@@ -243,6 +243,7 @@ def main(demo=False):
   st = time.monotonic()
   cloudlog.warning("loading model")
   model = None
+  usbgpu_model_loaded = False
   if USBGPU:
     usbgpu_model = None
 
@@ -275,7 +276,8 @@ def main(demo=False):
     model = usbgpu_model
     if model is None:
       params.put_bool("UsbGpuStartupFailed", True)
-    params.put_bool("UsbGpuActive", model is not None)
+    usbgpu_model_loaded = model is not None
+    params.put_bool("UsbGpuActive", usbgpu_model_loaded)
 
   # Keep the internal-GPU model ready so a USB disconnect or runtime error does
   # not take modeld down while driving.
@@ -286,7 +288,7 @@ def main(demo=False):
   # first eGPU execution can spend several seconds initializing queues/kernels
   # after the PKL has loaded; clearing this here causes a false commIssue while
   # modelV2 and its downstream services are still waiting for their first data.
-  usbgpu_startup_pending = USBGPU and model is not None
+  usbgpu_startup_pending = usbgpu_model_loaded
   if not usbgpu_startup_pending:
     params.put_bool("UsbGpuLoading", False)
   cloudlog.warning(f"models loaded in {time.monotonic() - st:.1f}s, modeld starting")
@@ -441,6 +443,9 @@ def main(demo=False):
         raise
       cloudlog.exception("eGPU model failed, falling back to internal GPU")
       params.put_bool("UsbGpuActive", False)
+      params.put_bool("UsbGpuStartupFailed", True)
+      params.put_bool("UsbGpuLoading", False)
+      usbgpu_startup_pending = False
       model = small_model
       run_count = 0
       # Run the already-loaded internal model for this same camera frame. A

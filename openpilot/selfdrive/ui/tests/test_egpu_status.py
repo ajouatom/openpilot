@@ -85,10 +85,11 @@ def test_modeld_restarts_instead_of_racing_a_timed_out_egpu_loader():
 def test_modeld_keeps_egpu_loading_until_first_output_is_published():
   source = (UI_DIR.parent / "modeld" / "modeld.py").read_text(encoding="utf-8")
 
-  pending = source.index("usbgpu_startup_pending = USBGPU and model is not None")
+  loaded = source.index("usbgpu_model_loaded = model is not None")
+  pending = source.index("usbgpu_startup_pending = usbgpu_model_loaded", loaded)
   first_send = source.index("pm.send('modelV2', modelv2_send)", pending)
   clear = source.index('params.put_bool("UsbGpuLoading", False)', first_send)
-  assert pending < first_send < clear
+  assert loaded < pending < first_send < clear
   assert "eGPU first model output published; startup complete" in source[clear:]
 
 
@@ -96,8 +97,12 @@ def test_modeld_runs_internal_fallback_on_the_same_frame():
   source = (UI_DIR.parent / "modeld" / "modeld.py").read_text(encoding="utf-8")
 
   fallback = source[source.index("eGPU model failed, falling back to internal GPU"):]
+  failed_set = fallback.index('params.put_bool("UsbGpuStartupFailed", True)')
+  loading_clear = fallback.index('params.put_bool("UsbGpuLoading", False)')
+  pending_clear = fallback.index("usbgpu_startup_pending = False")
   assert "model = small_model" in fallback
   assert "model_output = model.run(bufs, transforms, inputs, prepare_only)" in fallback
+  assert failed_set < loading_clear < pending_clear < fallback.index("model = small_model")
 
 
 def test_selfdrived_allows_five_seconds_for_egpu_fallback_to_settle():

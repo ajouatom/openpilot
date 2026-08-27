@@ -29,6 +29,13 @@ RETRY_INTERVAL_S = 5.0
 HUD_CHECK_INTERVAL_S = 0.1
 USB_FALLBACK_SCAN_INTERVAL_S = 5.0
 USB_OFF_DIM_INTERVAL_S = 30.0
+USBGPU_DISCOVERY_GRACE_S = 3.0
+USBGPU_STARTUP_TIMEOUT_S = 60.0
+USBGPU_STARTUP_POLL_S = 0.1
+USBGPU_EVER_PRESENT_PARAM = "UsbGpuEverPresent"
+USBGPU_LOADING_PARAM = "UsbGpuLoading"
+USBGPU_ACTIVE_PARAM = "UsbGpuActive"
+USBGPU_STARTUP_FAILED_PARAM = "UsbGpuStartupFailed"
 NETLINK_KOBJECT_UEVENT = 15
 AUTORUN_FPS_ENV = "CLUSTER_AUTORUN_FPS"
 REALTIME_CORES_ENV = "CLUSTER_REALTIME_CORES"
@@ -582,6 +589,56 @@ def _wait_for_hud_output_allowed(params: Params, expected_product_id: int) -> in
         time.sleep(max(0.1, min(next_hud_check, next_off_dim) - time.monotonic()))
 
 
+def _usbgpu_startup_expected() -> bool:
+    try:
+        from openpilot.selfdrive.modeld.helpers import usbgpu_compiled, usbgpu_present
+
+        return usbgpu_present() and usbgpu_compiled()
+    except Exception as exc:
+        print(f"[cluster_autorun] could not inspect eGPU startup state: {exc}", flush=True)
+        return False
+
+
+def _wait_for_usbgpu_startup(params: Params) -> None:
+    """Keep the shared USB display idle until initial eGPU transfers finish."""
+    remembered = params.get_bool(USBGPU_EVER_PRESENT_PARAM)
+    expected = _usbgpu_startup_expected()
+    discovery_deadline = time.monotonic() + USBGPU_DISCOVERY_GRACE_S
+    while remembered and not expected and time.monotonic() < discovery_deadline:
+        if (
+            params.get_bool(USBGPU_LOADING_PARAM)
+            or params.get_bool(USBGPU_ACTIVE_PARAM)
+            or params.get_bool(USBGPU_STARTUP_FAILED_PARAM)
+        ):
+            expected = True
+            break
+        time.sleep(USBGPU_STARTUP_POLL_S)
+        expected = _usbgpu_startup_expected()
+
+    if not expected:
+        return
+
+    print("[cluster_autorun] waiting for eGPU startup before opening USB display", flush=True)
+    startup_deadline = time.monotonic() + USBGPU_STARTUP_TIMEOUT_S
+    while time.monotonic() < startup_deadline:
+        loading = params.get_bool(USBGPU_LOADING_PARAM)
+        active = params.get_bool(USBGPU_ACTIVE_PARAM)
+        failed = params.get_bool(USBGPU_STARTUP_FAILED_PARAM)
+        if not loading and active:
+            print("[cluster_autorun] eGPU startup complete; starting USB display", flush=True)
+            return
+        if not loading and failed:
+            print("[cluster_autorun] eGPU startup failed; starting USB display after fallback", flush=True)
+            return
+        time.sleep(USBGPU_STARTUP_POLL_S)
+
+    print(
+        f"[cluster_autorun] eGPU startup wait timed out after {USBGPU_STARTUP_TIMEOUT_S:.0f}s; "
+        "starting USB display",
+        flush=True,
+    )
+
+
 def main() -> None:
     _configure_autorun_locale()
     _ensure_cluster_paths()
@@ -608,6 +665,8 @@ def main() -> None:
             if expected_product_id is None:
                 return
             continue
+
+        _wait_for_usbgpu_startup(params)
 
         if find_supported_usb_product(expected_product_id) is None:
             if not TICI:
