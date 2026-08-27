@@ -60,6 +60,7 @@ from openpilot.selfdrive.carrot.radar_motion.predictor import (
   radar_target_velocity_in_ego_frame,
   radar_motion_cut_in_threshold,
   radar_motion_sensitivity,
+  turning_corner_path_entry_allowed,
   visible_motion_points,
 )
 from openpilot.selfdrive.carrot.radar_motion.primary import (
@@ -162,6 +163,7 @@ __all__ = (
   "radar_target_velocity_in_ego_frame",
   "radar_motion_cut_in_threshold",
   "radar_motion_sensitivity",
+  "turning_corner_path_entry_allowed",
   "select_dpath_lead_two",
   "select_dpath_primary_radar_points",
   "select_primary_radar_points",
