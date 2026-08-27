@@ -82,6 +82,28 @@ def test_vehicle_speed_camera_distance_is_independent_of_accelerator(gas_pressed
   assert ret.speedLimitDistance == pytest.approx(300.0)
 
 
+@pytest.mark.parametrize("road_class", (1, 2))
+def test_vehicle_30_kph_camera_control_is_blocked_on_controlled_access_road(road_class):
+  state = _car_state()
+  state.vehicleNaviRoadClass = road_class
+  ret = SimpleNamespace(vEgo=20.0, speedLimit=30.0, gasPressed=False)
+
+  state.update_speed_limit(ret, speed_limit_cam=True)
+
+  assert ret.speedLimit == 30.0
+  assert ret.speedLimitDistance == 0.0
+
+
+def test_vehicle_regular_camera_control_remains_active_on_expressway():
+  state = _car_state()
+  state.vehicleNaviRoadClass = 2
+  ret = SimpleNamespace(vEgo=20.0, speedLimit=60.0, gasPressed=False)
+
+  state.update_speed_limit(ret, speed_limit_cam=True)
+
+  assert ret.speedLimitDistance == pytest.approx(360.0)
+
+
 def test_vehicle_speed_camera_distance_uses_tenths_of_a_second():
   state = _car_state(distance_time_tenths=62)
   ret = SimpleNamespace(vEgo=10.0, speedLimit=50.0, gasPressed=False)
@@ -288,10 +310,11 @@ def test_vehicle_navi_school_zone_follows_vehicle_camera_status():
   assert not state.vehicleNaviSchoolZoneActive
 
 
-def test_vehicle_navi_school_zone_is_blocked_by_hda_freeway_link_class():
+@pytest.mark.parametrize("link_class", (1, 2, 3))
+def test_vehicle_navi_school_zone_is_blocked_by_controlled_access_link_class(link_class):
   state = _car_state()
   state.vehicleNaviSchoolZoneControl = True
-  state.hda_info_4a3 = {"LinkClass": 1}
+  state.hda_info_4a3 = {"LinkClass": link_class}
   state.navi_profile_4be = {
     "PROLONG_VALUE": 0x77,
     "PROLONG_OFFSET": 0,
@@ -307,19 +330,53 @@ def test_vehicle_navi_school_zone_is_blocked_by_hda_freeway_link_class():
   assert not state.vehicleNaviSchoolZoneActive
 
 
-def test_vehicle_navi_school_zone_is_cleared_by_segment_freeway_road_class():
+@pytest.mark.parametrize("road_class", (1, 2))
+def test_vehicle_navi_school_zone_is_cleared_by_controlled_access_road_class(road_class):
   state = _car_state()
   state.vehicleNaviSchoolZoneControl = True
   state.vehicleNaviSchoolZoneActive = True
-  raw = 1 << 24
+  raw = road_class << 24
   state.navi_segment_4b9 = {f"BYTE_{i + 1}": byte for i, byte in enumerate(raw.to_bytes(8, "little"))}
   cp = SimpleNamespace(ts_nanos={"NEW_MSG_4B9": {"BYTE_1": 1}})
   ret = SimpleNamespace(speedLimit=30.0, speedBumpDistance=0.0, schoolZoneActive=False)
 
   assert not state._update_vehicle_navi_events(cp, ret, True)
-  assert state.vehicleNaviRoadClass == 1
+  assert state.vehicleNaviRoadClass == road_class
   assert not ret.schoolZoneActive
   assert not state.vehicleNaviSchoolZoneActive
+
+
+@pytest.mark.parametrize("road_class", (1, 2))
+def test_vehicle_navi_speed_bump_is_blocked_on_controlled_access_road(road_class):
+  state = _car_state()
+  state.vehicleNaviCanControl = True
+  state.vehicleNaviRoadClass = road_class
+  state.navi_profile_4be = {
+    "PROLONG_VALUE": 6,
+    "PROLONG_OFFSET": 300,
+    "PROLONG_CYCLIC_COUNTER": 3,
+    "PROLONG_UPDATE": 1,
+    "PROLONG_PROFILE_TYPE": 16,
+  }
+  cp = SimpleNamespace(ts_nanos={"NEW_MSG_4BE": {"PROLONG_VALUE": 1}})
+  ret = SimpleNamespace(speedLimit=100.0, speedBumpDistance=0.0, schoolZoneActive=False)
+
+  assert not state._update_vehicle_navi_events(cp, ret, False)
+  assert ret.speedBumpDistance == 0.0
+  assert state.vehicleNaviEvents == []
+
+
+def test_vehicle_navi_pending_speed_bump_is_cleared_on_expressway_entry():
+  state = _car_state()
+  state.vehicleNaviCanControl = True
+  state.vehicleNaviEvents = [{"type": "bump", "speed": 0, "kind": 6, "target": 300.0}]
+  state.vehicleNaviRoadClass = 2
+  cp = SimpleNamespace(ts_nanos={})
+  ret = SimpleNamespace(speedLimit=100.0, speedBumpDistance=0.0, schoolZoneActive=False)
+
+  assert not state._update_vehicle_navi_events(cp, ret, False)
+  assert ret.speedBumpDistance == 0.0
+  assert state.vehicleNaviEvents == []
 
 
 def test_vehicle_navi_school_zone_explicit_speed_change_clears_cap():
