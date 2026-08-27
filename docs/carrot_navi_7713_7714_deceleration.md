@@ -584,3 +584,27 @@ km/h다.
   실행하여 각각 `(22,22,93)`과 `(-1,0,0)`을 재현했다.
 - `test_carrot_navi_route_bridge.py`는 양쪽 route 경로와 7714 tombstone/disconnect ownership을 단언한다.
 - Windows 환경에는 전체 openpilot Linux 의존성과 pytest가 없어 전체 test suite는 실행하지 못했다.
+
+## 차량 순정 내비 0x4BA 커브 후보
+
+Hyundai CAN-FD 차량에서 수신되는 `0x4BA` ADASIS v2 Profile Short의 `ProfileType=1`은 전방 도로
+곡률이다. `Value0`은 ADASIS v2 표준의 10-bit 비선형 곡률값으로 복호화하고, `Offset`을 현재
+위치로부터 해당 곡률점까지의 거리로 사용한다. 확인한 아이오닉5 로그에서는 `Value1`이 항상 0으로
+채워져 있어 제어에는 검증된 `Value0` 곡률점만 사용한다.
+
+`CarState`는 곡률점을 주행거리 기준으로 추적하여 다음 세 필드를 발행한다.
+
+- `vehicleNaviCurveDistance`: 현재 선택된 곡률점까지 거리
+- `vehicleNaviCurveSpeed`: 목표 횡가속도 1.9 m/s²로 계산한 100% 기준 속도
+- `vehicleNaviCurveCurvature`: 복호화한 곡률(1/m)
+
+`VehicleNaviCurveControl=1`이고 `vehicleNaviCurveRouteActive=true`일 때만 `CarrotServ`가 이 값을
+감속 후보로 추가한다. 최종 목표속도는
+`vehicleNaviCurveSpeed × VehicleNaviCurveSpeedFactor / 100`이며, 기본 100%, 조절 범위는
+50~200%다. 기존 `AutoCurveSpeedLowerLimit`, `AutoNaviSpeedCtrlEnd`,
+`AutoNaviSpeedDecelRate`를 그대로 적용하고, 후보가 이기면 `desiredSource=hda_curve`, UI label은
+차량 내비 색상의 `curve`다. 두 설정은 주행 중 다시 읽으므로 재시작이 필요 없다.
+
+목적지가 없을 때 `0x4B9 CalculatedRoute=0`은 내비가 예측한 전방 경로(MPP)를 뜻하고, 목적지를
+탐색한 경로는 `CalculatedRoute=1`로 전달될 수 있다. `CalculatedRoute=2` 재탐색 신호에서는 기존
+곡률 캐시를 즉시 비워 이전 경로의 커브가 남지 않게 한다.

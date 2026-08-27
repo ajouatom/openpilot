@@ -28,6 +28,7 @@ from cluster_models import ClusterAlert
     ("hda", "cam"),
     ("hda_section", "section"),
     ("hda_bump", "bump"),
+    ("hda_curve", "curve"),
     ("school", "school"),
     ("route", "route"),
     ("vturn", "vturn"),
@@ -50,6 +51,7 @@ def test_deceleration_source_display_label(source, expected) -> None:
     ("hda", "cam", 3),
     ("hda_section", "section", 3),
     ("hda_bump", "bump", 3),
+    ("hda_curve", "curve", 3),
     ("school", "school", 3),
     ("route", "route", 4),
     ("model", "model", 2),
@@ -93,6 +95,7 @@ def test_vehicle_navigation_deceleration_presents_actual_reason() -> None:
   assert deceleration_source_presentation("hda") == ("cam", 3)
   assert deceleration_source_presentation("hda_section") == ("section", 3)
   assert deceleration_source_presentation("hda_bump") == ("bump", 3)
+  assert deceleration_source_presentation("hda_curve") == ("curve", 3)
   assert deceleration_source_presentation("school") == ("school", 3)
 
 

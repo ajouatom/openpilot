@@ -9,9 +9,14 @@ def _serv(mode):
   serv = CarrotServ.__new__(CarrotServ)
   serv.vehicleSpeedCameraControlMode = mode
   serv.vehicleNaviCanControl = True
+  serv.vehicleNaviCurveControl = False
+  serv.vehicleNaviCurveSpeedFactor = 1.0
   serv.vehicleNaviSchoolZoneControl = False
   serv.autoNaviSpeedSafetyFactor = 1.05
   serv.autoNaviSpeedBumpSpeed = 25
+  serv.autoCurveSpeedLowerLimit = 30
+  serv.autoNaviSpeedCtrlEnd = 6
+  serv.autoNaviSpeedDecelRate = 2.0
   serv.gas_override_speed = 0
   serv.gas_pressed_state = False
   serv.source_last = "none"
@@ -31,8 +36,40 @@ def _car_state(*, gas=False, brake=False, speed_limit=50, distance=300, v_ego=20
     vehicleNaviActive=False,
     vehicleNaviSectionActive=False,
     vehicleNaviSpeed=0,
+    vehicleNaviCurveDistance=0,
+    vehicleNaviCurveSpeed=0,
+    vehicleNaviCurveCurvature=0,
+    vehicleNaviCurveRouteActive=False,
     vEgo=v_ego,
   )
+
+
+def test_vehicle_navi_curve_control_is_opt_in():
+  serv = _serv(1)
+  CS = _car_state()
+  CS.vehicleNaviCurveDistance = 120
+  CS.vehicleNaviCurveSpeed = 50
+  CS.vehicleNaviCurveCurvature = 0.01
+  CS.vehicleNaviCurveRouteActive = True
+
+  assert serv._vehicle_navi_curve_speed(CS) == 250
+
+  serv.vehicleNaviCurveControl = True
+  assert serv._vehicle_navi_curve_speed(CS) < 250
+
+
+def test_vehicle_navi_curve_speed_factor_scales_calculated_target():
+  serv = _serv(1)
+  serv.vehicleNaviCurveControl = True
+  CS = _car_state()
+  CS.vehicleNaviCurveDistance = 0
+  CS.vehicleNaviCurveSpeed = 50
+  CS.vehicleNaviCurveCurvature = 0.01
+  CS.vehicleNaviCurveRouteActive = True
+
+  assert serv._vehicle_navi_curve_speed(CS) == pytest.approx(50)
+  serv.vehicleNaviCurveSpeedFactor = 1.5
+  assert serv._vehicle_navi_curve_speed(CS) == pytest.approx(75)
 
 
 @pytest.mark.parametrize(("mode", "gas_pressed", "expected"), (
