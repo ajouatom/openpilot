@@ -207,6 +207,13 @@ def test_optional_egpu_scons_target_is_not_gated_by_second_usb_scan() -> None:
   assert "and usbgpu_present()" not in source
 
 
+def test_model_compiler_uses_isolated_agnos_core() -> None:
+  source = (Path(BASEDIR) / "openpilot/selfdrive/modeld/SConscript").read_text(encoding="utf-8")
+
+  assert "taskset = 'taskset -c 7 ' if arch == 'larch64' else ''" in source
+  assert "{taskset}python3" in source
+
+
 def test_optional_egpu_build_retries_transient_pcie_link_startup() -> None:
   source = (Path(BASEDIR) / "openpilot/system/manager/build.py").read_text(encoding="utf-8")
 

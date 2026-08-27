@@ -104,7 +104,10 @@ if USBGPU:
 for usbgpu, pkl_path, driving_onnx_deps, driving_onnx, cmd_flags in model_builds:
   target_pkl_path = File(pkl_path).abspath
   camera_res_args = ' '.join(f'{cw}x{ch}' for cw, ch in CAMERA_CONFIGS)
-  cmd = (f'{cmd_flags} {mac_brew_string} python3 {modeld_dir}/compile_modeld.py '
+  # CPU 7 is isolated with isolcpus on AGNOS, so explicitly pin the model
+  # compiler there instead of competing with the normal build workload.
+  taskset = 'taskset -c 7 ' if arch == 'larch64' else ''
+  cmd = (f'{cmd_flags} {mac_brew_string} {taskset}python3 {modeld_dir}/compile_modeld.py '
         f'--model-size {model_w}x{model_h} '
         f'--camera-resolutions {camera_res_args} '
         f'--onnx {driving_onnx} '
