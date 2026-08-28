@@ -23,7 +23,7 @@ from cluster_display import (
   speed_unit,
 )
 from cluster_renderer import ClusterUiRenderer
-from main import ClusterDisplayPreferencesParamReader
+from main import ClusterClockVisibilityParamReader, ClusterDisplayPreferencesParamReader
 
 
 @pytest.mark.parametrize(
@@ -78,6 +78,33 @@ def test_display_preference_reader_uses_param_defaults_and_values():
 
   reader._params = FakeParams({})
   assert reader.read() == ("ko", True)
+
+
+@pytest.mark.parametrize(
+  ("show_date_time", "expected"),
+  ((0, False), (1, True), (2, True), (3, False)),
+)
+def test_cluster_clock_visibility_follows_show_date_time(show_date_time, expected):
+  class FakeParams:
+    def get_int(self, name):
+      assert name == "ShowDateTime"
+      return show_date_time
+
+  reader = object.__new__(ClusterClockVisibilityParamReader)
+  reader._params = FakeParams()
+
+  assert reader.read() is expected
+
+
+def test_cluster_clock_visibility_fails_visible():
+  class FailingParams:
+    def get_int(self, _name):
+      raise RuntimeError("read failed")
+
+  reader = object.__new__(ClusterClockVisibilityParamReader)
+  reader._params = FailingParams()
+
+  assert reader.read() is True
 
 
 def test_trip_report_draws_english_imperial_labels(monkeypatch):

@@ -96,6 +96,7 @@ DEFAULT_H264_GOP = 1
 DEFAULT_H264_DIMENSION_ALIGN = 1
 THEME_PARAM_POLL_SECONDS = 1.0
 DISPLAY_PREF_PARAM_POLL_SECONDS = 1.0
+CLOCK_VISIBILITY_PARAM_POLL_SECONDS = 1.0
 FPS_PARAM_POLL_SECONDS = 1.0
 BRIGHTNESS_PARAM_POLL_SECONDS = 0.1
 SCREEN_MODE_PARAM_POLL_SECONDS = 1.0
@@ -269,6 +270,25 @@ class ClusterDisplayPreferencesParamReader:
             return language, is_metric
         except Exception:
             return CLUSTER_LANGUAGE_KO, True
+
+
+class ClusterClockVisibilityParamReader:
+    def __init__(self) -> None:
+        self._params = None
+        try:
+            from openpilot.common.params import Params
+
+            self._params = Params()
+        except Exception:
+            pass
+
+    def read(self) -> bool:
+        if self._params is None:
+            return True
+        try:
+            return self._params.get_int("ShowDateTime") in (1, 2)
+        except Exception:
+            return True
 
 
 class ClusterLiveFpsParamReader:
@@ -824,6 +844,8 @@ def run_demo(
         else param_language
     )
     active_is_metric = bool(is_metric) if is_metric is not None else param_is_metric
+    clock_visibility_param_reader = ClusterClockVisibilityParamReader()
+    active_clock_visible = clock_visibility_param_reader.read()
     screen_mode_override = normalize_cluster_screen_mode(screen_mode) if screen_mode is not None else None
     screen_mode_param_reader = (
         ClusterScreenModeParamReader()
@@ -887,6 +909,7 @@ def run_demo(
         f"Display preferences initial: language={active_language} units={'metric' if active_is_metric else 'imperial'}",
         flush=True,
     )
+    print(f"ShowDateTime external HUD clock: {'on' if active_clock_visible else 'off'}", flush=True)
     print(f"{CLUSTER_SCREEN_MODE_PARAM} initial: {active_screen_mode}", flush=True)
     print(f"{CLUSTER_CAMERA_VIEW_MODE_PARAM} initial: {active_camera_view_mode}", flush=True)
     print(f"{CLUSTER_PANEL_LAYOUT_PARAM} initial: {active_panel_layout}", flush=True)
@@ -977,6 +1000,7 @@ def run_demo(
     last_report_time = start_time
     next_theme_param_read = start_time
     next_display_pref_param_read = start_time
+    next_clock_visibility_param_read = start_time
     next_fps_param_read = start_time + FPS_PARAM_POLL_SECONDS
     next_brightness_param_read = start_time
     next_screen_mode_param_read = start_time
@@ -1208,6 +1232,17 @@ def run_demo(
                     )
                     renderer.set_display_preferences(next_language, next_is_metric)
                 next_display_pref_param_read = now + DISPLAY_PREF_PARAM_POLL_SECONDS
+            if now >= next_clock_visibility_param_read:
+                next_clock_visible = clock_visibility_param_reader.read()
+                if next_clock_visible != active_clock_visible:
+                    old_clock_state = "on" if active_clock_visible else "off"
+                    next_clock_state = "on" if next_clock_visible else "off"
+                    print(
+                        f"ShowDateTime external HUD clock: {old_clock_state} -> {next_clock_state}",
+                        flush=True,
+                    )
+                    active_clock_visible = next_clock_visible
+                next_clock_visibility_param_read = now + CLOCK_VISIBILITY_PARAM_POLL_SECONDS
             if screen_mode_param_reader is not None and now >= next_screen_mode_param_read:
                 next_screen_mode = screen_mode_param_reader.read()
                 if next_screen_mode != renderer.screen_mode:
@@ -1376,7 +1411,7 @@ def run_demo(
                         flush=True,
                     )
                     break
-                center_clock_text = time.strftime("%H:%M:%S")
+                center_clock_text = time.strftime("%H:%M:%S") if active_clock_visible else None
                 profile.add_samples(live_source.profile_samples())
                 profile.add_elapsed("source.live_update", profile_stage)
             elif input_mode == "navi" and navi_source is not None:
@@ -1585,7 +1620,7 @@ def run_demo(
                 profile.add_elapsed("source.navi_overlay_update", profile_stage)
 
             if live_source is None:
-                center_clock_text = state.center_clock_text
+                center_clock_text = state.center_clock_text if active_clock_visible else None
 
             cluster_core_usage_text = None
             if cluster_core_usage_sampler is not None:
