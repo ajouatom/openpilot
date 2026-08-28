@@ -168,8 +168,8 @@ def test_known_egpu_prefetch_does_not_block_startup_or_force_build_without_live_
   assert "--ensure-if-egpu" not in prepare
   assert egpu_check < active_sha
   assert "return" in prepare[egpu_check:active_sha]
-  assert "check_usbgpu_power()" in prepare
-  assert 'BIG_MODEL_SHA=""' in prepare[prepare.index("check_usbgpu_power()"):]
+  assert "check_usbgpu_power()" not in prepare
+  assert "one-shot 12V check" in prepare
   assert "--ensure-if-egpu" in update
   assert "/tmp/big_model_update.log" in update
   assert ") >> \"$log_path\" 2>&1 &" in update
@@ -217,9 +217,17 @@ def test_model_compiler_uses_isolated_agnos_core() -> None:
 def test_optional_egpu_build_retries_transient_pcie_link_startup() -> None:
   source = (Path(BASEDIR) / "openpilot/system/manager/build.py").read_text(encoding="utf-8")
 
-  assert "check_usbgpu(timeout=10.0)" in source
+  assert "check_usbgpu(timeout=USBGPU_READINESS_TIMEOUT, require_clean_link=False)" in source
   assert "USB eGPU not ready for optional model compilation" in source
   assert "USBGPU_BUILD_ATTEMPTS = 6" in source
+  assert "USBGPU_READINESS_ATTEMPTS = 3" in source
+  assert "USBGPU_READINESS_TIMEOUT = 30.0" in source
+  assert 'USBGPU_TRANSIENT_READINESS_ERRORS = {"12V / PCIe not ready", "USB link errors", "GPU check timed out"}' in source
+  assert 'write_big_model_status(model_cache_dir(), "checking"' in source
+  assert "USB eGPU transient readiness error" in source
+  assert "USBGPU_ENUMERATION_WAIT_SECONDS = 20.0" in source
+  assert "waiting for eGPU USB re-enumeration" in source
+  assert "USB eGPU returned after" in source
   assert "usbgpu_pcie_not_ready(error_text)" in source
   assert "USB eGPU PCIe link not ready; retrying" in source
 

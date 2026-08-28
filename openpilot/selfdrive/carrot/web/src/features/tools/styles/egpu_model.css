@@ -1,0 +1,157 @@
+.egpu-model-card {
+  position: relative;
+  display: grid;
+  grid-template-columns: 54px minmax(0, 1fr);
+  gap: 14px;
+  margin: 2px 0 16px;
+  padding: 16px;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, #b58cff 34%, var(--md-outline-var));
+  border-radius: 18px;
+  background:
+    radial-gradient(circle at 12% 0%, rgba(181, 140, 255, 0.22), transparent 45%),
+    linear-gradient(135deg, color-mix(in srgb, var(--md-surface-container) 92%, #311f52), var(--md-surface-container));
+  box-shadow: 0 12px 34px rgba(14, 8, 28, 0.24);
+}
+
+.egpu-model-card[hidden] {
+  display: none;
+}
+
+.egpu-model-card::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(110deg, transparent 20%, rgba(255, 255, 255, 0.055) 48%, transparent 72%);
+  transform: translateX(-110%);
+}
+
+.egpu-model-card.is-running::after {
+  animation: egpu-model-shimmer 2.5s ease-in-out infinite;
+}
+
+.egpu-model-card__icon {
+  width: 54px;
+  height: 54px;
+  display: grid;
+  place-items: center;
+  border-radius: 17px;
+  color: #160d26;
+  background: linear-gradient(145deg, #f5dcff, #a27bff 58%, #74d7ff);
+  font-size: 17px;
+  font-weight: 900;
+  letter-spacing: -0.04em;
+  box-shadow: 0 7px 22px rgba(134, 89, 242, 0.32);
+}
+
+.egpu-model-card__body {
+  min-width: 0;
+}
+
+.egpu-model-card__heading,
+.egpu-model-card__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.egpu-model-card__heading strong {
+  font-size: 16px;
+  letter-spacing: -0.015em;
+}
+
+.egpu-model-card__state {
+  flex: 0 0 auto;
+  padding: 4px 9px;
+  border-radius: 999px;
+  color: color-mix(in srgb, #d9c8ff 88%, white);
+  background: rgba(164, 116, 255, 0.15);
+  font-size: 11px;
+  font-weight: 750;
+}
+
+.egpu-model-card[data-state="compiled"] .egpu-model-card__state {
+  color: #9ff1c7;
+  background: rgba(61, 190, 126, 0.14);
+}
+
+.egpu-model-card[data-state="error"] .egpu-model-card__state {
+  color: #ffbaa9;
+  background: rgba(235, 91, 59, 0.14);
+}
+
+.egpu-model-card__detail {
+  margin: 7px 0 9px;
+  color: var(--md-on-surface-var);
+  font-size: 13px;
+  line-height: 1.42;
+}
+
+.egpu-model-card__track {
+  height: 6px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.09);
+}
+
+.egpu-model-card__track span {
+  display: block;
+  width: 0;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #8f6cf0, #bfa0ff, #68d5ff);
+  transition: width 350ms ease;
+}
+
+.egpu-model-card__footer {
+  min-height: 28px;
+  margin-top: 7px;
+}
+
+.egpu-model-card__amount {
+  color: color-mix(in srgb, var(--md-on-surface-var) 82%, transparent);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.egpu-model-card__action.btn {
+  min-height: 34px;
+  padding: 7px 12px;
+  border-color: rgba(190, 155, 255, 0.38);
+  background: rgba(153, 106, 242, 0.17);
+  font-size: 12px;
+}
+
+@keyframes egpu-model-shimmer {
+  0%, 15% { transform: translateX(-110%); }
+  75%, 100% { transform: translateX(110%); }
+}
+
+@media (max-width: 420px) {
+  .egpu-model-card {
+    grid-template-columns: 44px minmax(0, 1fr);
+    gap: 11px;
+    padding: 14px;
+  }
+
+  .egpu-model-card__icon {
+    width: 44px;
+    height: 44px;
+    border-radius: 14px;
+    font-size: 15px;
+  }
+
+  .egpu-model-card__heading {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 5px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .egpu-model-card.is-running::after {
+    animation: none;
+  }
+}

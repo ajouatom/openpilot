@@ -96,3 +96,13 @@ def test_check_usbgpu_reports_new_link_errors(monkeypatch):
   monkeypatch.setattr(usbgpu.subprocess, "run", lambda *_args, **_kwargs: SimpleNamespace(returncode=0, stdout="", stderr=""))
 
   assert usbgpu.check_usbgpu() == "USB link errors"
+
+
+def test_check_usbgpu_can_accept_recoverable_link_errors(monkeypatch):
+  before = usbgpu.UsbGpuDevice("4-1.4", 0x3801, 1, 5000, "tiny", "custom ed4e39b7-CLEAN", 4, 7, 3)
+  after = usbgpu.UsbGpuDevice("4-1.4", 0x3801, 1, 5000, "tiny", "custom ed4e39b7-CLEAN", 4, 7, 4)
+  devices = iter((before, after))
+  monkeypatch.setattr(usbgpu, "get_usbgpu_device", lambda _path: next(devices))
+  monkeypatch.setattr(usbgpu.subprocess, "run", lambda *_args, **_kwargs: SimpleNamespace(returncode=0, stdout="", stderr=""))
+
+  assert usbgpu.check_usbgpu(require_clean_link=False) is None

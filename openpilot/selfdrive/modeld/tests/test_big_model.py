@@ -7,6 +7,7 @@ import pytest
 
 import openpilot.selfdrive.modeld.big_model as big_model
 from openpilot.selfdrive.modeld.big_model import BigModelManifest
+from openpilot.selfdrive.modeld.big_model_status import BigModelStatusReporter, read_big_model_status, write_big_model_status
 
 
 class FakeResponse:
@@ -151,6 +152,62 @@ def test_download_resumes_partial_file(monkeypatch, tmp_path: Path):
 
   monkeypatch.setattr(big_model, "urlopen", fake_urlopen)
   assert big_model._download_model(manifest, tmp_path).read_bytes() == data
+
+
+def test_download_reports_resumed_progress_and_verification(monkeypatch, tmp_path: Path):
+  data = b"0123456789"
+  manifest = BigModelManifest.from_dict(manifest_for(data), "https://example.com/models/manifest.json")
+  partial_path = big_model.model_path(manifest, tmp_path).with_suffix(".onnx.part")
+  tmp_path.mkdir(exist_ok=True)
+  partial_path.write_bytes(data[:4])
+  progress = []
+  phases = []
+
+  monkeypatch.setattr(big_model, "urlopen", lambda _request, timeout: FakeResponse(
+    data[4:], status=206, headers={"Content-Range": "bytes 4-9/10"}))
+  big_model._download_model(manifest, tmp_path,
+                            progress_callback=lambda _manifest, current, total: progress.append((current, total)),
+                            phase_callback=lambda state, _manifest: phases.append(state))
+
+  assert progress[0] == (4, 10)
+  assert progress[-1] == (10, 10)
+  assert phases == ["verifying"]
+
+
+def test_status_is_atomic_and_preserves_stage_start(tmp_path: Path):
+  first = write_big_model_status(tmp_path, "downloading", downloaded_bytes=10, total_bytes=100)
+  second = write_big_model_status(tmp_path, "downloading", downloaded_bytes=20, total_bytes=100)
+  assert second["started_at"] == first["started_at"]
+  assert read_big_model_status(tmp_path)["downloaded_bytes"] == 20
+  assert not list(tmp_path.glob(".status-*.json"))
+
+
+def test_status_reporter_rate_limits_download_updates(monkeypatch, tmp_path: Path):
+  manifest = BigModelManifest.from_dict(manifest_for(b"model"), "https://example.com/models/manifest.json")
+  reporter = BigModelStatusReporter(tmp_path, min_interval=60.0)
+  reporter.download_progress(manifest, 1, manifest.size)
+  reporter.download_progress(manifest, 2, manifest.size)
+  assert read_big_model_status(tmp_path)["downloaded_bytes"] == 1
+  reporter.download_progress(manifest, manifest.size, manifest.size)
+  assert read_big_model_status(tmp_path)["downloaded_bytes"] == manifest.size
+
+
+def test_web_surface_is_hidden_without_egpu_history_and_restart_is_gated():
+  source = (Path(big_model.__file__).parents[1] / "carrot/server/features/egpu_model.py").read_text(encoding="utf-8")
+  assert 'return {"ok": True, "available": False}' in source
+  assert '"UsbGpuEverPresent"' in source
+  assert 'payload.get("engaged")' in source
+  assert 'await asyncio.to_thread(usbgpu_present)' in source
+  assert 'await asyncio.to_thread(check_usbgpu, timeout=30.0, require_clean_link=False)' in source
+  assert 'params.put_bool("DoReboot", True)' in source
+
+
+def test_background_download_runs_at_low_cpu_and_io_priority():
+  launcher = (Path(big_model.__file__).parents[3] / "launch_chffrplus.sh").read_text(encoding="utf-8")
+  update = launcher[launcher.index("function start_big_model_update {"):]
+  update = update[:update.index("\n}")]
+  assert "ionice -c 3 nice -n 10 python3" in update
+  assert "nice -n 10 python3" in update
 
 
 def test_bad_hash_never_becomes_active(monkeypatch, tmp_path: Path):

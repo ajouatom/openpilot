@@ -166,8 +166,9 @@ def check_usbgpu_power(devices_path: Path = USB_DEVICES_PATH) -> str | None:
   return None
 
 
-def check_usbgpu(devices_path: Path = USB_DEVICES_PATH, timeout: float = 15.0) -> str | None:
-  """Run an offroad connection check. None means the USB and GPU checks passed."""
+def check_usbgpu(devices_path: Path = USB_DEVICES_PATH, timeout: float = 15.0,
+                 require_clean_link: bool = True) -> str | None:
+  """Run an offroad GPU check, optionally treating any recoverable link error as fatal."""
   device = get_usbgpu_device(devices_path)
   if device is None:
     return "USB not connected"
@@ -198,6 +199,8 @@ def check_usbgpu(devices_path: Path = USB_DEVICES_PATH, timeout: float = 15.0) -
     return "12V / PCIe not ready" if pcie_not_ready else "GPU incompatible"
 
   device_after = get_usbgpu_device(devices_path)
-  if device_after is None or device_after.link_error_count > link_errors:
+  if device_after is None:
+    return "USB disconnected during GPU check"
+  if require_clean_link and device_after.link_error_count > link_errors:
     return "USB link errors"
   return None

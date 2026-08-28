@@ -238,7 +238,6 @@ function invalidate_modeld_build_if_needed {
 function prepare_big_model_if_needed {
   BIG_MODEL_SHA=""
   BIG_MODEL_PKL_PATH=""
-  local readiness
 
   # Only local state is consulted on the startup path. Remote model delivery
   # runs in the background below and must never delay manager startup.
@@ -251,18 +250,10 @@ function prepare_big_model_if_needed {
     BIG_MODEL_PKL_PATH="$(python3 -c 'from openpilot.selfdrive.modeld.helpers import modeld_pkl_path; print(modeld_pkl_path(True))' 2>/dev/null || true)"
   fi
 
-  # The USB bridge remains at 5 Gbps while vehicle-switched GPU power is off.
-  # Only probe the actual GPU when the current model still needs a PKL; a
-  # bridge-only presence must not force an optional eGPU SCons build.
-  if [ -n "$BIG_MODEL_PKL_PATH" ] && [ ! -f "${BIG_MODEL_PKL_PATH}.chunkmanifest" ]; then
-    echo "Checking USB eGPU readiness before optional PKL compilation."
-    readiness="$(python3 -c 'from openpilot.system.hardware.usbgpu import check_usbgpu_power; print(check_usbgpu_power() or "")' 2>&1 || true)"
-    if [ -n "$readiness" ]; then
-      echo "USB eGPU not ready for PKL compilation: $readiness"
-      BIG_MODEL_SHA=""
-      BIG_MODEL_PKL_PATH=""
-    fi
-  fi
+  # Do not reject compilation from a one-shot 12V check here. During ignition
+  # startup the USB bridge can enumerate before switched GPU power and PCIe are
+  # ready. Mark the missing target stale and let build_usbgpu_model perform its
+  # retrying readiness check while the build screen remains visible.
 }
 
 function start_big_model_update {
@@ -278,10 +269,18 @@ function start_big_model_update {
     (
       exec 9>"$lock_path"
       flock -n 9 || exit 0
-      PYTHONUNBUFFERED=1 python3 -m openpilot.selfdrive.modeld.big_model --ensure-if-egpu --network-wait-seconds 60
+      if command -v ionice >/dev/null 2>&1; then
+        PYTHONUNBUFFERED=1 ionice -c 3 nice -n 10 python3 -m openpilot.selfdrive.modeld.big_model --ensure-if-egpu --network-wait-seconds 60
+      else
+        PYTHONUNBUFFERED=1 nice -n 10 python3 -m openpilot.selfdrive.modeld.big_model --ensure-if-egpu --network-wait-seconds 60
+      fi
     ) >> "$log_path" 2>&1 &
   else
-    PYTHONUNBUFFERED=1 python3 -m openpilot.selfdrive.modeld.big_model --ensure-if-egpu --network-wait-seconds 60 >> "$log_path" 2>&1 &
+    if command -v ionice >/dev/null 2>&1; then
+      PYTHONUNBUFFERED=1 ionice -c 3 nice -n 10 python3 -m openpilot.selfdrive.modeld.big_model --ensure-if-egpu --network-wait-seconds 60 >> "$log_path" 2>&1 &
+    else
+      PYTHONUNBUFFERED=1 nice -n 10 python3 -m openpilot.selfdrive.modeld.big_model --ensure-if-egpu --network-wait-seconds 60 >> "$log_path" 2>&1 &
+    fi
   fi
 }
 
