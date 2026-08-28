@@ -12,6 +12,7 @@ def _serv(mode):
   serv.vehicleNaviCurveControl = False
   serv.vehicleNaviCurveMppControl = False
   serv.vehicleNaviCurveSpeedFactor = 1.0
+  serv.vehicleNaviCurveControlEnd = 3.0
   serv.vehicleNaviSchoolZoneControl = False
   serv.autoNaviSpeedSafetyFactor = 1.05
   serv.autoNaviSpeedBumpSpeed = 25
@@ -72,6 +73,19 @@ def test_vehicle_navi_curve_speed_factor_scales_calculated_target():
   assert serv._vehicle_navi_curve_speed(CS) == pytest.approx(50)
   serv.vehicleNaviCurveSpeedFactor = 1.5
   assert serv._vehicle_navi_curve_speed(CS) == pytest.approx(75)
+
+
+def test_vehicle_navi_curve_uses_curve_specific_decel_end_time():
+  serv = _serv(1)
+  serv.vehicleNaviCurveControl = True
+  CS = _car_state()
+  CS.vehicleNaviCurveDistance = 150
+  CS.vehicleNaviCurveSpeed = 50
+  CS.vehicleNaviCurveCurvature = 0.01
+  CS.vehicleNaviCurveRouteActive = True
+
+  expected = serv.calculate_current_speed(150, 50, 3, serv.autoNaviSpeedDecelRate)
+  assert serv._vehicle_navi_curve_speed(CS) == pytest.approx(expected)
 
 
 def test_vehicle_navi_curve_mpp_control_is_separate_opt_in():

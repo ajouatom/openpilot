@@ -607,15 +607,19 @@ Hyundai CAN-FD 차량에서 수신되는 `0x4BA` ADASIS v2 Profile Short의 `Pro
 감속 후보로 추가한다. `VehicleNaviCurveMppControl=1`을 추가로 켜면 목적지가 없는 예상 경로
 (`CalculatedRoute=0`, MPP)에서도 곡률 감속을 허용한다. 최종 목표속도는
 `vehicleNaviCurveSpeed × VehicleNaviCurveSpeedFactor / 100`이며, 기본 100%, 조절 범위는
-50~200%다. 기존 `AutoCurveSpeedLowerLimit`, `AutoNaviSpeedCtrlEnd`,
-`AutoNaviSpeedDecelRate`를 그대로 적용하고, 후보가 이기면 `desiredSource=hda_curve`, UI label은
-차량 내비 색상의 `curve`다. 두 설정은 주행 중 다시 읽으므로 재시작이 필요 없다.
+50~200%다. 기존 `AutoCurveSpeedLowerLimit`, `AutoNaviSpeedDecelRate`와 커브 전용
+`VehicleNaviCurveCtrlEnd`를 적용한다. 커브 전용 감속완료 시간의 기본값은 3초이며, 카메라용
+`AutoNaviSpeedCtrlEnd`와 독립적이다. 후보가 이기면 `desiredSource=hda_curve`, UI label은 차량 내비
+색상의 `curve`다. 설정은 주행 중 다시 읽으므로 재시작이 필요 없다.
 
-선택된 커브 곡률점을 통과한 뒤에도 제한속도를 즉시 해제하지 않는다. 뒤따르는 0x4BA 점 중
-곡률이 충분히 작아 기준속도가 250 km/h로 포화되는 점을 해당 커브의 종료점으로 보고, 그 지점을
-통과하는 순간 커브 제한을 해제한다. 종료점 프로파일이 누락된 경우에만 곡률점 이후 120 m를
-보수적인 fallback 종료거리로 사용한다. 제한이 해제되면 종방향 제어의 일반 가속 제한 안에서
-기존 크루즈 설정속도로 복귀한다.
+선택된 곡률점은 정점을 통과하는 즉시 후보에서 제거한다. 뒤따르는 낮은 곡률점이 다음 후보가 되어
+커브 출구 전에 목표속도를 단계적으로 복원하며, 프로파일이 끝났다면 기존 크루즈 설정속도로
+복귀한다. 통과 뒤 제한속도를 유지하는 고정 fallback 거리는 사용하지 않는다.
+
+0x4BA `Distance`는 곡률 프로파일에서 raw 1당 2 m인 다음 spot까지의 길이로 해석한다. 길이가
+10 m 이하이면서 원시 곡률 기준속도가 20 km/h 이하인 단독 hairpin-level spot은 지도 노드의
+불연속값으로 보고 커브 감속 후보에서 제외한다. 그보다 완만한 10 m spot은 계속 사용하며 실제
+급회전 감속은 route/TBT 기반 turn 제어가 담당한다.
 
 목적지가 없을 때 `0x4B9 CalculatedRoute=0`은 내비가 예측한 전방 경로(MPP)를 뜻하고, 목적지를
 탐색한 경로는 `CalculatedRoute=1`로 전달된다. `CalculatedRoute=2` 재탐색 신호에서는 기존

@@ -23,9 +23,9 @@ class FakeParams:
       return self.value
     return {
       "VehicleNaviCurveSpeedFactor": 100,
+      "VehicleNaviCurveCtrlEnd": 3,
       "AutoCurveSpeedLowerLimit": 30,
       "AutoNaviSpeedDecelRate": 120,
-      "AutoNaviSpeedCtrlEnd": 7,
     }[key]
 
   def get_bool(self, key):
@@ -46,7 +46,7 @@ def _car_state(distance_time_tenths=60):
   state.vehicleNaviCurveSpeedFactor = 1.0
   state.vehicleNaviCurveLowerLimit = 30.0
   state.vehicleNaviCurveDecelRate = 1.2
-  state.vehicleNaviCurveControlEnd = 7.0
+  state.vehicleNaviCurveControlEnd = 3.0
   state.vehicleSpeedCameraParamsCounter = 0
   state.vehicleNaviEvents = []
   state.vehicleNaviCurves = []
@@ -538,6 +538,7 @@ def test_vehicle_navi_curve_profile_publishes_reference_speed_and_distance():
   state.vehicleNaviCurveRouteActive = True
   state.navi_profile_4ba = {
     "PROSHORT_OFFSET": 313,
+    "PROSHORT_DISTANCE": 5,
     "PROSHORT_VALUE_0": 599,
     "PROSHORT_PROFILE_TYPE": 1,
   }
@@ -549,44 +550,48 @@ def test_vehicle_navi_curve_profile_publishes_reference_speed_and_distance():
   assert ret.vehicleNaviCurveCurvature == pytest.approx(0.00112)
   assert ret.vehicleNaviCurveSpeed == pytest.approx(math.sqrt(1.9 / 0.00112) * 3.6)
   assert ret.vehicleNaviCurveRouteActive
+  assert state.vehicleNaviCurves[0]["span"] == 10.0
 
 
-def test_vehicle_navi_curve_holds_until_neutral_curvature_end():
+def test_vehicle_navi_curve_releases_passed_apex_and_uses_following_spot():
   state = _car_state()
   state.vehicleNaviCurves = [
-    {"target": 100.0, "curvature": 0.01, "speed": 50.0},
-    {"target": 180.0, "curvature": 0.0002, "speed": 250.0},
+    {"target": 100.0, "span": 10.0, "curvature": 0.01, "speed": 50.0},
+    {"target": 140.0, "span": 10.0, "curvature": 0.004, "speed": 80.0},
   ]
   ret = SimpleNamespace()
   cp = SimpleNamespace(ts_nanos={})
 
-  state.totalDistance = 110.0
+  state.totalDistance = 100.0
   state._update_vehicle_navi_curve_profile(cp, ret)
   assert ret.vehicleNaviCurveDistance == 0.0
   assert ret.vehicleNaviCurveSpeed == 50.0
 
-  state.totalDistance = 179.9
+  state.totalDistance = 100.1
   state._update_vehicle_navi_curve_profile(cp, ret)
-  assert ret.vehicleNaviCurveSpeed == 50.0
-
-  state.totalDistance = 180.0
-  state._update_vehicle_navi_curve_profile(cp, ret)
-  assert ret.vehicleNaviCurveSpeed == 0.0
+  assert ret.vehicleNaviCurveDistance == pytest.approx(39.9)
+  assert ret.vehicleNaviCurveSpeed == 80.0
 
 
-def test_vehicle_navi_curve_missing_end_uses_conservative_fallback():
+def test_vehicle_navi_curve_without_following_spot_releases_after_apex():
   state = _car_state()
-  state.vehicleNaviCurves = [{"target": 100.0, "curvature": 0.01, "speed": 50.0}]
+  state.vehicleNaviCurves = [{"target": 100.0, "span": 10.0, "curvature": 0.01, "speed": 50.0}]
   ret = SimpleNamespace()
   cp = SimpleNamespace(ts_nanos={})
 
-  state.totalDistance = 219.9
-  state._update_vehicle_navi_curve_profile(cp, ret)
-  assert ret.vehicleNaviCurveSpeed == 50.0
-
-  state.totalDistance = 220.0
+  state.totalDistance = 100.1
   state._update_vehicle_navi_curve_profile(cp, ret)
   assert ret.vehicleNaviCurveSpeed == 0.0
+
+
+def test_vehicle_navi_curve_skips_only_short_hairpin_speed_spot():
+  state = _car_state()
+  state._add_vehicle_navi_curve({"offset": 100.0, "span": 10.0, "curvature": 0.12288})
+  assert state.vehicleNaviCurves == []
+
+  state._add_vehicle_navi_curve({"offset": 110.0, "span": 10.0, "curvature": 0.04864})
+  assert len(state.vehicleNaviCurves) == 1
+  assert state.vehicleNaviCurves[0]["speed"] == pytest.approx(math.sqrt(1.9 / 0.04864) * 3.6)
 
 
 def test_vehicle_navi_route_recalculation_clears_curve_profile():

@@ -228,6 +228,7 @@ class CarrotServ:
     self.vehicleNaviCurveControl = self.params.get_bool("VehicleNaviCurveControl")
     self.vehicleNaviCurveMppControl = self.params.get_bool("VehicleNaviCurveMppControl")
     self.vehicleNaviCurveSpeedFactor = min(2.0, max(0.5, self.params.get_int("VehicleNaviCurveSpeedFactor") * 0.01))
+    self.vehicleNaviCurveControlEnd = max(0.0, float(self.params.get_int("VehicleNaviCurveCtrlEnd")))
     self.vehicleNaviSchoolZoneControl = self.params.get_bool("VehicleNaviSchoolZoneControl")
     self.vehicleSpeedCameraControlMode = min(3, max(0, self.params.get_int("VehicleSpeedCameraControlMode")))
     self.autoNaviSpeedSafetyFactor = float(self.params.get_int("AutoNaviSpeedSafetyFactor")) * 0.01
@@ -381,7 +382,7 @@ class CarrotServ:
 
     target_speed = max(self.autoCurveSpeedLowerLimit, reference_speed * self.vehicleNaviCurveSpeedFactor)
     return self.calculate_current_speed(float(getattr(CS, "vehicleNaviCurveDistance", 0.0)),
-                                        target_speed, self.autoNaviSpeedCtrlEnd, self.autoNaviSpeedDecelRate)
+                                        target_speed, self.vehicleNaviCurveControlEnd, self.autoNaviSpeedDecelRate)
 
   def _vehicle_school_zone_enabled(self, CS):
     if not CS.schoolZoneActive:
