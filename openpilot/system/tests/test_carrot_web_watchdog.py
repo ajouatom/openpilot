@@ -31,6 +31,68 @@ def _wait_for_line_count(path: Path, expected: int, timeout: float = 5.0) -> Non
   pytest.fail(f"timed out waiting for {expected} watchdog output lines:\n{output}")
 
 
+def _write_fake_command(path: Path, body: str) -> None:
+  path.write_text(f"#!/usr/bin/env bash\n{body}\n", encoding="utf-8")
+  path.chmod(0o755)
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="requires a POSIX shell")
+def test_restart_waits_for_old_web_watchdog_before_relaunch(tmp_path: Path) -> None:
+  bash = shutil.which("bash")
+  if bash is None:
+    pytest.skip("bash is unavailable")
+
+  fake_bin = tmp_path / "bin"
+  fake_bin.mkdir()
+  trace = tmp_path / "trace"
+  pgrep_count = tmp_path / "pgrep_count"
+
+  for name in ("git", "pkill", "rm", "sleep", "tmux", "bash"):
+    _write_fake_command(
+      fake_bin / name,
+      f"printf '{name}:%s\\n' \"$*\" >> \"$CARROT_WEB_TEST_TRACE\"\nexit 0",
+    )
+
+  _write_fake_command(
+    fake_bin / "pgrep",
+    """printf 'pgrep:%s\\n' "$*" >> "$CARROT_WEB_TEST_TRACE"
+if [[ "$*" == *"carrot_web_watchdog"* ]]; then
+  count="$(cat "$CARROT_WEB_TEST_PGREP_COUNT" 2>/dev/null || printf 0)"
+  count=$((count + 1))
+  printf '%s\\n' "$count" > "$CARROT_WEB_TEST_PGREP_COUNT"
+  if [ "$count" -eq 1 ]; then
+    exit 0
+  fi
+fi
+exit 1""",
+  )
+
+  env = os.environ.copy()
+  env.update({
+    "PATH": f"{fake_bin}{os.pathsep}{env.get('PATH', '')}",
+    "CARROT_WEB_TEST_TRACE": str(trace),
+    "CARROT_WEB_TEST_PGREP_COUNT": str(pgrep_count),
+  })
+  result = subprocess.run(
+    [bash, str(Path(BASEDIR) / "restart.sh")],
+    env=env,
+    capture_output=True,
+    text=True,
+    timeout=5,
+    check=False,
+  )
+
+  assert result.returncode == 0, result.stdout + result.stderr
+  lines = trace.read_text(encoding="utf-8").splitlines()
+  watchdog_checks = [i for i, line in enumerate(lines) if "pgrep:-f [c]arrot_web_watchdog" in line]
+  server_checks = [i for i, line in enumerate(lines) if "pgrep:-f [o]penpilot.selfdrive.carrot.carrot_server" in line]
+  relaunch = next(i for i, line in enumerate(lines) if line.startswith("tmux:new -s comma"))
+
+  assert len(watchdog_checks) == 2
+  assert server_checks
+  assert max(*watchdog_checks, *server_checks) < relaunch
+
+
 @pytest.mark.skipif(sys.platform == "win32", reason="requires a POSIX shell and deleted-cwd semantics")
 def test_watchdog_reenters_checkout_after_directory_replacement(tmp_path: Path) -> None:
   checkout = tmp_path / "openpilot"
