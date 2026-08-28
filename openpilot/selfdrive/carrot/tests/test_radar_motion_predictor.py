@@ -21,6 +21,7 @@ from openpilot.selfdrive.carrot.radar_motion.predictor import (
   project_to_model_path,
   radar_motion_sensitivity,
   radar_target_velocity_in_ego_frame,
+  turning_corner_path_entry_allowed,
   visible_motion_points,
 )
 from openpilot.selfdrive.carrot.radar_motion.lead_selection import (
@@ -68,6 +69,33 @@ class Point:
 
 
 STRAIGHT_PATH = ((0.0, 0.0), (100.0, 0.0))
+
+
+def test_turning_corner_path_entry_rejects_far_lateral_projection_alias():
+  assert not turning_corner_path_entry_allowed(
+    "corner235", 8.05, 1.28, -0.37,
+  )
+
+
+@pytest.mark.parametrize(
+  "source,y_rel,d_path,yaw_rate,cross_sensor_confirmed",
+  (
+    ("corner235", 8.05, 1.28, -0.19, False),
+    ("corner235", 4.99, 1.28, -0.37, False),
+    ("corner235", 8.05, 1.28, -0.37, True),
+    ("frontRadar", 8.05, 1.28, -0.37, False),
+  ),
+)
+def test_turning_corner_path_entry_preserves_supported_cases(
+  source, y_rel, d_path, yaw_rate, cross_sensor_confirmed,
+):
+  assert turning_corner_path_entry_allowed(
+    source,
+    y_rel,
+    d_path,
+    yaw_rate,
+    cross_sensor_confirmed=cross_sensor_confirmed,
+  )
 
 
 def model_with_lead(

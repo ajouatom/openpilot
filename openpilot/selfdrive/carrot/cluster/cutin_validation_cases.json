@@ -1319,6 +1319,18 @@
       "human_verified": true,
       "forbidden_lead_one_ids": [2734],
       "scene": "A parked truck on the left sweeps across the curved model path while the ego vehicle makes a tight left turn"
+    },
+    {
+      "id": "carnival-14c-5-tight-curve-adjacent-right-9",
+      "vehicle_folder": "KIA_CARNIVAL_4TH_GEN c4dcf95545dafe68",
+      "log": "0000014c--96eee11a8d--5/rlog.zst",
+      "source": "front+corner",
+      "window": [9.35, 10.50],
+      "expected": "clear",
+      "human_verified": true,
+      "forbidden_lead_one_ids": [1448, 1510],
+      "forbidden_lead_two_ids": [1448, 1510],
+      "scene": "A moving vehicle remains far to the right while a tight left curve projects its corner-radar track onto the model path"
     }
   ]
 }
