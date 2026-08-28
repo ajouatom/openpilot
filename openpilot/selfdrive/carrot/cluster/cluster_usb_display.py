@@ -97,6 +97,23 @@ def _set_cluster_hud_connected(connected: bool) -> None:
         print(f"Warning: failed to update ClusterHudConnected: {exc}", flush=True)
 
 
+def _usbgpu_reset_protected() -> bool:
+    """Avoid resetting a shared USB path while the eGPU owns active transfers."""
+    try:
+        from openpilot.common.params import Params
+
+        params = Params()
+        return params.get_bool("UsbGpuLoading") or params.get_bool("UsbGpuActive")
+    except ModuleNotFoundError:
+        # PC replay runs may not have openpilot's compiled params extension.
+        return False
+    except Exception as exc:
+        print(f"Warning: failed to inspect eGPU state before USB reset: {exc}", flush=True)
+        # On-device uncertainty must fail safe: losing display recovery is less
+        # harmful than resetting an eGPU that may be running the driving model.
+        return True
+
+
 def product_id_for_hud_mode(hud_mode: int) -> int | None:
     try:
         return HUD_MODE_PRODUCT_IDS.get(int(hud_mode))
@@ -540,10 +557,17 @@ class TuringUsbDisplay:
         import usb.util
 
         if self.dev is not None:
-            try:
-                self.dev.reset()
-            except Exception as exc:
-                print(f"USB reset failed: {exc}")
+            if _usbgpu_reset_protected():
+                print(
+                    "Skipping TURZX USB device reset while eGPU is loading or active; "
+                    "reconnecting without reset",
+                    flush=True,
+                )
+            else:
+                try:
+                    self.dev.reset()
+                except Exception as exc:
+                    print(f"USB reset failed: {exc}")
             try:
                 usb.util.dispose_resources(self.dev)
             except Exception:
