@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Safely install, confirm, or roll back the experimental C4 USB-PD v3 kernel."""
+"""Safely install, confirm, or roll back the SDM845 USB-PD v3 kernel."""
 
 from __future__ import annotations
 
@@ -18,20 +18,20 @@ import urllib.request
 
 
 EXPECTED_AGNOS_VERSION = "19.6"
-EXPECTED_DEVICE_TYPE = "mici"
-RELEASE_TAG = "usbpd-test-v3-c4"
+SUPPORTED_DEVICE_TYPES = frozenset(("c3", "tici", "tizi", "mici"))
+C3_DEVICE_TYPES = frozenset(("c3", "tici"))
+RELEASE_TAG = "usbpd-test-v3-agnos19.6"
 RELEASE_BASE = f"https://github.com/ajouatom/agnos-builder/releases/download/{RELEASE_TAG}"
-BOOT_URL = f"{RELEASE_BASE}/boot.img"
-CHECKSUM_URL = f"{RELEASE_BASE}/boot.img.sha256"
 STATE_PATH = Path("/data/usbpd-kernel-trial.json")
 DATA_DIR = Path("/data/usbpd-kernel-v3")
-BOOT_IMAGE_PATH = DATA_DIR / "boot.img"
-CHECKSUM_PATH = DATA_DIR / "boot.img.sha256"
+AUTO_FAILED_PATH = DATA_DIR / f"auto-failed-{RELEASE_TAG}.json"
+INSTALLED_PATH = DATA_DIR / "installed.json"
 PARAMS_PATH = Path("/data/params/d")
 DEVICE_MODEL_PATH = Path("/sys/firmware/devicetree/base/model")
 PSTORE_PATH = Path("/sys/fs/pstore")
 REPO_ROOT = Path(__file__).resolve().parents[1]
-MANIFEST_PATH = REPO_ROOT / "openpilot/system/hardware/tici/agnos.json"
+DEFAULT_MANIFEST_PATH = REPO_ROOT / "openpilot/system/hardware/tici/agnos.json"
+C3_MANIFEST_PATH = REPO_ROOT / "openpilot/system/hardware/tici/agnos-tici.json"
 
 
 class TrialError(Exception):
@@ -67,10 +67,29 @@ def device_type() -> str:
   return model.split("comma ")[-1]
 
 
-def require_c4() -> None:
+def require_supported_device() -> str:
   actual = device_type()
-  if actual != EXPECTED_DEVICE_TYPE:
-    raise TrialError(f"이 시험 커널은 comma four(mici) 전용입니다. 현재 장치: {actual}")
+  if actual not in SUPPORTED_DEVICE_TYPES:
+    raise TrialError(f"이 커널은 C3/C3 clone/C3X/C4 전용입니다. 현재 장치: {actual}")
+  return actual
+
+
+def boot_asset(device: str) -> str:
+  return "boot-c3-c3clone.img" if device in C3_DEVICE_TYPES else "boot-c3x-c4.img"
+
+
+def manifest_path(device: str) -> Path:
+  return C3_MANIFEST_PATH if device in C3_DEVICE_TYPES else DEFAULT_MANIFEST_PATH
+
+
+def release_paths(device: str) -> tuple[str, str, Path, Path]:
+  asset = boot_asset(device)
+  return (
+    f"{RELEASE_BASE}/{asset}",
+    f"{RELEASE_BASE}/{asset}.sha256",
+    DATA_DIR / asset,
+    DATA_DIR / f"{asset}.sha256",
+  )
 
 
 def current_slot() -> str:
@@ -78,6 +97,13 @@ def current_slot() -> str:
   if slot not in ("_a", "_b"):
     raise TrialError(f"알 수 없는 부팅 슬롯입니다: {slot!r}")
   return slot
+
+
+def current_boot_id() -> str:
+  try:
+    return Path("/proc/sys/kernel/random/boot_id").read_text(encoding="utf-8").strip()
+  except OSError:
+    return ""
 
 
 def other_slot(slot: str) -> str:
@@ -119,12 +145,12 @@ def sha256_file(path: Path, size: int | None = None) -> str:
   return digest.hexdigest()
 
 
-def load_manifest() -> list[dict]:
-  return json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
+def load_manifest(device: str) -> list[dict]:
+  return json.loads(manifest_path(device).read_text(encoding="utf-8"))
 
 
-def manifest_partition(name: str) -> dict:
-  for partition in load_manifest():
+def manifest_partition(name: str, device: str) -> dict:
+  for partition in load_manifest(device):
     if partition["name"] == name:
       return partition
   raise TrialError(f"AGNOS manifest에서 {name} 파티션을 찾지 못했습니다.")
@@ -145,9 +171,9 @@ def verify_partition(partition: dict, slot: str) -> bool:
     return stream.read(64).decode("ascii", errors="ignore").lower() == expected
 
 
-def verify_inactive_agnos(slot: str) -> list[str]:
+def verify_inactive_agnos(slot: str, device: str) -> list[str]:
   mismatches = []
-  for partition in load_manifest():
+  for partition in load_manifest(device):
     if not verify_partition(partition, slot):
       mismatches.append(partition["name"])
   return mismatches
@@ -174,23 +200,26 @@ def download_file(url: str, destination: Path) -> None:
       raise
 
 
-def download_and_verify_boot() -> tuple[Path, str, int]:
+def download_and_verify_boot(device: str) -> tuple[Path, str, int]:
+  boot_url, checksum_url, boot_image_path, checksum_path = release_paths(device)
   print("USB-PD 시험 커널과 checksum을 내려받습니다.", flush=True)
-  download_file(CHECKSUM_URL, CHECKSUM_PATH)
-  download_file(BOOT_URL, BOOT_IMAGE_PATH)
+  download_file(checksum_url, checksum_path)
 
-  checksum_fields = CHECKSUM_PATH.read_text(encoding="utf-8").split()
+  checksum_fields = checksum_path.read_text(encoding="utf-8").split()
   if not checksum_fields or len(checksum_fields[0]) != 64:
     raise TrialError("배포 checksum 형식이 올바르지 않습니다.")
   expected_hash = checksum_fields[0].lower()
-  image_size = BOOT_IMAGE_PATH.stat().st_size
+  if not boot_image_path.exists() or sha256_file(boot_image_path) != expected_hash:
+    download_file(boot_url, boot_image_path)
+
+  image_size = boot_image_path.stat().st_size
   if image_size <= 0:
     raise TrialError("시험 boot.img가 비어 있습니다.")
 
-  actual_hash = sha256_file(BOOT_IMAGE_PATH)
+  actual_hash = sha256_file(boot_image_path)
   if actual_hash != expected_hash:
     raise TrialError(f"시험 boot.img checksum 불일치: {actual_hash}")
-  return BOOT_IMAGE_PATH, actual_hash, image_size
+  return boot_image_path, actual_hash, image_size
 
 
 def save_state(state: dict) -> None:
@@ -212,6 +241,20 @@ def archive_state(state: dict, result: str) -> None:
   destination = DATA_DIR / f"trial-{result}-{state['finished_at']}.json"
   destination.write_text(json.dumps(state, indent=2, sort_keys=True) + "\n", encoding="utf-8")
   STATE_PATH.unlink(missing_ok=True)
+
+
+def save_installed(state: dict) -> None:
+  installed = {
+    "release_tag": state.get("release_tag", RELEASE_TAG),
+    "device_type": state.get("device_type", device_type()),
+    "boot_asset": state.get("boot_asset", boot_asset(device_type())),
+    "boot_sha256": state.get("boot_sha256", ""),
+    "boot_size": int(state.get("boot_size", 0)),
+    "slot": current_slot(),
+  }
+  DATA_DIR.mkdir(parents=True, exist_ok=True)
+  INSTALLED_PATH.write_text(json.dumps(installed, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+  os.sync()
 
 
 def best_effort_command(*args: str) -> str:
@@ -280,30 +323,31 @@ def collect_diagnostics() -> None:
   print(f"진단 자료를 저장했습니다: {destination}")
 
 
-def prepare_inactive_agnos() -> None:
+def prepare_inactive_agnos(interactive: bool = True) -> None:
   require_root()
   require_offroad()
-  require_c4()
+  device = require_supported_device()
   check_version()
   if STATE_PATH.exists():
     raise TrialError("이미 진행 중인 시험이 있습니다. 먼저 confirm 또는 rollback을 실행하세요.")
 
   target = other_slot(current_slot())
   print(f"비활성 슬롯 {target}에 순정 AGNOS {EXPECTED_AGNOS_VERSION}을 준비합니다.", flush=True)
-  print("다운로드와 기록에 시간이 오래 걸릴 수 있으며 완료될 때까지 전원을 끄면 안 됩니다.", flush=True)
-  answer = input("계속하려면 PREPARE를 입력하세요: ").strip()
-  if answer != "PREPARE":
-    raise TrialError("취소했습니다.")
+  if interactive:
+    print("다운로드와 기록에 시간이 오래 걸릴 수 있으며 완료될 때까지 전원을 끄면 안 됩니다.", flush=True)
+    answer = input("계속하려면 PREPARE를 입력하세요: ").strip()
+    if answer != "PREPARE":
+      raise TrialError("취소했습니다.")
   env = os.environ.copy()
   env["PYTHONPATH"] = f"{REPO_ROOT}:{env.get('PYTHONPATH', '')}"
   subprocess.run(
-    [sys.executable, str(REPO_ROOT / "openpilot/system/hardware/tici/agnos.py"), str(MANIFEST_PATH)],
+    [sys.executable, str(REPO_ROOT / "openpilot/system/hardware/tici/agnos.py"), str(manifest_path(device))],
     check=True,
     cwd=REPO_ROOT,
     env=env,
   )
 
-  mismatches = verify_inactive_agnos(target)
+  mismatches = verify_inactive_agnos(target, device)
   if mismatches:
     raise TrialError(f"비활성 슬롯 검증 실패: {', '.join(mismatches)}")
   print(f"비활성 슬롯 {target}의 순정 AGNOS 준비가 완료됐습니다. 이제 install을 실행하세요.")
@@ -312,14 +356,14 @@ def prepare_inactive_agnos() -> None:
 def install() -> None:
   require_root()
   require_offroad()
-  require_c4()
+  device = require_supported_device()
   check_version()
   if STATE_PATH.exists():
     raise TrialError("이미 진행 중인 시험이 있습니다. 먼저 status를 확인하세요.")
 
   active = current_slot()
   target = other_slot(active)
-  mismatches = verify_inactive_agnos(target)
+  mismatches = verify_inactive_agnos(target, device)
   if mismatches:
     names = ", ".join(mismatches)
     raise TrialError(
@@ -328,8 +372,8 @@ def install() -> None:
       "  sudo ./scripts/usbpd_kernel_trial.py prepare"
     )
 
-  boot_partition = manifest_partition("boot")
-  image_path, image_hash, image_size = download_and_verify_boot()
+  boot_partition = manifest_partition("boot", device)
+  image_path, image_hash, image_size = download_and_verify_boot(device)
   target_boot = partition_path("boot", target)
   partition_size = int(run("blockdev", "--getsize64", str(target_boot), capture=True))
   if image_size > partition_size:
@@ -356,13 +400,15 @@ def install() -> None:
   state = {
     "phase": "writing",
     "created_at": created_at,
+    "install_boot_id": current_boot_id(),
     "previous_slot": active,
     "trial_slot": target,
     "boot_sha256": image_hash,
     "boot_size": image_size,
     "backup_path": str(backup_path),
     "agnos_version": EXPECTED_AGNOS_VERSION,
-    "device_type": EXPECTED_DEVICE_TYPE,
+    "device_type": device,
+    "boot_asset": boot_asset(device),
     "release_tag": RELEASE_TAG,
   }
   save_state(state)
@@ -406,7 +452,7 @@ def should_defer_success() -> int:
 def activate() -> None:
   require_root()
   require_offroad()
-  require_c4()
+  require_supported_device()
   state = load_state()
   if state.get("phase") != "ready":
     raise TrialError(f"활성화할 수 없는 시험 상태입니다: {state.get('phase')}")
@@ -429,11 +475,12 @@ def activate() -> None:
 
 def confirm() -> None:
   require_root()
-  require_c4()
+  require_supported_device()
   state = load_state()
   if current_slot() != state.get("trial_slot"):
     raise TrialError("현재 시험 슬롯으로 부팅된 상태가 아니므로 확정할 수 없습니다.")
   run("abctl", "--set_success")
+  save_installed(state)
   archive_state(state, "confirmed")
   print("USB-PD 시험 커널 부팅을 성공으로 확정했습니다. 이 슬롯을 계속 사용합니다.")
 
@@ -450,11 +497,116 @@ def rollback() -> None:
   print("준비되면 'sudo reboot'를 실행하세요.")
 
 
+def record_auto_failure(state: dict, reason: str) -> None:
+  DATA_DIR.mkdir(parents=True, exist_ok=True)
+  failure = {
+    "release_tag": RELEASE_TAG,
+    "failed_at": int(time.time()),
+    "reason": reason,
+    "state": state,
+  }
+  AUTO_FAILED_PATH.write_text(json.dumps(failure, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+  os.sync()
+
+
+def ensure() -> int:
+  """Install the matching kernel automatically and request a reboot with exit 10."""
+  require_root()
+  device = require_supported_device()
+  check_version()
+  active = current_slot()
+
+  if STATE_PATH.exists():
+    state = load_state()
+    if state.get("phase") == "ready" and active == state.get("trial_slot"):
+      size = int(state.get("boot_size", 0))
+      expected_hash = str(state.get("boot_sha256", ""))
+      if size <= 0 or len(expected_hash) != 64:
+        raise TrialError("자동 확정에 필요한 boot 이미지 정보가 올바르지 않습니다.")
+      actual_hash = sha256_file(partition_path("boot", active), size)
+      if actual_hash != expected_hash:
+        raise TrialError(f"자동 확정 전 boot checksum 불일치: {actual_hash}")
+      confirm()
+      print(f"{device} USB-PD v3 커널 업데이트를 자동 확정했습니다.", flush=True)
+      return 0
+
+    previous = state.get("previous_slot")
+    if previous in ("_a", "_b") and active != state.get("trial_slot"):
+      if state.get("install_boot_id") and state.get("install_boot_id") == current_boot_id():
+        activate()
+        print("새 커널 슬롯은 아직 부팅되지 않았습니다. 안전한 시점에 자동 재부팅합니다.", flush=True)
+        return 10
+      reason = "시험 슬롯 부팅 실패 또는 기존 슬롯 자동 복귀"
+      record_auto_failure(state, reason)
+      archive_state(state, "auto-failed")
+      print(f"USB-PD v3 커널 자동 적용을 중단했습니다: {reason}", flush=True)
+      return 0
+
+    raise TrialError(f"처리할 수 없는 커널 업데이트 상태입니다: {state.get('phase')}")
+
+  if INSTALLED_PATH.exists():
+    try:
+      installed = json.loads(INSTALLED_PATH.read_text(encoding="utf-8"))
+      installed_size = int(installed.get("boot_size", 0))
+      installed_hash = str(installed.get("boot_sha256", ""))
+      if (installed.get("release_tag") == RELEASE_TAG and installed.get("device_type") == device and
+          installed_size > 0 and len(installed_hash) == 64 and
+          sha256_file(partition_path("boot", active), installed_size) == installed_hash):
+        print(f"{device}에 맞는 USB-PD v3 커널이 이미 적용되어 있습니다.", flush=True)
+        return 0
+    except (OSError, ValueError, TypeError, json.JSONDecodeError):
+      pass
+
+  require_offroad()
+  _image_path, image_hash, image_size = download_and_verify_boot(device)
+  active_hash = sha256_file(partition_path("boot", active), image_size)
+  if active_hash == image_hash:
+    AUTO_FAILED_PATH.unlink(missing_ok=True)
+    save_installed({
+      "release_tag": RELEASE_TAG,
+      "device_type": device,
+      "boot_asset": boot_asset(device),
+      "boot_sha256": image_hash,
+      "boot_size": image_size,
+    })
+    print(f"{device}에 맞는 USB-PD v3 커널이 이미 적용되어 있습니다.", flush=True)
+    return 0
+
+  if AUTO_FAILED_PATH.exists():
+    print(
+      f"이 릴리스의 자동 적용 실패 기록이 있어 재설치를 건너뜁니다: {AUTO_FAILED_PATH}",
+      flush=True,
+    )
+    return 0
+
+  target = other_slot(active)
+  mismatches = verify_inactive_agnos(target, device)
+  if mismatches:
+    message = f"비활성 슬롯 {target}을 AGNOS {EXPECTED_AGNOS_VERSION}으로 자동 준비합니다: {', '.join(mismatches)}"
+    print(message, flush=True)
+    prepare_inactive_agnos(interactive=False)
+
+  # install() reuses the verified local image, backs up the stock boot, writes
+  # only the inactive boot partition, verifies it, and selects that slot.
+  require_offroad()
+  install()
+  print("USB-PD v3 커널 적용을 위해 자동 재부팅합니다.", flush=True)
+  return 10
+
+
+def retry_auto() -> None:
+  require_root()
+  AUTO_FAILED_PATH.unlink(missing_ok=True)
+  print("USB-PD v3 커널 자동 적용 실패 기록을 지웠습니다. 다음 시작 때 다시 시도합니다.")
+
+
 def status() -> None:
   print(f"현재 슬롯: {current_slot()}")
   print(f"AGNOS 버전: {Path('/VERSION').read_text(encoding='utf-8').strip()}")
   print(f"장치: {device_type()}")
   print(f"시험 릴리스: {RELEASE_TAG}")
+  if device_type() in SUPPORTED_DEVICE_TYPES:
+    print(f"대상 이미지: {boot_asset(device_type())}")
   if STATE_PATH.exists():
     print(STATE_PATH.read_text(encoding="utf-8").rstrip())
   else:
@@ -463,7 +615,10 @@ def status() -> None:
 
 def main() -> int:
   parser = argparse.ArgumentParser(description=__doc__)
-  parser.add_argument("command", choices=("status", "prepare", "install", "activate", "confirm", "rollback", "collect", "should-defer-success"))
+  parser.add_argument("command", choices=(
+    "status", "prepare", "install", "activate", "confirm", "rollback",
+    "collect", "ensure", "retry-auto", "should-defer-success",
+  ))
   args = parser.parse_args()
 
   try:
@@ -481,6 +636,10 @@ def main() -> int:
       rollback()
     elif args.command == "collect":
       collect_diagnostics()
+    elif args.command == "ensure":
+      return ensure()
+    elif args.command == "retry-auto":
+      retry_auto()
     else:
       return should_defer_success()
   except (TrialError, OSError, subprocess.CalledProcessError, urllib.error.URLError) as error:

@@ -96,9 +96,9 @@ function agnos_init {
   # been tested and explicitly confirmed by the user.
   if [ -f /data/usbpd-kernel-trial.json ]; then
     if python3 "$DIR/scripts/usbpd_kernel_trial.py" should-defer-success; then
-      echo "C4 USB-PD v2 kernel trial active; deferring boot slot success confirmation."
+      echo "USB-PD v3 kernel update active; deferring boot slot success confirmation."
     else
-      echo "C4 USB-PD v2 trial state exists but is not valid for this slot; refusing automatic boot success confirmation."
+      echo "USB-PD v3 update state exists but is not valid for this slot; refusing automatic boot success confirmation."
     fi
   else
     sudo abctl --set_success
@@ -176,6 +176,54 @@ function start_carrot_recovery {
 
   echo "Starting carrot recovery server on 6999."
   (cd "$DIR" && "$py_bin" "$recovery_script" --port 6999 >> /tmp/carrot_recovery.log 2>&1 &)
+}
+
+function start_usbpd_kernel_update {
+  local updater="$DIR/scripts/usbpd_kernel_trial.py"
+  local log_path="/tmp/usbpd_kernel_update.log"
+  local lock_path="/tmp/usbpd_kernel_update.lock"
+
+  [ -f /AGNOS ] || return 0
+  [ -f "$updater" ] || return 0
+
+  (
+    if command -v flock >/dev/null 2>&1; then
+      exec 9>"$lock_path"
+      flock -n 9 || exit 0
+    fi
+
+    # A newly booted trial slot can be confirmed as soon as userspace is alive.
+    # A fresh installation waits for one minute of stable offroad state so it
+    # never delays manager startup or downloads/flashes while driving.
+    if [ ! -f /data/usbpd-kernel-trial.json ]; then
+      stable=0
+      while [ "$stable" -lt 12 ]; do
+        if [ "$(cat /data/params/d/IsOnroad 2>/dev/null)" = "0" ]; then
+          stable=$((stable+1))
+        else
+          stable=0
+        fi
+        sleep 5
+      done
+    else
+      sleep 20
+    fi
+
+    sudo python3 "$updater" ensure
+    result=$?
+    if [ "$result" = "10" ]; then
+      echo "USB-PD v3 kernel installed into the verified inactive slot."
+      if [ "$(cat /data/params/d/IsOnroad 2>/dev/null)" = "0" ]; then
+        echo "Vehicle is offroad; rebooting into the new kernel."
+        sudo reboot
+      else
+        echo "Vehicle became onroad; the new kernel will start at the next reboot."
+      fi
+    elif [ "$result" != "0" ]; then
+      echo "USB-PD v3 kernel auto-update deferred (exit ${result}); keeping the current kernel."
+    fi
+  ) >> "$log_path" 2>&1 &
+  return 0
 }
 
 function start_carrot_web {
@@ -388,6 +436,7 @@ function launch {
   fi
 
   start_carrot_web
+  start_usbpd_kernel_update
 
 
   FORCE_REBUILD=0
