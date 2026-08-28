@@ -5,6 +5,7 @@ import lzma
 import os
 import struct
 import subprocess
+import sys
 import time
 from collections.abc import Generator
 
@@ -14,6 +15,7 @@ SPARSE_CHUNK_FMT = struct.Struct('H2xI4x')
 CAIBX_URL = "https://commadist.azureedge.net/agnosupdate/"
 
 AGNOS_MANIFEST_FILE = "openpilot/system/hardware/tici/agnos.json"
+POST_FLASH_HOOK_ENV = "AGNOS_POST_FLASH_HOOK"
 
 
 class StreamingDecompressor:
@@ -274,6 +276,17 @@ def swap(manifest_path: str, target_slot_number: int, cloudlog) -> None:
       cloudlog.error(f"Swap failed {out}")
 
 
+def run_post_flash_hook(target_slot_number: int, cloudlog) -> None:
+  hook = os.getenv(POST_FLASH_HOOK_ENV, "").strip()
+  if not hook:
+    return
+  cloudlog.warning(f"Applying AGNOS post-flash hook to slot {target_slot_number}: {hook}")
+  subprocess.run(
+    [sys.executable, hook, "install-prepared", "--target-slot", str(target_slot_number)],
+    check=True,
+  )
+
+
 def flash_agnos_update(manifest_path: str, target_slot_number: int, cloudlog, standalone=False) -> None:
   update = json.load(open(manifest_path))
 
@@ -325,6 +338,7 @@ if __name__ == "__main__":
   target_slot_number = get_target_slot_number()
   if args.verify:
     if verify_agnos_update(args.manifest, target_slot_number):
+      run_post_flash_hook(target_slot_number, logging)
       swap(args.manifest, target_slot_number, logging)
       exit(0)
     exit(1)
@@ -334,6 +348,7 @@ if __name__ == "__main__":
       flash_agnos_update(args.manifest, target_slot_number, logging, standalone=True)
 
     logging.warning(f"Verification succeeded. Swapping to slot {target_slot_number}")
+    run_post_flash_hook(target_slot_number, logging)
     swap(args.manifest, target_slot_number, logging)
   else:
     flash_agnos_update(args.manifest, target_slot_number, logging, standalone=True)

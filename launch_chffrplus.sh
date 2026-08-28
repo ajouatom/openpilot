@@ -4,6 +4,15 @@ DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null && pwd )"
 
 source "$DIR/launch_env.sh"
 
+# Fold the USB-PD boot image into a required AGNOS 19.6 update so new users
+# download the OS once and reboot once. Existing 19.6 installs are handled by
+# the lightweight boot-time checker below.
+if [ "$AGNOS_VERSION" = "19.6" ]; then
+  export AGNOS_POST_FLASH_HOOK="$DIR/scripts/usbpd_kernel_trial.py"
+else
+  unset AGNOS_POST_FLASH_HOOK
+fi
+
 function cleanup_stale_git_lfs_hooks {
   # Some deployed checkouts still contain hooks installed by git-lfs even
   # though the executable is no longer part of the device image. Those hooks
@@ -93,7 +102,7 @@ function agnos_init {
   rm -f /data/scons_cache/config.lock
 
   # Keep the stock slot recoverable until the experimental USB-PD kernel has
-  # been tested and explicitly confirmed by the user.
+  # booted far enough for manager to report healthy hardware state.
   if [ -f /data/usbpd-kernel-trial.json ]; then
     if python3 "$DIR/scripts/usbpd_kernel_trial.py" should-defer-success; then
       echo "USB-PD v3 kernel update active; deferring boot slot success confirmation."
@@ -178,50 +187,57 @@ function start_carrot_recovery {
   (cd "$DIR" && "$py_bin" "$recovery_script" --port 6999 >> /tmp/carrot_recovery.log 2>&1 &)
 }
 
-function start_usbpd_kernel_update {
+function install_usbpd_kernel_at_boot {
   local updater="$DIR/scripts/usbpd_kernel_trial.py"
   local log_path="/tmp/usbpd_kernel_update.log"
-  local lock_path="/tmp/usbpd_kernel_update.lock"
 
   [ -f /AGNOS ] || return 0
   [ -f "$updater" ] || return 0
 
+  echo "Checking the device-specific USB-PD v3 kernel during boot." | tee -a "$log_path"
+  sudo python3 "$updater" ensure-boot 2>&1 | tee -a "$log_path"
+  local result="${PIPESTATUS[0]}"
+  if [ "$result" = "10" ]; then
+    echo "USB-PD v3 kernel installed into the verified inactive slot; rebooting once." | tee -a "$log_path"
+    if sudo reboot; then
+      while true; do sleep 1; done
+    fi
+    echo "USB-PD v3 kernel reboot request failed; continuing with the current boot." | tee -a "$log_path"
+    return 1
+  elif [ "$result" = "11" ]; then
+    echo "USB-PD v3 trial boot detected; waiting for manager health before confirmation." | tee -a "$log_path"
+  elif [ "$result" != "0" ]; then
+    echo "USB-PD v3 boot-time update deferred (exit ${result}); keeping the current kernel." | tee -a "$log_path"
+  fi
+  return 0
+}
+
+function start_usbpd_kernel_confirmation {
+  local updater="$DIR/scripts/usbpd_kernel_trial.py"
+  local log_path="/tmp/usbpd_kernel_update.log"
+  local watchdog="/var/tmp/power_watchdog"
+
+  [ -f /AGNOS ] || return 0
+  [ -f "$updater" ] || return 0
+  [ -f /data/usbpd-kernel-trial.json ] || return 0
+
+  rm -f "$watchdog"
   (
-    if command -v flock >/dev/null 2>&1; then
-      exec 9>"$lock_path"
-      flock -n 9 || exit 0
+    waited=0
+    while [ ! -s "$watchdog" ] && [ "$waited" -lt 180 ]; do
+      sleep 1
+      waited=$((waited+1))
+    done
+    if [ ! -s "$watchdog" ]; then
+      echo "Manager health was not observed; leaving the USB-PD trial unconfirmed."
+      exit 0
     fi
 
-    # A newly booted trial slot can be confirmed as soon as userspace is alive.
-    # A fresh installation waits for one minute of stable offroad state so it
-    # never delays manager startup or downloads/flashes while driving.
-    if [ ! -f /data/usbpd-kernel-trial.json ]; then
-      stable=0
-      while [ "$stable" -lt 12 ]; do
-        if [ "$(cat /data/params/d/IsOnroad 2>/dev/null)" = "0" ]; then
-          stable=$((stable+1))
-        else
-          stable=0
-        fi
-        sleep 5
-      done
-    else
-      sleep 20
-    fi
-
-    sudo python3 "$updater" ensure
-    result=$?
-    if [ "$result" = "10" ]; then
-      echo "USB-PD v3 kernel installed into the verified inactive slot."
-      if [ "$(cat /data/params/d/IsOnroad 2>/dev/null)" = "0" ]; then
-        echo "Vehicle is offroad; rebooting into the new kernel."
-        sudo reboot
-      else
-        echo "Vehicle became onroad; the new kernel will start at the next reboot."
-      fi
-    elif [ "$result" != "0" ]; then
-      echo "USB-PD v3 kernel auto-update deferred (exit ${result}); keeping the current kernel."
-    fi
+    # Give onroad services and shared USB devices time to settle after the
+    # first healthy hardwared update. A crash or reboot preserves A/B fallback.
+    sleep 60
+    sudo python3 "$updater" confirm-healthy || \
+      echo "USB-PD v3 health confirmation failed; leaving the trial unconfirmed."
   ) >> "$log_path" 2>&1 &
   return 0
 }
@@ -435,8 +451,8 @@ function launch {
     while true; do sleep 1; done
   fi
 
+  install_usbpd_kernel_at_boot
   start_carrot_web
-  start_usbpd_kernel_update
 
 
   FORCE_REBUILD=0
@@ -463,6 +479,7 @@ function launch {
       fi
     fi
   fi
+  start_usbpd_kernel_confirmation
   start_big_model_update
   ./manager.py
 

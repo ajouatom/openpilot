@@ -22,6 +22,8 @@ SUPPORTED_DEVICE_TYPES = frozenset(("c3", "tici", "tizi", "mici"))
 C3_DEVICE_TYPES = frozenset(("c3", "tici"))
 RELEASE_TAG = "usbpd-test-v3-agnos19.6"
 RELEASE_BASE = f"https://github.com/ajouatom/agnos-builder/releases/download/{RELEASE_TAG}"
+ENSURE_REBOOT_REQUIRED = 10
+ENSURE_CONFIRM_PENDING = 11
 STATE_PATH = Path("/data/usbpd-kernel-trial.json")
 DATA_DIR = Path("/data/usbpd-kernel-v3")
 AUTO_FAILED_PATH = DATA_DIR / f"auto-failed-{RELEASE_TAG}.json"
@@ -323,9 +325,10 @@ def collect_diagnostics() -> None:
   print(f"진단 자료를 저장했습니다: {destination}")
 
 
-def prepare_inactive_agnos(interactive: bool = True) -> None:
+def prepare_inactive_agnos(interactive: bool = True, boot_install: bool = False) -> None:
   require_root()
-  require_offroad()
+  if not boot_install:
+    require_offroad()
   device = require_supported_device()
   check_version()
   if STATE_PATH.exists():
@@ -353,16 +356,26 @@ def prepare_inactive_agnos(interactive: bool = True) -> None:
   print(f"비활성 슬롯 {target}의 순정 AGNOS 준비가 완료됐습니다. 이제 install을 실행하세요.")
 
 
-def install() -> None:
+def install(boot_install: bool = False, prepared_target: str | None = None) -> None:
   require_root()
-  require_offroad()
+  if not boot_install:
+    require_offroad()
   device = require_supported_device()
-  check_version()
+  if prepared_target is None:
+    check_version()
+  elif prepared_target not in ("_a", "_b"):
+    raise TrialError(f"알 수 없는 준비 슬롯입니다: {prepared_target!r}")
   if STATE_PATH.exists():
-    raise TrialError("이미 진행 중인 시험이 있습니다. 먼저 status를 확인하세요.")
+    state = load_state()
+    if prepared_target is not None and state.get("phase") == "ready" and state.get("trial_slot") == prepared_target:
+      archive_state(state, "reinstalled")
+    else:
+      raise TrialError("이미 진행 중인 시험이 있습니다. 먼저 status를 확인하세요.")
 
   active = current_slot()
-  target = other_slot(active)
+  target = prepared_target or other_slot(active)
+  if target != other_slot(active):
+    raise TrialError(f"현재 슬롯 {active}의 비활성 슬롯은 {other_slot(active)}이며 요청 슬롯 {target}과 다릅니다.")
   mismatches = verify_inactive_agnos(target, device)
   if mismatches:
     names = ", ".join(mismatches)
@@ -509,7 +522,19 @@ def record_auto_failure(state: dict, reason: str) -> None:
   os.sync()
 
 
-def ensure() -> int:
+def verify_current_trial(state: dict, active: str) -> None:
+  if state.get("phase") != "ready" or active != state.get("trial_slot"):
+    raise TrialError("현재 부팅 슬롯은 확정할 수 있는 USB-PD 시험 슬롯이 아닙니다.")
+  size = int(state.get("boot_size", 0))
+  expected_hash = str(state.get("boot_sha256", ""))
+  if size <= 0 or len(expected_hash) != 64:
+    raise TrialError("자동 확정에 필요한 boot 이미지 정보가 올바르지 않습니다.")
+  actual_hash = sha256_file(partition_path("boot", active), size)
+  if actual_hash != expected_hash:
+    raise TrialError(f"자동 확정 전 boot checksum 불일치: {actual_hash}")
+
+
+def ensure(confirm_trial: bool = True, boot_install: bool = False) -> int:
   """Install the matching kernel automatically and request a reboot with exit 10."""
   require_root()
   device = require_supported_device()
@@ -519,13 +544,10 @@ def ensure() -> int:
   if STATE_PATH.exists():
     state = load_state()
     if state.get("phase") == "ready" and active == state.get("trial_slot"):
-      size = int(state.get("boot_size", 0))
-      expected_hash = str(state.get("boot_sha256", ""))
-      if size <= 0 or len(expected_hash) != 64:
-        raise TrialError("자동 확정에 필요한 boot 이미지 정보가 올바르지 않습니다.")
-      actual_hash = sha256_file(partition_path("boot", active), size)
-      if actual_hash != expected_hash:
-        raise TrialError(f"자동 확정 전 boot checksum 불일치: {actual_hash}")
+      verify_current_trial(state, active)
+      if not confirm_trial:
+        print("USB-PD v3 시험 슬롯이 부팅됐습니다. manager 건강 확인 후 자동 확정합니다.", flush=True)
+        return ENSURE_CONFIRM_PENDING
       confirm()
       print(f"{device} USB-PD v3 커널 업데이트를 자동 확정했습니다.", flush=True)
       return 0
@@ -535,7 +557,7 @@ def ensure() -> int:
       if state.get("install_boot_id") and state.get("install_boot_id") == current_boot_id():
         activate()
         print("새 커널 슬롯은 아직 부팅되지 않았습니다. 안전한 시점에 자동 재부팅합니다.", flush=True)
-        return 10
+        return ENSURE_REBOOT_REQUIRED
       reason = "시험 슬롯 부팅 실패 또는 기존 슬롯 자동 복귀"
       record_auto_failure(state, reason)
       archive_state(state, "auto-failed")
@@ -557,7 +579,8 @@ def ensure() -> int:
     except (OSError, ValueError, TypeError, json.JSONDecodeError):
       pass
 
-  require_offroad()
+  if not boot_install:
+    require_offroad()
   _image_path, image_hash, image_size = download_and_verify_boot(device)
   active_hash = sha256_file(partition_path("boot", active), image_size)
   if active_hash == image_hash:
@@ -584,14 +607,39 @@ def ensure() -> int:
   if mismatches:
     message = f"비활성 슬롯 {target}을 AGNOS {EXPECTED_AGNOS_VERSION}으로 자동 준비합니다: {', '.join(mismatches)}"
     print(message, flush=True)
-    prepare_inactive_agnos(interactive=False)
+    prepare_inactive_agnos(interactive=False, boot_install=boot_install)
 
   # install() reuses the verified local image, backs up the stock boot, writes
   # only the inactive boot partition, verifies it, and selects that slot.
-  require_offroad()
-  install()
+  if not boot_install:
+    require_offroad()
+  install(boot_install=boot_install)
   print("USB-PD v3 커널 적용을 위해 자동 재부팅합니다.", flush=True)
-  return 10
+  return ENSURE_REBOOT_REQUIRED
+
+
+def ensure_boot() -> int:
+  """Check and install before manager starts, but leave trial confirmation pending."""
+  return ensure(confirm_trial=False, boot_install=True)
+
+
+def install_prepared_agnos(target_slot_number: int) -> None:
+  """Replace stock boot in a freshly prepared AGNOS slot before its first reboot."""
+  if target_slot_number not in (0, 1):
+    raise TrialError(f"알 수 없는 AGNOS 대상 슬롯 번호입니다: {target_slot_number}")
+  target = "_a" if target_slot_number == 0 else "_b"
+  install(boot_install=True, prepared_target=target)
+
+
+def confirm_healthy_boot() -> None:
+  """Confirm only an already-booted trial after launcher-observed manager health."""
+  require_root()
+  device = require_supported_device()
+  check_version()
+  state = load_state()
+  verify_current_trial(state, current_slot())
+  confirm()
+  print(f"{device} USB-PD v3 커널 업데이트를 건강 확인 후 자동 확정했습니다.", flush=True)
 
 
 def retry_auto() -> None:
@@ -617,8 +665,10 @@ def main() -> int:
   parser = argparse.ArgumentParser(description=__doc__)
   parser.add_argument("command", choices=(
     "status", "prepare", "install", "activate", "confirm", "rollback",
-    "collect", "ensure", "retry-auto", "should-defer-success",
+    "collect", "ensure", "ensure-boot", "install-prepared", "confirm-healthy",
+    "retry-auto", "should-defer-success",
   ))
+  parser.add_argument("--target-slot", type=int, choices=(0, 1))
   args = parser.parse_args()
 
   try:
@@ -638,6 +688,14 @@ def main() -> int:
       collect_diagnostics()
     elif args.command == "ensure":
       return ensure()
+    elif args.command == "ensure-boot":
+      return ensure_boot()
+    elif args.command == "install-prepared":
+      if args.target_slot is None:
+        raise TrialError("install-prepared에는 --target-slot이 필요합니다.")
+      install_prepared_agnos(args.target_slot)
+    elif args.command == "confirm-healthy":
+      confirm_healthy_boot()
     elif args.command == "retry-auto":
       retry_auto()
     else:
