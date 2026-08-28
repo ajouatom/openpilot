@@ -249,6 +249,7 @@
                 "VehicleNaviCurveControl",
                 "VehicleNaviCurveMppControl",
                 "VehicleNaviCurveSpeedFactor",
+                "VehicleNaviCurveCtrlEnd",
                 "TurnSpeedControlMode",
                 "MapTurnSpeedFactor",
                 "ModelTurnSpeedFactor",
@@ -2894,6 +2895,23 @@
       "default": 100,
       "unit": 10,
       "display_unit": "percent"
+    },
+    {
+      "group": "감속제어",
+      "name": "VehicleNaviCurveCtrlEnd",
+      "title": "차량 내비 커브 감속완료 시간(3초)",
+      "descr": "0x4BA 곡률 지점 몇 초 전까지 목표속도에 도달할지 설정합니다. 작을수록 커브에 더 가까이 가서 감속하며 주행 중 변경하면 약 1초 이내에 적용됩니다.",
+      "egroup": "SPEED",
+      "etitle": "Stock Navigation Curve Decel End (3s)",
+      "edescr": "Sets how many seconds before the 0x4BA curvature spot the target speed is reached. Lower values delay deceleration. Changes take effect while driving.",
+      "cgroup": "速度控制",
+      "ctitle": "原车导航弯道减速完成时间 (3秒)",
+      "cdescr": "设置在 0x4BA 曲率点前多少秒达到目标速度。数值越小，减速越晚。",
+      "min": 0,
+      "max": 10,
+      "default": 3,
+      "unit": 1,
+      "display_unit": "timeSec"
     },
     {
       "group": "감속제어",
