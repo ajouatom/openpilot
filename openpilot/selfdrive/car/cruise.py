@@ -193,6 +193,7 @@ class VCruiseCarrot:
     self._brake_pressed_count = 0
     self._soft_hold_count = 0
     self._soft_hold_active = 0
+    self.soft_hold_on_cancel = self.params.get_bool("SoftHoldOnCancel")
     self._cruise_ready = False
     self._cruise_cancel_state = False
     self._pause_auto_speed_up = False
@@ -263,6 +264,7 @@ class VCruiseCarrot:
     unit_factor = 1.0 if is_metric else CV.MPH_TO_KPH
     if self.frame % 10 == 0:
       self.autoCruiseControl = self.params.get_int("AutoCruiseControl") * unit_factor
+      self.soft_hold_on_cancel = self.params.get_bool("SoftHoldOnCancel")
       self.autoGasTokSpeed = self.params.get_int("AutoGasTokSpeed") * unit_factor
       self.autoGasCancelSpeed = self.params.get_int("AutoGasCancelSpeed") * unit_factor
       self.autoGasSyncSpeed = self.params.get_int("AutoGasSyncSpeed")
@@ -774,13 +776,18 @@ class VCruiseCarrot:
     else:
       return False, d_final
 
+  def _engage_soft_hold(self):
+    self._soft_hold_active = 2
+    if self.soft_hold_on_cancel:
+      self._cruise_cancel_state = False
+    self._cruise_control(1, -1, "Cruise on (soft hold)")
+
   def _update_cruise_state(self, CS, CC, v_cruise_kph):
     if not CC.enabled:
       #self._pause_auto_speed_up = False
       if self._brake_pressed_count == -1 and self._soft_hold_active > 0:
-        self._soft_hold_active = 2
         #self.autoCruiseControl_cancel_timer = 0
-        self._cruise_control(1, -1, "Cruise on (soft hold)")
+        self._engage_soft_hold()
       # GM: autoResume
       elif self.params.get_bool("ActivateCruiseAfterBrake"):
         self.params.put_bool_nonblocking("ActivateCruiseAfterBrake", False)
@@ -909,7 +916,8 @@ class VCruiseCarrot:
         self._v_cruise_kph_at_brake = self.v_cruise_kph
         self._add_log(f"{self.v_cruise_kph} Cruise speed at brake")
       soft_hold_available = CS.cruiseState.available and self.autoCruiseControl != 0 and not self.CP.pcmCruise and \
-                            self.autoCruiseControl_cancel_timer == 0
+                            self.autoCruiseControl_cancel_timer == 0 and \
+                            (not self._cruise_cancel_state or self.soft_hold_on_cancel)
       self._soft_hold_count = self._soft_hold_count + 1 if soft_hold_available and CS.vEgo < 0.1 and CS.gearShifter == GearShifter.drive else 0
       if not soft_hold_available:
         self._soft_hold_active = 0
