@@ -18,6 +18,7 @@ import {
   loadDashcamRoutes,
   markDashcamScrollBusy,
   maybeLoadMoreDashcamRoutes,
+  openAutoTuner,
   openDashcamPlayer,
   renderDashcamRoute,
   renderDashcamRoutes,
@@ -901,6 +902,15 @@ function bindLogsPage() {
         const entry = dashcamState.routes.find((item) => item.route === route);
         const targets = dashcamSelectedForRoute(entry || { segmentFolders: [] });
         uploadDashcamSegments(targets).catch(() => {});
+      } else if (action === "autotune-selected") {
+        const entry = dashcamState.routes.find((item) => item.route === route);
+        let targets = dashcamSelectedForRoute(entry || { segmentFolders: [] });
+        const allSegments = (entry?.segmentFolders || []).map((s) => s.segment);
+        const isAll = !targets || targets.length === 0 || (allSegments.length > 0 && targets.length === allSegments.length);
+        if (!targets || targets.length === 0) {
+          targets = allSegments;
+        }
+        openAutoTuner(route, targets, { isAll, totalCount: allSegments.length }).catch(() => {});
       }
     });
     routesHost.addEventListener("change", (ev) => {

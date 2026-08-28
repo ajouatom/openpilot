@@ -19,6 +19,7 @@ from . import (
   system,
   terminal,
   tools,
+  autotune,
   vision_diag,
   vision_test,
   web_sound,
@@ -48,6 +49,7 @@ def register_all(app: web.Application) -> None:
   dashcam.register(app)
   screenrecord.register(app)
   tools.register(app)
+  autotune.register(app)
   mapbox_tokens.register(app)
   youtube_live.register(app)
   vision_test.register(app)

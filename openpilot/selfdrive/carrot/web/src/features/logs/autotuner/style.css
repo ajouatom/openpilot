@@ -1,0 +1,978 @@
+/**
+ * AutoTuner Styling - Compact Modern Dark Theme with Auto Responsive Landscape & Portrait Layouts
+ * Full height flex constraint with smooth, reliable scrolling and sticky headers.
+ */
+
+/* Sheet overrides for AutoTuner modal */
+#appDialog.app-dialog--autotuner .app-dialog__sheet,
+#appDialog:has(#autoTunerRoot) .app-dialog__sheet,
+#appDialog:has(.autotuner-mount) .app-dialog__sheet {
+  box-sizing: border-box !important;
+  display: flex !important;
+  flex-direction: column !important;
+  overflow: hidden !important;
+  transition: width 0.2s cubic-bezier(0.2, 0, 0, 1), max-width 0.2s cubic-bezier(0.2, 0, 0, 1), height 0.2s cubic-bezier(0.2, 0, 0, 1);
+}
+
+/* Ensure dialog body, mount wrapper, and root fill flex space cleanly */
+#appDialog.app-dialog--autotuner .app-dialog__body,
+#appDialog:has(#autoTunerRoot) .app-dialog__body,
+#appDialog:has(.autotuner-mount) .app-dialog__body {
+  display: flex !important;
+  flex-direction: column !important;
+  flex: 1 1 0% !important;
+  min-height: 0 !important;
+  height: 100% !important;
+  overflow: hidden !important;
+  padding: 0 !important;
+  margin: 0 !important;
+}
+
+#appDialog.app-dialog--autotuner .app-dialog__foot,
+#appDialog:has(#autoTunerRoot) .app-dialog__foot {
+  margin-top: 4px !important;
+  padding-top: 0 !important;
+  flex-shrink: 0 !important;
+}
+
+.autotuner-mount,
+div:has(> #autoTunerRoot),
+div[id^="autotunerMount_"] {
+  display: flex !important;
+  flex-direction: column !important;
+  flex: 1 1 0% !important;
+  min-height: 0 !important;
+  height: 100% !important;
+  width: 100% !important;
+  overflow: hidden !important;
+}
+
+/* Landscape Mode (PC default & wide/rotated devices) */
+#appDialog.app-dialog--autotuner-landscape .app-dialog__sheet,
+#appDialog:has(#autoTunerRoot.autotuner-mode-landscape) .app-dialog__sheet {
+  width: min(96vw, 1180px) !important;
+  max-width: 1180px !important;
+  height: min(92dvh, 760px) !important;
+  max-height: min(92dvh, 760px) !important;
+  padding: 10px 14px !important;
+}
+
+/* Portrait Mode (Mobile vertical default) */
+#appDialog.app-dialog--autotuner-portrait .app-dialog__sheet,
+#appDialog:has(#autoTunerRoot.autotuner-mode-portrait) .app-dialog__sheet {
+  width: min(96vw, 560px) !important;
+  max-width: 560px !important;
+  height: min(94dvh, 860px) !important;
+  max-height: min(94dvh, 860px) !important;
+  padding: 10px 12px !important;
+}
+
+/* Mobile full-bleed screen coverage */
+@media (max-width: 640px) {
+  #appDialog.app-dialog--autotuner .app-dialog__sheet,
+  #appDialog:has(#autoTunerRoot) .app-dialog__sheet {
+    width: calc(100vw - 10px) !important;
+    max-width: calc(100vw - 10px) !important;
+    padding: 8px 10px !important;
+  }
+
+  #appDialog.app-dialog--autotuner-portrait .app-dialog__sheet,
+  #appDialog:has(#autoTunerRoot.autotuner-mode-portrait) .app-dialog__sheet {
+    height: calc(100dvh - 12px) !important;
+    max-height: calc(100dvh - 12px) !important;
+  }
+
+  #appDialog.app-dialog--autotuner-landscape .app-dialog__sheet,
+  #appDialog:has(#autoTunerRoot.autotuner-mode-landscape) .app-dialog__sheet {
+    height: calc(100dvh - 10px) !important;
+    max-height: calc(100dvh - 10px) !important;
+  }
+}
+
+/* Main Dialog Root */
+.autotuner-dialog {
+  display: flex !important;
+  flex-direction: column !important;
+  flex: 1 1 0% !important;
+  width: 100% !important;
+  height: 100% !important;
+  min-height: 0 !important;
+  box-sizing: border-box;
+  color: var(--text-color, #e0e0e0);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  overflow: hidden !important;
+}
+
+.autotuner-dialog::-webkit-scrollbar,
+.autotuner-col-left::-webkit-scrollbar,
+.autotuner-col-right::-webkit-scrollbar,
+.autotuner-tab-pane::-webkit-scrollbar,
+.autotuner-results-view::-webkit-scrollbar,
+.autotuner-table-wrap::-webkit-scrollbar,
+.autotuner-summary-card::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+
+.autotuner-dialog::-webkit-scrollbar-thumb,
+.autotuner-col-left::-webkit-scrollbar-thumb,
+.autotuner-col-right::-webkit-scrollbar-thumb,
+.autotuner-tab-pane::-webkit-scrollbar-thumb,
+.autotuner-results-view::-webkit-scrollbar-thumb,
+.autotuner-table-wrap::-webkit-scrollbar-thumb,
+.autotuner-summary-card::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.28);
+  border-radius: 4px;
+}
+
+.autotuner-dialog,
+.autotuner-col-left,
+.autotuner-col-right,
+.autotuner-mode-portrait .autotuner-tab-pane,
+.autotuner-results-view,
+.autotuner-table-wrap {
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+}
+
+/* Top Header Bar */
+.autotuner-top-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  padding-bottom: 5px;
+  margin-bottom: 6px;
+  flex-shrink: 0;
+}
+
+.autotuner-tabs {
+  display: flex;
+  gap: 6px;
+}
+
+.autotuner-tab {
+  background: transparent;
+  border: 1px solid transparent;
+  color: rgba(255, 255, 255, 0.7);
+  padding: 4px 10px;
+  font-size: 12.5px;
+  font-weight: 600;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.autotuner-tab:hover {
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.autotuner-tab.active {
+  color: #38ef7d;
+  background: rgba(56, 239, 125, 0.12);
+  border-color: rgba(56, 239, 125, 0.3);
+}
+
+/* Layout Switcher Button */
+.autotuner-layout-controls {
+  display: flex;
+  align-items: center;
+}
+
+.autotuner-layout-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 5px;
+  padding: 3px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #e2e8f0;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.autotuner-layout-btn:hover {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(56, 239, 125, 0.4);
+  color: #ffffff;
+}
+
+.autotuner-layout-badge {
+  background: rgba(56, 239, 125, 0.18);
+  color: #38ef7d;
+  padding: 1px 4px;
+  border-radius: 3px;
+  font-size: 9.5px;
+  font-weight: 700;
+}
+
+/* Panes */
+.autotuner-tab-pane {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 0%;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+}
+
+.autotuner-tab-pane.hidden {
+  display: none !important;
+}
+
+/* Landscape mode: 2 independent scrollable columns */
+.autotuner-mode-landscape .autotuner-columns {
+  display: grid !important;
+  grid-template-columns: 330px 1fr !important;
+  gap: 12px !important;
+  flex: 1 1 0% !important;
+  height: 100% !important;
+  min-height: 0 !important;
+  align-items: stretch !important;
+  overflow: hidden !important;
+}
+
+.autotuner-mode-landscape .autotuner-col-left {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 6px !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  padding-right: 4px !important;
+  min-height: 0 !important;
+  height: 100% !important;
+}
+
+.autotuner-mode-landscape .autotuner-col-right {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 6px !important;
+  min-height: 0 !important;
+  height: 100% !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  padding-right: 3px !important;
+  flex: 1 1 0% !important;
+  position: relative !important;
+}
+
+.autotuner-mode-landscape .autotuner-results-view {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 6px !important;
+  min-height: 100% !important;
+  width: 100% !important;
+  position: relative !important;
+  overflow: visible !important;
+}
+
+/* Portrait mode: single seamless vertical scroll container */
+.autotuner-mode-portrait .autotuner-tab-pane {
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  flex: 1 1 0% !important;
+  height: 100% !important;
+  min-height: 0 !important;
+}
+
+.autotuner-mode-portrait .autotuner-columns {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 8px !important;
+  min-height: min-content !important;
+  padding-right: 2px !important;
+  overflow: visible !important;
+}
+
+.autotuner-mode-portrait .autotuner-col {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 6px !important;
+  width: 100% !important;
+  min-height: min-content !important;
+  overflow: visible !important;
+}
+
+.autotuner-mode-portrait .autotuner-results-view {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 6px !important;
+  width: 100% !important;
+  min-height: min-content !important;
+  overflow: visible !important;
+}
+
+.autotuner-mode-portrait .autotuner-placeholder-box {
+  display: none !important;
+}
+
+/* Placeholder for Right Column before analysis */
+.autotuner-placeholder-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 20px 16px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px dashed rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  height: 100%;
+  min-height: 200px;
+  box-sizing: border-box;
+  gap: 6px;
+}
+
+.autotuner-placeholder-icon {
+  font-size: 32px;
+  filter: drop-shadow(0 2px 8px rgba(56, 239, 125, 0.2));
+}
+
+.autotuner-placeholder-title {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: #38ef7d;
+}
+
+.autotuner-placeholder-desc {
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: #a0aec0;
+  max-width: 420px;
+  word-break: keep-all;
+}
+
+/* Info Header Badge Bar */
+.autotuner-badge-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: rgba(255, 255, 255, 0.04);
+  padding: 4px 8px;
+  border-radius: 5px;
+  font-size: 11.5px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  box-sizing: border-box;
+}
+
+/* Situation Notice Banner (Centered block flow, clean text) */
+.autotuner-notice-banner {
+  background: rgba(255, 193, 7, 0.08);
+  border: 1px solid rgba(255, 193, 7, 0.25);
+  border-radius: 5px;
+  padding: 6px 10px;
+  font-size: 11.5px;
+  line-height: 1.4;
+  color: #ffeb3b;
+  display: block;
+  text-align: center;
+  word-break: keep-all;
+  box-sizing: border-box;
+  width: 100%;
+}
+
+.autotuner-rollback-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: rgba(255, 165, 2, 0.12);
+  border: 1px solid rgba(255, 165, 2, 0.35);
+  border-radius: 5px;
+  padding: 4px 8px;
+  font-size: 11.5px;
+  color: #ffa502;
+  gap: 6px;
+  box-sizing: border-box;
+}
+
+.autotuner-rollback-bar.hidden {
+  display: none !important;
+}
+
+/* Driver Override Option Box */
+.autotuner-override-box {
+  background: rgba(33, 150, 243, 0.08);
+  border: 1px solid rgba(33, 150, 243, 0.28);
+  border-radius: 6px;
+  padding: 6px 9px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  box-sizing: border-box;
+  width: 100%;
+}
+
+.autotuner-override-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  user-select: none;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #90caf9;
+}
+
+.autotuner-override-checkbox {
+  accent-color: #2196f3;
+  cursor: pointer;
+  width: 15px;
+  height: 15px;
+  margin: 0;
+}
+
+.autotuner-override-title {
+  color: #bbdefb;
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.autotuner-override-desc {
+  font-size: 10.5px;
+  line-height: 1.35;
+  color: #90a4ae;
+  word-break: keep-all;
+  padding-left: 21px;
+}
+
+.autotuner-chip {
+  background: rgba(56, 239, 125, 0.15);
+  color: #38ef7d;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-weight: 600;
+  font-size: 10.5px;
+  white-space: nowrap;
+}
+
+/* Form inputs */
+.autotuner-field {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.autotuner-label {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.autotuner-select,
+.autotuner-input,
+.autotuner-textarea {
+  background: rgba(20, 24, 30, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 5px;
+  padding: 5px 8px;
+  color: #ffffff;
+  font-size: 12.5px;
+  min-height: 32px;
+  outline: none;
+  transition: border-color 0.15s;
+  box-sizing: border-box;
+}
+
+.autotuner-select:focus,
+.autotuner-input:focus,
+.autotuner-textarea:focus {
+  border-color: #38ef7d;
+  box-shadow: 0 0 0 2px rgba(56, 239, 125, 0.2);
+}
+
+.autotuner-textarea {
+  min-height: 44px;
+  height: 48px;
+  resize: vertical;
+  line-height: 1.35;
+}
+
+/* Voice input row */
+.autotuner-voice-row {
+  display: flex;
+  gap: 5px;
+  align-items: stretch;
+}
+
+.autotuner-voice-row .autotuner-textarea {
+  flex: 1;
+}
+
+.autotuner-mic-btn {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: #ffffff;
+  padding: 3px 8px;
+  border-radius: 5px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 2px;
+  font-size: 10.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  transition: all 0.15s;
+  min-width: 52px;
+  box-sizing: border-box;
+}
+
+.autotuner-mic-btn:hover {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.autotuner-mic-btn.listening {
+  background: #ff4757 !important;
+  border-color: #ff6b81 !important;
+  color: #ffffff !important;
+  animation: pulse-mic 1.2s infinite;
+}
+
+@keyframes pulse-mic {
+  0% { box-shadow: 0 0 0 0 rgba(255, 71, 87, 0.7); }
+  70% { box-shadow: 0 0 0 8px rgba(255, 71, 87, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(255, 71, 87, 0); }
+}
+
+/* Action button (Centered, clean padding) */
+.autotuner-btn-primary {
+  background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+  color: #0d1e15;
+  border: none;
+  font-weight: 700;
+  font-size: 13px;
+  padding: 7px 12px;
+  min-height: 34px;
+  border-radius: 5px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 5px;
+  width: 100%;
+  box-sizing: border-box;
+  transition: opacity 0.15s;
+}
+
+.autotuner-btn-primary:hover {
+  opacity: 0.92;
+}
+
+.autotuner-btn-primary:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* Loading state */
+.autotuner-loading-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 20px 14px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 8px;
+  gap: 6px;
+  text-align: center;
+  height: 100%;
+  min-height: 160px;
+  box-sizing: border-box;
+}
+
+.autotuner-spinner {
+  width: 26px;
+  height: 26px;
+  border: 2.5px solid rgba(56, 239, 125, 0.2);
+  border-top-color: #38ef7d;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Diagnosis Summary Card */
+.autotuner-summary-card {
+  background: #151c24;
+  border: 1px solid rgba(56, 239, 125, 0.25);
+  border-radius: 6px;
+  padding: 6px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  flex-shrink: 0;
+  box-sizing: border-box;
+}
+
+.autotuner-summary-title {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #38ef7d;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin: 0 0 2px 0;
+  flex-shrink: 0;
+}
+
+.autotuner-summary-text {
+  font-size: 11.5px;
+  line-height: 1.4;
+  color: #e2e8f0;
+  margin: 0;
+  word-break: keep-all;
+}
+
+/* Table Section Container */
+.autotuner-table-section {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1 0 auto;
+  min-height: 0;
+}
+
+.autotuner-table-header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  position: sticky;
+  top: 0;
+  z-index: 25;
+  background: #121820;
+  padding: 4px 2px 2px 2px;
+  box-sizing: border-box;
+}
+
+.autotuner-table-wrap {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 6px;
+  background: #0f141a;
+  overflow: visible;
+}
+
+/* Table & Sticky Header Columns */
+.autotuner-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 11.5px;
+  text-align: left;
+}
+
+.autotuner-table thead {
+  position: sticky;
+  top: 25px; /* Sticks right under the sticky .autotuner-table-header-row */
+  z-index: 20;
+}
+
+.autotuner-table th {
+  position: sticky;
+  top: 25px;
+  z-index: 20;
+  background: #18202a !important;
+  color: #e2e8f0;
+  font-weight: 700;
+  padding: 6px 8px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.6);
+  white-space: nowrap;
+  box-sizing: border-box;
+}
+
+.autotuner-table td {
+  padding: 5px 8px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  vertical-align: middle;
+  background: #0f141a;
+  box-sizing: border-box;
+}
+
+.autotuner-table tbody tr:nth-child(even) td {
+  background: #141a22;
+}
+
+.autotuner-table tbody tr:hover td {
+  background: rgba(56, 239, 125, 0.09);
+}
+
+.autotuner-diff-val {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-family: monospace;
+  font-weight: 700;
+  font-size: 11px;
+}
+
+.autotuner-diff-old {
+  color: #a0aec0;
+  text-decoration: line-through;
+}
+
+.autotuner-diff-arrow {
+  color: #718096;
+}
+
+.autotuner-diff-new {
+  color: #38ef7d;
+  background: rgba(56, 239, 125, 0.12);
+  padding: 1px 4px;
+  border-radius: 3px;
+}
+
+.autotuner-diff-rollback {
+  color: #ffa502;
+  background: rgba(255, 165, 2, 0.15);
+  border: 1px solid rgba(255, 165, 2, 0.35);
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-weight: 700;
+  font-family: monospace;
+  font-size: 11px;
+  display: inline-block;
+}
+
+.autotuner-reason-text {
+  font-size: 11px;
+  color: #cbd5e0;
+  line-height: 1.35;
+  word-break: keep-all;
+}
+
+/* Footer Actions: Sticky at bottom of the scroll view */
+.autotuner-footer {
+  position: sticky;
+  bottom: 0;
+  z-index: 30;
+  background: #121820;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 6px 4px 4px 4px;
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+  margin-top: auto;
+  flex-shrink: 0;
+  box-shadow: 0 -3px 8px rgba(0, 0, 0, 0.5);
+}
+
+.autotuner-btn-secondary {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: #ffffff;
+  padding: 4px 8px;
+  border-radius: 5px;
+  font-size: 11.5px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.autotuner-btn-secondary:hover {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.autotuner-btn-undo {
+  background: rgba(255, 165, 2, 0.15);
+  border: 1px solid rgba(255, 165, 2, 0.4);
+  color: #ffa502;
+  padding: 4px 8px;
+  border-radius: 5px;
+  font-size: 11.5px;
+  cursor: pointer;
+  font-weight: 600;
+  transition: background 0.15s;
+}
+
+.autotuner-btn-undo:hover {
+  background: rgba(255, 165, 2, 0.25);
+}
+
+/* Rollback Confirmation Modal Overlay */
+.autotuner-modal-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.78);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  padding: 14px;
+  box-sizing: border-box;
+}
+
+.autotuner-modal-card {
+  background: #141b24;
+  border: 1px solid rgba(255, 165, 2, 0.4);
+  border-radius: 8px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.75);
+  width: min(92vw, 460px);
+  max-height: 86%;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+  box-sizing: border-box;
+}
+
+.autotuner-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  padding-bottom: 6px;
+}
+
+.autotuner-modal-title {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: #ffa502;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.autotuner-modal-close-btn {
+  background: transparent;
+  border: none;
+  color: #a0aec0;
+  font-size: 16px;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 4px;
+  line-height: 1;
+}
+
+.autotuner-modal-close-btn:hover {
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.autotuner-modal-desc {
+  font-size: 11.5px;
+  color: #cbd5e0;
+  line-height: 1.35;
+  margin: 0;
+}
+
+.autotuner-modal-table-box {
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 6px;
+  background: #0f141a;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  margin-top: 2px;
+}
+
+.autotuner-modal-th-row {
+  display: grid;
+  grid-template-columns: 28px minmax(130px, 1.2fr) minmax(120px, 1fr);
+  align-items: center;
+  background: #18202a;
+  color: #e2e8f0;
+  font-size: 11.5px;
+  font-weight: 700;
+  padding: 7px 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.18);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+  flex-shrink: 0;
+  box-sizing: border-box;
+}
+
+.autotuner-modal-th-check,
+.autotuner-modal-td-check {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+}
+
+.autotuner-modal-th-param,
+.autotuner-modal-th-diff {
+  white-space: nowrap;
+}
+
+.autotuner-modal-tb-scroll {
+  max-height: 220px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  display: flex;
+  flex-direction: column;
+}
+
+.autotuner-modal-tr-row {
+  display: grid;
+  grid-template-columns: 28px minmax(130px, 1.2fr) minmax(120px, 1fr);
+  align-items: center;
+  padding: 6px 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  font-size: 11.5px;
+  background: #0f141a;
+  box-sizing: border-box;
+}
+
+.autotuner-checkbox {
+  width: 15px;
+  height: 15px;
+  cursor: pointer;
+  accent-color: #ffa502;
+  margin: 0;
+}
+
+.autotuner-modal-tr-row:nth-child(even) {
+  background: #141a22;
+}
+
+.autotuner-modal-tr-row:hover {
+  background: rgba(255, 165, 2, 0.08);
+}
+
+.autotuner-modal-tr-row:last-child {
+  border-bottom: none;
+}
+
+.autotuner-modal-td-param {
+  font-weight: 600;
+  color: #ffffff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding-right: 6px;
+}
+
+.autotuner-modal-td-diff {
+  display: flex;
+  align-items: center;
+}
+
+.autotuner-modal-empty-row {
+  text-align: center;
+  color: #a0aec0;
+  padding: 14px;
+  font-size: 11.5px;
+}
+
+.autotuner-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding-top: 4px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}

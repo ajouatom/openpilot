@@ -4,6 +4,7 @@ import { dashcamReadStateStore } from "./dashcam_player_session.js";
 import { createLogsSegmentStatusTag } from "./player/components.js";
 import { loadScreenrecordVideos } from "./screenrecord.js";
 import { openRouteSummary } from "./route_summary/index.js";
+import { openAutoTuner } from "./autotuner/index.js";
 import {
   formatLogBytes,
   formatRelativeEpoch,
@@ -845,6 +846,7 @@ function dashcamRouteCardHtml(entry, index = 0, options = {}) {
           <span class="dashcam-selection-count">${escapeHtml(getUIText("selected_count", "{count} selected", { count: selected.length }))}</span>
           <button class="smallBtn" type="button" data-action="select-route" data-route="${routeAttr}" data-selected="${allSelected ? "1" : "0"}">${escapeHtml(selectLabel)}</button>
           <button class="smallBtn btn--filled" type="button" data-action="upload-selected" data-route="${routeAttr}" ${selected.length ? "" : "disabled"}>${escapeHtml(getUIText("upload_selected", "Upload selected"))}</button>
+          <button class="smallBtn btn--filled" type="button" data-action="autotune-selected" data-route="${routeAttr}" style="background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); color: #0d1e15; font-weight: 700;">${escapeHtml(getUIText("ai_tuning", "AI Tuning"))}</button>
           <button class="smallBtn dashcam-group-menu-btn dashcam-group-menu-btn--row" type="button" data-action="route-menu" data-route="${routeAttr}" aria-label="${escapeHtml(getUIText("group_menu", "Group menu"))}" title="${escapeHtml(getUIText("group_menu", "Group menu"))}">
             <svg viewBox="0 0 24 24"><path fill="currentColor" d="M6 10c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2m12 0c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2m-6 0c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2"/></svg>
           </button>
@@ -2044,6 +2046,7 @@ export {
   loadDashcamRoutes,
   markDashcamScrollBusy,
   maybeLoadMoreDashcamRoutes,
+  openAutoTuner,
   openDashcamPlayer,
   renderDashcamRoute,
   renderDashcamRoutes,
