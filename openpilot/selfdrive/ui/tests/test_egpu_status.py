@@ -105,6 +105,17 @@ def test_modeld_runs_internal_fallback_on_the_same_frame():
   assert failed_set < loading_clear < pending_clear < fallback.index("model = small_model")
 
 
+def test_modeld_queues_tmux_capture_for_all_egpu_failure_paths():
+  source = (UI_DIR.parent / "modeld" / "modeld.py").read_text(encoding="utf-8")
+  carrot_man_source = (UI_DIR.parent / "carrot" / "carrot_man.py").read_text(encoding="utf-8")
+
+  assert 'USBGPU_TMUX_ERROR_REASON = "egpu_error"' in source
+  assert 'queue_usbgpu_error_tmux(params, "model load failed")' in source
+  assert 'queue_usbgpu_error_tmux(params, "model load timed out")' in source
+  assert 'queue_usbgpu_error_tmux(params, "runtime model execution failed")' in source
+  assert '"egpu_error"' in carrot_man_source.split("CARROT_EXCEPTION_TMUX_REASONS =", 1)[1].splitlines()[0]
+
+
 def test_selfdrived_allows_five_seconds_for_egpu_fallback_to_settle():
   source = (UI_DIR.parent / "selfdrived" / "selfdrived.py").read_text(encoding="utf-8")
 

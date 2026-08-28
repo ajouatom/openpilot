@@ -38,6 +38,28 @@ MIN_LAT_CONTROL_SPEED = 0.3
 USBGPU_MODEL_LOAD_TIMEOUT = 40
 USBGPU_INIT_ATTEMPTS = 6
 USBGPU_INIT_RETRY_INTERVAL = 2.0
+USBGPU_TMUX_ERROR_REASON = "egpu_error"
+
+
+def queue_usbgpu_error_tmux(params: Params, context: str) -> bool:
+  """Request one tmux capture without replacing another pending diagnostic."""
+  try:
+    pending_reason = params.get("CarrotException")
+    if isinstance(pending_reason, bytes):
+      pending_reason = pending_reason.decode("utf-8", errors="ignore")
+    if pending_reason in (None, ""):
+      params.put("CarrotException", USBGPU_TMUX_ERROR_REASON)
+      cloudlog.warning(f"queued {USBGPU_TMUX_ERROR_REASON} tmux capture: {context}")
+      return True
+    if pending_reason == USBGPU_TMUX_ERROR_REASON:
+      return True
+    cloudlog.warning(
+      f"did not replace pending CarrotException={pending_reason!r} with "
+      f"{USBGPU_TMUX_ERROR_REASON}: {context}"
+    )
+  except Exception:
+    cloudlog.exception(f"failed to queue {USBGPU_TMUX_ERROR_REASON} tmux capture: {context}")
+  return False
 
 
 def get_lat_smooth_seconds_dynamic(model_output: dict[str, np.ndarray],
@@ -260,6 +282,7 @@ def main(demo=False):
             refresh_usbgpu_device_cache()
             continue
           cloudlog.exception("eGPU model load failed")
+          queue_usbgpu_error_tmux(params, "model load failed")
           return
 
     loader = threading.Thread(target=load_usbgpu_model, name="usbgpu-model-loader", daemon=True)
@@ -267,6 +290,7 @@ def main(demo=False):
     loader.join(USBGPU_MODEL_LOAD_TIMEOUT)
     if loader.is_alive():
       cloudlog.error(f"eGPU model load timed out after {USBGPU_MODEL_LOAD_TIMEOUT}s")
+      queue_usbgpu_error_tmux(params, "model load timed out")
       params.put_bool("UsbGpuStartupFailed", True)
       params.put_bool("UsbGpuLoading", False)
       # A Python thread cannot be stopped safely. Terminate modeld so the
@@ -442,6 +466,7 @@ def main(demo=False):
       if not params.get_bool("UsbGpuActive") or small_model is None:
         raise
       cloudlog.exception("eGPU model failed, falling back to internal GPU")
+      queue_usbgpu_error_tmux(params, "runtime model execution failed")
       params.put_bool("UsbGpuActive", False)
       params.put_bool("UsbGpuStartupFailed", True)
       params.put_bool("UsbGpuLoading", False)
