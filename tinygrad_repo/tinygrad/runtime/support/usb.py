@@ -14,6 +14,9 @@ def checked(fn, msg=None):
   return wrapper
 
 class USB3:
+  BULK_OUT_IO_ATTEMPTS = 10
+  BULK_OUT_IO_RETRY_INTERVAL_S = 0.01
+
   @staticmethod
   @functools.cache
   def ctx():
@@ -120,7 +123,18 @@ class USB3:
   def _bulk_out(self, ep: int, payload: bytes, timeout: int = 1000):
     if len(payload) > len(self._bulk_out_mv): self._bulk_out_buf, self._bulk_out_mv = alloc_cbuffer(len(payload))
     self._bulk_out_mv[:len(payload)] = payload
-    checked(libusb.libusb_bulk_transfer, f"bulk OUT 0x{ep:02X} failed")(self.handle, ep, self._bulk_out_buf, len(payload), self._transferred, timeout)
+    for attempt in range(self.BULK_OUT_IO_ATTEMPTS):
+      self._transferred.value = 0
+      ret = libusb.libusb_bulk_transfer(self.handle, ep, self._bulk_out_buf, len(payload), self._transferred, timeout)
+      if ret >= 0: break
+      # A zero-byte EIO is safe to replay. Never retry a partial transfer: the
+      # bridge may already have consumed part of the command or model buffer.
+      if (ret != libusb.LIBUSB_ERROR_IO or self._transferred.value != 0 or
+          attempt + 1 == self.BULK_OUT_IO_ATTEMPTS):
+        error = ctypes.string_at(libusb.libusb_strerror(ret)).decode()
+        raise RuntimeError(f"bulk OUT 0x{ep:02X} failed after {attempt + 1} attempts "
+                           f"({self._transferred.value}/{len(payload)} bytes): {error}")
+      time.sleep(self.BULK_OUT_IO_RETRY_INTERVAL_S)
     assert self._transferred.value == len(payload), f"bulk OUT short write on 0x{ep:02X}: {self._transferred.value}/{len(payload)} bytes"
 
   def _bulk_in(self, ep: int, length: int, timeout: int = 1000) -> memoryview:
@@ -202,8 +216,8 @@ class CustomASM24Controller:
   PCIE_LINK_READY = 0x78
   PCIE_LINK_TIMEOUT_S = 2.0
   PCIE_LINK_POLL_INTERVAL_S = 0.05
-  XDATA_READ_ATTEMPTS = 3
-  XDATA_READ_RETRY_INTERVAL_S = 0.005
+  XDATA_READ_ATTEMPTS = 20
+  XDATA_READ_RETRY_INTERVAL_S = 0.01
 
   def __init__(self, usb:USB3|None=None):
     if not usb:
@@ -312,7 +326,7 @@ class CustomASM24Controller:
         # transient LIBUSB_ERROR_IO while the bridge remains enumerated, so
         # retry the read briefly before modeld falls back to the internal GPU.
         time.sleep(self.XDATA_READ_RETRY_INTERVAL_S)
-      assert ret == chunk, f"read(0x{base_addr + off:04X}, {chunk}) failed: {ret}"
+      assert ret == chunk, f"read(0x{base_addr + off:04X}, {chunk}) failed: {ret} after {attempt + 1} attempts"
       result += bytes(self._f0_out_buf[:ret])
     return result[:length]
 

@@ -167,6 +167,95 @@ def test_custom_usb_controller_does_not_retry_xdata_disconnect(monkeypatch):
   assert len(calls) == 1
 
 
+def _make_usb_for_bulk_test(usb):
+  controller = usb.USB3.__new__(usb.USB3)
+  controller.handle = object()
+  controller._transferred = usb.ctypes.c_int(0)
+  controller._bulk_out_buf, controller._bulk_out_mv = usb.alloc_cbuffer(32)
+  return controller
+
+
+def test_usb_bulk_out_retries_zero_length_io_error(monkeypatch):
+  from tinygrad.runtime.support import usb
+
+  controller = _make_usb_for_bulk_test(usb)
+  attempts = iter((-1, 0))
+  calls = []
+  sleeps = []
+
+  def bulk_transfer(_handle, _endpoint, _buffer, length, transferred, _timeout):
+    calls.append(None)
+    ret = next(attempts)
+    transferred.value = length if ret == 0 else 0
+    return ret
+
+  monkeypatch.setattr(usb.libusb, "libusb_bulk_transfer", bulk_transfer)
+  monkeypatch.setattr(usb.time, "sleep", lambda seconds: sleeps.append(seconds))
+
+  controller._bulk_out(0x02, b"model data")
+
+  assert len(calls) == 2
+  assert sleeps == [controller.BULK_OUT_IO_RETRY_INTERVAL_S]
+
+
+def test_usb_bulk_out_does_not_retry_partial_io_error(monkeypatch):
+  from tinygrad.runtime.support import usb
+
+  controller = _make_usb_for_bulk_test(usb)
+  calls = []
+
+  def bulk_transfer(_handle, _endpoint, _buffer, _length, transferred, _timeout):
+    calls.append(None)
+    transferred.value = 4
+    return usb.libusb.LIBUSB_ERROR_IO
+
+  monkeypatch.setattr(usb.libusb, "libusb_bulk_transfer", bulk_transfer)
+
+  with pytest.raises(RuntimeError, match="bulk OUT 0x02 failed"):
+    controller._bulk_out(0x02, b"model data")
+
+  assert len(calls) == 1
+
+
+def test_usb_bulk_out_limits_zero_length_io_retries(monkeypatch):
+  from tinygrad.runtime.support import usb
+
+  controller = _make_usb_for_bulk_test(usb)
+  calls = []
+
+  def bulk_transfer(_handle, _endpoint, _buffer, _length, transferred, _timeout):
+    calls.append(None)
+    transferred.value = 0
+    return usb.libusb.LIBUSB_ERROR_IO
+
+  monkeypatch.setattr(usb.libusb, "libusb_bulk_transfer", bulk_transfer)
+  monkeypatch.setattr(usb.time, "sleep", lambda _seconds: None)
+
+  with pytest.raises(RuntimeError, match="bulk OUT 0x02 failed"):
+    controller._bulk_out(0x02, b"model data")
+
+  assert len(calls) == controller.BULK_OUT_IO_ATTEMPTS
+
+
+def test_usb_bulk_out_does_not_retry_disconnect(monkeypatch):
+  from tinygrad.runtime.support import usb
+
+  controller = _make_usb_for_bulk_test(usb)
+  calls = []
+
+  def bulk_transfer(_handle, _endpoint, _buffer, _length, transferred, _timeout):
+    calls.append(None)
+    transferred.value = 0
+    return usb.libusb.LIBUSB_ERROR_NO_DEVICE
+
+  monkeypatch.setattr(usb.libusb, "libusb_bulk_transfer", bulk_transfer)
+
+  with pytest.raises(RuntimeError, match="bulk OUT 0x02 failed after 1 attempts"):
+    controller._bulk_out(0x02, b"model data")
+
+  assert len(calls) == 1
+
+
 def test_usb_pci_device_releases_resources_after_init_failure(monkeypatch):
   from tinygrad.runtime.support import system
 
