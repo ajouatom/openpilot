@@ -57,6 +57,8 @@
   {
     "name": "boot",
     "url": "https://github.com/ajouatom/agnos-builder/releases/download/agnos-19.6.3-carrot/boot-c3x-c4-303d797a55933dd634ecf5e16b5b9746e12528fa8d5919903aff7a0ae888cfcb.img.xz",
+    "compressed_hash": "807239c4debfb14823fb443722711a730f1c696ed02202ae31c8563fdbf789af",
+    "compressed_size": 14038484,
     "hash": "303d797a55933dd634ecf5e16b5b9746e12528fa8d5919903aff7a0ae888cfcb",
     "hash_raw": "303d797a55933dd634ecf5e16b5b9746e12528fa8d5919903aff7a0ae888cfcb",
     "size": 47224832,
@@ -68,6 +70,8 @@
   {
     "name": "system",
     "url": "https://github.com/ajouatom/agnos-builder/releases/download/agnos-19.6.3-carrot/system-b97e492686fa3902b0385f13fa5663c911f0b150d06b722111d386f4ad42a7d7.img.xz",
+    "compressed_hash": "57a1e8fbf72ba0608512b505075b03ce41a77427da7edb43e093ddb99f4bda60",
+    "compressed_size": 1008228912,
     "hash": "ee1d82e325bfce8cc9c2fc1a509b65436830b9f34d3ee6568cf5345216d18c25",
     "hash_raw": "b97e492686fa3902b0385f13fa5663c911f0b150d06b722111d386f4ad42a7d7",
     "size": 4718592000,
