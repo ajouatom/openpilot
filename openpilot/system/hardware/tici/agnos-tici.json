@@ -56,29 +56,24 @@
   },
   {
     "name": "boot",
-    "url": "https://github.com/ajouatom/agnos-builder/releases/download/carrot-c3-19.6-v1/carrot-c3-agnos-19.6-boot.img.xz",
-    "hash": "82c790822b3ca56689a2dee892206494e5fe85d86f0d47d654d0e36e84cb2fbd",
-    "hash_raw": "82c790822b3ca56689a2dee892206494e5fe85d86f0d47d654d0e36e84cb2fbd",
+    "url": "https://github.com/ajouatom/agnos-builder/releases/download/agnos-19.6.3-carrot/boot-c3-c3clone-7f6a45827e82f0d7ee2bab286daf60fec79c40fd4af2aee967b146e06b5ece70.img.xz",
+    "hash": "7f6a45827e82f0d7ee2bab286daf60fec79c40fd4af2aee967b146e06b5ece70",
+    "hash_raw": "7f6a45827e82f0d7ee2bab286daf60fec79c40fd4af2aee967b146e06b5ece70",
     "size": 48343040,
     "sparse": false,
     "full_check": true,
     "has_ab": true,
-    "ondevice_hash": "7f54840b8ae437034210065da0648b833ccd191a03569257dc849d1db9c063d8"
+    "ondevice_hash": "4c148fbea709da7b2fc2626a7005d5fdc766623c9f4d35e2440d66abee09def6"
   },
   {
     "name": "system",
-    "url": "https://commadist.azureedge.net/agnosupdate/system-5b6ce7965904a157fd3a134ccfcb854f9ca5c1cc2a26b7cb80a4fa4e1cc4aaa3.img.xz",
-    "hash": "b134fd04e9da27fa1d359ea0f2742c216fa21a08b5c47e9be22ab3b0563d9b9b",
-    "hash_raw": "5b6ce7965904a157fd3a134ccfcb854f9ca5c1cc2a26b7cb80a4fa4e1cc4aaa3",
+    "url": "https://github.com/ajouatom/agnos-builder/releases/download/agnos-19.6.3-carrot/system-b97e492686fa3902b0385f13fa5663c911f0b150d06b722111d386f4ad42a7d7.img.xz",
+    "hash": "ee1d82e325bfce8cc9c2fc1a509b65436830b9f34d3ee6568cf5345216d18c25",
+    "hash_raw": "b97e492686fa3902b0385f13fa5663c911f0b150d06b722111d386f4ad42a7d7",
     "size": 4718592000,
     "sparse": true,
     "full_check": false,
     "has_ab": true,
-    "ondevice_hash": "91242772af771ae96fe2eebc105f2b80a7e1dbaaf6003c2574b62d51b806f468",
-    "alt": {
-      "hash": "5b6ce7965904a157fd3a134ccfcb854f9ca5c1cc2a26b7cb80a4fa4e1cc4aaa3",
-      "url": "https://commadist.azureedge.net/agnosupdate/system-5b6ce7965904a157fd3a134ccfcb854f9ca5c1cc2a26b7cb80a4fa4e1cc4aaa3.img",
-      "size": 4718592000
-    }
+    "ondevice_hash": "922f61a474912aef459586e9cc4f0dd923d58d5e9d67b3163566c7b0be8a5b55"
   }
 ]

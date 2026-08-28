@@ -4,15 +4,6 @@ DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null && pwd )"
 
 source "$DIR/launch_env.sh"
 
-# Fold the USB-PD boot image into a required AGNOS 19.6 update so new users
-# download the OS once and reboot once. Existing 19.6 installs are handled by
-# the lightweight boot-time checker below.
-if [ "$AGNOS_VERSION" = "19.6" ]; then
-  export AGNOS_POST_FLASH_HOOK="$DIR/scripts/usbpd_kernel_trial.py"
-else
-  unset AGNOS_POST_FLASH_HOOK
-fi
-
 function cleanup_stale_git_lfs_hooks {
   # Some deployed checkouts still contain hooks installed by git-lfs even
   # though the executable is no longer part of the device image. Those hooks
@@ -101,17 +92,7 @@ function agnos_init {
   sudo rm -f /data/etc/NetworkManager/system-connections/*.nmmeta
   rm -f /data/scons_cache/config.lock
 
-  # Keep the stock slot recoverable until the experimental USB-PD kernel has
-  # booted far enough for manager to report healthy hardware state.
-  if [ -f /data/usbpd-kernel-trial.json ]; then
-    if python3 "$DIR/scripts/usbpd_kernel_trial.py" should-defer-success; then
-      echo "USB-PD v3 kernel update active; deferring boot slot success confirmation."
-    else
-      echo "USB-PD v3 update state exists but is not valid for this slot; refusing automatic boot success confirmation."
-    fi
-  else
-    sudo abctl --set_success
-  fi
+  sudo abctl --set_success
 
   # TODO: do this without udev in AGNOS
   # udev does this, but sometimes we startup faster
@@ -185,61 +166,6 @@ function start_carrot_recovery {
 
   echo "Starting carrot recovery server on 6999."
   (cd "$DIR" && "$py_bin" "$recovery_script" --port 6999 >> /tmp/carrot_recovery.log 2>&1 &)
-}
-
-function install_usbpd_kernel_at_boot {
-  local updater="$DIR/scripts/usbpd_kernel_trial.py"
-  local log_path="/tmp/usbpd_kernel_update.log"
-
-  [ -f /AGNOS ] || return 0
-  [ -f "$updater" ] || return 0
-
-  echo "Checking the device-specific USB-PD v3 kernel during boot." | tee -a "$log_path"
-  sudo python3 "$updater" ensure-boot 2>&1 | tee -a "$log_path"
-  local result="${PIPESTATUS[0]}"
-  if [ "$result" = "10" ]; then
-    echo "USB-PD v3 kernel installed into the verified inactive slot; rebooting once." | tee -a "$log_path"
-    if sudo reboot; then
-      while true; do sleep 1; done
-    fi
-    echo "USB-PD v3 kernel reboot request failed; continuing with the current boot." | tee -a "$log_path"
-    return 1
-  elif [ "$result" = "11" ]; then
-    echo "USB-PD v3 trial boot detected; waiting for manager health before confirmation." | tee -a "$log_path"
-  elif [ "$result" != "0" ]; then
-    echo "USB-PD v3 boot-time update deferred (exit ${result}); keeping the current kernel." | tee -a "$log_path"
-  fi
-  return 0
-}
-
-function start_usbpd_kernel_confirmation {
-  local updater="$DIR/scripts/usbpd_kernel_trial.py"
-  local log_path="/tmp/usbpd_kernel_update.log"
-  local watchdog="/var/tmp/power_watchdog"
-
-  [ -f /AGNOS ] || return 0
-  [ -f "$updater" ] || return 0
-  [ -f /data/usbpd-kernel-trial.json ] || return 0
-
-  rm -f "$watchdog"
-  (
-    waited=0
-    while [ ! -s "$watchdog" ] && [ "$waited" -lt 180 ]; do
-      sleep 1
-      waited=$((waited+1))
-    done
-    if [ ! -s "$watchdog" ]; then
-      echo "Manager health was not observed; leaving the USB-PD trial unconfirmed."
-      exit 0
-    fi
-
-    # Give onroad services and shared USB devices time to settle after the
-    # first healthy hardwared update. A crash or reboot preserves A/B fallback.
-    sleep 60
-    sudo python3 "$updater" confirm-healthy || \
-      echo "USB-PD v3 health confirmation failed; leaving the trial unconfirmed."
-  ) >> "$log_path" 2>&1 &
-  return 0
 }
 
 function start_carrot_web {
@@ -451,7 +377,6 @@ function launch {
     while true; do sleep 1; done
   fi
 
-  install_usbpd_kernel_at_boot
   start_carrot_web
 
 
@@ -479,7 +404,6 @@ function launch {
       fi
     fi
   fi
-  start_usbpd_kernel_confirmation
   start_big_model_update
   ./manager.py
 

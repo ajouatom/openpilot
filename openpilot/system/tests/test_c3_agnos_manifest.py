@@ -11,23 +11,19 @@ def _load_manifest(name: str) -> list[dict]:
   return json.loads((TICI_DIR / name).read_text(encoding="utf-8"))
 
 
-def test_c3_manifest_uses_carrot_boot_and_official_agnos_19_system() -> None:
+def test_device_manifests_use_carrot_agnos_19_6_3_images() -> None:
   c3 = {partition["name"]: partition for partition in _load_manifest("agnos-tici.json")}
-  current = {partition["name"]: partition for partition in _load_manifest("agnos.json")}
+  c4 = {partition["name"]: partition for partition in _load_manifest("agnos.json")}
 
-  assert c3["boot"] == {
-    "name": "boot",
-    "url": "https://github.com/ajouatom/agnos-builder/releases/download/carrot-c3-19.6-v1/carrot-c3-agnos-19.6-boot.img.xz",
-    "hash": "82c790822b3ca56689a2dee892206494e5fe85d86f0d47d654d0e36e84cb2fbd",
-    "hash_raw": "82c790822b3ca56689a2dee892206494e5fe85d86f0d47d654d0e36e84cb2fbd",
-    "size": 48343040,
-    "sparse": False,
-    "full_check": True,
-    "has_ab": True,
-    "ondevice_hash": "7f54840b8ae437034210065da0648b833ccd191a03569257dc849d1db9c063d8",
-  }
-  assert c3["boot"] != current["boot"]
-  assert c3["system"] == current["system"]
+  assert c3["boot"]["hash_raw"] == "7f6a45827e82f0d7ee2bab286daf60fec79c40fd4af2aee967b146e06b5ece70"
+  assert c4["boot"]["hash_raw"] == "303d797a55933dd634ecf5e16b5b9746e12528fa8d5919903aff7a0ae888cfcb"
+  assert c3["boot"] != c4["boot"]
+  assert c3["system"] == c4["system"]
+  assert c3["system"]["hash_raw"] == "b97e492686fa3902b0385f13fa5663c911f0b150d06b722111d386f4ad42a7d7"
+  assert "agnos-19.6.3-carrot" in c3["boot"]["url"]
+  assert "agnos-19.6.3-carrot" in c4["boot"]["url"]
+  assert "agnos-19.6.3-carrot" in c3["system"]["url"]
+  assert "alt" not in c3["system"]
 
 
 def test_c3_manifest_preserves_proven_legacy_firmware() -> None:
@@ -51,3 +47,8 @@ def test_c3_and_clone_select_the_c3_manifest() -> None:
   assert 'if model in ("c3", "tici"):' in updater
   assert "agnos-tici.json" in launcher
   assert "agnos-tici.json" in updater
+
+
+def test_launch_requires_carrot_agnos_19_6_3() -> None:
+  launch_env = (Path(BASEDIR) / "launch_env.sh").read_text(encoding="utf-8")
+  assert 'export AGNOS_VERSION="19.6.3-carrot"' in launch_env
