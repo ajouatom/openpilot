@@ -31,6 +31,7 @@
               "zh": "自动巡航",
               "params": [
                 "AutoCruiseControl",
+                "SoftHoldOnCancel",
                 "AutoGasTokSpeed",
                 "AutoGasCancelSpeed",
                 "AutoGasSyncSpeed",
@@ -1716,6 +1717,22 @@
       "cdescr": "1: 软驻车 + 自动巡航, 2: 如果软驻车报错",
       "min": 0,
       "max": 3,
+      "default": 0,
+      "unit": 1
+    },
+    {
+      "group": "오토크루즈",
+      "name": "SoftHoldOnCancel",
+      "title": "캔슬 상태 소프트홀드 허용(0)",
+      "descr": "0:캔슬 상태에서는 소프트홀드를 사용하지 않음\n1:캔슬 상태에서도 정차 후 소프트홀드를 허용",
+      "egroup": "AUTOCRUISE",
+      "etitle": "Allow Soft Hold After Cancel(0)",
+      "edescr": "0:Disable soft hold while cruise is canceled\n1:Allow soft hold to engage after stopping in the canceled state",
+      "cgroup": "自动巡航",
+      "ctitle": "取消后允许软驻车(0)",
+      "cdescr": "0:巡航取消状态下禁用软驻车\n1:巡航取消状态下停车后允许软驻车",
+      "min": 0,
+      "max": 1,
       "default": 0,
       "unit": 1
     },

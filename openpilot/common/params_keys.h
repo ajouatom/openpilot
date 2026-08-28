@@ -214,6 +214,7 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"HDPuse", {PERSISTENT, INT, "0"}},
 
     {"AutoCruiseControl", {PERSISTENT, INT, "0"}},
+    {"SoftHoldOnCancel", {PERSISTENT, BOOL, "0"}},
     {"CruiseEcoControl", {PERSISTENT, INT, "2"}},
     {"CarrotCruiseDecel", {PERSISTENT, INT, "-1"}},
     {"CarrotCruiseAtcDecel", {PERSISTENT, INT, "-1"}},
@@ -345,8 +346,6 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"LaneChangeBsd", {PERSISTENT, INT, "0"}},
     {"LaneLineCheck", {PERSISTENT, INT, "0"}},
     {"MaxAngleFrames", {PERSISTENT, INT, "89"}},
-
-    {"SoftHoldMode", {PERSISTENT, INT, "0"}},
 
     {"LatMpcPathCost", {PERSISTENT, INT, "200"}},
     {"LatMpcMotionCost", {PERSISTENT, INT, "7"}},
