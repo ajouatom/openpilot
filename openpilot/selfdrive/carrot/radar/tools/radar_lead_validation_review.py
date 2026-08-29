@@ -15,6 +15,7 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 CARROT_ROOT = SCRIPT_DIR.parents[1]
 DEFAULT_CASES = CARROT_ROOT / "cluster" / "cutin_validation_cases.json"
 SIMULATOR_MODULE = "openpilot.selfdrive.carrot.radar.tools.radar_lead_simulator"
+VALIDATION_PRELOAD_AHEAD = 5
 
 
 def group_cases_by_log(cases: list[dict]) -> list[list[dict]]:
@@ -23,6 +24,25 @@ def group_cases_by_log(cases: list[dict]) -> list[list[dict]]:
     key = (str(case["vehicle_folder"]), str(case["log"]))
     groups.setdefault(key, []).append(case)
   return list(groups.values())
+
+
+def rolling_preload_indexes(
+  current_index: int,
+  route_available: list[bool],
+  scheduled_indexes: set[int],
+  preload_ahead: int = VALIDATION_PRELOAD_AHEAD,
+) -> list[int]:
+  """Return unscheduled indexes needed to keep a rolling look-ahead full."""
+  window = [
+    candidate_index
+    for candidate_index in range(current_index + 1, len(route_available))
+    if route_available[candidate_index]
+  ][:preload_ahead]
+  return [
+    candidate_index
+    for candidate_index in window
+    if candidate_index not in scheduled_indexes
+  ]
 
 
 def simulator_command(
@@ -168,6 +188,7 @@ def main() -> int:
     args.root / group[0]["vehicle_folder"] / Path(group[0]["log"])
     for group in groups
   ]
+  route_available = [route.is_file() for route in routes]
   missing = 0
   opened_cases = 0
   opened_logs = 0
@@ -176,14 +197,12 @@ def main() -> int:
     preloads: dict[int, subprocess.Popen] = {}
 
     def start_next_preloads(current_index: int) -> None:
-      next_indexes = [
-        candidate_index
-        for candidate_index in range(current_index + 1, len(groups))
-        if routes[candidate_index].is_file()
-      ][:2]
+      next_indexes = rolling_preload_indexes(
+        current_index,
+        route_available,
+        set(preloads),
+      )
       for candidate_index in next_indexes:
-        if candidate_index in preloads:
-          continue
         command = simulator_command(
           groups[candidate_index],
           args.root,
@@ -204,9 +223,13 @@ def main() -> int:
         )
 
     try:
+      print(
+        f"Rolling preload: keeping the next {VALIDATION_PRELOAD_AHEAD} logs ready.",
+        flush=True,
+      )
       for group_index, (group, route) in enumerate(zip(groups, routes, strict=True)):
         index = group_index + 1
-        if not route.is_file():
+        if not route_available[group_index]:
           missing += len(group)
           print(
             f"[{index:02d}/{len(groups):02d}] MISSING {len(group)} cases: {route}",
