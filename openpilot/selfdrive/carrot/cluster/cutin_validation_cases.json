@@ -6,14 +6,14 @@
       "vehicle_folder": "HYUNDAI_IONIQ_9 7a9a8e68022c1881",
       "log": "000001a7--2948dd51d1--37/rlog.zst",
       "source": "front+corner",
-      "window": [41.50, 44.40],
+      "window": [41.50, 48.50],
       "expected": "clear",
       "human_verified": true,
       "validation_stage": "lead_one",
-      "target_track_ids": [2294],
-      "forbidden_lead_one_ids": [2294],
-      "forbidden_lead_two_ids": [2294],
-      "scene": "Empty straight road: an uncorroborated low-speed corner-only reflection must not become leadOne or leadTwo and command hard braking"
+      "target_track_ids": [2294, 2333],
+      "forbidden_lead_one_ids": [2294, 2333],
+      "forbidden_lead_two_ids": [2294, 2333],
+      "scene": "Empty straight road: close-born uncorroborated stationary or moving corner reflections must not become leadOne or leadTwo"
     },
     {
       "id": "ioniq5-e32-56-corner-early-risk-3504",

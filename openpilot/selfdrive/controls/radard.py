@@ -99,7 +99,6 @@ RADAR_CENTER_PROMOTION_RECEDING_VREL = 0.5
 CORNER_FRONT_MATCH_DREL = 3.0
 CORNER_FRONT_MATCH_VREL = 2.0
 CORNER_CENTER_MIN_AGE = int(0.25 / DT_MDL)
-CORNER_CENTER_UNMATCHED_MAX_DREL = 45.0
 CORNER_STOPPED_MIN_AGE = int(0.35 / DT_MDL)
 CORNER_STOPPED_MIN_DREL = 5.0
 CORNER_STOPPED_MAX_DREL = 120.0
@@ -1042,7 +1041,7 @@ class RadarD:
       self._is_corner_track(t) and
       t.cnt >= CORNER_CENTER_MIN_AGE and
       3.0 < t.dRel < RADAR_ONLY_CENTER_MAX_DREL and
-      (matched_front or t.dRel <= CORNER_CENTER_UNMATCHED_MAX_DREL) and
+      (matched_front or t.cut_in_count > 0) and
       t.vLead > 2.0 and
       self._corner_in_lane_ok(t)
     )

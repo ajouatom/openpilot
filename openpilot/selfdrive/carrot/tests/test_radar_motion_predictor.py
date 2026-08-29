@@ -4828,7 +4828,7 @@ def test_rejected_corner_identity_can_reacquire_after_physical_break() -> None:
       v_ego=20.0,
       radar_points=(Point(
         1002,
-        60.0 - index * 0.1,
+        78.0 - index * 0.1,
         0.1,
         v_rel=-2.0,
         source="corner235",
@@ -4856,7 +4856,7 @@ def test_radar_only_moving_corner_accepts_consistent_range_rate() -> None:
       v_ego=20.0,
       radar_points=(Point(
         1002,
-        70.0 - index * 0.1,
+        75.0 - index * 0.1,
         0.1,
         v_rel=-2.0,
         source="corner235",
@@ -4869,6 +4869,34 @@ def test_radar_only_moving_corner_accepts_consistent_range_rate() -> None:
   assert output is not None
   assert output.lead_one is not None
   assert output.lead_one["radarTrackId"] == 1002
+
+
+def test_close_born_corner_only_moving_reflection_cannot_seed_lead() -> None:
+  controller = DPathRadarController(
+    prefer_corner_radar=True,
+    enable_radar_tracks=1,
+    cut_in_sensitivity=0,
+  )
+  output = None
+  for index in range(14):
+    time_s = index * 0.05
+    output = controller.update(
+      time_s=time_s,
+      v_ego=19.3 + index * 0.05,
+      radar_points=(Point(
+        2333,
+        41.2 - 8.2 * time_s,
+        -0.95,
+        v_rel=-8.2,
+        source="corner235",
+      ),),
+      model=model_with_lead(
+        110.0, 0.2, 19.0, probability=0.08,
+      ),
+    )
+    assert output.lead_one is None
+
+  assert output is not None
 
 
 def test_radar_only_moving_far_corner_rejects_tunnel_fixture() -> None:
@@ -5678,7 +5706,7 @@ def test_in_path_moving_radar_fallback_prefers_front_then_corner_scc() -> None:
         ),
       ),
       1,
-      1009,
+      None,
     ),
     (
       (
@@ -6079,7 +6107,7 @@ def test_closer_moving_radar_does_not_override_track_zero() -> None:
   assert output.lead_one["radarTrackId"] == 0
 
 
-def test_moving_corner_born_in_path_waits_for_lead_one_not_lead_two() -> None:
+def test_moving_corner_born_in_path_does_not_become_control_lead() -> None:
   controller = DPathRadarController(
     prefer_corner_radar=True,
     enable_radar_tracks=1,
@@ -6099,11 +6127,10 @@ def test_moving_corner_born_in_path_waits_for_lead_one_not_lead_two() -> None:
         30.0, 0.0, 0.0, probability=0.0,
       ),
     )
+    assert output.lead_one is None
     assert output.lead_two is None
 
   assert output is not None
-  assert output.lead_one is not None
-  assert output.lead_one["radarTrackId"] == 1009
 
 
 def test_no_vision_adjacent_moving_corner_does_not_become_lead_one() -> None:
