@@ -3,10 +3,12 @@
 - For long-running work, treat user questions, status checks, clarifications, and added in-scope
   requests as interruptions to answer while continuing the active work. Stop an active process or
   abandon the task only when the user explicitly asks to stop, cancel, pause, or replace it.
-- While the remote branches `carrot-wip`, `carrot-egpu`, and `egpu-tg` exist, apply, commit, and
-  push each user-requested `carrot-wip` code change to all three. The user may refer to `egpu-tg`
-  as `carrot-egpu-tg`; use the actual remote branch name. Stop mirroring only a branch that has
-  been removed from the remote.
+- While the remote `carrot-egpu` branch exists, apply and push each user-requested `carrot-wip`
+  code change to both `carrot-wip` and `carrot-egpu`.
+- Apply and push every shared big-model or eGPU infrastructure/fix commit to every existing remote
+  branch whose name starts with `carrot-egpu`. Preserve each experimental branch's intentionally
+  different model selection or payload unless the user explicitly asks to change it. Stop
+  mirroring only branches that have been removed from the remote.
 - Navigation deceleration behavior for the `origin/thftgr/navi-stream` branch is documented in
   `docs/carrot_navi_7713_7714_deceleration.md`.
 - The 7714-only control comparison between `origin/carrot-wip` and `origin/thftgr/navi-stream` is
