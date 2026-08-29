@@ -2037,8 +2037,15 @@ class RadarOccupancyV2Selector:
       ))
 
     self.motion_sensor = baseline.motion_sensor
+    self.enable_radar_tracks = baseline.enable_radar_tracks
+    self.cut_in_sensitivity = baseline.cut_in_sensitivity
+    self.motion_sensitivity = baseline.motion_sensitivity
+    self.decision_threshold = baseline.decision_threshold
+    self.maximum_lookahead_s = baseline.maximum_lookahead_s
+    self.motion_points = baseline.motion_points
     self.trajectories = baseline.trajectories
     self.lead_one_outputs = baseline.lead_one_outputs
+    self.baseline = baseline
     self.estimates = tuple(estimate_series)
     self.selections = tuple(selections)
 
@@ -3081,7 +3088,7 @@ class SimulatorUI:
   def __init__(
     self,
     frames: list[RadarFrame],
-    selector: RadarMotionShadowSelector,
+    selector: RadarMotionShadowSelector | RadarOccupancyV2Selector,
     title: str,
     log_path: Path,
     reviews: tuple[ValidationReview, ...] = (),
@@ -3098,6 +3105,13 @@ class SimulatorUI:
     self.rl = rl
     self.frames = frames
     self.selector = selector
+    self.use_occupancy_v2 = isinstance(selector, RadarOccupancyV2Selector)
+    self.v1_selector = (
+      selector.baseline if self.use_occupancy_v2 else selector
+    )
+    self.v2_selector = (
+      selector if self.use_occupancy_v2 else None
+    )
     self.enable_radar_tracks = selector.enable_radar_tracks
     self.title = title
     self.log_path = log_path
@@ -3139,12 +3153,14 @@ class SimulatorUI:
     self.pending_probability = applied_threshold
     self.probability_dragging = False
     del display_lookahead_s, sensor_lookaheads
-    self.probability_cache = {
+    self.probability_cache: dict[
+      tuple[str, int, float], RadarMotionShadowSelector
+    ] = {
       (
-        selector.motion_sensor,
-        selector.cut_in_sensitivity,
-        round(selector.decision_threshold, 2),
-      ): selector,
+        self.v1_selector.motion_sensor,
+        self.v1_selector.cut_in_sensitivity,
+        round(self.v1_selector.decision_threshold, 2),
+      ): self.v1_selector,
     }
     self.sensor_history_cache = {
       selector.motion_sensor: (
@@ -3202,6 +3218,36 @@ class SimulatorUI:
     else:
       self.video_error = f"camera missing: {self.video_path.name}"
 
+  def _activate_selector_pair(
+    self,
+    value: int,
+    baseline: RadarMotionShadowSelector,
+  ) -> None:
+    self.v1_selector = baseline
+    self.v2_selector = RadarOccupancyV2Selector(
+      self.frames,
+      baseline=baseline,
+      enable_radar_tracks=self.enable_radar_tracks,
+    )
+    self._activate_sensitivity(
+      value,
+      self.v2_selector if self.use_occupancy_v2 else self.v1_selector,
+    )
+
+  def _toggle_occupancy_version(self) -> None:
+    self.use_occupancy_v2 = not self.use_occupancy_v2
+    if self.use_occupancy_v2 and self.v2_selector is None:
+      self.v2_selector = RadarOccupancyV2Selector(
+        self.frames,
+        baseline=self.v1_selector,
+        enable_radar_tracks=self.enable_radar_tracks,
+      )
+    target = self.v2_selector if self.use_occupancy_v2 else self.v1_selector
+    assert target is not None
+    self._activate_sensitivity(self.cut_in_sensitivity, target)
+    version = "V2 확률 점유" if self.use_occupancy_v2 else "V1 기존"
+    self.status = f"검증 모델 {version}로 전환"
+
   def _refresh_lead_continuity(self) -> None:
     self.lead_one_segments = lead_continuity_segments(
       self.frames,
@@ -3241,7 +3287,7 @@ class SimulatorUI:
   def _activate_sensitivity(
     self,
     value: int,
-    selector: RadarMotionShadowSelector,
+    selector: RadarMotionShadowSelector | RadarOccupancyV2Selector,
   ) -> None:
     self.selector = selector
     self.cut_in_sensitivity = value
@@ -3323,7 +3369,7 @@ class SimulatorUI:
         - policy.cut_in_threshold
       ) >= 0.005
     ):
-      self._activate_sensitivity(value, cached)
+      self._activate_selector_pair(value, cached)
     else:
       label = VALIDATION_SENSITIVITY_LABELS[value]
       self.status = f"CUT-IN 감도 {value} {label} 이미 적용됨"
@@ -3368,7 +3414,7 @@ class SimulatorUI:
       save_validation_motion_mode(mode, self.settings_path)
     except OSError as exc:
       save_error = exc
-    self._activate_sensitivity(self.cut_in_sensitivity, cached)
+    self._activate_selector_pair(self.cut_in_sensitivity, cached)
     mode_text = "일반(코너 우선)" if mode == "normal" else "프런트 전용"
     self.status = (
       f"{mode_text} 모드 적용 · {target_sensor} · 미래 5.0초 고정"
@@ -4339,8 +4385,10 @@ class SimulatorUI:
       if self.motion_mode == "normal"
       else "프런트 전용"
     )
+    version_text = "V2 확률 점유" if self.use_occupancy_v2 else "V1 기존"
     self._draw_text(
-      f"dPath predictor: {mode_text} · {sensor_text} 레이더 사용 · "
+      f"dPath predictor: {version_text} · {mode_text} · "
+      + f"{sensor_text} 레이더 사용 · "
       + f"EnableRadarTracks {self.enable_radar_tracks}",
       x,
       int(rect.y + 82.0),
@@ -4388,6 +4436,11 @@ class SimulatorUI:
       max_rows -= 1
     for candidate in selection.cutin_diagnostics[:max_rows]:
       stage_text = {
+        "CLEAR": "관찰 해제",
+        "WATCH": "진입 관찰",
+        "LIMIT": "가속 제한/예비감속",
+        "LEAD": "L2 승격",
+        "OCCUPIED": "현재 경로 점유",
         "IN": "현재 경로",
         "PENDING": "CUT-IN 확인 중",
         "CUT-IN": "CUT-IN 확정",
@@ -4425,7 +4478,7 @@ class SimulatorUI:
       )
     self._draw_text(self.status[:65], x, int(rect.y + rect.height - 83.0), 15, white)
     self._draw_text(
-      "Space 재생  클릭 탐색  R 처음  T 처리모드  F 표시  H 궤적  A raw  M 마커",
+      "Space 재생  클릭 탐색  R 처음  V V1/V2  T 처리모드  F 표시  H 궤적  A raw  M 마커",
       x,
       int(rect.y + rect.height - 51.0),
       13,
@@ -4716,6 +4769,8 @@ class SimulatorUI:
       mode = "front" if self.motion_mode == "normal" else "normal"
       self.status = "처리 센서 모드 변경 계산 중..."
       self._request_motion_mode(mode)
+    if rl.is_key_pressed(rl.KEY_V):
+      self._toggle_occupancy_version()
     if rl.is_key_pressed(rl.KEY_I):
       self._label("detect")
     if rl.is_key_pressed(rl.KEY_C):
@@ -4926,6 +4981,11 @@ def parse_args() -> argparse.Namespace:
       + "(default: 2)"
     ),
   )
+  parser.add_argument(
+    "--legacy-v1",
+    action="store_true",
+    help="start visual review with the legacy V1 detector (V toggles V1/V2)",
+  )
   parser.add_argument("--validation-case", action="append", default=[])
   parser.add_argument(
     "--validation-root", type=Path,
@@ -5014,7 +5074,7 @@ def main() -> int:
     + f">={VALIDATION_MIN_CONTINUOUS_OVERLAP_S:.1f}s",
     flush=True,
   )
-  selector = RadarMotionShadowSelector(
+  v1_selector = RadarMotionShadowSelector(
     frames,
     (
       probability
@@ -5024,6 +5084,15 @@ def main() -> int:
     cut_in_sensitivity=cut_in_sensitivity,
     motion_sensor=motion_sensor,
     enable_radar_tracks=args.enable_radar_tracks,
+  )
+  selector = (
+    v1_selector
+    if args.legacy_v1
+    else RadarOccupancyV2Selector(
+      frames,
+      baseline=v1_selector,
+      enable_radar_tracks=args.enable_radar_tracks,
+    )
   )
   print_summary(args.rlog, frames, selector)
   if args.summary:
@@ -5052,6 +5121,7 @@ __all__ = (
   "ModelLead",
   "RadarFrame",
   "RadarMotionShadowSelector",
+  "RadarOccupancyV2Selector",
   "RadarPoint",
   "RecordedLead",
   "Selection",
