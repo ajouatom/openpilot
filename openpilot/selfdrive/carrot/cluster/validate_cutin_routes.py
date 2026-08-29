@@ -26,7 +26,11 @@ CASES_PATH = Path(__file__).with_name("cutin_validation_cases.json")
 
 def parse_args() -> argparse.Namespace:
   parser = argparse.ArgumentParser(description="Run the maintained route cut-in regression set.")
-  parser.add_argument("--root", type=Path, default=Path(r"W:\routes"), help="Route log root directory")
+  parser.add_argument(
+    "--root", type=Path,
+    default=Path(r"\\DS1821P\openpilot\routes"),
+    help="Route log root directory",
+  )
   parser.add_argument("--case", action="append", default=[], help="Run cases whose id contains this text")
   parser.add_argument("--list", action="store_true", help="List selected cases without parsing logs")
   return parser.parse_args()
@@ -99,11 +103,11 @@ def main() -> int:
       first_t, vehicle = detections[0]
       detail = (
         f"first={first_t:.2f}s id={vehicle.radar_track_id} "
-        f"d={vehicle.longitudinal_m:.1f}m"
+        + f"d={vehicle.longitudinal_m:.1f}m"
       )
     print(
       f"[{index:02d}/{len(cases):02d}] {'PASS' if passed else 'FAIL'} "
-      f"{case['id']}: {detail}",
+      + f"{case['id']}: {detail}",
       flush=True,
     )
 

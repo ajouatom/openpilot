@@ -2,6 +2,32 @@
   "sensitivity": 50,
   "cases": [
     {
+      "id": "ioniq5-e32-56-corner-early-risk-3504",
+      "vehicle_folder": "HYUNDAI_IONIQ_5_PE 07b62e389ed26c81",
+      "log": "00000e32--3c0b7b9a59--56/rlog.zst",
+      "source": "corner",
+      "window": [0.85, 1.20],
+      "expected": "detect",
+      "human_verified": true,
+      "validation_stage": "predecel",
+      "target_track_ids": [3504],
+      "latest_detection_s": 1.17,
+      "scene": "Right-side sedan is visibly committed across the lane boundary; sustained fused motion should block acceleration well before the rear reflection reaches the path center"
+    },
+    {
+      "id": "ioniq5-e32-56-corner-early-l2-3504",
+      "vehicle_folder": "HYUNDAI_IONIQ_5_PE 07b62e389ed26c81",
+      "log": "00000e32--3c0b7b9a59--56/rlog.zst",
+      "source": "corner",
+      "window": [1.20, 1.50],
+      "expected": "detect",
+      "human_verified": true,
+      "validation_stage": "lead_two",
+      "target_track_ids": [3504],
+      "latest_detection_s": 1.45,
+      "scene": "The same sedan has materially entered the ego lane and must be promoted to leadTwo before the legacy far-corner motion gate releases"
+    },
+    {
       "id": "k8-2db-56-stopped-motorcycle-leadone-35",
       "vehicle_folder": "KIA_K8_HEV_1ST_GEN b34d1abb87cce93b",
       "log": "000002db--6b934dd8b1--56/rlog.zst",
