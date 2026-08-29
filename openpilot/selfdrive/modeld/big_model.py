@@ -137,7 +137,7 @@ def _write_state(active: BigModelManifest, previous: BigModelManifest | None, ca
 
 
 def fetch_manifest(manifest_url: str = DEFAULT_MANIFEST_URL, timeout: float = 15.0) -> BigModelManifest:
-  # egpu-tg intentionally pins commaai/openpilot#38652 (tt-driving). Keep the
+  # carrot-egpu-tg intentionally pins commaai/openpilot#38652 (tt-driving). Keep the
   # environment/CLI override path below so a different manifest can still be
   # tested explicitly without changing this branch.
   if manifest_url == DEFAULT_MANIFEST_URL:
