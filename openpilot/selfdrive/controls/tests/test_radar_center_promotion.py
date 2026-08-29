@@ -47,12 +47,31 @@ class TestRadarCenterPromotion:
       cnt=CORNER_CENTER_MIN_AGE,
       dRel=68.0,
       vLead=20.0,
+      cut_in_count=0,
       in_lane_prob=1.0,
       dPath=0.0,
     )
 
     assert not radar._is_corner_center_candidate(track)
     assert radar._is_corner_center_candidate(track, matched_front=True)
+
+  def test_close_born_corner_center_requires_support_or_cutin_history(self):
+    radar = RadarD.__new__(RadarD)
+    radar.lane_line_available = True
+    track = SimpleNamespace(
+      is_corner_radar=True,
+      cnt=CORNER_CENTER_MIN_AGE,
+      dRel=41.0,
+      vLead=11.0,
+      cut_in_count=0,
+      in_lane_prob=1.0,
+      dPath=0.0,
+    )
+
+    assert not radar._is_corner_center_candidate(track)
+    assert radar._is_corner_center_candidate(track, matched_front=True)
+    track.cut_in_count = 1
+    assert radar._is_corner_center_candidate(track)
 
   def test_discontinuous_track_restarts_age(self):
     track = Track(1189)

@@ -21,6 +21,7 @@ from openpilot.selfdrive.carrot.radar.tools.radar_validation_replay import (
   RadarMotionShadowSelector,
   RadarOccupancyV2Selector,
   load_frames,
+  radar_replay_source_fingerprint,
 )
 from openpilot.selfdrive.carrot.radar.tools.validate_radar_lead_model import (
   DEFAULT_CASES,
@@ -66,7 +67,7 @@ def _cache_path(cache_dir: Path, log_path: Path) -> Path:
   stat = log_path.stat()
   identity = (
     f"{BASELINE_CACHE_VERSION}|{log_path}|{stat.st_size}|"
-    + f"{stat.st_mtime_ns}"
+    + f"{stat.st_mtime_ns}|{radar_replay_source_fingerprint()}"
   )
   digest = hashlib.sha256(identity.encode("utf-8")).hexdigest()[:20]
   return cache_dir / f"{digest}.pickle"
