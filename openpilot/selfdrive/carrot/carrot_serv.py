@@ -371,18 +371,29 @@ class CarrotServ:
   def _vehicle_speed_bump_enabled(self, CS):
     return self.vehicleNaviCanControl and self.autoNaviSpeedCtrlMode >= 2 and CS.speedBumpDistance > 0
 
-  def _vehicle_navi_curve_speed(self, CS):
+  def _vehicle_navi_curve_enabled(self, CS):
+    if CS is None:
+      return False
     reference_speed = float(getattr(CS, "vehicleNaviCurveSpeed", 0.0))
     curvature = float(getattr(CS, "vehicleNaviCurveCurvature", 0.0))
     route_active = bool(getattr(CS, "vehicleNaviCurveRouteActive", False))
     route_state = int(getattr(CS, "vehicleNaviCurveRouteState", 1 if route_active else 3))
     route_allowed = route_active or (self.vehicleNaviCurveMppControl and route_state == 0)
-    if not self.vehicleNaviCurveControl or not route_allowed or reference_speed <= 0 or abs(curvature) < 1e-7:
+    return self.vehicleNaviCurveControl and route_allowed and reference_speed > 0 and abs(curvature) >= 1e-7
+
+  def _vehicle_navi_curve_speed(self, CS):
+    if not self._vehicle_navi_curve_enabled(CS):
       return 250.0
 
+    reference_speed = float(getattr(CS, "vehicleNaviCurveSpeed", 0.0))
     target_speed = max(self.autoCurveSpeedLowerLimit, reference_speed * self.vehicleNaviCurveSpeedFactor)
     return self.calculate_current_speed(float(getattr(CS, "vehicleNaviCurveDistance", 0.0)),
                                         target_speed, self.vehicleNaviCurveControlEnd, self.autoNaviSpeedDecelRate)
+
+  def _vehicle_navi_curve_display_speed(self, CS, current_speed):
+    if not self._vehicle_navi_curve_enabled(CS):
+      return 0.0
+    return min(250.0, max(0.0, float(current_speed)))
 
   def _vehicle_school_zone_enabled(self, CS):
     if not CS.schoolZoneActive:
@@ -1489,6 +1500,7 @@ class CarrotServ:
     msg.carrotMan.vehicleNaviSpeed = vehicle_navi_speed
     msg.carrotMan.vehicleNaviSectionActive = vehicle_navi_section_active
     msg.carrotMan.vehicleNaviAvailable = bool(getattr(CS, "vehicleNaviAvailable", False))
+    msg.carrotMan.vehicleNaviCurveCurrentSpeed = self._vehicle_navi_curve_display_speed(CS, vehicle_curve_speed)
     msg.carrotMan.carrotCmdIndex = int(self.carrotCmdIndex)
     msg.carrotMan.carrotCmd = self.carrotCmd
     msg.carrotMan.carrotArg = self.carrotArg
