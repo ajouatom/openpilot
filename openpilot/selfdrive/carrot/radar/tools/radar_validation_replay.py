@@ -61,6 +61,13 @@ from openpilot.selfdrive.carrot.radar_motion import (
   vision_lead_from_model,
   vision_only_lead_allowed,
 )
+from openpilot.selfdrive.carrot.radar_motion.occupancy_v2 import (
+  OccupancyEstimate,
+  OccupancyEvidence,
+  OccupancyStage,
+  RadarOccupancyModelV2,
+  early_control_eligible,
+)
 
 
 RADAR_TO_CAMERA = 1.52
@@ -1723,6 +1730,326 @@ class RadarMotionShadowSelector:
   def select(self, frame: RadarFrame, frame_index: int | None = None) -> Selection:
     if frame_index is None:
       raise ValueError("shadow selector requires a frame index")
+    return self.selections[frame_index]
+
+
+def _occupancy_v2_candidate(
+  estimate: OccupancyEstimate,
+  point: RadarPoint,
+) -> Candidate:
+  prediction = estimate.evidence
+  overlap_eta = (
+    "--"
+    if estimate.time_to_overlap_s is None
+    else f"{estimate.time_to_overlap_s:.2f}s"
+  )
+  time_gap = "--" if estimate.time_gap_s is None else f"{estimate.time_gap_s:.2f}s"
+  collision_eta = (
+    "--"
+    if estimate.time_to_collision_s is None
+    else f"{estimate.time_to_collision_s:.2f}s"
+  )
+  return Candidate(
+    track_id=prediction.track_id,
+    score=estimate.lead_score,
+    reason="probabilistic lane occupancy V2",
+    decision_threshold=0.0,
+    d_rel=point.d_rel,
+    y_rel=point.y_rel,
+    v_lead=point.v_lead,
+    base_score=estimate.risk_score,
+    temporal_score=estimate.confidence,
+    current_path_occupancy=prediction.current_path_occupancy,
+    stage=estimate.stage.name,
+    detail=(
+      f"occ={estimate.occupancy_score:.2f} "
+      + f"risk={estimate.risk_score:.2f} lead={estimate.lead_score:.2f} "
+      + f"intent={estimate.intent_score:.2f} conf={estimate.confidence:.2f} "
+      + f"clear={estimate.path_clearance_m:.2f}m "
+      + f"inward={estimate.inward_rate_mps:.2f}m/s eta={overlap_eta} "
+      + f"gap={time_gap} ttc={collision_eta} "
+      + f"urgency={estimate.control_urgency:.2f}"
+    ),
+    source=prediction.source,
+    continuity_id=prediction.continuity_id,
+  )
+
+
+class RadarOccupancyV2Selector:
+  """Replay V1 with the bounded early-control additions from occupancy V2."""
+
+  name = "probabilistic-occupancy-v2"
+
+  def __init__(
+    self,
+    frames: Sequence[RadarFrame],
+    *,
+    baseline: RadarMotionShadowSelector | None = None,
+    enable_radar_tracks: int = 2,
+  ) -> None:
+    baseline = baseline or RadarMotionShadowSelector(
+      frames,
+      enable_radar_tracks=enable_radar_tracks,
+    )
+    occupancy_model = RadarOccupancyModelV2()
+    front_associator = FrontRadarKinematicAssociator()
+    lead_two_tracker = DPathLeadTwoTracker()
+    selections: list[Selection] = []
+    estimate_series: list[tuple[OccupancyEstimate, ...]] = []
+
+    for index, (frame, predictions, lead_one) in enumerate(zip(
+      frames,
+      baseline.trajectories,
+      baseline.lead_one_outputs,
+      strict=True,
+    )):
+      selected_points = baseline.motion_points[index]
+      all_points = radar_points_at_model_time(frame)
+      front_matches = front_associator.update(all_points)
+      cross_sensor_identities = set(front_matches)
+      cross_sensor_identities.update(
+        (point.source, point.track_id)
+        for point in front_matches.values()
+      )
+      point_by_identity = {
+        (point.source, point.track_id): point
+        for point in selected_points
+      }
+      point_by_identity.update({
+        (point.source, point.track_id): point
+        for point in all_points
+        if (point.source, point.track_id) in predictions
+      })
+      vision = vision_lead_from_model(_controller_model(frame))
+      evidence_values: list[OccupancyEvidence] = []
+      point_by_v2_identity: dict[tuple[str, int], RadarPoint] = {}
+      for prediction in predictions.values():
+        identity = prediction.source, prediction.track_id
+        point = point_by_identity.get(identity)
+        if point is None:
+          continue
+        vision_supported = (
+          apply_vision_bracket_cutin_support(
+            prediction,
+            point,
+            all_points,
+            vision,
+            lead_one,
+          ).reason
+          == "vision-bracketed physical CUT-IN"
+        )
+        evidence = OccupancyEvidence(
+          source=prediction.source,
+          track_id=prediction.track_id,
+          continuity_id=prediction.continuity_id,
+          d_rel=point.d_rel,
+          v_rel=point.v_rel,
+          v_lead=point.v_lead,
+          v_ego=frame.v_ego,
+          d_path=prediction.d_path,
+          d_path_rate_short=prediction.d_path_rate_short,
+          d_path_rate_long=prediction.d_path_rate_long,
+          reported_normal_speed=prediction.reported_normal_speed,
+          normal_speed_disagreement=prediction.normal_speed_disagreement,
+          directional_inward_displacement_m=(
+            prediction.directional_inward_displacement_m
+          ),
+          directional_consistency=prediction.directional_consistency,
+          directional_inward_sample_ratio=(
+            prediction.directional_inward_sample_ratio
+          ),
+          motion_consistency=prediction.motion_consistency,
+          recent_motion_support=prediction.recent_motion_support,
+          history_count=prediction.history_count,
+          uncertainty=prediction.uncertainty,
+          current_path_occupancy=prediction.current_path_occupancy,
+          cross_sensor_confirmed=identity in cross_sensor_identities,
+          vision_supported=vision_supported,
+        )
+        evidence_values.append(evidence)
+        point_by_v2_identity[evidence.identity] = point
+
+      estimates = occupancy_model.update(frame.time_s, evidence_values)
+      estimate_series.append(estimates)
+      estimate_by_identity = {
+        estimate.evidence.identity: estimate
+        for estimate in estimates
+      }
+      diagnostics = tuple(sorted(
+        (
+          _occupancy_v2_candidate(
+            estimate,
+            point_by_v2_identity[estimate.evidence.identity],
+          )
+          for estimate in estimates
+        ),
+        key=lambda candidate: (
+          -OccupancyStage[candidate.stage],
+          -candidate.score,
+          candidate.d_rel if candidate.d_rel is not None else math.inf,
+        ),
+      ))
+      baseline_selection = baseline.selections[index]
+      control_eligible_identities = {
+        estimate.evidence.identity
+        for estimate in estimates
+        if early_control_eligible(estimate)
+      }
+      lead_candidates = []
+      continuity_by_identity = {}
+      for identity, point in point_by_identity.items():
+        prediction = predictions.get(identity)
+        if prediction is None:
+          continue
+        estimate = estimate_by_identity.get((
+          prediction.source,
+          prediction.continuity_id,
+        ))
+        if estimate is None:
+          continue
+        continuity_by_identity[identity] = prediction.continuity_id
+        lead_point = prefer_front_radar_kinematics(
+          point, all_points, front_matches,
+        )
+        lead_d_path = (
+          project_to_model_path(
+            frame.path, lead_point.d_rel, lead_point.y_rel,
+          ).d_path
+          if lead_point is not point
+          else prediction.d_path
+        )
+        lead = lead_from_radar_point(
+          lead_point,
+          lead_d_path,
+          0.03,
+          estimate.lead_score,
+        )
+        if lead_duplicates_primary(lead, lead_one):
+          control_eligible_identities.discard(estimate.evidence.identity)
+          if lead_two_tracker.active_identity == (
+            prediction.source,
+            prediction.track_id,
+            prediction.continuity_id,
+          ):
+            lead_two_tracker.reset()
+          continue
+        if estimate.evidence.identity not in control_eligible_identities:
+          continue
+        lead_candidates.append(DPathLeadCandidate(
+          lead=lead,
+          source=prediction.source,
+          track_id=prediction.track_id,
+          continuity_id=prediction.continuity_id,
+          retainable=estimate.stage >= OccupancyStage.LIMIT,
+          confirmed_cutin=estimate.stage >= OccupancyStage.LEAD,
+        ))
+
+      v2_limit_candidates = tuple(
+        candidate for candidate in diagnostics
+        if (
+          OccupancyStage[candidate.stage] >= OccupancyStage.LIMIT
+          and (candidate.source, candidate.continuity_id)
+          in control_eligible_identities
+        )
+      )
+      v2_decision_candidates = tuple(
+        candidate for candidate in diagnostics
+        if (
+          OccupancyStage[candidate.stage] >= OccupancyStage.LEAD
+          and (candidate.source, candidate.continuity_id)
+          in control_eligible_identities
+        )
+      )
+      baseline_decision_keys = {
+        (candidate.source, candidate.track_id)
+        for candidate in baseline_selection.decision_cutin_candidates
+      }
+      decision_candidates = (
+        baseline_selection.decision_cutin_candidates
+        + tuple(
+          candidate for candidate in v2_decision_candidates
+          if (candidate.source, candidate.track_id)
+          not in baseline_decision_keys
+        )
+      )
+      predecel_candidate = min(
+        (
+          *v2_limit_candidates,
+          *(
+            ()
+            if baseline_selection.cutin_predecel_candidate is None
+            else (baseline_selection.cutin_predecel_candidate,)
+          ),
+        ),
+        key=lambda candidate: (
+          candidate.d_rel if candidate.d_rel is not None else math.inf,
+          -float(candidate.base_score or 0.0),
+        ),
+        default=None,
+      )
+
+      lead_selection = lead_two_tracker.update(
+        frame.time_s,
+        lead_one,
+        lead_candidates,
+        frame.v_ego,
+      )
+      selected_ids = {
+        int(lead["radarTrackId"])
+        for lead in lead_selection.cutins
+      }
+      active_candidates = tuple(
+        candidate for candidate in v2_decision_candidates
+        if candidate.track_id in selected_ids
+      )
+      active_candidates = (
+        baseline_selection.active_cutin_candidates
+        + active_candidates
+      )
+      v2_lead_two = _controller_candidate(
+        frame,
+        lead_selection.lead_two,
+        "RadarOccupancy V2 leadTwo",
+        continuity_by_identity,
+      )
+      if (
+        v2_lead_two is None
+        and baseline_selection.lead_two is not None
+      ):
+        # V2 is an early-control augmentation. V1 retains ownership whenever
+        # no independently eligible V2 lead is ready.
+        v2_lead_two = baseline_selection.lead_two
+      selections.append(Selection(
+        lead_one=baseline_selection.lead_one,
+        lead_two=v2_lead_two,
+        front_candidates=tuple(
+          candidate for candidate in diagnostics
+          if not candidate.source.startswith("corner")
+        ),
+        corner_candidates=tuple(
+          candidate for candidate in diagnostics
+          if candidate.source.startswith("corner")
+        ),
+        cutin_diagnostics=diagnostics,
+        decision_cutin_candidates=decision_candidates,
+        active_cutin_candidates=active_candidates,
+        cutin_predecel_candidate=predecel_candidate,
+      ))
+
+    self.motion_sensor = baseline.motion_sensor
+    self.trajectories = baseline.trajectories
+    self.lead_one_outputs = baseline.lead_one_outputs
+    self.estimates = tuple(estimate_series)
+    self.selections = tuple(selections)
+
+  def select(
+    self,
+    frame: RadarFrame,
+    frame_index: int | None = None,
+  ) -> Selection:
+    del frame
+    if frame_index is None:
+      raise ValueError("occupancy V2 selector requires a frame index")
     return self.selections[frame_index]
 
 
@@ -4600,7 +4927,10 @@ def parse_args() -> argparse.Namespace:
     ),
   )
   parser.add_argument("--validation-case", action="append", default=[])
-  parser.add_argument("--validation-root", type=Path, default=Path(r"W:\routes"))
+  parser.add_argument(
+    "--validation-root", type=Path,
+    default=Path(r"\\DS1821P\openpilot\routes"),
+  )
   parser.add_argument("--validation-cases", type=Path, default=DEFAULT_VALIDATION_CASES)
   parser.add_argument("--screenshot", type=Path)
   parser.add_argument(

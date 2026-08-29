@@ -66,7 +66,10 @@ def parse_args() -> argparse.Namespace:
   parser = argparse.ArgumentParser(
     description="Replay validation logs showing only the physical dPath predictor",
   )
-  parser.add_argument("--root", type=Path, default=Path(r"W:\routes"))
+  parser.add_argument(
+    "--root", type=Path,
+    default=Path(r"\\DS1821P\openpilot\routes"),
+  )
   parser.add_argument("--cases", type=Path, default=DEFAULT_CASES)
   parser.add_argument("--case", action="append", default=[])
   parser.add_argument(
