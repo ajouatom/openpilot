@@ -444,6 +444,11 @@ secondary SDI/route 확장은 이 primary gate 문제를 고치지 않는다.
 on-road UI, mici UI, cluster live UI의 보조속도 영역은 선택된 감속 이유와 목표속도만 표시한다. 제어용
 `desiredSource` 값 자체는 바꾸지 않으며, cruise가 꺼졌을 때 차량 내비 속도를 보조속도처럼 강제로 표시하지 않는다.
 
+보조속도 오른쪽의 라벤더 `curve` 값은 제어 winner와 별개로 `carState.vehicleNaviCurveSpeed`의
+100% 기준 커브속도를 표시한다. 유효한 곡률 spot이 없으면 `--`, 있으면 250 km/h를 상한으로 표시하며
+imperial UI에서는 상한 적용 후 mph로 변환한다. 따라서 보조속도는 현재 적용 중인 감속 목표이고,
+`curve`는 `VehicleNaviCurveSpeedFactor` 적용 전 CAN 곡률 계산값이다.
+
 - `0 < desiredSpeed < 200`
 - `desiredSpeed < 운전자 설정 cruise speed`
 - 외부 내비 source는 실제 이유(`cam`, `section`, `bump`, `turn`, `route` 등)를 주황으로 표시
