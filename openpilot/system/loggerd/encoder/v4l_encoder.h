@@ -15,7 +15,7 @@ public:
   int encode_frame(VisionBuf* buf, VisionIpcBufExtra *extra);
   void encoder_open();
   void encoder_close();
-  void set_idle(bool idle) override;
+  void set_idle(bool is_idle) override;
 
 private:
   int fd;
