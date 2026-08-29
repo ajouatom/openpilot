@@ -43,6 +43,20 @@ function elapsedText(startedAt) {
   return `${String(minutes).padStart(2, "0")}:${String(elapsed % 60).padStart(2, "0")}`;
 }
 
+function modelDisplayName(status) {
+  const explicitName = String(status?.display_name || "").trim();
+  if (explicitName) return explicitName;
+
+  const modelId = String(status?.model_id || "").toLowerCase();
+  if (modelId.includes("pr38726") || modelId.includes("time-to-go")) return "Time to Go";
+  return "";
+}
+
+function modelDisplayTitle(status, fallbackTitle = t("title")) {
+  const name = modelDisplayName(status);
+  return name ? `${name} · eGPU` : fallbackTitle;
+}
+
 function render(status = lastStatus) {
   const card = document.getElementById("egpuModelCard");
   if (!card) return;
@@ -65,7 +79,7 @@ function render(status = lastStatus) {
   card.hidden = false;
   card.dataset.state = state;
   card.classList.toggle("is-running", running);
-  document.getElementById("egpuModelTitle").textContent = t("title");
+  document.getElementById("egpuModelTitle").textContent = modelDisplayTitle(status);
   stateEl.textContent = t(state);
   detailEl.textContent = t(`${state}_detail`);
 
@@ -118,4 +132,4 @@ function init() {
 const CarrotEgpuModel = Object.freeze({ init, refresh, render });
 globalThis.CarrotEgpuModel = CarrotEgpuModel;
 
-export { CarrotEgpuModel };
+export { CarrotEgpuModel, modelDisplayName, modelDisplayTitle };
