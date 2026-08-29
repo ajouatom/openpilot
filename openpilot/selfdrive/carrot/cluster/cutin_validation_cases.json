@@ -2,6 +2,20 @@
   "sensitivity": 50,
   "cases": [
     {
+      "id": "ioniq9-a7-37-empty-road-stationary-corner-2294",
+      "vehicle_folder": "HYUNDAI_IONIQ_9 7a9a8e68022c1881",
+      "log": "000001a7--2948dd51d1--37/rlog.zst",
+      "source": "front+corner",
+      "window": [41.50, 44.40],
+      "expected": "clear",
+      "human_verified": true,
+      "validation_stage": "lead_one",
+      "target_track_ids": [2294],
+      "forbidden_lead_one_ids": [2294],
+      "forbidden_lead_two_ids": [2294],
+      "scene": "Empty straight road: an uncorroborated low-speed corner-only reflection must not become leadOne or leadTwo and command hard braking"
+    },
+    {
       "id": "ioniq5-e32-56-corner-early-risk-3504",
       "vehicle_folder": "HYUNDAI_IONIQ_5_PE 07b62e389ed26c81",
       "log": "00000e32--3c0b7b9a59--56/rlog.zst",

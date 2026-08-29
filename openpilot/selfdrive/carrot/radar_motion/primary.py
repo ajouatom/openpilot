@@ -77,6 +77,13 @@ STATIONARY_HELD_MAX_DPATH_M = 4.0
 STATIONARY_HELD_FRONT_NO_VISION_MAX_DPATH_M = 1.1
 STATIONARY_RADAR_ONLY_HELD_MAX_DPATH_M = 1.2
 STATIONARY_RADAR_ONLY_CORNER_MAX_DPATH_M = 0.50
+# A stopped vehicle first seen only by corner radar at close range is
+# indistinguishable from a curb, pole, or road-edge reflection that sweeps
+# through the curved model path. Real stopped leads normally have already
+# been observed farther away or are corroborated by vision/front radar/SCC.
+# Keep the useful early corner-only acquisition, but do not turn a newly
+# appearing close reflection directly into a braking lead.
+STATIONARY_RADAR_ONLY_CORNER_MIN_ACQUISITION_DREL_M = 70.0
 STATIONARY_RADAR_ONLY_CROSS_SOURCE_MAX_DREL_M = 7.0
 STATIONARY_RADAR_ONLY_CROSS_SOURCE_MAX_DPATH_M = 1.5
 STATIONARY_RADAR_ONLY_CROSS_SOURCE_MAX_VLEAD_MPS = 2.0
@@ -1391,6 +1398,12 @@ class VisionRadarMatcher:
       # Cross-sensor corroboration confirms that the reflection is physical;
       # it must not move a roadside stationary object onto the ego path.
       if abs(d_path) > STATIONARY_RADAR_ONLY_CORNER_MAX_DPATH_M:
+        continue
+      if (
+        cross_source is None
+        and point.d_rel
+        < STATIONARY_RADAR_ONLY_CORNER_MIN_ACQUISITION_DREL_M
+      ):
         continue
       support_cost = (
         abs(d_path) / STATIONARY_RADAR_ONLY_CORNER_MAX_DPATH_M
