@@ -628,6 +628,13 @@ Hyundai CAN-FD 차량에서 수신되는 `0x4BA` ADASIS v2 Profile Short의 `Pro
 `AutoNaviSpeedCtrlEnd`와 독립적이다. 후보가 이기면 `desiredSource=hda_curve`, UI label은 차량 내비
 색상의 `curve`다. 설정은 주행 중 다시 읽으므로 재시작이 필요 없다.
 
+`CarrotServ`는 `vehicleNaviCurveCurrentSpeed`로 현재 차량 위치와 남은 거리를 반영한 커브 후보속도를
+발행한다. 이 값은 같은 곡률점의 고정 정점 목표속도가 아니라, 멀리서는 250 km/h이고 감속 시작점에
+접근할수록 정점 목표속도까지 내려간 뒤 커브 출구에서 다시 올라가는 실제 거리 보간값이다. on-road,
+mici 및 USB 클러스터의 우측 `curve` 숫자는 이 값을 표시하며, 유효하거나 허용된 커브 후보가 없으면
+`--`를 표시한다. 최종 `desiredSpeed`는 이 후보와 카메라·route·model 등 다른 후보 중 최솟값이므로,
+다른 후보가 더 낮을 때 우측 `curve` 숫자와 실제 최종 보조속도는 다를 수 있다.
+
 선택된 곡률점은 정점을 통과하는 즉시 후보에서 제거한다. 뒤따르는 낮은 곡률점이 다음 후보가 되어
 커브 출구 전에 목표속도를 단계적으로 복원하며, 프로파일이 끝났다면 기존 크루즈 설정속도로
 복귀한다. 통과 뒤 제한속도를 유지하는 고정 fallback 거리는 사용하지 않는다.
