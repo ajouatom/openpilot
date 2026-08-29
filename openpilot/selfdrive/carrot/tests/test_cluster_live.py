@@ -28,7 +28,6 @@ from cluster_models import ClusterAlert
     ("hda", "cam"),
     ("hda_section", "section"),
     ("hda_bump", "bump"),
-    ("hda_curve", "curve"),
     ("school", "school"),
     ("route", "route"),
     ("vturn", "vturn"),
@@ -51,7 +50,6 @@ def test_deceleration_source_display_label(source, expected) -> None:
     ("hda", "cam", 3),
     ("hda_section", "section", 3),
     ("hda_bump", "bump", 3),
-    ("hda_curve", "curve", 3),
     ("school", "school", 3),
     ("route", "route", 4),
     ("model", "model", 2),
@@ -91,27 +89,10 @@ def test_live_hud_reads_active_egpu_param(monkeypatch) -> None:
   assert decorated.egpu_active
 
 
-@pytest.mark.parametrize(("target_speed", "expected"), ((999.0, 250.0), (85.4, 85.4), (0.0, None)))
-def test_live_hud_exposes_bounded_current_position_vehicle_curve_speed(target_speed, expected) -> None:
-  source = object.__new__(OpenpilotLiveSource)
-  source._max_lateral_accel = 3.0
-  source._energy_gauge_label = "fuel"
-  source._carrot_navi_media = None
-  source._current_carrot_navi = lambda _now: None
-  carrot_man = SimpleNamespace(vehicleNaviCurveCurrentSpeed=target_speed)
-  source._service_data = lambda service: carrot_man if service == "carrotMan" else None
-  source._service_alive = lambda _service: False
-
-  decorated = source._with_live_hud_state(standby_state())
-
-  assert decorated.vehicle_navi_curve_speed_kph == expected
-
-
 def test_vehicle_navigation_deceleration_presents_actual_reason() -> None:
   assert deceleration_source_presentation("hda") == ("cam", 3)
   assert deceleration_source_presentation("hda_section") == ("section", 3)
   assert deceleration_source_presentation("hda_bump") == ("bump", 3)
-  assert deceleration_source_presentation("hda_curve") == ("curve", 3)
   assert deceleration_source_presentation("school") == ("school", 3)
 
 

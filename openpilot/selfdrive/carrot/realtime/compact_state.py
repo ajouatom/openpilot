@@ -265,7 +265,6 @@ SERVICE_SCHEMAS: dict[str, tuple[int, tuple[tuple[Any, ...], ...]]] = {
     ("vehicleNaviSpeed", "i32"),
     ("vehicleNaviSectionActive", "bool"),
     ("vehicleNaviAvailable", "bool"),
-    ("vehicleNaviCurveCurrentSpeed", "f32"),
   )),
   "selfdriveState": (6, (
     ("enabled", "bool"),
