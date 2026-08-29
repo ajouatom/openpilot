@@ -29,11 +29,11 @@ from openpilot.selfdrive.modeld.big_model_status import BigModelStatusReporter
 
 DEFAULT_MANIFEST_URL = "https://upload.shind0.synology.me/models/comma4-big/manifest.json"
 TIME_TO_GO_MODEL = {
-  "model_id": "comma-pr38652-tt-driving-82fa8e95-62345fa8",
+  "model_id": "comma-pr38726-time-to-go-5a658611-39131097",
   "filename": "big_driving_supercombo.onnx",
-  "size": 1_757_103_461,
-  "sha256": "62345fa8406e318599cb62a8dccc3eb4f7e4cd6750638f2dcf7075c42798cf34",
-  "url": "https://upload.shind0.synology.me/models/comma4-big/big_driving_supercombo.onnx",
+  "size": 766_082_665,
+  "sha256": "3913109713cc782bdb001550a519f1fc6b36dbc7ade1cf6126622f044ff6adfb",
+  "url": "https://upload.shind0.synology.me/models/comma4-big-tg/big_driving_supercombo.onnx",
 }
 MAX_MANIFEST_SIZE = 64 * 1024
 MAX_MODEL_SIZE = 4 * 1024 * 1024 * 1024
@@ -137,7 +137,7 @@ def _write_state(active: BigModelManifest, previous: BigModelManifest | None, ca
 
 
 def fetch_manifest(manifest_url: str = DEFAULT_MANIFEST_URL, timeout: float = 15.0) -> BigModelManifest:
-  # carrot-egpu-tg intentionally pins commaai/openpilot#38652 (tt-driving). Keep the
+  # carrot-egpu-tg intentionally pins commaai/openpilot#38726 (Time to Go). Keep the
   # environment/CLI override path below so a different manifest can still be
   # tested explicitly without changing this branch.
   if manifest_url == DEFAULT_MANIFEST_URL:
