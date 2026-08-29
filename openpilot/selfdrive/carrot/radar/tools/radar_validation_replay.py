@@ -118,6 +118,21 @@ LONGITUDINAL_PLAN_MAX_AGE_S = 0.20
 ACCEL_GRAPH_MIN_MPS2 = -4.0
 ACCEL_GRAPH_MAX_MPS2 = 2.0
 LEAD_SPEED_GRAPH_MAX_KPH = 140.0
+
+
+def radar_replay_source_fingerprint() -> str:
+  """Fingerprint every source file that changes cached lead decisions."""
+  digest = hashlib.sha256()
+  source_files = (
+    Path(__file__),
+    *sorted((CARROT_ROOT / "radar_motion").glob("*.py")),
+  )
+  for source_path in source_files:
+    digest.update(str(source_path.relative_to(REPO_ROOT)).encode("utf-8"))
+    digest.update(source_path.read_bytes())
+  return digest.hexdigest()[:20]
+
+
 VALIDATION_SENSITIVITY_LABELS = (
   "사용 안 함",
   "둔감",
@@ -2074,10 +2089,9 @@ def visual_replay_cache_path(
 ) -> Path:
   """Return the private cache path for one exact visual replay setup."""
   log_stat = log_path.stat()
-  source_stat = Path(__file__).stat()
   identity = json.dumps({
     "version": VISUAL_REPLAY_CACHE_VERSION,
-    "source_mtime_ns": source_stat.st_mtime_ns,
+    "source_fingerprint": radar_replay_source_fingerprint(),
     "log": str(log_path.resolve()),
     "log_size": log_stat.st_size,
     "log_mtime_ns": log_stat.st_mtime_ns,
@@ -2105,6 +2119,7 @@ def save_visual_replay_cache(
       pickle.dump(
         {
           "version": VISUAL_REPLAY_CACHE_VERSION,
+          "source_fingerprint": radar_replay_source_fingerprint(),
           "frames": frames,
           "selector": selector,
         },
@@ -2128,6 +2143,8 @@ def load_visual_replay_cache(
     if (
       not isinstance(payload, dict)
       or payload.get("version") != VISUAL_REPLAY_CACHE_VERSION
+      or payload.get("source_fingerprint")
+      != radar_replay_source_fingerprint()
       or not isinstance(payload.get("frames"), list)
       or not isinstance(payload.get("selector"), RadarOccupancyV2Selector)
     ):
@@ -5290,6 +5307,7 @@ __all__ = (
   "motion_points_at_model_time",
   "monotonic_log_events",
   "preferred_radar_points",
+  "radar_replay_source_fingerprint",
   "preferred_radar_motion_sensor",
   "predictor_reference_time_ns",
   "qcamera_path_for_log",

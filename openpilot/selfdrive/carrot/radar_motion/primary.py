@@ -121,6 +121,11 @@ RADAR_ONLY_MOVING_CLOSER_SWITCH_MAX_DPATH_M = 0.5
 RADAR_ONLY_MOVING_MAX_DREL_M = 100.0
 RADAR_ONLY_MOVING_MID_DREL_M = 60.0
 RADAR_ONLY_MOVING_FAR_DREL_M = 80.0
+# A close-born corner-only return has neither cross-sensor corroboration nor
+# lateral entry history. Do not turn that ambiguous reflection directly into
+# a primary control lead; real close cut-ins remain handled by the occupancy
+# path, while a far-acquired identity may be held as it approaches.
+RADAR_ONLY_MOVING_CORNER_MIN_ACQUISITION_DREL_M = 70.0
 RADAR_ONLY_MOVING_NEAR_DPATH_M = 1.1
 RADAR_ONLY_MOVING_MID_DPATH_M = 0.9
 RADAR_ONLY_MOVING_FAR_DPATH_M = 0.75
@@ -2218,11 +2223,31 @@ class VisionRadarMatcher:
       d_path_limit = self._radar_only_moving_dpath_limit(
         point.d_rel,
       )
+      identity = self._identity(point)
+      front_supported = (
+        point.source.startswith("corner")
+        and getattr(
+          prefer_front_radar_kinematics(point, point_values),
+          "kinematics_source",
+          None,
+        ) == "frontRadar"
+      )
+      corner_previously_acquired = identity in (
+        self.radar_only_moving_identity,
+        self._radar_only_moving_pending_identity,
+      )
       if (
         abs(d_path) > d_path_limit
         or abs(d_path - point.y_rel)
         >= RADAR_ONLY_MOVING_MAX_PATH_Y_OFFSET_M
         or self._radar_only_moving_identity_rejected(point, time_s)
+        or (
+          point.source.startswith("corner")
+          and point.d_rel
+          < RADAR_ONLY_MOVING_CORNER_MIN_ACQUISITION_DREL_M
+          and not front_supported
+          and not corner_previously_acquired
+        )
       ):
         continue
       candidates.append((point, d_path, d_path_limit))
