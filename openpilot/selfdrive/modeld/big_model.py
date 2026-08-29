@@ -27,7 +27,7 @@ from urllib.request import Request, urlopen
 from openpilot.selfdrive.modeld.big_model_status import BigModelStatusReporter
 
 
-DEFAULT_MANIFEST_URL = "https://upload.shind0.synology.me/models/comma4-big/manifest.json"
+DEFAULT_MANIFEST_URL = "https://upload.shind0.synology.me/models/comma4-big-tg/manifest.json"
 TIME_TO_GO_MODEL = {
   "model_id": "comma-pr38726-time-to-go-5a658611-39131097",
   "filename": "big_driving_supercombo.onnx",
