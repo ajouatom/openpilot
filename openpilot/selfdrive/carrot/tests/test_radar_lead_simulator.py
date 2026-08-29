@@ -7,6 +7,7 @@ from types import SimpleNamespace
 import pytest
 
 from openpilot.selfdrive.carrot.radar_motion import model_path_point_at_s
+from openpilot.selfdrive.carrot.radar.tools import radar_lead_validation_review
 from openpilot.selfdrive.carrot.radar.tools.radar_lead_simulator import (
   Candidate,
   CurrentRadardSelector,
@@ -52,7 +53,9 @@ from openpilot.selfdrive.carrot.radar.tools.radar_lead_simulator import (
   visual_replay_cache_path,
 )
 from openpilot.selfdrive.carrot.radar.tools.radar_lead_validation_review import (
+  VALIDATION_PRELOAD_AHEAD,
   group_cases_by_log,
+  rolling_preload_indexes,
   simulator_command,
 )
 from openpilot.selfdrive.carrot.radar.tools.validate_radar_lead_model import (
@@ -954,6 +957,129 @@ def test_lead_continuity_breaks_on_missing_frames_and_track_id_changes() -> None
     [10],
     [11],
   ]
+
+
+def test_validation_runner_keeps_five_log_rolling_preload() -> None:
+  route_available = [True] * 10
+  scheduled: set[int] = set()
+  started: list[int] = []
+
+  for current_index in range(len(route_available)):
+    scheduled.discard(current_index)
+    new_indexes = rolling_preload_indexes(
+      current_index,
+      route_available,
+      scheduled,
+    )
+    if current_index == 0:
+      assert new_indexes == [1, 2, 3, 4, 5]
+    elif current_index <= 4:
+      assert new_indexes == [current_index + VALIDATION_PRELOAD_AHEAD]
+    scheduled.update(new_indexes)
+    started.extend(new_indexes)
+    expected_ready = min(
+      VALIDATION_PRELOAD_AHEAD,
+      len(route_available) - current_index - 1,
+    )
+    assert len(scheduled) == expected_ready
+
+  assert started == list(range(1, len(route_available)))
+
+
+def test_validation_runner_rolling_preload_skips_missing_logs() -> None:
+  route_available = [True, True, False, True, True, False, True, True]
+
+  assert rolling_preload_indexes(
+    0,
+    route_available,
+    set(),
+  ) == [1, 3, 4, 6, 7]
+  assert rolling_preload_indexes(
+    1,
+    route_available,
+    {3, 4, 6, 7},
+  ) == []
+
+
+def test_validation_runner_replenishes_five_log_buffer_to_end(
+  tmp_path,
+  monkeypatch,
+) -> None:
+  cases = []
+  for index in range(8):
+    relative_log = f"segment-{index}/rlog.zst"
+    route = tmp_path / "CAR" / relative_log
+    route.parent.mkdir(parents=True, exist_ok=True)
+    route.write_bytes(b"log")
+    cases.append({
+      "id": f"case-{index}",
+      "vehicle_folder": "CAR",
+      "log": relative_log,
+      "expected": "detect",
+    })
+  cases_path = tmp_path / "cases.json"
+  cases_path.write_text(json.dumps({"cases": cases}), encoding="utf-8")
+  args = SimpleNamespace(
+    root=tmp_path,
+    cases=cases_path,
+    case=[],
+    expected="all",
+    prob=None,
+    sensitivity=3,
+    enable_radar_tracks=2,
+    front_only=False,
+    motion_mode="normal",
+    list=False,
+  )
+  preload_commands: list[list[str]] = []
+  foreground_commands: list[list[str]] = []
+
+  class FakePreload:
+    def __init__(self, command, **_kwargs) -> None:
+      preload_commands.append(command)
+
+    def poll(self) -> int:
+      return 0
+
+    def wait(self, timeout=None) -> int:
+      del timeout
+      return 0
+
+    def terminate(self) -> None:
+      raise AssertionError("completed preload must not be terminated")
+
+    def kill(self) -> None:
+      raise AssertionError("completed preload must not be killed")
+
+  def fake_run(command, *, check):
+    assert not check
+    foreground_commands.append(command)
+    return SimpleNamespace(returncode=0)
+
+  monkeypatch.setattr(radar_lead_validation_review, "parse_args", lambda: args)
+  monkeypatch.setattr(
+    radar_lead_validation_review.subprocess,
+    "Popen",
+    FakePreload,
+  )
+  monkeypatch.setattr(
+    radar_lead_validation_review.subprocess,
+    "run",
+    fake_run,
+  )
+
+  assert radar_lead_validation_review.main() == 0
+  preload_ids = [
+    command[command.index("--validation-case") + 1]
+    for command in preload_commands
+  ]
+  foreground_ids = [
+    command[command.index("--validation-case") + 1]
+    for command in foreground_commands
+  ]
+  assert preload_ids[:5] == [f"case-{index}" for index in range(1, 6)]
+  assert preload_ids == [f"case-{index}" for index in range(1, 8)]
+  assert foreground_ids == [f"case-{index}" for index in range(8)]
 
 
 def test_lead_speed_continuity_converts_vlead_to_kph() -> None:
