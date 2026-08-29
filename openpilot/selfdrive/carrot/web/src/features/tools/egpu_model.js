@@ -3,6 +3,7 @@
 const POLL_INTERVAL_MS = 2000;
 let pollTimer = null;
 let lastStatus = null;
+let restartPending = false;
 
 const FALLBACK_STRINGS = {
   title: "eGPU big model",
@@ -90,9 +91,9 @@ function render(status = lastStatus) {
     ? `${formatBytes(status.downloaded_bytes)} / ${formatBytes(status.total_bytes)} · ${percent.toFixed(1)}%`
     : (state === "compiling" ? elapsedText(status.started_at) : "");
 
-  action.textContent = t("restart");
+  action.textContent = restartPending ? t("checking") : t("restart");
   action.hidden = !["ready", "waiting_for_ignition", "error"].includes(state) || status.compiled;
-  action.disabled = !status.can_restart;
+  action.disabled = restartPending || !status.can_restart;
 }
 
 async function refresh() {
@@ -109,13 +110,21 @@ async function refresh() {
 async function requestCompileRestart() {
   if (!await appConfirm(t("restart_confirm"), { title: t("restart") })) return;
   const button = document.getElementById("btnEgpuCompileRestart");
-  if (button) button.disabled = true;
+  restartPending = true;
+  if (button) {
+    button.disabled = true;
+    button.textContent = t("checking");
+  }
   try {
     await postJson("/api/egpu/model/compile-restart", {});
     if (typeof showAppToast === "function") showAppToast(t("restart_requested"));
+    return;
   } catch (error) {
+    restartPending = false;
+    if (typeof showAppToast === "function") {
+      showAppToast(`${t("error")}: ${error?.message || error}`, { tone: "error", duration: 5000 });
+    }
     if (typeof showError === "function") showError("eGPU model", error);
-  } finally {
     await refresh();
   }
 }
