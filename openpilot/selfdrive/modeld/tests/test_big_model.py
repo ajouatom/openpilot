@@ -60,6 +60,29 @@ def test_manifest_resolves_relative_https_url():
   assert manifest.cache_filename.endswith(".onnx")
 
 
+def test_default_manifest_is_pinned_to_time_to_go(monkeypatch):
+  monkeypatch.setattr(big_model, "urlopen", lambda *_args, **_kwargs: pytest.fail("default manifest must be built in"))
+  manifest = big_model.fetch_manifest()
+  assert manifest.model_id == "comma-pr38652-tt-driving-82fa8e95-62345fa8"
+  assert manifest.size == 1_757_103_461
+  assert manifest.sha256 == "62345fa8406e318599cb62a8dccc3eb4f7e4cd6750638f2dcf7075c42798cf34"
+  assert manifest.url == "https://upload.shind0.synology.me/models/comma4-big/big_driving_supercombo.onnx"
+
+
+def test_explicit_manifest_override_is_fetched(monkeypatch):
+  manifest_url = "https://example.com/models/manifest.json"
+  raw_manifest = manifest_for(b"model")
+
+  def fake_urlopen(request, timeout):
+    assert request.full_url == manifest_url
+    return FakeResponse(json.dumps(raw_manifest).encode())
+
+  monkeypatch.setattr(big_model, "urlopen", fake_urlopen)
+  manifest = big_model.fetch_manifest(manifest_url)
+  assert manifest.model_id == raw_manifest["model_id"]
+  assert manifest.url == "https://example.com/models/big_driving_supercombo.onnx"
+
+
 class FakeConnection:
   def __init__(self):
     self.closed = False
