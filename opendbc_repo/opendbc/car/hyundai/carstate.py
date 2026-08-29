@@ -214,6 +214,7 @@ class CarState(CarStateBase):
     self.vehicleNaviRouteResetTimestamp = 0
     self.vehicleNaviRoadClass = 7
     self.vehicleNaviCameraTarget = None
+    self.vehicleNaviCameraStatusEvent = None
     self.vehicleNaviSpeedZoneActive = False
     self.vehicleNaviSpeedZoneSpeed = 0.0
     self.vehicleNaviSchoolZoneActive = False
@@ -626,6 +627,7 @@ class CarState(CarStateBase):
   def _clear_vehicle_navi_events(self):
     self.vehicleNaviEvents = []
     self.vehicleNaviCameraTarget = None
+    self.vehicleNaviCameraStatusEvent = None
 
   def _clear_vehicle_navi_school_zone(self):
     self.vehicleNaviSchoolZoneActive = False
@@ -776,6 +778,29 @@ class CarState(CarStateBase):
                               if event["target"] >= self.totalDistance - VEHICLE_NAVI_PASSED_EVENT_DISTANCE and
                               (not on_controlled_access_road or
                                (event["type"] != "bump" and not (event["type"] == "camera" and event["speed"] == 30)))]
+
+    # 0x4BE announces cameras far enough ahead to start a smooth deceleration,
+    # but its offset can point 30-40 m beyond the physical camera. Associate
+    # the stock 0x4A3 camera status with the matching queued event and retire
+    # that event as soon as the status ends. This preserves the early 0x4BE
+    # preview while restoring speed at the vehicle's own camera pass point.
+    camera_status_speed = ret.speedLimit if speed_limit_cam else 0
+    status_event = self.vehicleNaviCameraStatusEvent
+    if speed_limit_cam:
+      if status_event is not None and status_event["speed"] != camera_status_speed:
+        self.vehicleNaviEvents = [event for event in self.vehicleNaviEvents if event is not status_event]
+        status_event = None
+      if status_event is None:
+        matching_cameras = [event for event in self.vehicleNaviEvents
+                            if event["type"] == "camera" and event["speed"] == camera_status_speed and
+                            event["target"] >= self.totalDistance - VEHICLE_NAVI_PASSED_EVENT_DISTANCE]
+        if matching_cameras:
+          status_event = matching_cameras[0]
+      self.vehicleNaviCameraStatusEvent = status_event
+    elif status_event is not None:
+      self.vehicleNaviEvents = [event for event in self.vehicleNaviEvents if event is not status_event]
+      self.vehicleNaviCameraStatusEvent = None
+
     upcoming = [event for event in self.vehicleNaviEvents if event["target"] > self.totalDistance]
 
     bumps = [event for event in upcoming if event["type"] == "bump"]
@@ -806,8 +831,11 @@ class CarState(CarStateBase):
       ret.vehicleNaviSpeed = self.vehicleNaviSpeedZoneSpeed
 
     cameras = [event for event in upcoming if event["type"] == "camera"]
-    if cameras:
-      camera = cameras[0]
+    # While 0x4A3 identifies the current camera, never replace it with a
+    # different future 0x4BE event. If no exact match exists, the caller falls
+    # back to the established virtual-distance calculation from 0x4A3.
+    camera = self.vehicleNaviCameraStatusEvent if speed_limit_cam else (cameras[0] if cameras else None)
+    if camera is not None:
       self.vehicleNaviCameraTarget = camera["target"]
       ret.speedLimit = camera["speed"]
       ret.vehicleNaviActive = True
@@ -817,7 +845,7 @@ class CarState(CarStateBase):
     if bumps:
       ret.vehicleNaviActive = True
 
-    return bool(cameras)
+    return camera is not None
 
   def update_speed_limit(self, ret, speed_limit_cam, distance_time_changed=None):
     if distance_time_changed is None:

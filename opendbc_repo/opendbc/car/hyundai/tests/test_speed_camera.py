@@ -46,6 +46,7 @@ def _car_state(distance_time_tenths=60):
   state.vehicleNaviRouteResetTimestamp = 0
   state.vehicleNaviRoadClass = 7
   state.vehicleNaviCameraTarget = None
+  state.vehicleNaviCameraStatusEvent = None
   state.vehicleNaviSpeedZoneActive = False
   state.vehicleNaviSpeedZoneSpeed = 0.0
   state.vehicleNaviSchoolZoneActive = False
@@ -423,6 +424,55 @@ def test_vehicle_navi_exact_camera_distance_replaces_virtual_distance():
   state.update_speed_limit(ret, speed_limit_cam=True)
 
   assert ret.speedLimitDistance == pytest.approx(300.0 - 10.0 * 0.01)
+
+
+def test_vehicle_navi_preview_remains_available_before_camera_status():
+  state = _car_state()
+  state.vehicleNaviCanControl = True
+  camera = {"type": "camera", "speed": 50, "kind": 1, "target": 500.0}
+  state.vehicleNaviEvents = [camera]
+  cp = SimpleNamespace(ts_nanos={})
+  ret = SimpleNamespace(speedLimit=0.0, speedBumpDistance=0.0, schoolZoneActive=False)
+
+  assert state._update_vehicle_navi_events(cp, ret, False)
+  assert state.vehicleNaviCameraTarget == pytest.approx(500.0)
+  assert ret.speedLimit == 50
+
+
+def test_vehicle_navi_camera_status_end_retires_confirmed_event_immediately():
+  state = _car_state()
+  state.vehicleNaviCanControl = True
+  current_camera = {"type": "camera", "speed": 60, "kind": 1, "target": 40.0}
+  next_camera = {"type": "camera", "speed": 50, "kind": 1, "target": 510.0}
+  state.vehicleNaviEvents = [current_camera, next_camera]
+  cp = SimpleNamespace(ts_nanos={})
+  ret = SimpleNamespace(speedLimit=60.0, speedBumpDistance=0.0, schoolZoneActive=False)
+
+  assert state._update_vehicle_navi_events(cp, ret, True)
+  assert state.vehicleNaviCameraStatusEvent is current_camera
+  assert state.vehicleNaviCameraTarget == pytest.approx(40.0)
+
+  # The vehicle camera status ends with 40 m still left in the 0x4BE offset.
+  # Retire only the confirmed camera; keep the next preview for early braking.
+  ret.speedLimit = 0.0
+  assert state._update_vehicle_navi_events(cp, ret, False)
+  assert current_camera not in state.vehicleNaviEvents
+  assert next_camera in state.vehicleNaviEvents
+  assert state.vehicleNaviCameraStatusEvent is None
+  assert state.vehicleNaviCameraTarget == pytest.approx(510.0)
+  assert ret.speedLimit == 50
+
+
+def test_vehicle_navi_camera_status_does_not_select_mismatched_future_camera():
+  state = _car_state()
+  state.vehicleNaviCanControl = True
+  state.vehicleNaviEvents = [{"type": "camera", "speed": 50, "kind": 1, "target": 500.0}]
+  cp = SimpleNamespace(ts_nanos={})
+  ret = SimpleNamespace(speedLimit=60.0, speedBumpDistance=0.0, schoolZoneActive=False)
+
+  assert not state._update_vehicle_navi_events(cp, ret, True)
+  assert state.vehicleNaviCameraTarget is None
+  assert ret.speedLimit == 60.0
 
 
 def test_vehicle_navi_section_log_frames_hold_cap_until_camera_status_ends():
