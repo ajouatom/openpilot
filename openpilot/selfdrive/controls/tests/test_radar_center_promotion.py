@@ -2,6 +2,7 @@ from types import SimpleNamespace
 
 from openpilot.selfdrive.controls.radard import (
   CORNER_CENTER_MIN_AGE,
+  CORNER_STOPPED_MIN_AGE,
   RadarD,
   Track,
   is_radar_center_promotion_safe,
@@ -75,3 +76,38 @@ class TestRadarCenterPromotion:
 
     track.update(None, point(64.1, 20.8), False, 1.0, 0.0, 0.0)
     assert track.cnt == 1
+
+  def test_close_unmatched_corner_stopped_reflection_is_rejected(self):
+    radar = RadarD.__new__(RadarD)
+    radar.lane_line_available = True
+    track = SimpleNamespace(
+      is_corner_radar=True,
+      cnt=CORNER_STOPPED_MIN_AGE,
+      dRel=54.0,
+      vLead=0.5,
+      yvLead=0.0,
+      in_lane_prob=1.0,
+      dPath=0.0,
+      corner_stopped_acquired=False,
+    )
+
+    assert not radar._is_corner_stopped_candidate(track)
+    assert radar._is_corner_stopped_candidate(track, matched_front=True)
+
+  def test_far_acquired_corner_stopped_lead_is_held_at_close_range(self):
+    radar = RadarD.__new__(RadarD)
+    radar.lane_line_available = True
+    track = SimpleNamespace(
+      is_corner_radar=True,
+      cnt=CORNER_STOPPED_MIN_AGE,
+      dRel=80.0,
+      vLead=0.5,
+      yvLead=0.0,
+      in_lane_prob=1.0,
+      dPath=0.0,
+      corner_stopped_acquired=False,
+    )
+
+    assert radar._is_corner_stopped_candidate(track)
+    track.dRel = 54.0
+    assert radar._is_corner_stopped_candidate(track)
