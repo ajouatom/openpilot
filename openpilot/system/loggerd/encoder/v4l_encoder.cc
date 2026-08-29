@@ -96,7 +96,9 @@ void V4LEncoder::dequeue_handler(V4LEncoder *e) {
       }
       continue;
     } else if (rc == 0) {
-      LOGE("encoder dequeue poll timeout");
+      if (!e->idle) {
+        LOGE("encoder dequeue poll timeout");
+      }
       continue;
     }
 
@@ -389,6 +391,10 @@ void V4LEncoder::encoder_open() {
   dequeue_handler_thread = std::thread(V4LEncoder::dequeue_handler, this);
   this->is_open = true;
   this->counter = 0;
+}
+
+void V4LEncoder::set_idle(bool idle) {
+  this->idle = idle;
 }
 
 int V4LEncoder::encode_frame(VisionBuf* buf, VisionIpcBufExtra *extra) {

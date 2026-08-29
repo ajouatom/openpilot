@@ -104,10 +104,13 @@ class TestManager:
     CP.notCar = False
     params = Params()
     params.put("DisableDM", "2")
-    params.put_bool("CarrotVisionActive", True)
+    params.put_bool("CarrotVisionActive", False)
 
     params.put("ClusterHud", "0")
+    assert not managed_processes["carrot_vision_encoderd"].should_run(False, params, CP)
     assert managed_processes["carrot_webrtcd"].should_run(True, params, CP)
+    assert managed_processes["carrot_vision_encoderd"].should_run(True, params, CP)
+    params.put_bool("CarrotVisionActive", True)
     assert managed_processes["carrot_vision_encoderd"].should_run(True, params, CP)
 
     params.put("ClusterHud", "1")

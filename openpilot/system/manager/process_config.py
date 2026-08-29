@@ -113,9 +113,6 @@ def enable_webrtc(started, params, CP: car.CarParams) -> bool:
   # WebRTC/encoder processes out of the same onroad session.
   return params.get_int("DisableDM") == 2 and not cluster_hud_active(params)
 
-def carrot_vision_active(started, params, CP: car.CarParams) -> bool:
-  return started and params.get_bool("CarrotVisionActive")
-
 def c3x_lite(started: bool, params: Params, CP: car.CarParams) -> bool:
   return started and params.get_bool("HardwareC3xLite")
 
@@ -155,7 +152,9 @@ procs = [
   # Preserve generic multi-camera WebRTC for notCar users. Carrot Vision on a
   # real device is road-only and remains gated by DisableDM == 2.
   NativeProcess("stream_encoderd", "openpilot/system/loggerd", ["./encoderd", "--stream"], notcar),
-  NativeProcess("carrot_vision_encoderd", "openpilot/system/loggerd", ["./encoderd", "--carrot-vision-road"], and_(iscar, enable_webrtc, carrot_vision_active)),
+  # Prewarm the hardware encoder with the rest of the onroad stack. The
+  # encoder process stays idle until CarrotVisionActive is set by a session.
+  NativeProcess("carrot_vision_encoderd", "openpilot/system/loggerd", ["./encoderd", "--carrot-vision-road"], and_(iscar, enable_webrtc)),
   NativeProcess("youtube_low_encoderd", "openpilot/system/loggerd", ["./encoderd", "--youtube-low"], and_(only_onroad, enable_youtube_low_encoder)),
   NativeProcess("youtube_medium_encoderd", "openpilot/system/loggerd", ["./encoderd", "--youtube-medium"], and_(only_onroad, enable_youtube_medium_encoder)),
   NativeProcess("youtube_encoderd", "openpilot/system/loggerd", ["./encoderd", "--youtube"], and_(only_onroad, enable_youtube_encoder)),
