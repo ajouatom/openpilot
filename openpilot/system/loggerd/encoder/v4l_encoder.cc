@@ -393,8 +393,8 @@ void V4LEncoder::encoder_open() {
   this->counter = 0;
 }
 
-void V4LEncoder::set_idle(bool idle) {
-  this->idle = idle;
+void V4LEncoder::set_idle(bool is_idle) {
+  this->idle = is_idle;
 }
 
 int V4LEncoder::encode_frame(VisionBuf* buf, VisionIpcBufExtra *extra) {
