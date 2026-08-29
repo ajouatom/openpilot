@@ -773,6 +773,7 @@ class CarState(CarStateBase):
   def _update_vehicle_navi_curve_profile(self, cp, ret):
     ret.vehicleNaviCurveDistance = 0.0
     ret.vehicleNaviCurveSpeed = 0.0
+    ret.vehicleNaviCurveTargetSpeed = 0.0
     ret.vehicleNaviCurveCurvature = 0.0
     ret.vehicleNaviCurveRouteActive = self.vehicleNaviCurveRouteActive
     ret.vehicleNaviCurveRouteState = self.vehicleNaviCurveRouteState
@@ -799,12 +800,13 @@ class CarState(CarStateBase):
       safe_speed = target_speed / CV.MS_TO_KPH
       decel_distance = max(0.0, distance - safe_speed * self.vehicleNaviCurveControlEnd)
       preview_speed = math.sqrt(safe_speed ** 2 + 2 * self.vehicleNaviCurveDecelRate * decel_distance) * CV.MS_TO_KPH
-      candidates.append((preview_speed, distance, curve))
+      candidates.append((preview_speed, distance, target_speed, curve))
 
     if candidates:
-      _, distance, curve = min(candidates, key=lambda item: item[0])
+      _, distance, target_speed, curve = min(candidates, key=lambda item: item[0])
       ret.vehicleNaviCurveDistance = distance
       ret.vehicleNaviCurveSpeed = curve["speed"]
+      ret.vehicleNaviCurveTargetSpeed = target_speed
       ret.vehicleNaviCurveCurvature = curve["curvature"]
 
   @staticmethod
