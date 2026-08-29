@@ -13,6 +13,7 @@ from openpilot.selfdrive.carrot.radar.tools.radar_lead_simulator import (
   ModelLead,
   RadarFrame,
   RadarMotionShadowSelector,
+  RadarOccupancyV2Selector,
   RadarPoint,
   RecordedLead,
   Selection,
@@ -145,6 +146,49 @@ def test_shadow_selector_uses_new_controller_not_recorded_radard_roles() -> None
   assert selection.lead_two is None
   assert selection.active_cutin_candidates == ()
   assert any(candidate.track_id == 1010 for candidate in selection.cutin_diagnostics)
+
+
+def test_visual_review_can_toggle_cached_v1_and_v2(tmp_path) -> None:
+  frames = [
+    frame(
+      (point(1010, 8.0, -3.0, source="corner235"),),
+      time_s=index * 0.1,
+    )
+    for index in range(3)
+  ]
+  v1 = RadarMotionShadowSelector(
+    frames,
+    motion_sensor="corner",
+    enable_radar_tracks=2,
+  )
+  v2 = RadarOccupancyV2Selector(
+    frames,
+    baseline=v1,
+    enable_radar_tracks=2,
+  )
+  ui = SimulatorUI(
+    frames,
+    v2,
+    "test",
+    tmp_path / "rlog.zst",
+    settings_path=tmp_path / "radar_validation.json",
+  )
+
+  assert ui.use_occupancy_v2
+  assert ui.selector is v2
+  assert v2.baseline is v1
+  assert v2.enable_radar_tracks == v1.enable_radar_tracks
+  assert v2.cut_in_sensitivity == v1.cut_in_sensitivity
+
+  ui._toggle_occupancy_version()
+  assert not ui.use_occupancy_v2
+  assert ui.selector is v1
+  assert "V1" in ui.status
+
+  ui._toggle_occupancy_version()
+  assert ui.use_occupancy_v2
+  assert ui.selector is v2
+  assert "V2" in ui.status
 
 
 def test_shadow_selector_rejects_far_corner_only_tunnel_fixture() -> None:
