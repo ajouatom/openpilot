@@ -715,14 +715,14 @@ class HudRenderer(Widget):
       curve_text = "250"
 
     draw_text_ui_style(
-      curve_text, bx + 335, by - 45, 50, COLORS.VEHICLE_NAVI_LAVENDER,
+      curve_text, bx + 355, by - 45, 42, COLORS.VEHICLE_NAVI_LAVENDER,
       font=self._font_display,
       border_width=1.0,
       shadow_offset=5.0,
       align="center_bottom",
     )
     draw_text_ui_style(
-      "curve", bx + 335, by - 100, 30, COLORS.VEHICLE_NAVI_LAVENDER,
+      "curve", bx + 355, by - 100, 28, COLORS.VEHICLE_NAVI_LAVENDER,
       font=self._font_display,
       border_width=1.0,
       shadow_offset=5.0,
