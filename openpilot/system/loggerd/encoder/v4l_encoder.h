@@ -1,5 +1,7 @@
 #pragma once
 
+#include <atomic>
+
 #include "common/queue.h"
 #include "system/loggerd/encoder/encoder.h"
 
@@ -13,11 +15,13 @@ public:
   int encode_frame(VisionBuf* buf, VisionIpcBufExtra *extra);
   void encoder_open();
   void encoder_close();
+  void set_idle(bool idle) override;
 
 private:
   int fd;
 
   bool is_open = false;
+  std::atomic<bool> idle = false;
   int segment_num = -1;
   int counter = 0;
 
