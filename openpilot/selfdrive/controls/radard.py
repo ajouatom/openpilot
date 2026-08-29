@@ -110,6 +110,10 @@ CORNER_STOPPED_FAR_DPATH_LIMIT = 0.75
 CORNER_STOPPED_NEAR_IN_LANE_PROB = 0.35
 CORNER_STOPPED_FAR_IN_LANE_PROB = 0.5
 CORNER_STOPPED_FAR_DREL = 60.0
+# A newly appearing close, stopped corner-radar return can be a roadside
+# reflection sweeping through the model path. Require it to have first been
+# qualified at long range, unless front radar independently corroborates it.
+CORNER_STOPPED_UNMATCHED_MIN_ACQUISITION_DREL = 70.0
 
 def laplacian_pdf(x: float, mu: float, b: float):
   diff = abs(x - mu) / max(b, 1e-4)
@@ -219,6 +223,7 @@ class Track:
     self.cutin_radar_inward_speed = 0.0
     self.sticky_dPath = 0.0
     self.sticky_path_y_std = 0.0
+    self.corner_stopped_acquired = False
 
     # ---- noise filter state (new) ----
     self._vLead_last = 0.0
@@ -290,6 +295,7 @@ class Track:
       self._cutin_position_history.clear()
       self._cutin_path_position_history.clear()
       self.side_corner_confirmed_count = 0
+      self.corner_stopped_acquired = False
       # optional: also reset filter init when track is not measured
       self._vLead_filt_init = False
     elif track_discontinuous:
@@ -301,6 +307,10 @@ class Track:
       self.cut_in_start_abs_dpath = 0.0
       self._cutin_position_history.clear()
       self._cutin_path_position_history.clear()
+      self.corner_stopped_acquired = False
+
+    if not is_corner_radar:
+      self.corner_stopped_acquired = False
 
     if self.measured and side_corner_confirmed:
       self.side_corner_confirmed_count += 1
@@ -1038,7 +1048,7 @@ class RadarD:
     )
 
   def _is_corner_stopped_candidate(self, t: Track, matched_front: bool = False) -> bool:
-    return (
+    qualifies = (
       self._is_corner_track(t) and
       t.cnt >= CORNER_STOPPED_MIN_AGE and
       CORNER_STOPPED_MIN_DREL < t.dRel < CORNER_STOPPED_MAX_DREL and
@@ -1046,6 +1056,13 @@ class RadarD:
       abs(t.yvLead) < CORNER_STOPPED_MAX_YVREL and
       self._corner_in_lane_ok(t, stopped=True, matched_front=matched_front)
     )
+    if not qualifies:
+      return False
+
+    if matched_front or t.dRel >= CORNER_STOPPED_UNMATCHED_MIN_ACQUISITION_DREL:
+      t.corner_stopped_acquired = True
+
+    return t.corner_stopped_acquired
 
   def _corner_track_accel_allowed(self, t: Track) -> bool:
     return (

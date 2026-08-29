@@ -3742,7 +3742,7 @@ def test_radar_only_stationary_corner_requires_half_second_confirmation() -> Non
       (
         Point(
           1009,
-          60.0 - 10.0 * time_s,
+          80.0 - 10.0 * time_s,
           0.1,
           v_rel=-10.0,
           source="corner235",
@@ -3766,7 +3766,7 @@ def test_radar_only_stationary_corner_requires_half_second_confirmation() -> Non
     (
       Point(
         1009,
-        60.0 - 10.0 * time_s,
+        80.0 - 10.0 * time_s,
         0.1,
         v_rel=-10.0,
         source="corner235",
@@ -3787,6 +3787,37 @@ def test_radar_only_stationary_corner_requires_half_second_confirmation() -> Non
 
   assert match is not None
   assert match.point.track_id == 1009
+
+
+def test_close_corner_only_stationary_reflection_cannot_seed_lead() -> None:
+  matcher = VisionRadarMatcher()
+  for index in range(30):
+    time_s = index * 0.05
+    point = snapshot_radar_points(
+      (
+        Point(
+          2294,
+          55.0 - 12.0 * time_s,
+          max(0.0, 1.2 - 0.6 * time_s),
+          v_rel=-12.0,
+          source="corner235",
+        ),
+      ),
+      v_ego=13.0,
+    )[0]
+    match = matcher.match(
+      model_with_lead(
+        95.0, 2.0, 13.0, probability=0.2,
+      ),
+      (),
+      STRAIGHT_PATH,
+      time_s=time_s,
+      stationary_points=(point,),
+      prefer_corner_stationary=True,
+    )
+    assert match is None
+
+  assert matcher.stationary_identity is None
 
 
 def test_radar_only_stationary_corner_range_jumps_restart_confirmation() -> None:
@@ -3836,7 +3867,7 @@ def test_radar_only_stationary_pending_resets_after_center_support_loss() -> Non
       (
         Point(
           1009,
-          60.0 - 10.0 * time_s,
+          80.0 - 10.0 * time_s,
           y_rel,
           v_rel=-10.0,
           source="corner235",
@@ -3949,7 +3980,7 @@ def test_radar_only_stationary_hold_uses_narrow_path_gate() -> None:
       (
         Point(
           1009,
-          60.0 - 10.0 * time_s,
+          80.0 - 10.0 * time_s,
           0.1,
           v_rel=-10.0,
           source="corner235",
@@ -3970,29 +4001,36 @@ def test_radar_only_stationary_hold_uses_narrow_path_gate() -> None:
 
   assert match is not None
 
-  held_point = snapshot_radar_points(
-    (
-      Point(
-        1009,
-        54.5,
-        1.0,
-        v_rel=-10.0,
-        source="corner235",
+  held = None
+  held_point = None
+  for index in range(1, 22):
+    time_s = 0.5 + index * 0.05
+    held_point = snapshot_radar_points(
+      (
+        Point(
+          1009,
+          75.0 - 10.0 * (time_s - 0.5),
+          1.0,
+          v_rel=-10.0,
+          source="corner235",
+        ),
       ),
-    ),
-    v_ego=10.0,
-  )[0]
-  held = matcher.match(
-    model_with_lead(
-      held_point.d_rel, held_point.y_rel, 0.0, probability=0.0,
-    ),
-    (),
-    STRAIGHT_PATH,
-    time_s=0.55,
-    stationary_points=(held_point,),
-    prefer_corner_stationary=True,
-  )
-  released_point = replace(held_point, d_rel=54.0, y_rel=1.3)
+      v_ego=10.0,
+    )[0]
+    held = matcher.match(
+      model_with_lead(
+        held_point.d_rel, held_point.y_rel, 0.0, probability=0.0,
+      ),
+      (),
+      STRAIGHT_PATH,
+      time_s=time_s,
+      stationary_points=(held_point,),
+      prefer_corner_stationary=True,
+    )
+    assert held is not None
+
+  assert held_point is not None
+  released_point = replace(held_point, d_rel=64.0, y_rel=1.3)
   released = matcher.match(
     model_with_lead(
       released_point.d_rel,
@@ -4002,12 +4040,11 @@ def test_radar_only_stationary_hold_uses_narrow_path_gate() -> None:
     ),
     (),
     STRAIGHT_PATH,
-    time_s=0.60,
+    time_s=1.60,
     stationary_points=(released_point,),
     prefer_corner_stationary=True,
   )
 
-  assert held is not None
   assert released is None
   assert matcher.stationary_identity is None
 
