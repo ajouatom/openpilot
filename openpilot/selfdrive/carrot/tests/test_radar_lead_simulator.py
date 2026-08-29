@@ -15,6 +15,7 @@ from openpilot.selfdrive.carrot.radar.tools.radar_lead_simulator import (
   RadarFrame,
   RadarMotionShadowSelector,
   RadarOccupancyV2Selector,
+  RadarOccupancyV3Selector,
   RadarPoint,
   RecordedLead,
   Selection,
@@ -155,7 +156,7 @@ def test_shadow_selector_uses_new_controller_not_recorded_radard_roles() -> None
   assert any(candidate.track_id == 1010 for candidate in selection.cutin_diagnostics)
 
 
-def test_visual_review_can_toggle_cached_v1_and_v2(tmp_path) -> None:
+def test_visual_review_can_cycle_cached_v1_v2_and_v3(tmp_path) -> None:
   frames = [
     frame(
       (point(1010, 8.0, -3.0, source="corner235"),),
@@ -173,12 +174,14 @@ def test_visual_review_can_toggle_cached_v1_and_v2(tmp_path) -> None:
     baseline=v1,
     enable_radar_tracks=2,
   )
+  v3 = RadarOccupancyV3Selector(frames, enable_radar_tracks=2)
   ui = SimulatorUI(
     frames,
     v2,
     "test",
     tmp_path / "rlog.zst",
     settings_path=tmp_path / "radar_validation.json",
+    v3_selector=v3,
   )
 
   assert ui.use_occupancy_v2
@@ -189,11 +192,18 @@ def test_visual_review_can_toggle_cached_v1_and_v2(tmp_path) -> None:
 
   ui._toggle_occupancy_version()
   assert not ui.use_occupancy_v2
+  assert ui.occupancy_version == 3
+  assert ui.selector is v3
+  assert "V3" in ui.status
+
+  ui._toggle_occupancy_version()
+  assert ui.occupancy_version == 1
   assert ui.selector is v1
   assert "V1" in ui.status
 
   ui._toggle_occupancy_version()
   assert ui.use_occupancy_v2
+  assert ui.occupancy_version == 2
   assert ui.selector is v2
   assert "V2" in ui.status
 
@@ -218,6 +228,7 @@ def test_visual_replay_cache_round_trip_and_exact_configuration(tmp_path) -> Non
     baseline=v1,
     enable_radar_tracks=2,
   )
+  v3 = RadarOccupancyV3Selector(frames, enable_radar_tracks=2)
   cache_path = visual_replay_cache_path(
     tmp_path / "cache",
     log_path,
@@ -227,14 +238,15 @@ def test_visual_replay_cache_round_trip_and_exact_configuration(tmp_path) -> Non
     enable_radar_tracks=2,
   )
 
-  save_visual_replay_cache(cache_path, frames, v2)
+  save_visual_replay_cache(cache_path, frames, v2, v3)
   cached = load_visual_replay_cache(cache_path)
 
   assert cached is not None
-  cached_frames, cached_v2 = cached
+  cached_frames, cached_v2, cached_v3 = cached
   assert cached_frames == frames
   assert cached_v2.selections == v2.selections
   assert cached_v2.baseline.selections == v1.selections
+  assert cached_v3.selections == v3.selections
   assert visual_replay_cache_path(
     tmp_path / "cache",
     log_path,
