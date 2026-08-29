@@ -47,7 +47,6 @@ LIVE_NAVI_IMAGE_BASE64_MAX_CHARS = 2 * 1024 * 1024
 LIVE_NAVI_IMAGE_MAX_DIMENSION = 2048
 ACCELERATION_DUE_TO_GRAVITY = 9.80665
 DEFAULT_MAX_LATERAL_ACCEL = 3.0
-VEHICLE_NAVI_CURVE_SPEED_MAX_KPH = 250.0
 SELFDRIVE_STATE_TIMEOUT_SECONDS = 5.0
 SELFDRIVE_UNRESPONSIVE_TIMEOUT_SECONDS = 10.0
 
@@ -432,11 +431,6 @@ class OpenpilotLiveSource:
             else None
         )
         vehicle_navi_available = bool(safe_get(carrot_man, "vehicleNaviAvailable", False))
-        vehicle_navi_curve_speed_kph = safe_optional_float(carrot_man, "vehicleNaviCurveCurrentSpeed")
-        if vehicle_navi_curve_speed_kph is None or vehicle_navi_curve_speed_kph <= 0.0:
-            vehicle_navi_curve_speed_kph = None
-        else:
-            vehicle_navi_curve_speed_kph = min(vehicle_navi_curve_speed_kph, VEHICLE_NAVI_CURVE_SPEED_MAX_KPH)
         if state.cruise_kph is not None and state.cruise_display_state != "off":
             # Keep this priority and the thresholds in sync with mici's SetSpeedOverride.
             longitudinal_plan = self._service_data("longitudinalPlan")
@@ -472,7 +466,6 @@ class OpenpilotLiveSource:
             cruise_override_kph=cruise_override_kph,
             cruise_override_label=cruise_override_label,
             cruise_override_color_mode=cruise_override_color_mode,
-            vehicle_navi_curve_speed_kph=vehicle_navi_curve_speed_kph,
         )
 
     def _live_cluster_alert(self, current_alert: ClusterAlert | None, onroad: bool) -> ClusterAlert | None:

@@ -38,7 +38,6 @@ CRUISE_SPEED_ANIMATION_MAX = 100
 CRUISE_SPEED_ANIMATION_STEP = 12
 CRUISE_SPEED_ANIMATION_START_SIZE = 96
 CRUISE_SPEED_ANIMATION_TARGET_SIZE = 40
-VEHICLE_NAVI_CURVE_SPEED_MAX_KPH = 250.0
 
 @dataclass(frozen=True)
 class SetSpeedOverrideState:
@@ -798,31 +797,6 @@ class HudRenderer(Widget):
         set_x = int(panel_x + panel_w * 0.90 - set_size.x * 0.5 + 50)
         set_y = int(panel_y + panel_h * 0.10 - set_size.y * 0.5 - 20)
         draw_text_ui_style(set_label_text, set_x, set_y, set_font, set_color, font=self._font_display, border_width=1.0, shadow_offset=3.0, align="left_top", y_offset=0.0)
-
-      try:
-        curve_speed_kph = float(ui_state.sm["carrotMan"].vehicleNaviCurveCurrentSpeed)
-      except Exception:
-        curve_speed_kph = 0.0
-      if curve_speed_kph > 0.0:
-        curve_speed = min(curve_speed_kph, VEHICLE_NAVI_CURVE_SPEED_MAX_KPH)
-        if not ui_state.is_metric:
-          curve_speed *= KM_TO_MILE
-        curve_text = str(int(round(curve_speed)))
-      else:
-        curve_text = "--"
-      if self._debug_speed_panel:
-        curve_text = "250"
-
-      curve_x = int(panel_x + panel_w * 0.90 + 150)
-      curve_color = rl.Color(199, 125, 255, 230)
-      curve_font = 34
-      curve_size = measure_text_cached(self._font_display, curve_text, curve_font)
-      curve_y = int(panel_y + panel_h * 0.25 - curve_size.y * 0.5)
-      draw_text_ui_style(curve_text, curve_x - curve_size.x * 0.5, curve_y, curve_font, curve_color, font=self._font_display, border_width=1.0, shadow_offset=3.0, align="left_top", y_offset=0.0)
-      curve_label_font = 26
-      curve_label_size = measure_text_cached(self._font_display, "curve", curve_label_font)
-      curve_label_y = int(panel_y + panel_h * 0.10 - curve_label_size.y * 0.5 - 20)
-      draw_text_ui_style("curve", curve_x - curve_label_size.x * 0.5, curve_label_y, curve_label_font, curve_color, font=self._font_display, border_width=1.0, shadow_offset=3.0, align="left_top", y_offset=0.0)
 
     # ----- cruise gap (small circle + number, bottom-mid-right) -----
     gap = self._get_cruise_gap()

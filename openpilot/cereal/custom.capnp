@@ -45,7 +45,6 @@ struct CarrotMan @0x81c2f05a394cf4af {
 	vehicleNaviSpeed @30 : Int32;
 	vehicleNaviSectionActive @31 : Bool;
 	vehicleNaviAvailable @32 : Bool;
-	vehicleNaviCurveCurrentSpeed @33 : Float32; # distance-adjusted 0x4BA curve candidate at the current vehicle position, kph; 0 when unavailable
 }
 
 struct CarrotNaviState @0xaedffd8f31e7b55d {

@@ -20,7 +20,6 @@ CRUISE_SPEED_ANIMATION_MAX = 100
 CRUISE_SPEED_ANIMATION_STEP = 12
 CRUISE_SPEED_ANIMATION_START_SIZE = 300
 HUD_PARAM_REFRESH_INTERVAL = 1.0
-VEHICLE_NAVI_CURVE_SPEED_MAX_KPH = 250.0
 WEEKDAYS_KO = ("일", "월", "화", "수", "목", "금", "토")
 
 
@@ -700,34 +699,6 @@ class HudRenderer(Widget):
         align="center_bottom",
       )
 
-    try:
-      curve_speed_kph = float(sm["carrotMan"].vehicleNaviCurveCurrentSpeed)
-    except Exception:
-      curve_speed_kph = 0.0
-    if curve_speed_kph > 0.0:
-      curve_speed = min(curve_speed_kph, VEHICLE_NAVI_CURVE_SPEED_MAX_KPH)
-      if not ui_state.is_metric:
-        curve_speed *= KM_TO_MILE
-      curve_text = str(int(round(curve_speed)))
-    else:
-      curve_text = "--"
-    if self._debug_speed_panel:
-      curve_text = "250"
-
-    draw_text_ui_style(
-      curve_text, bx + 355, by - 45, 42, COLORS.VEHICLE_NAVI_LAVENDER,
-      font=self._font_display,
-      border_width=1.0,
-      shadow_offset=5.0,
-      align="center_bottom",
-    )
-    draw_text_ui_style(
-      "curve", bx + 355, by - 100, 28, COLORS.VEHICLE_NAVI_LAVENDER,
-      font=self._font_display,
-      border_width=1.0,
-      shadow_offset=5.0,
-      align="center_bottom",
-    )
 
   def _update_cruise_speed_animation(self, cruise_text: str) -> None:
     if self._cruise_speed_text_last != cruise_text:
