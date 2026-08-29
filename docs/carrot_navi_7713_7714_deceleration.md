@@ -593,9 +593,12 @@ km/h다.
 ## 차량 순정 내비 0x4BA 커브 후보
 
 Hyundai CAN-FD 차량에서 수신되는 `0x4BA` ADASIS v2 Profile Short의 `ProfileType=1`은 전방 도로
-곡률이다. `Value0`은 ADASIS v2 표준의 10-bit 비선형 곡률값으로 복호화하고, `Offset`을 현재
-위치로부터 해당 곡률점까지의 거리로 사용한다. 확인한 아이오닉5 로그에서는 `Value1`이 항상 0으로
-채워져 있어 제어에는 검증된 `Value0` 곡률점만 사용한다.
+곡률이다. `Value0`은 ADASIS v2 표준의 10-bit 비선형 값으로 먼저 복호화한 뒤, Hyundai CAN-FD
+실차 로그에서 확인한 0.1 배율을 적용해 물리 곡률로 변환한다. 표준 복호값을 그대로 쓰면 일반적인
+고속도로 커브가 20~40 km/h급 급회전으로 과대 해석된다. `Offset`은 현재 위치로부터 해당
+곡률점까지의 거리로 사용한다. 확인한 아이오닉5 로그에서는 `Value1`이 항상 0으로 채워져 있어
+제어에는 검증된 `Value0`만 사용한다. `ControlPoint=1`인 값은 보간용 제어점이므로 실제 곡률점으로
+취급하지 않으며, `0x4B9`의 현재 `PathIndex`와 같은 프로파일만 후보에 넣는다.
 
 `CarState`는 곡률점을 주행거리 기준으로 추적하여 다음 세 필드를 발행한다.
 
@@ -617,7 +620,7 @@ Hyundai CAN-FD 차량에서 수신되는 `0x4BA` ADASIS v2 Profile Short의 `Pro
 복귀한다. 통과 뒤 제한속도를 유지하는 고정 fallback 거리는 사용하지 않는다.
 
 0x4BA `Distance`는 곡률 프로파일에서 raw 1당 2 m인 다음 spot까지의 길이로 해석한다. 길이가
-10 m 이하이면서 원시 곡률 기준속도가 20 km/h 이하인 단독 hairpin-level spot은 지도 노드의
+10 m 이하이면서 보정 곡률 기준속도가 60 km/h 이하인 단독 hairpin-level spot은 지도 노드의
 불연속값으로 보고 커브 감속 후보에서 제외한다. 그보다 완만한 10 m spot은 계속 사용하며 실제
 급회전 감속은 route/TBT 기반 turn 제어가 담당한다.
 
