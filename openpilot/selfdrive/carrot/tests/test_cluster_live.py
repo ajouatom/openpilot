@@ -91,14 +91,14 @@ def test_live_hud_reads_active_egpu_param(monkeypatch) -> None:
   assert decorated.egpu_active
 
 
-@pytest.mark.parametrize(("raw_speed", "expected"), ((999.0, 250.0), (85.4, 85.4), (0.0, None)))
-def test_live_hud_exposes_bounded_vehicle_curve_reference_speed(raw_speed, expected) -> None:
+@pytest.mark.parametrize(("target_speed", "expected"), ((999.0, 250.0), (85.4, 85.4), (0.0, None)))
+def test_live_hud_exposes_bounded_factor_adjusted_vehicle_curve_speed(target_speed, expected) -> None:
   source = object.__new__(OpenpilotLiveSource)
   source._max_lateral_accel = 3.0
   source._energy_gauge_label = "fuel"
   source._carrot_navi_media = None
   source._current_carrot_navi = lambda _now: None
-  car_state = SimpleNamespace(vehicleNaviCurveSpeed=raw_speed)
+  car_state = SimpleNamespace(vehicleNaviCurveTargetSpeed=target_speed)
   source._service_data = lambda service: car_state if service == "carState" else None
   source._service_alive = lambda _service: False
 

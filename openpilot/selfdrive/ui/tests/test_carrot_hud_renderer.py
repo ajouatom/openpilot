@@ -637,7 +637,7 @@ def test_vehicle_navigation_profile_does_not_force_speed_with_cruise_off(hud_mod
     (0.0, True, "--"),
   ),
 )
-def test_curve_reference_speed_draws_right_of_auxiliary_speed(
+def test_factor_adjusted_curve_speed_draws_right_of_auxiliary_speed(
   hud_module, monkeypatch, curve_speed_kph, is_metric, expected_text,
 ):
   module, fake_ui_state = hud_module
@@ -656,7 +656,7 @@ def test_curve_reference_speed_draws_right_of_auxiliary_speed(
   renderer._draw_texture_rect = lambda *args, **kwargs: None
   fake_ui_state.is_metric = is_metric
   fake_ui_state.sm = {
-    "carState": SimpleNamespace(vehicleNaviCurveSpeed=curve_speed_kph),
+    "carState": SimpleNamespace(vehicleNaviCurveTargetSpeed=curve_speed_kph),
     "carrotMan": SimpleNamespace(desiredSpeed=70.0, desiredSource="hda_curve"),
     "longitudinalPlan": SimpleNamespace(cruiseTarget=100.0),
   }
