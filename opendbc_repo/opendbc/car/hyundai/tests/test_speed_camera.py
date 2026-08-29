@@ -535,9 +535,10 @@ def test_vehicle_navi_curve_dbc_decodes_logged_frame():
   assert values["PROSHORT_VALUE_0"] == 816
   assert values["PROSHORT_VALUE_1"] == 0
   assert values["PROSHORT_PROFILE_TYPE"] == 1
-  assert values["PROSHORT_CONTROL_POINT"] == 1
-  assert values["PROSHORT_RETRANSMISSION"] == 1
-  assert values["PROSHORT_UPDATE"] == 0
+  curve = CarState._decode_vehicle_navi_curve(values)
+  assert curve is not None
+  assert curve["offset"] == 387
+  assert curve["raw_curvature"] == 816
 
 
 def test_vehicle_navi_curve_profile_publishes_reference_speed_and_distance():
@@ -545,32 +546,30 @@ def test_vehicle_navi_curve_profile_publishes_reference_speed_and_distance():
   state.vehicleNaviCurveRouteActive = True
   state.vehicleNaviCurvePathIndex = 8
   state.navi_profile_4ba = {
-    "PROSHORT_OFFSET": 384,
+    "PROSHORT_OFFSET": 1987,
     "PROSHORT_PATH_INDEX": 8,
     "PROSHORT_DISTANCE": 5,
     "PROSHORT_VALUE_0": 734,
     "PROSHORT_PROFILE_TYPE": 1,
-    "PROSHORT_CONTROL_POINT": 0,
   }
   cp = SimpleNamespace(ts_nanos={"NEW_MSG_4BA": {"PROSHORT_VALUE_0": 1}})
   ret = SimpleNamespace(speedLimit=0.0, speedBumpDistance=0.0, schoolZoneActive=False)
 
   assert not state._update_vehicle_navi_events(cp, ret, False)
-  assert ret.vehicleNaviCurveDistance == pytest.approx(384.0)
+  assert ret.vehicleNaviCurveDistance == pytest.approx(1987.0)
   assert ret.vehicleNaviCurveCurvature == pytest.approx(0.000696)
   assert ret.vehicleNaviCurveSpeed == pytest.approx(math.sqrt(1.9 / 0.000696) * 3.6)
   assert ret.vehicleNaviCurveRouteActive
   assert state.vehicleNaviCurves[0]["span"] == 10.0
 
 
-def test_vehicle_navi_curve_ignores_interpolation_control_point():
+def test_vehicle_navi_curve_rejects_invalid_offset_sentinel():
   curve = CarState._decode_vehicle_navi_curve({
-    "PROSHORT_OFFSET": 387,
+    "PROSHORT_OFFSET": 8191,
     "PROSHORT_PATH_INDEX": 8,
     "PROSHORT_DISTANCE": 5,
     "PROSHORT_VALUE_0": 816,
     "PROSHORT_PROFILE_TYPE": 1,
-    "PROSHORT_CONTROL_POINT": 1,
   })
 
   assert curve is None
@@ -586,7 +585,6 @@ def test_vehicle_navi_curve_ignores_other_adasis_path():
     "PROSHORT_DISTANCE": 10,
     "PROSHORT_VALUE_0": 816,
     "PROSHORT_PROFILE_TYPE": 1,
-    "PROSHORT_CONTROL_POINT": 0,
   }
   cp = SimpleNamespace(ts_nanos={"NEW_MSG_4BA": {"PROSHORT_VALUE_0": 1}})
   ret = SimpleNamespace(speedLimit=0.0, speedBumpDistance=0.0, schoolZoneActive=False)
