@@ -627,3 +627,45 @@ def test_vehicle_navigation_profile_does_not_force_speed_with_cruise_off(hud_mod
   assert override.label == "MAX"
   assert override.speed_color_mode == 0
   assert not override.force_persist
+
+
+@pytest.mark.parametrize(
+  ("curve_speed_kph", "is_metric", "expected_text"),
+  (
+    (999.0, True, "250"),
+    (100.0, False, "62"),
+    (0.0, True, "--"),
+  ),
+)
+def test_curve_reference_speed_draws_right_of_auxiliary_speed(
+  hud_module, monkeypatch, curve_speed_kph, is_metric, expected_text,
+):
+  module, fake_ui_state = hud_module
+  renderer = object.__new__(module.HudRenderer)
+  renderer._set_speed_override = module.SetSpeedOverride()
+  renderer._txt_speed_bg = object()
+  renderer._font_display = object()
+  renderer._debug_speed_panel = False
+  renderer._engaged = True
+  renderer.is_cruise_set = True
+  renderer.speed = 80.0
+  renderer.set_speed = 100.0
+  renderer._cruise_speed_text_last = None
+  renderer._cruise_speed_animation_text = ""
+  renderer._cruise_speed_animation_time = 0
+  renderer._draw_texture_rect = lambda *args, **kwargs: None
+  fake_ui_state.is_metric = is_metric
+  fake_ui_state.sm = {
+    "carState": SimpleNamespace(vehicleNaviCurveSpeed=curve_speed_kph),
+    "carrotMan": SimpleNamespace(desiredSpeed=70.0, desiredSource="hda_curve"),
+    "longitudinalPlan": SimpleNamespace(cruiseTarget=100.0),
+  }
+  draws = []
+  monkeypatch.setattr(module, "draw_text_ui_style", lambda *args, **kwargs: draws.append((args, kwargs)))
+
+  renderer._draw_carrot_speed_panel(140, 600)
+
+  curve_speed = next(args for args, _ in draws if args[0] == expected_text and args[1] == 475)
+  curve_label = next(args for args, _ in draws if args[0] == "curve" and args[1] == 475)
+  assert curve_speed[2:5] == (555, 50, module.COLORS.VEHICLE_NAVI_LAVENDER)
+  assert curve_label[2:5] == (500, 30, module.COLORS.VEHICLE_NAVI_LAVENDER)
