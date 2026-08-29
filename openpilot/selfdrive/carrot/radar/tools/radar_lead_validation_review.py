@@ -8,6 +8,7 @@ import json
 from pathlib import Path
 import subprocess
 import sys
+import tempfile
 
 
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -34,6 +35,9 @@ def simulator_command(
   motion_mode: str | None = None,
   sensitivity: int | None = None,
   enable_radar_tracks: int = 2,
+  cache_dir: Path | None = None,
+  preload_only: bool = False,
+  consume_cache: bool = False,
 ) -> list[str]:
   command = [
     sys.executable,
@@ -59,7 +63,25 @@ def simulator_command(
     command.append("--front-only")
   elif motion_mode is not None:
     command.extend(("--motion-mode", motion_mode))
+  if cache_dir is not None:
+    command.extend(("--cache-dir", str(cache_dir)))
+  if preload_only:
+    command.append("--preload-only")
+  if consume_cache:
+    command.append("--consume-cache")
   return command
+
+
+def _stop_preloads(preloads: dict[int, subprocess.Popen]) -> None:
+  for process in preloads.values():
+    if process.poll() is None:
+      process.terminate()
+  for process in preloads.values():
+    try:
+      process.wait(timeout=5.0)
+    except subprocess.TimeoutExpired:
+      process.kill()
+      process.wait()
 
 
 def parse_args() -> argparse.Namespace:
@@ -142,40 +164,89 @@ def main() -> int:
     return 0
 
   groups = group_cases_by_log(cases)
+  routes = [
+    args.root / group[0]["vehicle_folder"] / Path(group[0]["log"])
+    for group in groups
+  ]
   missing = 0
   opened_cases = 0
   opened_logs = 0
-  for index, group in enumerate(groups, 1):
-    case = group[0]
-    route = args.root / case["vehicle_folder"] / Path(case["log"])
-    if not route.is_file():
-      missing += len(group)
-      print(
-        f"[{index:02d}/{len(groups):02d}] MISSING {len(group)} cases: {route}",
-        flush=True,
-      )
-      continue
-    ids = ", ".join(str(item["id"]) for item in group)
-    print(
-      f"\n[{index:02d}/{len(groups):02d}] {len(group)} cases in one log: {ids}",
-      flush=True,
-    )
-    command = simulator_command(
-      group,
-      args.root,
-      args.cases,
-      args.prob,
-      f"{index}/{len(groups)}",
-      args.front_only,
-      args.motion_mode,
-      args.sensitivity,
-      args.enable_radar_tracks,
-    )
-    result = subprocess.run(command, check=False)
-    if result.returncode != 0:
-      return result.returncode
-    opened_logs += 1
-    opened_cases += len(group)
+  with tempfile.TemporaryDirectory(prefix="carrot-radar-review-") as directory:
+    cache_dir = Path(directory)
+    preloads: dict[int, subprocess.Popen] = {}
+
+    def start_next_preloads(current_index: int) -> None:
+      next_indexes = [
+        candidate_index
+        for candidate_index in range(current_index + 1, len(groups))
+        if routes[candidate_index].is_file()
+      ][:2]
+      for candidate_index in next_indexes:
+        if candidate_index in preloads:
+          continue
+        command = simulator_command(
+          groups[candidate_index],
+          args.root,
+          args.cases,
+          args.prob,
+          f"{candidate_index + 1}/{len(groups)}",
+          args.front_only,
+          args.motion_mode,
+          args.sensitivity,
+          args.enable_radar_tracks,
+          cache_dir=cache_dir,
+          preload_only=True,
+        )
+        preloads[candidate_index] = subprocess.Popen(
+          command,
+          stdout=subprocess.DEVNULL,
+          stderr=subprocess.DEVNULL,
+        )
+
+    try:
+      for group_index, (group, route) in enumerate(zip(groups, routes, strict=True)):
+        index = group_index + 1
+        if not route.is_file():
+          missing += len(group)
+          print(
+            f"[{index:02d}/{len(groups):02d}] MISSING {len(group)} cases: {route}",
+            flush=True,
+          )
+          continue
+        preload = preloads.pop(group_index, None)
+        if preload is not None:
+          returncode = preload.wait()
+          if returncode != 0:
+            print(
+              f"[{index:02d}/{len(groups):02d}] preload failed; loading normally",
+              flush=True,
+            )
+        start_next_preloads(group_index)
+        ids = ", ".join(str(item["id"]) for item in group)
+        print(
+          f"\n[{index:02d}/{len(groups):02d}] {len(group)} cases in one log: {ids}",
+          flush=True,
+        )
+        command = simulator_command(
+          group,
+          args.root,
+          args.cases,
+          args.prob,
+          f"{index}/{len(groups)}",
+          args.front_only,
+          args.motion_mode,
+          args.sensitivity,
+          args.enable_radar_tracks,
+          cache_dir=cache_dir,
+          consume_cache=True,
+        )
+        result = subprocess.run(command, check=False)
+        if result.returncode != 0:
+          return result.returncode
+        opened_logs += 1
+        opened_cases += len(group)
+    finally:
+      _stop_preloads(preloads)
   print(
     f"\nVisual review complete: {opened_cases}/{len(cases)} labeled windows "
     + f"in {opened_logs}/{len(groups)} unique logs"
