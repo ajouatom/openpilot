@@ -448,6 +448,8 @@ on-road UI, mici UI, cluster live UI의 보조속도 영역은 선택된 감속 
 100% 기준 커브속도를 표시한다. 유효한 곡률 spot이 없으면 `--`, 있으면 250 km/h를 상한으로 표시하며
 imperial UI에서는 상한 적용 후 mph로 변환한다. 따라서 보조속도는 현재 적용 중인 감속 목표이고,
 `curve`는 `VehicleNaviCurveSpeedFactor` 적용 전 CAN 곡률 계산값이다.
+세 자리 보조속도와 겹쳐 백의 자리가 가려지지 않도록 `curve` 값은 보조속도보다 작게 그리고 오른쪽으로
+분리해 표시한다. 디바이스 UI와 USB 클러스터가 같은 배치 원칙을 사용한다.
 
 - `0 < desiredSpeed < 200`
 - `desiredSpeed < 운전자 설정 cruise speed`

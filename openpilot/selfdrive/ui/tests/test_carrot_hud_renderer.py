@@ -665,7 +665,7 @@ def test_curve_reference_speed_draws_right_of_auxiliary_speed(
 
   renderer._draw_carrot_speed_panel(140, 600)
 
-  curve_speed = next(args for args, _ in draws if args[0] == expected_text and args[1] == 475)
-  curve_label = next(args for args, _ in draws if args[0] == "curve" and args[1] == 475)
-  assert curve_speed[2:5] == (555, 50, module.COLORS.VEHICLE_NAVI_LAVENDER)
-  assert curve_label[2:5] == (500, 30, module.COLORS.VEHICLE_NAVI_LAVENDER)
+  curve_speed = next(args for args, _ in draws if args[0] == expected_text and args[1] == 495)
+  curve_label = next(args for args, _ in draws if args[0] == "curve" and args[1] == 495)
+  assert curve_speed[2:5] == (555, 42, module.COLORS.VEHICLE_NAVI_LAVENDER)
+  assert curve_label[2:5] == (500, 28, module.COLORS.VEHICLE_NAVI_LAVENDER)
