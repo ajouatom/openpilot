@@ -16,7 +16,11 @@ REPLAY_WRAPPER = REPO_ROOT / "openpilot/selfdrive/carrot/cluster_replay_usb.py"
 
 def parse_args() -> argparse.Namespace:
   parser = argparse.ArgumentParser(description="Review maintained cut-in route windows in sequence.")
-  parser.add_argument("--root", type=Path, default=Path(r"W:\routes"), help="Route log root directory")
+  parser.add_argument(
+    "--root", type=Path,
+    default=Path(r"\\DS1821P\openpilot\routes"),
+    help="Route log root directory",
+  )
   parser.add_argument("--case", action="append", default=[], help="Review cases whose id contains this text")
   parser.add_argument("--start-at", help="Start at the first case whose id contains this text")
   parser.add_argument("--output", choices=("window", "usb", "both"), default="window")
@@ -90,7 +94,7 @@ def main() -> int:
     duration_text = "manual close" if duration_s is None else f"{duration_s:.1f}s wall time"
     print(
       f"\n[{index:02d}/{len(cases):02d}] {case['id']} "
-      f"expected={case['expected']} window={case['window'][0]:g}-{case['window'][1]:g}s",
+      + f"expected={case['expected']} window={case['window'][0]:g}-{case['window'][1]:g}s",
       flush=True,
     )
     print(f"  {case['scene']}", flush=True)

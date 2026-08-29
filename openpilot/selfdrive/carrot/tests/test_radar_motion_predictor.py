@@ -3094,6 +3094,54 @@ def test_controller_selects_cross_sensor_slow_close_cutin() -> None:
   assert selected_pickup[0][1]["vLead"] == pytest.approx(2.2)
 
 
+def test_controller_occupancy_v2_adds_early_risk_and_lead_two() -> None:
+  controller = DPathRadarController(prefer_corner_radar=True)
+  # Isolate the V2 augmentation: V1 remains present in production, but this
+  # test proves the new staged path can independently publish both outputs.
+  controller.motion_decisions = EmptyDecisionTracker()
+  controller.close_front_motion_decisions = EmptyDecisionTracker()
+  controller.cutin_predecel_tracker = SimpleNamespace(
+    update=lambda *args, **kwargs: None,
+  )
+  first_risk_s = None
+  first_lead_two_s = None
+
+  for index in range(36):
+    time_s = index * 0.05
+    target_d_rel = 8.0 - 1.7 * time_s
+    target_y_rel = -3.30 + 0.70 * time_s
+    output = controller.update(
+      time_s=time_s,
+      v_ego=7.9,
+      radar_points=(
+        Point(
+          35, 25.0, 0.0, v_rel=0.0, source="frontRadar",
+        ),
+        Point(
+          45, target_d_rel, target_y_rel,
+          v_rel=-1.7, source="frontRadar",
+        ),
+        Point(
+          3504, target_d_rel - 0.1, target_y_rel - 0.1,
+          v_rel=-1.6, source="corner235", trackState=2,
+        ),
+      ),
+      model=model_with_lead(25.0, 0.0, 7.9),
+    )
+    if output.lead_cutin_risk is not None and first_risk_s is None:
+      first_risk_s = time_s
+    if output.lead_two is not None and first_lead_two_s is None:
+      first_lead_two_s = time_s
+
+  assert first_risk_s is not None
+  assert first_lead_two_s is not None
+  assert first_risk_s < first_lead_two_s
+  assert first_risk_s <= 0.85
+  assert first_lead_two_s <= 1.46
+  assert output.lead_two is not None
+  assert output.lead_two["radarTrackId"] == 3504
+
+
 def test_corner_cutin_predecel_requires_continuous_confirmation() -> None:
   tracker = CornerCutInPredecelTracker(confirmation_s=0.10, hold_s=0.20)
   candidate = RadarMotionCutIn(SimpleNamespace(
