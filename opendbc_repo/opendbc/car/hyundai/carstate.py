@@ -33,7 +33,7 @@ VEHICLE_NAVI_CONTROLLED_ACCESS_LINK_CLASSES = (1, 2, 3)  # Freeway, IC, JC
 VEHICLE_NAVI_CONTROLLED_ACCESS_ROAD_CLASSES = (1, 2)  # Freeway, arterial/city freeway
 VEHICLE_NAVI_SCHOOL_ZONE_MAX_DISTANCE = 1000.0
 VEHICLE_NAVI_POSITION_TIMEOUT_NS = 1_000_000_000
-VEHICLE_NAVI_CURVE_MAX_DISTANCE = 1500.0
+VEHICLE_NAVI_CURVE_MAX_DISTANCE = 8190.0  # 13-bit offset; 8191 is the invalid sentinel
 VEHICLE_NAVI_CURVE_DISTANCE_FACTOR = 2.0
 VEHICLE_NAVI_CURVE_CANFD_SCALE = 0.1
 VEHICLE_NAVI_CURVE_SHORT_SPOT_MAX_DISTANCE = 10.0
@@ -720,8 +720,9 @@ class CarState(CarStateBase):
 
   @staticmethod
   def _decode_vehicle_navi_curve(values):
-    if (int(values.get("PROSHORT_PROFILE_TYPE", 0)) != 1 or
-        int(values.get("PROSHORT_CONTROL_POINT", 0)) != 0):
+    # The 3rd-generation CAN-FD DBC ends this payload at ProfileType. Bits
+    # 58-59 cycle across logged spots and are not a ControlPoint validity flag.
+    if int(values.get("PROSHORT_PROFILE_TYPE", 0)) != 1:
       return None
 
     offset = int(values.get("PROSHORT_OFFSET", 8191))
