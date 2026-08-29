@@ -571,7 +571,8 @@ def test_vehicle_curve_reference_speed_draws_right_of_cruise_override_and_caps_a
     cluster_renderer.VEHICLE_CURVE_SPEED_FONT_SIZE,
     cluster_renderer.VEHICLE_NAVI,
   )
-  assert cluster_renderer.VEHICLE_CURVE_SPEED_CENTER_X > cluster_renderer.CRUISE_OVERRIDE_SPEED_CENTER_X
+  assert cluster_renderer.VEHICLE_CURVE_SPEED_CENTER_X - cluster_renderer.CRUISE_OVERRIDE_SPEED_CENTER_X == 100.0
+  assert cluster_renderer.VEHICLE_CURVE_SPEED_FONT_SIZE < cluster_renderer.CRUISE_OVERRIDE_SPEED_FONT_SIZE
 
 
 @pytest.mark.parametrize(("active", "expected_draws"), ((False, 0), (True, 1)))
