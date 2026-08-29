@@ -90,19 +90,34 @@ def test_vehicle_navi_curve_uses_curve_specific_decel_end_time():
 
 def test_vehicle_navi_curve_display_speed_tracks_current_position_candidate():
   serv = _serv(1)
-  serv.vehicleNaviCurveControl = True
   CS = _car_state()
   CS.vehicleNaviCurveDistance = 150
   CS.vehicleNaviCurveSpeed = 50
   CS.vehicleNaviCurveCurvature = 0.01
   CS.vehicleNaviCurveRouteActive = True
 
-  current_speed = serv._vehicle_navi_curve_speed(CS)
-  assert serv._vehicle_navi_curve_display_speed(CS, current_speed) == pytest.approx(current_speed)
-  assert serv._vehicle_navi_curve_display_speed(CS, 999) == 250
+  expected = serv.calculate_current_speed(150, 50, 3, serv.autoNaviSpeedDecelRate)
+  assert serv._vehicle_navi_curve_display_speed(CS) == pytest.approx(expected)
 
-  serv.vehicleNaviCurveControl = False
-  assert serv._vehicle_navi_curve_display_speed(CS, current_speed) == 0
+  # Diagnostic display remains available with curve control disabled.
+  assert serv._vehicle_navi_curve_speed(CS) == 250
+  assert serv._vehicle_navi_curve_display_speed(CS) == pytest.approx(expected)
+
+  CS.vehicleNaviCurveRouteActive = False
+  CS.vehicleNaviCurveRouteState = 2
+  assert serv._vehicle_navi_curve_display_speed(CS) == 0
+
+
+def test_vehicle_navi_curve_display_includes_mpp_without_enabling_mpp_control():
+  serv = _serv(1)
+  CS = _car_state()
+  CS.vehicleNaviCurveDistance = 100
+  CS.vehicleNaviCurveSpeed = 80
+  CS.vehicleNaviCurveCurvature = 0.003
+  CS.vehicleNaviCurveRouteState = 0
+
+  assert serv._vehicle_navi_curve_speed(CS) == 250
+  assert 0 < serv._vehicle_navi_curve_display_speed(CS) <= 250
 
 
 def test_vehicle_navi_curve_mpp_control_is_separate_opt_in():
