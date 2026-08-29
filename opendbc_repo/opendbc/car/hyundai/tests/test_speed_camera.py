@@ -15,19 +15,13 @@ class FakeParams:
     self.value = value
     self.vehicle_navi = vehicle_navi
     self.school_zone = school_zone
-    self.curve_speed_factor = 100
     self.read_count = 0
 
   def get_int(self, key):
     if key == "VehicleSpeedCameraDistanceTime":
       self.read_count += 1
       return self.value
-    return {
-      "VehicleNaviCurveSpeedFactor": self.curve_speed_factor,
-      "VehicleNaviCurveCtrlEnd": 3,
-      "AutoCurveSpeedLowerLimit": 30,
-      "AutoNaviSpeedDecelRate": 120,
-    }[key]
+    raise KeyError(key)
 
   def get_bool(self, key):
     if key == "VehicleNaviCanControl":
@@ -44,21 +38,12 @@ def _car_state(distance_time_tenths=60):
   state.vehicleSpeedCameraDistanceTime = CarState._vehicle_speed_camera_distance_time(distance_time_tenths)
   state.vehicleNaviCanControl = False
   state.vehicleNaviSchoolZoneControl = False
-  state.vehicleNaviCurveSpeedFactor = 1.0
-  state.vehicleNaviCurveLowerLimit = 30.0
-  state.vehicleNaviCurveDecelRate = 1.2
-  state.vehicleNaviCurveControlEnd = 3.0
   state.vehicleSpeedCameraParamsCounter = 0
   state.vehicleNaviEvents = []
-  state.vehicleNaviCurves = []
   state.vehicleNaviSegmentTimestamp = 0
-  state.vehicleNaviCurveTimestamp = 0
   state.vehicleNaviProfileTimestamp = 0
   state.vehicleNaviAvailable = False
   state.vehicleNaviRouteResetTimestamp = 0
-  state.vehicleNaviCurveRouteActive = False
-  state.vehicleNaviCurveRouteState = 3
-  state.vehicleNaviCurvePathIndex = None
   state.vehicleNaviRoadClass = 7
   state.vehicleNaviCameraTarget = None
   state.vehicleNaviSpeedZoneActive = False
@@ -68,7 +53,6 @@ def _car_state(distance_time_tenths=60):
   state.vehicleNaviSchoolZoneUsesCameraStatus = False
   state.navi_segment_4b9 = None
   state.navi_position_4b4 = None
-  state.navi_profile_4ba = None
   state.navi_profile_4be = None
   state.hda_info_4a3 = None
   return state
@@ -505,189 +489,6 @@ def test_vehicle_navi_range_average_dbc_decodes_logged_frame():
 
   assert parser.vl["NEW_MSG_4B4"]["POS_OFFSET"] == 13
   assert parser.vl["NEW_MSG_4B4"]["POS_RANGE_AVG_SPEED"] == 92
-
-
-@pytest.mark.parametrize(("raw_value", "expected"), (
-  (511, 0.0),
-  (512, 0.00001),
-  (599, 0.00112),
-  (656, 0.00260),
-  (819, 0.01792),
-  (1022, 0.16192),
-  (1023, None),
-))
-def test_adasis_v2_curvature_decoder(raw_value, expected):
-  decoded = CarState._decode_adasis_curvature(raw_value)
-  if expected is None:
-    assert decoded is None
-  else:
-    assert decoded == pytest.approx(expected)
-
-
-def test_vehicle_navi_curve_dbc_decodes_logged_frame():
-  parser = CANParser("hyundai_canfd_generated", [("NEW_MSG_4BA", math.nan)], 0)
-  parser.update([1_000_000_000, [(0x4BA, bytes.fromhex("8301f9026006206c"), 0)]])
-
-  values = parser.vl["NEW_MSG_4BA"]
-  assert values["PROSHORT_OFFSET"] == 387
-  assert values["PROSHORT_PATH_INDEX"] == 8
-  assert values["PROSHORT_ACCURACY"] == 3
-  assert values["PROSHORT_DISTANCE"] == 5
-  assert values["PROSHORT_VALUE_0"] == 816
-  assert values["PROSHORT_VALUE_1"] == 0
-  assert values["PROSHORT_PROFILE_TYPE"] == 1
-  curve = CarState._decode_vehicle_navi_curve(values)
-  assert curve is not None
-  assert curve["offset"] == 387
-  assert curve["raw_curvature"] == 816
-
-
-def test_vehicle_navi_curve_profile_publishes_reference_speed_and_distance():
-  state = _car_state()
-  state.vehicleNaviCurveRouteActive = True
-  state.vehicleNaviCurvePathIndex = 8
-  state.navi_profile_4ba = {
-    "PROSHORT_OFFSET": 1987,
-    "PROSHORT_PATH_INDEX": 8,
-    "PROSHORT_DISTANCE": 5,
-    "PROSHORT_VALUE_0": 734,
-    "PROSHORT_PROFILE_TYPE": 1,
-  }
-  cp = SimpleNamespace(ts_nanos={"NEW_MSG_4BA": {"PROSHORT_VALUE_0": 1}})
-  ret = SimpleNamespace(speedLimit=0.0, speedBumpDistance=0.0, schoolZoneActive=False)
-
-  assert not state._update_vehicle_navi_events(cp, ret, False)
-  assert ret.vehicleNaviCurveDistance == pytest.approx(1987.0)
-  assert ret.vehicleNaviCurveCurvature == pytest.approx(0.000696)
-  assert ret.vehicleNaviCurveSpeed == pytest.approx(math.sqrt(1.9 / 0.000696) * 3.6)
-  assert ret.vehicleNaviCurveTargetSpeed == pytest.approx(ret.vehicleNaviCurveSpeed)
-  assert ret.vehicleNaviCurveRouteActive
-  assert state.vehicleNaviCurves[0]["span"] == 10.0
-
-
-def test_vehicle_navi_curve_rejects_invalid_offset_sentinel():
-  curve = CarState._decode_vehicle_navi_curve({
-    "PROSHORT_OFFSET": 8191,
-    "PROSHORT_PATH_INDEX": 8,
-    "PROSHORT_DISTANCE": 5,
-    "PROSHORT_VALUE_0": 816,
-    "PROSHORT_PROFILE_TYPE": 1,
-  })
-
-  assert curve is None
-
-
-def test_vehicle_navi_curve_ignores_other_adasis_path():
-  state = _car_state()
-  state.vehicleNaviCurveRouteActive = True
-  state.vehicleNaviCurvePathIndex = 8
-  state.navi_profile_4ba = {
-    "PROSHORT_OFFSET": 100,
-    "PROSHORT_PATH_INDEX": 9,
-    "PROSHORT_DISTANCE": 10,
-    "PROSHORT_VALUE_0": 816,
-    "PROSHORT_PROFILE_TYPE": 1,
-  }
-  cp = SimpleNamespace(ts_nanos={"NEW_MSG_4BA": {"PROSHORT_VALUE_0": 1}})
-  ret = SimpleNamespace(speedLimit=0.0, speedBumpDistance=0.0, schoolZoneActive=False)
-
-  assert not state._update_vehicle_navi_events(cp, ret, False)
-  assert state.vehicleNaviCurves == []
-  assert ret.vehicleNaviCurveSpeed == 0.0
-  assert ret.vehicleNaviCurveTargetSpeed == 0.0
-
-
-def test_vehicle_navi_curve_releases_passed_apex_and_uses_following_spot():
-  state = _car_state()
-  state.vehicleNaviCurves = [
-    {"target": 100.0, "span": 10.0, "curvature": 0.01, "speed": 50.0},
-    {"target": 140.0, "span": 10.0, "curvature": 0.004, "speed": 80.0},
-  ]
-  ret = SimpleNamespace()
-  cp = SimpleNamespace(ts_nanos={})
-
-  state.totalDistance = 100.0
-  state._update_vehicle_navi_curve_profile(cp, ret)
-  assert ret.vehicleNaviCurveDistance == 0.0
-  assert ret.vehicleNaviCurveSpeed == 50.0
-  assert ret.vehicleNaviCurveTargetSpeed == 50.0
-
-  state.totalDistance = 100.1
-  state._update_vehicle_navi_curve_profile(cp, ret)
-  assert ret.vehicleNaviCurveDistance == pytest.approx(39.9)
-  assert ret.vehicleNaviCurveSpeed == 80.0
-  assert ret.vehicleNaviCurveTargetSpeed == 80.0
-
-
-def test_vehicle_navi_curve_publishes_factor_adjusted_target_speed():
-  state = _car_state()
-  state.op_params.curve_speed_factor = 70
-  state.vehicleSpeedCameraParamsCounter = VEHICLE_SPEED_CAMERA_PARAM_UPDATE_FRAMES - 1
-  state._update_vehicle_speed_camera_params()
-  state.vehicleNaviCurves = [{"target": 100.0, "span": 20.0, "curvature": 0.01, "speed": 100.0}]
-  ret = SimpleNamespace()
-
-  state._update_vehicle_navi_curve_profile(SimpleNamespace(ts_nanos={}), ret)
-
-  assert ret.vehicleNaviCurveSpeed == 100.0
-  assert ret.vehicleNaviCurveTargetSpeed == 70.0
-
-
-def test_vehicle_navi_curve_without_following_spot_releases_after_apex():
-  state = _car_state()
-  state.vehicleNaviCurves = [{"target": 100.0, "span": 10.0, "curvature": 0.01, "speed": 50.0}]
-  ret = SimpleNamespace()
-  cp = SimpleNamespace(ts_nanos={})
-
-  state.totalDistance = 100.1
-  state._update_vehicle_navi_curve_profile(cp, ret)
-  assert ret.vehicleNaviCurveSpeed == 0.0
-  assert ret.vehicleNaviCurveTargetSpeed == 0.0
-
-
-def test_vehicle_navi_curve_skips_only_short_hairpin_speed_spot():
-  state = _car_state()
-  state._add_vehicle_navi_curve({"offset": 100.0, "span": 10.0, "curvature": 0.12288})
-  assert state.vehicleNaviCurves == []
-
-  state._add_vehicle_navi_curve({"offset": 110.0, "span": 10.0, "curvature": 0.004})
-  assert len(state.vehicleNaviCurves) == 1
-  assert state.vehicleNaviCurves[0]["speed"] == pytest.approx(math.sqrt(1.9 / 0.004) * 3.6)
-
-
-def test_vehicle_navi_route_recalculation_clears_curve_profile():
-  state = _car_state()
-  state.vehicleNaviCurves = [{"target": 300.0, "curvature": 0.01, "speed": 50.0}]
-  raw = bytes.fromhex("0000b8063110fdff")
-  state.navi_segment_4b9 = {f"BYTE_{i + 1}": byte for i, byte in enumerate(raw)}
-  cp = SimpleNamespace(ts_nanos={"NEW_MSG_4B9": {"BYTE_1": 2}})
-  ret = SimpleNamespace(speedLimit=0.0, speedBumpDistance=0.0, schoolZoneActive=False)
-
-  assert not state._update_vehicle_navi_events(cp, ret, False)
-  assert state.vehicleNaviCurves == []
-  assert ret.vehicleNaviCurveSpeed == 0.0
-
-
-def test_vehicle_navi_curve_control_requires_calculated_route():
-  state = _car_state()
-  raw = (1 << 22).to_bytes(8, "little")
-  state.navi_segment_4b9 = {f"BYTE_{i + 1}": byte for i, byte in enumerate(raw)}
-  cp = SimpleNamespace(ts_nanos={"NEW_MSG_4B9": {"BYTE_1": 1}})
-  ret = SimpleNamespace(speedLimit=0.0, speedBumpDistance=0.0, schoolZoneActive=False)
-
-  assert not state._update_vehicle_navi_events(cp, ret, False)
-  assert state.vehicleNaviCurveRouteActive
-  assert ret.vehicleNaviCurveRouteActive
-  assert ret.vehicleNaviCurveRouteState == 1
-  assert state.vehicleNaviCurvePathIndex == 0
-
-  state.navi_segment_4b9 = {f"BYTE_{i + 1}": 0 for i in range(8)}
-  cp.ts_nanos["NEW_MSG_4B9"]["BYTE_1"] = 2
-  assert not state._update_vehicle_navi_events(cp, ret, False)
-  assert not state.vehicleNaviCurveRouteActive
-  assert ret.vehicleNaviCurveRouteState == 0
-  assert state.vehicleNaviCurvePathIndex == 0
-  assert state.vehicleNaviCurves == []
 
 
 def test_vehicle_navi_stale_range_average_releases_section():

@@ -271,13 +271,6 @@ struct CarState {
   vehicleNaviSectionActive @90 :Bool; # stock-navigation kind 7 indicates a non-school speed-limit section
   vehicleNaviSpeed @91 :Float32; # raw speed from the active stock-navigation CAN profile, kph
   vehicleNaviAvailable @92 :Bool; # stock-navigation 0x4BE has been observed during this drive
-  vehicleNaviCurveDistance @93 :Float32; # distance to the controlling stock-navigation 0x4BA curvature spot, meters
-  vehicleNaviCurveSpeed @94 :Float32; # 100% reference speed calculated from the 0x4BA curvature, kph
-  vehicleNaviCurveCurvature @95 :Float32; # decoded ADASIS v2 curvature of the controlling spot, 1/m
-  vehicleNaviCurveRouteActive @96 :Bool; # 0x4B9 confirms that the stock navigation has a calculated route
-  vehicleNaviCurveRouteState @97 :UInt8; # 0x4B9 CalculatedRoute: 0 MPP, 1 calculated route, 2 recalculating, 3 invalid
-  vehicleNaviCurveTargetSpeed @98 :Float32; # factor-adjusted apex target speed for the controlling 0x4BA curvature spot, kph
-
   struct Tpms {
     fl @0 :Float32;
     fr @1 :Float32;

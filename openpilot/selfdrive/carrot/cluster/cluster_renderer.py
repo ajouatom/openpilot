@@ -263,11 +263,6 @@ CRUISE_OVERRIDE_SPEED_CENTER_Y = SPEED_PANEL_Y + 30 * SPEED_HUD_SCALE
 CRUISE_OVERRIDE_LABEL_CENTER_Y = SPEED_PANEL_Y - 4 * SPEED_HUD_SCALE
 CRUISE_OVERRIDE_LABEL_FONT_SIZE = 25 * SPEED_HUD_SCALE
 CRUISE_OVERRIDE_SPEED_FONT_SIZE = 52 * SPEED_HUD_SCALE
-VEHICLE_CURVE_SPEED_CENTER_X = CRUISE_OVERRIDE_SPEED_CENTER_X + 100.0
-VEHICLE_CURVE_SPEED_CENTER_Y = CRUISE_OVERRIDE_SPEED_CENTER_Y
-VEHICLE_CURVE_LABEL_CENTER_Y = CRUISE_OVERRIDE_LABEL_CENTER_Y
-VEHICLE_CURVE_LABEL_FONT_SIZE = 22 * SPEED_HUD_SCALE
-VEHICLE_CURVE_SPEED_FONT_SIZE = 45 * SPEED_HUD_SCALE
 # Center the gap number in the hollow of speed_bg.png's right curl.
 SPEED_GAP_CENTER_X = SPEED_PANEL_X + SPEED_PANEL_W * 0.92
 SPEED_GAP_CENTER_Y = SPEED_PANEL_Y + SPEED_PANEL_H * 0.835
@@ -7083,30 +7078,6 @@ class ClusterUiRenderer:
                 2,
                 anchor="center",
             )
-
-        curve_speed_text = "--"
-        if state.vehicle_navi_curve_speed_kph is not None and state.vehicle_navi_curve_speed_kph > 0.0:
-            curve_speed_text = str(int(round(display_speed(min(state.vehicle_navi_curve_speed_kph, 250.0), self.is_metric))))
-        self._draw_text_with_stroke(
-            "curve",
-            VEHICLE_CURVE_SPEED_CENTER_X,
-            VEHICLE_CURVE_LABEL_CENTER_Y,
-            VEHICLE_CURVE_LABEL_FONT_SIZE,
-            VEHICLE_NAVI,
-            (0, 0, 0),
-            2,
-            anchor="center",
-        )
-        self._draw_text_with_stroke(
-            curve_speed_text,
-            VEHICLE_CURVE_SPEED_CENTER_X,
-            VEHICLE_CURVE_SPEED_CENTER_Y,
-            VEHICLE_CURVE_SPEED_FONT_SIZE,
-            VEHICLE_NAVI,
-            (0, 0, 0),
-            2,
-            anchor="center",
-        )
 
         if state.speed_limit_kph is not None or state.navi_debug is not None:
             center = rl.Vector2(SPEED_LIMIT_SIGN_CENTER_X, SPEED_LIMIT_SIGN_CENTER_Y)

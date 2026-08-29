@@ -548,33 +548,6 @@ def test_ev_mode_indicator_fits_between_three_digit_speeds() -> None:
   assert cruise_left - ev_right >= 3.0
 
 
-def test_vehicle_curve_reference_speed_draws_right_of_cruise_override_and_caps_at_250() -> None:
-  renderer = object.__new__(ClusterUiRenderer)
-  renderer._current_theme = lambda: LIGHT_CLUSTER_THEME
-  renderer._speed_bg_texture = None
-  draws = []
-  renderer._draw_text_with_stroke = lambda *args, **kwargs: draws.append((args, kwargs))
-
-  renderer._draw_speed_block(_cluster_state(vehicle_navi_curve_speed_kph=999.0))
-
-  curve_label = next(args for args, _ in draws if args[0] == "curve")
-  curve_speed = next(args for args, _ in draws if args[0] == "250")
-  assert curve_label[1:5] == (
-    cluster_renderer.VEHICLE_CURVE_SPEED_CENTER_X,
-    cluster_renderer.VEHICLE_CURVE_LABEL_CENTER_Y,
-    cluster_renderer.VEHICLE_CURVE_LABEL_FONT_SIZE,
-    cluster_renderer.VEHICLE_NAVI,
-  )
-  assert curve_speed[1:5] == (
-    cluster_renderer.VEHICLE_CURVE_SPEED_CENTER_X,
-    cluster_renderer.VEHICLE_CURVE_SPEED_CENTER_Y,
-    cluster_renderer.VEHICLE_CURVE_SPEED_FONT_SIZE,
-    cluster_renderer.VEHICLE_NAVI,
-  )
-  assert cluster_renderer.VEHICLE_CURVE_SPEED_CENTER_X - cluster_renderer.CRUISE_OVERRIDE_SPEED_CENTER_X == 100.0
-  assert cluster_renderer.VEHICLE_CURVE_SPEED_FONT_SIZE < cluster_renderer.CRUISE_OVERRIDE_SPEED_FONT_SIZE
-
-
 @pytest.mark.parametrize(("active", "expected_draws"), ((False, 0), (True, 1)))
 def test_egpu_indicator_draws_only_while_active(monkeypatch, active, expected_draws) -> None:
   renderer = object.__new__(ClusterUiRenderer)
