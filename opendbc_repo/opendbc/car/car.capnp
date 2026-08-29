@@ -276,6 +276,7 @@ struct CarState {
   vehicleNaviCurveCurvature @95 :Float32; # decoded ADASIS v2 curvature of the controlling spot, 1/m
   vehicleNaviCurveRouteActive @96 :Bool; # 0x4B9 confirms that the stock navigation has a calculated route
   vehicleNaviCurveRouteState @97 :UInt8; # 0x4B9 CalculatedRoute: 0 MPP, 1 calculated route, 2 recalculating, 3 invalid
+  vehicleNaviCurveTargetSpeed @98 :Float32; # factor-adjusted apex target speed for the controlling 0x4BA curvature spot, kph
 
   struct Tpms {
     fl @0 :Float32;

@@ -432,7 +432,7 @@ class OpenpilotLiveSource:
             else None
         )
         vehicle_navi_available = bool(safe_get(carrot_man, "vehicleNaviAvailable", False))
-        vehicle_navi_curve_speed_kph = safe_optional_float(car_state, "vehicleNaviCurveSpeed")
+        vehicle_navi_curve_speed_kph = safe_optional_float(car_state, "vehicleNaviCurveTargetSpeed")
         if vehicle_navi_curve_speed_kph is None or vehicle_navi_curve_speed_kph <= 0.0:
             vehicle_navi_curve_speed_kph = None
         else:

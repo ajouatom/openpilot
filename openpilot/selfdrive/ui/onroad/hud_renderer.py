@@ -701,7 +701,7 @@ class HudRenderer(Widget):
       )
 
     try:
-      curve_speed_kph = float(sm["carState"].vehicleNaviCurveSpeed)
+      curve_speed_kph = float(sm["carState"].vehicleNaviCurveTargetSpeed)
     except Exception:
       curve_speed_kph = 0.0
     if curve_speed_kph > 0.0:

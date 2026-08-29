@@ -445,9 +445,10 @@ on-road UI, mici UI, cluster live UI의 보조속도 영역은 선택된 감속 
 `desiredSource` 값 자체는 바꾸지 않으며, cruise가 꺼졌을 때 차량 내비 속도를 보조속도처럼 강제로 표시하지 않는다.
 
 보조속도 오른쪽의 라벤더 `curve` 값은 제어 winner와 별개로 `carState.vehicleNaviCurveSpeed`의
-100% 기준 커브속도를 표시한다. 유효한 곡률 spot이 없으면 `--`, 있으면 250 km/h를 상한으로 표시하며
-imperial UI에서는 상한 적용 후 mph로 변환한다. 따라서 보조속도는 현재 적용 중인 감속 목표이고,
-`curve`는 `VehicleNaviCurveSpeedFactor` 적용 전 CAN 곡률 계산값이다.
+100% 기준 커브속도에 `VehicleNaviCurveSpeedFactor`와 `AutoCurveSpeedLowerLimit`을 적용한
+`carState.vehicleNaviCurveTargetSpeed`를 표시한다. 유효한 곡률 spot이 없으면 `--`, 있으면 250 km/h를
+상한으로 표시하며 imperial UI에서는 상한 적용 후 mph로 변환한다. 따라서 보조속도는 거리까지 반영한
+현재 감속 명령이고, `curve`는 해당 곡률 정점에서 사용할 비율 적용 목표속도다.
 세 자리 보조속도와 겹쳐 백의 자리가 가려지지 않도록 `curve` 값은 보조속도보다 작게 그리고 오른쪽으로
 분리해 표시한다. 디바이스 UI와 USB 클러스터가 같은 배치 원칙을 사용한다.
 
@@ -615,6 +616,7 @@ Hyundai CAN-FD 차량에서 수신되는 `0x4BA` ADASIS v2 Profile Short의 `Pro
 
 - `vehicleNaviCurveDistance`: 현재 선택된 곡률점까지 거리
 - `vehicleNaviCurveSpeed`: 목표 횡가속도 1.9 m/s²로 계산한 100% 기준 속도
+- `vehicleNaviCurveTargetSpeed`: 사용자 비율과 최저속도를 적용한 곡률 정점 목표속도
 - `vehicleNaviCurveCurvature`: 복호화한 곡률(1/m)
 
 `VehicleNaviCurveControl=1`이고 목적지 탐색 경로(`CalculatedRoute=1`)일 때 `CarrotServ`가 이 값을
