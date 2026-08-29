@@ -6,6 +6,8 @@ sys.path.insert(0, str(CLUSTER_DIR))
 
 from cluster_usb_display import (
   TURZX_BRIGHTNESS_COMMAND_MAX,
+  USBGPU_H264_CHUNK_GAP_S,
+  USBGPU_H264_MAX_CHUNK_SIZE,
   TuringUsbDisplay,
   _transparent_h264_overlay_png,
 )
@@ -76,6 +78,7 @@ def test_preopen_orientation_is_carried_by_h264_setup_without_setting_transactio
       calls.append((command_id, "clear-overlay", {8: len(frame)}, kwargs))
   )
   display._h264_chunk_size = lambda _requested: 202752
+  monkeypatch.setattr("cluster_usb_display._usbgpu_transfer_active", lambda: False)
   monkeypatch.setattr("cluster_usb_display.time.sleep", lambda _seconds: None)
 
   assert display.start_h264_stream() == 202752
@@ -86,6 +89,30 @@ def test_preopen_orientation_is_carried_by_h264_setup_without_setting_transactio
   assert all(call[3].get("no_ack_gap_s") == 0.0 for call in calls[:6])
   assert calls[6][3] == {"drain_input": True}
   assert calls[7][3]["no_ack_gap_s"] == 0.0
+
+
+def test_h264_egpu_coexistence_caps_chunks_and_yields_after_send(monkeypatch):
+  display = TuringUsbDisplay(fast_write=True)
+  display.dev = object()
+  display._send_optional_command = lambda *_args, **_kwargs: None
+  display._send_frame_no_ack = lambda *_args, **_kwargs: None
+  display._h264_chunk_size = lambda _requested: 202752
+  sent = []
+  sleeps = []
+  display._send_h264_chunk_no_ack = (
+    lambda chunk, *, is_last, drain_input: sent.append((chunk, is_last, drain_input))
+  )
+  monkeypatch.setattr("cluster_usb_display._usbgpu_transfer_active", lambda: True)
+  monkeypatch.setattr("cluster_usb_display.time.sleep", sleeps.append)
+
+  assert display.start_h264_stream() == USBGPU_H264_MAX_CHUNK_SIZE
+  assert display._h264_chunk_gap_s == USBGPU_H264_CHUNK_GAP_S
+
+  sleeps.clear()
+  display.send_h264_chunk(b"frame", wait_for_ack=False)
+
+  assert sent == [(b"frame", False, False)]
+  assert sleeps == [USBGPU_H264_CHUNK_GAP_S]
 
 
 def test_h264_clear_overlay_matches_captured_shape_and_size():
