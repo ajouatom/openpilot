@@ -88,6 +88,23 @@ def test_vehicle_navi_curve_uses_curve_specific_decel_end_time():
   assert serv._vehicle_navi_curve_speed(CS) == pytest.approx(expected)
 
 
+def test_vehicle_navi_curve_display_speed_tracks_current_position_candidate():
+  serv = _serv(1)
+  serv.vehicleNaviCurveControl = True
+  CS = _car_state()
+  CS.vehicleNaviCurveDistance = 150
+  CS.vehicleNaviCurveSpeed = 50
+  CS.vehicleNaviCurveCurvature = 0.01
+  CS.vehicleNaviCurveRouteActive = True
+
+  current_speed = serv._vehicle_navi_curve_speed(CS)
+  assert serv._vehicle_navi_curve_display_speed(CS, current_speed) == pytest.approx(current_speed)
+  assert serv._vehicle_navi_curve_display_speed(CS, 999) == 250
+
+  serv.vehicleNaviCurveControl = False
+  assert serv._vehicle_navi_curve_display_speed(CS, current_speed) == 0
+
+
 def test_vehicle_navi_curve_mpp_control_is_separate_opt_in():
   serv = _serv(1)
   serv.vehicleNaviCurveControl = True

@@ -800,7 +800,7 @@ class HudRenderer(Widget):
         draw_text_ui_style(set_label_text, set_x, set_y, set_font, set_color, font=self._font_display, border_width=1.0, shadow_offset=3.0, align="left_top", y_offset=0.0)
 
       try:
-        curve_speed_kph = float(ui_state.sm["carState"].vehicleNaviCurveTargetSpeed)
+        curve_speed_kph = float(ui_state.sm["carrotMan"].vehicleNaviCurveCurrentSpeed)
       except Exception:
         curve_speed_kph = 0.0
       if curve_speed_kph > 0.0:
