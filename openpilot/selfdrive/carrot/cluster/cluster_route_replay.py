@@ -85,6 +85,7 @@ DBC_SIGNAL_RE = re.compile(
     r'^\s*SG_ (\w+) : (\d+)\|(\d+)@([01])([+-]) \(([0-9.+\-eE]+),([0-9.+\-eE]+)\)'
 )
 ROUTE_SCHEMA_CACHE_NAME = "carrotpilot_cluster_capnp_v1"
+ROUTE_SCHEMA_CACHE_ENV = "CARROT_ROUTE_SCHEMA_CACHE_DIR"
 LOG_FILENAMES = {
     "qlog": "qlog.zst",
     "rlog": "rlog.zst",
@@ -5188,7 +5189,12 @@ def prepare_schema_copy() -> Path:
     if car_schema is None:
         raise RuntimeError(f"openpilot car schema not found near: {openpilot_root}")
 
-    schema_dir = Path(tempfile.gettempdir()) / ROUTE_SCHEMA_CACHE_NAME
+    schema_dir_override = os.environ.get(ROUTE_SCHEMA_CACHE_ENV)
+    schema_dir = (
+        Path(schema_dir_override)
+        if schema_dir_override
+        else Path(tempfile.gettempdir()) / ROUTE_SCHEMA_CACHE_NAME
+    )
     include_dir = schema_dir / "include"
     include_dir.mkdir(parents=True, exist_ok=True)
     for name in ("log.capnp", "custom.capnp", "deprecated.capnp"):

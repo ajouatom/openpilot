@@ -10,6 +10,7 @@ sys.path.insert(0, str(CLUSTER_DIR))
 from cluster_live import OpenpilotLiveSource
 from cluster_models import ClusterAlert, ModelPathPoint
 from cluster_route_replay import (
+  ROUTE_SCHEMA_CACHE_ENV,
   RawCornerObject,
   RouteLogParser,
   StableCornerObjectTracker,
@@ -19,8 +20,22 @@ from cluster_route_replay import (
   corner_track_label,
   frame_to_state,
   model_lead_detections_from_model_v2,
+  prepare_schema_copy,
   route_video_path_for_stream,
 )
+
+
+def test_schema_copy_honors_process_private_cache_directory(
+  tmp_path,
+  monkeypatch,
+):
+  schema_dir = tmp_path / "private-schema"
+  monkeypatch.setenv(ROUTE_SCHEMA_CACHE_ENV, str(schema_dir))
+
+  assert prepare_schema_copy() == schema_dir
+  assert (schema_dir / "log.capnp").is_file()
+  assert (schema_dir / "car.capnp").is_file()
+  assert (schema_dir / "include" / "c++.capnp").is_file()
 
 
 def corner_object(t, slot, object_id, age, x, y, vx, vy):
