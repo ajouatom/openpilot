@@ -32,6 +32,7 @@ from openpilot.selfdrive.carrot.radar.tools.radar_lead_simulator import (
   load_validation_motion_mode,
   load_validation_probability,
   load_validation_sensitivity,
+  load_visual_replay_cache,
   motion_points_at_model_time,
   monotonic_log_events,
   preferred_radar_motion_sensor,
@@ -41,12 +42,14 @@ from openpilot.selfdrive.carrot.radar.tools.radar_lead_simulator import (
   save_validation_motion_mode,
   save_validation_probability,
   save_validation_sensitivity,
+  save_visual_replay_cache,
   trajectory_history_display_y,
   trajectory_model_review_events,
   update_validation_case_label,
   vision_lead_continuity_segments,
   vision_lead_display_value,
   vision_lead_rgb,
+  visual_replay_cache_path,
 )
 from openpilot.selfdrive.carrot.radar.tools.radar_lead_validation_review import (
   group_cases_by_log,
@@ -189,6 +192,60 @@ def test_visual_review_can_toggle_cached_v1_and_v2(tmp_path) -> None:
   assert ui.use_occupancy_v2
   assert ui.selector is v2
   assert "V2" in ui.status
+
+
+def test_visual_replay_cache_round_trip_and_exact_configuration(tmp_path) -> None:
+  log_path = tmp_path / "rlog.zst"
+  log_path.write_bytes(b"test-log-identity")
+  frames = [
+    frame(
+      (point(1010, 8.0, -3.0, source="corner235"),),
+      time_s=index * 0.1,
+    )
+    for index in range(3)
+  ]
+  v1 = RadarMotionShadowSelector(
+    frames,
+    motion_sensor="corner",
+    enable_radar_tracks=2,
+  )
+  v2 = RadarOccupancyV2Selector(
+    frames,
+    baseline=v1,
+    enable_radar_tracks=2,
+  )
+  cache_path = visual_replay_cache_path(
+    tmp_path / "cache",
+    log_path,
+    motion_mode="normal",
+    cut_in_sensitivity=3,
+    probability_override=None,
+    enable_radar_tracks=2,
+  )
+
+  save_visual_replay_cache(cache_path, frames, v2)
+  cached = load_visual_replay_cache(cache_path)
+
+  assert cached is not None
+  cached_frames, cached_v2 = cached
+  assert cached_frames == frames
+  assert cached_v2.selections == v2.selections
+  assert cached_v2.baseline.selections == v1.selections
+  assert visual_replay_cache_path(
+    tmp_path / "cache",
+    log_path,
+    motion_mode="front",
+    cut_in_sensitivity=3,
+    probability_override=None,
+    enable_radar_tracks=2,
+  ) != cache_path
+
+
+def test_visual_replay_cache_ignores_damaged_file(tmp_path) -> None:
+  cache_path = tmp_path / "damaged.pickle"
+  cache_path.write_bytes(b"not a pickle")
+
+  assert load_visual_replay_cache(cache_path) is None
 
 
 def test_shadow_selector_rejects_far_corner_only_tunnel_fixture() -> None:
@@ -800,6 +857,24 @@ def test_validation_runner_forwards_device_sensitivity_override(tmp_path) -> Non
 
   assert command[command.index("--sensitivity") + 1] == "4"
   assert "--lookahead-s" not in command
+
+
+def test_validation_runner_can_preload_and_consume_private_cache(tmp_path) -> None:
+  command = simulator_command(
+    [{"id": "case-a"}],
+    tmp_path,
+    tmp_path / "cases.json",
+    None,
+    "2/40",
+    False,
+    cache_dir=tmp_path / "cache",
+    preload_only=True,
+    consume_cache=True,
+  )
+
+  assert command[command.index("--cache-dir") + 1] == str(tmp_path / "cache")
+  assert "--preload-only" in command
+  assert "--consume-cache" in command
 
 
 def test_predictor_event_pause_seeks_to_first_unhandled_marker() -> None:

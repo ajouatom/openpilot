@@ -5,9 +5,11 @@ from __future__ import annotations
 
 import argparse
 import bisect
+import hashlib
 import json
 import math
 import os
+import pickle
 import shutil
 import sys
 from collections.abc import Iterable, Mapping, Sequence
@@ -99,6 +101,7 @@ STATIONARY_HANDOFF_MAX_YREL_DELTA_M = 1.5
 VALIDATION_SETTINGS_ENV = "CARROT_RADAR_VALIDATION_SETTINGS"
 VALIDATION_MOTION_MODES = ("normal", "front")
 VALIDATION_DEFAULT_SENSITIVITY = 3
+VISUAL_REPLAY_CACHE_VERSION = 1
 LEAD_ONE_RADAR_RGB = (246, 142, 55)
 LEAD_ONE_VISION_RGB = (72, 145, 255)
 LEAD_ONE_VISION_WEAK_RGB = (104, 205, 255)
@@ -2058,6 +2061,80 @@ class RadarOccupancyV2Selector:
     if frame_index is None:
       raise ValueError("occupancy V2 selector requires a frame index")
     return self.selections[frame_index]
+
+
+def visual_replay_cache_path(
+  cache_dir: Path,
+  log_path: Path,
+  *,
+  motion_mode: str,
+  cut_in_sensitivity: int,
+  probability_override: float | None,
+  enable_radar_tracks: int,
+) -> Path:
+  """Return the private cache path for one exact visual replay setup."""
+  log_stat = log_path.stat()
+  source_stat = Path(__file__).stat()
+  identity = json.dumps({
+    "version": VISUAL_REPLAY_CACHE_VERSION,
+    "source_mtime_ns": source_stat.st_mtime_ns,
+    "log": str(log_path.resolve()),
+    "log_size": log_stat.st_size,
+    "log_mtime_ns": log_stat.st_mtime_ns,
+    "motion_mode": motion_mode,
+    "cut_in_sensitivity": int(cut_in_sensitivity),
+    "probability_override": probability_override,
+    "enable_radar_tracks": int(enable_radar_tracks),
+  }, sort_keys=True, separators=(",", ":"))
+  digest = hashlib.sha256(identity.encode("utf-8")).hexdigest()
+  return cache_dir / f"visual-replay-{digest}.pickle"
+
+
+def save_visual_replay_cache(
+  cache_path: Path,
+  frames: list[RadarFrame],
+  selector: RadarOccupancyV2Selector,
+) -> None:
+  """Atomically save a fully built replay for the foreground reviewer."""
+  cache_path.parent.mkdir(parents=True, exist_ok=True)
+  temporary_path = cache_path.with_name(
+    f"{cache_path.name}.{os.getpid()}.tmp",
+  )
+  try:
+    with temporary_path.open("wb") as cache_file:
+      pickle.dump(
+        {
+          "version": VISUAL_REPLAY_CACHE_VERSION,
+          "frames": frames,
+          "selector": selector,
+        },
+        cache_file,
+        protocol=pickle.HIGHEST_PROTOCOL,
+      )
+    temporary_path.replace(cache_path)
+  finally:
+    temporary_path.unlink(missing_ok=True)
+
+
+def load_visual_replay_cache(
+  cache_path: Path,
+) -> tuple[list[RadarFrame], RadarOccupancyV2Selector] | None:
+  """Load a prepared replay, returning None for stale or damaged data."""
+  if not cache_path.is_file():
+    return None
+  try:
+    with cache_path.open("rb") as cache_file:
+      payload = pickle.load(cache_file)
+    if (
+      not isinstance(payload, dict)
+      or payload.get("version") != VISUAL_REPLAY_CACHE_VERSION
+      or not isinstance(payload.get("frames"), list)
+      or not isinstance(payload.get("selector"), RadarOccupancyV2Selector)
+    ):
+      return None
+    return payload["frames"], payload["selector"]
+  except (EOFError, OSError, pickle.PickleError, AttributeError, TypeError):
+    return None
 
 
 def _route_replay_module() -> Any:
@@ -5003,6 +5080,21 @@ def parse_args() -> argparse.Namespace:
     default="",
     help="queue position shown in the window title, for example 1/40",
   )
+  parser.add_argument(
+    "--cache-dir",
+    type=Path,
+    help="private replay cache directory used by the validation queue",
+  )
+  parser.add_argument(
+    "--preload-only",
+    action="store_true",
+    help="build the replay cache and exit without opening a window",
+  )
+  parser.add_argument(
+    "--consume-cache",
+    action="store_true",
+    help="remove a prepared replay cache after loading it",
+  )
   return parser.parse_args()
 
 
@@ -5027,31 +5119,78 @@ def main() -> int:
     raise SystemExit("--sensitivity must be between 0 and 5")
   if args.front_only and args.motion_mode not in (None, "front"):
     raise SystemExit("--front-only conflicts with --motion-mode normal")
-  print(f"Loading {args.rlog} ...", flush=True)
-  frames = load_frames(args.rlog)
+  if args.preload_only and args.cache_dir is None:
+    raise SystemExit("--preload-only requires --cache-dir")
   motion_mode = (
     "front"
     if args.front_only
     else args.motion_mode or load_validation_motion_mode()
-  )
-  motion_sensor = (
-    "front"
-    if motion_mode == "front"
-    else preferred_radar_motion_sensor(frames)
   )
   cut_in_sensitivity = (
     load_validation_sensitivity()
     if args.sensitivity is None
     else int(args.sensitivity)
   )
+  cache_path = (
+    visual_replay_cache_path(
+      args.cache_dir,
+      args.rlog,
+      motion_mode=motion_mode,
+      cut_in_sensitivity=cut_in_sensitivity,
+      probability_override=args.prob,
+      enable_radar_tracks=args.enable_radar_tracks,
+    )
+    if args.cache_dir is not None
+    else None
+  )
+  cached = (
+    load_visual_replay_cache(cache_path)
+    if cache_path is not None
+    else None
+  )
+  if cached is not None:
+    frames, v2_selector = cached
+    v1_selector = v2_selector.baseline
+    motion_sensor = v1_selector.motion_sensor
+    probability = v1_selector.decision_threshold
+    print(f"Using prepared replay cache for {args.rlog}", flush=True)
+    if args.consume_cache and cache_path is not None:
+      cache_path.unlink(missing_ok=True)
+  else:
+    print(f"Loading {args.rlog} ...", flush=True)
+    frames = load_frames(args.rlog)
+    motion_sensor = (
+      "front"
+      if motion_mode == "front"
+      else preferred_radar_motion_sensor(frames)
+    )
+    motion_policy = radar_motion_sensitivity(
+      cut_in_sensitivity,
+      motion_sensor,
+    )
+    probability = (
+      motion_policy.cut_in_threshold
+      if args.prob is None
+      else float(args.prob)
+    )
+    print("Building physical dPath predictor history ...", flush=True)
+    v1_selector = RadarMotionShadowSelector(
+      frames,
+      probability if args.prob is not None else None,
+      cut_in_sensitivity=cut_in_sensitivity,
+      motion_sensor=motion_sensor,
+      enable_radar_tracks=args.enable_radar_tracks,
+    )
+    v2_selector = RadarOccupancyV2Selector(
+      frames,
+      baseline=v1_selector,
+      enable_radar_tracks=args.enable_radar_tracks,
+    )
+    if args.preload_only and cache_path is not None:
+      save_visual_replay_cache(cache_path, frames, v2_selector)
   motion_policy = radar_motion_sensitivity(
     cut_in_sensitivity,
     motion_sensor,
-  )
-  probability = (
-    motion_policy.cut_in_threshold
-    if args.prob is None
-    else float(args.prob)
   )
   if motion_mode == "front":
     ignored = sum(
@@ -5063,7 +5202,6 @@ def main() -> int:
       f"Front-only replay: ignoring {ignored} measured corner-radar points.",
       flush=True,
     )
-  print("Building physical dPath predictor history ...", flush=True)
   print(
     f"Validation {motion_sensor} CUT-IN: sensitivity "
     + f"{cut_in_sensitivity} "
@@ -5074,32 +5212,20 @@ def main() -> int:
     + f">={VALIDATION_MIN_CONTINUOUS_OVERLAP_S:.1f}s",
     flush=True,
   )
-  v1_selector = RadarMotionShadowSelector(
-    frames,
-    (
-      probability
-      if args.prob is not None
-      else None
-    ),
-    cut_in_sensitivity=cut_in_sensitivity,
-    motion_sensor=motion_sensor,
-    enable_radar_tracks=args.enable_radar_tracks,
-  )
   selector = (
     v1_selector
     if args.legacy_v1
-    else RadarOccupancyV2Selector(
-      frames,
-      baseline=v1_selector,
-      enable_radar_tracks=args.enable_radar_tracks,
-    )
+    else v2_selector
   )
+  if args.preload_only:
+    print(f"Prepared replay cache for {args.rlog}", flush=True)
+    return 0
   print_summary(args.rlog, frames, selector)
   if args.summary:
     return 0
   position = f"[{args.review_position}] " if args.review_position else ""
   display_name = f"{position}{args.rlog.parent.name}/{args.rlog.name}"
-  SimulatorUI(
+  ui = SimulatorUI(
     frames,
     selector,
     display_name,
@@ -5109,7 +5235,10 @@ def main() -> int:
     display_threshold=probability,
     motion_mode=motion_mode,
     cut_in_sensitivity=cut_in_sensitivity,
-  ).run(args.start, args.paused, args.screenshot, args.exit_at_end)
+  )
+  if args.legacy_v1:
+    ui.v2_selector = v2_selector
+  ui.run(args.start, args.paused, args.screenshot, args.exit_at_end)
   return 0
 
 
@@ -5155,6 +5284,7 @@ __all__ = (
   "load_validation_probability",
   "load_validation_sensitivity",
   "load_frames",
+  "load_visual_replay_cache",
   "main",
   "model_line_y",
   "motion_points_at_model_time",
@@ -5172,6 +5302,7 @@ __all__ = (
   "save_validation_lookahead",
   "save_validation_probability",
   "save_validation_sensitivity",
+  "save_visual_replay_cache",
   "prediction_with_validation_lookahead",
   "trajectory_history_display_y",
   "trajectory_history_display_position",
@@ -5181,6 +5312,7 @@ __all__ = (
   "update_validation_case_label",
   "validation_review_events",
   "validation_settings_path",
+  "visual_replay_cache_path",
   "vision_lead_continuity_segments",
   "vision_lead_display_value",
   "vision_lead_rgb",
