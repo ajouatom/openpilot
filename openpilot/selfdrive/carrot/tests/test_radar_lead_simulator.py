@@ -56,6 +56,7 @@ from openpilot.selfdrive.carrot.radar.tools.radar_lead_validation_review import 
   VALIDATION_PRELOAD_AHEAD,
   group_cases_by_log,
   rolling_preload_indexes,
+  simulator_environment,
   simulator_command,
 )
 from openpilot.selfdrive.carrot.radar.tools.validate_radar_lead_model import (
@@ -1032,11 +1033,16 @@ def test_validation_runner_replenishes_five_log_buffer_to_end(
     list=False,
   )
   preload_commands: list[list[str]] = []
+  preload_schema_dirs: list[str] = []
   foreground_commands: list[list[str]] = []
+  foreground_schema_dirs: list[str] = []
 
   class FakePreload:
     def __init__(self, command, **_kwargs) -> None:
       preload_commands.append(command)
+      preload_schema_dirs.append(
+        _kwargs["env"][radar_lead_validation_review.ROUTE_SCHEMA_CACHE_ENV],
+      )
 
     def poll(self) -> int:
       return 0
@@ -1051,10 +1057,15 @@ def test_validation_runner_replenishes_five_log_buffer_to_end(
     def kill(self) -> None:
       raise AssertionError("completed preload must not be killed")
 
-  def fake_run(command, *, check):
+  def fake_run(command, *, check, env):
     assert not check
     foreground_commands.append(command)
-    return SimpleNamespace(returncode=0)
+    foreground_schema_dirs.append(
+      env[radar_lead_validation_review.ROUTE_SCHEMA_CACHE_ENV],
+    )
+    return SimpleNamespace(
+      returncode=9 if len(foreground_commands) == 1 else 0,
+    )
 
   monkeypatch.setattr(radar_lead_validation_review, "parse_args", lambda: args)
   monkeypatch.setattr(
@@ -1068,7 +1079,7 @@ def test_validation_runner_replenishes_five_log_buffer_to_end(
     fake_run,
   )
 
-  assert radar_lead_validation_review.main() == 0
+  assert radar_lead_validation_review.main() == 1
   preload_ids = [
     command[command.index("--validation-case") + 1]
     for command in preload_commands
@@ -1080,6 +1091,20 @@ def test_validation_runner_replenishes_five_log_buffer_to_end(
   assert preload_ids[:5] == [f"case-{index}" for index in range(1, 6)]
   assert preload_ids == [f"case-{index}" for index in range(1, 8)]
   assert foreground_ids == [f"case-{index}" for index in range(8)]
+  assert len(set(preload_schema_dirs)) == 7
+  assert len(set(foreground_schema_dirs)) == 8
+
+
+def test_validation_runner_gives_each_loader_a_private_schema_dir(
+  tmp_path,
+) -> None:
+  first = simulator_environment(tmp_path, 1)
+  second = simulator_environment(tmp_path, 2)
+
+  key = radar_lead_validation_review.ROUTE_SCHEMA_CACHE_ENV
+  assert first[key] == str(tmp_path / "schema" / "log-001")
+  assert second[key] == str(tmp_path / "schema" / "log-002")
+  assert first[key] != second[key]
 
 
 def test_lead_speed_continuity_converts_vlead_to_kph() -> None:

@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -16,6 +17,7 @@ CARROT_ROOT = SCRIPT_DIR.parents[1]
 DEFAULT_CASES = CARROT_ROOT / "cluster" / "cutin_validation_cases.json"
 SIMULATOR_MODULE = "openpilot.selfdrive.carrot.radar.tools.radar_lead_simulator"
 VALIDATION_PRELOAD_AHEAD = 5
+ROUTE_SCHEMA_CACHE_ENV = "CARROT_ROUTE_SCHEMA_CACHE_DIR"
 
 
 def group_cases_by_log(cases: list[dict]) -> list[list[dict]]:
@@ -90,6 +92,14 @@ def simulator_command(
   if consume_cache:
     command.append("--consume-cache")
   return command
+
+
+def simulator_environment(cache_dir: Path, group_index: int) -> dict[str, str]:
+  environment = os.environ.copy()
+  environment[ROUTE_SCHEMA_CACHE_ENV] = str(
+    cache_dir / "schema" / f"log-{group_index:03d}",
+  )
+  return environment
 
 
 def _stop_preloads(preloads: dict[int, subprocess.Popen]) -> None:
@@ -190,6 +200,7 @@ def main() -> int:
   ]
   route_available = [route.is_file() for route in routes]
   missing = 0
+  failed_logs = 0
   opened_cases = 0
   opened_logs = 0
   with tempfile.TemporaryDirectory(prefix="carrot-radar-review-") as directory:
@@ -218,6 +229,7 @@ def main() -> int:
         )
         preloads[candidate_index] = subprocess.Popen(
           command,
+          env=simulator_environment(cache_dir, candidate_index),
           stdout=subprocess.DEVNULL,
           stderr=subprocess.DEVNULL,
         )
@@ -263,9 +275,19 @@ def main() -> int:
           cache_dir=cache_dir,
           consume_cache=True,
         )
-        result = subprocess.run(command, check=False)
+        result = subprocess.run(
+          command,
+          check=False,
+          env=simulator_environment(cache_dir, group_index),
+        )
         if result.returncode != 0:
-          return result.returncode
+          failed_logs += 1
+          print(
+            f"[{index:02d}/{len(groups):02d}] viewer exited with "
+            + f"code {result.returncode}; continuing with the next log",
+            flush=True,
+          )
+          continue
         opened_logs += 1
         opened_cases += len(group)
     finally:
@@ -274,7 +296,7 @@ def main() -> int:
     f"\nVisual review complete: {opened_cases}/{len(cases)} labeled windows "
     + f"in {opened_logs}/{len(groups)} unique logs"
   )
-  return int(missing > 0)
+  return int(missing > 0 or failed_logs > 0)
 
 
 if __name__ == "__main__":
