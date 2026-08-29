@@ -58,6 +58,8 @@ CMD_GET_STREAM_STATUS = 122
 CMD_STOP_STREAM = 123
 DEFAULT_H264_CHUNK_SIZE = 202752
 MAX_H264_CHUNK_SIZE = 1024 * 1024
+USBGPU_H264_MAX_CHUNK_SIZE = 64 * 1024
+USBGPU_H264_CHUNK_GAP_S = 0.001
 _LIBUSB_DLL_DIR_HANDLE = None
 _LIBUSB_BACKEND = None
 
@@ -95,6 +97,20 @@ def _set_cluster_hud_connected(connected: bool) -> None:
         pass
     except Exception as exc:
         print(f"Warning: failed to update ClusterHudConnected: {exc}", flush=True)
+
+
+def _usbgpu_transfer_active() -> bool:
+    """Return whether the driving model is actively using the shared USB eGPU."""
+    try:
+        from openpilot.common.params import Params
+
+        return Params().get_bool("UsbGpuActive")
+    except ModuleNotFoundError:
+        # PC replay runs may not have openpilot's compiled params extension.
+        return False
+    except Exception as exc:
+        print(f"Warning: failed to inspect eGPU state for TURZX pacing: {exc}", flush=True)
+        return False
 
 
 def product_id_for_hud_mode(hud_mode: int) -> int | None:
@@ -237,6 +253,7 @@ class TuringUsbDisplay:
         self._turbojpeg = None
         self._turbojpeg_unavailable = False
         self._jpeg_buffer = BytesIO()
+        self._h264_chunk_gap_s = 0.0
         # Keep sync + setting atomic with frame writes.
         self._usb_lock = threading.RLock()
         self.profile_enabled = os.environ.get("CLUSTER_PROFILE_USB") == "1"
@@ -660,6 +677,16 @@ class TuringUsbDisplay:
             time.sleep(USB_H264_FRAME_RATE_GAP_S)
 
         chunk_size = self._h264_chunk_size(requested_chunk_size)
+        self._h264_chunk_gap_s = 0.0
+        if _usbgpu_transfer_active():
+            negotiated_chunk_size = chunk_size
+            chunk_size = min(chunk_size, USBGPU_H264_MAX_CHUNK_SIZE)
+            self._h264_chunk_gap_s = USBGPU_H264_CHUNK_GAP_S
+            print(
+                f"TURZX H264 eGPU coexistence pacing: chunk {negotiated_chunk_size}->{chunk_size} bytes, "
+                f"gap={self._h264_chunk_gap_s * 1000.0:.1f} ms",
+                flush=True,
+            )
         print(f"TURZX H264 stream chunk size: {chunk_size} bytes", flush=True)
         return chunk_size
 
@@ -711,6 +738,8 @@ class TuringUsbDisplay:
                     self._h264_flow_control(target_queue_depth=3)
             else:
                 self._send_h264_chunk_no_ack(chunk, is_last=is_last, drain_input=not self.fast_write)
+            if self._h264_chunk_gap_s > 0.0:
+                time.sleep(self._h264_chunk_gap_s)
         except Exception as exc:
             raise RuntimeError(f"TURZX USB H264 chunk upload failed: {exc}") from exc
 
