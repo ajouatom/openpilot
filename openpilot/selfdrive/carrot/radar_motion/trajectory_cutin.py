@@ -49,6 +49,8 @@ FRONT_CURVE_ALIAS_MIN_ABS_YAW_RATE_RAD_S = 0.025
 CORNER_CURVE_ALIAS_MIN_ABS_YAW_RATE_RAD_S = 0.040
 CORNER_CURVE_ALIAS_MIN_ABS_YREL_M = 4.0
 CORNER_CURVE_ALIAS_MIN_OFFSET_DISCREPANCY_M = 2.0
+CORNER_CURVE_MAX_REPORTED_INWARD_MPS = 3.0
+CORNER_CURVE_MIN_RATE_DISAGREEMENT_MPS = 1.5
 PAIRED_OUTER_BODY_MIN_REPORTED_INWARD_MPS = 0.15
 PAIRED_OUTER_BODY_MAX_VREL_MPS = 1.0
 PAIRED_OUTER_BODY_MAX_ABS_YAW_RATE_RAD_S = 0.040
@@ -689,6 +691,15 @@ class TrajectoryCutInDetector:
           and not vision_supported
           and reported_inward
           < PAIRED_OUTER_BODY_MIN_REPORTED_INWARD_MPS
+        )
+        or (
+          point.source.startswith("corner")
+          and recent_abs_yaw_max
+          >= CORNER_CURVE_ALIAS_MIN_ABS_YAW_RATE_RAD_S
+          and reported_inward
+          > CORNER_CURVE_MAX_REPORTED_INWARD_MPS
+          and reported_inward - inward_rate
+          >= CORNER_CURVE_MIN_RATE_DISAGREEMENT_MPS
         )
       )
       front_curve_motion_supported = (

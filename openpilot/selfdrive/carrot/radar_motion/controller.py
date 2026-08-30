@@ -31,6 +31,7 @@ from openpilot.selfdrive.carrot.radar_motion.primary import (
   match_dpath_primary_lead,
   prefer_front_radar_kinematics,
   snapshot_radar_points,
+  stationary_vision_support_probability,
   vision_only_lead_allowed,
 )
 from openpilot.selfdrive.carrot.radar_motion.trajectory_cutin import (
@@ -581,10 +582,6 @@ class DPathRadarController:
         vision is not None
         and vision_only_lead_allowed(
           self.enable_radar_tracks,
-          side_cutin_supported=(
-            self.primary_matcher
-            .vision_only_side_cutin_supported
-          ),
         )
       ):
         lead_one = lead_from_vision(
@@ -766,11 +763,15 @@ class DPathRadarController:
       if prediction.track_id == primary_track_id
     ), default=0.0)
     stationary_primary_candidates = []
+    primary_vision = self.primary_matcher.vision_fallback
     for point, _, projection in scoped_motion_points:
       if not _is_corner(point):
         continue
+      model_probability = stationary_vision_support_probability(
+        primary_vision, point,
+      )
       lead = self._lead_from_radar_point(
-        point, projection.d_path, 0.03, 0.0,
+        point, projection.d_path, model_probability, 0.0,
       )
       stationary_primary_candidates.append(DPathLeadCandidate(
         lead=lead,
