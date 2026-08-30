@@ -133,7 +133,6 @@ class CarrotPlanner:
     self.jerk_factor = 1.0
     self.jerk_factor_apply = 1.0
 
-    self.j_lead_factor = 0.0
     self.lead_response_mode = 0
 
     self.activeCarrot = 0
@@ -181,7 +180,6 @@ class CarrotPlanner:
       self.cruiseMaxVals6 = self.params.get_float("CruiseMaxVals6") / 100.
     elif self.params_count == 40:
       self.stop_distance = self.params.get_float("StopDistanceCarrot") / 100.
-      self.j_lead_factor = self.params.get_float("JLeadFactor3") / 100.
       self.lead_response_mode = int(np.clip(
         self.params.get_int("LeadResponseMode"), 0, 2,
       ))
