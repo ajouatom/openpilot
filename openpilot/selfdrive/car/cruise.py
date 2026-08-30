@@ -731,7 +731,7 @@ class VCruiseCarrot:
     self.nRoadLimitSpeed_last = self.nRoadLimitSpeed
     return v_cruise_kph
 
-  def _cruise_control(self, enable, cancel_timer, reason):
+  def _cruise_control(self, enable, cancel_timer, reason, allow_cancel_state=False):
     if enable > 0 and not self._cruise_available:
       self._activate_cruise = 0
       self._add_log(reason + " > Cruise unavailable")
@@ -744,7 +744,7 @@ class VCruiseCarrot:
       self._activate_cruise = 0
       self._add_log(reason + " > Brake hold interlock active")
       return
-    if self._cruise_cancel_state: # and self._soft_hold_active != 2:
+    if self._cruise_cancel_state and not (allow_cancel_state and enable > 0):
       self._add_log(reason + " > Cancel state")
     elif enable > 0 and self._cancel_timer > 0 and cancel_timer >= 0:
       enable = 0
@@ -778,9 +778,7 @@ class VCruiseCarrot:
 
   def _engage_soft_hold(self):
     self._soft_hold_active = 2
-    if self.soft_hold_on_cancel:
-      self._cruise_cancel_state = False
-    self._cruise_control(1, -1, "Cruise on (soft hold)")
+    self._cruise_control(1, -1, "Cruise on (soft hold)", allow_cancel_state=self.soft_hold_on_cancel)
 
   def _update_cruise_state(self, CS, CC, v_cruise_kph):
     if not CC.enabled:
