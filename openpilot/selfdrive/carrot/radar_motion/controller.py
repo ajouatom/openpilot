@@ -14,40 +14,27 @@ from openpilot.selfdrive.carrot.radar_motion.lead_selection import (
   DPathStationaryShadowTracker,
   DPathLeadTwoTracker,
   cutin_can_compete_with_primary,
-  front_cutin_motion_supported,
   lead_duplicates_primary,
 )
-from openpilot.selfdrive.carrot.radar_motion.occupancy_v2 import (
-  OccupancyEstimate,
-  OccupancyEvidence,
-  OccupancyStage,
-  RadarOccupancyModelV2,
-  early_control_eligible,
-)
 from openpilot.selfdrive.carrot.radar_motion.predictor import (
-  CornerCutInPredecelTracker,
-  RadarMotionCutIn,
-  RadarMotionDecisionTracker,
   RadarMotionPredictor,
   _scoped_motion_points,
   _visible_scoped_motion_points,
-  corner_cutin_predecel_score,
   project_to_model_path,
-  radar_motion_sensitivity,
-  turning_corner_path_entry_allowed,
 )
 from openpilot.selfdrive.carrot.radar_motion.primary import (
   FrontRadarKinematicAssociator,
   RadarPointSnapshot,
   VisionRadarMatcher,
-  apply_vision_bracket_cutin_support,
   lead_from_vision,
   lead_from_radar_point,
   match_dpath_primary_lead,
   prefer_front_radar_kinematics,
   snapshot_radar_points,
-  vision_lead_from_model,
   vision_only_lead_allowed,
+)
+from openpilot.selfdrive.carrot.radar_motion.trajectory_cutin import (
+  TrajectoryCutInDetector,
 )
 
 
@@ -390,30 +377,8 @@ class DPathRadarController:
     self.lead_dynamics = RadarLeadDynamics()
 
   def _reset_motion_pipeline(self) -> None:
-    sensitivity = radar_motion_sensitivity(
-      self.cut_in_sensitivity,
-      self.motion_sensor,
-    )
-    self.motion_sensitivity = sensitivity
-    self.motion_predictor = RadarMotionPredictor(
-      directional_min_consistency=(
-        sensitivity.directional_min_consistency
-      ),
-    )
-    self.motion_decisions = RadarMotionDecisionTracker(
-      threshold=sensitivity.cut_in_threshold,
-      confirmation_s=sensitivity.confirmation_s,
-    )
-    self.close_front_motion_sensitivity = radar_motion_sensitivity(
-      self.cut_in_sensitivity,
-      "front",
-    )
-    self.close_front_motion_decisions = RadarMotionDecisionTracker(
-      threshold=self.close_front_motion_sensitivity.cut_in_threshold,
-      confirmation_s=self.close_front_motion_sensitivity.confirmation_s,
-    )
-    self.cutin_predecel_tracker = CornerCutInPredecelTracker()
-    self.occupancy_model_v2 = RadarOccupancyModelV2()
+    self.trajectory_cutin = TrajectoryCutInDetector(self.cut_in_sensitivity)
+    self._same_row_suppressed_until: dict[tuple[str, int, int], float] = {}
 
   def _points_at_model_time(
     self,
@@ -559,156 +524,6 @@ class DPathRadarController:
     lead["aLeadTau"] = self.lead_dynamics.a_lead_tau(point)
     return lead
 
-  def _occupancy_v2_estimates(
-    self,
-    time_s: float,
-    v_ego: float,
-    predictions: dict[tuple[str, int], Any],
-    point_by_identity: dict[tuple[str, int], RadarPointSnapshot],
-    front_kinematic_matches: dict[
-      tuple[str, int], RadarPointSnapshot
-    ],
-  ) -> dict[tuple[str, int], OccupancyEstimate]:
-    cross_sensor_identities = set(front_kinematic_matches)
-    cross_sensor_identities.update(
-      (point.source, point.track_id)
-      for point in front_kinematic_matches.values()
-    )
-    estimates = self.occupancy_model_v2.update(
-      time_s,
-      (
-        OccupancyEvidence(
-          source=prediction.source,
-          track_id=prediction.track_id,
-          continuity_id=prediction.continuity_id,
-          d_rel=point.d_rel,
-          v_rel=point.v_rel,
-          v_lead=point.v_lead,
-          v_ego=v_ego,
-          d_path=prediction.d_path,
-          d_path_rate_short=getattr(
-            prediction, "d_path_rate_short", prediction.d_path_rate_long,
-          ),
-          d_path_rate_long=prediction.d_path_rate_long,
-          reported_normal_speed=getattr(
-            prediction, "reported_normal_speed", 0.0,
-          ),
-          normal_speed_disagreement=getattr(
-            prediction, "normal_speed_disagreement", 1.0,
-          ),
-          directional_inward_displacement_m=getattr(
-            prediction, "directional_inward_displacement_m", 0.0,
-          ),
-          directional_consistency=getattr(
-            prediction, "directional_consistency", 0.0,
-          ),
-          directional_inward_sample_ratio=getattr(
-            prediction, "directional_inward_sample_ratio", 0.0,
-          ),
-          motion_consistency=getattr(prediction, "motion_consistency", 0.0),
-          recent_motion_support=getattr(
-            prediction, "recent_motion_support", 0.0,
-          ),
-          history_count=getattr(prediction, "history_count", 0),
-          uncertainty=getattr(prediction, "uncertainty", math.inf),
-          current_path_occupancy=prediction.current_path_occupancy,
-          cross_sensor_confirmed=(identity in cross_sensor_identities),
-          vision_supported=(
-            getattr(prediction, "reason", "")
-            == "vision-bracketed physical CUT-IN"
-          ),
-        )
-        for identity, prediction in predictions.items()
-        if (
-          self.motion_sensitivity.cut_in_enabled
-          and (point := point_by_identity.get(identity)) is not None
-        )
-      ),
-    )
-    return {
-      estimate.evidence.identity: estimate
-      for estimate in estimates
-      if early_control_eligible(estimate)
-    }
-
-  def _occupancy_v2_lead(
-    self,
-    prediction: Any,
-    point: RadarPointSnapshot,
-    path: tuple[tuple[float, float], ...],
-    points: tuple[RadarPointSnapshot, ...],
-    front_kinematic_matches: dict[
-      tuple[str, int], RadarPointSnapshot
-    ],
-    *,
-    model_probability: float,
-    score: float,
-  ) -> dict[str, Any]:
-    lead_point = prefer_front_radar_kinematics(
-      point, points, front_kinematic_matches,
-    )
-    lead_d_path = (
-      project_to_model_path(
-        path, lead_point.d_rel, lead_point.y_rel,
-      ).d_path
-      if lead_point is not point
-      else prediction.d_path
-    )
-    return self._lead_from_radar_point(
-      lead_point,
-      lead_d_path,
-      model_probability,
-      score,
-    )
-
-  def _occupancy_v2_risk_lead(
-    self,
-    estimates: dict[tuple[str, int], OccupancyEstimate],
-    predictions: dict[tuple[str, int], Any],
-    point_by_identity: dict[tuple[str, int], RadarPointSnapshot],
-    path: tuple[tuple[float, float], ...],
-    points: tuple[RadarPointSnapshot, ...],
-    front_kinematic_matches: dict[
-      tuple[str, int], RadarPointSnapshot
-    ],
-    lead_one: dict[str, Any] | None,
-  ) -> dict[str, Any] | None:
-    risk_leads = []
-    for prediction in predictions.values():
-      estimate = estimates.get((
-        prediction.source,
-        prediction.continuity_id,
-      ))
-      point = point_by_identity.get((
-        prediction.source,
-        prediction.track_id,
-      ))
-      if (
-        estimate is None
-        or estimate.stage < OccupancyStage.LIMIT
-        or point is None
-      ):
-        continue
-      lead = self._occupancy_v2_lead(
-        prediction,
-        point,
-        path,
-        points,
-        front_kinematic_matches,
-        model_probability=0.0,
-        score=estimate.risk_score,
-      )
-      if not lead_duplicates_primary(lead, lead_one):
-        risk_leads.append(lead)
-    return min(
-      risk_leads,
-      key=lambda lead: (
-        float(lead.get("dRel", math.inf)),
-        -float(lead.get("score", 0.0)),
-      ),
-      default=None,
-    )
-
   def update(
     self,
     time_s: float,
@@ -727,10 +542,8 @@ class DPathRadarController:
       self.stationary_primary_handoff_tracker.reset()
       self.scc_lead_two_tracker.reset()
       self.primary_cut_out_predictor = RadarMotionPredictor()
-      self.close_front_motion_decisions.reset()
       self.lead_dynamics.reset()
-      self.cutin_predecel_tracker.reset()
-      self.occupancy_model_v2.reset()
+      self.trajectory_cutin.reset()
       return DPathRadarOutput(
         None, None, None, None, (), (), (), (), (), (), None,
       )
@@ -782,18 +595,128 @@ class DPathRadarController:
         )
     motion_points = self._select_motion_points(points)
     scoped_motion_points = _scoped_motion_points(motion_points, path)
-    predictions = self.motion_predictor.update(
+    estimates = self.trajectory_cutin.update(
       time_s,
+      v_ego,
       motion_points,
       path,
-      v_ego,
-      yaw_rate_rad_s,
-      (
-        float(lead_one["dRel"])
-        if lead_one is not None
-        else None
+      model,
+      yaw_rate_rad_s=yaw_rate_rad_s,
+      cross_sensor_matches=front_kinematic_matches,
+    )
+    estimate_identities = {
+      (estimate.point.source, estimate.point.track_id)
+      for estimate in estimates
+    }
+    leads_left, leads_center, leads_right = self._display_leads(
+      scoped_motion_points,
+      estimate_identities,
+    )
+
+    active_identity = self.lead_two_tracker.active_identity
+    candidates: list[DPathLeadCandidate] = []
+    confirmed_cutin_leads: list[dict[str, Any]] = []
+    risk_leads: list[dict[str, Any]] = []
+    self._same_row_suppressed_until = {
+      identity: until_s
+      for identity, until_s in self._same_row_suppressed_until.items()
+      if time_s <= until_s
+    }
+    for estimate in estimates:
+      point = estimate.point
+      lead_point = prefer_front_radar_kinematics(
+        point, points, front_kinematic_matches,
+      )
+      d_path = (
+        project_to_model_path(path, lead_point.d_rel, lead_point.y_rel).d_path
+        if lead_point is not point else estimate.d_path
+      )
+      lead = self._lead_from_radar_point(
+        lead_point, d_path, 0.03, estimate.confidence,
+      )
+      candidate_source = (
+        lead_point.kinematics_source
+        if estimate.cross_sensor_supported
+        and lead_point.kinematics_source is not None
+        else point.source
+      )
+      candidate_track_id = (
+        lead_point.kinematics_track_id
+        if estimate.cross_sensor_supported
+        and lead_point.kinematics_track_id is not None
+        else point.track_id
+      )
+      candidate_continuity_id = (
+        candidate_track_id
+        if estimate.cross_sensor_supported else estimate.continuity_id
+      )
+      candidate_lead = lead
+      identity = (
+        candidate_source, candidate_track_id, candidate_continuity_id,
+      )
+      same_primary_row_without_vision = (
+        estimate.cross_sensor_supported
+        and not estimate.vision_supported
+        and lead_one is not None
+        and lead_one.get("status")
+        and float(candidate_lead.get("dRel", 0.0)) > 8.0
+        and abs(
+          float(candidate_lead.get("dRel", 0.0))
+          - float(lead_one.get("dRel", 0.0))
+        ) <= 3.0
+      )
+      if same_primary_row_without_vision:
+        self._same_row_suppressed_until[identity] = time_s + 0.75
+      same_row_suppressed = (
+        not estimate.vision_supported
+        and time_s <= self._same_row_suppressed_until.get(identity, -math.inf)
+      )
+      if (
+        lead_duplicates_primary(candidate_lead, lead_one)
+        or same_row_suppressed
+      ):
+        if active_identity == identity:
+          self.lead_two_tracker.reset()
+        continue
+      can_compete = cutin_can_compete_with_primary(
+        candidate_lead,
+        lead_one,
+        projected_path_entry=(
+          estimate.time_to_overlap_s is not None
+          or estimate.confirmed_cutin
+        ),
+        entry_horizon_s=estimate.time_to_overlap_s,
+      )
+      detected_cutin = (
+        self.cut_in_sensitivity > 0
+        and estimate.confirmed_cutin
+        and can_compete
+      )
+      confirmed_cutin = detected_cutin and estimate.control_eligible
+      if detected_cutin:
+        confirmed_cutin_leads.append(lead)
+      if self.cut_in_sensitivity > 0 and estimate.predecel_risk and can_compete:
+        risk_leads.append(lead)
+      candidates.append(DPathLeadCandidate(
+        lead=candidate_lead,
+        source=candidate_source,
+        track_id=candidate_track_id,
+        continuity_id=candidate_continuity_id,
+        retainable=(
+          estimate.current_path
+          or estimate.d_path * estimate.d_path_rate <= 0.0
+        ),
+        confirmed_cutin=confirmed_cutin,
+        allow_low_speed=estimate.cross_sensor_supported,
+      ))
+
+    lead_cutin_risk = min(
+      risk_leads,
+      key=lambda lead: (
+        float(lead.get("dRel", math.inf)),
+        -float(lead.get("score", 0.0)),
       ),
-      scoped_points=scoped_motion_points,
+      default=None,
     )
     front_motion_points = tuple(
       point for point in points if point.source == "frontRadar"
@@ -811,23 +734,6 @@ class DPathRadarController:
       for point in front_motion_points
       if point.track_id == primary_track_id
     )
-    cross_sensor_close_front_identities = frozenset(
-      (front.source, front.track_id)
-      for front in front_kinematic_matches.values()
-      if (
-        front.track_id != primary_track_id
-        and front.measured
-        and CROSS_SENSOR_CLOSE_CUTIN_MIN_DREL_M < front.d_rel
-        <= CROSS_SENSOR_CLOSE_CUTIN_MAX_DREL_M
-        and front.v_lead > CROSS_SENSOR_CLOSE_CUTIN_MIN_VLEAD_MPS
-        and abs(project_to_model_path(
-          path, front.d_rel, front.y_rel,
-        ).d_path) <= CROSS_SENSOR_CLOSE_CUTIN_MAX_ABS_DPATH_M
-      )
-    )
-    requested_front_prediction_identities = (
-      primary_cut_out_identities | cross_sensor_close_front_identities
-    )
     primary_cut_out_predictions = self.primary_cut_out_predictor.update(
       time_s,
       front_motion_points,
@@ -835,318 +741,13 @@ class DPathRadarController:
       v_ego,
       yaw_rate_rad_s,
       scoped_points=front_scoped_motion_points,
-      prediction_identities=requested_front_prediction_identities,
-      allow_low_speed_identities=cross_sensor_close_front_identities,
+      prediction_identities=primary_cut_out_identities,
     )
-    close_front_predictions = {
-      identity: prediction
-      for identity, prediction in primary_cut_out_predictions.items()
-      if identity in cross_sensor_close_front_identities
-    }
     primary_cut_out_probability = max((
       float(prediction.cut_out_probability)
       for prediction in primary_cut_out_predictions.values()
       if prediction.track_id == primary_track_id
     ), default=0.0)
-    leads_left, leads_center, leads_right = self._display_leads(
-      scoped_motion_points,
-      predictions,
-    )
-    active_identity = self.lead_two_tracker.active_identity
-    protected_identities = (
-      ()
-      if active_identity is None
-      else ((active_identity[0], active_identity[1]),)
-    )
-    visible_points = _visible_scoped_motion_points(
-      scoped_motion_points,
-      (
-        float(lead_one["dRel"])
-        if lead_one is not None
-        else None
-      ),
-      protected_identities,
-    )
-    point_by_identity = {
-      (point.source, point.track_id): point
-      for point in visible_points
-    }
-    point_by_identity.update(
-      {
-        (point.source, point.track_id): point
-        for point, _, _ in scoped_motion_points
-        if (point.source, point.track_id) in predictions
-      }
-    )
-    vision = vision_lead_from_model(model)
-    predictions = {
-      identity: (
-        apply_vision_bracket_cutin_support(
-          prediction,
-          point,
-          points,
-          vision,
-          lead_one,
-        )
-        if (
-          point := point_by_identity.get(
-            (prediction.source, prediction.track_id),
-          )
-        ) is not None
-        else prediction
-      )
-      for identity, prediction in predictions.items()
-    }
-    occupancy_estimate_by_identity = self._occupancy_v2_estimates(
-      time_s,
-      v_ego,
-      predictions,
-      point_by_identity,
-      front_kinematic_matches,
-    )
-    allowed_predictions = {
-      identity: prediction
-      for identity, prediction in predictions.items()
-      if (
-        (point := point_by_identity.get(identity)) is not None
-        and turning_corner_path_entry_allowed(
-          prediction.source,
-          point.y_rel,
-          prediction.d_path,
-          yaw_rate_rad_s,
-          cross_sensor_confirmed=(
-            identity in front_kinematic_matches
-          ),
-        )
-      )
-    }
-    predecel = self.cutin_predecel_tracker.update(
-      time_s,
-      (
-        RadarMotionCutIn(
-          prediction,
-          corner_cutin_predecel_score(
-            prediction,
-            point.d_rel,
-            point.v_rel,
-            v_ego=v_ego,
-            cross_sensor_confirmed=(
-              (prediction.source, prediction.track_id)
-              in front_kinematic_matches
-            ),
-          ),
-        )
-        for prediction in allowed_predictions.values()
-        if (
-          self.motion_sensitivity.cut_in_enabled
-          and (
-            point := point_by_identity.get(
-              (prediction.source, prediction.track_id),
-            )
-          ) is not None
-        )
-      ),
-    )
-    lead_cutin_risk = None
-    if predecel is not None:
-      risk_point = point_by_identity.get((
-        predecel.prediction.source,
-        predecel.prediction.track_id,
-      ))
-      if risk_point is not None:
-        lead_cutin_risk = self._lead_from_radar_point(
-          risk_point,
-          predecel.prediction.d_path,
-          0.0,
-          predecel.score,
-        )
-        if lead_duplicates_primary(lead_cutin_risk, lead_one):
-          lead_cutin_risk = None
-    v2_risk_lead = self._occupancy_v2_risk_lead(
-      occupancy_estimate_by_identity,
-      predictions,
-      point_by_identity,
-      path,
-      points,
-      front_kinematic_matches,
-      lead_one,
-    )
-    lead_cutin_risk = min(
-      (
-        *((v2_risk_lead,) if v2_risk_lead is not None else ()),
-        *((lead_cutin_risk,) if lead_cutin_risk is not None else ()),
-      ),
-      key=lambda lead: (
-        float(lead.get("dRel", math.inf)),
-        -float(lead.get("score", 0.0)),
-      ),
-      default=None,
-    )
-    decision = self.motion_decisions.update(
-      time_s,
-      (
-        allowed_predictions.values()
-        if self.motion_sensitivity.cut_in_enabled
-        else ()
-      ),
-    )
-    confirmed = {
-      (
-        cutin.prediction.source,
-        cutin.prediction.track_id,
-        cutin.prediction.continuity_id,
-      ): cutin
-      for cutin in decision.confirmed
-    }
-    close_front_decision = self.close_front_motion_decisions.update(
-      time_s,
-      (
-        close_front_predictions.values()
-        if self.close_front_motion_sensitivity.cut_in_enabled
-        else ()
-      ),
-    )
-    confirmed.update({
-      (
-        cutin.prediction.source,
-        cutin.prediction.track_id,
-        cutin.prediction.continuity_id,
-      ): cutin
-      for cutin in close_front_decision.confirmed
-    })
-    candidate_predictions = dict(predictions)
-    candidate_predictions.update(close_front_predictions)
-    point_by_identity.update({
-      (point.source, point.track_id): point
-      for point in front_motion_points
-      if (point.source, point.track_id)
-      in cross_sensor_close_front_identities
-    })
-    candidates = []
-    for prediction in candidate_predictions.values():
-      point = point_by_identity.get((prediction.source, prediction.track_id))
-      if point is None:
-        continue
-      identity = (
-        prediction.source,
-        prediction.track_id,
-        prediction.continuity_id,
-      )
-      cutin = confirmed.get(identity)
-      occupancy_estimate = occupancy_estimate_by_identity.get((
-        prediction.source,
-        prediction.continuity_id,
-      ))
-      occupancy_confirmed = (
-        occupancy_estimate is not None
-        and occupancy_estimate.stage >= OccupancyStage.LEAD
-      )
-      front_motion_supported = front_cutin_motion_supported(
-        prediction.source,
-        prediction.d_path_rate_long,
-        d_rel=point.d_rel,
-        v_rel=point.v_rel,
-        d_path=prediction.d_path,
-        d_path_rate_short=getattr(
-          prediction, "d_path_rate_short", prediction.d_path_rate_long,
-        ),
-        reported_normal_speed=getattr(
-          prediction, "reported_normal_speed", 0.0,
-        ),
-        current_path_occupancy=prediction.current_path_occupancy,
-        predicted_path_overlap_s=getattr(
-          prediction, "predicted_path_overlap_s", 0.0,
-        ),
-        directional_inward_displacement_m=getattr(
-          prediction, "directional_inward_displacement_m", 0.0,
-        ),
-        directional_consistency=getattr(
-          prediction, "directional_consistency", 0.0,
-        ),
-        directional_inward_sample_ratio=getattr(
-          prediction, "directional_inward_sample_ratio", 0.0,
-        ),
-        corner_directional_entry=(
-          getattr(prediction, "near_side_directional_entry", False)
-          or getattr(prediction, "lane_boundary_directional_entry", False)
-        ),
-        tracked_close_entry=getattr(
-          prediction, "front_tracked_close_entry", False,
-        ),
-        cross_sensor_confirmed=(
-          (prediction.source, prediction.track_id)
-          in cross_sensor_close_front_identities
-        ),
-        minimum_directional_consistency=(
-          self.motion_sensitivity.directional_min_consistency
-        ),
-      )
-      lead_point = prefer_front_radar_kinematics(
-        point, points, front_kinematic_matches,
-      )
-      lead_d_path = (
-        project_to_model_path(
-          path, lead_point.d_rel, lead_point.y_rel,
-        ).d_path
-        if lead_point is not point
-        else prediction.d_path
-      )
-      lead = self._lead_from_radar_point(
-        lead_point,
-        lead_d_path,
-        0.03,
-        (
-          max(
-            cutin.score if cutin is not None else 0.0,
-            (
-              occupancy_estimate.lead_score
-              if occupancy_estimate is not None
-              else 0.0
-            ),
-            getattr(prediction, "path_entry_probability", 0.0),
-          )
-        ),
-      )
-      if lead_duplicates_primary(lead, lead_one):
-        if self.lead_two_tracker.active_identity == identity:
-          self.lead_two_tracker.reset()
-        continue
-      candidates.append(DPathLeadCandidate(
-        lead=lead,
-        source=prediction.source,
-        track_id=prediction.track_id,
-        continuity_id=prediction.continuity_id,
-        retainable=(
-          prediction.current_path_occupancy
-          or prediction.d_path * prediction.d_path_rate_long <= 0.0
-        ),
-        confirmed_cutin=(
-          self.motion_sensitivity.cut_in_enabled
-          and (
-            occupancy_confirmed
-            or (
-              cutin is not None
-              and front_motion_supported
-              and cutin_can_compete_with_primary(
-                lead,
-                lead_one,
-                projected_path_entry=(
-                  getattr(prediction, "time_to_entry_s", None) is not None
-                ),
-                entry_horizon_s=getattr(
-                  prediction,
-                  "predicted_path_overlap_start_s",
-                  getattr(prediction, "time_to_entry_s", None),
-                ),
-              )
-            )
-          )
-        ),
-        allow_low_speed=(
-          (prediction.source, prediction.track_id)
-          in cross_sensor_close_front_identities
-        ),
-      ))
     stationary_primary_candidates = []
     for point, _, projection in scoped_motion_points:
       if not _is_corner(point):
@@ -1229,7 +830,10 @@ class DPathRadarController:
       and not any(candidate.identity == active_identity for candidate in candidates)
     ):
       source, track_id, continuity_id = active_identity
-      point = point_by_identity.get((source, track_id))
+      point = next((
+        value for value in points
+        if value.source == source and value.track_id == track_id
+      ), None)
       if point is not None:
         lead_point = prefer_front_radar_kinematics(
           point, points, front_kinematic_matches,
@@ -1295,7 +899,10 @@ class DPathRadarController:
       leads_left=leads_left,
       leads_center=leads_center,
       leads_right=leads_right,
-      leads_cutin=selection.cutins,
+      leads_cutin=tuple(sorted(
+        confirmed_cutin_leads,
+        key=lambda lead: float(lead["dRel"]),
+      )),
       leads_left2=self._pick_two(leads_left),
       leads_right2=self._pick_two(leads_right),
       lead_cutin_risk=lead_cutin_risk,

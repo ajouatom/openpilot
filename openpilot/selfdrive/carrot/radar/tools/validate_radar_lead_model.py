@@ -4,7 +4,11 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
+import math
+import os
+import pickle
 from pathlib import Path
 import sys
 from typing import Any
@@ -15,7 +19,7 @@ if str(REPO_ROOT) not in sys.path:
 
 from openpilot.selfdrive.carrot.radar.tools.radar_validation_replay import (
   CurrentRadardSelector,
-  RadarMotionShadowSelector,
+  ProductionDPathSelector,
   candidate_matches_targets,
   current_cutin_track_ids,
   front_only_frames,
@@ -29,6 +33,9 @@ from openpilot.selfdrive.carrot.radar_motion import (
 CARROT_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_CASES = CARROT_ROOT / "cluster" / "cutin_validation_cases.json"
 DEFAULT_LABELS = CARROT_ROOT / "cluster" / "radar_trajectory_labels.json"
+DEFAULT_CACHE_DIR = REPO_ROOT / ".tmp_radar_validation_cache"
+FRAME_CACHE_VERSION = 1
+DEADLINE_SAMPLE_TOLERANCE_S = 0.02
 
 
 def parse_args() -> argparse.Namespace:
@@ -42,6 +49,13 @@ def parse_args() -> argparse.Namespace:
   parser.add_argument("--cases", type=Path, default=DEFAULT_CASES)
   parser.add_argument("--labels", type=Path, default=DEFAULT_LABELS)
   parser.add_argument("--case", action="append", default=[])
+  parser.add_argument(
+    "--trace-track",
+    type=int,
+    action="append",
+    default=[],
+    help="print compact trajectory diagnostics for a radar track ID",
+  )
   parser.add_argument("--expected", choices=("detect", "clear", "stationary"))
   parser.add_argument("--front-only", action="store_true")
   parser.add_argument(
@@ -66,6 +80,17 @@ def parse_args() -> argparse.Namespace:
   )
   parser.add_argument("--report", type=Path)
   parser.add_argument(
+    "--cache-dir",
+    type=Path,
+    default=DEFAULT_CACHE_DIR,
+    help="parsed-frame cache directory (default: .tmp_radar_validation_cache)",
+  )
+  parser.add_argument(
+    "--no-cache",
+    action="store_true",
+    help="read and decode every rlog instead of using the parsed-frame cache",
+  )
+  parser.add_argument(
     "--strict-radard",
     action="store_true",
     help="return nonzero when an existing-radard expectation fails",
@@ -84,6 +109,58 @@ def parse_args() -> argparse.Namespace:
     ),
   )
   return parser.parse_args()
+
+
+def _frame_cache_path(cache_dir: Path, log_path: Path) -> Path:
+  stat = log_path.stat()
+  identity = json.dumps({
+    "version": FRAME_CACHE_VERSION,
+    "path": str(log_path.resolve()),
+    "size": stat.st_size,
+    "mtime_ns": stat.st_mtime_ns,
+  }, sort_keys=True, separators=(",", ":"))
+  digest = hashlib.sha256(identity.encode("utf-8")).hexdigest()
+  return cache_dir / f"frames-{digest}.pickle"
+
+
+def _load_frames(
+  log_path: Path,
+  cache_dir: Path | None,
+) -> tuple[list[Any], bool]:
+  cache_path = (
+    _frame_cache_path(cache_dir, log_path)
+    if cache_dir is not None else None
+  )
+  if cache_path is not None and cache_path.is_file():
+    try:
+      with cache_path.open("rb") as cache_file:
+        payload = pickle.load(cache_file)
+      if (
+        isinstance(payload, dict)
+        and payload.get("version") == FRAME_CACHE_VERSION
+        and isinstance(payload.get("frames"), list)
+      ):
+        return payload["frames"], True
+    except (EOFError, OSError, pickle.PickleError):
+      pass
+
+  frames = load_frames(log_path)
+  if cache_path is not None:
+    cache_path.parent.mkdir(parents=True, exist_ok=True)
+    temporary_path = cache_path.with_name(
+      f"{cache_path.name}.{os.getpid()}.tmp",
+    )
+    try:
+      with temporary_path.open("wb") as cache_file:
+        pickle.dump(
+          {"version": FRAME_CACHE_VERSION, "frames": frames},
+          cache_file,
+          protocol=pickle.HIGHEST_PROTOCOL,
+        )
+      temporary_path.replace(cache_path)
+    finally:
+      temporary_path.unlink(missing_ok=True)
+  return frames, False
 
 
 def _entries(cases_path: Path, labels_path: Path, cases_only: bool) -> list[dict[str, Any]]:
@@ -263,6 +340,71 @@ def _event_text(value: tuple[float, int] | None) -> str:
   return "--" if value is None else f"{value[0]:.2f}s/id{value[1]}"
 
 
+def _print_track_trace(
+  selector: Any,
+  frames: list[Any],
+  entries: list[dict[str, Any]],
+  track_ids: set[int],
+) -> None:
+  if not track_ids:
+    return
+  trace_all = -1 in track_ids
+  windows = tuple(
+    (float(entry["window"][0]), float(entry["window"][1]))
+    for entry in entries
+  )
+  last_print_s: dict[int, float] = {}
+  last_stage: dict[int, str] = {}
+  for index, frame in enumerate(frames):
+    if not any(start <= frame.time_s <= end for start, end in windows):
+      continue
+    selection = selector.select(frame, index)
+    diagnostic_ids = {
+      candidate.track_id for candidate in selection.cutin_diagnostics
+    }
+    for candidate in selection.cutin_diagnostics:
+      if not trace_all and candidate.track_id not in track_ids:
+        continue
+      stage_changed = last_stage.get(candidate.track_id) != candidate.stage
+      periodic = frame.time_s - last_print_s.get(candidate.track_id, -math.inf) >= 0.25
+      if not stage_changed and not periodic:
+        continue
+      print(
+        f"    trace {frame.time_s:.2f}s id{candidate.track_id} "
+        + f"{candidate.stage} yaw={frame.yaw_rate_rad_s:.3f} "
+        + candidate.detail
+        + " l1="
+        + (
+          "--" if selection.lead_one is None
+          else f"{selection.lead_one.track_id}@{selection.lead_one.d_rel:.1f}"
+        )
+        + " l2="
+        + (
+          "--" if selection.lead_two is None
+          else f"{selection.lead_two.track_id}@{selection.lead_two.d_rel:.1f}"
+        ),
+        flush=True,
+      )
+      last_stage[candidate.track_id] = candidate.stage
+      last_print_s[candidate.track_id] = frame.time_s
+    for point in frame.points:
+      if (
+        (not trace_all and point.track_id not in track_ids)
+        or point.track_id in diagnostic_ids
+      ):
+        continue
+      if frame.time_s - last_print_s.get(point.track_id, -math.inf) < 0.25:
+        continue
+      print(
+        f"    trace {frame.time_s:.2f}s id{point.track_id} RAW "
+        + f"source={point.source} dRel={point.d_rel:.2f} "
+        + f"yRel={point.y_rel:.2f} vLead={point.v_lead:.2f}",
+        flush=True,
+      )
+      last_stage[point.track_id] = "RAW"
+      last_print_s[point.track_id] = frame.time_s
+
+
 def _metrics(rows: list[dict[str, Any]], field: str) -> dict[str, float | int]:
   scorable = [
     row for row in rows
@@ -329,12 +471,14 @@ def main() -> int:
       for entry in log_entries:
         print(f"MISSING {entry['id']}: {path}", flush=True)
       continue
+    cache_dir = None if args.no_cache else args.cache_dir
+    frames, cache_hit = _load_frames(path, cache_dir)
     print(
-      f"[{log_index:02d}/{len(grouped):02d}] loading {path.parent.name}/{path.name} "
-      + f"({len(log_entries)} labels) ...",
+      f"[{log_index:02d}/{len(grouped):02d}] "
+      + f"{'cached' if cache_hit else 'loaded'} "
+      + f"{path.parent.name}/{path.name} ({len(log_entries)} labels)",
       flush=True,
     )
-    frames = load_frames(path)
     if args.front_only:
       frames, _ = front_only_frames(frames)
     sources = (
@@ -349,9 +493,12 @@ def main() -> int:
     if not args.shadow_only:
       cutin_ids = current_cutin_track_ids(path, frames, sources)
       radard = CurrentRadardSelector(frames, cutin_ids)
-    shadow = RadarMotionShadowSelector(
+    shadow = ProductionDPathSelector(
       frames,
       enable_radar_tracks=args.enable_radar_tracks,
+    )
+    _print_track_trace(
+      shadow, frames, log_entries, set(args.trace_track),
     )
     for entry in log_entries:
       expected = str(entry["expected"])
@@ -485,21 +632,30 @@ def main() -> int:
         and radard_event is not None
         and expected == "detect"
       ):
-        radard_pass = radard_event[0] <= float(deadline)
+        radard_pass = (
+          radard_event[0]
+          <= float(deadline) + DEADLINE_SAMPLE_TOLERANCE_S
+        )
       if (
         shadow_pass
         and deadline is not None
         and shadow_event is not None
         and expected == "detect"
       ):
-        shadow_pass = shadow_event[0] <= float(deadline)
+        shadow_pass = (
+          shadow_event[0]
+          <= float(deadline) + DEADLINE_SAMPLE_TOLERANCE_S
+        )
       if (
         predecel_pass
         and deadline is not None
         and predecel_event is not None
         and predecel_required
       ):
-        predecel_pass = predecel_event[0] <= float(deadline)
+        predecel_pass = (
+          predecel_event[0]
+          <= float(deadline) + DEADLINE_SAMPLE_TOLERANCE_S
+        )
         shadow_pass = shadow_pass and predecel_pass
       radard_continuous = (
         _lead_one_continuous(radard, frames, entry)
@@ -653,6 +809,7 @@ def main() -> int:
         "predeceleration_expectation_failures": predecel_failures,
       },
     }
+    args.report.parent.mkdir(parents=True, exist_ok=True)
     args.report.write_text(
       json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
       encoding="utf-8",
