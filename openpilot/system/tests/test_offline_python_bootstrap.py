@@ -253,3 +253,10 @@ def test_tinygrad_waits_for_custom_egpu_pcie_link_training() -> None:
   assert "self.reset_usb_bridge()" not in source
   assert "while ltssm != self.PCIE_LINK_READY" in source
   assert "time.sleep(self.PCIE_LINK_POLL_INTERVAL_S)" in source
+
+
+def test_tinygrad_bounds_usbgpu_copy_staging_transfers() -> None:
+  source = (Path(BASEDIR) / "tinygrad_repo/tinygrad/runtime/ops_amd.py").read_text(encoding="utf-8")
+
+  assert "USBGPU_COPY_BUFFER_SIZE = 64 * 1024" in source
+  assert "size=USBGPU_COPY_BUFFER_SIZE" in source
