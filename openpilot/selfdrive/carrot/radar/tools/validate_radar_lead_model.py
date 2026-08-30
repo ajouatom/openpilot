@@ -536,9 +536,12 @@ def main() -> int:
         )
         entry_source = str(entry.get("source", "front+corner"))
         shadow_applicable = (
-          entry_source == "front+corner"
-          or entry_source == shadow.motion_sensor
-          or role_constraints_present
+          bool(entry.get("shadow_applicable", True))
+          and (
+            entry_source == "front+corner"
+            or entry_source == shadow.motion_sensor
+            or role_constraints_present
+          )
         )
         shadow_event = (
           _first_event(
@@ -600,7 +603,8 @@ def main() -> int:
         )
       entry_source = str(entry.get("source", "front+corner"))
       predecel_applicable = (
-        shadow.motion_sensor == "corner"
+        shadow_applicable
+        and shadow.motion_sensor == "corner"
         and entry_source in ("corner", "front+corner")
         and expected in ("detect", "clear")
       )

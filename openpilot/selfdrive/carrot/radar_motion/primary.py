@@ -66,6 +66,7 @@ STATIONARY_MAX_ABS_VLEAD_MPS = 4.0
 STATIONARY_TURN_MIN_ABS_YAW_RATE_RAD_S = 0.10
 STATIONARY_TURN_CORNER_MIN_VISION_PROB = 0.80
 STATIONARY_HELD_CORNER_MAX_ABS_VLEAD_MPS = 8.0
+STATIONARY_MEASUREMENT_DROPOUT_HOLD_S = 0.10
 STATIONARY_MAX_VISION_SPEED_DELTA_MPS = 12.0
 STATIONARY_TRUSTED_MAX_VISION_SPEED_DELTA_MPS = 20.0
 STATIONARY_VISION_DISTANCE_FRACTION = 0.30
@@ -1300,6 +1301,69 @@ class VisionRadarMatcher:
       time_s,
     )
 
+  def _stationary_corner_slot_continuous(
+    self,
+    point: RadarPointSnapshot,
+    time_s: float,
+  ) -> bool:
+    previous = self._stationary_last_point
+    previous_time_s = self._stationary_last_time_s
+    return (
+      previous is not None
+      and previous_time_s is not None
+      and point.source.startswith("corner")
+      and point.source == previous.source
+      and self._identity(point) != self._identity(previous)
+      and abs(point.v_lead) <= STATIONARY_HELD_CORNER_MAX_ABS_VLEAD_MPS
+      and self._stationary_position_continuous(
+        previous,
+        previous_time_s,
+        point,
+        time_s,
+      )
+    )
+
+  def _stationary_measurement_dropout_hold(
+    self,
+    vision: VisionLead | None,
+    path: Sequence[tuple[float, float]],
+    time_s: float,
+  ) -> VisionRadarMatch | None:
+    previous = self._stationary_last_point
+    previous_time_s = self._stationary_last_time_s
+    if (
+      self.stationary_identity is None
+      or vision is None
+      or vision.probability < STATIONARY_VISION_MIN_PROB
+      or previous is None
+      or previous_time_s is None
+    ):
+      return None
+    dt = time_s - previous_time_s
+    if not 0.0 < dt <= STATIONARY_MEASUREMENT_DROPOUT_HOLD_S:
+      return None
+    predicted = replace(
+      previous,
+      d_rel=previous.d_rel + previous.v_rel * dt,
+      y_rel=previous.y_rel + previous.yv_rel * dt,
+      measured=False,
+    )
+    if self._stationary_vision_cross_source_position_cost(
+      vision, predicted,
+    ) is None:
+      return None
+    d_path = project_to_model_path(
+      path, predicted.d_rel, predicted.y_rel,
+    ).d_path
+    if abs(d_path) > STATIONARY_HELD_MAX_DPATH_M:
+      return None
+    return VisionRadarMatch(
+      point=predicted,
+      probability=vision.probability,
+      score=max(0.0, 1.0 - self._stationary_seed_score),
+      d_path=d_path,
+    )
+
   @staticmethod
   def _stationary_vision_cost(
     vision: VisionLead,
@@ -1637,8 +1701,25 @@ class VisionRadarMatcher:
       tuple[str, int], float
     ] = {}
     eligible_points: list[RadarPointSnapshot] = []
+    held_identity_present = any(
+      self._identity(point) == self.stationary_identity
+      for point in point_values
+    )
     for point in point_values:
       identity = self._identity(point)
+      continuous_corner_slot = (
+        strong_vision
+        and self.stationary_identity is not None
+        and not held_identity_present
+        and self._stationary_corner_slot_continuous(point, time_s)
+      )
+      held_corner_paired_front = (
+        strong_vision
+        and self._stationary_corner_supported
+        and identity == self.stationary_identity
+        and point.source == "frontRadar"
+        and abs(point.v_lead) <= STATIONARY_MAX_ABS_VLEAD_MPS
+      )
       held_corner_position_cost = (
         self._stationary_vision_cross_source_position_cost(
           vision, point,
@@ -1653,6 +1734,8 @@ class VisionRadarMatcher:
           and abs(point.v_lead)
           <= STATIONARY_HELD_CORNER_MAX_ABS_VLEAD_MPS
         )
+        or continuous_corner_slot
+        or held_corner_paired_front
         else None
       )
       if held_corner_position_cost is not None:
@@ -1906,6 +1989,11 @@ class VisionRadarMatcher:
           default=None,
         )
       if selected is None:
+        dropout_hold = self._stationary_measurement_dropout_hold(
+          vision, path, time_s,
+        )
+        if dropout_hold is not None:
+          return dropout_hold
         self._reset_stationary()
         return None
     else:
