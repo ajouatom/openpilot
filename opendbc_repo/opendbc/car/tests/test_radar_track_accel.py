@@ -5,14 +5,14 @@ import pytest
 from opendbc.car.interfaces import MyTrack
 
 
-def radar_point(v_lead: float, *, measured: bool = True, source: str = "frontRadar"):
+def radar_point(v_lead: float, *, measured: bool = True, source: str = "frontRadar", a_rel: float = float("nan")):
   return SimpleNamespace(
     dRel=30.0,
     yRel=0.0,
     vRel=v_lead - 20.0,
     yvRel=0.0,
     vLead=v_lead,
-    aRel=float("nan"),
+    aRel=a_rel,
     measured=measured,
     radarSource=source,
   )
@@ -50,6 +50,17 @@ def test_new_track_still_requires_acceleration_warmup():
 
   assert track.cnt == 1
   assert track.aLead == pytest.approx(0.0)
+
+
+def test_new_track_rejects_uncorroborated_native_acceleration():
+  point = radar_point(20.0, a_rel=-4.0)
+  track = MyTrack(37, point, 0.05)
+
+  track.update(point, 0.0)
+  track.update(point, 0.0)
+
+  assert abs(track.aLead) < 0.15
+  assert track.jLead == pytest.approx(0.0)
 
 
 def test_scc_single_slot_still_restarts_on_large_velocity_jump():
