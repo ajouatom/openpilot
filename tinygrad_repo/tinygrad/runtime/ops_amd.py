@@ -27,7 +27,7 @@ SQTT_ITRACE_SE_MASK, SQTT_LIMIT_SE, SQTT_SIMD_SEL, SQTT_TOKEN_EXCLUDE = \
 PMC = ContextVar("PMC", abs(VIZ.value)>=2)
 AMD_USB_WAIT_SPIN_MS = max(0, getenv("AMD_USB_WAIT_SPIN_MS", 1))
 AMD_USB_WAIT_SLEEP_US = max(0, getenv("AMD_USB_WAIT_SLEEP_US", 100))
-USBGPU_COPY_BUFFER_SIZE = 64 * 1024
+USBGPU_COPY_BUFFER_SIZE = 256 * 1024
 EVENT_INDEX_PARTIAL_FLUSH = 4 # based on a comment in nvd.h
 WAIT_REG_MEM_FUNCTION_EQ  = 3 # ==
 WAIT_REG_MEM_FUNCTION_NEQ = 4 # !=
@@ -931,9 +931,9 @@ class USBIface(PCIIface):
     self.pci_dev.usb._pci_cacheable += [self.pci_dev.bar_info(2)] # doorbell region is cacheable
 
     # special regions
-    # Keep each SCSI bulk DMA inside the firmware's documented 64 KiB transfer
-    # window. HCQAllocator automatically splits larger model inputs across this
-    # staging buffer, which also gives other devices on a shared hub time to run.
+    # Bound each SCSI bulk DMA below the original 512 KiB staging window while
+    # avoiding the setup overhead of splitting every model input into 64 KiB
+    # transfers. HCQAllocator automatically splits larger inputs at this size.
     self.copy_bufs = [self._dma_region(ctrl_addr=0xf000, sys_addr=0x200000, size=USBGPU_COPY_BUFFER_SIZE)]
     self.sys_buf, self.sys_next_off = self._dma_region(ctrl_addr=0xa000, sys_addr=0x820000, size=0x1000), 0x800
     self.cq_buf = self._dma_region(ctrl_addr=0xb800, sys_addr=0x822000, size=0x1000)
