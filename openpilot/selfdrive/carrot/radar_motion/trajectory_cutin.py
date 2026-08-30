@@ -30,6 +30,7 @@ from openpilot.selfdrive.carrot.radar_motion.primary import (
 EGO_PATH_HALF_WIDTH_M = 0.90
 TARGET_HALF_WIDTH_M = 1.00
 PATH_OVERLAP_HALF_WIDTH_M = EGO_PATH_HALF_WIDTH_M + TARGET_HALF_WIDTH_M
+PAIRED_CLOSE_BODY_HALF_WIDTH_M = 2.65
 OUTSIDE_HISTORY_MARGIN_M = 0.20
 MOTION_SCOPE_HALF_WIDTH_M = 5.40
 MAX_HISTORY_S = 1.50
@@ -39,6 +40,8 @@ MAX_OBSERVATION_GAP_S = 0.20
 MAX_DREL_M = 80.0
 CUTIN_MAX_DREL_M = 45.0
 FRONT_NEW_CUTIN_MIN_DREL_M = 2.0
+FRONT_CLOSE_BORN_MIN_DREL_M = 5.0
+CROSS_SENSOR_SLOT_HANDOFF_MAX_DREL_M = 12.0
 MIN_MOVING_VLEAD_MPS = 0.5
 
 CUTIN_CONFIRMATION_S = 0.10
@@ -83,7 +86,14 @@ class TrajectoryCutInEstimate:
   inward_rate: float
   reported_inward_rate: float
   inward_progress: float
+  recent_inward_progress: float
+  lateral_travel: float
+  lateral_net_fraction: float
   direction_consistency: float
+  recent_direction_consistency: float
+  recent_v_rel_min: float
+  recent_v_rel_spread: float
+  recent_abs_yaw_max: float
   history_s: float
   confidence: float
   vision_supported: bool
@@ -95,6 +105,9 @@ class TrajectoryCutInEstimate:
   control_eligible: bool
   predecel_risk: bool
   jittering: bool
+  unstable_fast_motion: bool
+  front_history_supported: bool
+  close_front_supported: bool
   curve_alias: bool
   reason: str
 
@@ -110,6 +123,7 @@ class _Observation:
   y_rel: float
   v_rel: float
   v_lead: float
+  yaw_rate_rad_s: float
   global_path_s: float
   d_path: float
 
@@ -163,12 +177,13 @@ def _median_slope(
 
 def _motion_metrics(
   observations: Sequence[_Observation],
-) -> tuple[float, float, float, float, bool]:
-  values = _values_since(observations, LONG_MOTION_WINDOW_S)
+  window_s: float = LONG_MOTION_WINDOW_S,
+) -> tuple[float, float, float, float, float, float, bool]:
+  values = _values_since(observations, window_s)
   if len(values) < 2:
-    return 0.0, 0.0, 0.0, 0.0, False
+    return 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, False
 
-  d_path_rate = _median_slope(values, "d_path", LONG_MOTION_WINDOW_S)
+  d_path_rate = _median_slope(values, "d_path", window_s)
   current_side = math.copysign(1.0, values[-1].d_path or values[0].d_path or 1.0)
   inward_rate = max(0.0, -current_side * d_path_rate)
   start_count = min(3, max(1, len(values) // 3))
@@ -200,6 +215,8 @@ def _motion_metrics(
     d_path_rate,
     inward_rate,
     inward_progress,
+    total_travel,
+    net_fraction,
     direction_consistency,
     jittering,
   )
@@ -338,6 +355,7 @@ class TrajectoryCutInDetector:
     model: Any,
     *,
     yaw_rate_rad_s: float = 0.0,
+    vision_required_front: bool = False,
     cross_sensor_matches: Mapping[
       tuple[str, int], RadarPointSnapshot
     ] | None = None,
@@ -369,7 +387,23 @@ class TrajectoryCutInDetector:
       projection = project_to_model_path(path, point.d_rel, point.y_rel)
       if abs(projection.d_path) > MOTION_SCOPE_HALF_WIDTH_M:
         continue
-      key = point.source, point.track_id
+      raw_key = point.source, point.track_id
+      cross_sensor_point = matches.get(raw_key)
+      # Corner radar object slots can swap between adjacent physical targets.
+      # When front radar independently associates the target, use that stable
+      # physical ID for motion history so a slot handoff does not erase the
+      # measured inward trajectory. Fall back to the raw slot if an invalid
+      # many-to-one match appears in the same frame.
+      key = (
+        (f"{point.source}:front", cross_sensor_point.track_id)
+        if point.source.startswith("corner")
+        and cross_sensor_point is not None
+        and cross_sensor_point.source == "frontRadar"
+        and point.d_rel <= CROSS_SENSOR_SLOT_HANDOFF_MAX_DREL_M
+        else raw_key
+      )
+      if key in seen:
+        key = raw_key
       seen.add(key)
       state = self._tracks.get(key)
       if state is None:
@@ -384,6 +418,7 @@ class TrajectoryCutInDetector:
         y_rel=point.y_rel,
         v_rel=point.v_rel,
         v_lead=point.v_lead,
+        yaw_rate_rad_s=yaw_rate_rad_s,
         global_path_s=self._ego_distance + projection.path_s,
         d_path=projection.d_path,
       ))
@@ -402,14 +437,39 @@ class TrajectoryCutInDetector:
         d_path_rate,
         inward_rate,
         inward_progress,
+        lateral_travel,
+        lateral_net_fraction,
         direction_consistency,
         jittering,
       ) = _motion_metrics(state.observations)
-      short_rate = _median_slope(
-        state.observations, "d_path", SHORT_MOTION_WINDOW_S,
+      (
+        short_rate,
+        short_inward_rate,
+        short_inward_progress,
+        _,
+        _,
+        short_direction_consistency,
+        _,
+      ) = _motion_metrics(
+        state.observations, SHORT_MOTION_WINDOW_S,
       )
       side = math.copysign(1.0, projection.d_path or point.y_rel or 1.0)
-      short_inward_rate = max(0.0, -side * short_rate)
+      short_inward_rate = max(
+        short_inward_rate,
+        max(0.0, -side * short_rate),
+      )
+      recent_v_rel_values = tuple(
+        value.v_rel
+        for value in _values_since(state.observations, 0.50)
+      )
+      recent_v_rel_min = min(recent_v_rel_values, default=point.v_rel)
+      recent_v_rel_spread = (
+        max(recent_v_rel_values, default=point.v_rel) - recent_v_rel_min
+      )
+      recent_abs_yaw_max = max((
+        abs(value.yaw_rate_rad_s)
+        for value in _values_since(state.observations, 0.75)
+      ), default=abs(yaw_rate_rad_s))
       reported_inward = _reported_inward_speed(
         point, projection, yaw_rate_rad_s,
       )
@@ -418,6 +478,18 @@ class TrajectoryCutInDetector:
         min(short_inward_rate, reported_inward + 0.35),
       )
       horizon_s = prediction_horizon_s(v_ego)
+      unstable_fast_lateral_motion = (
+        abs(point.v_rel) >= 5.0
+        and (
+          jittering
+          or direction_consistency < 0.75
+          or abs(inward_rate - reported_inward) > 0.75
+        )
+      )
+      if unstable_fast_lateral_motion:
+        horizon_s *= max(
+          0.50, 1.0 - 0.07 * (abs(point.v_rel) - 5.0),
+        )
       target_path_speed = _median_slope(
         state.observations, "global_path_s", LONG_MOTION_WINDOW_S,
       )
@@ -442,13 +514,23 @@ class TrajectoryCutInDetector:
       )
 
       vision_supported = _vision_supports(point, model)
-      cross_sensor_point = matches.get(key)
       cross_sensor_supported = cross_sensor_point is not None
       paired_front_overlap = (
         point.source.startswith("corner")
         and cross_sensor_point is not None
         and cross_sensor_point.source == "frontRadar"
-        and abs(cross_sensor_point.y_rel) <= 2.15
+        # At close range, both radars can return the outer body of a pickup or
+        # truck rather than its centre. The motion gate in paired_close_entry
+        # still prevents a parallel side reflection from becoming a cut-in.
+        and (
+          abs(cross_sensor_point.y_rel) <= 2.15
+          or (
+            abs(cross_sensor_point.y_rel)
+            <= PAIRED_CLOSE_BODY_HALF_WIDTH_M
+            and reported_inward >= 0.08
+            and point.v_rel <= 0.5
+          )
+        )
       )
       existence_supported = self._existence_supported(
         point,
@@ -475,6 +557,14 @@ class TrajectoryCutInDetector:
         and time_to_overlap_s <= horizon_s
         and ahead_at_overlap
       )
+      recent_time_to_overlap_s = (
+        clearance / short_inward_rate
+        if short_inward_rate > 0.05 else math.inf
+      )
+      recent_predicted_overlap = (
+        recent_time_to_overlap_s <= horizon_s
+        and point.d_rel + relative_path_speed * recent_time_to_overlap_s > 0.5
+      )
       consistent_motion = (
         inward_progress >= MIN_INWARD_PROGRESS_M
         and supported_inward_rate >= MIN_INWARD_RATE_MPS
@@ -485,10 +575,37 @@ class TrajectoryCutInDetector:
         and inward_rate >= MIN_INWARD_RATE_MPS
         and direction_consistency >= MIN_DIRECTION_CONSISTENCY
       )
+      front_history_supported = (
+        vision_required_front
+        and point.source == "frontRadar"
+        and not vision_supported
+        and history_s >= 0.50
+        and point.d_rel <= 20.0
+        and abs(projection.d_path) <= 3.20
+        and recent_abs_yaw_max < 0.020
+        and abs(point.v_rel) <= 5.0
+        and recent_v_rel_min >= 0.50
+        and recent_v_rel_spread <= 1.00
+        and (
+          (
+            short_inward_progress >= 0.18
+            and short_inward_rate >= 0.35
+            and short_direction_consistency >= 0.85
+          )
+          or (
+            inward_progress >= 0.35
+            and supported_inward_rate >= 0.35
+            and direction_consistency >= 0.75
+          )
+        )
+      )
       jitter_override = (
-        (vision_supported or cross_sensor_supported)
-        and inward_progress >= 0.45
-        and direction_consistency >= 0.65
+        front_history_supported
+        or (
+          (vision_supported or cross_sensor_supported)
+          and inward_progress >= 0.45
+          and direction_consistency >= 0.65
+        )
       )
       motion_reliable = not jittering or jitter_override
       paired_close_entry = (
@@ -497,14 +614,9 @@ class TrajectoryCutInDetector:
         and paired_front_overlap
         and point.d_rel <= 8.0
         and abs(projection.d_path) <= 2.75
-        and (
-          point.d_rel <= 2.0
-          or (
-            inward_progress >= 0.06
-            and supported_inward_rate >= 0.15
-            and direction_consistency >= 0.75
-          )
-        )
+        and inward_progress >= 0.06
+        and supported_inward_rate >= 0.15
+        and direction_consistency >= 0.75
       )
       curve_alias = not turning_corner_path_entry_allowed(
         point.source,
@@ -533,6 +645,19 @@ class TrajectoryCutInDetector:
         or paired_close_entry
         or 0.25 <= reported_inward <= 3.0
       )
+      corner_motion_plausible = (
+        not point.source.startswith("corner")
+        or vision_supported
+        or cross_sensor_supported
+        or inward_rate <= max(2.0, reported_inward + 1.0)
+      )
+      uncorroborated_away_range_supported = (
+        not point.source.startswith("corner")
+        or vision_supported
+        or cross_sensor_supported
+        or point.v_rel <= 0.5
+        or point.d_rel <= 30.0
+      )
       front_range_ok = (
         point.source != "frontRadar"
         or point.d_rel >= FRONT_NEW_CUTIN_MIN_DREL_M
@@ -541,15 +666,48 @@ class TrajectoryCutInDetector:
           for value in state.observations
         )
       )
+      close_front_supported = (
+        point.source != "frontRadar"
+        or vision_supported
+        or cross_sensor_supported
+        or point.d_rel >= FRONT_CLOSE_BORN_MIN_DREL_M
+        or any(
+          value.d_rel >= FRONT_CLOSE_BORN_MIN_DREL_M
+          for value in state.observations
+        )
+        or (
+          recent_abs_yaw_max < 0.020
+          and reported_inward >= 0.50
+          and inward_progress >= 0.30
+          and direction_consistency >= 0.75
+        )
+      )
       common_ok = (
         existence_supported
         and started_outside
         and front_range_ok
+        and close_front_supported
+        and (
+          point.source != "frontRadar"
+          or not vision_required_front
+          or (
+            recent_abs_yaw_max < 0.020
+            and abs(point.v_rel) <= 5.0
+          )
+        )
+        and (
+          point.source != "frontRadar"
+          or not vision_required_front
+          or vision_supported
+          or front_history_supported
+        )
         and MIN_MOVING_VLEAD_MPS < point.v_lead
         and 0.8 < point.d_rel <= CUTIN_MAX_DREL_M
         and motion_reliable
         and curve_motion_supported
         and slot_motion_supported
+        and corner_motion_plausible
+        and uncorroborated_away_range_supported
         and (
           not point.source.startswith("corner")
           or vision_supported
@@ -585,6 +743,10 @@ class TrajectoryCutInDetector:
           and supported_inward_rate >= 0.20
           and direction_consistency >= 0.75
         )
+        or (
+          front_history_supported
+          and recent_predicted_overlap
+        )
       )
       corner_approach_ok = (
         point.v_rel <= 0.5
@@ -601,12 +763,20 @@ class TrajectoryCutInDetector:
           and direction_consistency >= 0.90
         )
       )
+      projected_corner_entry_supported = (
+        point.d_rel > 8.0
+        or vision_supported
+      )
       corner_entry = (
         corner_approach_ok
         and corner_commitment
         and (
           (current_overlap and consistent_motion)
-          or (predicted_overlap and strong_predicted_motion)
+          or (
+            predicted_overlap
+            and strong_predicted_motion
+            and projected_corner_entry_supported
+          )
         )
       )
       raw_cutin = common_ok and (
@@ -617,6 +787,7 @@ class TrajectoryCutInDetector:
       cutin_confirmation_s = (
         0.0
         if paired_close_entry
+        or front_history_supported
         or (point.source == "frontRadar" and raw_body_overlap)
         else max(0.0, (
           CUTIN_CURRENT_OVERLAP_CONFIRMATION_S
@@ -632,25 +803,60 @@ class TrajectoryCutInDetector:
         confirmation_s=cutin_confirmation_s,
         hold_s=CUTIN_HOLD_S,
       )
-      control_relevant = (
-        point.d_rel <= 15.0
-        or (
-          point.v_rel < -0.5
-          and point.d_rel / -point.v_rel <= 5.0
-        )
+      trajectory_reversed = (
+        not raw_cutin
+        and not current_overlap
+        and not predicted_overlap
+        and not recent_predicted_overlap
+        and short_inward_progress < 0.05
+        and short_direction_consistency < 0.35
+        and not vision_supported
+        and not cross_sensor_supported
       )
+      if trajectory_reversed:
+        # A hold bridges brief radar jitter, but must not resurrect a candidate
+        # whose recent physical motion has clearly stopped or reversed.
+        state.cutin_until_s = -math.inf
+        confirmed_cutin = False
+      if (
+        vision_required_front
+        and point.source == "frontRadar"
+        and (
+          recent_abs_yaw_max >= 0.020
+          or abs(point.v_rel) > 5.0
+        )
+      ):
+        confirmed_cutin = False
+      closing_time_s = (
+        point.d_rel / -point.v_rel if point.v_rel < -0.1 else math.inf
+      )
+      strong_consistent_entry = (
+        inward_progress >= 0.60
+        and abs(inward_rate - reported_inward) <= 0.30
+      )
+      lead_role_relevant = (
+        point.v_rel >= 0.5
+        or point.d_rel <= 15.0
+        or closing_time_s <= 5.0
+        or strong_consistent_entry
+      )
+      # Lead-role promotion is independent of braking need, but still requires
+      # physical lane-entry geometry. This keeps an early adjacent-lane alert
+      # out of leadTwo while allowing a confirmed vehicle that is pulling away
+      # to occupy the auxiliary lead role. The planner and pre-deceleration
+      # path separately decide whether longitudinal action is necessary.
       control_eligible = (
         confirmed_cutin
-        and control_relevant
+        and lead_role_relevant
         and (
           raw_body_overlap
           if point.source == "frontRadar"
           else (
             current_overlap
-            or (paired_close_entry and point.v_rel <= 0.5)
+            or paired_close_entry
             or (
               time_to_overlap_s is not None
-              and time_to_overlap_s <= 1.60
+              and time_to_overlap_s <= 1.90
               and corner_commitment
             )
           )
@@ -660,17 +866,13 @@ class TrajectoryCutInDetector:
       raw_risk = (
         common_ok
         and 2.0 < point.d_rel <= 45.0
+        and point.v_rel <= -0.5
         and time_to_overlap_s is not None
         and time_to_overlap_s <= 3.0
         and (ahead_at_overlap or close_low_speed_entry)
         and inward_progress >= 0.25
         and supported_inward_rate >= 0.12
         and direction_consistency >= 0.60
-        and (
-          point.v_rel <= -0.5
-          or point.d_rel <= 12.0
-          or current_overlap
-        )
         and (
           point.source == "frontRadar"
           or reported_inward >= 0.40
@@ -689,6 +891,14 @@ class TrajectoryCutInDetector:
         ),
         hold_s=RISK_HOLD_S,
       )
+      if predecel_risk and (
+        point.v_rel >= -0.1 or time_to_overlap_s is None
+      ):
+        # The planner independently rejects a non-closing risk. Clear it here
+        # as well so the validator and published radarState describe the same
+        # action that the vehicle can actually take.
+        state.risk_until_s = -math.inf
+        predecel_risk = False
 
       current_path = (
         existence_supported
@@ -710,6 +920,7 @@ class TrajectoryCutInDetector:
       reason = (
         "confirmed trajectory CUT-IN" if confirmed_cutin
         else "trajectory pre-deceleration" if predecel_risk
+        else "uncorroborated close front" if not close_front_supported
         else "corner lateral jitter" if jittering
         else "current path" if current_path
         else "tracking"
@@ -726,7 +937,14 @@ class TrajectoryCutInDetector:
         inward_rate=supported_inward_rate,
         reported_inward_rate=reported_inward,
         inward_progress=inward_progress,
+        recent_inward_progress=short_inward_progress,
+        lateral_travel=lateral_travel,
+        lateral_net_fraction=lateral_net_fraction,
         direction_consistency=direction_consistency,
+        recent_direction_consistency=short_direction_consistency,
+        recent_v_rel_min=recent_v_rel_min,
+        recent_v_rel_spread=recent_v_rel_spread,
+        recent_abs_yaw_max=recent_abs_yaw_max,
         history_s=history_s,
         confidence=confidence,
         vision_supported=vision_supported,
@@ -741,6 +959,9 @@ class TrajectoryCutInDetector:
         control_eligible=control_eligible,
         predecel_risk=predecel_risk,
         jittering=jittering,
+        unstable_fast_motion=unstable_fast_lateral_motion,
+        front_history_supported=front_history_supported,
+        close_front_supported=close_front_supported,
         curve_alias=curve_alias,
         reason=reason,
       ))

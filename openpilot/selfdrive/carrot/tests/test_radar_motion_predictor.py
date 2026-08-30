@@ -4566,6 +4566,133 @@ def test_held_stationary_corner_ignores_bounded_velocity_outlier() -> None:
   assert matcher.stationary_identity == ("corner235", 1005)
 
 
+def test_held_stationary_corner_hands_off_to_continuous_new_slot() -> None:
+  matcher = VisionRadarMatcher()
+  v_leads = (0.0, 0.0, -4.5, -5.4, -6.2, -7.1, -5.7)
+  for index, v_lead in enumerate(v_leads):
+    time_s = index * 0.05
+    d_rel = 122.0 - index * 2.0
+    point = snapshot_radar_points((Point(
+      1005,
+      d_rel,
+      -0.6,
+      v_rel=v_lead - 23.0,
+      source="corner235",
+    ),), v_ego=23.0)[0]
+    match = matcher.match(
+      model_with_lead(d_rel - 8.0, -1.0, 18.0, probability=0.70),
+      (),
+      STRAIGHT_PATH,
+      time_s=time_s,
+      stationary_points=(point,),
+      prefer_corner_stationary=True,
+    )
+
+  assert match is not None
+  replacement = snapshot_radar_points((Point(
+    1010,
+    107.8,
+    -0.55,
+    v_rel=-29.0,
+    source="corner235",
+  ),), v_ego=23.0)[0]
+  match = matcher.match(
+    model_with_lead(100.0, -1.0, 17.0, probability=0.90),
+    (),
+    STRAIGHT_PATH,
+    time_s=0.35,
+    stationary_points=(replacement,),
+    prefer_corner_stationary=True,
+  )
+
+  assert match is not None
+  assert match.point.track_id == 1010
+  assert matcher.stationary_identity == ("corner235", 1010)
+
+
+def test_held_stationary_corner_bridges_one_missing_measurement() -> None:
+  matcher = VisionRadarMatcher()
+  match = None
+  v_leads = (0.0, 0.0, -4.5, -5.4, -6.2, -7.1, -5.7)
+  for index, v_lead in enumerate(v_leads):
+    time_s = index * 0.05
+    d_rel = 122.0 - index * 2.0
+    point = snapshot_radar_points((Point(
+      1005,
+      d_rel,
+      -0.6,
+      v_rel=v_lead - 23.0,
+      source="corner235",
+    ),), v_ego=23.0)[0]
+    match = matcher.match(
+      model_with_lead(d_rel - 8.0, -1.0, 18.0, probability=0.70),
+      (),
+      STRAIGHT_PATH,
+      time_s=time_s,
+      stationary_points=(point,),
+      prefer_corner_stationary=True,
+    )
+
+  assert match is not None
+  held = matcher.match(
+    model_with_lead(101.0, -1.0, 17.0, probability=0.90),
+    (),
+    STRAIGHT_PATH,
+    time_s=0.35,
+    stationary_points=(),
+    prefer_corner_stationary=True,
+  )
+
+  assert held is not None
+  assert held.point.track_id == 1005
+  assert not held.point.measured
+
+
+def test_corner_supported_front_stationary_tolerates_vision_range_noise() -> None:
+  matcher = VisionRadarMatcher()
+  match = None
+  for index in range(7):
+    time_s = index * 0.05
+    d_rel = 80.0 - index * 0.5
+    front = snapshot_radar_points((Point(
+      41,
+      d_rel,
+      0.1,
+      v_rel=-10.0,
+      source="frontRadar",
+    ),), v_ego=10.0)[0]
+    corner = snapshot_radar_points((Point(
+      1005,
+      d_rel + 0.2,
+      0.1,
+      v_rel=-10.0,
+      source="corner235",
+    ),), v_ego=10.0)[0]
+    match = matcher.match(
+      model_with_lead(d_rel, 0.1, 0.0, probability=0.90),
+      (front,),
+      STRAIGHT_PATH,
+      time_s=time_s,
+      stationary_points=(front, corner),
+      prefer_primary_stationary=True,
+    )
+
+  assert match is not None
+  assert match.point.track_id == 41
+  front = replace(front, d_rel=76.5)
+  held = matcher.match(
+    model_with_lead(100.0, 0.1, 0.0, probability=0.90),
+    (front,),
+    STRAIGHT_PATH,
+    time_s=0.35,
+    stationary_points=(front,),
+    prefer_primary_stationary=True,
+  )
+
+  assert held is not None
+  assert held.point.track_id == 41
+
+
 def test_fresh_corner_velocity_outlier_cannot_seed_stationary_lead() -> None:
   matcher = VisionRadarMatcher()
   match = None
