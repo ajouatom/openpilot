@@ -18,7 +18,6 @@ from opendbc.car.can_definitions import CanData, CanRecvCallable, CanSendCallabl
 from opendbc.car.common.basedir import BASEDIR
 from opendbc.car.common.conversions import Conversions as CV
 from opendbc.car.common.simple_kalman import KF1D, get_kalman_gain
-from opendbc.car.lead_motion import LeadMotionIMM
 from opendbc.car.values import PLATFORMS
 from opendbc.can import CANParser
 
@@ -38,6 +37,7 @@ CORNER_RADAR_SLOT_TRACK_RANGES = ((200, 220), (240, 250))
 CORNER_RADAR_SLOT_DISCONTINUITY_D_REL_M = 8.0
 CORNER_RADAR_SLOT_DISCONTINUITY_Y_REL_M = 1.5
 CORNER_RADAR_SLOT_DISCONTINUITY_V_REL_MPS = 4.0
+RADAR_ACCEL_INNOVATION_LIMIT = 3.0
 
 NEURAL_PARAMS_PATH = os.path.join(BASEDIR, 'torque_data/neural_ff_weights.json')
 TORQUE_NN_MODEL_PATH = os.path.join(BASEDIR, 'torque_data/lat_models')
@@ -222,11 +222,13 @@ class MyTrack:
     self.yRel = radar_point.yRel
     self.yvRel = radar_point.yvRel
     self.vLead = radar_point.vLead
+    self.v_lead_filtered_last = self.vLead
     self.aLead = 0.0
     self.jLead = 0.0
-    self.noisy = False
     self.dt = dt
-    self.lead_motion = LeadMotionIMM(self.vLead)
+    self.vLead_avg = FirstOrderFilter(self.vLead, 0.1, self.dt)
+    self.aLead_avg = FirstOrderFilter(self.aLead, 0.15, self.dt)
+    self.jLead_avg = FirstOrderFilter(self.jLead, 0.4, self.dt)
     self.yRel_avg = FirstOrderFilter(self.yRel, 0.1, self.dt)
     self.yvRel_avg = FirstOrderFilter(self.yvRel, 0.1, self.dt)
     self.cnt = 0
@@ -238,12 +240,12 @@ class MyTrack:
     self.yRel = radar_point.yRel
     self.yvRel = radar_point.yvRel
     self.vLead = radar_point.vLead
-    # Do not initialise a new physical target from one uncorroborated native
-    # acceleration sample. The second radar cycle can fuse aRel immediately,
-    # while the first published cycle remains neutral.
+    self.v_lead_filtered_last = self.vLead
     self.aLead = 0.0
     self.jLead = 0.0
-    self.lead_motion.reset(self.vLead, self.aLead)
+    self.vLead_avg.x = self.vLead
+    self.aLead_avg.x = self.aLead
+    self.jLead_avg.x = self.jLead
     self.yRel_avg.x = self.yRel
     self.yvRel_avg.x = self.yvRel
 
@@ -255,9 +257,8 @@ class MyTrack:
       or abs(radar_point.yRel - self.yRel) > CORNER_RADAR_SLOT_DISCONTINUITY_Y_REL_M
       or abs(radar_point.vRel - self.vRel) > CORNER_RADAR_SLOT_DISCONTINUITY_V_REL_MPS
     )
-
-  def update(self, radar_point, a_ego, dt=None):
-    update_dt = self.dt if dt is None else float(np.clip(dt, 0.015, 0.20))
+        
+  def update(self, radar_point, a_ego):
     if not radar_point.measured:
       if self.cnt > 0:
         self.init_point(radar_point)
@@ -265,7 +266,7 @@ class MyTrack:
     elif self.cnt < 1 or self.is_discontinuous_corner_slot(radar_point):
       self.init_point(radar_point)
       self.cnt += 1
-    else:
+    else:      
       self.vLead = radar_point.vLead
       if self.reused_corner_slot:
         self.yRel = radar_point.yRel
@@ -276,35 +277,38 @@ class MyTrack:
         self.yRel = self.yRel_avg.update(radar_point.yRel)
         self.yvRel = self.yvRel_avg.update(radar_point.yvRel)
 
-      velocity_innovation = (
-        self.vLead - self.lead_motion.steady_velocity
-      )
-      self.noisy = abs(velocity_innovation) > max(0.35, 6.0 * update_dt)
-      if self.noisy and self.radar_source == "scc":
-        # SCC is a single reusable object slot. A large velocity jump normally
-        # means the physical lead changed without a track-ID change.
-        self.init_point(radar_point)
-        self.cnt = 1
-        return
+      if True: #math.isnan(radar_point.aRel): # 
+        v_lead_filtered = self.vLead_avg.update(self.vLead)
+        pseudo_stop = abs(v_lead_filtered) < 0.3 and abs(self.vLead - v_lead_filtered) < 0.05
+        a_raw = (v_lead_filtered - self.v_lead_filtered_last) / self.dt
+        self.v_lead_filtered_last = v_lead_filtered
 
-      radar_a_rel = float(getattr(radar_point, "aRel", math.nan))
-      native_acceleration = (
-        radar_a_rel + a_ego
-        if math.isfinite(radar_a_rel) else None
-      )
-      pseudo_stop = (
-        abs(self.vLead) < 0.3
-        and abs(self.vLead - self.lead_motion.steady_velocity) < 0.05
-      )
-      self.lead_motion.update(
-        0.0 if pseudo_stop else self.vLead,
-        dt=update_dt,
-        native_acceleration=(
-          0.0 if pseudo_stop else native_acceleration
-        ),
-      )
-      self.aLead = self.lead_motion.acceleration
-      self.jLead = self.lead_motion.jerk if self.cnt > 1 else 0.0
+        self.noisy = abs(a_raw - self.aLead) > RADAR_ACCEL_INNOVATION_LIMIT
+        accel_sample = np.clip(a_raw, -10.0, 5.0) if not pseudo_stop else 0.0
+        if self.noisy and self.radar_source == "scc":
+          # SCC exposes one reusable object slot, so a large kinematic jump can mean the
+          # source switched to a different lead without changing the track ID.
+          self.cnt = 0
+        elif self.noisy:
+          # Keep protection against quantized radar velocity jumps, but do not reset the
+          # age of an identified radar track: that used to publish aLead/jLead as zero during
+          # real hard braking. Repeated measurements can still move the estimate quickly.
+          accel_sample = np.clip(
+            accel_sample,
+            self.aLead - RADAR_ACCEL_INNOVATION_LIMIT,
+            self.aLead + RADAR_ACCEL_INNOVATION_LIMIT,
+          )
+
+        a_lead = self.aLead_avg.update(accel_sample)
+
+        j_lead = (a_lead - self.aLead) / self.dt
+        self.aLead = a_lead
+        self.jLead = self.jLead_avg.update(j_lead if self.cnt > 2 else 0.0)
+      else:
+        a_lead = radar_point.aRel + a_ego
+        j_lead = (a_lead - self.aLead) / self.dt
+        self.aLead = a_lead
+        self.jLead = self.jLead_avg.update(j_lead if self.cnt > 2 else 0.0)
 
       # Store latest values
       self.dRel = radar_point.dRel
@@ -357,13 +361,6 @@ class RadarInterfaceBase(ABC):
         self.estimate_dt(rcv_time)
         return None
 
-      measurement_dt = self.dt
-      if self.last_timestamp is not None:
-        observed_dt = float(rcv_time) - float(self.last_timestamp)
-        if 0.015 <= observed_dt <= 0.20:
-          measurement_dt = observed_dt
-      self.last_timestamp = float(rcv_time)
-
       new_tracks = {}
       for addr, radar_point in self.pts.items():
         track_id = radar_point.trackId
@@ -371,27 +368,19 @@ class RadarInterfaceBase(ABC):
           new_tracks[track_id] = MyTrack(track_id, radar_point, self.dt)
         else:
           new_tracks[track_id] = self.tracks[track_id]
-        new_tracks[track_id].update(
-          radar_point,
-          self.a_ego,
-          measurement_dt,
-        )
+        new_tracks[track_id].update(radar_point, self.a_ego)
 
-        warmup_frames = 3 if new_tracks[track_id].reused_corner_slot else 2
-        if new_tracks[track_id].cnt < warmup_frames:
+        if new_tracks[track_id].cnt < 6:
           radar_point.aLead = 0
           radar_point.jLead = 0
           radar_point.yRel = float(new_tracks[track_id].yRel)
           radar_point.yvRel = float(new_tracks[track_id].yvRel)
         else:
           radar_point.aLead = float(new_tracks[track_id].aLead)
-          radar_point.jLead = (
-            float(new_tracks[track_id].jLead)
-            if new_tracks[track_id].cnt >= warmup_frames + 1 else 0.0
-          )
+          radar_point.jLead = float(new_tracks[track_id].jLead)
           radar_point.yRel = float(new_tracks[track_id].yRel)
           radar_point.yvRel = float(new_tracks[track_id].yvRel)
-
+                
       self.tracks = new_tracks
       """
       if self.last_timestamp is not None:
