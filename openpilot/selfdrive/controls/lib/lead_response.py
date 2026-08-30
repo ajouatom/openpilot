@@ -20,6 +20,9 @@ LEAD_RESPONSE_CRUISE_TAPER_TIME = 1.0
 # The planner runs at 20 Hz. Half a second rejects short radar hand-offs while
 # the normal MPC obstacle path remains active immediately.
 LEAD_RESPONSE_CONFIRM_FRAMES = 10
+# Near a stop, obstacle distance is the authoritative signal. Radar-derived
+# acceleration is too noisy to improve the existing MPC stop trajectory.
+LEAD_RESPONSE_MIN_LEAD_SPEED = 2.0
 
 
 @dataclass(frozen=True)
@@ -83,6 +86,7 @@ def should_apply_lead_accel_reference(
   mpc_mode: str,
   source: str,
   stable_frames: int,
+  lead_speed: float,
 ) -> bool:
   """Use feed-forward only after a stable lead actually limits ACC."""
   return (
@@ -90,6 +94,8 @@ def should_apply_lead_accel_reference(
     and mpc_mode == "acc"
     and source == "lead0"
     and stable_frames >= LEAD_RESPONSE_CONFIRM_FRAMES
+    and np.isfinite(lead_speed)
+    and lead_speed > LEAD_RESPONSE_MIN_LEAD_SPEED
   )
 
 
@@ -258,6 +264,7 @@ __all__ = (
   "LEAD_RESPONSE_BALANCED",
   "LEAD_RESPONSE_CONFIRM_FRAMES",
   "LEAD_RESPONSE_CRUISE_TAPER_TIME",
+  "LEAD_RESPONSE_MIN_LEAD_SPEED",
   "LEAD_RESPONSE_SMOOTH",
   "LEAD_RESPONSE_SYNC",
   "LeadResponseReference",

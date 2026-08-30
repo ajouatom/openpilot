@@ -6,6 +6,7 @@ import pytest
 from openpilot.selfdrive.controls.lib.lead_response import (
   LEAD_RESPONSE_BALANCED,
   LEAD_RESPONSE_CONFIRM_FRAMES,
+  LEAD_RESPONSE_MIN_LEAD_SPEED,
   LEAD_RESPONSE_SMOOTH,
   LEAD_RESPONSE_SYNC,
   build_lead_accel_trajectory,
@@ -187,6 +188,7 @@ def test_far_closing_lead_cannot_suppress_cruise_acceleration() -> None:
     mpc_mode="acc",
     source="cruise",
     stable_frames=LEAD_RESPONSE_CONFIRM_FRAMES,
+    lead_speed=20.0,
   )
 
 
@@ -195,6 +197,7 @@ def test_lead_response_requires_stable_active_acc_lead() -> None:
     "reset_state": False,
     "mpc_mode": "acc",
     "source": "lead0",
+    "lead_speed": LEAD_RESPONSE_MIN_LEAD_SPEED + 1.0,
   }
   assert not should_apply_lead_accel_reference(
     **common,
@@ -211,6 +214,23 @@ def test_lead_response_requires_stable_active_acc_lead() -> None:
   assert not should_apply_lead_accel_reference(
     **(common | {"mpc_mode": "blended"}),
     stable_frames=LEAD_RESPONSE_CONFIRM_FRAMES,
+  )
+
+
+def test_stopped_lead_uses_standard_mpc_stop_trajectory() -> None:
+  assert not should_apply_lead_accel_reference(
+    reset_state=False,
+    mpc_mode="acc",
+    source="lead0",
+    stable_frames=LEAD_RESPONSE_CONFIRM_FRAMES,
+    lead_speed=0.0,
+  )
+  assert not should_apply_lead_accel_reference(
+    reset_state=False,
+    mpc_mode="acc",
+    source="lead0",
+    stable_frames=LEAD_RESPONSE_CONFIRM_FRAMES,
+    lead_speed=LEAD_RESPONSE_MIN_LEAD_SPEED,
   )
 
 

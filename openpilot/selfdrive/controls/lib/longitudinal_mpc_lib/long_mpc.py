@@ -516,6 +516,7 @@ class LongitudinalMpc:
         mpc_mode=mode,
         source=self.source,
         stable_frames=self.lead_response_track_frames,
+        lead_speed=float(radarstate.leadOne.vLead),
       )
     ):
       lead_response = build_lead_accel_reference(
