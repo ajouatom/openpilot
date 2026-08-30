@@ -32,6 +32,8 @@ USB_OFF_DIM_INTERVAL_S = 30.0
 USBGPU_DISCOVERY_GRACE_S = 3.0
 USBGPU_STARTUP_TIMEOUT_S = 60.0
 USBGPU_STARTUP_POLL_S = 0.1
+USBGPU_DISPLAY_STABILIZE_S = 10.0
+USBGPU_DISPLAY_FPS = 5
 USBGPU_EVER_PRESENT_PARAM = "UsbGpuEverPresent"
 USBGPU_LOADING_PARAM = "UsbGpuLoading"
 USBGPU_ACTIVE_PARAM = "UsbGpuActive"
@@ -283,6 +285,7 @@ def _cluster_args(
     core_mode: int,
     priority: int,
     output_mode: str = "usb",
+    usbgpu_active: bool = False,
 ) -> list[str]:
     args = [
         "--input",
@@ -301,8 +304,14 @@ def _cluster_args(
     if output_mode in ("usb", "both"):
         # Standalone carrot_navi owns TCP 7714; live input consumes its carrotNavi cereal service.
         args[4:4] = _encoder_args(active_encoder_mode)
+        if usbgpu_active:
+            args.extend(["--usb-display-fps", str(USBGPU_DISPLAY_FPS)])
     fps = os.environ.get(AUTORUN_FPS_ENV, "").strip()
-    if fps:
+    if output_mode in ("usb", "both") and usbgpu_active:
+        # Cap rendering/encoding as well as the TURZX controller setting. The
+        # latter alone does not reduce H264 uploads on the shared USB bus.
+        args.extend(["--fps", str(USBGPU_DISPLAY_FPS)])
+    elif fps:
         args.extend(["--fps", fps])
     return args
 
@@ -313,6 +322,7 @@ def _run_cluster_once(
     core_mode: int,
     priority: int,
     output_mode: str = "usb",
+    usbgpu_active: bool = False,
 ) -> None:
     from selfdrive.carrot import cluster_run
     from cluster_h264_pipeline import H264PipelineInitializationError
@@ -348,6 +358,7 @@ def _run_cluster_once(
                         core_mode,
                         priority,
                         output_mode,
+                        usbgpu_active,
                     ),
                 ]
                 run_cluster_entry()
@@ -625,7 +636,25 @@ def _wait_for_usbgpu_startup(params: Params) -> None:
         active = params.get_bool(USBGPU_ACTIVE_PARAM)
         failed = params.get_bool(USBGPU_STARTUP_FAILED_PARAM)
         if not loading and active:
-            print("[cluster_autorun] eGPU startup complete; starting USB display", flush=True)
+            print(
+                f"[cluster_autorun] eGPU startup complete; keeping USB display idle for "
+                f"{USBGPU_DISPLAY_STABILIZE_S:.0f}s",
+                flush=True,
+            )
+            stabilize_deadline = time.monotonic() + USBGPU_DISPLAY_STABILIZE_S
+            while time.monotonic() < stabilize_deadline:
+                if not params.get_bool(USBGPU_ACTIVE_PARAM):
+                    print(
+                        "[cluster_autorun] eGPU became inactive during stabilization; "
+                        "starting USB display",
+                        flush=True,
+                    )
+                    return
+                time.sleep(min(USBGPU_STARTUP_POLL_S, stabilize_deadline - time.monotonic()))
+            print(
+                f"[cluster_autorun] eGPU stable; starting USB display at {USBGPU_DISPLAY_FPS} fps",
+                flush=True,
+            )
             return
         if not loading and failed:
             print("[cluster_autorun] eGPU startup failed; starting USB display after fallback", flush=True)
@@ -699,7 +728,13 @@ def main() -> None:
             print(f"[cluster_autorun] found {product_label(expected_product_id)}; starting cluster HUD", flush=True)
 
         try:
-            _run_cluster_once(hud_mode, encoder_mode, core_mode, priority)
+            _run_cluster_once(
+                hud_mode,
+                encoder_mode,
+                core_mode,
+                priority,
+                usbgpu_active=params.get_bool(USBGPU_ACTIVE_PARAM),
+            )
             next_hud_mode = _read_hud_mode(params)
             next_encoder_mode = _read_encoder_mode(params)
             next_live_fps_mode = _read_live_fps_mode(params)

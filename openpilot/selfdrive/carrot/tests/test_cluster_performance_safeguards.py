@@ -218,7 +218,9 @@ def test_cluster_autorun_waits_for_first_egpu_output_before_usb_display(monkeypa
   cluster_autorun._wait_for_usbgpu_startup(FakeParams())
 
   assert state_index[0] == 1
-  assert clock[0] == cluster_autorun.USBGPU_STARTUP_POLL_S
+  assert clock[0] == pytest.approx(
+    cluster_autorun.USBGPU_STARTUP_POLL_S + cluster_autorun.USBGPU_DISPLAY_STABILIZE_S,
+  )
 
 
 def test_cluster_autorun_skips_egpu_gate_for_unrelated_usb_display(monkeypatch):
@@ -664,6 +666,23 @@ def test_cluster_autorun_leaves_navi_server_owned_by_standalone_process(monkeypa
   assert "--navi-publish-cereal" not in args
   assert args[args.index("--output") + 1] == "usb"
   assert args[args.index("--usb-h264-backend") + 1] == "native"
+
+
+def test_cluster_autorun_caps_h264_upload_rate_while_egpu_is_active(monkeypatch):
+  cluster_autorun = _import_cluster_autorun(monkeypatch)
+
+  args = cluster_autorun._cluster_args(
+    hud_mode=0,
+    configured_encoder_mode=cluster_autorun.ENCODER_AUTO,
+    active_encoder_mode=cluster_autorun.ENCODER_HARDWARE,
+    core_mode=0,
+    priority=10,
+    usbgpu_active=True,
+  )
+
+  expected = str(cluster_autorun.USBGPU_DISPLAY_FPS)
+  assert args[args.index("--fps") + 1] == expected
+  assert args[args.index("--usb-display-fps") + 1] == expected
 
 
 def test_cluster_autorun_does_not_fallback_after_runtime_failure(monkeypatch):
