@@ -12,6 +12,7 @@ from openpilot.selfdrive.carrot.radar.tools.radar_lead_simulator import (
   Candidate,
   CurrentRadardSelector,
   ModelLead,
+  ProductionDPathSelector,
   RadarFrame,
   RadarMotionShadowSelector,
   RadarOccupancyV2Selector,
@@ -208,6 +209,70 @@ def test_visual_review_can_cycle_cached_v1_v2_and_v3(tmp_path) -> None:
   assert "V2" in ui.status
 
 
+def test_visual_review_starts_with_production_and_cycles_old_versions(
+  tmp_path,
+) -> None:
+  frames = [
+    frame(
+      (point(1010, 8.0, -3.0, source="corner235"),),
+      time_s=index * 0.1,
+    )
+    for index in range(3)
+  ]
+  v1 = RadarMotionShadowSelector(
+    frames,
+    motion_sensor="corner",
+    enable_radar_tracks=2,
+  )
+  v2 = RadarOccupancyV2Selector(
+    frames,
+    baseline=v1,
+    enable_radar_tracks=2,
+  )
+  v3 = RadarOccupancyV3Selector(frames, enable_radar_tracks=2)
+  production = ProductionDPathSelector(
+    frames,
+    motion_sensor="corner",
+    enable_radar_tracks=2,
+  )
+  ui = SimulatorUI(
+    frames,
+    v2,
+    "test",
+    tmp_path / "rlog.zst",
+    settings_path=tmp_path / "radar_validation.json",
+    v3_selector=v3,
+    production_selector=production,
+  )
+
+  assert ui.occupancy_version == 4
+  assert ui.selector is production
+  assert ui.v1_selector is v1
+  assert ui.v2_selector is v2
+
+  expected = (
+    (1, v1, "이전 V1"),
+    (2, v2, "이전 V2"),
+    (3, v3, "이전 V3"),
+    (4, production, "현재 Trajectory"),
+  )
+  for version, selector, label in expected:
+    ui._toggle_occupancy_version()
+    assert ui.occupancy_version == version
+    assert ui.selector is selector
+    assert label in ui.status
+
+  ui._request_sensitivity(4)
+  assert ui.occupancy_version == 4
+  assert ui.selector is ui.production_selector
+  assert ui.selector.cut_in_sensitivity == 4
+
+  ui._request_motion_mode("front")
+  assert ui.occupancy_version == 4
+  assert ui.selector is ui.production_selector
+  assert ui.selector.motion_sensor == "front"
+
+
 def test_visual_replay_cache_round_trip_and_exact_configuration(tmp_path) -> None:
   log_path = tmp_path / "rlog.zst"
   log_path.write_bytes(b"test-log-identity")
@@ -229,6 +294,11 @@ def test_visual_replay_cache_round_trip_and_exact_configuration(tmp_path) -> Non
     enable_radar_tracks=2,
   )
   v3 = RadarOccupancyV3Selector(frames, enable_radar_tracks=2)
+  production = ProductionDPathSelector(
+    frames,
+    motion_sensor="corner",
+    enable_radar_tracks=2,
+  )
   cache_path = visual_replay_cache_path(
     tmp_path / "cache",
     log_path,
@@ -238,15 +308,16 @@ def test_visual_replay_cache_round_trip_and_exact_configuration(tmp_path) -> Non
     enable_radar_tracks=2,
   )
 
-  save_visual_replay_cache(cache_path, frames, v2, v3)
+  save_visual_replay_cache(cache_path, frames, v2, v3, production)
   cached = load_visual_replay_cache(cache_path)
 
   assert cached is not None
-  cached_frames, cached_v2, cached_v3 = cached
+  cached_frames, cached_v2, cached_v3, cached_production = cached
   assert cached_frames == frames
   assert cached_v2.selections == v2.selections
   assert cached_v2.baseline.selections == v1.selections
   assert cached_v3.selections == v3.selections
+  assert cached_production.selections == production.selections
   assert visual_replay_cache_path(
     tmp_path / "cache",
     log_path,
