@@ -350,9 +350,7 @@
               "en": "Lead Response",
               "zh": "前车响应",
               "params": [
-                "LeadResponseMode",
-                "JLeadFactor3",
-                "RadarReactionFactor"
+                "LeadResponseMode"
               ]
             },
             {
@@ -1296,22 +1294,6 @@
     },
     {
       "group": "주행튜닝",
-      "name": "JLeadFactor3",
-      "title": "JerkLeadFactor(0)",
-      "descr": "값이 클수록 전방차량의 가속도변화율에 민감하게 반응",
-      "egroup": "LONG",
-      "etitle": "JerkLeadFactor(0)",
-      "edescr": "Higher values respond more sensitively to acceleration changes of the lead vehicle",
-      "cgroup": "纵向控制",
-      "ctitle": "前车冲击因子(0)",
-      "cdescr": "值越高对前车加速度变化的反应越敏感",
-      "min": 0,
-      "max": 100,
-      "default": 0,
-      "unit": 10
-    },
-    {
-      "group": "주행튜닝",
       "name": "LongTuningKpV",
       "title": "Long KpV(100)x0.01",
       "descr": "롱컨 비례게인(오차 즉각 반응) \n\n HKG: 100 권장",
@@ -1389,23 +1371,6 @@
       "max": 100,
       "default": 50,
       "unit": 5
-    },
-    {
-      "group": "주행튜닝",
-      "name": "RadarReactionFactor",
-      "title": "Radar reaction factor (100)%",
-      "descr": "값이 낮을수록 선행차량에 대한 반응이 빠름.",
-      "egroup": "LONG",
-      "etitle": "Radar reaction factor (100)%",
-      "edescr": "Lower value: faster response to lead car",
-      "cgroup": "纵向控制",
-      "ctitle": "雷达反应因子 (100)%",
-      "cdescr": "值越低：对前车的反应越快",
-      "min": 0,
-      "max": 200,
-      "default": 100,
-      "unit": 1,
-      "display_unit": "percent"
     },
     {
       "group": "감속제어",
