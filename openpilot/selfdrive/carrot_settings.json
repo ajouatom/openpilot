@@ -350,7 +350,8 @@
               "en": "Lead Response",
               "zh": "前车响应",
               "params": [
-                "LeadResponseMode"
+                "JLeadFactor3",
+                "RadarReactionFactor"
               ]
             },
             {
@@ -1259,38 +1260,19 @@
     },
     {
       "group": "주행튜닝",
-      "name": "LeadResponseMode",
-      "title": "선행차 반응 모드(0)",
-      "descr": "0: 여유거리를 사용해 일찍 부드럽게 반응, 1: 승차감과 동기 추종의 균형, 2: 선행차 가감속을 적극적으로 동기 추종. 모든 모드는 위험 시 안전 반응으로 전환합니다.",
+      "name": "JLeadFactor3",
+      "title": "JerkLeadFactor(0)",
+      "descr": "값이 클수록 전방차량의 가속도변화율에 민감하게 반응",
       "egroup": "LONG",
-      "etitle": "Lead Response Mode(0)",
-      "edescr": "0: Smooth uses surplus distance for an early gentle response. 1: Balanced. 2: Sync follows lead acceleration more directly. All modes blend toward the safety response when the margin is small.",
+      "etitle": "JerkLeadFactor(0)",
+      "edescr": "Higher values respond more sensitively to acceleration changes of the lead vehicle",
       "cgroup": "纵向控制",
-      "ctitle": "前车响应模式(0)",
-      "cdescr": "0：平顺，利用余距提前轻柔响应；1：均衡；2：同步，更直接跟随前车加减速。安全余量不足时所有模式都会转为安全响应。",
+      "ctitle": "前车冲击因子(0)",
+      "cdescr": "值越高对前车加速度变化的反应越敏感",
       "min": 0,
-      "max": 2,
+      "max": 100,
       "default": 0,
-      "unit": 1,
-      "control": "select",
-      "risk": "high",
-      "options": {
-        "ko": [
-          "부드럽게",
-          "균형",
-          "동기 추종"
-        ],
-        "en": [
-          "Smooth",
-          "Balanced",
-          "Sync"
-        ],
-        "zh": [
-          "平顺",
-          "均衡",
-          "同步跟随"
-        ]
-      }
+      "unit": 10
     },
     {
       "group": "주행튜닝",
@@ -1371,6 +1353,23 @@
       "max": 100,
       "default": 50,
       "unit": 5
+    },
+    {
+      "group": "주행튜닝",
+      "name": "RadarReactionFactor",
+      "title": "Radar reaction factor (100)%",
+      "descr": "값이 낮을수록 선행차량에 대한 반응이 빠름.",
+      "egroup": "LONG",
+      "etitle": "Radar reaction factor (100)%",
+      "edescr": "Lower value: faster response to lead car",
+      "cgroup": "纵向控制",
+      "ctitle": "雷达反应因子 (100)%",
+      "cdescr": "值越低：对前车的反应越快",
+      "min": 0,
+      "max": 200,
+      "default": 100,
+      "unit": 1,
+      "display_unit": "percent"
     },
     {
       "group": "감속제어",

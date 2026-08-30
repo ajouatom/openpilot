@@ -39,9 +39,6 @@ from openpilot.selfdrive.controls.lib.cutin_helpers import (
 
 # Default lead acceleration decay set to 50% at 1s
 _LEAD_ACCEL_TAU = 1.5
-# Engineering calibration, not a user response preference. It keeps quiet
-# lead acceleration transient while allowing hard motion to persist longer.
-RADAR_REACTION_FACTOR = 1.0
 
 # radar tracks
 SPEED, ACCEL = 0, 1     # Kalman filter states enum
@@ -803,7 +800,7 @@ class RadarD:
       self.corner_cutin_enabled = False
       self.front_cutin_enabled = False
     self.radar_lat_factor = self.cutin_tuning["horizon_s"] if cutin_enabled else 0.0
-    self.radar_reaction_factor = RADAR_REACTION_FACTOR
+    self.radar_reaction_factor = self.params.get_float("RadarReactionFactor") * 0.01
     self.detect_cut_in = cutin_enabled
     if self.corner_cutin_enabled:
       current_side_matches = self._side_corner_front_matches(rr.points)
