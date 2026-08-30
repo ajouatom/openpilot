@@ -320,7 +320,7 @@ class LongitudinalPlanner:
     longitudinalPlan.accels = self.a_desired_trajectory.tolist()
     longitudinalPlan.jerks = self.j_desired_trajectory.tolist()
 
-    longitudinalPlan.hasLead = sm['radarState'].leadOne.status
+    longitudinalPlan.hasLead = sm['radarState'].leadOne.status or sm['radarState'].leadTwo.status
     longitudinalPlan.longitudinalPlanSource = self.mpc.source
     longitudinalPlan.fcw = self.fcw
 
@@ -338,5 +338,8 @@ class LongitudinalPlanner:
     longitudinalPlan.desiredDistance = float(self.mpc.desired_distance)
     longitudinalPlan.events = carrot.events.to_msg()
     longitudinalPlan.myDrivingMode = carrot.myDrivingMode.value
+    longitudinalPlan.leadResponseMode = carrot.lead_response_mode
+    longitudinalPlan.leadOneResponseWeight = float(self.mpc.lead_response_confidences[0])
+    longitudinalPlan.leadTwoResponseWeight = float(self.mpc.lead_response_confidences[1])
 
     pm.send('longitudinalPlan', plan_send)

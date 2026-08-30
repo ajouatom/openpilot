@@ -7,6 +7,8 @@ from opendbc.car.common.conversions import Conversions as CV
 from opendbc.car.hyundai import hyundaicanfd, hyundaican
 from opendbc.car.hyundai.carstate import CarState
 from opendbc.car.hyundai.hyundaicanfd import CanBus
+from opendbc.car.hyundai.jerk_limits import CANFD_JERK_LIMIT_MAX, CANFD_JERK_RELEASE_THRESHOLD, CANFD_JERK_UPPER_MIN, \
+                                              calculate_canfd_jerk_limits, calculate_lead_braking_urgency
 from opendbc.car.hyundai.values import HyundaiFlags, Buttons, CarControllerParams, CAR, CAN_GEARS, HyundaiExtFlags
 from opendbc.car.interfaces import CarControllerBase
 from opendbc.car.vehicle_model import VehicleModel
@@ -35,18 +37,8 @@ PRE_OVERRIDE_MAX_TORQUE_DELTA = -10.0
 LOW_SPEED_ANGLE_RATE_RAMP_SPEED = 15.0 * CV.KPH_TO_MS
 MID_SPEED_ANGLE_RATE_LIMIT_SPEED = 40.0 * CV.KPH_TO_MS
 LARGE_ANGLE_UNWIND_RATE = 1.5  # deg/tick: allow a quicker return from the EPS fault-angle region
-CANFD_JERK_UPPER_MIN = 1.0
-CANFD_JERK_LIMIT_MAX = 5.0
 CANFD_JERK_ERROR_DELAY = 0.5
 CANFD_JERK_ERROR_FILTER_TIME = 0.4
-CANFD_JERK_ERROR_DEADBAND = 0.25
-CANFD_JERK_ERROR_FULL_SCALE = 0.5
-CANFD_JERK_RELEASE_THRESHOLD = 0.1
-# Some CAN-FD SCC implementations need a higher lower-jerk limit to follow sustained
-# deceleration requests. Keep the historical MPC-jerk limit as the default and blend
-# toward this stock-like feedforward only after measured under-deceleration.
-CANFD_JERK_LOWER_ACCEL_BP = [0.0, 0.8, 1.2, 1.5, 2.0, 2.5, 3.2]
-CANFD_JERK_LOWER_LIMIT_V = [1.2, 1.2, 1.2, 1.7, 3.0, 3.3, 3.7]
 
 vibrate_intervals = [
   (0.0, 0.5),
@@ -84,23 +76,6 @@ def process_hud_alert(enabled, fingerprint, hud_control):
 def rate_limit(x, x_last, lo, hi):
   return float(np.clip(x, x_last + lo, x_last + hi))
 
-
-def calculate_canfd_jerk_limits(accel: float, jerk: float, tracking_error: float = 0.0) -> tuple[float, float]:
-  jerk_u = np.clip(jerk * 2.0, CANFD_JERK_UPPER_MIN, CANFD_JERK_LIMIT_MAX)
-  jerk_l_mpc = np.clip(-jerk * 4.0, 1.0, CANFD_JERK_LIMIT_MAX)
-
-  # A clearly positive jerk means the plan is releasing deceleration. In that case, or when
-  # the vehicle is already tracking the request, return to the historical jerk-based
-  # limit immediately instead of allowing acceleration demand alone to hold braking.
-  assist_ratio = 0.0
-  if jerk <= CANFD_JERK_RELEASE_THRESHOLD:
-    assist_ratio = np.clip((tracking_error - CANFD_JERK_ERROR_DEADBAND) / CANFD_JERK_ERROR_FULL_SCALE, 0.0, 1.0)
-
-  decel_request = max(0.0, -accel)
-  jerk_l_feedforward = np.interp(decel_request, CANFD_JERK_LOWER_ACCEL_BP, CANFD_JERK_LOWER_LIMIT_V)
-  jerk_l_assist = 1.0 + assist_ratio * (jerk_l_feedforward - 1.0)
-  jerk_l = np.clip(max(jerk_l_mpc, jerk_l_assist), 1.0, CANFD_JERK_LIMIT_MAX)
-  return float(jerk_u), float(jerk_l)
 
 def apply_steer_angle_limits_physics(desired_sw_deg: float,
                                      last_sw_deg: float,
@@ -783,6 +758,7 @@ class HyundaiJerk:
     self.jerk_u = self.jerk_l = 0.0
     self.cb_upper = self.cb_lower = 0.0
     self.jerk_u_min = 0.5
+    self.braking_urgency = 0.0
     self.carrot_cruise = 1
     self.carrot_cruise_accel = 0.0
     self.accel_request_history = deque(maxlen=max(1, round(CANFD_JERK_ERROR_DELAY / DT_CTRL)))
@@ -828,6 +804,17 @@ class HyundaiJerk:
       self.jerk_error_filter.set_all(0.0)
     else:
       if canfd:
+        response_mode = None
+        self.braking_urgency = 0.0
+        if hud_control is not None:
+          response_mode = int(hud_control.leadResponseMode)
+          self.braking_urgency = calculate_lead_braking_urgency(
+            CS.out.vEgo,
+            (
+              (bool(hud_control.leadVisible), float(hud_control.leadDistance), float(hud_control.leadRelSpeed)),
+              (bool(hud_control.leadTwoVisible), float(hud_control.leadTwoDistance), float(hud_control.leadTwoRelSpeed)),
+            ),
+          )
         tracking_error = 0.0
         tracking_error_active = actuators.longControlState == LongCtrlState.pid and not CS.out.brakePressed and not CS.out.gasPressed
         if tracking_error_active:
@@ -852,7 +839,11 @@ class HyundaiJerk:
           self.accel_request_history.clear()
           filtered_tracking_error = self.jerk_error_filter.set_all(0.0)
 
-        self.jerk_u, self.jerk_l = calculate_canfd_jerk_limits(accel, self.jerk, filtered_tracking_error)
+        self.jerk_u, self.jerk_l = calculate_canfd_jerk_limits(
+          accel, self.jerk, filtered_tracking_error,
+          braking_urgency=self.braking_urgency,
+          response_mode=response_mode,
+        )
         self.cb_upper = self.cb_lower = 0.0
       else:
         self.jerk_u = min(max(self.jerk_u_min, self.jerk * 2.0), jerk_max_u)

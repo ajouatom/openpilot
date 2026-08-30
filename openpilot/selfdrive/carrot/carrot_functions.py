@@ -9,6 +9,7 @@ from openpilot.common.constants import CV
 from openpilot.common.filter_simple import MyMovingAverage
 from openpilot.selfdrive.carrot.t_follow import ramp_t_follow
 from openpilot.selfdrive.carrot.traffic_stop import is_traffic_stop_entry_allowed
+from openpilot.selfdrive.controls.lib.lead_response import equal_lead_t_follow_adjustment, lead_response_mode_for_driving_mode
 from openpilot.selfdrive.selfdrived.events import Events
 
 EventName = log.OnroadEvent.EventName
@@ -133,7 +134,7 @@ class CarrotPlanner:
     self.jerk_factor = 1.0
     self.jerk_factor_apply = 1.0
 
-    self.lead_response_mode = 0
+    self.lead_response_mode = lead_response_mode_for_driving_mode(self.myDrivingMode.value)
 
     self.activeCarrot = 0
     self.xDistToTurn = 0
@@ -157,6 +158,7 @@ class CarrotPlanner:
         self.myDrivingMode = self.drivingModeDetector.get_mode()
       else:
         self.myDrivingMode = myDrivingMode
+      self.lead_response_mode = lead_response_mode_for_driving_mode(self.myDrivingMode.value)
 
     if self.params_count == 10:
       self.myHighModeFactor = 1.2 #float(self.params.get_int("MyHighModeFactor")) / 100.
@@ -180,9 +182,6 @@ class CarrotPlanner:
       self.cruiseMaxVals6 = self.params.get_float("CruiseMaxVals6") / 100.
     elif self.params_count == 40:
       self.stop_distance = self.params.get_float("StopDistanceCarrot") / 100.
-      self.lead_response_mode = int(np.clip(
-        self.params.get_int("LeadResponseMode"), 0, 2,
-      ))
       self.eco_over_speed = self.params.get_int("CruiseEcoControl")
       self.autoNaviSpeedDecelRate = float(self.params.get_int("AutoNaviSpeedDecelRate")) * 0.01
       self.aChangeCostStarting = self.params.get_float("AChangeCostStarting")
@@ -308,8 +307,10 @@ class CarrotPlanner:
       self.desireStateCount = 0
 
 
-  def dynamic_t_follow(self, t_follow, lead, desired_follow_distance, prev_a):
+  def dynamic_t_follow(self, t_follow, leads, desired_follow_distance, prev_a):
+    del desired_follow_distance, prev_a
     self.jerk_factor_apply = self.jerk_factor
+    lead_list = leads if isinstance(leads, (tuple, list)) else (leads,)
 
     # 차선변경 시작 후 1.5초 동안은 공격적으로
     if self.desireState > 0.9 and self.desireStateCount < int(1.5 / DT_MDL):
@@ -318,13 +319,18 @@ class CarrotPlanner:
       self.jerk_factor_apply = self.jerk_factor * dynamicTFollowLC
 
     # 일반 lead follow: lead.jLead 기반 동적 조절
-    elif lead.status and self.dynamicTFollow > 0.0:
+    elif any(lead.status for lead in lead_list) and self.dynamicTFollow > 0.0:
       # lead.jLead < 0 : 앞차가 감속 방향으로 변함 -> 차간거리 증가
       # lead.jLead > 0 : 앞차가 가속 방향으로 변함 -> 차간거리 감소
-      t_follow += np.interp(lead.jLead, [-3.0, -0.5, 0.5, 2.0], [1.0, 0.0, 0.0, -1.0]) * self.dynamicTFollow
+      # Equal treatment without hierarchy: the most conservative simultaneous
+      # lead adjustment wins.
+      t_follow_adjustment = equal_lead_t_follow_adjustment(
+        [lead.jLead for lead in lead_list if lead.status], self.dynamicTFollow,
+      )
+      t_follow += t_follow_adjustment
 
       # 앞차가 풀어주는 상황에서는 jerk factor 약간 낮춰서 더 민첩하게
-      if lead.jLead > 0.2:
+      if t_follow_adjustment < 0.0:
         self.jerk_factor_apply = self.jerk_factor * 0.5
 
       t_follow = np.clip(t_follow, 0.3, 2.0)

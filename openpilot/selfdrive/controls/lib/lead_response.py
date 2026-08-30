@@ -17,9 +17,13 @@ LEAD_RESPONSE_SMOOTH = 0
 LEAD_RESPONSE_BALANCED = 1
 LEAD_RESPONSE_SYNC = 2
 LEAD_RESPONSE_CRUISE_TAPER_TIME = 1.0
-# The planner runs at 20 Hz. Half a second rejects short radar hand-offs while
-# the normal MPC obstacle path remains active immediately.
-LEAD_RESPONSE_CONFIRM_FRAMES = 10
+# The hard MPC obstacle is active on the first frame. Acceleration feed-forward
+# starts on the second frame and reaches full confidence after 0.3 seconds.
+LEAD_RESPONSE_MIN_TRACK_FRAMES = 2
+LEAD_RESPONSE_CONFIRM_FRAMES = 6
+LEAD_RESPONSE_BLEND_HORIZON = 1.5
+LEAD_RESPONSE_WEIGHT_ATTACK = 0.25
+LEAD_RESPONSE_WEIGHT_RELEASE = 0.10
 # Near a stop, obstacle distance is the authoritative signal. Radar-derived
 # acceleration is too noisy to improve the existing MPC stop trajectory.
 LEAD_RESPONSE_MIN_LEAD_SPEED = 2.0
@@ -80,6 +84,27 @@ def lead_response_profile(mode: int) -> LeadResponseProfile:
   return PROFILES.get(int(mode), PROFILES[LEAD_RESPONSE_BALANCED])
 
 
+def lead_response_mode_for_driving_mode(driving_mode: int) -> int:
+  """Use the existing drive mode as the single user-facing response control."""
+  return {
+    1: LEAD_RESPONSE_SMOOTH,    # Eco
+    2: LEAD_RESPONSE_SMOOTH,    # Safe
+    3: LEAD_RESPONSE_BALANCED,  # Normal
+    4: LEAD_RESPONSE_SYNC,      # High
+  }.get(int(driving_mode), LEAD_RESPONSE_BALANCED)
+
+
+def equal_lead_t_follow_adjustment(jerks: list[float], dynamic_factor: float) -> float:
+  """Combine simultaneous lead adjustments without leadOne/leadTwo priority."""
+  if not jerks or dynamic_factor <= 0.0:
+    return 0.0
+  adjustments = [
+    float(np.interp(jerk, [-3.0, -0.5, 0.5, 2.0], [1.0, 0.0, 0.0, -1.0])) * dynamic_factor
+    for jerk in jerks
+  ]
+  return float(max(adjustments))
+
+
 def should_apply_lead_accel_reference(
   *,
   reset_state: bool,
@@ -88,15 +113,105 @@ def should_apply_lead_accel_reference(
   stable_frames: int,
   lead_speed: float,
 ) -> bool:
-  """Use feed-forward only after a stable lead actually limits ACC."""
-  return (
+  """Compatibility predicate for whether continuous lead response may start.
+
+  ``source`` is intentionally not a gate. A stable moving lead may contribute a
+  small preview response while cruise still limits the immediate MPC obstacle.
+  """
+  del source
+  return lead_response_confidence(
+    reset_state=reset_state,
+    mpc_mode=mpc_mode,
+    stable_frames=stable_frames,
+    lead_speed=lead_speed,
+  ) > 0.0
+
+
+def lead_response_confidence(
+  *,
+  reset_state: bool,
+  mpc_mode: str,
+  stable_frames: int,
+  lead_speed: float,
+) -> float:
+  if (
     not reset_state
     and mpc_mode == "acc"
-    and source == "lead0"
-    and stable_frames >= LEAD_RESPONSE_CONFIRM_FRAMES
     and np.isfinite(lead_speed)
     and lead_speed > LEAD_RESPONSE_MIN_LEAD_SPEED
+    and stable_frames >= LEAD_RESPONSE_MIN_TRACK_FRAMES
+  ):
+    return float(np.interp(
+      stable_frames,
+      [LEAD_RESPONSE_MIN_TRACK_FRAMES - 1, LEAD_RESPONSE_CONFIRM_FRAMES],
+      [0.0, 1.0],
+    ))
+  return 0.0
+
+
+def lead_obstacle_relevance(
+  lead_obstacle: np.ndarray,
+  cruise_obstacle: np.ndarray,
+  v_ego: float,
+  time_indices: np.ndarray,
+) -> float:
+  """Return a continuous lead/cruise blend weight from predicted obstacles.
+
+  Positive advantage means the lead is the tighter obstacle. Looking ahead is
+  what permits a small response before the old instantaneous source switch.
+  """
+  lead_obstacle = np.asarray(lead_obstacle, dtype=float)
+  cruise_obstacle = np.asarray(cruise_obstacle, dtype=float)
+  time_indices = np.asarray(time_indices, dtype=float)
+  count = min(len(lead_obstacle), len(cruise_obstacle), len(time_indices))
+  if count == 0:
+    return 0.0
+  valid = (
+    np.isfinite(lead_obstacle[:count])
+    & np.isfinite(cruise_obstacle[:count])
+    & np.isfinite(time_indices[:count])
+    & (time_indices[:count] <= LEAD_RESPONSE_BLEND_HORIZON)
   )
+  if not np.any(valid):
+    return 0.0
+  advantage = float(np.max(cruise_obstacle[:count][valid] - lead_obstacle[:count][valid]))
+  blend_distance = float(np.clip(max(float(v_ego), 0.0) * 0.6, 3.0, 12.0))
+  return float(np.interp(advantage, [-blend_distance, blend_distance], [0.0, 1.0]))
+
+
+def rate_limit_lead_response_weight(previous: float, target: float) -> float:
+  previous = float(np.clip(previous, 0.0, 1.0))
+  target = float(np.clip(target, 0.0, 1.0))
+  if target > previous:
+    return min(target, previous + LEAD_RESPONSE_WEIGHT_ATTACK)
+  return max(target, previous - LEAD_RESPONSE_WEIGHT_RELEASE)
+
+
+def blend_lead_accel_reference(
+  previous_acceleration: np.ndarray,
+  lead_acceleration: np.ndarray,
+  weight: float,
+) -> np.ndarray:
+  """Continuously blend a lead reference without preview acceleration surges."""
+  previous_acceleration = np.asarray(previous_acceleration, dtype=float)
+  lead_acceleration = np.asarray(lead_acceleration, dtype=float)
+  weight = float(np.clip(weight, 0.0, 1.0))
+  delta = lead_acceleration - previous_acceleration
+  # Early negative response is useful; early positive response is not. Requiring
+  # squared confidence for acceleration also prevents a far lead suppressing
+  # or replacing the cruise target as source weights chatter near equality.
+  applied_weight = np.where(delta <= 0.0, weight, weight * weight)
+  return previous_acceleration + applied_weight * delta
+
+
+def combine_lead_accel_references(
+  previous_acceleration: np.ndarray,
+  candidates: list[np.ndarray],
+) -> np.ndarray:
+  """Treat leadOne and leadTwo equally; the more restrictive reference wins."""
+  if not candidates:
+    return np.copy(previous_acceleration)
+  return np.minimum.reduce([np.asarray(candidate, dtype=float) for candidate in candidates])
 
 
 def _value(value: Any, name: str, default: float = 0.0) -> float:
@@ -262,14 +377,23 @@ def build_lead_accel_reference(
 
 __all__ = (
   "LEAD_RESPONSE_BALANCED",
+  "LEAD_RESPONSE_BLEND_HORIZON",
   "LEAD_RESPONSE_CONFIRM_FRAMES",
   "LEAD_RESPONSE_CRUISE_TAPER_TIME",
   "LEAD_RESPONSE_MIN_LEAD_SPEED",
+  "LEAD_RESPONSE_MIN_TRACK_FRAMES",
   "LEAD_RESPONSE_SMOOTH",
   "LEAD_RESPONSE_SYNC",
   "LeadResponseReference",
+  "blend_lead_accel_reference",
   "build_lead_accel_trajectory",
   "build_lead_accel_reference",
+  "combine_lead_accel_references",
+  "equal_lead_t_follow_adjustment",
+  "lead_obstacle_relevance",
+  "lead_response_confidence",
+  "lead_response_mode_for_driving_mode",
   "lead_response_profile",
+  "rate_limit_lead_response_weight",
   "should_apply_lead_accel_reference",
 )

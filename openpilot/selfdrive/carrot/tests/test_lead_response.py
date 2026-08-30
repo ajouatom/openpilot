@@ -7,10 +7,18 @@ from openpilot.selfdrive.controls.lib.lead_response import (
   LEAD_RESPONSE_BALANCED,
   LEAD_RESPONSE_CONFIRM_FRAMES,
   LEAD_RESPONSE_MIN_LEAD_SPEED,
+  LEAD_RESPONSE_MIN_TRACK_FRAMES,
   LEAD_RESPONSE_SMOOTH,
   LEAD_RESPONSE_SYNC,
+  blend_lead_accel_reference,
   build_lead_accel_trajectory,
   build_lead_accel_reference,
+  combine_lead_accel_references,
+  equal_lead_t_follow_adjustment,
+  lead_obstacle_relevance,
+  lead_response_confidence,
+  lead_response_mode_for_driving_mode,
+  rate_limit_lead_response_weight,
   should_apply_lead_accel_reference,
 )
 
@@ -52,6 +60,14 @@ def test_response_modes_preserve_order_without_delaying_onset() -> None:
   assert smooth is not None and balanced is not None and sync is not None
   assert 0.0 > smooth.acceleration[0] > balanced.acceleration[0] > sync.acceleration[0]
   assert abs(smooth.raw_acceleration[0]) < abs(balanced.raw_acceleration[0]) < abs(sync.raw_acceleration[0])
+
+
+def test_existing_driving_modes_select_the_response_profile() -> None:
+  assert lead_response_mode_for_driving_mode(1) == LEAD_RESPONSE_SMOOTH
+  assert lead_response_mode_for_driving_mode(2) == LEAD_RESPONSE_SMOOTH
+  assert lead_response_mode_for_driving_mode(3) == LEAD_RESPONSE_BALANCED
+  assert lead_response_mode_for_driving_mode(4) == LEAD_RESPONSE_SYNC
+  assert lead_response_mode_for_driving_mode(99) == LEAD_RESPONSE_BALANCED
 
 
 def test_surplus_distance_softens_smooth_more_than_sync() -> None:
@@ -183,16 +199,29 @@ def test_far_closing_lead_cannot_suppress_cruise_acceleration() -> None:
 
   assert far_lead is not None
   assert far_lead.raw_acceleration[0] < 0.0
-  assert not should_apply_lead_accel_reference(
+  assert should_apply_lead_accel_reference(
     reset_state=False,
     mpc_mode="acc",
     source="cruise",
     stable_frames=LEAD_RESPONSE_CONFIRM_FRAMES,
     lead_speed=20.0,
   )
+  # Source is no longer a binary gate. A far lead instead gets zero continuous
+  # obstacle relevance and therefore cannot replace cruise acceleration.
+  weight = lead_obstacle_relevance(
+    lead_obstacle=np.full_like(TIME_INDICES, 140.0),
+    cruise_obstacle=np.full_like(TIME_INDICES, 20.0),
+    v_ego=8.0,
+    time_indices=TIME_INDICES,
+  )
+  assert weight == pytest.approx(0.0)
+  blended = blend_lead_accel_reference(
+    np.ones_like(TIME_INDICES), far_lead.acceleration, weight,
+  )
+  assert np.all(blended == 1.0)
 
 
-def test_lead_response_requires_stable_active_acc_lead() -> None:
+def test_lead_response_starts_on_second_frame_and_builds_confidence() -> None:
   common = {
     "reset_state": False,
     "mpc_mode": "acc",
@@ -201,10 +230,28 @@ def test_lead_response_requires_stable_active_acc_lead() -> None:
   }
   assert not should_apply_lead_accel_reference(
     **common,
-    stable_frames=LEAD_RESPONSE_CONFIRM_FRAMES - 1,
+    stable_frames=LEAD_RESPONSE_MIN_TRACK_FRAMES - 1,
   )
   assert should_apply_lead_accel_reference(
     **common,
+    stable_frames=LEAD_RESPONSE_MIN_TRACK_FRAMES,
+  )
+  assert lead_response_confidence(
+    reset_state=False,
+    mpc_mode="acc",
+    stable_frames=LEAD_RESPONSE_MIN_TRACK_FRAMES,
+    lead_speed=LEAD_RESPONSE_MIN_LEAD_SPEED + 1.0,
+  ) == pytest.approx(0.2)
+  assert lead_response_confidence(
+    reset_state=False,
+    mpc_mode="acc",
+    stable_frames=LEAD_RESPONSE_CONFIRM_FRAMES,
+    lead_speed=LEAD_RESPONSE_MIN_LEAD_SPEED + 1.0,
+  ) == pytest.approx(1.0)
+  # lead/cruise is a continuous blend; the diagnostic source label cannot add
+  # a 0.2-0.4 second delay.
+  assert should_apply_lead_accel_reference(
+    **(common | {"source": "cruise"}),
     stable_frames=LEAD_RESPONSE_CONFIRM_FRAMES,
   )
   assert not should_apply_lead_accel_reference(
@@ -248,3 +295,60 @@ def test_lead_jerk_is_integrated_before_adding_to_acceleration() -> None:
   assert trajectory[0] == pytest.approx(0.0)
   assert -0.25 < trajectory[1] < -0.15
   assert trajectory[2] < trajectory[1]
+
+
+def test_lead_relevance_previews_a_future_source_change() -> None:
+  cruise = np.array((20.0, 22.0, 26.0, 32.0, 40.0))
+  lead = np.array((22.0, 22.5, 23.0, 24.0, 27.0))
+
+  weight = lead_obstacle_relevance(lead, cruise, 15.0, TIME_INDICES)
+
+  assert lead[0] > cruise[0]
+  assert weight > 0.5
+
+
+def test_lead_relevance_is_continuous_around_equal_obstacles() -> None:
+  cruise = np.full_like(TIME_INDICES, 30.0)
+  slightly_ahead = lead_obstacle_relevance(
+    cruise + 0.1, cruise, 15.0, TIME_INDICES,
+  )
+  slightly_limiting = lead_obstacle_relevance(
+    cruise - 0.1, cruise, 15.0, TIME_INDICES,
+  )
+
+  assert 0.45 < slightly_ahead < 0.5
+  assert 0.5 < slightly_limiting < 0.55
+
+
+def test_lead_weight_attacks_faster_than_it_releases() -> None:
+  assert rate_limit_lead_response_weight(0.0, 1.0) == pytest.approx(0.25)
+  assert rate_limit_lead_response_weight(1.0, 0.0) == pytest.approx(0.9)
+
+
+def test_early_deceleration_blends_more_than_early_acceleration() -> None:
+  previous = np.zeros(3)
+  braking = blend_lead_accel_reference(previous, -np.ones(3), 0.5)
+  accelerating = blend_lead_accel_reference(previous, np.ones(3), 0.5)
+
+  assert np.all(braking == pytest.approx(-0.5))
+  assert np.all(accelerating == pytest.approx(0.25))
+
+
+def test_lead_one_and_lead_two_are_equal_and_more_restrictive_wins() -> None:
+  previous = np.zeros(3)
+  lead_one = np.array((-0.2, -0.3, -0.4))
+  lead_two = np.array((-0.5, -0.1, -0.6))
+
+  combined_12 = combine_lead_accel_references(previous, [lead_one, lead_two])
+  combined_21 = combine_lead_accel_references(previous, [lead_two, lead_one])
+
+  assert np.array_equal(combined_12, np.minimum(lead_one, lead_two))
+  assert np.array_equal(combined_12, combined_21)
+
+
+def test_dynamic_t_follow_treats_lead_order_equally() -> None:
+  lead_one_first = equal_lead_t_follow_adjustment([-2.0, 1.5], 0.5)
+  lead_two_first = equal_lead_t_follow_adjustment([1.5, -2.0], 0.5)
+
+  assert lead_one_first == pytest.approx(lead_two_first)
+  assert lead_one_first > 0.0

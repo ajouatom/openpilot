@@ -1216,6 +1216,9 @@ struct LongitudinalPlan @0xe00b5b3eba12876c {
   tFollow @46: Float32;
   desiredDistance @47: Float32;
   myDrivingMode @48: Int32;
+  leadResponseMode @49: Int8;
+  leadOneResponseWeight @50: Float32;
+  leadTwoResponseWeight @51: Float32;
 
   solverExecutionTime @35 :Float32;
 
