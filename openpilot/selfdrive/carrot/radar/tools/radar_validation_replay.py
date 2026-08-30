@@ -969,6 +969,7 @@ def _controller_candidate(
   lead: dict[str, Any] | None,
   reason: str,
   continuity_by_identity: Mapping[tuple[str, int], int] | None = None,
+  track_aliases: Iterable[int] = (),
 ) -> Candidate | None:
   if lead is None or not lead.get("status"):
     return None
@@ -987,6 +988,36 @@ def _controller_candidate(
     default=None,
   )
   source = matched_point.source if matched_point is not None else ""
+  aliases: tuple[int, ...] = tuple(
+    sorted({int(value) for value in track_aliases if int(value) != track_id})
+  )
+  if matched_point is not None:
+    counterpart_is_front = matched_point.source.startswith("corner")
+    counterparts = tuple(
+      (
+        abs(point.d_rel - matched_point.d_rel) / 5.0
+        + abs(point.y_rel - matched_point.y_rel) / 2.0
+        + abs(point.v_lead - matched_point.v_lead) / 2.5,
+        point,
+      )
+      for point in frame.points
+      if (
+        point.measured
+        and (
+          point.source == "frontRadar"
+          if counterpart_is_front
+          else point.source.startswith("corner")
+        )
+        and abs(point.d_rel - matched_point.d_rel) <= 5.0
+        and abs(point.y_rel - matched_point.y_rel) <= 2.0
+        and abs(point.v_lead - matched_point.v_lead) <= 2.5
+      )
+    )
+    if counterparts:
+      aliases = tuple(sorted({
+        *aliases,
+        min(counterparts, key=lambda value: value[0])[1].track_id,
+      }))
   return Candidate(
     track_id=track_id,
     score=float(lead.get("score", lead.get("modelProb", 0.0))),
@@ -995,6 +1026,7 @@ def _controller_candidate(
     y_rel=y_rel,
     v_lead=float(lead.get("vLead", 0.0)),
     source=source,
+    track_aliases=aliases,
     continuity_id=(
       continuity_by_identity.get((source, track_id))
       if continuity_by_identity is not None
@@ -2116,14 +2148,14 @@ def _v3_candidate(
     score=estimate.score,
     reason=f"V3 {estimate.reason}",
     stage=estimate.stage.name,
-    detail=(
-      f"{estimate.reason} risk={occupancy.risk_score:.2f} "
-      f"lead={occupancy.lead_score:.2f} "
-      f"intent={occupancy.intent_score:.2f} "
-      f"conf={occupancy.confidence:.2f} "
-      f"urgency={occupancy.control_urgency:.2f} "
-      f"inward={occupancy.inward_rate_mps:.2f} eta={overlap}"
-    ),
+    detail=" ".join((
+      f"{estimate.reason} risk={occupancy.risk_score:.2f}",
+      f"lead={occupancy.lead_score:.2f}",
+      f"intent={occupancy.intent_score:.2f}",
+      f"conf={occupancy.confidence:.2f}",
+      f"urgency={occupancy.control_urgency:.2f}",
+      f"inward={occupancy.inward_rate_mps:.2f} eta={overlap}",
+    )),
   )
 
 
@@ -2517,13 +2549,13 @@ def _copy_recorded_lead(lead: Any) -> RecordedLead:
   )
 
 
-def _production_controller_outputs(
+def _production_controller_replay(
   frames: Sequence[RadarFrame],
   *,
   motion_sensor: str,
   enable_radar_tracks: int,
   cut_in_sensitivity: int,
-) -> tuple[Any, ...]:
+) -> tuple[tuple[Any, ...], tuple[tuple[Any, ...], ...]]:
   """Replay the real dPath controller for option-dependent lead roles."""
   controller = DPathRadarController(
     prefer_corner_radar=motion_sensor == "corner",
@@ -2531,6 +2563,7 @@ def _production_controller_outputs(
     cut_in_sensitivity=cut_in_sensitivity,
   )
   outputs = []
+  estimates = []
   for frame in frames:
     controller.front_radar_measurement_delay_s = max(
       0.0, float(frame.radar_delay_s),
@@ -2551,7 +2584,171 @@ def _production_controller_outputs(
       frame.yaw_rate_rad_s,
       frame.input_age_s - frame.model_age_s,
     ))
-  return tuple(outputs)
+    estimates.append(controller.trajectory_cutin.last_estimates)
+  return tuple(outputs), tuple(estimates)
+
+
+def _production_controller_outputs(
+  frames: Sequence[RadarFrame],
+  *,
+  motion_sensor: str,
+  enable_radar_tracks: int,
+  cut_in_sensitivity: int,
+) -> tuple[Any, ...]:
+  return _production_controller_replay(
+    frames,
+    motion_sensor=motion_sensor,
+    enable_radar_tracks=enable_radar_tracks,
+    cut_in_sensitivity=cut_in_sensitivity,
+  )[0]
+
+
+class ProductionDPathSelector:
+  """Replay only the production controller without rebuilding shadow models."""
+
+  name = "production-dpath-controller"
+
+  def __init__(
+    self,
+    frames: Sequence[RadarFrame],
+    *,
+    motion_sensor: str | None = None,
+    enable_radar_tracks: int = 2,
+    cut_in_sensitivity: int = VALIDATION_DEFAULT_SENSITIVITY,
+  ) -> None:
+    self.motion_sensor = motion_sensor or preferred_radar_motion_sensor(frames)
+    self.enable_radar_tracks = int(enable_radar_tracks)
+    outputs, estimate_series = _production_controller_replay(
+      frames,
+      motion_sensor=self.motion_sensor,
+      enable_radar_tracks=self.enable_radar_tracks,
+      cut_in_sensitivity=cut_in_sensitivity,
+    )
+    selections = []
+    for frame, output, estimates in zip(
+      frames, outputs, estimate_series, strict=True,
+    ):
+      estimate_aliases: dict[int, tuple[int, ...]] = {}
+      for estimate in estimates:
+        if estimate.cross_sensor_track_id is None:
+          continue
+        point_id = estimate.point.track_id
+        cross_id = estimate.cross_sensor_track_id
+        estimate_aliases[point_id] = tuple({
+          *estimate_aliases.get(point_id, ()), cross_id,
+        })
+        estimate_aliases[cross_id] = tuple({
+          *estimate_aliases.get(cross_id, ()), point_id,
+        })
+      lead_one = _controller_candidate(
+        frame, output.lead_one, "production dPath leadOne",
+      )
+      lead_two = _controller_candidate(
+        frame,
+        output.lead_two,
+        "production dPath leadTwo",
+        track_aliases=estimate_aliases.get(
+          int((output.lead_two or {}).get("radarTrackId", -1)), (),
+        ),
+      )
+      decisions = tuple(
+        candidate
+        for lead in output.leads_cutin
+        if (
+          candidate := _controller_candidate(
+            frame,
+            lead,
+            "trajectory CUT-IN",
+            track_aliases=estimate_aliases.get(
+              int(lead.get("radarTrackId", -1)), (),
+            ),
+          )
+        ) is not None
+      )
+      risk = _controller_candidate(
+        frame,
+        output.lead_cutin_risk,
+        "trajectory CUT-IN pre-deceleration",
+        track_aliases=estimate_aliases.get(
+          int((output.lead_cutin_risk or {}).get("radarTrackId", -1)), (),
+        ),
+      )
+      diagnostics = tuple(
+        Candidate(
+          track_id=estimate.point.track_id,
+          score=estimate.confidence,
+          reason=estimate.reason,
+          d_rel=estimate.point.d_rel,
+          y_rel=estimate.point.y_rel,
+          v_lead=estimate.point.v_lead,
+          current_path_occupancy=estimate.current_path,
+          stage=(
+            "CUT-IN" if estimate.confirmed_cutin
+            else "RAW-CUTIN" if estimate.raw_cutin
+            else "PREDECEL" if estimate.predecel_risk
+            else "JITTER" if estimate.jittering
+            else "TRACK"
+          ),
+          detail=(
+            f"dRel={estimate.point.d_rel:.2f} "
+            + f"vRel={estimate.point.v_rel:.2f} "
+            + f"yRel={estimate.point.y_rel:.2f} "
+            + f"dPath={estimate.d_path:.2f}->{estimate.future_d_path:.2f} "
+            + f"rate={estimate.inward_rate:.2f} "
+            + f"radar={estimate.reported_inward_rate:.2f} "
+            + f"progress={estimate.inward_progress:.2f} "
+            + f"direction={estimate.direction_consistency:.2f} "
+            + f"vision={int(estimate.vision_supported)} "
+            + f"cross={int(estimate.cross_sensor_supported)} "
+            + "crossId="
+            + (
+              "--" if estimate.cross_sensor_track_id is None
+              else str(estimate.cross_sensor_track_id)
+            )
+            + " "
+            + f"control={int(estimate.control_eligible)} "
+            + f"curve={int(estimate.curve_alias)} "
+            + "eta="
+            + (
+              "--" if estimate.time_to_overlap_s is None
+              else f"{estimate.time_to_overlap_s:.2f}s"
+            )
+          ),
+          source=estimate.point.source,
+          continuity_id=estimate.continuity_id,
+        )
+        for estimate in estimates
+      )
+      selections.append(Selection(
+        lead_one=lead_one,
+        lead_two=lead_two,
+        front_candidates=tuple(
+          candidate for candidate in diagnostics
+          if not candidate.source.startswith("corner")
+        ),
+        corner_candidates=tuple(
+          candidate for candidate in diagnostics
+          if candidate.source.startswith("corner")
+        ),
+        cutin_diagnostics=diagnostics,
+        decision_cutin_candidates=decisions,
+        active_cutin_candidates=decisions,
+        external_candidates=decisions,
+        active_external_candidates=decisions,
+        cutin_predecel_candidate=risk,
+      ))
+    self.outputs = outputs
+    self.selections = tuple(selections)
+
+  def select(
+    self,
+    frame: RadarFrame,
+    frame_index: int | None = None,
+  ) -> Selection:
+    del frame
+    if frame_index is None:
+      raise ValueError("production dPath selector requires a frame index")
+    return self.selections[frame_index]
 
 
 def _empty_recorded_lead() -> RecordedLead:
@@ -5566,6 +5763,7 @@ __all__ = (
   "CurrentRadardTeacher",
   "LeadSelector",
   "ModelLead",
+  "ProductionDPathSelector",
   "RadarFrame",
   "RadarMotionShadowSelector",
   "RadarOccupancyV2Selector",

@@ -540,16 +540,19 @@ class DPathLeadTwoTracker:
       (candidate.lead for candidate in eligible),
       v_ego,
       allow_stopped_track_ids=frozenset(
-        candidate.track_id for candidate in active_candidates
+        int(candidate.lead.get("radarTrackId", candidate.track_id))
+        for candidate in active_candidates
       ) | frozenset(
-        candidate.track_id for candidate in eligible
+        int(candidate.lead.get("radarTrackId", candidate.track_id))
+        for candidate in eligible
         if (
           candidate.confirmed_stationary_shadow
           or candidate.allow_low_speed
         )
       ),
       allow_farther_track_ids=frozenset(
-        candidate.track_id for candidate in eligible
+        int(candidate.lead.get("radarTrackId", candidate.track_id))
+        for candidate in eligible
         if (
           candidate.confirmed_stationary_shadow
           or (
@@ -559,7 +562,8 @@ class DPathLeadTwoTracker:
         )
       ),
       allow_primary_proximity_track_ids=frozenset(
-        candidate.track_id for candidate in eligible
+        int(candidate.lead.get("radarTrackId", candidate.track_id))
+        for candidate in eligible
         if (
           candidate.confirmed_stationary_shadow
           or (
@@ -586,11 +590,11 @@ class DPathLeadTwoTracker:
       ),
       v_ego,
       allow_stopped_track_ids=frozenset(
-        candidate.track_id
+        int(candidate.lead.get("radarTrackId", candidate.track_id))
         for candidate in active_candidates
         if candidate.confirmed_cutin
       ) | frozenset(
-        candidate.track_id
+        int(candidate.lead.get("radarTrackId", candidate.track_id))
         for candidate in eligible
         if candidate.confirmed_cutin and candidate.allow_low_speed
       ),

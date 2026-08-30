@@ -1224,9 +1224,10 @@
       "log": "00000218--6aa147e461--2/rlog.zst",
       "source": "front+corner",
       "window": [13.7, 14.5],
-      "expected": "clear",
+      "expected": "detect",
+      "latest_detection_s": 14.5,
       "forbidden_lead_two_ids": [48, 1009],
-      "scene": "Black sedan remains in the right adjacent lane"
+      "scene": "Black sedan starts a sustained inward trajectory; report it early but do not promote it to leadTwo during this still-adjacent window"
     },
     {
       "id": "gv80-218-6-adjacent-right-36",
