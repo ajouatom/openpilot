@@ -114,6 +114,11 @@ CORNER_STOPPED_FAR_DREL = 60.0
 # qualified at long range, unless front radar independently corroborates it.
 CORNER_STOPPED_UNMATCHED_MIN_ACQUISITION_DREL = 70.0
 
+LEAD_MOTION_ACQUISITION_FRAMES = 3
+LEAD_MOTION_RATE_MIN_MPS2 = 0.35
+LEAD_MOTION_ACCEL_RATE_ABS_TOLERANCE_MPS2 = 1.0
+LEAD_MOTION_ACCEL_RATE_REL_TOLERANCE = 0.75
+
 def laplacian_pdf(x: float, mu: float, b: float):
   diff = abs(x - mu) / max(b, 1e-4)
   return 0.0 if diff > 50.0 else math.exp(-diff)
@@ -174,6 +179,59 @@ def pick_side_lead(leads: list[dict[str, Any]]) -> dict[str, Any]:
     key=lambda d: d['dRel'],
     default=empty_lead()
   )
+
+
+class LeadSelectionMotionGuard:
+  """Reject transient acceleration when a radar track first becomes a lead."""
+
+  def __init__(self) -> None:
+    self.reset()
+
+  def reset(self) -> None:
+    self.track_id = -1
+    self.frames = 0
+    self.previous_v_lead = 0.0
+
+  def update(self, status: bool, radar: bool, track_id: int, v_lead: float,
+             a_lead: float, j_lead: float) -> tuple[float, float, bool]:
+    if not status or not radar:
+      self.reset()
+      return float(a_lead), float(j_lead), True
+
+    track_id = int(track_id)
+    v_lead = float(v_lead)
+    a_lead = float(a_lead)
+    j_lead = float(j_lead)
+    if track_id != self.track_id:
+      self.track_id = track_id
+      self.frames = 1
+      self.previous_v_lead = v_lead
+      return 0.0, 0.0, False
+
+    v_lead_rate = (v_lead - self.previous_v_lead) / DT_MDL
+    self.previous_v_lead = v_lead
+    self.frames += 1
+    if self.frames <= LEAD_MOTION_ACQUISITION_FRAMES:
+      near_zero = abs(a_lead) <= LEAD_MOTION_RATE_MIN_MPS2
+      same_direction = (
+        abs(v_lead_rate) >= LEAD_MOTION_RATE_MIN_MPS2
+        and a_lead * v_lead_rate > 0.0
+      )
+      tolerance = max(
+        LEAD_MOTION_ACCEL_RATE_ABS_TOLERANCE_MPS2,
+        LEAD_MOTION_ACCEL_RATE_REL_TOLERANCE * abs(a_lead),
+      )
+      corroborated = near_zero or (
+        same_direction and abs(a_lead - v_lead_rate) <= tolerance
+      )
+      if not corroborated:
+        return 0.0, 0.0, False
+      # Acceleration can react on the second 20 Hz frame when velocity agrees.
+      # Jerk is held through acquisition because it is a derivative of the
+      # very transient that this guard is intended to reject.
+      return a_lead, 0.0, True
+
+    return a_lead, j_lead, True
 
 class Track:
   def __init__(self, identifier: int):
@@ -738,6 +796,7 @@ class RadarD:
     self.tracks: dict[int, Track] = {}
 
     self.lead_prob_filters = [FirstOrderFilter(0.0, 0.2, DT_MDL) for _ in range(2)]
+    self.lead_motion_guards = [LeadSelectionMotionGuard(), LeadSelectionMotionGuard()]
 
     self.v_ego = 0.0
     print("###RadarD.. : delay = ", delay, int(round(delay / DT_MDL))+1)
@@ -923,6 +982,7 @@ class RadarD:
         sm['carState'], md, front_tracks, 0, leads_v3[0], model_v_ego,
         self.lead_prob_filters[0].x, low_speed_override=False, vision_match_only=True,
       )
+      self._guard_selected_lead_motion(self.radar_state.leadOne, self.lead_motion_guards[0])
       self.radar_state.leadTwo = empty_lead()
 
       self.lane_line_available = md.laneLineProbs[1] > 0.5 and md.laneLineProbs[2] > 0.5
@@ -931,6 +991,23 @@ class RadarD:
       self.compute_leads(self.v_ego, compute_tracks, md, self.lead_prob_filters[0].x, front_tracks)
       if self.leadTwo is not None:
         self.radar_state.leadTwo = self.leadTwo
+      self._guard_selected_lead_motion(self.radar_state.leadTwo, self.lead_motion_guards[1])
+
+  @staticmethod
+  def _guard_selected_lead_motion(lead, guard: LeadSelectionMotionGuard) -> None:
+    a_lead, j_lead, accepted = guard.update(
+      bool(lead.status),
+      bool(lead.radar),
+      int(lead.radarTrackId),
+      float(lead.vLead),
+      float(lead.aLeadK),
+      float(lead.jLead),
+    )
+    lead.aLead = a_lead
+    lead.aLeadK = a_lead
+    lead.jLead = j_lead
+    if not accepted:
+      lead.aLeadTau = _LEAD_ACCEL_TAU
 
   def publish(self, pm: messaging.PubMaster):
     assert self.radar_state is not None
