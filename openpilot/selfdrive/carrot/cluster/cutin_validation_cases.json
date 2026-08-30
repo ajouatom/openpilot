@@ -375,17 +375,17 @@
       "vehicle_folder": "HYUNDAI_IONIQ_9 c92fab3f15c0dbfb",
       "log": "00000263--89012ce993--16/rlog.zst",
       "source": "front+corner",
-      "window": [20.95, 21.20],
+      "window": [21.25, 21.55],
       "expected": "detect",
       "human_verified": true,
       "validation_stage": "lead_two",
       "target_track_ids": [1039],
       "target_spatial_match": {
-        "d_rel": [40.0, 45.0],
+        "d_rel": [36.0, 42.0],
         "y_rel": [-0.5, 0.5]
       },
-      "latest_detection_s": 21.05,
-      "scene": "Vision-confirmed central stopped corner track 1039 must hand off from leadOne to closer leadTwo when farther front track 55 becomes leadOne"
+      "latest_detection_s": 21.35,
+      "scene": "After stationary confirmation, farther front track 55 exclusively owns leadOne while the continuous closer stopped corner hypothesis remains auxiliary leadTwo"
     },
     {
       "id": "ioniq5-352-5-overhead-sign-stationary-shadow-48",
@@ -589,10 +589,11 @@
       "expected": "detect",
       "human_verified": true,
       "validation_stage": "lead_one",
-      "target_track_ids": [41, 1005, 2175, 2190, 2198],
-      "latest_detection_s": 27.22,
-      "lead_one_continuous_window": [27.21, 29.20],
-      "scene": "Comma vision continuously identifies the same far central lead while corner slots 2175/2190/2198 hand off to central front track 41; bounded corner velocity outliers and slot changes must preserve L1 continuity"
+      "target_track_ids": [41],
+      "forbidden_lead_one_ids": [1005, 2175, 2190, 2198],
+      "latest_detection_s": 28.75,
+      "lead_one_continuous_window": [28.70, 29.20],
+      "scene": "Corner slots may track the distant hypothesis but cannot own leadOne; once central front track 41 becomes physically consistent it must acquire and continuously own L1"
     },
     {
       "id": "k5-224-11-weak-vision-front-stationary-ghost",
