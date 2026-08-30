@@ -50,6 +50,8 @@ VELOCITY_UPDATE_GATE_SIGMA = 6.0
 VELOCITY_UPDATE_MIN_GATE_MPS = 0.35
 ACCEL_UPDATE_GATE_SIGMA = 5.0
 ACCEL_UPDATE_MIN_GATE_MPS2 = 1.0
+NATIVE_ACCEL_DIRECT_FUSION_DELTA_MPS2 = 0.75
+NATIVE_ACCEL_CORROBORATION_PRODUCT = 0.008
 
 MIN_MODEL_PROBABILITY = 1e-4
 MAX_ABS_ACCEL_MPS2 = 10.0
@@ -309,7 +311,19 @@ class LeadMotionIMM:
     maneuver_innovation, maneuver_likelihood = self._update_velocity(
       self.maneuver, velocity,
     )
-    if use_native_acceleration:
+    # Radar acceleration fields can contain the previous occupant of a reused
+    # object slot for a few cycles. Fuse a large change only when the velocity
+    # measurement moves in the same direction in this cycle. Small changes are
+    # safe to use directly and keep the quiet-state estimate responsive.
+    native_delta = native_acceleration_value - self.acceleration
+    native_acceleration_corroborated = (
+      abs(native_delta) <= NATIVE_ACCEL_DIRECT_FUSION_DELTA_MPS2
+      or native_delta * steady_innovation > NATIVE_ACCEL_CORROBORATION_PRODUCT
+    )
+    fuse_native_acceleration = (
+      use_native_acceleration and native_acceleration_corroborated
+    )
+    if fuse_native_acceleration:
       self._update_acceleration(
         self.steady,
         native_acceleration_value,
@@ -343,11 +357,10 @@ class LeadMotionIMM:
     # do not expose aRel still enter maneuver mode after two corroborating
     # velocity residuals.
     event_probability = 0.0
-    if use_native_acceleration:
-      native_delta = native_acceleration_value - self.acceleration
+    if fuse_native_acceleration:
       if (
         abs(native_delta) > 0.50
-        and native_delta * steady_innovation > 0.008
+        and native_delta * steady_innovation > NATIVE_ACCEL_CORROBORATION_PRODUCT
       ):
         event_probability = float(_clamp(
           0.15 + (abs(native_delta) - 0.50) * (0.80 / 1.00),
@@ -395,7 +408,7 @@ class LeadMotionIMM:
       + self.maneuver_probability * maneuver_innovation
     )
     self.count += 1
-    return self.estimate(use_native_acceleration)
+    return self.estimate(fuse_native_acceleration)
 
   def estimate(self, used_native_acceleration: bool = False) -> LeadMotionEstimate:
     return LeadMotionEstimate(
