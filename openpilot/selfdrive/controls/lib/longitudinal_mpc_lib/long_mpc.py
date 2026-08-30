@@ -9,7 +9,7 @@ from openpilot.common.swaglog import cloudlog
 # WARNING: imports outside of constants will not trigger a rebuild
 from openpilot.selfdrive.modeld.constants import index_function
 from openpilot.selfdrive.controls.radard import _LEAD_ACCEL_TAU
-from openpilot.selfdrive.controls.lib.lead_response import build_lead_accel_reference
+from openpilot.selfdrive.controls.lib.lead_response import build_lead_accel_reference, should_apply_lead_accel_reference
 from openpilot.selfdrive.carrot.traffic_stop import get_traffic_stop_obstacle_distance
 
 if __name__ == '__main__':  # generating code
@@ -387,21 +387,25 @@ class LongitudinalMpc:
     self.cruise_min_a = min_a
     self.max_a = max_a
 
-  def _lead_response_ready(self, lead):
+  def _track_lead_response_target(self, lead):
     if not lead.status or not lead.radar:
       self.lead_response_track_id = -1
       self.lead_response_track_frames = 0
       return False
-    track_id = int(lead.radarTrackId)
+    try:
+      track_id = int(lead.radarTrackId)
+    except (AttributeError, TypeError, ValueError):
+      track_id = -1
+    if track_id < 0:
+      self.lead_response_track_id = -1
+      self.lead_response_track_frames = 0
+      return False
     if track_id != self.lead_response_track_id:
       self.lead_response_track_id = track_id
       self.lead_response_track_frames = 1
     else:
       self.lead_response_track_frames += 1
-    # A new or handed-off target must be stable for two model frames before
-    # its acceleration can influence feed-forward. MPC obstacle safety is
-    # active immediately and does not wait for this gate.
-    return self.lead_response_track_frames >= 2
+    return True
 
   def update(self, carrot, reset_state, radarstate, v_cruise, x, v, a, j,
              personality=log.LongitudinalPersonality.standard,
@@ -504,9 +508,15 @@ class LongitudinalMpc:
     previous_accel_reference = np.copy(self.prev_a)
     self.lead_response_active = False
     self.lead_accel_reference.fill(0.0)
+    lead_response_valid = self._track_lead_response_target(radarstate.leadOne)
     if (
-      not reset_state
-      and self._lead_response_ready(radarstate.leadOne)
+      lead_response_valid
+      and should_apply_lead_accel_reference(
+        reset_state=reset_state,
+        mpc_mode=mode,
+        source=self.source,
+        stable_frames=self.lead_response_track_frames,
+      )
     ):
       lead_response = build_lead_accel_reference(
         radarstate.leadOne,

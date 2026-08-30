@@ -5,10 +5,12 @@ import pytest
 
 from openpilot.selfdrive.controls.lib.lead_response import (
   LEAD_RESPONSE_BALANCED,
+  LEAD_RESPONSE_CONFIRM_FRAMES,
   LEAD_RESPONSE_SMOOTH,
   LEAD_RESPONSE_SYNC,
   build_lead_accel_trajectory,
   build_lead_accel_reference,
+  should_apply_lead_accel_reference,
 )
 
 
@@ -163,6 +165,53 @@ def test_positive_lead_response_tapers_with_cruise_speed_headroom() -> None:
   assert near_cruise is not None
   assert np.max(near_cruise.raw_acceleration) <= speed_headroom
   assert np.max(near_cruise.acceleration) <= speed_headroom
+
+
+def test_far_closing_lead_cannot_suppress_cruise_acceleration() -> None:
+  # Route 00000e48--68efa63608--2 had a 100+ m lead while cruise was the
+  # limiting MPC source. Its negative vRel reference suppressed launch accel.
+  far_lead = build_lead_accel_reference(
+    lead(dRel=130.0, vRel=-3.0, aLead=-0.2, aLeadK=-0.2),
+    mode=LEAD_RESPONSE_BALANCED,
+    v_ego=8.0,
+    v_cruise=25.0,
+    desired_distance=12.0,
+    previous_acceleration=1.0,
+    time_indices=TIME_INDICES,
+  )
+
+  assert far_lead is not None
+  assert far_lead.raw_acceleration[0] < 0.0
+  assert not should_apply_lead_accel_reference(
+    reset_state=False,
+    mpc_mode="acc",
+    source="cruise",
+    stable_frames=LEAD_RESPONSE_CONFIRM_FRAMES,
+  )
+
+
+def test_lead_response_requires_stable_active_acc_lead() -> None:
+  common = {
+    "reset_state": False,
+    "mpc_mode": "acc",
+    "source": "lead0",
+  }
+  assert not should_apply_lead_accel_reference(
+    **common,
+    stable_frames=LEAD_RESPONSE_CONFIRM_FRAMES - 1,
+  )
+  assert should_apply_lead_accel_reference(
+    **common,
+    stable_frames=LEAD_RESPONSE_CONFIRM_FRAMES,
+  )
+  assert not should_apply_lead_accel_reference(
+    **(common | {"reset_state": True}),
+    stable_frames=LEAD_RESPONSE_CONFIRM_FRAMES,
+  )
+  assert not should_apply_lead_accel_reference(
+    **(common | {"mpc_mode": "blended"}),
+    stable_frames=LEAD_RESPONSE_CONFIRM_FRAMES,
+  )
 
 
 def test_lead_jerk_is_integrated_before_adding_to_acceleration() -> None:

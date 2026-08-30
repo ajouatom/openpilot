@@ -17,6 +17,9 @@ LEAD_RESPONSE_SMOOTH = 0
 LEAD_RESPONSE_BALANCED = 1
 LEAD_RESPONSE_SYNC = 2
 LEAD_RESPONSE_CRUISE_TAPER_TIME = 1.0
+# The planner runs at 20 Hz. Half a second rejects short radar hand-offs while
+# the normal MPC obstacle path remains active immediately.
+LEAD_RESPONSE_CONFIRM_FRAMES = 10
 
 
 @dataclass(frozen=True)
@@ -72,6 +75,22 @@ PROFILES = {
 
 def lead_response_profile(mode: int) -> LeadResponseProfile:
   return PROFILES.get(int(mode), PROFILES[LEAD_RESPONSE_BALANCED])
+
+
+def should_apply_lead_accel_reference(
+  *,
+  reset_state: bool,
+  mpc_mode: str,
+  source: str,
+  stable_frames: int,
+) -> bool:
+  """Use feed-forward only after a stable lead actually limits ACC."""
+  return (
+    not reset_state
+    and mpc_mode == "acc"
+    and source == "lead0"
+    and stable_frames >= LEAD_RESPONSE_CONFIRM_FRAMES
+  )
 
 
 def _value(value: Any, name: str, default: float = 0.0) -> float:
@@ -237,6 +256,7 @@ def build_lead_accel_reference(
 
 __all__ = (
   "LEAD_RESPONSE_BALANCED",
+  "LEAD_RESPONSE_CONFIRM_FRAMES",
   "LEAD_RESPONSE_CRUISE_TAPER_TIME",
   "LEAD_RESPONSE_SMOOTH",
   "LEAD_RESPONSE_SYNC",
@@ -244,4 +264,5 @@ __all__ = (
   "build_lead_accel_trajectory",
   "build_lead_accel_reference",
   "lead_response_profile",
+  "should_apply_lead_accel_reference",
 )
