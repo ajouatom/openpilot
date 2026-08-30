@@ -2705,6 +2705,7 @@ class ProductionDPathSelector:
             "CUT-IN" if estimate.confirmed_cutin
             else "RAW-CUTIN" if estimate.raw_cutin
             else "PREDECEL" if estimate.predecel_risk
+            else "FILTERED" if not estimate.close_front_supported
             else "JITTER" if estimate.jittering
             else "TRACK"
           ),
@@ -2713,19 +2714,34 @@ class ProductionDPathSelector:
             + f"vRel={estimate.point.v_rel:.2f} "
             + f"yRel={estimate.point.y_rel:.2f} "
             + f"dPath={estimate.d_path:.2f}->{estimate.future_d_path:.2f} "
-            + f"rate={estimate.inward_rate:.2f} "
-            + f"radar={estimate.reported_inward_rate:.2f} "
-            + f"progress={estimate.inward_progress:.2f} "
-            + f"direction={estimate.direction_consistency:.2f} "
+            + "| "
+            + f"h={estimate.history_s:.2f} "
+            + f"p={estimate.inward_progress:.2f} "
+            + f"dir={estimate.direction_consistency:.2f} "
+            + f"yaw={estimate.recent_abs_yaw_max:.3f} "
+            + f"vSp={estimate.recent_v_rel_spread:.2f} "
+            + f"rp={estimate.recent_inward_progress:.2f} "
+            + f"rd={estimate.recent_direction_consistency:.2f} "
+            + "| "
+            + f"J={int(estimate.jittering)} "
+            + f"FJ={int(estimate.unstable_fast_motion)} "
+            + f"close={int(estimate.close_front_supported)} "
+            + f"hist={int(estimate.front_history_supported)} "
             + f"vision={int(estimate.vision_supported)} "
             + f"cross={int(estimate.cross_sensor_supported)} "
+            + f"ctrl={int(estimate.control_eligible)} "
+            + f"H={estimate.horizon_s:.2f} "
+            + f"rate={estimate.inward_rate:.2f} "
+            + f"radar={estimate.reported_inward_rate:.2f} "
+            + f"move={estimate.lateral_travel:.2f} "
+            + f"net={estimate.lateral_net_fraction:.2f} "
+            + f"vMin={estimate.recent_v_rel_min:.2f} "
             + "crossId="
             + (
               "--" if estimate.cross_sensor_track_id is None
               else str(estimate.cross_sensor_track_id)
             )
             + " "
-            + f"control={int(estimate.control_eligible)} "
             + f"curve={int(estimate.curve_alias)} "
             + "eta="
             + (
@@ -5070,7 +5086,7 @@ class SimulatorUI:
     )
     self._draw_probability_slider(rect)
     y = rect.y + 194.0
-    max_rows = max(3, int((rect.height - 348.0) // 45.0))
+    max_rows = max(3, int((rect.height - 348.0) // 79.0))
     predecel = selection.cutin_predecel_candidate
     if predecel is not None:
       self._draw_text(
@@ -5081,8 +5097,13 @@ class SimulatorUI:
         15,
         self._color((70, 190, 220)),
       )
-      self._draw_text(predecel.detail[:59], x + 18, int(y + 20.0), 14, muted)
-      y += 45.0
+      detail_lines = predecel.detail.split(" | ", 2)
+      self._draw_text(detail_lines[0][:59], x + 18, int(y + 20.0), 14, muted)
+      if len(detail_lines) > 1:
+        self._draw_text(detail_lines[1][:59], x + 18, int(y + 38.0), 14, muted)
+      if len(detail_lines) > 2:
+        self._draw_text(detail_lines[2][:59], x + 18, int(y + 56.0), 14, muted)
+      y += 79.0
       max_rows -= 1
     for candidate in selection.cutin_diagnostics[:max_rows]:
       stage_text = {
@@ -5111,8 +5132,13 @@ class SimulatorUI:
         15,
         white,
       )
-      self._draw_text(candidate.detail[:59], x + 18, int(y + 20.0), 14, muted)
-      y += 45.0
+      detail_lines = candidate.detail.split(" | ", 2)
+      self._draw_text(detail_lines[0][:59], x + 18, int(y + 20.0), 14, muted)
+      if len(detail_lines) > 1:
+        self._draw_text(detail_lines[1][:59], x + 18, int(y + 38.0), 14, muted)
+      if len(detail_lines) > 2:
+        self._draw_text(detail_lines[2][:59], x + 18, int(y + 56.0), 14, muted)
+      y += 79.0
     if self.reviews:
       active_reviews = [
         review for review in self.reviews

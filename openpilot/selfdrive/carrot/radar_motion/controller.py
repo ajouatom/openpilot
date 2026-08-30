@@ -594,6 +594,22 @@ class DPathRadarController:
           model_v_ego=_model_ego_speed(model, v_ego),
         )
     motion_points = self._select_motion_points(points)
+    if self.motion_sensor == "corner":
+      # A corner radar can temporarily miss the nearby body that camera and
+      # front radar both track. Keep unmatched front points as a vision-only
+      # fallback; matched front points stay represented by their corner track.
+      matched_front_identities = {
+        (point.source, point.track_id)
+        for point in front_kinematic_matches.values()
+      }
+      motion_points += tuple(
+        point for point in points
+        if (
+          point.source == "frontRadar"
+          and abs(point.v_rel) <= 5.0
+          and (point.source, point.track_id) not in matched_front_identities
+        )
+      )
     scoped_motion_points = _scoped_motion_points(motion_points, path)
     estimates = self.trajectory_cutin.update(
       time_s,
@@ -602,6 +618,7 @@ class DPathRadarController:
       path,
       model,
       yaw_rate_rad_s=yaw_rate_rad_s,
+      vision_required_front=self.motion_sensor == "corner",
       cross_sensor_matches=front_kinematic_matches,
     )
     estimate_identities = {
@@ -844,9 +861,11 @@ class DPathRadarController:
         lead = self._lead_from_radar_point(
           lead_point, d_path, 0.03, 0.0,
         )
-        if lead_duplicates_primary(lead, lead_one):
-          self.lead_two_tracker.reset()
-        else:
+        if not lead_duplicates_primary(lead, lead_one):
+          # A brief vision-range handoff can make the retained auxiliary
+          # object leadOne for one frame. Hide the duplicate output without
+          # discarding its physical continuity; if the prior leadOne returns,
+          # the still-continuous auxiliary track can resume immediately.
           candidates.append(DPathLeadCandidate(
             lead=lead,
             source=source,
