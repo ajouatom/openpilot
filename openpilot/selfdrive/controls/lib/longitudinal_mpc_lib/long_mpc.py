@@ -9,7 +9,7 @@ from openpilot.common.swaglog import cloudlog
 # WARNING: imports outside of constants will not trigger a rebuild
 from openpilot.selfdrive.modeld.constants import index_function
 from openpilot.selfdrive.controls.radard import _LEAD_ACCEL_TAU
-from openpilot.selfdrive.controls.lib.lead_response import build_lead_accel_reference, build_lead_accel_trajectory
+from openpilot.selfdrive.controls.lib.lead_response import build_lead_accel_reference
 from openpilot.selfdrive.carrot.traffic_stop import get_traffic_stop_obstacle_distance
 
 if __name__ == '__main__':  # generating code
@@ -40,7 +40,6 @@ A_EGO_COST = 0.
 J_EGO_COST = 5.0
 A_CHANGE_COST = 200.
 A_CHANGE_COST_STARTING = 10. #30.
-JLEAD_A_CHANGE_COST_MIN = 20.0
 DANGER_ZONE_COST = 100.
 CRASH_DISTANCE = .25
 LEAD_DANGER_FACTOR = 0.8 # 0.75
@@ -75,12 +74,6 @@ def get_jerk_factor(personality=log.LongitudinalPersonality.standard):
     return 0.5
   else:
     raise NotImplementedError("Longitudinal personality not supported")
-
-
-def get_jlead_a_change_cost(j_lead, j_lead_factor):
-  factor = float(np.clip(j_lead_factor, 0.0, 1.0))
-  min_cost = float(np.interp(factor, [0.0, 1.0], [A_CHANGE_COST, JLEAD_A_CHANGE_COST_MIN]))
-  return float(np.interp(abs(j_lead), [0.3, 2.0], [A_CHANGE_COST, min_cost]))
 
 
 def get_T_FOLLOW(personality=log.LongitudinalPersonality.standard):
@@ -250,7 +243,6 @@ class LongitudinalMpc:
     self.solver = AcadosOcpSolverCython(MODEL_NAME, ACADOS_SOLVER_TYPE, N)
 
     self.a_change_cost = A_CHANGE_COST
-    self.j_lead = 0.0
     self.lead_response_track_id = -1
     self.lead_response_track_frames = 0
     self.lead_response_active = False
@@ -358,23 +350,14 @@ class LongitudinalMpc:
         self.solver.set(i, 'x', self.x0)
 
   @staticmethod
-  def extrapolate_lead(x_lead, v_lead, a_lead, a_lead_tau, j_lead):
-    # jLead is m/s^3. Integrate it over time before combining it with the
-    # acceleration prediction; adding jerk directly to acceleration caused a
-    # dimensionally invalid, step-like lead response.
-    a_lead_traj = build_lead_accel_trajectory(
-      acceleration=a_lead,
-      acceleration_tau=a_lead_tau,
-      jerk=j_lead,
-      time_indices=T_IDXS,
-      time_differences=T_DIFFS,
-    )
+  def extrapolate_lead(x_lead, v_lead, a_lead, a_lead_tau):
+    a_lead_traj = a_lead * np.exp(-a_lead_tau * T_IDXS ** 2 / 2.0)
     v_lead_traj = np.clip(v_lead + np.cumsum(T_DIFFS * a_lead_traj), 0.0, 1e8)
     x_lead_traj = x_lead + np.cumsum(T_DIFFS * v_lead_traj)
     lead_xv = np.column_stack((x_lead_traj, v_lead_traj))
     return lead_xv
   
-  def process_lead(self, lead, j_lead):
+  def process_lead(self, lead):
     v_ego = self.x0[1]
     if lead is not None and lead.status:
       x_lead = lead.dRel
@@ -395,12 +378,7 @@ class LongitudinalMpc:
     v_lead = np.clip(v_lead, 0.0, 1e8)
     a_lead = np.clip(a_lead, -10., 5.)
 
-    if a_lead < -2.0 and j_lead > 0.5:
-      a_lead = a_lead + j_lead
-      a_lead = min(a_lead, -0.5)
-      a_lead_tau = max(a_lead_tau, 1.5)
-
-    lead_xv = self.extrapolate_lead(x_lead, v_lead, a_lead, a_lead_tau, j_lead)
+    lead_xv = self.extrapolate_lead(x_lead, v_lead, a_lead, a_lead_tau)
     return lead_xv, v_lead
 
   def set_accel_limits(self, min_a, max_a):
@@ -434,14 +412,10 @@ class LongitudinalMpc:
     t_follow = carrot.get_T_FOLLOW(personality, v_ego, actual_a_ego)
     self.status = radarstate.leadOne.status or radarstate.leadTwo.status
 
-    if radarstate.leadOne.status:
-      j_lead = radarstate.leadOne.jLead
-      self.j_lead = j_lead * 0.1 + self.j_lead * 0.9
-    else:
-      self.j_lead = 0.0
-
-    lead_xv_0, lead_v_0 = self.process_lead(radarstate.leadOne, np.clip(self.j_lead * carrot.j_lead_factor, -1.0, 1.0))
-    lead_xv_1, _ = self.process_lead(radarstate.leadTwo, 0.0)
+    # jLead still controls acceleration persistence in radard through
+    # aLeadTau. Do not inject it a second time into the MPC obstacle and cost.
+    lead_xv_0, lead_v_0 = self.process_lead(radarstate.leadOne)
+    lead_xv_1, _ = self.process_lead(radarstate.leadTwo)
 
     mode = self.mode
     comfort_brake = carrot.comfort_brake
@@ -495,10 +469,7 @@ class LongitudinalMpc:
       # These are not used in ACC mode
       x[:], v[:], a[:], j[:] = 0.0, 0.0, 0.0, 0.0
 
-      if radarstate.leadOne.status:
-        base_a_change_cost = get_jlead_a_change_cost(self.j_lead, carrot.j_lead_factor)
-      else:
-        base_a_change_cost = A_CHANGE_COST
+      base_a_change_cost = A_CHANGE_COST
 
       #safe_distance = lead_0_obstacle[0] - get_safe_obstacle_distance(v_ego, comfort_brake, stop_distance)
       self.lead_danger_factor = LEAD_DANGER_FACTOR #np.interp(safe_distance, [-30.0, 0.0], [0.9, LEAD_DANGER_FACTOR]) # ?닿구?곸슜?섎땲, ?ш퀬諛⑹???媛먯냽???덈Т 湲됱젙嫄고븯?붽쾬 媛숈쓬.

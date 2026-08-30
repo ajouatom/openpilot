@@ -80,21 +80,25 @@ def write_catalog(root, payload):
 
 class WikiSettingsGeneratorTest(unittest.TestCase):
   def test_current_catalog_generates_all_settings_and_valid_markdown(self):
+    catalog_data = json.loads(
+      GENERATOR.DEFAULT_CATALOG.read_text(encoding="utf-8"),
+    )
+    expected_settings = len(catalog_data["params"])
     result = GENERATOR.generate(
       GENERATOR.DEFAULT_CATALOG,
       catalog_commit=COMMIT,
       generated_at=STAMP,
     )
-    self.assertEqual(len(result.generated_settings), 174)
-    self.assertEqual(result.index["review"], {"current": 0, "needs_review": 174})
+    self.assertEqual(len(result.generated_settings), expected_settings)
+    self.assertEqual(result.index["review"], {"current": 0, "needs_review": expected_settings})
     self.assertEqual(result.index["locales"], ["ko", "en", "zh"])
-    self.assertEqual(len(result.pages), (174 * 3) + 2)
+    self.assertEqual(len(result.pages), (expected_settings * 3) + 2)
     setting_pages = {
       name: text
       for name, text in result.pages.items()
       if GENERATOR.GENERATED_PAGE_RE.fullmatch(name)
     }
-    self.assertEqual(len(setting_pages), 174 * 3)
+    self.assertEqual(len(setting_pages), expected_settings * 3)
     self.assertTrue(all(text.count("<!-- CARROT:SETTING:BEGIN ") == 1 for text in setting_pages.values()))
     for name, text in result.pages.items():
       if name.endswith(".md"):
