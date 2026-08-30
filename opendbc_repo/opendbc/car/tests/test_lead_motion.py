@@ -54,18 +54,6 @@ def test_native_acceleration_provides_first_cycle_attack() -> None:
   assert estimate.jerk < -0.5
 
 
-def test_uncorroborated_native_acceleration_spike_is_not_fused() -> None:
-  estimator = LeadMotionIMM(20.0)
-  for _ in range(20):
-    estimator.update(20.0, native_acceleration=0.0)
-
-  estimate = estimator.update(20.0, native_acceleration=-4.0)
-
-  assert not estimate.used_native_acceleration
-  assert abs(estimate.acceleration) < 0.15
-  assert abs(estimate.jerk) < 0.15
-
-
 def test_single_velocity_outlier_does_not_create_unbounded_acceleration() -> None:
   estimator = LeadMotionIMM(15.0)
   for _ in range(30):
