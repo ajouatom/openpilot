@@ -1120,10 +1120,13 @@
       "vehicle_folder": "HYUNDAI_SANTAFE_MX5 d9ec903afdbac0bd",
       "log": "000002d3--74e5ed8754--6/rlog.zst",
       "source": "front+corner",
-      "window": [41.3, 43.3],
+      "window": [40.50, 43.30],
       "expected": "detect",
-      "target_track_ids": [52, 1018],
-      "scene": "Close left vehicle enters while a center lead remains active"
+      "human_verified": true,
+      "target_track_ids": [52, 1018, 1339],
+      "lead_two_continuous_window": [40.74, 42.58],
+      "latest_detection_s": 40.80,
+      "scene": "Close left vehicle must become continuous leadTwo as its wheel begins crossing; intermittent corner/front cross-matches must not erase its trajectory history"
     },
     {
       "id": "santafe-d3-6-adjacent-bus-51",
@@ -1255,6 +1258,17 @@
       "expected": "clear",
       "forbidden_lead_two_ids": [32],
       "scene": "Close left vehicle passes longitudinally without entering the ego lane"
+    },
+    {
+      "id": "palisade-c21-8-front-curve-projection-18",
+      "vehicle_folder": "HYUNDAI_PALISADE b84b4a4fbb604be1",
+      "log": "00000c21--f9485787d6--8/rlog.zst",
+      "source": "front+corner",
+      "window": [17.80, 18.60],
+      "expected": "clear",
+      "human_verified": true,
+      "forbidden_lead_two_ids": [51],
+      "scene": "Front-radar vehicle remains in the adjacent lane; model-path rotation creates apparent dPath motion while radar reports no physical inward motion"
     },
     {
       "id": "palisade-c21-8-right-cutin-31",
@@ -1468,6 +1482,17 @@
       "scene": "Black sedan remains in the adjacent left lane while a small quantized inward shift briefly touches the lane-boundary straddle gate"
     },
     {
+      "id": "santafe-4f6-19-centerline-fast-pass-39",
+      "vehicle_folder": "HYUNDAI_SANTAFE_MX5_HEV 61d2c91e1039ab5e",
+      "log": "000004f6--33e8c8595d--19/rlog.zst",
+      "source": "front+corner",
+      "window": [38.70, 39.30],
+      "expected": "clear",
+      "human_verified": true,
+      "forbidden_lead_two_ids": [2606],
+      "scene": "Oncoming centerline vehicle passes the bumper in under 0.8 s; a brief corner/front body pair is not a sustained cut-in trajectory"
+    },
+    {
       "id": "carnival-14a-20-turn-parked-left-22",
       "vehicle_folder": "KIA_CARNIVAL_4TH_GEN c4dcf95545dafe68",
       "log": "0000014a--26d45431d5--20/rlog.zst",
@@ -1477,6 +1502,28 @@
       "human_verified": true,
       "forbidden_lead_one_ids": [2734],
       "scene": "A parked truck on the left sweeps across the curved model path while the ego vehicle makes a tight left turn"
+    },
+    {
+      "id": "carnival-14a-20-centerline-curve-projection-25",
+      "vehicle_folder": "KIA_CARNIVAL_4TH_GEN c4dcf95545dafe68",
+      "log": "0000014a--26d45431d5--20/rlog.zst",
+      "source": "front+corner",
+      "window": [24.70, 25.60],
+      "expected": "clear",
+      "human_verified": true,
+      "forbidden_lead_two_ids": [2740],
+      "scene": "Centerline-side vehicle stays over 5 m from the ego body while a left-turn model path sweeps under it without physical inward radar motion"
+    },
+    {
+      "id": "carnival-14c-5-left-turn-adjacent-left-2",
+      "vehicle_folder": "KIA_CARNIVAL_4TH_GEN c4dcf95545dafe68",
+      "log": "0000014c--96eee11a8d--5/rlog.zst",
+      "source": "front+corner",
+      "window": [2.20, 3.40],
+      "expected": "clear",
+      "human_verified": true,
+      "forbidden_lead_two_ids": [1479],
+      "scene": "During a left turn, the adjacent-left vehicle has only weak reported inward motion and must not be promoted by an outer-body corner/front pair"
     },
     {
       "id": "carnival-14c-5-tight-curve-adjacent-right-9",
