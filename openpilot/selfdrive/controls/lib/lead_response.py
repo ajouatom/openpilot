@@ -16,6 +16,7 @@ import numpy as np
 LEAD_RESPONSE_SMOOTH = 0
 LEAD_RESPONSE_BALANCED = 1
 LEAD_RESPONSE_SYNC = 2
+LEAD_RESPONSE_CRUISE_TAPER_TIME = 1.0
 
 
 @dataclass(frozen=True)
@@ -135,6 +136,7 @@ def build_lead_accel_reference(
   *,
   mode: int,
   v_ego: float,
+  v_cruise: float,
   desired_distance: float,
   previous_acceleration: float,
   time_indices: np.ndarray,
@@ -204,6 +206,14 @@ def build_lead_accel_reference(
     2.5,
   )
 
+  # Lead response is acceleration feed-forward, not a second speed target.
+  # Taper its positive contribution as cruise-speed headroom closes so a far
+  # lead cannot pull the ego vehicle above the driver's set speed. Negative
+  # references remain untouched for early braking and obstacle safety.
+  cruise_headroom = max(0.0, float(v_cruise) - float(v_ego))
+  positive_accel_ceiling = cruise_headroom / LEAD_RESPONSE_CRUISE_TAPER_TIME
+  raw_reference = np.minimum(raw_reference, positive_accel_ceiling)
+
   attack_jerk = profile.attack_jerk + safety_blend * (3.5 - profile.attack_jerk)
   release_jerk = profile.release_jerk + safety_blend * (2.0 - profile.release_jerk)
   reference = _rate_limit_reference(
@@ -213,6 +223,9 @@ def build_lead_accel_reference(
     attack_jerk,
     release_jerk,
   )
+  # Do not let release rate limiting preserve a stale positive acceleration
+  # after the cruise-speed headroom has disappeared.
+  reference = np.minimum(reference, positive_accel_ceiling)
   return LeadResponseReference(
     acceleration=reference,
     raw_acceleration=raw_reference,
@@ -224,6 +237,7 @@ def build_lead_accel_reference(
 
 __all__ = (
   "LEAD_RESPONSE_BALANCED",
+  "LEAD_RESPONSE_CRUISE_TAPER_TIME",
   "LEAD_RESPONSE_SMOOTH",
   "LEAD_RESPONSE_SYNC",
   "LeadResponseReference",
