@@ -17,6 +17,8 @@ CLIP_MARGIN = 500
 MIN_DRAW_DISTANCE = 10.0
 MAX_DRAW_DISTANCE = 100.0
 CARROT_PARAM_REFRESH_INTERVAL = 1.0
+LANE_DASH_LENGTH_M = 5.2
+LANE_DASH_GAP_M = 4.2
 
 LaneChangeState = log.LaneChangeState
 
@@ -59,6 +61,37 @@ class RadarLeadInfo:
   radar: bool = False
   model_prob: float = 0.0
   has_future_point: bool = False
+
+
+def lane_dash_segments(line: np.ndarray, max_distance: float) -> list[np.ndarray]:
+  if line.shape[0] < 2:
+    return []
+
+  x = line[:, 0]
+  start_distance = max(0.0, float(x[0]))
+  end_distance = min(max_distance, float(x[-1]))
+  if end_distance <= start_distance:
+    return []
+
+  segments = []
+  cycle_distance = LANE_DASH_LENGTH_M + LANE_DASH_GAP_M
+  cursor = math.floor(start_distance / cycle_distance) * cycle_distance
+  while cursor < end_distance:
+    dash_start = max(cursor, start_distance)
+    dash_end = min(cursor + LANE_DASH_LENGTH_M, end_distance)
+    if dash_end > dash_start:
+      inside = line[(x > dash_start) & (x < dash_end)]
+      start_point = np.array(
+        [dash_start, *(np.interp(dash_start, x, line[:, axis]) for axis in (1, 2))],
+        dtype=line.dtype,
+      )
+      end_point = np.array(
+        [dash_end, *(np.interp(dash_end, x, line[:, axis]) for axis in (1, 2))],
+        dtype=line.dtype,
+      )
+      segments.append(np.vstack((start_point, inside, end_point)))
+    cursor += cycle_distance
+  return segments
 
 
 class ModelRenderer(Widget):
@@ -942,14 +975,29 @@ class ModelRenderer(Widget):
       # zero. They cannot affect the framebuffer, so avoid both the projection
       # work and the draw call while preserving the > 0.3 visibility threshold.
       if not lane_line_visible[i]:
-        lane_vertices.append(empty_vertices)
+        lane_vertices.append([])
+        continue
+
+      lane_code = left_lane_line if i == 1 else right_lane_line if i == 2 else None
+      if lane_code is not None and lane_code < 0:
+        lane_vertices.append([])
         continue
 
       line_width = 0.025
       if i == 1 and left_lane_line >= 20:
         line_width = 0.05
-      pts = self._map_line_to_polygon(lane_line.raw_points, line_width, 0.0, max_idx, max_distance)
-      lane_vertices.append(pts)
+      is_dashed = lane_code is not None and lane_code % 10 == 0
+      line_segments = lane_dash_segments(lane_line.raw_points, max_distance) if is_dashed else [lane_line.raw_points]
+      projected_segments = []
+      for line_segment in line_segments:
+        segment_max_idx = line_segment.shape[0] - 1 if is_dashed else max_idx
+        segment_max_distance = min(max_distance, float(line_segment[-1, 0])) if is_dashed else max_distance
+        pts = self._map_line_to_polygon(
+          line_segment, line_width, 0.0, segment_max_idx, segment_max_distance,
+        )
+        if pts.size != 0:
+          projected_segments.append(pts)
+      lane_vertices.append(projected_segments)
 
       if i == 1 and draw_double_left:
         lane_vertices_double = self._map_line_to_polygon(
@@ -963,7 +1011,7 @@ class ModelRenderer(Widget):
         )
 
     for i in range(4):
-      if lane_vertices[i].size == 0:
+      if not lane_vertices[i]:
         continue
       alpha = 220
       stroke = 0.0
@@ -975,9 +1023,10 @@ class ModelRenderer(Widget):
       else:
         color = rl.Color(255, 255, 255, alpha)
 
-      draw_polygon_solid(lane_vertices[i], color)
-      if stroke > 0.0:
-        self._draw_polygon_outline_carrot(lane_vertices[i], color, stroke)
+      for lane_segment_vertices in lane_vertices[i]:
+        draw_polygon_solid(lane_segment_vertices, color)
+        if stroke > 0.0:
+          self._draw_polygon_outline_carrot(lane_segment_vertices, color, stroke)
 
       if i == 1 and draw_double_left and lane_vertices_double.size != 0:
         draw_polygon_solid(lane_vertices_double, color)
