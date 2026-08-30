@@ -541,6 +541,7 @@ class LongitudinalMpc:
         radarstate.leadOne,
         mode=carrot.lead_response_mode,
         v_ego=v_ego,
+        v_cruise=v_cruise,
         desired_distance=self.desired_distance,
         previous_acceleration=float(self.prev_a[0]),
         time_indices=T_IDXS,
