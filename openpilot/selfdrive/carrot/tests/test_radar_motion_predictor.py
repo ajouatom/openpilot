@@ -2531,18 +2531,18 @@ def test_stationary_corner_primary_handoff_becomes_and_remains_lead_two() -> Non
     "vLead": 10.0,
     "modelProb": 0.9,
   }
-  moved_lead = dict(corner_lead, dRel=43.1)
+  moved_lead = dict(corner_lead, dRel=39.3)
   moved = replace(corner, lead=moved_lead)
-  acquired = handoff.update(0.1, farther_primary, (moved,), None)
+  acquired = handoff.update(0.3, farther_primary, (moved,), None)
 
   assert acquired is not None
   assert acquired.confirmed_stationary_shadow
   assert lead_two.update(
-    0.1, farther_primary, (acquired,), 20.0,
+    0.3, farther_primary, (acquired,), 20.0,
   ).lead_two is acquired.lead
 
   retained = None
-  for index in range(2, 13):
+  for index in range(4, 13):
     time_s = index * 0.1
     retained_candidate = replace(
       corner,
@@ -4230,7 +4230,7 @@ def test_confident_vision_lead_elsewhere_releases_stationary_hold() -> None:
   assert matcher.stationary_identity is None
 
 
-def test_controller_publishes_vision_seeded_continuous_corner_stationary_lead() -> None:
+def test_controller_does_not_publish_corner_stationary_as_lead_one() -> None:
   controller = DPathRadarController(prefer_corner_radar=True)
   output = None
   for index in range(7):
@@ -4256,9 +4256,11 @@ def test_controller_publishes_vision_seeded_continuous_corner_stationary_lead() 
     )
 
   assert output is not None
-  assert output.lead_one is not None
-  assert output.lead_one["radarTrackId"] == 1009
-  assert output.lead_one["vLead"] == pytest.approx(0.0)
+  assert output.lead_one is None
+  assert any(
+    lead["radarTrackId"] == 1009
+    for lead in output.leads_center
+  )
 
 
 def test_controller_turn_rejects_weak_vision_stationary_corner_seed() -> None:
@@ -4293,7 +4295,7 @@ def test_controller_turn_rejects_weak_vision_stationary_corner_seed() -> None:
   assert controller.primary_matcher.stationary_identity is None
 
 
-def test_controller_turn_allows_strong_vision_stationary_corner_seed() -> None:
+def test_controller_turn_does_not_publish_strong_vision_corner_as_l1() -> None:
   controller = DPathRadarController(prefer_corner_radar=True)
   output = None
   for index in range(7):
@@ -4318,11 +4320,10 @@ def test_controller_turn_allows_strong_vision_stationary_corner_seed() -> None:
     )
 
   assert output is not None
-  assert output.lead_one is not None
-  assert output.lead_one["radarTrackId"] == 1009
+  assert output.lead_one is None
 
 
-def test_controller_turn_retains_previously_confirmed_stationary_corner() -> None:
+def test_controller_turn_does_not_retain_corner_only_l1() -> None:
   controller = DPathRadarController(prefer_corner_radar=True)
   output = None
   for index in range(7):
@@ -4346,8 +4347,7 @@ def test_controller_turn_retains_previously_confirmed_stationary_corner() -> Non
     )
 
   assert output is not None
-  assert output.lead_one is not None
-  assert output.lead_one["radarTrackId"] == 1009
+  assert output.lead_one is None
 
   retained = controller.update(
     time_s=0.35,
@@ -4363,8 +4363,7 @@ def test_controller_turn_retains_previously_confirmed_stationary_corner() -> Non
     yaw_rate_rad_s=0.20,
   )
 
-  assert retained.lead_one is not None
-  assert retained.lead_one["radarTrackId"] == 1009
+  assert retained.lead_one is None
 
 
 def test_weak_vision_accelerates_only_tight_front_corner_stationary_pair() -> None:
@@ -4916,7 +4915,7 @@ def test_radar_only_moving_corner_rejects_reported_velocity_conflict() -> None:
   assert output is not None
 
 
-def test_rejected_corner_identity_can_reacquire_after_physical_break() -> None:
+def test_corner_identity_cannot_reacquire_as_primary_after_physical_break() -> None:
   controller = DPathRadarController(
     prefer_corner_radar=True,
     enable_radar_tracks=1,
@@ -4957,11 +4956,10 @@ def test_rejected_corner_identity_can_reacquire_after_physical_break() -> None:
     )
 
   assert output is not None
-  assert output.lead_one is not None
-  assert output.lead_one["radarTrackId"] == 1002
+  assert output.lead_one is None
 
 
-def test_radar_only_moving_corner_accepts_consistent_range_rate() -> None:
+def test_radar_only_moving_corner_never_owns_lead_one() -> None:
   controller = DPathRadarController(
     prefer_corner_radar=True,
     enable_radar_tracks=1,
@@ -4985,8 +4983,7 @@ def test_radar_only_moving_corner_accepts_consistent_range_rate() -> None:
     )
 
   assert output is not None
-  assert output.lead_one is not None
-  assert output.lead_one["radarTrackId"] == 1002
+  assert output.lead_one is None
 
 
 def test_close_born_corner_only_moving_reflection_cannot_seed_lead() -> None:
@@ -5058,7 +5055,7 @@ def test_radar_only_moving_far_corner_rejects_tunnel_fixture() -> None:
   assert output is not None
 
 
-def test_radar_only_moving_far_corner_accepts_after_longer_confirmation() -> None:
+def test_radar_only_moving_far_corner_stays_out_of_lead_one() -> None:
   controller = DPathRadarController(
     prefer_corner_radar=True,
     enable_radar_tracks=1,
@@ -5085,8 +5082,7 @@ def test_radar_only_moving_far_corner_accepts_after_longer_confirmation() -> Non
       assert output.lead_one is None
 
   assert output is not None
-  assert output.lead_one is not None
-  assert output.lead_one["radarTrackId"] == 1002
+  assert output.lead_one is None
 
 
 def test_radar_only_moving_far_corner_with_front_support_uses_front() -> None:
@@ -5224,7 +5220,7 @@ def test_tentative_native_track_remains_available_to_vision_match() -> None:
   assert output.lead_one["radarTrackId"] == 39
 
 
-def test_vision_match_miss_recovers_unmatched_raw_corner() -> None:
+def test_vision_match_miss_does_not_publish_unmatched_raw_corner() -> None:
   output = DPathRadarController(
     prefer_corner_radar=True,
     enable_radar_tracks=1,
@@ -5242,9 +5238,7 @@ def test_vision_match_miss_recovers_unmatched_raw_corner() -> None:
     ),
   )
 
-  assert output.lead_one is not None
-  assert output.lead_one["radar"]
-  assert output.lead_one["radarTrackId"] == 1009
+  assert output.lead_one is None
 
 
 def test_vision_match_miss_recovers_close_moving_front_radar() -> None:
@@ -5339,7 +5333,7 @@ def test_unconfirmed_stationary_front_cannot_enable_vision_fallback() -> None:
   assert output.lead_one is None
 
 
-def test_radar_mode_keeps_sustained_vision_side_cutin_without_radar() -> None:
+def test_radar_mode_keeps_vision_only_side_cutin_out_of_lead_one() -> None:
   controller = DPathRadarController(
     prefer_corner_radar=True,
     enable_radar_tracks=1,
@@ -5361,9 +5355,7 @@ def test_radar_mode_keeps_sustained_vision_side_cutin_without_radar() -> None:
       assert output.lead_one is None
 
   assert output is not None
-  assert output.lead_one is not None
-  assert not output.lead_one["radar"]
-  assert output.lead_one["radarTrackId"] == -1
+  assert output.lead_one is None
   held = controller.update(
     time_s=0.35,
     v_ego=10.0,
@@ -5372,8 +5364,7 @@ def test_radar_mode_keeps_sustained_vision_side_cutin_without_radar() -> None:
       30.0, 1.45, 9.0, probability=0.36,
     ),
   )
-  assert held.lead_one is not None
-  assert not held.lead_one["radar"]
+  assert held.lead_one is None
 
 
 def test_near_vision_fallback_rejects_adjacent_raw_reflection() -> None:
@@ -5523,7 +5514,7 @@ def test_controller_vision_only_acquires_at_point_four_and_holds_briefly() -> No
   assert released.lead_one is None
 
 
-def test_corner_support_strengthens_front_stationary_sticky_and_handoff() -> None:
+def test_corner_support_strengthens_front_without_owning_lead_one() -> None:
   controller = DPathRadarController(prefer_corner_radar=True)
   output = None
   for index in range(7):
@@ -5550,7 +5541,7 @@ def test_corner_support_strengthens_front_stationary_sticky_and_handoff() -> Non
 
   assert output is not None
   assert output.lead_one is not None
-  assert output.lead_one["radarTrackId"] == 1009
+  assert output.lead_one["radarTrackId"] == 35
 
   corner_handoff = controller.update(
     time_s=0.35,
@@ -5580,7 +5571,7 @@ def test_corner_support_strengthens_front_stationary_sticky_and_handoff() -> Non
   )
 
   assert corner_handoff.lead_one is not None
-  assert corner_handoff.lead_one["radarTrackId"] == 1009
+  assert corner_handoff.lead_one["radarTrackId"] == 35
   assert front_return.lead_one is not None
   assert front_return.lead_one["radarTrackId"] == 35
 
@@ -5634,7 +5625,7 @@ def test_stationary_sticky_releases_to_vision_on_large_distance_error() -> None:
   assert released.lead_one is None
 
 
-def test_controller_stationary_mismatch_falls_back_front_corner_scc() -> None:
+def test_controller_stationary_mismatch_uses_configured_primary_only() -> None:
   cases = (
     (
       (
@@ -5667,8 +5658,8 @@ def test_controller_stationary_mismatch_falls_back_front_corner_scc() -> None:
         ),
       ),
       1,
-      1020,
-      "corner235",
+      None,
+      None,
     ),
     (
       (

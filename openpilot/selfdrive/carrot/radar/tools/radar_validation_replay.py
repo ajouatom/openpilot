@@ -1254,9 +1254,6 @@ class RadarMotionShadowSelector:
               vision is not None
               and vision_only_lead_allowed(
                 self.enable_radar_tracks,
-                side_cutin_supported=(
-                  matcher.vision_only_side_cutin_supported
-                ),
               )
             )
             else None
