@@ -94,6 +94,9 @@ def test_preopen_orientation_is_carried_by_h264_setup_without_setting_transactio
 
 
 def test_h264_egpu_coexistence_caps_chunks_and_yields_after_send(monkeypatch):
+  assert USBGPU_H264_MAX_CHUNK_SIZE == 32 * 1024
+  assert USBGPU_H264_CHUNK_GAP_S == 0.002
+
   display = TuringUsbDisplay(fast_write=True)
   display.dev = object()
   display._send_optional_command = lambda *_args, **_kwargs: None
