@@ -6741,7 +6741,7 @@ def test_production_dpath_mode_is_independent_of_conventional_radard() -> None:
   assert "from openpilot.selfdrive.controls.radard" not in dpath_source
   assert 'getattr(sm["modelV2"], "timestampEof", 0)' in dpath_source
   assert 'params.get_int(\n        "CarrotRadarCutInSensitivity",' in dpath_source
-  assert 'RadarReactionFactor' not in dpath_source
+  assert 'self.params.get_float("RadarReactionFactor") * 0.01' in dpath_source
   for field in (
     "leadOne",
     "leadTwo",
