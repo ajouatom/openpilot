@@ -350,6 +350,7 @@
               "en": "Lead Response",
               "zh": "前车响应",
               "params": [
+                "LeadResponseMode",
                 "JLeadFactor3",
                 "RadarReactionFactor"
               ]
@@ -1257,6 +1258,41 @@
       "default": -150,
       "unit": 100,
       "display_unit": "distanceCm"
+    },
+    {
+      "group": "주행튜닝",
+      "name": "LeadResponseMode",
+      "title": "선행차 반응 모드(0)",
+      "descr": "0: 여유거리를 사용해 일찍 부드럽게 반응, 1: 승차감과 동기 추종의 균형, 2: 선행차 가감속을 적극적으로 동기 추종. 모든 모드는 위험 시 안전 반응으로 전환합니다.",
+      "egroup": "LONG",
+      "etitle": "Lead Response Mode(0)",
+      "edescr": "0: Smooth uses surplus distance for an early gentle response. 1: Balanced. 2: Sync follows lead acceleration more directly. All modes blend toward the safety response when the margin is small.",
+      "cgroup": "纵向控制",
+      "ctitle": "前车响应模式(0)",
+      "cdescr": "0：平顺，利用余距提前轻柔响应；1：均衡；2：同步，更直接跟随前车加减速。安全余量不足时所有模式都会转为安全响应。",
+      "min": 0,
+      "max": 2,
+      "default": 0,
+      "unit": 1,
+      "control": "select",
+      "risk": "high",
+      "options": {
+        "ko": [
+          "부드럽게",
+          "균형",
+          "동기 추종"
+        ],
+        "en": [
+          "Smooth",
+          "Balanced",
+          "Sync"
+        ],
+        "zh": [
+          "平顺",
+          "均衡",
+          "同步跟随"
+        ]
+      }
     },
     {
       "group": "주행튜닝",
