@@ -262,6 +262,42 @@ def test_soft_hold_on_cancel_keeps_cancel_state_while_engaging():
   assert helper._activate_cruise == 1
 
 
+@pytest.mark.parametrize(("cancel_state", "expected_activate"), [
+  (False, 0),
+  (True, -1),
+])
+def test_gas_releases_cancel_soft_hold_to_cruise_off(cancel_state, expected_activate):
+  helper = VCruiseCarrot.__new__(VCruiseCarrot)
+  helper._cruise_available = True
+  helper._hold_interlock_active = False
+  helper._steering_interlock_active = False
+  helper._cruise_cancel_state = cancel_state
+  helper._cancel_timer = 0
+  helper._activate_cruise = 0
+  helper._soft_hold_count = 0
+  helper._soft_hold_active = 2
+  helper.autoCruiseControl = 1
+  helper.autoCruiseControl_cancel_timer = 0
+  helper.disengage_on_accelerator = False
+  helper._cruise_ready = False
+  helper._paddle_decel_active = False
+  helper.carrot_cruise_active = False
+  helper._gas_pressed_count = -1
+  helper._gas_pressed_count_last = 0
+  helper._gas_pressed_value = 0
+  helper._gas_tok_timer = 40
+  helper._gas_tok = False
+  helper._brake_pressed_count = -1
+  helper._add_log = lambda log: None
+
+  CS = SimpleNamespace(gasPressed=True, gas=0.2, brakePressed=False)
+  helper._prepare_brake_gas(CS, car.CarControl(enabled=True))
+
+  assert helper._soft_hold_active == 0
+  assert helper._cruise_cancel_state is cancel_state
+  assert helper._activate_cruise == expected_activate
+
+
 @pytest.mark.parametrize(("brake_hold_active", "parking_brake", "active"), [
   (False, False, False),
   (True, False, True),
