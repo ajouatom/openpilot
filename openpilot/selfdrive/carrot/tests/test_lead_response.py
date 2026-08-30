@@ -34,6 +34,7 @@ def reference(mode: int, **lead_overrides):
     lead(**lead_overrides),
     mode=mode,
     v_ego=15.0,
+    v_cruise=30.0,
     desired_distance=15.0,
     previous_acceleration=0.0,
     time_indices=TIME_INDICES,
@@ -97,6 +98,7 @@ def test_non_radar_or_invalid_lead_has_no_feedforward_reference() -> None:
     lead(radar=False),
     mode=LEAD_RESPONSE_BALANCED,
     v_ego=10.0,
+    v_cruise=20.0,
     desired_distance=10.0,
     previous_acceleration=0.0,
     time_indices=TIME_INDICES,
@@ -114,6 +116,53 @@ def test_far_lead_deceleration_never_becomes_acceleration_request() -> None:
 
   assert smooth is not None
   assert np.all(smooth.raw_acceleration <= 0.0)
+
+
+def test_far_closing_lead_cannot_accelerate_past_cruise_speed() -> None:
+  # Route c80e193a070a8bbe/00000bd0--5eb0330984--9 reproduced a
+  # +0.55 m/s^2 raw reference here and accelerated from a 100 km/h set speed
+  # to 115 km/h indicated while the slower lead was already being closed on.
+  at_cruise = build_lead_accel_reference(
+    lead(
+      dRel=130.1,
+      vRel=-1.37,
+      aLead=0.13,
+      aLeadK=0.13,
+      aLeadTau=0.3,
+    ),
+    mode=LEAD_RESPONSE_SMOOTH,
+    v_ego=100.0 / 3.6,
+    v_cruise=100.0 / 3.6,
+    desired_distance=44.8,
+    previous_acceleration=0.41,
+    time_indices=TIME_INDICES,
+  )
+
+  assert at_cruise is not None
+  assert np.all(at_cruise.raw_acceleration <= 0.0)
+  assert np.all(at_cruise.acceleration <= 0.0)
+
+
+def test_positive_lead_response_tapers_with_cruise_speed_headroom() -> None:
+  speed_headroom = 0.2
+  near_cruise = build_lead_accel_reference(
+    lead(
+      dRel=60.0,
+      vRel=1.0,
+      aLead=1.0,
+      aLeadK=1.0,
+    ),
+    mode=LEAD_RESPONSE_SYNC,
+    v_ego=25.0,
+    v_cruise=25.0 + speed_headroom,
+    desired_distance=30.0,
+    previous_acceleration=0.5,
+    time_indices=TIME_INDICES,
+  )
+
+  assert near_cruise is not None
+  assert np.max(near_cruise.raw_acceleration) <= speed_headroom
+  assert np.max(near_cruise.acceleration) <= speed_headroom
 
 
 def test_lead_jerk_is_integrated_before_adding_to_acceleration() -> None:
