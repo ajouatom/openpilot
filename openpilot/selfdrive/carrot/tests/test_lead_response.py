@@ -340,6 +340,46 @@ def test_filtered_lead_deceleration_opens_early_preview_weight() -> None:
   assert lead_response_target_weight(0.7, -1.0) == pytest.approx(1.0)
 
 
+@pytest.mark.parametrize("invalid_acceleration", (np.nan, np.inf, -np.inf))
+def test_nonfinite_lead_acceleration_cannot_open_preview(invalid_acceleration: float) -> None:
+  assert lead_response_target_weight(0.0, invalid_acceleration) == pytest.approx(0.0)
+  assert lead_response_target_weight(0.4, invalid_acceleration) == pytest.approx(0.4)
+
+
+@pytest.mark.parametrize("mode", (LEAD_RESPONSE_SMOOTH, LEAD_RESPONSE_BALANCED, LEAD_RESPONSE_SYNC))
+def test_far_confirmed_hard_deceleration_is_bounded_but_not_blocked(mode: int) -> None:
+  previous = np.ones_like(TIME_INDICES)
+  far_lead = build_lead_accel_reference(
+    lead(dRel=130.0, vRel=0.0, aLead=-4.0, aLeadK=-4.0),
+    mode=mode,
+    v_ego=20.0,
+    v_cruise=30.0,
+    desired_distance=25.0,
+    previous_acceleration=float(previous[0]),
+    time_indices=TIME_INDICES,
+  )
+
+  assert far_lead is not None
+  target_weight = lead_response_target_weight(0.0, -4.0)
+  first_preview_weight = rate_limit_lead_response_weight(0.0, target_weight)
+  effective_weight = lead_response_confidence(
+    reset_state=False,
+    mpc_mode="acc",
+    stable_frames=LEAD_RESPONSE_MIN_TRACK_FRAMES,
+    lead_speed=20.0,
+  ) * first_preview_weight
+  preview = blend_lead_accel_reference(previous, far_lead.acceleration, effective_weight)
+
+  # The first confirmed frame already sheds acceleration, but confidence,
+  # preview attack, and the selected profile's jerk bound prevent a step brake.
+  assert 0.0 < preview[0] < previous[0]
+  assert previous[0] - preview[0] < 0.02
+  # Once confirmed, a real hard-decelerating lead is allowed to request
+  # braking even before the diagnostic MPC source label changes.
+  confirmed = blend_lead_accel_reference(previous, far_lead.acceleration, target_weight)
+  assert np.any(confirmed < 0.0)
+
+
 def test_lead_response_starts_on_second_frame_and_builds_confidence() -> None:
   common = {
     "reset_state": False,

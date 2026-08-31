@@ -254,6 +254,8 @@ def lead_response_target_weight(obstacle_relevance: float, lead_acceleration: fl
   selected response profile still controls its magnitude and jerk rate.
   """
   obstacle_relevance = float(np.clip(obstacle_relevance, 0.0, 1.0))
+  if not np.isfinite(lead_acceleration):
+    return obstacle_relevance
   decel_preview = float(np.interp(
     max(-float(lead_acceleration), 0.0),
     [LEAD_DECEL_PREVIEW_START, LEAD_DECEL_PREVIEW_FULL],
