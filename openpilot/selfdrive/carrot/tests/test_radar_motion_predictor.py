@@ -6767,7 +6767,9 @@ def test_production_radar_is_fixed_to_carrot() -> None:
   assert not radard.exists()
   assert "from openpilot.selfdrive.controls.radard" not in dpath_source
   assert 'getattr(sm["modelV2"], "timestampEof", 0)' in dpath_source
-  assert 'params.get_int(\n        "CarrotRadarCutInSensitivity",' in dpath_source
+  assert "CarrotRadarCutInSensitivity" not in dpath_source
+  assert "PRODUCTION_CUT_IN_SENSITIVITY = 3" in dpath_source
+  assert "cut_in_sensitivity=PRODUCTION_CUT_IN_SENSITIVITY" in dpath_source
   assert 'self.params.get_float("RadarReactionFactor") * 0.01' in dpath_source
   for field in (
     "leadOne",
