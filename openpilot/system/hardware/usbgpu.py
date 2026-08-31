@@ -118,6 +118,19 @@ def usbgpu_status(compiled: bool, loading: bool, active: bool, startup_failed: b
   return "ready"
 
 
+def usbgpu_badge_state(compiled: bool, loading: bool, active: bool, startup_failed: bool) -> str:
+  """Return the prioritized on-road badge state shared by C3 and mici."""
+  if startup_failed:
+    return "error"
+  if loading:
+    return "loading"
+  if active:
+    return "active"
+  if not compiled:
+    return "not_compiled"
+  return "ready"
+
+
 def get_usbgpu_power_status(timeout_ms: int = 2000) -> UsbGpuPowerStatus | None:
   """Read the custom bridge INA231/BOB status without starting the GPU."""
   import usb.core

@@ -5,6 +5,7 @@ from openpilot.common.constants import CV
 from openpilot.selfdrive.carrot.deceleration_source import deceleration_source_presentation
 from openpilot.selfdrive.ui.onroad.exp_button import ExpButton
 from openpilot.selfdrive.ui.ui_state import ui_state, UIStatus
+from openpilot.system.hardware.usbgpu import usbgpu_badge_state
 from openpilot.system.ui.lib.application import gui_app, FontWeight
 from openpilot.system.ui.lib.multilang import tr
 from openpilot.system.ui.lib.text_measure import measure_text_cached
@@ -305,13 +306,22 @@ class HudRenderer(Widget):
     return self._exp_button.is_pressed
 
   def _draw_egpu_badge(self, rect: rl.Rectangle) -> None:
-    # Active is authoritative. A shared USB hub can briefly disappear from
-    # sysfs while it re-enumerates, but that sample must not blink the badge.
-    if not ui_state.usbgpu_present and not ui_state.usbgpu_active:
+    # Keep runtime state visible while the shared USB hub re-enumerates; a
+    # transient missing sysfs sample must not hide loading or failure details.
+    if not (ui_state.usbgpu_present or ui_state.usbgpu_active or
+            ui_state.usbgpu_loading or ui_state.usbgpu_startup_failed):
       return
 
     text = "eGPU"
-    color = COLORS.GREEN_210 if ui_state.usbgpu_active else COLORS.ORANGE_230
+    state = usbgpu_badge_state(ui_state.usbgpu_compiled, ui_state.usbgpu_loading,
+                               ui_state.usbgpu_active, ui_state.usbgpu_startup_failed)
+    color = {
+      "active": COLORS.GREEN_210,
+      "loading": COLORS.YELLOW_210,
+      "error": COLORS.RED_210,
+      "not_compiled": COLORS.ORANGE_230,
+      "ready": COLORS.WHITE_210,
+    }[state]
     font_size = 38
     text_size = measure_text_cached(self._font_semi_bold, text, font_size)
     pad_x, pad_y = 18, 8
