@@ -18,7 +18,6 @@ from openpilot.selfdrive.controls.lib.lead_response import (
   combine_braking_urgency_with_margin,
   combine_lead_accel_references,
   equal_lead_t_follow_adjustment,
-  lead_danger_factor,
   lead_obstacle_relevance,
   lead_response_confidence,
   lead_response_mode_for_driving_mode,
@@ -75,18 +74,12 @@ def test_existing_driving_modes_select_the_response_profile() -> None:
   assert lead_response_mode_for_driving_mode(99) == LEAD_RESPONSE_BALANCED
 
 
-def test_low_speed_obstacle_margin_is_mode_independent() -> None:
-  assert lead_danger_factor(0.0) == pytest.approx(0.95)
-  assert lead_danger_factor(3.0) == pytest.approx(0.95)
-  assert 0.80 < lead_danger_factor(6.0) < 0.95
-  assert lead_danger_factor(10.0) == pytest.approx(0.80)
-
-
 def test_collision_urgency_removes_comfort_mode_mpc_inertia() -> None:
   assert lead_safety_jerk_factor(0.75, 0.0) == pytest.approx(0.75)
   assert lead_safety_jerk_factor(0.75, 0.3) == pytest.approx(0.75)
   assert 0.50 < lead_safety_jerk_factor(0.75, 0.8) < 0.75
   assert lead_safety_jerk_factor(0.75, 1.0) == pytest.approx(0.50)
+  assert lead_safety_jerk_factor(0.70, 1.0) == pytest.approx(0.50)
   assert lead_safety_jerk_factor(0.50, 1.0) == pytest.approx(0.50)
   assert lead_safety_jerk_factor(0.25, 1.0) == pytest.approx(0.25)
 
@@ -129,6 +122,27 @@ def test_short_ttc_blends_every_mode_toward_safety_response() -> None:
   assert smooth.safety_blend == pytest.approx(1.0)
   assert smooth.effective_gain == pytest.approx(1.0)
   assert smooth.raw_acceleration[0] == pytest.approx(sync.raw_acceleration[0])
+
+
+def test_full_urgency_makes_deceleration_mode_independent_with_surplus_gap() -> None:
+  references = [
+    build_lead_accel_reference(
+      lead(dRel=25.0, vRel=0.0, aLead=-1.0, aLeadK=-1.0),
+      mode=mode,
+      v_ego=15.0,
+      v_cruise=30.0,
+      desired_distance=15.0,
+      previous_acceleration=0.0,
+      time_indices=TIME_INDICES,
+      braking_urgency=1.0,
+    )
+    for mode in (LEAD_RESPONSE_SMOOTH, LEAD_RESPONSE_BALANCED, LEAD_RESPONSE_SYNC)
+  ]
+
+  assert all(reference is not None for reference in references)
+  for reference in references[1:]:
+    assert reference.raw_acceleration == pytest.approx(references[0].raw_acceleration)
+    assert reference.acceleration == pytest.approx(references[0].acceleration)
 
 
 def test_reference_is_rate_limited_from_previous_acceleration() -> None:

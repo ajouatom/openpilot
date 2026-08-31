@@ -27,8 +27,6 @@ LEAD_RESPONSE_WEIGHT_RELEASE = 0.20
 # Near a stop, obstacle distance is the authoritative signal. Radar-derived
 # acceleration is too noisy to improve the existing MPC stop trajectory.
 LEAD_RESPONSE_MIN_LEAD_SPEED = 2.0
-LEAD_DANGER_FACTOR_BASE = 0.80
-LEAD_DANGER_FACTOR_LOW_SPEED = 0.95
 LEAD_SAFETY_JERK_FACTOR = 0.50
 
 
@@ -102,15 +100,6 @@ def lead_response_mode_for_driving_mode(driving_mode: int) -> int:
     3: LEAD_RESPONSE_SYNC,      # Sync
     4: LEAD_RESPONSE_SYNC,      # High: Sync + traffic-signal bypass
   }.get(int(driving_mode), LEAD_RESPONSE_BALANCED)
-
-
-def lead_danger_factor(v_ego: float) -> float:
-  """Add a mode-independent low-speed stop margin."""
-  return float(np.interp(
-    max(float(v_ego), 0.0),
-    [3.0, 10.0],
-    [LEAD_DANGER_FACTOR_LOW_SPEED, LEAD_DANGER_FACTOR_BASE],
-  ))
 
 
 def lead_safety_jerk_factor(nominal_factor: float, braking_urgency: float) -> float:
@@ -392,6 +381,12 @@ def build_lead_accel_reference(
       safety_profile.gap_deficit_gain - profile.gap_deficit_gain
     )
   )
+  effective_gap_surplus_gain = (
+    profile.gap_surplus_gain
+    + control_blend * (
+      safety_profile.gap_surplus_gain - profile.gap_surplus_gain
+    )
+  )
   effective_feedback_limit = (
     profile.tracking_feedback_limit
     + control_blend * (
@@ -405,7 +400,7 @@ def build_lead_accel_reference(
   )
   v_rel_feedback = effective_v_rel_gain * v_rel
   gap_deficit_feedback = effective_gap_gain * min(gap_error, 0.0)
-  gap_surplus_feedback = profile.gap_surplus_gain * min(
+  gap_surplus_feedback = effective_gap_surplus_gain * min(
     max(gap_error, 0.0), 20.0,
   )
   if a_lead < 0.0:
@@ -465,8 +460,6 @@ def build_lead_accel_reference(
 
 
 __all__ = (
-  "LEAD_DANGER_FACTOR_BASE",
-  "LEAD_DANGER_FACTOR_LOW_SPEED",
   "LEAD_SAFETY_JERK_FACTOR",
   "LEAD_RESPONSE_BALANCED",
   "LEAD_RESPONSE_BLEND_HORIZON",
@@ -485,7 +478,6 @@ __all__ = (
   "combine_braking_urgency_with_margin",
   "combine_lead_accel_references",
   "equal_lead_t_follow_adjustment",
-  "lead_danger_factor",
   "lead_obstacle_relevance",
   "lead_response_confidence",
   "lead_response_mode_for_driving_mode",
