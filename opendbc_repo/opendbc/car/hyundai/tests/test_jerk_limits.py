@@ -1,59 +1,57 @@
 import pytest
 
-from opendbc.car.hyundai.jerk_limits import calculate_canfd_jerk_limits, calculate_lead_braking_urgency
+from opendbc.car.hyundai.jerk_limits import calculate_canfd_jerk_limits
 
 
-def test_response_modes_only_shape_non_urgent_lower_jerk() -> None:
-  smooth_upper, smooth_lower = calculate_canfd_jerk_limits(
-    accel=-1.0, jerk=-1.0, response_mode=0,
-  )
-  balanced_upper, balanced_lower = calculate_canfd_jerk_limits(
-    accel=-1.0, jerk=-1.0, response_mode=1,
-  )
-  sync_upper, sync_lower = calculate_canfd_jerk_limits(
-    accel=-1.0, jerk=-1.0, response_mode=2,
+def test_non_urgent_limits_keep_historical_jerk_behavior() -> None:
+  upper, lower = calculate_canfd_jerk_limits(
+    accel=-1.0, jerk=-1.0, braking_urgency=0.0,
   )
 
-  assert smooth_upper == balanced_upper == sync_upper
-  assert smooth_lower < balanced_lower < sync_lower
+  assert upper == pytest.approx(1.0)
+  assert lower == pytest.approx(4.0)
 
 
-def test_response_mode_never_slows_brake_release() -> None:
-  uppers = [
-    calculate_canfd_jerk_limits(accel=-3.0, jerk=3.0, response_mode=mode)[0]
-    for mode in (0, 1, 2)
-  ]
+@pytest.mark.parametrize("accel", (0.0, -0.8, -1.5, -2.0, -3.2, -4.0))
+def test_accel_request_alone_does_not_raise_lower_limit(accel: float) -> None:
+  _, lower = calculate_canfd_jerk_limits(
+    accel=accel, jerk=0.0, braking_urgency=0.0,
+  )
 
-  assert uppers == pytest.approx([5.0, 5.0, 5.0])
+  assert lower == pytest.approx(1.0)
+
+
+def test_tracking_error_assist_is_preserved() -> None:
+  _, lower = calculate_canfd_jerk_limits(
+    accel=-2.0, jerk=0.0, tracking_error=0.75, braking_urgency=0.0,
+  )
+
+  assert lower == pytest.approx(3.0)
+
+
+def test_brake_release_upper_limit_is_unchanged_by_urgency() -> None:
+  upper, _ = calculate_canfd_jerk_limits(
+    accel=-3.0, jerk=3.0, braking_urgency=1.0,
+  )
+
+  assert upper == pytest.approx(5.0)
 
 
 def test_urgent_braking_overrides_smooth_comfort_cap() -> None:
   _, normal_lower = calculate_canfd_jerk_limits(
-    accel=-1.0, jerk=-2.0, braking_urgency=0.0, response_mode=0,
+    accel=-1.0, jerk=0.0, braking_urgency=0.0,
   )
   _, urgent_lower = calculate_canfd_jerk_limits(
-    accel=-1.0, jerk=-2.0, braking_urgency=1.0, response_mode=0,
+    accel=-1.0, jerk=0.0, braking_urgency=1.0,
   )
 
-  assert normal_lower == pytest.approx(1.8)
+  assert normal_lower == pytest.approx(1.0)
   assert urgent_lower == pytest.approx(5.0)
 
 
-def test_lead_braking_urgency_treats_both_leads_equally() -> None:
-  safe = (True, 60.0, -1.0)
-  dangerous = (True, 12.0, -6.0)
-
-  danger_as_one = calculate_lead_braking_urgency(20.0, (dangerous, safe))
-  danger_as_two = calculate_lead_braking_urgency(20.0, (safe, dangerous))
-
-  assert danger_as_one == pytest.approx(danger_as_two)
-  assert danger_as_one > 0.8
-
-
-@pytest.mark.parametrize("mode", (0, 1, 2))
-def test_emergency_acceleration_request_reaches_full_lower_limit(mode: int) -> None:
+def test_emergency_acceleration_request_reaches_full_lower_limit() -> None:
   _, lower = calculate_canfd_jerk_limits(
-    accel=-4.0, jerk=-2.0, braking_urgency=0.0, response_mode=mode,
+    accel=-4.0, jerk=0.0, braking_urgency=1.0,
   )
 
   assert lower == pytest.approx(5.0)

@@ -341,5 +341,6 @@ class LongitudinalPlanner:
     longitudinalPlan.leadResponseMode = carrot.lead_response_mode
     longitudinalPlan.leadOneResponseWeight = float(self.mpc.lead_response_confidences[0])
     longitudinalPlan.leadTwoResponseWeight = float(self.mpc.lead_response_confidences[1])
+    longitudinalPlan.brakingUrgency = float(self.mpc.braking_urgency)
 
     pm.send('longitudinalPlan', plan_send)

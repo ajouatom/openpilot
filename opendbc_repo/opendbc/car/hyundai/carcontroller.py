@@ -8,7 +8,7 @@ from opendbc.car.hyundai import hyundaicanfd, hyundaican
 from opendbc.car.hyundai.carstate import CarState
 from opendbc.car.hyundai.hyundaicanfd import CanBus
 from opendbc.car.hyundai.jerk_limits import CANFD_JERK_LIMIT_MAX, CANFD_JERK_RELEASE_THRESHOLD, CANFD_JERK_UPPER_MIN, \
-                                              calculate_canfd_jerk_limits, calculate_lead_braking_urgency
+                                              calculate_canfd_jerk_limits
 from opendbc.car.hyundai.values import HyundaiFlags, Buttons, CarControllerParams, CAR, CAN_GEARS, HyundaiExtFlags
 from opendbc.car.interfaces import CarControllerBase
 from opendbc.car.vehicle_model import VehicleModel
@@ -804,17 +804,7 @@ class HyundaiJerk:
       self.jerk_error_filter.set_all(0.0)
     else:
       if canfd:
-        response_mode = None
-        self.braking_urgency = 0.0
-        if hud_control is not None:
-          response_mode = int(hud_control.leadResponseMode)
-          self.braking_urgency = calculate_lead_braking_urgency(
-            CS.out.vEgo,
-            (
-              (bool(hud_control.leadVisible), float(hud_control.leadDistance), float(hud_control.leadRelSpeed)),
-              (bool(hud_control.leadTwoVisible), float(hud_control.leadTwoDistance), float(hud_control.leadTwoRelSpeed)),
-            ),
-          )
+        self.braking_urgency = float(np.clip(getattr(actuators, "brakingUrgency", 0.0), 0.0, 1.0))
         tracking_error = 0.0
         tracking_error_active = actuators.longControlState == LongCtrlState.pid and not CS.out.brakePressed and not CS.out.gasPressed
         if tracking_error_active:
@@ -842,7 +832,6 @@ class HyundaiJerk:
         self.jerk_u, self.jerk_l = calculate_canfd_jerk_limits(
           accel, self.jerk, filtered_tracking_error,
           braking_urgency=self.braking_urgency,
-          response_mode=response_mode,
         )
         self.cb_upper = self.cb_lower = 0.0
       else:

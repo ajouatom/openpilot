@@ -12,6 +12,8 @@ from openpilot.selfdrive.controls.radard import _LEAD_ACCEL_TAU
 from openpilot.selfdrive.controls.lib.lead_response import (
   blend_lead_accel_reference,
   build_lead_accel_reference,
+  calculate_lead_braking_urgency,
+  combine_braking_urgency_with_margin,
   combine_lead_accel_references,
   lead_obstacle_relevance,
   lead_response_confidence,
@@ -256,6 +258,7 @@ class LongitudinalMpc:
     self.lead_response_confidences = np.zeros(2)
     self.lead_response_active = False
     self.lead_accel_reference = np.zeros(N+1)
+    self.braking_urgency = 0.0
 
     self.reset()
     self.source = SOURCES[2]
@@ -294,6 +297,7 @@ class LongitudinalMpc:
     self.lead_response_confidences.fill(0.0)
     self.lead_response_active = False
     self.lead_accel_reference.fill(0.0)
+    self.braking_urgency = 0.0
     # timers
     self.solve_time = 0.0
     self.time_qp_solution = 0.0
@@ -433,6 +437,13 @@ class LongitudinalMpc:
     actual_a_ego = a_ego if measured_a_ego is None else float(measured_a_ego)
     t_follow = carrot.get_T_FOLLOW(personality, v_ego, actual_a_ego)
     self.status = radarstate.leadOne.status or radarstate.leadTwo.status
+    self.braking_urgency = calculate_lead_braking_urgency(
+      v_ego,
+      (
+        (bool(radarstate.leadOne.status), float(radarstate.leadOne.dRel), float(radarstate.leadOne.vRel)),
+        (bool(radarstate.leadTwo.status), float(radarstate.leadTwo.dRel), float(radarstate.leadTwo.vRel)),
+      ),
+    )
 
     # jLead still controls acceleration persistence in radard through
     # aLeadTau. Do not inject it a second time into the MPC obstacle and cost.
@@ -608,6 +619,9 @@ class LongitudinalMpc:
       self.apply_predicted_danger_a_change_cost(
         ((radarstate.leadOne, lead_0_obstacle), (radarstate.leadTwo, lead_1_obstacle)),
         base_a_change_cost, t_follow, comfort_brake, stop_distance,
+      )
+      self.braking_urgency = combine_braking_urgency_with_margin(
+        self.braking_urgency, self.predicted_danger_margin,
       )
 
     lead_0_fcw = (np.any(lead_xv_0[FCW_IDXS,0] - self.x_sol[FCW_IDXS,0] < CRASH_DISTANCE) and

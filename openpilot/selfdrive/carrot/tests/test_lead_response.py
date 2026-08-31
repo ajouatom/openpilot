@@ -13,6 +13,8 @@ from openpilot.selfdrive.controls.lib.lead_response import (
   blend_lead_accel_reference,
   build_lead_accel_trajectory,
   build_lead_accel_reference,
+  calculate_lead_braking_urgency,
+  combine_braking_urgency_with_margin,
   combine_lead_accel_references,
   equal_lead_t_follow_adjustment,
   lead_obstacle_relevance,
@@ -352,3 +354,20 @@ def test_dynamic_t_follow_treats_lead_order_equally() -> None:
 
   assert lead_one_first == pytest.approx(lead_two_first)
   assert lead_one_first > 0.0
+
+
+def test_mpc_braking_urgency_treats_lead_order_equally() -> None:
+  safe = (True, 60.0, -1.0)
+  dangerous = (True, 12.0, -6.0)
+
+  danger_as_one = calculate_lead_braking_urgency(20.0, (dangerous, safe))
+  danger_as_two = calculate_lead_braking_urgency(20.0, (safe, dangerous))
+
+  assert danger_as_one == pytest.approx(danger_as_two)
+  assert danger_as_one > 0.8
+
+
+def test_predicted_mpc_margin_can_raise_braking_urgency() -> None:
+  assert combine_braking_urgency_with_margin(0.2, 1.0) == pytest.approx(0.2)
+  assert combine_braking_urgency_with_margin(0.2, -1.5) == pytest.approx(0.5)
+  assert combine_braking_urgency_with_margin(0.2, -3.0) == pytest.approx(1.0)

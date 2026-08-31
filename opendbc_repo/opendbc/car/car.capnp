@@ -439,6 +439,7 @@ struct CarControl {
 
     jerk @9: Float32;  # m/s^3
     aTarget @10: Float32;  # m/s^2
+    brakingUrgency @11: Float32;  # planner-computed 0.0-1.0 longitudinal safety urgency
 
     enum LongControlState @0xe40f3a917d908282{
       off @0;
@@ -479,11 +480,6 @@ struct CarControl {
     naviEventType @19: Int16;   # VW MEB cluster: 0=없음 1=커브 2=교차로 3=분기/출구 4=로터리 5=병목 8=도로제한제어중
     naviEventSpeed @20: Int16;  # VW MEB cluster: 목표속도 kph (커브는 부호=방향: +우/-좌) -> ACC_Event_Wunschgeschw
     leadLimiting @21: Bool;     # VW MEB cluster: 앞차가 속도를 제한 중(xState lead) -> 앞차 하이라이트 우선
-
-    leadTwoVisible @22: Bool;
-    leadTwoDistance @23: Float32;
-    leadTwoRelSpeed @24: Float32;
-    leadResponseMode @25: Int8;
 
     # not used with the dash, TODO: separate structs for dash UI and device UI
     audibleAlert @5: AudibleAlert;

@@ -164,6 +164,7 @@ class Controls:
     actuators.accel = float(accel)
     actuators.aTarget = float(aTarget)
     actuators.jerk = float(jerk)
+    actuators.brakingUrgency = float(long_plan.brakingUrgency)
 
     # Steering PID loop and lateral MPC
     lat_plan = self.sm['lateralPlan']
@@ -351,12 +352,6 @@ class Controls:
     hudControl.leadRelSpeed = leadOne.vRel if leadOne.status else 0
     hudControl.leadRadar = 1 if leadOne.radar else 0
     hudControl.leadDPath = leadOne.dPath
-    leadTwo = radarState.leadTwo
-    hudControl.leadTwoVisible = leadTwo.status
-    hudControl.leadTwoDistance = leadTwo.dRel if leadTwo.status else 0
-    hudControl.leadTwoRelSpeed = leadTwo.vRel if leadTwo.status else 0
-    hudControl.leadResponseMode = lp.leadResponseMode
-
     meta = self.sm['modelV2'].meta
     if False: # command
       desire_map = {

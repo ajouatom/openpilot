@@ -105,6 +105,33 @@ def equal_lead_t_follow_adjustment(jerks: list[float], dynamic_factor: float) ->
   return float(max(adjustments))
 
 
+def calculate_lead_braking_urgency(
+  v_ego: float,
+  leads: tuple[tuple[bool, float, float], ...],
+) -> float:
+  """Return equal, order-independent TTC/headway urgency for all MPC leads."""
+  urgency = 0.0
+  for visible, distance, relative_speed in leads:
+    if not visible or not np.isfinite(distance) or not np.isfinite(relative_speed) or distance <= 0.0:
+      continue
+    closing_speed = max(0.0, -float(relative_speed))
+    if closing_speed <= 0.1:
+      continue
+    ttc = float(distance) / closing_speed
+    ttc_urgency = float(np.interp(ttc, [1.5, 5.0], [1.0, 0.0]))
+    headway = float(distance) / max(float(v_ego), 1.0)
+    closing_ratio = closing_speed / max(float(v_ego), 1.0)
+    gap_urgency = float(np.interp(headway, [0.35, 0.9], [1.0, 0.0])) * min(1.0, closing_ratio * 2.0)
+    urgency = max(urgency, ttc_urgency, gap_urgency)
+  return float(np.clip(urgency, 0.0, 1.0))
+
+
+def combine_braking_urgency_with_margin(lead_urgency: float, predicted_danger_margin: float) -> float:
+  """Add the MPC's predicted obstacle margin to the direct closing urgency."""
+  margin_urgency = float(np.interp(predicted_danger_margin, [-3.0, 0.0], [1.0, 0.0]))
+  return float(np.clip(max(lead_urgency, margin_urgency), 0.0, 1.0))
+
+
 def should_apply_lead_accel_reference(
   *,
   reset_state: bool,
@@ -388,6 +415,8 @@ __all__ = (
   "blend_lead_accel_reference",
   "build_lead_accel_trajectory",
   "build_lead_accel_reference",
+  "calculate_lead_braking_urgency",
+  "combine_braking_urgency_with_margin",
   "combine_lead_accel_references",
   "equal_lead_t_follow_adjustment",
   "lead_obstacle_relevance",
