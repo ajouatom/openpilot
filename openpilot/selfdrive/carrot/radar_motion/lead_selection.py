@@ -22,6 +22,7 @@ from openpilot.selfdrive.carrot.radar_motion.predictor import (
 CUTIN_MAX_DREL_M = 80.0
 PRIMARY_DUPLICATE_MAX_DREL_DELTA_M = 3.5
 PRIMARY_DUPLICATE_MAX_YREL_DELTA_M = 1.8
+PRIMARY_PROXIMITY_MIN_VLEAD_DELTA_MPS = 2.5
 PRIMARY_ROW_MAX_DREL_DELTA_M = 8.0
 CUTIN_PRIMARY_FUTURE_MARGIN_M = 2.0
 FRONT_CUT_IN_MIN_DPATH_RATE_MPS = 0.75
@@ -753,8 +754,15 @@ def select_dpath_lead_two(
         )
         and (
           not lead_duplicates_primary(lead, primary)
-          or int(lead.get("radarTrackId", -1))
-          in allow_primary_proximity_track_ids
+          or (
+            int(lead.get("radarTrackId", -1))
+            in allow_primary_proximity_track_ids
+            and primary is not None
+            and abs(
+              float(lead.get("vLead", 0.0))
+              - float(primary.get("vLead", 0.0))
+            ) > PRIMARY_PROXIMITY_MIN_VLEAD_DELTA_MPS
+          )
         )
       )
     ),
