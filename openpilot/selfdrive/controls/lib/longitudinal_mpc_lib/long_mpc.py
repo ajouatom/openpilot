@@ -590,6 +590,7 @@ class LongitudinalMpc:
         desired_distance=lead_desired_distance,
         previous_acceleration=float(self.prev_a[0]),
         time_indices=T_IDXS,
+        braking_urgency=self.braking_urgency,
       )
       if lead_response is not None:
         lead_response_candidates.append(blend_lead_accel_reference(

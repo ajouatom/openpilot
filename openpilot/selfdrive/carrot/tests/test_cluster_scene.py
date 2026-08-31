@@ -568,9 +568,9 @@ def test_egpu_indicator_draws_only_while_active(monkeypatch, active, expected_dr
 @pytest.mark.parametrize(
   ("mode", "label", "color"),
   (
-    (1, "연비", (0, 255, 0, 200)),
-    (2, "안전", (255, 165, 0, 200)),
-    (3, "일반", (255, 255, 255, 200)),
+    (1, "편안", (0, 255, 0, 200)),
+    (2, "균형", (255, 255, 255, 200)),
+    (3, "동기", (255, 165, 0, 200)),
     (4, "고속", (255, 0, 0, 200)),
   ),
 )

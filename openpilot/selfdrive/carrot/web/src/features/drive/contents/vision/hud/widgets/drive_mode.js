@@ -3,7 +3,7 @@
 import { svg, setText } from "../dom.js";
 import { DRIVE_MODE_COLORS } from "../tokens.js";
 
-/* 주행모드 배지(연비/안전/일반/고속). 클러스터 _draw_driving_mode_indicator 그대로 이식.
+/* 주행모드 배지(편안/균형/동기/고속). 클러스터 _draw_driving_mode_indicator 그대로 이식.
  * - 색/모양: 솔리드 모드색(배경 α 200/255) 둥근사각형 + 흰 테두리 + 흰 글자(어두운 외곽선). 색=토큰.
  * - 로케일: 라벨 길이에 맞춰 박스 폭을 동적 조정(한글 "안전" 2자 ↔ 영문 "Normal" 6자 모두 정합).
  * - 위치: 신호등 오른쪽에 넉넉한 간격으로 붙되, 좌표계는 패널(클러스터) 1:1. */
@@ -27,10 +27,10 @@ const MODE_KIND = Object.freeze({ 1: "eco", 2: "safe", 3: "normal", 4: "sport" }
 
 // 레지스트리 미로드 시 폴백(값은 translations/*.js 의 driveModes 와 동일: en/ko/zh).
 const FALLBACK_LABELS = Object.freeze({
-  eco: { ko: "연비", en: "Eco", zh: "经济" },
-  safe: { ko: "안전", en: "Safe", zh: "安全" },
-  normal: { ko: "일반", en: "Normal", zh: "标准" },
-  sport: { ko: "고속", en: "Sport", zh: "运动" },
+  eco: { ko: "편안", en: "SOFT", zh: "SOFT" },
+  safe: { ko: "균형", en: "BALN", zh: "BALN" },
+  normal: { ko: "동기", en: "SYNC", zh: "SYNC" },
+  sport: { ko: "고속", en: "HIGH", zh: "HIGH" },
 });
 
 const CJK_RE = /[ᄀ-ᇿ㄰-㆏가-힯　-ヿ㐀-鿿＀-￯]/;

@@ -56,6 +56,11 @@ NATIVE_ACCEL_CORROBORATION_PRODUCT = 0.008
 MIN_MODEL_PROBABILITY = 1e-4
 MAX_ABS_ACCEL_MPS2 = 10.0
 MAX_ABS_JERK_MPS3 = 8.0
+SMOOTH_JERK_EVENT_ALPHA = 0.20
+SMOOTH_JERK_TRACK_ALPHA = 0.08
+SMOOTH_JERK_RELEASE_ALPHA = 0.50
+SMOOTH_JERK_DEADBAND_MPS3 = 0.12
+SMOOTH_JERK_EVENT_GATE_MPS3 = 0.35
 
 
 @dataclass
@@ -136,6 +141,7 @@ class LeadMotionIMM:
     self.steady_probability = 0.90
     self.maneuver_probability = 0.10
     self.acceleration = acceleration
+    self.slow_acceleration = acceleration
     self.jerk = 0.0
     self.velocity_innovation = 0.0
     self.count = 0
@@ -383,7 +389,6 @@ class LeadMotionIMM:
       self.maneuver_probability = event_probability
       self.steady_probability = 1.0 - event_probability
 
-    previous_acceleration = self.acceleration
     target_acceleration = _clamp(
       self.steady_probability * self.steady.acceleration
       + self.maneuver_probability * self.maneuver.acceleration,
@@ -391,18 +396,38 @@ class LeadMotionIMM:
       MAX_ABS_ACCEL_MPS2,
     )
     self.acceleration = target_acceleration
-    raw_jerk = _clamp(
-      (self.acceleration - previous_acceleration) / dt,
+    slow_acceleration = _clamp(
+      self.steady.acceleration,
+      -MAX_ABS_ACCEL_MPS2,
+      MAX_ABS_ACCEL_MPS2,
+    )
+    raw_slow_jerk = _clamp(
+      (slow_acceleration - self.slow_acceleration) / dt,
       -MAX_ABS_JERK_MPS3,
       MAX_ABS_JERK_MPS3,
     )
-    # aLead carries the fast physical response. jLead is only an event cue for
-    # DynamicTFollow and lead extrapolation, so open it on corroborated event
-    # evidence rather than on every noisy change of IMM model probability.
-    jerk_event = event_probability >= 0.15
-    jerk_target = raw_jerk if jerk_event else 0.0
-    jerk_alpha = 0.45 if jerk_event else 0.30
+    # The mixed acceleration above remains the low-latency control signal.
+    # jLead is derived from the quiet model instead: it is used for aLeadTau
+    # and DynamicTFollow, where a noisy derivative can extend a braking event
+    # long after the physical lead has settled. Corroborated events open the
+    # filter quickly; quiet sub-deadband motion releases it toward zero.
+    jerk_event = (
+      event_probability >= 0.15
+      or abs(raw_slow_jerk) >= SMOOTH_JERK_EVENT_GATE_MPS3
+    )
+    if jerk_event:
+      jerk_target = raw_slow_jerk
+      jerk_alpha = SMOOTH_JERK_EVENT_ALPHA
+    elif abs(raw_slow_jerk) <= SMOOTH_JERK_DEADBAND_MPS3:
+      jerk_target = 0.0
+      jerk_alpha = SMOOTH_JERK_RELEASE_ALPHA
+    else:
+      jerk_target = raw_slow_jerk
+      jerk_alpha = SMOOTH_JERK_TRACK_ALPHA
     self.jerk += jerk_alpha * (jerk_target - self.jerk)
+    if abs(self.jerk) < 0.01 and jerk_target == 0.0:
+      self.jerk = 0.0
+    self.slow_acceleration = slow_acceleration
     self.velocity_innovation = (
       self.steady_probability * steady_innovation
       + self.maneuver_probability * maneuver_innovation

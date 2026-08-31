@@ -1275,7 +1275,7 @@ msgstr "downloading..."
 
 #: openpilot/selfdrive/ui/onroad/hud_renderer.py
 msgid "eco"
-msgstr ""
+msgstr "SOFT"
 
 #: openpilot/selfdrive/ui/layouts/settings/software.py
 msgid "failed to check for update"
@@ -1291,7 +1291,7 @@ msgstr "for \"{}\""
 
 #: openpilot/selfdrive/ui/onroad/hud_renderer.py
 msgid "high"
-msgstr ""
+msgstr "HIGH"
 
 #: openpilot/selfdrive/ui/onroad/hud_renderer.py
 msgid "km/h"
@@ -1331,7 +1331,7 @@ msgstr "never"
 
 #: openpilot/selfdrive/ui/onroad/hud_renderer.py
 msgid "norm"
-msgstr ""
+msgstr "SYNC"
 
 #: openpilot/selfdrive/ui/layouts/settings/software.py
 msgid "now"
@@ -1376,7 +1376,7 @@ msgstr "right"
 
 #: openpilot/selfdrive/ui/onroad/hud_renderer.py
 msgid "safe"
-msgstr ""
+msgstr "BALN"
 
 #: openpilot/selfdrive/selfdrived/events.py
 msgid "take control"

@@ -39,6 +39,7 @@ from openpilot.selfdrive.controls.lib.cutin_helpers import (
 
 # Default lead acceleration decay set to 50% at 1s
 _LEAD_ACCEL_TAU = 1.5
+_LEAD_ACCEL_TAU_MIN = 0.25
 # Engineering calibration, not a user response preference. It keeps quiet
 # lead acceleration transient while allowing hard motion to persist longer.
 RADAR_REACTION_FACTOR = 1.0
@@ -479,7 +480,7 @@ class Track:
     if abs(self.aLead) < a_lead_threshold and abs(self.jLead) < 0.5:
       self.aLeadTau.x = _LEAD_ACCEL_TAU * radar_reaction_factor
     else:
-      self.aLeadTau.update(0.0)
+      self.aLeadTau.x = max(_LEAD_ACCEL_TAU_MIN, self.aLeadTau.update(0.0))
 
     self.cnt += 1
 

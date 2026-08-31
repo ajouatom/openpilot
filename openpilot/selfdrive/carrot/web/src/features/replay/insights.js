@@ -464,10 +464,10 @@ window.CarrotReplayInsights = window.CarrotReplayInsights || (() => {
     lkas: ["replay_value_button_lkas", "Lane assist"],
   });
   const DRIVING_MODE_META = Object.freeze({
-    1: ["replay_value_driving_eco", "Efficiency first"],
-    2: ["replay_value_driving_safe", "Safety first"],
-    3: ["replay_value_driving_normal", "Balanced"],
-    4: ["replay_value_driving_high", "Quick response"],
+    1: ["replay_value_driving_eco", "Smooth"],
+    2: ["replay_value_driving_safe", "Balanced"],
+    3: ["replay_value_driving_normal", "Sync"],
+    4: ["replay_value_driving_high", "High (Sync + signal bypass)"],
   });
   const CARROT_MODE_META = Object.freeze({
     0: ["replay_value_carrot_off", "Guidance off"],

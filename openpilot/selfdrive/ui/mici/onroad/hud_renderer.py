@@ -898,14 +898,14 @@ class HudRenderer(Widget):
     except Exception:
       return "", rl.Color(255, 255, 255, 200)
 
-    if mode_val == 1:   # eco
-      return tr("eco"), rl.Color(0, 255, 0, 200)
-    if mode_val == 2:   # safe
-      return tr("safe"), rl.Color(255, 165, 0, 200)
-    if mode_val == 3:   # normal
-      return tr("norm"), rl.Color(255, 255, 255, 200)
+    if mode_val == 1:   # smooth
+      return tr("eco").upper(), rl.Color(0, 255, 0, 200)
+    if mode_val == 2:   # balanced
+      return tr("safe").upper(), rl.Color(255, 255, 255, 200)
+    if mode_val == 3:   # sync
+      return tr("norm").upper(), rl.Color(255, 165, 0, 200)
     if mode_val == 4:   # high
-      return tr("high"), rl.Color(255, 0, 0, 200)
+      return tr("high").upper(), rl.Color(255, 0, 0, 200)
 
     return "", rl.Color(255, 255, 255, 200)
 

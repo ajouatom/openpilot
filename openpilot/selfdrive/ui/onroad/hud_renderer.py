@@ -477,14 +477,14 @@ class HudRenderer(Widget):
     except Exception:
       return "", COLORS.WHITE_TRANSLUCENT
 
-    if mode_val == 1:   # eco
-      return tr("eco"), COLORS.GREEN_200
-    if mode_val == 2:   # safe
-      return tr("safe"), COLORS.ORANGE_200
-    if mode_val == 3:   # normal
-      return tr("norm"), COLORS.WHITE_TRANSLUCENT
+    if mode_val == 1:   # smooth
+      return tr("eco").upper(), COLORS.GREEN_200
+    if mode_val == 2:   # balanced
+      return tr("safe").upper(), COLORS.WHITE_TRANSLUCENT
+    if mode_val == 3:   # sync
+      return tr("norm").upper(), COLORS.ORANGE_200
     if mode_val == 4:   # high
-      return tr("high"), COLORS.RED_200
+      return tr("high").upper(), COLORS.RED_200
 
     return "", COLORS.WHITE_TRANSLUCENT
 
@@ -757,8 +757,8 @@ class HudRenderer(Widget):
   def _draw_carrot_lower_status(self, bx: int, by: int):
     mode_text, mode_color = self._get_driving_mode_text_and_color()
     if self._debug_speed_panel:
-      mode_text = "safe"
-      mode_color = COLORS.ORANGE_230
+      mode_text = "BALN"
+      mode_color = COLORS.WHITE_TRANSLUCENT
 
     # driving mode
     if mode_text:

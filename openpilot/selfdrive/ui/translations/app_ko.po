@@ -1275,7 +1275,7 @@ msgstr "다운로드 중..."
 
 #: openpilot/selfdrive/ui/onroad/hud_renderer.py
 msgid "eco"
-msgstr "연비"
+msgstr "편안"
 
 #: openpilot/selfdrive/ui/layouts/settings/software.py
 msgid "failed to check for update"
@@ -1331,7 +1331,7 @@ msgstr "없음"
 
 #: openpilot/selfdrive/ui/onroad/hud_renderer.py
 msgid "norm"
-msgstr "일반"
+msgstr "동기"
 
 #: openpilot/selfdrive/ui/layouts/settings/software.py
 msgid "now"
@@ -1376,7 +1376,7 @@ msgstr "오른쪽"
 
 #: openpilot/selfdrive/ui/onroad/hud_renderer.py
 msgid "safe"
-msgstr "안전"
+msgstr "균형"
 
 #: openpilot/selfdrive/selfdrived/events.py
 msgid "take control"

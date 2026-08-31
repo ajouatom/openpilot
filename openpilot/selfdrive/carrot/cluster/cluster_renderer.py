@@ -290,8 +290,8 @@ SPEED_DRIVING_MODE_CENTER_Y = SPEED_MODEL_TRAFFIC_CENTER_Y
 SPEED_DRIVING_MODE_FONT_SIZE = 27.0
 SPEED_DRIVING_MODE_STYLES = {
     1: ("driving_mode_eco", (0, 255, 0, 200)),
-    2: ("driving_mode_safe", (255, 165, 0, 200)),
-    3: ("driving_mode_normal", (255, 255, 255, 200)),
+    2: ("driving_mode_safe", (255, 255, 255, 200)),
+    3: ("driving_mode_normal", (255, 165, 0, 200)),
     4: ("driving_mode_sport", (255, 0, 0, 200)),
 }
 SIDE_GAUGE_TOP = 88

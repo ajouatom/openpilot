@@ -18,7 +18,11 @@ def test_quiet_velocity_noise_is_rejected() -> None:
   rms_acceleration = math.sqrt(sum(
     estimate.acceleration ** 2 for estimate in tail
   ) / len(tail))
+  rms_jerk = math.sqrt(sum(
+    estimate.jerk ** 2 for estimate in tail
+  ) / len(tail))
   assert rms_acceleration < 0.12
+  assert rms_jerk < 0.25
   assert sum(
     estimate.maneuver_probability for estimate in tail
   ) / len(tail) < 0.20
@@ -42,16 +46,20 @@ def test_braking_step_is_seen_within_two_radar_cycles() -> None:
   assert estimate.acceleration < -1.4
 
 
-def test_native_acceleration_provides_first_cycle_attack() -> None:
+def test_native_acceleration_attacks_before_smoothed_jerk() -> None:
   estimator = LeadMotionIMM(20.0)
   for _ in range(20):
     estimator.update(20.0, native_acceleration=0.0)
 
-  estimate = estimator.update(19.95, native_acceleration=-2.0)
+  first = estimator.update(19.95, native_acceleration=-2.0)
+  second = estimator.update(19.85, native_acceleration=-2.0)
 
-  assert estimate.used_native_acceleration
-  assert estimate.acceleration < -0.35
-  assert estimate.jerk < -0.5
+  assert first.used_native_acceleration
+  assert first.acceleration < -1.0
+  assert first.acceleration_fast < first.acceleration_slow - 1.0
+  assert -0.5 < first.jerk < -0.05
+  assert second.acceleration < -1.5
+  assert second.jerk < -1.0
 
 
 def test_uncorroborated_native_acceleration_spike_is_not_fused() -> None:

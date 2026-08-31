@@ -47,6 +47,7 @@ RADAR_MOTION_MAX_TIME_SKEW_S = 0.15
 # Keep this separate from the vehicle's front-radar delay.
 CORNER_RADAR_MEASUREMENT_DELAY_S = 0.05
 LEAD_ACCEL_TAU_S = 1.5
+LEAD_ACCEL_TAU_MIN_S = 0.25
 LEAD_ACCEL_FILTER_TAU_S = 0.45
 LEAD_ACCEL_DT_S = 0.05
 LEAD_ACCEL_FILTER_ALPHA = (
@@ -331,7 +332,10 @@ class RadarLeadDynamics:
       ):
         a_lead_tau = LEAD_ACCEL_TAU_S * factor
       else:
-        a_lead_tau *= 1.0 - LEAD_ACCEL_FILTER_ALPHA
+        a_lead_tau = max(
+          LEAD_ACCEL_TAU_MIN_S,
+          a_lead_tau * (1.0 - LEAD_ACCEL_FILTER_ALPHA),
+        )
       self._a_lead_tau[identity] = a_lead_tau
 
     for identity in tuple(self._a_lead_tau):

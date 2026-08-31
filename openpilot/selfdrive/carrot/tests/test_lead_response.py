@@ -10,6 +10,7 @@ from openpilot.selfdrive.controls.lib.lead_response import (
   LEAD_RESPONSE_MIN_TRACK_FRAMES,
   LEAD_RESPONSE_SMOOTH,
   LEAD_RESPONSE_SYNC,
+  auto_driving_mode_for_congestion,
   blend_lead_accel_reference,
   build_lead_accel_trajectory,
   build_lead_accel_reference,
@@ -66,10 +67,19 @@ def test_response_modes_preserve_order_without_delaying_onset() -> None:
 
 def test_existing_driving_modes_select_the_response_profile() -> None:
   assert lead_response_mode_for_driving_mode(1) == LEAD_RESPONSE_SMOOTH
-  assert lead_response_mode_for_driving_mode(2) == LEAD_RESPONSE_SMOOTH
-  assert lead_response_mode_for_driving_mode(3) == LEAD_RESPONSE_BALANCED
+  assert lead_response_mode_for_driving_mode(2) == LEAD_RESPONSE_BALANCED
+  assert lead_response_mode_for_driving_mode(3) == LEAD_RESPONSE_SYNC
   assert lead_response_mode_for_driving_mode(4) == LEAD_RESPONSE_SYNC
   assert lead_response_mode_for_driving_mode(99) == LEAD_RESPONSE_BALANCED
+
+
+@pytest.mark.parametrize(
+  ("auto_mode", "calm_mode", "clear_mode"),
+  ((1, 1, 2), (2, 1, 3), (3, 2, 3)),
+)
+def test_auto_driving_mode_pairs(auto_mode: int, calm_mode: int, clear_mode: int) -> None:
+  assert auto_driving_mode_for_congestion(auto_mode, congested=True) == calm_mode
+  assert auto_driving_mode_for_congestion(auto_mode, congested=False) == clear_mode
 
 
 def test_surplus_distance_softens_smooth_more_than_sync() -> None:
@@ -112,6 +122,46 @@ def test_reference_is_rate_limited_from_previous_acceleration() -> None:
   assert smooth.acceleration[0] == pytest.approx(-0.04)
   assert balanced.acceleration[0] == pytest.approx(-0.08)
   assert sync.acceleration[0] == pytest.approx(-0.14)
+
+
+def test_gap_and_relative_speed_do_not_form_a_second_controller() -> None:
+  stationary_acceleration = reference(
+    LEAD_RESPONSE_BALANCED,
+    dRel=8.0,
+    vRel=-4.0,
+    aLead=0.0,
+    aLeadK=0.0,
+  )
+
+  assert stationary_acceleration is not None
+  assert np.all(stationary_acceleration.raw_acceleration == pytest.approx(0.0))
+
+
+def test_emergency_jerk_rate_requires_braking_urgency() -> None:
+  common = {
+    "mode": LEAD_RESPONSE_SMOOTH,
+    "v_ego": 15.0,
+    "v_cruise": 30.0,
+    "desired_distance": 15.0,
+    "previous_acceleration": 0.0,
+    "time_indices": TIME_INDICES,
+  }
+  calm = build_lead_accel_reference(
+    lead(dRel=8.0, vRel=-4.0, aLead=-4.0, aLeadK=-4.0),
+    braking_urgency=0.0,
+    **common,
+  )
+  urgent = build_lead_accel_reference(
+    lead(dRel=8.0, vRel=-4.0, aLead=-4.0, aLeadK=-4.0),
+    braking_urgency=1.0,
+    **common,
+  )
+
+  assert calm is not None and urgent is not None
+  assert calm.safety_blend == pytest.approx(1.0)
+  assert calm.raw_acceleration[0] == pytest.approx(urgent.raw_acceleration[0])
+  assert calm.acceleration[0] == pytest.approx(-0.04)
+  assert urgent.acceleration[0] == pytest.approx(-0.175)
 
 
 def test_non_radar_or_invalid_lead_has_no_feedforward_reference() -> None:
@@ -324,7 +374,7 @@ def test_lead_relevance_is_continuous_around_equal_obstacles() -> None:
 
 def test_lead_weight_attacks_faster_than_it_releases() -> None:
   assert rate_limit_lead_response_weight(0.0, 1.0) == pytest.approx(0.25)
-  assert rate_limit_lead_response_weight(1.0, 0.0) == pytest.approx(0.9)
+  assert rate_limit_lead_response_weight(1.0, 0.0) == pytest.approx(0.8)
 
 
 def test_early_deceleration_blends_more_than_early_acceleration() -> None:
