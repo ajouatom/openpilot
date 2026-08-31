@@ -256,6 +256,7 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"AutoRoadSpeedAdjust", {PERSISTENT, INT, "50"}},
 
     {"StopDistanceCarrot", {PERSISTENT, INT, "550"}},
+    {"JLeadFactor3", {PERSISTENT, INT, "0"}},
     {"CruiseButtonMode", {PERSISTENT, INT, "0"}},
     {"CancelButtonMode", {PERSISTENT, INT, "0"}},
     {"LfaButtonMode", {PERSISTENT, INT, "0"}},
@@ -273,8 +274,8 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"CruiseSpeed5", {PERSISTENT, INT, "130"}},
 
     {"PaddleMode", {PERSISTENT, INT, "0"}},
-    {"LongitudinalDrivingMode", {PERSISTENT, INT, "2"}},
-    {"LongitudinalDrivingModeAuto", {PERSISTENT, INT, "0"}},
+    {"MyDrivingMode", {PERSISTENT, INT, "3"}},
+    {"MyDrivingModeAuto", {PERSISTENT, INT, "0"}},
     {"TrafficLightDetectMode", {PERSISTENT, INT, "2"}},
 
     {"SteerActuatorDelay", {PERSISTENT, INT, "0"}},
@@ -296,6 +297,7 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"LongActuatorDelay", {PERSISTENT, INT, "20"}},
     {"VEgoStopping", {PERSISTENT, INT, "50"}},
 
+    {"RadarReactionFactor", {PERSISTENT, INT, "100"}},
     {"EnableRadarTracks", {PERSISTENT, INT, "0"}},
     {"RadarLatFactor", {PERSISTENT, INT, "0"}},
     {"EnableCornerRadar", {PERSISTENT, INT, "0"}},

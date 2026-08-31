@@ -439,7 +439,6 @@ struct CarControl {
 
     jerk @9: Float32;  # m/s^3
     aTarget @10: Float32;  # m/s^2
-    brakingUrgency @11: Float32;  # planner-computed 0.0-1.0 longitudinal safety urgency
 
     enum LongControlState @0xe40f3a917d908282{
       off @0;

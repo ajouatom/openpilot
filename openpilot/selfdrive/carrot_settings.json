@@ -283,8 +283,8 @@
                   "en": "Drive Mode",
                   "zh": "驾驶模式",
                   "params": [
-                    "LongitudinalDrivingMode",
-                    "LongitudinalDrivingModeAuto"
+                    "MyDrivingMode",
+                    "MyDrivingModeAuto"
                   ]
                 },
                 {
@@ -342,6 +342,16 @@
                 "DynamicTFollowLC",
                 "EnableSpeedTF",
                 "TFollowDecelBoost"
+              ]
+            },
+            {
+              "id": "CRUISE_LEAD",
+              "ko": "선행차 반응",
+              "en": "Lead Response",
+              "zh": "前车响应",
+              "params": [
+                "JLeadFactor3",
+                "RadarReactionFactor"
               ]
             },
             {
@@ -1248,6 +1258,22 @@
     },
     {
       "group": "주행튜닝",
+      "name": "JLeadFactor3",
+      "title": "JerkLeadFactor(0)",
+      "descr": "값이 클수록 전방차량의 가속도변화율에 민감하게 반응",
+      "egroup": "LONG",
+      "etitle": "JerkLeadFactor(0)",
+      "edescr": "Higher values respond more sensitively to acceleration changes of the lead vehicle",
+      "cgroup": "纵向控制",
+      "ctitle": "前车冲击因子(0)",
+      "cdescr": "值越高对前车加速度变化的反应越敏感",
+      "min": 0,
+      "max": 100,
+      "default": 0,
+      "unit": 10
+    },
+    {
+      "group": "주행튜닝",
       "name": "LongTuningKpV",
       "title": "Long KpV(100)x0.01",
       "descr": "롱컨 비례게인(오차 즉각 반응) \n\n HKG: 100 권장",
@@ -1325,6 +1351,23 @@
       "max": 100,
       "default": 50,
       "unit": 5
+    },
+    {
+      "group": "주행튜닝",
+      "name": "RadarReactionFactor",
+      "title": "Radar reaction factor (100)%",
+      "descr": "값이 낮을수록 선행차량에 대한 반응이 빠름.",
+      "egroup": "LONG",
+      "etitle": "Radar reaction factor (100)%",
+      "edescr": "Lower value: faster response to lead car",
+      "cgroup": "纵向控制",
+      "ctitle": "雷达反应因子 (100)%",
+      "cdescr": "值越低：对前车的反应越快",
+      "min": 0,
+      "max": 200,
+      "default": 100,
+      "unit": 1,
+      "display_unit": "percent"
     },
     {
       "group": "감속제어",
@@ -2784,33 +2827,33 @@
     },
     {
       "group": "가속설정",
-      "name": "LongitudinalDrivingMode",
-      "title": "드라이브모드:(2)",
-      "descr": "1: 안정(평상시 선행차 반응을 차분하게 조절, 긴급감속은 동일)\n 2: 균형(안정성과 응답성의 균형)\n 3: 민첩(선행차 가감속에 빠르게 반응)\n 4: 고속(민첩 반응, 신호무시/가속도 20% 상승)",
+      "name": "MyDrivingMode",
+      "title": "드라이브모드:(3)",
+      "descr": "1: 연비(ComfortBrake, 가속도 10% 감소)\n 2: 안전(ComfortBrake, 가속도 20% 감소)\n 3: 일반\n 4: 고속(신호무시, 가속도 20%상승)",
       "egroup": "ACCEL",
-      "etitle": "DrivingMode:Init(2)",
-      "edescr": "1: Stable (calmer normal lead response; emergency braking unchanged), 2: Balanced (stability/response balance), 3: Rush (quickly follows lead acceleration), 4: High (Rush response, ignores signals/20% accel increase).",
+      "etitle": "DrivingMode:Init(3)",
+      "edescr": "1: Fuel Economy (ComfortBrake, 10% accel. reduction), 2: Safety (ComfortBrake, 20% accel. reduction), 3: Normal, 4: High Speed (Ignores signals, 20% accel. increase).",
       "cgroup": "加速设置",
-      "ctitle": "驾驶模式: 初始 (2)",
-      "cdescr": "1: Stable (平稳调节正常前车响应，紧急制动保持不变), 2: Balanced (稳定性与响应性的平衡), 3: Rush (快速响应前车加减速), 4: High (Rush 响应, 忽略信号/加速度增加 20%)",
+      "ctitle": "驾驶模式: 初始 (3)",
+      "cdescr": "1: 经济 (舒适刹车, 加速度减少 10%), 2: 安全 (舒适刹车, 加速度减少 20%), 3: 普通, 4: 高速 (忽略信号, 加速度增加 20%)",
       "min": 1,
       "max": 4,
-      "default": 2,
+      "default": 3,
       "unit": 1
     },
     {
       "group": "가속설정",
-      "name": "LongitudinalDrivingModeAuto",
+      "name": "MyDrivingModeAuto",
       "title": "드라이브모드: 자동",
-      "descr": "0: 사용안함\n 1: 균형 ↔ 안정(정체/정지 시 안정)\n 2: 민첩 ↔ 안정(정체/정지 시 안정)\n 3: 민첩 ↔ 균형(정체/정지 시 균형)",
+      "descr": "정체조건에서는 자동으로 안전모드로 전환, 앞차가속이 빠르거나 20kmh이상의 속도에서는 일반모드로 전환",
       "egroup": "ACCEL",
       "etitle": "DrivingMode: Auto",
-      "edescr": "0: Off, 1: Balanced ↔ Stable (Stable in congestion/stops), 2: Rush ↔ Stable (Stable in congestion/stops), 3: Rush ↔ Balanced (Balanced in congestion/stops).",
+      "edescr": "Safety mode in Congested Conditions; Normal mode when lead vehicle accelerates quickly or 20+km/h.",
       "cgroup": "加速设置",
       "ctitle": "驾驶模式: 自动",
-      "cdescr": "0: 关闭；1: Balanced ↔ Stable（拥堵/停车时 Stable）；2: Rush ↔ Stable（拥堵/停车时 Stable）；3: Rush ↔ Balanced（拥堵/停车时 Balanced）",
+      "cdescr": "拥堵路况进入安全模式；前车加速快或速度超过 20km/h 时进入普通模式",
       "min": 0,
-      "max": 3,
+      "max": 1,
       "default": 0,
       "unit": 1
     },

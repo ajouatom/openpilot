@@ -6436,19 +6436,6 @@ def test_controller_matches_radard_lead_dynamics_and_raw_jerk() -> None:
   assert quiet.lead_one["aLeadTau"] == pytest.approx(0.75)
   assert quiet.lead_one["jLead"] == pytest.approx(0.0)
 
-  settled = quiet
-  for index in range(40):
-    settled = controller.update(
-      time_s=1.10 + index * 0.05,
-      v_ego=10.0,
-      radar_points=(replace(hard_motion, a_lead=1.0, j_lead=0.75),),
-      model=model_with_lead(30.0, 0.0, 10.0),
-      radar_reaction_factor=0.5,
-    )
-
-  assert settled.lead_one is not None
-  assert settled.lead_one["aLeadTau"] == pytest.approx(0.25)
-
 
 def test_corner_lead_two_uses_matched_front_dynamics() -> None:
   controller = DPathRadarController(prefer_corner_radar=True)
@@ -6783,7 +6770,7 @@ def test_production_radar_is_fixed_to_carrot() -> None:
   assert "CarrotRadarCutInSensitivity" not in dpath_source
   assert "PRODUCTION_CUT_IN_SENSITIVITY = 3" in dpath_source
   assert "cut_in_sensitivity=PRODUCTION_CUT_IN_SENSITIVITY" in dpath_source
-  assert "RadarReactionFactor" not in dpath_source
+  assert 'self.params.get_float("RadarReactionFactor") * 0.01' in dpath_source
   for field in (
     "leadOne",
     "leadTwo",

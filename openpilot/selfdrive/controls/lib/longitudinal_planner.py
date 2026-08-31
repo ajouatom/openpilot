@@ -16,7 +16,6 @@ from openpilot.selfdrive.controls.lib.cutin_predecel import (
   apply_cutin_predecel_accel_limit,
   get_cutin_predecel_accel_limit,
 )
-from openpilot.selfdrive.controls.lib.lead_response import lead_safety_jerk_factor
 from openpilot.selfdrive.car.cruise import V_CRUISE_MAX, V_CRUISE_UNSET
 from openpilot.common.swaglog import cloudlog
 from openpilot.common.params import Params
@@ -232,23 +231,12 @@ class LongitudinalPlanner:
     self.mpc.set_weights(
       prev_accel_constraint,
       personality=sm['selfdriveState'].personality,
-      jerk_factor=lead_safety_jerk_factor(carrot.jerk_factor_apply, self.mpc.braking_urgency),
+      jerk_factor=carrot.jerk_factor_apply,
       a_change_cost_starting=carrot.aChangeCostStarting,
     )
     self.mpc.set_accel_limits(accel_limits_turns[0], accel_limits_turns[1])
     self.mpc.set_cur_state(self.v_desired_filter.x, self.a_desired)
-    self.mpc.update(
-      carrot,
-      reset_state,
-      sm['radarState'],
-      v_cruise,
-      x,
-      v,
-      a,
-      j,
-      personality=sm['selfdriveState'].personality,
-      measured_a_ego=sm['carState'].aEgo,
-    )
+    self.mpc.update(carrot, reset_state, sm['radarState'], v_cruise, x, v, a, j, personality=sm['selfdriveState'].personality)
 
     self.v_desired_trajectory = np.interp(CONTROL_N_T_IDX, T_IDXS_MPC, self.mpc.v_solution)
     self.a_desired_trajectory = np.interp(CONTROL_N_T_IDX, T_IDXS_MPC, self.mpc.a_solution)
@@ -314,14 +302,14 @@ class LongitudinalPlanner:
 
     longitudinalPlan = plan_send.longitudinalPlan
     longitudinalPlan.modelMonoTime = sm.logMonoTime['modelV2']
-    longitudinalPlan.processingDelay = (plan_send.logMonoTime - sm.logMonoTime['modelV2']) / 1e9
+    longitudinalPlan.processingDelay = (plan_send.logMonoTime / 1e9) - sm.logMonoTime['modelV2']
     longitudinalPlan.solverExecutionTime = self.mpc.solve_time
 
     longitudinalPlan.speeds = self.v_desired_trajectory.tolist()
     longitudinalPlan.accels = self.a_desired_trajectory.tolist()
     longitudinalPlan.jerks = self.j_desired_trajectory.tolist()
 
-    longitudinalPlan.hasLead = sm['radarState'].leadOne.status or sm['radarState'].leadTwo.status
+    longitudinalPlan.hasLead = sm['radarState'].leadOne.status
     longitudinalPlan.longitudinalPlanSource = self.mpc.source
     longitudinalPlan.fcw = self.fcw
 
@@ -339,12 +327,5 @@ class LongitudinalPlanner:
     longitudinalPlan.desiredDistance = float(self.mpc.desired_distance)
     longitudinalPlan.events = carrot.events.to_msg()
     longitudinalPlan.myDrivingMode = carrot.myDrivingMode.value
-    longitudinalPlan.leadResponseMode = carrot.lead_response_mode
-    longitudinalPlan.leadOneResponseWeight = float(self.mpc.lead_response_confidences[0])
-    longitudinalPlan.leadTwoResponseWeight = float(self.mpc.lead_response_confidences[1])
-    longitudinalPlan.brakingUrgency = float(self.mpc.braking_urgency)
-    longitudinalPlan.leadAccelReference = float(self.mpc.lead_accel_reference[0])
-    longitudinalPlan.leadDangerFactor = float(self.mpc.lead_danger_factor)
-    longitudinalPlan.predictedDangerMargin = float(self.mpc.predicted_danger_margin)
 
     pm.send('longitudinalPlan', plan_send)
