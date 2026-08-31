@@ -16,6 +16,7 @@ from openpilot.selfdrive.controls.lib.cutin_predecel import (
   apply_cutin_predecel_accel_limit,
   get_cutin_predecel_accel_limit,
 )
+from openpilot.selfdrive.controls.lib.lead_response import lead_safety_jerk_factor
 from openpilot.selfdrive.car.cruise import V_CRUISE_MAX, V_CRUISE_UNSET
 from openpilot.common.swaglog import cloudlog
 from openpilot.common.params import Params
@@ -231,7 +232,7 @@ class LongitudinalPlanner:
     self.mpc.set_weights(
       prev_accel_constraint,
       personality=sm['selfdriveState'].personality,
-      jerk_factor=carrot.jerk_factor_apply,
+      jerk_factor=lead_safety_jerk_factor(carrot.jerk_factor_apply, self.mpc.braking_urgency),
       a_change_cost_starting=carrot.aChangeCostStarting,
     )
     self.mpc.set_accel_limits(accel_limits_turns[0], accel_limits_turns[1])

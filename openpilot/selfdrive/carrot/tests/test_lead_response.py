@@ -18,10 +18,11 @@ from openpilot.selfdrive.controls.lib.lead_response import (
   combine_braking_urgency_with_margin,
   combine_lead_accel_references,
   equal_lead_t_follow_adjustment,
-  lead_danger_factor_for_mode,
+  lead_danger_factor,
   lead_obstacle_relevance,
   lead_response_confidence,
   lead_response_mode_for_driving_mode,
+  lead_safety_jerk_factor,
   rate_limit_lead_response_weight,
   should_apply_lead_accel_reference,
 )
@@ -74,13 +75,20 @@ def test_existing_driving_modes_select_the_response_profile() -> None:
   assert lead_response_mode_for_driving_mode(99) == LEAD_RESPONSE_BALANCED
 
 
-def test_smooth_adds_only_low_speed_obstacle_margin() -> None:
-  assert lead_danger_factor_for_mode(LEAD_RESPONSE_SMOOTH, 0.0) == pytest.approx(0.95)
-  assert lead_danger_factor_for_mode(LEAD_RESPONSE_SMOOTH, 3.0) == pytest.approx(0.95)
-  assert 0.80 < lead_danger_factor_for_mode(LEAD_RESPONSE_SMOOTH, 6.0) < 0.95
-  assert lead_danger_factor_for_mode(LEAD_RESPONSE_SMOOTH, 10.0) == pytest.approx(0.80)
-  assert lead_danger_factor_for_mode(LEAD_RESPONSE_BALANCED, 0.0) == pytest.approx(0.80)
-  assert lead_danger_factor_for_mode(LEAD_RESPONSE_SYNC, 0.0) == pytest.approx(0.80)
+def test_low_speed_obstacle_margin_is_mode_independent() -> None:
+  assert lead_danger_factor(0.0) == pytest.approx(0.95)
+  assert lead_danger_factor(3.0) == pytest.approx(0.95)
+  assert 0.80 < lead_danger_factor(6.0) < 0.95
+  assert lead_danger_factor(10.0) == pytest.approx(0.80)
+
+
+def test_collision_urgency_removes_comfort_mode_mpc_inertia() -> None:
+  assert lead_safety_jerk_factor(0.75, 0.0) == pytest.approx(0.75)
+  assert lead_safety_jerk_factor(0.75, 0.3) == pytest.approx(0.75)
+  assert 0.50 < lead_safety_jerk_factor(0.75, 0.8) < 0.75
+  assert lead_safety_jerk_factor(0.75, 1.0) == pytest.approx(0.50)
+  assert lead_safety_jerk_factor(0.50, 1.0) == pytest.approx(0.50)
+  assert lead_safety_jerk_factor(0.25, 1.0) == pytest.approx(0.25)
 
 
 @pytest.mark.parametrize(

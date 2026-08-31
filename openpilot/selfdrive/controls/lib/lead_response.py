@@ -28,7 +28,8 @@ LEAD_RESPONSE_WEIGHT_RELEASE = 0.20
 # acceleration is too noisy to improve the existing MPC stop trajectory.
 LEAD_RESPONSE_MIN_LEAD_SPEED = 2.0
 LEAD_DANGER_FACTOR_BASE = 0.80
-LEAD_DANGER_FACTOR_SMOOTH_LOW_SPEED = 0.95
+LEAD_DANGER_FACTOR_LOW_SPEED = 0.95
+LEAD_SAFETY_JERK_FACTOR = 0.50
 
 
 @dataclass(frozen=True)
@@ -103,15 +104,25 @@ def lead_response_mode_for_driving_mode(driving_mode: int) -> int:
   }.get(int(driving_mode), LEAD_RESPONSE_BALANCED)
 
 
-def lead_danger_factor_for_mode(mode: int, v_ego: float) -> float:
-  """Add low-speed stop margin without changing road-speed following."""
-  if int(mode) != LEAD_RESPONSE_SMOOTH:
-    return LEAD_DANGER_FACTOR_BASE
+def lead_danger_factor(v_ego: float) -> float:
+  """Add a mode-independent low-speed stop margin."""
   return float(np.interp(
     max(float(v_ego), 0.0),
     [3.0, 10.0],
-    [LEAD_DANGER_FACTOR_SMOOTH_LOW_SPEED, LEAD_DANGER_FACTOR_BASE],
+    [LEAD_DANGER_FACTOR_LOW_SPEED, LEAD_DANGER_FACTOR_BASE],
   ))
+
+
+def lead_safety_jerk_factor(nominal_factor: float, braking_urgency: float) -> float:
+  """Remove comfort-mode MPC inertia as collision urgency rises."""
+  nominal_factor = max(float(nominal_factor), 0.0)
+  urgency_blend = float(np.interp(
+    np.clip(float(braking_urgency), 0.0, 1.0),
+    [0.3, 1.0],
+    [0.0, 1.0],
+  ))
+  safety_factor = min(nominal_factor, LEAD_SAFETY_JERK_FACTOR)
+  return nominal_factor + urgency_blend * (safety_factor - nominal_factor)
 
 
 def auto_driving_mode_for_congestion(auto_mode: int, congested: bool) -> int:
@@ -455,7 +466,8 @@ def build_lead_accel_reference(
 
 __all__ = (
   "LEAD_DANGER_FACTOR_BASE",
-  "LEAD_DANGER_FACTOR_SMOOTH_LOW_SPEED",
+  "LEAD_DANGER_FACTOR_LOW_SPEED",
+  "LEAD_SAFETY_JERK_FACTOR",
   "LEAD_RESPONSE_BALANCED",
   "LEAD_RESPONSE_BLEND_HORIZON",
   "LEAD_RESPONSE_CONFIRM_FRAMES",
@@ -473,11 +485,12 @@ __all__ = (
   "combine_braking_urgency_with_margin",
   "combine_lead_accel_references",
   "equal_lead_t_follow_adjustment",
-  "lead_danger_factor_for_mode",
+  "lead_danger_factor",
   "lead_obstacle_relevance",
   "lead_response_confidence",
   "lead_response_mode_for_driving_mode",
   "lead_response_profile",
+  "lead_safety_jerk_factor",
   "rate_limit_lead_response_weight",
   "should_apply_lead_accel_reference",
 )

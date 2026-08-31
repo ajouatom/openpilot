@@ -15,7 +15,7 @@ from openpilot.selfdrive.controls.lib.lead_response import (
   calculate_lead_braking_urgency,
   combine_braking_urgency_with_margin,
   combine_lead_accel_references,
-  lead_danger_factor_for_mode,
+  lead_danger_factor,
   lead_obstacle_relevance,
   lead_response_confidence,
   rate_limit_lead_response_weight,
@@ -522,9 +522,9 @@ class LongitudinalMpc:
       base_a_change_cost = A_CHANGE_COST
 
       #safe_distance = lead_0_obstacle[0] - get_safe_obstacle_distance(v_ego, comfort_brake, stop_distance)
-      self.lead_danger_factor = lead_danger_factor_for_mode(carrot.lead_response_mode, v_ego)
+      self.lead_danger_factor = lead_danger_factor(v_ego)
       self.params[:,5] = self.lead_danger_factor
-      
+
     elif mode == 'blended':
       self.params[:,5] = 1.0
 
