@@ -1,4 +1,5 @@
 import importlib.util
+import os
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -64,6 +65,35 @@ def test_check_usbgpu_reports_pcie_and_success(monkeypatch, tmp_path):
   passed = SimpleNamespace(returncode=0, stdout="", stderr="")
   monkeypatch.setattr(usbgpu.subprocess, "run", lambda *_args, **_kwargs: passed)
   assert usbgpu.check_usbgpu(tmp_path) is None
+
+
+def test_check_usbgpu_preserves_openpilot_and_existing_python_paths(monkeypatch, tmp_path):
+  make_device(tmp_path)
+  existing_paths = ["/data/openpilot/pydeps", "/custom/python"]
+  monkeypatch.setenv("PYTHONPATH", os.pathsep.join(existing_paths))
+  captured_env = {}
+  real_run = usbgpu.subprocess.run
+
+  def run(*_args, **kwargs):
+    captured_env.update(kwargs["env"])
+    return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+  monkeypatch.setattr(usbgpu.subprocess, "run", run)
+  assert usbgpu.check_usbgpu(tmp_path) is None
+  assert captured_env["PYTHONPATH"].split(os.pathsep) == [
+    str(Path(usbgpu.BASEDIR) / "tinygrad_repo"),
+    usbgpu.BASEDIR,
+    *existing_paths,
+  ]
+  probe = real_run(
+    [sys.executable, "-c", "from openpilot.common.usbgpu_bus_lock import usbgpu_bus_lock"],
+    cwd=Path(usbgpu.BASEDIR) / "openpilot" / "system" / "manager",
+    env=captured_env,
+    capture_output=True,
+    text=True,
+    check=False,
+  )
+  assert probe.returncode == 0, probe.stderr
 
 
 def test_check_usbgpu_retries_in_fresh_process(monkeypatch, tmp_path):
