@@ -19,13 +19,12 @@ def _params_bool(params: Any, key: str) -> bool:
 
 def build_status_payload(params: Any | None = None) -> dict[str, Any]:
   params = params if params is not None else (Params() if HAS_PARAMS and Params is not None else None)
-  status = read_big_model_status(model_cache_dir())
-  manifest = active_manifest()
-  remembered = _params_bool(params, "UsbGpuEverPresent") if params is not None else False
-  available = remembered or manifest is not None or status is not None
-  if not available:
+  hardware_seen = _params_bool(params, "UsbGpuHardwareSeen") if params is not None else False
+  if not hardware_seen:
     return {"ok": True, "available": False}
 
+  status = read_big_model_status(model_cache_dir())
+  manifest = active_manifest()
   try:
     compiled = active_model_compiled() if manifest is not None else False
   except Exception:

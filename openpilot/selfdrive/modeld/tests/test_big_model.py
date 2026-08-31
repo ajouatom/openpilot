@@ -35,11 +35,11 @@ class FakeParams:
     self.puts = []
 
   def get_bool(self, key):
-    assert key == "UsbGpuEverPresent"
+    assert key == "UsbGpuHardwareSeen"
     return self.remembered
 
   def put_bool(self, key, value):
-    assert key == "UsbGpuEverPresent"
+    assert key == "UsbGpuHardwareSeen"
     self.puts.append((key, value))
     self.remembered = value
 
@@ -114,16 +114,22 @@ def test_wait_for_manifest_network_times_out(monkeypatch):
   assert not big_model.wait_for_manifest_network("https://example.com/manifest.json", timeout=0)
 
 
-@pytest.mark.parametrize("remembered,present,cached,expected,write", [
+@pytest.mark.parametrize("remembered,present,compiled,expected,write", [
   (False, False, False, False, False),
   (False, True, False, True, True),
   (False, False, True, True, True),
   (True, False, False, True, False),
 ])
-def test_remember_usbgpu_connection(remembered, present, cached, expected, write):
+def test_remember_usbgpu_connection(remembered, present, compiled, expected, write):
   params = FakeParams(remembered)
-  assert big_model.remember_usbgpu_connection(params, present, cached) is expected
+  assert big_model.remember_usbgpu_connection(params, present, compiled) is expected
   assert bool(params.puts) is write
+
+
+def test_background_update_does_not_treat_cached_onnx_as_hardware_history():
+  source = Path(big_model.__file__).read_text(encoding="utf-8")
+  assert "remember_usbgpu_connection(Params(), present, usbgpu_compiled())" in source
+  assert "remember_usbgpu_connection(Params(), present, active_manifest() is not None)" not in source
 
 
 @pytest.mark.parametrize("field,value", [
@@ -218,7 +224,9 @@ def test_status_reporter_rate_limits_download_updates(monkeypatch, tmp_path: Pat
 def test_web_surface_is_hidden_without_egpu_history_and_restart_is_gated():
   source = (Path(big_model.__file__).parents[1] / "carrot/server/features/egpu_model.py").read_text(encoding="utf-8")
   assert 'return {"ok": True, "available": False}' in source
-  assert '"UsbGpuEverPresent"' in source
+  assert '"UsbGpuHardwareSeen"' in source
+  assert "if not hardware_seen:" in source
+  assert "hardware_seen or manifest is not None" not in source
   assert 'payload.get("engaged")' in source
   assert 'if not usbgpu_present()' in source
   assert 'check_usbgpu(' not in source

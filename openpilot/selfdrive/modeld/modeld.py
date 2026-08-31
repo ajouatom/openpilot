@@ -226,8 +226,8 @@ def main(demo=False):
   USBGPU = _present and _compiled and not _startup_failed
   cloudlog.warning(f"usbgpu present: {_present}, compiled: {_compiled}, startup_failed: {_startup_failed}, requested: {USBGPU}")
   params.put_bool("UsbGpuPresent", _present)
-  if _present:
-    params.put_bool("UsbGpuEverPresent", True)
+  if _present or _compiled:
+    params.put_bool("UsbGpuHardwareSeen", True)
   params.put_bool("UsbGpuCompiled", _compiled)
   params.put_bool("UsbGpuLoading", USBGPU)
   params.put_bool("UsbGpuActive", False)
@@ -371,7 +371,7 @@ def main(demo=False):
       usbgpu_present_now = usbgpu_present()
       params.put_bool_nonblocking("UsbGpuPresent", usbgpu_present_now)
       if usbgpu_present_now:
-        params.put_bool_nonblocking("UsbGpuEverPresent", True)
+        params.put_bool_nonblocking("UsbGpuHardwareSeen", True)
       params.put_bool_nonblocking("UsbGpuCompiled", usbgpu_compiled_path() is not None)
 
     # Keep receiving frames until we are at least 1 frame ahead of previous extra frame

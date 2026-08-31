@@ -298,12 +298,12 @@ def active_model_compiled() -> bool:
   return Path(get_manifest_path(Path(modeld_pkl_path(usbgpu=True)))).is_file()
 
 
-def remember_usbgpu_connection(params, present: bool, cached_model: bool) -> bool:
-  """Persist eGPU history so model downloads can be prepared while it is powered off."""
-  remembered = params.get_bool("UsbGpuEverPresent")
-  known = remembered or present or cached_model
+def remember_usbgpu_connection(params, present: bool, compiled_model: bool) -> bool:
+  """Persist hardware-proven eGPU history for updates while it is powered off."""
+  remembered = params.get_bool("UsbGpuHardwareSeen")
+  known = remembered or present or compiled_model
   if known and not remembered:
-    params.put_bool("UsbGpuEverPresent", True)
+    params.put_bool("UsbGpuHardwareSeen", True)
   return known
 
 
@@ -321,9 +321,9 @@ def main() -> int:
 
   if args.ensure_if_egpu:
     from openpilot.common.params import Params
-    from openpilot.selfdrive.modeld.helpers import usbgpu_present
+    from openpilot.selfdrive.modeld.helpers import usbgpu_compiled, usbgpu_present
     present = usbgpu_present()
-    if remember_usbgpu_connection(Params(), present, active_manifest() is not None):
+    if remember_usbgpu_connection(Params(), present, usbgpu_compiled()):
       cache_dir = model_cache_dir()
       reporter = BigModelStatusReporter(cache_dir)
       try:
