@@ -1128,7 +1128,7 @@ window.CarrotTranslations.register("ko", {
     replay_value_hold_ready: "정차 시 작동 준비",
     replay_value_hold_active: "차량을 멈춘 상태로 유지 중",
     replay_value_gap_step: "{value}단계",
-    replay_value_driving_eco: "Smooth",
+    replay_value_driving_eco: "안정",
     replay_value_driving_safe: "Balanced",
     replay_value_driving_normal: "민첩",
     replay_value_driving_high: "고속 (민첩 + 신호무시)",
@@ -1413,5 +1413,5 @@ window.CarrotTranslations.register("ko", {
     CMD_TIMEOUT:         () => "명령 실행 시간이 초과되었습니다",
     TMUX_CAPTURE_FAIL:   () => "로그 캡처에 실패했습니다",
   },
-  driveModes: { normal: "민첩", eco: "편안", safe: "균형", sport: "고속" },
+  driveModes: { normal: "민첩", eco: "안정", safe: "균형", sport: "고속" },
 });

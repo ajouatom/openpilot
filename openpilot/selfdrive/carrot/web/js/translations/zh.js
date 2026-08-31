@@ -1127,7 +1127,7 @@ window.CarrotTranslations.register("zh", {
     replay_value_hold_ready: "停车保持准备",
     replay_value_hold_active: "正在保持车辆停止",
     replay_value_gap_step: "第{value}级",
-    replay_value_driving_eco: "Smooth",
+    replay_value_driving_eco: "Stable",
     replay_value_driving_safe: "Balanced",
     replay_value_driving_normal: "Rush",
     replay_value_driving_high: "High (Rush + 忽略信号)",
@@ -1349,5 +1349,5 @@ window.CarrotTranslations.register("zh", {
     CMD_TIMEOUT:         () => "命令执行超时",
     TMUX_CAPTURE_FAIL:   () => "日志捕获失败",
   },
-  driveModes: { normal: "RUSH", eco: "SOFT", safe: "BALN", sport: "HIGH" },
+  driveModes: { normal: "RUSH", eco: "STBL", safe: "BALN", sport: "HIGH" },
 });

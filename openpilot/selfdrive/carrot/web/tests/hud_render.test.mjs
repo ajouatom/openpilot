@@ -178,7 +178,7 @@ test("replay: eco (green) override renders; EV and lane correctly hidden", () =>
 
 // 주행모드 배지: myDrivingMode 1..4 는 색/라벨 표시, 그 외는 숨김.
 test("drive mode badge renders per myDrivingMode (1..4) and hides otherwise", () => {
-  const expectedLabels = { 1: "SOFT", 2: "BALN", 3: "RUSH", 4: "HIGH" };
+  const expectedLabels = { 1: "STBL", 2: "BALN", 3: "RUSH", 4: "HIGH" };
   for (const modeKey of Object.keys(DRIVE_MODE_COLORS)) {
     const mode = Number(modeKey);
     const r = renderFromCereal({ longitudinalPlan: { myDrivingMode: mode } });
