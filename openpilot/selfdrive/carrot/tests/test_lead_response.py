@@ -217,6 +217,26 @@ def test_e4f_smooth_approach_does_not_release_braking_on_positive_alead() -> Non
   assert incident.acceleration[0] < -0.15
 
 
+def test_fast_closing_guard_is_drive_mode_independent() -> None:
+  references = [
+    build_lead_accel_reference(
+      lead(dRel=43.94, vRel=-6.04, aLead=0.46, aLeadK=0.46),
+      mode=mode,
+      v_ego=14.87,
+      v_cruise=25.0,
+      desired_distance=43.36,
+      previous_acceleration=-0.15,
+      time_indices=TIME_INDICES,
+    )
+    for mode in (LEAD_RESPONSE_SMOOTH, LEAD_RESPONSE_BALANCED, LEAD_RESPONSE_SYNC)
+  ]
+
+  assert all(item is not None for item in references)
+  for item in references[1:]:
+    assert item.raw_acceleration == pytest.approx(references[0].raw_acceleration)
+    assert item.acceleration == pytest.approx(references[0].acceleration)
+
+
 def test_closing_preview_starts_before_desired_gap_is_consumed() -> None:
   # Same route at 48.04 s: 12.8 m of surplus remained, but at -6.14 m/s it
   # would be consumed in about 2.1 seconds.
@@ -252,7 +272,7 @@ def test_emergency_jerk_rate_requires_braking_urgency() -> None:
   assert calm is not None and urgent is not None
   assert calm.safety_blend == pytest.approx(1.0)
   assert calm.raw_acceleration[0] == pytest.approx(urgent.raw_acceleration[0])
-  assert calm.acceleration[0] == pytest.approx(-0.04)
+  assert calm.acceleration[0] == pytest.approx(-0.06)
   assert urgent.acceleration[0] == pytest.approx(-0.175)
 
 

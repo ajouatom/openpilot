@@ -37,6 +37,9 @@ LEAD_CLOSING_PREVIEW_FULL_TIME = 2.0
 LEAD_CLOSING_PREVIEW_START_TIME = 5.0
 LEAD_CLOSING_PREVIEW_MIN_SPEED = 0.5
 LEAD_CLOSING_DECEL_FLOOR_TIME = 1.5
+LEAD_CLOSING_NORMAL_GAIN = 0.40
+LEAD_CLOSING_NORMAL_DECEL_LIMIT = 1.0
+LEAD_CLOSING_ATTACK_JERK = 1.2
 LEAD_CLOSING_MAX_DECEL = 4.0
 
 
@@ -48,7 +51,6 @@ class LeadResponseProfile:
   gap_deficit_gain: float
   gap_surplus_gain: float
   tracking_feedback_limit: float
-  closing_decel_limit: float
   attack_jerk: float
   release_jerk: float
 
@@ -73,7 +75,6 @@ PROFILES = {
     gap_deficit_gain=0.07,
     gap_surplus_gain=0.025,
     tracking_feedback_limit=0.15,
-    closing_decel_limit=0.8,
     attack_jerk=0.8,
     release_jerk=0.8,
   ),
@@ -84,7 +85,6 @@ PROFILES = {
     gap_deficit_gain=0.09,
     gap_surplus_gain=0.020,
     tracking_feedback_limit=0.18,
-    closing_decel_limit=1.4,
     attack_jerk=1.6,
     release_jerk=1.0,
   ),
@@ -95,7 +95,6 @@ PROFILES = {
     gap_deficit_gain=0.12,
     gap_surplus_gain=0.010,
     tracking_feedback_limit=0.25,
-    closing_decel_limit=2.2,
     attack_jerk=2.8,
     release_jerk=1.8,
   ),
@@ -497,7 +496,7 @@ def build_lead_accel_reference(
   # even request acceleration) before the desired gap is recovered. Convert
   # relative kinetic energy into a bounded approach-deceleration reference.
   # It starts up to five seconds before the desired gap and is deliberately
-  # mode-shaped only while there is no collision urgency.
+  # independent of drive mode so comfort cannot weaken approach safety.
   closing_preview = lead_closing_preview_weight(d_rel, v_rel, desired_distance)
   if closing_preview > 0.0:
     closing_speed = max(-v_rel, 0.0)
@@ -507,9 +506,11 @@ def build_lead_accel_reference(
       3.0,
     )
     kinetic_decel = -(closing_speed ** 2) / (2.0 * braking_distance)
-    closing_gain = profile.far_decel_gain + control_blend * (1.0 - profile.far_decel_gain)
-    closing_limit = profile.closing_decel_limit + control_blend * (
-      LEAD_CLOSING_MAX_DECEL - profile.closing_decel_limit
+    closing_gain = LEAD_CLOSING_NORMAL_GAIN + control_blend * (
+      1.0 - LEAD_CLOSING_NORMAL_GAIN
+    )
+    closing_limit = LEAD_CLOSING_NORMAL_DECEL_LIMIT + control_blend * (
+      LEAD_CLOSING_MAX_DECEL - LEAD_CLOSING_NORMAL_DECEL_LIMIT
     )
     closing_decel = max(-closing_limit, kinetic_decel * closing_gain)
     closing_tau = float(np.clip(
@@ -531,7 +532,8 @@ def build_lead_accel_reference(
   # A modest gap deficit may increase how closely the reference matches the
   # lead, but it must not independently open an emergency jerk rate. Hard MPC
   # safety remains authoritative and exposes extra rate only through urgency.
-  attack_jerk = profile.attack_jerk + urgency * (3.5 - profile.attack_jerk)
+  normal_attack_jerk = LEAD_CLOSING_ATTACK_JERK if closing_preview > 0.0 else profile.attack_jerk
+  attack_jerk = normal_attack_jerk + urgency * (3.5 - normal_attack_jerk)
   release_jerk = profile.release_jerk + urgency * (2.0 - profile.release_jerk)
   reference = _rate_limit_reference(
     raw_reference,
