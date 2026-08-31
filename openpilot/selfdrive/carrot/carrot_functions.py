@@ -7,7 +7,7 @@ import numpy as np
 from openpilot.common.realtime import DT_MDL
 from openpilot.common.constants import CV
 from openpilot.common.filter_simple import MyMovingAverage
-from openpilot.selfdrive.carrot.t_follow import ramp_t_follow
+from openpilot.selfdrive.carrot.t_follow import get_t_follow_mode_factor, get_t_follow_mode_max, ramp_t_follow
 from openpilot.selfdrive.carrot.traffic_stop import is_traffic_stop_entry_allowed
 from openpilot.selfdrive.selfdrived.events import Events
 
@@ -33,6 +33,16 @@ class DrivingMode(Enum):
 
   def __str__(self):
     return self.name
+
+
+def get_driving_mode_factors(driving_mode: DrivingMode, eco_factor: float = 0.9,
+                             safe_factor: float = 0.8) -> tuple[float, float]:
+  """Return the accel/comfort and following-time factors for a drive mode."""
+  if driving_mode == DrivingMode.Eco:
+    return eco_factor, get_t_follow_mode_factor(eco_factor)
+  if driving_mode == DrivingMode.Safe:
+    return safe_factor, get_t_follow_mode_factor(safe_factor)
+  return 1.0, 1.0
 
 class TrafficState(Enum):
   off = 0
@@ -96,6 +106,7 @@ class CarrotPlanner:
     self.myHighModeFactor = 1.2
     self.drivingModeDetector = DrivingModeDetector()
     self.mySafeFactor = 1.0
+    self.myTFollowFactor = 1.0
 
     self.tFollowGap1 = 1.1
     self.tFollowGap2 = 1.3
@@ -282,15 +293,15 @@ class CarrotPlanner:
   def _clip_t_follow(self, t_follow):
     tf_min = float(min(self.tFollowGap1, self.tFollowGap2, self.tFollowGap3, self.tFollowGap4))
     tf_max = float(max(self.tFollowGap1, self.tFollowGap2, self.tFollowGap3, self.tFollowGap4))
-    tf_max = min(2.0, tf_max + max(0.0, self._tf_decel_extra))
+    tf_max = get_t_follow_mode_max(tf_max, self.myTFollowFactor, self._tf_decel_extra)
     return float(np.clip(t_follow, max(0.3, tf_min), tf_max))
 
   def get_T_FOLLOW(self, personality=log.LongitudinalPersonality.standard, v_ego=0.0, a_ego=0.0):
     tf_base = self._get_base_t_follow(personality, v_ego)
     tf_target = self._apply_speed_t_follow_scale(tf_base, v_ego)
     tf_adjusted = self._apply_decel_hold_and_boost_t_follow(tf_target, a_ego)
-    tf_safe = float(tf_adjusted * self.mySafeFactor)
-    tf_final = self._clip_t_follow(tf_safe)
+    tf_mode = float(tf_adjusted * self.myTFollowFactor)
+    tf_final = self._clip_t_follow(tf_mode)
     self._tf_applied = float(tf_final)
     return self.apply_t_follow(tf_final)
 
@@ -471,11 +482,9 @@ class CarrotPlanner:
     v_ego_cluster_kph = v_ego_cluster * CV.MS_TO_KPH
 
     leadOne = radarstate.leadOne
-    self.mySafeFactor = 1.0
-    if self.myDrivingMode == DrivingMode.Eco: # eco
-      self.mySafeFactor = self.myEcoModeFactor
-    elif self.myDrivingMode == DrivingMode.Safe: #safe
-      self.mySafeFactor = self.mySafeModeFactor
+    self.mySafeFactor, self.myTFollowFactor = get_driving_mode_factors(
+      self.myDrivingMode, self.myEcoModeFactor, self.mySafeModeFactor,
+    )
 
 
     self.drivingModeDetector.update_data(carstate, leadOne)
