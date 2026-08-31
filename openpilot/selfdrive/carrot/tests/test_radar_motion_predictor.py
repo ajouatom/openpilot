@@ -6743,7 +6743,7 @@ def test_confirmed_cutin_falls_back_to_lead_two_when_lead_one_disappears() -> No
   assert held.lead_two["radarTrackId"] == 1005
 
 
-def test_production_dpath_mode_is_independent_of_conventional_radard() -> None:
+def test_production_radar_is_fixed_to_carrot() -> None:
   radard = Path(__file__).resolve().parents[2] / "controls" / "radard.py"
   dpath_radard = (
     Path(__file__).resolve().parents[1] / "radar" / "radard_dpath.py"
@@ -6760,15 +6760,11 @@ def test_production_dpath_mode_is_independent_of_conventional_radard() -> None:
     / "manager"
     / "process_config.py"
   )
-  conventional_source = radard.read_text(encoding="utf-8")
   dpath_source = dpath_radard.read_text(encoding="utf-8")
   validation_source = validation_replay.read_text(encoding="utf-8")
   manager_source = process_config.read_text(encoding="utf-8")
 
-  assert "RadarLeadModelMode" not in conventional_source
-  assert "RadarMotionMode" not in conventional_source
-  assert "CarrotRadarMode" not in conventional_source
-  assert "RadarMotionPredictor" not in conventional_source
+  assert not radard.exists()
   assert "from openpilot.selfdrive.controls.radard" not in dpath_source
   assert 'getattr(sm["modelV2"], "timestampEof", 0)' in dpath_source
   assert 'params.get_int(\n        "CarrotRadarCutInSensitivity",' in dpath_source
@@ -6787,5 +6783,6 @@ def test_production_dpath_mode_is_independent_of_conventional_radard() -> None:
   ):
     assert f"self.radar_state.{field} =" in dpath_source
   assert "max_measurement_age_s=VALIDATION_CORNER_MAX_MEASUREMENT_AGE_S" in validation_source
-  assert '"radard", "openpilot.selfdrive.controls.radard", conventional_radard' in manager_source
-  assert '"radard_dpath", "openpilot.selfdrive.carrot.radar.radard_dpath", dpath_radard' in manager_source
+  assert '"radard", "openpilot.selfdrive.carrot.radar.radard_dpath", only_onroad' in manager_source
+  assert 'PythonProcess("radard_dpath"' not in manager_source
+  assert "CarrotRadarMode" not in manager_source

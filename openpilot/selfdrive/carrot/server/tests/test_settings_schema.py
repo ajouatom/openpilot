@@ -193,17 +193,12 @@ def test_cluster_camera_preference_is_in_brightness_and_view(settings, params):
   assert '{"ShowCameraWithCluster", {PERSISTENT, INT, "0"}}' in params_keys
 
 
-def test_carrot_radar_mode_replaces_removed_model_mode(settings, params):
+def test_carrot_radar_is_fixed_and_keeps_cutin_sensitivity(settings, params):
   by_name = {p["name"]: p for p in params}
   assert "RadarLeadModelMode" not in by_name
   assert "RadarDPathMode" not in by_name
   assert "RadarMotionMode" not in by_name
-  assert (by_name["CarrotRadarMode"]["min"], by_name["CarrotRadarMode"]["max"]) == (0, 1)
-  assert by_name["CarrotRadarMode"]["default"] == 0
-  assert by_name["CarrotRadarMode"]["control"] == "toggle"
-  assert by_name["CarrotRadarMode"]["risk"] == "high"
-  assert "재부팅" in by_name["CarrotRadarMode"]["descr"]
-  assert "restart the vehicle" in by_name["CarrotRadarMode"]["edescr"]
+  assert "CarrotRadarMode" not in by_name
   sensitivity = by_name["CarrotRadarCutInSensitivity"]
   assert (
     sensitivity["min"],
@@ -220,14 +215,13 @@ def test_carrot_radar_mode_replaces_removed_model_mode(settings, params):
     "민감",
     "아주 민감",
   ]
-  assert "당근레이더모드 전용" in sensitivity["descr"]
-  assert "only by Carrot Radar Mode" in sensitivity["edescr"]
+  assert "당근레이더의 끼어들기 감도" in sensitivity["descr"]
+  assert "Carrot Radar cut-in sensitivity" in sensitivity["edescr"]
   vehicle = next(category for category in settings["menu"] if category["id"] == "VEHICLE")
   radar = next(group for group in vehicle["groups"] if group["id"] == "VEH_RADAR")
   assert radar["params"] == [
     "EnableRadarTracks",
     "EnableCornerRadar",
-    "CarrotRadarMode",
     "CarrotRadarCutInSensitivity",
   ]
 
