@@ -1132,8 +1132,8 @@ window.CarrotTranslations.register("en", {
     replay_value_gap_step: "Level {value}",
     replay_value_driving_eco: "Smooth",
     replay_value_driving_safe: "Balanced",
-    replay_value_driving_normal: "Sync",
-    replay_value_driving_high: "High (Sync + signal bypass)",
+    replay_value_driving_normal: "Rush",
+    replay_value_driving_high: "High (Rush + signal bypass)",
     replay_value_carrot_off: "Guidance off",
     replay_value_carrot_ready: "Road guidance ready",
     replay_value_carrot_road: "Road information guidance",
@@ -1416,5 +1416,5 @@ window.CarrotTranslations.register("en", {
     CMD_TIMEOUT:         () => "Command timed out",
     TMUX_CAPTURE_FAIL:   () => "Failed to capture log",
   },
-  driveModes: { normal: "SYNC", eco: "SOFT", safe: "BALN", sport: "HIGH" },
+  driveModes: { normal: "RUSH", eco: "SOFT", safe: "BALN", sport: "HIGH" },
 });

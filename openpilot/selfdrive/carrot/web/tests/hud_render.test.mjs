@@ -178,13 +178,14 @@ test("replay: eco (green) override renders; EV and lane correctly hidden", () =>
 
 // 주행모드 배지: myDrivingMode 1..4 는 색/라벨 표시, 그 외는 숨김.
 test("drive mode badge renders per myDrivingMode (1..4) and hides otherwise", () => {
+  const expectedLabels = { 1: "SOFT", 2: "BALN", 3: "RUSH", 4: "HIGH" };
   for (const modeKey of Object.keys(DRIVE_MODE_COLORS)) {
     const mode = Number(modeKey);
     const r = renderFromCereal({ longitudinalPlan: { myDrivingMode: mode } });
     assert.equal(r.data.drivingMode, mode);
     assert.ok(isVisible(r.driveMode), `mode ${mode} visible`);
     assert.equal(r.driveModeBox.style.fill, DRIVE_MODE_COLORS[mode]);
-    assert.ok(r.driveModeLabel.textContent.length > 0, `mode ${mode} has a label`);
+    assert.equal(r.driveModeLabel.textContent, expectedLabels[mode]);
   }
   assert.ok(!isVisible(renderFromCereal({ longitudinalPlan: { myDrivingMode: 0 } }).driveMode), "mode 0 hidden");
   assert.ok(!isVisible(renderFromCereal({}).driveMode), "no mode hidden");

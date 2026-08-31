@@ -1331,7 +1331,7 @@ msgstr "없음"
 
 #: openpilot/selfdrive/ui/onroad/hud_renderer.py
 msgid "norm"
-msgstr "동기"
+msgstr "민첩"
 
 #: openpilot/selfdrive/ui/layouts/settings/software.py
 msgid "now"

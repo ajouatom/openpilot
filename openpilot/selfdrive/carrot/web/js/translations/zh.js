@@ -1129,8 +1129,8 @@ window.CarrotTranslations.register("zh", {
     replay_value_gap_step: "第{value}级",
     replay_value_driving_eco: "Smooth",
     replay_value_driving_safe: "Balanced",
-    replay_value_driving_normal: "Sync",
-    replay_value_driving_high: "High (Sync + 忽略信号)",
+    replay_value_driving_normal: "Rush",
+    replay_value_driving_high: "High (Rush + 忽略信号)",
     replay_value_carrot_off: "提示关闭",
     replay_value_carrot_ready: "道路提示就绪",
     replay_value_carrot_road: "道路信息提示",
@@ -1349,5 +1349,5 @@ window.CarrotTranslations.register("zh", {
     CMD_TIMEOUT:         () => "命令执行超时",
     TMUX_CAPTURE_FAIL:   () => "日志捕获失败",
   },
-  driveModes: { normal: "SYNC", eco: "SOFT", safe: "BALN", sport: "HIGH" },
+  driveModes: { normal: "RUSH", eco: "SOFT", safe: "BALN", sport: "HIGH" },
 });

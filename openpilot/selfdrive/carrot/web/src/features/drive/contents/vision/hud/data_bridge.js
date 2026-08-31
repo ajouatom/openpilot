@@ -37,7 +37,7 @@ function trafficSignalState(value) {
   return state === 1 || state === 2 ? state : 0;
 }
 
-// Cluster driving-mode telltale: longitudinalPlan.myDrivingMode 1..4 (편안/균형/동기/고속).
+// Cluster driving-mode telltale: longitudinalPlan.myDrivingMode 1..4 (편안/균형/민첩/고속).
 // Anything outside 1..4 means "no badge".
 function drivingModeState(value) {
   const mode = finite(value);

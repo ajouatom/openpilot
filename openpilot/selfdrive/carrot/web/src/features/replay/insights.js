@@ -466,8 +466,8 @@ window.CarrotReplayInsights = window.CarrotReplayInsights || (() => {
   const DRIVING_MODE_META = Object.freeze({
     1: ["replay_value_driving_eco", "Smooth"],
     2: ["replay_value_driving_safe", "Balanced"],
-    3: ["replay_value_driving_normal", "Sync"],
-    4: ["replay_value_driving_high", "High (Sync + signal bypass)"],
+    3: ["replay_value_driving_normal", "Rush"],
+    4: ["replay_value_driving_high", "High (Rush + signal bypass)"],
   });
   const CARROT_MODE_META = Object.freeze({
     0: ["replay_value_carrot_off", "Guidance off"],

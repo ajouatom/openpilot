@@ -1331,7 +1331,7 @@ msgstr "never"
 
 #: openpilot/selfdrive/ui/onroad/hud_renderer.py
 msgid "norm"
-msgstr "SYNC"
+msgstr "RUSH"
 
 #: openpilot/selfdrive/ui/layouts/settings/software.py
 msgid "now"

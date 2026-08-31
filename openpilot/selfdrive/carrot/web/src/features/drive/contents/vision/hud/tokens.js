@@ -17,7 +17,7 @@ export const COLORS = Object.freeze({
 });
 
 // 주행모드 배지 색 — 클러스터 SPEED_DRIVING_MODE_STYLES 그대로(배경 α는 style.js).
-// 1 Smooth(0,255,0) / 2 Balanced(255,255,255) / 3 Sync(255,165,0) / 4 High(255,0,0).
+// 1 Smooth(0,255,0) / 2 Balanced(255,255,255) / 3 Rush(255,165,0) / 4 High(255,0,0).
 export const DRIVE_MODE_COLORS = Object.freeze({
   1: "#00ff00",
   2: "#ffffff",
