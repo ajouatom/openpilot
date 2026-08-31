@@ -90,6 +90,18 @@
       "scene": "Strong vision range and a distinct closer front-radar track should hand leadOne from the stopped car to the motorcycle without SCC support"
     },
     {
+      "id": "ioniq9-2c5-23-close-born-rear-pass-53",
+      "vehicle_folder": "HYUNDAI_IONIQ_9 c92fab3f15c0dbfb",
+      "log": "000002c5--86044a22d0--23/rlog.zst",
+      "source": "front+corner",
+      "window": [53.45, 54.20],
+      "expected": "clear",
+      "human_verified": true,
+      "target_track_ids": [3284, 3286],
+      "forbidden_lead_two_ids": [3284, 3286],
+      "scene": "The right vehicle first appears beside the rear bumper and pulls ahead while the left vehicle remains parallel; weak perspective drift with close cross-sensor support must not become a CUT-IN"
+    },
+    {
       "id": "k8-2e3-33-close-low-speed-predecel-3423",
       "vehicle_folder": "KIA_K8_HEV_1ST_GEN b34d1abb87cce93b",
       "log": "000002e3--e8f3253035--33/rlog.zst",

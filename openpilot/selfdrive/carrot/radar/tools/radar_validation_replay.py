@@ -2702,6 +2702,8 @@ class ProductionDPathSelector:
             "CUT-IN" if estimate.confirmed_cutin
             else "RAW-CUTIN" if estimate.raw_cutin
             else "PREDECEL" if estimate.predecel_risk
+            else "REAR-PASS" if estimate.rear_pass
+            else "SIDE-DRIFT" if estimate.parallel_drift
             else "FILTERED" if not estimate.close_front_supported
             else "JITTER" if estimate.jittering
             else "TRACK"
@@ -2722,6 +2724,8 @@ class ProductionDPathSelector:
             + "| "
             + f"J={int(estimate.jittering)} "
             + f"FJ={int(estimate.unstable_fast_motion)} "
+            + f"rearPass={int(estimate.rear_pass)} "
+            + f"sideDrift={int(estimate.parallel_drift)} "
             + f"close={int(estimate.close_front_supported)} "
             + f"hist={int(estimate.front_history_supported)} "
             + f"vision={int(estimate.vision_supported)} "

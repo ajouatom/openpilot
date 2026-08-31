@@ -343,6 +343,74 @@ def test_fast_unstable_side_motion_uses_shorter_prediction_horizon() -> None:
   assert not estimate.confirmed_cutin
 
 
+def test_close_born_rear_side_pass_is_not_cutin() -> None:
+  detector = TrajectoryCutInDetector()
+  estimate = None
+  samples = zip(
+    (0.90, 1.00, 1.10, 1.20, 1.25, 1.35, 1.45,
+     1.60, 1.70, 1.85, 2.05, 2.50, 2.75, 3.03),
+    (2.85, 2.85, 2.85, 2.85, 2.85, 2.80, 2.80,
+     2.80, 2.75, 2.75, 2.75, 2.75, 2.70, 2.64),
+    (-1.35, -1.25, -0.95, -0.60, -0.50, -0.45, -0.35,
+     -0.20, -0.10, 0.00, 0.15, 1.15, 1.70, 1.85),
+    strict=True,
+  )
+  for index, (d_rel, y_rel, v_rel) in enumerate(samples):
+    corner = point(
+      3286, "corner235", d_rel, y_rel,
+      v_ego=12.9, v_rel=v_rel, yv_rel=-0.15,
+    )
+    front = point(
+      56, "frontRadar", d_rel + 2.0, 2.15,
+      v_ego=12.9, v_rel=v_rel,
+    )
+    estimate = detector.update(
+      index * 0.1,
+      12.9,
+      (corner,),
+      PATH,
+      MODEL,
+      cross_sensor_matches={(corner.source, corner.track_id): front},
+    )[0]
+
+  assert estimate is not None
+  assert estimate.rear_pass
+  assert not estimate.raw_cutin
+  assert not estimate.confirmed_cutin
+  assert not estimate.control_eligible
+  assert not estimate.predecel_risk
+
+
+def test_close_parallel_cross_sensor_drift_is_not_cutin() -> None:
+  detector = TrajectoryCutInDetector()
+  estimate = None
+  for index in range(22):
+    y_rel = -3.15 + 0.02 * index
+    corner = point(
+      3284, "corner235", 2.2, y_rel,
+      v_ego=12.9, v_rel=-0.05, yv_rel=0.10,
+    )
+    front = point(
+      57, "frontRadar", 3.5, -2.15,
+      v_ego=12.9, v_rel=-0.05,
+    )
+    estimate = detector.update(
+      index * 0.1,
+      12.9,
+      (corner,),
+      PATH,
+      MODEL,
+      cross_sensor_matches={(corner.source, corner.track_id): front},
+    )[0]
+
+  assert estimate is not None
+  assert estimate.parallel_drift
+  assert not estimate.raw_cutin
+  assert not estimate.confirmed_cutin
+  assert not estimate.control_eligible
+  assert not estimate.predecel_risk
+
+
 def test_corner_mode_unmatched_front_uses_strong_recent_history() -> None:
   detector = TrajectoryCutInDetector()
   estimate = None
