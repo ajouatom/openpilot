@@ -217,6 +217,47 @@ def test_e4f_smooth_approach_does_not_release_braking_on_positive_alead() -> Non
   assert incident.acceleration[0] < -0.15
 
 
+def test_e50_smooth_composes_lead_and_relative_deceleration() -> None:
+  # 00000e50--edce81a33a--2 near 25 s. The old closing guard selected the
+  # stronger of lead deceleration and relative-speed deceleration, requesting
+  # only about -0.5 m/s² while the desired gap was already short by 5.8 m.
+  incident = build_lead_accel_reference(
+    lead(dRel=24.44, vRel=-2.03, aLead=-0.70, aLeadK=-0.70),
+    mode=LEAD_RESPONSE_SMOOTH,
+    v_ego=18.09,
+    v_cruise=22.22,
+    desired_distance=30.27,
+    previous_acceleration=-0.50,
+    time_indices=TIME_INDICES,
+  )
+
+  assert incident is not None
+  assert incident.raw_acceleration[0] < -0.8
+  assert incident.raw_acceleration[0] > -1.3
+  assert incident.acceleration[0] < -0.50
+
+
+def test_e50_deeper_closing_builds_margin_before_emergency_peak() -> None:
+  # One second later the lead was at -1.45 m/s² and ego was closing at
+  # 2.66 m/s. Composing the motions should request useful extra deceleration
+  # instead of waiting for MPC danger urgency to jump near the final peak.
+  incident = build_lead_accel_reference(
+    lead(dRel=22.13, vRel=-2.66, aLead=-1.45, aLeadK=-1.45),
+    mode=LEAD_RESPONSE_SMOOTH,
+    v_ego=17.40,
+    v_cruise=22.22,
+    desired_distance=32.68,
+    previous_acceleration=-0.55,
+    time_indices=TIME_INDICES,
+    braking_urgency=0.35,
+  )
+
+  assert incident is not None
+  assert incident.raw_acceleration[0] < -1.7
+  assert incident.raw_acceleration[0] > -2.4
+  assert incident.acceleration[0] < -0.55
+
+
 @pytest.mark.parametrize("a_lead", (0.46, 0.0, -0.5, -2.0))
 def test_fast_closing_guard_is_drive_mode_independent(a_lead: float) -> None:
   references = [

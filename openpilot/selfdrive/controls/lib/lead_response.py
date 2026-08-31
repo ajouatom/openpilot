@@ -40,6 +40,12 @@ LEAD_CLOSING_DECEL_FLOOR_TIME = 1.5
 LEAD_CLOSING_NORMAL_GAIN = 0.40
 LEAD_CLOSING_NORMAL_DECEL_LIMIT = 1.0
 LEAD_CLOSING_ALEAD_GAIN = 0.70
+# When the lead is already braking, relative-speed correction is an additive
+# term. Bound only that addition so normal preview moves braking earlier rather
+# than creating a new emergency peak; the hard MPC obstacle remains free to
+# demand more. A recovered/accelerating lead keeps the full relative term.
+LEAD_CLOSING_ADDITIONAL_DECEL_LIMIT = 0.8
+LEAD_CLOSING_COMPOSED_DECEL_LIMIT = 3.2
 LEAD_CLOSING_ATTACK_JERK = 1.2
 LEAD_CLOSING_RELEASE_JERK = 1.0
 LEAD_CLOSING_MAX_DECEL = 4.0
@@ -520,14 +526,27 @@ def build_lead_accel_reference(
       1.0,
       8.0,
     ))
-    closing_reference = closing_decel * np.exp(-np.asarray(time_indices) / closing_tau)
+    relative_closing_reference = closing_decel * np.exp(-np.asarray(time_indices) / closing_tau)
     closing_alead_gain = LEAD_CLOSING_ALEAD_GAIN + control_blend * (
       1.0 - LEAD_CLOSING_ALEAD_GAIN
     )
     closing_alead_reference = closing_alead_gain * lead_acceleration
+    # Relative closing deceleration is required in addition to following the
+    # lead's own negative acceleration. Selecting only the stronger term lets
+    # relative speed accumulate: for example, a lead at -0.7 m/s² while ego
+    # needs another -0.6 m/s² to shed closing speed used to request only about
+    # -0.7 m/s², then rely on a late hard-obstacle correction. Compose the two
+    # physical terms instead. A positive aLead must not cancel the closing
+    # term; it is safe to release that term only as vRel and the gap recover.
+    additive_closing_reference = relative_closing_reference
+    if a_lead < 0.0:
+      additive_closing_reference = np.maximum(
+        additive_closing_reference,
+        -LEAD_CLOSING_ADDITIONAL_DECEL_LIMIT,
+      )
     closing_raw_reference = np.clip(
-      np.minimum(closing_alead_reference, closing_reference),
-      -4.0,
+      additive_closing_reference + np.minimum(closing_alead_reference, 0.0),
+      -LEAD_CLOSING_COMPOSED_DECEL_LIMIT,
       2.5,
     )
     raw_reference = (
