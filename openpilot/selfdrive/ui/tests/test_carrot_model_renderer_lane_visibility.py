@@ -183,6 +183,61 @@ def test_lane_draw_skips_zero_alpha_projection(model_renderer_module, monkeypatc
   assert draws == []
 
 
+def test_lane_dash_segments_are_anchored_and_truncated(model_renderer_module):
+  module = model_renderer_module
+  line = np.array(
+    [[0.0, 0.0, 0.0], [5.0, 0.5, 0.0], [10.0, 1.0, 0.0], [20.0, 2.0, 0.0]],
+    dtype=np.float32,
+  )
+
+  segments = module.lane_dash_segments(line, 12.0)
+
+  assert len(segments) == 2
+  np.testing.assert_allclose(segments[0][[0, -1], 0], [0.0, module.LANE_DASH_LENGTH_M])
+  np.testing.assert_allclose(segments[1][[0, -1], 0], [9.4, 12.0])
+  np.testing.assert_allclose(segments[1][[0, -1], 1], [0.94, 1.2])
+  assert all(np.all(np.diff(segment[:, 0]) > 0) for segment in segments)
+
+
+def test_negative_lane_type_keeps_model_geometry_visible(model_renderer_module, monkeypatch):
+  module = model_renderer_module
+  renderer = object.__new__(module.ModelRenderer)
+  renderer._carrot_show_lane_info = 1
+  renderer._lane_line_probs = np.ones(4, dtype=np.float32)
+  renderer._road_edge_stds = np.zeros(2, dtype=np.float32)
+  renderer._lane_lines = [
+    module.ModelPoints(raw_points=np.array([[0.0, i, 0.0], [20.0, i, 0.0]], dtype=np.float32))
+    for i in range(4)
+  ]
+  renderer._road_edges = [module.ModelPoints(), module.ModelPoints()]
+  renderer._rect = module.rl.Rectangle(0.0, 0.0, 2160.0, 1080.0)
+  renderer._get_path_length_idx = lambda *_args: 1
+
+  projected = []
+
+  def project(line, *_args):
+    projected.append(line)
+    return np.array([[0.0, 1.0], [0.0, 0.0], [1.0, 0.0], [1.0, 1.0]], dtype=np.float32)
+
+  renderer._map_line_to_polygon = project
+  renderer._draw_polygon_outline_carrot = lambda *_args: None
+  draws = []
+  monkeypatch.setattr(module, "draw_polygon_solid", lambda *args: draws.append(args))
+
+  class LaneSubMaster:
+    valid = {"modelV2": True, "carState": True}
+
+    def __getitem__(self, key):
+      assert key == "carState"
+      return SimpleNamespace(leftLaneLine=-1, rightLaneLine=-1)
+
+  renderer._draw_lane_lines_carrot(LaneSubMaster())
+
+  assert len(projected) == 4
+  assert all(actual is expected.raw_points for actual, expected in zip(projected, renderer._lane_lines, strict=True))
+  assert len(draws) == 4
+
+
 def test_mode9_complex_path_preserves_segment_fill_outline_order(model_renderer_module, monkeypatch):
   module = model_renderer_module
   renderer = object.__new__(module.ModelRenderer)
