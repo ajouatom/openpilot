@@ -404,8 +404,7 @@
           "zh": "雷达",
           "params": [
             "EnableRadarTracks",
-            "EnableCornerRadar",
-            "CarrotRadarCutInSensitivity"
+            "EnableCornerRadar"
           ]
         },
         {
@@ -2518,50 +2517,6 @@
       "unit": 1,
       "control": "toggle",
       "risk": "high"
-    },
-    {
-      "group": "레이더설정",
-      "name": "CarrotRadarCutInSensitivity",
-      "title": "당근레이더 컷인 민감도(3)",
-      "descr": "당근레이더의 끼어들기 감도입니다. 0: 끼어들기 사용 안 함, 1: 둔감, 2: 약간 둔감, 3: 보통(현재 기준), 4: 민감, 5: 아주 민감. 코너레이더활성화 설정에는 영향을 주지 않습니다. 변경 후 현재 주행을 끝내고 차량을 재시동하거나 기기를 재부팅해야 적용됩니다.",
-      "egroup": "RADAR",
-      "etitle": "Carrot Radar Cut-in Sensitivity(3)",
-      "edescr": "Carrot Radar cut-in sensitivity. 0: disabled, 1: insensitive, 2: slightly insensitive, 3: normal (current behavior), 4: sensitive, 5: very sensitive. It does not affect the Enable Corner Radar setting. End the current drive, then restart the vehicle or reboot the device after changing this setting.",
-      "cgroup": "雷达设置",
-      "ctitle": "Carrot 雷达切入灵敏度(3)",
-      "cdescr": "Carrot 雷达的切入灵敏度。0：禁用，1：迟钝，2：较迟钝，3：普通（当前标准），4：灵敏，5：非常灵敏。不会影响角雷达启用设置。更改后请结束当前行程，再重新启动车辆或重启设备才会生效。",
-      "min": 0,
-      "max": 5,
-      "default": 3,
-      "unit": 1,
-      "control": "select",
-      "risk": "high",
-      "options": {
-        "ko": [
-          "사용 안 함",
-          "둔감",
-          "약간 둔감",
-          "보통",
-          "민감",
-          "아주 민감"
-        ],
-        "en": [
-          "Disabled",
-          "Insensitive",
-          "Slightly insensitive",
-          "Normal",
-          "Sensitive",
-          "Very sensitive"
-        ],
-        "zh": [
-          "禁用",
-          "迟钝",
-          "较迟钝",
-          "普通",
-          "灵敏",
-          "非常灵敏"
-        ]
-      }
     },
     {
       "group": "시작",
