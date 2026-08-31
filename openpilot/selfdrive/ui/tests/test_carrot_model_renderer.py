@@ -208,7 +208,7 @@ def test_lane_draw_reuses_cached_raw_points():
     return np.empty((0, 2), dtype=np.float32)
 
   renderer._map_line_to_polygon = project
-  car_state = SimpleNamespace(leftLaneLine=0, rightLaneLine=0)
+  car_state = SimpleNamespace(leftLaneLine=1, rightLaneLine=1)
 
   class LaneSubMaster(FakeSubMaster):
     def __getitem__(self, key):
@@ -250,7 +250,7 @@ def test_lane_draw_builds_cached_optional_geometry():
     return np.empty((0, 2), dtype=np.float32)
 
   renderer._map_line_to_polygon = project
-  car_state = SimpleNamespace(leftLaneLine=24, rightLaneLine=0)
+  car_state = SimpleNamespace(leftLaneLine=24, rightLaneLine=1)
 
   class LaneSubMaster(FakeSubMaster):
     def __getitem__(self, key):
