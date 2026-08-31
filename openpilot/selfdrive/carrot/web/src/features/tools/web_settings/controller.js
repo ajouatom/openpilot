@@ -16,6 +16,7 @@ import {
 // row events to the setters.
 
 let webSettingsViewportSyncBound = false;
+let lastAutoUpdateErrorEventId = "";
 
 function ensureActiveWebSettingsGroupVisible() {
   const nav = document.querySelector(".app-dialog--web-settings .web-settings-nav");
@@ -120,9 +121,21 @@ async function openWebSettingsDialog() {
 
 function handleWebAutoUpdateStatus(status = {}) {
   // Auto update now runs device-side in carrot_server (services/auto_update.py),
-  // so it works without the web open and won't double-pull. Intentionally a
-  // no-op here; kept because tools.js still calls it on git-status updates.
-  void status;
+  // so it works without the web open and won't double-pull. Surface persistent
+  // device-side failures once per event when a browser is available again.
+  const update = status?.auto_update || {};
+  const updateStatus = String(update.status || "");
+  if (!["error", "reboot_blocked"].includes(updateStatus)) return;
+
+  const eventId = String(update.event_id || `${updateStatus}:${update.target_head || ""}:${update.error_code || ""}`);
+  if (!eventId || eventId === lastAutoUpdateErrorEventId || typeof showAppToast !== "function") return;
+  lastAutoUpdateErrorEventId = eventId;
+
+  const title = updateStatus === "reboot_blocked"
+    ? webSettingsText("web_auto_update_reboot_blocked")
+    : webSettingsText("web_auto_update_failed");
+  const detail = String(update.error || update.error_code || "").trim();
+  showAppToast(detail ? `${title}: ${detail}` : title, { tone: "error", duration: 8000 });
 }
 
 window.openWebSettingsDialog = openWebSettingsDialog;

@@ -374,6 +374,7 @@ window.CarrotTranslations.register("en", {
     web_auto_update_running: "Auto update: running git pull.",
     web_auto_update_done: "Auto update complete. Reboot was not requested.",
     web_auto_update_failed: "Auto update failed",
+    web_auto_update_reboot_blocked: "Automatic reboot blocked",
     web_start_page: "Start menu",
     web_start_page_desc: "Choose the first menu shown on launch.",
     web_start_page_last: "Last tab",

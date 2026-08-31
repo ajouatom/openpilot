@@ -17,6 +17,11 @@
     "severity": 1,
     "_comment": "Set extra field to the failed reason."
   },
+  "Offroad_CarrotAutoUpdateFailed": {
+    "text": "Carrot automatic update failed. Automatic reboot has been blocked.\n%1",
+    "severity": 1,
+    "_comment": "Set extra field to the failed reason. This is separate from Offroad_UpdateFailed so updated.py does not clear it."
+  },
   "Offroad_IsTakingSnapshot": {
     "text": "Taking camera snapshots. System won't start until finished.",
     "severity": 0
