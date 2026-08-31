@@ -10,16 +10,12 @@ from openpilot.common.swaglog import cloudlog
 from openpilot.selfdrive.modeld.constants import index_function
 from openpilot.selfdrive.controls.radar_constants import LEAD_ACCEL_TAU
 from openpilot.selfdrive.controls.lib.lead_response import (
-  blend_lead_accel_reference,
-  build_lead_accel_reference,
   calculate_lead_braking_urgency,
   combine_braking_urgency_with_margin,
-  combine_lead_accel_references,
-  lead_closing_preview_weight,
-  lead_obstacle_relevance,
-  lead_response_confidence,
-  lead_response_target_weight,
-  rate_limit_lead_response_weight,
+)
+from openpilot.selfdrive.controls.lib.longitudinal_mpc_lib.lead_mpc_input import (
+  ApproachDistanceController,
+  extrapolate_lead_motion,
 )
 from openpilot.selfdrive.carrot.traffic_stop import get_traffic_stop_obstacle_distance
 
@@ -254,11 +250,8 @@ class LongitudinalMpc:
     self.solver = AcadosOcpSolverCython(MODEL_NAME, ACADOS_SOLVER_TYPE, N)
 
     self.a_change_cost = A_CHANGE_COST
-    self.lead_response_track_ids = [-1, -1]
-    self.lead_response_track_frames = [0, 0]
-    self.lead_response_weights = np.zeros(2)
+    self.approach_distance = ApproachDistanceController(dt)
     self.lead_response_confidences = np.zeros(2)
-    self.lead_response_active = False
     self.lead_accel_reference = np.zeros(N+1)
     self.braking_urgency = 0.0
 
@@ -293,11 +286,8 @@ class LongitudinalMpc:
     self.crash_cnt = 0.0
     self.predicted_danger_margin = 1e3
     self.solution_status = 0
-    self.lead_response_track_ids = [-1, -1]
-    self.lead_response_track_frames = [0, 0]
-    self.lead_response_weights.fill(0.0)
+    self.approach_distance.reset()
     self.lead_response_confidences.fill(0.0)
-    self.lead_response_active = False
     self.lead_accel_reference.fill(0.0)
     self.braking_urgency = 0.0
     # timers
@@ -371,10 +361,16 @@ class LongitudinalMpc:
         self.solver.set(i, 'x', self.x0)
 
   @staticmethod
-  def extrapolate_lead(x_lead, v_lead, a_lead, a_lead_tau):
-    a_lead_traj = a_lead * np.exp(-a_lead_tau * T_IDXS ** 2 / 2.0)
-    v_lead_traj = np.clip(v_lead + np.cumsum(T_DIFFS * a_lead_traj), 0.0, 1e8)
-    x_lead_traj = x_lead + np.cumsum(T_DIFFS * v_lead_traj)
+  def extrapolate_lead(x_lead, v_lead, a_lead, a_lead_tau, j_lead=0.0):
+    x_lead_traj, v_lead_traj, _ = extrapolate_lead_motion(
+      x_lead=x_lead,
+      v_lead=v_lead,
+      a_lead=a_lead,
+      a_lead_tau=a_lead_tau,
+      j_lead=j_lead,
+      time_indices=T_IDXS,
+      time_differences=T_DIFFS,
+    )
     lead_xv = np.column_stack((x_lead_traj, v_lead_traj))
     return lead_xv
   
@@ -385,12 +381,14 @@ class LongitudinalMpc:
       v_lead = lead.vLead
       a_lead = lead.aLeadK
       a_lead_tau = lead.aLeadTau
+      j_lead = lead.jLead
     else:
       # Fake a fast lead car, so mpc can keep running in the same mode
       x_lead = 50.0
       v_lead = v_ego + 10.0
       a_lead = 0.0
       a_lead_tau = LEAD_ACCEL_TAU
+      j_lead = 0.0
 
     # MPC will not converge if immediate crash is expected
     # Clip lead distance to what is still possible to brake for
@@ -399,7 +397,7 @@ class LongitudinalMpc:
     v_lead = np.clip(v_lead, 0.0, 1e8)
     a_lead = np.clip(a_lead, -10., 5.)
 
-    lead_xv = self.extrapolate_lead(x_lead, v_lead, a_lead, a_lead_tau)
+    lead_xv = self.extrapolate_lead(x_lead, v_lead, a_lead, a_lead_tau, j_lead)
     return lead_xv, v_lead
 
   def set_accel_limits(self, min_a, max_a):
@@ -407,29 +405,6 @@ class LongitudinalMpc:
     # needs refactor
     self.cruise_min_a = min_a
     self.max_a = max_a
-
-  def _track_lead_response_target(self, index, lead):
-    if not lead.status or not lead.radar:
-      self.lead_response_track_ids[index] = -1
-      self.lead_response_track_frames[index] = 0
-      self.lead_response_weights[index] = 0.0
-      return False
-    try:
-      track_id = int(lead.radarTrackId)
-    except (AttributeError, TypeError, ValueError):
-      track_id = -1
-    if track_id < 0:
-      self.lead_response_track_ids[index] = -1
-      self.lead_response_track_frames[index] = 0
-      self.lead_response_weights[index] = 0.0
-      return False
-    if track_id != self.lead_response_track_ids[index]:
-      self.lead_response_track_ids[index] = track_id
-      self.lead_response_track_frames[index] = 1
-      self.lead_response_weights[index] = 0.0
-    else:
-      self.lead_response_track_frames[index] += 1
-    return True
 
   def update(self, carrot, reset_state, radarstate, v_cruise, x, v, a, j,
              personality=log.LongitudinalPersonality.standard,
@@ -447,8 +422,7 @@ class LongitudinalMpc:
       ),
     )
 
-    # jLead still controls acceleration persistence in radard through
-    # aLeadTau. Do not inject it a second time into the MPC obstacle and cost.
+    # aLead/aLeadTau/jLead form one physically integrated obstacle preview.
     lead_xv_0, lead_v_0 = self.process_lead(radarstate.leadOne)
     lead_xv_1, lead_v_1 = self.process_lead(radarstate.leadTwo)
 
@@ -460,18 +434,35 @@ class LongitudinalMpc:
       stop_x = 1000.0
     else:
       v_cruise, stop_x, mode = carrot.v_cruise, carrot.stop_dist, carrot.mode
-      lead_distances = [
+      base_lead_distances = [
         desired_follow_distance(v_ego, lead_v, comfort_brake, stop_distance, t_follow)
         for lead, lead_v in ((radarstate.leadOne, lead_v_0), (radarstate.leadTwo, lead_v_1))
         if lead.status
       ]
-      desired_distance = max(lead_distances, default=desired_follow_distance(
+      desired_distance = max(base_lead_distances, default=desired_follow_distance(
         v_ego, lead_v_0, comfort_brake, stop_distance, t_follow,
       ))
       t_follow = carrot.dynamic_t_follow(
         t_follow, (radarstate.leadOne, radarstate.leadTwo), desired_distance, self.prev_a,
       )
     t_follow = carrot.apply_t_follow(t_follow)
+
+    if reset_state or mode != 'acc':
+      self.approach_distance.reset()
+    base_desired_distances = (
+      desired_follow_distance(v_ego, lead_v_0, comfort_brake, stop_distance, t_follow),
+      desired_follow_distance(v_ego, lead_v_1, comfort_brake, stop_distance, t_follow),
+    )
+    approach_result = self.approach_distance.update(
+      base_t_follow=t_follow,
+      v_ego=v_ego,
+      leads=(radarstate.leadOne, radarstate.leadTwo) if mode == 'acc' else (),
+      desired_distances=base_desired_distances if mode == 'acc' else (),
+    )
+    t_follow = approach_result.t_follow
+    self.lead_response_confidences.fill(0.0)
+    self.lead_response_confidences[:len(approach_result.lead_active)] = approach_result.lead_active
+    self.lead_accel_reference.fill(0.0)
 
     # To estimate a safe distance from a moving lead, we calculate how much stopping
     # distance that lead needs as a minimum. We can add that to the current distance
@@ -552,71 +543,9 @@ class LongitudinalMpc:
     self.solver.set(N, "yref", self.yref[N][:COST_E_DIM])
 
     self.params[:,2] = np.min(x_obstacles, axis=1)
-    previous_accel_reference = np.copy(self.prev_a)
-    self.lead_response_active = False
-    self.lead_accel_reference.fill(0.0)
-    self.lead_response_confidences.fill(0.0)
-    lead_response_candidates = []
-    leads = (
-      (radarstate.leadOne, lead_0_obstacle, lead_v_0),
-      (radarstate.leadTwo, lead_1_obstacle, lead_v_1),
-    )
-    for index, (lead, lead_obstacle, lead_v) in enumerate(leads):
-      lead_response_valid = self._track_lead_response_target(index, lead)
-      confidence = lead_response_confidence(
-        reset_state=reset_state,
-        mpc_mode=mode,
-        stable_frames=self.lead_response_track_frames[index],
-        lead_speed=float(lead.vLead),
-      ) if lead_response_valid else 0.0
-
-      target_weight = 0.0
-      lead_desired_distance = desired_follow_distance(
-        v_ego, lead_v, comfort_brake, stop_distance, t_follow,
-      )
-      if confidence > 0.0 and mode == 'acc':
-        obstacle_relevance = lead_obstacle_relevance(lead_obstacle, cruise_obstacle, v_ego, T_IDXS)
-        closing_preview = lead_closing_preview_weight(
-          float(lead.dRel), float(lead.vRel), lead_desired_distance,
-        )
-        target_weight = lead_response_target_weight(
-          obstacle_relevance, float(lead.aLeadK), closing_preview,
-        )
-      self.lead_response_weights[index] = rate_limit_lead_response_weight(
-        self.lead_response_weights[index], target_weight,
-      )
-      effective_weight = confidence * self.lead_response_weights[index]
-      self.lead_response_confidences[index] = effective_weight
-
-      if effective_weight <= 0.0:
-        continue
-      lead_response = build_lead_accel_reference(
-        lead,
-        mode=carrot.lead_response_mode,
-        v_ego=v_ego,
-        v_cruise=v_cruise,
-        desired_distance=lead_desired_distance,
-        previous_acceleration=float(self.prev_a[0]),
-        time_indices=T_IDXS,
-        braking_urgency=self.braking_urgency,
-      )
-      if lead_response is not None:
-        lead_response_candidates.append(blend_lead_accel_reference(
-          self.prev_a, lead_response.acceleration, effective_weight,
-        ))
-
-    previous_accel_reference = combine_lead_accel_references(
-      self.prev_a, lead_response_candidates,
-    )
-    if lead_response_candidates:
-      self.lead_accel_reference = np.copy(previous_accel_reference)
-      self.lead_response_active = True
-    if reset_state:
-      self.lead_response_track_ids = [-1, -1]
-      self.lead_response_track_frames = [0, 0]
-      self.lead_response_weights.fill(0.0)
-      self.lead_response_confidences.fill(0.0)
-    self.params[:,3] = previous_accel_reference
+    # The previous MPC solution is the only acceleration reference. Lead
+    # motion and approaching behavior enter through obstacle and tFollow.
+    self.params[:,3] = self.prev_a
     self.params[:,4] = t_follow
     self.params[:,6] = comfort_brake
     self.params[:,7] = stop_distance

@@ -11,7 +11,6 @@ from openpilot.selfdrive.carrot.t_follow import ramp_t_follow
 from openpilot.selfdrive.carrot.traffic_stop import is_traffic_stop_entry_allowed
 from openpilot.selfdrive.controls.lib.lead_response import (
   auto_driving_mode_for_congestion,
-  equal_lead_t_follow_adjustment,
   lead_response_mode_for_driving_mode,
 )
 from openpilot.selfdrive.selfdrived.events import Events
@@ -311,32 +310,15 @@ class CarrotPlanner:
 
 
   def dynamic_t_follow(self, t_follow, leads, desired_follow_distance, prev_a):
-    del desired_follow_distance, prev_a
+    del leads, desired_follow_distance, prev_a
     self.jerk_factor_apply = self.jerk_factor
-    lead_list = leads if isinstance(leads, (tuple, list)) else (leads,)
 
-    # 차선변경 시작 후 1.5초 동안은 공격적으로
+    # Lane-change gap selection remains user controlled. Lead approaching is
+    # represented once by LongitudinalMpc's distance anchor.
     if self.desireState > 0.9 and self.desireStateCount < int(1.5 / DT_MDL):
       dynamicTFollowLC = max(0.2, self.dynamicTFollowLC)
       t_follow *= dynamicTFollowLC
       self.jerk_factor_apply = self.jerk_factor * dynamicTFollowLC
-
-    # 일반 lead follow: lead.jLead 기반 동적 조절
-    elif any(lead.status for lead in lead_list) and self.dynamicTFollow > 0.0:
-      # lead.jLead < 0 : 앞차가 감속 방향으로 변함 -> 차간거리 증가
-      # lead.jLead > 0 : 앞차가 가속 방향으로 변함 -> 차간거리 감소
-      # Equal treatment without hierarchy: the most conservative simultaneous
-      # lead adjustment wins.
-      t_follow_adjustment = equal_lead_t_follow_adjustment(
-        [lead.jLead for lead in lead_list if lead.status], self.dynamicTFollow,
-      )
-      t_follow += t_follow_adjustment
-
-      # 앞차가 풀어주는 상황에서는 jerk factor 약간 낮춰서 더 민첩하게
-      if t_follow_adjustment < 0.0:
-        self.jerk_factor_apply = self.jerk_factor * 0.5
-
-      t_follow = np.clip(t_follow, 0.3, 2.0)
 
     return float(t_follow)
 
