@@ -18,6 +18,7 @@ from openpilot.selfdrive.controls.lib.lead_response import (
   combine_braking_urgency_with_margin,
   combine_lead_accel_references,
   equal_lead_t_follow_adjustment,
+  lead_danger_factor_for_mode,
   lead_obstacle_relevance,
   lead_response_confidence,
   lead_response_mode_for_driving_mode,
@@ -71,6 +72,15 @@ def test_existing_driving_modes_select_the_response_profile() -> None:
   assert lead_response_mode_for_driving_mode(3) == LEAD_RESPONSE_SYNC
   assert lead_response_mode_for_driving_mode(4) == LEAD_RESPONSE_SYNC
   assert lead_response_mode_for_driving_mode(99) == LEAD_RESPONSE_BALANCED
+
+
+def test_smooth_adds_only_low_speed_obstacle_margin() -> None:
+  assert lead_danger_factor_for_mode(LEAD_RESPONSE_SMOOTH, 0.0) == pytest.approx(0.95)
+  assert lead_danger_factor_for_mode(LEAD_RESPONSE_SMOOTH, 3.0) == pytest.approx(0.95)
+  assert 0.80 < lead_danger_factor_for_mode(LEAD_RESPONSE_SMOOTH, 6.0) < 0.95
+  assert lead_danger_factor_for_mode(LEAD_RESPONSE_SMOOTH, 10.0) == pytest.approx(0.80)
+  assert lead_danger_factor_for_mode(LEAD_RESPONSE_BALANCED, 0.0) == pytest.approx(0.80)
+  assert lead_danger_factor_for_mode(LEAD_RESPONSE_SYNC, 0.0) == pytest.approx(0.80)
 
 
 @pytest.mark.parametrize(
@@ -135,6 +145,32 @@ def test_gap_and_relative_speed_do_not_form_a_second_controller() -> None:
 
   assert stationary_acceleration is not None
   assert np.all(stationary_acceleration.raw_acceleration == pytest.approx(0.0))
+
+
+def test_closing_urgency_keeps_bounded_feedback_active_after_alead_recovers() -> None:
+  common = {
+    "mode": LEAD_RESPONSE_SMOOTH,
+    "v_ego": 8.0,
+    "v_cruise": 20.0,
+    "desired_distance": 15.0,
+    "previous_acceleration": 0.0,
+    "time_indices": TIME_INDICES,
+  }
+  calm = build_lead_accel_reference(
+    lead(dRel=10.0, vRel=-2.0, aLead=0.0, aLeadK=0.0),
+    braking_urgency=0.0,
+    **common,
+  )
+  urgent = build_lead_accel_reference(
+    lead(dRel=10.0, vRel=-2.0, aLead=0.0, aLeadK=0.0),
+    braking_urgency=1.0,
+    **common,
+  )
+
+  assert calm is not None and urgent is not None
+  assert np.all(calm.raw_acceleration == pytest.approx(0.0))
+  assert urgent.raw_acceleration[0] == pytest.approx(-0.25)
+  assert urgent.acceleration[0] < 0.0
 
 
 def test_emergency_jerk_rate_requires_braking_urgency() -> None:

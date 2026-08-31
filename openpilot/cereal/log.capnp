@@ -1220,6 +1220,9 @@ struct LongitudinalPlan @0xe00b5b3eba12876c {
   leadOneResponseWeight @50: Float32;
   leadTwoResponseWeight @51: Float32;
   brakingUrgency @52: Float32;
+  leadAccelReference @53: Float32;
+  leadDangerFactor @54: Float32;
+  predictedDangerMargin @55: Float32;
 
   solverExecutionTime @35 :Float32;
 

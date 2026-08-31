@@ -27,6 +27,8 @@ LEAD_RESPONSE_WEIGHT_RELEASE = 0.20
 # Near a stop, obstacle distance is the authoritative signal. Radar-derived
 # acceleration is too noisy to improve the existing MPC stop trajectory.
 LEAD_RESPONSE_MIN_LEAD_SPEED = 2.0
+LEAD_DANGER_FACTOR_BASE = 0.80
+LEAD_DANGER_FACTOR_SMOOTH_LOW_SPEED = 0.95
 
 
 @dataclass(frozen=True)
@@ -52,14 +54,17 @@ class LeadResponseReference:
 
 PROFILES = {
   LEAD_RESPONSE_SMOOTH: LeadResponseProfile(
-    accel_gain=0.45,
-    far_decel_gain=0.25,
-    v_rel_gain=0.08,
-    gap_deficit_gain=0.06,
-    gap_surplus_gain=0.030,
-    tracking_feedback_limit=0.10,
+    # Smooth keeps normal control authority. Comfort comes from the lower
+    # jerk rates and softer far-lead response, not from waiting until the MPC
+    # has consumed the available following distance.
+    accel_gain=0.70,
+    far_decel_gain=0.35,
+    v_rel_gain=0.10,
+    gap_deficit_gain=0.07,
+    gap_surplus_gain=0.025,
+    tracking_feedback_limit=0.15,
     attack_jerk=0.8,
-    release_jerk=0.6,
+    release_jerk=0.8,
   ),
   LEAD_RESPONSE_BALANCED: LeadResponseProfile(
     accel_gain=0.72,
@@ -96,6 +101,17 @@ def lead_response_mode_for_driving_mode(driving_mode: int) -> int:
     3: LEAD_RESPONSE_SYNC,      # Sync
     4: LEAD_RESPONSE_SYNC,      # High: Sync + traffic-signal bypass
   }.get(int(driving_mode), LEAD_RESPONSE_BALANCED)
+
+
+def lead_danger_factor_for_mode(mode: int, v_ego: float) -> float:
+  """Add low-speed stop margin without changing road-speed following."""
+  if int(mode) != LEAD_RESPONSE_SMOOTH:
+    return LEAD_DANGER_FACTOR_BASE
+  return float(np.interp(
+    max(float(v_ego), 0.0),
+    [3.0, 10.0],
+    [LEAD_DANGER_FACTOR_SMOOTH_LOW_SPEED, LEAD_DANGER_FACTOR_BASE],
+  ))
 
 
 def auto_driving_mode_for_congestion(auto_mode: int, congested: bool) -> int:
@@ -351,21 +367,23 @@ def build_lead_accel_reference(
   deficit_fraction = max(0.0, -gap_error) / max(float(desired_distance), 1.0)
   ttc_fraction = float(np.clip((4.0 - closing_ttc) / 2.5, 0.0, 1.0))
   safety_blend = float(np.clip(deficit_fraction + ttc_fraction, 0.0, 1.0))
-  effective_gain = base_gain + safety_blend * (1.0 - base_gain)
+  urgency = float(np.clip(braking_urgency, 0.0, 1.0))
+  control_blend = max(safety_blend, urgency)
+  effective_gain = base_gain + control_blend * (1.0 - base_gain)
   safety_profile = PROFILES[LEAD_RESPONSE_SYNC]
   effective_v_rel_gain = (
     profile.v_rel_gain
-    + safety_blend * (safety_profile.v_rel_gain - profile.v_rel_gain)
+    + control_blend * (safety_profile.v_rel_gain - profile.v_rel_gain)
   )
   effective_gap_gain = (
     profile.gap_deficit_gain
-    + safety_blend * (
+    + control_blend * (
       safety_profile.gap_deficit_gain - profile.gap_deficit_gain
     )
   )
   effective_feedback_limit = (
     profile.tracking_feedback_limit
-    + safety_blend * (
+    + control_blend * (
       safety_profile.tracking_feedback_limit
       - profile.tracking_feedback_limit
     )
@@ -387,10 +405,12 @@ def build_lead_accel_reference(
       -0.8 * effective_gain * lead_acceleration,
     )
   # Distance and relative speed are already represented by the hard MPC
-  # obstacle. Keep only a small, acceleration-event-gated correction here so
-  # feed-forward does not become a second gap controller at short TFollow.
+  # obstacle. Keep only a bounded correction here. Normally it remains gated
+  # by a lead acceleration event; verified closing urgency may open it even
+  # after aLead has returned near zero, avoiding a brake-release-brake cycle.
   motion_activity = float(np.interp(abs(a_lead), [0.15, 0.75], [0.0, 1.0]))
-  tracking_feedback = motion_activity * np.clip(
+  tracking_activity = max(motion_activity, urgency)
+  tracking_feedback = tracking_activity * np.clip(
     v_rel_feedback + gap_deficit_feedback + gap_surplus_feedback,
     -effective_feedback_limit,
     effective_feedback_limit,
@@ -412,7 +432,6 @@ def build_lead_accel_reference(
   # A modest gap deficit may increase how closely the reference matches the
   # lead, but it must not independently open an emergency jerk rate. Hard MPC
   # safety remains authoritative and exposes extra rate only through urgency.
-  urgency = float(np.clip(braking_urgency, 0.0, 1.0))
   attack_jerk = profile.attack_jerk + urgency * (3.5 - profile.attack_jerk)
   release_jerk = profile.release_jerk + urgency * (2.0 - profile.release_jerk)
   reference = _rate_limit_reference(
@@ -435,6 +454,8 @@ def build_lead_accel_reference(
 
 
 __all__ = (
+  "LEAD_DANGER_FACTOR_BASE",
+  "LEAD_DANGER_FACTOR_SMOOTH_LOW_SPEED",
   "LEAD_RESPONSE_BALANCED",
   "LEAD_RESPONSE_BLEND_HORIZON",
   "LEAD_RESPONSE_CONFIRM_FRAMES",
@@ -452,6 +473,7 @@ __all__ = (
   "combine_braking_urgency_with_margin",
   "combine_lead_accel_references",
   "equal_lead_t_follow_adjustment",
+  "lead_danger_factor_for_mode",
   "lead_obstacle_relevance",
   "lead_response_confidence",
   "lead_response_mode_for_driving_mode",

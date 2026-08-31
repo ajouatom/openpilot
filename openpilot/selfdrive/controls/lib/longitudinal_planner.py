@@ -342,5 +342,8 @@ class LongitudinalPlanner:
     longitudinalPlan.leadOneResponseWeight = float(self.mpc.lead_response_confidences[0])
     longitudinalPlan.leadTwoResponseWeight = float(self.mpc.lead_response_confidences[1])
     longitudinalPlan.brakingUrgency = float(self.mpc.braking_urgency)
+    longitudinalPlan.leadAccelReference = float(self.mpc.lead_accel_reference[0])
+    longitudinalPlan.leadDangerFactor = float(self.mpc.lead_danger_factor)
+    longitudinalPlan.predictedDangerMargin = float(self.mpc.predicted_danger_margin)
 
     pm.send('longitudinalPlan', plan_send)

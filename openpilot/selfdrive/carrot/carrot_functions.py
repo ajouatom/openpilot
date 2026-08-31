@@ -96,7 +96,6 @@ class CarrotPlanner:
     self.myDrivingMode = DrivingMode(self.params.get_int("LongitudinalDrivingMode"))
     self.myDrivingMode_last = self.myDrivingMode
     self.myDrivingMode_disable_auto = False
-    self.mySmoothModeFactor = 0.9
     self.myHighModeFactor = 1.2
     self.drivingModeDetector = DrivingModeDetector()
     self.drivingModeFactor = 1.0
@@ -236,10 +235,10 @@ class CarrotPlanner:
         self.jerk_factor = 1.0
         tf_base = self.tFollowGap3
       elif personality == log.LongitudinalPersonality.standard:
-        self.jerk_factor = 1.0 if self.myDrivingMode == DrivingMode.Smooth else 0.7
+        self.jerk_factor = 0.75 if self.myDrivingMode == DrivingMode.Smooth else 0.7
         tf_base = self.tFollowGap2
       elif personality == log.LongitudinalPersonality.aggressive:
-        self.jerk_factor = 1.0 if self.myDrivingMode == DrivingMode.Smooth else 0.5
+        self.jerk_factor = 0.75 if self.myDrivingMode == DrivingMode.Smooth else 0.5
         tf_base = self.tFollowGap1
       else:
         raise NotImplementedError("Longitudinal personality not supported")
@@ -484,9 +483,6 @@ class CarrotPlanner:
 
     leadOne = radarstate.leadOne
     self.drivingModeFactor = 1.0
-    if self.myDrivingMode == DrivingMode.Smooth:
-      self.drivingModeFactor = self.mySmoothModeFactor
-
 
     self.drivingModeDetector.update_data(carstate, leadOne)
 
