@@ -15,6 +15,7 @@ from openpilot.selfdrive.controls.lib.lead_response import (
   calculate_lead_braking_urgency,
   combine_braking_urgency_with_margin,
   combine_lead_accel_references,
+  lead_closing_preview_weight,
   lead_obstacle_relevance,
   lead_response_confidence,
   lead_response_target_weight,
@@ -570,9 +571,17 @@ class LongitudinalMpc:
       ) if lead_response_valid else 0.0
 
       target_weight = 0.0
+      lead_desired_distance = desired_follow_distance(
+        v_ego, lead_v, comfort_brake, stop_distance, t_follow,
+      )
       if confidence > 0.0 and mode == 'acc':
         obstacle_relevance = lead_obstacle_relevance(lead_obstacle, cruise_obstacle, v_ego, T_IDXS)
-        target_weight = lead_response_target_weight(obstacle_relevance, float(lead.aLeadK))
+        closing_preview = lead_closing_preview_weight(
+          float(lead.dRel), float(lead.vRel), lead_desired_distance,
+        )
+        target_weight = lead_response_target_weight(
+          obstacle_relevance, float(lead.aLeadK), closing_preview,
+        )
       self.lead_response_weights[index] = rate_limit_lead_response_weight(
         self.lead_response_weights[index], target_weight,
       )
@@ -581,9 +590,6 @@ class LongitudinalMpc:
 
       if effective_weight <= 0.0:
         continue
-      lead_desired_distance = desired_follow_distance(
-        v_ego, lead_v, comfort_brake, stop_distance, t_follow,
-      )
       lead_response = build_lead_accel_reference(
         lead,
         mode=carrot.lead_response_mode,

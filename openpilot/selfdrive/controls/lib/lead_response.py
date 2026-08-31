@@ -1,8 +1,8 @@
-"""Lead-acceleration reference generation for longitudinal MPC.
+"""Lead-response reference generation for longitudinal MPC.
 
 The reference starts early and small. Hard safety remains in the MPC obstacle
-and danger constraints; this module only shapes how strongly normal following
-tries to reproduce the physical lead vehicle's acceleration.
+and danger constraints; this module shapes normal lead-acceleration following
+and prevents a fast approach from consuming the desired gap before MPC reacts.
 """
 
 from __future__ import annotations
@@ -30,6 +30,14 @@ LEAD_RESPONSE_MIN_LEAD_SPEED = 2.0
 LEAD_SAFETY_JERK_FACTOR = 0.50
 LEAD_DECEL_PREVIEW_START = 0.30
 LEAD_DECEL_PREVIEW_FULL = 1.00
+# A closing lead needs a response even when its filtered acceleration has
+# already recovered toward zero. Start before the desired gap is consumed so
+# Smooth can brake gently instead of relying on a late, large MPC correction.
+LEAD_CLOSING_PREVIEW_FULL_TIME = 2.0
+LEAD_CLOSING_PREVIEW_START_TIME = 5.0
+LEAD_CLOSING_PREVIEW_MIN_SPEED = 0.5
+LEAD_CLOSING_DECEL_FLOOR_TIME = 1.5
+LEAD_CLOSING_MAX_DECEL = 4.0
 
 
 @dataclass(frozen=True)
@@ -40,6 +48,7 @@ class LeadResponseProfile:
   gap_deficit_gain: float
   gap_surplus_gain: float
   tracking_feedback_limit: float
+  closing_decel_limit: float
   attack_jerk: float
   release_jerk: float
 
@@ -64,6 +73,7 @@ PROFILES = {
     gap_deficit_gain=0.07,
     gap_surplus_gain=0.025,
     tracking_feedback_limit=0.15,
+    closing_decel_limit=0.8,
     attack_jerk=0.8,
     release_jerk=0.8,
   ),
@@ -74,6 +84,7 @@ PROFILES = {
     gap_deficit_gain=0.09,
     gap_surplus_gain=0.020,
     tracking_feedback_limit=0.18,
+    closing_decel_limit=1.4,
     attack_jerk=1.6,
     release_jerk=1.0,
   ),
@@ -84,6 +95,7 @@ PROFILES = {
     gap_deficit_gain=0.12,
     gap_surplus_gain=0.010,
     tracking_feedback_limit=0.25,
+    closing_decel_limit=2.2,
     attack_jerk=2.8,
     release_jerk=1.8,
   ),
@@ -246,12 +258,41 @@ def rate_limit_lead_response_weight(previous: float, target: float) -> float:
   return max(target, previous - LEAD_RESPONSE_WEIGHT_RELEASE)
 
 
-def lead_response_target_weight(obstacle_relevance: float, lead_acceleration: float) -> float:
+def lead_closing_preview_weight(d_rel: float, v_rel: float, desired_distance: float) -> float:
+  """Return early response weight from time remaining to the desired gap."""
+  if not all(np.isfinite(value) for value in (d_rel, v_rel, desired_distance)):
+    return 0.0
+  if d_rel <= 0.0:
+    return 0.0
+  closing_speed = max(-float(v_rel), 0.0)
+  speed_weight = float(np.interp(
+    closing_speed,
+    [LEAD_CLOSING_PREVIEW_MIN_SPEED, 2.0],
+    [0.0, 1.0],
+  ))
+  if speed_weight <= 0.0:
+    return 0.0
+  gap_surplus = max(float(d_rel) - max(float(desired_distance), 0.0), 0.0)
+  time_to_desired_gap = gap_surplus / closing_speed
+  time_weight = float(np.interp(
+    time_to_desired_gap,
+    [LEAD_CLOSING_PREVIEW_FULL_TIME, LEAD_CLOSING_PREVIEW_START_TIME],
+    [1.0, 0.0],
+  ))
+  return float(np.clip(speed_weight * time_weight, 0.0, 1.0))
+
+
+def lead_response_target_weight(
+  obstacle_relevance: float,
+  lead_acceleration: float,
+  closing_preview: float = 0.0,
+) -> float:
   """Start shedding acceleration before a braking lead becomes the MPC source.
 
   Track stability and moving-lead confidence are applied by the caller. This
-  preview only opens for a filtered negative lead acceleration, while the
-  selected response profile still controls its magnitude and jerk rate.
+  preview opens for a filtered negative lead acceleration or a fast approach
+  to the desired gap. The selected response profile still controls magnitude
+  and jerk rate while collision urgency remains low.
   """
   obstacle_relevance = float(np.clip(obstacle_relevance, 0.0, 1.0))
   if not np.isfinite(lead_acceleration):
@@ -261,7 +302,11 @@ def lead_response_target_weight(obstacle_relevance: float, lead_acceleration: fl
     [LEAD_DECEL_PREVIEW_START, LEAD_DECEL_PREVIEW_FULL],
     [0.0, 1.0],
   ))
-  return max(obstacle_relevance, decel_preview)
+  return max(
+    obstacle_relevance,
+    decel_preview,
+    float(np.clip(closing_preview, 0.0, 1.0)),
+  )
 
 
 def blend_lead_accel_reference(
@@ -447,6 +492,34 @@ def build_lead_accel_reference(
     2.5,
   )
 
+  # A lead may finish braking and report positive aLead while ego is still
+  # closing rapidly. aLead-only feed-forward would then release the brake (or
+  # even request acceleration) before the desired gap is recovered. Convert
+  # relative kinetic energy into a bounded approach-deceleration reference.
+  # It starts up to five seconds before the desired gap and is deliberately
+  # mode-shaped only while there is no collision urgency.
+  closing_preview = lead_closing_preview_weight(d_rel, v_rel, desired_distance)
+  if closing_preview > 0.0:
+    closing_speed = max(-v_rel, 0.0)
+    braking_distance = max(
+      max(gap_error, 0.0),
+      closing_speed * LEAD_CLOSING_DECEL_FLOOR_TIME,
+      3.0,
+    )
+    kinetic_decel = -(closing_speed ** 2) / (2.0 * braking_distance)
+    closing_gain = profile.far_decel_gain + control_blend * (1.0 - profile.far_decel_gain)
+    closing_limit = profile.closing_decel_limit + control_blend * (
+      LEAD_CLOSING_MAX_DECEL - profile.closing_decel_limit
+    )
+    closing_decel = max(-closing_limit, kinetic_decel * closing_gain)
+    closing_tau = float(np.clip(
+      closing_speed / max(-closing_decel, 0.1),
+      1.0,
+      8.0,
+    ))
+    closing_reference = closing_decel * np.exp(-np.asarray(time_indices) / closing_tau)
+    raw_reference = np.minimum(raw_reference, closing_reference)
+
   # Lead response is acceleration feed-forward, not a second speed target.
   # Taper its positive contribution as cruise-speed headroom closes so a far
   # lead cannot pull the ego vehicle above the driver's set speed. Negative
@@ -487,6 +560,9 @@ __all__ = (
   "LEAD_RESPONSE_CRUISE_TAPER_TIME",
   "LEAD_DECEL_PREVIEW_FULL",
   "LEAD_DECEL_PREVIEW_START",
+  "LEAD_CLOSING_PREVIEW_FULL_TIME",
+  "LEAD_CLOSING_PREVIEW_MIN_SPEED",
+  "LEAD_CLOSING_PREVIEW_START_TIME",
   "LEAD_RESPONSE_MIN_LEAD_SPEED",
   "LEAD_RESPONSE_MIN_TRACK_FRAMES",
   "LEAD_RESPONSE_SMOOTH",
@@ -501,6 +577,7 @@ __all__ = (
   "combine_lead_accel_references",
   "equal_lead_t_follow_adjustment",
   "lead_obstacle_relevance",
+  "lead_closing_preview_weight",
   "lead_response_confidence",
   "lead_response_mode_for_driving_mode",
   "lead_response_profile",

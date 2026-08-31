@@ -18,6 +18,7 @@ from openpilot.selfdrive.controls.lib.lead_response import (
   combine_braking_urgency_with_margin,
   combine_lead_accel_references,
   equal_lead_t_follow_adjustment,
+  lead_closing_preview_weight,
   lead_obstacle_relevance,
   lead_response_confidence,
   lead_response_mode_for_driving_mode,
@@ -157,7 +158,7 @@ def test_reference_is_rate_limited_from_previous_acceleration() -> None:
   assert sync.acceleration[0] == pytest.approx(-0.14)
 
 
-def test_gap_and_relative_speed_do_not_form_a_second_controller() -> None:
+def test_fast_closing_lead_requests_deceleration_after_alead_recovers() -> None:
   stationary_acceleration = reference(
     LEAD_RESPONSE_BALANCED,
     dRel=8.0,
@@ -167,7 +168,8 @@ def test_gap_and_relative_speed_do_not_form_a_second_controller() -> None:
   )
 
   assert stationary_acceleration is not None
-  assert np.all(stationary_acceleration.raw_acceleration == pytest.approx(0.0))
+  assert stationary_acceleration.raw_acceleration[0] < -1.0
+  assert stationary_acceleration.acceleration[0] < 0.0
 
 
 def test_closing_urgency_keeps_bounded_feedback_active_after_alead_recovers() -> None:
@@ -191,9 +193,40 @@ def test_closing_urgency_keeps_bounded_feedback_active_after_alead_recovers() ->
   )
 
   assert calm is not None and urgent is not None
-  assert np.all(calm.raw_acceleration == pytest.approx(0.0))
-  assert urgent.raw_acceleration[0] == pytest.approx(-0.25)
+  assert calm.raw_acceleration[0] < 0.0
+  assert urgent.raw_acceleration[0] < calm.raw_acceleration[0]
   assert urgent.acceleration[0] < 0.0
+
+
+def test_e4f_smooth_approach_does_not_release_braking_on_positive_alead() -> None:
+  # 00000e4f--6327e1ceba--2 at 50.29 s: the same lead was still being
+  # approached at 6 m/s, but aLeadK briefly became positive and the old FF
+  # changed from braking to acceleration.
+  incident = build_lead_accel_reference(
+    lead(dRel=43.94, vRel=-6.04, aLead=0.46, aLeadK=0.46),
+    mode=LEAD_RESPONSE_SMOOTH,
+    v_ego=14.87,
+    v_cruise=25.0,
+    desired_distance=43.36,
+    previous_acceleration=-0.15,
+    time_indices=TIME_INDICES,
+  )
+
+  assert incident is not None
+  assert incident.raw_acceleration[0] <= -0.65
+  assert incident.acceleration[0] < -0.15
+
+
+def test_closing_preview_starts_before_desired_gap_is_consumed() -> None:
+  # Same route at 48.04 s: 12.8 m of surplus remained, but at -6.14 m/s it
+  # would be consumed in about 2.1 seconds.
+  weight = lead_closing_preview_weight(58.22, -6.14, 45.40)
+  assert weight > 0.95
+  assert lead_response_target_weight(0.0, 0.5, weight) > 0.95
+
+
+def test_distant_slowly_converging_lead_does_not_open_closing_preview() -> None:
+  assert lead_closing_preview_weight(130.0, -3.0, 12.0) == pytest.approx(0.0)
 
 
 def test_emergency_jerk_rate_requires_braking_urgency() -> None:
