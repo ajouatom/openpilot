@@ -2563,6 +2563,46 @@ def test_stationary_corner_primary_handoff_becomes_and_remains_lead_two() -> Non
   assert retained is not None
 
 
+def test_stationary_corner_handoff_cannot_duplicate_primary() -> None:
+  primary = {
+    "status": True,
+    "radar": True,
+    "radarTrackId": 55,
+    "dRel": 38.0,
+    "yRel": 1.0,
+    "vRel": -7.7,
+    "vLead": -0.2,
+    "modelProb": 0.93,
+  }
+  corner_lead = {
+    "status": True,
+    "radar": True,
+    "radarTrackId": 5961,
+    "dRel": 35.8,
+    "yRel": 0.6,
+    "dPath": -0.2,
+    "vRel": -7.5,
+    "vLead": 0.0,
+    "modelProb": 0.93,
+  }
+  corner = DPathLeadCandidate(
+    lead=corner_lead,
+    source="corner180",
+    track_id=5961,
+    continuity_id=0,
+    retainable=True,
+    confirmed_cutin=False,
+    confirmed_stationary_shadow=True,
+  )
+
+  selection = DPathLeadTwoTracker().update(
+    0.3, primary, (corner,), v_ego=7.7,
+  )
+
+  assert lead_duplicates_primary(corner_lead, primary)
+  assert selection.lead_two is None
+
+
 def test_stationary_corner_primary_handoff_rejects_weak_or_reused_identity() -> None:
   base_lead = {
     "status": True,

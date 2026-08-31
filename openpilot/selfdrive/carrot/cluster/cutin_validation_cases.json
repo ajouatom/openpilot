@@ -67,6 +67,19 @@
       "scene": "Right-lane vehicle briefly appears to move inward, then its recent trajectory reverses and it remains outside; a stale CUT-IN or pre-deceleration hold must not resurface"
     },
     {
+      "id": "k8-2db-56-stopped-cross-sensor-duplicate-22",
+      "vehicle_folder": "KIA_K8_HEV_1ST_GEN b34d1abb87cce93b",
+      "log": "000002db--6b934dd8b1--56/rlog.zst",
+      "source": "front+corner",
+      "window": [20.50, 23.50],
+      "expected": "clear",
+      "human_verified": true,
+      "validation_stage": "lead_two",
+      "required_lead_one_ids": [55],
+      "forbidden_lead_two_ids": [5961],
+      "scene": "Front track 55 and corner track 5961 are the same stopped vehicle; the corner stationary hypothesis must not duplicate the configured front leadOne as leadTwo"
+    },
+    {
       "id": "k8-2db-56-stopped-motorcycle-leadone-35",
       "vehicle_folder": "KIA_K8_HEV_1ST_GEN b34d1abb87cce93b",
       "log": "000002db--6b934dd8b1--56/rlog.zst",
