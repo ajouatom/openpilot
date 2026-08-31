@@ -1,6 +1,6 @@
 import pytest
 
-from openpilot.selfdrive.carrot.t_follow import ramp_t_follow
+from openpilot.selfdrive.carrot.t_follow import get_t_follow_mode_factor, get_t_follow_mode_max, ramp_t_follow
 
 
 DT_MDL = 0.05
@@ -22,3 +22,23 @@ def test_gap_increase_is_faster_while_already_decelerating():
 
 def test_gap_reduction_remains_immediate():
   assert ramp_t_follow(1.1, 1.6, 0.0, DT_MDL) == pytest.approx(1.1)
+
+
+@pytest.mark.parametrize(
+  ("comfort_factor", "t_follow_factor"),
+  (
+    (0.9, 1.1),
+    (0.8, 1.2),
+    (1.0, 1.0),
+  ),
+)
+def test_comfort_mode_reduction_increases_t_follow(comfort_factor, t_follow_factor):
+  assert get_t_follow_mode_factor(comfort_factor) == pytest.approx(t_follow_factor)
+
+
+def test_safe_mode_increase_is_not_clipped_at_the_configured_normal_max():
+  assert get_t_follow_mode_max(1.6, 1.2, 0.0) == pytest.approx(1.92)
+
+
+def test_mode_and_deceleration_gap_increase_preserve_global_cap():
+  assert get_t_follow_mode_max(1.8, 1.2, 0.1) == pytest.approx(2.0)
