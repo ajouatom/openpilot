@@ -17,6 +17,7 @@ from openpilot.selfdrive.controls.lib.lead_response import (
   combine_lead_accel_references,
   lead_obstacle_relevance,
   lead_response_confidence,
+  lead_response_target_weight,
   rate_limit_lead_response_weight,
 )
 from openpilot.selfdrive.carrot.traffic_stop import get_traffic_stop_obstacle_distance
@@ -570,7 +571,8 @@ class LongitudinalMpc:
 
       target_weight = 0.0
       if confidence > 0.0 and mode == 'acc':
-        target_weight = lead_obstacle_relevance(lead_obstacle, cruise_obstacle, v_ego, T_IDXS)
+        obstacle_relevance = lead_obstacle_relevance(lead_obstacle, cruise_obstacle, v_ego, T_IDXS)
+        target_weight = lead_response_target_weight(obstacle_relevance, float(lead.aLeadK))
       self.lead_response_weights[index] = rate_limit_lead_response_weight(
         self.lead_response_weights[index], target_weight,
       )

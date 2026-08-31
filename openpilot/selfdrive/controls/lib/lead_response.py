@@ -28,6 +28,8 @@ LEAD_RESPONSE_WEIGHT_RELEASE = 0.20
 # acceleration is too noisy to improve the existing MPC stop trajectory.
 LEAD_RESPONSE_MIN_LEAD_SPEED = 2.0
 LEAD_SAFETY_JERK_FACTOR = 0.50
+LEAD_DECEL_PREVIEW_START = 0.30
+LEAD_DECEL_PREVIEW_FULL = 1.00
 
 
 @dataclass(frozen=True)
@@ -242,6 +244,22 @@ def rate_limit_lead_response_weight(previous: float, target: float) -> float:
   if target > previous:
     return min(target, previous + LEAD_RESPONSE_WEIGHT_ATTACK)
   return max(target, previous - LEAD_RESPONSE_WEIGHT_RELEASE)
+
+
+def lead_response_target_weight(obstacle_relevance: float, lead_acceleration: float) -> float:
+  """Start shedding acceleration before a braking lead becomes the MPC source.
+
+  Track stability and moving-lead confidence are applied by the caller. This
+  preview only opens for a filtered negative lead acceleration, while the
+  selected response profile still controls its magnitude and jerk rate.
+  """
+  obstacle_relevance = float(np.clip(obstacle_relevance, 0.0, 1.0))
+  decel_preview = float(np.interp(
+    max(-float(lead_acceleration), 0.0),
+    [LEAD_DECEL_PREVIEW_START, LEAD_DECEL_PREVIEW_FULL],
+    [0.0, 1.0],
+  ))
+  return max(obstacle_relevance, decel_preview)
 
 
 def blend_lead_accel_reference(
@@ -465,6 +483,8 @@ __all__ = (
   "LEAD_RESPONSE_BLEND_HORIZON",
   "LEAD_RESPONSE_CONFIRM_FRAMES",
   "LEAD_RESPONSE_CRUISE_TAPER_TIME",
+  "LEAD_DECEL_PREVIEW_FULL",
+  "LEAD_DECEL_PREVIEW_START",
   "LEAD_RESPONSE_MIN_LEAD_SPEED",
   "LEAD_RESPONSE_MIN_TRACK_FRAMES",
   "LEAD_RESPONSE_SMOOTH",
@@ -482,6 +502,7 @@ __all__ = (
   "lead_response_confidence",
   "lead_response_mode_for_driving_mode",
   "lead_response_profile",
+  "lead_response_target_weight",
   "lead_safety_jerk_factor",
   "rate_limit_lead_response_weight",
   "should_apply_lead_accel_reference",

@@ -21,6 +21,7 @@ from openpilot.selfdrive.controls.lib.lead_response import (
   lead_obstacle_relevance,
   lead_response_confidence,
   lead_response_mode_for_driving_mode,
+  lead_response_target_weight,
   lead_safety_jerk_factor,
   rate_limit_lead_response_weight,
   should_apply_lead_accel_reference,
@@ -329,6 +330,14 @@ def test_far_closing_lead_cannot_suppress_cruise_acceleration() -> None:
     np.ones_like(TIME_INDICES), far_lead.acceleration, weight,
   )
   assert np.all(blended == 1.0)
+
+
+def test_filtered_lead_deceleration_opens_early_preview_weight() -> None:
+  assert lead_response_target_weight(0.0, -0.2) == pytest.approx(0.0)
+  assert 0.0 < lead_response_target_weight(0.0, -0.6) < 1.0
+  assert lead_response_target_weight(0.0, -1.0) == pytest.approx(1.0)
+  assert lead_response_target_weight(0.7, 0.5) == pytest.approx(0.7)
+  assert lead_response_target_weight(0.7, -1.0) == pytest.approx(1.0)
 
 
 def test_lead_response_starts_on_second_frame_and_builds_confidence() -> None:
