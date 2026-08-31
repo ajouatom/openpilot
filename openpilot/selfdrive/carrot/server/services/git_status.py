@@ -100,6 +100,7 @@ async def _read_status() -> dict[str, Any]:
   if rc != 0 or inside.lower() != "true":
     return _error_state("not a git repository")
 
+  head = await _git_text(["rev-parse", "HEAD"])
   branch = await _git_text(["branch", "--show-current"])
   if not branch:
     branch = await _git_text(["rev-parse", "--short", "HEAD"])
@@ -122,6 +123,8 @@ async def _read_status() -> dict[str, Any]:
       "behind": 0,
       "ahead": 0,
       "branch": branch,
+      "head": head,
+      "target_head": "",
       "upstream": "",
       "remote": remote,
       "remote_branch": remote_branch,
@@ -137,6 +140,7 @@ async def _read_status() -> dict[str, Any]:
   parts = counts.split()
   ahead = int(parts[0]) if len(parts) > 0 and parts[0].isdigit() else 0
   behind = int(parts[1]) if len(parts) > 1 and parts[1].isdigit() else 0
+  target_head = await _git_text(["rev-parse", upstream])
 
   return {
     "available": fetch_rc == 0,
@@ -144,6 +148,8 @@ async def _read_status() -> dict[str, Any]:
     "behind": behind,
     "ahead": ahead,
     "branch": branch,
+    "head": head,
+    "target_head": target_head,
     "upstream": upstream,
     "remote": remote,
     "remote_branch": remote_branch,

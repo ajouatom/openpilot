@@ -4,6 +4,7 @@ import uuid
 
 from aiohttp import web
 
+from ...services.git_state import read_auto_update_state
 from ...services.git_status import get_git_status
 from . import jobs
 from .actions import validate_action
@@ -100,7 +101,7 @@ async def api_tools_git_status(request: web.Request) -> web.Response:
     for name in ("force", "refresh")
   )
   status = await get_git_status(force=force)
-  return web.json_response({"ok": True, **status})
+  return web.json_response({"ok": True, **status, "auto_update": read_auto_update_state()})
 
 
 def register(app: web.Application) -> None:

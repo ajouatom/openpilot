@@ -5,7 +5,7 @@ import os
 import re
 import time
 
-from .git_state import did_git_pull_update, write_git_pull_time
+from .git_state import read_auto_update_state, write_auto_update_event, write_git_pull_time
 from .git_status import REPO_DIR, clear_git_status_cache, get_git_status
 from .web_settings import read_web_settings
 
@@ -22,6 +22,8 @@ RESET_TIMEOUT = 120.0
 PULL_TIMEOUT = 180.0
 GIT_INFO_TIMEOUT = 10.0    # cheap rev-parse/log/diff lookups
 NOTIFY_TIMEOUT = 4.0       # CWP push POST (fire-and-forget)
+AUTO_UPDATE_ERROR_ALERT = "Offroad_CarrotAutoUpdateFailed"
+AUTO_UPDATE_ERROR_DETAIL_LIMIT = 2000
 
 AUTO_REBOOT_OFF = "off"
 AUTO_REBOOT_PARK = "park"
@@ -61,6 +63,16 @@ def _auto_reboot_mode() -> str:
   except Exception:
     return AUTO_REBOOT_OFF
   return mode if mode in AUTO_REBOOT_MODES else AUTO_REBOOT_OFF
+
+
+def _verified_update_target(status: dict) -> tuple[int, str]:
+  # A failed fetch can leave a stale remote-tracking ref that still reports
+  # `behind > 0`. Never use that stale count to start an automatic pull.
+  if not bool(status.get("available")) or status.get("state") != "ok":
+    return 0, ""
+  behind = max(0, int(status.get("behind") or 0))
+  target_head = str(status.get("target_head") or "").strip()
+  return (behind, target_head) if behind > 0 and target_head else (0, "")
 
 
 def _message_valid(sm, service: str) -> bool:
@@ -118,7 +130,29 @@ def _request_reboot() -> None:
   Params().put_bool("DoReboot", True)
 
 
-async def _wait_for_auto_reboot(initial_mode: str) -> None:
+def _short_error(output: str, fallback: str) -> str:
+  detail = " ".join(str(output or "").strip().split())
+  return (detail or fallback)[-AUTO_UPDATE_ERROR_DETAIL_LIMIT:]
+
+
+def _set_auto_update_alert(show: bool, detail: str = "") -> None:
+  try:
+    from openpilot.selfdrive.selfdrived.alertmanager import set_offroad_alert
+
+    set_offroad_alert(AUTO_UPDATE_ERROR_ALERT, show, extra_text=detail if show else None)
+  except Exception as exc:
+    print(f"[auto_update] offroad alert error: {exc}", flush=True)
+
+
+def _record_error(error_code: str, detail: str, *, blocked: bool = False, **fields) -> None:
+  error = _short_error(detail, error_code)
+  status = "reboot_blocked" if blocked else "error"
+  write_auto_update_event(status, error_code=error_code, error=error, **fields)
+  _set_auto_update_alert(True, error)
+  print(f"[auto_update] {status} code={error_code}: {error}", flush=True)
+
+
+async def _wait_for_auto_reboot(initial_mode: str, updated_head: str) -> None:
   # Create a dedicated SubMaster only while an actual update is pending, so
   # ordinary auto-update polling adds no continuous msgq workload.
   from openpilot.cereal import messaging
@@ -126,11 +160,23 @@ async def _wait_for_auto_reboot(initial_mode: str) -> None:
   sm = messaging.SubMaster(["carState", "selfdriveState", "deviceState"])
   mode = initial_mode
   condition = AutoRebootCondition(mode)
+  pending = write_auto_update_event(
+    "reboot_pending",
+    new_head=updated_head,
+    target_head=updated_head,
+    error_code="",
+    error="",
+    reboot_mode=mode,
+  )
+  if not pending:
+    _record_error("state_write_failed", "Unable to save automatic-update reboot state")
+    return
   print(f"[auto_update] reboot armed mode={mode}", flush=True)
 
   while True:
     selected_mode = _auto_reboot_mode()
     if selected_mode == AUTO_REBOOT_OFF:
+      write_auto_update_event("updated", new_head=updated_head, target_head=updated_head, reboot_mode=AUTO_REBOOT_OFF)
       print("[auto_update] reboot cancelled", flush=True)
       return
     if selected_mode != mode:
@@ -154,6 +200,30 @@ async def _wait_for_auto_reboot(initial_mode: str) -> None:
       device_state_valid=device_state_valid,
       device_started=device_started,
     ):
+      state = read_auto_update_state()
+      if state.get("reboot_requested_head") == updated_head:
+        _record_error(
+          "duplicate_reboot_blocked",
+          f"Automatic reboot for {updated_head[:12]} was already requested",
+          blocked=True,
+          new_head=updated_head,
+          target_head=updated_head,
+          reboot_requested_head=updated_head,
+          reboot_mode=mode,
+        )
+        return
+      requested = write_auto_update_event(
+        "reboot_requested",
+        new_head=updated_head,
+        target_head=updated_head,
+        error_code="",
+        error="",
+        reboot_requested_head=updated_head,
+        reboot_mode=mode,
+      )
+      if not requested:
+        _record_error("state_write_failed", "Unable to save automatic-update reboot request")
+        return
       print(f"[auto_update] reboot condition met mode={mode}", flush=True)
       _request_reboot()
       return
@@ -233,23 +303,129 @@ async def _notify_cwp(old_head: str) -> None:
   print(f"[auto_update] notify {'sent' if ok else 'failed'} commits={len(commits)} http={status}", flush=True)
 
 
-async def _run_git_pull() -> tuple[bool, bool]:
+async def _run_git_pull(target_head: str = "") -> tuple[bool, bool, str]:
+  previous = read_auto_update_state()
+  if target_head and previous.get("reboot_requested_head") == target_head:
+    if previous.get("status") != "reboot_blocked" or previous.get("target_head") != target_head:
+      _record_error(
+        "duplicate_reboot_blocked",
+        f"Automatic reboot for {target_head[:12]} was already requested",
+        blocked=True,
+        target_head=target_head,
+        reboot_requested_head=target_head,
+      )
+    return False, False, ""
+
   rc, old_head = await _git(["rev-parse", "HEAD"], GIT_INFO_TIMEOUT)
   old_head = old_head.strip() if rc == 0 else ""
-  # Same as the manual git pull button: hard reset then pull.
-  await _git(["reset", "--hard"], RESET_TIMEOUT)
-  rc, out = await _git(["pull"], PULL_TIMEOUT)
-  updated = rc == 0 and did_git_pull_update(out)
-  if updated:
-    try:
-      write_git_pull_time()
-    except Exception:
-      pass
-    try:
-      await _notify_cwp(old_head)
-    except Exception as exc:
-      print(f"[auto_update] notify skipped: {exc}", flush=True)
-  return rc == 0, updated
+  if not old_head:
+    _record_error("head_read_failed", "Unable to read the current Git HEAD", target_head=target_head)
+    return False, False, ""
+
+  attempted_at = int(time.time())
+  started = write_auto_update_event(
+    "pulling",
+    attempted_at=attempted_at,
+    old_head=old_head,
+    new_head="",
+    target_head=target_head,
+    reset_rc=None,
+    pull_rc=None,
+    error_code="",
+    error="",
+  )
+  if not started:
+    _record_error("state_write_failed", "Unable to save automatic-update attempt")
+    return False, False, ""
+
+  # Keep the existing hard-reset behavior, but never pull or reboot if it fails.
+  reset_rc, reset_out = await _git(["reset", "--hard"], RESET_TIMEOUT)
+  if reset_rc != 0:
+    _record_error(
+      "reset_failed",
+      reset_out,
+      attempted_at=attempted_at,
+      old_head=old_head,
+      target_head=target_head,
+      reset_rc=reset_rc,
+    )
+    return False, False, ""
+
+  # Automatic updates must be a clean fast-forward; never create a merge commit.
+  pull_rc, pull_out = await _git(["pull", "--ff-only"], PULL_TIMEOUT)
+  if pull_rc != 0:
+    _record_error(
+      "pull_failed",
+      pull_out,
+      attempted_at=attempted_at,
+      old_head=old_head,
+      target_head=target_head,
+      reset_rc=reset_rc,
+      pull_rc=pull_rc,
+    )
+    return False, False, ""
+
+  head_rc, new_head = await _git(["rev-parse", "HEAD"], GIT_INFO_TIMEOUT)
+  new_head = new_head.strip() if head_rc == 0 else ""
+  upstream_rc, upstream_head = await _git(["rev-parse", "@{u}"], GIT_INFO_TIMEOUT)
+  upstream_head = upstream_head.strip() if upstream_rc == 0 else ""
+  verified_target = upstream_head or target_head
+  common_fields = {
+    "attempted_at": attempted_at,
+    "old_head": old_head,
+    "new_head": new_head,
+    "target_head": verified_target,
+    "reset_rc": reset_rc,
+    "pull_rc": pull_rc,
+  }
+  if not new_head:
+    _record_error("head_read_failed", "Unable to verify Git HEAD after pull", **common_fields)
+    return False, False, ""
+  if not upstream_head:
+    _record_error("upstream_read_failed", "Unable to verify the upstream Git HEAD after pull", **common_fields)
+    return False, False, new_head
+  if new_head == old_head:
+    _record_error("head_unchanged", "git pull completed but HEAD did not change", **common_fields)
+    return True, False, new_head
+  if new_head != upstream_head:
+    _record_error(
+      "head_mismatch",
+      f"Pulled HEAD {new_head[:12]} does not match upstream {upstream_head[:12]}",
+      **common_fields,
+    )
+    return True, False, new_head
+
+  if previous.get("reboot_requested_head") == new_head:
+    write_git_pull_time()
+    _record_error(
+      "duplicate_reboot_blocked",
+      f"Automatic reboot for {new_head[:12]} was already requested",
+      blocked=True,
+      reboot_requested_head=new_head,
+      **common_fields,
+    )
+    return True, False, new_head
+
+  updated = write_auto_update_event(
+    "updated",
+    error_code="",
+    error="",
+    **common_fields,
+  )
+  if not updated:
+    _record_error("state_write_failed", "Unable to save the verified automatic update", **common_fields)
+    return True, False, new_head
+
+  _set_auto_update_alert(False)
+  try:
+    write_git_pull_time()
+  except Exception:
+    pass
+  try:
+    await _notify_cwp(old_head)
+  except Exception as exc:
+    print(f"[auto_update] notify skipped: {exc}", flush=True)
+  return True, True, new_head
 
 
 async def auto_update_loop(
@@ -264,20 +440,27 @@ async def auto_update_loop(
     try:
       if _auto_update_enabled():
         status = await get_git_status()
-        behind = int(status.get("behind") or 0)
+        behind, target_head = _verified_update_target(status)
         if behind > 0 and (time.time() - _last_pull_at) >= AUTO_UPDATE_COOLDOWN:
           print(f"[auto_update] behind {behind} commit(s) -> git pull")
           _last_pull_at = time.time()
-          ok, updated = await _run_git_pull()
+          ok, updated, new_head = await _run_git_pull(target_head)
           clear_git_status_cache()
           print(f"[auto_update] git pull {'ok' if ok else 'failed'}")
           mode = _auto_reboot_mode()
           if updated and mode != AUTO_REBOOT_OFF:
             try:
-              await _wait_for_auto_reboot(mode)
+              await _wait_for_auto_reboot(mode, new_head)
             except asyncio.CancelledError:
               raise
             except Exception as exc:
+              _record_error(
+                "reboot_monitor_failed",
+                str(exc),
+                new_head=new_head,
+                target_head=new_head,
+                reboot_mode=mode,
+              )
               print(f"[auto_update] reboot monitor error: {exc}", flush=True)
     except asyncio.CancelledError:
       raise
