@@ -45,6 +45,14 @@ def test_usbgpu_status_checks_firmware(tmp_path):
   assert usbgpu.usbgpu_status(True, False, False, False, tmp_path) == "firmware mismatch"
 
 
+def test_usbgpu_badge_state_prioritizes_failures_and_loading():
+  assert usbgpu.usbgpu_badge_state(False, False, False, False) == "not_compiled"
+  assert usbgpu.usbgpu_badge_state(True, False, False, False) == "ready"
+  assert usbgpu.usbgpu_badge_state(True, False, True, False) == "active"
+  assert usbgpu.usbgpu_badge_state(True, True, True, False) == "loading"
+  assert usbgpu.usbgpu_badge_state(True, True, True, True) == "error"
+
+
 def test_check_usbgpu_reports_pcie_and_success(monkeypatch, tmp_path):
   make_device(tmp_path)
 
