@@ -405,7 +405,6 @@
           "params": [
             "EnableRadarTracks",
             "EnableCornerRadar",
-            "CarrotRadarMode",
             "CarrotRadarCutInSensitivity"
           ]
         },
@@ -2524,13 +2523,13 @@
       "group": "레이더설정",
       "name": "CarrotRadarCutInSensitivity",
       "title": "당근레이더 컷인 민감도(3)",
-      "descr": "당근레이더모드 전용 끼어들기 감도입니다. 0: 끼어들기 사용 안 함, 1: 둔감, 2: 약간 둔감, 3: 보통(현재 기준), 4: 민감, 5: 아주 민감. 기존 레이더모드와 코너레이더활성화 설정에는 영향을 주지 않습니다. 변경 후 현재 주행을 끝내고 차량을 재시동하거나 기기를 재부팅해야 적용됩니다.",
+      "descr": "당근레이더의 끼어들기 감도입니다. 0: 끼어들기 사용 안 함, 1: 둔감, 2: 약간 둔감, 3: 보통(현재 기준), 4: 민감, 5: 아주 민감. 코너레이더활성화 설정에는 영향을 주지 않습니다. 변경 후 현재 주행을 끝내고 차량을 재시동하거나 기기를 재부팅해야 적용됩니다.",
       "egroup": "RADAR",
       "etitle": "Carrot Radar Cut-in Sensitivity(3)",
-      "edescr": "Cut-in sensitivity used only by Carrot Radar Mode. 0: disabled, 1: insensitive, 2: slightly insensitive, 3: normal (current behavior), 4: sensitive, 5: very sensitive. It does not affect conventional radar mode or the Enable Corner Radar setting. End the current drive, then restart the vehicle or reboot the device after changing this setting.",
+      "edescr": "Carrot Radar cut-in sensitivity. 0: disabled, 1: insensitive, 2: slightly insensitive, 3: normal (current behavior), 4: sensitive, 5: very sensitive. It does not affect the Enable Corner Radar setting. End the current drive, then restart the vehicle or reboot the device after changing this setting.",
       "cgroup": "雷达设置",
       "ctitle": "Carrot 雷达切入灵敏度(3)",
-      "cdescr": "仅用于 Carrot 雷达模式的切入灵敏度。0：禁用，1：迟钝，2：较迟钝，3：普通（当前标准），4：灵敏，5：非常灵敏。不会影响传统雷达模式或角雷达启用设置。更改后请结束当前行程，再重新启动车辆或重启设备才会生效。",
+      "cdescr": "Carrot 雷达的切入灵敏度。0：禁用，1：迟钝，2：较迟钝，3：普通（当前标准），4：灵敏，5：非常灵敏。不会影响角雷达启用设置。更改后请结束当前行程，再重新启动车辆或重启设备才会生效。",
       "min": 0,
       "max": 5,
       "default": 3,
@@ -2627,24 +2626,6 @@
       "max": 2,
       "default": 0,
       "unit": 1
-    },
-    {
-      "group": "레이더설정",
-      "name": "CarrotRadarMode",
-      "title": "당근레이더모드",
-      "descr": "켜면 전방·코너 레이더로 차량의 움직임을 계속 추적해 끼어드는 차량을 감지하고, 카메라 영상과 레이더 정보를 당근레이더만의 새로운 방식으로 맞춰 앞차를 선택합니다. 코너 레이더와 레이더 트랙 기능이 모두 없는 차량에서는 기존 방식과 동일하게 동작합니다. 차량의 가감속 동작이 달라질 수 있으므로 검증된 차량에서만 사용하세요. 변경 후 현재 주행을 끝내고 차량을 재시동하거나 기기를 재부팅해야 적용됩니다.",
-      "egroup": "RADAR",
-      "etitle": "Carrot Radar Mode",
-      "edescr": "When enabled, continuously tracks vehicles with the front and corner radars to detect cut-ins, then uses Carrot Radar's new method of matching camera and radar information to select the vehicle ahead. On vehicles with neither corner-radar nor radar-track support, it behaves the same as the existing mode. This can change acceleration and braking, so use it only on a validated vehicle. End the current drive, then restart the vehicle or reboot the device after changing this setting.",
-      "cgroup": "雷达设置",
-      "ctitle": "Carrot 雷达模式",
-      "cdescr": "开启后，持续使用前雷达和角雷达跟踪车辆运动以检测切入车辆，并通过 Carrot Radar 新的摄像头与雷达信息匹配方式选择前车。对于既不支持角雷达也不支持雷达轨迹的车辆，其工作方式与现有模式相同。此设置会改变车辆的加减速行为，仅限在已验证的车辆上使用。更改后请结束当前行程，再重新启动车辆或重启设备才会生效。",
-      "min": 0,
-      "max": 1,
-      "default": 0,
-      "unit": 1,
-      "control": "toggle",
-      "risk": "high"
     },
     {
       "group": "시작",

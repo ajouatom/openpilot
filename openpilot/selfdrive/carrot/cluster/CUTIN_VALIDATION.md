@@ -10,11 +10,10 @@ physical equations, select thresholds, or add scene-specific exceptions.
 
 ## Current architecture
 
-`RadarLeadModelMode` and the learned radar-lead/path-occupancy runtimes have
-been removed. `CarrotRadarMode=0` runs only
-`openpilot/selfdrive/controls/radard.py` and preserves its existing lead
-selection. `CarrotRadarMode=1` does not start or import that implementation. It
-runs only `openpilot/selfdrive/carrot/radar/radard_dpath.py`, first calculates
+`RadarLeadModelMode`, `CarrotRadarMode`, the learned radar-lead/path-occupancy
+runtimes, and the former `openpilot/selfdrive/controls/radard.py` implementation
+have been removed. The manager always starts the production `radard` process
+from `openpilot/selfdrive/carrot/radar/radard_dpath.py`. It first calculates
 the normal front/SCC vision-matched `leadOne` or a vision-seeded physically
 continuous stationary `leadOne`, then supplies `leadTwo` from either a
 different measured moving point already in the current path or a physically
@@ -125,8 +124,9 @@ The predictor:
    selected, still-measured, physically continuous leadTwo is protected from
    this occlusion until it transfers to leadOne or becomes physically invalid;
 6. uses corner motion only when the log has measured corner data, otherwise
-   `frontRadar` raw-track motion; SCC stays available to existing radard but is
-   not predictor input, and the source choice never switches per frame;
+   `frontRadar` raw-track motion; setting-permitted SCC remains available to
+   leadOne but is not CUT-IN predictor input, and the source choice never
+   switches per frame;
 7. treats `|vLead| < 3 km/h` as position-only and never builds or extrapolates
    motion history for those points;
 8. requires front-radar CUT-IN detection at `dRel >= 5 m`, prevents a newly
@@ -327,8 +327,8 @@ Outside every maintained window, it is stored in
 The slider writes both sensor values and the `T` processing mode to the
 user-local `carrotpilot/radar_validation.json`. `--prob` provides a one-run
 override for the selected sensor without replacing its saved value. Neither
-changes conventional radard, production Radar Motion's fixed 0.30 corner and
-0.67 front thresholds, physical equations, or stored labels.
+changes production Carrot Radar's fixed 0.30 corner and 0.67 front thresholds,
+physical equations, or stored labels.
 `--motion-mode normal|front` chooses the
 initial mode; `--front-only` is a compatibility alias for front mode. Manual
 seek-bar or L1/L2-graph navigation re-arms handled events at and after the new
