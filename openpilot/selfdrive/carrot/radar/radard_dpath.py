@@ -21,6 +21,7 @@ CORNER_RADAR_FLAGS = int(
   | HyundaiExtFlags.CORNER_RADAR_OBJECTS_180
   | HyundaiExtFlags.CORNER_RADAR_OBJECTS_430
 )
+PRODUCTION_CUT_IN_SENSITIVITY = 3
 EMPTY_LEAD = {
   "dRel": 0.0,
   "yRel": 0.0,
@@ -86,9 +87,7 @@ class DPathRadarD:
         params.get_int("EnableCornerRadar"),
       ),
       enable_radar_tracks=params.get_int("EnableRadarTracks"),
-      cut_in_sensitivity=params.get_int(
-        "CarrotRadarCutInSensitivity",
-      ),
+      cut_in_sensitivity=PRODUCTION_CUT_IN_SENSITIVITY,
       front_radar_measurement_delay_s=float(CP.radarDelay),
     )
     self.params = params

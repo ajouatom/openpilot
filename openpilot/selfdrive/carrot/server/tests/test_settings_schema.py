@@ -193,36 +193,21 @@ def test_cluster_camera_preference_is_in_brightness_and_view(settings, params):
   assert '{"ShowCameraWithCluster", {PERSISTENT, INT, "0"}}' in params_keys
 
 
-def test_carrot_radar_is_fixed_and_keeps_cutin_sensitivity(settings, params):
+def test_carrot_radar_is_fixed_without_mode_or_sensitivity(settings, params):
   by_name = {p["name"]: p for p in params}
-  assert "RadarLeadModelMode" not in by_name
-  assert "RadarDPathMode" not in by_name
-  assert "RadarMotionMode" not in by_name
-  assert "CarrotRadarMode" not in by_name
-  sensitivity = by_name["CarrotRadarCutInSensitivity"]
-  assert (
-    sensitivity["min"],
-    sensitivity["max"],
-    sensitivity["default"],
-  ) == (0, 5, 3)
-  assert sensitivity["control"] == "select"
-  assert sensitivity["risk"] == "high"
-  assert sensitivity["options"]["ko"] == [
-    "사용 안 함",
-    "둔감",
-    "약간 둔감",
-    "보통",
-    "민감",
-    "아주 민감",
-  ]
-  assert "당근레이더의 끼어들기 감도" in sensitivity["descr"]
-  assert "Carrot Radar cut-in sensitivity" in sensitivity["edescr"]
+  for removed_name in (
+    "RadarLeadModelMode",
+    "RadarDPathMode",
+    "RadarMotionMode",
+    "CarrotRadarMode",
+    "CarrotRadarCutInSensitivity",
+  ):
+    assert removed_name not in by_name
   vehicle = next(category for category in settings["menu"] if category["id"] == "VEHICLE")
   radar = next(group for group in vehicle["groups"] if group["id"] == "VEH_RADAR")
   assert radar["params"] == [
     "EnableRadarTracks",
     "EnableCornerRadar",
-    "CarrotRadarCutInSensitivity",
   ]
 
 
