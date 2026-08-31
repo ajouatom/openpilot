@@ -202,7 +202,7 @@ def test_cluster_autorun_waits_for_first_egpu_output_before_usb_display(monkeypa
 
   class FakeParams:
     def get_bool(self, name):
-      if name == cluster_autorun.USBGPU_EVER_PRESENT_PARAM:
+      if name == cluster_autorun.USBGPU_HARDWARE_SEEN_PARAM:
         return True
       return states[state_index[0]][name]
 
@@ -228,7 +228,7 @@ def test_cluster_autorun_skips_egpu_gate_for_unrelated_usb_display(monkeypatch):
 
   class FakeParams:
     def get_bool(self, name):
-      assert name == cluster_autorun.USBGPU_EVER_PRESENT_PARAM
+      assert name == cluster_autorun.USBGPU_HARDWARE_SEEN_PARAM
       return False
 
   monkeypatch.setattr(cluster_autorun, "_usbgpu_startup_expected", lambda: False)
@@ -247,7 +247,7 @@ def test_cluster_autorun_releases_usb_display_after_egpu_fallback(monkeypatch):
   class FakeParams:
     def get_bool(self, name):
       return {
-        cluster_autorun.USBGPU_EVER_PRESENT_PARAM: True,
+        cluster_autorun.USBGPU_HARDWARE_SEEN_PARAM: True,
         cluster_autorun.USBGPU_LOADING_PARAM: False,
         cluster_autorun.USBGPU_ACTIVE_PARAM: False,
         cluster_autorun.USBGPU_STARTUP_FAILED_PARAM: True,

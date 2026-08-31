@@ -34,7 +34,7 @@ USBGPU_STARTUP_TIMEOUT_S = 60.0
 USBGPU_STARTUP_POLL_S = 0.1
 USBGPU_DISPLAY_STABILIZE_S = 10.0
 USBGPU_DISPLAY_FPS = 5
-USBGPU_EVER_PRESENT_PARAM = "UsbGpuEverPresent"
+USBGPU_HARDWARE_SEEN_PARAM = "UsbGpuHardwareSeen"
 USBGPU_LOADING_PARAM = "UsbGpuLoading"
 USBGPU_ACTIVE_PARAM = "UsbGpuActive"
 USBGPU_STARTUP_FAILED_PARAM = "UsbGpuStartupFailed"
@@ -612,7 +612,7 @@ def _usbgpu_startup_expected() -> bool:
 
 def _wait_for_usbgpu_startup(params: Params) -> None:
     """Keep the shared USB display idle until initial eGPU transfers finish."""
-    remembered = params.get_bool(USBGPU_EVER_PRESENT_PARAM)
+    remembered = params.get_bool(USBGPU_HARDWARE_SEEN_PARAM)
     expected = _usbgpu_startup_expected()
     discovery_deadline = time.monotonic() + USBGPU_DISCOVERY_GRACE_S
     while remembered and not expected and time.monotonic() < discovery_deadline:

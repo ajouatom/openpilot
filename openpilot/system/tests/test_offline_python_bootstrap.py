@@ -185,9 +185,10 @@ def test_usbgpu_history_is_persistent_and_recorded() -> None:
   params = (Path(BASEDIR) / "openpilot/common/params_keys.h").read_text(encoding="utf-8")
   modeld = (Path(BASEDIR) / "openpilot/selfdrive/modeld/modeld.py").read_text(encoding="utf-8")
 
-  assert '{"UsbGpuEverPresent", {PERSISTENT, BOOL}}' in params
-  assert 'params.put_bool("UsbGpuEverPresent", True)' in modeld
-  assert 'params.put_bool_nonblocking("UsbGpuEverPresent", True)' in modeld
+  assert '{"UsbGpuHardwareSeen", {PERSISTENT, BOOL}}' in params
+  assert 'if _present or _compiled:' in modeld
+  assert 'params.put_bool("UsbGpuHardwareSeen", True)' in modeld
+  assert 'params.put_bool_nonblocking("UsbGpuHardwareSeen", True)' in modeld
 
 
 def test_model_revalidation_preserves_compiled_artifacts() -> None:
