@@ -287,8 +287,11 @@ function renderGitPullStatus(status = {}) {
 
   const behind = Math.max(0, Number(status.behind || 0));
   const state = String(status.state || "");
-  const hasError = Boolean(state && state !== "ok");
-  const hasUpdates = behind > 0;
+  const autoUpdate = status.auto_update || {};
+  const autoUpdateStatus = String(autoUpdate.status || "");
+  const hasAutoUpdateError = ["error", "reboot_blocked"].includes(autoUpdateStatus);
+  const hasError = Boolean(state && state !== "ok") || hasAutoUpdateError;
+  const hasUpdates = behind > 0 && !hasError;
   const label = hasUpdates ? (behind > 99 ? "99+" : String(behind)) : (hasError ? "X" : "✓");
   button.classList.toggle("has-updates", hasUpdates);
   button.classList.toggle("is-current", !hasUpdates && !hasError);
@@ -308,7 +311,7 @@ function renderGitPullStatus(status = {}) {
     const suffix = upstream ? ` (${upstream})` : "";
     button.title = `${behind} commits available${suffix}`;
   } else if (hasError) {
-    button.title = status.error || status.fetch_error || "git status unavailable";
+    button.title = autoUpdate.error || autoUpdate.error_code || status.error || status.fetch_error || "git status unavailable";
   } else {
     button.title = "Up to date";
   }

@@ -374,6 +374,7 @@ window.CarrotTranslations.register("ko", {
     web_auto_update_running: "자동 업데이트: git pull 실행 중입니다.",
     web_auto_update_done: "자동 업데이트가 완료되었습니다. 재부팅은 요청하지 않았습니다.",
     web_auto_update_failed: "자동 업데이트 실패",
+    web_auto_update_reboot_blocked: "자동 재부팅 차단됨",
     web_start_page: "시작 메뉴",
     web_start_page_desc: "접속할 때 처음 열 메뉴를 선택합니다.",
     web_start_page_last: "마지막 탭",
