@@ -3175,7 +3175,7 @@ initSettingOverflowObservers();
 
 // ── Live value refresh ──────────────────────────────────────────────
 // Parameters are not only written by this screen: the steering-wheel gap
-// button changes MyDrivingMode and LongitudinalPersonality directly from the
+// button changes LongitudinalDrivingMode and LongitudinalPersonality directly from the
 // driving process (car/cruise.py). Without a refresh the settings screen keeps
 // showing the cached value for the whole TTL, so the list can disagree with
 // the device — and, now, with the change history right below it.

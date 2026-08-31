@@ -283,8 +283,8 @@
                   "en": "Drive Mode",
                   "zh": "驾驶模式",
                   "params": [
-                    "MyDrivingMode",
-                    "MyDrivingModeAuto"
+                    "LongitudinalDrivingMode",
+                    "LongitudinalDrivingModeAuto"
                   ]
                 },
                 {
@@ -2848,7 +2848,7 @@
     },
     {
       "group": "가속설정",
-      "name": "MyDrivingMode",
+      "name": "LongitudinalDrivingMode",
       "title": "드라이브모드:(2)",
       "descr": "1: Smooth(가장 부드러운 선행차 반응, ComfortBrake/가속도 10% 감소)\n 2: Balanced(부드러움과 응답성의 균형)\n 3: Sync(선행차 가감속에 빠르게 동기화)\n 4: High(Sync 반응, 신호무시/가속도 20% 상승)",
       "egroup": "ACCEL",
@@ -2864,7 +2864,7 @@
     },
     {
       "group": "가속설정",
-      "name": "MyDrivingModeAuto",
+      "name": "LongitudinalDrivingModeAuto",
       "title": "드라이브모드: 자동",
       "descr": "0: 사용안함\n 1: Balanced ↔ Smooth(정체/정지 시 Smooth)\n 2: Sync ↔ Smooth(정체/정지 시 Smooth)\n 3: Sync ↔ Balanced(정체/정지 시 Balanced)",
       "egroup": "ACCEL",

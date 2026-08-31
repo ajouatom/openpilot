@@ -93,7 +93,7 @@ class CarrotPlanner:
 
     self.soft_hold_active = 0
     self.events = Events()
-    self.myDrivingMode = DrivingMode(self.params.get_int("MyDrivingMode"))
+    self.myDrivingMode = DrivingMode(self.params.get_int("LongitudinalDrivingMode"))
     self.myDrivingMode_last = self.myDrivingMode
     self.myDrivingMode_disable_auto = False
     self.mySmoothModeFactor = 0.9
@@ -151,12 +151,12 @@ class CarrotPlanner:
     self.frame += 1
     self.params_count += 1
     if self.params_count % 10 == 0:
-      myDrivingMode = DrivingMode(self.params.get_int("MyDrivingMode"))
+      myDrivingMode = DrivingMode(self.params.get_int("LongitudinalDrivingMode"))
       if myDrivingMode != self.myDrivingMode_last:
         self.myDrivingMode_disable_auto = True
       self.myDrivingMode_last = myDrivingMode
       
-      self.myDrivingModeAuto = self.params.get_int("MyDrivingModeAuto")
+      self.myDrivingModeAuto = self.params.get_int("LongitudinalDrivingModeAuto")
       if self.myDrivingModeAuto > 0 and not self.myDrivingMode_disable_auto:
         self.myDrivingMode = self.drivingModeDetector.get_mode(self.myDrivingModeAuto)
       else:

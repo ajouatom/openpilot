@@ -35,6 +35,20 @@ def test_the_catalogue_is_readable_and_populated(params):
   assert all(isinstance(p.get("name"), str) and p["name"] for p in params)
 
 
+def test_longitudinal_driving_mode_uses_fresh_safe_defaults(params):
+  by_name = {p["name"]: p for p in params}
+  assert by_name["LongitudinalDrivingMode"]["default"] == 2
+  assert by_name["LongitudinalDrivingModeAuto"]["default"] == 0
+  assert "MyDrivingMode" not in by_name
+  assert "MyDrivingModeAuto" not in by_name
+
+  params_keys = PARAMS_KEYS_PATH.read_text(encoding="utf-8")
+  assert '{"LongitudinalDrivingMode", {PERSISTENT, INT, "2"}}' in params_keys
+  assert '{"LongitudinalDrivingModeAuto", {PERSISTENT, INT, "0"}}' in params_keys
+  assert '{"MyDrivingMode",' not in params_keys
+  assert '{"MyDrivingModeAuto",' not in params_keys
+
+
 def test_c3x_lite_hardware_setting_is_exposed(settings, params):
   by_name = {p["name"]: p for p in params}
   c3x_lite = by_name["HardwareC3xLite"]

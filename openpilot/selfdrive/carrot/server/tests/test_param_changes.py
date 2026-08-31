@@ -216,7 +216,7 @@ def test_count_changes_since_respects_the_allowed_set(log_path, baseline_path):
 
 
 # --- drift detection -------------------------------------------------------
-# The driving code writes MyDrivingMode straight to Params, so those changes can
+# The driving code writes LongitudinalDrivingMode straight to Params, so those changes can
 # never reach append_param_change() on their own.
 
 @pytest.fixture(autouse=True)
@@ -227,16 +227,16 @@ def clean_baseline():
 
 
 def test_the_first_sighting_seeds_the_baseline_without_logging(log_path):
-  assert param_changes.observe_param_values({"MyDrivingMode": 1, "A": 2}) == 0
+  assert param_changes.observe_param_values({"LongitudinalDrivingMode": 1, "A": 2}) == 0
   assert param_changes.read_param_changes() == []
 
 
 def test_a_value_changed_outside_the_web_server_is_recorded(log_path):
-  param_changes.observe_param_values({"MyDrivingMode": 1})
-  assert param_changes.observe_param_values({"MyDrivingMode": 2}) == 1
+  param_changes.observe_param_values({"LongitudinalDrivingMode": 1})
+  assert param_changes.observe_param_values({"LongitudinalDrivingMode": 2}) == 1
 
   record = param_changes.read_param_changes()[0]
-  assert record["name"] == "MyDrivingMode"
+  assert record["name"] == "LongitudinalDrivingMode"
   assert record["prev"] == 1
   assert record["next"] == 2
   assert record["source"] == "device"

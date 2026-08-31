@@ -43,7 +43,7 @@ PARAM_CHANGE_SOURCES = frozenset({
   "intro",
   "undo",
   # Something outside the web server changed the value -- in practice the
-  # driving code, which writes MyDrivingMode and LongitudinalPersonality
+  # driving code, which writes LongitudinalDrivingMode and LongitudinalPersonality
   # straight to Params when the steering-wheel gap button is pressed. All we
   # can prove is "not us", so the label says exactly that.
   "device",
