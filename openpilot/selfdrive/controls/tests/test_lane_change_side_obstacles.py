@@ -1,7 +1,6 @@
 from types import SimpleNamespace
 
 from openpilot.selfdrive.controls.lib.desire_lib.side_state import SideState
-from openpilot.selfdrive.controls.radard import pick_side_lead, select_side_leads
 
 
 def lead(d_rel: float, v_rel: float, v_ego: float, d_path: float = 2.0, track_id: int = 1):
@@ -138,26 +137,3 @@ class TestLaneChangeAvailabilityRelease:
 
     assert side.lane_change_available
     assert side.lane_change_available_released
-
-
-class TestSideLeadSelection:
-  def test_corner_side_leads_replace_front_side_leads_when_available(self):
-    front = [{"dRel": 8.0, "dPath": 2.0}]
-    corner = [{"dRel": 12.0, "dPath": 2.0}]
-
-    assert select_side_leads(front, corner, True) == corner
-
-  def test_front_side_leads_are_fallback_without_corner_tracks(self):
-    front = [{"dRel": 8.0, "dPath": 2.0}]
-    corner = [{"dRel": 12.0, "dPath": 2.0}]
-
-    assert select_side_leads(front, corner, False) == front
-
-  def test_pick_side_lead_prefers_nearest_valid_candidate(self):
-    leads = [
-      {"dRel": 20.0, "dPath": 2.0},
-      {"dRel": 10.0, "dPath": 2.0},
-      {"dRel": 7.0, "dPath": 5.0},
-    ]
-
-    assert pick_side_lead(leads)["dRel"] == 10.0

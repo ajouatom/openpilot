@@ -8,7 +8,7 @@ from openpilot.common.realtime import Ratekeeper, DT_MDL
 from openpilot.selfdrive.controls.lib.longcontrol import LongCtrlState
 from openpilot.selfdrive.modeld.constants import ModelConstants
 from openpilot.selfdrive.controls.lib.longitudinal_planner import LongitudinalPlanner
-from openpilot.selfdrive.controls.radard import _LEAD_ACCEL_TAU
+from openpilot.selfdrive.controls.radar_constants import LEAD_ACCEL_TAU
 
 
 class Plant:
@@ -94,7 +94,7 @@ class Plant:
     lead.vLeadK = float(v_lead)
     lead.aLeadK = float(a_lead)
     # TODO use real radard logic for this
-    lead.aLeadTau = float(_LEAD_ACCEL_TAU)
+    lead.aLeadTau = float(LEAD_ACCEL_TAU)
     lead.status = status
     lead.modelProb = float(prob_lead)
     if not self.only_lead2:
