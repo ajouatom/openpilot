@@ -23,15 +23,6 @@ from openpilot.common.swaglog import cloudlog, add_file_handler
 from openpilot.system.version import get_build_metadata
 from openpilot.system.hardware.hw import Paths
 
-
-def migrate_legacy_carrot_radar_mode(params: Params) -> None:
-  legacy_value = params.get("RadarMotionMode")
-  if params.get("CarrotRadarMode") is None and legacy_value in (0, 1):
-    params.put("CarrotRadarMode", legacy_value)
-  if legacy_value is not None:
-    params.remove("RadarMotionMode")
-
-
 def set_default_params():
   params = Params()
   for k in params.all_keys():
@@ -74,7 +65,6 @@ def manager_init() -> None:
   build_metadata = get_build_metadata()
 
   params = Params()
-  migrate_legacy_carrot_radar_mode(params)
   params.clear_all(ParamKeyFlag.CLEAR_ON_MANAGER_START)
   params.clear_all(ParamKeyFlag.CLEAR_ON_ONROAD_TRANSITION)
   params.clear_all(ParamKeyFlag.CLEAR_ON_OFFROAD_TRANSITION)

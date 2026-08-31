@@ -8,7 +8,7 @@ from matplotlib.backends.backend_agg import FigureCanvasAgg
 from matplotlib.offsetbox import AnchoredOffsetbox, HPacker, TextArea
 
 from openpilot.common.transformations.camera import get_view_frame_from_calib_frame
-from openpilot.selfdrive.controls.radard import RADAR_TO_CAMERA
+from openpilot.selfdrive.controls.radar_constants import RADAR_TO_CAMERA
 
 
 RED = (255, 0, 0)
