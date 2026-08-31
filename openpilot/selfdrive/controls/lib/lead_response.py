@@ -39,7 +39,9 @@ LEAD_CLOSING_PREVIEW_MIN_SPEED = 0.5
 LEAD_CLOSING_DECEL_FLOOR_TIME = 1.5
 LEAD_CLOSING_NORMAL_GAIN = 0.40
 LEAD_CLOSING_NORMAL_DECEL_LIMIT = 1.0
+LEAD_CLOSING_ALEAD_GAIN = 0.70
 LEAD_CLOSING_ATTACK_JERK = 1.2
+LEAD_CLOSING_RELEASE_JERK = 1.0
 LEAD_CLOSING_MAX_DECEL = 4.0
 
 
@@ -519,7 +521,19 @@ def build_lead_accel_reference(
       8.0,
     ))
     closing_reference = closing_decel * np.exp(-np.asarray(time_indices) / closing_tau)
-    raw_reference = np.minimum(raw_reference, closing_reference)
+    closing_alead_gain = LEAD_CLOSING_ALEAD_GAIN + control_blend * (
+      1.0 - LEAD_CLOSING_ALEAD_GAIN
+    )
+    closing_alead_reference = closing_alead_gain * lead_acceleration
+    closing_raw_reference = np.clip(
+      np.minimum(closing_alead_reference, closing_reference),
+      -4.0,
+      2.5,
+    )
+    raw_reference = (
+      (1.0 - closing_preview) * raw_reference
+      + closing_preview * closing_raw_reference
+    )
 
   # Lead response is acceleration feed-forward, not a second speed target.
   # Taper its positive contribution as cruise-speed headroom closes so a far
@@ -532,9 +546,16 @@ def build_lead_accel_reference(
   # A modest gap deficit may increase how closely the reference matches the
   # lead, but it must not independently open an emergency jerk rate. Hard MPC
   # safety remains authoritative and exposes extra rate only through urgency.
-  normal_attack_jerk = LEAD_CLOSING_ATTACK_JERK if closing_preview > 0.0 else profile.attack_jerk
+  normal_attack_jerk = (
+    (1.0 - closing_preview) * profile.attack_jerk
+    + closing_preview * LEAD_CLOSING_ATTACK_JERK
+  )
   attack_jerk = normal_attack_jerk + urgency * (3.5 - normal_attack_jerk)
-  release_jerk = profile.release_jerk + urgency * (2.0 - profile.release_jerk)
+  normal_release_jerk = (
+    (1.0 - closing_preview) * profile.release_jerk
+    + closing_preview * LEAD_CLOSING_RELEASE_JERK
+  )
+  release_jerk = normal_release_jerk + urgency * (2.0 - normal_release_jerk)
   reference = _rate_limit_reference(
     raw_reference,
     previous_acceleration,

@@ -217,10 +217,11 @@ def test_e4f_smooth_approach_does_not_release_braking_on_positive_alead() -> Non
   assert incident.acceleration[0] < -0.15
 
 
-def test_fast_closing_guard_is_drive_mode_independent() -> None:
+@pytest.mark.parametrize("a_lead", (0.46, 0.0, -0.5, -2.0))
+def test_fast_closing_guard_is_drive_mode_independent(a_lead: float) -> None:
   references = [
     build_lead_accel_reference(
-      lead(dRel=43.94, vRel=-6.04, aLead=0.46, aLeadK=0.46),
+      lead(dRel=43.94, vRel=-6.04, aLead=a_lead, aLeadK=a_lead),
       mode=mode,
       v_ego=14.87,
       v_cruise=25.0,
@@ -247,6 +248,66 @@ def test_closing_preview_starts_before_desired_gap_is_consumed() -> None:
 
 def test_distant_slowly_converging_lead_does_not_open_closing_preview() -> None:
   assert lead_closing_preview_weight(130.0, -3.0, 12.0) == pytest.approx(0.0)
+
+
+def test_closing_preview_grows_continuously_as_desired_gap_approaches() -> None:
+  weights = [
+    lead_closing_preview_weight(15.0 + 2.0 * seconds, -2.0, 15.0)
+    for seconds in np.linspace(6.0, 0.0, 25)
+  ]
+  assert weights[0] == pytest.approx(0.0)
+  assert weights[-1] == pytest.approx(1.0)
+  adjacent = list(zip(weights[:-1], weights[1:], strict=True))
+  assert all(later >= earlier for earlier, later in adjacent)
+  assert max(later - earlier for earlier, later in adjacent) <= 0.1
+
+
+@pytest.mark.parametrize("urgency", (0.0, 0.3, 0.7, 1.0))
+def test_closing_guard_is_nonpositive_bounded_and_mode_independent_over_grid(urgency: float) -> None:
+  for gap_surplus in (0.0, 2.0, 8.0, 20.0):
+    for v_rel in (-0.6, -1.0, -2.0, -4.0, -8.0):
+      for a_lead in (-4.0, -1.0, 0.0, 1.0, 3.0):
+        desired_distance = 20.0
+        d_rel = desired_distance + gap_surplus
+        if lead_closing_preview_weight(d_rel, v_rel, desired_distance) < 0.999:
+          continue
+        references = [
+          build_lead_accel_reference(
+            lead(dRel=d_rel, vRel=v_rel, aLead=a_lead, aLeadK=a_lead),
+            mode=mode,
+            v_ego=15.0,
+            v_cruise=30.0,
+            desired_distance=desired_distance,
+            previous_acceleration=0.0,
+            time_indices=TIME_INDICES,
+            braking_urgency=urgency,
+          )
+          for mode in (LEAD_RESPONSE_SMOOTH, LEAD_RESPONSE_BALANCED, LEAD_RESPONSE_SYNC)
+        ]
+        assert all(item is not None for item in references)
+        assert np.all(references[0].raw_acceleration <= 0.0)
+        assert np.all(references[0].raw_acceleration >= -4.0)
+        for item in references[1:]:
+          assert item.raw_acceleration == pytest.approx(references[0].raw_acceleration)
+          assert item.acceleration == pytest.approx(references[0].acceleration)
+
+
+def test_closing_guard_transition_is_continuous_across_relative_speed_threshold() -> None:
+  raw_values = []
+  for v_rel in np.linspace(-0.45, -0.55, 41):
+    item = build_lead_accel_reference(
+      lead(dRel=15.0, vRel=v_rel, aLead=1.0, aLeadK=1.0),
+      mode=LEAD_RESPONSE_SMOOTH,
+      v_ego=10.0,
+      v_cruise=20.0,
+      desired_distance=15.0,
+      previous_acceleration=0.2,
+      time_indices=TIME_INDICES,
+    )
+    assert item is not None
+    raw_values.append(float(item.raw_acceleration[0]))
+
+  assert max(abs(later - earlier) for earlier, later in zip(raw_values[:-1], raw_values[1:], strict=True)) < 0.02
 
 
 def test_emergency_jerk_rate_requires_braking_urgency() -> None:
