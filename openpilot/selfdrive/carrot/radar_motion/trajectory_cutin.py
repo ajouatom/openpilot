@@ -58,6 +58,14 @@ PAIRED_OUTER_BODY_MIN_INWARD_PROGRESS_M = 0.15
 PAIRED_FAST_PASS_MIN_CLOSING_SPEED_MPS = 5.0
 PAIRED_FAST_PASS_MAX_TTC_S = 0.80
 PAIRED_FAST_PASS_MIN_HISTORY_S = 0.35
+PAIRED_REAR_PASS_MAX_INITIAL_DREL_M = 1.50
+PAIRED_REAR_PASS_MIN_PULL_AWAY_MPS = 0.50
+PAIRED_REAR_PASS_MAX_INWARD_PROGRESS_M = 0.35
+PAIRED_REAR_PASS_MAX_REPORTED_INWARD_MPS = 0.30
+PAIRED_PARALLEL_MIN_HISTORY_S = 0.75
+PAIRED_PARALLEL_MAX_ABS_VREL_MPS = 0.50
+PAIRED_PARALLEL_MAX_INWARD_PROGRESS_M = 0.25
+PAIRED_PARALLEL_MAX_REPORTED_INWARD_MPS = 0.20
 
 CUTIN_CONFIRMATION_S = 0.10
 CUTIN_CURRENT_OVERLAP_CONFIRMATION_S = 0.05
@@ -121,6 +129,8 @@ class TrajectoryCutInEstimate:
   predecel_risk: bool
   jittering: bool
   unstable_fast_motion: bool
+  rear_pass: bool
+  parallel_drift: bool
   front_history_supported: bool
   close_front_supported: bool
   curve_alias: bool
@@ -147,6 +157,7 @@ class _Observation:
 class _TrackState:
   continuity_id: int
   observations: deque[_Observation] = field(default_factory=deque)
+  minimum_d_rel: float = math.inf
   last_seen_s: float = -math.inf
   cutin_since_s: float | None = None
   cutin_until_s: float = -math.inf
@@ -156,6 +167,7 @@ class _TrackState:
   def reset(self, continuity_id: int) -> None:
     self.continuity_id = continuity_id
     self.observations.clear()
+    self.minimum_d_rel = math.inf
     self.cutin_since_s = None
     self.cutin_until_s = -math.inf
     self.risk_since_s = None
@@ -453,6 +465,7 @@ class TrajectoryCutInDetector:
         global_path_s=self._ego_distance + projection.path_s,
         d_path=projection.d_path,
       ))
+      state.minimum_d_rel = min(state.minimum_d_rel, point.d_rel)
       while (
         state.observations
         and time_s - state.observations[0].time_s > MAX_HISTORY_S
@@ -580,6 +593,27 @@ class TrajectoryCutInDetector:
         for value in state.observations
       )
       current_overlap = abs(projection.d_path) <= PATH_OVERLAP_HALF_WIDTH_M
+      close_born_rear_pass = (
+        point.source.startswith("corner")
+        and cross_sensor_supported
+        and not vision_supported
+        and not current_overlap
+        and state.minimum_d_rel <= PAIRED_REAR_PASS_MAX_INITIAL_DREL_M
+        and point.v_rel >= PAIRED_REAR_PASS_MIN_PULL_AWAY_MPS
+        and inward_progress < PAIRED_REAR_PASS_MAX_INWARD_PROGRESS_M
+        and reported_inward < PAIRED_REAR_PASS_MAX_REPORTED_INWARD_MPS
+      )
+      paired_parallel_drift = (
+        point.source.startswith("corner")
+        and cross_sensor_supported
+        and not vision_supported
+        and not current_overlap
+        and history_s >= PAIRED_PARALLEL_MIN_HISTORY_S
+        and abs(point.v_rel) <= PAIRED_PARALLEL_MAX_ABS_VREL_MPS
+        and inward_progress < PAIRED_PARALLEL_MAX_INWARD_PROGRESS_M
+        and reported_inward < PAIRED_PARALLEL_MAX_REPORTED_INWARD_MPS
+      )
+      non_cutin_side_motion = close_born_rear_pass or paired_parallel_drift
       front_overlap_half_width = (
         2.15 if point.d_rel <= 20.0 else PATH_OVERLAP_HALF_WIDTH_M
       )
@@ -866,7 +900,7 @@ class TrajectoryCutInDetector:
           )
         )
       )
-      raw_cutin = common_ok and (
+      raw_cutin = common_ok and not non_cutin_side_motion and (
         front_entry
         if point.source == "frontRadar"
         else corner_entry or paired_close_entry or close_direct_entry
@@ -900,7 +934,12 @@ class TrajectoryCutInDetector:
         and not vision_supported
         and not cross_sensor_supported
       )
-      if trajectory_reversed or curve_alias or not front_curve_motion_supported:
+      if (
+        trajectory_reversed
+        or non_cutin_side_motion
+        or curve_alias
+        or not front_curve_motion_supported
+      ):
         # A hold bridges brief radar jitter, but must not resurrect a candidate
         # whose recent physical motion has clearly stopped or reversed.
         state.cutin_until_s = -math.inf
@@ -953,6 +992,7 @@ class TrajectoryCutInDetector:
 
       raw_risk = (
         common_ok
+        and not non_cutin_side_motion
         and 2.0 < point.d_rel <= 45.0
         and point.v_rel <= -0.5
         and time_to_overlap_s is not None
@@ -1011,6 +1051,8 @@ class TrajectoryCutInDetector:
       reason = (
         "confirmed trajectory CUT-IN" if confirmed_cutin
         else "trajectory pre-deceleration" if predecel_risk
+        else "close-born rear pass" if close_born_rear_pass
+        else "parallel side drift" if paired_parallel_drift
         else "uncorroborated close front" if not close_front_supported
         else "corner lateral jitter" if jittering
         else "current path" if current_path
@@ -1051,6 +1093,8 @@ class TrajectoryCutInDetector:
         predecel_risk=predecel_risk,
         jittering=jittering,
         unstable_fast_motion=unstable_fast_lateral_motion,
+        rear_pass=close_born_rear_pass,
+        parallel_drift=paired_parallel_drift,
         front_history_supported=front_history_supported,
         close_front_supported=close_front_supported,
         curve_alias=curve_alias,
