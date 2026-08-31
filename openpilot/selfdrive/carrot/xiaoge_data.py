@@ -29,9 +29,9 @@ from PIL import Image
 from openpilot.cereal import car
 from openpilot.common.params import Params
 from openpilot.common.realtime import Ratekeeper
+from openpilot.selfdrive.carrot.xiaoge_lane import parse_xiaoge_udp_payload
 
 
-HTTP_HOST = "0.0.0.0"
 HTTP_PORT = 8888
 UDP_HOST = "0.0.0.0"
 UDP_PORT = 4213
@@ -241,26 +241,16 @@ class XiaogeDataBroadcaster:
             raise ValueError(f"short Y plane: {data.size} < {height * stride}")
 
         y_plane = data[:height * stride].reshape(height, stride)[:, :width]
-        scale = max(TARGET_WIDTH / width, TARGET_HEIGHT / height)
-        step = max(1, int(1 / scale))
-        y_downsampled = y_plane[0:height:step, 0:width:step]
-
-        if y_downsampled.shape[0] < TARGET_HEIGHT or y_downsampled.shape[1] < TARGET_WIDTH:
-            resize_scale = max(TARGET_WIDTH / y_downsampled.shape[1], TARGET_HEIGHT / y_downsampled.shape[0])
-            resized_width = max(TARGET_WIDTH, round(y_downsampled.shape[1] * resize_scale))
-            resized_height = max(TARGET_HEIGHT, round(y_downsampled.shape[0] * resize_scale))
-            y_downsampled = np.asarray(
-                Image.fromarray(y_downsampled).resize((resized_width, resized_height), Image.Resampling.BILINEAR)
-            )
-
-        start_x = (y_downsampled.shape[1] - TARGET_WIDTH) // 2
-        start_y = (y_downsampled.shape[0] - TARGET_HEIGHT) // 2
-        y_crop = np.ascontiguousarray(
-            y_downsampled[start_y:start_y + TARGET_HEIGHT, start_x:start_x + TARGET_WIDTH]
-        )
+        crop_size = min(width, height)
+        start_x = (width - crop_size) // 2
+        start_y = (height - crop_size) // 2
+        y_crop = np.ascontiguousarray(y_plane[start_y:start_y + crop_size, start_x:start_x + crop_size])
 
         output = BytesIO()
-        Image.fromarray(y_crop).save(output, "JPEG", quality=JPEG_QUALITY)
+        image = Image.fromarray(y_crop)
+        if image.size != (TARGET_WIDTH, TARGET_HEIGHT):
+            image = image.resize((TARGET_WIDTH, TARGET_HEIGHT), Image.Resampling.BILINEAR)
+        image.save(output, "JPEG", quality=JPEG_QUALITY)
         return output.getvalue()
 
     @staticmethod
@@ -366,9 +356,9 @@ class XiaogeDataBroadcaster:
 
         server = None
         try:
-            server = LaneHttpServer((HTTP_HOST, HTTP_PORT), LaneHttpHandler)
+            server = LaneHttpServer((self.device_ip, HTTP_PORT), LaneHttpHandler)
             self.http_server = server
-            print(f"[lane-image] HTTP listening on {HTTP_HOST}:{HTTP_PORT}")
+            print(f"[lane-image] HTTP listening on {self.device_ip}:{HTTP_PORT}")
             server.serve_forever(poll_interval=0.2)
         except OSError as error:
             print(f"[lane-image] HTTP server error: {error}")
@@ -394,19 +384,10 @@ class XiaogeDataBroadcaster:
                     continue
 
                 try:
-                    obj = json.loads(data.decode("utf-8"))
-                    if not isinstance(obj, dict) or obj.get("resp") != "lane":
-                        continue
-                    left_lane = int(obj.get("left_lane", -1))
-                    right_lane = int(obj.get("right_lane", -1))
+                    left_lane, right_lane = parse_xiaoge_udp_payload(data)
                 except (UnicodeDecodeError, json.JSONDecodeError, TypeError, ValueError) as error:
                     print(f"[lane-udp] invalid result from {addr[0]}:{addr[1]}: {error}")
                     continue
-
-                if left_lane not in (-1, 0, 1):
-                    left_lane = -1
-                if right_lane not in (-1, 0, 1):
-                    right_lane = -1
 
                 result = {
                     "left_lane": left_lane,
@@ -585,7 +566,7 @@ class XiaogeDataBroadcaster:
 
                     lane_result = self.lane_result_snapshot()
                     self.publish_lane_result(lane_result)
-                    if lane_result["valid"]:
+                    if lane_result["active"]:
                         data['laneResult'] = lane_result
 
                     if data:

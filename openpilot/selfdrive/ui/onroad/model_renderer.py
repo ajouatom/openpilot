@@ -979,14 +979,12 @@ class ModelRenderer(Widget):
         continue
 
       lane_code = left_lane_line if i == 1 else right_lane_line if i == 2 else None
-      if lane_code is not None and lane_code < 0:
-        lane_vertices.append([])
-        continue
-
       line_width = 0.025
       if i == 1 and left_lane_line >= 20:
         line_width = 0.05
-      is_dashed = lane_code is not None and lane_code % 10 == 0
+      # Negative means the vehicle has no lane-type classification. Keep the
+      # high-confidence model geometry visible and use the legacy solid style.
+      is_dashed = lane_code is not None and lane_code >= 0 and lane_code % 10 == 0
       line_segments = lane_dash_segments(lane_line.raw_points, max_distance) if is_dashed else [lane_line.raw_points]
       projected_segments = []
       for line_segment in line_segments:

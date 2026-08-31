@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-import json
 import os
 import time
 import threading
@@ -24,9 +23,13 @@ from openpilot.selfdrive.car.card_diagnostics import should_log_card_diagnostics
 from openpilot.selfdrive.car.cruise import VCruiseCarrot
 from openpilot.selfdrive.car.car_specific import MockCarState
 from openpilot.selfdrive.car.openpilot_toggle import CruiseMainOpenpilotToggle
+from openpilot.selfdrive.carrot.xiaoge_lane import (
+  XiaogeLaneResult,
+  apply_xiaoge_lane_result,
+  parse_xiaoge_lane_payload,
+)
 
 REPLAY = "REPLAY" in os.environ
-XIAOGE_LANE_TIMEOUT_NS = 3_000_000_000
 XIAOGE_LANE_ERROR_LOG_INTERVAL_NS = 5_000_000_000
 
 EventName = log.OnroadEvent.EventName
@@ -34,39 +37,6 @@ ButtonType = car.CarState.ButtonEvent.Type
 
 # forward
 carlog.addHandler(ForwardingHandler(cloudlog))
-
-
-def parse_xiaoge_lane_payload(payload: bytes) -> tuple[int, int, bool, int]:
-  data = json.loads(payload)
-  if not isinstance(data, dict) or data.get("type") != "lane":
-    raise ValueError("expected a lane object")
-
-  left_lane = data.get("leftLine")
-  right_lane = data.get("rightLine")
-  line_valid = data.get("lineValid")
-  received_nanos = data.get("receivedMonoTimeNanos")
-  if (isinstance(left_lane, bool) or not isinstance(left_lane, int) or left_lane not in (-1, 0, 1) or
-      isinstance(right_lane, bool) or not isinstance(right_lane, int) or right_lane not in (-1, 0, 1)):
-    raise ValueError("leftLine/rightLine must be -1, 0, or 1")
-  if not isinstance(line_valid, bool):
-    raise ValueError("lineValid must be a boolean")
-  if isinstance(received_nanos, bool) or not isinstance(received_nanos, int) or received_nanos < 0:
-    raise ValueError("receivedMonoTimeNanos must be a non-negative integer")
-  return left_lane, right_lane, line_valid, received_nanos
-
-
-def apply_xiaoge_lane_result(CS: car.CarState, lane_result: tuple[int, int, bool, int] | None, now_nanos: int) -> bool:
-  if lane_result is None:
-    return False
-
-  left_lane, right_lane, line_valid, received_nanos = lane_result
-  age_nanos = now_nanos - received_nanos
-  if not line_valid or received_nanos == 0 or age_nanos < 0 or age_nanos > XIAOGE_LANE_TIMEOUT_NS:
-    return False
-
-  CS.leftLaneLine = left_lane
-  CS.rightLaneLine = right_lane
-  return True
 
 
 def obd_callback(params: Params) -> ObdCallback:
@@ -211,7 +181,7 @@ class Car:
     self.card_diag_slow_loop = 0
     self.card_diag_slow_process = 0
     self.card_diag_can_timeouts = 0
-    self.xiaoge_lane_result: tuple[int, int, bool, int] | None = None
+    self.xiaoge_lane_result: XiaogeLaneResult | None = None
     self.xiaoge_lane_error_log_at_ns = 0
     self.card_diag_stage_names = ('decode', 'ci_update', 'sm_update', 'radar', 'state_tail',
                                   'state_total', 'publish', 'apply', 'sendcan', 'total')
@@ -249,7 +219,7 @@ class Car:
     if self.sm.updated['customReservedRawData0']:
       try:
         self.xiaoge_lane_result = parse_xiaoge_lane_payload(bytes(self.sm['customReservedRawData0']))
-      except (UnicodeDecodeError, json.JSONDecodeError, TypeError, ValueError) as error:
+      except (UnicodeDecodeError, ValueError, TypeError) as error:
         self.xiaoge_lane_result = None
         if sm_done_ns - self.xiaoge_lane_error_log_at_ns >= XIAOGE_LANE_ERROR_LOG_INTERVAL_NS:
           cloudlog.warning(f"invalid Xiaoge lane payload: {error}")
