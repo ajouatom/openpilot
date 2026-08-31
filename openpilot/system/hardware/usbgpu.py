@@ -191,7 +191,10 @@ def check_usbgpu(devices_path: Path = USB_DEVICES_PATH, timeout: float = 15.0,
     return "firmware mismatch"
   link_errors = device.link_error_count
 
-  env = {**os.environ, "DEV": "USB+AMD:LLVM", "GMMU": "0", "PYTHONPATH": os.path.join(BASEDIR, "tinygrad_repo")}
+  pythonpath = [os.path.join(BASEDIR, "tinygrad_repo"), BASEDIR]
+  if inherited_pythonpath := os.environ.get("PYTHONPATH"):
+    pythonpath.append(inherited_pythonpath)
+  env = {**os.environ, "DEV": "USB+AMD:LLVM", "GMMU": "0", "PYTHONPATH": os.pathsep.join(pythonpath)}
   code = "from tinygrad import Tensor; x = Tensor.rand(1 << 20).realize(); [x.numpy() for _ in range(8)]"
   for attempt in range(USBGPU_CHECK_ATTEMPTS):
     try:

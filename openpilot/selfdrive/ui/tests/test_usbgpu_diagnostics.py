@@ -80,6 +80,22 @@ def test_check_usbgpu_retries_in_fresh_process(monkeypatch, tmp_path):
   assert sleeps == [usbgpu.USBGPU_CHECK_RETRY_INTERVAL]
 
 
+def test_check_usbgpu_preserves_required_python_paths(monkeypatch, tmp_path):
+  make_device(tmp_path)
+  captured_env = {}
+
+  def run(*_args, **kwargs):
+    captured_env.update(kwargs["env"])
+    return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+  monkeypatch.setenv("PYTHONPATH", "existing-pythonpath")
+  monkeypatch.setattr(usbgpu.subprocess, "run", run)
+
+  assert usbgpu.check_usbgpu(tmp_path) is None
+  pythonpath = captured_env["PYTHONPATH"].split(usbgpu.os.pathsep)
+  assert pythonpath == [usbgpu.os.path.join(usbgpu.BASEDIR, "tinygrad_repo"), usbgpu.BASEDIR, "existing-pythonpath"]
+
+
 def test_check_usbgpu_power_uses_firmware_rail_status(monkeypatch, tmp_path):
   make_device(tmp_path)
 

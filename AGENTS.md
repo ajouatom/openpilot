@@ -10,6 +10,9 @@
   branch whose name starts with `carrot-egpu`. Preserve each experimental branch's intentionally
   different model selection or payload unless the user explicitly asks to change it. Stop
   mirroring only branches that have been removed from the remote.
+- Keep both `<BASEDIR>/tinygrad_repo` and `<BASEDIR>` on `PYTHONPATH` for standalone eGPU tinygrad
+  probes: the USB runtime imports `openpilot.common.usbgpu_bus_lock`, and dropping the repository
+  root makes the readiness check misreport an import failure as `GPU incompatible`.
 - Navigation deceleration behavior for the `origin/thftgr/navi-stream` branch is documented in
   `docs/carrot_navi_7713_7714_deceleration.md`.
 - The 7714-only control comparison between `origin/carrot-wip` and `origin/thftgr/navi-stream` is
