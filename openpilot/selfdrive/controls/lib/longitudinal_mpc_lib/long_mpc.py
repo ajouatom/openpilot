@@ -243,7 +243,6 @@ class LongitudinalMpc:
     self.solver = AcadosOcpSolverCython(MODEL_NAME, ACADOS_SOLVER_TYPE, N)
 
     self.a_change_cost = A_CHANGE_COST
-    self.j_lead = 0.0
 
     self.reset()
     self.source = SOURCES[2]
@@ -337,16 +336,14 @@ class LongitudinalMpc:
         self.solver.set(i, 'x', self.x0)
 
   @staticmethod
-  def extrapolate_lead(x_lead, v_lead, a_lead, a_lead_tau, j_lead):
-    j_lead_tau = np.interp(j_lead, [-2.0, 0.0, 2.0], [0.2, 2.0, 0.1]) # tau: 2: 2sec, 1: 4sec, 0.5: 10sec
-    j_lead_traj = j_lead * np.exp(-j_lead_tau * (T_IDXS**2)/2.)
-    a_lead_traj = a_lead * np.exp(-a_lead_tau * (T_IDXS**2)/2.) + j_lead_traj
+  def extrapolate_lead(x_lead, v_lead, a_lead, a_lead_tau):
+    a_lead_traj = a_lead * np.exp(-a_lead_tau * (T_IDXS**2)/2.)
     v_lead_traj = np.clip(v_lead + np.cumsum(T_DIFFS * a_lead_traj), 0.0, 1e8)
     x_lead_traj = x_lead + np.cumsum(T_DIFFS * v_lead_traj)
     lead_xv = np.column_stack((x_lead_traj, v_lead_traj))
     return lead_xv
 
-  def process_lead(self, lead, j_lead):
+  def process_lead(self, lead):
     v_ego = self.x0[1]
     if lead is not None and lead.status:
       x_lead = lead.dRel
@@ -367,12 +364,7 @@ class LongitudinalMpc:
     v_lead = np.clip(v_lead, 0.0, 1e8)
     a_lead = np.clip(a_lead, -10., 5.)
 
-    if a_lead < -2.0 and j_lead > 0.5:
-      a_lead = a_lead + j_lead
-      a_lead = min(a_lead, -0.5)
-      a_lead_tau = max(a_lead_tau, 1.5)
-
-    lead_xv = self.extrapolate_lead(x_lead, v_lead, a_lead, a_lead_tau, j_lead)
+    lead_xv = self.extrapolate_lead(x_lead, v_lead, a_lead, a_lead_tau)
     return lead_xv, v_lead
 
   def set_accel_limits(self, min_a, max_a):
@@ -387,14 +379,8 @@ class LongitudinalMpc:
     t_follow = carrot.get_T_FOLLOW(personality, v_ego, a_ego)
     self.status = radarstate.leadOne.status or radarstate.leadTwo.status
 
-    if radarstate.leadOne.status:
-      j_lead = radarstate.leadOne.jLead
-      self.j_lead = j_lead * 0.1 + self.j_lead * 0.9
-    else:
-      self.j_lead = 0.0
-
-    lead_xv_0, lead_v_0 = self.process_lead(radarstate.leadOne, np.clip(self.j_lead * carrot.j_lead_factor, -1.0, 1.0))
-    lead_xv_1, _ = self.process_lead(radarstate.leadTwo, 0.0)
+    lead_xv_0, lead_v_0 = self.process_lead(radarstate.leadOne)
+    lead_xv_1, _ = self.process_lead(radarstate.leadTwo)
 
     mode = self.mode
     comfort_brake = carrot.comfort_brake

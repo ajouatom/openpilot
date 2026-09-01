@@ -40,7 +40,6 @@ def main():
   lateral_planner = LateralPlanner(CP, debug=False)
   fast_radar = FastRadarOverlay(
     front_radar_delay_s=float(CP.radarDelay),
-    radar_reaction_factor=params.get_float("RadarReactionFactor") * 0.01,
   )
 
   pm = messaging.PubMaster(['longitudinalPlan', 'driverAssistance', 'lateralPlan'])

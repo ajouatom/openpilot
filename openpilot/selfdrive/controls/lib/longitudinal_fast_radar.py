@@ -82,10 +82,8 @@ class FastRadarOverlay:
   def __init__(
     self,
     front_radar_delay_s: float,
-    radar_reaction_factor: float = 1.0,
   ) -> None:
     self.front_radar_delay_s = max(0.0, float(front_radar_delay_s))
-    self.radar_reaction_factor = max(0.0, float(radar_reaction_factor))
     self._selections = {
       "leadOne": _Selection(),
       "leadTwo": _Selection(),
@@ -161,10 +159,10 @@ class FastRadarOverlay:
     a_lead = float(point.aLead)
     j_lead = float(point.jLead)
     if (
-      abs(a_lead) < 0.5 * self.radar_reaction_factor
+      abs(a_lead) < 0.5
       and abs(j_lead) < 0.5
     ):
-      tau = LEAD_ACCEL_TAU_S * self.radar_reaction_factor
+      tau = LEAD_ACCEL_TAU_S
     else:
       tau *= 1.0 - LEAD_ACCEL_FILTER_ALPHA
     self._a_lead_tau[track_id] = max(0.0, float(tau))
