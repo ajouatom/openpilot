@@ -292,6 +292,7 @@ class DPathRadarOutput:
   leads_center: tuple[dict[str, Any], ...]
   leads_right: tuple[dict[str, Any], ...]
   leads_cutin: tuple[dict[str, Any], ...]
+  leads_cutin_path: tuple[dict[str, Any], ...]
   leads_left2: tuple[dict[str, Any], ...]
   leads_right2: tuple[dict[str, Any], ...]
   lead_cutin_risk: dict[str, Any] | None
@@ -560,7 +561,7 @@ class DPathRadarController:
       self.lead_dynamics.reset()
       self.trajectory_cutin.reset()
       return DPathRadarOutput(
-        None, None, None, None, (), (), (), (), (), (), None,
+        None, None, None, None, (), (), (), (), (), (), (), None,
       )
 
     points = self._points_at_model_time(
@@ -667,6 +668,7 @@ class DPathRadarController:
     active_identity = self.lead_two_tracker.active_identity
     candidates: list[DPathLeadCandidate] = []
     confirmed_cutin_leads: list[dict[str, Any]] = []
+    path_cutin_leads: list[dict[str, Any]] = []
     risk_leads: list[dict[str, Any]] = []
     self._same_row_suppressed_until = {
       identity: until_s
@@ -705,6 +707,14 @@ class DPathRadarController:
       identity = (
         candidate_source, candidate_track_id, candidate_continuity_id,
       )
+      if (
+        self.cut_in_sensitivity > 0
+        and estimate.confirmed_cutin
+        and estimate.current_path
+      ):
+        # Audible CUT-IN confirmation follows physical path occupancy, even
+        # when the object simultaneously becomes leadOne or leadTwo.
+        path_cutin_leads.append(lead)
       same_primary_row_without_vision = (
         estimate.cross_sensor_supported
         and not estimate.vision_supported
@@ -962,6 +972,10 @@ class DPathRadarController:
       leads_right=leads_right,
       leads_cutin=tuple(sorted(
         confirmed_cutin_leads,
+        key=lambda lead: float(lead["dRel"]),
+      )),
+      leads_cutin_path=tuple(sorted(
+        path_cutin_leads,
         key=lambda lead: float(lead["dRel"]),
       )),
       leads_left2=self._pick_two(leads_left),
