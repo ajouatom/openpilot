@@ -11,9 +11,7 @@ DRIVING_MODE_SAFE = 2
 DRIVING_MODE_NORMAL = 3
 DRIVING_MODE_HIGH = 4
 
-LEAD_JERK_LOOKAHEAD_S = 0.25
 LEAD_ACCEL_DEADBAND = 0.10
-LEAD_JERK_LIMIT = 3.0
 EGO_ACCEL_LIMIT = 3.0
 PREVIEW_DECEL_ATTACK_STEP_S = 0.08
 PREVIEW_RELEASE_STEP_S = 0.03
@@ -101,22 +99,19 @@ def get_lead_preview_request(
   *,
   lead_status: bool,
   a_lead: float,
-  j_lead: float,
   a_ego: float = 0.0,
 ) -> PreviewRequest:
   """Map mode-weighted relative acceleration to a signed preview request."""
   tuning = MODE_TUNING.get(_mode_value(driving_mode))
-  if tuning is None or not lead_status or not all(math.isfinite(value) for value in (a_lead, j_lead, a_ego)):
+  if tuning is None or not lead_status or not all(math.isfinite(value) for value in (a_lead, a_ego)):
     return PreviewRequest(0.0, 0.0, False)
 
-  # Convert jerk to a short-horizon acceleration contribution before combining
-  # the signals.  This avoids adding m/s^3 directly to m/s^2 and lets jerk only
-  # advance the onset of an already bounded preview response.
-  bounded_jerk = max(-LEAD_JERK_LIMIT, min(LEAD_JERK_LIMIT, float(j_lead)))
+  # Keep the preview signal on measured relative acceleration. Radar jerk is a
+  # useful trend diagnostic, but its longer causal fit can lag rapid changes and
+  # must not make the action-time request oscillate.
   bounded_ego_accel = max(-EGO_ACCEL_LIMIT, min(EGO_ACCEL_LIMIT, float(a_ego)))
   lead_accel_signal = (
     float(a_lead)
-    + LEAD_JERK_LOOKAHEAD_S * bounded_jerk
     - tuning.ego_accel_factor * bounded_ego_accel
   )
   lead_accel_signal = _deadzone(lead_accel_signal, LEAD_ACCEL_DEADBAND)

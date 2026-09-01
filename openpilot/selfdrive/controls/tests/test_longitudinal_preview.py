@@ -13,12 +13,11 @@ from openpilot.selfdrive.controls.lib.longitudinal_preview import (
 )
 
 
-def request(mode, a_lead, j_lead=0.0, a_ego=0.0):
+def request(mode, a_lead, a_ego=0.0):
   return get_lead_preview_request(
     mode,
     lead_status=True,
     a_lead=a_lead,
-    j_lead=j_lead,
     a_ego=a_ego,
   )
 
@@ -53,12 +52,6 @@ def test_braking_preview_is_capped_by_mode(mode, preview_max):
   assert request(mode, -10.0).offset_s == pytest.approx(preview_max)
 
 
-def test_jerk_is_converted_to_short_horizon_lead_acceleration():
-  result = request(DRIVING_MODE_SAFE, 0.0, -1.0)
-  assert result.lead_accel_signal == pytest.approx(-0.15)
-  assert result.offset_s == pytest.approx(0.15)
-
-
 @pytest.mark.parametrize("mode", [
   DRIVING_MODE_SAFE,
   DRIVING_MODE_ECO,
@@ -85,13 +78,13 @@ def test_all_modes_release_preview_when_ego_matches_lead_deceleration(mode):
 
 def test_preview_is_disabled_for_invalid_or_missing_lead():
   assert not get_lead_preview_request(
-    DRIVING_MODE_SAFE, lead_status=False, a_lead=-1.0, j_lead=-1.0,
+    DRIVING_MODE_SAFE, lead_status=False, a_lead=-1.0,
   ).active
   assert not get_lead_preview_request(
-    DRIVING_MODE_SAFE, lead_status=True, a_lead=float("nan"), j_lead=0.0,
+    DRIVING_MODE_SAFE, lead_status=True, a_lead=float("nan"),
   ).active
   assert not get_lead_preview_request(
-    DRIVING_MODE_SAFE, lead_status=True, a_lead=-1.0, j_lead=0.0, a_ego=float("nan"),
+    DRIVING_MODE_SAFE, lead_status=True, a_lead=-1.0, a_ego=float("nan"),
   ).active
 
 
@@ -136,7 +129,7 @@ def test_all_modes_can_release_positive_acceleration_to_coast(mode, floor):
 
 
 def test_normal_reacts_to_speed_bump_lead_deceleration():
-  request_normal = request(DRIVING_MODE_NORMAL, a_lead=-1.36, j_lead=-1.64, a_ego=0.70)
+  request_normal = request(DRIVING_MODE_NORMAL, a_lead=-1.36, a_ego=0.70)
   assert request_normal.offset_s == pytest.approx(1.50)
   assert apply_preview_target(0.70, 0.22, DRIVING_MODE_NORMAL, request_normal.lead_accel_signal) == pytest.approx(0.22)
 
