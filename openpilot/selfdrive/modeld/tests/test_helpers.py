@@ -1,5 +1,4 @@
 from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
 
@@ -105,12 +104,20 @@ def test_custom_usb_controller_reports_failed_retrain(monkeypatch):
   assert power_calls == [True]
 
 
+def _make_usb_for_ctrl_test(usb):
+  # This branch's tinygrad keeps the control-transfer buffers on USB3 instead of on
+  # CustomASM24Controller, so drive the retry through a bare USB3 rather than a stub.
+  controller = usb.USB3.__new__(usb.USB3)
+  controller.handle = object()
+  controller._ctrl_buf, controller._ctrl_mv = usb.alloc_cbuffer(0x1000)
+  return controller
+
+
 def test_custom_usb_controller_retries_transient_xdata_read(monkeypatch):
   from tinygrad.runtime.support import usb
 
   controller = usb.CustomASM24Controller.__new__(usb.CustomASM24Controller)
-  controller.usb = SimpleNamespace(handle=object())
-  controller._f0_out_buf, controller._f0_out_mv = usb.alloc_cbuffer(0x1000)
+  controller.usb = _make_usb_for_ctrl_test(usb)
   attempts = iter((-1, 8))
   sleeps = []
 
@@ -131,8 +138,7 @@ def test_custom_usb_controller_limits_xdata_read_retries(monkeypatch):
   from tinygrad.runtime.support import usb
 
   controller = usb.CustomASM24Controller.__new__(usb.CustomASM24Controller)
-  controller.usb = SimpleNamespace(handle=object())
-  controller._f0_out_buf, controller._f0_out_mv = usb.alloc_cbuffer(0x1000)
+  controller.usb = _make_usb_for_ctrl_test(usb)
   calls = []
 
   def control_transfer(*_args):
@@ -152,8 +158,7 @@ def test_custom_usb_controller_does_not_retry_xdata_disconnect(monkeypatch):
   from tinygrad.runtime.support import usb
 
   controller = usb.CustomASM24Controller.__new__(usb.CustomASM24Controller)
-  controller.usb = SimpleNamespace(handle=object())
-  controller._f0_out_buf, controller._f0_out_mv = usb.alloc_cbuffer(0x1000)
+  controller.usb = _make_usb_for_ctrl_test(usb)
   calls = []
 
   def control_transfer(*_args):
@@ -172,7 +177,8 @@ def _make_usb_for_bulk_test(usb):
   controller = usb.USB3.__new__(usb.USB3)
   controller.handle = object()
   controller._transferred = usb.ctypes.c_int(0)
-  controller._bulk_out_buf, controller._bulk_out_mv = usb.alloc_cbuffer(32)
+  # This branch's tinygrad exposes the retrying bulk OUT as USB3.bulk_write on EP 0x02.
+  controller._bulk_buf, controller._bulk_mv = usb.alloc_cbuffer(32)
   return controller
 
 
@@ -193,7 +199,7 @@ def test_usb_bulk_out_retries_zero_length_io_error(monkeypatch):
   monkeypatch.setattr(usb.libusb, "libusb_bulk_transfer", bulk_transfer)
   monkeypatch.setattr(usb.time, "sleep", lambda seconds: sleeps.append(seconds))
 
-  controller._bulk_out(0x02, b"model data")
+  controller.bulk_write(b"model data")
 
   assert len(calls) == 2
   assert sleeps == [controller.BULK_OUT_IO_RETRY_INTERVAL_S]
@@ -213,7 +219,7 @@ def test_usb_bulk_out_does_not_retry_partial_io_error(monkeypatch):
   monkeypatch.setattr(usb.libusb, "libusb_bulk_transfer", bulk_transfer)
 
   with pytest.raises(RuntimeError, match="bulk OUT 0x02 failed"):
-    controller._bulk_out(0x02, b"model data")
+    controller.bulk_write(b"model data")
 
   assert len(calls) == 1
 
@@ -233,7 +239,7 @@ def test_usb_bulk_out_limits_zero_length_io_retries(monkeypatch):
   monkeypatch.setattr(usb.time, "sleep", lambda _seconds: None)
 
   with pytest.raises(RuntimeError, match="bulk OUT 0x02 failed"):
-    controller._bulk_out(0x02, b"model data")
+    controller.bulk_write(b"model data")
 
   assert len(calls) == controller.BULK_OUT_IO_ATTEMPTS
 
@@ -252,7 +258,7 @@ def test_usb_bulk_out_does_not_retry_disconnect(monkeypatch):
   monkeypatch.setattr(usb.libusb, "libusb_bulk_transfer", bulk_transfer)
 
   with pytest.raises(RuntimeError, match="bulk OUT 0x02 failed after 1 attempts"):
-    controller._bulk_out(0x02, b"model data")
+    controller.bulk_write(b"model data")
 
   assert len(calls) == 1
 
