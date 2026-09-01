@@ -40,11 +40,13 @@ INSTALLER_URL_PATH = "/tmp/installer_url"
 
 
 class NetworkConnectivityMonitor:
-  def __init__(self, should_check: Callable[[], bool] | None = None):
+  def __init__(self, should_check: Callable[[], bool] | None = None,
+               probe_urls: tuple[str, ...] | None = None):
     self.network_connected = threading.Event()
     self.wifi_connected = threading.Event()
     self.recheck_event = threading.Event()
     self._should_check = should_check or (lambda: True)
+    self._probe_urls = probe_urls or (OPENPILOT_URL,)
     self._stop_event = threading.Event()
     self._last_timesyncd_restart = 0.0
     self._thread: threading.Thread | None = None
@@ -73,8 +75,10 @@ class NetworkConnectivityMonitor:
     while not self._stop_event.is_set():
       if self._should_check():
         try:
-          request = urllib.request.Request(OPENPILOT_URL, method="HEAD")
-          urllib.request.urlopen(request, timeout=2.0)
+          for url in self._probe_urls:
+            request = urllib.request.Request(url, method="HEAD")
+            with urllib.request.urlopen(request, timeout=2.0):
+              pass
 
           # Discard stale result if invalidated during request
           if self.recheck_event.is_set():

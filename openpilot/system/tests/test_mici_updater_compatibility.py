@@ -62,3 +62,27 @@ def test_tici_updater_only_installs_after_button_confirmation() -> None:
 
   assert 'Button("Install", click_callback=self.install_update' in source
   assert 'cmd = [self.updater, "--swap", self.manifest]' in source
+  assert "mark_update_confirmed(self.manifest)" in source
+  assert "if update_confirmed(manifest_path)" in source
+  assert "stderr=subprocess.STDOUT" in source
+  assert 'Button("Retry", click_callback=self.install_update' in source
+
+
+def test_mici_updater_checks_manifest_hosts_without_blocking_explicit_install() -> None:
+  updater = Path(BASEDIR) / "openpilot/system/ui/mici_updater.py"
+  source = updater.read_text(encoding="utf-8")
+
+  assert "probe_urls=manifest_download_urls(manifest_path)" in source
+  assert "self._continue_button.set_visible(True)" in source
+  assert "mark_update_confirmed(self.manifest)" in source
+  assert "if update_confirmed(manifest_path)" in source
+  assert "stderr=subprocess.STDOUT" in source
+  assert "self._failed_page.set_reason(reason)" in source
+
+
+def test_connectivity_monitor_accepts_update_specific_probe_urls() -> None:
+  setup = Path(BASEDIR) / "openpilot/system/ui/mici_setup.py"
+  source = setup.read_text(encoding="utf-8")
+
+  assert "probe_urls: tuple[str, ...] | None = None" in source
+  assert "for url in self._probe_urls" in source

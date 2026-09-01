@@ -8,6 +8,7 @@ import struct
 import subprocess
 import time
 from collections.abc import Generator
+from urllib.parse import urlsplit
 
 import requests
 
@@ -16,6 +17,77 @@ CAIBX_URL = "https://commadist.azureedge.net/agnosupdate/"
 
 AGNOS_MANIFEST_FILE = "openpilot/system/hardware/tici/agnos.json"
 DOWNLOAD_CACHE_DIR = Path(os.getenv("AGNOS_DOWNLOAD_CACHE_DIR", "/data/agnos-update-cache"))
+UPDATE_CONFIRMATION_FILE = Path(os.getenv("AGNOS_UPDATE_CONFIRMATION_FILE", "/data/agnos-update-confirmed"))
+UPDATE_LOCK_FILE = Path(os.getenv("AGNOS_UPDATE_LOCK_FILE", "/tmp/agnos-update.lock"))
+SWAP_MAX_ATTEMPTS = 5
+SWAP_RETRY_DELAY = 1.0
+VERIFY_FLASH_MAX_ATTEMPTS = 3
+DOWNLOAD_RETRY_ATTEMPTS = 5
+DOWNLOAD_RETRY_DELAY = 5.0
+DOWNLOAD_REQUEST_TIMEOUT = (10, 60)
+
+
+def manifest_digest(manifest_path: str | Path) -> str:
+  return hashlib.sha256(Path(manifest_path).read_bytes()).hexdigest()
+
+
+def manifest_download_urls(manifest_path: str | Path) -> tuple[str, ...]:
+  update = json.loads(Path(manifest_path).read_text(encoding="utf-8"))
+  urls: list[str] = []
+  origins: set[tuple[str, str]] = set()
+  for partition in update:
+    url = partition.get("url")
+    if not isinstance(url, str):
+      continue
+    parsed = urlsplit(url)
+    origin = (parsed.scheme, parsed.netloc)
+    if origin not in origins:
+      origins.add(origin)
+      urls.append(url)
+  return tuple(urls)
+
+
+def mark_update_confirmed(manifest_path: str | Path) -> None:
+  UPDATE_CONFIRMATION_FILE.parent.mkdir(parents=True, exist_ok=True)
+  temporary_path = UPDATE_CONFIRMATION_FILE.with_suffix(UPDATE_CONFIRMATION_FILE.suffix + ".tmp")
+  with temporary_path.open("w", encoding="utf-8") as output:
+    output.write(manifest_digest(manifest_path) + "\n")
+    output.flush()
+    os.fsync(output.fileno())
+  os.replace(temporary_path, UPDATE_CONFIRMATION_FILE)
+
+
+def update_confirmed(manifest_path: str | Path) -> bool:
+  try:
+    return UPDATE_CONFIRMATION_FILE.read_text(encoding="utf-8").strip() == manifest_digest(manifest_path)
+  except OSError:
+    return False
+
+
+def clear_update_confirmation() -> None:
+  UPDATE_CONFIRMATION_FILE.unlink(missing_ok=True)
+
+
+def report_progress(stage: str, progress: int) -> None:
+  print(f"{stage}: {max(0, min(progress, 100))}", flush=True)
+
+
+def acquire_update_lock():
+  try:
+    import fcntl
+  except ImportError:
+    return None
+
+  UPDATE_LOCK_FILE.parent.mkdir(parents=True, exist_ok=True)
+  lock_file = UPDATE_LOCK_FILE.open("w", encoding="utf-8")
+  try:
+    fcntl.flock(lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
+  except BlockingIOError:
+    lock_file.close()
+    raise RuntimeError("Another AGNOS updater is already running") from None
+  lock_file.write(f"{os.getpid()}\n")
+  lock_file.flush()
+  return lock_file
 
 
 class StreamingDecompressor:
@@ -24,7 +96,7 @@ class StreamingDecompressor:
 
     self.source = cache_path.open("rb") if cache_path is not None else None
     self.req = None if self.source is not None else requests.get(
-      url, stream=True, headers={'Accept-Encoding': None}, timeout=60,
+      url, stream=True, headers={'Accept-Encoding': None}, timeout=DOWNLOAD_REQUEST_TIMEOUT,
     )
     self.it = (iter(lambda: self.source.read(1024 * 1024), b"") if self.source is not None
                else self.req.iter_content(chunk_size=1024 * 1024))
@@ -104,7 +176,8 @@ def download_to_cache(partition: dict, cloudlog) -> Path | None:
     headers['Range'] = f"bytes={offset}-"
 
   cloudlog.info(f"Downloading {partition['name']} cache from byte {offset}")
-  response = requests.get(partition['url'], stream=True, headers=headers, timeout=60)
+  report_progress(f"Connecting for {partition['name']}", 0)
+  response = requests.get(partition['url'], stream=True, headers=headers, timeout=DOWNLOAD_REQUEST_TIMEOUT)
   response.raise_for_status()
 
   if offset and response.status_code != 206:
@@ -127,7 +200,7 @@ def download_to_cache(partition: dict, cloudlog) -> Path | None:
           p = int(output.tell() / expected_size * 100)
           if p != last_p:
             last_p = p
-            print(f"Downloading {partition['name']}: {p}", flush=True)
+            report_progress(f"Downloading {partition['name']}", p)
       output.flush()
       os.fsync(output.fileno())
   finally:
@@ -268,7 +341,7 @@ def extract_compressed_image(target_slot_number: int, partition: dict, cloudlog)
         p = int(out.tell() / partition['size'] * 100)
         if p != last_p:
           last_p = p
-          print(f"Installing {partition['name']}: {p}", flush=True)
+          report_progress(f"Installing {partition['name']}", p)
 
       if raw_hash.hexdigest().lower() != partition['hash_raw'].lower():
         raise Exception(f"Raw hash mismatch '{raw_hash.hexdigest().lower()}'")
@@ -325,7 +398,7 @@ def extract_casync_image(target_slot_number: int, partition: dict, cloudlog):
     p = int(cur / partition['size'] * 100)
     if p != last_p:
       last_p = p
-      print(f"Installing {partition['name']}: {p}", flush=True)
+      report_progress(f"Installing {partition['name']}", p)
 
   stats = casync.extract(target, sources, path, progress)
   cloudlog.error(f'casync done {json.dumps(stats)}')
@@ -337,6 +410,7 @@ def extract_casync_image(target_slot_number: int, partition: dict, cloudlog):
 
 def flash_partition(target_slot_number: int, partition: dict, cloudlog, standalone=False):
   cloudlog.info(f"Downloading and writing {partition['name']}")
+  report_progress(f"Checking {partition['name']}", 0)
 
   if verify_partition(target_slot_number, partition):
     cloudlog.info(f"Already flashed {partition['name']}")
@@ -367,13 +441,27 @@ def swap(manifest_path: str, target_slot_number: int, cloudlog) -> None:
     if not partition.get('full_check', False):
       clear_partition_hash(target_slot_number, partition)
 
-  while True:
-    out = subprocess.check_output(f"abctl --set_active {target_slot_number}", shell=True, stderr=subprocess.STDOUT, encoding='utf8')
-    if ("No such file or directory" not in out) and ("lun as boot lun" in out):
-      cloudlog.info(f"Swap successful {out}")
-      break
-    else:
-      cloudlog.error(f"Swap failed {out}")
+  last_output = ""
+  for attempt in range(1, SWAP_MAX_ATTEMPTS + 1):
+    report_progress(f"Switching boot slot {attempt}/{SWAP_MAX_ATTEMPTS}", 100)
+    try:
+      last_output = subprocess.check_output(
+        ["abctl", "--set_active", str(target_slot_number)],
+        stderr=subprocess.STDOUT,
+        encoding='utf8',
+      )
+    except subprocess.CalledProcessError as e:
+      last_output = e.output or str(e)
+
+    if ("No such file or directory" not in last_output) and ("lun as boot lun" in last_output):
+      cloudlog.info(f"Swap successful {last_output}")
+      return
+
+    cloudlog.error(f"Swap failed ({attempt}/{SWAP_MAX_ATTEMPTS}): {last_output}")
+    if attempt < SWAP_MAX_ATTEMPTS:
+      time.sleep(SWAP_RETRY_DELAY)
+
+  raise RuntimeError(f"Failed to switch boot slot after {SWAP_MAX_ATTEMPTS} attempts: {last_output.strip()}")
 
 
 def flash_agnos_update(manifest_path: str, target_slot_number: int, cloudlog, standalone=False) -> None:
@@ -387,16 +475,19 @@ def flash_agnos_update(manifest_path: str, target_slot_number: int, cloudlog, st
   for partition in update:
     success = False
 
-    for retries in range(10):
+    for retries in range(DOWNLOAD_RETRY_ATTEMPTS):
       try:
         flash_partition(target_slot_number, partition, cloudlog, standalone)
         success = True
         break
 
-      except requests.exceptions.RequestException:
+      except requests.exceptions.RequestException as e:
         cloudlog.exception("Failed")
-        cloudlog.info(f"Failed to download {partition['name']}, retrying ({retries})")
-        time.sleep(10)
+        retry_number = retries + 1
+        cloudlog.info(f"Failed to download {partition['name']}, retrying ({retry_number}/{DOWNLOAD_RETRY_ATTEMPTS})")
+        report_progress(f"Network retry {retry_number}/{DOWNLOAD_RETRY_ATTEMPTS}: {type(e).__name__}", 0)
+        if retry_number < DOWNLOAD_RETRY_ATTEMPTS:
+          time.sleep(DOWNLOAD_RETRY_DELAY)
 
     if not success:
       cloudlog.info(f"Failed to flash {partition['name']}, aborting")
@@ -424,18 +515,26 @@ if __name__ == "__main__":
 
   logging.basicConfig(level=logging.INFO)
 
+  update_lock = acquire_update_lock()
   target_slot_number = get_target_slot_number()
   if args.verify:
+    report_progress("Verifying update", 0)
     if verify_agnos_update(args.manifest, target_slot_number):
       swap(args.manifest, target_slot_number, logging)
       exit(0)
     exit(1)
   elif args.swap:
-    while not verify_agnos_update(args.manifest, target_slot_number):
-      logging.error("Verification failed. Flashing AGNOS")
+    for attempt in range(VERIFY_FLASH_MAX_ATTEMPTS + 1):
+      report_progress(f"Verifying update {attempt + 1}/{VERIFY_FLASH_MAX_ATTEMPTS + 1}", 0)
+      if verify_agnos_update(args.manifest, target_slot_number):
+        break
+      if attempt >= VERIFY_FLASH_MAX_ATTEMPTS:
+        raise RuntimeError(f"AGNOS verification failed after {VERIFY_FLASH_MAX_ATTEMPTS} flash attempts")
+      logging.error(f"Verification failed. Flashing AGNOS ({attempt + 1}/{VERIFY_FLASH_MAX_ATTEMPTS})")
       flash_agnos_update(args.manifest, target_slot_number, logging, standalone=True)
 
     logging.warning(f"Verification succeeded. Swapping to slot {target_slot_number}")
     swap(args.manifest, target_slot_number, logging)
+    report_progress("Update complete; rebooting", 100)
   else:
     flash_agnos_update(args.manifest, target_slot_number, logging, standalone=True)

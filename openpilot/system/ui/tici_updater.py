@@ -1,11 +1,14 @@
 #!/usr/bin/env python3
+import re
 import sys
 import subprocess
 import threading
+from collections import deque
 import pyray as rl
 from enum import IntEnum
 
 from openpilot.system.hardware import HARDWARE
+from openpilot.system.hardware.tici.agnos import mark_update_confirmed, update_confirmed
 from openpilot.system.ui.lib.application import gui_app, FontWeight, FONT_SCALE
 from openpilot.system.ui.lib.wifi_manager import WifiManager
 from openpilot.system.ui.widgets import Widget
@@ -41,24 +44,40 @@ class Updater(Widget):
     self.progress_value = 0
     self.progress_text = "Loading..."
     self.show_reboot_button = False
+    self.failure_detail = ""
     self.process = None
     self.update_thread = None
+    self._last_output: deque[str] = deque(maxlen=12)
     self.wifi_manager_ui = WifiManagerUI(WifiManager())
 
     # Buttons
     self._wifi_button = Button("Connect to Wi-Fi", click_callback=lambda: self.set_current_screen(Screen.WIFI))
     self._install_button = Button("Install", click_callback=self.install_update, button_style=ButtonStyle.PRIMARY)
     self._back_button = Button("Back", click_callback=lambda: self.set_current_screen(Screen.PROMPT))
+    self._retry_button = Button("Retry", click_callback=self.install_update, button_style=ButtonStyle.PRIMARY)
     self._reboot_button = Button("Reboot", click_callback=lambda: HARDWARE.reboot())
 
   def set_current_screen(self, screen: Screen):
     self.current_screen = screen
 
   def install_update(self):
+    if self.update_thread is not None and self.update_thread.is_alive():
+      return
+    try:
+      mark_update_confirmed(self.manifest)
+    except OSError as e:
+      self.set_current_screen(Screen.PROGRESS)
+      self.progress_text = "Update paused"
+      self.failure_detail = f"Unable to save confirmation: {e}"
+      self.show_reboot_button = True
+      return
+
     self.set_current_screen(Screen.PROGRESS)
     self.progress_value = 0
-    self.progress_text = "Downloading..."
+    self.progress_text = "Starting update..."
     self.show_reboot_button = False
+    self.failure_detail = ""
+    self._last_output.clear()
 
     # Start the update process in a separate thread
     self.update_thread = threading.Thread(target=self._run_update_process)
@@ -70,28 +89,47 @@ class Updater(Widget):
     try:
       cmd = [self.updater, "--swap", self.manifest]
       self.process = subprocess.Popen(cmd, stdout=subprocess.PIPE,
-                                      text=True, bufsize=1, universal_newlines=True)
-    except Exception:
+                                      stderr=subprocess.STDOUT, text=True, bufsize=1, universal_newlines=True)
+    except Exception as e:
       self.progress_text = "Update failed"
+      self.failure_detail = f"Unable to start updater: {e}"
       self.show_reboot_button = True
       return
 
     if self.process.stdout is not None:
       for line in self.process.stdout:
-        parts = line.strip().split(":")
-        if len(parts) == 2:
-          self.progress_text = parts[0]
-          try:
-            self.progress_value = int(float(parts[1]))
-          except ValueError:
-            pass
+        self._handle_process_line(line)
 
     exit_code = self.process.wait()
     if exit_code == 0:
+      self.progress_text = "Rebooting..."
+      self.progress_value = 100
       HARDWARE.reboot()
     else:
       self.progress_text = "Update failed"
+      detail = self._last_output[-1] if self._last_output else "no error output"
+      self.failure_detail = f"Updater exited with code {exit_code}: {detail}"
       self.show_reboot_button = True
+
+  def _handle_process_line(self, line: str):
+    text = line.strip()
+    if not text:
+      return
+    print(text, flush=True)
+    self._last_output.append(text[-240:])
+    match = re.fullmatch(r"(.+):\s*(\d{1,3})", text)
+    if match is not None:
+      self.progress_text = match.group(1)
+      self.progress_value = max(0, min(int(match.group(2)), 100))
+
+  def close(self):
+    if self.process is not None and self.process.poll() is None:
+      self.process.terminate()
+      try:
+        self.process.wait(timeout=5)
+      except subprocess.TimeoutExpired:
+        self.process.kill()
+        self.process.wait()
 
   def render_prompt_screen(self, rect: rl.Rectangle):
     # Title
@@ -144,7 +182,12 @@ class Updater(Widget):
 
     # Show reboot button if needed
     if self.show_reboot_button:
-      reboot_rect = rl.Rectangle(MARGIN + 100, rect.height - MARGIN - BUTTON_HEIGHT, BUTTON_WIDTH, BUTTON_HEIGHT)
+      detail_rect = rl.Rectangle(MARGIN + 100, 650, rect.width - MARGIN * 2 - 200, BODY_FONT_SIZE * FONT_SCALE * 2)
+      gui_text_box(detail_rect, self.failure_detail, BODY_FONT_SIZE)
+      retry_rect = rl.Rectangle(MARGIN + 100, rect.height - MARGIN - BUTTON_HEIGHT, BUTTON_WIDTH, BUTTON_HEIGHT)
+      reboot_rect = rl.Rectangle(rect.width - MARGIN - 100 - BUTTON_WIDTH, rect.height - MARGIN - BUTTON_HEIGHT,
+                                 BUTTON_WIDTH, BUTTON_HEIGHT)
+      self._retry_button.render(retry_rect)
       self._reboot_button.render(reboot_rect)
 
   def _render(self, rect: rl.Rectangle):
@@ -164,16 +207,22 @@ def main():
   updater_path = sys.argv[1]
   manifest_path = sys.argv[2]
 
+  updater = None
   try:
     # This UI can run from a clean source checkout before font atlases exist.
     gui_app.init_window("System Update", font_weights=(
       FontWeight.NORMAL, FontWeight.MEDIUM, FontWeight.BOLD, FontWeight.SEMI_BOLD,
     ))
-    gui_app.push_widget(Updater(updater_path, manifest_path))
+    updater = Updater(updater_path, manifest_path)
+    gui_app.push_widget(updater)
+    if update_confirmed(manifest_path):
+      updater.install_update()
     for _ in gui_app.render():
       pass
   finally:
     # Make sure we clean up even if there's an error
+    if updater is not None:
+      updater.close()
     gui_app.close()
 
 

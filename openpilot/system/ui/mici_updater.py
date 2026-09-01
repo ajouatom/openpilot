@@ -1,11 +1,15 @@
 #!/usr/bin/env python3
 import os
+import re
 import sys
 import subprocess
 import threading
+from collections import deque
 import pyray as rl
 
 from openpilot.common.realtime import config_realtime_process, set_core_affinity
+from openpilot.system.hardware.tici.agnos import (manifest_download_urls, mark_update_confirmed,
+                                                  update_confirmed)
 from openpilot.system.hardware import HARDWARE, TICI
 from openpilot.common.swaglog import cloudlog
 from openpilot.system.ui.lib.application import gui_app, FontWeight
@@ -21,6 +25,17 @@ class UpdaterNetworkSetupPage(NetworkSetupPage):
     super().__init__(network_monitor, continue_callback, back_callback=None)
     self._continue_button.set_text("download\n& install")
     self._continue_button.set_green(False)
+
+  def _nav_stack_tick(self):
+    super()._nav_stack_tick()
+    has_internet = self._has_internet
+    # The downloader has its own bounded retry and resume handling. Keep an
+    # explicit install action available when a connectivity probe is blocked
+    # even though the actual manifest hosts are reachable.
+    self._continue_button.set_visible(True)
+    self._continue_button.set_text("download\n& install" if has_internet else "try download\n& install")
+    if not has_internet:
+      self._waiting_button.set_text("update server\nnot ready")
 
 
 class ProgressPage(NavWidget):
@@ -72,9 +87,10 @@ class Updater(Scroller):
     self.progress_text = "loading"
     self.process = None
     self.update_thread = None
-    self._update_failed = False
+    self._failure_reason: str | None = None
+    self._last_output: deque[str] = deque(maxlen=12)
 
-    self._network_monitor = NetworkConnectivityMonitor()
+    self._network_monitor = NetworkConnectivityMonitor(probe_urls=manifest_download_urls(manifest_path))
     self._network_monitor.start()
 
     self._network_setup_page = UpdaterNetworkSetupPage(self._network_monitor, self._network_setup_continue_callback)
@@ -103,14 +119,25 @@ class Updater(Scroller):
   def _nav_stack_tick(self):
     self._progress_page.set_progress(self.progress_text, self.progress_value)
 
-    if self._update_failed:
-      self._update_failed = False
+    if self._failure_reason is not None:
+      reason = self._failure_reason
+      self._failure_reason = None
+      self._failed_page.set_reason(reason)
       self.show_event()
       gui_app.pop_widgets_to(self, lambda: gui_app.push_widget(self._failed_page))
 
   def install_update(self):
+    if self.update_thread is not None and self.update_thread.is_alive():
+      return
+    try:
+      mark_update_confirmed(self.manifest)
+    except OSError as e:
+      self._failure_reason = f"unable to save update confirmation: {e}"
+      return
+
     self.progress_value = 0
-    self.progress_text = "downloading"
+    self.progress_text = "starting update"
+    self._last_output.clear()
 
     def start_update():
       self.update_thread = threading.Thread(target=self._run_update_process, daemon=True)
@@ -125,29 +152,44 @@ class Updater(Scroller):
     try:
       cmd = [self.updater, "--swap", self.manifest]
       self.process = subprocess.Popen(cmd, stdout=subprocess.PIPE,
-                                      text=True, bufsize=1, universal_newlines=True)
-    except Exception:
-      self._update_failed = True
+                                      stderr=subprocess.STDOUT, text=True, bufsize=1, universal_newlines=True)
+    except Exception as e:
+      self._failure_reason = f"unable to start updater: {e}"
       return
 
     if self.process.stdout is not None:
       for line in self.process.stdout:
-        parts = line.strip().split(":")
-        if len(parts) == 2:
-          self.progress_text = parts[0].lower()
-          try:
-            self.progress_value = int(float(parts[1]))
-          except ValueError:
-            pass
+        self._handle_process_line(line)
 
     exit_code = self.process.wait()
     if exit_code == 0:
+      self.progress_text = "rebooting"
+      self.progress_value = 100
       HARDWARE.reboot()
     else:
-      self._update_failed = True
+      detail = self._last_output[-1] if self._last_output else "no error output"
+      self._failure_reason = f"updater exited with code {exit_code}: {detail}"
+
+  def _handle_process_line(self, line: str):
+    text = line.strip()
+    if not text:
+      return
+    print(text, flush=True)
+    self._last_output.append(text[-240:])
+    match = re.fullmatch(r"(.+):\s*(\d{1,3})", text)
+    if match is not None:
+      self.progress_text = match.group(1).lower()
+      self.progress_value = max(0, min(int(match.group(2)), 100))
 
   def close(self):
     self._network_monitor.stop()
+    if self.process is not None and self.process.poll() is None:
+      self.process.terminate()
+      try:
+        self.process.wait(timeout=5)
+      except subprocess.TimeoutExpired:
+        self.process.kill()
+        self.process.wait()
 
 
 def main():
@@ -167,17 +209,21 @@ def main():
   updater_path = sys.argv[1]
   manifest_path = sys.argv[2]
 
+  updater = None
   try:
     gui_app.init_window("System Update")
     updater = Updater(updater_path, manifest_path)
     gui_app.push_widget(updater)
+    if update_confirmed(manifest_path):
+      updater.install_update()
     for _ in gui_app.render():
       pass
-    updater.close()
   except Exception as e:
     print(f"Updater error: {e}")
     raise
   finally:
+    if updater is not None:
+      updater.close()
     gui_app.close()
 
 

@@ -87,6 +87,15 @@ function bootstrap_runtime_dependencies {
   ensure_python_package shapely shapely 0
 }
 
+function show_agnos_update_failure {
+  local reason="$1"
+  local message
+
+  printf -v message 'AGNOS update paused.\n\n%s\n\nOpen the recovery address shown above (port 6999).\nLog: /data/agnos-updater-ui.log\n\nTap Reboot to try the updater again.' "$reason"
+  printf '%s\n' "$message"
+  python3 "$DIR/openpilot/system/ui/text.py" "$message" || true
+}
+
 function agnos_init {
   # TODO: move this to agnos
   sudo rm -f /data/etc/NetworkManager/system-connections/*.nmmeta
@@ -99,28 +108,10 @@ function agnos_init {
   sudo chgrp gpu /dev/adsprpc-smd /dev/ion /dev/kgsl-3d0
   sudo chmod 660 /dev/adsprpc-smd /dev/ion /dev/kgsl-3d0
 
+  export AGNOS_UPDATE_CONFIRMATION_FILE="${AGNOS_UPDATE_CONFIRMATION_FILE:-/data/agnos-update-confirmed}"
+
   # Check if AGNOS update is required
-  if [ $(< /VERSION) != "$AGNOS_VERSION" ]; then
-    echo "Waiting for internet..."
-
-    timeout=0
-    while [ $timeout -lt 120 ]; do
-        if getent hosts pypi.org >/dev/null 2>&1; then
-            break
-        fi
-        echo "Waiting for internet... (${timeout})"
-        sleep 5
-        timeout=$((timeout+5))
-
-    done
-
-    if python3 -c "import jeepney" > /dev/null 2>&1; then
-      echo "jeepney already installed."
-    else
-      echo "jeepney installing to pydeps."
-      python3 -m pip install --target "$PYDEPS" --upgrade jeepney
-    fi
-
+  if [ "$(< /VERSION)" != "$AGNOS_VERSION" ]; then
     AGNOS_PY="$DIR/openpilot/system/hardware/tici/agnos.py"
     MANIFEST="$DIR/openpilot/system/hardware/tici/agnos.json"
     MODEL="$(tr -d '\000\r\n' 2>/dev/null < /sys/firmware/devicetree/base/model | tr '[:upper:]' '[:lower:]')"
@@ -128,19 +119,46 @@ function agnos_init {
     if [ "$MODEL" = "c3" ] || [ "$MODEL" = "tici" ]; then
       MANIFEST="$DIR/openpilot/system/hardware/tici/agnos-tici.json"
     fi
-    if $AGNOS_PY --verify $MANIFEST; then
-      sudo reboot
-    fi
     echo "AGNOS_PY=${AGNOS_PY}"
     echo "MANIFEST=${MANIFEST}"
     echo "MODEL=${MODEL}"
-    if ! python3 $DIR/openpilot/system/ui/updater.py $AGNOS_PY $MANIFEST; then
-      echo "AGNOS updater UI failed; automatic installation is disabled."
-      echo "Refusing to start openpilot on the old OS; use Carrot recovery and retry."
+
+    # A completed inactive slot only needs activation and a reboot. Check this
+    # before any network or standalone-UI dependency work.
+    if python3 "$AGNOS_PY" --verify "$MANIFEST"; then
+      echo "Verified AGNOS update activated; rebooting."
+      if sudo reboot; then
+        while true; do sleep 1; done
+      fi
+      show_agnos_update_failure "The updated slot is ready, but the reboot command failed."
       return 1
     fi
-    echo "AGNOS updater exited without reboot; refusing to start openpilot on the old OS."
+
+    if python3 -c "import jeepney" > /dev/null 2>&1; then
+      echo "jeepney already installed."
+    else
+      echo "Installing the AGNOS updater UI dependency."
+      if ! python3 -m pip install --target "$PYDEPS" --upgrade --timeout 15 --retries 2 jeepney; then
+        show_agnos_update_failure "The updater UI dependency could not be installed. Check the network, then retry."
+        return 1
+      fi
+    fi
+
+    local AGNOS_UI_LOG="/data/agnos-updater-ui.log"
+    local ui_result
+    : > "$AGNOS_UI_LOG"
+    for attempt in 1 2 3; do
+      echo "Starting AGNOS updater UI (${attempt}/3)." | tee -a "$AGNOS_UI_LOG"
+      python3 "$DIR/openpilot/system/ui/updater.py" "$AGNOS_PY" "$MANIFEST" 2>&1 | tee -a "$AGNOS_UI_LOG"
+      ui_result=${PIPESTATUS[0]}
+      echo "AGNOS updater UI exited with status ${ui_result}." | tee -a "$AGNOS_UI_LOG"
+      sleep 2
+    done
+
+    show_agnos_update_failure "The updater UI stopped three times. No unconfirmed update was installed."
     return 1
+  else
+    rm -f "$AGNOS_UPDATE_CONFIRMATION_FILE"
   fi
 }
 
