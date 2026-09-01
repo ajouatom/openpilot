@@ -149,8 +149,6 @@ class CarrotPlanner:
     self.jerk_factor = 1.0
     self.jerk_factor_apply = 1.0
 
-    self.j_lead_factor = 0.0
-
     self.activeCarrot = 0
     self.xDistToTurn = 0
     self.atcType = ""
@@ -170,7 +168,7 @@ class CarrotPlanner:
       
       self.myDrivingModeAuto = self.params.get_int("MyDrivingModeAuto")
       if self.myDrivingModeAuto > 0 and not self.myDrivingMode_disable_auto:
-        self.myDrivingMode = self.drivingModeDetector.get_mode()
+        self.myDrivingMode = self.drivingModeDetector.get_mode(self.myDrivingModeAuto)
       else:
         self.myDrivingMode = myDrivingMode
 
@@ -196,7 +194,6 @@ class CarrotPlanner:
       self.cruiseMaxVals6 = self.params.get_float("CruiseMaxVals6") / 100.
     elif self.params_count == 40:
       self.stop_distance = self.params.get_float("StopDistanceCarrot") / 100.
-      self.j_lead_factor = self.params.get_float("JLeadFactor3") / 100.
       self.eco_over_speed = self.params.get_int("CruiseEcoControl")
       self.autoNaviSpeedDecelRate = float(self.params.get_int("AutoNaviSpeedDecelRate")) * 0.01
       self.aChangeCostStarting = self.params.get_float("AChangeCostStarting")
@@ -703,5 +700,6 @@ class DrivingModeDetector:
         self.congested = False
         self.counter = - self.exit_needed
 
-    def get_mode(self):
-        return DrivingMode.Safe if self.congested else DrivingMode.Normal
+    def get_mode(self, auto_mode: int):
+        cruise_mode = DrivingMode.Eco if int(auto_mode) == 2 else DrivingMode.Normal
+        return DrivingMode.Safe if self.congested else cruise_mode

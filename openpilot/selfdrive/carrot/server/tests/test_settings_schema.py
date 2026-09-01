@@ -35,6 +35,28 @@ def test_the_catalogue_is_readable_and_populated(params):
   assert all(isinstance(p.get("name"), str) and p["name"] for p in params)
 
 
+def test_obsolete_lead_response_settings_are_removed(settings, params):
+  removed = {"JLeadFactor3", "RadarReactionFactor"}
+  by_name = {p["name"] for p in params}
+  assert removed.isdisjoint(by_name)
+  assert all(
+    removed.isdisjoint(group.get("params", []))
+    for category in settings["menu"]
+    for section in category.get("groups", [])
+    for group in section.get("groups", [])
+  )
+  params_keys = PARAMS_KEYS_PATH.read_text(encoding="utf-8")
+  assert all(name not in params_keys for name in removed)
+
+
+def test_automatic_driving_mode_exposes_manual_normal_and_eco_choices(params):
+  by_name = {p["name"]: p for p in params}
+  automatic = by_name["MyDrivingModeAuto"]
+  assert (automatic["min"], automatic["max"], automatic["default"]) == (0, 2, 0)
+  assert "1:일반↔안전" in automatic["descr"]
+  assert "2:에코↔안전" in automatic["descr"]
+
+
 def test_c3x_lite_hardware_setting_is_exposed(settings, params):
   by_name = {p["name"]: p for p in params}
   c3x_lite = by_name["HardwareC3xLite"]
