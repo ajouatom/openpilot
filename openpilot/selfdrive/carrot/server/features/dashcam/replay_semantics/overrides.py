@@ -60,4 +60,9 @@ CURATED_FIELD_UNITS = {
   "carOutput.actuatorsOutput.speed": "m/s",
   "carOutput.actuatorsOutput.jerk": "m/s^3",
   "carOutput.actuatorsOutput.aTarget": "m/s^2",
+  "longitudinalPlan.aTarget": "m/s^2",
+  "longitudinalPlan.aTargetBase": "m/s^2",
+  "longitudinalPlan.leadPreviewSeconds": "s",
+  "longitudinalPlan.leadPreviewActionTime": "s",
+  "longitudinalPlan.leadPreviewAccel": "m/s^2",
 }

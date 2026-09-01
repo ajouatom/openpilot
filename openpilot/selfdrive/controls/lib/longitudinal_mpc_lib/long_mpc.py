@@ -39,14 +39,10 @@ A_EGO_COST = 0.
 J_EGO_COST = 5.0
 A_CHANGE_COST = 200.
 A_CHANGE_COST_STARTING = 10. #30.
-JLEAD_A_CHANGE_COST_MIN = 20.0
 DANGER_ZONE_COST = 100.
 CRASH_DISTANCE = .25
 LEAD_DANGER_FACTOR = 0.8 # 0.75
 LIMIT_COST = 1e6
-PRED_DANGER_MARGIN_BP = [-5.0, -3.0, -1.0, 0.0]
-PRED_DANGER_A_CHANGE_COST = [20.0, 50.0, 120.0, A_CHANGE_COST]
-PRED_DANGER_A_CHANGE_COST_RECOVER = 20.0
 ACADOS_SOLVER_TYPE = 'SQP_RTI'
 
 
@@ -76,10 +72,8 @@ def get_jerk_factor(personality=log.LongitudinalPersonality.standard):
     raise NotImplementedError("Longitudinal personality not supported")
 
 
-def get_jlead_a_change_cost(j_lead, j_lead_factor):
-  factor = float(np.clip(j_lead_factor, 0.0, 1.0))
-  min_cost = float(np.interp(factor, [0.0, 1.0], [A_CHANGE_COST, JLEAD_A_CHANGE_COST_MIN]))
-  return float(np.interp(abs(j_lead), [0.3, 2.0], [A_CHANGE_COST, min_cost]))
+def get_a_change_cost(prev_accel_constraint: bool, a_change_cost_starting: float) -> float:
+  return float(A_CHANGE_COST if prev_accel_constraint else a_change_cost_starting)
 
 
 def get_T_FOLLOW(personality=log.LongitudinalPersonality.standard):
@@ -306,11 +300,17 @@ class LongitudinalMpc:
     for i in range(N):
       self.solver.cost_set(i, 'Zl', Zl)
 
-  def set_weights(self, prev_accel_constraint=True, personality=log.LongitudinalPersonality.standard, jerk_factor=1.0, a_change_cost_starting=A_CHANGE_COST_STARTING):
+  def set_weights(self, prev_accel_constraint=True,
+                  personality=log.LongitudinalPersonality.standard,
+                  jerk_factor=1.0,
+                  a_change_cost_starting=A_CHANGE_COST_STARTING):
     #jerk_factor = get_jerk_factor(personality)
     if self.mode == 'acc':
-      a_change_cost = self.a_change_cost if prev_accel_constraint else a_change_cost_starting
-      cost_weights = [X_EGO_OBSTACLE_COST, X_EGO_COST, V_EGO_COST, A_EGO_COST, jerk_factor * a_change_cost, jerk_factor * J_EGO_COST]
+      # Keep active-plan inertia fixed. jerk_factor controls only the shape of
+      # the new solution; multiplying both costs coupled responsiveness and
+      # smoothness and made lead-triggered preview difficult to bound.
+      a_change_cost = get_a_change_cost(prev_accel_constraint, a_change_cost_starting)
+      cost_weights = [X_EGO_OBSTACLE_COST, X_EGO_COST, V_EGO_COST, A_EGO_COST, a_change_cost, jerk_factor * J_EGO_COST]
       constraint_cost_weights = [LIMIT_COST, LIMIT_COST, LIMIT_COST, DANGER_ZONE_COST]
     elif self.mode == 'blended':
       a_change_cost = 40.0 if prev_accel_constraint else 0
@@ -318,27 +318,15 @@ class LongitudinalMpc:
       constraint_cost_weights = [LIMIT_COST, LIMIT_COST, LIMIT_COST, DANGER_ZONE_COST]
     else:
       raise NotImplementedError(f'Planner mode {self.mode} not recognized in planner cost set')
+    self.a_change_cost = float(a_change_cost)
     self.set_cost_weights(cost_weights, constraint_cost_weights)
 
-  def apply_predicted_danger_a_change_cost(self, lead, base_a_change_cost, lead_obstacle, t_follow, comfort_brake, stop_distance):
+  def update_predicted_danger_margin(self, lead, lead_obstacle, t_follow, comfort_brake, stop_distance):
     self.predicted_danger_margin = 1e3
-    if not lead.status:
-      target_a_change_cost = base_a_change_cost
-    else:
+    if lead.status:
       safe_distance = get_safe_obstacle_distance(self.x_sol[:,1], t_follow, comfort_brake, stop_distance)
       danger_margin = lead_obstacle - self.x_sol[:,0] - self.lead_danger_factor * safe_distance
       self.predicted_danger_margin = float(np.min(danger_margin[PRED_DANGER_IDXS]))
-
-      danger_a_change_cost = float(np.interp(self.predicted_danger_margin,
-                                             PRED_DANGER_MARGIN_BP,
-                                             PRED_DANGER_A_CHANGE_COST))
-      target_a_change_cost = min(base_a_change_cost, danger_a_change_cost)
-
-    if target_a_change_cost < self.a_change_cost:
-      self.a_change_cost = target_a_change_cost
-    else:
-      self.a_change_cost = min(target_a_change_cost,
-                               self.a_change_cost + PRED_DANGER_A_CHANGE_COST_RECOVER)
 
   def set_cur_state(self, v, a):
     v_prev = self.x0[1]
@@ -357,7 +345,7 @@ class LongitudinalMpc:
     x_lead_traj = x_lead + np.cumsum(T_DIFFS * v_lead_traj)
     lead_xv = np.column_stack((x_lead_traj, v_lead_traj))
     return lead_xv
-  
+
   def process_lead(self, lead, j_lead):
     v_ego = self.x0[1]
     if lead is not None and lead.status:
@@ -411,7 +399,7 @@ class LongitudinalMpc:
     mode = self.mode
     comfort_brake = carrot.comfort_brake
     stop_distance = carrot.stop_distance
-    
+
     if mode == 'blended':
       stop_x = 1000.0
     else:
@@ -424,7 +412,7 @@ class LongitudinalMpc:
     # and then treat that as a stopped car/obstacle at this new distance.
     lead_0_obstacle = lead_xv_0[:,0] + get_stopped_equivalence_factor(lead_xv_0[:,1])
     lead_1_obstacle = lead_xv_1[:,0] + get_stopped_equivalence_factor(lead_xv_1[:,1])
-    
+
     self.desired_distance = desired_follow_distance(v_ego, lead_v_0, comfort_brake, stop_distance, t_follow)
 
     self.params[:,0] = ACCEL_MIN if not reset_state else a_ego
@@ -459,15 +447,10 @@ class LongitudinalMpc:
       # These are not used in ACC mode
       x[:], v[:], a[:], j[:] = 0.0, 0.0, 0.0, 0.0
 
-      if radarstate.leadOne.status:
-        base_a_change_cost = get_jlead_a_change_cost(self.j_lead, carrot.j_lead_factor)
-      else:
-        base_a_change_cost = A_CHANGE_COST
-
       #safe_distance = lead_0_obstacle[0] - get_safe_obstacle_distance(v_ego, comfort_brake, stop_distance)
-      self.lead_danger_factor = LEAD_DANGER_FACTOR #np.interp(safe_distance, [-30.0, 0.0], [0.9, LEAD_DANGER_FACTOR]) # ?닿구?곸슜?섎땲, ?ш퀬諛⑹???媛먯냽???덈Т 湲됱젙嫄고븯?붽쾬 媛숈쓬.
+      self.lead_danger_factor = LEAD_DANGER_FACTOR
       self.params[:,5] = self.lead_danger_factor
-      
+
     elif mode == 'blended':
       self.params[:,5] = 1.0
 
@@ -503,7 +486,7 @@ class LongitudinalMpc:
 
     self.run()
     if mode == 'acc':
-      self.apply_predicted_danger_a_change_cost(radarstate.leadOne, base_a_change_cost, lead_0_obstacle, t_follow, comfort_brake, stop_distance)
+      self.update_predicted_danger_margin(radarstate.leadOne, lead_0_obstacle, t_follow, comfort_brake, stop_distance)
 
     if (np.any(lead_xv_0[FCW_IDXS,0] - self.x_sol[FCW_IDXS,0] < CRASH_DISTANCE) and
             radarstate.leadOne.modelProb > 0.9):

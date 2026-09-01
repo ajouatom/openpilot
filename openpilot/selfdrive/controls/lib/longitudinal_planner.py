@@ -16,6 +16,12 @@ from openpilot.selfdrive.controls.lib.cutin_predecel import (
   apply_cutin_predecel_accel_limit,
   get_cutin_predecel_accel_limit,
 )
+from openpilot.selfdrive.controls.lib.longitudinal_preview import (
+  apply_preview_target,
+  clip_action_time,
+  get_lead_preview_request,
+  rate_limit_preview,
+)
 from openpilot.selfdrive.car.cruise import V_CRUISE_MAX, V_CRUISE_UNSET
 from openpilot.common.swaglog import cloudlog
 from openpilot.common.params import Params
@@ -98,9 +104,13 @@ class LongitudinalPlanner:
     self.v_desired_filter = FirstOrderFilter(init_v, 2.0, self.dt)
     self.prev_accel_clip = [ACCEL_MIN, ACCEL_MAX]
     self.output_a_target = 0.0
+    self.output_a_target_base = 0.0
     self.output_v_target_now = 0.0
     self.output_j_target_now = 0.0
     self.output_should_stop = False
+    self.lead_preview = 0.0
+    self.lead_preview_action_time = 0.0
+    self.lead_preview_accel = 0.0
 
     self.v_desired_trajectory = np.zeros(CONTROL_N)
     self.a_desired_trajectory = np.zeros(CONTROL_N)
@@ -267,13 +277,50 @@ class LongitudinalPlanner:
     vEgoStopping = self.params.get_float("VEgoStopping") * 0.01
     action_t =  longitudinalActuatorDelay + DT_MDL
 
-    output_a_target_mpc, output_should_stop_mpc, output_v_target_mpc, _ = get_accel_from_plan(
+    output_a_target_base, output_should_stop_mpc, output_v_target_mpc, _ = get_accel_from_plan(
       self.v_desired_trajectory,
       self.a_desired_trajectory,
       CONTROL_N_T_IDX,
       action_t=action_t,
       vEgoStopping=vEgoStopping,
     )
+
+    lead = sm['radarState'].leadOne
+    preview_request = get_lead_preview_request(
+      carrot.myDrivingMode,
+      lead_status=(
+        self.mpc.mode == 'acc'
+        and not reset_state
+        and not sm['carState'].gasPressed
+        and lead.status
+        and lead.radar
+        and lead.radarTrackId >= 0
+      ),
+      a_lead=lead.aLeadK,
+      j_lead=lead.jLead,
+    )
+    if preview_request.active:
+      self.lead_preview = rate_limit_preview(preview_request.offset_s, self.lead_preview)
+      self.lead_preview_accel = preview_request.lead_accel_signal
+      self.lead_preview_action_time = clip_action_time(action_t, self.lead_preview)
+    else:
+      self.lead_preview = 0.0
+      self.lead_preview_accel = 0.0
+      self.lead_preview_action_time = action_t
+
+    output_a_target_preview, _, _, _ = get_accel_from_plan(
+      self.v_desired_trajectory,
+      self.a_desired_trajectory,
+      CONTROL_N_T_IDX,
+      action_t=self.lead_preview_action_time,
+      vEgoStopping=vEgoStopping,
+    )
+    output_a_target_mpc = apply_preview_target(
+      output_a_target_base,
+      output_a_target_preview,
+      carrot.myDrivingMode,
+      self.lead_preview_accel,
+    ) if preview_request.active else output_a_target_base
     output_a_target_e2e = sm['modelV2'].action.desiredAcceleration
     output_should_stop_e2e = sm['modelV2'].action.shouldStop
     output_v_target_now_e2e = sm['modelV2'].action.desiredVelocity
@@ -291,6 +338,7 @@ class LongitudinalPlanner:
     #  accel_clip[idx] = np.clip(accel_clip[idx], self.prev_accel_clip[idx] - 0.05, self.prev_accel_clip[idx] + 0.05)
     #self.output_a_target = np.clip(output_a_target, accel_clip[0], accel_clip[1])
     #self.prev_accel_clip = accel_clip
+    self.output_a_target_base = output_a_target_base
     self.output_a_target = output_a_target
     self.output_v_target_now = output_v_target_now
     self.output_j_target_now = self.j_desired_trajectory[0]
@@ -335,6 +383,11 @@ class LongitudinalPlanner:
     longitudinalPlan.fcw = self.fcw
 
     longitudinalPlan.aTarget = float(self.output_a_target)
+    longitudinalPlan.aTargetBase = float(self.output_a_target_base)
+    longitudinalPlan.leadPreviewSeconds = float(self.lead_preview)
+    longitudinalPlan.leadPreviewActionTime = float(self.lead_preview_action_time)
+    longitudinalPlan.leadPreviewAccel = float(self.lead_preview_accel)
+    longitudinalPlan.aChangeCost = float(self.mpc.a_change_cost)
     longitudinalPlan.vTargetNow = float(self.output_v_target_now)
     longitudinalPlan.jTargetNow = float(self.output_j_target_now)
     longitudinalPlan.shouldStop = bool(self.output_should_stop)

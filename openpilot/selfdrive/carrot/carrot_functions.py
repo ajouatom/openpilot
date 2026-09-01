@@ -607,7 +607,10 @@ class CarrotPlanner:
     if mode == 'acc':
       mode = 'blended' if self.xState in [XState.e2ePrepare] else 'acc'
 
-    self.comfort_brake *= self.mySafeFactor
+    # Drive modes shape transient response through lead preview and preserve
+    # steady-state spacing through tFollow.  Keep the MPC braking-distance model
+    # independent of mode so its v^2 term does not create a large high-speed gap
+    # jump (Safe/Eco max acceleration still uses mySafeFactor).
     self.actual_stop_distance = max(0, self.actual_stop_distance - (v_ego * DT_MDL))
 
     if stop_model_x == 1000.0:  # e2eCruise 또는 lead 상태
