@@ -60,13 +60,19 @@ def test_manifest_resolves_relative_https_url():
   assert manifest.cache_filename.endswith(".onnx")
 
 
-def test_default_manifest_is_pinned_to_time_to_go(monkeypatch):
+def test_default_manifest_is_pinned_to_tgc(monkeypatch):
   monkeypatch.setattr(big_model, "urlopen", lambda *_args, **_kwargs: pytest.fail("default manifest must be built in"))
   manifest = big_model.fetch_manifest()
-  assert manifest.model_id == "comma-pr38726-time-to-go-5a658611-39131097"
-  assert manifest.size == 766_082_665
-  assert manifest.sha256 == "3913109713cc782bdb001550a519f1fc6b36dbc7ade1cf6126622f044ff6adfb"
-  assert manifest.url == "https://upload.shind0.synology.me/models/comma4-big-tg/big_driving_supercombo.onnx"
+  assert manifest.model_id == "comma-pr38739-tgc-a2e422ee-1791d594"
+  assert manifest.size == 765_950_064
+  assert manifest.sha256 == "1791d5940b2c048d0639813426dd2cf1d6f2a6727ed51e17c8bcea8bbe754123"
+  assert manifest.url == "https://upload.shind0.synology.me/models/comma4-big-tgc/big_driving_supercombo.onnx"
+
+
+def test_tgc_tinygrad_custom_op_is_supported():
+  source = (Path(big_model.__file__).parents[3] / "tinygrad_repo/tinygrad/nn/onnx.py").read_text(encoding="utf-8")
+  assert 'TINYGRAD = "org.tinygrad"' in source
+  assert "Contiguous = {OpSetId(Domain.TINYGRAD, 1):contiguous_1}" in source
 
 
 def test_explicit_manifest_override_is_fetched(monkeypatch):
