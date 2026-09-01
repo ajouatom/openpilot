@@ -7,45 +7,47 @@ from openpilot.selfdrive.controls.lib.longitudinal_preview import (
   DRIVING_MODE_SAFE,
   apply_preview_target,
   clip_action_time,
+  clip_preview_offset,
   get_lead_preview_request,
   rate_limit_preview,
 )
 
 
-def request(mode, a_lead, j_lead=0.0):
+def request(mode, a_lead, j_lead=0.0, a_ego=0.0):
   return get_lead_preview_request(
     mode,
     lead_status=True,
     a_lead=a_lead,
     j_lead=j_lead,
+    a_ego=a_ego,
   )
 
 
 def test_safe_preview_changes_sign_with_lead_acceleration():
-  assert request(DRIVING_MODE_SAFE, 0.5).offset_s == pytest.approx(-0.10)
-  assert request(DRIVING_MODE_SAFE, -0.5).offset_s == pytest.approx(0.30)
+  assert request(DRIVING_MODE_SAFE, 0.5).offset_s == pytest.approx(-0.20)
+  assert request(DRIVING_MODE_SAFE, -0.5).offset_s == pytest.approx(0.40)
 
 
-def test_eco_halves_acceleration_side_but_keeps_braking_response():
-  assert request(DRIVING_MODE_ECO, 0.5).offset_s == pytest.approx(-0.06)
-  assert request(DRIVING_MODE_ECO, -0.4).offset_s == pytest.approx(0.18)
+def test_eco_delays_acceleration_side_but_keeps_braking_response():
+  assert request(DRIVING_MODE_ECO, 0.5).offset_s == pytest.approx(-0.15)
+  assert request(DRIVING_MODE_ECO, -0.4).offset_s == pytest.approx(0.30)
 
 
 def test_normal_does_not_preview_positive_lead_acceleration():
   assert request(DRIVING_MODE_NORMAL, 1.0).offset_s == 0.0
-  assert request(DRIVING_MODE_NORMAL, -0.5).offset_s == pytest.approx(0.14)
+  assert request(DRIVING_MODE_NORMAL, -0.5).offset_s == pytest.approx(0.40)
 
 
 def test_high_previews_stable_acceleration_forward():
   assert request(DRIVING_MODE_HIGH, 0.5).offset_s == pytest.approx(0.10)
-  assert request(DRIVING_MODE_HIGH, -0.5).offset_s == pytest.approx(0.14)
+  assert request(DRIVING_MODE_HIGH, -0.5).offset_s == pytest.approx(0.40)
 
 
 @pytest.mark.parametrize(("mode", "preview_max"), [
-  (DRIVING_MODE_SAFE, 0.60),
-  (DRIVING_MODE_ECO, 0.45),
-  (DRIVING_MODE_NORMAL, 0.25),
-  (DRIVING_MODE_HIGH, 0.25),
+  (DRIVING_MODE_SAFE, 1.50),
+  (DRIVING_MODE_ECO, 1.50),
+  (DRIVING_MODE_NORMAL, 1.50),
+  (DRIVING_MODE_HIGH, 1.50),
 ])
 def test_braking_preview_is_capped_by_mode(mode, preview_max):
   assert request(mode, -10.0).offset_s == pytest.approx(preview_max)
@@ -54,7 +56,31 @@ def test_braking_preview_is_capped_by_mode(mode, preview_max):
 def test_jerk_is_converted_to_short_horizon_lead_acceleration():
   result = request(DRIVING_MODE_SAFE, 0.0, -1.0)
   assert result.lead_accel_signal == pytest.approx(-0.15)
-  assert result.offset_s == pytest.approx(0.1125)
+  assert result.offset_s == pytest.approx(0.15)
+
+
+@pytest.mark.parametrize("mode", [
+  DRIVING_MODE_SAFE,
+  DRIVING_MODE_ECO,
+  DRIVING_MODE_NORMAL,
+  DRIVING_MODE_HIGH,
+])
+def test_all_modes_use_relative_acceleration_for_lead_deceleration(mode):
+  result = request(mode, 0.0, a_ego=0.8)
+  assert result.lead_accel_signal == pytest.approx(-0.7)
+  assert result.offset_s == pytest.approx(0.7)
+
+
+@pytest.mark.parametrize("mode", [
+  DRIVING_MODE_SAFE,
+  DRIVING_MODE_ECO,
+  DRIVING_MODE_NORMAL,
+  DRIVING_MODE_HIGH,
+])
+def test_all_modes_release_preview_when_ego_matches_lead_deceleration(mode):
+  result = request(mode, -0.5, a_ego=-0.5)
+  assert result.lead_accel_signal == 0.0
+  assert result.offset_s == 0.0
 
 
 def test_preview_is_disabled_for_invalid_or_missing_lead():
@@ -63,6 +89,9 @@ def test_preview_is_disabled_for_invalid_or_missing_lead():
   ).active
   assert not get_lead_preview_request(
     DRIVING_MODE_SAFE, lead_status=True, a_lead=float("nan"), j_lead=0.0,
+  ).active
+  assert not get_lead_preview_request(
+    DRIVING_MODE_SAFE, lead_status=True, a_lead=-1.0, j_lead=0.0, a_ego=float("nan"),
   ).active
 
 
@@ -79,12 +108,37 @@ def test_zero_preview_preserves_configured_actuator_delay():
   assert clip_action_time(2.05, 0.0) == pytest.approx(2.05)
 
 
-def test_comfort_modes_only_remove_acceleration_with_bounded_prebraking():
+def test_negative_preview_cannot_cross_zero_actuator_delay():
+  long_actuator_delay = 0.15
+  base_action_t = long_actuator_delay + 0.05
+  effective_preview = clip_preview_offset(base_action_t, -1.0)
+  assert effective_preview == pytest.approx(-long_actuator_delay)
+  assert long_actuator_delay + effective_preview == pytest.approx(0.0)
+
+
+def test_preview_only_removes_acceleration_with_bounded_prebraking():
   assert apply_preview_target(0.20, 0.40, DRIVING_MODE_SAFE, -0.5) == pytest.approx(0.20)
-  assert apply_preview_target(0.20, -0.20, DRIVING_MODE_SAFE, -0.5) == pytest.approx(0.02)
+  assert apply_preview_target(0.20, -0.20, DRIVING_MODE_SAFE, -0.5) == pytest.approx(-0.05)
   assert apply_preview_target(0.02, -0.20, DRIVING_MODE_SAFE, -0.5) == pytest.approx(-0.05)
   assert apply_preview_target(0.08, -0.20, DRIVING_MODE_ECO, -0.5) == pytest.approx(-0.04)
   assert apply_preview_target(-0.50, -1.0, DRIVING_MODE_NORMAL, -0.5) == pytest.approx(-0.58)
+
+
+@pytest.mark.parametrize(("mode", "floor"), [
+  (DRIVING_MODE_SAFE, -0.05),
+  (DRIVING_MODE_ECO, -0.04),
+  (DRIVING_MODE_NORMAL, -0.03),
+  (DRIVING_MODE_HIGH, -0.03),
+])
+def test_all_modes_can_release_positive_acceleration_to_coast(mode, floor):
+  assert apply_preview_target(0.70, 0.20, mode, -1.0) == pytest.approx(0.20)
+  assert apply_preview_target(0.70, -0.20, mode, -1.0) == pytest.approx(floor)
+
+
+def test_normal_reacts_to_speed_bump_lead_deceleration():
+  request_normal = request(DRIVING_MODE_NORMAL, a_lead=-1.36, j_lead=-1.64, a_ego=0.70)
+  assert request_normal.offset_s == pytest.approx(1.50)
+  assert apply_preview_target(0.70, 0.22, DRIVING_MODE_NORMAL, request_normal.lead_accel_signal) == pytest.approx(0.22)
 
 
 def test_positive_lead_acceleration_never_requests_prebraking():

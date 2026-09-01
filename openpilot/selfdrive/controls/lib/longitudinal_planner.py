@@ -18,7 +18,7 @@ from openpilot.selfdrive.controls.lib.cutin_predecel import (
 )
 from openpilot.selfdrive.controls.lib.longitudinal_preview import (
   apply_preview_target,
-  clip_action_time,
+  clip_preview_offset,
   get_lead_preview_request,
   rate_limit_preview,
 )
@@ -298,11 +298,13 @@ class LongitudinalPlanner:
       ),
       a_lead=lead.aLeadK,
       j_lead=lead.jLead,
+      a_ego=sm['carState'].aEgo,
     )
     if preview_request.active:
-      self.lead_preview = rate_limit_preview(preview_request.offset_s, self.lead_preview)
+      requested_preview = rate_limit_preview(preview_request.offset_s, self.lead_preview)
+      self.lead_preview = clip_preview_offset(action_t, requested_preview)
       self.lead_preview_accel = preview_request.lead_accel_signal
-      self.lead_preview_action_time = clip_action_time(action_t, self.lead_preview)
+      self.lead_preview_action_time = action_t + self.lead_preview
     else:
       self.lead_preview = 0.0
       self.lead_preview_accel = 0.0

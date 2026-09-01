@@ -1233,7 +1233,7 @@ struct LongitudinalPlan @0xe00b5b3eba12876c {
   aTargetBase @56 :Float32;
   leadPreviewSeconds @57 :Float32;
   leadPreviewActionTime @58 :Float32;
-  leadPreviewAccel @59 :Float32;
+  leadPreviewAccel @59 :Float32;  # mode-weighted aLead + jerk lookahead - aEgo contribution
   aChangeCost @60 :Float32;
 
   solverExecutionTime @35 :Float32;

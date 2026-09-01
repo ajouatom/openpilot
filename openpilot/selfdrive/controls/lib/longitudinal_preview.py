@@ -14,6 +14,7 @@ DRIVING_MODE_HIGH = 4
 LEAD_JERK_LOOKAHEAD_S = 0.25
 LEAD_ACCEL_DEADBAND = 0.10
 LEAD_JERK_LIMIT = 3.0
+EGO_ACCEL_LIMIT = 3.0
 PREVIEW_DECEL_ATTACK_STEP_S = 0.08
 PREVIEW_RELEASE_STEP_S = 0.03
 
@@ -30,12 +31,13 @@ MAX_HIGH_ACCEL_TARGET_DELTA = 0.15
 
 @dataclass(frozen=True)
 class PreviewTuning:
+  ego_accel_factor: float
   accel_factor: float
   decel_factor: float
   accel_preview_max: float
   decel_preview_max: float
   prebrake_floor: float
-  predecel_delta_max: float
+  predecel_delta_max: float | None
   active_decel_delta_max: float
   accelerate_early: bool = False
 
@@ -48,32 +50,35 @@ class PreviewRequest:
 
 
 MODE_TUNING = {
-  # Braking uses a longer horizon than acceleration because nearby MPC nodes
-  # remain close together at the start of a lead deceleration. Safe responds
-  # earliest with a small pre-brake; Eco is moderate; Normal preserves
-  # positive-lead acceleration timing and previews braking only.
+  # Every mode uses the same relative-acceleration safety horizon for braking.
+  # Mode character is kept on the acceleration side and by each mode's
+  # existing following-time, comfort-brake and maximum-acceleration settings.
   DRIVING_MODE_SAFE: PreviewTuning(
-    accel_factor=0.50, decel_factor=0.75,
-    accel_preview_max=0.10, decel_preview_max=0.60,
-    prebrake_floor=-0.05, predecel_delta_max=0.18, active_decel_delta_max=0.10,
+    ego_accel_factor=1.0,
+    accel_factor=1.00, decel_factor=1.00,
+    accel_preview_max=0.20, decel_preview_max=1.50,
+    prebrake_floor=-0.05, predecel_delta_max=None, active_decel_delta_max=0.10,
   ),
   DRIVING_MODE_ECO: PreviewTuning(
-    accel_factor=0.25, decel_factor=0.60,
-    accel_preview_max=0.06, decel_preview_max=0.45,
-    prebrake_floor=-0.04, predecel_delta_max=0.16, active_decel_delta_max=0.09,
+    ego_accel_factor=1.0,
+    accel_factor=0.75, decel_factor=1.00,
+    accel_preview_max=0.15, decel_preview_max=1.50,
+    prebrake_floor=-0.04, predecel_delta_max=None, active_decel_delta_max=0.09,
   ),
   DRIVING_MODE_NORMAL: PreviewTuning(
-    accel_factor=0.0, decel_factor=0.35,
-    accel_preview_max=0.0, decel_preview_max=0.25,
-    prebrake_floor=-0.03, predecel_delta_max=0.15, active_decel_delta_max=0.08,
+    ego_accel_factor=1.0,
+    accel_factor=0.0, decel_factor=1.00,
+    accel_preview_max=0.0, decel_preview_max=1.50,
+    prebrake_floor=-0.03, predecel_delta_max=None, active_decel_delta_max=0.08,
   ),
   # High keeps the normal safety-side preview and looks farther ahead during a
   # confirmed lead acceleration.  Its existing max-accel factor remains the
   # sustained acceleration envelope.
   DRIVING_MODE_HIGH: PreviewTuning(
-    accel_factor=0.30, decel_factor=0.35,
-    accel_preview_max=0.10, decel_preview_max=0.25,
-    prebrake_floor=-0.03, predecel_delta_max=0.15, active_decel_delta_max=0.08,
+    ego_accel_factor=1.0,
+    accel_factor=0.30, decel_factor=1.00,
+    accel_preview_max=0.10, decel_preview_max=1.50,
+    prebrake_floor=-0.03, predecel_delta_max=None, active_decel_delta_max=0.08,
     accelerate_early=True,
   ),
 }
@@ -97,17 +102,23 @@ def get_lead_preview_request(
   lead_status: bool,
   a_lead: float,
   j_lead: float,
+  a_ego: float = 0.0,
 ) -> PreviewRequest:
-  """Map lead acceleration/jerk to a bounded signed preview-time request."""
+  """Map mode-weighted relative acceleration to a signed preview request."""
   tuning = MODE_TUNING.get(_mode_value(driving_mode))
-  if tuning is None or not lead_status or not (math.isfinite(a_lead) and math.isfinite(j_lead)):
+  if tuning is None or not lead_status or not all(math.isfinite(value) for value in (a_lead, j_lead, a_ego)):
     return PreviewRequest(0.0, 0.0, False)
 
   # Convert jerk to a short-horizon acceleration contribution before combining
   # the signals.  This avoids adding m/s^3 directly to m/s^2 and lets jerk only
   # advance the onset of an already bounded preview response.
   bounded_jerk = max(-LEAD_JERK_LIMIT, min(LEAD_JERK_LIMIT, float(j_lead)))
-  lead_accel_signal = float(a_lead) + LEAD_JERK_LOOKAHEAD_S * bounded_jerk
+  bounded_ego_accel = max(-EGO_ACCEL_LIMIT, min(EGO_ACCEL_LIMIT, float(a_ego)))
+  lead_accel_signal = (
+    float(a_lead)
+    + LEAD_JERK_LOOKAHEAD_S * bounded_jerk
+    - tuning.ego_accel_factor * bounded_ego_accel
+  )
   lead_accel_signal = _deadzone(lead_accel_signal, LEAD_ACCEL_DEADBAND)
 
   if lead_accel_signal < 0.0:
@@ -138,6 +149,11 @@ def clip_action_time(base_action_t: float, preview_s: float) -> float:
   return float(max(MIN_ACTION_TIME_S, min(MAX_ACTION_TIME_S, base_action_t + preview_s)))
 
 
+def clip_preview_offset(base_action_t: float, preview_s: float) -> float:
+  """Return the effective offset after enforcing the MPC action-time bounds."""
+  return float(clip_action_time(base_action_t, preview_s) - float(base_action_t))
+
+
 def apply_preview_target(
   base_target: float,
   preview_target: float,
@@ -158,13 +174,15 @@ def apply_preview_target(
     # the bounded delta.  The normal MPC maximum acceleration is still obeyed.
     return float(max(base, min(candidate, base + MAX_HIGH_ACCEL_TARGET_DELTA)))
 
-  # Safe, Eco and Normal preview may only remove acceleration. A confirmed
-  # negative lead signal may request a small, mode-bounded pre-brake; positive
-  # lead acceleration can reduce acceleration only as far as coasting.
+  # Every mode may remove acceleration for a negative relative-acceleration
+  # signal. Pre-braking remains mode-bounded; a positive signal can reduce
+  # acceleration only as far as coasting.
   candidate = min(candidate, base)
   if base > 0.0:
     prebrake_floor = tuning.prebrake_floor if lead_accel_signal < 0.0 else 0.0
-    candidate = max(candidate, prebrake_floor, base - tuning.predecel_delta_max)
+    candidate = max(candidate, prebrake_floor)
+    if tuning.predecel_delta_max is not None:
+      candidate = max(candidate, base - tuning.predecel_delta_max)
   else:
     candidate = max(candidate, base - tuning.active_decel_delta_max)
   return float(candidate)
