@@ -6397,10 +6397,50 @@ def test_controller_disables_new_lead_two_at_zero_sensitivity() -> None:
   assert output is not None
   assert enabled_output is not None
   assert enabled_output.leads_cutin
+  assert enabled_output.leads_cutin_path == ()
   assert output.lead_one is not None
   assert output.lead_one["radarTrackId"] == 10
   assert output.lead_two is None
   assert output.leads_cutin == ()
+  assert output.leads_cutin_path == ()
+
+
+def test_controller_separates_predicted_and_path_occupied_cutins() -> None:
+  controller = DPathRadarController(prefer_corner_radar=True)
+  predicted_only = False
+  occupied = False
+  for index in range(40):
+    target_d_rel = 13.0 - 0.12 * index
+    target_y_rel = -3.0 + 0.07 * index
+    output = controller.update(
+      time_s=index * 0.1,
+      v_ego=10.0,
+      radar_points=(
+        Point(10, 30.0, 0.0, source="frontRadar"),
+        Point(
+          49, target_d_rel, target_y_rel,
+          v_rel=-7.8, v_lead=2.2,
+        ),
+        Point(
+          1005, target_d_rel - 0.25, target_y_rel - 0.15,
+          v_rel=-7.7, v_lead=2.3, yv_rel=0.7,
+          source="corner235", trackState=2,
+        ),
+      ),
+      model=model_with_lead(30.0, 0.0, 10.0),
+    )
+    predicted_ids = {
+      int(lead["radarTrackId"]) for lead in output.leads_cutin
+    }
+    occupied_ids = {
+      int(lead["radarTrackId"]) for lead in output.leads_cutin_path
+    }
+    assert occupied_ids <= predicted_ids
+    predicted_only |= bool(predicted_ids and not occupied_ids)
+    occupied |= bool(occupied_ids)
+
+  assert predicted_only
+  assert occupied
 
 
 def test_controller_matches_radard_lead_dynamics_and_raw_jerk() -> None:
@@ -6881,6 +6921,7 @@ def test_production_radar_is_fixed_to_carrot() -> None:
     "leadsCenter",
     "leadsRight",
     "leadsCutIn",
+    "leadsCutInPath",
     "leadsLeft2",
     "leadsRight2",
   ):
