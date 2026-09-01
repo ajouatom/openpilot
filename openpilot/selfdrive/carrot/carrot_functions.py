@@ -119,7 +119,7 @@ class CarrotPlanner:
     self.tFollowGap4 = 1.6
 
     self.dynamicTFollow = 0.0
-    self.dynamicTFollowLC = 0.0
+    self.dynamicTFollowLC = 1.0
     self.enableSpeedTF = 0
     self.tFollowDecelBoost = 0.0
     self._tf_decel_extra = 0.0
