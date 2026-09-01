@@ -158,10 +158,9 @@ def _first(values: Any, fallback: float = 0.0) -> float:
     return fallback
 
 
-def _source(point: Any) -> str:
-  source = str(getattr(point, "source", getattr(point, "radarSource", "frontRadar")))
+def _normalized_source(source: Any, track_id: int) -> str:
+  source = str(source)
   source = source.rsplit(".", 1)[-1]
-  track_id = int(getattr(point, "track_id", getattr(point, "trackId", -1)))
   if source == "frontRadar":
     if 200 <= track_id < 220:
       return "corner235"
@@ -170,6 +169,12 @@ def _source(point: Any) -> str:
     if 300 <= track_id < 412:
       return "corner430"
   return source
+
+
+def _source(point: Any) -> str:
+  source = getattr(point, "source", getattr(point, "radarSource", "frontRadar"))
+  track_id = int(getattr(point, "track_id", getattr(point, "trackId", -1)))
+  return _normalized_source(source, track_id)
 
 
 def _value(point: Any, snake: str, camel: str, fallback: float = 0.0) -> float:
@@ -576,6 +581,42 @@ def snapshot_radar_points(
   return tuple(snapshots)
 
 
+def snapshot_live_radar_points(
+  points: Iterable[Any],
+  v_ego: float,
+  time_delta_s: float = 0.0,
+) -> tuple[RadarPointSnapshot, ...]:
+  """Copy production car.RadarData points without probing absent aliases.
+
+  Cap'n Proto field lookup is unusually expensive when the requested field is
+  absent. The generic adapter above intentionally supports snake_case replay
+  objects, but its fallback lookups dominate the production RadarD CPU budget.
+  liveTracks always uses the camelCase car.RadarData schema, so read it directly.
+  """
+  snapshots = []
+  for point in points:
+    if not bool(point.measured):
+      continue
+    track_id = int(point.trackId)
+    v_rel = _finite(point.vRel)
+    yv_rel = _finite(point.yvRel)
+    snapshots.append(RadarPointSnapshot(
+      track_id=track_id,
+      source=_normalized_source(point.radarSource, track_id),
+      d_rel=_finite(point.dRel) + v_rel * time_delta_s,
+      y_rel=_finite(point.yRel) + yv_rel * time_delta_s,
+      v_rel=v_rel,
+      a_rel=_finite(point.aRel),
+      yv_rel=yv_rel,
+      v_lead=float(v_ego) + v_rel,
+      a_lead=_finite(point.aLead),
+      j_lead=_finite(point.jLead),
+      measured=True,
+      radar_track_state=int(_finite(point.trackState)),
+    ))
+  return tuple(snapshots)
+
+
 def select_primary_radar_points(
   points: Iterable[RadarPointSnapshot],
   enable_radar_tracks: int,
@@ -594,7 +635,9 @@ def select_primary_radar_points(
     return ()
   if enable_radar_tracks <= 0:
     return scc
-  if enable_radar_tracks >= 2:
+  if enable_radar_tracks >= 3:
+    return front + scc
+  if enable_radar_tracks == 2:
     return front + tuple(
       point for point in scc
       if point.v_lead < LOW_SPEED_SCC_MAX_VLEAD_MPS
