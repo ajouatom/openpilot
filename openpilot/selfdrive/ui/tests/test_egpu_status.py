@@ -138,6 +138,12 @@ def test_selfdrived_allows_five_seconds_for_egpu_fallback_to_settle():
 
 
 def test_tinygrad_retries_interrupted_usb_event_waits():
+  # This branch's tinygrad drives the bridge with the synchronous libusb API, so there is
+  # no libusb_handle_events wait to guard. EINTR arrives as a transfer return code and is
+  # classified alongside a zero-progress EIO instead.
   source = (UI_DIR.parents[2] / "tinygrad_repo" / "tinygrad" / "runtime" / "support" / "usb.py").read_text(encoding="utf-8")
 
-  assert "rc != libusb.LIBUSB_ERROR_INTERRUPTED" in source
+  assert "libusb.libusb_handle_events(" not in source
+  assert "RETRYABLE_ZERO_PROGRESS_ERRORS = (libusb.LIBUSB_ERROR_IO, libusb.LIBUSB_ERROR_INTERRUPTED)" in source
+  assert source.count("ret not in self.RETRYABLE_ZERO_PROGRESS_ERRORS") == 2  # bulk OUT + bulk IN
+  assert "ret not in USB3.RETRYABLE_ZERO_PROGRESS_ERRORS" in source          # XDATA read

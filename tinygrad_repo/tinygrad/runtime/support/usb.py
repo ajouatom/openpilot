@@ -16,6 +16,13 @@ def checked(fn, msg=None):
 class USB3:
   BULK_OUT_IO_ATTEMPTS = 10
   BULK_OUT_IO_RETRY_INTERVAL_S = 0.01
+  BULK_IN_IO_ATTEMPTS = 10
+  BULK_IN_IO_RETRY_INTERVAL_S = 0.01
+  # Signals can interrupt libusb's event wait without indicating a USB transfer failure.
+  # This stack uses the synchronous libusb API, so EINTR surfaces as a return code here
+  # instead of from libusb_handle_events. Both codes are only retryable when the transfer
+  # moved no data at all; a partial transfer has already reached the bridge.
+  RETRYABLE_ZERO_PROGRESS_ERRORS = (libusb.LIBUSB_ERROR_IO, libusb.LIBUSB_ERROR_INTERRUPTED)
 
   @staticmethod
   @functools.cache
@@ -94,9 +101,10 @@ class USB3:
       with usbgpu_bus_lock():
         ret = libusb.libusb_bulk_transfer(self.handle, 0x02, self._bulk_buf, len(payload), self._transferred, timeout)
       if ret >= 0: break
-      # A zero-byte EIO is safe to replay. Never retry a partial transfer: the
-      # bridge may already have consumed part of the command or model buffer.
-      if (ret != libusb.LIBUSB_ERROR_IO or self._transferred.value != 0 or
+      # A zero-byte EIO or an interrupted event wait is safe to replay. Never retry a
+      # partial transfer: the bridge may already have consumed part of the command or
+      # model buffer.
+      if (ret not in self.RETRYABLE_ZERO_PROGRESS_ERRORS or self._transferred.value != 0 or
           attempt + 1 == self.BULK_OUT_IO_ATTEMPTS):
         error = ctypes.string_at(libusb.libusb_strerror(ret)).decode()
         raise RuntimeError(f"bulk OUT 0x02 failed after {attempt + 1} attempts "
@@ -106,8 +114,19 @@ class USB3:
 
   def bulk_read(self, length:int, timeout:int=1000) -> memoryview:
     if length > len(self._bulk_mv): self._bulk_buf, self._bulk_mv = alloc_cbuffer(length)
-    with usbgpu_bus_lock():
-      checked(libusb.libusb_bulk_transfer, "bulk IN 0x81 failed")(self.handle, 0x81, self._bulk_buf, length, self._transferred, timeout)
+    for attempt in range(self.BULK_IN_IO_ATTEMPTS):
+      self._transferred.value = 0
+      with usbgpu_bus_lock():
+        ret = libusb.libusb_bulk_transfer(self.handle, 0x81, self._bulk_buf, length, self._transferred, timeout)
+      if ret >= 0: break
+      # Same rule as the OUT path: only replay a transfer that moved no data, since a
+      # partial IN has already drained part of the bridge's queued response.
+      if (ret not in self.RETRYABLE_ZERO_PROGRESS_ERRORS or self._transferred.value != 0 or
+          attempt + 1 == self.BULK_IN_IO_ATTEMPTS):
+        error = ctypes.string_at(libusb.libusb_strerror(ret)).decode()
+        raise RuntimeError(f"bulk IN 0x81 failed after {attempt + 1} attempts "
+                           f"({self._transferred.value}/{length} bytes): {error}")
+      time.sleep(self.BULK_IN_IO_RETRY_INTERVAL_S)
     return self._bulk_mv[:self._transferred.value]
 
   # NOTE: keep it for flash.py
@@ -210,10 +229,12 @@ class CustomASM24Controller:
       chunk = min(0xFF, length - off)
       for attempt in range(self.XDATA_READ_ATTEMPTS):
         ret, data = self.usb.control_read_attempt(0xE4, chunk, value=base_addr + off)
-        if ret == chunk or ret != libusb.LIBUSB_ERROR_IO or attempt + 1 == self.XDATA_READ_ATTEMPTS: break
-        # XDATA reads are side-effect free. A shared xHCI/hub can surface a
-        # transient LIBUSB_ERROR_IO while the bridge remains enumerated, so
-        # retry the read briefly before modeld falls back to the internal GPU.
+        if (ret == chunk or ret not in USB3.RETRYABLE_ZERO_PROGRESS_ERRORS or
+            attempt + 1 == self.XDATA_READ_ATTEMPTS): break
+        # XDATA reads are side-effect free. A shared xHCI/hub can surface a transient
+        # LIBUSB_ERROR_IO, and a signal can interrupt the event wait, while the bridge
+        # remains enumerated; retry the read briefly before modeld falls back to the
+        # internal GPU.
         time.sleep(self.XDATA_READ_RETRY_INTERVAL_S)
       assert ret == chunk, f"read(0x{base_addr + off:04X}, {chunk}) failed: {ret} after {attempt + 1} attempts"
       result += data

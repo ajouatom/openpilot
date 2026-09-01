@@ -263,6 +263,88 @@ def test_usb_bulk_out_does_not_retry_disconnect(monkeypatch):
   assert len(calls) == 1
 
 
+def test_usb_bulk_out_retries_interrupted_event_wait(monkeypatch):
+  from tinygrad.runtime.support import usb
+
+  controller = _make_usb_for_bulk_test(usb)
+  attempts = iter((usb.libusb.LIBUSB_ERROR_INTERRUPTED, 0))
+  calls = []
+
+  def bulk_transfer(_handle, _endpoint, _buffer, length, transferred, _timeout):
+    calls.append(None)
+    ret = next(attempts)
+    transferred.value = length if ret == 0 else 0
+    return ret
+
+  monkeypatch.setattr(usb.libusb, "libusb_bulk_transfer", bulk_transfer)
+  monkeypatch.setattr(usb.time, "sleep", lambda _seconds: None)
+
+  controller.bulk_write(b"model data")
+
+  assert len(calls) == 2
+
+
+def test_usb_bulk_in_retries_interrupted_event_wait(monkeypatch):
+  from tinygrad.runtime.support import usb
+
+  controller = _make_usb_for_bulk_test(usb)
+  attempts = iter((usb.libusb.LIBUSB_ERROR_INTERRUPTED, 0))
+  calls = []
+
+  def bulk_transfer(_handle, _endpoint, _buffer, length, transferred, _timeout):
+    calls.append(None)
+    ret = next(attempts)
+    transferred.value = length if ret == 0 else 0
+    return ret
+
+  monkeypatch.setattr(usb.libusb, "libusb_bulk_transfer", bulk_transfer)
+  monkeypatch.setattr(usb.time, "sleep", lambda _seconds: None)
+
+  assert len(controller.bulk_read(8)) == 8
+  assert len(calls) == 2
+
+
+def test_usb_bulk_in_does_not_retry_partial_transfer(monkeypatch):
+  from tinygrad.runtime.support import usb
+
+  controller = _make_usb_for_bulk_test(usb)
+  calls = []
+
+  def bulk_transfer(_handle, _endpoint, _buffer, _length, transferred, _timeout):
+    calls.append(None)
+    transferred.value = 4
+    return usb.libusb.LIBUSB_ERROR_IO
+
+  monkeypatch.setattr(usb.libusb, "libusb_bulk_transfer", bulk_transfer)
+
+  with pytest.raises(RuntimeError, match="bulk IN 0x81 failed after 1 attempts"):
+    controller.bulk_read(8)
+
+  assert len(calls) == 1
+
+
+def test_custom_usb_controller_retries_interrupted_xdata_read(monkeypatch):
+  from tinygrad.runtime.support import usb
+
+  controller = usb.CustomASM24Controller.__new__(usb.CustomASM24Controller)
+  controller.usb = _make_usb_for_ctrl_test(usb)
+  attempts = iter((usb.libusb.LIBUSB_ERROR_INTERRUPTED, 8))
+  calls = []
+
+  def control_transfer(_handle, _request_type, _request, _value, _index, buffer, length, _timeout):
+    calls.append(None)
+    ret = next(attempts)
+    if ret == length:
+      buffer[:length] = bytes(range(length))
+    return ret
+
+  monkeypatch.setattr(usb.libusb, "libusb_control_transfer", control_transfer)
+  monkeypatch.setattr(usb.time, "sleep", lambda _seconds: None)
+
+  assert controller.read(0xA8F0, 8) == bytes(range(8))
+  assert len(calls) == 2
+
+
 def test_usb_pci_device_releases_resources_after_init_failure(monkeypatch):
   from tinygrad.runtime.support import system
 
