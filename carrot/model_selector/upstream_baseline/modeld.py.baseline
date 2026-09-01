@@ -26,7 +26,7 @@ from openpilot.common.file_chunker import open_file_chunked
 from openpilot.selfdrive.modeld.constants import ModelConstants, Plan
 from openpilot.selfdrive.modeld.helpers import (get_tg_input_devices, load_oob, modeld_pkl_path,
                                                 refresh_usbgpu_device_cache, select_vision_streams, usbgpu_compiled_path,
-                                                usbgpu_pcie_not_ready, usbgpu_present)
+                                                usbgpu_pcie_not_ready, usbgpu_present, wait_for_usbgpu_present)
 
 PROCESS_NAME = "openpilot.selfdrive.modeld.modeld"
 SEND_RAW_PRED = os.getenv('SEND_RAW_PRED')
@@ -36,6 +36,8 @@ LAT_SMOOTH_SECONDS = 0.0
 LONG_SMOOTH_SECONDS = 0.3
 MIN_LAT_CONTROL_SPEED = 0.3
 USBGPU_MODEL_LOAD_TIMEOUT = 40
+USBGPU_DISCOVERY_GRACE_SECONDS = 5.0
+USBGPU_DISCOVERY_POLL_INTERVAL = 0.1
 USBGPU_INIT_ATTEMPTS = 6
 USBGPU_INIT_RETRY_INTERVAL = 2.0
 USBGPU_TMUX_ERROR_REASON = "egpu_error"
@@ -219,9 +221,19 @@ def main(demo=False):
   cloudlog.warning("modeld init")
 
   params = Params()
-  _present = usbgpu_present()
   usbgpu_pkl_path = usbgpu_compiled_path()
   _compiled = usbgpu_pkl_path is not None
+  _hardware_seen = params.get_bool("UsbGpuHardwareSeen")
+  _present = usbgpu_present()
+  if not _present and _compiled and _hardware_seen:
+    cloudlog.warning(
+      f"eGPU USB not present at modeld start; waiting up to {USBGPU_DISCOVERY_GRACE_SECONDS:.1f}s for SuperSpeed enumeration"
+    )
+    _present = wait_for_usbgpu_present(USBGPU_DISCOVERY_GRACE_SECONDS, USBGPU_DISCOVERY_POLL_INTERVAL)
+    if _present:
+      cloudlog.warning("eGPU USB enumerated during startup grace period")
+    else:
+      cloudlog.warning("eGPU USB still absent after startup grace period; using internal model")
   _startup_failed = params.get_bool("UsbGpuStartupFailed")
   USBGPU = _present and _compiled and not _startup_failed
   cloudlog.warning(f"usbgpu present: {_present}, compiled: {_compiled}, startup_failed: {_startup_failed}, requested: {USBGPU}")
