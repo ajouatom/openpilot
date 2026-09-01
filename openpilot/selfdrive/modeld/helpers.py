@@ -152,12 +152,29 @@ def usbgpu_pcie_not_ready(error: BaseException | str) -> bool:
   return False
 
 
+def active_usbgpu_compiled_path() -> Path | None:
+  model = active_manifest()
+  if model is None:
+    return None
+  path = modeld_pkl_path(usbgpu=True, model_sha256=model.sha256)
+  return path if Path(get_manifest_path(path)).is_file() else None
+
+
+def usbgpu_compile_pending() -> bool:
+  model = active_manifest()
+  if model is None:
+    return False
+  path = modeld_pkl_path(usbgpu=True, model_sha256=model.sha256)
+  return not Path(get_manifest_path(path)).is_file()
+
+
 def usbgpu_compiled_path() -> Path | None:
-  state = read_state()
-  for model in (state['active'], state['previous']):
-    if model is None:
-      continue
-    path = modeld_pkl_path(usbgpu=True, model_sha256=model.sha256)
+  if (path := active_usbgpu_compiled_path()) is not None:
+    return path
+
+  previous = read_state()['previous']
+  if previous is not None:
+    path = modeld_pkl_path(usbgpu=True, model_sha256=previous.sha256)
     if Path(get_manifest_path(path)).is_file():
       return path
   return None

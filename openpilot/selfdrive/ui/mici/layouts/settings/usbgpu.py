@@ -4,7 +4,7 @@ from pathlib import Path
 import pyray as rl
 
 from openpilot.common.file_chunker import get_manifest_path
-from openpilot.selfdrive.modeld.helpers import usbgpu_compiled_path
+from openpilot.selfdrive.modeld.helpers import active_usbgpu_compiled_path
 from openpilot.selfdrive.ui.mici.widgets.button import BigButton
 from openpilot.selfdrive.ui.mici.widgets.dialog import BigConfirmationDialog
 from openpilot.selfdrive.ui.ui_state import ui_state
@@ -27,7 +27,8 @@ class UsbGpuInfoLayout(Widget):
 
   def _update_state(self):
     self._status_value.set_text(usbgpu_status(ui_state.usbgpu_compiled, ui_state.usbgpu_loading, ui_state.usbgpu_active,
-                                              ui_state.usbgpu_startup_failed))
+                                              ui_state.usbgpu_startup_failed,
+                                              compile_pending=ui_state.usbgpu_compile_pending))
     device = get_usbgpu_device()
     if device is None:
       value = "not connected"
@@ -88,7 +89,7 @@ class UsbGpuLayoutMici(NavScroller):
   @staticmethod
   def _force_compile():
     def reboot():
-      path = usbgpu_compiled_path()
+      path = active_usbgpu_compiled_path()
       if path is not None:
         Path(get_manifest_path(path)).unlink(missing_ok=True)
       ui_state.params.put_bool("DoReboot", True, block=True)

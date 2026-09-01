@@ -310,7 +310,10 @@ class HudRenderer(Widget):
             ui_state.usbgpu_loading or ui_state.usbgpu_startup_failed):
       return
 
-    text = "eGPU"
+    state = usbgpu_badge_state(ui_state.usbgpu_compiled, ui_state.usbgpu_loading,
+                               ui_state.usbgpu_active, ui_state.usbgpu_startup_failed,
+                               ui_state.usbgpu_compile_pending)
+    text = "eGPU REBOOT" if state == "compile_pending" else "eGPU"
     font_size = 22
     text_size = measure_text_cached(self._font_semi_bold, text, font_size)
     pad_x, pad_y = 10, 5
@@ -321,12 +324,11 @@ class HudRenderer(Widget):
       badge_w,
       text_size.y + pad_y * 2,
     )
-    state = usbgpu_badge_state(ui_state.usbgpu_compiled, ui_state.usbgpu_loading,
-                               ui_state.usbgpu_active, ui_state.usbgpu_startup_failed)
     color = {
       "active": rl.Color(0, 255, 0, 230),
       "loading": rl.Color(255, 255, 0, 230),
       "error": rl.Color(255, 0, 0, 230),
+      "compile_pending": rl.Color(255, 165, 0, 230),
       "not_compiled": rl.Color(255, 165, 0, 230),
       "ready": rl.Color(255, 255, 255, 210),
     }[state]

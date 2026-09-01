@@ -95,7 +95,7 @@ def get_usbgpu_device(devices_path: Path = USB_DEVICES_PATH) -> UsbGpuDevice | N
 
 
 def usbgpu_status(compiled: bool, loading: bool, active: bool, startup_failed: bool,
-                  devices_path: Path = USB_DEVICES_PATH) -> str:
+                  devices_path: Path = USB_DEVICES_PATH, compile_pending: bool = False) -> str:
   devices = get_usbgpu_devices(devices_path)
   if not devices:
     return "not detected"
@@ -111,6 +111,8 @@ def usbgpu_status(compiled: bool, loading: bool, active: bool, startup_failed: b
     return "startup failed"
   if loading:
     return "loading"
+  if compile_pending:
+    return "reboot to compile"
   if active:
     return "active"
   if not compiled:
@@ -118,12 +120,15 @@ def usbgpu_status(compiled: bool, loading: bool, active: bool, startup_failed: b
   return "ready"
 
 
-def usbgpu_badge_state(compiled: bool, loading: bool, active: bool, startup_failed: bool) -> str:
+def usbgpu_badge_state(compiled: bool, loading: bool, active: bool, startup_failed: bool,
+                       compile_pending: bool = False) -> str:
   """Return the prioritized on-road badge state shared by C3 and mici."""
   if startup_failed:
     return "error"
   if loading:
     return "loading"
+  if compile_pending:
+    return "compile_pending"
   if active:
     return "active"
   if not compiled:

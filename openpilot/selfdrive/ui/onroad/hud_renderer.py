@@ -312,13 +312,15 @@ class HudRenderer(Widget):
             ui_state.usbgpu_loading or ui_state.usbgpu_startup_failed):
       return
 
-    text = "eGPU"
     state = usbgpu_badge_state(ui_state.usbgpu_compiled, ui_state.usbgpu_loading,
-                               ui_state.usbgpu_active, ui_state.usbgpu_startup_failed)
+                               ui_state.usbgpu_active, ui_state.usbgpu_startup_failed,
+                               ui_state.usbgpu_compile_pending)
+    text = "eGPU REBOOT" if state == "compile_pending" else "eGPU"
     color = {
       "active": COLORS.GREEN_210,
       "loading": COLORS.YELLOW_210,
       "error": COLORS.RED_210,
+      "compile_pending": COLORS.ORANGE_230,
       "not_compiled": COLORS.ORANGE_230,
       "ready": COLORS.WHITE_210,
     }[state]

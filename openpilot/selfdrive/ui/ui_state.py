@@ -8,7 +8,7 @@ from openpilot.cereal import messaging, car, log
 from openpilot.common.filter_simple import FirstOrderFilter
 from openpilot.common.params import Params
 from openpilot.common.swaglog import cloudlog
-from openpilot.selfdrive.modeld.helpers import usbgpu_compiled
+from openpilot.selfdrive.modeld.helpers import active_usbgpu_compiled_path, usbgpu_compile_pending
 from openpilot.selfdrive.ui.carrot_param_cache import RealtimeUiParamSnapshot, TimedSnapshotCache, read_realtime_ui_params
 from openpilot.selfdrive.ui.lib.prime_state import PrimeState
 from openpilot.system.ui.lib.application import gui_app
@@ -107,6 +107,7 @@ class UIState:
     self.show_camera_with_cluster: bool = False
     self.usbgpu_present: bool = False
     self.usbgpu_compiled: bool = False
+    self.usbgpu_compile_pending: bool = False
     self.usbgpu_loading: bool = False
     self.usbgpu_active: bool = False
     self.usbgpu_startup_failed: bool = False
@@ -217,10 +218,11 @@ class UIState:
     self.show_model_view = self.params.get_int("ShowModelView")
     self.show_camera_with_cluster = self.params.get_int("ShowCameraWithCluster") == 1
     self.usbgpu_present = self.params.get_bool("UsbGpuPresent")
-    # Compilation artifacts persist across offroad transitions, while the
-    # runtime Param is intentionally cleared. Read the filesystem so settings
-    # never report "model not compiled" for an already usable eGPU model.
-    self.usbgpu_compiled = usbgpu_compiled()
+    # Runtime may temporarily fall back to the previous model's PKL. Keep the
+    # UI completion state tied to the active model so that fallback use does
+    # not look like the newly downloaded model was already compiled.
+    self.usbgpu_compiled = active_usbgpu_compiled_path() is not None
+    self.usbgpu_compile_pending = usbgpu_compile_pending()
     self.usbgpu_loading = self.params.get_bool("UsbGpuLoading")
     self.usbgpu_active = self.params.get_bool("UsbGpuActive")
     self.usbgpu_startup_failed = self.params.get_bool("UsbGpuStartupFailed")

@@ -6,8 +6,9 @@ import pytest
 from openpilot.common.file_chunker import get_manifest_path
 from openpilot.selfdrive.modeld.big_model import BigModelManifest, _write_state
 import openpilot.selfdrive.modeld.helpers as helpers
-from openpilot.selfdrive.modeld.helpers import (modeld_pkl_path, refresh_usbgpu_device_cache, select_vision_streams,
-                                                usbgpu_compiled_path, usbgpu_pcie_not_ready)
+from openpilot.selfdrive.modeld.helpers import (active_usbgpu_compiled_path, modeld_pkl_path, refresh_usbgpu_device_cache,
+                                                select_vision_streams, usbgpu_compile_pending, usbgpu_compiled_path,
+                                                usbgpu_pcie_not_ready)
 
 
 @pytest.mark.parametrize(
@@ -327,8 +328,17 @@ def test_usbgpu_compiled_path_falls_back_to_previous_model(monkeypatch, tmp_path
   active = BigModelManifest("big-401", "big_driving_supercombo.onnx", 1, "a" * 64, "https://example.com/401.onnx")
   previous = BigModelManifest("big-400", "big_driving_supercombo.onnx", 1, "b" * 64, "https://example.com/400.onnx")
   _write_state(active, previous, cache_dir)
+  (cache_dir / active.cache_filename).write_bytes(b"1")
 
   previous_pkl = modeld_pkl_path(True, previous.sha256)
   Path(get_manifest_path(previous_pkl)).parent.mkdir(parents=True)
   Path(get_manifest_path(previous_pkl)).write_text("1")
+  assert active_usbgpu_compiled_path() is None
+  assert usbgpu_compile_pending()
   assert usbgpu_compiled_path() == previous_pkl
+
+  active_pkl = modeld_pkl_path(True, active.sha256)
+  Path(get_manifest_path(active_pkl)).write_text("1")
+  assert active_usbgpu_compiled_path() == active_pkl
+  assert not usbgpu_compile_pending()
+  assert usbgpu_compiled_path() == active_pkl

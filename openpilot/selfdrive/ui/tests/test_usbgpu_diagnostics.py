@@ -37,6 +37,7 @@ def test_usbgpu_status_distinguishes_link_and_runtime_states(tmp_path):
   assert usbgpu.usbgpu_status(False, False, False, False, tmp_path) == "model not compiled"
   assert usbgpu.usbgpu_status(True, True, False, False, tmp_path) == "loading"
   assert usbgpu.usbgpu_status(True, False, True, False, tmp_path) == "active"
+  assert usbgpu.usbgpu_status(False, False, True, False, tmp_path, compile_pending=True) == "reboot to compile"
   assert usbgpu.usbgpu_status(True, False, False, True, tmp_path) == "startup failed"
   assert usbgpu.usbgpu_status(True, False, False, False, tmp_path) == "ready"
 
@@ -50,6 +51,7 @@ def test_usbgpu_badge_state_prioritizes_failures_and_loading():
   assert usbgpu.usbgpu_badge_state(False, False, False, False) == "not_compiled"
   assert usbgpu.usbgpu_badge_state(True, False, False, False) == "ready"
   assert usbgpu.usbgpu_badge_state(True, False, True, False) == "active"
+  assert usbgpu.usbgpu_badge_state(False, False, True, False, True) == "compile_pending"
   assert usbgpu.usbgpu_badge_state(True, True, True, False) == "loading"
   assert usbgpu.usbgpu_badge_state(True, True, True, True) == "error"
 

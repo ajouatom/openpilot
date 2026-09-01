@@ -29,7 +29,7 @@ def test_both_device_huds_render_egpu_badge_with_shared_runtime_state():
     assert "badge_w" in badge_source
     assert "rect.width / 2" not in badge_source
     assert "usbgpu_badge_state" in badge_source
-    for attr in ("usbgpu_present", "usbgpu_compiled", "usbgpu_loading", "usbgpu_active", "usbgpu_startup_failed"):
+    for attr in ("usbgpu_present", "usbgpu_compiled", "usbgpu_compile_pending", "usbgpu_loading", "usbgpu_active", "usbgpu_startup_failed"):
       assert any(
         isinstance(node, ast.Attribute)
         and isinstance(node.value, ast.Name)
@@ -37,8 +37,9 @@ def test_both_device_huds_render_egpu_badge_with_shared_runtime_state():
         and node.attr == attr
         for node in ast.walk(badge)
       )
-    for state in ("active", "loading", "error", "not_compiled", "ready"):
+    for state in ("active", "loading", "error", "compile_pending", "not_compiled", "ready"):
       assert repr(state) in badge_source
+    assert "eGPU REBOOT" in badge_source
 
 
 def test_ui_state_reads_modeld_egpu_active_param():
@@ -54,10 +55,11 @@ def test_ui_state_reads_modeld_egpu_active_param():
   )
 
 
-def test_ui_state_reads_compiled_model_from_persistent_artifacts():
+def test_ui_state_distinguishes_current_compile_from_previous_fallback():
   update_params = _method(UI_DIR / "ui_state.py", "UIState", "update_params")
   calls = [node for node in ast.walk(update_params) if isinstance(node, ast.Call)]
-  assert any(isinstance(node.func, ast.Name) and node.func.id == "usbgpu_compiled" for node in calls)
+  assert any(isinstance(node.func, ast.Name) and node.func.id == "active_usbgpu_compiled_path" for node in calls)
+  assert any(isinstance(node.func, ast.Name) and node.func.id == "usbgpu_compile_pending" for node in calls)
   assert not any(
     isinstance(node.func, ast.Attribute)
     and node.func.attr == "get_bool"

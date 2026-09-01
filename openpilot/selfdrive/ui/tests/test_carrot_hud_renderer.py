@@ -72,6 +72,7 @@ def hud_module(monkeypatch):
     is_metric=True,
     usbgpu_present=False,
     usbgpu_compiled=False,
+    usbgpu_compile_pending=False,
     usbgpu_loading=False,
     usbgpu_active=False,
     usbgpu_startup_failed=False,
@@ -88,8 +89,9 @@ def hud_module(monkeypatch):
     ),
     "openpilot.selfdrive.ui.onroad.exp_button": SimpleNamespace(ExpButton=FakeExpButton),
     "openpilot.system.hardware.usbgpu": SimpleNamespace(
-      usbgpu_badge_state=lambda compiled, loading, active, failed: (
-        "error" if failed else "loading" if loading else "active" if active else "ready" if compiled else "not_compiled"
+      usbgpu_badge_state=lambda compiled, loading, active, failed, compile_pending=False: (
+        "error" if failed else "loading" if loading else "compile_pending" if compile_pending
+        else "active" if active else "ready" if compiled else "not_compiled"
       ),
     ),
     "openpilot.selfdrive.ui.ui_state": SimpleNamespace(
