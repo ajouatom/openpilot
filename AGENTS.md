@@ -3,13 +3,6 @@
 - For long-running work, treat user questions, status checks, clarifications, and added in-scope
   requests as interruptions to answer while continuing the active work. Stop an active process or
   abandon the task only when the user explicitly asks to stop, cancel, pause, or replace it.
-- While the remote branches exist, apply and push each user-requested `carrot-wip` code change to
-  all three branches: `carrot-wip`, `carrot-egpu`, and `carrot-egpu-tg`. Stop mirroring a branch
-  when it is removed from the remote.
-- Apply and push every shared big-model or eGPU infrastructure/fix commit to every existing remote
-  branch whose name starts with `carrot-egpu`. Preserve each experimental branch's intentionally
-  different model selection or payload unless the user explicitly asks to change it. Stop
-  mirroring only branches that have been removed from the remote.
 - Big-model ONNX files and manifests are hosted on the user's NAS under
   `\\DS1821P\openpilot\models\<model-directory>`. Vehicles download the same files through
   `https://upload.shind0.synology.me/models/<model-directory>/`. For a new big-model branch,

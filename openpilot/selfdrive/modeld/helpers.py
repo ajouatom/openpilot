@@ -5,6 +5,7 @@ import pickle
 import shutil
 import struct
 import tempfile
+import time
 from collections.abc import Collection
 from pathlib import Path
 from typing import TypeVar
@@ -110,6 +111,20 @@ def usbgpu_present() -> bool:
   # The custom bridge can remain enumerated over USB 2.0 while its SuperSpeed
   # link is unavailable. That state cannot support PCIe model loading.
   return usb_device_present(USBGPU_USB_IDS, USBGPU_MIN_SPEED_MBPS)
+
+
+def wait_for_usbgpu_present(timeout: float, poll_interval: float = 0.1) -> bool:
+  """Wait briefly for a remembered eGPU bridge to enumerate at SuperSpeed."""
+  if usbgpu_present():
+    return True
+
+  deadline = time.monotonic() + max(0.0, timeout)
+  poll_interval = max(0.01, poll_interval)
+  while (remaining := deadline - time.monotonic()) > 0.0:
+    time.sleep(min(poll_interval, remaining))
+    if usbgpu_present():
+      return True
+  return False
 
 
 def refresh_usbgpu_device_cache() -> None:

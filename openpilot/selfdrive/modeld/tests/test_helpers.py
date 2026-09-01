@@ -408,6 +408,41 @@ def test_usbgpu_present_rejects_usb2_fallback(monkeypatch, tmp_path: Path):
   assert not helpers.usbgpu_present()
 
 
+def test_wait_for_usbgpu_present_catches_late_superspeed_enumeration(monkeypatch):
+  present = iter((False, False, True))
+  now = 0.0
+  sleeps = []
+
+  def sleep(seconds):
+    nonlocal now
+    sleeps.append(seconds)
+    now += seconds
+
+  monkeypatch.setattr(helpers, "usbgpu_present", lambda: next(present))
+  monkeypatch.setattr(helpers.time, "monotonic", lambda: now)
+  monkeypatch.setattr(helpers.time, "sleep", sleep)
+
+  assert helpers.wait_for_usbgpu_present(5.0, 0.1)
+  assert sleeps == [0.1, 0.1]
+
+
+def test_wait_for_usbgpu_present_stops_at_deadline(monkeypatch):
+  now = 0.0
+  sleeps = []
+
+  def sleep(seconds):
+    nonlocal now
+    sleeps.append(seconds)
+    now += seconds
+
+  monkeypatch.setattr(helpers, "usbgpu_present", lambda: False)
+  monkeypatch.setattr(helpers.time, "monotonic", lambda: now)
+  monkeypatch.setattr(helpers.time, "sleep", sleep)
+
+  assert not helpers.wait_for_usbgpu_present(0.25, 0.1)
+  assert sum(sleeps) == pytest.approx(0.25)
+
+
 def test_usbgpu_compiled_path_falls_back_to_previous_model(monkeypatch, tmp_path: Path):
   cache_dir = tmp_path / "cache"
   compiled_dir = tmp_path / "compiled"
