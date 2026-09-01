@@ -322,6 +322,7 @@ class LongitudinalPlanner:
       output_a_target_preview,
       carrot.myDrivingMode,
       self.lead_preview_accel,
+      a_ego=sm['carState'].aEgo,
     ) if preview_request.active else output_a_target_base
     output_a_target_e2e = sm['modelV2'].action.desiredAcceleration
     output_should_stop_e2e = sm['modelV2'].action.shouldStop
