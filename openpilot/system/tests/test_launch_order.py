@@ -47,11 +47,13 @@ def test_restart_defers_params_build_to_dependency_aware_launcher() -> None:
   assert "launch_openpilot.sh" in source
 
 
-def test_agnos_ui_failure_uses_python_fallback_and_blocks_old_os_boot() -> None:
+def test_agnos_ui_failure_never_auto_installs_and_blocks_old_os_boot() -> None:
   launcher = Path(BASEDIR) / "launch_chffrplus.sh"
   source = launcher.read_text(encoding="utf-8")
+  agnos_init = source[source.index("function agnos_init {"):source.index("function start_carrot_recovery {")]
 
-  assert 'python3 "$AGNOS_PY" --swap "$MANIFEST"' in source
+  assert 'python3 "$AGNOS_PY" --swap "$MANIFEST"' not in agnos_init
   assert "$DIR/openpilot/system/hardware/tici/updater" not in source
+  assert "AGNOS updater UI failed; automatic installation is disabled." in agnos_init
   assert "if ! agnos_init; then" in source
   assert source.index("if ! agnos_init; then") < source.index('bash "$DIR/scripts/ensure_params_build.sh"')
