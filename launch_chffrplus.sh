@@ -135,16 +135,8 @@ function agnos_init {
     echo "MANIFEST=${MANIFEST}"
     echo "MODEL=${MODEL}"
     if ! python3 $DIR/openpilot/system/ui/updater.py $AGNOS_PY $MANIFEST; then
-      echo "AGNOS updater UI failed, falling back to the headless Python updater"
-      if python3 "$AGNOS_PY" --swap "$MANIFEST"; then
-        echo "AGNOS update installed; rebooting."
-        if ! sudo reboot; then
-          echo "AGNOS update installed, but the reboot command failed."
-          return 1
-        fi
-        while true; do sleep 1; done
-      fi
-      echo "AGNOS update failed; refusing to start openpilot on the old OS."
+      echo "AGNOS updater UI failed; automatic installation is disabled."
+      echo "Refusing to start openpilot on the old OS; use Carrot recovery and retry."
       return 1
     fi
     echo "AGNOS updater exited without reboot; refusing to start openpilot on the old OS."

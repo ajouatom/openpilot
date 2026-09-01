@@ -5,11 +5,15 @@ import pyray as rl
 from enum import IntEnum
 from typing import TypeVar
 from collections.abc import Callable
+from openpilot.common.params import UnknownKeyName
 from openpilot.system.ui.lib.application import gui_app, MousePos, MAX_TOUCH_SLOTS, MouseEvent
 
 try:
   from openpilot.selfdrive.ui.ui_state import device
-except ImportError:
+except (ImportError, UnknownKeyName):
+  # Standalone setup/update UIs run before the source Params registry is
+  # rebuilt. Keep them usable when a newly added key is unknown to the old
+  # params_pyx binary that is still loaded during an OS transition.
   class Device:
     awake = True
   device = Device()
