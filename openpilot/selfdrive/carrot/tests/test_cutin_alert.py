@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from openpilot.selfdrive.controls.lib.cutin_alert import (
   CutinAlertCandidate,
   CutinAlertTracker,
@@ -48,3 +50,26 @@ def test_cutin_alert_resets_when_disabled_or_empty() -> None:
   assert tracker.update((lead,))
   assert not tracker.update(())
   assert tracker.update((lead,))
+
+
+def test_cutin_alert_waits_for_path_occupancy_without_repeating_on_flicker() -> None:
+  tracker = CutinAlertTracker()
+  lead = candidate(10, 20.0, 2.0, -1.0)
+
+  assert not tracker.update((lead,), alert_candidates=())
+  assert tracker.update((lead,), alert_candidates=(lead,))
+  assert not tracker.update((lead,), alert_candidates=())
+  assert not tracker.update((lead,), alert_candidates=(lead,))
+
+
+def test_vehicle_audio_uses_only_path_occupied_cutins() -> None:
+  source = (
+    Path(__file__).resolve().parents[2]
+    / "selfdrived"
+    / "selfdrived.py"
+  ).read_text(encoding="utf-8")
+
+  assert "*self.sm['radarState'].leadsCutIn," in source
+  assert "*self.sm['radarState'].leadsCutInPath," in source
+  assert "for lead in self.sm['radarState'].leadsCutInPath\n" in source
+  assert "alert_candidates=path_cutin_candidates" in source
