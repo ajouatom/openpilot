@@ -1,3 +1,5 @@
+from types import SimpleNamespace
+
 import pytest
 
 from openpilot.cereal import log
@@ -29,6 +31,35 @@ def test_gap_increase_is_faster_while_already_decelerating():
 
 def test_gap_reduction_remains_immediate():
   assert ramp_t_follow(1.1, 1.6, 0.0, DT_MDL) == pytest.approx(1.1)
+
+
+def test_lane_change_response_scales_gap_and_jerk_for_first_1_5_seconds():
+  planner = CarrotPlanner.__new__(CarrotPlanner)
+  planner.desireState = 1.0
+  planner.desireStateCount = 1
+  planner.dynamicTFollowLC = 0.8
+  planner.jerk_factor = 0.7
+  planner.t_follow_last = 1.3
+  planner._tf_decel_extra = 0.0
+
+  lead = SimpleNamespace(status=True, jLead=2.0)
+  assert planner.dynamic_t_follow(1.3, lead, 0.0, 0.0) == pytest.approx(1.04)
+  assert planner.jerk_factor_apply == pytest.approx(0.56)
+
+
+def test_dynamic_lead_acceleration_response_closes_gap_more_quickly():
+  planner = CarrotPlanner.__new__(CarrotPlanner)
+  planner.desireState = 0.0
+  planner.desireStateCount = 0
+  planner.dynamicTFollow = 0.2
+  planner.dynamicTFollowLC = 1.0
+  planner.jerk_factor = 0.7
+  planner.t_follow_last = 1.3
+  planner._tf_decel_extra = 0.0
+
+  lead = SimpleNamespace(status=True, jLead=2.0)
+  assert planner.dynamic_t_follow(1.3, lead, 0.0, 0.0) == pytest.approx(1.1)
+  assert planner.jerk_factor_apply == pytest.approx(0.35)
 
 
 @pytest.mark.parametrize(
