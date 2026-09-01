@@ -205,9 +205,25 @@ class SelfdriveD:
         float(lead.yRel),
         float(lead.vRel),
       )
-      for lead in self.sm['radarState'].leadsCutIn
+      for lead in (
+        *self.sm['radarState'].leadsCutIn,
+        *self.sm['radarState'].leadsCutInPath,
+      )
     ) if cutin_enabled else ()
-    cutin_alert = self.cutin_audio_tracker.update(cutin_candidates, cutin_enabled)
+    path_cutin_candidates = tuple(
+      CutinAlertCandidate(
+        int(lead.radarTrackId),
+        float(lead.dRel),
+        float(lead.yRel),
+        float(lead.vRel),
+      )
+      for lead in self.sm['radarState'].leadsCutInPath
+    ) if cutin_enabled else ()
+    cutin_alert = self.cutin_audio_tracker.update(
+      cutin_candidates,
+      cutin_enabled,
+      alert_candidates=path_cutin_candidates,
+    )
     if cutin_alert:
       self.events.add(EventName.radarCutin)
 

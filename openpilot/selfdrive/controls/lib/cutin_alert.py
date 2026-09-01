@@ -35,13 +35,31 @@ class CutinAlertTracker:
       abs(current.v_rel - previous.v_rel) <= v_limit
     )
 
-  def update(self, candidates: tuple[CutinAlertCandidate, ...], enabled: bool = True) -> bool:
+  def update(
+    self,
+    candidates: tuple[CutinAlertCandidate, ...],
+    enabled: bool = True,
+    alert_candidates: tuple[CutinAlertCandidate, ...] | None = None,
+  ) -> bool:
     current = candidates if enabled else ()
-    alert = bool(current) and any(
-      not any(self._same_object(candidate, previous) for previous in self.previous)
-      for candidate in current
+    audible = (
+      current
+      if alert_candidates is None
+      else alert_candidates if enabled else ()
     )
-    self.previous = current
+    retained = tuple(
+      candidate for candidate in current
+      if any(self._same_object(candidate, previous) for previous in self.previous)
+    )
+    newly_audible = tuple(
+      candidate for candidate in audible
+      if not any(self._same_object(candidate, previous) for previous in self.previous)
+    )
+    alert = bool(newly_audible)
+    self.previous = retained + tuple(
+      candidate for candidate in newly_audible
+      if not any(self._same_object(candidate, value) for value in retained)
+    )
     return alert
 
   def reset(self) -> None:

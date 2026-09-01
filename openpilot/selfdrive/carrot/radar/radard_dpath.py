@@ -138,6 +138,7 @@ class DPathRadarD:
     self.radar_state.leadsCenter = output.leads_center
     self.radar_state.leadsRight = output.leads_right
     self.radar_state.leadsCutIn = output.leads_cutin
+    self.radar_state.leadsCutInPath = output.leads_cutin_path
     self.radar_state.leadCutInRisk = output.lead_cutin_risk or empty_lead()
     self.radar_state.leadsLeft2 = output.leads_left2
     self.radar_state.leadsRight2 = output.leads_right2
