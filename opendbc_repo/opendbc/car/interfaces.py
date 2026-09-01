@@ -239,6 +239,11 @@ def estimate_radar_jerk(velocity_history: deque[float], dt: float) -> float:
   return normalized_jerk / (dt ** 2)
 
 
+def _clip_scalar(value: float, lower: float, upper: float) -> float:
+  """Clamp one scalar without constructing a NumPy scalar/array."""
+  return lower if value < lower else upper if value > upper else value
+
+
 class MyTrack:
   def __init__(self, track_id: int, radar_point, dt: float):
     self.track_id = track_id
@@ -330,7 +335,7 @@ class MyTrack:
         a_raw = 0.0
 
       self.noisy = abs(a_raw - self.aLead) > RADAR_ACCEL_INNOVATION_LIMIT
-      accel_sample = np.clip(a_raw, -10.0, 5.0) if not pseudo_stop else 0.0
+      accel_sample = _clip_scalar(a_raw, -10.0, 5.0) if not pseudo_stop else 0.0
       if self.noisy and self.radar_source == "scc":
         # SCC exposes one reusable object slot, so a large kinematic jump can mean the
         # source switched to a different lead without changing the track ID.
@@ -339,7 +344,7 @@ class MyTrack:
         # Keep protection against quantized radar velocity jumps, but do not reset the
         # age of an identified radar track: that used to publish aLead/jLead as zero during
         # real hard braking. Repeated measurements can still move the estimate quickly.
-        accel_sample = np.clip(
+        accel_sample = _clip_scalar(
           accel_sample,
           self.aLead - RADAR_ACCEL_INNOVATION_LIMIT,
           self.aLead + RADAR_ACCEL_INNOVATION_LIMIT,
@@ -354,12 +359,12 @@ class MyTrack:
       if self.jLead_v_history:
         previous_velocity = self.jLead_v_history[-1]
         frame_acceleration = (trend_velocity - previous_velocity) / self.dt
-        trend_velocity = previous_velocity + float(np.clip(frame_acceleration, -10.0, 5.0)) * self.dt
+        trend_velocity = previous_velocity + _clip_scalar(frame_acceleration, -10.0, 5.0) * self.dt
       self.jLead_v_history.append(trend_velocity)
 
-      j_measurement = float(np.clip(
+      j_measurement = _clip_scalar(
         estimate_radar_jerk(self.jLead_v_history, self.dt), -6.0, 6.0,
-      ))
+      )
       if pseudo_stop or (self.noisy and self.radar_source == "scc"):
         j_target = 0.0
       else:
@@ -372,7 +377,7 @@ class MyTrack:
       self.jLead_avg.update_alpha(
         RADAR_JERK_ZERO_FILTER_RC if j_target == 0.0 else RADAR_JERK_FILTER_RC,
       )
-      self.jLead = float(np.clip(self.jLead_avg.update(j_target), -5.0, 5.0))
+      self.jLead = _clip_scalar(self.jLead_avg.update(j_target), -5.0, 5.0)
       self.jLead_avg.x = self.jLead
 
       # Store latest values

@@ -4,6 +4,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from openpilot.cereal import car
 from openpilot.selfdrive.carrot.radar_motion.predictor import (
   CornerCutInPredecelTracker,
   CUT_IN_CURRENT_SCOPE_HALF_WIDTH_M,
@@ -48,6 +49,7 @@ from openpilot.selfdrive.carrot.radar_motion.primary import (
   lead_from_radar_point,
   prefer_front_radar_kinematics,
   select_primary_radar_points,
+  snapshot_live_radar_points,
   snapshot_radar_points,
 )
 
@@ -6520,6 +6522,103 @@ def test_primary_input_policy_matches_removed_model_radard() -> None:
   assert [point.track_id for point in select_primary_radar_points(points, 0)] == [0, 1]
   assert [point.track_id for point in select_primary_radar_points(points, 1)] == [10]
   assert [point.track_id for point in select_primary_radar_points(points, 2)] == [10, 0]
+  assert [point.track_id for point in select_primary_radar_points(points, 3)] == [10, 0, 1]
+
+
+def test_live_radar_snapshot_matches_generic_capnp_adapter() -> None:
+  radar_data = car.RadarData.new_message()
+  capnp_points = radar_data.init("points", 6)
+  specs = (
+    (52, "frontRadar"),
+    (0, "scc"),
+    (1005, "corner235"),
+    (1241, "corner180"),
+    (1301, "corner430"),
+    (205, "frontRadar"),
+  )
+  for index, (track_id, source) in enumerate(specs):
+    point = capnp_points[index]
+    point.trackId = track_id
+    point.radarSource = source
+    point.dRel = 10.0 + index
+    point.yRel = -3.0 + index
+    point.vRel = -2.0 + index * 0.25
+    point.aRel = -0.5 + index * 0.1
+    point.yvRel = 0.2 - index * 0.05
+    point.vLead = 8.0
+    point.aLead = -0.4 + index * 0.05
+    point.jLead = -1.0 + index * 0.2
+    point.measured = index != 4
+    point.trackState = index % 3
+
+  generic = snapshot_radar_points(
+    capnp_points, v_ego=12.5, time_delta_s=0.075,
+  )
+  production = snapshot_live_radar_points(
+    capnp_points, v_ego=12.5, time_delta_s=0.075,
+  )
+
+  assert production == generic
+
+  generic_controller = DPathRadarController(
+    front_radar_measurement_delay_s=0.02,
+    corner_radar_measurement_delay_s=0.05,
+  )
+  production_controller = DPathRadarController(
+    front_radar_measurement_delay_s=0.02,
+    corner_radar_measurement_delay_s=0.05,
+    production_live_tracks=True,
+  )
+  assert production_controller._points_at_model_time(
+    capnp_points, 12.5, 0.015,
+  ) == generic_controller._points_at_model_time(
+    capnp_points, 12.5, 0.015,
+  )
+
+
+def test_mode_three_uses_scc_at_any_speed_when_front_omits_lead() -> None:
+  output = DPathRadarController(
+    enable_radar_tracks=3,
+  ).update(
+    time_s=16.0,
+    v_ego=9.2,
+    radar_points=(
+      Point(
+        52, 11.3, -3.39,
+        v_rel=-5.16, source="frontRadar",
+      ),
+      Point(
+        0, 6.6, 0.0,
+        v_rel=1.5, source="scc",
+      ),
+    ),
+    model=model_with_lead(
+      6.86, -0.2, 10.55, probability=1.0,
+    ),
+  )
+
+  assert output.lead_one is not None
+  assert output.lead_one["radarTrackId"] == 0
+  assert output.lead_one["dRel"] == pytest.approx(6.6)
+
+
+def test_mode_two_does_not_use_uncorroborated_fast_scc_radar_only() -> None:
+  controller = DPathRadarController(enable_radar_tracks=2)
+  output = None
+  for index in range(20):
+    output = controller.update(
+      time_s=index * 0.05,
+      v_ego=9.2,
+      radar_points=(
+        Point(0, 30.0, 0.0, v_rel=1.5, source="scc"),
+      ),
+      model=model_with_lead(
+        80.0, 0.0, 20.0, probability=0.0,
+      ),
+    )
+
+  assert output is not None
+  assert output.lead_one is None
 
 
 def test_option_two_publishes_corroborated_low_speed_scc_as_lead_two() -> None:
@@ -6770,6 +6869,8 @@ def test_production_radar_is_fixed_to_carrot() -> None:
   assert "CarrotRadarCutInSensitivity" not in dpath_source
   assert "PRODUCTION_CUT_IN_SENSITIVITY = 3" in dpath_source
   assert "cut_in_sensitivity=PRODUCTION_CUT_IN_SENSITIVITY" in dpath_source
+  assert "production_live_tracks=True" in dpath_source
+  assert "RADAR_REACTION_REFRESH_FRAMES = 20" in dpath_source
   assert 'self.params.get_float("RadarReactionFactor") * 0.01' in dpath_source
   for field in (
     "leadOne",
