@@ -141,6 +141,16 @@ def test_normal_reacts_to_speed_bump_lead_deceleration():
   assert apply_preview_target(0.70, 0.22, DRIVING_MODE_NORMAL, request_normal.lead_accel_signal) == pytest.approx(0.22)
 
 
+@pytest.mark.parametrize("mode", [
+  DRIVING_MODE_SAFE,
+  DRIVING_MODE_ECO,
+  DRIVING_MODE_NORMAL,
+  DRIVING_MODE_HIGH,
+])
+def test_future_accel_recovery_cannot_release_current_braking(mode):
+  assert apply_preview_target(-0.60, -0.10, mode, -0.5, a_ego=-0.4) == pytest.approx(-0.60)
+
+
 def test_positive_lead_acceleration_never_requests_prebraking():
   assert apply_preview_target(0.08, -0.20, DRIVING_MODE_SAFE, 0.5) == pytest.approx(0.0)
 
@@ -148,3 +158,8 @@ def test_positive_lead_acceleration_never_requests_prebraking():
 def test_high_acceleration_preview_has_a_bounded_gain():
   assert apply_preview_target(0.20, 0.50, DRIVING_MODE_HIGH, 0.5) == pytest.approx(0.35)
   assert apply_preview_target(0.20, 0.10, DRIVING_MODE_HIGH, 0.5) == pytest.approx(0.20)
+
+
+def test_high_acceleration_preview_is_disabled_while_decelerating():
+  assert apply_preview_target(-0.50, -0.10, DRIVING_MODE_HIGH, 0.5, a_ego=0.0) == pytest.approx(-0.50)
+  assert apply_preview_target(0.20, 0.50, DRIVING_MODE_HIGH, 0.5, a_ego=-0.3) == pytest.approx(0.20)

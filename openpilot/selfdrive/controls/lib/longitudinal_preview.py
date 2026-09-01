@@ -159,19 +159,22 @@ def apply_preview_target(
   preview_target: float,
   driving_mode,
   lead_accel_signal: float,
+  a_ego: float = 0.0,
 ) -> float:
   """Keep mode preview conservative and bound its acceleration delta."""
   mode = _mode_value(driving_mode)
   tuning = MODE_TUNING.get(mode)
   base = float(base_target)
   candidate = float(preview_target)
+  ego_not_braking = math.isfinite(a_ego) and float(a_ego) >= -LEAD_ACCEL_DEADBAND
 
   if tuning is None:
     return base
 
-  if mode == DRIVING_MODE_HIGH and lead_accel_signal > 0.0:
+  if mode == DRIVING_MODE_HIGH and lead_accel_signal > 0.0 and base > 0.0 and ego_not_braking:
     # High may advance a rising acceleration trajectory, but never by more than
-    # the bounded delta.  The normal MPC maximum acceleration is still obeyed.
+    # the bounded delta. Never use this exception while either the plan or the
+    # vehicle is decelerating; the normal MPC maximum acceleration still applies.
     return float(max(base, min(candidate, base + MAX_HIGH_ACCEL_TARGET_DELTA)))
 
   # Every mode may remove acceleration for a negative relative-acceleration
