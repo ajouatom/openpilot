@@ -1,5 +1,12 @@
 import pytest
 
+from openpilot.cereal import log
+from openpilot.selfdrive.carrot.carrot_functions import (
+  CarrotPlanner,
+  DrivingMode,
+  DrivingModeDetector,
+  get_driving_mode_comfort_brake_factor,
+)
 from openpilot.selfdrive.carrot.t_follow import get_t_follow_mode_factor, get_t_follow_mode_max, ramp_t_follow
 
 
@@ -42,3 +49,46 @@ def test_safe_mode_increase_is_not_clipped_at_the_configured_normal_max():
 
 def test_mode_and_deceleration_gap_increase_preserve_global_cap():
   assert get_t_follow_mode_max(1.8, 1.2, 0.1) == pytest.approx(2.0)
+
+
+def test_safe_comfort_brake_uses_a_modest_reduction_only():
+  assert get_driving_mode_comfort_brake_factor(DrivingMode.Safe) == pytest.approx(0.9)
+  assert get_driving_mode_comfort_brake_factor(DrivingMode.Eco) == pytest.approx(1.0)
+  assert get_driving_mode_comfort_brake_factor(DrivingMode.Normal) == pytest.approx(1.0)
+  assert get_driving_mode_comfort_brake_factor(DrivingMode.High) == pytest.approx(1.0)
+
+
+@pytest.mark.parametrize(
+  ("auto_mode", "congested", "expected"),
+  (
+    (1, False, DrivingMode.Normal),
+    (1, True, DrivingMode.Safe),
+    (2, False, DrivingMode.Eco),
+    (2, True, DrivingMode.Safe),
+  ),
+)
+def test_automatic_driving_mode_mapping(auto_mode, congested, expected):
+  detector = DrivingModeDetector()
+  detector.congested = congested
+  assert detector.get_mode(auto_mode) == expected
+
+
+def test_safe_t_follow_does_not_compound_during_repeated_deceleration():
+  planner = CarrotPlanner.__new__(CarrotPlanner)
+  planner.enableSpeedTF = 0
+  planner.tFollowGap1 = 0.5
+  planner.tFollowGap2 = 0.6
+  planner.tFollowGap3 = 0.8
+  planner.tFollowGap4 = 1.2
+  planner.tFollowDecelBoost = 0.0
+  planner.myDrivingMode = DrivingMode.Safe
+  planner.myTFollowFactor = 1.2
+  planner._tf_decel_extra = 0.0
+  planner._tf_applied = 0.72
+  planner.t_follow_last = 0.72
+
+  values = [
+    planner.get_T_FOLLOW(log.LongitudinalPersonality.standard, v_ego=10.0, a_ego=-1.0)
+    for _ in range(100)
+  ]
+  assert values == pytest.approx([0.72] * 100)

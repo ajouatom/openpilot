@@ -8,7 +8,7 @@ from openpilot.common.transformations.camera import _ar_ox_fisheye, _os_fisheye
 from openpilot.common.transformations.model import MEDMODEL_INPUT_SIZE, DM_INPUT_SIZE
 from openpilot.selfdrive.modeld.constants import ModelConstants
 from openpilot.selfdrive.modeld.big_model import active_manifest, active_model_path
-from openpilot.selfdrive.modeld.helpers import TG_INPUT_DEVICES_PATH, modeld_pkl_path, usbgpu_present
+from openpilot.selfdrive.modeld.helpers import TG_INPUT_DEVICES_PATH, modeld_pkl_path
 
 
 CAMERA_CONFIGS = [
@@ -57,7 +57,10 @@ tg_devices = { # which device to put jit inputs to at runtime
   },
 }
 
-USBGPU = os.getenv('BUILD_USB_GPU_MODEL') == '1' and usbgpu_present()
+# build.py checks for the hardware before requesting this optional target.
+# Do not repeat the live USB check while SCons is defining its graph: a hub
+# re-enumeration in that instant would omit the target entirely.
+USBGPU = os.getenv('BUILD_USB_GPU_MODEL') == '1'
 if USBGPU:
   usbgpu_tg_flags = f'DEBUG=2 DEV=USB+AMD:LLVM WARP_DEV={tg_backend} FLOAT16=1 JIT_BATCH_SIZE=0 GMMU=0 TC_OPT=2'
   # the USB+AMD GPU takes an exclusive flock; serialize all targets that touch it
@@ -101,7 +104,10 @@ if USBGPU:
 for usbgpu, pkl_path, driving_onnx_deps, driving_onnx, cmd_flags in model_builds:
   target_pkl_path = File(pkl_path).abspath
   camera_res_args = ' '.join(f'{cw}x{ch}' for cw, ch in CAMERA_CONFIGS)
-  cmd = (f'{cmd_flags} {mac_brew_string} python3 {modeld_dir}/compile_modeld.py '
+  # CPU 7 is isolated with isolcpus on AGNOS, so explicitly pin the model
+  # compiler there instead of competing with the normal build workload.
+  taskset = 'taskset -c 7 ' if arch == 'larch64' else ''
+  cmd = (f'{cmd_flags} {mac_brew_string} {taskset}python3 {modeld_dir}/compile_modeld.py '
         f'--model-size {model_w}x{model_h} '
         f'--camera-resolutions {camera_res_args} '
         f'--onnx {driving_onnx} '

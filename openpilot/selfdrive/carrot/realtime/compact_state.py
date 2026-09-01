@@ -358,7 +358,6 @@ SERVICE_SCHEMAS: dict[str, tuple[int, tuple[tuple[Any, ...], ...]]] = {
     ("leadsLeft2", ("struct_list", RADAR_LEAD_SCHEMA)),
     ("leadsRight2", ("struct_list", RADAR_LEAD_SCHEMA)),
     ("leadsCutIn", ("struct_list", RADAR_LEAD_SCHEMA)),
-    ("leadsCutInPath", ("struct_list", RADAR_LEAD_SCHEMA)),
   )),
   "carControl": (14, (
     ("latActive", "bool"),

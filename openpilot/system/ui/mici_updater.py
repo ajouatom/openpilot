@@ -176,6 +176,7 @@ def main():
     updater.close()
   except Exception as e:
     print(f"Updater error: {e}")
+    raise
   finally:
     gui_app.close()
 

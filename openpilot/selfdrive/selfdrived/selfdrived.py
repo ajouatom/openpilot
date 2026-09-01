@@ -134,6 +134,9 @@ class SelfdriveD:
     self.dm_lockout_set = False
     self.cutin_audio_tracker = CutinAlertTracker()
     self.dm_uncertain_alerted = False
+    self.big_model_loading = False
+    self.big_model_active = False
+    self.big_model_ready_t = 0.0
     self.state_machine = StateMachine()
     self.rk = Ratekeeper(100, print_delay_threshold=None)
 
@@ -162,6 +165,18 @@ class SelfdriveD:
       set_offroad_alert("Offroad_CarUnrecognized", True)
     elif self.CP.passive:
       self.events.add(EventName.dashcamMode, static=True)
+
+  def _big_model_settling(self) -> bool:
+    """Allow modeld to settle after eGPU startup or runtime fallback."""
+    loading = self.params.get_bool("UsbGpuLoading")
+    active = self.params.get_bool("UsbGpuActive")
+
+    if (self.big_model_loading and not loading) or (self.big_model_active and not active):
+      self.big_model_ready_t = time.monotonic()
+
+    self.big_model_loading = loading
+    self.big_model_active = active
+    return loading or time.monotonic() < self.big_model_ready_t + 5.0
 
   def update_events(self, CS):
     """Compute onroadEvents from carState"""
@@ -205,25 +220,9 @@ class SelfdriveD:
         float(lead.yRel),
         float(lead.vRel),
       )
-      for lead in (
-        *self.sm['radarState'].leadsCutIn,
-        *self.sm['radarState'].leadsCutInPath,
-      )
+      for lead in self.sm['radarState'].leadsCutIn
     ) if cutin_enabled else ()
-    path_cutin_candidates = tuple(
-      CutinAlertCandidate(
-        int(lead.radarTrackId),
-        float(lead.dRel),
-        float(lead.yRel),
-        float(lead.vRel),
-      )
-      for lead in self.sm['radarState'].leadsCutInPath
-    ) if cutin_enabled else ()
-    cutin_alert = self.cutin_audio_tracker.update(
-      cutin_candidates,
-      cutin_enabled,
-      alert_candidates=path_cutin_candidates,
-    )
+    cutin_alert = self.cutin_audio_tracker.update(cutin_candidates, cutin_enabled)
     if cutin_alert:
       self.events.add(EventName.radarCutin)
 
@@ -408,7 +407,8 @@ class SelfdriveD:
     # generic catch-all. ideally, a more specific event should be added above instead
     has_disable_events = self.events.contains(ET.NO_ENTRY) and (self.events.contains(ET.SOFT_DISABLE) or self.events.contains(ET.IMMEDIATE_DISABLE))
     no_system_errors = (not has_disable_events) or (len(self.events) == num_events)
-    if not self.sm.all_checks() and no_system_errors:
+    big_model_settling = self._big_model_settling()
+    if not self.sm.all_checks() and no_system_errors and not big_model_settling:
       if not self.sm.all_alive():
         self.events.add(EventName.commIssue)
       elif not self.sm.all_freq_ok():

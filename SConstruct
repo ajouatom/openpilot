@@ -41,19 +41,13 @@ assert arch in [
 ]
 
 pkg_names = ['bzip2', 'capnproto', 'eigen', 'ffmpeg', 'libjpeg', 'libyuv', 'ncurses', 'zeromq', 'zstd']
-pkgs = []
-for name in pkg_names:
-  try:
-    pkgs.append(importlib.import_module(name))
-  except ModuleNotFoundError as e:
-    # Some C3-compatible TICI images ship the system bzip2 headers/library but
-    # build Python without the optional bz2 extension. The bzip2 dependency
-    # package imports that extension while SCons is loading, so fall back to
-    # the system copy on larch64. Official AGNOS continues using the package.
-    if arch == "larch64" and name == "bzip2" and e.name == "bz2":
-      print("Python bz2 module unavailable; using the larch64 system bzip2 library.")
-      continue
-    raise
+if arch == "larch64":
+  # AGNOS 19 no longer ships comma's legacy bzip2/libyuv Python wrappers.
+  # Neither dependency is used by an on-device target: bzip2 is replay-only,
+  # and the libyuv-backed FFmpeg encoder is excluded below on larch64.
+  pkg_names = [name for name in pkg_names if name not in ('bzip2', 'libyuv')]
+
+pkgs = [importlib.import_module(name) for name in pkg_names]
 
 ffmpeg = pkgs[pkg_names.index('ffmpeg')]
 # Newer comma FFmpeg packages use shared libraries, while older AGNOS/device
@@ -108,10 +102,20 @@ def _libflags(target, source, env, for_signature):
   return _stripixes(env['LIBLINKPREFIX'], libs, env['LIBLINKSUFFIX'],
                     env['LIBPREFIXES'], env['LIBSUFFIXES'], env, env['LIBLITERALPREFIX'])
 
+scons_python_paths = [
+  Dir("#").abspath,
+  Dir("#third_party/acados").abspath,
+]
+if external_pythonpath := os.environ.get("PYTHONPATH"):
+  scons_python_paths += [
+    path for path in external_pythonpath.split(os.pathsep)
+    if path and path not in scons_python_paths
+  ]
+
 env = Environment(
   ENV={
     "PATH": os.environ['PATH'],
-    "PYTHONPATH": Dir("#").abspath + ':' + Dir(f"#third_party/acados").abspath,
+    "PYTHONPATH": os.pathsep.join(scons_python_paths),
     "ACADOS_SOURCE_DIR": Dir("#third_party/acados").abspath,
     "ACADOS_PYTHON_INTERFACE_PATH": Dir("#third_party/acados/acados_template").abspath,
     "TERA_PATH": Dir("#").abspath + f"/third_party/acados/{arch}/t_renderer"
@@ -154,7 +158,7 @@ env = Environment(
     f"#third_party/acados/{arch}/lib",
     [x.LIB_DIR for x in pkgs],
   ],
-  RPATH=[],
+  RPATH=[ffmpeg.LIB_DIR] if ffmpeg_shared else [],
   CYTHONCFILESUFFIX=".cpp",
   COMPILATIONDB_USE_ABSPATH=True,
   REDNOSE_ROOT="#",

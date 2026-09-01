@@ -1,5 +1,6 @@
-import ctypes, struct, dataclasses, array, itertools, time, functools
+import ctypes, struct, dataclasses, array, itertools, time, functools, contextlib
 from typing import Sequence
+from openpilot.common.usbgpu_bus_lock import usbgpu_bus_lock
 from tinygrad.runtime.autogen import libusb
 from tinygrad.helpers import DEBUG, DEV, to_mv, round_up, OSX, getenv, ceildiv
 from tinygrad.runtime.support.hcq import MMIOInterface
@@ -14,6 +15,9 @@ def checked(fn, msg=None):
   return wrapper
 
 class USB3:
+  BULK_OUT_IO_ATTEMPTS = 10
+  BULK_OUT_IO_RETRY_INTERVAL_S = 0.01
+
   @staticmethod
   @functools.cache
   def ctx():
@@ -88,6 +92,13 @@ class USB3:
 
       for slot in range(self.max_streams): struct.pack_into(">B", self.buf_cmd[slot], 3, slot + 1)
 
+  def close(self):
+    handle = getattr(self, "handle", None)
+    if handle is None: return
+    with contextlib.suppress(Exception): libusb.libusb_release_interface(handle, 0)
+    libusb.libusb_close(handle)
+    self.handle = None
+
   def _prep_transfer(self, tr, ep, stream_id, buf, length):
     tr.contents.dev_handle, tr.contents.endpoint, tr.contents.length, tr.contents.buffer = self.handle, ep, length, buf
     tr.contents.status, tr.contents.flags, tr.contents.timeout, tr.contents.num_iso_packets = 0xff, 0, 1000, 0
@@ -96,28 +107,50 @@ class USB3:
     return tr
 
   def _submit_and_wait(self, cmds):
-    for tr in cmds: checked(libusb.libusb_submit_transfer)(tr)
+    with usbgpu_bus_lock():
+      for tr in cmds: checked(libusb.libusb_submit_transfer)(tr)
 
-    running = len(cmds)
-    while running:
-      checked(libusb.libusb_handle_events)(USB3.ctx())
       running = len(cmds)
-      for tr in cmds:
-        if tr.contents.status == libusb.LIBUSB_TRANSFER_COMPLETED: running -= 1
-        elif tr.contents.status != 0xFF: raise RuntimeError(f"EP 0x{tr.contents.endpoint:02X} error: {tr.contents.status}")
+      while running:
+        # Signals can interrupt libusb's event wait without indicating a USB
+        # transfer failure. Retry EINTR, but keep surfacing real link errors.
+        rc = libusb.libusb_handle_events(USB3.ctx())
+        if rc < 0 and rc != libusb.LIBUSB_ERROR_INTERRUPTED:
+          raise RuntimeError(f"libusb_handle_events: {ctypes.string_at(libusb.libusb_strerror(rc)).decode()}")
+        running = len(cmds)
+        for tr in cmds:
+          if tr.contents.status == libusb.LIBUSB_TRANSFER_COMPLETED: running -= 1
+          elif tr.contents.status != 0xFF: raise RuntimeError(f"EP 0x{tr.contents.endpoint:02X} error: {tr.contents.status}")
 
   def _bulk_out(self, ep: int, payload: bytes, timeout: int = 1000):
     if len(payload) > len(self._bulk_out_mv): self._bulk_out_buf, self._bulk_out_mv = alloc_cbuffer(len(payload))
     self._bulk_out_mv[:len(payload)] = payload
-    checked(libusb.libusb_bulk_transfer, f"bulk OUT 0x{ep:02X} failed")(self.handle, ep, self._bulk_out_buf, len(payload), self._transferred, timeout)
+    for attempt in range(self.BULK_OUT_IO_ATTEMPTS):
+      self._transferred.value = 0
+      with usbgpu_bus_lock():
+        ret = libusb.libusb_bulk_transfer(self.handle, ep, self._bulk_out_buf, len(payload), self._transferred, timeout)
+      if ret >= 0: break
+      # A zero-byte EIO is safe to replay. Never retry a partial transfer: the
+      # bridge may already have consumed part of the command or model buffer.
+      if (ret != libusb.LIBUSB_ERROR_IO or self._transferred.value != 0 or
+          attempt + 1 == self.BULK_OUT_IO_ATTEMPTS):
+        error = ctypes.string_at(libusb.libusb_strerror(ret)).decode()
+        raise RuntimeError(f"bulk OUT 0x{ep:02X} failed after {attempt + 1} attempts "
+                           f"({self._transferred.value}/{len(payload)} bytes): {error}")
+      time.sleep(self.BULK_OUT_IO_RETRY_INTERVAL_S)
     assert self._transferred.value == len(payload), f"bulk OUT short write on 0x{ep:02X}: {self._transferred.value}/{len(payload)} bytes"
 
   def _bulk_in(self, ep: int, length: int, timeout: int = 1000) -> memoryview:
     if length > len(self._bulk_in_mv): self._bulk_in_buf, self._bulk_in_mv = alloc_cbuffer(length)
-    checked(libusb.libusb_bulk_transfer, f"bulk IN 0x{ep:02X} failed")(self.handle, ep, self._bulk_in_buf, length, self._transferred, timeout)
+    with usbgpu_bus_lock():
+      checked(libusb.libusb_bulk_transfer, f"bulk IN 0x{ep:02X} failed")(self.handle, ep, self._bulk_in_buf, length, self._transferred, timeout)
     return self._bulk_in_mv[:self._transferred.value]
 
   def send_batch(self, cdbs:list[bytes], idata:list[int]|None=None, odata:list[bytes|None]|None=None) -> list[bytes|None]:
+    with usbgpu_bus_lock():
+      return self._send_batch_locked(cdbs, idata, odata)
+
+  def _send_batch_locked(self, cdbs:list[bytes], idata:list[int]|None=None, odata:list[bytes|None]|None=None) -> list[bytes|None]:
     idata, odata = idata or [0] * len(cdbs), odata or [None] * len(cdbs)
     results:list[bytes|None] = []
     tr_window, op_window = [], []
@@ -188,6 +221,12 @@ class ReadOp: addr:int; size:int # noqa: E702
 class ScsiWriteOp: data:bytes; lba:int=0 # noqa: E702
 
 class CustomASM24Controller:
+  PCIE_LINK_READY = 0x78
+  PCIE_LINK_TIMEOUT_S = 2.0
+  PCIE_LINK_POLL_INTERVAL_S = 0.05
+  XDATA_READ_ATTEMPTS = 20
+  XDATA_READ_RETRY_INTERVAL_S = 0.01
+
   def __init__(self, usb:USB3|None=None):
     if not usb:
       devs = USB3.list_devices(0xADD1, 0x0001)
@@ -200,31 +239,46 @@ class CustomASM24Controller:
     self._f0_out_buf, self._f0_out_mv = alloc_cbuffer(0x1000) # for f0 and e4, allocate big enough for e4
     self._f0_in_buf, _ = alloc_cbuffer(8)
 
-    # Custom firmware now boots with PCIe off. Power it on before probing the link.
+    # Match the proven USB-PD branch startup sequence. The custom firmware's
+    # power-on command already asserts PERST, resets the tunnel state, and
+    # retrains PCIe; an extra power-off or USB reset can disturb a bridge that
+    # remained enumerated while vehicle-switched GPU power was off.
     ltssm = self.read(0xB450, 1)[0]
-    if ltssm != 0x78: self.set_pcie_power(True)
-    ltssm = self.read(0xB450, 1)[0]
-    if ltssm != 0x78: raise RuntimeError(f"PCIe link not up (LTSSM=0x{ltssm:02X}), custom firmware not ready")
+    if ltssm != self.PCIE_LINK_READY:
+      self.set_pcie_power(True)
+      deadline = time.monotonic() + self.PCIE_LINK_TIMEOUT_S
+      while ltssm != self.PCIE_LINK_READY and time.monotonic() < deadline:
+        time.sleep(self.PCIE_LINK_POLL_INTERVAL_S)
+        ltssm = self.read(0xB450, 1)[0]
+    if ltssm != self.PCIE_LINK_READY:
+      raise RuntimeError(f"PCIe link not up (LTSSM=0x{ltssm:02X}), custom firmware not ready")
 
   def set_pcie_power(self, enabled:bool, timeout:int=10000):
-    checked(libusb.libusb_control_transfer,
-            f"F3 PCIe power {'on' if enabled else 'off'} failed")(self.usb.handle, 0x40, 0xF3, int(enabled), 0, None, 0, timeout)
+    with usbgpu_bus_lock():
+      checked(libusb.libusb_control_transfer,
+              f"F3 PCIe power {'on' if enabled else 'off'} failed")(self.usb.handle, 0x40, 0xF3, int(enabled), 0, None, 0, timeout)
 
   # === PCIe TLP via 0xF0 vendor command ===
 
   def _f0_out(self, fmt_type:int, byte_en:int, address:int, value:int, mode:int=0):
     struct.pack_into('<III', self._f0_out_mv, 0, address & 0xFFFFFFFF, address >> 32, value)
-    ret = libusb.libusb_control_transfer(self.usb.handle, 0x40, 0xF0, fmt_type | (byte_en << 8), mode & 0x03, self._f0_out_buf, 12, 5000)
+    with usbgpu_bus_lock():
+      ret = libusb.libusb_control_transfer(self.usb.handle, 0x40, 0xF0, fmt_type | (byte_en << 8), mode & 0x03, self._f0_out_buf, 12, 5000)
     assert ret == 12, f"F0 OUT failed: {ret}"
 
   def _f0_in(self) -> tuple[int, int, int]:
-    ret = libusb.libusb_control_transfer(self.usb.handle, 0xC0, 0xF0, 0, 0, self._f0_in_buf, 8, 5000)
+    with usbgpu_bus_lock():
+      ret = libusb.libusb_control_transfer(self.usb.handle, 0xC0, 0xF0, 0, 0, self._f0_in_buf, 8, 5000)
     assert ret == 8, f"F0 IN failed: {ret}"
     return struct.unpack_from('<I', self._f0_in_buf, 0)[0], (self._f0_in_buf[4] >> 5) & 0x7, self._f0_in_buf[7]
 
   def _is_pci_cacheable(self, addr:int) -> bool: return any(x <= addr <= x + sz for x, sz in self._pci_cacheable)
 
   def pcie_request(self, fmt_type:int, address:int, value:int|None=None, size:int=4, cnt:int=10):
+    with usbgpu_bus_lock():
+      return self._pcie_request_locked(fmt_type, address, value, size, cnt)
+
+  def _pcie_request_locked(self, fmt_type:int, address:int, value:int|None=None, size:int=4, cnt:int=10):
     if fmt_type == 0x60 and size == 4 and self._is_pci_cacheable(address) and self._pci_cache.get(address) == value: return
     assert size > 0 and size <= 4, f"Invalid size {size}"
     if DEBUG >= 5: print("pcie_request", hex(fmt_type), hex(address), value, size)
@@ -264,14 +318,16 @@ class CustomASM24Controller:
   def pcie_mem_write(self, address:int, values:list[int], size:int):
     """Streaming PCIe memory write via 0xF0 mode 1 + bulk OUT. Data is little-endian dwords on the wire."""
     if not values: return
-    self._f0_out(0x60, 0x0F, address, len(values), mode=1)
-    self.usb._bulk_out(0x02, struct.pack(f'<{len(values)}I', *values))
+    with usbgpu_bus_lock():
+      self._f0_out(0x60, 0x0F, address, len(values), mode=1)
+      self.usb._bulk_out(0x02, struct.pack(f'<{len(values)}I', *values))
 
   def pcie_mem_read(self, address:int, nbytes:int) -> bytes:
     """Streaming PCIe memory read via 0xF0 mode 2 + bulk IN. Returns little-endian bytes."""
     assert nbytes % 4 == 0, f"pcie_mem_read requires 4-byte aligned size, got {nbytes}"
-    self._f0_out(0x20, 0x0F, address, nbytes // 4, mode=2)
-    return self.usb._bulk_in(0x81, nbytes, timeout=30000)
+    with usbgpu_bus_lock():
+      self._f0_out(0x20, 0x0F, address, nbytes // 4, mode=2)
+      return self.usb._bulk_in(0x81, nbytes, timeout=30000)
 
   # === XDATA read/write (0xE4/0xE5 vendor control transfers) ===
 
@@ -280,16 +336,24 @@ class CustomASM24Controller:
     result = b''
     for off in range(0, length, 0xFF):
       chunk = min(0xFF, length - off)
-      ret = libusb.libusb_control_transfer(self.usb.handle, 0xC0, 0xE4, base_addr + off, 0, self._f0_out_buf, chunk, 1000)
-      assert ret == chunk, f"read(0x{base_addr + off:04X}, {chunk}) failed: {ret}"
+      for attempt in range(self.XDATA_READ_ATTEMPTS):
+        with usbgpu_bus_lock():
+          ret = libusb.libusb_control_transfer(self.usb.handle, 0xC0, 0xE4, base_addr + off, 0, self._f0_out_buf, chunk, 1000)
+        if ret == chunk or ret != libusb.LIBUSB_ERROR_IO or attempt + 1 == self.XDATA_READ_ATTEMPTS: break
+        # XDATA reads are side-effect free. A shared xHCI/hub can surface a
+        # transient LIBUSB_ERROR_IO while the bridge remains enumerated, so
+        # retry the read briefly before modeld falls back to the internal GPU.
+        time.sleep(self.XDATA_READ_RETRY_INTERVAL_S)
+      assert ret == chunk, f"read(0x{base_addr + off:04X}, {chunk}) failed: {ret} after {attempt + 1} attempts"
       result += bytes(self._f0_out_buf[:ret])
     return result[:length]
 
   def write(self, base_addr:int, data:bytes, **kwargs):
     """Write to chip XDATA via vendor control OUT (bRequest=0xE5). wValue=addr, wIndex=val."""
     for off, val in enumerate(data):
-      checked(libusb.libusb_control_transfer,
-              f"write(0x{base_addr + off:04X}, 0x{val:02X}) failed")(self.usb.handle, 0x40, 0xE5, base_addr + off, val, None, 0, 1000)
+      with usbgpu_bus_lock():
+        checked(libusb.libusb_control_transfer,
+                f"write(0x{base_addr + off:04X}, 0x{val:02X}) failed")(self.usb.handle, 0x40, 0xE5, base_addr + off, val, None, 0, 1000)
 
   def scsi_write(self, buf:bytes, lba:int=0):
     """Write to SRAM via 0xF2 vendor command + bulk OUT."""
@@ -298,13 +362,15 @@ class CustomASM24Controller:
     num_slots = round_up(len(buf_padded), 0x4000) // 0x4000  # 16KB per slot
     # 0xF2 OUT: wValue=sectors, wIndex=start_slot|(num_slots<<8)
     windex = (num_slots & 0xFF) << 8
-    checked(libusb.libusb_control_transfer, "F2 setup failed")(self.usb.handle, 0x40, 0xF2, sectors, windex, None, 0, 1000)
-    self.usb._bulk_out(0x02, buf_padded)
+    with usbgpu_bus_lock():
+      checked(libusb.libusb_control_transfer, "F2 setup failed")(self.usb.handle, 0x40, 0xF2, sectors, windex, None, 0, 1000)
+      self.usb._bulk_out(0x02, buf_padded)
 
   def scsi_read_arm(self, size:int):
     windex = (ceildiv(size, 0x4000) & 0xFF) << 8
-    checked(libusb.libusb_control_transfer,
-            "F2 read arm failed")(self.usb.handle, 0x40, 0xF2, (ceildiv(size, 512) & 0x7FFF) | 0x8000, windex, None, 0, 1000)
+    with usbgpu_bus_lock():
+      checked(libusb.libusb_control_transfer,
+              "F2 read arm failed")(self.usb.handle, 0x40, 0xF2, (ceildiv(size, 512) & 0x7FFF) | 0x8000, windex, None, 0, 1000)
 
   def scsi_read(self, size:int) -> memoryview: return self.usb._bulk_in(0x81, round_up(size, 512), timeout=10000)[:size]
 

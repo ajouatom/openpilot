@@ -1,6 +1,8 @@
 import sys
 from pathlib import Path
 
+import usb.util
+
 CLUSTER_DIR = Path(__file__).resolve().parents[1] / "cluster"
 sys.path.insert(0, str(CLUSTER_DIR))
 
@@ -92,6 +94,9 @@ def test_preopen_orientation_is_carried_by_h264_setup_without_setting_transactio
 
 
 def test_h264_egpu_coexistence_caps_chunks_and_yields_after_send(monkeypatch):
+  assert USBGPU_H264_MAX_CHUNK_SIZE == 32 * 1024
+  assert USBGPU_H264_CHUNK_GAP_S == 0.002
+
   display = TuringUsbDisplay(fast_write=True)
   display.dev = object()
   display._send_optional_command = lambda *_args, **_kwargs: None
@@ -115,6 +120,16 @@ def test_h264_egpu_coexistence_caps_chunks_and_yields_after_send(monkeypatch):
   assert sleeps == [USBGPU_H264_CHUNK_GAP_S]
 
 
+def test_h264_egpu_coexistence_skips_blocking_chunk_negotiation(monkeypatch):
+  display = TuringUsbDisplay()
+  display._send_command = lambda *_args, **_kwargs: (_ for _ in ()).throw(
+    AssertionError("eGPU mode must not wait for a TURZX response"),
+  )
+  monkeypatch.setattr("cluster_usb_display._usbgpu_transfer_active", lambda: True)
+
+  assert display._h264_chunk_size(0) > USBGPU_H264_MAX_CHUNK_SIZE
+
+
 def test_h264_clear_overlay_matches_captured_shape_and_size():
   png = _transparent_h264_overlay_png()
 
@@ -136,3 +151,41 @@ def test_h264_stop_uses_bounded_nonblocking_status_drain():
   assert [call[0] for call in calls] == [123, 122, 122]
   assert all(call[3]["no_ack_gap_s"] == 0.080 for call in calls)
   assert all(call[3]["no_ack_drain_attempts"] == 1 for call in calls)
+
+
+def test_reconnect_does_not_reset_shared_usb_path_while_egpu_is_active(monkeypatch):
+  display = TuringUsbDisplay()
+  calls = []
+
+  class FakeDevice:
+    def reset(self):
+      calls.append("reset")
+
+  display.dev = FakeDevice()
+  monkeypatch.setattr("cluster_usb_display._usbgpu_reset_protected", lambda: True)
+  monkeypatch.setattr(usb.util, "dispose_resources", lambda _dev: calls.append("dispose"))
+  monkeypatch.setattr(display, "_connect_device", lambda: calls.append("connect"))
+  monkeypatch.setattr("cluster_usb_display.time.sleep", lambda _seconds: None)
+
+  display._reset_and_reconnect()
+
+  assert calls == ["dispose", "connect"]
+
+
+def test_reconnect_keeps_device_reset_when_egpu_is_not_in_use(monkeypatch):
+  display = TuringUsbDisplay()
+  calls = []
+
+  class FakeDevice:
+    def reset(self):
+      calls.append("reset")
+
+  display.dev = FakeDevice()
+  monkeypatch.setattr("cluster_usb_display._usbgpu_reset_protected", lambda: False)
+  monkeypatch.setattr(usb.util, "dispose_resources", lambda _dev: calls.append("dispose"))
+  monkeypatch.setattr(display, "_connect_device", lambda: calls.append("connect"))
+  monkeypatch.setattr("cluster_usb_display.time.sleep", lambda _seconds: None)
+
+  display._reset_and_reconnect()
+
+  assert calls == ["reset", "dispose", "connect"]

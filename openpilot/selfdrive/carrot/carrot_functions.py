@@ -44,6 +44,11 @@ def get_driving_mode_factors(driving_mode: DrivingMode, eco_factor: float = 0.9,
     return safe_factor, get_t_follow_mode_factor(safe_factor)
   return 1.0, 1.0
 
+
+def get_driving_mode_comfort_brake_factor(driving_mode: DrivingMode) -> float:
+  """Keep Eco efficient while giving Safe a modestly earlier braking profile."""
+  return 0.9 if driving_mode == DrivingMode.Safe else 1.0
+
 class TrafficState(Enum):
   off = 0
   red = 1
@@ -144,8 +149,6 @@ class CarrotPlanner:
     self.jerk_factor = 1.0
     self.jerk_factor_apply = 1.0
 
-    self.j_lead_factor = 0.0
-
     self.activeCarrot = 0
     self.xDistToTurn = 0
     self.atcType = ""
@@ -165,7 +168,7 @@ class CarrotPlanner:
       
       self.myDrivingModeAuto = self.params.get_int("MyDrivingModeAuto")
       if self.myDrivingModeAuto > 0 and not self.myDrivingMode_disable_auto:
-        self.myDrivingMode = self.drivingModeDetector.get_mode()
+        self.myDrivingMode = self.drivingModeDetector.get_mode(self.myDrivingModeAuto)
       else:
         self.myDrivingMode = myDrivingMode
 
@@ -191,7 +194,6 @@ class CarrotPlanner:
       self.cruiseMaxVals6 = self.params.get_float("CruiseMaxVals6") / 100.
     elif self.params_count == 40:
       self.stop_distance = self.params.get_float("StopDistanceCarrot") / 100.
-      self.j_lead_factor = self.params.get_float("JLeadFactor3") / 100.
       self.eco_over_speed = self.params.get_int("CruiseEcoControl")
       self.autoNaviSpeedDecelRate = float(self.params.get_int("AutoNaviSpeedDecelRate")) * 0.01
       self.aChangeCostStarting = self.params.get_float("AChangeCostStarting")
@@ -299,9 +301,12 @@ class CarrotPlanner:
   def get_T_FOLLOW(self, personality=log.LongitudinalPersonality.standard, v_ego=0.0, a_ego=0.0):
     tf_base = self._get_base_t_follow(personality, v_ego)
     tf_target = self._apply_speed_t_follow_scale(tf_base, v_ego)
-    tf_adjusted = self._apply_decel_hold_and_boost_t_follow(tf_target, a_ego)
-    tf_mode = float(tf_adjusted * self.myTFollowFactor)
-    tf_final = self._clip_t_follow(tf_mode)
+    # Keep the target, deceleration hold state and applied state in the same
+    # mode-scaled domain. Applying the mode factor after the hold compounded
+    # Safe's 1.2 factor every cycle while decelerating.
+    tf_mode_target = float(tf_target * self.myTFollowFactor)
+    tf_adjusted = self._apply_decel_hold_and_boost_t_follow(tf_mode_target, a_ego)
+    tf_final = self._clip_t_follow(tf_adjusted)
     self._tf_applied = float(tf_final)
     return self.apply_t_follow(tf_final)
 
@@ -473,7 +478,8 @@ class CarrotPlanner:
     #self.soft_hold_active = sm['carControl'].hudControl.softHoldActive # carrot 1
     self.soft_hold_active = sm['carState'].softHoldActive # carrot 2
 
-    self.comfort_brake = self.comfortBrake
+    mode_comfort_brake = self.comfortBrake * get_driving_mode_comfort_brake_factor(self.myDrivingMode)
+    self.comfort_brake = mode_comfort_brake
 
     v_ego = carstate.vEgo
     a_ego = carstate.aEgo
@@ -562,7 +568,7 @@ class CarrotPlanner:
           self.add_event(EventName.trafficSignGreen)
           self.xState = XState.e2eCruise
         else:
-          self.comfort_brake = self.comfortBrake * 0.9
+          self.comfort_brake = min(mode_comfort_brake, self.comfortBrake * 0.9)
           #self.comfort_brake = COMFORT_BRAKE
           self.trafficStopAdjustRatio = np.interp(v_ego_kph, [0, 100], [1.0, 0.7])
           # 속도가 높을수록 먼 정지거리 추정값을 줄여 보정함.
@@ -607,7 +613,10 @@ class CarrotPlanner:
     if mode == 'acc':
       mode = 'blended' if self.xState in [XState.e2ePrepare] else 'acc'
 
-    self.comfort_brake *= self.mySafeFactor
+    # Drive modes shape transient response through lead preview and preserve
+    # steady-state spacing through tFollow.  Keep the MPC braking-distance model
+    # independent of mode so its v^2 term does not create a large high-speed gap
+    # jump (Safe/Eco max acceleration still uses mySafeFactor).
     self.actual_stop_distance = max(0, self.actual_stop_distance - (v_ego * DT_MDL))
 
     if stop_model_x == 1000.0:  # e2eCruise 또는 lead 상태
@@ -691,5 +700,6 @@ class DrivingModeDetector:
         self.congested = False
         self.counter = - self.exit_needed
 
-    def get_mode(self):
-        return DrivingMode.Safe if self.congested else DrivingMode.Normal
+    def get_mode(self, auto_mode: int):
+        cruise_mode = DrivingMode.Eco if int(auto_mode) == 2 else DrivingMode.Normal
+        return DrivingMode.Safe if self.congested else cruise_mode

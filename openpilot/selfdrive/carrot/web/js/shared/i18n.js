@@ -260,7 +260,6 @@ function renderUIText() {
   setText("btnResetCalib", "Reset Calib");
   setText("btnSendTmuxLog", "capture tmux");
   setText("btnSendTmuxServerLog", "send tmux");
-  setText("btnInstallRequired", "install shapely");
   setText("btnDeleteVideos", "delete all videos");
   setText("btnDeleteLogs", "delete all logs");
   setText("btnRebuildAll", "Rebuild All");

@@ -1,6 +1,6 @@
 from __future__ import annotations
 from typing import cast
-import os, ctypes, struct, hashlib, functools, importlib, mmap, errno, array, contextlib, sys, weakref, itertools, collections, atexit
+import os, ctypes, struct, hashlib, functools, importlib, mmap, errno, array, contextlib, sys, weakref, itertools, collections, atexit, time
 assert sys.platform != 'win32'
 from dataclasses import dataclass
 from tinygrad.runtime.support.hcq import HCQCompiled, HCQAllocator, HCQBuffer, HWQueue, CLikeArgsState, HCQSignal, HCQProgram, FileIOInterface
@@ -25,6 +25,9 @@ SQTT = ContextVar("SQTT", abs(VIZ.value)>=2)
 SQTT_ITRACE_SE_MASK, SQTT_LIMIT_SE, SQTT_SIMD_SEL, SQTT_TOKEN_EXCLUDE = \
   ContextVar("SQTT_ITRACE_SE_MASK", 0b11), ContextVar("SQTT_LIMIT_SE", 0), ContextVar("SQTT_SIMD_SEL", 0), ContextVar("SQTT_TOKEN_EXCLUDE", 0)
 PMC = ContextVar("PMC", abs(VIZ.value)>=2)
+AMD_USB_WAIT_SPIN_MS = max(0, getenv("AMD_USB_WAIT_SPIN_MS", 1))
+AMD_USB_WAIT_SLEEP_US = max(0, getenv("AMD_USB_WAIT_SLEEP_US", 100))
+USBGPU_COPY_BUFFER_SIZE = 256 * 1024
 EVENT_INDEX_PARTIAL_FLUSH = 4 # based on a comment in nvd.h
 WAIT_REG_MEM_FUNCTION_EQ  = 3 # ==
 WAIT_REG_MEM_FUNCTION_NEQ = 4 # !=
@@ -45,8 +48,16 @@ class AMDSignal(HCQSignal):
   def __init__(self, *args, **kwargs): super().__init__(*args, **{**kwargs, 'timestamp_divider': 100})
 
   def _sleep(self, time_spent_since_last_sleep_ms:int):
+    if self.owner is None: return
+
+    if self.owner.is_usb():
+      # USB signals cannot use the interrupt-backed waits available to KFD/PCI. Keep a short busy-wait
+      # for low latency, then yield the realtime modeld core while longer GPU work is still running.
+      if time_spent_since_last_sleep_ms > AMD_USB_WAIT_SPIN_MS and AMD_USB_WAIT_SLEEP_US:
+        time.sleep(AMD_USB_WAIT_SLEEP_US / 1_000_000)
     # Reasonable to sleep for long workloads (which take more than 200ms) and only timeline signals.
-    if time_spent_since_last_sleep_ms > 200 and self.owner is not None: self.owner.iface.sleep(200)
+    elif time_spent_since_last_sleep_ms > 200:
+      self.owner.iface.sleep(200)
 
 class AMDComputeQueue(HWQueue):
   def __init__(self, dev:AMDDevice):
@@ -920,7 +931,10 @@ class USBIface(PCIIface):
     self.pci_dev.usb._pci_cacheable += [self.pci_dev.bar_info(2)] # doorbell region is cacheable
 
     # special regions
-    self.copy_bufs = [self._dma_region(ctrl_addr=0xf000, sys_addr=0x200000, size=0x80000)]
+    # Bound each SCSI bulk DMA below the original 512 KiB staging window while
+    # avoiding the setup overhead of splitting every model input into 64 KiB
+    # transfers. HCQAllocator automatically splits larger inputs at this size.
+    self.copy_bufs = [self._dma_region(ctrl_addr=0xf000, sys_addr=0x200000, size=USBGPU_COPY_BUFFER_SIZE)]
     self.sys_buf, self.sys_next_off = self._dma_region(ctrl_addr=0xa000, sys_addr=0x820000, size=0x1000), 0x800
     self.cq_buf = self._dma_region(ctrl_addr=0xb800, sys_addr=0x822000, size=0x1000)
 
