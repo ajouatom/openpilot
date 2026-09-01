@@ -297,7 +297,6 @@ class LongitudinalPlanner:
         and lead.radarTrackId >= 0
       ),
       a_lead=lead.aLeadK,
-      j_lead=lead.jLead,
       a_ego=sm['carState'].aEgo,
     )
     if preview_request.active:
