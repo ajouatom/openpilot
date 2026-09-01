@@ -80,6 +80,22 @@ class TestMessaging:
   def test_sub_sock(self, evt):
     messaging.sub_sock(evt)
 
+  def test_submaster_multiple_poll_services(self):
+    sm = messaging.SubMaster(
+      ["modelV2", "liveTracks", "carState"],
+      poll=["modelV2", "liveTracks"],
+    )
+    assert sm.non_polled_services == {"carState"}
+    assert sm.update_freq == 40.0
+    assert sm.freq_tracker["modelV2"].min_freq == 16.0
+    assert sm.freq_tracker["liveTracks"].max_freq == 24.0
+    assert sm.freq_tracker["carState"].min_freq == 16.0
+    assert sm.freq_tracker["carState"].max_freq == 48.0
+
+  def test_submaster_rejects_unknown_poll_service(self):
+    with pytest.raises(AssertionError, match="must be subscribed"):
+      messaging.SubMaster(["modelV2"], poll=["modelV2", "liveTracks"])
+
   @parameterized.expand([
     (messaging.drain_sock, capnp._DynamicStructReader),
     (messaging.drain_sock_raw, bytes),

@@ -295,15 +295,36 @@ class LongitudinalPlanner:
     self.output_v_target_now = output_v_target_now
     self.output_j_target_now = self.j_desired_trajectory[0]
 
-  def publish(self, sm, pm, carrot):
+  def publish(
+    self,
+    sm,
+    pm,
+    carrot,
+    *,
+    planner_execution_time=0.0,
+    live_tracks_mono_time=0,
+    fast_lead_mask=0,
+    fast_lead_track_id=-1,
+    planning_trigger="modelV2",
+    fast_radar_execution_time=0.0,
+    fast_lead_reason="inactive",
+  ):
     plan_send = messaging.new_message('longitudinalPlan')
 
     plan_send.valid = sm.all_checks(service_list=['carState', 'controlsState', 'selfdriveState'])
 
     longitudinalPlan = plan_send.longitudinalPlan
     longitudinalPlan.modelMonoTime = sm.logMonoTime['modelV2']
-    longitudinalPlan.processingDelay = (plan_send.logMonoTime / 1e9) - sm.logMonoTime['modelV2']
+    longitudinalPlan.radarStateMonoTime = sm.logMonoTime['radarState']
+    longitudinalPlan.processingDelay = (plan_send.logMonoTime - sm.logMonoTime['modelV2']) / 1e9
     longitudinalPlan.solverExecutionTime = self.mpc.solve_time
+    longitudinalPlan.plannerExecutionTime = float(planner_execution_time)
+    longitudinalPlan.liveTracksMonoTime = int(live_tracks_mono_time)
+    longitudinalPlan.fastLeadTrackId = int(fast_lead_track_id)
+    longitudinalPlan.fastLeadMask = int(fast_lead_mask)
+    longitudinalPlan.planningTrigger = planning_trigger
+    longitudinalPlan.fastRadarExecutionTime = float(fast_radar_execution_time)
+    longitudinalPlan.fastLeadReason = fast_lead_reason
 
     longitudinalPlan.speeds = self.v_desired_trajectory.tolist()
     longitudinalPlan.accels = self.a_desired_trajectory.tolist()

@@ -105,10 +105,17 @@ def recv_one_retry(sock: SubSocket) -> capnp.lib.capnp._DynamicStructReader:
 
 
 class FrequencyTracker:
-  def __init__(self, service_freq: float, update_freq: float, is_poll: bool):
+  def __init__(self, service_freq: float, update_freq: float, is_poll: bool,
+               min_update_freq: Optional[float] = None):
     freq = max(min(service_freq, update_freq), 1.)
     if is_poll:
       min_freq = max_freq = freq
+    elif min_update_freq is not None:
+      # Multiple poll sockets can wake together or independently. A conflated
+      # high-rate service is therefore sampled between the fastest individual
+      # poll rate and the sum of all poll rates.
+      min_freq = max(min(service_freq, min_update_freq), 1.)
+      max_freq = min(freq, update_freq)
     else:
       max_freq = min(freq, update_freq)
       if service_freq >= 2 * update_freq:
@@ -148,7 +155,7 @@ class FrequencyTracker:
 
 
 class SubMaster:
-  def __init__(self, services: List[str], poll: Optional[str] = None,
+  def __init__(self, services: List[str], poll: Optional[Union[str, List[str]]] = None,
                ignore_alive: Optional[List[str]] = None, ignore_avg_freq: Optional[List[str]] = None,
                ignore_valid: Optional[List[str]] = None, addr: str = "127.0.0.1", frequency: Optional[float] = None):
     self.frame = -1
@@ -170,7 +177,15 @@ class SubMaster:
 
     self.freq_tracker: Dict[str, FrequencyTracker] = {}
     self.poller = Poller()
-    polled_services = set([poll, ] if poll is not None else services)
+    if poll is None:
+      polled_services = set(services)
+    elif isinstance(poll, str):
+      polled_services = {poll}
+    else:
+      polled_services = set(poll)
+      assert polled_services, "At least one poll service is required"
+    assert polled_services <= set(services), "Poll services must be subscribed"
+    multiple_poll_services = poll is not None and not isinstance(poll, str) and len(polled_services) > 1
     self.non_polled_services = set(services) - polled_services
 
     self.ignore_average_freq = [] if ignore_avg_freq is None else ignore_avg_freq
@@ -179,9 +194,15 @@ class SubMaster:
 
     self.simulation = bool(int(os.getenv("SIMULATION", "0")))
 
-    # if freq and poll aren't specified, assume the max to be conservative
+    # Multiple independently phased poll services can wake the loop at their
+    # combined rate. Keep non-polled frequency tracking aligned with that rate.
     assert frequency is None or poll is None, "Do not specify 'frequency' - frequency of the polled service will be used."
-    self.update_freq = frequency or max([SERVICE_LIST[s].frequency for s in polled_services])
+    if frequency is not None:
+      self.update_freq = frequency
+    elif poll is not None and not isinstance(poll, str):
+      self.update_freq = sum(SERVICE_LIST[s].frequency for s in polled_services)
+    else:
+      self.update_freq = max(SERVICE_LIST[s].frequency for s in polled_services)
 
     for s in services:
       p = self.poller if s not in self.non_polled_services else None
@@ -193,7 +214,14 @@ class SubMaster:
         data = new_message(s, 0) # lists
 
       self.data[s] = getattr(data.as_reader(), s)
-      self.freq_tracker[s] = FrequencyTracker(SERVICE_LIST[s].frequency, self.update_freq, s == poll)
+      self.freq_tracker[s] = FrequencyTracker(
+        SERVICE_LIST[s].frequency,
+        self.update_freq,
+        poll is not None and s in polled_services,
+        (max(SERVICE_LIST[p].frequency for p in polled_services)
+         if multiple_poll_services and s in self.non_polled_services
+         else None),
+      )
 
   def __getitem__(self, s: str) -> capnp.lib.capnp._DynamicStructReader:
     return self.data[s]
