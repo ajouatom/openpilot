@@ -78,6 +78,15 @@ def test_modeld_refreshes_hotplug_state_after_startup():
   assert 'put_bool_nonblocking("UsbGpuCompiled", usbgpu_compiled_path() is not None)' in source
 
 
+def test_modeld_waits_for_a_remembered_egpu_to_enumerate():
+  source = (UI_DIR.parent / "modeld" / "modeld.py").read_text(encoding="utf-8")
+
+  assert "USBGPU_DISCOVERY_GRACE_SECONDS = 5.0" in source
+  assert '_hardware_seen = params.get_bool("UsbGpuHardwareSeen")' in source
+  assert "if not _present and _compiled and _hardware_seen:" in source
+  assert "wait_for_usbgpu_present(USBGPU_DISCOVERY_GRACE_SECONDS, USBGPU_DISCOVERY_POLL_INTERVAL)" in source
+
+
 def test_modeld_retries_transient_egpu_pcie_startup():
   source = (UI_DIR.parent / "modeld" / "modeld.py").read_text(encoding="utf-8")
 
