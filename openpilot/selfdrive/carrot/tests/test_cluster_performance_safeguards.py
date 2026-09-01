@@ -163,6 +163,7 @@ def test_cluster_autorun_restarts_without_delay_after_orientation_change(monkeyp
   monkeypatch.setattr(cluster_autorun, "_configure_autorun_affinity", lambda: None)
   monkeypatch.setattr(cluster_autorun, "_apply_realtime_setting_env", lambda *_args: None)
   monkeypatch.setattr(cluster_autorun, "_hud_output_allowed", lambda _params: True)
+  monkeypatch.setattr(cluster_autorun, "_wait_for_usbgpu_startup", lambda _params: None)
   monkeypatch.setattr(cluster_autorun, "_run_cluster_once", run_cluster_once)
   monkeypatch.setattr(
     usb_display_module,
@@ -180,6 +181,86 @@ def test_cluster_autorun_restarts_without_delay_after_orientation_change(monkeyp
     assert runs == [0, 2]
   finally:
     sys.modules.pop("openpilot.selfdrive.carrot.cluster_autorun", None)
+
+
+def test_cluster_autorun_waits_for_first_egpu_output_before_usb_display(monkeypatch):
+  cluster_autorun = _import_cluster_autorun(monkeypatch)
+  clock = [0.0]
+  states = [
+    {
+      cluster_autorun.USBGPU_LOADING_PARAM: True,
+      cluster_autorun.USBGPU_ACTIVE_PARAM: True,
+      cluster_autorun.USBGPU_STARTUP_FAILED_PARAM: False,
+    },
+    {
+      cluster_autorun.USBGPU_LOADING_PARAM: False,
+      cluster_autorun.USBGPU_ACTIVE_PARAM: True,
+      cluster_autorun.USBGPU_STARTUP_FAILED_PARAM: False,
+    },
+  ]
+  state_index = [0]
+
+  class FakeParams:
+    def get_bool(self, name):
+      if name == cluster_autorun.USBGPU_HARDWARE_SEEN_PARAM:
+        return True
+      return states[state_index[0]][name]
+
+  monkeypatch.setattr(cluster_autorun, "_usbgpu_startup_expected", lambda: True)
+  monkeypatch.setattr(cluster_autorun.time, "monotonic", lambda: clock[0])
+
+  def advance(seconds):
+    clock[0] += seconds
+    state_index[0] = min(state_index[0] + 1, len(states) - 1)
+
+  monkeypatch.setattr(cluster_autorun.time, "sleep", advance)
+
+  cluster_autorun._wait_for_usbgpu_startup(FakeParams())
+
+  assert state_index[0] == 1
+  assert clock[0] == pytest.approx(
+    cluster_autorun.USBGPU_STARTUP_POLL_S + cluster_autorun.USBGPU_DISPLAY_STABILIZE_S,
+  )
+
+
+def test_cluster_autorun_skips_egpu_gate_for_unrelated_usb_display(monkeypatch):
+  cluster_autorun = _import_cluster_autorun(monkeypatch)
+
+  class FakeParams:
+    def get_bool(self, name):
+      assert name == cluster_autorun.USBGPU_HARDWARE_SEEN_PARAM
+      return False
+
+  monkeypatch.setattr(cluster_autorun, "_usbgpu_startup_expected", lambda: False)
+  monkeypatch.setattr(
+    cluster_autorun.time,
+    "sleep",
+    lambda _seconds: pytest.fail("non-eGPU systems must not wait for the startup gate"),
+  )
+
+  cluster_autorun._wait_for_usbgpu_startup(FakeParams())
+
+
+def test_cluster_autorun_releases_usb_display_after_egpu_fallback(monkeypatch):
+  cluster_autorun = _import_cluster_autorun(monkeypatch)
+
+  class FakeParams:
+    def get_bool(self, name):
+      return {
+        cluster_autorun.USBGPU_HARDWARE_SEEN_PARAM: True,
+        cluster_autorun.USBGPU_LOADING_PARAM: False,
+        cluster_autorun.USBGPU_ACTIVE_PARAM: False,
+        cluster_autorun.USBGPU_STARTUP_FAILED_PARAM: True,
+      }[name]
+
+  monkeypatch.setattr(cluster_autorun, "_usbgpu_startup_expected", lambda: True)
+  monkeypatch.setattr(
+    cluster_autorun.time,
+    "sleep",
+    lambda _seconds: pytest.fail("failed eGPU startup must release the USB display gate"),
+  )
+
+  cluster_autorun._wait_for_usbgpu_startup(FakeParams())
 
 
 def _new_h264_pipeline() -> H264UsbPipeline:
@@ -585,6 +666,23 @@ def test_cluster_autorun_leaves_navi_server_owned_by_standalone_process(monkeypa
   assert "--navi-publish-cereal" not in args
   assert args[args.index("--output") + 1] == "usb"
   assert args[args.index("--usb-h264-backend") + 1] == "native"
+
+
+def test_cluster_autorun_caps_h264_upload_rate_while_egpu_is_active(monkeypatch):
+  cluster_autorun = _import_cluster_autorun(monkeypatch)
+
+  args = cluster_autorun._cluster_args(
+    hud_mode=0,
+    configured_encoder_mode=cluster_autorun.ENCODER_AUTO,
+    active_encoder_mode=cluster_autorun.ENCODER_HARDWARE,
+    core_mode=0,
+    priority=10,
+    usbgpu_active=True,
+  )
+
+  expected = str(cluster_autorun.USBGPU_DISPLAY_FPS)
+  assert args[args.index("--fps") + 1] == expected
+  assert args[args.index("--usb-display-fps") + 1] == expected
 
 
 def test_cluster_autorun_does_not_fallback_after_runtime_failure(monkeypatch):

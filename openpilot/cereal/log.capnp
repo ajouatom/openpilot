@@ -726,7 +726,6 @@ struct RadarState @0x9a185389d6fdd05f {
   leadsRight2 @20 : List(LeadData);
   leadsCutIn @21 : List(LeadData);
   leadCutInRisk @22 : LeadData;
-  leadsCutInPath @23 : List(LeadData);
 
   struct LeadData {
     dRel @0 :Float32;
@@ -1218,7 +1217,48 @@ struct LongitudinalPlan @0xe00b5b3eba12876c {
   desiredDistance @47: Float32;
   myDrivingMode @48: Int32;
 
+  # carrot-egpu-tg longitudinal fast-path timing/debug fields
+  plannerExecutionTime @49 :Float32;
+  liveTracksMonoTime @50 :UInt64;
+  fastLeadTrackId @51 :Int32 = -1;
+  fastLeadMask @52 :UInt8;  # bit 0: leadOne, bit 1: leadTwo
+  planningTrigger @53 :PlanningTrigger;
+  fastRadarExecutionTime @54 :Float32;
+  fastLeadReason @55 :FastLeadReason;
+
+  # Mode-aware lead preview diagnostics. LongActuatorDelay remains the physical
+  # base delay; leadPreviewSeconds is the bounded signed offset applied only to
+  # aTarget extraction from the already-solved MPC trajectory. Positive means
+  # farther into the future and negative means earlier in the trajectory.
+  aTargetBase @56 :Float32;
+  leadPreviewSeconds @57 :Float32;
+  leadPreviewActionTime @58 :Float32;
+  leadPreviewAccel @59 :Float32;  # mode-weighted aLead + jerk lookahead - aEgo contribution
+  aChangeCost @60 :Float32;
+
   solverExecutionTime @35 :Float32;
+
+  enum PlanningTrigger {
+    modelV2 @0;
+    liveTracks @1;
+  }
+
+  enum FastLeadReason {
+    inactive @0;
+    active @1;
+    notRadarLead @2;
+    selectionPending @3;
+    selectionUnstable @4;
+    trackMissing @5;
+    trackUnmeasured @6;
+    nonFinite @7;
+    invalidDistance @8;
+    distanceDiscontinuity @9;
+    velocityDiscontinuity @10;
+    radarStateInvalid @11;
+    liveTracksInvalid @12;
+    selectionStale @13;
+  }
 
   enum LongitudinalPlanSource {
     cruise @0;

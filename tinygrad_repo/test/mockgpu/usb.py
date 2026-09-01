@@ -188,6 +188,10 @@ class MockUSB3:
     else: raise ValueError(f"unsupported control IN request 0x{request:02X}")
     return memoryview(data[:length])
 
+  def control_read_attempt(self, request:int, length:int, value:int=0, index:int=0, timeout:int=1000) -> tuple[int, memoryview]:
+    data = self.control_read(request, length, value=value, index=index, timeout=timeout)
+    return len(data), data
+
   def bulk_write(self, data:bytes, timeout:int=1000):
     assert self._bulk_write_op is not None
     op, address, size = self._bulk_write_op

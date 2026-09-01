@@ -10,6 +10,11 @@
   branch whose name starts with `carrot-egpu`. Preserve each experimental branch's intentionally
   different model selection or payload unless the user explicitly asks to change it. Stop
   mirroring only branches that have been removed from the remote.
+- Big-model ONNX files and manifests are hosted on the user's NAS under
+  `\\DS1821P\openpilot\models\<model-directory>`. Vehicles download the same files through
+  `https://upload.shind0.synology.me/models/<model-directory>/`. For a new big-model branch,
+  create a distinct model directory, place the verified ONNX and `manifest.json` there, and point
+  the branch at that NAS manifest. Do not use GitHub LFS as the vehicle download source.
 - Navigation deceleration behavior for the `origin/thftgr/navi-stream` branch is documented in
   `docs/carrot_navi_7713_7714_deceleration.md`.
 - The 7714-only control comparison between `origin/carrot-wip` and `origin/thftgr/navi-stream` is

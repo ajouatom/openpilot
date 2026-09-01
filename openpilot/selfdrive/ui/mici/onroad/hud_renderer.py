@@ -13,6 +13,7 @@ from openpilot.selfdrive.carrot.deceleration_source import (
 # from openpilot.selfdrive.ui.mici.onroad.torque_bar import TorqueBar # 아이콘에 토크 적용: 토크바 미사용
 from openpilot.selfdrive.ui.mici.onroad import blend_colors
 from openpilot.selfdrive.ui.ui_state import ui_state, UIStatus
+from openpilot.system.hardware.usbgpu import usbgpu_badge_state
 from openpilot.system.ui.lib.application import gui_app, FontWeight
 from openpilot.system.ui.lib.multilang import tr
 from openpilot.system.ui.lib.text_measure import measure_text_cached
@@ -303,10 +304,16 @@ class HudRenderer(Widget):
     self._draw_cruise_speed_animation(rect)
 
   def _draw_egpu_badge(self, rect: rl.Rectangle) -> None:
-    if not ui_state.usbgpu_active:
+    # Keep runtime state visible while the shared USB hub re-enumerates; a
+    # transient missing sysfs sample must not hide loading or failure details.
+    if not (ui_state.usbgpu_present or ui_state.usbgpu_active or
+            ui_state.usbgpu_loading or ui_state.usbgpu_startup_failed):
       return
 
-    text = "eGPU"
+    state = usbgpu_badge_state(ui_state.usbgpu_compiled, ui_state.usbgpu_loading,
+                               ui_state.usbgpu_active, ui_state.usbgpu_startup_failed,
+                               ui_state.usbgpu_compile_pending)
+    text = "eGPU REBOOT" if state == "compile_pending" else "eGPU"
     font_size = 22
     text_size = measure_text_cached(self._font_semi_bold, text, font_size)
     pad_x, pad_y = 10, 5
@@ -317,16 +324,23 @@ class HudRenderer(Widget):
       badge_w,
       text_size.y + pad_y * 2,
     )
-    green = rl.Color(0, 255, 0, 230)
+    color = {
+      "active": rl.Color(0, 255, 0, 230),
+      "loading": rl.Color(255, 255, 0, 230),
+      "error": rl.Color(255, 0, 0, 230),
+      "compile_pending": rl.Color(255, 165, 0, 230),
+      "not_compiled": rl.Color(255, 165, 0, 230),
+      "ready": rl.Color(255, 255, 255, 210),
+    }[state]
     rl.draw_rectangle_rounded(badge, 0.35, 8, rl.Color(0, 0, 0, 150))
-    rl.draw_rectangle_rounded_lines_ex(badge, 0.35, 8, 2, green)
+    rl.draw_rectangle_rounded_lines_ex(badge, 0.35, 8, 2, color)
     rl.draw_text_ex(
       self._font_semi_bold,
       text,
       rl.Vector2(badge.x + pad_x, badge.y + pad_y),
       font_size,
       0,
-      green,
+      color,
     )
 
   def _update_cruise_speed_animation(self, cruise_text: str) -> None:

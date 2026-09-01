@@ -133,9 +133,11 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"UptimeOffroad", {PERSISTENT, FLOAT, "0.0"}},
     {"UptimeOnroad", {PERSISTENT, FLOAT, "0.0"}},
     {"UsbGpuPresent", {CLEAR_ON_MANAGER_START | CLEAR_ON_OFFROAD_TRANSITION, BOOL}},
+    {"UsbGpuHardwareSeen", {PERSISTENT, BOOL}},
     {"UsbGpuCompiled", {CLEAR_ON_MANAGER_START | CLEAR_ON_OFFROAD_TRANSITION, BOOL}},
     {"UsbGpuLoading", {CLEAR_ON_MANAGER_START | CLEAR_ON_OFFROAD_TRANSITION | CLEAR_ON_IGNITION_ON, BOOL}},
     {"UsbGpuActive", {CLEAR_ON_MANAGER_START | CLEAR_ON_OFFROAD_TRANSITION | CLEAR_ON_IGNITION_ON, BOOL}},
+    {"UsbGpuStartupFailed", {CLEAR_ON_MANAGER_START | CLEAR_ON_IGNITION_ON, BOOL}},
     {"UseWideCamera", {PERSISTENT, BOOL, "1"}},
     {"Version", {PERSISTENT, STRING}},
 
@@ -256,7 +258,6 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"AutoRoadSpeedAdjust", {PERSISTENT, INT, "50"}},
 
     {"StopDistanceCarrot", {PERSISTENT, INT, "550"}},
-    {"JLeadFactor3", {PERSISTENT, INT, "0"}},
     {"CruiseButtonMode", {PERSISTENT, INT, "0"}},
     {"CancelButtonMode", {PERSISTENT, INT, "0"}},
     {"LfaButtonMode", {PERSISTENT, INT, "0"}},
@@ -297,7 +298,6 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"LongActuatorDelay", {PERSISTENT, INT, "20"}},
     {"VEgoStopping", {PERSISTENT, INT, "50"}},
 
-    {"RadarReactionFactor", {PERSISTENT, INT, "100"}},
     {"EnableRadarTracks", {PERSISTENT, INT, "0"}},
     {"RadarLatFactor", {PERSISTENT, INT, "0"}},
     {"EnableCornerRadar", {PERSISTENT, INT, "0"}},

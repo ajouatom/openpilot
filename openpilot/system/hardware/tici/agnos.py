@@ -3,6 +3,7 @@ import hashlib
 import json
 import lzma
 import os
+from pathlib import Path
 import struct
 import subprocess
 import time
@@ -10,20 +11,23 @@ from collections.abc import Generator
 
 import requests
 
-import openpilot.system.updated.casync.casync as casync
-
 SPARSE_CHUNK_FMT = struct.Struct('H2xI4x')
 CAIBX_URL = "https://commadist.azureedge.net/agnosupdate/"
 
 AGNOS_MANIFEST_FILE = "openpilot/system/hardware/tici/agnos.json"
+DOWNLOAD_CACHE_DIR = Path(os.getenv("AGNOS_DOWNLOAD_CACHE_DIR", "/data/agnos-update-cache"))
 
 
 class StreamingDecompressor:
-  def __init__(self, url: str) -> None:
+  def __init__(self, url: str, cache_path: Path | None = None) -> None:
     self.buf = b""
 
-    self.req = requests.get(url, stream=True, headers={'Accept-Encoding': None}, timeout=60)
-    self.it = self.req.iter_content(chunk_size=1024 * 1024)
+    self.source = cache_path.open("rb") if cache_path is not None else None
+    self.req = None if self.source is not None else requests.get(
+      url, stream=True, headers={'Accept-Encoding': None}, timeout=60,
+    )
+    self.it = (iter(lambda: self.source.read(1024 * 1024), b"") if self.source is not None
+               else self.req.iter_content(chunk_size=1024 * 1024))
     self.decompressor = lzma.LZMADecompressor(format=lzma.FORMAT_AUTO)
     self.eof = False
     self.sha256 = hashlib.sha256()
@@ -31,7 +35,8 @@ class StreamingDecompressor:
   def read(self, length: int) -> bytes:
     while len(self.buf) < length and not self.eof:
       if self.decompressor.needs_input:
-        self.req.raise_for_status()
+        if self.req is not None:
+          self.req.raise_for_status()
 
         try:
           compressed = next(self.it)
@@ -52,6 +57,94 @@ class StreamingDecompressor:
 
     self.sha256.update(result)
     return result
+
+  def close(self) -> None:
+    if self.source is not None:
+      self.source.close()
+    if self.req is not None:
+      self.req.close()
+
+
+def file_checksum(path: Path) -> str:
+  digest = hashlib.sha256()
+  with path.open("rb") as source:
+    for chunk in iter(lambda: source.read(1024 * 1024), b""):
+      digest.update(chunk)
+  return digest.hexdigest()
+
+
+def download_to_cache(partition: dict, cloudlog) -> Path | None:
+  compressed_hash = partition.get("compressed_hash")
+  if not isinstance(compressed_hash, str):
+    return None
+
+  DOWNLOAD_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+  final_path = DOWNLOAD_CACHE_DIR / f"{partition['name']}-{compressed_hash}.img.xz"
+  partial_path = final_path.with_suffix(final_path.suffix + ".part")
+  if final_path.is_file():
+    if file_checksum(final_path).lower() == compressed_hash.lower():
+      return final_path
+    cloudlog.warning(f"Discarding invalid cached {partition['name']} image")
+    final_path.unlink()
+
+  offset = partial_path.stat().st_size if partial_path.is_file() else 0
+  expected_size = partition.get("compressed_size")
+  if not isinstance(expected_size, int):
+    expected_size = None
+  if expected_size is not None and offset >= expected_size:
+    if offset == expected_size and file_checksum(partial_path).lower() == compressed_hash.lower():
+      os.replace(partial_path, final_path)
+      return final_path
+    cloudlog.warning(f"Discarding invalid partial {partition['name']} image")
+    partial_path.unlink()
+    offset = 0
+
+  headers: dict[str, str | None] = {'Accept-Encoding': None}
+  if offset:
+    headers['Range'] = f"bytes={offset}-"
+
+  cloudlog.info(f"Downloading {partition['name']} cache from byte {offset}")
+  response = requests.get(partition['url'], stream=True, headers=headers, timeout=60)
+  response.raise_for_status()
+
+  if offset and response.status_code != 206:
+    cloudlog.warning(f"Server ignored resume for {partition['name']}; restarting the cached download")
+    offset = 0
+
+  if expected_size is None:
+    content_length = response.headers.get("Content-Length")
+    expected_size = offset + int(content_length) if content_length is not None else None
+
+  mode = "ab" if offset else "wb"
+  last_p = -1
+  try:
+    with partial_path.open(mode) as output:
+      for chunk in response.iter_content(chunk_size=1024 * 1024):
+        if not chunk:
+          continue
+        output.write(chunk)
+        if expected_size:
+          p = int(output.tell() / expected_size * 100)
+          if p != last_p:
+            last_p = p
+            print(f"Downloading {partition['name']}: {p}", flush=True)
+      output.flush()
+      os.fsync(output.fileno())
+  finally:
+    response.close()
+
+  downloaded_size = partial_path.stat().st_size
+  if expected_size is not None and downloaded_size != expected_size:
+    raise requests.ConnectionError(
+      f"Incomplete {partition['name']} download: {downloaded_size} of {expected_size} bytes"
+    )
+  actual_hash = file_checksum(partial_path)
+  if actual_hash.lower() != compressed_hash.lower():
+    partial_path.unlink(missing_ok=True)
+    raise requests.ConnectionError(f"Compressed {partition['name']} cache hash mismatch: {actual_hash}")
+
+  os.replace(partial_path, final_path)
+  return final_path
 
 
 def unsparsify(f: StreamingDecompressor) -> Generator[bytes, None, None]:
@@ -160,34 +253,45 @@ def clear_partition_hash(target_slot_number: int, partition: dict) -> None:
 
 def extract_compressed_image(target_slot_number: int, partition: dict, cloudlog):
   path = get_partition_path(target_slot_number, partition)
-  downloader = StreamingDecompressor(partition['url'])
+  cache_path = download_to_cache(partition, cloudlog)
+  downloader = StreamingDecompressor(partition['url'], cache_path)
 
-  with open(path, 'wb+') as out:
-    # Flash partition
-    last_p = 0
-    raw_hash = hashlib.sha256()
-    f = unsparsify if partition['sparse'] else noop
-    for chunk in f(downloader):
-      raw_hash.update(chunk)
-      out.write(chunk)
-      p = int(out.tell() / partition['size'] * 100)
-      if p != last_p:
-        last_p = p
-        print(f"Installing {partition['name']}: {p}", flush=True)
+  try:
+    with open(path, 'wb+') as out:
+      # Flash partition
+      last_p = 0
+      raw_hash = hashlib.sha256()
+      f = unsparsify if partition['sparse'] else noop
+      for chunk in f(downloader):
+        raw_hash.update(chunk)
+        out.write(chunk)
+        p = int(out.tell() / partition['size'] * 100)
+        if p != last_p:
+          last_p = p
+          print(f"Installing {partition['name']}: {p}", flush=True)
 
-    if raw_hash.hexdigest().lower() != partition['hash_raw'].lower():
-      raise Exception(f"Raw hash mismatch '{raw_hash.hexdigest().lower()}'")
+      if raw_hash.hexdigest().lower() != partition['hash_raw'].lower():
+        raise Exception(f"Raw hash mismatch '{raw_hash.hexdigest().lower()}'")
 
-    if downloader.sha256.hexdigest().lower() != partition['hash'].lower():
-      raise Exception("Uncompressed hash mismatch")
+      if downloader.sha256.hexdigest().lower() != partition['hash'].lower():
+        raise Exception("Uncompressed hash mismatch")
 
-    if out.tell() != partition['size']:
-      raise Exception("Uncompressed size mismatch")
+      if out.tell() != partition['size']:
+        raise Exception("Uncompressed size mismatch")
 
-    os.sync()
+      os.sync()
+  finally:
+    downloader.close()
+
+  if cache_path is not None:
+    cache_path.unlink(missing_ok=True)
 
 
 def extract_casync_image(target_slot_number: int, partition: dict, cloudlog):
+  # The standalone updater does not use casync. Import it only for this path
+  # so recovery/standalone flashing does not require pycryptodome.
+  import openpilot.system.updated.casync.casync as casync
+
   path = get_partition_path(target_slot_number, partition)
   seed_path = path[:-1] + ('b' if path[-1] == 'a' else 'a')
 

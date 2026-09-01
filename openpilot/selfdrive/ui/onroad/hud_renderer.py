@@ -5,6 +5,7 @@ from openpilot.common.constants import CV
 from openpilot.selfdrive.carrot.deceleration_source import deceleration_source_presentation
 from openpilot.selfdrive.ui.onroad.exp_button import ExpButton
 from openpilot.selfdrive.ui.ui_state import ui_state, UIStatus
+from openpilot.system.hardware.usbgpu import usbgpu_badge_state
 from openpilot.system.ui.lib.application import gui_app, FontWeight
 from openpilot.system.ui.lib.multilang import tr
 from openpilot.system.ui.lib.text_measure import measure_text_cached
@@ -305,10 +306,24 @@ class HudRenderer(Widget):
     return self._exp_button.is_pressed
 
   def _draw_egpu_badge(self, rect: rl.Rectangle) -> None:
-    if not ui_state.usbgpu_active:
+    # Keep runtime state visible while the shared USB hub re-enumerates; a
+    # transient missing sysfs sample must not hide loading or failure details.
+    if not (ui_state.usbgpu_present or ui_state.usbgpu_active or
+            ui_state.usbgpu_loading or ui_state.usbgpu_startup_failed):
       return
 
-    text = "eGPU"
+    state = usbgpu_badge_state(ui_state.usbgpu_compiled, ui_state.usbgpu_loading,
+                               ui_state.usbgpu_active, ui_state.usbgpu_startup_failed,
+                               ui_state.usbgpu_compile_pending)
+    text = "eGPU REBOOT" if state == "compile_pending" else "eGPU"
+    color = {
+      "active": COLORS.GREEN_210,
+      "loading": COLORS.YELLOW_210,
+      "error": COLORS.RED_210,
+      "compile_pending": COLORS.ORANGE_230,
+      "not_compiled": COLORS.ORANGE_230,
+      "ready": COLORS.WHITE_210,
+    }[state]
     font_size = 38
     text_size = measure_text_cached(self._font_semi_bold, text, font_size)
     pad_x, pad_y = 18, 8
@@ -321,14 +336,14 @@ class HudRenderer(Widget):
       text_size.y + pad_y * 2,
     )
     rl.draw_rectangle_rounded(badge, 0.35, 8, rl.Color(0, 0, 0, 150))
-    rl.draw_rectangle_rounded_lines_ex(badge, 0.35, 8, 3, COLORS.GREEN_210)
+    rl.draw_rectangle_rounded_lines_ex(badge, 0.35, 8, 3, color)
     rl.draw_text_ex(
       self._font_semi_bold,
       text,
       rl.Vector2(badge.x + pad_x, badge.y + pad_y),
       font_size,
       0,
-      COLORS.GREEN_210,
+      color,
     )
 
   def _draw_set_speed(self, rect: rl.Rectangle) -> None:

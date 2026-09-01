@@ -6799,7 +6799,7 @@ class ClusterUiRenderer:
         rl.draw_rectangle_rounded(rect, 0.35, 8, rl_color((0, 0, 0), 150))
         rl.draw_rectangle_rounded_lines_ex(rect, 0.35, 8, 2.0, rl_color(GREEN))
         self._draw_text("eGPU", EGPU_STATUS_CENTER_X, TOP_STATUS_CENTER_Y + 1.0,
-                        EGPU_STATUS_FONT_SIZE, GREEN, anchor="center", cache=True)
+                        EGPU_STATUS_FONT_SIZE, GREEN, anchor="center")
 
     def _draw_drive_status_box(
         self,

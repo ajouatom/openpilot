@@ -22,7 +22,6 @@ CORNER_RADAR_FLAGS = int(
   | HyundaiExtFlags.CORNER_RADAR_OBJECTS_430
 )
 PRODUCTION_CUT_IN_SENSITIVITY = 3
-RADAR_REACTION_REFRESH_FRAMES = 20
 EMPTY_LEAD = {
   "dRel": 0.0,
   "yRel": 0.0,
@@ -92,21 +91,10 @@ class DPathRadarD:
       front_radar_measurement_delay_s=float(CP.radarDelay),
       production_live_tracks=True,
     )
-    self.params = params
-    self.radar_reaction_factor = (
-      self.params.get_float("RadarReactionFactor") * 0.01
-    )
-    self.radar_reaction_refresh_frames = 0
     self.radar_state = log.RadarState.new_message()
     self.radar_state_valid = False
 
   def update(self, sm: messaging.SubMaster, rr: car.RadarData) -> None:
-    self.radar_reaction_refresh_frames += 1
-    if self.radar_reaction_refresh_frames >= RADAR_REACTION_REFRESH_FRAMES:
-      self.radar_reaction_factor = (
-        self.params.get_float("RadarReactionFactor") * 0.01
-      )
-      self.radar_reaction_refresh_frames = 0
     self.radar_state_valid = sm.all_checks()
     # Reuse the builder like conventional radard. Reallocating every 20 Hz
     # frame is measurable on device and does not change any published field.
@@ -128,7 +116,6 @@ class DPathRadarD:
       model=sm["modelV2"],
       yaw_rate_rad_s=_yaw_rate(sm["livePose"]),
       radar_to_model_time_s=model_time_s - radar_time_s,
-      radar_reaction_factor=self.radar_reaction_factor,
     )
     self.radar_state.leadOne = output.lead_one or empty_lead()
     self.radar_state.leadTwo = output.lead_two or empty_lead()
@@ -138,7 +125,6 @@ class DPathRadarD:
     self.radar_state.leadsCenter = output.leads_center
     self.radar_state.leadsRight = output.leads_right
     self.radar_state.leadsCutIn = output.leads_cutin
-    self.radar_state.leadsCutInPath = output.leads_cutin_path
     self.radar_state.leadCutInRisk = output.lead_cutin_risk or empty_lead()
     self.radar_state.leadsLeft2 = output.leads_left2
     self.radar_state.leadsRight2 = output.leads_right2

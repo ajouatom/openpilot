@@ -6,10 +6,6 @@ cd "$DIR"
 
 git pull
 
-# Params keys are compiled into params_pyx.so. Use a content stamp so a stale
-# SCons timestamp or cache entry cannot preserve the previous key registry.
-bash "$DIR/scripts/ensure_params_build.sh"
-
 wait_for_carrot_web_process_exit() {
   local pattern="$1"
   local label="$2"
@@ -45,6 +41,11 @@ wait_for_carrot_web_process_exit "[c]arrot_web_watchdog[.]sh" "Carrot Web watchd
 wait_for_carrot_web_process_exit "[o]penpilot.selfdrive.carrot.carrot_server" "Carrot Web server"
 rm -f /tmp/carrot_web_watchdog.pid
 
+# restart.sh is normally launched from the running comma tmux session, which
+# can still carry the previous branch's AGNOS_VERSION. Let the newly pulled
+# launch_env.sh select its own version instead of inheriting that stale value.
+unset AGNOS_VERSION
+tmux set-environment -gu AGNOS_VERSION 2>/dev/null || true
 tmux kill-session -t comma 2>/dev/null || true
 rm -f /tmp/safe_staging_overlay.lock
 sleep 1

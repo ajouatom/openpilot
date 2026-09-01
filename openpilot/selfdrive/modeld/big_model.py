@@ -14,16 +14,27 @@ import json
 import os
 import re
 import shutil
+import socket
 import sys
 import tempfile
+import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 from urllib.parse import urljoin, urlparse
 from urllib.request import Request, urlopen
 
+from openpilot.selfdrive.modeld.big_model_status import BigModelStatusReporter
 
-DEFAULT_MANIFEST_URL = "https://upload.shind0.synology.me/models/comma4-big/manifest.json"
+
+DEFAULT_MANIFEST_URL = "https://upload.shind0.synology.me/models/comma4-big-tgc/manifest.json"
+TGC_MODEL = {
+  "model_id": "comma-pr38739-tgc-a2e422ee-1791d594",
+  "filename": "big_driving_supercombo.onnx",
+  "size": 765_950_064,
+  "sha256": "1791d5940b2c048d0639813426dd2cf1d6f2a6727ed51e17c8bcea8bbe754123",
+  "url": "https://upload.shind0.synology.me/models/comma4-big-tgc/big_driving_supercombo.onnx",
+}
 MAX_MANIFEST_SIZE = 64 * 1024
 MAX_MODEL_SIZE = 4 * 1024 * 1024 * 1024
 DOWNLOAD_CHUNK_SIZE = 4 * 1024 * 1024
@@ -126,12 +137,39 @@ def _write_state(active: BigModelManifest, previous: BigModelManifest | None, ca
 
 
 def fetch_manifest(manifest_url: str = DEFAULT_MANIFEST_URL, timeout: float = 15.0) -> BigModelManifest:
+  # carrot-tgc intentionally pins commaai/openpilot#38739 (TGC). Keep the
+  # environment/CLI override path below so a different manifest can still be
+  # tested explicitly without changing this branch.
+  if manifest_url == DEFAULT_MANIFEST_URL:
+    return BigModelManifest.from_dict(TGC_MODEL, manifest_url)
+
   req = Request(manifest_url, headers={"Accept": "application/json", "User-Agent": "carrot-modeld/1"})
   with urlopen(req, timeout=timeout) as response:
     data = response.read(MAX_MANIFEST_SIZE + 1)
   if len(data) > MAX_MANIFEST_SIZE:
     raise ValueError("model manifest is too large")
   return BigModelManifest.from_dict(json.loads(data), manifest_url)
+
+
+def wait_for_manifest_network(manifest_url: str, timeout: float = 60.0,
+                              connect_timeout: float = 2.0, poll_interval: float = 2.0) -> bool:
+  parsed = urlparse(manifest_url)
+  if parsed.scheme != "https" or parsed.hostname is None:
+    raise ValueError("model manifest URL must use HTTPS and include a host")
+
+  address = (parsed.hostname, parsed.port or 443)
+  deadline = time.monotonic() + max(0.0, timeout)
+  while True:
+    remaining = max(0.0, deadline - time.monotonic())
+    try:
+      connection = socket.create_connection(address, timeout=max(0.1, min(connect_timeout, remaining or 0.1)))
+      connection.close()
+      return True
+    except OSError:
+      remaining = deadline - time.monotonic()
+      if remaining <= 0.0:
+        return False
+      time.sleep(min(poll_interval, remaining))
 
 
 def _sha256(path: Path) -> str:
@@ -142,12 +180,16 @@ def _sha256(path: Path) -> str:
   return digest.hexdigest()
 
 
-def _download_model(manifest: BigModelManifest, cache_dir: Path, timeout: float = 30.0) -> Path:
+def _download_model(manifest: BigModelManifest, cache_dir: Path, timeout: float = 30.0,
+                    progress_callback: Callable[[BigModelManifest, int, int], None] | None = None,
+                    phase_callback: Callable[[str, BigModelManifest], None] | None = None) -> Path:
   cache_dir.mkdir(parents=True, exist_ok=True)
   final_path = model_path(manifest, cache_dir)
   partial_path = final_path.with_suffix(final_path.suffix + ".part")
 
   if final_path.is_file() and final_path.stat().st_size == manifest.size:
+    if phase_callback is not None:
+      phase_callback("verifying", manifest)
     if _sha256(final_path) == manifest.sha256:
       return final_path
     final_path.unlink()
@@ -157,6 +199,8 @@ def _download_model(manifest: BigModelManifest, cache_dir: Path, timeout: float 
     partial_path.unlink()
     offset = 0
   elif offset == manifest.size:
+    if phase_callback is not None:
+      phase_callback("verifying", manifest)
     if _sha256(partial_path) == manifest.sha256:
       os.replace(partial_path, final_path)
       return final_path
@@ -171,6 +215,8 @@ def _download_model(manifest: BigModelManifest, cache_dir: Path, timeout: float 
   if offset:
     headers["Range"] = f"bytes={offset}-"
   req = Request(manifest.url, headers=headers)
+  if progress_callback is not None:
+    progress_callback(manifest, offset, manifest.size)
   with urlopen(req, timeout=timeout) as response:
     status = getattr(response, "status", response.getcode())
     append = offset > 0 and status == 206
@@ -185,12 +231,17 @@ def _download_model(manifest: BigModelManifest, cache_dir: Path, timeout: float 
     with partial_path.open(mode) as f:
       while chunk := response.read(DOWNLOAD_CHUNK_SIZE):
         f.write(chunk)
+        offset += len(chunk)
+        if progress_callback is not None:
+          progress_callback(manifest, offset, manifest.size)
       f.flush()
       os.fsync(f.fileno())
 
   actual_size = partial_path.stat().st_size
   if actual_size != manifest.size:
     raise OSError(f"model size mismatch: expected {manifest.size}, got {actual_size}")
+  if phase_callback is not None:
+    phase_callback("verifying", manifest)
   actual_sha256 = _sha256(partial_path)
   if actual_sha256 != manifest.sha256:
     partial_path.unlink()
@@ -199,7 +250,9 @@ def _download_model(manifest: BigModelManifest, cache_dir: Path, timeout: float 
   return final_path
 
 
-def ensure_big_model(manifest_url: str = DEFAULT_MANIFEST_URL, cache_dir: Path | None = None) -> tuple[Path, bool]:
+def ensure_big_model(manifest_url: str = DEFAULT_MANIFEST_URL, cache_dir: Path | None = None,
+                     progress_callback: Callable[[BigModelManifest, int, int], None] | None = None,
+                     phase_callback: Callable[[str, BigModelManifest], None] | None = None) -> tuple[Path, bool]:
   cache_dir = cache_dir or model_cache_dir()
   manifest = fetch_manifest(manifest_url)
   state = read_state(cache_dir)
@@ -208,7 +261,7 @@ def ensure_big_model(manifest_url: str = DEFAULT_MANIFEST_URL, cache_dir: Path |
   if active is not None and active.sha256 == manifest.sha256 and path.is_file() and path.stat().st_size == manifest.size:
     return path, False
 
-  path = _download_model(manifest, cache_dir)
+  path = _download_model(manifest, cache_dir, progress_callback=progress_callback, phase_callback=phase_callback)
   changed = active is None or active.sha256 != manifest.sha256
   if changed:
     previous = active if active is not None and model_path(active, cache_dir).is_file() else state["previous"]
@@ -237,22 +290,66 @@ def active_model_path(cache_dir: Path | None = None) -> Path | None:
   return model_path(active, cache_dir) if active is not None else None
 
 
+def active_model_compiled() -> bool:
+  if active_model_path() is None:
+    return False
+  from openpilot.common.file_chunker import get_manifest_path
+  from openpilot.selfdrive.modeld.helpers import modeld_pkl_path
+  return Path(get_manifest_path(Path(modeld_pkl_path(usbgpu=True)))).is_file()
+
+
+def remember_usbgpu_connection(params, present: bool, compiled_model: bool) -> bool:
+  """Persist hardware-proven eGPU history for updates while it is powered off."""
+  remembered = params.get_bool("UsbGpuHardwareSeen")
+  known = remembered or present or compiled_model
+  if known and not remembered:
+    params.put_bool("UsbGpuHardwareSeen", True)
+  return known
+
+
 def main() -> int:
   parser = argparse.ArgumentParser(description=__doc__)
   parser.add_argument("--ensure-if-egpu", action="store_true")
   parser.add_argument("--active-sha", action="store_true")
   parser.add_argument("--active-path", action="store_true")
   parser.add_argument("--manifest-url", default=os.getenv("CARROT_BIG_MODEL_MANIFEST", DEFAULT_MANIFEST_URL))
+  parser.add_argument("--network-wait-seconds", type=float, default=0.0)
   args = parser.parse_args()
 
+  if args.network_wait_seconds < 0.0:
+    parser.error("--network-wait-seconds must be non-negative")
+
   if args.ensure_if_egpu:
-    from openpilot.selfdrive.modeld.helpers import usbgpu_present
-    if usbgpu_present():
+    from openpilot.common.params import Params
+    from openpilot.selfdrive.modeld.helpers import usbgpu_compiled, usbgpu_present
+    present = usbgpu_present()
+    if remember_usbgpu_connection(Params(), present, usbgpu_compiled()):
+      cache_dir = model_cache_dir()
+      reporter = BigModelStatusReporter(cache_dir)
       try:
-        path, changed = ensure_big_model(args.manifest_url)
+        reporter.update("checking", detail="checking model catalog")
+        if active_manifest() is None and args.network_wait_seconds > 0.0:
+          print(f"waiting up to {args.network_wait_seconds:g}s for the big model server")
+          reporter.update("checking", detail="waiting for network")
+          if not wait_for_manifest_network(args.manifest_url, args.network_wait_seconds):
+            raise TimeoutError(f"big model server unavailable after {args.network_wait_seconds:g}s")
+        def phase(state: str, manifest: BigModelManifest) -> None:
+          reporter.update(state, model_id=manifest.model_id, sha256=manifest.sha256,
+                          downloaded_bytes=manifest.size, total_bytes=manifest.size)
+
+        path, changed = ensure_big_model(args.manifest_url, cache_dir,
+                                         progress_callback=reporter.download_progress,
+                                         phase_callback=phase)
+        manifest = active_manifest(cache_dir)
+        reporter.update("compiled" if active_model_compiled() else "ready",
+                        model_id=manifest.model_id if manifest is not None else None,
+                        sha256=manifest.sha256 if manifest is not None else None,
+                        downloaded_bytes=manifest.size if manifest is not None else None,
+                        total_bytes=manifest.size if manifest is not None else None)
         print(f"big model {'updated' if changed else 'ready'}: {path}")
       except Exception as e:
         # Model delivery must never prevent the normal internal-GPU build.
+        reporter.update("error", detail=str(e))
         print(f"big model update skipped: {e}", file=sys.stderr)
     return 0
 

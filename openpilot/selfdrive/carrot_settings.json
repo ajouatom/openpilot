@@ -345,16 +345,6 @@
               ]
             },
             {
-              "id": "CRUISE_LEAD",
-              "ko": "선행차 반응",
-              "en": "Lead Response",
-              "zh": "前车响应",
-              "params": [
-                "JLeadFactor3",
-                "RadarReactionFactor"
-              ]
-            },
-            {
               "id": "CRUISE_CARROT",
               "ko": "당근 크루즈",
               "en": "Carrot Cruise",
@@ -1258,22 +1248,6 @@
     },
     {
       "group": "주행튜닝",
-      "name": "JLeadFactor3",
-      "title": "JerkLeadFactor(0)",
-      "descr": "값이 클수록 전방차량의 가속도변화율에 민감하게 반응",
-      "egroup": "LONG",
-      "etitle": "JerkLeadFactor(0)",
-      "edescr": "Higher values respond more sensitively to acceleration changes of the lead vehicle",
-      "cgroup": "纵向控制",
-      "ctitle": "前车冲击因子(0)",
-      "cdescr": "值越高对前车加速度变化的反应越敏感",
-      "min": 0,
-      "max": 100,
-      "default": 0,
-      "unit": 10
-    },
-    {
-      "group": "주행튜닝",
       "name": "LongTuningKpV",
       "title": "Long KpV(100)x0.01",
       "descr": "롱컨 비례게인(오차 즉각 반응) \n\n HKG: 100 권장",
@@ -1351,23 +1325,6 @@
       "max": 100,
       "default": 50,
       "unit": 5
-    },
-    {
-      "group": "주행튜닝",
-      "name": "RadarReactionFactor",
-      "title": "Radar reaction factor (100)%",
-      "descr": "값이 낮을수록 선행차량에 대한 반응이 빠름.",
-      "egroup": "LONG",
-      "etitle": "Radar reaction factor (100)%",
-      "edescr": "Lower value: faster response to lead car",
-      "cgroup": "纵向控制",
-      "ctitle": "雷达反应因子 (100)%",
-      "cdescr": "值越低：对前车的反应越快",
-      "min": 0,
-      "max": 200,
-      "default": 100,
-      "unit": 1,
-      "display_unit": "percent"
     },
     {
       "group": "감속제어",
@@ -2845,15 +2802,15 @@
       "group": "가속설정",
       "name": "MyDrivingModeAuto",
       "title": "드라이브모드: 자동",
-      "descr": "정체조건에서는 자동으로 안전모드로 전환, 앞차가속이 빠르거나 20kmh이상의 속도에서는 일반모드로 전환",
+      "descr": "0:수동\n1:일반↔안전 자동전환\n2:에코↔안전 자동전환",
       "egroup": "ACCEL",
       "etitle": "DrivingMode: Auto",
-      "edescr": "Safety mode in Congested Conditions; Normal mode when lead vehicle accelerates quickly or 20+km/h.",
+      "edescr": "0: Manual\n1: Normal↔Safe automatic switching\n2: Eco↔Safe automatic switching",
       "cgroup": "加速设置",
       "ctitle": "驾驶模式: 自动",
-      "cdescr": "拥堵路况进入安全模式；前车加速快或速度超过 20km/h 时进入普通模式",
+      "cdescr": "0: 手动\n1: 普通↔安全自动切换\n2: 经济↔安全自动切换",
       "min": 0,
-      "max": 1,
+      "max": 2,
       "default": 0,
       "unit": 1
     },

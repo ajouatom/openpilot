@@ -29,6 +29,15 @@ RETRY_INTERVAL_S = 5.0
 HUD_CHECK_INTERVAL_S = 0.1
 USB_FALLBACK_SCAN_INTERVAL_S = 5.0
 USB_OFF_DIM_INTERVAL_S = 30.0
+USBGPU_DISCOVERY_GRACE_S = 3.0
+USBGPU_STARTUP_TIMEOUT_S = 60.0
+USBGPU_STARTUP_POLL_S = 0.1
+USBGPU_DISPLAY_STABILIZE_S = 10.0
+USBGPU_DISPLAY_FPS = 5
+USBGPU_HARDWARE_SEEN_PARAM = "UsbGpuHardwareSeen"
+USBGPU_LOADING_PARAM = "UsbGpuLoading"
+USBGPU_ACTIVE_PARAM = "UsbGpuActive"
+USBGPU_STARTUP_FAILED_PARAM = "UsbGpuStartupFailed"
 NETLINK_KOBJECT_UEVENT = 15
 AUTORUN_FPS_ENV = "CLUSTER_AUTORUN_FPS"
 REALTIME_CORES_ENV = "CLUSTER_REALTIME_CORES"
@@ -49,6 +58,7 @@ ENCODER_NAMES = {
     ENCODER_HARDWARE: "hardware",
     ENCODER_SOFTWARE: "software",
 }
+USB_DISCONNECT_TEXT = ("usb display disconnected", "no such device", "device has been disconnected")
 INITIAL_ALLOWED_CORES = (
     sorted(os.sched_getaffinity(0))
     if sys.platform == "linux" and hasattr(os, "sched_getaffinity")
@@ -73,6 +83,19 @@ def _ensure_cluster_paths() -> None:
         path_text = str(path)
         if path_text not in sys.path:
             sys.path.insert(0, path_text)
+
+
+def _is_usb_disconnect_error(exc: BaseException) -> bool:
+    """Recognize an expected hot-unplug through the wrapped pipeline errors."""
+    current: BaseException | None = exc
+    seen: set[int] = set()
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        message = str(current).lower()
+        if any(marker in message for marker in USB_DISCONNECT_TEXT):
+            return True
+        current = current.__cause__ or current.__context__
+    return False
 
 
 def _normalize_core_mode(value: object) -> int:
@@ -262,6 +285,7 @@ def _cluster_args(
     core_mode: int,
     priority: int,
     output_mode: str = "usb",
+    usbgpu_active: bool = False,
 ) -> list[str]:
     args = [
         "--input",
@@ -280,8 +304,14 @@ def _cluster_args(
     if output_mode in ("usb", "both"):
         # Standalone carrot_navi owns TCP 7714; live input consumes its carrotNavi cereal service.
         args[4:4] = _encoder_args(active_encoder_mode)
+        if usbgpu_active:
+            args.extend(["--usb-display-fps", str(USBGPU_DISPLAY_FPS)])
     fps = os.environ.get(AUTORUN_FPS_ENV, "").strip()
-    if fps:
+    if output_mode in ("usb", "both") and usbgpu_active:
+        # Cap rendering/encoding as well as the TURZX controller setting. The
+        # latter alone does not reduce H264 uploads on the shared USB bus.
+        args.extend(["--fps", str(USBGPU_DISPLAY_FPS)])
+    elif fps:
         args.extend(["--fps", fps])
     return args
 
@@ -292,6 +322,7 @@ def _run_cluster_once(
     core_mode: int,
     priority: int,
     output_mode: str = "usb",
+    usbgpu_active: bool = False,
 ) -> None:
     from selfdrive.carrot import cluster_run
     from cluster_h264_pipeline import H264PipelineInitializationError
@@ -327,6 +358,7 @@ def _run_cluster_once(
                         core_mode,
                         priority,
                         output_mode,
+                        usbgpu_active,
                     ),
                 ]
                 run_cluster_entry()
@@ -568,6 +600,74 @@ def _wait_for_hud_output_allowed(params: Params, expected_product_id: int) -> in
         time.sleep(max(0.1, min(next_hud_check, next_off_dim) - time.monotonic()))
 
 
+def _usbgpu_startup_expected() -> bool:
+    try:
+        from openpilot.selfdrive.modeld.helpers import usbgpu_compiled, usbgpu_present
+
+        return usbgpu_present() and usbgpu_compiled()
+    except Exception as exc:
+        print(f"[cluster_autorun] could not inspect eGPU startup state: {exc}", flush=True)
+        return False
+
+
+def _wait_for_usbgpu_startup(params: Params) -> None:
+    """Keep the shared USB display idle until initial eGPU transfers finish."""
+    remembered = params.get_bool(USBGPU_HARDWARE_SEEN_PARAM)
+    expected = _usbgpu_startup_expected()
+    discovery_deadline = time.monotonic() + USBGPU_DISCOVERY_GRACE_S
+    while remembered and not expected and time.monotonic() < discovery_deadline:
+        if (
+            params.get_bool(USBGPU_LOADING_PARAM)
+            or params.get_bool(USBGPU_ACTIVE_PARAM)
+            or params.get_bool(USBGPU_STARTUP_FAILED_PARAM)
+        ):
+            expected = True
+            break
+        time.sleep(USBGPU_STARTUP_POLL_S)
+        expected = _usbgpu_startup_expected()
+
+    if not expected:
+        return
+
+    print("[cluster_autorun] waiting for eGPU startup before opening USB display", flush=True)
+    startup_deadline = time.monotonic() + USBGPU_STARTUP_TIMEOUT_S
+    while time.monotonic() < startup_deadline:
+        loading = params.get_bool(USBGPU_LOADING_PARAM)
+        active = params.get_bool(USBGPU_ACTIVE_PARAM)
+        failed = params.get_bool(USBGPU_STARTUP_FAILED_PARAM)
+        if not loading and active:
+            print(
+                f"[cluster_autorun] eGPU startup complete; keeping USB display idle for "
+                f"{USBGPU_DISPLAY_STABILIZE_S:.0f}s",
+                flush=True,
+            )
+            stabilize_deadline = time.monotonic() + USBGPU_DISPLAY_STABILIZE_S
+            while time.monotonic() < stabilize_deadline:
+                if not params.get_bool(USBGPU_ACTIVE_PARAM):
+                    print(
+                        "[cluster_autorun] eGPU became inactive during stabilization; "
+                        "starting USB display",
+                        flush=True,
+                    )
+                    return
+                time.sleep(min(USBGPU_STARTUP_POLL_S, stabilize_deadline - time.monotonic()))
+            print(
+                f"[cluster_autorun] eGPU stable; starting USB display at {USBGPU_DISPLAY_FPS} fps",
+                flush=True,
+            )
+            return
+        if not loading and failed:
+            print("[cluster_autorun] eGPU startup failed; starting USB display after fallback", flush=True)
+            return
+        time.sleep(USBGPU_STARTUP_POLL_S)
+
+    print(
+        f"[cluster_autorun] eGPU startup wait timed out after {USBGPU_STARTUP_TIMEOUT_S:.0f}s; "
+        "starting USB display",
+        flush=True,
+    )
+
+
 def main() -> None:
     _configure_autorun_locale()
     _ensure_cluster_paths()
@@ -594,6 +694,8 @@ def main() -> None:
             if expected_product_id is None:
                 return
             continue
+
+        _wait_for_usbgpu_startup(params)
 
         if find_supported_usb_product(expected_product_id) is None:
             if not TICI:
@@ -626,7 +728,13 @@ def main() -> None:
             print(f"[cluster_autorun] found {product_label(expected_product_id)}; starting cluster HUD", flush=True)
 
         try:
-            _run_cluster_once(hud_mode, encoder_mode, core_mode, priority)
+            _run_cluster_once(
+                hud_mode,
+                encoder_mode,
+                core_mode,
+                priority,
+                usbgpu_active=params.get_bool(USBGPU_ACTIVE_PARAM),
+            )
             next_hud_mode = _read_hud_mode(params)
             next_encoder_mode = _read_encoder_mode(params)
             next_live_fps_mode = _read_live_fps_mode(params)
@@ -657,11 +765,17 @@ def main() -> None:
                 flush=True,
             )
         except Exception as exc:
-            print(
-                f"[cluster_autorun] cluster HUD failed: {exc}; retrying in {RETRY_INTERVAL_S:.0f}s",
-                flush=True,
-            )
-            traceback.print_exc()
+            if _is_usb_disconnect_error(exc):
+                print(
+                    f"[cluster_autorun] USB display disconnected; retrying in {RETRY_INTERVAL_S:.0f}s",
+                    flush=True,
+                )
+            else:
+                print(
+                    f"[cluster_autorun] cluster HUD failed: {exc}; retrying in {RETRY_INTERVAL_S:.0f}s",
+                    flush=True,
+                )
+                traceback.print_exc()
         time.sleep(RETRY_INTERVAL_S)
 
 

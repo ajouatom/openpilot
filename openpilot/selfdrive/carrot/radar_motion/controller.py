@@ -292,7 +292,6 @@ class DPathRadarOutput:
   leads_center: tuple[dict[str, Any], ...]
   leads_right: tuple[dict[str, Any], ...]
   leads_cutin: tuple[dict[str, Any], ...]
-  leads_cutin_path: tuple[dict[str, Any], ...]
   leads_left2: tuple[dict[str, Any], ...]
   leads_right2: tuple[dict[str, Any], ...]
   lead_cutin_risk: dict[str, Any] | None
@@ -319,19 +318,17 @@ class RadarLeadDynamics:
   def update(
     self,
     points: tuple[RadarPointSnapshot, ...],
-    radar_reaction_factor: float,
   ) -> None:
-    factor = max(0.0, float(radar_reaction_factor))
     active: set[tuple[str, int]] = set()
     for point in points:
       identity = point.source, point.track_id
       active.add(identity)
       a_lead_tau = self._a_lead_tau.get(identity, LEAD_ACCEL_TAU_S)
       if (
-        abs(point.a_lead) < 0.5 * factor
+        abs(point.a_lead) < 0.5
         and abs(point.j_lead) < 0.5
       ):
-        a_lead_tau = LEAD_ACCEL_TAU_S * factor
+        a_lead_tau = LEAD_ACCEL_TAU_S
       else:
         a_lead_tau *= 1.0 - LEAD_ACCEL_FILTER_ALPHA
       self._a_lead_tau[identity] = a_lead_tau
@@ -547,7 +544,6 @@ class DPathRadarController:
     model: Any,
     yaw_rate_rad_s: float = 0.0,
     radar_to_model_time_s: float = 0.0,
-    radar_reaction_factor: float = 1.0,
   ) -> DPathRadarOutput:
     path = _model_path(model)
     if len(path) < 2:
@@ -561,7 +557,7 @@ class DPathRadarController:
       self.lead_dynamics.reset()
       self.trajectory_cutin.reset()
       return DPathRadarOutput(
-        None, None, None, None, (), (), (), (), (), (), (), None,
+        None, None, None, None, (), (), (), (), (), (), None,
       )
 
     points = self._points_at_model_time(
@@ -569,7 +565,7 @@ class DPathRadarController:
       v_ego,
       radar_to_model_time_s,
     )
-    self.lead_dynamics.update(points, radar_reaction_factor)
+    self.lead_dynamics.update(points)
     front_kinematic_matches = self.front_kinematic_associator.update(points)
 
     # This is intentionally first: model lead zero identifies leadOne with
@@ -668,7 +664,6 @@ class DPathRadarController:
     active_identity = self.lead_two_tracker.active_identity
     candidates: list[DPathLeadCandidate] = []
     confirmed_cutin_leads: list[dict[str, Any]] = []
-    path_cutin_leads: list[dict[str, Any]] = []
     risk_leads: list[dict[str, Any]] = []
     self._same_row_suppressed_until = {
       identity: until_s
@@ -707,14 +702,6 @@ class DPathRadarController:
       identity = (
         candidate_source, candidate_track_id, candidate_continuity_id,
       )
-      if (
-        self.cut_in_sensitivity > 0
-        and estimate.confirmed_cutin
-        and estimate.current_path
-      ):
-        # Audible CUT-IN confirmation follows physical path occupancy, even
-        # when the object simultaneously becomes leadOne or leadTwo.
-        path_cutin_leads.append(lead)
       same_primary_row_without_vision = (
         estimate.cross_sensor_supported
         and not estimate.vision_supported
@@ -972,10 +959,6 @@ class DPathRadarController:
       leads_right=leads_right,
       leads_cutin=tuple(sorted(
         confirmed_cutin_leads,
-        key=lambda lead: float(lead["dRel"]),
-      )),
-      leads_cutin_path=tuple(sorted(
-        path_cutin_leads,
         key=lambda lead: float(lead["dRel"]),
       )),
       leads_left2=self._pick_two(leads_left),

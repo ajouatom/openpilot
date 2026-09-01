@@ -56,29 +56,28 @@
   },
   {
     "name": "boot",
-    "url": "https://agnosupdate.carrotpilot.app/18.4/boot-a227ab7a6ec9f1f5b47c2d003ec75b7d54672e80b867843ee0b87eb735c775df.img.xz",
-    "hash": "a227ab7a6ec9f1f5b47c2d003ec75b7d54672e80b867843ee0b87eb735c775df",
-    "hash_raw": "a227ab7a6ec9f1f5b47c2d003ec75b7d54672e80b867843ee0b87eb735c775df",
-    "size": 17864704,
+    "url": "https://github.com/ajouatom/agnos-builder/releases/download/agnos-19.6.3-carrot/boot-c3-c3clone-7f6a45827e82f0d7ee2bab286daf60fec79c40fd4af2aee967b146e06b5ece70.img.xz",
+    "compressed_hash": "e7d166d7eaec2fb05726577f9251b92a7fe5ef086b4a60d1ce2faafba5992c0f",
+    "compressed_size": 14315480,
+    "hash": "7f6a45827e82f0d7ee2bab286daf60fec79c40fd4af2aee967b146e06b5ece70",
+    "hash_raw": "7f6a45827e82f0d7ee2bab286daf60fec79c40fd4af2aee967b146e06b5ece70",
+    "size": 48343040,
     "sparse": false,
     "full_check": true,
     "has_ab": true,
-    "ondevice_hash": "e4dac469c76307917b24d72cf42723c584ef38532d15e99f2293eb44e09e8193"
+    "ondevice_hash": "4c148fbea709da7b2fc2626a7005d5fdc766623c9f4d35e2440d66abee09def6"
   },
   {
     "name": "system",
-    "url": "https://agnosupdate.carrotpilot.app/18.4/system-edda90aeecb40a620db657521b1c38dfac77e610b06700671fca9fca82278b8d.img.xz",
-    "hash": "77d8fbf70aae7e6d8ce6acc6a28cd862c155a7b1bf940064ee335b90a5ee91c1",
-    "hash_raw": "edda90aeecb40a620db657521b1c38dfac77e610b06700671fca9fca82278b8d",
+    "url": "https://github.com/ajouatom/agnos-builder/releases/download/agnos-19.6.3-carrot/system-b97e492686fa3902b0385f13fa5663c911f0b150d06b722111d386f4ad42a7d7.img.xz",
+    "compressed_hash": "57a1e8fbf72ba0608512b505075b03ce41a77427da7edb43e093ddb99f4bda60",
+    "compressed_size": 1008228912,
+    "hash": "ee1d82e325bfce8cc9c2fc1a509b65436830b9f34d3ee6568cf5345216d18c25",
+    "hash_raw": "b97e492686fa3902b0385f13fa5663c911f0b150d06b722111d386f4ad42a7d7",
     "size": 4718592000,
     "sparse": true,
     "full_check": false,
     "has_ab": true,
-    "ondevice_hash": "92e8c1d099ceff3a46fe3299c74765013a56c873ce695d9c54c660fc20bbc898",
-    "alt": {
-      "hash": "edda90aeecb40a620db657521b1c38dfac77e610b06700671fca9fca82278b8d",
-      "url": "https://agnosupdate.carrotpilot.app/18.4/system-edda90aeecb40a620db657521b1c38dfac77e610b06700671fca9fca82278b8d.img",
-      "size": 4718592000
-    }
+    "ondevice_hash": "922f61a474912aef459586e9cc4f0dd923d58d5e9d67b3163566c7b0be8a5b55"
   }
 ]

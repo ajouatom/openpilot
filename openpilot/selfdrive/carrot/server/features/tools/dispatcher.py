@@ -698,53 +698,6 @@ async def run_tool_job(job: Dict[str, Any]) -> None:
       jobs.finish(job, ok=True, result={"ok": True, "out": "tmux send triggered"})
       return
 
-    if action == "install_required":
-      import importlib.util
-
-      packages = [
-        {"pip": "shapely", "import": "shapely"},
-      ]
-      results = []
-      installed_any = False
-
-      for idx, item in enumerate(packages, start=1):
-        pip_name = item["pip"]
-        import_name = item["import"]
-        jobs.progress(job, message=f"checking {pip_name}", current=idx - 1, total=len(packages))
-
-        if importlib.util.find_spec(import_name) is not None:
-          results.append({"package": pip_name, "status": "already_installed"})
-          jobs.append(job, f"{pip_name}: already installed")
-          continue
-
-        jobs.progress(job, message=f"installing {pip_name}", current=idx, total=len(packages))
-        jobs.append(job, f"$ pip install {pip_name}")
-        rc = await jobs.stream_exec(job, ["pip", "install", pip_name], timeout=300)
-        results.append({"package": pip_name, "status": "installed" if rc == 0 else "failed", "returncode": rc})
-        if rc != 0:
-          jobs.finish(
-            job,
-            ok=False,
-            result={
-              "ok": False,
-              "error": f"pip install failed: {pip_name}",
-              "results": results,
-              "need_reboot": False,
-            },
-            error=f"pip install failed: {pip_name}",
-          )
-          return
-        installed_any = True
-
-      result = {
-        "ok": True,
-        "out": "required packages installed. reboot is required to apply changes." if installed_any else "all required packages are already installed.",
-        "results": results,
-        "need_reboot": installed_any,
-      }
-      jobs.finish(job, ok=True, result=result)
-      return
-
     if action == "backup_settings":
       if not HAS_PARAMS or ParamKeyType is None:
         jobs.finish(
@@ -1178,69 +1131,6 @@ async def dispatch_sync(request: web.Request, body: Dict[str, Any]) -> web.Respo
       params = Params()
       params.put_nonblocking("CarrotException", "tmux_send")
       return web.json_response({"ok": True, "out": "tmux send triggered"})
-
-    if action == "install_required":
-      import importlib.util
-
-      packages = [
-        {"pip": "shapely", "import": "shapely"},
-      ]
-
-      results = []
-      installed_any = False
-
-      for item in packages:
-        pip_name = item["pip"]
-        import_name = item["import"]
-
-        try:
-          if importlib.util.find_spec(import_name) is not None:
-            results.append({"package": pip_name, "status": "already_installed"})
-            continue
-
-          cmd = ["pip", "install", pip_name]
-          p = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
-
-          results.append({
-            "package": pip_name,
-            "status": "installed" if p.returncode == 0 else "failed",
-            "returncode": p.returncode,
-            "stdout": (p.stdout or "")[-2000:],
-            "stderr": (p.stderr or "")[-2000:],
-          })
-
-          if p.returncode != 0:
-            return web.json_response({
-              "ok": False,
-              "error": f"pip install failed: {pip_name}",
-              "results": results,
-              "need_reboot": False,
-            }, status=500)
-
-          installed_any = True
-
-        except Exception as e:
-          return web.json_response({
-            "ok": False,
-            "error": f"exception while checking/installing {pip_name}: {str(e)}",
-            "results": results,
-            "need_reboot": False,
-          }, status=500)
-
-      if installed_any:
-        return web.json_response({
-          "ok": True,
-          "out": "required packages installed. reboot is required to apply changes.",
-          "results": results,
-          "need_reboot": True,
-        })
-
-      return web.json_response({
-        "ok": True,
-        "out": "all required packages are already installed.",
-        "results": results,
-        "need_reboot": False,
-      })
 
     if action == "backup_settings":
       if not HAS_PARAMS or ParamKeyType is None:

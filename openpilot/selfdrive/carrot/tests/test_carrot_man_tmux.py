@@ -13,6 +13,10 @@ def test_spi_error_requests_tmux_capture():
   assert "spi_error" in CARROT_EXCEPTION_TMUX_REASONS
 
 
+def test_egpu_error_requests_tmux_capture():
+  assert "egpu_error" in CARROT_EXCEPTION_TMUX_REASONS
+
+
 def test_can_error_send_waits_for_five_seconds_after_detection():
   detected_at = 100.0
 
