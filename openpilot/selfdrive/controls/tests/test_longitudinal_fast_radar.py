@@ -210,3 +210,9 @@ def test_debug_reason_names_match_longitudinal_plan_schema():
     plan = log.LongitudinalPlan.new_message()
     plan.fastLeadReason = reason
     assert str(plan.fastLeadReason) == reason
+
+
+def test_radar_state_timestamp_uses_deprecated_schema_group():
+  plan = log.LongitudinalPlan.new_message()
+  plan.deprecated.radarStateMonoTime = 123
+  assert plan.deprecated.radarStateMonoTime == 123

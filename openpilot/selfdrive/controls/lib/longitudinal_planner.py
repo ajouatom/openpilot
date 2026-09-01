@@ -315,7 +315,7 @@ class LongitudinalPlanner:
 
     longitudinalPlan = plan_send.longitudinalPlan
     longitudinalPlan.modelMonoTime = sm.logMonoTime['modelV2']
-    longitudinalPlan.radarStateMonoTime = sm.logMonoTime['radarState']
+    longitudinalPlan.deprecated.radarStateMonoTime = sm.logMonoTime['radarState']
     longitudinalPlan.processingDelay = (plan_send.logMonoTime - sm.logMonoTime['modelV2']) / 1e9
     longitudinalPlan.solverExecutionTime = self.mpc.solve_time
     longitudinalPlan.plannerExecutionTime = float(planner_execution_time)

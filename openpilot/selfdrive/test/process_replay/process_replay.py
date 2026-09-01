@@ -482,7 +482,7 @@ CONFIGS = [
     proc_name="plannerd",
     pubs=["modelV2", "liveTracks", "carControl", "carState", "controlsState", "liveParameters", "radarState", "selfdriveState"],
     subs=["longitudinalPlan", "driverAssistance"],
-    ignore=["logMonoTime", "longitudinalPlan.processingDelay", "longitudinalPlan.radarStateMonoTime",
+    ignore=["logMonoTime", "longitudinalPlan.processingDelay", "longitudinalPlan.deprecated.radarStateMonoTime",
             "longitudinalPlan.solverExecutionTime",
             "longitudinalPlan.plannerExecutionTime", "longitudinalPlan.fastRadarExecutionTime"],
     init_callback=get_car_params_callback,
