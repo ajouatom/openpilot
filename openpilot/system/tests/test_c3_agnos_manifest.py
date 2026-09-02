@@ -11,19 +11,22 @@ def _load_manifest(name: str) -> list[dict]:
   return json.loads((TICI_DIR / name).read_text(encoding="utf-8"))
 
 
-def test_device_manifests_use_carrot_agnos_19_6_3_images() -> None:
+def test_c4_manifest_uses_production_agnos_19_6_images() -> None:
   c3 = {partition["name"]: partition for partition in _load_manifest("agnos-tici.json")}
   c4 = {partition["name"]: partition for partition in _load_manifest("agnos.json")}
 
+  # C3 still needs its device-specific carrot kernel. Never use that
+  # experimental rollout as the default for a clean C3X/C4 install.
   assert c3["boot"]["hash_raw"] == "7f6a45827e82f0d7ee2bab286daf60fec79c40fd4af2aee967b146e06b5ece70"
-  assert c4["boot"]["hash_raw"] == "303d797a55933dd634ecf5e16b5b9746e12528fa8d5919903aff7a0ae888cfcb"
+  assert c4["boot"]["hash_raw"] == "b30f5eef65ec3878f3aa3dcaf2cc95c09e2c1e661cd3a38e94da37dee76f68bd"
   assert c3["boot"] != c4["boot"]
-  assert c3["system"] == c4["system"]
   assert c3["system"]["hash_raw"] == "b97e492686fa3902b0385f13fa5663c911f0b150d06b722111d386f4ad42a7d7"
+  assert c4["system"]["hash_raw"] == "5b6ce7965904a157fd3a134ccfcb854f9ca5c1cc2a26b7cb80a4fa4e1cc4aaa3"
   assert "agnos-19.6.3-carrot" in c3["boot"]["url"]
-  assert "agnos-19.6.3-carrot" in c4["boot"]["url"]
   assert "agnos-19.6.3-carrot" in c3["system"]["url"]
-  assert "alt" not in c3["system"]
+  assert c4["boot"]["url"].startswith("https://commadist.azureedge.net/agnosupdate/")
+  assert c4["system"]["url"].startswith("https://commadist.azureedge.net/agnosupdate/")
+  assert "alt" in c4["system"]
 
 
 def test_c3_manifest_preserves_proven_legacy_firmware() -> None:
@@ -49,6 +52,12 @@ def test_c3_and_clone_select_the_c3_manifest() -> None:
   assert "agnos-tici.json" in updater
 
 
-def test_launch_requires_carrot_agnos_19_6_3() -> None:
+def test_launch_accepts_production_and_already_deployed_carrot_agnos() -> None:
   launch_env = (Path(BASEDIR) / "launch_env.sh").read_text(encoding="utf-8")
-  assert 'export AGNOS_VERSION="19.6.3-carrot"' in launch_env
+  launcher = (Path(BASEDIR) / "launch_chffrplus.sh").read_text(encoding="utf-8")
+  updated = (Path(BASEDIR) / "openpilot/system/updated/updated.py").read_text(encoding="utf-8")
+
+  assert 'export AGNOS_VERSION="19.6"' in launch_env
+  assert 'export AGNOS_COMPATIBLE_VERSIONS="19.6 19.6.3-carrot"' in launch_env
+  assert 'agnos_version_is_compatible "$CURRENT_AGNOS_VERSION"' in launcher
+  assert "cur_version in compatible_versions" in updated
