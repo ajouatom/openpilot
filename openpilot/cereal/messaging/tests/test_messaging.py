@@ -88,7 +88,8 @@ class TestMessaging:
     assert sm.non_polled_services == {"carState"}
     assert sm.update_freq == 40.0
     assert sm.freq_tracker["modelV2"].min_freq == 16.0
-    assert sm.freq_tracker["liveTracks"].max_freq == 24.0
+    assert sm.freq_tracker["liveTracks"].min_freq == 14.0 * 0.8
+    assert sm.freq_tracker["liveTracks"].max_freq == 25.0 * 1.2
     assert sm.freq_tracker["carState"].min_freq == 16.0
     assert sm.freq_tracker["carState"].max_freq == 48.0
 
