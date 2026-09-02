@@ -2705,13 +2705,13 @@
       "group": "차량간격",
       "name": "LeadAccelResponse",
       "title": "1단계 앞차 가속반응(0)",
-      "descr": "차간거리 1단계에서 앞차가 출발하거나 가속할 때 따라가는 민첩성을 설정합니다. 1~4단계는 목표 차간을 바꾸지 않습니다. 시험용 5단계는 TFollowGap1을 우선하고, 앞차가 멀어질 때 감속을 일찍 풀어 제한된 추가 가속을 허용합니다.",
+      "descr": "차간거리 1단계에서 앞차가 출발하거나 가속할 때 따라가는 민첩성을 설정합니다. 1~2단계는 완화형, 3단계는 일상 균형형, 4단계는 오버슈트 없는 강한 거리유지형입니다. 시험용 5단계는 앞차가 양의 가속 중일 때만 TFollowGap1을 우선하고 최대 0.2m/s²의 가속 오버슈트를 허용하며, 앞차 가속이 끝나면 즉시 기존 제어로 돌아갑니다.",
       "egroup": "FDIST",
       "etitle": "Gap 1 Lead Acceleration Response (0)",
-      "edescr": "Sets how quickly the vehicle follows a lead that starts or accelerates while following-distance level 1 is selected. Levels 1–4 do not change the target gap. Test level 5 prioritizes TFollowGap1 and may release braking early with bounded extra acceleration as the lead pulls away.",
+      "edescr": "Sets how quickly the vehicle follows a lead that starts or accelerates at following-distance level 1. Levels 1–2 are gentle, 3 is the everyday balance, and 4 strongly maintains distance without direct overshoot. Test level 5 prioritizes TFollowGap1 only during positive lead acceleration, permits up to 0.2 m/s² acceleration overshoot, and immediately returns to normal control when lead acceleration ends.",
       "cgroup": "跟车距离",
       "ctitle": "1 级车距前车加速响应 (0)",
-      "cdescr": "选择 1 级跟车距离时，设置前车起步或加速时的跟随灵敏度。1～4 级不改变目标车距。测试用 5 级优先采用 TFollowGap1，并在判断前车正在远离时提前解除减速，同时允许受限的额外加速。",
+      "cdescr": "选择 1 级跟车距离时，设置前车起步或加速时的跟随灵敏度。1～2 级偏柔和，3 级适合日常平衡使用，4 级在不直接超调的前提下强力保持车距。测试用 5 级仅在前车正加速时优先采用 TFollowGap1，允许最多 0.2 m/s² 的加速度超调；前车停止加速后立即恢复常规控制。",
       "min": 0,
       "max": 5,
       "default": 0,
@@ -2720,27 +2720,27 @@
       "options": {
         "ko": [
           "사용 안 함",
-          "1 빠름",
-          "2 민첩",
-          "3 적극",
-          "4 매우 민첩",
-          "5 즉각(시험)"
+          "1 완화",
+          "2 부드러움",
+          "3 균형(추천)",
+          "4 강한 거리유지",
+          "5 가속추종(시험)"
         ],
         "en": [
           "Disabled",
-          "1 Quick",
-          "2 Agile",
-          "3 Assertive",
-          "4 Very agile",
-          "5 Immediate (test)"
+          "1 Gentle",
+          "2 Smooth",
+          "3 Balanced (recommended)",
+          "4 Strong gap control",
+          "5 Acceleration tracking (test)"
         ],
         "zh": [
           "关闭",
-          "1 快速",
-          "2 灵敏",
-          "3 积极",
-          "4 非常灵敏",
-          "5 即时（测试）"
+          "1 缓和",
+          "2 平顺",
+          "3 均衡（推荐）",
+          "4 强力保距",
+          "5 加速跟随（测试）"
         ]
       }
     },

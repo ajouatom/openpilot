@@ -187,7 +187,7 @@ A lower `AutoNaviSpeedDecelRate` begins slowing farther away. `AutoNaviSpeedSafe
 
 `TFollowGap1` through `TFollowGap4` are stored in hundredths of a second. Lower values reduce the time gap. Establish a stable fixed-gap baseline before enabling `DynamicTFollow` features.
 
-`LeadAccelResponse` adjusts how quickly the vehicle follows a lead starting or accelerating at following-distance level 1, from 0 (disabled) through 5. Levels 1–4 do not change the target gap or braking response. Test level 5 prioritizes the `TFollowGap1` target and permits bounded extra acceleration as the lead pulls away. See [Lead-vehicle response](cruise-gap.md#lead-response) for its activation gates and per-level limits.
+`LeadAccelResponse` adjusts how quickly the vehicle follows a lead starting or accelerating at following-distance level 1. Levels 1–2 are gentle, 3 is the everyday balance, and 4 strongly maintains distance without direct overshoot. Test level 5 prioritizes `TFollowGap1` only during positive lead acceleration, permits up to `0.2 m/s²` acceleration overshoot, and immediately returns to normal control when lead acceleration ends. See [Lead-vehicle response](cruise-gap.md#lead-response) for its activation gates and per-level limits.
 
 `LongTuning*`, `LongActuatorDelay`, and `StoppingAccel` are advanced settings that directly affect vehicles using openpilot longitudinal control. Some have no effect when stock ACC remains responsible for acceleration and braking.
 
