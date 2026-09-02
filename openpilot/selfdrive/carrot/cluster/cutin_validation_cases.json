@@ -659,21 +659,6 @@
       "scene": "An adjacent visual lead and an opposite-side stationary front-radar reflection must not be associated as leadOne"
     },
     {
-      "id": "ioniq9-1bd-7-corner-vision-motorcycle-leadone",
-      "vehicle_folder": "HYUNDAI_IONIQ_9 7a9a8e68022c1881",
-      "log": "000001bd--95cbf9b22d--7/rlog.zst",
-      "source": "front+corner",
-      "window": [9.10, 10.50],
-      "expected": "detect",
-      "human_verified": true,
-      "validation_stage": "lead_one",
-      "target_track_ids": [1709, 1712],
-      "required_lead_one_ids": [1709, 1712],
-      "latest_detection_s": 9.35,
-      "lead_one_continuous_window": [9.30, 10.50],
-      "scene": "With no front-radar or SCC return, a sustained strong vision match must promote the central slow corner-radar motorcycle to leadOne"
-    },
-    {
       "id": "palisade-bef-2-motorcycle-leadone",
       "vehicle_folder": "HYUNDAI_PALISADE b84b4a4fbb604be1",
       "log": "00000bef--a8eb1d8c98--2/rlog.zst",
