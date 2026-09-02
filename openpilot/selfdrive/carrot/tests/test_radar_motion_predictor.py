@@ -3264,6 +3264,86 @@ def test_stationary_front_rejects_opposite_side_uncertain_vision_match() -> None
   assert matcher.stationary_identity is None
 
 
+def test_stationary_front_rejects_offset_moving_vision_median_reflection() -> None:
+  matcher = VisionRadarMatcher()
+  for index in range(8):
+    time_s = index * 0.05
+    point = snapshot_radar_points(
+      (
+        Point(
+          37,
+          30.8 - 10.0 * time_s,
+          0.8,
+          v_rel=-10.0,
+          source="frontRadar",
+        ),
+      ),
+      v_ego=10.0,
+    )[0]
+    match = matcher.match(
+      model_with_lead(
+        33.4 - 8.0 * time_s,
+        -0.5,
+        8.0,
+        probability=0.88,
+      ),
+      (point,),
+      STRAIGHT_PATH,
+      time_s=time_s,
+      stationary_points=(point,),
+      prefer_primary_stationary=True,
+      yaw_rate_rad_s=0.04,
+    )
+
+    assert match is None
+
+  assert matcher.stationary_identity is None
+
+
+def test_stationary_front_preserves_cross_sensor_support_during_turn() -> None:
+  matcher = VisionRadarMatcher()
+  match = None
+  for index in range(7):
+    time_s = index * 0.05
+    d_rel = 30.8 - 10.0 * time_s
+    front, corner = snapshot_radar_points(
+      (
+        Point(
+          37,
+          d_rel,
+          0.8,
+          v_rel=-10.0,
+          source="frontRadar",
+        ),
+        Point(
+          1037,
+          d_rel + 0.2,
+          0.8,
+          v_rel=-10.0,
+          source="corner235",
+        ),
+      ),
+      v_ego=10.0,
+    )
+    match = matcher.match(
+      model_with_lead(
+        d_rel + 2.6,
+        -0.5,
+        8.0,
+        probability=0.88,
+      ),
+      (front,),
+      STRAIGHT_PATH,
+      time_s=time_s,
+      stationary_points=(front, corner),
+      prefer_primary_stationary=True,
+      yaw_rate_rad_s=0.04,
+    )
+
+  assert match is not None
+  assert match.point.track_id == 37
+
+
 def test_stationary_radar_is_confirmed_once_then_retained_without_vision() -> None:
   matcher = VisionRadarMatcher()
   match = None
