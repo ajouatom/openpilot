@@ -297,6 +297,26 @@ def test_vehicle_navi_school_zone_follows_vehicle_camera_status():
   assert not state.vehicleNaviSchoolZoneActive
 
 
+def test_vehicle_navi_unconfirmed_30_zone_does_not_activate_school_zone():
+  state = _car_state()
+  state.vehicleNaviSchoolZoneControl = True
+  state.navi_profile_4be = {
+    "PROLONG_VALUE": 0x77,
+    "PROLONG_OFFSET": 0,
+    "PROLONG_CYCLIC_COUNTER": 3,
+    "PROLONG_UPDATE": 1,
+    "PROLONG_PROFILE_TYPE": 16,
+  }
+  cp = SimpleNamespace(ts_nanos={"NEW_MSG_4BE": {"PROLONG_VALUE": 1}})
+  ret = SimpleNamespace(speedLimit=0.0, speedBumpDistance=0.0, schoolZoneActive=False)
+
+  # 00000166--a0a89dc8d2--7: 0x77 occurred on a non-school road while
+  # 0x4A3 remained at speed 0 / MapSource 1 for the entire segment.
+  assert not state._update_vehicle_navi_events(cp, ret, False)
+  assert not ret.schoolZoneActive
+  assert not state.vehicleNaviSchoolZoneActive
+
+
 @pytest.mark.parametrize("link_class", (1, 2, 3))
 def test_vehicle_navi_school_zone_is_blocked_by_controlled_access_link_class(link_class):
   state = _car_state()
