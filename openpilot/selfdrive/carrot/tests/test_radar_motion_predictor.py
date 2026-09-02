@@ -3224,6 +3224,46 @@ def test_primary_matcher_rejects_low_score_fresh_distant_side_match() -> None:
   assert match is None
 
 
+def test_stationary_front_rejects_opposite_side_uncertain_vision_match() -> None:
+  matcher = VisionRadarMatcher()
+  for index in range(8):
+    time_s = index * 0.05
+    point = snapshot_radar_points(
+      (
+        Point(
+          45,
+          69.8 - 9.54 * time_s,
+          1.32,
+          v_rel=-9.54,
+          source="frontRadar",
+        ),
+      ),
+      v_ego=9.05,
+    )[0]
+    model = model_with_lead(
+      62.35 - 4.13 * time_s,
+      -2.42,
+      4.92,
+      probability=0.72,
+    )
+    model.leadsV3[0].xStd = (10.8,)
+    model.leadsV3[0].yStd = (1.7,)
+    model.leadsV3[0].vStd = (3.25,)
+
+    match = matcher.match(
+      model,
+      (point,),
+      STRAIGHT_PATH,
+      time_s=time_s,
+      stationary_points=(point,),
+      prefer_primary_stationary=True,
+    )
+
+    assert match is None
+
+  assert matcher.stationary_identity is None
+
+
 def test_stationary_radar_is_confirmed_once_then_retained_without_vision() -> None:
   matcher = VisionRadarMatcher()
   match = None

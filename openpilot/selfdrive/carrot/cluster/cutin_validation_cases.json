@@ -646,6 +646,19 @@
       "scene": "Empty road after a weak visual seed: offset stationary front-radar reflection 34 must release when current vision support disappears"
     },
     {
+      "id": "carnival-166-2-adjacent-vision-stationary-l1",
+      "vehicle_folder": "KIA_CARNIVAL_4TH_GEN c4dcf95545dafe68",
+      "log": "00000166--a0a89dc8d2--2/rlog.zst",
+      "source": "front+corner",
+      "window": [12.70, 14.50],
+      "expected": "clear",
+      "human_verified": true,
+      "validation_stage": "lead_one",
+      "target_track_ids": [45],
+      "forbidden_lead_one_ids": [45],
+      "scene": "An adjacent visual lead and an opposite-side stationary front-radar reflection must not be associated as leadOne"
+    },
+    {
       "id": "palisade-bef-2-motorcycle-leadone",
       "vehicle_folder": "HYUNDAI_PALISADE b84b4a4fbb604be1",
       "log": "00000bef--a8eb1d8c98--2/rlog.zst",
