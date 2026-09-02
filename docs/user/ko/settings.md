@@ -191,7 +191,7 @@ Carrot Web 설정 화면에서는 다음 기능을 사용할 수 있습니다.
 
 `TFollowGap1`~`TFollowGap4`는 저장값에 `0.01초`를 곱한 시간 간격입니다. 값을 줄이면 선행차와 가까워집니다. `DynamicTFollow` 관련 기능은 고정 차간에서 기준 동작을 확인한 다음 적용하세요.
 
-`LeadAccelResponse`는 차간 1단계에서만 앞차의 출발·가속을 따라가는 민첩성을 0~5단계로 조절합니다. 목표 차간이나 감속 반응은 바꾸지 않으며 5단계는 시험용 강한 반응입니다. 적용 조건과 단계별 제한은 [선행차 반응 설명](cruise-gap.md#lead-response)을 확인하세요.
+`LeadAccelResponse`는 차간 1단계에서만 앞차의 출발·가속을 따라가는 민첩성을 0~5단계로 조절합니다. 1~4단계는 목표 차간이나 감속 반응을 바꾸지 않습니다. 시험용 5단계는 `TFollowGap1` 목표를 우선하고 앞차가 멀어질 때 제한된 추가 가속을 허용합니다. 적용 조건과 단계별 제한은 [선행차 반응 설명](cruise-gap.md#lead-response)을 확인하세요.
 
 `LongTuning*`, `LongActuatorDelay`, `StoppingAccel`은 openpilot이 가감속을 제어하는 차량에서 직접적인 영향을 줄 수 있는 고급 항목입니다. 순정 ACC 차량에서는 관련 없는 항목도 있습니다.
 

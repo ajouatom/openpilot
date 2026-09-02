@@ -123,3 +123,60 @@ def test_safe_t_follow_does_not_compound_during_repeated_deceleration():
     for _ in range(100)
   ]
   assert values == pytest.approx([0.72] * 100)
+
+
+def _speed_tf_planner(lead_accel_response: int, applied_t_follow: float) -> CarrotPlanner:
+  planner = CarrotPlanner.__new__(CarrotPlanner)
+  planner.enableSpeedTF = -3
+  planner.tFollowGap1 = 0.4
+  planner.tFollowGap2 = 0.6
+  planner.tFollowGap3 = 0.8
+  planner.tFollowGap4 = 1.2
+  planner.tFollowDecelBoost = 0.0
+  planner.leadAccelResponse = lead_accel_response
+  planner.myDrivingMode = DrivingMode.Safe
+  planner.myTFollowFactor = 1.2
+  planner._tf_decel_extra = 0.0
+  planner._tf_applied = applied_t_follow
+  planner.t_follow_last = applied_t_follow
+  return planner
+
+
+def test_level_five_tf1_uses_configured_gap_one_despite_speed_table_and_safe_mode():
+  planner = _speed_tf_planner(lead_accel_response=5, applied_t_follow=0.72)
+
+  assert planner.get_T_FOLLOW(
+    log.LongitudinalPersonality.aggressive, v_ego=50.0 / 3.6, a_ego=0.0, lead_status=True,
+  ) == pytest.approx(0.4)
+
+
+def test_lower_tf1_response_keeps_speed_table_and_safe_mode_gap():
+  planner = _speed_tf_planner(lead_accel_response=4, applied_t_follow=0.72)
+
+  assert planner.get_T_FOLLOW(
+    log.LongitudinalPersonality.aggressive, v_ego=50.0 / 3.6, a_ego=0.0, lead_status=True,
+  ) == pytest.approx(0.72)
+
+
+def test_level_five_tf1_keeps_larger_gap_while_decelerating():
+  planner = _speed_tf_planner(lead_accel_response=5, applied_t_follow=0.72)
+
+  assert planner.get_T_FOLLOW(
+    log.LongitudinalPersonality.aggressive, v_ego=50.0 / 3.6, a_ego=-1.0, lead_status=True,
+  ) == pytest.approx(0.72)
+
+
+def test_level_five_does_not_force_gap_one_for_other_personalities():
+  planner = _speed_tf_planner(lead_accel_response=5, applied_t_follow=0.936)
+
+  assert planner.get_T_FOLLOW(
+    log.LongitudinalPersonality.standard, v_ego=50.0 / 3.6, a_ego=0.0, lead_status=True,
+  ) == pytest.approx(0.936)
+
+
+def test_level_five_tf1_does_not_change_cruise_target_without_a_lead():
+  planner = _speed_tf_planner(lead_accel_response=5, applied_t_follow=0.72)
+
+  assert planner.get_T_FOLLOW(
+    log.LongitudinalPersonality.aggressive, v_ego=50.0 / 3.6, a_ego=0.0, lead_status=False,
+  ) == pytest.approx(0.72)
