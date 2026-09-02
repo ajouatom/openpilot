@@ -81,12 +81,18 @@ def test_only_level_five_adds_direct_alead_boost():
 
 
 def test_acceleration_response_requires_gap_and_relative_speed_margin():
-  assert not lead_accel_response_allowed(5, v_rel=0.0, gap_margin=-0.01, lead_accel_signal=1.0)
+  assert not lead_accel_response_allowed(4, v_rel=0.0, gap_margin=-0.01, lead_accel_signal=1.0)
   assert not lead_accel_response_allowed(5, v_rel=-0.41, gap_margin=1.0, lead_accel_signal=1.0)
   assert not lead_accel_response_allowed(5, v_rel=-0.40, gap_margin=1.0, lead_accel_signal=0.5)
   assert lead_accel_response_allowed(5, v_rel=-0.40, gap_margin=1.0, lead_accel_signal=0.8)
   assert not lead_accel_response_allowed(1, v_rel=-0.01, gap_margin=1.0, lead_accel_signal=2.0)
   assert lead_accel_response_allowed(1, v_rel=0.0, gap_margin=0.0, lead_accel_signal=0.1)
+
+
+def test_level_five_can_follow_from_inside_target_gap_when_lead_is_pulling_away():
+  assert not lead_accel_response_allowed(4, v_rel=0.0, gap_margin=-5.0, lead_accel_signal=1.0)
+  assert lead_accel_response_allowed(5, v_rel=0.0, gap_margin=-5.0, lead_accel_signal=1.0)
+  assert not lead_accel_response_allowed(5, v_rel=-0.5, gap_margin=-5.0, lead_accel_signal=1.0)
 
 
 @pytest.mark.parametrize(("mode", "preview_max"), [
@@ -227,16 +233,37 @@ def test_acceleration_response_respects_vehicle_acceleration_limit():
   ) == pytest.approx(0.50)
 
 
-def test_acceleration_response_is_disabled_while_plan_or_vehicle_is_decelerating():
-  kwargs = dict(accel_response_active=True, accel_response_level=5, accel_boost=0.25)
+def test_lower_acceleration_response_is_disabled_while_plan_or_vehicle_is_decelerating():
+  kwargs = dict(accel_response_active=True, accel_response_level=4, accel_boost=0.0)
   assert apply_preview_target(-0.50, -0.10, DRIVING_MODE_HIGH, 0.5, a_ego=0.0, **kwargs) == pytest.approx(-0.50)
   assert apply_preview_target(0.20, 0.50, DRIVING_MODE_HIGH, 0.5, a_ego=-0.3, **kwargs) == pytest.approx(0.20)
 
 
-def test_falling_mpc_trajectory_blocks_alead_boost():
+def test_level_five_direct_boost_can_release_braking():
+  assert apply_preview_target(
+    -0.50, -0.80, DRIVING_MODE_HIGH, 0.5,
+    a_ego=-0.3,
+    accel_response_active=True,
+    accel_response_level=5,
+    accel_boost=0.20,
+  ) == pytest.approx(-0.30)
+
+
+def test_level_five_braking_release_respects_acceleration_limit():
+  assert apply_preview_target(
+    -0.50, -0.80, DRIVING_MODE_HIGH, 0.5,
+    a_ego=-0.3,
+    accel_response_active=True,
+    accel_response_level=5,
+    accel_boost=0.20,
+    accel_max=-0.40,
+  ) == pytest.approx(-0.40)
+
+
+def test_level_five_direct_boost_applies_when_preview_trajectory_is_falling():
   assert apply_preview_target(
     0.20, 0.10, DRIVING_MODE_HIGH, 0.5,
     accel_response_active=True,
     accel_response_level=5,
     accel_boost=0.25,
-  ) == pytest.approx(0.20)
+  ) == pytest.approx(0.45)

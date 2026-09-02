@@ -73,6 +73,8 @@ STATIONARY_VISION_DISTANCE_MAX_M = (
 STATIONARY_FRESH_MAX_DPATH_M = 2.0
 STATIONARY_HELD_MAX_DPATH_M = 4.0
 STATIONARY_HELD_FRONT_NO_VISION_MAX_DPATH_M = 1.1
+STATIONARY_HELD_FRONT_DEPARTURE_DPATH_M = STATIONARY_FRESH_MAX_DPATH_M
+STATIONARY_HELD_FRONT_DEPARTURE_CONFIRMATION_S = 0.25
 STATIONARY_RADAR_ONLY_HELD_MAX_DPATH_M = 1.2
 STATIONARY_RADAR_ONLY_CORNER_MAX_DPATH_M = 0.50
 # A stopped vehicle first seen only by corner radar at close range is
@@ -728,6 +730,7 @@ class VisionRadarMatcher:
     self._stationary_seed_probability = 0.0
     self._stationary_seed_score = 0.0
     self._stationary_path_outlier_since_s: float | None = None
+    self._stationary_front_departure_since_s: float | None = None
     self._observed_since_s: dict[tuple[str, int], float] = {}
     self._observed_last_s: dict[tuple[str, int], float] = {}
     self._stationary_corner_supported = False
@@ -796,6 +799,7 @@ class VisionRadarMatcher:
     self._stationary_seed_probability = 0.0
     self._stationary_seed_score = 0.0
     self._stationary_path_outlier_since_s = None
+    self._stationary_front_departure_since_s = None
     self._stationary_corner_supported = False
     self._stationary_weak_pair_identity = None
     self._stationary_weak_pair_last_vision_time_s = None
@@ -2201,6 +2205,35 @@ class VisionRadarMatcher:
       self.stationary_identity = selected_identity
 
     point, d_path, score = selected
+    selected_identity = self._identity(point)
+    selected_has_current_vision_support = (
+      strong_vision
+      and any(
+        self._identity(candidate) == selected_identity
+        for candidate, _, _ in supported
+      )
+    )
+    held_front_departing_path = (
+      selected_identity == self.stationary_identity
+      and point.source == "frontRadar"
+      and not selected_has_current_vision_support
+      and abs(d_path) > STATIONARY_HELD_FRONT_DEPARTURE_DPATH_M
+    )
+    if held_front_departing_path:
+      if self._stationary_front_departure_since_s is None:
+        self._stationary_front_departure_since_s = time_s
+      elif (
+        time_s - self._stationary_front_departure_since_s
+        >= STATIONARY_HELD_FRONT_DEPARTURE_CONFIRMATION_S
+      ):
+        # A corroborating corner return proves that the object is real, but
+        # not that it still occupies our path. Once vision no longer supports
+        # the held stopped lead, release a sustained path departure instead
+        # of following the physical object until ego is alongside it.
+        self._reset_stationary()
+        return None
+    else:
+      self._stationary_front_departure_since_s = None
     if (
       strong_vision
       and vision is not None
@@ -2962,6 +2995,7 @@ class VisionRadarMatcher:
       base_cost if base_cost is not None else max(0.0, 1.0 - match.score)
     )
     self._stationary_path_outlier_since_s = None
+    self._stationary_front_departure_since_s = None
     self._reset_stationary_closer_challenger()
 
   def match(
