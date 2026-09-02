@@ -370,6 +370,19 @@
       "scene": "A truck stays in the adjacent right lane while quantized front-radar lateral position briefly moves inward; weak directional consistency must not promote track 57 to leadTwo"
     },
     {
+      "id": "niro-63c-5-close-front-lateral-wander-35",
+      "vehicle_folder": "KIA_NIRO_HEV_2ND_GEN c903ce877d9129f9",
+      "log": "0000063c--4b9b21b7f0--5/rlog.zst",
+      "source": "front",
+      "window": [53.50, 56.50],
+      "expected": "clear",
+      "human_verified": true,
+      "validation_stage": "lead_two",
+      "target_track_ids": [35],
+      "forbidden_lead_two_ids": [35],
+      "scene": "At close range, front-radar lateral wander on a vehicle remaining in the adjacent right lane must not become CUT-IN, pre-deceleration, or leadTwo"
+    },
+    {
       "id": "carnival-ed-11-motorcycle-cutout-stationary-shadow",
       "vehicle_folder": "KIA_CARNIVAL_4TH_GEN c4dcf95545dafe68",
       "log": "000000ed--9fbaeb1dea--11/rlog.zst",

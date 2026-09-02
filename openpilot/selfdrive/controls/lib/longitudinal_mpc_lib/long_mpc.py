@@ -249,6 +249,7 @@ class LongitudinalMpc:
 
     self.t_follow = 1.0
     self.desired_distance = 0.0
+    self.base_desired_distances = np.zeros(2)
     self.lead_danger_factor = LEAD_DANGER_FACTOR
     self.predicted_danger_margin = 1e3
 
@@ -380,11 +381,15 @@ class LongitudinalMpc:
     self.status = radarstate.leadOne.status or radarstate.leadTwo.status
 
     lead_xv_0, lead_v_0 = self.process_lead(radarstate.leadOne)
-    lead_xv_1, _ = self.process_lead(radarstate.leadTwo)
+    lead_xv_1, lead_v_1 = self.process_lead(radarstate.leadTwo)
 
     mode = self.mode
     comfort_brake = carrot.comfort_brake
     stop_distance = carrot.stop_distance
+    self.base_desired_distances = np.array([
+      desired_follow_distance(v_ego, lead_v_0, comfort_brake, stop_distance, t_follow),
+      desired_follow_distance(v_ego, lead_v_1, comfort_brake, stop_distance, t_follow),
+    ])
 
     if mode == 'blended':
       stop_x = 1000.0

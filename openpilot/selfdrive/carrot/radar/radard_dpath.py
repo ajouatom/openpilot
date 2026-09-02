@@ -11,6 +11,7 @@ from openpilot.common.params import Params
 from openpilot.common.realtime import Priority, config_realtime_process
 from openpilot.common.swaglog import cloudlog
 from opendbc.car.hyundai.values import HyundaiExtFlags
+from openpilot.selfdrive.carrot.radar import effective_radar_track_mode
 from openpilot.selfdrive.carrot.radar_motion import (
   DPathRadarController,
 )
@@ -81,12 +82,17 @@ class DPathRadarD:
 
   def __init__(self, CP: car.CarParams) -> None:
     params = Params()
+    enable_radar_tracks = effective_radar_track_mode(
+      CP.brand,
+      CP.radarUnavailable,
+      params.get_int("EnableRadarTracks"),
+    )
     self.controller = DPathRadarController(
       prefer_corner_radar=corner_radar_enabled(
         CP,
         params.get_int("EnableCornerRadar"),
       ),
-      enable_radar_tracks=params.get_int("EnableRadarTracks"),
+      enable_radar_tracks=enable_radar_tracks,
       cut_in_sensitivity=PRODUCTION_CUT_IN_SENSITIVITY,
       front_radar_measurement_delay_s=float(CP.radarDelay),
       production_live_tracks=True,

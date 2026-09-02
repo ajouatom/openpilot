@@ -15,6 +15,8 @@ LEAD_ACCEL_DEADBAND = 0.10
 EGO_ACCEL_LIMIT = 3.0
 PREVIEW_DECEL_ATTACK_STEP_S = 0.08
 PREVIEW_RELEASE_STEP_S = 0.03
+LEAD_ACCEL_RESPONSE_MIN = 0
+LEAD_ACCEL_RESPONSE_MAX = 5
 
 # Preview is an offset from the calibrated actuator action time.  These caps
 # keep the request inside the published 2.5 s MPC trajectory and prevent a
@@ -24,20 +26,26 @@ PREVIEW_RELEASE_STEP_S = 0.03
 MIN_ACTION_TIME_S = 0.05
 MAX_ACTION_TIME_S = 2.50
 
-MAX_HIGH_ACCEL_TARGET_DELTA = 0.15
-
-
 @dataclass(frozen=True)
 class PreviewTuning:
   ego_accel_factor: float
-  accel_factor: float
   decel_factor: float
-  accel_preview_max: float
   decel_preview_max: float
   prebrake_floor: float
   predecel_delta_max: float | None
   active_decel_delta_max: float
-  accelerate_early: bool = False
+
+
+@dataclass(frozen=True)
+class LeadAccelResponseTuning:
+  preview_factor: float
+  preview_max: float
+  target_delta_max: float
+  prediction_horizon: float
+  closing_speed_floor: float
+  boost_gain: float = 0.0
+  boost_max: float = 0.0
+  boost_attack_step: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -45,6 +53,11 @@ class PreviewRequest:
   offset_s: float
   lead_accel_signal: float
   active: bool
+  accel_response_active: bool = False
+  accel_response_level: int = 0
+  accel_boost_target: float = 0.0
+  preview_attack_step: float = PREVIEW_DECEL_ATTACK_STEP_S
+  boost_attack_step: float = 0.0
 
 
 MODE_TUNING = {
@@ -53,32 +66,40 @@ MODE_TUNING = {
   # existing following-time, comfort-brake and maximum-acceleration settings.
   DRIVING_MODE_SAFE: PreviewTuning(
     ego_accel_factor=1.0,
-    accel_factor=1.00, decel_factor=1.00,
-    accel_preview_max=0.20, decel_preview_max=1.50,
+    decel_factor=1.00, decel_preview_max=1.50,
     prebrake_floor=-0.05, predecel_delta_max=None, active_decel_delta_max=0.10,
   ),
   DRIVING_MODE_ECO: PreviewTuning(
     ego_accel_factor=1.0,
-    accel_factor=0.75, decel_factor=1.00,
-    accel_preview_max=0.15, decel_preview_max=1.50,
+    decel_factor=1.00, decel_preview_max=1.50,
     prebrake_floor=-0.04, predecel_delta_max=None, active_decel_delta_max=0.09,
   ),
   DRIVING_MODE_NORMAL: PreviewTuning(
     ego_accel_factor=1.0,
-    accel_factor=0.0, decel_factor=1.00,
-    accel_preview_max=0.0, decel_preview_max=1.50,
+    decel_factor=1.00, decel_preview_max=1.50,
     prebrake_floor=-0.03, predecel_delta_max=None, active_decel_delta_max=0.08,
   ),
-  # High keeps the normal safety-side preview and looks farther ahead during a
-  # confirmed lead acceleration.  Its existing max-accel factor remains the
-  # sustained acceleration envelope.
   DRIVING_MODE_HIGH: PreviewTuning(
     ego_accel_factor=1.0,
-    accel_factor=0.30, decel_factor=1.00,
-    accel_preview_max=0.10, decel_preview_max=1.50,
+    decel_factor=1.00, decel_preview_max=1.50,
     prebrake_floor=-0.03, predecel_delta_max=None, active_decel_delta_max=0.08,
-    accelerate_early=True,
   ),
+}
+
+
+# Positive lead-acceleration response is intentionally independent of drive
+# mode. It is available only while the driver has selected following-distance
+# level 1; the mode-specific acceleration envelope remains the final limit.
+LEAD_ACCEL_RESPONSE_TUNING = {
+  1: LeadAccelResponseTuning(0.20, 0.08, 0.08, 0.00, 0.00),
+  2: LeadAccelResponseTuning(0.30, 0.12, 0.14, 0.10, -0.10),
+  3: LeadAccelResponseTuning(0.40, 0.18, 0.22, 0.20, -0.20),
+  4: LeadAccelResponseTuning(0.55, 0.25, 0.32, 0.35, -0.30),
+  # Level 5 is the deliberately forceful test setting. The feed-forward is
+  # still bounded by the total delta, the MPC acceleration limit, and the
+  # caller's distance/track/source gates.
+  5: LeadAccelResponseTuning(0.70, 0.35, 0.45, 0.50, -0.40,
+                             boost_gain=0.20, boost_max=0.25, boost_attack_step=0.08),
 }
 
 
@@ -94,12 +115,33 @@ def _deadzone(value: float, deadband: float) -> float:
   return 0.0
 
 
+def clip_lead_accel_response_level(level: int) -> int:
+  return max(LEAD_ACCEL_RESPONSE_MIN, min(LEAD_ACCEL_RESPONSE_MAX, int(level)))
+
+
+def lead_accel_response_allowed(level: int, *, v_rel: float, gap_margin: float,
+                                lead_accel_signal: float) -> bool:
+  """Allow TF1 acceleration preview only with distance and closing-speed margin."""
+  tuning = LEAD_ACCEL_RESPONSE_TUNING.get(clip_lead_accel_response_level(level))
+  if tuning is None or not all(math.isfinite(value) for value in (v_rel, gap_margin, lead_accel_signal)):
+    return False
+  if gap_margin < 0.0 or lead_accel_signal <= 0.0 or v_rel < tuning.closing_speed_floor:
+    return False
+
+  predicted_v_rel = float(v_rel) + float(lead_accel_signal) * tuning.prediction_horizon
+  return predicted_v_rel >= 0.0
+
+
 def get_lead_preview_request(
   driving_mode,
   *,
   lead_status: bool,
   a_lead: float,
   a_ego: float = 0.0,
+  accel_response_level: int = 0,
+  accel_response_enabled: bool = False,
+  v_rel: float = 0.0,
+  gap_margin: float = 0.0,
 ) -> PreviewRequest:
   """Map mode-weighted relative acceleration to a signed preview request."""
   tuning = MODE_TUNING.get(_mode_value(driving_mode))
@@ -116,15 +158,37 @@ def get_lead_preview_request(
   )
   lead_accel_signal = _deadzone(lead_accel_signal, LEAD_ACCEL_DEADBAND)
 
+  response_level = clip_lead_accel_response_level(accel_response_level)
+  accel_response_active = False
+  accel_boost_target = 0.0
+  preview_attack_step = PREVIEW_DECEL_ATTACK_STEP_S
+  boost_attack_step = 0.0
+
   if lead_accel_signal < 0.0:
     offset_s = min(-lead_accel_signal * tuning.decel_factor, tuning.decel_preview_max)
-  elif lead_accel_signal > 0.0 and tuning.accel_factor > 0.0:
-    magnitude = min(lead_accel_signal * tuning.accel_factor, tuning.accel_preview_max)
-    offset_s = magnitude if tuning.accelerate_early else -magnitude
+  elif (lead_accel_signal > 0.0 and accel_response_enabled and
+        lead_accel_response_allowed(response_level, v_rel=v_rel, gap_margin=gap_margin,
+                                    lead_accel_signal=lead_accel_signal)):
+    response_tuning = LEAD_ACCEL_RESPONSE_TUNING[response_level]
+    offset_s = min(lead_accel_signal * response_tuning.preview_factor, response_tuning.preview_max)
+    accel_boost_target = min(lead_accel_signal * response_tuning.boost_gain, response_tuning.boost_max)
+    accel_response_active = True
+    # Acceleration preview should take effect on the first valid planning
+    # cycle. Its output delta and optional level-5 boost remain independently
+    # bounded below.
+    preview_attack_step = response_tuning.preview_max
+    boost_attack_step = response_tuning.boost_attack_step
   else:
     offset_s = 0.0
 
-  return PreviewRequest(float(offset_s), float(lead_accel_signal), True)
+  return PreviewRequest(
+    float(offset_s), float(lead_accel_signal), True,
+    accel_response_active=accel_response_active,
+    accel_response_level=response_level,
+    accel_boost_target=float(accel_boost_target),
+    preview_attack_step=float(preview_attack_step),
+    boost_attack_step=float(boost_attack_step),
+  )
 
 
 def rate_limit_preview(
@@ -149,16 +213,26 @@ def clip_preview_offset(base_action_t: float, preview_s: float) -> float:
   return float(clip_action_time(base_action_t, preview_s) - float(base_action_t))
 
 
+def rate_limit_accel_boost(target: float, current: float, attack_step: float,
+                           release_step: float = 0.04) -> float:
+  """Keep level-5 feed-forward quick without exposing raw aLead noise."""
+  step = max(0.0, float(attack_step if target > current else release_step))
+  return float(max(current - step, min(current + step, target)))
+
+
 def apply_preview_target(
   base_target: float,
   preview_target: float,
   driving_mode,
   lead_accel_signal: float,
   a_ego: float = 0.0,
+  accel_response_active: bool = False,
+  accel_response_level: int = 0,
+  accel_boost: float = 0.0,
+  accel_max: float = math.inf,
 ) -> float:
   """Keep mode preview conservative and bound its acceleration delta."""
-  mode = _mode_value(driving_mode)
-  tuning = MODE_TUNING.get(mode)
+  tuning = MODE_TUNING.get(_mode_value(driving_mode))
   base = float(base_target)
   candidate = float(preview_target)
   ego_not_braking = math.isfinite(a_ego) and float(a_ego) >= -LEAD_ACCEL_DEADBAND
@@ -166,11 +240,15 @@ def apply_preview_target(
   if tuning is None:
     return base
 
-  if mode == DRIVING_MODE_HIGH and lead_accel_signal > 0.0 and base > 0.0 and ego_not_braking:
-    # High may advance a rising acceleration trajectory, but never by more than
-    # the bounded delta. Never use this exception while either the plan or the
-    # vehicle is decelerating; the normal MPC maximum acceleration still applies.
-    return float(max(base, min(candidate, base + MAX_HIGH_ACCEL_TARGET_DELTA)))
+  response_tuning = LEAD_ACCEL_RESPONSE_TUNING.get(clip_lead_accel_response_level(accel_response_level))
+  if (accel_response_active and response_tuning is not None and lead_accel_signal > 0.0 and
+      base >= 0.0 and ego_not_braking and candidate >= base):
+    target = max(base, candidate) + max(0.0, float(accel_boost))
+    target = min(target, base + response_tuning.target_delta_max, float(accel_max))
+    return float(max(base, target))
+
+  if lead_accel_signal > 0.0:
+    return base
 
   # Every mode may remove acceleration for a negative relative-acceleration
   # signal. Pre-braking remains mode-bounded; a positive signal can reduce

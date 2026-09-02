@@ -5,7 +5,10 @@ from openpilot.selfdrive.carrot.radar_motion.predictor import (
   project_to_model_path,
 )
 from openpilot.selfdrive.carrot.radar_motion.trajectory_cutin import (
+  FRONT_LATERAL_CONFIDENCE_MIN,
   TrajectoryCutInDetector,
+  front_lateral_motion_confidence,
+  front_lateral_noise_floor_m,
   prediction_horizon_s,
 )
 
@@ -80,6 +83,62 @@ def corner_series(
 
 def test_low_speed_prediction_looks_farther_ahead() -> None:
   assert prediction_horizon_s(2.0) > prediction_horizon_s(25.0)
+
+
+def test_front_lateral_noise_floor_increases_at_close_range() -> None:
+  assert front_lateral_noise_floor_m(5.0) > front_lateral_noise_floor_m(20.0)
+  assert front_lateral_noise_floor_m(20.0) > front_lateral_noise_floor_m(45.0)
+
+
+def test_front_lateral_confidence_separates_close_jitter_from_entry() -> None:
+  close_jitter = front_lateral_motion_confidence(
+    6.15, 0.35, 0.77, 1.00, 0.55,
+  )
+  sustained_entry = front_lateral_motion_confidence(
+    5.25, 0.49, 1.00, 1.00, 0.84,
+  )
+
+  assert close_jitter < FRONT_LATERAL_CONFIDENCE_MIN
+  assert sustained_entry >= FRONT_LATERAL_CONFIDENCE_MIN
+
+
+def test_close_front_lateral_wander_does_not_confirm_cutin() -> None:
+  detector = TrajectoryCutInDetector()
+  samples = (
+    (0.00, 5.95, -2.55, -1.24),
+    (0.30, 7.39, -2.55, -2.01),
+    (0.60, 6.30, -2.50, -1.01),
+    (0.90, 6.71, -2.45, -1.14),
+    (1.15, 6.86, -2.45, -1.36),
+    (1.45, 6.60, -2.50, -2.00),
+    (1.70, 6.53, -2.45, -1.85),
+    (2.00, 6.21, -2.11, -1.25),
+    (2.05, 6.15, -2.10, -1.25),
+    (2.30, 4.76, -2.10, -1.82),
+    (2.60, 5.11, -2.05, -2.15),
+    (2.90, 4.93, -2.00, -1.75),
+  )
+  estimate = None
+  for time_s, d_rel, y_rel, v_rel in samples:
+    estimate = detector.update(
+      time_s,
+      15.5,
+      (point(
+        35,
+        "frontRadar",
+        d_rel,
+        y_rel,
+        v_ego=15.5,
+        v_rel=v_rel,
+      ),),
+      PATH,
+      MODEL,
+    )[0]
+
+  assert estimate is not None
+  assert not estimate.confirmed_cutin
+  assert not estimate.control_eligible
+  assert not estimate.predecel_risk
 
 
 def test_higher_sensitivity_confirms_the_same_trajectory_earlier() -> None:

@@ -41,6 +41,10 @@ MAX_DREL_M = 80.0
 CUTIN_MAX_DREL_M = 45.0
 FRONT_NEW_CUTIN_MIN_DREL_M = 2.0
 FRONT_CLOSE_BORN_MIN_DREL_M = 5.0
+FRONT_LATERAL_CONFIDENCE_MIN = 0.75
+FRONT_LATERAL_NEAR_NOISE_M = 0.45
+FRONT_LATERAL_MID_NOISE_M = 0.30
+FRONT_LATERAL_FAR_NOISE_M = 0.20
 CROSS_SENSOR_SLOT_HANDOFF_MAX_DREL_M = 12.0
 CROSS_SENSOR_ALIAS_HOLD_S = 0.35
 MIN_MOVING_VLEAD_MPS = 0.5
@@ -94,6 +98,41 @@ def _finite(value: Any, fallback: float = 0.0) -> float:
 def prediction_horizon_s(v_ego: float) -> float:
   """Use time, not distance, while allowing more lookahead at low speed."""
   return max(1.40, min(3.00, 3.00 - 0.05 * max(0.0, v_ego)))
+
+
+def front_lateral_noise_floor_m(d_rel: float) -> float:
+  """Expected front-radar lateral wander; close body returns are noisiest."""
+  distance = max(0.0, d_rel)
+  if distance <= 8.0:
+    return FRONT_LATERAL_NEAR_NOISE_M
+  if distance <= 20.0:
+    ratio = (distance - 8.0) / 12.0
+    return FRONT_LATERAL_NEAR_NOISE_M + ratio * (
+      FRONT_LATERAL_MID_NOISE_M - FRONT_LATERAL_NEAR_NOISE_M
+    )
+  if distance <= 45.0:
+    ratio = (distance - 20.0) / 25.0
+    return FRONT_LATERAL_MID_NOISE_M + ratio * (
+      FRONT_LATERAL_FAR_NOISE_M - FRONT_LATERAL_MID_NOISE_M
+    )
+  return FRONT_LATERAL_FAR_NOISE_M
+
+
+def front_lateral_motion_confidence(
+  d_rel: float,
+  inward_progress: float,
+  direction_consistency: float,
+  recent_direction_consistency: float,
+  lateral_net_fraction: float,
+) -> float:
+  """Return motion significance after normalizing by range-dependent noise."""
+  noise_floor = front_lateral_noise_floor_m(d_rel)
+  coherence = max(0.0, min(
+    direction_consistency,
+    recent_direction_consistency,
+    lateral_net_fraction,
+  ))
+  return min(1.0, max(0.0, inward_progress) / noise_floor * coherence)
 
 
 @dataclass(frozen=True)
@@ -669,6 +708,19 @@ class TrajectoryCutInDetector:
           )
         )
       )
+      front_motion_supported = (
+        point.source != "frontRadar"
+        or vision_supported
+        or cross_sensor_supported
+        or front_history_supported
+        or front_lateral_motion_confidence(
+          point.d_rel,
+          inward_progress,
+          direction_consistency,
+          short_direction_consistency,
+          lateral_net_fraction,
+        ) >= FRONT_LATERAL_CONFIDENCE_MIN
+      )
       jitter_override = (
         front_history_supported
         or (
@@ -852,21 +904,24 @@ class TrajectoryCutInDetector:
         and front_time_to_pass_s >= 1.20
       )
       front_entry = (
-        (
-          raw_body_overlap
-          and front_time_to_pass_s >= 1.20
-          and consistent_motion
-        )
-        or (
-          vision_supported
-          and predicted_overlap
-          and inward_progress >= 0.18
-          and supported_inward_rate >= 0.20
-          and direction_consistency >= 0.75
-        )
-        or (
-          front_history_supported
-          and recent_predicted_overlap
+        front_motion_supported
+        and (
+          (
+            raw_body_overlap
+            and front_time_to_pass_s >= 1.20
+            and consistent_motion
+          )
+          or (
+            vision_supported
+            and predicted_overlap
+            and inward_progress >= 0.18
+            and supported_inward_rate >= 0.20
+            and direction_consistency >= 0.75
+          )
+          or (
+            front_history_supported
+            and recent_predicted_overlap
+          )
         )
       )
       corner_approach_ok = (
@@ -909,7 +964,6 @@ class TrajectoryCutInDetector:
         0.0
         if paired_close_entry
         or front_history_supported
-        or (point.source == "frontRadar" and raw_body_overlap)
         else max(0.0, (
           CUTIN_CURRENT_OVERLAP_CONFIRMATION_S
           if current_overlap
@@ -993,6 +1047,7 @@ class TrajectoryCutInDetector:
       raw_risk = (
         common_ok
         and not non_cutin_side_motion
+        and front_motion_supported
         and 2.0 < point.d_rel <= 45.0
         and point.v_rel <= -0.5
         and time_to_overlap_s is not None
@@ -1054,6 +1109,7 @@ class TrajectoryCutInDetector:
         else "close-born rear pass" if close_born_rear_pass
         else "parallel side drift" if paired_parallel_drift
         else "uncorroborated close front" if not close_front_supported
+        else "front lateral uncertainty" if not front_motion_supported
         else "corner lateral jitter" if jittering
         else "current path" if current_path
         else "tracking"

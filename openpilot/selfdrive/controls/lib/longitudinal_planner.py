@@ -2,6 +2,7 @@
 import math
 import numpy as np
 
+from openpilot.cereal import log
 import openpilot.cereal.messaging as messaging
 from opendbc.car.interfaces import ACCEL_MIN, ACCEL_MAX
 from openpilot.common.constants import CV
@@ -20,6 +21,7 @@ from openpilot.selfdrive.controls.lib.longitudinal_preview import (
   apply_preview_target,
   clip_preview_offset,
   get_lead_preview_request,
+  rate_limit_accel_boost,
   rate_limit_preview,
 )
 from openpilot.selfdrive.car.cruise import V_CRUISE_MAX, V_CRUISE_UNSET
@@ -37,6 +39,7 @@ MIN_ALLOW_THROTTLE_SPEED = 2.5
 RESET_DECEL_RAMP_TIME = 2.0
 TURN_CURVATURE_LOOKAHEAD = 1.0
 TURN_CURVATURE_MIN_SPEED = 3.0
+LEAD_ACCEL_MIN_TRACK_FRAMES = 3
 
 
 def get_max_accel(v_ego):
@@ -111,6 +114,9 @@ class LongitudinalPlanner:
     self.lead_preview = 0.0
     self.lead_preview_action_time = 0.0
     self.lead_preview_accel = 0.0
+    self.lead_accel_boost = 0.0
+    self.lead_preview_track_id = -1
+    self.lead_preview_track_frames = 0
 
     self.v_desired_trajectory = np.zeros(CONTROL_N)
     self.a_desired_trajectory = np.zeros(CONTROL_N)
@@ -285,7 +291,32 @@ class LongitudinalPlanner:
       vEgoStopping=vEgoStopping,
     )
 
-    lead = sm['radarState'].leadOne
+    lead_index = 1 if self.mpc.source == 'lead1' else 0
+    leads = (sm['radarState'].leadOne, sm['radarState'].leadTwo)
+    lead = leads[lead_index]
+    lead_source_active = self.mpc.source in ('lead0', 'lead1')
+    lead_track_valid = lead.status and lead.radar and lead.radarTrackId >= 0
+    lead_track_id = int(lead.radarTrackId) if lead_track_valid else -1
+    if lead_track_id >= 0 and lead_track_id == self.lead_preview_track_id:
+      self.lead_preview_track_frames += 1
+    elif lead_track_id >= 0:
+      self.lead_preview_track_id = lead_track_id
+      self.lead_preview_track_frames = 1
+    else:
+      self.lead_preview_track_id = -1
+      self.lead_preview_track_frames = 0
+
+    tf1_accel_response = (
+      sm['selfdriveState'].personality == log.LongitudinalPersonality.aggressive
+      and carrot.leadAccelResponse > 0
+      and lead_source_active
+      and self.lead_preview_track_frames >= LEAD_ACCEL_MIN_TRACK_FRAMES
+      and not output_should_stop_mpc
+    )
+    gap_margin = (
+      float(lead.dRel - self.mpc.base_desired_distances[lead_index])
+      if lead_track_valid else -1.0
+    )
     preview_request = get_lead_preview_request(
       carrot.myDrivingMode,
       lead_status=(
@@ -298,16 +329,30 @@ class LongitudinalPlanner:
       ),
       a_lead=lead.aLeadK,
       a_ego=sm['carState'].aEgo,
+      accel_response_level=carrot.leadAccelResponse,
+      accel_response_enabled=tf1_accel_response,
+      v_rel=lead.vRel,
+      gap_margin=gap_margin,
     )
     if preview_request.active:
-      requested_preview = rate_limit_preview(preview_request.offset_s, self.lead_preview)
+      requested_preview = rate_limit_preview(
+        preview_request.offset_s,
+        self.lead_preview,
+        decel_attack_step_s=preview_request.preview_attack_step,
+      )
       self.lead_preview = clip_preview_offset(action_t, requested_preview)
       self.lead_preview_accel = preview_request.lead_accel_signal
       self.lead_preview_action_time = action_t + self.lead_preview
+      self.lead_accel_boost = rate_limit_accel_boost(
+        preview_request.accel_boost_target,
+        self.lead_accel_boost,
+        preview_request.boost_attack_step,
+      )
     else:
       self.lead_preview = 0.0
       self.lead_preview_accel = 0.0
       self.lead_preview_action_time = action_t
+      self.lead_accel_boost = 0.0
 
     output_a_target_preview, _, _, _ = get_accel_from_plan(
       self.v_desired_trajectory,
@@ -322,6 +367,10 @@ class LongitudinalPlanner:
       carrot.myDrivingMode,
       self.lead_preview_accel,
       a_ego=sm['carState'].aEgo,
+      accel_response_active=preview_request.accel_response_active,
+      accel_response_level=preview_request.accel_response_level,
+      accel_boost=self.lead_accel_boost,
+      accel_max=accel_limits_turns[1],
     ) if preview_request.active else output_a_target_base
     output_a_target_e2e = sm['modelV2'].action.desiredAcceleration
     output_should_stop_e2e = sm['modelV2'].action.shouldStop
