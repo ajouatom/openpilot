@@ -108,6 +108,7 @@
       "code_paths": [
         "openpilot/selfdrive/carrot/carrot_functions.py",
         "openpilot/selfdrive/controls/lib/longitudinal_planner.py",
+        "openpilot/selfdrive/controls/lib/longitudinal_preview.py",
         "openpilot/selfdrive/controls/lib/longitudinal_mpc_lib/long_mpc.py",
         "openpilot/selfdrive/controls/lib/longcontrol.py"
       ],
