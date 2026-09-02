@@ -24,6 +24,7 @@ from openpilot.selfdrive.selfdrived.alertmanager import AlertManager, set_offroa
 from openpilot.selfdrive.controls.lib.cutin_alert import (
   CutinAlertCandidate,
   CutinAlertTracker,
+  promoted_cutin_candidates,
 )
 
 from openpilot.system.hardware import HARDWARE
@@ -222,7 +223,15 @@ class SelfdriveD:
       )
       for lead in self.sm['radarState'].leadsCutIn
     ) if cutin_enabled else ()
-    cutin_alert = self.cutin_audio_tracker.update(cutin_candidates, cutin_enabled)
+    lead_two = self.sm['radarState'].leadTwo
+    promoted_lead = CutinAlertCandidate(
+      int(lead_two.radarTrackId),
+      float(lead_two.dRel),
+      float(lead_two.yRel),
+      float(lead_two.vRel),
+    ) if cutin_enabled and lead_two.status else None
+    promoted_cutins = promoted_cutin_candidates(cutin_candidates, promoted_lead)
+    cutin_alert = self.cutin_audio_tracker.update(promoted_cutins, cutin_enabled)
     if cutin_alert:
       self.events.add(EventName.radarCutin)
 
