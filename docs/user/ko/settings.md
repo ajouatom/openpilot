@@ -165,7 +165,7 @@ Carrot Web 설정 화면에서는 다음 기능을 사용할 수 있습니다.
 | [도로 제한속도](speed-deceleration.md#road-speed-limit) | `AutoRoadSpeedLimitOffset`, `AutoRoadSpeedAdjust`, `AutoSpeedUptoRoadSpeedLimit` | 도로 제한속도에 맞춘 목표 속도 조절 |
 | [과속방지턱](speed-deceleration.md#speed-bump) | `AutoNaviSpeedBumpTime`, `AutoNaviSpeedBumpSpeed` | 방지턱 감속 완료 시점과 통과 속도 |
 | [커브·턴](speed-deceleration.md#curve-turn) | `AutoCurveSpeedFactor`, `AutoCurveSpeedLowerLimit`, `TurnSpeedControlMode`, `MapTurnSpeedFactor`, `ModelTurnSpeedFactor`, `ApplyModelSpeed` | 모델 곡률과 경로를 이용한 커브·턴 속도 |
-| [신호감지](speed-deceleration.md#traffic-light) | `TrafficLightDetectMode`, `TrafficStopDistanceAdjust` | 신호 정지·출발 감지와 정지 위치 보정 |
+| [신호감지](speed-deceleration.md#traffic-light) | `TrafficLightDetectMode`, `TrafficStopDistanceAdjust` | 신호 정지·출발 감지, 정지 위치 및 정지차 기준 자동 보정 |
 
 `AutoNaviSpeedCtrlMode`는 `0` 미사용, `1` 과속카메라, `2` 과속카메라+방지턱, `3` 과속카메라+방지턱+이동식카메라입니다.
 

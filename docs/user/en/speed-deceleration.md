@@ -276,7 +276,11 @@ The stored value is divided by 100 and added to the stop-obstacle position in me
 | `0` | 0 m | Model position |
 | `100` | +1.0 m | Stop later/closer to the line |
 
-Near a complete stop, the current code uses a fixed -2.0 m instead of the user value, so the final position may not exactly match the setting. Adjust by 100 (1 m) at a time under comparable conditions. If false signal detection is the problem, diagnose the mode/model decision instead of the distance offset.
+Near a complete stop, the current code uses a fixed -2.0 m instead of the user value, so the final position may not exactly match the setting.
+
+There is one vehicle-relative exception. During an E2E stop with no active `leadOne`, a high-probability, low-speed camera-model vehicle must remain 0–3 m ahead of the planned stop endpoint for five frames (about 0.25 s). For that stop only, the planner uses a +2.0 m virtual-obstacle offset instead of the signal adjustment, allowing the MPC to preserve `StopDistanceCarrot` from the inferred vehicle position. It does not create an SCC/radar object or promote `leadOne`; if confirmation fails, the existing signal-stop and fixed -2.0 m behavior remain unchanged.
+
+Adjust by 100 (1 m) at a time under comparable no-lead signal stops, because the automatic vehicle-relative correction can take priority when a stopped vehicle is present. If false signal detection is the problem, diagnose the mode/model decision instead of the distance offset.
 
 ## Quick troubleshooting
 

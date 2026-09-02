@@ -1235,6 +1235,7 @@ struct LongitudinalPlan @0xe00b5b3eba12876c {
   leadPreviewActionTime @58 :Float32;
   leadPreviewAccel @59 :Float32;  # mode-weighted aLead + jerk lookahead - aEgo contribution
   aChangeCost @60 :Float32;
+  trafficStopModelLeadOffset @61 :Float32;  # 0 normally, +2 m for a confirmed model-vehicle stop
 
   solverExecutionTime @35 :Float32;
 
