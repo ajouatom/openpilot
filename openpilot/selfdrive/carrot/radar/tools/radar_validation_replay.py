@@ -76,6 +76,11 @@ from openpilot.selfdrive.carrot.radar_motion.occupancy_v3 import (
   V3Evidence,
   V3Stage,
 )
+from openpilot.selfdrive.controls.lib.cutin_alert import (
+  CutinAlertCandidate,
+  CutinAlertTracker,
+  promoted_cutin_candidates,
+)
 
 
 RADAR_TO_CAMERA = 1.52
@@ -3618,6 +3623,65 @@ def trajectory_model_review_events(
   return events
 
 
+def _alert_candidate(candidate: Candidate | None) -> CutinAlertCandidate | None:
+  if (
+    candidate is None
+    or candidate.d_rel is None
+    or candidate.y_rel is None
+    or candidate.v_lead is None
+  ):
+    return None
+  return CutinAlertCandidate(
+    candidate.track_id,
+    candidate.d_rel,
+    candidate.y_rel,
+    candidate.v_lead,
+  )
+
+
+def selected_cutin_candidate(selection: Selection) -> Candidate | None:
+  """Return the confirmed CUT-IN that is the current leadTwo, if any."""
+  lead_two = _alert_candidate(selection.lead_two)
+  if lead_two is None:
+    return None
+  candidates = tuple(
+    (candidate, alert_candidate)
+    for candidate in selection.decision_cutin_candidates
+    if (alert_candidate := _alert_candidate(candidate)) is not None
+  )
+  promoted = promoted_cutin_candidates(
+    tuple(alert_candidate for _, alert_candidate in candidates),
+    lead_two,
+  )
+  if not promoted:
+    return None
+  return next(
+    candidate
+    for candidate, alert_candidate in candidates
+    if alert_candidate == promoted[0]
+  )
+
+
+def cutin_lead_two_promotion_events(
+  frames: Sequence[RadarFrame],
+  selector: LeadSelector,
+) -> dict[int, tuple[str, ...]]:
+  """Build the exact CUT-IN events that would trigger the on-device sound."""
+  tracker = CutinAlertTracker()
+  events: dict[int, tuple[str, ...]] = {}
+  for index, frame in enumerate(frames):
+    selection = selector.select(frame, index)
+    selected = selected_cutin_candidate(selection)
+    alert_candidate = _alert_candidate(selected)
+    if tracker.update(() if alert_candidate is None else (alert_candidate,)):
+      assert selected is not None
+      sensor = "corner" if selected.source.startswith("corner") else "front"
+      events[index] = (
+        f"알림음 L2 승격 {sensor} id {selected.track_id}",
+      )
+  return events
+
+
 def comparison_summary(frames: Sequence[RadarFrame], selector: LeadSelector) -> dict[str, int]:
   summary = {
     "frames": len(frames),
@@ -3768,17 +3832,19 @@ class SimulatorUI:
     self.speed = 1.0
     self.times = tuple(frame.time_s for frame in frames)
     self.playback_time = 0.0
-    self.events = trajectory_model_review_events(
+    self.marker_events = trajectory_model_review_events(
       frames,
       self.selector,
       ("front+corner",),
       applied_threshold,
     )
+    self.events = cutin_lead_two_promotion_events(frames, self.selector)
     self._refresh_lead_continuity()
     self.handled_events: set[int] = set()
     self.status = (
       f"dPath predictor 적용: {self.selector.motion_sensor} 레이더 · "
-      + f"EnableRadarTracks {self.enable_radar_tracks}"
+      + f"EnableRadarTracks {self.enable_radar_tracks} · "
+      + "자동정지=L2 승격 알림음"
     )
     self.font: Any | None = None
     self._owns_font = False
@@ -3932,12 +3998,13 @@ class SimulatorUI:
     self.sensor_probabilities[selector.motion_sensor] = (
       selector.decision_threshold
     )
-    self.events = trajectory_model_review_events(
+    self.marker_events = trajectory_model_review_events(
       self.frames,
       selector,
       ("front+corner",),
       selector.decision_threshold,
     )
+    self.events = cutin_lead_two_promotion_events(self.frames, selector)
     self.handled_events.clear()
     self._refresh_lead_continuity()
     lead_two_frames = sum(
@@ -3951,9 +4018,15 @@ class SimulatorUI:
       if value == 0
       else f"확인 {confirmation_s:.2f}초"
     )
+    candidate_events = sum(
+      label.startswith("물리 예측 CUT-IN")
+      for labels in self.marker_events.values()
+      for label in labels
+    )
     self.status = (
       f"CUT-IN 감도 {value} {label} · {policy_text} "
-      + f"적용 완료: 진입 {len(self.events)}회, "
+      + f"적용 완료: 후보 {candidate_events}회, "
+      + f"알림승격 {len(self.events)}회, "
       + f"L2 {lead_two_frames}프레임"
     )
 
@@ -5077,9 +5150,16 @@ class SimulatorUI:
       if selection.cutin_predecel_candidate is not None
       else "--"
     )
+    alert_id = (
+      lead_two_id
+      if self.index in self.events
+      and selected_cutin_candidate(selection) is not None
+      else "--"
+    )
     self._draw_text(
-      f"L1 {lead_one_id}  L2 {lead_two_id}  | 예비감속 {predecel_id}  | CUT-IN "
-      + str([value.track_id for value in selection.decision_cutin_candidates]),
+      f"L1 {lead_one_id}  L2 {lead_two_id} | 예비감속 {predecel_id} | 후보 "
+      + str([value.track_id for value in selection.decision_cutin_candidates])
+      + f" | 알림 {alert_id}",
       x,
       int(rect.y + 110.0),
       16,
@@ -5125,6 +5205,21 @@ class SimulatorUI:
         "L1-FUTURE": "진입 예상 시점에 L1보다 앞이 아님",
         "BELOW": "기준 미달",
       }.get(candidate.stage, candidate.stage)
+      selected_cutin = selected_cutin_candidate(selection)
+      if candidate.stage == "CUT-IN":
+        if (
+          self.index in self.events
+          and selected_cutin is not None
+          and candidate.track_id == selected_cutin.track_id
+        ):
+          stage_text = "L2 승격·알림음"
+        elif (
+          selected_cutin is not None
+          and candidate.track_id == selected_cutin.track_id
+        ):
+          stage_text = "L2 선택 유지"
+        else:
+          stage_text = "후보 확정(L2 미선택)"
       self._draw_text(
         f"{candidate.source[:9]:9} id{candidate.track_id:4d} "
         + f"진입{candidate.score:.2f} 이탈{candidate.path_exit_score:.2f} {stage_text}",
@@ -5262,17 +5357,22 @@ class SimulatorUI:
         self._color(color),
       )
     if self.show_shadow_markers:
-      for frame_index in self.events:
+      for frame_index in set(self.marker_events) | set(self.events):
         marker_x = rect.x + rect.width * self.times[frame_index] / total
         predecel_event = any(
           label.startswith("예비감속 위험")
-          for label in self.events[frame_index]
+          for label in self.marker_events.get(frame_index, ())
         )
+        alert_event = frame_index in self.events
         rl.draw_line_ex(
           rl.Vector2(marker_x, rect.y - 15.0),
           rl.Vector2(marker_x, rect.y + rect.height + 7.0),
-          3.0,
-          self._color((70, 190, 220) if predecel_event else (246, 142, 55)),
+          4.0 if alert_event else 3.0,
+          self._color(
+            (98, 225, 125)
+            if alert_event
+            else (70, 190, 220) if predecel_event else (246, 142, 55)
+          ),
         )
     progress = min(max(self.playback_time / total, 0.0), 1.0)
     rl.draw_rectangle(
@@ -5296,9 +5396,9 @@ class SimulatorUI:
       self._color((225, 231, 237)),
     )
     shadow_text = (
-      "하늘: 예비감속 위험 · 주황: CUT-IN 확정(M: 숨김)"
+      "하늘: 예비감속 · 주황: 후보 확정 · 연두: L2 승격 알림음(M: 숨김)"
       if self.show_shadow_markers
-      else "예비감속/CUT-IN 마커 숨김(M: 표시)"
+      else "예비감속/후보/알림음 마커 숨김(M: 표시)"
     )
     self._draw_text(
       f"{shadow_text}   위쪽 막대: 검증 구간",
@@ -5357,7 +5457,7 @@ class SimulatorUI:
     self.paused = True
     self.status = (
       f"{source} 탐색 @{self.playback_time:.2f}초; "
-      + "이후 CUT-IN 자동정지 재설정됨"
+      + "이후 L2 승격 알림음 자동정지 재설정됨"
     )
 
   def _rearm_events_from_current(self) -> None:
@@ -5397,7 +5497,7 @@ class SimulatorUI:
       self.status = (
         "수동 일시정지"
         if self.paused
-        else "재생 중: predictor CUT-IN 자동정지 대기"
+        else "재생 중: L2 승격 알림음 자동정지 대기"
       )
     shift = rl.is_key_down(rl.KEY_LEFT_SHIFT) or rl.is_key_down(rl.KEY_RIGHT_SHIFT)
     if rl.is_key_pressed(rl.KEY_RIGHT):
@@ -5426,12 +5526,12 @@ class SimulatorUI:
       self.handled_events.clear()
       self.seek(0.0)
       self.paused = False
-      self.status = "처음부터 재생: 모든 predictor CUT-IN 자동정지 대기"
+      self.status = "처음부터 재생: 모든 L2 승격 알림음 자동정지 대기"
       self._pause_for_event(-1, self.index)
     if rl.is_key_pressed(rl.KEY_M):
       self.show_shadow_markers = not self.show_shadow_markers
       state = "표시" if self.show_shadow_markers else "숨김"
-      self.status = f"dPath predictor 타임라인 마커 {state}"
+      self.status = f"예비감속/CUT-IN 후보/L2 알림음 타임라인 마커 {state}"
     if rl.is_key_pressed(rl.KEY_H):
       self.show_trajectory_history = not self.show_trajectory_history
       state = "표시" if self.show_trajectory_history else "숨김"
@@ -5899,6 +5999,7 @@ __all__ = (
   "candidate_track_ids",
   "comparison_summary",
   "confirmed_cutin_overlap_at",
+  "cutin_lead_two_promotion_events",
   "corner_radar_display_points",
   "current_cutin_track_ids",
   "front_only_frames",
@@ -5933,6 +6034,7 @@ __all__ = (
   "save_validation_probability",
   "save_validation_sensitivity",
   "save_visual_replay_cache",
+  "selected_cutin_candidate",
   "prediction_with_validation_lookahead",
   "trajectory_history_display_y",
   "trajectory_history_display_position",
