@@ -37,7 +37,9 @@ _services: dict[str, tuple] = {
   "peripheralState": (True, 2., 1),
   "radarState": (True, 20., 5),
   "roadEncodeIdx": (False, 20., 1),
-  "liveTracks": (True, 20.),
+  # Physical radars publish at either 20 Hz or 25 Hz depending on the brand.
+  # Use the midpoint so FrequencyTracker's +/-20% band accepts both clocks.
+  "liveTracks": (True, 22.5),
   "sendcan": (True, 100., 139, QueueSize.MEDIUM),
   "logMessage": (True, 0., None, QueueSize.BIG),
   "errorLogMessage": (True, 0., 1, QueueSize.BIG),
@@ -48,7 +50,9 @@ _services: dict[str, tuple] = {
   "carState": (True, 100., 10),
   "carControl": (True, 100., 10),
   "carOutput": (True, 100., 10),
-  "longitudinalPlan": (True, 20., 10),
+  # modelV2-triggered plans run at 20 Hz, while the fast physical-radar path
+  # follows 25 Hz liveTracks. The midpoint accepts both supported rates.
+  "longitudinalPlan": (True, 22.5, 10),
   "lateralManeuverPlan": (True, 20.),
   "driverAssistance": (True, 20., 20),
   "procLog": (True, 0.5, 15, QueueSize.BIG),
