@@ -56,28 +56,29 @@
   },
   {
     "name": "boot",
-    "url": "https://github.com/ajouatom/agnos-builder/releases/download/agnos-19.6.3-carrot/boot-c3x-c4-303d797a55933dd634ecf5e16b5b9746e12528fa8d5919903aff7a0ae888cfcb.img.xz",
-    "compressed_hash": "807239c4debfb14823fb443722711a730f1c696ed02202ae31c8563fdbf789af",
-    "compressed_size": 14038484,
-    "hash": "303d797a55933dd634ecf5e16b5b9746e12528fa8d5919903aff7a0ae888cfcb",
-    "hash_raw": "303d797a55933dd634ecf5e16b5b9746e12528fa8d5919903aff7a0ae888cfcb",
-    "size": 47224832,
+    "url": "https://commadist.azureedge.net/agnosupdate/boot-b30f5eef65ec3878f3aa3dcaf2cc95c09e2c1e661cd3a38e94da37dee76f68bd.img.xz",
+    "hash": "b30f5eef65ec3878f3aa3dcaf2cc95c09e2c1e661cd3a38e94da37dee76f68bd",
+    "hash_raw": "b30f5eef65ec3878f3aa3dcaf2cc95c09e2c1e661cd3a38e94da37dee76f68bd",
+    "size": 46897152,
     "sparse": false,
     "full_check": true,
     "has_ab": true,
-    "ondevice_hash": "1f44edfac7ba166638ff43e0b98c62f19250a872726a57e50d751449f4f9ab36"
+    "ondevice_hash": "6650e4c46df99ae6dfd6ee895a34b8a2a3cc490a8ce18e16cc3c451c3f822b6e"
   },
   {
     "name": "system",
-    "url": "https://github.com/ajouatom/agnos-builder/releases/download/agnos-19.6.3-carrot/system-b97e492686fa3902b0385f13fa5663c911f0b150d06b722111d386f4ad42a7d7.img.xz",
-    "compressed_hash": "57a1e8fbf72ba0608512b505075b03ce41a77427da7edb43e093ddb99f4bda60",
-    "compressed_size": 1008228912,
-    "hash": "ee1d82e325bfce8cc9c2fc1a509b65436830b9f34d3ee6568cf5345216d18c25",
-    "hash_raw": "b97e492686fa3902b0385f13fa5663c911f0b150d06b722111d386f4ad42a7d7",
+    "url": "https://commadist.azureedge.net/agnosupdate/system-5b6ce7965904a157fd3a134ccfcb854f9ca5c1cc2a26b7cb80a4fa4e1cc4aaa3.img.xz",
+    "hash": "b134fd04e9da27fa1d359ea0f2742c216fa21a08b5c47e9be22ab3b0563d9b9b",
+    "hash_raw": "5b6ce7965904a157fd3a134ccfcb854f9ca5c1cc2a26b7cb80a4fa4e1cc4aaa3",
     "size": 4718592000,
     "sparse": true,
     "full_check": false,
     "has_ab": true,
-    "ondevice_hash": "922f61a474912aef459586e9cc4f0dd923d58d5e9d67b3163566c7b0be8a5b55"
+    "ondevice_hash": "91242772af771ae96fe2eebc105f2b80a7e1dbaaf6003c2574b62d51b806f468",
+    "alt": {
+      "hash": "5b6ce7965904a157fd3a134ccfcb854f9ca5c1cc2a26b7cb80a4fa4e1cc4aaa3",
+      "url": "https://commadist.azureedge.net/agnosupdate/system-5b6ce7965904a157fd3a134ccfcb854f9ca5c1cc2a26b7cb80a4fa4e1cc4aaa3.img",
+      "size": 4718592000
+    }
   }
 ]
