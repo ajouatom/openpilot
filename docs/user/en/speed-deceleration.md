@@ -5,7 +5,7 @@
 > [!NOTE]
 > This is the canonical English user guide maintained with the `carrot-wip` code. When user-visible behavior changes, update this document together with the related code and tests.
 
-This page explains all **18 speed and deceleration settings** in the current code: event targets, deceleration distance, road-limit adjustment, speed bumps, curve/route/model speed, and traffic-light stop adjustment.
+This page explains all **20 speed and deceleration settings** in the current code: event targets, deceleration distance, stock-navigation CAN, road-limit adjustment, speed bumps, curve/route/model speed, and traffic-light stop adjustment.
 
 Change them in **Carrot Web → Settings → Driving control → Speed and deceleration**.
 
@@ -63,6 +63,12 @@ Record the value currently shown on the device before changing anything.
 | `3` | Mode 2 plus mobile-camera events |
 
 The event type, limit, and distance must all be valid. An average-speed zone retains its target until the end distance; mobile-camera events are used only in mode `3`.
+
+### Stock-navigation CAN control
+
+`VehicleNaviCanControl` uses exact camera and speed-bump distances from the stock navigation on supported Hyundai/Kia CAN-FD vehicles. On the Kia PV5, it currently supports regular cameras and speed bumps only; average-speed zones and `VehicleNaviSchoolZoneControl` remain disabled until the required periodic zone-state signal is validated.
+
+This experimental control is off by default. First verify that the displayed event type, limit, and remaining distance match the road, and disable it immediately if they do not.
 
 ### `AutoNaviSpeedSafetyFactor`
 
