@@ -14,6 +14,7 @@ from openpilot.selfdrive.controls.lib.longitudinal_fast_radar import (
 from openpilot.selfdrive.controls.lib.lateral_planner import LateralPlanner
 import openpilot.cereal.messaging as messaging
 from openpilot.selfdrive.carrot.carrot_functions import CarrotPlanner
+from openpilot.selfdrive.carrot.radar import effective_radar_track_mode
 
 
 LIVE_TRACKS_FALLBACK_TIMEOUT_S = 0.10
@@ -28,12 +29,15 @@ def main():
   CP = messaging.log_from_bytes(params.get("CarParams", block=True), car.CarParams)
   cloudlog.info("plannerd got CarParams: %s", CP.brand)
 
-  # The fast path requires stable physical radar identities. Preserve the
-  # model-triggered planner for radarless and SCC-only configurations.
-  live_tracks_longitudinal = (
-    not CP.radarUnavailable
-    and params.get_int("EnableRadarTracks") >= 1
+  # The fast path requires stable physical radar identities. Radar source
+  # options are Hyundai-only; other radar-equipped brands always use front
+  # tracks, while radarless cars preserve the model-triggered planner.
+  radar_track_mode = effective_radar_track_mode(
+    CP.brand,
+    CP.radarUnavailable,
+    params.get_int("EnableRadarTracks"),
   )
+  live_tracks_longitudinal = radar_track_mode >= 1
 
   ldw = LaneDepartureWarning()
   longitudinal_planner = LongitudinalPlanner(CP)

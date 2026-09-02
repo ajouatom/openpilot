@@ -41,8 +41,9 @@ from openpilot.selfdrive.carrot.radar_motion.trajectory_cutin import (
 
 
 # modelV2 is polled at 20 Hz while liveTracks may arrive just before or after
-# the camera exposure represented by timestampEof. A 0.10 s hard edge drops a
-# valid radar cycle when normal scheduling jitter puts it at 0.101-0.113 s.
+# the camera exposure represented by timestampEof. This bounds publication
+# skew only. A vehicle's declared sensor measurement delay can legitimately be
+# larger (VW MEB uses 0.8 s) and is applied below as a position projection.
 RADAR_MOTION_MAX_TIME_SKEW_S = 0.15
 # The 0x235/0x180/0x430 object stream is one radar cycle old when emitted.
 # Keep this separate from the vehicle's front-radar delay.
@@ -389,6 +390,13 @@ class DPathRadarController:
     v_ego: float,
     radar_to_model_time_s: float,
   ) -> tuple[RadarPointSnapshot, ...]:
+    publication_skew_s = float(radar_to_model_time_s)
+    if (
+      not math.isfinite(publication_skew_s)
+      or abs(publication_skew_s) > RADAR_MOTION_MAX_TIME_SKEW_S
+    ):
+      return ()
+
     aligned: list[RadarPointSnapshot] = []
     batch: list[Any] = []
     batch_time_delta_s: float | None = None
@@ -408,9 +416,7 @@ class DPathRadarController:
         if source.rsplit(".", 1)[-1].startswith("corner")
         else self.front_radar_measurement_delay_s
       )
-      time_delta_s = radar_to_model_time_s + measurement_delay_s
-      if abs(time_delta_s) > RADAR_MOTION_MAX_TIME_SKEW_S:
-        continue
+      time_delta_s = publication_skew_s + measurement_delay_s
       if (
         batch
         and batch_time_delta_s is not None

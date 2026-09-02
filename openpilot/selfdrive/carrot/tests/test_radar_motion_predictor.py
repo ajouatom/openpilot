@@ -6573,6 +6573,32 @@ def test_live_radar_snapshot_matches_generic_capnp_adapter() -> None:
   )
 
 
+def test_front_radar_measurement_delay_projects_fresh_points() -> None:
+  controller = DPathRadarController(
+    front_radar_measurement_delay_s=0.8,
+  )
+  points = controller._points_at_model_time(
+    (Point(10, 30.0, 0.0, v_rel=-2.0),),
+    v_ego=20.0,
+    radar_to_model_time_s=-0.05,
+  )
+
+  assert len(points) == 1
+  assert points[0].d_rel == pytest.approx(28.5)
+
+
+def test_stale_radar_publication_is_rejected_before_delay_projection() -> None:
+  controller = DPathRadarController(
+    front_radar_measurement_delay_s=0.8,
+  )
+
+  assert controller._points_at_model_time(
+    (Point(10, 30.0, 0.0, v_rel=-2.0),),
+    v_ego=20.0,
+    radar_to_model_time_s=-0.8,
+  ) == ()
+
+
 def test_mode_three_uses_scc_at_any_speed_when_front_omits_lead() -> None:
   output = DPathRadarController(
     enable_radar_tracks=3,
