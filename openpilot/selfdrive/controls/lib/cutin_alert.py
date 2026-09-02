@@ -7,6 +7,9 @@ CUTIN_ALERT_REID_MAX_VREL_MPS = 2.5
 CUTIN_ALERT_SAME_ID_MAX_DREL_M = 3.0
 CUTIN_ALERT_SAME_ID_MAX_YREL_M = 1.0
 CUTIN_ALERT_SAME_ID_MAX_VREL_MPS = 5.0
+CUTIN_ALERT_PROMOTION_MAX_DREL_M = 0.1
+CUTIN_ALERT_PROMOTION_MAX_YREL_M = 0.1
+CUTIN_ALERT_PROMOTION_MAX_VREL_MPS = 0.1
 
 
 @dataclass(frozen=True)
@@ -15,6 +18,24 @@ class CutinAlertCandidate:
   d_rel: float
   y_rel: float
   v_rel: float
+
+
+def promoted_cutin_candidates(
+  candidates: tuple[CutinAlertCandidate, ...],
+  lead_two: CutinAlertCandidate | None,
+) -> tuple[CutinAlertCandidate, ...]:
+  """Return only the detected CUT-IN that was actually selected as leadTwo."""
+  if lead_two is None or lead_two.track_id < 0:
+    return ()
+  return tuple(
+    candidate for candidate in candidates
+    if (
+      candidate.track_id == lead_two.track_id
+      and abs(candidate.d_rel - lead_two.d_rel) <= CUTIN_ALERT_PROMOTION_MAX_DREL_M
+      and abs(candidate.y_rel - lead_two.y_rel) <= CUTIN_ALERT_PROMOTION_MAX_YREL_M
+      and abs(candidate.v_rel - lead_two.v_rel) <= CUTIN_ALERT_PROMOTION_MAX_VREL_MPS
+    )
+  )
 
 
 class CutinAlertTracker:

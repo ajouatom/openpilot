@@ -143,7 +143,7 @@ An arbitrary log outside the maintained list can be opened directly as a module.
 
 ## Radar detection sounds
 
-When openpilot is enabled, a newly confirmed cut-in plays a two-tone cue. A continuously tracked object sounds only once. On the speakerless C3X Lite, the same event uses a GPIO buzzer pattern. The cue reports the selected existing-radard result; it does not change lead selection or longitudinal control. A higher-priority safety alert can take precedence.
+When openpilot is enabled, a two-tone cue plays only when a confirmed cut-in is actually promoted to `leadTwo`. Detection as a cut-in candidate stays silent unless that vehicle is selected as `leadTwo`, and a continuously tracked `leadTwo` sounds only once. On the speakerless C3X Lite, the same event uses a GPIO buzzer pattern. The cue reports the selected radar result; it does not change lead selection or longitudinal control. A higher-priority safety alert can take precedence.
 
 ## Relationship to harness presets
 
