@@ -106,9 +106,20 @@ def recv_one_retry(sock: SubSocket) -> capnp.lib.capnp._DynamicStructReader:
 
 class FrequencyTracker:
   def __init__(self, service_freq: float, update_freq: float, is_poll: bool,
-               min_update_freq: Optional[float] = None):
+               min_update_freq: Optional[float] = None,
+               service_freq_range: Optional[tuple[float, float]] = None):
     freq = max(min(service_freq, update_freq), 1.)
-    if is_poll:
+    if service_freq_range is not None:
+      service_min_freq, service_max_freq = service_freq_range
+      if is_poll:
+        min_freq = service_min_freq
+        max_freq = service_max_freq
+      else:
+        # A non-polled, conflated socket cannot be observed faster than the
+        # SubMaster update loop, but retains the source's slower lower bound.
+        min_freq = min(service_min_freq, update_freq)
+        max_freq = min(service_max_freq, update_freq)
+    elif is_poll:
       min_freq = max_freq = freq
     elif min_update_freq is not None:
       # Multiple poll sockets can wake together or independently. A conflated
@@ -221,6 +232,7 @@ class SubMaster:
         (max(SERVICE_LIST[p].frequency for p in polled_services)
          if multiple_poll_services and s in self.non_polled_services
          else None),
+        SERVICE_LIST[s].frequency_range,
       )
 
   def __getitem__(self, s: str) -> capnp.lib.capnp._DynamicStructReader:
