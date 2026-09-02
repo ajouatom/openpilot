@@ -96,6 +96,18 @@ function show_agnos_update_failure {
   python3 "$DIR/openpilot/system/ui/text.py" "$message" || true
 }
 
+function agnos_version_is_compatible {
+  local current_version="$1"
+  local compatible_version
+
+  for compatible_version in ${AGNOS_COMPATIBLE_VERSIONS:-$AGNOS_VERSION}; do
+    if [ "$current_version" = "$compatible_version" ]; then
+      return 0
+    fi
+  done
+  return 1
+}
+
 function agnos_init {
   # TODO: move this to agnos
   sudo rm -f /data/etc/NetworkManager/system-connections/*.nmmeta
@@ -110,8 +122,12 @@ function agnos_init {
 
   export AGNOS_UPDATE_CONFIRMATION_FILE="${AGNOS_UPDATE_CONFIRMATION_FILE:-/data/agnos-update-confirmed}"
 
-  # Check if AGNOS update is required
-  if [ "$(< /VERSION)" != "$AGNOS_VERSION" ]; then
+  local CURRENT_AGNOS_VERSION
+  CURRENT_AGNOS_VERSION="$(< /VERSION)"
+
+  # Check if AGNOS update is required. Keep already-deployed carrot images
+  # bootable, but do not force that experimental kernel onto clean C4 setups.
+  if ! agnos_version_is_compatible "$CURRENT_AGNOS_VERSION"; then
     AGNOS_PY="$DIR/openpilot/system/hardware/tici/agnos.py"
     MANIFEST="$DIR/openpilot/system/hardware/tici/agnos.json"
     MODEL="$(tr -d '\000\r\n' 2>/dev/null < /sys/firmware/devicetree/base/model | tr '[:upper:]' '[:lower:]')"
