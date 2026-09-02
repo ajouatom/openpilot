@@ -757,10 +757,13 @@ class CarState(CarStateBase):
               self.vehicleNaviSpeedZoneActive = True
               self.vehicleNaviSpeedZoneSpeed = event[1]
             if self.vehicleNaviSchoolZoneControl:
-              if event[1] == 30 and not on_controlled_access_road:
+              # 0x77 describes a generic 30 km/h zone and also appears outside
+              # school zones. Only use it for the school cap while 0x4A3
+              # independently confirms an active 30 km/h camera/zone.
+              if event[1] == 30 and speed_limit_cam and ret.speedLimit == 30 and not on_controlled_access_road:
                 self.vehicleNaviSchoolZoneActive = True
                 self.vehicleNaviSchoolZoneStartDistance = self.totalDistance
-                self.vehicleNaviSchoolZoneUsesCameraStatus = speed_limit_cam and ret.speedLimit == 30
+                self.vehicleNaviSchoolZoneUsesCameraStatus = True
               else:
                 self._clear_vehicle_navi_school_zone()
           elif self.vehicleNaviCanControl and (not on_controlled_access_road or
