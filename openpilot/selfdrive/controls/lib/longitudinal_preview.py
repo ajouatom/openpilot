@@ -121,11 +121,17 @@ def clip_lead_accel_response_level(level: int) -> int:
 
 def lead_accel_response_allowed(level: int, *, v_rel: float, gap_margin: float,
                                 lead_accel_signal: float) -> bool:
-  """Allow TF1 acceleration preview only with distance and closing-speed margin."""
-  tuning = LEAD_ACCEL_RESPONSE_TUNING.get(clip_lead_accel_response_level(level))
+  """Allow TF1 acceleration preview with a bounded closing-speed check."""
+  response_level = clip_lead_accel_response_level(level)
+  tuning = LEAD_ACCEL_RESPONSE_TUNING.get(response_level)
   if tuning is None or not all(math.isfinite(value) for value in (v_rel, gap_margin, lead_accel_signal)):
     return False
-  if gap_margin < 0.0 or lead_accel_signal <= 0.0 or v_rel < tuning.closing_speed_floor:
+  # Level 5 is the driver's explicit close-following test mode. It may start
+  # following an accelerating lead from inside the MPC target gap; the
+  # predicted-relative-speed check below still has to show the lead pulling
+  # away before acceleration is added.
+  inside_target_gap = gap_margin < 0.0 and response_level < LEAD_ACCEL_RESPONSE_MAX
+  if inside_target_gap or lead_accel_signal <= 0.0 or v_rel < tuning.closing_speed_floor:
     return False
 
   predicted_v_rel = float(v_rel) + float(lead_accel_signal) * tuning.prediction_horizon
@@ -241,8 +247,14 @@ def apply_preview_target(
     return base
 
   response_tuning = LEAD_ACCEL_RESPONSE_TUNING.get(clip_lead_accel_response_level(accel_response_level))
+  response_level = clip_lead_accel_response_level(accel_response_level)
+  forceful_response = response_level == LEAD_ACCEL_RESPONSE_MAX
+  conservative_gates_pass = base >= 0.0 and ego_not_braking and candidate >= base
   if (accel_response_active and response_tuning is not None and lead_accel_signal > 0.0 and
-      base >= 0.0 and ego_not_braking and candidate >= base):
+      (forceful_response or conservative_gates_pass)):
+    # Level 5's direct feed-forward remains useful even while the MPC
+    # trajectory is still releasing braking. Lower levels retain the
+    # conservative current-acceleration and rising-trajectory gates.
     target = max(base, candidate) + max(0.0, float(accel_boost))
     target = min(target, base + response_tuning.target_delta_max, float(accel_max))
     return float(max(base, target))

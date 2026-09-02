@@ -187,6 +187,8 @@ For a positive value of 20, the time gap is 80% of base at 0 km/h, 90% at 50 km/
 
 Negative modes build a speed table and then apply personality multipliers of ×1.0, ×1.3, ×1.6, and ×2.0. The result is clamped back to the four values' minimum/maximum, so large multipliers may stop near `TFollowGap4`.
 
+Selecting following-distance level 1 with `LeadAccelResponse=5` while tracking a lead is an experimental exception. During acceleration or steady driving, `TFollowGap1` takes priority over positive or negative `EnableSpeedTF` adjustments and Eco/Safe gap factors. It does not change the no-lead cruise target; deceleration hold, `TFollowDecelBoost`, lane-change, and `DynamicTFollow` adjustments can still apply afterward.
+
 ### `DynamicTFollow`
 
 Range 0–100, step 1; zero disables it. It changes time gap from lead jerk `jLead`:
@@ -225,7 +227,7 @@ For a clean baseline, use `EnableSpeedTF=0`, `DynamicTFollow=0`, `DynamicTFollow
 
 ### `LeadAccelResponse`
 
-When the lead starts or accelerates faster than the ego vehicle, this setting samples a slightly later point in the MPC trajectory to raise the acceleration target. It operates **only with following-distance level 1 (aggressive/TF1)**. Its level tuning is the same in Eco, Safe, Normal, and High-speed modes, although the final command remains bounded by each mode's acceleration envelope, curve limit, and vehicle safety limits.
+When the lead starts or accelerates faster than the ego vehicle, this setting samples a slightly later point in the MPC trajectory to raise the acceleration target. It operates **only with following-distance level 1 (aggressive/TF1)**. On openpilot-longitudinal vehicles that cannot report `pcmCruiseGap`, it uses the selected level-1 personality instead. Its level tuning is the same in Eco, Safe, Normal, and High-speed modes, although the final command remains bounded by each mode's acceleration envelope, curve limit, and vehicle safety limits.
 
 | Value | UI meaning | Maximum preview | Maximum increase over the base acceleration target |
 |---:|---|---:|---:|
@@ -236,17 +238,18 @@ When the lead starts or accelerates faster than the ego vehicle, this setting sa
 | `4` | Very agile | 0.25 s | 0.32 m/s² |
 | `5` | Immediate (test) | 0.35 s | 0.45 m/s² |
 
-Level 5 is an intentionally forceful test level. It can add a separately rate-limited boost of up to `0.25 m/s²`, still inside the table's total `0.45 m/s²` increase limit and the vehicle's final acceleration ceiling.
+Level 5 is an intentionally forceful test level. It fixes the acceleration/steady-state TF1 target to `TFollowGap1` and, when the lead is predicted to pull away, may raise the base acceleration target while inside the normal target gap or while releasing deceleration. It can add a separately rate-limited boost of up to `0.25 m/s²`, still inside the table's total `0.45 m/s²` increase limit and the vehicle's final acceleration ceiling.
 
-A nonzero value responds only when all of these gates pass:
+A nonzero value responds only when all of these common gates pass:
 
 - The normal ACC planner is active, no stop is requested, and the driver is not pressing the accelerator.
 - MPC selected a real radar lead, and the same radar track has been observed for at least three consecutive updates.
-- Measured lead distance is at least the base desired distance, leaving positive gap margin.
-- Relative lead acceleration exceeds the `0.1 m/s²` deadband and the level-specific relative-speed check does not indicate a closing risk.
-- The ego vehicle and base MPC target are not decelerating, and the preview target is no lower than the base target.
+- Relative lead acceleration exceeds the `0.1 m/s²` deadband.
+- Current relative speed plus predicted lead acceleration shows the lead pulling away while respecting the level-specific relative-speed floor.
 
-It therefore does not change the target time gap, response to lead braking, or stopping behavior. It is inactive with the experimental blended planner, a vision-only lead, and following-distance levels 2–4. Start at level 1 and raise one step at a time while checking launch following and unintended acceleration.
+Levels 1–4 also require measured lead distance at or beyond the base desired distance, no current ego or base-MPC deceleration, and a preview target no lower than the base target. Only level 5 relaxes those three gates so it can release braking earlier as the lead pulls away.
+
+Levels 1–4 do not change the target time gap, response to lead braking, or stopping behavior. Level 5 includes the TF1 target exception and bounded early braking release described above. Every level remains inactive with the experimental blended planner, a vision-only lead, and following-distance levels 2–4. Use level 5 only when you can verify that short-gap starts do not cause unwanted acceleration.
 
 ### `RadarReactionFactor`
 

@@ -9,6 +9,7 @@ from openpilot.common.constants import CV
 from openpilot.common.filter_simple import MyMovingAverage
 from openpilot.selfdrive.carrot.t_follow import get_t_follow_mode_factor, get_t_follow_mode_max, ramp_t_follow
 from openpilot.selfdrive.carrot.traffic_stop import is_traffic_stop_entry_allowed
+from openpilot.selfdrive.controls.lib.longitudinal_preview import LEAD_ACCEL_RESPONSE_MAX
 from openpilot.selfdrive.selfdrived.events import Events
 
 EventName = log.OnroadEvent.EventName
@@ -300,13 +301,24 @@ class CarrotPlanner:
     tf_max = get_t_follow_mode_max(tf_max, self.myTFollowFactor, self._tf_decel_extra)
     return float(np.clip(t_follow, max(0.3, tf_min), tf_max))
 
-  def get_T_FOLLOW(self, personality=log.LongitudinalPersonality.standard, v_ego=0.0, a_ego=0.0):
-    tf_base = self._get_base_t_follow(personality, v_ego)
-    tf_target = self._apply_speed_t_follow_scale(tf_base, v_ego)
-    # Keep the target, deceleration hold state and applied state in the same
-    # mode-scaled domain. Applying the mode factor after the hold compounded
-    # Safe's 1.2 factor every cycle while decelerating.
-    tf_mode_target = float(tf_target * self.myTFollowFactor)
+  def get_T_FOLLOW(self, personality=log.LongitudinalPersonality.standard, v_ego=0.0, a_ego=0.0, lead_status=False):
+    force_tf1_target = (
+      lead_status
+      and personality == log.LongitudinalPersonality.aggressive
+      and self.leadAccelResponse == LEAD_ACCEL_RESPONSE_MAX
+    )
+    if force_tf1_target:
+      # Level 5 is the explicit close-following test mode. Keep the driver's
+      # selected Gap 1 target authoritative during acceleration even when a
+      # speed table or automatic Safe mode would otherwise enlarge it.
+      tf_mode_target = float(self.tFollowGap1)
+    else:
+      tf_base = self._get_base_t_follow(personality, v_ego)
+      tf_target = self._apply_speed_t_follow_scale(tf_base, v_ego)
+      # Keep the target, deceleration hold state and applied state in the same
+      # mode-scaled domain. Applying the mode factor after the hold compounded
+      # Safe's 1.2 factor every cycle while decelerating.
+      tf_mode_target = float(tf_target * self.myTFollowFactor)
     tf_adjusted = self._apply_decel_hold_and_boost_t_follow(tf_mode_target, a_ego)
     tf_final = self._clip_t_follow(tf_adjusted)
     self._tf_applied = float(tf_final)
