@@ -119,6 +119,27 @@ def test_matching_stable_track_refreshes_only_longitudinal_kinematics():
   assert state.leadOne.dRel == pytest.approx(20.0)
 
 
+def test_large_declared_front_radar_delay_is_supported():
+  state = make_radar_state(
+    lead_one_d_rel=19.2,
+    lead_one_v_rel=-1.0,
+  )
+  data = make_radar_data({
+    "d_rel": 20.0,
+    "v_rel": -1.0,
+    "a_lead": 0.0,
+    "j_lead": 0.0,
+  })
+  overlay = FastRadarOverlay(front_radar_delay_s=0.8)
+  radar_mono_ns = confirm_selection(overlay, state)
+
+  result = build(overlay, state, data, radar_mono_ns)
+
+  assert result.lead_mask == LEAD_ONE_MASK
+  assert result.lead_one_reason == "active"
+  assert result.radar_state.leadOne.dRel == pytest.approx(19.2)
+
+
 @pytest.mark.parametrize(
   ("data", "reason"),
   [
