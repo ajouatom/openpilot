@@ -207,18 +207,11 @@ def handle_agnos_update() -> None:
   from openpilot.system.hardware.tici.agnos import flash_agnos_update, get_target_slot_number
 
   cur_version = HARDWARE.get_os_version()
-  version_config = run([
-    "bash", "-c",
-    r"""unset AGNOS_VERSION AGNOS_COMPATIBLE_VERSIONS
-source launch_env.sh
-printf '%s\n%s\n' "$AGNOS_VERSION" "${AGNOS_COMPATIBLE_VERSIONS:-$AGNOS_VERSION}"
-""",
-  ], OVERLAY_MERGED).splitlines()
-  updated_version = version_config[0]
-  compatible_versions = version_config[1].split() if len(version_config) > 1 else [updated_version]
+  updated_version = run(["bash", "-c", r"unset AGNOS_VERSION && source launch_env.sh && \
+                          echo -n $AGNOS_VERSION"], OVERLAY_MERGED).strip()
 
-  cloudlog.info(f"AGNOS version check: {cur_version} vs {updated_version}; compatible={compatible_versions}")
-  if cur_version in compatible_versions:
+  cloudlog.info(f"AGNOS version check: {cur_version} vs {updated_version}")
+  if cur_version == updated_version:
     return
 
   # prevent an openpilot getting swapped in with a mismatched or partially downloaded agnos

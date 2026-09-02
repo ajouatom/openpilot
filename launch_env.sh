@@ -16,13 +16,7 @@ export VECLIB_MAXIMUM_THREADS=1
 export QCOM_PRIORITY=12
 
 if [ -z "$AGNOS_VERSION" ]; then
-  # Keep fresh C3X/C4 installs on comma's production AGNOS. The optional
-  # carrot image contains an experimental USB-PD kernel and must not be rolled
-  # out implicitly from the custom software installer.
-  export AGNOS_VERSION="19.6"
-  export AGNOS_COMPATIBLE_VERSIONS="19.6 19.6.3-carrot"
-else
-  export AGNOS_COMPATIBLE_VERSIONS="${AGNOS_COMPATIBLE_VERSIONS:-$AGNOS_VERSION}"
+  export AGNOS_VERSION="19.6.3-carrot"
 fi
 
 export STAGING_ROOT="/data/safe_staging"
