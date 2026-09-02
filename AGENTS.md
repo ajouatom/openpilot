@@ -88,8 +88,13 @@
 
 - Do not create or edit files under `docs/user/ko/` or `docs/user/en/` unless the user explicitly
   requests user-documentation work. User-visible code changes alone do not authorize guide edits.
-- Keep setting-level explanations in the generated GitHub Wiki workflow and web-only explanations
-  in the localized UI instead of duplicating them into `docs/user/` by default.
+- The user has explicitly requested that every user-visible setting addition, removal, or behavior
+  change update the relevant Korean and English user guides in the same change. Treat setting work
+  as user-documentation work, keep the catalog summary and detailed guide synchronized with the
+  implementation, and run the user-docs validator.
+- Also keep setting-level explanations in the generated GitHub Wiki workflow. Keep explanations
+  specific to web-only features in the localized UI instead of duplicating web internals into
+  `docs/user/`.
 - `docs/user/docs_map.json` and `tools/docs/check_user_docs.py` are validation aids, not instructions
   to generate documentation. For an ordinary code pull request without explicitly requested docs,
   record a concrete `Docs-Not-Needed: <reason>` in the PR body when the workflow requires it.

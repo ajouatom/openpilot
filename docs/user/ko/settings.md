@@ -173,7 +173,7 @@ Carrot Web 설정 화면에서는 다음 기능을 사용할 수 있습니다.
 
 `TrafficLightDetectMode`는 `0` 미사용, `1` 정지만 감지, `2` 정지와 출발을 모두 감지합니다. 모델 판단에 의존하므로 운전자가 항상 직접 확인해야 합니다.
 
-### 크루즈·차간 — 30개
+### 크루즈·차간 — 31개
 
 아래 표의 **세부 구역 제목을 누르면** 실제 코드 기준의 계산 방식, 값의 방향과 주의사항을 설명한 페이지로 이동합니다.
 
@@ -184,12 +184,14 @@ Carrot Web 설정 화면에서는 다음 기능을 사용할 수 있습니다.
 | [정차·재출발](cruise-gap.md#stop-resume) | `StopDistanceCarrot`, `StoppingAccel`, `VEgoStopping`, `AChangeCostStarting` | 정지 위치, 정지 진입과 재출발 특성 |
 | [가감속 튜닝](cruise-gap.md#longitudinal-tuning) | `LongTuningKpV`, `LongTuningKiV`, `LongTuningKf`, `LongActuatorDelay` | 종방향 제어 계수와 차량 반응 지연 |
 | [차간거리](cruise-gap.md#following-gap) | `TFollowGap1`, `TFollowGap2`, `TFollowGap3`, `TFollowGap4`, `DynamicTFollow`, `DynamicTFollowLC`, `EnableSpeedTF`, `TFollowDecelBoost` | 차간 단계별 시간, 동적 차간과 감속 여유 |
-| [선행차 반응](cruise-gap.md#lead-response) | `JLeadFactor3`, `RadarReactionFactor` | 선행차 변화에 대한 반응 특성 |
+| [선행차 반응](cruise-gap.md#lead-response) | `LeadAccelResponse`, `JLeadFactor3`, `RadarReactionFactor` | TF1 앞차 가속과 선행차 변화에 대한 반응 특성 |
 | [당근 크루즈](cruise-gap.md#carrot-cruise) | `CruiseEcoControl`, `CarrotCruiseDecel`, `CarrotCruiseAtcDecel` | 연비 제어와 당근 크루즈 감속 특성 |
 
 `MyDrivingMode`는 `1` 연비, `2` 안전, `3` 일반, `4` 고속 모드입니다. 고속 모드는 신호 감지를 무시하고 가속 성향을 높이므로 모드 이름만 보고 선택하지 말고 설명을 확인하세요.
 
 `TFollowGap1`~`TFollowGap4`는 저장값에 `0.01초`를 곱한 시간 간격입니다. 값을 줄이면 선행차와 가까워집니다. `DynamicTFollow` 관련 기능은 고정 차간에서 기준 동작을 확인한 다음 적용하세요.
+
+`LeadAccelResponse`는 차간 1단계에서만 앞차의 출발·가속을 따라가는 민첩성을 0~5단계로 조절합니다. 목표 차간이나 감속 반응은 바꾸지 않으며 5단계는 시험용 강한 반응입니다. 적용 조건과 단계별 제한은 [선행차 반응 설명](cruise-gap.md#lead-response)을 확인하세요.
 
 `LongTuning*`, `LongActuatorDelay`, `StoppingAccel`은 openpilot이 가감속을 제어하는 차량에서 직접적인 영향을 줄 수 있는 고급 항목입니다. 순정 ACC 차량에서는 관련 없는 항목도 있습니다.
 
