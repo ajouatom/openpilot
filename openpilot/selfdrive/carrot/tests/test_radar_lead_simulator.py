@@ -24,6 +24,7 @@ from openpilot.selfdrive.carrot.radar.tools.radar_lead_simulator import (
   candidate_track_id,
   confirmed_cutin_overlap_at,
   corner_radar_display_points,
+  cutin_lead_two_promotion_events,
   frame_value_continuity_segments,
   front_only_frames,
   front_radar_display_points,
@@ -546,6 +547,54 @@ def test_predecel_and_confirmed_cutin_are_distinct_review_events() -> None:
   assert events[2] == ("물리 예측 CUT-IN corner id 2091 진입 0.79 이탈 0.00",)
 
 
+def test_cutin_candidate_does_not_pause_until_it_is_promoted_to_lead_two() -> None:
+  frames = [frame((), time_s=index * 0.1) for index in range(4)]
+  cutin = Candidate(
+    2015,
+    0.79,
+    "physical corner dPath shadow",
+    d_rel=9.8,
+    y_rel=-0.13,
+    v_lead=9.1,
+    source="corner180",
+  )
+  selections = (
+    Selection(None, None, decision_cutin_candidates=(cutin,)),
+    Selection(None, None, decision_cutin_candidates=(cutin,)),
+    Selection(None, cutin, decision_cutin_candidates=(cutin,)),
+    Selection(None, cutin, decision_cutin_candidates=(cutin,)),
+  )
+  selector = SimpleNamespace(
+    select=lambda _frame, index: selections[index],
+  )
+
+  events = cutin_lead_two_promotion_events(frames, selector)
+
+  assert events == {2: ("알림음 L2 승격 corner id 2015",)}
+
+
+def test_non_cutin_lead_two_does_not_create_sound_pause() -> None:
+  frames = [frame((), time_s=0.0)]
+  cutin = Candidate(
+    2015,
+    0.79,
+    "physical corner dPath shadow",
+    d_rel=9.8,
+    y_rel=-0.13,
+    v_lead=9.1,
+    source="corner180",
+  )
+  other_lead_two = replace(cutin, track_id=49, d_rel=14.0, y_rel=0.0)
+  selection = Selection(
+    None,
+    other_lead_two,
+    decision_cutin_candidates=(cutin,),
+  )
+  selector = SimpleNamespace(select=lambda _frame, _index: selection)
+
+  assert cutin_lead_two_promotion_events(frames, selector) == {}
+
+
 def test_validation_threshold_is_passed_to_physical_decision_tracker() -> None:
   selector = RadarMotionShadowSelector(
     [frame((point(10, 30.0, 0.0),))],
@@ -970,7 +1019,10 @@ def test_predictor_event_pause_seeks_to_first_unhandled_marker() -> None:
   ui.index = 3
   ui.playback_time = 0.3
   ui.paused = False
-  ui.events = {1: ("CUT-IN id 10",), 2: ("CUT-IN id 11",)}
+  ui.events = {
+    1: ("알림음 L2 승격 corner id 10",),
+    2: ("알림음 L2 승격 front id 11",),
+  }
   ui.handled_events = set()
   ui.status = ""
 
@@ -979,7 +1031,7 @@ def test_predictor_event_pause_seeks_to_first_unhandled_marker() -> None:
   assert ui.playback_time == 0.1
   assert ui.paused
   assert ui.handled_events == {1}
-  assert ui.status == "자동 일시정지 @0.10초: CUT-IN id 10"
+  assert ui.status == "자동 일시정지 @0.10초: 알림음 L2 승격 corner id 10"
 
 
 def test_manual_seek_rearms_future_predictor_pauses() -> None:
@@ -997,7 +1049,7 @@ def test_manual_seek_rearms_future_predictor_pauses() -> None:
 
   assert ui.index == 1
   assert ui.handled_events == set()
-  assert "자동정지 재설정됨" in ui.status
+  assert "L2 승격 알림음 자동정지 재설정됨" in ui.status
 
 
 def test_birds_eye_radar_positive_left_is_drawn_left_of_ego() -> None:
