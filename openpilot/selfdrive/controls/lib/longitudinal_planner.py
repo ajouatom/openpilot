@@ -441,6 +441,7 @@ class LongitudinalPlanner:
     longitudinalPlan.leadPreviewActionTime = float(self.lead_preview_action_time)
     longitudinalPlan.leadPreviewAccel = float(self.lead_preview_accel)
     longitudinalPlan.aChangeCost = float(self.mpc.a_change_cost)
+    longitudinalPlan.trafficStopModelLeadOffset = float(carrot.trafficStopModelLeadOffset)
     longitudinalPlan.vTargetNow = float(self.output_v_target_now)
     longitudinalPlan.jTargetNow = float(self.output_j_target_now)
     longitudinalPlan.shouldStop = bool(self.output_should_stop)

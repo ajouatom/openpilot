@@ -103,7 +103,7 @@ Range 400–1000 cm, step 10 cm. The code divides by 100 and uses it as the fixe
 
     ego braking distance + time gap × ego speed + StopDistance - lead braking distance
 
-It is therefore not the actual moving following distance. Its direct effect is clearest near zero speed behind a stopped lead. Although the catalog description says “stop position ×0.8,” the running code does not apply 0.8.
+It is therefore not the actual moving following distance. Its direct effect is clearest near zero speed behind a stopped lead. When there is no active `leadOne` but the camera model consistently associates a stationary vehicle with the E2E stop endpoint, the planner first corrects that endpoint toward the inferred vehicle position and then applies this fixed clearance. No SCC/radar object is created. Although the catalog description says “stop position ×0.8,” the running code does not apply 0.8.
 
 ### `StoppingAccel`
 
