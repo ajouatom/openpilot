@@ -1,4 +1,7 @@
 import ast
+import runpy
+import sys
+import types
 from pathlib import Path
 
 from openpilot.common.basedir import BASEDIR
@@ -43,7 +46,13 @@ def test_standalone_widgets_tolerate_a_stale_params_registry() -> None:
     node for node in ast.walk(tree)
     if isinstance(node, ast.ImportFrom) and node.module == "openpilot.common.params"
   )
+  params_try = next(node for node in ast.walk(tree) if isinstance(node, ast.Try) and params_import in node.body)
   import_try = next(node for node in ast.walk(tree) if isinstance(node, ast.Try) and device_import in node.body)
+  params_handled_names = {
+    handler.type.id
+    for handler in params_try.handlers
+    if isinstance(handler.type, ast.Name)
+  }
   handled_names = {
     exception.id
     for handler in import_try.handlers
@@ -53,7 +62,25 @@ def test_standalone_widgets_tolerate_a_stale_params_registry() -> None:
   }
 
   assert "UnknownKeyName" in {alias.name for alias in params_import.names}
+  assert "ImportError" in params_handled_names
   assert {"ImportError", "UnknownKeyName"} <= handled_names
+
+
+def test_standalone_widgets_tolerate_missing_params_binary(monkeypatch) -> None:
+  widgets = Path(BASEDIR) / "openpilot/system/ui/widgets/__init__.py"
+  pyray = types.ModuleType("pyray")
+  application = types.ModuleType("openpilot.system.ui.lib.application")
+  application.gui_app = object()
+  application.MousePos = object
+  application.MAX_TOUCH_SLOTS = 2
+  application.MouseEvent = object
+
+  monkeypatch.setitem(sys.modules, "pyray", pyray)
+  monkeypatch.setitem(sys.modules, "openpilot.system.ui.lib.application", application)
+  monkeypatch.setitem(sys.modules, "openpilot.common.params", None)
+
+  namespace = runpy.run_path(str(widgets))
+  assert namespace["device"].awake
 
 
 def test_tici_updater_only_installs_after_button_confirmation() -> None:
