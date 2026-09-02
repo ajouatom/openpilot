@@ -9,7 +9,7 @@ from openpilot.common.constants import CV
 from openpilot.common.filter_simple import MyMovingAverage
 from openpilot.selfdrive.carrot.t_follow import get_t_follow_mode_factor, get_t_follow_mode_max, ramp_t_follow
 from openpilot.selfdrive.carrot.traffic_stop import is_traffic_stop_entry_allowed
-from openpilot.selfdrive.controls.lib.longitudinal_preview import LEAD_ACCEL_RESPONSE_MAX
+from openpilot.selfdrive.controls.lib.longitudinal_preview import LEAD_ACCEL_DEADBAND, LEAD_ACCEL_RESPONSE_MAX
 from openpilot.selfdrive.selfdrived.events import Events
 
 EventName = log.OnroadEvent.EventName
@@ -301,16 +301,20 @@ class CarrotPlanner:
     tf_max = get_t_follow_mode_max(tf_max, self.myTFollowFactor, self._tf_decel_extra)
     return float(np.clip(t_follow, max(0.3, tf_min), tf_max))
 
-  def get_T_FOLLOW(self, personality=log.LongitudinalPersonality.standard, v_ego=0.0, a_ego=0.0, lead_status=False):
+  def get_T_FOLLOW(self, personality=log.LongitudinalPersonality.standard, v_ego=0.0, a_ego=0.0,
+                   lead_status=False, lead_accel=0.0):
     force_tf1_target = (
       lead_status
+      and np.isfinite(lead_accel)
+      and lead_accel > LEAD_ACCEL_DEADBAND
       and personality == log.LongitudinalPersonality.aggressive
       and self.leadAccelResponse == LEAD_ACCEL_RESPONSE_MAX
     )
     if force_tf1_target:
       # Level 5 is the explicit close-following test mode. Keep the driver's
-      # selected Gap 1 target authoritative during acceleration even when a
-      # speed table or automatic Safe mode would otherwise enlarge it.
+      # selected Gap 1 target authoritative only while the controlling lead
+      # is positively accelerating. A neutral/decelerating lead immediately
+      # returns to the normal speed-table and drive-mode target.
       tf_mode_target = float(self.tFollowGap1)
     else:
       tf_base = self._get_base_t_follow(personality, v_ego)

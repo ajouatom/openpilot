@@ -69,6 +69,15 @@ def test_tf1_acceleration_response_is_equal_in_every_drive_mode(mode, level):
   assert result.offset_s == pytest.approx(min(1.0 * tuning.preview_factor, tuning.preview_max))
 
 
+def test_response_levels_rise_monotonically_from_gentle_to_tracking():
+  tunings = [LEAD_ACCEL_RESPONSE_TUNING[level] for level in range(1, 6)]
+  assert [t.preview_max for t in tunings] == sorted(t.preview_max for t in tunings)
+  assert [t.target_delta_max for t in tunings] == sorted(t.target_delta_max for t in tunings)
+  assert [t.gap_margin_floor for t in tunings] == sorted(
+    (t.gap_margin_floor for t in tunings), reverse=True,
+  )
+
+
 def test_only_level_five_adds_direct_alead_boost():
   for level in range(1, 5):
     result = request(DRIVING_MODE_NORMAL, 2.0, accel_response_level=level,
@@ -77,22 +86,44 @@ def test_only_level_five_adds_direct_alead_boost():
 
   result = request(DRIVING_MODE_NORMAL, 2.0, accel_response_level=5,
                    accel_response_enabled=True, v_rel=0.0, gap_margin=1.0)
-  assert result.accel_boost_target == pytest.approx(0.25)
+  assert result.accel_boost_target == pytest.approx(0.50)
 
 
 def test_acceleration_response_requires_gap_and_relative_speed_margin():
-  assert not lead_accel_response_allowed(4, v_rel=0.0, gap_margin=-0.01, lead_accel_signal=1.0)
-  assert not lead_accel_response_allowed(5, v_rel=-0.41, gap_margin=1.0, lead_accel_signal=1.0)
-  assert not lead_accel_response_allowed(5, v_rel=-0.40, gap_margin=1.0, lead_accel_signal=0.5)
-  assert lead_accel_response_allowed(5, v_rel=-0.40, gap_margin=1.0, lead_accel_signal=0.8)
-  assert not lead_accel_response_allowed(1, v_rel=-0.01, gap_margin=1.0, lead_accel_signal=2.0)
-  assert lead_accel_response_allowed(1, v_rel=0.0, gap_margin=0.0, lead_accel_signal=0.1)
+  assert not lead_accel_response_allowed(1, v_rel=0.0, gap_margin=-0.01, lead_accel_signal=1.0, a_lead=1.0)
+  assert lead_accel_response_allowed(3, v_rel=0.0, gap_margin=-2.00, lead_accel_signal=1.0, a_lead=1.0)
+  assert not lead_accel_response_allowed(3, v_rel=0.0, gap_margin=-2.01, lead_accel_signal=1.0, a_lead=1.0)
+  assert not lead_accel_response_allowed(5, v_rel=-0.21, gap_margin=1.0, lead_accel_signal=1.0, a_lead=1.0)
+  assert not lead_accel_response_allowed(5, v_rel=-0.20, gap_margin=1.0, lead_accel_signal=0.3, a_lead=1.0)
+  assert lead_accel_response_allowed(5, v_rel=-0.20, gap_margin=1.0, lead_accel_signal=0.4, a_lead=1.0)
+  assert not lead_accel_response_allowed(1, v_rel=-0.01, gap_margin=1.0, lead_accel_signal=2.0, a_lead=2.0)
+  assert lead_accel_response_allowed(1, v_rel=0.0, gap_margin=0.0, lead_accel_signal=0.1, a_lead=0.2)
 
 
 def test_level_five_can_follow_from_inside_target_gap_when_lead_is_pulling_away():
-  assert not lead_accel_response_allowed(4, v_rel=0.0, gap_margin=-5.0, lead_accel_signal=1.0)
-  assert lead_accel_response_allowed(5, v_rel=0.0, gap_margin=-5.0, lead_accel_signal=1.0)
-  assert not lead_accel_response_allowed(5, v_rel=-0.5, gap_margin=-5.0, lead_accel_signal=1.0)
+  assert not lead_accel_response_allowed(4, v_rel=0.0, gap_margin=-5.0, lead_accel_signal=1.0, a_lead=1.0)
+  assert lead_accel_response_allowed(5, v_rel=0.0, gap_margin=-5.0, lead_accel_signal=1.0, a_lead=1.0)
+  assert not lead_accel_response_allowed(5, v_rel=-0.5, gap_margin=-5.0, lead_accel_signal=1.0, a_lead=1.0)
+
+
+def test_level_five_requires_positive_raw_lead_acceleration():
+  assert not lead_accel_response_allowed(5, v_rel=0.5, gap_margin=1.0, lead_accel_signal=0.5, a_lead=0.0)
+  assert not request(
+    DRIVING_MODE_NORMAL, 0.0, a_ego=-0.5,
+    accel_response_level=5, accel_response_enabled=True,
+    v_rel=0.5, gap_margin=1.0,
+  ).accel_response_active
+
+
+def test_level_five_keeps_tracking_while_lead_acceleration_remains_positive():
+  result = request(
+    DRIVING_MODE_NORMAL, 0.6, a_ego=0.6,
+    accel_response_level=5, accel_response_enabled=True,
+    v_rel=0.2, gap_margin=-5.0,
+  )
+  assert result.accel_response_active
+  assert result.offset_s == pytest.approx(0.55)
+  assert result.accel_boost_target == pytest.approx(0.30)
 
 
 @pytest.mark.parametrize(("mode", "preview_max"), [
@@ -151,9 +182,11 @@ def test_preview_rate_and_action_time_are_bounded():
 
 
 def test_level_five_boost_has_fast_attack_and_slower_release():
-  assert rate_limit_accel_boost(0.25, 0.0, 0.08) == pytest.approx(0.08)
-  assert rate_limit_accel_boost(0.25, 0.08, 0.08) == pytest.approx(0.16)
-  assert rate_limit_accel_boost(0.0, 0.16, 0.08) == pytest.approx(0.12)
+  tuning = LEAD_ACCEL_RESPONSE_TUNING[5]
+  assert rate_limit_accel_boost(tuning.boost_max, 0.0, tuning.boost_attack_step) == pytest.approx(0.20)
+  assert rate_limit_accel_boost(tuning.boost_max, 0.20, tuning.boost_attack_step) == pytest.approx(0.40)
+  assert rate_limit_accel_boost(0.0, 0.40, tuning.boost_attack_step) == pytest.approx(0.36)
+  assert rate_limit_accel_boost(0.0, 0.40, tuning.boost_attack_step, immediate_release=True) == 0.0
 
 
 def test_zero_preview_preserves_configured_actuator_delay():
@@ -218,9 +251,10 @@ def test_level_five_acceleration_target_is_mode_independent_and_bounded(mode):
     0.20, 0.80, mode, 0.5,
     accel_response_active=True,
     accel_response_level=5,
-    accel_boost=0.25,
+    accel_boost=0.50,
     accel_max=2.0,
-  ) == pytest.approx(0.65)
+    a_lead=1.0,
+  ) == pytest.approx(1.00)
 
 
 def test_acceleration_response_respects_vehicle_acceleration_limit():
@@ -228,8 +262,9 @@ def test_acceleration_response_respects_vehicle_acceleration_limit():
     0.20, 0.80, DRIVING_MODE_NORMAL, 0.5,
     accel_response_active=True,
     accel_response_level=5,
-    accel_boost=0.25,
+    accel_boost=0.50,
     accel_max=0.50,
+    a_lead=1.0,
   ) == pytest.approx(0.50)
 
 
@@ -246,6 +281,7 @@ def test_level_five_direct_boost_can_release_braking():
     accel_response_active=True,
     accel_response_level=5,
     accel_boost=0.20,
+    a_lead=0.50,
   ) == pytest.approx(-0.30)
 
 
@@ -257,6 +293,7 @@ def test_level_five_braking_release_respects_acceleration_limit():
     accel_response_level=5,
     accel_boost=0.20,
     accel_max=-0.40,
+    a_lead=0.50,
   ) == pytest.approx(-0.40)
 
 
@@ -265,5 +302,17 @@ def test_level_five_direct_boost_applies_when_preview_trajectory_is_falling():
     0.20, 0.10, DRIVING_MODE_HIGH, 0.5,
     accel_response_active=True,
     accel_response_level=5,
-    accel_boost=0.25,
-  ) == pytest.approx(0.45)
+    accel_boost=0.50,
+    a_lead=1.0,
+  ) == pytest.approx(0.70)
+
+
+def test_level_five_acceleration_cannot_exceed_lead_by_more_than_small_overshoot():
+  assert apply_preview_target(
+    0.10, 1.20, DRIVING_MODE_HIGH, 0.5,
+    accel_response_active=True,
+    accel_response_level=5,
+    accel_boost=0.50,
+    accel_max=2.0,
+    a_lead=0.40,
+  ) == pytest.approx(0.60)

@@ -43,9 +43,11 @@ class LeadAccelResponseTuning:
   target_delta_max: float
   prediction_horizon: float
   closing_speed_floor: float
+  gap_margin_floor: float
   boost_gain: float = 0.0
   boost_max: float = 0.0
   boost_attack_step: float = 0.0
+  lead_accel_overshoot_max: float = math.inf
 
 
 @dataclass(frozen=True)
@@ -91,15 +93,16 @@ MODE_TUNING = {
 # mode. It is available only while the driver has selected following-distance
 # level 1; the mode-specific acceleration envelope remains the final limit.
 LEAD_ACCEL_RESPONSE_TUNING = {
-  1: LeadAccelResponseTuning(0.20, 0.08, 0.08, 0.00, 0.00),
-  2: LeadAccelResponseTuning(0.30, 0.12, 0.14, 0.10, -0.10),
-  3: LeadAccelResponseTuning(0.40, 0.18, 0.22, 0.20, -0.20),
-  4: LeadAccelResponseTuning(0.55, 0.25, 0.32, 0.35, -0.30),
-  # Level 5 is the deliberately forceful test setting. The feed-forward is
-  # still bounded by the total delta, the MPC acceleration limit, and the
-  # caller's distance/track/source gates.
-  5: LeadAccelResponseTuning(0.70, 0.35, 0.45, 0.50, -0.40,
-                             boost_gain=0.20, boost_max=0.25, boost_attack_step=0.08),
+  1: LeadAccelResponseTuning(0.20, 0.08, 0.08, 0.00, 0.00, 0.00),
+  2: LeadAccelResponseTuning(0.35, 0.15, 0.18, 0.10, -0.05, -0.75),
+  3: LeadAccelResponseTuning(0.55, 0.28, 0.32, 0.20, -0.10, -2.00),
+  4: LeadAccelResponseTuning(0.80, 0.45, 0.50, 0.35, -0.15, -3.00),
+  # Level 5 deliberately follows positive lead acceleration and permits a
+  # small acceleration overshoot. The lead-acceleration cap and the vehicle's
+  # final acceleration limit keep that response bounded.
+  5: LeadAccelResponseTuning(1.10, 0.70, 0.80, 0.50, -0.20, -math.inf,
+                             boost_gain=0.60, boost_max=0.50, boost_attack_step=0.20,
+                             lead_accel_overshoot_max=0.20),
 }
 
 
@@ -120,18 +123,21 @@ def clip_lead_accel_response_level(level: int) -> int:
 
 
 def lead_accel_response_allowed(level: int, *, v_rel: float, gap_margin: float,
-                                lead_accel_signal: float) -> bool:
+                                lead_accel_signal: float, a_lead: float) -> bool:
   """Allow TF1 acceleration preview with a bounded closing-speed check."""
   response_level = clip_lead_accel_response_level(level)
   tuning = LEAD_ACCEL_RESPONSE_TUNING.get(response_level)
-  if tuning is None or not all(math.isfinite(value) for value in (v_rel, gap_margin, lead_accel_signal)):
+  if tuning is None or not all(math.isfinite(value) for value in (v_rel, gap_margin, lead_accel_signal, a_lead)):
     return False
   # Level 5 is the driver's explicit close-following test mode. It may start
   # following an accelerating lead from inside the MPC target gap; the
   # predicted-relative-speed check below still has to show the lead pulling
   # away before acceleration is added.
-  inside_target_gap = gap_margin < 0.0 and response_level < LEAD_ACCEL_RESPONSE_MAX
-  if inside_target_gap or lead_accel_signal <= 0.0 or v_rel < tuning.closing_speed_floor:
+  inside_target_gap = gap_margin < tuning.gap_margin_floor
+  positive_lead_accel = a_lead > LEAD_ACCEL_DEADBAND
+  if (inside_target_gap or v_rel < tuning.closing_speed_floor or
+      (response_level < LEAD_ACCEL_RESPONSE_MAX and lead_accel_signal <= 0.0) or
+      (response_level == LEAD_ACCEL_RESPONSE_MAX and not positive_lead_accel)):
     return False
 
   predicted_v_rel = float(v_rel) + float(lead_accel_signal) * tuning.prediction_horizon
@@ -170,11 +176,27 @@ def get_lead_preview_request(
   preview_attack_step = PREVIEW_DECEL_ATTACK_STEP_S
   boost_attack_step = 0.0
 
-  if lead_accel_signal < 0.0:
+  level_five_response = (
+    response_level == LEAD_ACCEL_RESPONSE_MAX
+    and accel_response_enabled
+    and lead_accel_response_allowed(
+      response_level, v_rel=v_rel, gap_margin=gap_margin,
+      lead_accel_signal=lead_accel_signal, a_lead=float(a_lead),
+    )
+  )
+  if level_five_response:
+    response_tuning = LEAD_ACCEL_RESPONSE_TUNING[response_level]
+    response_signal = _deadzone(float(a_lead), LEAD_ACCEL_DEADBAND)
+    offset_s = min(response_signal * response_tuning.preview_factor, response_tuning.preview_max)
+    accel_boost_target = min(response_signal * response_tuning.boost_gain, response_tuning.boost_max)
+    accel_response_active = True
+    preview_attack_step = response_tuning.preview_max
+    boost_attack_step = response_tuning.boost_attack_step
+  elif lead_accel_signal < 0.0:
     offset_s = min(-lead_accel_signal * tuning.decel_factor, tuning.decel_preview_max)
   elif (lead_accel_signal > 0.0 and accel_response_enabled and
         lead_accel_response_allowed(response_level, v_rel=v_rel, gap_margin=gap_margin,
-                                    lead_accel_signal=lead_accel_signal)):
+                                    lead_accel_signal=lead_accel_signal, a_lead=float(a_lead))):
     response_tuning = LEAD_ACCEL_RESPONSE_TUNING[response_level]
     offset_s = min(lead_accel_signal * response_tuning.preview_factor, response_tuning.preview_max)
     accel_boost_target = min(lead_accel_signal * response_tuning.boost_gain, response_tuning.boost_max)
@@ -220,8 +242,10 @@ def clip_preview_offset(base_action_t: float, preview_s: float) -> float:
 
 
 def rate_limit_accel_boost(target: float, current: float, attack_step: float,
-                           release_step: float = 0.04) -> float:
+                           release_step: float = 0.04, immediate_release: bool = False) -> float:
   """Keep level-5 feed-forward quick without exposing raw aLead noise."""
+  if immediate_release and target <= 0.0:
+    return 0.0
   step = max(0.0, float(attack_step if target > current else release_step))
   return float(max(current - step, min(current + step, target)))
 
@@ -236,6 +260,7 @@ def apply_preview_target(
   accel_response_level: int = 0,
   accel_boost: float = 0.0,
   accel_max: float = math.inf,
+  a_lead: float = 0.0,
 ) -> float:
   """Keep mode preview conservative and bound its acceleration delta."""
   tuning = MODE_TUNING.get(_mode_value(driving_mode))
@@ -250,12 +275,17 @@ def apply_preview_target(
   response_level = clip_lead_accel_response_level(accel_response_level)
   forceful_response = response_level == LEAD_ACCEL_RESPONSE_MAX
   conservative_gates_pass = base >= 0.0 and ego_not_braking and candidate >= base
-  if (accel_response_active and response_tuning is not None and lead_accel_signal > 0.0 and
+  positive_response = lead_accel_signal > 0.0 or (
+    forceful_response and math.isfinite(a_lead) and float(a_lead) > LEAD_ACCEL_DEADBAND
+  )
+  if (accel_response_active and response_tuning is not None and positive_response and
       (forceful_response or conservative_gates_pass)):
     # Level 5's direct feed-forward remains useful even while the MPC
     # trajectory is still releasing braking. Lower levels retain the
     # conservative current-acceleration and rising-trajectory gates.
     target = max(base, candidate) + max(0.0, float(accel_boost))
+    if forceful_response:
+      target = min(target, float(a_lead) + response_tuning.lead_accel_overshoot_max)
     target = min(target, base + response_tuning.target_delta_max, float(accel_max))
     return float(max(base, target))
 
