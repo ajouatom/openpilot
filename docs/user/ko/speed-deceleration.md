@@ -5,7 +5,7 @@
 > [!NOTE]
 > 이 문서는 `carrot-wip` 코드와 함께 관리하는 사용자 설명서 원본입니다. 사용자 동작이 바뀌면 관련 코드·테스트와 같은 변경에서 이 문서도 갱신합니다.
 
-이 페이지는 `carrot-wip`의 실제 코드를 기준으로 **속도·감속 18개 설정**을 설명합니다. 카메라 목표속도, 감속 시작 거리, 도로 제한속도 연동, 방지턱, 커브·경로·모델 속도와 신호 정지 보정이 서로 어떻게 연결되는지 사용자 관점에서 정리했습니다.
+이 페이지는 `carrot-wip`의 실제 코드를 기준으로 **속도·감속 20개 설정**을 설명합니다. 카메라 목표속도, 감속 시작 거리, 차량 순정 내비 CAN, 도로 제한속도 연동, 방지턱, 커브·경로·모델 속도와 신호 정지 보정이 서로 어떻게 연결되는지 사용자 관점에서 정리했습니다.
 
 모든 값은 Carrot Web의 **설정 → 주행 제어 → 속도·감속**에서 변경합니다.
 
@@ -55,7 +55,7 @@ Carrot Web 기본값 복원에 쓰이는 `carrot_settings.json`과 Params 최초
 <a id="speed-camera"></a>
 ## 1. 과속카메라
 
-관련 설정은 `AutoNaviSpeedCtrlMode`, `AutoNaviSpeedCtrlEnd`, `AutoNaviSpeedDecelRate`, `AutoNaviSpeedSafetyFactor`, `AutoNaviCountDownMode`입니다.
+관련 설정은 `AutoNaviSpeedCtrlMode`, `AutoNaviSpeedCtrlEnd`, `AutoNaviSpeedDecelRate`, `AutoNaviSpeedSafetyFactor`, `AutoNaviCountDownMode`, `VehicleNaviCanControl`, `VehicleNaviSchoolZoneControl`입니다.
 
 ### `AutoNaviSpeedCtrlMode`
 
@@ -67,6 +67,12 @@ Carrot Web 기본값 복원에 쓰이는 `carrot_settings.json`과 Params 최초
 | 3 | 과속카메라·구간단속 + 과속방지턱 + 이동식카메라 |
 
 이 설정은 내비게이션에서 이벤트 종류, 제한속도와 거리를 정상적으로 받아야 동작합니다. 구간단속 중에는 단속 종료 거리까지 목표속도를 계속 유지하고, 이동식카메라 이벤트는 `3`에서만 사용합니다.
+
+### 차량 순정 내비 CAN 제어
+
+`VehicleNaviCanControl`은 지원되는 Hyundai/Kia CAN-FD 차량에서 순정 내비가 제공하는 카메라·방지턱의 실제 거리를 감속에 사용합니다. Kia PV5에서는 일반 카메라와 방지턱만 지원하며, 구간단속과 `VehicleNaviSchoolZoneControl`은 필요한 주기 상태 신호가 아직 검증되지 않아 적용하지 않습니다.
+
+이 기능은 기본값이 꺼진 실험 기능입니다. 화면의 이벤트 종류, 제한속도와 남은 거리가 실제 도로와 일치하는지 먼저 확인하고, 일치하지 않으면 즉시 끄세요.
 
 ### `AutoNaviSpeedSafetyFactor`
 

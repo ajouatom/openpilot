@@ -232,7 +232,7 @@ SDI를 지울 때는 더 큰 sequence로 `present: false`, `value: null`, 비어
 | 7714 전용 section object | 없음 | `section.active`, speed limit, remaining distance | present + active + not suspended + section off-route 아님 + 전체 off-route 아님 + limit > 0일 때 type 4로 변환 | `section` / 주황 `section` |
 | 방지턱 | primary/plus type 22 | primary/secondary type 22 | `roadcate > 1`, mode >= 2. payload speed는 무시하고 `AutoNaviSpeedBumpSpeed` 사용. 단, 7714는 road category 갱신 순서/기본값 문제로 type 22가 수신되어도 후보 생성에 실패할 수 있음 | `bump` / 주황 `bump` |
 | 차량 수신 과속카메라 | `carState.speedLimit/speedLimitDistance` | 동일 | 차량 CAN에서 단속속도만 수신하며 Hyundai `CarState`가 `speedLimit × (VehicleSpeedCameraDistanceTime / 10)`으로 가상거리 생성. `VehicleSpeedCameraControlMode`에 따라 미사용·항상 적용·가속페달 속도 하한·가속페달 입력 중 해제를 선택 | `hda` / 라벤더 `cam`, 하한 적용 시 `gas` |
-| 차량 내비 CAN 정확거리/구간 | `carState.speedLimitDistance/speedBumpDistance/vehicleNaviSectionActive` | 동일 | `VehicleNaviCanControl`이 켜진 Hyundai CAN-FD에서 0x4BE alert spot의 Offset을 휠 주행거리로 추적. 카메라는 기존 `hda`, Value 6 방지턱은 별도 후보, 종류 7의 30 초과 제한속도 구간은 안전계수를 적용한 연속 상한으로 계산 | `hda`, `hda_section`, `hda_bump` / 라벤더 `cam`, `section`, `bump` |
+| 차량 내비 CAN 정확거리/구간 | `carState.speedLimitDistance/speedBumpDistance/vehicleNaviSectionActive` | 동일 | `VehicleNaviCanControl`이 켜진 Hyundai CAN-FD에서 0x4BE 또는 PV5 CAN-FD wrapper의 alert spot Offset을 휠 주행거리로 추적. 카메라는 기존 `hda`, Value 6 방지턱은 별도 후보로 계산. PV5의 구간단속은 주기 상태 신호가 검증될 때까지 비활성화 | `hda`, `hda_section`, `hda_bump` / 라벤더 `cam`, `section`, `bump` |
 | 차량 내비 CAN 30 km/h 구간 | `carState.schoolZoneActive` | 동일 | `VehicleNaviSchoolZoneControl`이 켜지고 0x4BE 종류 7이 30 km/h를 알리면 30 km/h 후보 적용. 차량의 30 카메라 상태 종료, 비-30 종류 7, 경로 재계산 또는 1 km 주행 시 해제. 가속페달 동작은 `VehicleSpeedCameraControlMode`를 따름 | `school` / 라벤더 `school`, mode 2 하한 적용 시 `gas` |
 
 차량 순정 내비의 0x4BA 곡률 프로파일은 경로·차선 연계 신뢰도가 충분하지 않아 파싱, 속도제어,
@@ -280,6 +280,13 @@ mode 2의 하한은 source 변경, 정차, 브레이크 입력, 제한속도 변
 하나를 켜면 Hyundai CAN-FD `0x4BE` `ProfileType=16`(Alert Information Spot)을 해석한다.
 전자는 카메라·방지턱 거리 제어, 후자는 종류 7의 30 km/h 구간 상한만 활성화한다.
 확인된 값은 다음과 같다.
+
+Kia PV5는 기존 8바이트 메시지를 그대로 보내지 않고 CAN-FD wrapper에 넣는다. E-CAN `0x364`
+bytes 8–15는 `HDA_INFO_4A3`, E-CAN `0x093` bytes 8–15는 `NEW_MSG_4BE`와 같은 필드 배치로
+해석한다. A-CAN `0x380` byte 3의 bit 6은 카메라 접근 중 켜지고 실제 통과 시 꺼지므로 기존
+`MapSource=2` 카메라 상태 대신 정확거리 후보 종료에 사용한다. PV5에서는 일반 카메라와 Value 6
+방지턱만 활성화하며, 종류 7의 구간단속·30 km/h 구간은 주기 위치·평균속도 메시지가 실로그로
+검증될 때까지 무시한다.
 
 - `Value=0x06`: 방지턱 후보. `carState.speedBumpDistance`로 전달하고
   `AutoNaviSpeedCtrlMode >= 2`일 때 `AutoNaviSpeedBumpSpeed/Time`을 적용한다.
