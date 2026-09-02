@@ -65,6 +65,16 @@ def test_longitudinal_comfort_settings_use_driver_facing_language(params):
   assert lead_response["display_unit"] == "percent"
   assert "0%는 사용 안 함" in lead_response["descr"]
 
+  lead_accel_response = by_name["LeadAccelResponse"]
+  assert (lead_accel_response["min"], lead_accel_response["max"], lead_accel_response["default"]) == (0, 5, 0)
+  assert lead_accel_response["control"] == "select"
+  assert "차간거리 1단계" in lead_accel_response["descr"]
+  assert "모든 주행모드" in lead_accel_response["descr"]
+  assert lead_accel_response["options"]["ko"][-1] == "5 즉각(시험)"
+
+  params_keys = PARAMS_KEYS_PATH.read_text(encoding="utf-8")
+  assert '{"LeadAccelResponse", {PERSISTENT, INT, "0"}}' in params_keys
+
   lane_change = by_name["DynamicTFollowLC"]
   assert lane_change["default"] == 100
   assert "100%는 변화 없음" in lane_change["descr"]
