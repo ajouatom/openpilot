@@ -347,6 +347,7 @@ class LongitudinalPlanner:
         preview_request.accel_boost_target,
         self.lead_accel_boost,
         preview_request.boost_attack_step,
+        immediate_release=not preview_request.accel_response_active,
       )
     else:
       self.lead_preview = 0.0
@@ -371,6 +372,7 @@ class LongitudinalPlanner:
       accel_response_level=preview_request.accel_response_level,
       accel_boost=self.lead_accel_boost,
       accel_max=accel_limits_turns[1],
+      a_lead=lead.aLeadK,
     ) if preview_request.active else output_a_target_base
     output_a_target_e2e = sm['modelV2'].action.desiredAcceleration
     output_should_stop_e2e = sm['modelV2'].action.shouldStop

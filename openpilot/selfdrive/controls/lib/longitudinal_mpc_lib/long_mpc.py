@@ -378,7 +378,22 @@ class LongitudinalMpc:
     v_ego = self.x0[1]
     a_ego = self.x0[2]
     self.status = radarstate.leadOne.status or radarstate.leadTwo.status
-    t_follow = carrot.get_T_FOLLOW(personality, v_ego, a_ego, lead_status=self.status)
+    # Use the previous cycle's controlling radar lead for the level-5 TF1
+    # exception. Requiring an already-opening gap avoids shrinking TF while
+    # the ego vehicle is still closing on the lead.
+    tf_lead = radarstate.leadOne if self.source == 'lead0' else radarstate.leadTwo if self.source == 'lead1' else None
+    tf_lead_valid = (
+      tf_lead is not None
+      and tf_lead.status
+      and tf_lead.radar
+      and tf_lead.radarTrackId >= 0
+      and tf_lead.vRel >= 0.0
+    )
+    t_follow = carrot.get_T_FOLLOW(
+      personality, v_ego, a_ego,
+      lead_status=tf_lead_valid,
+      lead_accel=tf_lead.aLeadK if tf_lead_valid else 0.0,
+    )
 
     lead_xv_0, lead_v_0 = self.process_lead(radarstate.leadOne)
     lead_xv_1, lead_v_1 = self.process_lead(radarstate.leadTwo)

@@ -146,7 +146,8 @@ def test_level_five_tf1_uses_configured_gap_one_despite_speed_table_and_safe_mod
   planner = _speed_tf_planner(lead_accel_response=5, applied_t_follow=0.72)
 
   assert planner.get_T_FOLLOW(
-    log.LongitudinalPersonality.aggressive, v_ego=50.0 / 3.6, a_ego=0.0, lead_status=True,
+    log.LongitudinalPersonality.aggressive, v_ego=50.0 / 3.6, a_ego=0.0,
+    lead_status=True, lead_accel=0.5,
   ) == pytest.approx(0.4)
 
 
@@ -162,15 +163,40 @@ def test_level_five_tf1_keeps_larger_gap_while_decelerating():
   planner = _speed_tf_planner(lead_accel_response=5, applied_t_follow=0.72)
 
   assert planner.get_T_FOLLOW(
-    log.LongitudinalPersonality.aggressive, v_ego=50.0 / 3.6, a_ego=-1.0, lead_status=True,
+    log.LongitudinalPersonality.aggressive, v_ego=50.0 / 3.6, a_ego=-1.0,
+    lead_status=True, lead_accel=0.5,
   ) == pytest.approx(0.72)
+
+
+@pytest.mark.parametrize("lead_accel", [0.0, -0.5])
+def test_level_five_returns_to_normal_gap_when_lead_stops_accelerating(lead_accel):
+  planner = _speed_tf_planner(lead_accel_response=5, applied_t_follow=0.72)
+
+  assert planner.get_T_FOLLOW(
+    log.LongitudinalPersonality.aggressive, v_ego=50.0 / 3.6, a_ego=0.0,
+    lead_status=True, lead_accel=lead_accel,
+  ) == pytest.approx(0.72)
+
+
+def test_level_five_acceleration_end_uses_existing_gap_increase_ramp():
+  planner = _speed_tf_planner(lead_accel_response=5, applied_t_follow=0.72)
+
+  assert planner.get_T_FOLLOW(
+    log.LongitudinalPersonality.aggressive, v_ego=50.0 / 3.6, a_ego=0.0,
+    lead_status=True, lead_accel=0.5,
+  ) == pytest.approx(0.4)
+  assert planner.get_T_FOLLOW(
+    log.LongitudinalPersonality.aggressive, v_ego=50.0 / 3.6, a_ego=0.0,
+    lead_status=True, lead_accel=0.0,
+  ) == pytest.approx(0.415)
 
 
 def test_level_five_does_not_force_gap_one_for_other_personalities():
   planner = _speed_tf_planner(lead_accel_response=5, applied_t_follow=0.936)
 
   assert planner.get_T_FOLLOW(
-    log.LongitudinalPersonality.standard, v_ego=50.0 / 3.6, a_ego=0.0, lead_status=True,
+    log.LongitudinalPersonality.standard, v_ego=50.0 / 3.6, a_ego=0.0,
+    lead_status=True, lead_accel=0.5,
   ) == pytest.approx(0.936)
 
 
@@ -178,5 +204,6 @@ def test_level_five_tf1_does_not_change_cruise_target_without_a_lead():
   planner = _speed_tf_planner(lead_accel_response=5, applied_t_follow=0.72)
 
   assert planner.get_T_FOLLOW(
-    log.LongitudinalPersonality.aggressive, v_ego=50.0 / 3.6, a_ego=0.0, lead_status=False,
+    log.LongitudinalPersonality.aggressive, v_ego=50.0 / 3.6, a_ego=0.0,
+    lead_status=False, lead_accel=0.5,
   ) == pytest.approx(0.72)
