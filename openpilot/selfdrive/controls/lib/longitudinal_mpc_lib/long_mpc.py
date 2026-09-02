@@ -9,7 +9,7 @@ from openpilot.common.swaglog import cloudlog
 # WARNING: imports outside of constants will not trigger a rebuild
 from openpilot.selfdrive.modeld.constants import index_function
 from openpilot.selfdrive.controls.radar_constants import LEAD_ACCEL_TAU
-from openpilot.selfdrive.carrot.traffic_stop import get_traffic_stop_obstacle_distance
+from openpilot.selfdrive.carrot.traffic_stop import get_traffic_stop_distance_adjust, get_traffic_stop_obstacle_distance
 
 if __name__ == '__main__':  # generating code
   from acados_template import AcadosModel, AcadosOcp, AcadosOcpSolver
@@ -438,7 +438,11 @@ class LongitudinalMpc:
                                  v_upper)
       cruise_obstacle = np.cumsum(T_DIFFS * v_cruise_clipped) + get_safe_obstacle_distance(v_cruise_clipped, t_follow, comfort_brake, stop_distance)
 
-      adjust_dist = carrot.trafficStopDistanceAdjust if v_ego > 0.1 else -2.0
+      adjust_dist = get_traffic_stop_distance_adjust(
+        carrot.trafficStopDistanceAdjust,
+        v_ego,
+        getattr(carrot, "trafficStopModelLeadOffset", 0.0),
+      )
       traffic_stop_obstacle = get_traffic_stop_obstacle_distance(stop_x, cruise_obstacle[0], adjust_dist)
       x2 = traffic_stop_obstacle * np.ones(N+1)
 
