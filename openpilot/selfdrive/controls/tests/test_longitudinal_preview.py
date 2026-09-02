@@ -5,41 +5,88 @@ from openpilot.selfdrive.controls.lib.longitudinal_preview import (
   DRIVING_MODE_HIGH,
   DRIVING_MODE_NORMAL,
   DRIVING_MODE_SAFE,
+  LEAD_ACCEL_RESPONSE_TUNING,
   apply_preview_target,
   clip_action_time,
   clip_preview_offset,
   get_lead_preview_request,
+  lead_accel_response_allowed,
+  rate_limit_accel_boost,
   rate_limit_preview,
 )
 
 
-def request(mode, a_lead, a_ego=0.0):
+def request(mode, a_lead, a_ego=0.0, **kwargs):
   return get_lead_preview_request(
     mode,
     lead_status=True,
     a_lead=a_lead,
     a_ego=a_ego,
+    **kwargs,
   )
 
 
-def test_safe_preview_changes_sign_with_lead_acceleration():
-  assert request(DRIVING_MODE_SAFE, 0.5).offset_s == pytest.approx(-0.20)
+def test_positive_lead_acceleration_is_disabled_without_tf1_response():
+  assert request(DRIVING_MODE_SAFE, 0.5).offset_s == 0.0
+  assert request(DRIVING_MODE_ECO, 0.5).offset_s == 0.0
+  assert request(DRIVING_MODE_NORMAL, 0.5).offset_s == 0.0
+  assert request(DRIVING_MODE_HIGH, 0.5).offset_s == 0.0
+
+
+def test_safe_preview_reacts_to_lead_deceleration():
   assert request(DRIVING_MODE_SAFE, -0.5).offset_s == pytest.approx(0.40)
 
 
-def test_eco_delays_acceleration_side_but_keeps_braking_response():
-  assert request(DRIVING_MODE_ECO, 0.5).offset_s == pytest.approx(-0.15)
+def test_eco_keeps_braking_response():
   assert request(DRIVING_MODE_ECO, -0.4).offset_s == pytest.approx(0.30)
 
 
-def test_normal_does_not_preview_positive_lead_acceleration():
-  assert request(DRIVING_MODE_NORMAL, 1.0).offset_s == 0.0
+def test_normal_keeps_braking_response():
   assert request(DRIVING_MODE_NORMAL, -0.5).offset_s == pytest.approx(0.40)
 
 
-def test_high_previews_stable_acceleration_forward():
-  assert request(DRIVING_MODE_HIGH, 0.5).offset_s == pytest.approx(0.10)
+def test_high_keeps_braking_response():
   assert request(DRIVING_MODE_HIGH, -0.5).offset_s == pytest.approx(0.40)
+
+
+@pytest.mark.parametrize("mode", [
+  DRIVING_MODE_SAFE,
+  DRIVING_MODE_ECO,
+  DRIVING_MODE_NORMAL,
+  DRIVING_MODE_HIGH,
+])
+@pytest.mark.parametrize("level", range(1, 6))
+def test_tf1_acceleration_response_is_equal_in_every_drive_mode(mode, level):
+  result = request(
+    mode, 1.1,
+    accel_response_level=level,
+    accel_response_enabled=True,
+    v_rel=0.0,
+    gap_margin=0.5,
+  )
+  tuning = LEAD_ACCEL_RESPONSE_TUNING[level]
+  assert result.accel_response_active
+  assert result.offset_s == pytest.approx(min(1.0 * tuning.preview_factor, tuning.preview_max))
+
+
+def test_only_level_five_adds_direct_alead_boost():
+  for level in range(1, 5):
+    result = request(DRIVING_MODE_NORMAL, 2.0, accel_response_level=level,
+                     accel_response_enabled=True, v_rel=0.0, gap_margin=1.0)
+    assert result.accel_boost_target == 0.0
+
+  result = request(DRIVING_MODE_NORMAL, 2.0, accel_response_level=5,
+                   accel_response_enabled=True, v_rel=0.0, gap_margin=1.0)
+  assert result.accel_boost_target == pytest.approx(0.25)
+
+
+def test_acceleration_response_requires_gap_and_relative_speed_margin():
+  assert not lead_accel_response_allowed(5, v_rel=0.0, gap_margin=-0.01, lead_accel_signal=1.0)
+  assert not lead_accel_response_allowed(5, v_rel=-0.41, gap_margin=1.0, lead_accel_signal=1.0)
+  assert not lead_accel_response_allowed(5, v_rel=-0.40, gap_margin=1.0, lead_accel_signal=0.5)
+  assert lead_accel_response_allowed(5, v_rel=-0.40, gap_margin=1.0, lead_accel_signal=0.8)
+  assert not lead_accel_response_allowed(1, v_rel=-0.01, gap_margin=1.0, lead_accel_signal=2.0)
+  assert lead_accel_response_allowed(1, v_rel=0.0, gap_margin=0.0, lead_accel_signal=0.1)
 
 
 @pytest.mark.parametrize(("mode", "preview_max"), [
@@ -97,6 +144,12 @@ def test_preview_rate_and_action_time_are_bounded():
   assert clip_action_time(0.20, -1.0) == pytest.approx(0.05)
 
 
+def test_level_five_boost_has_fast_attack_and_slower_release():
+  assert rate_limit_accel_boost(0.25, 0.0, 0.08) == pytest.approx(0.08)
+  assert rate_limit_accel_boost(0.25, 0.08, 0.08) == pytest.approx(0.16)
+  assert rate_limit_accel_boost(0.0, 0.16, 0.08) == pytest.approx(0.12)
+
+
 def test_zero_preview_preserves_configured_actuator_delay():
   assert clip_action_time(2.05, 0.0) == pytest.approx(2.05)
 
@@ -145,14 +198,45 @@ def test_future_accel_recovery_cannot_release_current_braking(mode):
 
 
 def test_positive_lead_acceleration_never_requests_prebraking():
-  assert apply_preview_target(0.08, -0.20, DRIVING_MODE_SAFE, 0.5) == pytest.approx(0.0)
+  assert apply_preview_target(0.08, -0.20, DRIVING_MODE_SAFE, 0.5) == pytest.approx(0.08)
 
 
-def test_high_acceleration_preview_has_a_bounded_gain():
-  assert apply_preview_target(0.20, 0.50, DRIVING_MODE_HIGH, 0.5) == pytest.approx(0.35)
-  assert apply_preview_target(0.20, 0.10, DRIVING_MODE_HIGH, 0.5) == pytest.approx(0.20)
+@pytest.mark.parametrize("mode", [
+  DRIVING_MODE_SAFE,
+  DRIVING_MODE_ECO,
+  DRIVING_MODE_NORMAL,
+  DRIVING_MODE_HIGH,
+])
+def test_level_five_acceleration_target_is_mode_independent_and_bounded(mode):
+  assert apply_preview_target(
+    0.20, 0.80, mode, 0.5,
+    accel_response_active=True,
+    accel_response_level=5,
+    accel_boost=0.25,
+    accel_max=2.0,
+  ) == pytest.approx(0.65)
 
 
-def test_high_acceleration_preview_is_disabled_while_decelerating():
-  assert apply_preview_target(-0.50, -0.10, DRIVING_MODE_HIGH, 0.5, a_ego=0.0) == pytest.approx(-0.50)
-  assert apply_preview_target(0.20, 0.50, DRIVING_MODE_HIGH, 0.5, a_ego=-0.3) == pytest.approx(0.20)
+def test_acceleration_response_respects_vehicle_acceleration_limit():
+  assert apply_preview_target(
+    0.20, 0.80, DRIVING_MODE_NORMAL, 0.5,
+    accel_response_active=True,
+    accel_response_level=5,
+    accel_boost=0.25,
+    accel_max=0.50,
+  ) == pytest.approx(0.50)
+
+
+def test_acceleration_response_is_disabled_while_plan_or_vehicle_is_decelerating():
+  kwargs = dict(accel_response_active=True, accel_response_level=5, accel_boost=0.25)
+  assert apply_preview_target(-0.50, -0.10, DRIVING_MODE_HIGH, 0.5, a_ego=0.0, **kwargs) == pytest.approx(-0.50)
+  assert apply_preview_target(0.20, 0.50, DRIVING_MODE_HIGH, 0.5, a_ego=-0.3, **kwargs) == pytest.approx(0.20)
+
+
+def test_falling_mpc_trajectory_blocks_alead_boost():
+  assert apply_preview_target(
+    0.20, 0.10, DRIVING_MODE_HIGH, 0.5,
+    accel_response_active=True,
+    accel_response_level=5,
+    accel_boost=0.25,
+  ) == pytest.approx(0.20)
