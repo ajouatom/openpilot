@@ -5,7 +5,7 @@
 > [!NOTE]
 > This is the canonical English user guide maintained with the `carrot-wip` code. When user-visible behavior changes, update this document together with the related code and tests.
 
-This page explains all **30 cruise and following-gap settings** from the current implementation, including where each value enters the calculation and the direction of adjustment.
+This page explains all **31 cruise and following-gap settings** from the current implementation, including where each value enters the calculation and the direction of adjustment.
 
 Change them in **Carrot Web → Settings → Driving control → Cruise and following gap**.
 
@@ -219,8 +219,34 @@ For a clean baseline, use `EnableSpeedTF=0`, `DynamicTFollow=0`, `DynamicTFollow
 
 | Setting | Range/scale | Role |
 |---|---|---|
+| `LeadAccelResponse` | 0–5, default 0 | Responsiveness to a lead starting or accelerating at following-distance level 1 |
 | `RadarReactionFactor` | 0–200%, default 100% | How long measured lead acceleration persists into the future |
 | `JLeadFactor3` | 0–100, ×0.01 | How much lead acceleration change enters future trajectory prediction |
+
+### `LeadAccelResponse`
+
+When the lead starts or accelerates faster than the ego vehicle, this setting samples a slightly later point in the MPC trajectory to raise the acceleration target. It operates **only with following-distance level 1 (aggressive/TF1)**. Its level tuning is the same in Eco, Safe, Normal, and High-speed modes, although the final command remains bounded by each mode's acceleration envelope, curve limit, and vehicle safety limits.
+
+| Value | UI meaning | Maximum preview | Maximum increase over the base acceleration target |
+|---:|---|---:|---:|
+| `0` | Disabled | None | None |
+| `1` | Quick | 0.08 s | 0.08 m/s² |
+| `2` | Agile | 0.12 s | 0.14 m/s² |
+| `3` | Assertive | 0.18 s | 0.22 m/s² |
+| `4` | Very agile | 0.25 s | 0.32 m/s² |
+| `5` | Immediate (test) | 0.35 s | 0.45 m/s² |
+
+Level 5 is an intentionally forceful test level. It can add a separately rate-limited boost of up to `0.25 m/s²`, still inside the table's total `0.45 m/s²` increase limit and the vehicle's final acceleration ceiling.
+
+A nonzero value responds only when all of these gates pass:
+
+- The normal ACC planner is active, no stop is requested, and the driver is not pressing the accelerator.
+- MPC selected a real radar lead, and the same radar track has been observed for at least three consecutive updates.
+- Measured lead distance is at least the base desired distance, leaving positive gap margin.
+- Relative lead acceleration exceeds the `0.1 m/s²` deadband and the level-specific relative-speed check does not indicate a closing risk.
+- The ego vehicle and base MPC target are not decelerating, and the preview target is no lower than the base target.
+
+It therefore does not change the target time gap, response to lead braking, or stopping behavior. It is inactive with the experimental blended planner, a vision-only lead, and following-distance levels 2–4. Start at level 1 and raise one step at a time while checking launch following and unintended acceleration.
 
 ### `RadarReactionFactor`
 
@@ -237,7 +263,7 @@ The code smooths `jLead` as 10% new and 90% previous, multiplies by this percent
 > [!NOTE]
 > Even with `JLeadFactor3=0`, `DynamicTFollow` separately uses raw `jLead`. Check both settings when isolating jerk-related behavior.
 
-For a baseline, set dynamic following off, `JLeadFactor3=0`, and `RadarReactionFactor=100`. Change only one setting if response is consistently late, and restore immediately if surging appears.
+For a baseline, set `DynamicTFollow=0`, `LeadAccelResponse=0`, `JLeadFactor3=0`, and `RadarReactionFactor=100`. If only TF1 response to a lead starting or accelerating is late, raise `LeadAccelResponse` from level 1 one step at a time. Change only one setting at once, and restore immediately if surging or unintended acceleration appears.
 
 <a id="carrot-cruise"></a>
 ## 7. Carrot cruise
