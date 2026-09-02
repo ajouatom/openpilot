@@ -4,10 +4,13 @@ from types import SimpleNamespace
 import pytest
 
 from opendbc.can import CANParser
+from opendbc.car import Bus
 from opendbc.car.hyundai.carstate import (
-  CarState, VEHICLE_NAVI_POSITION_TIMEOUT_NS, VEHICLE_NAVI_SCHOOL_ZONE_MAX_DISTANCE,
-  VEHICLE_SPEED_CAMERA_PARAM_UPDATE_FRAMES,
+  CANFD_HDA_INFO_MSG, CANFD_NAVI_PROFILE_MSG, CANFD_NAVI_STATUS_MSG, CarState,
+  VEHICLE_NAVI_POSITION_TIMEOUT_NS, VEHICLE_NAVI_SCHOOL_ZONE_MAX_DISTANCE,
+  VEHICLE_SPEED_CAMERA_PARAM_UPDATE_FRAMES, is_canfd_navi_camera_active,
 )
+from opendbc.car.hyundai.values import CAR, HyundaiFlags
 
 
 class FakeParams:
@@ -52,6 +55,8 @@ def _car_state(distance_time_tenths=60):
   state.vehicleNaviSchoolZoneActive = False
   state.vehicleNaviSchoolZoneStartDistance = 0.0
   state.vehicleNaviSchoolZoneUsesCameraStatus = False
+  state.vehicleNaviZoneControlSupported = True
+  state.navi_profile_msg = "NEW_MSG_4BE"
   state.navi_segment_4b9 = None
   state.navi_position_4b4 = None
   state.navi_profile_4be = None
@@ -559,6 +564,95 @@ def test_vehicle_navi_range_average_dbc_decodes_logged_frame():
 
   assert parser.vl["NEW_MSG_4B4"]["POS_OFFSET"] == 13
   assert parser.vl["NEW_MSG_4B4"]["POS_RANGE_AVG_SPEED"] == 92
+
+
+def test_pv5_canfd_navi_dbc_decodes_logged_frames():
+  parser = CANParser("hyundai_canfd_generated", [(CANFD_HDA_INFO_MSG, math.nan),
+                                                   (CANFD_NAVI_PROFILE_MSG, math.nan)], 0)
+  parser.update([1_000_000_000, [
+    (0x364, bytes.fromhex("4fe828000000000040329a1100000100"), 0),
+    (0x093, bytes.fromhex("5e0f24ffffffffffb0000000cce70814ffffffffffffffff"), 0),
+  ]])
+
+  hda_info = parser.vl[CANFD_HDA_INFO_MSG]
+  assert hda_info["SPEED_LIMIT"] == 50
+  assert hda_info["CountryCode"] == 410
+  assert hda_info["MapSource"] == 2
+
+  profile = CarState._decode_vehicle_navi_profile(parser.vl[CANFD_NAVI_PROFILE_MSG])
+  assert profile == {"value": 0xB0, "offset": 1996, "counter": 3, "update": 1, "profile_type": 16}
+  assert CarState._classify_vehicle_navi_profile(profile) == ("camera", 50, 0)
+
+  parser.update([1_010_000_000, [
+    (0x093, bytes.fromhex("c27c44ffffffffff060000007ae30814ffffffffffffffff"), 0),
+  ]])
+  bump = CarState._decode_vehicle_navi_profile(parser.vl[CANFD_NAVI_PROFILE_MSG])
+  assert bump == {"value": 6, "offset": 890, "counter": 3, "update": 1, "profile_type": 16}
+  assert CarState._classify_vehicle_navi_profile(bump) == ("bump", 0, 6)
+
+
+def test_pv5_canfd_navi_status_uses_logged_camera_pass_transition():
+  parser = CANParser("hyundai_canfd_generated", [(CANFD_NAVI_STATUS_MSG, math.nan)], 1)
+
+  parser.update([1_000_000_000, [(0x380, bytes.fromhex("d0af0b4001000030000000323210f1000000000000000000"), 1)]])
+  assert parser.vl[CANFD_NAVI_STATUS_MSG]["SPEED_LIMIT"] == 50
+  assert is_canfd_navi_camera_active(parser.vl[CANFD_NAVI_STATUS_MSG])
+
+  parser.update([1_010_000_000, [(0x380, bytes.fromhex("3e38110401000000280000323210f1000000000000000000"), 1)]])
+  assert not is_canfd_navi_camera_active(parser.vl[CANFD_NAVI_STATUS_MSG])
+
+
+def test_pv5_canfd_navi_messages_are_registered_on_their_logged_buses():
+  cp = SimpleNamespace(carFingerprint=CAR.KIA_PV5, flags=HyundaiFlags.CANFD | HyundaiFlags.EV,
+                       extFlags=0, safetyConfigs=[None])
+  parsers = CarState.__new__(CarState).get_can_parsers_canfd(cp)
+
+  assert CANFD_HDA_INFO_MSG in parsers[Bus.pt].vl
+  assert CANFD_NAVI_PROFILE_MSG in parsers[Bus.pt].vl
+  assert CANFD_NAVI_STATUS_MSG in parsers[Bus.alt].vl
+  assert "NEW_MSG_4B4" not in parsers[Bus.pt].vl
+
+
+def test_pv5_canfd_navi_profile_uses_wrapped_message_timestamp():
+  state = _car_state()
+  state.vehicleNaviCanControl = True
+  state.navi_profile_msg = CANFD_NAVI_PROFILE_MSG
+  state.navi_profile_4be = {
+    "PROLONG_VALUE": 0xB0,
+    "PROLONG_OFFSET": 1996,
+    "PROLONG_CYCLIC_COUNTER": 3,
+    "PROLONG_UPDATE": 1,
+    "PROLONG_PROFILE_TYPE": 16,
+  }
+  cp = SimpleNamespace(ts_nanos={CANFD_NAVI_PROFILE_MSG: {"PROLONG_VALUE": 1}})
+  ret = SimpleNamespace(speedLimit=0.0, speedBumpDistance=0.0, schoolZoneActive=False)
+
+  assert state._update_vehicle_navi_events(cp, ret, False)
+  assert ret.vehicleNaviAvailable
+  assert ret.vehicleNaviActive
+  assert ret.vehicleNaviSpeed == 50
+  assert state.vehicleNaviCameraTarget == pytest.approx(1996.0)
+
+
+def test_pv5_canfd_navi_ignores_unverified_speed_limit_zones():
+  state = _car_state()
+  state.vehicleNaviCanControl = True
+  state.vehicleNaviSchoolZoneControl = True
+  state.vehicleNaviZoneControlSupported = False
+  state.navi_profile_4be = {
+    "PROLONG_VALUE": 0xB7,
+    "PROLONG_OFFSET": 0,
+    "PROLONG_CYCLIC_COUNTER": 3,
+    "PROLONG_UPDATE": 1,
+    "PROLONG_PROFILE_TYPE": 16,
+  }
+  cp = SimpleNamespace(ts_nanos={"NEW_MSG_4BE": {"PROLONG_VALUE": 1}})
+  ret = SimpleNamespace(speedLimit=50.0, speedBumpDistance=0.0, schoolZoneActive=False)
+
+  assert not state._update_vehicle_navi_events(cp, ret, True)
+  assert not state.vehicleNaviSpeedZoneActive
+  assert not state.vehicleNaviSchoolZoneActive
+  assert not ret.vehicleNaviActive
 
 
 def test_vehicle_navi_stale_range_average_releases_section():

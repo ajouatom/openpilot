@@ -32,6 +32,10 @@ VEHICLE_NAVI_CONTROLLED_ACCESS_LINK_CLASSES = (1, 2, 3)  # Freeway, IC, JC
 VEHICLE_NAVI_CONTROLLED_ACCESS_ROAD_CLASSES = (1, 2)  # Freeway, arterial/city freeway
 VEHICLE_NAVI_SCHOOL_ZONE_MAX_DISTANCE = 1000.0
 VEHICLE_NAVI_POSITION_TIMEOUT_NS = 1_000_000_000
+CANFD_HDA_INFO_MSG = "CANFD_HDA_INFO_364"
+CANFD_NAVI_PROFILE_MSG = "CANFD_NAVI_PROFILE_093"
+CANFD_NAVI_STATUS_MSG = "CANFD_NAVI_STATUS_380"
+CANFD_NAVI_CAMERA_ACTIVE_BIT = 0x40
 STANDSTILL_THRESHOLD = 12 * 0.03125 * CV.KPH_TO_MS
 CANFD_AVH_RELEASE_GRACE_FRAMES = round(0.5 / DT_CTRL)
 CANFD_AVH_LAMP_ACTIVE = 2
@@ -104,6 +108,10 @@ def _get_ev_mode_state(cp: CANParser) -> tuple[bool, bool]:
   return active, valid
 
 
+def is_canfd_navi_camera_active(values) -> bool:
+  return bool(int(values.get("CAMERA_STATUS", 0)) & CANFD_NAVI_CAMERA_ACTIVE_BIT)
+
+
 NUMERIC_TO_TZ = {
     840: "America/New_York",   # 미국 (US) → 동부 시간대
     124: "America/Toronto",    # 캐나다 (CA) → 동부 시간대
@@ -172,10 +180,14 @@ class CarState(CarStateBase):
     self.adrv_0x1ea = None
     self.adrv_0x160 = None
     self.ccnc_0x162 = None
+    self.canfd_wrapped_navi = CP.carFingerprint == CAR.KIA_PV5
+    self.navi_profile_msg = CANFD_NAVI_PROFILE_MSG if self.canfd_wrapped_navi else "NEW_MSG_4BE"
+    self.vehicleNaviZoneControlSupported = not self.canfd_wrapped_navi
     self.hda_info_4a3 = None
     self.navi_position_4b4 = None
     self.navi_segment_4b9 = None
     self.navi_profile_4be = None
+    self.navi_status_380 = None
     self.tcs = None
     self.mdps = None
     self.steer_touch_2af = None
@@ -374,10 +386,16 @@ class CarState(CarStateBase):
           add_and_cache(self.cp_cam, "ADRV_0x160", "adrv_0x160")
           add_and_cache(self.cp_cam, "CCNC_0x162", "ccnc_0x162")
         elif self.controls_ready_count == 123:
-          add_and_cache(self.cp, "HDA_INFO_4A3", "hda_info_4a3")
-          add_and_cache(self.cp, "NEW_MSG_4B4", "navi_position_4b4")
-          add_and_cache(self.cp, "NEW_MSG_4B9", "navi_segment_4b9")
-          add_and_cache(self.cp, "NEW_MSG_4BE", "navi_profile_4be")
+          if self.canfd_wrapped_navi:
+            add_and_cache(self.cp, CANFD_HDA_INFO_MSG, "hda_info_4a3")
+            add_and_cache(self.cp, CANFD_NAVI_PROFILE_MSG, "navi_profile_4be")
+            if self.cp_alt is not None:
+              add_and_cache(self.cp_alt, CANFD_NAVI_STATUS_MSG, "navi_status_380")
+          else:
+            add_and_cache(self.cp, "HDA_INFO_4A3", "hda_info_4a3")
+            add_and_cache(self.cp, "NEW_MSG_4B4", "navi_position_4b4")
+            add_and_cache(self.cp, "NEW_MSG_4B9", "navi_segment_4b9")
+            add_and_cache(self.cp, "NEW_MSG_4BE", "navi_profile_4be")
           add_and_cache(self.cp, "STEER_TOUCH_2AF", "steer_touch_2af")
         elif self.controls_ready_count == 124:
           add_and_cache(self.cp, self.cruise_btns_msg_canfd, "cruise_buttons_msg")
@@ -709,7 +727,7 @@ class CarState(CarStateBase):
     ret.vehicleNaviActive = False
     ret.vehicleNaviSectionActive = False
     ret.vehicleNaviSpeed = 0.0
-    profile_timestamp = self._vehicle_navi_message_timestamp(cp, "NEW_MSG_4BE")
+    profile_timestamp = self._vehicle_navi_message_timestamp(cp, self.navi_profile_msg)
     self.vehicleNaviAvailable = self.vehicleNaviAvailable or profile_timestamp > 0
     ret.vehicleNaviAvailable = self.vehicleNaviAvailable
     self.vehicleNaviCameraTarget = None
@@ -753,19 +771,20 @@ class CarState(CarStateBase):
         event = self._classify_vehicle_navi_profile(profile)
         if event is not None and timestamp > self.vehicleNaviRouteResetTimestamp:
           if event[0] == "speed_limit_zone":
-            if self.vehicleNaviCanControl and event[1] > 30:
-              self.vehicleNaviSpeedZoneActive = True
-              self.vehicleNaviSpeedZoneSpeed = event[1]
-            if self.vehicleNaviSchoolZoneControl:
-              # 0x77 describes a generic 30 km/h zone and also appears outside
-              # school zones. Only use it for the school cap while 0x4A3
-              # independently confirms an active 30 km/h camera/zone.
-              if event[1] == 30 and speed_limit_cam and ret.speedLimit == 30 and not on_controlled_access_road:
-                self.vehicleNaviSchoolZoneActive = True
-                self.vehicleNaviSchoolZoneStartDistance = self.totalDistance
-                self.vehicleNaviSchoolZoneUsesCameraStatus = True
-              else:
-                self._clear_vehicle_navi_school_zone()
+            if self.vehicleNaviZoneControlSupported:
+              if self.vehicleNaviCanControl and event[1] > 30:
+                self.vehicleNaviSpeedZoneActive = True
+                self.vehicleNaviSpeedZoneSpeed = event[1]
+              if self.vehicleNaviSchoolZoneControl:
+                # 0x77 describes a generic 30 km/h zone and also appears outside
+                # school zones. Only use it for the school cap while 0x4A3
+                # independently confirms an active 30 km/h camera/zone.
+                if event[1] == 30 and speed_limit_cam and ret.speedLimit == 30 and not on_controlled_access_road:
+                  self.vehicleNaviSchoolZoneActive = True
+                  self.vehicleNaviSchoolZoneStartDistance = self.totalDistance
+                  self.vehicleNaviSchoolZoneUsesCameraStatus = True
+                else:
+                  self._clear_vehicle_navi_school_zone()
           elif self.vehicleNaviCanControl and (not on_controlled_access_road or
                                                (event[0] != "bump" and not (event[0] == "camera" and event[1] == 30))):
             self._add_vehicle_navi_event(*event, profile["offset"])
@@ -1065,6 +1084,12 @@ class CarState(CarStateBase):
         country_code = int(self.hda_info_4a3["CountryCode"])
         self.time_zone = ZoneInfo(NUMERIC_TO_TZ.get(country_code, "UTC"))
 
+    # PV5 carries the current stock-navigation camera state on A-CAN 0x380.
+    # Bit 6 is set while approaching the camera and clears at the pass point;
+    # using it mirrors the legacy 0x4A3 MapSource=2 retirement behavior.
+    if self.navi_status_380 is not None:
+      speed_limit_cam = is_canfd_navi_camera_active(self.navi_status_380)
+
     ret.gearStep = cp.vl["GEAR"]["GEAR_STEP"] if self.GEAR else 0
     if 1 <= ret.gearStep <= 8 and ret.gearShifter == GearShifter.unknown:
       ret.gearShifter = GearShifter.drive
@@ -1162,7 +1187,10 @@ class CarState(CarStateBase):
   def get_can_parsers_canfd(self, CP):
     # Register stock-navigation position/route/profile messages as optional
     # from startup so dynamic fingerprint timing cannot miss sparse profiles.
-    msgs = [("NEW_MSG_4B4", math.nan), ("NEW_MSG_4B9", math.nan), ("NEW_MSG_4BE", math.nan)]
+    wrapped_navi = CP.carFingerprint == CAR.KIA_PV5
+    msgs = ([(CANFD_HDA_INFO_MSG, math.nan), (CANFD_NAVI_PROFILE_MSG, math.nan)] if wrapped_navi else
+            [("NEW_MSG_4B4", math.nan), ("NEW_MSG_4B9", math.nan), ("NEW_MSG_4BE", math.nan)])
+    alt_msgs = [(CANFD_NAVI_STATUS_MSG, math.nan)] if wrapped_navi else []
     if not (CP.flags & HyundaiFlags.CANFD_ALT_BUTTONS):
       # TODO: this can be removed once we add dynamic support to vl_all
       msgs += [
@@ -1179,7 +1207,7 @@ class CarState(CarStateBase):
     return {
       Bus.pt: pt_parser,
       Bus.cam: CANParser(DBC[CP.carFingerprint][Bus.pt], [], CAN.CAM),
-      Bus.alt: CANParser(DBC[CP.carFingerprint][Bus.pt], [], CAN.ACAN),
+      Bus.alt: CANParser(DBC[CP.carFingerprint][Bus.pt], alt_msgs, CAN.ACAN),
     }
 
   def get_can_parsers(self, CP):
