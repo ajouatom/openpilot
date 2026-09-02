@@ -696,6 +696,13 @@ def _hide_replaced_adas_service_warning(values):
   if service_warning_hidden and values.get("FAULT_DAS") == 1:
     values["FAULT_DAS"] = 0
 
+
+def _select_cluster_background(cruise_enabled, lat_active, paddle_pressed, paddle_mode):
+  if paddle_mode > 0 and paddle_pressed:
+    return 6
+  return 1 if cruise_enabled else 3 if lat_active else 7
+
+
 def _make_ccnc_values(values, CS, lat_active, frame, hud_control,
                      lane_line=True, corner_radar=True,
                      desire=0,
@@ -727,7 +734,7 @@ def _make_ccnc_values(values, CS, lat_active, frame, hud_control,
 
 def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
                          disp_angle, left_lane_warning, right_lane_warning,
-                         enable_corner_radar, stopping, canfd_debug):
+                         enable_corner_radar, stopping, canfd_debug, paddle_mode):
   ret = []
   interlock_active = longitudinal_interlock_active(CS)
 
@@ -811,7 +818,9 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
         values["TARGET"] = 1 if hud_control.leadVisible and cruise_enabled else 0
         values["TARGET_DISTANCE"] = int(hud_control.leadDistance)
 
-        values["BACKGROUND"] = 6 if CS.paddle_button_prev > 0 else 1 if cruise_enabled else 3 if lat_active else 7
+        values["BACKGROUND"] = _select_cluster_background(
+          cruise_enabled, lat_active, CS.paddle_button_prev > 0, paddle_mode,
+        )
         values["CENTERLINE"] = 1 if HDA_CntrlModSta > 0 else 0
         values["CAR_CIRCLE"] = 2 if hdp_active else 1 if cruise_enabled else 0
 
