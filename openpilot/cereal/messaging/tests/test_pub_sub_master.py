@@ -97,6 +97,14 @@ class TestSubMaster:
         else:
           assert not sm._check_avg_freq(service)
 
+  def test_variable_radar_frequency_contract(self):
+    for service in ("liveTracks", "longitudinalPlan"):
+      for actual_freq in (20., 25.):
+        tracker = messaging.FrequencyTracker(SERVICE_LIST[service].frequency, 100., False)
+        for frame in range(250):
+          tracker.record_recv_time(frame / actual_freq)
+        assert tracker.valid, f"{service} rejected its supported {actual_freq:g} Hz clock"
+
   def test_alive(self):
     pass
 
