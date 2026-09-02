@@ -23,7 +23,6 @@ from openpilot.selfdrive.carrot.radar_motion.predictor import (
   project_to_model_path,
 )
 from openpilot.selfdrive.carrot.radar_motion.primary import (
-  CornerVisionPrimaryFallbackMatcher,
   FrontRadarKinematicAssociator,
   RadarPointSnapshot,
   VisionRadarMatcher,
@@ -360,9 +359,6 @@ class DPathRadarController:
   ) -> None:
     self.primary_matcher = VisionRadarMatcher()
     self.scc_primary_fallback_matcher = VisionRadarMatcher()
-    self.corner_vision_primary_fallback_matcher = (
-      CornerVisionPrimaryFallbackMatcher()
-    )
     self.enable_radar_tracks = int(enable_radar_tracks)
     self.front_radar_measurement_delay_s = max(
       0.0, float(front_radar_measurement_delay_s),
@@ -559,7 +555,6 @@ class DPathRadarController:
     if len(path) < 2:
       self.primary_matcher.reset()
       self.scc_primary_fallback_matcher.reset()
-      self.corner_vision_primary_fallback_matcher.reset()
       self.lead_two_tracker.reset()
       self.stationary_shadow_tracker.reset()
       self.stationary_primary_handoff_tracker.reset()
@@ -613,18 +608,6 @@ class DPathRadarController:
       )
     else:
       self.scc_primary_fallback_matcher.reset()
-    if primary_match is not None:
-      self.corner_vision_primary_fallback_matcher.reset()
-    elif self.enable_radar_tracks > 0:
-      primary_match = self.corner_vision_primary_fallback_matcher.update(
-        time_s,
-        model,
-        points,
-        path,
-        yaw_rate_rad_s,
-      )
-    else:
-      self.corner_vision_primary_fallback_matcher.reset()
     lead_one = None
     if primary_match is not None:
       lead_one = self._lead_from_radar_point(
