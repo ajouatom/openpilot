@@ -91,6 +91,21 @@ def test_longitudinal_comfort_settings_use_driver_facing_language(params):
   assert "멀리서부터 천천히 감속" in driving_mode["descr"]
 
 
+def test_longitudinal_pid_defaults_match_registry(params):
+  by_name = {p["name"]: p for p in params}
+  assert tuple(by_name[name]["default"] for name in (
+    "LongTuningKpV", "LongTuningKiV", "LongTuningKf",
+  )) == (100, 0, 100)
+
+  params_keys = PARAMS_KEYS_PATH.read_text(encoding="utf-8")
+  for name, default in (
+    ("LongTuningKpV", 100),
+    ("LongTuningKiV", 0),
+    ("LongTuningKf", 100),
+  ):
+    assert f'{{"{name}", {{PERSISTENT, INT, "{default}"}}}}' in params_keys
+
+
 def test_c3x_lite_hardware_setting_is_exposed(settings, params):
   by_name = {p["name"]: p for p in params}
   c3x_lite = by_name["HardwareC3xLite"]
