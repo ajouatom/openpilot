@@ -26,6 +26,8 @@ A radar fitted to the vehicle does not guarantee that carrotpilot can read the r
 
 On non-CAN FD Hyundai/Kia vehicles, a positive value attempts to enable radar tracks during startup and stores the result in `EnableRadarTracksResult`. Confirm both the activation result and actual incoming tracks; physical radar presence alone is not enough.
 
+Legacy Mando front radars use the base 32 slots at `0x500–0x51F` for timing and CAN validity, and automatically consume the additional 32 slots at `0x520–0x53F` when the vehicle transmits them. The upper bank is optional, so it does not delay publication or invalidate CAN on a 32-slot vehicle; an upper-bank slot that stops arriving is removed on the next radar cycle.
+
 <a id="corner-radar"></a>
 ## Corner radar
 

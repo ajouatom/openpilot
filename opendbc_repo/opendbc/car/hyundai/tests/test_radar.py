@@ -8,8 +8,10 @@ import opendbc.car.hyundai.hyundaicanfd as hyundaicanfd
 import opendbc.car.hyundai.radar_interface as radar_interface_module
 from opendbc.car.hyundai.radar_interface import (
   CORNER_OBJECT_STABLE_TRACK_ID_START,
+  RADAR_MSG_COUNT,
   RADAR_MSG_COUNT3,
   RADAR_MSG_COUNT4,
+  RADAR_REQUIRED_MSG_COUNT,
   RADAR_START_ADDR_CANFD3,
   CornerObjectTrackIdManager,
   RadarInterface,
@@ -18,6 +20,55 @@ from opendbc.car.hyundai.radar_interface import (
   deduplicate_corner_candidates,
 )
 from opendbc.car.hyundai.values import CAR, HyundaiExtFlags, HyundaiFlags
+
+
+class TestMandoRadar:
+  @staticmethod
+  def make_interface(monkeypatch):
+    class FakeParams:
+      def get_int(self, key):
+        return 1 if key == "EnableRadarTracks" else 0
+
+    monkeypatch.setattr(radar_interface_module, "Params", FakeParams)
+    cp = structs.CarParams()
+    cp.carFingerprint = CAR.HYUNDAI_GRANDEUR_IG
+    cp.flags = 0
+    cp.extFlags = 0
+    cp.radarUnavailable = False
+    cp.safetyConfigs = [structs.CarParams.SafetyConfig()]
+    return RadarInterface(cp)
+
+  def test_optional_upper_track_bank_and_32_slot_compatibility(self, monkeypatch):
+    radar_interface = self.make_interface(monkeypatch)
+
+    assert RADAR_MSG_COUNT == 64
+    assert RADAR_REQUIRED_MSG_COUNT == 32
+    assert radar_interface.radar_msg_count == 64
+    assert radar_interface.radar_required_msg_count == 32
+    assert radar_interface.trigger_msg_tracks == 0x51F
+    assert not radar_interface.rcp_tracks.message_states[0x51F].ignore_alive
+    assert radar_interface.rcp_tracks.message_states[0x520].ignore_alive
+    assert radar_interface.rcp_tracks.message_states[0x53F].ignore_alive
+
+    # This confirmed 0x52d target is the missing lead observed in a real
+    # 64-slot Grandeur IG log. The lower bank still provides the cycle trigger.
+    active_dat = bytes.fromhex("0060589b03fec0b2")
+    lower_bank = [(addr, bytes(8), 1) for addr in range(0x500, 0x520)]
+    radar_data = radar_interface.update([0, lower_bank + [(0x52D, active_dat, 1)]])
+    point = next(point for point in radar_data.points if point.trackId == 77)
+
+    assert not radar_data.errors.canError
+    assert point.measured
+    assert point.dRel == pytest.approx(math.cos(math.radians(2.2)) * 15.5)
+    assert point.yRel == pytest.approx(-0.5 * math.sin(math.radians(2.2)) * 15.5)
+    assert point.vRel == pytest.approx(1.78)
+    assert point.aRel == pytest.approx(-0.04)
+
+    # A 32-slot radar sends only the required lower bank. It must keep
+    # publishing without a CAN error, and the optional point must not go stale.
+    radar_data = radar_interface.update([0, lower_bank])
+    assert not radar_data.errors.canError
+    assert all(point.trackId != 77 for point in radar_data.points)
 
 
 class TestCanfdGroup2Radar:
