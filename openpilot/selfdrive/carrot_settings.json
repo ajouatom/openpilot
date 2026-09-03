@@ -1276,7 +1276,7 @@
       "cdescr": "纵向前馈修正 — HKG: 推荐 100",
       "min": 0,
       "max": 200,
-      "default": 0,
+      "default": 100,
       "unit": 5
     },
     {
