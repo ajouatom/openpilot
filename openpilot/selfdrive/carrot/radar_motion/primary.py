@@ -653,6 +653,13 @@ def select_dpath_primary_radar_points(
   enable_radar_tracks: int,
 ) -> tuple[RadarPointSnapshot, ...]:
   """Apply the configured front/SCC primary-source policy."""
+  if enable_radar_tracks == 3:
+    # Mode 3 first tries only the front-radar/vision association. The
+    # controller uses SCC unconditionally if that association fails.
+    return tuple(
+      point for point in points
+      if point.source == "frontRadar" and point.d_rel > 0.2
+    )
   return select_primary_radar_points(
     points, enable_radar_tracks,
   )
@@ -688,6 +695,28 @@ def vision_only_lead_allowed(
 ) -> bool:
   """Allow blue leadOne only when radar tracks are disabled."""
   return enable_radar_tracks <= VISION_ONLY_RADAR_TRACK_MODE
+
+
+def unconditional_scc_match(
+  points: Iterable[RadarPointSnapshot],
+) -> VisionRadarMatch | None:
+  """Return the nearest valid SCC object without vision or lateral matching."""
+  point = min(
+    (
+      point for point in points
+      if point.source == "scc" and point.measured and point.d_rel > 0.2
+    ),
+    key=lambda candidate: candidate.d_rel,
+    default=None,
+  )
+  if point is None:
+    return None
+  return VisionRadarMatch(
+    point=replace(point, y_rel=0.0, yv_rel=0.0),
+    probability=0.0,
+    score=1.0,
+    d_path=0.0,
+  )
 
 
 def vision_lead_from_model(model: Any) -> VisionLead | None:
@@ -3245,7 +3274,7 @@ def match_dpath_primary_lead(
       if enable_radar_tracks <= 0
       else (
         PRIMARY_RADAR_SOURCES
-        if enable_radar_tracks >= 2
+        if enable_radar_tracks == 2
         else frozenset(("frontRadar",))
       )
     )
