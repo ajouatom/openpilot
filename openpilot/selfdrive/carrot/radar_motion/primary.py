@@ -2337,10 +2337,15 @@ class VisionRadarMatcher:
       self._radar_only_moving_challenger_since_s = time_s
     self._radar_only_moving_challenger_last_point = challenger[0]
     self._radar_only_moving_challenger_last_time_s = time_s
+    confirmation_s = (
+      RADAR_ONLY_MOVING_TENTATIVE_CONFIRMATION_S
+      if challenger[0].radar_track_state == 1
+      else RADAR_ONLY_MOVING_CONFIRMATION_S
+    )
     if (
       self._radar_only_moving_challenger_since_s is None
       or time_s - self._radar_only_moving_challenger_since_s
-      < RADAR_ONLY_MOVING_CONFIRMATION_S
+      < confirmation_s
     ):
       return None
     return challenger

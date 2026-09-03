@@ -1601,6 +1601,17 @@
       "forbidden_lead_one_ids": [1448, 1510],
       "forbidden_lead_two_ids": [1448, 1510],
       "scene": "A moving vehicle remains far to the right while a tight left curve projects its corner-radar track onto the model path"
+    },
+    {
+      "id": "ioniq9-1c9-2-center-stationary-reflection-23",
+      "vehicle_folder": "HYUNDAI_IONIQ_9 7a9a8e68022c1881",
+      "log": "000001c9--dc79b098bb--2/rlog.zst",
+      "source": "front",
+      "window": [22.70, 23.45],
+      "expected": "clear",
+      "human_verified": true,
+      "forbidden_lead_one_ids": [35],
+      "scene": "A centered stationary road reflection becomes a tentative moving front-radar track near the bumper and must not replace the far vision-matched leadOne through the closer-challenger path"
     }
   ]
 }

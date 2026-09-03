@@ -6446,6 +6446,78 @@ def test_confirmed_closer_moving_radar_replaces_held_farther_identity() -> None:
   assert output.lead_one["modelProb"] == pytest.approx(0.0)
 
 
+def test_tentative_closer_moving_radar_requires_longer_confirmation() -> None:
+  controller = DPathRadarController(
+    prefer_corner_radar=True,
+    enable_radar_tracks=1,
+  )
+  v_ego = 20.0
+  v_rel = -2.0
+  for index in range(7):
+    time_s = index * 0.05
+    far_d_rel = 35.0 + v_rel * time_s
+    output = controller.update(
+      time_s=time_s,
+      v_ego=v_ego,
+      radar_points=(Point(
+        43, far_d_rel, 0.1,
+        v_rel=v_rel, source="frontRadar",
+      ),),
+      model=model_with_lead(
+        far_d_rel, 0.1, v_ego + v_rel, probability=0.99,
+      ),
+    )
+    assert output.lead_one is not None
+    assert output.lead_one["radarTrackId"] == 43
+
+  for index in range(7, 22):
+    time_s = index * 0.05
+    far_d_rel = 35.0 + v_rel * time_s
+    output = controller.update(
+      time_s=time_s,
+      v_ego=v_ego,
+      radar_points=(
+        Point(
+          35, far_d_rel - 9.0, 0.0,
+          v_rel=v_rel, source="frontRadar", trackState=1,
+        ),
+        Point(
+          43, far_d_rel, 0.1,
+          v_rel=v_rel, source="frontRadar",
+        ),
+      ),
+      model=model_with_lead(
+        far_d_rel, 0.1, v_ego + v_rel, probability=0.99,
+      ),
+    )
+    assert output.lead_one is not None
+    assert output.lead_one["radarTrackId"] == 43
+
+  time_s = 22 * 0.05
+  far_d_rel = 35.0 + v_rel * time_s
+  output = controller.update(
+    time_s=time_s,
+    v_ego=v_ego,
+    radar_points=(
+      Point(
+        35, far_d_rel - 9.0, 0.0,
+        v_rel=v_rel, source="frontRadar", trackState=1,
+      ),
+      Point(
+        43, far_d_rel, 0.1,
+        v_rel=v_rel, source="frontRadar",
+      ),
+    ),
+    model=model_with_lead(
+      far_d_rel, 0.1, v_ego + v_rel, probability=0.99,
+    ),
+  )
+
+  assert output.lead_one is not None
+  assert output.lead_one["radarTrackId"] == 35
+  assert output.lead_one["modelProb"] == pytest.approx(0.0)
+
+
 def test_off_center_moving_radar_does_not_replace_held_lead_one() -> None:
   controller = DPathRadarController(
     prefer_corner_radar=True,
