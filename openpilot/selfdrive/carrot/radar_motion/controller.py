@@ -30,9 +30,11 @@ from openpilot.selfdrive.carrot.radar_motion.primary import (
   lead_from_radar_point,
   match_dpath_primary_lead,
   prefer_front_radar_kinematics,
+  select_primary_radar_points,
   snapshot_live_radar_points,
   snapshot_radar_points,
   stationary_vision_support_probability,
+  unconditional_scc_match,
   vision_only_lead_allowed,
 )
 from openpilot.selfdrive.carrot.radar_motion.trajectory_cutin import (
@@ -72,6 +74,9 @@ SCC_PHYSICAL_MATCH_MAX_DREL_M = 8.0
 SCC_PHYSICAL_MATCH_MAX_VLEAD_DELTA_MPS = 3.0
 SCC_PHYSICAL_MATCH_MAX_ABS_DPATH_M = 2.2
 SCC_PRIMARY_DUPLICATE_MAX_DREL_DELTA_M = 5.0
+RADAR_VISION_FALLBACK_MAX_ABS_DPATH_M = 1.0
+RADAR_VISION_FALLBACK_MIN_PROBABILITY = 0.40
+RADAR_MATCH_MAX_FARTHER_THAN_VISION_M = 8.0
 SCC_PRIMARY_DUPLICATE_MAX_VLEAD_DELTA_MPS = 3.0
 SCC_PRIMARY_CLOSER_MARGIN_M = 1.0
 CROSS_SENSOR_CLOSE_CUTIN_MIN_DREL_M = 2.0
@@ -280,6 +285,33 @@ def _scc_lead_two_can_compete(
   return (
     float(lead.get("dRel", math.inf)) + SCC_PRIMARY_CLOSER_MARGIN_M
     < float(primary.get("dRel", math.inf))
+  )
+
+
+def _central_vision_fallback_allowed(
+  vision: Any,
+  path: tuple[tuple[float, float], ...],
+) -> bool:
+  return bool(
+    vision is not None
+    and vision.probability >= RADAR_VISION_FALLBACK_MIN_PROBABILITY
+    and abs(
+      project_to_model_path(path, vision.d_rel, vision.y_rel).d_path
+    ) <= RADAR_VISION_FALLBACK_MAX_ABS_DPATH_M
+  )
+
+
+def _radar_match_is_dangerously_farther_than_vision(
+  match: Any,
+  vision: Any,
+  path: tuple[tuple[float, float], ...],
+) -> bool:
+  """Reject a permissive radar match that can hide a much nearer visual car."""
+  return bool(
+    match is not None
+    and _central_vision_fallback_allowed(vision, path)
+    and match.point.d_rel - vision.d_rel
+    > RADAR_MATCH_MAX_FARTHER_THAN_VISION_M
   )
 
 
@@ -585,6 +617,21 @@ class DPathRadarController:
       enable_radar_tracks=self.enable_radar_tracks,
       yaw_rate_rad_s=yaw_rate_rad_s,
     )
+    vision = self.primary_matcher.vision_fallback
+    if self.enable_radar_tracks == -1:
+      # -1 is the legacy unconditional SCC mode. It intentionally does not
+      # require a vision match and ignores SCC lateral position entirely.
+      primary_match = unconditional_scc_match(points)
+    elif _radar_match_is_dangerously_farther_than_vision(
+      primary_match, vision, path,
+    ):
+      # A farther permissive match must not hide a strongly visible nearer car.
+      primary_match = None
+    if primary_match is None and self.enable_radar_tracks == 3:
+      # 3 uses front-radar/vision matching first, then always trusts the SCC
+      # longitudinal object if matching fails. Vision is the final fallback
+      # only when no SCC object exists.
+      primary_match = unconditional_scc_match(points)
     if primary_match is not None:
       self.scc_primary_fallback_matcher.reset()
     elif self.enable_radar_tracks == 2:
@@ -595,8 +642,8 @@ class DPathRadarController:
       primary_match = self.scc_primary_fallback_matcher.match(
         model,
         tuple(
-          point for point in points
-          if point.source == "scc" and point.d_rel > 0.2
+          point for point in select_primary_radar_points(points, 2)
+          if point.source == "scc"
         ),
         path,
         time_s=time_s,
@@ -617,11 +664,11 @@ class DPathRadarController:
         primary_match.score,
       )
     else:
-      vision = self.primary_matcher.vision_fallback
       if (
         vision is not None
-        and vision_only_lead_allowed(
-          self.enable_radar_tracks,
+        and (
+          vision_only_lead_allowed(self.enable_radar_tracks)
+          or _central_vision_fallback_allowed(vision, path)
         )
       ):
         lead_one = lead_from_vision(
