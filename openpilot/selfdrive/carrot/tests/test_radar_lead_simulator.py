@@ -8,6 +8,7 @@ import pytest
 
 from openpilot.selfdrive.carrot.radar_motion import model_path_point_at_s
 from openpilot.selfdrive.carrot.radar.tools import radar_lead_validation_review
+from openpilot.selfdrive.carrot.radar.tools import radar_validation_replay
 from openpilot.selfdrive.carrot.radar.tools.radar_lead_simulator import (
   Candidate,
   CurrentRadardSelector,
@@ -272,6 +273,31 @@ def test_visual_review_starts_with_production_and_cycles_old_versions(
   assert ui.occupancy_version == 4
   assert ui.selector is ui.production_selector
   assert ui.selector.motion_sensor == "front"
+
+
+def test_legacy_corner_id_recovery_is_explicitly_brand_gated() -> None:
+  encoded = SimpleNamespace(
+    trackId=380,
+    radarSource="frontRadar",
+    dRel=35.0,
+    yRel=0.1,
+    vRel=-6.0,
+    aRel=0.0,
+    yvRel=0.0,
+    vLead=22.0,
+    measured=True,
+    aLead=0.0,
+    jLead=0.0,
+    trackState=0,
+  )
+
+  normal = radar_validation_replay._copy_track_points((encoded,))
+  legacy_hyundai = radar_validation_replay._copy_track_points(
+    (encoded,), allow_legacy_corner_ids=True,
+  )
+
+  assert normal[0].source == "frontRadar"
+  assert legacy_hyundai[0].source == "corner430"
 
 
 def test_visual_replay_cache_round_trip_and_exact_configuration(tmp_path) -> None:
