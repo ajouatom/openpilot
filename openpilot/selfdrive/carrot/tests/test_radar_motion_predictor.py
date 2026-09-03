@@ -6812,6 +6812,9 @@ def test_live_radar_snapshot_matches_generic_capnp_adapter() -> None:
   )
 
   assert production == generic
+  assert [point.source for point in production] == [
+    "frontRadar", "scc", "corner235", "corner180", "frontRadar",
+  ]
 
   generic_controller = DPathRadarController(
     front_radar_measurement_delay_s=0.02,
@@ -6827,6 +6830,32 @@ def test_live_radar_snapshot_matches_generic_capnp_adapter() -> None:
   ) == generic_controller._points_at_model_time(
     capnp_points, 12.5, 0.015,
   )
+
+
+def test_high_front_track_id_remains_primary_on_non_hyundai_radar() -> None:
+  radar_data = car.RadarData.new_message()
+  point = radar_data.init("points", 1)[0]
+  point.trackId = 380
+  point.radarSource = "frontRadar"
+  point.dRel = 35.0
+  point.yRel = 0.1
+  point.vRel = -6.0
+  point.measured = True
+
+  controller = DPathRadarController(
+    enable_radar_tracks=1,
+    production_live_tracks=True,
+  )
+  output = controller.update(
+    time_s=1.0,
+    v_ego=28.0,
+    radar_points=radar_data.points,
+    model=model_with_lead(35.0, 0.1, 22.0),
+  )
+
+  assert controller.motion_sensor == "front"
+  assert output.lead_one is not None
+  assert output.lead_one["radarTrackId"] == 380
 
 
 def test_front_radar_measurement_delay_projects_fresh_points() -> None:
