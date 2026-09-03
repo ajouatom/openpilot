@@ -2948,13 +2948,13 @@
       "group": "감속제어",
       "name": "VehicleSpeedCameraControlMode",
       "title": "차량 수신 과속카메라 감속(항상 적용)",
-      "descr": "차량 CAN에서 수신한 과속카메라 단속속도를 자동 감속에 적용하는 방식을 선택합니다. Carrot Navi에서 수신하는 과속카메라 정보에는 영향을 주지 않습니다.\n0: 사용 안 함\n1: 가속페달과 관계없이 항상 적용\n2: 가속페달을 밟아 도달한 속도를 감속 목표의 하한으로 유지\n3: 가속페달을 밟는 동안 차량 수신 과속카메라 감속 해제",
+      "descr": "차량 CAN에서 수신한 과속카메라 단속속도를 자동 감속에 적용하는 방식을 선택합니다. Carrot Navi에서 수신하는 과속카메라 정보에는 영향을 주지 않습니다.\n0: 사용 안 함\n1: 가속페달과 관계없이 항상 적용\n2: 차량 수신 카메라 감속이 시작된 뒤 새로 가속페달을 밟으면 현재 이벤트를 무시하는 것으로 보고, 감속구간에서 가속으로 도달한 최고속도를 감속 하한으로 유지\n3: 가속페달을 밟는 동안 차량 수신 과속카메라 감속 해제",
       "egroup": "SPEED",
       "etitle": "Vehicle-received Speed Camera Deceleration(Always apply)",
-      "edescr": "Select how speed-camera enforcement speeds received over vehicle CAN are used for automatic deceleration. This does not affect speed-camera information received from Carrot Navi.\n0: Disabled\n1: Always apply regardless of accelerator input\n2: Keep the speed reached with the accelerator as the lower bound\n3: Suspend vehicle-received speed-camera deceleration while the accelerator is pressed",
+      "edescr": "Select how speed-camera enforcement speeds received over vehicle CAN are used for automatic deceleration. This does not affect speed-camera information received from Carrot Navi.\n0: Disabled\n1: Always apply regardless of accelerator input\n2: Once vehicle-received camera deceleration has begun, a new accelerator press overrides the current event and keeps the highest speed reached during the override as its lower bound\n3: Suspend vehicle-received speed-camera deceleration while the accelerator is pressed",
       "cgroup": "速度控制",
       "ctitle": "车辆接收测速摄像头减速（始终应用）",
-      "cdescr": "选择如何将通过车辆 CAN 接收的测速摄像头执法速度用于自动减速。此设置不影响从 Carrot Navi 接收的测速摄像头信息。\n0：禁用\n1：无论加速踏板输入如何都始终应用\n2：将踩加速踏板后达到的速度保持为减速目标下限\n3：踩下加速踏板期间暂停车辆接收的测速摄像头减速",
+      "cdescr": "选择如何将通过车辆 CAN 接收的测速摄像头执法速度用于自动减速。此设置不影响从 Carrot Navi 接收的测速摄像头信息。\n0：禁用\n1：无论加速踏板输入如何都始终应用\n2：车辆接收的摄像头减速开始后，新踩下加速踏板会忽略当前事件，并将覆盖期间达到的最高车速保持为减速下限\n3：踩下加速踏板期间暂停车辆接收的测速摄像头减速",
       "min": 0,
       "max": 3,
       "default": 1,
@@ -2964,19 +2964,19 @@
         "ko": [
           "사용 안 함",
           "항상 적용",
-          "가속페달 속도 하한",
+          "가속페달 감속 무시",
           "가속페달 입력 중 해제"
         ],
         "en": [
           "Disabled",
           "Always apply",
-          "Accelerator speed floor",
+          "Accelerator decel override",
           "Suspend while accelerating"
         ],
         "zh": [
           "禁用",
           "始终应用",
-          "加速踏板速度下限",
+          "加速踏板忽略减速",
           "加速时暂停"
         ]
       }

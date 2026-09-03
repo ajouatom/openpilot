@@ -5,7 +5,7 @@
 > [!NOTE]
 > 이 문서는 `carrot-wip` 코드와 함께 관리하는 사용자 설명서 원본입니다. 사용자 동작이 바뀌면 관련 코드·테스트와 같은 변경에서 이 문서도 갱신합니다.
 
-이 페이지는 `carrot-wip`의 실제 코드를 기준으로 **속도·감속 20개 설정**을 설명합니다. 카메라 목표속도, 감속 시작 거리, 차량 순정 내비 CAN, 도로 제한속도 연동, 방지턱, 커브·경로·모델 속도와 신호 정지 보정이 서로 어떻게 연결되는지 사용자 관점에서 정리했습니다.
+이 페이지는 `carrot-wip`의 실제 코드를 기준으로 **속도·감속 22개 설정**을 설명합니다. 카메라 목표속도, 감속 시작 거리, 차량 순정 내비 CAN, 도로 제한속도 연동, 방지턱, 커브·경로·모델 속도와 신호 정지 보정이 서로 어떻게 연결되는지 사용자 관점에서 정리했습니다.
 
 모든 값은 Carrot Web의 **설정 → 주행 제어 → 속도·감속**에서 변경합니다.
 
@@ -55,7 +55,7 @@ Carrot Web 기본값 복원에 쓰이는 `carrot_settings.json`과 Params 최초
 <a id="speed-camera"></a>
 ## 1. 과속카메라
 
-관련 설정은 `AutoNaviSpeedCtrlMode`, `AutoNaviSpeedCtrlEnd`, `AutoNaviSpeedDecelRate`, `AutoNaviSpeedSafetyFactor`, `AutoNaviCountDownMode`, `VehicleNaviCanControl`, `VehicleNaviSchoolZoneControl`입니다.
+관련 설정은 `AutoNaviSpeedCtrlMode`, `AutoNaviSpeedCtrlEnd`, `AutoNaviSpeedDecelRate`, `AutoNaviSpeedSafetyFactor`, `AutoNaviCountDownMode`, `VehicleNaviCanControl`, `VehicleNaviSchoolZoneControl`, `VehicleSpeedCameraControlMode`, `VehicleSpeedCameraDistanceTime`입니다.
 
 ### `AutoNaviSpeedCtrlMode`
 
@@ -73,6 +73,23 @@ Carrot Web 기본값 복원에 쓰이는 `carrot_settings.json`과 Params 최초
 `VehicleNaviCanControl`은 지원되는 Hyundai/Kia CAN-FD 차량에서 순정 내비가 제공하는 카메라·방지턱의 실제 거리를 감속에 사용합니다. Kia PV5에서는 일반 카메라와 방지턱만 지원하며, 구간단속과 `VehicleNaviSchoolZoneControl`은 필요한 주기 상태 신호가 아직 검증되지 않아 적용하지 않습니다.
 
 이 기능은 기본값이 꺼진 실험 기능입니다. 화면의 이벤트 종류, 제한속도와 남은 거리가 실제 도로와 일치하는지 먼저 확인하고, 일치하지 않으면 즉시 끄세요.
+
+### `VehicleSpeedCameraControlMode`
+
+이 설정은 차량 CAN으로 받은 카메라·구간단속·30km/h 구간 감속에만 적용하며 Carrot Navi의 카메라 정보에는 영향을 주지 않습니다.
+
+| 값 | 가속페달 동작 |
+|---:|---|
+| 0 | 차량 수신 카메라 감속을 사용하지 않음 |
+| 1 | 가속페달 상태와 관계없이 항상 감속 적용 |
+| 2 | 카메라 목표가 현재 차량속도보다 낮아 실제 감속이 시작된 뒤 새로 가속페달을 밟으면, 현재 이벤트를 무시하고 감속구간에서 가속으로 도달한 최고속도를 하한으로 유지 |
+| 3 | 가속페달을 밟는 동안 차량 수신 카메라 감속을 중단하고, 놓으면 다시 적용 |
+
+`2`에서는 감속이 시작되기 전에 밟아 계속 유지한 가속페달이 하한을 미리 만들지 않습니다. 실제 감속 중 새로 가속페달을 밟으면 현재 이벤트를 무시하려는 의사로 판단하고, 가속 중 도달한 최고속도까지 하한을 높입니다. 페달을 놓아도 같은 이벤트 동안에는 그 속도 아래로 추가 감속하지 않으며, 브레이크 입력, 정차, 제한속도·감속 소스 변경 또는 이벤트 종료 시 초기화됩니다.
+
+### `VehicleSpeedCameraDistanceTime`
+
+차량이 실제 카메라 거리를 제공하지 않고 단속속도만 보낼 때 가상 감속거리를 만듭니다. 화면의 `6.0초`는 50km/h 카메라에서 약 300m, `6.2초`는 약 310m의 가상거리를 뜻하며 변경값은 주행 중 약 1초 안에 반영됩니다.
 
 ### `AutoNaviSpeedSafetyFactor`
 
@@ -229,6 +246,8 @@ Carrot Web 기본값 복원에 쓰이는 `carrot_settings.json`과 Params 최초
 - 3초: 방지턱 약 30m 전까지 목표속도 도달
 
 값을 높이면 더 일찍 목표속도에 도달합니다. 접근 감속 곡선의 강도는 별도 항목이 아니라 `AutoNaviSpeedDecelRate`를 함께 사용합니다.
+
+카메라와 마찬가지로 방지턱 신호가 실제 감속을 시작한 뒤 새로 가속페달을 밟으면 현재 방지턱을 무시하려는 의사로 판단합니다. 감속구간에서 가속으로 도달한 최고속도를 하한으로 유지하고, 방지턱 이벤트가 끝나면 초기화합니다. 감속 전부터 계속 밟고 있던 가속페달은 오버라이드를 시작하지 않습니다.
 
 ### 방지턱이 이상할 때
 
