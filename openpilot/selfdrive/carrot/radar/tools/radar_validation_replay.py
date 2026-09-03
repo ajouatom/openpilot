@@ -2455,12 +2455,16 @@ def _route_replay_module() -> Any:
   return cluster_route_replay
 
 
-def _copy_track_points(points: Iterable[Any]) -> tuple[RadarPoint, ...]:
+def _copy_track_points(
+  points: Iterable[Any],
+  *,
+  allow_legacy_corner_ids: bool = False,
+) -> tuple[RadarPoint, ...]:
   copied: list[RadarPoint] = []
   for point in points:
     track_id = int(point.trackId)
     source = str(point.radarSource)
-    if source == "frontRadar":
+    if allow_legacy_corner_ids and source == "frontRadar":
       if 200 <= track_id < 220:
         source = "corner235"
       elif 240 <= track_id < 250:
@@ -2979,11 +2983,14 @@ def load_frames(log_path: Path) -> list[RadarFrame]:
   latest_carrot_a_target: float | None = None
   latest_carrot_a_target_ns = 0
   scc_dbc_messages: dict[int, tuple[str, dict[str, Any]]] = {}
+  car_brand = ""
   # carParams can be emitted well into a segment. Resolve the static vehicle
-  # DBC before consuming CAN so SCC_CONTROL is decoded from the first frame.
+  # metadata before consuming events so legacy corner-ID recovery is limited
+  # to Hyundai and SCC_CONTROL is decoded from the first frame.
   for event in events:
     try:
       if event.which() == "carParams":
+        car_brand = str(event.carParams.brand)
         scc_dbc_messages = _hyundai_scc_dbc_messages(
           route_replay,
           str(event.carParams.carFingerprint),
@@ -3026,7 +3033,10 @@ def load_frames(log_path: Path) -> list[RadarFrame]:
       merged = route_replay.merge_recorded_and_reconstructed_tracks(
         tuple(event.liveTracks.points), reconstructed,
       )
-      copied_points = _copy_track_points(merged)
+      copied_points = _copy_track_points(
+        merged,
+        allow_legacy_corner_ids=car_brand == "hyundai",
+      )
       latest_points = tuple(
         _with_group2_front_track_state(
           point, event_ns, group2_front_quality,

@@ -164,16 +164,14 @@ def _first(values: Any, fallback: float = 0.0) -> float:
 
 
 def _normalized_source(source: Any, track_id: int) -> str:
+  # radarSource is authoritative in live car.RadarData. Track IDs are local to
+  # each vehicle interface, so a numeric range used by Hyundai corner radar
+  # can also be reached by another brand's monotonically allocated front
+  # tracks (for example Volkswagen). Legacy-log ID recovery belongs in the
+  # brand-aware replay adapter, not the production radar path.
+  del track_id
   source = str(source)
-  source = source.rsplit(".", 1)[-1]
-  if source == "frontRadar":
-    if 200 <= track_id < 220:
-      return "corner235"
-    if 240 <= track_id < 250:
-      return "corner180"
-    if 300 <= track_id < 412:
-      return "corner430"
-  return source
+  return source.rsplit(".", 1)[-1]
 
 
 def _source(point: Any) -> str:

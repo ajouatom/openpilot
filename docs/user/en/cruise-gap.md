@@ -34,7 +34,7 @@ Change them in **Carrot Web → Settings → Driving control → Cruise and foll
 
 The same symptom can therefore have different causes. A slow launch might come from the low-speed acceleration table, start acceleration-change cost, PID gains, or a vehicle limit.
 
-Catalog defaults and initial Params values currently differ for `CruiseMaxVals1` through `6`, `StopDistanceCarrot`, `LongTuningKf`, and `DynamicTFollowLC`. Use the value shown on your device as the baseline.
+Catalog defaults and initial Params values currently differ for `CruiseMaxVals1` through `6`, `StopDistanceCarrot`, and `DynamicTFollowLC`. Use the value shown on your device as the baseline.
 
 <a id="driving-mode"></a>
 ## 1. Driving mode
@@ -128,12 +128,12 @@ Range 0–200, step 10, catalog default 10. Zero permits the quickest accelerati
 <a id="longitudinal-tuning"></a>
 ## 4. Longitudinal tuning
 
-| Setting | Stored range (step) | Actual scale | Role |
-|---|---:|---:|---|
-| `LongTuningKpV` | 0–200 (5) | ×0.01 | Immediate proportional response |
-| `LongTuningKiV` | 0–2000 (1) | ×0.001 | Accumulated correction for persistent error |
-| `LongTuningKf` | 0–200 (5) | ×0.01 | Feedforward from target acceleration |
-| `LongActuatorDelay` | 0–200 (5) | ×0.01 s | How far ahead in the plan to compensate for response delay |
+| Setting | Default | Stored range (step) | Actual scale | Role |
+|---|---:|---:|---:|---|
+| `LongTuningKpV` | 100 | 0–200 (5) | ×0.01 | Immediate proportional response |
+| `LongTuningKiV` | 0 | 0–2000 (1) | ×0.001 | Accumulated correction for persistent error |
+| `LongTuningKf` | 100 | 0–200 (5) | ×0.01 | Feedforward from target acceleration |
+| `LongActuatorDelay` | 20 | 0–200 (5) | ×0.01 s | How far ahead in the plan to compensate for response delay |
 
 > [!IMPORTANT]
 > The displayed `LongTuningKiV` title says `×0.01`, but `longcontrol.py` currently applies **×0.001**. Stored `100` is Ki `0.100`, not `1.00`.
