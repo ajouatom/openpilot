@@ -230,9 +230,9 @@ SDI를 지울 때는 더 큰 sequence로 `present: false`, `value: null`, 비어
 | 이동식 카메라 | type 7 | type 7 | mode 3에서만 적용. mode 1/2에서는 `_update_sdi()`가 limit/dist를 0으로 지움 | `cam` / 주황 `cam` |
 | 구간단속(block) | `nSdiBlockType` 2/3, block distance | primary SDI block type 2/3, block distance | type을 4로 바꾸고 block distance 사용. 단, block speed는 사용하지 않고 primary SDI speed에 안전계수를 적용 | `section` / 주황 `section` |
 | 7714 전용 section object | 없음 | `section.active`, speed limit, remaining distance | present + active + not suspended + section off-route 아님 + 전체 off-route 아님 + limit > 0일 때 type 4로 변환 | `section` / 주황 `section` |
-| 방지턱 | primary/plus type 22 | primary/secondary type 22 | `roadcate > 1`, mode >= 2. payload speed는 무시하고 `AutoNaviSpeedBumpSpeed` 사용. 단, 7714는 road category 갱신 순서/기본값 문제로 type 22가 수신되어도 후보 생성에 실패할 수 있음 | `bump` / 주황 `bump` |
-| 차량 수신 과속카메라 | `carState.speedLimit/speedLimitDistance` | 동일 | 차량 CAN에서 단속속도만 수신하며 Hyundai `CarState`가 `speedLimit × (VehicleSpeedCameraDistanceTime / 10)`으로 가상거리 생성. `VehicleSpeedCameraControlMode`에 따라 미사용·항상 적용·가속페달 속도 하한·가속페달 입력 중 해제를 선택 | `hda` / 라벤더 `cam`, 하한 적용 시 `gas` |
-| 차량 내비 CAN 정확거리/구간 | `carState.speedLimitDistance/speedBumpDistance/vehicleNaviSectionActive` | 동일 | `VehicleNaviCanControl`이 켜진 Hyundai CAN-FD에서 0x4BE 또는 PV5 CAN-FD wrapper의 alert spot Offset을 휠 주행거리로 추적. 카메라는 기존 `hda`, Value 6 방지턱은 별도 후보로 계산. PV5의 구간단속은 주기 상태 신호가 검증될 때까지 비활성화 | `hda`, `hda_section`, `hda_bump` / 라벤더 `cam`, `section`, `bump` |
+| 방지턱 | primary/plus type 22 | primary/secondary type 22 | `roadcate > 1`, mode >= 2. payload speed는 무시하고 `AutoNaviSpeedBumpSpeed` 사용. 실제 감속 중 새 가속 입력이 들어오면 이벤트 종료까지 가속 최고속도를 하한으로 유지. 단, 7714는 road category 갱신 순서/기본값 문제로 type 22가 수신되어도 후보 생성에 실패할 수 있음 | `bump` / 주황 `bump`, 오버라이드 시 `gas` |
+| 차량 수신 과속카메라 | `carState.speedLimit/speedLimitDistance` | 동일 | 차량 CAN에서 단속속도만 수신하며 Hyundai `CarState`가 `speedLimit × (VehicleSpeedCameraDistanceTime / 10)`으로 가상거리 생성. `VehicleSpeedCameraControlMode`에 따라 미사용·항상 적용·감속 중 가속 이벤트 무시·가속페달 입력 중 해제를 선택 | `hda` / 라벤더 `cam`, 오버라이드 시 `gas` |
+| 차량 내비 CAN 정확거리/구간 | `carState.speedLimitDistance/speedBumpDistance/vehicleNaviSectionActive` | 동일 | `VehicleNaviCanControl`이 켜진 Hyundai CAN-FD에서 0x4BE 또는 PV5 CAN-FD wrapper의 alert spot Offset을 휠 주행거리로 추적. 카메라는 기존 `hda`, Value 6 방지턱은 별도 후보로 계산하고 실제 감속 중 새 가속 입력에는 이벤트 오버라이드를 적용. PV5의 구간단속은 주기 상태 신호가 검증될 때까지 비활성화 | `hda`, `hda_section`, `hda_bump` / 라벤더 `cam`, `section`, `bump`, 오버라이드 시 `gas` |
 | 차량 내비 CAN 30 km/h 구간 | `carState.schoolZoneActive` | 동일 | `VehicleNaviSchoolZoneControl`이 켜지고 0x4BE 종류 7이 30 km/h를 알리면 30 km/h 후보 적용. 차량의 30 카메라 상태 종료, 비-30 종류 7, 경로 재계산 또는 1 km 주행 시 해제. 가속페달 동작은 `VehicleSpeedCameraControlMode`를 따름 | `school` / 라벤더 `school`, mode 2 하한 적용 시 `gas` |
 
 차량 순정 내비의 0x4BA 곡률 프로파일은 경로·차선 연계 신뢰도가 충분하지 않아 파싱, 속도제어,
@@ -266,12 +266,14 @@ Hyundai `CarState`가 설정을 약 1초마다 다시 읽으며, 값이 바뀌�
 |---:|---|
 | 0 | 차량 수신 과속카메라 후보를 만들지 않는다. 원시 `carState.speedLimit` 표시는 유지될 수 있다. |
 | 1 | 가속페달 상태와 무관하게 후보를 항상 적용한다. 가속페달 속도 하한은 만들지 않는다. |
-| 2 | 차량 수신 과속카메라가 최종 후보일 때, 가속페달로 도달한 최고속도를 `gas_override_speed`에 저장하고 감속 목표의 하한으로 유지한다. |
+| 2 | 차량 수신 과속카메라가 최종 후보이고 계산 목표가 현재 차량속도보다 낮아 실제 감속을 요구할 때, 새로 가속페달을 밟으면 현재 이벤트를 무시하는 것으로 판단한다. 감속구간에서 가속으로 도달한 최고속도를 `gas_override_speed`에 저장하고 감속 목표 하한으로 유지한다. |
 | 3 | 가속페달을 밟는 동안 차량 수신 과속카메라 후보만 제외하고, 페달을 놓으면 다시 적용한다. |
 
-mode 2의 하한은 source 변경, 정차, 브레이크 입력, 제한속도 변경 또는 정상 목표가 150 km/h를 넘을 때
-초기화된다. 이 모드 선택은 차량 CAN의 `hda`와 `school`에 적용하며 다른 감속 source의 기존 공통 오버라이드 정책을 변경하지
-않는다. 그 외 source에서는 `road`/`vturn`/`route`/`bump` 등의 기존 속도 하한을 유지하고,
+mode 2는 실제 감속 요구 전에 밟아 계속 유지한 가속페달로 하한을 미리 만들지 않는다. 실제 감속 중 새 가속 입력으로 오버라이드가 시작된 뒤에는
+가속으로 도달한 최고속도까지 저장값을 높이고, 페달을 놓아도 이벤트가 끝날 때까지 그 하한을 유지한다.
+하한은 source 변경, 정차, 브레이크 입력, 제한속도 변경 또는 정상 목표가 150 km/h를 넘을 때 초기화된다.
+이 모드 선택은 차량 CAN의 `hda`, `hda_section`, `school`에 적용한다. 차량 CAN 방지턱 `hda_bump`와 내비 방지턱 `bump`는
+모드와 무관하게 같은 감속 중 새 가속 입력·이벤트 최고속도 하한 정책을 사용한다. 그 외 source에서는 `road`/`vturn`/`route` 등의 기존 속도 하한을 유지하고,
 `cam`/`section`/`police`는 기존과 같이 하한을 초기화한다.
 
 ### 차량 내비 CAN 정확거리 정책
@@ -474,9 +476,11 @@ on-road UI, mici UI, cluster live UI의 보조속도 영역은 선택된 감속 
 활성이고 다른 모든 후보보다 낮아 실제 winner가 되어야 한다. 방지턱도 같은 방식으로 `bump`가 winner일
 때만 표시된다. `longitudinalPlan.cruiseTarget`의 eco 표시 조건이 먼저 참이면 `eco`가 우선 표시된다.
 `VehicleSpeedCameraControlMode=2`에서 차량 수신 과속카메라 `hda`, 구간단속 `hda_section` 또는 30 km/h 구간 `school`이 winner이고
-가속페달 속도 하한이 더 높으면 최종 source가 `gas`로 바뀐다. 다른 감속 source에는 이 모드 선택을 적용하지 않으며, 각 source의
-기존 공통 가속페달 오버라이드 동작을 그대로 유지한다. 차량 CAN 방지턱 `hda_bump`는 카메라 모드와 무관하게 가속페달
-오버라이드를 허용한다. `school`에서 mode 2의 `gas`가 연속 3초 이상 유지되면 현재 school 구간을 억제하고,
+계산 목표가 현재 차량속도보다 낮아진 뒤 새로 가속페달을 밟으면 현재 감속 이벤트를 무시하는 오버라이드를 시작한다. 오버라이드 중
+가속으로 도달한 최고속도가 하한이 되며, 이 하한이 계산 목표보다 높으면 최종 source가 `gas`로 바뀐다. 감속 전에 밟아 계속 유지한
+가속페달은 하한을 만들지 않고, 이벤트 source가 끝나면 하한을 초기화한다.
+다른 감속 source에는 이 모드 선택을 적용하지 않는다. 차량 CAN 방지턱 `hda_bump`와 내비 방지턱 `bump`는 카메라 모드와
+무관하게 실제 감속 중 새 가속 입력으로 같은 이벤트 오버라이드를 시작한다. `school`에서 mode 2의 `gas`가 연속 3초 이상 유지되면 현재 school 구간을 억제하고,
 차량의 `schoolZoneActive`가 끝난 뒤 다음 구간에서 다시 활성화한다.
 
 카운트다운은 같은 종류의 다음 카메라·방지턱·회전까지 거리가 20 m 또는 현재 2초 주행거리보다 크게 증가하면 새 목표로
