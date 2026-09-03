@@ -12,7 +12,8 @@ from opendbc.car.hyundai.hyundaicanfd import CanBus
 
 SCC_TID = 0
 RADAR_START_ADDR = 0x500
-RADAR_MSG_COUNT = 32
+RADAR_MSG_COUNT = 64
+RADAR_REQUIRED_MSG_COUNT = 32
 RADAR_MSG_COUNT4 = 8
 RADAR_GROUP4_MAX_LONG_DIST = 325.0
 RADAR_GROUP4_MAX_YREL = 6.0
@@ -175,7 +176,7 @@ def corner_object_position_valid(d_rel: float, y_rel: float) -> bool:
   return (normal_object or clipped_side_object) and abs(y_rel) < 40.0
 
 
-def get_radar_can_parser(CP, radar_tracks, msg_start_addr, msg_count, radar_group4=False):
+def get_radar_can_parser(CP, radar_tracks, msg_start_addr, msg_count, required_msg_count, radar_group4=False):
   if not radar_tracks:
     return None
   #if Bus.radar not in DBC[CP.carFingerprint]:
@@ -187,7 +188,11 @@ def get_radar_can_parser(CP, radar_tracks, msg_start_addr, msg_count, radar_grou
     messages = [(f"RADAR_TRACK_{addr:x}", 20) for addr in range(msg_start_addr, msg_start_addr + msg_count)]
     return CANParser('hyundai_canfd_radar_generated', messages, CAN.ACAN)
   else:
-    messages = [(f"RADAR_TRACK_{addr:x}", 20) for addr in range(msg_start_addr, msg_start_addr + msg_count)]
+    # Legacy Mando radars expose either 32 or 64 consecutive slots. Keep the
+    # first 32 mandatory for timing/CAN validity and accept the upper bank when
+    # present, so a 32-slot radar remains fully compatible.
+    messages = [(f"RADAR_TRACK_{addr:x}", 20 if index < required_msg_count else math.nan)
+                for index, addr in enumerate(range(msg_start_addr, msg_start_addr + msg_count))]
   #return CANParser(DBC[CP.carFingerprint][Bus.radar], messages, 1)
     dbc_name = 'hyundai_kia_denso_front_radar_generated' if radar_group4 else 'hyundai_kia_mando_front_radar_generated'
     return CANParser(dbc_name, messages, 1)
@@ -268,7 +273,10 @@ class RadarInterface(RadarInterfaceBase):
     else:
       self.radar_start_addr = RADAR_START_ADDR
       self.radar_msg_count = RADAR_MSG_COUNT4 if self.radar_group4 else RADAR_MSG_COUNT
-      
+    self.radar_required_msg_count = self.radar_msg_count
+    if not self.canfd and not self.radar_group4:
+      self.radar_required_msg_count = RADAR_REQUIRED_MSG_COUNT
+
     self.params = Params()
     self.radar_tracks = self.params.get_int("EnableRadarTracks") >= 1
     self.corner_object_tracks = bool(CP.extFlags & HyundaiExtFlags.CORNER_RADAR_OBJECTS_235.value) and self.params.get_int("EnableCornerRadar") > 0
@@ -286,7 +294,10 @@ class RadarInterface(RadarInterfaceBase):
     self.corner_object_180_missed_updates = 0
     self.corner_object_430_missed_updates = 0
     self.corner_object_track_ids = CornerObjectTrackIdManager()
-    self.rcp_tracks = get_radar_can_parser(CP, self.radar_tracks, self.radar_start_addr, self.radar_msg_count, self.radar_group4)
+    self.rcp_tracks = get_radar_can_parser(
+      CP, self.radar_tracks, self.radar_start_addr, self.radar_msg_count,
+      self.radar_required_msg_count, self.radar_group4,
+    )
     self.rcp_corner_objects = get_corner_object_can_parser(CP, self.corner_object_tracks)
     self.rcp_corner_objects_180 = get_corner_object_180_can_parser(CP, self.corner_object_180_tracks)
     self.rcp_corner_objects_430 = get_corner_object_430_can_parser(CP, self.corner_object_430_tracks)
@@ -296,7 +307,7 @@ class RadarInterface(RadarInterfaceBase):
     self.rcp_scc = get_radar_can_parser_scc(CP) if use_scc_parser else None
     self.trigger_msg_scc = 416 if self.canfd else 0x420
 
-    self.trigger_msg_tracks = self.radar_start_addr + self.radar_msg_count - 1
+    self.trigger_msg_tracks = self.radar_start_addr + self.radar_required_msg_count - 1
     self.trigger_msg_corner_objects = CORNER_OBJECT_235_START_ADDR + CORNER_OBJECT_235_MSG_COUNT - 1
     self.trigger_msg_corner_objects_180 = CORNER_OBJECT_180_START_ADDR + CORNER_OBJECT_180_MSG_COUNT - 1
     self.trigger_msg_corner_objects_430 = CORNER_OBJECT_430_RIGHT_START_ADDR + CORNER_OBJECT_430_MSG_COUNT_PER_SIDE - 1
@@ -469,6 +480,8 @@ class RadarInterface(RadarInterfaceBase):
 
       msg = self.rcp_tracks.vl[f"RADAR_TRACK_{addr:x}"]
       track_state = 0
+      optional_track_stale = (addr >= self.radar_start_addr + self.radar_required_msg_count and
+                              addr not in updated_messages)
 
       if self.radar_group1:
         valid = msg['VALID_CNT1'] > 10
@@ -495,6 +508,11 @@ class RadarInterface(RadarInterfaceBase):
                  abs(msg['LAT_DIST']) <= RADAR_GROUP4_MAX_YREL)
       else:
         valid = msg['STATE'] in (3, 4)
+
+      # Optional slots do not participate in CAN validity. Therefore explicitly
+      # require a fresh frame in each radar cycle instead of retaining a valid
+      # object from the last cycle if the upper bank stops transmitting.
+      valid = valid and not optional_track_stale
 
       self.pts[t_id].measured = bool(valid)
       if not valid:
@@ -545,7 +563,9 @@ class RadarInterface(RadarInterfaceBase):
       for addr in range(self.radar_start_addr, self.radar_start_addr + self.radar_msg_count):
         msg = self.rcp_tracks.vl[f"RADAR_TRACK_{addr:x}"]
 
-        valid = msg['VALID_CNT2'] > 10
+        optional_track_stale = (addr >= self.radar_start_addr + self.radar_required_msg_count and
+                                addr not in updated_messages)
+        valid = msg['VALID_CNT2'] > 10 and not optional_track_stale
         self.pts[t_id].measured = bool(valid)
         if not valid:
           self.pts[t_id].dRel = 0
