@@ -194,6 +194,7 @@ class CarrotServ:
     self.atc_activate_count = 0
     self.gas_override_speed = 0
     self.gas_pressed_state = False
+    self.speed_event_gas_pressed = False
     self.source_last = "none"
     self.school_zone_gas_override_started_at = None
     self.school_zone_suppressed = False
@@ -458,9 +459,14 @@ class CarrotServ:
       self.school_zone_suppressed = True
 
   def _apply_speed_source_gas_floor(self, CS, desired_speed, source, v_ego_kph, road_speed_limit_changed):
+    speed_event_gas_rising = CS.gasPressed and not self.speed_event_gas_pressed
+    self.speed_event_gas_pressed = CS.gasPressed
+
     if source in ("hda", "hda_section", "hda_bump", "school"):
       # Vehicle speed bumps always allow an intentional accelerator override.
-      # Camera, section, and school sources continue to follow mode 2.
+      # Camera, section, and school sources follow mode 2 only after their
+      # target has fallen below the current speed and actual deceleration is
+      # requested.
       gas_floor_active = source == "hda_bump" or self.vehicleSpeedCameraControlMode == 2
       if not gas_floor_active:
         self.gas_override_speed = 0
@@ -469,7 +475,14 @@ class CarrotServ:
                        CS.brakePressed or road_speed_limit_changed)
         if reset_floor:
           self.gas_override_speed = 0
+        if self.gas_override_speed <= 0:
+          if (speed_event_gas_rising and not CS.brakePressed and CS.vEgo >= 0.1 and
+              desired_speed <= 150 and desired_speed < v_ego_kph):
+            # A new accelerator input during active event deceleration means
+            # the driver wants to ignore the remaining slowdown.
+            self.gas_override_speed = v_ego_kph
         elif CS.gasPressed:
+          # Keep the highest speed reached while overriding this event.
           self.gas_override_speed = max(v_ego_kph, self.gas_override_speed)
 
       self.source_last = source
@@ -492,6 +505,12 @@ class CarrotServ:
                    CS.brakePressed or road_speed_limit_changed)
     if reset_floor:
       self.gas_override_speed = 0
+    elif source == "bump":
+      if self.gas_override_speed <= 0:
+        if speed_event_gas_rising and desired_speed < v_ego_kph:
+          self.gas_override_speed = v_ego_kph
+      elif CS.gasPressed:
+        self.gas_override_speed = max(v_ego_kph, self.gas_override_speed)
     elif CS.gasPressed and not self.gas_pressed_state:
       self.gas_override_speed = max(v_ego_kph, self.gas_override_speed)
     else:

@@ -17,6 +17,7 @@ def _serv(mode):
   serv.autoNaviSpeedDecelRate = 2.0
   serv.gas_override_speed = 0
   serv.gas_pressed_state = False
+  serv.speed_event_gas_pressed = False
   serv.source_last = "none"
   serv.school_zone_gas_override_started_at = None
   serv.school_zone_suppressed = False
@@ -53,7 +54,7 @@ def test_vehicle_speed_camera_mode_controls_candidate(mode, gas_pressed, expecte
   assert serv._vehicle_speed_camera_enabled(_car_state(gas=gas_pressed)) is expected
 
 
-def test_gas_floor_tracks_peak_speed_and_remains_after_release():
+def test_gas_floor_tracks_override_peak_during_decel_and_remains_after_release():
   serv = _serv(2)
   serv.source_last = "hda"
   CS = _car_state(gas=True)
@@ -67,6 +68,36 @@ def test_gas_floor_tracks_peak_speed_and_remains_after_release():
   CS.gasPressed = False
   desired_speed, source = serv._apply_speed_source_gas_floor(CS, 60, "hda", 82, False)
   assert (desired_speed, source, serv.gas_override_speed) == (85, "gas", 85)
+
+
+def test_gas_floor_does_not_arm_before_camera_deceleration_starts():
+  serv = _serv(2)
+  serv.source_last = "hda"
+  CS = _car_state(gas=True)
+
+  desired_speed, source = serv._apply_speed_source_gas_floor(CS, 90, "hda", 80, False)
+  assert (desired_speed, source, serv.gas_override_speed) == (90, "hda", 0)
+
+  desired_speed, source = serv._apply_speed_source_gas_floor(CS, 60, "hda", 80, False)
+  assert (desired_speed, source, serv.gas_override_speed) == (60, "hda", 0)
+
+  CS.gasPressed = False
+  desired_speed, source = serv._apply_speed_source_gas_floor(CS, 60, "hda", 80, False)
+  assert (desired_speed, source, serv.gas_override_speed) == (60, "hda", 0)
+
+  CS.gasPressed = True
+  desired_speed, source = serv._apply_speed_source_gas_floor(CS, 60, "hda", 80, False)
+  assert (desired_speed, source, serv.gas_override_speed) == (80, "gas", 80)
+
+
+def test_gas_floor_can_latch_when_camera_deceleration_first_becomes_source():
+  serv = _serv(2)
+
+  desired_speed, source = serv._apply_speed_source_gas_floor(
+    _car_state(gas=True), 60, "hda", 80, False,
+  )
+
+  assert (desired_speed, source, serv.gas_override_speed) == (80, "gas", 80)
 
 
 @pytest.mark.parametrize("mode", (0, 1, 3))
@@ -216,12 +247,47 @@ def test_vehicle_bump_always_uses_accelerator_speed_floor(mode):
   assert (desired_speed, source, serv.gas_override_speed) == (35, "gas", 35)
 
 
-def test_vehicle_bump_override_activates_when_pedal_precedes_source():
+def test_vehicle_bump_override_requires_new_pedal_input_during_decel():
   serv = _serv(1)
   CS = _car_state(gas=True)
 
+  serv._apply_speed_source_gas_floor(CS, 90, "cam", 34, False)
   assert serv._apply_speed_source_gas_floor(CS, 22, "hda_bump", 34, False)[:2] == (22, "hda_bump")
+
+  CS.gasPressed = False
+  assert serv._apply_speed_source_gas_floor(CS, 22, "hda_bump", 34, False)[:2] == (22, "hda_bump")
+
+  CS.gasPressed = True
   assert serv._apply_speed_source_gas_floor(CS, 22, "hda_bump", 35, False)[:2] == (35, "gas")
+  assert serv._apply_speed_source_gas_floor(CS, 22, "hda_bump", 40, False)[:2] == (40, "gas")
+
+
+@pytest.mark.parametrize(("mode", "source"), ((2, "hda"), (1, "hda_bump"), (1, "bump")))
+def test_speed_event_gas_floor_resets_when_event_source_ends(mode, source):
+  serv = _serv(mode)
+  serv.source_last = source
+  CS = _car_state(gas=True)
+
+  assert serv._apply_speed_source_gas_floor(CS, 22, source, 35, False)[:2] == (35, "gas")
+
+  CS.gasPressed = False
+  desired_speed, returned_source = serv._apply_speed_source_gas_floor(CS, 200, "road", 35, False)
+  assert (desired_speed, returned_source, serv.gas_override_speed) == (200, "road", 0)
+
+
+def test_legacy_bump_override_requires_new_pedal_input_during_decel():
+  serv = _serv(1)
+  serv.source_last = "bump"
+  CS = _car_state(gas=True)
+
+  assert serv._apply_speed_source_gas_floor(CS, 40, "bump", 35, False)[:2] == (40, "bump")
+  assert serv._apply_speed_source_gas_floor(CS, 22, "bump", 35, False)[:2] == (22, "bump")
+
+  CS.gasPressed = False
+  serv._apply_speed_source_gas_floor(CS, 22, "bump", 35, False)
+  CS.gasPressed = True
+  assert serv._apply_speed_source_gas_floor(CS, 22, "bump", 35, False)[:2] == (35, "gas")
+  assert serv._apply_speed_source_gas_floor(CS, 22, "bump", 40, False)[:2] == (40, "gas")
 
 
 def test_school_gas_override_suppresses_zone_after_three_seconds(monkeypatch):

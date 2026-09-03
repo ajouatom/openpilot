@@ -5,7 +5,7 @@
 > [!NOTE]
 > This is the canonical English user guide maintained with the `carrot-wip` code. When user-visible behavior changes, update this document together with the related code and tests.
 
-This page explains all **20 speed and deceleration settings** in the current code: event targets, deceleration distance, stock-navigation CAN, road-limit adjustment, speed bumps, curve/route/model speed, and traffic-light stop adjustment.
+This page explains all **22 speed and deceleration settings** in the current code: event targets, deceleration distance, stock-navigation CAN, road-limit adjustment, speed bumps, curve/route/model speed, and traffic-light stop adjustment.
 
 Change them in **Carrot Web → Settings → Driving control → Speed and deceleration**.
 
@@ -53,6 +53,8 @@ Record the value currently shown on the device before changing anything.
 <a id="speed-camera"></a>
 ## 1. Speed cameras
 
+The related settings are `AutoNaviSpeedCtrlMode`, `AutoNaviSpeedCtrlEnd`, `AutoNaviSpeedDecelRate`, `AutoNaviSpeedSafetyFactor`, `AutoNaviCountDownMode`, `VehicleNaviCanControl`, `VehicleNaviSchoolZoneControl`, `VehicleSpeedCameraControlMode`, and `VehicleSpeedCameraDistanceTime`.
+
 ### `AutoNaviSpeedCtrlMode`
 
 | Value | Events used for deceleration |
@@ -69,6 +71,23 @@ The event type, limit, and distance must all be valid. An average-speed zone ret
 `VehicleNaviCanControl` uses exact camera and speed-bump distances from the stock navigation on supported Hyundai/Kia CAN-FD vehicles. On the Kia PV5, it currently supports regular cameras and speed bumps only; average-speed zones and `VehicleNaviSchoolZoneControl` remain disabled until the required periodic zone-state signal is validated.
 
 This experimental control is off by default. First verify that the displayed event type, limit, and remaining distance match the road, and disable it immediately if they do not.
+
+### `VehicleSpeedCameraControlMode`
+
+This setting applies only to camera, average-speed-zone, and 30 km/h zone deceleration received over vehicle CAN. It does not affect camera information from Carrot Navi.
+
+| Value | Accelerator behavior |
+|---:|---|
+| `0` | Disable vehicle-received camera deceleration |
+| `1` | Always apply deceleration regardless of accelerator input |
+| `2` | Once the camera target is below vehicle speed and actual deceleration has begun, a new accelerator press overrides the current event and keeps the highest speed reached during the override as its lower bound |
+| `3` | Suspend vehicle-received camera deceleration while the accelerator is pressed and resume it after release |
+
+In mode `2`, an accelerator held from before actual deceleration begins does not pre-arm a floor. A new press during actual deceleration is treated as a request to ignore the current event, and the floor rises to the highest speed reached while accelerating. Releasing the pedal does not permit further slowing below that floor during the same event. Braking, stopping, a speed-limit or deceleration-source change, or the end of the event clears it.
+
+### `VehicleSpeedCameraDistanceTime`
+
+When the vehicle supplies only an enforcement speed without an exact camera distance, this setting creates a virtual deceleration distance. At a 50 km/h camera, `6.0 s` produces about 300 m and `6.2 s` about 310 m. A live change is applied within about one second.
 
 ### `AutoNaviSpeedSafetyFactor`
 
@@ -173,6 +192,8 @@ This is the crossing target in km/h. Raise it to cross faster and lower it to cr
     bump completion margin = bump target (m/s) × setting time (s)
 
 At 36 km/h (10 m/s), 1 second aims to reach target about 10 m before the bump; 3 seconds aims for about 30 m. A larger value finishes earlier. The approach curve still uses `AutoNaviSpeedDecelRate`.
+
+As with a camera event, a new accelerator press after a bump signal has begun actual deceleration is treated as a request to ignore that bump. The highest speed reached while accelerating becomes the floor for the rest of the event, and the floor is cleared when the bump event ends. An accelerator held from before deceleration began does not start the override.
 
 If there is no slowing, check mode 2+, event type 22, remaining distance, and road category. For late slowing, lower `DecelRate` or raise `BumpTime`; for an incorrect crossing speed, adjust only `BumpSpeed`.
 
