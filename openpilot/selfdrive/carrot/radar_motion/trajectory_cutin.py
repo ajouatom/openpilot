@@ -472,22 +472,34 @@ class TrajectoryCutInDetector:
         and point.d_rel <= CROSS_SENSOR_SLOT_HANDOFF_MAX_DREL_M
         else None
       )
+      prior_alias = self._corner_front_aliases.get(raw_key)
       if stable_cross_key is not None:
         self._corner_front_aliases[raw_key] = stable_cross_key, time_s
-      else:
-        prior_alias = self._corner_front_aliases.get(raw_key)
-        if (
-          prior_alias is not None
-          and point.source.startswith("corner")
-          and point.d_rel <= CROSS_SENSOR_SLOT_HANDOFF_MAX_DREL_M
-          and time_s - prior_alias[1] <= CROSS_SENSOR_ALIAS_HOLD_S
-        ):
-          stable_cross_key = prior_alias[0]
+      elif (
+        prior_alias is not None
+        and point.source.startswith("corner")
+        and point.d_rel <= CROSS_SENSOR_SLOT_HANDOFF_MAX_DREL_M
+        and time_s - prior_alias[1] <= CROSS_SENSOR_ALIAS_HOLD_S
+      ):
+        stable_cross_key = prior_alias[0]
       key = stable_cross_key or raw_key
       if key in seen:
         key = raw_key
       seen.add(key)
       state = self._tracks.get(key)
+      if state is None and key != raw_key:
+        # The corner point can acquire its first front-radar association only
+        # after it has already built useful OUT-to-IN history. Transfer that
+        # physically continuous raw/prior-alias state to the stable identity;
+        # otherwise the association itself erases the boundary crossing.
+        history_key = prior_alias[0] if prior_alias is not None else raw_key
+        history_state = self._tracks.get(history_key)
+        if (
+          history_state is not None
+          and self._continuous(history_state, point, time_s)
+        ):
+          state = self._tracks.pop(history_key)
+          self._tracks[key] = state
       if state is None:
         state = _TrackState(self._new_continuity_id())
         self._tracks[key] = state

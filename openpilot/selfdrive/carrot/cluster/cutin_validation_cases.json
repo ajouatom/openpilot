@@ -55,6 +55,19 @@
       "scene": "A far non-closing adjacent-lane vehicle has no vision support and only weak projected drift outside the path; crossing vRel +0.5 m/s must not promote it to leadTwo"
     },
     {
+      "id": "carnival-172-14-delayed-front-association-cutin-2920",
+      "vehicle_folder": "KIA_CARNIVAL_4TH_GEN c4dcf95545dafe68",
+      "log": "00000172--e4003be6e5--14/rlog.zst",
+      "source": "front+corner",
+      "window": [5.25, 6.65],
+      "expected": "detect",
+      "human_verified": true,
+      "validation_stage": "lead_two",
+      "target_track_ids": [51, 2920],
+      "latest_detection_s": 5.40,
+      "scene": "The left vehicle begins its measured OUT-to-IN motion as raw corner id2920, then acquires front id51; the first cross-sensor association must preserve the continuous outside history and promote it to leadTwo"
+    },
+    {
       "id": "ioniq9-a7-37-empty-road-stationary-corner-2294",
       "vehicle_folder": "HYUNDAI_IONIQ_9 7a9a8e68022c1881",
       "log": "000001a7--2948dd51d1--37/rlog.zst",
