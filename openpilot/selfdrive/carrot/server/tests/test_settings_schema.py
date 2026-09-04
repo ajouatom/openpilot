@@ -10,6 +10,13 @@ from pathlib import Path
 
 import pytest
 
+from openpilot.selfdrive.carrot.server.services.settings import (
+  build_menu_categories,
+  current_vehicle_brand,
+  filter_settings_catalog_for_brand,
+  group_index,
+)
+
 SETTINGS_PATH = Path(__file__).resolve().parents[3] / "carrot_settings.json"
 PARAMS_KEYS_PATH = Path(__file__).resolve().parents[4] / "common" / "params_keys.h"
 
@@ -98,6 +105,10 @@ def test_longitudinal_pid_defaults_match_registry(params):
   assert tuple(by_name[name]["default"] for name in (
     "LongTuningKpV", "LongTuningKiV", "LongTuningKf",
   )) == (100, 0, 100)
+  for name in ("LongTuningKpV", "LongTuningKiV", "LongTuningKf"):
+    assert by_name[name]["hidden_brands"] == ["hyundai"]
+    assert "현대·기아·제네시스" in by_name[name]["descr"]
+    assert "hidden and ignored" in by_name[name]["edescr"]
 
   params_keys = PARAMS_KEYS_PATH.read_text(encoding="utf-8")
   for name, default in (
@@ -106,6 +117,62 @@ def test_longitudinal_pid_defaults_match_registry(params):
     ("LongTuningKf", 100),
   ):
     assert f'{{"{name}", {{PERSISTENT, INT, "{default}"}}}}' in params_keys
+
+
+def test_hyundai_catalog_hides_longitudinal_pid_settings(settings):
+  groups, by_name, groups_list = group_index(settings)
+  categories = build_menu_categories(settings, by_name)
+  hidden = {"LongTuningKpV", "LongTuningKiV", "LongTuningKf"}
+
+  filtered_groups, filtered_groups_list, filtered_categories, hidden_names = filter_settings_catalog_for_brand(
+    groups, groups_list, categories, "hyundai",
+  )
+  visible_names = {item["name"] for items in filtered_groups.values() for item in items}
+  menu_names = {
+    name
+    for category in filtered_categories
+    for group in category["groups"]
+    for section in group["sections"]
+    for name in section["items"]
+  }
+
+  assert hidden_names == hidden
+  assert hidden.isdisjoint(visible_names)
+  assert hidden.isdisjoint(menu_names)
+  assert all(group["count"] == len(filtered_groups[group["group"]]) for group in filtered_groups_list)
+
+
+def test_other_brands_keep_longitudinal_pid_settings(settings):
+  groups, by_name, groups_list = group_index(settings)
+  categories = build_menu_categories(settings, by_name)
+  filtered_groups, _filtered_groups_list, _filtered_categories, hidden_names = filter_settings_catalog_for_brand(
+    groups, groups_list, categories, "toyota",
+  )
+  visible_names = {item["name"] for items in filtered_groups.values() for item in items}
+
+  assert hidden_names == set()
+  assert {"LongTuningKpV", "LongTuningKiV", "LongTuningKf"} <= visible_names
+
+
+@pytest.mark.parametrize("car_name", [
+  b"HYUNDAI_IONIQ_5_PE",
+  "KIA_EV6",
+  "GENESIS_G80_2ND_GEN_FL",
+])
+def test_vehicle_brand_falls_back_to_hkg_car_name(car_name):
+  class FakeParams:
+    def get(self, name):
+      return {"CarParamsPersistent": None, "CarName": car_name}.get(name)
+
+  assert current_vehicle_brand(FakeParams()) == "hyundai"
+
+
+def test_vehicle_brand_does_not_hide_settings_for_other_car_name():
+  class FakeParams:
+    def get(self, name):
+      return {"CarParamsPersistent": None, "CarName": "TOYOTA_RAV4"}.get(name)
+
+  assert current_vehicle_brand(FakeParams()) == ""
 
 
 def test_c3x_lite_hardware_setting_is_exposed(settings, params):
