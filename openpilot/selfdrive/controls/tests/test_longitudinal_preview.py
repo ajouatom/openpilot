@@ -76,6 +76,9 @@ def test_response_levels_rise_monotonically_from_gentle_to_tracking():
   tunings = [LEAD_ACCEL_RESPONSE_TUNING[level] for level in range(1, 6)]
   assert [t.preview_max for t in tunings] == sorted(t.preview_max for t in tunings)
   assert [t.target_delta_max for t in tunings] == sorted(t.target_delta_max for t in tunings)
+  assert [t.gap_error_gain for t in tunings] == sorted(t.gap_error_gain for t in tunings)
+  assert [t.opening_speed_gain for t in tunings] == sorted(t.opening_speed_gain for t in tunings)
+  assert [t.gap_recovery_max for t in tunings] == sorted(t.gap_recovery_max for t in tunings)
   assert [t.gap_margin_floor for t in tunings] == sorted(
     (t.gap_margin_floor for t in tunings), reverse=True,
   )
@@ -145,7 +148,7 @@ def test_only_level_five_adds_direct_alead_boost():
 
   result = request(DRIVING_MODE_NORMAL, 2.0, accel_response_level=5,
                    accel_response_enabled=True, v_rel=0.0, gap_margin=1.0)
-  assert result.accel_boost_target == pytest.approx(0.50)
+  assert result.accel_boost_target == pytest.approx(0.75)
 
 
 def test_acceleration_response_requires_gap_and_relative_speed_margin():
@@ -181,8 +184,8 @@ def test_level_five_keeps_tracking_while_lead_acceleration_remains_positive():
     v_rel=0.2, gap_margin=-5.0,
   )
   assert result.accel_response_active
-  assert result.offset_s == pytest.approx(0.55)
-  assert result.accel_boost_target == pytest.approx(0.30)
+  assert result.offset_s == pytest.approx(0.65)
+  assert result.accel_boost_target == pytest.approx(0.40)
 
 
 def test_cruise_acceleration_levels_progressively_use_cruise_max_envelope():
@@ -191,7 +194,31 @@ def test_cruise_acceleration_levels_progressively_use_cruise_max_envelope():
     get_cruise_accel_target(accel_response_level=level, **kwargs)
     for level in (3, 4, 5)
   ]
-  assert targets == pytest.approx([0.76, 0.96, 1.01])
+  assert targets == pytest.approx([0.86, 1.06, 1.26])
+
+
+def test_cruise_acceleration_levels_use_opening_gap_for_distinct_recovery():
+  kwargs = dict(
+    base_target=0.70,
+    accel_max=2.33,
+    a_lead=0.81,
+    speed_error=59.3 / 3.6,
+    v_rel=0.80,
+    gap_margin=6.0,
+  )
+  targets = [
+    get_cruise_accel_target(accel_response_level=level, **kwargs)
+    for level in (3, 4, 5)
+  ]
+  assert targets == pytest.approx([1.13, 1.60, 2.00])
+
+
+def test_gap_recovery_does_not_reward_a_closing_or_short_gap():
+  kwargs = dict(base_target=0.70, accel_max=2.33, a_lead=0.81, speed_error=59.3 / 3.6)
+  baseline = get_cruise_accel_target(accel_response_level=5, **kwargs)
+  assert get_cruise_accel_target(
+    accel_response_level=5, v_rel=-0.1, gap_margin=-1.0, **kwargs,
+  ) == pytest.approx(baseline)
 
 
 def test_cruise_acceleration_target_needs_set_speed_headroom_and_positive_lead_accel():
@@ -273,8 +300,8 @@ def test_preview_rate_and_action_time_are_bounded():
 
 def test_level_five_boost_has_fast_attack_and_slower_release():
   tuning = LEAD_ACCEL_RESPONSE_TUNING[5]
-  assert rate_limit_accel_boost(tuning.boost_max, 0.0, tuning.boost_attack_step) == pytest.approx(0.20)
-  assert rate_limit_accel_boost(tuning.boost_max, 0.20, tuning.boost_attack_step) == pytest.approx(0.40)
+  assert rate_limit_accel_boost(tuning.boost_max, 0.0, tuning.boost_attack_step) == pytest.approx(0.30)
+  assert rate_limit_accel_boost(tuning.boost_max, 0.30, tuning.boost_attack_step) == pytest.approx(0.60)
   assert rate_limit_accel_boost(0.0, 0.40, tuning.boost_attack_step) == pytest.approx(0.36)
   assert rate_limit_accel_boost(0.0, 0.40, tuning.boost_attack_step, immediate_release=True) == 0.0
 
@@ -341,10 +368,10 @@ def test_level_five_acceleration_target_is_mode_independent_and_bounded(mode):
     0.20, 0.80, mode, 0.5,
     accel_response_active=True,
     accel_response_level=5,
-    accel_boost=0.50,
+    accel_boost=0.75,
     accel_max=2.0,
     a_lead=1.0,
-  ) == pytest.approx(1.00)
+  ) == pytest.approx(1.45)
 
 
 def test_acceleration_response_respects_vehicle_acceleration_limit():
@@ -397,7 +424,7 @@ def test_level_five_direct_boost_applies_when_preview_trajectory_is_falling():
   ) == pytest.approx(0.70)
 
 
-def test_level_five_acceleration_cannot_exceed_lead_by_more_than_small_overshoot():
+def test_level_five_acceleration_without_gap_recovery_uses_bounded_overshoot():
   assert apply_preview_target(
     0.10, 1.20, DRIVING_MODE_HIGH, 0.5,
     accel_response_active=True,
@@ -405,13 +432,13 @@ def test_level_five_acceleration_cannot_exceed_lead_by_more_than_small_overshoot
     accel_boost=0.50,
     accel_max=2.0,
     a_lead=0.40,
-  ) == pytest.approx(0.60)
+  ) == pytest.approx(0.85)
 
 
 @pytest.mark.parametrize(("level", "cruise_target", "expected"), [
-  (3, 0.76, 0.76),
-  (4, 0.96, 0.96),
-  (5, 1.01, 1.01),
+  (3, 0.86, 0.86),
+  (4, 1.06, 1.06),
+  (5, 1.26, 1.26),
 ])
 def test_cruise_source_target_is_applied_by_levels_three_to_five(level, cruise_target, expected):
   assert apply_preview_target(
