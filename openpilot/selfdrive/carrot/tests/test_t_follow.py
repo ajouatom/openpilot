@@ -152,11 +152,20 @@ def test_level_five_tf1_uses_configured_gap_one_despite_speed_table_and_safe_mod
 
 
 def test_lower_tf1_response_keeps_speed_table_and_safe_mode_gap():
-  planner = _speed_tf_planner(lead_accel_response=4, applied_t_follow=0.72)
+  planner = _speed_tf_planner(lead_accel_response=3, applied_t_follow=0.72)
 
   assert planner.get_T_FOLLOW(
     log.LongitudinalPersonality.aggressive, v_ego=50.0 / 3.6, a_ego=0.0, lead_status=True,
   ) == pytest.approx(0.72)
+
+
+def test_level_four_tf1_uses_configured_gap_one_while_lead_accelerates():
+  planner = _speed_tf_planner(lead_accel_response=4, applied_t_follow=0.72)
+
+  assert planner.get_T_FOLLOW(
+    log.LongitudinalPersonality.aggressive, v_ego=50.0 / 3.6, a_ego=0.0,
+    lead_status=True, lead_accel=0.5,
+  ) == pytest.approx(0.4)
 
 
 def test_level_five_tf1_keeps_larger_gap_while_decelerating():
@@ -168,9 +177,10 @@ def test_level_five_tf1_keeps_larger_gap_while_decelerating():
   ) == pytest.approx(0.72)
 
 
+@pytest.mark.parametrize("level", [4, 5])
 @pytest.mark.parametrize("lead_accel", [0.0, -0.5])
-def test_level_five_returns_to_normal_gap_when_lead_stops_accelerating(lead_accel):
-  planner = _speed_tf_planner(lead_accel_response=5, applied_t_follow=0.72)
+def test_strong_levels_return_to_normal_gap_when_lead_stops_accelerating(level, lead_accel):
+  planner = _speed_tf_planner(lead_accel_response=level, applied_t_follow=0.72)
 
   assert planner.get_T_FOLLOW(
     log.LongitudinalPersonality.aggressive, v_ego=50.0 / 3.6, a_ego=0.0,

@@ -378,10 +378,10 @@ class LongitudinalMpc:
     v_ego = self.x0[1]
     a_ego = self.x0[2]
     self.status = radarstate.leadOne.status or radarstate.leadTwo.status
-    # Use the previous cycle's controlling radar lead for the level-5 TF1
-    # exception. Requiring an already-opening gap avoids shrinking TF while
-    # the ego vehicle is still closing on the lead.
-    tf_lead = radarstate.leadOne if self.source == 'lead0' else radarstate.leadTwo if self.source == 'lead1' else None
+    # Use the previous cycle's controlling radar lead for the level 4-5 TF1
+    # exception. Cruise can be the MPC source while a valid lead pulls away.
+    # Requiring an opening gap avoids shrinking TF while ego is still closing.
+    tf_lead = radarstate.leadOne if self.source in ('lead0', 'cruise') else radarstate.leadTwo if self.source == 'lead1' else None
     tf_lead_valid = (
       tf_lead is not None
       and tf_lead.status
