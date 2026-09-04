@@ -89,9 +89,6 @@ def test_response_costs_progress_from_gentle_to_maximum():
   assert [t.jerk_cost_factor for t in tunings] == sorted(
     (t.jerk_cost_factor for t in tunings), reverse=True,
   )
-  assert [t.gap_margin_floor for t in tunings] == sorted(
-    (t.gap_margin_floor for t in tunings), reverse=True,
-  )
 
 
 @pytest.mark.parametrize(("level", "a_change_factor", "jerk_factor"), [
@@ -154,11 +151,11 @@ def test_cruise_response_requires_set_speed_headroom():
 
 
 def test_acceleration_response_requires_gap_and_relative_speed_margin():
-  assert not lead_accel_response_allowed(1, v_rel=0.0, gap_margin=-0.01,
+  assert not lead_accel_response_allowed(1, v_rel=0.0, gap_margin=0.0,
                                          lead_accel_signal=1.0, a_lead=1.0)
-  assert lead_accel_response_allowed(3, v_rel=0.0, gap_margin=-2.00,
+  assert lead_accel_response_allowed(3, v_rel=0.0, gap_margin=0.01,
                                      lead_accel_signal=1.0, a_lead=1.0)
-  assert not lead_accel_response_allowed(3, v_rel=0.0, gap_margin=-2.01,
+  assert not lead_accel_response_allowed(3, v_rel=0.0, gap_margin=-0.01,
                                          lead_accel_signal=1.0, a_lead=1.0)
   assert not lead_accel_response_allowed(5, v_rel=-0.21, gap_margin=1.0,
                                          lead_accel_signal=1.0, a_lead=1.0)
@@ -166,10 +163,11 @@ def test_acceleration_response_requires_gap_and_relative_speed_margin():
                                      lead_accel_signal=0.4, a_lead=1.0)
 
 
-def test_level_five_can_follow_inside_target_gap_only_when_lead_pulls_away():
-  assert not mpc_request(4, v_rel=0.0, gap_margin=-5.0).active
-  assert mpc_request(5, a_lead=0.6, a_ego=0.6, v_rel=0.2, gap_margin=-5.0).active
-  assert not mpc_request(5, v_rel=-0.5, gap_margin=-5.0).active
+@pytest.mark.parametrize("level", range(1, 6))
+def test_every_level_returns_to_normal_cost_at_configured_tf(level):
+  assert mpc_request(level, v_rel=0.2, gap_margin=0.01).active
+  assert not mpc_request(level, v_rel=0.2, gap_margin=0.0).active
+  assert not mpc_request(level, v_rel=0.2, gap_margin=-0.01).active
 
 
 def test_level_five_requires_positive_raw_lead_acceleration():

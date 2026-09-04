@@ -43,7 +43,6 @@ class PreviewTuning:
 class LeadAccelResponseTuning:
   prediction_horizon: float
   closing_speed_floor: float
-  gap_margin_floor: float
   a_change_cost_factor: float
   jerk_cost_factor: float
 
@@ -97,11 +96,11 @@ MODE_TUNING = {
 # acceleration, lead-distance, danger-zone, turn and cut-in limits are not
 # changed by these factors.
 LEAD_ACCEL_RESPONSE_TUNING = {
-  1: LeadAccelResponseTuning(0.00, 0.00, 0.00, 0.85, 0.95),
-  2: LeadAccelResponseTuning(0.10, -0.05, -0.75, 0.65, 0.80),
-  3: LeadAccelResponseTuning(0.25, -0.10, -2.00, 0.40, 0.60),
-  4: LeadAccelResponseTuning(0.40, -0.15, -3.00, 0.18, 0.35),
-  5: LeadAccelResponseTuning(0.50, -0.20, -math.inf, 0.05, 0.15),
+  1: LeadAccelResponseTuning(0.00, 0.00, 0.85, 0.95),
+  2: LeadAccelResponseTuning(0.10, -0.05, 0.65, 0.80),
+  3: LeadAccelResponseTuning(0.25, -0.10, 0.40, 0.60),
+  4: LeadAccelResponseTuning(0.40, -0.15, 0.18, 0.35),
+  5: LeadAccelResponseTuning(0.50, -0.20, 0.05, 0.15),
 }
 
 
@@ -149,7 +148,9 @@ def lead_accel_response_allowed(level: int, *, v_rel: float, gap_margin: float,
   # positive lead acceleration with a cruise source because relative
   # acceleration may be near zero while an existing gap is opening.
   positive_lead_accel = a_lead > LEAD_ACCEL_DEADBAND
-  if (gap_margin < tuning.gap_margin_floor or
+  # Cost reduction is only for catching back up to the configured TF. Once
+  # that distance is reached, normal MPC costs resume and maintain the gap.
+  if (gap_margin <= 0.0 or
       v_rel < tuning.closing_speed_floor or
       not positive_lead_accel or
       (response_level < LEAD_ACCEL_RESPONSE_MAX and not cruise_source_active and lead_accel_signal <= 0.0)):
