@@ -128,6 +128,9 @@ Range 0–200, step 10, catalog default 10. Zero permits the quickest accelerati
 <a id="longitudinal-tuning"></a>
 ## 4. Longitudinal tuning
 
+> [!IMPORTANT]
+> Hyundai, Kia, and Genesis vehicles are fixed at `Kp=1.0`, `Ki=0`, and `Kf=1.0` to preserve safe acceleration and braking tracking. These three gain settings are hidden on those vehicles, and previously stored values are ignored by control. `LongActuatorDelay` remains visible and effective.
+
 | Setting | Default | Stored range (step) | Actual scale | Role |
 |---|---:|---:|---:|---|
 | `LongTuningKpV` | 100 | 0–200 (5) | ×0.01 | Immediate proportional response |
@@ -138,14 +141,14 @@ Range 0–200, step 10, catalog default 10. Zero permits the quickest accelerati
 > [!IMPORTANT]
 > The displayed `LongTuningKiV` title says `×0.01`, but `longcontrol.py` currently applies **×0.001**. Stored `100` is Ki `0.100`, not `1.00`.
 
-The Kp/Ki/Kf overrides apply only when the vehicle's base longitudinal tune has a single Kp point and a single Ki point. Multi-point vehicle tunes retain their defaults. These gains are also not the primary controller when stock SCC controls acceleration and braking.
+Hyundai, Kia, and Genesis do not read the stored `LongTuningKpV`, `LongTuningKiV`, or `LongTuningKf` values. On other brands, the overrides apply only when the vehicle's base longitudinal tune has a single Kp point and a single Ki point. Multi-point vehicle tunes retain their defaults. These gains are also not the primary controller when stock SCC controls acceleration and braking.
 
 - Raising Kp corrects present speed error more strongly; too much can oscillate.
 - Raising Ki removes persistent error faster; too much can accumulate into overshoot.
 - Raising Kf commands more for the same target acceleration in both acceleration and braking directions.
 - Raising delay uses a more future plan point and acts earlier; too much can lead the real car and surge.
 
-Tune delay first only if acceleration and braking are both consistently late, in 0.05-second steps. Then consider Kf, Kp, and finally Ki. Restore the saved profile immediately if oscillation appears.
+On other brands, tune delay first only if acceleration and braking are both consistently late, in 0.05-second steps. Then consider Kf, Kp, and finally Ki. Restore the saved profile immediately if oscillation appears.
 
 <a id="following-gap"></a>
 ## 5. Following gap
