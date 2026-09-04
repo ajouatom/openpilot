@@ -25,6 +25,7 @@ from openpilot.selfdrive.carrot.radar_motion.predictor import (
 from openpilot.selfdrive.carrot.radar_motion.primary import (
   FrontRadarKinematicAssociator,
   RadarPointSnapshot,
+  STATIONARY_MAX_ABS_VLEAD_MPS,
   VisionRadarMatcher,
   lead_from_vision,
   lead_from_radar_point,
@@ -77,6 +78,7 @@ SCC_PRIMARY_DUPLICATE_MAX_DREL_DELTA_M = 5.0
 RADAR_VISION_FALLBACK_MAX_ABS_DPATH_M = 1.0
 RADAR_VISION_FALLBACK_MIN_PROBABILITY = 0.40
 RADAR_MATCH_MAX_FARTHER_THAN_VISION_M = 8.0
+CORROBORATED_STATIONARY_VISION_RANGE_MISMATCH_HOLD_S = 0.15
 SCC_PRIMARY_DUPLICATE_MAX_VLEAD_DELTA_MPS = 3.0
 SCC_PRIMARY_CLOSER_MARGIN_M = 1.0
 CROSS_SENSOR_CLOSE_CUTIN_MIN_DREL_M = 2.0
@@ -411,10 +413,52 @@ class DPathRadarController:
     )
     self.scc_lead_two_tracker = DPathSccLeadTwoTracker()
     self.lead_dynamics = RadarLeadDynamics()
+    self._stationary_vision_range_mismatch_identity: (
+      tuple[str, int] | None
+    ) = None
+    self._stationary_vision_range_mismatch_since_s: float | None = None
 
   def _reset_motion_pipeline(self) -> None:
     self.trajectory_cutin = TrajectoryCutInDetector(self.cut_in_sensitivity)
     self._same_row_suppressed_until: dict[tuple[str, int, int], float] = {}
+
+  def _reset_stationary_vision_range_mismatch(self) -> None:
+    self._stationary_vision_range_mismatch_identity = None
+    self._stationary_vision_range_mismatch_since_s = None
+
+  def _reject_farther_radar_match(
+    self,
+    match: Any,
+    vision: Any,
+    path: tuple[tuple[float, float], ...],
+    time_s: float,
+  ) -> bool:
+    if not _radar_match_is_dangerously_farther_than_vision(
+      match, vision, path,
+    ):
+      self._reset_stationary_vision_range_mismatch()
+      return False
+
+    identity = (match.point.source, match.point.track_id)
+    corroborated_stationary = bool(
+      identity == self.primary_matcher.stationary_identity
+      and self.primary_matcher.stationary_corner_supported
+      and match.point.source == "frontRadar"
+      and match.point.measured
+      and abs(match.point.v_lead) <= STATIONARY_MAX_ABS_VLEAD_MPS
+    )
+    if not corroborated_stationary:
+      self._reset_stationary_vision_range_mismatch()
+      return True
+    if identity != self._stationary_vision_range_mismatch_identity:
+      self._stationary_vision_range_mismatch_identity = identity
+      self._stationary_vision_range_mismatch_since_s = time_s
+      return False
+    return bool(
+      self._stationary_vision_range_mismatch_since_s is not None
+      and time_s - self._stationary_vision_range_mismatch_since_s
+      >= CORROBORATED_STATIONARY_VISION_RANGE_MISMATCH_HOLD_S
+    )
 
   def _points_at_model_time(
     self,
@@ -594,6 +638,7 @@ class DPathRadarController:
       self.primary_cut_out_predictor = RadarMotionPredictor()
       self.lead_dynamics.reset()
       self.trajectory_cutin.reset()
+      self._reset_stationary_vision_range_mismatch()
       return DPathRadarOutput(
         None, None, None, None, (), (), (), (), (), (), None,
       )
@@ -622,8 +667,9 @@ class DPathRadarController:
       # -1 is the legacy unconditional SCC mode. It intentionally does not
       # require a vision match and ignores SCC lateral position entirely.
       primary_match = unconditional_scc_match(points)
-    elif _radar_match_is_dangerously_farther_than_vision(
-      primary_match, vision, path,
+      self._reset_stationary_vision_range_mismatch()
+    elif self._reject_farther_radar_match(
+      primary_match, vision, path, time_s,
     ):
       # A farther permissive match must not hide a strongly visible nearer car.
       primary_match = None
