@@ -15,19 +15,23 @@ from ..services.popular_values import read_popular_values_memory, schedule_popul
 from ..services.setting_favorites import read_setting_favorites
 from ..services.setting_profiles import read_setting_profiles
 from ..services.setting_unit_index import read_setting_unit_index, update_setting_unit_index
-from ..services.settings import get_settings_cached, settings_cache
+from ..services.settings import current_vehicle_brand, filter_settings_catalog_for_brand, get_settings_cached, settings_cache
 from ..services.ssh_keys import get_ssh_key_status
 
 
-def _settings_catalog_payload(cache_parts: tuple | None = None) -> dict:
+def _settings_catalog_payload(cache_parts: tuple | None = None, vehicle_brand: str | None = None) -> dict:
   path = settings_cache["path"]
   data, groups, _by_name, groups_list = cache_parts or get_settings_cached()
+  brand = current_vehicle_brand() if vehicle_brand is None else vehicle_brand
+  groups, groups_list, categories, _hidden_names = filter_settings_catalog_for_brand(
+    groups, groups_list, settings_cache.get("categories"), brand,
+  )
   return {
     "path": path,
     "apilot": data.get("apilot"),
     "groups": groups_list,
     "items_by_group": dict(groups),
-    "categories": settings_cache.get("categories"),
+    "categories": categories,
     "unit_cycle": UNIT_CYCLE,
     "has_params": HAS_PARAMS,
     "has_param_type": bool(ParamKeyType is not None and hasattr(Params(), "get_type")) if HAS_PARAMS else False,
@@ -37,17 +41,26 @@ def _settings_catalog_payload(cache_parts: tuple | None = None) -> dict:
 def _settings_snapshot_payload() -> dict:
   cache_parts = get_settings_cached()
   _data, _groups, by_name, _groups_list = cache_parts
+  vehicle_brand = current_vehicle_brand()
+  catalog = _settings_catalog_payload(cache_parts, vehicle_brand)
+  visible_names = {
+    item.get("name")
+    for items in catalog["items_by_group"].values()
+    for item in items
+    if item.get("name")
+  }
   values = get_param_values(
-    list(by_name),
-    {name: meta.get("default", 0) for name, meta in by_name.items()},
+    list(visible_names),
+    {name: by_name[name].get("default", 0) for name in visible_names},
   )
   # Entering settings is exactly when a value changed elsewhere would confuse
   # the user, so this is the read worth comparing against what we last knew.
   observe_param_values(values)
   ssh_status = get_ssh_key_status()
+  favorites = [name for name in read_setting_favorites().get("favorites", []) if name in visible_names]
   return {
     "ok": True,
-    "settings": _settings_catalog_payload(cache_parts),
+    "settings": catalog,
     "values": values,
     "device_values": get_device_setting_values(ssh_status),
     # The web reads its Device tab parameter names from here rather than
@@ -55,7 +68,7 @@ def _settings_snapshot_payload() -> dict:
     "device_groups": get_device_setting_group_names(),
     "device_network": get_device_network_snapshot(),
     "device_ssh": ssh_status,
-    "favorites": read_setting_favorites().get("favorites", []),
+    "favorites": favorites,
     "profiles": read_setting_profiles().get("profiles", []),
     "popular": read_popular_values_memory(),
     # Shipped with the snapshot so restoring the step multipliers costs no
