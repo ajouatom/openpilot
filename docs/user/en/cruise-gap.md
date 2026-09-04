@@ -229,14 +229,14 @@ For a clean baseline, use `EnableSpeedTF=0`, `DynamicTFollow=0`, `DynamicTFollow
 
 When the lead starts or accelerates and the gap begins to open, this setting reduces MPC's acceleration-change and jerk costs by level so it can select a faster new acceleration trajectory. It operates **only with following-distance level 1 (aggressive/TF1)**. On openpilot-longitudinal vehicles that cannot report `pcmCruiseGap`, it uses the selected level-1 personality instead. Levels 3–5 also operate when a stable radar lead remains but the current MPC source changes to `cruise`.
 
-| Value | UI meaning | Active `aChangeCost` | Additional multiplier on existing jerk cost | Allowance inside target distance |
+| Value | UI meaning | Active `aChangeCost` | Additional multiplier on existing jerk cost | Strong response ends |
 |---:|---|---:|---:|---:|
-| `0` | Disabled | `200` | `100%` | None |
-| `1` | Weak | `170` | `95%` | 0 m |
-| `2` | Mild | `130` | `80%` | 0.75 m |
-| `3` | Brisk (recommended) | `80` | `60%` | 2.0 m |
-| `4` | Urgent follow | `36` | `35%` | 3.0 m |
-| `5` | Maximum follow (test) | `10` | `15%` | Uses the prediction gates below instead |
+| `0` | Disabled | `200` | `100%` | Not applicable |
+| `1` | Weak | `170` | `95%` | Configured TF reached |
+| `2` | Mild | `130` | `80%` | Configured TF reached |
+| `3` | Brisk (recommended) | `80` | `60%` | Configured TF reached |
+| `4` | Urgent follow | `36` | `35%` | Configured TF reached |
+| `5` | Maximum follow (test) | `10` | `15%` | Configured TF reached |
 
 Lower `aChangeCost` releases the solution from the previous MPC acceleration plan, while lower jerk cost permits a steeper transition to the new acceleration. Level 3 is the brisk everyday choice, level 4 is for an urgent driver, and level 5 is the maximum test level intended to feel distinctly strong. These values reduce the active-driving base cost of `200`; they do not change `AChangeCostStarting` or velocity-PID gains.
 
@@ -250,7 +250,7 @@ A nonzero value responds only when all of these common gates pass:
 - Current relative speed plus predicted lead acceleration shows the lead pulling away while respecting the level-specific relative-speed floor.
 - With a `cruise` source, set speed exceeds current speed by more than `1 km/h`.
 
-Levels 1–4 also require the per-level distance allowance in the table. Level 5 relaxes that allowance, but current relative speed must be at least `-0.2 m/s` and the gap must be predicted to open within 0.5 seconds. When lead acceleration ends or the gap is predicted to close, the cost reduction is removed immediately and the default `aChangeCost=200` and normal jerk cost return. If the lead reaches zero acceleration or begins decelerating, the existing MPC lead prediction and deceleration preview continue unchanged.
+Every level uses the strong cost reduction only while actual distance exceeds the configured TF target. At or inside that target, the reduction is removed immediately, the default `aChangeCost=200` and normal jerk cost return, and ordinary MPC safely maintains the gap. Level 5 still requires relative speed of at least `-0.2 m/s` and a gap predicted to open within 0.5 seconds. If the lead reaches zero acceleration or begins decelerating, the existing MPC lead prediction and deceleration preview continue unchanged.
 
 Levels 1–3 do not change the target time gap. The level 4–5 exception that prioritizes the configured `TFollowGap1` as the base target applies only during positive lead acceleration; `DynamicTFollow` and lane-change corrections may still apply afterward. Lead-braking response and stopping behavior retain normal control at every level. Every level remains inactive with the experimental blended planner, a vision-only lead, and following-distance levels 2–4. Use level 5 only when you can verify that short-gap starts do not cause unwanted acceleration.
 
