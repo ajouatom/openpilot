@@ -2705,13 +2705,13 @@
       "group": "차량간격",
       "name": "LeadAccelResponse",
       "title": "1단계 앞차 가속반응(0)",
-      "descr": "차간거리 1단계에서 앞차가 출발하거나 가속할 때 따라가는 민첩성을 설정합니다. 안정된 레이더 앞차가 가속하지만 MPC 소스가 cruise로 바뀐 경우 3/4/5단계는 최종 CruiseMaxVals 상한의 최대 55/80/100%를 단계적으로 사용합니다. 4~5단계는 양의 앞차 가속 중 설정된 TFollowGap1을 기본 목표로 우선하며, 앞차 가속이나 설정속도 여유가 끝나면 즉시 기존 제어로 돌아갑니다.",
+      "descr": "차간거리 1단계에서 앞차가 출발하거나 가속할 때 따라가는 민첩성을 설정합니다. 1~2단계는 약한 반응, 3단계는 일상적으로 경쾌한 반응입니다. 안정된 레이더 앞차가 가속하지만 MPC 소스가 cruise로 바뀐 경우 3/4/5단계는 벌어진 거리와 상대속도를 반영해 최종 CruiseMaxVals 상한의 최대 65/95/100%를 사용합니다. 4단계는 TFollowGap1을 기준으로 급하게 거리를 회복하고, 5단계는 최대한 빠른 시험용 추종입니다. 앞차 가속이나 설정속도 여유가 끝나면 즉시 기존 제어로 돌아갑니다.",
       "egroup": "FDIST",
       "etitle": "Gap 1 Lead Acceleration Response (0)",
-      "edescr": "Sets response to a lead starting or accelerating at following-distance level 1. When a stable radar lead remains but MPC changes to cruise, levels 3/4/5 may use up to 55/80/100% of the final CruiseMaxVals envelope. Levels 4–5 prioritize configured TFollowGap1 as the base target during positive lead acceleration. Normal control resumes immediately when lead acceleration or set-speed headroom ends.",
+      "edescr": "Sets response to a lead starting or accelerating at following-distance level 1. Levels 1–2 are weak or mild and level 3 is the brisk everyday choice. When a stable radar lead remains but MPC changes to cruise, levels 3/4/5 use opening distance and relative speed and may use up to 65/95/100% of the final CruiseMaxVals envelope. Level 4 urgently recovers toward TFollowGap1 and level 5 is maximum-response test mode. Normal control resumes immediately when lead acceleration or set-speed headroom ends.",
       "cgroup": "跟车距离",
       "ctitle": "1 级车距前车加速响应 (0)",
-      "cdescr": "选择 1 级跟车距离时，设置前车起步或加速响应。稳定雷达前车仍存在而 MPC 切换为 cruise 时，3/4/5 级最多使用最终 CruiseMaxVals 上限的 55/80/100%。4～5 级仅在前车正加速时优先把设定的 TFollowGap1 作为基础目标；前车停止加速或设定速度余量消失后立即恢复常规控制。",
+      "cdescr": "选择 1 级跟车距离时，设置前车起步或加速响应。1～2 级为较弱响应，3 级为日常轻快响应。稳定雷达前车仍存在而 MPC 切换为 cruise 时，3/4/5 级根据扩大的车距和相对速度，最多使用最终 CruiseMaxVals 上限的 65/95/100%。4 级以 TFollowGap1 为目标快速追回车距，5 级为最大响应测试模式；前车停止加速或设定速度余量消失后立即恢复常规控制。",
       "min": 0,
       "max": 5,
       "default": 0,
@@ -2720,27 +2720,27 @@
       "options": {
         "ko": [
           "사용 안 함",
-          "1 완화",
-          "2 부드러움",
-          "3 균형(추천)",
-          "4 강한 거리유지",
-          "5 가속추종(시험)"
+          "1 약한 반응",
+          "2 완만한 반응",
+          "3 경쾌함(추천)",
+          "4 급한 추종",
+          "5 최대 추종(시험)"
         ],
         "en": [
           "Disabled",
-          "1 Gentle",
-          "2 Smooth",
-          "3 Balanced (recommended)",
-          "4 Strong gap control",
-          "5 Acceleration tracking (test)"
+          "1 Weak",
+          "2 Mild",
+          "3 Brisk (recommended)",
+          "4 Urgent follow",
+          "5 Maximum follow (test)"
         ],
         "zh": [
           "关闭",
-          "1 缓和",
-          "2 平顺",
-          "3 均衡（推荐）",
-          "4 强力保距",
-          "5 加速跟随（测试）"
+          "1 弱响应",
+          "2 平缓响应",
+          "3 轻快（推荐）",
+          "4 快速跟随",
+          "5 最大跟随（测试）"
         ]
       }
     },

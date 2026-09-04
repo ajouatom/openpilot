@@ -71,10 +71,11 @@ def test_longitudinal_comfort_settings_use_driver_facing_language(params):
   assert "차간거리 1단계" in lead_accel_response["descr"]
   assert "TFollowGap1" in lead_accel_response["descr"]
   assert "3/4/5단계" in lead_accel_response["descr"]
-  assert "55/80/100%" in lead_accel_response["descr"]
+  assert "65/95/100%" in lead_accel_response["descr"]
+  assert "벌어진 거리와 상대속도" in lead_accel_response["descr"]
   assert "설정속도 여유가 끝나면 즉시" in lead_accel_response["descr"]
-  assert lead_accel_response["options"]["ko"][3] == "3 균형(추천)"
-  assert lead_accel_response["options"]["ko"][-1] == "5 가속추종(시험)"
+  assert lead_accel_response["options"]["ko"][3] == "3 경쾌함(추천)"
+  assert lead_accel_response["options"]["ko"][-1] == "5 최대 추종(시험)"
 
   params_keys = PARAMS_KEYS_PATH.read_text(encoding="utf-8")
   assert '{"LeadAccelResponse", {PERSISTENT, INT, "0"}}' in params_keys
