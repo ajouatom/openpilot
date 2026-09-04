@@ -18,10 +18,14 @@ from openpilot.selfdrive.controls.lib.cutin_predecel import (
   get_cutin_predecel_accel_limit,
 )
 from openpilot.selfdrive.controls.lib.longitudinal_preview import (
+  LEAD_ACCEL_RESPONSE_TUNING,
   apply_preview_target,
   clip_preview_offset,
+  get_cruise_accel_target,
   get_lead_preview_request,
+  lead_accel_response_source_allowed,
   rate_limit_accel_boost,
+  rate_limit_cruise_accel_target,
   rate_limit_preview,
 )
 from openpilot.selfdrive.car.cruise import V_CRUISE_MAX, V_CRUISE_UNSET
@@ -115,6 +119,7 @@ class LongitudinalPlanner:
     self.lead_preview_action_time = 0.0
     self.lead_preview_accel = 0.0
     self.lead_accel_boost = 0.0
+    self.cruise_accel_target = 0.0
     self.lead_preview_track_id = -1
     self.lead_preview_track_frames = 0
 
@@ -294,7 +299,7 @@ class LongitudinalPlanner:
     lead_index = 1 if self.mpc.source == 'lead1' else 0
     leads = (sm['radarState'].leadOne, sm['radarState'].leadTwo)
     lead = leads[lead_index]
-    lead_source_active = self.mpc.source in ('lead0', 'lead1')
+    cruise_source_active = self.mpc.source == 'cruise'
     lead_track_valid = lead.status and lead.radar and lead.radarTrackId >= 0
     lead_track_id = int(lead.radarTrackId) if lead_track_valid else -1
     if lead_track_id >= 0 and lead_track_id == self.lead_preview_track_id:
@@ -309,7 +314,7 @@ class LongitudinalPlanner:
     tf1_accel_response = (
       sm['selfdriveState'].personality == log.LongitudinalPersonality.aggressive
       and carrot.leadAccelResponse > 0
-      and lead_source_active
+      and lead_accel_response_source_allowed(carrot.leadAccelResponse, self.mpc.source)
       and self.lead_preview_track_frames >= LEAD_ACCEL_MIN_TRACK_FRAMES
       and not output_should_stop_mpc
     )
@@ -331,6 +336,7 @@ class LongitudinalPlanner:
       a_ego=sm['carState'].aEgo,
       accel_response_level=carrot.leadAccelResponse,
       accel_response_enabled=tf1_accel_response,
+      cruise_source_active=cruise_source_active,
       v_rel=lead.vRel,
       gap_margin=gap_margin,
     )
@@ -362,6 +368,23 @@ class LongitudinalPlanner:
       action_t=self.lead_preview_action_time,
       vEgoStopping=vEgoStopping,
     )
+    if preview_request.cruise_source_active:
+      cruise_accel_target = get_cruise_accel_target(
+        output_a_target_base,
+        accel_max=accel_limits_turns[1],
+        a_lead=lead.aLeadK,
+        speed_error=v_cruise - v_ego,
+        accel_response_level=preview_request.accel_response_level,
+      )
+      cruise_tuning = LEAD_ACCEL_RESPONSE_TUNING[preview_request.accel_response_level]
+      self.cruise_accel_target = rate_limit_cruise_accel_target(
+        cruise_accel_target,
+        self.cruise_accel_target,
+        output_a_target_base,
+        cruise_tuning.cruise_accel_attack_step,
+      )
+    else:
+      self.cruise_accel_target = output_a_target_base
     output_a_target_mpc = apply_preview_target(
       output_a_target_base,
       output_a_target_preview,
@@ -373,6 +396,8 @@ class LongitudinalPlanner:
       accel_boost=self.lead_accel_boost,
       accel_max=accel_limits_turns[1],
       a_lead=lead.aLeadK,
+      cruise_source_active=preview_request.cruise_source_active,
+      cruise_accel_target=self.cruise_accel_target,
     ) if preview_request.active else output_a_target_base
     output_a_target_e2e = sm['modelV2'].action.desiredAcceleration
     output_should_stop_e2e = sm['modelV2'].action.shouldStop
