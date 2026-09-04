@@ -19,6 +19,7 @@ from openpilot.system.ui.widgets.button import Button, ButtonStyle, ButtonRadio
 from openpilot.system.ui.widgets.keyboard import Keyboard
 from openpilot.system.ui.widgets.label import Label
 from openpilot.system.ui.widgets.network import WifiManagerUI, WifiManager
+from openpilot.system.ui.setup_download import format_download_detail, format_http_error
 
 NetworkType = log.DeviceState.NetworkType
 
@@ -60,6 +61,9 @@ class Setup(Widget):
     self.failed_reason = ""
     self.download_url = ""
     self.download_progress = 0
+    self.download_status = "Connecting to server..."
+    self.download_detail = ""
+    self.download_started_at = 0.0
     self.download_thread = None
     self.wifi_ui = WifiManagerUI(WifiManager())
     self.keyboard = Keyboard()
@@ -116,7 +120,8 @@ class Setup(Widget):
                                                      68, text_alignment=rl.GuiTextAlignment.TEXT_ALIGN_LEFT, text_padding=60)
     self._custom_software_warning_body_scroll_panel = GuiScrollPanel()
 
-    self._downloading_body_label = Label("Downloading...", TITLE_FONT_SIZE, FontWeight.MEDIUM, text_padding=20)
+    self._downloading_body_label = Label("Connecting to server...", TITLE_FONT_SIZE, FontWeight.MEDIUM, text_padding=20)
+    self._downloading_detail_label = Label("", 60, FontWeight.NORMAL, text_padding=20)
 
     try:
       with open("/sys/class/hwmon/hwmon1/in1_input") as f:
@@ -278,8 +283,14 @@ class Setup(Widget):
     self._software_selection_continue_button.render(rl.Rectangle(rect.x + MARGIN + button_width + BUTTON_SPACING, button_y, button_width, BUTTON_HEIGHT))
 
   def render_downloading(self, rect: rl.Rectangle):
-    self._downloading_body_label.render(rl.Rectangle(rect.x, rect.y + rect.height / 2 - TITLE_FONT_SIZE * FONT_SCALE / 2, rect.width,
-                                                     TITLE_FONT_SIZE * FONT_SCALE))
+    self._downloading_body_label.set_text(self.download_status)
+    detail = self.download_detail
+    if self.download_status == "Connecting to server...":
+      detail = f"Waiting for server response... {int(time.monotonic() - self.download_started_at)}s"
+    self._downloading_detail_label.set_text(detail)
+    center_y = rect.y + rect.height / 2
+    self._downloading_body_label.render(rl.Rectangle(rect.x, center_y - TITLE_FONT_SIZE * FONT_SCALE, rect.width, TITLE_FONT_SIZE * FONT_SCALE))
+    self._downloading_detail_label.render(rl.Rectangle(rect.x, center_y + 20, rect.width, 60 * FONT_SCALE))
 
   def render_download_failed(self, rect: rl.Rectangle):
     self._download_failed_title_label.render(rl.Rectangle(rect.x + 117, rect.y + 185, rect.width - 117, TITLE_FONT_SIZE * FONT_SCALE))
@@ -338,6 +349,10 @@ class Setup(Widget):
 
     parsed = urlparse(url, scheme='https')
     self.download_url = (urlparse(f"https://{url}") if not parsed.netloc else parsed).geturl()
+    self.download_progress = 0
+    self.download_status = "Connecting to server..."
+    self.download_detail = "Waiting for server response..."
+    self.download_started_at = time.monotonic()
 
     self.state = SetupState.DOWNLOADING
 
@@ -345,6 +360,8 @@ class Setup(Widget):
     self.download_thread.start()
 
   def _download_thread(self):
+    fd = None
+    tmpfile = None
     try:
       import tempfile
 
@@ -355,22 +372,28 @@ class Setup(Widget):
                  "X-openpilot-device-type": HARDWARE.get_device_type()}
       req = urllib.request.Request(self.download_url, headers=headers)
 
-      with open(tmpfile, 'wb') as f, urllib.request.urlopen(req, timeout=30) as response:
+      with urllib.request.urlopen(req, timeout=30) as response:
         total_size = int(response.headers.get('content-length', 0))
         downloaded = 0
         block_size = 8192
+        output = os.fdopen(fd, 'wb')
+        fd = None
+        self.download_status = "Downloading installer..."
+        self.download_progress, self.download_detail = format_download_detail(downloaded, total_size)
 
-        while True:
-          buffer = response.read(block_size)
-          if not buffer:
-            break
+        with output as f:
+          while True:
+            buffer = response.read(block_size)
+            if not buffer:
+              break
 
-          downloaded += len(buffer)
-          f.write(buffer)
+            downloaded += len(buffer)
+            f.write(buffer)
 
-          if total_size:
-            self.download_progress = int(downloaded * 100 / total_size)
+            self.download_progress, self.download_detail = format_download_detail(downloaded, total_size)
 
+      self.download_status = "Verifying installer..."
+      self.download_detail = ""
       is_elf = False
       with open(tmpfile, 'rb') as f:
         header = f.read(4)
@@ -380,25 +403,31 @@ class Setup(Widget):
         self.download_failed(self.download_url, "No custom software found at this URL.")
         return
 
-      # AGNOS might try to execute the installer before this process exits.
-      # Therefore, important to close the fd before renaming the installer.
-      os.close(fd)
       os.rename(tmpfile, INSTALLER_DESTINATION_PATH)
+      tmpfile = None
 
       with open(INSTALLER_URL_PATH, "w") as f:
         f.write(self.download_url)
 
       # give time for installer UI to take over
+      self.download_status = "Starting installer..."
       time.sleep(0.1)
       gui_app.request_close()
 
     except urllib.error.HTTPError as e:
-      if e.code == 409:
-        error_msg = e.read().decode("utf-8")
-        self.download_failed(self.download_url, error_msg)
-    except Exception:
-      error_msg = "Ensure the entered URL is valid, and the device's internet connection is good."
+      details = e.read().decode("utf-8", errors="replace") if e.code == 409 else ""
+      self.download_failed(self.download_url, format_http_error(e.code, str(e.reason), details))
+    except Exception as e:
+      error_msg = f"Download error: {e}. Check the URL and internet connection."
       self.download_failed(self.download_url, error_msg)
+    finally:
+      if fd is not None:
+        os.close(fd)
+      if tmpfile is not None:
+        try:
+          os.unlink(tmpfile)
+        except FileNotFoundError:
+          pass
 
   def download_failed(self, url: str, reason: str):
     self.failed_url = url

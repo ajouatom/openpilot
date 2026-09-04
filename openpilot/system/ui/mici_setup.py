@@ -20,6 +20,7 @@ from openpilot.common.time_helpers import system_time_valid
 from openpilot.common.utils import run_cmd
 from openpilot.system.ui.lib.application import gui_app, FontWeight
 from openpilot.system.ui.lib.wifi_manager import WifiManager, ConnectStatus
+from openpilot.system.ui.setup_download import format_download_detail, format_http_error
 from openpilot.system.ui.widgets import Widget
 from openpilot.system.ui.widgets.nav_widget import NavWidget
 from openpilot.system.ui.widgets.label import UnifiedLabel
@@ -215,6 +216,10 @@ class DownloadingPage(NavWidget):
   def set_progress(self, progress: int):
     self._progress = progress
     self._progress_label.set_text(f"{progress}%")
+
+  def set_status(self, status: str):
+    self._title_label.set_text(status)
+    self._progress_label.set_visible(status == "downloading...")
 
   def _render(self, rect: rl.Rectangle):
     rl.draw_rectangle_rec(rect, rl.BLACK)
@@ -438,6 +443,8 @@ class Setup(Widget):
     super().__init__()
     self.download_url = ""
     self.download_progress = 0
+    self.download_status = "connecting..."
+    self.download_started_at = 0.0
     self.download_thread = None
     self._download_failed_reason: str | None = None
 
@@ -465,6 +472,10 @@ class Setup(Widget):
 
   def _nav_stack_tick(self):
     self._downloading_page.set_progress(self.download_progress)
+    status = self.download_status
+    if status == "connecting...":
+      status = f"connecting... {int(time.monotonic() - self.download_started_at)}s"
+    self._downloading_page.set_status(status)
 
     if self._download_failed_reason is not None:
       reason = self._download_failed_reason
@@ -507,6 +518,8 @@ class Setup(Widget):
     parsed = urlparse(url, scheme='https')
     self.download_url = (urlparse(f"https://{url}") if not parsed.netloc else parsed).geturl()
     self.download_progress = 0
+    self.download_status = "connecting..."
+    self.download_started_at = time.monotonic()
 
     def start_download():
       self.download_thread = threading.Thread(target=self._download_thread, daemon=True)
@@ -516,6 +529,8 @@ class Setup(Widget):
     gui_app.push_widget(self._downloading_page)
 
   def _download_thread(self):
+    fd = None
+    tmpfile = None
     try:
       import tempfile
 
@@ -526,22 +541,27 @@ class Setup(Widget):
                  "X-openpilot-device-type": HARDWARE.get_device_type()}
       req = urllib.request.Request(self.download_url, headers=headers)
 
-      with open(tmpfile, 'wb') as f, urllib.request.urlopen(req, timeout=30) as response:
+      with urllib.request.urlopen(req, timeout=30) as response:
         total_size = int(response.headers.get('content-length', 0))
         downloaded = 0
         block_size = 8192
+        output = os.fdopen(fd, 'wb')
+        fd = None
+        self.download_status = "downloading..."
+        self.download_progress, _ = format_download_detail(downloaded, total_size)
 
-        while True:
-          buffer = response.read(block_size)
-          if not buffer:
-            break
+        with output as f:
+          while True:
+            buffer = response.read(block_size)
+            if not buffer:
+              break
 
-          downloaded += len(buffer)
-          f.write(buffer)
+            downloaded += len(buffer)
+            f.write(buffer)
 
-          if total_size:
-            self.download_progress = int(downloaded * 100 / total_size)
+            self.download_progress, _ = format_download_detail(downloaded, total_size)
 
+      self.download_status = "verifying..."
       is_elf = False
       with open(tmpfile, 'rb') as f:
         header = f.read(4)
@@ -555,20 +575,27 @@ class Setup(Widget):
       with open(INSTALLER_URL_PATH, "w") as f:
         f.write(self.download_url)
 
-      # AGNOS might try to execute the installer before this process exits.
-      # Therefore, important to close the fd before renaming the installer.
-      os.close(fd)
       os.rename(tmpfile, INSTALLER_DESTINATION_PATH)
+      tmpfile = None
 
       # give time for installer UI to take over
+      self.download_status = "starting installer..."
       time.sleep(0.1)
       gui_app.request_close()
 
     except urllib.error.HTTPError as e:
-      if e.code == 409:
-        self._download_failed_reason = "Incompatible openpilot version."
-    except Exception:
-      self._download_failed_reason = "Invalid URL: " + self.download_url.replace("https://", "", 1)
+      details = e.read().decode("utf-8", errors="replace") if e.code == 409 else ""
+      self._download_failed_reason = format_http_error(e.code, str(e.reason), details)
+    except Exception as e:
+      self._download_failed_reason = f"Download error: {e}"
+    finally:
+      if fd is not None:
+        os.close(fd)
+      if tmpfile is not None:
+        try:
+          os.unlink(tmpfile)
+        except FileNotFoundError:
+          pass
 
 
 def main():
