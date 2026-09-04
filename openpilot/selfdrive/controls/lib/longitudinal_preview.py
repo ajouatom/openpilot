@@ -54,6 +54,9 @@ class LeadAccelResponseTuning:
   lead_accel_overshoot_max: float = math.inf
   cruise_accel_fraction: float = 0.0
   cruise_accel_attack_step: float = 0.0
+  gap_error_gain: float = 0.0
+  opening_speed_gain: float = 0.0
+  gap_recovery_max: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -105,19 +108,22 @@ LEAD_ACCEL_RESPONSE_TUNING = {
   # Levels 3 through 5 may recover an opening TF1 gap while cruise is the
   # MPC source. Their direct cruise targets progressively use more of the
   # final CruiseMaxVals envelope, after turn and cut-in limits are applied.
-  3: LeadAccelResponseTuning(0.55, 0.28, 0.45, 0.20, -0.10, -2.00,
-                             lead_accel_overshoot_max=0.10,
-                             cruise_accel_fraction=0.55, cruise_accel_attack_step=0.08),
-  4: LeadAccelResponseTuning(0.80, 0.45, 0.65, 0.35, -0.15, -3.00,
-                             lead_accel_overshoot_max=0.15,
-                             cruise_accel_fraction=0.80, cruise_accel_attack_step=0.12),
-  # Level 5 deliberately follows positive lead acceleration and permits a
-  # small acceleration overshoot. The lead-acceleration cap and the vehicle's
-  # final acceleration limit keep that response bounded.
-  5: LeadAccelResponseTuning(1.10, 0.70, 0.80, 0.50, -0.20, -math.inf,
-                             boost_gain=0.60, boost_max=0.50, boost_attack_step=0.20,
-                             lead_accel_overshoot_max=0.20,
-                             cruise_accel_fraction=1.00, cruise_accel_attack_step=0.20),
+  3: LeadAccelResponseTuning(0.65, 0.35, 0.55, 0.25, -0.10, -2.00,
+                             lead_accel_overshoot_max=0.12,
+                             cruise_accel_fraction=0.65, cruise_accel_attack_step=0.10,
+                             gap_error_gain=0.025, opening_speed_gain=0.12, gap_recovery_max=0.20),
+  4: LeadAccelResponseTuning(0.95, 0.60, 0.90, 0.40, -0.15, -3.00,
+                             lead_accel_overshoot_max=0.25,
+                             cruise_accel_fraction=0.95, cruise_accel_attack_step=0.20,
+                             gap_error_gain=0.08, opening_speed_gain=0.35, gap_recovery_max=0.75),
+  # Level 5 deliberately follows positive lead acceleration and rapidly
+  # recovers an opening gap. Set-speed headroom and the vehicle's final
+  # acceleration limit keep that response bounded.
+  5: LeadAccelResponseTuning(1.30, 0.90, 1.30, 0.50, -0.20, -math.inf,
+                             boost_gain=0.80, boost_max=0.75, boost_attack_step=0.30,
+                             lead_accel_overshoot_max=0.45,
+                             cruise_accel_fraction=1.00, cruise_accel_attack_step=0.35,
+                             gap_error_gain=0.16, opening_speed_gain=0.65, gap_recovery_max=1.50),
 }
 
 
@@ -256,11 +262,13 @@ def get_cruise_accel_target(
   a_lead: float,
   speed_error: float,
   accel_response_level: int,
+  v_rel: float = 0.0,
+  gap_margin: float = 0.0,
 ) -> float:
   """Return a bounded cruise-source acceleration target for TF1 levels 3-5."""
   response_level = clip_lead_accel_response_level(accel_response_level)
   tuning = LEAD_ACCEL_RESPONSE_TUNING.get(response_level)
-  values = (base_target, accel_max, a_lead, speed_error)
+  values = (base_target, accel_max, a_lead, speed_error, v_rel, gap_margin)
   if (tuning is None or response_level < LEAD_ACCEL_CRUISE_RESPONSE_MIN or
       not all(math.isfinite(value) for value in values) or
       a_lead <= LEAD_ACCEL_DEADBAND or speed_error <= CRUISE_SPEED_ERROR_DEADBAND):
@@ -272,7 +280,7 @@ def get_cruise_accel_target(
   speed_error_envelope = (
     float(speed_error) - CRUISE_SPEED_ERROR_DEADBAND
   ) * CRUISE_SPEED_ERROR_ACCEL_GAIN
-  lead_envelope = float(a_lead) + tuning.lead_accel_overshoot_max
+  lead_envelope = get_lead_accel_envelope(a_lead, v_rel, gap_margin, tuning)
   target = min(
     cruise_envelope,
     speed_error_envelope,
@@ -291,6 +299,17 @@ def rate_limit_cruise_accel_target(target: float, current: float, base: float,
   if target <= current:
     return target
   return float(min(target, current + max(0.0, float(attack_step))))
+
+
+def get_lead_accel_envelope(a_lead: float, v_rel: float, gap_margin: float,
+                            tuning: LeadAccelResponseTuning) -> float:
+  """Allow progressively more catch-up acceleration for an opening gap."""
+  recovery_allowance = min(
+    max(0.0, float(gap_margin)) * tuning.gap_error_gain
+    + max(0.0, float(v_rel)) * tuning.opening_speed_gain,
+    tuning.gap_recovery_max,
+  )
+  return float(a_lead) + tuning.lead_accel_overshoot_max + recovery_allowance
 
 
 def rate_limit_preview(
@@ -335,6 +354,8 @@ def apply_preview_target(
   accel_boost: float = 0.0,
   accel_max: float = math.inf,
   a_lead: float = 0.0,
+  v_rel: float = 0.0,
+  gap_margin: float = 0.0,
   cruise_source_active: bool = False,
   cruise_accel_target: float = -math.inf,
 ) -> float:
@@ -369,7 +390,7 @@ def apply_preview_target(
     if cruise_source_active and math.isfinite(cruise_accel_target):
       target = max(target, float(cruise_accel_target))
     if raw_lead_response:
-      target = min(target, float(a_lead) + response_tuning.lead_accel_overshoot_max)
+      target = min(target, get_lead_accel_envelope(a_lead, v_rel, gap_margin, response_tuning))
     target = min(target, base + response_tuning.target_delta_max, float(accel_max))
     return float(max(base, target))
 

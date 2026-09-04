@@ -227,18 +227,20 @@ For a clean baseline, use `EnableSpeedTF=0`, `DynamicTFollow=0`, `DynamicTFollow
 
 ### `LeadAccelResponse`
 
-When the lead starts or accelerates and the gap begins to open, this setting samples a slightly later point in the MPC trajectory to raise the acceleration target. It operates **only with following-distance level 1 (aggressive/TF1)**. On openpilot-longitudinal vehicles that cannot report `pcmCruiseGap`, it uses the selected level-1 personality instead. Levels 3–5 continue responding when a stable radar lead remains present but MPC changes its source to `cruise`, progressively applying the speed-based `CruiseMaxVals` envelope to the acceleration target. The final command remains bounded by each mode's acceleration envelope, curve limit, cut-in pre-deceleration limit, and vehicle safety limits.
+When the lead starts or accelerates and the gap begins to open, this setting samples a slightly later point in the MPC trajectory to raise the acceleration target. It operates **only with following-distance level 1 (aggressive/TF1)**. On openpilot-longitudinal vehicles that cannot report `pcmCruiseGap`, it uses the selected level-1 personality instead. Levels 3–5 continue responding when a stable radar lead remains present but MPC changes its source to `cruise`, progressively applying positive gap error and opening relative speed to the acceleration target. The final command remains bounded by each mode's `CruiseMaxVals` envelope, curve limit, cut-in pre-deceleration limit, and vehicle safety limits.
 
-| Value | UI meaning | Maximum preview | Maximum increase over base | Final acceleration envelope available with `cruise` source | Allowance inside target distance |
-|---:|---|---:|---:|---:|---:|
-| `0` | Disabled | None | None | None | None |
-| `1` | Gentle | 0.08 s | 0.08 m/s² | Disabled | 0 m |
-| `2` | Smooth | 0.15 s | 0.18 m/s² | Disabled | 0.75 m |
-| `3` | Balanced (recommended) | 0.28 s | 0.45 m/s² | Up to 55% | 2.0 m |
-| `4` | Strong gap control | 0.45 s | 0.65 m/s² | Up to 80% | 3.0 m |
-| `5` | Acceleration tracking (test) | 0.70 s | 0.80 m/s² | Up to 100% | Uses the prediction gates below instead |
+| Value | UI meaning | Maximum preview | Maximum increase over base | Final `cruise` acceleration envelope | Maximum gap-recovery allowance | Allowance inside target distance |
+|---:|---|---:|---:|---:|---:|---:|
+| `0` | Disabled | None | None | None | None | None |
+| `1` | Weak | 0.08 s | 0.08 m/s² | Disabled | None | 0 m |
+| `2` | Mild | 0.15 s | 0.18 m/s² | Disabled | None | 0.75 m |
+| `3` | Brisk (recommended) | 0.35 s | 0.55 m/s² | Up to 65% | 0.20 m/s² | 2.0 m |
+| `4` | Urgent follow | 0.60 s | 0.90 m/s² | Up to 95% | 0.75 m/s² | 3.0 m |
+| `5` | Maximum follow (test) | 0.90 s | 1.30 m/s² | Up to 100% | 1.50 m/s² | Uses the prediction gates below instead |
 
-Levels 1–2 retain the gentle response. Level 3 is the everyday balance and may use up to 55% of the final `CruiseMaxVals` envelope with a `cruise` source. Level 4 prioritizes target-gap recovery, may use up to 80%, and uses the configured `TFollowGap1` as its base target; level 5 may use up to 100% and also raises up to `0.50 m/s²` of direct boost quickly. When this special response raises the base target, it uses the lower of measured lead acceleration plus `0.10/0.15/0.20 m/s²` and the base target plus `0.45/0.65/0.80 m/s²`, respectively, as an upper bound. These percentages are available ceilings, not fixed acceleration commands; speed error and every other gate can request less.
+Level 1 is weak and level 2 is mild. Level 3 is the brisk everyday choice and may use up to 65% of the final `CruiseMaxVals` envelope with a `cruise` source. Level 4 may use up to 95% and the configured `TFollowGap1` to recover an opening gap urgently. Test level 5 may use up to 100% and up to `0.75 m/s²` of direct boost to approach the final allowed acceleration quickly.
+
+The level 3–5 direct target starts with measured lead acceleration plus `0.12/0.25/0.45 m/s²`, then adds a recovery allowance derived from positive gap error and opening relative speed. That allowance is capped at `0.20/0.75/1.50 m/s²`. The target is bounded again by `0.55/0.90/1.30 m/s²` over the base target, remaining set-speed headroom, the per-level `CruiseMaxVals` fraction, and every safety ceiling. Level 5 therefore cannot exceed set speed or bypass curve and cut-in limits.
 
 A nonzero value responds only when all of these common gates pass:
 

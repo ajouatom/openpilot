@@ -375,6 +375,8 @@ class LongitudinalPlanner:
         a_lead=lead.aLeadK,
         speed_error=v_cruise - v_ego,
         accel_response_level=preview_request.accel_response_level,
+        v_rel=lead.vRel,
+        gap_margin=gap_margin,
       )
       cruise_tuning = LEAD_ACCEL_RESPONSE_TUNING[preview_request.accel_response_level]
       self.cruise_accel_target = rate_limit_cruise_accel_target(
@@ -396,6 +398,8 @@ class LongitudinalPlanner:
       accel_boost=self.lead_accel_boost,
       accel_max=accel_limits_turns[1],
       a_lead=lead.aLeadK,
+      v_rel=lead.vRel,
+      gap_margin=gap_margin,
       cruise_source_active=preview_request.cruise_source_active,
       cruise_accel_target=self.cruise_accel_target,
     ) if preview_request.active else output_a_target_base
