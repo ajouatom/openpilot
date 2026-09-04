@@ -9,9 +9,12 @@ from openpilot.selfdrive.controls.lib.longitudinal_preview import (
   apply_preview_target,
   clip_action_time,
   clip_preview_offset,
+  get_cruise_accel_target,
   get_lead_preview_request,
   lead_accel_response_allowed,
+  lead_accel_response_source_allowed,
   rate_limit_accel_boost,
+  rate_limit_cruise_accel_target,
   rate_limit_preview,
 )
 
@@ -78,6 +81,62 @@ def test_response_levels_rise_monotonically_from_gentle_to_tracking():
   )
 
 
+def test_cruise_source_response_starts_at_balanced_level():
+  assert not lead_accel_response_source_allowed(2, 'cruise')
+  assert lead_accel_response_source_allowed(3, 'cruise')
+  assert lead_accel_response_source_allowed(4, 'cruise')
+  assert lead_accel_response_source_allowed(5, 'cruise')
+  assert lead_accel_response_source_allowed(1, 'lead0')
+  assert not lead_accel_response_source_allowed(5, 'e2e')
+
+
+@pytest.mark.parametrize("level", [3, 4, 5])
+def test_cruise_source_uses_positive_raw_lead_acceleration(level):
+  result = request(
+    DRIVING_MODE_NORMAL, 0.6, a_ego=0.6,
+    accel_response_level=level,
+    accel_response_enabled=True,
+    cruise_source_active=True,
+    v_rel=0.4,
+    gap_margin=1.0,
+  )
+  assert result.accel_response_active
+  assert result.cruise_source_active
+
+
+def test_gentle_levels_cannot_enable_cruise_source_response():
+  result = request(
+    DRIVING_MODE_NORMAL, 0.6,
+    accel_response_level=2,
+    accel_response_enabled=True,
+    cruise_source_active=True,
+    v_rel=0.4,
+    gap_margin=1.0,
+  )
+  assert not result.accel_response_active
+  assert not result.cruise_source_active
+
+
+@pytest.mark.parametrize("level", [3, 4, 5])
+def test_cruise_source_response_releases_when_lead_acceleration_ends_or_gap_will_close(level):
+  assert not request(
+    DRIVING_MODE_NORMAL, 0.10,
+    accel_response_level=level,
+    accel_response_enabled=True,
+    cruise_source_active=True,
+    v_rel=0.4,
+    gap_margin=1.0,
+  ).accel_response_active
+  assert not request(
+    DRIVING_MODE_NORMAL, 0.60, a_ego=2.0,
+    accel_response_level=level,
+    accel_response_enabled=True,
+    cruise_source_active=True,
+    v_rel=0.0,
+    gap_margin=1.0,
+  ).accel_response_active
+
+
 def test_only_level_five_adds_direct_alead_boost():
   for level in range(1, 5):
     result = request(DRIVING_MODE_NORMAL, 2.0, accel_response_level=level,
@@ -124,6 +183,37 @@ def test_level_five_keeps_tracking_while_lead_acceleration_remains_positive():
   assert result.accel_response_active
   assert result.offset_s == pytest.approx(0.55)
   assert result.accel_boost_target == pytest.approx(0.30)
+
+
+def test_cruise_acceleration_levels_progressively_use_cruise_max_envelope():
+  kwargs = dict(base_target=0.31, accel_max=2.33, a_lead=0.81, speed_error=59.3 / 3.6)
+  targets = [
+    get_cruise_accel_target(accel_response_level=level, **kwargs)
+    for level in (3, 4, 5)
+  ]
+  assert targets == pytest.approx([0.76, 0.96, 1.01])
+
+
+def test_cruise_acceleration_target_needs_set_speed_headroom_and_positive_lead_accel():
+  kwargs = dict(base_target=0.31, accel_max=2.33, accel_response_level=5)
+  assert get_cruise_accel_target(a_lead=0.81, speed_error=1.0 / 3.6, **kwargs) == pytest.approx(0.31)
+  assert get_cruise_accel_target(a_lead=0.10, speed_error=20.0 / 3.6, **kwargs) == pytest.approx(0.31)
+
+
+def test_cruise_acceleration_target_respects_final_acceleration_limit():
+  assert get_cruise_accel_target(
+    0.20,
+    accel_max=0.50,
+    a_lead=2.0,
+    speed_error=20.0 / 3.6,
+    accel_response_level=5,
+  ) == pytest.approx(0.50)
+
+
+def test_cruise_acceleration_target_attacks_by_level_and_releases_immediately():
+  assert rate_limit_cruise_accel_target(0.80, 0.30, 0.30, 0.08) == pytest.approx(0.38)
+  assert rate_limit_cruise_accel_target(0.80, 0.30, 0.30, 0.20) == pytest.approx(0.50)
+  assert rate_limit_cruise_accel_target(0.40, 0.70, 0.30, 0.20) == pytest.approx(0.40)
 
 
 @pytest.mark.parametrize(("mode", "preview_max"), [
@@ -316,3 +406,44 @@ def test_level_five_acceleration_cannot_exceed_lead_by_more_than_small_overshoot
     accel_max=2.0,
     a_lead=0.40,
   ) == pytest.approx(0.60)
+
+
+@pytest.mark.parametrize(("level", "cruise_target", "expected"), [
+  (3, 0.76, 0.76),
+  (4, 0.96, 0.96),
+  (5, 1.01, 1.01),
+])
+def test_cruise_source_target_is_applied_by_levels_three_to_five(level, cruise_target, expected):
+  assert apply_preview_target(
+    0.31, 0.40, DRIVING_MODE_NORMAL, 0.0,
+    a_ego=0.31,
+    accel_response_active=True,
+    accel_response_level=level,
+    accel_max=2.33,
+    a_lead=0.81,
+    cruise_source_active=True,
+    cruise_accel_target=cruise_target,
+  ) == pytest.approx(expected)
+
+
+def test_cruise_source_floor_can_overcome_falling_preview_without_releasing_braking():
+  assert apply_preview_target(
+    0.30, 0.20, DRIVING_MODE_NORMAL, -0.20,
+    a_ego=0.20,
+    accel_response_active=True,
+    accel_response_level=4,
+    accel_max=1.50,
+    a_lead=0.60,
+    cruise_source_active=True,
+    cruise_accel_target=0.70,
+  ) == pytest.approx(0.70)
+  assert apply_preview_target(
+    -0.10, 0.20, DRIVING_MODE_NORMAL, 0.40,
+    a_ego=-0.20,
+    accel_response_active=True,
+    accel_response_level=4,
+    accel_max=1.50,
+    a_lead=0.60,
+    cruise_source_active=True,
+    cruise_accel_target=0.70,
+  ) == pytest.approx(-0.10)
