@@ -29,15 +29,16 @@ def main():
   CP = messaging.log_from_bytes(params.get("CarParams", block=True), car.CarParams)
   cloudlog.info("plannerd got CarParams: %s", CP.brand)
 
-  # The fast path requires stable physical radar identities. Radar source
-  # options are Hyundai-only; other radar-equipped brands always use front
-  # tracks, while radarless cars preserve the model-triggered planner.
+  # Keep Hyundai's existing radar-triggered fast path. Other brands can publish
+  # radar at a different rate (VW MEB: 25 Hz), while the planner integrates at
+  # DT_MDL = 50 ms. Preserve their original modelV2 clock independently of which
+  # radar source supplies the lead observations.
   radar_track_mode = effective_radar_track_mode(
     CP.brand,
     CP.radarUnavailable,
     params.get_int("EnableRadarTracks"),
   )
-  live_tracks_longitudinal = radar_track_mode >= 1
+  live_tracks_longitudinal = CP.brand == "hyundai" and radar_track_mode >= 1
 
   ldw = LaneDepartureWarning()
   longitudinal_planner = LongitudinalPlanner(CP)
@@ -48,7 +49,7 @@ def main():
 
   pm = messaging.PubMaster(['longitudinalPlan', 'driverAssistance', 'lateralPlan'])
   # One process owns both planners to avoid another ~100 MB Python runtime.
-  # The two 20 Hz inputs wake this serial loop independently; no MPC overlaps.
+  # Hyundai's two inputs wake this serial loop independently; no MPC overlaps.
   sm = messaging.SubMaster(
     ['carControl', 'carState', 'controlsState', 'liveParameters', 'radarState',
      'liveTracks', 'modelV2', 'selfdriveState', 'carrotMan'],
