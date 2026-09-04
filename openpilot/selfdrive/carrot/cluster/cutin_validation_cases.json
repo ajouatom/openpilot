@@ -2,6 +2,34 @@
   "sensitivity": 50,
   "cases": [
     {
+      "id": "ioniq5-e7d-3-closer-stationary-front-52",
+      "vehicle_folder": "HYUNDAI_IONIQ_5_PE 07b62e389ed26c81",
+      "log": "00000e7d--929c32ef9a--3/rlog.zst",
+      "source": "front+corner",
+      "window": [15.08, 16.30],
+      "expected": "detect",
+      "human_verified": true,
+      "validation_stage": "lead_one",
+      "target_track_ids": [52],
+      "required_lead_one_ids": [52],
+      "latest_detection_s": 15.15,
+      "scene": "A long-observed high-quality front return is the closer stopped vehicle; it must replace the farther moving match before driver braking begins"
+    },
+    {
+      "id": "ioniq5-e7d-5-stationary-front-vision-range-jitter-52",
+      "vehicle_folder": "HYUNDAI_IONIQ_5_PE 07b62e389ed26c81",
+      "log": "00000e7d--929c32ef9a--5/rlog.zst",
+      "source": "front+corner",
+      "window": [30.34, 30.43],
+      "expected": "detect",
+      "human_verified": true,
+      "validation_stage": "lead_one",
+      "target_track_ids": [52],
+      "required_lead_one_ids": [52],
+      "latest_detection_s": 30.40,
+      "scene": "The confirmed corner-corroborated stopped front target remains physically continuous while vision range briefly jumps about 10 m closer; leadOne must stay radar-backed"
+    },
+    {
       "id": "carnival-16f-3-stationary-model-speed-lag-43",
       "vehicle_folder": "KIA_CARNIVAL_4TH_GEN c4dcf95545dafe68",
       "log": "0000016f--e5c88aaf17--3/rlog.zst",
