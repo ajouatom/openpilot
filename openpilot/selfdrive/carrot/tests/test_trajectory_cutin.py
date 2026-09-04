@@ -141,6 +141,63 @@ def test_close_front_lateral_wander_does_not_confirm_cutin() -> None:
   assert not estimate.predecel_risk
 
 
+def test_close_uncorroborated_front_stays_clear_outside_path_overlap() -> None:
+  detector = TrajectoryCutInDetector()
+  estimate = None
+  for index in range(31):
+    ratio = index / 30.0
+    y_rel = (
+      -2.60 + 0.10 * ratio
+      if ratio < 0.5
+      else -2.55 + 0.48 * (ratio - 0.5) / 0.5
+    )
+    estimate = detector.update(
+      index * 0.05,
+      6.8,
+      (point(
+        59,
+        "frontRadar",
+        5.70 - 2.90 * ratio,
+        y_rel,
+        v_ego=6.8,
+        v_rel=-1.82,
+      ),),
+      PATH,
+      MODEL,
+    )[0]
+
+  assert estimate is not None
+  assert abs(estimate.d_path) > 1.90
+  assert not estimate.confirmed_cutin
+  assert not estimate.control_eligible
+
+
+def test_close_uncorroborated_front_detects_after_actual_path_overlap() -> None:
+  detector = TrajectoryCutInDetector()
+  estimate = None
+  for index in range(31):
+    ratio = index / 30.0
+    estimate = detector.update(
+      index * 0.05,
+      6.8,
+      (point(
+        59,
+        "frontRadar",
+        5.70 - 2.70 * ratio,
+        -2.60 + 0.75 * ratio,
+        v_ego=6.8,
+        v_rel=-1.80,
+      ),),
+      PATH,
+      MODEL,
+    )[0]
+
+  assert estimate is not None
+  assert abs(estimate.d_path) <= 1.90
+  assert estimate.confirmed_cutin
+  assert estimate.control_eligible
+
+
 def test_higher_sensitivity_confirms_the_same_trajectory_earlier() -> None:
   def first_detection_index(sensitivity: int) -> int | None:
     detector = TrajectoryCutInDetector(sensitivity)

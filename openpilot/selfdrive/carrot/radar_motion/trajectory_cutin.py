@@ -665,8 +665,21 @@ class TrajectoryCutInDetector:
         and reported_inward < PAIRED_PARALLEL_MAX_REPORTED_INWARD_MPS
       )
       non_cutin_side_motion = close_born_rear_pass or paired_parallel_drift
+      uncorroborated_close_front = (
+        point.source == "frontRadar"
+        and point.d_rel <= 8.0
+        and not vision_supported
+        and not cross_sensor_supported
+      )
+      # Close legacy front-radar body returns can drift just inside the wider
+      # 2.15 m near-field allowance while the vehicle remains in its adjacent
+      # lane. Without independent vision/corner support, require the measured
+      # center to reach the actual body-overlap corridor before leadTwo.
       front_overlap_half_width = (
-        2.15 if point.d_rel <= 20.0 else PATH_OVERLAP_HALF_WIDTH_M
+        PATH_OVERLAP_HALF_WIDTH_M
+        if uncorroborated_close_front
+        else 2.15 if point.d_rel <= 20.0
+        else PATH_OVERLAP_HALF_WIDTH_M
       )
       raw_body_overlap = abs(point.y_rel) <= front_overlap_half_width
       ahead_at_overlap = (
