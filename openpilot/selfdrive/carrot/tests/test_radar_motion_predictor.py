@@ -3913,6 +3913,92 @@ def test_stationary_radar_rejects_fast_vision_speed_mismatch() -> None:
   assert matcher.stationary_identity is None
 
 
+def test_stationary_front_position_lock_recovers_model_speed_error() -> None:
+  matcher = VisionRadarMatcher()
+  match = None
+  for index in range(18):
+    time_s = index * 0.05
+    point = snapshot_radar_points(
+      (
+        Point(
+          43,
+          125.0 - 23.4 * time_s,
+          -0.6,
+          v_rel=-23.8,
+          source="frontRadar",
+          trackState=2,
+        ),
+      ),
+      v_ego=23.4,
+    )[0]
+    match = matcher.match(
+      model_with_lead(
+        point.d_rel - 1.0,
+        -0.3,
+        15.9,
+        probability=0.75,
+      ),
+      (),
+      STRAIGHT_PATH,
+      time_s=time_s,
+      stationary_points=(point,),
+      prefer_primary_stationary=True,
+    )
+
+  assert match is not None
+  assert match.point.source == "frontRadar"
+  assert match.point.track_id == 43
+
+
+@pytest.mark.parametrize(
+  "track_state,distance_error,yaw_rate",
+  (
+    (1, 1.0, 0.0),
+    (2, 5.5, 0.0),
+    (2, 1.0, 0.021),
+  ),
+)
+def test_stationary_front_position_lock_rejects_weak_geometry(
+  track_state: int,
+  distance_error: float,
+  yaw_rate: float,
+) -> None:
+  matcher = VisionRadarMatcher()
+  match = None
+  for index in range(18):
+    time_s = index * 0.05
+    point = snapshot_radar_points(
+      (
+        Point(
+          43,
+          125.0 - 23.4 * time_s,
+          -0.6,
+          v_rel=-23.8,
+          source="frontRadar",
+          trackState=track_state,
+        ),
+      ),
+      v_ego=23.4,
+    )[0]
+    match = matcher.match(
+      model_with_lead(
+        point.d_rel - distance_error,
+        -0.3,
+        15.9,
+        probability=0.75,
+      ),
+      (),
+      STRAIGHT_PATH,
+      time_s=time_s,
+      stationary_points=(point,),
+      prefer_primary_stationary=True,
+      yaw_rate_rad_s=yaw_rate,
+    )
+
+  assert match is None
+  assert matcher.stationary_identity is None
+
+
 def test_stationary_corner_cannot_bypass_confirmation_via_vision_recovery() -> None:
   matcher = VisionRadarMatcher()
   v_ego = 22.2
