@@ -622,6 +622,39 @@ def test_close_paired_outer_body_reflection_detects_with_inward_motion() -> None
   assert estimate.control_eligible
 
 
+def test_close_paired_target_passing_behind_before_overlap_is_rejected() -> None:
+  detector = TrajectoryCutInDetector()
+  estimate = None
+  samples = (
+    (0.86, 2.79, -1.95, -0.45),
+    (0.78, 2.80, -1.80, -0.40),
+    (0.84, 2.75, -1.30, -0.20),
+  )
+  for index, (d_rel, y_rel, v_rel, yv_rel) in enumerate(samples):
+    corner = point(
+      3160, "corner180", d_rel, y_rel,
+      v_ego=13.0, v_rel=v_rel, yv_rel=yv_rel,
+    )
+    front = point(
+      62, "frontRadar", d_rel + 0.2, 2.00,
+      v_ego=13.0, v_rel=v_rel,
+    )
+    estimate = detector.update(
+      index * 0.1,
+      13.0,
+      (corner,),
+      PATH,
+      MODEL,
+      cross_sensor_matches={(corner.source, corner.track_id): front},
+    )[0]
+
+  assert estimate is not None
+  assert estimate.time_to_overlap_s is not None
+  assert estimate.point.d_rel + estimate.point.v_rel * estimate.time_to_overlap_s < 0.5
+  assert not estimate.confirmed_cutin
+  assert not estimate.control_eligible
+
+
 def test_close_paired_outer_body_with_weak_motion_is_rejected() -> None:
   detector = TrajectoryCutInDetector()
   estimate = None
@@ -820,6 +853,42 @@ def test_far_uncorroborated_away_corner_path_jump_is_rejected() -> None:
   assert estimate is not None
   assert not estimate.confirmed_cutin
   assert not estimate.predecel_risk
+
+
+def test_nonclosing_far_parallel_pair_needs_strong_entry_motion() -> None:
+  detector = TrajectoryCutInDetector()
+  estimate = None
+  samples = (
+    (3.60, 0.00),
+    (3.55, 0.10),
+    (3.45, 0.20),
+    (3.40, 0.30),
+    (3.30, 0.40),
+    (3.25, 0.50),
+  )
+  for index, (y_rel, v_rel) in enumerate(samples):
+    corner = point(
+      3020, "corner180", 42.0 + 0.05 * index, y_rel,
+      v_ego=13.0, v_rel=v_rel, yv_rel=-0.70,
+    )
+    front = point(
+      52, "frontRadar", corner.d_rel + 2.0, y_rel + 0.1,
+      v_ego=13.0, v_rel=v_rel + 1.0,
+    )
+    estimate = detector.update(
+      index * 0.1,
+      13.0,
+      (corner,),
+      PATH,
+      MODEL,
+      cross_sensor_matches={(corner.source, corner.track_id): front},
+    )[0]
+
+  assert estimate is not None
+  assert estimate.inward_progress >= 0.28
+  assert not estimate.current_path
+  assert not estimate.confirmed_cutin
+  assert not estimate.control_eligible
 
 
 def test_front_parallel_drift_stays_clear_until_body_overlap() -> None:

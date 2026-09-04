@@ -955,10 +955,54 @@ class TrajectoryCutInDetector:
           )
         )
       )
-      raw_cutin = common_ok and not non_cutin_side_motion and (
+      # A close side body can satisfy the geometric overlap forecast even
+      # though its closing motion will carry it behind ego before that
+      # forecasted overlap.  Cross-sensor existence does not make that an
+      # actionable entry; wait until the body is already overlapping or is
+      # still ahead at the predicted overlap time.
+      paired_ahead_at_overlap = (
+        time_to_overlap_s is not None
+        and point.d_rel
+        + min(point.v_rel, relative_path_speed, recent_v_rel_min)
+        * time_to_overlap_s
+        > 0.5
+      )
+      paired_close_entry = paired_close_entry and (
+        point.d_rel > 2.0
+        or current_overlap
+        or (ahead_at_overlap and paired_ahead_at_overlap)
+      )
+      strong_consistent_entry = (
+        inward_progress >= 0.60
+        and abs(inward_rate - reported_inward) <= 0.30
+      )
+      committed_inward_entry = (
+        inward_progress >= 0.60
+        and direction_consistency >= 0.90
+      )
+      # A non-closing, unobserved-by-vision adjacent vehicle should not enter
+      # leadTwo merely because vRel crosses +0.5 m/s while a small amount of
+      # path-relative drift extrapolates toward the corridor.  Such a vehicle
+      # remains eligible after it reaches the near boundary or demonstrates a
+      # larger, physically coherent lane-entry trajectory.
+      weak_nonclosing_projected_entry = (
+        point.source.startswith("corner")
+        and point.d_rel > 15.0
+        and -0.1 <= point.v_rel <= 2.0
+        and not vision_supported
+        and not current_overlap
+        and abs(projection.d_path) > 2.30
+        and not committed_inward_entry
+      )
+      raw_cutin = (
+        common_ok
+        and not non_cutin_side_motion
+        and not weak_nonclosing_projected_entry
+        and (
         front_entry
         if point.source == "frontRadar"
         else corner_entry or paired_close_entry or close_direct_entry
+        )
       )
       cutin_confirmation_s = (
         0.0
@@ -1009,10 +1053,6 @@ class TrajectoryCutInDetector:
         confirmed_cutin = False
       closing_time_s = (
         point.d_rel / -point.v_rel if point.v_rel < -0.1 else math.inf
-      )
-      strong_consistent_entry = (
-        inward_progress >= 0.60
-        and abs(inward_rate - reported_inward) <= 0.30
       )
       lead_role_relevant = (
         point.v_rel >= 0.5
