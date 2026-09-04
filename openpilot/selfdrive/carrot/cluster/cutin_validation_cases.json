@@ -1199,6 +1199,19 @@
         "scene": "Night front-radar candidate remains parallel outside the ego lane"
       },
     {
+      "id": "k5-285-15-front-only-parallel-right-59",
+      "vehicle_folder": "KIA_K5_2021 UnregisteredDevice",
+      "log": "00000285--8638f7001c--15/rlog.zst",
+      "source": "front",
+      "window": [39.0, 43.0],
+      "expected": "clear",
+      "human_verified": true,
+      "validation_stage": "lead_two",
+      "target_track_ids": [59],
+      "forbidden_lead_two_ids": [59],
+      "scene": "A right-lane car remains parallel while ego closes in slow nighttime traffic; an uncorroborated close front-radar centroid outside the physical path-overlap corridor must not become leadTwo"
+    },
+    {
       "id": "pv5-129-8-right-front-cutin",
       "vehicle_folder": "KIA_PV5 8ca0d3863b1b3c32",
       "log": "00000129--fc54fff840--8/rlog.zst",
