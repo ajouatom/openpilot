@@ -10,6 +10,7 @@ from openpilot.common.swaglog import cloudlog
 from openpilot.selfdrive.modeld.constants import index_function
 from openpilot.selfdrive.controls.radar_constants import LEAD_ACCEL_TAU
 from openpilot.selfdrive.carrot.traffic_stop import get_traffic_stop_distance_adjust, get_traffic_stop_obstacle_distance
+from openpilot.selfdrive.controls.lib.longitudinal_preview import LEAD_ACCEL_MIN_TRACK_FRAMES, get_lead_accel_mpc_request
 
 if __name__ == '__main__':  # generating code
   from acados_template import AcadosModel, AcadosOcp, AcadosOcpSolver
@@ -72,8 +73,10 @@ def get_jerk_factor(personality=log.LongitudinalPersonality.standard):
     raise NotImplementedError("Longitudinal personality not supported")
 
 
-def get_a_change_cost(prev_accel_constraint: bool, a_change_cost_starting: float) -> float:
-  return float(A_CHANGE_COST if prev_accel_constraint else a_change_cost_starting)
+def get_a_change_cost(prev_accel_constraint: bool, a_change_cost_starting: float,
+                      response_factor: float = 1.0) -> float:
+  base_cost = A_CHANGE_COST if prev_accel_constraint else a_change_cost_starting
+  return float(base_cost * np.clip(response_factor, 0.0, 1.0))
 
 
 def get_T_FOLLOW(personality=log.LongitudinalPersonality.standard):
@@ -243,6 +246,9 @@ class LongitudinalMpc:
     self.solver = AcadosOcpSolverCython(MODEL_NAME, ACADOS_SOLVER_TYPE, N)
 
     self.a_change_cost = A_CHANGE_COST
+    self.jerk_cost_factor = 1.0
+    self.lead_accel_response_active = False
+    self.lead_accel_response_level = 0
 
     self.reset()
     self.source = SOURCES[2]
@@ -276,6 +282,8 @@ class LongitudinalMpc:
     self.crash_cnt = 0.0
     self.predicted_danger_margin = 1e3
     self.solution_status = 0
+    self.lead_accel_response_active = False
+    self.lead_accel_response_level = 0
     # timers
     self.solve_time = 0.0
     self.time_qp_solution = 0.0
@@ -303,14 +311,17 @@ class LongitudinalMpc:
   def set_weights(self, prev_accel_constraint=True,
                   personality=log.LongitudinalPersonality.standard,
                   jerk_factor=1.0,
-                  a_change_cost_starting=A_CHANGE_COST_STARTING):
+                  a_change_cost_starting=A_CHANGE_COST_STARTING,
+                  a_change_cost_factor=1.0,
+                  jerk_cost_factor=1.0):
     #jerk_factor = get_jerk_factor(personality)
     if self.mode == 'acc':
-      # Keep active-plan inertia fixed. jerk_factor controls only the shape of
-      # the new solution; multiplying both costs coupled responsiveness and
-      # smoothness and made lead-triggered preview difficult to bound.
-      a_change_cost = get_a_change_cost(prev_accel_constraint, a_change_cost_starting)
-      cost_weights = [X_EGO_OBSTACLE_COST, X_EGO_COST, V_EGO_COST, A_EGO_COST, a_change_cost, jerk_factor * J_EGO_COST]
+      a_change_cost = get_a_change_cost(
+        prev_accel_constraint, a_change_cost_starting, a_change_cost_factor,
+      )
+      applied_jerk_cost_factor = float(np.clip(jerk_cost_factor, 0.0, 1.0))
+      cost_weights = [X_EGO_OBSTACLE_COST, X_EGO_COST, V_EGO_COST, A_EGO_COST,
+                      a_change_cost, jerk_factor * applied_jerk_cost_factor * J_EGO_COST]
       constraint_cost_weights = [LIMIT_COST, LIMIT_COST, LIMIT_COST, DANGER_ZONE_COST]
     elif self.mode == 'blended':
       a_change_cost = 40.0 if prev_accel_constraint else 0
@@ -319,6 +330,7 @@ class LongitudinalMpc:
     else:
       raise NotImplementedError(f'Planner mode {self.mode} not recognized in planner cost set')
     self.a_change_cost = float(a_change_cost)
+    self.jerk_cost_factor = float(applied_jerk_cost_factor if self.mode == 'acc' else 1.0)
     self.set_cost_weights(cost_weights, constraint_cost_weights)
 
   def update_predicted_danger_margin(self, lead, lead_obstacle, t_follow, comfort_brake, stop_distance):
@@ -374,7 +386,14 @@ class LongitudinalMpc:
     self.cruise_min_a = min_a
     self.max_a = max_a
 
-  def update(self, carrot, reset_state, radarstate, v_cruise, x, v, a, j, personality=log.LongitudinalPersonality.standard):
+  def update(self, carrot, reset_state, radarstate, v_cruise, x, v, a, j,
+             personality=log.LongitudinalPersonality.standard,
+             prev_accel_constraint=True,
+             jerk_factor=1.0,
+             a_change_cost_starting=A_CHANGE_COST_STARTING,
+             lead_accel_response_enabled=False,
+             lead_track_frames=(0, 0),
+             measured_a_ego=0.0):
     v_ego = self.x0[1]
     a_ego = self.x0[2]
     self.status = radarstate.leadOne.status or radarstate.leadTwo.status
@@ -477,6 +496,46 @@ class LongitudinalMpc:
 
     else:
       raise NotImplementedError(f'Planner mode {self.mode} not recognized in planner update')
+
+    response_lead_index = 1 if self.source == 'lead1' else 0
+    response_lead = (radarstate.leadOne, radarstate.leadTwo)[response_lead_index]
+    response_gap_margin = (
+      float(response_lead.dRel - self.base_desired_distances[response_lead_index])
+      if response_lead.status else -1.0
+    )
+    response_track_stable = (
+      len(lead_track_frames) > response_lead_index
+      and lead_track_frames[response_lead_index] >= LEAD_ACCEL_MIN_TRACK_FRAMES
+    )
+    response_request = get_lead_accel_mpc_request(
+      carrot.leadAccelResponse,
+      enabled=(
+        mode == 'acc'
+        and lead_accel_response_enabled
+        and response_track_stable
+      ),
+      source=self.source,
+      lead_status=(
+        response_lead.status
+        and response_lead.radar
+        and response_lead.radarTrackId >= 0
+      ),
+      a_lead=response_lead.aLeadK,
+      a_ego=measured_a_ego,
+      v_rel=response_lead.vRel,
+      gap_margin=response_gap_margin,
+      speed_error=v_cruise - v_ego,
+    )
+    self.lead_accel_response_active = response_request.active
+    self.lead_accel_response_level = response_request.level if response_request.active else 0
+    self.set_weights(
+      prev_accel_constraint,
+      personality=personality,
+      jerk_factor=jerk_factor,
+      a_change_cost_starting=a_change_cost_starting,
+      a_change_cost_factor=response_request.a_change_cost_factor,
+      jerk_cost_factor=response_request.jerk_cost_factor,
+    )
 
     self.yref[:,1] = x
     self.yref[:,2] = v
