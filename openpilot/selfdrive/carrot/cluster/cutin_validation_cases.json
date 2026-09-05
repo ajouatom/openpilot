@@ -30,6 +30,21 @@
       "scene": "User-reviewed green-light approach: vision, moving front 35 and corner 4983 follow the real vehicle while stationary front reflection 32 briefly crosses the visual range; neither position-lock admission nor closer-lead retention may borrow that moving vehicle's evidence"
     },
     {
+      "id": "carnival-178-53-moving-front-35-uncertain-vision-range",
+      "vehicle_folder": "KIA_CARNIVAL_4TH_GEN c4dcf95545dafe68",
+      "log": "00000178--52f7f496c5--53/rlog.zst",
+      "source": "front",
+      "window": [17.20, 19.10],
+      "expected": "detect",
+      "human_verified": true,
+      "validation_stage": "lead_one",
+      "target_track_ids": [35],
+      "required_lead_one_ids": [35],
+      "lead_one_continuous_window": [17.20, 19.10],
+      "latest_detection_s": 17.25,
+      "scene": "User-reviewed moving vehicle: front 35 already matches model lead zero and remains physically continuous. At 17.35 s front range is 90.18 m, vision is 81.12 m with xStd 9.70 m; an unconditional 8 m post-match guard must not oscillate L1 to vision while uncertainty and track continuity support the same moving front"
+    },
+    {
       "id": "carnival-178-53-real-stopping-lead-35",
       "vehicle_folder": "KIA_CARNIVAL_4TH_GEN c4dcf95545dafe68",
       "log": "00000178--52f7f496c5--53/rlog.zst",

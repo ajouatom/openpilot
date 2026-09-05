@@ -1,0 +1,583 @@
+{
+  "baseline_commit": "c570e74f9b7ba24d139fa460e9eeadf07ec39c62",
+  "controller_sha256": "82bd1623c0ad3b5f090118d184066bc85f6b88b84917e3985327c640349559f8",
+  "segment": "00000178--52f7f496c5--53",
+  "clock": "Full-cereal service/frame-relative time; not initData boot time.",
+  "full_logs": 85,
+  "labels_per_mode": 468,
+  "new_label": "carnival-178-53-moving-front-35-uncertain-vision-range",
+  "existing_label_windows_and_deadlines_changed": false,
+  "focused_tests": {
+    "passed": 537,
+    "new_cases": 44,
+    "positive_tests_fail_on_baseline": 2
+  },
+  "wiki_tests_passed": 25,
+  "scope": "Offline production lead-controller replay; recorded acceleration is not a counterfactual closed-loop planner or vehicle result.",
+  "modes": {
+    "2": {
+      "before_failures": 39,
+      "after_failures": 38,
+      "fixed": [
+        "carnival-178-53-moving-front-35-uncertain-vision-range"
+      ],
+      "new_failures": [],
+      "remaining_failures": [
+        "gv80-218-2-adjacent-right-14",
+        "manual-0000005b-019p25-corner-1055",
+        "manual-0000005b-019p55-corner-1052",
+        "manual-0000005b-020p30-corner-1094",
+        "manual-0000005b-020p35-corner-1013",
+        "manual-0000005b-020p40-corner-1063",
+        "manual-0000005b-020p70-corner-1089",
+        "manual-0000006a-054p90-corner-1023",
+        "manual-000000b1-005p35-corner-1001",
+        "manual-000000b1-007p30-corner-1033",
+        "manual-000000cf-001p60-corner-1002",
+        "manual-000000cf-002p05-corner-1003",
+        "manual-000000cf-002p60-corner-1003",
+        "manual-000000cf-005p85-corner-1005",
+        "manual-000000cf-006p25-corner-1003",
+        "manual-000000cf-014p40-corner-1013",
+        "manual-000000cf-015p75-corner-1000",
+        "manual-000000cf-019p35-corner-1001",
+        "manual-00000192-032p30-corner-1036",
+        "manual-000001c1-024p50-corner-1014",
+        "manual-000001c1-024p80-corner-1015",
+        "manual-000001c1-025p20-corner-1012",
+        "manual-000001ce-014p70-corner-1000",
+        "manual-00000218-013p55-corner-1009",
+        "manual-00000218-046p40-corner-1040",
+        "manual-000002d3-040p10-corner-1000",
+        "manual-000002d3-040p45-corner-1018",
+        "manual-00000bef-024p30-front-34",
+        "manual-00000c21-013p65-front-58",
+        "manual-00000c21-029p80-front-40",
+        "manual-00000c21-031p50-front-46",
+        "manual-00000c21-032p65-front-61",
+        "manual-00000c21-032p75-front-63",
+        "manual-00000c21-033p15-front-62",
+        "manual-00000c21-058p05-front-59",
+        "manual-00000cd0-016p50-corner-1002",
+        "manual-00000cd0-017p20-corner-1002",
+        "manual-00000cfb-036p80-corner-1028"
+      ],
+      "before_summary": {
+        "existing_radard": null,
+        "physical_dpath_shadow": {
+          "labels": 432,
+          "tp": 45,
+          "fp": 0,
+          "fn": 38,
+          "tn": 349,
+          "precision": 1.0,
+          "recall": 0.5421686746987951,
+          "f1": 0.7031249999999999,
+          "accuracy": 0.9120370370370371
+        },
+        "missing": 0,
+        "radard_expectation_failures": 0,
+        "physical_dpath_expectation_failures": 39,
+        "predeceleration_expectation_failures": 0
+      },
+      "after_summary": {
+        "existing_radard": null,
+        "physical_dpath_shadow": {
+          "labels": 432,
+          "tp": 45,
+          "fp": 0,
+          "fn": 38,
+          "tn": 349,
+          "precision": 1.0,
+          "recall": 0.5421686746987951,
+          "f1": 0.7031249999999999,
+          "accuracy": 0.9120370370370371
+        },
+        "missing": 0,
+        "radard_expectation_failures": 0,
+        "physical_dpath_expectation_failures": 38,
+        "predeceleration_expectation_failures": 0
+      },
+      "strict_validator_exit_status_before": 1,
+      "strict_validator_exit_status_after": 1,
+      "before_incident_case": {
+        "id": "carnival-178-53-moving-front-35-uncertain-vision-range",
+        "validation_set": "cases",
+        "source": "front",
+        "expected": "detect",
+        "radard_event": null,
+        "shadow_event": [
+          17.208178734,
+          35
+        ],
+        "predecel_event": null,
+        "shadow_applicable": true,
+        "shadow_sensor": "corner",
+        "radard_pass": true,
+        "shadow_pass": false,
+        "predecel_pass": true,
+        "radard_continuous": null,
+        "shadow_continuous": false,
+        "radard_lead_two_continuous": null,
+        "shadow_lead_two_continuous": null,
+        "radard_required_lead_one": null,
+        "shadow_required_lead_one": [
+          17.208178734,
+          35
+        ],
+        "radard_forbidden_lead_one": null,
+        "shadow_forbidden_lead_one": null,
+        "radard_forbidden_lead_two": null,
+        "shadow_forbidden_lead_two": null
+      },
+      "after_incident_case": {
+        "id": "carnival-178-53-moving-front-35-uncertain-vision-range",
+        "validation_set": "cases",
+        "source": "front",
+        "expected": "detect",
+        "radard_event": null,
+        "shadow_event": [
+          17.208178734,
+          35
+        ],
+        "predecel_event": null,
+        "shadow_applicable": true,
+        "shadow_sensor": "corner",
+        "radard_pass": true,
+        "shadow_pass": true,
+        "predecel_pass": true,
+        "radard_continuous": null,
+        "shadow_continuous": true,
+        "radard_lead_two_continuous": null,
+        "shadow_lead_two_continuous": null,
+        "radard_required_lead_one": null,
+        "shadow_required_lead_one": [
+          17.208178734,
+          35
+        ],
+        "radard_forbidden_lead_one": null,
+        "shadow_forbidden_lead_one": null,
+        "radard_forbidden_lead_two": null,
+        "shadow_forbidden_lead_two": null
+      },
+      "incident": {
+        "before": {
+          "target_time_s": 17.349826487,
+          "target_lead_one": {
+            "dRel": 81.1195492553711,
+            "yRel": -0.15853101015090942,
+            "dPath": -0.1755178772798571,
+            "vRel": -0.7920351028442383,
+            "aRel": 0.0,
+            "vLead": 10.951167106628418,
+            "vLeadK": 10.951167106628418,
+            "aLead": -0.3765302896499634,
+            "aLeadK": -0.3765302896499634,
+            "aLeadTau": 0.3,
+            "jLead": 0.0,
+            "vLat": 0.0,
+            "status": true,
+            "fcw": false,
+            "modelProb": 0.9393830299377441,
+            "radar": false,
+            "radarTrackId": -1,
+            "score": 0.0
+          },
+          "target_vision": {
+            "probability": 0.9393830299377441,
+            "d_rel": 81.1195492553711,
+            "y_rel": -0.15853101015090942,
+            "velocity": 10.951167106628418,
+            "x_std": 9.704083442687988,
+            "y_std": 0.4543004333972931,
+            "v_std": 2.35288405418396,
+            "acceleration": -0.3765302896499634
+          },
+          "target_front_match": {
+            "point": {
+              "track_id": 35,
+              "source": "frontRadar",
+              "d_rel": 90.18112291693576,
+              "y_rel": 0.5838381046073027,
+              "v_rel": 5.119999885559082,
+              "a_rel": 1.399999976158142,
+              "yv_rel": 0.49000000953674316,
+              "v_lead": 16.86320209503174,
+              "a_lead": 0.589980959892273,
+              "j_lead": 1.0915552377700806,
+              "measured": true,
+              "radar_track_state": 2,
+              "kinematics_source": null,
+              "kinematics_track_id": null
+            },
+            "probability": 0.9393830299377441,
+            "score": 7.491232573438985e-05,
+            "d_path": 0.5921244564313419
+          },
+          "range_guard_rejected": true,
+          "continuity_window_s": [
+            17.2,
+            19.1
+          ],
+          "window_frames": 38,
+          "front35_frames": 26,
+          "false_front32_frames_12p8_to_16p5": 0,
+          "real_stopped_front35_frames_27p5_to_45": 349
+        },
+        "after": {
+          "target_time_s": 17.349826487,
+          "target_lead_one": {
+            "dRel": 90.18112291693576,
+            "yRel": 0.5838381046073027,
+            "dPath": 0.5921244564313419,
+            "vRel": 5.119999885559082,
+            "aRel": 1.399999976158142,
+            "vLead": 16.86320209503174,
+            "vLeadK": 16.86320209503174,
+            "aLead": 0.589980959892273,
+            "aLeadK": 0.589980959892273,
+            "aLeadTau": 0.42364430472150016,
+            "jLead": 1.0915552377700806,
+            "vLat": 0.49000000953674316,
+            "status": true,
+            "fcw": false,
+            "modelProb": 0.9393830299377441,
+            "radar": true,
+            "radarTrackId": 35,
+            "score": 7.491232573438985e-05
+          },
+          "target_vision": {
+            "probability": 0.9393830299377441,
+            "d_rel": 81.1195492553711,
+            "y_rel": -0.15853101015090942,
+            "velocity": 10.951167106628418,
+            "x_std": 9.704083442687988,
+            "y_std": 0.4543004333972931,
+            "v_std": 2.35288405418396,
+            "acceleration": -0.3765302896499634
+          },
+          "target_front_match": {
+            "point": {
+              "track_id": 35,
+              "source": "frontRadar",
+              "d_rel": 90.18112291693576,
+              "y_rel": 0.5838381046073027,
+              "v_rel": 5.119999885559082,
+              "a_rel": 1.399999976158142,
+              "yv_rel": 0.49000000953674316,
+              "v_lead": 16.86320209503174,
+              "a_lead": 0.589980959892273,
+              "j_lead": 1.0915552377700806,
+              "measured": true,
+              "radar_track_state": 2,
+              "kinematics_source": null,
+              "kinematics_track_id": null
+            },
+            "probability": 0.9393830299377441,
+            "score": 7.491232573438985e-05,
+            "d_path": 0.5921244564313419
+          },
+          "range_guard_rejected": false,
+          "continuity_window_s": [
+            17.2,
+            19.1
+          ],
+          "window_frames": 38,
+          "front35_frames": 38,
+          "false_front32_frames_12p8_to_16p5": 0,
+          "real_stopped_front35_frames_27p5_to_45": 349
+        }
+      }
+    },
+    "3": {
+      "before_failures": 39,
+      "after_failures": 38,
+      "fixed": [
+        "carnival-178-53-moving-front-35-uncertain-vision-range"
+      ],
+      "new_failures": [],
+      "remaining_failures": [
+        "ioniq9-234-6-scc-corroborated-early-l2",
+        "manual-0000005b-019p25-corner-1055",
+        "manual-0000005b-019p55-corner-1052",
+        "manual-0000005b-020p30-corner-1094",
+        "manual-0000005b-020p35-corner-1013",
+        "manual-0000005b-020p40-corner-1063",
+        "manual-0000005b-020p70-corner-1089",
+        "manual-0000006a-054p90-corner-1023",
+        "manual-000000b1-005p35-corner-1001",
+        "manual-000000b1-007p30-corner-1033",
+        "manual-000000cf-001p60-corner-1002",
+        "manual-000000cf-002p05-corner-1003",
+        "manual-000000cf-002p60-corner-1003",
+        "manual-000000cf-005p85-corner-1005",
+        "manual-000000cf-006p25-corner-1003",
+        "manual-000000cf-014p40-corner-1013",
+        "manual-000000cf-015p75-corner-1000",
+        "manual-000000cf-019p35-corner-1001",
+        "manual-00000192-032p30-corner-1036",
+        "manual-000001c1-024p50-corner-1014",
+        "manual-000001c1-024p80-corner-1015",
+        "manual-000001c1-025p20-corner-1012",
+        "manual-000001ce-014p70-corner-1000",
+        "manual-00000218-013p55-corner-1009",
+        "manual-00000218-046p40-corner-1040",
+        "manual-000002d3-040p10-corner-1000",
+        "manual-000002d3-040p45-corner-1018",
+        "manual-00000bef-024p30-front-34",
+        "manual-00000c21-013p65-front-58",
+        "manual-00000c21-029p80-front-40",
+        "manual-00000c21-031p50-front-46",
+        "manual-00000c21-032p65-front-61",
+        "manual-00000c21-032p75-front-63",
+        "manual-00000c21-033p15-front-62",
+        "manual-00000c21-058p05-front-59",
+        "manual-00000cd0-016p50-corner-1002",
+        "manual-00000cd0-017p20-corner-1002",
+        "manual-00000cfb-036p80-corner-1028"
+      ],
+      "before_summary": {
+        "existing_radard": null,
+        "physical_dpath_shadow": {
+          "labels": 432,
+          "tp": 45,
+          "fp": 0,
+          "fn": 38,
+          "tn": 349,
+          "precision": 1.0,
+          "recall": 0.5421686746987951,
+          "f1": 0.7031249999999999,
+          "accuracy": 0.9120370370370371
+        },
+        "missing": 0,
+        "radard_expectation_failures": 0,
+        "physical_dpath_expectation_failures": 39,
+        "predeceleration_expectation_failures": 0
+      },
+      "after_summary": {
+        "existing_radard": null,
+        "physical_dpath_shadow": {
+          "labels": 432,
+          "tp": 45,
+          "fp": 0,
+          "fn": 38,
+          "tn": 349,
+          "precision": 1.0,
+          "recall": 0.5421686746987951,
+          "f1": 0.7031249999999999,
+          "accuracy": 0.9120370370370371
+        },
+        "missing": 0,
+        "radard_expectation_failures": 0,
+        "physical_dpath_expectation_failures": 38,
+        "predeceleration_expectation_failures": 0
+      },
+      "strict_validator_exit_status_before": 1,
+      "strict_validator_exit_status_after": 1,
+      "before_incident_case": {
+        "id": "carnival-178-53-moving-front-35-uncertain-vision-range",
+        "validation_set": "cases",
+        "source": "front",
+        "expected": "detect",
+        "radard_event": null,
+        "shadow_event": [
+          17.208178734,
+          35
+        ],
+        "predecel_event": null,
+        "shadow_applicable": true,
+        "shadow_sensor": "corner",
+        "radard_pass": true,
+        "shadow_pass": false,
+        "predecel_pass": true,
+        "radard_continuous": null,
+        "shadow_continuous": false,
+        "radard_lead_two_continuous": null,
+        "shadow_lead_two_continuous": null,
+        "radard_required_lead_one": null,
+        "shadow_required_lead_one": [
+          17.208178734,
+          35
+        ],
+        "radard_forbidden_lead_one": null,
+        "shadow_forbidden_lead_one": null,
+        "radard_forbidden_lead_two": null,
+        "shadow_forbidden_lead_two": null
+      },
+      "after_incident_case": {
+        "id": "carnival-178-53-moving-front-35-uncertain-vision-range",
+        "validation_set": "cases",
+        "source": "front",
+        "expected": "detect",
+        "radard_event": null,
+        "shadow_event": [
+          17.208178734,
+          35
+        ],
+        "predecel_event": null,
+        "shadow_applicable": true,
+        "shadow_sensor": "corner",
+        "radard_pass": true,
+        "shadow_pass": true,
+        "predecel_pass": true,
+        "radard_continuous": null,
+        "shadow_continuous": true,
+        "radard_lead_two_continuous": null,
+        "shadow_lead_two_continuous": null,
+        "radard_required_lead_one": null,
+        "shadow_required_lead_one": [
+          17.208178734,
+          35
+        ],
+        "radard_forbidden_lead_one": null,
+        "shadow_forbidden_lead_one": null,
+        "radard_forbidden_lead_two": null,
+        "shadow_forbidden_lead_two": null
+      },
+      "incident": {
+        "before": {
+          "target_time_s": 17.349826487,
+          "target_lead_one": {
+            "dRel": 81.1195492553711,
+            "yRel": -0.15853101015090942,
+            "dPath": -0.1755178772798571,
+            "vRel": -0.7920351028442383,
+            "aRel": 0.0,
+            "vLead": 10.951167106628418,
+            "vLeadK": 10.951167106628418,
+            "aLead": -0.3765302896499634,
+            "aLeadK": -0.3765302896499634,
+            "aLeadTau": 0.3,
+            "jLead": 0.0,
+            "vLat": 0.0,
+            "status": true,
+            "fcw": false,
+            "modelProb": 0.9393830299377441,
+            "radar": false,
+            "radarTrackId": -1,
+            "score": 0.0
+          },
+          "target_vision": {
+            "probability": 0.9393830299377441,
+            "d_rel": 81.1195492553711,
+            "y_rel": -0.15853101015090942,
+            "velocity": 10.951167106628418,
+            "x_std": 9.704083442687988,
+            "y_std": 0.4543004333972931,
+            "v_std": 2.35288405418396,
+            "acceleration": -0.3765302896499634
+          },
+          "target_front_match": {
+            "point": {
+              "track_id": 35,
+              "source": "frontRadar",
+              "d_rel": 90.18112291693576,
+              "y_rel": 0.5838381046073027,
+              "v_rel": 5.119999885559082,
+              "a_rel": 1.399999976158142,
+              "yv_rel": 0.49000000953674316,
+              "v_lead": 16.86320209503174,
+              "a_lead": 0.589980959892273,
+              "j_lead": 1.0915552377700806,
+              "measured": true,
+              "radar_track_state": 2,
+              "kinematics_source": null,
+              "kinematics_track_id": null
+            },
+            "probability": 0.9393830299377441,
+            "score": 7.491232573438985e-05,
+            "d_path": 0.5921244564313419
+          },
+          "range_guard_rejected": true,
+          "continuity_window_s": [
+            17.2,
+            19.1
+          ],
+          "window_frames": 38,
+          "front35_frames": 26,
+          "false_front32_frames_12p8_to_16p5": 0,
+          "real_stopped_front35_frames_27p5_to_45": 349
+        },
+        "after": {
+          "target_time_s": 17.349826487,
+          "target_lead_one": {
+            "dRel": 90.18112291693576,
+            "yRel": 0.5838381046073027,
+            "dPath": 0.5921244564313419,
+            "vRel": 5.119999885559082,
+            "aRel": 1.399999976158142,
+            "vLead": 16.86320209503174,
+            "vLeadK": 16.86320209503174,
+            "aLead": 0.589980959892273,
+            "aLeadK": 0.589980959892273,
+            "aLeadTau": 0.42364430472150016,
+            "jLead": 1.0915552377700806,
+            "vLat": 0.49000000953674316,
+            "status": true,
+            "fcw": false,
+            "modelProb": 0.9393830299377441,
+            "radar": true,
+            "radarTrackId": 35,
+            "score": 7.491232573438985e-05
+          },
+          "target_vision": {
+            "probability": 0.9393830299377441,
+            "d_rel": 81.1195492553711,
+            "y_rel": -0.15853101015090942,
+            "velocity": 10.951167106628418,
+            "x_std": 9.704083442687988,
+            "y_std": 0.4543004333972931,
+            "v_std": 2.35288405418396,
+            "acceleration": -0.3765302896499634
+          },
+          "target_front_match": {
+            "point": {
+              "track_id": 35,
+              "source": "frontRadar",
+              "d_rel": 90.18112291693576,
+              "y_rel": 0.5838381046073027,
+              "v_rel": 5.119999885559082,
+              "a_rel": 1.399999976158142,
+              "yv_rel": 0.49000000953674316,
+              "v_lead": 16.86320209503174,
+              "a_lead": 0.589980959892273,
+              "j_lead": 1.0915552377700806,
+              "measured": true,
+              "radar_track_state": 2,
+              "kinematics_source": null,
+              "kinematics_track_id": null
+            },
+            "probability": 0.9393830299377441,
+            "score": 7.491232573438985e-05,
+            "d_path": 0.5921244564313419
+          },
+          "range_guard_rejected": false,
+          "continuity_window_s": [
+            17.2,
+            19.1
+          ],
+          "window_frames": 38,
+          "front35_frames": 38,
+          "false_front32_frames_12p8_to_16p5": 0,
+          "real_stopped_front35_frames_27p5_to_45": 349
+        }
+      }
+    }
+  },
+  "runtime": {
+    "scope": "Windows desktop controller.update on cached full-log snapshots; excludes decoding, model construction, production live-track parsing, IPC and publication. Not a device benchmark.",
+    "runs": "before, after, after, before; 6 logs per pass",
+    "before": {
+      "frames": 14390,
+      "mean_ms": 0.5551957609451008,
+      "p95_ms": 1.1537,
+      "p99_ms": 1.4513
+    },
+    "after": {
+      "frames": 14390,
+      "mean_ms": 0.5514886587908269,
+      "p95_ms": 1.1501,
+      "p99_ms": 1.3767
+    }
+  }
+}
