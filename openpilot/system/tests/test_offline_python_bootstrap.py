@@ -100,7 +100,7 @@ def test_remaining_legacy_runtime_dependencies_are_available_offline() -> None:
   })
 
 
-def test_launcher_bootstraps_without_network_package_installs() -> None:
+def test_launcher_bootstraps_from_local_wheels_first() -> None:
   launcher = (Path(BASEDIR) / "launch_chffrplus.sh").read_text(encoding="utf-8")
 
   assert "ensure_python_package serial pyserial 1" in launcher
