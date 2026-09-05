@@ -418,7 +418,7 @@ void send_peripheral_state(Panda *panda, PubMaster *pm) {
   pm->send("peripheralState", msg);
 }
 
-void process_panda_state(const std::vector<Panda *> &pandas, PubMaster *pm, bool engaged, bool is_onroad, bool spoofing_started) {
+std::optional<bool> process_panda_state(const std::vector<Panda *> &pandas, PubMaster *pm, bool engaged, bool is_onroad, bool spoofing_started) {
   std::vector<std::string> connected_serials;
   connected_serials.reserve(pandas.size());
   for (Panda *panda : pandas) {
@@ -428,7 +428,7 @@ void process_panda_state(const std::vector<Panda *> &pandas, PubMaster *pm, bool
   auto ignition_opt = send_panda_states(pm, pandas, is_onroad, spoofing_started);
   if (!ignition_opt) {
     LOGE("Failed to get ignition_opt");
-    return;
+    return std::nullopt;
   }
 
   // check if we should have pandad reconnect
@@ -457,6 +457,8 @@ void process_panda_state(const std::vector<Panda *> &pandas, PubMaster *pm, bool
   for (Panda *panda : pandas) {
     panda->send_heartbeat(engaged);
   }
+
+  return ignition_opt;
 }
 
 void process_peripheral_state(Panda *panda, PubMaster *pm, bool no_fan_control) {
@@ -583,8 +585,12 @@ void pandad_run(std::vector<Panda *> &pandas) {
       engaged = sm.allAliveAndValid({"selfdriveState"}) && sm["selfdriveState"].getSelfdriveState().getEnabled();
       is_onroad = params.getBool("IsOnroad");
       pandad_is_onroad.store(is_onroad, std::memory_order_relaxed);
-      process_panda_state(pandas, &pm, engaged, is_onroad, spoofing_started);
-      panda_safety.configureSafetyMode(is_onroad);
+      const auto ignition_opt = process_panda_state(pandas, &pm, engaged, is_onroad, spoofing_started);
+      if (ignition_opt) {
+        // A vehicle sleep can drop ignition without ending the onroad session.
+        // Reset safety configuration so its vehicle mode is restored after wake.
+        panda_safety.configureSafetyMode(is_onroad && *ignition_opt);
+      }
     }
 
     // Send out peripheralState at 2Hz
