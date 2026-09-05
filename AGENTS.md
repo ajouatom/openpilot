@@ -7,6 +7,8 @@
   `carrot-bmr_v6` and pushed to all three remote branches. Preserve each branch's model-specific
   changes while integrating the complete `carrot-wip` history into both model branches, and verify
   that none of the three branches has an unpushed commit before reporting the work complete.
+  Keep shared UI, model-name display helpers, and generated web assets identical across all three
+  branches; differences must be limited to model selection/artifacts and their model-specific tests.
 - On this Windows workstation, vehicle tmux session captures are stored under
   `\\DS1821P\openpilot\<branch>`. When tmux is mentioned, search the directory for the known
   branch for a vehicle folder whose name ends with the exact dongle ID. If the branch is unknown,

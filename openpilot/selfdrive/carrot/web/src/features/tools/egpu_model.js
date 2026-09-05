@@ -49,6 +49,7 @@ function modelDisplayName(status) {
   if (explicitName) return explicitName;
 
   const modelId = String(status?.model_id || "").toLowerCase();
+  if (modelId.includes("bmrlanpv6")) return "BMRLNAP v6";
   if (modelId.includes("pr38739") || modelId.includes("tgc")) return "TGC";
   if (modelId.includes("pr38726") || modelId.includes("time-to-go")) return "Time to Go";
   return "";
