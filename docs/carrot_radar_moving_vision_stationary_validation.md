@@ -83,7 +83,8 @@ its range has separated from confident vision by more than 15 m.
   in both modes 2 and 3. Failed expectations fall from **39 to 38** in each
   mode, with no new failures, no missing
   logs, and no pre-deceleration failures. The 38 pre-existing failures remain
-  visible: 37 manual detection labels and `gv80-218-2-adjacent-right-14`.
+  visible: 37 manual detection labels plus `gv80-218-2-adjacent-right-14`
+  in mode 2 or `ioniq9-234-6-scc-corroborated-early-l2` in mode 3.
   The full strict validator therefore still exits with status 1.
 
 The [machine-readable comparison](carrot_radar_moving_vision_stationary_validation.json)
