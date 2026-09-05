@@ -5227,6 +5227,29 @@ def test_front_stationary_pending_bridges_brief_vision_support_gap() -> None:
   assert matcher.stationary_identity == ("frontRadar", 52)
 
 
+@pytest.mark.parametrize("mode", (1, 2, 3))
+@pytest.mark.parametrize("resumed_frames", (3, 6))
+def test_stationary_front_restarts_confirmation_after_vision_support_gap(
+  mode: int, resumed_frames: int,
+) -> None:
+  controller = DPathRadarController(enable_radar_tracks=mode, prefer_corner_radar=True)
+  for index in range(20):
+    d_rel = 100.0 - index * 0.5
+    supported = index < 2 or 10 <= index < 10 + resumed_frames
+    output = controller.update(
+      time_s=index * 0.05,
+      v_ego=10.0,
+      radar_points=(Point(56, d_rel, 0.1, v_rel=-10.0, trackState=2),),
+      model=model_with_lead(d_rel, 0.1, 7.0, probability=0.70 if supported else 0.10),
+    )
+    if resumed_frames == 3 or index < 15:
+      assert output.lead_one is None or output.lead_one["radarTrackId"] != 56
+    elif index == 15:
+      # A genuinely renewed confirmation can still acquire the real object;
+      # the unsupported interval supplies no part of its 0.25-second dwell.
+      assert output.lead_one is not None and output.lead_one["radarTrackId"] == 56
+
+
 @pytest.mark.parametrize("probability", (0.0, 0.10, 0.39))
 @pytest.mark.parametrize("v_lead", (-0.4, 0.0, 3.9, 4.0))
 def test_long_observed_high_quality_front_stationary_needs_confirmation(

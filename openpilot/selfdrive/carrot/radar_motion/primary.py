@@ -2474,7 +2474,12 @@ class VisionRadarMatcher:
         and not self._stationary_corner_supported
         and not pending_measurement_held
       ):
-        self._stationary_pending_vision_support_frames = 0
+        # Once the bounded support gap expires, a later visual glimpse must
+        # start its own confirmation dwell. Keeping the old start time while
+        # resetting only the frame count approves three fresh frames in about
+        # 0.10 s after an arbitrarily long unsupported interval.
+        self._reset_stationary()
+        return None
       self._stationary_last_point = selected[0]
       self._stationary_last_time_s = time_s
       required_support_frames = (

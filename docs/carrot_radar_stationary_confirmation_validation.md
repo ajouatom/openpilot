@@ -75,6 +75,12 @@ deadline is replaced with an explicit no-admission window through 15.24 s and
 a confirmed-detection deadline of 15.45 s. This intentional delay is recorded
 instead of restoring the unsupported exception to satisfy the old deadline.
 
+Subsequent review found that the 15.388 s acquisition still borrowed time
+across interrupted vision support. It is not a completed fresh confirmation.
+The follow-up [interrupted-vision analysis](carrot_radar_interrupted_vision_validation.md)
+records the corrected 15.540 s acquisition, its 0.152 s delay, and the
+replacement expectations. The figures below describe this earlier revision.
+
 Focused tests cover observation age across the stationary speed band, all
 three front-track settings, mismatched/absent/intermittent corner evidence,
 confirmation after a delayed corner arrival, retention after confirmation,

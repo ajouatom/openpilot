@@ -2,6 +2,20 @@
   "sensitivity": 50,
   "cases": [
     {
+      "id": "carnival-178-62-interrupted-vision-stationary-reflections-36-56",
+      "vehicle_folder": "KIA_CARNIVAL_4TH_GEN c4dcf95545dafe68",
+      "log": "00000178--52f7f496c5--62/rlog.zst",
+      "source": "front+corner",
+      "window": [17.3, 19.4],
+      "expected": "clear",
+      "human_verified": true,
+      "validation_stage": "lead_one",
+      "target_track_ids": [36, 56],
+      "forbidden_lead_one_ids": [36, 56],
+      "forbidden_lead_two_ids": [36, 56],
+      "scene": "At a roundabout a moving white vehicle briefly appears in vision while stationary front returns remain beside the island. A long vision-support interruption must reset stationary confirmation time, so three later supported frames cannot borrow the old dwell and authorize front 36 or its successor 56"
+    },
+    {
       "id": "carnival-178-53-moving-vision-stationary-reflection-32",
       "vehicle_folder": "KIA_CARNIVAL_4TH_GEN c4dcf95545dafe68",
       "log": "00000178--52f7f496c5--53/rlog.zst",
@@ -104,14 +118,14 @@
       "vehicle_folder": "HYUNDAI_IONIQ_5_PE 07b62e389ed26c81",
       "log": "00000e7d--929c32ef9a--3/rlog.zst",
       "source": "front+corner",
-      "window": [12.0, 15.24],
+      "window": [12.0, 15.50],
       "expected": "clear",
       "human_verified": true,
       "validation_stage": "lead_one",
       "target_track_ids": [52],
       "forbidden_lead_one_ids": [52],
       "forbidden_lead_two_ids": [52],
-      "scene": "The real slow vehicle has no corresponding corner return; one corresponding vision frame at 15.05 s cannot replace normal front stationary confirmation with uncorroborated radar history"
+      "scene": "The real slow vehicle has no corresponding corner return. Vision support at 15.05 s is interrupted beyond the short hold; renewed support starts at 15.249 s and must complete a fresh 0.25-second confirmation before front 52 is admitted"
     },
     {
       "id": "ioniq5-e7d-3-closer-stationary-front-52",
@@ -124,8 +138,8 @@
       "validation_stage": "lead_one",
       "target_track_ids": [52],
       "required_lead_one_ids": [52],
-      "latest_detection_s": 15.45,
-      "scene": "The closer slow front vehicle must replace the farther moving match after corresponding vision completes the normal confirmation; the former 15.15 s deadline depended on uncorroborated radar-only admission"
+      "latest_detection_s": 15.60,
+      "scene": "The closer slow front vehicle must replace the farther moving match after fresh confirmation from 15.249 s, completing at 15.540 s. The earlier 15.15 s deadline required radar-only admission; the subsequent 15.45 s deadline still borrowed time across interrupted vision. The intentional 0.152 s detection delay is recorded in docs/carrot_radar_interrupted_vision_validation.md"
     },
     {
       "id": "ioniq5-e7d-5-stationary-front-vision-range-jitter-52",
