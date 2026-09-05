@@ -2,6 +2,34 @@
   "sensitivity": 50,
   "cases": [
     {
+      "id": "carnival-178-53-moving-vision-stationary-reflection-32",
+      "vehicle_folder": "KIA_CARNIVAL_4TH_GEN c4dcf95545dafe68",
+      "log": "00000178--52f7f496c5--53/rlog.zst",
+      "source": "front+corner",
+      "window": [12.8, 16.5],
+      "expected": "clear",
+      "human_verified": true,
+      "validation_stage": "lead_one",
+      "target_track_ids": [32],
+      "forbidden_lead_one_ids": [32],
+      "forbidden_lead_two_ids": [32],
+      "scene": "User-reviewed green-light approach: vision, moving front 35 and corner 4983 follow the real vehicle while stationary front reflection 32 briefly crosses the visual range; neither position-lock admission nor closer-lead retention may borrow that moving vehicle's evidence"
+    },
+    {
+      "id": "carnival-178-53-real-stopping-lead-35",
+      "vehicle_folder": "KIA_CARNIVAL_4TH_GEN c4dcf95545dafe68",
+      "log": "00000178--52f7f496c5--53/rlog.zst",
+      "source": "front+corner",
+      "window": [27.5, 45.0],
+      "expected": "detect",
+      "human_verified": true,
+      "validation_stage": "lead_one",
+      "target_track_ids": [35],
+      "required_lead_one_ids": [35],
+      "latest_detection_s": 27.6,
+      "scene": "The same real front vehicle later slows and stops at the next red light; rejecting the earlier static reflection must preserve front 35 as the approaching and stopped lead"
+    },
+    {
       "id": "carnival-175-35-unconfirmed-stationary-front-37-58",
       "vehicle_folder": "KIA_CARNIVAL_4TH_GEN c4dcf95545dafe68",
       "log": "00000175--f97562d8d2--35/rlog.zst",
