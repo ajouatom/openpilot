@@ -5388,6 +5388,135 @@ def test_long_observed_duplicate_front_stationary_returns_are_rejected() -> None
   assert matcher.stationary_identity is None
 
 
+def moving_range_model(d_rel, *, x_std=9.7, velocity=12.5):
+  model = model_with_lead(d_rel, -0.16, velocity, probability=0.94)
+  model.leadsV3[0].xStd = (x_std,)
+  model.leadsV3[0].vStd = (2.35,)
+  return model
+
+
+def seed_moving_range_front(controller, *, d_rel=89.4):
+  point = Point(35, d_rel, 0.6, v_rel=5.0, trackState=2)
+  output = controller.update(
+    0.0, 11.7, (point,), moving_range_model(d_rel - 7.27),
+  )
+  assert output.lead_one["radarTrackId"] == 35
+  return point
+
+
+@pytest.mark.parametrize("mode", (2, 3))
+def test_continuous_moving_front_survives_uncertain_vision_range(mode):
+  controller = DPathRadarController(enable_radar_tracks=mode, cut_in_sensitivity=0)
+  seed_moving_range_front(controller)
+  # Carnival 178/53: the moving match succeeds, but the old fixed 8 m
+  # post-match guard changed L1 to vision as its distance estimate wavered.
+  for time_s, radar_d, vision_d, x_std, vision_v in (
+    (0.05, 89.70, 81.68, 8.31, 12.64),
+    (0.10, 89.91, 80.34, 8.60, 11.76),
+    (0.15, 90.18, 81.12, 9.70, 10.95),
+    (0.20, 90.50, 80.90, 8.84, 12.79),
+    (0.25, 90.68, 79.92, 8.32, 12.76),
+  ):
+    output = controller.update(
+      time_s, 11.7, (Point(35, radar_d, 0.6, v_rel=5.0, trackState=2),),
+      moving_range_model(vision_d, x_std=x_std, velocity=vision_v),
+    )
+    assert output.lead_one["radar"]
+    assert output.lead_one["radarTrackId"] == 35
+    assert output.lead_one["dRel"] == pytest.approx(radar_d)
+    assert output.lead_one["vLead"] == pytest.approx(16.7)
+
+
+@pytest.mark.parametrize("mode", (2, 3))
+@pytest.mark.parametrize("change", (
+  "fresh", "new_id", "unmeasured", "longitudinal_jump", "lateral_jump",
+  "speed_jump", "gap", "missed_match", "invalid_path", "legacy_mode",
+))
+def test_uncertain_vision_range_requires_continuous_accepted_front(mode, change):
+  controller = DPathRadarController(enable_radar_tracks=mode, cut_in_sensitivity=0)
+  if change != "fresh":
+    seed_moving_range_front(controller)
+  time_s = 0.05
+  point = Point(35, 89.65, 0.6, v_rel=5.0, trackState=2)
+  if change == "new_id":
+    point = replace(point, track_id=36)
+  elif change == "unmeasured":
+    point = replace(point, measured=False)
+  elif change == "longitudinal_jump":
+    point = replace(point, d_rel=92.5)
+  elif change == "lateral_jump":
+    point = replace(point, y_rel=-0.3)
+  elif change == "speed_jump":
+    point = replace(point, v_rel=8.5)
+  elif change == "gap":
+    time_s = 0.3
+  elif change in ("missed_match", "invalid_path", "legacy_mode"):
+    model = moving_range_model(82.0)
+    if change == "invalid_path":
+      model.position = SimpleNamespace(x=(), y=())
+    if change == "legacy_mode":
+      controller.enable_radar_tracks = -1
+    controller.update(0.05, 11.7, (), model)
+    controller.enable_radar_tracks = mode
+    time_s = 0.1
+  output = controller.update(
+    time_s, 11.7, (point,), moving_range_model(point.d_rel - 10.0),
+  )
+  assert output.lead_one is not None
+  assert output.lead_one["radarTrackId"] == -1
+  assert not output.lead_one["radar"]
+
+
+@pytest.mark.parametrize("mode", (2, 3))
+@pytest.mark.parametrize("x_std", (2.0, 0.0, -10.0, float("nan"), float("inf")))
+def test_moving_front_releases_when_vision_range_is_precise_or_invalid(mode, x_std):
+  controller = DPathRadarController(enable_radar_tracks=mode, cut_in_sensitivity=0)
+  point = seed_moving_range_front(controller)
+  output = controller.update(
+    0.05, 11.7, (replace(point, d_rel=89.65),),
+    moving_range_model(79.65, x_std=x_std),
+  )
+  assert output.lead_one["radarTrackId"] == -1
+
+
+@pytest.mark.parametrize("mode", (2, 3))
+@pytest.mark.parametrize("radar_d,vision_d", ((90.0, 73.0), (40.0, 30.0)))
+def test_uncertain_range_cannot_hide_much_nearer_or_close_visual_car(mode, radar_d, vision_d):
+  controller = DPathRadarController(enable_radar_tracks=mode, cut_in_sensitivity=0)
+  point = seed_moving_range_front(controller, d_rel=radar_d)
+  output = controller.update(
+    0.05, 11.7, (replace(point, d_rel=radar_d + 0.25),),
+    moving_range_model(vision_d, x_std=30.0),
+  )
+  assert output.lead_one["radarTrackId"] == -1
+  assert output.lead_one["dRel"] == pytest.approx(vision_d)
+
+
+@pytest.mark.parametrize("mode", (2, 3))
+def test_moving_front_range_retention_releases_for_stopped_visual_lead(mode):
+  controller = DPathRadarController(enable_radar_tracks=mode, cut_in_sensitivity=0)
+  previous = seed_moving_range_front(controller)
+  output = controller.update(
+    0.05, 11.7, (replace(previous, d_rel=89.65),),
+    moving_range_model(79.65, velocity=0.0),
+  )
+  assert output.lead_one["radarTrackId"] == -1
+
+
+@pytest.mark.parametrize("mode", (2, 3))
+def test_moving_range_retention_does_not_block_new_nearer_radar_match(mode):
+  controller = DPathRadarController(enable_radar_tracks=mode, cut_in_sensitivity=0)
+  previous = seed_moving_range_front(controller)
+  output = controller.update(
+    0.05, 11.7, (
+      replace(previous, d_rel=89.65),
+      Point(36, 79.0, -0.16, v_rel=0.8, trackState=2),
+    ), moving_range_model(79.0),
+  )
+  assert output.lead_one["radarTrackId"] == 36
+  assert output.lead_one["dRel"] == pytest.approx(79.0)
+
+
 def test_controller_holds_brief_corroborated_stationary_range_mismatch() -> None:
   controller = DPathRadarController(
     prefer_corner_radar=True,
