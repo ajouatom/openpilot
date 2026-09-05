@@ -3,11 +3,10 @@
 - For long-running work, treat user questions, status checks, clarifications, and added in-scope
   requests as interruptions to answer while continuing the active work. Stop an active process or
   abandon the task only when the user explicitly asks to stop, cancel, pause, or replace it.
-- Every non-model change must be applied to both `carrot-wip` and `carrot-cinque-terre` and pushed
-  to both remote branches. Preserve each branch's model-specific changes while integrating the
-  complete `carrot-wip` history into `carrot-cinque-terre`, and verify that neither branch has an
-  unpushed commit before reporting the work complete. This replaces the previous synchronization
-  rule for `carrot-bmr_v6`.
+- Every non-model change must be applied to `carrot-wip`, `carrot-cinque-terre`, and
+  `carrot-bmr_v6` and pushed to all three remote branches. Preserve each branch's model-specific
+  changes while integrating the complete `carrot-wip` history into both model branches, and verify
+  that none of the three branches has an unpushed commit before reporting the work complete.
 - On this Windows workstation, vehicle tmux session captures are stored under
   `\\DS1821P\openpilot\<branch>`. When tmux is mentioned, search the directory for the known
   branch for a vehicle folder whose name ends with the exact dongle ID. If the branch is unknown,
