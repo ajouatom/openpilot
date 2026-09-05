@@ -27,13 +27,13 @@ from urllib.request import Request, urlopen
 from openpilot.selfdrive.modeld.big_model_status import BigModelStatusReporter
 
 
-DEFAULT_MANIFEST_URL = "https://upload.shind0.synology.me/models/comma4-big-tgc/manifest.json"
-TGC_MODEL = {
-  "model_id": "comma-pr38739-tgc-a2e422ee-1791d594",
+DEFAULT_MANIFEST_URL = "https://upload.shind0.synology.me/models/comma4-big-cinque-terre/manifest.json"
+CINQUE_TERRE_MODEL = {
+  "model_id": "comma-pr38771-cinque-terre-68b5f8e4-e8d82173",
   "filename": "big_driving_supercombo.onnx",
   "size": 765_950_064,
-  "sha256": "1791d5940b2c048d0639813426dd2cf1d6f2a6727ed51e17c8bcea8bbe754123",
-  "url": "https://upload.shind0.synology.me/models/comma4-big-tgc/big_driving_supercombo.onnx",
+  "sha256": "e8d821733be15ebe9e27498bc27ad8bbbd741980ece37d77f377294010b8ff28",
+  "url": "https://upload.shind0.synology.me/models/comma4-big-cinque-terre/big_driving_supercombo.onnx",
 }
 MAX_MANIFEST_SIZE = 64 * 1024
 MAX_MODEL_SIZE = 4 * 1024 * 1024 * 1024
@@ -137,11 +137,11 @@ def _write_state(active: BigModelManifest, previous: BigModelManifest | None, ca
 
 
 def fetch_manifest(manifest_url: str = DEFAULT_MANIFEST_URL, timeout: float = 15.0) -> BigModelManifest:
-  # carrot-tgc intentionally pins commaai/openpilot#38739 (TGC). Keep the
-  # environment/CLI override path below so a different manifest can still be
-  # tested explicitly without changing this branch.
+  # carrot-cinque-terre intentionally pins commaai/openpilot#38771 at 68b5f8e4.
+  # Keep the environment/CLI override path below so a different manifest can
+  # still be tested explicitly without changing this branch.
   if manifest_url == DEFAULT_MANIFEST_URL:
-    return BigModelManifest.from_dict(TGC_MODEL, manifest_url)
+    return BigModelManifest.from_dict(CINQUE_TERRE_MODEL, manifest_url)
 
   req = Request(manifest_url, headers={"Accept": "application/json", "User-Agent": "carrot-modeld/1"})
   with urlopen(req, timeout=timeout) as response:
