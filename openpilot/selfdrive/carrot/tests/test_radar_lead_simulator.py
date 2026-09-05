@@ -1330,6 +1330,19 @@ def test_validation_lead_one_continuity_rejects_a_single_missing_frame() -> None
   )
 
 
+@pytest.mark.parametrize("middle_id", (-1, 36, None, 35))
+def test_validation_continuity_requires_the_requested_radar_on_every_frame(middle_id):
+  frames = [frame((), time_s=index * 0.05) for index in range(3)]
+  leads = [Candidate(track_id, 1.0, "L1", d_rel=80.0)
+           if track_id is not None else None for track_id in (35, middle_id, 35)]
+  selector = SimpleNamespace(select=lambda _frame, index: Selection(leads[index], None))
+  entry = {
+    "lead_one_continuous_window": [0.0, 0.1],
+    "required_lead_one_ids": [35],
+  }
+  assert _lead_one_continuous(selector, frames, entry) == (middle_id == 35)
+
+
 def test_vision_only_lead_one_uses_blue_instead_of_radar_orange() -> None:
   assert lead_one_rgb(-1) == (72, 145, 255)
   assert lead_one_rgb(56) == (246, 142, 55)

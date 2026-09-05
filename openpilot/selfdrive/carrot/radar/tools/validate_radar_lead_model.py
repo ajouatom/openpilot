@@ -254,8 +254,12 @@ def _lead_one_continuous(
   if window is None:
     return None
   start_s, end_s = (float(value) for value in window)
+  targets = {int(value) for value in entry.get("required_lead_one_ids", ())}
   samples = [
-    selector.select(frame, index).lead_one is not None
+    (
+      candidate_matches_targets(selector.select(frame, index).lead_one, targets)
+      if targets else selector.select(frame, index).lead_one is not None
+    )
     for index, frame in enumerate(frames)
     if start_s <= frame.time_s <= end_s
   ]
