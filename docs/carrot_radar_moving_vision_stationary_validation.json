@@ -1,0 +1,273 @@
+{
+  "baseline_commit": "f8ce05da2ea1d2576bc93ed22bb001898539c1be",
+  "route_segment": "00000178--52f7f496c5--53",
+  "recorded_settings": {
+    "EnableRadarTracks": 3,
+    "EnableCornerRadar": 2
+  },
+  "full_schema_service_counts": {
+    "carState": 6004,
+    "carControl": 6019,
+    "modelV2": 1200,
+    "radarState": 1200,
+    "liveTracks": 1199,
+    "longitudinalPlan": 1193
+  },
+  "incident_window_s": [
+    12.8,
+    16.5
+  ],
+  "incident_checks": {
+    "2": {
+      "false_l1_before": 60,
+      "false_l1_after": 0,
+      "false_l1_interval_s": [
+        13.356570683,
+        16.299804969
+      ],
+      "cursor_s": 13.806416257,
+      "vision_at_cursor": {
+        "probability": 0.989972710609436,
+        "d_rel": 77.25946472167969,
+        "y_rel": 0.05623004585504532,
+        "velocity": 17.06945037841797,
+        "x_std": 6.478363513946533,
+        "y_std": 0.2971767783164978,
+        "v_std": 1.6475956439971924,
+        "acceleration": -0.09290099143981934
+      },
+      "lead_before": {
+        "dRel": 71.04791464419407,
+        "yRel": -0.30000001192092896,
+        "dPath": -0.5791016677019258,
+        "vRel": -18.329999923706055,
+        "aRel": 0.0,
+        "vLead": -0.2720527648925781,
+        "vLeadK": -0.2720527648925781,
+        "aLead": -0.1628413200378418,
+        "aLeadK": -0.1628413200378418,
+        "aLeadTau": 1.5,
+        "jLead": -0.15234065055847168,
+        "vLat": 0.0,
+        "status": true,
+        "fcw": false,
+        "modelProb": 0.989972710609436,
+        "radar": true,
+        "radarTrackId": 32,
+        "score": 0.0
+      },
+      "lead_after": {
+        "dRel": 77.25946472167969,
+        "yRel": 0.05623004585504532,
+        "dPath": -0.2514529555562844,
+        "vRel": -0.9884967803955078,
+        "aRel": 0.0,
+        "vLead": 17.06945037841797,
+        "vLeadK": 17.06945037841797,
+        "aLead": -0.09290099143981934,
+        "aLeadK": -0.09290099143981934,
+        "aLeadTau": 0.3,
+        "jLead": 0.0,
+        "vLat": 0.0,
+        "status": true,
+        "fcw": false,
+        "modelProb": 0.989972710609436,
+        "radar": false,
+        "radarTrackId": -1,
+        "score": 0.0
+      },
+      "normal_stopping_interval_s": [
+        27.5,
+        45.0
+      ],
+      "normal_stopping_frames_unchanged": 349
+    },
+    "3": {
+      "false_l1_before": 60,
+      "false_l1_after": 0,
+      "false_l1_interval_s": [
+        13.356570683,
+        16.299804969
+      ],
+      "cursor_s": 13.806416257,
+      "vision_at_cursor": {
+        "probability": 0.989972710609436,
+        "d_rel": 77.25946472167969,
+        "y_rel": 0.05623004585504532,
+        "velocity": 17.06945037841797,
+        "x_std": 6.478363513946533,
+        "y_std": 0.2971767783164978,
+        "v_std": 1.6475956439971924,
+        "acceleration": -0.09290099143981934
+      },
+      "lead_before": {
+        "dRel": 71.04791464419407,
+        "yRel": -0.30000001192092896,
+        "dPath": -0.5791016677019258,
+        "vRel": -18.329999923706055,
+        "aRel": 0.0,
+        "vLead": -0.2720527648925781,
+        "vLeadK": -0.2720527648925781,
+        "aLead": -0.1628413200378418,
+        "aLeadK": -0.1628413200378418,
+        "aLeadTau": 1.5,
+        "jLead": -0.15234065055847168,
+        "vLat": 0.0,
+        "status": true,
+        "fcw": false,
+        "modelProb": 0.989972710609436,
+        "radar": true,
+        "radarTrackId": 32,
+        "score": 0.0
+      },
+      "lead_after": {
+        "dRel": 86.84365884485274,
+        "yRel": 0.0,
+        "dPath": 0.0,
+        "vRel": -2.299999952316284,
+        "aRel": 0.0,
+        "vLead": 15.757947206497192,
+        "vLeadK": 15.757947206497192,
+        "aLead": 0.5720933675765991,
+        "aLeadK": 0.5720933675765991,
+        "aLeadTau": 1.35,
+        "jLead": 0.418093204498291,
+        "vLat": 0.0,
+        "status": true,
+        "fcw": false,
+        "modelProb": 0.0,
+        "radar": true,
+        "radarTrackId": 0,
+        "score": 1.0
+      },
+      "normal_stopping_interval_s": [
+        27.5,
+        45.0
+      ],
+      "normal_stopping_frames_unchanged": 349
+    }
+  },
+  "corpus_comparison": {
+    "2": {
+      "logs": 84,
+      "labels": 466,
+      "baseline_failures": 39,
+      "final_failures": 38,
+      "new_failure_ids": [],
+      "resolved_ids": [
+        "carnival-178-53-moving-vision-stationary-reflection-32"
+      ],
+      "remaining_failure_ids": [
+        "gv80-218-2-adjacent-right-14",
+        "manual-0000005b-019p25-corner-1055",
+        "manual-0000005b-019p55-corner-1052",
+        "manual-0000005b-020p30-corner-1094",
+        "manual-0000005b-020p35-corner-1013",
+        "manual-0000005b-020p40-corner-1063",
+        "manual-0000005b-020p70-corner-1089",
+        "manual-0000006a-054p90-corner-1023",
+        "manual-000000b1-005p35-corner-1001",
+        "manual-000000b1-007p30-corner-1033",
+        "manual-000000cf-001p60-corner-1002",
+        "manual-000000cf-002p05-corner-1003",
+        "manual-000000cf-002p60-corner-1003",
+        "manual-000000cf-005p85-corner-1005",
+        "manual-000000cf-006p25-corner-1003",
+        "manual-000000cf-014p40-corner-1013",
+        "manual-000000cf-015p75-corner-1000",
+        "manual-000000cf-019p35-corner-1001",
+        "manual-00000192-032p30-corner-1036",
+        "manual-000001c1-024p50-corner-1014",
+        "manual-000001c1-024p80-corner-1015",
+        "manual-000001c1-025p20-corner-1012",
+        "manual-000001ce-014p70-corner-1000",
+        "manual-00000218-013p55-corner-1009",
+        "manual-00000218-046p40-corner-1040",
+        "manual-000002d3-040p10-corner-1000",
+        "manual-000002d3-040p45-corner-1018",
+        "manual-00000bef-024p30-front-34",
+        "manual-00000c21-013p65-front-58",
+        "manual-00000c21-029p80-front-40",
+        "manual-00000c21-031p50-front-46",
+        "manual-00000c21-032p65-front-61",
+        "manual-00000c21-032p75-front-63",
+        "manual-00000c21-033p15-front-62",
+        "manual-00000c21-058p05-front-59",
+        "manual-00000cd0-016p50-corner-1002",
+        "manual-00000cd0-017p20-corner-1002",
+        "manual-00000cfb-036p80-corner-1028"
+      ],
+      "predeceleration_failures": 0,
+      "missing_logs": 0
+    },
+    "3": {
+      "logs": 84,
+      "labels": 466,
+      "baseline_failures": 39,
+      "final_failures": 38,
+      "new_failure_ids": [],
+      "resolved_ids": [
+        "carnival-178-53-moving-vision-stationary-reflection-32"
+      ],
+      "remaining_failure_ids": [
+        "ioniq9-234-6-scc-corroborated-early-l2",
+        "manual-0000005b-019p25-corner-1055",
+        "manual-0000005b-019p55-corner-1052",
+        "manual-0000005b-020p30-corner-1094",
+        "manual-0000005b-020p35-corner-1013",
+        "manual-0000005b-020p40-corner-1063",
+        "manual-0000005b-020p70-corner-1089",
+        "manual-0000006a-054p90-corner-1023",
+        "manual-000000b1-005p35-corner-1001",
+        "manual-000000b1-007p30-corner-1033",
+        "manual-000000cf-001p60-corner-1002",
+        "manual-000000cf-002p05-corner-1003",
+        "manual-000000cf-002p60-corner-1003",
+        "manual-000000cf-005p85-corner-1005",
+        "manual-000000cf-006p25-corner-1003",
+        "manual-000000cf-014p40-corner-1013",
+        "manual-000000cf-015p75-corner-1000",
+        "manual-000000cf-019p35-corner-1001",
+        "manual-00000192-032p30-corner-1036",
+        "manual-000001c1-024p50-corner-1014",
+        "manual-000001c1-024p80-corner-1015",
+        "manual-000001c1-025p20-corner-1012",
+        "manual-000001ce-014p70-corner-1000",
+        "manual-00000218-013p55-corner-1009",
+        "manual-00000218-046p40-corner-1040",
+        "manual-000002d3-040p10-corner-1000",
+        "manual-000002d3-040p45-corner-1018",
+        "manual-00000bef-024p30-front-34",
+        "manual-00000c21-013p65-front-58",
+        "manual-00000c21-029p80-front-40",
+        "manual-00000c21-031p50-front-46",
+        "manual-00000c21-032p65-front-61",
+        "manual-00000c21-032p75-front-63",
+        "manual-00000c21-033p15-front-62",
+        "manual-00000c21-058p05-front-59",
+        "manual-00000cd0-016p50-corner-1002",
+        "manual-00000cd0-017p20-corner-1002",
+        "manual-00000cfb-036p80-corner-1028"
+      ],
+      "predeceleration_failures": 0,
+      "missing_logs": 0
+    }
+  },
+  "focused_tests_passed": 487,
+  "front_only_mode_3_incident_cases_passed": 2,
+  "limitations": [
+    "Existing failed expectations are preserved and full strict validation exits 1.",
+    "Replayed lead selection does not recalculate a counterfactual MPC trajectory or replace an on-road test."
+  ],
+  "recorded_control": {
+    "window_s": [
+      13.3,
+      16.4
+    ],
+    "xState": 0,
+    "trafficState": 2,
+    "first_brake_pressed_s": 15.19238094299999,
+    "minimum_actual_accel_before_brake_mps2": -3.3228960037231445,
+    "minimum_commanded_accel_before_brake_mps2": -4.0
+  }
+}
