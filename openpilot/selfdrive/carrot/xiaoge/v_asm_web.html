@@ -1,0 +1,555 @@
+<!doctype html>
+<html lang="zh-CN">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>小鸽 V-ASM & 车道线识别</title>
+<style>
+*{box-sizing:border-box}
+body{background:#111827;color:#e5e7eb;font:15px system-ui,sans-serif;margin:0}
+main{max-width:1440px;margin:auto;padding:12px}
+h1{font-size:24px;margin:0}h2{font-size:18px}p{color:#9ca3af}.warn{color:#fbbf24;line-height:1.45}
+.grid,.feature-layout{display:grid;grid-template-columns:1fr;gap:14px}
+.feature-layout{margin-top:16px}.feature-section{min-width:0}
+#lane-panel{order:1}#vasm-panel{order:2}
+.card{background:#1f2937;border-radius:10px;padding:12px;min-width:0}
+canvas{display:block;width:100%;height:auto;background:#000;cursor:crosshair;touch-action:manipulation}
+.buttons,form{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}
+button,input{min-height:42px;padding:8px 10px;border-radius:6px;border:1px solid #4b5563;background:#374151;color:#fff;font:inherit}
+button{cursor:pointer;flex:1 1 132px}button.active{background:#2563eb}input{max-width:100%;width:100%}
+form label{display:grid;gap:4px;flex:1 1 100%;color:#d1d5db}
+pre{white-space:pre-wrap;word-break:break-word}.ok{color:#4ade80}.bad{color:#f87171}
+.feature-title{margin:0 0 10px;font-size:19px}.debug-panel{display:flex;flex-direction:column;gap:12px;margin:12px 0}
+.detection-grid,.metrics-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.side-card,.metric-item{background:#111827;border-radius:8px;padding:10px;border:1px solid #374151;text-align:center;min-width:0}
+.side-title,.metric-label{font-size:12px;color:#9ca3af;margin-bottom:6px;font-weight:600}
+.side-badge{display:inline-block;padding:4px 8px;border-radius:12px;font-weight:700;font-size:13px;background:#374151;color:#d1d5db;margin-bottom:8px}
+.side-badge.has-car,.side-badge.has-solid{background:#dc2626;color:#fff}.side-badge.no-car{background:#059669;color:#fff}
+.side-badge.has-dashed{background:#d97706;color:#fff}.side-badge.unconfigured{background:#4b5563;color:#9ca3af}
+.conf-box{font-size:12px;color:#9ca3af}.conf-box strong{color:#e5e7eb}
+.bar-bg{height:6px;background:#374151;border-radius:3px;margin-top:4px;overflow:hidden}.bar-fill{height:100%;background:#2563eb;width:0%;transition:width .2s}
+.bar-fill.active{background:#ef4444}.bar-fill.dashed{background:#f59e0b}.metric-val{font-size:14px;font-weight:600;color:#60a5fa;margin-top:2px}
+@media(min-width:900px){
+  main{padding:24px}.feature-layout{grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:20px}
+  .feature-section .grid{grid-template-columns:1fr}.card{padding:16px}.feature-title{font-size:20px}
+}
+</style>
+<main>
+<div class="buttons"><button id="language">English</button></div>
+<h1 data-i18n="title">小鸽 V-ASM & 车道线识别</h1>
+<p class="warn" data-i18n="warning">车道线持续提供给系统；盲区识别仅在变道条件满足时运行。</p>
+
+<div class="feature-layout">
+<!-- V-ASM 盲区监控 -->
+<section id="vasm-panel" class="feature-section">
+  <h2 class="feature-title" data-i18n="tabVasm">🛡️ V-ASM 盲区监控</h2>
+  <div class="grid">
+    <section class="card">
+      <canvas id="camera-vasm"></canvas>
+      <div class="buttons">
+        <button data-side="left" data-i18n="annotateLeft">标注画面左侧</button>
+        <button data-side="right" data-i18n="annotateRight">标注画面右侧</button>
+        <button id="undo" data-i18n="undo">撤销一个点</button>
+        <button id="save" data-i18n="save">保存配置</button>
+        <button id="clear" data-i18n="delete">恢复默认标注</button>
+        <button id="snapshot-vasm" data-i18n="snapshot">刷新画面</button>
+      </div>
+      <p id="hint">已预设开箱即用默认标注。选择一侧后可在广角画面上调整，点击“恢复默认标注”可还原。</p>
+    </section>
+
+    <aside class="card">
+      <h2 data-i18n="vasmSettings">盲区 V-ASM 设置</h2>
+      <form id="settings-vasm">
+        <label><span data-i18n="threshold">置信度阈值</span> <input id="threshold" type="number" min=".25" max="1" step=".05"></label>
+        <label><span data-i18n="smoothing">平滑时间（秒）</span> <input id="smoothing" type="number" min=".1" max=".5" step=".1"></label>
+        <label><span data-i18n="baseInterval">基础推理间隔（秒）</span> <input id="baseInterval" type="number" min=".05" max="1" step=".05"></label>
+        <button data-i18n="apply">应用盲区设置</button>
+      </form>
+
+      <h2 data-i18n="vasmStatus">盲区 V-ASM 实时状态</h2>
+      <div class="debug-panel">
+        <div class="detection-grid">
+          <div id="card-left" class="side-card">
+            <div class="side-title" data-i18n="leftSide">左侧盲区</div>
+            <div id="status-left" class="side-badge unconfigured" data-i18n="unconfigured">⚪ 未配置</div>
+            <div class="conf-box">
+              <span data-i18n="confidence">置信度</span>: <strong id="conf-val-left">0.0%</strong>
+              <div class="bar-bg"><div id="bar-left" class="bar-fill" style="width:0%"></div></div>
+            </div>
+          </div>
+          <div id="card-right" class="side-card">
+            <div class="side-title" data-i18n="rightSide">右侧盲区</div>
+            <div id="status-right" class="side-badge unconfigured" data-i18n="unconfigured">⚪ 未配置</div>
+            <div class="conf-box">
+              <span data-i18n="confidence">置信度</span>: <strong id="conf-val-right">0.0%</strong>
+              <div class="bar-bg"><div id="bar-right" class="bar-fill" style="width:0%"></div></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="metrics-grid">
+          <div class="metric-item" style="grid-column:span 2">
+            <div class="metric-label" data-i18n="vasmGate">盲区推理条件</div>
+            <div class="metric-val" id="metric-vasm-gate">--</div>
+          </div>
+          <div class="metric-item">
+            <div class="metric-label" data-i18n="inferenceFps">盲区推理 FPS</div>
+            <div class="metric-val" id="metric-inf-fps">-- Hz</div>
+          </div>
+          <div class="metric-item">
+            <div class="metric-label" data-i18n="inferenceLatency">盲区推理耗时</div>
+            <div class="metric-val" id="metric-inf-lat">-- ms</div>
+          </div>
+        </div>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ONNX 车道线识别 -->
+<section id="lane-panel" class="feature-section">
+  <h2 class="feature-title" data-i18n="tabLane">🛣️ ONNX 车道线识别</h2>
+  <div class="grid">
+    <section class="card">
+      <canvas id="camera-lane"></canvas>
+      <div class="buttons">
+        <button id="snapshot-lane" data-i18n="snapshot">刷新前向道路画面</button>
+      </div>
+      <p data-i18n="laneHint">前向道路相机画面，展示 ONNX 车道线分类推理输入。</p>
+    </section>
+
+    <aside class="card">
+      <h2 data-i18n="laneSettings">车道线识别设置</h2>
+      <form id="settings-lane">
+        <label><span data-i18n="laneThreshold">车道线阈值</span> <input id="laneThreshold" type="number" min=".05" max="1" step=".05"></label>
+        <label><span data-i18n="laneInterval">推理间隔（秒）</span> <input id="laneInterval" type="number" min=".05" max="2" step=".05"></label>
+        <button data-i18n="apply">应用车道线设置</button>
+      </form>
+
+      <h2 data-i18n="laneStatus">ONNX 车道线识别实时状态</h2>
+      <div class="debug-panel">
+        <div class="detection-grid">
+          <div id="card-lane-left" class="side-card">
+            <div class="side-title" data-i18n="leftLane">左侧车道线</div>
+            <div id="status-lane-left" class="side-badge unconfigured" data-i18n="unknown">⚪ 未识别</div>
+            <div class="conf-box">
+              <span data-i18n="confidence">置信度</span>: <strong id="conf-val-lane-left">0.0%</strong>
+              <div class="bar-bg"><div id="bar-lane-left" class="bar-fill" style="width:0%"></div></div>
+            </div>
+          </div>
+          <div id="card-lane-right" class="side-card">
+            <div class="side-title" data-i18n="rightLane">右侧车道线</div>
+            <div id="status-lane-right" class="side-badge unconfigured" data-i18n="unknown">⚪ 未识别</div>
+            <div class="conf-box">
+              <span data-i18n="confidence">置信度</span>: <strong id="conf-val-lane-right">0.0%</strong>
+              <div class="bar-bg"><div id="bar-lane-right" class="bar-fill" style="width:0%"></div></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="metrics-grid">
+          <div class="metric-item">
+            <div class="metric-label" data-i18n="laneInferenceFps">车道推理 FPS</div>
+            <div class="metric-val" id="metric-lane-inf-fps">-- Hz</div>
+          </div>
+          <div class="metric-item">
+            <div class="metric-label" data-i18n="laneInferenceLatency">车道推理耗时</div>
+            <div class="metric-val" id="metric-lane-inf-lat">-- ms</div>
+          </div>
+          <div class="metric-item" style="grid-column: span 2;">
+            <div class="metric-label" data-i18n="laneCandidates">车道候选数</div>
+            <div class="metric-val" id="metric-lane-candidates">--</div>
+          </div>
+        </div>
+      </div>
+    </aside>
+  </div>
+</section>
+</div>
+
+<!-- 公共全局指标与原始 JSON -->
+<section class="card" style="margin-top:20px">
+  <div class="metrics-grid">
+    <div class="metric-item">
+      <div class="metric-label" data-i18n="pollFps">网页刷新率</div>
+      <div class="metric-val" id="metric-poll-fps">-- Hz</div>
+    </div>
+    <div class="metric-item">
+      <div class="metric-label" data-i18n="cameraStatus">相机状态</div>
+      <div class="metric-val" id="metric-cam-status">--</div>
+    </div>
+  </div>
+
+  <details style="margin-top:10px">
+    <summary style="cursor:pointer;color:#9ca3af;font-size:13px" data-i18n="rawJson">原始 JSON 状态</summary>
+    <pre id="status" style="max-height:180px;overflow:auto;margin-top:6px;font-size:12px">加载中…</pre>
+  </details>
+</section>
+</main>
+
+<script>
+const zh={
+  title:"小鸽 V-ASM & 车道线识别",
+  warning:"车道线持续提供给系统；盲区识别仅在变道条件满足时运行。",
+  tabVasm:"🛡️ V-ASM 盲区监控",
+  tabLane:"🛣️ ONNX 车道线识别",
+  annotateLeft:"标注画面左侧",
+  annotateRight:"标注画面右侧",
+  undo:"撤销一个点",
+  save:"保存配置",
+  delete:"恢复默认标注",
+  snapshot:"刷新画面",
+  vasmSettings:"盲区 V-ASM 设置",
+  threshold:"盲区置信度阈值",
+  smoothing:"平滑时间（秒）",
+  baseInterval:"盲区推理间隔（秒）",
+  laneSettings:"车道线识别设置",
+  laneThreshold:"车道线阈值",
+  laneInterval:"车道推理间隔（秒）",
+  apply:"应用设置",
+  vasmStatus:"盲区 V-ASM 实时状态",
+  laneStatus:"ONNX 车道线识别实时状态",
+  laneHint:"前向道路相机画面，展示 ONNX 车道线分类推理输入。",
+  hint:"已预设开箱即用默认标注。选择一侧后可在广角画面上调整，点击“恢复默认标注”可还原。",
+  annotating:"正在标注画面",
+  saved:"配置已保存。",
+  applied:"设置已应用。",
+  leftSide:"左侧盲区",
+  rightSide:"右侧盲区",
+  leftLane:"左侧车道线",
+  rightLane:"右侧车道线",
+  hasCar:"🔴 有车",
+  noCar:"🟢 无车",
+  solid:"🔴 实线",
+  dashed:"🟡 虚线",
+  unknown:"⚪ 未识别",
+  unconfigured:"⚪ 未配置",
+  confidence:"置信度",
+  pollFps:"网页刷新率",
+  inferenceFps:"盲区推理 FPS",
+  inferenceLatency:"盲区推理耗时",
+  vasmGate:"盲区推理条件",
+  laneInferenceFps:"车道推理 FPS",
+  laneInferenceLatency:"车道推理耗时",
+  laneCandidates:"车道候选数",
+  cameraStatus:"相机状态",
+  cameraNormal:"🟢 正常",
+  cameraOffline:"🔴 离线",
+  rawJson:"原始 JSON 状态"
+};
+
+const en={
+  title:"Xiaoge V-ASM & Lane Detection",
+  warning:"Lane results continuously serve the system; blindspot inference runs only when lane-change conditions are met.",
+  tabVasm:"🛡️ V-ASM Blind Spot",
+  tabLane:"🛣️ ONNX Lane Detection",
+  annotateLeft:"Annotate image left",
+  annotateRight:"Annotate image right",
+  undo:"Undo point",
+  save:"Save configuration",
+  delete:"Reset to default annotations",
+  snapshot:"Refresh snapshot",
+  vasmSettings:"V-ASM Blind Spot Settings",
+  threshold:"V-ASM Confidence Threshold",
+  smoothing:"Smoothing seconds",
+  baseInterval:"V-ASM Interval (sec)",
+  laneSettings:"Lane Detection Settings",
+  laneThreshold:"Lane Threshold",
+  laneInterval:"Lane Interval (sec)",
+  apply:"Apply Settings",
+  vasmStatus:"V-ASM Blind Spot Status",
+  laneStatus:"ONNX Lane Detection Status",
+  laneHint:"Forward road camera view showing ONNX lane classification input.",
+  hint:"Out-of-the-box default annotations loaded. Select side to adjust, click reset to restore.",
+  annotating:"Annotating image",
+  saved:"Configuration saved.",
+  applied:"Settings applied.",
+  leftSide:"Left Blind Spot",
+  rightSide:"Right Blind Spot",
+  leftLane:"Left Lane Line",
+  rightLane:"Right Lane Line",
+  hasCar:"🔴 Car Detected",
+  noCar:"🟢 Clear",
+  solid:"🔴 Solid",
+  dashed:"🟡 Dashed",
+  unknown:"⚪ Unknown",
+  unconfigured:"⚪ Unconfigured",
+  confidence:"Confidence",
+  pollFps:"Web Poll Rate",
+  inferenceFps:"V-ASM FPS",
+  inferenceLatency:"V-ASM Latency",
+  vasmGate:"V-ASM Inference Gate",
+  laneInferenceFps:"Lane FPS",
+  laneInferenceLatency:"Lane Latency",
+  laneCandidates:"Lane Candidates",
+  cameraStatus:"Camera Status",
+  cameraNormal:"🟢 Normal",
+  cameraOffline:"🔴 Offline",
+  rawJson:"Raw Status JSON"
+};
+
+let language="zh",text=zh;
+const status=document.querySelector("#status"),hint=document.querySelector("#hint");
+const canvasVasm=document.querySelector("#camera-vasm"),ctxVasm=canvasVasm.getContext("2d");
+const canvasLane=document.querySelector("#camera-lane"),ctxLane=canvasLane.getContext("2d");
+
+const threshold=document.querySelector("#threshold"),smoothing=document.querySelector("#smoothing"),baseInterval=document.querySelector("#baseInterval");
+const laneThreshold=document.querySelector("#laneThreshold"),laneInterval=document.querySelector("#laneInterval");
+
+let imageVasm=null,imageLane=null,config={width:0,height:0,poly_left:[],poly_right:[]},side=null,lastPollTime=0,pollFps=0,lastStatus=null;
+
+function translate(){
+  text=language==="zh"?zh:en;
+  document.documentElement.lang=language==="zh"?"zh-CN":"en";
+  document.title=text.title;
+  document.querySelector("#language").textContent=language==="zh"?"English":"中文";
+  document.querySelectorAll("[data-i18n]").forEach(el=>{
+    const k=el.dataset.i18n;
+    if(text[k]) el.textContent=text[k];
+  });
+  if(!side) hint.textContent=text.hint;
+  if(lastStatus) updateDebugUI(lastStatus);
+}
+
+function points(name){return config["poly_"+name]}
+
+function redrawVasm(){
+  if(!imageVasm)return;
+  ctxVasm.drawImage(imageVasm,0,0,canvasVasm.width,canvasVasm.height);
+  for(const [name,color] of [["left","#3b82f6"],["right","#f97316"]]){
+    const p=points(name);
+    if(!p.length)continue;
+    ctxVasm.beginPath();
+    ctxVasm.moveTo(...p[0]);
+    for(const q of p.slice(1))ctxVasm.lineTo(...q);
+    if(p.length>2)ctxVasm.closePath();
+    ctxVasm.fillStyle=color+"44";
+    ctxVasm.fill();
+    ctxVasm.strokeStyle=color;
+    ctxVasm.lineWidth=3;
+    ctxVasm.stroke();
+    for(const q of p){
+      ctxVasm.beginPath();
+      ctxVasm.arc(...q,5,0,7);
+      ctxVasm.fillStyle=color;
+      ctxVasm.fill();
+    }
+  }
+}
+
+function redrawLane(){
+  if(!imageLane)return;
+  ctxLane.drawImage(imageLane,0,0,canvasLane.width,canvasLane.height);
+}
+
+function refreshVasm(){
+  const nextImage=new Image();
+  nextImage.onload=()=>{
+    imageVasm=nextImage;
+    canvasVasm.width=nextImage.naturalWidth;
+    canvasVasm.height=nextImage.naturalHeight;
+    if(!config.width){config.width=canvasVasm.width;config.height=canvasVasm.height}
+    redrawVasm();
+  };
+  nextImage.src="/api/snapshot?stream=wide&t="+Date.now();
+}
+
+function refreshLane(){
+  const nextImage=new Image();
+  nextImage.onload=()=>{
+    imageLane=nextImage;
+    canvasLane.width=nextImage.naturalWidth;
+    canvasLane.height=nextImage.naturalHeight;
+    redrawLane();
+  };
+  nextImage.src="/api/snapshot?stream=road&t="+Date.now();
+}
+
+async function load(){
+  const r=await fetch("/api/config"),saved=await r.json();
+  if(saved.width)config=saved;
+}
+
+function updateDebugUI(s){
+  // V-ASM UI Update
+  const configured=s.configuredSides||[];
+  for(const sName of ["left","right"]){
+    const isConfigured=configured.includes(sName);
+    const sideData=(s.vehicleSide&&s.vehicleSide[sName])||{active:false,confidence:0};
+    const badgeEl=document.querySelector("#status-"+sName);
+    const confValEl=document.querySelector("#conf-val-"+sName);
+    const barEl=document.querySelector("#bar-"+sName);
+
+    const confPct=Math.min(100,Math.max(0,(sideData.confidence*100).toFixed(1)));
+    confValEl.textContent=confPct+"%";
+    barEl.style.width=confPct+"%";
+
+    if(!isConfigured){
+      badgeEl.className="side-badge unconfigured";
+      badgeEl.textContent=text.unconfigured;
+      barEl.className="bar-fill";
+    }else if(sideData.active){
+      badgeEl.className="side-badge has-car";
+      badgeEl.textContent=text.hasCar;
+      barEl.className="bar-fill active";
+    }else{
+      badgeEl.className="side-badge no-car";
+      badgeEl.textContent=text.noCar;
+      barEl.className="bar-fill";
+    }
+  }
+
+  // Lane Line Detection UI Update
+  if(s.lane&&s.lane.result){
+    const lr=s.lane.result;
+    const laneSideMap={left:lr.leftLine,right:lr.rightLine};
+    const laneConfMap={left:lr.leftConf,right:lr.rightConf};
+
+    for(const lSide of ["left","right"]){
+      const lType=laneSideMap[lSide];
+      const lConf=laneConfMap[lSide]||0;
+      const badgeEl=document.querySelector("#status-lane-"+lSide);
+      const confValEl=document.querySelector("#conf-val-lane-"+lSide);
+      const barEl=document.querySelector("#bar-lane-"+lSide);
+
+      const confPct=Math.min(100,Math.max(0,(lConf*100).toFixed(1)));
+      confValEl.textContent=confPct+"%";
+      barEl.style.width=confPct+"%";
+
+      if(lType===1){
+        badgeEl.className="side-badge has-solid";
+        badgeEl.textContent=text.solid;
+        barEl.className="bar-fill active";
+      }else if(lType===0){
+        badgeEl.className="side-badge has-dashed";
+        badgeEl.textContent=text.dashed;
+        barEl.className="bar-fill dashed";
+      }else{
+        badgeEl.className="side-badge unconfigured";
+        badgeEl.textContent=text.unknown;
+        barEl.className="bar-fill";
+      }
+    }
+
+    const laneFps=(s.lane.inference&&s.lane.inference.fps!==undefined)?s.lane.inference.fps:0;
+    document.querySelector("#metric-lane-inf-fps").textContent=laneFps+" Hz";
+
+    const laneLat=(s.lane.inference&&s.lane.inference.latencyMs!==undefined)?s.lane.inference.latencyMs:"--";
+    document.querySelector("#metric-lane-inf-lat").textContent=laneLat+" ms";
+
+    document.querySelector("#metric-lane-candidates").textContent=lr.candidatesCount!==undefined?lr.candidatesCount:"--";
+  }
+
+  // General Metrics Update
+  document.querySelector("#metric-poll-fps").textContent=pollFps+" Hz";
+
+  const infFps=(s.inference&&s.inference.fps!==undefined)?s.inference.fps:0;
+  document.querySelector("#metric-inf-fps").textContent=infFps+" Hz";
+
+  const infLat=(s.inference&&s.inference.latencyMs!==undefined)?s.inference.latencyMs:"--";
+  document.querySelector("#metric-inf-lat").textContent=infLat+" ms";
+
+  const gate=s.gate;
+  const gateEl=document.querySelector("#metric-vasm-gate");
+  if(gate&&gate.active){
+    gateEl.textContent="🟢 "+gate.side+" ("+Number(gate.laneWidth).toFixed(1)+" m)";
+    gateEl.style.color="#34d399";
+  }else{
+    gateEl.textContent="⚪ "+((gate&&gate.reason)||"--");
+    gateEl.style.color="#9ca3af";
+  }
+
+  const camAvailable=s.camera&&s.camera.available;
+  const camAge=(s.camera&&s.camera.lastFrameAgeSeconds!==null&&s.camera.lastFrameAgeSeconds!==undefined)?s.camera.lastFrameAgeSeconds.toFixed(1)+"s":"";
+  const camStatusEl=document.querySelector("#metric-cam-status");
+  if(camAvailable){
+    camStatusEl.textContent=text.cameraNormal+(camAge?" ("+camAge+")":"");
+    camStatusEl.style.color="#34d399";
+  }else{
+    camStatusEl.textContent=text.cameraOffline+(s.camera&&s.camera.error?" ["+s.camera.error+"]":"");
+    camStatusEl.style.color="#f87171";
+  }
+}
+
+document.querySelector("#language").onclick=()=>{language=language==="zh"?"en":"zh";translate();};
+
+document.querySelectorAll("[data-side]").forEach(b=>b.onclick=()=>{
+  side=b.dataset.side;
+  hint.textContent=text.annotating+" "+side+".";
+  document.querySelectorAll("[data-side]").forEach(x=>x.classList.toggle("active",x===b));
+});
+
+canvasVasm.onclick=e=>{
+  if(!side||!imageVasm)return;
+  const r=canvasVasm.getBoundingClientRect();
+  points(side).push([Math.round((e.clientX-r.left)*canvasVasm.width/r.width),Math.round((e.clientY-r.top)*canvasVasm.height/r.height)]);
+  redrawVasm();
+};
+canvasVasm.oncontextmenu=e=>{e.preventDefault();if(side)points(side).pop();redrawVasm();};
+document.querySelector("#undo").onclick=()=>{if(side)points(side).pop();redrawVasm();};
+document.querySelector("#save").onclick=async()=>{
+  const r=await fetch("/api/config",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(config)}),d=await r.json();
+  hint.textContent=r.ok?text.saved:d.error;
+};
+document.querySelector("#clear").onclick=async()=>{
+  await fetch("/api/config",{method:"DELETE"});
+  const r=await fetch("/api/config");
+  config=await r.json();
+  redrawVasm();
+};
+document.querySelector("#snapshot-vasm").onclick=refreshVasm;
+document.querySelector("#snapshot-lane").onclick=refreshLane;
+
+const handleSettingsSubmit=async e=>{
+  e.preventDefault();
+  const r=await fetch("/api/settings",{
+    method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({
+      threshold:+threshold.value,
+      smoothingSeconds:+smoothing.value,
+      baseIntervalSeconds:+baseInterval.value,
+      laneThreshold:+laneThreshold.value,
+      laneIntervalSeconds:+laneInterval.value
+    })
+  });
+  const d=await r.json();
+  hint.textContent=r.ok?text.applied:d.error;
+};
+
+document.querySelector("#settings-vasm").onsubmit=handleSettingsSubmit;
+document.querySelector("#settings-lane").onsubmit=handleSettingsSubmit;
+
+async function poll(){
+  try{
+    const now=performance.now();
+    if(lastPollTime){
+      const delta=(now-lastPollTime)/1000;
+      if(delta>0)pollFps=(1/delta).toFixed(1);
+    }
+    lastPollTime=now;
+
+    const s=await (await fetch("/api/status")).json();
+    lastStatus=s;
+    status.textContent=JSON.stringify(s,null,2);
+
+    if(document.activeElement!==threshold)threshold.value=s.threshold;
+    if(document.activeElement!==smoothing)smoothing.value=s.smoothingSeconds;
+    if(document.activeElement!==baseInterval)baseInterval.value=s.baseIntervalSeconds;
+
+    if(s.lane){
+      if(document.activeElement!==laneThreshold)laneThreshold.value=s.lane.threshold;
+      if(document.activeElement!==laneInterval)laneInterval.value=s.lane.intervalSeconds;
+    }
+
+    updateDebugUI(s);
+  }catch(e){
+    status.textContent=e.message;
+  }
+}
+
+setInterval(poll,500);
+translate();
+load();
+poll();
+</script>
+</html>

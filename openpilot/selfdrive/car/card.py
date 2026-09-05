@@ -23,10 +23,10 @@ from openpilot.selfdrive.car.card_diagnostics import should_log_card_diagnostics
 from openpilot.selfdrive.car.cruise import VCruiseCarrot
 from openpilot.selfdrive.car.car_specific import MockCarState
 from openpilot.selfdrive.car.openpilot_toggle import CruiseMainOpenpilotToggle
-from openpilot.selfdrive.carrot.xiaoge_lane import (
-  XiaogeLaneResult,
-  apply_xiaoge_lane_result,
-  parse_xiaoge_lane_payload,
+from openpilot.selfdrive.carrot.xiaoge.xiaoge_vision import (
+  XiaogeVisionResult,
+  apply_xiaoge_vision_result,
+  parse_xiaoge_vision_payload,
 )
 
 REPLAY = "REPLAY" in os.environ
@@ -181,8 +181,8 @@ class Car:
     self.card_diag_slow_loop = 0
     self.card_diag_slow_process = 0
     self.card_diag_can_timeouts = 0
-    self.xiaoge_lane_result: XiaogeLaneResult | None = None
-    self.xiaoge_lane_error_log_at_ns = 0
+    self.xiaoge_vision_result: XiaogeVisionResult | None = None
+    self.xiaoge_vision_error_log_at_ns = 0
     self.card_diag_stage_names = ('decode', 'ci_update', 'sm_update', 'radar', 'state_tail',
                                   'state_total', 'publish', 'apply', 'sendcan', 'total')
     self.card_diag_stage_current = dict.fromkeys(self.card_diag_stage_names, 0)
@@ -218,13 +218,13 @@ class Car:
     sm_done_ns = time.monotonic_ns()
     if self.sm.updated['customReservedRawData0']:
       try:
-        self.xiaoge_lane_result = parse_xiaoge_lane_payload(bytes(self.sm['customReservedRawData0']))
+        self.xiaoge_vision_result = parse_xiaoge_vision_payload(bytes(self.sm['customReservedRawData0']))
       except (UnicodeDecodeError, ValueError, TypeError) as error:
-        self.xiaoge_lane_result = None
-        if sm_done_ns - self.xiaoge_lane_error_log_at_ns >= XIAOGE_LANE_ERROR_LOG_INTERVAL_NS:
-          cloudlog.warning(f"invalid Xiaoge lane payload: {error}")
-          self.xiaoge_lane_error_log_at_ns = sm_done_ns
-    apply_xiaoge_lane_result(CS, self.xiaoge_lane_result, sm_done_ns)
+        self.xiaoge_vision_result = None
+        if sm_done_ns - self.xiaoge_vision_error_log_at_ns >= XIAOGE_LANE_ERROR_LOG_INTERVAL_NS:
+          cloudlog.warning(f"invalid Xiaoge vision payload: {error}")
+          self.xiaoge_vision_error_log_at_ns = sm_done_ns
+    apply_xiaoge_vision_result(CS, self.xiaoge_vision_result, sm_done_ns)
     #self.t1 = time.monotonic()
 
     can_rcv_valid = len(can_strs) > 0

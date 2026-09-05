@@ -1,0 +1,2 @@
+# V-ASM standalone validation dependency. NumPy and Pillow come from openpilot.
+opencv-python-headless>=4.10
