@@ -5109,12 +5109,15 @@ def test_front_stationary_pending_bridges_brief_vision_support_gap() -> None:
   assert matcher.stationary_identity == ("frontRadar", 52)
 
 
-def test_long_observed_high_quality_front_only_stationary_lead() -> None:
+@pytest.mark.parametrize("probability", (0.0, 0.10, 0.39))
+@pytest.mark.parametrize("v_lead", (-0.4, 0.0, 3.9, 4.0))
+def test_long_observed_high_quality_front_stationary_needs_confirmation(
+  probability: float, v_lead: float,
+) -> None:
   matcher = VisionRadarMatcher()
-  match = None
-  for index in range(32):
+  for index in range(160):
     time_s = index * 0.05
-    d_rel = 100.0 - index * 0.5
+    d_rel = 140.0 - index * 0.5
     front = snapshot_radar_points((Point(
       52,
       d_rel,
@@ -5122,21 +5125,86 @@ def test_long_observed_high_quality_front_only_stationary_lead() -> None:
       v_rel=-10.0,
       source="frontRadar",
       trackState=2,
+      v_lead=v_lead,
     ),), v_ego=10.0)[0]
     match = matcher.match(
       model_with_lead(
-        d_rel + 10.0, 0.1, 8.0, probability=0.10,
+        d_rel + 10.0, 0.1, 8.0, probability=probability,
       ),
       (),
-      STRAIGHT_PATH,
+      ((0.0, 0.0), (180.0, 0.0)),
       time_s=time_s,
       stationary_points=(front,),
       prefer_primary_stationary=True,
     )
+    assert match is None
+    assert matcher.stationary_identity is None
 
-  assert match is not None
-  assert match.point.track_id == 52
-  assert matcher.stationary_identity == ("frontRadar", 52)
+
+@pytest.mark.parametrize("mode", (1, 2, 3))
+@pytest.mark.parametrize(
+  "corner_evidence",
+  ("absent", "range_mismatch", "lateral_mismatch", "speed_mismatch",
+   "unmeasured", "one_frame", "incomplete_confirmation"),
+)
+def test_controller_stationary_front_requires_same_object_corner_evidence(
+  mode: int, corner_evidence: str,
+) -> None:
+  controller = DPathRadarController(
+    prefer_corner_radar=True, enable_radar_tracks=mode,
+  )
+  for index in range(80):
+    d_rel = 100.0 - index * 0.5
+    front = Point(
+      61, d_rel, 0.1, v_rel=-10.0, trackState=2,
+    )
+    corner = Point(
+      1009,
+      d_rel + (6.0 if corner_evidence == "range_mismatch" else 0.2),
+      1.1 if corner_evidence == "lateral_mismatch" else 0.1,
+      v_rel=-5.0 if corner_evidence == "speed_mismatch" else -10.0,
+      source="corner235",
+      measured=corner_evidence != "unmeasured",
+    )
+    corner_present = (
+      corner_evidence != "absent"
+      and (corner_evidence != "one_frame" or index == 31)
+      and (corner_evidence != "incomplete_confirmation" or 20 <= index < 29)
+    )
+    output = controller.update(
+      time_s=index * 0.05,
+      v_ego=10.0,
+      radar_points=(front, corner) if corner_present else (front,),
+      model=model_with_lead(d_rel, 0.1, 0.0, probability=0.0),
+    )
+    assert output.lead_one is None
+    assert output.lead_two is None
+
+
+@pytest.mark.parametrize("mode", (1, 2, 3))
+def test_controller_stationary_front_waits_for_corner_then_holds_confirmed_identity(
+  mode: int,
+) -> None:
+  controller = DPathRadarController(
+    prefer_corner_radar=True, enable_radar_tracks=mode,
+  )
+  for index in range(100):
+    # The same ID later jumps to an unrelated return; its old confirmation
+    # cannot authorize another object without vision or a matching corner.
+    d_rel = 100.0 - index * 0.5 + (30.0 if index >= 72 else 0.0)
+    front = Point(58, d_rel, 0.1, v_rel=-10.0, trackState=2)
+    corner = Point(1009, d_rel + 0.2, 0.1, v_rel=-10.0, source="corner235")
+    output = controller.update(
+      time_s=index * 0.05,
+      v_ego=10.0,
+      radar_points=(front, corner) if 32 <= index < 60 else (front,),
+      model=model_with_lead(d_rel, 0.1, 0.0, probability=0.0),
+    )
+    if index < 42 or index >= 72:
+      assert output.lead_one is None
+    elif index >= 43:
+      assert output.lead_one is not None
+      assert output.lead_one["radarTrackId"] == 58
 
 
 def test_long_observed_duplicate_front_stationary_returns_are_rejected() -> None:
