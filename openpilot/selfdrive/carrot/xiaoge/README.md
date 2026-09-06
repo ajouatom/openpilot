@@ -43,6 +43,12 @@ V-ASM 仅在以下条件全部满足时推理：
 网页中的阈值、平滑时间和推理间隔用于调试和验证。车道线识别在服务运行时固定启用，避免因网页操作中断
 系统车道线结果。
 
+`Latency` 是一次图像预处理、模型推理和后处理的实际耗时，也包含线程等待；不是网页网络延迟。
+`Interval` 只限制推理启动间隔，缩短它不会让模型本身计算更快。当前 OpenCV 使用一个 CPU 计算线程。
+相机以非阻塞方式接收，空闲时在 Python 中短暂休眠，避免 VisionIPC 等待持有 GIL 并阻塞其他线程。
+原始状态 JSON 的 `lane.inference.threadCpuMs` 和 `inference.threadCpuMs` 分别记录车道和 V-ASM
+推理线程的 CPU 时间。它们不包含等待或其他工作线程的 CPU 时间，因此与 `latencyMs` 的差值不能直接视为 GIL 等待时间。
+
 ### 安装和手动启动
 
 在 comma3 的 openpilot 根目录运行：
@@ -107,6 +113,14 @@ Open `http://<comma-ip>:8082`.
 The web threshold, smoothing, and interval controls are intended for validation. Lane detection
 remains enabled while the service runs so web actions cannot interrupt system lane results.
 
+`Latency` measures one preprocessing, model inference, and postprocessing pass, including thread
+waits; it is not web network latency. `Interval` only limits how often inference starts, so reducing
+it does not speed up the model. OpenCV currently uses one CPU compute thread. Camera receivers poll
+without blocking and briefly sleep in Python when idle, so VisionIPC waits cannot hold the GIL and
+stall other threads. Raw status JSON exposes `lane.inference.threadCpuMs` and `inference.threadCpuMs`
+for the lane and V-ASM inference threads. These exclude waiting and CPU time on other worker threads;
+their difference from `latencyMs` is not a direct measurement of GIL waiting.
+
 ### Installation and manual launch
 
 From the comma3 openpilot root:
@@ -165,6 +179,14 @@ V-ASM은 다음 조건을 모두 만족할 때만 실행됩니다.
 
 웹의 임계값, 평활 시간, 추론 간격은 검증용입니다. 서비스가 실행되는 동안 차선 인식은 항상 활성화되어 웹
 동작 때문에 시스템 차선 결과가 중단되지 않습니다.
+
+`Latency`는 영상 전처리, 모델 계산, 후처리 한 번에 걸린 실제 시간이며 스레드 대기도 포함합니다. 웹 통신
+지연이 아닙니다. `Interval`은 추론 시작 간격만 제한하므로 줄여도 모델 계산 자체가 빨라지지는 않습니다.
+현재 OpenCV는 CPU 계산 스레드 하나를 사용합니다. 카메라는 대기 없이 수신을 확인하고, 프레임이 없으면
+Python에서 잠시 쉬어 VisionIPC 대기가 GIL을 잡고 다른 스레드를 막지 않도록 합니다.
+원시 상태 JSON의 `lane.inference.threadCpuMs`와 `inference.threadCpuMs`는 각각 차선 및 V-ASM 추론
+스레드가 사용한 CPU 시간입니다. 대기와 다른 작업 스레드의 CPU 시간은 제외하므로 `latencyMs`와의 차이가
+그대로 GIL 대기 시간은 아닙니다.
 
 ### 설치 및 수동 시작
 
