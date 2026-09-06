@@ -75,7 +75,7 @@ def test_longitudinal_comfort_settings_use_driver_facing_language(params):
   lead_accel_response = by_name["LeadAccelResponse"]
   assert (lead_accel_response["min"], lead_accel_response["max"], lead_accel_response["default"]) == (0, 5, 0)
   assert lead_accel_response["control"] == "select"
-  assert "차간거리 1단계" in lead_accel_response["descr"]
+  assert "모든 차간거리 단계" in lead_accel_response["descr"]
   assert "170/130/80/36/10" in lead_accel_response["descr"]
   assert "95/80/60/35/15%" in lead_accel_response["descr"]
   assert "MPC 뒤에 가속을 별도로 더하지 않으며" in lead_accel_response["descr"]

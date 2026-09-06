@@ -1,3 +1,7 @@
+import ast
+from pathlib import Path
+from types import SimpleNamespace
+
 import pytest
 
 from openpilot.selfdrive.controls.lib.longitudinal_preview import (
@@ -40,6 +44,48 @@ def mpc_request(level, *, source='lead0', enabled=True, lead_status=True,
     gap_margin=gap_margin,
     speed_error=speed_error,
   )
+
+
+@pytest.fixture
+def planner_response_gate():
+  # Evaluate the production activation condition without loading the native MPC
+  # solver. This catches a gap/personality restriction reintroduced at the caller.
+  planner_path = Path(__file__).resolve().parents[1] / "lib" / "longitudinal_planner.py"
+  tree = ast.parse(planner_path.read_text(encoding="utf-8"))
+  condition = next(node.value for node in ast.walk(tree) if isinstance(node, ast.Assign)
+                   and any(isinstance(target, ast.Name) and target.id == "lead_accel_response_enabled"
+                           for target in node.targets))
+  code = compile(ast.Expression(condition), str(planner_path), "eval")
+
+  def enabled(personality, level=3, *, reset_state=False, gas_pressed=False,
+              force_slow_decel=False, accel_max=1.6, should_stop=False):
+    return eval(code, {
+      "sm": {"selfdriveState": SimpleNamespace(personality=personality),
+             "carState": SimpleNamespace(gasPressed=gas_pressed)},
+      "log": SimpleNamespace(LongitudinalPersonality=SimpleNamespace(aggressive="aggressive")),
+      "carrot": SimpleNamespace(leadAccelResponse=level),
+      "reset_state": reset_state,
+      "force_slow_decel": force_slow_decel,
+      "accel_limits_turns": [-2.0, accel_max],
+      "self": SimpleNamespace(output_should_stop=should_stop),
+    })
+
+  return enabled
+
+
+@pytest.mark.parametrize("personality", ["aggressive", "standard", "relaxed", "moreRelaxed"])
+@pytest.mark.parametrize("level", range(1, 6))
+def test_planner_enables_response_at_every_following_gap(planner_response_gate, personality, level):
+  assert planner_response_gate(personality, level)
+
+
+@pytest.mark.parametrize("personality", ["aggressive", "standard", "relaxed", "moreRelaxed"])
+@pytest.mark.parametrize("blocked", [
+  {"level": 0}, {"reset_state": True}, {"gas_pressed": True},
+  {"force_slow_decel": True}, {"accel_max": 0.0}, {"accel_max": -0.5}, {"should_stop": True},
+])
+def test_every_gap_preserves_planner_response_inhibits(planner_response_gate, personality, blocked):
+  assert not planner_response_gate(personality, **blocked)
 
 
 @pytest.mark.parametrize("mode", [

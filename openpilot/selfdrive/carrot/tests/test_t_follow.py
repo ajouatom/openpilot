@@ -201,13 +201,65 @@ def test_level_five_acceleration_end_uses_existing_gap_increase_ramp():
   ) == pytest.approx(0.415)
 
 
-def test_level_five_does_not_force_gap_one_for_other_personalities():
-  planner = _speed_tf_planner(lead_accel_response=5, applied_t_follow=0.936)
+GAP_CASES = [
+  (log.LongitudinalPersonality.aggressive, 0.4, 1.0),
+  (log.LongitudinalPersonality.standard, 0.6, 1.3),
+  (log.LongitudinalPersonality.relaxed, 0.8, 1.6),
+  (log.LongitudinalPersonality.moreRelaxed, 1.2, 2.0),
+]
+
+
+@pytest.mark.parametrize(("personality", "configured_tf", "speed_factor"), GAP_CASES)
+@pytest.mark.parametrize("level", [4, 5])
+@pytest.mark.parametrize("speed_tf", [-3, 0, 30])
+def test_strong_response_uses_each_selected_gap(personality, configured_tf, speed_factor, level, speed_tf):
+  planner = _speed_tf_planner(lead_accel_response=level, applied_t_follow=1.44)
+  planner.enableSpeedTF = speed_tf
 
   assert planner.get_T_FOLLOW(
-    log.LongitudinalPersonality.standard, v_ego=50.0 / 3.6, a_ego=0.0,
+    personality, v_ego=50.0 / 3.6, a_ego=0.0,
     lead_status=True, lead_accel=0.5,
-  ) == pytest.approx(0.936)
+  ) == pytest.approx(configured_tf)
+  assert planner.jerk_factor == 1.0  # Safe mode base jerk is refreshed for the selected gap.
+
+
+@pytest.mark.parametrize(("personality", "configured_tf", "speed_factor"), GAP_CASES)
+@pytest.mark.parametrize("level", [0, 1, 2, 3])
+def test_mild_response_keeps_normal_tf_at_every_gap(personality, configured_tf, speed_factor, level):
+  normal_tf = 0.6 * speed_factor * 1.2
+  planner = _speed_tf_planner(lead_accel_response=level, applied_t_follow=normal_tf)
+
+  assert planner.get_T_FOLLOW(
+    personality, v_ego=50.0 / 3.6, a_ego=0.0,
+    lead_status=True, lead_accel=0.5,
+  ) == pytest.approx(normal_tf)
+
+
+@pytest.mark.parametrize(("personality", "configured_tf", "speed_factor"), GAP_CASES)
+@pytest.mark.parametrize("level", [4, 5])
+@pytest.mark.parametrize(("lead_status", "lead_accel"), [
+  (False, 0.5), (True, 0.1), (True, 0.0), (True, -0.5), (True, float("nan")),
+])
+def test_all_gaps_restore_normal_tf_without_accelerating_lead(personality, configured_tf, speed_factor,
+                                                             level, lead_status, lead_accel):
+  normal_tf = 0.6 * speed_factor * 1.2
+  planner = _speed_tf_planner(lead_accel_response=level, applied_t_follow=normal_tf)
+
+  assert planner.get_T_FOLLOW(
+    personality, v_ego=50.0 / 3.6, a_ego=0.0,
+    lead_status=lead_status, lead_accel=lead_accel,
+  ) == pytest.approx(normal_tf)
+
+
+@pytest.mark.parametrize(("personality", "configured_tf", "speed_factor"), GAP_CASES)
+def test_all_gaps_preserve_deceleration_hold(personality, configured_tf, speed_factor):
+  normal_tf = 0.6 * speed_factor * 1.2
+  planner = _speed_tf_planner(lead_accel_response=5, applied_t_follow=normal_tf)
+
+  assert planner.get_T_FOLLOW(
+    personality, v_ego=50.0 / 3.6, a_ego=-1.0,
+    lead_status=True, lead_accel=0.5,
+  ) == pytest.approx(normal_tf)
 
 
 def test_level_five_tf1_does_not_change_cruise_target_without_a_lead():
