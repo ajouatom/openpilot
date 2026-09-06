@@ -30,6 +30,15 @@ V-ASM 仅在以下条件全部满足时推理：
 车道结果超过 4 秒、盲区结果超过 1.5 秒未更新时，`card.py` 自动忽略它们。这样相机、模型或进程异常
 时不会将过期视觉信息继续用于 UI 或变道判断。
 
+### mici 行车显示
+
+启用 `ShareData` 后，mici 右下角显示 VISION 状态、最近一次车道推理耗时和左右实线/虚线图标。
+`?` 表示无法识别；等待或过期结果不会保留已识别图标。BSD 区分待机、指定侧未检测到和检测到；
+只有当前已评估的侧才会显示未检测到，另一侧不会被当作已检查。
+相机画面隐藏时仍保留状态卡和黄色侧边 BSD 提示。显示道路模型时，车道使用与 c3 相同的虚线分段规则，
+BSD 使用黄色侧边路障。车道位置来自驾驶模型，`lane.onnx` 只提供实线/虚线分类。
+OEM BSD 提示不依赖 `ShareData`；驾驶告警仍在最上层。V-ASM 的速度、方向和车道宽度条件保持不变。
+
 ### Web 调试页面
 
 打开 `http://<comma-ip>:8082`：
@@ -95,6 +104,18 @@ V-ASM runs only when all conditions hold:
 `card.py` discards lane results older than four seconds and blindspot results older than 1.5 seconds.
 This prevents stale visual state from affecting the UI or lane-change decision after a camera, model,
 or process failure.
+
+### mici on-road display
+
+With `ShareData` enabled, a card at the lower right shows VISION status, the latest lane inference
+time, and left/right solid or dashed icons. `?` means unknown; waiting or stale results do not retain
+recognized icons. BSD distinguishes standby, no detection on the evaluated side, and detection.
+Only a freshly evaluated side can show no detection; the other side is not assumed to have been checked.
+The card and amber side warnings remain visible with the camera hidden. With the road model visible,
+lanes use the same dash geometry as c3 and BSD adds amber roadside barriers. Lane positions still come
+from the driving model; `lane.onnx` supplies only solid/dashed classification.
+OEM BSD warnings also work with `ShareData` off. Driving alerts remain on top. The existing V-ASM
+speed, direction, and lane-width conditions are unchanged.
 
 ### Web diagnostics
 
@@ -168,6 +189,18 @@ V-ASM은 다음 조건을 모두 만족할 때만 실행됩니다.
 
 `card.py`는 4초가 지난 차선 결과와 1.5초가 지난 사각지대 결과를 무시합니다. 따라서 카메라, 모델 또는
 프로세스 장애 후 오래된 비전 상태가 UI나 차선 변경 판단에 사용되지 않습니다.
+
+### mici 주행 화면
+
+`ShareData`가 켜져 있으면 오른쪽 아래에 VISION 상태, 최근 차선 추론 시간, 좌우 실선·점선 아이콘이 나옵니다.
+`?`는 차선 종류를 알 수 없다는 뜻이며, 결과를 기다리거나 오래된 결과만 남으면 인식 아이콘을 유지하지 않습니다.
+BSD는 ‘대기’, 검사한 쪽의 ‘미감지’, ‘감지’를 구분합니다. 방금 검사한 쪽만 미감지로 표시하고,
+검사하지 않은 반대쪽을 검사한 것으로 간주하지 않습니다.
+카메라 화면을 숨겨도 상태 표시와 노란색 좌우 BSD 경고는 남습니다. 도로 모델이 보일 때는 c3와 같은
+점선 구간을 사용하고 BSD를 노란색 도로 옆 표시로 그립니다. 차선 위치는 주행 모델에서 가져오며,
+`lane.onnx`는 실선·점선 종류만 제공합니다.
+차량 자체 BSD 경고는 `ShareData`가 꺼져 있어도 표시하며, 주행 경고는 가장 위에 나옵니다.
+V-ASM의 기존 속도·방향·차선 폭 조건은 유지합니다.
 
 ### 웹 진단 페이지
 

@@ -1468,3 +1468,27 @@ msgstr "신호가바뀌었어요."
 msgid "🔥 Firehose Mode 🔥"
 msgstr "🔥 파이어호스 모드 🔥"
 
+
+#: openpilot/selfdrive/ui/mici/onroad/vision_renderer.py
+msgid "ON"
+msgstr "작동"
+
+#: openpilot/selfdrive/ui/mici/onroad/vision_renderer.py
+msgid "WAIT"
+msgstr "대기"
+
+#: openpilot/selfdrive/ui/mici/onroad/vision_renderer.py
+msgid "STALE"
+msgstr "지연"
+
+#: openpilot/selfdrive/ui/mici/onroad/vision_renderer.py
+msgid "STANDBY"
+msgstr "대기"
+
+#: openpilot/selfdrive/ui/mici/onroad/vision_renderer.py
+msgid "DETECTED"
+msgstr "감지"
+
+#: openpilot/selfdrive/ui/mici/onroad/vision_renderer.py
+msgid "NO DETECTION"
+msgstr "미감지"

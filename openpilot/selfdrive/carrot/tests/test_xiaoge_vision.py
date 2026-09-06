@@ -215,28 +215,57 @@ def test_lane_snapshot_rejects_short_y_plane():
     VASMService._lane_jpeg_from_nv12(bytes(12), 4, 4, 4)
 
 
-def test_vision_service_publishes_the_composite_payload(message_transport):
-  service = VASMService.__new__(VASMService)
-  service.lock = threading.Lock()
-  service.publish_lock = threading.Lock()
+def test_vision_service_publishes_the_composite_payload(vision_service):
+  service = vision_service
+  now = time.monotonic_ns()
+  service.last_frame_at = service.last_road_frame_at = time.monotonic()
+  service.camera_error = service.lane_camera_error = ""
+  service.vasm_gate = {"active": True, "side": "left", "reason": "", "laneWidth": 3.2}
   service.lane_result = {
     "leftLine": 0,
     "rightLine": 1,
     "valid": True,
-    "updatedMonoTimeNanos": 100,
+    "updatedMonoTimeNanos": now,
   }
-  service.vasm_result = {"left": True, "right": False, "updatedMonoTimeNanos": 200}
-  service.pm = messaging.PubMaster(["customReservedRawData0"])
+  service.vasm_result = {"left": True, "right": False, "side": "left", "updatedMonoTimeNanos": now}
 
   service.publish_vision_result()
 
-  sent = message_transport.sent
+  sent = service.sent
   assert len(sent) == 1
   assert sent[0][0] == "customReservedRawData0"
   event = messaging.log_from_bytes(sent[0][1])
   assert event.valid
   result = parse_xiaoge_vision_payload(event.customReservedRawData0)
   assert (result.left_lane, result.right_lane, result.left_blindspot, result.right_blindspot) == (0, 1, True, False)
+  payload = json.loads(bytes(event.customReservedRawData0))
+  assert payload["blindspot"]["side"] == "left"
+  assert payload["blindspot"]["valid"]
+  assert payload["lane"]["latencyMs"] == 0.0
+
+
+@pytest.mark.parametrize("invalid_reason", ["gate", "side", "camera", "expired"])
+def test_vision_payload_never_reports_unevaluated_blindspot_as_valid(vision_service, invalid_reason):
+  service = vision_service
+  now = time.monotonic_ns()
+  service.last_frame_at = time.monotonic()
+  service.camera_error = ""
+  service.vasm_gate = {"active": True, "side": "left", "reason": "", "laneWidth": 3.2}
+  service.vasm_result = {"left": True, "right": False, "side": "left", "updatedMonoTimeNanos": now}
+  if invalid_reason == "gate":
+    service.vasm_gate["active"] = False
+  elif invalid_reason == "side":
+    service.vasm_gate["side"] = "right"
+  elif invalid_reason == "camera":
+    service.camera_error = "camera unavailable"
+  else:
+    service.vasm_result["updatedMonoTimeNanos"] = now - XIAOGE_BLINDSPOT_TIMEOUT_NS - 1
+  service.publish_vision_result()
+  event = messaging.log_from_bytes(service.sent[-1][1])
+  payload = json.loads(bytes(event.customReservedRawData0))
+  assert payload["blindspot"]["valid"] is False
+  assert payload["blindspot"]["side"] == ""
+  assert payload["blindspot"]["left"] is False
 
 
 @pytest.fixture

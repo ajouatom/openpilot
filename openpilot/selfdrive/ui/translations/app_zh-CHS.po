@@ -1475,3 +1475,27 @@ msgstr "信号灯已变化"
 msgid "🔥 Firehose Mode 🔥"
 msgstr "🔥 Firehose 模式 🔥"
 
+
+#: openpilot/selfdrive/ui/mici/onroad/vision_renderer.py
+msgid "ON"
+msgstr "运行"
+
+#: openpilot/selfdrive/ui/mici/onroad/vision_renderer.py
+msgid "WAIT"
+msgstr "等待"
+
+#: openpilot/selfdrive/ui/mici/onroad/vision_renderer.py
+msgid "STALE"
+msgstr "延迟"
+
+#: openpilot/selfdrive/ui/mici/onroad/vision_renderer.py
+msgid "STANDBY"
+msgstr "待机"
+
+#: openpilot/selfdrive/ui/mici/onroad/vision_renderer.py
+msgid "DETECTED"
+msgstr "检测到"
+
+#: openpilot/selfdrive/ui/mici/onroad/vision_renderer.py
+msgid "NO DETECTION"
+msgstr "未检测到"

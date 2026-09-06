@@ -9,6 +9,7 @@ from openpilot.selfdrive.ui.mici.onroad.alert_renderer import AlertRenderer
 from openpilot.selfdrive.ui.mici.onroad.driver_state import DriverStateRenderer
 from openpilot.selfdrive.ui.mici.onroad.hud_renderer import HudRenderer
 from openpilot.selfdrive.ui.mici.onroad.model_renderer import ModelRenderer
+from openpilot.selfdrive.ui.mici.onroad.vision_renderer import VisionRenderer
 from openpilot.selfdrive.ui.mici.onroad.confidence_ball import ConfidenceBall
 from openpilot.selfdrive.ui.mici.onroad.cameraview import CameraView
 from openpilot.system.ui.lib.application import FontWeight, gui_app, MousePos, MouseEvent
@@ -162,6 +163,7 @@ class AugmentedRoadView(CameraView):
 
     self._model_renderer = ModelRenderer()
     self._hud_renderer = HudRenderer()
+    self._vision_renderer = VisionRenderer()
     self._alert_renderer = AlertRenderer()
     self._driver_state_renderer = DriverStateRenderer()
     self._confidence_ball = ConfidenceBall()
@@ -281,6 +283,7 @@ class AugmentedRoadView(CameraView):
     # TODO: have alert renderer draw offroad mici label below
     _t = time.monotonic()
     self._hud_renderer.render(self._content_rect)
+    self._vision_renderer.render(self._content_rect)
     hud_ms = (time.monotonic() - _t) * 1000.0
     if ui_state.started:
       _t = time.monotonic()
