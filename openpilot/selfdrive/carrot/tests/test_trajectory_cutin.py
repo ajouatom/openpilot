@@ -1037,6 +1037,28 @@ def test_nonclosing_far_parallel_pair_needs_strong_entry_motion() -> None:
   assert not estimate.control_eligible
 
 
+def test_near_outer_body_range_disagreement_cannot_trigger_or_hold_cutin() -> None:
+  detector = TrajectoryCutInDetector()
+  for index in range(18):
+    # Start with a genuine coherent pair, then the corner switches to a rear
+    # body reflection while the front return remains outside the lane.
+    y_rel = 2.85 - 0.06 * min(index, 9)
+    corner = point(7856, "corner235", 6.0, y_rel, v_rel=-1.0, yv_rel=-0.6)
+    front = point(34, "frontRadar", 6.8 if index < 10 else 8.0, y_rel, v_rel=-1.0)
+    estimate = detector.update(
+      index * 0.1, 10.0, (corner,), PATH, MODEL,
+      yaw_rate_rad_s=0.025,
+      cross_sensor_matches={} if index in (12, 13, 16) else {(corner.source, corner.track_id): front},
+    )[0]
+    if index == 9:
+      assert estimate.confirmed_cutin
+    if index >= 10:
+      assert not estimate.confirmed_cutin
+      assert not estimate.predecel_risk
+      assert not estimate.control_eligible
+      assert estimate.reason == "ambiguous outer-body pair"
+
+
 def test_front_parallel_drift_stays_clear_until_body_overlap() -> None:
   detector = TrajectoryCutInDetector()
   estimates = ()

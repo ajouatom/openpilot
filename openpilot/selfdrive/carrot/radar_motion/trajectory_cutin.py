@@ -59,6 +59,8 @@ PAIRED_OUTER_BODY_MIN_REPORTED_INWARD_MPS = 0.15
 PAIRED_OUTER_BODY_MAX_VREL_MPS = 1.0
 PAIRED_OUTER_BODY_MAX_ABS_YAW_RATE_RAD_S = 0.040
 PAIRED_OUTER_BODY_MIN_INWARD_PROGRESS_M = 0.15
+PAIRED_OUTER_BODY_MAX_DREL_DELTA_M = 1.25
+PAIRED_OUTER_BODY_RANGE_CHECK_MIN_ABS_YAW_RATE_RAD_S = 0.020
 PAIRED_FAST_PASS_MIN_CLOSING_SPEED_MPS = 5.0
 PAIRED_FAST_PASS_MAX_TTC_S = 0.80
 PAIRED_FAST_PASS_MIN_HISTORY_S = 0.35
@@ -202,6 +204,7 @@ class _TrackState:
   cutin_until_s: float = -math.inf
   risk_since_s: float | None = None
   risk_until_s: float = -math.inf
+  outer_body_ambiguous_until_s: float = -math.inf
 
   def reset(self, continuity_id: int) -> None:
     self.continuity_id = continuity_id
@@ -211,6 +214,7 @@ class _TrackState:
     self.cutin_until_s = -math.inf
     self.risk_since_s = None
     self.risk_until_s = -math.inf
+    self.outer_body_ambiguous_until_s = -math.inf
 
 
 def _values_since(
@@ -644,6 +648,38 @@ class TrajectoryCutInDetector:
         for value in state.observations
       )
       current_overlap = abs(projection.d_path) <= PATH_OVERLAP_HALF_WIDTH_M
+      # Both sensors seeing a nearby body proves existence, not lane entry.
+      # With ego rotation, different body facets can appear to move inward as
+      # ego passes the vehicle. A straight-road body offset alone is not this
+      # ambiguity: retain early support for genuinely entering large vehicles.
+      # Keep that ambiguous outer-body pair out of prediction-based approval
+      # until a sensor reaches the overlap corridor or vision corroborates it.
+      ambiguous_outer_body_pair = (
+        point.source.startswith("corner")
+        and cross_sensor_point is not None
+        and cross_sensor_point.source == "frontRadar"
+        and point.d_rel <= CROSS_SENSOR_SLOT_HANDOFF_MAX_DREL_M
+        and point.v_rel < -0.1
+        and recent_abs_yaw_max
+        >= PAIRED_OUTER_BODY_RANGE_CHECK_MIN_ABS_YAW_RATE_RAD_S
+        and not vision_supported
+        and not current_overlap
+        and abs(cross_sensor_point.y_rel) > 2.15
+        and abs(point.d_rel - cross_sensor_point.d_rel)
+        > PAIRED_OUTER_BODY_MAX_DREL_DELTA_M
+      )
+      if ambiguous_outer_body_pair:
+        state.outer_body_ambiguous_until_s = time_s + CROSS_SENSOR_ALIAS_HOLD_S
+      elif vision_supported or current_overlap or (
+        cross_sensor_point is not None
+        and abs(cross_sensor_point.y_rel) <= 2.15
+      ):
+        state.outer_body_ambiguous_until_s = -math.inf
+      # Losing the paired front for one radar cycle does not resolve the
+      # ambiguity or authorize the corner-only close-entry exception.
+      ambiguous_outer_body_pair = (
+        time_s <= state.outer_body_ambiguous_until_s
+      )
       close_born_rear_pass = (
         point.source.startswith("corner")
         and cross_sensor_supported
@@ -880,6 +916,7 @@ class TrajectoryCutInDetector:
       )
       common_ok = (
         existence_supported
+        and not ambiguous_outer_body_pair
         and started_outside
         and front_range_ok
         and close_front_supported
@@ -1062,6 +1099,7 @@ class TrajectoryCutInDetector:
         or non_cutin_side_motion
         or curve_alias
         or not front_curve_motion_supported
+        or ambiguous_outer_body_pair
       ):
         # A hold bridges brief radar jitter, but must not resurrect a candidate
         # whose recent physical motion has clearly stopped or reversed.
@@ -1144,6 +1182,7 @@ class TrajectoryCutInDetector:
         or time_to_overlap_s is None
         or curve_alias
         or not front_curve_motion_supported
+        or ambiguous_outer_body_pair
       ):
         # The planner independently rejects a non-closing risk. Clear it here
         # as well so the validator and published radarState describe the same
@@ -1173,6 +1212,7 @@ class TrajectoryCutInDetector:
         else "trajectory pre-deceleration" if predecel_risk
         else "close-born rear pass" if close_born_rear_pass
         else "parallel side drift" if paired_parallel_drift
+        else "ambiguous outer-body pair" if ambiguous_outer_body_pair
         else "uncorroborated close front" if not close_front_supported
         else "front lateral uncertainty" if not front_motion_supported
         else "corner lateral jitter" if jittering

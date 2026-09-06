@@ -1927,6 +1927,19 @@
       "human_verified": true,
       "forbidden_lead_one_ids": [35],
       "scene": "A centered stationary road reflection becomes a tentative moving front-radar track near the bumper and must not replace the far vision-matched leadOne through the closer-challenger path"
+    },
+    {
+      "id": "carnival-182-59-left-parallel-body-7856",
+      "vehicle_folder": "KIA_CARNIVAL_4TH_GEN c4dcf95545dafe68",
+      "log": "00000182--5deb296c85--59/rlog.zst",
+      "source": "front+corner",
+      "window": [48.0, 53.5],
+      "expected": "clear",
+      "human_verified": true,
+      "target_track_ids": [7856, 34],
+      "forbidden_lead_one_ids": [7856, 34],
+      "forbidden_lead_two_ids": [7856, 34],
+      "scene": "User-reported 50.06s false L2/predeceleration: the left silver sedan stays in its lane while ego passes. Corner 7856 and front 34 return different longitudinal body positions. Check the entire pass, including the 52s recurrence, for CUT-IN, predeceleration and lead-role promotion."
     }
   ]
 }
