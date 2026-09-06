@@ -64,6 +64,10 @@ results, before/after sensitivity sweeps, and original user verdicts.
   applicable clear/pre-deceleration cases.
 - Each mode retains 9 existing failed expectations; 208 labels have absent
   measured targets and are reported separately as unverified.
+- Two additional cases encode the saved scene 01/09 target identities and
+  deadlines, without changing the legacy labels. Both deadlines fail in both
+  modes and remain explicitly open. These were replayed separately on the same
+  source logs: 476 evaluated labels total, with 11 failed expectations per mode.
 - The new Carnival case has no CUT-IN, pre-deceleration, L1, or L2 output for
   the specified target at any sensitivity from 1 through 5 in either mode.
 - All 21 regenerated clips have the expected frame counts; their first,
@@ -79,6 +83,10 @@ User-review scene 01's white SUV is C1079/F48; F38/C1069 is a separate primary
 vehicle. The previous gallery title identifying C1079 as a black sedan was
 incorrect. Its 13.55 s deadline and scene 09's 16.75 s lead-selection gap remain
 unresolved. The user's saved notes have not been changed into passing labels.
+The new IDs are `gv80-218-2-user-white-suv-1355` and
+`ioniq5-cd0-1-user-lead-gap-1675`; source-ID corrections do not relax either
+requested deadline. A detection after the deadline still fails even when the
+presence-only confusion matrix records that the target eventually appeared.
 
 A yaw-coordinate sign correction was also prototyped. Although it changed
 the reported lateral velocity substantially, replay produced new outputs in
