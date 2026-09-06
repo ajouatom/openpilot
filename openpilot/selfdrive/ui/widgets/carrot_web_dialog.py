@@ -2,7 +2,7 @@ import pyray as rl
 
 from openpilot.selfdrive.ui.carrot_web import CarrotWebQrSession, fit_single_line_font_size
 from openpilot.selfdrive.ui.ui_state import ui_state
-from openpilot.system.ui.lib.application import FontWeight, MousePos, gui_app
+from openpilot.system.ui.lib.application import FontWeight, MousePos, gui_app, TextAlignment, TextAlignmentVertical
 from openpilot.system.ui.lib.multilang import tr
 from openpilot.system.ui.lib.text_measure import measure_text_cached
 from openpilot.system.ui.widgets import Widget
@@ -51,7 +51,7 @@ class CarrotWebDialog(Widget):
       "Carrot Web",
       int(38 * scale),
       rl.WHITE,
-      alignment=rl.GuiTextAlignment.TEXT_ALIGN_LEFT,
+      alignment=TextAlignment.LEFT,
       font_weight=FontWeight.BOLD,
     )
 
@@ -71,8 +71,8 @@ class CarrotWebDialog(Widget):
       address_text,
       address_size,
       rl.Color(205, 205, 205, 255),
-      alignment=rl.GuiTextAlignment.TEXT_ALIGN_LEFT,
-      alignment_vertical=rl.GuiTextAlignmentVertical.TEXT_ALIGN_TOP,
+      alignment=TextAlignment.LEFT,
+      alignment_vertical=TextAlignmentVertical.TOP,
       elide_right=False,
     )
 
@@ -83,14 +83,14 @@ class CarrotWebDialog(Widget):
         self._session.updated_time,
         int(20 * scale),
         rl.Color(135, 135, 135, 255),
-        alignment=rl.GuiTextAlignment.TEXT_ALIGN_LEFT,
+        alignment=TextAlignment.LEFT,
       )
       gui_label(
         footer_rect,
         f"{self._session.seconds_until_close(rl.get_time())}s",
         int(20 * scale),
         rl.Color(135, 135, 135, 255),
-        alignment=rl.GuiTextAlignment.TEXT_ALIGN_RIGHT,
+        alignment=TextAlignment.RIGHT,
       )
 
   def __del__(self):
