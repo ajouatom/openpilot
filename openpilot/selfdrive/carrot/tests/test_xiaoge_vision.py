@@ -9,7 +9,7 @@ import numpy as np
 import pytest
 from PIL import Image
 
-from openpilot.cereal import log
+import openpilot.cereal.messaging as messaging
 from openpilot.selfdrive.carrot.xiaoge import v_asm_server
 from openpilot.selfdrive.carrot.xiaoge.v_asm_server import VASMService
 from openpilot.selfdrive.carrot.xiaoge.xiaoge_vision import (
@@ -20,6 +20,47 @@ from openpilot.selfdrive.carrot.xiaoge.xiaoge_vision import (
   merge_xiaoge_lane_type,
   parse_xiaoge_vision_payload,
 )
+
+
+@pytest.fixture
+def message_transport(monkeypatch):
+  """Replace native sockets while retaining SubMaster, PubMaster and cereal."""
+  sockets = {}
+  sent = []
+
+  class Socket:
+    data = None
+
+    def receive(self, non_blocking=False):
+      data, self.data = self.data, None
+      return data
+
+  class Poller:
+    def poll(self, _timeout):
+      return [sock for sock in sockets.values() if sock.data is not None]
+
+  def sub_sock(service, **_kwargs):
+    sockets[service] = Socket()
+    return sockets[service]
+
+  def publish(service, valid=True, **data):
+    message = messaging.new_message(service, valid=valid)
+    setattr(message, service, data)
+    sockets[service].data = message.to_bytes()
+
+  monkeypatch.setattr(messaging, "Poller", Poller)
+  monkeypatch.setattr(messaging, "sub_sock", sub_sock)
+  monkeypatch.setattr(messaging, "pub_sock", lambda service: SimpleNamespace(send=lambda data: sent.append((service, data))))
+  return SimpleNamespace(publish=publish, sent=sent)
+
+
+@pytest.fixture
+def gate_service(message_transport):
+  service = VASMService.__new__(VASMService)
+  service.lock = threading.Lock()
+  service.vasm_gate = {}
+  service.sm = messaging.SubMaster(["carState", "modelV2"])
+  return service
 
 
 def vision_payload(**overrides) -> bytes:
@@ -66,58 +107,59 @@ def test_stale_vision_result_does_not_modify_state():
   assert (state.leftLaneLine, state.rightLaneLine, state.leftBlindspot, state.rightBlindspot) == (24, 14, False, False)
 
 
-def test_vasm_gate_requires_speed_direction_and_target_lane_width():
-  service = VASMService.__new__(VASMService)
-  service.lock = threading.Lock()
-  service.vasm_gate = {}
-  car_state = SimpleNamespace(vEgo=20.0)
-  model_v2 = SimpleNamespace(meta=SimpleNamespace(
-    laneChangeDirection=log.LaneChangeDirection.left,
-    laneWidthLeft=3.2,
-    laneWidthRight=2.8,
-  ))
+def test_vasm_gate_requires_speed_direction_and_target_lane_width(monkeypatch, gate_service, message_transport):
+  service = gate_service
+  car_state = {"vEgo": 20.0}
+  model_meta = {"laneChangeDirection": "left", "laneWidthLeft": 3.2, "laneWidthRight": 2.8}
+  now = 10.0
+  monkeypatch.setattr(v_asm_server.time, "monotonic", lambda: now)
 
-  class FakeSubMaster:
-    valid = {"carState": True, "modelV2": True}
-    alive = {"carState": True, "modelV2": True}
+  def update_gate():
+    nonlocal now
+    now += 0.05
+    message_transport.publish("carState", **car_state)
+    message_transport.publish("modelV2", meta=model_meta)
+    return service._update_vasm_gate()
 
-    def all_alive_and_valid(self, services):
-      return all(self.valid[service] and self.alive[service] for service in services)
+  assert update_gate() == (True, "left")
 
-    @staticmethod
-    def update(_timeout):
-      pass
-
-    def __getitem__(self, key):
-      return {"carState": car_state, "modelV2": model_v2}[key]
-
-  service.sm = FakeSubMaster()
-
-  assert service._update_vasm_gate() == (True, "left")
-
-  model_v2.meta.laneChangeDirection = log.LaneChangeDirection.right
-  assert service._update_vasm_gate() == (False, "right")
+  model_meta["laneChangeDirection"] = "right"
+  assert update_gate() == (False, "right")
   assert service.vasm_gate["reason"] == "target lane width below 3.0 m"
 
-  car_state.vEgo = 5.0
+  car_state["vEgo"] = 5.0
+  assert update_gate() == (False, "")
+
+  car_state["vEgo"] = 20.0
+  model_meta["laneChangeDirection"] = "none"
+  assert update_gate() == (False, "")
+
+  model_meta["laneChangeDirection"] = "right"
+  model_meta["laneWidthRight"] = 3.0
+  # Test either side of the limits without depending on Float32 rounding at equality.
+  for speed, expected in ((29.9, False), (30.1, True), (119.9, True), (120.1, False)):
+    car_state["vEgo"] = speed / 3.6
+    assert update_gate()[0] is expected
+
+
+@pytest.mark.parametrize("service_name", ["carState", "modelV2"])
+@pytest.mark.parametrize("failure", ["missing", "invalid", "stale"])
+def test_vasm_gate_rejects_unavailable_messages(monkeypatch, gate_service, message_transport, service_name, failure):
+  service = gate_service
+  monkeypatch.setattr(v_asm_server.time, "monotonic", lambda: 10.0)
+  data = {"carState": {"vEgo": 20.0}, "modelV2": {"meta": {"laneChangeDirection": "left", "laneWidthLeft": 3.2}}}
+  for name, fields in data.items():
+    if failure != "missing" or name != service_name:
+      message_transport.publish(name, valid=not (failure == "invalid" and name == service_name), **fields)
+  if failure == "stale":
+    assert service._update_vasm_gate() == (True, "left")
+    monkeypatch.setattr(v_asm_server.time, "monotonic", lambda: 11.0)
+    for name, fields in data.items():
+      if name != service_name:
+        message_transport.publish(name, **fields)
+
   assert service._update_vasm_gate() == (False, "")
-
-  car_state.vEgo = 20.0
-  model_v2.meta.laneChangeDirection = log.LaneChangeDirection.none
-  assert service._update_vasm_gate() == (False, "")
-
-  model_v2.meta.laneChangeDirection = log.LaneChangeDirection.right
-  model_v2.meta.laneWidthRight = 3.0
-  for speed, expected in ((29.9, False), (30.0, True), (120.0, True), (120.1, False)):
-    car_state.vEgo = speed / 3.6
-    assert service._update_vasm_gate()[0] is expected
-
-  car_state.vEgo = 20.0
-  for service_name in ("carState", "modelV2"):
-    for flags in (service.sm.valid, service.sm.alive):
-      flags[service_name] = False
-      assert service._update_vasm_gate() == (False, "")
-      flags[service_name] = True
+  assert service.vasm_gate["reason"] == "carState or modelV2 is unavailable"
 
 
 @pytest.mark.parametrize("age", [-1, 0, XIAOGE_BLINDSPOT_TIMEOUT_NS, XIAOGE_BLINDSPOT_TIMEOUT_NS + 1, XIAOGE_LANE_TIMEOUT_NS + 1])
@@ -171,7 +213,7 @@ def test_lane_snapshot_rejects_short_y_plane():
     VASMService._lane_jpeg_from_nv12(bytes(12), 4, 4, 4)
 
 
-def test_vision_service_publishes_the_composite_payload(monkeypatch):
+def test_vision_service_publishes_the_composite_payload(message_transport):
   service = VASMService.__new__(VASMService)
   service.lock = threading.Lock()
   service.publish_lock = threading.Lock()
@@ -182,51 +224,27 @@ def test_vision_service_publishes_the_composite_payload(monkeypatch):
     "updatedMonoTimeNanos": 100,
   }
   service.vasm_result = {"left": True, "right": False, "updatedMonoTimeNanos": 200}
-  sent = []
-
-  class FakePublisher:
-    @staticmethod
-    def new_message(_service, size, valid):
-      assert valid
-      return SimpleNamespace(customReservedRawData0=b"\0" * size)
-
-    def send(self, service_name, message):
-      sent.append((service_name, message.customReservedRawData0))
-
-  monkeypatch.setattr(v_asm_server.messaging, "new_message", FakePublisher.new_message)
-  service.pm = FakePublisher()
+  service.pm = messaging.PubMaster(["customReservedRawData0"])
 
   service.publish_vision_result()
 
+  sent = message_transport.sent
   assert len(sent) == 1
   assert sent[0][0] == "customReservedRawData0"
-  result = parse_xiaoge_vision_payload(sent[0][1])
+  event = messaging.log_from_bytes(sent[0][1])
+  assert event.valid
+  result = parse_xiaoge_vision_payload(event.customReservedRawData0)
   assert (result.left_lane, result.right_lane, result.left_blindspot, result.right_blindspot) == (0, 1, True, False)
 
 
 @pytest.fixture
-def vision_service(monkeypatch):
-  class FakeSubMaster:
-    def update(self, _timeout):
-      pass
-
-    def all_alive_and_valid(self, _services):
-      return True
-
-    def __getitem__(self, key):
-      return {
-        "carState": SimpleNamespace(vEgo=20.0),
-        "modelV2": SimpleNamespace(meta=SimpleNamespace(laneChangeDirection=log.LaneChangeDirection.left, laneWidthLeft=3.2)),
-      }[key]
-
-  sent = []
-  monkeypatch.setattr(v_asm_server.messaging, "SubMaster", lambda _services: FakeSubMaster(), raising=False)
-  monkeypatch.setattr(v_asm_server.messaging, "PubMaster", lambda _services: SimpleNamespace(send=lambda _name, message: sent.append(message)), raising=False)
-  monkeypatch.setattr(v_asm_server.messaging, "new_message", lambda *_args, **_kwargs: SimpleNamespace())
+def vision_service(message_transport):
   service = VASMService(v_asm_server.DEFAULT_MODEL_PATH)
   assert service.inference.valid, service.inference.error
   assert service.lane_inference.valid, service.lane_inference.error
-  service.sent = sent
+  message_transport.publish("carState", vEgo=20.0)
+  message_transport.publish("modelV2", meta={"laneChangeDirection": "left", "laneWidthLeft": 3.2})
+  service.sent = message_transport.sent
   return service
 
 
@@ -243,21 +261,26 @@ def padded_camera_frame():
 
 
 @pytest.mark.parametrize("stream", ["road", "wide"])
-def test_camera_loop_infers_and_snapshots_padded_allocation(monkeypatch, vision_service, padded_camera_frame, stream):
+@pytest.mark.parametrize("initial_disconnect", [False, True])
+def test_camera_loop_infers_and_snapshots_padded_allocation(monkeypatch, vision_service, padded_camera_frame, stream, initial_disconnect):
   service = vision_service
   frame = padded_camera_frame
+  connect_attempts = 0
 
   class FakeClient:
     delivered = False
 
     def __init__(self, *_args):
-      pass
+      self.connected = False
 
     def is_connected(self):
-      return True
+      return self.connected
 
     def connect(self, _blocking):
-      return True
+      nonlocal connect_attempts
+      connect_attempts += 1
+      self.connected = connect_attempts > int(initial_disconnect)
+      return self.connected
 
     def recv(self, timeout_ms):
       assert timeout_ms == 1000
@@ -271,8 +294,14 @@ def test_camera_loop_infers_and_snapshots_padded_allocation(monkeypatch, vision_
   visionipc.VisionIpcClient = FakeClient
   visionipc.VisionStreamType = SimpleNamespace(VISION_STREAM_ROAD=0, VISION_STREAM_WIDE_ROAD=1)
   monkeypatch.setitem(sys.modules, "msgq.visionipc", visionipc)
-  # A broken loop must fail this test rather than sleep/reconnect indefinitely.
-  monkeypatch.setattr(v_asm_server.time, "sleep", lambda _seconds: pytest.fail("camera loop rejected the padded frame"))
+
+  def retry_sleep(_seconds):
+    # Permit the initial offroad connection failure, but not an inference error.
+    assert initial_disconnect and connect_attempts == 1
+    error = service.lane_camera_error if stream == "road" else service.camera_error
+    assert "camera is unavailable" in error
+
+  monkeypatch.setattr(v_asm_server.time, "sleep", retry_sleep)
   service.snapshot_requests[stream] = 1
 
   if stream == "road":
@@ -280,15 +309,19 @@ def test_camera_loop_infers_and_snapshots_padded_allocation(monkeypatch, vision_
     assert service.lane_inference_count == 1
     assert service.lane_result["valid"], service.lane_result["error"]
     assert service.status()["lane"]["resultFresh"]
+    assert service.lane_camera_error == ""
     jpeg = service.last_road_jpeg
   else:
     service.run_camera()
     assert service.inference_count == 1
     assert service.status()["vehicleSide"]["left"]["valid"]
     assert not service.status()["vehicleSide"]["right"]["valid"]
+    assert service.camera_error == ""
     jpeg = service.last_jpeg
   assert len(service.sent) == 1
-  parse_xiaoge_vision_payload(service.sent[0].customReservedRawData0)
+  event = messaging.log_from_bytes(service.sent[0][1])
+  assert event.valid
+  parse_xiaoge_vision_payload(event.customReservedRawData0)
   with Image.open(BytesIO(jpeg)) as image:
     assert image.size == ((416, 416) if stream == "road" else (frame.width, frame.height))
     pixels = np.asarray(image)
