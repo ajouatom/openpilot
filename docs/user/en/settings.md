@@ -192,6 +192,8 @@ A lower `AutoNaviSpeedDecelRate` begins slowing farther away. `AutoNaviSpeedSafe
 
 `LongTuning*`, `LongActuatorDelay`, and `StoppingAccel` are advanced settings that directly affect vehicles using openpilot longitudinal control. Hyundai, Kia, and Genesis fix `LongTuningKpV`, `LongTuningKiV`, and `LongTuningKf` at the safe `100/0/100` values and hide them from settings. Some parameters have no effect when stock ACC remains responsible for acceleration and braking.
 
+For Hyundai, Kia, and Genesis, a saved `StoppingAccel=0` is automatically restored to `-50` (-0.50 m/s²) when vehicle control initializes after boot. Existing negative values are preserved, and other brands retain the traditional stop behavior for `0`.
+
 <a id="vehicle-hardware"></a>
 ## Vehicle and hardware
 

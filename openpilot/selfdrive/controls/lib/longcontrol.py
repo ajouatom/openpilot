@@ -67,7 +67,12 @@ class LongControl:
 
     self.params = Params()
     self.readParamCount = 0
-    self.stopping_accel = 0
+    self.stopping_accel = self.params.get_float("StoppingAccel") * 0.01
+    if CP.brand == "hyundai" and self.stopping_accel == 0.0:
+      # Restore the default at startup for Hyundai, Kia, and Genesis instead
+      # of retaining the legacy stop target selected by a persisted zero.
+      self.params.put_int("StoppingAccel", -50)
+      self.stopping_accel = -0.5
     self.j_lead = 0.0
 
     self.hyundai_fixed_longitudinal_tuning = CP.brand == "hyundai"

@@ -111,7 +111,9 @@ Range -100 to 0 in steps of 10, scaled by `0.01 m/s²`.
 
 - More negative: allows earlier stop-state entry and a stronger stopped brake target.
 - Closer to zero: weaker target.
-- Exactly `0`: use the vehicle's `CP.stopAccel` instead of the user value.
+- Exactly `0`: Hyundai, Kia, and Genesis automatically save `-50` when vehicle control initializes after boot and use `-0.50 m/s²` from the first control update. Other brands use the vehicle's `CP.stopAccel`.
+
+Existing negative values are preserved for Hyundai, Kia, and Genesis. If `0` is saved again later, it is restored to `-50` at the next vehicle-control initialization.
 
 An excessively negative value can make final braking harsh.
 
