@@ -133,6 +133,7 @@
                 "LaneChangeNeedTorque",
                 "LaneChangeDelay",
                 "LaneChangeBsd",
+                "ShareData",
                 "LaneLineCheck",
                 "AutoTurnControl",
                 "AutoTurnControlSpeedTurn",
@@ -2380,6 +2381,24 @@
       "max": 1,
       "default": 0,
       "unit": 1
+    },
+    {
+      "group": "조향일반",
+      "name": "ShareData",
+      "title": "ONNX 차선·BSD 인식",
+      "descr": "켜면 comma 장치에서 실선·점선과 카메라 사각지대를 인식합니다. BSD는 30~120km/h, 차로 변경 방향 지정, 대상 차로 폭 3m 이상일 때 해당 방향만 검사합니다. 끄면 비전 서비스가 중지되며 차량 자체 BSD는 유지됩니다. mici에는 차선 종류·처리 시간과 BSD 상태가 표시됩니다.",
+      "egroup": "LAT",
+      "etitle": "ONNX Lane and BSD Detection",
+      "edescr": "Enable on-device solid/dashed lane and camera blindspot detection. BSD checks only the requested lane-change side at 30–120 km/h with a target lane at least 3 m wide. Turning this off stops the vision service and preserves vehicle BSD. mici shows lane types, processing time, and BSD status.",
+      "cgroup": "转向",
+      "ctitle": "ONNX 车道与盲点识别",
+      "cdescr": "开启后在 comma 设备上识别实线、虚线和摄像头盲点。BSD 仅在车速 30–120 km/h、已指定变道方向且目标车道宽度至少 3 m 时检查该侧。关闭后停止视觉服务，保留车辆原有 BSD。mici 显示车道类型、处理耗时和 BSD 状态。",
+      "min": 0,
+      "max": 1,
+      "default": 0,
+      "unit": 1,
+      "control": "toggle",
+      "risk": "high"
     },
     {
       "group": "조향일반",
