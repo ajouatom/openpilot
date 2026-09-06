@@ -1940,6 +1940,31 @@
       "forbidden_lead_one_ids": [7856, 34],
       "forbidden_lead_two_ids": [7856, 34],
       "scene": "User-reported 50.06s false L2/predeceleration: the left silver sedan stays in its lane while ego passes. Corner 7856 and front 34 return different longitudinal body positions. Check the entire pass, including the 52s recurrence, for CUT-IN, predeceleration and lead-role promotion."
+    },
+    {
+      "id": "gv80-218-2-user-white-suv-1355",
+      "vehicle_folder": "GENESIS_GV80 4857b2d26ed4648e",
+      "log": "00000218--6aa147e461--2/rlog.zst",
+      "source": "front+corner",
+      "window": [12.8, 14.5],
+      "expected": "detect",
+      "human_verified": true,
+      "target_track_ids": [1079, 48],
+      "latest_detection_s": 13.55,
+      "scene": "Saved user review scene 01: the white SUV C1079/F48 is already cutting in and must be detected by 13.55s. Video and calibrated bearing distinguish it from the separate primary F38/C1069. This requested deadline remains an open regression; the legacy target ID and user memo are preserved separately."
+    },
+    {
+      "id": "ioniq5-cd0-1-user-lead-gap-1675",
+      "vehicle_folder": "HYUNDAI_IONIQ_5_PE 8b06424f3adf2bd3",
+      "log": "00000cd0--3956077d94--1/rlog.zst",
+      "source": "front+corner",
+      "window": [16.5, 17.95],
+      "expected": "detect",
+      "human_verified": true,
+      "validation_stage": "lead_one",
+      "target_track_ids": [1013],
+      "latest_detection_s": 16.75,
+      "scene": "Saved user review scene 09: the uphill white SUV at corner C1013 must be tracked by 16.75s. Camera frames were corrected using qRoadEncodeIdx timestamps. Front F40 has a different bearing and is not assigned as the same target. The requested radar lead deadline remains an open regression."
     }
   ]
 }
