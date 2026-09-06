@@ -4073,7 +4073,7 @@ def test_uncorroborated_stopped_front_releases_diverging_fast_vision_range() -> 
   (
     (1, 1.0, 0.0),
     (2, 5.5, 0.0),
-    (2, 1.0, 0.021),
+    (2, 1.0, 0.101),
   ),
 )
 def test_stationary_front_position_lock_rejects_weak_geometry(

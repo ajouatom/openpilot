@@ -1,0 +1,680 @@
+{
+  "baseline_commit": "723f3f8093a80868bb21395ed8fc4d52c7dcd02b",
+  "implementation_sha256": {
+    "primary": "ec668cfde5639a827b4ec5d23acb3f769d78d3887e634e12db27e4cdd3c9b406",
+    "controller": "708c9f6cff048158c01818a75239b6b68d2585f277318041e2cc8d971e8845a4"
+  },
+  "segment": "000001d5--5f166832a3--41",
+  "full_logs": 86,
+  "labels_per_mode": 473,
+  "clock": "Full-cereal service-relative frame time, not initData boot time.",
+  "scope": "Recorded-model offline controller replay. No closed-loop braking, model reinference, or vehicle-device timing claim.",
+  "existing_label_windows_and_deadlines_changed": false,
+  "focused_tests": {
+    "passed": 601,
+    "new_cases": 64,
+    "positive_tests_fail_on_baseline": 8
+  },
+  "wiki_tests_passed": 25,
+  "modes": {
+    "2": {
+      "before_failures": 39,
+      "after_failures": 38,
+      "fixed": [
+        "ioniq9-1d5-41-stopped-front-early-continuous"
+      ],
+      "new_failures": [],
+      "remaining_failures": [
+        "gv80-218-2-adjacent-right-14",
+        "manual-0000005b-019p25-corner-1055",
+        "manual-0000005b-019p55-corner-1052",
+        "manual-0000005b-020p30-corner-1094",
+        "manual-0000005b-020p35-corner-1013",
+        "manual-0000005b-020p40-corner-1063",
+        "manual-0000005b-020p70-corner-1089",
+        "manual-0000006a-054p90-corner-1023",
+        "manual-000000b1-005p35-corner-1001",
+        "manual-000000b1-007p30-corner-1033",
+        "manual-000000cf-001p60-corner-1002",
+        "manual-000000cf-002p05-corner-1003",
+        "manual-000000cf-002p60-corner-1003",
+        "manual-000000cf-005p85-corner-1005",
+        "manual-000000cf-006p25-corner-1003",
+        "manual-000000cf-014p40-corner-1013",
+        "manual-000000cf-015p75-corner-1000",
+        "manual-000000cf-019p35-corner-1001",
+        "manual-00000192-032p30-corner-1036",
+        "manual-000001c1-024p50-corner-1014",
+        "manual-000001c1-024p80-corner-1015",
+        "manual-000001c1-025p20-corner-1012",
+        "manual-000001ce-014p70-corner-1000",
+        "manual-00000218-013p55-corner-1009",
+        "manual-00000218-046p40-corner-1040",
+        "manual-000002d3-040p10-corner-1000",
+        "manual-000002d3-040p45-corner-1018",
+        "manual-00000bef-024p30-front-34",
+        "manual-00000c21-013p65-front-58",
+        "manual-00000c21-029p80-front-40",
+        "manual-00000c21-031p50-front-46",
+        "manual-00000c21-032p65-front-61",
+        "manual-00000c21-032p75-front-63",
+        "manual-00000c21-033p15-front-62",
+        "manual-00000c21-058p05-front-59",
+        "manual-00000cd0-016p50-corner-1002",
+        "manual-00000cd0-017p20-corner-1002",
+        "manual-00000cfb-036p80-corner-1028"
+      ],
+      "after_summary": {
+        "existing_radard": null,
+        "physical_dpath_shadow": {
+          "labels": 437,
+          "tp": 46,
+          "fp": 0,
+          "fn": 38,
+          "tn": 353,
+          "precision": 1.0,
+          "recall": 0.5476190476190477,
+          "f1": 0.7076923076923077,
+          "accuracy": 0.9130434782608695
+        },
+        "missing": 0,
+        "radard_expectation_failures": 0,
+        "physical_dpath_expectation_failures": 38,
+        "predeceleration_expectation_failures": 0
+      },
+      "strict_validator_exit_status_before": 1,
+      "strict_validator_exit_status_after": 1,
+      "before_incident_case": {
+        "id": "ioniq9-1d5-41-stopped-front-early-continuous",
+        "validation_set": "cases",
+        "source": "front+corner",
+        "expected": "detect",
+        "radard_event": null,
+        "shadow_event": [
+          13.848197439,
+          42
+        ],
+        "predecel_event": null,
+        "shadow_applicable": true,
+        "shadow_sensor": "corner",
+        "radard_pass": true,
+        "shadow_pass": false,
+        "predecel_pass": true,
+        "radard_continuous": null,
+        "shadow_continuous": false,
+        "radard_lead_two_continuous": null,
+        "shadow_lead_two_continuous": null,
+        "radard_required_lead_one": null,
+        "shadow_required_lead_one": [
+          13.848197439,
+          42
+        ],
+        "radard_forbidden_lead_one": null,
+        "shadow_forbidden_lead_one": null,
+        "radard_forbidden_lead_two": null,
+        "shadow_forbidden_lead_two": null
+      },
+      "after_incident_case": {
+        "id": "ioniq9-1d5-41-stopped-front-early-continuous",
+        "validation_set": "cases",
+        "source": "front+corner",
+        "expected": "detect",
+        "radard_event": null,
+        "shadow_event": [
+          12.848527741,
+          53
+        ],
+        "predecel_event": null,
+        "shadow_applicable": true,
+        "shadow_sensor": "corner",
+        "radard_pass": true,
+        "shadow_pass": true,
+        "predecel_pass": true,
+        "radard_continuous": null,
+        "shadow_continuous": true,
+        "radard_lead_two_continuous": null,
+        "shadow_lead_two_continuous": null,
+        "radard_required_lead_one": null,
+        "shadow_required_lead_one": [
+          12.848527741,
+          53
+        ],
+        "radard_forbidden_lead_one": null,
+        "shadow_forbidden_lead_one": null,
+        "radard_forbidden_lead_two": null,
+        "shadow_forbidden_lead_two": null
+      },
+      "new_negative_cases": {
+        "stationary-audit-azera-cf-3-moving-vision-reflection-46": {
+          "id": "stationary-audit-azera-cf-3-moving-vision-reflection-46",
+          "validation_set": "cases",
+          "source": "front+corner",
+          "expected": "clear",
+          "radard_event": null,
+          "shadow_event": null,
+          "predecel_event": null,
+          "shadow_applicable": true,
+          "shadow_sensor": "corner",
+          "radard_pass": true,
+          "shadow_pass": true,
+          "predecel_pass": true,
+          "radard_continuous": null,
+          "shadow_continuous": null,
+          "radard_lead_two_continuous": null,
+          "shadow_lead_two_continuous": null,
+          "radard_required_lead_one": null,
+          "shadow_required_lead_one": null,
+          "radard_forbidden_lead_one": null,
+          "shadow_forbidden_lead_one": null,
+          "radard_forbidden_lead_two": null,
+          "shadow_forbidden_lead_two": null
+        },
+        "stationary-audit-azera-cf-3-moving-vision-reflection-56": {
+          "id": "stationary-audit-azera-cf-3-moving-vision-reflection-56",
+          "validation_set": "cases",
+          "source": "front+corner",
+          "expected": "clear",
+          "radard_event": null,
+          "shadow_event": null,
+          "predecel_event": null,
+          "shadow_applicable": true,
+          "shadow_sensor": "corner",
+          "radard_pass": true,
+          "shadow_pass": true,
+          "predecel_pass": true,
+          "radard_continuous": null,
+          "shadow_continuous": null,
+          "radard_lead_two_continuous": null,
+          "shadow_lead_two_continuous": null,
+          "radard_required_lead_one": null,
+          "shadow_required_lead_one": null,
+          "radard_forbidden_lead_one": null,
+          "shadow_forbidden_lead_one": null,
+          "radard_forbidden_lead_two": null,
+          "shadow_forbidden_lead_two": null
+        },
+        "stationary-audit-ioniq5-cb5-3-bridge-reflection-33": {
+          "id": "stationary-audit-ioniq5-cb5-3-bridge-reflection-33",
+          "validation_set": "cases",
+          "source": "front+corner",
+          "expected": "clear",
+          "radard_event": null,
+          "shadow_event": null,
+          "predecel_event": null,
+          "shadow_applicable": true,
+          "shadow_sensor": "corner",
+          "radard_pass": true,
+          "shadow_pass": true,
+          "predecel_pass": true,
+          "radard_continuous": null,
+          "shadow_continuous": null,
+          "radard_lead_two_continuous": null,
+          "shadow_lead_two_continuous": null,
+          "radard_required_lead_one": null,
+          "shadow_required_lead_one": null,
+          "radard_forbidden_lead_one": null,
+          "shadow_forbidden_lead_one": null,
+          "radard_forbidden_lead_two": null,
+          "shadow_forbidden_lead_two": null
+        },
+        "stationary-audit-ioniq9-1b9-26-late-tunnel-reflection-48": {
+          "id": "stationary-audit-ioniq9-1b9-26-late-tunnel-reflection-48",
+          "validation_set": "cases",
+          "source": "front+corner",
+          "expected": "clear",
+          "radard_event": null,
+          "shadow_event": null,
+          "predecel_event": null,
+          "shadow_applicable": true,
+          "shadow_sensor": "corner",
+          "radard_pass": true,
+          "shadow_pass": true,
+          "predecel_pass": true,
+          "radard_continuous": null,
+          "shadow_continuous": null,
+          "radard_lead_two_continuous": null,
+          "shadow_lead_two_continuous": null,
+          "radard_required_lead_one": null,
+          "shadow_required_lead_one": null,
+          "radard_forbidden_lead_one": null,
+          "shadow_forbidden_lead_one": null,
+          "radard_forbidden_lead_two": null,
+          "shadow_forbidden_lead_two": null
+        }
+      },
+      "incident": {
+        "before": {
+          "first_measured_front_time_s": 13.848197439,
+          "first_front_distance_m": 72.36567427407051,
+          "first_front_id": 42,
+          "tracking_end_s": 20.5,
+          "frames_from_first_front": 134,
+          "non_front_frames_after_first_front": 8,
+          "distance_jumps_gt_3m": []
+        },
+        "after": {
+          "first_measured_front_time_s": 12.848527741,
+          "first_front_distance_m": 96.40608178073644,
+          "first_front_id": 53,
+          "tracking_end_s": 20.5,
+          "frames_from_first_front": 154,
+          "non_front_frames_after_first_front": 0,
+          "distance_jumps_gt_3m": []
+        }
+      }
+    },
+    "3": {
+      "before_failures": 39,
+      "after_failures": 38,
+      "fixed": [
+        "ioniq9-1d5-41-stopped-front-early-continuous"
+      ],
+      "new_failures": [],
+      "remaining_failures": [
+        "ioniq9-234-6-scc-corroborated-early-l2",
+        "manual-0000005b-019p25-corner-1055",
+        "manual-0000005b-019p55-corner-1052",
+        "manual-0000005b-020p30-corner-1094",
+        "manual-0000005b-020p35-corner-1013",
+        "manual-0000005b-020p40-corner-1063",
+        "manual-0000005b-020p70-corner-1089",
+        "manual-0000006a-054p90-corner-1023",
+        "manual-000000b1-005p35-corner-1001",
+        "manual-000000b1-007p30-corner-1033",
+        "manual-000000cf-001p60-corner-1002",
+        "manual-000000cf-002p05-corner-1003",
+        "manual-000000cf-002p60-corner-1003",
+        "manual-000000cf-005p85-corner-1005",
+        "manual-000000cf-006p25-corner-1003",
+        "manual-000000cf-014p40-corner-1013",
+        "manual-000000cf-015p75-corner-1000",
+        "manual-000000cf-019p35-corner-1001",
+        "manual-00000192-032p30-corner-1036",
+        "manual-000001c1-024p50-corner-1014",
+        "manual-000001c1-024p80-corner-1015",
+        "manual-000001c1-025p20-corner-1012",
+        "manual-000001ce-014p70-corner-1000",
+        "manual-00000218-013p55-corner-1009",
+        "manual-00000218-046p40-corner-1040",
+        "manual-000002d3-040p10-corner-1000",
+        "manual-000002d3-040p45-corner-1018",
+        "manual-00000bef-024p30-front-34",
+        "manual-00000c21-013p65-front-58",
+        "manual-00000c21-029p80-front-40",
+        "manual-00000c21-031p50-front-46",
+        "manual-00000c21-032p65-front-61",
+        "manual-00000c21-032p75-front-63",
+        "manual-00000c21-033p15-front-62",
+        "manual-00000c21-058p05-front-59",
+        "manual-00000cd0-016p50-corner-1002",
+        "manual-00000cd0-017p20-corner-1002",
+        "manual-00000cfb-036p80-corner-1028"
+      ],
+      "after_summary": {
+        "existing_radard": null,
+        "physical_dpath_shadow": {
+          "labels": 437,
+          "tp": 46,
+          "fp": 0,
+          "fn": 38,
+          "tn": 353,
+          "precision": 1.0,
+          "recall": 0.5476190476190477,
+          "f1": 0.7076923076923077,
+          "accuracy": 0.9130434782608695
+        },
+        "missing": 0,
+        "radard_expectation_failures": 0,
+        "physical_dpath_expectation_failures": 38,
+        "predeceleration_expectation_failures": 0
+      },
+      "strict_validator_exit_status_before": 1,
+      "strict_validator_exit_status_after": 1,
+      "before_incident_case": {
+        "id": "ioniq9-1d5-41-stopped-front-early-continuous",
+        "validation_set": "cases",
+        "source": "front+corner",
+        "expected": "detect",
+        "radard_event": null,
+        "shadow_event": [
+          13.848197439,
+          42
+        ],
+        "predecel_event": null,
+        "shadow_applicable": true,
+        "shadow_sensor": "corner",
+        "radard_pass": true,
+        "shadow_pass": false,
+        "predecel_pass": true,
+        "radard_continuous": null,
+        "shadow_continuous": false,
+        "radard_lead_two_continuous": null,
+        "shadow_lead_two_continuous": null,
+        "radard_required_lead_one": null,
+        "shadow_required_lead_one": [
+          13.848197439,
+          42
+        ],
+        "radard_forbidden_lead_one": null,
+        "shadow_forbidden_lead_one": null,
+        "radard_forbidden_lead_two": null,
+        "shadow_forbidden_lead_two": null
+      },
+      "after_incident_case": {
+        "id": "ioniq9-1d5-41-stopped-front-early-continuous",
+        "validation_set": "cases",
+        "source": "front+corner",
+        "expected": "detect",
+        "radard_event": null,
+        "shadow_event": [
+          12.848527741,
+          53
+        ],
+        "predecel_event": null,
+        "shadow_applicable": true,
+        "shadow_sensor": "corner",
+        "radard_pass": true,
+        "shadow_pass": true,
+        "predecel_pass": true,
+        "radard_continuous": null,
+        "shadow_continuous": true,
+        "radard_lead_two_continuous": null,
+        "shadow_lead_two_continuous": null,
+        "radard_required_lead_one": null,
+        "shadow_required_lead_one": [
+          12.848527741,
+          53
+        ],
+        "radard_forbidden_lead_one": null,
+        "shadow_forbidden_lead_one": null,
+        "radard_forbidden_lead_two": null,
+        "shadow_forbidden_lead_two": null
+      },
+      "new_negative_cases": {
+        "stationary-audit-azera-cf-3-moving-vision-reflection-46": {
+          "id": "stationary-audit-azera-cf-3-moving-vision-reflection-46",
+          "validation_set": "cases",
+          "source": "front+corner",
+          "expected": "clear",
+          "radard_event": null,
+          "shadow_event": null,
+          "predecel_event": null,
+          "shadow_applicable": true,
+          "shadow_sensor": "corner",
+          "radard_pass": true,
+          "shadow_pass": true,
+          "predecel_pass": true,
+          "radard_continuous": null,
+          "shadow_continuous": null,
+          "radard_lead_two_continuous": null,
+          "shadow_lead_two_continuous": null,
+          "radard_required_lead_one": null,
+          "shadow_required_lead_one": null,
+          "radard_forbidden_lead_one": null,
+          "shadow_forbidden_lead_one": null,
+          "radard_forbidden_lead_two": null,
+          "shadow_forbidden_lead_two": null
+        },
+        "stationary-audit-azera-cf-3-moving-vision-reflection-56": {
+          "id": "stationary-audit-azera-cf-3-moving-vision-reflection-56",
+          "validation_set": "cases",
+          "source": "front+corner",
+          "expected": "clear",
+          "radard_event": null,
+          "shadow_event": null,
+          "predecel_event": null,
+          "shadow_applicable": true,
+          "shadow_sensor": "corner",
+          "radard_pass": true,
+          "shadow_pass": true,
+          "predecel_pass": true,
+          "radard_continuous": null,
+          "shadow_continuous": null,
+          "radard_lead_two_continuous": null,
+          "shadow_lead_two_continuous": null,
+          "radard_required_lead_one": null,
+          "shadow_required_lead_one": null,
+          "radard_forbidden_lead_one": null,
+          "shadow_forbidden_lead_one": null,
+          "radard_forbidden_lead_two": null,
+          "shadow_forbidden_lead_two": null
+        },
+        "stationary-audit-ioniq5-cb5-3-bridge-reflection-33": {
+          "id": "stationary-audit-ioniq5-cb5-3-bridge-reflection-33",
+          "validation_set": "cases",
+          "source": "front+corner",
+          "expected": "clear",
+          "radard_event": null,
+          "shadow_event": null,
+          "predecel_event": null,
+          "shadow_applicable": true,
+          "shadow_sensor": "corner",
+          "radard_pass": true,
+          "shadow_pass": true,
+          "predecel_pass": true,
+          "radard_continuous": null,
+          "shadow_continuous": null,
+          "radard_lead_two_continuous": null,
+          "shadow_lead_two_continuous": null,
+          "radard_required_lead_one": null,
+          "shadow_required_lead_one": null,
+          "radard_forbidden_lead_one": null,
+          "shadow_forbidden_lead_one": null,
+          "radard_forbidden_lead_two": null,
+          "shadow_forbidden_lead_two": null
+        },
+        "stationary-audit-ioniq9-1b9-26-late-tunnel-reflection-48": {
+          "id": "stationary-audit-ioniq9-1b9-26-late-tunnel-reflection-48",
+          "validation_set": "cases",
+          "source": "front+corner",
+          "expected": "clear",
+          "radard_event": null,
+          "shadow_event": null,
+          "predecel_event": null,
+          "shadow_applicable": true,
+          "shadow_sensor": "corner",
+          "radard_pass": true,
+          "shadow_pass": true,
+          "predecel_pass": true,
+          "radard_continuous": null,
+          "shadow_continuous": null,
+          "radard_lead_two_continuous": null,
+          "shadow_lead_two_continuous": null,
+          "radard_required_lead_one": null,
+          "shadow_required_lead_one": null,
+          "radard_forbidden_lead_one": null,
+          "shadow_forbidden_lead_one": null,
+          "radard_forbidden_lead_two": null,
+          "shadow_forbidden_lead_two": null
+        }
+      },
+      "incident": {
+        "before": {
+          "first_measured_front_time_s": 13.848197439,
+          "first_front_distance_m": 72.36567427407051,
+          "first_front_id": 42,
+          "tracking_end_s": 20.5,
+          "frames_from_first_front": 134,
+          "non_front_frames_after_first_front": 8,
+          "distance_jumps_gt_3m": []
+        },
+        "after": {
+          "first_measured_front_time_s": 12.848527741,
+          "first_front_distance_m": 96.40608178073644,
+          "first_front_id": 53,
+          "tracking_end_s": 20.5,
+          "frames_from_first_front": 154,
+          "non_front_frames_after_first_front": 0,
+          "distance_jumps_gt_3m": []
+        }
+      }
+    }
+  },
+  "all_frame_admission_audit": {
+    "logs": 86,
+    "mode": 2,
+    "scope": "Compare every frame, including outside labels. Group newly selected slow/stopped radar fronts; treat old/new radar within 5 m range, 1.5 m lateral and 3 m/s speed as the same physical target.",
+    "remaining_changes": [
+      {
+        "segment": "00000aa5--26e26ea9a8--3",
+        "spans": [
+          {
+            "start": 30.645894728,
+            "end": 30.645894728,
+            "frames": 1,
+            "d_start": 101.59080278483755,
+            "d_end": 101.59080278483755,
+            "ids": [
+              35
+            ]
+          },
+          {
+            "start": 31.047132175,
+            "end": 31.095138529,
+            "frames": 2,
+            "d_start": 94.36810210287646,
+            "d_end": 93.47905416494118,
+            "ids": [
+              35
+            ]
+          }
+        ]
+      },
+      {
+        "segment": "00000d53--4a628c2753--3",
+        "spans": [
+          {
+            "start": 7.448360661,
+            "end": 7.448360661,
+            "frames": 1,
+            "d_start": 95.36369166671358,
+            "d_end": 95.36369166671358,
+            "ids": [
+              33
+            ]
+          }
+        ]
+      },
+      {
+        "segment": "000001d5--5f166832a3--41",
+        "spans": [
+          {
+            "start": 12.848527741,
+            "end": 13.792795878,
+            "frames": 20,
+            "d_start": 96.40608178073644,
+            "d_end": 73.53549604937297,
+            "ids": [
+              40,
+              42,
+              53
+            ]
+          },
+          {
+            "start": 13.992785508,
+            "end": 14.292674558,
+            "frames": 6,
+            "d_start": 68.658423477189,
+            "d_end": 62.190197153123876,
+            "ids": [
+              42
+            ]
+          },
+          {
+            "start": 14.492582211,
+            "end": 14.542612507,
+            "frames": 2,
+            "d_start": 58.13026034490998,
+            "d_end": 57.20992499193997,
+            "ids": [
+              42
+            ]
+          }
+        ]
+      },
+      {
+        "segment": "000001ce--d184d0265e--6",
+        "spans": [
+          {
+            "start": 44.163289394,
+            "end": 44.163289394,
+            "frames": 1,
+            "d_start": 65.69967921642444,
+            "d_end": 65.69967921642444,
+            "ids": [
+              61
+            ]
+          }
+        ]
+      },
+      {
+        "segment": "00000495--f78491e8e3--7",
+        "spans": [
+          {
+            "start": 10.8023884,
+            "end": 10.903133707,
+            "frames": 2,
+            "d_start": 89.48849617701639,
+            "d_end": 88.16057826340905,
+            "ids": [
+              56
+            ]
+          },
+          {
+            "start": 11.40206987,
+            "end": 11.40206987,
+            "frames": 1,
+            "d_start": 80.85159026810695,
+            "d_end": 80.85159026810695,
+            "ids": [
+              56
+            ]
+          }
+        ]
+      }
+    ],
+    "review": "qcamera and radar histories inspected for all changed routes. Outside the requested scene, the final difference is eight continuation frames of fronts already selected by baseline (aa5/3:3, d53/3:1, 1ce/6:1, 495/7:3), not new stationary identities. The unbounded-speed candidate introduced 47 reflection frames across four newly labelled windows; final candidate emits none of those targets.",
+    "limitations": "This delta audit and maintained labels are not exhaustive ground truth for every object in every frame."
+  },
+  "runtime": {
+    "baseline": "723f3f8093",
+    "logs": 9,
+    "rounds": [
+      {
+        "variant": "before",
+        "mean_ms": 0.6930826627109216,
+        "frames": 10786
+      },
+      {
+        "variant": "after",
+        "mean_ms": 0.6981620990172446,
+        "frames": 10786
+      },
+      {
+        "variant": "after",
+        "mean_ms": 0.7025931114407566,
+        "frames": 10786
+      },
+      {
+        "variant": "before",
+        "mean_ms": 0.6860694696829224,
+        "frames": 10786
+      }
+    ],
+    "timing": {
+      "before": {
+        "frames": 21572,
+        "mean_ms": 0.689576066196922,
+        "p95_ms": 1.6816,
+        "p99_ms": 2.0216
+      },
+      "after": {
+        "frames": 21572,
+        "mean_ms": 0.7003776052290006,
+        "p95_ms": 1.7055,
+        "p99_ms": 2.0663
+      }
+    },
+    "scope": "Windows desktop ABBA controller.update timing on cached recorded-model frames. Excludes log decoding, model construction, live-track parsing, IPC, and publishing; not a vehicle-device benchmark."
+  }
+}
