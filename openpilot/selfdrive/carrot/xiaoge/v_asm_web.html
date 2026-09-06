@@ -15,9 +15,11 @@ h1{font-size:24px;margin:0}h2{font-size:18px}p{color:#9ca3af}.warn{color:#fbbf24
 canvas{display:block;width:100%;height:auto;background:#000;cursor:crosshair;touch-action:manipulation}
 .buttons,form{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}
 button,input{min-height:42px;padding:8px 10px;border-radius:6px;border:1px solid #4b5563;background:#374151;color:#fff;font:inherit}
-button{cursor:pointer;flex:1 1 132px}button.active{background:#2563eb}input{max-width:100%;width:100%}
+button{cursor:pointer;flex:1 1 132px;word-break:keep-all}button.active{background:#2563eb}input{max-width:100%;width:100%}
 form label{display:grid;gap:4px;flex:1 1 100%;color:#d1d5db}
 pre{white-space:pre-wrap;word-break:break-word}.ok{color:#4ade80}.bad{color:#f87171}
+.page-nav{display:flex;align-items:center;gap:16px}.page-nav a{color:#93c5fd}.page-nav button{flex:0 1 132px;margin-left:auto}
+#connection-error{padding:12px;border:1px solid #92400e;border-radius:8px;background:#451a03}
 .feature-title{margin:0 0 10px;font-size:19px}.debug-panel{display:flex;flex-direction:column;gap:12px;margin:12px 0}
 .detection-grid,.metrics-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .side-card,.metric-item{background:#111827;border-radius:8px;padding:10px;border:1px solid #374151;text-align:center;min-width:0}
@@ -34,8 +36,10 @@ pre{white-space:pre-wrap;word-break:break-word}.ok{color:#4ade80}.bad{color:#f87
 }
 </style>
 <main>
-<div class="buttons"><button id="language">English</button></div>
+<div class="buttons page-nav"><a id="carrot-nav" href="/" hidden>Carrot Web</a><button id="language">English</button></div>
 <h1 data-i18n="title">小鸽 V-ASM & 车道线识别</h1>
+<p id="connection-error" class="warn" role="status" hidden></p>
+<p data-i18n="activationHint"></p>
 <p class="warn" data-i18n="warning">车道线持续提供给系统；盲区识别仅在变道条件满足时运行。</p>
 
 <div class="feature-layout">
@@ -190,6 +194,10 @@ pre{white-space:pre-wrap;word-break:break-word}.ok{color:#4ade80}.bad{color:#f87
 
 <script>
 const zh={
+  activationHint:"在 Carrot Web 设置中搜索 ONNX 并开启车道与盲点识别。行驶前等待摄像头是正常状态。",
+  vision_unavailable:"无法连接识别服务。请确认 Carrot Web 设置中的 ONNX 车道与盲点识别已开启；本页会自动重试。",
+  vision_timeout:"识别服务响应较慢，正在自动重试。",
+  vision_bad_response:"识别服务返回了异常响应，正在自动重试。",
   title:"小鸽 V-ASM & 车道线识别",
   warning:"车道线持续提供给系统；盲区识别仅在变道条件满足时运行。",
   tabVasm:"🛡️ V-ASM 盲区监控",
@@ -244,6 +252,10 @@ const zh={
 };
 
 const en={
+  activationHint:"Search for ONNX in Carrot Web settings to enable lane and BSD detection. Waiting for cameras before driving starts is normal.",
+  vision_unavailable:"Cannot connect to the detection service. Check that ONNX Lane and BSD Detection is enabled in Carrot Web settings; this page will reconnect automatically.",
+  vision_timeout:"The detection service is slow to respond. Retrying automatically.",
+  vision_bad_response:"The detection service returned an unexpected response. Retrying automatically.",
   title:"Xiaoge V-ASM & Lane Detection",
   warning:"Lane results continuously serve the system; blindspot inference runs only when lane-change conditions are met.",
   tabVasm:"🛡️ V-ASM Blind Spot",
@@ -297,7 +309,68 @@ const en={
   rawJson:"Raw Status JSON"
 };
 
-let language="zh",text=zh;
+const ko={
+  activationHint:"Carrot Web 설정에서 ONNX를 검색해 차선·BSD 인식을 켜세요. 주행 시작 전에는 카메라 대기가 정상입니다.",
+  vision_unavailable:"인식 서비스에 연결하지 못했습니다. Carrot Web 설정에서 ONNX 차선·BSD 인식이 켜져 있는지 확인하세요. 이 화면은 자동으로 다시 연결합니다.",
+  vision_timeout:"인식 서비스의 응답이 늦어지고 있습니다. 자동으로 다시 연결합니다.",
+  vision_bad_response:"인식 서비스에서 올바른 응답을 받지 못했습니다. 자동으로 다시 연결합니다.",
+  title:"ONNX 차선·BSD 진단",
+  warning:"차선 종류는 계속 인식하며, 카메라 BSD는 차로 변경 조건이 맞을 때 해당 방향만 검사합니다.",
+  tabVasm:"🛡️ V-ASM 사각지대",
+  tabLane:"🛣️ ONNX 차선 인식",
+  annotateLeft:"왼쪽 감지 영역 지정",
+  annotateRight:"오른쪽 감지 영역 지정",
+  undo:"마지막 점 취소",
+  save:"감지 영역 저장",
+  delete:"기본 감지 영역 복원",
+  snapshot:"영상 새로고침",
+  snapshotWaiting:"카메라 영상을 기다리고 있습니다.",
+  snapshotLoading:"카메라 영상을 가져오는 중입니다…",
+  snapshotReady:"현재 저장된 장면입니다. 영상 새로고침을 누르면 최신 장면을 가져옵니다.",
+  snapshotError:"영상을 가져오지 못했습니다. 영상 새로고침을 눌러 다시 시도하세요.",
+  vasmSettings:"사각지대 인식 설정",
+  threshold:"BSD 신뢰도 기준",
+  smoothing:"결과 평활화 시간(초)",
+  baseInterval:"BSD 계산 간격(초)",
+  laneSettings:"차선 인식 설정",
+  laneThreshold:"차선 신뢰도 기준",
+  laneInterval:"차선 계산 간격(초)",
+  apply:"설정 적용",
+  vasmStatus:"사각지대 인식 상태",
+  laneStatus:"차선 인식 상태",
+  laneHint:"차선 종류를 판별하는 데 사용하는 전방 카메라 영상입니다.",
+  hint:"기본 감지 영역이 준비되어 있습니다. 좌우 중 하나를 선택하고 영상에 점을 찍어 검사할 영역을 지정한 뒤 저장하세요. 기본 감지 영역 복원으로 되돌릴 수 있습니다.",
+  annotating:"감지 영역을 지정하는 중:",
+  saved:"감지 영역을 저장했습니다.",
+  applied:"설정을 적용했습니다.",
+  leftSide:"왼쪽 사각지대",
+  rightSide:"오른쪽 사각지대",
+  leftLane:"왼쪽 차선",
+  rightLane:"오른쪽 차선",
+  hasCar:"🔴 차량 감지",
+  noCar:"🟢 미감지",
+  solid:"🔴 실선",
+  dashed:"🟡 점선",
+  unknown:"⚪ 미확인",
+  unconfigured:"⚪ 영역 미설정",
+  confidence:"신뢰도",
+  pollFps:"웹 상태 갱신 빈도",
+  inferenceFps:"BSD 계산 빈도",
+  inferenceLatency:"BSD 처리 시간",
+  vasmGate:"BSD 실행 조건",
+  laneInferenceFps:"차선 계산 빈도",
+  laneInferenceLatency:"차선 처리 시간",
+  laneCandidates:"차선 후보 수",
+  cameraStatus:"카메라 상태",
+  cameraNormal:"🟢 정상",
+  cameraOffline:"🔴 연결 대기",
+  rawJson:"상세 상태 JSON"
+};
+const languages={ko,en,zh},languageNames={ko:"한국어",en:"English",zh:"中文"};
+const requestedLanguage=new URLSearchParams(location.search).get("lang")||navigator.language?.slice(0,2);
+let language=Object.hasOwn(languages,requestedLanguage)?requestedLanguage:"en",text=languages[language];
+document.querySelector("#carrot-nav").hidden=!location.pathname.startsWith("/xiaoge/");
+let polling=false,configLoaded=false,connectionError=null;
 const status=document.querySelector("#status"),hint=document.querySelector("#hint");
 const canvasVasm=document.querySelector("#camera-vasm"),ctxVasm=canvasVasm.getContext("2d");
 const canvasLane=document.querySelector("#camera-lane"),ctxLane=canvasLane.getContext("2d");
@@ -319,10 +392,10 @@ function updateSnapshotStatus(stream){
 }
 
 function translate(){
-  text=language==="zh"?zh:en;
-  document.documentElement.lang=language==="zh"?"zh-CN":"en";
+  text=languages[language];
+  document.documentElement.lang=language==="zh"?"zh-CN":language;
   document.title=text.title;
-  document.querySelector("#language").textContent=language==="zh"?"English":"中文";
+  document.querySelector("#language").textContent=languageNames[nextLanguage()];
   document.querySelectorAll("[data-i18n]").forEach(el=>{
     const k=el.dataset.i18n;
     if(text[k]) el.textContent=text[k];
@@ -330,6 +403,25 @@ function translate(){
   if(!side) hint.textContent=text.hint;
   for(const stream of ["wide","road"])updateSnapshotStatus(stream);
   if(lastStatus) updateDebugUI(lastStatus);
+  if(connectionError)showConnectionError(connectionError);
+}
+
+function nextLanguage(){const codes=Object.keys(languages);return codes[(codes.indexOf(language)+1)%codes.length];}
+function errorMessage(error){return text[error.code]||error.message||text.vision_unavailable;}
+async function api(path,options){
+  const response=await fetch("api/"+path,options),data=await response.json();
+  if(!response.ok)throw Object.assign(new Error(data.error||response.statusText),{code:data.code});
+  return data;
+}
+function showConnectionError(error){
+  connectionError=error;
+  lastStatus=null;
+  configLoaded=false;
+  const message=errorMessage(error),notice=document.querySelector("#connection-error");
+  if(notice.textContent!==message)notice.textContent=message;
+  notice.hidden=false;
+  status.textContent=message;
+  updateDebugUI({configuredSides:["left","right"],lane:{result:{},resultFresh:false},camera:{error:message},gate:{reason:message}});
 }
 
 function points(name){return config["poly_"+name]}
@@ -395,7 +487,7 @@ function refreshSnapshot(stream){
     finish("snapshotReady");
   };
   nextImage.onerror=()=>finish("snapshotError");
-  nextImage.src="/api/snapshot?stream="+stream+"&t="+Date.now();
+  nextImage.src="api/snapshot?stream="+stream+"&t="+Date.now();
 }
 
 function refreshVasm(){refreshSnapshot("wide")}
@@ -413,8 +505,9 @@ function loadInitialSnapshots(s){
 }
 
 async function load(){
-  const r=await fetch("/api/config"),saved=await r.json();
+  const saved=await api("config");
   if(saved.width)config=saved;
+  configLoaded=true;
   redrawVasm();
 }
 
@@ -523,7 +616,7 @@ function updateDebugUI(s){
   }
 }
 
-document.querySelector("#language").onclick=()=>{language=language==="zh"?"en":"zh";translate();};
+document.querySelector("#language").onclick=()=>{language=nextLanguage();translate();};
 
 document.querySelectorAll("[data-side]").forEach(b=>b.onclick=()=>{
   side=b.dataset.side;
@@ -542,39 +635,44 @@ canvasVasm.onclick=e=>{
 canvasVasm.oncontextmenu=e=>{e.preventDefault();if(side)points(side).pop();redrawVasm();};
 document.querySelector("#undo").onclick=()=>{if(side)points(side).pop();redrawVasm();};
 document.querySelector("#save").onclick=async()=>{
-  const r=await fetch("/api/config",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(config)}),d=await r.json();
-  hint.textContent=r.ok?text.saved:d.error;
+  try{
+    await api("config",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(config)});
+    hint.textContent=text.saved;
+  }catch(error){hint.textContent=errorMessage(error);}
 };
 document.querySelector("#clear").onclick=async()=>{
-  await fetch("/api/config",{method:"DELETE"});
-  const r=await fetch("/api/config");
-  config=await r.json();
-  redrawVasm();
+  try{
+    await api("config",{method:"DELETE"});
+    await load();
+  }catch(error){hint.textContent=errorMessage(error);}
 };
 document.querySelector("#snapshot-vasm").onclick=refreshVasm;
 document.querySelector("#snapshot-lane").onclick=refreshLane;
 
 const handleSettingsSubmit=async e=>{
   e.preventDefault();
-  const r=await fetch("/api/settings",{
-    method:"POST",
-    headers:{"Content-Type":"application/json"},
-    body:JSON.stringify({
-      threshold:+threshold.value,
-      smoothingSeconds:+smoothing.value,
-      baseIntervalSeconds:+baseInterval.value,
-      laneThreshold:+laneThreshold.value,
-      laneIntervalSeconds:+laneInterval.value
-    })
-  });
-  const d=await r.json();
-  hint.textContent=r.ok?text.applied:d.error;
+  try{
+    await api("settings",{
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({
+        threshold:+threshold.value,
+        smoothingSeconds:+smoothing.value,
+        baseIntervalSeconds:+baseInterval.value,
+        laneThreshold:+laneThreshold.value,
+        laneIntervalSeconds:+laneInterval.value
+      })
+    });
+    hint.textContent=text.applied;
+  }catch(error){hint.textContent=errorMessage(error);}
 };
 
 document.querySelector("#settings-vasm").onsubmit=handleSettingsSubmit;
 document.querySelector("#settings-lane").onsubmit=handleSettingsSubmit;
 
 async function poll(){
+  if(polling)return;
+  polling=true;
   try{
     const now=performance.now();
     if(lastPollTime){
@@ -583,7 +681,10 @@ async function poll(){
     }
     lastPollTime=now;
 
-    const s=await (await fetch("/api/status")).json();
+    const s=await api("status");
+    if(!configLoaded)await load();
+    connectionError=null;
+    document.querySelector("#connection-error").hidden=true;
     lastStatus=s;
     status.textContent=JSON.stringify(s,null,2);
 
@@ -599,13 +700,14 @@ async function poll(){
     updateDebugUI(s);
     loadInitialSnapshots(s);
   }catch(e){
-    status.textContent=e.message;
+    showConnectionError(e);
+  }finally{
+    polling=false;
   }
 }
 
 setInterval(poll,500);
 translate();
-load();
 poll();
 </script>
 </html>

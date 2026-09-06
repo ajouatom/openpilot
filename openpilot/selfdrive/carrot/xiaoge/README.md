@@ -45,10 +45,12 @@ OEM BSD 提示不依赖 `ShareData`；驾驶告警仍在最上层。V-ASM 的速
 
 ### Web 调试页面
 
-打开 `http://<comma-ip>:8082`：
+在 Carrot Web 的工具菜单中打开“ONNX 车道与盲点诊断”，或访问 `http://<comma-ip>:7000/xiaoge/`。
+7000 端口提供页面并转发到本机 8082 诊断接口，推理仍由独立服务运行。功能关闭时页面会提示开启 ONNX 设置并自动重连。
+直接访问 `http://<comma-ip>:8082` 仍然可用。
 
 - 默认适配手机浏览器；宽度达到 900px 时自动显示为左侧车道线、右侧 V-ASM 的电脑双栏布局。
-- 支持中文/English 切换，显示模型状态、推理耗时、频率、检测置信度和原始状态 JSON。
+- 支持中文/English/한국어 切换，并沿用工具菜单的语言；显示模型状态、推理耗时、频率、检测置信度和原始状态 JSON。
 - 相机就绪后自动加载第一帧；首次加载失败会重试，并显示加载状态。之后点击对应“刷新画面”按钮获取新快照，不会连续播放视频。
 - V-ASM 页面显示门控条件、目标侧和当前车道宽度；可在广角图像上修改左右盲区多边形。
 - 未保存配置时使用内置的 1928x1208 广角默认多边形；“恢复默认标注”会删除本地覆盖配置。
@@ -129,11 +131,14 @@ speed, direction, and lane-width conditions are unchanged.
 
 ### Web diagnostics
 
-Open `http://<comma-ip>:8082`.
+In Carrot Web, open Tools → ONNX Lane / BSD, or visit `http://<comma-ip>:7000/xiaoge/`.
+Port 7000 serves the page and forwards its diagnostic requests to local port 8082; inference stays in its separate service.
+When detection is off, the page explains how to enable the ONNX setting and reconnects automatically.
+Direct access at `http://<comma-ip>:8082` still works.
 
 - The interface is mobile-first. At 900px or wider it automatically becomes a desktop two-column
   view with lanes on the left and V-ASM on the right.
-- Chinese and English are available. The page shows model state, inference latency/rate,
+- Korean, Chinese, and English are available, following the Tools menu language. The page shows model state, inference latency/rate,
   confidence, and raw status JSON.
 - The first snapshot loads automatically when its camera is ready, with retries and visible loading
   status. Use the matching refresh button for later snapshots; the images are not a continuous video feed.
@@ -220,10 +225,13 @@ V-ASM의 기존 속도·방향·차선 폭 조건은 유지합니다.
 
 ### 웹 진단 페이지
 
-`http://<comma-ip>:8082`를 여십시오.
+Carrot Web의 도구 → ONNX 차선·BSD 진단을 누르거나 `http://<comma-ip>:7000/xiaoge/`를 여십시오.
+7000번 서버가 페이지를 제공하고 진단 요청을 장치 내부 8082번으로 전달하며, 추론은 기존 별도 서비스에서 실행합니다.
+기능이 꺼져 있어도 페이지가 열리고 ONNX 설정을 켜는 방법을 안내하며 자동으로 다시 연결합니다.
+`http://<comma-ip>:8082`로 직접 접속하는 방법도 유지됩니다.
 
 - 모바일 우선 UI이며, 너비가 900px 이상이면 왼쪽 차선/오른쪽 V-ASM의 데스크톱 2열 보기로 자동 전환됩니다.
-- 중국어와 영어 전환을 지원하며 모델 상태, 추론 시간/주기, 신뢰도, 원시 상태 JSON을 표시합니다.
+- 도구 메뉴의 언어를 이어받으며 한국어·영어·중국어 전환을 지원합니다. 모델 상태, 추론 시간/주기, 신뢰도, 원시 상태 JSON을 표시합니다.
 - 카메라가 준비되면 첫 스냅샷을 자동으로 가져오며, 처음 실패하면 재시도하고 로딩 상태를 표시합니다. 이후에는 각 새로고침 버튼으로 새 사진을 가져옵니다. 연속 재생 영상은 아닙니다.
 - V-ASM 패널은 실행 조건, 대상 측, 차선 폭을 표시하며 광각 영상에서 좌우 사각지대 다각형을 편집할 수 있습니다.
 - 로컬 설정을 저장하기 전에는 내장 1928x1208 광각 기본 다각형을 사용합니다. 주석을 초기화하면 로컬 설정이 제거됩니다.
