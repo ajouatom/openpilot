@@ -312,7 +312,8 @@ class VASMService:
 
   def _update_vasm_gate(self) -> tuple[bool, str]:
     self.sm.update(0)
-    if not self.sm.all_alive_and_valid(["carState", "modelV2"]):
+    services = ["carState", "modelV2"]
+    if not (self.sm.all_alive(services) and self.sm.all_valid(services)):
       gate = {"active": False, "side": "", "reason": "carState or modelV2 is unavailable", "laneWidth": 0.0}
     else:
       speed = float(self.sm["carState"].vEgo)
