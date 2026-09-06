@@ -196,6 +196,8 @@ Carrot Web 설정 화면에서는 다음 기능을 사용할 수 있습니다.
 
 `LongTuning*`, `LongActuatorDelay`, `StoppingAccel`은 openpilot이 가감속을 제어하는 차량에서 직접적인 영향을 줄 수 있는 고급 항목입니다. 현대·기아·제네시스에서는 `LongTuningKpV`, `LongTuningKiV`, `LongTuningKf`가 안전값 `100/0/100`으로 고정되어 설정 화면에 나오지 않으며, 순정 ACC 차량에서는 관련 없는 항목도 있습니다.
 
+현대·기아·제네시스에서 `StoppingAccel=0`으로 저장되어 있으면 부팅 후 차량 제어 초기화 시 `-50`(-0.50m/s²)으로 자동 보정합니다. 기존 음수 값은 유지하며, 다른 차종의 `0`은 기존 정지 제어 방식을 사용합니다.
+
 <a id="vehicle-hardware"></a>
 ## 차량·하드웨어
 
