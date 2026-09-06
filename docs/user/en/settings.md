@@ -97,21 +97,21 @@ Ignoring `x0.01`, `x0.001`, `cm`, `km/h`, or `%` can make a value appear one hun
 
 ## Settings map
 
-The current `carrot_settings.json` contains **171 parameters**. Every entry is assigned to one of these menus:
+The current `carrot_settings.json` contains **175 parameters**. Every entry is assigned to one of these menus:
 
 | Category | Count | Groups |
 |---|---:|---|
-| Driving control | 107 | Startup and auto, buttons and presets, steering, speed and deceleration, cruise and following gap |
-| Vehicle and hardware | 16 | Hyundai/Kia, CAN FD/HDA, radar, driver monitoring, vehicle assistance, device hardware |
+| Driving control | 112 | Startup and auto, buttons and presets, steering, speed and deceleration, cruise and following gap |
+| Vehicle and hardware | 14 | Hyundai/Kia, CAN FD/HDA, radar, driver monitoring, vehicle assistance, device hardware |
 | Display | 37 | Information, path, brightness/on-road view, external HUD |
-| System | 11 | Recording/power, network/map, sound, software |
+| System | 12 | Recording/power, network/map, sound, software |
 
 ## Driving control
 
-These 107 settings can affect vehicle motion. Change one item at a time.
+These 112 settings can affect vehicle motion. Change one item at a time.
 
 <a id="start-auto"></a>
-### Startup and auto — 8 settings
+### Startup and auto — 9 settings
 
 | Section | Parameters | Purpose |
 |---|---|---|
@@ -137,16 +137,18 @@ Select a section title for the code-based state machine, units, and application 
 The result depends heavily on whether the car uses stock SCC and which button message the vehicle accepts. Diagnose unexpected behavior with the normal `CruiseButtonMode=0` behavior first.
 
 <a id="vehicle-steering"></a>
-### Vehicle steering — 36 settings
+### Vehicle steering — 37 settings
 
 | Section | Parameters | Purpose |
 |---|---|---|
 | Centering | `PathOffset`, `CameraYawTrimDeg` | Path position and camera-yaw trim |
 | Steering feel | `SteerActuatorDelay`, `LatSmoothSec`, `LatSuspendAngleDeg`, `CustomSR`, `SteerRatioRate` | Timing, smoothing, suspension angle, and steering ratio |
-| [Lane change](lane-change.md) and automatic turn | `LaneChangeNeedTorque`, `LaneChangeDelay`, `LaneChangeBsd`, `LaneLineCheck`, `AutoTurnControl`, `AutoTurnControlSpeedTurn`, `AutoTurnControlTurnEnd`, `AutoTurnMapChange` | Lane-change entry conditions and ATC behavior |
+| [Lane change](lane-change.md) and automatic turn | `LaneChangeNeedTorque`, `LaneChangeDelay`, `LaneChangeBsd`, `ShareData`, `LaneLineCheck`, `AutoTurnControl`, `AutoTurnControlSpeedTurn`, `AutoTurnControlTurnEnd`, `AutoTurnMapChange` | Lane-change entry conditions and ATC behavior |
 | Lane mode | `LatMpcPathCost`, `LatMpcMotionCost`, `LatMpcAccelCost`, `LatMpcJerkCost`, `LatMpcSteeringRateCost`, `LatMpcInputOffset`, `UseLaneLineSpeed`, `UseLaneLineCurveSpeed`, `AdjustLaneOffset` | Lane-mode MPC weights and lane-line conditions |
 | Advanced torque | `LateralTorqueCustom`, `LateralTorqueAccelFactor`, `LateralTorqueFriction`, `LateralTorqueKpV`, `LateralTorqueKiV`, `LateralTorqueKf`, `LateralTorqueKd` | Custom torque-control gains |
 | Steering limits | `CustomSteerMax`, `CustomSteerDeltaUp`, `CustomSteerDeltaDown`, `CustomSteerDeltaUpLC`, `CustomSteerDeltaDownLC` | Maximum torque and torque-rate limits |
+
+`ONNX Lane and BSD Detection` (`ShareData`) runs solid/dashed classification and gated camera BSD on the device. It defaults to off and preserves existing saved values. Enabling it adds mici status information; disabling it stops the vision service. The update includes OpenCV, prepared automatically during normal startup. See [conditions and status indicators](lane-change.md#sharedata--onnx-lane-and-bsd-detection).
 
 A larger `SteerActuatorDelay` compensates by commanding earlier. A larger `LatSmoothSec` is smoother but may respond more slowly. Changing both together makes diagnosis difficult.
 
@@ -172,7 +174,7 @@ A lower `AutoNaviSpeedDecelRate` begins slowing farther away. `AutoNaviSpeedSafe
 
 `TrafficLightDetectMode` is `0` off, `1` stop detection, or `2` stop and go detection. This is model-based assistance; the driver must always verify the signal.
 
-### Cruise and following gap — 31 settings overall, 28 on Hyundai/Kia/Genesis
+### Cruise and following gap — 29 settings overall, 26 on Hyundai/Kia/Genesis
 
 | Section | Parameters | Purpose |
 |---|---|---|
@@ -197,7 +199,7 @@ For Hyundai, Kia, and Genesis, a saved `StoppingAccel=0` is automatically restor
 <a id="vehicle-hardware"></a>
 ## Vehicle and hardware
 
-These 16 settings describe the car, harness, and device hardware configuration. Do not enable them merely as a display experiment.
+These 14 settings describe the car, harness, and device hardware configuration. Do not enable them merely as a display experiment.
 
 | Group | Parameters | Purpose |
 |---|---|---|
@@ -276,7 +278,7 @@ The Replay event timeline also identifies Carrot Navi connection and route-sessi
 <a id="system"></a>
 ## System
 
-The 11 system settings cover recording, power, network, maps, sound, and software menus.
+The 12 system settings cover recording, power, network, maps, sound, and software menus.
 
 | Group | Parameters | Purpose |
 |---|---|---|

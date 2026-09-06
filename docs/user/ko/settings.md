@@ -97,21 +97,21 @@ Carrot Web 설정 화면에서는 다음 기능을 사용할 수 있습니다.
 
 ## 전체 설정 지도
 
-현재 `carrot-wip`의 `carrot_settings.json`에는 **171개 파라미터**가 있으며, 모든 항목이 아래 메뉴에 연결되어 있습니다.
+현재 `carrot-wip`의 `carrot_settings.json`에는 **175개 파라미터**가 있으며, 모든 항목이 아래 메뉴에 연결되어 있습니다.
 
 | 대분류 | 항목 수 | 중분류 |
 |---|---:|---|
-| 주행 제어 | 107 | 시작·오토, 버튼·프리셋, 차량 조향, 속도·감속, 크루즈·차간 |
-| 차량·하드웨어 | 16 | 현대·기아, CANFD·HDA, 레이더, 운전자 모니터링, 차량 보조, 기기 하드웨어 |
+| 주행 제어 | 112 | 시작·오토, 버튼·프리셋, 차량 조향, 속도·감속, 크루즈·차간 |
+| 차량·하드웨어 | 14 | 현대·기아, CANFD·HDA, 레이더, 운전자 모니터링, 차량 보조, 기기 하드웨어 |
 | 화면 표시 | 37 | 정보 표시, 경로 표시, 밝기·주행화면, 외부 HUD |
-| 시스템 | 11 | 녹화·전원, 네트워크·지도, 사운드, 소프트웨어 |
+| 시스템 | 12 | 녹화·전원, 네트워크·지도, 사운드, 소프트웨어 |
 
 ## 주행 제어
 
-주행 제어는 차량 움직임에 영향을 줄 수 있는 107개 항목입니다. 한 번에 여러 값을 변경하지 마세요.
+주행 제어는 차량 움직임에 영향을 줄 수 있는 112개 항목입니다. 한 번에 여러 값을 변경하지 마세요.
 
 <a id="start-auto"></a>
-### 시작·오토 — 8개
+### 시작·오토 — 9개
 
 | 세부 구역 | 파라미터 | 용도 |
 |---|---|---|
@@ -137,16 +137,18 @@ Carrot Web 설정 화면에서는 다음 기능을 사용할 수 있습니다.
 버튼 설정은 순정 SCC 사용 여부와 차량 버튼 메시지에 따라 체감이 크게 다릅니다. 버튼이 예상과 다르게 작동하면 사용자 모드보다 `CruiseButtonMode=0`의 일반 동작에서 먼저 확인하세요.
 
 <a id="vehicle-steering"></a>
-### 차량 조향 — 36개
+### 차량 조향 — 37개
 
 | 세부 구역 | 파라미터 | 용도 |
 |---|---|---|
 | 중앙 보정 | `PathOffset`, `CameraYawTrimDeg` | 레인모드 경로의 좌우 위치와 카메라 YAW 미세 보정 |
 | 조향감 | `SteerActuatorDelay`, `LatSmoothSec`, `LatSuspendAngleDeg`, `CustomSR`, `SteerRatioRate` | 조향 시점, 평활화, 일시중지 각도와 조향비 |
-| [차로 변경](lane-change.md)·자동 턴 | `LaneChangeNeedTorque`, `LaneChangeDelay`, `LaneChangeBsd`, `LaneLineCheck`, `AutoTurnControl`, `AutoTurnControlSpeedTurn`, `AutoTurnControlTurnEnd`, `AutoTurnMapChange` | 차로 변경 진입 조건과 ATC 동작 |
+| [차로 변경](lane-change.md)·자동 턴 | `LaneChangeNeedTorque`, `LaneChangeDelay`, `LaneChangeBsd`, `ShareData`, `LaneLineCheck`, `AutoTurnControl`, `AutoTurnControlSpeedTurn`, `AutoTurnControlTurnEnd`, `AutoTurnMapChange` | 차로 변경 진입 조건과 ATC 동작 |
 | 레인모드 | `LatMpcPathCost`, `LatMpcMotionCost`, `LatMpcAccelCost`, `LatMpcJerkCost`, `LatMpcSteeringRateCost`, `LatMpcInputOffset`, `UseLaneLineSpeed`, `UseLaneLineCurveSpeed`, `AdjustLaneOffset` | 레인모드 MPC 가중치와 차선 사용 조건 |
 | 고급 토크·토크 계수 | `LateralTorqueCustom`, `LateralTorqueAccelFactor`, `LateralTorqueFriction`, `LateralTorqueKpV`, `LateralTorqueKiV`, `LateralTorqueKf`, `LateralTorqueKd` | 커스텀 토크 제어 계수 |
 | 고급 토크·조향 제한 | `CustomSteerMax`, `CustomSteerDeltaUp`, `CustomSteerDeltaDown`, `CustomSteerDeltaUpLC`, `CustomSteerDeltaDownLC` | 최대 조향 토크와 토크 변화율 제한 |
+
+`ONNX 차선·BSD 인식`(`ShareData`)은 장치에서 실선·점선과 조건부 카메라 BSD를 계산하는 설정입니다. 기본값은 꺼짐이며 기존 저장값은 유지합니다. 켜면 mici에 인식 상태가 표시되고, 끄면 비전 서비스가 중지됩니다. 필요한 OpenCV는 업데이트에 포함되어 정상 시작 시 자동 준비됩니다. [동작 조건과 표시 읽기](lane-change.md#sharedata--onnx-차선bsd-인식)를 참고하세요.
 
 `SteerActuatorDelay`는 높을수록 더 일찍 조향하도록 보상하고, `LatSmoothSec`는 높을수록 부드러워지는 대신 반응이 늦어질 수 있습니다. 두 값을 동시에 바꾸면 원인을 구분하기 어렵습니다.
 
@@ -174,7 +176,7 @@ Carrot Web 설정 화면에서는 다음 기능을 사용할 수 있습니다.
 
 `TrafficLightDetectMode`는 `0` 미사용, `1` 정지만 감지, `2` 정지와 출발을 모두 감지합니다. 모델 판단에 의존하므로 운전자가 항상 직접 확인해야 합니다.
 
-### 크루즈·차간 — 전체 31개, 현대·기아·제네시스 28개
+### 크루즈·차간 — 전체 29개, 현대·기아·제네시스 26개
 
 아래 표의 **세부 구역 제목을 누르면** 실제 코드 기준의 계산 방식, 값의 방향과 주의사항을 설명한 페이지로 이동합니다.
 
@@ -201,7 +203,7 @@ Carrot Web 설정 화면에서는 다음 기능을 사용할 수 있습니다.
 <a id="vehicle-hardware"></a>
 ## 차량·하드웨어
 
-차량·하드웨어 16개 항목은 차종, 하네스와 기기 하드웨어 구성을 결정하는 설정입니다. 화면 표시 설정처럼 시험 삼아 켜면 안 됩니다.
+차량·하드웨어 14개 항목은 차종, 하네스와 기기 하드웨어 구성을 결정하는 설정입니다. 화면 표시 설정처럼 시험 삼아 켜면 안 됩니다.
 
 | 중분류 | 파라미터 | 용도 |
 |---|---|---|
@@ -285,7 +287,7 @@ Carrot Vision에는 `carrot_settings.json` 카탈로그와 별도로 **AR 표시
 <a id="system"></a>
 ## 시스템
 
-시스템에는 녹화, 전원, 네트워크, 지도, 소리와 소프트웨어 메뉴를 다루는 11개 항목이 있습니다.
+시스템에는 녹화, 전원, 네트워크, 지도, 소리와 소프트웨어 메뉴를 다루는 12개 항목이 있습니다.
 
 | 중분류 | 파라미터 | 용도 |
 |---|---|---|

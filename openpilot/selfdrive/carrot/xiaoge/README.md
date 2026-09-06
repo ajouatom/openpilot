@@ -13,6 +13,10 @@ Xiaoge Vision 是 CarrotPilot 的本地视觉扩展。它使用 comma3 的 Visio
 请不要同时手动启动 `v_asm_server.py`，否则会
 与入口进程争用 8082 端口并产生重复的视觉推理进程。
 
+### 启用
+
+在 Carrot Web（端口 7000）的 **设置 → 驾驶控制 → 转向 → 变道 (自动转向) → ONNX 车道与盲点识别** 中开关。它使用现有 `ShareData` 参数，默认关闭并保留已有值。关闭后停止视觉和原有 TCP 7711 服务；车辆 OEM BSD 保持有效。
+
 ### 功能和原理
 
 | 功能 | 相机与模型 | 工作方式 |
@@ -61,12 +65,14 @@ OpenCV 最多使用两个 CPU 计算线程，避免与实时驾驶核心争用�
 
 ### 安装和手动启动
 
+正常启动会从 `third_party/wheels` 将已固定版本的 OpenCV 安装到可写的 `pydeps`，无需联网，也不会修改只读系统虚拟环境或替换 NumPy。下面的命令仅用于手动验证。
+
 在 comma3 的 openpilot 根目录运行：
 
 ```bash
-./tools/op.sh venv
-python -m pip install --no-cache-dir -r openpilot/selfdrive/carrot/xiaoge/requirements.txt
-python -m openpilot.selfdrive.carrot.xiaoge_data
+python -m pip install --no-index --no-deps --find-links third_party/wheels \
+  --target pydeps opencv-python-headless==4.13.0.92
+PYTHONPATH="$PWD/pydeps:$PWD${PYTHONPATH:+:$PYTHONPATH}" python -m openpilot.selfdrive.carrot.xiaoge_data
 ```
 
 `camerad` 必须运行。V-ASM 多边形配置保存在本目录的 `v_asm_config.json`，该文件已被 Git 忽略。
@@ -86,6 +92,10 @@ The managed entry point is `openpilot.selfdrive.carrot.xiaoge_data`. The manager
 the existing `ShareData` parameter is enabled, providing both local vision and the existing TCP 7711
 data service. Camera inference requires `camerad` to be running. Do not also launch
 `v_asm_server.py` manually: it would conflict on port 8082 and create a second vision process.
+
+### Enabling the feature
+
+Use **Carrot Web (port 7000) → Settings → Driving → Steering → Lane Change (Auto Turn) → ONNX Lane and BSD Detection**. The toggle uses the existing `ShareData` parameter, defaults to off, and preserves saved values. Turning it off stops vision and the existing TCP 7711 service; OEM BSD remains available.
 
 ### Features and operation
 
@@ -146,12 +156,14 @@ their difference from `latencyMs` is not a direct measurement of GIL waiting.
 
 ### Installation and manual launch
 
+Normal startup installs pinned OpenCV from `third_party/wheels` into writable `pydeps` without internet access. It leaves the read-only system venv and its NumPy intact. The commands below are for manual validation only.
+
 From the comma3 openpilot root:
 
 ```bash
-./tools/op.sh venv
-python -m pip install --no-cache-dir -r openpilot/selfdrive/carrot/xiaoge/requirements.txt
-python -m openpilot.selfdrive.carrot.xiaoge_data
+python -m pip install --no-index --no-deps --find-links third_party/wheels \
+  --target pydeps opencv-python-headless==4.13.0.92
+PYTHONPATH="$PWD/pydeps:$PWD${PYTHONPATH:+:$PYTHONPATH}" python -m openpilot.selfdrive.carrot.xiaoge_data
 ```
 
 `camerad` must be running. Local V-ASM polygon overrides are saved as `v_asm_config.json` in this
@@ -172,6 +184,10 @@ ONNX 모델을 실행하고, 하나의 버전 관리된 `xiaogeVision` JSON 메�
 때만 관리자가 실행하며, 로컬 비전 인식과 기존 TCP 7711 데이터 서비스를 함께 제공합니다.
 카메라 추론에는 `camerad` 실행이 필요합니다. `v_asm_server.py`를 별도로
 실행하지 마십시오. 8082 포트가 충돌하고 두 번째 비전 프로세스가 실행됩니다.
+
+### 기능 켜기
+
+**Carrot Web(7000번 포트) → 설정 → 주행 제어 → 차량 조향 → 차로 변경 (자동 턴) → ONNX 차선·BSD 인식**에서 켜고 끕니다. 기존 `ShareData` 파라미터를 사용하며 기본값은 꺼짐이고 저장값은 유지합니다. 끄면 비전과 기존 TCP 7711 서비스가 중지되고 차량 자체 BSD는 유지됩니다.
 
 ### 기능 및 동작 원리
 
@@ -226,12 +242,14 @@ Python에서 잠시 쉬어 VisionIPC 대기가 GIL을 잡고 다른 스레드를
 
 ### 설치 및 수동 시작
 
+정상 시작 시 `third_party/wheels`에 포함된 고정 버전 OpenCV를 쓰기 가능한 `pydeps`에 자동 설치합니다. 인터넷 없이 준비하며 읽기 전용 시스템 가상환경과 기존 NumPy는 변경하지 않습니다. 아래 명령은 수동 검증용입니다.
+
 comma3 openpilot 루트에서 실행합니다.
 
 ```bash
-./tools/op.sh venv
-python -m pip install --no-cache-dir -r openpilot/selfdrive/carrot/xiaoge/requirements.txt
-python -m openpilot.selfdrive.carrot.xiaoge_data
+python -m pip install --no-index --no-deps --find-links third_party/wheels \
+  --target pydeps opencv-python-headless==4.13.0.92
+PYTHONPATH="$PWD/pydeps:$PWD${PYTHONPATH:+:$PYTHONPATH}" python -m openpilot.selfdrive.carrot.xiaoge_data
 ```
 
 `camerad`가 실행 중이어야 합니다. 로컬 V-ASM 다각형 설정은 이 디렉터리의 `v_asm_config.json`에

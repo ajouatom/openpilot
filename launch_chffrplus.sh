@@ -111,6 +111,12 @@ function bootstrap_runtime_dependencies {
   ensure_python_package brotli brotli 0
   ensure_python_package usb pyusb 0
 
+  # Xiaoge lane/BSD inference uses a pinned, bundled OpenCV wheel. Keep NumPy
+  # from AGNOS and install only into pydeps, never the read-only system venv.
+  # Prepare it even when ShareData is off so the settings toggle works offline.
+  ensure_python_package "cv2; assert cv2.__version__ == '4.13.0'; assert hasattr(cv2.dnn, 'readNetFromONNX')" \
+    "opencv-python-headless==4.13.0.92" 0
+
   # AGNOS 19 follows current comma, which no longer includes the legacy Eigen
   # and libjpeg wrappers used by this branch's rednose and JPEG encoder. Keep
   # those native headers/libraries available from official offline wheels.

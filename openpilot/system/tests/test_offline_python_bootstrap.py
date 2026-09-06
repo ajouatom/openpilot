@@ -52,6 +52,14 @@ def test_optional_shapely_dependency_is_available_for_agnos_19() -> None:
   assert "Name: shapely" in _wheel_metadata(wheels[0])
 
 
+def test_xiaoge_opencv_dependency_is_available_offline() -> None:
+  _assert_locked_wheels({"opencv_python_headless": "4.13.0.92"})
+  wheel_dir = Path(BASEDIR) / "third_party/wheels"
+  wheel = next(wheel_dir.glob("opencv_python_headless-4.13.0.92-cp37-abi3-*aarch64.whl"))
+  assert "Name: opencv-python-headless" in _wheel_metadata(wheel)
+  assert _wheel_contains(wheel, "cv2/cv2.abi3.so")
+
+
 def test_legacy_native_build_dependencies_are_available_for_agnos_19() -> None:
   wheel_dir = Path(BASEDIR) / "third_party/wheels"
   expected = {
@@ -112,6 +120,8 @@ def test_launcher_bootstraps_from_local_wheels_first() -> None:
   assert "ensure_python_package qrcode qrcode 1" in launcher
   assert "ensure_python_package brotli brotli 0" in launcher
   assert "ensure_python_package usb pyusb 0" in launcher
+  assert "ensure_python_package \"cv2; assert cv2.__version__ == '4.13.0'" in launcher
+  assert '"opencv-python-headless==4.13.0.92" 0' in launcher
   assert "ensure_python_package eigen eigen 1" in launcher
   assert "ensure_python_package libjpeg libjpeg 1" in launcher
   assert "[ -f /TICI ] || [ -f /AGNOS ]" in launcher

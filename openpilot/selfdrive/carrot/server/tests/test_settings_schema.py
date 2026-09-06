@@ -42,6 +42,20 @@ def test_the_catalogue_is_readable_and_populated(params):
   assert all(isinstance(p.get("name"), str) and p["name"] for p in params)
 
 
+def test_onnx_vision_toggle_uses_existing_runtime_flag_and_lane_change_menu(settings, params):
+  by_name = {p["name"]: p for p in params}
+  vision = by_name["ShareData"]
+  assert (vision["control"], vision["min"], vision["max"], vision["default"]) == ("toggle", 0, 1, 0)
+  assert vision["risk"] == "high"
+  assert '{"ShareData", {PERSISTENT, INT, "0"}}' in PARAMS_KEYS_PATH.read_text(encoding="utf-8")
+  driving = next(category for category in settings["menu"] if category["id"] == "DRIVING")
+  steering = next(group for group in driving["groups"] if group["id"] == "STEER")
+  lane_change = next(group for group in steering["groups"] if group["id"] == "STEER_LANECHANGE")
+  assert "ShareData" in lane_change["params"]
+  for title in ("title", "etitle", "ctitle"):
+    assert "ONNX" in vision[title]
+
+
 def test_obsolete_lead_response_settings_are_removed(settings, params):
   removed = {"JLeadFactor3", "RadarReactionFactor"}
   by_name = {p["name"] for p in params}
