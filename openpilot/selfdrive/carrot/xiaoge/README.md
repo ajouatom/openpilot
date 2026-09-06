@@ -36,7 +36,7 @@ V-ASM 仅在以下条件全部满足时推理：
 
 - 默认适配手机浏览器；宽度达到 900px 时自动显示为左侧车道线、右侧 V-ASM 的电脑双栏布局。
 - 支持中文/English 切换，显示模型状态、推理耗时、频率、检测置信度和原始状态 JSON。
-- 相机图像仅在点击对应“刷新画面”按钮时请求一帧，不会自动刷新或重载网页。
+- 相机就绪后自动加载第一帧；首次加载失败会重试，并显示加载状态。之后点击对应“刷新画面”按钮获取新快照，不会连续播放视频。
 - V-ASM 页面显示门控条件、目标侧和当前车道宽度；可在广角图像上修改左右盲区多边形。
 - 未保存配置时使用内置的 1928x1208 广角默认多边形；“恢复默认标注”会删除本地覆盖配置。
 
@@ -97,8 +97,8 @@ Open `http://<comma-ip>:8082`.
   view with lanes on the left and V-ASM on the right.
 - Chinese and English are available. The page shows model state, inference latency/rate,
   confidence, and raw status JSON.
-- Camera frames are fetched only when the matching refresh button is pressed; the page does not
-  reload and camera images do not auto-refresh.
+- The first snapshot loads automatically when its camera is ready, with retries and visible loading
+  status. Use the matching refresh button for later snapshots; the images are not a continuous video feed.
 - The V-ASM panel shows its activation gate, selected side, and lane width. Its wide-camera view
   supports editing the left and right blindspot polygons.
 - Built-in 1928x1208 wide-camera polygons are used until a local override is saved. Resetting the
@@ -159,7 +159,7 @@ V-ASM은 다음 조건을 모두 만족할 때만 실행됩니다.
 
 - 모바일 우선 UI이며, 너비가 900px 이상이면 왼쪽 차선/오른쪽 V-ASM의 데스크톱 2열 보기로 자동 전환됩니다.
 - 중국어와 영어 전환을 지원하며 모델 상태, 추론 시간/주기, 신뢰도, 원시 상태 JSON을 표시합니다.
-- 각 새로고침 버튼을 눌렀을 때만 해당 카메라 프레임을 가져옵니다. 페이지를 다시 로드하거나 카메라 영상을 자동 갱신하지 않습니다.
+- 카메라가 준비되면 첫 스냅샷을 자동으로 가져오며, 처음 실패하면 재시도하고 로딩 상태를 표시합니다. 이후에는 각 새로고침 버튼으로 새 사진을 가져옵니다. 연속 재생 영상은 아닙니다.
 - V-ASM 패널은 실행 조건, 대상 측, 차선 폭을 표시하며 광각 영상에서 좌우 사각지대 다각형을 편집할 수 있습니다.
 - 로컬 설정을 저장하기 전에는 내장 1928x1208 광각 기본 다각형을 사용합니다. 주석을 초기화하면 로컬 설정이 제거됩니다.
 

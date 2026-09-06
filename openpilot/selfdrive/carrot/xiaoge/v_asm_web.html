@@ -45,6 +45,7 @@ pre{white-space:pre-wrap;word-break:break-word}.ok{color:#4ade80}.bad{color:#f87
   <div class="grid">
     <section class="card">
       <canvas id="camera-vasm"></canvas>
+      <p id="snapshot-status-wide" aria-live="polite" data-i18n="snapshotWaiting">等待相机画面。</p>
       <div class="buttons">
         <button data-side="left" data-i18n="annotateLeft">标注画面左侧</button>
         <button data-side="right" data-i18n="annotateRight">标注画面右侧</button>
@@ -111,6 +112,7 @@ pre{white-space:pre-wrap;word-break:break-word}.ok{color:#4ade80}.bad{color:#f87
   <div class="grid">
     <section class="card">
       <canvas id="camera-lane"></canvas>
+      <p id="snapshot-status-road" aria-live="polite" data-i18n="snapshotWaiting">等待相机画面。</p>
       <div class="buttons">
         <button id="snapshot-lane" data-i18n="snapshot">刷新前向道路画面</button>
       </div>
@@ -198,6 +200,10 @@ const zh={
   save:"保存配置",
   delete:"恢复默认标注",
   snapshot:"刷新画面",
+  snapshotWaiting:"等待相机画面。",
+  snapshotLoading:"正在获取相机画面…",
+  snapshotReady:"已加载快照。点击“刷新画面”获取新画面。",
+  snapshotError:"未能获取画面。可点击“刷新画面”重试。",
   vasmSettings:"盲区 V-ASM 设置",
   threshold:"盲区置信度阈值",
   smoothing:"平滑时间（秒）",
@@ -248,6 +254,10 @@ const en={
   save:"Save configuration",
   delete:"Reset to default annotations",
   snapshot:"Refresh snapshot",
+  snapshotWaiting:"Waiting for camera image.",
+  snapshotLoading:"Loading camera image…",
+  snapshotReady:"Snapshot loaded. Refresh snapshot to update it.",
+  snapshotError:"Could not load the image. Refresh snapshot to try again.",
   vasmSettings:"V-ASM Blind Spot Settings",
   threshold:"V-ASM Confidence Threshold",
   smoothing:"Smoothing seconds",
@@ -296,6 +306,17 @@ const threshold=document.querySelector("#threshold"),smoothing=document.querySel
 const laneThreshold=document.querySelector("#laneThreshold"),laneInterval=document.querySelector("#laneInterval");
 
 let imageVasm=null,imageLane=null,config={width:0,height:0,poly_left:[],poly_right:[]},side=null,lastPollTime=0,pollFps=0,lastStatus=null;
+const snapshotState={
+  wide:{loading:false,retryAt:0,message:"snapshotWaiting",button:document.querySelector("#snapshot-vasm")},
+  road:{loading:false,retryAt:0,message:"snapshotWaiting",button:document.querySelector("#snapshot-lane")},
+};
+
+function updateSnapshotStatus(stream){
+  const state=snapshotState[stream],el=document.querySelector("#snapshot-status-"+stream);
+  el.textContent=text[state.message];
+  el.className=state.message==="snapshotError"?"bad":"";
+  state.button.disabled=state.loading;
+}
 
 function translate(){
   text=language==="zh"?zh:en;
@@ -307,6 +328,7 @@ function translate(){
     if(text[k]) el.textContent=text[k];
   });
   if(!side) hint.textContent=text.hint;
+  for(const stream of ["wide","road"])updateSnapshotStatus(stream);
   if(lastStatus) updateDebugUI(lastStatus);
 }
 
@@ -315,6 +337,8 @@ function points(name){return config["poly_"+name]}
 function redrawVasm(){
   if(!imageVasm)return;
   ctxVasm.drawImage(imageVasm,0,0,canvasVasm.width,canvasVasm.height);
+  ctxVasm.save();
+  ctxVasm.scale(canvasVasm.width/config.width,canvasVasm.height/config.height);
   for(const [name,color] of [["left","#3b82f6"],["right","#f97316"]]){
     const p=points(name);
     if(!p.length)continue;
@@ -334,6 +358,7 @@ function redrawVasm(){
       ctxVasm.fill();
     }
   }
+  ctxVasm.restore();
 }
 
 function redrawLane(){
@@ -341,32 +366,56 @@ function redrawLane(){
   ctxLane.drawImage(imageLane,0,0,canvasLane.width,canvasLane.height);
 }
 
-function refreshVasm(){
+function refreshSnapshot(stream){
+  const state=snapshotState[stream];
+  if(state.loading)return;
+  state.loading=true;
+  state.message="snapshotLoading";
+  updateSnapshotStatus(stream);
+  const finish=message=>{
+    state.loading=false;
+    state.message=message;
+    state.retryAt=Date.now()+2000;
+    updateSnapshotStatus(stream);
+  };
   const nextImage=new Image();
   nextImage.onload=()=>{
-    imageVasm=nextImage;
-    canvasVasm.width=nextImage.naturalWidth;
-    canvasVasm.height=nextImage.naturalHeight;
-    if(!config.width){config.width=canvasVasm.width;config.height=canvasVasm.height}
-    redrawVasm();
+    if(stream==="wide"){
+      imageVasm=nextImage;
+      canvasVasm.width=nextImage.naturalWidth;
+      canvasVasm.height=nextImage.naturalHeight;
+      if(!config.width){config.width=canvasVasm.width;config.height=canvasVasm.height}
+      redrawVasm();
+    }else{
+      imageLane=nextImage;
+      canvasLane.width=nextImage.naturalWidth;
+      canvasLane.height=nextImage.naturalHeight;
+      redrawLane();
+    }
+    finish("snapshotReady");
   };
-  nextImage.src="/api/snapshot?stream=wide&t="+Date.now();
+  nextImage.onerror=()=>finish("snapshotError");
+  nextImage.src="/api/snapshot?stream="+stream+"&t="+Date.now();
 }
 
-function refreshLane(){
-  const nextImage=new Image();
-  nextImage.onload=()=>{
-    imageLane=nextImage;
-    canvasLane.width=nextImage.naturalWidth;
-    canvasLane.height=nextImage.naturalHeight;
-    redrawLane();
-  };
-  nextImage.src="/api/snapshot?stream=road&t="+Date.now();
+function refreshVasm(){refreshSnapshot("wide")}
+function refreshLane(){refreshSnapshot("road")}
+
+function loadInitialSnapshots(s){
+  if(document.hidden)return;
+  for(const [stream,available,image] of [
+    ["wide",s.camera&&s.camera.available,imageVasm],
+    ["road",s.lane&&s.lane.cameraAvailable,imageLane],
+  ]){
+    const state=snapshotState[stream];
+    if(available&&!image&&!state.loading&&Date.now()>=state.retryAt)refreshSnapshot(stream);
+  }
 }
 
 async function load(){
   const r=await fetch("/api/config"),saved=await r.json();
   if(saved.width)config=saved;
+  redrawVasm();
 }
 
 function updateDebugUI(s){
@@ -485,7 +534,9 @@ document.querySelectorAll("[data-side]").forEach(b=>b.onclick=()=>{
 canvasVasm.onclick=e=>{
   if(!side||!imageVasm)return;
   const r=canvasVasm.getBoundingClientRect();
-  points(side).push([Math.round((e.clientX-r.left)*canvasVasm.width/r.width),Math.round((e.clientY-r.top)*canvasVasm.height/r.height)]);
+  const x=Math.max(0,Math.min(config.width-1,Math.round((e.clientX-r.left)*config.width/r.width)));
+  const y=Math.max(0,Math.min(config.height-1,Math.round((e.clientY-r.top)*config.height/r.height)));
+  points(side).push([x,y]);
   redrawVasm();
 };
 canvasVasm.oncontextmenu=e=>{e.preventDefault();if(side)points(side).pop();redrawVasm();};
@@ -546,6 +597,7 @@ async function poll(){
     }
 
     updateDebugUI(s);
+    loadInitialSnapshots(s);
   }catch(e){
     status.textContent=e.message;
   }
