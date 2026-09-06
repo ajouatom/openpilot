@@ -1,8 +1,9 @@
 import json
+import sys
 import threading
 from dataclasses import replace
 from io import BytesIO
-from types import SimpleNamespace
+from types import ModuleType, SimpleNamespace
 
 import numpy as np
 import pytest
@@ -166,7 +167,7 @@ def test_lane_snapshot_center_crops_stride_padded_frame():
 
 
 def test_lane_snapshot_rejects_short_y_plane():
-  with pytest.raises(ValueError, match="short lane image plane"):
+  with pytest.raises(ValueError, match="short NV12 Y plane"):
     VASMService._lane_jpeg_from_nv12(bytes(12), 4, 4, 4)
 
 
@@ -201,3 +202,142 @@ def test_vision_service_publishes_the_composite_payload(monkeypatch):
   assert sent[0][0] == "customReservedRawData0"
   result = parse_xiaoge_vision_payload(sent[0][1])
   assert (result.left_lane, result.right_lane, result.left_blindspot, result.right_blindspot) == (0, 1, True, False)
+
+
+@pytest.fixture
+def vision_service(monkeypatch):
+  class FakeSubMaster:
+    def update(self, _timeout):
+      pass
+
+    def all_alive_and_valid(self, _services):
+      return True
+
+    def __getitem__(self, key):
+      return {
+        "carState": SimpleNamespace(vEgo=20.0),
+        "modelV2": SimpleNamespace(meta=SimpleNamespace(laneChangeDirection=log.LaneChangeDirection.left, laneWidthLeft=3.2)),
+      }[key]
+
+  sent = []
+  monkeypatch.setattr(v_asm_server.messaging, "SubMaster", lambda _services: FakeSubMaster(), raising=False)
+  monkeypatch.setattr(v_asm_server.messaging, "PubMaster", lambda _services: SimpleNamespace(send=lambda _name, message: sent.append(message)), raising=False)
+  monkeypatch.setattr(v_asm_server.messaging, "new_message", lambda *_args, **_kwargs: SimpleNamespace())
+  service = VASMService(v_asm_server.DEFAULT_MODEL_PATH)
+  assert service.inference.valid, service.inference.error
+  assert service.lane_inference.valid, service.lane_inference.error
+  service.sent = sent
+  return service
+
+
+@pytest.fixture
+def padded_camera_frame():
+  width, height, stride = 1344, 760, 1408
+  uv_offset = stride * 768
+  raw = np.full(2_428_928, 255, dtype=np.uint8)
+  raw[:stride * height].reshape(height, stride)[:, :width] = 80
+  uv = raw[uv_offset:uv_offset + stride * (height // 2)].reshape(height // 2, stride)
+  uv[:, :width:2] = 90
+  uv[:, 1:width:2] = 240
+  return SimpleNamespace(data=memoryview(raw), width=width, height=height, stride=stride, uv_offset=uv_offset)
+
+
+@pytest.mark.parametrize("stream", ["road", "wide"])
+def test_camera_loop_infers_and_snapshots_padded_allocation(monkeypatch, vision_service, padded_camera_frame, stream):
+  service = vision_service
+  frame = padded_camera_frame
+
+  class FakeClient:
+    delivered = False
+
+    def __init__(self, *_args):
+      pass
+
+    def is_connected(self):
+      return True
+
+    def connect(self, _blocking):
+      return True
+
+    def recv(self, timeout_ms):
+      assert timeout_ms == 1000
+      if self.delivered:
+        service.running = False
+        return None
+      self.delivered = True
+      return frame
+
+  visionipc = ModuleType("msgq.visionipc")
+  visionipc.VisionIpcClient = FakeClient
+  visionipc.VisionStreamType = SimpleNamespace(VISION_STREAM_ROAD=0, VISION_STREAM_WIDE_ROAD=1)
+  monkeypatch.setitem(sys.modules, "msgq.visionipc", visionipc)
+  # A broken loop must fail this test rather than sleep/reconnect indefinitely.
+  monkeypatch.setattr(v_asm_server.time, "sleep", lambda _seconds: pytest.fail("camera loop rejected the padded frame"))
+  service.snapshot_requests[stream] = 1
+
+  if stream == "road":
+    service.run_road_camera()
+    assert service.lane_inference_count == 1
+    assert service.lane_result["valid"], service.lane_result["error"]
+    assert service.status()["lane"]["resultFresh"]
+    jpeg = service.last_road_jpeg
+  else:
+    service.run_camera()
+    assert service.inference_count == 1
+    assert service.status()["vehicleSide"]["left"]["valid"]
+    assert not service.status()["vehicleSide"]["right"]["valid"]
+    jpeg = service.last_jpeg
+  assert len(service.sent) == 1
+  parse_xiaoge_vision_payload(service.sent[0].customReservedRawData0)
+  with Image.open(BytesIO(jpeg)) as image:
+    assert image.size == ((416, 416) if stream == "road" else (frame.width, frame.height))
+    pixels = np.asarray(image)
+    if stream == "road":
+      assert float(pixels.mean()) == pytest.approx(80, abs=2)
+    else:
+      # The UV plane encodes red; interpreting padded Y rows as UV changes it.
+      assert float(pixels[:, :, 0].mean()) > 240
+      assert float(pixels[:, :, 1:].mean()) < 30
+
+
+def test_initial_status_does_not_report_clear_blindspots(vision_service):
+  status = vision_service.status()
+  assert not status["camera"]["available"]
+  assert not status["lane"]["resultFresh"]
+  assert not status["vehicleSide"]["left"]["valid"]
+  assert not status["vehicleSide"]["right"]["valid"]
+
+
+@pytest.mark.parametrize("failure", ["camera_error", "camera_stale", "inference_stale", "gate_closed", "side_changed"])
+def test_status_invalidates_results_after_camera_or_inference_stops(monkeypatch, vision_service, failure):
+  service = vision_service
+  monkeypatch.setattr(v_asm_server.time, "monotonic", lambda: 10.0)
+  monkeypatch.setattr(v_asm_server.time, "monotonic_ns", lambda: 10_000_000_000)
+  service.last_frame_at = service.last_road_frame_at = 10.0
+  service.camera_error = service.lane_camera_error = ""
+  service.vasm_gate = {"active": True, "side": "left"}
+  service.vasm_result = {"left": False, "right": False, "side": "left", "updatedMonoTimeNanos": 10_000_000_000}
+  service.lane_result.update(valid=True, leftLine=1, rightLine=0, updatedMonoTimeNanos=10_000_000_000)
+  assert service.status()["vehicleSide"]["left"]["valid"]
+  assert service.status()["lane"]["resultFresh"]
+
+  if failure == "camera_error":
+    service.camera_error = service.lane_camera_error = "invalid camera frame"
+  elif failure == "camera_stale":
+    service.last_frame_at = service.last_road_frame_at = 7.0
+  elif failure == "inference_stale":
+    service.vasm_result["updatedMonoTimeNanos"] = 8_000_000_000
+    service.lane_result["updatedMonoTimeNanos"] = 5_000_000_000
+  elif failure == "gate_closed":
+    service.vasm_gate["active"] = False
+  else:
+    service.vasm_gate["side"] = "right"
+
+  status = service.status()
+  assert not status["vehicleSide"]["left"]["valid"]
+  assert not status["vehicleSide"]["right"]["valid"]
+  if failure in ("camera_error", "camera_stale", "inference_stale"):
+    assert not status["lane"]["resultFresh"]
+  if failure in ("camera_error", "camera_stale"):
+    assert not status["camera"]["available"]
+    assert not status["lane"]["cameraAvailable"]

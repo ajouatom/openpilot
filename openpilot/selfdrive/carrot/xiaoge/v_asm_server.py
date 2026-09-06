@@ -12,7 +12,6 @@ from io import BytesIO
 from pathlib import Path
 from urllib.parse import urlparse
 
-import numpy as np
 from PIL import Image
 
 if __package__ in (None, ""):
@@ -21,7 +20,9 @@ if __package__ in (None, ""):
 import openpilot.cereal.messaging as messaging
 from openpilot.cereal import log
 from openpilot.selfdrive.carrot.xiaoge.lane_inference import DEFAULT_LANE_MODEL_PATH, LaneInference, prepare_lane_image
+from openpilot.selfdrive.carrot.xiaoge.nv12 import nv12_y_plane, pack_nv12
 from openpilot.selfdrive.carrot.xiaoge.v_asm_inference import DEFAULT_MODEL_PATH, VASMInference
+from openpilot.selfdrive.carrot.xiaoge.xiaoge_vision import XIAOGE_BLINDSPOT_TIMEOUT_NS, XIAOGE_LANE_TIMEOUT_NS
 
 try:
   import cv2
@@ -50,6 +51,7 @@ FOLLOWUP_WINDOW_SECONDS = 1.5
 VASM_MIN_SPEED_MPS = 30.0 / 3.6
 VASM_MAX_SPEED_MPS = 120.0 / 3.6
 VASM_MIN_LANE_WIDTH_METERS = 3.0
+CAMERA_TIMEOUT_SECONDS = 2.0
 
 
 DEFAULT_POLYGONS = {
@@ -141,7 +143,7 @@ class VASMService:
       "reason": "waiting for carState and modelV2",
       "laneWidth": 0.0,
     }
-    self.vasm_result = {"left": False, "right": False, "updatedMonoTimeNanos": 0}
+    self.vasm_result = {"left": False, "right": False, "side": "", "updatedMonoTimeNanos": 0}
 
     # Lane inference engine setup
     self.lane_inference = LaneInference(DEFAULT_LANE_MODEL_PATH)
@@ -230,6 +232,26 @@ class VASMService:
 
   def status(self) -> dict:
     with self.lock:
+      now = time.monotonic()
+      now_nanos = time.monotonic_ns()
+      camera_age = now - self.last_frame_at if self.last_frame_at else None
+      road_camera_age = now - self.last_road_frame_at if self.last_road_frame_at else None
+      camera_available = camera_age is not None and camera_age <= CAMERA_TIMEOUT_SECONDS and not self.camera_error
+      road_camera_available = road_camera_age is not None and road_camera_age <= CAMERA_TIMEOUT_SECONDS and not self.lane_camera_error
+      vasm_timestamp = self.vasm_result["updatedMonoTimeNanos"]
+      vasm_fresh = vasm_timestamp > 0 and 0 <= now_nanos - vasm_timestamp <= XIAOGE_BLINDSPOT_TIMEOUT_NS
+      vehicle_sides = {}
+      for side in ("left", "right"):
+        valid = bool(camera_available and self.inference.valid and vasm_fresh and self.vasm_gate["active"] and
+                     self.vasm_gate["side"] == side and self.vasm_result["side"] == side)
+        vehicle_sides[side] = {
+          "valid": valid,
+          "active": self.vasm_result[side] if valid else False,
+          "confidence": self.inference.confidence[side] if valid else 0.0,
+        }
+      lane_timestamp = self.lane_result["updatedMonoTimeNanos"]
+      lane_fresh = bool(road_camera_available and self.lane_inference.valid and self.lane_result["valid"] and
+                        lane_timestamp > 0 and 0 <= now_nanos - lane_timestamp <= XIAOGE_LANE_TIMEOUT_NS)
       return {
         "standalone": False,
         "integrated": True,
@@ -245,18 +267,12 @@ class VASMService:
         "smoothingSeconds": self.smoothing_seconds,
         "baseIntervalSeconds": self.base_interval_seconds,
         "camera": {
-          "available": bool(self.last_frame_at),
+          "available": camera_available,
           "error": self.camera_error,
-          "lastFrameAgeSeconds": time.monotonic() - self.last_frame_at if self.last_frame_at else None,
+          "lastFrameAgeSeconds": camera_age,
         },
-        "imageSide": {
-          side: {"active": self.inference.active[side], "confidence": self.inference.confidence[side]}
-          for side in ("left", "right")
-        },
-        "vehicleSide": {
-          side: {"active": self.inference.active[side], "confidence": self.inference.confidence[side]}
-          for side in ("left", "right")
-        },
+        "imageSide": vehicle_sides,
+        "vehicleSide": vehicle_sides,
         "inference": {
           "latencyMs": round(self.last_inference_ms, 1),
           "fps": self.inference_fps,
@@ -270,8 +286,10 @@ class VASMService:
           "error": self.lane_inference.error,
           "threshold": self.lane_threshold,
           "intervalSeconds": self.lane_interval_seconds,
-          "cameraAvailable": bool(self.last_road_frame_at),
+          "cameraAvailable": road_camera_available,
           "cameraError": self.lane_camera_error,
+          "lastFrameAgeSeconds": road_camera_age,
+          "resultFresh": lane_fresh,
           "result": self.lane_result,
           "inference": {
             "latencyMs": round(self.last_lane_inference_ms, 1),
@@ -342,9 +360,8 @@ class VASMService:
       self.pm.send("customReservedRawData0", msg)
 
   @staticmethod
-  def _jpeg_from_nv12(data: bytes, width: int, height: int, stride: int) -> bytes:
-    frame = np.frombuffer(data, dtype=np.uint8).reshape((-1, stride))
-    nv12 = frame[:height + height // 2, :width]
+  def _jpeg_from_nv12(data: bytes, width: int, height: int, stride: int, uv_offset: int) -> bytes:
+    nv12 = pack_nv12(data, width, height, stride, uv_offset)
     rgb = cv2.cvtColor(nv12, cv2.COLOR_YUV2RGB_NV12)
     output = BytesIO()
     Image.fromarray(rgb).save(output, "JPEG", quality=85)
@@ -353,7 +370,7 @@ class VASMService:
   @staticmethod
   def _lane_jpeg_from_nv12(data: bytes, width: int, height: int, stride: int) -> bytes:
     """Build the grayscale road-camera input expected by the lane model."""
-    frame = np.frombuffer(data, dtype=np.uint8).reshape((-1, stride))
+    frame = nv12_y_plane(data, width, height, stride)
     gray = prepare_lane_image(frame, width, height)
     output = BytesIO()
     Image.fromarray(gray).save(output, "JPEG", quality=50)
@@ -377,19 +394,18 @@ class VASMService:
         if buffer is None:
           continue
         now = time.monotonic()
-        frame = np.frombuffer(buffer.data, dtype=np.uint8).reshape((-1, client.stride))[:, :client.width]
         gate_active, side = self._update_vasm_gate()
         publish_clear = False
         with self.lock:
           self.last_frame_at = now
           self.camera_error = ""
           if self.snapshot_responses["wide"] < self.snapshot_requests["wide"]:
-            self.last_jpeg = self._jpeg_from_nv12(buffer.data, client.width, client.height, client.stride)
+            self.last_jpeg = self._jpeg_from_nv12(buffer.data, buffer.width, buffer.height, buffer.stride, buffer.uv_offset)
             self.snapshot_responses["wide"] = self.snapshot_requests["wide"]
             self.snapshot_condition.notify_all()
           if not gate_active:
             publish_clear = self.vasm_result["left"] or self.vasm_result["right"]
-            self.vasm_result = {"left": False, "right": False, "updatedMonoTimeNanos": time.monotonic_ns()}
+            self.vasm_result = {"left": False, "right": False, "side": "", "updatedMonoTimeNanos": time.monotonic_ns()}
           else:
             interval = FOLLOWUP_INTERVAL_SECONDS if now < self.followup_until else self.base_interval_seconds
             if now - self.last_inference_at < interval:
@@ -402,9 +418,10 @@ class VASMService:
           configured_sides = self.inference.configured_sides
           if side not in configured_sides or not self.inference.valid:
             continue
+          frame = pack_nv12(buffer.data, buffer.width, buffer.height, buffer.stride, buffer.uv_offset)
           previous = self.last_side_at[side]
           t0 = time.monotonic()
-          self.inference.update(frame, client.width, client.height, side, self.threshold, self.smoothing_seconds, now - previous if previous else interval)
+          self.inference.update(frame, buffer.width, buffer.height, side, self.threshold, self.smoothing_seconds, now - previous if previous else interval)
           t1 = time.monotonic()
           active = self.inference.active[side]
         with self.lock:
@@ -421,6 +438,7 @@ class VASMService:
           self.vasm_result = {
             "left": self.inference.active["left"] if side == "left" else False,
             "right": self.inference.active["right"] if side == "right" else False,
+            "side": side,
             "updatedMonoTimeNanos": time.monotonic_ns(),
           }
         self.publish_vision_result()
@@ -448,12 +466,12 @@ class VASMService:
         if buffer is None:
           continue
         now = time.monotonic()
-        frame = np.frombuffer(buffer.data, dtype=np.uint8).reshape((-1, client.stride))[:, :client.width]
+        frame = nv12_y_plane(buffer.data, buffer.width, buffer.height, buffer.stride)
         with self.lock:
           self.last_road_frame_at = now
           self.lane_camera_error = ""
           if self.snapshot_responses["road"] < self.snapshot_requests["road"]:
-            self.last_road_jpeg = self._lane_jpeg_from_nv12(buffer.data, client.width, client.height, client.stride)
+            self.last_road_jpeg = self._lane_jpeg_from_nv12(buffer.data, buffer.width, buffer.height, buffer.stride)
             self.snapshot_responses["road"] = self.snapshot_requests["road"]
             self.snapshot_condition.notify_all()
           if not self.lane_inference.valid:
@@ -464,7 +482,7 @@ class VASMService:
           lane_threshold = self.lane_threshold
         t0 = time.monotonic()
         res = self.lane_inference.infer(
-          frame, client.width, client.height, conf_thresh=lane_threshold
+          frame, buffer.width, buffer.height, conf_thresh=lane_threshold
         )
         t1 = time.monotonic()
         with self.lock:
