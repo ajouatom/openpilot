@@ -25,6 +25,16 @@ from openpilot.selfdrive.carrot.radar_motion.predictor import (
 from openpilot.selfdrive.carrot.radar_motion.primary import (
   FrontRadarKinematicAssociator,
   RadarPointSnapshot,
+  STATIONARY_MAX_ABS_VLEAD_MPS,
+  STATIONARY_FRONT_ANCHOR_MAX_AGE_S,
+  STATIONARY_FRONT_ANCHOR_MAX_SPEED_JUMP_MPS,
+  STATIONARY_FRONT_POSITION_LOCK_MIN_TRACK_STATE,
+  STATIONARY_FRONT_RANGE_MAX_DPATH_M,
+  STATIONARY_FRONT_RANGE_MAX_ERROR_M,
+  STATIONARY_FRONT_RANGE_MAX_FRACTION,
+  STATIONARY_FRONT_RANGE_MAX_YREL_ERROR_M,
+  STATIONARY_FRONT_RANGE_XSTD_SIGMA,
+  VISION_RADAR_MAX_DISTANCE_ERROR_M,
   VisionRadarMatcher,
   lead_from_vision,
   lead_from_radar_point,
@@ -77,6 +87,13 @@ SCC_PRIMARY_DUPLICATE_MAX_DREL_DELTA_M = 5.0
 RADAR_VISION_FALLBACK_MAX_ABS_DPATH_M = 1.0
 RADAR_VISION_FALLBACK_MIN_PROBABILITY = 0.40
 RADAR_MATCH_MAX_FARTHER_THAN_VISION_M = 8.0
+MOVING_FRONT_RANGE_XSTD_SIGMA = 1.5
+MOVING_FRONT_RANGE_MAX_DISTANCE_FRACTION = 0.15
+MOVING_FRONT_RANGE_MAX_GAP_S = 0.15
+MOVING_FRONT_RANGE_MAX_POSITION_ERROR_M = 2.5
+MOVING_FRONT_RANGE_MAX_LATERAL_ERROR_M = 0.75
+MOVING_FRONT_RANGE_MAX_SPEED_JUMP_MPS = 3.0
+CORROBORATED_STATIONARY_VISION_RANGE_MISMATCH_HOLD_S = 0.15
 SCC_PRIMARY_DUPLICATE_MAX_VLEAD_DELTA_MPS = 3.0
 SCC_PRIMARY_CLOSER_MARGIN_M = 1.0
 CROSS_SENSOR_CLOSE_CUTIN_MIN_DREL_M = 2.0
@@ -305,13 +322,14 @@ def _radar_match_is_dangerously_farther_than_vision(
   match: Any,
   vision: Any,
   path: tuple[tuple[float, float], ...],
+  max_farther_than_vision_m: float = RADAR_MATCH_MAX_FARTHER_THAN_VISION_M,
 ) -> bool:
   """Reject a permissive radar match that can hide a much nearer visual car."""
   return bool(
     match is not None
     and _central_vision_fallback_allowed(vision, path)
     and match.point.d_rel - vision.d_rel
-    > RADAR_MATCH_MAX_FARTHER_THAN_VISION_M
+    > max_farther_than_vision_m
   )
 
 
@@ -411,10 +429,152 @@ class DPathRadarController:
     )
     self.scc_lead_two_tracker = DPathSccLeadTwoTracker()
     self.lead_dynamics = RadarLeadDynamics()
+    self._stationary_vision_range_mismatch_identity: (
+      tuple[str, int] | None
+    ) = None
+    self._stationary_vision_range_mismatch_since_s: float | None = None
+    self._moving_range_last_point: RadarPointSnapshot | None = None
+    self._moving_range_last_time_s: float | None = None
+    self._stationary_range_last_point: RadarPointSnapshot | None = None
+    self._stationary_range_last_time_s: float | None = None
+    self._stationary_range_anchor_time_s: float | None = None
+
+  def _reset_stationary_range_history(self) -> None:
+    self._stationary_range_last_point = None
+    self._stationary_range_last_time_s = None
+    self._stationary_range_anchor_time_s = None
+
+  def _stationary_front_range_limit(self, match: Any, vision: Any, time_s: float) -> tuple[float, float | None]:
+    limit = RADAR_MATCH_MAX_FARTHER_THAN_VISION_M
+    if match is None or vision is None or not math.isfinite(time_s):
+      return limit, None
+    point = match.point
+    if (
+      point.source != "frontRadar" or not point.measured
+      or point.radar_track_state < STATIONARY_FRONT_POSITION_LOCK_MIN_TRACK_STATE
+      or abs(point.v_lead) > STATIONARY_MAX_ABS_VLEAD_MPS
+      or (point.source, point.track_id) != self.primary_matcher.stationary_identity
+      or abs(match.d_path) > STATIONARY_FRONT_RANGE_MAX_DPATH_M
+      or vision.probability < RADAR_VISION_FALLBACK_MIN_PROBABILITY
+      or abs(point.y_rel - vision.y_rel) > STATIONARY_FRONT_RANGE_MAX_YREL_ERROR_M
+    ):
+      return limit, None
+    anchor_time_s = None
+    if abs(point.d_rel - vision.d_rel) <= limit:
+      anchor_time_s = time_s
+    elif (
+      self._stationary_range_last_point is not None
+      and self._stationary_range_last_time_s is not None
+      and self._stationary_range_anchor_time_s is not None
+      and 0.0 < time_s - self._stationary_range_last_time_s <= RADAR_MOTION_MAX_TIME_SKEW_S
+      and time_s - self._stationary_range_anchor_time_s <= STATIONARY_FRONT_ANCHOR_MAX_AGE_S
+      and VisionRadarMatcher._stationary_position_continuous(
+        self._stationary_range_last_point, self._stationary_range_last_time_s, point, time_s,
+      )
+      and abs(point.v_lead - self._stationary_range_last_point.v_lead) <= STATIONARY_FRONT_ANCHOR_MAX_SPEED_JUMP_MPS
+    ):
+      anchor_time_s = self._stationary_range_anchor_time_s
+    if anchor_time_s is None:
+      anchor_time_s = self.primary_matcher.stationary_front_anchor_time(point, time_s)
+    if anchor_time_s is not None and math.isfinite(vision.x_std) and vision.x_std > 0.0:
+      limit = max(limit, min(
+        STATIONARY_FRONT_RANGE_MAX_ERROR_M,
+        STATIONARY_FRONT_RANGE_MAX_FRACTION * vision.d_rel,
+        STATIONARY_FRONT_RANGE_XSTD_SIGMA * vision.x_std,
+      ))
+    return limit, anchor_time_s
 
   def _reset_motion_pipeline(self) -> None:
     self.trajectory_cutin = TrajectoryCutInDetector(self.cut_in_sensitivity)
     self._same_row_suppressed_until: dict[tuple[str, int, int], float] = {}
+
+  def _reset_stationary_vision_range_mismatch(self) -> None:
+    self._stationary_vision_range_mismatch_identity = None
+    self._stationary_vision_range_mismatch_since_s = None
+
+  def _reject_farther_radar_match(
+    self,
+    match: Any,
+    vision: Any,
+    path: tuple[tuple[float, float], ...],
+    time_s: float,
+  ) -> bool:
+    # Only an accepted, continuously measured moving front may use vision's
+    # range uncertainty. A fresh ID, a position jump, or a missed match must
+    # qualify again under the normal nearer-car guard.
+    point = match.point if match is not None else None
+    moving_front = bool(
+      point is not None
+      and point.source == "frontRadar"
+      and point.measured
+      and point.v_lead > STATIONARY_MAX_ABS_VLEAD_MPS
+      and _central_vision_fallback_allowed(vision, path)
+      and vision.velocity > STATIONARY_MAX_ABS_VLEAD_MPS
+      and abs(match.d_path) <= RADAR_VISION_FALLBACK_MAX_ABS_DPATH_M
+    )
+    previous = self._moving_range_last_point
+    previous_time_s = self._moving_range_last_time_s
+    range_limit = RADAR_MATCH_MAX_FARTHER_THAN_VISION_M
+    if moving_front and previous is not None and previous_time_s is not None:
+      dt = time_s - previous_time_s
+      if (
+        (point.source, point.track_id) == (previous.source, previous.track_id)
+        and 0.0 < dt <= MOVING_FRONT_RANGE_MAX_GAP_S
+        and abs(point.d_rel - (previous.d_rel + previous.v_rel * dt))
+        <= MOVING_FRONT_RANGE_MAX_POSITION_ERROR_M
+        and abs(point.y_rel - (previous.y_rel + previous.yv_rel * dt))
+        <= MOVING_FRONT_RANGE_MAX_LATERAL_ERROR_M
+        and abs(point.v_lead - previous.v_lead)
+        <= MOVING_FRONT_RANGE_MAX_SPEED_JUMP_MPS
+        and math.isfinite(vision.x_std)
+        and vision.x_std > 0.0
+      ):
+        range_limit = max(
+          range_limit,
+          min(
+            VISION_RADAR_MAX_DISTANCE_ERROR_M,
+            MOVING_FRONT_RANGE_MAX_DISTANCE_FRACTION * vision.d_rel,
+            MOVING_FRONT_RANGE_XSTD_SIGMA * vision.x_std,
+          ),
+        )
+    stationary_limit, stationary_anchor_time_s = self._stationary_front_range_limit(match, vision, time_s)
+    range_limit = max(range_limit, stationary_limit)
+    self._reset_stationary_range_history()
+    self._moving_range_last_point = None
+    self._moving_range_last_time_s = None
+    if not _radar_match_is_dangerously_farther_than_vision(
+      match, vision, path, range_limit,
+    ):
+      if moving_front:
+        self._moving_range_last_point = point
+        self._moving_range_last_time_s = time_s
+      if stationary_anchor_time_s is not None:
+        self._stationary_range_last_point = point
+        self._stationary_range_last_time_s = time_s
+        self._stationary_range_anchor_time_s = stationary_anchor_time_s
+      self._reset_stationary_vision_range_mismatch()
+      return False
+
+    identity = (match.point.source, match.point.track_id)
+    corroborated_stationary = bool(
+      identity == self.primary_matcher.stationary_identity
+      and self.primary_matcher.stationary_corner_supported
+      and match.point.source == "frontRadar"
+      and match.point.measured
+      and abs(match.point.v_lead) <= STATIONARY_MAX_ABS_VLEAD_MPS
+    )
+    if not corroborated_stationary:
+      self._reset_stationary_vision_range_mismatch()
+      return True
+    if identity != self._stationary_vision_range_mismatch_identity:
+      self._stationary_vision_range_mismatch_identity = identity
+      self._stationary_vision_range_mismatch_since_s = time_s
+      return False
+    return bool(
+      self._stationary_vision_range_mismatch_since_s is not None
+      and time_s - self._stationary_vision_range_mismatch_since_s
+      >= CORROBORATED_STATIONARY_VISION_RANGE_MISMATCH_HOLD_S
+    )
 
   def _points_at_model_time(
     self,
@@ -594,6 +754,10 @@ class DPathRadarController:
       self.primary_cut_out_predictor = RadarMotionPredictor()
       self.lead_dynamics.reset()
       self.trajectory_cutin.reset()
+      self._reset_stationary_vision_range_mismatch()
+      self._moving_range_last_point = None
+      self._moving_range_last_time_s = None
+      self._reset_stationary_range_history()
       return DPathRadarOutput(
         None, None, None, None, (), (), (), (), (), (), None,
       )
@@ -622,8 +786,12 @@ class DPathRadarController:
       # -1 is the legacy unconditional SCC mode. It intentionally does not
       # require a vision match and ignores SCC lateral position entirely.
       primary_match = unconditional_scc_match(points)
-    elif _radar_match_is_dangerously_farther_than_vision(
-      primary_match, vision, path,
+      self._reset_stationary_vision_range_mismatch()
+      self._moving_range_last_point = None
+      self._moving_range_last_time_s = None
+      self._reset_stationary_range_history()
+    elif self._reject_farther_radar_match(
+      primary_match, vision, path, time_s,
     ):
       # A farther permissive match must not hide a strongly visible nearer car.
       primary_match = None

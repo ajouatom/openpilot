@@ -42,6 +42,20 @@ def test_the_catalogue_is_readable_and_populated(params):
   assert all(isinstance(p.get("name"), str) and p["name"] for p in params)
 
 
+def test_onnx_vision_toggle_uses_existing_runtime_flag_and_lane_change_menu(settings, params):
+  by_name = {p["name"]: p for p in params}
+  vision = by_name["ShareData"]
+  assert (vision["control"], vision["min"], vision["max"], vision["default"]) == ("toggle", 0, 1, 0)
+  assert vision["risk"] == "high"
+  assert '{"ShareData", {PERSISTENT, INT, "0"}}' in PARAMS_KEYS_PATH.read_text(encoding="utf-8")
+  driving = next(category for category in settings["menu"] if category["id"] == "DRIVING")
+  steering = next(group for group in driving["groups"] if group["id"] == "STEER")
+  lane_change = next(group for group in steering["groups"] if group["id"] == "STEER_LANECHANGE")
+  assert "ShareData" in lane_change["params"]
+  for title in ("title", "etitle", "ctitle"):
+    assert "ONNX" in vision[title]
+
+
 def test_obsolete_lead_response_settings_are_removed(settings, params):
   removed = {"JLeadFactor3", "RadarReactionFactor"}
   by_name = {p["name"] for p in params}
@@ -75,7 +89,7 @@ def test_longitudinal_comfort_settings_use_driver_facing_language(params):
   lead_accel_response = by_name["LeadAccelResponse"]
   assert (lead_accel_response["min"], lead_accel_response["max"], lead_accel_response["default"]) == (0, 5, 0)
   assert lead_accel_response["control"] == "select"
-  assert "차간거리 1단계" in lead_accel_response["descr"]
+  assert "모든 차간거리 단계" in lead_accel_response["descr"]
   assert "170/130/80/36/10" in lead_accel_response["descr"]
   assert "95/80/60/35/15%" in lead_accel_response["descr"]
   assert "MPC 뒤에 가속을 별도로 더하지 않으며" in lead_accel_response["descr"]

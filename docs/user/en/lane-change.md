@@ -63,6 +63,17 @@ This setting changes only the wait **before the lane change starts**. It does no
 
 Vehicle BSD is an assistive signal. It cannot cover every fast-closing vehicle, motorcycle, object outside its sensing area, adverse condition, or sensor fault. Never interpret the absence of a BSD warning as proof that no vehicle is behind you.
 
+### `ShareData` — ONNX lane and BSD detection
+
+Enable **Carrot Web → Settings → Driving → Steering → Lane Change (Auto Turn) → ONNX Lane and BSD Detection**. It defaults to off; an existing saved enabled value is preserved.
+
+- **On:** the comma device computes lane types and camera BSD. Inference does not run on the phone. Solid/dashed classification runs continuously. BSD checks only the requested lane-change side at 30–120 km/h when that lane is at least 3 m wide.
+- **Off:** the vision service stops. Its last results expire after their validity period; vehicle-provided lane information and BSD remain available. The setting and mici status display update within a few seconds.
+
+The mici VISION card shows left/right lane types and the latest processing time. BSD distinguishes standby, no detection on the evaluated side, and detection. The card and warning indicators remain visible with the camera hidden. Amber BSD warnings combine vehicle BSD and ONNX detections.
+
+OpenCV is included with the update and installed automatically during normal device startup. No separate pip command or internet connection while driving is required. Standby means BSD is not being evaluated; no detection does not guarantee that the entire blind spot is clear.
+
 ### `LaneLineCheck` — lane-marking handling
 
 | Value | Behavior |

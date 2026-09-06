@@ -217,6 +217,8 @@ window.CarrotTranslations.register("en", {
     setting_tab_device: "Device",
     setting_tab_carrot: "CarrotPilot",
     tools: "Tools",
+    onnx_vision: "ONNX Lane / BSD",
+    onnx_vision_hint: "Open lane and blindspot status, snapshots, and detection regions in a new tab",
     logs: "Logs",
     terminal: "Terminal",
     carrot: "Carrot",

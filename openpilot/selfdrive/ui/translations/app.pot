@@ -1472,3 +1472,27 @@ msgstr ""
 msgid "Check tires, pressure, or alignment (Factor: {stiffness_factor:.1f})"
 msgstr ""
 
+
+#: openpilot/selfdrive/ui/mici/onroad/vision_renderer.py
+msgid "ON"
+msgstr ""
+
+#: openpilot/selfdrive/ui/mici/onroad/vision_renderer.py
+msgid "WAIT"
+msgstr ""
+
+#: openpilot/selfdrive/ui/mici/onroad/vision_renderer.py
+msgid "STALE"
+msgstr ""
+
+#: openpilot/selfdrive/ui/mici/onroad/vision_renderer.py
+msgid "STANDBY"
+msgstr ""
+
+#: openpilot/selfdrive/ui/mici/onroad/vision_renderer.py
+msgid "DETECTED"
+msgstr ""
+
+#: openpilot/selfdrive/ui/mici/onroad/vision_renderer.py
+msgid "NO DETECTION"
+msgstr ""

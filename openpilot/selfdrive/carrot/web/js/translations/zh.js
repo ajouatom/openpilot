@@ -217,6 +217,8 @@ window.CarrotTranslations.register("zh", {
     setting_tab_device: "设备",
     setting_tab_carrot: "CarrotPilot",
     tools: "工具",
+    onnx_vision: "ONNX 车道与盲点诊断",
+    onnx_vision_hint: "在新标签页查看车道与盲点识别状态、图像和检测区域",
     logs: "日志",
     terminal: "终端",
     carrot: "胡萝卜",

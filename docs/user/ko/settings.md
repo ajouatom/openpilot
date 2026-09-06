@@ -97,21 +97,21 @@ Carrot Web 설정 화면에서는 다음 기능을 사용할 수 있습니다.
 
 ## 전체 설정 지도
 
-현재 `carrot-wip`의 `carrot_settings.json`에는 **171개 파라미터**가 있으며, 모든 항목이 아래 메뉴에 연결되어 있습니다.
+현재 `carrot-wip`의 `carrot_settings.json`에는 **175개 파라미터**가 있으며, 모든 항목이 아래 메뉴에 연결되어 있습니다.
 
 | 대분류 | 항목 수 | 중분류 |
 |---|---:|---|
-| 주행 제어 | 107 | 시작·오토, 버튼·프리셋, 차량 조향, 속도·감속, 크루즈·차간 |
-| 차량·하드웨어 | 16 | 현대·기아, CANFD·HDA, 레이더, 운전자 모니터링, 차량 보조, 기기 하드웨어 |
+| 주행 제어 | 112 | 시작·오토, 버튼·프리셋, 차량 조향, 속도·감속, 크루즈·차간 |
+| 차량·하드웨어 | 14 | 현대·기아, CANFD·HDA, 레이더, 운전자 모니터링, 차량 보조, 기기 하드웨어 |
 | 화면 표시 | 37 | 정보 표시, 경로 표시, 밝기·주행화면, 외부 HUD |
-| 시스템 | 11 | 녹화·전원, 네트워크·지도, 사운드, 소프트웨어 |
+| 시스템 | 12 | 녹화·전원, 네트워크·지도, 사운드, 소프트웨어 |
 
 ## 주행 제어
 
-주행 제어는 차량 움직임에 영향을 줄 수 있는 107개 항목입니다. 한 번에 여러 값을 변경하지 마세요.
+주행 제어는 차량 움직임에 영향을 줄 수 있는 112개 항목입니다. 한 번에 여러 값을 변경하지 마세요.
 
 <a id="start-auto"></a>
-### 시작·오토 — 8개
+### 시작·오토 — 9개
 
 | 세부 구역 | 파라미터 | 용도 |
 |---|---|---|
@@ -137,16 +137,18 @@ Carrot Web 설정 화면에서는 다음 기능을 사용할 수 있습니다.
 버튼 설정은 순정 SCC 사용 여부와 차량 버튼 메시지에 따라 체감이 크게 다릅니다. 버튼이 예상과 다르게 작동하면 사용자 모드보다 `CruiseButtonMode=0`의 일반 동작에서 먼저 확인하세요.
 
 <a id="vehicle-steering"></a>
-### 차량 조향 — 36개
+### 차량 조향 — 37개
 
 | 세부 구역 | 파라미터 | 용도 |
 |---|---|---|
 | 중앙 보정 | `PathOffset`, `CameraYawTrimDeg` | 레인모드 경로의 좌우 위치와 카메라 YAW 미세 보정 |
 | 조향감 | `SteerActuatorDelay`, `LatSmoothSec`, `LatSuspendAngleDeg`, `CustomSR`, `SteerRatioRate` | 조향 시점, 평활화, 일시중지 각도와 조향비 |
-| [차로 변경](lane-change.md)·자동 턴 | `LaneChangeNeedTorque`, `LaneChangeDelay`, `LaneChangeBsd`, `LaneLineCheck`, `AutoTurnControl`, `AutoTurnControlSpeedTurn`, `AutoTurnControlTurnEnd`, `AutoTurnMapChange` | 차로 변경 진입 조건과 ATC 동작 |
+| [차로 변경](lane-change.md)·자동 턴 | `LaneChangeNeedTorque`, `LaneChangeDelay`, `LaneChangeBsd`, `ShareData`, `LaneLineCheck`, `AutoTurnControl`, `AutoTurnControlSpeedTurn`, `AutoTurnControlTurnEnd`, `AutoTurnMapChange` | 차로 변경 진입 조건과 ATC 동작 |
 | 레인모드 | `LatMpcPathCost`, `LatMpcMotionCost`, `LatMpcAccelCost`, `LatMpcJerkCost`, `LatMpcSteeringRateCost`, `LatMpcInputOffset`, `UseLaneLineSpeed`, `UseLaneLineCurveSpeed`, `AdjustLaneOffset` | 레인모드 MPC 가중치와 차선 사용 조건 |
 | 고급 토크·토크 계수 | `LateralTorqueCustom`, `LateralTorqueAccelFactor`, `LateralTorqueFriction`, `LateralTorqueKpV`, `LateralTorqueKiV`, `LateralTorqueKf`, `LateralTorqueKd` | 커스텀 토크 제어 계수 |
 | 고급 토크·조향 제한 | `CustomSteerMax`, `CustomSteerDeltaUp`, `CustomSteerDeltaDown`, `CustomSteerDeltaUpLC`, `CustomSteerDeltaDownLC` | 최대 조향 토크와 토크 변화율 제한 |
+
+`ONNX 차선·BSD 인식`(`ShareData`)은 장치에서 실선·점선과 조건부 카메라 BSD를 계산하는 설정입니다. 기본값은 꺼짐이며 기존 저장값은 유지합니다. 켜면 mici에 인식 상태가 표시되고, 끄면 비전 서비스가 중지됩니다. 필요한 OpenCV는 업데이트에 포함되어 정상 시작 시 자동 준비됩니다. [동작 조건과 표시 읽기](lane-change.md#sharedata--onnx-차선bsd-인식)를 참고하세요.
 
 `SteerActuatorDelay`는 높을수록 더 일찍 조향하도록 보상하고, `LatSmoothSec`는 높을수록 부드러워지는 대신 반응이 늦어질 수 있습니다. 두 값을 동시에 바꾸면 원인을 구분하기 어렵습니다.
 
@@ -174,7 +176,7 @@ Carrot Web 설정 화면에서는 다음 기능을 사용할 수 있습니다.
 
 `TrafficLightDetectMode`는 `0` 미사용, `1` 정지만 감지, `2` 정지와 출발을 모두 감지합니다. 모델 판단에 의존하므로 운전자가 항상 직접 확인해야 합니다.
 
-### 크루즈·차간 — 전체 31개, 현대·기아·제네시스 28개
+### 크루즈·차간 — 전체 29개, 현대·기아·제네시스 26개
 
 아래 표의 **세부 구역 제목을 누르면** 실제 코드 기준의 계산 방식, 값의 방향과 주의사항을 설명한 페이지로 이동합니다.
 
@@ -185,21 +187,23 @@ Carrot Web 설정 화면에서는 다음 기능을 사용할 수 있습니다.
 | [정차·재출발](cruise-gap.md#stop-resume) | `StopDistanceCarrot`, `StoppingAccel`, `VEgoStopping`, `AChangeCostStarting` | 정지 위치, 정지 진입과 재출발 특성 |
 | [가감속 튜닝](cruise-gap.md#longitudinal-tuning) | `LongTuningKpV`, `LongTuningKiV`, `LongTuningKf`, `LongActuatorDelay` | 현기차는 Kp/Ki/Kf `100/0/100` 고정·숨김, 다른 브랜드는 조정 가능 |
 | [차간거리](cruise-gap.md#following-gap) | `TFollowGap1`, `TFollowGap2`, `TFollowGap3`, `TFollowGap4`, `DynamicTFollow`, `DynamicTFollowLC`, `EnableSpeedTF`, `TFollowDecelBoost` | 차간 단계별 시간, 동적 차간과 감속 여유 |
-| [선행차 반응](cruise-gap.md#lead-response) | `LeadAccelResponse`, `JLeadFactor3`, `RadarReactionFactor` | TF1 앞차 가속과 선행차 변화에 대한 반응 특성 |
+| [선행차 반응](cruise-gap.md#lead-response) | `LeadAccelResponse`, `JLeadFactor3`, `RadarReactionFactor` | 모든 차간 단계의 앞차 가속과 선행차 변화에 대한 반응 특성 |
 | [당근 크루즈](cruise-gap.md#carrot-cruise) | `CruiseEcoControl`, `CarrotCruiseDecel`, `CarrotCruiseAtcDecel` | 연비 제어와 당근 크루즈 감속 특성 |
 
 `MyDrivingMode`는 `1` 연비, `2` 안전, `3` 일반, `4` 고속 모드입니다. 고속 모드는 신호 감지를 무시하고 가속 성향을 높이므로 모드 이름만 보고 선택하지 말고 설명을 확인하세요.
 
 `TFollowGap1`~`TFollowGap4`는 저장값에 `0.01초`를 곱한 시간 간격입니다. 값을 줄이면 선행차와 가까워집니다. `DynamicTFollow` 관련 기능은 고정 차간에서 기준 동작을 확인한 다음 적용하세요.
 
-`LeadAccelResponse`는 차간 1단계에서만 앞차의 출발·가속을 따라가는 MPC 민첩성을 0~5단계로 조절합니다. 1단계는 약한 반응, 2단계는 완만한 반응, 3단계는 일상적으로 조금 급한 경쾌함, 4단계는 급한 추종, 시험용 5단계는 최대 추종입니다. 단계가 높을수록 MPC의 활성 가속변화 비용과 jerk 비용을 낮춰 `vTargetNow`와 `aTarget`이 함께 더 빠르게 상승하며, `CruiseMaxVals`·곡선·끼어들기·위험거리 상한은 그대로 유지합니다. 설정 TF에 도달하거나 앞차 가속이 끝나면 즉시 기존 MPC 비용과 감속 제어로 돌아갑니다. 적용 조건과 단계별 비용은 [선행차 반응 설명](cruise-gap.md#lead-response)을 확인하세요.
+`LeadAccelResponse`는 모든 차간 단계에서 앞차의 출발·가속을 따라가는 운전자 성향을 0~5단계로 조절합니다. 선택한 차간 단계의 TF를 기준으로 동작하며, 반응 강도 4~5는 앞차 가속 중 해당 단계의 `TFollowGap1~4` 설정을 우선합니다. 1단계는 약한 반응, 2단계는 완만한 반응, 3단계는 일상적으로 조금 급한 경쾌함, 4단계는 급한 추종, 시험용 5단계는 최대 추종입니다. 단계가 높을수록 MPC의 활성 가속변화 비용과 jerk 비용을 낮춰 `vTargetNow`와 `aTarget`이 함께 더 빠르게 상승하며, `CruiseMaxVals`·곡선·끼어들기·위험거리 상한은 그대로 유지합니다. 설정 TF에 도달하거나 앞차 가속이 끝나면 즉시 기존 MPC 비용과 감속 제어로 돌아갑니다. 적용 조건과 단계별 비용은 [선행차 반응 설명](cruise-gap.md#lead-response)을 확인하세요.
 
 `LongTuning*`, `LongActuatorDelay`, `StoppingAccel`은 openpilot이 가감속을 제어하는 차량에서 직접적인 영향을 줄 수 있는 고급 항목입니다. 현대·기아·제네시스에서는 `LongTuningKpV`, `LongTuningKiV`, `LongTuningKf`가 안전값 `100/0/100`으로 고정되어 설정 화면에 나오지 않으며, 순정 ACC 차량에서는 관련 없는 항목도 있습니다.
+
+현대·기아·제네시스에서 `StoppingAccel=0`으로 저장되어 있으면 부팅 후 차량 제어 초기화 시 `-50`(-0.50m/s²)으로 자동 보정합니다. 기존 음수 값은 유지하며, 다른 차종의 `0`은 기존 정지 제어 방식을 사용합니다.
 
 <a id="vehicle-hardware"></a>
 ## 차량·하드웨어
 
-차량·하드웨어 16개 항목은 차종, 하네스와 기기 하드웨어 구성을 결정하는 설정입니다. 화면 표시 설정처럼 시험 삼아 켜면 안 됩니다.
+차량·하드웨어 14개 항목은 차종, 하네스와 기기 하드웨어 구성을 결정하는 설정입니다. 화면 표시 설정처럼 시험 삼아 켜면 안 됩니다.
 
 | 중분류 | 파라미터 | 용도 |
 |---|---|---|
@@ -215,7 +219,7 @@ Carrot Web 설정 화면에서는 다음 기능을 사용할 수 있습니다.
 
 - `HyundaiCameraSCC`: 현대·기아 차량의 롱컨, 크루즈 동기화와 CAN FD 배선 구성에 따라 모드가 달라집니다.
 - `CanfdHDA2`: HDA2 차량에서만 활성화합니다.
-- `EnableRadarTracks`: `-2`는 비전 전용 시험, `-1`은 비전 매칭 없이 SCC를 항상 사용, `0`은 SCC-비전 매칭, `1`은 SCC 없이 프런트 레이더-비전 매칭, `2`는 프런트 레이더와 저속 SCC-비전 매칭, `3`은 프런트 레이더-비전 매칭 실패 시 SCC 강제 사용입니다. 매칭 모드는 실패 시 확률 `0.40` 이상인 중앙 비전을 사용하고, `-1`·`3`은 SCC가 없을 때만 비전으로 전환합니다. 강제 SCC는 횡좌표를 무시합니다. 레거시 Mando 레이더의 32·64슬롯 차이는 자동 처리합니다.
+- `EnableRadarTracks`: `-2`는 비전 전용 시험, `-1`은 비전 매칭 없이 SCC를 항상 사용, `0`은 SCC-비전 매칭, `1`은 SCC 없이 프런트 레이더-비전 매칭, `2`는 프런트 레이더와 저속 SCC-비전 매칭, `3`은 프런트 레이더-비전 매칭 실패 시 SCC 강제 사용입니다. 매칭 모드는 실패 시 확률 `0.40` 이상인 중앙 비전을 사용하고, `-1`·`3`은 SCC가 없을 때만 비전으로 전환합니다. 강제 SCC는 횡좌표를 무시합니다. 레거시 Mando 레이더의 32·64슬롯 차이는 자동 처리합니다. 새 정지 전방 리드는 비전 또는 동일 물체의 코너 검출로 확인해야 하며, 전방 레이더의 연속 관측만으로 승인하지 않습니다. 비전의 위치·속도와 일치하는 이동 레이더가 별도로 확인되면, 그 비전을 다른 정지 반사체의 승인·유지 근거로 사용하지 않습니다. 코너 근거도 선택한 정지 객체와 실제로 일치해야 인정합니다. 동일 객체의 코너 확인이 없는 미확정 프런트는 비전 근거가 허용된 짧은 공백을 넘겨 끊기면 객체와 확인 시간을 함께 초기화하고 다시 확인합니다. 이미 선택한 이동 프런트는 같은 실측 객체의 연속성이 유지되면 제한된 비전 거리 불확실도 안에서 L1을 유지하며, 고정 8m 차이만으로 버리지 않습니다. 더 가까운 새 매칭은 즉시 선택할 수 있고, 공백이나 물리적 급변이 생기면 이 유지 허용치를 초기화합니다. 먼 정지차는 실측 프런트의 연속 이력과 반복된 비전 위치 일치가 있을 때 완만한 곡선에서도 확인할 수 있습니다. 같은 코너의 연속된 위치·속도 근거를 함께 판단하고, 확인된 정지 프런트는 거리·시간 상한 안에서 비전 거리 흔들림을 견딥니다. 제어 거리·속도는 레이더 값을 사용합니다.
 - `CarrotRadarMode`: 전방·코너 레이더로 차량의 움직임을 계속 추적해 끼어드는 차량을 감지하고, 카메라 영상과 레이더 정보를 새로운 방식으로 맞춰 앞차를 선택합니다. 코너 레이더와 레이더 트랙 기능이 모두 없는 차량에서는 기존 방식과 동일하게 동작합니다. 가감속 동작이 달라질 수 있으므로 검증을 마친 동일 차량에서만 켭니다. 변경값은 다음 OnRoad가 시작될 때 고정되므로, 변경 후 현재 주행을 끝내고 차량을 재시동하거나 기기를 재부팅해야 적용됩니다. 기존 `RadarMotionMode` 값은 업데이트 후 처음 시작할 때 새 이름으로 한 번 자동 이관됩니다.
 - `CarrotRadarCutInSensitivity`: 당근레이더모드 전용 CUT-IN 감도입니다. `0`은 사용 안 함, `1`은 둔감, `3`은 보통(기본값), `5`는 아주 민감이며 `2`와 `4`는 중간 단계입니다. 단계 `1`~`5`는 실제 측정 움직임이 각각 `0.50`, `0.40`, `0.35`, `0.25`, `0.20초` 계속될 때 확정하며, 물리 미래 예측시간은 5.0초로 고정합니다. 전방 레이더의 최근 실측 이력에서 0.50m 이상 강한 단방향 진입이 확인되면 timestamp 양자화로 확정을 놓치지 않도록 최대 20Hz 레이더 한 프레임만 반영하며, 작은 인접 차로 흔들림에는 적용하지 않습니다. 기존 레이더모드와 `EnableCornerRadar`에는 영향을 주지 않습니다. 다음 OnRoad 시작 때 읽으므로 변경 후 차량을 재시동하거나 기기를 재부팅해야 적용됩니다.
 - `DisableDM`: 운전자 모니터링을 비활성화할 수 있는 안전 관련 항목이며 재부팅이 필요합니다.
@@ -283,7 +287,7 @@ Carrot Vision에는 `carrot_settings.json` 카탈로그와 별도로 **AR 표시
 <a id="system"></a>
 ## 시스템
 
-시스템에는 녹화, 전원, 네트워크, 지도, 소리와 소프트웨어 메뉴를 다루는 11개 항목이 있습니다.
+시스템에는 녹화, 전원, 네트워크, 지도, 소리와 소프트웨어 메뉴를 다루는 12개 항목이 있습니다.
 
 | 중분류 | 파라미터 | 용도 |
 |---|---|---|

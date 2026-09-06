@@ -1,0 +1,2 @@
+# Match uv.lock and the bundled AGNOS wheel. NumPy and Pillow come from openpilot.
+opencv-python-headless==4.13.0.92

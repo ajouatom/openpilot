@@ -1,0 +1,323 @@
+{
+  "baseline_commit": "5de19eabcec09d8695a90a8d7991bd72a19d9bff",
+  "recorded_commit": "f8ce05da2ea1d2576bc93ed22bb001898539c1be",
+  "route_segment": "00000178--52f7f496c5--62",
+  "full_schema_service_counts": {
+    "carState": 6001,
+    "carControl": 6054,
+    "modelV2": 1201,
+    "radarState": 1201,
+    "liveTracks": 1200,
+    "longitudinalPlan": 1201
+  },
+  "incident_window_s": [
+    17.3,
+    19.4
+  ],
+  "incident_checks": {
+    "2": {
+      "recorded_code": {
+        "false_l1_frames": 27,
+        "interval_s": [
+          17.850927253,
+          19.152389131
+        ]
+      },
+      "current": {
+        "false_l1_frames": 5,
+        "interval_s": [
+          17.95421103,
+          18.150281429
+        ]
+      },
+      "fixed": {
+        "false_l1_frames": 0,
+        "interval_s": null
+      }
+    },
+    "3": {
+      "recorded_code": {
+        "false_l1_frames": 27,
+        "interval_s": [
+          17.850927253,
+          19.152389131
+        ]
+      },
+      "current": {
+        "false_l1_frames": 5,
+        "interval_s": [
+          17.95421103,
+          18.150281429
+        ]
+      },
+      "fixed": {
+        "false_l1_frames": 0,
+        "interval_s": null
+      }
+    }
+  },
+  "corpus_comparison_original_expectations": {
+    "2": {
+      "logs": 85,
+      "labels": 467,
+      "baseline_failures": 39,
+      "final_failures": 39,
+      "new_failure_ids": [
+        "ioniq5-e7d-3-closer-stationary-front-52"
+      ],
+      "resolved_ids": [
+        "carnival-178-62-interrupted-vision-stationary-reflections-36-56"
+      ],
+      "remaining_failure_ids": [
+        "gv80-218-2-adjacent-right-14",
+        "ioniq5-e7d-3-closer-stationary-front-52",
+        "manual-0000005b-019p25-corner-1055",
+        "manual-0000005b-019p55-corner-1052",
+        "manual-0000005b-020p30-corner-1094",
+        "manual-0000005b-020p35-corner-1013",
+        "manual-0000005b-020p40-corner-1063",
+        "manual-0000005b-020p70-corner-1089",
+        "manual-0000006a-054p90-corner-1023",
+        "manual-000000b1-005p35-corner-1001",
+        "manual-000000b1-007p30-corner-1033",
+        "manual-000000cf-001p60-corner-1002",
+        "manual-000000cf-002p05-corner-1003",
+        "manual-000000cf-002p60-corner-1003",
+        "manual-000000cf-005p85-corner-1005",
+        "manual-000000cf-006p25-corner-1003",
+        "manual-000000cf-014p40-corner-1013",
+        "manual-000000cf-015p75-corner-1000",
+        "manual-000000cf-019p35-corner-1001",
+        "manual-00000192-032p30-corner-1036",
+        "manual-000001c1-024p50-corner-1014",
+        "manual-000001c1-024p80-corner-1015",
+        "manual-000001c1-025p20-corner-1012",
+        "manual-000001ce-014p70-corner-1000",
+        "manual-00000218-013p55-corner-1009",
+        "manual-00000218-046p40-corner-1040",
+        "manual-000002d3-040p10-corner-1000",
+        "manual-000002d3-040p45-corner-1018",
+        "manual-00000bef-024p30-front-34",
+        "manual-00000c21-013p65-front-58",
+        "manual-00000c21-029p80-front-40",
+        "manual-00000c21-031p50-front-46",
+        "manual-00000c21-032p65-front-61",
+        "manual-00000c21-032p75-front-63",
+        "manual-00000c21-033p15-front-62",
+        "manual-00000c21-058p05-front-59",
+        "manual-00000cd0-016p50-corner-1002",
+        "manual-00000cd0-017p20-corner-1002",
+        "manual-00000cfb-036p80-corner-1028"
+      ],
+      "predeceleration_failures": 0,
+      "missing_logs": 0
+    },
+    "3": {
+      "logs": 85,
+      "labels": 467,
+      "baseline_failures": 39,
+      "final_failures": 39,
+      "new_failure_ids": [
+        "ioniq5-e7d-3-closer-stationary-front-52"
+      ],
+      "resolved_ids": [
+        "carnival-178-62-interrupted-vision-stationary-reflections-36-56"
+      ],
+      "remaining_failure_ids": [
+        "ioniq5-e7d-3-closer-stationary-front-52",
+        "ioniq9-234-6-scc-corroborated-early-l2",
+        "manual-0000005b-019p25-corner-1055",
+        "manual-0000005b-019p55-corner-1052",
+        "manual-0000005b-020p30-corner-1094",
+        "manual-0000005b-020p35-corner-1013",
+        "manual-0000005b-020p40-corner-1063",
+        "manual-0000005b-020p70-corner-1089",
+        "manual-0000006a-054p90-corner-1023",
+        "manual-000000b1-005p35-corner-1001",
+        "manual-000000b1-007p30-corner-1033",
+        "manual-000000cf-001p60-corner-1002",
+        "manual-000000cf-002p05-corner-1003",
+        "manual-000000cf-002p60-corner-1003",
+        "manual-000000cf-005p85-corner-1005",
+        "manual-000000cf-006p25-corner-1003",
+        "manual-000000cf-014p40-corner-1013",
+        "manual-000000cf-015p75-corner-1000",
+        "manual-000000cf-019p35-corner-1001",
+        "manual-00000192-032p30-corner-1036",
+        "manual-000001c1-024p50-corner-1014",
+        "manual-000001c1-024p80-corner-1015",
+        "manual-000001c1-025p20-corner-1012",
+        "manual-000001ce-014p70-corner-1000",
+        "manual-00000218-013p55-corner-1009",
+        "manual-00000218-046p40-corner-1040",
+        "manual-000002d3-040p10-corner-1000",
+        "manual-000002d3-040p45-corner-1018",
+        "manual-00000bef-024p30-front-34",
+        "manual-00000c21-013p65-front-58",
+        "manual-00000c21-029p80-front-40",
+        "manual-00000c21-031p50-front-46",
+        "manual-00000c21-032p65-front-61",
+        "manual-00000c21-032p75-front-63",
+        "manual-00000c21-033p15-front-62",
+        "manual-00000c21-058p05-front-59",
+        "manual-00000cd0-016p50-corner-1002",
+        "manual-00000cd0-017p20-corner-1002",
+        "manual-00000cfb-036p80-corner-1028"
+      ],
+      "predeceleration_failures": 0,
+      "missing_logs": 0
+    }
+  },
+  "corpus_comparison": {
+    "2": {
+      "logs": 85,
+      "labels": 467,
+      "baseline_failures": 40,
+      "final_failures": 38,
+      "new_failure_ids": [],
+      "resolved_ids": [
+        "carnival-178-62-interrupted-vision-stationary-reflections-36-56",
+        "ioniq5-e7d-3-unconfirmed-stationary-front-52"
+      ],
+      "remaining_failure_ids": [
+        "gv80-218-2-adjacent-right-14",
+        "manual-0000005b-019p25-corner-1055",
+        "manual-0000005b-019p55-corner-1052",
+        "manual-0000005b-020p30-corner-1094",
+        "manual-0000005b-020p35-corner-1013",
+        "manual-0000005b-020p40-corner-1063",
+        "manual-0000005b-020p70-corner-1089",
+        "manual-0000006a-054p90-corner-1023",
+        "manual-000000b1-005p35-corner-1001",
+        "manual-000000b1-007p30-corner-1033",
+        "manual-000000cf-001p60-corner-1002",
+        "manual-000000cf-002p05-corner-1003",
+        "manual-000000cf-002p60-corner-1003",
+        "manual-000000cf-005p85-corner-1005",
+        "manual-000000cf-006p25-corner-1003",
+        "manual-000000cf-014p40-corner-1013",
+        "manual-000000cf-015p75-corner-1000",
+        "manual-000000cf-019p35-corner-1001",
+        "manual-00000192-032p30-corner-1036",
+        "manual-000001c1-024p50-corner-1014",
+        "manual-000001c1-024p80-corner-1015",
+        "manual-000001c1-025p20-corner-1012",
+        "manual-000001ce-014p70-corner-1000",
+        "manual-00000218-013p55-corner-1009",
+        "manual-00000218-046p40-corner-1040",
+        "manual-000002d3-040p10-corner-1000",
+        "manual-000002d3-040p45-corner-1018",
+        "manual-00000bef-024p30-front-34",
+        "manual-00000c21-013p65-front-58",
+        "manual-00000c21-029p80-front-40",
+        "manual-00000c21-031p50-front-46",
+        "manual-00000c21-032p65-front-61",
+        "manual-00000c21-032p75-front-63",
+        "manual-00000c21-033p15-front-62",
+        "manual-00000c21-058p05-front-59",
+        "manual-00000cd0-016p50-corner-1002",
+        "manual-00000cd0-017p20-corner-1002",
+        "manual-00000cfb-036p80-corner-1028"
+      ],
+      "predeceleration_failures": 0,
+      "missing_logs": 0
+    },
+    "3": {
+      "logs": 85,
+      "labels": 467,
+      "baseline_failures": 40,
+      "final_failures": 38,
+      "new_failure_ids": [],
+      "resolved_ids": [
+        "carnival-178-62-interrupted-vision-stationary-reflections-36-56",
+        "ioniq5-e7d-3-unconfirmed-stationary-front-52"
+      ],
+      "remaining_failure_ids": [
+        "ioniq9-234-6-scc-corroborated-early-l2",
+        "manual-0000005b-019p25-corner-1055",
+        "manual-0000005b-019p55-corner-1052",
+        "manual-0000005b-020p30-corner-1094",
+        "manual-0000005b-020p35-corner-1013",
+        "manual-0000005b-020p40-corner-1063",
+        "manual-0000005b-020p70-corner-1089",
+        "manual-0000006a-054p90-corner-1023",
+        "manual-000000b1-005p35-corner-1001",
+        "manual-000000b1-007p30-corner-1033",
+        "manual-000000cf-001p60-corner-1002",
+        "manual-000000cf-002p05-corner-1003",
+        "manual-000000cf-002p60-corner-1003",
+        "manual-000000cf-005p85-corner-1005",
+        "manual-000000cf-006p25-corner-1003",
+        "manual-000000cf-014p40-corner-1013",
+        "manual-000000cf-015p75-corner-1000",
+        "manual-000000cf-019p35-corner-1001",
+        "manual-00000192-032p30-corner-1036",
+        "manual-000001c1-024p50-corner-1014",
+        "manual-000001c1-024p80-corner-1015",
+        "manual-000001c1-025p20-corner-1012",
+        "manual-000001ce-014p70-corner-1000",
+        "manual-00000218-013p55-corner-1009",
+        "manual-00000218-046p40-corner-1040",
+        "manual-000002d3-040p10-corner-1000",
+        "manual-000002d3-040p45-corner-1018",
+        "manual-00000bef-024p30-front-34",
+        "manual-00000c21-013p65-front-58",
+        "manual-00000c21-029p80-front-40",
+        "manual-00000c21-031p50-front-46",
+        "manual-00000c21-032p65-front-61",
+        "manual-00000c21-032p75-front-63",
+        "manual-00000c21-033p15-front-62",
+        "manual-00000c21-058p05-front-59",
+        "manual-00000cd0-016p50-corner-1002",
+        "manual-00000cd0-017p20-corner-1002",
+        "manual-00000cfb-036p80-corner-1028"
+      ],
+      "predeceleration_failures": 0,
+      "missing_logs": 0
+    }
+  },
+  "focused_tests_passed": 493,
+  "expectation_changes": {
+    "case": "ioniq5-e7d-3-closer-stationary-front-52",
+    "first_detection_before_s": 15.387799502,
+    "first_detection_after_s": 15.539648426,
+    "detection_delay_s": 0.15184892399999939,
+    "original_deadline_s": 15.45,
+    "revised_deadline_s": 15.6,
+    "no_admission_window_before_s": [
+      12.0,
+      15.24
+    ],
+    "no_admission_window_after_s": [
+      12.0,
+      15.5
+    ],
+    "support_restarted_s": 15.248622815,
+    "reason": "The old acquisition borrowed dwell across a vision support interruption. Require a fresh 0.25-second confirmation; preserve the newly failed original deadline below."
+  },
+  "limitations": [
+    "Full strict validation retains the 38 previously failed expectations.",
+    "One real slow vehicle is selected 0.152 seconds later and fails its original deadline. The maintained deadline was explicitly revised to require fresh confirmation.",
+    "Model probabilities are unchanged. This is lead replay, not a counterfactual MPC or on-road result."
+  ],
+  "vision_probability_runs": [
+    {
+      "threshold": 0.4,
+      "first_s": 17.396725169,
+      "last_s": 17.450999355,
+      "frames": 2
+    },
+    {
+      "threshold": 0.4,
+      "first_s": 17.800984032,
+      "last_s": 18.150281429,
+      "frames": 8
+    },
+    {
+      "threshold": 0.8,
+      "first_s": 18.001754503,
+      "last_s": 18.05364795,
+      "frames": 2
+    }
+  ]
+}

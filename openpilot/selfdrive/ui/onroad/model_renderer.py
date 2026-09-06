@@ -8,6 +8,10 @@ from openpilot.common.filter_simple import FirstOrderFilter
 from openpilot.common.params import Params
 from openpilot.selfdrive.locationd.calibrationd import HEIGHT_INIT
 from openpilot.selfdrive.ui.ui_state import ui_state
+from openpilot.selfdrive.ui.road_markings import (
+  LANE_DASH_LENGTH_M as LANE_DASH_LENGTH_M, LANE_DASH_GAP_M as LANE_DASH_GAP_M,
+  lane_dash_segments, project_blindspot_barrier, blindspot_barrier_quads,
+)
 from openpilot.system.ui.lib.application import gui_app, FontWeight
 from openpilot.system.ui.lib.text_draw import draw_text_ui_style
 from openpilot.system.ui.lib.shader_polygon import draw_polygon, draw_polygon_solid, Gradient
@@ -17,8 +21,6 @@ CLIP_MARGIN = 500
 MIN_DRAW_DISTANCE = 10.0
 MAX_DRAW_DISTANCE = 100.0
 CARROT_PARAM_REFRESH_INTERVAL = 1.0
-LANE_DASH_LENGTH_M = 5.2
-LANE_DASH_GAP_M = 4.2
 
 LaneChangeState = log.LaneChangeState
 
@@ -63,35 +65,6 @@ class RadarLeadInfo:
   has_future_point: bool = False
 
 
-def lane_dash_segments(line: np.ndarray, max_distance: float) -> list[np.ndarray]:
-  if line.shape[0] < 2:
-    return []
-
-  x = line[:, 0]
-  start_distance = max(0.0, float(x[0]))
-  end_distance = min(max_distance, float(x[-1]))
-  if end_distance <= start_distance:
-    return []
-
-  segments = []
-  cycle_distance = LANE_DASH_LENGTH_M + LANE_DASH_GAP_M
-  cursor = math.floor(start_distance / cycle_distance) * cycle_distance
-  while cursor < end_distance:
-    dash_start = max(cursor, start_distance)
-    dash_end = min(cursor + LANE_DASH_LENGTH_M, end_distance)
-    if dash_end > dash_start:
-      inside = line[(x > dash_start) & (x < dash_end)]
-      start_point = np.array(
-        [dash_start, *(np.interp(dash_start, x, line[:, axis]) for axis in (1, 2))],
-        dtype=line.dtype,
-      )
-      end_point = np.array(
-        [dash_end, *(np.interp(dash_end, x, line[:, axis]) for axis in (1, 2))],
-        dtype=line.dtype,
-      )
-      segments.append(np.vstack((start_point, inside, end_point)))
-    cursor += cycle_distance
-  return segments
 
 
 class ModelRenderer(Widget):
@@ -1047,65 +1020,8 @@ class ModelRenderer(Widget):
 
 
   def _build_blind_spot_barrier_carrot(self, model_position: np.ndarray, y_shift: float) -> np.ndarray:
-    max_idx_barrier = self._get_path_length_idx(model_position[:, 0], 40.0)
-    points = model_position[:max_idx_barrier + 1]
-    points = points[points[:, 0] >= 0]
-    if points.shape[0] == 0:
-      return np.empty((0, 2), dtype=np.float32)
-
-    # Project the upper/lower barrier edges together. This preserves the old
-    # point and clipping rules without two Python projection calls per point.
-    offsets = np.array(
-      [[0.0, y_shift, 1.15], [0.0, y_shift, 0.6]],
-      dtype=np.float32,
-    )
-    points_3d = points[None, :, :] + offsets[:, None, :]
-    # Keep the former three-term float32 dot-product order while applying the
-    # projection to both edges and all model points at once.
-    transform = self._car_space_transform
-    projected = (
-      transform[:, 0, None, None] * points_3d[None, :, :, 0] +
-      transform[:, 1, None, None] * points_3d[None, :, :, 1] +
-      transform[:, 2, None, None] * points_3d[None, :, :, 2]
-    )
-    upper_projected = projected[:, 0, :]
-    lower_projected = projected[:, 1, :]
-
-    valid_depth = (np.abs(upper_projected[2]) >= 1e-6) & (np.abs(lower_projected[2]) >= 1e-6)
-    if not np.any(valid_depth):
-      return np.empty((0, 2), dtype=np.float32)
-
-    upper_screen = upper_projected[:2, valid_depth] / upper_projected[2, valid_depth][None, :]
-    lower_screen = lower_projected[:2, valid_depth] / lower_projected[2, valid_depth][None, :]
-
-    clip = self._clip_region
-    x_min, x_max = clip.x, clip.x + clip.width
-    y_min, y_max = clip.y, clip.y + clip.height
-    upper_in_clip = (
-      (upper_screen[0] >= x_min) & (upper_screen[0] <= x_max) &
-      (upper_screen[1] >= y_min) & (upper_screen[1] <= y_max)
-    )
-    lower_in_clip = (
-      (lower_screen[0] >= x_min) & (lower_screen[0] <= x_max) &
-      (lower_screen[1] >= y_min) & (lower_screen[1] <= y_max)
-    )
-    both_in_clip = upper_in_clip & lower_in_clip
-    if not np.any(both_in_clip):
-      return np.empty((0, 2), dtype=np.float32)
-
-    upper_screen = upper_screen[:, both_in_clip]
-    lower_screen = lower_screen[:, both_in_clip]
-
-    # Match the old hill/inversion filter: keep a point only when its upper
-    # screen Y does not increase relative to the last accepted point.
-    if upper_screen.shape[1] > 1:
-      keep = upper_screen[1] == np.minimum.accumulate(upper_screen[1])
-      upper_screen = upper_screen[:, keep]
-      lower_screen = lower_screen[:, keep]
-
-    if upper_screen.shape[1] == 0:
-      return np.empty((0, 2), dtype=np.float32)
-    return np.vstack((upper_screen.T, lower_screen[:, ::-1].T)).astype(np.float32)
+    max_idx = self._get_path_length_idx(model_position[:, 0], 40.0)
+    return project_blindspot_barrier(model_position[:max_idx + 1], y_shift, self._car_space_transform, self._clip_region)
 
 
   def _update_blind_spot_barriers_carrot(self, sm, update_left: bool = True, update_right: bool = True):
@@ -1126,33 +1042,7 @@ class ModelRenderer(Widget):
       self._carrot_lane_barrier_vertices[1] = self._build_blind_spot_barrier_carrot(model_position, 1.7)
 
   def _draw_blind_spot_segments_carrot(self, points: np.ndarray, color: rl.Color):
-    if points.size == 0:
-      return
-
-    count = points.shape[0]
-    half = count // 2
-    if half < 3:
-      return
-
-    starts = np.arange(0, half - 2, 2)
-    if starts.size == 0:
-      return
-
-    quads = np.stack(
-      (
-        points[starts],
-        points[starts + 1],
-        points[count - starts - 3],
-        points[count - starts - 2],
-      ),
-      axis=1,
-    )
-    centers = np.mean(quads, axis=1, keepdims=True)
-    angles = np.arctan2(quads[:, :, 1] - centers[:, :, 1], quads[:, :, 0] - centers[:, :, 0])
-    order = np.argsort(angles, axis=1)
-    ordered_quads = np.take_along_axis(quads, order[:, :, None], axis=1)
-
-    for quad in ordered_quads:
+    for quad in blindspot_barrier_quads(points):
       self._draw_polygon_points_carrot(quad, color, False, 10)
 
 
