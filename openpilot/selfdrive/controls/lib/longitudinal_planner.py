@@ -255,9 +255,9 @@ class LongitudinalPlanner:
     )
 
     lead_track_frames = self.update_lead_tracks(sm['radarState'])
+    # Response strength is a driver preference at every following-distance level.
     lead_accel_response_enabled = (
-      sm['selfdriveState'].personality == log.LongitudinalPersonality.aggressive
-      and carrot.leadAccelResponse > 0
+      carrot.leadAccelResponse > 0
       and not reset_state
       and not sm['carState'].gasPressed
       and not force_slow_decel

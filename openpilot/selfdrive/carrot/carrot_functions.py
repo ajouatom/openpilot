@@ -10,7 +10,7 @@ from openpilot.common.filter_simple import MyMovingAverage
 from openpilot.selfdrive.carrot.t_follow import get_t_follow_mode_factor, get_t_follow_mode_max, ramp_t_follow
 from openpilot.selfdrive.carrot.traffic_stop import TrafficStopModelLeadMatcher, is_traffic_stop_entry_allowed
 from openpilot.selfdrive.controls.radar_constants import RADAR_TO_CAMERA
-from openpilot.selfdrive.controls.lib.longitudinal_preview import LEAD_ACCEL_DEADBAND, LEAD_ACCEL_TF1_FORCE_MIN
+from openpilot.selfdrive.controls.lib.longitudinal_preview import LEAD_ACCEL_DEADBAND, LEAD_ACCEL_CONFIGURED_TF_MIN
 from openpilot.selfdrive.selfdrived.events import Events
 
 EventName = log.OnroadEvent.EventName
@@ -213,8 +213,8 @@ class CarrotPlanner:
     factor = self.myHighModeFactor if self.myDrivingMode == DrivingMode.High else self.mySafeFactor
     return np.interp(v_ego, A_CRUISE_MAX_BP_CARROT, cruiseMaxVals) * factor
 
-  def _get_base_t_follow(self, personality, v_ego):
-    if self.enableSpeedTF < 0:
+  def _get_base_t_follow(self, personality, v_ego, use_speed_tf=True):
+    if use_speed_tf and self.enableSpeedTF < 0:
       TF_SPEED_BPS = {
         -1: [0, 30, 60, 90],
         -2: [0, 40, 80, 120],
@@ -306,20 +306,19 @@ class CarrotPlanner:
 
   def get_T_FOLLOW(self, personality=log.LongitudinalPersonality.standard, v_ego=0.0, a_ego=0.0,
                    lead_status=False, lead_accel=0.0):
-    force_tf1_target = (
+    force_configured_tf_target = (
       lead_status
       and np.isfinite(lead_accel)
       and lead_accel > LEAD_ACCEL_DEADBAND
-      and personality == log.LongitudinalPersonality.aggressive
-      and self.leadAccelResponse >= LEAD_ACCEL_TF1_FORCE_MIN
+      and self.leadAccelResponse >= LEAD_ACCEL_CONFIGURED_TF_MIN
     )
-    if force_tf1_target:
-      # Levels 4-5 keep the driver's Gap 1 target authoritative only while a
+    tf_base = self._get_base_t_follow(personality, v_ego, use_speed_tf=not force_configured_tf_target)
+    if force_configured_tf_target:
+      # Levels 4-5 keep the driver's selected gap target authoritative while a
       # tracked lead is positively accelerating and the gap is opening. A
       # neutral/decelerating lead returns to normal gap processing at once.
-      tf_mode_target = float(self.tFollowGap1)
+      tf_mode_target = tf_base
     else:
-      tf_base = self._get_base_t_follow(personality, v_ego)
       tf_target = self._apply_speed_t_follow_scale(tf_base, v_ego)
       # Keep the target, deceleration hold state and applied state in the same
       # mode-scaled domain. Applying the mode factor after the hold compounded
