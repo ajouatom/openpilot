@@ -26,6 +26,14 @@ from openpilot.selfdrive.carrot.radar_motion.primary import (
   FrontRadarKinematicAssociator,
   RadarPointSnapshot,
   STATIONARY_MAX_ABS_VLEAD_MPS,
+  STATIONARY_FRONT_ANCHOR_MAX_AGE_S,
+  STATIONARY_FRONT_ANCHOR_MAX_SPEED_JUMP_MPS,
+  STATIONARY_FRONT_POSITION_LOCK_MIN_TRACK_STATE,
+  STATIONARY_FRONT_RANGE_MAX_DPATH_M,
+  STATIONARY_FRONT_RANGE_MAX_ERROR_M,
+  STATIONARY_FRONT_RANGE_MAX_FRACTION,
+  STATIONARY_FRONT_RANGE_MAX_YREL_ERROR_M,
+  STATIONARY_FRONT_RANGE_XSTD_SIGMA,
   VISION_RADAR_MAX_DISTANCE_ERROR_M,
   VisionRadarMatcher,
   lead_from_vision,
@@ -427,6 +435,54 @@ class DPathRadarController:
     self._stationary_vision_range_mismatch_since_s: float | None = None
     self._moving_range_last_point: RadarPointSnapshot | None = None
     self._moving_range_last_time_s: float | None = None
+    self._stationary_range_last_point: RadarPointSnapshot | None = None
+    self._stationary_range_last_time_s: float | None = None
+    self._stationary_range_anchor_time_s: float | None = None
+
+  def _reset_stationary_range_history(self) -> None:
+    self._stationary_range_last_point = None
+    self._stationary_range_last_time_s = None
+    self._stationary_range_anchor_time_s = None
+
+  def _stationary_front_range_limit(self, match: Any, vision: Any, time_s: float) -> tuple[float, float | None]:
+    limit = RADAR_MATCH_MAX_FARTHER_THAN_VISION_M
+    if match is None or vision is None or not math.isfinite(time_s):
+      return limit, None
+    point = match.point
+    if (
+      point.source != "frontRadar" or not point.measured
+      or point.radar_track_state < STATIONARY_FRONT_POSITION_LOCK_MIN_TRACK_STATE
+      or abs(point.v_lead) > STATIONARY_MAX_ABS_VLEAD_MPS
+      or (point.source, point.track_id) != self.primary_matcher.stationary_identity
+      or abs(match.d_path) > STATIONARY_FRONT_RANGE_MAX_DPATH_M
+      or vision.probability < RADAR_VISION_FALLBACK_MIN_PROBABILITY
+      or abs(point.y_rel - vision.y_rel) > STATIONARY_FRONT_RANGE_MAX_YREL_ERROR_M
+    ):
+      return limit, None
+    anchor_time_s = None
+    if abs(point.d_rel - vision.d_rel) <= limit:
+      anchor_time_s = time_s
+    elif (
+      self._stationary_range_last_point is not None
+      and self._stationary_range_last_time_s is not None
+      and self._stationary_range_anchor_time_s is not None
+      and 0.0 < time_s - self._stationary_range_last_time_s <= RADAR_MOTION_MAX_TIME_SKEW_S
+      and time_s - self._stationary_range_anchor_time_s <= STATIONARY_FRONT_ANCHOR_MAX_AGE_S
+      and VisionRadarMatcher._stationary_position_continuous(
+        self._stationary_range_last_point, self._stationary_range_last_time_s, point, time_s,
+      )
+      and abs(point.v_lead - self._stationary_range_last_point.v_lead) <= STATIONARY_FRONT_ANCHOR_MAX_SPEED_JUMP_MPS
+    ):
+      anchor_time_s = self._stationary_range_anchor_time_s
+    if anchor_time_s is None:
+      anchor_time_s = self.primary_matcher.stationary_front_anchor_time(point, time_s)
+    if anchor_time_s is not None and math.isfinite(vision.x_std) and vision.x_std > 0.0:
+      limit = max(limit, min(
+        STATIONARY_FRONT_RANGE_MAX_ERROR_M,
+        STATIONARY_FRONT_RANGE_MAX_FRACTION * vision.d_rel,
+        STATIONARY_FRONT_RANGE_XSTD_SIGMA * vision.x_std,
+      ))
+    return limit, anchor_time_s
 
   def _reset_motion_pipeline(self) -> None:
     self.trajectory_cutin = TrajectoryCutInDetector(self.cut_in_sensitivity)
@@ -481,6 +537,9 @@ class DPathRadarController:
             MOVING_FRONT_RANGE_XSTD_SIGMA * vision.x_std,
           ),
         )
+    stationary_limit, stationary_anchor_time_s = self._stationary_front_range_limit(match, vision, time_s)
+    range_limit = max(range_limit, stationary_limit)
+    self._reset_stationary_range_history()
     self._moving_range_last_point = None
     self._moving_range_last_time_s = None
     if not _radar_match_is_dangerously_farther_than_vision(
@@ -489,6 +548,10 @@ class DPathRadarController:
       if moving_front:
         self._moving_range_last_point = point
         self._moving_range_last_time_s = time_s
+      if stationary_anchor_time_s is not None:
+        self._stationary_range_last_point = point
+        self._stationary_range_last_time_s = time_s
+        self._stationary_range_anchor_time_s = stationary_anchor_time_s
       self._reset_stationary_vision_range_mismatch()
       return False
 
@@ -694,6 +757,7 @@ class DPathRadarController:
       self._reset_stationary_vision_range_mismatch()
       self._moving_range_last_point = None
       self._moving_range_last_time_s = None
+      self._reset_stationary_range_history()
       return DPathRadarOutput(
         None, None, None, None, (), (), (), (), (), (), None,
       )
@@ -725,6 +789,7 @@ class DPathRadarController:
       self._reset_stationary_vision_range_mismatch()
       self._moving_range_last_point = None
       self._moving_range_last_time_s = None
+      self._reset_stationary_range_history()
     elif self._reject_farther_radar_match(
       primary_match, vision, path, time_s,
     ):
