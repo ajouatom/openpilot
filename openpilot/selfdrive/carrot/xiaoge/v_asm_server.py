@@ -282,6 +282,7 @@ class VASMService:
         "inference": {
           "latencyMs": round(self.last_inference_ms, 1),
           "threadCpuMs": round(self.last_inference_thread_cpu_ms, 1),
+          "updatedMonoTimeNanos": vasm_timestamp,
           "fps": self.inference_fps,
           "count": self.inference_count,
           "lastAgeSeconds": round(time.monotonic() - self.last_inference_at, 2) if self.last_inference_at else None,
@@ -345,9 +346,11 @@ class VASMService:
     return bool(gate["active"]), str(gate["side"])
 
   def publish_vision_result(self) -> None:
-    with self.lock:
-      lane = dict(self.lane_result)
-      vasm = dict(self.vasm_result)
+    status = self.status()
+    lane = status["lane"]["result"]
+    sides = status["vehicleSide"]
+    blindspot_valid = any(side["valid"] for side in status["vehicleSide"].values())
+    blindspot_side = next((side for side in ("left", "right") if sides[side]["valid"]), "")
     now_nanos = time.monotonic_ns()
     payload = json.dumps({
       "type": "xiaogeVision",
@@ -355,14 +358,16 @@ class VASMService:
       "lane": {
         "leftLine": lane["leftLine"],
         "rightLine": lane["rightLine"],
-        "valid": lane["valid"],
+        "valid": status["lane"]["resultFresh"],
+        "latencyMs": status["lane"]["inference"]["latencyMs"],
         "receivedMonoTimeNanos": lane["updatedMonoTimeNanos"] or now_nanos,
       },
       "blindspot": {
-        "left": vasm["left"],
-        "right": vasm["right"],
-        "valid": True,
-        "receivedMonoTimeNanos": vasm["updatedMonoTimeNanos"] or now_nanos,
+        "left": sides["left"]["active"],
+        "right": sides["right"]["active"],
+        "valid": blindspot_valid,
+        "side": blindspot_side,
+        "receivedMonoTimeNanos": status["inference"]["updatedMonoTimeNanos"] or now_nanos,
       },
     }, separators=(",", ":")).encode()
     with self.publish_lock:

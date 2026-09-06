@@ -7,6 +7,7 @@ from openpilot.common.params import Params
 from openpilot.common.filter_simple import FirstOrderFilter
 from openpilot.selfdrive.locationd.calibrationd import HEIGHT_INIT
 from openpilot.selfdrive.ui.ui_state import ui_state, UIStatus
+from openpilot.selfdrive.ui.road_markings import lane_dash_segments, project_blindspot_barrier, blindspot_barrier_quads
 from openpilot.selfdrive.ui.mici.onroad import blend_colors
 from openpilot.system.ui.lib.application import gui_app, FontWeight
 from openpilot.system.ui.lib.text_draw import draw_text_ui_style
@@ -76,6 +77,8 @@ class ModelRenderer(Widget):
     # Initialize ModelPoints objects
     self._path = ModelPoints()
     self._lane_lines = [ModelPoints() for _ in range(4)]
+    self._lane_marking_codes = [-1] * 4
+    self._lane_marking_segments: list[list[np.ndarray]] = [[] for _ in range(4)]
     self._road_edges = [ModelPoints() for _ in range(2)]
     self._acceleration_x = np.empty((0,), dtype=np.float32)
 
@@ -147,7 +150,8 @@ class ModelRenderer(Widget):
       if path_x_array.size == 0:
         return
 
-      self._update_model(lead_one, path_x_array)
+      car_state = sm['carState'] if sm.valid['carState'] and sm.alive['carState'] else None
+      self._update_model(lead_one, path_x_array, car_state)
       if render_lead_indicator:
         self._update_leads_carrot(radar_state, path_x_array)
         
@@ -163,6 +167,8 @@ class ModelRenderer(Widget):
     if ui_state.status != UIStatus.DISENGAGED:
       #self._draw_lane_lines()
       self._draw_path(sm)
+
+    self._draw_blindspots(sm)
 
     if render_lead_indicator and radar_state:
       self._draw_lead_indicator()
@@ -266,19 +272,33 @@ class ModelRenderer(Widget):
       else:
         self._lead_pt_filt[0] = None
         
-  def _update_model(self, lead, path_x_array):
+  def _update_model(self, lead, path_x_array, car_state=None):
     """Update model visualization data based on model message"""
     max_distance = np.clip(path_x_array[-1], MIN_DRAW_DISTANCE, MAX_DRAW_DISTANCE)
     max_idx = self._get_path_length_idx(self._lane_lines[0].raw_points[:, 0], max_distance)
 
     # Update lane lines using raw points
     line_width_factor = 0.12
+    self._lane_marking_codes = [-1, car_state.leftLaneLine if car_state else -1, car_state.rightLaneLine if car_state else -1, -1]
     for i, lane_line in enumerate(self._lane_lines):
       if i in (1, 2):
         line_width_factor = 0.16
       lane_line.projected_points = self._map_line_to_polygon(
         lane_line.raw_points, line_width_factor * self._lane_line_probs[i], 0.0, max_idx
       )
+      self._lane_marking_segments[i] = []
+      code = self._lane_marking_codes[i]
+      if code >= 0 and self._lane_line_probs[i] > 0.3:
+        dashed = code % 10 == 0
+        segments = lane_dash_segments(lane_line.raw_points, float(max_distance)) if dashed else [lane_line.raw_points]
+        for segment in segments:
+          points = self._map_line_to_polygon(segment, 0.05, 0.0, len(segment) - 1 if dashed else max_idx)
+          if points.size:
+            self._lane_marking_segments[i].append(points)
+        if i == 1 and code % 10 == 4:
+          points = self._map_line_to_polygon(lane_line.raw_points + np.array([0, -0.3, 0], dtype=np.float32), 0.05, 0.0, max_idx)
+          if points.size:
+            self._lane_marking_segments[i].append(points)
 
     # Update road edges using raw points
     for road_edge in self._road_edges:
@@ -399,6 +419,12 @@ class ModelRenderer(Widget):
     """Draw lane lines and road edges"""
     """Two closest lines should be green (lane line or road edges)"""
     for i, lane_line in enumerate(self._lane_lines):
+      code = self._lane_marking_codes[i]
+      if code >= 0 and self._lane_line_probs[i] > 0.3:
+        color = rl.Color(218, 202, 37, 220) if code >= 20 else rl.Color(255, 255, 255, 220)
+        for points in self._lane_marking_segments[i]:
+          draw_polygon(self._rect, points, color)
+        continue
       if lane_line.projected_points.size == 0:
         continue
 
@@ -412,6 +438,19 @@ class ModelRenderer(Widget):
       # if closest lane lines are not confident, make road edges green
       color = self._get_ll_color(float(1.0 - self._road_edge_stds[i]), float(self._lane_line_probs[i + 1]) < 0.25, i == 0)
       draw_polygon(self._rect, road_edge.projected_points, color)
+
+  def _draw_blindspots(self, sm):
+    if not (sm.valid['carState'] and sm.alive['carState'] and sm.valid['modelV2'] and sm.alive['modelV2']):
+      return
+    car_state = sm['carState']
+    if not (car_state.leftBlindspot or car_state.rightBlindspot) or self._path.raw_points.shape[0] < 2:
+      return
+    max_idx = self._get_path_length_idx(self._path.raw_points[:, 0], 40.0)
+    for active, shift in ((car_state.leftBlindspot, -1.7), (car_state.rightBlindspot, 1.7)):
+      if active:
+        polygon = project_blindspot_barrier(self._path.raw_points[:max_idx + 1], shift, self._car_space_transform, self._clip_region)
+        for quad in blindspot_barrier_quads(polygon):
+          draw_polygon(self._rect, quad, rl.Color(255, 215, 0, 150))
 
   def _draw_path(self, sm):
     """Draw path with dynamic coloring based on mode and throttle state."""

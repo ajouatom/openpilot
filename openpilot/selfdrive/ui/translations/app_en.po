@@ -1474,3 +1474,27 @@ msgstr ""
 msgid "🔥 Firehose Mode 🔥"
 msgstr "🔥 Firehose Mode 🔥"
 
+
+#: openpilot/selfdrive/ui/mici/onroad/vision_renderer.py
+msgid "ON"
+msgstr "ON"
+
+#: openpilot/selfdrive/ui/mici/onroad/vision_renderer.py
+msgid "WAIT"
+msgstr "WAIT"
+
+#: openpilot/selfdrive/ui/mici/onroad/vision_renderer.py
+msgid "STALE"
+msgstr "STALE"
+
+#: openpilot/selfdrive/ui/mici/onroad/vision_renderer.py
+msgid "STANDBY"
+msgstr "STANDBY"
+
+#: openpilot/selfdrive/ui/mici/onroad/vision_renderer.py
+msgid "DETECTED"
+msgstr "DETECTED"
+
+#: openpilot/selfdrive/ui/mici/onroad/vision_renderer.py
+msgid "NO DETECTION"
+msgstr "NO DETECTION"
