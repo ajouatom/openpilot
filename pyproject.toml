@@ -22,7 +22,7 @@ dependencies = [
   # core
   "cffi",
   "scons",
-  "pycapnp",
+  "pycapnp==2.1.0",  # 2.2 introduces a memory leak due to cyclic references
   "Cython",
   "setuptools",
   "numpy >=2.0",
@@ -76,7 +76,7 @@ dependencies = [
   "zstandard",
 
   # ui
-  "raylib @ git+https://github.com/commaai/dependencies.git@release-raylib#subdirectory=raylib",
+  "comma-deps-raylib",
   "qrcode",
   "jeepney",
   "pillow",
@@ -166,20 +166,19 @@ lint.select = [
   "E", "F", "W", "PIE", "C4", "ISC", "A", "B",
   "NPY", # numpy
   "UP",  # pyupgrade
+  "ASYNC",
+  "B904", "B905",
+  "PLC0207",
   "TRY203", "TRY400", "TRY401", # try/excepts
-  "RUF008", "RUF100",
+  "RUF006", "RUF008", "RUF009", "RUF061", "RUF064", "RUF100", "RUF102", "RUF103", "RUF104",
   "TID251",
   "PLE", "PLR1704",
 ]
 lint.ignore = [
   "E741",
   "E402",
-  "C408",
-  "ISC003",
   "B027",
-  "B024",
-  "NPY002",  # new numpy random syntax is worse
-  "UP045", "UP007",  # these don't play nice with raylib atm
+  "UP007",  # this doesn't play nice with raylib atm
 ]
 line-length = 160
 target-version ="py311"
