@@ -52,6 +52,7 @@ VASM_MIN_SPEED_MPS = 30.0 / 3.6
 VASM_MAX_SPEED_MPS = 120.0 / 3.6
 VASM_MIN_LANE_WIDTH_METERS = 3.0
 CAMERA_TIMEOUT_SECONDS = 2.0
+SNAPSHOT_TIMEOUT_SECONDS = 5.0
 
 
 DEFAULT_POLYGONS = {
@@ -306,8 +307,10 @@ class VASMService:
       requested = self.snapshot_requests[stream_type]
       self.snapshot_condition.wait_for(
         lambda: self.snapshot_responses[stream_type] >= requested or not self.running,
-        timeout=1.0,
+        timeout=SNAPSHOT_TIMEOUT_SECONDS,
       )
+      if self.snapshot_responses[stream_type] < requested:
+        return None
       return self.last_road_jpeg if stream_type == "road" else self.last_jpeg
 
   def _update_vasm_gate(self) -> tuple[bool, str]:

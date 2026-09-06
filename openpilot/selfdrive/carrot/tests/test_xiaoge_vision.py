@@ -1,6 +1,8 @@
 import json
 import sys
 import threading
+import time
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 from io import BytesIO
 from types import ModuleType, SimpleNamespace
@@ -246,6 +248,35 @@ def vision_service(message_transport):
   message_transport.publish("modelV2", meta={"laneChangeDirection": "left", "laneWidthLeft": 3.2})
   service.sent = message_transport.sent
   return service
+
+
+@pytest.mark.parametrize("stream", ["road", "wide"])
+def test_snapshot_waits_for_camera_busy_longer_than_one_second(vision_service, stream):
+  service = vision_service
+  jpeg = b"fresh snapshot"
+  with ThreadPoolExecutor(max_workers=1) as executor:
+    pending = executor.submit(service.snapshot, stream)
+    deadline = time.monotonic() + 1.0
+    while service.snapshot_requests[stream] == 0 and time.monotonic() < deadline:
+      time.sleep(0.01)
+    assert service.snapshot_requests[stream] == 1
+    # A camera worker can spend more than the old one-second timeout in inference.
+    time.sleep(1.1)
+    with service.snapshot_condition:
+      if stream == "road":
+        service.last_road_jpeg = jpeg
+      else:
+        service.last_jpeg = jpeg
+      service.snapshot_responses[stream] = service.snapshot_requests[stream]
+      service.snapshot_condition.notify_all()
+    assert pending.result(timeout=1.0) == jpeg
+
+
+@pytest.mark.parametrize("stream", ["road", "wide"])
+def test_snapshot_timeout_does_not_report_old_image_as_refreshed(monkeypatch, vision_service, stream):
+  monkeypatch.setattr(v_asm_server, "SNAPSHOT_TIMEOUT_SECONDS", 0.01)
+  vision_service.last_road_jpeg = vision_service.last_jpeg = b"old snapshot"
+  assert vision_service.snapshot(stream) is None
 
 
 @pytest.fixture
