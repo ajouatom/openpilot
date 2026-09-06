@@ -66,10 +66,46 @@ from openpilot.selfdrive.carrot.radar.tools.radar_lead_validation_review import 
 from openpilot.selfdrive.carrot.radar.tools.validate_radar_lead_model import (
   _candidate_matches_entry,
   _first_role_constraint_event,
+  _input_coverage,
   _lead_one_continuous,
   _lead_two_continuous,
   _metrics,
 )
+
+
+def test_absent_clear_label_is_not_counted_as_true_negative() -> None:
+  coverage = _input_coverage(
+    [frame((point(2000, 20.0, 3.0, source="corner235"),), time_s=1.0)],
+    {"window": [0.5, 1.5], "source": "corner", "target_track_ids": [1000]},
+  )
+  assert coverage == dict(valid=False, sample_frames=1, target_frames=0, scope="target", reason="labelled_target_absent")
+  metrics = _metrics([dict(expected="clear", shadow_event=None, input_valid=coverage['valid'])], "shadow_event")
+  assert metrics['labels'] == metrics['tn'] == 0
+  assert metrics['unverified_labels'] == 1
+
+
+def test_label_input_coverage_requires_measured_target_in_the_named_sensor() -> None:
+  entry = dict(window=[0.5, 1.5], source="corner", target_track_ids=[1000])
+  samples = [frame((point(1000, 20.0, 3.0, source="frontRadar"),), time_s=1.0)]
+  assert not _input_coverage(samples, entry)['valid']
+  samples.append(frame((point(1000, 20.0, 3.0, source="corner235", measured=False),), time_s=1.1))
+  assert not _input_coverage(samples, entry)['valid']
+  samples.append(frame((point(1000, 20.0, 3.0, source="corner235"),), time_s=1.2))
+  assert _input_coverage(samples, entry)['target_frames'] == 1
+
+
+def test_unscoped_clear_window_does_not_require_a_radar_target():
+  entry = dict(window=[0.5, 1.5], source="front+corner")
+  assert _input_coverage([frame((), time_s=1.0)], entry)['valid']
+  assert not _input_coverage([frame((), time_s=2.0)], entry)['valid']
+
+
+def test_spatial_only_label_does_not_match_unrelated_input():
+  entry = dict(window=[0.5, 1.5], source="corner", target_spatial_match=dict(d_rel=[15.0, 25.0], y_rel=[2.0, 4.0]))
+  wrong_side = point(1000, 20.0, -3.0, source="corner235")
+  assert not _input_coverage([frame((wrong_side,), time_s=1.0)], entry)['valid']
+  target = point(1000, 20.0, 3.0, source="corner235")
+  assert _input_coverage([frame((target,), time_s=1.0)], entry)['valid']
 
 
 def point(

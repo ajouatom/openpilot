@@ -189,12 +189,15 @@ def _source_matches(source: str, candidate_source: str) -> bool:
 
 
 def _candidate_matches_entry(candidate: Any, entry: dict[str, Any]) -> bool:
+  if candidate is None:
+    return False
   targets = {int(value) for value in entry.get("target_track_ids", ())}
-  if candidate_matches_targets(candidate, targets):
+  identities = {candidate.track_id, *getattr(candidate, "track_aliases", ())}
+  if targets and identities & targets:
     return True
   spatial = entry.get("target_spatial_match")
-  if candidate is None or not isinstance(spatial, dict):
-    return False
+  if not isinstance(spatial, dict):
+    return not targets
   d_rel_range = spatial.get("d_rel")
   y_rel_range = spatial.get("y_rel")
   if not (
@@ -243,6 +246,31 @@ def _first_event(
       )
       return frame.time_s, best.track_id
   return None
+
+
+def _input_coverage(frames: list[Any], entry: dict[str, Any]) -> dict[str, Any]:
+  """An absent labelled object is an unverified case, never a true negative."""
+  start_s, end_s = (float(value) for value in entry["window"])
+  samples = [frame for frame in frames if start_s <= frame.time_s <= end_s]
+  scoped = bool(entry.get("target_track_ids") or entry.get("target_spatial_match"))
+  source = str(entry.get("source", "front+corner"))
+  target_frames = sum(any(
+    point.measured
+    and _source_matches(source, point.source)
+    and _candidate_matches_entry(point, entry)
+    for point in frame.points
+  ) for frame in samples) if scoped else None
+  valid = bool(samples) and (not scoped or bool(target_frames))
+  return {
+    "valid": valid,
+    "sample_frames": len(samples),
+    "target_frames": target_frames,
+    "scope": "target" if scoped else "window",
+    "reason": (
+      "observed" if valid else "no_frames_in_window" if not samples
+      else "labelled_target_absent"
+    ),
+  }
 
 
 def _lead_one_continuous(
@@ -414,6 +442,7 @@ def _metrics(rows: list[dict[str, Any]], field: str) -> dict[str, float | int]:
     row for row in rows
     if row["expected"] in ("detect", "clear")
     and (field != "shadow_event" or row.get("shadow_applicable", True))
+    and row.get("input_valid", True)
   ]
   tp = sum(row["expected"] == "detect" and row[field] is not None for row in scorable)
   fp = sum(row["expected"] == "clear" and row[field] is not None for row in scorable)
@@ -423,6 +452,7 @@ def _metrics(rows: list[dict[str, Any]], field: str) -> dict[str, float | int]:
   recall = tp / max(tp + fn, 1)
   return {
     "labels": len(scorable),
+    "unverified_labels": sum(not row.get("input_valid", True) for row in rows),
     "tp": tp,
     "fp": fp,
     "fn": fn,
@@ -436,7 +466,7 @@ def _metrics(rows: list[dict[str, Any]], field: str) -> dict[str, float | int]:
 
 def _print_metrics(title: str, values: dict[str, float | int]) -> None:
   print(
-    f"{title}: {values['labels']} labels "
+    f"{title}: {values['labels']} labels (unverified={values['unverified_labels']}) "
     + f"P={float(values['precision']):.3f} "
     + f"R={float(values['recall']):.3f} "
     + f"F1={float(values['f1']):.3f} "
@@ -505,6 +535,7 @@ def main() -> int:
       shadow, frames, log_entries, set(args.trace_track),
     )
     for entry in log_entries:
+      coverage = _input_coverage(frames, entry)
       expected = str(entry["expected"])
       validation_stage = str(entry.get("validation_stage", "output"))
       required_lead_one_ids = entry.get("required_lead_one_ids", ())
@@ -687,11 +718,15 @@ def main() -> int:
         radard_pass = radard_pass and radard_lead_two_continuous
       if shadow_lead_two_continuous is not None and shadow_applicable:
         shadow_pass = shadow_pass and shadow_lead_two_continuous
+      if not coverage["valid"]:
+        radard_pass = shadow_pass = predecel_pass = None
       row = {
         "id": str(entry["id"]),
         "validation_set": str(entry["validation_set"]),
         "source": str(entry.get("source", "")),
         "expected": expected,
+        "input_valid": coverage["valid"],
+        "input_coverage": coverage,
         "radard_event": radard_event,
         "shadow_event": shadow_event,
         "predecel_event": predecel_event,
@@ -712,6 +747,9 @@ def main() -> int:
         "shadow_forbidden_lead_two": shadow_forbidden_l2,
       }
       rows.append(row)
+      if not coverage["valid"]:
+        print(f"  {entry['id']} UNVERIFIED: {coverage['reason']}", flush=True)
+        continue
       print(
         f"  {entry['id']} expected={expected} "
         + (
@@ -784,12 +822,13 @@ def main() -> int:
   radard_failures = (
     0
     if args.shadow_only
-    else sum(not row["radard_pass"] for row in rows)
+    else sum(row["radard_pass"] is False for row in rows)
   )
-  shadow_failures = sum(not row["shadow_pass"] for row in rows)
-  predecel_failures = sum(not row["predecel_pass"] for row in rows)
+  shadow_failures = sum(row["shadow_pass"] is False for row in rows)
+  predecel_failures = sum(row["predecel_pass"] is False for row in rows)
+  unverified = sum(not row["input_valid"] for row in rows)
   print(
-    f"\nprocessed={len(rows)} missing={missing} "
+    f"\nprocessed={len(rows)} missing={missing} unverified={unverified} "
     + (
       "existing-radard=SKIP "
       if args.shadow_only
@@ -801,7 +840,7 @@ def main() -> int:
 
   if args.report is not None:
     payload = {
-      "version": 1,
+      "version": 2,
       "description": "existing radard control versus physical dPath shadow; manual labels validation-only",
       "rows": rows,
       "summary": {
@@ -812,6 +851,7 @@ def main() -> int:
         ),
         "physical_dpath_shadow": _metrics(rows, "shadow_event"),
         "missing": missing,
+        "unverified": unverified,
         "radard_expectation_failures": radard_failures,
         "physical_dpath_expectation_failures": shadow_failures,
         "predeceleration_expectation_failures": predecel_failures,
@@ -825,6 +865,7 @@ def main() -> int:
     print(f"report written: {args.report}")
   return int(
     missing > 0
+    or (unverified > 0 and (args.strict_radard or args.strict_shadow or args.strict_predecel))
     or (args.strict_radard and radard_failures > 0)
     or (args.strict_shadow and shadow_failures > 0)
     or (args.strict_predecel and predecel_failures > 0)
