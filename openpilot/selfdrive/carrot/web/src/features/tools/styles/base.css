@@ -59,6 +59,11 @@
   --tools-console-visible-lines: var(--tools-console-expanded-lines);
 }
 
+#btnToolsOnnxVision {
+  grid-column: 1 / -1;
+  text-decoration: none;
+}
+
 #toolsMeta {
   height: 30px;
   min-height: 30px;

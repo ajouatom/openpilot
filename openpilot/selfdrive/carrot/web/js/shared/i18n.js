@@ -254,6 +254,12 @@ function renderUIText() {
   setText("btnToolsLanguage", getUIText("language", "Language"));
   setText("btnToolsWebSettings", getUIText("web_settings", "Web Settings"));
   setText("btnDeviceInfo", getUIText("info", "Info"));
+  setText("btnToolsOnnxVision", getUIText("onnx_vision", "ONNX Lane / BSD"));
+  const onnxVisionLink = document.getElementById("btnToolsOnnxVision");
+  if (onnxVisionLink) {
+    onnxVisionLink.href = "/xiaoge/?lang=" + encodeURIComponent(LANG);
+    onnxVisionLink.title = getUIText("onnx_vision_hint", "Open lane and blindspot diagnostics in a new tab");
+  }
   setText("btnGitBranch", "change branch");
   setText("btnGitResetRepo", "reset repo");
   setText("btnDeviceLang", "Device Lang");

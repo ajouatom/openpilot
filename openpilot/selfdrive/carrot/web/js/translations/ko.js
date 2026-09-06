@@ -217,6 +217,8 @@ window.CarrotTranslations.register("ko", {
     setting_tab_device: "디바이스",
     setting_tab_carrot: "당근파일럿",
     tools: "도구",
+    onnx_vision: "ONNX 차선·BSD 진단",
+    onnx_vision_hint: "차선·사각지대 인식 상태, 영상과 감지 영역을 새 탭에서 확인합니다",
     logs: "로그",
     terminal: "터미널",
     carrot: "당근",
