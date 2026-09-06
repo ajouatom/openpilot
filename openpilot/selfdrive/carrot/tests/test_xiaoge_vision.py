@@ -297,9 +297,11 @@ def test_camera_loop_infers_and_snapshots_padded_allocation(monkeypatch, vision_
   service = vision_service
   frame = padded_camera_frame
   connect_attempts = 0
+  idle_waits = 0
 
   class FakeClient:
     delivered = False
+    polls = 0
 
     def __init__(self, *_args):
       self.connected = False
@@ -314,7 +316,10 @@ def test_camera_loop_infers_and_snapshots_padded_allocation(monkeypatch, vision_
       return self.connected
 
     def recv(self, timeout_ms):
-      assert timeout_ms == 1000
+      assert timeout_ms == 0
+      self.polls += 1
+      if self.polls == 1:
+        return None
       if self.delivered:
         service.running = False
         return None
@@ -326,7 +331,11 @@ def test_camera_loop_infers_and_snapshots_padded_allocation(monkeypatch, vision_
   visionipc.VisionStreamType = SimpleNamespace(VISION_STREAM_ROAD=0, VISION_STREAM_WIDE_ROAD=1)
   monkeypatch.setitem(sys.modules, "msgq.visionipc", visionipc)
 
-  def retry_sleep(_seconds):
+  def retry_sleep(seconds):
+    nonlocal idle_waits
+    if seconds == v_asm_server.CAMERA_POLL_INTERVAL_SECONDS:
+      idle_waits += 1
+      return
     # Permit the initial offroad connection failure, but not an inference error.
     assert initial_disconnect and connect_attempts == 1
     error = service.lane_camera_error if stream == "road" else service.camera_error
@@ -340,15 +349,18 @@ def test_camera_loop_infers_and_snapshots_padded_allocation(monkeypatch, vision_
     assert service.lane_inference_count == 1
     assert service.lane_result["valid"], service.lane_result["error"]
     assert service.status()["lane"]["resultFresh"]
+    assert service.status()["lane"]["inference"]["threadCpuMs"] >= 0
     assert service.lane_camera_error == ""
     jpeg = service.last_road_jpeg
   else:
     service.run_camera()
     assert service.inference_count == 1
+    assert service.status()["inference"]["threadCpuMs"] >= 0
     assert service.status()["vehicleSide"]["left"]["valid"]
     assert not service.status()["vehicleSide"]["right"]["valid"]
     assert service.camera_error == ""
     jpeg = service.last_jpeg
+  assert idle_waits == 2  # No frame yet, then the stream stops after the frame.
   assert len(service.sent) == 1
   event = messaging.log_from_bytes(service.sent[0][1])
   assert event.valid
@@ -362,6 +374,67 @@ def test_camera_loop_infers_and_snapshots_padded_allocation(monkeypatch, vision_
       # The UV plane encodes red; interpreting padded Y rows as UV changes it.
       assert float(pixels[:, :, 0].mean()) > 240
       assert float(pixels[:, :, 1:].mean()) < 30
+
+
+@pytest.mark.parametrize("stream", ["road", "wide"])
+def test_idle_camera_yields_and_resumes_without_reconnecting(monkeypatch, vision_service, stream):
+  """An empty camera must not monopolize the GIL or spin while other work runs."""
+  service = vision_service
+  received = threading.Event()
+  sleeping = threading.Event()
+  other_work_done = threading.Event()
+  polls = []
+  connections = []
+  real_sleep = time.sleep
+
+  class IdleClient:
+    def __init__(self, *_args):
+      pass
+
+    def is_connected(self):
+      return True
+
+    def connect(self, blocking):
+      connections.append(blocking)
+      return True
+
+    def recv(self, timeout_ms):
+      polls.append(timeout_ms)
+      assert timeout_ms == 0, "native blocking recv holds the GIL"
+      received.set()
+      return None
+
+  visionipc = ModuleType("msgq.visionipc")
+  visionipc.VisionIpcClient = IdleClient
+  visionipc.VisionStreamType = SimpleNamespace(VISION_STREAM_ROAD=0, VISION_STREAM_WIDE_ROAD=1)
+  monkeypatch.setitem(sys.modules, "msgq.visionipc", visionipc)
+
+  def cooperative_sleep(seconds):
+    assert seconds == v_asm_server.CAMERA_POLL_INTERVAL_SECONDS
+    assert 0 < seconds <= 0.01
+    sleeping.set()
+    if len(polls) == 1:
+      assert other_work_done.wait(1.0), "camera wait prevented other Python work"
+    else:
+      service.running = False
+    real_sleep(seconds)
+
+  monkeypatch.setattr(v_asm_server.time, "sleep", cooperative_sleep)
+  loop = service.run_road_camera if stream == "road" else service.run_camera
+  with ThreadPoolExecutor(max_workers=1) as executor:
+    future = executor.submit(loop)
+    try:
+      assert received.wait(1.0)
+      assert sleeping.wait(1.0)
+      # Status requests can run while either camera has no frame.
+      assert not service.status()["camera"]["available"]
+      other_work_done.set()
+      future.result(timeout=1.0)
+    finally:
+      service.running = False
+      other_work_done.set()
+  assert polls == [0, 0]
+  assert connections == [False]
 
 
 def test_initial_status_does_not_report_clear_blindspots(vision_service):

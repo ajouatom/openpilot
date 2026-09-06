@@ -53,6 +53,9 @@ VASM_MAX_SPEED_MPS = 120.0 / 3.6
 VASM_MIN_LANE_WIDTH_METERS = 3.0
 CAMERA_TIMEOUT_SECONDS = 2.0
 SNAPSHOT_TIMEOUT_SECONDS = 5.0
+# VisionIPC recv holds the GIL while waiting. Poll without blocking, then sleep
+# in Python so an idle camera cannot stall inference or HTTP on other threads.
+CAMERA_POLL_INTERVAL_SECONDS = 0.005
 
 
 DEFAULT_POLYGONS = {
@@ -128,6 +131,7 @@ class VASMService:
     self.last_frame_at = 0.0
     self.last_inference_at = 0.0
     self.last_inference_ms = 0.0
+    self.last_inference_thread_cpu_ms = 0.0
     self.inference_count = 0
     self.inference_fps = 0.0
     self._fps_window_start = time.monotonic()
@@ -156,6 +160,7 @@ class VASMService:
     self.last_road_frame_at = 0.0
     self.last_lane_inference_at = 0.0
     self.last_lane_inference_ms = 0.0
+    self.last_lane_inference_thread_cpu_ms = 0.0
     self.lane_inference_count = 0
     self.lane_inference_fps = 0.0
     self._lane_fps_window_start = time.monotonic()
@@ -276,6 +281,7 @@ class VASMService:
         "vehicleSide": vehicle_sides,
         "inference": {
           "latencyMs": round(self.last_inference_ms, 1),
+          "threadCpuMs": round(self.last_inference_thread_cpu_ms, 1),
           "fps": self.inference_fps,
           "count": self.inference_count,
           "lastAgeSeconds": round(time.monotonic() - self.last_inference_at, 2) if self.last_inference_at else None,
@@ -294,6 +300,7 @@ class VASMService:
           "result": self.lane_result,
           "inference": {
             "latencyMs": round(self.last_lane_inference_ms, 1),
+            "threadCpuMs": round(self.last_lane_inference_thread_cpu_ms, 1),
             "fps": self.lane_inference_fps,
             "count": self.lane_inference_count,
             "lastAgeSeconds": round(time.monotonic() - self.last_lane_inference_at, 2) if self.last_lane_inference_at else None,
@@ -394,8 +401,9 @@ class VASMService:
             time.sleep(1.0)
             continue
 
-        buffer = client.recv(timeout_ms=1000)
+        buffer = client.recv(timeout_ms=0)
         if buffer is None:
+          time.sleep(CAMERA_POLL_INTERVAL_SECONDS)
           continue
         now = time.monotonic()
         gate_active, side = self._update_vasm_gate()
@@ -425,11 +433,14 @@ class VASMService:
           frame = pack_nv12(buffer.data, buffer.width, buffer.height, buffer.stride, buffer.uv_offset)
           previous = self.last_side_at[side]
           t0 = time.monotonic()
+          cpu0 = time.thread_time()
           self.inference.update(frame, buffer.width, buffer.height, side, self.threshold, self.smoothing_seconds, now - previous if previous else interval)
           t1 = time.monotonic()
+          thread_cpu_ms = (time.thread_time() - cpu0) * 1000.0
           active = self.inference.active[side]
         with self.lock:
           self.last_inference_ms = (t1 - t0) * 1000.0
+          self.last_inference_thread_cpu_ms = thread_cpu_ms
           self.inference_count += 1
           self._fps_window_count += 1
           if t1 - self._fps_window_start >= 1.0:
@@ -466,8 +477,9 @@ class VASMService:
             time.sleep(1.0)
             continue
 
-        buffer = client.recv(timeout_ms=1000)
+        buffer = client.recv(timeout_ms=0)
         if buffer is None:
+          time.sleep(CAMERA_POLL_INTERVAL_SECONDS)
           continue
         now = time.monotonic()
         frame = nv12_y_plane(buffer.data, buffer.width, buffer.height, buffer.stride)
@@ -485,12 +497,15 @@ class VASMService:
 
           lane_threshold = self.lane_threshold
         t0 = time.monotonic()
+        cpu0 = time.thread_time()
         res = self.lane_inference.infer(
           frame, buffer.width, buffer.height, conf_thresh=lane_threshold
         )
         t1 = time.monotonic()
+        thread_cpu_ms = (time.thread_time() - cpu0) * 1000.0
         with self.lock:
           self.last_lane_inference_ms = (t1 - t0) * 1000.0
+          self.last_lane_inference_thread_cpu_ms = thread_cpu_ms
           self.lane_inference_count += 1
           self._lane_fps_window_count += 1
           if t1 - self._lane_fps_window_start >= 1.0:
