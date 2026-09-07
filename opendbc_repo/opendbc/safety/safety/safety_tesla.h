@@ -4,6 +4,12 @@
 
 static bool tesla_longitudinal = false;
 static bool tesla_stock_aeb = false;
+static bool tesla_auto_speed_limit = false;
+static bool tesla_speed_button_rx_template_valid = false;
+static uint8_t tesla_speed_button_rx_template[8] = {0U};
+static uint32_t tesla_speed_button_rx_timestamp = 0U;
+static bool tesla_speed_button_last_tx_valid = false;
+static uint32_t tesla_speed_button_last_tx_timestamp = 0U;
 
 // FSD 14 support: flips ANGLE_CONTROL and LANE_KEEP_ASSIST control types
 static bool tesla_fsd_14 = false;
@@ -108,6 +114,18 @@ static void tesla_rx_hook(const CANPacket_t *to_push) {
         tesla_stock_steering_control = false;
       }
       tesla_stock_steering_control_prev = tesla_stock_steering_control_now;
+    }
+  }
+
+  if (bus == 1) {
+    // Only a current, genuine idle right-wheel frame may be used as a TX
+    // template. This prevents synthesizing vehicle-bus controls.
+    if ((addr == 0x3C2U) && ((GET_BYTE(to_push, 0) & 0x03U) == 1U) && ((GET_BYTE(to_push, 3) & 0x3FU) == 0U)) {
+      for (int i = 0; i < 8; i++) {
+        tesla_speed_button_rx_template[i] = GET_BYTE(to_push, i);
+      }
+      tesla_speed_button_rx_template_valid = true;
+      tesla_speed_button_rx_timestamp = microsecond_timer_get();
     }
   }
 
@@ -217,6 +235,29 @@ static bool tesla_tx_hook(const CANPacket_t *to_send) {
     }
   }
 
+  if (addr == 0x3C2U) {
+    const uint8_t tick = GET_BYTE(to_send, 3) & 0x3FU;
+    const bool tick_allowed = (tick == 1U) || (tick == 0x3FU);
+    bool template_matches = tesla_speed_button_rx_template_valid;
+    for (int i = 0; i < 8; i++) {
+      if (i == 3) {
+        template_matches &= (GET_BYTE(to_send, i) & 0xC0U) == (tesla_speed_button_rx_template[i] & 0xC0U);
+      } else {
+        template_matches &= GET_BYTE(to_send, i) == tesla_speed_button_rx_template[i];
+      }
+    }
+    const uint32_t now = microsecond_timer_get();
+    const bool template_fresh = get_ts_elapsed(now, tesla_speed_button_rx_timestamp) <= 1500000U;
+    const bool rate_allowed = !tesla_speed_button_last_tx_valid ||
+                              (get_ts_elapsed(now, tesla_speed_button_last_tx_timestamp) >= 250000U);
+    if (!(tesla_auto_speed_limit && controls_allowed && tick_allowed && template_matches && template_fresh && rate_allowed)) {
+      violation = true;
+    } else {
+      tesla_speed_button_last_tx_valid = true;
+      tesla_speed_button_last_tx_timestamp = now;
+    }
+  }
+
   if (violation) {
     tx = false;
   }
@@ -270,9 +311,17 @@ static safety_config tesla_init(uint16_t param) {
     {0x2b9, 0, 8},  // DAS_control
     {0x27D, 0, 3},  // APS_eacMonitor
   };
+  static const CanMsg TESLA_M3_Y_AUTO_SPEED_TX_MSGS[] = {
+    {0x488, 0, 4},  // DAS_steeringControl
+    {0x2b9, 0, 8},  // DAS_control
+    {0x27D, 0, 3},  // APS_eacMonitor
+    {0x3C2, 1, 8},  // VCLEFT_switchStatus
+  };
 
   const uint16_t TESLA_FLAG_FSD_14 = 2;
+  const uint16_t TESLA_FLAG_AUTO_SPEED_LIMIT = 4;
   tesla_fsd_14 = GET_FLAG(param, TESLA_FLAG_FSD_14);
+  tesla_auto_speed_limit = GET_FLAG(param, TESLA_FLAG_AUTO_SPEED_LIMIT);
 
 #ifdef ALLOW_DEBUG
   const int TESLA_FLAG_LONGITUDINAL_CONTROL = 1;
@@ -282,6 +331,10 @@ static safety_config tesla_init(uint16_t param) {
   tesla_stock_aeb = false;
   tesla_stock_steering_control = false;
   tesla_stock_steering_control_prev = false;
+  tesla_speed_button_rx_template_valid = false;
+  tesla_speed_button_rx_timestamp = 0U;
+  tesla_speed_button_last_tx_valid = false;
+  tesla_speed_button_last_tx_timestamp = 0U;
   // we used to assume Summon on startup; instead we tolerate a short
   // window without TX (DI_state comes at 10 Hz). Panda safety will
   // reject TX until the first DI_state message clears tesla_summon.
@@ -298,6 +351,9 @@ static safety_config tesla_init(uint16_t param) {
     {.msg = {{0x311, 0, 7, .ignore_checksum = true, .ignore_counter = true,.frequency = 10U}, { 0 }, { 0 }}},   // UI_warning (blinkers, buckle switch & doors)
   };
 
+  if (tesla_longitudinal && tesla_auto_speed_limit) {
+    return BUILD_SAFETY_CFG(tesla_model3_y_rx_checks, TESLA_M3_Y_AUTO_SPEED_TX_MSGS);
+  }
   return BUILD_SAFETY_CFG(tesla_model3_y_rx_checks, TESLA_M3_Y_TX_MSGS);
 }
 

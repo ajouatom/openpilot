@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 import unittest
 
-from opendbc.car.tesla.values import TeslaSafetyFlags
 from opendbc.car.structs import CarParams
-from opendbc.can.can_define import CANDefine
+from opendbc.car.tesla.values import TeslaSafetyFlags
+from opendbc.can import CANDefine
 from opendbc.safety.tests.libsafety import libsafety_py
 import opendbc.safety.tests.common as common
 from opendbc.safety.tests.common import CANPackerPanda
@@ -11,6 +11,8 @@ from opendbc.safety.tests.common import CANPackerPanda
 MSG_DAS_steeringControl = 0x488
 MSG_APS_eacMonitor = 0x27d
 MSG_DAS_Control = 0x2b9
+MSG_VCLEFT_SWITCH_STATUS = 0x3C2
+OBSERVED_SPEED_WHEEL_IDLE = bytes.fromhex("010000c000000000")
 
 
 class TestTeslaSafetyBase(common.PandaCarSafetyTest, common.AngleSteeringSafetyTest, common.LongitudinalAccelSafetyTest):
@@ -86,6 +88,12 @@ class TestTeslaSafetyBase(common.PandaCarSafetyTest, common.AngleSteeringSafetyT
     }
     return self.packer.make_can_msg_panda("DAS_control", bus, values)
 
+  @staticmethod
+  def _speed_wheel_msg(right_ticks=0, data=OBSERVED_SPEED_WHEEL_IDLE):
+    payload = bytearray(data)
+    payload[3] = (payload[3] & 0xC0) | (right_ticks & 0x3F)
+    return libsafety_py.make_CANPacket(MSG_VCLEFT_SWITCH_STATUS, 1, payload)
+
   def _accel_msg(self, accel: float):
     # For common.LongitudinalAccelSafetyTest
     return self._long_control_msg(10, accel_limits=(accel, max(accel, 0)))
@@ -131,6 +139,22 @@ class TestTeslaLongitudinalSafety(TestTeslaSafetyBase):
   def test_no_aeb(self):
     for aeb_event in range(4):
       self.assertEqual(self._tx(self._long_control_msg(10, aeb_event=aeb_event)), aeb_event == 0)
+
+  def test_auto_speed_limit_requires_fresh_template_and_controls(self):
+    self.safety.set_safety_hooks(CarParams.SafetyModel.tesla, TeslaSafetyFlags.LONG_CONTROL | TeslaSafetyFlags.AUTO_SPEED_LIMIT)
+    self.safety.init_tests()
+
+    self.assertTrue(self._rx(self._speed_wheel_msg()))
+    self.safety.set_controls_allowed(False)
+    self.assertFalse(self._tx(self._speed_wheel_msg(1)))
+    self.safety.set_controls_allowed(True)
+    self.assertTrue(self._tx(self._speed_wheel_msg(1)))
+    self.assertFalse(self._tx(self._speed_wheel_msg(-1)))
+    self.assertFalse(self._tx(self._speed_wheel_msg(2)))
+    self.assertFalse(self._tx(self._speed_wheel_msg(1, bytes.fromhex("010000c000000001"))))
+
+    self.safety.set_timer(1_500_001)
+    self.assertFalse(self._tx(self._speed_wheel_msg(-1)))
 
   def test_stock_aeb_passthrough(self):
     no_aeb_msg = self._long_control_msg(10, aeb_event=0)
