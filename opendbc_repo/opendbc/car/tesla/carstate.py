@@ -10,12 +10,18 @@ ButtonType = structs.CarState.ButtonEvent.Type
 
 TESLA_GAS_PRESS_ON = 0.8
 TESLA_GAS_PRESS_OFF = 0.4
+TESLA_TPMS_PRESSURE_SNA = 255 * 0.025
+TESLA_TPMS_BAR_TO_PSI = 14.5037738
 SPEED_AUTO_RESUME_GESTURE_NS = 1_000_000_000
 
 
 def update_tesla_gas_pressed(previous: bool, pedal_position: float) -> bool:
   threshold = TESLA_GAS_PRESS_OFF if previous else TESLA_GAS_PRESS_ON
   return float(pedal_position) > threshold
+
+
+def get_tesla_tpms_pressure(pressure_bar: float) -> float:
+  return round(pressure_bar * TESLA_TPMS_BAR_TO_PSI, 1) if pressure_bar < TESLA_TPMS_PRESSURE_SNA else 0.0
 
 
 class CarState(CarStateBase):
@@ -297,6 +303,12 @@ class CarState(CarStateBase):
     # 3-finger infotainment press detection (vehicle bus)
     if Bus.adas in can_parsers:
       cp_adas = can_parsers[Bus.adas]
+      tpms = cp_adas.vl["VCSEC_TPMSDisplay"]
+      ret.tpms.fl = get_tesla_tpms_pressure(tpms["VCSEC_TPMSDisplayPressureFL"])
+      ret.tpms.fr = get_tesla_tpms_pressure(tpms["VCSEC_TPMSDisplayPressureFR"])
+      ret.tpms.rl = get_tesla_tpms_pressure(tpms["VCSEC_TPMSDisplayPressureRL"])
+      ret.tpms.rr = get_tesla_tpms_pressure(tpms["VCSEC_TPMSDisplayPressureRR"])
+
       prev_infotainment = self.infotainment_3_finger_press
       self.infotainment_3_finger_press = int(cp_adas.vl["UI_status2"]["UI_activeTouchPoints"])
       ret.buttonEvents = [*ret.buttonEvents, *create_button_events(
@@ -312,5 +324,5 @@ class CarState(CarStateBase):
       Bus.ap_party: CANParser(DBC[CP.carFingerprint][Bus.party], [], CANBUS.autopilot_party),
     }
     if CP.flags & TeslaFlags.HAS_VEHICLE_BUS:
-      parsers[Bus.adas] = CANParser("tesla_model3_vehicle", [("UI_status2", 2)], CANBUS.vehicle)
+      parsers[Bus.adas] = CANParser("tesla_model3_vehicle", [("UI_status2", 2), ("VCSEC_TPMSDisplay", 1)], CANBUS.vehicle)
     return parsers

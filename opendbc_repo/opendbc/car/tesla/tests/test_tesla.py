@@ -116,3 +116,26 @@ class TestTeslaFingerprint(unittest.TestCase):
     CP = CarInterface.get_params(CAR.TESLA_MODEL_3, gen_empty_fingerprint(), [], True, False, False)
     assert not (CP.flags & TeslaFlags.AUTO_SPEED_LIMIT)
     assert not (CP.safetyConfigs[0].safetyParam & TeslaSafetyFlags.AUTO_SPEED_LIMIT)
+
+  def test_vehicle_bus_tpms_display(self):
+    fingerprint = gen_empty_fingerprint()
+    fingerprint[CANBUS.vehicle][0x3DF] = 8
+    CP = CarInterface.get_params(CAR.TESLA_MODEL_3, fingerprint, [], False, False, False)
+    car_state = CarState(CP)
+    can_parsers = CarState.get_can_parsers(CP)
+
+    self.assertIn(0x25A, can_parsers[Bus.adas].addresses)
+    tpms = can_parsers[Bus.adas].vl["VCSEC_TPMSDisplay"]
+    tpms["VCSEC_TPMSDisplayPressureFL"] = 2.575
+    tpms["VCSEC_TPMSDisplayPressureFR"] = 2.725
+    tpms["VCSEC_TPMSDisplayPressureRL"] = 2.625
+    tpms["VCSEC_TPMSDisplayPressureRR"] = 2.650
+
+    ret = car_state.update(can_parsers)
+    self.assertAlmostEqual(ret.tpms.fl, 37.3, places=1)
+    self.assertAlmostEqual(ret.tpms.fr, 39.5, places=1)
+    self.assertAlmostEqual(ret.tpms.rl, 38.1, places=1)
+    self.assertAlmostEqual(ret.tpms.rr, 38.4, places=1)
+
+    tpms["VCSEC_TPMSDisplayPressureFR"] = 6.375
+    self.assertEqual(car_state.update(can_parsers).tpms.fr, 0.0)
