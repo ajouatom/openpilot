@@ -224,8 +224,8 @@ def test_vehicle_navi_can_control_is_opt_in(settings, params):
   assert (control["min"], control["max"], control["default"]) == (0, 1, 0)
   assert control["control"] == "toggle"
   assert control["risk"] == "high"
-  assert "PV5에서는 일반 과속카메라와 방지턱만 지원" in control["descr"]
-  assert "average-speed zones are not yet supported" in control["edescr"]
+  assert "PV5는 구간단속 알림 이후 제한속도를 유지" in control["descr"]
+  assert "Average speed and remaining distance are not calculated" in control["edescr"]
 
   driving = next(category for category in settings["menu"] if category["id"] == "DRIVING")
   speed = next(group for group in driving["groups"] if group["id"] == "SPEED")

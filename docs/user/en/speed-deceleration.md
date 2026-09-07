@@ -68,7 +68,9 @@ The event type, limit, and distance must all be valid. An average-speed zone ret
 
 ### Stock-navigation CAN control
 
-`VehicleNaviCanControl` uses exact camera and speed-bump distances from the stock navigation on supported Hyundai/Kia CAN-FD vehicles. On the Kia PV5, it currently supports regular cameras and speed bumps only; average-speed zones and `VehicleNaviSchoolZoneControl` remain disabled until the required periodic zone-state signal is validated.
+`VehicleNaviCanControl` uses exact camera and speed-bump distances from the stock navigation on supported Hyundai/Kia CAN-FD vehicles. The Kia PV5 also holds a section speed cap after a section alert. It retains the cap after the brief alert ends and releases it when navigation enforcement ends, on early exit, on conflicting limits, or after more than one second of signal loss.
+
+PV5 section control does not calculate average speed or remaining distance. Restarting, losing signals, or re-enabling the setting requires a new section alert, so the cap may not resume immediately within a zone. Recorded driving validates entry, retention within the zone, and early exit; passage through the actual enforcement endpoint remains to be validated. `VehicleNaviSchoolZoneControl` remains unsupported on the PV5.
 
 This experimental control is off by default. First verify that the displayed event type, limit, and remaining distance match the road, and disable it immediately if they do not.
 

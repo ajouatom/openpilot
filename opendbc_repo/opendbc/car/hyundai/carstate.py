@@ -36,6 +36,7 @@ CANFD_HDA_INFO_MSG = "CANFD_HDA_INFO_364"
 CANFD_NAVI_PROFILE_MSG = "CANFD_NAVI_PROFILE_093"
 CANFD_NAVI_STATUS_MSG = "CANFD_NAVI_STATUS_380"
 CANFD_NAVI_CAMERA_ACTIVE_BIT = 0x40
+CANFD_NAVI_STATUS_TIMEOUT_NS = 1_000_000_000
 STANDSTILL_THRESHOLD = 12 * 0.03125 * CV.KPH_TO_MS
 CANFD_AVH_RELEASE_GRACE_FRAMES = round(0.5 / DT_CTRL)
 CANFD_AVH_LAMP_ACTIVE = 2
@@ -182,12 +183,13 @@ class CarState(CarStateBase):
     self.ccnc_0x162 = None
     self.canfd_wrapped_navi = CP.carFingerprint == CAR.KIA_PV5
     self.navi_profile_msg = CANFD_NAVI_PROFILE_MSG if self.canfd_wrapped_navi else "NEW_MSG_4BE"
-    self.vehicleNaviZoneControlSupported = not self.canfd_wrapped_navi
+    self.vehicleNaviZoneControlSupported = not self.canfd_wrapped_navi  # Legacy kind-7 profile zones only
     self.hda_info_4a3 = None
     self.navi_position_4b4 = None
     self.navi_segment_4b9 = None
     self.navi_profile_4be = None
     self.navi_status_380 = None
+    self.pv5_section_start_prev = False
     self.tcs = None
     self.mdps = None
     self.steer_touch_2af = None
@@ -656,6 +658,45 @@ class CarState(CarStateBase):
     self.vehicleNaviSpeedZoneActive = False
     self.vehicleNaviSpeedZoneSpeed = 0.0
 
+  def _update_pv5_navi_section(self, cp, cp_alt):
+    # PV5 byte 10 bit 4 pulses at entry and again within the section (about
+    # five seconds in the 2026-09-07 logs). Latch only its
+    # rising edge, and require fresh, agreeing navigation limits to retain it.
+    def fresh(parser, name, address, size):
+      if parser is None:
+        return False
+      timestamp = self._vehicle_navi_message_timestamp(parser, name)
+      age = cp._last_update_nanos - timestamp
+      return (timestamp > 0 and 0 <= age <= CANFD_NAVI_STATUS_TIMEOUT_NS and
+              not parser.bus_timeout and len(parser.dat.get(address, b"")) == size)
+
+    status_valid = fresh(cp_alt, CANFD_NAVI_STATUS_MSG, 0x380, 24)
+    hda_valid = fresh(cp, CANFD_HDA_INFO_MSG, 0x364, 16)
+    if not status_valid or not hda_valid or self.navi_status_380 is None or self.hda_info_4a3 is None:
+      self._clear_vehicle_navi_speed_zone()
+      # After a dropout, observe an alert-low frame before accepting a new
+      # rising edge. A repeated old high must not resurrect a released cap.
+      self.pv5_section_start_prev = True
+      return
+
+    start = bool(self.navi_status_380["SECTION_ALERT"])
+    rising = start and not self.pv5_section_start_prev
+    self.pv5_section_start_prev = start
+    speed = int(self.navi_status_380["SPEED_LIMIT"])
+    valid_limit = (30 < speed <= 150 and speed % 5 == 0 and
+                   speed == int(self.hda_info_4a3["SPEED_LIMIT"]) and
+                   int(self.hda_info_4a3["MapSource"]) == 2)
+    if not self.vehicleNaviCanControl or not valid_limit:
+      self._clear_vehicle_navi_speed_zone()
+      return
+
+    speed_kph = speed if self.is_metric else speed * CV.MPH_TO_KPH
+    if self.vehicleNaviSpeedZoneActive and speed_kph != self.vehicleNaviSpeedZoneSpeed:
+      self._clear_vehicle_navi_speed_zone()
+    if rising:
+      self.vehicleNaviSpeedZoneActive = True
+      self.vehicleNaviSpeedZoneSpeed = speed_kph
+
   @staticmethod
   def _vehicle_navi_message_timestamp(cp, name):
     return max(cp.ts_nanos.get(name, {}).values(), default=0)
@@ -721,14 +762,16 @@ class CarState(CarStateBase):
     self.vehicleNaviEvents.sort(key=lambda event: event["target"])
     self.vehicleNaviEvents = self.vehicleNaviEvents[:VEHICLE_NAVI_MAX_EVENTS]
 
-  def _update_vehicle_navi_events(self, cp, ret, speed_limit_cam):
+  def _update_vehicle_navi_events(self, cp, ret, speed_limit_cam, cp_alt=None):
     ret.speedBumpDistance = 0.0
     ret.schoolZoneActive = False
     ret.vehicleNaviActive = False
     ret.vehicleNaviSectionActive = False
     ret.vehicleNaviSpeed = 0.0
+    if self.canfd_wrapped_navi:
+      self._update_pv5_navi_section(cp, cp_alt)
     profile_timestamp = self._vehicle_navi_message_timestamp(cp, self.navi_profile_msg)
-    self.vehicleNaviAvailable = self.vehicleNaviAvailable or profile_timestamp > 0
+    self.vehicleNaviAvailable = self.vehicleNaviAvailable or profile_timestamp > 0 or self.vehicleNaviSpeedZoneActive
     ret.vehicleNaviAvailable = self.vehicleNaviAvailable
     self.vehicleNaviCameraTarget = None
 
@@ -829,7 +872,7 @@ class CarState(CarStateBase):
     if bumps:
       ret.speedBumpDistance = bumps[0]["target"] - self.totalDistance
 
-    if self.vehicleNaviSpeedZoneActive and (not position_seen and not speed_limit_cam):
+    if self.vehicleNaviSpeedZoneActive and not self.canfd_wrapped_navi and (not position_seen and not speed_limit_cam):
       self._clear_vehicle_navi_speed_zone()
 
     if self.vehicleNaviSchoolZoneActive:
@@ -1167,7 +1210,7 @@ class CarState(CarStateBase):
     ret.vCluRatio = (ret.vEgo / vEgoClu) if (vEgoClu > 3. and ret.vEgo > 3.) else 1.0
 
     distance_time_changed = self._update_vehicle_speed_camera_params()
-    speed_limit_cam = self._update_vehicle_navi_events(cp, ret, speed_limit_cam) or speed_limit_cam
+    speed_limit_cam = self._update_vehicle_navi_events(cp, ret, speed_limit_cam, cp_alt) or speed_limit_cam
     self.update_speed_limit(ret, speed_limit_cam, distance_time_changed)
 
     paddle_button = self.paddle_button_prev
