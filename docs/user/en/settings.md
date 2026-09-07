@@ -196,6 +196,8 @@ A lower `AutoNaviSpeedDecelRate` begins slowing farther away. `AutoNaviSpeedSafe
 
 For Hyundai, Kia, and Genesis, a saved `StoppingAccel=0` is automatically restored to `-50` (-0.50 m/s²) when vehicle control initializes after boot. Existing negative values are preserved, and other brands retain the traditional stop behavior for `0`.
 
+On supported Tesla vehicles with the additional vehicle bus detected, the device's **alpha longitudinal** (`AlphaLongitudinalEnabled`) toggle also enables [automatic cruise set-speed adjustment](tesla.md#automatic-cruise-speed) to the vehicle-reported limit. Turning the right speed wheel pauses it; an opposite-direction wheel gesture within one second or disengaging and re-engaging resumes it. There is no separate Carrot Web setting for this feature.
+
 <a id="vehicle-hardware"></a>
 ## Vehicle and hardware
 

@@ -200,6 +200,8 @@ Carrot Web 설정 화면에서는 다음 기능을 사용할 수 있습니다.
 
 현대·기아·제네시스에서 `StoppingAccel=0`으로 저장되어 있으면 부팅 후 차량 제어 초기화 시 `-50`(-0.50m/s²)으로 자동 보정합니다. 기존 음수 값은 유지하며, 다른 차종의 `0`은 기존 정지 제어 방식을 사용합니다.
 
+지원되는 Tesla 차량에서 추가 차량 버스가 감지되면 장치의 **alpha longitudinal**(`AlphaLongitudinalEnabled`) 토글을 켤 때 차량 수신 제한속도에 맞춘 [크루즈 설정속도 자동 조절](tesla.md#automatic-cruise-speed)도 활성화됩니다. 오른쪽 속도 휠을 직접 돌리면 일시 중지하며, 1초 안에 반대 방향으로 돌리거나 제어를 해제했다가 다시 켜면 재개합니다. 별도의 Carrot Web 설정은 없습니다.
+
 <a id="vehicle-hardware"></a>
 ## 차량·하드웨어
 
