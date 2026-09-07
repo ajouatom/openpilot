@@ -37,6 +37,8 @@ from openpilot.selfdrive.carrot.radar_motion.lead_selection import (
 )
 from openpilot.selfdrive.carrot.radar_motion.controller import (
   DPathRadarController,
+  DPathSccLeadTwoTracker,
+  _scc_lead_two_independently_supported,
   stationary_shadow_corner_supported,
 )
 from openpilot.selfdrive.carrot.radar_motion.predictor import RadarMotionCutIn
@@ -7956,6 +7958,113 @@ def test_option_two_suppresses_scc_lead_two_duplicate_of_primary() -> None:
   assert output.lead_one is not None
   assert output.lead_one["radarTrackId"] == 45
   assert output.lead_two is None
+
+
+@pytest.mark.parametrize("mode", (2, 3))
+@pytest.mark.parametrize("vision_probability", (0.0, 1.0))
+def test_scc_road_reflection_does_not_bypass_independent_lead_confirmation(
+  mode: int, vision_probability: float,
+) -> None:
+  controller = DPathRadarController(enable_radar_tracks=mode)
+  for index in range(20):
+    time_s = index * 0.05
+    d_rel = 9.0 - 7.3 * time_s
+    output = controller.update(
+      time_s, 7.3,
+      (
+        Point(35, 17.0, 0.5, v_rel=-0.3),
+        Point(39, d_rel, 0.15, v_rel=-7.4),
+        Point(0, d_rel - 0.2, 0.0, v_rel=-7.3, source="scc"),
+      ),
+      model_with_lead(16.4, 0.5, 6.5, probability=vision_probability),
+    )
+    assert output.lead_two is None
+    if vision_probability == 1.0:
+      assert output.lead_one is not None
+      assert output.lead_one["radarTrackId"] == 35
+
+
+def test_scc_cannot_reuse_other_vehicle_vision_inside_permissive_range_gate() -> None:
+  points = snapshot_radar_points((
+    Point(39, 12.0, 0.1, v_rel=-7.0),
+    Point(0, 12.0, 0.0, v_rel=-7.0, source="scc"),
+  ), 7.0)
+  # Five metres would fit the ordinary stopped-vision position gate. Here
+  # camera range/speed are already owned by a distinct moving radar vehicle.
+  vision = VisionLead(1.0, 17.0, 0.1, 7.0, 2.0, 0.6, 1.5)
+  primary = {"status": True, "radar": True, "modelProb": 1.0, "dRel": 17.0, "vLead": 7.0}
+  assert not _scc_lead_two_independently_supported(
+    points[1], points[0], points, STRAIGHT_PATH, vision, primary,
+  )
+
+
+@pytest.mark.parametrize("corner_d,corner_y,corner_v,measured,expected", (
+  (12.1, 0.2, 0.0, True, True),
+  (12.1, 0.2, 0.0, False, False),
+  (12.1, 3.2, 0.0, True, False),
+  (12.1, 0.2, 7.0, True, False),
+  (20.0, 0.2, 0.0, True, False),
+))
+def test_scc_corroboration_requires_the_same_measured_corner_object(
+  corner_d, corner_y, corner_v, measured, expected,
+) -> None:
+  points = snapshot_radar_points((
+    Point(39, 12.0, 0.1, v_rel=-7.0),
+    Point(0, 12.0, 0.0, v_rel=-7.0, source="scc"),
+    Point(1039, corner_d, corner_y, v_rel=corner_v - 7.0, measured=measured, source="corner235"),
+  ), 7.0)
+  assert _scc_lead_two_independently_supported(
+    points[1], points[0], points, STRAIGHT_PATH, None, None,
+  ) is expected
+
+
+def test_scc_stationary_vehicle_can_be_confirmed_by_current_vision() -> None:
+  points = snapshot_radar_points((
+    Point(39, 30.0, 0.1, v_rel=-7.0),
+    Point(0, 29.8, 0.0, v_rel=-7.0, source="scc"),
+  ), 7.0)
+  vision = VisionLead(0.9, 31.0, 0.1, 0.0, 2.0, 0.6, 1.5)
+  assert _scc_lead_two_independently_supported(
+    points[1], points[0], points, STRAIGHT_PATH, vision, None,
+  )
+  # A later model hypothesis is not a second camera vehicle or current support.
+  assert not _scc_lead_two_independently_supported(
+    points[1], points[0], points, STRAIGHT_PATH,
+    replace(vision, probability=0.0), None,
+  )
+
+
+def test_scc_front_corner_body_agreement_survives_far_model_path_wobble() -> None:
+  points = snapshot_radar_points((
+    Point(45, 102.3, 6.85, v_rel=-17.0),
+    Point(0, 104.1, 0.0, v_rel=-16.6, source="scc"),
+    Point(1618, 103.4, 6.18, v_rel=-15.1, source="corner235"),
+  ), 21.3)
+  # Both sensors still locate the same slowing vehicle near 100 m. The path
+  # moves outside both returns, so neither currently owns physical output.
+  path = ((0.0, 0.0), (120.0, -12.0))
+  assert _scc_lead_two_independently_supported(
+    points[1], None, points, path, None, None,
+  )
+
+
+def test_scc_support_dropout_is_bounded_and_cannot_transfer_across_range_jump() -> None:
+  tracker = DPathSccLeadTwoTracker()
+  point = snapshot_radar_points((Point(0, 30.0, 0.0, v_rel=-5.0, source="scc"),), 5.0)[0]
+  for index in range(5):
+    output = tracker.update(index * 0.05, replace(point, d_rel=30.0 - index * 0.25), independently_supported=True)
+  assert output is not None
+  assert tracker.update(0.25, replace(point, d_rel=28.75), independently_supported=False) is not None
+  assert tracker.update(0.35, replace(point, d_rel=28.25), independently_supported=False) is None
+  assert tracker.update(0.40, replace(point, d_rel=28.0), independently_supported=True) is None
+  assert tracker.update(0.45, replace(point, d_rel=4.0), independently_supported=False) is None
+
+
+def test_unconfirmed_scc_cannot_accumulate_time_without_independent_support() -> None:
+  tracker = DPathSccLeadTwoTracker()
+  point = snapshot_radar_points((Point(0, 30.0, 0.0, source="scc"),), 0.0)[0]
+  for index in range(20):
+    assert tracker.update(index * 0.05, point, independently_supported=(index % 2 == 0)) is None
 
 
 def test_independent_controller_calculates_lead_one_before_motion_lead_two() -> None:
