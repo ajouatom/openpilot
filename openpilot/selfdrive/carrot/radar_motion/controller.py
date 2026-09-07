@@ -34,7 +34,11 @@ from openpilot.selfdrive.carrot.radar_motion.primary import (
   STATIONARY_FRONT_RANGE_MAX_FRACTION,
   STATIONARY_FRONT_RANGE_MAX_YREL_ERROR_M,
   STATIONARY_FRONT_RANGE_XSTD_SIGMA,
+  STATIONARY_VISION_CROSS_SOURCE_MAX_DREL_M,
+  STATIONARY_VISION_CROSS_SOURCE_MAX_VLEAD_MPS,
   VISION_RADAR_MAX_DISTANCE_ERROR_M,
+  VISION_LEAD_MIN_PROB,
+  VisionLead,
   VisionRadarMatcher,
   lead_from_vision,
   lead_from_radar_point,
@@ -45,6 +49,7 @@ from openpilot.selfdrive.carrot.radar_motion.primary import (
   snapshot_radar_points,
   stationary_vision_support_probability,
   unconditional_scc_match,
+  vision_lead_from_model,
   vision_only_lead_allowed,
 )
 from openpilot.selfdrive.carrot.radar_motion.trajectory_cutin import (
@@ -74,6 +79,7 @@ STATIONARY_SHADOW_CORNER_MAX_DPATH_DELTA_M = 1.25
 STATIONARY_SHADOW_CORNER_MAX_ABS_VLEAD_MPS = 3.0
 STATIONARY_SHADOW_CORNER_MAX_VLEAD_DELTA_MPS = 3.0
 SCC_LEAD_TWO_CONFIRMATION_S = 0.15
+SCC_LEAD_TWO_SUPPORT_HOLD_S = 0.10
 SCC_LEAD_TWO_MAX_DREL_M = 150.0
 SCC_LEAD_TWO_MAX_VLEAD_MPS = 5.0
 SCC_LEAD_TWO_MAX_POSITION_ERROR_M = 3.0
@@ -83,6 +89,7 @@ SCC_PHYSICAL_MATCH_DREL_FRACTION = 0.05
 SCC_PHYSICAL_MATCH_MAX_DREL_M = 8.0
 SCC_PHYSICAL_MATCH_MAX_VLEAD_DELTA_MPS = 3.0
 SCC_PHYSICAL_MATCH_MAX_ABS_DPATH_M = 2.2
+SCC_CORNER_MATCH_MAX_YREL_DELTA_M = 1.25
 SCC_PRIMARY_DUPLICATE_MAX_DREL_DELTA_M = 5.0
 RADAR_VISION_FALLBACK_MAX_ABS_DPATH_M = 1.0
 RADAR_VISION_FALLBACK_MIN_PROBABILITY = 0.40
@@ -170,6 +177,8 @@ def _scc_physical_support(
   scc: RadarPointSnapshot,
   points: Iterable[RadarPointSnapshot],
   path: tuple[tuple[float, float], ...],
+  *,
+  require_path: bool = True,
 ) -> RadarPointSnapshot | None:
   """Prefer an in-path physical return that corroborates the OEM SCC lead."""
   d_rel_gate = min(
@@ -195,7 +204,7 @@ def _scc_physical_support(
     projection = project_to_model_path(
       path, point.d_rel, point.y_rel,
     )
-    if abs(projection.d_path) > SCC_PHYSICAL_MATCH_MAX_ABS_DPATH_M:
+    if require_path and abs(projection.d_path) > SCC_PHYSICAL_MATCH_MAX_ABS_DPATH_M:
       continue
     supported.append((
       0 if point.source == "frontRadar" else 1,
@@ -210,18 +219,81 @@ def _scc_physical_support(
   )[-1]
 
 
+def _scc_lead_two_independently_supported(
+  scc: RadarPointSnapshot,
+  physical: RadarPointSnapshot | None,
+  points: Iterable[RadarPointSnapshot],
+  path: tuple[tuple[float, float], ...],
+  vision: VisionLead | None,
+  primary: dict[str, Any] | None,
+) -> bool:
+  # The OEM SCC object and the front object list come from the same radar.
+  # Agreement between them also occurs for bridge joints and road reflections;
+  # it identifies a return, but is not independent evidence of a vehicle.
+  point_values = tuple(points)
+  front = (
+    physical if physical is not None and physical.source == "frontRadar"
+    else _scc_physical_support(
+      scc, (point for point in point_values if point.source == "frontRadar"),
+      path, require_path=False,
+    )
+  )
+  # Associate sensors in physical coordinates. Long-range model path wobble
+  # must not erase agreement between the same front/corner body. Physical
+  # lead output still uses the original path gate; SCC owns its backup role.
+  corner = _scc_physical_support(
+    scc,
+    (
+      point for point in point_values if _is_corner(point)
+      and (
+        front is None
+        or (
+          abs(front.d_rel - point.d_rel) <= STATIONARY_VISION_CROSS_SOURCE_MAX_DREL_M
+          and abs(front.y_rel - point.y_rel) <= SCC_CORNER_MATCH_MAX_YREL_DELTA_M
+          and abs(front.v_lead - point.v_lead) <= STATIONARY_VISION_CROSS_SOURCE_MAX_VLEAD_MPS
+        )
+      )
+    ),
+    path,
+    require_path=front is None,
+  )
+  if corner is not None:
+    return True
+
+  point = physical or scc
+  if VisionRadarMatcher._stationary_vision_base_cost(vision, point) is None:
+    return False
+  # A camera lead already associated with a distinct moving front object
+  # cannot also authenticate a nearer stationary SCC return.
+  if (
+    primary is not None
+    and primary.get("status") and primary.get("radar")
+    and float(primary.get("modelProb", 0.0)) >= VISION_LEAD_MIN_PROB
+    and (
+      abs(point.d_rel - float(primary["dRel"])) > SCC_PRIMARY_DUPLICATE_MAX_DREL_DELTA_M
+      or abs(point.v_lead - float(primary["vLead"])) > SCC_PRIMARY_DUPLICATE_MAX_VLEAD_DELTA_MPS
+    )
+  ):
+    return False
+  return True
+
+
 class DPathSccLeadTwoTracker:
-  """Confirm an opt-in low-speed OEM SCC backup independently of dPath."""
+  """Confirm a low-speed SCC backup with independent object evidence."""
 
   def __init__(self) -> None:
     self._since_s: float | None = None
     self._last_time_s: float | None = None
     self._last_point: RadarPointSnapshot | None = None
+    self._last_support_s: float | None = None
+    self._confirmed = False
 
   def reset(self) -> None:
     self._since_s = None
     self._last_time_s = None
     self._last_point = None
+    self._last_support_s = None
+    self._confirmed = False
 
   def _continuous(
     self,
@@ -244,29 +316,25 @@ class DPathSccLeadTwoTracker:
   def update(
     self,
     time_s: float,
-    points: Iterable[RadarPointSnapshot],
+    point: RadarPointSnapshot | None,
     *,
-    enabled: bool,
+    independently_supported: bool,
   ) -> RadarPointSnapshot | None:
-    if not enabled:
-      self.reset()
-      return None
-    candidates = tuple(
-      point for point in points
-      if (
-        point.measured
-        and point.source == "scc"
-        and 0.8 < point.d_rel <= SCC_LEAD_TWO_MAX_DREL_M
-        and point.v_lead < SCC_LEAD_TWO_MAX_VLEAD_MPS
-      )
-    )
-    point = min(candidates, key=lambda value: value.d_rel, default=None)
     if point is None:
       self.reset()
       return None
     if not self._continuous(time_s, point):
-      self._since_s = float(time_s)
-    elif self._since_s is None:
+      self.reset()
+    if independently_supported:
+      self._last_support_s = float(time_s)
+    elif (
+      not self._confirmed
+      or self._last_support_s is None
+      or not 0.0 <= float(time_s) - self._last_support_s <= SCC_LEAD_TWO_SUPPORT_HOLD_S
+    ):
+      self.reset()
+      return None
+    if self._since_s is None:
       self._since_s = float(time_s)
     self._last_time_s = float(time_s)
     self._last_point = point
@@ -275,6 +343,7 @@ class DPathSccLeadTwoTracker:
       or float(time_s) - self._since_s < SCC_LEAD_TWO_CONFIRMATION_S
     ):
       return None
+    self._confirmed = True
     return point
 
 
@@ -1140,16 +1209,33 @@ class DPathRadarController:
       candidates,
       v_ego,
     )
+    scc_point = min(
+      (
+        point for point in points
+        if self.enable_radar_tracks >= 2
+        and point.measured and point.source == "scc"
+        and 0.8 < point.d_rel <= SCC_LEAD_TWO_MAX_DREL_M
+        and point.v_lead < SCC_LEAD_TWO_MAX_VLEAD_MPS
+      ),
+      key=lambda point: point.d_rel,
+      default=None,
+    )
+    physical_support = (
+      _scc_physical_support(scc_point, points, path)
+      if scc_point is not None else None
+    )
     scc_point = self.scc_lead_two_tracker.update(
-      time_s,
-      points,
-      enabled=self.enable_radar_tracks >= 2,
+      time_s, scc_point,
+      independently_supported=(
+        scc_point is not None
+        and _scc_lead_two_independently_supported(
+          scc_point, physical_support, points, path,
+          vision_lead_from_model(model), lead_one,
+        )
+      ),
     )
     scc_lead_two = None
     if scc_point is not None:
-      physical_support = _scc_physical_support(
-        scc_point, points, path,
-      )
       lead_point = physical_support or scc_point
       scc_lead_two = self._lead_from_radar_point(
         lead_point,
