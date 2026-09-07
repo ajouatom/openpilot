@@ -8,7 +8,7 @@ from opendbc.car.tesla.carstate import CarState
 from opendbc.car.tesla.interface import CarInterface
 from opendbc.car.tesla.fingerprints import FW_VERSIONS
 from opendbc.car.tesla.radar_interface import RADAR_START_ADDR
-from opendbc.car.tesla.values import CAR
+from opendbc.car.tesla.values import CAR, CANBUS, TeslaFlags, TeslaSafetyFlags
 
 Ecu = CarParams.Ecu
 
@@ -37,7 +37,7 @@ Ecu = CarParams.Ecu
 #   platform=E  variant_code=4HP015  software_major=05  software_minor=0
 FW_RE = re.compile(
   rb'^(?P<unknown_prefix>.+),' +
-  rb'(?P<platform>[EY])' +
+  rb'(?P<platform>[EYX])' +
   rb'(?P<variant_code>\d?[A-Z]*\d{3})' +
   rb'\.(?P<software_major>\d+)' +
   rb'(?:\.(?P<software_minor>\d+))?$'
@@ -46,6 +46,7 @@ FW_RE = re.compile(
 PLATFORM_TO_CAR = {
   b'E': CAR.TESLA_MODEL_3,
   b'Y': CAR.TESLA_MODEL_Y,
+  b'X': CAR.TESLA_MODEL_X,
 }
 
 
@@ -102,3 +103,16 @@ class TestTeslaFingerprint(unittest.TestCase):
     fingerprint = gen_empty_fingerprint()
     CP = CarInterface.get_params(CAR.TESLA_MODEL_3, fingerprint, [], False, False, False)
     assert CP.radarUnavailable  # No radar signal -> unavailable
+
+  def test_auto_speed_limit_requires_longitudinal_and_vehicle_bus(self):
+    fingerprint = gen_empty_fingerprint()
+    fingerprint[CANBUS.vehicle][0x3DF] = 8
+
+    CP = CarInterface.get_params(CAR.TESLA_MODEL_3, fingerprint, [], True, False, False)
+    assert CP.flags & TeslaFlags.HAS_VEHICLE_BUS
+    assert CP.flags & TeslaFlags.AUTO_SPEED_LIMIT
+    assert CP.safetyConfigs[0].safetyParam & TeslaSafetyFlags.AUTO_SPEED_LIMIT
+
+    CP = CarInterface.get_params(CAR.TESLA_MODEL_3, gen_empty_fingerprint(), [], True, False, False)
+    assert not (CP.flags & TeslaFlags.AUTO_SPEED_LIMIT)
+    assert not (CP.safetyConfigs[0].safetyParam & TeslaSafetyFlags.AUTO_SPEED_LIMIT)

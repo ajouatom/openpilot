@@ -10,6 +10,7 @@ ButtonType = structs.CarState.ButtonEvent.Type
 
 TESLA_GAS_PRESS_ON = 0.8
 TESLA_GAS_PRESS_OFF = 0.4
+SPEED_AUTO_RESUME_GESTURE_NS = 1_000_000_000
 
 
 def update_tesla_gas_pressed(previous: bool, pedal_position: float) -> bool:
@@ -40,6 +41,47 @@ class CarState(CarStateBase):
     self.cruise_override = False
     self.coop_steering = True
     self.infotainment_3_finger_press = 0
+    self.tesla_speed_button_template = None
+    self.tesla_speed_button_template_nanos = 0
+    self.tesla_speed_limit_target = 0.0
+    self.tesla_speed_limit_target_nanos = 0
+    self.tesla_speed_limit_target_valid = False
+    self.tesla_speed_units = "KPH"
+    self.tesla_manual_speed_adjustment_counter = 0
+    self.tesla_speed_auto_resume_gesture_counter = 0
+    self._tesla_speed_resume_up_nanos = 0
+    self._tesla_speed_resume_down_nanos = 0
+    self._tesla_speed_resume_wait_idle = False
+
+  def observe_speed_wheel_frame(self, data: bytes, monotonic_nanos: int) -> None:
+    if len(data) != 8 or (data[0] & 0x03) != 1:
+      return
+
+    raw_tick = data[3] & 0x3F
+    if raw_tick == 0:
+      self.tesla_speed_button_template = bytes(data)
+      self.tesla_speed_button_template_nanos = monotonic_nanos
+      self._tesla_speed_resume_wait_idle = False
+      return
+
+    if self._tesla_speed_resume_wait_idle:
+      return
+
+    signed_tick = raw_tick - 0x40 if raw_tick & 0x20 else raw_tick
+    direction = 1 if signed_tick > 0 else -1
+    self.tesla_manual_speed_adjustment_counter += 1
+    opposite_nanos = self._tesla_speed_resume_down_nanos if direction > 0 else self._tesla_speed_resume_up_nanos
+    if opposite_nanos and monotonic_nanos - opposite_nanos <= SPEED_AUTO_RESUME_GESTURE_NS:
+      self.tesla_speed_auto_resume_gesture_counter += 1
+      self._tesla_speed_resume_up_nanos = 0
+      self._tesla_speed_resume_down_nanos = 0
+      self._tesla_speed_resume_wait_idle = True
+    elif direction > 0:
+      self._tesla_speed_resume_up_nanos = monotonic_nanos
+      self._tesla_speed_resume_down_nanos = 0
+    else:
+      self._tesla_speed_resume_down_nanos = monotonic_nanos
+      self._tesla_speed_resume_up_nanos = 0
 
   def update_summon_state(self, summon_state: str, cruise_enabled: bool):
     summon_now = summon_state in ("ACTIVE", "COMPLETE", "SELFPARK_STARTED")
@@ -153,6 +195,7 @@ class CarState(CarStateBase):
       # Keep cruise unit consistent with displayed speed when enum/raw bit are unreliable.
       cruise_is_kph = ui_is_kph
 
+    self.tesla_speed_units = "KPH" if cruise_is_kph else "MPH"
     ret.cruiseState.speedCluster = cp_party.vl["DI_state"]["DI_digitalSpeed"] * (CV.KPH_TO_MS if cruise_is_kph else CV.MPH_TO_MS)
     ret.cruiseState.speed = max(ret.cruiseState.speedCluster, 1e-3)
     ret.cruiseState.available = cruise_state == "STANDBY" or ret.cruiseState.enabled
@@ -167,10 +210,18 @@ class CarState(CarStateBase):
     ret.buttonEvents = [*create_button_events(acc_cancel, self.acc_cancel_last, {1: ButtonType.cancel})]
     self.acc_cancel_last = acc_cancel
 
-    # DAS_fusedSpeedLimit from DBC is always in kph (scale=5). Do NOT apply ui_is_kph conversion.
+    # DAS_fusedSpeedLimit uses the instrument's selected speed unit.
     speed_limit = cp_ap_party.vl["DAS_status"]["DAS_fusedSpeedLimit"]
-    if 0 < speed_limit <= 150:
+    speed_limit_time = cp_ap_party.ts_nanos["DAS_status"]["DAS_fusedSpeedLimit"]
+    if 0 < speed_limit <= 150 and speed_limit_time > 0:
       ret.speedLimit = speed_limit
+      self.tesla_speed_limit_target = speed_limit * (CV.KPH_TO_MS if cruise_is_kph else CV.MPH_TO_MS)
+      self.tesla_speed_limit_target_nanos = speed_limit_time
+      self.tesla_speed_limit_target_valid = True
+    else:
+      self.tesla_speed_limit_target = 0.0
+      self.tesla_speed_limit_target_nanos = 0
+      self.tesla_speed_limit_target_valid = False
 
     park_brake_state = self.can_define.dv["DI_state"]["DI_parkBrakeState"].get(int(cp_party.vl["DI_state"]["DI_parkBrakeState"]), None)
     vehicle_hold_state = self.can_define.dv["DI_state"]["DI_vehicleHoldState"].get(int(cp_party.vl["DI_state"]["DI_vehicleHoldState"]), None)
