@@ -2,13 +2,14 @@ import re
 import unittest
 
 from opendbc.car import Bus, gen_empty_fingerprint
+from opendbc.car.common.conversions import Conversions as CV
 from opendbc.car.selected_car import get_selected_car_platform
 from opendbc.car.structs import CarParams
 from opendbc.car.tesla.carstate import CarState
 from opendbc.car.tesla.interface import CarInterface
 from opendbc.car.tesla.fingerprints import FW_VERSIONS
 from opendbc.car.tesla.radar_interface import RADAR_START_ADDR
-from opendbc.car.tesla.values import CAR
+from opendbc.car.tesla.values import CAR, CANBUS, TeslaFlags, TeslaSafetyFlags
 
 Ecu = CarParams.Ecu
 
@@ -37,7 +38,7 @@ Ecu = CarParams.Ecu
 #   platform=E  variant_code=4HP015  software_major=05  software_minor=0
 FW_RE = re.compile(
   rb'^(?P<unknown_prefix>.+),' +
-  rb'(?P<platform>[EY])' +
+  rb'(?P<platform>[EYX])' +
   rb'(?P<variant_code>\d?[A-Z]*\d{3})' +
   rb'\.(?P<software_major>\d+)' +
   rb'(?:\.(?P<software_minor>\d+))?$'
@@ -46,6 +47,7 @@ FW_RE = re.compile(
 PLATFORM_TO_CAR = {
   b'E': CAR.TESLA_MODEL_3,
   b'Y': CAR.TESLA_MODEL_Y,
+  b'X': CAR.TESLA_MODEL_X,
 }
 
 
@@ -102,3 +104,66 @@ class TestTeslaFingerprint(unittest.TestCase):
     fingerprint = gen_empty_fingerprint()
     CP = CarInterface.get_params(CAR.TESLA_MODEL_3, fingerprint, [], False, False, False)
     assert CP.radarUnavailable  # No radar signal -> unavailable
+
+  def test_auto_speed_limit_requires_longitudinal_and_vehicle_bus(self):
+    fingerprint = gen_empty_fingerprint()
+    fingerprint[CANBUS.vehicle][0x3DF] = 8
+
+    CP = CarInterface.get_params(CAR.TESLA_MODEL_3, fingerprint, [], True, False, False)
+    assert CP.flags & TeslaFlags.HAS_VEHICLE_BUS
+    assert CP.flags & TeslaFlags.AUTO_SPEED_LIMIT
+    assert CP.safetyConfigs[0].safetyParam & TeslaSafetyFlags.AUTO_SPEED_LIMIT
+
+    CP = CarInterface.get_params(CAR.TESLA_MODEL_3, fingerprint, [], False, False, False)
+    assert CP.flags & TeslaFlags.HAS_VEHICLE_BUS
+    assert not (CP.flags & TeslaFlags.AUTO_SPEED_LIMIT)
+    assert not (CP.safetyConfigs[0].safetyParam & TeslaSafetyFlags.AUTO_SPEED_LIMIT)
+
+    CP = CarInterface.get_params(CAR.TESLA_MODEL_3, gen_empty_fingerprint(), [], True, False, False)
+    assert not (CP.flags & TeslaFlags.AUTO_SPEED_LIMIT)
+    assert not (CP.safetyConfigs[0].safetyParam & TeslaSafetyFlags.AUTO_SPEED_LIMIT)
+
+  def test_speed_limit_normalizes_display_units(self):
+    CP = CarInterface.get_params(CAR.TESLA_MODEL_3, gen_empty_fingerprint(), [], False, False, False)
+    car_state = CarState(CP)
+    can_parsers = CarState.get_can_parsers(CP)
+    for units, speed_limit, unit_to_ms in ((1, 100, CV.KPH_TO_MS), (0, 65, CV.MPH_TO_MS)):
+      with self.subTest(units=units):
+        can_parsers[Bus.party].vl["DI_state"]["DI_speedUnits"] = units
+        can_parsers[Bus.ap_party].vl["DAS_status"]["DAS_fusedSpeedLimit"] = speed_limit
+        can_parsers[Bus.ap_party].ts_nanos["DAS_status"]["DAS_fusedSpeedLimit"] = 2_000_000_000
+
+        ret = car_state.update(can_parsers)
+        self.assertAlmostEqual(ret.speedLimit, speed_limit * unit_to_ms * CV.MS_TO_KPH, places=5)
+        self.assertAlmostEqual(car_state.tesla_speed_limit_target, speed_limit * unit_to_ms)
+        self.assertTrue(car_state.tesla_speed_limit_target_valid)
+
+    for speed_limit, timestamp in ((0, 2_000_000_000), (155, 2_000_000_000), (65, 0)):
+      with self.subTest(speed_limit=speed_limit, timestamp=timestamp):
+        can_parsers[Bus.ap_party].vl["DAS_status"]["DAS_fusedSpeedLimit"] = speed_limit
+        can_parsers[Bus.ap_party].ts_nanos["DAS_status"]["DAS_fusedSpeedLimit"] = timestamp
+        self.assertEqual(car_state.update(can_parsers).speedLimit, 0.0)
+        self.assertFalse(car_state.tesla_speed_limit_target_valid)
+
+  def test_vehicle_bus_tpms_display(self):
+    fingerprint = gen_empty_fingerprint()
+    fingerprint[CANBUS.vehicle][0x3DF] = 8
+    CP = CarInterface.get_params(CAR.TESLA_MODEL_3, fingerprint, [], False, False, False)
+    car_state = CarState(CP)
+    can_parsers = CarState.get_can_parsers(CP)
+
+    self.assertIn(0x25A, can_parsers[Bus.adas].addresses)
+    tpms = can_parsers[Bus.adas].vl["VCSEC_TPMSDisplay"]
+    tpms["VCSEC_TPMSDisplayPressureFL"] = 2.575
+    tpms["VCSEC_TPMSDisplayPressureFR"] = 2.725
+    tpms["VCSEC_TPMSDisplayPressureRL"] = 2.625
+    tpms["VCSEC_TPMSDisplayPressureRR"] = 2.650
+
+    ret = car_state.update(can_parsers)
+    self.assertAlmostEqual(ret.tpms.fl, 37.3, places=1)
+    self.assertAlmostEqual(ret.tpms.fr, 39.5, places=1)
+    self.assertAlmostEqual(ret.tpms.rl, 38.1, places=1)
+    self.assertAlmostEqual(ret.tpms.rr, 38.4, places=1)
+
+    tpms["VCSEC_TPMSDisplayPressureFR"] = 6.375
+    self.assertEqual(car_state.update(can_parsers).tpms.fr, 0.0)
