@@ -538,7 +538,7 @@ window.CarrotTranslations.register("zh", {
     reboot_later: "已选择。请稍后重启以应用更改。",
     rebooting: "正在重启...",
     git_sync_confirm: "将同步分支。\n本地分支可能会被清理。继续？",
-    git_reset_confirm: "将还原代码更改。\n你的修改可能会丢失。继续？",
+    git_reset_confirm: "连接远程仓库检查分支跟踪并自动修复失效的关联。验证失败时不会重置。\n然后还原代码更改，你的修改可能会丢失。继续？",
     git_reset_mode_prompt: "选择重置模式\n\n• hard: 删除所有更改\n• soft: 仅撤消提交\n• mixed: 仅取消暂存",
     git_reset_target_prompt: "输入重置目标\n例如: HEAD (当前), origin/master (远程)",
     delete_videos_confirm: "删除所有行车视频？\n此操作无法撤销。继续？",

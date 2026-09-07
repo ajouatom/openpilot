@@ -258,3 +258,38 @@ def test_auto_update_state_survives_as_bounded_history(tmp_path, monkeypatch):
   assert data["auto_update"]["reboot_requested_head"] == "target-head"
   assert data["auto_update"]["error_code"] == f"error-{git_state.AUTO_UPDATE_HISTORY_LIMIT + 2}"
   assert len(data["auto_update_history"]) == git_state.AUTO_UPDATE_HISTORY_LIMIT
+
+
+def test_manual_pull_recovery_clears_ref_error_but_preserves_reboot_receipt(tmp_path, monkeypatch):
+  monkeypatch.setattr(git_state, "CARROT_STATE_DIR", str(tmp_path))
+  monkeypatch.setattr(git_state, "CARROT_GIT_STATE_PATH", str(tmp_path / "git.json"))
+  alerts = []
+  monkeypatch.setattr(auto_update, "_set_auto_update_alert", lambda show: alerts.append(show))
+  git_state.write_auto_update_event(
+    "error", error_code="pull_failed", error="fatal: couldn't find remote ref refs/heads/release-tizi-staging",
+    reboot_requested_head="already-requested",
+  )
+
+  auto_update.clear_recovered_git_ref_error()
+
+  state = git_state.read_auto_update_state()
+  assert state["status"] == "idle"
+  assert state["error"] == ""
+  assert state["reboot_requested_head"] == "already-requested"
+  assert alerts == [False]
+  assert git_state.read_git_state()["auto_update_history"][0]["error_code"] == "pull_failed"
+
+
+def test_manual_pull_does_not_clear_unrelated_or_reboot_errors(monkeypatch):
+  def unexpected(*args, **kwargs):
+    raise AssertionError("unrelated failure must remain visible")
+
+  monkeypatch.setattr(auto_update, "write_auto_update_event", unexpected)
+  monkeypatch.setattr(auto_update, "_set_auto_update_alert", unexpected)
+  for state in [
+    {"status": "error", "error_code": "head_mismatch", "error": "incorrect HEAD"},
+    {"status": "reboot_blocked", "error_code": "duplicate_reboot_blocked"},
+    {"status": "error", "error_code": "pull_failed", "error": "connection failed"},
+  ]:
+    monkeypatch.setattr(auto_update, "read_auto_update_state", lambda state=state: state)
+    auto_update.clear_recovered_git_ref_error()
