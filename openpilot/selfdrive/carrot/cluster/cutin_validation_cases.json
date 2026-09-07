@@ -1965,6 +1965,21 @@
       "target_track_ids": [1013],
       "latest_detection_s": 16.75,
       "scene": "Saved user review scene 09: the uphill white SUV at corner C1013 must be tracked by 16.75s. Camera frames were corrected using qRoadEncodeIdx timestamps. Front F40 has a different bearing and is not assigned as the same target. The requested radar lead deadline remains an open regression."
+    },
+    {
+      "id": "santafe-92-69-bridge-joint-scc-backup-39",
+      "vehicle_folder": "HYUNDAI_SANTA_FE_2022 e2fbe393d4ab01fb",
+      "log": "00000092--d1a1129c12--69/rlog.zst",
+      "source": "front",
+      "window": [34.5, 36.5],
+      "expected": "clear",
+      "human_verified": true,
+      "target_track_ids": [39],
+      "required_lead_one_ids": [35],
+      "lead_one_continuous_window": [34.5, 36.5],
+      "forbidden_lead_one_ids": [39, 0],
+      "forbidden_lead_two_ids": [39, 0],
+      "scene": "User-reported bridge-joint false braking at 35.60s. Vision and front 35 continuously track the moving vehicle around 17m. SCC jumps to a stationary near-road return also reported as front 39 and previously bypassed independent confirmation into L2 at 35.55-36.05s. The camera shows the road joint approaching without a vehicle at that near range. SCC and front are the same radar, not independent vehicle evidence."
     }
   ]
 }
