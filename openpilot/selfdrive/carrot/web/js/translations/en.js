@@ -539,7 +539,7 @@ window.CarrotTranslations.register("en", {
     reboot_later: "Selected. Reboot later to apply.",
     rebooting: "Rebooting...",
     git_sync_confirm: "This will sync branches.\nLocal branches will be cleaned up. Continue?",
-    git_reset_confirm: "This will revert code changes.\nYour modifications may be lost. Continue?",
+    git_reset_confirm: "Connect to the remote repository to check branch tracking and repair broken links. Reset will stop if verification fails.\nThen revert code changes. Your modifications may be lost. Continue?",
     git_reset_mode_prompt: "Select reset mode\n\n• hard: discard all changes\n• soft: undo commit only\n• mixed: unstage only",
     git_reset_target_prompt: "Enter reset target\ne.g. HEAD (current), origin/master (remote)",
     delete_videos_confirm: "Delete ALL driving videos?\nThis cannot be undone. Continue?",
