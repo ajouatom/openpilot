@@ -11,6 +11,15 @@ class CarInterface(CarInterfaceBase):
   CarController = CarController
   RadarInterface = RadarInterface
 
+  def update(self, can_packets):
+    # Keep the exact vehicle-bus idle frame as the only template for generated
+    # speed-wheel messages. Repacking the DBC fields would lose unknown bits.
+    for mono_time, frames in can_packets:
+      for address, data, source in frames:
+        if address == 0x3C2 and source == CANBUS.vehicle:
+          self.CS.observe_speed_wheel_frame(data, mono_time)
+    return super().update(can_packets)
+
   @staticmethod
   def _get_params(ret: structs.CarParams, candidate, fingerprint, car_fw, alpha_long, is_release, docs) -> structs.CarParams:
     ret.brand = "tesla"
@@ -34,10 +43,20 @@ class CarInterface(CarInterfaceBase):
     # - Radar CAN lines must be tapped and connected to CAN bus 1 (normally not used for tesla vehicles)
     ret.radarUnavailable = RADAR_START_ADDR not in fingerprint[1] or Bus.radar not in DBC[candidate]
 
+    # Vehicle-bus availability gates both infotainment gestures and the
+    # automatic cruise-speed wheel. The latter is always enabled with Tesla
+    # openpilot longitudinal control when the required bus is available.
+    has_vehicle_bus = 0x3DF in fingerprint[CANBUS.vehicle]
+    if has_vehicle_bus:
+      ret.flags |= TeslaFlags.HAS_VEHICLE_BUS.value
+
     ret.alphaLongitudinalAvailable = True
     if alpha_long:
       ret.openpilotLongitudinalControl = True
       ret.safetyConfigs[0].safetyParam |= TeslaSafetyFlags.LONG_CONTROL.value
+      if has_vehicle_bus:
+        ret.flags |= TeslaFlags.AUTO_SPEED_LIMIT.value
+        ret.safetyConfigs[0].safetyParam |= TeslaSafetyFlags.AUTO_SPEED_LIMIT.value
 
       ret.vEgoStopping = 0.1
       ret.vEgoStarting = 0.1
@@ -49,9 +68,5 @@ class CarInterface(CarInterfaceBase):
       ret.safetyConfigs[0].safetyParam |= TeslaSafetyFlags.FSD_14.value
 
     ret.dashcamOnly = candidate in (CAR.TESLA_MODEL_X,)  # dashcam only, pending find invalidLkasSetting signal
-
-    # Vehicle bus detection: 0x3DF (infotainment 3-finger press) on bus 1
-    if 0x3DF in fingerprint[CANBUS.vehicle]:
-      ret.flags |= TeslaFlags.HAS_VEHICLE_BUS.value
 
     return ret

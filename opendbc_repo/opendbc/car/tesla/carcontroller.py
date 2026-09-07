@@ -1,10 +1,11 @@
 import numpy as np
 from opendbc.can import CANPacker
-from opendbc.car import Bus, apply_steer_angle_limits_vm, structs
+from opendbc.car import Bus, apply_steer_angle_limits_vm
 from opendbc.car.interfaces import CarControllerBase
 from opendbc.car.tesla.teslacan import TeslaCAN
 from opendbc.car.tesla.values import CarControllerParams
 from opendbc.car.tesla.coop_steering import CoopSteeringCarController
+from opendbc.car.tesla.speed_limit_controller import TeslaSpeedLimitController
 from opendbc.car.vehicle_model import VehicleModel
 
 
@@ -23,6 +24,7 @@ class CarController(CarControllerBase):
     self.tesla_can = TeslaCAN(CP, self.packer)
     self.coop_steering = True
     self.coop_steer = CoopSteeringCarController()
+    self.speed_limit_controller = TeslaSpeedLimitController(CP)
 
     # Vehicle model used for lateral limiting
     self.VM = VehicleModel(get_safety_CP())
@@ -30,6 +32,7 @@ class CarController(CarControllerBase):
   def update(self, CC, CS, now_nanos):
     actuators = CC.actuators
     can_sends = []
+    can_sends.extend(self.speed_limit_controller.update(CC, CS, now_nanos))
 
     # Tesla EPS enforces disabling steering on heavy lateral override force.
     # When enabling in a tight curve, we wait until user reduces steering force to start steering.
