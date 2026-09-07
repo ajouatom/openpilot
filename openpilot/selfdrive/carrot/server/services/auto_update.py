@@ -152,6 +152,15 @@ def _record_error(error_code: str, detail: str, *, blocked: bool = False, **fiel
   print(f"[auto_update] {status} code={error_code}: {error}", flush=True)
 
 
+def clear_recovered_git_ref_error() -> None:
+  """Called only after a successful manual pull; keep reboot receipts intact."""
+  state = read_auto_update_state()
+  if (state.get("status") == "error" and state.get("error_code") == "pull_failed"
+      and "couldn't find remote ref" in str(state.get("error") or "")):
+    if write_auto_update_event("idle", error_code="", error=""):
+      _set_auto_update_alert(False)
+
+
 async def _wait_for_auto_reboot(initial_mode: str, updated_head: str) -> None:
   # Create a dedicated SubMaster only while an actual update is pending, so
   # ordinary auto-update polling adds no continuous msgq workload.

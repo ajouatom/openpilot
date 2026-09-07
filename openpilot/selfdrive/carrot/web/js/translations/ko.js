@@ -539,7 +539,7 @@ window.CarrotTranslations.register("ko", {
     reboot_later: "선택되었습니다. 적용하려면 나중에 재부팅하세요.",
     rebooting: "재부팅 중...",
     git_sync_confirm: "브랜치를 동기화합니다.\n로컬 브랜치가 정리될 수 있습니다. 계속할까요?",
-    git_reset_confirm: "코드 변경사항을 되돌립니다.\n수정 내용이 사라질 수 있습니다. 계속할까요?",
+    git_reset_confirm: "원격 저장소에 연결해 브랜치 연결 설정을 점검하고, 끊어진 연결을 자동 복구합니다. 연결 확인에 실패하면 리셋하지 않습니다.\n이후 코드 변경사항을 되돌립니다. 수정 내용이 사라질 수 있습니다. 계속할까요?",
     git_reset_mode_prompt: "리셋 방식을 선택하세요\n\n• hard: 모든 변경 삭제\n• soft: 커밋만 취소\n• mixed: 스테이지만 취소",
     git_reset_target_prompt: "리셋 대상을 입력하세요\n예: HEAD (현재), origin/master (원본)",
     delete_videos_confirm: "모든 주행 영상을 삭제할까요?\n이 작업은 되돌릴 수 없습니다. 계속할까요?",
