@@ -34,13 +34,13 @@ jobs:
         with:
           python-version: '3.12'
       - name: Install focused test dependencies
-        run: pip install -r tools/carrot_route_vault/requirements.txt pytest
+        run: pip install -r tools/carrot_route_vault/requirements.txt pytest raylib==5.5.0.4
       - name: Test receiver and production radar replay
         env:
           PYTHONPATH: .:opendbc_repo
         run: |
-          python -m pytest -c /dev/null --confcutdir=tools/carrot_route_vault tools/carrot_route_vault/tests
-          python -m pytest -c /dev/null --confcutdir=openpilot/selfdrive/carrot/tests \
+          python -m pytest -c /dev/null --rootdir=. --confcutdir=tools/carrot_route_vault tools/carrot_route_vault/tests
+          python -m pytest -c /dev/null --rootdir=. --confcutdir=openpilot/selfdrive/carrot/tests \
             openpilot/selfdrive/carrot/tests/test_trajectory_cutin.py \
             openpilot/selfdrive/carrot/tests/test_radar_motion_predictor.py \
             openpilot/selfdrive/carrot/tests/test_radar_lead_simulator.py \
