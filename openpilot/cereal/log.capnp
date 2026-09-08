@@ -747,6 +747,8 @@ struct RadarState @0x9a185389d6fdd05f {
     aLead @5 :Float32;
     jLead @16 :Float32;
     score @17 :Float32;
+    cutOutTime @18 :Float32;       # predicted body clearance, seconds; 0 = inactive
+    cutOutConfidence @19 :Float32; # confirmed/ramped future headway relief, 0..1
   }
 
   deprecated :group {

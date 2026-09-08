@@ -55,6 +55,7 @@ from openpilot.selfdrive.carrot.radar_motion.primary import (
 from openpilot.selfdrive.carrot.radar_motion.trajectory_cutin import (
   TrajectoryCutInDetector,
 )
+from openpilot.selfdrive.carrot.radar_motion.trajectory_cutout import TrajectoryCutOutTracker
 
 
 # modelV2 is polled at 20 Hz while liveTracks may arrive just before or after
@@ -490,6 +491,7 @@ class DPathRadarController:
     self.cut_in_sensitivity = max(0, min(5, int(cut_in_sensitivity)))
     self._reset_motion_pipeline()
     self.primary_cut_out_predictor = RadarMotionPredictor()
+    self.trajectory_cutout = TrajectoryCutOutTracker()
     self.front_kinematic_associator = FrontRadarKinematicAssociator()
     self.lead_two_tracker = DPathLeadTwoTracker()
     self.stationary_shadow_tracker = DPathStationaryShadowTracker()
@@ -821,6 +823,7 @@ class DPathRadarController:
       self.stationary_primary_handoff_tracker.reset()
       self.scc_lead_two_tracker.reset()
       self.primary_cut_out_predictor = RadarMotionPredictor()
+      self.trajectory_cutout.reset()
       self.lead_dynamics.reset()
       self.trajectory_cutin.reset()
       self._reset_stationary_vision_range_mismatch()
@@ -914,6 +917,20 @@ class DPathRadarController:
           v_ego,
           model_v_ego=_model_ego_speed(model, v_ego),
         )
+    cutout_point = primary_match.point if primary_match is not None and self.enable_radar_tracks > 0 else None
+    paired_corners = tuple(
+      point for point in points
+      if cutout_point is not None and point.source.startswith("corner")
+      and (front := front_kinematic_matches.get((point.source, point.track_id))) is not None
+      and front.track_id == cutout_point.track_id
+      and abs(point.d_rel - cutout_point.d_rel) <= 1.5
+      and abs(point.v_rel - cutout_point.v_rel) <= 2.0
+    )
+    cutout_lateral = min(paired_corners, key=lambda point: abs(point.d_rel - cutout_point.d_rel), default=cutout_point)
+    cutout = self.trajectory_cutout.update(time_s, cutout_point, cutout_lateral, vision, path, v_ego, yaw_rate_rad_s)
+    if lead_one is not None:
+      lead_one["cutOutTime"] = cutout.time_s
+      lead_one["cutOutConfidence"] = cutout.confidence
     motion_points = self._select_motion_points(points)
     if self.motion_sensor == "corner":
       # A corner radar can temporarily miss the nearby body that camera and

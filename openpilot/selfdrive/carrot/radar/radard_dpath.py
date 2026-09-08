@@ -42,6 +42,8 @@ EMPTY_LEAD = {
   "radarTrackId": -1,
   "jLead": 0.0,
   "score": 0.0,
+  "cutOutTime": 0.0,
+  "cutOutConfidence": 0.0,
 }
 
 
