@@ -2,6 +2,18 @@
   "sensitivity": 50,
   "cases": [
     {
+      "id": "azera-1b1-20-left-parallel-two-meter-boundary-3103",
+      "vehicle_folder": "HYUNDAI_AZERA_7TH_GEN f3a537501c7197ec",
+      "log": "000001b1--2738b927eb--20/rlog.zst",
+      "source": "front+corner",
+      "window": [49.0, 55.5],
+      "expected": "clear",
+      "target_track_ids": [3103, 36],
+      "forbidden_lead_one_ids": [3103, 36],
+      "forbidden_lead_two_ids": [3103, 36],
+      "scene": "User-reported false braking: the left adjacent car stays outside the lane. Corner 3103 moves inward only about 0.15 m while paired front 36 sees its inner body at yRel 2.1 m. At corner dRel 2.05 m, a two-meter exception admitted CUT-IN despite predicted entry occurring after the target passes ego; retained Lead2 then caused aTarget -2.91 m/s2. Reject the side pass and release any prior lead role while preserving primary front 50. Window uses replay segment time, approximately 0.1 s before video time."
+    },
+    {
       "id": "stationary-audit-azera-cf-3-moving-vision-reflection-46",
       "vehicle_folder": "HYUNDAI_AZERA_7TH_GEN f3a537501c7197ec",
       "log": "000000cf--04b9851018--3/rlog.zst",
