@@ -33,7 +33,7 @@
 // ********************* Serial debugging *********************
 
 static bool check_started(void) {
-  bool started = current_board->check_ignition() || ignition_can;
+  bool started = current_board->check_ignition() || ignition_can || wake_on_can;
   return started;
 }
 
@@ -273,15 +273,12 @@ static void tick_handler(void) {
       // check registers
       check_registers();
 
-      // set ignition_can to false after 2s of no CAN seen
-      if (ignition_can_cnt > 2U) {
-        ignition_can = false;
-      }
+      // Expire ignition and wake independently when their CAN signals stop.
+      ignition_can_tick();
 
       // on to the next one
       uptime_cnt += 1U;
       safety_mode_cnt += 1U;
-      ignition_can_cnt += 1U;
 
       // synchronous safety check
       safety_tick(&current_safety_config);
