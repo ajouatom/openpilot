@@ -33,7 +33,7 @@
 // ********************* Serial debugging *********************
 
 static bool check_started(void) {
-  bool started = current_board->check_ignition() || ignition_can;
+  bool started = current_board->check_ignition() || ignition_can || wake_on_can;
   return started;
 }
 
@@ -277,11 +277,15 @@ static void tick_handler(void) {
       if (ignition_can_cnt > 2U) {
         ignition_can = false;
       }
+      if (wake_on_can_cnt > 2U) {
+        wake_on_can = false;
+      }
 
       // on to the next one
       uptime_cnt += 1U;
       safety_mode_cnt += 1U;
       ignition_can_cnt += 1U;
+      wake_on_can_cnt += 1U;
 
       // synchronous safety check
       safety_tick(&current_safety_config);
