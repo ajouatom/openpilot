@@ -2,6 +2,42 @@
   "sensitivity": 50,
   "cases": [
     {
+      "id": "k8-329-57-right-sedan-before-entry-8526",
+      "vehicle_folder": "KIA_K8_HEV_1ST_GEN b34d1abb87cce93b",
+      "log": "00000329--a6c885ef88--57/rlog.zst",
+      "source": "front+corner",
+      "window": [52.0, 55.1],
+      "expected": "clear",
+      "target_track_ids": [8526, 58],
+      "forbidden_lead_two_ids": [8526, 58],
+      "scene": "Video-reviewed black sedan remains on the right before sustained inward entry. Do not infer a cut-in from paired body reflections alone. Times are replay segment time, approximately 0.0967 s before video."
+    },
+    {
+      "id": "k8-329-57-right-sedan-early-continuous-lead-two-8526",
+      "vehicle_folder": "KIA_K8_HEV_1ST_GEN b34d1abb87cce93b",
+      "log": "00000329--a6c885ef88--57/rlog.zst",
+      "source": "front+corner",
+      "window": [55.1, 56.9],
+      "expected": "detect",
+      "validation_stage": "lead_two",
+      "latest_detection_s": 55.6,
+      "lead_two_continuous_window": [55.7, 56.75],
+      "target_track_ids": [8526, 58],
+      "scene": "User-reported late black-sedan cut-in. Corner 8526 and front 58 have sustained inward motion while vision transitions from primary 42. Ego yaw exceeds 0.020 rad/s and paired body ranges differ by about 1.8 m; those facts must not veto independently corroborated entry or repeatedly release Lead2. Original Lead2 started at replay 56.604 s (video 56.701 s). Require earlier continuous selection before deep lane overlap. Replay time is approximately 0.0967 s before video."
+    },
+    {
+      "id": "k8-329-57-right-sedan-early-predecel-8526",
+      "vehicle_folder": "KIA_K8_HEV_1ST_GEN b34d1abb87cce93b",
+      "log": "00000329--a6c885ef88--57/rlog.zst",
+      "source": "front+corner",
+      "window": [55.1, 56.9],
+      "expected": "detect",
+      "validation_stage": "predecel",
+      "latest_detection_s": 55.85,
+      "target_track_ids": [8526, 58],
+      "scene": "Same video-reviewed black sedan: confirmed physical entry that remains ahead must allow bounded pre-deceleration before the original replay 56.760 s (video 56.857 s). Preserve the separate confirmation and side-pass safeguards. Replay time is approximately 0.0967 s before video."
+    },
+    {
       "id": "k8-329-52-right-suv-parallel-before-entry-8059",
       "vehicle_folder": "KIA_K8_HEV_1ST_GEN b34d1abb87cce93b",
       "log": "00000329--a6c885ef88--52/rlog.zst",

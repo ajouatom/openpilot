@@ -1285,8 +1285,11 @@ def test_slow_close_entry_uses_vision_transition_only_with_physical_support(side
     v_rel = -4.0 if missing_evidence == "passes_before_entry" else -2.0
     d_rel = 9.0 + v_rel * time_s
     y_rel = side * (2.9 - (0.0 if missing_evidence == "parallel" else 0.3) * time_s)
-    corner = point(1200, "corner180", d_rel, y_rel, v_ego=8.0, v_rel=v_rel)
-    front = point(42, "frontRadar", d_rel + 1.8, y_rel, v_ego=8.0, v_rel=v_rel - 1.0)
+    # In the curve negative case, all reported lateral speed comes from ego
+    # rotation; the wandering body positions have no physical inward support.
+    yaw = 0.03 if missing_evidence == "curve" else 0.0
+    corner = point(1200, "corner180", d_rel, y_rel, v_ego=8.0, v_rel=v_rel, yv_rel=-yaw * d_rel)
+    front = point(42, "frontRadar", d_rel + 1.8, y_rel, v_ego=8.0, v_rel=v_rel - 1.0, yv_rel=-yaw * (d_rel + 1.8))
     model = SimpleNamespace(leadsV3=(SimpleNamespace(
       prob=0.5 if missing_evidence == "probability" else 0.99,
       x=(18.0 if missing_evidence == "range" else 13.02,),
@@ -1298,7 +1301,7 @@ def test_slow_close_entry_uses_vision_transition_only_with_physical_support(side
       MODEL if missing_evidence == "vision" else model,
       primary_lead=None if missing_evidence == "primary" else {"status": True, "dRel": 16.0},
       cross_sensor_matches={} if missing_evidence == "front" else {(corner.source, corner.track_id): front},
-      yaw_rate_rad_s=0.03 if missing_evidence == "curve" else 0.0,
+      yaw_rate_rad_s=yaw,
     ))
 
   if missing_evidence is None:
@@ -1312,3 +1315,28 @@ def test_slow_close_entry_uses_vision_transition_only_with_physical_support(side
   else:
     assert not any(estimate.vision_bracket_supported for estimate in estimates)
     assert not any(estimate.confirmed_cutin or estimate.control_eligible or estimate.predecel_risk for estimate in estimates)
+
+
+@pytest.mark.parametrize("side", (-1.0, 1.0))
+@pytest.mark.parametrize("physical_motion", (True, False))
+def test_curve_pair_resolves_body_offset_only_with_physical_inward_motion(side, physical_motion) -> None:
+  detector = TrajectoryCutInDetector()
+  yaw = side * 0.025
+  model = SimpleNamespace(leadsV3=(SimpleNamespace(prob=0.99, x=(12.52,), y=(0.0,), v=(7.0,)),))
+  for index in range(21):
+    t = index * 0.05
+    d_rel = 8.0 - t
+    y_rel = side * (2.85 - 0.6 * t)
+    normal_speed = -side * 0.6 if physical_motion else 0.0
+    corner = point(1200, "corner235", d_rel, y_rel, v_ego=8.0, v_rel=-1.0,
+                   yv_rel=normal_speed - yaw * d_rel)
+    front = point(42, "frontRadar", d_rel + 1.8, y_rel, v_ego=8.0, v_rel=-1.0,
+                  yv_rel=normal_speed - yaw * (d_rel + 1.8))
+    estimate = detector.update(t, 8.0, (corner,), PATH, model, yaw_rate_rad_s=yaw,
+                              primary_lead={"status": True, "dRel": 16.0},
+                              cross_sensor_matches={(corner.source, corner.track_id): front})[0]
+  assert not estimate.current_path
+  assert estimate.paired_inward_motion_supported == physical_motion
+  assert estimate.confirmed_cutin == physical_motion
+  assert estimate.control_eligible == physical_motion
+  assert estimate.predecel_risk == physical_motion
