@@ -13,6 +13,8 @@ TESLA_GAS_PRESS_OFF = 0.4
 TESLA_TPMS_PRESSURE_SNA = 255 * 0.025
 TESLA_TPMS_BAR_TO_PSI = 14.5037738
 SPEED_AUTO_RESUME_GESTURE_NS = 1_000_000_000
+STOCK_ACC_CANCEL_STATES = (0, 1, 2, 12, 13, 14, 15)
+STOCK_ACC_CANCEL_PULSE_FRAMES = 4
 
 
 def update_tesla_gas_pressed(previous: bool, pedal_position: float) -> bool:
@@ -44,6 +46,8 @@ class CarState(CarStateBase):
     self.acc_cancel_last = 0
     self.das_control = None
     self.das_accCancel = False
+    self.das_acc_state_last = None
+    self.das_acc_cancel_frames = 0
     self.cruise_override = False
     self.coop_steering = True
     self.infotainment_3_finger_press = 0
@@ -182,9 +186,15 @@ class CarState(CarStateBase):
     speed_units_raw = int(cp_party.vl["DI_state"]["DI_speedUnits"])
     speed_units = self.can_define.dv["DI_state"]["DI_speedUnits"].get(speed_units_raw, speed_units_raw)
     acc_state = cp_ap_party.vl["DAS_control"]["DAS_accState"]
-    # Respect all stock DAS cancel states, not just ACC_CANCEL_GENERIC_SILENT(13).
-    # ELDA/ELK triggers ACC_CANCEL_GENERIC(0) which must also be forwarded.
-    self.das_accCancel = acc_state in (0, 1, 2, 12, 13, 14, 15)
+    # DAS_accState=0 is the steady idle value when stock ACC is unavailable.
+    # Only forward a cancellation after the stock controller was actively on;
+    # otherwise CP would continually cancel a new stalk engagement.
+    if self.das_acc_state_last in (3, 4) and acc_state in STOCK_ACC_CANCEL_STATES:
+      self.das_acc_cancel_frames = STOCK_ACC_CANCEL_PULSE_FRAMES
+    self.das_acc_state_last = acc_state
+    self.das_accCancel = self.das_acc_cancel_frames > 0
+    if self.das_acc_cancel_frames > 0:
+      self.das_acc_cancel_frames -= 1
 
     summon_state = self.can_define.dv["DI_state"]["DI_autoparkState"].get(int(cp_party.vl["DI_state"]["DI_autoparkState"]), None)
     cruise_enabled = cruise_state in ("ENABLED", "STANDSTILL", "OVERRIDE", "PRE_FAULT", "PRE_CANCEL")
@@ -206,7 +216,7 @@ class CarState(CarStateBase):
     ret.cruiseState.speed = max(ret.cruiseState.speedCluster, 1e-3)
     ret.cruiseState.available = cruise_state == "STANDBY" or ret.cruiseState.enabled
     ret.cruiseState.standstill = False  # This needs to be false, since we can resume from stop without sending anything special
-    ret.standstill = cruise_state == "STANDSTILL"
+    ret.standstill = cp_party.vl["ESP_B"]["ESP_vehicleStandstillSts"] == 1
     ret.accFaulted = cruise_state == "FAULT"
 
     # Emit a single cancel button event on the rising edge of any stock DAS cancel state.
@@ -268,7 +278,7 @@ class CarState(CarStateBase):
     # Stock Autosteer should be off (includes FSD)
     # TODO: find for TESLA_MODEL_X and HW2.5 vehicles
     if not (self.CP.flags & TeslaFlags.MISSING_DAS_SETTINGS):
-      ret.invalidLkasSetting = cp_ap_party.vl["DAS_status"]["DAS_autopilotState"] not in (0, 1, 2)  # DISABLED, UNAVAILABLE, AVAILABLE
+      ret.invalidLkasSetting = cp_ap_party.vl["DAS_settings"]["DAS_autosteerEnabled"] != 0
 
       # Because we don't have FSD 14 detection outside of a set of FW, we should check if this FW is accidentally missing from FSD_14_FW
       # 1. If in Autosteer or FSD, already caught by invalidLkasSetting
