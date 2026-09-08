@@ -258,6 +258,7 @@ class LongitudinalPlanner:
     # Response strength is a driver preference at every following-distance level.
     lead_accel_response_enabled = (
       carrot.leadAccelResponse > 0
+      and not carrot.lane_change_active
       and not reset_state
       and not sm['carState'].gasPressed
       and not force_slow_decel

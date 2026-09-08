@@ -90,7 +90,7 @@ The camera or vehicle can misclassify markings, and value `2` does not make cros
 - There is no normal setting for a lane-change-specific angle, lateral speed, or path shape.
 - `CustomSteerDeltaUpLC` and `CustomSteerDeltaDownLC` are advanced vehicle-control values that alter steering-torque rate limits during lane changes on some torque-controlled vehicles. They do not specify the model's target path or maneuver speed, and incorrect tuning can reduce tracking performance and safety margin.
 - General steering settings such as `SteerActuatorDelay` and `LatSmoothSec` can affect overall path-tracking timing and response, but they are not lane-change shape controls.
-- `DynamicTFollowLC` changes the **longitudinal following gap** briefly after lane-change entry; it does not change the lateral angle or crossing speed.
+- `DynamicTFollowLC` permits bounded relief for the old lead after predicted clearance, only with confirmed lateral movement and destination-lead spacing. Base TF and normal destination-lead spacing remain intact. It does not change the lateral angle or crossing speed. `100` disables additional relief.
 
 ## Safer operation
 
