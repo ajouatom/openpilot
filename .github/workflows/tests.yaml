@@ -21,6 +21,22 @@ env:
   CI: 1
 
 jobs:
+  git_update:
+    name: Git update lifecycle
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - run: python -m pip install pytest aiohttp
+      - name: Check startup, locking, recovery and subprocess cleanup
+        run: |
+          bash -n launch_chffrplus.sh
+          python -m pytest -c /dev/null --rootdir=. --confcutdir=openpilot/common/tests openpilot/common/tests/test_repo_update.py
+          python -m pytest -c /dev/null --rootdir=. --confcutdir=openpilot/selfdrive/carrot/server/tests openpilot/selfdrive/carrot/server/tests/test_auto_update.py openpilot/selfdrive/carrot/server/tests/test_git_config.py
+          python -m pytest -c /dev/null --rootdir=. --confcutdir=openpilot/system/tests openpilot/system/tests/test_launch_order.py
+
   build_release:
     name: build release
     runs-on: ubuntu-24.04

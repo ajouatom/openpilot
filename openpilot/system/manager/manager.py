@@ -12,6 +12,7 @@ import openpilot.cereal.messaging as messaging
 import openpilot.system.sentry as sentry
 from openpilot.common.utils import atomic_write
 from openpilot.common.params import Params, ParamKeyFlag
+from openpilot.common.repo_update import release_boot_lock
 from openpilot.common.text_window import TextWindow
 from openpilot.system.hardware import HARDWARE
 from openpilot.system.manager.camera_config import configure_wide_camera
@@ -237,8 +238,11 @@ def manager_thread() -> None:
       break
 
 def main() -> None:
-  manager_init()
-  write_supported_cars_files()
+  try:
+    manager_init()
+    write_supported_cars_files()
+  finally:
+    release_boot_lock()
 
   if os.getenv("PREPAREONLY") is not None:
     return

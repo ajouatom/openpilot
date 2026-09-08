@@ -3,8 +3,11 @@ from __future__ import annotations
 import asyncio
 import os
 import re
+import subprocess
 import time
 
+from openpilot.common.async_process import prepare_repo, run_process
+from openpilot.common.repo_update import RepoBusyError, repo_lock
 from .git_state import read_auto_update_state, write_auto_update_event, write_git_pull_time
 from .git_status import REPO_DIR, clear_git_status_cache, get_git_status
 from .web_settings import read_web_settings
@@ -15,7 +18,8 @@ from .web_settings import read_web_settings
 # the pull actually changes HEAD, then waits for the configured condition.
 AUTO_UPDATE_POLL_INTERVAL = 60.0
 AUTO_UPDATE_COOLDOWN = 300.0       # min seconds between pulls
-AUTO_UPDATE_INITIAL_DELAY = 30.0
+AUTO_UPDATE_INITIAL_DELAY = 0.0
+AUTO_UPDATE_READY_DELAY = 10.0
 AUTO_REBOOT_POLL_INTERVAL = 0.1
 AUTO_REBOOT_DISENGAGED_DELAY = 1.0
 RESET_TIMEOUT = 120.0
@@ -30,20 +34,12 @@ AUTO_REBOOT_PARK = "park"
 AUTO_REBOOT_DISENGAGED = "disengaged"
 AUTO_REBOOT_MODES = {AUTO_REBOOT_OFF, AUTO_REBOOT_PARK, AUTO_REBOOT_DISENGAGED}
 
-_last_pull_at = 0.0
+_last_pull_at = float("-inf")
 
 
 async def _git(args: list[str], timeout: float) -> tuple[int, str]:
   try:
-    proc = await asyncio.create_subprocess_exec(
-      "git",
-      *args,
-      cwd=REPO_DIR,
-      stdout=asyncio.subprocess.PIPE,
-      stderr=asyncio.subprocess.STDOUT,
-    )
-    out_bytes, _ = await asyncio.wait_for(proc.communicate(), timeout=timeout)
-    return int(proc.returncode or 0), (out_bytes or b"").decode("utf-8", "replace").strip()
+    return await run_process(["git", *args], cwd=REPO_DIR, timeout=timeout)
   except asyncio.TimeoutError:
     return 124, "timeout"
   except Exception as exc:
@@ -153,12 +149,93 @@ def _record_error(error_code: str, detail: str, *, blocked: bool = False, **fiel
 
 
 def clear_recovered_git_ref_error() -> None:
-  """Called only after a successful manual pull; keep reboot receipts intact."""
+  """Called after a successful manual pull; keep reboot receipts intact."""
   state = read_auto_update_state()
-  if (state.get("status") == "error" and state.get("error_code") == "pull_failed"
-      and "couldn't find remote ref" in str(state.get("error") or "")):
+  error = str(state.get("error") or "")
+  ref_error = state.get("error_code") == "pull_failed" and "couldn't find remote ref" in error
+  lock_error = state.get("error_code") in {"reset_failed", "pull_failed", "git_busy"} and "index.lock" in error and "File exists" in error
+  if lock_error:
+    # A successful pull alone can leave local modifications in the legacy API.
+    # Clear the old alert only after verifying both a valid HEAD and its files.
+    for args in (["rev-parse", "--verify", "HEAD^{commit}"], ["--no-optional-locks", "diff", "--quiet", "HEAD", "--"]):
+      result = subprocess.run(["git", *args], cwd=REPO_DIR, capture_output=True, timeout=GIT_INFO_TIMEOUT)
+      if result.returncode:
+        return
+  if state.get("status") in {"error", "waiting"} and (ref_error or lock_error):
     if write_auto_update_event("idle", error_code="", error=""):
       _set_auto_update_alert(False)
+
+
+class ManagerReady:
+  """A live manager heartbeat, not elapsed boot time or a persistent flag."""
+
+  def __init__(self, delay: float = AUTO_UPDATE_READY_DELAY):
+    self.delay = delay
+    self.ready_since: float | None = None
+    self.last_sample: float | None = None
+
+  def update(self, now: float, valid: bool) -> bool:
+    if self.last_sample is not None and now - self.last_sample > 2.5:
+      self.ready_since = None
+    self.last_sample = now
+    if not valid:
+      self.ready_since = None
+      return False
+    if self.ready_since is None:
+      self.ready_since = now
+    return now - self.ready_since >= self.delay
+
+
+class ManagerMonitor:
+  def __init__(self):
+    from openpilot.cereal import messaging
+    self.sm = messaging.SubMaster(["managerState"])
+    self.condition = ManagerReady()
+
+  def ready(self) -> bool:
+    self.sm.update(0)
+    return self.condition.update(time.monotonic(), _message_valid(self.sm, "managerState"))
+
+  async def observe(self) -> None:
+    # Keep observing while fetch/pull awaits network I/O, so a manager restart
+    # cannot be hidden by a long update-status request.
+    while True:
+      self.ready()
+      await asyncio.sleep(1.0)
+
+
+async def _attempt_update(monitor) -> tuple[bool, bool, str]:
+  """Do not hold the checkout lock while waiting for manager initialization."""
+  global _last_pull_at
+  if not monitor.ready():
+    return False, False, ""
+  status = await get_git_status()
+  behind, target_head = _verified_update_target(status)
+  if not behind or time.monotonic() - _last_pull_at < AUTO_UPDATE_COOLDOWN:
+    return False, False, ""
+  try:
+    with repo_lock():
+      if not monitor.ready():
+        return False, False, ""
+      await prepare_repo(REPO_DIR)
+      # Fetch/lock acquisition may have taken time or a manual checkout may have
+      # changed branches. Verify the observed checkout before modifying it.
+      rc, branch = await _git(["branch", "--show-current"], GIT_INFO_TIMEOUT)
+      if rc or branch != status.get("branch") or not monitor.ready():
+        return False, False, ""
+      rc, head = await _git(["rev-parse", "HEAD"], GIT_INFO_TIMEOUT)
+      if rc or head != status.get("head") or not monitor.ready():
+        return False, False, ""
+      _last_pull_at = time.monotonic()
+      return await _run_git_pull(target_head)
+  except RepoBusyError as exc:
+    # Contention is a retry condition, not an update failure/offroad alert.
+    if read_auto_update_state().get("status") == "pulling":
+      write_auto_update_event("waiting", error_code="git_busy", error=str(exc))
+    print(f"[auto_update] waiting: {exc}", flush=True)
+    return False, False, ""
+  finally:
+    clear_git_status_cache()
 
 
 async def _wait_for_auto_reboot(initial_mode: str, updated_head: str) -> None:
@@ -350,6 +427,8 @@ async def _run_git_pull(target_head: str = "") -> tuple[bool, bool, str]:
   # Keep the existing hard-reset behavior, but never pull or reboot if it fails.
   reset_rc, reset_out = await _git(["reset", "--hard"], RESET_TIMEOUT)
   if reset_rc != 0:
+    if "index.lock" in reset_out and "File exists" in reset_out:
+      raise RepoBusyError(reset_out)
     _record_error(
       "reset_failed",
       reset_out,
@@ -363,6 +442,8 @@ async def _run_git_pull(target_head: str = "") -> tuple[bool, bool, str]:
   # Automatic updates must be a clean fast-forward; never create a merge commit.
   pull_rc, pull_out = await _git(["pull", "--ff-only"], PULL_TIMEOUT)
   if pull_rc != 0:
+    if "index.lock" in pull_out and "File exists" in pull_out:
+      raise RepoBusyError(pull_out)
     _record_error(
       "pull_failed",
       pull_out,
@@ -441,38 +522,39 @@ async def auto_update_loop(
   interval: float = AUTO_UPDATE_POLL_INTERVAL,
   initial_delay: float = AUTO_UPDATE_INITIAL_DELAY,
 ) -> None:
-  global _last_pull_at
+  monitor = ManagerMonitor()
+  async with asyncio.TaskGroup() as group:
+    group.create_task(monitor.observe())
+    await _auto_update_loop(monitor, interval, initial_delay)
+
+
+async def _auto_update_loop(monitor, interval: float, initial_delay: float) -> None:
+  next_check = 0.0
   if initial_delay > 0:
     await asyncio.sleep(initial_delay)
 
   while True:
     try:
-      if _auto_update_enabled():
-        status = await get_git_status()
-        behind, target_head = _verified_update_target(status)
-        if behind > 0 and (time.time() - _last_pull_at) >= AUTO_UPDATE_COOLDOWN:
-          print(f"[auto_update] behind {behind} commit(s) -> git pull")
-          _last_pull_at = time.time()
-          ok, updated, new_head = await _run_git_pull(target_head)
-          clear_git_status_cache()
-          print(f"[auto_update] git pull {'ok' if ok else 'failed'}")
-          mode = _auto_reboot_mode()
-          if updated and mode != AUTO_REBOOT_OFF:
-            try:
-              await _wait_for_auto_reboot(mode, new_head)
-            except asyncio.CancelledError:
-              raise
-            except Exception as exc:
-              _record_error(
-                "reboot_monitor_failed",
-                str(exc),
-                new_head=new_head,
-                target_head=new_head,
-                reboot_mode=mode,
-              )
-              print(f"[auto_update] reboot monitor error: {exc}", flush=True)
+      if _auto_update_enabled() and monitor.ready() and time.monotonic() >= next_check:
+        ok, updated, new_head = await _attempt_update(monitor)
+        next_check = time.monotonic() + interval
+        mode = _auto_reboot_mode()
+        if updated and mode != AUTO_REBOOT_OFF:
+          try:
+            await _wait_for_auto_reboot(mode, new_head)
+          except asyncio.CancelledError:
+            raise
+          except Exception as exc:
+            _record_error(
+              "reboot_monitor_failed",
+              str(exc),
+              new_head=new_head,
+              target_head=new_head,
+              reboot_mode=mode,
+            )
+            print(f"[auto_update] reboot monitor error: {exc}", flush=True)
     except asyncio.CancelledError:
       raise
     except Exception as exc:
       print(f"[auto_update] loop error: {exc}")
-    await asyncio.sleep(interval)
+    await asyncio.sleep(1.0)
