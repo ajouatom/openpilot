@@ -191,4 +191,6 @@ The ADAS preset enabling corner radar means that its harness can access such a c
 
 ## Predicted CUT-OUT handling
 
+When ego changes lanes, the separate [Lane Change Response](cruise-gap.md#dynamictfollowlc) limits apply and do not stack with the CUT-OUT relief below. Base TF is preserved, including normal spacing for destination front vehicles. Without confirmed lateral movement, tracked vehicles and sufficient spacing, no additional relief is allowed.
+
 A confirmed moving front lead that is leaving the path can receive bounded future following-distance relief in ACC for `EnableRadarTracks=1`, `2`, or `3`. This requires earlier vision confirmation, a confident visual switch to a farther vehicle, continuous outward radar motion, and enough remaining distance through predicted body clearance. Radar distance, speed and L1 selection stay intact; the adjustment begins only after predicted clearance plus 0.30 seconds and is capped at half the configured time gap, 0.50 seconds, and 8 m. It cancels when the evidence fails and does not apply to SCC-only leads, strong turns, stationary leads, hard-braking leads, or blended mode.

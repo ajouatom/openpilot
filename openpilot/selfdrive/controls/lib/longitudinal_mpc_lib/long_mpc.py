@@ -12,6 +12,7 @@ from openpilot.selfdrive.controls.radar_constants import LEAD_ACCEL_TAU
 from openpilot.selfdrive.carrot.traffic_stop import get_traffic_stop_distance_adjust, get_traffic_stop_obstacle_distance
 from openpilot.selfdrive.controls.lib.longitudinal_preview import LEAD_ACCEL_MIN_TRACK_FRAMES, get_lead_accel_mpc_request
 from openpilot.selfdrive.controls.lib.longitudinal_cutout import cutout_obstacle_relief
+from openpilot.selfdrive.carrot.radar_motion.lane_change_gap import LaneChangeGapPlan
 
 if __name__ == '__main__':  # generating code
   from acados_template import AcadosModel, AcadosOcp, AcadosOcpSolver
@@ -433,6 +434,8 @@ class LongitudinalMpc:
       v_cruise, stop_x, mode = carrot.v_cruise, carrot.stop_dist, carrot.mode
       desired_distance = desired_follow_distance(v_ego, lead_v_0, comfort_brake, stop_distance, t_follow)
       t_follow = carrot.dynamic_t_follow(t_follow, radarstate.leadOne, desired_distance, self.prev_a)
+      if getattr(carrot, 'lane_change_active', False):
+        jerk_factor = carrot.jerk_factor  # no previous-cycle dynamic jerk boost on entry
 
     # To estimate a safe distance from a moving lead, we calculate how much stopping
     # distance that lead needs as a minimum. We can add that to the current distance
@@ -467,12 +470,26 @@ class LongitudinalMpc:
       traffic_stop_obstacle = get_traffic_stop_obstacle_distance(stop_x, cruise_obstacle[0], adjust_dist)
       x2 = traffic_stop_obstacle * np.ones(N+1)
 
+      lane_change = getattr(carrot, 'lane_change_gap', LaneChangeGapPlan())
       lead_0_follow_obstacle = lead_0_obstacle
       if cutout_relief_enabled and not reset_state:
-        lead_0_follow_obstacle = lead_0_obstacle + cutout_obstacle_relief(
-          radarstate.leadOne, v_ego, T_IDXS, t_follow, stop_distance,
-        )
+        if lane_change.active:
+          lead_0_follow_obstacle = lead_0_obstacle + lane_change.credit(
+            radarstate.leadOne, T_IDXS, v_ego, self.max_a, t_follow, stop_distance, carrot.dynamicTFollowLC,
+          )
+        else:
+          lead_0_follow_obstacle = lead_0_obstacle + cutout_obstacle_relief(
+            radarstate.leadOne, v_ego, T_IDXS, t_follow, stop_distance,
+          )
       x_obstacles = np.column_stack([lead_0_follow_obstacle, lead_1_obstacle, cruise_obstacle, x2])
+      # The destination front vehicles retain the normal TF over the entire
+      # horizon. Fold them into lead1 so all downstream source logic remains
+      # compatible, without replacing radarState or changing measured leads.
+      if lane_change.active and not reset_state:
+        for target in lane_change.targets:
+          target_xv, _ = self.process_lead(target)
+          target_obstacle = target_xv[:,0] + get_stopped_equivalence_factor(target_xv[:,1])
+          x_obstacles[:,1] = np.minimum(x_obstacles[:,1], target_obstacle)
       self.source = SOURCES[np.argmin(x_obstacles[0])]
 
       if v_cruise == 0 and self.source == 'cruise':

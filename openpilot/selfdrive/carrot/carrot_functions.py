@@ -8,6 +8,7 @@ from openpilot.common.realtime import DT_MDL
 from openpilot.common.constants import CV
 from openpilot.common.filter_simple import MyMovingAverage
 from openpilot.selfdrive.carrot.t_follow import get_t_follow_mode_factor, get_t_follow_mode_max, ramp_t_follow
+from openpilot.selfdrive.carrot.radar_motion.lane_change_gap import LaneChangeGapPlan, LaneChangeGapTracker
 from openpilot.selfdrive.carrot.traffic_stop import TrafficStopModelLeadMatcher, is_traffic_stop_entry_allowed
 from openpilot.selfdrive.controls.radar_constants import RADAR_TO_CAMERA
 from openpilot.selfdrive.controls.lib.longitudinal_preview import LEAD_ACCEL_DEADBAND, LEAD_ACCEL_CONFIGURED_TF_MIN
@@ -94,6 +95,11 @@ class CarrotPlanner:
     self.user_stop_distance = -1
 
     self.t_follow_last = 1.5
+    self._tf_base_last = 1.5
+    self.lane_change_active = False
+    self.lane_change_gap = LaneChangeGapPlan()
+    self._lane_change_tracker = LaneChangeGapTracker()
+    self._lane_change_model_ns = 0
 
     self.startSignCount = 0
     self.stopSignCount = 0
@@ -307,7 +313,7 @@ class CarrotPlanner:
   def get_T_FOLLOW(self, personality=log.LongitudinalPersonality.standard, v_ego=0.0, a_ego=0.0,
                    lead_status=False, lead_accel=0.0):
     force_configured_tf_target = (
-      lead_status
+      lead_status and not getattr(self, 'lane_change_active', False)
       and np.isfinite(lead_accel)
       and lead_accel > LEAD_ACCEL_DEADBAND
       and self.leadAccelResponse >= LEAD_ACCEL_CONFIGURED_TF_MIN
@@ -327,12 +333,16 @@ class CarrotPlanner:
     tf_adjusted = self._apply_decel_hold_and_boost_t_follow(tf_mode_target, a_ego)
     tf_final = self._clip_t_follow(tf_adjusted)
     self._tf_applied = float(tf_final)
-    return self.apply_t_follow(tf_final)
+    # Baseline and final dynamic gap have separate histories. Feeding the
+    # reduced result back into this ramp compounded the reduction every cycle.
+    self._tf_base_last = ramp_t_follow(tf_final, getattr(self, '_tf_base_last', self.t_follow_last), self._tf_decel_extra, DT_MDL)
+    return float(self._tf_base_last)
 
 
   def _update_model_desire(self, sm):
     meta = sm['modelV2'].meta
     carState = sm['carState']
+    self.lane_change_active = meta.laneChangeState in (LaneChangeState.laneChangeStarting, LaneChangeState.laneChangeFinishing)
 
     if meta.laneChangeState == LaneChangeState.laneChangeStarting:
       self.desireState = meta.desireState[3] if carState.leftBlinker else meta.desireState[4]
@@ -341,15 +351,46 @@ class CarrotPlanner:
       self.desireState = 0.0
       self.desireStateCount = 0
 
+    self._update_lane_change_gap(sm)
+
+  def _update_lane_change_gap(self, sm):
+    state, model, radar = sm['carState'], sm['modelV2'], sm['radarState']
+    signal = state.leftBlinker != state.rightBlinker
+    direction = ((-1 if state.leftBlinker else 1) if signal else self._lane_change_tracker.direction) if self.lane_change_active else 0
+    now_ns = int(sm.logMonoTime['modelV2'])
+    valid = all(sm.valid[key] and sm.alive[key] for key in ('carState', 'modelV2', 'radarState'))
+    valid = valid and abs(now_ns - int(sm.logMonoTime['radarState'])) <= 200_000_000
+    if not valid or direction == 0:
+      self._lane_change_tracker.reset()
+      self.lane_change_gap = LaneChangeGapPlan(active=self.lane_change_active, reason='invalid-input' if self.lane_change_active else 'inactive')
+      self._lane_change_model_ns = 0
+      return
+    if now_ns == self._lane_change_model_ns:
+      return  # fast radar must not count the same model/pose twice
+    self._lane_change_model_ns = now_ns
+    pose = sm['livePose']
+    angular = pose.angularVelocityDevice
+    pose_valid = (sm.valid['livePose'] and sm.alive['livePose'] and pose.inputsOK and pose.sensorsOK and angular.valid
+                  and abs(now_ns - int(sm.logMonoTime['livePose'])) <= 150_000_000)
+    side = 'Left' if direction == -1 else 'Right'
+    side_leads = (getattr(radar, 'lead' + side), *getattr(radar, 'leads' + side))
+    self.lane_change_gap = self._lane_change_tracker.update(
+      now=now_ns * 1e-9, direction=direction, v_ego=float(state.vEgo),
+      yaw_rate=float(angular.z) if pose_valid else float('nan'),
+      path_t=tuple(model.position.t), path_x=tuple(model.position.x), path_y=tuple(model.position.y),
+      primary=radar.leadOne, side_leads=side_leads,
+      blindspot=not signal or bool(state.leftBlindspot if direction == -1 else state.rightBlindspot), valid=valid,
+    )
+
 
   def dynamic_t_follow(self, t_follow, lead, desired_follow_distance, prev_a):
     self.jerk_factor_apply = self.jerk_factor
 
-    # 차선변경 시작 후 1.5초 동안은 공격적으로
-    if self.desireState > 0.9 and self.desireStateCount < int(1.5 / DT_MDL):
-      dynamicTFollowLC = max(0.2, self.dynamicTFollowLC)
-      t_follow *= dynamicTFollowLC
-      self.jerk_factor_apply = self.jerk_factor * dynamicTFollowLC
+    # A lane change keeps the baseline TF and jerk cost for every obstacle.
+    # Only confirmed departure credit in MPC may relax the old primary later.
+    if getattr(self, 'lane_change_active', False):
+      self.t_follow_last = float(t_follow)
+      return float(t_follow)
 
     # 일반 lead follow: lead.jLead 기반 동적 조절
     elif lead.status and self.dynamicTFollow > 0.0:

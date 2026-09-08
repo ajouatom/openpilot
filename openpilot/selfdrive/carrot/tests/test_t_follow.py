@@ -33,7 +33,7 @@ def test_gap_reduction_remains_immediate():
   assert ramp_t_follow(1.1, 1.6, 0.0, DT_MDL) == pytest.approx(1.1)
 
 
-def test_lane_change_response_scales_gap_and_jerk_for_first_1_5_seconds():
+def test_lane_change_keeps_gap_and_jerk_at_every_setting():
   planner = CarrotPlanner.__new__(CarrotPlanner)
   planner.desireState = 1.0
   planner.desireStateCount = 1
@@ -41,10 +41,30 @@ def test_lane_change_response_scales_gap_and_jerk_for_first_1_5_seconds():
   planner.jerk_factor = 0.7
   planner.t_follow_last = 1.3
   planner._tf_decel_extra = 0.0
+  planner.lane_change_active = True
 
   lead = SimpleNamespace(status=True, jLead=2.0)
-  assert planner.dynamic_t_follow(1.3, lead, 0.0, 0.0) == pytest.approx(1.04)
-  assert planner.jerk_factor_apply == pytest.approx(0.56)
+  assert planner.dynamic_t_follow(1.3, lead, 0.0, 0.0) == pytest.approx(1.3)
+  assert planner.jerk_factor_apply == pytest.approx(0.7)
+
+
+@pytest.mark.parametrize('lane_change,ratio', [(True, .2), (True, .8), (True, 1.0), (False, 1.0)])
+def test_base_and_dynamic_tf_do_not_compound_over_repeated_planner_cycles(lane_change, ratio):
+  planner = _speed_tf_planner(0, 1.3)
+  planner.enableSpeedTF = 0
+  planner.myTFollowFactor = 1.0
+  planner.tFollowGap1 = planner.tFollowGap2 = planner.tFollowGap3 = planner.tFollowGap4 = 1.3
+  planner.lane_change_active = lane_change
+  planner.dynamicTFollowLC = ratio
+  planner.dynamicTFollow = .2
+  planner.desireState = 1.0
+  planner.desireStateCount = 1
+  lead = SimpleNamespace(status=True, jLead=2.0)
+  for _ in range(100):
+    tf = planner.get_T_FOLLOW(v_ego=15., a_ego=0.)
+    result = planner.dynamic_t_follow(tf, lead, 0., 0.)
+    assert tf == pytest.approx(1.3)
+    assert result == pytest.approx(1.3 if lane_change else 1.1)
 
 
 def test_dynamic_lead_acceleration_response_closes_gap_more_quickly():
