@@ -73,6 +73,13 @@ def test_detect_key_episodes():
       "gas": False, "brake": False, "steer": True, "standstill": False,
       "hasLead": False, "dRel": 0.0, "vLead": 0.0, "aLead": 0.0, "jLead": 0.0,
       "steerAngle": 5.0, "desiredSteerAngle": 1.0, "steerTorque": 0.3
+    },
+    {
+      "t": 30.0, "vEgo": 53.0, "aEgo": 0.0, "aTarget": 0.0, "aCmd": 0.0,
+      "gas": False, "brake": False, "steer": False, "standstill": False,
+      "hasLead": False, "dRel": 0.0, "vLead": 0.0, "aLead": 0.0, "jLead": 0.0,
+      "steerAngle": 42.0, "desiredSteerAngle": 45.0, "steerTorque": 0.6,
+      "vTurnSpeed": 44, "desiredSpeed": 65.0, "desiredSource": "model"
     }
   ]
 
@@ -83,6 +90,7 @@ def test_detect_key_episodes():
   assert "harsh_catchup_accel" in types_default
   assert "harsh_decel" in types_default
   assert "steering_tracking_error" in types_default
+  assert "curve_speed_mismatch" in types_default
   assert "driver_brake_override" not in types_default
   assert "driver_gas_override" not in types_default
   assert "driver_steer_override" not in types_default
@@ -155,3 +163,24 @@ async def test_extract_telemetry_missing_route():
   assert resp.status == 400
   payload = json.loads(resp.text)
   assert payload["ok"] is False
+
+
+@pytest.mark.asyncio
+async def test_extract_telemetry_structure_with_code_reference():
+  req_mock = MagicMock()
+  req_mock.json = AsyncMock(return_value={"route": "test_route", "segments": []})
+  req_mock.query.get.return_value = "test_route"
+
+  with patch.object(autotune, "build_routes", return_value=[{"route": "test_route", "title": "test_route", "segmentFolders": ["test_seg"]}]), \
+       patch.object(autotune, "_extract_all_frames_sync", return_value=[]), \
+       patch.object(autotune, "get_settings_cached", return_value=(None, None, {"TurnSpeedControlMode": {"title": "턴속도제어", "descr": "0:안함 1:비전"}}, None)), \
+       patch.object(autotune, "get_param_values", return_value={"TurnSpeedControlMode": "3"}):
+    resp = await autotune.api_autotune_extract_telemetry(req_mock)
+    assert resp.status == 200
+    payload = json.loads(resp.text)
+    assert payload["ok"] is True
+    assert "sourceCodeReference" in payload
+    assert "min(v_cruise_kph, carrot_man.desiredSpeed)" in payload["sourceCodeReference"]
+    assert "paramDescriptions" in payload
+    assert "TurnSpeedControlMode" in payload["paramDescriptions"]
+

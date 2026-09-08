@@ -332,3 +332,39 @@ test("renderAutoTunerHtml renders driver override option card and respects check
   assert.match(htmlChecked, /id="chkIncludeDriverOverride"[^>]*checked/);
 });
 
+test("buildUserPrompt injects sourceCodeReference and paramDescriptions, and Free mode recommends TurnSpeedControlMode", async () => {
+  const promptKo = buildSystemPrompt("ko");
+  assert.match(promptKo, /min\(cruiseTarget, carrotMan\.desiredSpeed\)/);
+  assert.match(promptKo, /TurnSpeedControlMode/);
+  assert.match(promptKo, /CruiseEcoControl/);
+
+  const mockTelemetry = {
+    route: "test-route",
+    segmentCount: 1,
+    stats: {},
+    episodes: [],
+    currentParams: { TurnSpeedControlMode: "3", AutoCurveSpeedFactor: "100" },
+    paramDescriptions: {
+      TurnSpeedControlMode: {
+        title: "TurnSpeedControlMode",
+        descr: "0:not use, 1:vision, 2:vision+route, 3:route(always)",
+      }
+    },
+    sourceCodeReference: "# Speed Arbitration: v_cruise = min(cruiseTarget, carrotMan.desiredSpeed)",
+  };
+
+  const userPrompt = buildUserPrompt(mockTelemetry, "코너에서 속도가 안 줄어들어요", { lang: "ko" });
+  assert.match(userPrompt, /ACTIVE PARAMETER DEFINITIONS & SPECIFICATIONS/);
+  assert.match(userPrompt, /CARROTPILOT CORE CONTROL SOURCE CODE REFERENCE/);
+  assert.match(userPrompt, /min\(cruiseTarget, carrotMan\.desiredSpeed\)/);
+  assert.match(userPrompt, /Do NOT assume control contention between Eco and Curve deceleration/);
+
+  // In Free Mode, reporting curve issue when TurnSpeedControlMode is 3 recommends switching to 1
+  const freeResult = await callAiTuner(mockTelemetry, "코너 커브 진입 시 속도가 안 줄고 밀려요", { provider: "free" }, null, { lang: "ko" });
+  const tscmParam = freeResult.recommendedParams.find(p => p.name === "TurnSpeedControlMode");
+  assert.ok(tscmParam, "TurnSpeedControlMode should be recommended when curve issue reported with mode 3");
+  assert.strictEqual(tscmParam.recommended, "1");
+  assert.match(tscmParam.reason, /비전 카메라 기반 커브 감속/);
+});
+
+

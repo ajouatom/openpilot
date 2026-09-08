@@ -310,15 +310,26 @@ export function buildSystemPrompt(lang = "ko") {
 
   return `You are CarrotPilot AutoTuner AI, an expert autonomous driving engineer specializing in Openpilot CarrotPilot vehicle control tuning.
 You will be provided with:
-1. Driving Telemetry Summary & Key Notable Episodes (including driver manual overrides if enabled) extracted from recent driving logs (vEgo, aEgo, aTarget, aCmd, jerk, dRel, vLead, aLead, jLead, steerAngle, desiredSteerAngle, driverOverrides, etc.).
-2. The current active parameters of the openpilot device.
-3. The user's specific complaint/symptom or analysis request.
+1. Driving Telemetry Summary & Key Notable Episodes (including driver manual overrides, carrotMan curve speeds, and speed mismatches) extracted from recent driving logs.
+2. The current active parameters of the openpilot device, along with their official definitions and options.
+3. Relevant CarrotPilot Core Control Source Code Snippets defining speed arbitration and turn control logic.
+4. The user's specific complaint/symptom or analysis request.
 
 Your task is to:
-1. Analyze the root cause of any driving discomfort, jerk, oscillation, lag, tracking error, or driver manual overrides (which reflect driver dissatisfaction with automated behavior) using physics, MPC control theory, and CarrotPilot parameter domain knowledge.
-2. Recommend concrete parameter changes with specific target numeric values.
+1. Analyze the root cause of any driving discomfort, jerk, oscillation, lag, tracking error, curve speed issues, or driver manual overrides using physics, MPC control theory, and CarrotPilot parameter domain knowledge.
+2. Ground your technical explanation strictly on the provided Source Code Snippets and Parameter Definitions. Verify how speed arbitration and mode selections actually behave in code rather than guessing.
+3. Recommend concrete parameter changes with specific target numeric values.
 
-Key Parameter Rules for CarrotPilot:
+Key Parameter & Architecture Rules for CarrotPilot:
+- Speed Arbitration: Final target speed is \`v_cruise = min(cruiseTarget, carrotMan.desiredSpeed)\`. The lower speed ALWAYS wins. Deceleration from carrotMan strictly overrides cruise speed. There is NEVER any control competition between CruiseEcoControl and Curve Deceleration.
+- TurnSpeedControlMode:
+  * 0: Disabled (no turn deceleration)
+  * 1: Vision-based (\`vturn\` calculated from camera road curvature and lateral acceleration limit)
+  * 2: Vision + Route (\`vturn\` + navigation route TBT turn speed)
+  * 3: Route only (Navigation route only! CRITICAL: When set to 3, vision \`vturn\` is COMPLETELY EXCLUDED from speed sources. If navigation is not active, curve deceleration will NOT trigger!)
+- CruiseEcoControl: When enabled (>0, e.g. 2), sets cruise target to \`set_speed + eco_over_speed\` (+2 km/h) only when vehicle speed is > 3 km/h below cruise set speed. It NEVER prevents, delays, or competes with braking because min() strictly prioritizes lower desiredSpeed.
+- AutoCurveSpeedFactor: Scales vision curve sensitivity (default 100). Only takes effect when TurnSpeedControlMode is 1 or 2.
+- ModelTurnSpeedFactor: Look-ahead time for future model speed (default 0). Non-zero values (e.g. 80 = 8.0s ahead) look far ahead and multiply by 1.2, which does not provide immediate sharp curve deceleration.
 - CruiseMaxVals0~6: Max acceleration limits across speed bins [0, 10, 40, 60, 80, 110, 140 km/h] in hundredths of m/s^2 (e.g. 145 = 1.45 m/s^2). Default is ~160/200/160. Lowering CruiseMaxVals1 (10km/h) to 140~150 prevents harsh catch-up acceleration surges.
 - DynamicTFollow: Time-gap dynamic reduction based on lead car acceleration (jLead). Value in hundredths of sec (e.g. 30 = 0.30s). When set too high (>20), lead car acceleration causes target distance to shrink rapidly and halves MPC jerk factor, causing sudden surges. Recommend 10~15 or 0 for smooth following.
 - EnableSpeedTF: Speed-scaled follow distance reduction. Value in % (e.g. 20 = 20% reduction at 0km/h scaling up to 100km/h). Recommend 10 or 0 for stable follow distance.
@@ -347,7 +358,8 @@ JSON Schema:
       "reason": "Clear explanation in ${targetLang} of why this parameter was changed and what effect it will have."
     }
   ]
-}`;
+}
+`;
 }
 
 export const SYSTEM_PROMPT = buildSystemPrompt("ko");
@@ -377,6 +389,22 @@ Note: Driver overrides represent direct driver dissatisfaction with automated be
 `;
   }
 
+  let paramDescSection = "";
+  if (telemetryData?.paramDescriptions && Object.keys(telemetryData.paramDescriptions).length > 0) {
+    paramDescSection = `
+### ACTIVE PARAMETER DEFINITIONS & SPECIFICATIONS:
+${JSON.stringify(telemetryData.paramDescriptions, null, 2)}
+`;
+  }
+
+  let codeReferenceSection = "";
+  if (telemetryData?.sourceCodeReference) {
+    codeReferenceSection = `
+### CARROTPILOT CORE CONTROL SOURCE CODE REFERENCE:
+${telemetryData.sourceCodeReference}
+`;
+  }
+
   const langDirectives = {
     ko: "CRITICAL: Write the entire JSON output (summary, rootCause, reason) strictly in Korean (한국어로 상세하고 친절하게 작성).",
     en: "CRITICAL: Write the entire JSON output (summary, rootCause, reason) strictly in English.",
@@ -392,12 +420,17 @@ ${JSON.stringify(telemetryData.episodes || [], null, 2)}
 
 Current Active Vehicle Parameters:
 ${JSON.stringify(telemetryData.currentParams || {}, null, 2)}
-
+${paramDescSection}${codeReferenceSection}
 ### USER COMPLAINT / ISSUE DESCRIPTION:
 ${userText}
 
-${langDirectives[lang] || langDirectives.ko}
-Please analyze the data and output the JSON response matching the required schema.`;
+CRITICAL INSTRUCTIONS:
+1. Ground your technical explanation strictly on the provided Source Code Reference, Parameter Definitions, and carrotMan telemetry (desiredSpeed, desiredSource, vTurnSpeed).
+2. Do NOT assume control contention between Eco and Curve deceleration; check the min() speed arbitration code snippet.
+3. If a turn/curve was not decelerated, check if TurnSpeedControlMode excluded vturn (Mode 3 excludes vision vturn!) or if desiredSource was 'model' instead of 'vturn'.
+4. Output the JSON response matching the required schema.
+
+${langDirectives[lang] || langDirectives.ko}`;
 }
 
 function analyzeWithBuiltinEngine(telemetryData, userIssueText, options = {}) {
@@ -700,6 +733,19 @@ function analyzeWithBuiltinEngine(telemetryData, userIssueText, options = {}) {
           recommended: "98",
           reason: "스티어링 반응 비율을 미세 단축하여 곡선로 추종성을 강화합니다.",
         });
+        const tscm = Number(currentParams.TurnSpeedControlMode);
+        if (tscm === 3) {
+          recommendedParams.push({
+            name: "TurnSpeedControlMode",
+            current: "3",
+            recommended: "1",
+            reason: lang === "en"
+              ? "TurnSpeedControlMode 3 disables camera vision curve deceleration. Switching to 1 enables vision curvature deceleration (vturn) before entering curves."
+              : lang === "zh"
+              ? "TurnSpeedControlMode 3 禁用了视觉弯道减速。切换为 1 可在入弯前启用视觉曲率减速 (vturn)。"
+              : "현재 TurnSpeedControlMode가 3(경로 전용)으로 설정되어 비전 카메라 기반 커브 감속(vturn)이 비활성화되어 있습니다. 1(비전) 또는 2(비전+경로)로 변경하여 코너 진입 전 안전하게 감속하도록 설정합니다.",
+          });
+        }
       }
     }
 

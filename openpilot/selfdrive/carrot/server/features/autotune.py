@@ -33,6 +33,7 @@ def _extract_telemetry_from_log(log_path: str) -> list[dict[str, Any]]:
   curr_rs = None
   curr_lp = None
   curr_cc = None
+  curr_cm = None
   last_sample_t = -1.0
   sample_interval = 1.0 / DOWN_SAMPLE_HZ
 
@@ -47,6 +48,8 @@ def _extract_telemetry_from_log(log_path: str) -> list[dict[str, Any]]:
         curr_lp = evt.longitudinalPlan
       elif which == "carControl":
         curr_cc = evt.carControl
+      elif which == "carrotMan":
+        curr_cm = evt.carrotMan
 
       t_now = evt.logMonoTime * 1e-9
       if last_sample_t < 0 or (t_now - last_sample_t >= sample_interval):
@@ -93,6 +96,23 @@ def _extract_telemetry_from_log(log_path: str) -> list[dict[str, Any]]:
               a_lead = float(getattr(lead_one, "aLeadK", getattr(lead_one, "aLead", 0.0)))  # m/s^2
               j_lead = float(getattr(lead_one, "jLead", 0.0))  # m/s^3
 
+          # CarrotMan & LongitudinalPlan target speeds
+          desired_speed = 0.0
+          desired_source = ""
+          v_turn_speed = 0
+          active_carrot = 0
+          x_dist_to_turn = 0
+          if curr_cm is not None:
+            desired_speed = float(getattr(curr_cm, "desiredSpeed", 0.0))
+            desired_source = str(getattr(curr_cm, "desiredSource", "") or "")
+            v_turn_speed = int(getattr(curr_cm, "vTurnSpeed", 0))
+            active_carrot = int(getattr(curr_cm, "activeCarrot", 0))
+            x_dist_to_turn = int(getattr(curr_cm, "xDistToTurn", 0))
+
+          cruise_target = 0.0
+          if curr_lp is not None:
+            cruise_target = float(getattr(curr_lp, "cruiseTarget", 0.0))
+
           frames.append({
             "t": round(t_now, 2),
             "vEgo": round(v_ego, 1),
@@ -111,6 +131,12 @@ def _extract_telemetry_from_log(log_path: str) -> list[dict[str, Any]]:
             "steerAngle": round(steer_angle, 1),
             "desiredSteerAngle": round(desired_steer_angle, 1),
             "steerTorque": round(steer_torque, 2),
+            "desiredSpeed": round(desired_speed, 1),
+            "desiredSource": desired_source,
+            "vTurnSpeed": v_turn_speed,
+            "cruiseTarget": round(cruise_target, 1),
+            "activeCarrot": active_carrot,
+            "xDistToTurn": x_dist_to_turn,
           })
           last_sample_t = t_now
     except Exception:
@@ -182,6 +208,31 @@ def _detect_key_episodes(frames: list[dict[str, Any]], include_driver_override: 
         "description": f"조향 추종 오차({steer_err:.1f}deg): 목표={f['desiredSteerAngle']}deg, 실제={f['steerAngle']}deg, 토크={f['steerTorque']}",
       })
 
+    # Episode 5: Curve deceleration mismatch
+    # (High steer angle with vTurnSpeed indicating curve deceleration, but desiredSpeed did not decelerate or source != 'vturn')
+    steer_mag = max(abs(f["steerAngle"]), abs(f["desiredSteerAngle"]))
+    v_turn_mag = abs(f.get("vTurnSpeed", 0))
+    des_speed = f.get("desiredSpeed", 0.0)
+    des_src = f.get("desiredSource", "")
+    if f["vEgo"] >= 30.0 and steer_mag >= 15.0 and 0 < v_turn_mag < (f["vEgo"] - 5.0):
+      if des_speed >= (f["vEgo"] - 1.0) or des_src != "vturn":
+        episodes.append({
+          "type": "curve_speed_mismatch",
+          "t": f["t"],
+          "vEgo": f["vEgo"],
+          "steerAngle": f["steerAngle"],
+          "desiredSteerAngle": f["desiredSteerAngle"],
+          "vTurnSpeed": f.get("vTurnSpeed", 0),
+          "desiredSpeed": des_speed,
+          "desiredSource": des_src,
+          "cruiseTarget": f.get("cruiseTarget", 0.0),
+          "isOverride": False,
+          "description": (
+            f"코너 감속 불일치/미반영: 차속={f['vEgo']}km/h, 조향={f['steerAngle']}deg, "
+            f"vTurn계산={f.get('vTurnSpeed')}km/h, 최종목표={des_speed}km/h(소스='{des_src}')"
+          ),
+        })
+
     # Optional: Driver Manual Override Episodes (Driver Discomfort Feedback)
     if include_driver_override:
       # Driver Brake Override (e.g. driver intervened because automated decel was too late or accel was aggressive)
@@ -251,6 +302,42 @@ def _extract_all_frames_sync(folders: list[str]) -> list[dict[str, Any]]:
     except Exception:
       pass
   return all_frames
+
+
+CORE_CONTROL_SOURCE_CODE = """# === CarrotPilot Core Speed Arbitration & Turn Deceleration Logic ===
+# 1. Cruise & Deceleration Arbitration (openpilot/selfdrive/carrot/carrot_functions.py):
+#    v_cruise_kph = self.cruise_eco_control(v_ego_cluster_kph, v_cruise_kph)
+#    v_cruise_kph, atc_active = self._update_carrot_man(sm, v_ego_kph, v_cruise_kph)
+#    Inside _update_carrot_man:
+#      v_cruise_kph = min(v_cruise_kph, carrot_man.desiredSpeed)
+#    * RULE: The lowest speed ALWAYS wins via min(). Deceleration from carrot_man.desiredSpeed
+#      strictly overrides cruise target. There is NO control contention between Eco and Curve deceleration.
+
+# 2. Turn Speed Source Selection (openpilot/selfdrive/carrot/carrot_serv.py):
+#    TurnSpeedControlMode: 0=Not used, 1=Vision(vturn), 2=Vision+Route(TBT), 3=Route(always)
+#    if self.turnSpeedControlMode in [1, 2]:
+#      speed_n_sources.append((max(abs(vturn_speed), self.autoCurveSpeedLowerLimit), "vturn"))
+#    route_speed = max(route_speed * self.mapTurnSpeedFactor, self.autoCurveSpeedLowerLimit)
+#    if self.turnSpeedControlMode == 2:
+#      if -500 < self.xDistToTurn < 500: speed_n_sources.append((route_speed, "route"))
+#    elif self.turnSpeedControlMode in [3, 4]:
+#      speed_n_sources.append((route_speed, "route"))
+#    model_turn_speed = max(sm['modelV2'].meta.modelTurnSpeed, self.autoCurveSpeedLowerLimit)
+#    if model_turn_speed < 200 and abs(vturn_speed) < 120:
+#      speed_n_sources.append((model_turn_speed, "model"))
+#    desired_speed, source = min(speed_n_sources, key=lambda x: x[0])
+#    * RULE: If TurnSpeedControlMode is 3, 'vturn' is completely excluded from speed_n_sources!
+#      Vision curve deceleration is disabled, relying solely on navigation route.
+
+# 3. Cruise Eco Control (openpilot/selfdrive/carrot/carrot_functions.py):
+#    if self.eco_over_speed > 0:
+#      if self.eco_target_speed == 0 and v_ego_kph + 3 < v_cruise_kph:
+#        self.eco_target_speed = v_cruise_kph
+#      if self.eco_target_speed != 0:
+#        v_cruise_kph_apply = self.eco_target_speed + self.eco_over_speed  # (+2 km/h)
+#    * RULE: Eco mode only boosts cruise target (+2 km/h) on open roads when v_ego < set - 3.
+#      It never prevents or delays braking when desiredSpeed < set_speed due to min() arbitration.
+"""
 
 
 async def api_autotune_extract_telemetry(request: web.Request) -> web.Response:
@@ -365,6 +452,22 @@ async def api_autotune_extract_telemetry(request: web.Request) -> web.Response:
     },
   }
 
+  # Build parameter descriptions for active parameters
+  param_descriptions: dict[str, Any] = {}
+  try:
+    for k in current_params.keys():
+      p = by_name.get(k)
+      if p:
+        param_descriptions[k] = {
+          "title": p.get("title") or p.get("etitle") or k,
+          "descr": (p.get("descr") or p.get("edescr") or "").strip(),
+          "min": p.get("min"),
+          "max": p.get("max"),
+          "default": p.get("default"),
+        }
+  except Exception:
+    pass
+
   return web.json_response({
     "ok": True,
     "route": route_filter,
@@ -373,6 +476,8 @@ async def api_autotune_extract_telemetry(request: web.Request) -> web.Response:
     "episodes": episodes,
     "telemetrySample": sample_frames,
     "currentParams": current_params,
+    "paramDescriptions": param_descriptions,
+    "sourceCodeReference": CORE_CONTROL_SOURCE_CODE,
   })
 
 
