@@ -287,12 +287,11 @@ def test_public_page_generates_and_caches_scoped_qcamera_preview(tmp_path: Path,
     async with TestClient(TestServer(create_app(config, start_cleanup=False))) as client:
       page = await client.get(page_path)
       page_html = await page.text()
-      assert '<video id="video" controls autoplay muted playsinline preload="metadata">' in page_html
-      assert 'id="videoSeek"' in page_html
-      assert 'aria-label="영상 재생 위치"' in page_html
+      assert '<video id="video" autoplay muted playsinline preload="metadata">' in page_html
+      assert 'id="videoSeek"' not in page_html
+      assert "attachRadarReview(video)" in page_html
       assert "setVideo(featured.videoUrl,featured.previewUrl,featured.index)" in page_html
       assert "video.play().catch(()=>{})" in page_html
-      assert "video.currentTime=" in page_html
 
       manifest_response = await client.get(f"{page_path}/manifest")
       manifest = await manifest_response.json()
