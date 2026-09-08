@@ -2,6 +2,41 @@
   "sensitivity": 50,
   "cases": [
     {
+      "id": "k8-329-52-right-suv-parallel-before-entry-8059",
+      "vehicle_folder": "KIA_K8_HEV_1ST_GEN b34d1abb87cce93b",
+      "log": "00000329--a6c885ef88--52/rlog.zst",
+      "source": "front+corner",
+      "window": [32.9, 35.9],
+      "expected": "clear",
+      "target_track_ids": [8059, 42],
+      "forbidden_lead_two_ids": [8059, 42],
+      "scene": "Video-reviewed right SUV remains outside the lane before committing to entry. A nearer paired radar body and a confident farther vision lead alone must not produce CUT-IN or pre-deceleration. Times are replay segment time, approximately 0.1014 s before video."
+    },
+    {
+      "id": "k8-329-52-right-suv-vision-transition-predecel-8059",
+      "vehicle_folder": "KIA_K8_HEV_1ST_GEN b34d1abb87cce93b",
+      "log": "00000329--a6c885ef88--52/rlog.zst",
+      "source": "front+corner",
+      "window": [36.2, 37.3],
+      "expected": "detect",
+      "validation_stage": "predecel",
+      "latest_detection_s": 36.6,
+      "target_track_ids": [8059, 42],
+      "scene": "User-reported late response, confirmed in qcamera: right SUV corner 8059/front 42 enters ahead. At video 36.55 s, corner dRel 5.13 m and dPath -2.50 m, 1.50 s continuous history, inward progress 0.19 m and predicted overlap 1.87 s coexist with a confident visual range between paired front 42 and old primary 59. Direct lateral vision matching is not yet valid. Require early bounded pre-deceleration with coherent two-sensor entry rather than waiting for 0.25 m short-window travel. Times are replay segment time, approximately 0.1014 s before video."
+    },
+    {
+      "id": "k8-329-52-right-suv-early-lead-two-8059",
+      "vehicle_folder": "KIA_K8_HEV_1ST_GEN b34d1abb87cce93b",
+      "log": "00000329--a6c885ef88--52/rlog.zst",
+      "source": "front+corner",
+      "window": [36.2, 37.3],
+      "expected": "detect",
+      "validation_stage": "lead_two",
+      "latest_detection_s": 36.55,
+      "target_track_ids": [8059, 42],
+      "scene": "Same video-reviewed right SUV: promote the physically entering paired body after a confirmed near-term forecast that remains ahead of ego. Vision transition corroboration must not bypass side-pass or curve/body ambiguity safeguards. The original controller first selected Lead2 at replay 37.05 s. Times are replay segment time, approximately 0.1014 s before video."
+    },
+    {
       "id": "azera-1b1-20-left-parallel-two-meter-boundary-3103",
       "vehicle_folder": "HYUNDAI_AZERA_7TH_GEN f3a537501c7197ec",
       "log": "000001b1--2738b927eb--20/rlog.zst",

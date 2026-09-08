@@ -1270,3 +1270,45 @@ def test_alternating_corner_jitter_is_rejected() -> None:
 
   assert estimate.jittering
   assert not estimate.confirmed_cutin
+
+
+@pytest.mark.parametrize("side", (-1.0, 1.0))
+@pytest.mark.parametrize("missing_evidence", (
+  None, "vision", "probability", "range", "speed", "front", "primary",
+  "parallel", "curve", "passes_before_entry",
+))
+def test_slow_close_entry_uses_vision_transition_only_with_physical_support(side, missing_evidence) -> None:
+  detector = TrajectoryCutInDetector()
+  estimates = []
+  for index in range(35):
+    time_s = index * 0.05
+    v_rel = -4.0 if missing_evidence == "passes_before_entry" else -2.0
+    d_rel = 9.0 + v_rel * time_s
+    y_rel = side * (2.9 - (0.0 if missing_evidence == "parallel" else 0.3) * time_s)
+    corner = point(1200, "corner180", d_rel, y_rel, v_ego=8.0, v_rel=v_rel)
+    front = point(42, "frontRadar", d_rel + 1.8, y_rel, v_ego=8.0, v_rel=v_rel - 1.0)
+    model = SimpleNamespace(leadsV3=(SimpleNamespace(
+      prob=0.5 if missing_evidence == "probability" else 0.99,
+      x=(18.0 if missing_evidence == "range" else 13.02,),
+      y=(0.0,),
+      v=(12.0 if missing_evidence == "speed" else 8.0 + v_rel,),
+    ),))
+    estimates.extend(detector.update(
+      time_s, 8.0, (corner,), PATH,
+      MODEL if missing_evidence == "vision" else model,
+      primary_lead=None if missing_evidence == "primary" else {"status": True, "dRel": 16.0},
+      cross_sensor_matches={} if missing_evidence == "front" else {(corner.source, corner.track_id): front},
+      yaw_rate_rad_s=0.03 if missing_evidence == "curve" else 0.0,
+    ))
+
+  if missing_evidence is None:
+    assert not any(estimate.vision_supported for estimate in estimates)
+    assert any(estimate.vision_bracket_supported for estimate in estimates)
+    assert any(estimate.predecel_risk for estimate in estimates)
+    assert any(estimate.confirmed_cutin and not estimate.control_eligible for estimate in estimates)
+    assert estimates[-1].confirmed_cutin
+    assert estimates[-1].control_eligible
+    assert not estimates[-1].current_path
+  else:
+    assert not any(estimate.vision_bracket_supported for estimate in estimates)
+    assert not any(estimate.confirmed_cutin or estimate.control_eligible or estimate.predecel_risk for estimate in estimates)
