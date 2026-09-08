@@ -4,6 +4,9 @@ import asyncio
 import time
 from typing import Any
 
+from openpilot.common.async_process import run_process
+from openpilot.common.repo_update import RepoBusyError, repo_lock
+
 
 REPO_DIR = "/data/openpilot"
 GIT_STATUS_TTL = 600.0
@@ -42,16 +45,7 @@ def _error_state(message: str, **extra: Any) -> dict[str, Any]:
 
 async def _git(args: list[str], timeout: float = GIT_TIMEOUT) -> tuple[int, str]:
   try:
-    proc = await asyncio.create_subprocess_exec(
-      "git",
-      *args,
-      cwd=REPO_DIR,
-      stdout=asyncio.subprocess.PIPE,
-      stderr=asyncio.subprocess.STDOUT,
-    )
-    out_bytes, _ = await asyncio.wait_for(proc.communicate(), timeout=timeout)
-    out = (out_bytes or b"").decode("utf-8", "replace").strip()
-    return int(proc.returncode or 0), out
+    return await run_process(["git", *args], cwd=REPO_DIR, timeout=timeout)
   except asyncio.TimeoutError:
     return 124, "timeout"
   except Exception as exc:
@@ -166,7 +160,11 @@ async def get_git_status(force: bool = False) -> dict[str, Any]:
   async with _lock_for_loop():
     if _cache and not force and (_now() - float(_cache.get("checked_at", 0))) < GIT_STATUS_TTL:
       return dict(_cache)
-    _cache = await _read_status()
+    try:
+      with repo_lock():
+        _cache = await _read_status()
+    except RepoBusyError:
+      return {**_error_state("Build or another Git operation is running"), "state": "busy"}
     return dict(_cache)
 
 

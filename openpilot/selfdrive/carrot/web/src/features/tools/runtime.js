@@ -290,15 +290,16 @@ function renderGitPullStatus(status = {}) {
   const autoUpdate = status.auto_update || {};
   const autoUpdateStatus = String(autoUpdate.status || "");
   const hasAutoUpdateError = ["error", "reboot_blocked"].includes(autoUpdateStatus);
-  const hasError = Boolean(state && state !== "ok") || hasAutoUpdateError;
-  const hasUpdates = behind > 0 && !hasError;
-  const label = hasUpdates ? (behind > 99 ? "99+" : String(behind)) : (hasError ? "X" : "✓");
+  const waiting = (state === "busy" || autoUpdateStatus === "waiting") && !hasAutoUpdateError;
+  const hasError = Boolean(state && !["ok", "busy"].includes(state)) || hasAutoUpdateError;
+  const hasUpdates = behind > 0 && !hasError && !waiting;
+  const label = waiting ? "…" : (hasUpdates ? (behind > 99 ? "99+" : String(behind)) : (hasError ? "X" : "✓"));
   button.classList.toggle("has-updates", hasUpdates);
-  button.classList.toggle("is-current", !hasUpdates && !hasError);
+  button.classList.toggle("is-current", !hasUpdates && !hasError && !waiting);
   button.classList.toggle("has-git-error", !hasUpdates && hasError);
   badge.hidden = false;
   badge.textContent = label;
-  badge.dataset.state = hasUpdates ? "updates" : (hasError ? "error" : "current");
+  badge.dataset.state = waiting ? "waiting" : (hasUpdates ? "updates" : (hasError ? "error" : "current"));
 
   if (navButton) {
     navButton.classList.toggle("has-git-updates", hasUpdates);
@@ -306,7 +307,9 @@ function renderGitPullStatus(status = {}) {
     else navButton.removeAttribute("data-git-behind");
   }
 
-  if (hasUpdates) {
+  if (waiting) {
+    button.title = getUIText("web_auto_update_waiting", "Waiting for startup or another update to finish.");
+  } else if (hasUpdates) {
     const upstream = String(status.upstream || "").trim();
     const suffix = upstream ? ` (${upstream})` : "";
     button.title = `${behind} commits available${suffix}`;

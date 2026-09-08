@@ -362,10 +362,19 @@ function invalidate_native_build_if_needed {
 }
 
 function launch {
+  # Protect the checkout throughout bootstrap, SCons and manager initialization.
+  # The manager releases this inherited flock after init; background web/recovery
+  # servers must not inherit it. Never delete the lock file itself.
+  export CARROT_REPO_LOCK_PATH="${CARROT_REPO_LOCK_PATH:-/tmp/carrot_repo_update.lock}"
+  exec 9>"$CARROT_REPO_LOCK_PATH"
+  if ! flock -w 300 9; then
+    echo "Another repository operation is still running; launch deferred."
+    exec 9>&-
+    start_carrot_recovery
+    while true; do sleep 1; done
+  fi
+  export CARROT_BOOT_LOCK_FD=9
   cleanup_stale_git_lfs_hooks
-
-  # Remove orphaned git lock if it exists on boot
-  [ -f "$DIR/.git/index.lock" ] && rm -f $DIR/.git/index.lock
 
   # Check to see if there's a valid overlay-based update available. Conditions
   # are as follows:
@@ -415,11 +424,16 @@ function launch {
   if [ "$(cat /data/params/d/SshEnabled 2>/dev/null)" != "1" ]; then
     echo -n 1 > /data/params/d/SshEnabled
   fi
-  start_carrot_recovery
+  (
+    exec 9>&-
+    unset CARROT_BOOT_LOCK_FD
+    start_carrot_recovery
+  )
 
   # hardware specific init
   if [ -f /AGNOS ]; then
     if ! agnos_init; then
+      flock -u 9
       while true; do sleep 1; done
     fi
   fi
@@ -428,16 +442,22 @@ function launch {
   # imports native dependency modules while building Params, so bootstrap them
   # before the first SCons invocation.
   if ! bootstrap_runtime_dependencies; then
+    flock -u 9
     while true; do sleep 1; done
   fi
 
   # Build Params before any long-running carrot service imports it.
   if ! bash "$DIR/scripts/ensure_params_build.sh"; then
     echo "Params registry build failed, not starting openpilot."
+    flock -u 9
     while true; do sleep 1; done
   fi
 
-  start_carrot_web
+  (
+    exec 9>&-
+    unset CARROT_BOOT_LOCK_FD
+    start_carrot_web
+  )
 
 
   FORCE_REBUILD=0
@@ -454,6 +474,7 @@ function launch {
   if [ "$FORCE_REBUILD" = "1" ] || [ ! -f $DIR/prebuilt ]; then
     if ! ./build.py; then
       echo "openpilot build failed, not starting manager."
+      flock -u 9
       while true; do sleep 1; done
     fi
     if [ "$FORCE_REBUILD" = "1" ]; then
@@ -466,6 +487,9 @@ function launch {
   fi
   start_big_model_update
   ./manager.py
+  # Also release if manager failed before reaching main()/initialization.
+  flock -u 9
+  exec 9>&-
 
   # if broken, keep on screen error
   while true; do sleep 1; done
