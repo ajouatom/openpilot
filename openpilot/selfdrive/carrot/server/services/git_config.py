@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import subprocess
 
+from openpilot.common.repo_update import child_lock_kwargs
+
 
 class GitConfigError(Exception):
   pass
@@ -19,7 +21,7 @@ def repair_git_config(repo_dir: str, *, remote: str | None = None, repair_upstre
 
   def git(*args: str, allowed: tuple[int, ...] = (0,), timeout: float = 15.0) -> str:
     proc = subprocess.run(
-      ["git", *args], cwd=repo_dir, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=timeout,
+      ["git", *args], cwd=repo_dir, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=timeout, **child_lock_kwargs(),
     )
     output = "\n".join(part.strip() for part in (proc.stdout, proc.stderr) if part.strip())
     if proc.returncode not in allowed:
