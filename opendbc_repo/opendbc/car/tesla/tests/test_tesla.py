@@ -81,6 +81,59 @@ class TestTeslaFingerprint(unittest.TestCase):
 
     self.assertFalse(ret.vehicleSensorsInvalid)
 
+  def test_standstill_uses_esp_not_cruise_state(self):
+    CP = CarInterface.get_params(CAR.TESLA_MODEL_Y, gen_empty_fingerprint(), [], False, False, False)
+    car_state = CarState(CP)
+    can_parsers = CarState.get_can_parsers(CP)
+
+    can_parsers[Bus.party].vl["DI_state"]["DI_cruiseState"] = 0  # UNAVAILABLE
+    can_parsers[Bus.party].vl["ESP_B"]["ESP_vehicleStandstillSts"] = 1
+    self.assertTrue(car_state.update(can_parsers).standstill)
+
+    can_parsers[Bus.party].vl["DI_state"]["DI_cruiseState"] = 3  # STANDSTILL
+    can_parsers[Bus.party].vl["ESP_B"]["ESP_vehicleStandstillSts"] = 0
+    self.assertFalse(car_state.update(can_parsers).standstill)
+
+  def test_stock_tacc_does_not_trigger_autosteer_conflict(self):
+    fingerprint = gen_empty_fingerprint()
+    fingerprint[CANBUS.autopilot_party][0x293] = 8  # DAS_settings
+    CP = CarInterface.get_params(CAR.TESLA_MODEL_Y, fingerprint, [], False, False, False)
+    car_state = CarState(CP)
+    can_parsers = CarState.get_can_parsers(CP)
+
+    # Normal stock TACC reports ACTIVE_NOMINAL. It must not be treated as
+    # Autosteer/FSD, otherwise the stalk's pcmEnable event is rejected.
+    can_parsers[Bus.ap_party].vl["DAS_status"]["DAS_autopilotState"] = 3
+    can_parsers[Bus.ap_party].vl["DAS_settings"]["DAS_autosteerEnabled"] = 0
+    self.assertFalse(car_state.update(can_parsers).invalidLkasSetting)
+
+    can_parsers[Bus.ap_party].vl["DAS_settings"]["DAS_autosteerEnabled"] = 1
+    self.assertTrue(car_state.update(can_parsers).invalidLkasSetting)
+
+  def test_idle_stock_acc_state_does_not_cancel_new_engagement(self):
+    CP = CarInterface.get_params(CAR.TESLA_MODEL_Y, gen_empty_fingerprint(), [], True, False, False)
+    car_state = CarState(CP)
+    can_parsers = CarState.get_can_parsers(CP)
+    das_control = can_parsers[Bus.ap_party].vl["DAS_control"]
+
+    # Real vehicles continuously emit ACC_CANCEL_GENERIC (0) while ACC is
+    # unavailable. Treating that idle value as an active cancellation makes CP
+    # transmit ACC_CANCEL_GENERIC_SILENT and abort a stalk engagement.
+    das_control["DAS_accState"] = 0
+    car_state.update(can_parsers)
+    self.assertFalse(car_state.das_accCancel)
+    car_state.update(can_parsers)
+    self.assertFalse(car_state.das_accCancel)
+
+    # A transition away from active stock ACC is a real cancellation and must
+    # still be forwarded briefly.
+    das_control["DAS_accState"] = 4
+    car_state.update(can_parsers)
+    self.assertFalse(car_state.das_accCancel)
+    das_control["DAS_accState"] = 0
+    car_state.update(can_parsers)
+    self.assertTrue(car_state.das_accCancel)
+
   def test_fw_platform_code(self):
     # Every EPS FW must parse and its platform letter must match the car it's filed under.
     for car_model, ecus in FW_VERSIONS.items():
