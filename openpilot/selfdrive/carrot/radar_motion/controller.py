@@ -957,6 +957,7 @@ class DPathRadarController:
       model,
       yaw_rate_rad_s=yaw_rate_rad_s,
       vision_required_front=self.motion_sensor == "corner",
+      primary_lead=lead_one,
       cross_sensor_matches=front_kinematic_matches,
     )
     estimate_identities = {

@@ -2738,6 +2738,7 @@ class ProductionDPathSelector:
             + f"close={int(estimate.close_front_supported)} "
             + f"hist={int(estimate.front_history_supported)} "
             + f"vision={int(estimate.vision_supported)} "
+            + f"visionBracket={int(estimate.vision_bracket_supported)} "
             + f"cross={int(estimate.cross_sensor_supported)} "
             + f"ctrl={int(estimate.control_eligible)} "
             + f"H={estimate.horizon_s:.2f} "
