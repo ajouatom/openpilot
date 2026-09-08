@@ -6,15 +6,19 @@ import signal
 from openpilot.common.repo_update import child_lock_kwargs, recover_stale_index_lock
 
 
-async def prepare_repo(repo_dir: str) -> bool:
+async def run_locked_thread(function, *args, **kwargs):
   # to_thread continues running after cancellation. Keep the caller's lock held
   # until the inspection/unlink has actually finished.
-  task = asyncio.create_task(asyncio.to_thread(recover_stale_index_lock, repo_dir))
+  task = asyncio.create_task(asyncio.to_thread(function, *args, **kwargs))
   try:
     return await asyncio.shield(task)
   except asyncio.CancelledError:
     await asyncio.shield(task)
     raise
+
+
+async def prepare_repo(repo_dir: str) -> bool:
+  return await run_locked_thread(recover_stale_index_lock, repo_dir)
 
 
 def process_group_kwargs() -> dict:
