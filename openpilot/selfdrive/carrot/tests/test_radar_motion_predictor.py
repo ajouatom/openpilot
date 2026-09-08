@@ -1153,6 +1153,18 @@ def test_cutin_must_still_be_ahead_of_primary_at_path_entry_time() -> None:
   )
 
 
+def test_current_overlap_does_not_make_a_farther_target_compete_with_primary() -> None:
+  primary = {"status": True, "dRel": 12.0, "vRel": -1.0}
+  assert not cutin_can_compete_with_primary(
+    {"status": True, "dRel": 21.0, "vRel": -2.0}, primary,
+    projected_path_entry=True, entry_horizon_s=0.0,
+  )
+  assert cutin_can_compete_with_primary(
+    {"status": True, "dRel": 6.0, "vRel": -2.0}, primary,
+    projected_path_entry=True, entry_horizon_s=0.0,
+  )
+
+
 def test_controller_filters_same_row_proximity_without_projected_entry() -> None:
   controller = DPathRadarController(prefer_corner_radar=True)
   trajectory_detected = False
