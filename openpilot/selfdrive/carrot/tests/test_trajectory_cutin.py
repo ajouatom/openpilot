@@ -1,5 +1,7 @@
 from types import SimpleNamespace
 
+import pytest
+
 from openpilot.selfdrive.carrot.radar_motion.primary import RadarPointSnapshot
 from openpilot.selfdrive.carrot.radar_motion.predictor import (
   project_to_model_path,
@@ -1035,6 +1037,101 @@ def test_nonclosing_far_parallel_pair_needs_strong_entry_motion() -> None:
   assert not estimate.current_path
   assert not estimate.confirmed_cutin
   assert not estimate.control_eligible
+
+
+@pytest.mark.parametrize("last_distance", (1.95, 2.05, 3.0, 4.0))
+@pytest.mark.parametrize("side", (-1.0, 1.0))
+@pytest.mark.parametrize("sensitivity", (1, 3, 5))
+def test_paired_side_pass_is_rejected_on_both_sides_of_two_meters(
+  last_distance: float, side: float, sensitivity: int,
+) -> None:
+  detector = TrajectoryCutInDetector(sensitivity)
+  estimates = []
+  for index in range(21):
+    time_s = index * 0.05
+    corner = point(
+      3103, "corner235", last_distance + 1.1 * (1.0 - time_s),
+      side * (2.90 - 0.20 * time_s),
+      v_ego=11.7, v_rel=-1.1, yv_rel=-side * 0.10,
+    )
+    front = point(
+      36, "frontRadar", corner.d_rel + 2.1, side * 2.10,
+      v_ego=11.7, v_rel=-1.1,
+    )
+    estimates.append(detector.update(
+      time_s, 11.7, (corner,), PATH, MODEL,
+      cross_sensor_matches={(corner.source, corner.track_id): front},
+    )[0])
+
+  assert estimates[-1].time_to_overlap_s is not None
+  assert estimates[-1].passing_before_overlap
+  assert not any(value.confirmed_cutin for value in estimates)
+  assert not any(value.control_eligible for value in estimates)
+  assert not any(value.predecel_risk for value in estimates)
+
+
+def test_paired_cutin_latch_clears_when_entry_will_be_behind_ego() -> None:
+  detector = TrajectoryCutInDetector()
+  estimates = []
+  for index in range(21):
+    time_s = index * 0.05
+    corner = point(
+      3103, "corner235", 3.5 - time_s, 2.9 - 0.5 * min(time_s, 0.5),
+      v_ego=11.7, v_rel=-1.0, yv_rel=-0.5 if index <= 10 else 0.0,
+    )
+    front = point(36, "frontRadar", corner.d_rel + 0.5, 2.1, v_ego=11.7, v_rel=-1.0)
+    estimates.append(detector.update(
+      time_s, 11.7, (corner,), PATH, MODEL,
+      cross_sensor_matches={(corner.source, corner.track_id): front},
+    )[0])
+
+  assert any(value.confirmed_cutin for value in estimates)
+  rejected = [value for value in estimates if value.passing_before_overlap]
+  assert rejected
+  assert all(not value.confirmed_cutin and not value.control_eligible for value in rejected)
+
+
+@pytest.mark.parametrize("front_inward, expected", ((0.05, False), (0.5, True)))
+def test_paired_front_entry_forecast_requires_measured_inward_motion(
+  front_inward: float, expected: bool,
+) -> None:
+  detector = TrajectoryCutInDetector()
+  for index in range(21):
+    time_s = index * 0.05
+    corner = point(
+      2102, "corner235", 7.7 - 3.0 * time_s, -2.85 + 0.2 * time_s,
+      v_ego=14.4, v_rel=-3.0, yv_rel=0.2,
+    )
+    front = point(56, "frontRadar", corner.d_rel + 1.8, -2.35,
+                  v_ego=14.4, v_rel=-3.0, yv_rel=front_inward)
+    estimate = detector.update(
+      time_s, 14.4, (corner,), PATH, MODEL,
+      cross_sensor_matches={(corner.source, corner.track_id): front},
+    )[0]
+
+  assert estimate.confirmed_cutin == expected
+  assert estimate.control_eligible == expected
+  assert estimate.passing_before_overlap != expected
+
+
+@pytest.mark.parametrize("side", (-1.0, 1.0))
+def test_close_paired_vehicle_already_entering_path_remains_eligible(side: float) -> None:
+  detector = TrajectoryCutInDetector()
+  for index in range(21):
+    time_s = index * 0.05
+    corner = point(
+      3103, "corner235", 2.2 - time_s, side * (2.9 - 1.2 * time_s),
+      v_ego=11.7, v_rel=-1.0, yv_rel=-side * 1.2,
+    )
+    front = point(36, "frontRadar", corner.d_rel + 0.5, corner.y_rel,
+                  v_ego=11.7, v_rel=-1.0)
+    estimate = detector.update(
+      time_s, 11.7, (corner,), PATH, MODEL,
+      cross_sensor_matches={(corner.source, corner.track_id): front},
+    )[0]
+
+  assert estimate.confirmed_cutin and estimate.control_eligible
+  assert not estimate.passing_before_overlap
 
 
 def test_near_outer_body_range_disagreement_cannot_trigger_or_hold_cutin() -> None:
