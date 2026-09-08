@@ -42,12 +42,12 @@ class Updater:
     except subprocess.CalledProcessError:
       self.compose = ["docker-compose"]
 
-  def run(self, *args, timeout=600):
+  def run(self, *args, timeout=600, stdin_data=None):
     try:
       result = subprocess.run(args, cwd=str(self.root), check=True, text=True,
-                              capture_output=True, timeout=timeout)
+                              capture_output=True, timeout=timeout, input=stdin_data)
     except subprocess.CalledProcessError as error:
-      logging.error("%s failed: %s", args[0], (error.stderr or "")[-4000:])
+      logging.exception("%s failed: %s", args[0], (error.stderr or "")[-4000:])
       raise
     return result.stdout.strip()
 
@@ -65,23 +65,22 @@ class Updater:
     return self.run("docker", "inspect", "--format", "{{.Image}}", container)
 
   def probe(self, image, online=False):
-    args = ["docker", "run", "--rm", "--name", "carrot-route-vault-update-probe", "--network", "host",
+    args = ["docker", "run", "--rm", "-i", "--name", "carrot-route-vault-update-probe", "--network", "host",
             "--read-only", "--cap-drop", "ALL", "--security-opt", "no-new-privileges:true",
             "--memory", "2g", "--user", self.config.get("user", "1026:100"), "--group-add", "101",
-            "--tmpfs", "/tmp:size=64m", "-v", self.config["data_root"] + ":/data/openpilot:ro",
-            "-v", str(self.root / "auto-update.json") + ":/probe/config.json:ro"]
+            "--tmpfs", "/tmp:size=64m", "-v", self.config["data_root"] + ":/data/openpilot:ro"]
+    args += [image, "python", "/app/deploy_probe.py"]
+    request = {"config": self.config}
     if online:
-      args += ["-v", str(self.expected_path) + ":/probe/expected.json:ro"]
-    args += [image, "python", "/app/deploy_probe.py", "/probe/config.json"]
-    if online:
-      args += ["--online", "--expected", "/probe/expected.json"]
+      args += ["--online"]
+      request["expected"] = json.loads(self.expected_path.read_text())["replay"]
     # A previous host crash may have left only this specifically named probe behind.
     try:
       self.run("docker", "rm", "-f", "carrot-route-vault-update-probe", timeout=30)
     except subprocess.CalledProcessError:
       pass
     try:
-      return json.loads(self.run(*args, timeout=480))
+      return json.loads(self.run(*args, timeout=480, stdin_data=json.dumps(request)))
     finally:
       try:
         self.run("docker", "rm", "-f", "carrot-route-vault-update-probe", timeout=30)
