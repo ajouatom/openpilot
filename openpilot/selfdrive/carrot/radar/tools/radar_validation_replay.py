@@ -22,6 +22,7 @@ REPO_ROOT = Path(__file__).resolve().parents[5]
 if str(REPO_ROOT) not in sys.path:
   sys.path.insert(0, str(REPO_ROOT))
 
+from openpilot.selfdrive.carrot.radar_motion.coordinates import device_yaw_to_radar
 from openpilot.selfdrive.carrot.radar_motion import (
   CORNER_RADAR_MEASUREMENT_DELAY_S,
   CORNER_CUT_IN_THRESHOLD,
@@ -113,7 +114,7 @@ STATIONARY_HANDOFF_MAX_YREL_DELTA_M = 1.5
 VALIDATION_SETTINGS_ENV = "CARROT_RADAR_VALIDATION_SETTINGS"
 VALIDATION_MOTION_MODES = ("normal", "front")
 VALIDATION_DEFAULT_SENSITIVITY = 3
-VISUAL_REPLAY_CACHE_VERSION = 3
+VISUAL_REPLAY_CACHE_VERSION = 4
 LEAD_ONE_RADAR_RGB = (246, 142, 55)
 LEAD_ONE_VISION_RGB = (72, 145, 255)
 LEAD_ONE_VISION_WEAK_RGB = (104, 205, 255)
@@ -975,6 +976,7 @@ def _controller_model(frame: RadarFrame) -> Any:
       for lead in frame.model_leads
     ),
     velocity=SimpleNamespace(x=(frame.v_ego,)),
+    laneLineProbs=frame.lane_probs,
   )
 
 
@@ -2749,6 +2751,7 @@ class ProductionDPathSelector:
             + f"hist={int(estimate.front_history_supported)} "
             + f"vision={int(estimate.vision_supported)} "
             + f"visionBracket={int(estimate.vision_bracket_supported)} "
+            + f"pairedMotion={int(estimate.paired_inward_motion_supported)} "
             + f"cross={int(estimate.cross_sensor_supported)} "
             + f"ctrl={int(estimate.control_eligible)} "
             + f"H={estimate.horizon_s:.2f} "
@@ -2977,11 +2980,11 @@ def _yaw_metadata(
   ):
     value = _finite(getattr(angular_velocity, "z", math.nan), math.nan)
     if math.isfinite(value):
-      return value, False, "livePose"
+      return device_yaw_to_radar(value), False, "livePose"
   ratio = max(abs(_finite(steer_ratio, 14.0)), 1.0)
   base = max(abs(_finite(wheelbase, 2.8)), 1.5)
   road_wheel_angle = math.radians(_finite(steering_angle_deg) / ratio)
-  return -_finite(v_ego) * math.tan(road_wheel_angle) / base, True, "steering"
+  return _finite(v_ego) * math.tan(road_wheel_angle) / base, True, "steering"
 
 
 def load_frames(log_path: Path) -> list[RadarFrame]:
