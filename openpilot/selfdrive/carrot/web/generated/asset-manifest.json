@@ -6,7 +6,7 @@
       "kind": "bundle",
       "source": "src/entries/app.js",
       "path": "js/generated/app.js",
-      "hash": "d55ee0caca57fd432655cda0d5eb381bb49d1bcf9da9a4b80b053d657eb37487"
+      "hash": "57003501f0e8d69cf16c43ec061c82ec5d92a39d9c328379a279097abc684219"
     },
     {
       "id": "drive.runtime",
