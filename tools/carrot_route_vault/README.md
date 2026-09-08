@@ -11,7 +11,14 @@ reviewer. The page shows radar points, model paths/lanes, vision leads, recorded
 and recalculated Lead 1/2, per-track dPath diagnostics, and a lead-distance graph.
 Video and radar share the recorded qcamera timing; when timing or video is
 unavailable, the radar timeline operates independently and says so explicitly.
-Browser source/sensitivity controls only change replay analysis.
+The web replay sensitivity is fixed to 3, including requests with an old sensitivity
+query parameter. The browser source control only changes replay analysis. A single
+playback bar spans the video and radar panels, followed by a full-width distance/speed
+and acceleration graph using the desktop reviewer's continuity series.
+
+When detection or lead-selection code changes, redeploy this service in the same
+task as required by the repository's `AGENTS.md`. Existing recorded lead decisions
+remain unchanged; recalculation uses the deployed source version.
 
 Replay runs in a separate Python process, with one active job and at most four
 pending jobs per server. Requests poll for completion. Results are gzip-cached

@@ -48,12 +48,28 @@ def export_frames(frames, *, sensor="auto", sensitivity=replay.VALIDATION_DEFAUL
   selector = replay.ProductionDPathSelector(frames, motion_sensor=selected_sensor,
                                           cut_in_sensitivity=sensitivity)
   output = []
+  selections = []
   for index, frame in enumerate(frames):
     item = asdict(frame)
     item.pop("mono_time_s", None)
-    selection = asdict(selector.select(frame, index))
+    selected = selector.select(frame, index)
+    selections.append(selected)
+    selection = asdict(selected)
     item["selection"] = {key: selection[key] for key in ("lead_one", "lead_two", "cutin_diagnostics", "cutin_predecel_candidate")}
     output.append(item)
+  def runs(segments, color):
+    return [{"color": "#%02x%02x%02x" % (color(segment[0][2]) if callable(color) else color),
+             "samples": [point[:2] for point in segment]} for segment in segments]
+
+  graphs = {
+    "leadOne": runs(replay.lead_continuity_segments(frames, selections, "lead_one"), replay.lead_one_rgb),
+    "leadTwo": runs(replay.lead_continuity_segments(frames, selections, "lead_two"), replay.LEAD_TWO_RGB),
+    "vision": runs(replay.vision_lead_continuity_segments(frames), replay.vision_lead_rgb),
+    "leadSpeed": runs(replay.lead_speed_continuity_segments(frames, selections), replay.LEAD_ONE_SPEED_RGB),
+    "sccDistance": runs(replay.frame_value_continuity_segments(frames, "scc_distance_m"), replay.SCC_DISTANCE_RGB),
+    "sccAccel": runs(replay.frame_value_continuity_segments(frames, "scc_a_req_raw"), replay.SCC_ACCEL_RGB),
+    "carrotAccel": runs(replay.frame_value_continuity_segments(frames, "carrot_a_target"), replay.CARROT_ACCEL_RGB),
+  }
   return finite_json({
     "schemaVersion": SCHEMA_VERSION,
     "sourceVersion": source_version(),
@@ -64,6 +80,7 @@ def export_frames(frames, *, sensor="auto", sensitivity=replay.VALIDATION_DEFAUL
     "radarToCamera": replay.RADAR_TO_CAMERA,
     "videoAligned": all(frame.video_time_s is not None for frame in frames),
     "frames": output,
+    "graphs": graphs,
   })
 
 
