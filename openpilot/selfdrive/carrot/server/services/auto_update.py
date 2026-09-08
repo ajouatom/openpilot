@@ -188,13 +188,22 @@ class ManagerReady:
 
 class ManagerMonitor:
   def __init__(self):
-    from openpilot.cereal import messaging
-    self.sm = messaging.SubMaster(["managerState"])
+    self.sm = None
     self.condition = ManagerReady()
 
   def ready(self) -> bool:
-    self.sm.update(0)
-    return self.condition.update(time.monotonic(), _message_valid(self.sm, "managerState"))
+    # The external web server can start before native messaging has been built.
+    # A failed early import must not permanently kill the automatic-update task.
+    try:
+      if self.sm is None:
+        from openpilot.cereal import messaging
+        self.sm = messaging.SubMaster(["managerState"])
+      self.sm.update(0)
+      valid = _message_valid(self.sm, "managerState")
+    except Exception:
+      self.sm = None
+      valid = False
+    return self.condition.update(time.monotonic(), valid)
 
   async def observe(self) -> None:
     # Keep observing while fetch/pull awaits network I/O, so a manager restart
