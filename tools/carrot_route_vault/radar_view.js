@@ -147,12 +147,15 @@ export function attachRadarReview(video) {
     lastTick=now;if(running||(usesVideo()&&!video.paused))frameHandle=requestAnimationFrame(tick);
   }
   function animate(){lastTick=performance.now();if(!frameHandle)frameHandle=requestAnimationFrame(tick);}
-  play.onclick=()=>{if(!duration())return;if(usesVideo()){if(video.paused){if(current>=duration())seek(0);video.play().catch(()=>setStatus('영상을 재생하지 못했습니다. 다시 재생을 눌러 주세요.'));}else video.pause();}else {if(current>=duration())seek(0);running=!running;animate();draw();}};
+  function pause(){running=false;video.pause();draw();}
+  function resume(){if(!duration())return;if(current>=duration())seek(0);if(usesVideo()){video.play().catch(()=>setStatus('영상을 재생하지 못했습니다. 다시 재생을 눌러 주세요.'));}else{running=true;animate();draw();}}
+  play.onclick=()=>{if(running||(usesVideo()&&!video.paused))pause();else resume();};
+  video.addEventListener('click',resume);
   video.addEventListener('play',animate);
   for(const event of ['loadedmetadata','durationchange','timeupdate','seeked','pause','ended','emptied'])video.addEventListener(event,()=>{if(usesVideo()){current=Math.max(0,Math.min(video.currentTime,duration()));index=nearest(current);}draw();});
   scrub.oninput=()=>seek(Number(scrub.value));
-  graph.onclick=e=>{const rect=graph.getBoundingClientRect();seek((e.clientX-rect.left-44)/Math.max(1,rect.width-88)*duration());};
-  map.onclick=e=>{const rect=map.getBoundingClientRect();let distance=18;selectedTrack=null;for(const p of hitPoints){const d=Math.hypot(e.clientX-rect.left-p.x,e.clientY-rect.top-p.y);if(d<distance){distance=d;selectedTrack=p.id;}}draw();};
+  graph.onclick=e=>{const rect=graph.getBoundingClientRect();seek((e.clientX-rect.left-44)/Math.max(1,rect.width-88)*duration());pause();};
+  map.onclick=e=>{const rect=map.getBoundingClientRect();let distance=18;selectedTrack=null;for(const p of hitPoints){const d=Math.hypot(e.clientX-rect.left-p.x,e.clientY-rect.top-p.y);if(d<distance){distance=d;selectedTrack=p.id;}}resume();draw();};
   new ResizeObserver(draw).observe(review);
   find('[data-range]').onchange=draw;
   async function load(selected) {

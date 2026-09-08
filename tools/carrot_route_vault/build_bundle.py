@@ -1,11 +1,10 @@
-"""Build a DSM Docker context from committed replay sources and this viewer.
+"""Build a DSM Docker context entirely from committed replay and viewer sources.
 
 Usage: python tools/carrot_route_vault/build_bundle.py OUTPUT --ref HEAD
 Uncommitted vehicle/controller edits are deliberately excluded.
 """
 import argparse
 from pathlib import Path
-import shutil
 import subprocess
 
 
@@ -34,8 +33,9 @@ def build(destination: Path, ref: str):
     target = destination / name
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_bytes(subprocess.check_output(["git", "show", f"{commit}:{name}"], cwd=ROOT))
-  for name in ("server.py", "viewer.py", "radar.py", "radar_view.js", "requirements.txt", "Dockerfile.vault"):
-    shutil.copyfile(Path(__file__).with_name(name), destination / name)
+  for name in ("server.py", "viewer.py", "radar.py", "radar_view.js", "requirements.txt", "Dockerfile.vault", "deploy_probe.py"):
+    source = f"tools/carrot_route_vault/{name}"
+    (destination / name).write_bytes(subprocess.check_output(["git", "show", f"{commit}:{source}"], cwd=ROOT))
   (destination / "SOURCE_COMMIT").write_text(commit + "\n", encoding="utf-8")
   print(f"Built {destination} from {commit}")
 

@@ -15,6 +15,8 @@ The web replay sensitivity is fixed to 3, including requests with an old sensiti
 query parameter. The browser source control only changes replay analysis. A single
 playback bar spans the video and radar panels, followed by a full-width distance/speed
 and acceleration graph using the desktop reviewer's continuity series.
+Clicking the camera or radar map resumes playback (map clicks still select a track).
+Clicking the lower distance/acceleration graph seeks to that time and pauses there.
 
 When detection or lead-selection code changes, redeploy this service in the same
 task as required by the repository's `AGENTS.md`. Existing recorded lead decisions
@@ -26,12 +28,76 @@ by source path, size, nanosecond mtime, replay code fingerprint, and options;
 cache storage is capped at 2 GiB. Every data request rechecks its route scope or
 share token, including cache hits. `rlog` is preferred; `qlog` fallback is labelled.
 
-## Build and update the existing DSM project
+## Automatic updates of the existing DSM project
+
+Push shared changes to `carrot-wip`. The `Carrot Routes image` workflow tests the
+receiver and production radar replay, builds an entirely committed bundle, smoke
+tests its Docker image, and publishes `ghcr.io/ajouatom/carrot-route-vault` with
+`sha-<commit>` and `carrot-wip` tags. Model branches do not publish deployments.
+Stale queued builds cannot replace the deployment tag. The package must be public
+for anonymous NAS pulls; no NAS credentials or private logs go to GitHub.
+
+The existing root DSM task runs every five minutes:
+
+```sh
+export PATH=/usr/local/bin:/usr/bin:/bin:/var/packages/ContainerManager/target/usr/bin:$PATH
+python3 /volume1/docker/carrot-route-vault/auto_update.py /volume1/docker/carrot-route-vault
+```
+
+One-time setup: install `auto_update.py` beside the existing `compose.yaml`, keep
+the existing ports, mounts, secrets and UID, and create NAS-local `auto-update.json`:
+
+```json
+{
+  "image": "ghcr.io/ajouatom/carrot-route-vault:carrot-wip",
+  "data_root": "/volume1/openpilot",
+  "user": "1026:100",
+  "base_url": "http://127.0.0.1:18080",
+  "log_path": "/data/openpilot/routes/<vehicle>/<segment>/rlog.zst",
+  "route_path": "/routes/<URL-encoded-vehicle>/<segment>",
+  "radar_path": "/routes/<URL-encoded-vehicle>/<segment>/radar/<index>",
+  "extra_paths": ["/models/<family>/manifest.json"],
+  "forbidden_cutin": [{"track_id": 123, "start": 49, "end": 56}]
+}
+```
+
+Use an existing persistent result link and a retained real regression log with
+qcamera timing. The example placeholders must be replaced locally; do not commit
+private route paths. Additional regression rules are optional. Keep the updater,
+its configuration and project files writable only by NAS administrators.
+
+The updater locks against overlapping runs, pulls the deployment tag, resolves an
+immutable image ID, and replays the configured log in an isolated read-only probe
+container before touching production. It preserves the current image for rollback,
+recreates only `carrot-upload`, checks the deployed commit, actual upload-result
+page, additional endpoints and every recalculated frame/graph against the fresh
+probe. A code fingerprint change automatically invalidates the radar cache.
+
+Failures restore the previous image and check its health. A transaction journal
+also recovers interrupted deployments on the next run. Failed images are
+quarantined until a different image is published; to explicitly retry a repaired
+environment, clear only `failedImage` in `auto-update-state.json`. A registry outage
+leaves production running. Unchanged images do not restart it.
+
+Check `auto-update-state.json` for `sourceCommit`, `image`, `verifiedAt`, replay
+fingerprint/hash and status. `auto-update.log` rotates at 1 MiB (two backups).
+An outstanding `auto-update-transaction.json` means rollback needs attention.
+`GET /api/v1/health` exposes the running `sourceCommit`. Verify this and the public
+result page before reporting a radar change complete. Routine changes need no DSM
+login or manual source copy. Host updater changes themselves require an explicit
+one-time reinstall; Python 3.8+ and Docker Compose are required on the NAS.
+
+To pause automation, disable only the Carrot Routes scheduled task. For manual
+rollback, use the saved `previousImage` as the compose image and recreate the
+service with `--no-build`. Do not prune the current/previous image. Image retention
+is deliberately left to the NAS administrator; uploads and caches are not deleted.
+
+## Manual build / recovery
 
 Run `python tools/carrot_route_vault/build_bundle.py <new-output-directory> --ref HEAD`
 after committing changes. This creates a Docker build context using committed
 replay Python sources, the full cereal schemas, and DBC data. Uncommitted vehicle
-changes and model artifacts are excluded. It also copies this viewer's source.
+changes and model artifacts are excluded. Viewer files also come from that commit.
 
 Back up the existing `/volume1/docker/carrot-route-vault` code and compose files,
 then copy the generated context there. Keep existing secrets, database paths,
