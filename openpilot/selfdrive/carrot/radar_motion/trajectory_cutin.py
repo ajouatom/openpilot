@@ -176,6 +176,7 @@ class TrajectoryCutInEstimate:
   close_front_supported: bool
   curve_alias: bool
   reason: str
+  passing_before_overlap: bool = False
 
   @property
   def identity(self) -> tuple[str, int, int]:
@@ -1029,10 +1030,39 @@ class TrajectoryCutInDetector:
         * time_to_overlap_s
         > 0.5
       )
-      paired_close_entry = paired_close_entry and (
-        point.d_rel > 2.0
-        or current_overlap
+      # Front and corner radar can observe different ends of a long vehicle.
+      # Accept the front return's own entry forecast only with measured inward
+      # motion; an inner body reflection inside the 2.15 m allowance is not
+      # sufficient evidence that an otherwise parallel vehicle is entering.
+      paired_front_entry_ahead = False
+      if point.source.startswith("corner") and cross_sensor_point is not None:
+        front_projection = project_to_model_path(
+          path, cross_sensor_point.d_rel, cross_sensor_point.y_rel,
+        )
+        front_inward = _reported_inward_speed(
+          cross_sensor_point, front_projection, yaw_rate_rad_s,
+        )
+        front_clearance = max(0.0, abs(front_projection.d_path) - PATH_OVERLAP_HALF_WIDTH_M)
+        if front_clearance == 0.0:
+          paired_front_entry_ahead = cross_sensor_point.d_rel > 0.5
+        elif front_inward >= MIN_INWARD_RATE_MPS:
+          front_entry_s = front_clearance / front_inward
+          paired_front_entry_ahead = (
+            front_entry_s <= horizon_s
+            and cross_sensor_point.d_rel + cross_sensor_point.v_rel * front_entry_s > 0.5
+          )
+      paired_entry_ahead = (
+        current_overlap
         or (ahead_at_overlap and paired_ahead_at_overlap)
+        or paired_front_entry_ahead
+      )
+      paired_close_entry = paired_close_entry and paired_entry_ahead
+      passing_before_overlap = (
+        point.source.startswith("corner")
+        and cross_sensor_supported
+        and point.d_rel <= 8.0
+        and time_to_overlap_s is not None
+        and not paired_entry_ahead
       )
       strong_consistent_entry = (
         inward_progress >= 0.60
@@ -1100,6 +1130,7 @@ class TrajectoryCutInDetector:
         or curve_alias
         or not front_curve_motion_supported
         or ambiguous_outer_body_pair
+        or passing_before_overlap
       ):
         # A hold bridges brief radar jitter, but must not resurrect a candidate
         # whose recent physical motion has clearly stopped or reversed.
@@ -1210,6 +1241,7 @@ class TrajectoryCutInDetector:
       reason = (
         "confirmed trajectory CUT-IN" if confirmed_cutin
         else "trajectory pre-deceleration" if predecel_risk
+        else "side pass before path entry" if passing_before_overlap
         else "close-born rear pass" if close_born_rear_pass
         else "parallel side drift" if paired_parallel_drift
         else "ambiguous outer-body pair" if ambiguous_outer_body_pair
@@ -1260,6 +1292,7 @@ class TrajectoryCutInDetector:
         close_front_supported=close_front_supported,
         curve_alias=curve_alias,
         reason=reason,
+        passing_before_overlap=passing_before_overlap,
       ))
 
     for key, state in tuple(self._tracks.items()):
