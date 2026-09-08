@@ -30,6 +30,10 @@ extern can_health_t can_health[CAN_HEALTH_ARRAY_SIZE];
 // Ignition detected from CAN meessages
 extern bool ignition_can;
 extern uint32_t ignition_can_cnt;
+// Wake indication is intentionally separate from ignition. It keeps Panda alive
+// while a Tesla is in accessory or conditioning without putting openpilot on-road.
+extern bool wake_on_can;
+extern uint32_t wake_on_can_cnt;
 
 #define ALL_CAN_SILENT 0xFF
 #define ALL_CAN_LIVE 0
