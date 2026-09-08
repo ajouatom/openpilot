@@ -178,6 +178,8 @@ def test_fetch_failure_does_not_reconnect_upstream(tmp_path, monkeypatch):
 @pytest.fixture
 def web_dispatcher(tmp_path, monkeypatch):
   """Load the real tool dispatcher without starting vehicle-only feature imports."""
+  from openpilot.common import repo_update
+  monkeypatch.setattr(repo_update, "LOCK_PATH", str(tmp_path / "repo.lock"))
   _, _, device = checkout(tmp_path)
   server_dir = Path(__file__).parents[1]
   base = "openpilot.selfdrive.carrot.server.features"
@@ -231,6 +233,30 @@ def dispatch(dispatcher, api, action, **payload):
     return job["result"]
   response = asyncio.run(dispatcher.dispatch_sync(None, {"action": action, **payload}))
   return json.loads(response.text)
+
+
+@pytest.mark.parametrize("api", ["job", "sync"])
+def test_manual_pull_recovers_orphaned_index_lock(web_dispatcher, api, monkeypatch):
+  from openpilot.common import repo_update
+  dispatcher, device, _ = web_dispatcher
+  lock = device / ".git/index.lock"
+  lock.write_bytes(b"interrupted Git operation")
+  monkeypatch.setattr(repo_update, "STALE_INDEX_SECONDS", -1)
+  monkeypatch.setattr(repo_update, "git_process_running", lambda: False)
+  result = dispatch(dispatcher, api, "git_pull")
+  assert result["ok"], result
+  assert not lock.exists()
+
+
+@pytest.mark.parametrize("api", ["job", "sync"])
+def test_manual_git_waits_while_build_owns_checkout(web_dispatcher, api):
+  from openpilot.common.repo_update import repo_lock
+  dispatcher, _, commands = web_dispatcher
+  with repo_lock():
+    result = dispatch(dispatcher, api, "git_pull")
+  assert not result["ok"]
+  assert result["error_code"] == "GIT_BUSY"
+  assert commands == []
 
 
 @pytest.mark.parametrize("api", ["job", "sync"])

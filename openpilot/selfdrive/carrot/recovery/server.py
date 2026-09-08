@@ -577,7 +577,12 @@ def _run_exec(args: list[str], timeout: float = TIMEOUT_SEC) -> tuple[int, str]:
 
 
 def _git_branches() -> dict:
-  _run_exec(["git", "fetch", "--all", "--prune"], 180)
+  rc, out = _run_exec([
+    "python3", str(REPO_ROOT / "common/repo_update.py"), "--repo", str(REPO_ROOT.parent),
+    "git", "fetch", "--all", "--prune",
+  ], 180)
+  if rc:
+    return {"ok": False, "error": out}
   current = (_run_exec(["git", "branch", "--show-current"], 15)[1] or "").strip()
   rc, out = _run_exec(
     ["git", "for-each-ref",
@@ -664,7 +669,6 @@ def _git_command(action: str, payload: dict) -> str | None:
       # abort any in-progress op (';' so failures are ignored), rebuild remote
       # refs so a corrupt ref can't block fetch, then FORCE the branch to the
       # remote ('&&' chain stops only on a real failure).
-      "find .git -type f -name '*.lock' -delete 2>/dev/null; "
       "git remote set-url origin https://github.com/ajouatom/openpilot.git 2>/dev/null; "
       "git merge --abort 2>/dev/null; git rebase --abort 2>/dev/null; "
       "git cherry-pick --abort 2>/dev/null; git revert --abort 2>/dev/null; "
@@ -714,6 +718,13 @@ def _git_action(action: str, payload: dict) -> dict:
   cmd = _git_command(action, payload)
   if cmd is None:
     return {"ok": False, "error": "invalid action or missing parameters"}
+  # Execute the entire recovery transaction under the same OS lock as startup
+  # and Carrot Web. The helper is standard-library-only and works without the
+  # main web stack. It inspects abandoned index locks before running commands.
+  cmd = " ".join([
+    "python3", shlex.quote(str(REPO_ROOT / "common/repo_update.py")),
+    "--repo", shlex.quote(str(REPO_ROOT.parent)), "bash", "-c", shlex.quote(cmd),
+  ])
   return {"ok": True, "command": cmd}
 
 

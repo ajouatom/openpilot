@@ -11,7 +11,7 @@ def test_recovery_and_agnos_precede_params_build() -> None:
 
   pythonpath = launch.index('export PYTHONPATH=')
   ssh_access = launch.index("/data/params/d/SshEnabled")
-  recovery = launch.index("  start_carrot_recovery")
+  recovery = launch.index("  start_carrot_recovery", ssh_access)
   agnos_update = launch.index("    if ! agnos_init; then")
   dependencies = launch.index("  if ! bootstrap_runtime_dependencies; then")
   params_build = launch.index('bash "$DIR/scripts/ensure_params_build.sh"')

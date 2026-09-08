@@ -1,4 +1,8 @@
 import asyncio
+from contextlib import nullcontext
+import subprocess
+
+import pytest
 
 from openpilot.selfdrive.carrot.server.services import auto_update, git_state
 from openpilot.selfdrive.carrot.server.services.auto_update import (
@@ -7,6 +11,82 @@ from openpilot.selfdrive.carrot.server.services.auto_update import (
   AUTO_REBOOT_PARK,
   AutoRebootCondition,
 )
+
+
+def test_manager_must_be_live_after_any_length_build_and_restart():
+  ready = auto_update.ManagerReady(delay=10)
+  for now in range(600):
+    assert not ready.update(now, False)
+  for now in range(600, 610):
+    assert not ready.update(now, True)
+  assert ready.update(610, True)
+  assert not ready.update(611, False)
+  assert not ready.update(612, True)
+  # A gap in observations cannot count as continuous healthy operation either.
+  assert not ready.update(630, True)
+
+
+@pytest.mark.parametrize("phase", ["building", "restarting", "busy", "ready"])
+def test_update_waits_for_manager_and_checkout_lock(monkeypatch, phase):
+  from openpilot.common.repo_update import RepoBusyError
+  readiness = iter([False] if phase == "building" else [True, False] if phase == "restarting" else [True] * 4)
+  monitor = type("Monitor", (), {"ready": lambda self: next(readiness)})()
+  calls = []
+
+  async def status():
+    calls.append("status")
+    return {"available": True, "state": "ok", "behind": 1, "target_head": "new", "head": "old", "branch": "carrot-wip"}
+
+  def lock():
+    if phase == "busy":
+      raise RepoBusyError("another operation")
+    return nullcontext()
+
+  async def prepare(repo):
+    calls.append("prepare")
+
+  async def git(args, timeout):
+    return 0, "carrot-wip" if args[0] == "branch" else "old"
+
+  async def pull(target):
+    calls.append("pull")
+    return True, True, target
+
+  monkeypatch.setattr(auto_update, "get_git_status", status)
+  monkeypatch.setattr(auto_update, "repo_lock", lock)
+  monkeypatch.setattr(auto_update, "prepare_repo", prepare)
+  monkeypatch.setattr(auto_update, "_git", git)
+  monkeypatch.setattr(auto_update, "_run_git_pull", pull)
+  monkeypatch.setattr(auto_update, "_last_pull_at", float("-inf"))
+  monkeypatch.setattr(auto_update, "read_auto_update_state", dict)
+  monkeypatch.setattr(auto_update, "write_auto_update_event", lambda *args, **kwargs: {})
+  result = asyncio.run(auto_update._attempt_update(monitor))
+  assert ("pull" in calls) == (phase == "ready")
+  assert result[1] == (phase == "ready")
+  if phase == "building":
+    assert not calls
+
+
+def test_manual_pull_clears_verified_lock_error_and_preserves_receipt(tmp_path, monkeypatch):
+  monkeypatch.setattr(git_state, "CARROT_STATE_DIR", str(tmp_path))
+  monkeypatch.setattr(git_state, "CARROT_GIT_STATE_PATH", str(tmp_path / "git.json"))
+  alerts = []
+  monkeypatch.setattr(auto_update, "_set_auto_update_alert", lambda show: alerts.append(show))
+  monkeypatch.setattr(subprocess, "run", lambda *args, **kwargs: subprocess.CompletedProcess(args, 0))
+  git_state.write_auto_update_event("error", error_code="reset_failed", error="index.lock: File exists", reboot_requested_head="receipt")
+  auto_update.clear_recovered_git_ref_error()
+  assert git_state.read_auto_update_state()["status"] == "idle"
+  assert git_state.read_auto_update_state()["reboot_requested_head"] == "receipt"
+  assert alerts == [False]
+
+
+def test_manual_pull_keeps_lock_alert_when_checkout_verification_fails(monkeypatch):
+  monkeypatch.setattr(auto_update, "read_auto_update_state", lambda: {
+    "status": "error", "error_code": "reset_failed", "error": "index.lock: File exists",
+  })
+  monkeypatch.setattr(subprocess, "run", lambda *args, **kwargs: subprocess.CompletedProcess(args, 1))
+  monkeypatch.setattr(auto_update, "write_auto_update_event", lambda *args, **kwargs: pytest.fail("must preserve alert"))
+  auto_update.clear_recovered_git_ref_error()
 
 
 def test_park_reboot_requires_valid_disengaged_park_state():
