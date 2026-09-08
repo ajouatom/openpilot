@@ -182,7 +182,7 @@ A lower `AutoNaviSpeedDecelRate` begins slowing farther away. `AutoNaviSpeedSafe
 | [Speed-based acceleration](cruise-gap.md#acceleration-table) | `CruiseMaxVals0` through `CruiseMaxVals6` | Maximum acceleration tendency by speed band |
 | [Stopping and restarting](cruise-gap.md#stop-resume) | `StopDistanceCarrot`, `StoppingAccel`, `VEgoStopping`, `AChangeCostStarting` | Stop position, stop entry, and restart behavior |
 | [Longitudinal tuning](cruise-gap.md#longitudinal-tuning) | `LongTuningKpV`, `LongTuningKiV`, `LongTuningKf`, `LongActuatorDelay` | Hyundai/Kia/Genesis hide fixed `100/0/100` gains; other brands can adjust them |
-| [Following gap](cruise-gap.md#following-gap) | `TFollowGap1` through `TFollowGap4`, `DynamicTFollow`, `DynamicTFollowLC`, `EnableSpeedTF`, `TFollowDecelBoost` | Gap times, dynamic gap, and deceleration margin |
+| [Following gap](cruise-gap.md#following-gap) | `TFollowGap1` through `TFollowGap4`, `DynamicTFollow`, `DynamicTFollowLC`, `EnableSpeedTF`, `TFollowDecelBoost` | Gap times, dynamic gap, confirmed lane-change departure relief, and deceleration margin |
 | [Lead response](cruise-gap.md#lead-response) | `LeadAccelResponse`, `JLeadFactor3`, `RadarReactionFactor` | Acceleration response at every following-distance level and other lead-vehicle responses |
 | [Carrot cruise](cruise-gap.md#carrot-cruise) | `CruiseEcoControl`, `CarrotCruiseDecel`, `CarrotCruiseAtcDecel` | Economy control and cruise deceleration limits |
 

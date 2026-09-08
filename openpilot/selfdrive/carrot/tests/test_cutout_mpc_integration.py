@@ -8,11 +8,12 @@ import numpy as np
 import pytest
 
 from openpilot.selfdrive.controls.lib.longitudinal_cutout import cutout_obstacle_relief
+from openpilot.selfdrive.carrot.radar_motion.lane_change_gap import GapLead, LaneChangeGapPlan
 from openpilot.selfdrive.controls.lib.longitudinal_preview import get_lead_accel_mpc_request
 from openpilot.selfdrive.carrot.traffic_stop import get_traffic_stop_distance_adjust, get_traffic_stop_obstacle_distance
 
 
-def run_update(*, confidence=0., mode="acc", reset=False, enabled=True, second_distance=100., stop_x=1000.):
+def run_update(*, confidence=0., mode="acc", reset=False, enabled=True, second_distance=100., stop_x=1000., lane_change=None):
   path = Path(__file__).resolve().parents[2] / "controls/lib/longitudinal_mpc_lib/long_mpc.py"
   tree = ast.parse(path.read_text(encoding="utf-8"))
   mpc = next(node for node in tree.body if isinstance(node, ast.ClassDef) and node.name == "LongitudinalMpc")
@@ -31,7 +32,7 @@ def run_update(*, confidence=0., mode="acc", reset=False, enabled=True, second_d
                    "get_lead_accel_mpc_request": get_lead_accel_mpc_request,
                    "get_traffic_stop_distance_adjust": get_traffic_stop_distance_adjust,
                    "get_traffic_stop_obstacle_distance": get_traffic_stop_obstacle_distance,
-                   "cutout_obstacle_relief": cutout_obstacle_relief}
+                   "cutout_obstacle_relief": cutout_obstacle_relief, "LaneChangeGapPlan": LaneChangeGapPlan}
   exec(compile(ast.Module(body=helpers+methods, type_ignores=[]), str(path), "exec"), namespace)
   lead = NS(status=True, radar=True, radarTrackId=50, dRel=25., vRel=-1., vLead=14.,
             aLeadK=-.5, aLeadTau=1.5, modelProb=.99, cutOutTime=1., cutOutConfidence=confidence)
@@ -39,6 +40,9 @@ def run_update(*, confidence=0., mode="acc", reset=False, enabled=True, second_d
   carrot = NS(comfort_brake=2.5, stop_distance=6., v_cruise=20., stop_dist=stop_x, mode=mode,
               trafficStopDistanceAdjust=0., trafficStopModelLeadOffset=0., leadAccelResponse=0,
               get_T_FOLLOW=lambda *a, **kw:1.45, dynamic_t_follow=lambda tf,*a:tf)
+  if lane_change is not None:
+    carrot.lane_change_gap = lane_change
+    carrot.dynamicTFollowLC = .9
   self = NS(x0=np.array([0., 15., 0.]), source="lead0", mode=mode, max_a=1.5, cruise_min_a=-1.2,
             params=np.zeros((13,8)), prev_a=np.zeros(13), yref=np.zeros((13,6)),
             solver=NS(set=lambda *a:None), set_weights=lambda *a,**kw:None, crash_cnt=0,
@@ -48,6 +52,22 @@ def run_update(*, confidence=0., mode="acc", reset=False, enabled=True, second_d
   arrays=[np.zeros(13) for _ in range(4)]
   namespace["update"](self, carrot, reset, NS(leadOne=lead, leadTwo=second), 20., *arrays, cutout_relief_enabled=enabled)
   return self, times
+
+
+def test_lane_change_adds_destination_obstacle_without_reducing_tf_or_other_limits():
+  target = GapLead(70, 8., -3.5, -5., 10., -1.)
+  changed, _ = run_update(lane_change=LaneChangeGapPlan(True, 50, (target,)))
+  baseline, _ = run_update()
+  assert np.all(changed.params[:, 2] <= baseline.params[:, 2])
+  assert np.any(changed.params[:, 2] < baseline.params[:, 2])
+  np.testing.assert_array_equal(changed.params[:, [0, 1, 3, 4, 5, 6, 7]], baseline.params[:, [0, 1, 3, 4, 5, 6, 7]])
+  assert changed.source == 'lead1'
+
+
+def test_lane_change_never_stacks_old_cutout_relief():
+  baseline, _ = run_update(lane_change=LaneChangeGapPlan(active=True))
+  changed, _ = run_update(confidence=1., lane_change=LaneChangeGapPlan(active=True))
+  np.testing.assert_array_equal(changed.params, baseline.params)
 
 
 def test_acc_changes_only_post_clearance_obstacle_and_keeps_collision_diagnostics():

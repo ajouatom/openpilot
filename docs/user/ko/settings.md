@@ -186,7 +186,7 @@ Carrot Web 설정 화면에서는 다음 기능을 사용할 수 있습니다.
 | [가속 성향·속도별 가속값](cruise-gap.md#acceleration-table) | `CruiseMaxVals0`, `CruiseMaxVals1`, `CruiseMaxVals2`, `CruiseMaxVals3`, `CruiseMaxVals4`, `CruiseMaxVals5`, `CruiseMaxVals6` | 속도 구간별 최대 가속 성향 |
 | [정차·재출발](cruise-gap.md#stop-resume) | `StopDistanceCarrot`, `StoppingAccel`, `VEgoStopping`, `AChangeCostStarting` | 정지 위치, 정지 진입과 재출발 특성 |
 | [가감속 튜닝](cruise-gap.md#longitudinal-tuning) | `LongTuningKpV`, `LongTuningKiV`, `LongTuningKf`, `LongActuatorDelay` | 현기차는 Kp/Ki/Kf `100/0/100` 고정·숨김, 다른 브랜드는 조정 가능 |
-| [차간거리](cruise-gap.md#following-gap) | `TFollowGap1`, `TFollowGap2`, `TFollowGap3`, `TFollowGap4`, `DynamicTFollow`, `DynamicTFollowLC`, `EnableSpeedTF`, `TFollowDecelBoost` | 차간 단계별 시간, 동적 차간과 감속 여유 |
+| [차간거리](cruise-gap.md#following-gap) | `TFollowGap1`, `TFollowGap2`, `TFollowGap3`, `TFollowGap4`, `DynamicTFollow`, `DynamicTFollowLC`, `EnableSpeedTF`, `TFollowDecelBoost` | 차간 단계별 시간, 동적 차간, 차로 변경 이탈 확인 후 제한적 완화와 감속 여유 |
 | [선행차 반응](cruise-gap.md#lead-response) | `LeadAccelResponse`, `JLeadFactor3`, `RadarReactionFactor` | 모든 차간 단계의 앞차 가속과 선행차 변화에 대한 반응 특성 |
 | [당근 크루즈](cruise-gap.md#carrot-cruise) | `CruiseEcoControl`, `CarrotCruiseDecel`, `CarrotCruiseAtcDecel` | 연비 제어와 당근 크루즈 감속 특성 |
 
