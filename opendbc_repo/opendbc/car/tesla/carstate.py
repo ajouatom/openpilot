@@ -189,7 +189,7 @@ class CarState(CarStateBase):
     # DAS_accState=0 is the steady idle value when stock ACC is unavailable.
     # Only forward a cancellation after the stock controller was actively on;
     # otherwise CP would continually cancel a new stalk engagement.
-    if self.das_acc_state_last == 4 and acc_state in STOCK_ACC_CANCEL_STATES:
+    if self.das_acc_state_last in (3, 4) and acc_state in STOCK_ACC_CANCEL_STATES:
       self.das_acc_cancel_frames = STOCK_ACC_CANCEL_PULSE_FRAMES
     self.das_acc_state_last = acc_state
     self.das_accCancel = self.das_acc_cancel_frames > 0
