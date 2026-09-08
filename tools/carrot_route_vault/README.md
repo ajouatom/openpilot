@@ -15,8 +15,9 @@ The web replay sensitivity is fixed to 3, including requests with an old sensiti
 query parameter. The browser source control only changes replay analysis. A single
 playback bar spans the video and radar panels, followed by a full-width distance/speed
 and acceleration graph using the desktop reviewer's continuity series.
-Clicking the camera or radar map resumes playback (map clicks still select a track).
-Clicking the lower distance/acceleration graph seeks to that time and pauses there.
+Clicking anywhere in the camera, radar or lower graph panels toggles playback and
+pause (map clicks still select a track). Only the seek bar changes playback time;
+clicks on buttons, selectors and the seek bar do not trigger the panel toggle.
 
 When detection or lead-selection code changes, redeploy this service in the same
 task as required by the repository's `AGENTS.md`. Existing recorded lead decisions
