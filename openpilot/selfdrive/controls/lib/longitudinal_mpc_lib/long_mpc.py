@@ -11,6 +11,7 @@ from openpilot.selfdrive.modeld.constants import index_function
 from openpilot.selfdrive.controls.radar_constants import LEAD_ACCEL_TAU
 from openpilot.selfdrive.carrot.traffic_stop import get_traffic_stop_distance_adjust, get_traffic_stop_obstacle_distance
 from openpilot.selfdrive.controls.lib.longitudinal_preview import LEAD_ACCEL_MIN_TRACK_FRAMES, get_lead_accel_mpc_request
+from openpilot.selfdrive.controls.lib.longitudinal_cutout import cutout_obstacle_relief
 
 if __name__ == '__main__':  # generating code
   from acados_template import AcadosModel, AcadosOcp, AcadosOcpSolver
@@ -393,7 +394,8 @@ class LongitudinalMpc:
              a_change_cost_starting=A_CHANGE_COST_STARTING,
              lead_accel_response_enabled=False,
              lead_track_frames=(0, 0),
-             measured_a_ego=0.0):
+             measured_a_ego=0.0,
+             cutout_relief_enabled=False):
     v_ego = self.x0[1]
     a_ego = self.x0[2]
     self.status = radarstate.leadOne.status or radarstate.leadTwo.status
@@ -465,7 +467,12 @@ class LongitudinalMpc:
       traffic_stop_obstacle = get_traffic_stop_obstacle_distance(stop_x, cruise_obstacle[0], adjust_dist)
       x2 = traffic_stop_obstacle * np.ones(N+1)
 
-      x_obstacles = np.column_stack([lead_0_obstacle, lead_1_obstacle, cruise_obstacle, x2])
+      lead_0_follow_obstacle = lead_0_obstacle
+      if cutout_relief_enabled and not reset_state:
+        lead_0_follow_obstacle = lead_0_obstacle + cutout_obstacle_relief(
+          radarstate.leadOne, v_ego, T_IDXS, t_follow, stop_distance,
+        )
+      x_obstacles = np.column_stack([lead_0_follow_obstacle, lead_1_obstacle, cruise_obstacle, x2])
       self.source = SOURCES[np.argmin(x_obstacles[0])]
 
       if v_cruise == 0 and self.source == 'cruise':
