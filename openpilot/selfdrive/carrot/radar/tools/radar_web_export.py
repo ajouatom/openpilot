@@ -22,8 +22,11 @@ def source_version() -> str:
   for root in roots:
     files.update(root.glob("*.py"))
   files.update((replay.REPO_ROOT / "openpilot/cereal").glob("*.capnp"))
+  for path in (replay.REPO_ROOT / "opendbc_repo/opendbc").rglob("*"):
+    if path.suffix in {".py", ".capnp", ".dbc"}:
+      files.add(path)
   for path in sorted(files):
-    digest.update(str(path.relative_to(replay.REPO_ROOT)).encode())
+    digest.update(path.relative_to(replay.REPO_ROOT).as_posix().encode())
     digest.update(path.read_bytes())
   return digest.hexdigest()[:20]
 
