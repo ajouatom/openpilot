@@ -50,7 +50,9 @@ jobs:
           IMAGE: ghcr.io/${{ github.repository_owner }}/carrot-route-vault
         run: |
           python tools/carrot_route_vault/build_bundle.py "$RUNNER_TEMP/vault-bundle" --ref "$GITHUB_SHA"
+          docker pull "$IMAGE:carrot-wip" || true
           docker build -f "$RUNNER_TEMP/vault-bundle/Dockerfile.vault" \
+            --cache-from "$IMAGE:carrot-wip" --build-arg BUILDKIT_INLINE_CACHE=1 \
             --label "org.opencontainers.image.source=https://github.com/$GITHUB_REPOSITORY" \
             --label "org.opencontainers.image.revision=$GITHUB_SHA" \
             -t "$IMAGE:sha-$GITHUB_SHA" "$RUNNER_TEMP/vault-bundle"

@@ -4,6 +4,7 @@ import gzip
 import hashlib
 import json
 from pathlib import Path
+import sys
 import time
 import urllib.error
 import urllib.request
@@ -68,14 +69,13 @@ def online(config, commit, expected):
 
 def main():
   parser = argparse.ArgumentParser(description=__doc__)
-  parser.add_argument("config", type=Path)
   parser.add_argument("--online", action="store_true")
-  parser.add_argument("--expected", type=Path)
   args = parser.parse_args()
-  config = json.loads(args.config.read_text())
+  request = json.load(sys.stdin)
+  config = request["config"]
   commit = Path(__file__).with_name("SOURCE_COMMIT").read_text().strip()
   if args.online:
-    result = online(config, commit, json.loads(args.expected.read_text())["replay"])
+    result = online(config, commit, request["expected"])
   else:
     from openpilot.selfdrive.carrot.radar.tools import radar_web_export as exporter
     result = check_payload(exporter.export_frames(exporter.replay.load_frames(Path(config["log_path"]))), config)

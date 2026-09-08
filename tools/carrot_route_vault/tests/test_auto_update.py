@@ -111,6 +111,24 @@ def test_rejects_ambiguous_compose_and_mutable_images():
     pinned_compose(COMPOSE + "    image: extra\n", NEW)
 
 
+def test_probe_passes_private_config_on_stdin_without_acl_mount(tmp_path, monkeypatch):
+  updater = FakeUpdater(tmp_path)
+  updater.config["data_root"] = "/volume1/openpilot"
+  updater.expected_path.write_text(json.dumps(REPORT))
+  calls = []
+
+  def run(*args, **kwargs):
+    calls.append((args, kwargs))
+    return json.dumps(REPORT)
+
+  monkeypatch.setattr(updater, "run", run)
+  assert Updater.probe(updater, NEW, online=True) == REPORT
+  args, kwargs = next((a, k) for a, k in calls if a[:2] == ("docker", "run"))
+  assert "-i" in args and "--online" in args
+  assert not any("/probe/" in a for a in args)
+  assert json.loads(kwargs["stdin_data"]) == {"config": updater.config, "expected": REPORT["replay"]}
+
+
 def test_real_route_probe_requires_nonempty_regression_window():
   payload = {"schemaVersion": 1, "sourceVersion": "v", "graphs": {}, "frames": [
     {"video_time_s": 52, "selection": {"cutin_diagnostics": [{"track_id": 42, "stage": "CUT-IN"}]}}]}
