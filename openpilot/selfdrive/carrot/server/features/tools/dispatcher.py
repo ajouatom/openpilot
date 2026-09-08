@@ -23,7 +23,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from aiohttp import web
 
-from openpilot.common.async_process import prepare_repo
+from openpilot.common.async_process import prepare_repo, run_locked_thread
 from openpilot.common.repo_update import RepoBusyError, child_lock_kwargs, repo_lock
 from openpilot.system.hardware import HARDWARE
 
@@ -252,7 +252,7 @@ def _build_git_update_summary_sync(repo_dir: str, before: str, after: str, raw_o
 
 async def _repair_git_job(job: dict[str, Any], repo_dir: str, **kwargs: Any) -> bool:
   jobs.progress(job, message="checking Git configuration", current=0, total=2)
-  rc, out = await asyncio.to_thread(repair_git_config, repo_dir, **kwargs)
+  rc, out = await run_locked_thread(repair_git_config, repo_dir, **kwargs)
   clear_git_status_cache()
   jobs.append(job, out + "\n")
   if rc != 0:
@@ -889,7 +889,7 @@ async def _dispatch_sync(request: web.Request, body: Dict[str, Any]) -> web.Resp
     REPO_DIR = "/data/openpilot"
 
     if action == "git_pull":
-      rc_config, out_config = await asyncio.to_thread(repair_git_config, REPO_DIR)
+      rc_config, out_config = await run_locked_thread(repair_git_config, REPO_DIR)
       clear_git_status_cache()
       if rc_config != 0:
         return web.json_response({"ok": False, "rc": rc_config, "out": out_config})
@@ -924,7 +924,7 @@ async def _dispatch_sync(request: web.Request, body: Dict[str, Any]) -> web.Resp
       target = (body.get("target") or "HEAD").strip()
       if mode not in ("hard", "soft", "mixed"):
         return web.json_response({"ok": False, "error": "bad mode"}, status=400)
-      rc_config, out_config = await asyncio.to_thread(repair_git_config, REPO_DIR)
+      rc_config, out_config = await run_locked_thread(repair_git_config, REPO_DIR)
       clear_git_status_cache()
       if rc_config != 0:
         return web.json_response({"ok": False, "rc": rc_config, "out": out_config})
@@ -1046,7 +1046,7 @@ async def _dispatch_sync(request: web.Request, body: Dict[str, Any]) -> web.Resp
       rc, out = run(["git", "remote", "set-url", "origin", url], cwd=REPO_DIR)
       if rc != 0:
         return web.json_response({"ok": False, "rc": rc, "out": out})
-      rc, out = await asyncio.to_thread(repair_git_config, REPO_DIR, remote="origin", repair_upstream=False)
+      rc, out = await run_locked_thread(repair_git_config, REPO_DIR, remote="origin", repair_upstream=False)
       clear_git_status_cache()
       return web.json_response({"ok": rc == 0, "rc": rc, "out": out, "summary_key": "git_result_remote_set_done"})
 
@@ -1064,7 +1064,7 @@ async def _dispatch_sync(request: web.Request, body: Dict[str, Any]) -> web.Resp
       if rc_setup != 0:
         return web.json_response({"ok": False, "rc": rc_setup, "out": out_setup})
 
-      rc_fetch, out_fetch = await asyncio.to_thread(repair_git_config, REPO_DIR, remote=name, repair_upstream=False)
+      rc_fetch, out_fetch = await run_locked_thread(repair_git_config, REPO_DIR, remote=name, repair_upstream=False)
       clear_git_status_cache()
       rc_remote_urls, out_remote_urls = run(["git", "remote", "-v"], cwd=REPO_DIR)
       out = (out_setup + "\n" + out_fetch + "\n\n> git remote -v\n" + (out_remote_urls if rc_remote_urls == 0 else "")).strip()

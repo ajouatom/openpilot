@@ -2,6 +2,7 @@ import asyncio
 import os
 import subprocess
 import sys
+import threading
 import time
 
 import pytest
@@ -81,6 +82,34 @@ def test_same_event_loop_tasks_cannot_share_a_transaction(repo):
   async def scenario():
     with repo_update.repo_lock():
       await asyncio.create_task(attempt())
+  asyncio.run(scenario())
+
+
+def test_cancelled_threaded_repair_keeps_lock_until_thread_finishes(repo):
+  started, finish = threading.Event(), threading.Event()
+
+  def repair():
+    started.set()
+    assert finish.wait(5)
+
+  async def operation():
+    with repo_update.repo_lock():
+      await async_process.run_locked_thread(repair)
+
+  async def scenario():
+    task = asyncio.create_task(operation())
+    try:
+      assert await asyncio.to_thread(started.wait, 5)
+      task.cancel()
+      await asyncio.sleep(0)
+      with pytest.raises(repo_update.RepoBusyError), repo_update.repo_lock():
+        pytest.fail("cancelled operation released its lock while the thread was still writing")
+    finally:
+      finish.set()
+      with pytest.raises(asyncio.CancelledError):
+        await task
+    with repo_update.repo_lock():
+      pass
   asyncio.run(scenario())
 
 
