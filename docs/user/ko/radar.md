@@ -188,3 +188,7 @@ ADAS 프리셋이 코너 레이더를 켠다는 것은 하네스에서 접근 �
 - 현대·기아 레이더 메시지 파싱: `opendbc_repo/opendbc/car/hyundai/radar_interface.py`
 - 비-CAN FD 레이더 활성화: `opendbc_repo/opendbc/car/hyundai/interface.py`
 - 최초 설정 프리셋: `openpilot/selfdrive/carrot/server/features/intro/presets.py`
+
+## 선행차 CUT-OUT 예측 처리
+
+`EnableRadarTracks=1`·`2`·`3`에서는 이미 확인한 이동 프런트 선행차가 경로를 빠져나갈 때 ACC의 미래 추종 거리 요구를 제한적으로 완화합니다. 이전 비전 확인, 확실한 먼 차량으로의 비전 전환, 연속된 레이더 바깥쪽 움직임, 차체 이탈까지의 충분한 잔여 거리가 함께 필요합니다. 레이더 거리·속도와 L1 선택은 유지하며, 예상 차체 이탈 시점에 0.30초를 더한 이후에만 설정 시간 간격의 절반·0.50초·8m 중 가장 작은 범위 안에서 조정합니다. 근거가 사라지면 취소하고, SCC 단독 선행차·큰 회전·정지차·강한 감속 중인 앞차·블렌디드 모드에는 적용하지 않습니다.
