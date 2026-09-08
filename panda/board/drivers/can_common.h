@@ -10,6 +10,8 @@ can_health_t can_health[CAN_HEALTH_ARRAY_SIZE] = {{0}, {0}, {0}};
 // Ignition detected from CAN meessages
 bool ignition_can = false;
 uint32_t ignition_can_cnt = 0U;
+bool wake_on_can = false;
+uint32_t wake_on_can_cnt = 0U;
 
 int can_live = 0;
 int pending_can_live = 0;
@@ -165,6 +167,12 @@ void ignition_can_hook(CANPacket_t *to_push) {
   if (bus == 0) {
     int addr = GET_ADDR(to_push);
     int len = GET_LEN(to_push);
+    static bool tesla_seatbelt_latched = false;
+    static bool tesla_door_open = false;
+    if (!wake_on_can || (wake_on_can_cnt > 2U)) {
+      tesla_seatbelt_latched = false;
+      tesla_door_open = false;
+    }
 
     // GM exception
     if ((addr == 0x1F1) && (len == 8)) {
@@ -187,7 +195,7 @@ void ignition_can_hook(CANPacket_t *to_push) {
       prev_counter = counter;
     }
 
-    // Tesla Model 3/Y exception
+    // Tesla Model 3/Y wake state
     if ((addr == 0x221) && (len == 8)) {
       // 0x221 overlaps with Rivian which has random data on byte 0
       int counter = GET_BYTE(to_push, 6) >> 4;
@@ -196,8 +204,40 @@ void ignition_can_hook(CANPacket_t *to_push) {
       if ((counter == ((prev_counter + 1) % 16)) && (prev_counter != -1)) {
         // VCFRONT_LVPowerState->VCFRONT_vehiclePowerState
         int power_state = (GET_BYTE(to_push, 0) >> 5U) & 0x3U;
-        ignition_can = power_state == 0x3;  // VEHICLE_POWER_STATE_DRIVE=3
-        ignition_can_cnt = 0U;
+        wake_on_can = power_state != 0x0;  // Not VEHICLE_POWER_STATE_OFF
+        wake_on_can_cnt = 0U;
+      }
+      prev_counter = counter;
+    }
+
+    // 0x118 also carries Subaru steering torque with the same counter layout.
+    // Only interpret Tesla gear/cabin messages while its power evidence is fresh.
+    const bool tesla_awake = wake_on_can && (wake_on_can_cnt <= 2U);
+    if (tesla_awake && (addr == 0x118) && (len == 8)) {
+      int counter = GET_BYTE(to_push, 1) & 0xFU;
+
+      static int prev_counter = -1;
+      if ((counter == ((prev_counter + 1) % 16)) && (prev_counter != -1)) {
+        int tesla_gear = (GET_BYTE(to_push, 2) >> 5U) & 0x7U;  // DI_systemStatus->DI_gear
+        if ((tesla_gear == 2) || (tesla_gear == 3) || (tesla_gear == 4)) {  // R, N, D
+          ignition_can = true;
+        } else if ((tesla_gear == 1) && (!tesla_seatbelt_latched || tesla_door_open)) {  // P
+          ignition_can = false;
+        }
+        if ((tesla_gear >= 1) && (tesla_gear <= 4)) {
+          ignition_can_cnt = 0U;
+        }
+      }
+      prev_counter = counter;
+    }
+
+    if (tesla_awake && (addr == 0x311U) && (len == 7)) {
+      int counter = GET_BYTE(to_push, 1) & 0xFU;
+
+      static int prev_counter = -1;
+      if ((counter == ((prev_counter + 1) % 16)) && (prev_counter != -1)) {
+        tesla_seatbelt_latched = ((GET_BYTE(to_push, 1) >> 5U) & 0x1U) != 0U;  // UI_warning->buckleStatus
+        tesla_door_open = ((GET_BYTE(to_push, 3) >> 4U) & 0x1U) != 0U;  // UI_warning->anyDoorOpen
       }
       prev_counter = counter;
     }
@@ -216,6 +256,17 @@ void ignition_can_hook(CANPacket_t *to_push) {
     }
 
   }
+}
+
+void ignition_can_tick(void) {
+  if (ignition_can_cnt > 2U) {
+    ignition_can = false;
+  }
+  if (wake_on_can_cnt > 2U) {
+    wake_on_can = false;
+  }
+  ignition_can_cnt += 1U;
+  wake_on_can_cnt += 1U;
 }
 
 bool can_tx_check_min_slots_free(uint32_t min) {

@@ -31,3 +31,16 @@ The controller waits for a stable limit, then adjusts the set speed one displaye
 Cooperative steering blends the driver's steering torque with the planned angle, ramps steering back in on engagement, and removes excess override when an angle limit is reached. Existing EPS override and steering-angle limits still apply.
 
 When the vehicle bus supplies tire-pressure data, the four tire readings are available to the display. A sensor's unavailable value is shown as unavailable rather than as a pressure reading.
+
+<a id="engagement-and-standstill"></a>
+## Engagement and standstill
+
+Tesla standstill detection uses the vehicle's ESP signal independently of the stock cruise state. Supported Tesla vehicles can steer at true standstill when driving control is active, or when `AlwaysLateral` is enabled in a forward-driving gear and lateral control is already on. Steering faults and the lateral-enable switch still block steering; minimum steering-speed limits still apply while moving.
+
+Normal stock TACC operation is not treated as an Autosteer conflict. Where the vehicle provides its Autosteer setting, Autosteer or FSD must remain disabled. Existing steering-conflict checks still apply. A continuously idle stock ACC state no longer repeatedly cancels a new stalk engagement; a real transition from active or holding ACC to a cancel state is still forwarded briefly.
+
+## Wake and parked operation
+
+Valid Tesla power-state messages can keep the device awake during accessory or conditioning operation without putting openpilot on-road. R, N, or D selects the on-road ignition state. In P, an unlatched seatbelt or an open door switches it off-road; with the belt latched and doors closed, P preserves the previous ignition state. Entering P alone therefore does not always switch the driving screen off.
+
+Wake and ignition indications expire independently when their corresponding CAN messages stop. These states control device power and on-road status; they do not engage driving control by themselves.
