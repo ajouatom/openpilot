@@ -122,6 +122,51 @@ export function createDialogController(environment = {}) {
   let activeDialog = null;
   let dialogSerial = 0;
   let pendingRestoreFocus = null;
+  let dialogHistoryActive = false;
+  let dialogHistoryClosing = false;
+
+  // A same-URL entry lets mobile Back dismiss the dialog before the page
+  // router (or an underlying search/log panel) sees the navigation event.
+  function pushDialogHistory() {
+    if (!activeDialog || dialogHistoryActive || dialogHistoryClosing || !target.history?.pushState) return;
+    target.history.pushState({ ...target.history.state, appDialog: true }, "");
+    dialogHistoryActive = true;
+  }
+
+  function popDialogHistory() {
+    if (!dialogHistoryActive) return;
+    dialogHistoryActive = false;
+    if (!target.history?.state?.appDialog) return;
+    dialogHistoryClosing = true;
+    target.history.back();
+  }
+
+  function onHistoryPop(event) {
+    if (dialogHistoryClosing) {
+      dialogHistoryClosing = false;
+      event.stopImmediatePropagation();
+      // A choice can open another dialog before history.back() completes.
+      pushDialogHistory();
+      return;
+    }
+    if (!dialogHistoryActive) {
+      // Forward may revisit a dismissed dialog entry. Restore only its page;
+      // never replay a confirmation or resurrect a completed operation.
+      if (event.state?.appDialog) {
+        const { appDialog: ignored, ...pageState } = event.state;
+        target.history.replaceState(pageState, "");
+      }
+      return;
+    }
+    dialogHistoryActive = false;
+    event.stopImmediatePropagation();
+    if (activeDialog?.mode === "alert") resolveDialogState(activeDialog, true);
+    else cancelAppDialog();
+    // Submitting forms and asynchronous progress cancellation keep their
+    // dialog open, so they still need a guard for the next Back press.
+    pushDialogHistory();
+  }
+  target.addEventListener?.("popstate", onHistoryPop, true);
 
   const makeFocusTrap = environment.createFocusTrap ?? ((container, options) => createDefaultFocusTrap(
     container,
@@ -204,10 +249,11 @@ export function createDialogController(environment = {}) {
     state.resolve(result);
   }
 
-  function resolveDialogState(state, result) {
+  function resolveDialogState(state, result, { keepHistory = false } = {}) {
     if (!state || activeDialog !== state || state.closing) return;
     state.closing = true;
     activeDialog = null;
+    if (!keepHistory) popDialogHistory();
     pendingRestoreFocus = state.lastFocus || pendingRestoreFocus;
     if (state.openFrame != null) {
       cancelFrame(state.openFrame);
@@ -308,7 +354,7 @@ export function createDialogController(environment = {}) {
     let inheritedLastFocus = pendingRestoreFocus;
     if (activeDialog) {
       inheritedLastFocus = activeDialog.lastFocus || inheritedLastFocus;
-      resolveDialogState(activeDialog, dialogCancelResult(activeDialog));
+      resolveDialogState(activeDialog, dialogCancelResult(activeDialog), { keepHistory: true });
     }
     pendingRestoreFocus = null;
 
@@ -474,6 +520,7 @@ export function createDialogController(environment = {}) {
         closeTimer: null,
       };
       activeDialog = state;
+      pushDialogHistory();
       appDialog.hidden = false;
       syncModalBodyLock();
 
