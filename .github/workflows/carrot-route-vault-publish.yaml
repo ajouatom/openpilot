@@ -64,8 +64,14 @@ jobs:
           echo "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
           docker push "$IMAGE:sha-$GITHUB_SHA"
           # Never move the deployment tag backwards when a queued build is stale.
-          latest=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/carrot-wip" --jq .object.sha)
-          if [ "$latest" = "$GITHUB_SHA" ]; then
+          # An unrelated vehicle/UI commit must not suppress the last replay update.
+          git fetch --depth=1 origin carrot-wip
+          if git diff --quiet "$GITHUB_SHA" FETCH_HEAD -- \
+            tools/carrot_route_vault openpilot/selfdrive/carrot/radar_motion \
+            openpilot/selfdrive/carrot/cluster openpilot/selfdrive/carrot/radar/tools/radar_validation_replay.py \
+            openpilot/selfdrive/carrot/radar/tools/radar_web_export.py openpilot/selfdrive/controls/lib/cutin_alert.py \
+            openpilot/selfdrive/controls/lib/cutin_helpers.py openpilot/cereal opendbc_repo/opendbc \
+            .github/workflows/carrot-route-vault-publish.yaml; then
             docker tag "$IMAGE:sha-$GITHUB_SHA" "$IMAGE:carrot-wip"
             docker push "$IMAGE:carrot-wip"
           fi

@@ -43,8 +43,12 @@ class Updater:
       self.compose = ["docker-compose"]
 
   def run(self, *args, timeout=600):
-    result = subprocess.run(args, cwd=str(self.root), check=True, text=True,
-                            capture_output=True, timeout=timeout)
+    try:
+      result = subprocess.run(args, cwd=str(self.root), check=True, text=True,
+                              capture_output=True, timeout=timeout)
+    except subprocess.CalledProcessError as error:
+      logging.error("%s failed: %s", args[0], (error.stderr or "")[-4000:])
+      raise
     return result.stdout.strip()
 
   def compose_run(self, *args):
@@ -108,7 +112,9 @@ class Updater:
 
   def update(self):
     if self.journal_path.exists():
+      logging.warning("Recovering interrupted deployment")
       self.restore(json.loads(self.journal_path.read_text()))
+    logging.info("Checking registry image %s", self.config["image"])
     self.run("docker", "pull", self.config["image"], timeout=1200)
     candidate = self.run("docker", "image", "inspect", "--format", "{{.Id}}", self.config["image"])
     previous = self.current_image()
@@ -125,6 +131,8 @@ class Updater:
     transaction = {"candidate": candidate, "previousImage": previous, "previousCompose": rollback}
     switched = False
     try:
+      self.save(status="validating", candidate=candidate)
+      logging.info("Replaying configured regression log with candidate %s", candidate)
       expected = self.probe(candidate)
       if not re.fullmatch(r"[0-9a-f]{40}", expected["sourceCommit"]):
         raise ValueError("Candidate has no valid committed source identity")
@@ -132,6 +140,7 @@ class Updater:
       atomic_write(self.journal_path, json.dumps(transaction))
       switched = True
       atomic_write(self.compose_path, replacement)
+      logging.info("Recreating production container and checking served replay")
       self.compose_run("up", "-d", "--no-build", "carrot-upload")
       if self.current_image() != candidate:
         raise RuntimeError("Production container did not use the pinned candidate")
@@ -140,7 +149,7 @@ class Updater:
         raise ValueError("Online and offline validation differ")
       self.save(status="updated", image=candidate, previousImage=previous,
                 sourceCommit=actual["sourceCommit"], replay=actual["replay"],
-                verifiedAt=int(datetime.now(timezone.utc).timestamp()), failedImage=None, error=None)
+                verifiedAt=int(datetime.now(timezone.utc).timestamp()), failedImage=None, error=None, candidate=None)
       self.journal_path.unlink()
       logging.info("Updated and verified source %s", actual["sourceCommit"])
     except Exception as error:
