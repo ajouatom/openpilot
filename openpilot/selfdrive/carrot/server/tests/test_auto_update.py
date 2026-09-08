@@ -1,6 +1,8 @@
 import asyncio
 from contextlib import nullcontext
 import subprocess
+import sys
+import types
 
 import pytest
 
@@ -24,6 +26,28 @@ def test_manager_must_be_live_after_any_length_build_and_restart():
   assert not ready.update(612, True)
   # A gap in observations cannot count as continuous healthy operation either.
   assert not ready.update(630, True)
+
+
+def test_manager_monitor_retries_when_messaging_is_not_built_yet(monkeypatch):
+  built = False
+  clock = 0.0
+
+  def submaster(services):
+    if not built:
+      raise ImportError("native messaging not built")
+    return types.SimpleNamespace(valid={"managerState": True}, alive={"managerState": True}, update=lambda _: None)
+
+  cereal = types.ModuleType("openpilot.cereal")
+  cereal.messaging = types.SimpleNamespace(SubMaster=submaster)
+  monkeypatch.setitem(sys.modules, "openpilot.cereal", cereal)
+  monkeypatch.setattr(auto_update.time, "monotonic", lambda: clock)
+  monitor = auto_update.ManagerMonitor()
+  assert not monitor.ready()
+  built = True
+  for tick in range(11):
+    clock = float(tick)
+    ready = monitor.ready()
+  assert ready
 
 
 @pytest.mark.parametrize("phase", ["building", "restarting", "busy", "ready"])
