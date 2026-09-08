@@ -28,8 +28,9 @@ def test_radar_route_scope_and_revocation(tmp_path, monkeypatch):
       assert (await client.get(base + "/radar/1")).status == 404
       assert not calls
       assert (await client.get(base + "/radar/0?sensor=front&sensitivity=5")).status == 202
-      assert calls[-1] == (tmp_path / "uploads/routes" / DIRECTORY / f"{ROUTE}--0/rlog.zst", "front", 5)
-      assert (await client.get(base + "/radar/0?sensitivity=bad")).status == 400
+      assert calls[-1] == (tmp_path / "uploads/routes" / DIRECTORY / f"{ROUTE}--0/rlog.zst", "front", 3)
+      assert (await client.get(base + "/radar/0?sensitivity=bad")).status == 202
+      assert calls[-1][2] == 3
       share = await create_share(client)
       from urllib.parse import urlsplit
       shared_base = urlsplit(share["shareUrl"]).path
@@ -93,3 +94,20 @@ def test_export_matches_desktop_controller():
     assert item['selection']['lead_one'] == exporter.finite_json(asdict(selection.lead_one)) if selection.lead_one else item['selection']['lead_one'] is None
   assert payload['sensitivity'] == exporter.replay.VALIDATION_DEFAULT_SENSITIVITY
   json.dumps(payload, allow_nan=False)
+
+
+def test_graph_preserves_missing_scc_samples_and_desktop_series():
+  from dataclasses import replace
+  from openpilot.selfdrive.carrot.radar.tools import radar_web_export as exporter
+  from openpilot.selfdrive.carrot.tests.test_radar_lead_simulator import frame, point
+  frames = [replace(frame((point(41, 25.0, 0.0),), time_s=i * .05),
+                    video_time_s=10 + i * .05, scc_a_req_raw=value, carrot_a_target=-.5)
+            for i, value in enumerate((-1.0, None, -2.0))]
+  payload = exporter.export_frames(frames)
+  assert payload['graphs']['sccAccel'] == [
+    {'color': '#f75ea0', 'samples': [[0.0, -1.0]]},
+    {'color': '#f75ea0', 'samples': [[.1, -2.0]]},
+  ]
+  assert payload['graphs']['carrotAccel'][0]['samples'] == [[0.0, -.5], [.05, -.5], [.1, -.5]]
+  assert payload['frames'][0]['video_time_s'] == 10
+  assert set(payload['graphs']) == {'leadOne', 'leadTwo', 'vision', 'leadSpeed', 'sccDistance', 'sccAccel', 'carrotAccel'}
