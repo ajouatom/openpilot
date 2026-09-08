@@ -34,7 +34,7 @@ Change them in **Carrot Web → Settings → Driving control → Cruise and foll
 
 The same symptom can therefore have different causes. A slow launch might come from the low-speed acceleration table, start acceleration-change cost, PID gains, or a vehicle limit.
 
-Catalog defaults and initial Params values currently differ for `CruiseMaxVals1` through `6`, `StopDistanceCarrot`, and `DynamicTFollowLC`. Use the value shown on your device as the baseline.
+Catalog defaults and initial Params values currently differ for `CruiseMaxVals1` through `6` and `StopDistanceCarrot`. Use the value shown on your device as the baseline.
 
 <a id="driving-mode"></a>
 ## 1. Driving mode
@@ -175,7 +175,7 @@ Hyundai/Kia configurations can expose all four personalities. Other vehicles can
 3. During deceleration, suspend that reduction and add `TFollowDecelBoost`.
 4. Apply Eco/Safe driving-mode factors.
 5. Clamp to the minimum and maximum of the four base values.
-6. Apply `DynamicTFollowLC` during a lane change; otherwise apply `DynamicTFollow` when a lead exists.
+6. Keep the base TF during a lane change; otherwise apply `DynamicTFollow` when a lead exists.
 7. Rate-limit increases so the gap does not jump suddenly.
 
 ### `EnableSpeedTF`
@@ -192,7 +192,7 @@ For a positive value of 20, the time gap is 80% of base at 0 km/h, 90% at 50 km/
 
 Negative modes build a speed table and then apply personality multipliers of ×1.0, ×1.3, ×1.6, and ×2.0. The result is clamped back to the four values' minimum/maximum, so large multipliers may stop near `TFollowGap4`.
 
-Tracking a lead with `LeadAccelResponse=4` or `5` is an exception at every following-distance level. The selected gap’s `TFollowGap1`–`TFollowGap4` setting takes priority over positive or negative `EnableSpeedTF` adjustments and Eco/Safe gap factors only while a stable radar lead is accelerating positively and the gap is opening. When lead acceleration falls to `0.1 m/s²` or below, the exception is removed immediately and normal gap control—including the existing TF increase ramp—and braking behavior resume. It does not change the no-lead cruise target; `TFollowDecelBoost`, lane-change, and `DynamicTFollow` adjustments can still apply.
+Tracking a lead with `LeadAccelResponse=4` or `5` is an exception at every following-distance level. The selected gap’s `TFollowGap1`–`TFollowGap4` setting takes priority over positive or negative `EnableSpeedTF` adjustments and Eco/Safe gap factors only while a stable radar lead is accelerating positively and the gap is opening. When lead acceleration falls to `0.1 m/s²` or below, the exception is removed immediately and normal gap control—including the existing TF increase ramp—and braking behavior resume. It does not change the no-lead cruise target. During lane-change starting and finishing, this exception and stronger acceleration response are disabled, retaining normal base TF.
 
 ### `DynamicTFollow`
 
@@ -206,12 +206,17 @@ A value of 50 permits up to about ±0.50 s under a strong change; 100 permits ab
 
 ### `DynamicTFollowLC`
 
-For about 1.5 seconds after lane-change start, this percentage multiplies the time gap. Range 20–100, step 5: 100 retains the gap; 80 uses 80%; 20 is the code's minimum ratio.
+This setting permits bounded relief of the old lead's following-distance requirement after predicted body clearance. It does not reduce the common TF or acceleration-change costs during a lane change. Range 20–100, step 5.
 
-The catalog default is currently 0 even though the range is 20–100 and initial Params value is 100. If zero reaches the running code, it is forced to 20%.
+- `100`: no additional relief for the old lead.
+- Lower values: more relief after confirmed departure.
+- `80` and below: the same cap. Legacy values such as `50` or `20` no longer substantially shorten TF.
 
-> [!WARNING]
-> This multiplier is applied after the base time gap has been clamped to at least 0.3 s, and there is no second 0.3-second clamp. Applying 20% to 1.10 s can therefore produce about 0.22 s. Low values are very aggressive.
+The catalog and initial Params default are both `100`. Invalid values, including `0`, disable additional relief. Establish baseline behavior at `100` and change one step at a time. Lower values do not mean faster acceleration in every lane change.
+
+Relief requires measured lateral movement, continuous observations of the same lead, predicted body clearance, and sufficient destination-lead spacing. It starts only after predicted clearance plus 0.35 seconds. The cap is the smallest of 20% of base TF, 0.25 seconds, and 4 metres. Destination front vehicles retain normal TF.
+
+A blind-spot warning, cancellation, changed or missing tracks, missing pose data, or an unconfirmed destination lead blocks additional relief. A lane that appears empty does not authorize earlier acceleration without sufficient observations. This setting does not replace lane-change permission checks or checking rear traffic.
 
 ### `TFollowDecelBoost`
 
@@ -257,7 +262,7 @@ A nonzero value responds only when all of these common gates pass:
 
 Every level uses the strong cost reduction only while actual distance exceeds the configured TF target. At or inside that target, the reduction is removed immediately, the default `aChangeCost=200` and normal jerk cost return, and ordinary MPC safely maintains the gap. Level 5 still requires relative speed of at least `-0.2 m/s` and a gap predicted to open within 0.5 seconds. If the lead reaches zero acceleration or begins decelerating, the existing MPC lead prediction and deceleration preview continue unchanged.
 
-Levels 1–3 do not change the target time gap. The level 4–5 exception that prioritizes the selected gap’s configured `TFollowGap1`–`TFollowGap4` as the base target applies only during positive lead acceleration; `DynamicTFollow` and lane-change corrections may still apply afterward. Lead-braking response and stopping behavior retain normal control at every level. Every level remains inactive with the experimental blended planner or a vision-only lead. Use level 5 only when you can verify that short-gap starts do not cause unwanted acceleration.
+Levels 1–3 do not change the target time gap. The level 4–5 exception that prioritizes the selected gap’s configured `TFollowGap1`–`TFollowGap4` as the base target applies only during positive lead acceleration. Every level's stronger acceleration response is disabled during lane-change starting and finishing. Lead-braking response and stopping behavior retain normal control at every level. Every level remains inactive with the experimental blended planner or a vision-only lead. Use level 5 only when you can verify that short-gap starts do not cause unwanted acceleration.
 
 ### `RadarReactionFactor`
 
