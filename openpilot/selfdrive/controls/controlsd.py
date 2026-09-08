@@ -42,6 +42,14 @@ LAT_CURVATURE_SATURATION_ACCEL = 0.1  # infiniteCable2 LatControlCurvature: ъ│бы
 ACTUATOR_FIELDS = tuple(car.CarControl.Actuators.schema.fields.keys())
 
 
+def lateral_control_allowed(selfdrive_active: bool, always_lateral: bool, lat_enabled: bool,
+                            steer_fault_temporary: bool, steer_fault_permanent: bool,
+                            standstill: bool, steer_at_standstill: bool) -> bool:
+  return ((selfdrive_active or always_lateral) and lat_enabled and
+          not steer_fault_temporary and not steer_fault_permanent and
+          (not standstill or steer_at_standstill))
+
+
 class Controls:
   def __init__(self) -> None:
     self.params = Params()
@@ -139,8 +147,9 @@ class Controls:
 
     # Check which actuators can be enabled
     standstill = abs(CS.vEgo) <= max(self.CP.minSteerSpeed, MIN_LATERAL_CONTROL_SPEED) or CS.standstill
-    CC.latActive = ((self.sm['selfdriveState'].active or lateral_enabled) and CS.latEnabled and
-                    not CS.steerFaultTemporary and not CS.steerFaultPermanent and not standstill)
+    CC.latActive = lateral_control_allowed(self.sm['selfdriveState'].active, lateral_enabled, CS.latEnabled,
+                                           CS.steerFaultTemporary, CS.steerFaultPermanent, standstill,
+                                           self.CP.steerAtStandstill)
     CC.latActive = self.carrot_controls.lat_suspend_control(CS, CC.latActive)
     CC.longActive = CC.enabled and not any(e.overrideLongitudinal for e in self.sm['onroadEvents']) and self.CP.openpilotLongitudinalControl
 
