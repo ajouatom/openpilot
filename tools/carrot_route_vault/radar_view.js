@@ -12,7 +12,8 @@ style.textContent = `
 .radar-panel{min-width:0}.radar-panel h2{margin:0}.radar-toolbar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:12px 0}
 .radar-toolbar label{font-size:12px;color:var(--muted)}.radar-toolbar select{width:auto;padding:6px;display:block}
 .radar-map{display:block;width:100%;height:clamp(280px,30vw,420px);background:#090e14;border-radius:12px;touch-action:manipulation}
-.radar-graph{display:block;width:100%;height:350px;background:#090e14;border-radius:8px;cursor:crosshair}
+.radar-layout,.radar-plots{cursor:pointer}
+.radar-graph{display:block;width:100%;height:350px;background:#090e14;border-radius:8px}
 .radar-status{min-height:2.8em;color:var(--muted);font-size:13px;margin:10px 0;overflow-wrap:anywhere}
 .radar-legend{font-size:12px;line-height:1.8;color:#c1cbd6}.radar-readout{font-size:13px;font-variant-numeric:tabular-nums;white-space:pre-wrap;overflow-wrap:anywhere}
 .radar-detail{font-size:12px;white-space:pre-wrap;max-height:190px;overflow:auto;color:#b9c7d6}
@@ -48,7 +49,7 @@ export function attachRadarReview(video) {
   const plots = document.createElement('section');
   plots.className = 'card radar-plots';
   plots.innerHTML = `<div class="radar-plot-legend"><span style="color:#f68e37">L1 거리 (레이더)</span><span style="color:#f5d348">L2 거리</span><span style="color:#4891ff">비전 거리 / 비전 L1</span><span style="color:#f75ea0">SCC 거리·가속도</span><span style="color:#3ecd82">L1 속도·Carrot 목표 가속도</span></div>
-    <canvas class="radar-graph" aria-label="선행차 거리와 속도, SCC와 Carrot 가속도 그래프. 누르면 해당 시간으로 이동"></canvas>
+    <canvas class="radar-graph" aria-label="선행차 거리와 속도, SCC와 Carrot 가속도 그래프. 누르면 재생 또는 일시정지"></canvas>
     <div class="radar-readout"></div>
     <p class="muted tiny">기록된 Lead는 업로드 당시 차량의 판정입니다. 재계산은 서버의 검증 코드로 실행하며 민감도는 3으로 고정됩니다. 레이더 소스 선택은 이 화면의 분석에만 적용됩니다.</p>`;
   review.append(transport, plots);
@@ -149,13 +150,13 @@ export function attachRadarReview(video) {
   function animate(){lastTick=performance.now();if(!frameHandle)frameHandle=requestAnimationFrame(tick);}
   function pause(){running=false;video.pause();draw();}
   function resume(){if(!duration())return;if(current>=duration())seek(0);if(usesVideo()){video.play().catch(()=>setStatus('영상을 재생하지 못했습니다. 다시 재생을 눌러 주세요.'));}else{running=true;animate();draw();}}
-  play.onclick=()=>{if(running||(usesVideo()&&!video.paused))pause();else resume();};
-  video.addEventListener('click',resume);
+  function togglePlayback(){if(running||(usesVideo()&&!video.paused))pause();else resume();}
+  play.onclick=togglePlayback;
+  review.addEventListener('click',e=>{if(!e.target.closest('button,input,select,label,a'))togglePlayback();});
   video.addEventListener('play',animate);
   for(const event of ['loadedmetadata','durationchange','timeupdate','seeked','pause','ended','emptied'])video.addEventListener(event,()=>{if(usesVideo()){current=Math.max(0,Math.min(video.currentTime,duration()));index=nearest(current);}draw();});
   scrub.oninput=()=>seek(Number(scrub.value));
-  graph.onclick=e=>{const rect=graph.getBoundingClientRect();seek((e.clientX-rect.left-44)/Math.max(1,rect.width-88)*duration());pause();};
-  map.onclick=e=>{const rect=map.getBoundingClientRect();let distance=18;selectedTrack=null;for(const p of hitPoints){const d=Math.hypot(e.clientX-rect.left-p.x,e.clientY-rect.top-p.y);if(d<distance){distance=d;selectedTrack=p.id;}}resume();draw();};
+  map.onclick=e=>{const rect=map.getBoundingClientRect();let distance=18;selectedTrack=null;for(const p of hitPoints){const d=Math.hypot(e.clientX-rect.left-p.x,e.clientY-rect.top-p.y);if(d<distance){distance=d;selectedTrack=p.id;}}draw();};
   new ResizeObserver(draw).observe(review);
   find('[data-range]').onchange=draw;
   async function load(selected) {
