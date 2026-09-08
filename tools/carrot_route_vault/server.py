@@ -396,6 +396,8 @@ class UploadService:
     return web.json_response({
       "ok": ready,
       "service": "carrot-upload",
+      "sourceCommit": (Path(__file__).with_name("SOURCE_COMMIT").read_text().strip()
+                       if Path(__file__).with_name("SOURCE_COMMIT").is_file() else "development"),
       "dailyQuotaBytes": self.config.daily_device_quota,
       "maxFileBytes": self.config.max_file_bytes,
       "bandwidthLimit": None,
