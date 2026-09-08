@@ -3177,6 +3177,42 @@ def test_controller_trajectory_cutin_adds_early_risk_and_lead_two() -> None:
   assert output.lead_two["radarTrackId"] == 3504
 
 
+def test_controller_releases_paired_cutin_that_will_pass_before_entry(monkeypatch) -> None:
+  controller = DPathRadarController(prefer_corner_radar=True)
+  selected = False
+  rejected = False
+  estimates = []
+  update = controller.trajectory_cutin.update
+
+  def observe(*args, **kwargs):
+    estimates[:] = update(*args, **kwargs)
+    return tuple(estimates)
+
+  monkeypatch.setattr(controller.trajectory_cutin, "update", observe)
+  for index in range(21):
+    time_s = index * 0.05
+    distance = 3.5 - time_s
+    output = controller.update(
+      time_s, 11.7,
+      (
+        Point(50, 24.0, 0.0, v_rel=0.0, v_lead=11.7),
+        Point(36, distance + 0.5, 2.1, v_rel=-1.0, v_lead=10.7),
+        Point(3103, distance, 2.9 - 0.5 * min(time_s, 0.5),
+              v_rel=-1.0, v_lead=10.7, yv_rel=-0.5 if index <= 10 else 0.0,
+              source="corner235", trackState=2),
+      ),
+      model_with_lead(24.0, 0.0, 11.7),
+    )
+    if any(value.point.track_id == 3103 and value.passing_before_overlap for value in estimates):
+      assert selected
+      rejected = True
+      assert output.lead_two is None
+      assert not output.leads_cutin
+    selected |= output.lead_two is not None
+
+  assert selected and rejected
+
+
 def test_corner_cutin_predecel_requires_continuous_confirmation() -> None:
   tracker = CornerCutInPredecelTracker(confirmation_s=0.10, hold_s=0.20)
   candidate = RadarMotionCutIn(SimpleNamespace(

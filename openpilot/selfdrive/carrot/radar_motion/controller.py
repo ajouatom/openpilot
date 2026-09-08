@@ -1052,6 +1052,13 @@ class DPathRadarController:
         confirmed_cutin_leads.append(lead)
       if self.cut_in_sensitivity > 0 and estimate.predecel_risk and can_compete:
         risk_leads.append(lead)
+      # A side pass cannot retain a full lead role. Keep the independently
+      # gated, bounded low-speed pre-deceleration path above available when
+      # substantial inward motion still warrants a precaution.
+      if estimate.passing_before_overlap:
+        if active_identity == identity:
+          self.lead_two_tracker.reset()
+        continue
       candidates.append(DPathLeadCandidate(
         lead=candidate_lead,
         source=candidate_source,
