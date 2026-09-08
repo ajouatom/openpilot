@@ -220,7 +220,6 @@ function start_carrot_recovery {
 }
 
 function start_carrot_web {
-  export CARROT_WEB_EXTERNAL="${CARROT_WEB_EXTERNAL:-1}"
   [ "$CARROT_WEB_EXTERNAL" = "1" ] || return
 
   local watchdog_script="$DIR/scripts/carrot_web_watchdog.sh"
@@ -453,6 +452,10 @@ function launch {
     while true; do sleep 1; done
   fi
 
+  # Export in the parent so manager also knows the external watchdog owns the
+  # web server. An export inside the subshell never reaches manager and causes
+  # a second carrot_server to crash repeatedly on the occupied port 7000.
+  export CARROT_WEB_EXTERNAL="${CARROT_WEB_EXTERNAL:-1}"
   (
     exec 9>&-
     unset CARROT_BOOT_LOCK_FD
