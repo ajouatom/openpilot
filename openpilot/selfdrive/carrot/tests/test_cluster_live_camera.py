@@ -89,6 +89,7 @@ def test_camera_switch_waits_for_wide_frame_before_changing_projection(monkeypat
   class FakeClient:
     streams = {road_stream, wide_stream}
     target_frame = None
+    timestamp_eof = 123456789
 
     def __init__(self, _name, stream, conflate=True):
       self.stream = stream
@@ -137,6 +138,7 @@ def test_camera_switch_waits_for_wide_frame_before_changing_projection(monkeypat
   assert camera.select_stream(True)
   assert camera._stream_type == wide_stream
   assert camera._frame is FakeClient.target_frame
+  assert camera.timestamp_eof == FakeClient.timestamp_eof
 
 
 def test_camera_wide_request_falls_back_when_stream_is_unavailable():

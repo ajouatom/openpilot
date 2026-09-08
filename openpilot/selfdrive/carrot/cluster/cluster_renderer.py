@@ -13,7 +13,7 @@ from pathlib import Path
 
 import numpy as np
 import pyray as rl
-from cluster_yolo import yolo_text
+from cluster_yolo import box_label, camera_boxes, yolo_text
 
 from openpilot.common.transformations.camera import DEVICE_CAMERAS, view_frame_from_device_frame
 from openpilot.common.transformations.orientation import rot_from_euler
@@ -1603,6 +1603,7 @@ class ClusterUiRenderer:
         )
         try:
             drew_camera = False
+            live_camera = None
             if texture is not None:
                 rl.draw_texture_pro(
                     texture,
@@ -1623,8 +1624,29 @@ class ClusterUiRenderer:
                         self._close_live_road_camera()
             if drew_camera:
                 rl.draw_rectangle_rec(projection.dest, rl_color((0, 0, 0), CAMERA_BACKGROUND_VIGNETTE_ALPHA))
+                if live_camera is not None:
+                    self._draw_yolo_camera_boxes(state, projection, live_camera.timestamp_eof)
         finally:
             rl.end_scissor_mode()
+
+    def _draw_yolo_camera_boxes(self, state, projection, timestamp_eof) -> None:
+        # The caller's camera scissor also clips corners outside the visible crop.
+        video = projection.video_dest
+        boxes = camera_boxes(state.yolo, camera="wideRoad" if projection.wide_camera else "road",
+                             timestamp_eof=timestamp_eof, video_rect=(video.x, video.y, video.width, video.height))
+        dest = projection.dest
+        scale = self.height / DESIGN_HEIGHT
+        for box, points in boxes:
+            left, right = min(p[0] for p in points), max(p[0] for p in points)
+            top, bottom = min(p[1] for p in points), max(p[1] for p in points)
+            if right <= dest.x or left >= dest.x+dest.width or bottom <= dest.y or top >= dest.y+dest.height:
+                continue
+            for i, point in enumerate(points):
+                rl.draw_line_ex(rl.Vector2(*point), rl.Vector2(*points[(i+1) % 4]), max(1., 2.*scale), rl_color(GREEN))
+            label_x = max(dest.x+3, left)
+            label_y = clamp(top-12*scale, dest.y+12*scale, dest.y+dest.height-12*scale)
+            label = self._ellipsize_text(box_label(box, self.language), 19*scale, dest.x+dest.width-label_x-3)
+            self._draw_text_with_stroke(label, label_x, label_y, 19*scale, GREEN, (0, 0, 0), 1)
 
     def _live_road_camera_view(self):
         live_camera = getattr(self, "_live_road_camera", None)

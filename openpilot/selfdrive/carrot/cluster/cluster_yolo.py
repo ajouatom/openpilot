@@ -4,12 +4,22 @@ import math
 
 
 @dataclass(frozen=True, slots=True)
+class YoloBox:
+    label: str
+    confidence: int
+    points: tuple[float, ...]
+
+
+@dataclass(frozen=True, slots=True)
 class YoloDisplay:
     state: str
     runs: int = 0
     execution_ms: float | None = None
     objects: tuple[tuple[str, int, int], ...] = ()
     more: int = 0
+    camera: str = ""
+    timestamp_eof: int = 0
+    boxes: tuple[YoloBox, ...] = ()
 
 
 def _get(value, key, default=None):
@@ -27,7 +37,7 @@ def build_yolo_display(message, *, enabled, valid, transport_age, image_age):
     state = str(_get(message, "state", "waiting"))
     # Paused/error messages are deliberately invalid as detection data, but
     # their current status must remain visible and clear previous objects.
-    if state in ("paused", "error", "overrun"):
+    if state in ("paused", "error", "overrun", "no_budget", "camera_pending", "warming"):
         return YoloDisplay(state, runs)
     if state != "run":
         return YoloDisplay("waiting", runs)
@@ -38,6 +48,7 @@ def build_yolo_display(message, *, enabled, valid, transport_age, image_age):
     seconds = float(_get(message, "executionTime", 0))
     execution_ms = seconds*1000 if math.isfinite(seconds) and seconds > 0 else None
     grouped = {}
+    boxes = []
     for detection in list(_get(message, "detections", ()))[:40]:
         score = float(_get(detection, "confidence", 0))
         if not math.isfinite(score) or not 0 <= score <= 1:
@@ -45,8 +56,31 @@ def build_yolo_display(message, *, enabled, valid, transport_age, image_age):
         label = str(_get(detection, "label", "object"))[:32]
         count, best = grouped.get(label, (0, 0))
         grouped[label] = (count+1, max(best, round(score*100)))
+        points = tuple(float(v) for v in _get(detection, "cameraPoints", ()))
+        if len(points) == 8 and all(math.isfinite(v) and abs(v) <= 10 for v in points):
+            boxes.append(YoloBox(label, round(score*100), points))
     groups = sorted(((label, count, best) for label, (count, best) in grouped.items()), key=lambda x: (-x[2], x[0]))
-    return YoloDisplay("run", runs, execution_ms, tuple(groups[:3]), sum(g[1] for g in groups[3:]))
+    return YoloDisplay("run", runs, execution_ms, tuple(groups[:3]), sum(g[1] for g in groups[3:]),
+                       str(_get(message, "camera", "")), int(_get(message, "timestampEof", 0)), tuple(boxes))
+
+
+def camera_boxes(display, *, camera, timestamp_eof, video_rect):
+    """Project original-camera corners through the very same video crop/zoom.
+
+    Road boxes cannot be placed on wide images without depth/extrinsics. Also
+    reject old camera frames even when the detection transport itself is fresh.
+    """
+    if (display is None or display.state != "run" or display.camera != camera
+            or min(display.timestamp_eof, timestamp_eof) <= 0
+            or abs(display.timestamp_eof-timestamp_eof) > 200_000_000):
+        return ()
+    x, y, width, height = video_rect
+    return tuple((box, tuple((x+box.points[i]*width, y+box.points[i+1]*height) for i in range(0, 8, 2)))
+                 for box in display.boxes)
+
+
+def box_label(box, language):
+    return f"{_KO_LABELS.get(box.label, box.label) if language == 'ko' else box.label} {box.confidence}%"
 
 
 _KO_LABELS = {"person": "사람", "bicycle": "자전거", "car": "자동차", "motorcycle": "오토바이",
@@ -58,7 +92,9 @@ def yolo_text(display, language):
     korean = language == "ko"
     states = {"run": ("실행", "RUN"), "paused": ("일시정지", "PAUSED"), "error": ("오류", "ERROR"),
               "overrun": ("시간초과", "OVERRUN"), "waiting": ("준비대기", "WAITING"),
-              "stale": ("갱신대기", "STALE"), "invalid": ("수신오류", "INVALID"), "off": ("꺼짐", "OFF")}
+              "stale": ("갱신대기", "STALE"), "invalid": ("수신오류", "INVALID"), "off": ("꺼짐", "OFF"),
+              "no_budget": ("여유시간대기", "WAITING FOR BUDGET"), "camera_pending": ("카메라 우선", "CAMERA FIRST"),
+              "warming": ("안정화대기", "STABILIZING")}
     title = f"YOLO {states.get(display.state, states['waiting'])[0 if korean else 1]}"
     if display.execution_ms is not None:
         title += f" {display.execution_ms:.1f}ms"

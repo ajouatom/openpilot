@@ -6,7 +6,7 @@ from types import SimpleNamespace
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "cluster"))
-from cluster_yolo import build_yolo_display, yolo_text
+from cluster_yolo import build_yolo_display, camera_boxes, yolo_text
 
 
 def display(**kwargs):
@@ -68,3 +68,63 @@ def test_all_hud_layouts_receive_yolo_summary(monkeypatch):
   for mode in [0, 1, 2, cluster_renderer.CLUSTER_SCREEN_MODE_FULLSCREEN_3D]:
     renderer._draw_yolo_status(replace(standby_state(), yolo=display()), mode)
   assert calls.count('YOLO 실행 7.0ms · #42') == 4
+
+
+def boxed_display(**kwargs):
+  return display(message={'state': 'run', 'camera': 'road', 'timestampEof': 10_000_000_000,
+                          'detections': [{'label': 'car', 'confidence': .8,
+                                          'cameraPoints': [.1, .2, .4, .21, .39, .6, .11, .59]}]}, **kwargs)
+
+
+def test_camera_corners_follow_video_crop_zoom_and_swapped_panel_offset():
+  result = boxed_display()
+  box, points = camera_boxes(result, camera='road', timestamp_eof=10_100_000_000,
+                             video_rect=(800., -100., 1200., 700.))[0]
+  assert box.label == 'car' and box.confidence == 80
+  assert points[0] == pytest.approx((920., 40.))
+  assert points[2] == pytest.approx((1268., 320.))
+  assert points[0][1] != points[1][1]  # retain calibrated quadrilateral, not model-space rectangle
+
+
+@pytest.mark.parametrize('camera,stamp', [('wideRoad', 10_000_000_000), ('road', 0),
+                                         ('road', 10_201_000_000), ('road', 9_799_000_000)])
+def test_wrong_camera_or_mismatched_video_frame_never_draws_boxes(camera, stamp):
+  assert not camera_boxes(boxed_display(), camera=camera, timestamp_eof=stamp, video_rect=(0, 0, 100, 100))
+
+
+@pytest.mark.parametrize('kwargs', [{'valid': False}, {'image_age': .36}, {'enabled': False}])
+def test_invalid_stale_disabled_clears_boxes(kwargs):
+  assert not boxed_display(**kwargs).boxes
+
+
+def test_malformed_camera_points_never_fall_back_to_wrong_model_coordinates():
+  result = display(message={'state': 'run', 'detections': [
+    {'label': 'car', 'confidence': .8, 'cameraPoints': [float('nan')]*8},
+    {'label': 'car', 'confidence': .8, 'cameraPoints': [0., 1.]},
+    {'label': 'car', 'confidence': .8, 'x1': .1, 'y1': .1, 'x2': .2, 'y2': .2},
+  ]})
+  assert not result.boxes and result.objects == (('car', 3, 80),)
+
+
+def test_live_renderer_draws_four_camera_edges_and_localized_label(monkeypatch):
+  import cluster_renderer as module
+  from cluster_live import standby_state
+  renderer = object.__new__(module.ClusterUiRenderer)
+  renderer.height = 480
+  renderer.language = 'ko'
+  renderer._ellipsize_text = lambda text, *args: text
+  labels, lines = [], []
+  renderer._draw_text_with_stroke = lambda text, *args: labels.append(text)
+  monkeypatch.setattr(module.rl, 'draw_line_ex', lambda *args: lines.append(args))
+  rect = SimpleNamespace(x=0., y=0., width=1128., height=480.)
+  projection = SimpleNamespace(dest=rect, video_dest=rect, wide_camera=False)
+  renderer._draw_yolo_camera_boxes(replace(standby_state(), yolo=boxed_display()), projection, 10_050_000_000)
+  assert len(lines) == 4 and labels == ['자동차 80%']
+  renderer._draw_yolo_camera_boxes(replace(standby_state(), yolo=boxed_display()), projection, 11_000_000_000)
+  assert len(lines) == 4
+
+
+def test_budget_wait_has_specific_status_and_no_boxes():
+  result = display(message={'state': 'no_budget', 'runs': 4018}, valid=False)
+  assert yolo_text(result, 'ko')[0] == 'YOLO 여유시간대기 · #4018'
+  assert not result.boxes

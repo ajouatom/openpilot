@@ -9,6 +9,50 @@ validated or enabled by this plan.
 
 ## Current baseline
 
+### Resident budget starvation and camera boxes (2026-09-09)
+
+Analyzed all 13 locally retained rlog segments of `00000efa--3bcb5439f9`
+on the owner's vehicle, emitting only YOLO timing/state and model timing
+aggregates. YOLO ran 4,018 times from boot time 27362.227 until about 27781
+(roughly seven minutes). At segment 7, its required reservation rose from
+7.470 to 10.194 ms; subsequent free slots were typically 8–9 ms. The run
+counter remained 4,018 through segment 12 at 28087.218. Overruns stayed zero.
+The supervisor repeatedly retried after ten seconds without a result, eventually
+waiting 30 seconds between attempts, but the lifetime maximum reservation never
+decreased. This is direct evidence of admission starvation, not a GPU execution
+error. It does not isolate what delayed that individual host/GPU transaction or
+establish a causal relationship with the external display's USB hub.
+
+The resident runtime now uses a 30-second rolling maximum above the unchanged
+artifact/startup measurement floor. Completed, within-deadline measurements can
+expire even when no new work is admitted, breaking the circular wait. Lowering
+the reservation starts five revalidation runs limited to 1 Hz. The 20% margin,
+1 ms guard, stable primary cadence, next-camera priority and GPU-error latch
+remain mandatory. A real deadline miss permanently raises this owner's floor;
+it is not aged away. A monotonic maximum queue avoids scanning the sample window
+on each primary frame. No artifact/kernel/input transfer changes or recompilation
+are needed. Recovery history now includes the YOLO state, run/overrun counters,
+required reservation and available time at the pause.
+
+The cluster's live camera background draws the existing calibrated four-corner
+`cameraPoints`, object names and confidence. Projection uses exactly the video's
+crop, zoom and panel offset. Boxes require fresh valid detections, the same road
+or wide camera, and camera/result EOF timestamps within 200 ms. Pauses, stale
+results, mismatched cameras and missing coordinates clear boxes. Road detections
+are not projected onto wide images or a distance-based synthetic scene. The
+owner's existing camera-view mode is 2 (road), so no setting change is necessary.
+The status panel distinguishes budget wait, camera priority and stabilization.
+This remains display-only and exclusive to carrot-egpu-yolo2; no radar/lead or
+replay-service code changed.
+
+Validation before deployment: 173 focused timing, automatic recovery, decoder,
+cluster and camera tests passed; three unchanged native-messaging tests skipped
+on Windows. Regression coverage reproduces the non-overrun starvation, bounded
+revalidation, sustained slow work, real-overrun floor, camera mismatch, stale
+frames and calibrated corner projection. Hidden renderer previews confirmed
+Korean labels and boxes. These are simulated UI/timing checks, not a new moving
+vehicle or long-duration GPU measurement; the vehicle was offroad during work.
+
 ### Persistent automatic start and recovery (2026-09-08)
 
 On the next ignition, four unnecessary pauses were traced to onroadEvents

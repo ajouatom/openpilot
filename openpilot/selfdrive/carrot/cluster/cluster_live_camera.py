@@ -85,6 +85,7 @@ class LiveRoadCamera:
         self._available_streams: set[object] = set()
         self._last_stream_discovery = 0.0
         self._frame = None
+        self.timestamp_eof = 0
         self._last_connection_attempt = 0.0
         self._connected_at = 0.0
         self._last_frame_poll = 0.0
@@ -159,6 +160,7 @@ class LiveRoadCamera:
         self._target_client = None
         self._target_stream_type = None
         self._frame = target_frame
+        self.timestamp_eof = int(self._client.timestamp_eof)
         self._connected_at = now
         self._last_frame_at = now
         self._texture_needs_update = True
@@ -169,6 +171,7 @@ class LiveRoadCamera:
 
     def _reset_connection(self) -> None:
         self._frame = None
+        self.timestamp_eof = 0
         self._connected_at = 0.0
         self._last_frame_at = 0.0
         self._texture_needs_update = False
@@ -210,6 +213,7 @@ class LiveRoadCamera:
         frame = self._client.recv(timeout_ms=0)
         if frame is not None:
             self._frame = frame
+            self.timestamp_eof = int(self._client.timestamp_eof)
             self._last_frame_at = now
             self._texture_needs_update = True
         elif not self._client.is_connected():

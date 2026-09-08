@@ -119,7 +119,10 @@ def main():
         reason = 'no admitted YOLO result for 10 seconds'
       enabled = policy.update(now, owner=owner, started=started, healthy=not reason, reason=reason, fatal=fatal)
       if was_enabled and not enabled:
-        history.append({'camera_time': now, 'reason': policy.reason, 'stable_seconds_required': policy.delay})
+        yolo = sm['carrotYolo']
+        history.append({'camera_time': now, 'reason': policy.reason, 'stable_seconds_required': policy.delay,
+                        'yolo_state': yolo.state, 'runs': yolo.runs, 'overruns': yolo.overruns,
+                        'required_ms': yolo.requiredTime*1000, 'available_ms': yolo.budgetTime*1000})
         del history[:-12]
       # Immediately revoke on faults; renew disabled leases too, so a prepared
       # owner can publish status throughout cooldown without executing GPU work.

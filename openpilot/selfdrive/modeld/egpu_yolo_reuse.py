@@ -82,6 +82,8 @@ class ReuseRuntime(YoloRuntime):
     # This is a compiled artifact replay on the driving owner's startup thread.
     # No ONNX runner or compiler is invoked on live camera frames.
     runtime = cls(input_queue, bundle)
+    from openpilot.selfdrive.modeld.egpu_yolo_budget import RevalidatingBudget
+    runtime.budget = RevalidatingBudget(runtime.budget)
     # Lock mode at startup; changing a lease cannot promote a stationary owner.
     runtime.mode = session.get('mode', 'stationary')
     runtime.automatic = session.get('automatic') is True
