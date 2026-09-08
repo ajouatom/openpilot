@@ -34,7 +34,7 @@ CARROT_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_CASES = CARROT_ROOT / "cluster" / "cutin_validation_cases.json"
 DEFAULT_LABELS = CARROT_ROOT / "cluster" / "radar_trajectory_labels.json"
 DEFAULT_CACHE_DIR = REPO_ROOT / ".tmp_radar_validation_cache"
-FRAME_CACHE_VERSION = 1
+FRAME_CACHE_VERSION = 2
 DEADLINE_SAMPLE_TOLERANCE_S = 0.02
 
 
