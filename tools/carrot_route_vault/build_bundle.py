@@ -18,7 +18,8 @@ SOURCES = (
   "openpilot/selfdrive/controls/lib/cutin_alert.py",
   "openpilot/selfdrive/controls/lib/cutin_helpers.py",
   "openpilot/cereal",
-  "opendbc_repo/opendbc/car/car.capnp",
+  "opendbc_repo/opendbc/__init__.py",
+  "opendbc_repo/opendbc/car",
   "opendbc_repo/opendbc/dbc",
 )
 
