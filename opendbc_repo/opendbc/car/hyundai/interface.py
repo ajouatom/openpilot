@@ -62,7 +62,9 @@ class CarInterface(CarInterfaceBase):
       if has_ev_mode_status:
         ret.extFlags |= HyundaiExtFlags.EV_MODE_STATUS_230.value
 
-      if 203 in fingerprint[CAN.CAM]: # LFA_ALT
+      # Tucson can broadcast LFA_ALT while using LFA torque steering.
+      # Keep its torque controller instead of inferring angle support from 0xCB alone.
+      if candidate != CAR.HYUNDAI_TUCSON_4TH_GEN and 0xCB in fingerprint[CAN.CAM]:  # LFA_ALT
         print("##### Anglecontrol detected (LFA_ALT)")
         ret.flags |= HyundaiFlags.ANGLE_CONTROL.value
 
