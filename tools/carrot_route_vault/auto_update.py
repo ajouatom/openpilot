@@ -1,4 +1,5 @@
 """NAS Python 3.8+ updater. Run from a root DSM scheduled task every five minutes."""
+# ruff: noqa: UP017 -- DSM Python 3.8 does not provide datetime.UTC.
 import argparse
 from datetime import datetime, timezone
 import json
