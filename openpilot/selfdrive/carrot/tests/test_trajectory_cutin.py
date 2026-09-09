@@ -526,6 +526,34 @@ def test_entry_withdrawal_requires_sustained_motion_loss_outside_path(side, mane
     assert not any(e.entry_withdrawn for e in estimates)
 
 
+@pytest.mark.parametrize("side", (-1.0, 1.0))
+@pytest.mark.parametrize("aborts_entry", (False, True))
+def test_confirmed_slow_entry_does_not_flip_parallel_at_velocity_boundary(side, aborts_entry) -> None:
+  detector = TrajectoryCutInDetector()
+  estimates = []
+  for index in range(41):
+    time_s = index * 0.05
+    stopped = aborts_entry and time_s >= 1.0
+    lateral = 2.55 - 0.30 * (min(time_s, 1.0) if aborts_entry else time_s)
+    # The 0.9 s progress window remains around 0.25 m, and reported velocity
+    # jitters across 0.15 m/s although positions keep moving inward.
+    reported = 0.0 if stopped else 0.14 if index >= 20 and index % 2 else 0.16
+    corner = point(1200, "corner180", 3.0 + 0.1 * time_s, side * lateral,
+                   v_ego=3.0, v_rel=0.1, yv_rel=-side * reported)
+    front = point(40, "frontRadar", corner.d_rel + 1.0, corner.y_rel,
+                  v_ego=3.0, v_rel=0.1, yv_rel=-side * reported)
+    estimates.append(detector.update(time_s, 3.0, (corner,), PATH, MODEL,
+      cross_sensor_matches={(corner.source, corner.track_id): front})[0])
+
+  first = next(i for i, estimate in enumerate(estimates) if estimate.confirmed_cutin)
+  assert first < 20
+  if aborts_entry:
+    assert any(e.entry_withdrawn for e in estimates[20:])
+    assert all(not e.confirmed_cutin for e in estimates[30:])
+  else:
+    assert all(e.confirmed_cutin and not e.parallel_drift for e in estimates[first:])
+
+
 def test_far_inconsistent_corner_motion_stays_alert_only() -> None:
   detector = TrajectoryCutInDetector()
   estimate = None
