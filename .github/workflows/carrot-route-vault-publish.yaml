@@ -1,0 +1,82 @@
+name: Carrot Routes image
+
+on:
+  push:
+    branches: [carrot-wip]
+    paths:
+      - 'tools/carrot_route_vault/**'
+      - 'openpilot/selfdrive/carrot/radar_motion/**'
+      - 'openpilot/selfdrive/carrot/cluster/**'
+      - 'openpilot/selfdrive/carrot/radar/tools/radar_validation_replay.py'
+      - 'openpilot/selfdrive/carrot/radar/tools/radar_web_export.py'
+      - 'openpilot/selfdrive/controls/lib/cutin_*.py'
+      - 'openpilot/cereal/**'
+      - 'opendbc_repo/opendbc/**'
+      - '.github/workflows/carrot-route-vault-publish.yaml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: carrot-route-vault-publish
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: github.ref == 'refs/heads/carrot-wip'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Install focused test dependencies
+        run: pip install -r tools/carrot_route_vault/requirements.txt pytest raylib==5.5.0.4
+      - name: Test receiver and production radar replay
+        env:
+          PYTHONPATH: .:opendbc_repo
+        run: |
+          python -m pytest -c /dev/null --rootdir=. --confcutdir=tools/carrot_route_vault tools/carrot_route_vault/tests
+          python -m pytest -c /dev/null --rootdir=. --confcutdir=openpilot/selfdrive/carrot/tests \
+            openpilot/selfdrive/carrot/tests/test_lane_change_gap.py \
+            openpilot/selfdrive/carrot/tests/test_cutout_mpc_integration.py \
+            openpilot/selfdrive/carrot/tests/test_trajectory_cutout.py \
+            openpilot/selfdrive/carrot/tests/test_trajectory_cutin.py \
+            openpilot/selfdrive/carrot/tests/test_radar_motion_predictor.py \
+            openpilot/selfdrive/carrot/tests/test_radar_lead_simulator.py \
+            openpilot/selfdrive/carrot/tests/test_radard_dpath.py
+      - name: Build committed bundle and image
+        env:
+          IMAGE: ghcr.io/${{ github.repository_owner }}/carrot-route-vault
+        run: |
+          python tools/carrot_route_vault/build_bundle.py "$RUNNER_TEMP/vault-bundle" --ref "$GITHUB_SHA"
+          docker pull "$IMAGE:carrot-wip" || true
+          docker build -f "$RUNNER_TEMP/vault-bundle/Dockerfile.vault" \
+            --cache-from "$IMAGE:carrot-wip" --build-arg BUILDKIT_INLINE_CACHE=1 \
+            --label "org.opencontainers.image.source=https://github.com/$GITHUB_REPOSITORY" \
+            --label "org.opencontainers.image.revision=$GITHUB_SHA" \
+            -t "$IMAGE:sha-$GITHUB_SHA" "$RUNNER_TEMP/vault-bundle"
+          docker run --rm "$IMAGE:sha-$GITHUB_SHA" python -c \
+            'import server, deploy_probe; from openpilot.selfdrive.carrot.radar.tools.radar_web_export import source_version; print(source_version())'
+      - name: Publish tested image
+        env:
+          GH_TOKEN: ${{ github.token }}
+          IMAGE: ghcr.io/${{ github.repository_owner }}/carrot-route-vault
+        run: |
+          echo "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+          docker push "$IMAGE:sha-$GITHUB_SHA"
+          # Never move the deployment tag backwards when a queued build is stale.
+          # An unrelated vehicle/UI commit must not suppress the last replay update.
+          git fetch --depth=1 origin carrot-wip
+          if git diff --quiet "$GITHUB_SHA" FETCH_HEAD -- \
+            tools/carrot_route_vault openpilot/selfdrive/carrot/radar_motion \
+            openpilot/selfdrive/carrot/cluster openpilot/selfdrive/carrot/radar/tools/radar_validation_replay.py \
+            openpilot/selfdrive/carrot/radar/tools/radar_web_export.py openpilot/selfdrive/controls/lib/cutin_alert.py \
+            openpilot/selfdrive/controls/lib/cutin_helpers.py openpilot/cereal opendbc_repo/opendbc \
+            .github/workflows/carrot-route-vault-publish.yaml; then
+            docker tag "$IMAGE:sha-$GITHUB_SHA" "$IMAGE:carrot-wip"
+            docker push "$IMAGE:carrot-wip"
+          fi

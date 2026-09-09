@@ -696,7 +696,7 @@ def cutin_can_compete_with_primary(
   primary_d_rel = float(primary.get("dRel", math.inf))
   if not math.isfinite(lead_d_rel) or not math.isfinite(primary_d_rel):
     return False
-  if entry_horizon_s is not None and float(entry_horizon_s) > 0.0:
+  if entry_horizon_s is not None and float(entry_horizon_s) >= 0.0:
     horizon_s = float(entry_horizon_s)
     lead_future_d_rel = (
       lead_d_rel + float(lead.get("vRel", 0.0)) * horizon_s

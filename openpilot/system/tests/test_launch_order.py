@@ -1,7 +1,53 @@
 import ast
+import os
 from pathlib import Path
+import shutil
+import subprocess
+
+import pytest
 
 from openpilot.common.basedir import BASEDIR
+
+
+@pytest.mark.parametrize("external, expected", [(None, "1"), ("", "1"), ("0", "0"), ("1", "1")])
+def test_web_mode_reaches_manager_without_inheriting_boot_lock(tmp_path: Path, external: str | None, expected: str) -> None:
+  bash = shutil.which("bash")
+  if bash is None:
+    pytest.skip("bash is unavailable")
+
+  source = (Path(BASEDIR) / "launch_chffrplus.sh").read_text(encoding="utf-8")
+  launch = source[source.index("function launch {"):]
+  web_startup = launch[launch.index("  # Build Params"):launch.index("  FORCE_REBUILD=0")]
+  env = os.environ.copy()
+  env.pop("CARROT_WEB_EXTERNAL", None)
+  if external is not None:
+    env["CARROT_WEB_EXTERNAL"] = external
+
+  # Run the real startup call site, with service/build stubs. The manager probe
+  # is a new process, so a shell-local assignment cannot accidentally pass.
+  harness = r'''
+set -eu
+DIR="$PWD"
+mkdir -p scripts
+printf 'exit 0\n' > scripts/ensure_params_build.sh
+exec 9>boot.lock
+export CARROT_BOOT_LOCK_FD=9
+start_carrot_web() {
+  command bash -c 'printf "web=%s\n" "${CARROT_WEB_EXTERNAL-unset}"'
+  if { true >&9; } 2>/dev/null; then
+    echo 'web inherited boot lock' >&2
+    exit 1
+  fi
+  test "${CARROT_BOOT_LOCK_FD-unset}" = unset
+}
+''' + web_startup + r'''
+command bash -c 'printf "manager=%s\n" "${CARROT_WEB_EXTERNAL-unset}"'
+test "$CARROT_BOOT_LOCK_FD" = 9
+true >&9
+'''
+  result = subprocess.run([bash, "-c", harness], cwd=tmp_path, env=env, capture_output=True, text=True, timeout=5, check=False)
+  assert result.returncode == 0, result.stdout + result.stderr
+  assert result.stdout.splitlines() == [f"web={expected}", f"manager={expected}"]
 
 
 def test_recovery_and_agnos_precede_params_build() -> None:
@@ -11,7 +57,7 @@ def test_recovery_and_agnos_precede_params_build() -> None:
 
   pythonpath = launch.index('export PYTHONPATH=')
   ssh_access = launch.index("/data/params/d/SshEnabled")
-  recovery = launch.index("  start_carrot_recovery")
+  recovery = launch.index("  start_carrot_recovery", ssh_access)
   agnos_update = launch.index("    if ! agnos_init; then")
   dependencies = launch.index("  if ! bootstrap_runtime_dependencies; then")
   params_build = launch.index('bash "$DIR/scripts/ensure_params_build.sh"')

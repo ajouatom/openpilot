@@ -3,7 +3,6 @@
 
 from __future__ import annotations
 
-import math
 from typing import Any
 
 from openpilot.cereal import car, log, messaging
@@ -12,6 +11,7 @@ from openpilot.common.realtime import Priority, config_realtime_process
 from openpilot.common.swaglog import cloudlog
 from opendbc.car.hyundai.values import HyundaiExtFlags
 from openpilot.selfdrive.carrot.radar import effective_radar_track_mode
+from openpilot.selfdrive.carrot.radar_motion.coordinates import device_yaw_to_radar
 from openpilot.selfdrive.carrot.radar_motion import (
   DPathRadarController,
 )
@@ -42,6 +42,8 @@ EMPTY_LEAD = {
   "radarTrackId": -1,
   "jLead": 0.0,
   "score": 0.0,
+  "cutOutTime": 0.0,
+  "cutOutConfidence": 0.0,
 }
 
 
@@ -66,7 +68,7 @@ def _yaw_rate(live_pose: Any) -> float:
     and bool(getattr(live_pose, "sensorsOK", False))
   ):
     value = float(getattr(angular_velocity, "z", 0.0))
-    return value if math.isfinite(value) else 0.0
+    return device_yaw_to_radar(value)
   return 0.0
 
 

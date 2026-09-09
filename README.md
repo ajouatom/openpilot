@@ -1,6 +1,6 @@
 # carrotpilot
 
-[한국어](#한국어) · [English](#english)
+[한국어](#한국어) · [English](#english) · [简体中文](#简体中文)
 
 [사용 설명서](https://g4iwnl.gitbook.io/carrotpilot) · [CarrotPilot Wiki](https://github.com/ajouatom/openpilot/wiki)
 
@@ -185,3 +185,94 @@ Official public guidance for carrotpilot is provided primarily through the manua
 carrotpilot is based on [openpilot](https://github.com/commaai/openpilot), developed by comma.ai and openpilot contributors. openpilot is distributed under the MIT License, while some components may use other licenses. See [LICENSE](LICENSE) and the license notices in individual components for details.
 
 “openpilot” and comma hardware names belong to their respective rights holders. carrotpilot is not affiliated with or endorsed by comma.ai.
+
+---
+
+## 简体中文
+
+carrotpilot 是一个基于 [openpilot](https://github.com/commaai/openpilot) 的独立驾驶辅助软件项目，主要面向现代·起亚·Genesis 车辆的兼容性、纵向控制质量和真实驾驶体验进行开发与改进。
+
+carrotpilot 不是由 comma.ai 开发、审查、批准或正式支持的 openpilot 发行版。它包含与上游 openpilot 不同的车辆控制、安全策略和 Driver Monitoring 逻辑，因此不能假设这两个项目在行为和支持要求上完全相同。
+
+### 安装与发布策略
+
+在重置设备后，在安装地址输入框中使用以下地址：
+
+```text
+i.carrotpilot.app/carrot-wip
+```
+
+`carrot-wip` 是持续开发和发布同步进行的 rolling branch。为了解决车辆特定问题、风险点和错误，代码会经常更新，它并不像传统稳定版那样长期冻结不变。更新前请确认改动内容，更新后请在能够立即接管车辆控制的环境中进行验证。
+
+公开的预构建 `carrot` 分支也存在，但没有积极维护，因此当前推荐的发布分支是 `carrot-wip`。
+
+### 支持设备
+
+- comma three (C3)
+- comma 3X (C3X)
+- comma four (C4)
+
+部分非原厂或克隆设备也提供有限兼容性，但其硬件配置和质量并不一致。特别是部分设备没有可用的驾驶员正视摄像头，或者其摄像头支持不正常。这些配置不推荐使用，也不保证设备兼容性或 Driver Monitoring 行为。
+
+“实验性”或“有限兼容”标签仅用于描述技术成熟度和验证范围，并不免除法律要求、安全标准或使用者责任。
+
+### 车辆支持范围
+
+carrotpilot 的开发和真实反馈主要聚焦现代·起亚·Genesis（HKG）车辆。
+
+仓库中也包含从 upstream openpilot 继承来的其他制造商车辆代码和支持列表，但这并不意味着这些车辆都已被 carrotpilot 单独验证或被积极支持。没有用户反馈的制造商和车型无法保证其可用性和质量。
+
+在安装前，请先查阅 [使用说明书](https://g4iwnl.gitbook.io/carrotpilot) 和 [Wiki](https://github.com/ajouatom/openpilot/wiki)，确认车辆兼容性、所需线束和已知限制。
+
+### 现代·起亚·Genesis 线束与纵向控制
+
+| 车辆配置 | 常见连接与控制方式 |
+|---|---|
+| CAN 车辆 | 使用 comma 原厂线束，连接摄像头 |
+| CAN-FD 普通车辆 | 使用 comma 原厂线束，连接摄像头 |
+| 配备 ADAS 模块的 CAN-FD HDA2 车辆 | 使用单独线束，连接 ADAS 模块 |
+
+在受支持的 CAN-FD HDA2 配置中，设备连接到 ADAS 模块，carrotpilot 的 openpilot 纵向控制会直接生成加速和减速指令。这不同于完全依赖原厂 SCC 进行纵向控制的方式。
+
+并非所有车辆和车型年都受支持。即使车名相同，线束、连接位置和纵向控制兼容性也可能因平台、ECU、摄像头和 ADAS 配置而不同，因此请务必确认车辆具体支持信息。
+
+### 与 upstream openpilot 的差异
+
+#### Vehicle safety 与 CAN 策略
+
+carrotpilot 会在部分安全策略和 CAN 接受条件上与 upstream openpilot 不同。这些调整考虑了受支持车辆上已确认的 CAN 消息周期、计数器、控制方式以及车辆故障案例。仓库中包含针对特定消息或时序条件进行调优的代码，旨在避免干扰车辆正常控制流程。
+
+这意味着 carrotpilot 与 comma.ai 官方 safety model 并不完全一致，也不能保证它在所有车辆和场景下都更安全，或满足特定的功能安全标准。安全相关修改应基于日志、可复现案例和本仓库中的测试来评估。
+
+#### Driver Monitoring
+
+carrotpilot 会调整 Driver Monitoring 行为，以减少当驾驶员确实在看前方时仍反复触发告警的问题。
+
+Driver Monitoring 默认开启。但在一些无法使用驾驶员正视摄像头的硬件上（包括部分非原厂设备），也提供关闭选项。关闭后，将无法使用基于摄像头的驾驶员状态检测，以及相关的告警和减速功能，因此不推荐使用此配置。无论 Driver Monitoring 是否启用，驾驶员都应始终注视道路，并准备好随时接管车辆控制。
+
+### 开发与验证范围
+
+本仓库包含从 openpilot 继承来的测试，以及 carrotpilot 自有的车辆控制、设置和安全相关测试。但这并不等同于 comma.ai 的官方发布验证或内部 HIL（硬件在环）体系，也不意味着所有车辆、线束和设备组合都已完成验证。
+
+`carrot-wip` 会根据真实使用反馈持续更新。对于文档中未说明的配置或没有反馈的车辆，应视为未验证状态。
+
+### 法律声明
+
+在车辆中安装或修改软件，可能会受到司法管辖区和车辆配置相关法律、汽车安全要求、检查规定及保险条款的约束。
+
+韩国《汽车管理法》限制对可能影响车辆安全运行的软件进行任意修改、安装、增设或删除。详细内容请参考 [国家法令信息센터的《汽车管理法》](https://www.law.go.kr/lsInfoP.do?chrClsCd=010102&lsId=001747&lsiSeq=260419&viewCls=lsRvsDocInfoR)。
+
+carrotpilot 是一个正在开发中的驾驶辅助软件，而不是经认证的车辆零件或自动驾驶产品。本仓库不对特定场景下的车辆适配性、法律合规性或安全性做出担保。用户应自行确认适用法律法规，并对自身设备、安装、设置和使用承担责任。本声明不构成法律意见。
+
+### 文档
+
+- [CarrotPilot 使用说明书](https://g4iwnl.gitbook.io/carrotpilot)
+- [CarrotPilot Wiki](https://github.com/ajouatom/openpilot/wiki)
+
+carrotpilot 的官方公开说明主要以上述使用说明书和 Wiki 为主。请先查阅这些文档，确认车辆要求和设置说明。
+
+### 署名与许可证
+
+carrotpilot 基于 comma.ai 和 openpilot 贡献者开发的 [openpilot](https://github.com/commaai/openpilot)。openpilot 以 MIT License 发布，部分组件可能适用其他许可证。详细信息请查看 [LICENSE](LICENSE) 和各组件的许可证声明。
+
+“openpilot”与 comma 硬件名称均属于其相应权利人。carrotpilot 不属于 comma.ai 的关联项目，也未获得 comma.ai 的背书。
