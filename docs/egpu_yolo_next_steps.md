@@ -2,12 +2,48 @@
 
 Continue on the owner-requested `carrot-egpu-yolo2`, branched from
 `carrot-egpu-yolo` at `1310ed43fe`. This remains a separate feature experiment
-based on `carrot-cinque-terre`. Do not activate these features on the three
-maintained model branches. The owner approved the following five stages.
+with its own model selection. Keep YOLO-specific changes on this feature branch
+when synchronizing common code with other maintained branches. The owner approved the following five stages.
 The present outputs are observational; automatic vehicle control is not
 validated or enabled by this plan.
 
 ## Current baseline
+
+### Completed-overrun recovery (2026-09-09, late morning)
+
+The vehicle at `17f249459d` retained another unrecoverable wait. In route
+`00000eff--ea8c7e840f`, frame 3227 was the 1,272nd and final YOLO execution.
+Submission took 2.384 ms; completion/readback took 6.031 ms rather than the
+roughly 2 ms nearby. The owner's complete job cost, reconstructed from the next
+reservation, was 8.751 ms. With the 1 ms guard this exceeded the available
+9.244 ms by about 0.507 ms. The resulting required reservation of 11.502 ms
+became permanent although later slots were typically 8–9 ms. Status history
+also retained earlier owners stuck at 15.802 and 24.362 ms after one overrun.
+
+In the inspected two-second window the driving model stayed about 35–37 ms,
+with continuous model IDs and no camera ID discontinuity or camera publication
+gap above 75 ms. Thermal state was green. CPU load was high (core 7 about
+84–90% near the event), but the logs cannot separate GPU/USB response latency
+from host scheduling delay inside readback. Do not claim the hub or a specific
+CPU process caused it. The ordinary rolling-budget fix was active and working;
+its explicit permanent-overrun exception caused this remaining recovery failure.
+
+Completed overruns now retain the increased reservation for 30 seconds, then
+60/120/240/300 seconds on repeated misses within the same model owner. Only
+after supervisor authorization, 200 uninterrupted primary frames and no pending
+camera may the runtime revalidate above its unchanged artifact/startup floor.
+Five successful probes, at most 1 Hz, precede normal admission. Every probe
+still needs the complete estimated job plus 20% margin and 1 ms guard to fit.
+Overrun counts remain cumulative; GPU execution errors are never cleared here.
+This is bounded retry after transient completed work, not a promise that a
+future job cannot overrun. Actual recovery can take longer than the budget
+backoff while the supervisor or camera/primary guards require more waiting.
+
+Tests reproduce the recorded 11.502 ms reservation, continued blocking before
+the timeout, startup-floor protection, authorization/stability/camera gates,
+five 1 Hz probes, increasing retry delay and permanent GPU-error quarantine.
+This changes neither the compiled artifact nor inference input and requires
+no GPU compilation. Live moving recovery remains to be verified after rollout.
 
 ### Resident budget starvation and camera boxes (2026-09-09)
 
@@ -28,8 +64,9 @@ artifact/startup measurement floor. Completed, within-deadline measurements can
 expire even when no new work is admitted, breaking the circular wait. Lowering
 the reservation starts five revalidation runs limited to 1 Hz. The 20% margin,
 1 ms guard, stable primary cadence, next-camera priority and GPU-error latch
-remain mandatory. A real deadline miss permanently raises this owner's floor;
-it is not aged away. A monotonic maximum queue avoids scanning the sample window
+remain mandatory. The initial version permanently raised this owner's floor
+after a deadline miss; the bounded recovery above supersedes that exception.
+A monotonic maximum queue avoids scanning the sample window
 on each primary frame. No artifact/kernel/input transfer changes or recompilation
 are needed. Recovery history now includes the YOLO state, run/overrun counters,
 required reservation and available time at the pause.
