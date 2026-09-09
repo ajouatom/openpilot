@@ -10,7 +10,7 @@ from openpilot.common.swaglog import cloudlog
 from openpilot.selfdrive.modeld.constants import index_function
 from openpilot.selfdrive.controls.radar_constants import LEAD_ACCEL_TAU
 from openpilot.selfdrive.carrot.traffic_stop import get_traffic_stop_distance_adjust, get_traffic_stop_obstacle_distance
-from openpilot.selfdrive.controls.lib.longitudinal_preview import LEAD_ACCEL_MIN_TRACK_FRAMES, get_lead_accel_mpc_request
+from openpilot.selfdrive.controls.lib.longitudinal_preview import LEAD_ACCEL_MIN_TRACK_FRAMES, LeadAccelResponseState, get_lead_accel_mpc_request
 from openpilot.selfdrive.controls.lib.longitudinal_cutout import cutout_obstacle_relief
 from openpilot.selfdrive.carrot.radar_motion.lane_change_gap import LaneChangeGapPlan
 
@@ -287,6 +287,7 @@ class LongitudinalMpc:
     self.lead_accel_response_active = False
     self.lead_accel_response_level = 0
     # timers
+    self.lead_response_state = LeadAccelResponseState()
     self.solve_time = 0.0
     self.time_qp_solution = 0.0
     self.time_linearization = 0.0
@@ -416,6 +417,7 @@ class LongitudinalMpc:
       lead_status=tf_lead_valid,
       lead_accel=tf_lead.aLeadK if tf_lead_valid else 0.0,
     )
+    jerk_factor = carrot.jerk_factor
 
     lead_xv_0, lead_v_0 = self.process_lead(radarstate.leadOne)
     lead_xv_1, lead_v_1 = self.process_lead(radarstate.leadTwo)
@@ -432,10 +434,6 @@ class LongitudinalMpc:
       stop_x = 1000.0
     else:
       v_cruise, stop_x, mode = carrot.v_cruise, carrot.stop_dist, carrot.mode
-      desired_distance = desired_follow_distance(v_ego, lead_v_0, comfort_brake, stop_distance, t_follow)
-      t_follow = carrot.dynamic_t_follow(t_follow, radarstate.leadOne, desired_distance, self.prev_a)
-      if getattr(carrot, 'lane_change_active', False):
-        jerk_factor = carrot.jerk_factor  # no previous-cycle dynamic jerk boost on entry
 
     # To estimate a safe distance from a moving lead, we calculate how much stopping
     # distance that lead needs as a minimum. We can add that to the current distance
@@ -544,6 +542,7 @@ class LongitudinalMpc:
       gap_margin=response_gap_margin,
       speed_error=v_cruise - v_ego,
     )
+    response_request = self.lead_response_state.update(response_request, self.dt, response_lead.radarTrackId)
     self.lead_accel_response_active = response_request.active
     self.lead_accel_response_level = response_request.level if response_request.active else 0
     self.set_weights(

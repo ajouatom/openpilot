@@ -81,29 +81,27 @@ def test_automatic_driving_mode_exposes_manual_normal_and_eco_choices(params):
 def test_longitudinal_comfort_settings_use_driver_facing_language(params):
   by_name = {p["name"]: p for p in params}
 
-  lead_response = by_name["DynamicTFollow"]
-  assert lead_response["default"] == 0
-  assert lead_response["display_unit"] == "percent"
-  assert "0%는 사용 안 함" in lead_response["descr"]
+  assert "DynamicTFollow" not in by_name
 
   lead_accel_response = by_name["LeadAccelResponse"]
   assert (lead_accel_response["min"], lead_accel_response["max"], lead_accel_response["default"]) == (0, 5, 0)
   assert lead_accel_response["control"] == "select"
   assert "모든 차간거리 단계" in lead_accel_response["descr"]
-  assert "170/130/80/36/10" in lead_accel_response["descr"]
-  assert "95/80/60/35/15%" in lead_accel_response["descr"]
+  assert "190/170/130/36/10" in lead_accel_response["descr"]
+  assert "95/85/70/35/15%" in lead_accel_response["descr"]
   assert "MPC 뒤에 가속을 별도로 더하지 않으며" in lead_accel_response["descr"]
   assert "CruiseMaxVals" in lead_accel_response["descr"]
   assert "설정 TF에 도달" in lead_accel_response["descr"]
-  assert lead_accel_response["options"]["ko"][3] == "3 경쾌함(추천)"
+  assert lead_accel_response["options"]["ko"][3] == "3 균형 추종"
   assert lead_accel_response["options"]["ko"][-1] == "5 최대 추종(시험)"
 
   params_keys = PARAMS_KEYS_PATH.read_text(encoding="utf-8")
   assert '{"LeadAccelResponse", {PERSISTENT, INT, "0"}}' in params_keys
+  assert '{"DynamicTFollow",' not in params_keys
 
   lane_change = by_name["DynamicTFollowLC"]
   assert lane_change["default"] == 100
-  assert "100%는 변화 없음" in lane_change["descr"]
+  assert "100은 추가 완화 없음" in lane_change["descr"]
 
   driving_mode = by_name["MyDrivingMode"]
   assert "ComfortBrake" not in driving_mode["descr"]

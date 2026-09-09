@@ -138,8 +138,9 @@ def test_production_tf_update_cycle_has_no_repeated_reduction(changing, ratio):
   path = Path(__file__).resolve().parents[1] / 'carrot_functions.py'
   tree = ast.parse(path.read_text(encoding='utf-8'))
   cls = next(n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == 'CarrotPlanner')
-  methods = [n for n in cls.body if isinstance(n, ast.FunctionDef) and n.name in ('get_T_FOLLOW', 'dynamic_t_follow', 'apply_t_follow')]
-  namespace = {'np': np, 'DT_MDL': .05, 'ramp_t_follow': ramp_t_follow, 'log': NS(LongitudinalPersonality=NS(standard=1))}
+  methods = [n for n in cls.body if isinstance(n, ast.FunctionDef) and n.name in ('get_T_FOLLOW',)]
+  namespace = {'LEAD_ACCEL_DEADBAND': .1, 'LEAD_ACCEL_CONFIGURED_TF_MIN': 4, 'np': np, 'DT_MDL': .05,
+               'ramp_t_follow': ramp_t_follow, 'log': NS(LongitudinalPersonality=NS(standard=1))}
   exec(compile(ast.Module(body=methods, type_ignores=[]), str(path), 'exec'), namespace)
   planner_type = type('ActualTFMethods', (), {n.name: namespace[n.name] for n in methods})
   p = planner_type()
@@ -151,12 +152,12 @@ def test_production_tf_update_cycle_has_no_repeated_reduction(changing, ratio):
   p._tf_decel_extra = 0.
   p.t_follow_last = 1.3
   p.lane_change_active = changing
-  p.dynamicTFollowLC, p.dynamicTFollow, p.jerk_factor = ratio, .2, .7
+  p.dynamicTFollowLC, p.leadAccelResponse, p.jerk_factor = ratio, 0, .7
   p.desireState, p.desireStateCount = 1., 1
   for _ in range(100):
     tf = p.get_T_FOLLOW()
     assert tf == pytest.approx(1.3)
-    assert p.dynamic_t_follow(tf, NS(status=True, jLead=2.), 0., 0.) == pytest.approx(1.3 if changing else 1.1)
+    assert p.t_follow_last == pytest.approx(1.3)
 
 
 @pytest.mark.parametrize('replace_primary', [True, False])

@@ -126,7 +126,6 @@ class CarrotPlanner:
     self.tFollowGap3 = 1.45
     self.tFollowGap4 = 1.6
 
-    self.dynamicTFollow = 0.0
     self.leadAccelResponse = 0
     self.dynamicTFollowLC = 1.0
     self.enableSpeedTF = 0
@@ -156,7 +155,6 @@ class CarrotPlanner:
     self.desireState = 0.0
     self.desireStateCount = 0
     self.jerk_factor = 1.0
-    self.jerk_factor_apply = 1.0
 
     self.activeCarrot = 0
     self.xDistToTurn = 0
@@ -191,7 +189,6 @@ class CarrotPlanner:
       self.tFollowGap2 = self.params.get_float("TFollowGap2") / 100.
       self.tFollowGap3 = self.params.get_float("TFollowGap3") / 100.
       self.tFollowGap4 = self.params.get_float("TFollowGap4") / 100.
-      self.dynamicTFollow = self.params.get_float("DynamicTFollow") / 100.
       self.leadAccelResponse = int(np.clip(self.params.get_int("LeadAccelResponse"), 0, 5))
       self.dynamicTFollowLC = self.params.get_float("DynamicTFollowLC") / 100.
       self.enableSpeedTF = self.params.get_int("EnableSpeedTF")
@@ -283,25 +280,16 @@ class CarrotPlanner:
 
 
   def _apply_decel_hold_and_boost_t_follow(self, tf_target, a_ego):
-    if not hasattr(self, "_tf_applied") or self._tf_applied <= 0.0:
-      self._tf_applied = float(tf_target)
-
-    DECEL_HOLD_A = -0.2  # m/s^2
-    self._tf_decel_extra = 0.0
-
-    # 감속 중에는 t_follow 축소를 막음
-    if a_ego <= DECEL_HOLD_A and tf_target < self._tf_applied:
-      tf_held = float(self._tf_applied)
-    else:
-      tf_held = float(tf_target)
-
-    # 감속 중에는 속도 감소로 실제 거리 여유가 줄 수 있으므로 약간 추가 확보
-    # a_ego = -0.2 부근에서는 거의 0, 더 강한 감속일수록 boost 증가
-    decel_boost = float(np.interp(a_ego, [-2.5, -1.0, -0.3, 0.0],
-                                  [0.50, 0.25, 0.06, 0.0]))
-    self._tf_decel_extra = decel_boost * self.tFollowDecelBoost
-
-    return float(tf_held + self._tf_decel_extra)
+    # Hold only the unboosted baseline. Feeding the previous boosted target
+    # back here would add the same margin on every planner cycle.
+    previous_extra = getattr(self, "_tf_decel_extra", 0.0)
+    previous_base = getattr(self, "_tf_decel_base", getattr(self, "_tf_applied", tf_target) - previous_extra)
+    self._tf_decel_base = max(tf_target, previous_base) if a_ego <= -0.2 else tf_target
+    requested_extra = float(np.interp(a_ego, [-2.5, -1.0, -0.3, 0.0], [0.50, 0.25, 0.06, 0.0])) * self.tFollowDecelBoost
+    # Add braking margin promptly; release only the extra margin progressively
+    # so its removal does not suddenly invite acceleration to a shorter gap.
+    self._tf_decel_extra = max(requested_extra, previous_extra - 0.10 * DT_MDL)
+    return float(self._tf_decel_base + self._tf_decel_extra)
 
 
   def _clip_t_follow(self, t_follow):
@@ -333,10 +321,10 @@ class CarrotPlanner:
     tf_adjusted = self._apply_decel_hold_and_boost_t_follow(tf_mode_target, a_ego)
     tf_final = self._clip_t_follow(tf_adjusted)
     self._tf_applied = float(tf_final)
-    # Baseline and final dynamic gap have separate histories. Feeding the
-    # reduced result back into this ramp compounded the reduction every cycle.
+    # Apply the baseline increase ramp once per planner cycle.
     self._tf_base_last = ramp_t_follow(tf_final, getattr(self, '_tf_base_last', self.t_follow_last), self._tf_decel_extra, DT_MDL)
-    return float(self._tf_base_last)
+    self.t_follow_last = float(self._tf_base_last)
+    return self.t_follow_last
 
 
   def _update_model_desire(self, sm):
@@ -380,38 +368,6 @@ class CarrotPlanner:
       blindspot=not signal or bool(state.leftBlindspot if direction == -1 else state.rightBlindspot), valid=valid,
     )
 
-
-  def dynamic_t_follow(self, t_follow, lead, desired_follow_distance, prev_a):
-    self.jerk_factor_apply = self.jerk_factor
-
-    # A lane change keeps the baseline TF and jerk cost for every obstacle.
-    # Only confirmed departure credit in MPC may relax the old primary later.
-    if getattr(self, 'lane_change_active', False):
-      self.t_follow_last = float(t_follow)
-      return float(t_follow)
-
-    # 일반 lead follow: lead.jLead 기반 동적 조절
-    elif lead.status and self.dynamicTFollow > 0.0:
-      # lead.jLead < 0 : 앞차가 감속 방향으로 변함 -> 차간거리 증가
-      # lead.jLead > 0 : 앞차가 가속 방향으로 변함 -> 차간거리 감소
-      t_follow += np.interp(lead.jLead, [-3.0, -0.5, 0.5, 2.0], [1.0, 0.0, 0.0, -1.0]) * self.dynamicTFollow
-
-      # 앞차가 풀어주는 상황에서는 jerk factor 약간 낮춰서 더 민첩하게
-      if lead.jLead > 0.2:
-        self.jerk_factor_apply = self.jerk_factor * 0.5
-
-      t_follow = np.clip(t_follow, 0.3, 2.0)
-
-    return self.apply_t_follow(t_follow, 0.0)
-
-
-  def apply_t_follow(self, t_follow, adjust_t_follow=0.0):
-    # t_follow가 급격히 증가하면 목표거리도 급격히 증가하여 강한 감속을 유도할 수 있으므로
-    # 증가 방향만 천천히 반영
-    t_follow = ramp_t_follow(t_follow, self.t_follow_last, self._tf_decel_extra, DT_MDL)
-
-    self.t_follow_last = float(t_follow)
-    return float(t_follow + adjust_t_follow)
 
   def update_stop_dist(self, stop_x):
     stop_x = self.xStopFilter.process(stop_x, median = True)
