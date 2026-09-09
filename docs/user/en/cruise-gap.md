@@ -214,9 +214,12 @@ This setting permits bounded relief of the old lead's following-distance require
 
 The catalog and initial Params default are both `100`. Invalid values, including `0`, disable additional relief. Establish baseline behavior at `100` and change one step at a time. Lower values do not mean faster acceleration in every lane change.
 
-Relief requires measured lateral movement, continuous observations of the same lead, predicted body clearance, and sufficient destination-lead spacing. It starts only after predicted clearance plus 0.35 seconds. The cap is the smallest of 20% of base TF, 0.25 seconds, and 4 metres. Destination front vehicles retain normal TF.
+Relief requires measured lateral movement, continuous observations of the same lead, predicted body clearance, and sufficient selected leadTwo spacing. It starts only after predicted clearance plus 0.35 seconds. The cap is the smallest of 20% of base TF, 0.25 seconds, and 4 metres. Current leadOne/leadTwo retain normal TF.
 
-A blind-spot warning, cancellation, changed or missing tracks, missing pose data, or an unconfirmed destination lead blocks additional relief. A lane that appears empty does not authorize earlier acceleration without sufficient observations. This setting does not replace lane-change permission checks or checking rear traffic.
+A blind-spot warning, cancellation, changed or missing tracks, missing pose data, or a missing normally selected second lead blocks additional relief. A lane that appears empty does not authorize earlier acceleration without sufficient observations. This setting does not replace lane-change permission checks or checking rear traffic.
+
+
+The normally selected leadOne/leadTwo at lane-change entry form the reference pair. If either selected lead changes or disappears, additional acceleration relief stops for the rest of that maneuver. Braking uses only the currently selected leads; side radar candidates and stored entry vehicles never become additional braking obstacles.
 
 ### `TFollowDecelBoost`
 

@@ -2779,15 +2779,13 @@ class ProductionDPathSelector:
         for estimate in estimates
       )
       direction = frame.lane_change_direction or (lane_change_tracker.direction if frame.lane_change_active else 0)
-      side = 'left' if direction == -1 else 'right'
-      side_dicts = (getattr(output, 'lead_' + side) or {}, *getattr(output, 'leads_' + side))
       lane_change_gap = lane_change_tracker.update(
         now=frame.mono_time_s, direction=direction, v_ego=frame.v_ego,
         yaw_rate=frame.lane_change_device_yaw if frame.lane_change_device_yaw is not None else math.nan,
         path_t=frame.path_times, path_x=tuple(p[0] for p in frame.lane_change_model_path),
         path_y=tuple(p[1] for p in frame.lane_change_model_path),
         primary=SimpleNamespace(**output.lead_one) if output.lead_one else None,
-        side_leads=tuple(SimpleNamespace(**d) for d in side_dicts if d),
+        secondary=SimpleNamespace(**output.lead_two) if output.lead_two else None,
         blindspot=frame.lane_change_blindspot or frame.lane_change_direction == 0,
         valid=frame.input_age_s <= 0.20 and frame.model_age_s <= 0.20 and frame.car_state_age_s <= 0.20,
       )
