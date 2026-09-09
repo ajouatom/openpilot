@@ -9,6 +9,7 @@ import pytest
 
 from openpilot.selfdrive.controls.lib.longitudinal_cutout import cutout_obstacle_relief
 from openpilot.selfdrive.controls.lib.longitudinal_approach import CLOSING_DEADBAND, LeadApproachState, approach_margin, approach_reference
+from openpilot.selfdrive.controls.lib.longitudinal_safe_follow import SafeFollowState
 from openpilot.selfdrive.carrot.radar_motion.lane_change_gap import GapLead, LaneChangeGapPlan
 from openpilot.selfdrive.controls.lib.longitudinal_preview import LeadAccelResponseState, get_lead_accel_mpc_request
 from openpilot.selfdrive.carrot.traffic_stop import get_traffic_stop_distance_adjust, get_traffic_stop_obstacle_distance
@@ -39,13 +40,14 @@ def run_update(*, confidence=0., mode="acc", reset=False, enabled=True, second_d
   lead = NS(status=selected_status, radar=True, radarTrackId=50, dRel=25., vRel=-1., vLead=14.,
             aLeadK=-.5, aLeadTau=1.5, modelProb=.99, cutOutTime=1., cutOutConfidence=confidence)
   second = NS(**(vars(lead) | {"dRel": second_distance, "radarTrackId": 51, "cutOutConfidence": 0.}))
-  carrot = NS(comfort_brake=2.5, stop_distance=6., v_cruise=20., stop_dist=stop_x, mode=mode,
+  carrot = NS(comfort_brake=2.5, stop_distance=6., v_cruise=20., stop_dist=stop_x, mode=mode, myDrivingMode=3,
               trafficStopDistanceAdjust=0., trafficStopModelLeadOffset=0., leadAccelResponse=0,
               get_T_FOLLOW=lambda *a, **kw:1.45, jerk_factor=1.)
   if lane_change is not None:
     carrot.lane_change_gap = lane_change
     carrot.dynamicTFollowLC = .9
   self = NS(dt=.05, lead_response_state=LeadAccelResponseState(), x0=np.array([0., 15., 0.]), source="lead0", mode=mode, max_a=1.5, cruise_min_a=-1.2,
+            safe_follow_state=SafeFollowState(),
             lead_approach_states=(LeadApproachState(), LeadApproachState()), lead_approach_margins=np.zeros((13,2)),
             params=np.zeros((13,8)), prev_a=np.zeros(13), yref=np.zeros((13,6)),
             solver=NS(set=lambda *a:None), set_weights=lambda *a,**kw:None, crash_cnt=0,
