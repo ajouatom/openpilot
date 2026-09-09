@@ -6,6 +6,7 @@ import numpy as np
 import pytest
 
 from openpilot.selfdrive.controls.lib.longitudinal_approach import APPROACH_TUNING, LeadApproachState, approach_margin, approach_reference
+from openpilot.selfdrive.controls.lib.longitudinal_safe_follow import SafeFollowState
 
 
 @pytest.mark.parametrize('level', range(6))
@@ -91,6 +92,7 @@ def load_mpc_update(path):
             'AcadosOcpSolverCython': RecordingSolver, 'LEAD_ACCEL_MIN_TRACK_FRAMES': 3,
             'LeadAccelResponseState': preview.LeadAccelResponseState, 'get_lead_accel_mpc_request': preview.get_lead_accel_mpc_request,
             'LeadApproachState': LeadApproachState, 'approach_margin': approach_margin, 'approach_reference': approach_reference,
+            'SafeFollowState': SafeFollowState,
             'CLOSING_DEADBAND': .2, 'get_traffic_stop_distance_adjust': get_traffic_stop_distance_adjust,
             'get_traffic_stop_obstacle_distance': get_traffic_stop_obstacle_distance,
             'LaneChangeGapPlan': LaneChangeGapPlan, 'cutout_obstacle_relief': cutout_obstacle_relief}
@@ -107,18 +109,19 @@ def load_mpc_update(path):
 
 
 def run_update(cls, level=1, *, distance=45.15, speed=79.04/3.6, lead_speed=None,
-               frames=10, status=True, radar=True, enabled=True, reset=False, lane_change=False, mode='acc', lead_index=0, lead_accel=0.):
+               frames=10, status=True, radar=True, enabled=True, reset=False, lane_change=False, mode='acc', lead_index=0,
+               lead_accel=0., driving_mode=3, ego_accel=0.):
   if lead_speed is None:
     lead_speed = speed-1.96
   lead = SimpleNamespace(status=status, radar=radar, radarTrackId=49, dRel=distance, vLead=lead_speed,
                          vRel=lead_speed-speed, aLeadK=lead_accel, aLeadTau=1.5, modelProb=1.)
   absent = SimpleNamespace(status=False, radar=False, radarTrackId=-1, vRel=0., aLeadK=0., modelProb=0.)
   rs = SimpleNamespace(leadOne=lead if lead_index == 0 else absent, leadTwo=lead if lead_index == 1 else absent)
-  carrot = SimpleNamespace(leadAccelResponse=level, jerk_factor=1., comfort_brake=2.4, stop_distance=6.,
+  carrot = SimpleNamespace(leadAccelResponse=level, myDrivingMode=driving_mode, jerk_factor=1., comfort_brake=2.4, stop_distance=6.,
                            mode=mode, v_cruise=30., stop_dist=1000., trafficStopDistanceAdjust=0., lane_change_active=lane_change,
                            get_T_FOLLOW=lambda *args, **kwargs: .65)
   mpc = cls(mode=mode)
-  mpc.set_cur_state(speed, 0.)
+  mpc.set_cur_state(speed, ego_accel)
   mpc.set_accel_limits(-1.2, 2.)
   for _ in range(20):
     mpc.update(carrot, reset, rs, 30., *(np.zeros(13) for _ in range(4)), lead_accel_response_enabled=enabled,
