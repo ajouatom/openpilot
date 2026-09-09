@@ -4095,15 +4095,17 @@ class ClusterUiRenderer:
     def _draw_yolo_status(self, state: ClusterUiState, screen_mode: int) -> None:
         if state.yolo is None:
             return
-        x = (DESIGN_WIDTH - 520.0 if screen_mode == CLUSTER_SCREEN_MODE_FULLSCREEN_3D
-             else self._driving_hud_offset_design_x(screen_mode) + 420.0)
+        fullscreen = screen_mode == CLUSTER_SCREEN_MODE_FULLSCREEN_3D
+        x = (DESIGN_WIDTH - 520.0 if fullscreen
+             else self._driving_hud_offset_design_x(screen_mode) + 520.0)
+        width = 500.0 if fullscreen else 400.0
         color = (GREEN if state.yolo.state == "run" else RED if state.yolo.state in ("error", "overrun", "invalid") else AMBER)
-        rect = rl.Rectangle(x, 10.0, 500.0, 62.0)
+        rect = rl.Rectangle(x, 10.0, width, 62.0)
         rl.draw_rectangle_rounded(rect, 0.2, 8, rl_color((8, 13, 18), 205))
         rl.draw_rectangle_rounded_lines_ex(rect, 0.2, 8, 1.0, rl_color(color))
         title, content = yolo_text(state.yolo, self.language)
-        self._draw_text(self._ellipsize_text(title, 23, 476), x+12, 27, 23, color, anchor="left")
-        self._draw_text(self._ellipsize_text(content, 20, 476), x+12, 54, 20, WHITE, anchor="left")
+        self._draw_text(self._ellipsize_text(title, 23, width-24), x+12, 27, 23, color, anchor="left")
+        self._draw_text(self._ellipsize_text(content, 20, width-24), x+12, 54, 20, WHITE, anchor="left")
 
     def _draw_route_replay_controls(
         self,
