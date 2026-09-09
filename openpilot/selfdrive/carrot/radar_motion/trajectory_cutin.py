@@ -181,6 +181,7 @@ class TrajectoryCutInEstimate:
   passing_before_overlap: bool = False
   vision_bracket_supported: bool = False
   paired_inward_motion_supported: bool = False
+  entry_withdrawn: bool = False
 
   @property
   def identity(self) -> tuple[str, int, int]:
@@ -1264,6 +1265,21 @@ class TrajectoryCutInDetector:
           else CUTIN_CONFIRMATION_S
         ) + 0.05 * (3 - self.sensitivity))
       )
+      # A vehicle may move rapidly toward us and then settle in its own lane.
+      # The long motion window still predicts entry after that maneuver has
+      # ended. Require both recent positions and measured lateral velocity to
+      # lose inward motion before cancelling; keep a body already overlapping
+      # our corridor and a directly associated visual lead protected.
+      entry_withdrawn = (
+        not raw_cutin
+        and not current_overlap
+        and not paired_front_overlap
+        and not vision_supported
+        and history_s >= 0.75
+        and not recent_predicted_overlap
+        and short_inward_rate < max(MIN_INWARD_RATE_MPS, 0.5 * inward_rate)
+        and reported_inward < max(MIN_INWARD_RATE_MPS, 0.5 * inward_rate)
+      )
       confirmed_cutin = _update_latch(
         state,
         time_s,
@@ -1284,6 +1300,7 @@ class TrajectoryCutInDetector:
       )
       if (
         trajectory_reversed
+        or entry_withdrawn
         or non_cutin_side_motion
         or curve_alias
         or not front_curve_motion_supported
@@ -1380,7 +1397,8 @@ class TrajectoryCutInDetector:
         hold_s=RISK_HOLD_S,
       )
       if predecel_risk and (
-        point.v_rel >= -0.1
+        entry_withdrawn
+        or point.v_rel >= -0.1
         or time_to_overlap_s is None
         or curve_alias
         or not front_curve_motion_supported
@@ -1412,6 +1430,7 @@ class TrajectoryCutInDetector:
       reason = (
         "confirmed trajectory CUT-IN" if confirmed_cutin
         else "trajectory pre-deceleration" if predecel_risk
+        else "entry withdrawn outside path" if entry_withdrawn
         else "side pass before path entry" if passing_before_overlap
         else "close-born rear pass" if close_born_rear_pass
         else "parallel side drift" if paired_parallel_drift
@@ -1466,6 +1485,7 @@ class TrajectoryCutInDetector:
         passing_before_overlap=passing_before_overlap,
         vision_bracket_supported=vision_bracket_supported,
         paired_inward_motion_supported=paired_inward_motion_supported,
+        entry_withdrawn=entry_withdrawn,
       ))
 
     for key, state in tuple(self._tracks.items()):

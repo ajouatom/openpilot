@@ -497,6 +497,35 @@ def test_reversed_unsupported_trajectory_clears_confirmed_hold() -> None:
   assert not estimate.predecel_risk
 
 
+@pytest.mark.parametrize("side", (-1.0, 1.0))
+@pytest.mark.parametrize("maneuver", ("settle", "return", "continue", "single_sample", "overlap"))
+def test_entry_withdrawal_requires_sustained_motion_loss_outside_path(side, maneuver) -> None:
+  detector = TrajectoryCutInDetector()
+  estimates = []
+  for index in range(45):
+    time_s = index * 0.05
+    stop_time = 1.7 if maneuver == "overlap" else 1.0
+    inward = 1.5
+    lateral = 4.2 - 1.5 * time_s
+    if maneuver in ("settle", "return", "overlap") and time_s >= stop_time:
+      inward = -0.5 if maneuver == "return" else 0.0
+      lateral = 4.2 - 1.5 * stop_time - inward * (time_s - stop_time)
+    reported_inward = 0.0 if maneuver == "single_sample" and index == 21 else inward
+    corner = point(1200, "corner235", 30.0 - 5.0 * time_s, side * lateral,
+                   v_ego=15.0, v_rel=-5.0, yv_rel=-side * reported_inward)
+    front = point(38, "frontRadar", corner.d_rel + 1.0, corner.y_rel,
+                  v_ego=15.0, v_rel=-5.0, yv_rel=-side * reported_inward)
+    estimates.append(detector.update(time_s, 15.0, (corner,), PATH, MODEL,
+      cross_sensor_matches={(corner.source, corner.track_id): front})[0])
+
+  assert any(e.confirmed_cutin and e.control_eligible and e.predecel_risk for e in estimates[:20])
+  if maneuver in ("settle", "return"):
+    assert any(e.entry_withdrawn for e in estimates[20:30])
+    assert all(not e.confirmed_cutin and not e.predecel_risk for e in estimates[30:])
+  else:
+    assert not any(e.entry_withdrawn for e in estimates)
+
+
 def test_far_inconsistent_corner_motion_stays_alert_only() -> None:
   detector = TrajectoryCutInDetector()
   estimate = None
