@@ -2,6 +2,30 @@
   "sensitivity": 50,
   "cases": [
     {
+      "id": "k8-32e-32-right-suv-before-confirmed-entry-4791",
+      "vehicle_folder": "KIA_K8_HEV_1ST_GEN b34d1abb87cce93b",
+      "log": "0000032e--00a430a6bf--32/rlog.zst",
+      "source": "front+corner",
+      "window": [54.0, 56.5],
+      "expected": "clear",
+      "target_track_ids": [4791, 40],
+      "forbidden_lead_two_ids": [4791, 40],
+      "scene": "Video-reviewed right SUV before confirmed close entry. Preserving an established cut-in across threshold noise must not relax the initial admission gate. Replay time is 0.1000 s before video."
+    },
+    {
+      "id": "k8-32e-32-right-suv-continuous-entry-lead-two-4791",
+      "vehicle_folder": "KIA_K8_HEV_1ST_GEN b34d1abb87cce93b",
+      "log": "0000032e--00a430a6bf--32/rlog.zst",
+      "source": "front+corner",
+      "window": [56.5, 59.85],
+      "expected": "detect",
+      "validation_stage": "lead_two",
+      "latest_detection_s": 56.8,
+      "lead_two_continuous_window": [56.8, 59.85],
+      "target_track_ids": [4791, 40],
+      "scene": "User-reported dropped cut-in, confirmed in qcamera: right SUV keeps entering throughout the segment. After video 56.809 s detection, corner 4791/front 40 continues inward in both position windows, with direction consistency 1.0. Progress and reported velocity jitter around 0.25 m and 0.15 m/s, causing an erroneous SIDE-DRIFT veto and Lead2 gap at video 56.951-57.308 s. Require continuous Lead2; absence of strong new-entry evidence is not evidence that an established entry reversed. Replay time is 0.1000 s before video."
+    },
+    {
       "id": "carnival-196-11-aborted-right-entry-initial-lead-two-3293",
       "vehicle_folder": "KIA_CARNIVAL_4TH_GEN c4dcf95545dafe68",
       "log": "00000196--b3454d7cd6--11/rlog.zst",
