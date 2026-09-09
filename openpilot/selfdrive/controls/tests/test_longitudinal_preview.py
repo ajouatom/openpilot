@@ -10,6 +10,7 @@ from openpilot.selfdrive.controls.lib.longitudinal_preview import (
   DRIVING_MODE_NORMAL,
   DRIVING_MODE_SAFE,
   LEAD_ACCEL_RESPONSE_TUNING,
+  LeadAccelResponseState,
   apply_preview_target,
   clip_action_time,
   clip_preview_offset,
@@ -31,7 +32,7 @@ def preview_request(mode, a_lead, *, a_ego=0.0, lead_status=True):
 
 
 def mpc_request(level, *, source='lead0', enabled=True, lead_status=True,
-                a_lead=1.1, a_ego=0.0, v_rel=0.0, gap_margin=0.5,
+                a_lead=1.1, a_ego=0.0, v_rel=0.0, gap_margin=3.0,
                 speed_error=20.0):
   return get_lead_accel_mpc_request(
     level,
@@ -63,7 +64,7 @@ def planner_response_gate():
       "sm": {"selfdriveState": SimpleNamespace(personality=personality),
              "carState": SimpleNamespace(gasPressed=gas_pressed)},
       "log": SimpleNamespace(LongitudinalPersonality=SimpleNamespace(aggressive="aggressive")),
-      "carrot": SimpleNamespace(leadAccelResponse=level),
+      "carrot": SimpleNamespace(leadAccelResponse=level, lane_change_active=False),
       "reset_state": reset_state,
       "force_slow_decel": force_slow_decel,
       "accel_limits_turns": [-2.0, accel_max],
@@ -138,9 +139,9 @@ def test_response_costs_progress_from_gentle_to_maximum():
 
 
 @pytest.mark.parametrize(("level", "a_change_factor", "jerk_factor"), [
-  (1, 0.85, 0.95),
-  (2, 0.65, 0.80),
-  (3, 0.40, 0.60),
+  (1, 0.95, 0.95),
+  (2, 0.85, 0.85),
+  (3, 0.65, 0.70),
   (4, 0.18, 0.35),
   (5, 0.05, 0.15),
 ])
@@ -267,3 +268,70 @@ def test_preview_only_removes_acceleration_with_bounded_prebraking():
 def test_positive_signal_never_changes_mpc_acceleration_output(mode):
   assert apply_preview_target(0.20, 1.20, mode, 0.5) == pytest.approx(0.20)
   assert apply_preview_target(-0.50, 0.50, mode, 0.5) == pytest.approx(-0.50)
+
+
+@pytest.mark.parametrize("level", [1, 2, 3, 4])
+def test_small_lead_changes_and_small_gap_margin_fade_boost(level):
+  full = mpc_request(level, a_lead=1., v_rel=.5)
+  quiet = mpc_request(level, a_lead=.101, v_rel=.5)
+  near = mpc_request(level, a_lead=1., v_rel=.5, gap_margin=.001)
+  assert full.active and quiet.active and near.active
+  assert full.a_change_cost_factor < quiet.a_change_cost_factor < 1.
+  assert full.a_change_cost_factor < near.a_change_cost_factor < 1.
+  assert quiet.a_change_cost_factor > .99
+  assert near.a_change_cost_factor > .99
+
+
+@pytest.mark.parametrize("level", [1, 2, 3, 4])
+def test_response_entry_ramps_and_track_change_restarts(level):
+  state = LeadAccelResponseState()
+  request = mpc_request(level)
+  first = state.update(request, .05, 10)
+  assert first.a_change_cost_factor > request.a_change_cost_factor
+  for _ in range(20):
+    full = state.update(request, .05, 10)
+  assert full.a_change_cost_factor == pytest.approx(request.a_change_cost_factor)
+  assert state.update(request, .05, 11).strength == pytest.approx(first.strength)
+
+
+@pytest.mark.parametrize("level", range(1, 6))
+@pytest.mark.parametrize("blocked", [{"a_lead": -3.}, {"gap_margin": 0.}, {"v_rel": -3.},
+                                     {"lead_status": False}, {"enabled": False}, {"a_lead": float('nan')}])
+def test_braking_closing_and_invalid_input_release_boost_immediately(level, blocked):
+  state = LeadAccelResponseState()
+  for _ in range(20):
+    state.update(mpc_request(level), .05, 10)
+  result = state.update(mpc_request(level, **blocked), .05, 10)
+  assert not result.active
+  assert result.a_change_cost_factor == 1.
+  assert result.jerk_cost_factor == 1.
+  assert state.strength == 0.
+
+
+def test_maximum_response_has_no_fade_or_entry_delay():
+  state = LeadAccelResponseState()
+  request = mpc_request(5, a_lead=.101, v_rel=.1, gap_margin=.001)
+  assert request.active
+  assert request.a_change_cost_factor == .05
+  assert request.jerk_cost_factor == .15
+  assert state.update(request, .05, 10) is request
+  assert state.update(request, .05, 11) is request
+
+
+def test_mild_response_does_not_latch_strong_cost_near_a_deadband():
+  state = LeadAccelResponseState()
+  factors = [state.update(mpc_request(3, a_lead=a, a_ego=.1, v_rel=.2), .05, 10).a_change_cost_factor
+             for a in [.19, .21] * 50]
+  assert min(factors) > .98
+  assert max(factors) == 1.
+
+
+@pytest.mark.parametrize("level", [1, 2, 3, 4, 5])
+def test_response_ramp_uses_elapsed_time_across_planner_rates(level):
+  strengths = []
+  for dt in [.01, .025, .05]:
+    state = LeadAccelResponseState()
+    for _ in range(round(.1 / dt)):
+      result = state.update(mpc_request(level), dt, 10)
+    strengths.append(result.strength)
+  assert strengths == pytest.approx([strengths[0]] * 3)
