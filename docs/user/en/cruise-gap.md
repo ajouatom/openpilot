@@ -43,26 +43,28 @@ Catalog defaults and initial Params values currently differ for `CruiseMaxVals1`
 
 | Value | Mode | Max acceleration | `comfort_brake` | Time-gap term | Additional behavior |
 |---:|---|---:|---:|---:|---|
-| `1` | Eco | ×0.9 | ×0.9 | ×0.9, then clamped | Traffic-light detection retained |
-| `2` | Safe | ×0.8 | ×0.8 | ×0.8, then clamped | Congestion state used by auto mode |
+| `1` | Eco | ×0.9 | ×1.0 | ×1.1, then clamped | Traffic-light detection retained |
+| `2` | Safe | ×0.8 | ×0.9 | ×1.2, then clamped | Congestion state used by auto mode |
 | `3` | Normal | ×1.0 | ×1.0 | ×1.0 | Baseline |
 | `4` | High speed | ×1.2 | ×1.0 | ×1.0 | Traffic stop/go detection forced off |
 
-A smaller `comfort_brake` increases the distance term calculated for stopping, while `t_follow` is reduced by 10% in Eco and 20% in Safe mode. “Safe” therefore does not simply mean a longer time gap; final distance depends on ego and lead speeds.
+A smaller `comfort_brake` increases the stopping-distance term. Baseline time-gap factors are 1.1 in Eco and 1.2 in Safe; speed scaling, clamps, deceleration allowance and selected-TF priority at levels 4–5 determine the final gap.
 
 > [!WARNING]
 > High-speed mode raises the acceleration ceiling by 20% and ignores traffic-light control.
 
+In Safe mode, levels 4–5 retain existing launch response and boost entry. Only when ego out-accelerates the lead while catching the target gap does the future positive-acceleration ceiling taper. Renewed lead acceleration or sufficient opening gap removes the extra restriction. No new gap allowance is added; existing Safe acceleration limits, TF processing and braking limits remain active.
+
 ### `MyDrivingModeAuto`
 
-`0` uses the stored mode. `1` switches only between Safe and Normal according to traffic conditions; it never automatically selects Eco or High-speed mode.
+`0` uses the stored mode. `1` switches only between Safe and Normal according to traffic conditions; `2` switches between Safe and Eco. High-speed mode is never selected automatically.
 
 The current code enters congestion after repeated observations of either:
 
 - Lead distance at most 12 m and lead speed at most 2 km/h; or
 - Lead speed below 5 km/h, lead acceleration below 0.2 m/s², ego speed above 1 km/h, and lead distance below 200 m.
 
-It exits when lead acceleration exceeds 1.5 m/s², ego speed exceeds 35 km/h, or no lead is present within 200 m. The running code uses **35 km/h**, despite the setting description saying 20 km/h.
+It exits when lead acceleration exceeds 1.5 m/s², ego speed exceeds 35 km/h, or no lead is present within 200 m. The speed-based congestion exit threshold is **35 km/h**.
 
 Changing the stored `MyDrivingMode` during a drive can suspend automatic switching until the planner process restarts. For a stable comparison, use `MyDrivingMode=3` and `MyDrivingModeAuto=0`.
 
@@ -266,6 +268,12 @@ Approach preference works in normal ACC with a stable radar lead and a current c
 Added distance is the positive part of `(closing speed − 0.2 m/s) × closing-time allowance`, capped by the table and 25% of the remaining distance after stopping clearance. It fades linearly for estimated required braking between 0.8 and 2.0 m/s² using current and predicted speeds/distances. Current required braking of at least 2.0 m/s² disables the approach preference throughout the horizon. This constant-speed-lead estimate gates a comfort preference; it does not certify safe distance or braking capability.
 
 Allowance is recalculated at each predicted node without accumulation. Physical lead positions, TF and danger constraints stay unchanged; only the existing soft distance reference shifts, so braking onset and acceleration are not fixed values. This preference acts on the MPC target; ego-deceleration-based `TFollowDecelBoost` remains a separate part of TF processing. Level 5 receives no added approach preference in either acceleration response or its distance target.
+
+In Safe mode, levels 4–5 retain existing launch response and boost entry. Only when ego out-accelerates the lead while catching the target gap does the future positive-acceleration ceiling taper. Renewed lead acceleration or sufficient opening gap removes the extra restriction. No new gap allowance is added; existing Safe acceleration limits, TF processing and braking limits remain active.
+
+Current target-distance headroom, relative speed and lead acceleration estimate the approach over about two seconds. Settling is considered only when ego acceleration exceeds the lead’s positive acceleration by more than 0.1 m/s². The future ceiling descends from current acceleration at 0.8 m/s² per second of prediction time; this is not a fixed vehicle jerk limit and never blocks negative acceleration.
+
+Safe entry and exit blend the correction over 0.8 seconds. Target change/loss and existing boost inhibits such as accelerator override or lane change clear the state. Steady operation in Normal and levels 0–3 receive no settling correction. Configured TF is not increased, and existing selected-TF priority conditions for levels 4–5 during lead acceleration remain. Prompt launches still respect the existing Safe acceleration ceiling and do not guarantee prevention of cut-ins.
 
 ### `RadarReactionFactor`
 
