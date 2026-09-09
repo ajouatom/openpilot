@@ -60,16 +60,17 @@ def test_manifest_resolves_relative_https_url():
   assert manifest.cache_filename.endswith(".onnx")
 
 
-def test_default_manifest_is_pinned_to_tgc(monkeypatch):
+def test_default_manifest_is_pinned_to_cinque_v2(monkeypatch):
   monkeypatch.setattr(big_model, "urlopen", lambda *_args, **_kwargs: pytest.fail("default manifest must be built in"))
   manifest = big_model.fetch_manifest()
-  assert manifest.model_id == "comma-pr38739-tgc-a2e422ee-1791d594"
-  assert manifest.size == 765_950_064
-  assert manifest.sha256 == "1791d5940b2c048d0639813426dd2cf1d6f2a6727ed51e17c8bcea8bbe754123"
-  assert manifest.url == "https://upload.shind0.synology.me/models/comma4-big-tgc/big_driving_supercombo.onnx"
+  assert big_model.DEFAULT_MANIFEST_URL == "https://upload.shind0.synology.me/models/comma4-big-cinque-v2/manifest.json"
+  assert manifest.model_id == "comma-pr38823-cinque-v2-37bfa141-09d080f3"
+  assert manifest.size == 766_040_736
+  assert manifest.sha256 == "09d080f36965bb2a0790500452bd328aa03c484d0222aa79d1ad9f021a522aec"
+  assert manifest.url == "https://upload.shind0.synology.me/models/comma4-big-cinque-v2/big_driving_supercombo.onnx"
 
 
-def test_tgc_tinygrad_custom_op_is_supported():
+def test_big_model_tinygrad_custom_op_is_supported():
   source = (Path(big_model.__file__).parents[3] / "tinygrad_repo/tinygrad/nn/onnx.py").read_text(encoding="utf-8")
   assert 'TINYGRAD = "org.tinygrad"' in source
   assert "Contiguous = {OpSetId(Domain.TINYGRAD, 1):contiguous_1}" in source
