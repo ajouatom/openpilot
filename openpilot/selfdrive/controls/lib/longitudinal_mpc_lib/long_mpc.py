@@ -13,6 +13,7 @@ from openpilot.selfdrive.carrot.traffic_stop import get_traffic_stop_distance_ad
 from openpilot.selfdrive.controls.lib.longitudinal_preview import LEAD_ACCEL_MIN_TRACK_FRAMES, LeadAccelResponseState, get_lead_accel_mpc_request
 from openpilot.selfdrive.controls.lib.longitudinal_cutout import cutout_obstacle_relief
 from openpilot.selfdrive.controls.lib.longitudinal_approach import CLOSING_DEADBAND, LeadApproachState, approach_margin, approach_reference
+from openpilot.selfdrive.controls.lib.longitudinal_safe_follow import SafeFollowState
 from openpilot.selfdrive.carrot.radar_motion.lane_change_gap import LaneChangeGapPlan
 
 if __name__ == '__main__':  # generating code
@@ -289,6 +290,7 @@ class LongitudinalMpc:
     self.lead_accel_response_level = 0
     # timers
     self.lead_response_state = LeadAccelResponseState()
+    self.safe_follow_state = SafeFollowState()
     self.lead_approach_states = (LeadApproachState(), LeadApproachState())
     self.lead_approach_margins = np.zeros((N+1, 2))
     self.solve_time = 0.0
@@ -548,6 +550,16 @@ class LongitudinalMpc:
     response_request = self.lead_response_state.update(response_request, self.dt, response_lead.radarTrackId)
     self.lead_accel_response_active = response_request.active
     self.lead_accel_response_level = response_request.level if response_request.active else 0
+    self.params[:,1] = self.safe_follow_state.acceleration_limits(
+      self.params[:,1], T_IDXS,
+      level=carrot.leadAccelResponse, driving_mode=carrot.myDrivingMode,
+      enabled=(mode == 'acc' and lead_accel_response_enabled and not reset_state
+               and not getattr(carrot, 'lane_change_active', False) and response_track_stable
+               and response_lead.status and response_lead.radar),
+      track_id=response_lead.radarTrackId, gap_margin=response_gap_margin,
+      v_rel=response_lead.vRel, a_lead=response_lead.aLeadK,
+      a_ego=max(a_ego, measured_a_ego), dt=self.dt,
+    )
     self.set_weights(
       prev_accel_constraint,
       personality=personality,
