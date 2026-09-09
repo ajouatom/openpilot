@@ -790,6 +790,18 @@ class TrajectoryCutInDetector:
         and inward_progress < PAIRED_REAR_PASS_MAX_INWARD_PROGRESS_M
         and reported_inward < PAIRED_REAR_PASS_MAX_REPORTED_INWARD_MPS
       )
+      # Weak instantaneous speed/progress can prevent a new cut-in, but does
+      # not prove that an already confirmed entry has become parallel. Keep
+      # its ordinary confirmation hold while both position windows still
+      # show coherent inward motion. Withdrawal and side-pass vetoes below
+      # remain independent, and this does not extend the hold timer.
+      confirmed_entry_continues = (
+        time_s <= state.cutin_until_s
+        and inward_rate >= MIN_INWARD_RATE_MPS
+        and short_inward_rate >= MIN_INWARD_RATE_MPS
+        and direction_consistency >= 0.75
+        and short_direction_consistency >= 0.75
+      )
       paired_parallel_drift = (
         point.source.startswith("corner")
         and cross_sensor_supported
@@ -799,6 +811,7 @@ class TrajectoryCutInDetector:
         and abs(point.v_rel) <= PAIRED_PARALLEL_MAX_ABS_VREL_MPS
         and inward_progress < PAIRED_PARALLEL_MAX_INWARD_PROGRESS_M
         and reported_inward < PAIRED_PARALLEL_MAX_REPORTED_INWARD_MPS
+        and not confirmed_entry_continues
       )
       non_cutin_side_motion = close_born_rear_pass or paired_parallel_drift
       uncorroborated_close_front = (
