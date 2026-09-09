@@ -23,15 +23,28 @@ def build_status_payload(params: Any | None = None) -> dict[str, Any]:
   if not hardware_seen:
     return {"ok": True, "available": False}
 
-  status = read_big_model_status(model_cache_dir())
+  status = read_big_model_status(model_cache_dir()) or {}
   manifest = active_manifest()
+  # Status describes the model being updated; active_manifest can still refer
+  # to the previous model until the new download passes verification.
+  same_model = manifest is not None and (not status or status.get("sha256") == manifest.sha256)
+  phase = status.get("state")
+  updating = phase in {"checking", "downloading", "verifying", "compiling", "error"}
   try:
-    compiled = active_model_compiled() if manifest is not None else False
+    compiled = active_model_compiled() if same_model and not updating else False
   except Exception:
     compiled = False
-  state = "compiled" if compiled else str((status or {}).get("state") or ("ready" if manifest is not None else "checking"))
-  downloaded = int((status or {}).get("downloaded_bytes") or (manifest.size if manifest is not None else 0))
-  total = int((status or {}).get("total_bytes") or (manifest.size if manifest is not None else 0))
+  if updating:
+    state = phase
+  elif compiled:
+    state = "compiled"
+  elif same_model:
+    state = "waiting_for_ignition" if phase == "waiting_for_ignition" else "ready"
+  else:
+    state = "checking"
+  fallback_size = manifest.size if same_model else 0
+  downloaded = int(status.get("downloaded_bytes", fallback_size))
+  total = int(status.get("total_bytes", fallback_size))
   progress = round(min(100.0, max(0.0, downloaded * 100.0 / total)), 1) if total > 0 else None
   engaged = _params_bool(params, "IsEngaged") if params is not None else False
 
@@ -39,17 +52,17 @@ def build_status_payload(params: Any | None = None) -> dict[str, Any]:
     "ok": True,
     "available": True,
     "state": state,
-    "model_id": (status or {}).get("model_id") or (manifest.model_id if manifest is not None else None),
-    "sha256": (status or {}).get("sha256") or (manifest.sha256 if manifest is not None else None),
+    "model_id": status.get("model_id") if status else (manifest.model_id if manifest is not None else None),
+    "sha256": status.get("sha256") if status else (manifest.sha256 if manifest is not None else None),
     "downloaded_bytes": downloaded,
     "total_bytes": total,
     "progress": progress,
-    "detail": (status or {}).get("detail"),
-    "started_at": (status or {}).get("started_at"),
-    "updated_at": (status or {}).get("updated_at"),
+    "detail": status.get("detail"),
+    "started_at": status.get("started_at"),
+    "updated_at": status.get("updated_at"),
     "compiled": compiled,
     "engaged": engaged,
-    "can_restart": manifest is not None and not compiled and not engaged and state not in {
+    "can_restart": same_model and not compiled and not engaged and state not in {
       "checking", "downloading", "verifying", "compiling",
     },
   }
