@@ -245,11 +245,27 @@ Sets lead-start and acceleration response at every following-distance level. Lev
 
 With sufficient input, levels 1–4 ramp boost entry over 0.80/0.60/0.40/0.15 seconds. Boost scales down when distance margin is below 2.0/1.5/1.0/0.5 metres respectively, or the acceleration signal is small. The table gives full-boost costs; small changes stay closer to baseline costs. Level 5 has neither fade nor entry delay. Vehicles previously using DynamicTFollow may feel different because its additional TF reduction and jerk boost are removed.
 
-Every level requires normal ACC, no accelerator override or stop request, and a stable radar lead. Levels 1–2 use lead0/lead1 sources; levels 3–5 also support cruise. Cruise requires more than 1 km/h of set-speed headroom. Lead acceleration must exceed 0.1 m/s²; levels 1–4 with a lead source also require relative acceleration above the 0.1 m/s² deadband. Existing relative-speed and level-specific prediction gates remain active.
+Acceleration boost at every level requires normal ACC, no accelerator override or stop request, and a stable radar lead. Levels 1–2 use lead0/lead1 sources; levels 3–5 also support cruise. Cruise requires more than 1 km/h of set-speed headroom. Lead acceleration must exceed 0.1 m/s²; levels 1–4 with a lead source also require relative acceleration above the 0.1 m/s² deadband. Existing relative-speed and level-specific prediction gates remain active.
 
 Boost ends immediately at the TF target distance, when lead acceleration ends, or when closing-speed conditions fail. A changed lead restarts gradual entry at levels 1–4. Level 5 retains the −0.2 m/s relative-speed floor and 0.5-second prediction condition. All levels disable boost during lane-change starting/finishing, blended mode, and vision-only lead tracking.
 
 Levels 4–5 prioritize the selected `TFollowGap1`–`TFollowGap4` while a stable lead accelerates and the gap opens. Levels 1–3 retain normal speed/mode TF processing. `CruiseMaxVals`, curve, cut-in, lead-distance and danger-distance limits, and deceleration preview remain active. No acceleration is added after MPC. This setting does not change `AChangeCostStarting` or PID gains. Lower levels do not delay braking required by an urgent approach.
+
+Levels 1–4 add temporary clearance to the MPC distance preference while approaching a slower lead, with more allowance at lower levels. Levels 0 and 5 add no approach preference. The allowance disappears at matched speed, retaining the existing TF reference. Extra allowance fades when substantial braking is already needed, such as a nearby stationary lead; existing braking constraints remain active.
+
+Approach preference works in normal ACC with a stable radar lead and a current closing speed above 0.2 m/s, even when the lead is not accelerating. Unlike acceleration-boost source gates, all levels 1–4 can prepare an approach with a cruise source. The common boost inhibits still apply: accelerator override, stop request, lane change, forced deceleration, or no positive acceleration headroom. A new target or level ramps in over 0.8 seconds; target loss or the end of closing removes the preference.
+
+| Level | Closing-time allowance | Added-distance cap |
+|---|---:|---:|
+| 1 | 3.0 s | 12 m |
+| 2 | 2.0 s | 8 m |
+| 3 | 1.0 s | 4 m |
+| 4 | 0.3 s | 1 m |
+| 0, 5 | None | 0 m |
+
+Added distance is the positive part of `(closing speed − 0.2 m/s) × closing-time allowance`, capped by the table and 25% of the remaining distance after stopping clearance. It fades linearly for estimated required braking between 0.8 and 2.0 m/s² using current and predicted speeds/distances. Current required braking of at least 2.0 m/s² disables the approach preference throughout the horizon. This constant-speed-lead estimate gates a comfort preference; it does not certify safe distance or braking capability.
+
+Allowance is recalculated at each predicted node without accumulation. Physical lead positions, TF and danger constraints stay unchanged; only the existing soft distance reference shifts, so braking onset and acceleration are not fixed values. This preference acts on the MPC target; ego-deceleration-based `TFollowDecelBoost` remains a separate part of TF processing. Level 5 receives no added approach preference in either acceleration response or its distance target.
 
 ### `RadarReactionFactor`
 
