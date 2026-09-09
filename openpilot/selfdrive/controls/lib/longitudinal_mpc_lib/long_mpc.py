@@ -12,6 +12,7 @@ from openpilot.selfdrive.controls.radar_constants import LEAD_ACCEL_TAU
 from openpilot.selfdrive.carrot.traffic_stop import get_traffic_stop_distance_adjust, get_traffic_stop_obstacle_distance
 from openpilot.selfdrive.controls.lib.longitudinal_preview import LEAD_ACCEL_MIN_TRACK_FRAMES, LeadAccelResponseState, get_lead_accel_mpc_request
 from openpilot.selfdrive.controls.lib.longitudinal_cutout import cutout_obstacle_relief
+from openpilot.selfdrive.controls.lib.longitudinal_approach import CLOSING_DEADBAND, LeadApproachState, approach_margin, approach_reference
 from openpilot.selfdrive.carrot.radar_motion.lane_change_gap import LaneChangeGapPlan
 
 if __name__ == '__main__':  # generating code
@@ -288,6 +289,8 @@ class LongitudinalMpc:
     self.lead_accel_response_level = 0
     # timers
     self.lead_response_state = LeadAccelResponseState()
+    self.lead_approach_states = (LeadApproachState(), LeadApproachState())
+    self.lead_approach_margins = np.zeros((N+1, 2))
     self.solve_time = 0.0
     self.time_qp_solution = 0.0
     self.time_linearization = 0.0
@@ -554,6 +557,25 @@ class LongitudinalMpc:
       jerk_cost_factor=response_request.jerk_cost_factor,
     )
 
+    # Keep physical obstacles, danger limits, source selection and TF unchanged.
+    # Only the soft distance preference gets temporary closing headroom. A prior
+    # solution supplies the ego trajectory used to form this cycle's references.
+    approach_v = np.maximum(0.0, self.x_sol[:,1] + v_ego - self.x_sol[0,1])
+    approach_x = np.cumsum(T_DIFFS * np.r_[approach_v[0], (approach_v[1:] + approach_v[:-1]) * 0.5])
+    self.lead_approach_margins[:] = 0.0
+    for lead_index, (lead, lead_xv) in enumerate(((radarstate.leadOne, lead_xv_0), (radarstate.leadTwo, lead_xv_1))):
+      eligible = (
+        mode == 'acc' and lead_accel_response_enabled and not reset_state
+        and not getattr(carrot, 'lane_change_active', False)
+        and len(lead_track_frames) > lead_index and lead_track_frames[lead_index] >= LEAD_ACCEL_MIN_TRACK_FRAMES
+        and lead.status and lead.radar and lead.vRel < -CLOSING_DEADBAND
+      )
+      strength = self.lead_approach_states[lead_index].update(carrot.leadAccelResponse, lead.radarTrackId, eligible, self.dt)
+      if strength > 0.0:
+        self.lead_approach_margins[:,lead_index] = strength * approach_margin(
+          carrot.leadAccelResponse, approach_v, lead_xv[:,1], lead_xv[:,0] - approach_x, stop_distance,
+        )
+    self.yref[:,0] = approach_reference(x_obstacles, self.lead_approach_margins, approach_v)
     self.yref[:,1] = x
     self.yref[:,2] = v
     self.yref[:,3] = a
