@@ -2723,6 +2723,7 @@ class ProductionDPathSelector:
             "CUT-IN" if estimate.confirmed_cutin
             else "RAW-CUTIN" if estimate.raw_cutin
             else "PREDECEL" if estimate.predecel_risk
+            else "WITHDRAWN" if estimate.entry_withdrawn
             else "REAR-PASS" if estimate.rear_pass
             else "SIDE-DRIFT" if estimate.parallel_drift
             else "FILTERED" if not estimate.close_front_supported
