@@ -63,7 +63,7 @@ def test_recovery_and_agnos_precede_params_build() -> None:
   params_build = launch.index('bash "$DIR/scripts/ensure_params_build.sh"')
   web = launch.index("  start_carrot_web")
   build = launch.index("    if ! ./build.py; then")
-  manager = launch.index("  ./manager.py")
+  manager = launch.index("  start_manager")
 
   assert pythonpath < ssh_access < recovery < agnos_update < dependencies < params_build < web < build < manager
 

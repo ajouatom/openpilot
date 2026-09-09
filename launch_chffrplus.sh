@@ -350,6 +350,18 @@ function invalidate_native_build_if_needed {
   fi
 }
 
+function start_manager {
+  # A warm start or a long build can leave the launcher on an isolated CPU.
+  # Set the manager's initial mask before Python creates threads or forks:
+  # ordinary services share CPUs 0-5; camera/model/control keep their explicit
+  # affinity overrides. The compiler can still use all eight CPUs separately.
+  if [ -f /AGNOS ]; then
+    taskset -c 0-5 ./manager.py
+  else
+    ./manager.py
+  fi
+}
+
 function launch {
   # Protect the checkout throughout bootstrap, SCons and manager initialization.
   # The manager releases this inherited flock after init; background web/recovery
@@ -479,7 +491,7 @@ function launch {
     fi
   fi
   start_big_model_update
-  ./manager.py
+  start_manager
   # Also release if manager failed before reaching main()/initialization.
   flock -u 9
   exec 9>&-
