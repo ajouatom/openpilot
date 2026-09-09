@@ -3,7 +3,7 @@ import os
 from typing import NoReturn, TypedDict
 
 from openpilot.cereal import messaging
-from openpilot.common.realtime import Ratekeeper
+from openpilot.common.realtime import Ratekeeper, set_core_affinity
 from openpilot.common.swaglog import cloudlog
 
 JIFFY = os.sysconf(os.sysconf_names['SC_CLK_TCK'])
@@ -273,6 +273,9 @@ def build_proc_log_message(msg) -> None:
 
 
 def main() -> NoReturn:
+  # Procfs/smaps collection must not get stranded on isolated control/model
+  # cores, where real-time processes can starve this normal-priority task.
+  set_core_affinity([0, 1, 2, 3])
   pm = messaging.PubMaster(['procLog'])
   rk = Ratekeeper(0.5)
   while True:
