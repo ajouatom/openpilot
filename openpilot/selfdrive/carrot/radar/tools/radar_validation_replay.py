@@ -13,7 +13,7 @@ import pickle
 import shutil
 import sys
 from collections.abc import Iterable, Mapping, Sequence
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, Protocol
@@ -22,6 +22,7 @@ REPO_ROOT = Path(__file__).resolve().parents[5]
 if str(REPO_ROOT) not in sys.path:
   sys.path.insert(0, str(REPO_ROOT))
 
+from openpilot.selfdrive.carrot.radar_motion.coordinates import device_yaw_to_radar
 from openpilot.selfdrive.carrot.radar_motion import (
   CORNER_RADAR_MEASUREMENT_DELAY_S,
   CORNER_CUT_IN_THRESHOLD,
@@ -81,6 +82,7 @@ from openpilot.selfdrive.controls.lib.cutin_alert import (
   CutinAlertTracker,
   promoted_cutin_candidates,
 )
+from openpilot.selfdrive.carrot.radar_motion.lane_change_gap import LaneChangeGapPlan, LaneChangeGapTracker
 
 
 RADAR_TO_CAMERA = 1.52
@@ -112,7 +114,7 @@ STATIONARY_HANDOFF_MAX_YREL_DELTA_M = 1.5
 VALIDATION_SETTINGS_ENV = "CARROT_RADAR_VALIDATION_SETTINGS"
 VALIDATION_MOTION_MODES = ("normal", "front")
 VALIDATION_DEFAULT_SENSITIVITY = 3
-VISUAL_REPLAY_CACHE_VERSION = 3
+VISUAL_REPLAY_CACHE_VERSION = 4
 LEAD_ONE_RADAR_RGB = (246, 142, 55)
 LEAD_ONE_VISION_RGB = (72, 145, 255)
 LEAD_ONE_VISION_WEAK_RGB = (104, 205, 255)
@@ -279,6 +281,13 @@ class RadarFrame:
   scc_distance_m: float | None = None
   scc_a_req_raw: float | None = None
   carrot_a_target: float | None = None
+  lane_change_direction: int = 0
+  lane_change_active: bool = False
+  lane_change_blindspot: bool = False
+  path_times: tuple[float, ...] = ()
+  car_state_age_s: float = math.inf
+  lane_change_model_path: tuple[tuple[float, float], ...] = ()
+  lane_change_device_yaw: float | None = None
 
 
 @dataclass(frozen=True)
@@ -333,6 +342,7 @@ class Selection:
   active_external_candidates: tuple[Candidate, ...] = ()
   lead_two_tentative: bool | None = None
   cutin_predecel_candidate: Candidate | None = None
+  lane_change_gap: LaneChangeGapPlan = field(default_factory=LaneChangeGapPlan)
 
 
 def lead_one_rgb(track_id: int | None) -> tuple[int, int, int]:
@@ -966,6 +976,7 @@ def _controller_model(frame: RadarFrame) -> Any:
       for lead in frame.model_leads
     ),
     velocity=SimpleNamespace(x=(frame.v_ego,)),
+    laneLineProbs=frame.lane_probs,
   )
 
 
@@ -2650,6 +2661,7 @@ class ProductionDPathSelector:
       cut_in_sensitivity=self.cut_in_sensitivity,
     )
     selections = []
+    lane_change_tracker = LaneChangeGapTracker()
     for frame, output, estimates in zip(
       frames, outputs, estimate_series, strict=True,
     ):
@@ -2738,6 +2750,8 @@ class ProductionDPathSelector:
             + f"close={int(estimate.close_front_supported)} "
             + f"hist={int(estimate.front_history_supported)} "
             + f"vision={int(estimate.vision_supported)} "
+            + f"visionBracket={int(estimate.vision_bracket_supported)} "
+            + f"pairedMotion={int(estimate.paired_inward_motion_supported)} "
             + f"cross={int(estimate.cross_sensor_supported)} "
             + f"ctrl={int(estimate.control_eligible)} "
             + f"H={estimate.horizon_s:.2f} "
@@ -2764,6 +2778,19 @@ class ProductionDPathSelector:
         )
         for estimate in estimates
       )
+      direction = frame.lane_change_direction or (lane_change_tracker.direction if frame.lane_change_active else 0)
+      side = 'left' if direction == -1 else 'right'
+      side_dicts = (getattr(output, 'lead_' + side) or {}, *getattr(output, 'leads_' + side))
+      lane_change_gap = lane_change_tracker.update(
+        now=frame.mono_time_s, direction=direction, v_ego=frame.v_ego,
+        yaw_rate=frame.lane_change_device_yaw if frame.lane_change_device_yaw is not None else math.nan,
+        path_t=frame.path_times, path_x=tuple(p[0] for p in frame.lane_change_model_path),
+        path_y=tuple(p[1] for p in frame.lane_change_model_path),
+        primary=SimpleNamespace(**output.lead_one) if output.lead_one else None,
+        side_leads=tuple(SimpleNamespace(**d) for d in side_dicts if d),
+        blindspot=frame.lane_change_blindspot or frame.lane_change_direction == 0,
+        valid=frame.input_age_s <= 0.20 and frame.model_age_s <= 0.20 and frame.car_state_age_s <= 0.20,
+      )
       selections.append(Selection(
         lead_one=lead_one,
         lead_two=lead_two,
@@ -2781,6 +2808,7 @@ class ProductionDPathSelector:
         external_candidates=decisions,
         active_external_candidates=decisions,
         cutin_predecel_candidate=risk,
+        lane_change_gap=lane_change_gap,
       ))
     self.motion_points = tuple(
       motion_points_at_model_time(frame, self.motion_sensor)
@@ -2952,11 +2980,11 @@ def _yaw_metadata(
   ):
     value = _finite(getattr(angular_velocity, "z", math.nan), math.nan)
     if math.isfinite(value):
-      return value, False, "livePose"
+      return device_yaw_to_radar(value), False, "livePose"
   ratio = max(abs(_finite(steer_ratio, 14.0)), 1.0)
   base = max(abs(_finite(wheelbase, 2.8)), 1.5)
   road_wheel_angle = math.radians(_finite(steering_angle_deg) / ratio)
-  return -_finite(v_ego) * math.tan(road_wheel_angle) / base, True, "steering"
+  return _finite(v_ego) * math.tan(road_wheel_angle) / base, True, "steering"
 
 
 def load_frames(log_path: Path) -> list[RadarFrame]:
@@ -2967,6 +2995,9 @@ def load_frames(log_path: Path) -> list[RadarFrame]:
   latest_points: tuple[RadarPoint, ...] | None = None
   latest_points_ns = 0
   latest_v_ego = 0.0
+  latest_left_blinker = latest_right_blinker = False
+  latest_left_blindspot = latest_right_blindspot = False
+  latest_car_state_ns = 0
   latest_steering_angle_deg = 0.0
   latest_steering_rate_deg_s = 0.0
   latest_live_pose: Any | None = None
@@ -3115,7 +3146,10 @@ def load_frames(log_path: Path) -> list[RadarFrame]:
         0.0, _finite(event.carParams.radarDelay),
       )
     elif which == "carState":
+      latest_car_state_ns = event_ns
       latest_v_ego = _finite(event.carState.vEgo)
+      latest_left_blinker, latest_right_blinker = bool(event.carState.leftBlinker), bool(event.carState.rightBlinker)
+      latest_left_blindspot, latest_right_blindspot = bool(event.carState.leftBlindspot), bool(event.carState.rightBlindspot)
       latest_steering_angle_deg = _finite(event.carState.steeringAngleDeg)
       latest_steering_rate_deg_s = _finite(event.carState.steeringRateDeg)
     elif which == "livePose":
@@ -3195,6 +3229,24 @@ def load_frames(log_path: Path) -> list[RadarFrame]:
         yaw_rate_rad_s=yaw_rate,
         yaw_rate_estimated=yaw_estimated,
         yaw_rate_source=yaw_source,
+        lane_change_direction=(
+          (-1 if latest_left_blinker else 1)
+          if str(event.modelV2.meta.laneChangeState) in ('laneChangeStarting', 'laneChangeFinishing')
+          and latest_left_blinker != latest_right_blinker else 0
+        ),
+        lane_change_active=str(event.modelV2.meta.laneChangeState) in ('laneChangeStarting', 'laneChangeFinishing'),
+        lane_change_blindspot=latest_left_blindspot if latest_left_blinker else latest_right_blindspot,
+        path_times=tuple(float(t) for t in event.modelV2.position.t),
+        car_state_age_s=max(0.0, (event_ns - latest_car_state_ns) / 1e9) if latest_car_state_ns else math.inf,
+        # Preserve the vehicle planner's native right-positive model/pose
+        # inputs independently of the radar reviewer's display coordinates.
+        lane_change_model_path=tuple(zip(event.modelV2.position.x, event.modelV2.position.y, strict=False)),
+        lane_change_device_yaw=(
+          latest_live_pose.angularVelocityDevice.z
+          if latest_live_pose is not None and live_pose_age_s <= 0.15
+          and latest_live_pose.inputsOK and latest_live_pose.sensorsOK and latest_live_pose.angularVelocityDevice.valid
+          and math.isfinite(latest_live_pose.angularVelocityDevice.z) else None
+        ),
         steer_ratio=latest_steer_ratio,
         wheelbase=latest_wheelbase,
         scc_bus=(

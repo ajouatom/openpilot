@@ -1,0 +1,14 @@
+FROM python:3.12-slim
+ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 OPENBLAS_NUM_THREADS=1
+RUN apt-get update && apt-get install --no-install-recommends --yes ffmpeg \
+    && rm -rf /var/lib/apt/lists/* && useradd --create-home --uid 10001 carrot
+WORKDIR /app
+COPY requirements.txt ./
+RUN pip install --no-cache-dir --requirement requirements.txt
+COPY --chown=carrot:carrot server.py viewer.py radar.py radar_view.js deploy_probe.py SOURCE_COMMIT /app/
+COPY --chown=carrot:carrot openpilot /app/openpilot/
+COPY --chown=carrot:carrot opendbc_repo /app/opendbc_repo/
+RUN chmod -R a+rX /app
+USER carrot
+EXPOSE 8080
+CMD ["python", "server.py"]

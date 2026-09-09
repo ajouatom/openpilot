@@ -232,7 +232,7 @@ SDI를 지울 때는 더 큰 sequence로 `present: false`, `value: null`, 비어
 | 7714 전용 section object | 없음 | `section.active`, speed limit, remaining distance | present + active + not suspended + section off-route 아님 + 전체 off-route 아님 + limit > 0일 때 type 4로 변환 | `section` / 주황 `section` |
 | 방지턱 | primary/plus type 22 | primary/secondary type 22 | `roadcate > 1`, mode >= 2. payload speed는 무시하고 `AutoNaviSpeedBumpSpeed` 사용. 실제 감속 중 새 가속 입력이 들어오면 이벤트 종료까지 가속 최고속도를 하한으로 유지. 단, 7714는 road category 갱신 순서/기본값 문제로 type 22가 수신되어도 후보 생성에 실패할 수 있음 | `bump` / 주황 `bump`, 오버라이드 시 `gas` |
 | 차량 수신 과속카메라 | `carState.speedLimit/speedLimitDistance` | 동일 | 차량 CAN에서 단속속도만 수신하며 Hyundai `CarState`가 `speedLimit × (VehicleSpeedCameraDistanceTime / 10)`으로 가상거리 생성. `VehicleSpeedCameraControlMode`에 따라 미사용·항상 적용·감속 중 가속 이벤트 무시·가속페달 입력 중 해제를 선택 | `hda` / 라벤더 `cam`, 오버라이드 시 `gas` |
-| 차량 내비 CAN 정확거리/구간 | `carState.speedLimitDistance/speedBumpDistance/vehicleNaviSectionActive` | 동일 | `VehicleNaviCanControl`이 켜진 Hyundai CAN-FD에서 0x4BE 또는 PV5 CAN-FD wrapper의 alert spot Offset을 휠 주행거리로 추적. 카메라는 기존 `hda`, Value 6 방지턱은 별도 후보로 계산하고 실제 감속 중 새 가속 입력에는 이벤트 오버라이드를 적용. PV5의 구간단속은 주기 상태 신호가 검증될 때까지 비활성화 | `hda`, `hda_section`, `hda_bump` / 라벤더 `cam`, `section`, `bump`, 오버라이드 시 `gas` |
+| 차량 내비 CAN 정확거리/구간 | `carState.speedLimitDistance/speedBumpDistance/vehicleNaviSectionActive` | 동일 | `VehicleNaviCanControl`이 켜진 Hyundai CAN-FD에서 0x4BE 또는 PV5 CAN-FD wrapper의 alert spot Offset을 휠 주행거리로 추적. 카메라는 기존 `hda`, Value 6 방지턱은 별도 후보로 계산하고 실제 감속 중 새 가속 입력에는 이벤트 오버라이드를 적용. PV5 구간단속은 0x380 알림 이후 신선한 0x380/0x364의 일치하는 제한속도·단속 상태로 유지 | `hda`, `hda_section`, `hda_bump` / 라벤더 `cam`, `section`, `bump`, 오버라이드 시 `gas` |
 | 차량 내비 CAN 30 km/h 구간 | `carState.schoolZoneActive` | 동일 | `VehicleNaviSchoolZoneControl`이 켜지고 0x4BE 종류 7이 30 km/h를 알리면 30 km/h 후보 적용. 차량의 30 카메라 상태 종료, 비-30 종류 7, 경로 재계산 또는 1 km 주행 시 해제. 가속페달 동작은 `VehicleSpeedCameraControlMode`를 따름 | `school` / 라벤더 `school`, mode 2 하한 적용 시 `gas` |
 
 차량 순정 내비의 0x4BA 곡률 프로파일은 경로·차선 연계 신뢰도가 충분하지 않아 파싱, 속도제어,
@@ -287,8 +287,21 @@ Kia PV5는 기존 8바이트 메시지를 그대로 보내지 않고 CAN-FD wrap
 bytes 8–15는 `HDA_INFO_4A3`, E-CAN `0x093` bytes 8–15는 `NEW_MSG_4BE`와 같은 필드 배치로
 해석한다. A-CAN `0x380` byte 3의 bit 6은 카메라 접근 중 켜지고 실제 통과 시 꺼지므로 기존
 `MapSource=2` 카메라 상태 대신 정확거리 후보 종료에 사용한다. PV5에서는 일반 카메라와 Value 6
-방지턱만 활성화하며, 종류 7의 구간단속·30 km/h 구간은 주기 위치·평균속도 메시지가 실로그로
-검증될 때까지 무시한다.
+방지턱을 지원하고, 종류 7 프로파일만으로 구간단속·30 km/h 구간을 활성화하지 않는다.
+
+PV5 구간단속은 A-CAN `0x380` byte 10 bit 4 (`SECTION_ALERT`) 상승 에지로 시작한다.
+2026-09-07 로그에서 이 신호는 진입 때 약 5초간 켜졌다가 꺼지고 구간 중간에도 다시 발생했다.
+알림이 끝나도 `0x380` byte 12와 `0x364 SPEED_LIMIT`가 같고 `MapSource=2`이면 상한을 유지한다.
+두 제한속도는 30 초과 150 이하의 5 단위 값이어야 한다. 값이 바뀌거나 불일치하면 해제하고,
+`MapSource != 2`, 0 제한속도, 버스 timeout, 잘못된 프레임 길이, 1초 초과 수신 지연에도 해제한다.
+신호 유실 뒤에는 알림이 꺼진 새 프레임을 거쳐 다음 상승 에지를 받아야 재활성화한다.
+설정 재활성화·구간 중 재시작도 다음 알림까지 기다릴 수 있다. 학교구역 제어는 계속 미지원이다.
+
+검증: `000001f9--268e157ef8`의 `--12` 56.631초에 80 상한 시작, `--13` 1.682초에
+알림이 꺼져도 유지. 업로드되지 않은 `--14`는 재생에서 신호 공백으로 처리했다.
+`--15` 40.288초 재알림으로 다시 활성화한 뒤 `--16/17` 전체에서 유지했고,
+`--18` 12.490초 `0x364` 변화로 해제했다. 실제 단속 종점 통과는 아직 검증되지 않았으며,
+이번 종료는 중간 이탈이다. 평균속도·남은거리는 계산하지 않고 기존 `hda_section` 상한을 사용한다.
 
 - `Value=0x06`: 방지턱 후보. `carState.speedBumpDistance`로 전달하고
   `AutoNaviSpeedCtrlMode >= 2`일 때 `AutoNaviSpeedBumpSpeed/Time`을 적용한다.

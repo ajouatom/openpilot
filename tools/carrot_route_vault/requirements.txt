@@ -1,0 +1,4 @@
+aiohttp==3.13.3
+numpy==2.5.1
+pycapnp==2.2.2
+zstandard==0.25.0

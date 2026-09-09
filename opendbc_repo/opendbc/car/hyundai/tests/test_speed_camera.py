@@ -56,6 +56,9 @@ def _car_state(distance_time_tenths=60):
   state.vehicleNaviSchoolZoneStartDistance = 0.0
   state.vehicleNaviSchoolZoneUsesCameraStatus = False
   state.vehicleNaviZoneControlSupported = True
+  state.canfd_wrapped_navi = False
+  state.pv5_section_start_prev = False
+  state.is_metric = True
   state.navi_profile_msg = "NEW_MSG_4BE"
   state.navi_segment_4b9 = None
   state.navi_position_4b4 = None
@@ -653,6 +656,104 @@ def test_pv5_canfd_navi_ignores_unverified_speed_limit_zones():
   assert not state.vehicleNaviSpeedZoneActive
   assert not state.vehicleNaviSchoolZoneActive
   assert not ret.vehicleNaviActive
+
+
+# Raw 2026-09-07 PV5 frames: section approach, announcement, and early exit.
+PV5_SECTION_HDA = bytes.fromhex("5ef6be000000000041509a1100000100")
+PV5_SECTION_LOW = bytes.fromhex("80a5d30001000000000000325010f1000000000000000000")
+PV5_SECTION_HIGH = bytes.fromhex("b99cdd0001000000000010325010f1000000000000000000")
+PV5_SECTION_EXIT_HDA = bytes.fromhex("ec0d040000000000521e9a0940000100")
+PV5_SECTION_EXIT = bytes.fromhex("ba962c0001000000000000320010f1000000000000000000")
+
+
+def _pv5_section_state():
+  state = _car_state()
+  state.canfd_wrapped_navi = True
+  state.vehicleNaviZoneControlSupported = False
+  state.vehicleNaviCanControl = True
+  state.navi_profile_msg = CANFD_NAVI_PROFILE_MSG
+  cp = CANParser("hyundai_canfd_generated", [(CANFD_HDA_INFO_MSG, math.nan)], 0)
+  alt = CANParser("hyundai_canfd_generated", [(CANFD_NAVI_STATUS_MSG, math.nan)], 1)
+  state.hda_info_4a3 = cp.vl[CANFD_HDA_INFO_MSG]
+  state.navi_status_380 = alt.vl[CANFD_NAVI_STATUS_MSG]
+  return state, cp, alt
+
+
+def _pv5_section_step(state, cp, alt, t, status=PV5_SECTION_LOW, hda=PV5_SECTION_HDA):
+  cp.update([int(t * 1e9), [] if hda is None else [(0x364, hda, 0)]])
+  alt.update([int(t * 1e9), [] if status is None else [(0x380, status, 1)]])
+  ret = SimpleNamespace(speedLimit=80.0)
+  state._update_vehicle_navi_events(cp, ret, False, alt)
+  return ret
+
+
+def test_pv5_section_latches_through_alert_end_and_repeated_alert_then_exits():
+  state, cp, alt = _pv5_section_state()
+  assert not _pv5_section_step(state, cp, alt, 1).vehicleNaviSectionActive
+  ret = _pv5_section_step(state, cp, alt, 1.1, PV5_SECTION_HIGH)
+  assert ret.vehicleNaviAvailable and ret.vehicleNaviActive and ret.vehicleNaviSectionActive
+  assert ret.vehicleNaviSpeed == 80
+  assert state.navi_status_380["SECTION_ALERT"] == 1
+  assert not is_canfd_navi_camera_active(state.navi_status_380)
+  # Fresh messages throughout a section, including another five-second alert.
+  for i in range(12, 200):
+    status = PV5_SECTION_HIGH if 100 <= i < 150 else PV5_SECTION_LOW
+    ret = _pv5_section_step(state, cp, alt, i / 10, status)
+    assert ret.vehicleNaviSectionActive and ret.vehicleNaviSpeed == 80
+  ret = _pv5_section_step(state, cp, alt, 20, PV5_SECTION_EXIT, PV5_SECTION_EXIT_HDA)
+  assert not ret.vehicleNaviSectionActive and not ret.vehicleNaviActive
+  # The old limit returning after exit is insufficient to start another zone.
+  assert not _pv5_section_step(state, cp, alt, 20.1).vehicleNaviSectionActive
+
+
+@pytest.mark.parametrize("status,hda", [(None, PV5_SECTION_HDA), (PV5_SECTION_HIGH, None), (None, None)])
+def test_pv5_section_releases_on_message_loss_and_requires_new_edge(status, hda):
+  state, cp, alt = _pv5_section_state()
+  _pv5_section_step(state, cp, alt, 1)
+  assert _pv5_section_step(state, cp, alt, 1.1, PV5_SECTION_HIGH).vehicleNaviSectionActive
+  assert not _pv5_section_step(state, cp, alt, 2.2, status, hda).vehicleNaviSectionActive
+  assert not _pv5_section_step(state, cp, alt, 2.3, PV5_SECTION_HIGH).vehicleNaviSectionActive
+  _pv5_section_step(state, cp, alt, 2.4)
+  assert _pv5_section_step(state, cp, alt, 2.5, PV5_SECTION_HIGH).vehicleNaviSectionActive
+
+
+def test_pv5_section_setting_disabled_and_reenabled_requires_new_alert():
+  state, cp, alt = _pv5_section_state()
+  _pv5_section_step(state, cp, alt, 1)
+  assert _pv5_section_step(state, cp, alt, 1.1, PV5_SECTION_HIGH).vehicleNaviSectionActive
+  state.vehicleNaviCanControl = False
+  assert not _pv5_section_step(state, cp, alt, 1.2, PV5_SECTION_HIGH).vehicleNaviSectionActive
+  state.vehicleNaviCanControl = True
+  assert not _pv5_section_step(state, cp, alt, 1.3, PV5_SECTION_HIGH).vehicleNaviSectionActive
+  _pv5_section_step(state, cp, alt, 1.4)
+  assert _pv5_section_step(state, cp, alt, 1.5, PV5_SECTION_HIGH).vehicleNaviSectionActive
+
+
+@pytest.mark.parametrize("speed,map_source", [(0, 2), (30, 2), (255, 2), (80, 1), (50, 2)])
+def test_pv5_section_rejects_invalid_or_disagreeing_limits(speed, map_source):
+  state, cp, alt = _pv5_section_state()
+  hda = bytearray(PV5_SECTION_HDA)
+  hda[9] = speed
+  hda[11] = (hda[11] & ~0x38) | (map_source << 3)
+  _pv5_section_step(state, cp, alt, 1)
+  assert not _pv5_section_step(state, cp, alt, 1.1, PV5_SECTION_HIGH, bytes(hda)).vehicleNaviSectionActive
+
+
+def test_pv5_section_does_not_start_from_spot_camera_or_other_alert():
+  state, cp, alt = _pv5_section_state()
+  for i, (camera, alert) in enumerate([(0, 0), (0x40, 0), (4, 0), (0, 2)]):
+    status = bytearray(PV5_SECTION_LOW)
+    status[3], status[10] = camera, alert
+    assert not _pv5_section_step(state, cp, alt, 1 + i / 10, bytes(status)).vehicleNaviSectionActive
+
+
+def test_pv5_section_imperial_limit_remains_stable():
+  state, cp, alt = _pv5_section_state()
+  state.is_metric = False
+  _pv5_section_step(state, cp, alt, 1)
+  ret = _pv5_section_step(state, cp, alt, 1.1, PV5_SECTION_HIGH)
+  assert ret.vehicleNaviSpeed == pytest.approx(80 * 1.609344)
+  assert _pv5_section_step(state, cp, alt, 1.2).vehicleNaviSectionActive
 
 
 def test_vehicle_navi_stale_range_average_releases_section():

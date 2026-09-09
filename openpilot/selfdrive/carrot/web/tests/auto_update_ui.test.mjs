@@ -31,3 +31,23 @@ test("persistent automatic update failures surface once in Web and override stal
   assert.match(toolsRuntimeSource, /status\.auto_update/);
   assert.match(toolsRuntimeSource, /const hasUpdates = behind > 0 && !hasError/);
 });
+
+test("Git contention shows waiting without a false error or up-to-date badge", () => {
+  const elements = new Map();
+  const document = {
+    getElementById(id) {
+      if (!elements.has(id)) elements.set(id, { classList: { toggle() {} }, dataset: {}, removeAttribute() {} });
+      return elements.get(id);
+    },
+  };
+  const start = toolsRuntimeSource.indexOf("function renderGitPullStatus(");
+  const end = toolsRuntimeSource.indexOf("async function refreshGitPullStatus(", start);
+  const render = new Function("document", "getUIText", `${toolsRuntimeSource.slice(start, end)}; return renderGitPullStatus;`)(document, (_, fallback) => fallback);
+  render({ state: "busy", behind: 3 });
+  assert.equal(elements.get("gitPullBadge").dataset.state, "waiting");
+  assert.equal(elements.get("gitPullBadge").textContent, "…");
+  render({ state: "busy", auto_update: { status: "error", error: "previous failure" } });
+  assert.equal(elements.get("gitPullBadge").dataset.state, "error");
+  render({ state: "ok", behind: 0, auto_update: { status: "idle" } });
+  assert.equal(elements.get("gitPullBadge").dataset.state, "current");
+});

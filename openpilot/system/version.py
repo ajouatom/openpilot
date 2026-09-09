@@ -44,16 +44,12 @@ def is_dirty(cwd: str = BASEDIR) -> bool:
   try:
     # Actually check dirty files
     if not is_prebuilt(cwd):
-      # This is needed otherwise touched files might show up as modified
-      try:
-        subprocess.check_call(["git", "update-index", "--refresh"], cwd=cwd)
-      except subprocess.CalledProcessError:
-        pass
-
       branch = get_branch()
       if not branch:
         return True
-      dirty = (subprocess.call(["git", "diff-index", "--quiet", branch, "--"], cwd=cwd)) != 0
+      # Compare actual content without updating/locking the shared index. This
+      # runs in multiple startup processes while Carrot Web is already alive.
+      dirty = subprocess.call(["git", "--no-optional-locks", "diff", "--quiet", branch, "--"], cwd=cwd) != 0
   except subprocess.CalledProcessError:
     cloudlog.exception("git subprocess failed while checking dirty")
     dirty = True

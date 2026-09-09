@@ -47,6 +47,12 @@ int comms_can_read(uint8_t *data, uint32_t max_len);
 void comms_can_write(uint8_t *data, uint32_t len);
 void comms_can_reset(void);
 uint32_t can_slots_empty(can_ring *q);
+void ignition_can_hook(CANPacket_t *packet);
+void ignition_can_tick(void);
+extern bool ignition_can;
+extern uint32_t ignition_can_cnt;
+extern bool wake_on_can;
+extern uint32_t wake_on_can_cnt;
 """)
 
 class CANPacket:

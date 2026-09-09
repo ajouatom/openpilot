@@ -54,7 +54,7 @@ def main():
   # Hyundai's two inputs wake this serial loop independently; no MPC overlaps.
   sm = messaging.SubMaster(
     ['carControl', 'carState', 'controlsState', 'liveParameters', 'radarState',
-     'liveTracks', 'modelV2', 'selfdriveState', 'carrotMan'],
+     'liveTracks', 'modelV2', 'selfdriveState', 'carrotMan', 'livePose'],
     poll=(['modelV2', 'liveTracks'] if live_tracks_longitudinal else 'modelV2'),
     ignore_avg_freq=['radarState'],
   )

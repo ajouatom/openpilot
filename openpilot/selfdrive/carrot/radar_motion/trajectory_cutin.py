@@ -24,6 +24,8 @@ from openpilot.selfdrive.carrot.radar_motion.predictor import (
 from openpilot.selfdrive.carrot.radar_motion.primary import (
   RADAR_TO_CAMERA_M,
   RadarPointSnapshot,
+  VisionLead,
+  vision_lead_from_model,
 )
 
 
@@ -176,6 +178,9 @@ class TrajectoryCutInEstimate:
   close_front_supported: bool
   curve_alias: bool
   reason: str
+  passing_before_overlap: bool = False
+  vision_bracket_supported: bool = False
+  paired_inward_motion_supported: bool = False
 
   @property
   def identity(self) -> tuple[str, int, int]:
@@ -198,6 +203,8 @@ class _Observation:
 class _TrackState:
   continuity_id: int
   observations: deque[_Observation] = field(default_factory=deque)
+  front_observations: deque[_Observation] = field(default_factory=deque)
+  front_track_id: int | None = None
   minimum_d_rel: float = math.inf
   last_seen_s: float = -math.inf
   cutin_since_s: float | None = None
@@ -205,16 +212,20 @@ class _TrackState:
   risk_since_s: float | None = None
   risk_until_s: float = -math.inf
   outer_body_ambiguous_until_s: float = -math.inf
+  paired_motion_support_until_s: float = -math.inf
 
   def reset(self, continuity_id: int) -> None:
     self.continuity_id = continuity_id
     self.observations.clear()
+    self.front_observations.clear()
+    self.front_track_id = None
     self.minimum_d_rel = math.inf
     self.cutin_since_s = None
     self.cutin_until_s = -math.inf
     self.risk_since_s = None
     self.risk_until_s = -math.inf
     self.outer_body_ambiguous_until_s = -math.inf
+    self.paired_motion_support_until_s = -math.inf
 
 
 def _values_since(
@@ -295,10 +306,12 @@ def _motion_metrics(
 def _vision_supports(
   point: RadarPointSnapshot,
   model: Any,
+  *,
+  precise: bool = False,
 ) -> bool:
   for lead in getattr(model, "leadsV3", ()):
     probability = _finite(getattr(lead, "prob", 0.0))
-    if probability < 0.35:
+    if probability < (0.90 if precise else 0.35):
       continue
     d_rel = _finite(getattr(lead, "x", (0.0,))[0]) - RADAR_TO_CAMERA_M
     y_rel = -_finite(getattr(lead, "y", (0.0,))[0])
@@ -307,12 +320,43 @@ def _vision_supports(
     y_std = max(0.5, _finite(getattr(lead, "yStd", (0.5,))[0], 0.5))
     v_std = max(1.0, _finite(getattr(lead, "vStd", (1.0,))[0], 1.0))
     if (
-      abs(point.d_rel - d_rel) <= max(4.0, 0.20 * point.d_rel, 2.0 * x_std)
-      and abs(point.y_rel - y_rel) <= max(1.5, 2.0 * y_std)
+      abs(point.d_rel - d_rel) <= max(4.0, 0.20 * point.d_rel, 0.0 if precise else 2.0 * x_std)
+      and abs(point.y_rel - y_rel) <= (1.5 if precise else max(1.5, 2.0 * y_std))
       and abs(point.v_lead - v_lead) <= max(5.0, 2.0 * v_std)
     ):
       return True
   return False
+
+
+def _vision_brackets_pair(
+  point: RadarPointSnapshot,
+  front: RadarPointSnapshot | None,
+  vision: VisionLead | None,
+  primary_lead: Mapping[str, Any] | None,
+  path: Sequence[tuple[float, float]],
+) -> bool:
+  """Corroborate a near body while vision transitions from the farther lead.
+
+  This is range/speed evidence, not a direct lateral vision association.
+  The caller must independently require sustained inward motion and entry
+  before passing ego; a visible adjacent vehicle alone proves neither.
+  """
+  return bool(
+    point.source.startswith("corner")
+    and front is not None
+    and front.source == "frontRadar"
+    and vision is not None
+    and vision.probability >= 0.90
+    and primary_lead is not None
+    and primary_lead.get("status", False)
+    and 0.5 < point.d_rel <= 8.0
+    and front.d_rel + 0.5 < vision.d_rel < _finite(primary_lead.get("dRel")) - 0.5
+    and vision.d_rel - front.d_rel <= 6.0
+    and abs(front.y_rel) <= PAIRED_CLOSE_BODY_HALF_WIDTH_M
+    and abs(project_to_model_path(path, vision.d_rel, vision.y_rel).d_path) <= EGO_PATH_HALF_WIDTH_M
+    and abs(vision.velocity - front.v_lead) <= 2.0
+    and abs(vision.velocity - point.v_lead) <= 2.0
+  )
 
 
 def _reported_inward_speed(
@@ -430,6 +474,7 @@ class TrajectoryCutInDetector:
     *,
     yaw_rate_rad_s: float = 0.0,
     vision_required_front: bool = False,
+    primary_lead: Mapping[str, Any] | None = None,
     cross_sensor_matches: Mapping[
       tuple[str, int], RadarPointSnapshot
     ] | None = None,
@@ -446,6 +491,9 @@ class TrajectoryCutInDetector:
     self._last_v_ego = v_ego
 
     matches = cross_sensor_matches or {}
+    vision = vision_lead_from_model(model)
+    lane_probs = tuple(getattr(model, "laneLineProbs", ()))
+    lane_path_supported = len(lane_probs) < 3 or max(lane_probs[1:3]) >= 0.75
     seen: set[tuple[str, int]] = set()
     estimates: list[TrajectoryCutInEstimate] = []
     for point in points:
@@ -521,6 +569,26 @@ class TrajectoryCutInDetector:
         d_path=projection.d_path,
       ))
       state.minimum_d_rel = min(state.minimum_d_rel, point.d_rel)
+      if cross_sensor_point is not None:
+        if (
+          state.front_track_id != cross_sensor_point.track_id
+          or (state.front_observations and time_s - state.front_observations[-1].time_s > MAX_OBSERVATION_GAP_S)
+        ):
+          state.front_observations.clear()
+        state.front_track_id = cross_sensor_point.track_id
+        front_projection = project_to_model_path(path, cross_sensor_point.d_rel, cross_sensor_point.y_rel)
+        state.front_observations.append(_Observation(
+          time_s=time_s,
+          d_rel=cross_sensor_point.d_rel,
+          y_rel=cross_sensor_point.y_rel,
+          v_rel=cross_sensor_point.v_rel,
+          v_lead=cross_sensor_point.v_lead,
+          yaw_rate_rad_s=yaw_rate_rad_s,
+          global_path_s=self._ego_distance + front_projection.path_s,
+          d_path=front_projection.d_path,
+        ))
+      while state.front_observations and time_s - state.front_observations[0].time_s > MAX_HISTORY_S:
+        state.front_observations.popleft()
       while (
         state.observations
         and time_s - state.observations[0].time_s > MAX_HISTORY_S
@@ -648,6 +716,36 @@ class TrajectoryCutInDetector:
         for value in state.observations
       )
       current_overlap = abs(projection.d_path) <= PATH_OVERLAP_HALF_WIDTH_M
+      # A yaw/range offset is an ambiguity heuristic, not evidence against
+      # entry. Rotation-corrected normal velocity plus sustained OUT-to-IN
+      # positions can resolve it when the visual lead transition independently
+      # corroborates the paired body. Keep reported motion independent of the
+      # position-derived forecast.
+      paired_inward_motion = (
+        point.source.startswith("corner")
+        and cross_sensor_point is not None
+        and cross_sensor_point.source == "frontRadar"
+        and history_s >= 0.75
+        and inward_progress >= 0.15
+        and short_inward_progress >= 0.06
+        and inward_rate >= MIN_INWARD_RATE_MPS
+        and short_inward_rate >= MIN_INWARD_RATE_MPS
+        and direction_consistency >= 0.75
+        and short_direction_consistency >= 0.75
+        and reported_inward >= MIN_INWARD_RATE_MPS
+        and abs(reported_inward - inward_rate) <= 0.50
+      )
+      independent_motion_support = (
+        paired_inward_motion
+        and _vision_brackets_pair(point, cross_sensor_point, vision, primary_lead, path)
+      )
+      if independent_motion_support:
+        state.paired_motion_support_until_s = time_s + MAX_OBSERVATION_GAP_S
+      elif not paired_inward_motion:
+        state.paired_motion_support_until_s = -math.inf
+      # Bridge a single noisy front/vision sample only while the independent
+      # corner velocity and recent inward position evidence both remain valid.
+      paired_inward_motion_supported = time_s <= state.paired_motion_support_until_s
       # Both sensors seeing a nearby body proves existence, not lane entry.
       # With ego rotation, different body facets can appear to move inward as
       # ego passes the vehicle. A straight-road body offset alone is not this
@@ -663,6 +761,7 @@ class TrajectoryCutInDetector:
         and recent_abs_yaw_max
         >= PAIRED_OUTER_BODY_RANGE_CHECK_MIN_ABS_YAW_RATE_RAD_S
         and not vision_supported
+        and not paired_inward_motion_supported
         and not current_overlap
         and abs(cross_sensor_point.y_rel) > 2.15
         and abs(point.d_rel - cross_sensor_point.d_rel)
@@ -670,7 +769,7 @@ class TrajectoryCutInDetector:
       )
       if ambiguous_outer_body_pair:
         state.outer_body_ambiguous_until_s = time_s + CROSS_SENSOR_ALIAS_HOLD_S
-      elif vision_supported or current_overlap or (
+      elif vision_supported or paired_inward_motion_supported or current_overlap or (
         cross_sensor_point is not None
         and abs(cross_sensor_point.y_rel) <= 2.15
       ):
@@ -937,6 +1036,15 @@ class TrajectoryCutInDetector:
         and MIN_MOVING_VLEAD_MPS < point.v_lead
         and 0.8 < point.d_rel <= CUTIN_MAX_DREL_M
         and motion_reliable
+        # With missing lane boundaries, broad visual uncertainty must not
+        # turn motion of the predicted path into motion of an adjacent car.
+        and (
+          not point.source.startswith("corner")
+          or point.d_rel <= 8.0
+          or _vision_supports(point, model, precise=True)
+          or abs(point.y_rel) <= 1.0
+          or lane_path_supported
+        )
         and front_curve_motion_supported
         and not curve_alias
         and curve_motion_supported
@@ -1029,10 +1137,77 @@ class TrajectoryCutInDetector:
         * time_to_overlap_s
         > 0.5
       )
-      paired_close_entry = paired_close_entry and (
-        point.d_rel > 2.0
-        or current_overlap
+      # Front and corner radar can observe different ends of a long vehicle.
+      # Accept the front return's own entry forecast only with measured inward
+      # motion; an inner body reflection inside the 2.15 m allowance is not
+      # sufficient evidence that an otherwise parallel vehicle is entering.
+      paired_front_entry_ahead = False
+      if point.source.startswith("corner") and cross_sensor_point is not None:
+        front_projection = project_to_model_path(
+          path, cross_sensor_point.d_rel, cross_sensor_point.y_rel,
+        )
+        front_inward = _reported_inward_speed(
+          cross_sensor_point, front_projection, yaw_rate_rad_s,
+        )
+        # Front velocity is often heavily filtered. Its own position history
+        # can corroborate entry once displacement exceeds the range-dependent
+        # lateral noise floor; corner history alone cannot supply this vote.
+        front_rate, _, front_progress, _, _, front_direction, _ = _motion_metrics(state.front_observations)
+        if (
+          len(state.front_observations) >= 3
+          and front_progress >= 0.75 * front_lateral_noise_floor_m(cross_sensor_point.d_rel)
+          and front_direction >= 0.75
+        ):
+          front_inward = max(front_inward, -math.copysign(1.0, front_projection.d_path) * front_rate)
+        front_clearance = max(0.0, abs(front_projection.d_path) - PATH_OVERLAP_HALF_WIDTH_M)
+        if front_clearance == 0.0:
+          paired_front_entry_ahead = cross_sensor_point.d_rel > 0.5
+        elif front_inward >= MIN_INWARD_RATE_MPS:
+          front_entry_s = front_clearance / front_inward
+          paired_front_entry_ahead = (
+            front_entry_s <= horizon_s
+            and cross_sensor_point.d_rel + cross_sensor_point.v_rel * front_entry_s > 0.5
+          )
+      paired_entry_ahead = (
+        current_overlap
         or (ahead_at_overlap and paired_ahead_at_overlap)
+        or paired_front_entry_ahead
+      )
+      paired_close_entry = paired_close_entry and paired_entry_ahead
+      # Near-body radar returns may remain outside the direct vision lateral
+      # match while vision switches from the old lead. Use that transition
+      # only with a full second of coherent physical motion, both radars,
+      # and a forecast that leaves the entering vehicle ahead of ego.
+      vision_bracket_supported = (
+        _vision_brackets_pair(point, cross_sensor_point, vision, primary_lead, path)
+        and history_s >= 1.0
+        and inward_progress >= PAIRED_OUTER_BODY_MIN_INWARD_PROGRESS_M
+        and inward_rate >= 0.20
+        and short_inward_rate >= 0.20
+        and direction_consistency >= 0.85
+        and short_direction_consistency >= 0.75
+        and lateral_net_fraction >= 0.65
+        and (
+          recent_abs_yaw_max < PAIRED_OUTER_BODY_RANGE_CHECK_MIN_ABS_YAW_RATE_RAD_S
+          or paired_inward_motion_supported
+        )
+        and point.v_rel <= -0.5
+        and predicted_overlap
+        and paired_ahead_at_overlap
+        and cross_sensor_point.d_rel + cross_sensor_point.v_rel * time_to_overlap_s > 0.5
+      )
+      vision_bracket_entry = (
+        # Recognition/pre-deceleration may use the prediction horizon, while
+        # longitudinal lead promotion still waits for near-term overlap.
+        vision_bracket_supported
+        and time_to_overlap_s <= 1.90
+      )
+      passing_before_overlap = (
+        point.source.startswith("corner")
+        and cross_sensor_supported
+        and point.d_rel <= 8.0
+        and time_to_overlap_s is not None
+        and not paired_entry_ahead
       )
       strong_consistent_entry = (
         inward_progress >= 0.60
@@ -1060,10 +1235,23 @@ class TrajectoryCutInDetector:
         common_ok
         and not non_cutin_side_motion
         and not weak_nonclosing_projected_entry
+        # In a curve, a far corner return can cross the predicted path while
+        # its paired front return remains outside. Require that front return
+        # to reach the body corridor or independently forecast entry ahead.
+        and (
+          not point.source.startswith("corner")
+          or point.d_rel <= 8.0
+          or not cross_sensor_supported
+          or recent_abs_yaw_max < 0.020
+          or vision_supported
+          or current_overlap
+          or paired_front_overlap
+          or paired_front_entry_ahead
+        )
         and (
         front_entry
         if point.source == "frontRadar"
-        else corner_entry or paired_close_entry or close_direct_entry
+        else corner_entry or paired_close_entry or close_direct_entry or vision_bracket_supported
         )
       )
       cutin_confirmation_s = (
@@ -1100,6 +1288,7 @@ class TrajectoryCutInDetector:
         or curve_alias
         or not front_curve_motion_supported
         or ambiguous_outer_body_pair
+        or passing_before_overlap
       ):
         # A hold bridges brief radar jitter, but must not resurrect a candidate
         # whose recent physical motion has clearly stopped or reversed.
@@ -1131,6 +1320,14 @@ class TrajectoryCutInDetector:
       control_eligible = (
         confirmed_cutin
         and lead_role_relevant
+        # A distant adjacent-lane alert needs more coherent measured motion
+        # before it can affect longitudinal control through Lead2.
+        and (
+          not point.source.startswith("corner")
+          or point.d_rel <= 8.0
+          or vision_supported
+          or (direction_consistency >= 0.90 and lateral_net_fraction >= 0.80)
+        )
         and (
           raw_body_overlap
           if point.source == "frontRadar"
@@ -1138,6 +1335,7 @@ class TrajectoryCutInDetector:
             current_overlap
             or paired_close_entry
             or close_direct_entry
+            or vision_bracket_entry
             or (
               time_to_overlap_s is not None
               and time_to_overlap_s <= 1.90
@@ -1156,7 +1354,11 @@ class TrajectoryCutInDetector:
         and time_to_overlap_s is not None
         and time_to_overlap_s <= 3.0
         and (ahead_at_overlap or close_low_speed_entry)
-        and inward_progress >= 0.25
+        and (
+          inward_progress >= 0.25
+          or vision_bracket_supported
+          or (confirmed_cutin and control_eligible)
+        )
         and supported_inward_rate >= 0.12
         and direction_consistency >= 0.60
         and (
@@ -1210,6 +1412,7 @@ class TrajectoryCutInDetector:
       reason = (
         "confirmed trajectory CUT-IN" if confirmed_cutin
         else "trajectory pre-deceleration" if predecel_risk
+        else "side pass before path entry" if passing_before_overlap
         else "close-born rear pass" if close_born_rear_pass
         else "parallel side drift" if paired_parallel_drift
         else "ambiguous outer-body pair" if ambiguous_outer_body_pair
@@ -1260,6 +1463,9 @@ class TrajectoryCutInDetector:
         close_front_supported=close_front_supported,
         curve_alias=curve_alias,
         reason=reason,
+        passing_before_overlap=passing_before_overlap,
+        vision_bracket_supported=vision_bracket_supported,
+        paired_inward_motion_supported=paired_inward_motion_supported,
       ))
 
     for key, state in tuple(self._tracks.items()):

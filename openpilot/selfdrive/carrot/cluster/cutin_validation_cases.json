@@ -2,6 +2,89 @@
   "sensitivity": 50,
   "cases": [
     {
+      "id": "k8-329-57-right-sedan-before-entry-8526",
+      "vehicle_folder": "KIA_K8_HEV_1ST_GEN b34d1abb87cce93b",
+      "log": "00000329--a6c885ef88--57/rlog.zst",
+      "source": "front+corner",
+      "window": [52.0, 55.1],
+      "expected": "clear",
+      "target_track_ids": [8526, 58],
+      "forbidden_lead_two_ids": [8526, 58],
+      "scene": "Video-reviewed black sedan remains on the right before sustained inward entry. Do not infer a cut-in from paired body reflections alone. Times are replay segment time, approximately 0.0967 s before video."
+    },
+    {
+      "id": "k8-329-57-right-sedan-early-continuous-lead-two-8526",
+      "vehicle_folder": "KIA_K8_HEV_1ST_GEN b34d1abb87cce93b",
+      "log": "00000329--a6c885ef88--57/rlog.zst",
+      "source": "front+corner",
+      "window": [55.1, 56.9],
+      "expected": "detect",
+      "validation_stage": "lead_two",
+      "latest_detection_s": 55.6,
+      "lead_two_continuous_window": [55.7, 56.75],
+      "target_track_ids": [8526, 58],
+      "scene": "User-reported late black-sedan cut-in. Corner 8526 and front 58 have sustained inward motion while vision transitions from primary 42. Ego yaw exceeds 0.020 rad/s and paired body ranges differ by about 1.8 m; those facts must not veto independently corroborated entry or repeatedly release Lead2. Original Lead2 started at replay 56.604 s (video 56.701 s). Require earlier continuous selection before deep lane overlap. Replay time is approximately 0.0967 s before video."
+    },
+    {
+      "id": "k8-329-57-right-sedan-early-predecel-8526",
+      "vehicle_folder": "KIA_K8_HEV_1ST_GEN b34d1abb87cce93b",
+      "log": "00000329--a6c885ef88--57/rlog.zst",
+      "source": "front+corner",
+      "window": [55.1, 56.9],
+      "expected": "detect",
+      "validation_stage": "predecel",
+      "latest_detection_s": 55.85,
+      "target_track_ids": [8526, 58],
+      "scene": "Same video-reviewed black sedan: confirmed physical entry that remains ahead must allow bounded pre-deceleration before the original replay 56.760 s (video 56.857 s). Preserve the separate confirmation and side-pass safeguards. Replay time is approximately 0.0967 s before video."
+    },
+    {
+      "id": "k8-329-52-right-suv-parallel-before-entry-8059",
+      "vehicle_folder": "KIA_K8_HEV_1ST_GEN b34d1abb87cce93b",
+      "log": "00000329--a6c885ef88--52/rlog.zst",
+      "source": "front+corner",
+      "window": [32.9, 35.9],
+      "expected": "clear",
+      "target_track_ids": [8059, 42],
+      "forbidden_lead_two_ids": [8059, 42],
+      "scene": "Video-reviewed right SUV remains outside the lane before committing to entry. A nearer paired radar body and a confident farther vision lead alone must not produce CUT-IN or pre-deceleration. Times are replay segment time, approximately 0.1014 s before video."
+    },
+    {
+      "id": "k8-329-52-right-suv-vision-transition-predecel-8059",
+      "vehicle_folder": "KIA_K8_HEV_1ST_GEN b34d1abb87cce93b",
+      "log": "00000329--a6c885ef88--52/rlog.zst",
+      "source": "front+corner",
+      "window": [36.2, 37.3],
+      "expected": "detect",
+      "validation_stage": "predecel",
+      "latest_detection_s": 36.6,
+      "target_track_ids": [8059, 42],
+      "scene": "User-reported late response, confirmed in qcamera: right SUV corner 8059/front 42 enters ahead. At video 36.55 s, corner dRel 5.13 m and dPath -2.50 m, 1.50 s continuous history, inward progress 0.19 m and predicted overlap 1.87 s coexist with a confident visual range between paired front 42 and old primary 59. Direct lateral vision matching is not yet valid. Require early bounded pre-deceleration with coherent two-sensor entry rather than waiting for 0.25 m short-window travel. Times are replay segment time, approximately 0.1014 s before video."
+    },
+    {
+      "id": "k8-329-52-right-suv-early-lead-two-8059",
+      "vehicle_folder": "KIA_K8_HEV_1ST_GEN b34d1abb87cce93b",
+      "log": "00000329--a6c885ef88--52/rlog.zst",
+      "source": "front+corner",
+      "window": [36.2, 37.3],
+      "expected": "detect",
+      "validation_stage": "lead_two",
+      "latest_detection_s": 36.55,
+      "target_track_ids": [8059, 42],
+      "scene": "Same video-reviewed right SUV: promote the physically entering paired body after a confirmed near-term forecast that remains ahead of ego. Vision transition corroboration must not bypass side-pass or curve/body ambiguity safeguards. The original controller first selected Lead2 at replay 37.05 s. Times are replay segment time, approximately 0.1014 s before video."
+    },
+    {
+      "id": "azera-1b1-20-left-parallel-two-meter-boundary-3103",
+      "vehicle_folder": "HYUNDAI_AZERA_7TH_GEN f3a537501c7197ec",
+      "log": "000001b1--2738b927eb--20/rlog.zst",
+      "source": "front+corner",
+      "window": [49.0, 55.5],
+      "expected": "clear",
+      "target_track_ids": [3103, 36],
+      "forbidden_lead_one_ids": [3103, 36],
+      "forbidden_lead_two_ids": [3103, 36],
+      "scene": "User-reported false braking: the left adjacent car stays outside the lane. Corner 3103 moves inward only about 0.15 m while paired front 36 sees its inner body at yRel 2.1 m. At corner dRel 2.05 m, a two-meter exception admitted CUT-IN despite predicted entry occurring after the target passes ego; retained Lead2 then caused aTarget -2.91 m/s2. Reject the side pass and release any prior lead role while preserving primary front 50. Window uses replay segment time, approximately 0.1 s before video time."
+    },
+    {
       "id": "stationary-audit-azera-cf-3-moving-vision-reflection-46",
       "vehicle_folder": "HYUNDAI_AZERA_7TH_GEN f3a537501c7197ec",
       "log": "000000cf--04b9851018--3/rlog.zst",
@@ -1965,6 +2048,21 @@
       "target_track_ids": [1013],
       "latest_detection_s": 16.75,
       "scene": "Saved user review scene 09: the uphill white SUV at corner C1013 must be tracked by 16.75s. Camera frames were corrected using qRoadEncodeIdx timestamps. Front F40 has a different bearing and is not assigned as the same target. The requested radar lead deadline remains an open regression."
+    },
+    {
+      "id": "santafe-92-69-bridge-joint-scc-backup-39",
+      "vehicle_folder": "HYUNDAI_SANTA_FE_2022 e2fbe393d4ab01fb",
+      "log": "00000092--d1a1129c12--69/rlog.zst",
+      "source": "front",
+      "window": [34.5, 36.5],
+      "expected": "clear",
+      "human_verified": true,
+      "target_track_ids": [39],
+      "required_lead_one_ids": [35],
+      "lead_one_continuous_window": [34.5, 36.5],
+      "forbidden_lead_one_ids": [39, 0],
+      "forbidden_lead_two_ids": [39, 0],
+      "scene": "User-reported bridge-joint false braking at 35.60s. Vision and front 35 continuously track the moving vehicle around 17m. SCC jumps to a stationary near-road return also reported as front 39 and previously bypassed independent confirmation into L2 at 35.55-36.05s. The camera shows the road joint approaching without a vehicle at that near range. SCC and front are the same radar, not independent vehicle evidence."
     }
   ]
 }

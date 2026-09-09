@@ -7,6 +7,8 @@ Tool job infrastructure.
 """
 from __future__ import annotations
 
+from openpilot.common.async_process import process_group_kwargs, run_process, stop_process
+
 import asyncio
 import json
 import os
@@ -284,6 +286,7 @@ async def stream_exec(job: Dict[str, Any], cmd: List[str], *, cwd: Optional[str]
     cwd=cwd,
     stdout=asyncio.subprocess.PIPE,
     stderr=asyncio.subprocess.STDOUT,
+    **process_group_kwargs(),
   )
 
   async def _consume() -> int:
@@ -295,44 +298,20 @@ async def stream_exec(job: Dict[str, Any], cmd: List[str], *, cwd: Optional[str]
       append(job, chunk.decode("utf-8", errors="replace"))
     return await proc.wait()
 
+  consumer = asyncio.create_task(_consume())
   try:
-    if timeout is not None:
-      return await asyncio.wait_for(_consume(), timeout=timeout)
-    return await _consume()
-  except asyncio.TimeoutError:
-    try:
-      proc.kill()
-    except Exception:
-      pass
-    try:
-      await proc.wait()
-    except Exception:
-      pass
-    append(job, "\n[timeout]\n")
+    return await asyncio.wait_for(asyncio.shield(consumer), timeout)
+  except (asyncio.TimeoutError, asyncio.CancelledError) as exc:
+    await asyncio.shield(stop_process(proc))
+    await asyncio.shield(consumer)
+    if isinstance(exc, asyncio.TimeoutError):
+      append(job, "\n[timeout]\n")
     raise
 
 
 async def capture_exec(cmd: List[str], *, cwd: Optional[str] = None,
                        timeout: Optional[float] = None) -> Tuple[int, str]:
-  proc = await asyncio.create_subprocess_exec(
-    *cmd,
-    cwd=cwd,
-    stdout=asyncio.subprocess.PIPE,
-    stderr=asyncio.subprocess.STDOUT,
-  )
-  try:
-    stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=timeout) if timeout is not None else await proc.communicate()
-  except asyncio.TimeoutError:
-    try:
-      proc.kill()
-    except Exception:
-      pass
-    try:
-      await proc.wait()
-    except Exception:
-      pass
-    raise
-  return proc.returncode, (stdout or b"").decode("utf-8", errors="replace").strip()
+  return await run_process(cmd, cwd=cwd, timeout=timeout)
 
 
 def result_from_log(job: Dict[str, Any], rc: int, **extra: Any) -> Dict[str, Any]:

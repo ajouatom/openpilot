@@ -10,11 +10,20 @@ ButtonType = structs.CarState.ButtonEvent.Type
 
 TESLA_GAS_PRESS_ON = 0.8
 TESLA_GAS_PRESS_OFF = 0.4
+TESLA_TPMS_PRESSURE_SNA = 255 * 0.025
+TESLA_TPMS_BAR_TO_PSI = 14.5037738
+SPEED_AUTO_RESUME_GESTURE_NS = 1_000_000_000
+STOCK_ACC_CANCEL_STATES = (0, 1, 2, 12, 13, 14, 15)
+STOCK_ACC_CANCEL_PULSE_FRAMES = 4
 
 
 def update_tesla_gas_pressed(previous: bool, pedal_position: float) -> bool:
   threshold = TESLA_GAS_PRESS_OFF if previous else TESLA_GAS_PRESS_ON
   return float(pedal_position) > threshold
+
+
+def get_tesla_tpms_pressure(pressure_bar: float) -> float:
+  return round(pressure_bar * TESLA_TPMS_BAR_TO_PSI, 1) if pressure_bar < TESLA_TPMS_PRESSURE_SNA else 0.0
 
 
 class CarState(CarStateBase):
@@ -37,9 +46,52 @@ class CarState(CarStateBase):
     self.acc_cancel_last = 0
     self.das_control = None
     self.das_accCancel = False
+    self.das_acc_state_last = None
+    self.das_acc_cancel_frames = 0
     self.cruise_override = False
     self.coop_steering = True
     self.infotainment_3_finger_press = 0
+    self.tesla_speed_button_template = None
+    self.tesla_speed_button_template_nanos = 0
+    self.tesla_speed_limit_target = 0.0
+    self.tesla_speed_limit_target_nanos = 0
+    self.tesla_speed_limit_target_valid = False
+    self.tesla_speed_units = "KPH"
+    self.tesla_manual_speed_adjustment_counter = 0
+    self.tesla_speed_auto_resume_gesture_counter = 0
+    self._tesla_speed_resume_up_nanos = 0
+    self._tesla_speed_resume_down_nanos = 0
+    self._tesla_speed_resume_wait_idle = False
+
+  def observe_speed_wheel_frame(self, data: bytes, monotonic_nanos: int) -> None:
+    if len(data) != 8 or (data[0] & 0x03) != 1:
+      return
+
+    raw_tick = data[3] & 0x3F
+    if raw_tick == 0:
+      self.tesla_speed_button_template = bytes(data)
+      self.tesla_speed_button_template_nanos = monotonic_nanos
+      self._tesla_speed_resume_wait_idle = False
+      return
+
+    if self._tesla_speed_resume_wait_idle:
+      return
+
+    signed_tick = raw_tick - 0x40 if raw_tick & 0x20 else raw_tick
+    direction = 1 if signed_tick > 0 else -1
+    self.tesla_manual_speed_adjustment_counter += 1
+    opposite_nanos = self._tesla_speed_resume_down_nanos if direction > 0 else self._tesla_speed_resume_up_nanos
+    if opposite_nanos and monotonic_nanos - opposite_nanos <= SPEED_AUTO_RESUME_GESTURE_NS:
+      self.tesla_speed_auto_resume_gesture_counter += 1
+      self._tesla_speed_resume_up_nanos = 0
+      self._tesla_speed_resume_down_nanos = 0
+      self._tesla_speed_resume_wait_idle = True
+    elif direction > 0:
+      self._tesla_speed_resume_up_nanos = monotonic_nanos
+      self._tesla_speed_resume_down_nanos = 0
+    else:
+      self._tesla_speed_resume_down_nanos = monotonic_nanos
+      self._tesla_speed_resume_up_nanos = 0
 
   def update_summon_state(self, summon_state: str, cruise_enabled: bool):
     summon_now = summon_state in ("ACTIVE", "COMPLETE", "SELFPARK_STARTED")
@@ -134,9 +186,15 @@ class CarState(CarStateBase):
     speed_units_raw = int(cp_party.vl["DI_state"]["DI_speedUnits"])
     speed_units = self.can_define.dv["DI_state"]["DI_speedUnits"].get(speed_units_raw, speed_units_raw)
     acc_state = cp_ap_party.vl["DAS_control"]["DAS_accState"]
-    # Respect all stock DAS cancel states, not just ACC_CANCEL_GENERIC_SILENT(13).
-    # ELDA/ELK triggers ACC_CANCEL_GENERIC(0) which must also be forwarded.
-    self.das_accCancel = acc_state in (0, 1, 2, 12, 13, 14, 15)
+    # DAS_accState=0 is the steady idle value when stock ACC is unavailable.
+    # Only forward a cancellation after the stock controller was actively on;
+    # otherwise CP would continually cancel a new stalk engagement.
+    if self.das_acc_state_last in (3, 4) and acc_state in STOCK_ACC_CANCEL_STATES:
+      self.das_acc_cancel_frames = STOCK_ACC_CANCEL_PULSE_FRAMES
+    self.das_acc_state_last = acc_state
+    self.das_accCancel = self.das_acc_cancel_frames > 0
+    if self.das_acc_cancel_frames > 0:
+      self.das_acc_cancel_frames -= 1
 
     summon_state = self.can_define.dv["DI_state"]["DI_autoparkState"].get(int(cp_party.vl["DI_state"]["DI_autoparkState"]), None)
     cruise_enabled = cruise_state in ("ENABLED", "STANDSTILL", "OVERRIDE", "PRE_FAULT", "PRE_CANCEL")
@@ -153,11 +211,12 @@ class CarState(CarStateBase):
       # Keep cruise unit consistent with displayed speed when enum/raw bit are unreliable.
       cruise_is_kph = ui_is_kph
 
+    self.tesla_speed_units = "KPH" if cruise_is_kph else "MPH"
     ret.cruiseState.speedCluster = cp_party.vl["DI_state"]["DI_digitalSpeed"] * (CV.KPH_TO_MS if cruise_is_kph else CV.MPH_TO_MS)
     ret.cruiseState.speed = max(ret.cruiseState.speedCluster, 1e-3)
     ret.cruiseState.available = cruise_state == "STANDBY" or ret.cruiseState.enabled
     ret.cruiseState.standstill = False  # This needs to be false, since we can resume from stop without sending anything special
-    ret.standstill = cruise_state == "STANDSTILL"
+    ret.standstill = cp_party.vl["ESP_B"]["ESP_vehicleStandstillSts"] == 1
     ret.accFaulted = cruise_state == "FAULT"
 
     # Emit a single cancel button event on the rising edge of any stock DAS cancel state.
@@ -167,10 +226,19 @@ class CarState(CarStateBase):
     ret.buttonEvents = [*create_button_events(acc_cancel, self.acc_cancel_last, {1: ButtonType.cancel})]
     self.acc_cancel_last = acc_cancel
 
-    # DAS_fusedSpeedLimit from DBC is always in kph (scale=5). Do NOT apply ui_is_kph conversion.
+    # DAS_fusedSpeedLimit uses the instrument's selected speed unit.
     speed_limit = cp_ap_party.vl["DAS_status"]["DAS_fusedSpeedLimit"]
-    if 0 < speed_limit <= 150:
-      ret.speedLimit = speed_limit
+    speed_limit_time = cp_ap_party.ts_nanos["DAS_status"]["DAS_fusedSpeedLimit"]
+    if 0 < speed_limit <= 150 and speed_limit_time > 0:
+      self.tesla_speed_limit_target = speed_limit * (CV.KPH_TO_MS if cruise_is_kph else CV.MPH_TO_MS)
+      # The shared speed-limit display expects km/h even on MPH vehicles.
+      ret.speedLimit = self.tesla_speed_limit_target * CV.MS_TO_KPH
+      self.tesla_speed_limit_target_nanos = speed_limit_time
+      self.tesla_speed_limit_target_valid = True
+    else:
+      self.tesla_speed_limit_target = 0.0
+      self.tesla_speed_limit_target_nanos = 0
+      self.tesla_speed_limit_target_valid = False
 
     park_brake_state = self.can_define.dv["DI_state"]["DI_parkBrakeState"].get(int(cp_party.vl["DI_state"]["DI_parkBrakeState"]), None)
     vehicle_hold_state = self.can_define.dv["DI_state"]["DI_vehicleHoldState"].get(int(cp_party.vl["DI_state"]["DI_vehicleHoldState"]), None)
@@ -210,7 +278,7 @@ class CarState(CarStateBase):
     # Stock Autosteer should be off (includes FSD)
     # TODO: find for TESLA_MODEL_X and HW2.5 vehicles
     if not (self.CP.flags & TeslaFlags.MISSING_DAS_SETTINGS):
-      ret.invalidLkasSetting = cp_ap_party.vl["DAS_status"]["DAS_autopilotState"] not in (0, 1, 2)  # DISABLED, UNAVAILABLE, AVAILABLE
+      ret.invalidLkasSetting = cp_ap_party.vl["DAS_settings"]["DAS_autosteerEnabled"] != 0
 
       # Because we don't have FSD 14 detection outside of a set of FW, we should check if this FW is accidentally missing from FSD_14_FW
       # 1. If in Autosteer or FSD, already caught by invalidLkasSetting
@@ -246,6 +314,12 @@ class CarState(CarStateBase):
     # 3-finger infotainment press detection (vehicle bus)
     if Bus.adas in can_parsers:
       cp_adas = can_parsers[Bus.adas]
+      tpms = cp_adas.vl["VCSEC_TPMSDisplay"]
+      ret.tpms.fl = get_tesla_tpms_pressure(tpms["VCSEC_TPMSDisplayPressureFL"])
+      ret.tpms.fr = get_tesla_tpms_pressure(tpms["VCSEC_TPMSDisplayPressureFR"])
+      ret.tpms.rl = get_tesla_tpms_pressure(tpms["VCSEC_TPMSDisplayPressureRL"])
+      ret.tpms.rr = get_tesla_tpms_pressure(tpms["VCSEC_TPMSDisplayPressureRR"])
+
       prev_infotainment = self.infotainment_3_finger_press
       self.infotainment_3_finger_press = int(cp_adas.vl["UI_status2"]["UI_activeTouchPoints"])
       ret.buttonEvents = [*ret.buttonEvents, *create_button_events(
@@ -261,5 +335,5 @@ class CarState(CarStateBase):
       Bus.ap_party: CANParser(DBC[CP.carFingerprint][Bus.party], [], CANBUS.autopilot_party),
     }
     if CP.flags & TeslaFlags.HAS_VEHICLE_BUS:
-      parsers[Bus.adas] = CANParser("tesla_model3_vehicle", [("UI_status2", 2)], CANBUS.vehicle)
+      parsers[Bus.adas] = CANParser("tesla_model3_vehicle", [("UI_status2", 2), ("VCSEC_TPMSDisplay", 1)], CANBUS.vehicle)
     return parsers

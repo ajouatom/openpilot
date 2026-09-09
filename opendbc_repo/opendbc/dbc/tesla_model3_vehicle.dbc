@@ -90,6 +90,12 @@ BO_ 585 SCCM_leftStalk: 3 VEH
  SG_ SCCM_leftStalkReserved1 : 19|5@1+ (1,0) [0|31] "" X
  SG_ SCCM_highBeamStalkStatus : 12|2@1+ (1,0) [0|3] "" das
 
+BO_ 602 VCSEC_TPMSDisplay: 6 VEH
+ SG_ VCSEC_TPMSDisplayPressureFL : 0|8@1+ (0.025,0) [0|6.35] "bar" VEH
+ SG_ VCSEC_TPMSDisplayPressureFR : 8|8@1+ (0.025,0) [0|6.35] "bar" VEH
+ SG_ VCSEC_TPMSDisplayPressureRL : 16|8@1+ (0.025,0) [0|6.35] "bar" VEH
+ SG_ VCSEC_TPMSDisplayPressureRR : 24|8@1+ (0.025,0) [0|6.35] "bar" VEH
+
 BO_ 280 DI_systemStatus: 8 VEH
  SG_ DI_epbRequest : 44|2@1+ (1,0) [0|2] "" epbl
  SG_ DI_systemStatusCounter : 8|4@1+ (1,0) [0|15] "" X
@@ -361,6 +367,10 @@ VAL_ 259 VCRIGHT_frontLatchStatus 8 "LATCH_FAULT" 2 "LATCH_CLOSED" 1 "LATCH_OPEN
 VAL_ 585 SCCM_washWipeButtonStatus 3 "SNA" 0 "NOT_PRESSED" 2 "2ND_DETENT" 1 "1ST_DETENT";
 VAL_ 585 SCCM_turnIndicatorStalkStatus 3 "DOWN_1" 5 "SNA" 0 "IDLE" 1 "UP_1" 4 "DOWN_2" 2 "UP_2";
 VAL_ 585 SCCM_highBeamStalkStatus 3 "SNA" 0 "IDLE" 1 "PULL" 2 "PUSH";
+VAL_ 602 VCSEC_TPMSDisplayPressureFL 255 "SNA";
+VAL_ 602 VCSEC_TPMSDisplayPressureFR 255 "SNA";
+VAL_ 602 VCSEC_TPMSDisplayPressureRL 255 "SNA";
+VAL_ 602 VCSEC_TPMSDisplayPressureRR 255 "SNA";
 VAL_ 605 DAS_trafficLightColor 0 "NONE" 1 "RED" 2 "GREEN" 3 "YELLOW";
 VAL_ 280 DI_epbRequest 0 "DI_EPBREQUEST_NO_REQUEST" 1 "DI_EPBREQUEST_PARK" 2 "DI_EPBREQUEST_UNPARK";
 VAL_ 280 DI_keepAliveRequest 1 "KEEP_ALIVE" 0 "NO_REQUEST";

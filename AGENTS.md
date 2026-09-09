@@ -1,5 +1,16 @@
 # Repository memory
 
+- Whenever radar detection or lead-selection code changes, update the NAS Carrot Routes
+  radar replay service in the same task. The `Carrot Routes image` GitHub workflow builds
+  committed shared code using `tools/carrot_route_vault/build_bundle.py`; the NAS scheduled
+  updater pulls, validates and deploys the tested image to the existing
+  `/volume1/docker/carrot-route-vault` project. Use this automatic path for routine updates;
+  do not manually copy sources or rebuild on the NAS. Verify the workflow and NAS updater
+  report the intended commit, and verify an actual upload-result page and
+  its recalculated radar data before reporting completion. This includes replay adapters and
+  shared detection dependencies such as `radar_motion`, `cluster`, cut-in helpers, and required
+  cereal/DBC compatibility changes. Keep the server's code fingerprint/cache invalidation and
+  deployed `SOURCE_COMMIT` current; a vehicle-branch push alone does not complete this work.
 - For long-running work, treat user questions, status checks, clarifications, and added in-scope
   requests as interruptions to answer while continuing the active work. Stop an active process or
   abandon the task only when the user explicitly asks to stop, cancel, pause, or replace it.
