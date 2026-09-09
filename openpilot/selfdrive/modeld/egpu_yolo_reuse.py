@@ -128,7 +128,10 @@ class ReuseRuntime(YoloRuntime):
     start = camera_time()
     # Consider every completed primary frame. The camera/deadline/overrun
     # checks still decide whether this frame has room for optional GPU work.
-    reason = self.budget.admit(start, pending, min_interval=0.) if enabled else 'paused'
+    # Lamp observation needs a stable few frames, not every driving frame.
+    # Bound its duty cycle while retaining all existing deadline/fault guards.
+    interval = .2 if self.model_id == 'signal-v33-observe-s260911' else 0.
+    reason = self.budget.admit(start, pending, min_interval=interval) if enabled else 'paused'
     values = None
     if reason == 'run':
       try:

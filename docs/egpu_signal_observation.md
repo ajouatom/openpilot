@@ -21,6 +21,8 @@ create `/data/egpu_yolo/signal_observation.json` with:
 ```
 
 Only fresh, valid road-camera results with that exact model ID can produce a tone.
+Signal inference is limited to five attempts per second; the existing primary
+timing, camera, deadline, and recovery guards can reduce that rate further.
 At least three distinct frames spanning 300 ms must agree on one visible color.
 Mixed red/green observations, stale data, wide-camera input, paused inference, and
 missing enablement produce no tone. Red uses a short lower-pitched tone; green a

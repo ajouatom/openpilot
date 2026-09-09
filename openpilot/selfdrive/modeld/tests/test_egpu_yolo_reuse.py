@@ -116,3 +116,26 @@ def test_session_gates_actual_submission_and_publication_cost_latches_overrun(mo
   assert runtime.budget.overruns == int(expected == 'run')
   if expected == 'run':
     assert runtime.budget.admit(102) == 'overrun'
+
+@pytest.mark.parametrize('model_id,expected_runs', [('signal-v33-observe-s260911', 0), ('regular-yolo', 1)])
+def test_signal_only_limits_actual_submissions_to_five_hz(monkeypatch, model_id, expected_runs):
+  from types import SimpleNamespace
+  import numpy as np
+  from openpilot.selfdrive.modeld.egpu_yolo import IdleBudget
+  from openpilot.selfdrive.modeld import egpu_yolo_reuse
+  monkeypatch.setattr(egpu_yolo_reuse, 'camera_time', lambda: 101.27)
+  monkeypatch.setattr(egpu_yolo_reuse, 'read_session', lambda **kwargs: True)
+  runtime = egpu_yolo_reuse.ReuseRuntime.__new__(egpu_yolo_reuse.ReuseRuntime)
+  runtime.budget = IdleBudget(.003)
+  for frame in range(25):
+    runtime.budget.observe(frame, 100+frame*.05, 100+frame*.05+.01)
+  runtime.budget.last_run = 101.1
+  runtime.model_id, runtime.phases = model_id, (0., 0., 0.)
+  runtime.names = ['red_visible', 'green_visible']
+  runtime.last_publish = runtime.last_execution = 0.
+  submissions = []
+  runtime.infer = lambda: submissions.append(True) or []
+  runtime.output = SimpleNamespace(send=lambda packet: None)
+  runtime.after_publish(None, 25, 101250000000, 101255000000, 101.26, 101.27, False,
+                        'road', np.eye(3), (1344, 760), lambda: False, 101.26, 101.27, permitted=True)
+  assert len(submissions) == expected_runs
