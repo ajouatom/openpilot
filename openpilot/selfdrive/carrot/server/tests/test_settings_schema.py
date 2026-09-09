@@ -105,13 +105,17 @@ def test_longitudinal_comfort_settings_use_driver_facing_language(params):
   assert lane_change["default"] == 100
   assert "100%는 변화 없음" in lane_change["descr"]
 
-  decel_margin = by_name["TFollowDecelBoost"]
-  assert decel_margin["default"] == 50
-  assert "목표 간격" in decel_margin["descr"]
-
   driving_mode = by_name["MyDrivingMode"]
   assert "ComfortBrake" not in driving_mode["descr"]
   assert "멀리서부터 천천히 감속" in driving_mode["descr"]
+
+
+def test_deceleration_gap_margin_defaults_match_registry(params):
+  decel_margin = next(p for p in params if p["name"] == "TFollowDecelBoost")
+  assert decel_margin["default"] == 0
+  assert "목표 간격" in decel_margin["descr"]
+  params_keys = PARAMS_KEYS_PATH.read_text(encoding="utf-8")
+  assert '{"TFollowDecelBoost", {PERSISTENT, INT, "0"}}' in params_keys
 
 
 def test_longitudinal_pid_defaults_match_registry(params):
