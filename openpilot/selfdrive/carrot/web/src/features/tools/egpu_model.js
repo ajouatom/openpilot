@@ -49,6 +49,7 @@ function modelDisplayName(status) {
   if (explicitName) return explicitName;
 
   const modelId = String(status?.model_id || "").toLowerCase();
+  if (modelId.includes("pr38823") || modelId.includes("cinque-v2")) return "Cinque v2";
   if (modelId.includes("pr38771") || modelId.includes("cinque-terre")) return "Cinque Terre";
   if (modelId.includes("bmrlanpv6")) return "BMRLNAP v6";
   if (modelId.includes("pr38739") || modelId.includes("tgc")) return "TGC";
