@@ -14,18 +14,22 @@
 - For long-running work, treat user questions, status checks, clarifications, and added in-scope
   requests as interruptions to answer while continuing the active work. Stop an active process or
   abandon the task only when the user explicitly asks to stop, cancel, pause, or replace it.
-- Every non-model change must be applied to `carrot-wip`, `carrot-cinque-terre`, and
-  `carrot-bmr_v6` and pushed to all three remote branches. Preserve each branch's model-specific
-  changes while integrating the complete `carrot-wip` history into both model branches, and verify
-  that none of the three branches has an unpushed commit before reporting the work complete.
-  Keep shared UI, model-name display helpers, and generated web assets identical across all three
-  branches; differences must be limited to model selection/artifacts, required model-specific
-  compatibility changes, and their tests.
+- Apply model selection/artifacts, model and branch names, required model compatibility changes,
+  and branch-specific features (such as YOLO2) only to their relevant branches. Preserve these
+  differences when synchronizing shared code; do not spread an experiment to other branches.
+  The user will explicitly identify new feature experiments and their target branches.
+- Common changes, including radar processing and Carrot Web, must be committed and pushed to
+  every maintained `carrot-*` branch. Discover the current set from `origin/carrot-*`, including
+  newly created branches; do not limit synchronization to a fixed list of model variants.
+  Keep common code and its generated assets synchronized while preserving each branch's model
+  and feature differences. Integrate the complete `carrot-wip` history into model-only variants;
+  integrate shared changes into feature branches without overwriting their dedicated features.
+  Verify every affected branch matches its remote with no unpushed commits before completion.
 - When adding a model for testing, create a new experimental branch from the current `carrot-wip`.
-  Apply the same shared-code synchronization rule to the new model branch. Add any model-name
-  display support to the common code and generated web assets on every maintained branch.
-  A branch explicitly designated for a separate feature experiment may differ for that experiment;
-  the three current branches listed above remain model variants with otherwise identical features.
+  Apply the same shared-code synchronization rule to the new branch. Model-name display changes
+  and their generated assets belong only to branches using that model. As of 2026-09-09,
+  `carrot-cinque_v2` and `carrot-egpu-yolo2` use Cinque v2 from commaai/openpilot#38823;
+  other branches retain their own model choices and feature experiments.
 - On this Windows workstation, vehicle tmux session captures are stored under
   `\\DS1821P\openpilot\<branch>`. When tmux is mentioned, search the directory for the known
   branch for a vehicle folder whose name ends with the exact dongle ID. If the branch is unknown,
