@@ -226,11 +226,7 @@ For a clean baseline, use `EnableSpeedTF=0`, `DynamicTFollowLC=100`, `MyDrivingM
 <a id="lead-response"></a>
 ## 6. Lead-vehicle response
 
-| Setting | Range/scale | Role |
-|---|---|---|
-| `LeadAccelResponse` | 0–5, default 0 | Driver response preference for a lead starting or accelerating at every following-distance level |
-| `RadarReactionFactor` | 0–200%, default 100% | How long measured lead acceleration persists into the future |
-| `JLeadFactor3` | 0–100, ×0.01 | How much lead acceleration change enters future trajectory prediction |
+Use `LeadAccelResponse` to adjust response to a lead starting, accelerating or being approached. Its range is 0–5; the default 0 disables the additional response adjustments.
 
 ### `LeadAccelResponse`
 
@@ -275,19 +271,12 @@ Current target-distance headroom, relative speed and lead acceleration estimate 
 
 Safe entry and exit blend the correction over 0.8 seconds. Target change/loss and existing boost inhibits such as accelerator override or lane change clear the state. Steady operation in Normal and levels 0–3 receive no settling correction. Configured TF is not increased, and existing selected-TF priority conditions for levels 4–5 during lead acceleration remain. Prompt launches still respect the existing Safe acceleration ceiling and do not guarantee prevention of cut-ins.
 
-### `RadarReactionFactor`
+### Adjustment sequence
 
-Radar acceleration and jerk form `aLeadTau`, used by MPC to predict how long the lead's current acceleration or deceleration will continue.
-
-- Lower values assume the measured change persists longer and respond more quickly.
-- Higher values let it decay sooner and may respond more smoothly but later.
-- Too low can react to radar noise; too high can respond slowly to real lead braking.
-
-### `JLeadFactor3`
-
-The code smooths `jLead` as 10% new and 90% previous, multiplies by this percentage, clamps to -1 through +1, and inserts it into the future lead trajectory. Zero excludes jerk; 50 uses half; 100 uses the full allowed value.
-
-For a baseline, set `LeadAccelResponse=0`, `JLeadFactor3=0`, and `RadarReactionFactor=100`. If response to a lead starting or accelerating is late at your selected gap, raise `LeadAccelResponse` from level 1 one step at a time. Change only one setting at once, and restore immediately if surging or unintended acceleration appears.
+1. Keep driving mode and time gap fixed, and use `LeadAccelResponse=0` to establish the baseline response.
+2. Adjust `LeadAccelResponse` one level at a time to change response to a lead starting or accelerating at the selected gap.
+3. Compare launch response, acceleration settling during approach and deceleration in the same driving mode at similar speeds and lead conditions.
+4. Restore the previous value if surging or unintended acceleration appears.
 
 <a id="carrot-cruise"></a>
 ## 7. Carrot cruise
