@@ -121,7 +121,9 @@ def decode_packet(packet):
     raise ValueError('native compact FP32 or FP16 output required')
   cpu_start = camera_time()
   # Keep transport compact, but run filtering/NMS in FP32 on this CPU worker.
-  detections = decode_detections(values.astype(np.float32, copy=False), 512, 256, compact=True)
+  signal_model = metadata.get('modelId') == 'signal-v33-observe-s260911' and list(names) == ['red_visible', 'green_visible']
+  detections = decode_detections(values.astype(np.float32, copy=False), 512, 256,
+                                 confidence=.25 if signal_model else .35, compact=True)
   for detection in detections:
     detection['label'] = names[detection['classId']]
   metadata['detections'] = project_detections(detections, np.asarray(transform), (512, 256), size)

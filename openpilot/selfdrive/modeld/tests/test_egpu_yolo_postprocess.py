@@ -45,6 +45,16 @@ def test_cpu_decoder_rejects_wrong_compact_shape_and_preserves_paused_status():
   assert decode_packet((metadata, None, None, None, None, None)) == metadata
 
 
+def test_signal_model_keeps_two_class_names_and_its_frozen_threshold():
+  values = np.zeros((1, 6, 2688), dtype=np.float32)
+  values[0, :, 0] = [256, 100, 6, 6, .3, 1]
+  packet = ({'modelId': 'signal-v33-observe-s260911'}, values, np.eye(3), (512, 256),
+            ['red_visible', 'green_visible'], 0.)
+  assert decode_packet(packet)['detections'][0]['label'] == 'green_visible'
+  packet[0]['modelId'] = 'regular-yolo'
+  assert decode_packet(packet)['detections'] == []
+
+
 @pytest.mark.parametrize('count', [0, 1, 2, 10, 40])
 @pytest.mark.parametrize('transform', [np.eye(3), np.array([[1.1, .2, 7], [-.03, .8, 19], [.01, -.01, 1]]),
                                     np.array([[1, 0, 0], [0, 1, 0], [0, 0, -1]]), np.zeros((3, 3)), np.full((3, 3), np.nan)])

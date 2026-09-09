@@ -13,6 +13,8 @@ from openpilot.common.realtime import Ratekeeper
 from openpilot.common.utils import retry
 from openpilot.common.swaglog import cloudlog
 from openpilot.selfdrive.car.openpilot_toggle import CruiseMainOpenpilotToggle
+from openpilot.selfdrive.modeld.egpu_yolo import camera_time
+from openpilot.selfdrive.ui.egpu_signal_audio import SignalAudio
 
 from openpilot.system import micd
 from openpilot.system.hardware import HARDWARE
@@ -175,6 +177,7 @@ class Soundd:
     self.selfdrive_timeout_alert = False
 
     self.spl_filter_weighted = FirstOrderFilter(0, 2.5, FILTER_DT, initialized=False)
+    self.signal_audio = SignalAudio(SAMPLE_RATE)
 
   def load_sounds(self):
     self.loaded_sounds: dict[int, np.ndarray] = {}
@@ -242,6 +245,8 @@ class Soundd:
         written_frames += frames_to_write
         self.current_sound_frame += frames_to_write
 
+    if hasattr(self, 'signal_audio'):
+      ret += self.signal_audio.render(frames, priority=self.current_alert != AudibleAlert.none)
     return ret * self.current_volume
 
   def callback(self, data_out: np.ndarray, frames: int, time, status) -> None:
@@ -305,7 +310,7 @@ class Soundd:
     # sounddevice must be imported after forking processes
     import sounddevice as sd
 
-    sm = messaging.SubMaster(['selfdriveState', 'soundPressure', 'carrotMan', 'carState'])
+    sm = messaging.SubMaster(['selfdriveState', 'soundPressure', 'carrotMan', 'carState', 'carrotYolo', 'deviceState'])
     cruise_main_toggle = CruiseMainOpenpilotToggle(ButtonType.mainCruise)
 
     with self.get_stream(sd) as stream:
@@ -325,6 +330,11 @@ class Soundd:
           self.update_alert(AudibleAlert.prompt)
         else:
           self.get_audible_alert(sm)
+
+        self.signal_audio.update(sm['carrotYolo'], now=camera_time(), valid=sm.valid['carrotYolo'],
+                                 transport_age=time.monotonic()-sm.recv_time['carrotYolo'],
+                                 blocked=(self.current_alert != AudibleAlert.none or not sm['deviceState'].started
+                                          or not sm.all_checks(['deviceState', 'selfdriveState'])))
 
         rk.keep_time()
 
