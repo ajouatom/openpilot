@@ -2,6 +2,43 @@
   "sensitivity": 50,
   "cases": [
     {
+      "id": "carnival-196-11-aborted-right-entry-initial-lead-two-3293",
+      "vehicle_folder": "KIA_CARNIVAL_4TH_GEN c4dcf95545dafe68",
+      "log": "00000196--b3454d7cd6--11/rlog.zst",
+      "source": "front+corner",
+      "window": [25.4, 26.2],
+      "expected": "detect",
+      "validation_stage": "lead_two",
+      "latest_detection_s": 25.8,
+      "lead_two_continuous_window": [25.8, 26.2],
+      "target_track_ids": [3293, 38],
+      "scene": "Video-reviewed right SUV initially approaches rapidly from the outer lane. Corner 3293/front 38 move inward coherently and entry ahead is plausible, so preserve the initial Lead2 response. The SUV subsequently settles in the adjacent lane; that later withdrawal is tested separately. Replay segment time is approximately 0.0500 s before video."
+    },
+    {
+      "id": "carnival-196-11-aborted-right-entry-initial-predecel-3293",
+      "vehicle_folder": "KIA_CARNIVAL_4TH_GEN c4dcf95545dafe68",
+      "log": "00000196--b3454d7cd6--11/rlog.zst",
+      "source": "front+corner",
+      "window": [25.4, 26.2],
+      "expected": "detect",
+      "validation_stage": "predecel",
+      "latest_detection_s": 25.75,
+      "target_track_ids": [3293, 38],
+      "scene": "Preserve bounded pre-deceleration during the same rapid initial approach, before the right SUV stops moving toward the ego lane. Withdrawal must not be implemented by suppressing the initial real entry risk. Replay time is approximately 0.0500 s before video."
+    },
+    {
+      "id": "carnival-196-11-aborted-right-entry-release-3293",
+      "vehicle_folder": "KIA_CARNIVAL_4TH_GEN c4dcf95545dafe68",
+      "log": "00000196--b3454d7cd6--11/rlog.zst",
+      "source": "front+corner",
+      "window": [26.35, 29.0],
+      "expected": "clear",
+      "target_track_ids": [3293, 38],
+      "forbidden_lead_one_ids": [3293, 38],
+      "forbidden_lead_two_ids": [3293, 38],
+      "scene": "User-reported prolonged braking after the right SUV aborts entry and stays in its own lane. Recent position-derived inward motion and measured lateral velocity both fall while both radar bodies remain outside the corridor. The former long-window forecast and lead retention held Lead2 until video 27.844 s. Clear CUT-IN, pre-deceleration and Lead2 together once withdrawal is observed, without reacquiring the same outside body. Replay time is approximately 0.0500 s before video."
+    },
+    {
       "id": "k8-329-57-right-sedan-before-entry-8526",
       "vehicle_folder": "KIA_K8_HEV_1ST_GEN b34d1abb87cce93b",
       "log": "00000329--a6c885ef88--57/rlog.zst",
