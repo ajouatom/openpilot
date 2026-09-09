@@ -5,7 +5,13 @@ Baseline TF and dynamic TF have separate ramp histories, preventing repeated
 reduction in consecutive planner cycles. Lane-change starting/finishing also
 blocks the lead-acceleration response override and ordinary dynamic TF.
 
-## Departure and destination constraints
+## Selected-lead authority
+
+The normally selected leadOne/leadTwo at lane-change entry form the reference pair. If either selected lead changes or disappears, additional acceleration relief stops for the rest of that maneuver. Braking uses only the currently selected leads; side radar candidates and stored entry vehicles never become additional braking obstacles.
+
+Only selected leadTwo is supplied as the additional credit guard. Side candidate lists are never read by this tracker or used as MPC braking obstacles. Entry IDs and current IDs are exported for replay inspection. A selected-pair change latches relief off, even if the original pair returns.
+
+## Departure constraints
 
 `radar_motion/lane_change_gap.py` is shared by the vehicle planner and the NAS
 radar replay. Radar yRel is left-positive; model and device-pose y are
@@ -18,24 +24,22 @@ departure credit.
 The model must predict sustained body clearance, with a 2.5 m combined width
 and margin plus an expanding 0.2 m/s uncertainty envelope. Its prediction may
 not advance clearance faster than measured lateral motion. Track continuity,
-actual movement and destination tracks must be confirmed. Missing pose,
+actual movement and the selected pair must be confirmed. Missing pose,
 invalid samples, large turns, changed primary identity, a path returning to
-the old lane, blindspot warnings and unconfirmed destination traffic revoke
+the old lane, blindspot warnings and a missing selected second lead revoke
 credit. An apparently empty destination is not treated as verified free space.
 The confidence field is a confirmation ramp, not a calibrated probability.
 
 Before allowing credit, a 50 ms grid checks the transition for three seconds,
 using the allowed maximum ego acceleration and at least 1 m/s² target braking
 (or a stronger measured deceleration). The old lead must retain a stopping
-buffer until clearance plus 0.35 s. Every destination front target must retain
-the full TF and braking-distance margin throughout the transition. Close side
-or rear targets and blindspot warnings deny extra credit; existing lateral
+buffer until clearance plus 0.35 s. The selected second lead must retain
+the full TF and braking-distance margin throughout the transition. A close selected second lead and blindspot warnings deny extra credit; existing lateral
 permission checks remain responsible for the lane-change decision.
 
 MPC keeps its unmodified common TF. It receives bounded credit only on old
 lead obstacle samples after clearance plus 0.35 s, ramping over 0.5 s. The cap
-is the smallest of 20% of base TF, 0.25 s and 4 m. Destination front vehicles
-compete independently with full normal spacing from the start of the maneuver.
+is the smallest of 20% of base TF, 0.25 s and 4 m. Only current leadOne/leadTwo compete with normal spacing. No extra side obstacle is constructed.
 LeadTwo, traffic-stop and cruise obstacles remain in the minimum. Old CUT-OUT
 and lane-change credits never stack. Original radarState and FCW trajectories
 are not rewritten. The implementation does not change the MPC solver ABI.
@@ -43,7 +47,7 @@ are not rewritten. The implementation does not change the MPC solver ABI.
 ## Settings
 
 `DynamicTFollowLC=100` remains the default and disables extra departure credit;
-destination constraints remain enabled. Invalid/zero values disable credit.
+normal selected-lead constraints remain enabled. Invalid/zero values disable credit.
 Values below 80 have the same cap as 80, so legacy aggressive settings cannot
 restore global TF reduction. Credit is disabled for TF below 0.8 s and speeds
 outside 5–35 m/s. These bounds are conservative implementation choices, not
@@ -67,7 +71,7 @@ cannot establish that 90 or another value is best for a particular driver.
 
 Focused tests cover mirrored maneuvers, path-only movement, yaw-only azimuth,
 aborted/re-entering paths, sensor loss, changed tracks, stopping/closing leads,
-multiple destination vehicles, invalid settings, TF recurrence and production
+selected-pair changes and roadside candidate exclusion, invalid settings, TF recurrence and production
 MPC parameter assembly with a recording solver. The NAS adapter recalculates
 the same tracker and exports `selection.lane_change_gap`; source fingerprints
 include this module and invalidate old visual/web replay caches. It preserves
@@ -79,3 +83,13 @@ a recording solver; they do not establish the closed-loop vehicle response or
 represent an execution of compiled acados. No road test or safety guarantee is
 claimed. Replay verifies sensor interpretation on recorded trajectories; ego
 and other road users can react differently under changed control.
+
+## 2026-09-09 roadside-braking regression
+
+The previous implementation incorrectly folded unverified side candidates into
+the MPC lead1 obstacle column, even when both selected leads were absent and
+DynamicTFollowLC was 100. Recorded returns about five metres to the right with
+near-zero speed caused transient braking requests. That insertion is removed.
+Regression tests verify that these values cannot affect MPC inputs, that the
+planner adapter never reads side lists, and that entry-pair changes revoke credit.
+Replay/parameter reconstruction is not a closed-loop or compiled-solver road test.
