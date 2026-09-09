@@ -87,6 +87,11 @@ def enable_egpu_yolo_supervisor(started, params, CP: car.CarParams) -> bool:
   from openpilot.selfdrive.modeld.egpu_yolo_auto import configured
   return configured()
 
+
+def enable_signal_cpu(started, params, CP: car.CarParams) -> bool:
+  from openpilot.selfdrive.modeld.egpu_signal_cpu import configured
+  return started and configured()
+
 #def enable_connect(started, params, CP: car.CarParams) -> bool:
 #  return params.get_int("EnableConnect") > 0
 
@@ -162,6 +167,7 @@ procs = [
   PythonProcess("modeld", "openpilot.selfdrive.modeld.modeld", only_onroad),
   PythonProcess("egpu_yolo_supervisor", "openpilot.selfdrive.modeld.egpu_yolo_supervisor", enable_egpu_yolo_supervisor,
                 enabled=not PC, restart_if_crash=True),
+  PythonProcess("signal_observer", "openpilot.selfdrive.modeld.egpu_signal_cpu", enable_signal_cpu, enabled=not PC),
   PythonProcess("qcom_yolod", "openpilot.selfdrive.modeld.qcom_yolod", enable_qcom_yolo, enabled=not PC),
   PythonProcess("dmonitoringmodeld", "openpilot.selfdrive.modeld.dmonitoringmodeld", enable_dm, enabled=(WEBCAM or not PC)),
   PythonProcess("sensord", "openpilot.system.sensord.sensord", only_onroad, enabled=not PC),

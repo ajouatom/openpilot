@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 
 MODEL_ID = "signal-v33-observe-s260911"
+CPU_MODEL_ID = "signal-v33-observe-int8-s260911"
 
 
 def get(value, key, default=None):
@@ -20,15 +21,21 @@ class SignalObservation:
     self.announced = None
     self.last_tone = -math.inf
 
-  def update(self, message, *, now, valid, transport_age, enabled, blocked=False):
+  def update(self, message, *, now, valid, transport_age, enabled, blocked=False, expected_model_id=MODEL_ID):
     color = None
+    stale = False
+    gap = .4 if expected_model_id == CPU_MODEL_ID else .35
     try:
       frame = int(get(message, 'frameId', -1))
-      fresh = (enabled and not blocked and valid and math.isfinite(transport_age) and 0 <= transport_age <= .35
+      age = now-float(get(message, 'timestampEof', 0))/1e9
+      context = (enabled and not blocked and valid and math.isfinite(transport_age) and transport_age >= 0
                and frame >= 0 and math.isfinite(now)
-               and get(message, 'modelId') == MODEL_ID and str(get(message, 'camera')) == 'road'
+               and expected_model_id in (MODEL_ID, CPU_MODEL_ID) and get(message, 'modelId') == expected_model_id
+               and str(get(message, 'camera')) == 'road'
                and str(get(message, 'state')) == 'run'
-               and 0 <= now-float(get(message, 'timestampEof', 0))/1e9 <= .35)
+               and math.isfinite(age) and age >= 0)
+      stale = context and (age > .35 or transport_age > .35)
+      fresh = context and not stale
       if fresh:
         colors = set()
         for d in list(get(message, 'detections', ()))[:100]:
@@ -43,14 +50,17 @@ class SignalObservation:
     except (TypeError, ValueError, OverflowError):
       color = None
     if color is None:
-      self.candidate = None
-      self.count = 0
+      # Between 3 Hz CPU results, keep only the candidate history briefly.
+      # Stale data never emits a tone; each counted frame must be fresh.
+      if not (expected_model_id == CPU_MODEL_ID and stale and now-self.last_seen <= gap):
+        self.candidate = None
+        self.count = 0
       if not enabled or blocked or now-self.last_seen >= 2:
         self.announced = None
       return None
     if frame == self.frame:
       return None
-    if frame < self.frame or now-self.last_seen > .35 or color != self.candidate:
+    if frame < self.frame or now-self.last_seen > gap or color != self.candidate:
       self.candidate, self.since, self.count = color, now, 0
     self.frame = frame
     self.last_seen = now
@@ -68,6 +78,7 @@ class SignalAudio:
     self.path = Path(os.getenv('EGPU_YOLO_DIR', '/data/egpu_yolo'))/'signal_observation.json'
     self.next_check = 0.
     self.enabled = False
+    self.model_id = MODEL_ID
     self.samples = None
     self.position = 0
     t = np.arange(round(sample_rate*.12), dtype=np.float32)/sample_rate
@@ -80,11 +91,12 @@ class SignalAudio:
       self.next_check = now+1.
       try:
         config = json.loads(self.path.read_text())
-        self.enabled = config.get('enabled') is True and config.get('model_id') == MODEL_ID
+        self.model_id = config.get('model_id')
+        self.enabled = config.get('enabled') is True and self.model_id in (MODEL_ID, CPU_MODEL_ID)
       except (OSError, ValueError, TypeError, AttributeError):
         self.enabled = False
     color = self.state.update(message, now=now, valid=valid, transport_age=transport_age,
-                              enabled=self.enabled, blocked=blocked)
+                              enabled=self.enabled, blocked=blocked, expected_model_id=self.model_id)
     if blocked or not self.enabled:
       self.samples = None
     elif color is not None:

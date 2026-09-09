@@ -1,48 +1,62 @@
-# Signal perception audio experiment (carrot-egpu-yolo2)
+﻿# Signal perception audio experiment (carrot-egpu-yolo2)
 
-This optional experiment replaces the resident COCO observation model with
-`signal-v33-observe-s260911`, a two-class 512x256 YOLO11n lamp detector. It publishes
-`red_visible` and `green_visible` observations on `carrotYolo`. No control process,
-navigation signal, traffic-stop state, or actuator command is changed.
+The current trial uses `signal-v33-observe-int8-s260911`, a 512x256 two-class
+YOLO11n detector with a TRAIN-calibrated INT8 backbone and FP32 detection head.
+An ONNX Runtime CPU worker on cores 4 and 5 observes the calibrated road crop
+at up to three frames per second. It never opens the driving eGPU or QCOM queue.
+The original COCO observer and this signal observer cannot run together.
 
 The model remains experimental. The examined partial-label sets contain misses
-and false detections; local regression acceptance was not achieved. Vehicle
-observation is explicitly requested to collect further evidence. The two classes
-do not identify the ego lane, turning direction, pedestrian relevance, or permission
-to proceed.
+and false detections; independent deployment acceptance was not achieved.
+Quantization retained the examined FP32 counts on one set and improved one
+localization on the other; this is compatibility evidence, not a new accuracy
+claim. Classes do not identify the ego lane, turning direction, pedestrian
+relevance, or permission to proceed. No control, navigation traffic-stop state,
+or actuator command consumes this experiment.
 
-## Perception tones
+## Enablement and display
 
-After exclusive parked compilation and input/output validation, an installer may
-create `/data/egpu_yolo/signal_observation.json` with:
+A verified installer can create `/data/egpu_yolo/signal_cpu.json`:
 
 ```json
-{"enabled": true, "model_id": "signal-v33-observe-s260911"}
+{"enabled": true, "model_id": "signal-v33-observe-int8-s260911"}
 ```
 
-Only fresh, valid road-camera results with that exact model ID can produce a tone.
-Signal inference is limited to five attempts per second; the existing primary
-timing, camera, deadline, and recovery guards can reduce that rate further.
-At least three distinct frames spanning 300 ms must agree on one visible color.
-Mixed red/green observations, stale data, wide-camera input, paused inference, and
-missing enablement produce no tone. Red uses a short lower-pitched tone; green a
-short higher-pitched tone. These mean only that a lamp color was observed. They
-are not stop/go instructions. A color is announced once, with a three-second
-minimum interval; two seconds without a valid color permit a new observation.
+The worker requires the pinned model under `signal-v36-cpu-int8/model.onnx` and
+its isolated ONNX Runtime installation. It refuses enablement if the resident
+GPU observer is enabled or a QCOM observer marker exists. The model is hosted
+in its own NAS directory, `models/carrot-signal-v33-int8-observe`.
 
-Existing alerts always take priority and immediately discard an observation tone.
-Remove the marker or set `enabled` to `false` to disable perception audio. It is an
-internal experimental opt-in, not a public settings-catalog entry.
+The YOLO2 screen summarizes red/green observations. CPU summary text can remain
+for at most 600 ms of capture age to bridge 3 Hz results. Camera boxes retain the
+separate 200 ms frame-alignment check, so a summary may appear without a box.
+They are observations of lamp colors, not stop/go instructions.
 
-## Preparation and rollback
+For sound, `/data/egpu_yolo/signal_observation.json` must explicitly enable the
+same model ID. Red has a short lower-pitched tone; green a short higher-pitched
+tone. Three distinct fresh frames must agree, with at least 300 ms between the
+first and last. CPU candidate history can bridge up to 400 ms between received
+frames, but each counted frame still requires capture and transport age at most
+350 ms. Stale data never emits a tone. Mixed colors or invalid context reset
+agreement. Repeated colors are suppressed, with at least three seconds between
+tones; two seconds without valid color permits another observation. Existing
+warning audio always takes priority and discards the observation tone.
 
-Keep this model in its own NAS model directory and compile it into a separate
-vehicle staging directory. Verify the source SHA256, native input rebinding,
-serialized output, eGPU timing budget, and restored primary model before enabling
-observation. Preserve the prior resident bundle and its enablement files before
-activation; rollback restores those files with no driving-model weight change.
+## Validation and rollback
 
-The PC export and tinygrad checks establish numerical compatibility, not vehicle
-eGPU timing or successful live installation. Vehicle commissioning must record its
-actual model ID, camera, fresh messages, and timing. The Linux soundd integration
-also requires live verification; Windows lacks its msgq service transport.
+The FP32 eGPU attempt passed isolated 1,000-run timing and numerical tests, but
+shared live execution still produced deadline overruns, including after a 5 Hz
+limit. Its automatic execution and tones were disabled. Keep those failure
+records; do not claim the isolated benchmark established stable live operation.
+
+The CPU path must be checked on actual road frames after installation, including
+capture age, primary model health, process ownership, and its rate. Existing
+primary timing/drop checks can pause CPU observations too. CPU benchmark timing
+alone does not establish live display/audio readiness.
+
+Preserve the former resident bundle and enablement files before installing.
+Disabling `signal_cpu.json` stops the CPU observer; disabling or removing
+`signal_observation.json` stops tones. A guarded parked rollback restores the
+prior resident bundle and markers. These are internal trial markers, not public
+settings-catalog entries. The earlier FP32 model ID remains supported by the
+sound filter for reversible experiments, but the marker must match its exact ID.

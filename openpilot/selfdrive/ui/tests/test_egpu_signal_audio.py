@@ -7,6 +7,28 @@ import numpy as np
 import pytest
 
 from openpilot.selfdrive.ui.egpu_signal_audio import MODEL_ID, SignalAudio, SignalObservation
+from openpilot.selfdrive.ui.egpu_signal_audio import CPU_MODEL_ID
+
+
+def test_three_cpu_frames_must_each_be_fresh_even_when_history_spans_stale_gaps():
+  state = SignalObservation()
+  for index, now in enumerate([10., 10.34, 10.68]):
+    m = message(now-.25, index)
+    m['modelId'] = CPU_MODEL_ID
+    value = state.update(m, now=now, valid=True, transport_age=0, enabled=True, expected_model_id=CPU_MODEL_ID)
+    assert value == ('red_visible' if index == 2 else None)
+    assert state.update(m, now=now+.2, valid=True, transport_age=.2, enabled=True, expected_model_id=CPU_MODEL_ID) is None
+
+
+def test_cpu_history_expires_and_marker_cannot_authorize_a_different_model():
+  state = SignalObservation()
+  m = message(10, 1)
+  assert state.update(m, now=10, valid=True, transport_age=0, enabled=True, expected_model_id=CPU_MODEL_ID) is None
+  m['modelId'] = CPU_MODEL_ID
+  assert state.update(m, now=10, valid=True, transport_age=0, enabled=True, expected_model_id=CPU_MODEL_ID) is None
+  assert state.count == 1
+  assert state.update(m, now=10.5, valid=True, transport_age=.5, enabled=True, expected_model_id=CPU_MODEL_ID) is None
+  assert state.count == 0
 
 
 def message(now, frame, colors=('red_visible',), **changes):

@@ -44,6 +44,17 @@ def test_absent_disabled_invalid_and_empty_are_distinct():
   assert yolo_text(replace(display(), objects=()), 'en')[1] == 'No detections'
 
 
+def test_cpu_signal_summary_bridges_frames_without_relaxing_box_alignment():
+  message = {'modelId': 'signal-v33-observe-int8-s260911', 'state': 'run', 'runs': 3,
+             'camera': 'road', 'timestampEof': 10_000_000_000,
+             'detections': [{'label': 'red_visible', 'confidence': .8, 'cameraPoints': [.1, .1, .2, .1, .2, .2, .1, .2]}]}
+  result = display(message=message, image_age=.5)
+  assert result.state == 'run'
+  assert '빨강 감지' in yolo_text(result, 'ko')[1]
+  assert not camera_boxes(result, camera='road', timestamp_eof=10_300_000_000, video_rect=(0, 0, 512, 256))
+  assert display(message=message, image_age=.61).state == 'stale'
+
+
 def test_live_source_uses_publication_age_and_clears_paused_content():
   from cluster_live import OpenpilotLiveSource
   source = object.__new__(OpenpilotLiveSource)

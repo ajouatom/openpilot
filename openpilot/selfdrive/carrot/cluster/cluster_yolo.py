@@ -43,7 +43,11 @@ def build_yolo_display(message, *, enabled, valid, transport_age, image_age):
         return YoloDisplay("waiting", runs)
     if not valid:
         return YoloDisplay("invalid", runs)
-    if not math.isfinite(image_age) or not 0 <= image_age <= .35:
+    # The independent 3 Hz CPU observer has ~200 ms inference latency. Keep
+    # its textual observation between frames; camera boxes retain their
+    # separate, stricter image-alignment check below.
+    max_age = .6 if _get(message, "modelId") == "signal-v33-observe-int8-s260911" else .35
+    if not math.isfinite(image_age) or not 0 <= image_age <= max_age:
         return YoloDisplay("stale", runs)
     seconds = float(_get(message, "executionTime", 0))
     execution_ms = seconds*1000 if math.isfinite(seconds) and seconds > 0 else None
@@ -86,6 +90,9 @@ def box_label(box, language):
 _KO_LABELS = {"person": "사람", "bicycle": "자전거", "car": "자동차", "motorcycle": "오토바이",
               "bus": "버스", "truck": "트럭", "traffic light": "신호등", "stop sign": "정지표지",
               "chair": "의자", "dog": "개", "cat": "고양이", "potted plant": "화분"}
+
+
+_KO_LABELS.update({"red_visible": "빨강 감지", "green_visible": "초록 감지"})
 
 
 def yolo_text(display, language):
