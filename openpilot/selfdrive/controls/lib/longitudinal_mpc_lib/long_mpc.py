@@ -482,14 +482,8 @@ class LongitudinalMpc:
             radarstate.leadOne, v_ego, T_IDXS, t_follow, stop_distance,
           )
       x_obstacles = np.column_stack([lead_0_follow_obstacle, lead_1_obstacle, cruise_obstacle, x2])
-      # The destination front vehicles retain the normal TF over the entire
-      # horizon. Fold them into lead1 so all downstream source logic remains
-      # compatible, without replacing radarState or changing measured leads.
-      if lane_change.active and not reset_state:
-        for target in lane_change.targets:
-          target_xv, _ = self.process_lead(target)
-          target_obstacle = target_xv[:,0] + get_stopped_equivalence_factor(target_xv[:,1])
-          x_obstacles[:,1] = np.minimum(x_obstacles[:,1], target_obstacle)
+      # Only currently selected leadOne/leadTwo may constrain braking.
+      # Entry snapshots and lane-change credit guards never add obstacles.
       self.source = SOURCES[np.argmin(x_obstacles[0])]
 
       if v_cruise == 0 and self.source == 'cruise':

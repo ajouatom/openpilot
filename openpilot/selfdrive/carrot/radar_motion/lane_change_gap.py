@@ -3,6 +3,8 @@
 Coordinates: model/pose y is right-positive, radar yRel is left-positive.
 The session frame is fixed at lane-change entry. Measured yaw and speed, not
 the moving model path, establish that ego has actually started moving aside.
+Only the selected leadOne/leadTwo enter this tracker. Stored entry identities
+can veto acceleration relief; they never add or retain a braking obstacle.
 Confidence below is an evidence ramp, NOT a calibrated collision probability.
 """
 from __future__ import annotations
@@ -55,6 +57,8 @@ class LaneChangeGapPlan:
   clearance_s: float = 0.0
   confidence: float = 0.0
   reason: str = 'inactive'
+  entry_ids: tuple[int, ...] = ()
+  selected_ids: tuple[int, ...] = ()
 
   def credit(self, primary: Any, horizons: np.ndarray, v_ego: float, max_accel: float,
              t_follow: float, stop_distance: float, ratio: float) -> np.ndarray:
@@ -103,31 +107,43 @@ class LaneChangeGapTracker:
     self.target_ids = ()
     self.targets_since = 0.0
     self.previous_leads = {}
+    self.entry_ids = ()
+    self.selection_changed = False
 
   def update(self, *, now: float, direction: int, v_ego: float, yaw_rate: float,
              path_t: tuple, path_x: tuple, path_y: tuple, primary: Any,
-             side_leads: tuple, blindspot: bool = False, valid: bool = True) -> LaneChangeGapPlan:
+             secondary: Any, blindspot: bool = False, valid: bool = True) -> LaneChangeGapPlan:
     active = direction in (-1, 1)
     if not active or not valid or not math.isfinite(now):
       self.reset()
       return LaneChangeGapPlan(active=active, reason='invalid-input' if active else 'inactive')
     lead = GapLead.read(primary)
-    candidates = tuple(l for item in side_leads if (l := GapLead.read(item)) is not None)
-    invalid_target = any(item is not None and item.status and GapLead.read(item) is None for item in side_leads)
-    # These obstacles are useful even without reliable pose or a departure
-    # prediction. The selected side list also catches cars alongside ego.
-    targets = tuple(sorted({l.radarTrackId: l for l in candidates if l.dRel > 0.0}.values(), key=lambda l: l.dRel))[:4]
-    base = {'active': True, 'primary_id': lead.radarTrackId if lead else -1, 'targets': targets}
-    def inactive(reason):
-      return LaneChangeGapPlan(**base, reason=reason)
-    if not all(math.isfinite(v) for v in (v_ego, yaw_rate)) or not 5.0 <= v_ego <= 35.0 or abs(yaw_rate) > 0.08:
-      self.reset()
-      return inactive('pose-or-speed')
-    if self.direction != direction or not 0.0 < now - self.last_time <= 0.15:
+    second = GapLead.read(secondary)
+    targets = (second,) if second is not None and second.dRel > 0.0 else ()
+    invalid_target = secondary is not None and secondary.status and second is None
+    selected_ids = tuple(l.radarTrackId if l is not None else -1 for l in (lead, second))
+    if self.direction != direction:
       self.reset()
       self.direction = direction
       self.started = self.last_time = now
       self.primary_id = lead.radarTrackId if lead else -1
+      self.entry_ids = selected_ids
+    elif not 0.0 < now - self.last_time <= 0.15:
+      self.selection_changed = True
+    self.selection_changed |= selected_ids != self.entry_ids
+    base = {'active': True, 'primary_id': self.primary_id, 'targets': targets,
+            'entry_ids': self.entry_ids, 'selected_ids': selected_ids}
+    def inactive(reason):
+      return LaneChangeGapPlan(**base, reason=reason)
+    if not all(math.isfinite(v) for v in (v_ego, yaw_rate)) or not 5.0 <= v_ego <= 35.0 or abs(yaw_rate) > 0.08:
+      self.history.clear()
+      self.selection_changed = True
+      self.last_time = now
+      return inactive('pose-or-speed')
+    if self.selection_changed:
+      self.history.clear()
+      self.last_time = now
+      return inactive('selected-leads-changed')
     dt = now - self.last_time
     self.ego_y += v_ego * math.sin(self.heading + yaw_rate * dt * 0.5) * dt
     self.heading += yaw_rate * dt
@@ -148,9 +164,7 @@ class LaneChangeGapTracker:
     if lead is None or lead.radarTrackId != self.primary_id or not 8.0 < lead.dRel < 60.0:
       self.history.clear()
       return inactive('primary-changed')
-    if len(targets) != len({l.radarTrackId for l in candidates if l.dRel > 0.0}):
-      return inactive('too-many-targets')
-    if blindspot or invalid_target or any(l.dRel <= 3.0 for l in candidates) or not targets or any(l.radarTrackId == lead.radarTrackId for l in targets):
+    if blindspot or invalid_target or (second is not None and second.dRel <= 3.0) or not targets or any(l.radarTrackId == lead.radarTrackId for l in targets):
       self.targets_since = now
       return inactive('destination-unconfirmed')
     ids = tuple(sorted(l.radarTrackId for l in targets))
