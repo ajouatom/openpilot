@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 import math
 
 
@@ -45,6 +45,9 @@ class LeadAccelResponseTuning:
   closing_speed_floor: float
   a_change_cost_factor: float
   jerk_cost_factor: float
+  rise_time: float = 0.0
+  gap_fade: float = 0.0
+  accel_fade: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -61,6 +64,7 @@ class LeadAccelMpcRequest:
   lead_accel_signal: float = 0.0
   a_change_cost_factor: float = 1.0
   jerk_cost_factor: float = 1.0
+  strength: float = 0.0
 
 
 MODE_TUNING = {
@@ -96,12 +100,37 @@ MODE_TUNING = {
 # acceleration, lead-distance, danger-zone, turn and cut-in limits are not
 # changed by these factors.
 LEAD_ACCEL_RESPONSE_TUNING = {
-  1: LeadAccelResponseTuning(0.00, 0.00, 0.85, 0.95),
-  2: LeadAccelResponseTuning(0.10, -0.05, 0.65, 0.80),
-  3: LeadAccelResponseTuning(0.25, -0.10, 0.40, 0.60),
-  4: LeadAccelResponseTuning(0.40, -0.15, 0.18, 0.35),
+  1: LeadAccelResponseTuning(0.00, 0.00, 0.95, 0.95, 0.80, 2.00, 0.50),
+  2: LeadAccelResponseTuning(0.10, -0.05, 0.85, 0.85, 0.60, 1.50, 0.40),
+  3: LeadAccelResponseTuning(0.25, -0.10, 0.65, 0.70, 0.40, 1.00, 0.30),
+  4: LeadAccelResponseTuning(0.40, -0.15, 0.18, 0.35, 0.15, 0.50, 0.15),
   5: LeadAccelResponseTuning(0.50, -0.20, 0.05, 0.15),
 }
+
+
+class LeadAccelResponseState:
+  """Ramp only entry into stronger acceleration; never delay a safety release."""
+
+  def __init__(self):
+    self.strength = 0.0
+    self.key = None
+
+  def update(self, request: LeadAccelMpcRequest, dt: float, track_id: int) -> LeadAccelMpcRequest:
+    key = (request.level, track_id)
+    if not request.active or track_id < 0 or not math.isfinite(dt) or dt <= 0.0:
+      self.strength, self.key = 0.0, None
+      return LeadAccelMpcRequest(False)
+    if key != self.key:
+      self.strength = 0.0
+    self.key = key
+    tuning = LEAD_ACCEL_RESPONSE_TUNING[request.level]
+    if request.level == LEAD_ACCEL_RESPONSE_MAX:
+      self.strength = request.strength
+      return request
+    self.strength = min(request.strength, self.strength + dt / tuning.rise_time) if tuning.rise_time > 0.0 else request.strength
+    return replace(request, strength=self.strength,
+                   a_change_cost_factor=1.0 - self.strength * (1.0 - tuning.a_change_cost_factor),
+                   jerk_cost_factor=1.0 - self.strength * (1.0 - tuning.jerk_cost_factor))
 
 
 def _mode_value(driving_mode) -> int:
@@ -197,12 +226,20 @@ def get_lead_accel_mpc_request(
     return LeadAccelMpcRequest(False, level=response_level, lead_accel_signal=lead_accel_signal)
 
   tuning = LEAD_ACCEL_RESPONSE_TUNING[response_level]
+  # Keep level 5's maximum response exactly as configured. Other levels fade
+  # the boost near the target gap and acceleration deadband, without changing
+  # the lead prediction or delaying braking. The caller ramps boost entry.
+  strength = 1.0
+  if tuning.gap_fade > 0.0:
+    signal = a_lead - LEAD_ACCEL_DEADBAND if cruise_source_active else min(a_lead - LEAD_ACCEL_DEADBAND, lead_accel_signal)
+    strength = min(1.0, gap_margin / tuning.gap_fade, signal / tuning.accel_fade)
   return LeadAccelMpcRequest(
     True,
     level=response_level,
     lead_accel_signal=lead_accel_signal,
-    a_change_cost_factor=tuning.a_change_cost_factor,
-    jerk_cost_factor=tuning.jerk_cost_factor,
+    a_change_cost_factor=tuning.a_change_cost_factor if strength == 1.0 else 1.0 - strength * (1.0 - tuning.a_change_cost_factor),
+    jerk_cost_factor=tuning.jerk_cost_factor if strength == 1.0 else 1.0 - strength * (1.0 - tuning.jerk_cost_factor),
+    strength=strength,
   )
 
 

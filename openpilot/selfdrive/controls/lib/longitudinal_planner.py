@@ -271,7 +271,7 @@ class LongitudinalPlanner:
       carrot, reset_state, sm['radarState'], v_cruise, x, v, a, j,
       personality=sm['selfdriveState'].personality,
       prev_accel_constraint=prev_accel_constraint,
-      jerk_factor=carrot.jerk_factor_apply,
+      jerk_factor=carrot.jerk_factor,
       a_change_cost_starting=carrot.aChangeCostStarting,
       lead_accel_response_enabled=lead_accel_response_enabled,
       cutout_relief_enabled=(
