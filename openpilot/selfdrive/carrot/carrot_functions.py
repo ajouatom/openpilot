@@ -372,13 +372,11 @@ class CarrotPlanner:
     angular = pose.angularVelocityDevice
     pose_valid = (sm.valid['livePose'] and sm.alive['livePose'] and pose.inputsOK and pose.sensorsOK and angular.valid
                   and abs(now_ns - int(sm.logMonoTime['livePose'])) <= 150_000_000)
-    side = 'Left' if direction == -1 else 'Right'
-    side_leads = (getattr(radar, 'lead' + side), *getattr(radar, 'leads' + side))
     self.lane_change_gap = self._lane_change_tracker.update(
       now=now_ns * 1e-9, direction=direction, v_ego=float(state.vEgo),
       yaw_rate=float(angular.z) if pose_valid else float('nan'),
       path_t=tuple(model.position.t), path_x=tuple(model.position.x), path_y=tuple(model.position.y),
-      primary=radar.leadOne, side_leads=side_leads,
+      primary=radar.leadOne, secondary=radar.leadTwo,
       blindspot=not signal or bool(state.leftBlindspot if direction == -1 else state.rightBlindspot), valid=valid,
     )
 
