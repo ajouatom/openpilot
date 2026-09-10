@@ -36,6 +36,7 @@ jobs:
           python -m pytest -c /dev/null --rootdir=. --confcutdir=openpilot/common/tests openpilot/common/tests/test_repo_update.py
           python -m pytest -c /dev/null --rootdir=. --confcutdir=openpilot/selfdrive/carrot/server/tests openpilot/selfdrive/carrot/server/tests/test_auto_update.py openpilot/selfdrive/carrot/server/tests/test_git_config.py
           python -m pytest -c /dev/null --rootdir=. --confcutdir=openpilot/system/tests openpilot/system/tests/test_launch_order.py
+          python -m pytest -c /dev/null --rootdir=. --confcutdir=openpilot/system/updated/tests openpilot/system/updated/tests/test_process.py
 
   build_release:
     name: build release
