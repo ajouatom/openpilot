@@ -289,14 +289,16 @@ def apply_preview_target(
   base_target: float,
   preview_target: float,
   driving_mode,
-  lead_accel_signal: float,
 ) -> float:
   """Apply only bounded early deceleration; never add acceleration post-MPC."""
   tuning = MODE_TUNING.get(_mode_value(driving_mode))
   base = float(base_target)
-  if tuning is None or lead_accel_signal >= 0.0:
+  if tuning is None:
     return base
 
+  # The caller already ramps the preview time back to the actuator delay.
+  # Keep using that remaining preview across relative-acceleration zero
+  # crossings; gating it again here abruptly drops and reapplies the correction.
   candidate = min(float(preview_target), base)
   if base > 0.0:
     candidate = max(candidate, tuning.prebrake_floor)
