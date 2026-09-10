@@ -16,7 +16,13 @@ export const APP_DIALOG_VARIANT_CLASSES = Object.freeze([
   "app-dialog--form",
   "app-dialog--input",
   "app-dialog--progress",
+  "app-dialog--titleless",
+  "app-dialog--tools-device-info",
 ]);
+
+const APP_DIALOG_VARIANT_BY_NAME = Object.freeze({
+  "tools-device-info": "app-dialog--tools-device-info",
+});
 
 const MODAL_SURFACE_IDS = Object.freeze([
   "appDialog",
@@ -108,6 +114,7 @@ export function createDialogController(environment = {}) {
   const { target, documentRoot, setTimer, requestFrame, cancelFrame } = controllerEnvironment(environment);
   const element = (id) => documentRoot?.getElementById?.(id) ?? null;
   const appDialog = element("appDialog");
+  const appDialogSheet = appDialog?.querySelector?.(".app-dialog__sheet") ?? null;
   const appDialogBackdrop = element("appDialogBackdrop");
   const appDialogTitle = element("appDialogTitle");
   const appDialogBody = element("appDialogBody");
@@ -194,6 +201,10 @@ export function createDialogController(environment = {}) {
 
   function resetPresentation() {
     appDialog?.classList?.remove(...APP_DIALOG_VARIANT_CLASSES);
+    if (appDialogSheet) {
+      appDialogSheet.setAttribute("aria-labelledby", "appDialogTitle");
+      appDialogSheet.removeAttribute("aria-label");
+    }
     if (appDialogChoices) {
       appDialogChoices.className = "app-dialog__choices";
       appDialogChoices.style.removeProperty("--app-dialog-choice-columns");
@@ -378,8 +389,18 @@ export function createDialogController(environment = {}) {
     const isChoice = mode === "choice" || hasChoices;
     const choiceLayout = appDialogChoiceLayout(choiceGroups, options);
     const showCancel = mode !== "alert" && options.showCancel !== false;
+    const hideTitle = options.hideTitle === true;
+    const variantClass = APP_DIALOG_VARIANT_BY_NAME[options.variant];
 
     resetPresentation();
+    if (variantClass) appDialog.classList.add(variantClass);
+    if (hideTitle) {
+      appDialog.classList.add("app-dialog--titleless");
+      if (appDialogSheet) {
+        appDialogSheet.removeAttribute("aria-labelledby");
+        appDialogSheet.setAttribute("aria-label", options.dialogLabel || title);
+      }
+    }
     if (isForm) appDialog.classList.add("app-dialog--form");
     if (mode === "prompt" || isForm) appDialog.classList.add("app-dialog--input");
     if (hasChoices) {
@@ -449,6 +470,7 @@ export function createDialogController(environment = {}) {
         button.className = buttonClass;
         if (choice.labelHtml) button.innerHTML = choice.labelHtml;
         else button.textContent = String(choice.label);
+        if (choice.current || choice.selected) button.setAttribute("aria-current", "true");
         button.addEventListener("click", () => resolveAppDialog(choice.value));
         return button;
       };
@@ -564,6 +586,10 @@ export function createDialogController(environment = {}) {
       html: options.html,
       confirmLabel: options.confirmLabel,
       copyText: options.copyText,
+      copyLabel: options.copyLabel,
+      hideTitle: options.hideTitle,
+      dialogLabel: options.dialogLabel,
+      variant: options.variant,
     });
   }
 

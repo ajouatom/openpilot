@@ -1,0 +1,169 @@
+/* Tools > Info is a support snapshot.  These tokens keep its grouped identity
+   card independent from the generic dialog and action-list components. */
+.tools-device-info {
+  --tools-device-info-gap: var(--sp-md);
+  --tools-device-info-section-gap: var(--sp-lg);
+  --tools-device-info-row-min-height: 54px;
+  --tools-device-info-row-padding: var(--sp-sm) var(--sp-md);
+  --tools-device-info-radius: var(--r-md);
+  --tools-device-info-value-size: var(--fs-label-sm);
+  --tools-device-info-border: color-mix(in srgb, var(--md-outline-var) 46%, transparent);
+  --tools-device-info-surface: color-mix(in srgb, var(--md-surface-cont) 86%, transparent);
+  --tools-device-info-hero-surface: color-mix(in srgb, var(--md-primary) 10%, var(--md-surface-cont-h));
+  --tools-device-info-hero-border: color-mix(in srgb, var(--md-primary) 30%, var(--md-outline-var));
+  --tools-device-info-mark-surface: var(--md-primary-state);
+  --tools-device-info-mark-color: var(--md-primary);
+  --tools-device-info-code-color: var(--md-on-surface);
+  display: grid;
+  gap: var(--tools-device-info-section-gap);
+  min-width: 0;
+}
+
+.tools-device-info__hero {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr);
+  align-items: center;
+  gap: var(--tools-device-info-gap);
+  padding: var(--sp-md);
+  border: 1px solid var(--tools-device-info-hero-border);
+  border-radius: var(--tools-device-info-radius);
+  background: var(--tools-device-info-hero-surface);
+}
+
+.tools-device-info__mark {
+  display: grid;
+  width: 44px;
+  height: 44px;
+  place-items: center;
+  border-radius: var(--r-sm);
+  background: var(--tools-device-info-mark-surface);
+  color: var(--tools-device-info-mark-color);
+  font-size: var(--fs-label-md);
+  font-weight: 900;
+}
+
+.tools-device-info__device,
+.tools-device-info__summary,
+.tools-device-info__sectionTitle,
+.tools-device-info__label,
+.tools-device-info__value {
+  margin: 0;
+}
+
+.tools-device-info__device {
+  color: var(--md-on-surface);
+  font-size: var(--tools-device-info-value-size);
+  font-weight: 850;
+  overflow-wrap: anywhere;
+}
+
+.tools-device-info__summary {
+  margin-top: 2px;
+  color: var(--md-on-surface-var);
+  font-size: var(--tools-device-info-value-size);
+  font-weight: 700;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.tools-device-info__section {
+  display: grid;
+  gap: var(--sp-xs);
+  min-width: 0;
+}
+
+.tools-device-info__sectionTitle {
+  padding-inline: var(--sp-xs);
+  color: var(--md-on-surface-var);
+  font-size: var(--fs-label-sm);
+  font-weight: 850;
+}
+
+.tools-device-info__list {
+  overflow: hidden;
+  border: 1px solid var(--tools-device-info-border);
+  border-radius: var(--tools-device-info-radius);
+  background: var(--tools-device-info-surface);
+}
+
+.tools-device-info__row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--tools-device-info-gap);
+  min-width: 0;
+  min-height: var(--tools-device-info-row-min-height);
+  padding: var(--tools-device-info-row-padding);
+  border-top: 1px solid color-mix(in srgb, var(--tools-device-info-border) 76%, transparent);
+}
+
+.tools-device-info__row:first-child { border-top: 0; }
+
+.tools-device-info__rowCopy {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.tools-device-info__label {
+  color: var(--md-on-surface-var);
+  font-size: var(--fs-label-sm);
+  font-weight: 700;
+}
+
+.tools-device-info__value {
+  color: var(--md-on-surface);
+  font-size: var(--fs-body-md);
+  font-weight: 800;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.tools-device-info__value--code {
+  color: var(--tools-device-info-code-color);
+  font-family: var(--font-mono);
+  font-size: var(--fs-label-sm);
+  font-weight: 750;
+}
+
+.tools-device-info__copy {
+  min-height: 36px;
+  padding-inline: var(--sp-md);
+  border: 1px solid var(--tools-device-info-border);
+  border-radius: var(--r-sm);
+  background: color-mix(in srgb, var(--md-surface-cont-h) 92%, transparent);
+  color: var(--md-on-surface);
+  font: inherit;
+  font-size: var(--fs-label-sm);
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.tools-device-info__copy:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
+  outline-offset: var(--focus-ring-offset);
+}
+
+/* Keep this data-heavy dialog comfortably smaller than the viewport. The
+   generic dialog body owns scrolling, so actions remain available as fields
+   are added over time. */
+.app-dialog--tools-device-info .app-dialog__sheet {
+  --tools-device-info-sheet-max-height: clamp(400px, 80dvh, 620px);
+  max-height: min(var(--dialog-sheet-max-height), var(--tools-device-info-sheet-max-height));
+}
+
+.app-dialog--tools-device-info .app-dialog__body {
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+@media (max-width: 360px) {
+  .tools-device-info__row { gap: var(--sp-sm); padding-inline: var(--sp-sm); }
+  .tools-device-info__copy { padding-inline: var(--sp-sm); }
+}
+
+@media (max-width: 640px) and (aspect-ratio < 13/10) {
+  .app-dialog--tools-device-info .app-dialog__sheet {
+    max-height: min(var(--dialog-sheet-mobile-max-height), var(--tools-device-info-sheet-max-height));
+  }
+}

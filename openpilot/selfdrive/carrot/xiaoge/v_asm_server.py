@@ -10,7 +10,7 @@ from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from io import BytesIO
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
 
 from PIL import Image
 
@@ -36,7 +36,7 @@ except ModuleNotFoundError as error:
   raise
 
 
-HOST = "0.0.0.0"
+HOST = "127.0.0.1"
 PORT = 8082
 CONFIG_PATH = Path(__file__).resolve().parent / "v_asm_config.json"
 MIN_THRESHOLD = 0.25
@@ -56,6 +56,15 @@ SNAPSHOT_TIMEOUT_SECONDS = 5.0
 # VisionIPC recv holds the GIL while waiting. Poll without blocking, then sleep
 # in Python so an idle camera cannot stall inference or HTTP on other threads.
 CAMERA_POLL_INTERVAL_SECONDS = 0.005
+PARAM_REFRESH_SECONDS = 1.0
+
+PARAM_SETTING_DEFAULTS = {
+  "OnnxBsdThreshold": 45,
+  "OnnxBsdSmoothingMs": 200,
+  "OnnxBsdIntervalMs": 250,
+  "OnnxLaneThreshold": 25,
+  "OnnxLaneIntervalMs": 400,
+}
 
 
 DEFAULT_POLYGONS = {
@@ -110,8 +119,30 @@ def normalize_config(config: object) -> dict:
   return normalized
 
 
+def create_params():
+  try:
+    from openpilot.common.params import Params
+    return Params()
+  except (ImportError, OSError):
+    return None
+
+
+def read_param_int(params, name: str, default: int) -> int:
+  if params is None:
+    return default
+  try:
+    raw = params.get(name)
+    if raw is None or raw == b"" or raw == "":
+      return default
+    return int(raw)
+  except Exception:
+    # A source hot-update can briefly leave params_pyx on the previous key
+    # table. Keep vision alive on defaults until the native module reloads.
+    return default
+
+
 class VASMService:
-  def __init__(self, model_path: Path):
+  def __init__(self, model_path: Path, params=None):
     self.lock = threading.Lock()
     self.snapshot_condition = threading.Condition(self.lock)
     self.snapshot_requests = {"wide": 0, "road": 0}
@@ -175,6 +206,36 @@ class VASMService:
       "error": "",
       "updatedMonoTimeNanos": 0,
     }
+    self.params = params if params is not None else create_params()
+    self.last_param_refresh_at = 0.0
+    self._refresh_settings_from_params(force=True)
+
+  def _refresh_settings_from_params(self, force: bool = False) -> None:
+    now = time.monotonic()
+    with self.lock:
+      if not force and now - self.last_param_refresh_at < PARAM_REFRESH_SECONDS:
+        return
+      self.last_param_refresh_at = now
+
+    values = {
+      name: read_param_int(self.params, name, default)
+      for name, default in PARAM_SETTING_DEFAULTS.items()
+    }
+    with self.lock:
+      self.threshold = min(max(values["OnnxBsdThreshold"], 25), 100) / 100.0
+      self.smoothing_seconds = min(max(values["OnnxBsdSmoothingMs"], 100), 500) / 1000.0
+      self.base_interval_seconds = min(max(values["OnnxBsdIntervalMs"], 50), 1000) / 1000.0
+      self.lane_threshold = min(max(values["OnnxLaneThreshold"], 5), 100) / 100.0
+      self.lane_interval_seconds = min(max(values["OnnxLaneIntervalMs"], 50), 2000) / 1000.0
+
+  def _persist_settings(self, values: dict[str, int]) -> None:
+    if self.params is None:
+      return
+    try:
+      for name, value in values.items():
+        self.params.put_int(name, value)
+    except Exception as error:
+      raise ValueError("could not persist ONNX settings") from error
 
   def _read_config(self) -> dict:
     try:
@@ -228,6 +289,13 @@ class VASMService:
     if not 0.05 <= lane_interval_seconds <= 2.0:
       raise ValueError("laneIntervalSeconds must be 0.05 to 2.0")
 
+    self._persist_settings({
+      "OnnxBsdThreshold": round(threshold * 100),
+      "OnnxBsdSmoothingMs": round(smoothing_seconds * 1000),
+      "OnnxBsdIntervalMs": round(base_interval_seconds * 1000),
+      "OnnxLaneThreshold": round(lane_threshold * 100),
+      "OnnxLaneIntervalMs": round(lane_interval_seconds * 1000),
+    })
     with self.lock:
       self.threshold = threshold
       self.smoothing_seconds = smoothing_seconds
@@ -237,6 +305,7 @@ class VASMService:
     return self.status()
 
   def status(self) -> dict:
+    self._refresh_settings_from_params()
     with self.lock:
       now = time.monotonic()
       now_nanos = time.monotonic_ns()
@@ -411,6 +480,7 @@ class VASMService:
           time.sleep(CAMERA_POLL_INTERVAL_SECONDS)
           continue
         now = time.monotonic()
+        self._refresh_settings_from_params()
         gate_active, side = self._update_vasm_gate()
         publish_clear = False
         with self.lock:
@@ -487,6 +557,7 @@ class VASMService:
           time.sleep(CAMERA_POLL_INTERVAL_SECONDS)
           continue
         now = time.monotonic()
+        self._refresh_settings_from_params()
         frame = nv12_y_plane(buffer.data, buffer.width, buffer.height, buffer.stride)
         with self.lock:
           self.last_road_frame_at = now
@@ -563,9 +634,10 @@ class Handler(BaseHTTPRequestHandler):
       self._json(HTTPStatus.OK, self.service.config)
     elif path == "/api/snapshot":
       parsed_url = urlparse(self.path)
-      stream_type = "wide"
-      if "stream=road" in parsed_url.query:
-        stream_type = "road"
+      stream_type = parse_qs(parsed_url.query).get("stream", ["wide"])[0]
+      if stream_type not in ("wide", "road"):
+        self._json(HTTPStatus.BAD_REQUEST, {"error": "stream must be wide or road"})
+        return
       jpeg = self.service.snapshot(stream_type)
       if jpeg is None:
         self._json(HTTPStatus.SERVICE_UNAVAILABLE, {"error": f"no {stream_type} camera frame available"})

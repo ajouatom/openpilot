@@ -70,7 +70,8 @@ def test_proxy_relays_status_snapshots_and_configuration_only_to_fixed_service(m
       ("GET", "/api/status"), ("GET", "/api/snapshot"), ("POST", "/api/config"),
       ("DELETE", "/api/config"), ("POST", "/api/settings"),
     ]
-    assert received[1][2] == {"stream": "road", "t": "123"}
+    assert received[0][2] == {}
+    assert received[1][2] == {"stream": "road"}
     assert received[2][3] == b'{"poly_left": [[1, 2]]}'
   asyncio.run(check())
 
@@ -89,6 +90,7 @@ def test_proxy_rejects_unregistered_operations_cross_origin_and_oversize_posts(m
         ("POST", "/xiaoge/api/config", {"json": {}, "headers": {"Origin": "http://example.invalid"}}, 403),
         ("DELETE", "/xiaoge/api/config", {"headers": {"Origin": "null"}}, 403),
         ("POST", "/xiaoge/api/config", {"data": b" " * 65537, "headers": {"Content-Type": "application/json"}}, 413),
+        ("GET", "/xiaoge/api/snapshot?stream=roadx", {}, 400),
       ):
         response = await client.request(method, path, **kwargs)
         assert response.status == expected, (method, path, await response.text())

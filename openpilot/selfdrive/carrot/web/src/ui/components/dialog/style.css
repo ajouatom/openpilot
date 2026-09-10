@@ -73,6 +73,10 @@
   flex-shrink: 0;
 }
 
+.app-dialog--titleless .app-dialog__head {
+  display: none;
+}
+
 .app-dialog__title {
   font-size: var(--fs-title-sm);
   font-weight: 800;
@@ -246,8 +250,12 @@
 .app-dialog__choices {
   --dialog-choice-heading-fg: var(--md-on-surface-var);
   --dialog-choice-heading-size: var(--fs-label-sm);
+  --dialog-choice-action-min-height: 48px;
+  --dialog-choice-action-padding: var(--sp-md) var(--sp-lg);
+  --dialog-choice-gap: var(--sp-sm);
+  --dialog-choice-value-gap: var(--sp-xs);
   display: grid;
-  gap: 6px;
+  gap: var(--dialog-choice-value-gap);
   margin-top: var(--sp-md);
   overflow-y: auto;
   min-height: 0;
@@ -267,8 +275,8 @@
   min-width: 0;
   padding: 0 12px;
   border-radius: var(--dialog-choice-radius);
-  overflow: hidden;
-  text-overflow: ellipsis;
+  overflow: visible;
+  text-overflow: clip;
   min-height: var(--control-min-height);
   font-size: var(--fs-label-md);
   font-weight: 800;
@@ -285,7 +293,7 @@
 /* Unified popup item look: compact boxed rows matching the branch picker.
    Value grids remain a separate compact control for short numeric choices. */
 .app-dialog__choices--list {
-  gap: var(--sp-sm);
+  gap: var(--dialog-choice-gap);
   padding: 0;
   border: 0;
   background: transparent;
@@ -312,8 +320,9 @@
   text-align: left;
   white-space: normal;
   line-height: 1.25;
-  min-height: 48px;
-  padding: var(--sp-md) var(--sp-lg);
+  min-height: var(--dialog-choice-action-min-height);
+  padding: var(--dialog-choice-action-padding);
+  overflow-wrap: anywhere;
   border: 1px solid var(--popup-item-border);
   border-radius: var(--popup-item-radius);
   background: var(--popup-item-bg);
@@ -354,13 +363,15 @@
 
 .app-dialog__choices--value-grid {
   grid-template-columns: repeat(var(--app-dialog-choice-columns, 5), minmax(0, 1fr));
-  gap: 6px;
+  gap: var(--dialog-choice-value-gap);
 }
 
 .app-dialog__choices--value-grid .app-dialog__choiceBtn--value {
   min-height: 42px;
   padding: 0 6px;
   justify-content: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
   border: 1px solid var(--popup-item-border);
   border-radius: var(--popup-item-radius);
   background: var(--popup-item-bg);

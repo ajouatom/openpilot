@@ -58,6 +58,8 @@ import {
 } from "./dom_renderer.js";
 import { createSettingsStore } from "./store.js";
 import { createSettingValueCache } from "./value_cache.js";
+import { installSettingsExtensionRegistry } from "./extensions/registry.js";
+import { registerOnnxVisionSettingsExtension } from "./extensions/onnx_vision/index.js";
 
 const installedTargets = new WeakMap();
 
@@ -79,6 +81,8 @@ export function installSettingsRuntimeFacade(target = globalThis, options = {}) 
     now: options.now,
   });
   const aux = createSettingsAuxState(options.auxLoaders || createSettingsAuxLoaders(normalizedTarget));
+  const extensions = installSettingsExtensionRegistry(normalizedTarget);
+  registerOnnxVisionSettingsExtension(extensions);
   const documentation = createSettingDocumentationClient({
     fetchImpl: typeof normalizedTarget.fetch === "function" ? normalizedTarget.fetch.bind(normalizedTarget) : null,
     indexUrl: resolveSettingDocumentationIndexUrl(),
@@ -148,6 +152,7 @@ export function installSettingsRuntimeFacade(target = globalThis, options = {}) 
       renderGroupList: renderSettingsGroupList,
     }),
     values: createSettingValueCache(),
+    extensions,
   });
   const installation = Object.freeze({ store, runtime });
 
