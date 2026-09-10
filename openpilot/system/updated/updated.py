@@ -20,6 +20,7 @@ from openpilot.common.swaglog import cloudlog
 from openpilot.selfdrive.selfdrived.alertmanager import set_offroad_alert
 from openpilot.system.hardware import AGNOS, HARDWARE
 from openpilot.system.version import get_build_metadata
+from openpilot.system.updated.process import run
 
 LOCK_FILE = os.getenv("UPDATER_LOCK_FILE", "/tmp/safe_staging_overlay.lock")
 STAGING_ROOT = os.getenv("UPDATER_STAGING_ROOT", "/data/safe_staging")
@@ -67,10 +68,6 @@ class WaitTimeHelper:
 def write_time_to_param(params, param) -> None:
   t = datetime.datetime.now(datetime.UTC).replace(tzinfo=None)
   params.put(param, t)
-
-def run(cmd: list[str], cwd: str | None = None) -> str:
-  return subprocess.check_output(cmd, cwd=cwd, stderr=subprocess.STDOUT, encoding='utf8')
-
 
 def set_consistent_flag(consistent: bool) -> None:
   os.sync()
@@ -190,14 +187,16 @@ def finalize_update() -> None:
   run(["git", "reset", "--hard"], FINALIZED)
   run(["git", "submodule", "foreach", "--recursive", "git", "reset", "--hard"], FINALIZED)
 
-  cloudlog.info("Starting git cleanup in finalized update")
+  # Fetch already downloads packed objects. Repacking every ref here is not
+  # needed to install an update and can consume over 1 GiB on a 4 GiB device.
+  # Keep LFS pruning, but leave full Git repository maintenance out of updates.
+  cloudlog.info("Starting LFS cleanup in finalized update (Git repack skipped)")
   t = time.monotonic()
   try:
-    run(["git", "gc"], FINALIZED)
     run(["git", "lfs", "prune"], FINALIZED)
-    cloudlog.event("Done git cleanup", duration=time.monotonic() - t)
+    cloudlog.event("Done LFS cleanup", duration=time.monotonic() - t)
   except subprocess.CalledProcessError:
-    cloudlog.exception(f"Failed git cleanup, took {time.monotonic() - t:.3f} s")
+    cloudlog.exception(f"Failed LFS cleanup, took {time.monotonic() - t:.3f} s")
 
   set_consistent_flag(True)
   cloudlog.info("done finalizing overlay")
