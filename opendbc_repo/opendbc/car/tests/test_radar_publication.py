@@ -113,15 +113,31 @@ def current_estimate(velocities, dt):
   return np.array(output)
 
 
+def historical_filtered_estimate(velocities, dt, *, publication_delay=True):
+  """Pre-93bab17bca: speed RC=.10, derivative, acceleration RC=.15."""
+  velocity = velocities[0]
+  acceleration = 0.
+  output = []
+  for raw_velocity in velocities:
+    previous_velocity, previous_acceleration = velocity, acceleration
+    velocity += dt / (.1 + dt) * (raw_velocity - velocity)
+    raw_acceleration = (velocity - previous_velocity) / dt
+    sample = np.clip(raw_acceleration, -10., 5.)
+    sample = np.clip(sample, acceleration - 3., acceleration + 3.)
+    acceleration += dt / (.15 + dt) * (sample - acceleration)
+    output.append(previous_acceleration if publication_delay else acceleration)
+  return np.array(output)
+
+
+@pytest.mark.parametrize('dt', [.02, .05, .1])
 @pytest.mark.parametrize('initial', [0., 1.5])
 @pytest.mark.parametrize('braking', [-.5, -1., -3., -6.])
 @pytest.mark.parametrize('phase', [0., .0125, .025, .0375])
-def test_braking_thresholds_are_not_later_than_the_previous_published_estimate(initial, braking, phase):
-  dt = .05
-  t = np.arange(120)*dt
+def test_braking_thresholds_are_not_later_than_the_historical_filter(initial, braking, phase, dt):
+  t = np.arange(int(8 / dt))*dt
   onset = 2.+phase
   speeds = 30.+initial*t+(braking-initial)*np.maximum(0., t-onset)
-  before, after = legacy_published(speeds, dt), current_estimate(speeds, dt)
+  before, after = historical_filtered_estimate(speeds, dt), current_estimate(speeds, dt)
   for fraction in [.1, .5, .9]:
     threshold = initial+(braking-initial)*fraction
     before_index = np.flatnonzero((t >= onset) & (before <= threshold))[0]
@@ -129,10 +145,15 @@ def test_braking_thresholds_are_not_later_than_the_previous_published_estimate(i
     assert after_index <= before_index
 
 
-def test_constant_speed_measurement_noise_is_reduced_without_an_extra_filter():
-  velocities = 20.+np.random.default_rng(410).normal(0., .03, 2000)
-  before, after = legacy_published(velocities, .05)[100:], current_estimate(velocities, .05)[100:]
-  assert np.std(after) < .8*np.std(before)
+@pytest.mark.parametrize('dt', [.02, .05, .1])
+@pytest.mark.parametrize('sigma', [.03, .1])
+def test_noise_matches_historical_filter_and_reduces_short_difference_noise(dt, sigma):
+  velocities = 20.+np.random.default_rng(410).normal(0., sigma, 2000)
+  historical = historical_filtered_estimate(velocities, dt)[100:]
+  after = current_estimate(velocities, dt)[100:]
+  assert np.std(after) <= 1.05*np.std(historical)
+  before = legacy_published(velocities, dt)[100:]
+  assert np.std(after) < .65*np.std(before)
 
 
 def test_scc_target_replacement_discriminator_retains_three_sample_response():
@@ -157,3 +178,43 @@ def test_constant_acceleration_remains_unbiased(acceleration, dt):
   t = np.arange(100)*dt
   estimates = current_estimate(40.+acceleration*t, dt)
   assert estimates[-1] == pytest.approx(acceleration, abs=1e-4)
+
+
+@pytest.mark.parametrize('braking', [-1., -3., -6.])
+def test_braking_estimate_is_monotone_and_does_not_overshoot(braking):
+  dt = .05
+  t = np.arange(160)*dt
+  speed = 30.+braking*np.clip(t-2., 0., 1.)
+  acceleration = current_estimate(speed, dt)
+  braking_samples = acceleration[(t > 2.) & (t <= 3.)]
+  assert np.all(np.diff(braking_samples) <= 1e-5)
+  assert min(acceleration) >= braking-1e-5
+  assert max(acceleration) <= 1e-5
+  assert abs(acceleration[-1]) < 1e-4
+
+
+@pytest.mark.parametrize('spike', [-.5, .5])
+def test_single_velocity_spike_is_attenuated_and_settles(spike):
+  velocities = np.full(160, 20.)
+  velocities[40] += spike
+  historical = historical_filtered_estimate(velocities, .05)
+  acceleration = current_estimate(velocities, .05)
+  assert max(abs(acceleration)) <= 1.05*max(abs(historical))
+  assert abs(acceleration[-1]) < 1e-5
+
+
+def test_filter_state_is_cleared_on_track_reacquisition():
+  p = point()
+  track = MyTrack(52, p, .05)
+  for i in range(30):
+    p.vLead = 20.-i*.1
+    track.update(p, 0.)
+  assert track.aLead < -1.5
+  p.measured = False
+  p.vLead = 25.
+  track.update(p, 0.)
+  p.measured = True
+  for _ in range(20):
+    track.update(p, 0.)
+    track.write_acceleration(p)
+    assert p.aLead == 0.
