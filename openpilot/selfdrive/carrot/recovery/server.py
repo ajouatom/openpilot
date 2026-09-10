@@ -627,7 +627,7 @@ def _git_reboot() -> dict:
 def _git_command(action: str, payload: dict) -> str | None:
   """Returns a shell command string to inject into the terminal. None if invalid."""
   if action == "git_pull":
-    return "git reset --hard && git pull"
+    return "python3 -m openpilot.selfdrive.carrot.server.services.git_config"
   if action == "git_sync":
     current = (_run_exec(["git", "branch", "--show-current"], 15)[1] or "").strip()
     rc, out = _run_exec(["git", "branch", "--format=%(refname:short)"], 30)
