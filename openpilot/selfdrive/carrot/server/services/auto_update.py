@@ -6,8 +6,9 @@ import re
 import subprocess
 import time
 
-from openpilot.common.async_process import prepare_repo, run_process
+from openpilot.common.async_process import prepare_repo, run_locked_thread, run_process
 from openpilot.common.repo_update import RepoBusyError, repo_lock
+from .git_config import prepare_git_pull
 from .git_state import read_auto_update_state, write_auto_update_event, write_git_pull_time
 from .git_status import REPO_DIR, clear_git_status_cache, get_git_status
 from .web_settings import read_web_settings
@@ -153,6 +154,7 @@ def clear_recovered_git_ref_error() -> None:
   state = read_auto_update_state()
   error = str(state.get("error") or "")
   ref_error = state.get("error_code") == "pull_failed" and "couldn't find remote ref" in error
+  multiple_error = state.get("error_code") == "pull_failed" and "Cannot fast-forward to multiple branches" in error
   lock_error = state.get("error_code") in {"reset_failed", "pull_failed", "git_busy"} and "index.lock" in error and "File exists" in error
   if lock_error:
     # A successful pull alone can leave local modifications in the legacy API.
@@ -161,7 +163,7 @@ def clear_recovered_git_ref_error() -> None:
       result = subprocess.run(["git", *args], cwd=REPO_DIR, capture_output=True, timeout=GIT_INFO_TIMEOUT)
       if result.returncode:
         return
-  if state.get("status") in {"error", "waiting"} and (ref_error or lock_error):
+  if state.get("status") in {"error", "waiting"} and (ref_error or lock_error or multiple_error):
     if write_auto_update_event("idle", error_code="", error=""):
       _set_auto_update_alert(False)
 
@@ -234,6 +236,12 @@ async def _attempt_update(monitor) -> tuple[bool, bool, str]:
         return False, False, ""
       rc, head = await _git(["rev-parse", "HEAD"], GIT_INFO_TIMEOUT)
       if rc or head != status.get("head") or not monitor.ready():
+        return False, False, ""
+      rc, output, target_head = await run_locked_thread(prepare_git_pull, REPO_DIR)
+      if rc:
+        _record_error("pull_failed", output)
+        return False, False, ""
+      if not monitor.ready():
         return False, False, ""
       _last_pull_at = time.monotonic()
       return await _run_git_pull(target_head)
@@ -398,7 +406,10 @@ async def _notify_cwp(old_head: str) -> None:
   print(f"[auto_update] notify {'sent' if ok else 'failed'} commits={len(commits)} http={status}", flush=True)
 
 
-async def _run_git_pull(target_head: str = "") -> tuple[bool, bool, str]:
+async def _run_git_pull(target_head: str) -> tuple[bool, bool, str]:
+  if not target_head:
+    _record_error("upstream_read_failed", "No verified update target")
+    return False, False, ""
   previous = read_auto_update_state()
   if target_head and previous.get("reboot_requested_head") == target_head:
     if previous.get("status") != "reboot_blocked" or previous.get("target_head") != target_head:
@@ -448,8 +459,9 @@ async def _run_git_pull(target_head: str = "") -> tuple[bool, bool, str]:
     )
     return False, False, ""
 
-  # Automatic updates must be a clean fast-forward; never create a merge commit.
-  pull_rc, pull_out = await _git(["pull", "--ff-only"], PULL_TIMEOUT)
+  # Apply only the selected branch's pinned commit. FETCH_HEAD can be rewritten
+  # by another fetch and must never determine which branches get merged.
+  pull_rc, pull_out = await _git(["merge", "--ff-only", target_head], PULL_TIMEOUT)
   if pull_rc != 0:
     if "index.lock" in pull_out and "File exists" in pull_out:
       raise RepoBusyError(pull_out)
@@ -466,30 +478,24 @@ async def _run_git_pull(target_head: str = "") -> tuple[bool, bool, str]:
 
   head_rc, new_head = await _git(["rev-parse", "HEAD"], GIT_INFO_TIMEOUT)
   new_head = new_head.strip() if head_rc == 0 else ""
-  upstream_rc, upstream_head = await _git(["rev-parse", "@{u}"], GIT_INFO_TIMEOUT)
-  upstream_head = upstream_head.strip() if upstream_rc == 0 else ""
-  verified_target = upstream_head or target_head
   common_fields = {
     "attempted_at": attempted_at,
     "old_head": old_head,
     "new_head": new_head,
-    "target_head": verified_target,
+    "target_head": target_head,
     "reset_rc": reset_rc,
     "pull_rc": pull_rc,
   }
   if not new_head:
     _record_error("head_read_failed", "Unable to verify Git HEAD after pull", **common_fields)
     return False, False, ""
-  if not upstream_head:
-    _record_error("upstream_read_failed", "Unable to verify the upstream Git HEAD after pull", **common_fields)
-    return False, False, new_head
   if new_head == old_head:
     _record_error("head_unchanged", "git pull completed but HEAD did not change", **common_fields)
     return True, False, new_head
-  if new_head != upstream_head:
+  if new_head != target_head:
     _record_error(
       "head_mismatch",
-      f"Pulled HEAD {new_head[:12]} does not match upstream {upstream_head[:12]}",
+      f"Pulled HEAD {new_head[:12]} does not match selected target {target_head[:12]}",
       **common_fields,
     )
     return True, False, new_head
