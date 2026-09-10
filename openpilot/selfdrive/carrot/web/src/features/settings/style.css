@@ -10,6 +10,7 @@
 @import "./styles/item_chrome.css";
 @import "./styles/device_tab.css";
 @import "./styles/youtube_live.css";
+@import "./extensions/onnx_vision/style.css";
 @import "./styles/token_card.css";
 @import "./styles/change_history.css";
 @import "./styles/documentation.css";

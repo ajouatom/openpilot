@@ -1,0 +1,931 @@
+.onnx-vision-section {
+  margin-top: var(--sp-md);
+}
+
+.onnx-vision-card,
+.onnx-vision-feature-card {
+  padding-bottom: var(--sp-md);
+}
+
+.onnx-vision-editor-card {
+  padding: var(--sp-md);
+}
+
+.onnx-vision-editor-host {
+  min-width: 0;
+}
+
+.onnx-vision-advanced-settings {
+  display: grid;
+  width: 100%;
+  margin-top: var(--sp-xs);
+  overflow: visible;
+  border: 0;
+  background: transparent;
+}
+
+.onnx-vision-advanced-settings__summary {
+  display: inline-flex;
+  justify-self: end;
+  align-items: center;
+  gap: var(--sp-sm);
+  min-height: var(--control-min-height);
+  padding: 0 var(--sp-xs);
+  color: var(--md-info);
+  cursor: pointer;
+  list-style: none;
+}
+
+.onnx-vision-advanced-settings__summary::-webkit-details-marker {
+  display: none;
+}
+
+.onnx-vision-advanced-settings__summary > strong {
+  font-size: var(--fs-body-sm);
+  font-weight: 700;
+}
+
+.onnx-vision-advanced-settings__summary::after {
+  content: none;
+}
+
+.onnx-vision-advanced-settings__summary:hover,
+.onnx-vision-advanced-settings__summary:focus-visible {
+  color: var(--md-on-surface);
+  outline: none;
+}
+
+.onnx-vision-advanced-settings__summary:hover > strong {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.onnx-vision-advanced-settings__summary:focus-visible {
+  border-radius: var(--r-sm);
+  box-shadow: 0 0 0 var(--focus-ring-width) var(--focus-ring-color);
+}
+
+.onnx-vision-advanced-settings__body {
+  display: grid;
+  width: 100%;
+  gap: var(--sp-md);
+  padding-top: var(--sp-xs);
+}
+
+.onnx-vision-advanced-settings__body > .onnx-vision-section {
+  margin-top: 0;
+}
+
+.onnx-vision-card__head,
+.onnx-vision-feature-card__head {
+  align-items: flex-start;
+}
+
+.onnx-vision-card__copy {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.onnx-vision-card__summary {
+  margin: 0;
+  color: var(--md-on-surface-var);
+  font-size: var(--fs-body-sm);
+  overflow-wrap: anywhere;
+}
+
+.onnx-vision-card__state {
+  flex: 0 0 auto;
+}
+
+.onnx-vision-card__metric .setting-profile-row__value {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.onnx-vision-card__actions {
+  margin-top: var(--sp-md);
+}
+
+.onnx-side-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--sp-sm);
+  padding: var(--sp-md) 0;
+  border-top: 1px solid color-mix(in srgb, var(--md-outline-var) 28%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--md-outline-var) 28%, transparent);
+}
+
+.onnx-side-status {
+  display: grid;
+  gap: var(--sp-sm);
+  min-width: 0;
+  padding: var(--sp-md);
+  border: 1px solid color-mix(in srgb, var(--md-outline-var) 36%, transparent);
+  border-radius: var(--r-md);
+  background: color-mix(in srgb, var(--md-surface-cont) 88%, transparent);
+}
+
+.onnx-side-status__head,
+.onnx-confidence__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-sm);
+  min-width: 0;
+}
+
+.onnx-side-status__head strong {
+  color: var(--md-on-surface);
+  font-size: var(--fs-label-md);
+}
+
+.onnx-confidence {
+  display: grid;
+  gap: var(--sp-xs);
+}
+
+.onnx-confidence__label,
+.onnx-confidence__value {
+  color: var(--md-on-surface-var);
+  font-size: var(--fs-label-sm);
+}
+
+.onnx-confidence__value {
+  color: var(--md-on-surface);
+}
+
+.onnx-confidence__track {
+  width: 100%;
+  height: 7px;
+  overflow: hidden;
+  border: 0;
+  border-radius: var(--r-round);
+  background: var(--md-surface-cont-hh);
+}
+
+.onnx-confidence__track::-webkit-progress-bar {
+  background: var(--md-surface-cont-hh);
+}
+
+.onnx-confidence__track::-webkit-progress-value {
+  border-radius: var(--r-round);
+  background: var(--md-info);
+}
+
+.onnx-confidence[data-active="true"] .onnx-confidence__track::-webkit-progress-value {
+  background: var(--md-warning);
+}
+
+.onnx-confidence__track::-moz-progress-bar {
+  border-radius: var(--r-round);
+  background: var(--md-info);
+}
+
+.onnx-confidence[data-active="true"] .onnx-confidence__track::-moz-progress-bar {
+  background: var(--md-warning);
+}
+
+.onnx-confidence[data-valid="false"] {
+  opacity: var(--state-disabled-opacity);
+}
+
+.onnx-vision-feature-card__metrics {
+  border-bottom: 1px solid color-mix(in srgb, var(--md-outline-var) 28%, transparent);
+}
+
+.onnx-vision-feature-card__settings {
+  padding: 0;
+}
+
+.onnx-vision-feature-card__settings:empty {
+  display: none;
+}
+
+.onnx-vision-feature-card__settings .setting--detail-child .setting-favorite-mark {
+  display: none;
+}
+
+.onnx-snapshot-dialog,
+.onnx-polygon-dialog,
+.onnx-vision-dialog {
+  display: grid;
+  gap: var(--sp-md);
+  white-space: normal;
+}
+
+.onnx-snapshot-dialog__surface,
+.onnx-polygon-dialog__canvas-wrap {
+  position: relative;
+  display: grid;
+  place-items: center;
+  min-height: 180px;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--md-outline-var) 42%, transparent);
+  border-radius: var(--r-md);
+  background: var(--md-surface);
+}
+
+.onnx-snapshot-dialog__surface img,
+.onnx-polygon-dialog__canvas-wrap > svg[data-role="scene"] {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: min(62dvh, 720px);
+  object-fit: contain;
+}
+
+.onnx-snapshot-dialog__state,
+.onnx-polygon-dialog__state {
+  padding: var(--sp-md);
+  color: var(--md-on-surface-var);
+  font-size: var(--fs-body-sm);
+  text-align: center;
+}
+
+.onnx-snapshot-dialog__surface img:not([hidden]) + .onnx-snapshot-dialog__state {
+  position: absolute;
+  right: var(--sp-sm);
+  bottom: var(--sp-sm);
+  padding: var(--sp-xs) var(--sp-sm);
+  border-radius: var(--r-round);
+  background: color-mix(in srgb, var(--md-surface) 84%, transparent);
+  color: var(--md-on-surface);
+}
+
+.onnx-snapshot-dialog__state[data-tone="error"],
+.onnx-polygon-dialog__state[data-tone="error"] {
+  color: var(--md-error);
+}
+
+.onnx-polygon-dialog__state[data-tone="warning"] {
+  color: var(--md-warning);
+}
+
+.onnx-polygon-dialog__hint {
+  margin: 0;
+  color: var(--md-on-surface-var);
+  font-size: var(--fs-body-sm);
+}
+
+.onnx-polygon-dialog__sides {
+  width: 100%;
+}
+
+.onnx-polygon-dialog__workspace {
+  display: grid;
+  min-width: 0;
+}
+
+.onnx-polygon-dialog__canvas-wrap {
+  min-height: 0;
+  isolation: isolate;
+}
+
+.onnx-polygon-dialog__canvas-wrap > svg[data-role="scene"] {
+  position: relative;
+  z-index: 1;
+  aspect-ratio: var(--onnx-camera-aspect, 16 / 10);
+  height: auto;
+  max-height: none;
+  cursor: crosshair;
+  touch-action: pan-y;
+  user-select: none;
+}
+
+.onnx-polygon-dialog[data-preview="fallback"] .onnx-polygon-dialog__canvas-wrap > svg[data-role="scene"] {
+  max-height: min(48dvh, 600px);
+}
+
+.onnx-polygon-dialog[data-has-selection="true"] .onnx-polygon-dialog__canvas-wrap > svg[data-role="scene"] {
+  cursor: move;
+  touch-action: none;
+}
+
+.onnx-polygon-dialog[data-has-selection="true"] .onnx-polygon-dialog__canvas-wrap > svg[data-role="scene"]:active {
+  cursor: grabbing;
+}
+
+.onnx-polygon-dialog__backdrop {
+  fill: var(--md-surface);
+}
+
+.onnx-polygon-dialog[data-preview="fallback"] .onnx-polygon-dialog__backdrop {
+  fill: transparent;
+}
+
+.onnx-fallback-road,
+.onnx-fallback-road * {
+  pointer-events: none;
+}
+
+.onnx-fallback-road {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.onnx-fallback-road > * {
+  opacity: 0.28;
+}
+
+.onnx-fallback-road[hidden],
+.onnx-fallback-road__notice[hidden],
+.onnx-polygon-dialog [data-role="image"][hidden] {
+  display: none;
+}
+
+.onnx-fallback-road__sky {
+  fill: color-mix(in srgb, var(--md-info) 14%, var(--md-surface));
+}
+
+.onnx-fallback-road__ground {
+  fill: color-mix(in srgb, var(--md-surface-cont-h) 82%, var(--md-surface));
+}
+
+.onnx-fallback-road__road {
+  fill: color-mix(in srgb, var(--md-on-surface) 12%, var(--md-surface));
+}
+
+.onnx-fallback-road__horizon,
+.onnx-fallback-road__shoulder,
+.onnx-fallback-road__lane {
+  vector-effect: non-scaling-stroke;
+  fill: none;
+  stroke-linecap: round;
+}
+
+.onnx-fallback-road__horizon {
+  stroke: color-mix(in srgb, var(--md-outline-var) 34%, transparent);
+  stroke-width: 1;
+}
+
+.onnx-fallback-road__shoulder {
+  stroke: color-mix(in srgb, var(--md-on-surface-var) 54%, transparent);
+  stroke-width: 2;
+}
+
+.onnx-fallback-road__lane {
+  stroke: color-mix(in srgb, var(--md-on-surface) 68%, transparent);
+  stroke-width: 2;
+  stroke-dasharray: 14 18;
+}
+
+.onnx-fallback-road__notice {
+  position: absolute;
+  top: var(--sp-sm);
+  right: var(--sp-sm);
+  max-width: min(52%, 320px);
+  min-height: var(--control-min-height);
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  color: color-mix(in srgb, var(--md-on-surface-var) 76%, transparent);
+  font-family: var(--font-sans);
+  font-size: var(--fs-label-sm);
+  font-weight: 700;
+  line-height: 1.25;
+  letter-spacing: 0.01em;
+  text-align: right;
+  text-shadow: 0 1px 2px color-mix(in srgb, var(--md-surface) 82%, transparent);
+  pointer-events: none;
+  z-index: 2;
+}
+
+.onnx-polygon-dialog__polygon {
+  vector-effect: non-scaling-stroke;
+  stroke-width: 1.5;
+  stroke-linejoin: round;
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+.onnx-polygon-dialog__polygon:not(.is-active) {
+  pointer-events: none;
+}
+
+.onnx-polygon-dialog__polygon[data-polygon-side="left"] {
+  fill: color-mix(in srgb, var(--md-info) 16%, transparent);
+  stroke: var(--md-info);
+}
+
+.onnx-polygon-dialog__polygon[data-polygon-side="right"] {
+  fill: color-mix(in srgb, var(--md-warning) 16%, transparent);
+  stroke: var(--md-warning);
+}
+
+.onnx-polygon-dialog__polygon.is-active {
+  opacity: 1;
+  stroke-width: 2;
+}
+
+.onnx-polygon-handle {
+  cursor: move;
+  outline: none;
+  touch-action: none;
+}
+
+.onnx-polygon-handle.is-inactive {
+  pointer-events: none;
+  opacity: 0.62;
+}
+
+.onnx-polygon-handle__hit {
+  fill: transparent;
+  stroke: transparent;
+}
+
+.onnx-polygon-handle__selection {
+  vector-effect: non-scaling-stroke;
+  fill: none;
+  stroke-width: 1.5;
+  opacity: 0;
+  transition: opacity var(--motion-quick) var(--ease-standard);
+}
+
+.onnx-polygon-handle[data-handle-side="left"] .onnx-polygon-handle__selection {
+  stroke: var(--md-info);
+}
+
+.onnx-polygon-handle[data-handle-side="right"] .onnx-polygon-handle__selection {
+  stroke: var(--md-warning);
+}
+
+.onnx-polygon-handle.is-selected .onnx-polygon-handle__selection,
+.onnx-polygon-handle:focus-visible .onnx-polygon-handle__selection {
+  opacity: 1;
+}
+
+.onnx-polygon-handle__dot {
+  vector-effect: non-scaling-stroke;
+  fill: var(--md-surface);
+  stroke-width: 2;
+  transition: fill var(--motion-quick) var(--ease-standard), stroke-width var(--motion-quick) var(--ease-standard);
+}
+
+.onnx-polygon-handle[data-handle-side="left"] .onnx-polygon-handle__dot {
+  stroke: var(--md-info);
+}
+
+.onnx-polygon-handle[data-handle-side="right"] .onnx-polygon-handle__dot {
+  stroke: var(--md-warning);
+}
+
+.onnx-polygon-handle.is-selected .onnx-polygon-handle__dot,
+.onnx-polygon-handle:focus-visible .onnx-polygon-handle__dot {
+  stroke-width: 2;
+}
+
+.onnx-polygon-handle[data-handle-side="left"].is-selected .onnx-polygon-handle__dot,
+.onnx-polygon-handle[data-handle-side="left"]:focus-visible .onnx-polygon-handle__dot {
+  fill: var(--md-info);
+}
+
+.onnx-polygon-handle[data-handle-side="right"].is-selected .onnx-polygon-handle__dot,
+.onnx-polygon-handle[data-handle-side="right"]:focus-visible .onnx-polygon-handle__dot {
+  fill: var(--md-warning);
+}
+
+.onnx-polygon-handle__label-bg {
+  vector-effect: non-scaling-stroke;
+  fill: color-mix(in srgb, var(--md-surface) 88%, transparent);
+  stroke: color-mix(in srgb, var(--md-outline-var) 68%, transparent);
+  stroke-width: 0.75;
+  pointer-events: none;
+}
+
+.onnx-polygon-handle__label-hit {
+  fill: transparent;
+  pointer-events: all;
+  cursor: move;
+}
+
+.onnx-polygon-handle[data-handle-side="left"].is-selected .onnx-polygon-handle__label-bg {
+  fill: var(--md-info);
+  stroke: var(--md-info);
+}
+
+.onnx-polygon-handle[data-handle-side="right"].is-selected .onnx-polygon-handle__label-bg {
+  fill: var(--md-warning);
+  stroke: var(--md-warning);
+}
+
+.onnx-polygon-handle__label {
+  fill: var(--md-on-surface);
+  pointer-events: none;
+  user-select: none;
+  font-family: inherit;
+  font-weight: 850;
+  line-height: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+.onnx-polygon-handle.is-selected .onnx-polygon-handle__label {
+  fill: var(--md-surface);
+}
+
+.onnx-polygon-dialog__state {
+  position: absolute;
+  left: var(--sp-sm);
+  bottom: var(--sp-sm);
+  padding: var(--sp-xs) var(--sp-sm);
+  border-radius: var(--r-round);
+  background: color-mix(in srgb, var(--md-surface) 84%, transparent);
+  color: var(--md-on-surface);
+  pointer-events: none;
+  z-index: 2;
+}
+
+.onnx-polygon-dialog__state[data-tone="selection"] {
+  color: var(--md-info);
+  font-weight: 700;
+}
+
+.onnx-polygon-dialog__point-select {
+  position: absolute;
+  top: var(--sp-sm);
+  left: var(--sp-sm);
+  min-width: 88px;
+  min-height: 36px;
+  max-width: calc(100% - (var(--sp-sm) * 2));
+  padding: 0 var(--sp-sm);
+  border: 1px solid color-mix(in srgb, var(--md-outline-var) 45%, transparent);
+  border-radius: var(--r-xs);
+  appearance: none;
+  -webkit-appearance: none;
+  background: var(--md-surface-cont-h);
+  background-image: none;
+  color: var(--md-on-surface);
+  font-family: inherit;
+  font-size: var(--fs-label-sm);
+  font-weight: 800;
+  line-height: 1.2;
+  text-align: center;
+  text-align-last: center;
+  cursor: pointer;
+  touch-action: manipulation;
+  z-index: 3;
+}
+
+.onnx-polygon-dialog__point-select::-ms-expand {
+  display: none;
+}
+
+.onnx-polygon-dialog__point-select:disabled {
+  cursor: default;
+  opacity: var(--state-disabled-opacity);
+}
+
+.onnx-polygon-dialog__point-panel {
+  display: grid;
+  gap: var(--sp-sm);
+  padding: var(--sp-md);
+  border: 1px solid color-mix(in srgb, var(--md-outline-var) 36%, transparent);
+  border-radius: var(--r-md);
+  background: var(--md-surface-cont);
+}
+
+.onnx-polygon-dialog__advanced {
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--md-outline-var) 36%, transparent);
+  border-radius: var(--r-md);
+  background: var(--md-surface-cont);
+}
+
+.onnx-polygon-dialog__advanced > summary {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--sp-md);
+  min-height: 48px;
+  padding: var(--sp-sm) var(--sp-md);
+  color: var(--md-on-surface);
+  cursor: pointer;
+  font-size: var(--fs-label-md);
+  font-weight: 800;
+  list-style: none;
+}
+
+.onnx-polygon-dialog__advanced > summary::-webkit-details-marker {
+  display: none;
+}
+
+.onnx-polygon-dialog__advanced > summary::after {
+  content: "›";
+  grid-column: 2;
+  grid-row: 1;
+  color: var(--md-on-surface-var);
+  font-size: var(--fs-title-sm);
+  transform: rotate(90deg);
+  transition: transform var(--motion-quick) var(--ease-standard);
+}
+
+.onnx-polygon-dialog__advanced[open] > summary::after {
+  transform: rotate(-90deg);
+}
+
+.onnx-polygon-dialog__advanced [data-role="advanced-summary"] {
+  grid-column: 2;
+  grid-row: 1;
+  margin-right: calc(var(--sp-lg) + var(--sp-xs));
+  color: var(--md-on-surface-var);
+  font-size: var(--fs-label-sm);
+  font-weight: 700;
+}
+
+.onnx-polygon-dialog__advanced-body {
+  display: grid;
+  gap: var(--sp-md);
+  padding: 0 var(--sp-md) var(--sp-md);
+}
+
+.onnx-polygon-dialog__advanced .onnx-polygon-dialog__point-panel {
+  background: var(--md-surface);
+}
+
+.onnx-polygon-dialog__advanced-actions {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.onnx-polygon-dialog__footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--sp-md);
+}
+
+.onnx-polygon-dialog__footer [data-role="save-state"] {
+  color: var(--md-on-surface-var);
+  font-size: var(--fs-label-sm);
+  font-weight: 700;
+}
+
+.onnx-polygon-dialog__footer [data-role="save-state"][data-dirty="true"] {
+  color: var(--md-warning);
+}
+
+.onnx-polygon-dialog__footer [data-action="save"] {
+  min-width: 112px;
+}
+
+.onnx-polygon-dialog__save-state {
+  min-height: 18px;
+  color: var(--md-on-surface-var);
+  font-size: var(--fs-label-sm);
+  font-weight: 700;
+  text-align: right;
+}
+
+.onnx-polygon-dialog__save-state[data-dirty="true"] {
+  color: var(--md-warning);
+}
+
+.onnx-polygon-dialog__primary-actions {
+  align-items: stretch;
+  container-type: inline-size;
+}
+
+.onnx-polygon-dialog__primary-actions > .smallBtn,
+.page--setting #settingScreenItems .onnx-polygon-dialog__primary-actions > .smallBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-width: 0;
+  height: 46px;
+  min-height: 46px;
+  margin: 0;
+  padding: 0 clamp(3px, 1vw, 10px);
+  padding: 0 clamp(3px, 1.2cqw, 10px);
+  overflow: hidden;
+  font-size: clamp(10px, 2.2vw, var(--fs-body-sm));
+  font-size: clamp(10px, 3.1cqw, var(--fs-body-sm));
+  line-height: 1.2;
+  text-align: center;
+  vertical-align: middle;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.onnx-polygon-dialog__primary-actions > [data-action="save"].is-soft-disabled {
+  opacity: var(--state-disabled-opacity);
+  cursor: not-allowed;
+}
+
+.onnx-polygon-dialog__camera-actions {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: stretch;
+}
+
+.onnx-polygon-dialog__camera-actions > .smallBtn,
+.page--setting #settingScreenItems .onnx-polygon-dialog__camera-actions > .smallBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-width: 0;
+  min-height: 46px;
+  margin: 0;
+  text-align: center;
+}
+
+.onnx-polygon-dialog__point-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-md);
+}
+
+.onnx-polygon-dialog__point-head > div {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.onnx-polygon-dialog__point-head strong {
+  color: var(--md-on-surface);
+  font-size: var(--fs-label-md);
+}
+
+.onnx-polygon-dialog__point-head span {
+  color: var(--md-on-surface-var);
+  font-size: var(--fs-label-sm);
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.onnx-polygon-dialog__point-head span[data-has-point="true"] {
+  font-family: var(--font-mono);
+}
+
+.onnx-polygon-dialog__step {
+  flex: 0 0 auto;
+}
+
+.onnx-polygon-dialog__point-tools {
+  display: grid;
+  grid-template-columns: 136px minmax(0, 1fr);
+  gap: var(--sp-md);
+  align-items: center;
+}
+
+.onnx-polygon-dialog__dpad {
+  display: grid;
+  grid-template-columns: repeat(3, 42px);
+  grid-template-rows: repeat(3, 42px);
+  place-content: center;
+  gap: 3px;
+}
+
+.onnx-polygon-dialog__dpad .smallBtn {
+  min-width: 0;
+  min-height: 0;
+  padding: 0;
+  font-size: var(--fs-title-sm);
+}
+
+.onnx-polygon-dialog__dpad [data-move="up"] {
+  grid-column: 2;
+}
+
+.onnx-polygon-dialog__dpad [data-move="left"] {
+  grid-column: 1;
+  grid-row: 2;
+}
+
+.onnx-polygon-dialog__dpad [data-role="step-value"] {
+  display: grid;
+  grid-column: 2;
+  grid-row: 2;
+  place-items: center;
+  border-radius: var(--r-sm);
+  background: var(--md-surface-cont-h);
+  color: var(--md-on-surface-var);
+  font: 750 var(--fs-label-sm)/1 var(--font-mono);
+}
+
+.onnx-polygon-dialog__dpad [data-move="right"] {
+  grid-column: 3;
+  grid-row: 2;
+}
+
+.onnx-polygon-dialog__dpad [data-move="down"] {
+  grid-column: 2;
+  grid-row: 3;
+}
+
+.onnx-polygon-dialog__point-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--sp-sm);
+}
+
+.onnx-polygon-dialog__point-actions .smallBtn,
+.onnx-polygon-dialog__advanced-actions .smallBtn {
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+#appDialog:has(.onnx-polygon-dialog) .app-dialog__sheet,
+#appDialog:has(.onnx-snapshot-dialog) .app-dialog__sheet {
+  width: min(100%, 900px);
+}
+
+.onnx-vision-dialog__summary {
+  margin: 0;
+  color: var(--md-on-surface-var);
+}
+
+.onnx-vision-dialog__list {
+  display: grid;
+  margin: 0;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--md-outline-var) 38%, transparent);
+  border-radius: var(--r-md);
+}
+
+.onnx-vision-dialog__list > div {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--sp-md);
+  padding: var(--sp-sm) var(--sp-md);
+  border-top: 1px solid color-mix(in srgb, var(--md-outline-var) 28%, transparent);
+}
+
+.onnx-vision-dialog__list > div:first-child {
+  border-top: 0;
+}
+
+.onnx-vision-dialog__list dt {
+  color: var(--md-on-surface-var);
+}
+
+.onnx-vision-dialog__list dd {
+  margin: 0;
+  color: var(--md-on-surface);
+  font-weight: 800;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+.onnx-vision-dialog__raw summary {
+  cursor: pointer;
+  color: var(--md-on-surface-var);
+  font-size: var(--fs-label-md);
+  font-weight: 750;
+}
+
+.onnx-vision-dialog__raw pre {
+  max-height: 260px;
+  margin: var(--sp-sm) 0 0;
+  padding: var(--sp-md);
+  overflow: auto;
+  border-radius: var(--r-sm);
+  background: var(--md-surface);
+  color: var(--md-on-surface);
+  font: 600 var(--fs-label-sm)/1.45 var(--font-mono);
+  white-space: pre;
+}
+
+@media (min-width: 760px) {
+  .onnx-polygon-dialog__advanced-body {
+    grid-template-columns: minmax(0, 1fr) minmax(240px, 0.7fr);
+  }
+
+  .onnx-polygon-dialog__advanced-body > [data-role="sides"] {
+    grid-column: 1 / -1;
+  }
+
+  .onnx-polygon-dialog__advanced-actions {
+    grid-template-columns: 1fr;
+    align-content: start;
+  }
+}
+
+@media (max-width: 560px) {
+  .onnx-side-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .onnx-polygon-dialog__advanced-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .onnx-polygon-dialog__point-tools {
+    grid-template-columns: 126px minmax(0, 1fr);
+    gap: var(--sp-sm);
+  }
+
+  .onnx-polygon-dialog__dpad {
+    grid-template-columns: repeat(3, 38px);
+    grid-template-rows: repeat(3, 38px);
+  }
+
+  .onnx-polygon-dialog__point-actions {
+    grid-template-columns: 1fr;
+  }
+}
