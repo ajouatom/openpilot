@@ -1716,6 +1716,25 @@ class VisionRadarMatcher:
     if not stationary_fronts:
       self._moving_vision_evidence.clear()
       return set()
+    independently_supported = {
+      self._identity(front)
+      for front, _, _, _ in self._stationary_front_corner_pairs(points, path)
+    }
+    # The broad stationary speed tolerance protects distant stopped vehicles
+    # whose model velocity converges late. At close range it can instead lend
+    # a moving car's vision to a stationary reflector as their ranges cross.
+    # Require independent physical support for that contradictory association,
+    # including pending/held identities; a good position score is insufficient.
+    near_velocity_conflicts = {
+      self._identity(point) for point in stationary_fronts
+      if point.d_rel < STATIONARY_FRONT_POSITION_LOCK_MIN_DREL_M
+      and vision.probability >= VISION_RADAR_FAR_MIN_SEED_PROB
+      and abs(point.v_lead - vision.velocity) > max(
+        STATIONARY_MOVING_VISION_MIN_SPEED_DELTA_MPS,
+        min(STATIONARY_MAX_VISION_SPEED_DELTA_MPS, 3.0 * abs(vision.v_std)),
+      )
+      and self._identity(point) not in independently_supported
+    }
     moving_support = tuple(
       point for point in points if point.measured
       and 0.5 < point.d_rel < 180.0
@@ -1747,7 +1766,7 @@ class VisionRadarMatcher:
       evidence[identity] = _RadarPositionEvidence(since_s, time_s, point)
     self._moving_vision_evidence = evidence
     if not moving_support:
-      return set()
+      return near_velocity_conflicts
     # A measured moving front/SCC keeps the immediate veto. For a stationary
     # front with repeated tight visual anchors, a corner must keep agreeing
     # with vision while moving continuously; a single noisy corner sample
@@ -1757,11 +1776,7 @@ class VisionRadarMatcher:
       or time_s - item.since_s >= STATIONARY_MOVING_CORNER_CONFIRMATION_S
       for item in evidence.values()
     )
-    independently_supported = {
-      self._identity(front)
-      for front, _, _, _ in self._stationary_front_corner_pairs(points, path)
-    }
-    return {
+    return near_velocity_conflicts | {
       self._identity(point) for point in stationary_fronts
       if self._identity(point) not in independently_supported
       and (
