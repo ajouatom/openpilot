@@ -38,7 +38,7 @@ CORNER_RADAR_SLOT_DISCONTINUITY_D_REL_M = 8.0
 CORNER_RADAR_SLOT_DISCONTINUITY_Y_REL_M = 1.5
 CORNER_RADAR_SLOT_DISCONTINUITY_V_REL_MPS = 4.0
 RADAR_ACCEL_INNOVATION_LIMIT = 3.0
-RADAR_ACCEL_HISTORY_SAMPLES = 3
+RADAR_ACCEL_HISTORY_SAMPLES = 4
 RADAR_ACCEL_FILTER_RC = 0.05
 RADAR_JERK_HISTORY_SECONDS = 0.50
 RADAR_JERK_HISTORY_MIN_SAMPLES = 7
@@ -262,7 +262,7 @@ class MyTrack:
     self.vLead_avg = FirstOrderFilter(self.vLead, 0.1, self.dt)
     self.aLead_avg = FirstOrderFilter(self.aLead, RADAR_ACCEL_FILTER_RC, self.dt)
     self.jLead_avg = FirstOrderFilter(self.jLead, RADAR_JERK_FILTER_RC, self.dt)
-    self.aLead_v_history: deque[float] = deque(maxlen=RADAR_ACCEL_HISTORY_SAMPLES)
+    self.aLead_v_history: deque[float] = deque()
     jerk_history_samples = max(
       RADAR_JERK_HISTORY_MIN_SAMPLES,
       int(round(RADAR_JERK_HISTORY_SECONDS / self.dt)) + 1,
@@ -280,7 +280,9 @@ class MyTrack:
     self.vLead_avg.x = self.vLead
     self.aLead_avg.x = self.aLead
     self.jLead_avg.x = self.jLead
-    self.aLead_v_history.clear()
+    # SCC's reusable object slot also uses acceleration innovation to detect
+    # target replacement. Preserve its original three-sample discriminator.
+    self.aLead_v_history = deque(maxlen=3 if self.radar_source == "scc" else RADAR_ACCEL_HISTORY_SAMPLES)
     self.aLead_v_history.append(self.vLead)
     self.jLead_v_history.clear()
     self.jLead_v_history.append(self.vLead)
@@ -304,6 +306,10 @@ class MyTrack:
       or abs(radar_point.yRel - self.yRel) > CORNER_RADAR_SLOT_DISCONTINUITY_Y_REL_M
       or abs(radar_point.vRel - self.vRel) > CORNER_RADAR_SLOT_DISCONTINUITY_V_REL_MPS
     )
+
+  def write_acceleration(self, radar_point):
+    radar_point.aLead = float(self.aLead) if self.cnt >= 6 else 0.0
+    radar_point.jLead = float(self.jLead) if self.cnt >= 6 else 0.0
         
   def update(self, radar_point, a_ego):
     if not radar_point.measured:
@@ -328,9 +334,15 @@ class MyTrack:
       pseudo_stop = abs(v_lead_filtered) < 0.3 and abs(self.vLead - v_lead_filtered) < 0.05
 
       self.aLead_v_history.append(self.vLead)
-      if len(self.aLead_v_history) == RADAR_ACCEL_HISTORY_SAMPLES:
-        acceleration_span = (RADAR_ACCEL_HISTORY_SAMPLES - 1) * self.dt
-        a_raw = (self.aLead_v_history[-1] - self.aLead_v_history[0]) / acceleration_span
+      if len(self.aLead_v_history) == self.aLead_v_history.maxlen:
+        # Slope of the four equally spaced speed samples (linear least squares).
+        # Use every sample instead of differencing only two noisy endpoints.
+        # The existing acceleration filter and innovation limits remain in place.
+        if self.radar_source == "scc":
+          a_raw = (self.aLead_v_history[-1] - self.aLead_v_history[0]) / (2.0 * self.dt)
+        else:
+          v0, v1, v2, v3 = self.aLead_v_history
+          a_raw = (3.0 * (v3 - v0) + v2 - v1) / (10.0 * self.dt)
       else:
         a_raw = 0.0
 
@@ -440,18 +452,19 @@ class RadarInterfaceBase(ABC):
           new_tracks[track_id] = self.tracks[track_id]
         new_tracks[track_id].update(radar_point, self.a_ego)
 
-        if new_tracks[track_id].cnt < 6:
-          radar_point.aLead = 0
-          radar_point.jLead = 0
-          radar_point.yRel = float(new_tracks[track_id].yRel)
-          radar_point.yvRel = float(new_tracks[track_id].yvRel)
-        else:
-          radar_point.aLead = float(new_tracks[track_id].aLead)
-          radar_point.jLead = float(new_tracks[track_id].jLead)
-          radar_point.yRel = float(new_tracks[track_id].yRel)
-          radar_point.yvRel = float(new_tracks[track_id].yvRel)
+        new_tracks[track_id].write_acceleration(radar_point)
+        radar_point.yRel = float(new_tracks[track_id].yRel)
+        radar_point.yvRel = float(new_tracks[track_id].yvRel)
                 
       self.tracks = new_tracks
+      # RadarInterface.update() may already have copied self.pts into the
+      # Cap'n Proto result. Refresh that copy after this frame's track update;
+      # otherwise current distance/speed are paired with last frame's dynamics.
+      # Keep the interface's selected point set, order, and raw metadata intact.
+      for radar_point in ret.points:
+        track = self.tracks.get(radar_point.trackId)
+        if track is not None:
+          track.write_acceleration(radar_point)
       """
       if self.last_timestamp is not None:
         print(f"dt1 = {rcv_time - self.last_timestamp:.6f}")
