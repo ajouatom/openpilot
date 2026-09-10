@@ -64,7 +64,9 @@ async def _resolve_tracking(branch: str) -> dict[str, str]:
 
   if branch:
     remote = await _git_text(["config", "--get", f"branch.{branch}.remote"])
-    merge_ref = await _git_text(["config", "--get", f"branch.{branch}.merge"])
+    merge_refs = (await _git_text(["config", "--get-all", f"branch.{branch}.merge"])).splitlines()
+    # The repair path reconnects duplicate entries to this selected branch.
+    merge_ref = f"refs/heads/{branch}" if len(set(merge_refs)) > 1 else next(iter(merge_refs), "")
     if remote and merge_ref.startswith("refs/heads/"):
       remote_branch = merge_ref[len("refs/heads/"):]
       upstream = f"{remote}/{remote_branch}"
