@@ -237,7 +237,8 @@
               "zh": "减速带",
               "params": [
                 "AutoNaviSpeedBumpTime",
-                "AutoNaviSpeedBumpSpeed"
+                "AutoNaviSpeedBumpSpeed",
+                "AutoNaviSpeedBumpEndDistance"
               ]
             },
             {
@@ -2921,19 +2922,39 @@
     {
       "group": "감속제어",
       "name": "VehicleNaviCanControl",
-      "title": "차량 내비 CAN 카메라·방지턱 제어",
-      "descr": "차량 순정 내비 CAN의 카메라·방지턱 실제 거리를 자동 감속에 사용합니다. PV5는 구간단속 알림 이후 제한속도를 유지하고 내비 단속 상태 종료·이탈 또는 신호 유실 시 해제합니다. 평균속도·남은거리 계산은 지원하지 않으며, 재시작·신호 유실·설정 재활성화 후에는 새 구간 알림이 필요합니다. 실험 기능이므로 검증된 차량에서만 사용하세요.",
+      "title": "차량 내비 CAN 감속 적용 모드",
+      "descr": "차량 순정 내비 CAN의 카메라·방지턱 실제 거리를 자동 감속에 사용하는 범위를 선택합니다. 경로 일치는 vNAVI의 현재 계산 경로와 미래 이벤트 경로가 같다는 뜻입니다.\n0: 사용 안 함\n1: 카메라·방지턱 항상 적용\n2: 카메라는 항상, 방지턱은 경로 일치 시 적용\n3: 카메라·방지턱 모두 경로 일치 시 적용\n경로 정보가 2초 넘게 갱신되지 않으면 경로 없음으로 처리합니다. 차량이 현재 카메라 상태를 직접 확인한 감속은 VehicleSpeedCameraControlMode가 별도로 제어합니다. PV5의 직접 확인된 구간단속 상태는 1~3에서 유지됩니다. 실험 기능이므로 검증된 차량에서만 사용하세요.",
       "egroup": "SPEED",
-      "etitle": "Vehicle Navigation CAN Camera & Bump Control",
-      "edescr": "Use exact stock-navigation CAN camera and bump distances for deceleration. The PV5 also holds the section speed limit after a section alert and releases it when navigation enforcement ends, on exit, or on signal loss. Average speed and remaining distance are not calculated. A new section alert is required after restart, signal loss, or re-enabling the setting. Experimental; use only on a validated vehicle.",
+      "etitle": "Vehicle Navigation CAN Deceleration Mode",
+      "edescr": "Select when exact stock-navigation CAN camera and bump distances are used for deceleration. Route match means the vNAVI future event matches the currently calculated route and path.\n0: Disabled\n1: Always use cameras and bumps\n2: Always use cameras; use bumps only on the calculated route\n3: Use cameras and bumps only on the calculated route\nRoute data older than two seconds is treated as no route. Current camera states confirmed directly by the vehicle are controlled separately by VehicleSpeedCameraControlMode. A directly confirmed PV5 section remains active in modes 1–3. Experimental; use only on a validated vehicle.",
       "cgroup": "速度控制",
-      "ctitle": "车辆导航 CAN 摄像头和减速带控制",
-      "cdescr": "使用原车导航 CAN 的摄像头和减速带实际距离进行减速。PV5 在区间测速提示后保持限速，在导航测速状态结束、驶离或信号丢失时解除。不计算平均速度或剩余距离；重启、信号丢失或重新启用设置后需要新的区间提示。此为实验功能，请仅在已验证车辆上使用。",
+      "ctitle": "车辆导航 CAN 减速应用模式",
+      "cdescr": "选择何时使用原车导航 CAN 的摄像头和减速带实际距离进行减速。路径匹配是指 vNAVI 的未来事件与当前计算路线及路径一致。\n0：禁用\n1：摄像头和减速带始终应用\n2：摄像头始终应用，减速带仅在路径匹配时应用\n3：摄像头和减速带仅在路径匹配时应用\n路径数据超过两秒未更新时按无路径处理。车辆直接确认的当前摄像头状态由 VehicleSpeedCameraControlMode 单独控制。PV5 直接确认的区间测速状态在模式 1～3 中保持有效。此为实验功能，请仅在已验证车辆上使用。",
       "min": 0,
-      "max": 1,
+      "max": 3,
       "default": 0,
       "unit": 1,
-      "control": "toggle",
+      "control": "select",
+      "options": {
+        "ko": [
+          "사용 안 함",
+          "카메라·방지턱 항상",
+          "카메라 항상·방지턱 경로",
+          "카메라·방지턱 경로"
+        ],
+        "en": [
+          "Disabled",
+          "Always camera & bump",
+          "Camera always, bump on route",
+          "Camera & bump on route"
+        ],
+        "zh": [
+          "禁用",
+          "摄像头和减速带始终应用",
+          "摄像头始终、减速带按路径",
+          "摄像头和减速带按路径"
+        ]
+      },
       "risk": "high"
     },
     {
@@ -3057,6 +3078,24 @@
       "default": 35,
       "unit": 5,
       "display_unit": "speedKph"
+    },
+    {
+      "group": "감속제어",
+      "name": "AutoNaviSpeedBumpEndDistance",
+      "title": "방지턱 감속 조기 종료 거리(200cm)",
+      "descr": "차량 순정 내비 또는 Carrot Navi가 보낸 방지턱의 남은 거리가 이 값 이하가 되면 방지턱 감속 제한을 먼저 해제합니다. 저장값과 표시 단위는 cm이며 0은 수신 지점까지 유지합니다. 지도상 방지턱 위치가 실제 위치보다 뒤에 있을 때 통과 후 속도 복원이 늦는 현상을 보정합니다. 값을 너무 크게 설정하면 실제 방지턱 전에 가속할 수 있습니다.",
+      "egroup": "SPEED",
+      "etitle": "Speed Bump Early Release Distance (200 cm)",
+      "edescr": "Release the speed-bump deceleration limit when the remaining distance from stock navigation or Carrot Navi is at or below this value. The stored and displayed unit is cm; 0 keeps control until the received point. This compensates when the mapped bump lies behind the physical bump and speed recovery otherwise starts late. Setting it too high can allow acceleration before the actual bump.",
+      "cgroup": "速度控制",
+      "ctitle": "减速带减速提前解除距离（200厘米）",
+      "cdescr": "当原车导航或 Carrot Navi 提供的减速带剩余距离小于或等于此值时，提前解除减速限制。保存值和显示单位为厘米；0 表示保持控制直到接收的位置。此设置可补偿地图中的减速带位置晚于实际位置而导致通过后恢复速度过慢的问题。设置过大可能会在实际减速带前开始加速。",
+      "min": 0,
+      "max": 5000,
+      "default": 200,
+      "unit": 10,
+      "display_unit": "distanceCm",
+      "risk": "high"
     },
     {
       "group": "감속제어",
