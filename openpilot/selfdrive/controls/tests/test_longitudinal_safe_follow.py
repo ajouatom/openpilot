@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 
 from openpilot.selfdrive.controls.lib.longitudinal_safe_follow import SafeFollowState
-from openpilot.selfdrive.controls.tests.test_longitudinal_approach import load_mpc_update, run_update
+from openpilot.selfdrive.controls.tests.test_longitudinal_gap_recovery import load_mpc_update, run_update
 
 
 TIMES = np.array([0., .25, .5, 1., 2.])
