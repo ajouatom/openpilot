@@ -21,7 +21,7 @@ SETTINGS_PATH = Path(__file__).resolve().parents[3] / "carrot_settings.json"
 PARAMS_KEYS_PATH = Path(__file__).resolve().parents[4] / "common" / "params_keys.h"
 
 # Mirrors SETTING_DISPLAY_UNIT_TYPES / SETTING_CONTROL_KINDS in setting.js.
-KNOWN_DISPLAY_UNITS = {"raw", "speedKph", "distanceCm", "timeSec", "timeMin", "percent", "degree"}
+KNOWN_DISPLAY_UNITS = {"raw", "speedKph", "distanceCm", "timeSec", "timeMs", "timeMin", "percent", "degree"}
 KNOWN_CONTROL_KINDS = {"toggle", "segmented", "select", "slider"}
 KNOWN_RISK_LEVELS = {"high", "medium"}
 
@@ -42,7 +42,7 @@ def test_the_catalogue_is_readable_and_populated(params):
   assert all(isinstance(p.get("name"), str) and p["name"] for p in params)
 
 
-def test_onnx_vision_toggle_uses_existing_runtime_flag_and_lane_change_menu(settings, params):
+def test_onnx_vision_toggle_uses_existing_runtime_flag_and_first_steering_section(settings, params):
   by_name = {p["name"]: p for p in params}
   vision = by_name["ShareData"]
   assert (vision["control"], vision["min"], vision["max"], vision["default"]) == ("toggle", 0, 1, 0)
@@ -50,8 +50,19 @@ def test_onnx_vision_toggle_uses_existing_runtime_flag_and_lane_change_menu(sett
   assert '{"ShareData", {PERSISTENT, INT, "0"}}' in PARAMS_KEYS_PATH.read_text(encoding="utf-8")
   driving = next(category for category in settings["menu"] if category["id"] == "DRIVING")
   steering = next(group for group in driving["groups"] if group["id"] == "STEER")
+  onnx = steering["groups"][0]
   lane_change = next(group for group in steering["groups"] if group["id"] == "STEER_LANECHANGE")
-  assert "ShareData" in lane_change["params"]
+  assert onnx["id"] == "STEER_ONNX"
+  detail_names = [
+    "OnnxLaneThreshold", "OnnxLaneIntervalMs", "OnnxBsdThreshold",
+    "OnnxBsdSmoothingMs", "OnnxBsdIntervalMs",
+  ]
+  assert onnx["params"] == ["ShareData", *detail_names]
+  assert "ShareData" not in lane_change["params"]
+  for name in detail_names:
+    assert by_name[name]["detail_parent"] == "ShareData"
+    assert by_name[name]["detail_section"] in ("lane", "bsd")
+    assert f'{{"{name}", {{PERSISTENT, INT,' in PARAMS_KEYS_PATH.read_text(encoding="utf-8")
   for title in ("title", "etitle", "ctitle"):
     assert "ONNX" in vision[title]
 
@@ -155,7 +166,10 @@ def test_hyundai_catalog_hides_longitudinal_pid_settings(settings):
   assert hidden_names == hidden
   assert hidden.isdisjoint(visible_names)
   assert hidden.isdisjoint(menu_names)
-  assert all(group["count"] == len(filtered_groups[group["group"]]) for group in filtered_groups_list)
+  assert all(
+    group["count"] == sum(1 for item in filtered_groups[group["group"]] if not item.get("detail_parent"))
+    for group in filtered_groups_list
+  )
 
 
 def test_other_brands_keep_longitudinal_pid_settings(settings):

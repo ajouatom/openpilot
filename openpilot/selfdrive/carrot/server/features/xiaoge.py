@@ -27,6 +27,12 @@ async def proxy_api(request: web.Request) -> web.Response:
   # Register only the existing diagnostic operations. Neither a URL nor a host
   # supplied by the caller can turn this into a general-purpose proxy.
   endpoint = request.path.rsplit("/", 1)[-1]
+  query = {}
+  if endpoint == "snapshot":
+    stream = request.query.get("stream", "wide")
+    if stream not in ("wide", "road"):
+      raise web.HTTPBadRequest(text="stream must be wide or road")
+    query["stream"] = stream
   body = None
   headers = {}
   if request.method in ("POST", "DELETE"):
@@ -43,7 +49,7 @@ async def proxy_api(request: web.Request) -> web.Response:
 
   try:
     async with request.app["http"].request(
-      request.method, f"{XIAOGE_URL}/api/{endpoint}", params=request.query,
+      request.method, f"{XIAOGE_URL}/api/{endpoint}", params=query,
       data=body, headers=headers, timeout=PROXY_TIMEOUT, allow_redirects=False,
     ) as response:
       if 300 <= response.status < 400:

@@ -9,6 +9,7 @@ import { installPopoverFacade } from "../ui/components/popover/facade.js";
 import { installSegmentedControlFacade } from "../ui/components/segmented_control/facade.js";
 import { installSettingRowFacade } from "../ui/components/setting_row/facade.js";
 import { installStateSurfaceFacade } from "../ui/components/state_surface/facade.js";
+import { installSettingsChoiceDialogFacade } from "../features/settings/choice_dialog.js";
 
 const target = globalThis;
 const documentRoot = target.document;
@@ -24,3 +25,4 @@ installNumericStepperFacade(target);
 installParamCommitFacade(target);
 installSettingRowFacade(target);
 installDiffTableFacade(target);
+installSettingsChoiceDialogFacade(target);

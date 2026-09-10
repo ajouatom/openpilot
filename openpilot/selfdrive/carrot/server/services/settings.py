@@ -88,7 +88,12 @@ def group_index(settings: Dict[str, Any]) -> Tuple[Dict[str, list], Dict[str, Di
         cgroup = it.get("cgroup")
       if egroup and cgroup:
         break
-    groups_list.append({"group": g, "egroup": egroup, "cgroup": cgroup, "count": len(items)})
+    groups_list.append({
+      "group": g,
+      "egroup": egroup,
+      "cgroup": cgroup,
+      "count": sum(1 for item in items if not item.get("detail_parent")),
+    })
 
   return groups, by_name, groups_list
 
@@ -152,7 +157,12 @@ def build_menu_categories(data: Dict[str, Any], by_name: Dict[str, Dict[str, Any
         # params directly under the 중-group → single label-less section
         sections = [{"id": grp.get("id"), "ko": None, "en": None, "zh": None,
                      "items": [n for n in grp.get("params", []) if n in by_name]}]
-      count = sum(len(s["items"]) for s in sections)
+      count = sum(
+        1
+        for section in sections
+        for name in section["items"]
+        if not by_name[name].get("detail_parent")
+      )
       groups_out.append({**_label(grp), "id": grp.get("id"), "count": count, "sections": sections})
     cats.append({**_label(cat), "id": cat.get("id"), "groups": groups_out})
   return cats
@@ -187,8 +197,20 @@ def filter_settings_catalog_for_brand(
     group: [item for item in items if item.get("name") not in hidden_names]
     for group, items in groups.items()
   }
+  detail_names = {
+    str(item.get("name"))
+    for items in filtered_groups.values()
+    for item in items
+    if item.get("detail_parent")
+  }
   filtered_groups_list = [
-    {**group, "count": len(filtered_groups.get(group.get("group"), []))}
+    {
+      **group,
+      "count": sum(
+        1 for item in filtered_groups.get(group.get("group"), [])
+        if not item.get("detail_parent")
+      ),
+    }
     for group in groups_list
   ]
 
@@ -203,7 +225,12 @@ def filter_settings_catalog_for_brand(
           if section["items"]:
             visible_sections.append(section)
         group["sections"] = visible_sections
-        group["count"] = sum(len(section["items"]) for section in visible_sections)
+        group["count"] = sum(
+          1
+          for section in visible_sections
+          for name in section["items"]
+          if name not in detail_names
+        )
         if group["count"]:
           visible_groups.append(group)
       category["groups"] = visible_groups
