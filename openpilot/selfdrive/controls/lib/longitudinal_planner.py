@@ -231,6 +231,10 @@ class LongitudinalPlanner:
       jerk_factor=carrot.jerk_factor,
       a_change_cost_starting=carrot.aChangeCostStarting,
       lead_accel_response_enabled=lead_accel_response_enabled,
+      lead_gap_enabled=(
+        not reset_state and not sm['carState'].gasPressed
+        and not force_slow_decel and not carrot.lane_change_active
+      ),
       cutout_relief_enabled=(
         not reset_state and not sm['carState'].gasPressed
         and not force_slow_decel and not self.output_should_stop
