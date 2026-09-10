@@ -220,14 +220,15 @@ def test_wide_camera_fallback_setting_is_exposed(settings, params):
   assert '{"UseWideCamera", {PERSISTENT, BOOL, "1"}}' in params_keys
 
 
-def test_vehicle_navi_can_control_is_opt_in(settings, params):
+def test_vehicle_navi_can_control_exposes_route_filter_modes(settings, params):
   by_name = {p["name"]: p for p in params}
   control = by_name["VehicleNaviCanControl"]
-  assert (control["min"], control["max"], control["default"]) == (0, 1, 0)
-  assert control["control"] == "toggle"
+  assert (control["min"], control["max"], control["default"]) == (0, 3, 0)
+  assert control["control"] == "select"
+  assert all(len(control["options"][locale]) == 4 for locale in ("ko", "en", "zh"))
   assert control["risk"] == "high"
-  assert "PV5는 구간단속 알림 이후 제한속도를 유지" in control["descr"]
-  assert "Average speed and remaining distance are not calculated" in control["edescr"]
+  assert "calculated route" in control["edescr"]
+  assert "VehicleSpeedCameraControlMode" in control["edescr"]
 
   driving = next(category for category in settings["menu"] if category["id"] == "DRIVING")
   speed = next(group for group in driving["groups"] if group["id"] == "SPEED")
@@ -235,7 +236,23 @@ def test_vehicle_navi_can_control_is_opt_in(settings, params):
   assert "VehicleNaviCanControl" in camera["params"]
 
   params_keys = PARAMS_KEYS_PATH.read_text(encoding="utf-8")
-  assert '{"VehicleNaviCanControl", {PERSISTENT, BOOL, "0"}}' in params_keys
+  assert '{"VehicleNaviCanControl", {PERSISTENT, INT, "0"}}' in params_keys
+
+
+def test_speed_bump_early_release_distance_is_exposed_in_centimeters(settings, params):
+  by_name = {p["name"]: p for p in params}
+  distance = by_name["AutoNaviSpeedBumpEndDistance"]
+  assert (distance["min"], distance["max"], distance["default"], distance["unit"]) == (0, 5000, 200, 10)
+  assert distance["display_unit"] == "distanceCm"
+  assert distance["risk"] == "high"
+
+  driving = next(category for category in settings["menu"] if category["id"] == "DRIVING")
+  speed = next(group for group in driving["groups"] if group["id"] == "SPEED")
+  bump = next(group for group in speed["groups"] if group["id"] == "SPEED_BUMP")
+  assert "AutoNaviSpeedBumpEndDistance" in bump["params"]
+
+  params_keys = PARAMS_KEYS_PATH.read_text(encoding="utf-8")
+  assert '{"AutoNaviSpeedBumpEndDistance", {PERSISTENT, INT, "200"}}' in params_keys
 
 
 def test_vehicle_navi_school_zone_control_is_opt_in(settings, params):

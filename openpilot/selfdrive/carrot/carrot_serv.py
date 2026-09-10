@@ -223,9 +223,10 @@ class CarrotServ:
   def update_params(self):
     self.autoNaviSpeedBumpSpeed = float(self.params.get_int("AutoNaviSpeedBumpSpeed"))
     self.autoNaviSpeedBumpTime = float(self.params.get_int("AutoNaviSpeedBumpTime"))
+    self.autoNaviSpeedBumpEndDistance = float(min(5000, max(0, self.params.get_int("AutoNaviSpeedBumpEndDistance")))) * 0.01
     self.autoNaviSpeedCtrlEnd = float(self.params.get_int("AutoNaviSpeedCtrlEnd"))
     self.autoNaviSpeedCtrlMode = self.params.get_int("AutoNaviSpeedCtrlMode")
-    self.vehicleNaviCanControl = self.params.get_bool("VehicleNaviCanControl")
+    self.vehicleNaviCanControl = min(3, max(0, self.params.get_int("VehicleNaviCanControl")))
     self.vehicleNaviSchoolZoneControl = self.params.get_bool("VehicleNaviSchoolZoneControl")
     self.vehicleSpeedCameraControlMode = min(3, max(0, self.params.get_int("VehicleSpeedCameraControlMode")))
     self.autoNaviSpeedSafetyFactor = float(self.params.get_int("AutoNaviSpeedSafetyFactor")) * 0.01
@@ -365,8 +366,12 @@ class CarrotServ:
             not (CS.schoolZoneActive and self.school_zone_suppressed) and
             not (self.vehicleSpeedCameraControlMode == 3 and CS.gasPressed))
 
+  def _speed_bump_control_active(self, distance):
+    return distance > self.autoNaviSpeedBumpEndDistance
+
   def _vehicle_speed_bump_enabled(self, CS):
-    return self.vehicleNaviCanControl and self.autoNaviSpeedCtrlMode >= 2 and CS.speedBumpDistance > 0
+    return (self.vehicleNaviCanControl and self.autoNaviSpeedCtrlMode >= 2 and
+            self._speed_bump_control_active(CS.speedBumpDistance))
 
   def _vehicle_school_zone_enabled(self, CS):
     if not CS.schoolZoneActive:
@@ -391,7 +396,7 @@ class CarrotServ:
       speed = 30
     elif getattr(CS, "vehicleNaviSpeed", 0) > 0:
       speed = int(CS.vehicleNaviSpeed * self.autoNaviSpeedSafetyFactor)
-    elif CS.speedBumpDistance > 0:
+    elif self._speed_bump_control_active(CS.speedBumpDistance):
       speed = int(self.autoNaviSpeedBumpSpeed)
     else:
       speed = 0
@@ -1342,6 +1347,7 @@ class CarrotServ:
     ### 과속카메라, 사고방지턱
     legacy_sdi_active = (self.xSpdLimit > 0 and (self.xSpdDist > 0 or self.xSpdType in [100, 101]) and
                          self.active_carrot > 0 and
+                         (self.xSpdType != 22 or self._speed_bump_control_active(self.xSpdDist)) and
                          not self._legacy_sdi_suppressed(self.xSpdType, vehicle_speed_camera_active, vehicle_bump_active))
     if legacy_sdi_active:
       safe_sec = self.autoNaviSpeedBumpTime if self.xSpdType == 22 else self.autoNaviSpeedCtrlEnd
