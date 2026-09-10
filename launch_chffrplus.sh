@@ -4,6 +4,22 @@ DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null && pwd )"
 
 source "$DIR/launch_env.sh"
 
+function disable_automatic_git_maintenance {
+  # Git fetch/pull can otherwise leave a detached repack running into a drive.
+  # Inherit this policy in recovery, web, manager and their Git/submodule workers
+  # without changing .git/config (which would invalidate the staging overlay).
+  local config_count="${GIT_CONFIG_COUNT:-0}"
+  local option
+  for option in gc.auto=0 gc.autoDetach=false maintenance.auto=false; do
+    export "GIT_CONFIG_KEY_${config_count}=${option%%=*}"
+    export "GIT_CONFIG_VALUE_${config_count}=${option#*=}"
+    config_count=$((config_count + 1))
+  done
+  export GIT_CONFIG_COUNT="$config_count"
+}
+
+disable_automatic_git_maintenance
+
 function cleanup_stale_git_lfs_hooks {
   # Some deployed checkouts still contain hooks installed by git-lfs even
   # though the executable is no longer part of the device image. Those hooks
