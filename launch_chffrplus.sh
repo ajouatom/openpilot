@@ -364,6 +364,12 @@ function invalidate_native_build_if_needed {
   if [ "$missing" = "1" ]; then
     FORCE_REBUILD=1
   fi
+
+  # A prebuilt checkout can retain params_pyx.so from before new keys were
+  # added. Check the loaded registry, not just the presence of native binaries.
+  if ! python3 "$DIR/openpilot/system/manager/params_check.py"; then
+    FORCE_REBUILD=1
+  fi
 }
 
 function start_manager {
@@ -505,6 +511,11 @@ function launch {
         echo -n "$BIG_MODEL_SHA" > "$DIR/openpilot/selfdrive/modeld/models/.big_model_build_stamp"
       fi
     fi
+  fi
+  # Never start driving services if a rebuild left the Params registry stale.
+  if ! python3 "$DIR/openpilot/system/manager/params_check.py"; then
+    echo "Native Params still do not match this checkout; not starting manager."
+    return 1
   fi
   start_big_model_update
   start_manager

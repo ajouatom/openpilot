@@ -7,6 +7,7 @@ import numpy as np
 from openpilot.common.realtime import DT_MDL
 from openpilot.common.constants import CV
 from openpilot.common.filter_simple import MyMovingAverage
+from openpilot.selfdrive.carrot.carrot_man_input import get_carrot_man
 from openpilot.selfdrive.carrot.t_follow import get_t_follow_mode_factor, get_t_follow_mode_max, ramp_t_follow
 from openpilot.selfdrive.carrot.radar_motion.lane_change_gap import LaneChangeGapPlan, LaneChangeGapTracker
 from openpilot.selfdrive.carrot.traffic_stop import TrafficStopModelLeadMatcher, is_traffic_stop_entry_allowed
@@ -420,8 +421,8 @@ class CarrotPlanner:
 
   def _update_carrot_man(self, sm, v_ego_kph, v_cruise_kph):
     atc_active = False
-    if sm.alive['carrotMan']:
-      carrot_man = sm['carrotMan']
+    carrot_man = get_carrot_man(sm)
+    if carrot_man is not None:
       atc_turn_left = carrot_man.atcType in ["turn left", "atc left"]
       trigger_start = self.carrot_stay_stop = False
       if atc_turn_left or sm['carState'].leftBlinker:
@@ -448,6 +449,12 @@ class CarrotPlanner:
       self.atcType = carrot_man.atcType
 
       v_cruise_kph = min(v_cruise_kph, carrot_man.desiredSpeed)
+    else:
+      self.trafficState_carrot = 0
+      self.carrot_stay_stop = False
+      self.activeCarrot = 0
+      self.xDistToTurn = 0
+      self.atcType = ""
 
     return v_cruise_kph, atc_active
 
