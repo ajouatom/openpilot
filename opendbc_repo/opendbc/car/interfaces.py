@@ -38,8 +38,10 @@ CORNER_RADAR_SLOT_DISCONTINUITY_D_REL_M = 8.0
 CORNER_RADAR_SLOT_DISCONTINUITY_Y_REL_M = 1.5
 CORNER_RADAR_SLOT_DISCONTINUITY_V_REL_MPS = 4.0
 RADAR_ACCEL_INNOVATION_LIMIT = 3.0
-RADAR_ACCEL_HISTORY_SAMPLES = 4
-RADAR_ACCEL_FILTER_RC = 0.05
+# Restore the original filtered-speed derivative and its noise attenuation.
+# Publish the current estimate without an additional output filter or frame lag.
+RADAR_SPEED_FILTER_RC = 0.10
+RADAR_ACCEL_FILTER_RC = 0.15
 RADAR_JERK_HISTORY_SECONDS = 0.50
 RADAR_JERK_HISTORY_MIN_SAMPLES = 7
 RADAR_JERK_FILTER_RC = 0.25
@@ -259,7 +261,7 @@ class MyTrack:
     self.jLead = 0.0
     self.noisy = False
     self.dt = dt
-    self.vLead_avg = FirstOrderFilter(self.vLead, 0.1, self.dt)
+    self.vLead_avg = FirstOrderFilter(self.vLead, RADAR_SPEED_FILTER_RC, self.dt)
     self.aLead_avg = FirstOrderFilter(self.aLead, RADAR_ACCEL_FILTER_RC, self.dt)
     self.jLead_avg = FirstOrderFilter(self.jLead, RADAR_JERK_FILTER_RC, self.dt)
     self.aLead_v_history: deque[float] = deque()
@@ -278,11 +280,13 @@ class MyTrack:
     self.jLead = 0.0
     self.noisy = False
     self.vLead_avg.x = self.vLead
+    self.v_lead_filtered_last = self.vLead
+    self.aLead_avg.update_alpha(0.05 if self.radar_source == "scc" else RADAR_ACCEL_FILTER_RC)
     self.aLead_avg.x = self.aLead
     self.jLead_avg.x = self.jLead
     # SCC's reusable object slot also uses acceleration innovation to detect
     # target replacement. Preserve its original three-sample discriminator.
-    self.aLead_v_history = deque(maxlen=3 if self.radar_source == "scc" else RADAR_ACCEL_HISTORY_SAMPLES)
+    self.aLead_v_history = deque(maxlen=3)
     self.aLead_v_history.append(self.vLead)
     self.jLead_v_history.clear()
     self.jLead_v_history.append(self.vLead)
@@ -333,18 +337,15 @@ class MyTrack:
       v_lead_filtered = self.vLead_avg.update(self.vLead)
       pseudo_stop = abs(v_lead_filtered) < 0.3 and abs(self.vLead - v_lead_filtered) < 0.05
 
-      self.aLead_v_history.append(self.vLead)
-      if len(self.aLead_v_history) == self.aLead_v_history.maxlen:
-        # Slope of the four equally spaced speed samples (linear least squares).
-        # Use every sample instead of differencing only two noisy endpoints.
-        # The existing acceleration filter and innovation limits remain in place.
-        if self.radar_source == "scc":
-          a_raw = (self.aLead_v_history[-1] - self.aLead_v_history[0]) / (2.0 * self.dt)
-        else:
-          v0, v1, v2, v3 = self.aLead_v_history
-          a_raw = (3.0 * (v3 - v0) + v2 - v1) / (10.0 * self.dt)
+      if self.radar_source == "scc":
+        self.aLead_v_history.append(self.vLead)
+        a_raw = ((self.aLead_v_history[-1] - self.aLead_v_history[0]) / (2.0 * self.dt)
+                 if len(self.aLead_v_history) == 3 else 0.0)
       else:
-        a_raw = 0.0
+        # Differentiate filtered speed, not the quantized raw radar samples.
+        # Together with aLead_avg this is just two first-order filters.
+        a_raw = (v_lead_filtered - self.v_lead_filtered_last) / self.dt
+      self.v_lead_filtered_last = v_lead_filtered
 
       self.noisy = abs(a_raw - self.aLead) > RADAR_ACCEL_INNOVATION_LIMIT
       accel_sample = _clip_scalar(a_raw, -10.0, 5.0) if not pseudo_stop else 0.0
