@@ -53,7 +53,7 @@ def test_manager_monitor_retries_when_messaging_is_not_built_yet(monkeypatch):
 @pytest.mark.parametrize("phase", ["building", "restarting", "busy", "ready"])
 def test_update_waits_for_manager_and_checkout_lock(monkeypatch, phase):
   from openpilot.common.repo_update import RepoBusyError
-  readiness = iter([False] if phase == "building" else [True, False] if phase == "restarting" else [True] * 4)
+  readiness = iter([False] if phase == "building" else [True, False] if phase == "restarting" else [True] * 5)
   monitor = type("Monitor", (), {"ready": lambda self: next(readiness)})()
   calls = []
 
@@ -79,6 +79,7 @@ def test_update_waits_for_manager_and_checkout_lock(monkeypatch, phase):
   monkeypatch.setattr(auto_update, "get_git_status", status)
   monkeypatch.setattr(auto_update, "repo_lock", lock)
   monkeypatch.setattr(auto_update, "prepare_repo", prepare)
+  monkeypatch.setattr(auto_update, "prepare_git_pull", lambda repo: (0, "verified", "new"))
   monkeypatch.setattr(auto_update, "_git", git)
   monkeypatch.setattr(auto_update, "_run_git_pull", pull)
   monkeypatch.setattr(auto_update, "_last_pull_at", float("-inf"))
@@ -239,9 +240,10 @@ def test_git_pull_reports_actual_update_and_records_pull_time(monkeypatch):
     (0, "new-head"),
   ])
   recorded = []
+  commands = []
 
   async def fake_git(args, timeout):
-    del args, timeout
+    commands.append(args)
     return next(responses)
 
   async def fake_notify(old_head):
@@ -256,6 +258,8 @@ def test_git_pull_reports_actual_update_and_records_pull_time(monkeypatch):
 
   assert asyncio.run(auto_update._run_git_pull("new-head")) == (True, True, "new-head")
   assert recorded == [("alert", False), ("time", None), ("notify", "old-head")]
+  assert ["merge", "--ff-only", "new-head"] in commands
+  assert not any(args[0] == "pull" for args in commands)
 
 
 def test_git_pull_failure_is_persisted_and_never_reports_update(monkeypatch):
@@ -364,13 +368,17 @@ def test_auto_update_state_survives_as_bounded_history(tmp_path, monkeypatch):
   assert len(data["auto_update_history"]) == git_state.AUTO_UPDATE_HISTORY_LIMIT
 
 
-def test_manual_pull_recovery_clears_ref_error_but_preserves_reboot_receipt(tmp_path, monkeypatch):
+@pytest.mark.parametrize("error", [
+  "fatal: couldn't find remote ref refs/heads/release-tizi-staging",
+  "fatal: Cannot fast-forward to multiple branches.",
+])
+def test_manual_pull_recovery_clears_ref_error_but_preserves_reboot_receipt(tmp_path, monkeypatch, error):
   monkeypatch.setattr(git_state, "CARROT_STATE_DIR", str(tmp_path))
   monkeypatch.setattr(git_state, "CARROT_GIT_STATE_PATH", str(tmp_path / "git.json"))
   alerts = []
   monkeypatch.setattr(auto_update, "_set_auto_update_alert", lambda show: alerts.append(show))
   git_state.write_auto_update_event(
-    "error", error_code="pull_failed", error="fatal: couldn't find remote ref refs/heads/release-tizi-staging",
+    "error", error_code="pull_failed", error=error,
     reboot_requested_head="already-requested",
   )
 
