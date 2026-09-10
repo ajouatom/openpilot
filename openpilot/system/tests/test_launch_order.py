@@ -9,6 +9,23 @@ import pytest
 from openpilot.common.basedir import BASEDIR
 
 
+def test_git_maintenance_policy_reaches_nested_services(tmp_path: Path) -> None:
+  bash = shutil.which("bash")
+  if bash is None:
+    pytest.skip("bash is unavailable")
+  source = (Path(BASEDIR) / "launch_chffrplus.sh").read_text(encoding="utf-8")
+  policy = source[source.index("function disable_automatic_git_maintenance {"):source.index("function cleanup_stale_git_lfs_hooks {")]
+  assert source.index("disable_automatic_git_maintenance\n") < source.index("function launch {")
+  env = {**os.environ, "GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_NOSYSTEM": "1", "GIT_CONFIG_COUNT": "2",
+         "GIT_CONFIG_KEY_0": "test.preserved", "GIT_CONFIG_VALUE_0": "keep",
+         "GIT_CONFIG_KEY_1": "gc.auto", "GIT_CONFIG_VALUE_1": "1"}
+  # A second shell models a web/recovery service starting its own Git child.
+  probe = "bash -c 'for key in gc.auto gc.autoDetach maintenance.auto test.preserved; do git config --get \"$key\"; done'"
+  result = subprocess.run([bash, "-c", policy + probe], cwd=tmp_path, env=env, capture_output=True, text=True, timeout=5)
+  assert result.returncode == 0, result.stdout + result.stderr
+  assert result.stdout.splitlines() == ["0", "false", "false", "keep"]
+
+
 @pytest.mark.parametrize("external, expected", [(None, "1"), ("", "1"), ("0", "0"), ("1", "1")])
 def test_web_mode_reaches_manager_without_inheriting_boot_lock(tmp_path: Path, external: str | None, expected: str) -> None:
   bash = shutil.which("bash")
