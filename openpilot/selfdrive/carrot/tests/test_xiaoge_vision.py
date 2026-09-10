@@ -279,6 +279,49 @@ def vision_service(message_transport):
   return service
 
 
+def test_runtime_settings_load_from_and_persist_to_params(vision_service):
+  class FakeParams:
+    def __init__(self):
+      self.values = {
+        "OnnxBsdThreshold": 60,
+        "OnnxBsdSmoothingMs": 300,
+        "OnnxBsdIntervalMs": 350,
+        "OnnxLaneThreshold": 40,
+        "OnnxLaneIntervalMs": 550,
+      }
+
+    def get(self, name):
+      value = self.values.get(name)
+      return None if value is None else str(value).encode()
+
+    def put_int(self, name, value):
+      self.values[name] = value
+
+  params = FakeParams()
+  vision_service.params = params
+  vision_service._refresh_settings_from_params(force=True)
+  assert vision_service.threshold == 0.60
+  assert vision_service.smoothing_seconds == 0.30
+  assert vision_service.base_interval_seconds == 0.35
+  assert vision_service.lane_threshold == 0.40
+  assert vision_service.lane_interval_seconds == 0.55
+
+  vision_service.set_settings({
+    "threshold": 0.5,
+    "smoothingSeconds": 0.2,
+    "baseIntervalSeconds": 0.15,
+    "laneThreshold": 0.3,
+    "laneIntervalSeconds": 0.45,
+  })
+  assert params.values == {
+    "OnnxBsdThreshold": 50,
+    "OnnxBsdSmoothingMs": 200,
+    "OnnxBsdIntervalMs": 150,
+    "OnnxLaneThreshold": 30,
+    "OnnxLaneIntervalMs": 450,
+  }
+
+
 @pytest.mark.parametrize("stream", ["road", "wide"])
 def test_snapshot_waits_for_camera_busy_longer_than_one_second(vision_service, stream):
   service = vision_service

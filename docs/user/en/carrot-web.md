@@ -98,6 +98,7 @@ See [Understanding Settings](settings.md) for ranges, units, and a safe tuning o
 ## Tools page
 
 Tools contains management actions that can immediately change device or repository state.
+Manage `ONNX Lane and BSD Detection` in **Settings → Driving → Steering → ONNX Lane & BSD**, not through a Tools shortcut.
 
 ### Quick actions
 

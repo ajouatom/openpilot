@@ -78,7 +78,7 @@ export function createSettingsDerivedModel(options = {}) {
   }
 
   function getFavoriteEntries() {
-    return favorites.map(findItemByName).filter(Boolean);
+    return favorites.map(findItemByName).filter((entry) => entry && !entry.item?.detail_parent);
   }
 
   function getProfileEntries(profile) {
@@ -155,7 +155,21 @@ export function createSettingsDerivedModel(options = {}) {
     if (group === SETTING_DERIVED_IDS.favoritesGroup) return getFavoriteEntries();
     const profile = getProfileByGroup(group);
     if (profile) return getProfileEntries(profile);
-    return (itemsByGroup[group] || []).map((item) => ({ group, item }));
+    return (itemsByGroup[group] || [])
+      .filter((item) => !item?.detail_parent)
+      .map((item) => ({ group, item }));
+  }
+
+  function getDetailEntries(group, parentName) {
+    const target = String(parentName || "").trim();
+    if (!target || isProfileGroup(group) || group === SETTING_DERIVED_IDS.favoritesGroup) {
+      return getItemEntriesForGroup(group).filter((entry) => entry.item?.name === target);
+    }
+    const items = itemsByGroup[group] || [];
+    const parent = items.find((item) => item?.name === target && !item?.detail_parent);
+    if (!parent) return [];
+    return [parent, ...items.filter((item) => String(item?.detail_parent || "") === target)]
+      .map((item) => ({ group, item }));
   }
 
   function getGroupMeta(group) {
@@ -233,6 +247,7 @@ export function createSettingsDerivedModel(options = {}) {
     groups.forEach((groupMeta) => {
       const group = groupMeta.group;
       (itemsByGroup[group] || []).forEach((item) => {
+        if (item?.detail_parent) return;
         entries.push(makeSearchEntry({ source: "carrot", group, item, sourceLabels: resolvedLabels }));
       });
     });
@@ -262,6 +277,7 @@ export function createSettingsDerivedModel(options = {}) {
     getValidFavoriteNames,
     getGroupsForDisplay,
     getItemEntriesForGroup,
+    getDetailEntries,
     getGroupMeta,
     getGroupLabel,
     getItemContextLabel,
