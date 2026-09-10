@@ -12,6 +12,9 @@ def _serv(mode):
   serv.vehicleNaviSchoolZoneControl = False
   serv.autoNaviSpeedSafetyFactor = 1.05
   serv.autoNaviSpeedBumpSpeed = 25
+  serv.autoNaviSpeedBumpTime = 1
+  serv.autoNaviSpeedBumpEndDistance = 2
+  serv.autoNaviSpeedCtrlMode = 2
   serv.autoCurveSpeedLowerLimit = 30
   serv.autoNaviSpeedCtrlEnd = 6
   serv.autoNaviSpeedDecelRate = 2.0
@@ -135,6 +138,29 @@ def test_vehicle_navi_bump_countdown_follows_countdown_mode():
   assert serv._speed_countdown_distance(CS) == 0
   serv.autoNaviCountDownMode = 2
   assert serv._speed_countdown_distance(CS) == 120
+
+
+@pytest.mark.parametrize(("distance", "expected"), (
+  (0, False),
+  (1.99, False),
+  (2.0, False),
+  (2.01, True),
+))
+def test_speed_bump_control_releases_at_configured_distance(distance, expected):
+  serv = _serv(1)
+  CS = _car_state()
+  CS.speedBumpDistance = distance
+
+  assert serv._vehicle_speed_bump_enabled(CS) is expected
+
+
+def test_vehicle_navigation_display_releases_bump_at_configured_distance():
+  serv = _serv(1)
+  CS = _car_state()
+  CS.vehicleNaviActive = True
+  CS.speedBumpDistance = 2
+
+  assert serv._vehicle_navigation_display(CS) == (False, 0, False)
 
 
 def test_countdown_idle_reset_rearms_same_second_for_next_camera():
