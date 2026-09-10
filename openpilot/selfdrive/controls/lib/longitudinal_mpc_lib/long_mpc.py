@@ -583,7 +583,7 @@ class LongitudinalMpc:
       )
       state = self.lead_gap_states[lead_index]
       state.update(level=carrot.leadAccelResponse, track_id=lead.radarTrackId, enabled=eligible, dt=self.dt,
-                   ego_speed=v_ego, lead_speed=lead.vLead if eligible else 0.0, lead_accel=lead.aLeadK,
+                   ego_speed=v_ego, lead_speed=lead.vLead if eligible else 0.0, relative_speed=lead.vRel if eligible else 0.0,
                    distance=lead.dRel if eligible else 0.0, desired_distance=self.base_desired_distances[lead_index], base_tf=t_follow)
       self.lead_gap_margins[:,lead_index] = state.margins(
         level=carrot.leadAccelResponse, times=T_IDXS, ego_speeds=gap_v, lead_speeds=lead_xv[:,1], base_tf=t_follow)
