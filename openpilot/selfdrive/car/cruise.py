@@ -3,6 +3,7 @@ import numpy as np
 
 from openpilot.cereal import car
 from openpilot.common.constants import CV
+from openpilot.selfdrive.carrot.carrot_man_input import get_carrot_man
 
 from opendbc.car import structs
 GearShifter = structs.CarState.GearShifter
@@ -301,6 +302,20 @@ class VCruiseCarrot:
           cruiseSpeed1 = self.nRoadLimitSpeed + self.autoRoadSpeedLimitOffset
       self._cruise_speed_table = [cruiseSpeed1, cruiseSpeed2, cruiseSpeed3, cruiseSpeed4, cruiseSpeed5]
 
+  def _update_carrot_man(self, sm):
+    carrot_man = get_carrot_man(sm)
+    if carrot_man is not None:
+      self.nRoadLimitSpeed = carrot_man.nRoadLimitSpeed
+      self.desiredSpeed = carrot_man.desiredSpeed
+      self.carrot_cmd_index = carrot_man.carrotCmdIndex
+      self.carrot_cmd = carrot_man.carrotCmd
+      self.carrot_arg = carrot_man.carrotArg
+    else:
+      self.nRoadLimitSpeed = 0
+      self.desiredSpeed = 250
+      self.carrot_cmd = ""
+      self.carrot_arg = ""
+
   def update_v_cruise(self, CS, sm, is_metric):
     self._add_log("")
     self.update_params(is_metric)
@@ -320,13 +335,7 @@ class VCruiseCarrot:
       self.autoCruiseControl_cancel_timer = max(0, self.autoCruiseControl_cancel_timer - 1)
 
     CC = sm['carControl']
-    if sm.alive['carrotMan']:
-      carrot_man = sm['carrotMan']
-      self.nRoadLimitSpeed = carrot_man.nRoadLimitSpeed
-      self.desiredSpeed = carrot_man.desiredSpeed
-      self.carrot_cmd_index = carrot_man.carrotCmdIndex
-      self.carrot_cmd = carrot_man.carrotCmd
-      self.carrot_arg = carrot_man.carrotArg
+    self._update_carrot_man(sm)
     if sm.alive['longitudinalPlan']:
       lp = sm['longitudinalPlan']
       self.xState = lp.xState
