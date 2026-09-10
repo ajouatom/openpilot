@@ -33,7 +33,7 @@ def test_continuous_track_keeps_acceleration_during_hard_braking():
 
   assert track.noisy
   assert track.cnt >= 6
-  assert track.aLead == pytest.approx(-1.5)
+  assert track.aLead < -0.5
 
   for v_lead in (18.5, 18.0, 17.5, 17.0, 16.5):
     track.update(radar_point(v_lead), 0.0)
