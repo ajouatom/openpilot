@@ -7,7 +7,7 @@ from opendbc.can import CANParser
 from opendbc.car import Bus
 from opendbc.car.hyundai.carstate import (
   CANFD_HDA_INFO_MSG, CANFD_NAVI_PROFILE_MSG, CANFD_NAVI_STATUS_MSG, CarState,
-  VEHICLE_NAVI_POSITION_TIMEOUT_NS, VEHICLE_NAVI_SCHOOL_ZONE_MAX_DISTANCE,
+  VEHICLE_NAVI_POSITION_TIMEOUT_NS, VEHICLE_NAVI_ROUTE_TIMEOUT_NS, VEHICLE_NAVI_SCHOOL_ZONE_MAX_DISTANCE,
   VEHICLE_SPEED_CAMERA_PARAM_UPDATE_FRAMES, is_canfd_navi_camera_active,
 )
 from opendbc.car.hyundai.values import CAR, HyundaiFlags
@@ -24,11 +24,11 @@ class FakeParams:
     if key == "VehicleSpeedCameraDistanceTime":
       self.read_count += 1
       return self.value
+    if key == "VehicleNaviCanControl":
+      return int(self.vehicle_navi)
     raise KeyError(key)
 
   def get_bool(self, key):
-    if key == "VehicleNaviCanControl":
-      return self.vehicle_navi
     assert key == "VehicleNaviSchoolZoneControl"
     return self.school_zone
 
@@ -47,6 +47,8 @@ def _car_state(distance_time_tenths=60):
   state.vehicleNaviProfileTimestamp = 0
   state.vehicleNaviAvailable = False
   state.vehicleNaviRouteResetTimestamp = 0
+  state.vehicleNaviRouteState = 0
+  state.vehicleNaviRoutePathIndex = None
   state.vehicleNaviRoadClass = 7
   state.vehicleNaviCameraTarget = None
   state.vehicleNaviCameraStatusEvent = None
@@ -227,10 +229,11 @@ def test_vehicle_navi_profile_decodes_labeled_speed_bump_frame():
     "PROLONG_OFFSET": (value >> 32) & 0x1fff,
     "PROLONG_CYCLIC_COUNTER": (value >> 45) & 0x3,
     "PROLONG_UPDATE": (value >> 47) & 0x1,
+    "PROLONG_PATH_INDEX": (value >> 48) & 0x3f,
     "PROLONG_PROFILE_TYPE": (value >> 54) & 0x1f,
   })
 
-  assert profile == {"value": 6, "offset": 890, "counter": 3, "update": 1, "profile_type": 16}
+  assert profile == {"value": 6, "offset": 890, "counter": 3, "update": 1, "path_index": 8, "profile_type": 16}
   assert CarState._classify_vehicle_navi_profile(profile) == ("bump", 0, 6)
 
 
@@ -241,6 +244,93 @@ def test_vehicle_navi_segment_decodes_functional_road_class():
   })
 
   assert segment == {"offset": 123, "path_index": 0, "calculated_route": 1, "functional_road_class": 1}
+
+
+# 00000f07--e42270f2b5--2 reported the false bump as route state 0 with
+# segment/profile path 8. Modes 2 and 3 must reject that combination.
+@pytest.mark.parametrize(("mode", "value", "route_state", "segment_path", "profile_path", "expected"), (
+  (1, 6, 0, 8, 8, True),
+  (2, 0xB1, 0, 8, 8, True),
+  (2, 6, 0, 8, 8, False),
+  (2, 6, 1, 8, 8, True),
+  (2, 6, 1, 8, 9, False),
+  (3, 0xB1, 0, 8, 8, False),
+  (3, 0xB1, 1, 8, 8, True),
+  (3, 6, 1, 8, 8, True),
+))
+def test_vehicle_navi_control_mode_filters_profiles_by_calculated_route(
+    mode, value, route_state, segment_path, profile_path, expected,
+):
+  state = _car_state()
+  state.vehicleNaviCanControl = mode
+  segment_raw = (segment_path << 13) | (route_state << 22) | (6 << 24)
+  state.navi_segment_4b9 = {
+    f"BYTE_{i + 1}": byte for i, byte in enumerate(segment_raw.to_bytes(8, "little"))
+  }
+  state.navi_profile_4be = {
+    "PROLONG_VALUE": value,
+    "PROLONG_OFFSET": 300,
+    "PROLONG_CYCLIC_COUNTER": 3,
+    "PROLONG_UPDATE": 1,
+    "PROLONG_PATH_INDEX": profile_path,
+    "PROLONG_PROFILE_TYPE": 16,
+  }
+  cp = SimpleNamespace(ts_nanos={
+    "NEW_MSG_4B9": {"BYTE_1": 1},
+    "NEW_MSG_4BE": {"PROLONG_VALUE": 2},
+  })
+  ret = SimpleNamespace(speedLimit=0.0, speedBumpDistance=0.0, schoolZoneActive=False)
+
+  state._update_vehicle_navi_events(cp, ret, False)
+
+  assert bool(state.vehicleNaviEvents) is expected
+  if value == 6:
+    assert (ret.speedBumpDistance > 0) is expected
+  else:
+    assert (ret.vehicleNaviSpeed > 0) is expected
+
+
+@pytest.mark.parametrize(("mode", "remaining_types"), (
+  (2, {"camera"}),
+  (3, set()),
+))
+def test_vehicle_navi_leaving_calculated_route_clears_route_filtered_events(mode, remaining_types):
+  state = _car_state()
+  state.vehicleNaviCanControl = mode
+  state.vehicleNaviRouteState = 1
+  state.vehicleNaviRoutePathIndex = 8
+  state.vehicleNaviEvents = [
+    {"type": "camera", "speed": 50, "kind": 1, "target": 300.0},
+    {"type": "bump", "speed": 0, "kind": 6, "target": 200.0},
+  ]
+  segment_raw = (8 << 13) | (0 << 22) | (6 << 24)
+  state.navi_segment_4b9 = {
+    f"BYTE_{i + 1}": byte for i, byte in enumerate(segment_raw.to_bytes(8, "little"))
+  }
+  cp = SimpleNamespace(ts_nanos={"NEW_MSG_4B9": {"BYTE_1": 1}})
+  ret = SimpleNamespace(speedLimit=0.0, speedBumpDistance=0.0, schoolZoneActive=False)
+
+  state._update_vehicle_navi_events(cp, ret, False)
+
+  assert {event["type"] for event in state.vehicleNaviEvents} == remaining_types
+
+
+def test_vehicle_navi_stale_calculated_route_rejects_route_filtered_bump():
+  state = _car_state()
+  state.vehicleNaviCanControl = 2
+  state.vehicleNaviRouteState = 1
+  state.vehicleNaviRoutePathIndex = 8
+  state.vehicleNaviSegmentTimestamp = 1_000_000_000
+  state.vehicleNaviEvents = [{"type": "bump", "speed": 0, "kind": 6, "target": 200.0}]
+  cp = SimpleNamespace(ts_nanos={}, _last_update_nanos=1_000_000_000 + VEHICLE_NAVI_ROUTE_TIMEOUT_NS + 1)
+  ret = SimpleNamespace(speedLimit=0.0, speedBumpDistance=0.0, schoolZoneActive=False)
+
+  state._update_vehicle_navi_events(cp, ret, False)
+
+  assert state.vehicleNaviRouteState == 0
+  assert state.vehicleNaviRoutePathIndex is None
+  assert state.vehicleNaviEvents == []
+  assert ret.speedBumpDistance == 0
 
 
 def test_vehicle_navi_route_recalculation_clears_events():
@@ -583,14 +673,14 @@ def test_pv5_canfd_navi_dbc_decodes_logged_frames():
   assert hda_info["MapSource"] == 2
 
   profile = CarState._decode_vehicle_navi_profile(parser.vl[CANFD_NAVI_PROFILE_MSG])
-  assert profile == {"value": 0xB0, "offset": 1996, "counter": 3, "update": 1, "profile_type": 16}
+  assert profile == {"value": 0xB0, "offset": 1996, "counter": 3, "update": 1, "path_index": 8, "profile_type": 16}
   assert CarState._classify_vehicle_navi_profile(profile) == ("camera", 50, 0)
 
   parser.update([1_010_000_000, [
     (0x093, bytes.fromhex("c27c44ffffffffff060000007ae30814ffffffffffffffff"), 0),
   ]])
   bump = CarState._decode_vehicle_navi_profile(parser.vl[CANFD_NAVI_PROFILE_MSG])
-  assert bump == {"value": 6, "offset": 890, "counter": 3, "update": 1, "profile_type": 16}
+  assert bump == {"value": 6, "offset": 890, "counter": 3, "update": 1, "path_index": 8, "profile_type": 16}
   assert CarState._classify_vehicle_navi_profile(bump) == ("bump", 0, 6)
 
 
