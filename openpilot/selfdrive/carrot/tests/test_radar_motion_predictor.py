@@ -3314,6 +3314,59 @@ def test_stationary_front_rejects_opposite_side_uncertain_vision_match() -> None
   assert matcher.stationary_identity is None
 
 
+@pytest.mark.parametrize("distance,vision_speed,corner,expected", (
+  (20.0, 8.5, False, False),
+  (20.0, 0.0, False, True),
+  (20.0, 8.5, True, True),
+  (90.0, 8.5, False, True),
+))
+def test_near_stationary_front_cannot_borrow_precise_moving_vision(
+  distance, vision_speed, corner, expected,
+) -> None:
+  matcher = VisionRadarMatcher()
+  matches = []
+  for index in range(20):
+    time_s = index * 0.05
+    d_rel = distance - 8.0 * time_s
+    points = [Point(33, d_rel, 0.0, v_rel=-8.0, source="frontRadar")]
+    if corner:
+      points.append(Point(1033, d_rel + 0.2, 0.1, v_rel=-8.0, source="corner235"))
+    snapshots = snapshot_radar_points(points, v_ego=8.0)
+    model = model_with_lead(d_rel + 0.5, 0.5, vision_speed, probability=0.99)
+    model.leadsV3[0].vStd = (0.8,)
+    matches.append(matcher.match(
+      model, snapshots[:1], STRAIGHT_PATH, time_s=time_s,
+      stationary_points=snapshots, prefer_primary_stationary=True,
+      yaw_rate_rad_s=0.04,
+    ))
+  assert (matches[-1] is not None) == expected
+  if not expected:
+    assert all(match is None for match in matches)
+
+
+def test_near_stationary_speed_conflict_revokes_pending_and_held_identity() -> None:
+  for seed_frames in (3, 10):
+    matcher = VisionRadarMatcher()
+    for index in range(seed_frames + 8):
+      time_s = index * 0.05
+      points = snapshot_radar_points(
+        (Point(33, 25.0 - 8.0 * time_s, 0.0, v_rel=-8.0),), v_ego=8.0,
+      )
+      conflict = index >= seed_frames
+      model = model_with_lead(points[0].d_rel, 0.0, 8.5 if conflict else 0.0, probability=0.99)
+      model.leadsV3[0].vStd = (0.8,)
+      match = matcher.match(
+        model, points, STRAIGHT_PATH, time_s=time_s,
+        stationary_points=points, prefer_primary_stationary=True,
+      )
+      if conflict:
+        assert match is None
+        assert matcher.stationary_identity is None
+        assert matcher._stationary_pending_identity is None
+      elif index == seed_frames - 1 and seed_frames == 10:
+        assert match is not None
+
+
 def test_stationary_front_rejects_offset_moving_vision_median_reflection() -> None:
   matcher = VisionRadarMatcher()
   for index in range(8):
