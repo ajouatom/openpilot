@@ -33,6 +33,7 @@ from openpilot.selfdrive.modeld.modeld import LAT_SMOOTH_SECONDS
 from openpilot.selfdrive.locationd.helpers import PoseCalibrator, Pose
 
 from openpilot.selfdrive.carrot.carrot_controls import CarrotControls
+from openpilot.selfdrive.carrot.carrot_man_input import get_carrot_man
 
 State = log.SelfdriveState.OpenpilotState
 LaneChangeState = log.LaneChangeState
@@ -283,7 +284,8 @@ class Controls:
     CC.cruiseControl.override = CC.enabled and not CC.longActive and self.CP.openpilotLongitudinalControl
     CC.cruiseControl.cancel = CS.cruiseState.enabled and (not CC.enabled or not self.CP.pcmCruise)
 
-    desired_kph = min(CS.vCruiseCluster, self.sm['carrotMan'].desiredSpeed)
+    carrot_man = get_carrot_man(self.sm)
+    desired_kph = CS.vCruiseCluster if carrot_man is None else min(CS.vCruiseCluster, carrot_man.desiredSpeed)
     setSpeed = float(desired_kph * CV.KPH_TO_MS)
     speeds = self.sm['longitudinalPlan'].speeds
     if len(speeds):
