@@ -9,7 +9,7 @@ import types
 
 import pytest
 
-from openpilot.selfdrive.carrot.server.services.git_config import repair_git_config
+from openpilot.selfdrive.carrot.server.services.git_config import prepare_git_pull, repair_git_config
 
 
 def git(repo, *args, check=True):
@@ -272,7 +272,8 @@ def test_web_reset_repairs_migration_before_requested_reset(web_dispatcher, api,
 
   assert result["ok"], result
   assert git(device, "rev-parse", "--abbrev-ref", "@{upstream}") == "origin/carrot-wip"
-  assert commands.index(["git", "fetch", "--prune", "--no-recurse-submodules", "origin"]) < commands.index(["git", "reset", f"--{mode}", "HEAD"])
+  fetch = ["git", "fetch", "--prune", "--no-recurse-submodules", "origin", "+refs/heads/carrot-wip:refs/remotes/origin/carrot-wip"]
+  assert commands.index(fetch) < commands.index(["git", "reset", f"--{mode}", "HEAD"])
   assert (device / "version.txt").read_text() == ("old\n" if mode == "hard" else "user change\n")
 
 
@@ -309,3 +310,148 @@ def test_web_remote_change_removes_inherited_fetch_ref(web_dispatcher, api, acti
   result = dispatch(dispatcher, api, action, name="origin", url=url)
   assert result["ok"], result
   git(device, "fetch", "origin")
+
+
+def add_other_model(device):
+  seed = device.parent / "seed"
+  remote = device.parent / "origin.git"
+  git(seed, "checkout", "-b", "carrot-other", "HEAD~1")
+  (seed / "other-model.txt").write_text("other model only\n")
+  git(seed, "add", "other-model.txt")
+  git(seed, "commit", "-qm", "other model")
+  git(seed, "push", str(remote), "carrot-other")
+  git(device, "config", "--replace-all", "remote.origin.fetch", "+refs/heads/*:refs/remotes/origin/*")
+  return git(seed, "rev-parse", "carrot-wip")
+
+
+@pytest.mark.parametrize("api", ["job", "sync"])
+@pytest.mark.parametrize("duplicate_tracking", [False, True])
+def test_pull_applies_only_selected_model_despite_multiple_fetch_heads(web_dispatcher, monkeypatch, api, duplicate_tracking):
+  dispatcher, device, commands = web_dispatcher
+  expected = add_other_model(device)
+  if duplicate_tracking:
+    git(device, "config", "--add", "branch.carrot-wip.merge", "refs/heads/carrot-other")
+    failed = git(device, "pull", "--ff-only", check=False)
+    assert failed.returncode != 0
+    assert "Cannot fast-forward to multiple branches" in failed.stderr
+
+  def prepare(repo):
+    result = prepare_git_pull(repo)
+    # Reproduce an unrelated fetch changing FETCH_HEAD after target selection.
+    git(device, "fetch", "origin", "carrot-wip", "carrot-other")
+    assert len((device / ".git/FETCH_HEAD").read_text().splitlines()) == 2
+    return result
+
+  monkeypatch.setattr(dispatcher, "prepare_git_pull", prepare)
+  result = dispatch(dispatcher, api, "git_pull")
+  assert result["ok"], result
+  assert git(device, "rev-parse", "HEAD") == expected
+  assert git(device, "branch", "--show-current") == "carrot-wip"
+  assert git(device, "config", "--get-all", "branch.carrot-wip.merge") == "refs/heads/carrot-wip"
+  assert not (device / "other-model.txt").exists()
+  assert ["git", "merge", "--ff-only", expected] in commands
+
+
+def test_ambiguous_tracking_without_exact_branch_does_not_guess_model(tmp_path):
+  _, _, device = checkout(tmp_path)
+  add_other_model(device)
+  git(device, "branch", "-m", "unknown-model")
+  git(device, "config", "--add", "branch.unknown-model.merge", "refs/heads/carrot-other")
+  config = (device / ".git/config").read_bytes()
+  before = git(device, "rev-parse", "HEAD")
+  rc, output, target = prepare_git_pull(str(device))
+  assert rc != 0 and not target, output
+  assert (device / ".git/config").read_bytes() == config
+  assert git(device, "rev-parse", "HEAD") == before
+
+
+def test_auto_update_repairs_tracking_and_ignores_unrelated_fetch(web_dispatcher, monkeypatch):
+  from openpilot.selfdrive.carrot.server.services import auto_update, git_status
+
+  _, device, commands = web_dispatcher
+  expected = add_other_model(device)
+  git(device, "config", "--add", "branch.carrot-wip.merge", "refs/heads/carrot-other")
+  events = []
+
+  async def run_git(args, timeout=10):  # noqa: ASYNC109 -- matches the production Git adapter
+    proc = await asyncio.to_thread(subprocess.run, ["git", *args], cwd="/data/openpilot", capture_output=True, text=True, timeout=timeout)
+    return proc.returncode, (proc.stdout + proc.stderr).strip()
+
+  async def notify(head):
+    pass
+
+  def prepare(repo):
+    result = prepare_git_pull(repo)
+    git(device, "fetch", "origin", "carrot-wip", "carrot-other")
+    return result
+
+  monkeypatch.setattr(git_status, "_git", run_git)
+  monkeypatch.setattr(auto_update, "_git", run_git)
+  monkeypatch.setattr(auto_update, "get_git_status", git_status._read_status)
+  monkeypatch.setattr(auto_update, "prepare_git_pull", prepare)
+  monkeypatch.setattr(auto_update, "read_auto_update_state", dict)
+  monkeypatch.setattr(auto_update, "write_auto_update_event", lambda status, **fields: events.append(status) or {"status": status})
+  monkeypatch.setattr(auto_update, "_set_auto_update_alert", lambda *args: None)
+  monkeypatch.setattr(auto_update, "write_git_pull_time", lambda: None)
+  monkeypatch.setattr(auto_update, "_notify_cwp", notify)
+  monkeypatch.setattr(auto_update, "_last_pull_at", float("-inf"))
+  assert asyncio.run(auto_update._attempt_update(types.SimpleNamespace(ready=lambda: True))) == (True, True, expected)
+  assert events == ["pulling", "updated"]
+  assert git(device, "rev-parse", "HEAD") == expected
+  assert not (device / "other-model.txt").exists()
+  assert ["git", "merge", "--ff-only", expected] in commands
+
+
+def test_recovery_pull_uses_same_selected_branch_repair(tmp_path, monkeypatch):
+  from openpilot.selfdrive.carrot.server.services import git_config
+  _, _, device = checkout(tmp_path)
+  expected = add_other_model(device)
+  git(device, "config", "--add", "branch.carrot-wip.merge", "refs/heads/carrot-other")
+  monkeypatch.chdir(device)
+  assert git_config.main() == 0
+  assert git(device, "rev-parse", "HEAD") == expected
+  assert not (device / "other-model.txt").exists()
+
+
+def test_duplicate_tracking_preserves_valid_renamed_branch_and_remote(tmp_path):
+  _, _, device = checkout(tmp_path)
+  git(device, "branch", "-m", "my-local-branch")
+  git(device, "remote", "rename", "origin", "my-fork")
+  git(device, "config", "--add", "branch.my-local-branch.merge", "refs/heads/carrot-wip")
+  rc, output, target = prepare_git_pull(str(device))
+  assert rc == 0, output
+  assert target == git(device, "rev-parse", "refs/remotes/my-fork/carrot-wip")
+  assert git(device, "config", "--get-all", "branch.my-local-branch.merge") == "refs/heads/carrot-wip"
+  assert git(device, "branch", "--show-current") == "my-local-branch"
+
+
+def test_duplicate_tracking_is_not_repaired_before_successful_fetch(tmp_path, monkeypatch):
+  _, _, device = checkout(tmp_path)
+  add_other_model(device)
+  git(device, "config", "--add", "branch.carrot-wip.merge", "refs/heads/carrot-other")
+  before = (device / ".git/config").read_bytes()
+  original = subprocess.run
+
+  def fail_fetch(args, **kwargs):
+    if args[:2] == ["git", "fetch"]:
+      return subprocess.CompletedProcess(args, 1, "", "offline")
+    return original(args, **kwargs)
+
+  monkeypatch.setattr(subprocess, "run", fail_fetch)
+  rc, output, target = prepare_git_pull(str(device))
+  assert rc != 0 and not target, output
+  assert (device / ".git/config").read_bytes() == before
+
+
+@pytest.mark.parametrize("api", ["job", "sync"])
+def test_pull_refuses_divergence_without_merging_other_history(web_dispatcher, api):
+  dispatcher, device, _ = web_dispatcher
+  git(device, "config", "user.name", "Local change")
+  git(device, "config", "user.email", "test@example.invalid")
+  (device / "local.txt").write_text("local commit\n")
+  git(device, "add", "local.txt")
+  git(device, "commit", "-qm", "local commit")
+  before = git(device, "rev-parse", "HEAD")
+  result = dispatch(dispatcher, api, "git_pull")
+  assert not result["ok"], result
+  assert git(device, "rev-parse", "HEAD") == before
