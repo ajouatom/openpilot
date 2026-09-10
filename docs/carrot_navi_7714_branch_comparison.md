@@ -121,6 +121,22 @@ bump ...` 구조라서, 적용 가능한 primary camera 또는 section이 있으
 
 ## 상태 유지와 clear 차이
 
+### carrotMan 미수신·중단 시 속도 적용 방어 (2026-09-10)
+
+`carrot-wip`의 플래너·크루즈·제어 출력은 `carrotMan`을 실제 수신했고, 메시지가 valid/alive이며,
+수신 후 1초 이내이고 `desiredSpeed`가 1..250 km/h인 경우에만 내비 속도 상한을 적용한다.
+`carrotMan`은 frequency 0 서비스여서 SubMaster의 alive/valid 초기값만으로 수신 여부를 판단할 수 없다.
+미수신 또는 중단 시 설정속도를 유지하고 내비 회전·신호 상태와 크루즈의 내비 속도/명령을 정리한다.
+모델 신호 정지와 전방 차량에 따른 감속 판단은 별도로 유지한다. 이 방어는 7713/7714의 개별
+입력 만료 규칙이 아니라, 두 입력을 처리하는 `carrot_man` 서비스 자체의 발행 상태 검사다.
+
+차량 시작 시에는 소스 `params_keys.h`와 로드한 네이티브 Params 키 목록을 대조한다.
+불일치하면 prebuilt 여부와 무관하게 SCons를 실행하고, 빌드 후에도 불일치하면 manager를 시작하지 않는다.
+이는 새 키를 모르는 바이너리에서 `carrot_man`이 `UnknownKeyName`으로 반복 종료되는 상황을 방지한다.
+검증: `test_carrot_man_input.py`, `test_params_check.py`. 이 변경을 `navi-stream`에 적용했다는 뜻은 아니다.
+
+### 기존 7714 입력 상태 정책
+
 - `carrot-wip`의 control 활성 판정은 speed/current/next presence만 본다.
 - `navi-stream`은 여기에 `guidance_active`와 route presence를 포함하여 route-only 상태도 active로 유지한다.
 - `navi-stream`은 disconnect에서 speed/TBT 외에도 7714 route ownership, vehicle freshness, 남은
