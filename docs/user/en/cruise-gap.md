@@ -249,11 +249,13 @@ Boost ends immediately at the TF target distance, when lead acceleration ends, o
 
 Levels 4–5 prioritize the selected `TFollowGap1`–`TFollowGap4` while a stable lead accelerates and the gap opens. Levels 1–3 retain normal speed/mode TF processing. `CruiseMaxVals`, curve, cut-in, lead-distance and danger-distance limits, and deceleration preview remain active. No acceleration is added after MPC. This setting does not change `AChangeCostStarting` or PID gains. Lower levels do not delay braking required by an urgent approach.
 
-Levels 0–4 capture half of the excess over the base following distance when acquiring a radar lead or departing from a stop. Base TF plus extra TF is capped at 2.5 seconds without reducing a larger base TF. A first-order filter recovers the extra TF, most slowly at level 0. A stopped lead retains it; a slow lead recovers it more slowly. Level 5 adds no extra TF. This replaces the previous relative-closing-speed distance allowance rather than stacking with it.
+Levels 0–4 capture half of the excess over the base following distance when acquiring a radar lead or while the measured following gap opens. Base TF plus extra TF is capped at 2.5 seconds without reducing a larger base TF. A first-order filter recovers the extra TF even while the gap opens, most slowly at level 0. A large gap alone does not repeatedly refill it. A stopped lead retains it; a slow lead recovers it more slowly. Level 5 adds no extra TF. This replaces the previous relative-closing-speed distance allowance rather than stacking with it.
 
 Headroom applies to a stable radar lead in normal ACC. Accelerator override, disengagement, forced deceleration and lane changes disable it. Unlike acceleration boost, it also applies at level 0 and during stopping. Target loss/replacement or a level change does not transfer the old allowance.
 
-Acquisition allowance ramps in over 0.8 seconds. During departure, headroom is accepted early and further increases are limited to 0.5 TF seconds per second. Once ego is moving, lead acceleration at or below 0.5m/s² or matching lead speed ends launch collection. The same gap or small acceleration fluctuations cannot continually refill it afterward.
+Acquisition allowance ramps in over 0.8 seconds. Afterward, a larger candidate is accepted when measured relative speed, filtered with a 0.3-second time constant, exceeds 0.2m/s; further increases are limited to 0.5 TF seconds per second. A brief lead-acceleration lull does not end capture while the gap keeps opening, and renewed opening can capture more headroom.
+
+Stored extra TF continues recovering during capture. A constant or closing gap does not refill it. A newly acquired slower or stopped lead can receive initial headroom without an opening gap. The stopped-lead hold rule is described below.
 
 | Level | Base recovery time constant | Extra TF |
 |---|---:|---|

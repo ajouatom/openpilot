@@ -50,11 +50,12 @@ def load_mpc_update(path):
 
 def run_update(cls, level=1, *, distance=45.15, speed=79.04/3.6, lead_speed=None,
                frames=10, status=True, radar=True, enabled=True, reset=False, lane_change=False, mode='acc', lead_index=0,
-               lead_accel=0., driving_mode=3, ego_accel=0., gap_enabled=True):
+               lead_accel=0., driving_mode=3, ego_accel=0., gap_enabled=True, relative_speed=None):
   if lead_speed is None:
     lead_speed = speed-1.96
   lead = SimpleNamespace(status=status, radar=radar, radarTrackId=49, dRel=distance, vLead=lead_speed,
-                         vRel=lead_speed-speed, aLeadK=lead_accel, aLeadTau=1.5, modelProb=1.)
+                         vRel=lead_speed-speed if relative_speed is None else relative_speed,
+                         aLeadK=lead_accel, aLeadTau=1.5, modelProb=1.)
   absent = SimpleNamespace(status=False, radar=False, radarTrackId=-1, vRel=0., aLeadK=0., modelProb=0.)
   rs = SimpleNamespace(leadOne=lead if lead_index == 0 else absent, leadTwo=lead if lead_index == 1 else absent)
   carrot = SimpleNamespace(leadAccelResponse=level, myDrivingMode=driving_mode, jerk_factor=1., comfort_brake=2.4, stop_distance=6.,
@@ -76,8 +77,9 @@ def mpc_class():
 
 def step(state, **kwargs):
   args = {'level': 0, 'track_id': 49, 'enabled': True, 'dt': .05, 'ego_speed': 10., 'lead_speed': 10.,
-          'lead_accel': 0., 'distance': 40., 'desired_distance': 20., 'base_tf': .6}
+          'distance': 40., 'desired_distance': 20., 'base_tf': .6}
   args.update(kwargs)
+  args.setdefault('relative_speed', args['lead_speed'] - args['ego_speed'])
   return state.update(**args)
 
 
@@ -145,24 +147,65 @@ def test_filter_respects_elapsed_time_at_different_planner_rates():
   assert max(values)-min(values) < .004
 
 
-def test_launch_captures_before_acceleration_ends_then_noise_cannot_restart_it():
+def test_opening_recaptures_after_departure_and_later_reacceleration():
   state = LeadGapState()
   step(state, ego_speed=0., lead_speed=0., distance=6., desired_distance=6.)
-  for _ in range(8):
-    step(state, ego_speed=.1, lead_speed=.8, lead_accel=1.5, distance=7., desired_distance=6.)
-  assert state.launching and state.extra_tf > 0.
-  before = state.extra_tf
-  step(state, ego_speed=1., lead_speed=2., lead_accel=.49)
-  assert not state.launching
+  for _ in range(40):
+    step(state, ego_speed=1., lead_speed=2., distance=8., desired_distance=6.)
   captured = state.extra_tf
-  assert captured >= before
+  assert captured > .8
   for _ in range(100):
-    step(state, ego_speed=2., lead_speed=3., lead_accel=.5+.02*np.sin(_), distance=100.)
+    step(state, ego_speed=10., lead_speed=10., distance=100.)
   assert state.extra_tf < captured
+  before = state.extra_tf
+  for _ in range(40):
+    step(state, ego_speed=10., lead_speed=12., distance=100.)
+  assert state.extra_tf > before + .8
+
+
+def test_opening_does_not_hold_a_large_old_tf_when_candidate_has_fallen():
+  state = LeadGapState()
+  step(state)
+  initial = state.extra_tf
+  for _ in range(100):
+    step(state, relative_speed=1., lead_speed=11., distance=20.)
+  assert state.extra_tf == pytest.approx(initial / 1.01**100)
+  times = np.array([0., 1., 2., 3.])
+  margins = state.margins(level=0, times=times, ego_speeds=np.full(4, 10.), lead_speeds=np.full(4, 11.), base_tf=.6)
+  assert np.all(np.diff(margins) < 0.)
+
+
+def test_relative_speed_noise_and_single_spike_do_not_replenish():
+  state = LeadGapState()
+  step(state, distance=20.)
+  for i in range(200):
+    step(state, distance=60., relative_speed=.06*np.sin(i))
+  assert state.extra_tf == 0.
+  step(state, distance=60., relative_speed=.4)
+  assert state.extra_tf == 0.
+  for _ in range(20):
+    step(state, distance=60., relative_speed=1.)
+  assert 0.3 < state.extra_tf <= .5
+
+
+def test_capture_rise_is_limited_and_a_track_change_clears_opening_filter():
+  state = LeadGapState()
+  step(state, distance=20.)
+  for _ in range(80):
+    before = state.extra_tf
+    step(state, distance=1000., relative_speed=2.)
+    assert state.extra_tf - before <= .025 + 1e-10
+  assert state.extra_tf > 1.5
+  step(state, track_id=50, distance=20., relative_speed=-2.)
+  assert state.extra_tf == 0.
+  assert state.filtered_relative_speed == -2.
+  for _ in range(30):
+    step(state, track_id=50, distance=100., relative_speed=-2.)
+  assert state.extra_tf == 0.
 
 
 @pytest.mark.parametrize('kwargs', [{'enabled': False}, {'track_id': -1}, {'distance': np.nan},
-                                   {'lead_accel': np.inf}, {'dt': 0.}, {'level': 5}])
+                                   {'relative_speed': np.inf}, {'dt': 0.}, {'level': 5}])
 def test_invalidation_clears_headroom(kwargs):
   state = LeadGapState()
   step(state)
@@ -197,6 +240,14 @@ def test_mpc_headroom_only_changes_comfort_reference(mpc_class, lead_index):
   assert base.source == changed.source
   assert np.any(changed.yref[:,0] > 0.)
   assert changed.lead_gap_margins[0,lead_index] > 0.
+
+
+@pytest.mark.parametrize('lead_index', [0, 1])
+def test_mpc_capture_uses_measured_relative_speed_not_planned_ego_speed(mpc_class, lead_index):
+  # Planned ego speed can exceed measured ego speed during departure. The
+  # supplied radar vRel still says that the physical gap is opening.
+  mpc = run_update(mpc_class, 0, speed=12., lead_speed=11., relative_speed=.8, lead_index=lead_index)
+  assert mpc.lead_gap_states[lead_index].filtered_relative_speed == pytest.approx(.8)
 
 
 @pytest.mark.parametrize('kwargs', [{'level': 5}, {'frames': 2}, {'status': False}, {'radar': False},
