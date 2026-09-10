@@ -5,6 +5,7 @@ import math
 import subprocess
 import threading
 import time
+from datetime import datetime, timezone
 from copy import deepcopy
 from typing import Any, Dict, List
 
@@ -100,6 +101,116 @@ DEVICE_SETTING_DEFAULTS: Dict[str, Any] = {
   for _group, entries in DEVICE_SETTING_GROUPS
   for name, default in entries
 }
+
+
+# The Tools > Info dialog is a read-only support snapshot, not a Params
+# settings group.  Keep its data contract here so it can add hardware values
+# (IMEI, modem status) without pretending they are writable Params.
+TOOL_DEVICE_INFO_PARAM_DEFAULTS: Dict[str, Any] = {
+  "DongleId": "",
+  "HardwareSerial": "",
+  "DevicePosition": "",
+  "GitBranch": "",
+  "GitCommit": "",
+  "GitCommitDate": "",
+  "GitPullTime": "",
+}
+
+
+def _text(value: Any) -> str:
+  return str(value or "").strip()
+
+
+def _first_text(value: Any) -> str:
+  if isinstance(value, (list, tuple)):
+    return next((_text(item) for item in value if _text(item)), "")
+  return _text(value)
+
+
+def _hardware_value(hardware: Any, method: str, default: Any = "") -> Any:
+  try:
+    return getattr(hardware, method)()
+  except Exception:
+    return default
+
+
+def _boot_time() -> str:
+  """Return the current OS boot timestamp without persisting device metadata."""
+  try:
+    with open("/proc/stat", encoding="utf-8") as stat_file:
+      for line in stat_file:
+        key, _, value = line.partition(" ")
+        if key != "btime":
+          continue
+        timestamp = float(value.strip())
+        return datetime.fromtimestamp(timestamp, tz=timezone.utc).isoformat().replace("+00:00", "Z")
+  except (OSError, OverflowError, ValueError):
+    pass
+  return ""
+
+
+def get_tools_device_info() -> Dict[str, Any]:
+  """Return the compact, local-only device support snapshot for Tools.
+
+  The IMEI deliberately comes from HARDWARE rather than Params: it is a modem
+  identity, not a user setting, and should never enter setting history or a
+  writable parameter endpoint.  Every field is best-effort so an unavailable
+  modem leaves the rest of the support card usable.
+  """
+  values = get_param_values(list(TOOL_DEVICE_INFO_PARAM_DEFAULTS), TOOL_DEVICE_INFO_PARAM_DEFAULTS)
+  device_type = "unknown"
+  imei = ""
+  hardware_serial = ""
+  modem_version = ""
+  network: Dict[str, Any] = {}
+  sim: Dict[str, Any] = {}
+  hardware = None
+  try:
+    from openpilot.system.hardware import HARDWARE
+    hardware = HARDWARE
+  except Exception:
+    # Web info must remain available while hardware services are starting.
+    pass
+  if hardware is not None:
+    device_type = _text(_hardware_value(hardware, "get_device_type", device_type)) or device_type
+    try:
+      imei = _text(hardware.get_imei(0))
+    except Exception:
+      pass
+    hardware_serial = _text(_hardware_value(hardware, "get_serial"))
+    modem_version = _text(_hardware_value(hardware, "get_modem_version"))
+    network_value = _hardware_value(hardware, "get_network_info", {})
+    sim_value = _hardware_value(hardware, "get_sim_info", {})
+    network = network_value if isinstance(network_value, dict) else {}
+    sim = sim_value if isinstance(sim_value, dict) else {}
+
+  serial = _text(values.get("HardwareSerial")) or hardware_serial
+  return {
+    "identity": {
+      "device_type": device_type,
+      "imei": imei,
+      "imei_available": bool(imei),
+      "dongle_id": _text(values.get("DongleId")),
+      "hardware_serial": serial,
+      "position": _text(values.get("DevicePosition")),
+    },
+    "software": {
+      "branch": _text(values.get("GitBranch")),
+      "commit": _text(values.get("GitCommit")),
+      "commit_date": _text(values.get("GitCommitDate")),
+      "last_update": _text(values.get("GitPullTime")),
+    },
+    "connectivity": {
+      "carrier": _text(network.get("operator")),
+      "technology": _text(network.get("technology")),
+      "state": _text(network.get("state")),
+      "sim_state": _first_text(sim.get("sim_state")),
+      "modem_version": modem_version,
+    },
+    "runtime": {
+      "boot_time": _boot_time(),
+    },
+  }
 
 
 def get_device_setting_group_names() -> Dict[str, list]:
