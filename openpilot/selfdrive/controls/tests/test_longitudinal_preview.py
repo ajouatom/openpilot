@@ -253,10 +253,10 @@ def test_negative_preview_cannot_cross_zero_actuator_delay():
 
 
 def test_preview_only_removes_acceleration_with_bounded_prebraking():
-  assert apply_preview_target(0.20, 0.40, DRIVING_MODE_SAFE, -0.5) == pytest.approx(0.20)
-  assert apply_preview_target(0.20, -0.20, DRIVING_MODE_SAFE, -0.5) == pytest.approx(-0.05)
-  assert apply_preview_target(0.08, -0.20, DRIVING_MODE_ECO, -0.5) == pytest.approx(-0.04)
-  assert apply_preview_target(-0.50, -1.0, DRIVING_MODE_NORMAL, -0.5) == pytest.approx(-0.58)
+  assert apply_preview_target(0.20, 0.40, DRIVING_MODE_SAFE) == pytest.approx(0.20)
+  assert apply_preview_target(0.20, -0.20, DRIVING_MODE_SAFE) == pytest.approx(-0.05)
+  assert apply_preview_target(0.08, -0.20, DRIVING_MODE_ECO) == pytest.approx(-0.04)
+  assert apply_preview_target(-0.50, -1.0, DRIVING_MODE_NORMAL) == pytest.approx(-0.58)
 
 
 @pytest.mark.parametrize("mode", [
@@ -265,9 +265,9 @@ def test_preview_only_removes_acceleration_with_bounded_prebraking():
   DRIVING_MODE_NORMAL,
   DRIVING_MODE_HIGH,
 ])
-def test_positive_signal_never_changes_mpc_acceleration_output(mode):
-  assert apply_preview_target(0.20, 1.20, mode, 0.5) == pytest.approx(0.20)
-  assert apply_preview_target(-0.50, 0.50, mode, 0.5) == pytest.approx(-0.50)
+def test_preview_never_increases_mpc_acceleration_output(mode):
+  assert apply_preview_target(0.20, 1.20, mode) == pytest.approx(0.20)
+  assert apply_preview_target(-0.50, 0.50, mode) == pytest.approx(-0.50)
 
 
 @pytest.mark.parametrize("level", [1, 2, 3, 4])
