@@ -83,10 +83,10 @@ test("Korean unavailable notice reconnects and clears stale detections after a d
   assert.equal(p.ids.get("conf-val-left").textContent, "0%");
 });
 
-test("API calls and snapshots work through port 7000 and directly on port 8082", async () => {
+test("port 7000 uses the gateway while the legacy page keeps its loopback-relative API", async () => {
   for (const [url, prefix, hasBackLink] of [
     ["http://comma.local:7000/xiaoge/?lang=en", "/xiaoge/api/", true],
-    ["http://comma.local:8082/", "/api/", false],
+    ["http://127.0.0.1:8082/", "/api/", false],
   ]) {
     const p = page(url, (path) => reply(path.endsWith("/status") ? ready : {}));
     await setImmediate();

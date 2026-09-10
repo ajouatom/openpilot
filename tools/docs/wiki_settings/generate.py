@@ -76,6 +76,7 @@ DISPLAY_UNITS = {
   "speedKph": "km/h",
   "distanceCm": "cm",
   "timeSec": "s",
+  "timeMs": "ms",
   "timeMin": "min",
   "percent": "%",
   "degree": "deg",

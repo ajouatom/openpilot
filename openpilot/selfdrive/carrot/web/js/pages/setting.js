@@ -119,6 +119,10 @@ function getSettingItemEntriesForGroup(group) {
   return getSettingDerivedModel().getItemEntriesForGroup(group);
 }
 
+function getSettingDetailEntries(group, name) {
+  return getSettingDerivedModel().getDetailEntries(group, name);
+}
+
 async function loadSettingPopularValues(force = false) {
   return settingAuxState.popular.load(force);
 }
@@ -557,6 +561,7 @@ const SETTING_DISPLAY_UNIT_TYPES = Object.freeze({
   speedKph: "km/h",
   distanceCm: "cm",
   timeSec: "s",
+  timeMs: "ms",
   timeMin: "min",
   percent: "%",
   degree: "deg",
@@ -2307,7 +2312,7 @@ async function renderItems(group, options = {}) {
 
   const allEntries = getSettingItemEntriesForGroup(group);
   const detailEntry = detailMode ? getSettingDetailEntry(group, detailName) : null;
-  const entries = detailMode ? (detailEntry ? [detailEntry] : []) : allEntries;
+  const entries = detailMode ? (detailEntry ? getSettingDetailEntries(group, detailName) : []) : allEntries;
   const list = entries.map((entry) => entry.item);
   const profile = getSettingProfileByGroup(group);
   if (screenItems) screenItems.classList.toggle("setting-screen-items--profile", Boolean(profile));
@@ -2410,6 +2415,11 @@ async function renderItems(group, options = {}) {
     if (animateItems) el.style.setProperty("--i", String(index));
     el.dataset.settingName = name;
     el.dataset.settingGroup = originGroup;
+    if (detailMode && p.detail_parent) {
+      el.dataset.detailParent = p.detail_parent;
+      el.dataset.detailSection = p.detail_section || "";
+      el.classList.add("setting--detail-child");
+    }
     el.classList.toggle("is-favorite", isSettingFavorite(name));
 
     const top = document.createElement("div");
@@ -2479,7 +2489,7 @@ async function renderItems(group, options = {}) {
     let popularDetail = null;
     let historyBlock = null;
     let historyFullBlock = null;
-    if (detailMode) {
+    if (detailMode && index === 0) {
       contextPanel = settingContextRuntime.create({
         document,
         text: getUIText,
@@ -2782,12 +2792,17 @@ async function renderItems(group, options = {}) {
           className: "setting-choice-option",
         };
       });
+      const choiceLayout = window.CarrotUI?.settingsChoiceDialog?.resolveLayout?.(p, { name }) || "list";
+      const currentLabel = getSettingOptionLabel(name, current);
+      const choiceMeta = choiceLayout === "list"
+        ? `${getUIText("setting_choice_current", "Current")}: ${currentLabel}`
+        : rangeMeta;
       const selected = await openAppDialog({
         mode: "choice",
-        choiceLayout: "value-grid",
+        choiceLayout,
         title: title || name,
         html: true,
-        messageHtml: `<div class="setting-choice-dialog">${escapeHtml(name)}<br>${escapeHtml(rangeMeta)}</div>`,
+        messageHtml: `<div class="setting-choice-dialog">${escapeHtml(choiceMeta)}</div>`,
         choices,
         cancelLabel: getUIText("cancel", "Cancel"),
         showCancel: true,
@@ -2875,6 +2890,8 @@ async function renderItems(group, options = {}) {
   itemsBox.dataset.renderedGroup = group;
   if (detailMode) itemsBox.dataset.renderedDetail = detailName;
   scheduleSettingOverflowSync(itemsBox);
+  window.CarrotSettingsExtensions?.sync?.({ group, detailMode, detailName, root: itemsBox });
+  // Legacy panels are migrated into CarrotSettingsExtensions in later phases.
   window.CarrotMapboxTokenSettings?.sync?.();
   window.CarrotYouTubeLiveSettings?.sync?.();
   syncSettingLiveRefresh();
