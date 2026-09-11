@@ -166,7 +166,7 @@ Carrot Web 설정 화면에서는 다음 기능을 사용할 수 있습니다.
 | [과속카메라](speed-deceleration.md#speed-camera) | `AutoNaviSpeedCtrlMode`, `AutoNaviSpeedCtrlEnd`, `AutoNaviSpeedDecelRate`, `AutoNaviSpeedSafetyFactor`, `AutoNaviCountDownMode`, `VehicleNaviCanControl`, `VehicleNaviSchoolZoneControl`, `VehicleSpeedCameraControlMode`, `VehicleSpeedCameraDistanceTime` | 안전운전 이벤트의 대상, 순정 내비 CAN·PV5 구간단속 제한속도 유지, 감속 시점과 목표 속도 |
 | [도로 제한속도](speed-deceleration.md#road-speed-limit) | `AutoRoadSpeedLimitOffset`, `AutoRoadSpeedAdjust`, `AutoSpeedUptoRoadSpeedLimit` | 도로 제한속도에 맞춘 목표 속도 조절 |
 | [과속방지턱](speed-deceleration.md#speed-bump) | `AutoNaviSpeedBumpTime`, `AutoNaviSpeedBumpSpeed`, `AutoNaviSpeedBumpEndDistance` | 방지턱 감속 완료 시점, 통과 속도와 조기 종료 거리 |
-| [커브·턴](speed-deceleration.md#curve-turn) | `AutoCurveSpeedFactor`, `AutoCurveSpeedLowerLimit`, `TurnSpeedControlMode`, `MapTurnSpeedFactor`, `ModelTurnSpeedFactor`, `ApplyModelSpeed` | 모델 곡률과 경로를 이용한 커브·턴 속도 |
+| [커브·턴](speed-deceleration.md#curve-turn) | `AutoCurveSpeedFactor`, `AutoCurveSpeedLowerLimit`, `TurnSpeedControlMode`, `MapTurnSpeedFactor`, `ApplyModelSpeed` | 곡률·남은 거리 기반 커브 감속과 경로 턴 속도 |
 | [신호감지](speed-deceleration.md#traffic-light) | `TrafficLightDetectMode`, `TrafficStopDistanceAdjust` | 신호 정지·출발 감지, 정지 위치 및 정지차 기준 자동 보정 |
 
 `AutoNaviSpeedCtrlMode`는 `0` 미사용, `1` 과속카메라, `2` 과속카메라+방지턱, `3` 과속카메라+방지턱+이동식카메라입니다.
