@@ -64,6 +64,9 @@ MODEL_COMPONENT_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 MODEL_CONTENT_TYPES = {
   "manifest.json": "application/json",
   "big_driving_supercombo.onnx": "application/octet-stream",
+  "precompiled.json": "application/json",
+  "big_driving_tinygrad.pkl": "application/octet-stream",
+  "precompiled-runtime.tar.gz": "application/gzip",
 }
 
 ADMIN_COOKIE = "carrot_route_admin"
