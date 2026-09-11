@@ -1,7 +1,5 @@
 from openpilot.cereal import log
-from openpilot.common.constants import CV
 from openpilot.common.realtime import DT_MDL
-import numpy as np
 from openpilot.common.params import Params
 
 from openpilot.selfdrive.controls.lib.desire_lib.constants import (
@@ -59,8 +57,6 @@ class DesireHelper:
     self.laneChangeBsd = 0
     self.laneLineCheck = 0
     self.laneChangeDelay = 0.0
-    self.modelTurnSpeedFactor = 0.0
-    self.model_turn_speed = 200.0
 
     # misc
     self.prev_desire_enabled = False
@@ -79,16 +75,6 @@ class DesireHelper:
       self.laneChangeBsd = self.params.get_int("LaneChangeBsd")
       self.laneLineCheck = self.params.get_int("LaneLineCheck")
       self.laneChangeDelay = self.params.get_float("LaneChangeDelay") * 0.1
-      self.modelTurnSpeedFactor = self.params.get_float("ModelTurnSpeedFactor") * 0.1
-
-  def _make_model_turn_speed(self, modeldata):
-    if self.modelTurnSpeedFactor > 0:
-      model_turn_speed = np.interp(self.modelTurnSpeedFactor,
-                                   modeldata.velocity.t,
-                                   modeldata.velocity.x) * CV.MS_TO_KPH * 1.2
-      self.model_turn_speed = self.model_turn_speed * 0.9 + model_turn_speed * 0.1
-    else:
-      self.model_turn_speed = 200.0
 
   def _check_desire_state(self, modeldata, carstate, maneuver_type):
     desire_state = modeldata.meta.desireState
@@ -225,7 +211,6 @@ class DesireHelper:
   def update(self, carstate, modeldata, lateral_active, lane_change_prob, carrotMan, radarState):
     self.frame += 1
     self._update_params_periodic()
-    self._make_model_turn_speed(modeldata)
 
     # counts
     self.carrot_lane_change_count = max(0, self.carrot_lane_change_count - 1)

@@ -28,12 +28,12 @@ import ipaddress
 import openpilot.cereal.messaging as messaging
 from openpilot.common.realtime import Ratekeeper, set_core_affinity
 from openpilot.common.params import Params, ParamKeyType
-from openpilot.common.filter_simple import MyMovingAverage
 from openpilot.system.hardware import PC, TICI
 from openpilot.selfdrive.navd.helpers import Coordinate
 from openpilot.common.constants import CV
 
 from openpilot.selfdrive.carrot.carrot_serv import CarrotServ
+from openpilot.selfdrive.carrot.curve_speed import VisionCurveSpeed, curve_speed
 from openpilot.selfdrive.carrot.carrot_navi_control import CarrotNaviControl, parse_carrot_navi_control
 from openpilot.selfdrive.carrot.server.services.web_settings import read_web_settings
 from openpilot.selfdrive.carrot.web_upload import (
@@ -325,8 +325,7 @@ class CarrotMan:
     self.ip_address = "0.0.0.0"
     self.remote_addr = None
 
-    self.turn_speed_last = 250
-    self.curvatureFilter = MyMovingAverage(20)
+    self.vision_curve_speed = VisionCurveSpeed()
     self.carrot_curve_speed_params()
 
     self.is_running = True
@@ -1430,39 +1429,15 @@ class CarrotMan:
 
   def carrot_curve_speed(self, sm):
     self.carrot_curve_speed_params()
-    if not sm.alive['carState'] and not sm.alive['modelV2']:
-        return 250
-    #print(len(sm['modelV2'].orientationRate.z))
-    if len(sm['modelV2'].orientationRate.z) == 0:
-        return 250
-
+    if not all(sm.alive[name] and sm.valid[name] for name in ('carState', 'modelV2')):
+      return self.vision_curve_speed.update(None, time.monotonic())
     return self.vturn_speed(sm['carState'], sm)
 
   def vturn_speed(self, CS, sm):
-    TARGET_LAT_A = 1.9  # m/s^2
-
-    modelData = sm['modelV2']
-    v_ego = max(CS.vEgo, 0.1)
-    # Set the curve sensitivity
-    orientation_rate = np.array(modelData.orientationRate.z) * self.autoCurveSpeedFactor
-    velocity = np.array(modelData.velocity.x)
-
-    # Get the maximum lat accel from the model
-    max_index = np.argmax(np.abs(orientation_rate))
-    curv_direction = np.sign(orientation_rate[max_index])
-    max_pred_lat_acc = np.amax(np.abs(orientation_rate) * velocity)
-
-    # Get the maximum curve based on the current velocity
-    max_curve = max_pred_lat_acc / (v_ego**2)
-
-    # Set the target lateral acceleration
-    adjusted_target_lat_a = TARGET_LAT_A
-
-    # Get the target velocity for the maximum curve
-    #turnSpeed = max(abs(adjusted_target_lat_a / max_curve)**0.5  * 3.6, self.autoCurveSpeedLowerLimit)
-    turnSpeed = max(abs(adjusted_target_lat_a / max_curve)**0.5  * 3.6, 5)
-    turnSpeed = min(turnSpeed, 250)
-    return turnSpeed * curv_direction
+    result = curve_speed(sm['modelV2'], CS.vEgo, self.autoCurveSpeedFactor,
+                         self.carrot_serv.autoCurveSpeedLowerLimit,
+                         speed_ratio=CS.vCluRatio, a_ego=CS.aEgo)
+    return self.vision_curve_speed.update(result, time.monotonic())
 
   def carrot_navi_thread(self):
     self.carrot_navi_tcp_server(7712)
