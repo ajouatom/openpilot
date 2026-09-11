@@ -8,6 +8,8 @@ from openpilot.selfdrive.modeld.constants import ModelConstants
 TURN_CURVATURE_LOOKAHEAD = 1.0
 TURN_CURVATURE_MIN_SPEED = 3.0
 TURN_ACCEL_LOOKAHEAD = 3.0
+TURN_PREVIEW_LAST = int(np.searchsorted(ModelConstants.T_IDXS, TURN_ACCEL_LOOKAHEAD))
+TURN_PREVIEW_TIMES = np.append(np.asarray(ModelConstants.T_IDXS[:TURN_PREVIEW_LAST]), TURN_ACCEL_LOOKAHEAD)
 
 
 def get_future_curvature(model_msg, fallback_curvature, lookahead=TURN_CURVATURE_LOOKAHEAD):
@@ -30,12 +32,10 @@ def _preview_curvatures(model_msg, v_ego, accel_max):
     return None
   values = np.asarray(values, dtype=float)
   # Invalid far-tail predictions must not discard otherwise valid near geometry.
-  last = int(np.searchsorted(ModelConstants.T_IDXS, TURN_ACCEL_LOOKAHEAD))
-  if not np.all(np.isfinite(values[:, :last + 1])):
+  if not np.all(np.isfinite(values[:, :TURN_PREVIEW_LAST + 1])):
     return None
-  times = np.append(np.asarray(ModelConstants.T_IDXS[:last]), TURN_ACCEL_LOOKAHEAD)
-  x, y, z, velocity, yaw_rate = [np.interp(times, ModelConstants.T_IDXS, value) for value in values]
-  distance = np.r_[0., np.cumsum(np.sqrt(np.diff(x)**2 + np.diff(y)**2 + np.diff(z)**2))]
+  x, y, z, velocity, yaw_rate = [np.interp(TURN_PREVIEW_TIMES, ModelConstants.T_IDXS, value) for value in values]
+  distance = np.concatenate(([0.], np.cumsum(np.sqrt(np.diff(x)**2 + np.diff(y)**2 + np.diff(z)**2))))
   # Use distance, not model time: the model may travel more slowly than ACC.
   reachable = v_ego * TURN_ACCEL_LOOKAHEAD + 0.5 * accel_max * TURN_ACCEL_LOOKAHEAD**2
   valid = (distance <= reachable) & (velocity >= TURN_CURVATURE_MIN_SPEED)
@@ -44,7 +44,8 @@ def _preview_curvatures(model_msg, v_ego, accel_max):
     boundary_velocity = float(np.interp(reachable, distance, velocity))
     if boundary_velocity >= TURN_CURVATURE_MIN_SPEED:
       boundary_curve = abs(float(np.interp(reachable, distance, yaw_rate))) / boundary_velocity
-      return np.r_[distance[valid], reachable], np.r_[np.abs(yaw_rate[valid] / velocity[valid]), boundary_curve]
+      return (np.concatenate((distance[valid], [reachable])),
+              np.concatenate((np.abs(yaw_rate[valid] / velocity[valid]), [boundary_curve])))
   if not np.any(valid):
     return None
   return distance[valid], np.abs(yaw_rate[valid] / velocity[valid])
@@ -73,18 +74,27 @@ def limit_accel_in_turns(v_ego, curvature, a_target, a_lat_max, safety_ratio=0.7
   maximum = min(a_target[1], math.sqrt(max(0.0, total_accel**2 - lateral_accel**2)))
   if model_msg is not None and total_accel > 0.0:
     maximum = min(maximum, a_target[1] * max(0.0, 1.0 - (lateral_accel / total_accel)**2))
+  # Future geometry can only tighten this ceiling. Avoid decoding/interpolating
+  # the full path when the current curve already forbids positive acceleration.
+  if maximum <= 0.0:
+    return [a_target[0], maximum]
   preview = _preview_curvatures(model_msg, v_ego, a_target[1]) if model_msg is not None else None
-  if preview is None or maximum <= 0.0:
+  if preview is None:
     return [a_target[0], maximum]
 
   distance, curve = preview
   cruise_squared = max(v_ego, v_cruise)**2 if v_cruise is not None and math.isfinite(v_cruise) else math.inf
+  ego_squared = v_ego**2
+  total_squared = total_accel**2
 
   def feasible(accel):
-    speed_squared = np.minimum(v_ego**2 + 2.0 * accel * distance, cruise_squared)
-    lateral_squared = (speed_squared * curve)**2
-    return bool(np.all((accel**2 + lateral_squared <= total_accel**2) &
-                       (accel <= a_target[1] * (1.0 - lateral_squared / total_accel**2))))
+    speed_squared = np.minimum(ego_squared + 2.0 * accel * distance, cruise_squared)
+    # Both limits tighten monotonically with lateral acceleration, so checking
+    # its largest value covers every path point without two boolean arrays.
+    peak_lateral = float(np.max(speed_squared * curve))
+    lateral_squared = peak_lateral * peak_lateral
+    return (accel**2 + lateral_squared <= total_squared and
+            accel <= a_target[1] * (1.0 - lateral_squared / total_squared))
 
   if not feasible(0.0):
     return [a_target[0], 0.0]
