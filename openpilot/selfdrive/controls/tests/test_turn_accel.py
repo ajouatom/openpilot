@@ -124,6 +124,22 @@ def test_moderate_curve_reserves_comfort_before_combined_limit_binds():
   assert math.hypot(1.6, 100.*.006) < 2.1
 
 
+def test_nonuniform_curves_respect_both_budgets_at_every_preview_point():
+  rng = np.random.default_rng(51)
+  for _ in range(100):
+    speed = float(rng.uniform(3., 25.))
+    cruise = speed + float(rng.uniform(0., 10.))
+    maximum = float(rng.uniform(.5, 3.))
+    curvature = rng.uniform(-1., 1., TIMES.shape) * (1.4 / speed**2)
+    ceiling = limit(model(curvature, speed), speed=speed, cruise=cruise, maximum=maximum)[1]
+    for t in [*TIMES[TIMES < 3.], 3.]:
+      curve = float(np.interp(t, TIMES, curvature))
+      velocity_squared = min(speed**2 + 2. * ceiling * speed * t, cruise**2)
+      lateral = abs(velocity_squared * curve)
+      assert math.hypot(ceiling, lateral) <= 2.1 + 1e-12
+      assert ceiling <= maximum * (1. - lateral**2 / 2.1**2) + 1e-12
+
+
 def test_recorded_launch_curve_reduces_acceleration_before_and_during_turn():
   # Anonymized model geometry from an accelerating curve: no CAN, location,
   # device identifiers, or wall-clock timestamps are needed for this regression.
