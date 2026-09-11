@@ -30,7 +30,7 @@ def planner_preview():
   state = SimpleNamespace(lead_preview=.87, mpc=SimpleNamespace(mode='acc', source='lead0'))
 
   def step(a_lead, *, a_ego=0., mode=preview.DRIVING_MODE_NORMAL, status=True, radar=True,
-           track_id=52, gas=False, reset=False, mpc_mode='acc', source='lead0', a_now=1.6, jerk=-.6):
+           track_id=52, gas=False, brake=False, reset=False, mpc_mode='acc', source='lead0', a_now=1.6, jerk=-.6):
     state.mpc.mode, state.mpc.source = mpc_mode, source
     state.v_desired_trajectory = 10 + a_now * times + .5 * jerk * times**2
     state.a_desired_trajectory = a_now + jerk * times
@@ -38,7 +38,7 @@ def planner_preview():
     absent = SimpleNamespace(status=False, radar=False, radarTrackId=-1, aLeadK=0.)
     rs = SimpleNamespace(leadOne=lead if source != 'lead1' else absent, leadTwo=lead if source == 'lead1' else absent)
     base = ns['get_accel_from_plan'](state.v_desired_trajectory, state.a_desired_trajectory, times, action_t=.35)[0]
-    ns.update(self=state, sm={'radarState': rs, 'carState': SimpleNamespace(aEgo=a_ego, gasPressed=gas)},
+    ns.update(self=state, sm={'radarState': rs, 'carState': SimpleNamespace(aEgo=a_ego, gasPressed=gas, brakePressed=brake)},
               carrot=SimpleNamespace(myDrivingMode=mode), reset_state=reset, action_t=.35,
               vEgoStopping=.05, CONTROL_N_T_IDX=times, output_a_target_base=base)
     exec(code, ns)
@@ -66,15 +66,57 @@ def test_repeated_deadband_crossings_do_not_toggle_the_output(planner_preview):
   assert max(abs(np.diff(targets))) < .05
 
 
-@pytest.mark.parametrize('blocked', [{'status': False}, {'radar': False}, {'track_id': -1},
-                                   {'gas': True}, {'reset': True}, {'mpc_mode': 'blended'},
-                                   {'a_lead': float('nan')}, {'a_ego': float('nan')}, {'mode': 0}])
-def test_invalid_or_inactive_preview_discards_remaining_time(planner_preview, blocked):
+@pytest.mark.parametrize('blocked', [{'gas': True}, {'brake': True}, {'reset': True}, {'mpc_mode': 'blended'}])
+def test_driver_intervention_or_control_exit_discards_remaining_time(planner_preview, blocked):
   assert planner_preview(-1.)[2] > 0.
   kwargs = {'a_lead': .5}
   kwargs.update(blocked)
   target, base, remaining = planner_preview(**kwargs)
   assert remaining == 0.
+  assert target == pytest.approx(base)
+  # Re-engagement starts from zero; no old correction returns.
+  assert planner_preview(.5)[2] == 0.
+
+
+@pytest.mark.parametrize('mode', [1, 2, 3, 4])
+@pytest.mark.parametrize('source', ['lead0', 'lead1', 'cruise'])
+@pytest.mark.parametrize('missing', [{'status': False}, {'radar': False}, {'track_id': -1},
+                                   {'a_lead': float('nan')}, {'a_ego': float('nan')}])
+def test_lost_radar_support_releases_remaining_correction_on_current_plan(planner_preview, mode, source, missing):
+  before, base, offset = planner_preview(-2., mode=mode, source=source)
+  kwargs = {'a_lead': -2., 'mode': mode, 'source': source, **missing}
+  target, _, remaining = planner_preview(**kwargs)
+  assert remaining == pytest.approx(offset - .03)
+  assert before < target < base - .2
+  assert target - before < .05
+  for _ in range(55):
+    target, base, remaining = planner_preview(**kwargs)
+  assert remaining == 0.
+  assert target == pytest.approx(base)
+
+
+def test_repeated_radar_vision_handoffs_do_not_toggle_to_base(planner_preview):
+  targets = [planner_preview(-2., radar=radar)[0] for radar in [True, False]*30]
+  assert max(abs(np.diff(targets))) < .06
+
+
+@pytest.mark.parametrize('radar', [False, True])
+@pytest.mark.parametrize('mode,limit', [(1, .09), (2, .10), (3, .08), (4, .08)])
+def test_new_braking_plan_is_immediate_during_handoff(planner_preview, radar, mode, limit):
+  planner_preview(-2., mode=mode)
+  planner_preview(0., radar=False, mode=mode)
+  target, base, _ = planner_preview(-4., radar=radar, track_id=63 if radar else -1,
+                                  mode=mode, a_now=-3., jerk=-1.)
+  assert target <= base
+  assert target == pytest.approx(base - limit)
+  assert target < -3.
+
+
+@pytest.mark.parametrize('a_now,jerk', [(0., 0.), (.8, .3), (-.8, .3)])
+def test_handoff_tail_does_not_brake_on_a_flat_or_rising_new_plan(planner_preview, a_now, jerk):
+  planner_preview(-2.)
+  target, base, remaining = planner_preview(0., radar=False, a_now=a_now, jerk=jerk)
+  assert remaining > 0.
   assert target == pytest.approx(base)
 
 
