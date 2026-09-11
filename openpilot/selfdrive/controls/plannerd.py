@@ -5,6 +5,7 @@ from openpilot.cereal import car
 from openpilot.common.params import Params
 from openpilot.common.realtime import Priority, config_realtime_process
 from openpilot.common.swaglog import cloudlog
+from openpilot.common.runtime_diagnostics import RuntimeDiagnostics
 from openpilot.selfdrive.controls.lib.ldw import LaneDepartureWarning
 from openpilot.selfdrive.controls.lib.longitudinal_planner import LongitudinalPlanner
 from openpilot.selfdrive.controls.lib.longitudinal_fast_radar import (
@@ -61,9 +62,13 @@ def main():
   carrot = CarrotPlanner()
   model_frame = 0
   last_longitudinal_trigger_mono_ns = 0
+  diagnostics = RuntimeDiagnostics('plannerd', cloudlog.event)
 
   while True:
+    wait_start = time.monotonic()
     sm.update()
+    loop_start, cpu_start = time.monotonic(), time.thread_time()
+    timings = {'poll_ms': (loop_start - wait_start) * 1000}
 
     if sm.updated['radarState']:
       fast_radar.observe_radar_state(
@@ -155,8 +160,11 @@ def main():
         fast_radar_execution_time=fast_radar_execution_time,
         fast_lead_reason=(fast_result.lead_one_reason if fast_result is not None else 'inactive'),
       )
+      timings['longitudinal_ms'] = (time.monotonic() - planner_start) * 1000
 
     if sm.updated['modelV2']:
+      lateral_start = time.monotonic()
+      timings['model_age_at_lateral_ms'] = (lateral_start - sm.logMonoTime['modelV2'] * 1e-9) * 1000
       model_frame += 1
       lateral_planner.update(sm, carrot)
       lateral_planner.publish(sm, pm, carrot)
@@ -167,6 +175,13 @@ def main():
       msg.driverAssistance.leftLaneDeparture = ldw.left
       msg.driverAssistance.rightLaneDeparture = ldw.right
       pm.send('driverAssistance', msg)
+      timings['lateral_and_assistance_ms'] = (time.monotonic() - lateral_start) * 1000
+
+    diagnostics.record(
+      context={'planning_trigger': planning_trigger, 'model_frame_id': int(sm['modelV2'].frameId)},
+      work_ms=(time.monotonic() - loop_start) * 1000, thread_cpu_ms=(time.thread_time() - cpu_start) * 1000,
+      model_updated=int(sm.updated['modelV2']), longitudinal_run=int(run_longitudinal and sm.seen['modelV2']), **timings,
+    )
 
 
 if __name__ == "__main__":
