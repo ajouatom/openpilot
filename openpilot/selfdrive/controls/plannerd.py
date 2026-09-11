@@ -24,7 +24,8 @@ MIN_LONGITUDINAL_PLAN_INTERVAL_NS = 25_000_000
 
 
 def main():
-  config_realtime_process(7, Priority.CTRL_LOW)
+  # Keep planning off modeld's core so the next inference cannot preempt a plan.
+  config_realtime_process(5, Priority.CTRL_LOW)
 
   cloudlog.info("plannerd is waiting for CarParams")
   params = Params()
