@@ -36,6 +36,7 @@ PAIRED_CLOSE_BODY_HALF_WIDTH_M = 2.65
 OUTSIDE_HISTORY_MARGIN_M = 0.20
 MOTION_SCOPE_HALF_WIDTH_M = 5.40
 MAX_HISTORY_S = 1.50
+SLOW_ENTRY_OUTSIDE_MEMORY_S = 3.0
 LONG_MOTION_WINDOW_S = 0.90
 SHORT_MOTION_WINDOW_S = 0.35
 MAX_OBSERVATION_GAP_S = 0.20
@@ -182,6 +183,7 @@ class TrajectoryCutInEstimate:
   vision_bracket_supported: bool = False
   paired_inward_motion_supported: bool = False
   entry_withdrawn: bool = False
+  paired_body_entry: bool = False
 
   @property
   def identity(self) -> tuple[str, int, int]:
@@ -214,6 +216,8 @@ class _TrackState:
   risk_until_s: float = -math.inf
   outer_body_ambiguous_until_s: float = -math.inf
   paired_motion_support_until_s: float = -math.inf
+  outside_until_s: float = -math.inf
+  outside_side: float = 0.0
 
   def reset(self, continuity_id: int) -> None:
     self.continuity_id = continuity_id
@@ -227,6 +231,8 @@ class _TrackState:
     self.risk_until_s = -math.inf
     self.outer_body_ambiguous_until_s = -math.inf
     self.paired_motion_support_until_s = -math.inf
+    self.outside_until_s = -math.inf
+    self.outside_side = 0.0
 
 
 def _values_since(
@@ -260,24 +266,25 @@ def _median_slope(
 def _motion_metrics(
   observations: Sequence[_Observation],
   window_s: float = LONG_MOTION_WINDOW_S,
+  attribute: str = "d_path",
 ) -> tuple[float, float, float, float, float, float, bool]:
   values = _values_since(observations, window_s)
   if len(values) < 2:
     return 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, False
 
-  d_path_rate = _median_slope(values, "d_path", window_s)
-  current_side = math.copysign(1.0, values[-1].d_path or values[0].d_path or 1.0)
+  d_path_rate = _median_slope(values, attribute, window_s)
+  current_side = math.copysign(1.0, getattr(values[-1], attribute) or getattr(values[0], attribute) or 1.0)
   inward_rate = max(0.0, -current_side * d_path_rate)
   start_count = min(3, max(1, len(values) // 3))
   end_count = min(2, len(values))
-  start_abs = statistics.median(abs(value.d_path) for value in values[:start_count])
-  end_abs = statistics.median(abs(value.d_path) for value in values[-end_count:])
+  start_abs = statistics.median(abs(getattr(value, attribute)) for value in values[:start_count])
+  end_abs = statistics.median(abs(getattr(value, attribute)) for value in values[-end_count:])
   inward_progress = max(0.0, start_abs - end_abs)
 
   inward_travel = 0.0
   outward_travel = 0.0
   for first, second in zip(values, values[1:], strict=False):
-    delta = abs(first.d_path) - abs(second.d_path)
+    delta = abs(getattr(first, attribute)) - abs(getattr(second, attribute))
     if abs(delta) < 0.01:
       continue
     if delta > 0.0:
@@ -716,6 +723,12 @@ class TrajectoryCutInDetector:
         >= PATH_OVERLAP_HALF_WIDTH_M + OUTSIDE_HISTORY_MARGIN_M
         for value in state.observations
       )
+      # Keep the actual outside observation's timestamp, not the time at
+      # which it falls out of the short motion window. A track reset or a
+      # side change must not inherit a previous vehicle's entry evidence.
+      if point.measured and abs(projection.d_path) >= PATH_OVERLAP_HALF_WIDTH_M + OUTSIDE_HISTORY_MARGIN_M:
+        state.outside_until_s = time_s + SLOW_ENTRY_OUTSIDE_MEMORY_S
+        state.outside_side = side
       current_overlap = abs(projection.d_path) <= PATH_OVERLAP_HALF_WIDTH_M
       # A yaw/range offset is an ambiguity heuristic, not evidence against
       # entry. Rotation-corrected normal velocity plus sustained OUT-to-IN
@@ -895,8 +908,43 @@ class TrajectoryCutInDetector:
           lateral_net_fraction,
         ) >= FRONT_LATERAL_CONFIDENCE_MIN
       )
+      paired_body_entry = False
+      if (
+        point.source.startswith("corner")
+        and point.measured
+        and cross_sensor_point is not None and cross_sensor_point.measured
+        and cross_sensor_point.source == "frontRadar"
+        and len(state.front_observations) >= 3
+        and state.front_observations[-1].time_s - state.front_observations[0].time_s >= 0.50
+        and current_overlap and paired_front_overlap
+        and 0.8 < point.d_rel <= 8.0
+        and v_ego <= 12.0
+        and -5.0 <= point.v_rel < -0.1
+        and point.d_rel / -point.v_rel >= 1.20
+        and time_s <= state.outside_until_s and side == state.outside_side
+        and history_s >= 0.75
+        and recent_abs_yaw_max < 0.020
+        and reported_inward >= 0.10
+        and vision is not None and vision.probability >= 0.90
+        and (
+          _vision_supports(point, model, precise=True)
+          or _vision_brackets_pair(point, cross_sensor_point, vision, primary_lead, path)
+        )
+      ):
+        # A changing model path can jitter dPath while both measured body
+        # returns move steadily inward. Check those independent positions
+        # and rotation-corrected front velocity before overriding that veto.
+        _, _, body_progress, _, body_net, body_direction, _ = _motion_metrics(state.observations, attribute="y_rel")
+        _, _, front_progress, _, front_net, front_direction, _ = _motion_metrics(state.front_observations, attribute="y_rel")
+        paired_projection = project_to_model_path(path, cross_sensor_point.d_rel, cross_sensor_point.y_rel)
+        paired_body_entry = (
+          body_progress >= 0.10 and body_net >= 0.65 and body_direction >= 0.80
+          and front_progress >= 0.20 and front_net >= 0.50 and front_direction >= 0.75
+          and _reported_inward_speed(cross_sensor_point, paired_projection, yaw_rate_rad_s) >= 0.10
+        )
       jitter_override = (
-        front_history_supported
+        paired_body_entry
+        or front_history_supported
         or (
           (vision_supported or cross_sensor_supported)
           and inward_progress >= 0.45
@@ -1030,7 +1078,7 @@ class TrajectoryCutInDetector:
       common_ok = (
         existence_supported
         and not ambiguous_outer_body_pair
-        and started_outside
+        and (started_outside or paired_body_entry)
         and front_range_ok
         and close_front_supported
         and (
@@ -1127,7 +1175,7 @@ class TrajectoryCutInDetector:
         point.d_rel > 8.0
         or vision_supported
       )
-      corner_entry = (
+      corner_entry = paired_body_entry or (
         corner_approach_ok
         and corner_commitment
         and (
@@ -1270,7 +1318,7 @@ class TrajectoryCutInDetector:
       )
       cutin_confirmation_s = (
         0.0
-        if paired_close_entry
+        if paired_close_entry or paired_body_entry
         or front_history_supported
         else max(0.0, (
           CUTIN_CURRENT_OVERLAP_CONFIRMATION_S
@@ -1499,6 +1547,7 @@ class TrajectoryCutInDetector:
         vision_bracket_supported=vision_bracket_supported,
         paired_inward_motion_supported=paired_inward_motion_supported,
         entry_withdrawn=entry_withdrawn,
+        paired_body_entry=paired_body_entry,
       ))
 
     for key, state in tuple(self._tracks.items()):

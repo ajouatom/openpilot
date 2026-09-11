@@ -2,6 +2,30 @@
   "sensitivity": 50,
   "cases": [
     {
+      "id": "k8-306-4-slow-left-suv-5227",
+      "vehicle_folder": "KIA_K8_HEV_1ST_GEN 036a65e681889431",
+      "log": "00000306--8d2e9a9a21--4/rlog.zst",
+      "source": "front+corner",
+      "window": [50.0, 53.5],
+      "expected": "detect",
+      "target_track_ids": [1516],
+      "latest_detection_s": 52.17,
+      "scene": "User-reported missed slow left white SUV at video 52.27 s. Full rlog and qcamera identify corner 1516/front 52. Both body returns move inward while model-path changes jitter dPath; outside evidence expires from the ordinary 1.5 s history before vision hands off from front 37. Require detection by the reported frame, not eventual acquisition near the bumper. Replay time is about 0.1012 s before video."
+    },
+    {
+      "id": "k8-306-4-slow-left-suv-continuous-lead-two",
+      "vehicle_folder": "KIA_K8_HEV_1ST_GEN 036a65e681889431",
+      "log": "00000306--8d2e9a9a21--4/rlog.zst",
+      "source": "front+corner",
+      "window": [50.0, 53.5],
+      "expected": "detect",
+      "validation_stage": "lead_two",
+      "target_track_ids": [1516],
+      "latest_detection_s": 52.17,
+      "lead_two_continuous_window": [52.16, 53.45],
+      "scene": "The same slow white SUV must continuously reach longitudinal control as L2 while L1 remains on the farther front 37. An alert alone or a late final lead handoff does not satisfy the regression. The continuity interval ends before the near vision/primary handoff; replay time is about 0.1012 s before video."
+    },
+    {
       "id": "k8-32e-32-right-suv-before-confirmed-entry-4791",
       "vehicle_folder": "KIA_K8_HEV_1ST_GEN b34d1abb87cce93b",
       "log": "0000032e--00a430a6bf--32/rlog.zst",
