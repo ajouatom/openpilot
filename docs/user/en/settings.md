@@ -242,6 +242,16 @@ Display contains 37 settings. Most on-road display settings are easy to reverse;
 | Brightness/on-road view | `ShowCustomBrightness`, `ShowModelView`, `ShowCameraWithCluster` | Brightness, camera/model composition, and the on-device camera while the external HUD is connected |
 | External HUD | `ClusterHud`, `ClusterHudBrightness`, `ClusterHudOrientation`, and related `ClusterHud*` settings | Supported TURZX HUD layout, live brightness, screen rotation, camera, radar, encoder, and performance options |
 
+`ShowPlotMode` selects an on-road diagnostic graph; `0` turns it off. Modes `4` and `5` both use the primary lead vehicle (`radarState.leadOne`), and the mici device display also updates these graphs when the lead message values change.
+
+| Color | `4`: Lead acceleration/relative speed | `5`: Lead acceleration/jerk |
+|---|---|---|
+| Yellow | First planned ego acceleration `longitudinalPlan.accels[0]` (m/s²) | Actual ego acceleration `carState.aEgo` (m/s²) |
+| Green | Estimated lead acceleration `leadOne.aLeadK` (m/s²) | Lead acceleration `leadOne.aLead` (m/s²) |
+| Orange | Relative lead speed `leadOne.vRel` (m/s) | Rate of change of lead acceleration `leadOne.jLead` (m/s³) |
+
+Negative relative speed means the gap is closing; positive relative speed means it is opening. Lead values display as zero when no lead is detected, and this setting changes only the diagnostic display, with no effect on vehicle control.
+
 An APN label remaining in the `ShowRouteInfo` description refers to route-input state. It is not an indication that CarrotMan or CarrotLink is supported.
 
 `ShowCameraWithCluster=0` keeps the existing default: while the external HUD is connected, the on-device camera is hidden. Set it to `1` to show the on-device camera video.
