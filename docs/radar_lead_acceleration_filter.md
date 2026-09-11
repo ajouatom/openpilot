@@ -85,6 +85,48 @@ ride quality. Faster adaptation can also respond to a coherent sensor error.
 Offline estimator comparisons and synthetic input tests must be distinguished
 from vehicle validation after updating.
 
+## Speed response and execution latency
+
+These are distinct measurements. The acceleration observer's internal velocity
+is not published as control speed: `RadarInterfaceBase` preserves each current
+point's `vLead`/`vRel`, and `FastRadarOverlay` publishes current `v_ego + vRel` as
+both `vLead` and `vLeadK`. Multi-frame regressions cover launch, cruise and braking
+through both boundaries. This change adds no speed-filter sample delay; existing
+sensor delay, scheduling and transport latency remain.
+
+Internal speed is also compared with the historical RC=0.10 s speed state on
+72 known launch/braking/stop trajectories (20/50/100 ms periods, four onset
+phases, accelerations +1/+2/+3 and -1/-3/-6 m/s²). Every 10/50/90% speed crossing
+is no later, and maximum absolute speed error is smaller. At 20 Hz, braking
+from 20 m/s at -3 m/s² reduces maximum speed overestimation from 0.300 to
+0.104 m/s; at -6 m/s² it reduces 0.600 to 0.222 m/s. This is synthetic known
+motion, not a ground-truth measurement of logged lead speed.
+
+Prediction briefly overshoots after acceleration ends: across those cases,
+internal speed reaches as low as -0.227 m/s after stopping, then settles.
+It is not sent to control as lead speed. Consequently these results do not
+authorize replacing raw control speed with the internal state without further
+validation. In steady constant acceleration its near-zero speed lag is a
+prediction property, not zero detection latency at a new motion transition.
+
+A Windows 11/Python 3.12.3 microbenchmark alternates versions across six rounds,
+with 72,000 full `MyTrack.update` calls and 12,000 batches of 64 tracks per version.
+Both versions retain the same independent jerk estimator. Times include the
+measurement clock overhead (median 0.1 µs); outliers are retained.
+
+| Scope | Version | Mean | 95th percentile | 99th percentile | Observed maximum |
+| --- | --- | --- | --- | --- | --- |
+| One track | Restored filter | 2.12 µs | 2.3 µs | 2.8 µs | 183.3 µs |
+| One track | New observer | 2.95 µs | 3.2 µs | 6.1 µs | 269.4 µs |
+| 64-track batch | Restored filter | 0.135 ms | 0.159 ms | 0.253 ms | 0.837 ms |
+| 64-track batch | New observer | 0.191 ms | 0.233 ms | 0.396 ms | 1.092 ms |
+
+The observed new batch maximum is about 2.2% of a 50 ms update period on this PC.
+This is not a hard worst-case bound or vehicle timing result. Lightweight point
+objects exclude CAN decoding, serialization, transport, planner execution and
+competing vehicle workloads. A device-level timing measurement under normal
+driving load is still needed to quantify end-to-end latency on the vehicle.
+
 ## Integration boundaries
 
 - Front/corner radar tracks use the observer; their existing warmup, loss and

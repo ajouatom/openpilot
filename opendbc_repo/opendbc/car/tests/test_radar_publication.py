@@ -84,6 +84,27 @@ def test_new_and_reacquired_tracks_do_not_publish_old_acceleration():
     assert p.aLead == p.jLead == 0.
 
 
+def test_acceleration_observer_does_not_delay_published_speed():
+  radar = CopyingRadar()
+  different_internal_speed = False
+  published = 0
+  for i in range(80):
+    # Launch, cruise and braking, including a small isolated measurement error.
+    speed = 10. + .1*min(i, 20) - .15*max(i-40, 0) + (.3 if i == 30 else 0.)
+    for p in radar.pts.values():
+      p.vLead, p.vRel = speed, speed-20.
+    result = radar.update_carrot(20., 0., i*.05, [])
+    if result is None:  # Existing initial radar-period acquisition.
+      continue
+    published += 1
+    for p in result.points:
+      assert p.vLead == pytest.approx(speed)
+      assert p.vRel == pytest.approx(speed-20.)
+      different_internal_speed |= abs(radar.tracks[p.trackId].lead_filter.velocity-speed) > .01
+  assert different_internal_speed  # The assertions distinguish raw and filtered speed.
+  assert published >= 70
+
+
 def legacy_published(velocities, dt):
   """Reference: former 3-sample difference, RC=.05, and one-frame copy lag."""
   history = deque(maxlen=3)
