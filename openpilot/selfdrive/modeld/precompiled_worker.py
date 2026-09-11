@@ -37,6 +37,8 @@ def main():
   import model_runtime
   from tinygrad import Device, Tensor
   from openpilot.selfdrive.modeld.helpers import load_oob
+  from openpilot.common.runtime_diagnostics import RuntimeDiagnostics
+  from openpilot.common.swaglog import cloudlog
   from openpilot.system.camerad.cameras.nv12_info import get_nv12_info
 
   with pkl.open('rb') as f:
@@ -75,18 +77,29 @@ def main():
               'checkpoint': metadata['model_checkpoint'], 'frame_size': frame_size}
       control.write(json.dumps(info).encode() + b'\n')
       control.flush()
+      diagnostics = RuntimeDiagnostics('precompiled_worker', cloudlog.event)
       while command := sys.stdin.buffer.read(1):
         if command == b'q':
           break
         if command != b'r':
           raise ValueError('invalid model worker command')
+        started, cpu_started = time.monotonic(), time.thread_time()
         outs, = run_model(**{k: queues[k] for k in model_runtime.MODELD_INPUTS})
+        dispatched = time.monotonic()
         result = outs.numpy().reshape(-1)
         if result.size != count or not np.isfinite(result).all():
           raise ValueError('invalid precompiled model output')
         output[:] = result
+        finished, cpu_finished = time.monotonic(), time.thread_time()
         control.write(b'1\n')
         control.flush()
+        # Timings include transfers/synchronization; these are not pure GPU
+        # kernel durations. Keep the pipe protocol and the compiled graph intact.
+        diagnostics.record(context={'gpu_arch': manifest['gpu_arch']},
+                           run_model_ms=(dispatched - started) * 1000,
+                           result_sync_ms=(finished - dispatched) * 1000,
+                           work_ms=(finished - started) * 1000,
+                           thread_cpu_ms=(cpu_finished - cpu_started) * 1000)
       del output, packed_shared, queues
 
 
