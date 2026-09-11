@@ -76,11 +76,12 @@ class LeadGapState:
     # Roll a copy through the SAME capture, entry and recovery rules. Anchor
     # predicted changes to measurements, rather than replacing measured vRel
     # with the MPC's planned ego speed. Forecasting cannot mutate live state.
-    relative_speeds = self.relative_speed + (lead_speeds - ego_speeds) - (lead_speeds[0] - ego_speeds[0])
+    relative_speed_offset = self.relative_speed - (lead_speeds[0] - ego_speeds[0])
+    relative_speeds = lead_speeds - ego_speeds + relative_speed_offset
     if lead_distances is None:
       lead_distances = self.distance + np.cumsum(np.diff(times, prepend=0.0) * relative_speeds)
     else:
-      lead_distances = self.distance + lead_distances - lead_distances[0]
+      lead_distances = self.distance + lead_distances - lead_distances[0] + times * relative_speed_offset
     if desired_distances is None:
       desired_distances = np.full_like(times, self.desired_distance)
     else:
