@@ -1,0 +1,294 @@
+{
+  "baseline_commit": "e3b8ac8c7cd0e549287d3e02edc82eab182a5056",
+  "tests": {
+    "focused": 683,
+    "cutout_lane_change": 94,
+    "lead_filter": 280,
+    "vault": 28
+  },
+  "modes": {
+    "2": {
+      "before": {
+        "existing_radard": null,
+        "physical_dpath_shadow": {
+          "labels": 245,
+          "unverified_labels": 208,
+          "tp": 55,
+          "fp": 0,
+          "fn": 9,
+          "tn": 181,
+          "precision": 1.0,
+          "recall": 0.859375,
+          "f1": 0.9243697478991597,
+          "accuracy": 0.963265306122449
+        },
+        "missing": 0,
+        "unverified": 208,
+        "radard_expectation_failures": 0,
+        "physical_dpath_expectation_failures": 10,
+        "predeceleration_expectation_failures": 0
+      },
+      "after": {
+        "existing_radard": null,
+        "physical_dpath_shadow": {
+          "labels": 247,
+          "unverified_labels": 208,
+          "tp": 57,
+          "fp": 0,
+          "fn": 9,
+          "tn": 181,
+          "precision": 1.0,
+          "recall": 0.8636363636363636,
+          "f1": 0.9268292682926829,
+          "accuracy": 0.9635627530364372
+        },
+        "missing": 0,
+        "unverified": 208,
+        "radard_expectation_failures": 0,
+        "physical_dpath_expectation_failures": 10,
+        "predeceleration_expectation_failures": 0
+      },
+      "existing_label_changes": [],
+      "new_cases": [
+        {
+          "id": "k8-306-4-slow-left-suv-5227",
+          "validation_set": "cases",
+          "source": "front+corner",
+          "expected": "detect",
+          "input_valid": true,
+          "input_coverage": {
+            "valid": true,
+            "sample_frames": 69,
+            "target_frames": 69,
+            "scope": "target",
+            "reason": "observed"
+          },
+          "radard_event": null,
+          "shadow_event": [
+            52.152585589,
+            1516
+          ],
+          "predecel_event": [
+            53.260269499,
+            1516
+          ],
+          "shadow_applicable": true,
+          "shadow_sensor": "corner",
+          "radard_pass": true,
+          "shadow_pass": true,
+          "predecel_pass": true,
+          "radard_continuous": null,
+          "shadow_continuous": null,
+          "radard_lead_two_continuous": null,
+          "shadow_lead_two_continuous": null,
+          "radard_required_lead_one": null,
+          "shadow_required_lead_one": null,
+          "radard_forbidden_lead_one": null,
+          "shadow_forbidden_lead_one": null,
+          "radard_forbidden_lead_two": null,
+          "shadow_forbidden_lead_two": null
+        },
+        {
+          "id": "k8-306-4-slow-left-suv-continuous-lead-two",
+          "validation_set": "cases",
+          "source": "front+corner",
+          "expected": "detect",
+          "input_valid": true,
+          "input_coverage": {
+            "valid": true,
+            "sample_frames": 69,
+            "target_frames": 69,
+            "scope": "target",
+            "reason": "observed"
+          },
+          "radard_event": null,
+          "shadow_event": [
+            52.152585589,
+            1516
+          ],
+          "predecel_event": [
+            53.260269499,
+            1516
+          ],
+          "shadow_applicable": true,
+          "shadow_sensor": "corner",
+          "radard_pass": true,
+          "shadow_pass": true,
+          "predecel_pass": true,
+          "radard_continuous": null,
+          "shadow_continuous": null,
+          "radard_lead_two_continuous": null,
+          "shadow_lead_two_continuous": true,
+          "radard_required_lead_one": null,
+          "shadow_required_lead_one": null,
+          "radard_forbidden_lead_one": null,
+          "shadow_forbidden_lead_one": null,
+          "radard_forbidden_lead_two": null,
+          "shadow_forbidden_lead_two": null
+        }
+      ],
+      "remaining_failures": [
+        "manual-00000bef-024p30-front-34",
+        "ioniq5-cd0-1-user-lead-gap-1675",
+        "gv80-218-2-user-white-suv-1355",
+        "manual-00000c21-029p80-front-40",
+        "manual-00000c21-031p50-front-46",
+        "manual-00000c21-032p65-front-61",
+        "manual-00000c21-032p75-front-63",
+        "manual-00000c21-033p15-front-62",
+        "manual-00000c21-058p05-front-59",
+        "manual-00000c21-013p65-front-58"
+      ],
+      "sensitivity_first_video_detection": {
+        "1": 52.253776922,
+        "2": 52.253776922,
+        "3": 52.253776922,
+        "4": 52.253776922,
+        "5": 52.253776922
+      }
+    },
+    "3": {
+      "before": {
+        "existing_radard": null,
+        "physical_dpath_shadow": {
+          "labels": 245,
+          "unverified_labels": 208,
+          "tp": 55,
+          "fp": 1,
+          "fn": 9,
+          "tn": 180,
+          "precision": 0.9821428571428571,
+          "recall": 0.859375,
+          "f1": 0.9166666666666665,
+          "accuracy": 0.9591836734693877
+        },
+        "missing": 0,
+        "unverified": 208,
+        "radard_expectation_failures": 0,
+        "physical_dpath_expectation_failures": 13,
+        "predeceleration_expectation_failures": 1
+      },
+      "after": {
+        "existing_radard": null,
+        "physical_dpath_shadow": {
+          "labels": 247,
+          "unverified_labels": 208,
+          "tp": 57,
+          "fp": 1,
+          "fn": 9,
+          "tn": 180,
+          "precision": 0.9827586206896551,
+          "recall": 0.8636363636363636,
+          "f1": 0.9193548387096775,
+          "accuracy": 0.9595141700404858
+        },
+        "missing": 0,
+        "unverified": 208,
+        "radard_expectation_failures": 0,
+        "physical_dpath_expectation_failures": 13,
+        "predeceleration_expectation_failures": 1
+      },
+      "existing_label_changes": [],
+      "new_cases": [
+        {
+          "id": "k8-306-4-slow-left-suv-5227",
+          "validation_set": "cases",
+          "source": "front+corner",
+          "expected": "detect",
+          "input_valid": true,
+          "input_coverage": {
+            "valid": true,
+            "sample_frames": 69,
+            "target_frames": 69,
+            "scope": "target",
+            "reason": "observed"
+          },
+          "radard_event": null,
+          "shadow_event": [
+            52.152585589,
+            1516
+          ],
+          "predecel_event": [
+            53.260269499,
+            1516
+          ],
+          "shadow_applicable": true,
+          "shadow_sensor": "corner",
+          "radard_pass": true,
+          "shadow_pass": true,
+          "predecel_pass": true,
+          "radard_continuous": null,
+          "shadow_continuous": null,
+          "radard_lead_two_continuous": null,
+          "shadow_lead_two_continuous": null,
+          "radard_required_lead_one": null,
+          "shadow_required_lead_one": null,
+          "radard_forbidden_lead_one": null,
+          "shadow_forbidden_lead_one": null,
+          "radard_forbidden_lead_two": null,
+          "shadow_forbidden_lead_two": null
+        },
+        {
+          "id": "k8-306-4-slow-left-suv-continuous-lead-two",
+          "validation_set": "cases",
+          "source": "front+corner",
+          "expected": "detect",
+          "input_valid": true,
+          "input_coverage": {
+            "valid": true,
+            "sample_frames": 69,
+            "target_frames": 69,
+            "scope": "target",
+            "reason": "observed"
+          },
+          "radard_event": null,
+          "shadow_event": [
+            52.152585589,
+            1516
+          ],
+          "predecel_event": [
+            53.260269499,
+            1516
+          ],
+          "shadow_applicable": true,
+          "shadow_sensor": "corner",
+          "radard_pass": true,
+          "shadow_pass": true,
+          "predecel_pass": true,
+          "radard_continuous": null,
+          "shadow_continuous": null,
+          "radard_lead_two_continuous": null,
+          "shadow_lead_two_continuous": true,
+          "radard_required_lead_one": null,
+          "shadow_required_lead_one": null,
+          "radard_forbidden_lead_one": null,
+          "shadow_forbidden_lead_one": null,
+          "radard_forbidden_lead_two": null,
+          "shadow_forbidden_lead_two": null
+        }
+      ],
+      "remaining_failures": [
+        "ioniq9-234-6-scc-corroborated-early-l2",
+        "manual-00000bef-024p30-front-34",
+        "ioniq5-cd0-1-user-lead-gap-1675",
+        "gv80-218-2-adjacent-pass-49",
+        "gv80-218-2-user-white-suv-1355",
+        "ioniq5-cfb-6-early-clear",
+        "manual-00000c21-029p80-front-40",
+        "manual-00000c21-031p50-front-46",
+        "manual-00000c21-032p65-front-61",
+        "manual-00000c21-032p75-front-63",
+        "manual-00000c21-033p15-front-62",
+        "manual-00000c21-058p05-front-59",
+        "manual-00000c21-013p65-front-58"
+      ],
+      "sensitivity_first_video_detection": {
+        "1": 52.253776922,
+        "2": 52.253776922,
+        "3": 52.253776922,
+        "4": 52.253776922,
+        "5": 52.253776922
+      }
+    }
+  }
+}
