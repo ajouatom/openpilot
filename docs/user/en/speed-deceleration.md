@@ -30,7 +30,6 @@ The code collects several candidates and selects their minimum as `desired_speed
 | Road limit plus offset | `AutoRoadSpeedLimitOffset` |
 | Vision curve | `AutoCurveSpeedFactor`, `TurnSpeedControlMode` |
 | Route turn | `MapTurnSpeedFactor`, `TurnSpeedControlMode` |
-| Future model speed | `ModelTurnSpeedFactor` |
 | Separate automatic turn control | `AutoTurnControl*` |
 
 If raising one value produces no change, another source may already be lower. Check the displayed source, event type, target limit, and remaining distance together.
@@ -219,22 +218,25 @@ If there is no slowing, check mode 2+, event type 22, remaining distance, road c
 <a id="curve-turn"></a>
 ## 4. Curves and turns
 
-There are four distinct sources:
+There are three distinct sources:
 
 - **Vision curve speed** from predicted yaw rate and speed
 - **Route-turn speed** from route/turn input
-- **Future model speed** at a selected future time
 - **Applied model driving speed** from the model's overall desired velocity
 
 ### `AutoCurveSpeedFactor`
 
-The code scales model yaw rate and calculates a curve speed around a 1.9 m/s² lateral-acceleration target. A larger factor treats the same curve as sharper and produces a lower target.
+The code divides predicted yaw rate by velocity at the same point to obtain curvature. It divides the 1.9 m/s² reference lateral-acceleration budget by the setting ratio, so a higher factor produces a lower curve target. Predicted future velocity is not used directly as a driving-speed target.
+
+The curve target and remaining path distance determine the speed ceiling at the current position. A distant curve permits a higher approach speed; the ceiling decreases toward the curve target as the vehicle approaches. The calculation reserves time for control response and gradual braking buildup. Release briefly holds the limit and then raises it progressively.
+
+Slow or invalid model predictions and isolated yaw-rate spikes are excluded. Late or inaccurate curve predictions can still lead to late deceleration.
 
 The relationship is approximately inverse-square-root: changing 100% to 120% produces about `1 / √1.2`, or 91% of the previous calculated speed. Raise it one step if curves are too fast; lower it if they are too slow.
 
 ### `AutoCurveSpeedLowerLimit`
 
-This floor applies to vision-curve, route-turn, and future-model candidates. Raising it prevents those sources from selecting a lower speed, which can leave insufficient slowing for a sharp curve. It is not an automatically safe minimum.
+This floor applies to vision-curve and route-turn candidates. For vision curves, it applies to the curve target before remaining distance determines the current approach ceiling. Raising it prevents those sources from selecting a lower speed, which can leave insufficient slowing for a sharp curve. It is not an automatically safe minimum.
 
 ### `TurnSpeedControlMode`
 
@@ -248,26 +250,13 @@ This floor applies to vision-curve, route-turn, and future-model candidates. Rai
 In mode 2, route-turn speed enters only when turn distance is roughly between -500 m and +500 m. Mode 3 can cause unexpected slowing when route data is inaccurate.
 
 > [!IMPORTANT]
-> Mode `0` does not disable every model-derived speed function. Check `ModelTurnSpeedFactor` and `ApplyModelSpeed` separately.
+> Mode `0` does not disable every model-derived speed function. `ApplyModelSpeed` changes cruise set speed separately.
 
 ### `MapTurnSpeedFactor`
 
     route-turn candidate = route speed × factor / 100
 
 80% lowers the received value; 100% keeps it; 120% raises it. `AutoCurveSpeedLowerLimit` is then applied as the floor. Valid supported route-speed input is required.
-
-### `ModelTurnSpeedFactor`
-
-The stored value is multiplied by `0.1 seconds` to choose a future point in the model prediction:
-
-| Value | Future point |
-|---:|---:|
-| `0` | Disabled; candidate set to 200 km/h |
-| `10` | About 1.0 s ahead |
-| `30` | About 3.0 s ahead |
-| `50` | About 5.0 s ahead |
-
-The chosen speed is multiplied by 1.2 and smoothed. A larger setting does not necessarily mean slower; it depends on the predicted speed at that future point.
 
 ### `ApplyModelSpeed`
 
@@ -285,7 +274,7 @@ This is not curve-only. It applies the driving model's `desiredVelocity` to crui
 > [!WARNING]
 > A negative value is a strong continuous overwrite, not a “deceleration only” switch. Without a valid road limit, the ceiling can become zero. Leave it at `0` unless you fully understand the input path and behavior.
 
-For isolated tuning, start with mode 1, `ModelTurnSpeedFactor=0`, and `ApplyModelSpeed=0`; adjust the curve factor, then the floor, then add route and future-model sources one at a time.
+For isolated tuning, start with mode 1 and `ApplyModelSpeed=0`; adjust the curve factor, then the floor, and then check route-turn control. Test `ApplyModelSpeed` separately because it changes cruise set speed.
 
 <a id="traffic-light"></a>
 ## 5. Traffic-light detection

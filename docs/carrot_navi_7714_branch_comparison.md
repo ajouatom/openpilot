@@ -121,6 +121,17 @@ bump ...` 구조라서, 적용 가능한 primary camera 또는 section이 있으
 
 ## 상태 유지와 clear 차이
 
+### carrot-wip 비전 커브 속도 변경 (2026-09-11)
+
+`carrot-wip`은 `ModelTurnSpeedFactor` 미래속도 후보를 제거했다. 7713/7714에 공통인
+`CarrotServ` 최저속도 선택에서 `model` 후보와 vTurn 120km/h 경계 조건이 없어졌다.
+비전 커브의 `vturn` 후보는 예측 요레이트/속도로 얻은 곡률과 커브까지 남은 거리로
+현재 위치의 속도 상한을 계산한다. 커브 최저속도·모드별 비전/경로 선택은 유지한다.
+별도 `ApplyModelSpeed` 설정속도 기능과 SDI/TBT 입력 처리에는 적용되지 않는다.
+이는 `navi-stream`에 같은 변경이 적용됐다는 뜻은 아니다.
+검증: `test_curve_speed.py`, `test_carrot_navi_serv.py`의 모드별 속도 선택 및 기존
+`test_vehicle_speed_camera_control.py`.
+
 ### carrotMan 미수신·중단 시 속도 적용 방어 (2026-09-10)
 
 `carrot-wip`의 플래너·크루즈·제어 출력은 `carrotMan`을 실제 수신했고, 메시지가 valid/alive이며,

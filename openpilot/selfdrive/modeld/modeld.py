@@ -529,7 +529,8 @@ def main(demo=False):
       modelv2_send.modelV2.meta.distanceToRoadEdgeRight = float(DH.right.dist_to_edge)
       modelv2_send.modelV2.meta.desire = DH.desire
       modelv2_send.modelV2.meta.laneChangeProb = DH.lane_change_ll_prob
-      modelv2_send.modelV2.meta.modelTurnSpeed = float(DH.model_turn_speed)
+      # Retain the wire field for older log/replay readers; this limiter is retired.
+      modelv2_send.modelV2.meta.modelTurnSpeed = 200.0
       modelv2_send.modelV2.meta.laneChangeAvailableLeft = DH.lane_change_available_left
       modelv2_send.modelV2.meta.laneChangeAvailableRight = DH.lane_change_available_right
       mt3 = time.perf_counter()
