@@ -285,7 +285,16 @@ def main(demo=False):
       nonlocal usbgpu_model
       for attempt in range(1, USBGPU_INIT_ATTEMPTS + 1):
         try:
-          usbgpu_model = ModelState(vipc_client_main.width, vipc_client_main.height, True, usbgpu_pkl_path)
+          if usbgpu_pkl_path.name == 'model.pkl' and (usbgpu_pkl_path.parent / 'installed.json').is_file():
+            from openpilot.selfdrive.modeld.precompiled_runner import PrecompiledModelState
+            from openpilot.selfdrive.modeld.precompiled_model import reject
+            try:
+              usbgpu_model = PrecompiledModelState(vipc_client_main.width, vipc_client_main.height, usbgpu_pkl_path)
+            except Exception:
+              reject(usbgpu_pkl_path)
+              raise
+          else:
+            usbgpu_model = ModelState(vipc_client_main.width, vipc_client_main.height, True, usbgpu_pkl_path)
           return
         except Exception as exc:
           if usbgpu_pcie_not_ready(exc) and attempt < USBGPU_INIT_ATTEMPTS:
