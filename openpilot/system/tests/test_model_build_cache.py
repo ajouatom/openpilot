@@ -81,7 +81,7 @@ def test_optional_model_reuse_checks_dependencies(tmp_path: Path, monkeypatch, e
   assert manifest_path.exists() is exists  # Preserve old artifacts through transient failures.
 
 
-@pytest.mark.parametrize('delivery', ['available', 'missing', 'invalid'])
+@pytest.mark.parametrize('delivery', ['available', 'missing', 'invalid', 'pcie_off', 'usb_reset'])
 def test_precompiled_delivery_or_local_compile_fallback(tmp_path, monkeypatch, delivery):
   tree = ast.parse((Path(BASEDIR) / 'openpilot/system/manager/build.py').read_text(encoding='utf8'))
   body = [n for n in tree.body if isinstance(n, ast.Assign) and any(
@@ -105,9 +105,14 @@ def test_precompiled_delivery_or_local_compile_fallback(tmp_path, monkeypatch, d
   monkeypatch.setitem(sys.modules, 'openpilot.system.hardware.usbgpu', SimpleNamespace(check_usbgpu=lambda **kw: None))
   def validate(command, **kw):
     assert 'openpilot.selfdrive.modeld.precompiled_runner' in command
+    assert kw['stderr'] == subprocess.STDOUT and kw['text']
     if delivery == 'invalid':
-      raise subprocess.CalledProcessError(1, command)
-    return SimpleNamespace(returncode=0)
+      raise subprocess.CalledProcessError(1, command, output='ValueError: incompatible model metadata\n')
+    if delivery in ('pcie_off', 'usb_reset'):
+      output = ('RuntimeError: PCIe link not up (LTSSM=0x00), custom firmware not ready\n'
+                if delivery == 'pcie_off' else 'RuntimeError: USB bridge reset failed\n')
+      raise subprocess.CalledProcessError(1, command, output=output)
+    return SimpleNamespace(returncode=0, stdout='')
   def compile_local(command, **kw):
     assert command[0:3] == ['scons', '-j1', '--cache-populate']
     raise RuntimeError('local compiler was invoked')
@@ -115,7 +120,7 @@ def test_precompiled_delivery_or_local_compile_fallback(tmp_path, monkeypatch, d
                'os': os, 'sys': sys, 'time': SimpleNamespace(time=lambda: 0),
                'subprocess': SimpleNamespace(run=validate, Popen=compile_local, PIPE=-1, STDOUT=-2)}
   exec(compile(ast.Module(body=body, type_ignores=[]), '<optional model build>', 'exec'), namespace)
-  if delivery == 'available':
+  if delivery in ('available', 'pcie_off', 'usb_reset'):
     assert namespace['build_usbgpu_model'](SimpleNamespace(update=lambda text: None))
   else:
     with pytest.raises(RuntimeError, match='local compiler was invoked'):

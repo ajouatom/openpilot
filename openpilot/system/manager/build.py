@@ -64,12 +64,26 @@ def build_usbgpu_model(spinner: Spinner) -> bool:
     try:
       if usbgpu_present():
         spinner.update("USB eGPU big model\nValidating precompiled model")
-        subprocess.run([sys.executable, '-m', 'openpilot.selfdrive.modeld.precompiled_runner', str(precompiled)],
-                       cwd=BASEDIR, check=True, timeout=120)
+        validation = subprocess.run([sys.executable, '-m', 'openpilot.selfdrive.modeld.precompiled_runner', str(precompiled)],
+                                    cwd=BASEDIR, check=True, timeout=120, text=True,
+                                    stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        print(validation.stdout, end='')
       write_big_model_status(model_cache_dir(), "compiled", detail="downloaded precompiled model", **status_values)
       print(f"Using precompiled eGPU model without SCons compilation: {precompiled}")
       return True
     except Exception as exc:
+      output = getattr(exc, 'output', '') or ''
+      if isinstance(output, bytes):
+        output = output.decode('utf-8', 'replace')
+      if output:
+        print(output, end='')
+      if usbgpu_pcie_not_ready(output):
+        # USB enumeration can succeed with ignition off while the GPU's 12V
+        # supply is absent. Keep the verified artifact for the next model start.
+        detail = 'precompiled model verified; waiting for eGPU power/PCIe readiness'
+        write_big_model_status(model_cache_dir(), 'waiting_for_ignition', detail=detail, **status_values)
+        print(f'Precompiled eGPU validation deferred: {detail}')
+        return True
       print(f"Precompiled eGPU validation failed; using local compiler: {exc}")
       reject(precompiled)
   present = usbgpu_present()
