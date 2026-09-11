@@ -1,5 +1,6 @@
-"""Retain bounded lead-gap headroom, then recover it with a first-order filter."""
+"""Recover newly opened lead-gap headroom with continuous two-stage dynamics."""
 
+from copy import copy
 import math
 
 import numpy as np
@@ -21,8 +22,13 @@ class LeadGapState:
   def __init__(self):
     self.key = None
     self.extra_tf = 0.0
+    self.recovery_tf = 0.0
     self.strength = 0.0
     self.filtered_relative_speed = 0.0
+    self.candidate = 0.0
+    self.distance = 0.0
+    self.desired_distance = 0.0
+    self.relative_speed = 0.0
 
   def update(self, *, level, track_id, enabled, dt, ego_speed, lead_speed, relative_speed,
              distance, desired_distance, base_tf):
@@ -38,37 +44,89 @@ class LeadGapState:
     acquired = key != self.key
     if acquired:
       self.key, self.extra_tf, self.strength = key, candidate, 0.0
+      self.recovery_tf = candidate
       self.filtered_relative_speed = relative_speed
 
     # Use measured relative speed, not lead speed minus the MPC's planned ego
     # speed. Opening can continue through a lead acceleration lull or restart.
-    self.filtered_relative_speed += dt / (OPENING_FILTER_TAU + dt) * (relative_speed - self.filtered_relative_speed)
+    self.filtered_relative_speed += -math.expm1(-dt / OPENING_FILTER_TAU) * (relative_speed - self.filtered_relative_speed)
     if not acquired:
-      previous = self.extra_tf
-      self.extra_tf /= 1.0 + dt * recovery_strength(lead_speed) / RECOVERY_TAU[level]
+      captured = 0.0
       if self.filtered_relative_speed > OPENING_SPEED:
-        # Keep recovering even while opening. A large constant gap alone must
-        # not replenish the allowance, and new headroom enters at a bounded rate.
-        self.extra_tf = max(self.extra_tf, min(candidate, previous + MAX_CAPTURE_RISE * dt))
+        # Spend only newly observed headroom, never the same candidate again.
+        # A changing braking-distance estimate or ego-speed denominator alone
+        # is not an opening gap. Bound measurement jumps by relative motion.
+        opened = min(max(0.0, distance - self.distance), max(0.0, relative_speed) * dt)
+        captured = min(max(0.0, candidate - self.candidate),
+                       CAPTURE_FRACTION * opened / max(ego_speed, MIN_CAPTURE_SPEED), MAX_CAPTURE_RISE * dt)
+      self.recovery_tf, self.extra_tf = recover_headroom(
+        self.recovery_tf, self.extra_tf, captured, dt, lead_speed, RECOVERY_TAU[level], cap)
 
     self.extra_tf = min(cap, self.extra_tf)
+    self.recovery_tf = min(cap, self.recovery_tf)
     self.strength = min(1.0, self.strength + dt / ENTRY_TIME)
-    return self.extra_tf * self.strength
+    self.candidate, self.distance = candidate, distance
+    self.desired_distance, self.relative_speed = desired_distance, relative_speed
+    return self.extra_tf * entry_weight(self.strength)
 
-  def margins(self, *, level, times, ego_speeds, lead_speeds, base_tf):
+  def margins(self, *, level, times, ego_speeds, lead_speeds, base_tf,
+              lead_distances=None, desired_distances=None):
     if self.key is None or level not in range(len(RECOVERY_TAU)):
       return np.zeros_like(times)
-    # Predict the same inexpensive first-order recovery over the MPC horizon.
-    # At a stopped lead the TF stays fixed, but its distance term vanishes as
-    # ego stops. Do not assume future opening will replenish the allowance.
-    strength = recovery_strength(lead_speeds)
-    remaining = np.cumprod(1.0 / (1.0 + np.diff(times, prepend=0.0) * strength / RECOVERY_TAU[level]))
-    extra = min(self.extra_tf, max(0.0, MAX_TOTAL_TF - base_tf)) * self.strength
-    return np.maximum(ego_speeds, 0.0) * extra * remaining
+    # Roll a copy through the SAME capture, entry and recovery rules. Anchor
+    # predicted changes to measurements, rather than replacing measured vRel
+    # with the MPC's planned ego speed. Forecasting cannot mutate live state.
+    relative_speeds = self.relative_speed + (lead_speeds - ego_speeds) - (lead_speeds[0] - ego_speeds[0])
+    if lead_distances is None:
+      lead_distances = self.distance + np.cumsum(np.diff(times, prepend=0.0) * relative_speeds)
+    else:
+      lead_distances = self.distance + lead_distances - lead_distances[0]
+    if desired_distances is None:
+      desired_distances = np.full_like(times, self.desired_distance)
+    else:
+      desired_distances = self.desired_distance + desired_distances - desired_distances[0]
+    predicted = copy(self)
+    margins = np.zeros_like(times)
+    previous_time = 0.0
+    for i, t in enumerate(times):
+      dt = float(t - previous_time)
+      if dt > 0.0:
+        predicted.update(level=level, track_id=self.key[1], enabled=True, dt=dt,
+                         ego_speed=float(ego_speeds[i]), lead_speed=float(lead_speeds[i]),
+                         relative_speed=float(relative_speeds[i]), distance=max(1e-3, float(lead_distances[i])),
+                         desired_distance=float(desired_distances[i]), base_tf=base_tf)
+      margins[i] = max(0.0, ego_speeds[i]) * min(predicted.extra_tf, max(0.0, MAX_TOTAL_TF - base_tf)) * entry_weight(predicted.strength)
+      previous_time = t
+    return margins
+
+
+def entry_weight(strength):
+  """Zero entry slope at both ends of the existing acquisition interval."""
+  return strength * strength * (3.0 - 2.0 * strength)
+
+
+def recover_headroom(reservoir, extra, captured, dt, lead_speed, tau, cap):
+  """Exact two-stage decay with constant capture rate over this interval.
+
+  With no capture and initially equal states, extra = H*(1+k*t)*exp(-k*t).
+  It starts with zero recovery slope. Both stages share the same speed clock,
+  retaining headroom at a stopped lead. Two stages use k=2/tau so their mean
+  recovery time remains tau instead of doubling the previous time scale.
+  """
+  k = 2.0 * float(recovery_strength(lead_speed)) / tau
+  if k <= 0.0:
+    return min(cap, reservoir + captured), extra
+  z = k * dt
+  decay = math.exp(-z)
+  # Stable integration of the capture input, including near-zero lead speed.
+  first = -math.expm1(-z) / z
+  second = (1.0 - (1.0 + z) * decay) / z if z > 1e-4 else z / 2.0 - z*z / 3.0 + z*z*z / 8.0
+  return (min(cap, max(0.0, reservoir * decay + captured * first)),
+          min(cap, max(0.0, (extra + z * reservoir) * decay + captured * second)))
 
 
 def recovery_strength(lead_speed):
-  return np.clip((lead_speed - STOPPED_SPEED) / (FULL_RECOVERY_SPEED - STOPPED_SPEED), 0.0, 1.0)
+  return min(1.0, max(0.0, (lead_speed - STOPPED_SPEED) / (FULL_RECOVERY_SPEED - STOPPED_SPEED)))
 
 
 def gap_reference(obstacles, margins, ego_speed):
