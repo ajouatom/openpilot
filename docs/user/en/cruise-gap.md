@@ -251,15 +251,15 @@ Levels 4–5 prioritize the selected `TFollowGap1`–`TFollowGap4` while a stabl
 
 Deceleration preview operates independently of the response level. During active control, remaining correction releases progressively when relative acceleration eases or the lead switches between radar and vision or disappears. Accelerator or brake intervention and longitudinal control exit clear it immediately. Crossing zero relative acceleration does not remove the correction in one step. New hard-deceleration requests retain the existing preview attack rate and braking bounds.
 
-Levels 0–4 capture half of the excess over the base following distance when acquiring a radar lead or while the measured following gap opens. Base TF plus extra TF is capped at 2.5 seconds without reducing a larger base TF. A first-order filter recovers the extra TF even while the gap opens, most slowly at level 0. A large gap alone does not repeatedly refill it. A stopped lead retains it; a slow lead recovers it more slowly. Level 5 adds no extra TF. This replaces the previous relative-closing-speed distance allowance rather than stacking with it.
+Levels 0–4 initially capture half the excess over the base following distance when acquiring a radar lead. Subsequent capture accepts only candidate increases supported by newly measured gap opening; the same headroom cannot refill the allowance repeatedly. Base TF plus extra TF is capped at 2.5 seconds without reducing a larger base TF. Two filter stages smooth the recovery rate, most gradually at level 0. MPC predicts future headroom with the same capture and recovery rules. A stopped lead retains it; a slow lead recovers it more slowly. Level 5 adds no extra TF. This replaces the previous relative-closing-speed distance allowance rather than stacking with it.
 
 Headroom applies to a stable radar lead in normal ACC. Accelerator override, disengagement, forced deceleration and lane changes disable it. Unlike acceleration boost, it also applies at level 0 and during stopping. Target loss/replacement or a level change does not transfer the old allowance.
 
-Acquisition allowance ramps in over 0.8 seconds. Afterward, a larger candidate is accepted when measured relative speed, filtered with a 0.3-second time constant, exceeds 0.2m/s; further increases are limited to 0.5 TF seconds per second. A brief lead-acceleration lull does not end capture while the gap keeps opening, and renewed opening can capture more headroom.
+Acquisition allowance ramps in over 0.8 seconds with zero slope at both ends. Afterward, measured relative speed filtered with a 0.3-second time constant must exceed 0.2m/s, and only candidate increases supported by actual gap growth are captured. Capture is bounded by relative-motion gap growth and 0.5 TF seconds per second. A candidate increase caused only by the base target distance or ego speed does not refill the allowance.
 
 Stored extra TF continues recovering during capture. A constant or closing gap does not refill it. A newly acquired slower or stopped lead can receive initial headroom without an opening gap. The stopped-lead hold rule is described below.
 
-| Level | Base recovery time constant | Extra TF |
+| Level | Base recovery time scale | Extra TF |
 |---|---:|---|
 | 0 | 5 seconds | Active |
 | 1 | 4 seconds | Active |
@@ -268,7 +268,7 @@ Stored extra TF continues recovering during capture. A constant or closing gap d
 | 4 | 1 second | Active |
 | 5 | — | None |
 
-Lead speed at or below 0.3m/s holds extra TF. From 0.3 to 5m/s, recovery strength increases linearly with lead speed; at 5m/s and above the table applies. A five-second time constant leaves roughly 37% after five seconds rather than completing recovery. For a stopped lead, the extra-TF distance term shrinks with ego speed toward normal stopping clearance.
+Lead speed at or below 0.3m/s holds extra TF. From 0.3 to 5m/s, recovery strength increases linearly with lead speed; at 5m/s and above the table applies. Starting with equal recovery states and no new capture, roughly 41% remains after the listed time scale. Recovery begins with zero slope, builds gradually, then tapers. For a stopped lead, the extra-TF distance term shrinks with ego speed toward normal stopping clearance.
 
 Capture uses actual distance minus the base target distance, with a 1m/s minimum divisor at low ego speed. Without excess over the base target including braking-distance terms, there is no new extra TF. Only the MPC comfort reference changes; physical lead positions, base TF, danger constraints and braking limits stay unchanged. Temporary TF does not guarantee a particular braking onset or ride quality. Ego-deceleration `TFollowDecelBoost` remains separate existing TF processing.
 
