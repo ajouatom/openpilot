@@ -29,8 +29,8 @@ def test_launcher_accepts_precompiled_model_without_legacy_chunks(tmp_path, arti
   function = source[source.index('function invalidate_modeld_build_if_needed {'):]
   function = function[:function.index('\n}')+2]
   script = (f'DIR={shlex.quote(tmp_path.as_posix())}\nBIG_MODEL_SHA=model-sha\nFORCE_REBUILD=0\n'
-            'git() { echo stamp; }\n'
-            f'big_model_artifact_ready() {{ return {0 if artifact_ready else 1}; }}\n'
+            + 'git() { echo stamp; }\n'
+            + f'big_model_artifact_ready() {{ return {0 if artifact_ready else 1}; }}\n'
             + function + '\ninvalidate_modeld_build_if_needed\necho "$FORCE_REBUILD"\n')
   result = subprocess.run([bash, '-c', script], capture_output=True, text=True, check=True)
   assert result.stdout.strip().splitlines()[-1] == expected_rebuild
