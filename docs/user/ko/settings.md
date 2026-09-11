@@ -249,6 +249,16 @@ Carrot Web 설정 화면에서는 다음 기능을 사용할 수 있습니다.
 | 외부 HUD·레이더 표시 | `ClusterHudRadarInfo`, `ClusterHudRadarDisplay`, `ClusterHudRadarSourceColor` | 외부 HUD의 레이더 정보와 색상 |
 | 외부 HUD·성능·디버그 | `ClusterHudCoreMode`, `ClusterHudPriority`, `ClusterHudDebug` | CPU 코어, 프로세스 우선순위와 진단 정보 |
 
+`ShowPlotMode`는 주행 중 진단 그래프를 선택하며 `0`은 표시를 끕니다. `4`와 `5`는 모두 주 제어 대상 앞차(`radarState.leadOne`)를 사용하며, mici 본체에서도 앞차 메시지의 값이 바뀌면 그래프에 반영합니다.
+
+| 색상 | `4`: 앞차 가속도·상대속도 | `5`: 앞차 가속도·저크 |
+|---|---|---|
+| 노랑 | 내 차의 계획 가속도 첫 값 `longitudinalPlan.accels[0]` (m/s²) | 내 차의 실제 가속도 `carState.aEgo` (m/s²) |
+| 초록 | 앞차의 추정 가속도 `leadOne.aLeadK` (m/s²) | 앞차 가속도 `leadOne.aLead` (m/s²) |
+| 주황 | 앞차와의 상대속도 `leadOne.vRel` (m/s) | 앞차 가속도 변화율 `leadOne.jLead` (m/s³) |
+
+상대속도는 음수일 때 앞차와 가까워지고 양수일 때 멀어집니다. 앞차가 검출되지 않으면 앞차 값은 0으로 표시되며, 이 설정은 진단 표시만 바꾸고 차량 제어에는 영향을 주지 않습니다.
+
 `ShowRouteInfo` 설명에 남아 있는 APN 표기는 경로 정보 입력 상태를 뜻합니다. 이를 CarrotMan 또는 CarrotLink 지원 안내로 해석하면 안 됩니다.
 
 `ShowCustomBrightness=0`은 주변 밝기에 따른 자동 조절이고, `ShowModelView`는 카메라와 모델 표시 조합을 선택합니다. `ShowCameraWithCluster=0`은 외부 HUD 연결 중 본체 카메라를 숨기는 기존 기본 동작이고, `1`은 본체 카메라 영상을 표시합니다. `ClusterHud` 계열은 지원되는 외부 HUD를 연결한 경우에만 사용하세요.
