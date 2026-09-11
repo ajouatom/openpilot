@@ -573,6 +573,7 @@ class LongitudinalMpc:
     # Extra TF is a comfort preference, not a change to physical lead obstacles,
     # base TF, cruise/map targets or braking constraints. Level 5 adds no margin.
     gap_v = np.maximum(0.0, self.x_sol[:,1] + v_ego - self.x_sol[0,1])
+    gap_x = np.cumsum(np.diff(T_IDXS, prepend=0.0) * np.concatenate(([gap_v[0]], (gap_v[1:] + gap_v[:-1]) * 0.5)))
     self.lead_gap_margins[:] = 0.0
     for lead_index, (lead, lead_xv) in enumerate(((radarstate.leadOne, lead_xv_0), (radarstate.leadTwo, lead_xv_1))):
       eligible = (
@@ -586,7 +587,9 @@ class LongitudinalMpc:
                    ego_speed=v_ego, lead_speed=lead.vLead if eligible else 0.0, relative_speed=lead.vRel if eligible else 0.0,
                    distance=lead.dRel if eligible else 0.0, desired_distance=self.base_desired_distances[lead_index], base_tf=t_follow)
       self.lead_gap_margins[:,lead_index] = state.margins(
-        level=carrot.leadAccelResponse, times=T_IDXS, ego_speeds=gap_v, lead_speeds=lead_xv[:,1], base_tf=t_follow)
+        level=carrot.leadAccelResponse, times=T_IDXS, ego_speeds=gap_v, lead_speeds=lead_xv[:,1], base_tf=t_follow,
+        lead_distances=lead_xv[:,0] - gap_x,
+        desired_distances=desired_follow_distance(gap_v, lead_xv[:,1], comfort_brake, stop_distance, t_follow))
     self.yref[:,0] = gap_reference(x_obstacles, self.lead_gap_margins, gap_v)
     self.yref[:,1] = x
     self.yref[:,2] = v
