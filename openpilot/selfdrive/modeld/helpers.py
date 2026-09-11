@@ -92,10 +92,19 @@ def load_oob(f):
       if prev is not None:
         prev.release()
       buf = bytearray(struct.unpack('<q', h)[0])
-      f.readinto(buf)
+      if f.readinto(buf) != len(buf):
+        raise EOFError("incomplete model buffer")
       prev = pickle.PickleBuffer(buf)
       yield prev
   return pickle.load(io.BytesIO(opcodes), buffers=buffers())
+
+
+def validate_model_file(path: str | Path) -> None:
+  with open(path, "rb") as f:
+    load_oob(f)
+    if f.read(1):
+      raise ValueError("unexpected model buffer data")
+
 
 def usb_device_present(usb_ids: Collection[tuple[int, int]], min_speed_mbps: int = 0) -> bool:
   for d in Path("/sys/bus/usb/devices").glob("*"):
