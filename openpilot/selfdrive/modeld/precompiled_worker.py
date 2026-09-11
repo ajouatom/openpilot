@@ -1,22 +1,28 @@
 """Run a pinned compiled model in its own tinygrad interpreter and shared input buffer."""
-import ctypes
 import hashlib
 import json
 import mmap
 import os
 from pathlib import Path
-import signal
 import sys
+import threading
+import time
+
+
+def watch_parent(parent):
+  # PR_SET_PDEATHSIG follows the creating *thread*. modeld's loading thread exits
+  # after startup, so monitor the parent process instead of killing a healthy worker.
+  while os.getppid() == parent:
+    time.sleep(.2)
+  os._exit(1)
 
 
 def main():
   # Release the exclusive USB GPU when modeld exits, including a crash/SIGKILL.
   parent = os.getppid()
-  if sys.platform == 'linux':
-    if ctypes.CDLL(None).prctl(1, signal.SIGKILL, 0, 0, 0) != 0:
-      raise OSError('could not set worker parent-death signal')
-    if os.getppid() != parent or parent == 1:
-      return
+  if parent == 1:
+    return
+  threading.Thread(target=watch_parent, args=(parent,), daemon=True).start()
   control = sys.stdout.buffer
   sys.stdout = sys.stderr  # tinygrad diagnostics must not enter the control protocol
   pkl, shared_path, width, height = Path(sys.argv[1]), Path(sys.argv[2]), int(sys.argv[3]), int(sys.argv[4])
@@ -64,6 +70,7 @@ def main():
       output = np.ndarray((count,), np.float32, buffer=shared, offset=input_bytes)
       queues['packed_npy_inputs'] = Tensor(packed_shared, device='NPY').realize()
       info = {'size': total, 'input_bytes': input_bytes, 'output_count': count, 'layout': layout,
+              'input_shapes': metadata['input_shapes'],
               'output_slices': {k: [v.start, v.stop, v.step] for k, v in metadata['output_slices'].items()},
               'checkpoint': metadata['model_checkpoint'], 'frame_size': frame_size}
       control.write(json.dumps(info).encode() + b'\n')
