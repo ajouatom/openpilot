@@ -90,10 +90,22 @@ def load_oob(f):
   opcodes = f.read(struct.unpack('<q', f.read(8))[0])
   def buffers():
     while (h := f.read(8)):
-      pb = pickle.PickleBuffer(bytearray(struct.unpack('<q', h)[0]))
-      f.readinto(pb)
+      # carrot: this branch's vendored tinygrad releases the PickleBuffer itself in
+      # Buffer.__init__ after copying, so upstream's prev/release bookkeeping is redundant here.
+      nbytes = struct.unpack('<q', h)[0]
+      pb = pickle.PickleBuffer(bytearray(nbytes))
+      if f.readinto(pb) != nbytes:
+        raise EOFError("incomplete model buffer")
       yield pb
   return pickle.load(io.BytesIO(opcodes), buffers=buffers())
+
+
+def validate_model_file(path: str | Path) -> None:
+  with open(path, "rb") as f:
+    load_oob(f)
+    if f.read(1):
+      raise ValueError("unexpected model buffer data")
+
 
 def usb_device_present(usb_ids: Collection[tuple[int, int]], min_speed_mbps: int = 0) -> bool:
   for d in Path("/sys/bus/usb/devices").glob("*"):

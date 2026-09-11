@@ -11,7 +11,7 @@ from collections import namedtuple
 
 import numpy as np
 
-from openpilot.selfdrive.modeld.helpers import dump_oob, load_oob
+from openpilot.selfdrive.modeld.helpers import dump_oob, load_oob, validate_model_file
 
 def _patch_tinygrad_fetch_fw():
   import hashlib
@@ -318,4 +318,5 @@ if __name__ == "__main__":
 
   with open(args.output, "wb") as f:
     dump_oob(out, f)
+  validate_model_file(args.output)
   print(f"Saved JITs to {args.output} ({os.path.getsize(args.output) / 1e6:.2f} MB)")
