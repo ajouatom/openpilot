@@ -19,6 +19,7 @@ from opendbc.car.common.basedir import BASEDIR
 from opendbc.car.common.conversions import Conversions as CV
 from opendbc.car.common.simple_kalman import KF1D, get_kalman_gain
 from opendbc.car.values import PLATFORMS
+from opendbc.car.radar_lead_filter import RadarLeadFilter
 from opendbc.can import CANParser
 
 from openpilot.common.params import Params
@@ -38,10 +39,9 @@ CORNER_RADAR_SLOT_DISCONTINUITY_D_REL_M = 8.0
 CORNER_RADAR_SLOT_DISCONTINUITY_Y_REL_M = 1.5
 CORNER_RADAR_SLOT_DISCONTINUITY_V_REL_MPS = 4.0
 RADAR_ACCEL_INNOVATION_LIMIT = 3.0
-# Restore the original filtered-speed derivative and its noise attenuation.
-# Publish the current estimate without an additional output filter or frame lag.
+# Filtered speed is retained for the existing near-standstill detector.
 RADAR_SPEED_FILTER_RC = 0.10
-RADAR_ACCEL_FILTER_RC = 0.15
+RADAR_ACCEL_FILTER_RC = 0.05  # SCC reusable-slot path only
 RADAR_JERK_HISTORY_SECONDS = 0.50
 RADAR_JERK_HISTORY_MIN_SAMPLES = 7
 RADAR_JERK_FILTER_RC = 0.25
@@ -263,6 +263,7 @@ class MyTrack:
     self.dt = dt
     self.vLead_avg = FirstOrderFilter(self.vLead, RADAR_SPEED_FILTER_RC, self.dt)
     self.aLead_avg = FirstOrderFilter(self.aLead, RADAR_ACCEL_FILTER_RC, self.dt)
+    self.lead_filter = RadarLeadFilter(self.vLead, self.dt)
     self.jLead_avg = FirstOrderFilter(self.jLead, RADAR_JERK_FILTER_RC, self.dt)
     self.aLead_v_history: deque[float] = deque()
     jerk_history_samples = max(
@@ -280,8 +281,7 @@ class MyTrack:
     self.jLead = 0.0
     self.noisy = False
     self.vLead_avg.x = self.vLead
-    self.v_lead_filtered_last = self.vLead
-    self.aLead_avg.update_alpha(0.05 if self.radar_source == "scc" else RADAR_ACCEL_FILTER_RC)
+    self.lead_filter.reset(self.vLead)
     self.aLead_avg.x = self.aLead
     self.jLead_avg.x = self.jLead
     # SCC's reusable object slot also uses acceleration innovation to detect
@@ -341,29 +341,18 @@ class MyTrack:
         self.aLead_v_history.append(self.vLead)
         a_raw = ((self.aLead_v_history[-1] - self.aLead_v_history[0]) / (2.0 * self.dt)
                  if len(self.aLead_v_history) == 3 else 0.0)
-      else:
-        # Differentiate filtered speed, not the quantized raw radar samples.
-        # Together with aLead_avg this is just two first-order filters.
-        a_raw = (v_lead_filtered - self.v_lead_filtered_last) / self.dt
-      self.v_lead_filtered_last = v_lead_filtered
-
-      self.noisy = abs(a_raw - self.aLead) > RADAR_ACCEL_INNOVATION_LIMIT
-      accel_sample = _clip_scalar(a_raw, -10.0, 5.0) if not pseudo_stop else 0.0
-      if self.noisy and self.radar_source == "scc":
+        self.noisy = abs(a_raw - self.aLead) > RADAR_ACCEL_INNOVATION_LIMIT
         # SCC exposes one reusable object slot, so a large kinematic jump can mean the
         # source switched to a different lead without changing the track ID.
-        self.cnt = 0
-      elif self.noisy:
-        # Keep protection against quantized radar velocity jumps, but do not reset the
-        # age of an identified radar track: that used to publish aLead/jLead as zero during
-        # real hard braking. Repeated measurements can still move the estimate quickly.
-        accel_sample = _clip_scalar(
-          accel_sample,
-          self.aLead - RADAR_ACCEL_INNOVATION_LIMIT,
-          self.aLead + RADAR_ACCEL_INNOVATION_LIMIT,
-        )
-
-      self.aLead = float(self.aLead_avg.update(accel_sample))
+        if self.noisy:
+          self.cnt = 0
+        accel_sample = _clip_scalar(a_raw, -10.0, 5.0) if not pseudo_stop else 0.0
+        self.aLead = float(self.aLead_avg.update(accel_sample))
+      else:
+        self.aLead = self.lead_filter.update(self.vLead, stationary=pseudo_stop)
+        self.noisy = self.lead_filter.limited
+        # Keep identified tracks alive through real braking. The observer bounds
+        # the correction instead of resetting their age and publishing zero.
 
       # Estimate jerk independently from a causal quadratic velocity trend. Limit the
       # per-frame velocity step before adding it to the trend history so a single radar
