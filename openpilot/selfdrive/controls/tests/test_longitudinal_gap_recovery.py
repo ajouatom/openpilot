@@ -253,7 +253,7 @@ def test_horizon_matches_updates_including_entry_and_new_capture(opening, lead_s
   saved = vars(state).copy()
   margins = state.margins(level=1, times=times, ego_speeds=np.full_like(times, 10.),
                           lead_speeds=np.full_like(times, lead_speed), base_tf=.6,
-                          lead_distances=distances, desired_distances=desired)
+                          lead_distances=28. + (lead_speed - 10.)*times, desired_distances=desired)
   assert vars(state) == saved
   live = copy(state)
   expected = [margins[0]]
@@ -271,6 +271,21 @@ def test_new_capture_is_bounded_by_observed_motion_and_not_spent_twice():
   for _ in range(100):
     step(state, distance=1000., relative_speed=2., lead_speed=12.)
   assert state.recovery_tf < stored
+
+
+def test_horizon_distance_and_relative_speed_share_the_measured_anchor():
+  state = LeadGapState()
+  step(state, level=1, ego_speed=12., lead_speed=11., relative_speed=1., distance=28.)
+  times = np.arange(81)*.05
+  # Planned ego speed suggests closing, but the measured gap is still opening.
+  # Both the relative speed AND the gap forecast must use the measured anchor.
+  predicted = state.margins(level=1, times=times, ego_speeds=np.full_like(times, 12.),
+                           lead_speeds=np.full_like(times, 11.), base_tf=.6,
+                           lead_distances=28.-times, desired_distances=np.full_like(times, 20.))
+  expected = [predicted[0]]
+  for t in times[1:]:
+    expected.append(12.*step(state, level=1, ego_speed=12., lead_speed=11., relative_speed=1., distance=28.+t))
+  np.testing.assert_allclose(predicted, expected, rtol=0, atol=1e-12)
 
 
 def test_recovery_and_capture_have_the_same_rate_independent_of_update_interval():
