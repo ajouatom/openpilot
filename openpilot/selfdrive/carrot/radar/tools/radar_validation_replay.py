@@ -2753,6 +2753,7 @@ class ProductionDPathSelector:
             + f"vision={int(estimate.vision_supported)} "
             + f"visionBracket={int(estimate.vision_bracket_supported)} "
             + f"pairedMotion={int(estimate.paired_inward_motion_supported)} "
+            + f"bodyEntry={int(estimate.paired_body_entry)} "
             + f"cross={int(estimate.cross_sensor_supported)} "
             + f"ctrl={int(estimate.control_eligible)} "
             + f"H={estimate.horizon_s:.2f} "
