@@ -2,6 +2,7 @@
 import os
 import selectors
 import subprocess
+import sys
 import time
 from pathlib import Path
 
@@ -47,6 +48,30 @@ def build_usbgpu_model(spinner: Spinner) -> bool:
     "downloaded_bytes": manifest.size,
     "total_bytes": manifest.size,
   }
+  # Precompiled models carry their matching runtime; local SCons remains the fallback.
+  from openpilot.selfdrive.modeld.precompiled_model import ensure_precompiled, reject
+  precompiled = None
+  try:
+    spinner.update("USB eGPU big model\nChecking precompiled model")
+    def download_progress(done, total):
+      spinner.update(f"USB eGPU big model\nDownloading precompiled model {done * 100 // total}%")
+      write_big_model_status(model_cache_dir(), "downloading", model_id=manifest.model_id, sha256=manifest.sha256,
+                             downloaded_bytes=done, total_bytes=total, detail="precompiled model")
+    precompiled = ensure_precompiled(manifest, progress=download_progress)
+  except Exception as exc:
+    print(f"Precompiled eGPU model unavailable; using local compiler: {exc}")
+  if precompiled is not None:
+    try:
+      if usbgpu_present():
+        spinner.update("USB eGPU big model\nValidating precompiled model")
+        subprocess.run([sys.executable, '-m', 'openpilot.selfdrive.modeld.precompiled_runner', str(precompiled)],
+                       cwd=BASEDIR, check=True, timeout=120)
+      write_big_model_status(model_cache_dir(), "compiled", detail="downloaded precompiled model", **status_values)
+      print(f"Using precompiled eGPU model without SCons compilation: {precompiled}")
+      return True
+    except Exception as exc:
+      print(f"Precompiled eGPU validation failed; using local compiler: {exc}")
+      reject(precompiled)
   present = usbgpu_present()
   if not present:
     wait_started = time.monotonic()

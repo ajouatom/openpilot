@@ -293,6 +293,9 @@ def active_model_path(cache_dir: Path | None = None) -> Path | None:
 def active_model_compiled() -> bool:
   if active_model_path() is None:
     return False
+  from openpilot.selfdrive.modeld.precompiled_model import installed
+  if installed() is not None:
+    return True
   from openpilot.common.file_chunker import get_manifest_path
   from openpilot.selfdrive.modeld.helpers import modeld_pkl_path
   return Path(get_manifest_path(Path(modeld_pkl_path(usbgpu=True)))).is_file()
