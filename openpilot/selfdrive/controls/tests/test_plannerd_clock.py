@@ -5,6 +5,7 @@ from types import SimpleNamespace
 import pytest
 
 from openpilot.cereal import car, log
+from openpilot.common.runtime_diagnostics import RuntimeDiagnostics
 from openpilot.selfdrive.carrot.radar import effective_radar_track_mode
 from openpilot.selfdrive.controls.lib.longitudinal_fast_radar import RadarStateOverride
 from openpilot.selfdrive.controls.lib.longitudinal_stopping_lead import StoppingLeadFilter
@@ -57,6 +58,7 @@ def run_planner_events(mocker, brand, configured_mode, radar_period_ms, *, stopp
         'controlsState': SimpleNamespace(longControlState=(
           car.CarControl.Actuators.LongControlState.stopping if stopping else car.CarControl.Actuators.LongControlState.pid)),
         'radarState': radar_state,
+        'modelV2': SimpleNamespace(frameId=round((self.now - 10.0) * 20)),
       }.get(service, SimpleNamespace())
 
     def all_checks(self, _services):
@@ -76,12 +78,13 @@ def run_planner_events(mocker, brand, configured_mode, radar_period_ms, *, stopp
   calls = []
   planner.publish.side_effect = lambda *args, **kwargs: calls.append((sm.now, kwargs))
   namespace = {
-    'time': SimpleNamespace(monotonic=lambda: sm.now),
+    'time': SimpleNamespace(monotonic=lambda: sm.now, thread_time=lambda: sm.now),
     'car': car,
     'Params': lambda: params,
     'Priority': SimpleNamespace(CTRL_LOW=0),
     'config_realtime_process': mocker.Mock(),
     'cloudlog': mocker.Mock(),
+    'RuntimeDiagnostics': RuntimeDiagnostics,
     'LongitudinalPlanner': mocker.Mock(return_value=planner),
     'LateralPlanner': mocker.Mock(),
     'FastRadarOverlay': mocker.Mock(return_value=fast_radar),
