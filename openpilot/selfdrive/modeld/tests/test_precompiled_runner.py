@@ -3,6 +3,9 @@ import json
 from pathlib import Path
 from types import SimpleNamespace
 
+import numpy as np
+import pytest
+
 from openpilot.selfdrive.modeld import precompiled_runner as runner
 
 
@@ -27,3 +30,34 @@ def test_precompiled_state_exposes_camera_inputs_required_by_modeld(tmp_path, mo
     assert model.checkpoint == info['checkpoint']
   finally:
     model.close()
+
+
+@pytest.mark.parametrize('error,rejected', [(KeyboardInterrupt(), False), (SystemExit(), False),
+                                           (TimeoutError('worker timeout'), True), (ValueError('invalid output'), True)])
+def test_inference_shutdown_releases_worker_without_rejecting_artifact(monkeypatch, tmp_path, error, rejected):
+  model = object.__new__(runner.PrecompiledModelState)
+  model.pkl_path = tmp_path / 'model.pkl'
+  model.process = SimpleNamespace(stdin=io.BytesIO())
+  model.first_run = False
+  model.frame_size = 16
+  model.prev_desire = np.zeros(8, np.float32)
+  model.views = {key: np.zeros(shape, np.float32) for key, shape in
+                 {'img': 16, 'big_img': 16, 'desire': 8, 'traffic_convention': 2, 'action_t': 2,
+                  'tfm': (3, 3), 'big_tfm': (3, 3)}.items()}
+  closed, rejections = [], []
+  def close(self):
+    closed.append(True)
+    self.process = None
+  def receive(self, timeout):
+    raise error
+  monkeypatch.setattr(runner.PrecompiledModelState, 'close', close)
+  monkeypatch.setattr(runner.PrecompiledModelState, '_receive', receive)
+  from openpilot.selfdrive.modeld import precompiled_model
+  monkeypatch.setattr(precompiled_model, 'reject', rejections.append)
+  frames = {key: SimpleNamespace(data=np.zeros(16, np.uint8)) for key in ('img', 'big_img')}
+  transforms = {key: np.eye(3, dtype=np.float32) for key in frames}
+  inputs = {'desire_pulse': np.zeros(8, np.float32), 'traffic_convention': np.zeros(2), 'action_t': np.zeros(2)}
+  with pytest.raises(type(error)):
+    model.run(frames, transforms, inputs, False)
+  assert closed == [True]
+  assert rejections == ([model.pkl_path] if rejected else [])
