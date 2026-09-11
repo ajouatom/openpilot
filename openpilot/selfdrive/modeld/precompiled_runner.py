@@ -74,10 +74,13 @@ class PrecompiledModelState:
       result = self.output.copy()
       if not np.isfinite(result).all():
         raise ValueError('non-finite model output')
-    except BaseException:
+    except BaseException as exc:
       self.close()
-      from openpilot.selfdrive.modeld.precompiled_model import reject
-      reject(self.pkl_path)
+      # The manager sends SIGINT when ignition turns off. KeyboardInterrupt and
+      # SystemExit release the worker but must not blacklist a healthy artifact.
+      if isinstance(exc, Exception):
+        from openpilot.selfdrive.modeld.precompiled_model import reject
+        reject(self.pkl_path)
       raise
     self.views['prev_feat'][:] = result[self.output_slices['hidden_state']]
     # The fused graph advances image and policy history together, including dropped-frame catch-up.
