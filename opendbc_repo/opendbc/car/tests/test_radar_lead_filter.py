@@ -26,6 +26,40 @@ def estimate(velocity, dt):
 
 
 @pytest.mark.parametrize('dt', [.02, .05, .1])
+@pytest.mark.parametrize('acceleration', [-6., -3., -1., 1., 2., 3.])
+@pytest.mark.parametrize('phase', [0., .0125, .025, .0375])
+def test_internal_speed_latency_and_transient_error_against_original(dt, acceleration, phase):
+  onset = 2. + phase
+  start, finish = (20., 0.) if acceleration < 0 else (0., 20.)
+  end = onset + 20./abs(acceleration)
+  t = np.arange(0., end+3., dt)
+  truth = start + acceleration*np.clip(t-onset, 0., end-onset)
+  observer = RadarLeadFilter(start, dt)
+  reference, observed = [], []
+  speed = start
+  for measured in truth:
+    speed += dt/(.10+dt)*(measured-speed)
+    reference.append(speed)
+    observer.update(float(measured))
+    observed.append(observer.velocity)
+  reference, observed = np.array(reference), np.array(observed)
+  direction = np.sign(acceleration)
+  for fraction in [.1, .5, .9]:
+    threshold = start+(finish-start)*fraction
+    before = np.flatnonzero(direction*(reference-threshold) >= 0.)[0]
+    after = np.flatnonzero(direction*(observed-threshold) >= 0.)[0]
+    assert after <= before
+  assert max(abs(observed-truth)) < max(abs(reference-truth))
+  if acceleration < 0:
+    assert max(observed-truth) < max(reference-truth)
+  # Prediction can briefly overshoot the final speed; this internal state is not
+  # published as vLead/vLeadK. Bound the transient and verify it fully settles.
+  assert min(observed) >= -.25
+  assert max(observed) <= 20.25
+  assert observed[-1] == pytest.approx(finish, abs=1e-5)
+
+
+@pytest.mark.parametrize('dt', [.02, .05, .1])
 @pytest.mark.parametrize('initial', [0., 1.5])
 @pytest.mark.parametrize('braking', [-.5, -1., -3., -6.])
 @pytest.mark.parametrize('phase', [0., .0125, .025, .0375])
