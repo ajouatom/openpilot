@@ -1,5 +1,7 @@
 import ast
 import os
+import shlex
+import shutil
 from pathlib import Path
 import subprocess
 import sys
@@ -10,6 +12,28 @@ import pytest
 from openpilot.common.basedir import BASEDIR
 from openpilot.common.file_chunker import get_manifest_path
 from openpilot.selfdrive.modeld import big_model, big_model_status, helpers, precompiled_model
+
+
+@pytest.mark.parametrize('artifact_ready, expected_rebuild', [(True, '0'), (False, '1')])
+def test_launcher_accepts_precompiled_model_without_legacy_chunks(tmp_path, artifact_ready, expected_rebuild):
+  bash = 'C:/Program Files/Git/bin/bash.exe' if os.name == 'nt' else shutil.which('bash')
+  if not bash or not Path(bash).is_file():
+    pytest.skip('bash unavailable')
+  models = tmp_path / 'openpilot/selfdrive/modeld/models'
+  models.mkdir(parents=True)
+  (models / '.build_stamp').write_text('stamp:')
+  (models / '.big_model_build_stamp').write_text('model-sha')
+  (models / 'tg_input_devices.json').write_text('{}')
+  (models / 'driving_tinygrad.pkl.chunkmanifest').write_text('1')
+  source = (Path(BASEDIR) / 'launch_chffrplus.sh').read_text(encoding='utf8')
+  function = source[source.index('function invalidate_modeld_build_if_needed {'):]
+  function = function[:function.index('\n}')+2]
+  script = (f'DIR={shlex.quote(tmp_path.as_posix())}\nBIG_MODEL_SHA=model-sha\nFORCE_REBUILD=0\n'
+            'git() { echo stamp; }\n'
+            f'big_model_artifact_ready() {{ return {0 if artifact_ready else 1}; }}\n'
+            + function + '\ninvalidate_modeld_build_if_needed\necho "$FORCE_REBUILD"\n')
+  result = subprocess.run([bash, '-c', script], capture_output=True, text=True, check=True)
+  assert result.stdout.strip().splitlines()[-1] == expected_rebuild
 
 
 @pytest.mark.parametrize('exists, query_result, reusable', [(True, 0, True), (True, 1, False), (True, 2, False), (False, 0, False)])
