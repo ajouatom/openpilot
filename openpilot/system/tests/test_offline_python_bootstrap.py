@@ -187,7 +187,7 @@ def test_known_egpu_prefetch_does_not_block_startup_or_force_build_without_live_
   launch = launcher[launcher.index("function launch {"):]
   build = launch.index("./build.py")
   update_start = launch.index("start_big_model_update", build)
-  manager = launch.index("./manager.py", update_start)
+  manager = launch.index("start_manager", update_start)
   assert build < update_start < manager
 
 
