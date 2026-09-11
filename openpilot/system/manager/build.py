@@ -68,7 +68,15 @@ def build_usbgpu_model(spinner: Spinner) -> bool:
 
   pkl_path = Path(modeld_pkl_path(usbgpu=True))
   manifest_path = Path(get_manifest_path(pkl_path))
-  if manifest_path.is_file():
+  env = os.environ.copy()
+  env['BUILD_USB_GPU_MODEL'] = '1'
+  env['PYTHONUNBUFFERED'] = '1'
+  target = os.path.relpath(manifest_path, BASEDIR)
+  # A model hash alone does not cover compiler/serialization/tinygrad changes.
+  # Query SCons before reusing the existing artifact, without compiling it.
+  if manifest_path.is_file() and subprocess.run(
+    ["scons", "-q", target], cwd=BASEDIR, env=env, check=False,
+  ).returncode == 0:
     write_big_model_status(model_cache_dir(), "compiled", **status_values)
     return True
 
@@ -99,10 +107,6 @@ def build_usbgpu_model(spinner: Spinner) -> bool:
     write_big_model_status(model_cache_dir(), "waiting_for_ignition", detail=readiness_error, **status_values)
     return False
 
-  env = os.environ.copy()
-  env['BUILD_USB_GPU_MODEL'] = '1'
-  env['PYTHONUNBUFFERED'] = '1'
-  target = os.path.relpath(manifest_path, BASEDIR)
   all_output: list[bytes] = []
   compile_started_at = time.time()
   for attempt in range(1, USBGPU_BUILD_ATTEMPTS + 1):
