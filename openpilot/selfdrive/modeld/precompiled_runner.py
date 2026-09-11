@@ -37,6 +37,8 @@ class PrecompiledModelState:
         self.views[name] = np.ndarray(spec['shape'], np.dtype(spec['dtype']), buffer=self.shared, offset=spec['offset'])
       self.output = np.ndarray((info['output_count'],), np.float32, buffer=self.shared, offset=info['input_bytes'])
       self.output_slices = {k: slice(*v) for k, v in info['output_slices'].items()}
+      self.input_shapes = info['input_shapes']
+      self.vision_input_names = [name for name in self.input_shapes if 'img' in name]
       self.frame_size = info['frame_size']
       self.checkpoint = info['checkpoint']
     except BaseException:
