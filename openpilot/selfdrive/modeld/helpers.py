@@ -180,6 +180,9 @@ def active_usbgpu_compiled_path() -> Path | None:
   model = active_manifest()
   if model is None:
     return None
+  from openpilot.selfdrive.modeld.precompiled_model import installed
+  if (precompiled := installed(model)) is not None:
+    return precompiled
   path = modeld_pkl_path(usbgpu=True, model_sha256=model.sha256)
   return path if Path(get_manifest_path(path)).is_file() else None
 
@@ -187,6 +190,9 @@ def active_usbgpu_compiled_path() -> Path | None:
 def usbgpu_compile_pending() -> bool:
   model = active_manifest()
   if model is None:
+    return False
+  from openpilot.selfdrive.modeld.precompiled_model import installed
+  if installed(model) is not None:
     return False
   path = modeld_pkl_path(usbgpu=True, model_sha256=model.sha256)
   return not Path(get_manifest_path(path)).is_file()
