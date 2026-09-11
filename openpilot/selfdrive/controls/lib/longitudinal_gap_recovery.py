@@ -1,4 +1,4 @@
-"""Recover newly opened lead-gap headroom with continuous two-stage dynamics."""
+"""Hold opening-gap headroom, then recover it with continuous two-stage dynamics."""
 
 from copy import copy
 import math
@@ -51,16 +51,12 @@ class LeadGapState:
     # speed. Opening can continue through a lead acceleration lull or restart.
     self.filtered_relative_speed += -math.expm1(-dt / OPENING_FILTER_TAU) * (relative_speed - self.filtered_relative_speed)
     if not acquired:
-      captured = 0.0
-      if self.filtered_relative_speed > OPENING_SPEED:
-        # Spend only newly observed headroom, never the same candidate again.
-        # A changing braking-distance estimate or ego-speed denominator alone
-        # is not an opening gap. Bound measurement jumps by relative motion.
-        opened = min(max(0.0, distance - self.distance), max(0.0, relative_speed) * dt)
-        captured = min(max(0.0, candidate - self.candidate),
-                       CAPTURE_FRACTION * opened / max(ego_speed, MIN_CAPTURE_SPEED), MAX_CAPTURE_RISE * dt)
-      self.recovery_tf, self.extra_tf = recover_headroom(
-        self.recovery_tf, self.extra_tf, captured, dt, lead_speed, RECOVERY_TAU[level], cap)
+      # An opening gap is deliberate comfort headroom, including when lead
+      # acceleration has already eased. Follow its envelope rather than only
+      # accepting candidate increments while simultaneously draining it.
+      target = max(candidate, self.recovery_tf, self.extra_tf) if self.filtered_relative_speed > OPENING_SPEED else None
+      self.recovery_tf, self.extra_tf = advance_headroom(
+        self.recovery_tf, self.extra_tf, target, dt, lead_speed, RECOVERY_TAU[level], cap)
 
     self.extra_tf = min(cap, self.extra_tf)
     self.recovery_tf = min(cap, self.recovery_tf)
@@ -106,24 +102,30 @@ def entry_weight(strength):
   return strength * strength * (3.0 - 2.0 * strength)
 
 
-def recover_headroom(reservoir, extra, captured, dt, lead_speed, tau, cap):
-  """Exact two-stage decay with constant capture rate over this interval.
+def advance_headroom(reservoir, extra, target, dt, lead_speed, tau, cap):
+  """Charge/hold an absolute envelope, or release through two filter stages.
 
-  With no capture and initially equal states, extra = H*(1+k*t)*exp(-k*t).
-  It starts with zero recovery slope. Both stages share the same speed clock,
-  retaining headroom at a stopped lead. Two stages use k=2/tau so their mean
-  recovery time remains tau instead of doubling the previous time scale.
+  The reservoir rises at a bounded rate while opening, never accumulating the
+  same candidate repeatedly. The output always follows extra'=k*(reservoir-extra),
+  including across charge/hold/release transitions. On release the reservoir
+  decays too: equal initial states give extra=H*(1+k*t)*exp(-k*t).
   """
+  reservoir, extra = min(cap, reservoir), min(cap, extra)
   k = 2.0 * float(recovery_strength(lead_speed)) / tau
+  if target is not None:
+    charge_time = min(dt, max(0.0, min(cap, target) - reservoir) / MAX_CAPTURE_RISE)
+    if k > 0.0:
+      following = -math.expm1(-k * charge_time)
+      extra += (reservoir - extra) * following + MAX_CAPTURE_RISE * (charge_time - following / k)
+    reservoir += MAX_CAPTURE_RISE * charge_time
+    if k > 0.0:
+      extra += (reservoir - extra) * -math.expm1(-k * (dt - charge_time))
+    return reservoir, min(cap, max(0.0, extra))
   if k <= 0.0:
-    return min(cap, reservoir + captured), extra
+    return reservoir, extra
   z = k * dt
   decay = math.exp(-z)
-  # Stable integration of the capture input, including near-zero lead speed.
-  first = -math.expm1(-z) / z
-  second = (1.0 - (1.0 + z) * decay) / z if z > 1e-4 else z / 2.0 - z*z / 3.0 + z*z*z / 8.0
-  return (min(cap, max(0.0, reservoir * decay + captured * first)),
-          min(cap, max(0.0, (extra + z * reservoir) * decay + captured * second)))
+  return reservoir * decay, (extra + z * reservoir) * decay
 
 
 def recovery_strength(lead_speed):
