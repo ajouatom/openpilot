@@ -264,7 +264,6 @@
                 "AutoCurveSpeedLowerLimit",
                 "TurnSpeedControlMode",
                 "MapTurnSpeedFactor",
-                "ModelTurnSpeedFactor",
                 "ApplyModelSpeed"
               ]
             },
@@ -1354,13 +1353,13 @@
       "group": "감속제어",
       "name": "AutoCurveSpeedFactor",
       "title": "커브속도 조절비율(100%)",
-      "descr": "높으면 커브속도가 느려집니다.",
+      "descr": "높이면 허용 횡가속도가 낮아져 커브 목표속도가 낮아집니다. 커브까지 남은 거리에 따라 미리 감속합니다.",
       "egroup": "DECEL",
       "etitle": "CurveSpeedFactor(100%)",
-      "edescr": "Higher value: slow curve speed",
+      "edescr": "Higher values lower the lateral-acceleration budget and curve target speed. Slowing starts according to the distance to the curve.",
       "cgroup": "减速控制",
       "ctitle": "弯道速度调节比例(100%)",
-      "cdescr": "值越高：弯道速度越慢",
+      "cdescr": "数值越高，允许的横向加速度和弯道目标速度越低。根据距弯道的距离提前减速。",
       "min": 50,
       "max": 300,
       "default": 100,
@@ -3274,22 +3273,6 @@
       "default": 100,
       "unit": 10,
       "display_unit": "percent"
-    },
-    {
-      "group": "감속제어",
-      "name": "ModelTurnSpeedFactor",
-      "title": "모델턴속도반영시간(0)x0.1sec",
-      "descr": "클수록 모델의 미래속도가 반영됩니다.",
-      "egroup": "SPEED",
-      "etitle": "ModelTurnSpeed time(0)x0.1sec",
-      "edescr": "future model speed",
-      "cgroup": "速度控制",
-      "ctitle": "模型转向速度时间 (0)x0.1s",
-      "cdescr": "未来模型速度",
-      "min": 0,
-      "max": 80,
-      "default": 0,
-      "unit": 10
     },
     {
       "group": "감속제어",

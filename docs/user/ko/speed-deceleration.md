@@ -30,7 +30,6 @@
 | 도로 제한속도 + 오프셋 | `AutoRoadSpeedLimitOffset` |
 | 비전 커브 | `AutoCurveSpeedFactor`, `TurnSpeedControlMode` |
 | 경로 턴 | `MapTurnSpeedFactor`, `TurnSpeedControlMode` |
-| 모델 미래속도 | `ModelTurnSpeedFactor` |
 | 별도 자동 턴 제어 | `AutoTurnControl` 계열 |
 
 따라서 한 설정을 올렸는데 속도가 변하지 않으면 다른 후보가 이미 더 낮은지 확인해야 합니다. 화면에 표시되는 감속 소스, 이벤트 종류, 목표 제한속도와 남은 거리를 함께 보세요.
@@ -284,18 +283,21 @@ PV5 구간단속은 평균속도나 남은거리를 계산하지 않습니다. �
 <a id="curve-turn"></a>
 ## 4. 커브·턴
 
-관련 설정은 `AutoCurveSpeedFactor`, `AutoCurveSpeedLowerLimit`, `TurnSpeedControlMode`, `MapTurnSpeedFactor`, `ModelTurnSpeedFactor`, `ApplyModelSpeed`입니다.
+관련 설정은 `AutoCurveSpeedFactor`, `AutoCurveSpeedLowerLimit`, `TurnSpeedControlMode`, `MapTurnSpeedFactor`, `ApplyModelSpeed`입니다.
 
 커브 관련 속도는 하나가 아닙니다.
 
 - **비전 커브 속도**: 모델이 본 진행 방향의 회전율과 속도로 계산
 - **경로 턴 속도**: 경로·TBT에서 받은 턴 속도에 비율 적용
-- **모델 미래속도**: 모델이 몇 초 뒤로 예측한 속도 사용
 - **모델 주행속도 적용**: 모델의 전체 desired velocity를 크루즈 설정속도에 별도로 반영
 
 ### `AutoCurveSpeedFactor`
 
-비전 모델의 회전율에 비율을 곱한 뒤 목표 횡가속도 1.9m/s²를 기준으로 커브 속도를 계산합니다. 값이 클수록 같은 커브를 더 굽은 것으로 보므로 목표속도가 낮아집니다.
+비전 모델의 회전율을 같은 시점의 예측속도로 나누어 곡률을 구합니다. 허용 횡가속도는 기준 1.9m/s²를 설정비율로 나누어 정하므로, 값이 클수록 같은 커브의 목표속도가 낮아집니다. 모델의 미래속도를 주행 목표속도로 직접 사용하지 않습니다.
+
+커브 목표속도와 그 커브까지 남은 거리를 함께 계산합니다. 멀리 있는 커브는 현재 위치에서 더 높은 속도를 허용하고, 가까워질수록 커브 목표속도에 도달하도록 상한을 낮춥니다. 제어 응답과 감속이 서서히 커지는 시간을 고려하며, 제한 해제는 잠깐 유지한 뒤 점진적으로 이뤄집니다.
+
+저속·유효하지 않은 모델 예측과 단일 회전율 이상치를 제외합니다. 예측이 늦거나 부정확하면 커브 전 감속도 늦을 수 있습니다.
 
 속도 변화는 비율에 단순 반비례하지 않고 대략 제곱근 관계입니다. 예를 들어 100%에서 120%로 올리면 계산 속도는 약 `1 / √1.2`, 즉 기존의 약 91% 수준이 됩니다.
 
@@ -306,7 +308,7 @@ PV5 구간단속은 평균속도나 남은거리를 계산하지 않습니다. �
 
 ### `AutoCurveSpeedLowerLimit`
 
-비전 커브, 경로 턴과 모델 미래속도 후보에 적용되는 최저속도입니다.
+비전 커브와 경로 턴 후보에 적용되는 최저속도입니다. 비전 커브에서는 커브 통과 목표에 먼저 적용하고, 남은 거리로 현재 위치의 속도 상한을 계산합니다.
 
 - 30이면 각 커브 후보를 최소 30km/h로 제한
 - 높이면 급커브에서도 목표가 그 값 아래로 내려가지 않음
@@ -326,7 +328,7 @@ PV5 구간단속은 평균속도나 남은거리를 계산하지 않습니다. �
 모드 2의 경로 속도는 현재 턴 거리 값이 약 -500~500m 범위일 때만 후보에 들어갑니다. 모드 3은 경로 속도를 항상 후보에 넣으므로 경로 정보가 부정확한 환경에서는 예상하지 못한 감속이 생길 수 있습니다.
 
 > [!IMPORTANT]
-> `TurnSpeedControlMode=0`이 모든 모델 기반 속도 기능을 끄는 것은 아닙니다. `ModelTurnSpeedFactor`와 `ApplyModelSpeed`는 별도 분기이므로 각각 0인지 확인해야 합니다.
+> `TurnSpeedControlMode=0`이 모든 모델 기반 속도 기능을 끄는 것은 아닙니다. `ApplyModelSpeed`는 별도 설정속도 기능입니다.
 
 ### `MapTurnSpeedFactor`
 
@@ -337,19 +339,6 @@ PV5 구간단속은 평균속도나 남은거리를 계산하지 않습니다. �
 - 120%: 받은 속도보다 높게 반영
 
 그 결과에 `AutoCurveSpeedLowerLimit`이 최저값으로 적용됩니다. 설정 설명의 APN·외부 연결 문구와 별개로, 현재 지원되는 입력에서 유효한 경로 속도가 들어와야 동작합니다. 당근맨과 CarrotLink는 현재 지원하지 않습니다.
-
-### `ModelTurnSpeedFactor`
-
-저장값에 `0.1초`를 곱해 모델 속도 예측에서 볼 미래 시점을 정합니다.
-
-| 저장값 | 보는 시점 |
-|---:|---:|
-| 0 | 사용 안 함, 모델 턴 속도 200km/h로 비활성화 |
-| 10 | 약 1.0초 뒤 |
-| 30 | 약 3.0초 뒤 |
-| 50 | 약 5.0초 뒤 |
-
-선택한 시점의 모델 속도에 1.2를 곱하고 평활화한 값이 후보가 됩니다. 값이 크다고 항상 더 느려지는 설정은 아니며, 더 먼 미래에 모델이 예측한 속도가 낮은지 높은지에 따라 달라집니다.
 
 ### `ApplyModelSpeed`
 
@@ -371,11 +360,11 @@ PV5 구간단속은 평균속도나 남은거리를 계산하지 않습니다. �
 
 ### 커브 조정 추천 순서
 
-1. `TurnSpeedControlMode=1`, `ModelTurnSpeedFactor=0`, `ApplyModelSpeed=0`으로 비전 커브만 분리합니다.
+1. `TurnSpeedControlMode=1`, `ApplyModelSpeed=0`으로 비전 커브만 분리합니다.
 2. `AutoCurveSpeedFactor`를 5씩 바꾸며 같은 커브에서 비교합니다.
 3. 필요한 최저값만 `AutoCurveSpeedLowerLimit`로 정합니다.
 4. 경로 정보가 검증된 경우에만 모드 2와 `MapTurnSpeedFactor`를 추가합니다.
-5. `ModelTurnSpeedFactor`는 마지막에 추가하고, `ApplyModelSpeed`는 별도 기능으로 시험합니다.
+5. `ApplyModelSpeed`는 크루즈 설정속도를 바꾸는 별도 기능으로 확인합니다.
 
 [5개 세부 구역으로 돌아가기](#5개-세부-구역)
 
@@ -437,7 +426,7 @@ PV5 구간단속은 평균속도나 남은거리를 계산하지 않습니다. �
 | 제한속도 변경에 반응하지 않음 | 유효한 도로 속도, `AutoSpeedUptoRoadSpeedLimit`, `AutoRoadSpeedAdjust` 의존성 |
 | 방지턱 감속이 없음 | 모드 2 이상, 이벤트 종류, 도로 범주 |
 | 직선에서 커브 감속 | 최종 소스가 비전·경로·모델 중 무엇인지 확인 |
-| 턴 모드 0인데 감속 | `ModelTurnSpeedFactor`, `ApplyModelSpeed`, 별도 ATC 확인 |
+| 턴 모드 0인데 감속 | `ApplyModelSpeed`, 별도 ATC 확인 |
 | 신호에서 불필요한 정지·출발 | `TrafficLightDetectMode`, 주행 모드, 모델 판단 확인 |
 
 CAN 오류로 자동 전송되는 진단 로그는 현재 온로드에서 새로 수신 중인 차량 또는 레이더 상태가 실제 오류를 보고할 때만 생성됩니다. 이전 주행 종료 과정의 CAN timeout은 사용하지 않으며, 오류 뒤의 상황을 포함하도록 감지 5초 후 캡처합니다. 따라서 속도·감속 이상을 분석할 때 자동 진단 로그가 없더라도 필요한 주행 구간은 Carrot Web에서 별도로 전송해야 합니다.

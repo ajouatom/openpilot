@@ -58,6 +58,7 @@ def _serv():
   serv.vehicleNaviCanControl = True
   serv.autoNaviSpeedSafetyFactor = 1.0
   serv.autoNaviSpeedBumpSpeed = 20
+  serv.autoNaviSpeedBumpEndDistance = 0.0
   serv.is_metric = True
   serv.roadcate = 8
   serv.nRoadLimitSpeed = 30
@@ -346,3 +347,48 @@ def test_vehicle_navi_speed_bump_requires_both_settings_and_distance():
   serv.autoNaviSpeedCtrlMode = 2
   car_state.speedBumpDistance = 0.0
   assert not serv._vehicle_speed_bump_enabled(car_state)
+
+
+@pytest.mark.parametrize('mode, expected_source, expected_speed', [(0, 'road', 200), (1, 'vturn', 110), (2, 'route', 70), (3, 'route', 70)])
+def test_curve_selection_ignores_retired_model_speed(monkeypatch, mode, expected_source, expected_speed):
+  from openpilot.selfdrive.carrot import carrot_serv
+
+  class Params:
+    def __init__(self, *_args):
+      pass
+
+    def get(self, key):
+      return str({'AutoCurveSpeedLowerLimit': 20, 'TurnSpeedControlMode': mode,
+                  'MapTurnSpeedFactor': 100, 'ModelTurnSpeedFactor': 80}.get(key, 0))
+
+    def get_int(self, key):
+      return int(self.get(key))
+
+    def get_float(self, key):
+      return float(self.get(key))
+
+    def get_bool(self, key):
+      return bool(self.get_int(key))
+
+  monkeypatch.setattr(carrot_serv, 'Params', Params)
+  serv = CarrotServ()
+  monkeypatch.setattr(serv, '_update_carrot_navi', lambda _sm: False)
+  monkeypatch.setattr(serv, '_update_gps', lambda *_args: 0.)
+  monkeypatch.setattr(serv, 'update_nav_instruction', lambda _sm: None)
+  monkeypatch.setattr(serv, 'update_auto_turn', lambda *_args: (250., 'none', 250., 0.))
+  monkeypatch.setattr(serv, '_vehicle_navigation_display', lambda _cs: (False, 0, False))
+
+  class SubMaster(dict):
+    alive = {'carState': False, 'selfdriveState': False, 'navInstruction': False}
+
+  sm = SubMaster(modelV2=SimpleNamespace(meta=SimpleNamespace(modelTurnSpeed=16.)))
+  sent = {}
+  pm = SimpleNamespace(send=lambda name, message: sent.update({name: message}))
+  serv.update_navi('', sm, pm, 110., [], [], 70., 'gpsLocationExternal')
+  result = sent['carrotMan'].carrotMan
+  assert (result.desiredSource, result.desiredSpeed) == (expected_source, expected_speed)
+  # The old 120 km/h gate must not produce a new source or a 20 km/h target.
+  serv.update_navi('', sm, pm, 125., [], [], 70., 'gpsLocationExternal')
+  result = sent['carrotMan'].carrotMan
+  assert result.desiredSource == expected_source
+  assert result.desiredSpeed == (125 if mode == 1 else expected_speed)
