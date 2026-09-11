@@ -1,78 +1,102 @@
-# Radar lead acceleration filtering
+# Noise-aware lead acceleration observer
 
-The front/corner radar acceleration estimator again differentiates filtered
-speed, using the two first-order filters present before `93bab17bca`:
+`RadarLeadFilter` estimates lead velocity and acceleration together. Unlike the
+historical two-filter derivative, it predicts the next velocity and corrects the
+two motion states using the measured speed error. Its gain increases smoothly
+when a persistent error is supported by another measurement in the same direction.
+An estimate of measurement jitter suppresses that increase on noisy tracks.
+
+The historical RC=0.10/0.15 s filter is the noise and timing reference. The current-
+frame publication correction remains; comparison with the restored filter excludes
+the older 50 ms publication bug, so that bug fix is not counted as this observer's
+improvement.
+
+## Scalar update
+
+The essential operations, before the existing bounds and near-standstill handling:
 
 ```python
-v_filtered += dt / (0.10 + dt) * (v_measured - v_filtered)
-a_sample = (v_filtered - v_filtered_previous) / dt
-a_filtered += dt / (0.15 + dt) * (a_sample - a_filtered)
+v_predicted = v_estimated + a_estimated * dt
+error = v_measured - v_predicted
+sample = clip(error, -0.5, 0.5)
+evidence = max(0, previous_mean_error * sample)
+noise_variance += noise_alpha * (0.5 * (sample - previous_sample)**2 - noise_variance)
+mean_error += mean_alpha * (sample - mean_error)
+weight = (evidence / (uncertainty_floor + 8 * noise_variance + evidence))**2
+alpha = alpha_slow + weight * (alpha_fast - alpha_slow)
+beta = beta_slow + weight * (beta_fast - beta_slow)
+v_estimated = v_predicted + alpha * error
+a_estimated += beta * error / dt
 ```
 
-The pseudocode omits the existing standstill handling, acceleration bounds,
-innovation limit and acquisition reset. Those protections remain in `MyTrack`.
-The current-frame publication correction in `380b5d9d1b` also remains. There is
-no added output filter, prediction term, adaptive time constant, or setting.
+The first isolated error has no previous signed evidence and cannot immediately
+select a faster response. Opposite-signed errors have zero evidence. The mean
+residual uses RC=0.15 s and its short-term variation uses RC=0.50 s. The uncertainty
+floor is `(0.10 + 0.8*dt)**2`, in squared speed units. These are calibrated constants,
+not guarantees that coherent sensor error can always be distinguished from motion.
 
-## Why restore this estimator
+Slow gains are derived from the historical filter's poles. At 20 Hz they are
+alpha=0.5 and beta=1/12. Fast gains correspond to RC=0.05/0.075 s: alpha=0.7 and
+beta=0.2. This is interpolation between observer gains, not a switch on the sign
+or magnitude of `aLead`, and not a drive-mode or response-level setting.
 
-The September 1 change replaced the filtered-speed derivative with a short raw
-velocity difference and shortened the acceleration filter. The subsequent
-four-sample linear slope reduced some of that noise, but still differentiated
-short raw radar-speed fluctuations. A small speed error can become a large
-acceleration error and enter the MPC's lead-motion prediction.
+Acceleration correction retains the historical post-filter innovation bound
+`3*dt/(0.15+dt)` (0.75 m/s² per 50 ms), plus the acceleration target limits.
+When a correction saturates, the velocity state is adjusted consistently with
+the bounded acceleration. Without that adjustment, merely replacing the cascade
+with an equivalent linear observer changes its response to large speed spikes.
+An independent regression checks equivalence with adaptation disabled, including
+saturated corrections.
 
-The restored filters attenuate those fluctuations before and after taking the
-derivative. Both updates use the existing `FirstOrderFilter`; at 20 Hz their
-weights are 1/3 and 1/4. The non-SCC four-sample slope history is no longer used.
+Per-frame work consists of scalar arithmetic, bounds and two exponential-moving-
+average updates. There are no matrix inversions, history fits, or new settings.
+The original independent jerk estimator is unchanged.
 
-Equal 0.12 s time constants were evaluated and rejected. Their white-noise RMS
-was within about 4% of the historical filter, but a single 0.5 m/s speed spike
-produced a 0.865 m/s² peak instead of 0.750 m/s². Restoring the original constants
-preserves both steady-noise attenuation and the original spike bound without
-adding special-case logic.
+## Validation and tradeoffs
 
-## Timing and validation
-
-For a known acceleration transition from 0 to -3 m/s², sampled every 50 ms:
+For a known 0 to -3 m/s² acceleration change at 20 Hz:
 
 | Estimator | 10% response | 50% response | 90% response |
 | --- | --- | --- | --- |
-| Historical 0.10/0.15 s filters, including old publication lag | 150 ms | 300 ms | 650 ms |
-| Four-sample slope before this change | 50 ms | 150 ms | 250 ms |
-| Restored filters, current-frame publication | 100 ms | 250 ms | 600 ms |
+| Restored RC=0.10/0.15 s filter, current-frame output | 100 ms | 250 ms | 600 ms |
+| Adaptive observer | 100 ms | 200 ms | 500 ms |
 
-These are estimator threshold crossings, not vehicle brake application times.
-Stronger attenuation costs response speed relative to the recent slope-based
-estimator. The restored estimator is one publication frame faster than the
-historical version; it does not eliminate causal filtering delay.
+For 0 to -6 m/s², the 90% response improves from 600 to 500 ms; the 50% response
+remains 250 ms. Weak -0.5/-1 m/s² transitions keep essentially the original
+response. This preserves smoothing where evidence for a motion change is weak.
+The numbers describe acceleration estimation, not vehicle brake application.
 
-With deterministic independent speed noise of standard deviation 0.10 m/s,
-acceleration RMS was approximately 0.505 m/s² for the four-sample slope and
-0.194 m/s² for both the restored and historical filters. In recorded launch
-windows, the restored filter reduced the 95th-percentile absolute adjacent
-acceleration change by approximately 53–58% relative to the four-sample slope.
-These measures describe estimate variability, not error against ground truth.
+Tests cover 20/50/100 ms sample periods, multiple transition phases, initial
+acceleration, constant-acceleration bias, correlated and independent noise, isolated
+speed spikes, bounded monotonic braking and acquisition/reset. Known braking
+threshold crossings are compared against the original filter without publication
+delay. Tests also require a measurable settling improvement on clear braking.
 
-Focused tests cover known braking at multiple sample periods and transition
-phases, monotonic braking, constant-acceleration bias, isolated speed spikes,
-steady-speed noise, reset/reacquisition, publication copies and SCC replacement.
-The historical filter is an independent reference in the tests. Recorded-input
-comparisons are offline estimator replays, not closed-loop vehicle validation.
+On deterministic independent speed noise with standard deviation 0.10 m/s,
+20 Hz acceleration RMS remains approximately 0.194 m/s². Correlated-noise tests
+and steady acceleration also retain the original noise level within the test
+tolerance. Recorded launch windows remain close to the restored filter's adjacent
+acceleration variability. A retained noisy bus window increases that variability
+by about 4.7%, rather than eliminating it. Such logged variability is not error
+against ground truth, and does not prove the lead's actual acceleration.
 
-## Boundaries
+This observer does not remove every source of noise or prove improved closed-loop
+ride quality. Faster adaptation can also respond to a coherent sensor error.
+Offline estimator comparisons and synthetic input tests must be distinguished
+from vehicle validation after updating.
 
-- SCC has a reusable target slot. Its existing three-sample acceleration
-  discriminator and 0.05 s acceleration filter remain unchanged, so this change
-  does not mask its target-replacement reset.
-- Identified radar tracks keep their age during a large acceleration innovation;
-  real braking must not cause the acceleration publication to reset to zero.
-- Raw `vLead`, `vRel`, distance, target selection and the independent jerk
-  estimator remain unchanged. The new filtering affects `aLead`/`aLeadK`; it does
-  not make the raw speed display smooth or remove all noisy inputs to the MPC.
-- The NAS viewer recalculates lead selection from recorded `liveTracks` inputs.
-  Deploying new source invalidates its replay cache but does not rewrite old
-  recorded accelerations or MPC plans. Comparing this filter on old velocity
-  samples requires the separate offline estimator replay.
-- No setting has been added or reinterpreted. TF, response-level mappings,
-  braking limits and model/branch choices are unchanged.
+## Integration boundaries
+
+- Front/corner radar tracks use the observer; their existing warmup, loss and
+  reusable-corner-slot reset behavior remains. Strong braking does not reset an
+  identified track's age and force acceleration to zero.
+- SCC's reusable target slot retains its three-sample speed discriminator and
+  RC=0.05 acceleration filter. This preserves its target-replacement detection.
+- The existing near-standstill detector suppresses acceleration toward zero.
+  Observer motion and noise state reset on track acquisition or reacquisition.
+- `aLead`/`aLeadK` use the new estimate. Raw `vLead`, `vRel`, distance, lead
+  selection, TF, response-level mapping, `aLeadTau` and model choices are unchanged.
+- NAS replay uses recorded `liveTracks` inputs to recalculate selection. Deployment
+  updates the code fingerprint/cache, but does not rewrite old recorded `aLead`
+  or MPC plans. Filter comparisons on old velocity measurements are separate
+  offline replays.

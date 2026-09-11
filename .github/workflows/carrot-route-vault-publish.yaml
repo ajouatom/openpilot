@@ -39,6 +39,8 @@ jobs:
         env:
           PYTHONPATH: .:opendbc_repo
         run: |
+          python -m pytest -c /dev/null --rootdir=. --confcutdir=opendbc_repo/opendbc/car/tests \
+            opendbc_repo/opendbc/car/tests/test_radar_lead_filter.py
           python -m pytest -c /dev/null --rootdir=. --confcutdir=tools/carrot_route_vault tools/carrot_route_vault/tests
           python -m pytest -c /dev/null --rootdir=. --confcutdir=openpilot/selfdrive/carrot/tests \
             openpilot/selfdrive/carrot/tests/test_lane_change_gap.py \
