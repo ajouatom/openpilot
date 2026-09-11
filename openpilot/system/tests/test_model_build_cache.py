@@ -30,6 +30,11 @@ def test_launcher_accepts_precompiled_model_without_legacy_chunks(tmp_path, arti
   function = function[:function.index('\n}')+2]
   script = (f'DIR={shlex.quote(tmp_path.as_posix())}\nBIG_MODEL_SHA=model-sha\nFORCE_REBUILD=0\n'
             + 'git() { echo stamp; }\n'
+            # This branch fingerprints the compiler with carrot.model_selector's compile_env_tag()
+            # instead of upstream's `git rev-parse`, so neutralize that call the same way the git
+            # stub does. Without it the real fingerprint never matches the synthetic .build_stamp
+            # and the stamp branch forces a rebuild before the big-model case under test is reached.
+            + "python3() { printf 'stamp:'; }\n"
             + f'big_model_artifact_ready() {{ return {0 if artifact_ready else 1}; }}\n'
             + function + '\ninvalidate_modeld_build_if_needed\necho "$FORCE_REBUILD"\n')
   result = subprocess.run([bash, '-c', script], capture_output=True, text=True, check=True)
