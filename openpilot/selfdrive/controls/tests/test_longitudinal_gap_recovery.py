@@ -1,13 +1,12 @@
 import ast
 from copy import copy
-import math
 from pathlib import Path
 from types import SimpleNamespace
 
 import numpy as np
 import pytest
 
-from openpilot.selfdrive.controls.lib.longitudinal_gap_recovery import LeadGapState, gap_reference
+from openpilot.selfdrive.controls.lib.longitudinal_gap_recovery import LeadGapState, advance_headroom, gap_reference
 from openpilot.selfdrive.controls.lib.longitudinal_safe_follow import SafeFollowState
 
 
@@ -166,16 +165,21 @@ def test_opening_recaptures_after_departure_and_later_reacceleration():
   assert state.extra_tf > without_opening.extra_tf + .1
 
 
-def test_opening_does_not_hold_a_large_old_tf_when_candidate_has_fallen():
+def test_opening_holds_headroom_even_after_candidate_falls():
   state = LeadGapState()
-  step(state)
+  step(state, relative_speed=1., lead_speed=11.)
   initial = state.extra_tf
   for _ in range(100):
     step(state, relative_speed=1., lead_speed=11., distance=20.)
-  assert state.extra_tf == pytest.approx(initial * 3. * math.exp(-2.))
+  assert state.extra_tf == initial
   times = np.array([0., 1., 2., 3.])
   margins = state.margins(level=0, times=times, ego_speeds=np.full(4, 10.), lead_speeds=np.full(4, 11.), base_tf=.6)
-  assert np.all(np.diff(margins) < 0.)
+  np.testing.assert_allclose(margins, initial * 10.)
+  # Once the lead matches speed, the buffer releases rather than holding
+  # permanently just because the actual distance is still large.
+  for _ in range(120):
+    step(state, relative_speed=0., lead_speed=10., distance=60.)
+  assert 0.0 < state.extra_tf < initial * .5
 
 
 def test_relative_speed_noise_and_single_spike_do_not_replenish():
@@ -188,7 +192,7 @@ def test_relative_speed_noise_and_single_spike_do_not_replenish():
   assert state.extra_tf == 0.
   for _ in range(20):
     step(state, distance=60., relative_speed=1.)
-  assert state.extra_tf == 0.  # relative speed alone cannot refill a constant gap
+  assert state.extra_tf > 0.  # sustained opening can replenish existing headroom
 
 
 def test_capture_rise_is_limited_and_a_track_change_clears_opening_filter():
@@ -207,21 +211,22 @@ def test_capture_rise_is_limited_and_a_track_change_clears_opening_filter():
   assert state.extra_tf == 0.
 
 
-def test_unchanged_opening_candidate_cannot_cancel_recovery():
+def test_unchanged_opening_candidate_holds_buffer_without_accumulating():
   state = LeadGapState()
   for _ in range(100):
     step(state, level=1, distance=28., relative_speed=1., lead_speed=11.)
   before = state.extra_tf
   for _ in range(80):
     step(state, level=1, distance=28., relative_speed=1., lead_speed=11.)
-  assert 0.0 < state.extra_tf < before * .3
+  assert state.extra_tf == before == pytest.approx(.4)
+  assert state.recovery_tf == pytest.approx(.4)
 
 
-def test_braking_distance_and_speed_changes_do_not_create_opening_headroom():
+def test_braking_distance_and_speed_changes_alone_do_not_trigger_capture():
   state = LeadGapState()
-  step(state, distance=20., relative_speed=1.)
+  step(state, distance=20., relative_speed=0.)
   for i in range(60):
-    step(state, distance=20., desired_distance=20.-i*.1, ego_speed=10.-i*.05, relative_speed=1.)
+    step(state, distance=20., desired_distance=20.-i*.1, ego_speed=10.-i*.05, relative_speed=0.)
   assert state.recovery_tf == state.extra_tf == 0.
 
 
@@ -262,15 +267,16 @@ def test_horizon_matches_updates_including_entry_and_new_capture(opening, lead_s
   np.testing.assert_allclose(margins, expected, rtol=0, atol=1e-12)
 
 
-def test_new_capture_is_bounded_by_observed_motion_and_not_spent_twice():
+def test_candidate_jump_is_rate_limited_and_does_not_accumulate_past_cap():
   state = LeadGapState()
   step(state, distance=20., relative_speed=2., lead_speed=12.)
   step(state, distance=1000., relative_speed=2., lead_speed=12.)
-  assert state.recovery_tf <= .005  # half of 0.1m opening / 10m/s
-  stored = state.recovery_tf
-  for _ in range(100):
+  assert state.recovery_tf == pytest.approx(.025)  # reservoir rise <= 0.5 TF/s
+  assert 0.0 < state.extra_tf < state.recovery_tf
+  for _ in range(1000):
     step(state, distance=1000., relative_speed=2., lead_speed=12.)
-  assert state.recovery_tf < stored
+    assert 0.0 <= state.extra_tf <= state.recovery_tf <= 1.9
+  assert state.extra_tf == pytest.approx(1.9)
 
 
 def test_horizon_distance_and_relative_speed_share_the_measured_anchor():
@@ -288,7 +294,7 @@ def test_horizon_distance_and_relative_speed_share_the_measured_anchor():
   np.testing.assert_allclose(predicted, expected, rtol=0, atol=1e-12)
 
 
-def test_recovery_and_capture_have_the_same_rate_independent_of_update_interval():
+def test_rising_candidate_is_consistent_across_update_intervals():
   results = []
   for dt in (.02, .05, .1):
     state = LeadGapState()
@@ -296,7 +302,43 @@ def test_recovery_and_capture_have_the_same_rate_independent_of_update_interval(
     for i in range(round(5./dt)):
       step(state, level=1, dt=dt, distance=28.+(i+1)*dt, relative_speed=1., lead_speed=11.)
     results.append(state.extra_tf)
-  np.testing.assert_allclose(results, results[0], atol=1e-12)
+  np.testing.assert_allclose(results, results[0], rtol=0., atol=.004)
+
+
+def test_constant_envelope_charge_hold_release_is_interval_independent():
+  results = []
+  for dt in (.02, .05, .1, 1.):
+    reservoir = extra = 0.
+    for target, duration in ((1., 6.), (None, 4.)):
+      for _ in range(round(duration / dt)):
+        reservoir, extra = advance_headroom(reservoir, extra, target, dt, 10., 4., 1.9)
+    results.append((reservoir, extra))
+  np.testing.assert_allclose(results, [results[0]] * len(results), rtol=0., atol=1e-12)
+
+
+@pytest.mark.parametrize('reservoir,extra', [(1., 1.), (1., .6), (.3, .6)])
+def test_opening_to_release_preserves_output_slope(reservoir, extra):
+  dt = 1e-5
+  charged = advance_headroom(reservoir, extra, 1., dt, 10., 4., 1.9)[1]
+  released = advance_headroom(reservoir, extra, None, dt, 10., 4., 1.9)[1]
+  assert (charged - extra) / dt == pytest.approx((released - extra) / dt, abs=3e-6)
+
+
+def test_level_one_keeps_opening_buffer_then_recovers_gradually():
+  state = LeadGapState()
+  step(state, level=1, distance=20., relative_speed=2., lead_speed=12.)
+  # Existing excess is an absolute charge target, not a one-shot increment.
+  for _ in range(160):
+    step(state, level=1, distance=40., relative_speed=2., lead_speed=12.)
+  assert .96 < state.extra_tf < 1.
+  held = state.extra_tf
+  # The lead's acceleration may be zero while vRel is still positive.
+  for _ in range(80):
+    step(state, level=1, distance=40., relative_speed=2., lead_speed=12.)
+  assert held < state.extra_tf <= 1.
+  for _ in range(100):
+    step(state, level=1, distance=40., relative_speed=0., lead_speed=10.)
+  assert .3 < state.extra_tf < .4
 
 
 @pytest.mark.parametrize('kwargs', [{'enabled': False}, {'track_id': -1}, {'distance': np.nan},
