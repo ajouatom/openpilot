@@ -41,8 +41,11 @@ class PrecompiledModelState:
       self.vision_input_names = [name for name in self.input_shapes if 'img' in name]
       self.frame_size = info['frame_size']
       self.checkpoint = info['checkpoint']
-    except BaseException:
+    except BaseException as exc:
       self.close()
+      if isinstance(exc, Exception):
+        from openpilot.selfdrive.modeld.precompiled_model import record_failure
+        record_failure(self.pkl_path, exc, 'load')
       raise
 
   def _receive(self, timeout: float) -> bytes:
@@ -53,6 +56,8 @@ class PrecompiledModelState:
     value = self.process.stdout.readline()
     if not value:
       raise RuntimeError(f'precompiled eGPU worker exited ({self.process.poll()})')
+    if value.startswith(b'ERROR '):
+      raise RuntimeError(json.loads(value[6:]))
     return value
 
   def run(self, bufs, transforms, inputs, prepare_only):
@@ -79,8 +84,8 @@ class PrecompiledModelState:
       # The manager sends SIGINT when ignition turns off. KeyboardInterrupt and
       # SystemExit release the worker but must not blacklist a healthy artifact.
       if isinstance(exc, Exception):
-        from openpilot.selfdrive.modeld.precompiled_model import reject
-        reject(self.pkl_path)
+        from openpilot.selfdrive.modeld.precompiled_model import record_failure
+        record_failure(self.pkl_path, exc, 'inference')
       raise
     self.views['prev_feat'][:] = result[self.output_slices['hidden_state']]
     # The fused graph advances image and policy history together, including dropped-frame catch-up.

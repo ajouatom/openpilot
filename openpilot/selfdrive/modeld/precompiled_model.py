@@ -9,6 +9,7 @@ import re
 import shutil
 import tarfile
 import tempfile
+import time
 from urllib.parse import urljoin, urlparse
 from urllib.request import Request, urlopen
 
@@ -157,3 +158,21 @@ def ensure_precompiled(model=None, cache_dir: Path | None = None, progress=None)
 def reject(path: Path) -> None:
   value = json.loads((path.parent / 'installed.json').read_text())
   (path.parent / 'rejected').write_text(value['pickle']['sha256'])
+
+
+def record_failure(path: Path, error: BaseException | str, phase: str) -> bool:
+  """Keep transient device failures retryable; persist why an artifact was rejected."""
+  from openpilot.selfdrive.modeld.helpers import usbgpu_pcie_not_ready
+  detail = str(error)
+  transient = (usbgpu_pcie_not_ready(error) or isinstance(error, (TimeoutError, BrokenPipeError)) or
+               'precompiled eGPU worker timed out' in detail or 'precompiled eGPU worker exited' in detail)
+  value = json.loads((path.parent / 'installed.json').read_text())
+  failure = {'time': time.time(), 'phase': phase, 'rejected': not transient,  # noqa: TID251 - correlate persisted failures with boot logs
+             'pickle_sha256': value['pickle']['sha256'], 'error': detail[-16384:]}
+  target = path.parent / 'last_failure.json'
+  temporary = target.with_suffix('.json.tmp')
+  temporary.write_text(json.dumps(failure, indent=2))
+  os.replace(temporary, target)
+  if not transient:
+    reject(path)
+  return not transient

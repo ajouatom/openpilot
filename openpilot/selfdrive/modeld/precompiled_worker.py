@@ -7,6 +7,7 @@ from pathlib import Path
 import sys
 import threading
 import time
+import traceback
 
 
 def watch_parent(parent):
@@ -104,4 +105,13 @@ def main():
 
 
 if __name__ == '__main__':
-  main()
+  control = sys.stdout.buffer
+  try:
+    main()
+  except Exception:
+    # stderr alone loses the underlying error at the parent pipe's EOF. Send
+    # the traceback over the control pipe so PCIe readiness remains retryable.
+    error = traceback.format_exc()
+    control.write(b'ERROR ' + json.dumps(error[-16384:]).encode() + b'\n')
+    control.flush()
+    raise
