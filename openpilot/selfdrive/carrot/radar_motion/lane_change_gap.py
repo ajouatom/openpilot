@@ -112,8 +112,14 @@ class LaneChangeGapTracker:
 
   def update(self, *, now: float, direction: int, v_ego: float, yaw_rate: float,
              path_t: tuple, path_x: tuple, path_y: tuple, primary: Any,
-             secondary: Any, blindspot: bool = False, valid: bool = True) -> LaneChangeGapPlan:
+             secondary: Any = None, blindspot: bool = False, valid: bool = True,
+             side_leads: tuple | None = None) -> LaneChangeGapPlan:
     active = direction in (-1, 1)
+    if side_leads is not None:
+      # A stale caller must not crash planning or turn unselected side returns
+      # into braking obstacles. Require the selected-pair API for any credit.
+      self.reset()
+      return LaneChangeGapPlan(active=active, reason='legacy-side-input')
     if not active or not valid or not math.isfinite(now):
       self.reset()
       return LaneChangeGapPlan(active=active, reason='invalid-input' if active else 'inactive')
