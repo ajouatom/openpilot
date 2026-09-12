@@ -155,7 +155,7 @@ export function attachRadarReview(video) {
   review.addEventListener('click',e=>{if(!e.target.closest('button,input,select,label,a'))togglePlayback();});
   video.addEventListener('play',animate);
   for(const event of ['loadedmetadata','durationchange','timeupdate','seeked','pause','ended','emptied'])video.addEventListener(event,()=>{if(usesVideo()){current=Math.max(0,Math.min(video.currentTime,duration()));index=nearest(current);}draw();});
-  scrub.oninput=()=>seek(Number(scrub.value));
+  scrub.oninput=()=>{const time=Number(scrub.value);pause();seek(time);};
   map.onclick=e=>{const rect=map.getBoundingClientRect();let distance=18;selectedTrack=null;for(const p of hitPoints){const d=Math.hypot(e.clientX-rect.left-p.x,e.clientY-rect.top-p.y);if(d<distance){distance=d;selectedTrack=p.id;}}draw();};
   new ResizeObserver(draw).observe(review);
   find('[data-range]').onchange=draw;
