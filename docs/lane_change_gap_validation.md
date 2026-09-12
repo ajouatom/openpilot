@@ -11,6 +11,13 @@ The normally selected leadOne/leadTwo at lane-change entry form the reference pa
 
 Only selected leadTwo is supplied as the additional credit guard. Side candidate lists are never read by this tracker or used as MPC braking obstacles. Entry IDs and current IDs are exported for replay inspection. A selected-pair change latches relief off, even if the original pair returns.
 
+The retired `side_leads` keyword is accepted only to keep an older planner
+caller from terminating with `TypeError` after a partial update. Such a call
+resets the tracker and returns no targets or departure credit, even if a
+`secondary` argument is also present. It never converts side candidates into
+selected leads. Update the complete checkout and restart to use the selected-pair
+API; normal current callers retain their existing behavior.
+
 ## Departure constraints
 
 `radar_motion/lane_change_gap.py` is shared by the vehicle planner and the NAS

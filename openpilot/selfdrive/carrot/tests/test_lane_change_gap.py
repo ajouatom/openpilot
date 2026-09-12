@@ -125,6 +125,22 @@ def test_missing_pose_retains_selected_lead_metadata_without_relief():
   assert p.targets and p.confidence == 0.0
 
 
+@pytest.mark.parametrize('side_leads', [(), (lead(5., speed=0., lateral=-5., track=3),)])
+@pytest.mark.parametrize('include_secondary', [False, True])
+def test_legacy_side_lead_call_revokes_credit_without_crashing(side_leads, include_secondary):
+  # An uploaded planner crash used this retired keyword with the new tracker.
+  # Never reinterpret side candidates as the normally selected second lead.
+  tracker, plans = departure()
+  assert plans[-1].confidence > 0.0
+  kwargs = {'secondary': lead(120., track=2)} if include_secondary else {}
+  p = tracker.update(now=3.55, direction=1, v_ego=15., yaw_rate=.04,
+                     path_t=(), path_x=(), path_y=(), primary=lead(), side_leads=side_leads, **kwargs)
+  assert p.active and p.reason == 'legacy-side-input'
+  assert p.targets == () and p.confidence == 0.0
+  assert not np.any(credit(p=p)[1])
+  assert tracker.direction == 0 and not tracker.history
+
+
 def test_repeated_or_stale_frames_cannot_accumulate_evidence():
   tracker, _ = departure()
   p = tracker.update(now=10., direction=1, v_ego=15., yaw_rate=.04,
