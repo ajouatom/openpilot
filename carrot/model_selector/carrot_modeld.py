@@ -38,6 +38,7 @@ from openpilot.cereal.messaging import PubMaster, SubMaster
 from msgq.visionipc import VisionIpcClient, VisionStreamType, VisionBuf
 from opendbc.car.car_helpers import get_demo_car_params
 from openpilot.common.swaglog import cloudlog
+from openpilot.common.runtime_diagnostics import RuntimeDiagnostics
 from openpilot.common.params import Params
 from openpilot.common.filter_simple import FirstOrderFilter
 from openpilot.common.realtime import config_realtime_process, DT_MDL
@@ -509,7 +510,9 @@ def main(demo=False):
   lat_smooth_seconds = LAT_SMOOTH_SECONDS
   vEgoStopping = params.get_float("VEgoStopping") * 0.01
   camera_yaw_trim_deg = params.get_float("CameraYawTrimDeg") * 0.01
+  diagnostics = RuntimeDiagnostics('modeld', cloudlog.event)
   while True:
+    loop_start, cpu_start = time.monotonic(), time.thread_time()
     frame += 1
     if frame % 100 == 0:
       custom_lat_delay = params.get_float("SteerActuatorDelay") * 0.01
@@ -555,6 +558,7 @@ def main(demo=False):
       buf_extra = buf_main
       meta_extra = meta_main
 
+    camera_ready = time.monotonic()
     sm.update(0)
     desire = DH.desire
     is_rhd = sm["driverMonitoringState"].isRHD
@@ -612,8 +616,11 @@ def main(demo=False):
     }
 
     mt1 = time.perf_counter()
+    camera_age_at_run_ms = (time.monotonic() - meta_main.timestamp_eof * 1e-9) * 1000
+    inference_cpu_start = time.thread_time()
     model_output = model.run(bufs, transforms, inputs, prepare_only)
     mt2 = time.perf_counter()
+    inference_cpu_ms = (time.thread_time() - inference_cpu_start) * 1000
     model_execution_time = mt2 - mt1
 
     if model_output is not None:
@@ -657,6 +664,16 @@ def main(demo=False):
       pm.send('drivingModelData', drivingdata_send)
       pm.send('cameraOdometry', posenet_send)
     last_vipc_frame_id = meta_main.frame_id
+    diagnostics.record(
+      context={'backend': type(model).__name__, 'usbgpu': USBGPU, 'engine': 'carrot_legacy',
+               'frame_id': meta_main.frame_id},
+      camera_wait_ms=(camera_ready - loop_start) * 1000,
+      camera_age_at_run_ms=camera_age_at_run_ms,
+      inference_ms=model_execution_time * 1000, inference_thread_cpu_ms=inference_cpu_ms,
+      postprocess_ms=(time.perf_counter() - mt2) * 1000,
+      loop_ms=(time.monotonic() - loop_start) * 1000, thread_cpu_ms=(time.thread_time() - cpu_start) * 1000,
+      dropped_frames=vipc_dropped_frames, published=int(model_output is not None),
+    )
 
 
 if __name__ == "__main__":
