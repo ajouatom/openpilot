@@ -288,12 +288,7 @@ def main(demo=False):
         try:
           if usbgpu_pkl_path.name == 'model.pkl' and (usbgpu_pkl_path.parent / 'installed.json').is_file():
             from openpilot.selfdrive.modeld.precompiled_runner import PrecompiledModelState
-            from openpilot.selfdrive.modeld.precompiled_model import reject
-            try:
-              usbgpu_model = PrecompiledModelState(vipc_client_main.width, vipc_client_main.height, usbgpu_pkl_path)
-            except Exception:
-              reject(usbgpu_pkl_path)
-              raise
+            usbgpu_model = PrecompiledModelState(vipc_client_main.width, vipc_client_main.height, usbgpu_pkl_path)
           else:
             usbgpu_model = ModelState(vipc_client_main.width, vipc_client_main.height, True, usbgpu_pkl_path)
           return
