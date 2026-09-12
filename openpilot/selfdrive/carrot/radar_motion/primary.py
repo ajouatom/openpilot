@@ -1708,12 +1708,28 @@ class VisionRadarMatcher:
     ):
       self._moving_vision_evidence.clear()
       return set()
+    # At queue speeds a stopped reflection and the real moving lead can be
+    # separated by less than the broad 6 m/s stationary tolerance. Consider
+    # that disagreement only with precise close-range vision; below, require
+    # a separate continuously observed moving radar target to corroborate it.
+    low_speed_conflicts = {
+      self._identity(point) for point in points
+      if point.source == "frontRadar"
+      and abs(point.v_lead) <= STATIONARY_MAX_ABS_VLEAD_MPS
+      and point.d_rel < STATIONARY_FRONT_POSITION_LOCK_MIN_DREL_M
+      and vision.probability >= VISION_RADAR_FAR_MIN_SEED_PROB
+      and abs(point.v_lead - vision.velocity) > max(
+        STATIONARY_MOVING_VISION_MAX_SPEED_ERROR_MPS, 3.0 * abs(vision.v_std),
+      )
+    }
     stationary_fronts = tuple(
       point for point in points
       if point.source == "frontRadar"
       and abs(point.v_lead) <= STATIONARY_MAX_ABS_VLEAD_MPS
-      and abs(point.v_lead - vision.velocity)
-      > STATIONARY_MOVING_VISION_MIN_SPEED_DELTA_MPS
+      and (
+        abs(point.v_lead - vision.velocity) > STATIONARY_MOVING_VISION_MIN_SPEED_DELTA_MPS
+        or self._identity(point) in low_speed_conflicts
+      )
     )
     if not stationary_fronts:
       self._moving_vision_evidence.clear()
@@ -1781,6 +1797,10 @@ class VisionRadarMatcher:
     return near_velocity_conflicts | {
       self._identity(point) for point in stationary_fronts
       if self._identity(point) not in independently_supported
+      and (
+        abs(point.v_lead - vision.velocity) > STATIONARY_MOVING_VISION_MIN_SPEED_DELTA_MPS
+        or (self._identity(point) in low_speed_conflicts and continuous_moving_support)
+      )
       and (
         continuous_moving_support
         or self._stationary_anchored_front_cost(
