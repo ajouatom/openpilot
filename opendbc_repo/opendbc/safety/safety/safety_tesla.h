@@ -120,7 +120,8 @@ static void tesla_rx_hook(const CANPacket_t *to_push) {
   if (bus == 1) {
     // Only a current, genuine idle right-wheel frame may be used as a TX
     // template. This prevents synthesizing vehicle-bus controls.
-    if ((addr == 0x3C2U) && ((GET_BYTE(to_push, 0) & 0x03U) == 1U) && ((GET_BYTE(to_push, 3) & 0x3FU) == 0U)) {
+    if ((addr == 0x3C2U) && (GET_LEN(to_push) == 8U) &&
+        ((GET_BYTE(to_push, 0) & 0x03U) == 1U) && ((GET_BYTE(to_push, 3) & 0x3FU) == 0U)) {
       for (int i = 0; i < 8; i++) {
         tesla_speed_button_rx_template[i] = GET_BYTE(to_push, i);
       }

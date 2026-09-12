@@ -140,22 +140,6 @@ class TestTeslaLongitudinalSafety(TestTeslaSafetyBase):
     for aeb_event in range(4):
       self.assertEqual(self._tx(self._long_control_msg(10, aeb_event=aeb_event)), aeb_event == 0)
 
-  def test_auto_speed_limit_requires_fresh_template_and_controls(self):
-    self.safety.set_safety_hooks(CarParams.SafetyModel.tesla, TeslaSafetyFlags.LONG_CONTROL | TeslaSafetyFlags.AUTO_SPEED_LIMIT)
-    self.safety.init_tests()
-
-    self.assertTrue(self._rx(self._speed_wheel_msg()))
-    self.safety.set_controls_allowed(False)
-    self.assertFalse(self._tx(self._speed_wheel_msg(1)))
-    self.safety.set_controls_allowed(True)
-    self.assertTrue(self._tx(self._speed_wheel_msg(1)))
-    self.assertFalse(self._tx(self._speed_wheel_msg(-1)))
-    self.assertFalse(self._tx(self._speed_wheel_msg(2)))
-    self.assertFalse(self._tx(self._speed_wheel_msg(1, bytes.fromhex("010000c000000001"))))
-
-    self.safety.set_timer(1_500_001)
-    self.assertFalse(self._tx(self._speed_wheel_msg(-1)))
-
   def test_stock_aeb_passthrough(self):
     no_aeb_msg = self._long_control_msg(10, aeb_event=0)
     no_aeb_msg_cam = self._long_control_msg(10, aeb_event=0, bus=2)
@@ -192,6 +176,81 @@ class TestTeslaLongitudinalSafety(TestTeslaSafetyBase):
     self.assertFalse(self._tx(self._long_control_msg(set_speed=10, accel_limits=(-1.1, -0.6))))
     self.assertFalse(self._tx(self._long_control_msg(set_speed=0, accel_limits=(-0.6, -1.1))))
     self.assertFalse(self._tx(self._long_control_msg(set_speed=0, accel_limits=(-0.1, -0.1))))
+
+
+class TestTeslaAutoSpeedLimitSafety(TestTeslaLongitudinalSafety):
+  TX_MSGS = [*TestTeslaLongitudinalSafety.TX_MSGS, [MSG_VCLEFT_SWITCH_STATUS, 1]]
+
+  def setUp(self):
+    super().setUp()
+    self.safety.set_safety_hooks(CarParams.SafetyModel.tesla, TeslaSafetyFlags.LONG_CONTROL | TeslaSafetyFlags.AUTO_SPEED_LIMIT)
+    self.safety.init_tests()
+
+  def test_speed_wheel_requires_template_and_controls(self):
+    self.safety.set_controls_allowed(True)
+    self.assertFalse(self._tx(self._speed_wheel_msg(1)))
+    self.assertTrue(self._rx(self._speed_wheel_msg()))
+    self.safety.set_controls_allowed(False)
+    self.assertFalse(self._tx(self._speed_wheel_msg(1)))
+    self.safety.set_controls_allowed(True)
+    self.assertTrue(self._tx(self._speed_wheel_msg(1)))
+    self.safety.set_timer(250_000)
+    self.assertTrue(self._tx(self._speed_wheel_msg(-1)))
+
+  def test_speed_wheel_rate_limit(self):
+    self.assertTrue(self._rx(self._speed_wheel_msg()))
+    self.safety.set_controls_allowed(True)
+    self.assertTrue(self._tx(self._speed_wheel_msg(1)))
+    self.safety.set_timer(249_999)
+    self.assertFalse(self._tx(self._speed_wheel_msg(-1)))
+    self.safety.set_timer(250_000)
+    self.assertTrue(self._tx(self._speed_wheel_msg(-1)))
+
+  def test_speed_wheel_template_expires(self):
+    self.assertTrue(self._rx(self._speed_wheel_msg()))
+    self.safety.set_controls_allowed(True)
+    self.safety.set_timer(1_500_001)
+    self.assertFalse(self._tx(self._speed_wheel_msg(-1)))
+    self.assertTrue(self._rx(self._speed_wheel_msg()))
+    self.assertTrue(self._tx(self._speed_wheel_msg(-1)))
+
+  def test_speed_wheel_only_changes_tick_by_one(self):
+    self.assertTrue(self._rx(self._speed_wheel_msg()))
+    self.safety.set_controls_allowed(True)
+    for tick in range(-32, 32):
+      if tick not in (-1, 1):
+        self.assertFalse(self._tx(self._speed_wheel_msg(tick)))
+    for byte in range(8):
+      data = bytearray(OBSERVED_SPEED_WHEEL_IDLE)
+      data[byte] ^= 0x40 if byte == 3 else 0x80
+      self.assertFalse(self._tx(self._speed_wheel_msg(1, data)))
+    self.assertTrue(self._tx(self._speed_wheel_msg(1)))
+
+  def test_speed_wheel_requires_longitudinal_and_feature_flags(self):
+    for flags in (0, TeslaSafetyFlags.LONG_CONTROL, TeslaSafetyFlags.AUTO_SPEED_LIMIT):
+      with self.subTest(flags=flags):
+        self.safety.set_safety_hooks(CarParams.SafetyModel.tesla, flags)
+        self.safety.init_tests()
+        self.assertTrue(self._rx(self._speed_wheel_msg()))
+        self.safety.set_controls_allowed(True)
+        self.assertFalse(self._tx(self._speed_wheel_msg(1)))
+
+  def test_speed_wheel_requires_genuine_complete_idle_template(self):
+    invalid_templates = [
+      (0, OBSERVED_SPEED_WHEEL_IDLE),
+      (2, OBSERVED_SPEED_WHEEL_IDLE),
+      (1, bytes.fromhex("000000c000000000")),  # wrong mux
+      (1, bytes.fromhex("010000c100000000")),  # driver input
+      (1, OBSERVED_SPEED_WHEEL_IDLE[:4]),
+      (1, OBSERVED_SPEED_WHEEL_IDLE + bytes(4)),
+    ]
+    for bus, data in invalid_templates:
+      with self.subTest(bus=bus, data=data):
+        self._reset_safety_hooks()
+        self.safety.init_tests()
+        self.safety.set_controls_allowed(True)
+        self.assertTrue(self._rx(libsafety_py.make_CANPacket(MSG_VCLEFT_SWITCH_STATUS, bus, data)))
+        self.assertFalse(self._tx(self._speed_wheel_msg(1)))
 
 
 if __name__ == "__main__":

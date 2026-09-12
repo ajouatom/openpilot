@@ -79,6 +79,14 @@ class TeslaSpeedLimitController:
     if not self.configured or not CC.enabled or CC.cruiseControl.cancel or not CS.out.cruiseState.enabled:
       self._reset(clear_manual_override=True)
       return []
+
+    # Preserve driver intent even while target data or braking blocks output.
+    if resume_changed:
+      self.manual_override_active = False
+    elif manual_changed:
+      self.manual_override_active = True
+      self._reset_pending()
+
     if CS.out.brakePressed or not CS.tesla_speed_limit_target_valid or not target_is_fresh:
       self._reset(clear_manual_override=False)
       return []
@@ -95,12 +103,6 @@ class TeslaSpeedLimitController:
       self.planned_target_display = target_display
       self.target_change_nanos = now_nanos
       self.target_stabilizing = True
-
-    if resume_changed:
-      self.manual_override_active = False
-    elif manual_changed:
-      self.manual_override_active = True
-      self._reset_pending()
 
     if self.manual_override_active:
       return []

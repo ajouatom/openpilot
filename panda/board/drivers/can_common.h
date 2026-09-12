@@ -167,9 +167,12 @@ void ignition_can_hook(CANPacket_t *to_push) {
   if (bus == 0) {
     int addr = GET_ADDR(to_push);
     int len = GET_LEN(to_push);
-    static int tesla_gear = -1;
     static bool tesla_seatbelt_latched = false;
     static bool tesla_door_open = false;
+    if (!wake_on_can || (wake_on_can_cnt > 2U)) {
+      tesla_seatbelt_latched = false;
+      tesla_door_open = false;
+    }
 
     // GM exception
     if ((addr == 0x1F1) && (len == 8)) {
@@ -207,24 +210,28 @@ void ignition_can_hook(CANPacket_t *to_push) {
       prev_counter = counter;
     }
 
-    // Tesla Model 3/Y ignition state
-    if ((addr == 0x118) && (len == 8)) {
+    // 0x118 also carries Subaru steering torque with the same counter layout.
+    // Only interpret Tesla gear/cabin messages while its power evidence is fresh.
+    const bool tesla_awake = wake_on_can && (wake_on_can_cnt <= 2U);
+    if (tesla_awake && (addr == 0x118) && (len == 8)) {
       int counter = GET_BYTE(to_push, 1) & 0xFU;
 
       static int prev_counter = -1;
       if ((counter == ((prev_counter + 1) % 16)) && (prev_counter != -1)) {
-        tesla_gear = (GET_BYTE(to_push, 2) >> 5U) & 0x7U;  // DI_systemStatus->DI_gear
+        int tesla_gear = (GET_BYTE(to_push, 2) >> 5U) & 0x7U;  // DI_systemStatus->DI_gear
         if ((tesla_gear == 2) || (tesla_gear == 3) || (tesla_gear == 4)) {  // R, N, D
           ignition_can = true;
         } else if ((tesla_gear == 1) && (!tesla_seatbelt_latched || tesla_door_open)) {  // P
           ignition_can = false;
         }
-        ignition_can_cnt = 0U;
+        if ((tesla_gear >= 1) && (tesla_gear <= 4)) {
+          ignition_can_cnt = 0U;
+        }
       }
       prev_counter = counter;
     }
 
-    if ((addr == 0x311U) && (len == 7)) {
+    if (tesla_awake && (addr == 0x311U) && (len == 7)) {
       int counter = GET_BYTE(to_push, 1) & 0xFU;
 
       static int prev_counter = -1;
@@ -249,6 +256,17 @@ void ignition_can_hook(CANPacket_t *to_push) {
     }
 
   }
+}
+
+void ignition_can_tick(void) {
+  if (ignition_can_cnt > 2U) {
+    ignition_can = false;
+  }
+  if (wake_on_can_cnt > 2U) {
+    wake_on_can = false;
+  }
+  ignition_can_cnt += 1U;
+  wake_on_can_cnt += 1U;
 }
 
 bool can_tx_check_min_slots_free(uint32_t min) {

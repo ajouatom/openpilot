@@ -84,6 +84,7 @@ void can_set_orientation(bool flipped);
 void can_set_forwarding(uint8_t from, uint8_t to);
 #endif
 void ignition_can_hook(CANPacket_t *to_push);
+void ignition_can_tick(void);
 bool can_tx_check_min_slots_free(uint32_t min);
 uint8_t calculate_checksum(const uint8_t *dat, uint32_t len);
 void can_set_checksum(CANPacket_t *packet);

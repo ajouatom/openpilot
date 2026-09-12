@@ -45,10 +45,10 @@ ACTUATOR_FIELDS = tuple(car.CarControl.Actuators.schema.fields.keys())
 
 def lateral_control_allowed(selfdrive_active: bool, always_lateral: bool, lat_enabled: bool,
                             steer_fault_temporary: bool, steer_fault_permanent: bool,
-                            standstill: bool, steer_at_standstill: bool) -> bool:
+                            below_min_speed: bool, standstill: bool, steer_at_standstill: bool) -> bool:
   return ((selfdrive_active or always_lateral) and lat_enabled and
           not steer_fault_temporary and not steer_fault_permanent and
-          (not standstill or steer_at_standstill))
+          ((standstill and steer_at_standstill) or (not standstill and not below_min_speed)))
 
 
 class Controls:
@@ -147,10 +147,12 @@ class Controls:
     #self.soft_hold_active = CS.softHoldActive #car.OnroadEvent.EventName.softHold in [e.name for e in self.sm['onroadEvents']]
 
     # Check which actuators can be enabled
-    standstill = abs(CS.vEgo) <= max(self.CP.minSteerSpeed, MIN_LATERAL_CONTROL_SPEED) or CS.standstill
+    below_min_speed = abs(CS.vEgo) <= max(self.CP.minSteerSpeed, MIN_LATERAL_CONTROL_SPEED)
+    # This Tesla engagement change must not relax other brands' speed gates.
+    steer_at_standstill = self.CP.brand == "tesla" and self.CP.steerAtStandstill
     CC.latActive = lateral_control_allowed(self.sm['selfdriveState'].active, lateral_enabled, CS.latEnabled,
-                                           CS.steerFaultTemporary, CS.steerFaultPermanent, standstill,
-                                           self.CP.steerAtStandstill)
+                                           CS.steerFaultTemporary, CS.steerFaultPermanent, below_min_speed,
+                                           CS.standstill, steer_at_standstill)
     CC.latActive = self.carrot_controls.lat_suspend_control(CS, CC.latActive)
     CC.longActive = CC.enabled and not any(e.overrideLongitudinal for e in self.sm['onroadEvents']) and self.CP.openpilotLongitudinalControl
 

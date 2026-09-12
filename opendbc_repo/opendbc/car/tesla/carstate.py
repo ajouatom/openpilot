@@ -230,8 +230,9 @@ class CarState(CarStateBase):
     speed_limit = cp_ap_party.vl["DAS_status"]["DAS_fusedSpeedLimit"]
     speed_limit_time = cp_ap_party.ts_nanos["DAS_status"]["DAS_fusedSpeedLimit"]
     if 0 < speed_limit <= 150 and speed_limit_time > 0:
-      ret.speedLimit = speed_limit
       self.tesla_speed_limit_target = speed_limit * (CV.KPH_TO_MS if cruise_is_kph else CV.MPH_TO_MS)
+      # The shared speed-limit display expects km/h even on MPH vehicles.
+      ret.speedLimit = self.tesla_speed_limit_target * CV.MS_TO_KPH
       self.tesla_speed_limit_target_nanos = speed_limit_time
       self.tesla_speed_limit_target_valid = True
     else:

@@ -1,10 +1,11 @@
 import re
 import unittest
 
-from opendbc.car import Bus, gen_empty_fingerprint
+from opendbc.car import Bus, gen_empty_fingerprint, structs
+from opendbc.car.common.conversions import Conversions as CV
 from opendbc.car.selected_car import get_selected_car_platform
 from opendbc.car.structs import CarParams
-from opendbc.car.tesla.carstate import CarState
+from opendbc.car.tesla.carstate import CarState, STOCK_ACC_CANCEL_PULSE_FRAMES, STOCK_ACC_CANCEL_STATES
 from opendbc.car.tesla.interface import CarInterface
 from opendbc.car.tesla.fingerprints import FW_VERSIONS
 from opendbc.car.tesla.radar_interface import RADAR_START_ADDR
@@ -133,6 +134,45 @@ class TestTeslaFingerprint(unittest.TestCase):
     car_state.update(can_parsers)
     self.assertTrue(car_state.das_accCancel)
 
+  def test_stock_acc_cancel_pulse_is_bounded_and_includes_hold(self):
+    CP = CarInterface.get_params(CAR.TESLA_MODEL_Y, gen_empty_fingerprint(), [], True, False, False)
+    for active_state in (3, 4):
+      for cancel_state in STOCK_ACC_CANCEL_STATES:
+        with self.subTest(active_state=active_state, cancel_state=cancel_state):
+          car_state = CarState(CP)
+          parsers = CarState.get_can_parsers(CP)
+          das = parsers[Bus.ap_party].vl["DAS_control"]
+          das["DAS_accState"] = active_state
+          car_state.update(parsers)
+          das["DAS_accState"] = cancel_state
+          events = []
+          for frame in range(STOCK_ACC_CANCEL_PULSE_FRAMES + 5):
+            ret = car_state.update(parsers)
+            self.assertEqual(car_state.das_accCancel, frame < STOCK_ACC_CANCEL_PULSE_FRAMES)
+            events.extend((event.type, event.pressed) for event in ret.buttonEvents)
+          cancel = structs.CarState.ButtonEvent.Type.cancel
+          self.assertEqual(events, [(cancel, True), (cancel, False)])
+
+  def test_cancel_pulse_reaches_each_longitudinal_send_phase(self):
+    CP = CarInterface.get_params(CAR.TESLA_MODEL_Y, gen_empty_fingerprint(), [], True, False, False)
+    CC = structs.CarControl(enabled=True, longActive=True).as_reader()
+    for phase in range(STOCK_ACC_CANCEL_PULSE_FRAMES):
+      with self.subTest(phase=phase):
+        car_state = CarState(CP)
+        parsers = CarState.get_can_parsers(CP)
+        controller = CarInterface.CarController({Bus.party: "tesla_model3_party"}, CP)
+        controller.frame = phase
+        das = parsers[Bus.ap_party].vl["DAS_control"]
+        das["DAS_accState"] = 3
+        car_state.update(parsers)
+        das["DAS_accState"] = 0
+        commands = []
+        for frame in range(STOCK_ACC_CANCEL_PULSE_FRAMES):
+          car_state.out = car_state.update(parsers)
+          _, sends = controller.update(CC, car_state, (frame + 1) * 10_000_000)
+          commands.extend(data[1] >> 4 for address, data, _ in sends if address == 0x2B9)
+        self.assertEqual(commands, [13])
+
   def test_fw_platform_code(self):
     # Every EPS FW must parse and its platform letter must match the car it's filed under.
     for car_model, ecus in FW_VERSIONS.items():
@@ -166,9 +206,36 @@ class TestTeslaFingerprint(unittest.TestCase):
     assert CP.flags & TeslaFlags.AUTO_SPEED_LIMIT
     assert CP.safetyConfigs[0].safetyParam & TeslaSafetyFlags.AUTO_SPEED_LIMIT
 
+    CP = CarInterface.get_params(CAR.TESLA_MODEL_3, fingerprint, [], False, False, False)
+    assert CP.flags & TeslaFlags.HAS_VEHICLE_BUS
+    assert not (CP.flags & TeslaFlags.AUTO_SPEED_LIMIT)
+    assert not (CP.safetyConfigs[0].safetyParam & TeslaSafetyFlags.AUTO_SPEED_LIMIT)
+
     CP = CarInterface.get_params(CAR.TESLA_MODEL_3, gen_empty_fingerprint(), [], True, False, False)
     assert not (CP.flags & TeslaFlags.AUTO_SPEED_LIMIT)
     assert not (CP.safetyConfigs[0].safetyParam & TeslaSafetyFlags.AUTO_SPEED_LIMIT)
+
+  def test_speed_limit_normalizes_display_units(self):
+    CP = CarInterface.get_params(CAR.TESLA_MODEL_3, gen_empty_fingerprint(), [], False, False, False)
+    car_state = CarState(CP)
+    can_parsers = CarState.get_can_parsers(CP)
+    for units, speed_limit, unit_to_ms in ((1, 100, CV.KPH_TO_MS), (0, 65, CV.MPH_TO_MS)):
+      with self.subTest(units=units):
+        can_parsers[Bus.party].vl["DI_state"]["DI_speedUnits"] = units
+        can_parsers[Bus.ap_party].vl["DAS_status"]["DAS_fusedSpeedLimit"] = speed_limit
+        can_parsers[Bus.ap_party].ts_nanos["DAS_status"]["DAS_fusedSpeedLimit"] = 2_000_000_000
+
+        ret = car_state.update(can_parsers)
+        self.assertAlmostEqual(ret.speedLimit, speed_limit * unit_to_ms * CV.MS_TO_KPH, places=5)
+        self.assertAlmostEqual(car_state.tesla_speed_limit_target, speed_limit * unit_to_ms)
+        self.assertTrue(car_state.tesla_speed_limit_target_valid)
+
+    for speed_limit, timestamp in ((0, 2_000_000_000), (155, 2_000_000_000), (65, 0)):
+      with self.subTest(speed_limit=speed_limit, timestamp=timestamp):
+        can_parsers[Bus.ap_party].vl["DAS_status"]["DAS_fusedSpeedLimit"] = speed_limit
+        can_parsers[Bus.ap_party].ts_nanos["DAS_status"]["DAS_fusedSpeedLimit"] = timestamp
+        self.assertEqual(car_state.update(can_parsers).speedLimit, 0.0)
+        self.assertFalse(car_state.tesla_speed_limit_target_valid)
 
   def test_vehicle_bus_tpms_display(self):
     fingerprint = gen_empty_fingerprint()

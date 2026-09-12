@@ -1,5 +1,7 @@
 from types import SimpleNamespace
 
+import pytest
+
 from opendbc.car.tesla.speed_limit_controller import TeslaSpeedLimitController, create_speed_wheel_frame
 from opendbc.car.tesla.values import TeslaFlags
 
@@ -87,3 +89,43 @@ def test_controller_quantizes_in_vehicle_display_units():
   state.tesla_speed_limit_target_nanos = 2_600_000_000
   assert controller.update(fake_control(), state, 2_600_000_000) == []
   assert len(controller.update(fake_control(), state, 3_100_000_000)) == 1
+
+
+@pytest.mark.parametrize("unavailable", ["invalid", "stale", "brake"])
+def test_manual_adjustment_is_remembered_while_automatic_control_waits(unavailable):
+  controller = TeslaSpeedLimitController(SimpleNamespace(flags=TeslaFlags.AUTO_SPEED_LIMIT))
+  state = fake_state()
+  assert controller.update(fake_control(), state, 2_000_000_000) == []
+
+  state.tesla_manual_speed_adjustment_counter = 1
+  state.tesla_speed_limit_target_valid = unavailable != "invalid"
+  state.tesla_speed_limit_target_nanos = 0 if unavailable == "stale" else 2_100_000_000
+  state.out.brakePressed = unavailable == "brake"
+  assert controller.update(fake_control(), state, 2_100_000_000) == []
+
+  state.tesla_speed_limit_target_valid = True
+  state.out.brakePressed = False
+  for now in (2_200_000_000, 2_700_000_000):
+    state.tesla_speed_limit_target_nanos = now
+    assert controller.update(fake_control(), state, now) == []
+  assert controller.manual_override_active
+
+
+def test_resume_gesture_is_remembered_while_speed_limit_is_unavailable():
+  controller = TeslaSpeedLimitController(SimpleNamespace(flags=TeslaFlags.AUTO_SPEED_LIMIT))
+  state = fake_state()
+  assert controller.update(fake_control(), state, 2_000_000_000) == []
+  state.tesla_manual_speed_adjustment_counter = 1
+  assert controller.update(fake_control(), state, 2_100_000_000) == []
+  assert controller.manual_override_active
+
+  state.tesla_speed_limit_target_valid = False
+  state.tesla_manual_speed_adjustment_counter = 2
+  state.tesla_speed_auto_resume_gesture_counter = 1
+  assert controller.update(fake_control(), state, 2_200_000_000) == []
+
+  state.tesla_speed_limit_target_valid = True
+  state.tesla_speed_limit_target_nanos = 2_300_000_000
+  assert controller.update(fake_control(), state, 2_300_000_000) == []
+  state.tesla_speed_limit_target_nanos = 2_800_000_000
+  assert len(controller.update(fake_control(), state, 2_800_000_000)) == 1
