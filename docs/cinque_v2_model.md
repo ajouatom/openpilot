@@ -39,3 +39,13 @@ The 2026-09-13 consolidation passed all 60 model downloader, cache/helper and
 precompiled-artifact tests, plus all six web model-name tests. Rebuilding the web
 assets reproduced the committed Cinque v2 assets. This consolidation does not
 constitute new device-side compilation or on-road validation.
+
+The same consolidation verified the complete SHA-256 and size of the NAS ONNX,
+precompiled pickle and runtime archive. The NAS and public HTTPS model and
+precompiled catalogs matched, and the precompiled catalog passed validation
+against the selected ONNX hash.
+
+Docs-Not-Needed: The web change only labels the existing eGPU model status as
+Cinque v2; it adds no setting or interaction. Web-only model presentation belongs
+in the localized UI rather than the public user guides. The pinned model and
+branch transition are documented here.
