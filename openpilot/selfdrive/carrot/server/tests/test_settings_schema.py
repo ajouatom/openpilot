@@ -42,6 +42,16 @@ def test_the_catalogue_is_readable_and_populated(params):
   assert all(isinstance(p.get("name"), str) and p["name"] for p in params)
 
 
+def test_rear_camera_hold_uses_meter_values_and_persistent_default(settings, params):
+  hold = next(p for p in params if p["name"] == "AutoNaviRearCameraHoldDistance")
+  assert (hold["min"], hold["max"], hold["default"], hold["unit"]) == (0, 300, 100, 10)
+  assert '"AutoNaviRearCameraHoldDistance", {PERSISTENT, INT, "100"}' in PARAMS_KEYS_PATH.read_text(encoding="utf-8")
+  driving = next(category for category in settings["menu"] if category["id"] == "DRIVING")
+  speed = next(group for group in driving["groups"] if group["id"] == "SPEED")
+  cameras = next(group for group in speed["groups"] if group["id"] == "SPEED_CAMERA")
+  assert hold["name"] in cameras["params"]
+
+
 def test_onnx_vision_toggle_uses_existing_runtime_flag_and_first_steering_section(settings, params):
   by_name = {p["name"]: p for p in params}
   vision = by_name["ShareData"]
