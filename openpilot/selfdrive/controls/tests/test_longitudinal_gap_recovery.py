@@ -7,7 +7,6 @@ import numpy as np
 import pytest
 
 from openpilot.selfdrive.controls.lib.longitudinal_gap_recovery import LeadGapState, advance_headroom, gap_reference, displayed_follow_distance
-from openpilot.selfdrive.controls.lib.longitudinal_safe_follow import SafeFollowState
 
 
 def load_mpc_update(path):
@@ -33,7 +32,6 @@ def load_mpc_update(path):
             'AcadosOcpSolverCython': RecordingSolver, 'LEAD_ACCEL_MIN_TRACK_FRAMES': 3,
             'LeadAccelResponseState': preview.LeadAccelResponseState, 'get_lead_accel_mpc_request': preview.get_lead_accel_mpc_request,
             'LeadGapState': LeadGapState, 'gap_reference': gap_reference, 'displayed_follow_distance': displayed_follow_distance,
-            'SafeFollowState': SafeFollowState,
             'get_traffic_stop_distance_adjust': get_traffic_stop_distance_adjust,
             'get_traffic_stop_obstacle_distance': get_traffic_stop_obstacle_distance,
             'LaneChangeGapPlan': LaneChangeGapPlan, 'cutout_obstacle_relief': cutout_obstacle_relief}
