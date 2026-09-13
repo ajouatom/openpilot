@@ -52,6 +52,8 @@ def _car_state(distance_time_tenths=60):
   state.vehicleNaviRoadClass = 7
   state.vehicleNaviCameraTarget = None
   state.vehicleNaviCameraStatusEvent = None
+  state.vehicleNaviCameraStatusSpeed = 0.0
+  state.vehicleNaviCameraStatusTarget = None
   state.vehicleNaviSpeedZoneActive = False
   state.vehicleNaviSpeedZoneSpeed = 0.0
   state.vehicleNaviSchoolZoneActive = False
@@ -593,6 +595,108 @@ def test_vehicle_navi_camera_status_does_not_select_mismatched_future_camera():
   assert ret.speedLimit == 60.0
 
 
+@pytest.mark.parametrize("future_distance", (1138.0, 1027.0, 1702.0))
+def test_vehicle_navi_current_warning_rejects_distant_same_speed_preview(future_distance):
+  state = _car_state(75)
+  state.vehicleNaviCanControl = True
+  camera = {"type": "camera", "speed": 50, "kind": 1, "target": future_distance}
+  state.vehicleNaviEvents = [camera]
+  cp = SimpleNamespace(ts_nanos={})
+  ret = SimpleNamespace(speedLimit=0.0, vEgo=0.0)
+
+  # A previously selected preview must not leak into the current warning.
+  assert state._update_vehicle_navi_events(cp, ret, False)
+  state.update_speed_limit(ret, True, distance_time_changed=False)
+  assert ret.speedLimitDistance == future_distance
+  ret.speedLimit = 50.0
+  assert not state._update_vehicle_navi_events(cp, ret, True)
+  state.update_speed_limit(ret, True, distance_time_changed=False)
+  assert state.vehicleNaviCameraStatusEvent is None
+  assert ret.speedLimitDistance == 375.0
+
+  # Travel does not move the association window toward a future camera.
+  state.totalDistance = future_distance - 100.0
+  assert not state._update_vehicle_navi_events(cp, ret, True)
+  state.update_speed_limit(ret, True, distance_time_changed=False)
+  assert ret.speedLimitDistance == 1.0
+
+  # Ending an unmatched warning preserves the future preview.
+  ret.speedLimit = 0.0
+  assert state._update_vehicle_navi_events(cp, ret, False)
+  state.update_speed_limit(ret, True, distance_time_changed=False)
+  assert state.vehicleNaviCameraStatusEvent is None
+  assert camera in state.vehicleNaviEvents
+  assert ret.speedLimitDistance == 100.0
+
+
+def test_vehicle_navi_late_profile_cannot_extend_current_warning_distance():
+  state = _car_state(75)
+  state.vehicleNaviCanControl = True
+  cp = SimpleNamespace(ts_nanos={})
+  ret = SimpleNamespace(speedLimit=50.0, vEgo=0.0)
+  assert not state._update_vehicle_navi_events(cp, ret, True)
+  state.update_speed_limit(ret, True, distance_time_changed=False)
+  state.totalDistance = 50.0
+  state._add_vehicle_navi_event("camera", 50, 1, 1996.0)
+  assert not state._update_vehicle_navi_events(cp, ret, True)
+  state.update_speed_limit(ret, True, distance_time_changed=False)
+  assert ret.speedLimitDistance == 325.0
+
+  # A delayed nearby profile can still replace the estimate (including the
+  # known 30-40 m offset beyond the physical camera).
+  state._add_vehicle_navi_event("camera", 50, 1, 355.0)
+  assert state._update_vehicle_navi_events(cp, ret, True)
+  state.update_speed_limit(ret, True, distance_time_changed=False)
+  assert ret.speedLimitDistance == 355.0
+
+
+def test_vehicle_navi_warning_keeps_cap_after_profile_endpoint():
+  state = _car_state()
+  state.vehicleNaviCanControl = True
+  state._add_vehicle_navi_event("camera", 50, 1, 20.0)
+  cp = SimpleNamespace(ts_nanos={})
+  ret = SimpleNamespace(speedLimit=50.0, vEgo=0.0)
+  assert state._update_vehicle_navi_events(cp, ret, True)
+  state.totalDistance = 60.0
+  assert state._update_vehicle_navi_events(cp, ret, True)
+  state.update_speed_limit(ret, True, distance_time_changed=False)
+  assert ret.speedLimitDistance == 1.0
+  ret.speedLimit = 0.0
+  assert not state._update_vehicle_navi_events(cp, ret, False)
+  state.update_speed_limit(ret, False, distance_time_changed=False)
+  assert ret.speedLimitDistance == 0.0
+
+
+def test_vehicle_navi_warning_speed_change_and_restart_reset_fallback():
+  state = _car_state(75)
+  cp = SimpleNamespace(ts_nanos={})
+  ret = SimpleNamespace(speedLimit=50.0, vEgo=0.0)
+  state._update_vehicle_navi_events(cp, ret, True)
+  state.totalDistance = 100.0
+  ret.speedLimit = 30.0
+  state._update_vehicle_navi_events(cp, ret, True)
+  state.update_speed_limit(ret, True, distance_time_changed=False)
+  assert ret.speedLimitDistance == 225.0
+  ret.speedLimit = 0.0
+  state._update_vehicle_navi_events(cp, ret, False)
+  ret.speedLimit = 30.0
+  state.totalDistance = 200.0
+  state._update_vehicle_navi_events(cp, ret, True)
+  state.update_speed_limit(ret, True, distance_time_changed=False)
+  assert ret.speedLimitDistance == 225.0
+
+
+def test_vehicle_navi_live_distance_setting_updates_current_warning():
+  state = _car_state(75)
+  ret = SimpleNamespace(speedLimit=50.0, vEgo=0.0)
+  state._update_vehicle_navi_events(SimpleNamespace(ts_nanos={}), ret, True)
+  state.totalDistance = 100.0
+  state.op_params.value = 62
+  state.vehicleSpeedCameraParamsCounter = VEHICLE_SPEED_CAMERA_PARAM_UPDATE_FRAMES - 1
+  state.update_speed_limit(ret, True)
+  assert ret.speedLimitDistance == 310.0
+
+
 def test_vehicle_navi_section_log_frames_hold_cap_until_camera_status_ends():
   state = _car_state()
   state.vehicleNaviCanControl = True
@@ -889,7 +993,12 @@ def test_vehicle_navi_section_end_camera_uses_logged_1997_meter_offset():
   cp = SimpleNamespace(ts_nanos={"NEW_MSG_4BE": {"PROLONG_VALUE": 1}})
   ret = SimpleNamespace(speedLimit=100.0, speedBumpDistance=0.0, schoolZoneActive=False)
 
-  assert state._update_vehicle_navi_events(cp, ret, True)
+  # The section-end profile is still useful as a future preview, but must
+  # not move an independently active camera warning almost 2 km away.
+  assert not state._update_vehicle_navi_events(cp, ret, True)
+  assert state.vehicleNaviCameraTarget is None
+  ret.speedLimit = 0.0
+  assert state._update_vehicle_navi_events(cp, ret, False)
   assert ret.vehicleNaviActive
   assert ret.vehicleNaviSpeed == 100
   assert state.vehicleNaviCameraTarget == pytest.approx(1997.0)
