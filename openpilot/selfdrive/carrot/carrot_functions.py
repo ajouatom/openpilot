@@ -435,7 +435,7 @@ class CarrotPlanner:
   def update(self, sm, v_cruise_kph, mode):
     self._params_update()
     self.leadAccelResponse = get_lead_response_for_gap(
-      self.leadAccelResponseBase, self.leadAccelResponseTF, int(sm['selfdriveState'].personality),
+      self.leadAccelResponseBase, self.leadAccelResponseTF, sm['selfdriveState'].personality,
     )
     self._update_model_desire(sm)
 
