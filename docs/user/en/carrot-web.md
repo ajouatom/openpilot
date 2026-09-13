@@ -47,6 +47,8 @@ The Drive page displays live video and driving state. Its usual layout contains 
 
 The web video and HUD are reference displays. Always prioritize the vehicle's actual warnings and the road ahead.
 
+The following-distance bar and its 25 m label show the current dynamically adjusted following target. This differs from measured lead distance and is hidden without a valid lead. See [following-gap settings](cruise-gap.md#following-gap).
+
 ### AR display and diagnostics
 
 - Enabling **Show AR** in `Tools > Web Settings` overlays Carrot Navi driving guidance on the Carrot Vision video and requests additional real-time pose and position data only while it is enabled.
