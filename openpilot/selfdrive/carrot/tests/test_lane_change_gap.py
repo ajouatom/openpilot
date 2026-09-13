@@ -10,7 +10,7 @@ import pytest
 from openpilot.selfdrive.carrot.radar_motion.lane_change_gap import (
   GapLead, LaneChangeGapPlan, LaneChangeGapTracker,
 )
-from openpilot.selfdrive.carrot.t_follow import ramp_t_follow
+from openpilot.selfdrive.carrot.t_follow import ramp_mode_t_follow_factor, ramp_t_follow
 
 
 def lead(distance=35.0, speed=15.0, lateral=0.0, track=1, accel=0.0):
@@ -156,7 +156,8 @@ def test_production_tf_update_cycle_has_no_repeated_reduction(changing, ratio):
   cls = next(n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == 'CarrotPlanner')
   methods = [n for n in cls.body if isinstance(n, ast.FunctionDef) and n.name in ('get_T_FOLLOW',)]
   namespace = {'LEAD_ACCEL_DEADBAND': .1, 'LEAD_ACCEL_CONFIGURED_TF_MIN': 4, 'np': np, 'DT_MDL': .05,
-               'ramp_t_follow': ramp_t_follow, 'log': NS(LongitudinalPersonality=NS(standard=1))}
+               'ramp_t_follow': ramp_t_follow, 'ramp_mode_t_follow_factor': ramp_mode_t_follow_factor,
+               'log': NS(LongitudinalPersonality=NS(standard=1))}
   exec(compile(ast.Module(body=methods, type_ignores=[]), str(path), 'exec'), namespace)
   planner_type = type('ActualTFMethods', (), {n.name: namespace[n.name] for n in methods})
   p = planner_type()
