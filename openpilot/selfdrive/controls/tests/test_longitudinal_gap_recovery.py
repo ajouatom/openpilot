@@ -6,7 +6,7 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 
-from openpilot.selfdrive.controls.lib.longitudinal_gap_recovery import LeadGapState, advance_headroom, gap_reference
+from openpilot.selfdrive.controls.lib.longitudinal_gap_recovery import LeadGapState, advance_headroom, gap_reference, displayed_follow_distance
 from openpilot.selfdrive.controls.lib.longitudinal_safe_follow import SafeFollowState
 
 
@@ -32,7 +32,7 @@ def load_mpc_update(path):
             'V_EGO_COST': 0., 'A_EGO_COST': 0., 'J_EGO_COST': 5., 'SOURCES': ['lead0','lead1','cruise','e2e'],
             'AcadosOcpSolverCython': RecordingSolver, 'LEAD_ACCEL_MIN_TRACK_FRAMES': 3,
             'LeadAccelResponseState': preview.LeadAccelResponseState, 'get_lead_accel_mpc_request': preview.get_lead_accel_mpc_request,
-            'LeadGapState': LeadGapState, 'gap_reference': gap_reference,
+            'LeadGapState': LeadGapState, 'gap_reference': gap_reference, 'displayed_follow_distance': displayed_follow_distance,
             'SafeFollowState': SafeFollowState,
             'get_traffic_stop_distance_adjust': get_traffic_stop_distance_adjust,
             'get_traffic_stop_obstacle_distance': get_traffic_stop_obstacle_distance,
@@ -427,3 +427,24 @@ def test_planner_gap_gate_allows_zero_level_and_stopping_but_not_override(gas, r
     'reset_state': reset, 'sm': {'carState': SimpleNamespace(gasPressed=gas)}, 'force_slow_decel': force,
     'carrot': SimpleNamespace(leadAccelResponse=0, lane_change_active=lane),
     'self': SimpleNamespace(output_should_stop=True)}) == expected
+
+
+def test_displayed_target_includes_headroom_and_uses_restrictive_valid_lead():
+  assert displayed_follow_distance([20., 30.], [60., 70.], [60., 70.], [5., 25.], [True, True]) == 55.
+  assert displayed_follow_distance([20., 30.], [60., 70.], [60., 70.], [5., 25.], [True, False]) == 25.
+  assert displayed_follow_distance([20., 30.], [60., 70.], [60., 70.], [5., 25.], [False, False]) == 0.
+
+
+def test_displayed_target_accounts_for_existing_relief_without_changing_inputs():
+  obstacles = np.array([60., 70.])
+  margins = np.array([5., 0.])
+  assert displayed_follow_distance([20., 30.], [58., 70.], obstacles, margins, [True, False]) == 23.
+  assert obstacles == pytest.approx([60., 70.])
+  assert margins == pytest.approx([5., 0.])
+
+
+@pytest.mark.parametrize('lead_index', [0, 1])
+def test_mpc_publishes_current_dynamic_follow_target(mpc_class, lead_index):
+  mpc = run_update(mpc_class, level=0, lead_index=lead_index)
+  assert mpc.desired_distance == pytest.approx(mpc.base_desired_distances[lead_index] + mpc.lead_gap_margins[0, lead_index])
+  assert mpc.desired_distance > mpc.base_desired_distances[lead_index]

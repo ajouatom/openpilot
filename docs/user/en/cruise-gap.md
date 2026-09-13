@@ -172,27 +172,28 @@ Hyundai/Kia configurations can expose all four personalities. Other vehicles can
 
 ### Actual application order
 
-1. Select baseline TF from personality or the speed table.
-2. Apply speed reduction and driving-mode factors, subject to the level 4–5 accelerating-lead exception below.
+1. Use the base TF of the cruise-gap level selected with the button.
+2. Apply the speed TF multiplier and driving-mode adjustment. Lead response levels 4–5 use the same calculation.
 3. Hold baseline TF against reduction during braking, then add `TFollowDecelBoost` once.
-4. Apply configured/global bounds and rate-limit TF increases.
-5. Release extra deceleration margin at 0.10 seconds per second as braking eases.
+4. Apply TF increases gradually. Release extra deceleration margin at 0.10 seconds per second.
 
-### `EnableSpeedTF`
+### `SpeedTFFactor` · Speed TF multiplier
 
-| Value | Behavior |
-|---:|---|
-| `0` | Use the selected Gap1–4 without a speed adjustment |
-| `1–50` | Below 100 km/h, reduce the time gap increasingly at lower speed by this percentage |
-| `-1` | Treat Gap1–4 as a table at 0/30/60/90 km/h |
-| `-2` | Table at 0/40/80/120 km/h |
-| `-3` | Table at 0/50/100/150 km/h |
+Increases the selected base TF linearly with speed. Range `10–30`, default `10`, step `1`. The screen shows `1.0×–3.0×`.
 
-For a positive value of 20, the time gap is 80% of base at 0 km/h, 90% at 50 km/h, and 100% at 100 km/h or above.
+- `10`: no speed adjustment.
+- `20`: 1.0× when stopped, 1.5× at 50 km/h, 2.0× at 100 km/h and 3.0× at 200 km/h.
+- Higher values give a longer TF at the same speed. Lead acceleration response is unchanged.
 
-Negative modes build a speed table and then apply personality multipliers of ×1.0, ×1.3, ×1.6, and ×2.0. The result is clamped back to the four values' minimum/maximum, so large multipliers may stop near `TFollowGap4`.
+With base TF 0.50 seconds and setting 20, TF is 0.50/0.75/1.00 seconds at 0/50/100 km/h. Driving-mode and deceleration adjustments follow. The speed-adjusted result is not clipped to the largest TF1–4 setting or the former two-second cap.
 
-Tracking a lead with `LeadAccelResponse=4` or `5` is an exception at every following-distance level. The selected gap’s `TFollowGap1`–`TFollowGap4` setting takes priority over positive or negative `EnableSpeedTF` adjustments and Eco/Safe gap factors only while a stable radar lead is accelerating positively and the gap is opening. When lead acceleration falls to `0.1 m/s²` or below, the exception is removed immediately and normal gap control—including the existing TF increase ramp—and braking behavior resume. It does not change the no-lead cruise target. During lane-change starting and finishing, this exception and stronger acceleration response are disabled, retaining normal base TF.
+The former `EnableSpeedTF` setting is removed; its value is not converted to the new multiplier. The new setting starts with no speed adjustment. Existing base TF and common lead acceleration response values are retained.
+
+### Target following-distance marker
+
+The bar on the driving path and its `25 m` label show the current following target. They include speed TF, relative-speed/stopping-distance adjustments, response-dependent extra headroom, and permitted lane-change/cutout relief.
+
+The bar is hidden without a valid lead. With two leads, it shows the more restrictive following reference. It is not the measured lead distance or a guaranteed safety boundary. The selected button level does not change automatically.
 
 ### `DynamicTFollowLC`
 
@@ -221,16 +222,25 @@ At ego acceleration around -0.2 m/s² or below, the code first prevents speed ad
 
 At `TFollowDecelBoost=50`, the addition is approximately 0.03 s at -0.3 m/s², 0.125 s at -1.0 m/s², and a maximum around 0.25 s at -2.5 m/s². Range is 0–100 in steps of 10.
 
-For a clean baseline, use `EnableSpeedTF=0`, `DynamicTFollowLC=100`, `MyDrivingMode=3`, and `MyDrivingModeAuto=0`. If the result is still wrong, check the base gaps, stop distance, selected personality, and radar lead before adding dynamic features.
+For a clean baseline, use `SpeedTFFactor=10`, `DynamicTFollowLC=100`, `MyDrivingMode=3`, and `MyDrivingModeAuto=0`. If the result is still wrong, check the base gaps, stop distance, selected personality, and radar lead before adding dynamic features.
 
 <a id="lead-response"></a>
 ## 6. Lead-vehicle response
 
 Use `LeadAccelResponse` to adjust response to a lead starting, accelerating or being approached. Its range is 0–5; the default 0 disables acceleration boost and recovers extra TF most slowly.
 
-### `LeadAccelResponse`
+### `LeadAccelResponseTF1`–`LeadAccelResponseTF4`
 
-Sets lead-start and acceleration response at every following-distance level. Levels 1–3 soften small changes and response near the target gap; level 4 is quick and level 5 retains the immediate maximum response. The selected TF remains the reference; a separate lead-jerk adjustment no longer expands or shrinks TF.
+Assigns lead acceleration response to each cruise-gap level. Range `-1–5`; the default `-1` is displayed as **Use common**.
+
+- `-1`: use the common `LeadAccelResponse` value.
+- `0–5`: use this value at this gap. `0` is an explicit override, not inheritance.
+
+For example, set TF1 and TF2 to 50 and their responses to 5 and 3. Both use the same base following time, while the button changes response. The selected response controls both acceleration boost and recovery of extra headroom. A response-level change reinitializes headroom under the new response. The speed multiplier applies to every gap.
+
+### `LeadAccelResponse` · Common value
+
+Sets lead-start and acceleration response for gaps configured to use the common value. Levels 1–3 soften small changes and response near the target gap; level 4 is quick and level 5 retains the immediate maximum response. The selected TF remains the reference; a separate lead-jerk adjustment no longer expands or shrinks TF.
 
 | Level | `aChangeCost` at full boost | Multiplier on existing jerk cost |
 |---|---:|---:|
@@ -247,7 +257,7 @@ Acceleration boost at every level requires normal ACC, no accelerator override o
 
 Boost ends immediately at the TF target distance, when lead acceleration ends, or when closing-speed conditions fail. A changed lead restarts gradual entry at levels 1–4. Level 5 retains the −0.2 m/s relative-speed floor and 0.5-second prediction condition. All levels disable boost during lane-change starting/finishing, blended mode, and vision-only lead tracking.
 
-Levels 4–5 prioritize the selected `TFollowGap1`–`TFollowGap4` while a stable lead accelerates and the gap opens. Levels 1–3 retain normal speed/mode TF processing. `CruiseMaxVals`, curve, cut-in, lead-distance and danger-distance limits, and deceleration preview remain active. No acceleration is added after MPC. This setting does not change `AChangeCostStarting` or PID gains. Lower levels do not delay braking required by an urgent approach.
+Every response level uses TF with speed and driving-mode adjustments. The former levels 4–5 speed-TF bypass is removed. `CruiseMaxVals`, curve, cut-in, lead-distance and danger-distance limits, and deceleration preview remain active. No acceleration is added after MPC. This setting does not change `AChangeCostStarting` or PID gains. Lower levels do not delay braking required by an urgent approach.
 
 Deceleration preview operates independently of the response level. During active control, remaining correction releases progressively when relative acceleration eases or the lead switches between radar and vision or disappears. Accelerator or brake intervention and longitudinal control exit clear it immediately. Crossing zero relative acceleration does not remove the correction in one step. New hard-deceleration requests retain the existing preview attack rate and braking bounds.
 
