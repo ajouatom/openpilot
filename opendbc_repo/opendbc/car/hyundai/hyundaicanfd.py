@@ -13,15 +13,6 @@ TurnDirection = log.Desire
 
 ACC_CONTROL_DT = 1.0 / 50.0
 
-# ══════════════════════════════════════════════════════════════════════════════
-# [차량 모델 선택 (ccNC DBC 규격)]
-# 0: 순정(1), 1: 승용차(3), 2: 트럭(5), 3: 보행자(7), 4: 자전거(9), 5: 오토바이(11), 6: 라바콘(13)
-# ══════════════════════════════════════════════════════════════════════════════
-CAR_MODEL_TYPE = 1
-
-_MODEL_ID_MAP = {0: 1, 1: 3, 2: 5, 3: 7, 4: 9, 5: 11, 6: 13}
-CAR_MODEL_ID = _MODEL_ID_MAP.get(CAR_MODEL_TYPE, 1)
-
 
 def longitudinal_interlock_active(CS) -> bool:
   return CS.out.brakeHoldActive or CS.out.parkingBrake
@@ -615,11 +606,6 @@ def hkg_can_fd_checksum(address: int, sig, d: bytearray) -> int:
   return crc
 
 
-
-
-def _clip_int(x, lo, hi):
-  return lo if x < lo else hi if x > hi else int(x)
-
 def _get_desire_and_lane_changing(md):
   desire = 0
   lane_changing = 0
@@ -652,29 +638,6 @@ def _apply_lane_desire(values, desire):
   elif desire == 4:  # 우차선변경
     values['LANE_CHANGING'] = 4
 
-def _apply_radar_blink(values, radar_pairs, frame, *,
-                      disp_dist=30.0, min_dist=14.0,
-                      max_interval=100, t=1.0):
-  """
-  거리 > min_dist 일 때만 깜빡임.
-  거리 멀수록 interval 커짐(느리게).
-  """
-  for det_key, dist_key in radar_pairs:
-    dist = values[dist_key]
-    if dist <= min_dist:
-      continue
-
-    d = min(dist, disp_dist)
-    interval = int((1 + (max_interval - 1) * (d / disp_dist)) * t)
-    interval = _clip_int(interval, 1, max_interval)
-
-    blink = (frame // interval) & 1
-    if CAR_MODEL_ID > 1:
-      values[det_key] = (CAR_MODEL_ID + 1) if blink else CAR_MODEL_ID
-    else:
-      values[det_key] = 2 - blink
-    values[dist_key] = min_dist
-
 def _suppress_trailer_mode_warning(values, CS):
   # Logs from IONIQ 9 show ALERTS_5=6 is the periodic
   # "driver assistance limited in trailer mode" popup.
@@ -703,34 +666,23 @@ def _select_cluster_background(cruise_enabled, lat_active, paddle_pressed, paddl
   return 1 if cruise_enabled else 3 if lat_active else 7
 
 
-def _make_ccnc_values(values, CS, lat_active, frame, hud_control,
-                     lane_line=True, corner_radar=True,
-                     desire=0,
-                     blink_pairs=None,
-                     blink_t=1.0):
-  if lane_line:
-    curvature = round(CS.out.steeringAngleDeg / 3)
-    mag = min(abs(curvature), 15)
-    curv = mag + (-1 if curvature < 0 else 0)
-    direction = 1 if curvature < 0 else 0
-    values["LANELINE_CURVATURE"] = curv if lat_active else 0
-    values["LANELINE_CURVATURE_DIRECTION"] = direction if lat_active else 0
-    if desire:
-      _apply_lane_desire(values, desire)
+def _apply_cluster_lane_lines(values, CS, lat_active, desire):
+  curvature = round(CS.out.steeringAngleDeg / 3)
+  mag = min(abs(curvature), 15)
+  curv = mag + (-1 if curvature < 0 else 0)
+  direction = 1 if curvature < 0 else 0
+  values["LANELINE_CURVATURE"] = curv if lat_active else 0
+  values["LANELINE_CURVATURE_DIRECTION"] = direction if lat_active else 0
+  if desire:
+    _apply_lane_desire(values, desire)
 
-  if corner_radar:
-    radar_all = [
-      ('LF_DETECT', 'LF_DETECT_DISTANCE'),
-      ('RF_DETECT', 'RF_DETECT_DISTANCE'),
-      ('LR_DETECT', 'LR_DETECT_DISTANCE'),
-      ('RR_DETECT', 'RR_DETECT_DISTANCE'),
-    ]
-    for det_key, dist_key in radar_all:
-      if values[det_key] > 0 and values[dist_key] != 0:
-        values[det_key] = CAR_MODEL_ID
 
-    if blink_pairs:
-      _apply_radar_blink(values, blink_pairs, frame, t=blink_t)
+def _convert_ccnc_boxes_to_cars(values):
+  # Only 0x162 uses 1/2 for gray/white boxes and 3/4 for gray/white cars.
+  # 0x1ea has different display enums; FF_DETECT_ALT has no car enum.
+  for key in ("FF_DETECT", "LF_DETECT", "RF_DETECT", "LR_DETECT", "RR_DETECT"):
+    if values[key] in (1, 2):
+      values[key] += 2
 
 def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
                          disp_angle, left_lane_warning, right_lane_warning,
@@ -911,37 +863,14 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
         values['LEFT_BLINK_HOLD'] = 1 if lane_changing == 3 else 0
         values['RIGHT_BLINK_HOLD'] = 1 if lane_changing == 4 else 0
 
-        _make_ccnc_values(
-          values, CS, lat_active, frame, hud_control,
-          lane_line=True,
-          corner_radar=True,
-          desire=desire,
-          # 기존대로 LR/RR만 깜빡임
-          blink_pairs=[('LR_DETECT', 'LR_DETECT_DISTANCE'),
-                       ('RR_DETECT', 'RR_DETECT_DISTANCE')],
-          blink_t=1.0
-        )
+        _apply_cluster_lane_lines(values, CS, lat_active, desire)
 
         ret.append(packer.make_can_msg("ADRV_0x1ea", CAN.ECAN, values, rx_counter = rx_counter))
 
       if CS.ccnc_0x162 is not None:
         values = copy.copy(CS.ccnc_0x162)
 
-        if hud_control.leadDistance > 0:
-          values["FF_DISTANCE"] = hud_control.leadDistance
-          ff_type = CAR_MODEL_ID if CAR_MODEL_ID > 1 else (3 if hud_control.leadRadar == 1 else 13)
-          values["FF_DETECT"] = (ff_type + 1) if hud_control.leadRelSpeed < -0.1 else ff_type
-
-        _make_ccnc_values(
-          values, CS, lat_active, frame, hud_control,
-          lane_line=False,
-          corner_radar=True,
-          desire=0,
-          # 필요하면 162도 깜빡임 적용(원래 코드처럼 LR/RR만)
-          blink_pairs=[('LR_DETECT', 'LR_DETECT_DISTANCE'),
-                       ('RR_DETECT', 'RR_DETECT_DISTANCE')],
-          blink_t=1.0
-        )
+        _convert_ccnc_boxes_to_cars(values)
 
         if (left_lane_warning and not CS.out.leftBlinker) or (right_lane_warning and not CS.out.rightBlinker):
           values["VIBRATE"] = 1
