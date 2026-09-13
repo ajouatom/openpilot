@@ -214,6 +214,14 @@ def get_param_values(names: list[str], defaults: Optional[Dict[str, Any]] = None
       values[name] = custom_value
       continue
     values[name] = _read_param_value(params, name, defaults.get(name, 0))
+  if "CruiseGapLevels" in values:
+    from openpilot.selfdrive.carrot.cruise_gap import cruise_gap_levels
+    from .settings import current_max_gap_levels
+    try:
+      requested = int(values["CruiseGapLevels"])
+    except (TypeError, ValueError):
+      requested = 0
+    values["CruiseGapLevels"] = cruise_gap_levels(requested, current_max_gap_levels(params))
   return values
 
 

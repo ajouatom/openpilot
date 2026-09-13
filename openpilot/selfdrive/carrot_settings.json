@@ -349,6 +349,7 @@
               "en": "Follow Gap",
               "zh": "车距",
               "params": [
+                "CruiseGapLevels",
                 "TFollowGap1",
                 "TFollowGap2",
                 "TFollowGap3",
@@ -2764,6 +2765,28 @@
       "default": 0,
       "unit": 5,
       "display_unit": "percent"
+    },
+    {
+      "group": "차량간격",
+      "name": "CruiseGapLevels",
+      "title": "갭 단계 수",
+      "descr": "갭 버튼으로 순환할 단계 수입니다. 2단계부터 차량 지원 최대 단계까지 선택하며 기본값은 차량 최대 단계입니다. 2는 TF1↔TF2, 3은 TF1~TF3을 사용합니다. 다음 갭 버튼 조작부터 적용하며 사용하지 않는 TF와 추종응답성 값도 보관합니다. openpilot이 가감속을 제어할 때 적용하며 순정 ACC의 단계 수는 바꾸지 않습니다.",
+      "egroup": "FDIST",
+      "etitle": "Gap cycle levels",
+      "edescr": "Number of levels cycled by the gap button, from 2 to the vehicle-supported maximum (the default). 2 uses TF1 and TF2; 3 uses TF1 through TF3. Applies on the next gap-button press and preserves unused TF and following responsiveness values. Applies with openpilot longitudinal control; stock ACC keeps its own levels.",
+      "cgroup": "跟车距离",
+      "ctitle": "车距循环级数",
+      "cdescr": "车距按钮循环的级数，可选2级至车辆支持的最大级数，默认使用车辆最大级数。2使用TF1和TF2，3使用TF1至TF3。下次按车距按钮时生效，保留未使用的TF和跟车响应性设置。仅在openpilot控制加减速时应用，不改变原厂ACC的级数。",
+      "min": 2,
+      "max": 4,
+      "default": 4,
+      "unit": 1,
+      "control": "select",
+      "options": {
+        "ko": ["2단계", "3단계", "4단계"],
+        "en": ["2 levels", "3 levels", "4 levels"],
+        "zh": ["2级", "3级", "4级"]
+      }
     },
     {
       "group": "차량간격",

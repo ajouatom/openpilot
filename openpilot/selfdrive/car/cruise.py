@@ -4,6 +4,7 @@ import numpy as np
 from openpilot.cereal import car
 from openpilot.common.constants import CV
 from openpilot.selfdrive.carrot.carrot_man_input import get_carrot_man
+from openpilot.selfdrive.carrot.cruise_gap import cruise_gap_levels, next_gap_personality, supported_gap_levels
 
 from opendbc.car import structs
 GearShifter = structs.CarState.GearShifter
@@ -622,11 +623,14 @@ class VCruiseCarrot:
         self._cruise_speed_initialized = True
 
       elif button_type == ButtonType.gapAdjustCruise:
-        longitudinalPersonalityMax = self.params.get_int("LongitudinalPersonalityMax")
-        if CS.pcmCruiseGap == 0:
-          personality = (self.params.get_int('LongitudinalPersonality') - 1) % longitudinalPersonalityMax
+        longitudinalPersonalityMax = supported_gap_levels(self.params.get_int("LongitudinalPersonalityMax"))
+        gap_levels = cruise_gap_levels(self.params.get_int("CruiseGapLevels"), longitudinalPersonalityMax)
+        if not self.CP.openpilotLongitudinalControl:
+          gap_levels = longitudinalPersonalityMax
+        if CS.pcmCruiseGap == 0 or gap_levels < longitudinalPersonalityMax:
+          personality = next_gap_personality(self.params.get_int('LongitudinalPersonality'), gap_levels)
         else:
-          personality = np.clip(CS.pcmCruiseGap - 1, 0, longitudinalPersonalityMax)
+          personality = int(np.clip(CS.pcmCruiseGap - 1, 0, longitudinalPersonalityMax - 1))
         self.params.put_int_nonblocking('LongitudinalPersonality', personality)
         #self.events.append(EventName.personalityChanged)
       elif button_type == ButtonType.lfaButton:

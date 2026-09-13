@@ -165,6 +165,16 @@ On other brands, tune delay first only if acceleration and braking are both cons
 <a id="following-gap"></a>
 ## 5. Following gap
 
+### Gap cycle levels
+
+`CruiseGapLevels` sets how many levels the gap button cycles through. The minimum is 2; the maximum and default are the vehicle-supported count. Four-level vehicles offer 2–4, and three-level vehicles offer 2–3.
+
+- 2 levels: TF1↔TF2.
+- 3 levels: TF1→TF3→TF2→TF1.
+- 4 levels: the existing TF1→TF4→TF3→TF2→TF1 sequence.
+
+Changes apply on the next gap-button press. If the current level is outside the new range, the first press selects the configured maximum. Unused TF and gap-specific following responsiveness values are preserved. Holding the gap button still changes driving mode. This applies with openpilot longitudinal control; stock ACC retains its own levels.
+
 ### Four base time gaps
 
 Multiply stored values by 0.01 seconds. All four range from 40 to 300 in steps of 5.
