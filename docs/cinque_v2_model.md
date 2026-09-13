@@ -1,9 +1,14 @@
 # Cinque v2 model integration
 
-`carrot-cinque_v2` starts from `carrot-wip` commit
-`dbbf4969de64f271df5b40b71a31940e7704e896`. The same driving-model selection is
-also applied to `carrot-egpu-yolo2`, preserving its dedicated YOLO2 implementation.
-Other branches keep their existing models.
+On 2026-09-13, `carrot-wip` incorporates the complete `carrot-cinque_v2` history
+through `6756edb408e8a2343a1e37ec8a30c73f3a8c8480` and adopts its Cinque v2 eGPU
+big model in place of TGC. `carrot-wip` is now the sole maintained top-level
+`carrot-*` branch. This integration does not include the separate YOLO experiments.
+
+The original model branch started from `carrot-wip` commit
+`dbbf4969de64f271df5b40b71a31940e7704e896`. Retired branch tips are preserved under
+`archive/2026-09-13/<branch>`. Existing vehicles on a retired branch must select
+`carrot-wip`; deleting a remote branch does not automatically migrate them.
 
 - Source: [commaai/openpilot#38823](https://github.com/commaai/openpilot/pull/38823)
 - Source commit: `37bfa1413edcdc2e8844984b83727c33f81d8f46`
@@ -13,7 +18,7 @@ Other branches keep their existing models.
 - Manifest: <https://upload.shind0.synology.me/models/comma4-big-cinque-v2/manifest.json>
 - NAS directory: `\\DS1821P\openpilot\models\comma4-big-cinque-v2`
 
-This PR replaces the eGPU big model. The internal fallback driving model stays
+This integration replaces the eGPU big model. The internal fallback driving model stays
 unchanged. The existing downloader verifies the pinned size and SHA-256, and the
 compiled artifact name includes the model hash so an older model's compiled
 artifact is not selected for Cinque v2.
@@ -29,3 +34,8 @@ The NAS copy and the HTTPS manifest were verified, and the vehicle downloader
 downloaded the complete model over HTTPS with the expected hash. Model downloader,
 cache/helper, and model-name display tests pass. Device-side eGPU compilation,
 inference timing, and on-road behavior have not been tested on this workstation.
+
+The 2026-09-13 consolidation passed all 60 model downloader, cache/helper and
+precompiled-artifact tests, plus all six web model-name tests. Rebuilding the web
+assets reproduced the committed Cinque v2 assets. This consolidation does not
+constitute new device-side compilation or on-road validation.
