@@ -884,9 +884,7 @@ class ModelRenderer(Widget):
           self._draw_text_box_carrot(x + w, disp_y, dist_text, 40, rl.Color(0, 0, 255, 255))
           draw_text_ui_style(dist_text, x + w, disp_y, 40, text_color, align="center", y_offset=0.0)
 
-    if self._carrot_tf_distance > 0.0 and self._carrot_tf_left is not None and self._carrot_tf_right is not None:
-      self._draw_line_segment_carrot(self._carrot_tf_left, self._carrot_tf_right, rl.Color(255, 255, 255, 255), 3.0)
-      draw_text_ui_style(f"{self._carrot_tf_distance:.1f}({self._carrot_t_follow:.2f})", int(self._carrot_tf_right[0]), int(self._carrot_tf_right[1]), 25, rl.Color(255, 255, 255, 255), align="center", y_offset=0.0)
+    self._draw_tf_marker_carrot()
 
     if self._carrot_lead_status:
       rcolor = rl.Color(255, 0, 0, 255) if self._carrot_radar_track_id < 1 else rl.Color(255, 175, 3, 255)
@@ -915,6 +913,12 @@ class ModelRenderer(Widget):
         3.0,
       )
 
+
+  def _draw_tf_marker_carrot(self):
+    if self._carrot_tf_distance > 0.0 and self._carrot_tf_left is not None and self._carrot_tf_right is not None:
+      self._draw_line_segment_carrot(self._carrot_tf_left, self._carrot_tf_right, rl.Color(255, 255, 255, 255), 3.0)
+      draw_text_ui_style(f"{self._carrot_tf_distance:.0f} m", int(self._carrot_tf_right[0]) + 10, int(self._carrot_tf_right[1]),
+                         25, rl.Color(255, 255, 255, 255), align="left", y_offset=0.0)
 
   def _draw_lane_lines_carrot(self, sm):
     if self._carrot_show_lane_info < 1:

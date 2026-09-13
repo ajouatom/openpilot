@@ -138,3 +138,18 @@ def gap_reference(obstacles, margins, ego_speed):
   preferred[:, :2] -= margins
   shift = np.maximum(0.0, np.min(obstacles, axis=1) - np.min(preferred, axis=1))
   return shift / (np.maximum(ego_speed, 0.0) + 10.0)
+
+
+def displayed_follow_distance(base_distances, physical_obstacles, following_obstacles, margins, lead_status):
+  """Current target for the most restrictive valid lead following reference.
+
+  Keep this in metres in the planner: UIs must not reconstruct controller
+  state from TF or vehicle speed. No lead means there is no following marker.
+  """
+  preferred = np.asarray(following_obstacles) - np.asarray(margins)
+  valid = np.asarray(lead_status, dtype=bool) & np.isfinite(preferred) & np.isfinite(base_distances) & np.isfinite(physical_obstacles)
+  if not np.any(valid):
+    return 0.0
+  index = int(np.argmin(np.where(valid, preferred, np.inf)))
+  relief = physical_obstacles[index] - following_obstacles[index]
+  return float(max(0.0, base_distances[index] + margins[index] + relief))
