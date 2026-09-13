@@ -19,7 +19,7 @@ Change them in **Carrot Web → Settings → Driving control → Cruise and foll
 3. [Stopping and restarting](#stop-resume)
 4. [Longitudinal tuning](#longitudinal-tuning)
 5. [Following gap](#following-gap)
-6. [Lead-vehicle response](#lead-response)
+6. [Following responsiveness](#lead-response)
 7. [Carrot cruise](#carrot-cruise)
 
 ## Order in which settings act
@@ -43,7 +43,7 @@ The related settings are `MyDrivingMode` and `MyDrivingModeAuto`.
 
 ### `MyDrivingMode`
 
-Modes set maximum acceleration, braking allowance and base time gap, and cap the selected lead acceleration response.
+Modes set maximum acceleration, braking allowance and base time gap, and cap the selected following responsiveness.
 
 | Value | Mode | Max acceleration | `comfort_brake` | Time gap | Lead response cap |
 |---:|---|---:|---:|---:|---:|
@@ -191,11 +191,11 @@ Increases the selected base TF linearly with speed. Range `10–30`, default `10
 
 - `10`: no speed adjustment.
 - `20`: 1.0× when stopped, 1.5× at 50 km/h, 2.0× at 100 km/h and 3.0× at 200 km/h.
-- Higher values give a longer TF at the same speed. Lead acceleration response is unchanged.
+- Higher values give a longer TF at the same speed. Following responsiveness is unchanged.
 
 With base TF 0.50 seconds and setting 20, TF is 0.50/0.75/1.00 seconds at 0/50/100 km/h. Driving-mode and deceleration adjustments follow. The speed-adjusted result is not clipped to the largest TF1–4 setting or the former two-second cap.
 
-The former `EnableSpeedTF` setting is removed; its value is not converted to the new multiplier. The new setting starts with no speed adjustment. Existing base TF and common lead acceleration response values are retained.
+The former `EnableSpeedTF` setting is removed; its value is not converted to the new multiplier. The new setting starts with no speed adjustment. Existing base TF and common following responsiveness values are retained.
 
 ### Target following-distance marker
 
@@ -233,13 +233,13 @@ At `TFollowDecelBoost=50`, the addition is approximately 0.03 s at -0.3 m/s², 0
 For a clean baseline, use `SpeedTFFactor=10`, `DynamicTFollowLC=100`, `MyDrivingMode=3`, and `MyDrivingModeAuto=0`. If the result is still wrong, check the base gaps, stop distance, selected personality, and radar lead before adding dynamic features.
 
 <a id="lead-response"></a>
-## 6. Lead-vehicle response
+## 6. Following responsiveness
 
 Use `LeadAccelResponse` to adjust response to a lead starting, accelerating or being approached. Its range is 0–5; the default 0 disables acceleration boost and recovers extra TF most slowly.
 
 ### `LeadAccelResponseTF1`–`LeadAccelResponseTF4`
 
-Assigns lead acceleration response to each cruise-gap level. Range `-1–5`; the default `-1` is displayed as **Use common**.
+Assigns following responsiveness to each cruise-gap level. Range `-1–5`; the default `-1` is displayed as **Use common**.
 
 Changing the cruise-gap level with the button while driving applies that gap's response. Switching gaps does not change the saved common value.
 
