@@ -53,7 +53,7 @@ class LSM6DS3_Accel(Sensor):
     self.writes((
       # Enable continuous update and automatic address increment
       (self.LSM6DS3_ACCEL_I2C_REG_CTRL3_C, self.LSM6DS3_ACCEL_IF_INC),
-      # Set ODR to 104 Hz, FS to 짹2g (default)
+      # Set ODR to 104 Hz, FS to ±2g (default)
       (self.LSM6DS3_ACCEL_I2C_REG_CTRL1_XL, self.LSM6DS3_ACCEL_ODR_104HZ),
       # Configure data ready signal to pulse mode
       (self.LSM6DS3_ACCEL_I2C_REG_DRDY_CFG, self.LSM6DS3_ACCEL_DRDY_PULSE_MODE),
@@ -77,13 +77,9 @@ class LSM6DS3_Accel(Sensor):
 
     event = log.SensorEventData.new_message()
     event.timestamp = ts
-    event.version = 1
-    event.sensor = 1  # SENSOR_ACCELEROMETER
-    event.type = 1    # SENSOR_TYPE_ACCELEROMETER
     event.source = self.source
     a = event.init('acceleration')
     a.v = [y, -x, z]
-    a.status = 1
     return event
 
   def shutdown(self) -> None:
@@ -121,10 +117,10 @@ class LSM6DS3_Accel(Sensor):
     # Configure ODR and full scale based on sensor type
     if self.source == log.SensorEventData.SensorSource.lsm6ds3trc:
       odr_fs = self.LSM6DS3_ACCEL_FS_4G | self.LSM6DS3_ACCEL_ODR_52HZ
-      scaling = 0.122  # mg/LSB for 짹4g
+      scaling = 0.122  # mg/LSB for ±4g
     else:
       odr_fs = self.LSM6DS3_ACCEL_ODR_52HZ
-      scaling = 0.061  # mg/LSB for 짹2g
+      scaling = 0.061  # mg/LSB for ±2g
     self.write(self.LSM6DS3_ACCEL_I2C_REG_CTRL1_XL, odr_fs)
 
     # Wait for stable output
