@@ -228,6 +228,9 @@ def test_actual_update_resolves_response_after_refresh_on_every_gap_change():
   exec(compile(ast.Module(body=[update], type_ignores=[]), str(source), 'exec'), namespace)
   planner = SimpleNamespace(leadAccelResponseBase=0, leadAccelResponseTF=[5, 3, 0, -1])
   planner._params_update = lambda: setattr(planner, 'leadAccelResponseBase', 4)
-  for gap, expected in [(0, 5), (1, 3), (2, 0), (3, 4), (0, 5)]:
-    namespace['update'](planner, {'selfdriveState': SimpleNamespace(personality=gap)}, 100., 'acc')
+  event = log.Event.new_message()
+  state = event.init('selfdriveState')
+  for gap, expected in [('aggressive', 5), ('standard', 3), ('relaxed', 0), ('moreRelaxed', 4), ('aggressive', 5)]:
+    state.personality = gap
+    namespace['update'](planner, {'selfdriveState': state}, 100., 'acc')
     assert planner.leadAccelResponse == expected
