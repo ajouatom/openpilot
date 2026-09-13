@@ -15,6 +15,7 @@ def get_speed_t_follow_factor(setting: int, speed_kph: float) -> float:
 
 
 def get_lead_response_for_gap(common: int, overrides, gap_index: int) -> int:
+  gap_index = int(getattr(gap_index, 'raw', gap_index))
   value = overrides[gap_index]
   return int(min(5, max(0, common if value < 0 else value)))
 
