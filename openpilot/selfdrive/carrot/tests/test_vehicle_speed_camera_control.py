@@ -7,6 +7,9 @@ from openpilot.selfdrive.carrot.carrot_serv import CarrotServ
 
 def _serv(mode):
   serv = CarrotServ.__new__(CarrotServ)
+  serv.external_navigation_active = False
+  serv.carrot_navi_active = False
+  serv.active_count = serv.active_kisa_count = 0
   serv.vehicleSpeedCameraControlMode = mode
   serv.vehicleNaviCanControl = True
   serv.vehicleNaviSchoolZoneControl = False
@@ -381,18 +384,48 @@ def test_vehicle_section_mode_two_uses_accelerator_speed_floor():
   assert (desired_speed, source, serv.gas_override_speed) == (115, "gas", 115)
 
 
-@pytest.mark.parametrize(("x_spd_type", "vehicle_camera", "vehicle_bump", "suppressed"), (
-  (1, True, False, True),
-  (1, False, True, False),
-  (22, True, False, False),
-  (22, False, True, True),
-  (22, True, True, True),
-  (100, True, False, False),
-  (101, True, False, False),
-  (1, False, False, False),
-))
-def test_vehicle_can_source_suppresses_only_same_legacy_sdi_type(x_spd_type, vehicle_camera, vehicle_bump, suppressed):
-  assert CarrotServ._legacy_sdi_suppressed(x_spd_type, vehicle_camera, vehicle_bump) is suppressed
+@pytest.mark.parametrize("connection", ("active_count", "active_kisa_count", "carrot_navi_active"))
+def test_external_connection_excludes_all_stock_navigation_until_disconnect(connection):
+  serv = _serv(1)
+  serv.vehicleNaviSchoolZoneControl = True
+  serv.autoNaviCountDownMode = 2
+  serv.xSpdType = -1
+  serv.xSpdDist = 0  # Connected without an external hazard must still exclude stock data.
+  CS = _car_state(distance=30)
+  CS.vehicleNaviActive = CS.vehicleNaviSectionActive = CS.schoolZoneActive = True
+  CS.vehicleNaviSpeed = 50
+  CS.speedBumpDistance = 20
+
+  setattr(serv, connection, 1)
+  assert serv._update_navigation_source()
+  assert not serv._update_navigation_source()
+  assert not serv._vehicle_speed_camera_enabled(CS)
+  assert not serv._vehicle_speed_bump_enabled(CS)
+  assert not serv._vehicle_school_zone_enabled(CS)
+  assert not serv._vehicle_section_zone_enabled(CS)
+  assert serv._vehicle_navigation_display(CS) == (False, 0, False)
+  assert serv._speed_countdown_distance(CS) == 0
+
+  serv.xSpdType, serv.xSpdDist = 22, 13
+  assert serv._speed_countdown_distance(CS) == 13
+  serv.autoNaviCountDownMode = 1
+  assert serv._speed_countdown_distance(CS) == 0
+  serv.autoNaviCountDownMode = 2
+  serv.left_spd_sec = serv.left_tbt_sec = 0
+  serv.speed_countdown_distance_last = serv.turn_countdown_distance_last = 13
+  serv.gas_override_speed = 80
+  serv.school_zone_suppressed = True
+
+  setattr(serv, connection, 0)
+  assert serv._update_navigation_source()
+  assert (serv.left_spd_sec, serv.left_tbt_sec, serv.speed_countdown_distance_last,
+          serv.turn_countdown_distance_last, serv.gas_override_speed) == (100, 100, 0, 0, 0)
+  assert serv._vehicle_speed_camera_enabled(CS)
+  assert serv._vehicle_speed_bump_enabled(CS)
+  assert serv._vehicle_school_zone_enabled(CS)
+  assert serv._vehicle_section_zone_enabled(CS)
+  assert serv._vehicle_navigation_display(CS) == (True, 30, True)
+  assert serv._speed_countdown_distance(CS) == 20  # Ignore stale external distance.
 
 
 @pytest.mark.parametrize(("brake_pressed", "road_limit_changed"), (
