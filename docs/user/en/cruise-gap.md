@@ -233,6 +233,8 @@ Use `LeadAccelResponse` to adjust response to a lead starting, accelerating or b
 
 Assigns lead acceleration response to each cruise-gap level. Range `-1–5`; the default `-1` is displayed as **Use common**.
 
+Changing the cruise-gap level with the button while driving applies that gap's response. Switching gaps does not change the saved common value.
+
 - `-1`: use the common `LeadAccelResponse` value.
 - `0–5`: use this value at this gap. `0` is an explicit override, not inheritance.
 
