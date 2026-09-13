@@ -39,34 +39,42 @@ Catalog defaults and initial Params values currently differ for `CruiseMaxVals1`
 <a id="driving-mode"></a>
 ## 1. Driving mode
 
+The related settings are `MyDrivingMode` and `MyDrivingModeAuto`.
+
 ### `MyDrivingMode`
 
-| Value | Mode | Max acceleration | `comfort_brake` | Time-gap term | Additional behavior |
-|---:|---|---:|---:|---:|---|
-| `1` | Eco | ×0.9 | ×1.0 | ×1.1, then clamped | Traffic-light detection retained |
-| `2` | Safe | ×0.8 | ×0.9 | ×1.2, then clamped | Congestion state used by auto mode |
-| `3` | Normal | ×1.0 | ×1.0 | ×1.0 | Baseline |
-| `4` | High speed | ×1.2 | ×1.0 | ×1.0 | Traffic stop/go detection forced off |
+Modes set maximum acceleration, braking allowance and base time gap, and cap the selected lead acceleration response.
 
-A smaller `comfort_brake` increases the stopping-distance term. Baseline time-gap factors are 1.1 in Eco and 1.2 in Safe; speed scaling, clamps, deceleration allowance and selected-TF priority at levels 4–5 determine the final gap.
+| Value | Mode | Max acceleration | `comfort_brake` | Time gap | Lead response cap |
+|---:|---|---:|---:|---:|---:|
+| 1 | Eco | ×0.9 | ×1.0 | ×1.1 | 2 |
+| 2 | Safe | ×0.8 | ×0.9 | ×1.2 | 3 |
+| 3 | Normal | ×1.0 | ×1.0 | ×1.0 | Selected value |
+| 4 | High | ×1.2 | ×1.0 | ×1.0 | Selected value |
+
+The gap-specific `LeadAccelResponseTF1`–`TF4` choice or common `LeadAccelResponse` is resolved before the mode cap. A selected 5 becomes 3 in Safe or 2 in Eco, while lower choices such as 1 and 0 are never raised. The same caps apply in manual modes, without changing stored settings.
+
+A smaller `comfort_brake` increases the calculated stopping-distance term. Every response level retains user TF, `SpeedTFFactor` and the mode gap multiplier; temporary gap-recovery headroom and deceleration allowance remain separate.
+
+The separate mode-specific jerk adjustment and former Safe level-4/5 acceleration taper are removed. Baseline jerk costs remain; the effective `LeadAccelResponse` controls cost changes during eligible lead response and gap recovery.
+
+A decreasing mode gap multiplier releases at 0.05 per second: about four seconds from Safe to Normal or two from Eco to Normal. Separate deceleration allowance may remain in the total target. Increasing mode margins use the existing TF rise ramp; an explicit driver selection of a smaller gap is not separately delayed.
 
 > [!WARNING]
-> High-speed mode raises the acceleration ceiling by 20% and ignores traffic-light control.
-
-In Safe mode, levels 4–5 retain existing launch response and boost entry. Only when ego out-accelerates the lead while catching the target gap does the future positive-acceleration ceiling taper. Renewed lead acceleration or sufficient opening gap removes the extra restriction. This Safe acceleration limiter itself adds no gap allowance; existing Safe acceleration limits, TF processing and braking limits remain active.
+> High mode raises the acceleration ceiling by 20% and disables traffic stop/go detection. Automatic selection never chooses High.
 
 ### `MyDrivingModeAuto`
 
-`0` uses the stored mode. `1` switches only between Safe and Normal according to traffic conditions; `2` switches between Safe and Eco. High-speed mode is never selected automatically.
+`0` uses the stored mode, `1` selects Normal↔Safe, and `2` selects Eco↔Safe. Stopping approaches and sustained slow following select Safe; this detection does not select control leads or issue braking commands.
 
-The current code enters congestion after repeated observations of either:
+- **Stopping approach:** A lead at or below 5 km/h within the speed-dependent approach envelope for about 0.3 seconds selects Safe. The envelope is `ego speed² / (2 × 2.4) + 2 × ego speed` metres, clamped to 12–200 m; speeds in these formulas are in m/s.
+- **Sustained slow following:** Ego at or below 35 km/h and a lead at or below 30 km/h within following range for eight seconds selects Safe. Following range is `12 + 3 × ego speed` metres, clamped to 30–80 m.
+- **Flow recovery:** Both vehicles at or above 35 km/h, or a lead at or above 15 km/h pulling away by at least 1 m/s with distance at least `8 + 1.8 × ego speed` metres, must persist for six seconds. Lead acceleration below -0.2 m/s² restarts recovery confirmation.
+- **Clear road:** Valid observations of no lead while ego travels at least 15 km/h for four seconds restore the base mode. Losing a lead while stopped does not restore it.
 
-- Lead distance at most 12 m and lead speed at most 2 km/h; or
-- Lead speed below 5 km/h, lead acceleration below 0.2 m/s², ego speed above 1 km/h, and lead distance below 200 m.
+A short launch or one strong acceleration does not release Safe. A changed lead track restarts recovery confirmation; invalid or stale inputs do not count toward confirmation time.
 
-It exits when lead acceleration exceeds 1.5 m/s², ego speed exceeds 35 km/h, or no lead is present within 200 m. The speed-based congestion exit threshold is **35 km/h**.
-
-Changing the stored `MyDrivingMode` during a drive can suspend automatic switching until the planner process restarts. For a stable comparison, use `MyDrivingMode=3` and `MyDrivingModeAuto=0`.
+Manually changing the stored `MyDrivingMode` suspends automatic selection until the planner restarts. The displayed actual mode can differ from the stored choice during automatic operation.
 
 <a id="acceleration-table"></a>
 ## 2. Speed-based acceleration table
@@ -244,6 +252,8 @@ For example, set TF1 and TF2 to 50 and their responses to 5 and 3. Both use the 
 
 Sets lead-start and acceleration response for gaps configured to use the common value. Levels 1–3 soften small changes and response near the target gap; level 4 is quick and level 5 retains the immediate maximum response. The selected TF remains the reference; a separate lead-jerk adjustment no longer expands or shrinks TF.
 
+The table below describes the **effective response level after the mode cap**, not necessarily the stored choice.
+
 | Level | `aChangeCost` at full boost | Multiplier on existing jerk cost |
 |---|---:|---:|
 | 0 Relaxed recovery | 200 | 100% |
@@ -284,11 +294,7 @@ Lead speed at or below 0.3m/s holds extra TF. From 0.3 to 5m/s, recovery strengt
 
 Capture uses actual distance minus the base target distance, with a 1m/s minimum divisor at low ego speed. Without excess over the base target including braking-distance terms, there is no new extra TF. Only the MPC comfort reference changes; physical lead positions, base TF, danger constraints and braking limits stay unchanged. Temporary TF does not guarantee a particular braking onset or ride quality. Ego-deceleration `TFollowDecelBoost` remains separate existing TF processing.
 
-In Safe mode, levels 4–5 retain existing launch response and boost entry. Only when ego out-accelerates the lead while catching the target gap does the future positive-acceleration ceiling taper. Renewed lead acceleration or sufficient opening gap removes the extra restriction. This Safe acceleration limiter itself adds no gap allowance; existing Safe acceleration limits, TF processing and braking limits remain active.
-
-Current target-distance headroom, relative speed and lead acceleration estimate the approach over about two seconds. Settling is considered only when ego acceleration exceeds the lead’s positive acceleration by more than 0.1 m/s². The future ceiling descends from current acceleration at 0.8 m/s² per second of prediction time; this is not a fixed vehicle jerk limit and never blocks negative acceleration.
-
-Safe entry and exit blend the correction over 0.8 seconds. Target change/loss and existing boost inhibits such as accelerator override or lane change clear the state. Steady operation in Normal and levels 0–3 receive no settling correction. Configured TF is not increased, and existing selected-TF priority conditions for levels 4–5 during lead acceleration remain. Prompt launches still respect the existing Safe acceleration ceiling and do not guarantee prevention of cut-ins.
+Lead response uses the final level after the mode cap. A selected 5 uses level 3 in Safe or level 2 in Eco, including that level’s gap-recovery headroom. No separate mode-specific jerk adjustment or former Safe-only acceleration taper is stacked on top. Level 5 in Normal and High retains maximum response.
 
 ### Adjustment sequence
 

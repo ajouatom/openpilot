@@ -6,6 +6,7 @@ from openpilot.selfdrive.carrot.carrot_functions import (
   DrivingMode,
   DrivingModeDetector,
   get_driving_mode_comfort_brake_factor,
+  get_mode_lead_response,
 )
 from openpilot.selfdrive.carrot.t_follow import (
   get_t_follow_mode_factor, get_t_follow_mode_max, get_speed_t_follow_factor, get_lead_response_for_gap, ramp_t_follow,
@@ -214,7 +215,9 @@ def test_equal_tf_can_use_different_responses_and_zero_is_an_override():
   assert get_lead_response_for_gap(2, overrides, 3) == 2
 
 
-def test_actual_update_resolves_response_after_refresh_on_every_gap_change():
+@pytest.mark.parametrize('mode,ceiling', [(DrivingMode.Eco, 2), (DrivingMode.Safe, 3),
+                                        (DrivingMode.Normal, 5), (DrivingMode.High, 5)])
+def test_actual_update_resolves_response_after_refresh_on_every_gap_change(mode, ceiling):
   import ast
   from pathlib import Path
   from types import SimpleNamespace
@@ -223,14 +226,111 @@ def test_actual_update_resolves_response_after_refresh_on_every_gap_change():
   planner_class = next(n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == 'CarrotPlanner')
   update = next(n for n in planner_class.body if isinstance(n, ast.FunctionDef) and n.name == 'update')
   # Run the production refresh/selection prefix without hardware or navigation.
-  update.body = update.body[:2]
-  namespace = {'get_lead_response_for_gap': get_lead_response_for_gap}
+  update.body = update.body[:3]
+  namespace = {'get_lead_response_for_gap': get_lead_response_for_gap, 'get_mode_lead_response': get_mode_lead_response}
   exec(compile(ast.Module(body=[update], type_ignores=[]), str(source), 'exec'), namespace)
-  planner = SimpleNamespace(leadAccelResponseBase=0, leadAccelResponseTF=[5, 3, 0, -1])
+  planner = SimpleNamespace(leadAccelResponseBase=0, leadAccelResponseTF=[5, 3, 0, -1], myDrivingMode=mode)
+  planner._update_driving_mode = lambda sm: None
   planner._params_update = lambda: setattr(planner, 'leadAccelResponseBase', 4)
   event = log.Event.new_message()
   state = event.init('selfdriveState')
   for gap, expected in [('aggressive', 5), ('standard', 3), ('relaxed', 0), ('moreRelaxed', 4), ('aggressive', 5)]:
     state.personality = gap
     namespace['update'](planner, {'selfdriveState': state}, 100., 'acc')
-    assert planner.leadAccelResponse == expected
+    assert planner.leadAccelResponse == min(expected, ceiling)
+    assert planner.leadAccelResponseTF == [5, 3, 0, -1]
+    assert planner.leadAccelResponseBase == 4
+
+
+@pytest.mark.parametrize("personality", list(log.LongitudinalPersonality.schema.enumerants.values()))
+def test_modes_share_the_same_baseline_jerk_cost(personality):
+  planner = _speed_tf_planner(3, 1.2)
+  factors = []
+  for mode in DrivingMode:
+    planner.myDrivingMode = mode
+    planner._get_base_t_follow(personality, 10.)
+    factors.append(planner.jerk_factor)
+  assert factors == [factors[0]] * len(factors)
+
+
+def test_mode_margin_releases_slowly_without_delaying_manual_gap_reduction():
+  planner = _speed_tf_planner(3, 1.2)
+  planner.tFollowGap1 = .5
+  planner.tFollowGap2 = 1.
+  assert planner.get_T_FOLLOW(v_ego=10.) == pytest.approx(1.2)
+  planner.myTFollowFactor = 1.
+  first = planner.get_T_FOLLOW(v_ego=10.)
+  assert first == pytest.approx(1.1975)
+  # User requests a smaller gap: only the mode multiplier retains its tail.
+  assert planner.get_T_FOLLOW(log.LongitudinalPersonality.aggressive, v_ego=10.) == pytest.approx(.5 * 1.195)
+  for _ in range(80):
+    final = planner.get_T_FOLLOW(log.LongitudinalPersonality.aggressive, v_ego=10.)
+  assert final == pytest.approx(.5)
+
+
+def test_safe_reentry_during_mode_release_does_not_compound_margin():
+  planner = _speed_tf_planner(3, 1.2)
+  planner.tFollowGap2 = 1.
+  planner.get_T_FOLLOW(v_ego=10.)
+  for _ in range(5):
+    planner.myTFollowFactor = 1.
+    for _ in range(20):
+      planner.get_T_FOLLOW(v_ego=10.)
+    planner.myTFollowFactor = 1.2
+    for _ in range(20):
+      value = planner.get_T_FOLLOW(v_ego=10.)
+      assert value <= 1.2 + 1e-9
+    assert value == pytest.approx(1.2)
+
+
+@pytest.mark.parametrize('automatic,base_mode', [(1, DrivingMode.Normal), (2, DrivingMode.Eco)])
+def test_live_auto_selection_preserves_short_launch_and_manual_override(automatic, base_mode):
+  from types import SimpleNamespace as NS
+
+  class State(dict):
+    def all_checks(self, services):
+      assert services == ['carState', 'radarState']
+      return self.valid
+
+  sm = State(carState=NS(vEgo=0.), radarState=NS(leadOne=NS(
+    status=True, dRel=8., vLead=0., vRel=0., aLeadK=0., radar=True, radarTrackId=42)))
+  sm.valid = True
+  planner = CarrotPlanner.__new__(CarrotPlanner)
+  planner.myDrivingMode = base_mode
+  planner.myDrivingModeAuto = automatic
+  planner.myDrivingMode_disable_auto = False
+  planner.drivingModeDetector = DrivingModeDetector()
+  for _ in range(8):
+    planner._update_driving_mode(sm)
+  assert planner.myDrivingMode == DrivingMode.Safe
+  sm['carState'].vEgo = 20 / 3.6
+  lead = sm['radarState'].leadOne
+  lead.dRel, lead.vLead, lead.vRel, lead.aLeadK = 35., 30 / 3.6, 10 / 3.6, 2.
+  for _ in range(60):
+    planner._update_driving_mode(sm)
+  assert planner.myDrivingMode == DrivingMode.Safe
+  for _ in range(62):
+    planner._update_driving_mode(sm)
+  assert planner.myDrivingMode == base_mode
+  planner.myDrivingMode_disable_auto = True
+  planner.myDrivingMode = DrivingMode.High
+  sm['carState'].vEgo = 0.
+  lead.dRel, lead.vLead, lead.vRel, lead.aLeadK = 8., 0., 0., 0.
+  for _ in range(20):
+    planner._update_driving_mode(sm)
+  assert planner.myDrivingMode == DrivingMode.High
+
+
+def test_stored_mode_change_still_disables_automatic_selection():
+  from types import SimpleNamespace as NS
+  values = {'MyDrivingMode': DrivingMode.Eco.value, 'MyDrivingModeAuto': 1, 'TrafficLightDetectMode': 1}
+  planner = CarrotPlanner.__new__(CarrotPlanner)
+  planner.params = NS(get_int=values.__getitem__)
+  planner.frame = planner.params_count = 9
+  planner.myDrivingMode_last = planner.myDrivingMode = DrivingMode.Normal
+  planner.myDrivingMode_disable_auto = False
+  planner.drivingModeDetector = DrivingModeDetector()
+  planner.drivingModeDetector.congested = True
+  planner._params_update()
+  assert planner.myDrivingMode_disable_auto
+  assert planner.myDrivingMode == DrivingMode.Eco

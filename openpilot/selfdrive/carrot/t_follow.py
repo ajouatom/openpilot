@@ -32,3 +32,11 @@ def ramp_t_follow(target: float, current: float, decel_extra: float, dt: float) 
 
   rise_rate = T_FOLLOW_DECEL_RISE_RATE if decel_extra > T_FOLLOW_DECEL_EXTRA_THRESHOLD else T_FOLLOW_RISE_RATE
   return float(min(target, current + rise_rate * dt))
+
+
+MODE_T_FOLLOW_RELEASE_RATE = 0.05  # mode multiplier per second (Safe -> Normal in 4 s)
+
+
+def ramp_mode_t_follow_factor(target: float, current: float, dt: float) -> float:
+  """Release only the mode margin slowly; explicit driver gap changes still apply."""
+  return float(max(target, current - MODE_T_FOLLOW_RELEASE_RATE * dt))
