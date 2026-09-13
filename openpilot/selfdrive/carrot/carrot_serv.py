@@ -162,6 +162,7 @@ class CarrotServ:
     self.xSpdLimit = 0
     self.xSpdDist = 0
     self.xSpdType = -1
+    self.rear_camera_events = []
 
     self.xTurnInfo = -1
     self.xDistToTurn = 0
@@ -226,6 +227,7 @@ class CarrotServ:
     self.autoNaviSpeedBumpTime = float(self.params.get_int("AutoNaviSpeedBumpTime"))
     self.autoNaviSpeedBumpEndDistance = float(min(5000, max(0, self.params.get_int("AutoNaviSpeedBumpEndDistance")))) * 0.01
     self.autoNaviSpeedCtrlEnd = float(self.params.get_int("AutoNaviSpeedCtrlEnd"))
+    self.autoNaviRearCameraHoldDistance = float(min(300, max(0, self.params.get_int("AutoNaviRearCameraHoldDistance"))))
     self.autoNaviSpeedCtrlMode = self.params.get_int("AutoNaviSpeedCtrlMode")
     self.vehicleNaviCanControl = min(3, max(0, self.params.get_int("VehicleNaviCanControl")))
     self.vehicleNaviSchoolZoneControl = self.params.get_bool("VehicleNaviSchoolZoneControl")
@@ -371,12 +373,40 @@ class CarrotServ:
     changed = external_active != self.external_navigation_active
     self.external_navigation_active = external_active
     if changed:
+      self.rear_camera_events = []
       self.speed_countdown_distance_last = self.turn_countdown_distance_last = 0.0
       self.left_spd_sec = self.left_tbt_sec = 100
       self.gas_override_speed = 0
       self.school_zone_gas_override_started_at = None
       self.school_zone_suppressed = False
     return changed
+
+  def _rear_camera_speed(self, CS, delta_dist):
+    # TMAP EDC SDI 75/76: rear speed / rear signal-and-speed camera.
+    # Arm only on the final approach. Keep the wheel-distance endpoint even
+    # when the app removes the SDI at the camera or announces the next item.
+    hold_distance = self.autoNaviRearCameraHoldDistance
+    if (CS is None or delta_dist < 0 or not self.external_navigation_active or
+        self.autoNaviSpeedCtrlMode <= 0 or hold_distance <= 0 or self.carrot_navi_off_route):
+      self.rear_camera_events = []
+      return 250.0, 0.0
+
+    self.rear_camera_events = [event for event in self.rear_camera_events
+                               if event["target"] + hold_distance > self.totalDistance]
+    if (self.active_carrot > 1 and self.xSpdType in (75, 76) and
+        0 < self.xSpdDist <= 50 and self.xSpdLimit > 0):
+      target = self.totalDistance + self.xSpdDist
+      matching = next((event for event in self.rear_camera_events if abs(event["target"] - target) <= 40), None)
+      if matching is None:
+        self.rear_camera_events.append({"target": target, "speed": self.xSpdLimit})
+      else:
+        # Repeated zero/near-zero reports must not move the hold endpoint.
+        matching["speed"] = min(matching["speed"], self.xSpdLimit)
+
+    if not self.rear_camera_events:
+      return 250.0, 0.0
+    event = min(self.rear_camera_events, key=lambda event: event["speed"])
+    return event["speed"], max(0.0, event["target"] + hold_distance - self.totalDistance)
 
   def _vehicle_speed_camera_enabled(self, CS):
     return (not self.external_navigation_active and
@@ -615,6 +645,8 @@ class CarrotServ:
   def _get_sdi_descr(self, nSdiType):
     # 多语言映射：ko（韩语，原始），zh（简体中文），en（英文）。
     sdi_ko = {
+        75: "후면 과속 단속",
+        76: "후면 신호·과속 단속",
         0: "신호과속",
         1: "과속 (고정식)",
         2: "구간단속 시작",
@@ -685,6 +717,8 @@ class CarrotServ:
     }
 
     sdi_en = {
+        75: "Rear speed camera",
+        76: "Rear signal and speed camera",
         0: "Signal speed enforcement",
         1: "Speed camera (fixed)",
         2: "Section control start",
@@ -755,6 +789,8 @@ class CarrotServ:
     }
 
     sdi_zh = {
+        75: "后向测速摄像头",
+        76: "后向闯红灯及测速摄像头",
         0: "信号测速/闯灯拍照",
         1: "固定测速摄像头",
         2: "区间测速开始",
@@ -857,6 +893,7 @@ class CarrotServ:
       self.xSpdDist = 0
 
   def _reset_carrot_navi_sequences(self, session_id):
+    self.rear_camera_events = []
     self.carrot_navi_session_id = session_id
     self.carrot_navi_speed_sequence = -1
     self.carrot_navi_current_sequence = -1
@@ -876,6 +913,7 @@ class CarrotServ:
     self.carrot_navi_traffic_active = False
 
   def _clear_carrot_navi_control(self):
+    self.rear_camera_events = []
     self.active_count = 0
     self.active_sdi_count = 0
     self.carrot_navi_has_control = False
@@ -1339,6 +1377,7 @@ class CarrotServ:
     if self.active_carrot <= 1 or self.active_kisa_count > 0:
       self.update_nav_instruction(sm)
 
+    rear_camera_speed, rear_camera_remaining = self._rear_camera_speed(CS, delta_dist)
     if self.xSpdType < 0 or (self.xSpdType not in [100,101] and self.xSpdDist <= 0) or (self.xSpdType in [100,101] and self.xSpdDist < -250):
       self.xSpdType = -1
       self.xSpdDist = self.xSpdLimit = 0
@@ -1419,7 +1458,11 @@ class CarrotServ:
       self.atcType = "none"
 
 
-    sdi_source = ("bump" if self.xSpdType == 22 else "section" if self.xSpdType == 4 else
+    rear_camera_holding = rear_camera_speed < 250 and rear_camera_speed <= sdi_speed
+    sdi_speed = min(sdi_speed, rear_camera_speed)
+    if rear_camera_holding:
+      self.active_carrot = 3
+    sdi_source = ("cam" if rear_camera_holding else "bump" if self.xSpdType == 22 else "section" if self.xSpdType == 4 else
                   "police" if self.xSpdType == 100 else
                   "waze" if self.xSpdType == 101 else "cam")
     speed_n_sources = [
@@ -1511,6 +1554,9 @@ class CarrotServ:
     msg.carrotMan.nGoPosDist = self.nGoPosDist
     msg.carrotMan.nGoPosTime = self.nGoPosTime
     msg.carrotMan.szSdiDescr = self._get_sdi_descr(-1 if self.nSdiType == 0 and self.nSdiDist == 0 else self.nSdiType)
+    if rear_camera_holding and source == "cam":
+      label = {"ko": "후면단속 속도 유지", "en": "Rear camera speed hold", "zh": "后向测速限速保持"}.get(self.lang, "Rear camera speed hold")
+      msg.carrotMan.szSdiDescr = f"{label} {math.ceil(rear_camera_remaining)}m"
 
     #coords_str = ";".join([f"{x},{y}" for x, y in coords])
     coords_str = ";".join([f"{x:.2f},{y:.2f},{d:.2f}" for (x, y), d in zip(coords, distances, strict=False)])
