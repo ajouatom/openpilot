@@ -7823,6 +7823,35 @@ def test_controller_uses_fixed_lead_dynamics_and_raw_jerk() -> None:
   assert quiet.lead_one["jLead"] == pytest.approx(0.0)
 
 
+@pytest.mark.parametrize("a_lead", (-0.45, 0.0, 0.3))
+@pytest.mark.parametrize("v_rel,closing", ((-0.51, True), (-0.5, False), (-0.49, False), (1.0, False)))
+def test_controller_lead_tau_persists_while_closing_and_recovers(a_lead, v_rel, closing) -> None:
+  controller = DPathRadarController(prefer_corner_radar=False)
+  point = Point(10, 30.0, 0.0, v_rel=v_rel, a_lead=a_lead, j_lead=0.0)
+  for index in range(20):
+    output = controller.update(
+      time_s=1.0 + index * 0.05,
+      v_ego=10.0,
+      radar_points=(point,),
+      model=model_with_lead(30.0, 0.0, 10.0 + v_rel),
+    )
+    expected_tau = 1.5 * 0.9 ** (index + 1) if closing else 1.5
+    assert output.lead_one is not None
+    assert output.lead_one["aLeadTau"] == pytest.approx(expected_tau)
+    assert output.leads_center[0]["aLeadTau"] == pytest.approx(expected_tau)
+    assert output.lead_one["aLeadK"] == pytest.approx(a_lead)
+    assert output.lead_one["jLead"] == pytest.approx(0.0)
+
+  recovered = controller.update(
+    time_s=2.0,
+    v_ego=10.0,
+    radar_points=(replace(point, v_rel=0.0),),
+    model=model_with_lead(30.0, 0.0, 10.0),
+  )
+  assert recovered.lead_one is not None
+  assert recovered.lead_one["aLeadTau"] == pytest.approx(1.5)
+
+
 def test_corner_lead_two_uses_matched_front_dynamics() -> None:
   controller = DPathRadarController(prefer_corner_radar=True)
   selected: list[dict] = []
