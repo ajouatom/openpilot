@@ -1,5 +1,20 @@
 # 7714 내비 감속 브랜치 비교
 
+## 2026-09-13 외부 내비 우선 선택 (`carrot-wip` 및 유지 중인 `carrot-*`)
+
+외부 내비 연결 중에는 순정 내비 카메라·방지턱·구간단속·30km/h 구역 후보와 순정 내비 속도 표시를 제외한다.
+7714는 유효하고 살아 있는 서비스의 `connected` snapshot으로 판단하며 speed/guidance 항목이 없어도 연결로 본다.
+7713/legacy와 KISA는 기존 수신 카운터가 만료될 때까지 연결 상태를 유지한다. `activeCarrot`은 순정 감속에도
+변하므로 연결 판정에 쓰지 않는다. 모든 외부 연결이 끝나면 순정 후보를 기존 설정에 따라 다시 사용한다.
+
+카운트다운 거리도 같은 연결 선택을 따르며 외부·순정 거리의 최솟값을 섞지 않는다. 전환 시 카운트다운과
+가속 오버라이드·구역 억제 상태를 초기화하고 알림에 한 번 idle을 보낸다. 순정 CAN 수신과 이벤트 추적은 계속하여
+복귀 시 현재 거리와 상태를 사용한다. 이 변경은 아래 과거 `navi-stream` 비교 기준에 소급 적용하지 않는다.
+
+검증: `test_external_navigation_priority.py`, `test_vehicle_speed_camera_control.py`, `test_carrot_navi_serv.py`.
+외부 안내 항목 없음, 각 순정 감속 종류 배제, 연결 만료 후 복귀, 7714 idle heartbeat와 disconnect/invalid/dead,
+외부 13m·순정 30.62m 방지턱의 외부 거리 기준 해제를 확인한다.
+
 ## 비교 기준
 
 - `origin/carrot-wip`: `031cb441501ac3cbda4f28cae48767a5cf2d086e`
