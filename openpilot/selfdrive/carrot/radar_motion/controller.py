@@ -419,7 +419,7 @@ class DPathRadarOutput:
 
 
 class RadarLeadDynamics:
-  """Track lead acceleration persistence and preserve raw jLead output."""
+  """Mirror conventional radard's per-track aLeadTau and raw jLead output."""
 
   def __init__(self) -> None:
     self._a_lead_tau: dict[tuple[str, int], float] = {}
@@ -448,11 +448,9 @@ class RadarLeadDynamics:
       if (
         abs(point.a_lead) < 0.5
         and abs(point.j_lead) < 0.5
-        and point.v_rel >= -0.5
       ):
         a_lead_tau = LEAD_ACCEL_TAU_S
       else:
-        # While closing, do not assume even mild lead acceleration fades quickly.
         a_lead_tau *= 1.0 - LEAD_ACCEL_FILTER_ALPHA
       self._a_lead_tau[identity] = a_lead_tau
 
