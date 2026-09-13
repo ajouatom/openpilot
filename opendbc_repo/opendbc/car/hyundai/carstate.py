@@ -26,6 +26,7 @@ CLUSTER_SAMPLE_RATE = 20  # frames
 VEHICLE_SPEED_CAMERA_PARAM_UPDATE_FRAMES = round(1.0 / DT_CTRL)
 VEHICLE_NAVI_MAX_EVENT_DISTANCE = 2500.0
 VEHICLE_NAVI_PASSED_EVENT_DISTANCE = 30.0
+VEHICLE_NAVI_CAMERA_MATCH_MARGIN = 40.0
 VEHICLE_NAVI_MAX_EVENTS = 32
 VEHICLE_NAVI_CAMERA_KINDS = (0, 1, 2)
 VEHICLE_NAVI_CONTROLLED_ACCESS_LINK_CLASSES = (1, 2, 3)  # Freeway, IC, JC
@@ -232,6 +233,8 @@ class CarState(CarStateBase):
     self.vehicleNaviRoadClass = 7
     self.vehicleNaviCameraTarget = None
     self.vehicleNaviCameraStatusEvent = None
+    self.vehicleNaviCameraStatusSpeed = 0.0
+    self.vehicleNaviCameraStatusTarget = None
     self.vehicleNaviSpeedZoneActive = False
     self.vehicleNaviSpeedZoneSpeed = 0.0
     self.vehicleNaviSchoolZoneActive = False
@@ -638,6 +641,8 @@ class CarState(CarStateBase):
     distance_time = self._vehicle_speed_camera_distance_time(distance_time_tenths)
     changed = distance_time != self.vehicleSpeedCameraDistanceTime
     self.vehicleSpeedCameraDistanceTime = distance_time
+    if changed and self.vehicleNaviCameraStatusTarget is not None:
+      self.vehicleNaviCameraStatusTarget = self.totalDistance + self.vehicleNaviCameraStatusSpeed * distance_time
     vehicle_navi_can_control = self._vehicle_navi_can_control_mode(self.op_params.get_int("VehicleNaviCanControl"))
     if vehicle_navi_can_control != self.vehicleNaviCanControl:
       self.vehicleNaviCanControl = vehicle_navi_can_control
@@ -811,6 +816,14 @@ class CarState(CarStateBase):
     ret.vehicleNaviAvailable = self.vehicleNaviAvailable
     self.vehicleNaviCameraTarget = None
 
+    # Track the current warning independently of future 0x4BE previews. A new
+    # warning must not inherit a distant preview's virtual-distance origin.
+    camera_status_speed = ret.speedLimit if speed_limit_cam else 0
+    if camera_status_speed != self.vehicleNaviCameraStatusSpeed:
+      self.vehicleNaviCameraStatusTarget = (self.totalDistance + camera_status_speed * self.vehicleSpeedCameraDistanceTime
+                                            if camera_status_speed > 0 else None)
+      self.vehicleNaviCameraStatusSpeed = camera_status_speed
+
     # 0x4B4 is periodic while the stock navigation is running. Its range
     # average speed is zero outside a section-camera zone and valid inside it.
     # It is therefore authoritative for the *current* section state; 0x4BE is
@@ -899,9 +912,10 @@ class CarState(CarStateBase):
     # 0x4BE announces cameras far enough ahead to start a smooth deceleration,
     # but its offset can point 30-40 m beyond the physical camera. Associate
     # the stock 0x4A3 camera status with the matching queued event and retire
-    # that event as soon as the status ends. This preserves the early 0x4BE
-    # preview while restoring speed at the vehicle's own camera pass point.
-    camera_status_speed = ret.speedLimit if speed_limit_cam else 0
+    # that event as soon as the status ends. A same-speed profile beyond the
+    # warning's initial virtual endpoint (plus offset margin) is a future
+    # preview, not evidence of the current camera's distance. Keep this bound
+    # fixed in traveled-distance coordinates so later profiles cannot extend it.
     status_event = self.vehicleNaviCameraStatusEvent
     if speed_limit_cam:
       if status_event is not None and status_event["speed"] != camera_status_speed:
@@ -910,7 +924,8 @@ class CarState(CarStateBase):
       if status_event is None:
         matching_cameras = [event for event in self.vehicleNaviEvents
                             if event["type"] == "camera" and event["speed"] == camera_status_speed and
-                            event["target"] >= self.totalDistance - VEHICLE_NAVI_PASSED_EVENT_DISTANCE]
+                            self.totalDistance - VEHICLE_NAVI_PASSED_EVENT_DISTANCE <= event["target"] <=
+                            (self.vehicleNaviCameraStatusTarget or self.totalDistance) + VEHICLE_NAVI_CAMERA_MATCH_MARGIN]
         if matching_cameras:
           status_event = matching_cameras[0]
       self.vehicleNaviCameraStatusEvent = status_event
@@ -972,7 +987,14 @@ class CarState(CarStateBase):
     self.totalDistance += ret.vEgo * DT_CTRL
     if ret.speedLimit > 0 and speed_limit_cam and self.vehicleNaviCanControl and self.vehicleNaviCameraTarget is not None:
       self.speedLimitDistance = self.vehicleNaviCameraTarget
-      ret.speedLimitDistance = max(0.0, self.speedLimitDistance - self.totalDistance)
+      ret.speedLimitDistance = max(1.0 if self.vehicleNaviCameraStatusTarget is not None else 0.0,
+                                   self.speedLimitDistance - self.totalDistance)
+    elif ret.speedLimit > 0 and speed_limit_cam and self.vehicleNaviCameraStatusTarget is not None:
+      # No nearby matching profile: use the current warning's own fallback.
+      # Keep the cap at its endpoint until the warning ends; never restart a
+      # full virtual distance or attach a later, far-away same-speed camera.
+      self.speedLimitDistance = self.vehicleNaviCameraStatusTarget
+      ret.speedLimitDistance = max(1.0, self.speedLimitDistance - self.totalDistance)
     elif ret.speedLimit > 0 and speed_limit_cam:
       if distance_time_changed or self.speedLimitDistance <= self.totalDistance:
         self.speedLimitDistance = self.totalDistance + ret.speedLimit * self.vehicleSpeedCameraDistanceTime
