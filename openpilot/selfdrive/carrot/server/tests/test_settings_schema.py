@@ -15,6 +15,7 @@ from openpilot.selfdrive.carrot.server.services.settings import (
   current_vehicle_brand,
   filter_settings_catalog_for_brand,
   group_index,
+  with_vehicle_gap_limits,
 )
 
 SETTINGS_PATH = Path(__file__).resolve().parents[3] / "carrot_settings.json"
@@ -40,6 +41,44 @@ def params(settings):
 def test_the_catalogue_is_readable_and_populated(params):
   assert len(params) > 100
   assert all(isinstance(p.get("name"), str) and p["name"] for p in params)
+
+
+@pytest.mark.parametrize("maximum", (3, 4))
+def test_gap_cycle_catalog_uses_vehicle_maximum_without_mutating_cache(settings, maximum):
+  groups, by_name, groups_list = group_index(settings)
+  original = by_name["CruiseGapLevels"]
+  data, adapted_groups, adapted_names, _ = with_vehicle_gap_limits((settings, groups, by_name, groups_list), maximum)
+  selected = adapted_names["CruiseGapLevels"]
+  assert (selected["min"], selected["max"], selected["default"]) == (2, maximum, maximum)
+  assert all(len(options) == maximum - 1 for options in selected["options"].values())
+  from openpilot.selfdrive.carrot.server.services.params import clamp_numeric
+  assert clamp_numeric(4, selected) == maximum
+  assert clamp_numeric(1, selected) == 2
+  assert next(p for p in data["params"] if p["name"] == "CruiseGapLevels") is selected
+  assert next(p for p in adapted_groups[selected["group"]] if p["name"] == "CruiseGapLevels") is selected
+  assert (original["max"], original["default"]) == (4, 4)
+  assert all(len(options) == 3 for options in original["options"].values())
+
+
+@pytest.mark.parametrize("maximum,stored,expected", ((3, 4, 3), (4, 4, 4), (3, 2, 2), (4, 3, 3), (3, 0, 3)))
+def test_gap_cycle_read_matches_vehicle_limit(monkeypatch, maximum, stored, expected):
+  from openpilot.selfdrive.carrot.server.services import params as service
+  class FakeParams:
+    def get_int(self, key):
+      return maximum
+  monkeypatch.setattr(service, "HAS_PARAMS", True)
+  monkeypatch.setattr(service, "Params", FakeParams)
+  monkeypatch.setattr(service, "_read_param_value", lambda params, name, default: stored)
+  assert service.get_param_values(["CruiseGapLevels"], {"CruiseGapLevels": maximum}) == {"CruiseGapLevels": expected}
+
+
+def test_gap_cycle_setting_is_registered_and_in_gap_menu(settings):
+  assert '{"CruiseGapLevels", {PERSISTENT, INT, "4"}}' in PARAMS_KEYS_PATH.read_text(encoding="utf-8")
+  groups, by_name, _ = group_index(settings)
+  categories = build_menu_categories(settings, by_name)
+  section = next(section for category in categories for group in category["groups"] for section in group["sections"]
+                 if "TFollowGap1" in section["items"])
+  assert section["items"].index("CruiseGapLevels") < section["items"].index("TFollowGap1")
 
 
 def test_rear_camera_hold_uses_meter_values_and_persistent_default(settings, params):

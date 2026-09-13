@@ -4,6 +4,7 @@ from copy import deepcopy
 from typing import Any, Dict, List, Tuple
 
 from ..config import DEFAULT_SETTINGS_PATH
+from openpilot.selfdrive.carrot.cruise_gap import supported_gap_levels
 
 
 # mtime-based cache for carrot_settings.json
@@ -238,6 +239,37 @@ def filter_settings_catalog_for_brand(
   return filtered_groups, filtered_groups_list, filtered_categories, hidden_names
 
 
+def current_max_gap_levels(params=None) -> int:
+  if params is None:
+    from .params import HAS_PARAMS, Params
+    if not HAS_PARAMS or Params is None:
+      return 4
+    params = Params()
+  try:
+    return supported_gap_levels(params.get_int("LongitudinalPersonalityMax"))
+  except Exception:
+    return 3
+
+
+def with_vehicle_gap_limits(cache_parts: tuple, maximum: int) -> tuple:
+  data, groups, by_name, groups_list = cache_parts
+  setting = by_name.get("CruiseGapLevels")
+  if setting is None:
+    return cache_parts
+  maximum = supported_gap_levels(maximum)
+  setting = {**setting, "max": maximum, "default": maximum,
+             "options": {locale: options[:maximum - 1] for locale, options in setting["options"].items()}}
+  # Keep the process cache neutral when vehicle identification changes.
+  def adapted(items):
+    return [setting if item.get("name") == "CruiseGapLevels" else item for item in items]
+  return (
+    {**data, "params": adapted(data["params"])},
+    {group: adapted(items) for group, items in groups.items()},
+    {**by_name, "CruiseGapLevels": setting},
+    groups_list,
+  )
+
+
 def get_settings_cached() -> Tuple[Dict[str, Any], Dict[str, list], Dict[str, Dict[str, Any]], List[Dict[str, Any]]]:
   path = settings_cache["path"]
   st = os.stat(path)
@@ -253,9 +285,9 @@ def get_settings_cached() -> Tuple[Dict[str, Any], Dict[str, list], Dict[str, Di
       "groups_list": groups_list,
       "categories": build_menu_categories(data, by_name),
     })
-  return (
+  return with_vehicle_gap_limits((
     settings_cache["data"],
     settings_cache["groups"],
     settings_cache["by_name"],
     settings_cache["groups_list"],
-  )
+  ), current_max_gap_levels())

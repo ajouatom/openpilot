@@ -4,6 +4,7 @@ import pytest
 
 from openpilot.cereal import car
 from openpilot.selfdrive.car.cruise import ButtonType, VCruiseCarrot, is_hold_interlock_active
+from openpilot.selfdrive.carrot.cruise_gap import cruise_gap_levels
 
 
 def make_cruise_helper(button_kph, cruise_button_mode, carrot_cruise_active, cruise_enabled,
@@ -308,3 +309,59 @@ def test_cruise_hold_interlock_sources(brake_hold_active, parking_brake, active)
   CS = car.CarState(brakeHoldActive=brake_hold_active, parkingBrake=parking_brake)
 
   assert is_hold_interlock_active(CS) is active
+
+
+@pytest.mark.parametrize("maximum,requested,expected", [
+  (4, 4, 4), (3, 4, 3), (4, 2, 2), (3, 2, 2), (4, 3, 3),
+  (3, 0, 3), (4, 0, 4), (0, 4, 3), (4, 99, 4), (3, 1, 2),
+])
+def test_gap_cycle_limits(maximum, requested, expected):
+  assert cruise_gap_levels(requested, maximum) == expected
+
+
+@pytest.mark.parametrize("maximum,requested,pcm_gap,expected", [
+  (4, 2, 0, [1, 0, 1, 0]),
+  (4, 2, 4, [1, 0, 1, 0]),
+  (4, 3, 4, [2, 1, 0, 2]),
+  (3, 2, 3, [1, 0, 1, 0]),
+  (4, 4, 0, [3, 2, 1, 0]),
+  (3, 4, 0, [2, 1, 0, 2]),
+])
+def test_gap_button_cycles_selected_levels(maximum, requested, pcm_gap, expected):
+  helper, CS, CC = make_cruise_helper(80, 0, False, True)
+  helper._prepare_buttons = lambda CS, speed: (speed, ButtonType.gapAdjustCruise, False)
+  helper.CP = SimpleNamespace(openpilotLongitudinalControl=True)
+  values = {"LongitudinalPersonalityMax": maximum, "CruiseGapLevels": requested, "LongitudinalPersonality": 0}
+  helper.params = SimpleNamespace(get_int=values.__getitem__, put_int_nonblocking=values.__setitem__)
+  CS.pcmCruiseGap = pcm_gap
+  for personality in expected:
+    assert helper._update_cruise_buttons(CS, CC, 80) == 80
+    assert values["LongitudinalPersonality"] == personality
+  assert values["CruiseGapLevels"] == requested
+
+
+@pytest.mark.parametrize("openpilot_long,requested,pcm_gap,current,expected", [
+  (True, 2, 4, 3, 1),  # Reducing from TF4 enters TF2 on the next press.
+  (True, 4, 3, 0, 2),  # Default preserves the vehicle-reported gap.
+  (False, 2, 4, 0, 3),  # Stock ACC owns its gap cycle.
+  (False, 2, 0, 0, 3),
+  (True, 4, 9, 0, 3),  # Invalid OEM values cannot create an invalid enum.
+])
+def test_gap_button_reduction_and_oem_gap(openpilot_long, requested, pcm_gap, current, expected):
+  helper, CS, CC = make_cruise_helper(80, 0, False, True)
+  helper._prepare_buttons = lambda CS, speed: (speed, ButtonType.gapAdjustCruise, False)
+  helper.CP = SimpleNamespace(openpilotLongitudinalControl=openpilot_long)
+  values = {"LongitudinalPersonalityMax": 4, "CruiseGapLevels": requested, "LongitudinalPersonality": current}
+  helper.params = SimpleNamespace(get_int=values.__getitem__, put_int_nonblocking=values.__setitem__)
+  CS.pcmCruiseGap = pcm_gap
+  helper._update_cruise_buttons(CS, CC, 80)
+  assert values["LongitudinalPersonality"] == expected
+
+
+def test_gap_long_press_still_changes_driving_mode():
+  helper, CS, CC = make_cruise_helper(80, 0, False, True)
+  helper._prepare_buttons = lambda CS, speed: (speed, ButtonType.gapAdjustCruise, True)
+  values = {"MyDrivingMode": 4, "LongitudinalPersonality": 1}
+  helper.params = SimpleNamespace(get_int=values.__getitem__, put_int_nonblocking=values.__setitem__)
+  helper._update_cruise_buttons(CS, CC, 80)
+  assert values == {"MyDrivingMode": 1, "LongitudinalPersonality": 1}
