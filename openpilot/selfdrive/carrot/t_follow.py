@@ -8,9 +8,20 @@ def get_t_follow_mode_factor(accel_comfort_factor: float) -> float:
   return float(2.0 - accel_comfort_factor)
 
 
+def get_speed_t_follow_factor(setting: int, speed_kph: float) -> float:
+  """10 means unchanged; 20 means twice the selected TF at 100 km/h."""
+  factor_at_100 = min(30, max(10, setting)) * 0.1
+  return 1.0 + (factor_at_100 - 1.0) * max(0.0, speed_kph) / 100.0
+
+
+def get_lead_response_for_gap(common: int, overrides, gap_index: int) -> int:
+  value = overrides[gap_index]
+  return int(min(5, max(0, common if value < 0 else value)))
+
+
 def get_t_follow_mode_max(configured_max: float, mode_factor: float, decel_extra: float) -> float:
-  """Let a comfort mode increase the configured gap while preserving the global cap."""
-  return float(min(2.0, configured_max * max(1.0, mode_factor) + max(0.0, decel_extra)))
+  """The caller supplies the speed-scaled maximum, including any held baseline."""
+  return float(configured_max * max(1.0, mode_factor) + max(0.0, decel_extra))
 
 
 def ramp_t_follow(target: float, current: float, decel_extra: float, dt: float) -> float:
