@@ -1,18 +1,38 @@
 name: Sync Upstream
 
 on:
-  schedule:
-    - cron: '0 0 * * *'  # 매일 한국 시간 기준 오전 9시에 자동 실행
-  workflow_dispatch:      # 수동 실행 버튼 활성화
+  # Upstream merges are deliberate maintenance operations.
+  workflow_dispatch:
+    inputs:
+      source_repository:
+        description: "Upstream repository (owner/repository)"
+        required: true
+        type: string
+      target_branch:
+        description: "Branch to synchronize (must also exist in the source repository)"
+        required: true
+        type: string
+
+permissions:
+  contents: write
 
 jobs:
   sync:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Sync upstream
-        run: gh repo sync $GITHUB_REPOSITORY --source 원본계정명/저장소명
+      - name: Validate explicit synchronization target
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SOURCE_REPOSITORY: ${{ inputs.source_repository }}
+          TARGET_BRANCH: ${{ inputs.target_branch }}
+        run: |
+          if [[ ! "$SOURCE_REPOSITORY" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]]; then
+            echo "::error::Specify a valid upstream owner/repository."
+            exit 1
+          fi
+          git check-ref-format --branch "$TARGET_BRANCH"
+      - name: Sync upstream without forcing divergent history
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SOURCE_REPOSITORY: ${{ inputs.source_repository }}
+          TARGET_BRANCH: ${{ inputs.target_branch }}
+        run: gh repo sync "$GITHUB_REPOSITORY" --source "$SOURCE_REPOSITORY" --branch "$TARGET_BRANCH"

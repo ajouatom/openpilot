@@ -121,6 +121,10 @@
 - `docs/user/docs_map.json` and `tools/docs/check_user_docs.py` are validation aids, not instructions
   to generate documentation. For an ordinary code pull request without explicitly requested docs,
   record a concrete `Docs-Not-Needed: <reason>` in the PR body when the workflow requires it.
+  For direct pushes, put the reason in each affected commit message; it only exempts that
+  commit. Settings-related rules remain required; other mapped changes produce review advice
+  and do not authorize unsolicited guide edits. Settings behavior changes still require the
+  relevant Korean/English guides and Wiki explanations, even when outside mapped paths.
 - Do not place private, internal-only, credential-bearing, or non-public feature documentation in
   `docs/user/` or link it from the public Wiki.
 

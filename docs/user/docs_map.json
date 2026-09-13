@@ -3,6 +3,7 @@
   "rules": [
     {
       "id": "settings-catalog-and-web",
+      "enforcement": "required",
       "description": "설정 카탈로그, 기본값, 단위와 Carrot Web 설정 화면",
       "code_paths": [
         "openpilot/selfdrive/carrot_settings.json",
@@ -39,6 +40,7 @@
     },
     {
       "id": "intro-presets",
+      "enforcement": "required",
       "description": "최초 설정과 차량 제어 프리셋",
       "code_paths": [
         "openpilot/selfdrive/carrot/server/features/intro/presets.py",
@@ -53,6 +55,7 @@
     },
     {
       "id": "cruise-buttons-and-shared-control",
+      "enforcement": "advisory",
       "description": "크루즈 버튼, 속도 프리셋과 공용 크루즈 동작",
       "code_paths": [
         "openpilot/selfdrive/car/cruise.py",
@@ -75,6 +78,7 @@
     },
     {
       "id": "speed-deceleration",
+      "enforcement": "advisory",
       "description": "카메라, 제한속도, 방지턱, 커브와 턴 감속",
       "code_paths": [
         "openpilot/selfdrive/carrot/carrot_serv.py",
@@ -90,6 +94,7 @@
     },
     {
       "id": "lane-change",
+      "enforcement": "advisory",
       "description": "차로 변경 요청, 진입 조건, 차선·BSD·측면 물체 판단",
       "code_paths": [
         "openpilot/selfdrive/controls/lib/desire_helper.py",
@@ -104,6 +109,7 @@
     },
     {
       "id": "longitudinal-and-gap",
+      "enforcement": "advisory",
       "description": "종방향 제어, 정차·재출발과 차간거리",
       "code_paths": [
         "openpilot/selfdrive/carrot/carrot_functions.py",
@@ -125,6 +131,7 @@
     },
     {
       "id": "carrot-web-pages",
+      "enforcement": "advisory",
       "description": "Carrot Web 주행·화면녹화·도구·로그·터미널 화면",
       "code_paths": [
         "openpilot/selfdrive/ui/carrot_web.py",
@@ -163,6 +170,7 @@
     },
     {
       "id": "dashcam-log-sharing",
+      "enforcement": "advisory",
       "description": "Carrot Web 대시캠 구간 선택과 분석 로그 전송",
       "code_paths": [
         "openpilot/selfdrive/carrot/web/src/features/logs/dashcam.js",
@@ -183,6 +191,7 @@
     },
     {
       "id": "radar",
+      "enforcement": "advisory",
       "description": "전방 레이더 트랙, 코너 레이더와 선행차 결합",
       "code_paths": [
         "openpilot/selfdrive/controls/radard.py",
@@ -206,6 +215,7 @@
     },
     {
       "id": "tesla-vehicle-integration",
+      "enforcement": "advisory",
       "description": "Tesla vehicle CAN compatibility and driver-control inputs",
       "code_paths": [
         "opendbc_repo/opendbc/car/tesla/**",

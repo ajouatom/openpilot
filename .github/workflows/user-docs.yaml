@@ -2,6 +2,7 @@ name: user docs
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, edited]
   push:
     branches:
       - carrot-wip
@@ -24,6 +25,13 @@ jobs:
         env:
           DOCS_BASE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
           PR_BODY: ${{ github.event.pull_request.body }}
-        run: python tools/docs/check_user_docs.py --base "$DOCS_BASE_SHA"
+          DOCS_EVENT_NAME: ${{ github.event_name }}
+        run: |
+          args=(--base "$DOCS_BASE_SHA")
+          if [ "$DOCS_EVENT_NAME" = "push" ]; then
+            args+=(--commit-overrides)
+          fi
+          python tools/docs/check_user_docs.py "${args[@]}"
       - name: Test user documentation checker
+        if: ${{ !cancelled() }}
         run: python -m pytest -q -o addopts='' --confcutdir=tools/docs/tests tools/docs/tests/test_check_user_docs.py

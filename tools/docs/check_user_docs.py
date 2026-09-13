@@ -31,6 +31,8 @@ def load_mapping(path: Path) -> dict[str, Any]:
         raise ValueError(f"rule is missing {key!r}: {rule}")
     if not rule["code_paths"] or not rule["doc_sets"] or any(not doc_set for doc_set in rule["doc_sets"]):
       raise ValueError(f"rule must contain code_paths and non-empty doc_sets: {rule['id']}")
+    if rule.get("enforcement", "required") not in {"required", "advisory"}:
+      raise ValueError(f"invalid enforcement: {rule['id']}")
   return mapping
 
 
@@ -60,7 +62,7 @@ def find_missing_docs(changed_files: list[str], mapping: dict[str, Any]) -> list
 
 
 def extract_override_reason(pr_body: str) -> str:
-  match = re.search(r"(?im)^\s*Docs-Not-Needed\s*:\s*(.+?)\s*$", pr_body or "")
+  match = re.search(r"(?im)^[ \t]*Docs-Not-Needed[ \t]*:[ \t]*([^\r\n]*)\r?$", pr_body or "")
   if match is None:
     return ""
   reason = match.group(1).strip()
@@ -93,11 +95,30 @@ def changed_files_from_git(base: str, head: str) -> list[str]:
   return [normalize_path(line) for line in output.splitlines() if line.strip()]
 
 
+def unwaived_files_from_git(base: str, head: str) -> set[str]:
+  """A commit reason covers only that commit, never other commits in a push."""
+  resolved_base = resolve_base(base, head)
+  commits = git_output("rev-list", "--first-parent", f"{resolved_base}..{head}").splitlines()
+  unwaived: set[str] = set()
+  for commit in commits:
+    reason = extract_override_reason(git_output("show", "-s", "--format=%B", commit))
+    if reason:
+      print(f"Commit {commit[:12]} docs exception: {reason}")
+      continue
+    paths = git_output("diff-tree", "--root", "--first-parent", "-m", "--no-commit-id", "--name-only", "-r", commit)
+    unwaived.update(normalize_path(path) for path in paths.splitlines())
+  return unwaived
+
+
 def build_parser() -> argparse.ArgumentParser:
   parser = argparse.ArgumentParser(description="Check that mapped user docs change with user-visible code.")
   parser.add_argument("--base", default="", help="base Git ref or SHA; defaults to HEAD^")
   parser.add_argument("--head", default="HEAD", help="head Git ref or SHA")
   parser.add_argument("--map", type=Path, default=DEFAULT_MAP, help="path to docs_map.json")
+  parser.add_argument(
+    "--commit-overrides", action="store_true",
+    help="accept per-commit Docs-Not-Needed reasons for a direct push",
+  )
   parser.add_argument(
     "--changed-file", action="append", default=[], help="explicit changed path; repeat to bypass git diff",
   )
@@ -106,9 +127,25 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
   args = build_parser().parse_args(argv)
+  if args.commit_overrides and args.changed_file:
+    raise ValueError("--commit-overrides requires a Git change range")
   mapping = load_mapping(args.map)
   changed_files = args.changed_file or changed_files_from_git(args.base, args.head)
   missing = find_missing_docs(changed_files, mapping)
+
+  advisory = [rule for rule in missing if rule.get("enforcement", "required") == "advisory"]
+  for rule in advisory:
+    print(f"Docs review suggested [{rule['id']}]: {', '.join(rule['matched_code'])}")
+  if advisory:
+    print("Update user guides only when documentation work is requested; keep web-only explanations in the localized UI.")
+  missing = [rule for rule in missing if rule.get("enforcement", "required") == "required"]
+
+  if missing and args.commit_overrides:
+    unwaived = unwaived_files_from_git(args.base, args.head)
+    missing = [
+      {**rule, "matched_code": [path for path in rule["matched_code"] if path in unwaived]}
+      for rule in missing if any(path in unwaived for path in rule["matched_code"])
+    ]
 
   if not missing:
     print(f"User docs check passed ({len(changed_files)} changed files).")
@@ -121,14 +158,15 @@ def main(argv: list[str] | None = None) -> int:
       print(f"  - {rule['id']}: {', '.join(rule['matched_code'])}")
     return 0
 
-  print("User-visible code changed without a mapped user-documentation update:", file=sys.stderr)
+  print("Required user-documentation update is missing:", file=sys.stderr)
   for rule in missing:
     print(f"\n[{rule['id']}] {rule['description']}", file=sys.stderr)
     print(f"  code: {', '.join(rule['matched_code'])}", file=sys.stderr)
     formatted_sets = [" + ".join(doc_set) for doc_set in rule["doc_sets"]]
     print(f"  update one complete set: {'; or '.join(formatted_sets)}", file=sys.stderr)
   print(
-    "\nUpdate the relevant document, or add `Docs-Not-Needed: <concrete reason>` to the PR body.",
+    "\nUpdate the relevant documents. For changes that do not affect settings behavior, add "
+    "`Docs-Not-Needed: <concrete reason>` to the PR body or each affected push commit message.",
     file=sys.stderr,
   )
   return 1
