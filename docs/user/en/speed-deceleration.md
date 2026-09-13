@@ -67,7 +67,9 @@ The event type, limit, and distance must all be valid. An average-speed zone ret
 
 ### Stock-navigation CAN control
 
-`VehicleNaviCanControl` selects when exact camera and speed-bump distances from stock navigation are used on supported Hyundai/Kia CAN-FD vehicles. The previous enabled value, `1`, remains the always-apply mode.
+When external navigation is connected, deceleration and countdowns use external navigation only. Stock cameras, bumps, sections, 30 km/h zone caps, and stock-navigation speed displays are excluded even if external navigation has no current guidance or enforcement item. After disconnection or receive timeout is detected, stock navigation becomes available again according to its settings.
+
+`VehicleNaviCanControl` selects when exact camera and speed-bump distances from stock navigation are used on supported Hyundai/Kia CAN-FD vehicles. The modes below apply only without an external navigation connection. Always apply in mode `1` means independent of stock route guidance.
 
 | Value | vNAVI future-event scope |
 |---:|---|
@@ -145,7 +147,7 @@ If slowing begins too late, lower this value one step. If it begins too early, r
 | `1` | Turn points and speed events, excluding bumps |
 | `2` | Turn points, speed events, and bumps |
 
-The countdown estimates seconds from distance and current speed. It does not alter the deceleration calculation.
+The countdown uses only external-navigation distances while connected, and stock-navigation distances otherwise. Changing the connection state resets the previous countdown. It estimates seconds from distance and current speed and does not alter the deceleration calculation.
 
 Recommended tuning order: validate event data, set the target with `SafetyFactor`, set the completion position with `CtrlEnd`, and finally tune the approach curve with `DecelRate`.
 

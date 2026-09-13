@@ -43,6 +43,7 @@ def _serv():
   serv.carrot_navi_vehicle_sequence = -1
   serv.carrot_navi_route_sequence = -1
   serv.carrot_navi_active = False
+  serv.external_navigation_active = False
   serv.carrot_navi_has_control = False
   serv.carrot_navi_road_limit_valid = False
   serv.carrot_navi_off_route = False
@@ -132,6 +133,28 @@ def _message():
     "laneCurrent": {"meta": _meta(1, present=False)},
     "navigationStatus": {"meta": _meta(1, present=False)},
   }
+
+
+@pytest.mark.parametrize("disconnect", ("connected", "alive", "valid"))
+def test_7714_connected_without_guidance_owns_navigation_until_disconnect(disconnect):
+  serv = _serv()
+  sm = _SubMaster({"schemaVersion": 1, "connected": True, "sessionId": "idle"})
+  assert not serv._update_carrot_navi(sm)
+  assert serv._external_navigation_connected()
+  assert serv._update_navigation_source()
+  assert serv.external_navigation_active
+  sm.updated["carrotNavi"] = False
+  assert not serv._update_carrot_navi(sm)
+  assert serv._external_navigation_connected()
+
+  sm.updated["carrotNavi"] = True
+  if disconnect == "connected":
+    sm.data["connected"] = False
+  else:
+    getattr(sm, disconnect)["carrotNavi"] = False
+  assert not serv._update_carrot_navi(sm)
+  assert serv._update_navigation_source()
+  assert not serv.external_navigation_active
 
 
 def test_applies_new_navi_control_without_resetting_distance_on_heartbeat():
