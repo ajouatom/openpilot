@@ -186,7 +186,7 @@ A lower `AutoNaviSpeedDecelRate` begins slowing farther away. `AutoNaviSpeedSafe
 | [Stopping and restarting](cruise-gap.md#stop-resume) | `StopDistanceCarrot`, `StoppingAccel`, `VEgoStopping`, `AChangeCostStarting` | Stop position, stop entry, and restart behavior |
 | [Longitudinal tuning](cruise-gap.md#longitudinal-tuning) | `LongTuningKpV`, `LongTuningKiV`, `LongTuningKf`, `LongActuatorDelay` | Hyundai/Kia/Genesis hide fixed `100/0/100` gains; other brands can adjust them |
 | [Following gap](cruise-gap.md#following-gap) | `TFollowGap1` through `TFollowGap4`, `DynamicTFollowLC`, `SpeedTFFactor`, `TFollowDecelBoost` | Gap times, lane-change relief using selected leads, and deceleration margin (default 0%) |
-| [Lead response](cruise-gap.md#lead-response) | `LeadAccelResponse`, `LeadAccelResponseTF1`–`LeadAccelResponseTF4` | Lead-start, acceleration and approach response at every following-distance level |
+| [Following responsiveness](cruise-gap.md#lead-response) | `LeadAccelResponse`, `LeadAccelResponseTF1`–`LeadAccelResponseTF4` | Lead-start, acceleration and approach response at every following-distance level |
 | [Carrot cruise](cruise-gap.md#carrot-cruise) | `CruiseEcoControl`, `CarrotCruiseDecel`, `CarrotCruiseAtcDecel` | Economy control and cruise deceleration limits |
 
 `MyDrivingMode` is `1` eco, `2` safe, `3` normal, or `4` high speed. High-speed mode ignores traffic-light control and increases acceleration tendency, so read its behavior before selecting it.
@@ -195,7 +195,7 @@ Eco caps lead response at 2 and Safe at 3; Normal and High retain the selected v
 
 `TFollowGap1` through `TFollowGap4` are stored in hundredths of a second. Lower values reduce the time gap. Use `LeadAccelResponse` for acceleration response: levels 1–3 are gradual, 4 is quick, and 5 retains maximum response. Added deceleration margin does not accumulate.
 
-`LeadAccelResponse`: Adjusts how the car follows a lead vehicle as it starts or speeds up. Lower levels close the gap more gradually; higher levels follow more quickly. Level 0 turns off the acceleration boost, and level 5 is the most responsive test setting. See [Lead-vehicle response](cruise-gap.md#lead-response) for details.
+`LeadAccelResponse`: Adjusts how the car follows a lead vehicle as it starts or speeds up. Lower levels close the gap more gradually; higher levels follow more quickly. Level 0 turns off the acceleration boost, and level 5 is the most responsive test setting. See [Following responsiveness](cruise-gap.md#lead-response) for details.
 
 `SpeedTFFactor` applies a linear speed multiplier to the selected base TF: 10 is unchanged; 20 doubles it at 100 km/h. `LeadAccelResponseTF1`–`TF4` use the common response at -1 and a gap-specific response at 0–5. Levels 4–5 retain speed TF. The driving-screen bar shows the dynamically adjusted following target in metres.
 
