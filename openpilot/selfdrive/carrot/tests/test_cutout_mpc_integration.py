@@ -8,7 +8,7 @@ import numpy as np
 import pytest
 
 from openpilot.selfdrive.controls.lib.longitudinal_cutout import cutout_obstacle_relief
-from openpilot.selfdrive.controls.lib.longitudinal_gap_recovery import LeadGapState, gap_reference
+from openpilot.selfdrive.controls.lib.longitudinal_gap_recovery import LeadGapState, gap_reference, displayed_follow_distance
 from openpilot.selfdrive.controls.lib.longitudinal_safe_follow import SafeFollowState
 from openpilot.selfdrive.carrot.radar_motion.lane_change_gap import GapLead, LaneChangeGapPlan
 from openpilot.selfdrive.controls.lib.longitudinal_preview import LeadAccelResponseState, get_lead_accel_mpc_request
@@ -31,7 +31,7 @@ def run_update(*, confidence=0., mode="acc", reset=False, enabled=True, second_d
                    "SOURCES": ["lead0", "lead1", "cruise", "e2e"], "LEAD_DANGER_FACTOR": .8,
                    "A_CHANGE_COST_STARTING": 10., "COST_E_DIM": 5, "CRASH_DISTANCE": .25,
                    "LEAD_ACCEL_MIN_TRACK_FRAMES": 3,
-                   "gap_reference": gap_reference,
+                   "gap_reference": gap_reference, "displayed_follow_distance": displayed_follow_distance,
                    "get_lead_accel_mpc_request": get_lead_accel_mpc_request,
                    "get_traffic_stop_distance_adjust": get_traffic_stop_distance_adjust,
                    "get_traffic_stop_obstacle_distance": get_traffic_stop_obstacle_distance,

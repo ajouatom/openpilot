@@ -92,7 +92,7 @@ export function createRoadOverlayAuxRenderer(options = {}) {
 
     const uiScale = ui.getScale(videoWidth, videoHeight);
     geometry.drawPolyline([left, right], "rgba(255,255,255,0.92)", Math.max(3.0 * uiScale, 1.6));
-    const labelText = `${ui.displayDistance(tfDistance).toFixed(1)}(${finiteNumber(longitudinalPlan?.tFollow, 0).toFixed(2)})`;
+    const labelText = `${tfDistance.toFixed(0)} m`;
     const labelFontSize = Math.max(20 * uiScale, 12);
     const labelAnchor = ui.clampTextAnchor(
       { x: right.x + 10, y: right.y - 4 },
