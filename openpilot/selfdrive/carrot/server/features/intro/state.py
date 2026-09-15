@@ -46,9 +46,8 @@ Consequences that broke the obvious approaches:
   · CompletedTrainingVersion defaults to "0.2.0", so it is ALWAYS set.
     Testing it for truthiness matches every device and would hide the intro
     from everyone, forever. (This module had exactly that bug.)
-  · Comparing against carrot_settings.json defaults is wrong too — they
-    disagree with params_keys.h in at least one place (SpeedFromPCM is 2 in
-    params_keys.h, 0 in carrot_settings.json).
+  · Compare against params_keys.h defaults, which manager uses to initialize
+    params, rather than relying on the separate carrot_settings.json catalog.
 
 What DOES work: compare against `params.get_default_value(k)`, the same value
 manager wrote. 159 of the 163 carrot settings have one. Any difference means
