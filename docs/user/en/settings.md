@@ -192,7 +192,7 @@ While external navigation is connected, deceleration, countdowns, and navigation
 
 `MyDrivingMode` is `1` eco, `2` safe, `3` normal, or `4` high speed. High-speed mode ignores traffic-light control and increases acceleration tendency, so read its behavior before selecting it.
 
-Eco caps lead response at 2 and Safe at 3; Normal and High retain the selected value. Caps follow common/gap-specific selection and never raise lower choices or 0. Eco ×1.1 and Safe ×1.2 TF multipliers remain, with gradual release of mode allowance. Automatic selection uses Safe for stopping approaches and sustained slow following; a brief launch or lead loss does not release it.
+Eco caps lead response at 2 and Safe at 3; Normal and High retain the selected value. Caps follow common/gap-specific selection and never raise lower choices or 0. Eco ×1.1 and Safe ×1.2 TF multipliers remain, with gradual release of mode allowance. Automatic selection uses Safe for stopping approaches and sustained slow following. Outside a stopping approach, lead acceleration above 1.5 m/s² for about 0.5 seconds restores Normal/Eco; otherwise, it requires six seconds of flow recovery or four seconds with no lead at 15 km/h or above.
 
 `CruiseGapLevels` (Gap cycle levels) limits button cycling to 2 through the vehicle-supported maximum, which is the default. 2 uses TF1 and TF2; 3 uses TF1 through TF3. It applies on the next gap-button press and preserves unused TF and following responsiveness values. Applies with openpilot longitudinal control.
 
