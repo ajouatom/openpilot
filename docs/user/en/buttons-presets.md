@@ -155,6 +155,7 @@ Scope and exclusions:
 - `Test1` and `Test2` can affect both classic CAN and CAN FD button paths.
 - `Test3` duplication currently applies to the CAN FD path.
 - With `SpeedFromPCM=1`, the RES/SET branch that corrects the difference between desired and stock set speeds does not run.
+- `SpeedFromPCM` defaults to `2` (curve/camera deceleration). Restoring its default also uses `2`; updating alone does not change an existing saved value.
 - These values do nothing on vehicles that do not use this transmission path.
 
 > [!WARNING]
