@@ -43,7 +43,6 @@ If raising one value produces no change, another source may already be lower. Ch
 |---|---:|---:|
 | `AutoCurveSpeedFactor` | 100 | 120 |
 | `AutoNaviSpeedCtrlEnd` | 6 | 7 |
-| `AutoNaviSpeedDecelRate` | 200 | 120 |
 | `MapTurnSpeedFactor` | 100 | 90 |
 | `AutoRoadSpeedAdjust` | 0 | 50 |
 
@@ -137,12 +136,14 @@ At a 60 km/h target (about 16.7 m/s), 6 seconds is about 100 m and 10 seconds is
 
 ### `AutoNaviSpeedDecelRate`
 
-The stored value is multiplied by `0.01 m/s²`:
+The catalog default and initial Params value are both `120`, corresponding to `1.20 m/s²`. Updating the software does not change an existing saved setting.
+
+The stored value is multiplied by `0.01 m/s²` to calculate the approach curve for cameras and speed bumps:
 
 | Stored value | Rate used | Perceived direction |
 |---:|---:|---|
 | 80 | 0.80 m/s² | Start earlier and more gently |
-| 120 | 1.20 m/s² | Middle |
+| 120 | 1.20 m/s² | Default |
 | 200 | 2.00 m/s² | Can start closer and slow more strongly |
 
 The important direction is: **a lower value starts deceleration earlier**. The speed ceiling follows:
