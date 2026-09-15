@@ -16,7 +16,7 @@ from openpilot.selfdrive.controls.lib.longitudinal_gap_recovery import LeadGapSt
 from openpilot.selfdrive.carrot.radar_motion.lane_change_gap import LaneChangeGapPlan
 
 if __name__ == '__main__':  # generating code
-  from acados_template import AcadosModel, AcadosOcp, AcadosOcpSolver
+  from acados.acados_template import AcadosModel, AcadosOcp, AcadosOcpSolver
 else:
   from openpilot.selfdrive.controls.lib.longitudinal_mpc_lib.c_generated_code.acados_ocp_solver_pyx import AcadosOcpSolverCython
 

@@ -141,6 +141,12 @@ function bootstrap_runtime_dependencies {
     return 1
   fi
 
+  # MPC headers, templates, native libraries and CasADi now come from one wheel.
+  if ! ensure_python_package "acados; from acados.acados_template import AcadosOcpSolver; from casadi import SX" \
+      "comma-deps-acados==0.2.2.post103" 1; then
+    return 1
+  fi
+
   ensure_python_package shapely shapely 0
 }
 

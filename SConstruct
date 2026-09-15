@@ -40,7 +40,7 @@ assert arch in [
   "Darwin",   # macOS arm64 (x86 not supported)
 ]
 
-pkg_names = ['bzip2', 'capnproto', 'eigen', 'ffmpeg', 'libjpeg', 'libyuv', 'ncurses', 'zeromq', 'zstd']
+pkg_names = ['acados', 'bzip2', 'capnproto', 'eigen', 'ffmpeg', 'libjpeg', 'libyuv', 'ncurses', 'zeromq', 'zstd']
 if arch == "larch64":
   # AGNOS 19 no longer ships comma's legacy bzip2/libyuv Python wrappers.
   # Neither dependency is used by an on-device target: bzip2 is replay-only,
@@ -48,6 +48,7 @@ if arch == "larch64":
   pkg_names = [name for name in pkg_names if name not in ('bzip2', 'libyuv')]
 
 pkgs = [importlib.import_module(name) for name in pkg_names]
+acados = pkgs[pkg_names.index('acados')]
 
 ffmpeg = pkgs[pkg_names.index('ffmpeg')]
 # Newer comma FFmpeg packages use shared libraries, while older AGNOS/device
@@ -104,7 +105,6 @@ def _libflags(target, source, env, for_signature):
 
 scons_python_paths = [
   Dir("#").abspath,
-  Dir("#third_party/acados").abspath,
 ]
 if external_pythonpath := os.environ.get("PYTHONPATH"):
   scons_python_paths += [
@@ -116,9 +116,9 @@ env = Environment(
   ENV={
     "PATH": os.environ['PATH'],
     "PYTHONPATH": os.pathsep.join(scons_python_paths),
-    "ACADOS_SOURCE_DIR": Dir("#third_party/acados").abspath,
-    "ACADOS_PYTHON_INTERFACE_PATH": Dir("#third_party/acados/acados_template").abspath,
-    "TERA_PATH": Dir("#").abspath + f"/third_party/acados/{arch}/t_renderer"
+    "ACADOS_SOURCE_DIR": acados.DIR,
+    "ACADOS_PYTHON_INTERFACE_PATH": acados.TEMPLATE_DIR,
+    "TERA_PATH": acados.TERA_PATH,
   },
   CCFLAGS=[
     "-g",
@@ -143,9 +143,8 @@ env = Environment(
     "#third_party",
     "#third_party/json11",
     "#third_party/linux/include",
-    "#third_party/acados/include",
-    "#third_party/acados/include/blasfeo/include",
-    "#third_party/acados/include/hpipm/include",
+    os.path.join(acados.INCLUDE_DIR, "blasfeo", "include"),
+    os.path.join(acados.INCLUDE_DIR, "hpipm", "include"),
     "#third_party/catch2/include",
     [x.INCLUDE_DIR for x in pkgs],
   ],
@@ -155,7 +154,6 @@ env = Environment(
     "#third_party",
     "#openpilot/selfdrive/pandad",
     "#rednose/helpers",
-    f"#third_party/acados/{arch}/lib",
     [x.LIB_DIR for x in pkgs],
   ],
   RPATH=[ffmpeg.LIB_DIR] if ffmpeg_shared else [],
@@ -165,6 +163,11 @@ env = Environment(
   tools=["default", "cython", "compilation_db", "rednose_filter"],
   toolpath=["#site_scons/site_tools", "#rednose_repo/site_scons/site_tools"],
 )
+# SCons' Darwin linker tool does not expand RPATH by default.
+if arch == "Darwin":
+  env["RPATHPREFIX"] = "-Wl,-rpath,"
+  env["RPATHSUFFIX"] = ""
+  env["_RPATH"] = "${_concat(RPATHPREFIX, RPATH, RPATHSUFFIX, __env__)}"
 if arch != "larch64":
   env['_LIBFLAGS'] = _libflags
 
@@ -234,7 +237,7 @@ else:
 np_version = SCons.Script.Value(np.__version__)
 Export('envCython', 'np_version')
 
-Export('env', 'arch', 'ffmpeg_libs')
+Export('env', 'arch', 'acados', 'ffmpeg_libs')
 
 # Setup cache dir
 cache_dir = '/data/scons_cache' if arch == "larch64" else '/tmp/scons_cache'
