@@ -77,6 +77,27 @@ def test_legacy_native_build_dependencies_are_available_for_agnos_19() -> None:
   assert _wheel_contains(wheel_dir / "libjpeg-3.1.0-py3-none-linux_aarch64.whl", "libjpeg/install/lib/libjpeg.a")
 
 
+def test_packaged_acados_is_available_offline_with_matching_casadi() -> None:
+  _assert_locked_wheels({"comma_deps_acados": "0.2.2.post103"})
+  wheel_dir = Path(BASEDIR) / "third_party/wheels"
+  wheel = next(wheel_dir.glob("comma_deps_acados-0.2.2.post103-*aarch64.whl"))
+  for suffix in (
+    "acados/__init__.py",
+    "acados/acados_template/acados_ocp_solver_pyx.pyx",
+    "acados/acados_template/acados_solver_common.pxd",
+    "acados/install/include/acados_c/ocp_nlp_interface.h",
+    "acados/install/bin/t_renderer",
+    "acados/install/lib/libacados.so",
+    "acados/install/lib/libblasfeo.so",
+    "acados/install/lib/libhpipm.so",
+    "acados/install/lib/libqpOASES_e.so.3.1",
+    "casadi/__init__.py",
+  ):
+    assert _wheel_contains(wheel, suffix), suffix
+  project = tomllib.loads((Path(BASEDIR) / "pyproject.toml").read_text(encoding="utf-8"))
+  assert not any(dep.startswith("casadi") for dep in project["project"]["dependencies"])
+
+
 def test_carrot_aiohttp_runtime_is_available_offline() -> None:
   wheel_dir = Path(BASEDIR) / "third_party/wheels"
   expected = {
@@ -124,6 +145,7 @@ def test_launcher_bootstraps_from_local_wheels_first() -> None:
   assert '"opencv-python-headless==4.13.0.92" 0' in launcher
   assert "ensure_python_package eigen eigen 1" in launcher
   assert "ensure_python_package libjpeg libjpeg 1" in launcher
+  assert '"comma-deps-acados==0.2.2.post103" 1' in launcher
   assert "[ -f /TICI ] || [ -f /AGNOS ]" in launcher
   assert "ensure_python_package shapely shapely 0" in launcher
   assert "pip install shapely" not in launcher

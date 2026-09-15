@@ -28,6 +28,7 @@ dependencies = [
   "numpy >=2.0",
 
   # vendored native dependencies
+  "comma-deps-acados==0.2.2.post103",  # includes the matching CasADi Python module
   "bzip2 @ git+https://github.com/commaai/dependencies.git@release-bzip2#subdirectory=bzip2",
   "capnproto @ git+https://github.com/commaai/dependencies.git@release-capnproto#subdirectory=capnproto",
   "eigen @ git+https://github.com/commaai/dependencies.git@release-eigen#subdirectory=eigen",
@@ -60,9 +61,6 @@ dependencies = [
   "PyJWT",
   "json-rpc",
   "websocket_client",
-
-  # acados deps
-  "casadi >=3.6.6",  # 3.12 fixed in 3.6.6
 
   # joystickd
   "inputs",
