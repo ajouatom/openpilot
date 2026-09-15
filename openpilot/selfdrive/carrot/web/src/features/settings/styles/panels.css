@@ -200,6 +200,84 @@
   color: color-mix(in srgb, var(--setting-info-ink) 82%, var(--md-on-surface));
 }
 
+.setting-inline-search {
+  min-width: 0;
+  margin: 0 0 4px;
+  padding: 10px 12px;
+  border: 1px solid var(--md-outline-var);
+  border-radius: var(--control-radius);
+  background: var(--md-surface-cont);
+}
+
+.setting-inline-search:focus-within {
+  border-color: var(--md-primary);
+}
+
+.setting-inline-search label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.setting-inline-search__field {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 4px;
+}
+
+.setting-inline-search input {
+  width: 100%;
+  min-width: 0;
+  min-height: 36px;
+  padding: 4px 0;
+  border: 0;
+  border-radius: 0;
+  outline: none;
+  background: transparent;
+  color: var(--md-on-surface);
+  font: inherit;
+  font-size: 16px;
+}
+
+.setting-inline-search input::-webkit-search-cancel-button {
+  -webkit-appearance: none;
+}
+
+.setting-inline-search button {
+  flex: 0 0 36px;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--r-round);
+  background: var(--md-surface-cont-h);
+  color: var(--md-on-surface);
+  font-size: 22px;
+  cursor: pointer;
+}
+
+.setting-inline-search__hint {
+  margin-top: 4px;
+  color: var(--md-on-surface-var);
+  font-size: 11px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.setting-inline-search__status:not(:empty) {
+  display: block;
+  margin-top: 4px;
+  color: var(--md-primary);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.page--setting.setting-tab-device #settingScreenItems > .setting-inline-search {
+  display: none;
+}
+
 .page--setting #groupList .groupBtn--profile {
   border-color: var(--setting-profile-outline);
   background: var(--md-surface-cont-h);

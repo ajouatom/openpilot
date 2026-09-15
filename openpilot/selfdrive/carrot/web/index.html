@@ -237,6 +237,15 @@
 
           <!-- CarrotPilot Groups -->
           <div id="carrotTabContent">
+            <form id="settingInlineSearch" class="setting-inline-search" role="search">
+              <label id="settingInlineSearchLabel" for="settingInlineSearchInput">설정 찾기</label>
+              <div class="setting-inline-search__field">
+                <input id="settingInlineSearchInput" type="search" placeholder="예: 감속, TF" autocomplete="off" spellcheck="false" enterkeyhint="search" aria-describedby="settingInlineSearchHint" />
+                <button id="settingInlineSearchClear" type="button" aria-label="검색어 지우기" hidden>×</button>
+              </div>
+              <div id="settingInlineSearchHint" class="setting-inline-search__hint">이름·설명·분류로 검색 · 최대 20개</div>
+              <output id="settingInlineSearchStatus" class="setting-inline-search__status" aria-live="polite"></output>
+            </form>
             <div id="groupList"></div>
           </div>
 

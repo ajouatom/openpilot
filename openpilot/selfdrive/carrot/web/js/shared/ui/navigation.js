@@ -680,6 +680,7 @@ function runSettingScreenSlide(showEl, hideEl, direction, token) {
 }
 
 function showSettingScreen(which, pushHistory = false) {
+  if (typeof mountSettingInlineSearch === "function") mountSettingInlineSearch(which);
   const isGroups = (which === "groups");
   const showEl = isGroups ? screenGroups : screenItems;
   const hideEl = isGroups ? screenItems : screenGroups;
