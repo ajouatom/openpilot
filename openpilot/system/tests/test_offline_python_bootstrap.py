@@ -1,3 +1,4 @@
+import ast
 import hashlib
 import tomllib
 import zipfile
@@ -98,6 +99,32 @@ def test_packaged_acados_is_available_offline_with_matching_casadi() -> None:
   assert not any(dep.startswith("casadi") for dep in project["project"]["dependencies"])
 
 
+def test_packaged_json11_and_catch2_are_available_offline() -> None:
+  _assert_locked_wheels({"comma_deps_json11": "20170411.0.post103", "comma_deps_catch2": "2.13.10.post96"})
+  wheel_dir = Path(BASEDIR) / "third_party/wheels"
+  json11 = next(wheel_dir.glob("comma_deps_json11-20170411.0.post103-*aarch64.whl"))
+  catch2 = next(wheel_dir.glob("comma_deps_catch2-2.13.10.post96-*.whl"))
+  assert _wheel_contains(json11, "json11/install/include/json11/json11.hpp")
+  assert _wheel_contains(json11, "json11/install/lib/libjson11.a")
+  assert _wheel_contains(catch2, "catch2/install/include/catch2/catch.hpp")
+
+
+def test_minimal_build_does_not_import_test_only_catch2() -> None:
+  source = (Path(BASEDIR) / "SConstruct").read_text(encoding="utf-8")
+  nodes = ast.parse(source).body
+  start = next(i for i, node in enumerate(nodes) if isinstance(node, ast.Assign) and
+               any(isinstance(target, ast.Name) and target.id == "pkg_names" for target in node.targets))
+  end = next(i for i, node in enumerate(nodes) if isinstance(node, ast.Assign) and
+             any(isinstance(target, ast.Name) and target.id == "pkgs" for target in node.targets))
+  package_selection = compile(ast.Module(body=nodes[start:end], type_ignores=[]), "SConstruct", "exec")
+  for arch in ("x86_64", "aarch64", "larch64", "Darwin"):
+    for extras in (False, True):
+      scope = {"arch": arch, "GetOption": {"extras": extras}.__getitem__}
+      exec(package_selection, scope)
+      assert "json11" in scope["pkg_names"]
+      assert ("catch2" in scope["pkg_names"]) == extras
+
+
 def test_carrot_aiohttp_runtime_is_available_offline() -> None:
   wheel_dir = Path(BASEDIR) / "third_party/wheels"
   expected = {
@@ -146,6 +173,8 @@ def test_launcher_bootstraps_from_local_wheels_first() -> None:
   assert "ensure_python_package eigen eigen 1" in launcher
   assert "ensure_python_package libjpeg libjpeg 1" in launcher
   assert '"comma-deps-acados==0.2.2.post103" 1' in launcher
+  assert 'ensure_python_package json11 "comma-deps-json11==20170411.0.post103" 1' in launcher
+  assert 'if [ -f "$DIR/.gitattributes" ] && ! ensure_python_package catch2 "comma-deps-catch2==2.13.10.post96" 1' in launcher
   assert "[ -f /TICI ] || [ -f /AGNOS ]" in launcher
   assert "ensure_python_package shapely shapely 0" in launcher
   assert "pip install shapely" not in launcher

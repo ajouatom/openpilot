@@ -48,6 +48,8 @@ jobs:
       - run: ./tools/op.sh setup
       - name: Build openpilot
         run: scons
+      - name: Check packaged json11 and Catch2 with C++ logging test
+        run: openpilot/common/tests/test_common swaglog
       - name: Check packaged acados and MPC solvers
         run: |
           .venv/bin/python -m pytest -c /dev/null --rootdir=. --confcutdir=openpilot/system/tests \

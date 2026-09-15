@@ -40,7 +40,9 @@ assert arch in [
   "Darwin",   # macOS arm64 (x86 not supported)
 ]
 
-pkg_names = ['acados', 'bzip2', 'capnproto', 'eigen', 'ffmpeg', 'libjpeg', 'libyuv', 'ncurses', 'zeromq', 'zstd']
+pkg_names = ['acados', 'bzip2', 'capnproto', 'eigen', 'ffmpeg', 'json11', 'libjpeg', 'libyuv', 'ncurses', 'zeromq', 'zstd']
+if GetOption('extras'):
+  pkg_names.append('catch2')
 if arch == "larch64":
   # AGNOS 19 no longer ships comma's legacy bzip2/libyuv Python wrappers.
   # Neither dependency is used by an on-device target: bzip2 is replay-only,
@@ -141,17 +143,14 @@ env = Environment(
     "#msgq",
     "#openpilot/cereal/gen/cpp",
     "#third_party",
-    "#third_party/json11",
     "#third_party/linux/include",
     os.path.join(acados.INCLUDE_DIR, "blasfeo", "include"),
     os.path.join(acados.INCLUDE_DIR, "hpipm", "include"),
-    "#third_party/catch2/include",
     [x.INCLUDE_DIR for x in pkgs],
   ],
   LIBPATH=[
     "#openpilot/common",
     "#msgq_repo",
-    "#third_party",
     "#openpilot/selfdrive/pandad",
     "#rednose/helpers",
     [x.LIB_DIR for x in pkgs],
@@ -279,9 +278,6 @@ SConscript([
 
 if arch == "larch64":
   SConscript(['openpilot/system/camerad/SConscript'])
-
-# Build openpilot
-SConscript(['third_party/SConscript'])
 
 # Build selfdrive
 SConscript([
