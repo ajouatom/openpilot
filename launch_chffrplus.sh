@@ -147,6 +147,15 @@ function bootstrap_runtime_dependencies {
     return 1
   fi
 
+  if ! ensure_python_package json11 "comma-deps-json11==20170411.0.post103" 1; then
+    return 1
+  fi
+
+  # Development checkouts build C++ tests by default, matching SConstruct extras.
+  if [ -f "$DIR/.gitattributes" ] && ! ensure_python_package catch2 "comma-deps-catch2==2.13.10.post96" 1; then
+    return 1
+  fi
+
   ensure_python_package shapely shapely 0
 }
 

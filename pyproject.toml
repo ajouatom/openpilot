@@ -29,6 +29,7 @@ dependencies = [
 
   # vendored native dependencies
   "comma-deps-acados==0.2.2.post103",  # includes the matching CasADi Python module
+  "comma-deps-json11==20170411.0.post103",
   "bzip2 @ git+https://github.com/commaai/dependencies.git@release-bzip2#subdirectory=bzip2",
   "capnproto @ git+https://github.com/commaai/dependencies.git@release-capnproto#subdirectory=capnproto",
   "eigen @ git+https://github.com/commaai/dependencies.git@release-eigen#subdirectory=eigen",
@@ -87,6 +88,7 @@ docs = [
 ]
 
 testing = [
+  "comma-deps-catch2==2.13.10.post96",  # Catch2 v2 headers for the existing C++ tests
   "coverage",
   "hypothesis ==6.47.*",
   "ty",
