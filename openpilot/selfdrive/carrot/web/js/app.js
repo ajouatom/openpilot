@@ -28,6 +28,7 @@ window.addEventListener("popstate", async (ev) => {
   }
 
   if (st.page === "setting") {
+    if (st.group === SETTING_INLINE_SEARCH_GROUP) restoreSettingInlineSearch(st.inlineSearchQuery || "");
     const screen = st.screen || "groups";
     const previousDetail = CURRENT_SETTING_DETAIL;
     const itemsWereActive = typeof isSettingItemsScreenActive === "function" && isSettingItemsScreenActive();
