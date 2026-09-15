@@ -24,16 +24,18 @@ def get_mode_lead_response(requested: int, mode: DrivingMode) -> int:
 
 
 class DrivingModeDetector:
-  """Enter Safe promptly for stopping; leave only after sustained flow recovery.
+  """Enter Safe promptly for stopping; leave for lead acceleration or flow recovery.
 
   This is a comfort-mode selector, not an obstacle detector or brake trigger.
-  Short launches, cut-ins and missing samples cannot clear the queue history.
+  Brief acceleration spikes, cut-ins and missing samples cannot clear the queue history.
   """
 
   STOP_ENTRY_TIME = 0.30
   SLOW_ENTRY_TIME = 8.0
   RECOVERY_TIME = 6.0
   CLEAR_ROAD_TIME = 4.0
+  ACCEL_EXIT_THRESHOLD = 1.5
+  ACCEL_EXIT_TIME = 0.5
 
   def __init__(self):
     self.congested = False
@@ -41,10 +43,11 @@ class DrivingModeDetector:
     self.slow_time = 0.0
     self.recovery_time = 0.0
     self.clear_time = 0.0
+    self.accel_time = 0.0
     self.lead_key = None
 
   def _reset_evidence(self):
-    self.stop_time = self.slow_time = self.recovery_time = self.clear_time = 0.0
+    self.stop_time = self.slow_time = self.recovery_time = self.clear_time = self.accel_time = 0.0
 
   def update_data(self, carstate, lead, *, valid=True, dt=DT_MDL):
     if not valid or not math.isfinite(dt) or not 0 < dt <= 0.2 or not math.isfinite(carstate.vEgo):
@@ -54,7 +57,7 @@ class DrivingModeDetector:
 
     ego = max(0.0, carstate.vEgo)
     if not lead.status:
-      self.stop_time = self.slow_time = self.recovery_time = 0.0
+      self.stop_time = self.slow_time = self.recovery_time = self.accel_time = 0.0
       self.lead_key = None
       # A disappeared stopped lead is not proof of an open road.
       self.clear_time = self.clear_time + dt if ego >= 15 * CV.KPH_TO_MS else 0.0
@@ -72,7 +75,7 @@ class DrivingModeDetector:
     speed = max(0.0, lead.vLead)
     key = (lead.radar, lead.radarTrackId)
     if key != self.lead_key:
-      self.recovery_time = 0.0
+      self.recovery_time = self.accel_time = 0.0
     self.lead_key = key
 
     # Approximate approach envelope only for choosing a comfort mode. Actual
@@ -84,15 +87,17 @@ class DrivingModeDetector:
     self.stop_time = min(self.STOP_ENTRY_TIME, self.stop_time + dt) if stopping else 0.0
     self.slow_time = min(self.SLOW_ENTRY_TIME, self.slow_time + dt) if slow else 0.0
 
-    # Acceleration alone is deliberately not an exit: queues contain strong,
-    # short launches. Require sustained speed or a genuinely opening gap.
+    # Restore prompt release for a strongly accelerating lead without waiting
+    # for six seconds of flow recovery. Stopping approaches still take priority.
+    accelerating = not stopping and lead.aLeadK > self.ACCEL_EXIT_THRESHOLD
+    self.accel_time = min(self.ACCEL_EXIT_TIME, self.accel_time + dt) if accelerating else 0.0
     flowing = ego >= 35 * CV.KPH_TO_MS and speed >= 35 * CV.KPH_TO_MS
     opening = (speed >= 15 * CV.KPH_TO_MS and lead.vRel >= 1.0
                and lead.dRel >= 8.0 + 1.8 * ego)
     recovering = not stopping and lead.aLeadK >= -0.2 and (flowing or opening)
     self.recovery_time = min(self.RECOVERY_TIME, self.recovery_time + dt) if recovering else 0.0
 
-    if self.recovery_time >= self.RECOVERY_TIME:
+    if self.accel_time >= self.ACCEL_EXIT_TIME or self.recovery_time >= self.RECOVERY_TIME:
       self.congested = False
       self.stop_time = self.slow_time = 0.0
     elif self.stop_time >= self.STOP_ENTRY_TIME or self.slow_time >= self.SLOW_ENTRY_TIME:

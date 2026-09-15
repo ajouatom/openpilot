@@ -57,6 +57,44 @@ def test_repeated_short_launches_preserve_safe():
     assert advance(detector, .5)
 
 
+@pytest.mark.parametrize('dt', [.025, .05, .1])
+@pytest.mark.parametrize('automatic,base_mode', [(1, DrivingMode.Normal), (2, DrivingMode.Eco)])
+def test_strong_lead_acceleration_releases_safe_before_flow_recovery(dt, automatic, base_mode):
+  detector = DrivingModeDetector()
+  advance(detector, .4, dt=dt)
+  assert advance(detector, .4, ego=10, lead_speed=10, distance=16, lead_accel=1.6, dt=dt)
+  assert not advance(detector, .2, ego=10, lead_speed=10, distance=16, lead_accel=1.6, dt=dt)
+  assert detector.get_mode(automatic) == base_mode
+  assert not advance(detector, 2., ego=10, lead_speed=10, distance=16, lead_accel=1.6, dt=dt)
+  assert advance(detector, .4, dt=dt)
+
+
+def test_acceleration_threshold_is_strict_and_spikes_do_not_accumulate():
+  detector = DrivingModeDetector()
+  advance(detector, .4)
+  assert advance(detector, 2., ego=10, lead_speed=10, distance=16, lead_accel=1.5)
+  for _ in range(4):
+    assert advance(detector, .4, ego=10, lead_speed=10, distance=16, lead_accel=2.)
+    assert advance(detector, .1, ego=10, lead_speed=10, distance=16, lead_accel=1.5)
+
+
+@pytest.mark.parametrize('interruption', [{'valid': False}, {'status': False}, {'track': 43},
+                                         {'lead_accel': float('nan')}, {'lead_speed': 0.}])
+def test_acceleration_release_restarts_after_interrupted_evidence(interruption):
+  detector = DrivingModeDetector()
+  advance(detector, .4)
+  sample = {'ego': 10, 'lead_speed': 10, 'distance': 8, 'lead_accel': 2.}
+  assert advance(detector, .4, **sample)
+  assert advance(detector, .1, **(sample | interruption))
+  assert advance(detector, .4, **sample)
+  assert not advance(detector, .2, **sample)
+
+
+def test_stopping_approach_keeps_safe_even_with_high_lead_acceleration():
+  detector = DrivingModeDetector()
+  assert advance(detector, 2., ego=20, lead_speed=5, distance=8, lead_accel=2.)
+
+
 @pytest.mark.parametrize('ego,lead_speed,distance', [(45, 45, 30), (20, 30, 35)])
 def test_sustained_flow_or_opening_gap_releases_safe(ego, lead_speed, distance):
   detector = DrivingModeDetector()

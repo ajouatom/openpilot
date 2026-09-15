@@ -284,7 +284,7 @@ def test_safe_reentry_during_mode_release_does_not_compound_margin():
 
 
 @pytest.mark.parametrize('automatic,base_mode', [(1, DrivingMode.Normal), (2, DrivingMode.Eco)])
-def test_live_auto_selection_preserves_short_launch_and_manual_override(automatic, base_mode):
+def test_live_auto_selection_releases_accelerating_lead_and_preserves_manual_override(automatic, base_mode):
   from types import SimpleNamespace as NS
 
   class State(dict):
@@ -306,10 +306,10 @@ def test_live_auto_selection_preserves_short_launch_and_manual_override(automati
   sm['carState'].vEgo = 20 / 3.6
   lead = sm['radarState'].leadOne
   lead.dRel, lead.vLead, lead.vRel, lead.aLeadK = 35., 30 / 3.6, 10 / 3.6, 2.
-  for _ in range(60):
+  for _ in range(8):
     planner._update_driving_mode(sm)
   assert planner.myDrivingMode == DrivingMode.Safe
-  for _ in range(62):
+  for _ in range(4):
     planner._update_driving_mode(sm)
   assert planner.myDrivingMode == base_mode
   planner.myDrivingMode_disable_auto = True

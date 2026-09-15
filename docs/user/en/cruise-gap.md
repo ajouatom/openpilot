@@ -69,10 +69,11 @@ A decreasing mode gap multiplier releases at 0.05 per second: about four seconds
 
 - **Stopping approach:** A lead at or below 5 km/h within the speed-dependent approach envelope for about 0.3 seconds selects Safe. The envelope is `ego speed² / (2 × 2.4) + 2 × ego speed` metres, clamped to 12–200 m; speeds in these formulas are in m/s.
 - **Sustained slow following:** Ego at or below 35 km/h and a lead at or below 30 km/h within following range for eight seconds selects Safe. Following range is `12 + 3 × ego speed` metres, clamped to 30–80 m.
+- **Lead acceleration:** Outside a stopping approach, lead acceleration above 1.5 m/s² for about 0.5 seconds restores Normal/Eco without waiting for six seconds of flow recovery.
 - **Flow recovery:** Both vehicles at or above 35 km/h, or a lead at or above 15 km/h pulling away by at least 1 m/s with distance at least `8 + 1.8 × ego speed` metres, must persist for six seconds. Lead acceleration below -0.2 m/s² restarts recovery confirmation.
 - **Clear road:** Valid observations of no lead while ego travels at least 15 km/h for four seconds restore the base mode. Losing a lead while stopped does not restore it.
 
-A short launch or one strong acceleration does not release Safe. A changed lead track restarts recovery confirmation; invalid or stale inputs do not count toward confirmation time.
+Acceleration spikes shorter than about 0.5 seconds do not release Safe. A changed lead track restarts acceleration and flow confirmation; invalid or stale inputs and lead loss reset acceleration confirmation.
 
 Manually changing the stored `MyDrivingMode` suspends automatic selection until the planner restarts. The displayed actual mode can differ from the stored choice during automatic operation.
 
