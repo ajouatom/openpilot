@@ -10,22 +10,22 @@ authors = [
 
 dependencies = [
   # multiple users
-  "sounddevice",  # micd + soundd
+  "sounddevice >=0.5.6",  # micd + soundd
   "pyserial",     # pigeond + qcomgpsd
-  "requests",     # many one-off uses
+  "requests >=2.34.2",  # many one-off uses
   "sympy",        # rednose + friends
   "crcmod-plus",  # cars + qcomgpsd
-  "tqdm",         # cars (fw_versions.py) on start + many one-off uses
+  "tqdm >=4.70.1",  # cars (fw_versions.py) on start + many one-off uses
   "msgpack",      # realtime broker / carrot live payload transport
   "brotli",       # carrot QR backup compression
 
   # core
-  "cffi",
-  "scons",
+  "cffi >=2.1.1",
+  "scons >=4.11.1",
   "pycapnp==2.1.0",  # 2.2 introduces a memory leak due to cyclic references
-  "Cython",
-  "setuptools",
-  "numpy >=2.0",
+  "Cython >=3.3.0",
+  "setuptools >=84.0.0",
+  "numpy >=2.5.3",
 
   # vendored native dependencies
   "comma-deps-acados==0.2.2.post103",  # includes the matching CasADi Python module
@@ -49,19 +49,19 @@ dependencies = [
   "aiortc",
 
   # panda
-  "libusb1",
+  "libusb1 >=3.4.0",
   "pyusb",       # carrot cluster USB display
   "spidev; platform_system == 'Linux'",
 
   # logging
-  "pyzmq",
+  "pyzmq >=27.2.0",
   "sentry-sdk",
   "xattr",  # used in place of 'os.getxattr' for macOS compatibility
 
   # athena
-  "PyJWT",
+  "PyJWT >=2.14.0",
   "json-rpc",
-  "websocket_client",
+  "websocket_client >=1.9.2",
 
   # joystickd
   "inputs",
@@ -75,10 +75,10 @@ dependencies = [
   "zstandard",
 
   # ui
-  "comma-deps-raylib",
+  "comma-deps-raylib >=6.0.0.1.post103",
   "qrcode",
   "jeepney",
-  "pillow",
+  "pillow >=12.3.0",
 ]
 
 [project.optional-dependencies]
@@ -89,9 +89,9 @@ docs = [
 
 testing = [
   "comma-deps-catch2==2.13.10.post96",  # Catch2 v2 headers for the existing C++ tests
-  "coverage",
+  "coverage >=7.16.0",
   "hypothesis ==6.47.*",
-  "ty",
+  "ty >=0.0.80",
   "pytest",
   "pytest-cpp",
   "pytest-subtests",
@@ -99,13 +99,13 @@ testing = [
   "pytest-xdist @ git+https://github.com/sshane/pytest-xdist@2b4372bd62699fb412c4fe2f95bf9f01bd2018da",
   "pytest-asyncio",
   "pytest-mock",
-  "ruff",
-  "codespell",
+  "ruff >=0.16.7",
+  "codespell >=2.4.3",
   "pre-commit-hooks",
 ]
 
 dev = [
-  "matplotlib",
+  "matplotlib >=3.11.2",
   "opencv-python-headless",
 ]
 
