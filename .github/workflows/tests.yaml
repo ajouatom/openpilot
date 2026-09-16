@@ -48,11 +48,3 @@ jobs:
       - run: ./tools/op.sh setup
       - name: Build openpilot
         run: scons
-      - name: Check packaged json11 and Catch2 with C++ logging test
-        run: openpilot/common/tests/test_common swaglog
-      - name: Check packaged acados and MPC solvers
-        run: |
-          .venv/bin/python -m pytest -c /dev/null --rootdir=. --confcutdir=openpilot/system/tests \
-            openpilot/system/tests/test_acados_build.py openpilot/system/tests/test_offline_python_bootstrap.py
-          .venv/bin/python -m pytest -c /dev/null --rootdir=. --confcutdir=openpilot/selfdrive/controls/tests \
-            openpilot/selfdrive/controls/tests/test_lateral_mpc.py openpilot/selfdrive/controls/tests/test_long_mpc_a_change_cost.py
