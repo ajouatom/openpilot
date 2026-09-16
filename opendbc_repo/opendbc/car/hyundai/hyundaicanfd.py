@@ -1,6 +1,8 @@
 import copy
+import math
 import numpy as np
 from opendbc.car import CanBusBase
+from opendbc.car.carlog import carlog
 from opendbc.car.crc import CRC16_XMODEM
 from opendbc.car.hyundai.values import HyundaiFlags, HyundaiExtFlags
 from openpilot.common.params import Params
@@ -24,6 +26,38 @@ def apply_accel_jerk_limit(a_raw: float, a_value_last: float, jerk_u: float, jer
   upper_step = max(0.0, float(jerk_u)) * dt
   lower_step = max(0.0, float(jerk_l)) * dt
   return float(np.clip(a_raw, a_value_last - lower_step, a_value_last + upper_step))
+
+
+def apply_stopping_experiment(values, CS, controller, accel, previous_value, jerk_u, jerk_l):
+  """Apply the branch-local experiment after the normal SCC interlocks."""
+  if controller is None:
+    return
+
+  wheels = CS.out.wheelSpeeds
+  speeds = [CS.out.vEgo, CS.out.vEgoRaw, wheels.fl, wheels.fr, wheels.rl, wheels.rr]
+  finite = all(math.isfinite(v) for v in (*speeds, accel, previous_value, jerk_u, jerk_l))
+  speed = max(abs(v) for v in speeds) if finite else 0.0
+  blocked = (not finite or not CS.out.canValid or CS.out.brakePressed or CS.out.gasPressed
+             or str(CS.out.gearShifter) != "drive" or longitudinal_interlock_active(CS))
+  previous_phase = controller.phase
+  command = controller.update(
+    active=values["ACCMode"] == 1 and not blocked, requested=bool(values["StopReq"]), speed=speed,
+    held=CS.canfdSccHoldActive, accel=accel, previous_value=previous_value,
+    jerk_u=max(0.0, min(jerk_u, 5.0)), jerk_l=max(1.0, min(jerk_l, 5.0)),
+  )
+  if blocked or values["ACCMode"] != 1:
+    values.update(StopReq=0, aReqRaw=0.0, aReqValue=0.0)
+    if not finite:
+      values.update(ACCMode=0, JerkUpperLimit=1.0, JerkLowerLimit=1.0)
+  elif command is not None:
+    values.update(StopReq=command.stop_req, aReqRaw=command.raw, aReqValue=command.value,
+                  AccelLimitBandUpper=0.0, AccelLimitBandLower=command.lower)
+
+  if controller.phase != previous_phase:
+    carlog.warning({"event": "carrot_stopping", "from": str(previous_phase), "phase": str(controller.phase),
+                    "reason": controller.reason, "speed": speed, "aEgo": CS.out.aEgo,
+                    "held": CS.canfdSccHoldActive, "retry_used": controller.retried,
+                    "StopReq": values["StopReq"], "aReqRaw": values["aReqRaw"], "aReqValue": values["aReqValue"]})
 
 
 def hyundai_crc8(data: bytes) -> int:
@@ -343,9 +377,12 @@ def create_lfa_icon_non_camera_scc(packer, CS, CAN, CC):
     ret.append(packer.make_can_msg("ADRV_0x161", CAN.ECAN, values, rx_counter=rx_counter))
   return ret
 
-def create_acc_control_scc2(packer, CAN, enabled, accel_value_last, accel, stopping, gas_override, set_speed, hud_control, hyundai_jerk, CS):
+def create_acc_control_scc2(packer, CAN, enabled, accel_value_last, accel, stopping, gas_override, set_speed, hud_control, hyundai_jerk, CS,
+                            stop_controller=None):
 
   if CS.scc_control is None:
+    if stop_controller is not None:
+      stop_controller.reset()
     return None, accel_value_last
   interlock_active = longitudinal_interlock_active(CS)
   soft_hold_active = CS.softHoldActive > 0 and CS.out.cruiseState.available
@@ -401,13 +438,9 @@ def create_acc_control_scc2(packer, CAN, enabled, accel_value_last, accel, stopp
 
   values["DriverAlert"] = 0   # 1: SCC Disengaged, 2: No SCC Engage condition, 3: SCC Disenganed when the vehicle stops
 
-  values["TARGET_DISTANCE"] = CS.out.vEgo * 1.0 + 4.0
+  values["TARGET_DISTANCE"] = CS.out.vEgo + 4.0 if math.isfinite(CS.out.vEgo) else 4.0
 
-  soft_hold_info = 1 if soft_hold_active and CS.softHoldActive > 1 and enabled else 0
-
-  # 이거안하면 정지중 뒤로 밀리는 현상 발생하는듯.. (신호정지중에 뒤로 밀리는 경험함.. 시험해봐야)
-  if values["InfoDisplay"] != 5: #5: Front Car Departure Notice
-    values["InfoDisplay"] = 4 if not interlock_active and stopping and CS.out.aEgo > -0.3 else 0  # 1: SCC Mode, 2: Convention Cruise Mode, 3: Object disappered at low speed, 4: Available to resume acceleration control, 5: Front vehicle departure notice, 6: Reserved, 7: Invalid
+  values["InfoDisplay"] = 0  # carrot-stopping: remove the display-based stopping workaround
 
   values["TakeOverReq"] = 0    # 1: Takeover request, 2: Not used, 3: Error indicator , 이것이 켜지면 가속을 안하는듯함.
   #values["NEW_SIGNAL_4"] = 9 if hud_control.leadVisible else 0
@@ -417,11 +450,13 @@ def create_acc_control_scc2(packer, CAN, enabled, accel_value_last, accel, stopp
   values["AccelLimitBandUpper"] = 0.0   # 이값이 1.26일때 가속을 안하는 증상이 보임..
   values["AccelLimitBandLower"] = 0.0
 
-  values["ZEROS_7"] = 1
+  values["ZEROS_7"] = 0  # Experimental baseline, including vehicles whose stock byte is nonzero
+  apply_stopping_experiment(values, CS, stop_controller, accel, accel_value_last, jerk_u, jerk_l)
 
-  return packer.make_can_msg("SCC_CONTROL", CAN.ECAN, values), a_val
+  return packer.make_can_msg("SCC_CONTROL", CAN.ECAN, values), values["aReqValue"]
 
-def create_acc_control(packer, CAN, enabled, accel_last, accel, stopping, gas_override, set_speed, hud_control, jerk_u, jerk_l, CS):
+def create_acc_control(packer, CAN, enabled, accel_last, accel, stopping, gas_override, set_speed, hud_control, jerk_u, jerk_l, CS,
+                       stop_controller=None):
 
   interlock_active = longitudinal_interlock_active(CS)
   soft_hold_active = CS.softHoldActive > 0 and CS.out.cruiseState.available
@@ -456,9 +491,11 @@ def create_acc_control(packer, CAN, enabled, accel_last, accel, stopping, gas_ov
     #"SET_ME_3": 0x3,
     "ACC_ObjLatPos": 0x64,
     "DISTANCE_SETTING": hud_control.leadDistanceBars, # + 5,
-    "InfoDisplay": 4 if not interlock_active and stopping and CS.out.cruiseState.standstill else 0,
+    "InfoDisplay": 0,
+    "ZEROS_7": 0,
   }
 
+  apply_stopping_experiment(values, CS, stop_controller, accel, accel_last, jerk_u, jerk_l)
   return packer.make_can_msg("SCC_CONTROL", CAN.ECAN, values)
 
 
