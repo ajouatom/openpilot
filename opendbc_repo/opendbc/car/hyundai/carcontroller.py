@@ -6,6 +6,7 @@ from opendbc.car import Bus, DT_CTRL, apply_driver_steer_torque_limits, common_f
 from opendbc.car.common.conversions import Conversions as CV
 from opendbc.car.hyundai import hyundaicanfd, hyundaican
 from opendbc.car.hyundai.carstate import CarState
+from opendbc.car.hyundai.stopping import CanfdStopping
 from opendbc.car.hyundai.hyundaicanfd import CanBus
 from opendbc.car.hyundai.values import HyundaiFlags, Buttons, CarControllerParams, CAR, CAN_GEARS, HyundaiExtFlags
 from opendbc.car.interfaces import CarControllerBase
@@ -182,6 +183,7 @@ class CarController(CarControllerBase):
 
     self.accel_last = 0
     self.accel_value_last = 0.0
+    self.canfd_stopping = CanfdStopping()
     self.apply_torque_last = 0
     self.car_fingerprint = CP.carFingerprint
     self.last_button_frame = 0
@@ -536,7 +538,7 @@ class CarController(CarControllerBase):
           if self.CP.flags & HyundaiFlags.CAMERA_SCC.value:
             msg, self.accel_value_last = hyundaicanfd.create_acc_control_scc2(
               self.packer, self.CAN, CC.enabled, self.accel_value_last, accel, stopping, CC.cruiseControl.override,
-              set_speed_in_units, hud_control, self.hyundai_jerk, CS,
+              set_speed_in_units, hud_control, self.hyundai_jerk, CS, self.canfd_stopping,
             )
             if msg is not None:
               can_sends.append(msg)
@@ -544,7 +546,7 @@ class CarController(CarControllerBase):
           else:
             can_sends.append(hyundaicanfd.create_acc_control(self.packer, self.CAN, CC.enabled, self.accel_last, accel, stopping,
                                                              CC.cruiseControl.override, set_speed_in_units, hud_control,
-                                                             self.hyundai_jerk.jerk_u, self.hyundai_jerk.jerk_l, CS))
+                                                             self.hyundai_jerk.jerk_u, self.hyundai_jerk.jerk_l, CS, self.canfd_stopping))
             self.accel_last = accel
       else:
         # button presses
