@@ -37,6 +37,7 @@ public:
   Replay(const std::string &route, std::vector<std::string> allow, std::vector<std::string> block, SubMaster *sm = nullptr,
          uint32_t flags = REPLAY_FLAG_NONE, const std::string &data_dir = "", bool auto_source = false);
   ~Replay();
+  void stop();
   bool load();
   RouteLoadError lastRouteError() const { return route().lastError(); }
   void start(int seconds = 0) { seekTo(min_seconds_ + seconds, false); }

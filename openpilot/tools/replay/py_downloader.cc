@@ -15,12 +15,13 @@ static DownloadProgressHandler progress_handler = nullptr;
 
 // Run a Python command and capture stdout. Optionally parse stderr for PROGRESS lines.
 // Returns stdout content. If abort is signaled, kills the child process.
-std::string runPython(const std::vector<std::string> &args, std::atomic<bool> *abort = nullptr, bool parse_progress = false) {
+std::string runPython(const std::vector<std::string> &args, std::atomic<bool> *abort = nullptr, bool parse_progress = false,
+                      const char *module = "openpilot.tools.lib.file_downloader") {
   // Build argv for execvp
   std::vector<const char *> argv;
   argv.push_back("python3");
   argv.push_back("-m");
-  argv.push_back("openpilot.tools.lib.file_downloader");
+  argv.push_back(module);
   for (const auto &a : args) {
     argv.push_back(a.c_str());
   }
@@ -201,6 +202,10 @@ std::string getRouteFiles(const std::string &route) {
 
 std::string getDevices() {
   return runPython({"devices"});
+}
+
+std::string authenticate(const std::string &provider, std::atomic<bool> *abort) {
+  return runPython({provider, "--json"}, abort, false, "openpilot.tools.lib.auth");
 }
 
 std::string getDeviceRoutes(const std::string &dongle_id, int64_t start_ms, int64_t end_ms, bool preserved) {

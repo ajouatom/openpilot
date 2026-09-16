@@ -73,6 +73,15 @@ void Replay::setupSegmentManager(bool has_filters) {
 }
 
 Replay::~Replay() {
+  stop();
+  camera_server_.reset();
+  seg_mgr_.reset();
+}
+
+void Replay::stop() {
+  // Merge callbacks access both Replay and its owner. Join them while all objects
+  // and their owning pointers are still alive, before stopping the playback thread.
+  seg_mgr_->stop();
   if (stream_thread_.joinable()) {
     rInfo("shutdown: in progress...");
     interruptStream([this]() {
@@ -82,8 +91,6 @@ Replay::~Replay() {
     stream_thread_.join();
     rInfo("shutdown: done");
   }
-  camera_server_.reset();
-  seg_mgr_.reset();
 }
 
 bool Replay::load() {
