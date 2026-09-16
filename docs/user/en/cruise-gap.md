@@ -104,7 +104,6 @@ Tune the speed band containing the symptom instead of changing the whole table. 
 | Setting | Stored-value interpretation | Direction when increased or moved toward zero |
 |---|---|---|
 | `StopDistanceCarrot` | `600` → 6.00 m | Increases fixed clearance to a stopped lead |
-| `StoppingAccel` | `-50` → -0.50 m/s² | Moving toward zero weakens the stopped-state brake target |
 | `VEgoStopping` | `50` → 0.50 m/s | Higher values enter stopping state at a higher planned speed |
 | `AChangeCostStarting` | MPC acceleration-change cost | Higher values smooth initial acceleration changes |
 
@@ -116,17 +115,11 @@ Range 400–1000 cm, step 10 cm. The code divides by 100 and uses it as the fixe
 
 It is therefore not the actual moving following distance. Its direct effect is clearest near zero speed behind a stopped lead. When there is no active `leadOne` but the camera model consistently associates a stationary vehicle with the E2E stop endpoint, the planner first corrects that endpoint toward the inferred vehicle position and then applies this fixed clearance. No SCC/radar object is created. Although the catalog description says “stop position ×0.8,” the running code does not apply 0.8.
 
-### `StoppingAccel`
+### Fixed stopping acceleration
 
-Range -100 to 0 in steps of 10, scaled by `0.01 m/s²`.
+Stopping acceleration is fixed at `-0.50 m/s²` (formerly stored as `-50`) for all brands and is no longer adjustable in settings. Existing `StoppingAccel` values, including `0` and other negative values, are ignored.
 
-- More negative: allows earlier stop-state entry and a stronger stopped brake target.
-- Closer to zero: weaker target.
-- Exactly `0`: Hyundai, Kia, and Genesis automatically save `-50` when vehicle control initializes after boot and use `-0.50 m/s²` from the first control update. Other brands use the vehicle's `CP.stopAccel`.
-
-Existing negative values are preserved for Hyundai, Kia, and Genesis. If `0` is saved again later, it is restored to `-50` at the next vehicle-control initialization.
-
-An excessively negative value can make final braking harsh.
+This value sets the stop-entry acceleration threshold and the target used when gradually increasing braking in normal stopping state. Stronger braking already in progress is retained, and soft hold continues to use the vehicle-specific stationary-hold acceleration. This value does not directly control acceleration or braking when stock ACC is responsible.
 
 ### `VEgoStopping`
 
