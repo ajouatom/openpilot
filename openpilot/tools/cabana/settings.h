@@ -1,73 +1,27 @@
 #pragma once
 
-#include <QByteArray>
-#include <QComboBox>
-#include <QDialog>
-#include <QGroupBox>
-#include <QLineEdit>
-#include <QSpinBox>
+#include <cstdint>
+#include <string>
+#include <vector>
 
-#define LIGHT_THEME 1
-#define DARK_THEME 2
+#include "tools/cabana/core/observable.h"
+#include "tools/cabana/core/settings.h"
 
-class Settings : public QObject {
-  Q_OBJECT
-
+class Settings : public CabanaSettingsState {
 public:
-  enum DragDirection {
-    MsbFirst,
-    LsbFirst,
-    AlwaysLE,
-    AlwaysBE,
-  };
-
   Settings();
-  ~Settings();
-
-  bool absolute_time = false;
-  int fps = 10;
-  int max_cached_minutes = 30;
-  int chart_height = 200;
-  int chart_column_count = 1;
-  int chart_range = 3 * 60; // 3 minutes
-  int chart_series_type = 0;
-  int theme = 0;
-  int sparkline_range = 15; // 15 seconds
-  bool multiple_lines_hex = false;
-  bool log_livestream = true;
-  bool suppress_defined_signals = false;
-  QString log_path;
-  QString last_dir;
-  QString last_route_dir;
-  QByteArray geometry;
-  QByteArray video_splitter_state;
-  QByteArray window_state;
-  QStringList recent_files;
-  QByteArray message_header_state;
-  DragDirection drag_direction = MsbFirst;
-
-  // session data
-  QString recent_dbc_file;
-  QString active_msg_id;
-  QStringList selected_msg_ids;
-  QStringList active_charts;
-
-signals:
-  void changed();
-};
-
-class SettingsDlg : public QDialog {
-public:
-  SettingsDlg(QWidget *parent);
   void save();
-  QSpinBox *fps;
-  QSpinBox *cached_minutes;
-  QSpinBox *chart_height;
-  QComboBox *chart_series_type;
-  QComboBox *theme;
-  QGroupBox *log_livestream;
-  QLineEdit *log_path;
-  QComboBox *drag_direction;
+
+  // Qt frontend layout state. This intentionally stays outside CabanaSettingsState.
+  std::vector<uint8_t> geometry;
+  std::vector<uint8_t> video_splitter_state;
+  std::vector<uint8_t> window_state;
+  std::vector<uint8_t> message_header_state;
+
+  // UI layout state (dock layout, window geometry, table state), owned by the imgui frontend
+  std::string ui_state;
+
+  Observable<> changed;
 };
 
 extern Settings settings;

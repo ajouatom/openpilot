@@ -1,22 +1,17 @@
 #pragma once
 
-#include <QCheckBox>
 #include <algorithm>
 #include <memory>
 #include <set>
-#include <vector>
 
 #include "common/prefix.h"
 #include "tools/cabana/streams/abstractstream.h"
 #include "tools/replay/replay.h"
 
-Q_DECLARE_METATYPE(std::shared_ptr<LogReader>);
-
 class ReplayStream : public AbstractStream {
-  Q_OBJECT
-
 public:
-  ReplayStream(QObject *parent);
+  ReplayStream();
+  ~ReplayStream();
   void start() override { replay->start(); }
   bool loadRoute(const std::string &route, const std::string &data_dir, uint32_t replay_flags = REPLAY_FLAG_NONE, bool auto_source = false);
   bool eventFilter(const Event *event);
@@ -26,7 +21,9 @@ public:
   inline std::string carFingerprint() const override { return replay->carFingerprint(); }
   double minSeconds() const override { return replay->minSeconds(); }
   double maxSeconds() const { return replay->maxSeconds(); }
-  inline QDateTime beginDateTime() const { return QDateTime::fromSecsSinceEpoch(replay->routeDateTime()); }
+  inline std::chrono::system_clock::time_point beginDateTime() const override {
+    return std::chrono::system_clock::from_time_t(replay->routeDateTime());
+  }
   inline uint64_t beginMonoTime() const override { return replay->routeStartNanos(); }
   inline void setSpeed(float speed) override { replay->setSpeed(speed); }
   inline float getSpeed() const { return replay->getSpeed(); }
@@ -34,24 +31,13 @@ public:
   inline bool isPaused() const override { return replay->isPaused(); }
   void pause(bool pause) override;
 
-signals:
-  void qLogLoaded(std::shared_ptr<LogReader> qlog);
+  // invoked on the main thread
+  Observable<std::shared_ptr<LogReader>> qLogLoaded;
 
 private:
   void mergeSegments();
   std::unique_ptr<Replay> replay = nullptr;
+  Connection settings_connection_;
   std::set<int> processed_segments;
   std::unique_ptr<OpenpilotPrefix> op_prefix;
-};
-
-class OpenReplayWidget : public AbstractOpenStreamWidget {
-  Q_OBJECT
-
-public:
-  OpenReplayWidget(QWidget *parent = nullptr);
-  AbstractStream *open() override;
-
-private:
-  QLineEdit *route_edit;
-  std::vector<QCheckBox *> cameras;
 };
