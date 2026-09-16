@@ -11,6 +11,7 @@ CONTROL_N_T_IDX = ModelConstants.T_IDXS[:CONTROL_N]
 HYUNDAI_LONGITUDINAL_KP = 1.0
 HYUNDAI_LONGITUDINAL_KI = 0.0
 HYUNDAI_LONGITUDINAL_KF = 1.0
+STOPPING_ACCEL = -0.5  # m/s^2; formerly StoppingAccel=-50
 
 LongCtrlState = car.CarControl.Actuators.LongControlState
 
@@ -67,12 +68,7 @@ class LongControl:
 
     self.params = Params()
     self.readParamCount = 0
-    self.stopping_accel = self.params.get_float("StoppingAccel") * 0.01
-    if CP.brand == "hyundai" and self.stopping_accel == 0.0:
-      # Restore the default at startup for Hyundai, Kia, and Genesis instead
-      # of retaining the legacy stop target selected by a persisted zero.
-      self.params.put_int("StoppingAccel", -50)
-      self.stopping_accel = -0.5
+    self.stopping_accel = STOPPING_ACCEL
     self.j_lead = 0.0
 
     self.hyundai_fixed_longitudinal_tuning = CP.brand == "hyundai"
@@ -115,7 +111,6 @@ class LongControl:
     self.readParamCount += 1
     if self.readParamCount >= 100:
       self.readParamCount = 0
-      self.stopping_accel = self.params.get_float("StoppingAccel") * 0.01
     elif self.readParamCount == 10:
       self._refresh_longitudinal_tuning()
 
@@ -140,8 +135,7 @@ class LongControl:
       if soft_hold_active:
         output_accel = self.CP.stopAccel
 
-      stopAccel = self.stopping_accel if self.stopping_accel < 0.0 else self.CP.stopAccel
-      if output_accel > stopAccel:
+      if output_accel > self.stopping_accel:
         output_accel = min(output_accel, 0.0)
         output_accel -= self.CP.stoppingDecelRate * DT_CTRL
       self.reset()
