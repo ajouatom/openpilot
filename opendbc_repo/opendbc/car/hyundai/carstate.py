@@ -10,7 +10,7 @@ from opendbc.car.common.conversions import Conversions as CV
 from opendbc.car.hyundai.hyundaicanfd import CanBus
 from opendbc.car.hyundai.values import HyundaiFlags, CAR, DBC, Buttons, CarControllerParams, CAMERA_SCC_CAR, HyundaiExtFlags, \
                                        EV_MODE_ACTIVE_VALUES, EV_MODE_STATUS_ADDR, EV_MODE_STATUS_DLC, EV_MODE_STATUS_MSG, \
-                                       EV_MODE_STATUS_SIGNAL
+                                       EV_MODE_STATUS_SIGNAL, HyundaiFlagsSP
 from opendbc.car.interfaces import CarStateBase
 
 from openpilot.common.params import Params
@@ -284,6 +284,14 @@ class CarState(CarStateBase):
     self.cp_cam = None
     self.cp_alt = None
     self.controls_ready_count = 0
+
+    #ESCC
+    #self.escc_enabled = True if Params().get_int("EnableEscc") == 1 else False
+    self.escc_aeb_warning = 0
+    self.escc_aeb_dec_cmd_act = 0
+    self.escc_cmd_act = 0
+    self.escc_aeb_dec_cmd = 0
+    self.showDebugLog = 0 #Params().get_int("ShowDebugLog")
 
     # trailer detection
     self.trailer_connected = False
@@ -575,6 +583,44 @@ class CarState(CarStateBase):
           aeb_braking = False
       ret.stockFcw = (aeb_warning or scc_warning) and not aeb_braking
       ret.stockAeb = aeb_warning and aeb_braking
+    #加上ESCC的数据
+    elif self.CP.spFlags & HyundaiFlagsSP.SP_ENHANCED_SCC:
+      use_fca = self.CP.flags & HyundaiFlags.USE_FCA
+      if use_fca:
+        # FCA11 既可能在动力总线(CAN 0)也可能在摄像头总线(CAN 2)。
+        # 上面的 add_if_seen() 已经把它注册在实际携带它的那个 parser 上，
+        # 所以这里必须选同一个 parser。无条件从 cp 读会经由 VLDict 把该地址
+        # 注册到 CAN 0，而 CAN 0 上根本没有它，反过来会导致 can_valid 失败。
+        aeb_parser = cp_cam if "FCA11" in cp_cam.vl else cp
+        aeb_src = "FCA11"
+        aeb_sig = "FCA_CmdAct"
+        aeb_warning_sig = "CF_VSM_Warn"
+        aeb_braking_sig = "CF_VSM_DecCmdAct"
+        aeb_braking_cmd = "CR_VSM_DecCmd"
+      else:
+        aeb_parser = cp
+        aeb_src = "ESCC"
+        aeb_sig = "AEB_CmdAct"
+        aeb_warning_sig = "CF_VSM_Warn_SCC12"
+        aeb_braking_sig = "CF_VSM_DecCmdAct_SCC12"
+        aeb_braking_cmd = "CR_VSM_DecCmd_SCC12"
+
+      aeb_values = aeb_parser.vl[aeb_src]
+      aeb_warning = aeb_values[aeb_warning_sig] != 0
+      aeb_braking = aeb_values[aeb_braking_sig] != 0 or aeb_values[aeb_sig] != 0
+      ret.stockFcw = aeb_warning and not aeb_braking
+      ret.stockAeb = aeb_warning and aeb_braking
+      if not use_fca:
+        self.escc_aeb_warning = aeb_values[aeb_warning_sig]
+        self.escc_aeb_dec_cmd_act = aeb_values[aeb_braking_sig]
+        self.escc_cmd_act = aeb_values[aeb_sig]
+        self.escc_aeb_dec_cmd = aeb_values[aeb_braking_cmd]
+      try:
+        if (self.showDebugLog & 64) > 0:
+          escc_data = cp.vl["ESCC"]
+          print(f"CarState ESCC: {escc_data}")
+      except KeyError:
+        pass
 
     if self.CP.enableBsm:
       ret.leftBlindspot = cp.vl["LCA11"]["CF_Lca_IndLeft"] != 0
