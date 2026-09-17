@@ -67,8 +67,12 @@ an older compiled big model. Explicit ONNX overrides retain their existing compi
 - Changed Python files compile; new adapter and focused tests pass lint. Existing
   unrelated lint findings in the downloader/build files were preserved.
 
-This workstation has no matching USB AMD eGPU. Device-side loading, first-use warp
-compilation, inference timing and on-road behavior have not been validated.
+A subsequent C4 trial on AGNOS 19.6.3-carrot confirmed that the pinned artifact
+loads and produces live camera inference through its matching runtime. A passive
+10-second stationary observation received 200 consecutive model frames with
+finite position/velocity values and median execution time 39.56 ms. This does
+not validate driving behavior. The ongoing OS, Bluetooth and tinygrad review
+is recorded in [the AGNOS trial](agnos_19_8_bluetooth_trial.md).
 
 Docs-Not-Needed: This experiment changes a pinned model and its private runtime,
 not a user setting. Its web-only model label is implemented in the localized UI;
