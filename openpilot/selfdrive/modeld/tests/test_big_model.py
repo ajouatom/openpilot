@@ -60,14 +60,28 @@ def test_manifest_resolves_relative_https_url():
   assert manifest.cache_filename.endswith(".onnx")
 
 
-def test_default_manifest_is_pinned_to_cinque_v2(monkeypatch):
+def test_default_manifest_is_pinned_to_cinque_v3(monkeypatch):
   monkeypatch.setattr(big_model, "urlopen", lambda *_args, **_kwargs: pytest.fail("default manifest must be built in"))
   manifest = big_model.fetch_manifest()
-  assert big_model.DEFAULT_MANIFEST_URL == "https://upload.shind0.synology.me/models/comma4-big-cinque-v2/manifest.json"
-  assert manifest.model_id == "comma-pr38823-cinque-v2-37bfa141-09d080f3"
-  assert manifest.size == 766_040_736
-  assert manifest.sha256 == "09d080f36965bb2a0790500452bd328aa03c484d0222aa79d1ad9f021a522aec"
-  assert manifest.url == "https://upload.shind0.synology.me/models/comma4-big-cinque-v2/big_driving_supercombo.onnx"
+  assert big_model.DEFAULT_MANIFEST_URL == "https://upload.shind0.synology.me/models/comma4-big-cinque-v3/manifest.json"
+  assert manifest.model_id == "comma-pr38932-cinque-v3-892fc3a1-e758b96d"
+  assert manifest.size == 776_634_338
+  assert manifest.sha256 == "e758b96df27858ea97122d18554930d04f9f8bda417417074edfb3a72b008d0b"
+  assert manifest.url == "https://upload.shind0.synology.me/models/comma4-big-cinque-v3/big_driving_tinygrad.pkl"
+  assert manifest.precompiled_only
+  assert manifest.cache_filename == "big_driving_tinygrad-e758b96df27858ea.pkl"
+
+
+def test_precompiled_only_model_never_uses_a_local_onnx_build(tmp_path, monkeypatch):
+  from openpilot.selfdrive.modeld import helpers, precompiled_model
+  manifest = big_model.fetch_manifest()
+  monkeypatch.setattr(big_model, 'active_manifest', lambda: manifest)
+  monkeypatch.setattr(helpers, 'active_manifest', lambda: manifest)
+  monkeypatch.setattr(precompiled_model, 'installed', lambda *args: None)
+  monkeypatch.setattr(helpers, 'modeld_pkl_path', lambda **kw: pytest.fail('no ONNX compiler artifact for v3'))
+  assert not big_model.active_model_compiled()
+  assert helpers.active_usbgpu_compiled_path() is None
+  assert helpers.usbgpu_compiled_path() is None
 
 
 def test_big_model_tinygrad_custom_op_is_supported():

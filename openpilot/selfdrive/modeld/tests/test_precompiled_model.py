@@ -105,3 +105,39 @@ def test_wrong_resume_range_is_rejected(tmp_path, monkeypatch):
   monkeypatch.setattr(pm, 'urlopen', lambda *a, **kw: Response(b'piled', 206, {'Content-Range': 'bytes 0-4/5'}))
   with pytest.raises(OSError, match='resume'):
     pm.download(artifact, target)
+
+
+def test_generic_catalog_is_bound_to_the_pickle_hash():
+  value, _ = catalog()
+  value.update(format='comma-generic-onnx', model_sha256=value['pickle']['sha256'])
+  del value['onnx_sha256']
+  pm.validate_catalog(copy.deepcopy(value), value['model_sha256'], 'https://nas.example/precompiled.json')
+  value['pickle']['sha256'] = 'b' * 64
+  with pytest.raises(ValueError, match='selected model hash'):
+    pm.validate_catalog(value, value['model_sha256'], 'https://nas.example/precompiled.json')
+
+
+def test_generic_install_reuses_verified_download(tmp_path, monkeypatch):
+  from openpilot.selfdrive.modeld.big_model import BigModelManifest, model_path
+  value, data = catalog()
+  value.update(format='comma-generic-onnx', model_sha256=value['pickle']['sha256'])
+  # The new runtime carries upstream's warp compiler in place of the old fused module.
+  runtime = io.BytesIO()
+  with tarfile.open(fileobj=runtime, mode='w:gz') as tar:
+    for name in ('examples/openpilot/compile_warp.py', 'tinygrad/__init__.py'):
+      entry = tarfile.TarInfo(name)
+      entry.size = 1
+      tar.addfile(entry, io.BytesIO(b'\n'))
+  data['runtime'] = runtime.getvalue()
+  value['runtime'].update(size=len(data['runtime']), sha256=hashlib.sha256(data['runtime']).hexdigest())
+  model = BigModelManifest('v3', 'big_driving_tinygrad.pkl', len(data['pickle']), value['model_sha256'],
+                           'https://nas.example/v3/big_driving_tinygrad.pkl')
+  model_path(model, tmp_path).write_bytes(data['pickle'])
+  def fetch(request, **kwargs):
+    name = request.full_url.rsplit('/', 1)[-1]
+    assert name != 'pickle', 'the verified source must be reused'
+    return Response(json.dumps(value).encode() if name == 'precompiled.json' else data[name])
+  monkeypatch.setattr(pm, 'urlopen', fetch)
+  path = pm.ensure_precompiled(model, tmp_path)
+  assert path.read_bytes() == data['pickle']
+  assert pm.installed(model, tmp_path) == path
