@@ -229,6 +229,7 @@ class TestRadarGroup3:
   def test_group3_active_track(self):
     track = self.parse(0x406, "e1043b0f02590e692a227e16f80fe00f28fcc753a20a0000")
 
+    assert track["OBJECT_ID"] == 15
     assert track["OBJECT_LENGTH"] == pytest.approx(4.4)
     assert track["LONG_DIST"] == pytest.approx(55.4)
     assert track["LAT_DIST"] == pytest.approx(-3.0)
@@ -267,12 +268,23 @@ class TestRadarGroup3:
     empty_dat = bytes.fromhex("c03d3b0000000000ff0700000000000000d0020000000000")
     packets = [(addr, active_dat if addr == 0x406 else empty_dat, 1) for addr in range(0x400, 0x41E)]
     radar_data = radar_interface.update([0, packets])
-    point = next(point for point in radar_data.points if point.trackId == 38)
+    point = next(point for point in radar_data.points if point.trackId >= 1_000_000)
 
     assert point.measured
     assert point.dRel == pytest.approx(53.1)
     assert point.yRel == pytest.approx(-3.0)
     assert point.vRel == pytest.approx(4.4)
+    first_id = point.trackId
+    packets = [(addr, active_dat if addr == 0x410 else empty_dat, 1) for addr in range(0x400, 0x41E)]
+    moved = radar_interface.update([0, packets])
+    assert [p.trackId for p in moved.points] == [first_id]
+    assert len([p for p in radar_interface.pts.values() if p.trackId == first_id]) == 1
+    # Missing the occupied slot must not republish CANParser's cached value.
+    missing = radar_interface.update([0, [(addr, empty_dat, 1) for addr in range(0x400, 0x41E) if addr != 0x410]])
+    assert not missing.points
+    returned = radar_interface.update([0, packets])
+    assert returned.points[0].trackId != first_id
+
 
 
 class TestCornerRadarObjectIdentity:
