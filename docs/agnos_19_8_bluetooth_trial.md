@@ -298,6 +298,46 @@ cruise/desire regressions. These tests use temporary command files, never vehicl
 input or CAN. Thirteen web tests pass and the production assets build. Multiple
 physical accessories and actual long/double operation are not yet verified.
 
+### Native button-long actions and engagement follow-up
+
+The initial HID speed actions changed set speed but did not produce an engagement
+request. RES/+ and SET/- now request engagement when disabled, including their
+native long variants. The request uses the existing `activateCruise`/car-event
+path; it never sets selfdrive state directly. Manual button intent is independent
+of the automatic-engagement preference. CAN validity, Drive, cruise availability,
+physical-button priority, brake/gas checks, hold/steering interlocks and normal
+selfdrived no-entry events remain. A negative request already produced that frame
+is not replaced, and SET during soft hold keeps its existing cancel behavior.
+
+The action selectors now include every button with a distinct native long handler:
+
+| Native action | Result |
+| --- | --- |
+| `accelCruiseLong` / `decelCruiseLong` | One existing 10-unit speed step; can request engagement while disabled |
+| `gapAdjustCruiseLong` | Existing driving-mode cycle |
+| `lfaButtonLong` | Existing lane-line mode toggle |
+| `cancelLong` | Cruise cancellation and lateral disable |
+
+Short `lfaButton` and `cancel` are also selectable. These action names are separate
+from the remote's physical gesture: a short remote press may execute a native
+long action without waiting 700 ms. No synthetic held state or repeat is left
+behind. Fixed actions such as lane requests, paddle deceleration and CarrotCruise
+have no separate native long handler; they can still be assigned to any gesture.
+Existing user mappings are preserved, and long actions are not auto-assigned.
+
+Explicit Bluetooth cancellation uses `activateCruise=-3`, leaving the existing
+automatic -1/-2 meanings unchanged. PCM vehicles also receive the normal cancel
+event for this request. The Hyundai stock-cruise button path now accepts only
+positive activation requests, so negative cancellation cannot accidentally send
+RES. This is compatibility for the experiment's new cancel actions; no panda
+safety limits or schema changes are involved.
+
+Validation: 140 C4 Python tests and 14 web tests pass. Coverage includes disabled
+cruise with automatic engagement off, all five native long handlers, physical
+priority/interlocks, actual selfdrived state-machine no-entry checks and PCM/non-PCM
+cancel transitions. Tests generate no vehicle commands. Actual road engagement
+has not been exercised by the agent.
+
 For rollback while stationary, stop comma, restore the matching previous
 openpilot OS manifest/version (the pre-trial commit is in `before.json`), select
 the preserved B slot with `sudo abctl --set_active 1`, and reboot. Restoring the

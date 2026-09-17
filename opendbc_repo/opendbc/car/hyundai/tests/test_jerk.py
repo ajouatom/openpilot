@@ -74,6 +74,22 @@ def build_jerk_controller():
   return controller
 
 
+@pytest.mark.parametrize('activation', [-3, -2, -1, 0, 1])
+def test_cancel_request_never_becomes_stock_cruise_resume(activation):
+  controller = CarController.__new__(CarController)
+  controller.activateCruise = 0
+  controller.prev_clu_speed = 72
+  controller.button_spam1 = controller.button_spam2 = 8
+  controller.frame = 100
+  controller.last_button_frame = controller.button_wait = controller.button_spamming_count = 0
+  CC = SimpleNamespace(enabled=False, hudControl=SimpleNamespace(setSpeed=20, leadVisible=True))
+  CS = SimpleNamespace(is_metric=True, cruise_buttons=[0], out=SimpleNamespace(
+    brakePressed=False, gasPressed=False, brakeHoldActive=False, parkingBrake=False,
+    vEgo=20, activateCruise=activation, cruiseState=SimpleNamespace(speed=20)))
+  assert controller.make_spam_button(CC, CS) == (1 if activation > 0 else 0)
+  assert controller.activateCruise == int(activation > 0)
+
+
 @pytest.mark.parametrize(
   "accel",
   [

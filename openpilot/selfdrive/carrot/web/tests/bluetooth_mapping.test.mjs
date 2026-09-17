@@ -1,6 +1,17 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { mappingButtons, gestureToken, splitGesture, learnEvents } from "../src/features/tools/bluetooth_mapping.js";
+import { mappingButtons, gestureToken, splitGesture, learnEvents, BUTTON_ACTIONS, REMOTE_ACTIONS } from "../src/features/tools/bluetooth_mapping.js";
+
+test("every native button has a separately selectable one-shot long action", () => {
+  for (const button of BUTTON_ACTIONS) {
+    assert.ok(REMOTE_ACTIONS.includes(button));
+    assert.ok(REMOTE_ACTIONS.includes(`${button}Long`));
+  }
+  assert.equal(new Set(REMOTE_ACTIONS).size, REMOTE_ACTIONS.length);
+  const mapping = { up: 'accelCruiseLong' };
+  assert.deepEqual(mappingButtons(mapping), ['up']);
+  assert.equal(gestureToken('up', 'single'), 'up');
+});
 
 test("existing single mappings and new gestures share one button row", () => {
   assert.deepEqual(mappingButtons({ up: "accelCruise", "up@double": "carrotCruise", "key:115@long": "paddleDecel" }), ["up", "key:115"]);

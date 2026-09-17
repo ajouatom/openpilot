@@ -1,4 +1,4 @@
-import { mappingButtons, gestureToken, splitGesture, learnEvents } from "./bluetooth_mapping.js";
+import { mappingButtons, gestureToken, splitGesture, learnEvents, REMOTE_ACTIONS } from "./bluetooth_mapping.js";
 
 const WORDS = {
   ko: {
@@ -22,6 +22,10 @@ const WORDS = {
     multi: "여러 장치를 함께 사용할 수 있으며 장치별로 매핑을 저장합니다 (최대 16개 등록, 실제 동시 연결 수는 기기에 따라 다름). 입력은 순서대로 처리하며 400ms 지난 명령은 버립니다. 키 등록 시험은 선택한 한 장치에만 적용됩니다. 다른 활성 장치는 계속 동작합니다.",
     carrotHelp: "CarrotCruise는 기존 가속 제한 모드에 진입합니다. 다시 눌러도 해제되지 않으며 크루즈 +로 해제합니다. 실제 가속 제한은 해당 차종의 기존 지원과 CarrotCruiseDecel 설정을 따릅니다.",
     mappingOn: "매핑 켜짐", mappingOff: "매핑 꺼짐", receiving: "입력 수신 중",
+    accelCruiseLong: "크루즈 + 길게 (10단위 조절)", decelCruiseLong: "크루즈 − 길게 (10단위 조절)",
+    gapAdjustCruiseLong: "갭 길게 (주행 모드 순환)", lfaButton: "LFA 버튼", lfaButtonLong: "LFA 길게 (차선 모드 전환)",
+    cancelCruise: "크루즈 취소", cancelLong: "취소 길게 (크루즈·조향 해제)",
+    buttonHelp: "크루즈 +/−는 크루즈가 꺼져 있으면 기존 활성화 조건을 거쳐 켜기를 요청합니다. 버튼의 ‘길게’ 동작도 기능 목록에서 선택할 수 있습니다. 예: 리모컨 짧게 누르기 → 크루즈 + 길게. 이 경우 추가로 기다리지 않고 핸들 버튼의 롱 동작을 한 번 실행합니다. LFA와 갭의 동작은 기존 설정을 따릅니다.",
   },
   en: {
     title: "Bluetooth remotes", close: "Close", scan: "Scan devices (30s)", on: "Enable Bluetooth", off: "Disable Bluetooth",
@@ -44,12 +48,17 @@ const WORDS = {
     multi: "Use multiple devices with separate mappings (up to 16 saved; simultaneous connections depend on hardware). Commands are processed in order and expire after 400ms. Learning tests only the selected device; other enabled devices continue operating.",
     carrotHelp: "CarrotCruise enters the existing acceleration-limiting mode. Repeating it keeps the mode on; Cruise + exits it. Actual limiting follows existing vehicle support and CarrotCruiseDecel.",
     mappingOn: "Mapping on", mappingOff: "Mapping off", receiving: "Receiving input",
+    accelCruiseLong: "Cruise + long (10-step adjustment)", decelCruiseLong: "Cruise − long (10-step adjustment)",
+    gapAdjustCruiseLong: "Gap long (cycle driving mode)", lfaButton: "LFA button", lfaButtonLong: "LFA long (toggle lane-line mode)",
+    cancelCruise: "Cancel cruise", cancelLong: "Cancel long (cruise and lateral off)",
+    buttonHelp: "Cruise +/− request engagement through existing checks when cruise is off. Native long-button actions are separate choices: for example, a short remote press can run Cruise + long once, with no additional hold delay. LFA and gap actions follow existing settings.",
   },
 };
 const DEFAULTS = { up: "accelCruise", down: "decelCruise", left: "laneLeft", right: "laneRight", center: "paddleDecel", "1": "gapAdjustCruise", "2": "none" };
-const ACTIONS = ["none", "accelCruise", "decelCruise", "laneLeft", "laneRight", "paddleDecel", "gapAdjustCruise", "carrotCruise"];
+const ACTIONS = REMOTE_ACTIONS;
 let dialog, state, selected, draft, timer, devicesSignature, busy = false, promptId, dirty = false;
 const t = (key) => WORDS[typeof LANG !== "undefined" && LANG === "ko" ? "ko" : "en"][key] || key;
+const actionLabel = (action) => t(action === "cancel" ? "cancelCruise" : action);
 const tokenLabel = (token) => { const [base, gesture] = splitGesture(token); return `${t(base)} · ${t(gesture)}`; };
 let seenEvents = new Set();
 const element = (tag, text, className) => { const e = document.createElement(tag); if (text != null) e.textContent = text; if (className) e.className = className; return e; };
@@ -105,7 +114,7 @@ function renderEditor() {
     seenEvents = new Set((state.runtime.recent_events || []).map(e => e.id));
     await api("learn", { address: selected, enabled: true }); part("notice").textContent = t("waiting");
   }), button("stop", async () => { await api("learn", { address: selected, enabled: false }); }));
-  editor.append(actions, element("p", t("learnHelp")), element("p", t("gestures")), element("p", t("carrotHelp")), region("notice"), region("capture"), region("event", "output")); lock();
+  editor.append(actions, element("p", t("learnHelp")), element("p", t("gestures")), element("p", t("buttonHelp")), element("p", t("carrotHelp")), region("notice"), region("capture"), region("event", "output")); lock();
 }
 function renderMappings() {
   const rows = part("mapping"); rows.replaceChildren();
@@ -114,7 +123,7 @@ function renderMappings() {
     for (const gesture of ["single", "double", "long"]) {
       const token = gestureToken(base, gesture), label = element("label", t(gesture)), select = element("select"); select.dataset.mutation = "true";
       select.setAttribute("aria-label", tokenLabel(token));
-      for (const value of ACTIONS) { const option = element("option", t(value)); option.value = value; select.append(option); }
+      for (const value of ACTIONS) { const option = element("option", actionLabel(value)); option.value = value; select.append(option); }
       select.value = draft.mapping[token] || "none"; select.onchange = () => { draft.mapping[token] = select.value; dirty = true; };
       label.append(select); row.append(label);
     }
@@ -174,7 +183,7 @@ async function refresh() {
     const fresh = events.filter(e => e.address === selected && !seenEvents.has(e.id));
     for (const event of fresh) {
       seenEvents.add(event.id);
-      part("event").textContent = `${tokenLabel(event.button)} → ${t(event.action)} · ${t(event.reason === "test" ? "testEvent" : event.emitted ? "sent" : "ignored")}`;
+      part("event").textContent = `${tokenLabel(event.button)} → ${actionLabel(event.action)} · ${t(event.reason === "test" ? "testEvent" : event.emitted ? "sent" : "ignored")}`;
     }
     if (learning?.address === selected && learnEvents(draft.mapping, fresh)) { dirty = true; renderMappings(); }
     if (seenEvents.size > 256) seenEvents = new Set(events.map(e => e.id));
