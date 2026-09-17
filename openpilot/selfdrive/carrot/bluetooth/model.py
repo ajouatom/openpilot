@@ -9,10 +9,13 @@ import uuid
 
 CONFIG_PATH = Path('/data/carrot/bluetooth.json')
 RUNTIME = Path('/dev/shm/carrot-bluetooth')
-ACTIONS = ('none', 'accelCruise', 'decelCruise', 'laneLeft', 'laneRight', 'paddleDecel', 'gapAdjustCruise', 'carrotCruise')
+REMOTE_BUTTONS = ('accelCruise', 'decelCruise', 'gapAdjustCruise', 'lfaButton', 'cancel')
+ACTIONS = ('none', *REMOTE_BUTTONS, *(button + 'Long' for button in REMOTE_BUTTONS),
+           'laneLeft', 'laneRight', 'paddleDecel', 'carrotCruise')
 DOUBLE_SECONDS = 0.35
 LONG_SECONDS = 0.7
 COMMAND_TTL = 0.4
+BLUETOOTH_CANCEL = -3  # Explicit driver cancel, including PCM cruise; -1/-2 retain their existing meanings.
 DEFAULT_MAPPING = {'up': 'accelCruise', 'down': 'decelCruise', 'left': 'laneLeft', 'right': 'laneRight',
                    'center': 'paddleDecel', '1': 'gapAdjustCruise', '2': 'none'}
 MAC = re.compile(r'^(?:[0-9A-F]{2}:){5}[0-9A-F]{2}$')
