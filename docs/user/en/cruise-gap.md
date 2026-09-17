@@ -123,7 +123,7 @@ This value sets the stop-entry acceleration threshold and the target used when g
 
 ### CANFD Stop Retry (Experimental) · `CanfdStopRetry`
 
-Available under Vehicle & Hardware → CANFD·HDA, with **OFF** as the default. Applies only to Hyundai/Kia CANFD with openpilot longitudinal control. Reboot the device after changing it; editing the setting during a drive does not change the current stopping method.
+Available under Vehicle & Hardware → CANFD·HDA, with **OFF** as the default. Applies only to Hyundai/Kia CANFD with openpilot longitudinal control. Changes apply during driving within about 0.5 seconds without rebooting. Retry state resets only when switching ON or OFF; leaving the setting unchanged preserves an ongoing retry.
 
 - **OFF:** Retains existing stop requests, negative acceleration requests, InfoDisplay, and byte7 handling.
 - **ON:** Sends StopReq=1 with aReq=0 during low-speed stop requests and sets InfoDisplay and byte7 to zero. The lower band uses a fixed experimental value of 0.20 during stop requests, without copying stock SCC values.
@@ -132,7 +132,7 @@ Available under Vehicle & Hardware → CANFD·HDA, with **OFF** as the default. 
 The fixed stopping acceleration above still applies. When enabled, the CAN output stage substitutes zero acceleration during stop requests; recovery requests the stronger deceleration of the existing request and -0.50 m/s².
 
 > [!CAUTION]
-> Complete stopping and collision prevention have not been established across vehicles. Validate only in a controlled area where you can brake directly. Switch OFF and reboot to restore the previous method.
+> Complete stopping and collision prevention have not been established across vehicles. Validate only in a controlled area where you can brake directly. Switch OFF to restore the previous method at the next settings refresh. Switching while stopped also changes the transmitted requests, so change it only when prepared to brake directly.
 
 ### `VEgoStopping`
 

@@ -223,7 +223,7 @@ Carrot Web 설정 화면에서는 다음 기능을 사용할 수 있습니다.
 |---|---|---|
 | 현대·기아 | `HyundaiCameraSCC`, `IsLdwsCar`, `HapticFeedbackWhenSpeedCamera` | SCC 연결 방식, LDWS 차량과 카메라 구간 햅틱 |
 | CANFD·HDA | `CanfdHDA2`, `CanfdDebug`, `HDPuse` | HDA2 차량과 CAN FD 디버그·HDP 기능 |
-| CANFD·HDA | `CanfdStopRetry` | 기본 OFF. ON일 때만 순정형 정지 요청과 움직임 감지 후 한 번의 감속·재요청을 적용합니다. 현대·기아 CANFD 오픈파일럿 종방향 전용이며 변경 후 재부팅이 필요합니다. [정지 재시도 설명](cruise-gap.md#canfd-정지-재시도-시험--canfdstopretry)을 확인하세요. |
+| CANFD·HDA | `CanfdStopRetry` | 기본 OFF. ON일 때만 순정형 정지 요청과 움직임 감지 후 한 번의 감속·재요청을 적용합니다. 현대·기아 CANFD 오픈파일럿 종방향 전용이며 주행 중에도 약 0.5초 이내 반영됩니다. [정지 재시도 설명](cruise-gap.md#canfd-정지-재시도-시험--canfdstopretry)을 확인하세요. |
 | 레이더 | `EnableRadarTracks`, `EnableCornerRadar`, `CarrotRadarMode`, `CarrotRadarCutInSensitivity` | SCC 레이더, 레이더 트랙, 코너 레이더와 당근레이더 처리·컷인 감도 |
 | 운전자 모니터링 | `DisableDM`, `MuteDoor`, `MuteSeatbelt` | 운전자 모니터링과 일부 차량 경고음 처리 |
 | 차량 보조 | `MaxAngleFrames`, `SpeedFromPCM` | 최대 조향각 관련 프레임과 순정 SCC 속도 제어 방식 |

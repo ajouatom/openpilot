@@ -11,7 +11,7 @@ from opendbc.car.hyundai.values import CAR, HyundaiFlags
 
 
 @pytest.mark.parametrize("enabled", [False, True])
-def test_setting_is_latched_at_controller_start(monkeypatch, enabled):
+def test_setting_initialization_and_live_refresh(monkeypatch, enabled):
   settings = {"CanfdStopRetry": enabled}
   params = SimpleNamespace(get_bool=lambda key: settings.get(key, False), get_int=lambda key: 0)
   monkeypatch.setattr(carcontroller, "Params", lambda: params)
@@ -19,7 +19,8 @@ def test_setting_is_latched_at_controller_start(monkeypatch, enabled):
   controller = carcontroller.CarController({Bus.pt: "hyundai_canfd_generated"}, cp)
   assert isinstance(controller.canfd_stopping, CanfdStopping) == enabled
   settings["CanfdStopRetry"] = not enabled
-  assert isinstance(controller.canfd_stopping, CanfdStopping) == enabled
+  controller._update_canfd_stop_retry(params)
+  assert isinstance(controller.canfd_stopping, CanfdStopping) != enabled
 
 
 def step(controller, **overrides):
@@ -187,6 +188,45 @@ def test_disabled_experiment_preserves_legacy_stopping(camera, stock_info):
     assert values["AccelLimitBandLower"] == pytest.approx(0)
     assert values["InfoDisplay"] == (5 if camera and stock_info == 5 else 4)
     assert values["ZEROS_7"] == (1 if camera else 0)
+
+
+@pytest.mark.parametrize("camera", [True, False])
+def test_live_toggle_changes_packed_commands_and_retains_retry_progress(camera):
+  controller = carcontroller.CarController.__new__(carcontroller.CarController)
+  controller.canfd_stopping = None
+  settings = {"CanfdStopRetry": False}
+  params = SimpleNamespace(get_bool=lambda key: settings[key])
+  cs = make_cs()
+  assert send(camera, controller.canfd_stopping, cs)["aReqRaw"] == pytest.approx(-0.5)
+
+  settings["CanfdStopRetry"] = True
+  controller._update_canfd_stop_retry(params)
+  values = send(camera, controller.canfd_stopping, cs)
+  assert values["StopReq"] == 1
+  assert values["aReqRaw"] == pytest.approx(0)
+  initial = controller.canfd_stopping
+  # Polling an unchanged ON setting must not restart the request timer or retry budget.
+  for _ in range(170):
+    controller._update_canfd_stop_retry(params)
+    send(camera, controller.canfd_stopping, cs)
+  assert controller.canfd_stopping is initial
+  assert initial.phase == StopPhase.fallback
+
+  settings["CanfdStopRetry"] = False
+  controller._update_canfd_stop_retry(params)
+  assert controller.canfd_stopping is None
+  values = send(camera, controller.canfd_stopping, cs)
+  assert values["StopReq"] == 1
+  assert values["aReqRaw"] == pytest.approx(-0.5)
+  assert values["AccelLimitBandLower"] == pytest.approx(0)
+
+  settings["CanfdStopRetry"] = True
+  controller._update_canfd_stop_retry(params)
+  assert controller.canfd_stopping is not initial
+  assert not controller.canfd_stopping.retried
+  values = send(camera, controller.canfd_stopping, cs)
+  assert values["StopReq"] == 1
+  assert values["aReqRaw"] == pytest.approx(0)
 
 
 @pytest.mark.parametrize("camera", [True, False])
