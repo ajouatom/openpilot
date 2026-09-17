@@ -30,6 +30,11 @@
   explicitly requests them. Keep their model selections, generated display assets, compatibility
   changes and dedicated features scoped to those experiments; agree their maintenance scope
   with the user instead of automatically restoring the retired multi-branch synchronization rule.
+- As of 2026-09-17, the user explicitly maintains `carrot-cinque_v3` as an experiment
+  derived from `carrot-wip`. Apply future common `carrot-wip` changes to this branch too,
+  while preserving its pinned Cinque v3 model, generated model labels, and dedicated
+  runtime compatibility changes. Verify both maintained branches are pushed when shared
+  changes are made. This exception does not restore any retired branch.
 - On this Windows workstation, vehicle tmux session captures are stored under
   `\\DS1821P\openpilot\<branch>`. When tmux is mentioned, search the directory for the known
   branch for a vehicle folder whose name ends with the exact dongle ID. If the branch is unknown,
