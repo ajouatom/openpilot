@@ -132,11 +132,53 @@ Raw image SHA-256 values:
 - C3X/C4 boot: `dccd7965346b0a87a9f64cb6be257f6bb5d3d0f368c8655085efc1e460527f5a`
 - Common system: `375c5d22335770ac08750660bb5b29a3331c550d6a9875b35f36b88af792ea44`
 
-The initial C4 slot is `_b`, running AGNOS `19.6.3-carrot`. Its existing
+The initial C4 slot was `_b`, running AGNOS `19.6.3-carrot`. Its existing
 Bluetooth firmware partition contains `crbtfw11/20/21.tlv` and corresponding
 `crnv11/20/21.bin` files. No failed system services were present at the baseline
-check. New-OS boot, Bluetooth discovery/pairing and post-update inference are
-pending an offroad installation window; build success is not hardware validation.
+check. The user confirmed the vehicle was stationary. A three-second live
+check showed zero speed, valid car state, and neither enabled nor active control.
+The comma service was stopped before flashing. All inactive A-slot partitions
+passed a full raw-hash check before the standard updater activated that slot.
+The device booted `19.8-carrot-bt1`, `/BUILD` matched `f5b3f77`, and the kernel
+build timestamp was 2026-09-17 03:41:40 UTC. The previous B slot was preserved.
+
+Hardware results:
+
+- `/dev/btpower`, Bluetooth `ttyHS1` and GPS `ttyHS0` are present.
+- Native `hci0` powers on and reports BR/EDR, LE and secure-connections support.
+  Discovery found nearby devices over the air; no USB Bluetooth adapter was used.
+- Radio service restart succeeds. Firmware is mounted read-only from the active
+  Bluetooth partition, and `/var/lib/bluetooth` is backed by `/data/bluetooth`.
+- A second reboot with the enable flag present automatically starts the radio;
+  the controller remains powered and no system services are failed.
+- With Bluetooth enabled, a stationary 10-second live model observation received
+  201 consecutive frames, finite position/velocity values, zero frame drops and
+  median model execution time 39.28 ms (baseline: 39.56 ms). This brief sample
+  demonstrates operation, not a performance improvement or driving validation.
+- With comma stopped, the pinned v3 artifact loaded for both 1928x1208 and
+  1344x760 inputs and passed ten inference calls per format. Load times were
+  21.40 and 21.05 seconds respectively. The first invocation includes warm-up;
+  these synthetic IPC smoke timings are not the live modeld timing metric.
+- A pre-existing 108 MB `/cache` partition was full from accumulated boot logs.
+  This caused `agnos-debug` to fail after reboot. 61 older boot-log directories
+  were preserved under `/data/carrot-bluetooth-trial/debug-cache-backup`, leaving
+  the latest 40 in place. Restarting `agnos-debug` succeeded; no services remained
+  failed. This did not require an image or model code change.
+
+Evidence on the trial device: `/data/carrot-bluetooth-trial/before.json`,
+`staged.json` in that directory, `/data/carrot-bluetooth-observation-after.json`,
+and `/data/carrot-bluetooth-model-after.json`. The latter records both camera
+formats and the unchanged model checkpoint. Four device-manifest tests also pass.
+
+The user's remote appeared as `Yiser-J6`, advertising the BLE HID service and
+keyboard appearance after being put in pairing mode. Pairing/key-event tests are
+still in progress. No unidentified discovered accessory has been paired.
+
+For rollback while stationary, stop comma, restore the matching previous
+openpilot OS manifest/version (the pre-trial commit is in `before.json`), select
+the preserved B slot with `sudo abctl --set_active 1`, and reboot. Restoring the
+matching code avoids immediately requesting the new OS again. Do not flash the
+preserved slot as part of rollback.
 
 Docs-Not-Needed: Developer-only OS/model compatibility experiment with no
 user-facing setting addition or changed setting behavior.
