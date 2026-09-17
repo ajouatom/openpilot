@@ -27,11 +27,17 @@ def test_stationary_origin_mapping_and_no_http_command_endpoint(tmp_path, monkey
       pass
 
   monkeypatch.setattr(feature, 'Bluez', Client)
+  async def enabled():
+    return True
+  monkeypatch.setattr(feature, 'radio_enabled', enabled)
 
   async def run():
     app = web.Application()
     feature.register(app)
     async with TestClient(TestServer(app)) as client:
+      result = await client.get('/api/bluetooth')
+      assert result.status == 200
+      assert (await result.json())['radioEnabled']
       payload = {'devices': {MAC: {'profile': 'yiser-j6', 'enabled': True, 'mapping': DEFAULT_MAPPING}}}
       assert (await client.post('/api/bluetooth/config', json=payload)).status == 409
       atomic_json(tmp_path / 'status.json', {'time': time.monotonic(), 'stationary': True})

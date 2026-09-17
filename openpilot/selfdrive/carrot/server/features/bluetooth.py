@@ -1,6 +1,5 @@
 """Stationary-only Bluetooth setup. HTTP can configure mappings, never fire them."""
 import asyncio
-from pathlib import Path
 import time
 from urllib.parse import urlsplit
 
@@ -11,6 +10,18 @@ from openpilot.selfdrive.carrot.bluetooth.model import CONFIG_PATH, RUNTIME, ACT
 
 CLIENT = web.AppKey('bluetooth', Bluez)
 LOCK = web.AppKey('bluetooth_lock', asyncio.Lock)
+
+
+async def radio_enabled():
+  # BlueZ deliberately keeps the parent directory private because it contains bonds.
+  process = await asyncio.create_subprocess_exec('sudo', '-n', 'test', '-f', '/data/bluetooth/ENABLED',
+    stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL)
+  try:
+    return await asyncio.wait_for(process.wait(), 3) == 0
+  except TimeoutError:
+    process.kill()
+    await process.wait()
+    return False
 
 
 def runtime():
@@ -35,7 +46,7 @@ def guard(request):
 
 async def status(request):
   result = {'runtime': runtime(), 'config': config(), 'actions': ACTIONS, 'defaults': DEFAULT_MAPPING,
-            'radioEnabled': await asyncio.to_thread(Path('/data/bluetooth/ENABLED').exists)}
+            'radioEnabled': await radio_enabled()}
   try:
     result.update(await request.app[CLIENT].snapshot())
     result['available'] = True
