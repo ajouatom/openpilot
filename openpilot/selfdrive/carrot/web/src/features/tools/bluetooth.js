@@ -36,7 +36,7 @@ const WORDS = {
 };
 const DEFAULTS = { up: "accelCruise", down: "decelCruise", left: "laneLeft", right: "laneRight", center: "paddleDecel", "1": "gapAdjustCruise", "2": "none" };
 const ACTIONS = ["none", "accelCruise", "decelCruise", "laneLeft", "laneRight", "paddleDecel", "gapAdjustCruise"];
-let dialog, state, selected, draft, timer, busy = false, lastEvent, promptId, dirty = false;
+let dialog, state, selected, draft, timer, devicesSignature, busy = false, lastEvent, promptId, dirty = false;
 const t = (key) => WORDS[typeof LANG !== "undefined" && LANG === "ko" ? "ko" : "en"][key] || key;
 const element = (tag, text, className) => { const e = document.createElement(tag); if (text != null) e.textContent = text; if (className) e.className = className; return e; };
 const part = (id) => dialog.querySelector(`[data-bt="${id}"]`);
@@ -102,9 +102,13 @@ function renderMappings() {
   lock();
 }
 function renderDevices() {
+  const devices = [...state.devices].sort((a, b) => Number(b.paired) - Number(a.paired) || a.address.localeCompare(b.address));
+  const signature = JSON.stringify(devices.map(({ address, name, paired, connected, battery }) => ({ address, name, paired, connected, battery })));
+  if (signature === devicesSignature) return;
+  devicesSignature = signature;
   const list = part("devices"); list.replaceChildren();
   if (!state.devices.length) list.append(element("p", t("empty")));
-  for (const device of [...state.devices].sort((a, b) => Number(b.paired) - Number(a.paired) || a.address.localeCompare(b.address))) {
+  for (const device of devices) {
     const card = element("div", null, "bt-device"), name = element("strong", device.name || device.address);
     card.append(name, element("div", `${device.address} · ${device.connected ? t("connected") : device.paired ? t("paired") : ""}${device.battery != null ? ` · ${t("battery")} ${device.battery}%` : ""}`));
     const actions = element("div", null, "bt-actions");
@@ -156,7 +160,7 @@ async function refresh() {
 }
 function open() {
   if (dialog?.open) return;
-  dialog?.remove(); state = selected = draft = promptId = null; dirty = false;
+  dialog?.remove(); state = selected = draft = promptId = devicesSignature = null; dirty = false;
   dialog = element("dialog", null, "carrot-bt-dialog"); dialog.setAttribute("aria-label", t("title"));
   const header = element("div", null, "bt-actions"); header.append(element("h2", t("title")), button("close", () => dialog.close(), false));
   const actions = element("div", null, "bt-actions"), radio = button("on", () => api("radio", { enabled: !state.radioEnabled })); radio.dataset.bt = "radio";
@@ -165,6 +169,11 @@ function open() {
   part("error").setAttribute("role", "alert"); part("status").setAttribute("role", "status");
   dialog.addEventListener("close", () => { clearTimeout(timer); /* Test expiry is explicit; closing never silently re-enables commands. */ });
   document.body.append(dialog); dialog.showModal(); lock();
-  const poll = async () => { try { await refresh(); } catch (error) { part("error").textContent = error.message; } finally { if (dialog.open) timer = setTimeout(poll, 1000); } }; poll();
+  let pollFailed = false;
+  const poll = async () => {
+    try { await refresh(); if (pollFailed) part("error").textContent = ""; pollFailed = false; }
+    catch (error) { pollFailed = true; part("error").textContent = error.message; }
+    finally { if (dialog.open) timer = setTimeout(poll, 1000); }
+  }; poll();
 }
 globalThis.CarrotBluetooth = { init() { const button = document.getElementById("btnToolsBluetooth"); if (button) { button.textContent = t("title"); button.onclick = open; } } };
