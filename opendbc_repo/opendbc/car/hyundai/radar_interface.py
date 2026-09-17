@@ -9,6 +9,7 @@ from opendbc.car.interfaces import RadarInterfaceBase
 from opendbc.car.hyundai.values import DBC, HyundaiFlags, HyundaiExtFlags
 from openpilot.common.params import Params
 from opendbc.car.hyundai.hyundaicanfd import CanBus
+from opendbc.car.hyundai.radar_group3 import Group3Object, Group3TrackIds
 
 SCC_TID = 0
 RADAR_START_ADDR = 0x500
@@ -334,6 +335,8 @@ class RadarInterface(RadarInterfaceBase):
     self.corner_object_430_history = {}
     self.corner_object_430_noncenter_inward_frames = {}
 
+    self.group3_track_ids = Group3TrackIds()
+
     # Initialize pts
     if self.rcp_tracks is not None:
       total_tracks = self.radar_msg_count * (2 if self.radar_group1 else 1)
@@ -474,6 +477,25 @@ class RadarInterface(RadarInterfaceBase):
     return ret
 
   def _update(self, updated_messages):
+    if self.radar_group3:
+      objects = {
+        addr: Group3Object.from_signals(self.rcp_tracks.vl[f"RADAR_TRACK_{addr:x}"])
+        for addr in range(self.radar_start_addr, self.radar_start_addr + self.radar_msg_count)
+        if addr in updated_messages
+      }
+      assignments = self.group3_track_ids.update(objects)
+      # Remove old slot entries, including migrated IDs. An unmeasured copy in
+      # the previous slot would otherwise reset the surviving object's filter.
+      for slot in range(32, 32 + self.radar_msg_count):
+        self.pts.pop(slot, None)
+      for addr, track_id in assignments.items():
+        obj = objects[addr]
+        point = structs.RadarData.RadarPoint()
+        point.trackId, point.radarSource, point.measured = track_id, "frontRadar", True
+        point.dRel, point.yRel, point.vRel = obj.d_rel, obj.y, obj.v
+        point.vLead, point.aRel, point.yvRel = self.v_ego + obj.v, float("nan"), 0.0
+        self.pts[32 + addr - self.radar_start_addr] = point
+      return
 
     t_id = 32
     for addr in range(self.radar_start_addr, self.radar_start_addr + self.radar_msg_count):
@@ -485,9 +507,6 @@ class RadarInterface(RadarInterfaceBase):
 
       if self.radar_group1:
         valid = msg['VALID_CNT1'] > 10
-      elif self.radar_group3:
-        # Group 3 marks an empty object slot with LONG_DIST raw 0x7ff (204.7 m).
-        valid = msg['LONG_DIST'] < 204.7
       elif self.canfd:
         valid, track_state = canfd_group2_track_status(msg)
       elif self.radar_group4:
@@ -530,16 +549,12 @@ class RadarInterface(RadarInterfaceBase):
         self.pts[t_id].aRel = msg['REL_ACCEL1']
         self.pts[t_id].yvRel = msg['LAT_SPEED1']
       elif self.canfd:
-        if self.radar_group3:
-          # Group 3 reports the object's center. Convert it to the rear surface to match SCC/vision dRel.
-          self.pts[t_id].dRel = max(0.0, msg['LONG_DIST'] - msg['OBJECT_LENGTH'] * 0.5 - 0.1)
-        else:
-          self.pts[t_id].dRel = msg['LONG_DIST']
+        self.pts[t_id].dRel = msg['LONG_DIST']
         self.pts[t_id].yRel = msg['LAT_DIST']
         self.pts[t_id].vRel = msg['REL_SPEED']
         self.pts[t_id].vLead = self.pts[t_id].vRel + self.v_ego
-        self.pts[t_id].aRel = float('nan') if self.radar_group3 else msg['REL_ACCEL']
-        self.pts[t_id].yvRel = 0.0 if self.radar_group3 else msg['LAT_SPEED']
+        self.pts[t_id].aRel = msg['REL_ACCEL']
+        self.pts[t_id].yvRel = msg['LAT_SPEED']
         self.pts[t_id].trackState = track_state
       elif self.radar_group4:
         self.pts[t_id].dRel = msg['LONG_DIST']

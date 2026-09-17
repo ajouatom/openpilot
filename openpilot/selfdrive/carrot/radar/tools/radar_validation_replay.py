@@ -133,12 +133,23 @@ ACCEL_GRAPH_MAX_MPS2 = 2.0
 LEAD_SPEED_GRAPH_MAX_KPH = 140.0
 
 
+def _radar_input_sources():
+  return tuple(REPO_ROOT / name for name in (
+    "openpilot/selfdrive/carrot/radar/tools/radar_group3_replay.py",
+    "opendbc_repo/opendbc/car/hyundai/radar_group3.py",
+    "opendbc_repo/opendbc/car/radar_tracks.py",
+    "opendbc_repo/opendbc/car/radar_lead_filter.py",
+    "openpilot/common/filter_simple.py",
+  ))
+
+
 def radar_replay_source_fingerprint() -> str:
   """Fingerprint every source file that changes cached lead decisions."""
   digest = hashlib.sha256()
   source_files = (
     Path(__file__),
     *sorted((CARROT_ROOT / "radar_motion").glob("*.py")),
+    *_radar_input_sources(),
   )
   for source_path in source_files:
     digest.update(str(source_path.relative_to(REPO_ROOT)).encode("utf-8"))
@@ -155,7 +166,7 @@ def radar_replay_baseline_source_fingerprint() -> str:
   ui_start = replay_source.index("\nclass SimulatorUI:")
   replay_source = replay_source[:v3_start] + replay_source[v3_end:ui_start]
   digest.update(replay_source.encode("utf-8"))
-  for source_path in sorted((CARROT_ROOT / "radar_motion").glob("*.py")):
+  for source_path in (*sorted((CARROT_ROOT / "radar_motion").glob("*.py")), *_radar_input_sources()):
     if source_path.name == "occupancy_v3.py":
       continue
     digest.update(str(source_path.relative_to(REPO_ROOT)).encode("utf-8"))
@@ -3015,6 +3026,7 @@ def load_frames(log_path: Path) -> list[RadarFrame]:
   latest_carrot_a_target_ns = 0
   scc_dbc_messages: dict[int, tuple[str, dict[str, Any]]] = {}
   car_brand = ""
+  group3_enabled = False
   # carParams can be emitted well into a segment. Resolve the static vehicle
   # metadata before consuming events so legacy corner-ID recovery is limited
   # to Hyundai and SCC_CONTROL is decoded from the first frame.
@@ -3022,6 +3034,7 @@ def load_frames(log_path: Path) -> list[RadarFrame]:
     try:
       if event.which() == "carParams":
         car_brand = str(event.carParams.brand)
+        group3_enabled = car_brand == "hyundai" and bool(int(event.carParams.extFlags) & 2048)
         scc_dbc_messages = _hyundai_scc_dbc_messages(
           route_replay,
           str(event.carParams.carFingerprint),
@@ -3029,6 +3042,15 @@ def load_frames(log_path: Path) -> list[RadarFrame]:
         break
     except Exception:
       continue
+  group3_replay = None
+  if group3_enabled:
+    from collections import Counter
+    from openpilot.selfdrive.carrot.radar.tools.radar_group3_replay import Group3Replay
+    # Infer the receive bus from this log, including alternate harness layouts.
+    buses = Counter(int(msg.src) for event in events if event.which() == "can" for msg in event.can
+                    if int(msg.src) < 128 and 0x400 <= int(msg.address) <= 0x41d and len(msg.dat) == 24)
+    if buses:
+      group3_replay = Group3Replay(buses.most_common(1)[0][0])
   latest_radar_delay_s = 0.0
   latest_path: tuple[tuple[float, float], ...] = ()
   latest_lanes: tuple[tuple[tuple[float, float], ...], ...] = ()
@@ -3061,8 +3083,11 @@ def load_frames(log_path: Path) -> list[RadarFrame]:
         latest_v_ego,
         max_measurement_age_s=VALIDATION_CORNER_MAX_MEASUREMENT_AGE_S,
       )
+      recorded_points = tuple(event.liveTracks.points)
+      if group3_replay is not None:
+        recorded_points = group3_replay.correct(event_t, recorded_points)
       merged = route_replay.merge_recorded_and_reconstructed_tracks(
-        tuple(event.liveTracks.points), reconstructed,
+        recorded_points, reconstructed,
       )
       copied_points = _copy_track_points(
         merged,
@@ -3079,6 +3104,8 @@ def load_frames(log_path: Path) -> list[RadarFrame]:
       for can_message in event.can:
         address = int(can_message.address)
         raw = bytes(can_message.dat)
+        if group3_replay is not None:
+          group3_replay.consume(event_t, address, raw, int(can_message.src))
         scc_distance, scc_a_req_raw, scc_object_valid = (
           _decode_scc_can_message(
             route_replay,

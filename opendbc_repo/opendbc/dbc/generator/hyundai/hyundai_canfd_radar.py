@@ -99,6 +99,7 @@ BO_ {a} RADAR_TRACK_{a:x}: 24 RADAR
     for a in range(0x400, 0x400 + 30):
         f.write(f"""
 BO_ {a} RADAR_TRACK_{a:x}: 24 RADAR
+ SG_ OBJECT_ID : 24|7@1+ (1,0) [0|127] "" XXX
  SG_ OBJECT_LENGTH : 41|7@1+ (0.1,0) [0|12.7] "m" XXX
  SG_ LONG_DIST : 64|11@1+ (0.1,0) [0|204.7] "m" XXX
  SG_ LAT_DIST : 75|12@1- (0.05,0) [-102.4|102.35] "m" XXX

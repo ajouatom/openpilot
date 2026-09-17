@@ -9,6 +9,8 @@ on:
       - 'openpilot/selfdrive/carrot/cluster/**'
       - 'openpilot/selfdrive/carrot/radar/tools/radar_validation_replay.py'
       - 'openpilot/selfdrive/carrot/radar/tools/radar_web_export.py'
+      - 'openpilot/selfdrive/carrot/radar/tools/radar_group3_replay.py'
+      - 'openpilot/common/filter_simple.py'
       - 'openpilot/selfdrive/controls/lib/cutin_*.py'
       - 'openpilot/cereal/**'
       - 'opendbc_repo/opendbc/**'
@@ -40,7 +42,8 @@ jobs:
           PYTHONPATH: .:opendbc_repo
         run: |
           python -m pytest -c /dev/null --rootdir=. --confcutdir=opendbc_repo/opendbc/car/tests \
-            opendbc_repo/opendbc/car/tests/test_radar_lead_filter.py
+            opendbc_repo/opendbc/car/tests/test_radar_lead_filter.py \
+            opendbc_repo/opendbc/car/tests/test_radar_group3.py
           python -m pytest -c /dev/null --rootdir=. --confcutdir=tools/carrot_route_vault tools/carrot_route_vault/tests
           python -m pytest -c /dev/null --rootdir=. --confcutdir=openpilot/selfdrive/carrot/tests \
             openpilot/selfdrive/carrot/tests/test_lane_change_gap.py \
@@ -78,6 +81,7 @@ jobs:
             openpilot/selfdrive/carrot/cluster openpilot/selfdrive/carrot/radar/tools/radar_validation_replay.py \
             openpilot/selfdrive/carrot/radar/tools/radar_web_export.py openpilot/selfdrive/controls/lib/cutin_alert.py \
             openpilot/selfdrive/controls/lib/cutin_helpers.py openpilot/cereal opendbc_repo/opendbc \
+            openpilot/common/filter_simple.py openpilot/selfdrive/carrot/radar/tools/radar_group3_replay.py \
             .github/workflows/carrot-route-vault-publish.yaml; then
             docker tag "$IMAGE:sha-$GITHUB_SHA" "$IMAGE:carrot-wip"
             docker push "$IMAGE:carrot-wip"
