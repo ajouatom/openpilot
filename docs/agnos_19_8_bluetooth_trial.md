@@ -238,8 +238,22 @@ They do not synthesize CAN messages or physical vehicle turn-signal operation.
 
 Validation: replay of the actual seven-button recording, repeat/drop/expiry tests,
 HTTP origin/stationary/configuration checks, and cruise/desire regression tests:
-74 passed in the C4 Python environment. Live BlueZ enumeration and application
-agent registration also passed. Road behavior and other accessories are not yet
+75 passed in the C4 Python environment, with warnings treated as errors. Live
+BlueZ enumeration and application agent registration also passed. The web dialog
+was checked on the device, and a second EVIOCGRAB returned EBUSY while the daemon
+owned the remote, confirming exclusive HID capture.
+
+The follow-up live test decoded all four direction gestures to their requested
+actions without emitting vehicle commands. Its remaining observed tokens were
+`key:114` and `2`; center and button 1 were not independently confirmed in this
+run. The earlier seven-button capture still passes replay, but it does not prove
+that every button has the same behavior in the remote's current mode. Unknown
+key 114 remains unassigned. No further physical testing was requested after the
+user ended the session. Evidence: `/data/carrot-bluetooth-mapping-events.json`.
+
+The requested Yiser profile and default mapping are saved on the trial device.
+Test mode has ended; persistent vehicle-command activation remains off pending
+explicit activation approval. Road behavior and other accessories are not yet
 verified. Korean/English usage and scope explanations live in the web dialog;
 no global Params setting or generated settings Wiki page is added.
 
