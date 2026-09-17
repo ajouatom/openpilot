@@ -679,7 +679,11 @@ class VCruiseCarrot:
         #self.params.put_bool_nonblocking("ExperimentalMode", not self.params.get_bool("ExperimentalMode"))
         self._add_log("Lateral " + "enabled" if self._lat_enabled else "disabled")
 
-    if remote == 'paddleDecel':
+    if remote == 'carrotCruise':
+      # Same acceleration-limiting mode as LFA mode 2 / paddle mode 3.
+      # Repeated requests keep the mode on; RES/+ retains its existing exit path.
+      self.carrot_cruise_active = True
+    elif remote == 'paddleDecel':
       self._cruise_control(-2, -1, "Cruise off & Ready (Bluetooth paddle)")
       self._paddle_decel_active = True
     elif self._paddle_mode > 0 and button_type in [ButtonType.paddleLeft, ButtonType.paddleRight]:  # paddle button

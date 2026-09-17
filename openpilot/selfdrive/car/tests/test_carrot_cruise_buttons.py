@@ -159,6 +159,22 @@ def test_bluetooth_gap_cycles_even_with_pcm_gap():
   assert values['LongitudinalPersonality'] != 3
 
 
+@pytest.mark.parametrize('initial', [False, True])
+def test_bluetooth_carrot_cruise_enters_existing_mode_without_toggling_or_speed_change(initial):
+  helper, CS, CC = make_cruise_helper(80, 0, initial, True)
+  helper.button_cnt = 0
+  helper._prepare_buttons = lambda *args: (80, 0, False)
+  helper.bluetooth_commands = SimpleNamespace(read=lambda allowed: 'carrotCruise' if allowed else None)
+  CS.canValid = CS.cruiseState.available = True
+  CS.gearShifter = 'drive'
+  calls = []
+  helper._cruise_control = lambda *args: calls.append(args)
+  assert helper._update_cruise_buttons(CS, CC, 80) == 80
+  assert helper.carrot_cruise_active
+  assert not helper._paddle_decel_active
+  assert calls == []
+
+
 def test_auto_hold_blocks_automatic_cruise_activation():
   helper = VCruiseCarrot.__new__(VCruiseCarrot)
   helper._cruise_available = True

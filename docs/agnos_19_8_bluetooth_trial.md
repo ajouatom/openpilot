@@ -252,10 +252,51 @@ key 114 remains unassigned. No further physical testing was requested after the
 user ended the session. Evidence: `/data/carrot-bluetooth-mapping-events.json`.
 
 The requested Yiser profile and default mapping are saved on the trial device.
-Test mode has ended; persistent vehicle-command activation remains off pending
-explicit activation approval. Road behavior and other accessories are not yet
+Test mode ended with persistent vehicle-command activation initially off. The
+user subsequently explicitly approved activation; the saved Yiser mapping is
+now enabled, with its connected HID node exclusively captured. Road behavior and other accessories are not yet
 verified. Korean/English usage and scope explanations live in the web dialog;
 no global Params setting or generated settings Wiki page is added.
+
+### Multiple remotes, click gestures and CarrotCruise
+
+The same Cinque v3 experiment now supports per-button short, double and long
+actions in the localized web editor. Existing single mappings and enabled state
+are preserved. New double/long actions default to unassigned. Double clicks use
+a 350 ms release-to-release window; only an assigned double action delays its
+single action. Learning recognizes all gestures and therefore waits on singles.
+Long actions fire once on release after at least 700 ms; keyboard repeats do not
+fire commands. Holds over 10 seconds, dropped input and overdue deferred singles
+are discarded. A remote emitting synthetic short pulses cannot expose its true
+physical hold duration; Yiser long-press support is not yet verified on hardware.
+
+Device-specific decoders prevent two remotes from combining into one double
+click. One daemon writes bounded, ordered cruise/lane event journals, preserving
+simultaneous device commands rather than overwriting one slot. Readers consume
+each event once and reject startup leftovers, cancelled and >400 ms old events.
+There are at most 64 entries per channel; overload can discard old commands.
+Disconnects, mapping changes and test transitions cancel pending device input.
+HTTP cancellation writes device timestamps instead of racing journal writes.
+Only the selected device is suppressed during learning; other enabled devices
+continue operating. The web editor merges one device's save server-side, displays
+each mapping/capture state and retains test events arriving between polls.
+Configuration allows 16 devices, not a guarantee of 16 simultaneous radio links.
+
+`carrotCruise` enters the existing `carrot_cruise_active` mode, matching LFA mode 2
+and paddle mode 3. Repeated requests leave it enabled, and existing RES/+ handling
+exits it without increasing set speed on that first press. It does not change
+`CarrotCruiseDecel`, `CarrotCruiseAtcDecel`, steering, engage conditions or vehicle
+controller algorithms. Actual acceleration limiting remains subject to existing
+vehicle support (the Hyundai controller), its speed/override/stop conditions and
+those parameters. This action is available in every gesture selector but is not
+automatically assigned to the user's remote.
+
+Validation: 94 C4 Python tests pass with warnings as errors, including actual
+daemon-loop tests with two local input pipes, delayed singles, learning isolation,
+recorded Yiser replay, queue expiry/cancellation, API device-save isolation and
+cruise/desire regressions. These tests use temporary command files, never vehicle
+input or CAN. Thirteen web tests pass and the production assets build. Multiple
+physical accessories and actual long/double operation are not yet verified.
 
 For rollback while stationary, stop comma, restore the matching previous
 openpilot OS manifest/version (the pre-trial commit is in `before.json`), select
