@@ -440,7 +440,10 @@ def create_acc_control_scc2(packer, CAN, enabled, accel_value_last, accel, stopp
 
   values["TARGET_DISTANCE"] = CS.out.vEgo + 4.0 if math.isfinite(CS.out.vEgo) else 4.0
 
-  values["InfoDisplay"] = 0  # carrot-stopping: remove the display-based stopping workaround
+  if stop_controller is not None:
+    values["InfoDisplay"] = 0
+  elif values["InfoDisplay"] != 5:
+    values["InfoDisplay"] = 4 if not interlock_active and stopping and CS.out.aEgo > -0.3 else 0
 
   values["TakeOverReq"] = 0    # 1: Takeover request, 2: Not used, 3: Error indicator , 이것이 켜지면 가속을 안하는듯함.
   #values["NEW_SIGNAL_4"] = 9 if hud_control.leadVisible else 0
@@ -450,7 +453,7 @@ def create_acc_control_scc2(packer, CAN, enabled, accel_value_last, accel, stopp
   values["AccelLimitBandUpper"] = 0.0   # 이값이 1.26일때 가속을 안하는 증상이 보임..
   values["AccelLimitBandLower"] = 0.0
 
-  values["ZEROS_7"] = 0  # Experimental baseline, including vehicles whose stock byte is nonzero
+  values["ZEROS_7"] = 0 if stop_controller is not None else 1
   apply_stopping_experiment(values, CS, stop_controller, accel, accel_value_last, jerk_u, jerk_l)
 
   return packer.make_can_msg("SCC_CONTROL", CAN.ECAN, values), values["aReqValue"]
@@ -491,7 +494,8 @@ def create_acc_control(packer, CAN, enabled, accel_last, accel, stopping, gas_ov
     #"SET_ME_3": 0x3,
     "ACC_ObjLatPos": 0x64,
     "DISTANCE_SETTING": hud_control.leadDistanceBars, # + 5,
-    "InfoDisplay": 0,
+    "InfoDisplay": 0 if stop_controller is not None else (
+      4 if not interlock_active and stopping and CS.out.cruiseState.standstill else 0),
     "ZEROS_7": 0,
   }
 

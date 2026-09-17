@@ -183,7 +183,8 @@ class CarController(CarControllerBase):
 
     self.accel_last = 0
     self.accel_value_last = 0.0
-    self.canfd_stopping = CanfdStopping()
+    # Latch at controller startup so changing a setting cannot alter an ongoing stop.
+    self.canfd_stopping = CanfdStopping() if Params().get_bool("CanfdStopRetry") else None
     self.apply_torque_last = 0
     self.car_fingerprint = CP.carFingerprint
     self.last_button_frame = 0

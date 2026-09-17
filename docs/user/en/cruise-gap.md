@@ -121,6 +121,19 @@ Stopping acceleration is fixed at `-0.50 m/s²` (formerly stored as `-50`) for a
 
 This value sets the stop-entry acceleration threshold and the target used when gradually increasing braking in normal stopping state. Stronger braking already in progress is retained, and soft hold continues to use the vehicle-specific stationary-hold acceleration. This value does not directly control acceleration or braking when stock ACC is responsible.
 
+### CANFD Stop Retry (Experimental) · `CanfdStopRetry`
+
+Available under Vehicle & Hardware → CANFD·HDA, with **OFF** as the default. Applies only to Hyundai/Kia CANFD with openpilot longitudinal control. Reboot the device after changing it; editing the setting during a drive does not change the current stopping method.
+
+- **OFF:** Retains existing stop requests, negative acceleration requests, InfoDisplay, and byte7 handling.
+- **ON:** Sends StopReq=1 with aReq=0 during low-speed stop requests and sets InfoDisplay and byte7 to zero. The lower band uses a fixed experimental value of 0.20 during stop requests, without copying stock SCC values.
+- If motion persists, releases StopReq, requests negative acceleration, then reasserts once. If the retry still fails, retains negative acceleration requests without repeated toggling. Driver pedal input, cruise disengagement, and interlocks such as Auto Hold cancel retries.
+
+The fixed stopping acceleration above still applies. When enabled, the CAN output stage substitutes zero acceleration during stop requests; recovery requests the stronger deceleration of the existing request and -0.50 m/s².
+
+> [!CAUTION]
+> Complete stopping and collision prevention have not been established across vehicles. Validate only in a controlled area where you can brake directly. Switch OFF and reboot to restore the previous method.
+
 ### `VEgoStopping`
 
 Range 1–100, step 5. A value of 50 is 0.50 m/s (about 1.8 km/h). `shouldStop` becomes true when both the planner's current and one-second-ahead target speeds are below this threshold.

@@ -219,6 +219,7 @@ These 14 settings describe the car, harness, and device hardware configuration. 
 |---|---|---|
 | Hyundai/Kia | `HyundaiCameraSCC`, `IsLdwsCar`, `HapticFeedbackWhenSpeedCamera` | SCC connection, LDWS behavior, and speed-event haptics |
 | CAN FD/HDA | `CanfdHDA2`, `CanfdDebug`, `HDPuse` | HDA2 selection, CAN FD diagnostics, and HDP |
+| CANFD·HDA | `CanfdStopRetry` | Default OFF. Enables stock-like stop requests and one deceleration/reassertion attempt when motion persists. Hyundai/Kia CANFD openpilot longitudinal only; reboot after changing. See [stop retry details](cruise-gap.md#canfd-stop-retry-experimental--canfdstopretry). |
 | Radar | `EnableRadarTracks`, `EnableCornerRadar`, `CarrotRadarMode`, `CarrotRadarCutInSensitivity` | SCC radar, raw tracks, corner radar, and Carrot Radar processing and cut-in sensitivity |
 | Driver monitoring | `DisableDM`, `MuteDoor`, `MuteSeatbelt` | Driver monitoring and selected vehicle alerts |
 | Vehicle assistance | `MaxAngleFrames`, `SpeedFromPCM` | Steering-angle frames and stock-SCC speed control |

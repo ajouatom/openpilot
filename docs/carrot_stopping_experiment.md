@@ -4,7 +4,9 @@
 2026-09-17 사용자 요청으로 `carrot-wip`에 반영했다. 현대·기아 CAN FD의
 openpilot 종방향 SCC 송신 경로 두 곳(camera SCC / 일반 CAN FD)에만 적용한다.
 일반 CAN, 순정 종방향 제어, 모델 선택은 변경하지 않는다. 별도 시험 브랜치는 삭제하며,
-이후 코드는 `carrot-wip`에서 관리한다. 설정 항목은 추가하지 않는다.
+이후 코드는 `carrot-wip`에서 관리한다. `CanfdStopRetry` 설정은 기본 OFF이며,
+ON에서만 아래 시험 제어를 적용한다. OFF는 기존 aReq, InfoDisplay, byte7과 Lower 처리를
+유지한다. 설정은 CarController 시작 시 한 번 읽으므로 변경 후 기기를 재부팅한다.
 
 이 코드는 ECU의 정지 제어 진입 조건과 aReq 우선순위를 조사하기 위한 실험이다.
 추돌 방지나 실차 정지 성공을 보증하지 않는다. 공개도로 적용 전 제동을 직접
