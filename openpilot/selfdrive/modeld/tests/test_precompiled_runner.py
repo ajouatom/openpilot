@@ -111,6 +111,32 @@ def test_worker_reports_real_checksum_failure_before_gpu_access(tmp_path):
   assert 'precompiled PKL checksum mismatch' in json.loads(result.stdout[6:])
 
 
+def test_generic_runner_advances_dropped_frames_without_external_feature_queue(monkeypatch):
+  model = object.__new__(runner.PrecompiledModelState)
+  model.process = SimpleNamespace(stdin=io.BytesIO())
+  model.first_run, model.frame_size = True, 16
+  model.prev_desire = np.zeros(8, np.float32)
+  model.views = {name: np.zeros(shape, np.float32) for name, shape in
+                 {'img': 16, 'big_img': 16, 'desire': 8, 'traffic_convention': (1, 2), 'action_t': (1, 2),
+                  'tfm': (3, 3), 'big_tfm': (3, 3)}.items()}
+  model.output = np.array([1., 2.], np.float32)
+  model.output_slices = {'action': slice(0, 2)}
+  model.parser = SimpleNamespace(parse_outputs=lambda outputs: outputs)
+  monkeypatch.setattr(model, '_receive', lambda timeout: b'1\n')
+  frames = {name: SimpleNamespace(data=np.zeros(16, np.uint8)) for name in ('img', 'big_img')}
+  transforms = {name: np.eye(3, dtype=np.float32) for name in frames}
+  inputs = {'desire_pulse': np.eye(8, dtype=np.float32)[1], 'traffic_convention': np.array([1, 0]), 'action_t': np.array([.2, .3])}
+  try:
+    np.testing.assert_array_equal(model.run(frames, transforms, inputs, True)['action'], [[1, 2]])
+    assert model.views['desire'][1] == 1
+    output = model.run(frames, transforms, inputs, False)
+    assert model.process.stdin.getvalue() == b'rr'
+    assert model.views['desire'][1] == 0
+    np.testing.assert_array_equal(output['action'], [[1, 2]])
+  finally:
+    model.process = None
+
+
 def test_fused_graph_publishes_completed_policy_after_camera_drop(monkeypatch):
   model = object.__new__(runner.PrecompiledModelState)
   model.process = SimpleNamespace(stdin=io.BytesIO())

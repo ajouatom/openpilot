@@ -31,7 +31,7 @@ class PrecompiledModelState:
       worker = Path(__file__).with_name('precompiled_worker.py')
       self.process = subprocess.Popen([sys.executable, str(worker), str(pkl_path), self.file.name, str(cam_w), str(cam_h)],
                                       stdin=subprocess.PIPE, stdout=subprocess.PIPE, bufsize=0)
-      info = json.loads(self._receive(38))
+      info = json.loads(self._receive(110))
       self.shared = mmap.mmap(self.file.fileno(), info['size'])
       for name, spec in info['layout'].items():
         self.views[name] = np.ndarray(spec['shape'], np.dtype(spec['dtype']), buffer=self.shared, offset=spec['offset'])
@@ -87,7 +87,9 @@ class PrecompiledModelState:
         from openpilot.selfdrive.modeld.precompiled_model import record_failure
         record_failure(self.pkl_path, exc, 'inference')
       raise
-    self.views['prev_feat'][:] = result[self.output_slices['hidden_state']]
+    if 'prev_feat' in self.views:
+      self.views['prev_feat'][:] = result[self.output_slices['hidden_state']]
+    # Generic ONNX artifacts advance all recurrent state inside their graph.
     # The fused graph advances image and policy history together, including dropped-frame catch-up.
     # It also produces a complete current-frame policy: publishing it avoids
     # an extra output gap after a dropped camera frame. The split backend still
