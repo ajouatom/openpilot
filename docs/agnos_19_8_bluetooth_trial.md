@@ -198,8 +198,50 @@ in its current mode:
 
 Touch events include `BTN_TOUCH` and `BTN_TOOL_PEN`. Coordinates are in the
 descriptor's 0–1000 range, not physical display pixels. The raw capture is
-`/data/carrot-bluetooth-yiser-keys.log`. Long presses, other remote modes and
-mapping these gestures to Carrot actions are not part of this OS trial.
+`/data/carrot-bluetooth-yiser-keys.log`. Other remote modes have not been tested.
+
+### Carrot Web mapping follow-up (Cinque v3 experiment only)
+
+Tools → Bluetooth remotes provides radio control, 30-second discovery, explicit
+device pairing (including PIN/passkey confirmation), connect/disconnect/forget,
+and a per-device input profile and action map. Setup requires fresh stationary,
+disengaged telemetry, or a confirmed offroad state. The HTTP API cannot execute
+vehicle actions. Pairing is application-scoped; unsolicited pairing requests are
+rejected. Smartphone pairing does not implement phone audio, calls or PAN.
+
+`carrot_bluetooth` runs independently of the web server and exclusively grabs
+only configured Bluetooth evdev nodes. The mapping is stored outside the repo
+in `/data/carrot/bluetooth.json`; pairing keys remain in BlueZ's private store.
+Disabling a device's mapping releases its original HID input. Disconnects and
+process exit release the kernel grab; reconnects are discovered automatically.
+Generic HID keyboard/media keys can be learned from a press/release. Relative
+mouse wheels, gamepad axes and arbitrary vendor protocols are not implemented.
+
+| Yiser-J6 button | Default Carrot action |
+| --- | --- |
+| Up | `accelCruise` |
+| Down | `decelCruise` |
+| Left / Right | Existing remote lane-change request, left / right |
+| Center | Paddle deceleration (physical paddle setting unchanged) |
+| 1 | Cycle cruise gap |
+| 2 | No action |
+
+The learn/test session lasts 120 seconds and suppresses commands for that device.
+Closing the dialog does not end the session early. Save a profile before learning,
+then save again to persist newly learned keys/actions. Unmapped events are swallowed
+while the mapping is enabled. Key repeats are ignored; actions fire on release or
+completion of a short touch gesture. Stale (>400 ms), startup and replayed commands
+are discarded. Physical cruise-button events/held buttons have priority, and valid
+CAN, cruise availability and Drive are required for cruise actions. Lane requests
+retain lateral-active, speed, trailer, geometry, blind-spot and torque checks.
+They do not synthesize CAN messages or physical vehicle turn-signal operation.
+
+Validation: replay of the actual seven-button recording, repeat/drop/expiry tests,
+HTTP origin/stationary/configuration checks, and cruise/desire regression tests:
+74 passed in the C4 Python environment. Live BlueZ enumeration and application
+agent registration also passed. Road behavior and other accessories are not yet
+verified. Korean/English usage and scope explanations live in the web dialog;
+no global Params setting or generated settings Wiki page is added.
 
 For rollback while stationary, stop comma, restore the matching previous
 openpilot OS manifest/version (the pre-trial commit is in `before.json`), select

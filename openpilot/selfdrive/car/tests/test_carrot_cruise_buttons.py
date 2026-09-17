@@ -10,7 +10,8 @@ from openpilot.selfdrive.carrot.cruise_gap import cruise_gap_levels
 def make_cruise_helper(button_kph, cruise_button_mode, carrot_cruise_active, cruise_enabled,
                        cruise_speed_initialized=True, cruise_speed_at_brake=0):
   helper = VCruiseCarrot.__new__(VCruiseCarrot)
-  helper._prepare_buttons = lambda CS, v_cruise_kph: (button_kph, ButtonType.accelCruise, False)
+  helper.bluetooth_commands = SimpleNamespace(read=lambda **kwargs: None)
+  helper._prepare_buttons = lambda CS, v_cruise_kph, remote=None: (button_kph, ButtonType.accelCruise, False)
   helper._carrot_command = lambda v_cruise_kph, button_type, long_pressed: (v_cruise_kph, button_type, long_pressed)
   helper._update_cruise_state = lambda CS, CC, v_cruise_kph: v_cruise_kph
   helper._add_log = lambda log: None
@@ -91,6 +92,71 @@ def test_accel_keeps_initialized_speed_without_brake_snapshot_while_cruise_is_of
   helper, CS, CC = make_cruise_helper(81, cruise_button_mode, carrot_cruise_active=False, cruise_enabled=False)
 
   assert helper._update_cruise_buttons(CS, CC, 80) == 80
+
+
+@pytest.mark.parametrize(('action', 'expected'), [('accelCruise', 81), ('decelCruise', 79)])
+def test_bluetooth_uses_cruise_button_steps(action, expected):
+  helper, CS, CC = make_cruise_helper(81, 0, False, True)
+  helper._prepare_buttons = VCruiseCarrot._prepare_buttons.__get__(helper)
+  helper.button_cnt = 0
+  helper.button_long_time = 50
+  helper.long_pressed = False
+  helper._cruise_speed_unit_basic = 1
+  helper._cruise_button_long_delay = 50
+  helper.is_metric = True
+  helper.bluetooth_commands = SimpleNamespace(read=lambda allowed: action if allowed else None)
+  CS.canValid = True
+  CS.cruiseState.available = True
+  CS.gearShifter = 'drive'
+  CS.cruiseSpeedBigStep = True  # A physical stalk's big-step bit must not affect HID.
+  assert helper._update_cruise_buttons(CS, CC, 80) == expected
+  assert helper.button_cnt == 0
+  assert len(CS.buttonEvents) == 0  # No fake CAN/CarState events.
+
+
+@pytest.mark.parametrize('block', ['can', 'available', 'gear', 'button', 'held'])
+def test_bluetooth_does_not_override_vehicle_button_or_gate(block):
+  helper, CS, CC = make_cruise_helper(81, 0, False, True)
+  helper.button_cnt = int(block == 'held')
+  CS.canValid = block != 'can'
+  CS.cruiseState.available = block != 'available'
+  CS.gearShifter = 'park' if block == 'gear' else 'drive'
+  if block == 'button':
+    CS.buttonEvents = [{'type': 'cancel', 'pressed': True}]
+  allowed_values = []
+  helper.bluetooth_commands = SimpleNamespace(read=lambda allowed: allowed_values.append(allowed))
+  helper._update_cruise_buttons(CS, CC, 80)
+  assert allowed_values == [False]
+
+
+def test_bluetooth_paddle_decel_uses_ready_path_independent_of_physical_paddle_mode():
+  helper, CS, CC = make_cruise_helper(80, 0, False, True)
+  helper.button_cnt = 0
+  helper._prepare_buttons = lambda *args: (80, 0, False)
+  helper.bluetooth_commands = SimpleNamespace(read=lambda allowed: 'paddleDecel' if allowed else None)
+  CS.canValid = CS.cruiseState.available = True
+  CS.gearShifter = 'drive'
+  calls = []
+  helper._cruise_control = lambda *args: calls.append(args[:2])
+  helper._update_cruise_buttons(CS, CC, 80)
+  assert calls == [(-2, -1)]
+  assert helper._paddle_decel_active
+  assert helper._paddle_mode == 0
+
+
+def test_bluetooth_gap_cycles_even_with_pcm_gap():
+  helper, CS, CC = make_cruise_helper(80, 0, False, True)
+  helper.button_cnt = 0
+  helper._prepare_buttons = lambda *args: (80, ButtonType.gapAdjustCruise, False)
+  helper.bluetooth_commands = SimpleNamespace(read=lambda allowed: 'gapAdjustCruise' if allowed else None)
+  CS.canValid = CS.cruiseState.available = True
+  CS.gearShifter = 'drive'
+  CS.pcmCruiseGap = 4
+  helper.CP = SimpleNamespace(openpilotLongitudinalControl=True)
+  values = {'LongitudinalPersonalityMax': 4, 'CruiseGapLevels': 4, 'LongitudinalPersonality': 3}
+  helper.params = SimpleNamespace(get_int=values.__getitem__, put_int_nonblocking=values.__setitem__)
+  helper._update_cruise_buttons(CS, CC, 80)
+  assert values['LongitudinalPersonality'] != 3
 
 
 def test_auto_hold_blocks_automatic_cruise_activation():
@@ -329,7 +395,7 @@ def test_gap_cycle_limits(maximum, requested, expected):
 ])
 def test_gap_button_cycles_selected_levels(maximum, requested, pcm_gap, expected):
   helper, CS, CC = make_cruise_helper(80, 0, False, True)
-  helper._prepare_buttons = lambda CS, speed: (speed, ButtonType.gapAdjustCruise, False)
+  helper._prepare_buttons = lambda CS, speed, remote=None: (speed, ButtonType.gapAdjustCruise, False)
   helper.CP = SimpleNamespace(openpilotLongitudinalControl=True)
   values = {"LongitudinalPersonalityMax": maximum, "CruiseGapLevels": requested, "LongitudinalPersonality": 0}
   helper.params = SimpleNamespace(get_int=values.__getitem__, put_int_nonblocking=values.__setitem__)
@@ -349,7 +415,7 @@ def test_gap_button_cycles_selected_levels(maximum, requested, pcm_gap, expected
 ])
 def test_gap_button_reduction_and_oem_gap(openpilot_long, requested, pcm_gap, current, expected):
   helper, CS, CC = make_cruise_helper(80, 0, False, True)
-  helper._prepare_buttons = lambda CS, speed: (speed, ButtonType.gapAdjustCruise, False)
+  helper._prepare_buttons = lambda CS, speed, remote=None: (speed, ButtonType.gapAdjustCruise, False)
   helper.CP = SimpleNamespace(openpilotLongitudinalControl=openpilot_long)
   values = {"LongitudinalPersonalityMax": 4, "CruiseGapLevels": requested, "LongitudinalPersonality": current}
   helper.params = SimpleNamespace(get_int=values.__getitem__, put_int_nonblocking=values.__setitem__)
@@ -360,7 +426,7 @@ def test_gap_button_reduction_and_oem_gap(openpilot_long, requested, pcm_gap, cu
 
 def test_gap_long_press_still_changes_driving_mode():
   helper, CS, CC = make_cruise_helper(80, 0, False, True)
-  helper._prepare_buttons = lambda CS, speed: (speed, ButtonType.gapAdjustCruise, True)
+  helper._prepare_buttons = lambda CS, speed, remote=None: (speed, ButtonType.gapAdjustCruise, True)
   values = {"MyDrivingMode": 4, "LongitudinalPersonality": 1}
   helper.params = SimpleNamespace(get_int=values.__getitem__, put_int_nonblocking=values.__setitem__)
   helper._update_cruise_buttons(CS, CC, 80)
