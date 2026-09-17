@@ -171,8 +171,35 @@ and `/data/carrot-bluetooth-model-after.json`. The latter records both camera
 formats and the unchanged model checkpoint. Four device-manifest tests also pass.
 
 The user's remote appeared as `Yiser-J6`, advertising the BLE HID service and
-keyboard appearance after being put in pairing mode. Pairing/key-event tests are
-still in progress. No unidentified discovered accessory has been paired.
+keyboard appearance after being put in pairing mode. Pairing, bonding, trust
+and connection succeeded; the battery service reported 90%. Linux created a
+UHID input device named `Yiser-J6` with keyboard and absolute-pointer handlers.
+Its descriptor exposes media keys plus `BTN_TOUCH`, `ABS_X` and `ABS_Y`, so it
+must not be treated as a seven-arrow-key keyboard based on appearance alone.
+The bond info exists under `/data/bluetooth` with mode 0600; its keys are not
+included in logs or this document. After a radio/BlueZ service restart, the bond
+and trust remained, and the remote reconnected automatically without pairing
+again. No unidentified accessory was paired. Discovery and pairability were
+turned off after pairing.
+
+The user pressed all seven buttons in the requested order while `evtest --grab`
+captured only this remote and comma was stopped. Recorded short-press behavior
+in its current mode:
+
+| Button | Observed input |
+| --- | --- |
+| Up | Touch swipe with increasing `ABS_Y` |
+| Down | Touch swipe with decreasing `ABS_Y` |
+| Left | Touch swipe with increasing `ABS_X` |
+| Right | Touch swipe with decreasing `ABS_X` |
+| Center | Touch tap at (300, 500) |
+| 1 | `KEY_VOLUMEUP` (115), press and release |
+| 2 | Touch tap at (420, 850) |
+
+Touch events include `BTN_TOUCH` and `BTN_TOOL_PEN`. Coordinates are in the
+descriptor's 0–1000 range, not physical display pixels. The raw capture is
+`/data/carrot-bluetooth-yiser-keys.log`. Long presses, other remote modes and
+mapping these gestures to Carrot actions are not part of this OS trial.
 
 For rollback while stationary, stop comma, restore the matching previous
 openpilot OS manifest/version (the pre-trial commit is in `before.json`), select
