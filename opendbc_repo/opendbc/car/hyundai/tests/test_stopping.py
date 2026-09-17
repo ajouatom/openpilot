@@ -3,8 +3,23 @@ from types import SimpleNamespace
 import pytest
 
 from opendbc.can import CANPacker, CANParser
+from opendbc.car import Bus, structs
+from opendbc.car.hyundai import carcontroller
 from opendbc.car.hyundai.hyundaicanfd import create_acc_control, create_acc_control_scc2
 from opendbc.car.hyundai.stopping import CanfdStopping, StopPhase, DT, ENTRY_SPEED, STOP_LOWER_BAND
+from opendbc.car.hyundai.values import CAR, HyundaiFlags
+
+
+@pytest.mark.parametrize("enabled", [False, True])
+def test_setting_is_latched_at_controller_start(monkeypatch, enabled):
+  settings = {"CanfdStopRetry": enabled}
+  params = SimpleNamespace(get_bool=lambda key: settings.get(key, False), get_int=lambda key: 0)
+  monkeypatch.setattr(carcontroller, "Params", lambda: params)
+  cp = structs.CarParams(carFingerprint=CAR.KIA_EV6, flags=int(HyundaiFlags.CANFD))
+  controller = carcontroller.CarController({Bus.pt: "hyundai_canfd_generated"}, cp)
+  assert isinstance(controller.canfd_stopping, CanfdStopping) == enabled
+  settings["CanfdStopRetry"] = not enabled
+  assert isinstance(controller.canfd_stopping, CanfdStopping) == enabled
 
 
 def step(controller, **overrides):
@@ -129,7 +144,7 @@ def make_cs():
     out=SimpleNamespace(aEgo=0.0, vEgo=0.3, vEgoRaw=0.3,
                         wheelSpeeds=SimpleNamespace(fl=0.3, fr=0.3, rl=0.3, rr=0.3),
                         canValid=True, gearShifter="drive", brakePressed=False, gasPressed=False,
-                        brakeHoldActive=False, parkingBrake=False, cruiseState=SimpleNamespace(available=True)),
+                        brakeHoldActive=False, parkingBrake=False, cruiseState=SimpleNamespace(available=True, standstill=True)),
   )
 
 
@@ -149,11 +164,29 @@ def send(camera, controller, CS, *, enabled=True, override=False, stopping=True,
   values = parser.vl["SCC_CONTROL"]
   # Independent little-endian positions from the supplied OEM SCC definition.
   packed = int.from_bytes(msg[1], "little")
-  assert msg[1][7] == 0
-  assert packed >> 74 & 7 == values["InfoDisplay"] == 0
+  if controller is not None:
+    assert msg[1][7] == 0
+    assert values["InfoDisplay"] == 0
+  assert packed >> 74 & 7 == values["InfoDisplay"]
   assert packed >> 184 & 3 == values["StopReq"]
   assert (packed >> 176 & 63) * 0.02 == pytest.approx(values["AccelLimitBandLower"])
   return values
+
+
+@pytest.mark.parametrize("camera", [True, False])
+@pytest.mark.parametrize("stock_info", [0, 4, 5])
+def test_disabled_experiment_preserves_legacy_stopping(camera, stock_info):
+  cs = make_cs()
+  cs.scc_control["InfoDisplay"] = stock_info
+  # Persistent motion must not activate retries when the setting is OFF.
+  for _ in range(200):
+    values = send(camera, None, cs)
+    assert values["StopReq"] == 1
+    assert values["aReqRaw"] == pytest.approx(-0.5)
+    assert values["aReqValue"] == pytest.approx(-0.5)
+    assert values["AccelLimitBandLower"] == pytest.approx(0)
+    assert values["InfoDisplay"] == (5 if camera and stock_info == 5 else 4)
+    assert values["ZEROS_7"] == (1 if camera else 0)
 
 
 @pytest.mark.parametrize("camera", [True, False])

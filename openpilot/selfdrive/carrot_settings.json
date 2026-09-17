@@ -403,6 +403,7 @@
           "params": [
             "CanfdHDA2",
             "CanfdDebug",
+            "CanfdStopRetry",
             "HDPuse"
           ]
         },
@@ -2636,6 +2637,24 @@
       "max": 1,
       "default": 0,
       "unit": 1
+    },
+    {
+      "group": "시작",
+      "name": "CanfdStopRetry",
+      "title": "CANFD 정지 재시도 (시험)",
+      "descr": "기본 OFF. 현대·기아 CANFD 오픈파일럿 종방향 제어용 시험 기능입니다. OFF는 기존 정지 동작, ON은 순정형 정지 요청 후 움직임이 지속되면 감속·재요청합니다. 차종별 완전 정지는 검증되지 않았습니다. 변경 후 기기를 재부팅하세요.",
+      "egroup": "START",
+      "etitle": "CANFD Stop Retry (Experimental)",
+      "edescr": "Default OFF. Experimental stopping for Hyundai/Kia CANFD with openpilot longitudinal control. OFF retains existing stopping; ON sends stock-like stop requests and retries with deceleration if motion persists. Complete stopping is not validated across vehicles. Reboot the device after changing.",
+      "cgroup": "启动设置",
+      "ctitle": "CANFD 停车重试（试验）",
+      "cdescr": "默认关闭。用于现代/起亚 CANFD 的 openpilot 纵向控制试验功能。关闭时保留原有停车控制；开启后发送类似原厂的停车请求，若持续移动则减速并重试。尚未验证所有车型均能完全停车。更改后请重启设备。",
+      "min": 0,
+      "max": 1,
+      "default": 0,
+      "unit": 1,
+      "control": "toggle",
+      "risk": "high"
     },
     {
       "group": "시작",
