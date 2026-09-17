@@ -29,7 +29,7 @@ def apply_accel_jerk_limit(a_raw: float, a_value_last: float, jerk_u: float, jer
 
 
 def apply_stopping_experiment(values, CS, controller, accel, previous_value, jerk_u, jerk_l):
-  """Apply the branch-local experiment after the normal SCC interlocks."""
+  """Apply the stopping/re-entry sequence after the normal SCC interlocks."""
   if controller is None:
     return
 

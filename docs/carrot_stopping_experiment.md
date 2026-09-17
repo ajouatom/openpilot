@@ -1,9 +1,10 @@
-# carrot-stopping: CAN FD 정지 제어 시험
+# CAN FD 정지 제어: carrot-stopping 시험 및 carrot-wip 반영
 
-`carrot-wip`의 `c04fa4566c`에서 분리한 시험 브랜치다. 현대·기아 CAN FD의
+`carrot-wip`의 `c04fa4566c`에서 분리한 `carrot-stopping`의 정지 제어를
+2026-09-17 사용자 요청으로 `carrot-wip`에 반영했다. 현대·기아 CAN FD의
 openpilot 종방향 SCC 송신 경로 두 곳(camera SCC / 일반 CAN FD)에만 적용한다.
-일반 CAN, 순정 종방향 제어, 모델 선택은 변경하지 않는다. 이 실험을 유지 브랜치에
-자동 동기화하지 않는다. 설정 항목은 추가하지 않는다.
+일반 CAN, 순정 종방향 제어, 모델 선택은 변경하지 않는다. 별도 시험 브랜치는 삭제하며,
+이후 코드는 `carrot-wip`에서 관리한다. 설정 항목은 추가하지 않는다.
 
 이 코드는 ECU의 정지 제어 진입 조건과 aReq 우선순위를 조사하기 위한 실험이다.
 추돌 방지나 실차 정지 성공을 보증하지 않는다. 공개도로 적용 전 제동을 직접
