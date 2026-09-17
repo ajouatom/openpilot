@@ -18,7 +18,7 @@ def source_version() -> str:
   digest = hashlib.sha256()
   roots = (replay.CARROT_ROOT / "radar_motion", replay.CARROT_ROOT / "cluster",
            replay.REPO_ROOT / "openpilot/selfdrive/controls/lib")
-  files = {Path(__file__), Path(replay.__file__)}
+  files = {Path(__file__), Path(replay.__file__), *replay._radar_input_sources()}
   for root in roots:
     files.update(root.glob("*.py"))
   files.update((replay.REPO_ROOT / "openpilot/cereal").glob("*.capnp"))

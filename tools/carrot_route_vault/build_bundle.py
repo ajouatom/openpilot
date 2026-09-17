@@ -10,6 +10,8 @@ import subprocess
 
 ROOT = Path(__file__).resolve().parents[2]
 SOURCES = (
+  "openpilot/common/filter_simple.py",
+  "openpilot/selfdrive/carrot/radar/tools/radar_group3_replay.py",
   "openpilot/selfdrive/carrot/radar_motion",
   "openpilot/selfdrive/carrot/radar/tools/radar_validation_replay.py",
   "openpilot/selfdrive/carrot/radar/tools/radar_web_export.py",
