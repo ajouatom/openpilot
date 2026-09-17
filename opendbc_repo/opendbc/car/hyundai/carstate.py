@@ -175,6 +175,7 @@ class CarState(CarStateBase):
 
     # for CANFD parsing
     self.scc_control = None
+    self.canfdSccHoldActive = False
     self.lfa = None
     self.lfa_alt = None
     self.lfahda_cluster = None
@@ -1134,6 +1135,7 @@ class CarState(CarStateBase):
     ret.cruiseState.available = self.main_enabled and self.controls_ready_count >= READY_COUNT_OK #cp.vl["TCS"]["ACCEnable"] == 0
 
     avh_state = cp.vl["ESP_STATUS"]["AVH_Sta"]
+    self.canfdSccHoldActive = avh_state == 1
     avh_lamp = cp.vl["ESP_STATUS"]["AVH_LAMP"]
     ret.brakeHoldActive, self.canfdAvhReleaseGraceFrames = update_canfd_auto_hold_interlock_state(
       avh_state, avh_lamp, self.canfdOemBrakeHoldLatched, self.canfdAvhReleaseGraceFrames,
