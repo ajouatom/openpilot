@@ -44,6 +44,16 @@ def guard(request):
     raise web.HTTPConflict(text='setup requires fresh stationary and disengaged state')
 
 
+def cancel_pending(mac):
+  cancelled = read_json(RUNTIME / 'cancelled.json', {})
+  if not isinstance(cancelled, dict):
+    cancelled = {}
+  cancelled[mac] = time.monotonic()
+  atomic_json(RUNTIME / 'cancelled.json', cancelled)
+  # Only the daemon writes command journals. Readers reject cancelled events;
+  # rewriting a journal here could race a simultaneous event from another device.
+
+
 async def status(request):
   result = {'runtime': runtime(), 'config': config(), 'actions': ACTIONS, 'defaults': DEFAULT_MAPPING,
             'radioEnabled': await radio_enabled()}
@@ -82,16 +92,28 @@ async def mutate(request):
       elif operation in ('connect', 'disconnect', 'forget'):
         mac = address(body.get('address'))
         await client.device_action(mac, operation)
+        if operation != 'connect':
+          cancel_pending(mac)
         if operation == 'forget':
           settings = config()
           settings['devices'].pop(mac, None)
           atomic_json(CONFIG_PATH, settings)
-      elif operation == 'config':
-        settings = validate_config(body)
+      elif operation in ('config', 'device-config'):
+        previous = config()
+        if operation == 'device-config':
+          mac = address(body.get('address'))
+          settings = config()
+          settings['devices'][mac] = body.get('device')
+          settings = validate_config(settings)
+        else:
+          settings = validate_config(body)
         paired = {d['address'] for d in (await client.snapshot())['devices'] if d['paired']}
         if any(mac not in paired for mac in settings['devices']):
           raise ValueError('pair devices before configuring input')
         atomic_json(CONFIG_PATH, settings)
+        for mac, old in previous['devices'].items():
+          if settings['devices'].get(mac) != old:
+            cancel_pending(mac)
       elif operation == 'learn':
         mac = address(body.get('address'))
         if mac not in config()['devices']:
@@ -99,9 +121,7 @@ async def mutate(request):
         if type(body.get('enabled')) is not bool:
           raise ValueError('enabled must be boolean')
         atomic_json(RUNTIME / 'learn.json', {'address': mac, 'until': time.monotonic() + 120} if body['enabled'] else {})
-        # Clear a pending action when entering test mode.
-        for channel in ('cruise', 'lane'):
-          atomic_json(RUNTIME / f'{channel}.json', {})
+        cancel_pending(mac)
       elif operation == 'radio':
         if type(body.get('enabled')) is not bool:
           raise ValueError('enabled must be boolean')

@@ -9,7 +9,7 @@ import time
 import uuid
 
 from openpilot.cereal import messaging
-from openpilot.selfdrive.carrot.bluetooth.model import RUNTIME, Decoder, address, atomic_json, config, read_json
+from openpilot.selfdrive.carrot.bluetooth.model import RUNTIME, CommandWriter, Decoder, address, atomic_json, config, read_json
 
 EVENT = struct.Struct('@llHHi')
 EVIOCGRAB = 0x40044590
@@ -64,11 +64,33 @@ def main():
   settings = config()
   last_reload = last_status = 0.0
   last_event = None
+  last_events = {}
+  recent_events = []
   errors = {}
   last_fire = {}
   learning = {}
-  session = uuid.uuid4().hex
-  sequence = 0
+  writer = CommandWriter()
+  for channel in writer.events:
+    writer.publish(channel)
+
+  def emit(mac, tokens, now):
+    nonlocal last_event
+    device = settings['devices'][mac]
+    testing = learning.get('address') == mac
+    for token in tokens:
+      action = device['mapping'].get(token, 'none')
+      reason = 'test' if testing else 'inactive'
+      emitted = False
+      if not testing and device['enabled'] and started and car_ok and now - last_fire.get((mac, token), 0) >= 0.18:
+        if action != 'none':
+          writer.send(mac, action, now)
+          last_fire[mac, token] = now
+          emitted, reason = True, 'sent'
+      last_event = {'id': uuid.uuid4().hex, 'time': now, 'address': mac, 'button': token,
+                    'action': action, 'emitted': emitted, 'reason': reason}
+      last_events[mac] = last_event
+      recent_events.append(last_event)
+      del recent_events[:-128]
   try:
     while True:
       now = time.monotonic()
@@ -80,6 +102,7 @@ def main():
       if now - last_reload >= 0.25:
         last_reload = now
         updated = config()
+        previous_learning = learning
         learning = read_json(RUNTIME / 'learn.json', {}) or {}
         if not isinstance(learning, dict) or not isinstance(learning.get('until', 0), (int, float)) or learning.get('until', 0) < now:
           learning = {}
@@ -89,7 +112,8 @@ def main():
           old = settings['devices'].get(mac)
           new = updated['devices'].get(mac)
           wanted = new and (new['enabled'] or learning.get('address') == mac)
-          if path not in available or not wanted or old != new:
+          learning_changed = (previous_learning.get('address') == mac) != (learning.get('address') == mac)
+          if path not in available or not wanted or old != new or learning_changed:
             os.close(fd)
             del opened[path]
         settings = updated
@@ -99,12 +123,13 @@ def main():
           if path in opened or not device or not (device['enabled'] or learning.get('address') == mac):
             continue
           try:
-            opened[path] = (open_input(path), mac, Decoder(device['profile']))
+            opened[path] = (open_input(path), mac, Decoder(device['profile'], device['mapping'], learning.get('address') == mac))
           except (OSError, subprocess.SubprocessError) as exc:
             errors[mac] = str(exc)
       ready, _, _ = select.select([entry[0] for entry in opened.values()], [], [], 0.01)
       for path, (fd, mac, decoder) in list(opened.items()):
         if fd not in ready:
+          emit(mac, decoder.flush(time.monotonic()), time.monotonic())
           continue
         try:
           data = os.read(fd, EVENT.size * 128)
@@ -118,32 +143,24 @@ def main():
           continue
         now = time.monotonic()
         for _sec, _usec, kind, code, value in EVENT.iter_unpack(data):
-          for token in decoder.feed(kind, code, value, now):
-            device = settings['devices'][mac]
-            action = device['mapping'].get(token, 'none')
-            testing = learning.get('address') == mac
-            fresh = 0 <= now - (_sec + _usec / 1e6) < 0.4
-            reason = 'test' if testing else 'inactive'
-            emitted = False
-            # Key repeats and queued events never become acceleration repeats.
-            if fresh and not testing and device['enabled'] and started and car_ok and now - last_fire.get(mac, 0) >= 0.18:
-              if action != 'none':
-                sequence += 1
-                channel = 'lane' if action in ('laneLeft', 'laneRight') else 'cruise'
-                atomic_json(RUNTIME / f'{channel}.json', {'id': f'{session}:{sequence}', 'time': now,
-                                                        'action': action, 'address': mac})
-                last_fire[mac] = now
-                emitted, reason = True, 'sent'
-            last_event = {'id': uuid.uuid4().hex, 'time': now, 'address': mac, 'button': token,
-                          'action': action, 'emitted': emitted, 'reason': reason}
+          stamp = _sec + _usec / 1e6
+          if not 0 <= now - stamp < 0.4:
+            decoder.feed(0, 3, 0, now)
+            continue
+          emit(mac, decoder.feed(kind, code, value, stamp), now)
+        emit(mac, decoder.flush(now), now)
+      now = time.monotonic()
+      writer.prune({mac for _, mac, _ in opened.values()
+                    if settings['devices'][mac]['enabled'] and learning.get('address') != mac} if started and car_ok else set(), now)
       if now - last_status >= 0.2:
         last_status = now
         atomic_json(RUNTIME / 'status.json', {'time': now, 'stationary': bool(stationary), 'started': bool(started),
                     'grabbed': sorted({entry[1] for entry in opened.values()}), 'errors': errors,
-                    'last_event': last_event, 'learning': learning})
+                    'last_event': last_event, 'last_events': last_events, 'recent_events': recent_events, 'learning': learning})
   finally:
     for fd, _, _ in opened.values():
       os.close(fd)
+    lock.close()
     atomic_json(RUNTIME / 'status.json', {'time': time.monotonic(), 'stationary': False, 'grabbed': [], 'stopped': True})
 
 

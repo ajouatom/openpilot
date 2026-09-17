@@ -10,3 +10,6 @@
 .carrot-bt-dialog [data-bt=event] { display: block; padding: 12px 0; color: #a8e6c8; }
 .carrot-bt-dialog [data-bt=notice] { color: #f9da86; line-height: 1.6; }
 .carrot-bt-dialog button:disabled { opacity: .45; }
+.carrot-bt-dialog .bt-mapping-row { border: 1px solid #52647680; border-radius: 10px; margin: 12px 0; padding: 4px 12px; min-width: 0; }
+.carrot-bt-dialog .bt-mapping-row legend { font-weight: 700; padding: 0 6px; }
+.carrot-bt-dialog .bt-mapping-row select { min-width: 0; width: 65%; }
