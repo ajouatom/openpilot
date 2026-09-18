@@ -3,13 +3,14 @@ from types import SimpleNamespace
 import pytest
 
 from opendbc.can import CANPacker, CANParser
+from opendbc.car import structs
 from opendbc.car.hyundai import hyundaicanfd
 from opendbc.car.hyundai.tests.test_scc_lead import make_cs, make_radar, send as send_scc
 from opendbc.car.hyundai.values import HyundaiFlags
 
 
-def send_ccnc(monkeypatch, radar, *, enabled=True, stock=None, present=True):
-  monkeypatch.setattr(hyundaicanfd, "Params", lambda: SimpleNamespace(get_int=lambda key: 0))
+def send_ccnc(monkeypatch, radar, *, enabled=True, stock=None, present=True, with_target=False):
+  monkeypatch.setattr(hyundaicanfd, "Params", lambda: SimpleNamespace(get_int=lambda key: 0, get=lambda key: "0"))
   packer = CANPacker("hyundai_canfd_generated")
   source = {key: 0 for key in packer.dbc.name_to_msg["CCNC_0x162"].sigs}
   source.update(FF_DISTANCE=204.6, FF_DETECT_ALT=2, FF_DISTANCE_ALT=31.2, FF_LATERAL_ALT=0.7,
@@ -22,21 +23,30 @@ def send_ccnc(monkeypatch, radar, *, enabled=True, stock=None, present=True):
   cs.modelV2 = cs.lfahda_cluster = cs.cruise_buttons_msg = None
   cs.adrv_0x161 = cs.adrv_0x200 = cs.adrv_0x1ea = None
   cs.ccnc_0x162 = source if present else None
+  if with_target:
+    cs.adrv_0x161 = {key: 0 for key in packer.dbc.name_to_msg["ADRV_0x161"].sigs}
+    cs.out.latEnabled = True
+    cs.out.vehicleNaviAvailable = cs.out.leftBlindspot = cs.out.rightBlindspot = False
+    cs.out.leftLaneLine = cs.out.rightLaneLine = 0
+    cs.is_metric = True
+    cs.trailer_connected = False
   messages = hyundaicanfd.create_ccnc_messages(
     SimpleNamespace(flags=HyundaiFlags.CAMERA_SCC), packer, SimpleNamespace(ECAN=0, CAM=2), 5,
-    SimpleNamespace(enabled=enabled, latActive=True), cs, SimpleNamespace(), 0, False, False, 0, False, 0, 0,
+    SimpleNamespace(enabled=enabled, latActive=True), cs, structs.CarControl().hudControl, 0, False, False, 0, False, 0, 0,
   )
   assert source == original
   if not present:
     assert messages == []
     return None
-  assert len(messages) == 1 and messages[0][0] == 0x162 and messages[0][2] == 0
-  parser = CANParser("hyundai_canfd_generated", [("CCNC_0x162", 20)], 0)
+  assert len(messages) == (2 if with_target else 1) and messages[-1][0] == 0x162 and messages[-1][2] == 0
+  parser = CANParser("hyundai_canfd_generated", [("CCNC_0x162", 20), ("ADRV_0x161", 20)], 0)
   assert 0x162 in parser.update([1_000_000_000, messages])
   values = dict(parser.vl["CCNC_0x162"])
-  assert values["CHECKSUM"] == hyundaicanfd.hkg_can_fd_checksum(0x162, None, bytearray(messages[0][1]))
+  assert values["CHECKSUM"] == hyundaicanfd.hkg_can_fd_checksum(0x162, None, bytearray(messages[-1][1]))
   for key in ("FF_DETECT_ALT", "FF_DISTANCE_ALT", "FF_LATERAL_ALT", "RF_DETECT", "RF_DETECT_DISTANCE", "RF_DETECT_LATERAL"):
     assert values[key] == pytest.approx(original[key])
+  if with_target:
+    values["target_values"] = dict(parser.vl["ADRV_0x161"])
   return values
 
 
@@ -79,3 +89,32 @@ def test_ccnc_geometry_bounds_do_not_wrap(monkeypatch, y_rel, raw_lateral):
 
 def test_absent_ccnc_message_is_not_synthesized(monkeypatch):
   send_ccnc(monkeypatch, make_radar(), present=False)
+
+
+@pytest.mark.parametrize(("first", "second", "expected"), [
+  ({"dRel": 20.0}, {"dRel": 9.6, "yRel": 0.3, "vRel": -2.1}, 2),
+  ({"dRel": 9.6}, {"dRel": 20.0}, 1),
+  ({"dRel": 9.6}, {"dRel": 9.6, "yRel": 0.3}, 1),
+  ({"status": False}, {"dRel": 9.6}, 2),
+  ({"dRel": float("nan")}, {"dRel": 9.6}, 2),
+  ({"dRel": 20.0}, {"dRel": 0.0}, 1),
+  ({"dRel": 20.0}, {"dRel": 9.6, "yRel": float("nan")}, 1),
+  ({"dRel": 20.0}, {"dRel": 9.6, "status": False}, 1),
+  ({"status": False}, {"status": False}, 0),
+])
+def test_all_vehicle_displays_follow_nearest_valid_lead(monkeypatch, first, second, expected):
+  radar = make_radar(**first)
+  radar.leadTwo = make_radar(**second).leadOne
+  cc = send_ccnc(monkeypatch, radar, with_target=True)
+  scc = send_scc(make_cs(radar))
+  target = cc["target_values"]
+  if expected:
+    lead = radar.leadOne if expected == 1 else radar.leadTwo
+    assert scc["ACC_ObjDist"] == pytest.approx(lead.dRel)
+    assert scc["ACC_ObjLatPos"] == pytest.approx(-lead.yRel)
+    assert scc["ACC_ObjRelSpd"] == pytest.approx(lead.vRel)
+    assert cc["FF_DISTANCE"] == target["TARGET_DISTANCE"] == pytest.approx(lead.dRel)
+    assert cc["FF_LATERAL"] == pytest.approx((-lead.yRel) % 12.8)
+    assert target["TARGET"] == 1 and target["DISTANCE_LEAD"] == 2
+  else:
+    assert scc["HUD_LEAD_INFO"] == cc["FF_DETECT"] == target["TARGET"] == target["DISTANCE_LEAD"] == 0
