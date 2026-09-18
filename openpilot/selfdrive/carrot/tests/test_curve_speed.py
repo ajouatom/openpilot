@@ -148,3 +148,32 @@ def test_recorded_geometry_distinguishes_mild_bend_entry_and_exit():
   assert 25. < results['curve_entry'].curve_kph < 50.
   assert results['curve_entry'].distance < 20.
   assert results['curve_exit'].approach_kph > 50.
+
+
+def test_confirmed_exit_follows_recent_geometry_instead_of_slow_speed_ramp():
+  state = VisionCurveSpeed()
+  state.update(CurveSpeed(30.), 0., model_time=1)
+  for i in range(1, 7):
+    value = state.update(CurveSpeed(80.), i * .05, model_time=i + 1)
+    assert value == (30. if i <= 5 else 80.)
+  # A new bend is effective immediately, even during recovery.
+  assert state.update(CurveSpeed(25.), .35, model_time=8) == 25.
+
+
+def test_repeated_frame_and_scheduler_pause_do_not_confirm_exit():
+  state = VisionCurveSpeed()
+  state.update(CurveSpeed(30.), 0., model_time=1)
+  for t in np.arange(.05, 1., .05):
+    assert state.update(CurveSpeed(100.), float(t), model_time=2) == 30.
+  assert state.update(CurveSpeed(100.), 10., model_time=3) == 30.
+  assert state.update(CurveSpeed(100.), 10.05, model_time=4) == 30.
+  assert state.update(CurveSpeed(25.), 10.10, model_time=4) == 25.
+
+
+def test_model_loss_resets_exit_confirmation():
+  state = VisionCurveSpeed()
+  state.update(CurveSpeed(30.), 0.)
+  for t in (.05, .1, .15):
+    state.update(CurveSpeed(100.), t)
+  assert state.update(None, .2) == 30.
+  assert state.update(CurveSpeed(100.), .25) == 30.

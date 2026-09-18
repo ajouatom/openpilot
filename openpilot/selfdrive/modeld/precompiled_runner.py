@@ -89,8 +89,9 @@ class PrecompiledModelState:
       raise
     self.views['prev_feat'][:] = result[self.output_slices['hidden_state']]
     # The fused graph advances image and policy history together, including dropped-frame catch-up.
-    if prepare_only:
-      return None
+    # It also produces a complete current-frame policy: publishing it avoids
+    # an extra output gap after a dropped camera frame. The split backend still
+    # uses prepare_only to catch up its image history without policy inference.
     outputs = self.parser.parse_outputs({k: result[np.newaxis, section] for k, section in self.output_slices.items()})
     if os.getenv('SEND_RAW_PRED'):
       outputs['raw_pred'] = result
