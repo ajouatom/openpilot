@@ -4,6 +4,7 @@ import math
 import os
 from pathlib import Path
 import pickle
+import time
 
 import numpy as np
 
@@ -103,7 +104,27 @@ class GenericModelRuntime:
     self.frames = input_view(self.device_buffer, (2, self.frame_size), dtypes.uint8, self.frames_offset)
 
   def run(self):
+    started, cpu_started = time.monotonic(), time.thread_time()
     self.device_buffer.copy_from(self.host)
+    uploaded, cpu_uploaded = time.monotonic(), time.thread_time()
     self.queues['new_img'] = self.run_warp(input_frame=self.frames, M_inv=self.transforms)
+    warped, cpu_warped = time.monotonic(), time.thread_time()
     self.run_model(output_buffers=self.outputs, **self.queues)
-    return self.outputs['outputs'].numpy().reshape(-1)
+    dispatched, cpu_dispatched = time.monotonic(), time.thread_time()
+    result = self.outputs['outputs'].numpy().reshape(-1)
+    finished, cpu_finished = time.monotonic(), time.thread_time()
+    # Call boundaries only: GPU work may finish in a later call. Do not insert
+    # synchronizations that change pipelining or label these as kernel timings.
+    # In particular, generic output download is inside adapter.run(), whereas
+    # the worker's result_sync_ms only measures validation/shared-output copy.
+    self.last_timings = {
+      'input_upload_ms': (uploaded - started) * 1000,
+      'input_upload_cpu_ms': (cpu_uploaded - cpu_started) * 1000,
+      'warp_call_ms': (warped - uploaded) * 1000,
+      'warp_call_cpu_ms': (cpu_warped - cpu_uploaded) * 1000,
+      'model_call_ms': (dispatched - warped) * 1000,
+      'model_call_cpu_ms': (cpu_dispatched - cpu_warped) * 1000,
+      'output_read_ms': (finished - dispatched) * 1000,
+      'output_read_cpu_ms': (cpu_finished - cpu_dispatched) * 1000,
+    }
+    return result

@@ -126,7 +126,8 @@ def main():
                            run_model_ms=(dispatched - started) * 1000,
                            result_sync_ms=(finished - dispatched) * 1000,
                            work_ms=(finished - started) * 1000,
-                           thread_cpu_ms=(cpu_finished - cpu_started) * 1000)
+                           thread_cpu_ms=(cpu_finished - cpu_started) * 1000,
+                           **(adapter.last_timings if generic else {}))
       if generic:
         del adapter
       del output, packed_shared, queues
