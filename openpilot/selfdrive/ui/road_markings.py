@@ -18,25 +18,60 @@ def lane_dash_segments(line: np.ndarray, max_distance: float) -> list[np.ndarray
   if end_distance <= start_distance:
     return []
 
-  segments = []
+  boundaries = []
   cycle_distance = LANE_DASH_LENGTH_M + LANE_DASH_GAP_M
   cursor = math.floor(start_distance / cycle_distance) * cycle_distance
   while cursor < end_distance:
     dash_start = max(cursor, start_distance)
     dash_end = min(cursor + LANE_DASH_LENGTH_M, end_distance)
     if dash_end > dash_start:
-      inside = line[(x > dash_start) & (x < dash_end)]
-      start_point = np.array(
-        [dash_start, *(np.interp(dash_start, x, line[:, axis]) for axis in (1, 2))],
-        dtype=line.dtype,
-      )
-      end_point = np.array(
-        [dash_end, *(np.interp(dash_end, x, line[:, axis]) for axis in (1, 2))],
-        dtype=line.dtype,
-      )
-      segments.append(np.vstack((start_point, inside, end_point)))
+      boundaries.append((dash_start, dash_end))
     cursor += cycle_distance
+  if not boundaries:
+    return []
+
+  # Interpolate all dash endpoints together, instead of four np.interp calls
+  # and three temporary arrays for every short dash on every camera frame.
+  distances = np.asarray(boundaries).ravel()
+  endpoints = np.empty((len(distances), 3), dtype=line.dtype)
+  endpoints[:, 0] = distances
+  endpoints[:, 1] = np.interp(distances, x, line[:, 1])
+  endpoints[:, 2] = np.interp(distances, x, line[:, 2])
+  segments = []
+  for i, (dash_start, dash_end) in enumerate(boundaries):
+    inside = line[(x > dash_start) & (x < dash_end)]
+    segments.append(np.concatenate((endpoints[2*i:2*i+1], inside, endpoints[2*i+1:2*i+2])))
   return segments
+
+
+def project_lane_segments(segments: list[np.ndarray], half_width: float, transform: np.ndarray, clip) -> list[np.ndarray]:
+  """Project independent dash ribbons in one batch, preserving their gaps/order.
+
+  Dash endpoints are already interpolated by lane_dash_segments. Keep the
+  legacy float32 offsets, two-sided clipping, and per-dash vertex ordering.
+  """
+  if not segments:
+    return []
+  lengths = [len(segment) for segment in segments]
+  points = np.concatenate(segments)
+  n = len(points)
+  offsets = np.array([[0., -half_width, 0.], [0., half_width, 0.]], dtype=np.float32)
+  sides = (points[None, :, :] + offsets[:, None, :]).reshape(2 * n, 3)
+  projected = (transform @ sides.T).reshape(3, 2, n)
+  depth_ok = np.abs(projected[2]) >= 1e-6
+  xy = np.divide(projected[:2], projected[2:3], out=np.full_like(projected[:2], np.nan), where=depth_ok[None, :, :])
+  valid = ((points[:, 0] >= 0) & depth_ok.all(axis=0)
+           & ((xy[0] >= clip.x) & (xy[0] <= clip.x + clip.width)
+              & (xy[1] >= clip.y) & (xy[1] <= clip.y + clip.height)).all(axis=0))
+  result = []
+  start = 0
+  for length in lengths:
+    end = start + length
+    sides_xy = xy[:, :, start:end][:, :, valid[start:end]]
+    if sides_xy.shape[2]:
+      result.append(np.concatenate((sides_xy[:, 0].T, sides_xy[:, 1, ::-1].T)).astype(np.float32))
+    start = end
+  return result
 
 
 def project_blindspot_barrier(points: np.ndarray, y_shift: float, transform: np.ndarray, clip) -> np.ndarray:
