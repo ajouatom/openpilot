@@ -3,6 +3,7 @@ import colorsys
 import numpy as np
 
 from openpilot.selfdrive.ui.onroad.path_geometry import project_path, sample_path
+from openpilot.selfdrive.ui.render_diagnostics import RenderDiagnostics
 import pyray as rl
 from openpilot.cereal import messaging, car, log
 from dataclasses import dataclass, field
@@ -12,7 +13,7 @@ from openpilot.selfdrive.locationd.calibrationd import HEIGHT_INIT
 from openpilot.selfdrive.ui.ui_state import ui_state
 from openpilot.selfdrive.ui.road_markings import (
   LANE_DASH_LENGTH_M as LANE_DASH_LENGTH_M, LANE_DASH_GAP_M as LANE_DASH_GAP_M,
-  lane_dash_segments, project_blindspot_barrier, blindspot_barrier_quads,
+  lane_dash_segments, project_lane_segments, project_blindspot_barrier, blindspot_barrier_quads,
 )
 from openpilot.system.ui.lib.application import gui_app, FontWeight
 from openpilot.system.ui.lib.text_draw import draw_text_ui_style
@@ -153,10 +154,15 @@ class ModelRenderer(Widget):
     self._draw_carrot_overlays(sm)
 
   def _draw_carrot_overlays(self, sm) -> None:
-    self._draw_path_carrot(sm)
-    self._draw_lane_lines_carrot(sm)
-    self._draw_blind_spot_carrot(sm)
-    self._draw_radar_info_carrot(sm)
+    if not hasattr(self, '_render_diagnostics'):
+      self._render_diagnostics = RenderDiagnostics('uiModel')
+    timing = self._render_diagnostics
+    timing.start()
+    timing.call('path', self._draw_path_carrot, sm)
+    timing.call('lanes', self._draw_lane_lines_carrot, sm)
+    timing.call('blindspot', self._draw_blind_spot_carrot, sm)
+    timing.call('radar', self._draw_radar_info_carrot, sm)
+    timing.finish()
 
   def _update_raw_points(self, model):
     """Update raw 3D points from model data"""
@@ -964,16 +970,15 @@ class ModelRenderer(Widget):
       # Negative means the vehicle has no lane-type classification. Keep the
       # high-confidence model geometry visible and use the legacy solid style.
       is_dashed = lane_code is not None and lane_code >= 0 and lane_code % 10 == 0
-      line_segments = lane_dash_segments(lane_line.raw_points, max_distance) if is_dashed else [lane_line.raw_points]
-      projected_segments = []
-      for line_segment in line_segments:
-        segment_max_idx = line_segment.shape[0] - 1 if is_dashed else max_idx
-        segment_max_distance = min(max_distance, float(line_segment[-1, 0])) if is_dashed else max_distance
-        pts = self._map_line_to_polygon(
-          line_segment, line_width, 0.0, segment_max_idx, segment_max_distance,
+      if is_dashed:
+        projected_segments = project_lane_segments(
+          lane_dash_segments(lane_line.raw_points, max_distance), line_width, self._car_space_transform, self._clip_region,
         )
-        if pts.size != 0:
-          projected_segments.append(pts)
+      else:
+        pts = self._map_line_to_polygon(
+          lane_line.raw_points, line_width, 0.0, max_idx, max_distance,
+        )
+        projected_segments = [pts] if pts.size != 0 else []
       lane_vertices.append(projected_segments)
 
       if i == 1 and draw_double_left:

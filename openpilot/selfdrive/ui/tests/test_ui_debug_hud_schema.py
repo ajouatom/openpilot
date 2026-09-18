@@ -82,13 +82,16 @@ def test_augmented_road_view_publishes_compact_snapshot_after_render():
         publish_lines.append(node.lineno)
 
     if isinstance(node, ast.Call):
+      render_target = node.func
+      if _is_attribute(node.func, "timing", "call") and len(node.args) >= 2:
+        render_target = node.args[1]
       if (
-        isinstance(node.func, ast.Attribute)
+        isinstance(render_target, ast.Attribute)
         and (
-          _is_attribute(node.func, "self", "model_renderer", "render")
-          or _is_attribute(node.func, "self", "_hud_renderer", "render")
-          or _is_attribute(node.func, "self", "alert_renderer", "render")
-          or _is_attribute(node.func, "self", "driver_state_renderer", "render")
+          _is_attribute(render_target, "self", "model_renderer", "render")
+          or _is_attribute(render_target, "self", "_hud_renderer", "render")
+          or _is_attribute(render_target, "self", "alert_renderer", "render")
+          or _is_attribute(render_target, "self", "driver_state_renderer", "render")
         )
       ):
         render_lines.append(node.lineno)

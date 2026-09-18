@@ -134,6 +134,7 @@ class FakeParams:
       "ShowPathModeLane": 14,
       "ShowPathColorLane": 20,
       "ShowPathColorCruiseOff": 19,
+      "CarrotTireTrajectory": 1,
     }
     self.calls = []
 
@@ -149,16 +150,16 @@ def test_carrot_params_refresh_is_throttled(monkeypatch):
   renderer._carrot_params_next_refresh_time = 0.0
 
   renderer._refresh_carrot_params(0.0)
-  assert len(params.calls) == 7
+  assert len(params.calls) == len(params.values)
   assert renderer._carrot_show_path_mode_normal == 9
 
   params.values["ShowPathMode"] = 13
   renderer._refresh_carrot_params(0.999)
-  assert len(params.calls) == 7
+  assert len(params.calls) == len(params.values)
   assert renderer._carrot_show_path_mode_normal == 9
 
   renderer._refresh_carrot_params(1.0)
-  assert len(params.calls) == 14
+  assert len(params.calls) == 2 * len(params.values)
   assert renderer._carrot_show_path_mode_normal == 13
 
 
