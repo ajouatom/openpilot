@@ -96,7 +96,9 @@ def main():
         control.flush()
         # Timings include transfers/synchronization; these are not pure GPU
         # kernel durations. Keep the pipe protocol and the compiled graph intact.
-        diagnostics.record(context={'gpu_arch': manifest['gpu_arch']},
+        diagnostics.record(context={'gpu_arch': manifest['gpu_arch'], 'format': manifest['format'],
+                                    'camera_width': width, 'camera_height': height, 'input_bytes': input_bytes,
+                                    'model_sha256': manifest['pickle']['sha256']},
                            run_model_ms=(dispatched - started) * 1000,
                            result_sync_ms=(finished - dispatched) * 1000,
                            work_ms=(finished - started) * 1000,
