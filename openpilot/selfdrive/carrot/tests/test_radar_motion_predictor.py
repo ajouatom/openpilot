@@ -47,12 +47,14 @@ from openpilot.selfdrive.carrot.radar_motion.primary import (
   RadarPointSnapshot,
   VisionLead,
   VisionRadarMatcher,
+  VisionRadarMatch,
   apply_vision_bracket_cutin_support,
   lead_from_radar_point,
   prefer_front_radar_kinematics,
   select_primary_radar_points,
   snapshot_live_radar_points,
   snapshot_radar_points,
+  vision_lead_from_model,
 )
 
 
@@ -3573,6 +3575,89 @@ def test_stationary_front_hands_off_to_persistent_closer_vision_match() -> None:
   assert selected_ids[:5] == [59] * 5
   assert selected_ids[-1] == 46
   assert matcher.stationary_identity == ("frontRadar", 46)
+
+
+def test_distinct_stopped_body_handoff_requires_sustained_better_vision_match() -> None:
+  matcher = VisionRadarMatcher()
+  held = Point(32, 20.0, -0.2, trackState=2)
+  for i in range(7):
+    points = snapshot_radar_points((held,), v_ego=0.0)
+    result = matcher.match(model_with_lead(20.0, -0.2, 0.0, probability=1.0), points, STRAIGHT_PATH,
+                           time_s=i * 0.05, stationary_points=points, prefer_primary_stationary=True)
+  assert result.point.track_id == 32
+  # Vision sits closer to the nearer body, with realistic range bias. Both
+  # returns still fit the broad stationary gate, and their gap exceeds 5 m.
+  selected = []
+  for i in range(13):
+    points = snapshot_radar_points((held, Point(52, 14.5, 0.2, trackState=2)), v_ego=0.0)
+    model = model_with_lead(16.1, 0.1, 0.0, probability=0.99)
+    model.leadsV3[0].xStd = (0.65,)
+    model.leadsV3[0].yStd = (0.25,)
+    result = matcher.match(model, points, STRAIGHT_PATH, time_s=0.35 + i * 0.05,
+                           stationary_points=points, prefer_primary_stationary=True)
+    selected.append(result.point.track_id)
+  assert selected[:10] == [32] * 10
+  assert selected[-1] == 52
+  assert matcher.stationary_identity == ("frontRadar", 52)
+
+
+@pytest.mark.parametrize("change", (
+  "no_vision", "weak_vision", "vision_on_held", "ambiguous_range", "range_error", "low_quality",
+  "low_match_score", "lateral", "off_path", "speed", "unmeasured", "unmeasured_challenger", "corner", "far_separation",
+  "new_id", "gap", "position_jump", "transient",
+))
+def test_distinct_stopped_body_cannot_replace_l1_without_clear_persistent_vision(change):
+  matcher = VisionRadarMatcher()
+  ready = []
+  for i in range(13):
+    held = Point(32, 20.0, -0.2, trackState=2)
+    closer = Point(52, 14.5, 0.2, trackState=2)
+    distance, probability, score, d_path = 16.1, 0.99, 0.05, 0.2
+    if change == "weak_vision":
+      probability = 0.89
+    elif change == "vision_on_held":
+      distance = 20.0
+    elif change == "ambiguous_range":
+      distance = 17.25
+    elif change == "range_error":
+      closer, distance = replace(closer, d_rel=11.0), 14.0
+    elif change == "low_quality":
+      closer = replace(closer, trackState=1)
+    elif change == "low_match_score":
+      score = 1e-6
+    elif change == "lateral":
+      closer = replace(closer, y_rel=1.3)
+    elif change == "off_path":
+      d_path = 1.1
+    elif change == "speed":
+      closer = replace(closer, v_rel=3.0)
+    elif change == "corner":
+      closer = replace(closer, source="corner235")
+    elif change == "far_separation":
+      closer, distance = replace(closer, d_rel=3.0), 4.0
+    elif change == "new_id":
+      closer = replace(closer, track_id=52 + i // 4)
+    elif change == "position_jump":
+      held = replace(held, d_rel=20.0 + 4.0 * (i % 2))
+      closer = replace(closer, d_rel=14.5 + 4.0 * (i % 2))
+      distance += 4.0 * (i % 2)
+    elif change == "transient" and i >= 9:
+      distance = 20.0
+    points = snapshot_radar_points((held, closer), v_ego=0.0)
+    vision = vision_lead_from_model(model_with_lead(distance, 0.1, 0.0, probability=probability))
+    if change == "no_vision":
+      vision = None
+    # The normal snapshot filter already excludes unmeasured returns.
+    if change == "unmeasured":
+      points = (replace(points[0], measured=False), points[1])
+    elif change == "unmeasured_challenger":
+      points = (points[0], replace(points[1], measured=False))
+    stationary = VisionRadarMatch(points[0], 0.99, 0.01, -0.2)
+    moving = VisionRadarMatch(points[1], 0.99, score, d_path)
+    ready.append(matcher._stationary_closer_handoff_ready(
+      stationary, moving, vision, i * (0.3 if change == "gap" else 0.05),
+    ))
+  assert not any(ready)
 
 
 def test_stationary_front_hands_off_to_offset_closer_vision_range() -> None:
