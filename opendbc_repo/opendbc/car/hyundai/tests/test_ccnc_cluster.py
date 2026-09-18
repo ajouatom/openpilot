@@ -53,11 +53,12 @@ def test_cluster_objects_preserve_received_geometry_and_display_state(monkeypatc
     modelV2=None, lfahda_cluster=None, cruise_buttons_msg=None, adrv_0x161=None, adrv_0x200=None,
     adrv_0x1ea=source if message == "ADRV_0x1ea" else None,
     ccnc_0x162=source if message == "CCNC_0x162" else None,
+    radarState=SimpleNamespace(leadOne=SimpleNamespace(status=True, dRel=81.2, yRel=-1.3, vRel=-5.0)),
   )
   cp = SimpleNamespace(flags=HyundaiFlags.CAMERA_SCC.value)
   can = SimpleNamespace(ECAN=0, CAM=2)
-  control = SimpleNamespace(latActive=True)
-  # Positive lead distance and closing speed must not replace received FF data.
+  control = SimpleNamespace(latActive=True, enabled=True)
+  # FF uses radarState directly, independently of the older HUD distance.
   hud = SimpleNamespace(leadDistance=123.4, leadRadar=1, leadRelSpeed=-5.0)
 
   for frame in (0, 5, 65, 70, 100, 135, 200):
@@ -73,7 +74,7 @@ def test_cluster_objects_preserve_received_geometry_and_display_state(monkeypatc
       assert decoded[f"{side}_DETECT_LATERAL"] == pytest.approx(2.9)
       assert decoded[f"{side}_DETECT"] == expected_detect
     if message == "CCNC_0x162":
-      assert decoded["FF_DETECT"] == expected_detect
+      assert decoded["FF_DETECT"] == (expected_detect or 4)
       for key in ("FF_DISTANCE", "FF_LATERAL", "FF_DETECT_ALT", "FF_DISTANCE_ALT", "FF_LATERAL_ALT"):
         assert decoded[key] == pytest.approx(original[key])
     else:
