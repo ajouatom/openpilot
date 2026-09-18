@@ -150,6 +150,12 @@ STATIONARY_CLOSER_HANDOFF_RANGE_MAX_YREL_DELTA_M = 1.25
 STATIONARY_CLOSER_HANDOFF_MAX_DPATH_M = 1.0
 STATIONARY_CLOSER_HANDOFF_MAX_VISION_YREL_ERROR_M = 1.0
 STATIONARY_CLOSER_HANDOFF_MIN_VISION_RANGE_GAIN_M = 0.75
+# A distinct nearer stopped body can be more than 5 m ahead of the held one.
+# Reassociate only when vision resolves it clearly, not merely because it is
+# closer. Keep the ordinary matcher, measured front quality, and a longer hold.
+STATIONARY_DISTINCT_HANDOFF_MAX_VISION_ERROR_M = 2.5
+STATIONARY_DISTINCT_HANDOFF_MAX_ERROR_RATIO = 0.5
+STATIONARY_DISTINCT_HANDOFF_CONFIRMATION_S = 0.50
 STATIONARY_CLOSER_THAN_MOVING_MIN_DREL_GAIN_M = 3.0
 # Keep radar-only moving promotion disjoint from the stationary fallback.
 # A front-only point in this band needs vision, corner, or permitted SCC
@@ -3478,6 +3484,19 @@ class VisionRadarMatcher:
         <= abs(stationary.point.d_rel - vision.d_rel)
       )
     )
+    distinct_vision_match = (
+      stationary is not None
+      and moving is not None
+      and vision is not None
+      and cost_supported
+      and vision_range_supported
+      and moving.point.radar_track_state >= STATIONARY_RADAR_ONLY_FRONT_MIN_TRACK_STATE
+      and moving.score >= VISION_MATCH_FRESH_MIN_SCORE
+      and abs(moving.point.d_rel - vision.d_rel) <= STATIONARY_DISTINCT_HANDOFF_MAX_VISION_ERROR_M
+      and abs(moving.point.d_rel - vision.d_rel)
+      <= STATIONARY_DISTINCT_HANDOFF_MAX_ERROR_RATIO * abs(stationary.point.d_rel - vision.d_rel)
+      and stationary.point.d_rel - moving.point.d_rel <= VISION_RADAR_MAX_DISTANCE_ERROR_M
+    )
     eligible = (
       stationary is not None
       and moving is not None
@@ -3496,7 +3515,8 @@ class VisionRadarMatcher:
       and (
         STATIONARY_CLOSER_HANDOFF_MIN_DREL_GAIN_M
         <= stationary.point.d_rel - moving.point.d_rel
-        <= STATIONARY_CLOSER_HANDOFF_MAX_DREL_DELTA_M
+        and (stationary.point.d_rel - moving.point.d_rel <= STATIONARY_CLOSER_HANDOFF_MAX_DREL_DELTA_M
+             or distinct_vision_match)
       )
       and abs(stationary.point.v_lead - moving.point.v_lead)
       <= STATIONARY_CLOSER_HANDOFF_MAX_VLEAD_DELTA_MPS
@@ -3512,10 +3532,15 @@ class VisionRadarMatcher:
       self._stationary_closer_challenger_since_s = time_s
     self._stationary_closer_challenger_last_point = moving.point
     self._stationary_closer_challenger_last_time_s = time_s
+    confirmation_s = (
+      STATIONARY_DISTINCT_HANDOFF_CONFIRMATION_S
+      if stationary.point.d_rel - moving.point.d_rel > STATIONARY_CLOSER_HANDOFF_MAX_DREL_DELTA_M
+      else STATIONARY_CLOSER_HANDOFF_CONFIRMATION_S
+    )
     return (
       self._stationary_closer_challenger_since_s is not None
       and time_s - self._stationary_closer_challenger_since_s
-      >= STATIONARY_CLOSER_HANDOFF_CONFIRMATION_S
+      >= confirmation_s
     )
 
   def _adopt_stationary_closer_handoff(
