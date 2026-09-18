@@ -377,6 +377,21 @@ def create_lfa_icon_non_camera_scc(packer, CS, CAN, CC):
     ret.append(packer.make_can_msg("ADRV_0x161", CAN.ECAN, values, rx_counter=rx_counter))
   return ret
 
+def _apply_scc_lead(values, radar_state):
+  lead = radar_state.leadOne if radar_state is not None else None
+  valid = (lead is not None and lead.status and lead.dRel > 0
+           and all(math.isfinite(v) for v in (lead.dRel, lead.yRel, lead.vRel)))
+  # Match the stock no-object encoding; never retain an old camera target.
+  values.update(ACC_ObjDist=204.6, ACC_ObjLatPos=0.0, ACC_ObjRelSpd=239.4, HUD_LEAD_INFO=0)
+  if valid:
+    values["ACC_ObjDist"] = float(np.clip(lead.dRel, 0.1, 204.5))
+    # SCC lateral position has the opposite sign to radarState.yRel. Bound to
+    # the signed 9-bit signal's representable range (0.1 scale, -20 offset).
+    values["ACC_ObjLatPos"] = float(np.clip(-lead.yRel, -45.6, 5.5))
+    values["ACC_ObjRelSpd"] = float(np.clip(lead.vRel, -170.0, 239.3))
+    values["HUD_LEAD_INFO"] = 1 if lead.vRel > 0 else 2
+
+
 def create_acc_control_scc2(packer, CAN, enabled, accel_value_last, accel, stopping, gas_override, set_speed, hud_control, hyundai_jerk, CS,
                             stop_controller=None):
 
@@ -422,19 +437,14 @@ def create_acc_control_scc2(packer, CAN, enabled, accel_value_last, accel, stopp
   values["DISTANCE_SETTING"] = hud_control.leadDistanceBars # + 5
   #values["DISTANCE_SETTING"] = hud_control.leadDistanceBars  + 5
 
-  #values["ACC_ObjDist"] = 1
   #values["ObjValid"] = 0
   #values["OBJ_STATUS"] =  2
   #values["NSCCOper"] = 1 if enabled else 0 # 0: off, 1: Ready, 2: Act, 3: Error Indicator
   #values["NSCCOnOff"] = 2  # 0: Default, 1: Off, 2: On, 3: Invalid
   #values["SET_ME_3"] = 0x3  # objRelsped와 충돌
-  #values["ACC_ObjLatPos"] = - hud_control.leadDPath
   values["DriveMode"] = 0 # 0: Default, 1: Comfort Mode, 2:Normal mode, 3:Dynamic mode, reserved
 
-  hud_lead_info = 0
-  if hud_control.leadVisible:
-    hud_lead_info = 1 if values["ACC_ObjRelSpd"] > 0 else 2
-  values["HUD_LEAD_INFO"] = hud_lead_info  #1: in-path object detected(uncontrollable), 2: controllable long, 3: controllable long & lat, ... reserved
+  _apply_scc_lead(values, getattr(CS, "radarState", None))
 
   values["DriverAlert"] = 0   # 1: SCC Disengaged, 2: No SCC Engage condition, 3: SCC Disenganed when the vehicle stops
 
