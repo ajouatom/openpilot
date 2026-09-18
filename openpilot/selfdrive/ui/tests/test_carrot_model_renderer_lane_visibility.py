@@ -12,6 +12,32 @@ import pytest
 MODEL_RENDERER_PATH = Path(__file__).parents[1] / "onroad" / "model_renderer.py"
 
 
+@pytest.mark.parametrize('half_width', [.025, .05])
+def test_batched_dash_projection_preserves_clipping_and_gaps(model_renderer_module, half_width):
+  module = model_renderer_module
+  renderer = object.__new__(module.ModelRenderer)
+  renderer._clip_region = module.rl.Rectangle(0., 0., 2160., 1080.)
+  rng = np.random.default_rng(5)
+  for _ in range(25):
+    renderer._car_space_transform = np.array([[1080., -950., 0.], [540., 0., 950.], [1., 0., 0.]], dtype=np.float32)
+    line = np.column_stack((np.linspace(-2., 100., 33), rng.normal(0, 3, 33), rng.normal(0, 1, 33))).astype(np.float32)
+    segments = module.lane_dash_segments(line, 95.)
+    expected = [renderer._map_line_to_polygon(s, half_width, 0., len(s) - 1, float(s[-1, 0])) for s in segments]
+    expected = [p for p in expected if p.size]
+    actual = module.project_lane_segments(segments, half_width, renderer._car_space_transform, renderer._clip_region)
+    assert len(actual) == len(expected)
+    for got, want in zip(actual, expected, strict=True):
+      np.testing.assert_allclose(got, want, atol=.001, rtol=1e-6)
+
+
+def test_batch_projection_handles_empty_and_fully_clipped_dashes(model_renderer_module):
+  module = model_renderer_module
+  clip = module.rl.Rectangle(0., 0., 10., 10.)
+  assert module.project_lane_segments([], .05, np.eye(3), clip) == []
+  line = np.array([[0., 0., 0.], [5., 0., 0.]], dtype=np.float32)
+  assert module.project_lane_segments([line], .05, np.eye(3), clip) == []
+
+
 @pytest.fixture
 def model_renderer_module(monkeypatch):
   @dataclass(frozen=True)

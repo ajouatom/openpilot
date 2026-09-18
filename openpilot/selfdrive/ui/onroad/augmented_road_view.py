@@ -10,6 +10,7 @@ from openpilot.selfdrive.ui.onroad.alert_renderer import AlertRenderer
 from openpilot.selfdrive.ui.onroad.driver_state import DriverStateRenderer
 from openpilot.selfdrive.ui.onroad.hud_renderer import HudRenderer
 from openpilot.selfdrive.ui.onroad.model_renderer import ModelRenderer
+from openpilot.selfdrive.ui.render_diagnostics import RenderDiagnostics
 from openpilot.selfdrive.ui.onroad.cameraview import CameraView
 from openpilot.system.ui.lib.application import gui_app
 from openpilot.system.ui.lib.text_draw import draw_text_ui_style
@@ -48,6 +49,7 @@ class AugmentedRoadView(CameraView):
     self._suppress_camera_for_cluster = False
 
     self.model_renderer = ModelRenderer()
+    self._render_diagnostics = RenderDiagnostics('ui')
     self._hud_renderer = HudRenderer()
     self.alert_renderer = AlertRenderer()
     self.driver_state_renderer = DriverStateRenderer()
@@ -81,7 +83,10 @@ class AugmentedRoadView(CameraView):
     start_draw = time.monotonic()
     if not ui_state.started:
       return
-    # 구간별 계측(계측 전용) — 렌더 호출 순서는 그대로, 각 구간 전후 monotonic만 잰다.
+    timing = self._render_diagnostics
+    timing.start()
+    # Preserve uiDebug wall timers and draw order; runtimeTiming also measures
+    # thread CPU work so scheduler/GPU waits are not mistaken for render work.
     # scissor begin/end는 raylib 배치 flush 지점이라 특정 구간에 귀속시키지 않는다 —
     # total과 구간 합의 차이(미귀속)로 남는다. extras = carrot 테두리(+텍스트)
     cam_ms = model_ms = ds_ms = hud_ms = alert_ms = extras_ms = 0.0
@@ -112,22 +117,22 @@ class AugmentedRoadView(CameraView):
       rl.draw_rectangle_rec(self._content_rect, rl.BLACK)
     else:
       # Render the base camera view
-      super()._render(rect)
+      timing.call('camera', super()._render, rect)
     cam_ms = (time.monotonic() - _t) * 1000.0
 
     if not self._suppress_camera_for_cluster:
       # Draw the model overlay only with the camera view
       _t = time.monotonic()
-      self.model_renderer.render(self._content_rect)
+      timing.call('model', self.model_renderer.render, self._content_rect)
       model_ms = (time.monotonic() - _t) * 1000.0
     _t = time.monotonic()
-    self._hud_renderer.render(self._content_rect)  # plot 활성 시 plot 비용도 hud 구간에 포함
+    timing.call('hud', self._hud_renderer.render, self._content_rect)  # includes plot when enabled
     hud_ms = (time.monotonic() - _t) * 1000.0
     _t = time.monotonic()
-    self.alert_renderer.render(self._content_rect)
+    timing.call('alert', self.alert_renderer.render, self._content_rect)
     alert_ms = (time.monotonic() - _t) * 1000.0
     _t = time.monotonic()
-    self.driver_state_renderer.render(self._content_rect)
+    timing.call('driver_state', self.driver_state_renderer.render, self._content_rect)
     ds_ms = (time.monotonic() - _t) * 1000.0
 
     # Custom UI extension point - add custom overlays here
@@ -138,7 +143,7 @@ class AugmentedRoadView(CameraView):
 
     # Draw colored border based on driving state
     _t = time.monotonic()
-    self._draw_border_carrot(rect)
+    timing.call('border', self._draw_border_carrot, rect)
     extras_ms = (time.monotonic() - _t) * 1000.0
 
     # publish uiDebug
@@ -154,6 +159,7 @@ class AugmentedRoadView(CameraView):
     ud.plotMode = self._plot_mode
     ud.recording = gui_app.is_recording()
     self._pm.send('uiDebug', msg)
+    timing.finish()
 
   def _handle_mouse_press(self, _):
     if not self._hud_renderer.user_interacting() and self._click_callback is not None:
