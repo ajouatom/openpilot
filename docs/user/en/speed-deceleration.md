@@ -243,7 +243,7 @@ There are three distinct sources:
 
 The code divides predicted yaw rate by velocity at the same point to obtain curvature. It divides the 1.9 m/s² reference lateral-acceleration budget by the setting ratio, so a higher factor produces a lower curve target. Predicted future velocity is not used directly as a driving-speed target.
 
-The curve target and remaining path distance determine the speed ceiling at the current position. A distant curve permits a higher approach speed; the ceiling decreases toward the curve target as the vehicle approaches. The calculation reserves time for control response and gradual braking buildup. Release briefly holds the limit and then raises it progressively.
+The curve target and remaining path distance determine the speed ceiling at the current position. A distant curve permits a higher approach speed; the ceiling decreases toward the curve target as the vehicle approaches. The calculation reserves time for control response and gradual braking buildup. When consecutive fresh model paths confirm that the turn is easing, vTurn recovers promptly to the lowest ceiling from roughly the last 0.25 seconds. A tighter curve limit applies immediately; repeated frames or missing model input do not justify fast release. Actual acceleration still follows the existing acceleration and jerk limits.
 
 Slow or invalid model predictions and isolated yaw-rate spikes are excluded. Late or inaccurate curve predictions can still lead to late deceleration.
 

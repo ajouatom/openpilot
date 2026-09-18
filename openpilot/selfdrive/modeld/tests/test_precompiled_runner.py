@@ -109,3 +109,28 @@ def test_worker_reports_real_checksum_failure_before_gpu_access(tmp_path):
   assert result.returncode != 0
   assert result.stdout.startswith(b'ERROR ')
   assert 'precompiled PKL checksum mismatch' in json.loads(result.stdout[6:])
+
+
+def test_fused_graph_publishes_completed_policy_after_camera_drop(monkeypatch):
+  model = object.__new__(runner.PrecompiledModelState)
+  model.process = SimpleNamespace(stdin=io.BytesIO())
+  model.first_run = False
+  model.frame_size = 16
+  model.prev_desire = np.zeros(8, np.float32)
+  model.views = {key: np.zeros(shape, np.float32) for key, shape in
+                 {'img': 16, 'big_img': 16, 'desire': 8, 'traffic_convention': 2, 'action_t': 2,
+                  'tfm': (3, 3), 'big_tfm': (3, 3), 'prev_feat': 4}.items()}
+  model.output = np.arange(6, dtype=np.float32)
+  model.output_slices = {'hidden_state': slice(0, 4), 'action': slice(4, 6)}
+  model.parser = SimpleNamespace(parse_outputs=lambda outputs: outputs)
+  monkeypatch.setattr(model, '_receive', lambda timeout: b'1\n')
+  frames = {key: SimpleNamespace(data=np.zeros(16, np.uint8)) for key in ('img', 'big_img')}
+  transforms = {key: np.eye(3, dtype=np.float32) for key in frames}
+  inputs = {'desire_pulse': np.zeros(8, np.float32), 'traffic_convention': np.zeros(2), 'action_t': np.zeros(2)}
+  try:
+    outputs = model.run(frames, transforms, inputs, True)
+    np.testing.assert_array_equal(outputs['action'], [[4., 5.]])
+    np.testing.assert_array_equal(model.views['prev_feat'], [0., 1., 2., 3.])
+    assert model.process.stdin.getvalue() == b'r'
+  finally:
+    model.process = None

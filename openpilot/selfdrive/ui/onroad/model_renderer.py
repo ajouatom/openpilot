@@ -1,6 +1,8 @@
 import math
 import colorsys
 import numpy as np
+
+from openpilot.selfdrive.ui.onroad.path_geometry import project_path, sample_path
 import pyray as rl
 from openpilot.cereal import messaging, car, log
 from dataclasses import dataclass, field
@@ -1177,92 +1179,24 @@ class ModelRenderer(Widget):
 
 
   def _build_path_polygon_update_line_data2_carrot(self, line: np.ndarray, width_apply: float, z_off_start: float, z_off_end: float, max_idx: int, allow_invert: bool = True) -> np.ndarray:
-    left_points = []
-    right_points = []
-
-    for i in range(0, max_idx + 1):
-      if line[i, 0] < 0:
-        continue
-      z_off = self._carrot_interp(float(line[i, 0]), [0.0, 100.0], [z_off_start, z_off_end])
-      y_off = self._carrot_interp(z_off, [-3.0, 0.0, 3.0], [1.5, 0.5, 1.5]) * width_apply
-
-      left = self._map_to_screen(line[i, 0], line[i, 1] - y_off, line[i, 2] + z_off)
-      right = self._map_to_screen(line[i, 0], line[i, 1] + y_off, line[i, 2] + z_off)
-      if left is not None and right is not None:
-        if not allow_invert and len(left_points) > 0 and left[1] > left_points[-1][1]:
-          continue
-        left_points.append(left)
-        right_points.insert(0, right)
-
-    if len(left_points) == 0:
-      return np.empty((0, 2), dtype=np.float32)
-    return np.array(left_points + right_points, dtype=np.float32)
-
+    points = line[:max_idx + 1]
+    points = points[points[:, 0] >= 0]
+    return project_path(points, width_apply, z_off_start, z_off_end,
+                        self._car_space_transform, self._clip_region, allow_invert)
 
   def _build_path_polygon_update_line_data_dist_carrot(self, line: np.ndarray, width_apply: float, z_off_start: float, z_off_end: float, max_dist: float, allow_invert: bool = True) -> np.ndarray:
-    left_points = []
-    right_points = []
-
-    line_x = line[:, 0].astype(np.float32).copy()
-    line_y = line[:, 1].astype(np.float32).copy()
-    line_z = line[:, 2].astype(np.float32).copy()
-
-    x_prev = 0.0
-    for i in range(line_x.shape[0]):
-      if i > 0 and line_x[i] < x_prev:
-        line_x[i] = x_prev
-      x_prev = line_x[i]
-
-    idxs = np.arange(line_x.shape[0], dtype=np.float32)
-
+    distances = []
     dist = 2.0
-    exit_flag = False
-    while not exit_flag:
-      if dist >= max_dist:
-        dist = max_dist
-        exit_flag = True
-
-      z_off = self._carrot_interp(dist, [0.0, 100.0], [z_off_start, z_off_end])
-      y_off = self._carrot_interp(z_off, [-3.0, 0.0, 3.0], [1.5, 0.5, 1.5]) * width_apply
-      idx = self._carrot_interp(dist, line_x, idxs)
-      if idx >= line_x.shape[0]:
-        idx = line_x.shape[0] - 1
-
-      line_y1 = self._carrot_interp(idx, idxs, line_y)
-      line_z1 = self._carrot_interp(idx, idxs, line_z)
-
-      left = self._map_to_screen(dist, line_y1 - y_off, line_z1 + z_off)
-      right = self._map_to_screen(dist, line_y1 + y_off, line_z1 + z_off)
-
-      if left is not None and right is not None:
-        if not allow_invert and len(left_points) > 0 and left[1] > left_points[-1][1]:
-          dist = dist + dist * 0.15
-          continue
-        left_points.append(left)
-        right_points.insert(0, right)
-
-      if exit_flag:
-        break
+    while dist < max_dist:
+      distances.append(dist)
       dist = dist + dist * 0.15
-
-    if len(left_points) == 0:
-      return np.empty((0, 2), dtype=np.float32)
-    return np.array(left_points + right_points, dtype=np.float32)
+    distances.append(max_dist)
+    return project_path(sample_path(line, distances), width_apply, z_off_start, z_off_end,
+                        self._car_space_transform, self._clip_region, allow_invert)
 
 
   def _build_path_polygon_update_line_data_dist3_carrot(self, sm, line: np.ndarray, width_apply: float, z_off_start: float, z_off_end: float, max_dist: float, allow_invert: bool = True) -> np.ndarray:
-    left_points = []
-    right_points = []
-
-    line_x = line[:, 0].astype(np.float32).copy()
-    line_y = line[:, 1].astype(np.float32).copy()
-    line_z = line[:, 2].astype(np.float32).copy()
-
-    idxs = np.arange(line_x.shape[0], dtype=np.float32)
-    x_prev = 0.0
-    for i in range(line_x.shape[0]):
-      line_x[i] = x_prev if (i > 0 and line_x[i] < x_prev) else line_x[i]
-      x_prev = line_x[i]
+    distances = []
 
     car_state = sm['carState']
     v_ego_kph = float(car_state.vEgoCluster * 3.6)
@@ -1316,30 +1250,16 @@ class ModelRenderer(Widget):
 
       for j in range(2, -1, -1):
         dist_j = dist_function(100.0, max_dist) if exit_flag else dist_function(t - j * 1.0, max_dist)
-        z_off = self._carrot_interp(dist_j, [0.0, 100.0], [z_off_start, z_off_end])
-        y_off = self._carrot_interp(z_off, [-3.0, 0.0, 3.0], [1.5, 0.5, 1.5]) * width_apply
-
-        idx = self._carrot_interp(dist_j, line_x, idxs)
-        if idx >= line_x.shape[0]:
-          break
-
-        line_y1 = self._carrot_interp(idx, idxs, line_y)
-        line_z1 = self._carrot_interp(idx, idxs, line_z)
-
-        left = self._map_to_screen(dist_j, line_y1 - y_off, line_z1 + z_off)
-        right = self._map_to_screen(dist_j, line_y1 + y_off, line_z1 + z_off)
-        if left is not None and right is not None:
-          left_points.append(left)
-          right_points.insert(0, right)
+        distances.append(dist_j)
 
         if exit_flag:
           break
 
       i += 1
 
-    if len(left_points) == 0:
-      return np.empty((0, 2), dtype=np.float32)
-    return np.array(left_points + right_points, dtype=np.float32)
+    # Animated path order intentionally permits inversions, as before.
+    return project_path(sample_path(line, distances), width_apply, z_off_start, z_off_end,
+                        self._car_space_transform, self._clip_region)
 
 
   def _make_path_data_carrot(self, sm) -> bool:
