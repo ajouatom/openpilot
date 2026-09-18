@@ -4,6 +4,7 @@ Model velocity is used only to recover curvature from yaw rate. It is never
 treated as a desired vehicle speed. All calculations use metres and seconds;
 the result is converted to the cruise/display speed convention at the boundary.
 """
+from collections import deque
 from dataclasses import dataclass
 import math
 
@@ -21,6 +22,8 @@ APPROACH_DECEL = 1.0
 APPROACH_JERK = 0.8
 RESPONSE_TIME = 1.0
 RELEASE_HOLD = 0.35
+GEOMETRY_RELEASE_WINDOW = 0.25
+GEOMETRY_MIN_SPAN = 0.20
 RELEASE_RATE_KPH = 7.2
 
 
@@ -93,27 +96,53 @@ def curve_speed(model, v_ego, sensitivity=1.0, lower_limit_kph=30.0, *, speed_ra
 
 
 class VisionCurveSpeed:
-  """Apply tighter geometry immediately and release it without frame-to-frame jumps."""
+  """Tighten immediately; release against a short history of fresh geometry."""
   def __init__(self):
     self.speed = NO_LIMIT_KPH
     self.direction = 1.0
     self.last_time = None
     self.release_since = None
+    self.geometry = deque()
+    self.last_model_time = None
 
-  def update(self, result, now):
+  def update(self, result, now, *, model_time=None):
     if not math.isfinite(now):
       return self.speed * self.direction
     dt = 0.0 if self.last_time is None else max(0.0, min(now - self.last_time, 0.2))
     self.last_time = now
-    target = result.approach_kph if result is not None else NO_LIMIT_KPH
-    if target <= self.speed:
-      self.speed = target
-      if result is not None:
+    if result is not None and not math.isfinite(result.approach_kph):
+      result = None
+    if result is not None:
+      # Re-reading one model frame is not independent confirmation of an exit.
+      stamp = now if model_time is None else model_time
+      if self.last_model_time is not None and stamp <= self.last_model_time:
+        # Updated vehicle speed/acceleration can tighten the same model path.
+        if result.approach_kph < self.speed:
+          self.speed = result.approach_kph
+          self.direction = result.direction
+          self.geometry.clear()
+        return self.speed * self.direction
+      self.last_model_time = stamp
+      if self.geometry and (now < self.geometry[-1][0] or now - self.geometry[-1][0] > GEOMETRY_MIN_SPAN):
+        self.geometry.clear()
+      self.geometry.append((now, result.approach_kph))
+      while self.geometry and now - self.geometry[0][0] > GEOMETRY_RELEASE_WINDOW + 1e-9:
+        self.geometry.popleft()
+      target = result.approach_kph
+      confirmed = len(self.geometry) >= 3 and now - self.geometry[0][0] >= GEOMETRY_MIN_SPAN - 1e-9
+      if target <= self.speed:
+        self.speed = target
         self.direction = result.direction
+      elif confirmed:
+        # Release the ceiling, not a commanded acceleration. The longitudinal
+        # planner continues to enforce acceleration/jerk and other speed limits.
+        self.speed = min(value for _, value in self.geometry)
       self.release_since = None
     else:
+      # Missing/invalid geometry is not evidence that the road has straightened.
+      self.geometry.clear()
       if self.release_since is None:
         self.release_since = now
       if now - self.release_since >= RELEASE_HOLD:
-        self.speed = min(target, self.speed + RELEASE_RATE_KPH * dt)
+        self.speed = min(NO_LIMIT_KPH, self.speed + RELEASE_RATE_KPH * dt)
     return self.speed * self.direction

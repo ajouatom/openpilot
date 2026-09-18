@@ -24,6 +24,7 @@ from openpilot.selfdrive.modeld.parse_model_outputs import Parser
 from openpilot.selfdrive.modeld.compile_modeld import make_input_queues, WARP_INPUTS, POLICY_INPUTS
 from openpilot.selfdrive.modeld.fill_model_msg import fill_model_msg, fill_driving_model_data, fill_pose_msg, PublishState
 from openpilot.common.file_chunker import open_file_chunked
+from openpilot.selfdrive.modeld.camera_sync import FrameMeta, receive_camera_pair
 from openpilot.selfdrive.modeld.constants import ModelConstants, Plan
 from openpilot.selfdrive.modeld.helpers import (get_tg_input_devices, load_oob, modeld_pkl_path,
                                                 refresh_usbgpu_device_cache, select_vision_streams, usbgpu_compiled_path,
@@ -117,16 +118,6 @@ def get_action_from_model(model_output: dict[str, np.ndarray], prev_action: log.
                                 desiredAcceleration=float(desired_accel),
                                 shouldStop=bool(should_stop),
                                 desiredVelocity=float(desired_velocity_now))
-
-class FrameMeta:
-  frame_id: int = 0
-  timestamp_sof: int = 0
-  timestamp_eof: int = 0
-
-  def __init__(self, vipc=None):
-    if vipc is not None:
-      self.frame_id, self.timestamp_sof, self.timestamp_eof = vipc.frame_id, vipc.timestamp_sof, vipc.timestamp_eof
-
 
 class ModelState:
   prev_desire: np.ndarray  # for tracking the rising edge of the pulse
@@ -393,37 +384,11 @@ def main(demo=False):
         params.put_bool_nonblocking("UsbGpuHardwareSeen", True)
       params.put_bool_nonblocking("UsbGpuCompiled", usbgpu_compiled_path() is not None)
 
-    # Keep receiving frames until we are at least 1 frame ahead of previous extra frame
-    while meta_main.timestamp_sof < meta_extra.timestamp_sof + 25000000:
-      buf_main = vipc_client_main.recv()
-      meta_main = FrameMeta(vipc_client_main)
-      if buf_main is None:
-        break
-
-    if buf_main is None:
-      cloudlog.debug("vipc_client_main no frame")
+    frames = receive_camera_pair(vipc_client_main, vipc_client_extra if use_extra_client else None)
+    if frames is None:
+      cloudlog.debug("camera pair unavailable or out of sync")
       continue
-
-    if use_extra_client:
-      # Keep receiving extra frames until frame id matches main camera
-      while True:
-        buf_extra = vipc_client_extra.recv()
-        meta_extra = FrameMeta(vipc_client_extra)
-        if buf_extra is None or meta_main.timestamp_sof < meta_extra.timestamp_sof + 25000000:
-          break
-
-      if buf_extra is None:
-        cloudlog.debug("vipc_client_extra no frame")
-        continue
-
-      if abs(meta_main.timestamp_sof - meta_extra.timestamp_sof) > 10000000:
-        cloudlog.error(f"frames out of sync! main: {meta_main.frame_id} ({meta_main.timestamp_sof / 1e9:.5f}),\
-                         extra: {meta_extra.frame_id} ({meta_extra.timestamp_sof / 1e9:.5f})")
-
-    else:
-      # Use single camera
-      buf_extra = buf_main
-      meta_extra = meta_main
+    buf_main, meta_main, buf_extra, meta_extra = frames
 
     camera_ready = time.monotonic()
     sm.update(0)
@@ -465,7 +430,7 @@ def main(demo=False):
     frame_drop_ratio = frames_dropped / (1 + frames_dropped)
     prepare_only = vipc_dropped_frames > 0
     if prepare_only:
-      cloudlog.error(f"skipping model eval. Dropped {vipc_dropped_frames} frames")
+      cloudlog.error(f"camera dropped {vipc_dropped_frames} frames; advancing model history")
 
     bufs = {name: buf_extra if 'big' in name else buf_main for name in model.vision_input_names}
     transforms = {name: model_transform_extra if 'big' in name else model_transform_main for name in model.vision_input_names}
