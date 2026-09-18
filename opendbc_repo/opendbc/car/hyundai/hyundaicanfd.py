@@ -378,10 +378,13 @@ def create_lfa_icon_non_camera_scc(packer, CS, CAN, CC):
   return ret
 
 def _display_lead(radar_state):
-  lead = radar_state.leadOne if radar_state is not None else None
-  valid = (lead is not None and lead.status and lead.dRel > 0
-           and all(math.isfinite(v) for v in (lead.dRel, lead.yRel, lead.vRel)))
-  return lead if valid else None
+  # Vehicle displays show the nearest valid control lead, including leadTwo.
+  # Equal distances retain leadOne; this does not change radar/control roles.
+  leads = (getattr(radar_state, name, None) for name in ("leadOne", "leadTwo"))
+  return min((lead for lead in leads
+              if lead is not None and lead.status and lead.dRel > 0
+              and all(math.isfinite(v) for v in (lead.dRel, lead.yRel, lead.vRel))),
+             key=lambda lead: lead.dRel, default=None)
 
 
 def _apply_scc_lead(values, radar_state):
@@ -755,7 +758,7 @@ def _apply_ccnc_lead(values, radar_state, enabled):
   same_object = (values["FF_DETECT"] != 0
                  and abs(values["FF_DISTANCE"] - lead.dRel) <= 3.0
                  and abs(stock_lateral + lead.yRel) <= 1.0)
-  # leadOne has no object class. Retain the OEM class only for a matching
+  # Radar leads have no object class. Retain the OEM class only for a matching
   # target; otherwise use the existing generic gray/white car presentation.
   if not same_object:
     values["FF_DETECT"] = 4 if enabled else 3
@@ -768,6 +771,9 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
                          enable_corner_radar, stopping, canfd_debug, paddle_mode):
   ret = []
   interlock_active = longitudinal_interlock_active(CS)
+  display_lead = _display_lead(getattr(CS, "radarState", None))
+  lead_visible = display_lead is not None
+  lead_distance = float(np.clip(display_lead.dRel, 0.1, 204.5)) if lead_visible else 0.0
 
   md = CS.modelV2
   if not hasattr(create_ccnc_messages, '_lane_line_check') or frame % 100 == 0:
@@ -842,12 +848,12 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
         values["vSetDis"] = int(set_speed_in_units + 0.5)
 
         values["DISTANCE"] = 4 if hdp_active else hud_control.leadDistanceBars
-        values["DISTANCE_LEAD"] = 2 if cruise_enabled and hud_control.leadVisible else 1 if main_enabled and hud_control.leadVisible else 0
+        values["DISTANCE_LEAD"] = 2 if cruise_enabled and lead_visible else 1 if main_enabled and lead_visible else 0
         values["DISTANCE_CAR"] = 3 if hdp_active else 2 if cruise_enabled else 1 if main_enabled else 0
         values["DISTANCE_SPACING"] = 5 if hdp_active else 1 if cruise_enabled else 0
 
-        values["TARGET"] = 1 if hud_control.leadVisible and cruise_enabled else 0
-        values["TARGET_DISTANCE"] = int(hud_control.leadDistance)
+        values["TARGET"] = 1 if lead_visible and cruise_enabled else 0
+        values["TARGET_DISTANCE"] = lead_distance
 
         values["BACKGROUND"] = _select_cluster_background(
           cruise_enabled, lat_active, CS.paddle_button_prev > 0, paddle_mode,
