@@ -45,7 +45,12 @@ def test_reject_incompatible_generic_artifact(artifact, change):
     model_metadata(artifact)
 
 
-def test_generic_dispatch_uploads_warps_and_feeds_back_state():
+def test_generic_dispatch_uploads_warps_and_feeds_back_state(monkeypatch):
+  from openpilot.selfdrive.modeld import generic_model_runtime
+  wall_clock = iter([0, .01, .03, .06, .10, .10, .12, .13, .17, .23])
+  cpu_clock = iter([0, .001, .003, .006, .010, .010, .012, .013, .017, .023])
+  monkeypatch.setattr(generic_model_runtime, 'time', SimpleNamespace(
+    monotonic=lambda: next(wall_clock), thread_time=lambda: next(cpu_clock)))
   runtime = object.__new__(GenericModelRuntime)
   calls = []
   runtime.host, runtime.frames, runtime.transforms = object(), object(), object()
@@ -65,9 +70,17 @@ def test_generic_dispatch_uploads_warps_and_feeds_back_state():
     calls.append(('model',))
   runtime.run_warp, runtime.run_model = warp, run
   np.testing.assert_array_equal(runtime.run(), [1, 2])
+  assert runtime.last_timings['input_upload_ms'] == pytest.approx(10)
+  assert runtime.last_timings['output_read_ms'] == pytest.approx(40)
   runtime.run()
   assert state[0] == 2
   assert [call[0] for call in calls] == ['upload', 'warp', 'model'] * 2
+  assert runtime.last_timings == pytest.approx({
+    'input_upload_ms': 20, 'input_upload_cpu_ms': 2,
+    'warp_call_ms': 10, 'warp_call_cpu_ms': 1,
+    'model_call_ms': 40, 'model_call_cpu_ms': 4,
+    'output_read_ms': 60, 'output_read_cpu_ms': 6,
+  })
 
 
 def test_precompiled_only_boot_failure_skips_local_compilation(monkeypatch, tmp_path):
