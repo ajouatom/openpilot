@@ -36,3 +36,7 @@ test("Cinque v2 model gets a distinct friendly eGPU title", () => {
   assert.equal(modelDisplayTitle(status, "eGPU big model"), "Cinque v2 · eGPU");
   assert.equal(modelDisplayName({ model_id: "comma-pr38771-cinque-terre-68b5f8e4-e8d82173" }), "Cinque Terre");
 });
+
+test("Cinque v3 has its own eGPU title", () => {
+  assert.equal(modelDisplayName({ model_id: "comma-pr38932-cinque-v3-892fc3a1-e758b96d" }), "Cinque v3");
+});

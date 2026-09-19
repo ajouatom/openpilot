@@ -78,6 +78,7 @@ def generate_report(proposed, master, tmp, commit):
                      (lambda x: get_idx_if_non_empty(x.leftDriverData.faceOrientation, 0), "leftDriverData.faceOrientation0"),
                      (lambda x: get_idx_if_non_empty(x.leftDriverData.eyesClosedProb), "leftDriverData.eyesClosedProb"),
                      (lambda x: get_idx_if_non_empty(x.leftDriverData.phoneProb), "leftDriverData.phoneProb"),
+                     (lambda x: get_idx_if_non_empty(x.leftDriverData.sleepProb), "leftDriverData.sleepProb"),
                      (lambda x: get_idx_if_non_empty(x.rightDriverData.faceProb), "rightDriverData.faceProb"),
                     ], "driverStateV2")
 

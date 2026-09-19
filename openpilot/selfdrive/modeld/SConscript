@@ -99,7 +99,7 @@ model_builds.append((False, modeld_pkl_path(False), get_existing_chunks(regular_
 if USBGPU:
   big_manifest = active_manifest()
   big_onnx = active_model_path()
-  if big_manifest is not None and big_onnx is not None:
+  if big_manifest is not None and not big_manifest.precompiled_only and big_onnx is not None:
     model_builds.append((True, modeld_pkl_path(True, big_manifest.sha256), [str(big_onnx)], str(big_onnx), usbgpu_tg_flags))
 
 for usbgpu, pkl_path, driving_onnx_deps, driving_onnx, cmd_flags in model_builds:

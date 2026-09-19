@@ -35,7 +35,11 @@ def main():
   sys.path.insert(0, str(runtime))
   os.environ.update(DEV='USB+AMD:LLVM', GMMU='0', JIT_BATCH_SIZE='0')
   import numpy as np
-  import model_runtime
+  generic = manifest['format'] == 'comma-generic-onnx'
+  if generic:
+    os.environ.update(FLOAT16='1', TC_OPT='2', TC_MIN_GLOBALS='32')
+  if not generic:
+    import model_runtime
   from tinygrad import Device, Tensor
   from openpilot.selfdrive.modeld.helpers import load_oob
   from openpilot.common.runtime_diagnostics import RuntimeDiagnostics
@@ -46,20 +50,33 @@ def main():
     jits = load_oob(f)
     if f.read(1):
       raise ValueError('trailing precompiled model data')
-  if 'run_policy' in jits or 'run_model' not in jits:
+  if not generic and ('run_policy' in jits or 'run_model' not in jits):
     raise ValueError('wrong precompiled runtime format')
-  metadata = jits['metadata']
-  if metadata['model_checkpoint'] != manifest['model_checkpoint']:
-    raise ValueError('precompiled checkpoint mismatch')
-  run_model = jits['run_model'][(width, height)]
-  device = jits['input_devices']['model']
+  if generic:
+    from openpilot.selfdrive.modeld.generic_model_runtime import GenericModelRuntime, model_metadata
+    checkpoint, _, _, _ = model_metadata(jits)
+    if checkpoint != manifest['model_checkpoint']:
+      raise ValueError('precompiled checkpoint mismatch')
+    adapter = GenericModelRuntime(jits, width, height, runtime, get_nv12_info(width, height))
+    metadata = {'model_checkpoint': adapter.checkpoint, 'input_shapes': adapter.input_shapes, 'output_slices': adapter.output_slices}
+    device = adapter.device
+  else:
+    metadata = jits['metadata']
+    if metadata['model_checkpoint'] != manifest['model_checkpoint']:
+      raise ValueError('precompiled checkpoint mismatch')
+    run_model = jits['run_model'][(width, height)]
+    device = jits['input_devices']['model']
   if Device[device].arch != manifest['gpu_arch']:
     raise ValueError('precompiled GPU architecture mismatch')
-  frame_size = model_runtime.nv12_copy_size(*get_nv12_info(width, height)[:3])
-  queues, npy, frames = model_runtime.make_input_queues(metadata['input_shapes'], 4, device, frame_size)
-  packed = frames['img'].base
+  if generic:
+    frame_size, packed, views = adapter.frame_size, adapter.packed, adapter.views
+    queues = {}
+  else:
+    frame_size = model_runtime.nv12_copy_size(*get_nv12_info(width, height)[:3])
+    queues, npy, frames = model_runtime.make_input_queues(metadata['input_shapes'], 4, device, frame_size)
+    packed = frames['img'].base
+    views = npy | frames
   assert packed.dtype == np.uint8 and packed.ndim == 1 and packed.flags.c_contiguous
-  views = npy | frames
   layout = {name: {'offset': view.ctypes.data - packed.ctypes.data, 'shape': list(view.shape), 'dtype': str(view.dtype)}
             for name, view in views.items()}
   count = max(section.stop for section in metadata['output_slices'].values())
@@ -71,7 +88,10 @@ def main():
       packed_shared = np.ndarray((input_bytes,), np.uint8, buffer=shared)
       packed_shared[:] = 0
       output = np.ndarray((count,), np.float32, buffer=shared, offset=input_bytes)
-      queues['packed_npy_inputs'] = Tensor(packed_shared, device='NPY').realize()
+      if generic:
+        adapter.bind_shared(packed_shared)
+      else:
+        queues['packed_npy_inputs'] = Tensor(packed_shared, device='NPY').realize()
       info = {'size': total, 'input_bytes': input_bytes, 'output_count': count, 'layout': layout,
               'input_shapes': metadata['input_shapes'],
               'output_slices': {k: [v.start, v.stop, v.step] for k, v in metadata['output_slices'].items()},
@@ -85,9 +105,13 @@ def main():
         if command != b'r':
           raise ValueError('invalid model worker command')
         started, cpu_started = time.monotonic(), time.thread_time()
-        outs, = run_model(**{k: queues[k] for k in model_runtime.MODELD_INPUTS})
-        dispatched = time.monotonic()
-        result = outs.numpy().reshape(-1)
+        if generic:
+          result = adapter.run()
+          dispatched = time.monotonic()
+        else:
+          outs, = run_model(**{k: queues[k] for k in model_runtime.MODELD_INPUTS})
+          dispatched = time.monotonic()
+          result = outs.numpy().reshape(-1)
         if result.size != count or not np.isfinite(result).all():
           raise ValueError('invalid precompiled model output')
         output[:] = result
@@ -102,7 +126,10 @@ def main():
                            run_model_ms=(dispatched - started) * 1000,
                            result_sync_ms=(finished - dispatched) * 1000,
                            work_ms=(finished - started) * 1000,
-                           thread_cpu_ms=(cpu_finished - cpu_started) * 1000)
+                           thread_cpu_ms=(cpu_finished - cpu_started) * 1000,
+                           **(adapter.last_timings if generic else {}))
+      if generic:
+        del adapter
       del output, packed_shared, queues
 
 

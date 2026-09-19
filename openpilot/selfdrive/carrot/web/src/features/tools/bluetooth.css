@@ -1,0 +1,15 @@
+.carrot-bt-dialog { width: min(680px, calc(100vw - 32px)); max-height: 88dvh; overflow: auto; background: var(--bg, #111923); color: var(--text, #edf4fa); border: 1px solid #526476; border-radius: 16px; padding: 22px; }
+.carrot-bt-dialog::backdrop { background: #000a; }
+.carrot-bt-dialog h2 { margin: 0; flex: 1; }
+.carrot-bt-dialog p { line-height: 1.6; font-size: 14px; opacity: .85; }
+.carrot-bt-dialog .bt-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 12px 0; }
+.carrot-bt-dialog .bt-device { border-bottom: 1px solid #52647680; padding: 12px 0; overflow-wrap: anywhere; }
+.carrot-bt-dialog label { display: flex; justify-content: space-between; gap: 12px; align-items: center; margin: 12px 0; }
+.carrot-bt-dialog select, .carrot-bt-dialog input:not([type=checkbox]) { max-width: 70%; padding: 10px; background: #1b2937; color: #edf4fa; border: 1px solid #526476; border-radius: 8px; }
+.carrot-bt-dialog [data-bt=error], .carrot-bt-dialog [data-bt=service] { color: #ffbf9c; overflow-wrap: anywhere; }
+.carrot-bt-dialog [data-bt=event] { display: block; padding: 12px 0; color: #a8e6c8; }
+.carrot-bt-dialog [data-bt=notice] { color: #f9da86; line-height: 1.6; }
+.carrot-bt-dialog button:disabled { opacity: .45; }
+.carrot-bt-dialog .bt-mapping-row { border: 1px solid #52647680; border-radius: 10px; margin: 12px 0; padding: 4px 12px; min-width: 0; }
+.carrot-bt-dialog .bt-mapping-row legend { font-weight: 700; padding: 0 6px; }
+.carrot-bt-dialog .bt-mapping-row select { min-width: 0; width: 65%; }

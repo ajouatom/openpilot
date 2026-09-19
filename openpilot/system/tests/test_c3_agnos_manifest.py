@@ -11,18 +11,18 @@ def _load_manifest(name: str) -> list[dict]:
   return json.loads((TICI_DIR / name).read_text(encoding="utf-8"))
 
 
-def test_device_manifests_use_carrot_agnos_19_6_3_images() -> None:
+def test_device_manifests_use_carrot_agnos_19_8_bluetooth_images() -> None:
   c3 = {partition["name"]: partition for partition in _load_manifest("agnos-tici.json")}
   c4 = {partition["name"]: partition for partition in _load_manifest("agnos.json")}
 
-  assert c3["boot"]["hash_raw"] == "7f6a45827e82f0d7ee2bab286daf60fec79c40fd4af2aee967b146e06b5ece70"
-  assert c4["boot"]["hash_raw"] == "303d797a55933dd634ecf5e16b5b9746e12528fa8d5919903aff7a0ae888cfcb"
+  assert c3["boot"]["hash_raw"] == "9d1c81ef890edf349e0919260a850ab5d1f95162fbd4b262cfcd52d92c0ac0b8"
+  assert c4["boot"]["hash_raw"] == "dccd7965346b0a87a9f64cb6be257f6bb5d3d0f368c8655085efc1e460527f5a"
   assert c3["boot"] != c4["boot"]
   assert c3["system"] == c4["system"]
-  assert c3["system"]["hash_raw"] == "b97e492686fa3902b0385f13fa5663c911f0b150d06b722111d386f4ad42a7d7"
-  assert "agnos-19.6.3-carrot" in c3["boot"]["url"]
-  assert "agnos-19.6.3-carrot" in c4["boot"]["url"]
-  assert "agnos-19.6.3-carrot" in c3["system"]["url"]
+  assert c3["system"]["hash_raw"] == "375c5d22335770ac08750660bb5b29a3331c550d6a9875b35f36b88af792ea44"
+  assert "agnos-19.8-carrot-bt1" in c3["boot"]["url"]
+  assert "agnos-19.8-carrot-bt1" in c4["boot"]["url"]
+  assert "agnos-19.8-carrot-bt1" in c3["system"]["url"]
   assert "alt" not in c3["system"]
 
 
@@ -49,6 +49,6 @@ def test_c3_and_clone_select_the_c3_manifest() -> None:
   assert "agnos-tici.json" in updater
 
 
-def test_launch_requires_carrot_agnos_19_6_3() -> None:
+def test_launch_requires_carrot_agnos_19_8_bluetooth() -> None:
   launch_env = (Path(BASEDIR) / "launch_env.sh").read_text(encoding="utf-8")
-  assert 'export AGNOS_VERSION="19.6.3-carrot"' in launch_env
+  assert 'export AGNOS_VERSION="19.8-carrot-bt1"' in launch_env

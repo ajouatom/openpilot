@@ -1,5 +1,12 @@
 # Repository memory
 
+- As of 2026-09-19, the user requests full integration of `carrot-cinque_v3` into
+  `carrot-wip`, including the pinned Cinque v3 eGPU model/runtime, AGNOS
+  `19.8-carrot-bt1`, and Bluetooth remote features. This supersedes the earlier
+  Cinque v2/OS separation below. Keep the internal-GPU driving model unchanged;
+  update driver monitoring to official Super Leicht (#38942). Both maintained
+  branches receive shared fixes until the user explicitly retires one.
+
 - Whenever radar detection or lead-selection code changes, update the NAS Carrot Routes
   radar replay service in the same task. The `Carrot Routes image` GitHub workflow builds
   committed shared code using `tools/carrot_route_vault/build_bundle.py`; the NAS scheduled

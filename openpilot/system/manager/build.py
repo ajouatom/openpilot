@@ -48,7 +48,8 @@ def build_usbgpu_model(spinner: Spinner) -> bool:
     "downloaded_bytes": manifest.size,
     "total_bytes": manifest.size,
   }
-  # Precompiled models carry their matching runtime; local SCons remains the fallback.
+  # Only ONNX models can fall back to local SCons compilation.
+  fallback = 'internal model' if manifest.precompiled_only else 'local compiler'
   from openpilot.selfdrive.modeld.precompiled_model import ensure_precompiled, record_failure
   precompiled = None
   try:
@@ -59,13 +60,13 @@ def build_usbgpu_model(spinner: Spinner) -> bool:
                              downloaded_bytes=done, total_bytes=total, detail="precompiled model")
     precompiled = ensure_precompiled(manifest, progress=download_progress)
   except Exception as exc:
-    print(f"Precompiled eGPU model unavailable; using local compiler: {exc}")
+    print(f"Precompiled eGPU model unavailable; using {fallback}: {exc}")
   if precompiled is not None:
     try:
       if usbgpu_present():
         spinner.update("USB eGPU big model\nValidating precompiled model")
         validation = subprocess.run([sys.executable, '-m', 'openpilot.selfdrive.modeld.precompiled_runner', str(precompiled)],
-                                    cwd=BASEDIR, check=True, timeout=120, text=True,
+                                    cwd=BASEDIR, check=True, timeout=300, text=True,
                                     stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
         print(validation.stdout, end='')
       write_big_model_status(model_cache_dir(), "compiled", detail="downloaded precompiled model", **status_values)
@@ -85,7 +86,10 @@ def build_usbgpu_model(spinner: Spinner) -> bool:
         write_big_model_status(model_cache_dir(), 'waiting_for_ignition', detail=detail, **status_values)
         print(f'Precompiled eGPU validation deferred: {detail}')
         return True
-      print(f"Precompiled eGPU validation failed; using local compiler: {exc}")
+      print(f"Precompiled eGPU validation failed; using {fallback}: {exc}")
+  if manifest.precompiled_only:
+    write_big_model_status(model_cache_dir(), "error", detail="precompiled model unavailable; using internal model", **status_values)
+    return False
   present = usbgpu_present()
   if not present:
     wait_started = time.monotonic()

@@ -13,7 +13,7 @@ import time
 from urllib.parse import urljoin, urlparse
 from urllib.request import Request, urlopen
 
-from openpilot.selfdrive.modeld.big_model import active_manifest, model_cache_dir
+from openpilot.selfdrive.modeld.big_model import active_manifest, model_cache_dir, model_path
 
 PROTOCOL = 1
 MAX_CATALOG = 64 * 1024
@@ -26,9 +26,11 @@ def sha256(path: Path) -> str:
 
 
 def validate_catalog(value: dict, model_sha: str, catalog_url: str) -> dict:
-  if value.get('protocol') != PROTOCOL or value.get('onnx_sha256') != model_sha:
+  generic = value.get('format') == 'comma-generic-onnx'
+  identity = 'model_sha256' if generic else 'onnx_sha256'
+  if value.get('protocol') != PROTOCOL or value.get(identity) != model_sha:
     raise ValueError('precompiled model does not match the selected ONNX/protocol')
-  if value.get('format') != 'comma-run-model' or value.get('gpu_arch') != 'gfx1200':
+  if value.get('format') not in ('comma-run-model', 'comma-generic-onnx') or value.get('gpu_arch') != 'gfx1200':
     raise ValueError('unsupported precompiled model format/GPU')
   if value.get('frame_skip') != 4 or value.get('camera_resolutions') != [[1928, 1208], [1344, 760]]:
     raise ValueError('incompatible precompiled model inputs')
@@ -41,6 +43,8 @@ def validate_catalog(value: dict, model_sha: str, catalog_url: str) -> dict:
     artifact['url'] = urljoin(catalog_url, artifact['url'])
     if urlparse(artifact['url']).scheme != 'https' or urlparse(artifact['url']).netloc != urlparse(catalog_url).netloc:
       raise ValueError('artifact must use the model server HTTPS origin')
+  if generic and value['pickle']['sha256'] != model_sha:
+    raise ValueError('generic artifact must match the selected model hash')
   return value
 
 
@@ -104,7 +108,8 @@ def installed(model=None, cache_dir: Path | None = None) -> Path | None:
     runtime = root / ('runtime-' + value['runtime']['sha256'][:16])
     if value.get('runtime_directory') != runtime.name:
       return None
-    if not (runtime / 'model_runtime.py').is_file() or not (runtime / 'tinygrad' / '__init__.py').is_file():
+    entry = 'examples/openpilot/compile_warp.py' if value['format'] == 'comma-generic-onnx' else 'model_runtime.py'
+    if not (runtime / entry).is_file() or not (runtime / 'tinygrad' / '__init__.py').is_file():
       return None
     return root / 'model.pkl'
   except (OSError, ValueError, KeyError, TypeError):
@@ -131,7 +136,15 @@ def ensure_precompiled(model=None, cache_dir: Path | None = None, progress=None)
   if (root / 'rejected').exists() and (root / 'rejected').read_text() == value['pickle']['sha256']:
     return None
   root.mkdir(parents=True, exist_ok=True)
-  download(value['pickle'], root / 'model.pkl', progress)
+  target = root / 'model.pkl'
+  if value['format'] == 'comma-generic-onnx' and not target.exists():
+    source = model_path(model, cache_dir or model_cache_dir())
+    if source.is_file() and source.stat().st_size == value['pickle']['size'] and sha256(source) == model.sha256:
+      try:
+        os.link(source, target)
+      except OSError:
+        shutil.copyfile(source, target)
+  download(value['pickle'], target, progress)
   download(value['runtime'], root / 'runtime.tar.gz')
   runtime = root / ('runtime-' + value['runtime']['sha256'][:16])
   if not runtime.exists():

@@ -8,6 +8,7 @@ from opendbc.car.hyundai.interface import ENABLE_BUTTONS as HYUNDAI_ENABLE_BUTTO
 from opendbc.car.hyundai.carstate import PREV_BUTTON_SAMPLES as HYUNDAI_PREV_BUTTON_SAMPLES
 
 from openpilot.selfdrive.selfdrived.events import Events, ET
+from openpilot.selfdrive.carrot.bluetooth.model import BLUETOOTH_CANCEL
 
 from openpilot.common.params import Params
 
@@ -242,6 +243,8 @@ class CarSpecificEvents:
       events.add(EventName.belowSteerSpeed)
     if CS.buttonEnable:
       events.add(EventName.buttonEnable)
+    if self.CP.pcmCruise and CS.activateCruise == BLUETOOTH_CANCEL and CS_prev.activateCruise != BLUETOOTH_CANCEL:
+      events.add(EventName.buttonCancel)
 
     # Handle cancel button presses
     for b in CS.buttonEvents:

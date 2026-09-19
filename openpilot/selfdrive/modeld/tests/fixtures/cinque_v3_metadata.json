@@ -1,0 +1,170 @@
+{
+  "metadata": {
+    "metadata": {
+      "output_slices": "gASVkwEAAAAAAAB9lCiMCmxhbmVfbGluZXOUjAhidWlsdGluc5SMBXNsaWNllJOUSwBNEAJOh5RS\nlIwPbGFuZV9saW5lc19wcm9ilGgETRACTRgCToeUUpSMCnJvYWRfZWRnZXOUaARNGAJNIANOh5RS\nlIwEbWV0YZRoBE0gA01XA06HlFKUjAtkZXNpcmVfcHJlZJRoBE1XA013A06HlFKUjARwb3NllGgE\nTXcDTYMDToeUUpSMFndpZGVfZnJvbV9kZXZpY2VfZXVsZXKUaARNgwNNiQNOh5RSlIwOcm9hZF90\ncmFuc2Zvcm2UaARNiQNNlQNOh5RSlIwEcGxhbpRoBE2VA01zB06HlFKUjARsZWFklGgETXMHTQMI\nToeUUpSMCWxlYWRfcHJvYpRoBE0DCE0GCE6HlFKUjAxkZXNpcmVfc3RhdGWUaARNBghNDghOh5RS\nlIwGYWN0aW9ulGgETQ4ITRIIToeUUpSMDGhpZGRlbl9zdGF0ZZRoBE0SCE0SSE6HlFKUjANwYWSU\naARNEkhNFEhOh5RSlHUu\n",
+      "model_checkpoint": "b9facbcc-4d47-410e-b3ce-dfcbad12ba92/56320/f78ed37d-afad-4dbc-8050-40ea885eedde/12864"
+    },
+    "input_shapes": {
+      "new_img": [
+        2,
+        6,
+        128,
+        256
+      ],
+      "desire": [
+        8
+      ],
+      "traffic_convention": [
+        1,
+        2
+      ],
+      "action_t": [
+        1,
+        2
+      ],
+      "state_img_q": [
+        2,
+        5,
+        6,
+        128,
+        256
+      ],
+      "state_desire_q": [
+        132,
+        1,
+        8
+      ],
+      "state_feat_q": [
+        128,
+        1,
+        16384
+      ]
+    },
+    "output_shapes": {
+      "outputs": [
+        1,
+        18452
+      ],
+      "next_state_img_q": [
+        2,
+        5,
+        6,
+        128,
+        256
+      ],
+      "next_state_desire_q": [
+        132,
+        1,
+        8
+      ],
+      "next_state_feat_q": [
+        128,
+        1,
+        16384
+      ]
+    }
+  },
+  "input_specs": {
+    "new_img": [
+      [
+        2,
+        6,
+        128,
+        256
+      ],
+      "|u1",
+      "AMD"
+    ],
+    "desire": [
+      [
+        8
+      ],
+      "<f4",
+      "AMD"
+    ],
+    "traffic_convention": [
+      [
+        1,
+        2
+      ],
+      "<f4",
+      "AMD"
+    ],
+    "action_t": [
+      [
+        1,
+        2
+      ],
+      "<f4",
+      "AMD"
+    ],
+    "state_img_q": [
+      [
+        2,
+        5,
+        6,
+        128,
+        256
+      ],
+      "|u1",
+      "AMD"
+    ],
+    "state_desire_q": [
+      [
+        132,
+        1,
+        8
+      ],
+      "<f4",
+      "AMD"
+    ],
+    "state_feat_q": [
+      [
+        128,
+        1,
+        16384
+      ],
+      "<f4",
+      "AMD"
+    ]
+  },
+  "output_specs": {
+    "outputs": [
+      [
+        1,
+        18452
+      ],
+      "float32",
+      "AMD"
+    ],
+    "next_state_img_q": [
+      [
+        2,
+        5,
+        6,
+        128,
+        256
+      ],
+      "uint8",
+      "AMD"
+    ],
+    "next_state_desire_q": [
+      [
+        132,
+        1,
+        8
+      ],
+      "float32",
+      "AMD"
+    ],
+    "next_state_feat_q": [
+      [
+        128,
+        1,
+        16384
+      ],
+      "float32",
+      "AMD"
+    ]
+  }
+}
