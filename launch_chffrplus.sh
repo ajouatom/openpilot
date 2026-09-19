@@ -290,6 +290,13 @@ function big_model_artifact_ready {
 }
 
 function invalidate_modeld_build_if_needed {
+  # The release adds generated files to Git, so its model tree ID differs
+  # from the source build's ID. Validate actual inputs and artifacts instead.
+  # Optional eGPU artifacts are delivered by the existing NAS background updater.
+  if [ -f "$DIR/prebuilt" ] && python3 "$DIR/scripts/verify_prebuilt.py"; then
+    echo "Verified Carrot prebuilt; native/model compilation is not required."
+    return
+  fi
   local stamp_path="$DIR/openpilot/selfdrive/modeld/models/.build_stamp"
   local big_stamp_path="$DIR/openpilot/selfdrive/modeld/models/.big_model_build_stamp"
   local tg_devices_path="$DIR/openpilot/selfdrive/modeld/models/tg_input_devices.json"

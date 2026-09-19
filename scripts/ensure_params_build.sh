@@ -19,6 +19,15 @@ if [ "$HEADER_HASH" = "$BUILT_HASH" ] && [ -f "$MODULE" ]; then
   exit 0
 fi
 
+# A fresh installation has no external SCons cache stamp. Validate the shipped
+# binding and registry before deciding to compile it again.
+if [ -f "$ROOT/prebuilt" ] && python3 "$ROOT/scripts/verify_prebuilt.py" --params-only && \
+   PYTHONPATH="$ROOT${PYTHONPATH:+:$PYTHONPATH}" python3 "$ROOT/openpilot/system/manager/params_check.py"; then
+  printf '%s\n' "$HEADER_HASH" > "$STAMP.tmp"
+  mv -f "$STAMP.tmp" "$STAMP"
+  exit 0
+fi
+
 echo "Params registry changed; rebuilding params_pyx.so."
 rm -f \
   "$ROOT/openpilot/common/params.o" \
