@@ -4,8 +4,10 @@
   `carrot-wip`, including the pinned Cinque v3 eGPU model/runtime, AGNOS
   `19.8-carrot-bt1`, and Bluetooth remote features. This supersedes the earlier
   Cinque v2/OS separation below. Keep the internal-GPU driving model unchanged;
-  update driver monitoring to official Super Leicht (#38942). Both maintained
-  branches receive shared fixes until the user explicitly retires one.
+  driver monitoring uses official Super Leicht (#38942). After successful
+  integration the user explicitly retired `carrot-cinque_v3`; `carrot-wip` is
+  the sole maintained top-level `carrot-*` branch. Do not recreate v3 or push
+  changes to its detached worktree. Its complete history is merged into wip.
 
 - Whenever radar detection or lead-selection code changes, update the NAS Carrot Routes
   radar replay service in the same task. The `Carrot Routes image` GitHub workflow builds
@@ -26,8 +28,8 @@
   differences when synchronizing shared code; do not spread an experiment to other branches.
   The user will explicitly identify new feature experiments and their target branches.
 - As of 2026-09-13, `carrot-wip` is the sole maintained top-level `carrot-*` branch.
-  It incorporates the complete `carrot-cinque_v2` history and uses its pinned Cinque v2
-  eGPU big model from commaai/openpilot#38823. The internal-GPU fallback model is unchanged.
+  It incorporates the complete `carrot-cinque_v2` history. Its former Cinque v2
+  selection was superseded by the 2026-09-19 integration above.
   Commit and push common changes, including radar processing and Carrot Web, to `carrot-wip`;
   verify it matches `origin/carrot-wip` with no unpushed commits before completion.
   Do not recreate retired branches or synchronize changes to their archive tags or detached
@@ -37,11 +39,8 @@
   explicitly requests them. Keep their model selections, generated display assets, compatibility
   changes and dedicated features scoped to those experiments; agree their maintenance scope
   with the user instead of automatically restoring the retired multi-branch synchronization rule.
-- As of 2026-09-17, the user explicitly maintains `carrot-cinque_v3` as an experiment
-  derived from `carrot-wip`. Apply future common `carrot-wip` changes to this branch too,
-  while preserving its pinned Cinque v3 model, generated model labels, and dedicated
-  runtime compatibility changes. Verify both maintained branches are pushed when shared
-  changes are made. This exception does not restore any retired branch.
+- The 2026-09-17 exception maintaining `carrot-cinque_v3` separately ended on
+  2026-09-19 after its complete integration and the user's explicit deletion request.
 - On this Windows workstation, vehicle tmux session captures are stored under
   `\\DS1821P\openpilot\<branch>`. When tmux is mentioned, search the directory for the known
   branch for a vehicle folder whose name ends with the exact dongle ID. If the branch is unknown,
