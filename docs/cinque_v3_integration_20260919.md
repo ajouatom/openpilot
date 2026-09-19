@@ -3,6 +3,8 @@
 The user requested full integration of `carrot-cinque_v3` (9653269dcd) into
 `carrot-wip` (1130b07462), plus the new official driver-monitoring model and
 applicable recent upstream changes. The merge preserves both histories.
+The subsequent explicit retirement request removes the local and remote v3
+branches after validation; `carrot-wip` is the sole maintained top-level branch.
 
 ## Included
 
@@ -59,6 +61,17 @@ The existing C4 OS/model/Bluetooth trial evidence remains in the linked trial
 document. PC/CI validation is not a new C3/C3X/C4 on-road or GPU timing result.
 This change does not claim to repair the separately diagnosed 9842 vehicle's
 MPC extension import failure, nor establish the cause of camera/SPI stalls.
+
+Final integration commit: `a13bba3ca4a306c1c3bdc1ccc0bb5e402e31bee9`.
+[Linux CI](https://github.com/ajouatom/openpilot/actions/runs/35433080120)
+passed the full build, 221 model/monitoring/cruise/Bluetooth tests, web controls
+and startup/update lifecycle tests. User-doc validation passed. The NAS updater
+deployed that commit and verified 1,196 replay frames; an independent public
+health/page/data check matched the updater's replay hash.
+
+The previously discussed SPI protocol PR #38868 remains open and unmerged at
+review (head f0568611). It changes both Panda firmware and host protocol code;
+it is not included as a proven SPI-error fix in this integration.
 
 Docs-Not-Needed: No global setting definition or setting semantics change;
 Bluetooth is an existing web-only feature with localized in-dialog guidance.
