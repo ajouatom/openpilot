@@ -83,6 +83,7 @@ class HyundaiSafetyFlags(IntFlag):
   CANFD_LKA_STEERING_ALT = 128
   FCEV_GAS = 256
   ALT_LIMITS_2 = 512
+  ESCC = 1024
 
 
 class HyundaiFlags(IntFlag):
@@ -139,6 +140,20 @@ class HyundaiFlags(IntFlag):
   ALT_LIMITS_2 = 2 ** 26
 
   CC_ONLY_CAR = 2 ** 31
+
+class HyundaiFlagsSP(IntFlag):
+  SP_ENHANCED_SCC = 1
+  SP_CAN_LFA_BTN = 2
+  SP_NAV_MSG = 2 ** 2
+
+  SP_NON_SCC = 2 ** 3
+  SP_NON_SCC_FCA = 2 ** 4
+  SP_NON_SCC_RADAR_FCA = 2 ** 5
+
+  SP_CAMERA_SCC_LEAD = 2 ** 6
+  SP_LKAS12 = 2 ** 7
+  SP_RADAR_TRACKS = 2 ** 8
+  SP_UPSTREAM_TACO = 2 ** 9
 
 class HyundaiExtFlags(IntFlag):
   NAVI_CLUSTER = 2 ** 2

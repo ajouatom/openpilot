@@ -413,6 +413,7 @@
           "en": "Radar",
           "zh": "雷达",
           "params": [
+            "EnableEscc",
             "EnableRadarTracks",
             "EnableCornerRadar"
           ]
@@ -2685,6 +2686,22 @@
       "cdescr": "-2: VOACC 纯视觉测试\n-1: 无视觉匹配始终使用 SCC；无 SCC 时使用视觉\n0: SCC 与视觉匹配；失败时使用视觉\n1: 仅前雷达与视觉匹配；失败时使用视觉\n2: 前雷达 + 低速 SCC 与视觉匹配；失败时使用视觉\n3: 前雷达视觉匹配失败后始终使用 SCC；无 SCC 时使用视觉\n新视觉目标要求 prob >= 0.40；强制 SCC 忽略横向位置\n自动支持传统 Mando 32/64 槽位版本",
       "min": -2,
       "max": 3,
+      "default": 0,
+      "unit": 1
+    },
+    {
+      "group": "레이더설정",
+      "name": "EnableEscc",
+      "title": "ESCC 사용(0)",
+      "descr": "1: ESCC 사용",
+      "egroup": "RADAR",
+      "etitle": "Enable ESCC(0)",
+      "edescr": "1: Enable ESCC",
+      "cgroup": "雷达设置",
+      "ctitle": "开启 ESCC (0)",
+      "cdescr": "1: 开启 ESCC",
+      "min": 0,
+      "max": 1,
       "default": 0,
       "unit": 1
     },
