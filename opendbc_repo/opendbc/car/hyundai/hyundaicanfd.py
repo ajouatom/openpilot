@@ -387,15 +387,28 @@ def _display_lead(radar_state):
              key=lambda lead: lead.dRel, default=None)
 
 
-def _apply_scc_lead(values, radar_state):
+def _display_lead_lateral(lead, model_v2):
+  # Model position and the cluster use right-positive y; radar yRel is left-positive.
+  lateral = -lead.yRel
+  position = getattr(model_v2, "position", None)
+  if position is not None:
+    x, y = position.x, position.y
+    if (len(x) >= 2 and len(x) == len(y)
+        and all(math.isfinite(v) for v in x) and all(math.isfinite(v) for v in y)
+        and all(x[i] > x[i - 1] for i in range(1, len(x)))):
+      lateral -= float(np.interp(lead.dRel, x, y))
+  return lateral
+
+
+def _apply_scc_lead(values, radar_state, model_v2=None):
   lead = _display_lead(radar_state)
   # Match the stock no-object encoding; never retain an old camera target.
   values.update(ACC_ObjDist=204.6, ACC_ObjLatPos=0.0, ACC_ObjRelSpd=239.4, HUD_LEAD_INFO=0)
   if lead is not None:
     values["ACC_ObjDist"] = float(np.clip(lead.dRel, 0.1, 204.5))
-    # SCC lateral position has the opposite sign to radarState.yRel. Bound to
+    # Show the offset from the model path at the lead distance. Bound to
     # the signed 9-bit signal's representable range (0.1 scale, -20 offset).
-    values["ACC_ObjLatPos"] = float(np.clip(-lead.yRel, -45.6, 5.5))
+    values["ACC_ObjLatPos"] = float(np.clip(_display_lead_lateral(lead, model_v2), -45.6, 5.5))
     values["ACC_ObjRelSpd"] = float(np.clip(lead.vRel, -170.0, 239.3))
     values["HUD_LEAD_INFO"] = 1 if lead.vRel > 0 else 2
 
@@ -452,7 +465,7 @@ def create_acc_control_scc2(packer, CAN, enabled, accel_value_last, accel, stopp
   #values["SET_ME_3"] = 0x3  # objRelsped와 충돌
   values["DriveMode"] = 0 # 0: Default, 1: Comfort Mode, 2:Normal mode, 3:Dynamic mode, reserved
 
-  _apply_scc_lead(values, getattr(CS, "radarState", None))
+  _apply_scc_lead(values, getattr(CS, "radarState", None), getattr(CS, "modelV2", None))
 
   values["DriverAlert"] = 0   # 1: SCC Disengaged, 2: No SCC Engage condition, 3: SCC Disenganed when the vehicle stops
 
@@ -744,7 +757,7 @@ def _convert_ccnc_boxes_to_cars(values):
       values[key] += 2
 
 
-def _apply_ccnc_lead(values, radar_state, enabled):
+def _apply_ccnc_lead(values, radar_state, enabled, model_v2=None):
   lead = _display_lead(radar_state)
   if lead is None:
     values.update(FF_DETECT=0, FF_DISTANCE=204.6, FF_LATERAL=0.0)
@@ -755,15 +768,16 @@ def _apply_ccnc_lead(values, radar_state, enabled):
   stock_lateral = values["FF_LATERAL"]
   if stock_lateral >= 6.4:
     stock_lateral -= 12.8
+  lateral = _display_lead_lateral(lead, model_v2)
   same_object = (values["FF_DETECT"] != 0
                  and abs(values["FF_DISTANCE"] - lead.dRel) <= 3.0
-                 and abs(stock_lateral + lead.yRel) <= 1.0)
+                 and abs(stock_lateral - lateral) <= 1.0)
   # Radar leads have no object class. Retain the OEM class only for a matching
   # target; otherwise use the existing generic gray/white car presentation.
   if not same_object:
     values["FF_DETECT"] = 4 if enabled else 3
   values["FF_DISTANCE"] = float(np.clip(lead.dRel, 0.1, 204.5))
-  values["FF_LATERAL"] = float(np.clip(-lead.yRel, -6.4, 6.3))
+  values["FF_LATERAL"] = float(np.clip(lateral, -6.4, 6.3))
 
 
 def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
@@ -956,7 +970,7 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
         values = copy.copy(CS.ccnc_0x162)
 
         _convert_ccnc_boxes_to_cars(values)
-        _apply_ccnc_lead(values, getattr(CS, "radarState", None), CC.enabled)
+        _apply_ccnc_lead(values, getattr(CS, "radarState", None), CC.enabled, getattr(CS, "modelV2", None))
 
         if (left_lane_warning and not CS.out.leftBlinker) or (right_lane_warning and not CS.out.rightBlinker):
           values["VIBRATE"] = 1

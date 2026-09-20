@@ -7,9 +7,10 @@ from opendbc.car import structs
 from opendbc.car.hyundai import hyundaicanfd
 from opendbc.car.hyundai.tests.test_scc_lead import make_cs, make_radar, send as send_scc
 from opendbc.car.hyundai.values import HyundaiFlags
+from openpilot.cereal import log
 
 
-def send_ccnc(monkeypatch, radar, *, enabled=True, stock=None, present=True, with_target=False):
+def send_ccnc(monkeypatch, radar, *, enabled=True, stock=None, present=True, with_target=False, model=None):
   monkeypatch.setattr(hyundaicanfd, "Params", lambda: SimpleNamespace(get_int=lambda key: 0, get=lambda key: "0"))
   packer = CANPacker("hyundai_canfd_generated")
   source = {key: 0 for key in packer.dbc.name_to_msg["CCNC_0x162"].sigs}
@@ -21,6 +22,9 @@ def send_ccnc(monkeypatch, radar, *, enabled=True, stock=None, present=True, wit
   cs.out.steeringAngleDeg = 0.0
   cs.out.leftBlinker = cs.out.rightBlinker = False
   cs.modelV2 = cs.lfahda_cluster = cs.cruise_buttons_msg = None
+  cs.modelV2 = model
+  if model is not None and isinstance(model, SimpleNamespace):
+    model.meta = SimpleNamespace(desire=SimpleNamespace(raw=0), desireState=[])
   cs.adrv_0x161 = cs.adrv_0x200 = cs.adrv_0x1ea = None
   cs.ccnc_0x162 = source if present else None
   if with_target:
@@ -89,6 +93,39 @@ def test_ccnc_geometry_bounds_do_not_wrap(monkeypatch, y_rel, raw_lateral):
 
 def test_absent_ccnc_message_is_not_synthesized(monkeypatch):
   send_ccnc(monkeypatch, make_radar(), present=False)
+
+
+@pytest.mark.parametrize("direction", [-1, 1])
+@pytest.mark.parametrize("second", [False, True])
+def test_curve_display_uses_path_at_selected_lead_distance(monkeypatch, direction, second):
+  radar = make_radar(dRel=30, yRel=-2.7 * direction)
+  if second:
+    radar.leadTwo = radar.leadOne
+    radar.leadOne = make_radar(dRel=60).leadOne
+  model = log.ModelDataV2.new_message()
+  model.position.x = [0, 20, 40, 80]
+  model.position.y = [0, direction, 3 * direction, 8 * direction]
+  model = model.as_reader()
+  cs = make_cs(radar)
+  cs.modelV2 = model
+  scc = send_scc(cs)
+  cc = send_ccnc(monkeypatch, radar, model=model, stock=dict(FF_DETECT=12, FF_DISTANCE=30, FF_LATERAL=0))
+  assert scc["ACC_ObjLatPos"] == pytest.approx(0.7 * direction)
+  assert cc["FF_LATERAL"] == pytest.approx((0.7 * direction) % 12.8)
+  assert cc["FF_DETECT"] == 12
+  assert cc["FF_DISTANCE"] == scc["ACC_ObjDist"] == 30
+
+
+@pytest.mark.parametrize(("x", "y"), [([], []), ([0], [0]), ([0, 20], [0]),
+                                       ([0, 20], [0, float("nan")]), ([0, float("inf")], [0, 1]),
+                                       ([20, 0], [0, 1]), ([0, 0], [0, 1])])
+def test_invalid_path_retains_uncompensated_display(monkeypatch, x, y):
+  radar = make_radar(yRel=-1.2)
+  model = SimpleNamespace(position=SimpleNamespace(x=x, y=y))
+  cs = make_cs(radar)
+  cs.modelV2 = model
+  assert send_scc(cs)["ACC_ObjLatPos"] == pytest.approx(1.2)
+  assert send_ccnc(monkeypatch, radar, model=model)["FF_LATERAL"] == pytest.approx(1.2)
 
 
 @pytest.mark.parametrize(("first", "second", "expected"), [
