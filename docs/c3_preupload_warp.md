@@ -104,4 +104,35 @@ retain a known-good model/runtime pair for that device rather than weakening
 validity checks. World Model-specific artifacts/control work remain local and
 are not validated by Cinque tests.
 
-Docs-Not-Needed: Internal model runtime optimization; no user setting or user-guide change.
+## September 21 vehicle result and remaining camera pairing issue
+
+EV9 `000002cc--03d0a44f7d--10` on 2723a8eb confirms the optimized path is
+active: worker timing records report `warp_backend=qcom`, 393,728 USB bytes,
+mean local preparation 7.30 ms and upload 5.36 ms. Model execution averages
+34.98 ms with a maximum of 40.74 ms in this segment. The 7,471,616-byte host
+shared allocation still holds raw input; it is no longer the USB payload.
+
+Four warnings remain, although both camera frame-ID streams are consecutive.
+Their current SOF timestamps differ by 12.6-13.2 ms; the strict 10 ms pairing
+limit skips a main frame each time. Full-segment metadata replay reproduces
+all four actual model gaps. Changing only this limit to 20 ms retains all
+1,200 pairs. This is below half the nominal 50 ms frame period and remains a
+hard bound; it is not the official implementation's unbounded final skew.
+SOF is timestamped in the kernel IRQ callback, but the source of the skew is
+not established by these logs.
+
+Official v3 and official master 3b2a75a4 both publish invalid cameraOdometry
+after a real main-frame gap. Their pairing loop logs final skew above 10 ms
+but proceeds. Carrot's Sep 18 publication change explains a difference from
+earlier Carrot behavior, not a unique deviation from current official policy.
+Keep pose validity and downstream fault checks intact.
+
+The Ioniq `00000f8c--3ae462b8c7--6` phase slip and
+`00000f8d--e6ec5e5328--3` IFE failure still produce real gaps under the bounded
+20 ms rule. Tests preserve rejection/resynchronization for missing frames,
+timeouts, excessive skew in either direction and nonmatching streams, while
+retaining the prior short/long cadence fix. A real camera driver failure
+cannot be claimed fixed by this timing adjustment. Vehicle validation of the
+new pairing limit and driving behavior remains outstanding.
+
+Docs-Not-Needed: Internal model runtime and camera pairing correction; no user setting or user-guide change.
