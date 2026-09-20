@@ -208,7 +208,15 @@ def create_acc_commands_scc(packer, enabled, accel, jerk, idx, hud_control, set_
   if CS.scc12 is not None:
     values = copy.copy(CS.scc12)
     values["ACCMode"] = scc12_acc_mode #2 if enabled and long_override else 1 if long_enabled else 0
-    values["StopReq"] = stop_req
+    # The tested classic-CAN Casper creeps with StopReq asserted despite a
+    # sustained negative request. Use ordinary deceleration for normal stops;
+    # leave pedal, override and soft-hold handling unchanged.
+    casper_decel_stop = (
+      CS.CP.carFingerprint == CAR.HYUNDAI_CASPER and enabled and stopping
+      and scc12_acc_mode == 1 and soft_hold_active == 0 and accel < 0
+      and not CS.out.brakePressed and not CS.out.gasPressed
+    )
+    values["StopReq"] = 0 if casper_decel_stop else stop_req
     values["aReqRaw"] = accel
     values["aReqValue"] = accel
     values["ACCFailInfo"] = 0
