@@ -52,6 +52,21 @@ bump. C4 and non-generic artifacts retain their prior execution path.
 
 ## Validation and deployment checks
 
+The first vehicle trial, EV9 `000002c9--15d447d91b--0` on 9a349b60, rejected
+the QCOM warp with `QCOM pre-upload warp differs from artifact AMD warp`.
+The worker continued on AMD with 7,471,616 USB input bytes and mean upload
+24.801 ms. Thus this trial does not measure the proposed optimized path.
+Locationd/communication alerts recur after initialization. Segment-zero timing
+includes a first model run of about 1.73 s; do not compare its overall mean
+directly to steady-state earlier segments. Model execution median is 50.417 ms.
+
+Original diagnostics did not retain the failing probe or mismatch size. The
+follow-up reports all failing probes, shapes/dtypes, mismatch counts, maximum
+pixel difference, bounded coordinate/value samples, and repeat consistency.
+Acceptance remains exact; numerical rounding, layout and memory consistency
+are hypotheses until these diagnostics or device-side reproduction resolve
+the cause. A parked startup log is sufficient to capture this validation.
+
 Focused host tests cover device selection, compact transfer contents, recurrent
 state identity/advancement, validation rejection and input cleanup. Existing
 generic-runtime and worker-protocol tests also pass. Windows cannot execute
