@@ -1,5 +1,6 @@
 """C3 pre-upload warp using the model artifact's own pinned warp implementation."""
 import os
+import json
 from pathlib import Path
 import pickle
 import time
@@ -39,6 +40,21 @@ def bind_runtime(adapter, args, packed, report_failure):
     adapter = GenericModelRuntime(*args)
     adapter.bind_shared(packed)
   return adapter
+
+
+def warp_difference(actual, expected):
+  detail = {'actual_shape': list(actual.shape), 'expected_shape': list(expected.shape),
+            'actual_dtype': str(actual.dtype), 'expected_dtype': str(expected.dtype)}
+  if actual.shape != expected.shape or actual.dtype != expected.dtype:
+    return detail
+  indices = np.flatnonzero(actual.reshape(-1) != expected.reshape(-1))
+  if not len(indices):
+    return None
+  detail.update(mismatched_pixels=int(indices.size), total_pixels=int(actual.size),
+                max_abs_error=int(np.abs(actual.astype(np.int16) - expected.astype(np.int16)).max()),
+                samples=[{'index': list(map(int, np.unravel_index(int(i), actual.shape))),
+                          'qcom': int(actual.reshape(-1)[i]), 'amd': int(expected.reshape(-1)[i])} for i in indices[:8]])
+  return detail
 
 
 class LocalWarpRuntime(GenericModelRuntime):
@@ -101,16 +117,25 @@ class LocalWarpRuntime(GenericModelRuntime):
     frames = input_view(reference, (2, self.frame_size), dtypes.uint8, self.frames_offset)
     transforms = input_view(reference, (2, 3, 3), dtypes.float32)
     matrices = np.ndarray((2, 3, 3), np.float32, buffer=self.raw)
+    differences = []
     try:
       self.raw[:] = np.random.default_rng(0).integers(0, 256, self.raw.size, dtype=np.uint8)
-      for matrix in (np.eye(3), [[2.3, .01, 20.2], [-.02, 2.1, 40.3], [.0001, -.0002, 1]],
-                     [[1, 0, -200], [0, 1, -100], [0, 0, 1]]):
+      probes = [('identity', np.eye(3)),
+                ('projective', [[2.3, .01, 20.2], [-.02, 2.1, 40.3], [.0001, -.0002, 1]]),
+                ('border', [[1, 0, -200], [0, 1, -100], [0, 0, 1]])]
+      for name, matrix in probes:
         matrices[:] = matrix
         reference.copy_from(self.local_host)
         expected = self.amd_warp(input_frame=frames, M_inv=transforms).numpy()
         actual = self.prepare_images()
-        if actual.dtype != np.uint8 or actual.shape != tuple(self.specs['new_img'][0]) or not np.array_equal(actual, expected):
-          raise RuntimeError('QCOM pre-upload warp differs from artifact AMD warp')
+        if expected.dtype != np.uint8 or expected.shape != tuple(self.specs['new_img'][0]):
+          raise RuntimeError('artifact AMD warp has unexpected output contract')
+        if (difference := warp_difference(actual, expected)) is not None:
+          difference['probe'] = name
+          difference['repeat_matches_first'] = bool(np.array_equal(actual, self.prepare_images()))
+          differences.append(difference)
+      if differences:
+        raise RuntimeError('QCOM pre-upload warp differs from artifact AMD warp: ' + json.dumps(differences))
     finally:
       self.raw[:] = 0
 

@@ -12,6 +12,15 @@ def test_local_warp_is_only_selected_for_c3(device, expected):
   assert local.use_local_warp(device) is expected
 
 
+def test_warp_difference_reports_pixels_without_uint8_overflow():
+  expected = np.array([[[[255, 0]]]], np.uint8)
+  actual = np.array([[[[0, 255]]]], np.uint8)
+  diff = local.warp_difference(actual, expected)
+  assert diff['max_abs_error'] == 255 and diff['mismatched_pixels'] == 2
+  assert diff['samples'][0] == {'index': [0, 0, 0, 0], 'qcom': 0, 'amd': 255}
+  assert local.warp_difference(expected.copy(), expected) is None
+
+
 @pytest.mark.parametrize('device,fault', [('tizi', None), ('tizi', 'init'), ('tizi', 'bind'), ('mici', None)])
 def test_local_warp_failures_retain_original_backend(monkeypatch, device, fault):
   calls, errors = [], []

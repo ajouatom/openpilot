@@ -8,6 +8,10 @@
   uploads full NV12 images before AMD warp. The user approved C3-only QCOM
   pre-upload warp while retaining the existing C4 path. See
   `docs/c3_preupload_warp.md` for implementation, validation limits and evidence.
+  EV9 segment `000002c9--15d447d91b--0` on 9a349b60 failed the QCOM/AMD pixel
+  comparison and fell back to AMD (7,471,616 USB bytes, about 24.8 ms upload).
+  The optimization is NOT vehicle-validated or confirmed active. Diagnose the
+  per-probe mismatch details before changing warp math or acceptance criteria.
   Preserve official model input/outputs and recurrent state; never hide overload
   by weakening pose validity. Evaluate model/runtime updates per device family;
   do not assume C4 validation covers C3, or automatically freeze all C3 models.
