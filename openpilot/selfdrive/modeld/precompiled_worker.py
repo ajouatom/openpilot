@@ -53,11 +53,13 @@ def main():
   if not generic and ('run_policy' in jits or 'run_model' not in jits):
     raise ValueError('wrong precompiled runtime format')
   if generic:
-    from openpilot.selfdrive.modeld.generic_model_runtime import GenericModelRuntime, model_metadata
+    from openpilot.selfdrive.modeld.generic_model_runtime import model_metadata
+    from openpilot.selfdrive.modeld.local_gpu_warp import LocalWarpRuntime, bind_runtime, create_runtime, vehicle_device_type
     checkpoint, _, _, _ = model_metadata(jits)
     if checkpoint != manifest['model_checkpoint']:
       raise ValueError('precompiled checkpoint mismatch')
-    adapter = GenericModelRuntime(jits, width, height, runtime, get_nv12_info(width, height))
+    adapter_args = (jits, width, height, runtime, get_nv12_info(width, height))
+    adapter = create_runtime(adapter_args, vehicle_device_type(), cloudlog.exception)
     metadata = {'model_checkpoint': adapter.checkpoint, 'input_shapes': adapter.input_shapes, 'output_slices': adapter.output_slices}
     device = adapter.device
   else:
@@ -89,7 +91,9 @@ def main():
       packed_shared[:] = 0
       output = np.ndarray((count,), np.float32, buffer=shared, offset=input_bytes)
       if generic:
-        adapter.bind_shared(packed_shared)
+        adapter = bind_runtime(adapter, adapter_args, packed_shared, cloudlog.exception)
+        cloudlog.event('precompiledWarp', backend='qcom' if isinstance(adapter, LocalWarpRuntime) else 'amd',
+                       input_bytes=input_bytes, usb_input_bytes=getattr(adapter, 'upload_bytes', input_bytes))
       else:
         queues['packed_npy_inputs'] = Tensor(packed_shared, device='NPY').realize()
       info = {'size': total, 'input_bytes': input_bytes, 'output_count': count, 'layout': layout,
@@ -122,6 +126,8 @@ def main():
         # kernel durations. Keep the pipe protocol and the compiled graph intact.
         diagnostics.record(context={'gpu_arch': manifest['gpu_arch'], 'format': manifest['format'],
                                     'camera_width': width, 'camera_height': height, 'input_bytes': input_bytes,
+                                    'warp_backend': 'qcom' if generic and isinstance(adapter, LocalWarpRuntime) else 'amd',
+                                    'usb_input_bytes': getattr(adapter, 'upload_bytes', input_bytes) if generic else input_bytes,
                                     'model_sha256': manifest['pickle']['sha256']},
                            run_model_ms=(dispatched - started) * 1000,
                            result_sync_ms=(finished - dispatched) * 1000,
