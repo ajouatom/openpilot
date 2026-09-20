@@ -1,5 +1,18 @@
 # Repository memory
 
+- On 2026-09-20, EV9 `3eef70e8fb92485c` (tizi/C3 family) reproduced Cinque v3
+  dropped-frame odometry invalidity even with `xiaoge_data` stopped. Raw-image
+  upload averaged 24.75 ms and model execution 50.69 ms; C4 `07b62e389ed26c81`
+  used the same artifact at 13.94 ms upload / 39.73 ms execution. Old TG code
+  warped on QCOM before transferring model-sized images, whereas generic v3
+  uploads full NV12 images before AMD warp. The user approved C3-only QCOM
+  pre-upload warp while retaining the existing C4 path. See
+  `docs/c3_preupload_warp.md` for implementation, validation limits and evidence.
+  Preserve official model input/outputs and recurrent state; never hide overload
+  by weakening pose validity. Evaluate model/runtime updates per device family;
+  do not assume C4 validation covers C3, or automatically freeze all C3 models.
+  Keep World Model experiments local and apply its separate validation rules.
+
 - As of 2026-09-20, the user requested deletion of the remote `carrot-worldmodel`
   branch to prevent others from installing an unfinished experiment. Keep this
   experiment local only; do not recreate or push its remote branch unless the
