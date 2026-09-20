@@ -14,6 +14,9 @@ ACTIONS = ('none', *REMOTE_BUTTONS, *(button + 'Long' for button in REMOTE_BUTTO
            'laneLeft', 'laneRight', 'paddleDecel', 'carrotCruise')
 DOUBLE_SECONDS = 0.35
 LONG_SECONDS = 0.7
+REPEAT_SECONDS = 0.5
+MAX_HOLD_SECONDS = 10
+REPEAT_ACTIONS = ('accelCruise', 'decelCruise', 'accelCruiseLong', 'decelCruiseLong')
 COMMAND_TTL = 0.4
 BLUETOOTH_CANCEL = -3  # Explicit driver cancel, including PCM cruise; -1/-2 retain their existing meanings.
 DEFAULT_MAPPING = {'up': 'accelCruise', 'down': 'decelCruise', 'left': 'laneLeft', 'right': 'laneRight',
@@ -133,16 +136,79 @@ class Decoder:
     self.pending_keys = []
     self.dropped = False
     self.clicks = Clicks(mapping, learning)
+    self.holds = {}
+    self.frame_open = False
+    self.repeated = set()
+
+  @property
+  def active_longs(self):
+    return {hold['token'] + '@long' for hold in self.holds.values() if hold['fired'] and not hold['expired']}
+
+  def cancel_holds(self):
+    for hold in self.holds.values():
+      hold['expired'] = True
+
+  def hold(self, source, token, started):
+    previous = self.holds.get(source)
+    if previous and previous['token'] != token:
+      if previous['fired'] or previous['expired']:
+        previous['expired'] = True  # Changing direction cannot resume a cancelled or already fired hold.
+        return
+      self.holds.pop(source, None)
+      previous = None
+    if not previous and token:
+      self.holds[source] = {'token': token, 'started': started, 'last': None, 'fired': False, 'expired': False}
+
+  def key_token(self, key):
+    return '1' if self.profile == 'yiser-j6' and key == 115 else f'key:{key}'
+
+  def touch_token(self):
+    dx, dy = self.last[0] - self.start[0], self.last[1] - self.start[1]
+    if max(abs(dx), abs(dy)) >= 120:
+      axis, delta = ('x', dx) if abs(dx) > abs(dy) else ('y', dy)
+      token = f'swipe:{axis}{"+" if delta > 0 else "-"}'
+      return {'swipe:y+': 'up', 'swipe:y-': 'down', 'swipe:x+': 'left', 'swipe:x-': 'right'}[token] if self.profile == 'yiser-j6' else token
+    if self.profile == 'yiser-j6':
+      if abs(self.last[0] - 300) <= 65 and abs(self.last[1] - 500) <= 65:
+        return 'center'
+      if abs(self.last[0] - 420) <= 65 and abs(self.last[1] - 850) <= 65:
+        return '2'
+      return None
+    return f'tap:{round(self.last[0] / 25) * 25}:{round(self.last[1] / 25) * 25}'
 
   def flush(self, now):
-    return self.clicks.flush(now)
+    self.repeated.clear()
+    if self.dropped or self.frame_open:
+      return []
+    result = self.clicks.flush(now)
+    for source, hold in self.holds.items():
+      duration = now - hold['started']
+      age = now - self.started if source == 'touch' else duration
+      if not 0 <= age <= MAX_HOLD_SECONDS:
+        hold['expired'] = True
+      token = hold['token']
+      if hold['expired'] or duration < LONG_SECONDS or not self.clicks.assigned(token, 'long'):
+        continue
+      long_token = token + '@long'
+      repeat = self.clicks.mapping.get(long_token) in REPEAT_ACTIONS
+      if hold['fired'] and (not repeat or now - hold['last'] < REPEAT_SECONDS):
+        continue
+      if hold['fired']:
+        self.repeated.add(long_token)
+      hold['fired'] = True
+      hold['last'] = now  # Never catch up missed ticks after a scheduler stall.
+      result.append(long_token)
+    return result
 
   def feed(self, kind, code, value, now):
+    self.repeated.clear()
+    self.frame_open = not (kind == 0 and code == 0)
     if kind == 0 and code == 3:  # SYN_DROPPED: ignore until all buttons have been released
       self.start = self.last = None
       self.down.clear()
       self.pending_keys.clear()
       self.clicks.pending.clear()
+      self.holds.clear()
       self.dropped = True
       return []
     if kind == 3 and code in (0, 1):
@@ -165,35 +231,28 @@ class Decoder:
       if not self.touch and not self.down:
         self.dropped = False
       return []
-    releases = [('1' if self.profile == 'yiser-j6' and key == 115 else f'key:{key}', duration) for key, duration in self.pending_keys]
+    releases = []
+    for key, duration in self.pending_keys:
+      hold = self.holds.pop(key, {})
+      if not hold.get('fired') and not hold.get('expired'):
+        releases.append((self.key_token(key), duration))
     self.pending_keys.clear()
+    for key, started in self.down.items():
+      self.hold(key, self.key_token(key), started)
     if self.touch:
       if self.start is None:
         self.start = (self.x, self.y)
         self.started = now
       self.last = (self.x, self.y)
+      self.hold('touch', self.touch_token(), now)
     elif self.start is not None:
-      start, end = self.start, self.last
+      token = self.touch_token()
+      hold = self.holds.pop('touch', {})
       self.start = self.last = None
       duration = now - self.started
-      if 0 <= duration <= 10:
-        dx, dy = end[0] - start[0], end[1] - start[1]
-        if max(abs(dx), abs(dy)) >= 120:
-          axis, delta = ('x', dx) if abs(dx) > abs(dy) else ('y', dy)
-          token = f'swipe:{axis}{"+" if delta > 0 else "-"}'
-          if self.profile == 'yiser-j6':
-            token = {'swipe:y+': 'up', 'swipe:y-': 'down', 'swipe:x+': 'left', 'swipe:x-': 'right'}[token]
-          if duration <= 1.5:
-            releases.append((token, duration))
-        elif self.profile == 'yiser-j6':
-          if abs(end[0] - 300) <= 65 and abs(end[1] - 500) <= 65:
-            releases.append(('center', duration))
-          elif abs(end[0] - 420) <= 65 and abs(end[1] - 850) <= 65:
-            releases.append(('2', duration))
-        else:
-          releases.append((f'tap:{round(end[0] / 25) * 25}:{round(end[1] / 25) * 25}', duration))
-        if duration > 1.5:
-          releases = [(token, held) for token, held in releases if self.clicks.assigned(token, 'long')]
+      if token and not hold.get('fired') and not hold.get('expired') and 0 <= duration <= MAX_HOLD_SECONDS:
+        if duration <= 1.5 or self.clicks.assigned(token, 'long'):
+          releases.append((token, duration))
     tokens = []
     for token, duration in releases:
       tokens.extend(self.clicks.release(token, duration, now))
@@ -211,18 +270,19 @@ class CommandWriter:
   def publish(self, channel):
     atomic_json(self.root / f'{channel}.json', {'events': self.events[channel]})
 
-  def prune(self, addresses, now):
+  def prune(self, addresses, now, active_holds=None):
     for channel, events in self.events.items():
-      kept = [e for e in events if e['address'] in addresses and 0 <= now - e['time'] <= COMMAND_TTL]
+      kept = [e for e in events if e['address'] in addresses and 0 <= now - e['time'] <= COMMAND_TTL and
+              (not e.get('hold') or active_holds is None or e['hold'] in active_holds)]
       if kept != events:
         self.events[channel] = kept
         self.publish(channel)
 
-  def send(self, mac, action, now):
+  def send(self, mac, action, now, hold=None, repeat=False):
     channel = 'lane' if action in ('laneLeft', 'laneRight') else 'cruise'
     self.sequence += 1
-    events = [e for e in self.events[channel] if 0 <= now - e['time'] <= COMMAND_TTL]
-    events.append({'id': f'{self.session}:{self.sequence}', 'time': now, 'action': action, 'address': mac})
+    events = [e for e in self.events[channel] if 0 <= now - e['time'] <= COMMAND_TTL and (not hold or e.get('hold') != hold)]
+    events.append({'id': f'{self.session}:{self.sequence}', 'time': now, 'action': action, 'address': mac, 'hold': hold, 'repeat': repeat})
     self.events[channel] = events[-64:]
     self.publish(channel)
 
@@ -235,8 +295,10 @@ class CommandReader:
     self.last_id = None
     self.seen = deque(maxlen=128)
     self.last_check = 0.0
+    self.is_repeat = False
 
   def read(self, allowed=True, now=None):
+    self.is_repeat = False
     now = time.monotonic() if now is None else now
     if now - self.last_check < 0.02:
       return None
@@ -265,5 +327,6 @@ class CommandReader:
         if isinstance(until, (int, float)) and until > now:
           continue
       if allowed and message.get('action') in ACTIONS:
+        self.is_repeat = bool(message.get('repeat', False))
         return message['action']
     return None

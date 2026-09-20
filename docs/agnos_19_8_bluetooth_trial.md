@@ -234,8 +234,9 @@ mouse wheels, gamepad axes and arbitrary vendor protocols are not implemented.
 The learn/test session lasts 120 seconds and suppresses commands for that device.
 Closing the dialog does not end the session early. Save a profile before learning,
 then save again to persist newly learned keys/actions. Unmapped events are swallowed
-while the mapping is enabled. Key repeats are ignored; actions fire on release or
-completion of a short touch gesture. Stale (>400 ms), startup and replayed commands
+while the mapping is enabled. Kernel key repeats are ignored; short actions fire
+on release or completion of a short touch gesture. Assigned long actions use the
+hold timer described below. Stale (>400 ms), startup and replayed commands
 are discarded. Physical cruise-button events/held buttons have priority, and valid
 CAN, cruise availability and Drive are required for cruise actions. Lane requests
 retain lateral-active, speed, trailer, geometry, blind-spot and torque checks.
@@ -270,9 +271,10 @@ actions in the localized web editor. Existing single mappings and enabled state
 are preserved. New double/long actions default to unassigned. Double clicks use
 a 350 ms release-to-release window; only an assigned double action delays its
 single action. Learning recognizes all gestures and therefore waits on singles.
-Long actions fire once on release after at least 700 ms; keyboard repeats do not
-fire commands. Holds over 10 seconds, dropped input and overdue deferred singles
-are discarded. A remote emitting synthetic short pulses cannot expose its true
+Long actions originally fired on release; the hold-timer follow-up below replaces
+that behavior. Kernel key repeats do not directly fire commands. Holds stop after
+10 seconds, and dropped input and overdue deferred singles are discarded.
+A remote emitting synthetic short pulses cannot expose its true
 physical hold duration; Yiser long-press support is not yet verified on hardware.
 
 Device-specific decoders prevent two remotes from combining into one double
@@ -348,6 +350,33 @@ openpilot OS manifest/version (the pre-trial commit is in `before.json`), select
 the preserved B slot with `sudo abctl --set_active 1`, and reboot. Restoring the
 matching code avoids immediately requesting the new OS again. Do not flash the
 preserved slot as part of rollback.
+
+### Held actions (carrot-wip, 2026-09-20)
+
+An assigned `@long` gesture now fires while held, first at 700 ms. The speed
+actions `accelCruise`, `decelCruise`, `accelCruiseLong` and `decelCruiseLong`
+repeat every 500 ms while assigned to that gesture. Other actions execute once
+per hold, avoiding repeated mode toggles, gap cycles and lane requests. Native
+long actions mapped to a short or double gesture still execute only once.
+Existing mappings are preserved; repeat requires assigning the Long press slot.
+
+Release, input loss, a changed touch direction, mapping/test transitions and a
+10-second hold timeout stop repetition and remove unconsumed held commands.
+Pedals, physical vehicle buttons, leaving Drive, invalid vehicle state and
+cruise disengagement cancel the hold until release and a new press. Repeated
+ticks cannot request engagement when cruise is disabled; the first action keeps
+the existing manual engagement path and checks. Missed intervals are never
+replayed as a burst. Kernel auto-repeat events do not set the repeat cadence.
+
+The localized web dialog describes timing and the required Long press mapping.
+Hardware must report a continuous press and release; a synthetic short pulse
+does not expose the user's physical hold duration. Physical Yiser hold behavior
+and road operation remain unverified.
+
+Validation: 160 C4 Python tests pass with warnings as errors, including the
+real daemon loop with simulated HID pipes, hold interruptions and disabled-cruise
+repeat rejection. Fourteen web tests pass and the production tools bundle builds.
+Tests use temporary journals and do not send vehicle commands.
 
 Docs-Not-Needed: Developer-only OS/model compatibility experiment with no
 user-facing setting addition or changed setting behavior.

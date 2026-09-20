@@ -69,21 +69,25 @@ def main():
   errors = {}
   last_fire = {}
   learning = {}
+  previously_enabled = False
   writer = CommandWriter()
   for channel in writer.events:
     writer.publish(channel)
 
-  def emit(mac, tokens, now):
+  def emit(path, mac, decoder, tokens, now):
     nonlocal last_event
     device = settings['devices'][mac]
     testing = learning.get('address') == mac
+    held = decoder.active_longs
+    if hold_blocked and not testing:
+      decoder.cancel_holds()
     for token in tokens:
       action = device['mapping'].get(token, 'none')
       reason = 'test' if testing else 'inactive'
       emitted = False
-      if not testing and device['enabled'] and started and car_ok and now - last_fire.get((mac, token), 0) >= 0.18:
+      if not testing and device['enabled'] and started and car_ok and not (token in held and hold_blocked) and now - last_fire.get((mac, token), 0) >= 0.18:
         if action != 'none':
-          writer.send(mac, action, now)
+          writer.send(mac, action, now, hold=f'{path}:{token}' if token in held else None, repeat=token in decoder.repeated)
           last_fire[mac, token] = now
           emitted, reason = True, 'sent'
       last_event = {'id': uuid.uuid4().hex, 'time': now, 'address': mac, 'button': token,
@@ -97,6 +101,11 @@ def main():
       sm.update(0)
       started = sm.alive['deviceState'] and sm['deviceState'].started
       car_ok = sm.alive['carState'] and sm.valid['carState'] and sm['carState'].canValid
+      enabled = sm.alive['selfdriveState'] and sm['selfdriveState'].enabled
+      cs = sm['carState']
+      hold_blocked = (not started or not car_ok or not sm.alive['selfdriveState'] or cs.brakePressed or cs.gasPressed or
+                      cs.gearShifter != 'drive' or bool(cs.buttonEvents) or (previously_enabled and not enabled))
+      previously_enabled = enabled
       stationary = (sm.alive['deviceState'] and not sm['deviceState'].started) or (
         car_ok and abs(sm['carState'].vEgo) < 0.1 and sm.alive['selfdriveState'] and not sm['selfdriveState'].enabled)
       if now - last_reload >= 0.25:
@@ -129,7 +138,7 @@ def main():
       ready, _, _ = select.select([entry[0] for entry in opened.values()], [], [], 0.01)
       for path, (fd, mac, decoder) in list(opened.items()):
         if fd not in ready:
-          emit(mac, decoder.flush(time.monotonic()), time.monotonic())
+          emit(path, mac, decoder, decoder.flush(time.monotonic()), time.monotonic())
           continue
         try:
           data = os.read(fd, EVENT.size * 128)
@@ -147,11 +156,12 @@ def main():
           if not 0 <= now - stamp < 0.4:
             decoder.feed(0, 3, 0, now)
             continue
-          emit(mac, decoder.feed(kind, code, value, stamp), now)
-        emit(mac, decoder.flush(now), now)
+          emit(path, mac, decoder, decoder.feed(kind, code, value, stamp), now)
+        emit(path, mac, decoder, decoder.flush(now), now)
       now = time.monotonic()
       writer.prune({mac for _, mac, _ in opened.values()
-                    if settings['devices'][mac]['enabled'] and learning.get('address') != mac} if started and car_ok else set(), now)
+                    if settings['devices'][mac]['enabled'] and learning.get('address') != mac} if started and car_ok else set(), now,
+                   {f'{path}:{token}' for path, (_, _, decoder) in opened.items() for token in decoder.active_longs})
       if now - last_status >= 0.2:
         last_status = now
         atomic_json(RUNTIME / 'status.json', {'time': now, 'stationary': bool(stationary), 'started': bool(started),
