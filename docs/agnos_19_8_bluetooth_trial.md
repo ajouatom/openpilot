@@ -1,5 +1,10 @@
 # AGNOS 19.8 native Bluetooth / Cinque v3 experiment
 
+As of 2026-09-19, the user requested integration of this entire experiment into
+`carrot-wip`. References below to v3-only scope and the old wip model/OS describe
+the original trial. See [the integration review](cinque_v3_integration_20260919.md)
+for the current scope; the hardware validation limits below still apply.
+
 ## Scope
 
 The user requested this combined experiment on 2026-09-17, on the existing

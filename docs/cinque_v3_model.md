@@ -1,5 +1,14 @@
 # Cinque v3 experiment
 
+## Integration on 2026-09-19
+
+The user requested that `carrot-wip` incorporate this experiment in full,
+including its pinned Cinque v3 runtime, AGNOS 19.8 Bluetooth image and remote
+controls. Both maintained branches now select this same eGPU artifact. The
+internal-GPU driving model stays unchanged. Driver monitoring separately moves
+to Super Leicht; see [the integration review](cinque_v3_integration_20260919.md).
+The original experiment and its validation history follow below.
+
 `carrot-cinque_v3` was created on 2026-09-17 from `carrot-wip`
 `91214ef52a`, plus the shared maintenance-scope commit `286ee33a32`.
 The user requests that future common `carrot-wip` changes also reach this branch,

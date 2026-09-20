@@ -1,3 +1,5 @@
+import pytest
+
 from openpilot.cereal import log
 from openpilot.common.realtime import DT_DMON
 from openpilot.selfdrive.monitoring.policy import DriverMonitoring, DRIVER_MONITOR_SETTINGS
@@ -24,6 +26,7 @@ def make_msg(face_detected, distracted=False, model_uncertain=False):
   ds.leftDriverData.facePositionStd = [1.*model_uncertain, 1.*model_uncertain]
   # TODO: test both separately when e2e is used
   ds.leftDriverData.phoneProb = 0.
+  ds.leftDriverData.sleepProb = 0.
   return ds
 
 
@@ -47,6 +50,44 @@ always_true = [True] * int(TEST_TIMESPAN / DT_DMON)
 always_false = [False] * int(TEST_TIMESPAN / DT_DMON)
 
 class TestMonitoring:
+  @pytest.mark.parametrize('rhd', [False, True])
+  @pytest.mark.parametrize('seconds,level', [(DISTRACTED_SECONDS_TO_ORANGE, 2), (DISTRACTED_SECONDS_TO_RED, 3)])
+  def test_sleep_prediction_triggers_alert_and_recovers(self, rhd, seconds, level):
+    dm = DriverMonitoring()
+    dm.wheel_on_right_default = rhd
+    awake = make_msg(True)
+    awake.rightDriverData = awake.leftDriverData
+    sleepy = make_msg(True)
+    sleepy.leftDriverData.sleepProb = 0.9
+    sleepy.rightDriverData = sleepy.leftDriverData
+    # Eyes remain open: the new sleep head alone must reach the alert policy.
+    for _ in range(int(seconds / DT_DMON)):
+      dm._update_states(sleepy, [0, 0, 0], 20, True, False)
+      dm._update_events(False, True, False, False)
+    assert dm.alert_level == level
+    state = dm.get_state_packet().driverMonitoringState.visionPolicyState
+    assert state.distractedTypes.sleep and state.isDistracted
+    assert not state.distractedTypes.eye and not state.distractedTypes.phone
+    for _ in range(int(10 / DT_DMON)):
+      dm._update_states(awake, [0, 0, 0], 20, True, False)
+      dm._update_events(False, True, False, False)
+    assert not dm.driver_distracted
+    assert not dm.get_state_packet().driverMonitoringState.visionPolicyState.distractedTypes.sleep
+    if level == 3:
+      # The existing terminal alert must still require disengagement.
+      assert dm.alert_level == log.DriverMonitoringState.AlertLevel.three
+      dm._update_events(False, False, False, False)
+    assert dm.alert_level == log.DriverMonitoringState.AlertLevel.none
+
+  @pytest.mark.parametrize('probability,uncertain,detected', [(0.74, False, True), (0.9, True, True), (0.9, False, False)])
+  def test_sleep_prediction_preserves_confidence_gates(self, probability, uncertain, detected):
+    dm = DriverMonitoring()
+    dm.wheel_on_right_default = False
+    msg = make_msg(detected, model_uncertain=uncertain)
+    msg.leftDriverData.sleepProb = probability
+    dm._update_states(msg, [0, 0, 0], 20, True, False)
+    assert not dm.driver_distracted
+
   def _run_seq(self, msgs, interaction, engaged, lowspeed):
     DM = DriverMonitoring()
     alert_lvls = []
