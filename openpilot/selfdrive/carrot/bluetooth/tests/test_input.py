@@ -114,16 +114,111 @@ def test_double_replaces_both_single_actions_and_single_waits():
   assert decoder.flush(2.42) == []
 
 
-def test_long_fires_once_on_release_and_never_from_repeat():
+def test_mode_long_fires_while_held_once_and_never_from_keyboard_repeat():
   decoder = Decoder(mapping={'key:115': 'accelCruise', 'key:115@long': 'carrotCruise'})
   decoder.feed(1, 115, 1, 1)
   for stamp in (1.3, 1.6, 1.9, 2.1):
     decoder.feed(1, 115, 2, stamp)
     assert decoder.feed(0, 0, 0, stamp) == []
-    assert decoder.flush(stamp) == []
+    assert decoder.flush(stamp) == (['key:115@long'] if stamp == 1.9 else [])
   decoder.feed(1, 115, 0, 2.2)
-  assert decoder.feed(0, 0, 0, 2.2) == ['key:115@long']
+  assert decoder.feed(0, 0, 0, 2.2) == []
   assert decoder.flush(2.6) == []
+
+
+@pytest.mark.parametrize('action', ['accelCruise', 'decelCruise', 'accelCruiseLong', 'decelCruiseLong'])
+def test_speed_long_repeats_on_timer_then_release_stops_without_an_extra_click(action):
+  decoder = Decoder(mapping={'key:115': 'gapAdjustCruise', 'key:115@long': action})
+  decoder.feed(1, 115, 1, 1)
+  decoder.feed(0, 0, 0, 1)
+  assert decoder.flush(1.69) == []
+  assert decoder.flush(1.71) == ['key:115@long']
+  assert not decoder.repeated
+  assert decoder.flush(2.20) == []
+  assert decoder.flush(2.22) == ['key:115@long']
+  assert decoder.repeated == {'key:115@long'}
+  assert decoder.flush(4) == ['key:115@long']  # One tick, no catch-up burst.
+  assert decoder.flush(4.01) == []
+  decoder.feed(1, 115, 0, 4.1)
+  assert decoder.feed(0, 0, 0, 4.1) == []
+  assert not decoder.active_longs
+  assert decoder.flush(5) == []
+
+
+def test_long_does_not_repeat_without_a_long_mapping():
+  decoder = Decoder(mapping={'key:115': 'accelCruise'})
+  decoder.feed(1, 115, 1, 1)
+  decoder.feed(0, 0, 0, 1)
+  assert decoder.flush(2) == []
+  decoder.feed(1, 115, 0, 2.1)
+  assert decoder.feed(0, 0, 0, 2.1) == ['key:115']
+
+
+@pytest.mark.parametrize('end', ['drop', 'cancel', 'timeout'])
+def test_held_repeats_stop_on_drop_interruption_or_ten_second_timeout(end):
+  decoder = Decoder(mapping={'key:115@long': 'accelCruise'})
+  decoder.feed(1, 115, 1, 1)
+  decoder.feed(0, 0, 0, 1)
+  assert decoder.flush(1.8) == ['key:115@long']
+  if end == 'drop':
+    decoder.feed(0, 3, 0, 2)
+  elif end == 'cancel':
+    decoder.cancel_holds()
+  assert decoder.flush(11.1 if end == 'timeout' else 3) == []
+  assert not decoder.active_longs
+  decoder.feed(1, 115, 0, 12)
+  assert decoder.feed(0, 0, 0, 12) == []
+
+
+def test_incomplete_frame_cannot_generate_a_held_tick():
+  decoder = Decoder(mapping={'key:115@long': 'accelCruise'})
+  decoder.feed(1, 115, 1, 1)
+  assert decoder.flush(2) == []
+  decoder.feed(0, 0, 0, 2)
+  assert decoder.flush(2) == ['key:115@long']
+  decoder.feed(1, 115, 0, 2.1)
+  assert decoder.flush(3) == []
+  assert decoder.feed(0, 0, 0, 3) == []
+
+
+@pytest.mark.parametrize('cancel_before_first', [False, True])
+def test_touch_hold_starts_once_and_direction_change_cannot_retrigger(cancel_before_first):
+  decoder = Decoder('yiser-j6', {'center@long': 'carrotCruise', 'left@long': 'laneLeft'})
+  for event in [(3, 0, 300), (3, 1, 500), (1, 330, 1), (0, 0, 0)]:
+    decoder.feed(*event, 1)
+  if cancel_before_first:
+    decoder.cancel_holds()
+  assert decoder.flush(1.8) == ([] if cancel_before_first else ['center@long'])
+  decoder.feed(3, 0, 600, 2)
+  decoder.feed(0, 0, 0, 2)
+  assert decoder.flush(3) == []
+  decoder.feed(1, 330, 0, 3.1)
+  assert decoder.feed(0, 0, 0, 3.1) == []
+
+
+def test_release_cancels_unconsumed_hold_events_but_preserves_other_device(tmp_path):
+  writer = CommandWriter(tmp_path)
+  reader = CommandReader('cruise', tmp_path)
+  reader.started = 10
+  writer.send('A', 'accelCruiseLong', 11, hold='event1:key:115', repeat=True)
+  writer.send('B', 'gapAdjustCruise', 11)
+  writer.prune({'A', 'B'}, 11.02, active_holds=set())
+  assert reader.read(now=11.05) == 'gapAdjustCruise'
+  assert not reader.is_repeat
+  assert reader.read(now=11.1) is None
+
+
+def test_hold_queue_keeps_only_latest_tick_and_marks_repeat(tmp_path):
+  writer = CommandWriter(tmp_path)
+  reader = CommandReader('cruise', tmp_path)
+  reader.started = 10
+  writer.send('A', 'accelCruiseLong', 11, hold='held')
+  writer.send('A', 'accelCruiseLong', 11.1, hold='held', repeat=True)
+  assert len(writer.events['cruise']) == 1
+  assert reader.read(now=11.15) == 'accelCruiseLong'
+  assert reader.is_repeat
+  assert reader.read(now=11.2) is None
+  assert not reader.is_repeat
 
 
 def test_touch_long_press_and_firmware_short_pulses_are_distinct():

@@ -560,6 +560,8 @@ class VCruiseCarrot:
   def _update_cruise_buttons(self, CS, CC, v_cruise_kph):
     remote = self.bluetooth_commands.read(allowed=(CS.canValid and CS.cruiseState.available and
       CS.gearShifter == GearShifter.drive and not CS.buttonEvents and self.button_cnt == 0))
+    if getattr(self.bluetooth_commands, 'is_repeat', False) and not CC.enabled:
+      remote = None  # Holding a remote must never re-engage after disengagement.
     button_kph, button_type, long_pressed = self._prepare_buttons(CS, v_cruise_kph, remote)
     remote_enable = remote in ('accelCruise', 'decelCruise', 'accelCruiseLong', 'decelCruiseLong') and not CC.enabled
     # SET during soft hold retains its existing cancel behavior.

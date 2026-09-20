@@ -258,6 +258,15 @@ def test_remote_long_speed_action_is_one_native_step_without_held_state(action, 
   assert helper._update_cruise_buttons(CS, CC, expected) == expected
 
 
+@pytest.mark.parametrize('action', ['accelCruise', 'decelCruise', 'accelCruiseLong', 'decelCruiseLong'])
+def test_remote_repeat_cannot_reengage_disabled_cruise(action):
+  helper, CS, CC = make_remote_helper(action, enabled=False)
+  helper.bluetooth_commands.is_repeat = True
+  assert helper._update_cruise_buttons(CS, CC, 80) == 80
+  assert helper._activate_cruise == 0
+  assert not helper._lat_enabled
+
+
 def test_remote_gap_long_cycles_driving_mode_without_changing_gap():
   helper, CS, CC = make_remote_helper('gapAdjustCruiseLong', enabled=True)
   values = {'MyDrivingMode': 4, 'LongitudinalPersonality': 2}
