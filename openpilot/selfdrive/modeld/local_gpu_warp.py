@@ -57,6 +57,48 @@ def warp_difference(actual, expected):
   return detail
 
 
+def only_sampling_boundary_differences(actual, expected, raw, frames_offset, frame_size, frame_info, camera_size, matrices):
+  """Explain every differing value from the original NV12 pixels, not a % tolerance.
+
+  Different float32 GPU division/FMA implementations can straddle a nearest
+  neighbour half-pixel boundary. Permit only adjacent samples within 0.00025
+  source pixels of that boundary; both results must match those source values.
+  This bound covers the reproduced EV9 samples (maximum distance 0.000124).
+  No arbitrary intensity error, layout error or non-boundary difference passes.
+  """
+  if actual.shape != (2, 6, 128, 256) or expected.shape != actual.shape or actual.dtype != np.uint8 or expected.dtype != np.uint8:
+    return False
+  stride, y_height = frame_info[:2]
+  width, height = camera_size
+  for camera, channel, row, col in np.argwhere(actual != expected):
+    uv = channel >= 4
+    x, y = (col, row) if uv else (2 * col + channel // 2, 2 * row + channel % 2)
+    matrix = matrices[camera].astype(np.float64)
+    if uv:
+      matrix *= np.array([[1, 1, .5], [1, 1, .5], [2, 2, 1]])
+    projected = matrix @ [x, y, 1]
+    if not np.isfinite(projected).all() or abs(projected[2]) < .5:
+      return False
+    source = projected[:2] / projected[2]
+    candidates, boundary = [], False
+    for value, limit in zip(source, (width // 2, height // 2) if uv else (width, height), strict=True):
+      lo = np.floor(value)
+      near = abs(value - lo - .5) <= .00025
+      boundary |= near
+      coords = (int(lo), int(lo + 1)) if near else (int(np.rint(value)),)
+      candidates.append({min(max(c, 0), limit - 1) for c in coords})
+    if not boundary:
+      return False
+    values = set()
+    for sy in candidates[1]:
+      for sx in candidates[0]:
+        offset = stride * y_height + sy * stride + 2 * sx + channel - 4 if uv else sy * stride + sx
+        values.add(int(raw[frames_offset + camera * frame_size + offset]))
+    if int(actual[camera, channel, row, col]) not in values or int(expected[camera, channel, row, col]) not in values:
+      return False
+  return True
+
+
 class LocalWarpRuntime(GenericModelRuntime):
   """Keep the shared-input protocol, but transfer only prepared images to AMD.
 
@@ -69,6 +111,7 @@ class LocalWarpRuntime(GenericModelRuntime):
     from examples.openpilot.compile_warp import NV12Frame, compile_warp
 
     super().__init__(jits, width, height, runtime_dir, frame_info)
+    self.camera_size, self.frame_info = (width, height), frame_info
     self.amd_warp = self.run_warp
     cache = runtime_dir / f'warp-qcom-preupload-v1-{width}x{height}.pkl'
     with Context(DEV='QCOM'):
@@ -133,7 +176,14 @@ class LocalWarpRuntime(GenericModelRuntime):
         if (difference := warp_difference(actual, expected)) is not None:
           difference['probe'] = name
           difference['repeat_matches_first'] = bool(np.array_equal(actual, self.prepare_images()))
-          differences.append(difference)
+          explained = difference['repeat_matches_first'] and only_sampling_boundary_differences(
+            actual, expected, self.raw, self.frames_offset, self.frame_size, self.frame_info, self.camera_size, matrices)
+          difference['sampling_boundary_only'] = explained
+          if explained:
+            from openpilot.common.swaglog import cloudlog
+            cloudlog.event('precompiledWarpSamplingBoundary', **difference)
+          else:
+            differences.append(difference)
       if differences:
         raise RuntimeError('QCOM pre-upload warp differs from artifact AMD warp: ' + json.dumps(differences))
     finally:
