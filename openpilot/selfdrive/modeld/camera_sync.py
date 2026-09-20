@@ -1,5 +1,12 @@
 """Pair current camera frames by exposure time, without assuming a fixed cadence."""
 
+# SOF timestamps are taken in the kernel IRQ callback. EV9 2cc--10 records
+# 12.6-13.2 ms skew with both camera streams complete; a 10 ms hard limit
+# discarded four usable main frames. Allow bounded IRQ timing jitter while
+# staying below half the nominal 50 ms camera period. Do not accept the
+# 50-150 ms stale pairs observed during Ioniq camera recovery.
+MAX_CAMERA_SKEW_NS = 20_000_000
+
 
 class FrameMeta:
   frame_id: int = 0
@@ -30,7 +37,7 @@ def receive_camera_pair(main, extra=None):
     if main_buf is None or extra_buf is None:
       return None
     delta = main_meta.timestamp_sof - extra_meta.timestamp_sof
-    if abs(delta) <= 10_000_000:
+    if abs(delta) <= MAX_CAMERA_SKEW_NS:
       return main_buf, main_meta, extra_buf, extra_meta
     if delta < 0:
       main_buf = main.recv()

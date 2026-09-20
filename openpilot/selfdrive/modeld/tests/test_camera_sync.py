@@ -1,5 +1,7 @@
 from types import SimpleNamespace
 
+import pytest
+
 from openpilot.selfdrive.modeld.camera_sync import receive_camera_pair
 
 
@@ -55,3 +57,44 @@ def test_resync_is_bounded_even_if_timestamps_never_match():
   extra = Camera((i, i * 100_000_000 + 50_000_000) for i in range(100))
   assert receive_camera_pair(main, extra) is None
   assert main.frame_id + extra.frame_id <= 10
+
+
+@pytest.mark.parametrize('frame_id,main_sof,wide_sof', [
+  (12212, 688_852_340_000, 688_865_358_000),
+  (12232, 689_852_248_000, 689_864_863_000),
+  (12266, 691_552_169_000, 691_565_355_000),
+  (12793, 717_914_040_000, 717_927_115_000),
+])
+def test_ev9_complete_camera_streams_do_not_create_model_frame_gaps(frame_id, main_sof, wide_sof):
+  # EV9 000002cc--03d0a44f7d--10: the old 10 ms limit skipped these
+  # main frames, publishing invalid odometry despite complete camera streams.
+  main = Camera([(frame_id - 1, main_sof - 50_000_000), (frame_id, main_sof),
+                 (frame_id + 1, main_sof + 50_000_000)])
+  wide = Camera([(frame_id, main_sof - 50_000_000), (frame_id + 1, wide_sof),
+                 (frame_id + 2, main_sof + 50_000_000)])
+  selected = [receive_camera_pair(main, wide)[1].frame_id for _ in range(3)]
+  assert selected == [frame_id - 1, frame_id, frame_id + 1]
+
+
+@pytest.mark.parametrize('skew', [-20_000_000, 20_000_000])
+def test_small_skew_is_symmetric_and_bounded(skew):
+  main = Camera([(1, 100_000_000)])
+  wide = Camera([(1, 100_000_000 + skew)])
+  assert receive_camera_pair(main, wide) is not None
+
+
+@pytest.mark.parametrize('skew', [-20_000_001, 20_000_001])
+def test_outside_skew_limit_requires_a_fresh_frame(skew):
+  main = Camera([(1, 100_000_000)])
+  wide = Camera([(1, 100_000_000 + skew)])
+  assert receive_camera_pair(main, wide) is None
+
+
+@pytest.mark.parametrize('missing', [1, 3])
+def test_missing_camera_frames_still_create_a_real_gap(missing):
+  # Ioniq f8c/f8d: phase slip / IFE recovery cannot be made valid by
+  # accepting a camera pair separated by one or more complete periods.
+  main = Camera((i, 1_000_000_000 + i * 50_000_000) for i in range(missing + 3))
+  wide = Camera((i, 1_000_000_000 + i * 50_000_000) for i in [0, missing + 1, missing + 2])
+  selected = [receive_camera_pair(main, wide)[1].frame_id for _ in range(3)]
+  assert selected == [0, missing + 1, missing + 2]
