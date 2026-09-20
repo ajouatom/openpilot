@@ -1,12 +1,13 @@
 # Repository memory
 
-- As of 2026-09-20, the user explicitly maintains `carrot-worldmodel` as a new
-  experiment derived from current `carrot-wip`. Apply future common `carrot-wip`
-  changes to this branch too, preserving its World Model artifacts and dedicated
-  runtime/compatibility work. Verify both maintained branches are pushed when
-  shared changes are made. This exception does not restore any retired branch.
-  World Model preparation starts offline; downloaded research artifacts alone
-  do not mean that the vehicle runtime is integrated or validated.
+- As of 2026-09-20, the user requested deletion of the remote `carrot-worldmodel`
+  branch to prevent others from installing an unfinished experiment. Keep this
+  experiment local only; do not recreate or push its remote branch unless the
+  user explicitly authorizes publication again. Continue applying common
+  `carrot-wip` changes locally while preserving World Model-specific artifacts
+  and runtime work. Only `carrot-wip` must be pushed for shared changes; this
+  exception does not restore any retired branch. World Model has passed isolated
+  synthetic inference, but vehicle control integration remains unvalidated.
 
 - As of 2026-09-19, the user requests full integration of `carrot-cinque_v3` into
   `carrot-wip`, including the pinned Cinque v3 eGPU model/runtime, AGNOS
