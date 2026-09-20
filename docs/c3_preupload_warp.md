@@ -40,11 +40,11 @@ on EV9). This is a local memory copy, not a claim of end-to-end zero-copy.
 
 At initialization, random NV12 data and identity, projective and border-clamped
 transforms are processed on QCOM and the artifact's AMD warp. Any shape, dtype,
-pixel mismatch or initialization failure retains the original AMD path and
+unexplained pixel mismatch or initialization failure retains the original AMD path and
 logs the failure. No model inference occurs during this check, and shared
 inputs are cleared afterward. This probe is an acceptance guard, not proof
-of equivalence for every possible image/transform. Pixel differences must be
-investigated, not resolved by silently relaxing the comparison.
+of equivalence for every possible image/transform. Differences are checked
+against the source-pixel rule below, never accepted by an image-error percentage.
 
 The QCOM warp cache lives under the pinned artifact runtime, distinct from AMD
 cache files. Changing the local compilation contract requires a cache-version
@@ -63,9 +63,27 @@ directly to steady-state earlier segments. Model execution median is 50.417 ms.
 Original diagnostics did not retain the failing probe or mismatch size. The
 follow-up reports all failing probes, shapes/dtypes, mismatch counts, maximum
 pixel difference, bounded coordinate/value samples, and repeat consistency.
-Acceptance remains exact; numerical rounding, layout and memory consistency
-are hypotheses until these diagnostics or device-side reproduction resolve
-the cause. A parked startup log is sufficient to capture this validation.
+At that stage acceptance remained exact. A parked startup log is sufficient
+to capture this validation.
+
+EV9 `000002ca--50469cb155--0` on 820f82ea then showed only 16 differences out
+of 393,216 samples, exclusively in the projective probe, with repeat-stable
+results. Identity/border probes passed. All eight recorded coordinate/value
+pairs were reproduced against the deterministic source data: each pair selects
+adjacent source pixels across a half-pixel rounding boundary. For example,
+source x=867.499983 produces AMD sample x=867/value 30 and QCOM x=868/value 87.
+The largest boundary distance among the logged samples is 0.000124 pixels.
+Large intensity differences are expected for adjacent random source pixels;
+an intensity-difference threshold would be inappropriate.
+
+Validation now explains every differing sample from the original NV12 buffer
+and float64 projection of the actual float32 transform. Only within 0.00025
+source pixels of a half-pixel boundary may either adjacent sample be accepted;
+both GPU values must belong to the correct camera and Y/U/V source plane, and
+QCOM repeat output must match. All other differences retain the AMD fallback.
+This is bounded nearest-neighbour numerical equivalence, not bit identity or
+proof of driving equivalence. The eight logged samples pass regression tests;
+the vehicle must still validate all differences and demonstrate actual timing.
 
 Focused host tests cover device selection, compact transfer contents, recurrent
 state identity/advancement, validation rejection and input cleanup. Existing

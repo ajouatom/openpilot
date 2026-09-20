@@ -12,6 +12,12 @@
   comparison and fell back to AMD (7,471,616 USB bytes, about 24.8 ms upload).
   The optimization is NOT vehicle-validated or confirmed active. Diagnose the
   per-probe mismatch details before changing warp math or acceptance criteria.
+  Follow-up `000002ca--50469cb155--0` on 820f82ea found 16 repeat-stable
+  projective-only mismatches; all eight logged samples reconstruct as adjacent
+  source pixels at half-pixel rounding boundaries. Validation now checks each
+  mismatch against correct-camera/plane NV12 source values within 0.00025
+  source pixels of a rounding boundary. Do not replace this with a percentage
+  or intensity tolerance; device activation/timing still need confirmation.
   Preserve official model input/outputs and recurrent state; never hide overload
   by weakening pose validity. Evaluate model/runtime updates per device family;
   do not assume C4 validation covers C3, or automatically freeze all C3 models.

@@ -21,6 +21,43 @@ def test_warp_difference_reports_pixels_without_uint8_overflow():
   assert local.warp_difference(expected.copy(), expected) is None
 
 
+def test_ev9_recorded_rounding_samples_are_explained_by_source_pixels():
+  raw = np.random.default_rng(0).integers(0, 256, 7471616, dtype=np.uint8)
+  matrices = np.tile(np.array([[2.3, .01, 20.2], [-.02, 2.1, 40.3], [.0001, -.0002, 1]], np.float32), (2, 1, 1))
+  actual = np.zeros((2, 6, 128, 256), np.uint8)
+  expected = actual.copy()
+  # Actual 820f82ea EV9 --0 diagnostic, all eight recorded mismatch samples.
+  samples = [((0, 1, 101, 183), 87, 30), ((0, 1, 127, 55), 97, 133),
+             ((0, 2, 7, 249), 78, 64), ((0, 2, 31, 250), 192, 157),
+             ((0, 4, 16, 52), 87, 28), ((0, 4, 69, 134), 225, 51),
+             ((0, 5, 16, 52), 168, 68), ((0, 5, 69, 134), 148, 34)]
+  args = (raw, 512, 3735552, (2048, 1216, 608), (1928, 1208), matrices)
+  for index, qcom, amd in samples:
+    actual[index], expected[index] = qcom, amd
+  assert local.only_sampling_boundary_differences(actual, expected, *args)
+  # Even at a rounding boundary, an unrelated value must still fail.
+  actual[samples[0][0]] = 200
+  assert not local.only_sampling_boundary_differences(actual, expected, *args)
+  actual[samples[0][0]] = samples[0][1]
+  actual[0, 0, 0, 0] = 1  # ordinary (non-boundary) source coordinate
+  assert not local.only_sampling_boundary_differences(actual, expected, *args)
+
+
+def test_rounding_allowance_requires_correct_camera_and_chroma_plane():
+  raw = np.zeros(7471616, dtype=np.uint8)
+  matrices = np.tile(np.eye(3, dtype=np.float32), (2, 1, 1))
+  matrices[:, 0, 2] = 1  # chroma x = 0.5, luma x = 1.0
+  actual = np.zeros((2, 6, 128, 256), np.uint8)
+  expected = actual.copy()
+  offset = 512 + 3735552 + 2048 * 1216
+  raw[offset], raw[offset + 2] = 7, 9
+  actual[1, 4, 0, 0], expected[1, 4, 0, 0] = 7, 9
+  args = (raw, 512, 3735552, (2048, 1216, 608), (1928, 1208), matrices)
+  assert local.only_sampling_boundary_differences(actual, expected, *args)
+  actual[1, 5, 0, 0], expected[1, 5, 0, 0] = 7, 9  # values belong to U, not V
+  assert not local.only_sampling_boundary_differences(actual, expected, *args)
+
+
 @pytest.mark.parametrize('device,fault', [('tizi', None), ('tizi', 'init'), ('tizi', 'bind'), ('mici', None)])
 def test_local_warp_failures_retain_original_backend(monkeypatch, device, fault):
   calls, errors = [], []
@@ -98,6 +135,7 @@ def test_device_validation_rejects_different_warp_and_clears_probe_input(monkeyp
   runtime.raw = np.zeros(256, np.uint8)
   runtime.device = 'AMD'
   runtime.frames_offset, runtime.frame_size = 128, 64
+  runtime.camera_size, runtime.frame_info = (1928, 1208), (2048, 1216, 608)
   runtime.specs = {'new_img': ((2, 6, 128, 256), 'uint8', 'AMD')}
   runtime.local_host = object()
   expected = np.zeros((2, 6, 128, 256), np.uint8)
