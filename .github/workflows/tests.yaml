@@ -66,6 +66,7 @@ jobs:
             openpilot/selfdrive/controls/tests/test_leads.py \
             openpilot/selfdrive/carrot/bluetooth/tests \
             openpilot/selfdrive/car/tests/test_carrot_cruise_buttons.py \
+            opendbc_repo/opendbc/car/volkswagen/tests/test_carstate_buttons.py \
             openpilot/selfdrive/controls/tests/test_desire_helper.py \
             openpilot/system/tests/test_c3_agnos_manifest.py
 

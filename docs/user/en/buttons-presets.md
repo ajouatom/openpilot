@@ -47,6 +47,10 @@ The button-test catalog default of `0` is even below the displayed minimum. Do n
 
 This table describes a short press during normal driving with cruise already active.
 
+On Volkswagen, `SET` and `-` share the decrease action, while `RES` and `+` share the increase action. Separate `SET`/`RES` buttons also follow this mode, the speed units, and the long-press setting; pressing `SET` while active does not always reset the set speed to current vehicle speed.
+
+Manual engagement with openpilot longitudinal control is still requested when the physical `SET` or `RES` button is released. The standalone `+`/`-` buttons do not gain an engagement action.
+
 | Value | Short RES/+ | Short SET/- |
 |---:|---|---|
 | `0` normal | Next `CruiseSpeedUnitBasic` grid point | Previous `CruiseSpeedUnitBasic` grid point |

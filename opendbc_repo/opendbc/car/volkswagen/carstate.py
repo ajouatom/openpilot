@@ -6,6 +6,7 @@ from opendbc.car.volkswagen.values import DBC, CANBUS, NetworkLocation, Transmis
                                                       CarControllerParams, VolkswagenFlags
 
 ButtonType = structs.CarState.ButtonEvent.Type
+CRUISE_BUTTON_TYPES = {ButtonType.setCruise: ButtonType.decelCruise, ButtonType.resumeCruise: ButtonType.accelCruise}
 
 
 class CarState(CarStateBase):
@@ -15,6 +16,7 @@ class CarState(CarStateBase):
     self.eps_init_complete = False
     self.CCP = CarControllerParams(CP)
     self.button_states = {button.event_type: False for button in self.CCP.BUTTONS}
+    self.button_enable = False
     self.esp_hold_confirmation = False
     self.long_control_inhibit = False  # MEB: 차가 종방향 제어를 일시 거부 중 (VMM_02)
     self.upscale_lead_car_signal = False
@@ -49,24 +51,33 @@ class CarState(CarStateBase):
     return fault
 
   def update_button_enable(self, buttonEvents: list[structs.CarState.ButtonEvent]):
-    if not self.CP.pcmCruise:
-      for b in buttonEvents:
-        # Enable OP long on falling edge of enable buttons
-        if b.type in (ButtonType.setCruise, ButtonType.resumeCruise) and not b.pressed:
-          return True
-    return False
+    # Only physical SET/RES releases enable OP long, matching Panda's CAN checks.
+    return not self.CP.pcmCruise and self.button_enable
 
   def create_button_events(self, pt_cp, buttons):
-    button_events = []
+    previous_states, current_states = {}, {}
+    self.button_enable = False
 
     for button in buttons:
       state = pt_cp.vl[button.can_addr][button.can_msg] in button.values
-      if self.button_states[button.event_type] != state:
+      previous = self.button_states[button.event_type]
+      if button.event_type in CRUISE_BUTTON_TYPES and previous and not state:
+        self.button_enable = True
+
+      # Keep physical edges separate, then share Carrot's RES/+ and SET/- paths.
+      # Overlapping aliases remain held until both physical buttons are released.
+      event_type = CRUISE_BUTTON_TYPES.get(button.event_type, button.event_type)
+      previous_states[event_type] = previous_states.get(event_type, False) or previous
+      current_states[event_type] = current_states.get(event_type, False) or state
+      self.button_states[button.event_type] = state
+
+    button_events = []
+    for event_type, state in current_states.items():
+      if previous_states[event_type] != state:
         event = structs.CarState.ButtonEvent()
-        event.type = button.event_type
+        event.type = event_type
         event.pressed = state
         button_events.append(event)
-      self.button_states[button.event_type] = state
 
     return button_events
 
