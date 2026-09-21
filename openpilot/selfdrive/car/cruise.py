@@ -377,6 +377,14 @@ class VCruiseCarrot:
     self._prepare_brake_gas(CS, CC)
     if CC.enabled:
       self._cruise_ready = False
+      if self.is_vw_meb:
+        for be in CS.buttonEvents:
+          if be.pressed and be.type == ButtonType.setCruise:
+            self.v_cruise_kph = float(np.clip(max(self.v_ego_kph_set, self._cruise_speed_min),
+                                              self._cruise_speed_min, self._cruise_speed_max))
+            self.v_cruise_cluster_kph = self.v_cruise_kph
+            self._add_log(f"{self.v_cruise_kph} Cruise reset to current speed (MEB SET)")
+            break
     v_cruise_kph = self._update_cruise_buttons(CS, CC, self.v_cruise_kph)
 
     if self._activate_cruise > 0:
@@ -411,6 +419,18 @@ class VCruiseCarrot:
     self.enabled_last = CC.enabled
 
   def initialize_v_cruise(self, CS, experimental_mode: bool) -> None:
+    # VW MEB 한정: SET 인게이지 시 크루즈 속도를 현재속도로 세팅.
+    # carrot은 이 초기화를 비활성(아래 return)했었는데, HKG는 자동크루즈/버튼 경로가
+    # 속도를 잡아주는 반면 MEB의 SET 버튼 인게이지는 아무도 안 잡아줘서 이전 잔존값
+    # (실제속도와 무관한 5/31/52 등)으로 인게이지되는 문제가 있었음 (실차 rlog 확인).
+    # RESUME(accel/resume 버튼) 인게이지는 기존대로 이전 값 유지. 타 차종 동작 불변.
+    if self.is_vw_meb:
+      if not any(b.type in (ButtonType.accelCruise, ButtonType.resumeCruise) for b in CS.buttonEvents):
+        self.v_cruise_kph = float(np.clip(max(self.v_ego_kph_set, self._cruise_speed_min),
+                                          self._cruise_speed_min, self._cruise_speed_max))
+        self.v_cruise_cluster_kph = self.v_cruise_kph
+        self._add_log(f"{self.v_cruise_kph} Cruise set to current speed (MEB engage)")
+        return
     return
     # initializing is handled by the PCM
     if self.CP.pcmCruise and self.speed_from_pcm == 1:
