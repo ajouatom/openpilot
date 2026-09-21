@@ -184,6 +184,7 @@ class CarController(CarControllerBase):
 
     self.accel_last = 0
     self.accel_value_last = 0.0
+    self.display_lead_lateral = hyundaicanfd.DisplayLeadLateralFilter()
     # Refreshed with the other live settings in update().
     self.canfd_stopping = CanfdStopping() if Params().get_bool("CanfdStopRetry") else None
     self.apply_torque_last = 0
@@ -530,6 +531,7 @@ class CarController(CarControllerBase):
       if self.camera_scc_params in [2, 3]:
         self.canfd_toggle_adas(CC, CS)
       if self.CP.openpilotLongitudinalControl:
+        hud_lateral = self.display_lead_lateral.update(getattr(CS, "radarState", None), getattr(CS, "modelV2", None))
         self.hyundai_jerk.make_jerk(self.CP, CS, accel, actuators, hud_control)
         self.hyundai_jerk.check_carrot_cruise(CC, CS, hud_control, stopping, accel, actuators.aTarget)
 
@@ -537,7 +539,7 @@ class CarController(CarControllerBase):
           can_sends.extend(hyundaicanfd.create_ccnc_messages(
             self.CP, self.packer, self.CAN, self.frame, CC, CS, hud_control, apply_angle,
             left_lane_warning, right_lane_warning, self.enable_corner_radar, stopping,
-            self.canfd_debug, self.paddle_mode,
+            self.canfd_debug, self.paddle_mode, hud_lateral=hud_lateral,
           ))
           if hda2:
             can_sends.extend(hyundaicanfd.create_adrv_messages(self.CP, self.packer, self.CAN, self.frame))
@@ -547,7 +549,7 @@ class CarController(CarControllerBase):
           if self.CP.flags & HyundaiFlags.CAMERA_SCC.value:
             msg, self.accel_value_last = hyundaicanfd.create_acc_control_scc2(
               self.packer, self.CAN, CC.enabled, self.accel_value_last, accel, stopping, CC.cruiseControl.override,
-              set_speed_in_units, hud_control, self.hyundai_jerk, CS, self.canfd_stopping,
+              set_speed_in_units, hud_control, self.hyundai_jerk, CS, self.canfd_stopping, hud_lateral=hud_lateral,
             )
             if msg is not None:
               can_sends.append(msg)
