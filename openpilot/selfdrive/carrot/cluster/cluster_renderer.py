@@ -408,6 +408,8 @@ RADAR_LABEL_DISTANCE_FONT_SIZE = 16
 RADAR_LABEL_SPEED_FONT_SIZE = 14
 VEHICLE_BADGE_DISTANCE_FONT_SIZE = 17
 VEHICLE_BADGE_SPEED_FONT_SIZE = 15
+LEAD_ONE_DISTANCE_FONT_SIZE = 24
+LEAD_ONE_SPEED_FONT_SIZE = 22
 RADAR_LABEL_ANCHOR_Z_OFFSET_M = 0.30
 VEHICLE_BADGE_ANCHOR_Z_OFFSET_M = 0.32
 WORLD_LABEL_NEAR_M = 18.0
@@ -641,6 +643,22 @@ class CameraOverlayProjection:
     wide_camera: bool = False
 
 
+@dataclass(frozen=True, slots=True)
+class VehicleMetricLine:
+    text: str
+    x: float
+    y: float
+    size: float
+
+
+@dataclass(frozen=True, slots=True)
+class VehicleMetricLabel:
+    vehicle: VehicleBox
+    lines: tuple[VehicleMetricLine, ...]
+    color: tuple[int, ...]
+    shadow_offset: float = 0.0
+
+
 @lru_cache(maxsize=256)
 def _cached_rl_color(r: int, g: int, b: int, a: int) -> rl.Color:
     return rl.Color(r, g, b, a)
@@ -699,6 +717,12 @@ def vehicle_distance_m(vehicle: VehicleBox) -> float:
     if vehicle.longitudinal_m is not None:
         return vehicle.longitudinal_m
     return vehicle.center.y - EGO_FORWARD_M
+
+
+def vehicle_has_lead_one_metrics(vehicle: VehicleBox) -> bool:
+    # primary also marks L2 and CUT-IN. Only the existing leadOne gets large
+    # metrics; never infer a new lead from proximity or a raw radar point.
+    return vehicle.primary and vehicle.label.upper() == "L1" and vehicle_distance_m(vehicle) > 0.0
 
 
 def vehicle_speed_label(vehicle: VehicleBox, is_metric: bool = True) -> str:
@@ -1839,8 +1863,13 @@ class ClusterUiRenderer:
                 self._draw_camera_overlay_radar_point(point, projection, scene.scene_shift_x_m, state.radar_info_mode)
             self._profile_add("render_world.camera_projected_overlay.radar", profile_stage)
             profile_stage = self._profile_start()
+            metric_labels: list[VehicleMetricLabel] = []
             for vehicle in sorted(scene.vehicles, key=self._camera_overlay_vehicle_draw_key):
-                self._draw_camera_overlay_vehicle(vehicle, projection, scene.scene_shift_x_m, state.radar_info_mode)
+                self._draw_camera_overlay_vehicle(vehicle, projection, scene.scene_shift_x_m, state.radar_info_mode, metric_labels)
+            self._draw_vehicle_metric_labels(metric_labels, (
+                projection.dest.x, projection.dest.y,
+                projection.dest.x + projection.dest.width, projection.dest.y + projection.dest.height,
+            ))
             self._profile_add("render_world.camera_projected_overlay.vehicles", profile_stage)
         finally:
             rl.end_scissor_mode()
@@ -1930,8 +1959,9 @@ class ClusterUiRenderer:
         projection: CameraOverlayProjection,
         scene_shift_x_m: float,
         radar_info_mode: int,
+        metric_labels: list[VehicleMetricLabel] | None = None,
     ) -> None:
-        self._draw_camera_overlay_vehicle_frame(vehicle, projection, scene_shift_x_m, radar_info_mode)
+        self._draw_camera_overlay_vehicle_frame(vehicle, projection, scene_shift_x_m, radar_info_mode, metric_labels)
 
     @staticmethod
     def _camera_overlay_vehicle_draw_key(vehicle: VehicleBox) -> tuple[int, float]:
@@ -1952,6 +1982,7 @@ class ClusterUiRenderer:
         projection: CameraOverlayProjection,
         scene_shift_x_m: float,
         radar_info_mode: int,
+        metric_labels: list[VehicleMetricLabel] | None = None,
     ) -> None:
         center_y_m = vehicle.center.y + RADAR_TO_CAMERA_M + VEHICLE_LENGTH_M
         base_z = CAMERA_OVERLAY_VEHICLE_ROAD_HEIGHT_M
@@ -2067,20 +2098,25 @@ class ClusterUiRenderer:
 
         label = self._vehicle_overlay_label(vehicle, radar_info_mode)
         if label:
+            label_size = LEAD_ONE_DISTANCE_FONT_SIZE if vehicle_has_lead_one_metrics(vehicle) else 17 if emphasized else 15
             label_color = (*ring_base[:3], 255 if vehicle.primary or vehicle.cut_in else 230)
             label_y = marker.y - 12.0
             if lead_one:
                 label_y = marker.y - 18.0
             elif lead_two:
                 label_y = marker.y + marker.height + 16.0
-            self._draw_world_label_text(
-                label,
-                marker.x + marker.width * 0.5,
-                max(14.0, label_y),
-                17 if emphasized else 15,
+            metric = VehicleMetricLabel(
+                vehicle,
+                (VehicleMetricLine(label, marker.x + marker.width * 0.5, max(14.0, label_y), label_size),),
                 label_color,
-                anchor="center",
             )
+            if metric_labels is None:
+                self._draw_vehicle_metric_labels([metric], (
+                    projection.dest.x, projection.dest.y,
+                    projection.dest.x + projection.dest.width, projection.dest.y + projection.dest.height,
+                ))
+            else:
+                metric_labels.append(metric)
 
     def _vehicle_overlay_label(self, vehicle: VehicleBox, radar_info_mode: int) -> str:
         parts: list[str] = []
@@ -3532,16 +3568,7 @@ class ClusterUiRenderer:
 
         project_ms = 0.0
         layout_ms = 0.0
-        text_ms = 0.0
-
-        def draw_label_text(label, x, y, size, color) -> None:
-            nonlocal text_ms
-            if profile_enabled:
-                text_stage = time.perf_counter()
-                self._draw_world_label_text(label, x, y, size, color, anchor="center")
-                text_ms += (time.perf_counter() - text_stage) * 1000.0
-                return
-            self._draw_world_label_text(label, x, y, size, color, anchor="center")
+        metric_labels: list[VehicleMetricLabel] = []
 
         for vehicle in ordered:
             anchor = rl.Vector3(
@@ -3575,9 +3602,10 @@ class ClusterUiRenderer:
                     layout_ms += (time.perf_counter() - layout_stage) * 1000.0
                 continue
             distance_m = vehicle_distance_m(vehicle)
-            scale = world_label_scale(distance_m)
-            distance_size = max(9.0, VEHICLE_BADGE_DISTANCE_FONT_SIZE * scale)
-            speed_size = max(8.0, VEHICLE_BADGE_SPEED_FONT_SIZE * scale)
+            lead_one = vehicle_has_lead_one_metrics(vehicle)
+            scale = 1.0 if lead_one else world_label_scale(distance_m)
+            distance_size = LEAD_ONE_DISTANCE_FONT_SIZE if lead_one else max(9.0, VEHICLE_BADGE_DISTANCE_FONT_SIZE * scale)
+            speed_size = LEAD_ONE_SPEED_FONT_SIZE if lead_one else max(8.0, VEHICLE_BADGE_SPEED_FONT_SIZE * scale)
             shadow_offset = max(1.0, 1.2 * scale)
             gap = max(2.0, 4.0 * scale)
             if speed and distance:
@@ -3589,43 +3617,66 @@ class ClusterUiRenderer:
             else:
                 distance_y = screen.y - distance_size * 0.5
             center_x = screen.x
-            shadow = theme.world_label_shadow
             text_color = vehicle_metric_color(vehicle, theme, radar_source_color_mode)
+            lines = []
+            if distance:
+                lines.append(VehicleMetricLine(distance, center_x, distance_y, distance_size))
+            if speed:
+                lines.append(VehicleMetricLine(speed, center_x, speed_y, speed_size))
+            metric_labels.append(VehicleMetricLabel(vehicle, tuple(lines), text_color, shadow_offset))
             if profile_enabled:
                 layout_ms += (time.perf_counter() - layout_stage) * 1000.0
-            if distance:
-                draw_label_text(
-                    distance,
-                    center_x + shadow_offset,
-                    distance_y + shadow_offset,
-                    distance_size,
-                    shadow,
-                )
-                draw_label_text(
-                    distance,
-                    center_x,
-                    distance_y,
-                    distance_size,
-                    text_color,
-                )
-            if speed:
-                draw_label_text(
-                    speed,
-                    center_x + shadow_offset,
-                    speed_y + shadow_offset,
-                    speed_size,
-                    shadow,
-                )
-                draw_label_text(
-                    speed,
-                    center_x,
-                    speed_y,
-                    speed_size,
-                    text_color,
-                )
+        profile_stage = self._profile_start()
+        self._draw_vehicle_metric_labels(metric_labels)
+        self._profile_add("draw_scene.vehicle_badges.text", profile_stage)
         self._profile_add_elapsed("draw_scene.vehicle_badges.project", project_ms)
         self._profile_add_elapsed("draw_scene.vehicle_badges.layout", layout_ms)
-        self._profile_add_elapsed("draw_scene.vehicle_badges.text", text_ms)
+
+    def _vehicle_metric_label_rect(self, label: VehicleMetricLabel) -> tuple[float, float, float, float]:
+        rects = []
+        for line in label.lines:
+            width, height = self._measure_text(line.text, line.size, max(1.0, line.size * 0.02), self._font_for_text(line.text))
+            rects.append((line.x - width * 0.5, line.y - height * 0.5, line.x + width * 0.5, line.y + height * 0.5))
+        left, top = min(rect[0] for rect in rects), min(rect[1] for rect in rects)
+        right, bottom = max(rect[2] for rect in rects), max(rect[3] for rect in rects)
+        return left, top, right - left + label.shadow_offset, bottom - top + label.shadow_offset
+
+    def _draw_vehicle_metric_labels(
+        self,
+        labels: list[VehicleMetricLabel],
+        bounds: tuple[float, float, float, float] | None = None,
+    ) -> None:
+        lead = next((label for label in labels if vehicle_has_lead_one_metrics(label.vehicle)), None)
+        protected = None
+        if lead is not None:
+            left, top, right, bottom = bounds if bounds is not None else (0.0, 0.0, float(self.width), float(self.height))
+            x, y, width, height = self._vehicle_metric_label_rect(lead)
+            # Keep the full-size L1 group inside the viewport even at the horizon.
+            dx = clamp(x, left + 4.0, max(left + 4.0, right - width - 4.0)) - x
+            dy = clamp(y, top + 4.0, max(top + 4.0, bottom - height - 4.0)) - y
+            lead = replace(lead, lines=tuple(replace(line, x=line.x + dx, y=line.y + dy) for line in lead.lines))
+            protected = (x + dx - 4.0, y + dy - 4.0, width + 8.0, height + 8.0)
+
+        # Reserve L1's space first, but paint it last. Only overlapping secondary
+        # vehicle text is omitted; their geometry and the radar/control state stay intact.
+        visible = []
+        for label in labels:
+            if lead is not None and label.vehicle is lead.vehicle:
+                continue
+            if protected is not None and rectangles_overlap(self._vehicle_metric_label_rect(label), protected):
+                continue
+            visible.append(label)
+        if lead is not None:
+            visible.append(lead)
+        shadow = self._current_theme().world_label_shadow if any(label.shadow_offset for label in visible) else None
+        for label in visible:
+            for line in label.lines:
+                if label.shadow_offset:
+                    self._draw_world_label_text(
+                        line.text, line.x + label.shadow_offset, line.y + label.shadow_offset,
+                        line.size, shadow, anchor="center",
+                    )
+                self._draw_world_label_text(line.text, line.x, line.y, line.size, label.color, anchor="center")
 
     def _world_label_bounds(
         self,
