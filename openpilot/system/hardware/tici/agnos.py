@@ -23,7 +23,7 @@ SWAP_MAX_ATTEMPTS = 5
 SWAP_RETRY_DELAY = 1.0
 VERIFY_FLASH_MAX_ATTEMPTS = 3
 DOWNLOAD_RETRY_ATTEMPTS = 5
-DOWNLOAD_RETRY_DELAY = 5.0
+DOWNLOAD_RETRY_DELAY = 10.0
 DOWNLOAD_REQUEST_TIMEOUT = (10, 60)
 
 
@@ -484,14 +484,14 @@ def flash_agnos_update(manifest_path: str, target_slot_number: int, cloudlog, st
       except requests.exceptions.RequestException as e:
         cloudlog.exception("Failed")
         retry_number = retries + 1
-        cloudlog.info(f"Failed to download {partition['name']}, retrying ({retry_number}/{DOWNLOAD_RETRY_ATTEMPTS})")
-        report_progress(f"Network retry {retry_number}/{DOWNLOAD_RETRY_ATTEMPTS}: {type(e).__name__}", 0)
         if retry_number < DOWNLOAD_RETRY_ATTEMPTS:
+          cloudlog.info(f"Failed to download {partition['name']}, retrying ({retry_number}/{DOWNLOAD_RETRY_ATTEMPTS})")
+          report_progress(f"Network retry {retry_number}/{DOWNLOAD_RETRY_ATTEMPTS} in {DOWNLOAD_RETRY_DELAY:g}s: {type(e).__name__}", 0)
           time.sleep(DOWNLOAD_RETRY_DELAY)
 
     if not success:
       cloudlog.info(f"Failed to flash {partition['name']}, aborting")
-      raise Exception("Maximum retries exceeded")
+      raise RuntimeError(f"Download failed after {DOWNLOAD_RETRY_ATTEMPTS} attempts. Check Wi-Fi, then tap Retry.")
 
   cloudlog.info(f"AGNOS ready on slot {target_slot_number}")
 
