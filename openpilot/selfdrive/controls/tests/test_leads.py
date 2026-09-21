@@ -24,7 +24,12 @@ class TestLeads:
       return msgs
 
     msgs = [m for _ in range(3) for m in single_iter_pkg()]
-    out = replay_process_with_name("card", msgs, fingerprint=TOYOTA.TOYOTA_COROLLA_TSS2)
+    card_out = replay_process_with_name("card", msgs, fingerprint=TOYOTA.TOYOTA_COROLLA_TSS2)
+    radar_inputs = sorted(
+      [m for m in msgs if m.which() == "can"] + [m for m in card_out if m.which() == "carState"],
+      key=lambda m: m.logMonoTime,
+    )
+    out = replay_process_with_name("radarcan", radar_inputs, fingerprint=TOYOTA.TOYOTA_COROLLA_TSS2)
     states = [m for m in out if m.which() == "liveTracks"]
     failures = [not state.valid for state in states]
 

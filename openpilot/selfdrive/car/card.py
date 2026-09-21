@@ -9,14 +9,15 @@ from openpilot.cereal import car, log
 
 from openpilot.common.params import Params
 from openpilot.common.realtime import config_realtime_process, Priority, Ratekeeper
+from openpilot.common.runtime_diagnostics import RuntimeDiagnostics
 from openpilot.common.swaglog import cloudlog, ForwardingHandler
 
 from opendbc.car import DT_CTRL, structs
 from opendbc.car.can_definitions import CanData, CanRecvCallable, CanSendCallable
 from opendbc.car.carlog import carlog
 from opendbc.car.fw_versions import ObdCallback
-from opendbc.car.car_helpers import get_car, interfaces
-from opendbc.car.interfaces import CarInterfaceBase, RadarInterfaceBase
+from opendbc.car.car_helpers import get_car
+from opendbc.car.interfaces import CarInterfaceBase
 from openpilot.selfdrive.pandad import can_capnp_to_list, can_list_to_can_capnp
 from openpilot.selfdrive.car.alternative_experience import get_alternative_experience
 from openpilot.selfdrive.car.card_diagnostics import should_log_card_diagnostics
@@ -70,14 +71,13 @@ def can_comm_callbacks(logcan: messaging.SubSocket, sendcan: messaging.PubSocket
 
 class Car:
   CI: CarInterfaceBase
-  RI: RadarInterfaceBase
   CP: car.CarParams
 
-  def __init__(self, CI=None, RI=None) -> None:
+  def __init__(self, CI=None) -> None:
     self.can_sock = messaging.sub_sock('can', timeout=20)
     self.sm = messaging.SubMaster(['pandaStates', 'carControl', 'onroadEvents', 'carrotMan', 'longitudinalPlan',
                                    'radarState', 'modelV2', 'drivingModelData', 'customReservedRawData0'])
-    self.pm = messaging.PubMaster(['sendcan', 'carState', 'carParams', 'carOutput', 'liveTracks'])
+    self.pm = messaging.PubMaster(['sendcan', 'carState', 'carParams', 'carOutput'])
 
     self.can_rcv_cum_timeout_counter = 0
 
@@ -112,14 +112,12 @@ class Car:
           cached_params = _cached_params
 
       self.CI = get_car(*self.can_callbacks, obd_callback(self.params), alpha_long_allowed, is_release, num_pandas, cached_params)
-      self.RI = interfaces[self.CI.CP.carFingerprint].RadarInterface(self.CI.CP)
       self.CP = self.CI.CP
 
       # continue onto next fingerprinting step in pandad
       self.params.put_bool("FirmwareQueryDone", True)
     else:
       self.CI, self.CP = CI, CI.CP
-      self.RI = RI
 
     self.CP.alternativeExperience = get_alternative_experience(self.params.get_bool("DisengageOnAccelerator"))
     openpilot_enabled_toggle = self.params.get_bool("OpenpilotEnabledToggle")
@@ -183,13 +181,14 @@ class Car:
     self.card_diag_can_timeouts = 0
     self.xiaoge_vision_result: XiaogeVisionResult | None = None
     self.xiaoge_vision_error_log_at_ns = 0
-    self.card_diag_stage_names = ('decode', 'ci_update', 'sm_update', 'radar', 'state_tail',
+    self.card_diag_stage_names = ('decode', 'ci_update', 'sm_update', 'vision', 'state_tail',
                                   'state_total', 'publish', 'apply', 'sendcan', 'total')
     self.card_diag_stage_current = dict.fromkeys(self.card_diag_stage_names, 0)
     self.card_diag_stage_sum_us = dict.fromkeys(self.card_diag_stage_names, 0)
     self.card_diag_stage_max_us = dict.fromkeys(self.card_diag_stage_names, 0)
+    self.runtime_diagnostics = RuntimeDiagnostics('card', cloudlog.event)
 
-  def state_update(self) -> tuple[car.CarState, structs.RadarDataT | None]:
+  def state_update(self) -> car.CarState:
     """carState update loop, driven by can"""
 
     can_strs = messaging.drain_sock_raw(self.can_sock, wait_for_one=True)
@@ -203,16 +202,11 @@ class Car:
     can_list = can_capnp_to_list(can_strs)
     decode_done_ns = time.monotonic_ns()
 
-    rcv_time = time.time()
-
     # Update carState from CAN
     CS = self.CI.update(can_list)
     if self.CP.brand == 'mock':
       CS = self.mock_carstate.update(CS)
     ci_done_ns = time.monotonic_ns()
-
-    # Update radar tracks from CAN
-    #RD: structs.RadarDataT | None = self.RI.update_carrot(CS.vEgo, can_list)
 
     self.sm.update(0)
     sm_done_ns = time.monotonic_ns()
@@ -237,8 +231,13 @@ class Car:
     if can_rcv_valid and REPLAY:
       self.can_log_mono_time = messaging.log_from_bytes(can_strs[0]).logMonoTime
 
-    RD: structs.RadarDataT | None = self.RI.update_carrot(CS.vEgo, CS.aEgo, rcv_time, can_list)
-    radar_done_ns = time.monotonic_ns()
+    # radarcan consumes the CAN stream independently. These bounds preserve the
+    # old update_carrot(CS.vEgo, CS.aEgo, ..., can_list) association exactly.
+    CS.radarInput.firstCanMonoTime = can_list[0][0] if can_list else 0
+    CS.radarInput.lastCanMonoTime = can_list[-1][0] if can_list else 0
+    CS.radarInput.canPacketCount = len(can_list)
+    CS.radarInput.receiveMonoTime = self.can_log_mono_time if REPLAY and can_rcv_valid else recv_ns
+    vision_done_ns = time.monotonic_ns()
     #self.t2 = time.monotonic()
 
     #self.v_cruise_helper.update_v_cruise(CS, self.sm['carControl'].enabled, self.is_metric)
@@ -270,17 +269,17 @@ class Car:
       'decode': (decode_done_ns - recv_ns) // 1000,
       'ci_update': (ci_done_ns - decode_done_ns) // 1000,
       'sm_update': (sm_done_ns - ci_done_ns) // 1000,
-      'radar': (radar_done_ns - sm_done_ns) // 1000,
-      'state_tail': (state_done_ns - radar_done_ns) // 1000,
+      'vision': (vision_done_ns - sm_done_ns) // 1000,
+      'state_tail': (state_done_ns - vision_done_ns) // 1000,
       'state_total': (state_done_ns - recv_ns) // 1000,
       'publish': 0,
       'apply': 0,
       'sendcan': 0,
       'total': 0,
     }
-    return CS, RD
+    return CS
 
-  def state_publish(self, CS: car.CarState, RD: structs.RadarDataT | None):
+  def state_publish(self, CS: car.CarState):
     """carState and carParams publish loop"""
 
     # carParams - logged every 50 seconds (> 1 per segment)
@@ -303,12 +302,6 @@ class Car:
     cs_send.carState.canErrorCounter = self.can_rcv_cum_timeout_counter
     cs_send.carState.cumLagMs = -self.rk.remaining * 1000.
     self.pm.send('carState', cs_send)
-
-    if RD is not None:
-      tracks_msg = messaging.new_message('liveTracks')
-      tracks_msg.valid = not any(RD.errors.to_dict().values())
-      tracks_msg.liveTracks = RD
-      self.pm.send('liveTracks', tracks_msg)
 
   def controls_update(self, CS: car.CarState, CC: car.CarControl):
     """control update loop, driven by carControl"""
@@ -353,8 +346,8 @@ class Car:
                 f"ci_max_us={self.card_diag_stage_max_us['ci_update']}, "
                 f"sm_avg_us={self.card_diag_stage_sum_us['sm_update'] // self.card_diag_frames}, "
                 f"sm_max_us={self.card_diag_stage_max_us['sm_update']}, "
-                f"radar_avg_us={self.card_diag_stage_sum_us['radar'] // self.card_diag_frames}, "
-                f"radar_max_us={self.card_diag_stage_max_us['radar']}, "
+                f"vision_avg_us={self.card_diag_stage_sum_us['vision'] // self.card_diag_frames}, "
+                f"vision_max_us={self.card_diag_stage_max_us['vision']}, "
                 f"tail_avg_us={self.card_diag_stage_sum_us['state_tail'] // self.card_diag_frames}, "
                 f"tail_max_us={self.card_diag_stage_max_us['state_tail']}, "
                 f"state_avg_us={self.card_diag_stage_sum_us['state_total'] // self.card_diag_frames}, "
@@ -379,7 +372,8 @@ class Car:
       self.CC_prev = CC
 
   def step(self):
-    CS, RD = self.state_update()
+    cpu_start = time.thread_time()
+    CS = self.state_update()
 
     if self.cruise_main_toggle.update(CS.buttonEvents, self.sm['carControl'].enabled):
       if self.CI.CC is not None and not self.CP.dashcamOnly:
@@ -391,7 +385,7 @@ class Car:
         cloudlog.warning("Cruise MAIN long press ignored: vehicle has no openpilot controller")
 
     publish_start_ns = time.monotonic_ns()
-    self.state_publish(CS, RD)
+    self.state_publish(CS)
     self.card_diag_stage_current['publish'] = (time.monotonic_ns() - publish_start_ns) // 1000
 
     initialized = (not any(e.name == EventName.selfdriveInitializing for e in self.sm['onroadEvents']) and
@@ -401,6 +395,11 @@ class Car:
 
     self.initialized_prev = initialized
     self.CS_prev = CS
+    self.runtime_diagnostics.record(
+      work_ms=(time.monotonic_ns() - self.card_diag_recv_ns) / 1e6,
+      thread_cpu_ms=(time.thread_time() - cpu_start) * 1000,
+      **{f'{name}_ms': value / 1000 for name, value in self.card_diag_stage_current.items()},
+    )
 
   def params_thread(self, evt):
     while not evt.is_set():

@@ -1142,13 +1142,23 @@ def is_review_candidate(
   )
 
 
+@dataclass(frozen=True)
+class RadarCutOutPrediction:
+  """The only prediction fields consumed by production lead-role selection."""
+  track_id: int
+  cut_out_probability: float
+
+
 class RadarMotionPredictor:
   """Maintain independent front/corner dPath histories and predict path overlap."""
 
   def __init__(
     self,
     directional_min_consistency: float = DIRECTIONAL_MIN_CONSISTENCY,
+    *,
+    cut_out_only: bool = False,
   ) -> None:
+    self.cut_out_only = cut_out_only
     self.directional_min_consistency = float(
       directional_min_consistency,
     )
@@ -1285,7 +1295,7 @@ class RadarMotionPredictor:
     observation: _Observation,
     path: Sequence[tuple[float, float]],
     config: _SourceConfig,
-  ) -> RadarMotionPrediction:
+  ) -> RadarMotionPrediction | RadarCutOutPrediction:
     observations = tuple(state.observations)
     short = _window(observations, SHORT_HISTORY_S)
     long = _window(observations, LONG_HISTORY_S)
@@ -1476,6 +1486,11 @@ class RadarMotionPredictor:
     self._update_path_occupancy_state(
       state, observation, enough_history,
     )
+    # Keep all history, reassociation and occupancy state updates identical to
+    # the full predictor. Production needs no diagnostic trajectories or CUT-IN
+    # scores from this second predictor; trajectory_cutin owns that decision.
+    if self.cut_out_only and not (enough_history and state.inside_latched):
+      return RadarCutOutPrediction(track_id, 0.0)
     path_entry_age_s = (
       observation.time_s - state.entry_time_s
       if state.entry_time_s is not None
@@ -1486,6 +1501,7 @@ class RadarMotionPredictor:
     path_accel = max(-3.0, min(3.0, observation.a_lead))
     samples: list[RadarMotionSample] = []
     path_key = _path_key(path)
+    max_cut_out_probability = 0.0
     for horizon_s in MOTION_HORIZONS_S:
       path_displacement = (
         path_speed * horizon_s
@@ -1498,22 +1514,10 @@ class RadarMotionPredictor:
         observation.d_path
         + path_slope * path_displacement
       )
-      _, future_y = _model_path_point_at_s(
-        path_key,
-        future_path_x,
-        future_d_path,
-      )
       lateral_sigma = (
         lateral_base_uncertainty
         + slope_disagreement * abs(path_displacement)
         + 0.20 * abs(curvature) * path_displacement ** 2
-      )
-      longitudinal_sigma = (
-        config.base_longitudinal_sigma_m
-        + d_rel_residual
-        + 0.5 * path_x_long_residual
-        + 0.25 * path_x_short_residual
-        + 0.20 * abs(relative_accel) * horizon_s ** 2
       )
       extrapolation_support = min(
         1.0,
@@ -1529,6 +1533,20 @@ class RadarMotionPredictor:
         * extrapolation_support
         if future_d_rel > 0.0
         else 0.0
+      )
+      if self.cut_out_only:
+        if abs(future_d_path) > abs(observation.d_path):
+          max_cut_out_probability = max(max_cut_out_probability, 1.0 - occupancy_prob)
+        continue
+      _, future_y = _model_path_point_at_s(
+        path_key, future_path_x, future_d_path,
+      )
+      longitudinal_sigma = (
+        config.base_longitudinal_sigma_m
+        + d_rel_residual
+        + 0.5 * path_x_long_residual
+        + 0.25 * path_x_short_residual
+        + 0.20 * abs(relative_accel) * horizon_s ** 2
       )
       path_proximity_score = (
         _path_proximity_score(future_d_path) * extrapolation_support
@@ -1546,6 +1564,9 @@ class RadarMotionPredictor:
         occupancy_prob=occupancy_prob,
         path_proximity_score=path_proximity_score,
       ))
+
+    if self.cut_out_only:
+      return RadarCutOutPrediction(track_id, max_cut_out_probability * motion_consistency)
 
     (
       predicted_path_overlap_start_s,
@@ -1842,7 +1863,7 @@ class RadarMotionPredictor:
     ] | None = None,
     prediction_identities: Iterable[tuple[str, int]] | None = None,
     allow_low_speed_identities: Iterable[tuple[str, int]] = (),
-  ) -> dict[tuple[str, int], RadarMotionPrediction]:
+  ) -> dict[tuple[str, int], RadarMotionPrediction | RadarCutOutPrediction]:
     time_s = float(time_s)
     v_ego = _finite(v_ego)
     yaw_rate_rad_s = _finite(yaw_rate_rad_s)
@@ -1905,7 +1926,7 @@ class RadarMotionPredictor:
         if state is not None:
           self._retire_state(sensor, state)
 
-    predictions: dict[tuple[str, int], RadarMotionPrediction] = {}
+    predictions: dict[tuple[str, int], RadarMotionPrediction | RadarCutOutPrediction] = {}
     ego_projection = project_to_model_path(path, 0.0, 0.0)
     cos_heading = math.cos(self._ego_heading_rad)
     sin_heading = math.sin(self._ego_heading_rad)

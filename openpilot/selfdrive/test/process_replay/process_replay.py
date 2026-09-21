@@ -461,14 +461,27 @@ CONFIGS = [
   ProcessConfig(
     proc_name="card",
     pubs=["pandaStates", "carControl", "onroadEvents", "can"],
-    subs=["sendcan", "carState", "carParams", "carOutput", "liveTracks"],
-    ignore=["logMonoTime", "carState.cumLagMs"],
+    subs=["sendcan", "carState", "carParams", "carOutput"],
+    ignore=["logMonoTime", "carState.cumLagMs", "carState.radarInput"],
     init_callback=card_fingerprint_callback,
     should_recv_callback=card_rcv_callback,
     tolerance=NUMPY_TOLERANCE,
     processing_time=0.004,
     main_pub="can",
     main_pub_drained=True,
+  ),
+  ProcessConfig(
+    # carState must carry batch metadata from a replay of the matching card.
+    # Old recorded carState alone cannot reconstruct card's exact CAN drains.
+    proc_name="radarcan",
+    pubs=["can", "carState"],
+    subs=["liveTracks"],
+    ignore=["logMonoTime"],
+    init_callback=get_car_params_callback,
+    should_recv_callback=MessageBasedRcvCallback("can"),
+    main_pub="can",
+    main_pub_drained=True,
+    tolerance=NUMPY_TOLERANCE,
   ),
   ProcessConfig(
     proc_name="radard",
