@@ -705,15 +705,18 @@ class CarState(CarStateBase):
         self.hda_info_4a3 is None or self.navi_status_380 is None):
       return False
     camera_active = is_canfd_navi_camera_active(self.navi_status_380)
+    camera_status = int(self.navi_status_380["CAMERA_STATUS"])
     map_warning = int(self.hda_info_4a3["MapSource"]) == 2
     if camera_active:
       self.pv5_camera_status_seen = True
     elif not map_warning:
       self.pv5_camera_status_seen = False
+    elif camera_status == 0x04:
+      self.pv5_camera_status_seen = True  # Also remember a pass observed after process startup.
     # Only the observed zero-status case needs this fallback. In particular,
     # do not turn the recorded post-pass value 0x04 into a new warning when
     # starting midway through a route.
-    return camera_active or (map_warning and int(self.navi_status_380["CAMERA_STATUS"]) == 0 and
+    return camera_active or (map_warning and camera_status == 0 and
                              not self.pv5_camera_status_seen)
 
   def _update_pv5_navi_section(self, cp, cp_alt):

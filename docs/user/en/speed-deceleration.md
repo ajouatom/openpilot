@@ -102,7 +102,7 @@ In mode `2`, an accelerator held from before actual deceleration begins does not
 
 On the Kia PV5, a current stock-navigation camera warning is also used when the separate camera-status signal stays at zero. Without a matching nearby camera distance, it uses the virtual distance below and releases when the warning ends.
 
-If the separate camera signal has already identified the camera, its pass indication takes priority; a remaining navigation warning does not reactivate it. Both messages must be fresh within one second.
+If the separate camera signal has identified the camera or reports that it has passed at startup, its pass indication takes priority; a remaining navigation warning does not reactivate it. Both messages must be fresh within one second.
 
 ### `VehicleSpeedCameraDistanceTime`
 
