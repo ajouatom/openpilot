@@ -14,10 +14,32 @@ from openpilot.system.hardware import HARDWARE, TICI
 from openpilot.common.swaglog import cloudlog
 from openpilot.system.ui.lib.application import gui_app, FontWeight, TextAlignmentVertical
 from openpilot.system.ui.widgets.nav_widget import NavWidget
-from openpilot.system.ui.widgets.scroller import Scroller
+from openpilot.system.ui.widgets.scroller import Scroller, NavScroller
 from openpilot.system.ui.widgets.label import UnifiedLabel
-from openpilot.system.ui.mici_setup import (NetworkSetupPage, FailedPage, NetworkConnectivityMonitor,
+from openpilot.system.ui.mici_setup import (NetworkSetupPage, NetworkConnectivityMonitor,
                                             GreyBigButton, BigPillButton)
+from openpilot.selfdrive.ui.mici.widgets.dialog import BigConfirmationCircleButton
+
+
+class UpdaterFailedPage(NavScroller):
+  def __init__(self, retry_callback, network_callback):
+    super().__init__()
+    self.set_back_callback(network_callback)
+    self._retry_button = BigPillButton("Retry")
+    self._retry_button.set_click_callback(retry_callback)
+    self._wifi_button = BigPillButton("Connect\nto Wi-Fi")
+    self._wifi_button.set_click_callback(network_callback)
+    self._reason_card = GreyBigButton("update paused", "")
+    self._scroller.add_widgets([
+      self._retry_button,
+      self._wifi_button,
+      self._reason_card,
+      BigConfirmationCircleButton("reboot\ndevice", gui_app.texture("icons_mici/settings/device/reboot.png", 64, 70),
+                                  HARDWARE.reboot, exit_on_confirm=False),
+    ])
+
+  def set_reason(self, reason: str):
+    self._reason_card.set_value(reason)
 
 
 class UpdaterNetworkSetupPage(NetworkSetupPage):
@@ -97,7 +119,7 @@ class Updater(Scroller):
 
     self._progress_page = ProgressPage()
 
-    self._failed_page = FailedPage(self._retry, title="update failed")
+    self._failed_page = UpdaterFailedPage(self._retry, self._open_network_setup)
 
     self._continue_button = BigPillButton("next")
     self._continue_button.set_click_callback(lambda: gui_app.push_widget(self._network_setup_page))
@@ -114,7 +136,10 @@ class Updater(Scroller):
     self.install_update()
 
   def _retry(self):
-    gui_app.pop_widgets_to(self)
+    gui_app.pop_widgets_to(self, self.install_update)
+
+  def _open_network_setup(self):
+    gui_app.pop_widgets_to(self, lambda: gui_app.push_widget(self._network_setup_page))
 
   def _nav_stack_tick(self):
     self._progress_page.set_progress(self.progress_text, self.progress_value)

@@ -41,6 +41,9 @@ class FakeLog:
   def error(self, message: str) -> None:
     self.messages.append(message)
 
+  def exception(self, message: str) -> None:
+    self.messages.append(message)
+
 
 def write_manifest(path: Path, urls: tuple[str, ...] = ()) -> None:
   path.write_text(json.dumps([
@@ -119,3 +122,51 @@ def test_swap_accepts_a_transient_abctl_failure(monkeypatch, tmp_path: Path) -> 
   monkeypatch.setattr(agnos.time, "sleep", lambda _seconds: None)
 
   agnos.swap(str(manifest), 1, FakeLog())
+
+
+@pytest.mark.parametrize("online_after", [30, 60])
+def test_download_waits_for_wifi_and_can_restart_after_exhaustion(monkeypatch, tmp_path: Path, online_after: int) -> None:
+  manifest = tmp_path / "agnos.json"
+  write_manifest(manifest, ("https://downloads.example/image.xz",))
+  elapsed = 0
+  attempts = []
+
+  def sleep(seconds):
+    nonlocal elapsed
+    elapsed += seconds
+
+  def flash(*_args):
+    attempts.append(elapsed)
+    if elapsed < online_after:
+      raise requests.ConnectionError("Wi-Fi not connected")
+
+  monkeypatch.setattr(agnos.os, "system", lambda _cmd: 0)
+  monkeypatch.setattr(agnos.time, "sleep", sleep)
+  monkeypatch.setattr(agnos, "flash_partition", flash)
+
+  if online_after > 40:
+    with pytest.raises(RuntimeError, match="Check Wi-Fi, then tap Retry"):
+      agnos.flash_agnos_update(str(manifest), 1, FakeLog(), standalone=True)
+    assert attempts == [0, 10, 20, 30, 40]
+    # Wi-Fi connects while the failure screen waits for the user's Retry tap.
+    elapsed = online_after
+
+  agnos.flash_agnos_update(str(manifest), 1, FakeLog(), standalone=True)
+  assert attempts[-1] == online_after
+
+
+def test_non_network_failure_is_not_retried(monkeypatch, tmp_path: Path) -> None:
+  manifest = tmp_path / "agnos.json"
+  write_manifest(manifest, ("https://downloads.example/image.xz",))
+
+  def flash(*_args):
+    raise OSError("partition write failed")
+
+  def unexpected_sleep(_seconds):
+    pytest.fail("A partition write failure must not be retried as a network failure")
+
+  monkeypatch.setattr(agnos.os, "system", lambda _cmd: 0)
+  monkeypatch.setattr(agnos.time, "sleep", unexpected_sleep)
+  monkeypatch.setattr(agnos, "flash_partition", flash)
+  with pytest.raises(OSError, match="partition write failed"):
+    agnos.flash_agnos_update(str(manifest), 1, FakeLog(), standalone=True)

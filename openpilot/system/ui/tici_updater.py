@@ -180,14 +180,17 @@ class Updater(Widget):
       progress_rect = rl.Rectangle(bar_rect.x, bar_rect.y, progress_width, bar_rect.height)
       rl.draw_rectangle_rounded(progress_rect, 0.5, 10, PROGRESS_COLOR)
 
-    # Show reboot button if needed
+    # Keep network setup and retry available after the automatic attempts end.
     if self.show_reboot_button:
       detail_rect = rl.Rectangle(MARGIN + 100, 650, rect.width - MARGIN * 2 - 200, BODY_FONT_SIZE * FONT_SCALE * 2)
       gui_text_box(detail_rect, self.failure_detail, BODY_FONT_SIZE)
-      retry_rect = rl.Rectangle(MARGIN + 100, rect.height - MARGIN - BUTTON_HEIGHT, BUTTON_WIDTH, BUTTON_HEIGHT)
-      reboot_rect = rl.Rectangle(rect.width - MARGIN - 100 - BUTTON_WIDTH, rect.height - MARGIN - BUTTON_HEIGHT,
-                                 BUTTON_WIDTH, BUTTON_HEIGHT)
+      button_width = (rect.width - MARGIN * 4) / 3
+      button_y = rect.height - MARGIN - BUTTON_HEIGHT
+      retry_rect = rl.Rectangle(MARGIN, button_y, button_width, BUTTON_HEIGHT)
+      wifi_rect = rl.Rectangle(MARGIN * 2 + button_width, button_y, button_width, BUTTON_HEIGHT)
+      reboot_rect = rl.Rectangle(MARGIN * 3 + button_width * 2, button_y, button_width, BUTTON_HEIGHT)
       self._retry_button.render(retry_rect)
+      self._wifi_button.render(wifi_rect)
       self._reboot_button.render(reboot_rect)
 
   def _render(self, rect: rl.Rectangle):
