@@ -17,6 +17,7 @@ from openpilot.selfdrive.controls.lib.lateral_planner import LateralPlanner
 import openpilot.cereal.messaging as messaging
 from openpilot.selfdrive.carrot.carrot_functions import CarrotPlanner
 from openpilot.selfdrive.carrot.radar import effective_radar_track_mode
+from openpilot.selfdrive.carrot.radar_motion.timing import front_radar_distance_delay_s
 
 
 LIVE_TRACKS_FALLBACK_TIMEOUT_S = 0.10
@@ -47,7 +48,7 @@ def main():
   longitudinal_planner = LongitudinalPlanner(CP)
   lateral_planner = LateralPlanner(CP, debug=False)
   fast_radar = FastRadarOverlay(
-    front_radar_delay_s=float(CP.radarDelay),
+    front_radar_delay_s=front_radar_distance_delay_s(CP),
   )
   stopping_lead_filter = StoppingLeadFilter()
 
