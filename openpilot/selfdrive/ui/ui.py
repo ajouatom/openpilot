@@ -14,18 +14,16 @@ BIG_UI = gui_app.big_ui()
 
 
 def main():
-  cores = {5, }
-  # UI는 상시 SCHED_OTHER — 비RT UI는 core5의 radard(FIFO51)를 절대
-  # 선점하지 못하므로 주행 프로세스가 항상 우선한다 (기존 FIFO51 UI는
-  # radard와 같은 우선순위로 core5를 점유해 20Hz cadence를 위협). FIFO 승격 재도입
-  # 금지, core7은 modeld+plannerd+dmonitoringmodeld 전용이라 UI 재배치도 금지.
+  cores = {0, 1, 2, 3}
+  # Keep rendering off the camera/planner core5 and model core7. The UI must
+  # remain SCHED_OTHER so realtime sensor, localization and CAN work takes
+  # precedence on the little cores. See docs/camera_core5_trial.md.
   # GC는 계속 끈다 — 기존 config_realtime_process가 하던 GC pause(프레임
   # 히치) 방지는 유지해야 한다.
   gc.disable()
   # TICI offroad power-save는 big core4~7을 offline한다 — always_run UI는
-  # 항상 online인 core0에서 부트스트랩하고, onroad에서 core5가 online되면
-  # 아래 render loop가 best-effort로 re-affine한다 (실패는 삼키고 다음
-  # 프레임에 재시도).
+  # 항상 online인 core0에서 부트스트랩한다. 렌더 루프에서는 power-save에서도
+  # online인 core0~3으로 best-effort re-affine한다 (실패 시 다음 프레임 재시도).
   set_core_affinity([0])
   # SCHED_OTHER 계약 명시 적용 + readback 검증 (실패는 fail-stop)
   ensure_ui_sched_other()
@@ -39,7 +37,7 @@ def main():
   for should_render in gui_app.render():
     ui_state.update()
     if should_render:
-      # reaffine after power save offlines our core
+      # Keep the render thread on the little cores across power-save transitions.
       if TICI and os.sched_getaffinity(0) != cores:
         try:
           set_core_affinity(list(cores))

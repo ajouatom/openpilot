@@ -1,5 +1,16 @@
 # Repository memory
 
+- On 2026-09-21, after Ioniq 5 C4 `00000f90--96d7dcd525--4` reproduced a
+  101 ms wide-camera SOF gap, the user authorized a CPU-placement trial:
+  main UI uses cores0..3 with SCHED_OTHER (core0 bootstrap), camerad and its
+  camera IRQ targets move from core6 to core5. card remains core6 FIFO53;
+  planner/radard remain core5 FIFO51 and camera keeps normal scheduling.
+  Preserve the UI's verified SCHED_OTHER contract and pose validity limits.
+  This supersedes the camera/UI placements described in older observations,
+  not radar isolation or cluster affinity. No C3/C4 vehicle benefit is yet
+  validated; do not claim same-core contention caused the camera fault.
+  See docs/camera_core5_trial.md for scope, trade-offs and validation.
+
 - On 2026-09-21, ID.4 replay showed that adding CP.radarDelay (0.8 s) to
   distance alignment could switch the selected lead to a farther CAN object.
   The user approved zero extra distance projection for VW MEB. Use the shared
