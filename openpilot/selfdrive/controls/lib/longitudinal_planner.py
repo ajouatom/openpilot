@@ -3,11 +3,13 @@ import numpy as np
 
 import openpilot.cereal.messaging as messaging
 from opendbc.car.interfaces import ACCEL_MIN, ACCEL_MAX
+from opendbc.car.hyundai.values import HyundaiFlags
 from openpilot.common.constants import CV
 from openpilot.common.filter_simple import FirstOrderFilter
 from openpilot.common.realtime import DT_MDL
 from openpilot.selfdrive.modeld.constants import ModelConstants
 from openpilot.selfdrive.controls.lib.longcontrol import LongCtrlState
+from openpilot.selfdrive.controls.lib.longitudinal_stopping import should_prepare_stop
 from openpilot.selfdrive.controls.lib.longitudinal_mpc_lib.long_mpc import LongitudinalMpc, N
 from openpilot.selfdrive.controls.lib.longitudinal_mpc_lib.long_mpc import T_IDXS as T_IDXS_MPC
 from openpilot.selfdrive.controls.lib.drive_helpers import CONTROL_N, get_accel_from_plan, is_volkswagen_meb
@@ -340,6 +342,23 @@ class LongitudinalPlanner:
       output_a_target = min(output_a_target_mpc, output_a_target_e2e)
       output_v_target_now = min(output_v_target_mpc, output_v_target_now_e2e)
       self.output_should_stop = output_should_stop_e2e or output_should_stop_mpc
+
+    # Prepare the stop before deceleration fades, while retaining the normal
+    # acceleration plan and the controller's aEgo >= -0.5 handover condition.
+    # Read the existing toggle here as well so changes apply without a restart.
+    early_stop_enabled = (
+      self.CP.brand == "hyundai" and self.CP.flags & HyundaiFlags.CANFD
+      and self.CP.openpilotLongitudinalControl and self.params.get_bool("CanfdStopRetry")
+      and self.mpc.mode == 'acc' and not reset_state
+      and not sm['carState'].gasPressed and not sm['carState'].brakePressed
+      and sm['carState'].canValid and str(sm['carState'].gearShifter) == 'drive'
+      and not sm['carState'].brakeHoldActive and not sm['carState'].parkingBrake
+    )
+    if early_stop_enabled:
+      self.output_should_stop |= should_prepare_stop(
+        self.v_desired_trajectory, self.a_desired_trajectory, CONTROL_N_T_IDX,
+        v_ego=v_ego, action_t=action_t, v_stop=vEgoStopping,
+      )
 
     #for idx in range(2):
     #  accel_clip[idx] = np.clip(accel_clip[idx], self.prev_accel_clip[idx] - 0.05, self.prev_accel_clip[idx] + 0.05)
