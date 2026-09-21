@@ -23,6 +23,7 @@ if str(REPO_ROOT) not in sys.path:
   sys.path.insert(0, str(REPO_ROOT))
 
 from openpilot.selfdrive.carrot.radar_motion.coordinates import device_yaw_to_radar
+from openpilot.selfdrive.carrot.radar_motion.timing import front_radar_distance_delay_s
 from openpilot.selfdrive.carrot.radar_motion import (
   CORNER_RADAR_MEASUREMENT_DELAY_S,
   CORNER_CUT_IN_THRESHOLD,
@@ -3169,9 +3170,7 @@ def load_frames(log_path: Path) -> list[RadarFrame]:
       wheelbase = _finite(event.carParams.wheelbase)
       latest_steer_ratio = steer_ratio if 5.0 <= steer_ratio <= 30.0 else 14.0
       latest_wheelbase = wheelbase if 1.8 <= wheelbase <= 4.5 else 2.8
-      latest_radar_delay_s = max(
-        0.0, _finite(event.carParams.radarDelay),
-      )
+      latest_radar_delay_s = front_radar_distance_delay_s(event.carParams)
     elif which == "carState":
       latest_car_state_ns = event_ns
       latest_v_ego = _finite(event.carState.vEgo)

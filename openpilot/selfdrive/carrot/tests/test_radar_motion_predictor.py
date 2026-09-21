@@ -8100,6 +8100,31 @@ def test_stale_radar_publication_is_rejected_before_delay_projection() -> None:
   ) == ()
 
 
+def test_meb_distance_alignment_keeps_near_lead_without_extra_projection() -> None:
+  from openpilot.selfdrive.carrot.radar_motion.timing import front_radar_distance_delay_s, VOLKSWAGEN_MEB_FLAG
+
+  cp = SimpleNamespace(brand="volkswagen", flags=VOLKSWAGEN_MEB_FLAG, radarDelay=0.8)
+  points = (Point(613, 21.9375, 0.0, v_rel=-6.5), Point(619, 29.625, 0.0, v_rel=-7.75))
+  model = model_with_lead(22.8867, 0.0, 0.441, probability=1.0)
+  chosen = []
+  for delay in (front_radar_distance_delay_s(cp), cp.radarDelay):
+    controller = DPathRadarController(enable_radar_tracks=1, front_radar_measurement_delay_s=delay)
+    output = controller.update(10.0, 6.5, points, model, radar_to_model_time_s=-0.06)
+    assert output.lead_one is not None
+    chosen.append(output.lead_one["radarTrackId"])
+  assert chosen == [613, 619]
+
+  # Zero extra delay retains measured publication/exposure skew and kinematics.
+  aligned = DPathRadarController(front_radar_measurement_delay_s=front_radar_distance_delay_s(cp))._points_at_model_time(
+    (Point(613, 21.9375, 0.0, v_rel=-6.5, v_lead=0.7, a_lead=-0.2),),
+    v_ego=6.5, radar_to_model_time_s=-0.06,
+  )[0]
+  assert aligned.d_rel == pytest.approx(21.9375 + 6.5 * 0.06)
+  assert aligned.v_rel == pytest.approx(-6.5)
+  assert aligned.v_lead == pytest.approx(0.0)  # Existing vEgo + vRel policy.
+  assert aligned.a_lead == pytest.approx(-0.2)
+
+
 def test_mode_three_uses_scc_at_any_speed_when_front_omits_lead() -> None:
   output = DPathRadarController(
     enable_radar_tracks=3,

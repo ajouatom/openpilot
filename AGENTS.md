@@ -1,5 +1,14 @@
 # Repository memory
 
+- On 2026-09-21, ID.4 replay showed that adding CP.radarDelay (0.8 s) to
+  distance alignment could switch the selected lead to a farther CAN object.
+  The user approved zero extra distance projection for VW MEB. Use the shared
+  radar_motion/timing.py policy in runtime and NAS replay; preserve measured
+  camera/publication skew. Do not also zero CP.radarDelay: its ego-history
+  compensation and velocity/acceleration effects have not been recalibrated.
+  Other platforms retain their existing delay. See
+  docs/meb_radar_distance_alignment.md for scope and regression evidence.
+
 - On 2026-09-21, K9 C4 logs reproduced locationd timing-check invalidity from
   repeated IMU timestamps over 100 ms old. Historical captures first showed
   these failures after the September 19 update, despite unchanged HUD 10 FPS,

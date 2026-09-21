@@ -7,6 +7,7 @@ import pytest
 from openpilot.cereal import car, log
 from openpilot.common.runtime_diagnostics import RuntimeDiagnostics
 from openpilot.selfdrive.carrot.radar import effective_radar_track_mode
+from openpilot.selfdrive.carrot.radar_motion.timing import front_radar_distance_delay_s
 from openpilot.selfdrive.controls.lib.longitudinal_fast_radar import RadarStateOverride
 from openpilot.selfdrive.controls.lib.longitudinal_stopping_lead import StoppingLeadFilter
 
@@ -66,7 +67,7 @@ def run_planner_events(mocker, brand, configured_mode, radar_period_ms, *, stopp
 
   sm = SubMaster()
   sub_master_factory = mocker.Mock(return_value=sm)
-  cp = SimpleNamespace(brand=brand, radarUnavailable=False, radarDelay=0.8, openpilotLongitudinalControl=True)
+  cp = SimpleNamespace(brand=brand, flags=0, radarUnavailable=False, radarDelay=0.8, openpilotLongitudinalControl=True)
   params = mocker.Mock()
   params.get_int.return_value = configured_mode
   fast_radar = mocker.Mock()
@@ -93,6 +94,7 @@ def run_planner_events(mocker, brand, configured_mode, radar_period_ms, *, stopp
     'LaneDepartureWarning': mocker.Mock(),
     'CarrotPlanner': lambda: SimpleNamespace(mode='acc'),
     'effective_radar_track_mode': effective_radar_track_mode,
+    'front_radar_distance_delay_s': front_radar_distance_delay_s,
     'messaging': SimpleNamespace(
       log_from_bytes=lambda value, schema: cp,
       PubMaster=mocker.Mock(),

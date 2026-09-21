@@ -14,6 +14,7 @@ from openpilot.common.swaglog import cloudlog
 from opendbc.car.hyundai.values import HyundaiExtFlags
 from openpilot.selfdrive.carrot.radar import effective_radar_track_mode
 from openpilot.selfdrive.carrot.radar_motion.coordinates import device_yaw_to_radar
+from openpilot.selfdrive.carrot.radar_motion.timing import front_radar_distance_delay_s
 from openpilot.selfdrive.carrot.radar_motion import (
   DPathRadarController,
 )
@@ -98,7 +99,7 @@ class DPathRadarD:
       ),
       enable_radar_tracks=enable_radar_tracks,
       cut_in_sensitivity=PRODUCTION_CUT_IN_SENSITIVITY,
-      front_radar_measurement_delay_s=float(CP.radarDelay),
+      front_radar_measurement_delay_s=front_radar_distance_delay_s(CP),
       production_live_tracks=True,
     )
     self.radar_state = log.RadarState.new_message()
