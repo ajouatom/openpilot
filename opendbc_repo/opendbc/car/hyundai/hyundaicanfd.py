@@ -5,6 +5,7 @@ from opendbc.car import CanBusBase, DT_CTRL
 from opendbc.car.carlog import carlog
 from opendbc.car.crc import CRC16_XMODEM
 from opendbc.car.hyundai.values import HyundaiFlags, HyundaiExtFlags
+from opendbc.car.hyundai.stopping import MOVING_SPEED
 from openpilot.common.params import Params
 from openpilot.common.filter_simple import FirstOrderFilter
 from opendbc.car.common.conversions import Conversions as CV
@@ -38,13 +39,18 @@ def apply_stopping_experiment(values, CS, controller, accel, previous_value, jer
   speeds = [CS.out.vEgo, CS.out.vEgoRaw, wheels.fl, wheels.fr, wheels.rl, wheels.rr]
   finite = all(math.isfinite(v) for v in (*speeds, accel, previous_value, jerk_u, jerk_l))
   speed = max(abs(v) for v in speeds) if finite else 0.0
-  blocked = (not finite or not CS.out.canValid or CS.out.brakePressed or CS.out.gasPressed
+  soft_hold = CS.softHoldActive > 0 and CS.out.cruiseState.available
+  # Only an armed, stationary soft hold may prepare while the driver brakes.
+  # Ordinary braking and pedal input while moving keep their existing interlock.
+  brake_blocked = CS.out.brakePressed and not (soft_hold and speed <= MOVING_SPEED)
+  blocked = (not finite or not CS.out.canValid or brake_blocked or CS.out.gasPressed
              or str(CS.out.gearShifter) != "drive" or longitudinal_interlock_active(CS))
   previous_phase = controller.phase
   command = controller.update(
     active=values["ACCMode"] == 1 and not blocked, requested=bool(values["StopReq"]), speed=speed,
     held=CS.canfdSccHoldActive, accel=accel, previous_value=previous_value,
     jerk_u=max(0.0, min(jerk_u, 5.0)), jerk_l=max(1.0, min(jerk_l, 5.0)),
+    soft_hold=soft_hold,
   )
   if blocked or values["ACCMode"] != 1:
     values.update(StopReq=0, aReqRaw=0.0, aReqValue=0.0)
@@ -58,6 +64,7 @@ def apply_stopping_experiment(values, CS, controller, accel, previous_value, jer
     carlog.warning({"event": "carrot_stopping", "from": str(previous_phase), "phase": str(controller.phase),
                     "reason": controller.reason, "speed": speed, "aEgo": CS.out.aEgo,
                     "held": CS.canfdSccHoldActive, "retry_used": controller.retried,
+                    "soft_hold": soft_hold, "prepare_cycles": controller.prepare_cycles,
                     "StopReq": values["StopReq"], "aReqRaw": values["aReqRaw"], "aReqValue": values["aReqValue"]})
 
 

@@ -40,6 +40,9 @@ class DictParams:
     assert name != "StoppingAccel", "Removed stopping acceleration setting must never be read"
     return self.values[name]
 
+  def get_bool(self, name):
+    return bool(self.values.get(name, False))
+
   def put_int(self, name, value):
     self.values[name] = value
     self.writes.append((name, value))
@@ -48,6 +51,7 @@ class DictParams:
 def make_cp(brand="hyundai"):
   return SimpleNamespace(
     brand=brand,
+    flags=0, openpilotLongitudinalControl=True,
     longitudinalTuning=SimpleNamespace(
       kpBP=[0.0], kpV=[9.0], kiBP=[0.0], kiV=[9.0], kf=9.0,
     ),
@@ -131,6 +135,39 @@ def test_fixed_stop_entry_threshold(monkeypatch, a_ego, expected):
   control.update(True, cs, plan, (-3.5, 2.0), 0.0, radar)
 
   assert control.long_control_state == getattr(longcontrol_module.LongCtrlState, expected)
+
+
+def test_experiment_prepared_stop_handover_and_live_toggle(monkeypatch):
+  params = DictParams({"CanfdStopRetry": True})
+  monkeypatch.setattr(longcontrol_module, "Params", lambda: params)
+  cp = make_cp()
+  cp.flags = longcontrol_module.HyundaiFlags.CANFD
+  control = LongControl(cp)
+  control.long_control_state = longcontrol_module.LongCtrlState.pid
+  cs = SimpleNamespace(softHoldActive=0, vEgo=0.6, aEgo=-0.8, brakePressed=False,
+                       cruiseState=SimpleNamespace(standstill=False))
+  plan = SimpleNamespace(aTarget=-0.8, vTargetNow=0.6, jTargetNow=0.0, shouldStop=True)
+  radar = SimpleNamespace(leadOne=SimpleNamespace(status=True, dRel=3.0))
+
+  # Early intent, including a nearby lead, must retain ordinary stronger braking.
+  accel, _, _ = control.update(True, cs, plan, (-3.5, 2.0), 0.0, radar)
+  assert control.long_control_state == longcontrol_module.LongCtrlState.pid
+  assert accel == pytest.approx(-0.8)
+  cs.aEgo = -0.5
+  control.update(True, cs, plan, (-3.5, 2.0), 0.0, radar)
+  assert control.long_control_state == longcontrol_module.LongCtrlState.stopping
+
+  # A real launch still releases stop state; no unconditional hold latch is added.
+  plan.shouldStop = False
+  control.update(True, cs, plan, (-3.5, 2.0), 0.0, radar)
+  assert control.long_control_state == longcontrol_module.LongCtrlState.pid
+  params.values["CanfdStopRetry"] = False
+  control.readParamCount = 49
+  cs.aEgo = -0.8
+  plan.shouldStop = True
+  control.update(True, cs, plan, (-3.5, 2.0), 0.0, radar)
+  assert not control.canfd_stop_retry
+  assert control.long_control_state == longcontrol_module.LongCtrlState.stopping  # legacy close-lead exception
 
 
 @pytest.mark.parametrize("soft_hold, previous_accel, expected", [(0, -1.0, -1.0), (1, 0.0, -2.0)])
