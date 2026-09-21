@@ -27,7 +27,6 @@ from cluster_config import (
     CLUSTER_ORIENTATION_PARAM,
     CLUSTER_PANEL_LAYOUT_DRIVING_LEFT,
     CLUSTER_PANEL_LAYOUT_PARAM,
-    CLUSTER_PRIORITY_PARAM,
     CLUSTER_RADAR_DISPLAY_PARAM,
     CLUSTER_RADAR_INFO_PARAM,
     CLUSTER_RADAR_SOURCE_COLOR_PARAM,
@@ -47,7 +46,6 @@ from cluster_config import (
     normalize_cluster_encoder_mode,
     normalize_cluster_live_fps,
     normalize_cluster_panel_layout,
-    normalize_cluster_priority,
     normalize_cluster_radar_display_mode,
     normalize_cluster_radar_info_mode,
     normalize_cluster_radar_source_color_mode,
@@ -580,25 +578,6 @@ class ClusterHudCoreModeParamReader:
             return None
 
 
-class ClusterHudPriorityParamReader:
-    def __init__(self) -> None:
-        self._params = None
-        try:
-            from openpilot.common.params import Params
-
-            self._params = Params()
-        except Exception:
-            pass
-
-    def read(self) -> int | None:
-        if self._params is None:
-            return None
-        try:
-            return normalize_cluster_priority(self._params.get_int(CLUSTER_PRIORITY_PARAM))
-        except Exception:
-            return None
-
-
 def route_overlay_for_mode(
     overlay: RouteOverlay | None,
     mode: str,
@@ -728,14 +707,11 @@ def run_demo(
     hud_mode_watch: int | None,
     hud_encoder_watch: int | None,
     hud_core_mode_watch: int | None,
-    hud_priority_watch: int | None,
     language: str | None,
     is_metric: bool | None,
 ) -> None:
     if hud_core_mode_watch is not None:
         hud_core_mode_watch = normalize_cluster_core_mode(hud_core_mode_watch)
-    if hud_priority_watch is not None:
-        hud_priority_watch = normalize_cluster_priority(hud_priority_watch)
     profile = ProfileReporter(profile_render, profile_interval_s)
     gc_hook = GcProfileHook(profile) if profile_render else None
     if gc_hook is not None:
@@ -891,7 +867,6 @@ def run_demo(
     hud_mode_param_reader = ClusterHudModeParamReader() if hud_mode_watch is not None else None
     hud_encoder_param_reader = ClusterHudEncoderParamReader() if hud_encoder_watch is not None else None
     hud_core_mode_param_reader = ClusterHudCoreModeParamReader() if hud_core_mode_watch is not None else None
-    hud_priority_param_reader = ClusterHudPriorityParamReader() if hud_priority_watch is not None else None
     hud_debug_param_reader = ClusterHudOutputGateParamReader() if hud_mode_watch is not None or input_mode == "live" else None
     hud_output_gate_param_reader = hud_debug_param_reader if hud_mode_watch is not None else None
     active_hud_debug_mode = hud_debug_param_reader.read_mode() if hud_debug_param_reader is not None else 0
@@ -1311,7 +1286,6 @@ def run_demo(
                     hud_mode_param_reader is not None
                     or hud_encoder_param_reader is not None
                     or hud_core_mode_param_reader is not None
-                    or hud_priority_param_reader is not None
                     or hud_debug_param_reader is not None
                 )
             ):
@@ -1334,14 +1308,6 @@ def run_demo(
                     print(
                         f"{CLUSTER_CORE_MODE_PARAM} changed from "
                         f"{hud_core_mode_watch} to {next_hud_core_mode}; exiting for restart",
-                        flush=True,
-                    )
-                    break
-                next_hud_priority = hud_priority_param_reader.read() if hud_priority_param_reader is not None else None
-                if next_hud_priority is not None and next_hud_priority != hud_priority_watch:
-                    print(
-                        f"{CLUSTER_PRIORITY_PARAM} changed from "
-                        f"{hud_priority_watch} to {next_hud_priority}; exiting for restart",
                         flush=True,
                     )
                     break
@@ -2394,12 +2360,6 @@ def parse_args() -> argparse.Namespace:
         help=argparse.SUPPRESS,
     )
     parser.add_argument(
-        "--cluster-hud-priority",
-        type=int,
-        default=None,
-        help=argparse.SUPPRESS,
-    )
-    parser.add_argument(
         "--route-loop",
         action="store_true",
         help="Loop route replay instead of stopping at the end.",
@@ -2715,7 +2675,6 @@ def main(*, exit_on_error: bool = True) -> None:
             args.cluster_hud_mode,
             args.cluster_hud_encoder,
             args.cluster_hud_core_mode,
-            args.cluster_hud_priority,
             args.language,
             args.is_metric,
         )

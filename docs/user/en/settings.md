@@ -255,6 +255,8 @@ Display contains 37 settings. Most on-road display settings are easy to reverse;
 | Brightness/on-road view | `ShowCustomBrightness`, `ShowModelView`, `ShowCameraWithCluster` | Brightness, camera/model composition, and the on-device camera while the external HUD is connected |
 | External HUD | `ClusterHud`, `ClusterHudBrightness`, `ClusterHudOrientation`, and related `ClusterHud*` settings | Supported TURZX HUD layout, live brightness, screen rotation, camera, radar, encoder, and performance options |
 
+The external HUD uses normal scheduling so realtime sensor reception and control work takes precedence. The realtime priority setting has been removed, and stored `ClusterHudPriority` values are ignored. CPU selection through `ClusterHudCoreMode` and the `ClusterHudLiveFps` setting remain available. Under high CPU load, the actual HUD refresh rate can fall below the configured FPS.
+
 `ShowPlotMode` selects an on-road diagnostic graph; `0` turns it off. Modes `4` and `5` both use the primary lead vehicle (`radarState.leadOne`), and the mici device display also updates these graphs when the lead message values change.
 
 | Color | `4`: Lead acceleration/relative speed | `5`: Lead acceleration/jerk |

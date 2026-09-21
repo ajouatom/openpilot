@@ -258,7 +258,9 @@ Carrot Web 설정 화면에서는 다음 기능을 사용할 수 있습니다.
 | 외부 HUD·기본 | `ClusterHud`, `ClusterHudBrightness`, `ClusterHudOrientation`, `ClusterHudMirror`, `ClusterHudTheme`, `ClusterNaviMapTheme`, `ClusterNaviMapType`, `ClusterNaviMapFps` | TURZX 외부 HUD, 밝기, 화면 회전, 미러링과 지도 테마 |
 | 외부 HUD·화면·카메라 | `ClusterHudEncoder`, `ClusterHudLiveFps`, `ClusterHudScreenMode`, `ClusterHudPanelLayout`, `ClusterHudCameraViewMode` | 인코더, 전송 FPS와 화면·카메라·좌우 패널 구성 |
 | 외부 HUD·레이더 표시 | `ClusterHudRadarInfo`, `ClusterHudRadarDisplay`, `ClusterHudRadarSourceColor` | 외부 HUD의 레이더 정보와 색상 |
-| 외부 HUD·성능·디버그 | `ClusterHudCoreMode`, `ClusterHudPriority`, `ClusterHudDebug` | CPU 코어, 프로세스 우선순위와 진단 정보 |
+| 외부 HUD·성능·디버그 | `ClusterHudCoreMode`, `ClusterHudDebug` | CPU 코어와 진단 정보 |
+
+외부 HUD는 일반 우선순위로 실행되어 실시간 센서 수신과 제어 작업이 먼저 처리됩니다. 기존 실시간 우선순위 설정은 제거되었으며 저장된 `ClusterHudPriority` 값은 적용되지 않습니다. `ClusterHudCoreMode`의 코어 선택과 `ClusterHudLiveFps`의 FPS 설정은 유지됩니다. CPU 부하가 높으면 HUD의 실제 갱신율이 설정 FPS보다 낮아질 수 있습니다.
 
 `ShowPlotMode`는 주행 중 진단 그래프를 선택하며 `0`은 표시를 끕니다. `4`와 `5`는 모두 주 제어 대상 앞차(`radarState.leadOne`)를 사용하며, mici 본체에서도 앞차 메시지의 값이 바뀌면 그래프에 반영합니다.
 
