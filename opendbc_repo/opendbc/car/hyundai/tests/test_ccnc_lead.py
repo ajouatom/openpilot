@@ -10,7 +10,7 @@ from opendbc.car.hyundai.values import HyundaiFlags
 from openpilot.cereal import log
 
 
-def send_ccnc(monkeypatch, radar, *, enabled=True, stock=None, present=True, with_target=False, model=None):
+def send_ccnc(monkeypatch, radar, *, enabled=True, stock=None, present=True, with_target=False, model=None, hud_lateral=None):
   monkeypatch.setattr(hyundaicanfd, "Params", lambda: SimpleNamespace(get_int=lambda key: 0, get=lambda key: "0"))
   packer = CANPacker("hyundai_canfd_generated")
   source = {key: 0 for key in packer.dbc.name_to_msg["CCNC_0x162"].sigs}
@@ -37,6 +37,7 @@ def send_ccnc(monkeypatch, radar, *, enabled=True, stock=None, present=True, wit
   messages = hyundaicanfd.create_ccnc_messages(
     SimpleNamespace(flags=HyundaiFlags.CAMERA_SCC), packer, SimpleNamespace(ECAN=0, CAM=2), 5,
     SimpleNamespace(enabled=enabled, latActive=True), cs, structs.CarControl().hudControl, 0, False, False, 0, False, 0, 0,
+    hud_lateral=hud_lateral,
   )
   assert source == original
   if not present:

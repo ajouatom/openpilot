@@ -25,11 +25,11 @@ def make_cs(radar):
   )
 
 
-def send(cs, enabled=True):
+def send(cs, enabled=True, hud_lateral=None):
   msg, _ = create_acc_control_scc2(
     CANPacker("hyundai_canfd_generated"), SimpleNamespace(ECAN=0), enabled, -0.5, -0.8, False, False, 80.0,
     SimpleNamespace(leadDistanceBars=2, leadVisible=False),
-    SimpleNamespace(carrot_cruise=0, jerk_u=1.0, jerk_l=2.0), cs,
+    SimpleNamespace(carrot_cruise=0, jerk_u=1.0, jerk_l=2.0), cs, hud_lateral=hud_lateral,
   )
   assert msg[0] == 0x1a0 and msg[2] == 0
   parser = CANParser("hyundai_canfd_generated", [("SCC_CONTROL", 50)], 0)
