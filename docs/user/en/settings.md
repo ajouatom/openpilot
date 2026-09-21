@@ -136,6 +136,8 @@ Select a section title for the code-based state machine, units, and application 
 
 The result depends heavily on whether the car uses stock SCC and which button message the vehicle accepts. Diagnose unexpected behavior with the normal `CruiseButtonMode=0` behavior first.
 
+Volkswagen's separate `SET`/`RES` buttons follow the same button mode, speed units, and long-press setting as `-`/`+`, respectively. Manual engagement with openpilot longitudinal control remains tied to the physical `SET`/`RES` buttons.
+
 <a id="vehicle-steering"></a>
 ### Vehicle steering — 37 top-level + 5 ONNX detail settings
 
