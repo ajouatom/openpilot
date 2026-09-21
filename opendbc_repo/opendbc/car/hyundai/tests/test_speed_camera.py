@@ -937,6 +937,14 @@ def test_pv5_map_fallback_does_not_accept_post_pass_or_unknown_status(status_byt
   assert not _pv5_camera_step(state, cp, alt, 1, bytes(status))[0]
 
 
+def test_pv5_starting_at_pass_does_not_rearm_when_status_later_clears():
+  state, cp, alt = _pv5_section_state()
+  assert not _pv5_camera_step(state, cp, alt, 1, PV5_FRONT_PASSED)[0]
+  assert not _pv5_camera_step(state, cp, alt, 1.1)[0]
+  assert not _pv5_camera_step(state, cp, alt, 1.2, hda=PV5_REAR_END_HDA)[0]
+  assert _pv5_camera_step(state, cp, alt, 1.3)[0]
+
+
 @pytest.mark.parametrize("missing", ["status", "hda", "both"])
 def test_pv5_camera_rejects_stale_signals_without_rearming_passed_warning(missing):
   state, cp, alt = _pv5_section_state()
