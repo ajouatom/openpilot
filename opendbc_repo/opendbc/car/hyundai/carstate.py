@@ -193,6 +193,7 @@ class CarState(CarStateBase):
     self.navi_profile_4be = None
     self.navi_status_380 = None
     self.pv5_section_start_prev = False
+    self.pv5_camera_status_seen = False
     self.tcs = None
     self.mdps = None
     self.steer_touch_2af = None
@@ -685,20 +686,42 @@ class CarState(CarStateBase):
     self.vehicleNaviSpeedZoneActive = False
     self.vehicleNaviSpeedZoneSpeed = 0.0
 
+  def _pv5_navi_message_fresh(self, cp, parser, name, address, size):
+    if parser is None:
+      return False
+    timestamp = self._vehicle_navi_message_timestamp(parser, name)
+    age = cp._last_update_nanos - timestamp
+    return (timestamp > 0 and 0 <= age <= CANFD_NAVI_STATUS_TIMEOUT_NS and
+            not parser.bus_timeout and len(parser.dat.get(address, b"")) == size)
+
+  def _update_pv5_camera_warning(self, cp, cp_alt):
+    # Some PV5 rear-camera warnings only assert 0x364 MapSource=2. Use
+    # that warning until 0x380 has identified the current camera. Once it
+    # has, its falling edge is authoritative even if MapSource remains 2.
+    # Keep the latch through signal loss; stale data must not re-arm a
+    # camera that has already been passed.
+    if (not self._pv5_navi_message_fresh(cp, cp, CANFD_HDA_INFO_MSG, 0x364, 16) or
+        not self._pv5_navi_message_fresh(cp, cp_alt, CANFD_NAVI_STATUS_MSG, 0x380, 24) or
+        self.hda_info_4a3 is None or self.navi_status_380 is None):
+      return False
+    camera_active = is_canfd_navi_camera_active(self.navi_status_380)
+    map_warning = int(self.hda_info_4a3["MapSource"]) == 2
+    if camera_active:
+      self.pv5_camera_status_seen = True
+    elif not map_warning:
+      self.pv5_camera_status_seen = False
+    # Only the observed zero-status case needs this fallback. In particular,
+    # do not turn the recorded post-pass value 0x04 into a new warning when
+    # starting midway through a route.
+    return camera_active or (map_warning and int(self.navi_status_380["CAMERA_STATUS"]) == 0 and
+                             not self.pv5_camera_status_seen)
+
   def _update_pv5_navi_section(self, cp, cp_alt):
     # PV5 byte 10 bit 4 pulses at entry and again within the section (about
     # five seconds in the 2026-09-07 logs). Latch only its
     # rising edge, and require fresh, agreeing navigation limits to retain it.
-    def fresh(parser, name, address, size):
-      if parser is None:
-        return False
-      timestamp = self._vehicle_navi_message_timestamp(parser, name)
-      age = cp._last_update_nanos - timestamp
-      return (timestamp > 0 and 0 <= age <= CANFD_NAVI_STATUS_TIMEOUT_NS and
-              not parser.bus_timeout and len(parser.dat.get(address, b"")) == size)
-
-    status_valid = fresh(cp_alt, CANFD_NAVI_STATUS_MSG, 0x380, 24)
-    hda_valid = fresh(cp, CANFD_HDA_INFO_MSG, 0x364, 16)
+    status_valid = self._pv5_navi_message_fresh(cp, cp_alt, CANFD_NAVI_STATUS_MSG, 0x380, 24)
+    hda_valid = self._pv5_navi_message_fresh(cp, cp, CANFD_HDA_INFO_MSG, 0x364, 16)
     if not status_valid or not hda_valid or self.navi_status_380 is None or self.hda_info_4a3 is None:
       self._clear_vehicle_navi_speed_zone()
       # After a dropout, observe an alert-low frame before accepting a new
@@ -1203,11 +1226,8 @@ class CarState(CarStateBase):
         country_code = int(self.hda_info_4a3["CountryCode"])
         self.time_zone = ZoneInfo(NUMERIC_TO_TZ.get(country_code, "UTC"))
 
-    # PV5 carries the current stock-navigation camera state on A-CAN 0x380.
-    # Bit 6 is set while approaching the camera and clears at the pass point;
-    # using it mirrors the legacy 0x4A3 MapSource=2 retirement behavior.
-    if self.navi_status_380 is not None:
-      speed_limit_cam = is_canfd_navi_camera_active(self.navi_status_380)
+    if self.canfd_wrapped_navi:
+      speed_limit_cam = self._update_pv5_camera_warning(cp, cp_alt)
 
     ret.gearStep = cp.vl["GEAR"]["GEAR_STEP"] if self.GEAR else 0
     if 1 <= ret.gearStep <= 8 and ret.gearShifter == GearShifter.unknown:

@@ -100,6 +100,10 @@ This setting applies only to camera, average-speed-zone, and 30 km/h zone decele
 
 In mode `2`, an accelerator held from before actual deceleration begins does not pre-arm a floor. A new press during actual deceleration is treated as a request to ignore the current event, and the floor rises to the highest speed reached while accelerating. Releasing the pedal does not permit further slowing below that floor during the same event. Braking, stopping, a speed-limit or deceleration-source change, or the end of the event clears it.
 
+On the Kia PV5, a current stock-navigation camera warning is also used when the separate camera-status signal stays at zero. Without a matching nearby camera distance, it uses the virtual distance below and releases when the warning ends.
+
+If the separate camera signal has already identified the camera, its pass indication takes priority; a remaining navigation warning does not reactivate it. Both messages must be fresh within one second.
+
 ### `VehicleSpeedCameraDistanceTime`
 
 When the vehicle supplies only an enforcement speed without an exact camera distance, this setting creates a virtual deceleration distance. At a 50 km/h camera, `6.0 s` produces about 300 m and `6.2 s` about 310 m. A live change is applied within about one second.

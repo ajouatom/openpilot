@@ -62,6 +62,7 @@ def _car_state(distance_time_tenths=60):
   state.vehicleNaviZoneControlSupported = True
   state.canfd_wrapped_navi = False
   state.pv5_section_start_prev = False
+  state.pv5_camera_status_seen = False
   state.is_metric = True
   state.navi_profile_msg = "NEW_MSG_4BE"
   state.navi_segment_4b9 = None
@@ -879,6 +880,84 @@ def _pv5_section_step(state, cp, alt, t, status=PV5_SECTION_LOW, hda=PV5_SECTION
   ret = SimpleNamespace(speedLimit=80.0)
   state._update_vehicle_navi_events(cp, ret, False, alt)
   return ret
+
+
+# Recorded rear-camera warning and its end, 2026-09-21 PV5 segment 32.
+PV5_REAR_HDA = bytes.fromhex("c8f096000000000040329a1100000100")
+PV5_REAR_END_HDA = bytes.fromhex("bbf1a0000000000040329a0900000100")
+PV5_REAR_STATUS = bytes.fromhex("3af78e0001000000000000323210f1000000000000000000")
+PV5_FRONT_APPROACH = bytes.fromhex("d0af0b4001000030000000323210f1000000000000000000")
+PV5_FRONT_PASSED = bytes.fromhex("3e38110401000000280000323210f1000000000000000000")
+
+
+def _pv5_camera_step(state, cp, alt, t, status=PV5_REAR_STATUS, hda=PV5_REAR_HDA):
+  cp.update([int(t * 1e9), [] if hda is None else [(0x364, hda, 0)]])
+  alt.update([int(t * 1e9), [] if status is None else [(0x380, status, 1)]])
+  warning = state._update_pv5_camera_warning(cp, alt)
+  ret = SimpleNamespace(vEgo=0.0, speedLimit=50.0)
+  camera = state._update_vehicle_navi_events(cp, ret, warning, alt)
+  state.update_speed_limit(ret, warning or camera, distance_time_changed=False)
+  return warning, ret
+
+
+def test_pv5_zero_status_camera_uses_own_distance_and_releases_on_map_end():
+  state, cp, alt = _pv5_section_state()
+  state._add_vehicle_navi_event("camera", 50, 0, 1000)
+  warning, ret = _pv5_camera_step(state, cp, alt, 1)
+  assert warning
+  assert ret.speedLimitDistance == 300
+  assert state.vehicleNaviCameraStatusEvent is None  # Future preview is not this warning.
+  state.totalDistance = 350
+  warning, ret = _pv5_camera_step(state, cp, alt, 1.1)
+  assert warning and ret.speedLimitDistance == 1  # No full-distance restart.
+  warning, ret = _pv5_camera_step(state, cp, alt, 1.2, hda=PV5_REAR_END_HDA)
+  assert not warning
+  assert ret.speedLimitDistance == 650  # The separate future preview survives.
+  assert state.vehicleNaviCameraStatusTarget is None
+
+
+def test_pv5_front_pass_stays_released_until_map_warning_ends():
+  state, cp, alt = _pv5_section_state()
+  state._add_vehicle_navi_event("camera", 50, 0, 200)
+  warning, ret = _pv5_camera_step(state, cp, alt, 1, PV5_FRONT_APPROACH)
+  assert warning and ret.speedLimitDistance == 200
+  warning, ret = _pv5_camera_step(state, cp, alt, 1.1, PV5_FRONT_PASSED)
+  assert not warning and ret.speedLimitDistance == 0
+  assert not state.vehicleNaviEvents
+  assert not _pv5_camera_step(state, cp, alt, 1.2)[0]  # Zero after pass is not a rear camera.
+  assert not _pv5_camera_step(state, cp, alt, 1.3, hda=PV5_REAR_END_HDA)[0]
+  assert _pv5_camera_step(state, cp, alt, 1.4)[0]  # Next distinct map warning.
+
+
+@pytest.mark.parametrize("status_byte", [4, 1, 2, 128])
+def test_pv5_map_fallback_does_not_accept_post_pass_or_unknown_status(status_byte):
+  state, cp, alt = _pv5_section_state()
+  status = bytearray(PV5_REAR_STATUS)
+  status[3] = status_byte
+  assert not _pv5_camera_step(state, cp, alt, 1, bytes(status))[0]
+
+
+@pytest.mark.parametrize("missing", ["status", "hda", "both"])
+def test_pv5_camera_rejects_stale_signals_without_rearming_passed_warning(missing):
+  state, cp, alt = _pv5_section_state()
+  assert _pv5_camera_step(state, cp, alt, 1, PV5_FRONT_APPROACH)[0]
+  assert not _pv5_camera_step(state, cp, alt, 1.1, PV5_FRONT_PASSED)[0]
+  assert not _pv5_camera_step(state, cp, alt, 2.2,
+                             None if missing in ("status", "both") else PV5_REAR_STATUS,
+                             None if missing in ("hda", "both") else PV5_REAR_HDA)[0]
+  assert not _pv5_camera_step(state, cp, alt, 2.3)[0]
+  assert not _pv5_camera_step(state, cp, alt, 2.4, hda=PV5_REAR_END_HDA)[0]
+  assert _pv5_camera_step(state, cp, alt, 2.5)[0]
+
+
+@pytest.mark.parametrize("missing", ["status", "hda", "both"])
+def test_pv5_map_fallback_requires_fresh_messages(missing):
+  state, cp, alt = _pv5_section_state()
+  assert _pv5_camera_step(state, cp, alt, 1)[0]
+  warning, ret = _pv5_camera_step(state, cp, alt, 2.1,
+                                 None if missing in ("status", "both") else PV5_REAR_STATUS,
+                                 None if missing in ("hda", "both") else PV5_REAR_HDA)
+  assert not warning and ret.speedLimitDistance == 0
 
 
 def test_pv5_section_latches_through_alert_end_and_repeated_alert_then_exits():
