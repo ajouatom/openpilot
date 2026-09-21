@@ -478,7 +478,9 @@ CONFIGS = [
     subs=["liveTracks"],
     ignore=["logMonoTime"],
     init_callback=get_car_params_callback,
-    should_recv_callback=MessageBasedRcvCallback("can"),
+    # The ego message closes its CAN batch, including the final input batch.
+    # Lock CAN because that is the worker's first receive on each iteration.
+    should_recv_callback=MessageBasedRcvCallback("carState"),
     main_pub="can",
     main_pub_drained=True,
     tolerance=NUMPY_TOLERANCE,
