@@ -23,7 +23,6 @@ HUD_ENCODER_PARAM = "ClusterHudEncoder"
 HUD_LIVE_FPS_PARAM = "ClusterHudLiveFps"
 HUD_ORIENTATION_PARAM = "ClusterHudOrientation"
 HUD_CORE_MODE_PARAM = "ClusterHudCoreMode"
-HUD_PRIORITY_PARAM = "ClusterHudPriority"
 IS_ONROAD_PARAM = "IsOnroad"
 RETRY_INTERVAL_S = 5.0
 HUD_CHECK_INTERVAL_S = 0.1
@@ -41,13 +40,10 @@ USBGPU_STARTUP_FAILED_PARAM = "UsbGpuStartupFailed"
 NETLINK_KOBJECT_UEVENT = 15
 AUTORUN_FPS_ENV = "CLUSTER_AUTORUN_FPS"
 REALTIME_CORES_ENV = "CLUSTER_REALTIME_CORES"
-REALTIME_PRIORITY_ENV = "CLUSTER_REALTIME_PRIORITY"
 DEFAULT_REALTIME_CORES = [1, 2, 3, 4]
-DEFAULT_REALTIME_PRIORITY = 10
 CORE_MODE_DEDICATED = 0
 CORE_MODE_ALL = 1
 EXPLICIT_REALTIME_CORES_ENV = REALTIME_CORES_ENV in os.environ
-EXPLICIT_REALTIME_PRIORITY_ENV = REALTIME_PRIORITY_ENV in os.environ
 ENCODER_AUTO = 0
 ENCODER_JPEG = 1
 ENCODER_HARDWARE = 2
@@ -118,22 +114,6 @@ def _normalize_core_mode(value: object) -> int:
     return CORE_MODE_DEDICATED
 
 
-def _normalize_priority(value: object) -> int:
-    if isinstance(value, str):
-        normalized = value.strip()
-        try:
-            value = int(normalized)
-        except ValueError:
-            return DEFAULT_REALTIME_PRIORITY
-    try:
-        priority = int(value)
-    except (TypeError, ValueError):
-        return DEFAULT_REALTIME_PRIORITY
-    if priority < 1:
-        return DEFAULT_REALTIME_PRIORITY
-    return min(99, priority)
-
-
 def _all_realtime_cores() -> list[int]:
     return INITIAL_ALLOWED_CORES[:] or list(range(os.cpu_count() or 1))
 
@@ -151,11 +131,9 @@ def _parse_realtime_cores(text: str) -> list[int]:
     return [int(core.strip()) for core in text.split(",") if core.strip()]
 
 
-def _apply_realtime_setting_env(core_mode: int, priority: int) -> None:
+def _apply_realtime_setting_env(core_mode: int) -> None:
     if not EXPLICIT_REALTIME_CORES_ENV:
         os.environ[REALTIME_CORES_ENV] = ",".join(str(core) for core in _cores_for_core_mode(core_mode))
-    if not EXPLICIT_REALTIME_PRIORITY_ENV:
-        os.environ[REALTIME_PRIORITY_ENV] = str(priority)
 
 
 def _cluster_realtime_cores() -> list[int]:
@@ -249,14 +227,6 @@ def _read_core_mode(params: Params) -> int:
         return CORE_MODE_DEDICATED
 
 
-def _read_priority(params: Params) -> int:
-    try:
-        return _normalize_priority(params.get_int(HUD_PRIORITY_PARAM))
-    except Exception as exc:
-        print(f"[cluster_autorun] failed to read {HUD_PRIORITY_PARAM}: {exc}", flush=True)
-        return DEFAULT_REALTIME_PRIORITY
-
-
 def _encoder_sequence(encoder_mode: int) -> list[int]:
     if encoder_mode == ENCODER_AUTO:
         return [ENCODER_HARDWARE, ENCODER_SOFTWARE, ENCODER_JPEG] if TICI else [ENCODER_SOFTWARE, ENCODER_JPEG]
@@ -283,7 +253,6 @@ def _cluster_args(
     configured_encoder_mode: int,
     active_encoder_mode: int,
     core_mode: int,
-    priority: int,
     output_mode: str = "usb",
     usbgpu_active: bool = False,
 ) -> list[str]:
@@ -298,8 +267,6 @@ def _cluster_args(
         str(configured_encoder_mode),
         "--cluster-hud-core-mode",
         str(core_mode),
-        "--cluster-hud-priority",
-        str(priority),
     ]
     if output_mode in ("usb", "both"):
         # Standalone carrot_navi owns TCP 7714; live input consumes its carrotNavi cereal service.
@@ -320,7 +287,6 @@ def _run_cluster_once(
     hud_mode: int,
     encoder_mode: int,
     core_mode: int,
-    priority: int,
     output_mode: str = "usb",
     usbgpu_active: bool = False,
 ) -> None:
@@ -356,7 +322,6 @@ def _run_cluster_once(
                         encoder_mode,
                         active_encoder_mode,
                         core_mode,
-                        priority,
                         output_mode,
                         usbgpu_active,
                     ),
@@ -669,6 +634,9 @@ def _wait_for_usbgpu_startup(params: Params) -> None:
 
 
 def main() -> None:
+    from openpilot.common.realtime import drop_realtime
+
+    drop_realtime()
     _configure_autorun_locale()
     _ensure_cluster_paths()
     from cluster_usb_display import find_supported_usb_product, product_id_for_hud_mode, product_label
@@ -677,8 +645,7 @@ def main() -> None:
     params.put_bool_nonblocking("ClusterHudConnected", False)
     while True:
         core_mode = _read_core_mode(params)
-        priority = _read_priority(params)
-        _apply_realtime_setting_env(core_mode, priority)
+        _apply_realtime_setting_env(core_mode)
         _configure_autorun_affinity()
         hud_mode = _read_hud_mode(params)
         encoder_mode = _read_encoder_mode(params)
@@ -705,7 +672,7 @@ def main() -> None:
                     flush=True,
                 )
                 try:
-                    _run_cluster_once(hud_mode, encoder_mode, core_mode, priority, output_mode="window")
+                    _run_cluster_once(hud_mode, encoder_mode, core_mode, output_mode="window")
                     continue
                 except Exception as exc:
                     print(
@@ -732,7 +699,6 @@ def main() -> None:
                 hud_mode,
                 encoder_mode,
                 core_mode,
-                priority,
                 usbgpu_active=params.get_bool(USBGPU_ACTIVE_PARAM),
             )
             next_hud_mode = _read_hud_mode(params)
@@ -740,14 +706,12 @@ def main() -> None:
             next_live_fps_mode = _read_live_fps_mode(params)
             next_orientation = _read_orientation(params)
             next_core_mode = _read_core_mode(params)
-            next_priority = _read_priority(params)
             if (
                 next_hud_mode != hud_mode
                 or next_encoder_mode != encoder_mode
                 or next_live_fps_mode != live_fps_mode
                 or (next_orientation is not None and next_orientation != orientation)
                 or next_core_mode != core_mode
-                or next_priority != priority
             ):
                 print(
                     f"[cluster_autorun] HUD setting changed "
@@ -755,8 +719,7 @@ def main() -> None:
                     f"encoder {encoder_mode}->{next_encoder_mode}, "
                     f"live_fps {live_fps_mode}->{next_live_fps_mode}, "
                     f"orientation {orientation}->{next_orientation}, "
-                    f"core_mode {core_mode}->{next_core_mode}, "
-                    f"priority {priority}->{next_priority}; rechecking",
+                    f"core_mode {core_mode}->{next_core_mode}; rechecking",
                     flush=True,
                 )
                 continue

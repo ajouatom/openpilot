@@ -290,19 +290,18 @@ debug UI before navi data has arrived. Normal mode checks the onroad gate every
 so a stale HUD frame does not remain visible.
 The autorun watcher normalizes locale before this dim-only USB path too, so
 vendor USB initialization does not fail before the renderer is launched.
-Manager autostart always configures the cluster process through openpilot's
-realtime helper. `ClusterHudCoreMode=0` maps to cores `1,2,3,4`, while mode `1`
-maps to all initially allowed CPU cores. `ClusterHudPriority` always controls
-the FIFO priority with range `1..99`, default `10`; `CLUSTER_REALTIME` is no
-longer read.
-Changing either param makes the running HUD exit so `cluster_autorun` can
-relaunch it with the new affinity/scheduler settings, without a whole system restart.
-Explicit `CLUSTER_REALTIME_CORES` or `CLUSTER_REALTIME_PRIORITY` environment
-values still override the corresponding Params.
+Manager autostart and `cluster_run` use normal `SCHED_OTHER` scheduling, so
+realtime sensor and control work takes precedence. Inherited realtime policy
+is dropped before starting display workers; failure to drop it stops startup.
+`ClusterHudCoreMode=0` maps to cores `1,2,3,4`, while mode `1` maps to all
+initially allowed CPU cores. Changing the core mode restarts the HUD without
+a whole system restart. `CLUSTER_REALTIME_CORES` can override this affinity.
+The retired `ClusterHudPriority` setting and `CLUSTER_REALTIME_PRIORITY` /
+`CLUSTER_REALTIME` environment variables cannot enable realtime scheduling.
+The configured FPS and the eGPU-specific USB display cap are unchanged.
 The HUD reads the local Git branch immediately on every platform and refreshes
 the upstream update state asynchronously at most every 60 seconds. The Git
-worker changes itself to `SCHED_OTHER` before `ls-remote`/`fetch`, so TICI does
-not run those commands in the render process's FIFO scheduling class.
+worker also explicitly selects `SCHED_OTHER` before `ls-remote`/`fetch`.
 Native H.264 callback output is queued as complete access units. The bounded
 queue retains the latest codec config, keyframe, and frame without waiting for
 USB; stale access units are dropped and reported instead of failing the run.

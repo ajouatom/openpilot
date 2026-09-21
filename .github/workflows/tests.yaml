@@ -61,6 +61,8 @@ jobs:
             openpilot/selfdrive/carrot/tests/test_radarcan_process.py \
             openpilot/selfdrive/carrot/tests/test_radar_can_batch.py \
             openpilot/selfdrive/carrot/tests/test_radar_cutout_fast_path.py \
+            openpilot/selfdrive/carrot/tests/test_cluster_performance_safeguards.py \
+            openpilot/selfdrive/carrot/tests/test_cluster_autorun.py \
             openpilot/selfdrive/controls/tests/test_leads.py \
             openpilot/selfdrive/carrot/bluetooth/tests \
             openpilot/selfdrive/car/tests/test_carrot_cruise_buttons.py \

@@ -196,7 +196,7 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"ClusterHudMirror", {PERSISTENT, INT, "0"}},
     {"ClusterHudEncoder", {PERSISTENT, INT, "0"}},
     {"ClusterHudCoreMode", {PERSISTENT, INT, "0"}},
-    {"ClusterHudPriority", {PERSISTENT, INT, "10"}},
+    {"ClusterHudPriority", {PERSISTENT, INT, "10"}},  // Retired: ignored; HUD always uses SCHED_OTHER.
     {"ClusterHudTheme", {PERSISTENT, INT, "0"}},
     {"ClusterNaviMapTheme", {PERSISTENT, INT, "1"}},
     {"ClusterNaviMapType", {PERSISTENT, INT, "0"}},

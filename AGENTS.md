@@ -1,5 +1,16 @@
 # Repository memory
 
+- On 2026-09-21, K9 C4 logs reproduced locationd timing-check invalidity from
+  repeated IMU timestamps over 100 ms old. Historical captures first showed
+  these failures after the September 19 update, despite unchanged HUD 10 FPS,
+  cores 1..4 and FIFO 10. The user authorized normal SCHED_OTHER scheduling for
+  cluster autorun/render workers so sensord FIFO 1 and other realtime work
+  take precedence. Keep legacy ClusterHudPriority/environment overrides from
+  restoring FIFO; retain FPS and core selection. This is a contention mitigation,
+  not a proved fix for the OS/runtime regression. Do not weaken pose validity
+  thresholds or claim vehicle validation from desktop tests. Official 521db4c
+  changes initial gyro-bias covariance, not the observed sensor timestamp delays.
+
 - On 2026-09-21 the user authorized radar optimization and preprocessing
   isolation to reduce card/camerad contention on core6, with mandatory radar
   regression validation. RadarInterface/liveTracks now belong to radarcan on

@@ -7,7 +7,6 @@ def test_device_cluster_uses_standalone_carrot_navi_ipc():
     configured_encoder_mode=cluster_autorun.ENCODER_AUTO,
     active_encoder_mode=cluster_autorun.ENCODER_JPEG,
     core_mode=cluster_autorun.CORE_MODE_DEDICATED,
-    priority=10,
   )
 
   assert args[:2] == ["--input", "live"]
@@ -22,7 +21,6 @@ def test_device_cluster_caps_external_display_fps_while_egpu_is_active():
     configured_encoder_mode=cluster_autorun.ENCODER_AUTO,
     active_encoder_mode=cluster_autorun.ENCODER_HARDWARE,
     core_mode=cluster_autorun.CORE_MODE_DEDICATED,
-    priority=10,
     usbgpu_active=True,
   )
 
