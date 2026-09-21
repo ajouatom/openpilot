@@ -251,14 +251,16 @@ def _median_slope(
   window_s: float,
 ) -> float:
   values = _values_since(observations, window_s)
+  # Read each attribute once rather than twice for every historical pair.
+  samples = tuple((value.time_s, getattr(value, attribute)) for value in values)
   slopes = []
-  for index, first in enumerate(values):
-    for second in values[index + 1:]:
-      dt = second.time_s - first.time_s
+  for index, (first_time, first_value) in enumerate(samples):
+    for second_time, second_value in samples[index + 1:]:
+      dt = second_time - first_time
       if dt < 0.10:
         continue
       slopes.append(
-        (getattr(second, attribute) - getattr(first, attribute)) / dt
+        (second_value - first_value) / dt
       )
   return float(statistics.median(slopes)) if slopes else 0.0
 

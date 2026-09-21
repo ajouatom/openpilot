@@ -58,6 +58,10 @@ jobs:
             openpilot/selfdrive/modeld/tests/test_generic_model_runtime.py \
             openpilot/selfdrive/modeld/tests/test_dmonitoring_artifact.py \
             openpilot/selfdrive/modeld/tests/test_camera_sync.py \
+            openpilot/selfdrive/carrot/tests/test_radarcan_process.py \
+            openpilot/selfdrive/carrot/tests/test_radar_can_batch.py \
+            openpilot/selfdrive/carrot/tests/test_radar_cutout_fast_path.py \
+            openpilot/selfdrive/controls/tests/test_leads.py \
             openpilot/selfdrive/carrot/bluetooth/tests \
             openpilot/selfdrive/car/tests/test_carrot_cruise_buttons.py \
             openpilot/selfdrive/controls/tests/test_desire_helper.py \

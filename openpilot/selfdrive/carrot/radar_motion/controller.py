@@ -490,7 +490,7 @@ class DPathRadarController:
     self.motion_sensor = "corner" if prefer_corner_radar else "front"
     self.cut_in_sensitivity = max(0, min(5, int(cut_in_sensitivity)))
     self._reset_motion_pipeline()
-    self.primary_cut_out_predictor = RadarMotionPredictor()
+    self.primary_cut_out_predictor = RadarMotionPredictor(cut_out_only=True)
     self.trajectory_cutout = TrajectoryCutOutTracker()
     self.front_kinematic_associator = FrontRadarKinematicAssociator()
     self.lead_two_tracker = DPathLeadTwoTracker()
@@ -822,7 +822,7 @@ class DPathRadarController:
       self.stationary_shadow_tracker.reset()
       self.stationary_primary_handoff_tracker.reset()
       self.scc_lead_two_tracker.reset()
-      self.primary_cut_out_predictor = RadarMotionPredictor()
+      self.primary_cut_out_predictor = RadarMotionPredictor(cut_out_only=True)
       self.trajectory_cutout.reset()
       self.lead_dynamics.reset()
       self.trajectory_cutin.reset()

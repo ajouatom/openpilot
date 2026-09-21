@@ -3,11 +3,13 @@
 
 from __future__ import annotations
 
+import time
 from typing import Any
 
 from openpilot.cereal import car, log, messaging
 from openpilot.common.params import Params
 from openpilot.common.realtime import Priority, config_realtime_process
+from openpilot.common.runtime_diagnostics import RuntimeDiagnostics
 from openpilot.common.swaglog import cloudlog
 from opendbc.car.hyundai.values import HyundaiExtFlags
 from openpilot.selfdrive.carrot.radar import effective_radar_track_mode
@@ -162,12 +164,18 @@ def main() -> None:
   )
   pm = messaging.PubMaster(["radarState"])
   radar = DPathRadarD(CP)
+  diagnostics = RuntimeDiagnostics('radard', cloudlog.event)
 
   while True:
     sm.update()
     if sm.updated["modelV2"]:
+      start, cpu_start = time.monotonic(), time.thread_time()
       radar.update(sm, sm["liveTracks"])
       radar.publish(pm)
+      diagnostics.record(work_ms=(time.monotonic() - start) * 1000,
+                         thread_cpu_ms=(time.thread_time() - cpu_start) * 1000,
+                         model_age_ms=(start - sm.logMonoTime['modelV2'] * 1e-9) * 1000,
+                         tracks_age_ms=(start - sm.logMonoTime['liveTracks'] * 1e-9) * 1000)
 
 
 if __name__ == "__main__":
