@@ -388,6 +388,7 @@ def test_road_camera_world_reuses_one_projection_for_background_and_overlay(monk
   monkeypatch.setattr(renderer, "_current_theme", lambda: theme)
   monkeypatch.setattr(renderer, "_highlight_lane_lit", lambda *_args: False)
   monkeypatch.setattr(renderer, "_scene_for_state", lambda *_args: scene)
+  monkeypatch.setattr(renderer, "_select_camera_overlay_stream", lambda *_args: False)
   monkeypatch.setattr(
     renderer,
     "_camera_overlay_projection",
@@ -445,6 +446,126 @@ def _max_scene_forward_m(strips) -> float:
     for side in (strip.left, strip.right)
     for point in side
   )
+
+
+@pytest.fixture
+def metric_renderer(monkeypatch):
+  renderer = object.__new__(ClusterUiRenderer)
+  renderer.width = cluster_renderer.DESIGN_WIDTH
+  renderer.height = cluster_renderer.DESIGN_HEIGHT
+  renderer.profile_enabled = False
+  renderer.theme_mode = "light"
+  renderer._theme = LIGHT_CLUSTER_THEME
+  labels = []
+  monkeypatch.setattr(renderer, "_draw_world_label_text", lambda text, x, y, size, *_args, **_kwargs: labels.append((text, size)))
+  monkeypatch.setattr(renderer, "_font_for_text", lambda _text: None)
+  monkeypatch.setattr(renderer, "_measure_text", lambda text, size, *_args: (len(text) * size * 0.5, size))
+  monkeypatch.setattr(cluster_renderer, "world_to_screen_label_anchor", lambda point, *_args: SimpleNamespace(x=100.0 + point.y * 6.0, y=220.0))
+  monkeypatch.setattr(renderer, "_camera_overlay_screen_xy", lambda point, *_args: (500.0 + point.x * 10.0, 220.0 - point.z * 20.0))
+  monkeypatch.setattr(cluster_renderer.rl, "draw_rectangle_rounded_lines_ex", lambda *_args: None)
+  return renderer, labels
+
+
+def _metric_vehicle(label="L1", distance=180.0, speed=90.0, primary=True, cut_in=False):
+  return cluster_scene.vehicle_box(
+    0.0, EGO_FORWARD_M + distance, 0.0, 3.6, (255, 255, 255), False,
+    label=label, source="radarState", longitudinal_m=distance, absolute_speed_kph=speed,
+    primary=primary, cut_in=cut_in,
+  )
+
+
+@pytest.mark.parametrize("distance", [8.0, 18.0, 80.0, 150.0, 220.0])
+@pytest.mark.parametrize("is_metric", [True, False])
+def test_lead_one_metrics_keep_large_size_at_every_distance(metric_renderer, distance, is_metric):
+  renderer, labels = metric_renderer
+  renderer.is_metric = is_metric
+  vehicle = _metric_vehicle(distance=distance)
+  renderer._draw_vehicle_badges((vehicle,), object())
+  assert dict(labels) == {
+    cluster_renderer.vehicle_distance_label(vehicle, is_metric): 24,
+    cluster_renderer.vehicle_speed_label(vehicle, is_metric): 22,
+  }
+
+
+def test_only_lead_one_has_large_metrics_among_primary_and_surrounding_vehicles(metric_renderer):
+  renderer, labels = metric_renderer
+  vehicles = (
+    _metric_vehicle("L2", distance=150.0, speed=72.0),
+    _metric_vehicle("CUT-IN", distance=160.0, speed=63.0, cut_in=True),
+    _metric_vehicle("L1"),
+    _metric_vehicle("RF", distance=130.0, speed=54.0, primary=False),
+    _metric_vehicle("RR", distance=-10.0, speed=36.0, primary=False),
+  )
+  renderer._draw_vehicle_badges(vehicles, object())
+  large = {text: size for text, size in labels if size > 17}
+  assert large == {"180 m": 24, "90 km/h": 22}
+  for vehicle in (vehicles[0], vehicles[1], vehicles[3], vehicles[4]):
+    scale = cluster_renderer.world_label_scale(vehicle.longitudinal_m)
+    assert dict(labels)[cluster_renderer.vehicle_distance_label(vehicle)] == pytest.approx(max(9.0, 17 * scale))
+    assert dict(labels)[cluster_renderer.vehicle_speed_label(vehicle)] == pytest.approx(max(8.0, 15 * scale))
+
+
+@pytest.mark.parametrize("label,primary,distance", [("L2", True, 80.0), ("L10", True, 80.0), ("L1", False, 80.0), ("L1", True, -10.0)])
+def test_missing_lead_one_does_not_promote_another_metric_label(metric_renderer, label, primary, distance):
+  renderer, labels = metric_renderer
+  renderer._draw_vehicle_badges((_metric_vehicle(label, primary=primary, distance=distance),), object())
+  assert labels
+  assert all(size <= 17 for _, size in labels)
+
+
+@pytest.mark.parametrize("mode", range(5))
+@pytest.mark.parametrize("speed", [None, 0.0, 90.0])
+def test_large_metrics_preserve_visibility_and_missing_speed_rules(metric_renderer, mode, speed):
+  renderer, labels = metric_renderer
+  vehicle = _metric_vehicle(speed=speed)
+  renderer._draw_vehicle_badges((vehicle,), object(), radar_info_mode=mode)
+  expected = {"180 m": 24}  # Existing important-lead distance remains visible in every mode.
+  if mode != CLUSTER_RADAR_INFO_NONE and speed == 90.0:
+    expected["90 km/h"] = 22
+  assert dict(labels) == expected
+
+
+@pytest.mark.parametrize("distance", [8.0, 80.0, 220.0])
+@pytest.mark.parametrize("label,primary,size", [("L1", True, 24), ("L2", True, 17), ("CUT-IN", True, 17), ("RF", False, 15)])
+def test_camera_overlay_enlarges_only_lead_one_metrics(metric_renderer, distance, label, primary, size):
+  renderer, labels = metric_renderer
+  vehicle = _metric_vehicle(label, distance=distance, primary=primary, cut_in=label == "CUT-IN")
+  projection = SimpleNamespace(dest=cluster_renderer.rl.Rectangle(0.0, 0.0, 1124.0, 480.0))
+  renderer._draw_camera_overlay_vehicle_frame(vehicle, projection, 0.0, CLUSTER_RADAR_INFO_ALL_SPEED_DISTANCE)
+  assert len(labels) == 1
+  assert labels[0][1] == size
+  assert labels[0][0].endswith("90 km/h")
+  assert f"{distance:.0f} m" in labels[0][0]
+
+
+def test_large_lead_labels_stay_in_view_and_suppress_only_overlapping_vehicle_text(metric_renderer, monkeypatch):
+  renderer, _ = metric_renderer
+  draws = []
+  monkeypatch.setattr(renderer, "_draw_world_label_text", lambda text, x, y, size, *_args, **_kwargs: draws.append((text, x, y, size)))
+  line = cluster_renderer.VehicleMetricLine
+  label = cluster_renderer.VehicleMetricLabel
+  renderer._draw_vehicle_metric_labels([
+    label(_metric_vehicle("L2"), (line("L2 speed", 500.0, 40.0, 15),), (255, 255, 255)),
+    label(_metric_vehicle(), (line("180 m", 500.0, -10.0, 24), line("90 km/h", 500.0, 20.0, 22)), (255, 255, 255)),
+    label(_metric_vehicle("RF", primary=False), (line("RF speed", 800.0, 100.0, 15),), (255, 255, 255)),
+  ])
+  assert {text for text, *_ in draws} == {"180 m", "90 km/h", "RF speed"}
+  assert {text: size for text, _, _, size in draws} == {"180 m": 24, "90 km/h": 22, "RF speed": 15}
+  assert all(y - size * 0.5 >= 4.0 for _, _, y, size in draws)
+  assert all(y + size * 0.5 <= renderer.height - 4.0 for _, _, y, size in draws)
+
+
+def test_camera_overlay_reserves_large_lead_metrics_after_drawing_vehicle_frames(metric_renderer, monkeypatch):
+  renderer, labels = metric_renderer
+  monkeypatch.setattr(cluster_renderer.rl, "begin_scissor_mode", lambda *_args: None)
+  monkeypatch.setattr(cluster_renderer.rl, "end_scissor_mode", lambda: None)
+  scene = SimpleNamespace(
+    highlight_lanes=(), road_edges=(), lane_markings=(), planned_path=(), radar_points=(), scene_shift_x_m=0.0,
+    vehicles=(_metric_vehicle(), _metric_vehicle("RF", primary=False, speed=60.0)),
+  )
+  projection = SimpleNamespace(dest=cluster_renderer.rl.Rectangle(0.0, 0.0, 1124.0, 480.0))
+  renderer._draw_camera_projected_overlay(scene, _cluster_state(), projection)
+  assert labels == [("180 m 90 km/h", 24)]
 
 
 def test_scene_cache_key_covers_every_cluster_scene_state_access() -> None:

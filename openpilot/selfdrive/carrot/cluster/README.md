@@ -4,6 +4,75 @@ Standalone raylib cluster UI bundle for openpilot devices. The normal and road
 camera HUDs show available tire pressures around a fixed vehicle diagram beside
 the navigation panel; pressures below 31 psi are highlighted in red.
 
+## Code and rendering flow
+
+| Component | Responsibility |
+| --- | --- |
+| `../cluster_run.py`, `main.py` | Launcher, input/output selection, settings polling, render loop and cleanup. Device workers use normal `SCHED_OTHER` scheduling. |
+| `cluster_live.py`, `cluster_route_replay.py` | Convert live cereal messages or recorded events into `ClusterUiState`. Live input reuses the replay state builder; `radarState.leadOne` is labelled `L1`, and `leadTwo` is `L2`. |
+| `cluster_models.py`, `cluster_scene.py` | Immutable state/geometry, existing display merging, lane/path meshes and vehicle boxes. Actual distances remain available separately from the compressed 3D placement. |
+| `cluster_renderer.py` | Shared raylib drawing for the window and USB frame: 3D scene, calibrated road/wide-camera overlays, labels and HUD. |
+| `cluster_navi*.py`, `cluster_live_camera.py` | Navigation state/media and device camera input. |
+| `cluster_usb_pipeline.py`, `cluster_h264_pipeline.py`, `cluster_gles_*.py` | Frame transport, encoder workers and the comma GLES/NV12 output paths. |
+
+### First lead speed and distance
+
+The existing first lead (`L1`, `primary=True`, positive actual longitudinal
+distance) keeps a **24 px distance label and 22 px speed label** in both 3D
+views, including at long range. Road and wide-camera views use a **24 px**
+combined distance/speed label above its frame. These are screen-space font
+sizes, independent of the shrinking vehicle geometry and actual distance.
+The renderer keeps the whole L1 text group inside the viewport without reducing
+its font size. Secondary vehicle text that overlaps this group is omitted for
+that frame; the corresponding vehicle boxes/frames remain visible. This keeps
+distant L2 or adjacent-vehicle text from covering the enlarged L1 metrics.
+
+`primary` alone cannot identify this vehicle: it also marks `L2` and recorded
+cut-ins. `vehicle_has_lead_one_metrics()` therefore checks the exact `L1`
+role. L2, cut-ins, adjacent/rear vehicles and raw radar points retain their
+existing sizes; 3D labels still shrink from 18 to 180 metres for those objects.
+When L1 is absent, no other object inherits its enlarged text. Display merging
+retains the existing role and actual distance; font sizing does not select a
+new control lead or change radar detection.
+
+The existing `ClusterHudRadarInfo` visibility rules, source colors and
+metric/imperial conversions still apply. Missing speed is not fabricated, and
+existing stopped/slow-speed suppression remains in effect. In 3D, important
+lead distance labels retain their existing visibility even with radar info
+off; camera overlays retain their separate existing visibility rules.
+
+### Tests and synthetic pre-rendering
+
+From this repository checkout's root, using its Linux Python environment:
+
+```bash
+PYTHONPATH=. .venv/bin/python -m pytest -c /dev/null -p no:cacheprovider --confcutdir=openpilot/selfdrive/carrot/tests openpilot/selfdrive/carrot/tests/test_cluster_scene.py openpilot/selfdrive/carrot/tests/test_cluster_display.py openpilot/selfdrive/carrot/tests/test_cluster_performance_safeguards.py
+PYTHONPATH=. .venv/bin/python openpilot/selfdrive/carrot/cluster/render_lead_labels.py --output build/cluster_lead_labels
+```
+
+The rendering command needs an available OpenGL display (a Linux desktop or
+an Xvfb session); it opens a hidden raylib window and uses the production
+`render_to_png_bytes()` path and repository fonts. It writes 36 full-size PNGs,
+8 comparison sheets and `metrics.json` containing the actual text draw sizes
+and bounds. Cases cover 20/80/150/220 m in both 3D views and both camera views,
+dark/light themes, L2 and surrounding vehicles, missing/stopped L1, imperial
+units and swapped panels. Camera frames use a plain synthetic background.
+
+Unit tests exercise 8/18/80/150/220 m, all five radar-info modes, absent speed,
+and the distinction between L1 and other primary vehicles. The test command
+isolates these renderer tests from the repository's device/process fixtures.
+Host tests and PNGs verify label behavior and layout; they do not validate
+comma GPU drivers, real camera alignment, USB output or on-device performance.
+The production change uses the existing Python/raylib APIs and font assets,
+with no Windows-specific dependency or runtime branch.
+
+2026-09-21 host validation: **154 tests passed** under WSL Ubuntu/Linux Python
+3.12. All 36 synthetic frames were rendered through raylib; recorded L1 draws
+kept the specified sizes and stayed within the 1920x480 frame. Visual review
+covered long-range clipping/overlap, both themes and camera projections. An
+existing projection-only unit test now stubs camera-stream selection so it
+does not try to connect to live camera services on Linux.
+
 Run from the openpilot root:
 
 ```bash
