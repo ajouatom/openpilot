@@ -25,8 +25,9 @@ MIN_LONGITUDINAL_PLAN_INTERVAL_NS = 25_000_000
 
 
 def main():
-  # Keep planning off modeld's core so the next inference cannot preempt a plan.
-  config_realtime_process(5, Priority.CTRL_LOW)
+  # Keep planning off camera/model cores and away from card's FIFO53 on core5.
+  # Core4 controlsd/selfdrived remain FIFO53; planner and radarcan use FIFO51.
+  config_realtime_process(4, Priority.CTRL_LOW)
 
   cloudlog.info("plannerd is waiting for CarParams")
   params = Params()

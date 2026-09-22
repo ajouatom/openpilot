@@ -1,5 +1,15 @@
 # Radar preprocessing isolation and equivalent-output optimization
 
+## Current CPU placement
+
+The September 22 user-approved grouping keeps radarcan on core4 FIFO51 and
+radard on core5 FIFO51, moves planner to core4 FIFO51 and card to core5 FIFO53,
+and leaves camera/IRQ on core6. Controlsd/selfdrived stay core4 FIFO53 and
+model/DM stay core7. See [camera placement measurements](camera_core5_trial.md)
+for parked C4 timing gains and increased planner/radar latency. The historical
+core6-sharing motivation below predates this grouping. Radar algorithms,
+batch joining, replay outputs and priorities are unchanged by the grouping.
+
 ## Motivation and scope
 
 The September 2026 EV9/C3 and Ioniq5/C4 investigations found card and camerad
