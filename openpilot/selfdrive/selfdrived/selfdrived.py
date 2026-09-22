@@ -636,7 +636,9 @@ class SelfdriveD:
 
 
 def main():
-  config_realtime_process(4, Priority.CTRL_HIGH)
+  # Pair short 100Hz state/control work on core6, leaving core4 for planning
+  # and radar preprocessing. Camerad remains SCHED_OTHER on the same core.
+  config_realtime_process(6, Priority.CTRL_HIGH)
   s = SelfdriveD()
   s.run()
 
