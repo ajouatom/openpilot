@@ -1,5 +1,19 @@
 # Repository memory
 
+- On 2026-09-22, parked Ioniq 5 C4 follow-up reproduced a 91.961ms road-camera
+  delay, model input frame gap and invalid odometry/pose inputs with ftrace off;
+  IMU ages stayed below 34ms. Live boot args isolate only cores6..7. Kernel
+  tracing on core5 verified ready-camera scheduling delays behind normal
+  proclogd/kswapd work and FIFO planner/radard. The high-reclaim trace also had
+  diagnostic tmpfs overhead; do not treat its frequency as an unperturbed result.
+  The camera/IRQ core5 trial below is rolled back to core6, retaining UI on
+  cores0..3 and camera/UI SCHED_OTHER. A short 5/6/5 parked comparison reduced
+  core6's observed tail/runqueue wait but added about 3ms mean camera age.
+  A nice=-10 trial did not materially improve mean/p99; keep nice0. Preserve
+  other process placements and pose limits. This is a measured mitigation, not
+  proof of a driving fix, C3 benefit or the cause of earlier SOF/IFE faults.
+  See docs/camera_core5_trial.md for evidence and limitations.
+
 - On 2026-09-22, PV5 follow-up `0000022a--99e06b0cc0--17` disproved
   interpreting A-CAN 0x380 bit 6 falling as camera passage: roughly 4.7 s
   notification pulses ended while MapSource=2 and a 30 km/h camera still
