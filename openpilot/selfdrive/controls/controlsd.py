@@ -455,7 +455,9 @@ class Controls:
 
 
 def main():
-  config_realtime_process(4, Priority.CTRL_HIGH)
+  # Share isolated core6 with selfdrived and camerad; keep the short 100Hz
+  # control work off core4's planner/radarcan queue. Preserve FIFO53.
+  config_realtime_process(6, Priority.CTRL_HIGH)
   controls = Controls()
   controls.run()
 

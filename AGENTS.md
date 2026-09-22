@@ -1,5 +1,22 @@
 # Repository memory
 
+- On 2026-09-22, the user reported near-idle core6 and busy cores4/5 after
+  camera reservation and requested balanced placement. Whole-core /proc/stat
+  and deviceState, including background work, confirmed core4 about91%.
+  Earlier selected-process CPU sums did not establish total core headroom.
+  New parked C4 A/B/A trials place controlsd/selfdrived together on core6
+  FIFO53 with camerad SCHED_OTHER. Keep planner/radarcan core4 FIFO51,
+  card core5 FIFO53, radard core5 FIFO51, model/DM core7, and UI little/normal.
+  This supersedes the camera-exclusive and control-core4 placements below.
+  Both-controls trial core4/5/6/7 means were59/63/54/48%; camera road/wide max
+  rose to47.261/49.151ms while planner work max fell to8.613ms and radar input
+  age max to13.360ms. No model/pose/CAN failure occurred. Core4 still briefly
+  reached100%; parked timing is not proof of loaded driving or C3 behavior.
+  Follow-up temporarily enabled DM:90s yielded1804 valid DM frames with no
+  DM/driving-model skips or pose/CAN failures, whole-core means61/71/46/69%,
+  road/wide max51.370/52.838ms. DisableDM was restored to2 afterwards.
+  Preserve priorities and validity thresholds. See docs/camera_core5_trial.md.
+
 - On 2026-09-22, after three parked C4 grouping comparisons, the user approved
   leaving camerad/camera IRQ on core6, moving card to core5 FIFO53 with radard
   FIFO51, and moving planner to core4 FIFO51 with radarcan below the unchanged

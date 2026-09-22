@@ -2,10 +2,11 @@
 
 ## Current CPU placement
 
-The September 22 user-approved grouping keeps radarcan on core4 FIFO51 and
-radard on core5 FIFO51, moves planner to core4 FIFO51 and card to core5 FIFO53,
-and leaves camera/IRQ on core6. Controlsd/selfdrived stay core4 FIFO53 and
-model/DM stay core7. See [camera placement measurements](camera_core5_trial.md)
+The September 22 grouping keeps radarcan/planner on core4 FIFO51,
+radard on core5 FIFO51 and card on core5 FIFO53. The subsequent balancing
+follow-up moves controlsd/selfdrived to core6 FIFO53 with camera/IRQ;
+camera remains SCHED_OTHER and model/DM stay core7.
+See [camera placement measurements](camera_core5_trial.md)
 for parked C4 timing gains and increased planner/radar latency. The historical
 core6-sharing motivation below predates this grouping. Radar algorithms,
 batch joining, replay outputs and priorities are unchanged by the grouping.

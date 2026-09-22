@@ -74,11 +74,11 @@ def test_ui_uses_little_cores_and_retries_affinity_without_rt_promotion(big_ui, 
 
 
 def test_camera_isolated_from_card_and_planner_without_priority_changes():
-  # Keep card/radard together and planner/radarcan below the core4 controls.
+  # Separate card/radard and planner/radarcan; share camera with short controls.
   placements = {
     "openpilot/selfdrive/car/card.py": (5, "Priority.CTRL_HIGH"),
-    "openpilot/selfdrive/controls/controlsd.py": (4, "Priority.CTRL_HIGH"),
-    "openpilot/selfdrive/selfdrived/selfdrived.py": (4, "Priority.CTRL_HIGH"),
+    "openpilot/selfdrive/controls/controlsd.py": (6, "Priority.CTRL_HIGH"),
+    "openpilot/selfdrive/selfdrived/selfdrived.py": (6, "Priority.CTRL_HIGH"),
     "openpilot/selfdrive/controls/plannerd.py": (4, "Priority.CTRL_LOW"),
     "openpilot/selfdrive/carrot/radar/radarcan.py": (4, "Priority.CTRL_LOW"),
     "openpilot/selfdrive/carrot/radar/radard_dpath.py": (5, "Priority.CTRL_LOW"),

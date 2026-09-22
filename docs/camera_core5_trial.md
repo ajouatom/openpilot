@@ -1,6 +1,74 @@
 # Camera CPU placement trials
 
-## Current placement: September 22 task grouping
+## Current placement: balance short control work with camera processing
+
+The user reported low core6 usage and saturated cores4/5 after the first
+grouping and requested redistribution. A whole-core 20-second measurement
+confirmed mean4/5/6/7 usage of90.83/71.46/16.62/44.61%, with a one-second
+core5 sample at100%. Earlier per-process sums omitted other threads, cluster
+and general background work and did not establish whole-core headroom.
+
+The revised placement preserves all scheduling priorities:
+
+| Core | Main application work | Scheduling |
+| --- | --- | --- |
+| 4 | planner, radarcan | FIFO51 |
+| 5 | card; radard | FIFO53; FIFO51 |
+| 6 | controlsd, selfdrived; camerad and camera IRQ targets | FIFO53; camera SCHED_OTHER/nice0 |
+| 7 | modeld/eGPU worker; DM model when enabled; GPU IRQ | FIFO54; FIFO5 |
+
+Camera no longer has an application-exclusive core. The short 100Hz control
+and state loops share its isolated core; the heavier card loop stays off it.
+UI remains little-core/SCHED_OTHER. This shared code covers C3/C4 but current
+measurements are parked C4 only. No control, radar or model algorithm changes.
+
+Two new 30/90/30-second A/B/A trials moved first controlsd alone, then both
+controlsd and selfdrived, from core4 to6. Five-second settles, continuous
+P/zero-speed/disabled guards and automatic restoration were used. CPU figures
+come from whole-core /proc/stat deltas, cross-checked with deviceState's
+screen-facing usage samples; short periodic work can produce different
+usage estimates across windows, including near-zero displayed camera usage
+despite about6.6% camerad scheduler CPU time. Do not interpret zero as inactivity.
+
+| Measurement | Before both-controls trial | Both controls on6 | Restored |
+| --- | ---: | ---: | ---: |
+| Whole-core4 mean usage (%) | 90.82 | 59.19 | 90.92 |
+| Whole-core5 mean usage (%) | 64.79 | 62.89 | 70.67 |
+| Whole-core6 mean usage (%) | 6.68 | 53.58 | 10.04 |
+| Whole-core7 mean usage (%) | 50.26 | 47.74 | 52.24 |
+| Road max age (ms) | 36.807 | 47.261 | 36.835 |
+| Wide max age (ms) | 37.454 | 49.151 | 37.596 |
+| Planner max work (ms) | 19.936 | 8.613 | 16.672 |
+| Radar input max age (ms) | 26.663 | 13.360 | 21.120 |
+
+Controlsd alone left core4 at78.05% and road/wide max43.203/41.946ms; moving
+both gives more planning/radar headroom at a camera-tail cost. Both-controls
+core4 still briefly reached100% in deviceState; camera runnable wait rose
+from5.62 to54.03ms/s. CarControl maximum publication interval was20.218ms
+versus19.587ms before. No model gaps, invalid odometry/pose/CAN/radar/plans
+or control messages occurred in measured phases; no odometry/pose failures
+occurred in transitions, and IMU ages stayed below34ms. Neither average
+utilization nor these short samples prove loaded-driving deadlines, failure
+rates, C3 behavior or resolution of historical SOF/IFE faults. Camera ages
+continue to mean construction time minus estimated SOF+11ms EOF.
+
+Final confirmation retained the balanced placement for40 seconds with DM off,
+then enabled DM for a20-second startup, five-second settle and90-second
+measurement. DisableDM was restored from0 to its original2 afterwards.
+All startup/settle/measured intervals had no driving-model frame gaps or
+invalid odometry/pose inputs. DM published1804 valid frames with no frame-ID
+skips; mean/max model execution was22.335/34.912ms. The enabled-DM whole-core
+4/5/6/7 means were61.24/70.75/46.39/69.11%, with deviceState maxima of
+100/79/56/75%. Road/wide maximum ages were51.370/52.838ms and camera runnable
+wait40.33ms/s. Planner maximum work was8.557ms, radar input maximum age13.551ms,
+and carControl maximum interval19.873ms. IMU ages remained below36ms.
+This confirms parked DM-enabled operation for the short sample, not driving
+validation. The selected runtime placement was kept and checked by thread.
+Local placement/UI/pairing checks passed30 tests with5 Linux-only skips;
+controlsd's11 pre-existing Ruff findings were unchanged and other edited
+Python files passed. No camera binary code or scheduling priority changed.
+
+## Historical September 22 task grouping
 
 After the rollback and three parked grouping comparisons below, the user
 approved moving card to core5 and planner to core4. Camera userspace and its
