@@ -252,9 +252,9 @@ hardware path.
 `--usb-h264-orientation landscape` tests direct 1920x462 output, while
 `--usb-h264-align 16` deliberately tests macroblock-aligned output such as
 1920x464. When `--fps` is omitted, non-live H264 USB runs use
-`--usb-h264-fps 30` as the render cap; live H264 runs follow
-`ClusterHudLiveFps`. The TURZX display frame-rate command follows the effective
-H264 FPS unless `--usb-display-fps 0` is passed explicitly. H264 chunks are no-ACK by
+`--usb-h264-fps 30` as the render cap. Device live USB output fixes rendering,
+encoding and the TURZX controller to 10 FPS, or 5 FPS while eGPU is active.
+Diagnostic non-live runs still accept explicit FPS overrides. H264 chunks are no-ACK by
 default like JPEG frame uploads; use
 `--usb-h264-wait-ack` for strict response diagnostics, or
 `--usb-h264-soft-ack` to mimic the vendor video sender's retry/status polling
@@ -344,12 +344,10 @@ Keep `--usb-h264-input-format nv12` for native hardware testing. Direct RGB
 USERPTR diagnostics were removed after measured device tests showed corrupted
 output across direct and hidden 32-bit RGB variants.
 
-Manager autostart omits `--fps` by default so live launches follow
-`ClusterHudLiveFps`. JPEG/PNG runs apply setting changes while running; H264
-runs exit and let `cluster_autorun` relaunch when the setting changes the
-encoder FPS because the V4L2 encoder timing, SPS timing, and automatic bitrate
-are fixed at startup. Set `CLUSTER_AUTORUN_FPS` only for fixed test overrides;
-`0` means uncapped.
+Manager autostart uses 10 FPS, or 5 FPS while eGPU is active. Device live USB
+output ignores legacy FPS settings and environment overrides. The live loop
+checks eGPU activity each second; JPEG/PNG update in place, while H264 restarts
+to keep encoder timing, SPS timing and automatic bitrate consistent.
 `ClusterHudDebug` controls the autorun output gate: `0` starts external HUD
 rendering only while openpilot is onroad, and `1`, `2`, and `3` keep the
 always-on debug behavior after power-up. In live input only, `2` also keeps the
@@ -362,12 +360,11 @@ vendor USB initialization does not fail before the renderer is launched.
 Manager autostart and `cluster_run` use normal `SCHED_OTHER` scheduling, so
 realtime sensor and control work takes precedence. Inherited realtime policy
 is dropped before starting display workers; failure to drop it stops startup.
-`ClusterHudCoreMode=0` maps to cores `1,2,3,4`, while mode `1` maps to all
-initially allowed CPU cores. Changing the core mode restarts the HUD without
-a whole system restart. `CLUSTER_REALTIME_CORES` can override this affinity.
-The retired `ClusterHudPriority` setting and `CLUSTER_REALTIME_PRIORITY` /
-`CLUSTER_REALTIME` environment variables cannot enable realtime scheduling.
-The configured FPS and the eGPU-specific USB display cap are unchanged.
+Onroad, UI workers use core6 and HUD workers use core7 at nice19. Offroad,
+all workers return to cores0..3, including always-on debug output. A missing
+or offlining target core falls back to little cores and is retried. Old CPU
+selection, FPS and realtime-priority settings/environment overrides are ignored.
+The supervisor waits for USB/onroad startup on little cores.
 The HUD reads the local Git branch immediately on every platform and refreshes
 the upstream update state asynchronously at most every 60 seconds. The Git
 worker also explicitly selects `SCHED_OTHER` before `ls-remote`/`fetch`.
@@ -491,14 +488,9 @@ the drive, lavender `vNAVI` appears in the same status slot instead. This
 availability status never follows `activeCarrot`, because vehicle-CAN speed
 candidates also change that control state. The center clock, EV indicator, and
 fuel/DEF gauges are unchanged.
-When `--fps` is omitted, `ClusterHudLiveFps` controls the render limit and is
-polled about once per second while running: `0` uncapped diagnostic mode, `1`
-10 Hz default, `2` 20 Hz, `3` 30 Hz, `4` 40 Hz, `5` 50 Hz, and `6` 60 Hz.
-Direct route/replay CLI runs also apply nonzero values; mode `0` keeps non-live
-H264 runs on the `--usb-h264-fps` safety cap. Explicit `--fps` remains a fixed
-override. For H264 USB output, changing the effective FPS exits the current HUD
-process so autostart can relaunch with a matching encoder FPS when a launcher
-is present.
+Device live USB output uses the fixed 10/5 FPS policy described above. Desktop
+and non-live diagnostic runs retain explicit `--fps`; without it non-live H264
+uses `--usb-h264-fps`. These diagnostic overrides do not change device live USB output.
 
 `ClusterNaviMapFps` independently controls the Android MAP MAIN request: mode
 `0` is 5 Hz, `1` is the 10 Hz default, `2` is 20 Hz, and `3` is 30 Hz. At

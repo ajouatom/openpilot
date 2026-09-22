@@ -391,7 +391,6 @@ def test_external_hud_brightness_and_orientation_use_catalog_controls(settings, 
   ]
   assert screen["params"] == [
     "ClusterHudEncoder",
-    "ClusterHudLiveFps",
     "ClusterHudScreenMode",
     "ClusterHudPanelLayout",
     "ClusterHudCameraViewMode",

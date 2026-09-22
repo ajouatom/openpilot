@@ -1,6 +1,58 @@
 # Camera CPU placement trials
 
-## Current placement: balance short control work with camera processing
+## September 23: approved onroad display placement and fixed USB rate
+
+The user approved main UI on core6 and USB cluster on core7 only while onroad,
+both SCHED_OTHER/nice19. Existing camera (SCHED_OTHER/nice0), control, model/DM,
+radar, planner and IRQ placement/priorities are unchanged. Offroad display
+workers return to cores0..3, including the always-on cluster debug mode.
+The main UI bootstraps on core0 before applying the shared display scheduler.
+Workers are checked every0.5 seconds, with immediate checks on state transitions;
+an unavailable big core or a hotplug race falls back to little cores. This covers
+render/USB/native-encoder threads and the software encoder child. Offroad restores
+nice0 when permitted; older limits that prohibit this retain nice19 on little cores.
+
+USB rendering, encoding and controller rate are fixed at10 FPS, or5 FPS while
+UsbGpuActive. Runtime changes restart H.264 when its encoder rate changes;
+JPEG/PNG update their cap and controller rate in place. ClusterHudLiveFps and
+ClusterHudCoreMode are removed from Params and the settings catalog; old FPS/core
+environment overrides are ignored. ClusterNaviMapFps remains a separate setting.
+
+Parked C4 comparisons used whole-core /proc/stat, with continuous P/zero-speed/
+controls-disabled/onroad guards, automatic restoration and five-second settles.
+All application threads received the trial placement and nice19. A temporary
+cpuset with sched_load_balance=0 retained the isolated-core behavior: a common
+6/7 mask concentrated work on6. This is not a universal property of a 6/7 mask.
+
+| DM-enabled condition | Seconds | CPU2 mean % | CPU6 mean % | CPU7 mean % | UI draw Hz | Model mean/max ms | Road/wide max age ms |
+| --- | ---: | ---: | ---: | ---: | ---: | --- | --- |
+| Original display placement | 30 | 82.7 | 45.1 | 66.9 | 19.68 | 40.61/43.09 | 47.86/49.38 |
+| **UI6, cluster7 (selected)** | 60 | 61.7 | 77.6 | 85.2 | 19.77 | 40.98/44.64 | 48.73/49.02 |
+| UI7, cluster6 | 60 | 60.4 | 64.7 | 93.5 | 16.44 | 41.08/43.85 | 46.82/47.63 |
+| Original placement restored | 30 | 83.1 | 44.6 | 68.8 | 19.74 | 40.63/42.81 | 48.32/48.47 |
+
+Earlier common-6/7 trials reduced little-core load but reduced UI draw frequency
+to18.14Hz with DM off and17.65Hz with DM on. The selected split retained UI
+frequency. Across all11 phases (570.4 seconds), there were no observed camera,
+driving-model or DM frame gaps, invalid pose/odometry inputs or CAN validity
+failures; DM produced6607 valid frames. The selected phase included1202 valid DM
+frames and maximum gyro age32.40ms. Core7 nevertheless reached100% briefly
+(seven one-second samples at least90%); this does not establish unlimited headroom.
+Camera age here is publication time minus estimated EOF, not direct consumer
+delivery latency. UI Hz is uiDebug draw frequency; cluster FPS was not measured
+directly. These trials used the prior eGPU5 FPS cap.
+
+All trial affinities, priorities and DisableDM=2 were restored and trial resources
+removed. The final shared scheduler additionally passed real Linux syscalls in
+an isolated comma-owned process: main thread, worker and child each transitioned
+little/nice0 -> core6 or7/nice19 -> little/nice0 with SCHED_OTHER throughout.
+Desktop tests cover hotplug races, worker correction, old nice limits, both FPS
+states and settings removal. This is **not** actual ignition-off/hotplug testing,
+nor driving validation of the final code. The earlier driving segment showed
+no camera/model gaps or pose/CAN invalidity but ran the old display placement.
+C3 and loaded driving, especially with DM, still need vehicle validation.
+
+## September 22 placement: balance short control work with camera processing
 
 The user reported low core6 usage and saturated cores4/5 after the first
 grouping and requested redistribution. A whole-core 20-second measurement

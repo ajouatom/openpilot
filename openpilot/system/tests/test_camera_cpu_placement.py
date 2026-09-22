@@ -42,35 +42,25 @@ def test_camera_irqs_follow_camerad_across_power_save():
 
 
 @pytest.mark.parametrize("big_ui", [False, True])
-@pytest.mark.parametrize("fail_once", [False, True])
-def test_ui_uses_little_cores_and_retries_affinity_without_rt_promotion(big_ui, fail_once):
-  affinity = {0, 1, 2, 3, 4, 5}
+def test_ui_updates_onroad_policy_even_without_a_render(big_ui):
   calls, events = [], []
-
-  def set_affinity(cores):
-    nonlocal affinity, fail_once
-    calls.append(set(cores))
-    if len(cores) > 1 and fail_once:
-      fail_once = False
-      raise OSError("transient affinity failure")
-    affinity = set(cores)
-
+  states = iter([True, False, True])
+  ui_state = SimpleNamespace(started=False)
+  ui_state.update = lambda: setattr(ui_state, "started", next(states))
+  def scheduler(core, *, enabled):
+    assert core == 6 and enabled
+    return SimpleNamespace(update=lambda onroad, **kw: calls.append(onroad))
   main = load_function("openpilot/selfdrive/ui/ui.py", "main", {
-    "TICI": True, "BIG_UI": big_ui,
+    "TICI": True, "BIG_UI": big_ui, "DisplayScheduler": scheduler,
     "gc": SimpleNamespace(disable=lambda: events.append("gc_disabled")),
-    "os": SimpleNamespace(sched_getaffinity=lambda _: affinity),
-    "set_core_affinity": set_affinity,
+    "set_core_affinity": lambda cores: events.append(tuple(cores)),
     "ensure_ui_sched_other": lambda: events.append("sched_other"),
-    "gui_app": SimpleNamespace(init_window=lambda _: events.append("window"), render=lambda: iter([True] * 3)),
-    "ui_state": SimpleNamespace(update=lambda: None),
-    "MainLayout": lambda: events.append("big"),
-    "MiciMainLayout": lambda: events.append("mici"),
+    "gui_app": SimpleNamespace(init_window=lambda _: None, render=lambda: iter([True, False, True])),
+    "ui_state": ui_state, "MainLayout": lambda: None, "MiciMainLayout": lambda: None,
   })
   main()
-  assert calls[0] == {0}  # GUI workers inherit the safe bootstrap affinity.
-  assert all(cores == {0, 1, 2, 3} for cores in calls[1:])
-  assert affinity == {0, 1, 2, 3}
-  assert events == ["gc_disabled", "sched_other", "window", "big" if big_ui else "mici"]
+  assert events == ["gc_disabled", (0,), "sched_other"]
+  assert calls == [False, True, False, True]
 
 
 def test_camera_isolated_from_card_and_planner_without_priority_changes():

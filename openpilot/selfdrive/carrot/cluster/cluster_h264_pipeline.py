@@ -949,6 +949,11 @@ class H264UsbPipeline:
         )
         self._debug_log_session_config("native")
 
+    @property
+    def encoder_pid(self) -> int | None:
+        proc = self._proc
+        return proc.pid if proc is not None and proc.poll() is None else None
+
     def _start_ffmpeg(self) -> None:
         ffmpeg = self._ffmpeg_executable()
         self.ffmpeg_encoder_name = self._resolve_ffmpeg_encoder(ffmpeg)

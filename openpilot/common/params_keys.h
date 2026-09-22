@@ -197,13 +197,11 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"ClusterHudOrientation", {PERSISTENT, INT, "0"}},
     {"ClusterHudMirror", {PERSISTENT, INT, "0"}},
     {"ClusterHudEncoder", {PERSISTENT, INT, "0"}},
-    {"ClusterHudCoreMode", {PERSISTENT, INT, "0"}},
     {"ClusterHudPriority", {PERSISTENT, INT, "10"}},  // Retired: ignored; HUD always uses SCHED_OTHER.
     {"ClusterHudTheme", {PERSISTENT, INT, "0"}},
     {"ClusterNaviMapTheme", {PERSISTENT, INT, "1"}},
     {"ClusterNaviMapType", {PERSISTENT, INT, "0"}},
     {"ClusterNaviMapFps", {PERSISTENT, INT, "1"}},
-    {"ClusterHudLiveFps", {PERSISTENT, INT, "1"}},
     {"ClusterHudScreenMode", {PERSISTENT, INT, "0"}},
     {"ClusterHudPanelLayout", {PERSISTENT, INT, "0"}},
     {"ClusterHudCameraViewMode", {PERSISTENT, INT, "0"}},

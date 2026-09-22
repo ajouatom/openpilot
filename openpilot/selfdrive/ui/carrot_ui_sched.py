@@ -1,13 +1,4 @@
-"""carrot 전용: UI 스케줄러 계약 — 상시 SCHED_OTHER를 명시 적용하고 검증한다.
-
-UI 목표는 SCHED_OTHER/core0~3 (core0 부트스트랩 — ui.py 소관)이다.
-센서·위치 추정·CAN의 실시간 작업이 UI보다 우선해야 한다. 카메라·플래너의
-core5와 모델의 core7에는 UI를 배치하지 않는다. FIFO 승격/복구 재도입 금지.
-
-정상 manager launch는 SCHED_OTHER를 상속하므로 사실상 no-op 검증이지만,
-계약을 명시 적용(drop)하고 readback해 어떤 경로로든 RT로 시작된 UI가 그대로
-실행되는 것을 막는다 (시작 시 1회 — 매 프레임 syscall 금지).
-"""
+"""Verify normal UI scheduling before applying onroad/offroad display placement."""
 import os
 import sys
 
