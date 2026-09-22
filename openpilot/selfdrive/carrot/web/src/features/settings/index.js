@@ -49,6 +49,10 @@ import { renderFingerprintSummary } from "./fingerprint/fingerprint_summary.js";
 import { collectRestoredValues, selectProfileApplyValues } from "./profiles/apply_plan.js";
 import { getSettingRiskLevel, renderSettingRiskBadge } from "./risk.js";
 import { highlightSearchText } from "./search/highlight.js";
+import { filterSettingSearchEntries, isProfileSearchScope, normalizeSearchScope } from "./search/entries.js";
+import { renderSettingSearchResults } from "./search/results.js";
+import { createSettingSearchPanelView } from "./search/panel.js";
+import { createSettingInlineSearchView } from "./search/inline.js";
 import {
   appendSettingsItemSection,
   createSettingsGroupRenderPlan,
@@ -124,7 +128,15 @@ export function installSettingsRuntimeFacade(target = globalThis, options = {}) 
       selectApplyValues: selectProfileApplyValues,
       collectRestoredValues,
     }),
-    search: Object.freeze({ highlight: highlightSearchText }),
+    search: Object.freeze({
+      highlight: highlightSearchText,
+      filterEntries: filterSettingSearchEntries,
+      isProfileScope: isProfileSearchScope,
+      normalizeScope: normalizeSearchScope,
+      renderResults: renderSettingSearchResults,
+      createPanel: createSettingSearchPanelView,
+      createInline: createSettingInlineSearchView,
+    }),
     fingerprint: Object.freeze({ renderSummary: renderFingerprintSummary }),
     risk: Object.freeze({ level: getSettingRiskLevel, renderBadge: renderSettingRiskBadge }),
     popular: Object.freeze({

@@ -317,8 +317,10 @@ function renderUIText() {
     btnSettingSearchSubmit.setAttribute("aria-label", s.setting_search || "Search Settings");
     btnSettingSearchSubmit.title = s.setting_search || "Search Settings";
   }
-  if (typeof renderSettingSearchResults === "function" && settingSearchPanel && !settingSearchPanel.hidden) {
-    renderSettingSearchResults(settingSearchInput?.value || "");
+  // The overlay panel view is created by pages/setting.js; re-render its
+  // results so a language change re-labels the visible list.
+  if (typeof settingSearchPanelView !== "undefined" && settingSearchPanelView.isOpen()) {
+    settingSearchPanelView.render();
   }
   setText("appBranchPickerTitle", s.branch_select);
   setText("appBranchPickerClose", s.close);

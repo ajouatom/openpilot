@@ -18,13 +18,13 @@ def test_carrot_navi_fullscreen_on_tap_is_explicit_opt_in():
   }
 
 
-def test_fresh_drive_layout_defaults_to_full_area_one_navigation():
+def test_fresh_drive_layout_defaults_to_full_area_one_vision():
   defaults = web_settings.sanitize_web_settings({})
 
   for orientation in ("horizontal", "vertical"):
     assert defaults[f"carrot_navi_{orientation}_mode"] == "area_1"
-    assert defaults[f"carrot_navi_{orientation}_area_1"] == "navigation"
-    assert defaults[f"carrot_navi_{orientation}_area_2"] == "vision"
+    assert defaults[f"carrot_navi_{orientation}_area_1"] == "vision"
+    assert defaults[f"carrot_navi_{orientation}_area_2"] == "navigation"
 
 
 def test_existing_settings_without_layout_keys_keep_legacy_layout(tmp_path, monkeypatch):

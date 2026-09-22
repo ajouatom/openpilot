@@ -142,7 +142,7 @@
 }
 
 .page--setting #settingScreenItems .setting-context__state--loading strong {
-  animation: setting-context-loading 1.2s ease-in-out infinite alternate;
+  animation: setting-context-loading var(--setting-context-loading-duration) ease-in-out infinite alternate;
 }
 
 .page--setting #settingScreenItems .setting-context .setting-popular-detail-block,

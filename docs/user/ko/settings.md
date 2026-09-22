@@ -29,6 +29,10 @@ carrotpilot의 세부 설정은 **Carrot Web에서 모두 확인하고 변경하
 
 접속 문제와 다른 화면의 설명은 [Carrot Web](https://github.com/ajouatom/openpilot/wiki/Guide-Carrot-Web)을 참고하세요.
 
+### 웹 화면 구성 기본값
+
+`도구 > Web Settings > 화면 구성`의 처음 설치 기본값은 가로·세로 모두 **영역 1 전체**이며, 영역 1은 **당근비전**, 영역 2는 **당근네비**입니다. `기본값` 버튼은 두 방향을 모두 **영역 1 전체 + 영역 1 당근비전 + 영역 2 당근네비**로 되돌립니다. 화면별 설명은 [Carrot Web 화면 구성](carrot-web.md#화면-구성)을 참고하세요.
+
 ## 설정 화면 사용법
 
 Carrot Web 설정 화면에서는 다음 기능을 사용할 수 있습니다.

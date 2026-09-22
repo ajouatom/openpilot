@@ -124,8 +124,15 @@ import { setWebSettingByKey, setWebSettingsByKeys } from "./state.js";
       <section class="drive-layout-setting" data-web-settings-component="${COMPONENT_NAME}">
         <header class="drive-layout-setting__header">
           <h3>${escapeHtml(webSettingsText("web_drive_layout_title"))}</h3>
-          <div class="drive-layout-segmented drive-layout-segmented--compact" role="group" aria-label="${escapeHtml(webSettingsText("web_drive_layout_orientation"))}">
-            ${renderButtons("orientation", VIEW_OPTIONS.orientation)}
+          <div class="drive-layout-header-actions">
+            <button type="button" class="drive-layout-reset" data-drive-layout-reset
+                    title="${escapeHtml(webSettingsText("web_drive_layout_reset_hint"))}"
+                    aria-label="${escapeHtml(webSettingsText("web_drive_layout_reset_hint"))}">
+              ${escapeHtml(webSettingsText("default_value"))}
+            </button>
+            <div class="drive-layout-segmented drive-layout-segmented--compact" role="group" aria-label="${escapeHtml(webSettingsText("web_drive_layout_orientation"))}">
+              ${renderButtons("orientation", VIEW_OPTIONS.orientation)}
+            </div>
           </div>
         </header>
 
@@ -299,6 +306,37 @@ import { setWebSettingByKey, setWebSettingsByKeys } from "./state.js";
             [keys.area1Content]: layout.area2Content,
             [keys.area2Content]: layout.area1Content,
           });
+          sync(component);
+          await save;
+        } catch (error) {
+          reportFailure(error);
+        } finally {
+          pending = false;
+          sync(component);
+        }
+      });
+
+      // The button restores the whole layout for both orientations: 영역 1 전체
+      // (Area 1 full screen) with Area 1 = Carrot Vision and Area 2 = Carrot
+      // Navi. Mode and contents come from the spec's own constants so a stale
+      // page cannot leave them as-is; the split ratio follows the injected
+      // spec default when one is available.
+      component.querySelector("[data-drive-layout-reset]")?.addEventListener("click", async () => {
+        if (pending) return;
+        const defaults = globalThis.CarrotWebSettingDefaults || {};
+        const values = {};
+        for (const orientation of [spec.ORIENTATION.HORIZONTAL, spec.ORIENTATION.VERTICAL]) {
+          const keys = spec.keysFor(orientation);
+          values[keys.mode] = spec.MODE.AREA_1;
+          values[keys.area1Content] = spec.CONTENT.VISION;
+          values[keys.area2Content] = spec.CONTENT.NAVIGATION;
+          if (Object.prototype.hasOwnProperty.call(defaults, keys.ratio)) {
+            values[keys.ratio] = defaults[keys.ratio];
+          }
+        }
+        pending = true;
+        try {
+          const save = setWebSettingsByKeys(values);
           sync(component);
           await save;
         } catch (error) {

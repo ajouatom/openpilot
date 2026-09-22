@@ -534,6 +534,7 @@ window.CarrotTranslations.register("zh", {
     web_drive_layout_content_vision: "Carrot Vision",
     web_drive_layout_content_navigation: "Carrot 导航",
     web_drive_layout_content_drive_insights: "驾驶信息",
+    web_drive_layout_reset_hint: "将横屏和竖屏布局恢复为默认值（区域 1 全屏，Carrot Vision）",
     web_drive_layout_swap: "交换区域内容",
     drive_content_status_preparing: "准备中",
     drive_content_status_waiting: "等待中",

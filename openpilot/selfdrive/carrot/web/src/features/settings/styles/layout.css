@@ -279,7 +279,7 @@
   .page--setting.setting-layout-split #deviceGroupList .groupBtn.is-overflowing:hover .setting-group-label,
   .page--setting.setting-layout-split #deviceGroupList .groupBtn.is-overflowing:focus .setting-group-label,
   .page--setting.setting-layout-split #deviceGroupList .groupBtn.is-overflowing:active .setting-group-label {
-    animation: setting-left-text-pan 4.2s ease-in-out 1;
+    animation: setting-left-text-pan var(--setting-left-pan-duration) ease-in-out 1;
   }
 
   .page.page--setting > .page-fab-layer--setting {
