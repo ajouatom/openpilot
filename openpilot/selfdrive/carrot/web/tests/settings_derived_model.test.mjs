@@ -168,11 +168,19 @@ test("search entries cover catalog items and profile items with a lowercase hays
   const model = createModel();
   const entries = model.buildSearchEntries({ carrot: "당근파일럿", profile: "프로필" });
 
-  assert.equal(entries.length, 5, "detail children stay inside the parent screen");
+  assert.equal(entries.length, 6, "detail children are indexed with their parent context");
   const carrot = entries.find((entry) => entry.source === "carrot" && entry.name === "ApplyModelSpeed");
   assert.equal(carrot.groupLabel, "속도제어");
   assert.equal(carrot.title, "모델 주행속도");
+  assert.equal(carrot.detailParent, "");
   assert.equal(carrot.haystack, carrot.haystack.toLowerCase());
+
+  const parent = entries.find((entry) => entry.name === "SteerActuatorDelay");
+  const child = entries.find((entry) => entry.name === "OnnxLaneThreshold");
+  assert.equal(parent.detailParent, "");
+  assert.equal(child.detailParent, "SteerActuatorDelay");
+  assert.equal(child.group, "STEER");
+  assert.match(child.haystack, /조향 지연/, "the parent title is searchable from the child");
 
   const profile = entries.find((entry) => entry.source === "profile");
   assert.equal(profile.profileId, "p1");

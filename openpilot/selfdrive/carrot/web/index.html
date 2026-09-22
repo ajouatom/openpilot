@@ -1,4 +1,4 @@
-﻿<!doctype html>
+<!doctype html>
 <html class="notranslate" translate="no">
 <head>
   <script id="carrotAssetManifest" type="application/json"></script>
@@ -197,7 +197,10 @@
               </svg>
               <span id="settingFabResetDefaultsLabel">설정 초기화</span>
             </button>
-            <button id="btnSettingFabSearch" class="setting-fab-action" type="button" role="menuitem">
+            <!-- Retired overlay-search entry point: hidden until the page's
+                 SETTING_OVERLAY_SEARCH_ENABLED flag re-enables it. The inline
+                 "설정 찾기" field is the active search. -->
+            <button id="btnSettingFabSearch" class="setting-fab-action" type="button" role="menuitem" hidden>
               <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
                 <path fill="currentColor" d="M15.5 14h-.79l-.28-.27A6.47 6.47 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16a6.47 6.47 0 0 0 4.23-1.57l.27.28v.79L19 20.49 20.49 19zM9.5 14A4.5 4.5 0 1 1 14 9.5 4.5 4.5 0 0 1 9.5 14"/>
               </svg>
@@ -238,12 +241,13 @@
           <!-- CarrotPilot Groups -->
           <div id="carrotTabContent">
             <form id="settingInlineSearch" class="setting-inline-search" role="search">
-              <label id="settingInlineSearchLabel" for="settingInlineSearchInput">설정 찾기</label>
               <div class="setting-inline-search__field">
-                <input id="settingInlineSearchInput" type="search" placeholder="예: 감속, TF" autocomplete="off" spellcheck="false" enterkeyhint="search" aria-describedby="settingInlineSearchHint" />
+                <svg class="setting-inline-search__icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                  <path fill="currentColor" d="M15.5 14h-.79l-.28-.27A6.47 6.47 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16a6.47 6.47 0 0 0 4.23-1.57l.27.28v.79L19 20.49 20.49 19zM9.5 14A4.5 4.5 0 1 1 14 9.5 4.5 4.5 0 0 1 9.5 14"/>
+                </svg>
+                <input id="settingInlineSearchInput" type="search" placeholder="예: 감속, TF" autocomplete="off" spellcheck="false" enterkeyhint="search" aria-label="설정 찾기" />
                 <button id="settingInlineSearchClear" type="button" aria-label="검색어 지우기" hidden>×</button>
               </div>
-              <div id="settingInlineSearchHint" class="setting-inline-search__hint">이름·설명·분류로 검색 · 최대 20개</div>
               <output id="settingInlineSearchStatus" class="setting-inline-search__status" aria-live="polite"></output>
             </form>
             <div id="groupList"></div>

@@ -29,7 +29,10 @@
   font-weight: 800;
   line-height: 1;
   cursor: pointer;
-  transition: background 0.14s ease, color 0.14s ease, transform 0.12s ease;
+  transition:
+    background var(--motion-quick) var(--ease-standard),
+    color var(--motion-quick) var(--ease-standard),
+    transform var(--motion-quick) var(--ease-standard);
 }
 
 .setting-tab.is-active {

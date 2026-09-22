@@ -536,6 +536,7 @@ window.CarrotTranslations.register("ko", {
     web_drive_layout_content_navigation: "당근네비",
     web_drive_layout_content_drive_insights: "주행정보",
     web_drive_layout_swap: "영역 콘텐츠 바꾸기",
+    web_drive_layout_reset_hint: "가로·세로 화면 구성을 기본값(영역 1 전체, 영역 1 당근비전)으로 되돌립니다",
     drive_content_status_preparing: "준비 중",
     drive_content_status_waiting: "대기 중",
     drive_content_status_empty: "표시할 내용 없음",

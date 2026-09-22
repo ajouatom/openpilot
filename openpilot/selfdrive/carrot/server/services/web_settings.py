@@ -19,7 +19,9 @@ WEB_DRIVE_LAYOUT_MODES = {"split", "area_1", "area_2"}
 WEB_AUTO_UPDATE_REBOOT_MODES = {"off", "park", "disengaged"}
 
 # Existing settings files created before the drive-layout keys were persisted
-# should retain the former split layout. Fresh installs use WEB_SETTINGS_SPEC.
+# should retain the former split layout. Fresh installs use WEB_SETTINGS_SPEC
+# (currently the same values; the explicit block stays so a future default
+# change cannot silently move existing devices).
 LEGACY_DRIVE_LAYOUT_DEFAULTS = {
   "carrot_navi_horizontal_mode": "split",
   "carrot_navi_horizontal_area_1": "vision",
@@ -414,13 +416,16 @@ WEB_SETTINGS_SPEC: List[_Field] = [
   _Field("vision_display_mode", "enum", "normal", choices={"fit", "normal", "crop"}),
   _Field("replay_hud_visible", "bool", False),
   _Field("replay_insights_tab", "enum", "events", choices=WEB_REPLAY_INSIGHTS_TABS),
+  # Fresh installs show Carrot Vision full screen in both orientations: area 1
+  # is the visible area in the default "area_1" mode, and navigation waits in
+  # area 2 for the split modes.
   _Field("carrot_navi_horizontal_mode", "enum", "area_1", choices=WEB_DRIVE_LAYOUT_MODES),
-  _Field("carrot_navi_horizontal_area_1", "enum", "navigation"),
-  _Field("carrot_navi_horizontal_area_2", "enum", "vision"),
+  _Field("carrot_navi_horizontal_area_1", "enum", "vision"),
+  _Field("carrot_navi_horizontal_area_2", "enum", "navigation"),
   _Field("carrot_navi_split_ratio", "str", "0.70", normalize=_normalize_carrot_navi_split_ratio),
   _Field("carrot_navi_vertical_mode", "enum", "area_1", choices=WEB_DRIVE_LAYOUT_MODES),
-  _Field("carrot_navi_vertical_area_1", "enum", "navigation"),
-  _Field("carrot_navi_vertical_area_2", "enum", "vision"),
+  _Field("carrot_navi_vertical_area_1", "enum", "vision"),
+  _Field("carrot_navi_vertical_area_2", "enum", "navigation"),
   _Field("carrot_navi_vertical_split_ratio", "str", "0.50", normalize=_normalize_carrot_navi_vertical_split_ratio),
   _Field("kmap_enabled", "bool", False),
   _Field("kmap_url", "str", "https://jominki354.github.io/kmap/", normalize=_normalize_kmap_url),

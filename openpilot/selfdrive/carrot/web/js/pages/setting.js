@@ -37,12 +37,35 @@ const SETTING_VALUES_TTL_MS = settingValueRepository.defaultTtlMs;
 
 const SETTING_FAVORITES_GROUP = settingDerivedRuntime.ids.favoritesGroup;
 const SETTING_INLINE_SEARCH_GROUP = settingDerivedRuntime.ids.searchGroup;
+const settingSearchRuntime = carrotSettingsRuntime.search;
+// Retired overlay search panel (hamburger menu / profile card). Its entry
+// points are hidden and openSettingSearchPanel() is a no-op while false; the
+// implementation stays for profile-scoped search parity. Flip to true to
+// restore the entries.
+const SETTING_OVERLAY_SEARCH_ENABLED = false;
 let settingInlineSearchQuery = "";
 let settingInlineSearchPreviousGroup = null;
-let settingInlineSearchTimer = null;
-const settingInlineSearchForm = document.getElementById("settingInlineSearch");
-const settingInlineSearchInput = document.getElementById("settingInlineSearchInput");
-const settingInlineSearchClear = document.getElementById("settingInlineSearchClear");
+// Field behaviour (debounce, IME, clear button, slot mounting, labels) lives in
+// features/settings/search/inline.js; the page keeps the navigation that
+// onApply triggers (search group, history, screen transitions).
+const settingInlineSearchView = settingSearchRuntime.createInline({
+  elements: {
+    form: document.getElementById("settingInlineSearch"),
+    input: document.getElementById("settingInlineSearchInput"),
+    clear: document.getElementById("settingInlineSearchClear"),
+    status: document.getElementById("settingInlineSearchStatus"),
+  },
+  // The visible title/hint were removed; the label only names the field for
+  // assistive tech.
+  getLabels: () => ({
+    label: getUIText("setting_inline_search", "Find settings"),
+    placeholder: getUIText("setting_inline_search_placeholder", "e.g. deceleration, TF"),
+    clear: getUIText("setting_inline_search_clear", "Clear search"),
+  }),
+  getStatusText: () => (settingInlineSearchQuery ? getSettingInlineSearchCountLabel() : ""),
+  onApply: (query) => applySettingInlineSearch(query),
+  onError: (error) => showAppToast(error?.message || String(error), { tone: "error" }),
+});
 const SETTING_FAVORITES_LONG_PRESS_MS = 620;
 const SETTING_FAVORITES_MOVE_TOLERANCE = 10;
 const settingProfileSectionExpandedState = new Map();
@@ -120,7 +143,8 @@ function getSettingProfilesLabel() {
 
 function getSettingGroupsForDisplay() {
   const groups = getSettingDerivedModel().getGroupsForDisplay();
-  groups.splice(1, 0, { group: SETTING_INLINE_SEARCH_GROUP, virtual: true });
+  // Search leads the menu; favorites follows directly below it.
+  groups.unshift({ group: SETTING_INLINE_SEARCH_GROUP, virtual: true });
   return groups;
 }
 
@@ -399,8 +423,8 @@ async function presentSettingsEntry(catalog, options = {}) {
     animateChrome: animateLayout,
     animateItems: animateLayout,
   });
-  if (settingSearchPanel && !settingSearchPanel.hidden) {
-    renderSettingSearchResults(settingSearchInput?.value || "");
+  if (settingSearchPanelView.isOpen()) {
+    settingSearchPanelView.render();
   }
 
   if (reusePreparedData) {
@@ -541,10 +565,10 @@ function renderGroups(options = {}) {
     profilesLabel: getSettingProfilesLabel(),
     getGroupLabel: getSettingGroupLabel,
   });
-  const restoreSearchFocus = document.activeElement === settingInlineSearchInput;
+  const restoreSearchFocus = settingInlineSearchView.isFocused();
   settingViewRuntime.renderGroupList(box, plan, { animate: animateGroups });
   mountSettingInlineSearch();
-  if (restoreSearchFocus) settingInlineSearchInput.focus({ preventScroll: true });
+  if (restoreSearchFocus) settingInlineSearchView.focus();
   scheduleSettingOverflowSync(box);
 }
 
@@ -564,51 +588,34 @@ function getSettingInlineSearchCountLabel() {
 }
 
 function mountSettingInlineSearch(screen = null) {
-  if (!settingInlineSearchForm) return;
   const itemsVisible = screen ? screen === "items" : screenItems?.style.display !== "none";
   const inItems = CURRENT_GROUP === SETTING_INLINE_SEARCH_GROUP && itemsVisible
     && isCarrotSettingTabActive() && !isCompactLandscapeMode();
   const target = inItems ? screenItems : document.querySelector(".setting-inline-search-slot");
-  const focused = document.activeElement === settingInlineSearchInput;
-  const selection = focused ? [settingInlineSearchInput.selectionStart, settingInlineSearchInput.selectionEnd] : null;
-  if (target && settingInlineSearchForm.parentElement !== target) {
-    if (inItems) target.insertBefore(settingInlineSearchForm, document.getElementById("items"));
-    else target.appendChild(settingInlineSearchForm);
-    if (focused) {
-      settingInlineSearchInput.focus({ preventScroll: true });
-      settingInlineSearchInput.setSelectionRange(...selection);
-    }
-  }
-  document.getElementById("settingInlineSearchLabel").textContent = getUIText("setting_inline_search", "Find settings");
-  document.getElementById("settingInlineSearchHint").textContent = getUIText("setting_inline_search_hint", "Search names, descriptions and groups · Up to 20 results");
-  settingInlineSearchInput.placeholder = getUIText("setting_inline_search_placeholder", "e.g. deceleration, TF");
-  settingInlineSearchClear.setAttribute("aria-label", getUIText("setting_inline_search_clear", "Clear search"));
-  settingInlineSearchClear.hidden = !settingInlineSearchInput.value;
-  document.getElementById("settingInlineSearchStatus").textContent = settingInlineSearchQuery
-    ? getSettingInlineSearchCountLabel() : "";
+  const insertBefore = inItems ? document.getElementById("items") : null;
+  settingInlineSearchView.mount(target, insertBefore);
+  settingInlineSearchView.refresh();
 }
 
 function restoreSettingInlineSearch(query = "") {
-  clearTimeout(settingInlineSearchTimer);
-  settingInlineSearchTimer = null;
+  settingInlineSearchView.cancelPending();
   settingInlineSearchQuery = String(query).trim();
-  if (settingInlineSearchInput) settingInlineSearchInput.value = settingInlineSearchQuery;
+  settingInlineSearchView.setQuery(settingInlineSearchQuery);
   settingValueRepository.invalidateGroup(SETTING_INLINE_SEARCH_GROUP);
 }
 
-async function applySettingInlineSearch() {
-  clearTimeout(settingInlineSearchTimer);
-  settingInlineSearchTimer = null;
+async function applySettingInlineSearch(query = settingInlineSearchView.getQuery()) {
+  settingInlineSearchView.cancelPending();
   if (!SETTINGS || CURRENT_PAGE !== "setting" || !isCarrotSettingTabActive()) return;
-  const query = settingInlineSearchInput.value.trim();
-  if (query === settingInlineSearchQuery && CURRENT_GROUP === SETTING_INLINE_SEARCH_GROUP
+  const nextQuery = String(query || "").trim();
+  if (nextQuery === settingInlineSearchQuery && CURRENT_GROUP === SETTING_INLINE_SEARCH_GROUP
     && !CURRENT_SETTING_DETAIL && isSettingItemsScreenActive()) return;
   const wasSearching = CURRENT_GROUP === SETTING_INLINE_SEARCH_GROUP;
-  settingInlineSearchQuery = query;
+  settingInlineSearchQuery = nextQuery;
   // This virtual group's parameter set changes on each query and detail view.
   settingValueRepository.invalidateGroup(SETTING_INLINE_SEARCH_GROUP);
   ++settingRenderToken;
-  if (!query) {
+  if (!nextQuery) {
     if (wasSearching) {
       const previous = settingInlineSearchPreviousGroup;
       const group = getSettingDerivedModel().getGroupMeta(previous) ? previous : null;
@@ -631,36 +638,16 @@ async function applySettingInlineSearch() {
   }
   CURRENT_GROUP = SETTING_INLINE_SEARCH_GROUP;
   CURRENT_SETTING_DETAIL = null;
-  const restoreInputFocus = document.activeElement === settingInlineSearchInput;
+  const restoreInputFocus = settingInlineSearchView.isFocused();
   showSettingScreen("items", !wasSearching);
   renderGroups({ animateGroups: false });
   mountSettingInlineSearch("items");
-  if (restoreInputFocus) settingInlineSearchInput.focus({ preventScroll: true });
-  history.replaceState({ page: "setting", screen: "items", group: CURRENT_GROUP, inlineSearchQuery: query }, "");
+  if (restoreInputFocus) settingInlineSearchView.focus();
+  history.replaceState({ page: "setting", screen: "items", group: CURRENT_GROUP, inlineSearchQuery: nextQuery }, "");
   await renderItems(SETTING_INLINE_SEARCH_GROUP, { animateItems: false });
 }
 
-function scheduleSettingInlineSearch(event) {
-  clearTimeout(settingInlineSearchTimer);
-  settingInlineSearchClear.hidden = !settingInlineSearchInput.value;
-  if (event?.isComposing) return;
-  settingInlineSearchTimer = window.setTimeout(() => {
-    applySettingInlineSearch().catch((e) => showAppToast(e.message, { tone: "error" }));
-  }, 160);
-}
-
-settingInlineSearchInput?.addEventListener("input", scheduleSettingInlineSearch);
-settingInlineSearchInput?.addEventListener("compositionstart", () => clearTimeout(settingInlineSearchTimer));
-settingInlineSearchInput?.addEventListener("compositionend", scheduleSettingInlineSearch);
-settingInlineSearchForm?.addEventListener("submit", (event) => {
-  event.preventDefault();
-  applySettingInlineSearch().catch((e) => showAppToast(e.message, { tone: "error" }));
-});
-settingInlineSearchClear?.addEventListener("click", () => {
-  settingInlineSearchInput.value = "";
-  applySettingInlineSearch().then(() => settingInlineSearchInput.focus({ preventScroll: true }))
-    .catch((e) => showAppToast(e.message, { tone: "error" }));
-});
+settingInlineSearchView.bind();
 
 // Control kinds a parameter may declare via its "control" field.
 const SETTING_CONTROL_KINDS = ["toggle", "segmented", "select", "slider"];
@@ -1048,9 +1035,7 @@ let settingGroupTransitionLock = false;
 let settingRenderToken = 0;
 let pendingSettingFocus = null;
 let settingFocusClearTimer = null;
-let settingSearchDebounceTimer = null;
 let settingSearchEntries = [];
-let settingSearchScope = { type: "all", profileId: "" };
 const settingPageRoot = document.getElementById("pageSetting");
 let settingFabMenuOpen = false;
 let CURRENT_SETTING_DETAIL = null;
@@ -1095,7 +1080,7 @@ if (window.CarrotSettingsStore?.status === "ready") {
 }
 
 function syncSettingSearchFabState() {
-  const isOpen = Boolean(settingSearchPanel && !settingSearchPanel.hidden);
+  const isOpen = settingSearchPanelView.isOpen();
   if (settingPageRoot) settingPageRoot.classList.toggle("setting-search-open", isOpen);
   if (btnSettingSearch) {
     btnSettingSearch.classList.toggle("active", isOpen || settingFabMenuOpen);
@@ -1395,13 +1380,15 @@ function appendSettingProfileHeader(profile, container) {
   menuPanel.setAttribute("role", "menu");
   menuPanel.setAttribute("aria-hidden", "true");
   menuPanel.hidden = true;
-  // Order: search, apply, delete. Search is the low-stakes, most-used action
-  // so it leads; the destructive delete is last, away from the others.
-  menuPanel.appendChild(makeSettingProfileMenuItem({
-    label: getUIText("setting_profile_search", "Search Profile"),
-    icon: "search",
-    onClick: () => openSettingSearchPanel({ scope: { type: "profile", profileId: profile.id } }).catch(() => {}),
-  }));
+  // Order: search, apply, delete — search leads while the overlay search is
+  // enabled. The destructive delete stays last, away from the others.
+  if (SETTING_OVERLAY_SEARCH_ENABLED) {
+    menuPanel.appendChild(makeSettingProfileMenuItem({
+      label: getUIText("setting_profile_search", "Search Profile"),
+      icon: "search",
+      onClick: () => openSettingSearchPanel({ scope: { type: "profile", profileId: profile.id } }).catch(() => {}),
+    }));
+  }
   menuPanel.appendChild(makeSettingProfileMenuItem({
     label: getUIText("apply", "Apply"),
     icon: "apply",
@@ -1493,7 +1480,7 @@ function syncSettingFabMenuState() {
     }
   }
   if (btnSettingSearch) {
-    btnSettingSearch.classList.toggle("active", settingFabMenuOpen || Boolean(settingSearchPanel && !settingSearchPanel.hidden));
+    btnSettingSearch.classList.toggle("active", settingFabMenuOpen || settingSearchPanelView.isOpen());
     btnSettingSearch.setAttribute("aria-expanded", settingFabMenuOpen ? "true" : "false");
   }
 }
@@ -1509,24 +1496,11 @@ function toggleSettingFabMenu() {
   syncSettingFabMenuState();
 }
 
-function mountSettingSearchOverlay() {
-  if (settingSearchBackdrop && settingSearchBackdrop.parentElement !== document.body) {
-    document.body.appendChild(settingSearchBackdrop);
-  }
-  if (settingSearchPanel && settingSearchPanel.parentElement !== document.body) {
-    document.body.appendChild(settingSearchPanel);
-  }
-}
-
 function rebuildSettingSearchEntries() {
   settingSearchEntries = getSettingDerivedModel().buildSearchEntries({
     carrot: getUIText("setting_search_source_carrot", "CarrotPilot"),
     profile: getUIText("setting_search_source_profile", "Profile"),
   });
-  return settingSearchEntries;
-}
-
-function getSettingSearchEntries() {
   return settingSearchEntries;
 }
 
@@ -1536,13 +1510,72 @@ function highlightSettingSearchText(text, query) {
   return carrotSettingsRuntime.search.highlight(text, query, { escape: escapeHtml });
 }
 
-function getSettingSearchScopeLabel() {
-  if (settingSearchScope.type === "profile") {
-    const profile = getSettingProfileById(settingSearchScope.profileId);
-    return profile?.name || getUIText("setting_search_source_profile", "Profile");
+async function selectSettingSearchEntry(entry) {
+  try {
+    const detailParent = String(entry.detailParent || "");
+    pendingSettingFocus = { group: entry.group, name: entry.name };
+    if (entry.source === "profile" && entry.profileId && entry.originalGroup) {
+      settingProfileSectionExpandedState.set(`${entry.profileId}:${entry.originalGroup}`, true);
+    }
+    closeSettingSearchPanel({ syncHistory: false });
+    if (CURRENT_GROUP === entry.group && !CURRENT_SETTING_DETAIL && screenItems && screenItems.style.display !== "none") {
+      focusSettingItem(entry.name);
+      return;
+    }
+    if (detailParent) {
+      // A detail child only exists inside its parent's detail screen: open the
+      // group first, then the parent detail, and let the pending focus land on
+      // the child row once it renders.
+      if (CURRENT_GROUP === entry.group && CURRENT_SETTING_DETAIL === detailParent) {
+        focusSettingItem(entry.name);
+        return;
+      }
+      await activateSettingGroup(entry.group, true);
+      await selectSettingDetail(entry.group, detailParent, true);
+      return;
+    }
+    await activateSettingGroup(entry.group, true);
+  } catch (e) {
+    showAppToast(e.message || "Search jump failed", { tone: "error" });
   }
-  return getUIText("setting_search_all", "All settings");
 }
+
+// Overlay panel DOM state (visibility, scope, labels, results, debounce) lives
+// in features/settings/search/panel.js. The page keeps settings/profile
+// loading, history entries, the FAB state and the modal scroll lock.
+const settingSearchPanelView = settingSearchRuntime.createPanel({
+  elements: {
+    panel: document.getElementById("settingSearchPanel"),
+    backdrop: document.getElementById("settingSearchBackdrop"),
+    form: document.getElementById("settingSearchForm"),
+    input: document.getElementById("settingSearchInput"),
+    results: document.getElementById("settingSearchResults"),
+  },
+  getEntries: () => {
+    if (!SETTINGS) return [];
+    if (!settingSearchEntries.length) rebuildSettingSearchEntries();
+    return settingSearchEntries;
+  },
+  getLabels: () => ({
+    all: getUIText("setting_search_all", "All settings"),
+    placeholder: getUIText("setting_search_placeholder", "Search name, description, group"),
+    profilePlaceholder: getUIText("setting_profile_search_placeholder", "Search in this profile"),
+    empty: getUIText("setting_search_empty", "No matching settings found."),
+    sourceCarrot: getUIText("setting_search_source_carrot", "CarrotPilot"),
+    sourceProfile: getUIText("setting_search_source_profile", "Profile"),
+    count: getUIText("setting_inline_search_count", "Showing {shown} of {total}"),
+  }),
+  getProfileName: (profileId) => getSettingProfileById(profileId)?.name || "",
+  escape: escapeHtml,
+  highlight: highlightSettingSearchText,
+  onSelect: selectSettingSearchEntry,
+  onRequestClose: () => closeSettingSearchPanel({ syncHistory: true }),
+  onOpenChange: () => syncSettingSearchFabState(),
+  // The panel keeps `hidden` until its close fade finishes; re-sync the modal
+  // body lock then, like the shared dialog's finalize step.
+  onHidden: () => syncModalBodyLock(),
+});
+settingSearchPanelView.bind();
 
 function clearSettingItemFocus() {
   if (settingFocusClearTimer) {
@@ -1857,24 +1890,7 @@ function focusSettingItem(name, behavior = "smooth") {
 function closeSettingSearchPanel(options = {}) {
   const syncHistory = Boolean(options.syncHistory);
   const fromHistory = Boolean(options.fromHistory);
-  if (settingSearchDebounceTimer) {
-    clearTimeout(settingSearchDebounceTimer);
-    settingSearchDebounceTimer = null;
-  }
-  if (settingSearchPanel) {
-    settingSearchPanel.hidden = true;
-    settingSearchPanel.setAttribute("aria-hidden", "true");
-  }
-  if (settingSearchBackdrop) settingSearchBackdrop.hidden = true;
-  syncSettingSearchFabState();
-
-  if (settingSearchInput) {
-    settingSearchInput.value = "";
-    settingSearchInput.placeholder = getUIText("setting_search_placeholder", "Search name, description, group");
-    settingSearchInput.removeAttribute("aria-label");
-  }
-  if (settingSearchResults) settingSearchResults.innerHTML = "";
-  settingSearchScope = { type: "all", profileId: "" };
+  settingSearchPanelView.hide();
   syncModalBodyLock();
 
   const state = history.state || {};
@@ -1888,106 +1904,9 @@ function closeSettingSearchPanel(options = {}) {
   }
 }
 
-function renderSettingSearchResults(query = "") {
-  if (!settingSearchResults) return;
-
-  const trimmed = String(query || "").trim();
-  if (!SETTINGS) {
-    settingSearchResults.innerHTML = "";
-    return;
-  }
-
-  if (!trimmed) {
-    settingSearchResults.innerHTML = "";
-    return;
-  }
-
-  if (!settingSearchEntries.length && SETTINGS) {
-    rebuildSettingSearchEntries();
-  }
-
-  const q = trimmed.toLowerCase();
-  const matches = getSettingSearchEntries()
-    .filter((entry) => {
-      if (!entry.haystack.includes(q)) return false;
-      if (settingSearchScope.type === "profile") {
-        return entry.source === "profile" && entry.profileId === settingSearchScope.profileId;
-      }
-      return true;
-    })
-    .slice(0, 36);
-
-  settingSearchResults.innerHTML = "";
-
-  if (!matches.length) {
-    const empty = document.createElement("div");
-    empty.className = "setting-search-result setting-search-result--empty";
-    empty.textContent = getUIText("setting_search_empty", "No matching settings found.");
-    settingSearchResults.appendChild(empty);
-    return;
-  }
-
-  const sections = [
-    {
-      key: "carrot",
-      title: getUIText("setting_search_source_carrot", "CarrotPilot"),
-      entries: matches.filter((entry) => entry.source === "carrot"),
-    },
-    {
-      key: "profile",
-      title: getUIText("setting_search_source_profile", "Profile"),
-      entries: matches.filter((entry) => entry.source === "profile"),
-    },
-  ].filter((section) => section.entries.length);
-
-  sections.forEach((section) => {
-    const sectionEl = document.createElement("div");
-    sectionEl.className = "setting-search-section";
-    sectionEl.innerHTML = `
-      <div class="setting-search-section__title">
-        <span>${escapeHtml(section.title)}</span>
-        <strong>${section.entries.length}</strong>
-      </div>
-      <div class="setting-search-section__body"></div>
-    `;
-    settingSearchResults.appendChild(sectionEl);
-    const sectionBody = sectionEl.querySelector(".setting-search-section__body");
-
-    section.entries.forEach((entry) => {
-      const button = document.createElement("button");
-      button.type = "button";
-      button.className = "setting-search-result";
-      const metaLabel = entry.source === "profile"
-        ? `${entry.profileName} / ${entry.contextGroupLabel || entry.groupLabel}`
-        : entry.contextGroupLabel || entry.groupLabel;
-      button.innerHTML = `
-        <div class="setting-search-result__group">${highlightSettingSearchText(metaLabel, trimmed)}</div>
-        <div class="setting-search-result__title">${highlightSettingSearchText(entry.title || entry.name, trimmed)}</div>
-        ${entry.name && entry.name !== entry.title ? `<div class="setting-search-result__name">${highlightSettingSearchText(entry.name, trimmed)}</div>` : ""}
-        ${entry.descr ? `<div class="setting-search-result__descr">${highlightSettingSearchText(entry.descr, trimmed)}</div>` : ""}
-      `;
-      button.onclick = async () => {
-        try {
-          pendingSettingFocus = { group: entry.group, name: entry.name };
-          if (entry.source === "profile" && entry.profileId && entry.originalGroup) {
-            settingProfileSectionExpandedState.set(`${entry.profileId}:${entry.originalGroup}`, true);
-          }
-          closeSettingSearchPanel({ syncHistory: false });
-          if (CURRENT_GROUP === entry.group && !CURRENT_SETTING_DETAIL && screenItems && screenItems.style.display !== "none") {
-            focusSettingItem(entry.name);
-            return;
-          }
-          await activateSettingGroup(entry.group, true);
-        } catch (e) {
-          showAppToast(e.message || "Search jump failed", { tone: "error" });
-        }
-      };
-      sectionBody.appendChild(button);
-    });
-  });
-}
-
 async function openSettingSearchPanel(options = {}) {
+  // Single gate for every entry point (FAB menu, profile card, history).
+  if (!SETTING_OVERLAY_SEARCH_ENABLED) return;
   const pushHistory = options.pushHistory !== false;
   const scope = options.scope || { type: "all", profileId: "" };
   if (CURRENT_PAGE !== "setting") return;
@@ -2000,17 +1919,9 @@ async function openSettingSearchPanel(options = {}) {
     }
   }
   await loadSettingProfiles();
-  settingSearchScope = {
-    type: scope.type === "profile" && scope.profileId ? "profile" : "all",
-    profileId: scope.type === "profile" && scope.profileId ? String(scope.profileId) : "",
-  };
+  const activeScope = settingSearchPanelView.setScope(scope);
   rebuildSettingSearchEntries();
-  if (!settingSearchPanel) return;
-  mountSettingSearchOverlay();
-  settingSearchPanel.hidden = false;
-  settingSearchPanel.setAttribute("aria-hidden", "false");
-  if (settingSearchBackdrop) settingSearchBackdrop.hidden = false;
-  syncSettingSearchFabState();
+  settingSearchPanelView.show();
   const state = history.state || {};
   if (pushHistory && !(state.page === "setting" && state.search)) {
     history.pushState({
@@ -2019,22 +1930,11 @@ async function openSettingSearchPanel(options = {}) {
       group: CURRENT_GROUP || null,
       settingName: CURRENT_SETTING_DETAIL || null,
       search: true,
-      searchScope: settingSearchScope.type,
-      profileId: settingSearchScope.profileId || null,
+      searchScope: activeScope.type,
+      profileId: activeScope.profileId || null,
     }, "");
   }
   syncModalBodyLock();
-  if (settingSearchInput) {
-    settingSearchInput.placeholder = settingSearchScope.type === "profile"
-      ? getUIText("setting_profile_search_placeholder", "Search in this profile")
-      : getUIText("setting_search_placeholder", "Search name, description, group");
-    settingSearchInput.setAttribute("aria-label", getSettingSearchScopeLabel());
-  }
-  renderSettingSearchResults(settingSearchInput?.value || "");
-  requestAnimationFrame(() => {
-    settingSearchInput?.focus({ preventScroll: true });
-    settingSearchInput?.select();
-  });
 }
 
 if (btnSettingSearch) {
@@ -2053,6 +1953,8 @@ if (btnSettingSearch) {
 }
 
 if (btnSettingFabSearch) {
+  // Hidden with the retired overlay search; the flag restores both together.
+  btnSettingFabSearch.hidden = !SETTING_OVERLAY_SEARCH_ENABLED;
   btnSettingFabSearch.onclick = () => {
     closeSettingFabMenu();
     openSettingSearchPanel().catch(() => {});
@@ -2198,30 +2100,8 @@ if (btnSettingFabResetDefaults) {
   };
 }
 
-if (settingSearchBackdrop) {
-  settingSearchBackdrop.onclick = () => closeSettingSearchPanel({ syncHistory: true });
-}
-
-if (settingSearchForm) {
-  settingSearchForm.addEventListener("submit", (e) => {
-    e.preventDefault();
-    const firstResult = settingSearchResults?.querySelector("button.setting-search-result");
-    if (firstResult) firstResult.click();
-  });
-}
-
-if (settingSearchInput) {
-  settingSearchInput.addEventListener("input", () => {
-    if (settingSearchDebounceTimer) clearTimeout(settingSearchDebounceTimer);
-    settingSearchDebounceTimer = window.setTimeout(() => {
-      settingSearchDebounceTimer = null;
-      renderSettingSearchResults(settingSearchInput.value);
-    }, 70);
-  });
-}
-
 window.addEventListener("keydown", (e) => {
-  if (e.key === "Escape" && settingSearchPanel && !settingSearchPanel.hidden) {
+  if (e.key === "Escape" && settingSearchPanelView.isOpen()) {
     closeSettingSearchPanel({ syncHistory: true });
     return;
   }

@@ -1,0 +1,351 @@
+/* Setting search — backdrop, full-screen panel, inline field and result list.
+   Feature-owned styles for the setting search surface. Breakpoint-dependent
+   sizing (--setting-search-* overrides) stays in styles/layout.css next to the
+   page breakpoints; this file owns the component's base layout and visuals. */
+
+/* ── Backdrop ─────────────────────────────────────────────────────── */
+
+.setting-search-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 170;
+  border: 0;
+  background: color-mix(in srgb, var(--md-surface) 38%, transparent);
+  backdrop-filter: blur(6px) saturate(108%);
+  -webkit-backdrop-filter: blur(6px) saturate(108%);
+  /* Closed base state; the panel view adds .is-open one frame after showing,
+     matching the shared dialog's backdrop fade. */
+  opacity: 0;
+  transition: opacity var(--motion-base) var(--ease-linear);
+}
+
+.setting-search-backdrop.is-open {
+  opacity: 1;
+}
+
+.setting-search-backdrop[hidden],
+.setting-search-panel[hidden] {
+  display: none !important;
+}
+
+/* ── Full-screen panel ───────────────────────────────────────────── */
+
+.setting-search-panel {
+  --setting-search-form-width: clamp(320px, 42vw, 520px);
+  --setting-search-results-width: min(72vw, 760px);
+  --setting-search-results-max-height: 680px;
+  position: fixed;
+  top: var(--app-vv-top, 0px);
+  right: 0;
+  bottom: auto;
+  left: 0;
+  width: 100vw;
+  height: var(--app-vv-height, 100dvh);
+  min-height: 0;
+  box-sizing: border-box;
+  z-index: 171;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 14px;
+  padding: calc(18px + env(safe-area-inset-top, 0px)) var(--sp-lg) calc(var(--app-nav-bottom-gap, var(--nav-bar-height)) + 18px + var(--kb-inset) + env(safe-area-inset-bottom, 0px));
+  pointer-events: none;
+}
+
+.setting-search-panel::before {
+  content: none;
+}
+
+.setting-search-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0;
+  width: min(var(--setting-search-form-width), calc(100vw - 40px));
+  min-height: clamp(56px, 7vh, 62px);
+  padding-left: 20px;
+  border: 1px solid color-mix(in srgb, var(--md-primary) 26%, var(--md-stroke-soft));
+  border-radius: var(--control-radius);
+  background: color-mix(in srgb, var(--md-surface-cont) 76%, transparent);
+  backdrop-filter: blur(10px) saturate(112%);
+  -webkit-backdrop-filter: blur(10px) saturate(112%);
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.26);
+  pointer-events: auto;
+  position: relative;
+  z-index: 1;
+  flex: 0 0 auto;
+  /* Sheet entrance, same motion spec as .app-dialog__sheet. */
+  opacity: 0;
+  transform: translateY(14px) scale(0.985);
+  transition:
+    opacity var(--motion-base) var(--ease-emphasized),
+    transform var(--motion-medium) var(--ease-emphasized);
+}
+
+.setting-search-panel.is-open .setting-search-form {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+}
+
+.setting-search-form:focus-within {
+  border-color: color-mix(in srgb, var(--md-primary) 46%, var(--md-stroke-strong));
+}
+
+.setting-search-form__input {
+  min-width: 0;
+  min-height: 56px;
+  border: 0;
+  background: transparent;
+  color: var(--md-on-surface);
+  font-size: var(--fs-body-md);
+  outline: none;
+}
+
+.setting-search-form__submit {
+  width: 56px;
+  height: 100%;
+  border: 0;
+  border-left: 1px solid color-mix(in srgb, var(--md-stroke-soft) 42%, transparent);
+  border-radius: 0 var(--control-radius) var(--control-radius) 0;
+  background: transparent;
+  color: var(--md-primary);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.setting-search-form__submit:active {
+  background: color-mix(in srgb, var(--md-primary) 12%, transparent);
+}
+
+.setting-search-form__submit svg {
+  width: 20px;
+  height: 20px;
+}
+
+.setting-search-results {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  width: min(var(--setting-search-results-width), calc(100vw - 40px));
+  min-height: 0;
+  padding: 0 4px 12px;
+  max-height: var(--setting-search-results-max-height);
+  flex: 1 1 auto;
+  overflow: auto;
+  overscroll-behavior: contain;
+  scroll-padding-block: 8px 18px;
+  scrollbar-gutter: stable;
+  pointer-events: auto;
+  position: relative;
+  z-index: 1;
+}
+
+.setting-search-results:empty {
+  display: none;
+}
+
+/* Shown only when the result limit hides further matches. */
+.setting-search-summary {
+  padding: 0 4px var(--sp-sm);
+  color: var(--md-on-surface-var);
+  font-size: var(--fs-label-md);
+  font-weight: 700;
+}
+
+.setting-search-section {
+  display: grid;
+  gap: var(--sp-sm);
+  padding: 0 0 var(--sp-lg);
+}
+
+.setting-search-section__title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 0 4px;
+  color: var(--md-primary);
+  font-size: var(--fs-title-sm);
+  font-weight: 900;
+  letter-spacing: 0;
+}
+
+.setting-search-section__title strong {
+  color: var(--md-on-surface-var);
+  font-size: var(--fs-label-md);
+  font-weight: 800;
+}
+
+.setting-search-section__body {
+  overflow: hidden;
+  background: var(--md-surface-cont);
+  border: 1px solid color-mix(in srgb, var(--md-outline-var) 22%, transparent);
+  border-radius: var(--r-xl);
+  box-shadow: var(--shadow-1);
+}
+
+/* ── Inline field (group-list slot) ──────────────────────────────── */
+
+.setting-inline-search {
+  min-width: 0;
+  margin: 0 0 4px;
+  padding: 10px 12px;
+  border: 1px solid var(--md-outline-var);
+  border-radius: var(--control-radius);
+  background: var(--md-surface-cont);
+}
+
+.setting-inline-search:focus-within {
+  border-color: var(--md-primary);
+}
+
+.setting-inline-search__field {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: var(--sp-sm);
+}
+
+.setting-inline-search__icon {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  color: var(--md-on-surface-var);
+}
+
+.setting-inline-search input {
+  width: 100%;
+  min-width: 0;
+  min-height: 36px;
+  padding: 4px 0;
+  border: 0;
+  border-radius: 0;
+  outline: none;
+  background: transparent;
+  color: var(--md-on-surface);
+  font: inherit;
+  font-size: 16px;
+}
+
+.setting-inline-search input::-webkit-search-cancel-button {
+  -webkit-appearance: none;
+}
+
+.setting-inline-search button {
+  flex: 0 0 36px;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--r-round);
+  background: var(--md-surface-cont-h);
+  color: var(--md-on-surface);
+  font-size: 22px;
+  cursor: pointer;
+}
+
+.setting-inline-search__status:not(:empty) {
+  display: block;
+  margin-top: 4px;
+  color: var(--md-primary);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.page--setting.setting-tab-device #settingScreenItems > .setting-inline-search {
+  display: none;
+}
+
+/* ── Result list ─────────────────────────────────────────────────── */
+
+.setting-search-result {
+  width: 100%;
+  padding: 12px 14px;
+  border: 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--md-stroke-soft) 32%, transparent);
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.setting-search-section__body > .setting-search-result:last-child {
+  border-bottom: 0;
+}
+
+.setting-search-result:hover,
+.setting-search-result:focus-visible {
+  background: color-mix(in srgb, var(--md-surface-cont) 88%, var(--md-primary));
+  outline: none;
+}
+
+.setting-search-result:active {
+  transform: translateY(1px);
+}
+
+.setting-search-result--empty {
+  cursor: default;
+  color: var(--md-on-surface-var);
+  border: 1px solid var(--popup-item-border);
+  border-radius: var(--popup-item-radius);
+  background: var(--popup-item-bg);
+}
+
+.setting-search-result__group {
+  color: var(--md-primary);
+  font-size: var(--fs-label-md);
+  font-weight: 700;
+}
+
+.setting-search-result__title {
+  margin-top: 4px;
+  color: var(--md-on-surface);
+  font-size: var(--fs-body-lg);
+  font-weight: 700;
+}
+
+.setting-search-result__name {
+  margin-top: 2px;
+  color: var(--md-outline);
+  font-family: var(--font-mono);
+  font-size: var(--fs-label-md);
+}
+
+.setting-search-result__descr {
+  margin-top: 6px;
+  color: var(--md-on-surface-var);
+  font-size: var(--fs-body-sm);
+  display: block;
+  overflow: visible;
+}
+
+.setting-search-result__mark {
+  background: color-mix(in srgb, var(--md-primary) 20%, transparent);
+  color: var(--md-primary);
+  padding: 0 1px;
+  border-radius: 4px;
+}
+
+/* ── Open state ──────────────────────────────────────────────────── */
+
+.page--setting.setting-search-open .fab--setting-search {
+  opacity: 0;
+  transform: scale(0.92);
+  pointer-events: none;
+}
+
+.page--setting.setting-search-open #settingScreenHost,
+.page--setting.setting-search-open #settingsMeta {
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .setting-search-backdrop,
+  .setting-search-form {
+    transition: none;
+  }
+}
