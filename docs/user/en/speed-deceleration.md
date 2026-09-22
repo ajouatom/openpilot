@@ -100,9 +100,9 @@ This setting applies only to camera, average-speed-zone, and 30 km/h zone decele
 
 In mode `2`, an accelerator held from before actual deceleration begins does not pre-arm a floor. A new press during actual deceleration is treated as a request to ignore the current event, and the floor rises to the highest speed reached while accelerating. Releasing the pedal does not permit further slowing below that floor during the same event. Braking, stopping, a speed-limit or deceleration-source change, or the end of the event clears it.
 
-On the Kia PV5, the current camera with a matched distance remains selected until that distance is exhausted; later cameras stay queued. A brief notification ending, or a different limit being announced, does not discard the current camera.
+On the Kia PV5, a matched camera distance remains active through brief notification pulses only while fresh stock-navigation messages continue to report the same enforcement limit. When enforcement ends, the limit changes, or either message is lost for more than one second, the current and queued camera distances are cleared.
 
-After its distance is exhausted, the next queued camera is selected, and the completed camera’s unchanged warning cannot restart it. Without a matching nearby distance, a fresh stock-navigation warning uses the virtual distance below until that warning ends; both navigation messages must be received within one second.
+A queued distance alone cannot trigger deceleration, including after the current camera's distance is exhausted. A new valid warning without a newly received matching distance uses the virtual distance below; an unchanged warning for a completed camera cannot restart it. PV5 route departure is not detected independently: cancellation relies on stock navigation ending or changing its enforcement state.
 
 ### `VehicleSpeedCameraDistanceTime`
 
