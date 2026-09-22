@@ -36,8 +36,8 @@ def vw_buttons(request):
 
 @pytest.mark.parametrize('pcm', [False, True])
 @pytest.mark.parametrize('physical,logical,can_enable', [
-  ('setCruise', 'decelCruise', True),
-  ('resumeCruise', 'accelCruise', True),
+  ('setCruise', 'setCruise', True),
+  ('resumeCruise', 'resumeCruise', True),
   ('accelCruise', 'accelCruise', False),
   ('decelCruise', 'decelCruise', False),
 ])
@@ -54,22 +54,22 @@ def test_speed_button_edges_and_physical_engagement(vw_buttons, pcm, physical, l
 
 @pytest.mark.parametrize('physical,logical', [('setCruise', 'decelCruise'), ('resumeCruise', 'accelCruise')])
 @pytest.mark.parametrize('release_physical_first', [False, True])
-def test_overlapping_aliases_remain_held_until_last_release(vw_buttons, physical, logical, release_physical_first):
+def test_separate_buttons_keep_independent_edges(vw_buttons, physical, logical, release_physical_first):
   _, update = vw_buttons
-  assert update(**{physical: True}) == ([(logical, True)], False)
-  assert update(**{logical: True}) == ([], False)
+  assert update(**{physical: True}) == ([(physical, True)], False)
+  assert update(**{logical: True}) == ([(logical, True)], False)
   first, last = (physical, logical) if release_physical_first else (logical, physical)
-  assert update(**{first: False}) == ([], release_physical_first)
+  assert update(**{first: False}) == ([(first, False)], release_physical_first)
   assert update() == ([], False)
-  assert update(**{last: False}) == ([(logical, False)], not release_physical_first)
+  assert update(**{last: False}) == ([(last, False)], not release_physical_first)
   assert update() == ([], False)
 
 
 @pytest.mark.parametrize('physical,logical', [('setCruise', 'decelCruise'), ('resumeCruise', 'accelCruise')])
-def test_alias_handoff_does_not_synthesize_a_click(vw_buttons, physical, logical):
+def test_button_handoff_preserves_each_physical_event(vw_buttons, physical, logical):
   _, update = vw_buttons
-  assert update(**{physical: True}) == ([(logical, True)], False)
-  assert update(**{physical: False, logical: True}) == ([], True)
+  assert update(**{physical: True}) == ([(physical, True)], False)
+  assert update(**{physical: False, logical: True}) == ([(physical, False), (logical, True)], True)
   assert update(**{logical: False}) == ([(logical, False)], False)
 
 

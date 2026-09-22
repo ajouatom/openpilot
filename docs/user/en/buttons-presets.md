@@ -47,7 +47,9 @@ The button-test catalog default of `0` is even below the displayed minimum. Do n
 
 This table describes a short press during normal driving with cruise already active.
 
-On Volkswagen, `SET` and `-` share the decrease action, while `RES` and `+` share the increase action. Separate `SET`/`RES` buttons also follow this mode, the speed units, and the long-press setting; pressing `SET` while active does not always reset the set speed to current vehicle speed.
+On Volkswagen, the separate `SET` button sets the current cluster speed. `RES` restores the saved pre-braking speed when available, otherwise retaining the existing set speed; if no set speed has been initialized, it uses current speed. Existing minimum and maximum set-speed limits still apply.
+
+Separate `SET`/`RES` buttons act once on release, whether tapped or held. The button mode, speed units, and long-press setting below apply to the separate `+`/`-` buttons; when speed comes from stock SCC, the stock set speed takes precedence.
 
 Manual engagement with openpilot longitudinal control is still requested when the physical `SET` or `RES` button is released. The standalone `+`/`-` buttons do not gain an engagement action.
 
