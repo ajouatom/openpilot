@@ -2,6 +2,20 @@
   "sensitivity": 50,
   "cases": [
     {
+      "id": "carnival-1c8-1-front-position-history-51",
+      "vehicle_folder": "KIA_CARNIVAL_4TH_GEN c4dcf95545dafe68",
+      "log": "000001c8--95bc7cab1c--1/rlog.zst",
+      "source": "front+corner",
+      "window": [40.4, 41.65],
+      "expected": "detect",
+      "validation_stage": "lead_one",
+      "target_track_ids": [51],
+      "required_lead_one_ids": [51],
+      "latest_detection_s": 40.75,
+      "lead_one_continuous_window": [40.70, 41.65],
+      "scene": "User-reported delayed vision/radar match at video 40.57 s. Measured front 51 first appears at 40.542 s and stays spatially aligned with vision while radar reports near zero speed and model velocity remains 14-16 m/s. Repeated front/vision position evidence must acquire L1 by replay 40.75 s without requiring a corner return or stacking another dwell. Replay time precedes video by about 0.099 s. Baseline acquires at video 41.294 s; the later 41.8 s front 51/53 handoff is outside this initial-acquisition case. Recorded-model replay does not establish closed-loop braking performance."
+    },
+    {
       "id": "ev9-6d-31-stationary-corner-phantom-4847",
       "vehicle_folder": "KIA_EV9 a6444e342fe1700f",
       "log": "0000006d--10d12b5baf--31/rlog.zst",

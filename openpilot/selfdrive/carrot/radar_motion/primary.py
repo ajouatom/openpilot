@@ -86,6 +86,13 @@ STATIONARY_FRONT_ANCHOR_MAX_SPEED_JUMP_MPS = 2.0
 STATIONARY_FRONT_ANCHOR_MAX_VISION_SPEED_DELTA_MPS = 24.0
 STATIONARY_FRONT_ANCHOR_VSTD_SIGMA = 4.0
 STATIONARY_FRONT_ANCHOR_MAX_DPATH_M = 1.25
+# Repeated visual position agreement can complete stationary confirmation
+# while the measured front track is being observed. Existence confidence is
+# separate from model speed uncertainty; the existing speed/conflict vetoes
+# still apply when this evidence is used.
+STATIONARY_FRONT_POSITION_HISTORY_MIN_PROB = 0.70
+STATIONARY_FRONT_POSITION_HISTORY_CONFIRM_PROB = 0.80
+STATIONARY_FRONT_POSITION_HISTORY_MAX_RANGE_RESIDUAL_M = 0.75
 STATIONARY_FRONT_RANGE_XSTD_SIGMA = 2.0
 STATIONARY_FRONT_RANGE_MAX_ERROR_M = 25.0
 STATIONARY_FRONT_RANGE_MAX_FRACTION = 0.25
@@ -798,6 +805,8 @@ class _RadarPositionEvidence:
   point: RadarPointSnapshot
   anchor_frames: int = 0
   anchor_time_s: float | None = None
+  position_since_s: float | None = None
+  position_frames: int = 0
 
 
 class VisionRadarMatcher:
@@ -1572,6 +1581,8 @@ class VisionRadarMatcher:
         since_s = previous.since_s if continuous else time_s
         anchor_frames = 0
         anchor_time_s = None
+        position_since_s = None
+        position_frames = 0
         if (
           vision is not None and vision.probability >= STATIONARY_VISION_MIN_PROB
           and point.d_rel >= STATIONARY_FRONT_POSITION_LOCK_MIN_DREL_M
@@ -1592,8 +1603,34 @@ class VisionRadarMatcher:
           if abs(point.d_rel - vision.d_rel) <= STATIONARY_FRONT_POSITION_LOCK_MAX_DISTANCE_ERROR_M:
             anchor_frames = min(anchor_frames + 1, STATIONARY_FRONT_ANCHOR_MIN_FRAMES)
             anchor_time_s = time_s
-        current[identity] = _RadarPositionEvidence(since_s, time_s, point, anchor_frames, anchor_time_s)
+            if vision.probability >= STATIONARY_FRONT_POSITION_HISTORY_MIN_PROB:
+              # A stable radar ID alone does not establish visual identity.
+              # Every sample must keep the tight position/quality gates above.
+              position_continuous = bool(
+                continuous and previous.position_since_s is not None
+                and abs(point.d_rel - previous.point.d_rel
+                        - 0.5 * (point.v_rel + previous.point.v_rel) * (time_s - previous.time_s))
+                <= STATIONARY_FRONT_POSITION_HISTORY_MAX_RANGE_RESIDUAL_M
+              )
+              position_since_s = previous.position_since_s if position_continuous else time_s
+              position_frames = min(previous.position_frames + 1, 6) if position_continuous else 1
+        current[identity] = _RadarPositionEvidence(
+          since_s, time_s, point, anchor_frames, anchor_time_s, position_since_s, position_frames,
+        )
     self._stationary_front_evidence = current
+
+  def _stationary_front_position_confirmed(
+    self, vision: VisionLead | None, point: RadarPointSnapshot, time_s: float,
+  ) -> bool:
+    evidence = self._stationary_front_evidence.get(self._identity(point))
+    return bool(
+      vision is not None
+      and vision.probability >= STATIONARY_FRONT_POSITION_HISTORY_CONFIRM_PROB
+      and evidence is not None and evidence.time_s == time_s
+      and evidence.position_since_s is not None
+      and time_s - evidence.position_since_s >= STATIONARY_CONFIRMATION_S
+      and evidence.position_frames >= STATIONARY_FRONT_MIN_VISION_SUPPORT_FRAMES
+    )
 
   def stationary_front_anchor_time(self, point: RadarPointSnapshot, time_s: float) -> float | None:
     evidence = self._stationary_front_evidence.get(self._identity(point))
@@ -1611,7 +1648,10 @@ class VisionRadarMatcher:
   ) -> float | None:
     if (
       vision is None or vision.probability < STATIONARY_VISION_MIN_PROB
-      or self.stationary_front_anchor_time(point, time_s) is None
+      or (
+        self.stationary_front_anchor_time(point, time_s) is None
+        and not self._stationary_front_position_confirmed(vision, point, time_s)
+      )
       or abs(point.v_lead - vision.velocity) > STATIONARY_FRONT_ANCHOR_MAX_VISION_SPEED_DELTA_MPS
       or not math.isfinite(vision.v_std) or vision.v_std <= 0.0
       or abs(point.v_lead - vision.velocity) > STATIONARY_FRONT_ANCHOR_VSTD_SIGMA * vision.v_std
@@ -2705,7 +2745,13 @@ class VisionRadarMatcher:
         )
         else STATIONARY_FRONT_MIN_VISION_SUPPORT_FRAMES
       )
-      if (
+      position_confirmed = (
+        self._stationary_front_position_confirmed(vision, selected[0], time_s)
+        and self._stationary_anchored_front_cost(
+          vision, selected[0], selected[1], time_s, yaw_rate_rad_s,
+        ) is not None
+      )
+      if not position_confirmed and (
         self._stationary_pending_since_s is None
         or time_s - self._stationary_pending_since_s
         < (
