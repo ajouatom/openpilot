@@ -15,7 +15,7 @@ from opendbc.car.car_helpers import interfaces
 
 def main():
   # controlsd/selfdrived on core4 are FIFO53; this FIFO51 worker yields to
-  # their deadlines. Keep card/camera core6 and model/runtime core7 untouched.
+  # their deadlines and shares FIFO51 with planner. Camera/model use cores6/7.
   config_realtime_process(4, Priority.CTRL_LOW)
   poller = messaging.Poller()
   can_sock = messaging.sub_sock('can', poller=poller, conflate=False)

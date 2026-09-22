@@ -1,6 +1,67 @@
-# Camera core5 placement trial
+# Camera CPU placement trials
 
-## September 22 follow-up: camera placement rolled back
+## Current placement: September 22 task grouping
+
+After the rollback and three parked grouping comparisons below, the user
+approved moving card to core5 and planner to core4. Camera userspace and its
+IRQ targets stay on isolated core6 with normal scheduling. This supersedes
+the card/planner placements in the historical sections of this document.
+
+| Core | Main application work | Scheduling |
+| --- | --- | --- |
+| 4 | controlsd, selfdrived; radarcan, planner | FIFO53; FIFO51 |
+| 5 | card; radard | FIFO53; FIFO51 |
+| 6 | camerad and camera IRQ targets | Camera SCHED_OTHER/nice0 |
+| 7 | modeld/eGPU worker; DM model when enabled; GPU IRQ | FIFO54; FIFO5 |
+
+UI remains on cores0..3/SCHED_OTHER. Core6 is reserved by application placement;
+this is not a guarantee that no other kernel work or interrupt runs there.
+The shared runtime placement applies to C3/C4, but only parked C4 measurements
+are available. No inference, radar detection, lead-selection, CAN joining,
+control algorithm, priority, validity threshold or user setting is changed.
+
+Three separate 30/60/30-second before/trial/restored comparisons held the
+camera/IRQ on core6. Each transition had a five-second settle, P/zero speed/
+controls-disabled guards, and no ftrace. Card moved to core5 in all trials:
+
+| Candidate | Planner / radarcan / radard cores | Road / wide max age (ms) | Planner max work (ms) | Radar input max age (ms) |
+| --- | --- | --- | --- | --- |
+| All card/planner/radard on core5 | 5 / 4 / 5 | 37.050 / 37.434 | 32.080 | 15.513 |
+| **Selected: planner on core4** | **4 / 4 / 5** | **36.889 / 37.335** | **19.132** | **24.953** |
+| CAN work on core5, planning/radard on core4 | 4 / 5 / 4 | 36.738 / 37.215 | 20.273 | 19.075 |
+
+Surrounding baseline maxima were 51.451-58.083ms for road/wide cameras. Camera
+runnable wait fell from 59.21-97.60ms/s to 5.69-5.88ms/s. Camera age means
+message construction minus estimated SOF+11ms EOF, not measured hardware EOF
+or IPC arrival. Card still consumed about 57% CPU and 5.5ms per 100Hz cycle.
+Moving it away repeatedly improved camera timing; this is evidence of a CPU
+sharing cost in these conditions, not an explanation of every past SOF/IFE fault.
+
+The selected trial's planner max work increased from about 8ms to 19ms and
+radar input max age from about 15ms to 25ms. Its radard model age averaged
+5.321ms (max 15.428), compared with trial1's 24.234ms (max 36.488) and trial3's
+18.037ms (max 28.140). Named core4 tasks used about 76% CPU and core5 about 61%,
+excluding other threads, background tasks and IRQs. Extra load remains a risk.
+All measured phases had no model gaps, invalid odometry/pose inputs, CAN-invalid
+carState, invalid radar/plan/control messages; IMU ages stayed below 34ms.
+DM was disabled (DisableDM=2). Driving with more radar objects, DM-enabled
+operation, C3, thermal behavior and failure-rate improvements are unvalidated.
+
+After approval, the selected placement was applied live and retained after a
+further 90-second check: road/wide maximum ages 36.782/37.258ms, camera runnable
+wait 5.80ms/s, zero model gaps or invalid odometry/pose/CAN/radar/plan messages.
+Planner maximum work was 20.813ms and radar input maximum age 26.824ms; these
+remain trade-offs rather than universally improved timings. All card threads
+read back core5 and planner threads core4. The vehicle checkout was still
+eda4f745: this live application does not install the committed source update.
+The new commit must be installed for the grouping to persist after process
+restarts. Local regression checks passed 30 tests with 5 Linux-only skips.
+Card's 22 existing Ruff findings were unchanged; other edited Python files
+passed Ruff. No native camerad build was needed for its comment-only change.
+
+The following sections retain the earlier trial and rollback evidence.
+
+## Historical September 22 follow-up: camera placement rolled back
 
 The camera/IRQ part of this trial is reverted to core6. The UI remains on
 cores0..3 with its verified SCHED_OTHER policy. All control, radar, model and

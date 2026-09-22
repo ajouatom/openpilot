@@ -423,8 +423,8 @@ class Car:
       t.join()
     
 def main():
-  #config_realtime_process(4, Priority.CTRL_HIGH)
-  config_realtime_process(6, Priority.CTRL_HIGH)
+  # Share core5 with lower-priority radard, leaving isolated core6 for camera work.
+  config_realtime_process(5, Priority.CTRL_HIGH)
   car = Car()
   car.card_thread()
 

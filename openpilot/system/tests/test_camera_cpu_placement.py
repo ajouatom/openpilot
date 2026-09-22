@@ -73,13 +73,13 @@ def test_ui_uses_little_cores_and_retries_affinity_without_rt_promotion(big_ui, 
   assert events == ["gc_disabled", "sched_other", "window", "big" if big_ui else "mici"]
 
 
-def test_camera_move_keeps_control_and_model_placements():
-  # This trial must not silently move deadline-sensitive consumers with it.
+def test_camera_isolated_from_card_and_planner_without_priority_changes():
+  # Keep card/radard together and planner/radarcan below the core4 controls.
   placements = {
-    "openpilot/selfdrive/car/card.py": (6, "Priority.CTRL_HIGH"),
+    "openpilot/selfdrive/car/card.py": (5, "Priority.CTRL_HIGH"),
     "openpilot/selfdrive/controls/controlsd.py": (4, "Priority.CTRL_HIGH"),
     "openpilot/selfdrive/selfdrived/selfdrived.py": (4, "Priority.CTRL_HIGH"),
-    "openpilot/selfdrive/controls/plannerd.py": (5, "Priority.CTRL_LOW"),
+    "openpilot/selfdrive/controls/plannerd.py": (4, "Priority.CTRL_LOW"),
     "openpilot/selfdrive/carrot/radar/radarcan.py": (4, "Priority.CTRL_LOW"),
     "openpilot/selfdrive/carrot/radar/radard_dpath.py": (5, "Priority.CTRL_LOW"),
     "openpilot/selfdrive/modeld/modeld.py": (7, "54"),
