@@ -1,5 +1,20 @@
 # Repository memory
 
+- On 2026-09-23, the user approved the parked display-placement candidate:
+  onroad main UI core6 and USB cluster core7, both SCHED_OTHER/nice19;
+  offroad both return to cores0..3 before big-core power saving. This supersedes
+  the UI-little placement below. Keep camera/control/model/radar priorities and
+  placement unchanged. Apply the display policy to all workers, including the
+  software encoder child. USB render/encode/controller rate is fixed at10 FPS,
+  or5 while UsbGpuActive; removed ClusterHudLiveFps/ClusterHudCoreMode and legacy
+  FPS/core environment overrides must not restore custom placement/rates.
+  DM-enabled parked UI6/cluster7 measured core2/6/7 means61.7/77.6/85.2%, UI19.77Hz,
+  road/wide max48.73/49.02ms, no camera/model/DM gaps or pose/CAN invalidity.
+  Core7 still briefly reached100%; C3, loaded driving and actual ignition-off
+  hotplug remain unvalidated. Isolated device syscalls verified nice19 and
+  core6/7-to-little restoration for threads and a child under comma credentials.
+  See docs/camera_core5_trial.md for comparisons and limits.
+
 - On 2026-09-22, the user reported near-idle core6 and busy cores4/5 after
   camera reservation and requested balanced placement. Whole-core /proc/stat
   and deviceState, including background work, confirmed core4 about91%.

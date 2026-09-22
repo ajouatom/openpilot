@@ -18,19 +18,12 @@ from cluster_config import (
   cluster_camera_view_prefers_wide,
   cluster_wide_camera_zoom_factor,
   normalize_cluster_camera_view_mode,
-  normalize_cluster_live_fps,
   normalize_cluster_panel_layout,
   normalize_cluster_screen_mode,
   resolved_usb_h264_bitrate,
 )
 
 
-def test_cluster_live_fps_modes_remain_independent_from_map_fps():
-  assert [normalize_cluster_live_fps(mode) for mode in range(7)] == [
-    0.0, 10.0, 20.0, 30.0, 40.0, 50.0, 60.0,
-  ]
-  assert normalize_cluster_live_fps(7) == 0.0
-  assert normalize_cluster_live_fps("invalid") == 0.0
 
 
 def test_cluster_h264_auto_bitrate_preserves_per_frame_budget_through_60_fps():

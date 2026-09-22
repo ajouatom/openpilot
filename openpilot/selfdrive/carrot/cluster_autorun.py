@@ -20,9 +20,7 @@ OPENPILOT_ROOT = CARROT_DIR.parents[1]
 HUD_PARAM = "ClusterHud"
 HUD_DEBUG_PARAM = "ClusterHudDebug"
 HUD_ENCODER_PARAM = "ClusterHudEncoder"
-HUD_LIVE_FPS_PARAM = "ClusterHudLiveFps"
 HUD_ORIENTATION_PARAM = "ClusterHudOrientation"
-HUD_CORE_MODE_PARAM = "ClusterHudCoreMode"
 IS_ONROAD_PARAM = "IsOnroad"
 RETRY_INTERVAL_S = 5.0
 HUD_CHECK_INTERVAL_S = 0.1
@@ -38,12 +36,6 @@ USBGPU_LOADING_PARAM = "UsbGpuLoading"
 USBGPU_ACTIVE_PARAM = "UsbGpuActive"
 USBGPU_STARTUP_FAILED_PARAM = "UsbGpuStartupFailed"
 NETLINK_KOBJECT_UEVENT = 15
-AUTORUN_FPS_ENV = "CLUSTER_AUTORUN_FPS"
-REALTIME_CORES_ENV = "CLUSTER_REALTIME_CORES"
-DEFAULT_REALTIME_CORES = [1, 2, 3, 4]
-CORE_MODE_DEDICATED = 0
-CORE_MODE_ALL = 1
-EXPLICIT_REALTIME_CORES_ENV = REALTIME_CORES_ENV in os.environ
 ENCODER_AUTO = 0
 ENCODER_JPEG = 1
 ENCODER_HARDWARE = 2
@@ -55,11 +47,6 @@ ENCODER_NAMES = {
     ENCODER_SOFTWARE: "software",
 }
 USB_DISCONNECT_TEXT = ("usb display disconnected", "no such device", "device has been disconnected")
-INITIAL_ALLOWED_CORES = (
-    sorted(os.sched_getaffinity(0))
-    if sys.platform == "linux" and hasattr(os, "sched_getaffinity")
-    else list(range(os.cpu_count() or 1))
-)
 
 
 def _configure_autorun_locale() -> None:
@@ -92,71 +79,6 @@ def _is_usb_disconnect_error(exc: BaseException) -> bool:
             return True
         current = current.__cause__ or current.__context__
     return False
-
-
-def _normalize_core_mode(value: object) -> int:
-    if isinstance(value, str):
-        normalized = value.strip().lower()
-        if normalized in ("all", "all-cores", "all_cores"):
-            return CORE_MODE_ALL
-        if normalized in ("dedicated", "default", "cluster", "1,2,3,4"):
-            return CORE_MODE_DEDICATED
-        try:
-            value = int(normalized)
-        except ValueError:
-            return CORE_MODE_DEDICATED
-    try:
-        mode = int(value)
-    except (TypeError, ValueError):
-        return CORE_MODE_DEDICATED
-    if mode == CORE_MODE_ALL:
-        return CORE_MODE_ALL
-    return CORE_MODE_DEDICATED
-
-
-def _all_realtime_cores() -> list[int]:
-    return INITIAL_ALLOWED_CORES[:] or list(range(os.cpu_count() or 1))
-
-
-def _cores_for_core_mode(core_mode: int) -> list[int]:
-    if core_mode == CORE_MODE_ALL:
-        return _all_realtime_cores()
-    return DEFAULT_REALTIME_CORES[:]
-
-
-def _parse_realtime_cores(text: str) -> list[int]:
-    normalized = text.strip().lower()
-    if normalized in ("all", "*"):
-        return _all_realtime_cores()
-    return [int(core.strip()) for core in text.split(",") if core.strip()]
-
-
-def _apply_realtime_setting_env(core_mode: int) -> None:
-    if not EXPLICIT_REALTIME_CORES_ENV:
-        os.environ[REALTIME_CORES_ENV] = ",".join(str(core) for core in _cores_for_core_mode(core_mode))
-
-
-def _cluster_realtime_cores() -> list[int]:
-    cores_text = os.environ.get(REALTIME_CORES_ENV)
-    if cores_text:
-        return _parse_realtime_cores(cores_text)
-    return DEFAULT_REALTIME_CORES[:]
-
-
-def _set_current_process_affinity(cores: list[int]) -> list[int]:
-    if sys.platform != "linux" or not hasattr(os, "sched_setaffinity"):
-        return []
-    os.sched_setaffinity(0, cores)
-    return sorted(os.sched_getaffinity(0))
-
-
-def _configure_autorun_affinity() -> None:
-    try:
-        cores = _cluster_realtime_cores()
-        allowed_cores = _set_current_process_affinity(cores)
-        print(f"[cluster_autorun] affinity configured cores={allowed_cores or cores}", flush=True)
-    except Exception as exc:
-        print(f"[cluster_autorun] failed to set core affinity: {exc}", flush=True)
 
 
 def _read_hud_mode(params: Params) -> int:
@@ -202,14 +124,6 @@ def _read_encoder_mode(params: Params) -> int:
     return encoder_mode
 
 
-def _read_live_fps_mode(params: Params) -> int:
-    try:
-        return int(params.get_int(HUD_LIVE_FPS_PARAM))
-    except Exception as exc:
-        print(f"[cluster_autorun] failed to read {HUD_LIVE_FPS_PARAM}: {exc}", flush=True)
-        return 0
-
-
 def _read_orientation(params: Params) -> int | None:
     try:
         orientation = int(params.get_int(HUD_ORIENTATION_PARAM))
@@ -217,14 +131,6 @@ def _read_orientation(params: Params) -> int | None:
         print(f"[cluster_autorun] failed to read {HUD_ORIENTATION_PARAM}: {exc}", flush=True)
         return None
     return orientation if orientation in (0, 2) else None
-
-
-def _read_core_mode(params: Params) -> int:
-    try:
-        return _normalize_core_mode(params.get_int(HUD_CORE_MODE_PARAM))
-    except Exception as exc:
-        print(f"[cluster_autorun] failed to read {HUD_CORE_MODE_PARAM}: {exc}", flush=True)
-        return CORE_MODE_DEDICATED
 
 
 def _encoder_sequence(encoder_mode: int) -> list[int]:
@@ -252,7 +158,6 @@ def _cluster_args(
     hud_mode: int,
     configured_encoder_mode: int,
     active_encoder_mode: int,
-    core_mode: int,
     output_mode: str = "usb",
     usbgpu_active: bool = False,
 ) -> list[str]:
@@ -265,28 +170,18 @@ def _cluster_args(
         str(hud_mode),
         "--cluster-hud-encoder",
         str(configured_encoder_mode),
-        "--cluster-hud-core-mode",
-        str(core_mode),
     ]
+    fps = USBGPU_DISPLAY_FPS if usbgpu_active else 10
+    args.extend(["--fps", str(fps)])
     if output_mode in ("usb", "both"):
-        # Standalone carrot_navi owns TCP 7714; live input consumes its carrotNavi cereal service.
         args[4:4] = _encoder_args(active_encoder_mode)
-        if usbgpu_active:
-            args.extend(["--usb-display-fps", str(USBGPU_DISPLAY_FPS)])
-    fps = os.environ.get(AUTORUN_FPS_ENV, "").strip()
-    if output_mode in ("usb", "both") and usbgpu_active:
-        # Cap rendering/encoding as well as the TURZX controller setting. The
-        # latter alone does not reduce H264 uploads on the shared USB bus.
-        args.extend(["--fps", str(USBGPU_DISPLAY_FPS)])
-    elif fps:
-        args.extend(["--fps", fps])
+        args.extend(["--usb-display-fps", str(fps)])
     return args
 
 
 def _run_cluster_once(
     hud_mode: int,
     encoder_mode: int,
-    core_mode: int,
     output_mode: str = "usb",
     usbgpu_active: bool = False,
 ) -> None:
@@ -321,7 +216,6 @@ def _run_cluster_once(
                         hud_mode,
                         encoder_mode,
                         active_encoder_mode,
-                        core_mode,
                         output_mode,
                         usbgpu_active,
                     ),
@@ -635,21 +529,21 @@ def _wait_for_usbgpu_startup(params: Params) -> None:
 
 def main() -> None:
     from openpilot.common.realtime import drop_realtime
+    from openpilot.common.display_scheduling import DisplayScheduler
 
     drop_realtime()
     _configure_autorun_locale()
     _ensure_cluster_paths()
     from cluster_usb_display import find_supported_usb_product, product_id_for_hud_mode, product_label
 
+    scheduler = DisplayScheduler(7, enabled=TICI)
+    scheduler.update(False, force=True)
     params = Params()
     params.put_bool_nonblocking("ClusterHudConnected", False)
     while True:
-        core_mode = _read_core_mode(params)
-        _apply_realtime_setting_env(core_mode)
-        _configure_autorun_affinity()
+        scheduler.update(False, force=True)
         hud_mode = _read_hud_mode(params)
         encoder_mode = _read_encoder_mode(params)
-        live_fps_mode = _read_live_fps_mode(params)
         orientation = _read_orientation(params)
         expected_product_id = product_id_for_hud_mode(hud_mode)
         if expected_product_id is None:
@@ -672,7 +566,7 @@ def main() -> None:
                     flush=True,
                 )
                 try:
-                    _run_cluster_once(hud_mode, encoder_mode, core_mode, output_mode="window")
+                    _run_cluster_once(hud_mode, encoder_mode, output_mode="window")
                     continue
                 except Exception as exc:
                     print(
@@ -698,28 +592,21 @@ def main() -> None:
             _run_cluster_once(
                 hud_mode,
                 encoder_mode,
-                core_mode,
                 usbgpu_active=params.get_bool(USBGPU_ACTIVE_PARAM),
             )
             next_hud_mode = _read_hud_mode(params)
             next_encoder_mode = _read_encoder_mode(params)
-            next_live_fps_mode = _read_live_fps_mode(params)
             next_orientation = _read_orientation(params)
-            next_core_mode = _read_core_mode(params)
             if (
                 next_hud_mode != hud_mode
                 or next_encoder_mode != encoder_mode
-                or next_live_fps_mode != live_fps_mode
                 or (next_orientation is not None and next_orientation != orientation)
-                or next_core_mode != core_mode
             ):
                 print(
                     f"[cluster_autorun] HUD setting changed "
                     f"mode {hud_mode}->{next_hud_mode}, "
                     f"encoder {encoder_mode}->{next_encoder_mode}, "
-                    f"live_fps {live_fps_mode}->{next_live_fps_mode}, "
-                    f"orientation {orientation}->{next_orientation}, "
-                    f"core_mode {core_mode}->{next_core_mode}; rechecking",
+                    f"orientation {orientation}->{next_orientation}; rechecking",
                     flush=True,
                 )
                 continue

@@ -1,14 +1,4 @@
-"""carrot 전용: UI 스케줄러 foundation(상시 SCHED_OTHER/core0~3) 회귀 테스트.
-
-기존 FIFO51/core5 UI는 radar(FIFO51)와 같은 우선순위로 core5를 점유해
-20Hz cadence를 위협했다. foundation 계약:
-- UI는 상시 SCHED_OTHER (RT/FIFO 승격 프리미티브 부재, 재도입 금지)
-- 시작은 core0 부트스트랩(offroad power-save의 core4~7 offline 대응),
-  render loop가 cores={0, 1, 2, 3}으로 re-affine (실패 시 다음 프레임 재시도)
-- 시작 시 SCHED_OTHER를 명시 적용하고 readback 검증 (false success 금지,
-  검증 불가면 fail-stop), gc.disable()은 유지
-- core7은 modeld+dmonitoringmodeld 전용 — UI affinity 재도입 금지
-"""
+"""UI normal-scheduler contract; onroad core6 and offroad little cores."""
 import ast
 import os
 import sys
@@ -117,22 +107,15 @@ class TestEnsureSchedOtherContract:
 class TestUiStartupAst:
   """ui.py 시작/재affine 구조 고정 — import 부작용 때문에 AST 검증."""
 
-  def test_cores_var_assigned_little_cores(self):
-    # UI는 카메라/core5와 모델/core7을 피하고 little cores만 사용한다
+  def test_ui_uses_onroad_core6_policy(self):
     tree = _ui_py_tree()
-    assigns = [n for n in ast.walk(tree) if isinstance(n, ast.Assign)
-               and any(isinstance(t, ast.Name) and t.id == "cores" for t in n.targets)]
-    assert len(assigns) == 1
-    val = assigns[0].value
-    assert isinstance(val, ast.Set) and len(val.elts) == 4
-    assert {e.value for e in val.elts if isinstance(e, ast.Constant)} == {0, 1, 2, 3}
+    calls = [n for n in ast.walk(tree) if isinstance(n, ast.Call) and isinstance(n.func, ast.Name) and n.func.id == "DisplayScheduler"]
+    assert len(calls) == 1 and calls[0].args[0].value == 6
 
-  def test_bootstrap_core0_and_reaffine_linked_to_cores(self):
-    shapes = _affinity_shapes(_ui_py_tree())
-    assert ("const_list", (0,)) in shapes    # core0 부트스트랩 (상수 리스트)
-    assert ("list_of_var", "cores") in shapes  # re-affine은 cores 변수와 직접 연결
-    # 부트스트랩과 re-affine 외 다른 affinity 호출 형태는 없어야 한다
-    assert all(s in (("const_list", (0,)), ("list_of_var", "cores")) for s in shapes)
+  def test_bootstrap_core0_and_runtime_transition(self):
+    assert ("const_list", (0,)) in _affinity_shapes(_ui_py_tree())
+    source = (UI_DIR / "ui.py").read_text()
+    assert "scheduler.update(ui_state.started)" in source
 
   def test_gc_disable_retained(self):
     # 스케줄러 helper 제거 과정에서 gc.disable()까지 사라지면 안 된다 —
@@ -171,22 +154,6 @@ class TestUiStartupAst:
         consts = {e.value for e in node.elts if isinstance(e, ast.Constant)}
         assert 7 not in consts
 
-  def test_reaffine_failure_swallowed_and_retryable(self):
-    # affinity syscall 실패가 UI를 죽이면 안 된다 —
-    # try/except OSError로 삼키고, 렌더 루프 안이라 다음 프레임에 재시도된다
-    tree = _ui_py_tree()
-
-    def contains_reaffine(node):
-      return any(isinstance(n, ast.Call) and isinstance(n.func, ast.Name)
-                 and n.func.id == "set_core_affinity" and n.args
-                 and isinstance(n.args[0], ast.Call) for n in ast.walk(node))
-
-    guarded = [t for t in ast.walk(tree) if isinstance(t, ast.Try) and contains_reaffine(t)
-               and any(h.type is not None and isinstance(h.type, ast.Name)
-                       and h.type.id == "OSError" for h in t.handlers)]
-    assert guarded, "re-affine은 try/except OSError 안에 있어야 한다"
-    loops = [n for n in ast.walk(tree) if isinstance(n, (ast.For, ast.While))]
-    assert any(any(t in ast.walk(loop) for t in guarded) for loop in loops)
 
 
 class TestNoFifoAnywhereInUi:
