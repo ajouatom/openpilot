@@ -705,12 +705,30 @@ class CarState(CarStateBase):
       self.vehicleNaviEvents = [candidate for candidate in self.vehicleNaviEvents if candidate is not event]
       self.vehicleNaviCameraStatusEvent = None
 
-    if (not self._pv5_navi_message_fresh(cp, cp, CANFD_HDA_INFO_MSG, 0x364, 16) or
-        not self._pv5_navi_message_fresh(cp, cp_alt, CANFD_NAVI_STATUS_MSG, 0x380, 24) or
-        self.hda_info_4a3 is None or self.navi_status_380 is None):
+    fresh = (self._pv5_navi_message_fresh(cp, cp, CANFD_HDA_INFO_MSG, 0x364, 16) and
+             self._pv5_navi_message_fresh(cp, cp_alt, CANFD_NAVI_STATUS_MSG, 0x380, 24) and
+             self.hda_info_4a3 is not None and self.navi_status_380 is not None)
+    speed = self.hda_info_4a3["SPEED_LIMIT"] * (1 if self.is_metric else CV.MPH_TO_KPH) if fresh else 0
+    map_warning = fresh and int(self.hda_info_4a3["MapSource"]) == 2 and 0 < self.hda_info_4a3["SPEED_LIMIT"] < 255
+    previous_speed = self.vehicleNaviCameraStatusSpeed or self.pv5_completed_camera_speed
+    if not map_warning or (previous_speed and speed != previous_speed):
+      # PV5 has no decoded current-route/path signal. Stored distance alone
+      # cannot authorize control after navigation cancels or changes its warning.
+      # Flush every camera, including future previews, and consume the cached
+      # profile so it cannot reinsert the old route's distance in this update.
+      self.vehicleNaviEvents = [candidate for candidate in self.vehicleNaviEvents if candidate["type"] != "camera"]
+      self.vehicleNaviCameraStatusEvent = None
+      self.vehicleNaviCameraTarget = None
+      self.vehicleNaviCameraStatusTarget = None
+      self.vehicleNaviCameraStatusSpeed = 0
+      profile_event = (self._classify_vehicle_navi_profile(self._decode_vehicle_navi_profile(self.navi_profile_4be))
+                       if self.navi_profile_4be is not None else None)
+      if profile_event is not None and profile_event[0] == "camera":
+        self.vehicleNaviProfileTimestamp = max(self.vehicleNaviProfileTimestamp,
+                                             self._vehicle_navi_message_timestamp(cp, self.navi_profile_msg))
+
+    if not fresh:
       return False
-    map_warning = int(self.hda_info_4a3["MapSource"]) == 2
-    speed = self.hda_info_4a3["SPEED_LIMIT"] * (1 if self.is_metric else CV.MPH_TO_KPH)
     if not map_warning or speed != self.pv5_completed_camera_speed:
       self.pv5_completed_camera_speed = 0
     return map_warning and self.pv5_completed_camera_speed == 0
@@ -941,10 +959,9 @@ class CarState(CarStateBase):
     # fixed in traveled-distance coordinates so later profiles cannot extend it.
     status_event = self.vehicleNaviCameraStatusEvent
     if self.canfd_wrapped_navi:
-      # Keep the current PV5 camera even when its notification pulses off or
-      # the map starts announcing another limit. Route/setting invalidation
-      # still removes it from the queue. Only match a new warning to a nearby
-      # unpassed event; future previews stay queued independently.
+      # Only a fresh, unchanged map warning authorizes the retained distance.
+      # The warning helper cancels old camera profiles on loss/change; the
+      # short notification pulse alone does not end that authorization.
       if status_event is not None and not any(event is status_event for event in self.vehicleNaviEvents):
         status_event = None
       if status_event is None and speed_limit_cam:
@@ -1001,11 +1018,12 @@ class CarState(CarStateBase):
       ret.vehicleNaviSpeed = self.vehicleNaviSpeedZoneSpeed
 
     cameras = [event for event in upcoming if event["type"] == "camera"]
-    # Keep a matched PV5 current event until its distance is exhausted.
-    # Otherwise an unmatched current warning uses its own virtual distance,
-    # never a different future preview's distance.
-    retain_pv5_camera = self.canfd_wrapped_navi and self.vehicleNaviCameraStatusEvent is not None
-    camera = self.vehicleNaviCameraStatusEvent if speed_limit_cam or retain_pv5_camera else (cameras[0] if cameras else None)
+    # PV5 previews have no current-route proof: never promote one to control
+    # without a fresh matching warning, including after the previous target.
+    if self.canfd_wrapped_navi:
+      camera = self.vehicleNaviCameraStatusEvent if speed_limit_cam else None
+    else:
+      camera = self.vehicleNaviCameraStatusEvent if speed_limit_cam else (cameras[0] if cameras else None)
     if camera is not None:
       self.vehicleNaviCameraTarget = camera["target"]
       ret.speedLimit = camera["speed"]
