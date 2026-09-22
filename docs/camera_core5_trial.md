@@ -1,5 +1,56 @@
 # Camera core5 placement trial
 
+## September 22 follow-up: camera placement rolled back
+
+The camera/IRQ part of this trial is reverted to core6. The UI remains on
+cores0..3 with its verified SCHED_OTHER policy. All control, radar, model and
+cluster placements are unchanged. Camera policy/nice remain SCHED_OTHER/0.
+The table and rationale below describe the historical September 21 trial.
+
+Parked Ioniq 5 C4 testing on `eda4f745` verified the live kernel command line
+`isolcpus=6,7`: core5 admits ordinary background work. A complete scheduler
+trace showed camerad runnable but waiting 24.266ms while proclogd consumed
+13.155ms and planner/radard about 10.6ms on core5. The preceding sensor
+exposure ioctl had completed its CCI wait, and the next road frame's ISP
+completion was already recorded. A later 93.856ms wide-camera delay included
+43.393ms of kswapd execution across two camerad runnable waits. That latter
+sample had substantial temporary tracing storage on tmpfs, so it demonstrates
+the interference path without proving an unperturbed incident frequency.
+The tracing footprint and locally backed-up temporary files were then reduced.
+
+With ftrace off, P/zero speed/selfdrive disabled throughout, the original
+core5/SCHED_OTHER/nice0 configuration reproduced a 91.961ms road-camera age,
+model frame 47481 -> 47483, invalid cameraOdometry, and livePose.inputsOK=false.
+IMU ages remained below 34ms and sensorsOK stayed true. Camera ages here use
+message construction time minus the estimated SOF+11ms EOF, not an independently
+measured hardware EOF. A nice=-10 trial did not materially improve mean/p99
+camera age, so no priority change is retained.
+
+A separate camera+IRQ-only core5/core6/core5 comparison retained normal
+scheduling and all other placements. Each transition had a five-second settle
+interval; the measured phases were 45/90/45 seconds:
+
+| Measurement | core5 before | core6 | core5 restored |
+| --- | ---: | ---: | ---: |
+| Road mean age (ms) | 37.657 | 40.041 | 36.749 |
+| Road max age (ms) | 63.124 | 52.822 | 65.269 |
+| Wide max age (ms) | 60.834 | 56.091 | 81.477 |
+| Camera runnable wait (ms per second) | 84.595 | 56.649 | 69.018 |
+
+There were no model gaps/invalid odometry in these three measured phases or
+their transition intervals. Gyro/accelerometer ages stayed below 34ms.
+Core6 reduced the observed tail and runnable wait, with a roughly 3ms mean-age
+cost. This supports ending the unproven core5 trial; it does not establish a
+failure-rate reduction from a short sequential test, a driving fix, C3 results,
+or the cause of older SOF gaps/IFE faults. The earlier core6 IFE/SOF incidents
+remain distinct evidence and must not be described as solved by this rollback.
+
+Rollback regression checks: 30 placement/UI/pairing tests passed on Windows
+with UTF-8 enabled; five Linux-only UI scheduler tests were skipped. Hardware
+imports for UI guards were stubbed. Ruff and the patch whitespace check passed.
+The live comparison exercised real Linux affinity/IRQ writes and restoration;
+a full native camerad build and driving validation are not established by it.
+
 The user authorized this trial on 2026-09-21 after Ioniq 5 C4 route
 `00000f90--96d7dcd525--4` again produced a temporary Location alert.
 Its wide-camera SOF interval was 101.038 ms despite consecutive frame and

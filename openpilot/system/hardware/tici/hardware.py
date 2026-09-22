@@ -330,10 +330,10 @@ class Tici(HardwareBase):
     # GPU, modeld core
     affine_irq(7, "kgsl-3d0")
 
-    # Match camerad/main.cc: core5 trial, separate from card on core6.
+    # Match camerad/main.cc: restore the AGNOS-isolated camera core.
     camera_irqs = ("a5", "cci", "cpas_camnoc", "cpas-cdm", "csid", "ife", "csid-lite", "ife-lite")
     for n in camera_irqs:
-      affine_irq(5, n)
+      affine_irq(6, n)
 
   def get_gpu_usage_percent(self):
     try:

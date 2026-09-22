@@ -19,7 +19,7 @@ def load_function(path, name, scope):
 def test_camera_irqs_follow_camerad_across_power_save():
   source = (ROOT / "openpilot/system/camerad/main.cc").read_text(encoding="utf-8")
   cores = re.findall(r"util::set_core_affinity\(\{(\d+)\}\)", source)
-  assert cores == ["5"]
+  assert cores == ["6"]
   camera_core = int(cores[0])
   calls, writes = [], []
   set_power_save = load_function("openpilot/system/hardware/tici/hardware.py", "set_power_save", {
@@ -28,7 +28,7 @@ def test_camera_irqs_follow_camerad_across_power_save():
   })
   hardware = SimpleNamespace(amplifier=None)
   # Exercise real power-save code, including offline/online transitions, with
-  # sysfs writes mocked. The target must never drift back to card's core6.
+  # sysfs writes mocked. Camera work must stay off non-isolated core5.
   for powersave in (False, True, False):
     calls.clear()
     writes.clear()
