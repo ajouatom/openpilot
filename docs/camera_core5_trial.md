@@ -51,6 +51,16 @@ imports for UI guards were stubbed. Ruff and the patch whitespace check passed.
 The live comparison exercised real Linux affinity/IRQ writes and restoration;
 a full native camerad build and driving validation are not established by it.
 
+The selected core6 placement was then applied live without restarting the
+vehicle. A further 90 seconds / 1,801 frames per road camera measured maximum
+ages of 54.807ms road and 56.935ms wide, with no model gaps/invalid odometry/pose
+input failures. Camera runnable wait was 102.093ms/s in this later sample,
+so the initial runqueue reduction is not a consistent result across samples.
+The observed tail remained bounded in this sample; a short quiet interval does
+not establish a fixed failure rate. The vehicle checkout remained `eda4f745`;
+live affinity changes require the committed update to persist after restarts
+or subsequent power-state reconfiguration.
+
 The user authorized this trial on 2026-09-21 after Ioniq 5 C4 route
 `00000f90--96d7dcd525--4` again produced a temporary Location alert.
 Its wide-camera SOF interval was 101.038 ms despite consecutive frame and
