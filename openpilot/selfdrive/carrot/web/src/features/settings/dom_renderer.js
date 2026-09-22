@@ -91,7 +91,10 @@ function applyGroupElement(element, entry, animate) {
   element.onclick = null;
   if (entry.kind === "search") {
     // The page owns this form. Do not replace the focused input during typing.
-    element.className = "setting-inline-search-slot";
+    // The slot still takes the shared stagger class: it is created with the
+    // rest of the group list, so it must reveal with its neighbours instead of
+    // popping in while every other row animates.
+    element.className = joinClassNames("setting-inline-search-slot", animate && "ui-stagger-item");
   } else if (entry.kind === "divider") {
     element.className = joinClassNames(
       "setting-profile-divider",

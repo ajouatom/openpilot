@@ -20,6 +20,20 @@ test("matching is case-insensitive but preserves the original casing", () => {
   assert.match(mark("ApplyModelSpeed", "model"), /<mark[^>]*>Model<\/mark>/);
 });
 
+test("an NFD query still highlights NFC text", () => {
+  assert.equal(
+    mark("감속 조절", "감속".normalize("NFD")),
+    '<mark class="setting-search-result__mark">감속</mark> 조절',
+  );
+});
+
+test("NFD source text is matched and returned in its NFC form", () => {
+  assert.equal(
+    mark("감속".normalize("NFD"), "감속"),
+    '<mark class="setting-search-result__mark">감속</mark>',
+  );
+});
+
 test("only the first occurrence is highlighted", () => {
   const html = mark("speed speed", "speed");
   assert.equal(html.match(/<mark/g).length, 1);

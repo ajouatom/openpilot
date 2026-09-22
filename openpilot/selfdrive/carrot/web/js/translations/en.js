@@ -536,6 +536,7 @@ window.CarrotTranslations.register("en", {
     web_drive_layout_content_navigation: "Carrot Navi",
     web_drive_layout_content_drive_insights: "Drive Insights",
     web_drive_layout_swap: "Swap area content",
+    web_drive_layout_reset_hint: "Restore the landscape and portrait layouts to their defaults (Area 1 full screen, Carrot Vision)",
     drive_content_status_preparing: "Preparing",
     drive_content_status_waiting: "Waiting",
     drive_content_status_empty: "Nothing to display",

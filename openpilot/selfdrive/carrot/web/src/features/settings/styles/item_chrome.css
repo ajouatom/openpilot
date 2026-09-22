@@ -89,7 +89,10 @@
   border-radius: 999px;
   background: transparent;
   color: var(--md-on-surface);
-  transition: background 0.14s ease, color 0.14s ease, transform 0.14s ease;
+  transition:
+    background var(--motion-quick) var(--ease-standard),
+    color var(--motion-quick) var(--ease-standard),
+    transform var(--motion-quick) var(--ease-standard);
 }
 
 .page--setting #settingScreenItems #itemsTitle:active .setting-title-backIcon {
@@ -182,7 +185,7 @@
 }
 
 .page--setting #settingScreenItems .setting-marquee.is-overflowing .setting-marquee__content {
-  animation: setting-marquee-pan 6s linear 0.5s infinite alternate;
+  animation: setting-marquee-pan var(--setting-marquee-duration) linear 0.5s infinite alternate;
 }
 
 .page--setting #settingScreenItems .setting-marquee.is-manual .setting-marquee__content {

@@ -64,6 +64,10 @@ The following-distance bar and its 25 m label show the current dynamically adjus
 - road video or another supported content type in each area; and
 - swapping the two areas.
 
+A fresh install starts with **Area 1 full screen** in both orientations: Area 1 is **Carrot Vision** and Area 2 is **Carrot Navi**, so the Drive page shows Carrot Vision full screen. Switching to Split divides landscape 70% / 30% and portrait 50% / 50%.
+
+**Default** restores both orientations to **Area 1 full screen** with Area 1 Carrot Vision and Area 2 Carrot Navi.
+
 Unavailable content reports waiting, recovering, unavailable, or unsupported. Changing the web layout does not change vehicle-control behavior.
 
 ### Starting and stopping a screen recording

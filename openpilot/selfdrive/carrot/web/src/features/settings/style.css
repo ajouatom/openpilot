@@ -1,8 +1,11 @@
-/* Import order is the cascade order. The six files below replace the former
-   device.css and appear in exactly the order its sections did, so the built
-   stylesheet is unchanged. */
+/* Import order is the cascade order. The files below replace the former
+   device.css; base/panels/search_and_dialogs/layout keep its section order.
+   Search component styles live in styles/search.css between the menu chrome
+   (panels) and the shared layout overrides (layout), which stay last so their
+   breakpoints keep winning. */
 @import "./styles/base.css";
 @import "./styles/panels.css";
+@import "./styles/search.css";
 @import "./styles/search_and_dialogs.css";
 @import "./styles/layout.css";
 @import "./styles/item_row.css";
