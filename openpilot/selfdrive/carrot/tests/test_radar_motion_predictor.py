@@ -4183,6 +4183,72 @@ def test_stationary_radar_rejects_fast_vision_speed_mismatch() -> None:
   assert matcher.stationary_identity is None
 
 
+@pytest.mark.parametrize("mode", (1, 2, 3))
+def test_front_position_history_promotes_without_corner_or_second_dwell(mode: int) -> None:
+  controller = DPathRadarController(enable_radar_tracks=mode)
+  for index in range(7):
+    time_s = index * 0.05
+    distance = 100.0 - 22.0 * time_s
+    model = model_with_lead(distance, 0.1, 16.0, probability=0.75 if index == 0 else 0.85)
+    model.leadsV3[0].vStd = (4.5,)
+    output = controller.update(
+      time_s=time_s, v_ego=22.0,
+      radar_points=(Point(51, distance, 0.1, v_rel=-22.0, trackState=2),),
+      model=model, yaw_rate_rad_s=0.03,
+    )
+    assert output.lead_one is not None
+    if index < 5:
+      assert output.lead_one["radarTrackId"] == -1
+    else:
+      assert output.lead_one["radarTrackId"] == 51
+      assert output.lead_one["vLead"] == pytest.approx(0.0)
+      assert not controller.primary_matcher.stationary_corner_supported
+
+
+@pytest.mark.parametrize("broken_evidence", (
+  "probability_gap", "position_gap", "range_jump", "radar_dropout", "weak_track",
+  "lateral_gap", "tight_turn", "precise_speed", "moving_competitor", "weak_confirmation", "reset",
+))
+def test_front_position_history_requires_continuous_uncontested_evidence(broken_evidence: str) -> None:
+  controller = DPathRadarController(enable_radar_tracks=2)
+  for index in range(7):
+    time_s = index * 0.05
+    distance = 100.0 - 22.0 * time_s
+    probability = 0.85
+    vision_distance = distance
+    radar_distance = distance
+    y_rel = 0.1
+    track_state = 2
+    yaw_rate = 0.03
+    if index == 3:
+      if broken_evidence == "probability_gap":
+        probability = 0.69
+      elif broken_evidence == "position_gap":
+        vision_distance += 6.0
+      elif broken_evidence == "lateral_gap":
+        y_rel = 1.5
+      elif broken_evidence == "weak_track":
+        track_state = 1
+      elif broken_evidence == "tight_turn":
+        yaw_rate = 0.11
+      elif broken_evidence == "reset":
+        controller.primary_matcher.reset()
+    if broken_evidence == "range_jump" and index >= 3:
+      radar_distance += 1.0
+    if broken_evidence == "weak_confirmation" and index >= 5:
+      probability = 0.79
+    model = model_with_lead(vision_distance, 0.1, 16.0, probability=probability)
+    model.leadsV3[0].vStd = (1.5 if broken_evidence == "precise_speed" else 4.5,)
+    points = [Point(51, radar_distance, y_rel, v_rel=-22.0, trackState=track_state)]
+    if broken_evidence == "radar_dropout" and index == 3:
+      points = []
+    if broken_evidence == "moving_competitor":
+      points.append(Point(77, distance + 1.0, 0.1, v_rel=-6.0, trackState=2))
+    output = controller.update(time_s=time_s, v_ego=22.0, radar_points=points,
+                               model=model, yaw_rate_rad_s=yaw_rate)
+    assert output.lead_one is None or output.lead_one["radarTrackId"] != 51
+
+
 def test_stationary_front_position_lock_recovers_model_speed_error() -> None:
   matcher = VisionRadarMatcher()
   match = None
