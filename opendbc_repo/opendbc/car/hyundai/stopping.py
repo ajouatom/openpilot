@@ -1,14 +1,15 @@
-"""carrot-stopping experiment: stock-like stop request and bounded re-entry.
+"""carrot-stopping experiment: continuous stop acceleration and bounded re-entry.
 
 Thresholds below are experimental, not OEM acceptance conditions. This controller
 cannot guarantee stopping; ECU response must be measured on the vehicle.
 """
 from dataclasses import dataclass
 from enum import StrEnum
+import math
 
 
 DT = 0.02  # SCC_CONTROL is transmitted at 50 Hz
-ENTRY_SPEED = 0.7  # m/s; do not replace approach braking with a zero request above this
+ENTRY_SPEED = 0.7  # m/s; retain approach braking above the low-speed stop region
 STOP_SPEED = 0.05
 MOVING_SPEED = 0.10
 STOP_CONFIRM_TIME = 0.2
@@ -21,6 +22,14 @@ RELEASE_TIME_LIMIT = 1.0
 RECOVERY_ACCEL = -0.5
 STOP_LOWER_BAND = 0.20  # fixed experimental value; never copied from the stock SCC
 SOFT_HOLD_PREPARE_CYCLES = 2  # completed SCC frames at or below RECOVERY_ACCEL
+DEFAULT_STOPPING_RATE = 0.8  # m/s^3; CarParams.stoppingDecelRate supplies the vehicle rate
+
+
+def converge_stopping_accel(accel: float, target: float, rate: float, dt: float) -> float:
+  """Approach a negative stop target from either side without overshooting."""
+  accel = min(accel, 0.0)
+  step = max(rate, 0.0) * dt
+  return min(accel + step, target) if accel < target else max(accel - step, target)
 
 
 class StopPhase(StrEnum):
@@ -43,7 +52,8 @@ class StopCommand:
 
 
 class CanfdStopping:
-  def __init__(self):
+  def __init__(self, stopping_rate: float = DEFAULT_STOPPING_RATE):
+    self.stopping_rate = stopping_rate if math.isfinite(stopping_rate) and stopping_rate > 0 else DEFAULT_STOPPING_RATE
     self.reset()
 
   def reset(self):
@@ -58,6 +68,7 @@ class CanfdStopping:
     self.rolling_time = 0.0
     self.last_value = 0.0
     self.prepare_cycles = 0
+    self.stop_req_last = False
 
   def enter(self, phase: StopPhase, speed: float, reason: str):
     self.phase = phase
@@ -127,14 +138,22 @@ class CanfdStopping:
       self.enter(StopPhase.retry, speed, "reassert_once")
 
     if self.phase in (StopPhase.request, StopPhase.retry, StopPhase.held):
-      self.last_value = 0.0
-      return StopCommand(1, 0.0, 0.0, STOP_LOWER_BAND)
+      # Preserve the preceding SCC output on each StopReq rising edge. Both
+      # requests then converge to -0.5, including when braking started stronger.
+      if self.stop_req_last:
+        jerk_limit = jerk_u if self.last_value < RECOVERY_ACCEL else jerk_l
+        self.last_value = converge_stopping_accel(self.last_value, RECOVERY_ACCEL,
+                                                  min(self.stopping_rate, jerk_limit), DT)
+      self.last_value = min(self.last_value, 0.0)
+      self.stop_req_last = True
+      return StopCommand(1, self.last_value, self.last_value, STOP_LOWER_BAND)
 
     # StopReq is released while requesting ordinary deceleration. Retain a
     # stronger existing braking request; never send a positive recovery request.
     return self._decelerate(accel, jerk_u, jerk_l)
 
   def _decelerate(self, accel: float, jerk_u: float, jerk_l: float) -> StopCommand:
+    self.stop_req_last = False
     raw = min(accel, RECOVERY_ACCEL)
     self.last_value = min(0.0, max(self.last_value - jerk_l * DT, min(raw, self.last_value + jerk_u * DT)))
     return StopCommand(0, raw, self.last_value, 0.0)

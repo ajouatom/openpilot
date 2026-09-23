@@ -458,6 +458,7 @@ def create_acc_control_scc2(packer, CAN, enabled, accel_value_last, accel, stopp
   enabled = acc_control_enabled
 
   acc_mode = 0 if not enabled else (2 if gas_override else 1)
+  previous_value = accel_value_last
 
   if hyundai_jerk.carrot_cruise == 1:
     acc_mode = 4 if enabled else 0
@@ -517,12 +518,12 @@ def create_acc_control_scc2(packer, CAN, enabled, accel_value_last, accel, stopp
   values["AccelLimitBandLower"] = 0.0
 
   values["ZEROS_7"] = 0 if stop_controller is not None else 1
-  apply_stopping_experiment(values, CS, stop_controller, accel, accel_value_last, jerk_u, jerk_l)
+  apply_stopping_experiment(values, CS, stop_controller, accel, previous_value, jerk_u, jerk_l)
 
   return packer.make_can_msg("SCC_CONTROL", CAN.ECAN, values), values["aReqValue"]
 
 def create_acc_control(packer, CAN, enabled, accel_last, accel, stopping, gas_override, set_speed, hud_control, jerk_u, jerk_l, CS,
-                       stop_controller=None):
+                       stop_controller=None, accel_value_last=None):
 
   interlock_active = longitudinal_interlock_active(CS)
   soft_hold_active = CS.softHoldActive > 0 and CS.out.cruiseState.available
@@ -562,8 +563,11 @@ def create_acc_control(packer, CAN, enabled, accel_last, accel, stopping, gas_ov
     "ZEROS_7": 0,
   }
 
-  apply_stopping_experiment(values, CS, stop_controller, accel, accel_last, jerk_u, jerk_l)
-  return packer.make_can_msg("SCC_CONTROL", CAN.ECAN, values)
+  # accel_last is the legacy raw target, not necessarily the previous SCC
+  # output. Retain that path when OFF; anchor stop entry to the returned value.
+  previous_value = accel_last if accel_value_last is None else accel_value_last
+  apply_stopping_experiment(values, CS, stop_controller, accel, previous_value, jerk_u, jerk_l)
+  return packer.make_can_msg("SCC_CONTROL", CAN.ECAN, values), values["aReqValue"]
 
 
 def create_spas_messages(packer, CAN, frame, left_blink, right_blink):
