@@ -66,7 +66,9 @@ const CameraConfig DRIVER_CAMERA_CONFIG = {
   .phy = CAM_ISP_IFE_IN_RES_PHY_2,
   .vignetting_correction = false,
   .output_type = ISP_BPS_PROCESSED,
-  .staggered_sof = true,
+  // Bundled panda/board/drivers/clock_source.h drives all FSIN outputs from
+  // TIM1 in phase. A staggered driver SOF requires the matching TIM8 firmware.
+  .staggered_sof = false,
 };
 
 const CameraConfig ALL_CAMERA_CONFIGS[] = {WIDE_ROAD_CAMERA_CONFIG, ROAD_CAMERA_CONFIG, DRIVER_CAMERA_CONFIG};

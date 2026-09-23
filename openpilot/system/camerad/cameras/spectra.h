@@ -13,6 +13,7 @@
 #include "common/swaglog.h"
 #include "system/camerad/cameras/hw.h"
 #include "system/camerad/cameras/camera_common.h"
+#include "system/camerad/cameras/camera_event_timing.h"
 #include "system/camerad/sensors/sensor.h"
 
 #define MAX_IFE_BUFS 20
@@ -210,6 +211,7 @@ public:
   uint64_t frame_id_raw_last = 0;
   int invalid_request_count = 0;
   bool skip_expected = true;
+  CameraEventTiming event_timing;
 
   CameraBuf buf;
   SpectraMaster *m;

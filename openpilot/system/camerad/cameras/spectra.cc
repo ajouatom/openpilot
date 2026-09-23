@@ -1409,7 +1409,7 @@ bool SpectraCamera::handle_camera_event(const cam_req_mgr_message *event_data) {
 
   uint64_t request_id = event_data->u.frame_msg.request_id;  // ID from the camera request manager
   uint64_t frame_id_raw = event_data->u.frame_msg.frame_id;  // raw as opposed to our re-indexed frame ID
-  uint64_t timestamp = event_data->u.frame_msg.timestamp;    // timestamped in the kernel's SOF IRQ callback
+  uint64_t timestamp = event_data->u.frame_msg.timestamp;    // BOOT_TS from the kernel SOF handling path
   //LOGD("handle cam %d ts %lu req id %lu frame id %lu", cc.camera_num, timestamp, request_id, frame_id_raw);
 
   // if there's a lag, some more frames could have already come in before
@@ -1417,6 +1417,17 @@ bool SpectraCamera::handle_camera_event(const cam_req_mgr_message *event_data) {
   if (timestamp < last_requeue_ts) {
     LOGD("skipping frame: ts before requeue / cam %d ts %lu req id %lu frame id %lu", cc.camera_num, timestamp, request_id, frame_id_raw);
     return false;
+  }
+
+  const uint64_t received = nanos_since_boot();
+  const auto timing = event_timing.observe(timestamp, received);
+  if (timing.report) {
+    LOGW("camera SOF timing: camera %d raw_id %lu request %lu sof_boot_ns %lu received_ns %lu "
+         "sof_delta_ms %.3f event_age_ms %.3f sof_status %u last_valid_raw %lu last_valid_request %lu "
+         "last_requeue_ns %lu suppressed %lu",
+         cc.camera_num, frame_id_raw, request_id, timestamp, received,
+         timing.sof_delta_ns * 1e-6, timing.event_age_ns * 1e-6, event_data->u.frame_msg.sof_status,
+         frame_id_raw_last, request_id_last, last_requeue_ts, timing.suppressed);
   }
 
   if (stress_test("skipping SOF event")) {

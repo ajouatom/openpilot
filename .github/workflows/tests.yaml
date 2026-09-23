@@ -48,6 +48,8 @@ jobs:
       - run: ./tools/op.sh setup
       - name: Build openpilot
         run: scons
+      - name: Check passive camera SOF diagnostics
+        run: openpilot/system/camerad/test/test_camera_event_timing
       - name: Check model, monitoring and Bluetooth integration
         run: |
           python -m pytest -o addopts='' -q \
