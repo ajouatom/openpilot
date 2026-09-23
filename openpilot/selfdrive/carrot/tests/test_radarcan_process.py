@@ -8,7 +8,8 @@ import pytest
 
 
 @pytest.mark.skipif(sys.platform != 'linux', reason='requires built Linux msgq/Params runtime')
-def test_radarcan_publishes_invalid_on_missing_input_and_recovers():
+@pytest.mark.parametrize('radar_track_flip', [False, True])
+def test_radarcan_publishes_invalid_on_missing_input_and_recovers(radar_track_flip):
   from openpilot.cereal import car, messaging
   from openpilot.common.params import Params
   from openpilot.common.prefix import OpenpilotPrefix
@@ -17,6 +18,7 @@ def test_radarcan_publishes_invalid_on_missing_input_and_recovers():
   with OpenpilotPrefix():
     cp = car.CarParams.new_message(carFingerprint=str(CAR.MOCK), brand='mock', radarTimeStep=0.05)
     Params().put('CarParams', cp.to_bytes())
+    Params().put_bool('RadarTrackFlip', radar_track_flip)
     pm = messaging.PubMaster(['can', 'carState'])
     tracks = messaging.sub_sock('liveTracks', conflate=False)
     env = dict(os.environ)
@@ -40,6 +42,7 @@ def test_radarcan_publishes_invalid_on_missing_input_and_recovers():
           pm.send('carState', cs)
           time.sleep(0.01)
           for msg in messaging.drain_sock(tracks):
+            assert msg.liveTracks.radarTrackFlipped == radar_track_flip
             if msg.valid == valid:
               if not valid:
                 assert msg.liveTracks.errors.canError
@@ -47,6 +50,8 @@ def test_radarcan_publishes_invalid_on_missing_input_and_recovers():
         pytest.fail(f'no liveTracks valid={valid}, send_can={send_can}')
 
       drive_until(True)
+      # A setting edit cannot change the coordinate system until restart.
+      Params().put_bool('RadarTrackFlip', not radar_track_flip)
       messaging.drain_sock(tracks)
       drive_until(False, send_can=False)
       messaging.drain_sock(tracks)

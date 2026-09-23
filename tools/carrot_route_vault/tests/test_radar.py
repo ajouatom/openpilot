@@ -14,8 +14,8 @@ from .test_viewer import DIRECTORY, ROUTE, OTHER_ROUTE, create_share, seed_route
 def test_radar_route_scope_and_revocation(tmp_path, monkeypatch):
   calls = []
 
-  async def response(_self, source, sensor, sensitivity):
-    calls.append((source, sensor, sensitivity))
+  async def response(_self, source, sensor, sensitivity, radar_track_flip="recorded"):
+    calls.append((source, sensor, sensitivity, radar_track_flip))
     return web.json_response({"status": "preparing"}, status=202)
 
   monkeypatch.setattr(RadarJobs, "response", response)
@@ -28,7 +28,9 @@ def test_radar_route_scope_and_revocation(tmp_path, monkeypatch):
       assert (await client.get(base + "/radar/1")).status == 404
       assert not calls
       assert (await client.get(base + "/radar/0?sensor=front&sensitivity=5")).status == 202
-      assert calls[-1] == (tmp_path / "uploads/routes" / DIRECTORY / f"{ROUTE}--0/rlog.zst", "front", 3)
+      assert calls[-1] == (tmp_path / "uploads/routes" / DIRECTORY / f"{ROUTE}--0/rlog.zst", "front", 3, "recorded")
+      assert (await client.get(base + "/radar/0?radar_track_flip=flipped")).status == 202
+      assert calls[-1][3] == "flipped"
       assert (await client.get(base + "/radar/0?sensitivity=bad")).status == 202
       assert calls[-1][2] == 3
       share = await create_share(client)
@@ -58,8 +60,8 @@ def test_job_deduplicates_and_publishes_cache(tmp_path, monkeypatch):
     calls = []
     release = asyncio.Event()
 
-    async def prepare(src, output, sensor, sensitivity):
-      calls.append(src)
+    async def prepare(src, output, sensor, sensitivity, radar_track_flip="recorded"):
+      calls.append((src, radar_track_flip))
       await release.wait()
       output.parent.mkdir(exist_ok=True)
       output.write_bytes(gzip.compress(b'{"frames":[{}]}'))
@@ -73,6 +75,15 @@ def test_job_deduplicates_and_publishes_cache(tmp_path, monkeypatch):
     await asyncio.gather(*manager.jobs.values())
     assert (await manager.response(source, "auto", 3)).status == 200
     assert not manager.jobs
+    assert (await manager.response(source, "auto", 3, "flipped")).status == 202
+    await asyncio.gather(*manager.jobs.values())
+    assert calls[-1] == (source, "flipped")
+    assert (await manager.response(source, "auto", 3, "flipped")).status == 200
+    assert (await manager.response(source, "auto", 3, "normal")).status == 202
+    await asyncio.gather(*manager.jobs.values())
+    assert calls[-1] == (source, "normal")
+    with pytest.raises(web.HTTPBadRequest):
+      await manager.response(source, "auto", 3, "invalid")
     with pytest.raises(web.HTTPBadRequest):
       await manager.response(source, "invalid", 3)
     source.write_bytes(b"replacement log")

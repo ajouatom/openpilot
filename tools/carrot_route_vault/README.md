@@ -12,7 +12,13 @@ and recalculated Lead 1/2, per-track dPath diagnostics, and a lead-distance grap
 Video and radar share the recorded qcamera timing; when timing or video is
 unavailable, the radar timeline operates independently and says so explicitly.
 The web replay sensitivity is fixed to 3, including requests with an old sensitivity
-query parameter. The browser source control only changes replay analysis. A single
+query parameter. The browser source control only changes replay analysis. The
+front-radar orientation selector offers recorded/normal/inverted coordinates for
+analysis only; it never changes the vehicle setting or recorded lead decisions.
+New liveTracks messages mark applied `RadarTrackFlip`, so replay preserves logged
+orientation by default and explicit overrides never invert a corrected log twice.
+The override changes front-track lateral position and velocity before selection;
+SCC, corner radar and vision retain their own coordinates. A single
 playback bar spans the video and radar panels, followed by a full-width distance/speed
 and acceleration graph using the desktop reviewer's continuity series.
 Clicking anywhere in the camera, radar or lower graph panels toggles playback and
