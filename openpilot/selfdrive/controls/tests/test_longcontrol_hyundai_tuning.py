@@ -189,6 +189,32 @@ def test_stopping_preserves_stronger_braking_and_vehicle_soft_hold(monkeypatch, 
   assert accel == expected
 
 
+@pytest.mark.parametrize("soft_hold", [0, 1])
+@pytest.mark.parametrize("initial", [-1.0, -0.5, -0.3, 0.0])
+@pytest.mark.parametrize("rate", [0.4, 0.8])
+def test_experiment_stopping_converges_both_directions_at_vehicle_rate(monkeypatch, soft_hold, initial, rate):
+  monkeypatch.setattr(longcontrol_module, "Params", lambda: DictParams({"CanfdStopRetry": True}))
+  cp = make_cp()
+  cp.flags = longcontrol_module.HyundaiFlags.CANFD
+  cp.stopAccel = -2.0
+  cp.stoppingDecelRate = rate
+  control = LongControl(cp)
+  control.last_output_accel = initial
+  cs = SimpleNamespace(softHoldActive=soft_hold, vEgo=0.0, aEgo=0.0, brakePressed=False,
+                       cruiseState=SimpleNamespace(standstill=True))
+  plan = SimpleNamespace(aTarget=-2.0, vTargetNow=0.0, jTargetNow=0.0, shouldStop=True)
+  radar = SimpleNamespace(leadOne=SimpleNamespace(status=False, dRel=0.0))
+  previous = initial
+  for _ in range(150):
+    accel, _, _ = control.update(True, cs, plan, (-3.5, 2.0), 0.0, radar)
+    assert control.long_control_state == longcontrol_module.LongCtrlState.stopping
+    assert abs(accel - previous) <= rate * longcontrol_module.DT_CTRL + 1e-9
+    assert abs(accel + 0.5) <= abs(previous + 0.5) + 1e-9
+    assert min(initial, -0.5) <= accel <= max(initial, -0.5)
+    previous = accel
+  assert accel == pytest.approx(-0.5)
+
+
 def test_hyundai_tuning_is_fixed_without_reading_params():
   control = make_control(hyundai=True, params=RejectingParams())
 

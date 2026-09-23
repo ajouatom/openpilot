@@ -6,6 +6,7 @@ from openpilot.common.pid import PIDController
 from openpilot.selfdrive.modeld.constants import ModelConstants
 from openpilot.common.params import Params
 from opendbc.car.hyundai.values import HyundaiFlags
+from opendbc.car.hyundai.stopping import converge_stopping_accel
 
 CONTROL_N_T_IDX = ModelConstants.T_IDXS[:CONTROL_N]
 
@@ -142,12 +143,14 @@ class LongControl:
     elif self.long_control_state == LongCtrlState.stopping:
       output_accel = self.last_output_accel
 
-      if soft_hold_active:
-        output_accel = self.CP.stopAccel
-
-      if output_accel > self.stopping_accel:
-        output_accel = min(output_accel, 0.0)
-        output_accel -= self.CP.stoppingDecelRate * DT_CTRL
+      if self.canfd_stop_retry:
+        output_accel = converge_stopping_accel(output_accel, self.stopping_accel, self.CP.stoppingDecelRate, DT_CTRL)
+      else:
+        if soft_hold_active:
+          output_accel = self.CP.stopAccel
+        if output_accel > self.stopping_accel:
+          output_accel = min(output_accel, 0.0)
+          output_accel -= self.CP.stoppingDecelRate * DT_CTRL
       self.reset()
 
     elif self.long_control_state == LongCtrlState.starting:

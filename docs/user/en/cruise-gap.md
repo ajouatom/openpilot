@@ -119,19 +119,19 @@ It is therefore not the actual moving following distance. Its direct effect is c
 
 Stopping acceleration is fixed at `-0.50 m/s²` (formerly stored as `-50`) for all brands and is no longer adjustable in settings. Existing `StoppingAccel` values, including `0` and other negative values, are ignored.
 
-This value sets the stop-entry acceleration threshold and the target used when gradually increasing braking in normal stopping state. Stronger braking already in progress is retained, and soft hold continues to use the vehicle-specific stationary-hold acceleration. This value does not directly control acceleration or braking when stock ACC is responsible.
+This value sets the stop-entry acceleration threshold and the target used when gradually increasing braking in normal stopping state. With the CANFD experiment below OFF, stronger requests are retained and soft hold uses the vehicle-specific stationary-hold acceleration. With it ON, stronger requests also gradually return to -0.50 m/s². This value does not directly control acceleration or braking when stock ACC is responsible.
 
 ### CANFD Stop Retry (Experimental) · `CanfdStopRetry`
 
 Available under Vehicle & Hardware → CANFD·HDA, with **OFF** as the default. Applies only to Hyundai/Kia CANFD with openpilot longitudinal control. Changes apply during driving within about 0.5 seconds without rebooting. Retry state resets only when switching ON or OFF; leaving the setting unchanged preserves an ongoing retry.
 
 - **OFF:** Retains existing stop requests, negative acceleration requests, InfoDisplay, and byte7 handling.
-- **ON:** Sends StopReq=1 with aReq=0 during low-speed stop requests and sets InfoDisplay and byte7 to zero. The lower band uses a fixed experimental value of 0.20 during stop requests, without copying stock SCC values.
+- **ON:** When StopReq becomes active, both aReqRaw and aReqValue start from the preceding aReqValue output and gradually approach -0.50 m/s². A -0.30 request becomes more negative; a -1.00 request becomes less negative. Positive starting requests are clamped to zero. InfoDisplay and byte7 are zero, and the lower band uses a fixed experimental value of 0.20 during stop requests without copying stock SCC values.
 - In normal ACC, decelerating below 0.7 m/s with a planned stop prepares stop intent up to one second earlier. Ordinary braking continues while actual acceleration is below -0.50 m/s²; stopping begins in the control cycle when it reaches -0.50 m/s² or above. Steady crawling and planned starts or reacceleration do not qualify. Blended-mode stop intent is unchanged.
 - An armed, stationary soft hold requests negative acceleration before the driver releases the brake. StopReq is asserted after two SCC frames with transmitted aReqValue at or below -0.50 m/s². Jerk limiting can extend preparation; releasing the pedal earlier continues the preparation phase.
 - If motion persists, releases StopReq, requests negative acceleration, then reasserts once. If the retry still fails, retains negative acceleration requests without repeated toggling. Accelerator input, cruise disengagement, and interlocks such as Auto Hold cancel it. Requests while the brake is pressed are allowed only for an armed soft hold with every speed input at or below 0.10 m/s.
 
-The fixed stopping acceleration above still applies. When enabled, the CAN output stage substitutes zero acceleration during stop requests; recovery requests the stronger deceleration of the existing request and -0.50 m/s².
+Convergence follows the vehicle's stopping rate and CAN jerk limits without passing the target. Reasserting StopReq also continues from the preceding output. Recovery with StopReq released requests the stronger deceleration of the existing request and -0.50 m/s².
 
 > [!CAUTION]
 > Complete stopping and collision prevention have not been established across vehicles. Validate only in a controlled area where you can brake directly. Switch OFF to restore the previous method at the next settings refresh. Switching while stopped also changes the transmitted requests, so change it only when prepared to brake directly.

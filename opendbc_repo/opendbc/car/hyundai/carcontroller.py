@@ -186,7 +186,7 @@ class CarController(CarControllerBase):
     self.accel_value_last = 0.0
     self.display_lead_lateral = hyundaicanfd.DisplayLeadLateralFilter()
     # Refreshed with the other live settings in update().
-    self.canfd_stopping = CanfdStopping() if Params().get_bool("CanfdStopRetry") else None
+    self.canfd_stopping = CanfdStopping(CP.stoppingDecelRate) if Params().get_bool("CanfdStopRetry") else None
     self.apply_torque_last = 0
     self.car_fingerprint = CP.carFingerprint
     self.last_button_frame = 0
@@ -240,7 +240,7 @@ class CarController(CarControllerBase):
   def _update_canfd_stop_retry(self, params):
     enabled = params.get_bool("CanfdStopRetry")
     if enabled != (self.canfd_stopping is not None):
-      self.canfd_stopping = CanfdStopping() if enabled else None
+      self.canfd_stopping = CanfdStopping(self.CP.stoppingDecelRate) if enabled else None
       carlog.warning({"event": "canfd_stop_retry_setting", "enabled": enabled})
 
   def update(self, CC, CS, now_nanos):
@@ -555,9 +555,13 @@ class CarController(CarControllerBase):
               can_sends.append(msg)
             can_sends.extend(hyundaicanfd.create_tcs_messages(self.packer, self.CAN, CS)) # for sorento SCC radar...
           else:
-            can_sends.append(hyundaicanfd.create_acc_control(self.packer, self.CAN, CC.enabled, self.accel_last, accel, stopping,
-                                                             CC.cruiseControl.override, set_speed_in_units, hud_control,
-                                                             self.hyundai_jerk.jerk_u, self.hyundai_jerk.jerk_l, CS, self.canfd_stopping))
+            msg, self.accel_value_last = hyundaicanfd.create_acc_control(
+              self.packer, self.CAN, CC.enabled, self.accel_last, accel, stopping,
+              CC.cruiseControl.override, set_speed_in_units, hud_control,
+              self.hyundai_jerk.jerk_u, self.hyundai_jerk.jerk_l, CS, self.canfd_stopping,
+              accel_value_last=self.accel_value_last,
+            )
+            can_sends.append(msg)
             self.accel_last = accel
       else:
         # button presses
