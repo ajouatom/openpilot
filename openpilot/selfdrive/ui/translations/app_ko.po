@@ -1492,3 +1492,11 @@ msgstr "감지"
 #: openpilot/selfdrive/ui/mici/onroad/vision_renderer.py
 msgid "NO DETECTION"
 msgstr "미감지"
+
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "CAN Error: Enable CameraSCC"
+msgstr "CAN 오류: CameraSCC 설정을 켜 주세요"
+
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "SCC detected on camera bus"
+msgstr "카메라 버스에서 SCC 신호가 감지되었습니다"

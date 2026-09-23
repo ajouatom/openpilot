@@ -1499,3 +1499,11 @@ msgstr "检测到"
 #: openpilot/selfdrive/ui/mici/onroad/vision_renderer.py
 msgid "NO DETECTION"
 msgstr "未检测到"
+
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "CAN Error: Enable CameraSCC"
+msgstr "CAN 错误：请启用 CameraSCC"
+
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "SCC detected on camera bus"
+msgstr "在摄像头总线上检测到 SCC 信号"

@@ -6,6 +6,8 @@ import os
 from enum import IntEnum
 from collections.abc import Callable
 
+from opendbc.car.hyundai.values import HyundaiFlags
+
 from openpilot.cereal import log, car
 import openpilot.cereal.messaging as messaging
 from openpilot.common.constants import CV
@@ -415,7 +417,15 @@ def invalid_lkas_setting_alert(CP: car.CarParams, CS: car.CarState, sm: messagin
   return NormalPermanentAlert("Invalid LKAS setting", text)
 
 def car_parser_result(CP: car.CarParams, CS: car.CarState, sm: messaging.SubMaster, metric: bool, soft_disable_time: int, personality) -> Alert:
-  results = Params().get("CanParserResult")
+  params = Params()
+  if (CP.brand == "hyundai" and not (CP.flags & HyundaiFlags.CAMERA_SCC)
+      and params.get_int("HyundaiCameraSCC") == 0 and params.get_bool("HyundaiCameraSccHint")):
+    return Alert(
+      "CAN Error: Enable CameraSCC",
+      "SCC detected on camera bus",
+      AlertStatus.normal, AlertSize.mid,
+      Priority.LOW, VisualAlert.none, AudibleAlert.none, 1., creation_delay=1.)
+  results = params.get("CanParserResult")
   if results is None:
     results = ""
   return Alert(
