@@ -3227,6 +3227,35 @@ def test_controller_releases_paired_cutin_that_will_pass_before_entry(monkeypatc
   assert selected and rejected
 
 
+@pytest.mark.parametrize("side", (-1, 1))
+def test_controller_clears_stationary_pair_motion_disagreement_without_l2_hold(side) -> None:
+  controller = DPathRadarController(prefer_corner_radar=True)
+  selected = False
+  risk_seen = False
+  for index in range(16):
+    time_s = index * 0.05
+    distance = 13.0 - 4.8 * time_s
+    output = controller.update(
+      time_s, 6.0,
+      (
+        Point(36, 25.0, 0.0, v_lead=6.0),
+        Point(52, distance, side * 3.9, v_rel=-5.7, v_lead=0.3),
+        Point(2302, distance, side * (5.0 - 2.0 * time_s), v_rel=-4.8, v_lead=1.2,
+              yv_rel=-side * (0.3 if index < 12 else 0.05), source="corner235", trackState=2),
+      ),
+      model_with_lead(25.0, 0.0, 6.0),
+    )
+    if index < 12:
+      selected |= output.lead_two is not None
+      risk_seen |= output.lead_cutin_risk is not None
+    else:
+      assert selected and risk_seen
+      assert any(e.stationary_pair_alias for e in controller.trajectory_cutin.last_estimates)
+      assert output.lead_two is None
+      assert not output.leads_cutin
+      assert output.lead_cutin_risk is None
+
+
 def test_corner_cutin_predecel_requires_continuous_confirmation() -> None:
   tracker = CornerCutInPredecelTracker(confirmation_s=0.10, hold_s=0.20)
   candidate = RadarMotionCutIn(SimpleNamespace(

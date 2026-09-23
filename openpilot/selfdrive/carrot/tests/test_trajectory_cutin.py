@@ -87,6 +87,45 @@ def test_low_speed_prediction_looks_farther_ahead() -> None:
   assert prediction_horizon_s(2.0) > prediction_horizon_s(25.0)
 
 
+@pytest.mark.parametrize("side", (-1, 1))
+@pytest.mark.parametrize("sensitivity", range(1, 6))
+def test_stationary_outside_pair_does_not_corroborate_corner_position_jump(side, sensitivity) -> None:
+  detector = TrajectoryCutInDetector(sensitivity)
+  estimates = []
+  for index in range(13):
+    time_s = index * 0.05
+    corner = point(2302, "corner235", 13.0 - 4.8 * time_s, side * (5.0 - 2.0 * time_s),
+                   v_ego=6.0, v_rel=-4.8, yv_rel=-side * 0.05)
+    front = point(52, "frontRadar", corner.d_rel, side * 3.9, v_ego=6.0, v_rel=-5.7)
+    estimates.extend(detector.update(time_s, 6.0, (corner,), PATH, MODEL,
+                                    cross_sensor_matches={(corner.source, corner.track_id): front}))
+  assert any(e.stationary_pair_alias for e in estimates)
+  assert not any(e.confirmed_cutin or e.control_eligible or e.predecel_risk for e in estimates)
+
+
+@pytest.mark.parametrize("side", (-1, 1))
+@pytest.mark.parametrize("evidence", ("corner_velocity", "front_velocity", "front_positions", "overlap", "moving_front", "vision"))
+def test_stationary_pair_veto_preserves_independent_entry_evidence(side, evidence) -> None:
+  detector = TrajectoryCutInDetector()
+  estimates = []
+  for index in range(21):
+    time_s = index * 0.05
+    corner_y = 3.0 - 2.0 * time_s if evidence == "overlap" else 5.0 - 2.0 * time_s
+    front_y = 4.5 - time_s if evidence == "front_positions" else 3.9
+    corner = point(2302, "corner235", 16.0 - 4.8 * time_s, side * corner_y,
+                   v_ego=6.0, v_rel=-4.8, yv_rel=-side * (1.0 if evidence == "corner_velocity" else 0.05))
+    front = point(52, "frontRadar", corner.d_rel, side * front_y, v_ego=6.0,
+                  v_rel=-4.8 if evidence == "moving_front" else -5.7,
+                  yv_rel=-side * (1.0 if evidence == "front_velocity" else 0.0))
+    model = SimpleNamespace(leadsV3=(SimpleNamespace(
+      prob=0.95, x=(corner.d_rel + 1.52,), y=(-corner.y_rel,), v=(corner.v_lead,),
+    ),)) if evidence == "vision" else MODEL
+    estimates.extend(detector.update(time_s, 6.0, (corner,), PATH, model,
+                                    cross_sensor_matches={(corner.source, corner.track_id): front}))
+  assert not estimates[-1].stationary_pair_alias
+  assert any(e.confirmed_cutin for e in estimates[-5:])
+
+
 def test_front_lateral_noise_floor_increases_at_close_range() -> None:
   assert front_lateral_noise_floor_m(5.0) > front_lateral_noise_floor_m(20.0)
   assert front_lateral_noise_floor_m(20.0) > front_lateral_noise_floor_m(45.0)

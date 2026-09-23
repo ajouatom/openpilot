@@ -1056,7 +1056,10 @@ class DPathRadarController:
       # A withdrawn entry or side pass cannot retain a full lead role. Keep the independently
       # gated, bounded low-speed pre-deceleration path above available when
       # substantial inward motion still warrants a precaution.
-      if estimate.entry_withdrawn or estimate.passing_before_overlap or estimate.parallel_drift or estimate.rear_pass:
+      if (
+        estimate.entry_withdrawn or estimate.passing_before_overlap
+        or estimate.parallel_drift or estimate.rear_pass or estimate.stationary_pair_alias
+      ):
         if active_identity == identity:
           self.lead_two_tracker.reset()
         continue
