@@ -1,5 +1,6 @@
 import os
 import time
+from urllib.parse import urlsplit
 
 from opendbc.car import gen_empty_fingerprint
 from opendbc.car.can_definitions import CanRecvCallable, CanSendCallable
@@ -16,6 +17,20 @@ from openpilot.common.params import Params
 
 
 FRAME_FINGERPRINT = 100  # 1s
+
+
+def format_git_source(remote: str | None, branch: str | None) -> str:
+  remote = remote or ""
+  # Normalize SCP-style SSH remotes as well as HTTPS/SSH URLs; never log credentials.
+  if "://" not in remote:
+    remote = "ssh://" + remote.replace(":", "/", 1)
+  try:
+    parsed = urlsplit(remote)
+    parts = parsed.path.strip("/").split("/")
+    owner = parts[0] if parsed.hostname and len(parts) >= 2 else "unknown"
+  except ValueError:
+    owner = "unknown"
+  return f"{owner}/{branch or 'unknown'}"
 
 
 def load_interfaces(brand_names):
@@ -184,7 +199,9 @@ def get_car(can_recv: CanRecvCallable, can_send: CanSendCallable, set_obd_multip
   CP.fingerprintSource = source
   CP.fuzzyFingerprint = not exact_match
 
-  print("Carrot GitBranch = {}, {}".format(Params().get("GitBranch"), Params().get("GitCommitDate")))
+  params = Params()
+  print("Carrot GitBranch = {}, {}".format(format_git_source(params.get("GitRemote"), params.get("GitBranch")),
+                                         params.get("GitCommitDate")))
 
   return interfaces[CP.carFingerprint](CP)
 
