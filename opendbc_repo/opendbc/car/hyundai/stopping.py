@@ -1,4 +1,4 @@
-"""carrot-stopping experiment: continuous stop acceleration and bounded re-entry.
+"""Hyundai CAN FD: continuous stop acceleration and bounded re-entry.
 
 Thresholds below are experimental, not OEM acceptance conditions. This controller
 cannot guarantee stopping; ECU response must be measured on the vehicle.

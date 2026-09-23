@@ -10,17 +10,22 @@ from opendbc.car.hyundai.stopping import CanfdStopping, StopPhase, DT, ENTRY_SPE
 from opendbc.car.hyundai.values import CAR, HyundaiFlags
 
 
-@pytest.mark.parametrize("enabled", [False, True])
-def test_setting_initialization_and_live_refresh(monkeypatch, enabled):
-  settings = {"CanfdStopRetry": enabled}
-  params = SimpleNamespace(get_bool=lambda key: settings.get(key, False), get_int=lambda key: 0)
+def make_car_controller(monkeypatch, *, canfd=True, longitudinal=True):
+  def get_bool(key):
+    assert key != "CanfdStopRetry", "Removed stop retry setting must never be read"
+    return False
+  params = SimpleNamespace(get_bool=get_bool, get_int=lambda key: 0)
   monkeypatch.setattr(carcontroller, "Params", lambda: params)
-  cp = structs.CarParams(carFingerprint=CAR.KIA_EV6, flags=int(HyundaiFlags.CANFD))
-  controller = carcontroller.CarController({Bus.pt: "hyundai_canfd_generated"}, cp)
-  assert isinstance(controller.canfd_stopping, CanfdStopping) == enabled
-  settings["CanfdStopRetry"] = not enabled
-  controller._update_canfd_stop_retry(params)
-  assert isinstance(controller.canfd_stopping, CanfdStopping) != enabled
+  cp = structs.CarParams(carFingerprint=CAR.KIA_EV6, flags=int(HyundaiFlags.CANFD) if canfd else 0,
+                         openpilotLongitudinalControl=longitudinal, stoppingDecelRate=0.8)
+  return carcontroller.CarController({Bus.pt: "hyundai_canfd_generated"}, cp)
+
+
+@pytest.mark.parametrize("canfd", [False, True])
+@pytest.mark.parametrize("longitudinal", [False, True])
+def test_controller_enables_canfd_stopping_by_vehicle_scope(monkeypatch, canfd, longitudinal):
+  controller = make_car_controller(monkeypatch, canfd=canfd, longitudinal=longitudinal)
+  assert isinstance(controller.canfd_stopping, CanfdStopping) == (canfd and longitudinal)
 
 
 def step(controller, **overrides):
@@ -200,15 +205,15 @@ def send(camera, controller, CS, *, enabled=True, override=False, stopping=True,
 
 @pytest.mark.parametrize("camera", [True, False])
 @pytest.mark.parametrize("initial", [-1.0, -0.3])
-def test_packed_stop_starts_from_previous_output_even_when_enabled_mid_stop(camera, initial):
+def test_packed_stop_starts_from_previous_output(camera, initial):
   cs = make_cs()
-  # A legacy frame can have a raw target different from its limited output.
-  legacy = send(camera, None, cs, accel=-2.0, previous_value=initial, previous_target=initial)
-  assert legacy["aReqRaw"] != legacy["aReqValue"]
   controller = CanfdStopping()
-  first = send(camera, controller, cs, accel=-2.0, previous_value=legacy["aReqValue"], previous_target=legacy["aReqRaw"])
+  # Ordinary braking can have a raw target different from its limited output.
+  approach = send(camera, controller, cs, stopping=False, accel=-2.0, previous_value=initial, previous_target=initial)
+  assert approach["aReqRaw"] != approach["aReqValue"]
+  first = send(camera, controller, cs, accel=-2.0, previous_value=approach["aReqValue"], previous_target=approach["aReqRaw"])
   assert first["StopReq"] == 1
-  assert first["aReqRaw"] == first["aReqValue"] == legacy["aReqValue"]
+  assert first["aReqRaw"] == first["aReqValue"] == approach["aReqValue"]
 
   # Confirm hold to isolate convergence from the separate persistent-motion retry.
   cs.canfdSccHoldActive = True
@@ -249,10 +254,10 @@ def test_packed_retry_restarts_convergence_from_release_output(camera):
 
 @pytest.mark.parametrize("camera", [True, False])
 @pytest.mark.parametrize("stock_info", [0, 4, 5])
-def test_disabled_experiment_preserves_legacy_stopping(camera, stock_info):
+def test_base_packet_builder_without_controller_preserves_legacy_fields(camera, stock_info):
   cs = make_cs()
   cs.scc_control["InfoDisplay"] = stock_info
-  # Persistent motion must not activate retries when the setting is OFF.
+  # Direct use of the base packet builder does not create a retry controller.
   for _ in range(200):
     values = send(camera, None, cs)
     assert values["StopReq"] == 1
@@ -264,43 +269,19 @@ def test_disabled_experiment_preserves_legacy_stopping(camera, stock_info):
 
 
 @pytest.mark.parametrize("camera", [True, False])
-def test_live_toggle_changes_packed_commands_and_retains_retry_progress(camera):
-  controller = carcontroller.CarController.__new__(carcontroller.CarController)
-  controller.CP = SimpleNamespace(stoppingDecelRate=0.8)
-  controller.canfd_stopping = None
-  settings = {"CanfdStopRetry": False}
-  params = SimpleNamespace(get_bool=lambda key: settings[key])
+def test_default_controller_sends_stop_commands_and_retains_retry_progress(camera, monkeypatch):
+  controller = make_car_controller(monkeypatch)
   cs = make_cs()
-  assert send(camera, controller.canfd_stopping, cs)["aReqRaw"] == pytest.approx(-0.5)
-
-  settings["CanfdStopRetry"] = True
-  controller._update_canfd_stop_retry(params)
   values = send(camera, controller.canfd_stopping, cs)
   assert values["StopReq"] == 1
   assert values["aReqRaw"] == pytest.approx(-0.5)
+  assert values["InfoDisplay"] == values["ZEROS_7"] == 0
+  assert values["AccelLimitBandLower"] == pytest.approx(STOP_LOWER_BAND)
   initial = controller.canfd_stopping
-  # Polling an unchanged ON setting must not restart the request timer or retry budget.
   for _ in range(170):
-    controller._update_canfd_stop_retry(params)
     send(camera, controller.canfd_stopping, cs)
   assert controller.canfd_stopping is initial
   assert initial.phase == StopPhase.fallback
-
-  settings["CanfdStopRetry"] = False
-  controller._update_canfd_stop_retry(params)
-  assert controller.canfd_stopping is None
-  values = send(camera, controller.canfd_stopping, cs)
-  assert values["StopReq"] == 1
-  assert values["aReqRaw"] == pytest.approx(-0.5)
-  assert values["AccelLimitBandLower"] == pytest.approx(0)
-
-  settings["CanfdStopRetry"] = True
-  controller._update_canfd_stop_retry(params)
-  assert controller.canfd_stopping is not initial
-  assert not controller.canfd_stopping.retried
-  values = send(camera, controller.canfd_stopping, cs)
-  assert values["StopReq"] == 1
-  assert values["aReqRaw"] == pytest.approx(-0.5)
 
 
 @pytest.mark.parametrize("camera", [True, False])

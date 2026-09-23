@@ -403,7 +403,6 @@
           "params": [
             "CanfdHDA2",
             "CanfdDebug",
-            "CanfdStopRetry",
             "HDPuse"
           ]
         },
@@ -2635,24 +2634,6 @@
       "max": 1,
       "default": 0,
       "unit": 1
-    },
-    {
-      "group": "시작",
-      "name": "CanfdStopRetry",
-      "title": "CANFD 정지 재시도 (시험)",
-      "descr": "기본 OFF. 현대·기아 CANFD 오픈파일럿 종방향 제어용 시험 기능입니다. ON은 일반 ACC의 저속 정지 판단을 앞당기며, 정지 요청 시 직전 가속도 출력에서 -0.50m/s²로 서서히 수렴합니다. 소프트홀드는 음수 요청을 먼저 보내며, 움직임이 지속되면 감속 후 한 번 재요청합니다. 차종별 완전 정지는 검증되지 않았습니다. 주행 중 변경은 약 0.5초 이내 반영되며 OFF는 기존 방식입니다.",
-      "egroup": "START",
-      "etitle": "CANFD Stop Retry (Experimental)",
-      "edescr": "Default OFF. Experimental stopping for Hyundai/Kia CANFD with openpilot longitudinal control. ON anticipates low-speed stops in normal ACC and gradually moves the preceding acceleration output toward -0.50 m/s² when requesting a stop. Soft hold sends negative requests first; persistent motion triggers deceleration and one retry. Complete stopping is not validated across vehicles. Changes apply during driving within about 0.5 seconds; OFF retains the previous method.",
-      "cgroup": "启动设置",
-      "ctitle": "CANFD 停车重试（试验）",
-      "cdescr": "默认关闭。用于现代/起亚 CANFD 的 openpilot 纵向控制试验功能。开启后提前判断普通 ACC 的低速停车，发出停车请求时从上一加速度输出逐渐趋近 -0.50m/s²。软驻车先发送负加速度请求；若持续移动则减速并重试一次。尚未验证所有车型均能完全停车。行驶中更改约 0.5 秒内生效；关闭后恢复原有方式。",
-      "min": 0,
-      "max": 1,
-      "default": 0,
-      "unit": 1,
-      "control": "toggle",
-      "risk": "high"
     },
     {
       "group": "시작",

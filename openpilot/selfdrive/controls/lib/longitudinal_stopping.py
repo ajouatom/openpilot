@@ -1,4 +1,4 @@
-"""Earlier stop intent for the opt-in Hyundai CAN FD stopping experiment."""
+"""Earlier stop intent for Hyundai CAN FD openpilot longitudinal control."""
 import numpy as np
 
 from opendbc.car.hyundai.stopping import ENTRY_SPEED, STOP_SPEED

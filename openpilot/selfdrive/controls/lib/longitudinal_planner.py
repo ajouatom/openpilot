@@ -345,10 +345,9 @@ class LongitudinalPlanner:
 
     # Prepare the stop before deceleration fades, while retaining the normal
     # acceleration plan and the controller's aEgo >= -0.5 handover condition.
-    # Read the existing toggle here as well so changes apply without a restart.
     early_stop_enabled = (
       self.CP.brand == "hyundai" and self.CP.flags & HyundaiFlags.CANFD
-      and self.CP.openpilotLongitudinalControl and self.params.get_bool("CanfdStopRetry")
+      and self.CP.openpilotLongitudinalControl
       and self.mpc.mode == 'acc' and not reset_state
       and not sm['carState'].gasPressed and not sm['carState'].brakePressed
       and sm['carState'].canValid and str(sm['carState'].gearShifter) == 'drive'

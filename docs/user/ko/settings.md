@@ -218,18 +218,19 @@ Carrot Web 설정 화면에서는 다음 기능을 사용할 수 있습니다.
 
 정지시작가속도는 모든 차종에서 `-0.50m/s²`(이전 저장값 `-50`)로 고정되어 설정에서 제거되었습니다. 기존 `StoppingAccel` 저장값은 적용하지 않습니다. 일반 정지 제어와 소프트홀드의 차이는 [정차·재출발](cruise-gap.md#stop-resume)을 참고하세요.
 
+현대·기아 CANFD 오픈파일럿 종방향 제어의 조기 정지 판단, -0.50m/s² 수렴과 한 번의 정지 재시도는 별도 설정 없이 기본 적용됩니다. [CANFD 정지 제어](cruise-gap.md#canfd-stopping)를 참고하세요.
+
 지원되는 Tesla 차량에서 추가 차량 버스가 감지되면 장치의 **alpha longitudinal**(`AlphaLongitudinalEnabled`) 토글을 켤 때 차량 수신 제한속도에 맞춘 [크루즈 설정속도 자동 조절](tesla.md#automatic-cruise-speed)도 활성화됩니다. 오른쪽 속도 휠을 직접 돌리면 일시 중지하며, 1초 안에 반대 방향으로 돌리거나 제어를 해제했다가 다시 켜면 재개합니다. 별도의 Carrot Web 설정은 없습니다.
 
 <a id="vehicle-hardware"></a>
 ## 차량·하드웨어
 
-차량·하드웨어 14개 항목은 차종, 하네스와 기기 하드웨어 구성을 결정하는 설정입니다. 화면 표시 설정처럼 시험 삼아 켜면 안 됩니다.
+차량·하드웨어 15개 항목은 차종, 하네스와 기기 하드웨어 구성을 결정하는 설정입니다. 화면 표시 설정처럼 시험 삼아 켜면 안 됩니다.
 
 | 중분류 | 파라미터 | 용도 |
 |---|---|---|
 | 현대·기아 | `HyundaiCameraSCC`, `IsLdwsCar`, `HapticFeedbackWhenSpeedCamera` | SCC 연결 방식, LDWS 차량과 카메라 구간 햅틱 |
 | CANFD·HDA | `CanfdHDA2`, `CanfdDebug`, `HDPuse` | HDA2 차량과 CAN FD 디버그·HDP 기능 |
-| CANFD·HDA | `CanfdStopRetry` | 기본 OFF. 저속 정지 판단을 앞당기고 정지 요청 출력을 직전 값에서 -0.50m/s²로 수렴시킵니다. 소프트홀드의 음수 요구 선행 송신과 한 번의 감속·재요청을 포함합니다. 현대·기아 CANFD 오픈파일럿 종방향 전용이며 주행 중에도 약 0.5초 이내 반영됩니다. [정지 재시도 설명](cruise-gap.md#canfd-정지-재시도-시험--canfdstopretry)을 확인하세요. |
 | 레이더 | `EnableRadarTracks`, `RadarTrackFlip`, `EnableCornerRadar`, `CarrotRadarMode`, `CarrotRadarCutInSensitivity` | SCC 레이더, 전방 트랙 좌우 보정, 코너 레이더와 당근레이더 처리·컷인 감도 |
 | 운전자 모니터링 | `DisableDM`, `MuteDoor`, `MuteSeatbelt` | 운전자 모니터링과 일부 차량 경고음 처리 |
 | 차량 보조 | `MaxAngleFrames`, `SpeedFromPCM` | 최대 조향각 관련 프레임과 순정 SCC 속도 제어 방식 |

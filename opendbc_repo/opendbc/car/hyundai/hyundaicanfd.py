@@ -30,7 +30,7 @@ def apply_accel_jerk_limit(a_raw: float, a_value_last: float, jerk_u: float, jer
   return float(np.clip(a_raw, a_value_last - lower_step, a_value_last + upper_step))
 
 
-def apply_stopping_experiment(values, CS, controller, accel, previous_value, jerk_u, jerk_l):
+def apply_canfd_stopping(values, CS, controller, accel, previous_value, jerk_u, jerk_l):
   """Apply the stopping/re-entry sequence after the normal SCC interlocks."""
   if controller is None:
     return
@@ -518,7 +518,7 @@ def create_acc_control_scc2(packer, CAN, enabled, accel_value_last, accel, stopp
   values["AccelLimitBandLower"] = 0.0
 
   values["ZEROS_7"] = 0 if stop_controller is not None else 1
-  apply_stopping_experiment(values, CS, stop_controller, accel, previous_value, jerk_u, jerk_l)
+  apply_canfd_stopping(values, CS, stop_controller, accel, previous_value, jerk_u, jerk_l)
 
   return packer.make_can_msg("SCC_CONTROL", CAN.ECAN, values), values["aReqValue"]
 
@@ -564,9 +564,9 @@ def create_acc_control(packer, CAN, enabled, accel_last, accel, stopping, gas_ov
   }
 
   # accel_last is the legacy raw target, not necessarily the previous SCC
-  # output. Retain that path when OFF; anchor stop entry to the returned value.
+  # output. Keep ordinary packet limiting; anchor stop entry to the returned value.
   previous_value = accel_last if accel_value_last is None else accel_value_last
-  apply_stopping_experiment(values, CS, stop_controller, accel, previous_value, jerk_u, jerk_l)
+  apply_canfd_stopping(values, CS, stop_controller, accel, previous_value, jerk_u, jerk_l)
   return packer.make_can_msg("SCC_CONTROL", CAN.ECAN, values), values["aReqValue"]
 
 

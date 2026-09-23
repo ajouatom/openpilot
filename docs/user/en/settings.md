@@ -214,18 +214,19 @@ Deceleration preview operates independently of the response level. During active
 
 Stopping acceleration is fixed at `-0.50 m/s²` (formerly stored as `-50`) for all brands and has been removed from settings. Existing `StoppingAccel` values are ignored. See [Stopping and restarting](cruise-gap.md#stop-resume) for the distinction between normal stopping control and soft hold.
 
+Hyundai/Kia CANFD with openpilot longitudinal control uses early stop intent, convergence toward -0.50 m/s², and one stop retry by default, without a separate setting. See [CANFD stopping control](cruise-gap.md#canfd-stopping).
+
 On supported Tesla vehicles with the additional vehicle bus detected, the device's **alpha longitudinal** (`AlphaLongitudinalEnabled`) toggle also enables [automatic cruise set-speed adjustment](tesla.md#automatic-cruise-speed) to the vehicle-reported limit. Turning the right speed wheel pauses it; an opposite-direction wheel gesture within one second or disengaging and re-engaging resumes it. There is no separate Carrot Web setting for this feature.
 
 <a id="vehicle-hardware"></a>
 ## Vehicle and hardware
 
-These 15 settings describe the car, harness, and device hardware configuration. Do not enable them merely as a display experiment.
+These settings describe the car, harness, and device hardware configuration. Do not enable them merely as a display experiment.
 
 | Group | Parameters | Purpose |
 |---|---|---|
 | Hyundai/Kia | `HyundaiCameraSCC`, `IsLdwsCar`, `HapticFeedbackWhenSpeedCamera` | SCC connection, LDWS behavior, and speed-event haptics |
 | CAN FD/HDA | `CanfdHDA2`, `CanfdDebug`, `HDPuse` | HDA2 selection, CAN FD diagnostics, and HDP |
-| CANFD·HDA | `CanfdStopRetry` | Default OFF. Anticipates low-speed stop intent and moves the preceding stop-request output toward -0.50 m/s². Includes negative soft-hold preparation and one deceleration/reassertion attempt. Hyundai/Kia CANFD openpilot longitudinal only; changes apply during driving within about 0.5 seconds. See [stop retry details](cruise-gap.md#canfd-stop-retry-experimental--canfdstopretry). |
 | Radar | `EnableRadarTracks`, `RadarTrackFlip`, `EnableCornerRadar`, `CarrotRadarMode`, `CarrotRadarCutInSensitivity` | SCC radar, front-track orientation, corner radar, and Carrot Radar processing and cut-in sensitivity |
 | Driver monitoring | `DisableDM`, `MuteDoor`, `MuteSeatbelt` | Driver monitoring and selected vehicle alerts |
 | Vehicle assistance | `MaxAngleFrames`, `SpeedFromPCM` | Steering-angle frames and stock-SCC speed control |
