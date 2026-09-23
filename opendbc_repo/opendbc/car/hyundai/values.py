@@ -359,6 +359,13 @@ class CAR(Platforms):
     [HyundaiCarDocs("Hyundai Staria 2023", "All", car_parts=CarParts.common([CarHarness.hyundai_k]))],
     CarSpecs(mass=2205, wheelbase=3.273, steerRatio=11.94),  # https://www.hyundai.com/content/dam/hyundai/au/en/models/staria-load/premium-pip-update-2023/spec-sheet/STARIA_Load_Spec-Table_March_2023_v3.1.pdf
   )
+  HYUNDAI_STARIA_EV = HyundaiCanFDPlatformConfig(
+    [HyundaiCarDocs("Hyundai Staria EV 2026", car_parts=CarParts.common([CarHarness.hyundai_k]))],
+    # Korean Lounge 7/11-seat curb weight and wheelbase; see docs/staria_ev_registration.md.
+    # Steering ratio remains the existing Staria baseline pending EV-specific measurement.
+    HYUNDAI_STARIA_4TH_GEN.specs.override(mass=2590, wheelbase=3.275),
+    flags=HyundaiFlags.EV,
+  )
   HYUNDAI_TUCSON = HyundaiPlatformConfig(
     [
       HyundaiCarDocs("Hyundai Tucson 2021", min_enable_speed=19 * CV.MPH_TO_MS, car_parts=CarParts.common([CarHarness.hyundai_l])),

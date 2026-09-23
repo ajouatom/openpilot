@@ -83,6 +83,8 @@ Each entry in `carrot_settings.json` contains:
 
 ### The current value comes first
 
+For a 2026 Staria EV, use `Hyundai Staria EV 2026` in vehicle selection. Existing Staria selections are not migrated automatically; check HDA2 and camera SCC settings separately against the vehicle wiring. See [vehicle selection](carrot-web.md#tools-page).
+
 Persistent values stored on the device may remain after an update. Record the value currently shown by your device before relying on the JSON `default`, a number in a title, or another user's value.
 
 A catalog default is not a recommended tune for every vehicle. Vehicle tuning, existing Params, and the branch from which the device was updated can all affect the starting value.

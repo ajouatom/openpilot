@@ -109,6 +109,7 @@ Manage `ONNX Lane and BSD Detection` in **Settings → Driving → Steering → 
 ### Quick actions
 
 - `Car Select`: choose the vehicle maker and model.
+- For the 2026 electric Staria, select `Hyundai Staria EV 2026`. Its accelerator and gear decoding differs from `Hyundai Staria 2023`; an existing selection is not migrated automatically. Reboot after selecting it, then check gear/pedal indications and CAN errors while parked.
 - `Language`: change the Carrot Web language.
 - `Web Settings`: configure the Drive layout, video, HUD, AR, and other web-only display options.
 - `Info`: view and copy the device type, branch, commit, identifiers, and network information.
