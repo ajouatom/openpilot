@@ -103,18 +103,18 @@ Ignoring `x0.01`, `x0.001`, `cm`, `km/h`, or `%` can make a value appear one hun
 
 ## Settings map
 
-The current `carrot_settings.json` contains **182 parameters**. Every entry is assigned to one of these menus:
+The current `carrot_settings.json` contains **183 parameters**. Every entry is assigned to one of these menus:
 
 | Category | Count | Groups |
 |---|---:|---|
-| Driving control | 121 | Startup and auto, buttons and presets, steering, speed and deceleration, cruise and following gap |
+| Driving control | 122 | Startup and auto, buttons and presets, steering, speed and deceleration, cruise and following gap |
 | Vehicle and hardware | 15 | Hyundai/Kia, CAN FD/HDA, radar, driver monitoring, vehicle assistance, device hardware |
 | Display | 34 | Information, path, brightness/on-road view, external HUD |
 | System | 12 | Recording/power, network/map, sound, software |
 
 ## Driving control
 
-These 121 settings can affect vehicle motion. Change one item at a time.
+These 122 settings can affect vehicle motion. Change one item at a time.
 
 <a id="start-auto"></a>
 ### Startup and auto — 9 settings
@@ -191,7 +191,7 @@ While external navigation is connected, deceleration, countdowns, and navigation
 |---|---|---|
 | [Driving mode](cruise-gap.md#driving-mode) | `MyDrivingMode`, `MyDrivingModeAuto` | Eco, safe, normal, high-speed modes and automatic selection |
 | [Speed-based acceleration](cruise-gap.md#acceleration-table) | `CruiseMaxVals0` through `CruiseMaxVals6` | Maximum acceleration tendency by speed band |
-| [Stopping and restarting](cruise-gap.md#stop-resume) | `StopDistanceCarrot`, `VEgoStopping`, `AChangeCostStarting` | Stop position, stop entry, and restart behavior |
+| [Stopping and restarting](cruise-gap.md#stop-resume) | `StopDistanceCarrot`, `StoppingAccel`, `VEgoStopping`, `AChangeCostStarting` | Stop position, stop entry, and restart behavior |
 | [Longitudinal tuning](cruise-gap.md#longitudinal-tuning) | `LongTuningKpV`, `LongTuningKiV`, `LongTuningKf`, `LongActuatorDelay` | Hyundai/Kia/Genesis hide fixed `100/0/100` gains; other brands can adjust them |
 | [Following gap](cruise-gap.md#following-gap) | `TFollowGap1` through `TFollowGap4`, `DynamicTFollowLC`, `SpeedTFFactor`, `TFollowDecelBoost` | Gap times, lane-change relief using selected leads, and deceleration margin (default 0%) |
 | [Following responsiveness](cruise-gap.md#lead-response) | `LeadAccelResponse`, `LeadAccelResponseTF1`–`LeadAccelResponseTF4` | Lead-start, acceleration and approach response at every following-distance level |
@@ -214,9 +214,9 @@ Deceleration preview operates independently of the response level. During active
 
 `LongTuning*` and `LongActuatorDelay` are advanced settings that directly affect vehicles using openpilot longitudinal control. Hyundai, Kia, and Genesis fix `LongTuningKpV`, `LongTuningKiV`, and `LongTuningKf` at the safe `100/0/100` values and hide them from settings. Some parameters have no effect when stock ACC remains responsible for acceleration and braking.
 
-Stopping acceleration is fixed at `-0.50 m/s²` (formerly stored as `-50`) for all brands and has been removed from settings. Existing `StoppingAccel` values are ignored. See [Stopping and restarting](cruise-gap.md#stop-resume) for the distinction between normal stopping control and soft hold.
+`StoppingAccel` is adjustable again: default `-50`, range `-100 to -50`, step `10`. The stored value is multiplied by 0.01, with the same bounds enforced by control. Original stop-entry and braking behavior and vehicle-specific soft hold are restored; changes apply within about one second. See [Stopping and restarting](cruise-gap.md#stop-resume).
 
-Hyundai/Kia CANFD with openpilot longitudinal control uses early stop intent, convergence toward -0.50 m/s², and one stop retry by default, without a separate setting. See [CANFD stopping control](cruise-gap.md#canfd-stopping).
+Hyundai/Kia CANFD with openpilot longitudinal control retains one stop retry by default when motion persists. See [CANFD stopping control](cruise-gap.md#canfd-stopping).
 
 On supported Tesla vehicles with the additional vehicle bus detected, the device's **alpha longitudinal** (`AlphaLongitudinalEnabled`) toggle also enables [automatic cruise set-speed adjustment](tesla.md#automatic-cruise-speed) to the vehicle-reported limit. Turning the right speed wheel pauses it; an opposite-direction wheel gesture within one second or disengaging and re-engaging resumes it. There is no separate Carrot Web setting for this feature.
 
