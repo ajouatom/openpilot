@@ -14,14 +14,15 @@ from openpilot.selfdrive.controls.lib.longitudinal_preview import LeadAccelRespo
 from openpilot.selfdrive.carrot.traffic_stop import get_traffic_stop_distance_adjust, get_traffic_stop_obstacle_distance
 
 
-def run_update(*, confidence=0., mode="acc", reset=False, enabled=True, second_distance=100., stop_x=1000., lane_change=None, selected_status=True):
+def run_update(*, confidence=0., mode="acc", reset=False, enabled=True, second_distance=100., stop_x=1000., lane_change=None, selected_status=True,
+               lead_tau=None, jerk_factor=1., comfort_brake=2.5, t_follow=1.45):
   path = Path(__file__).resolve().parents[2] / "controls/lib/longitudinal_mpc_lib/long_mpc.py"
   tree = ast.parse(path.read_text(encoding="utf-8"))
   mpc = next(node for node in tree.body if isinstance(node, ast.ClassDef) and node.name == "LongitudinalMpc")
   methods = [node for node in mpc.body if isinstance(node, ast.FunctionDef)
-             and node.name in ("update", "update_predicted_danger_margin")]
+             and node.name in ("update", "update_predicted_danger_margin", "process_lead", "extrapolate_lead", "set_weights")]
   helpers = [node for node in tree.body if isinstance(node, ast.FunctionDef)
-             and node.name in ("get_stopped_equivalence_factor", "get_safe_obstacle_distance", "desired_follow_distance")]
+             and node.name in ("get_stopped_equivalence_factor", "get_safe_obstacle_distance", "desired_follow_distance", "get_a_change_cost")]
   times = np.array([10.*(i/12)**2 for i in range(13)])
   namespace = {"np": np, "log": NS(LongitudinalPersonality=NS(standard=1)),
                    "COMFORT_BRAKE": 2.5, "STOP_DISTANCE": 6., "ACCEL_MIN": -3.5, "N": 12,
@@ -29,6 +30,9 @@ def run_update(*, confidence=0., mode="acc", reset=False, enabled=True, second_d
                    "FCW_IDXS": times<5., "PRED_DANGER_IDXS": (times>.2)&(times<3.),
                    "SOURCES": ["lead0", "lead1", "cruise", "e2e"], "LEAD_DANGER_FACTOR": .8,
                    "A_CHANGE_COST_STARTING": 10., "COST_E_DIM": 5, "CRASH_DISTANCE": .25,
+                   "A_CHANGE_COST": 200., "J_EGO_COST": 5., "X_EGO_OBSTACLE_COST": 5.,
+                   "X_EGO_COST": 0., "V_EGO_COST": 0., "A_EGO_COST": 0.,
+                   "LIMIT_COST": 1e6, "DANGER_ZONE_COST": 100., "LEAD_ACCEL_TAU": 1.5,
                    "LEAD_ACCEL_MIN_TRACK_FRAMES": 3,
                    "gap_reference": gap_reference, "displayed_follow_distance": displayed_follow_distance,
                    "get_lead_accel_mpc_request": get_lead_accel_mpc_request,
@@ -37,11 +41,12 @@ def run_update(*, confidence=0., mode="acc", reset=False, enabled=True, second_d
                    "cutout_obstacle_relief": cutout_obstacle_relief, "LaneChangeGapPlan": LaneChangeGapPlan}
   exec(compile(ast.Module(body=helpers+methods, type_ignores=[]), str(path), "exec"), namespace)
   lead = NS(status=selected_status, radar=True, radarTrackId=50, dRel=25., vRel=-1., vLead=14.,
-            aLeadK=-.5, aLeadTau=1.5, modelProb=.99, cutOutTime=1., cutOutConfidence=confidence)
+            aLeadK=-.5 if lead_tau is None else -2., aLeadTau=1.5 if lead_tau is None else lead_tau,
+            modelProb=.99, cutOutTime=1., cutOutConfidence=confidence)
   second = NS(**(vars(lead) | {"dRel": second_distance, "radarTrackId": 51, "cutOutConfidence": 0.}))
-  carrot = NS(comfort_brake=2.5, stop_distance=6., v_cruise=20., stop_dist=stop_x, mode=mode, myDrivingMode=3,
+  carrot = NS(comfort_brake=comfort_brake, stop_distance=6., v_cruise=20., stop_dist=stop_x, mode=mode, myDrivingMode=3,
               trafficStopDistanceAdjust=0., trafficStopModelLeadOffset=0., leadAccelResponse=0,
-              get_T_FOLLOW=lambda *a, **kw:1.45, jerk_factor=1.)
+              get_T_FOLLOW=lambda *a, **kw:t_follow, jerk_factor=jerk_factor)
   if lane_change is not None:
     carrot.lane_change_gap = lane_change
     carrot.dynamicTFollowLC = .9
@@ -54,10 +59,36 @@ def run_update(*, confidence=0., mode="acc", reset=False, enabled=True, second_d
     distance, speed = (l.dRel, l.vLead) if l.status else (50., 25.)
     return np.column_stack([distance + speed * times, np.full(13, speed)]), speed
   self.process_lead = process_lead
+  self.weight_calls = []
+  self.set_cost_weights = lambda *args:self.weight_calls.append(args)
+  self.set_weights = lambda *args, **kwargs:namespace['set_weights'](self, *args, **kwargs)
+  if lead_tau is not None:
+    self.extrapolate_lead = namespace['extrapolate_lead']
+    self.process_lead = lambda lead:namespace['process_lead'](self, lead)
   self.update_predicted_danger_margin=lambda *a:namespace["update_predicted_danger_margin"](self,*a)
   arrays=[np.zeros(13) for _ in range(4)]
   namespace["update"](self, carrot, reset, NS(leadOne=lead, leadTwo=second), 20., *arrays, cutout_relief_enabled=enabled)
   return self, times
+
+
+@pytest.mark.parametrize('jerk_factor,comfort_brake,t_follow', [(.5, 2., .9), (1., 2.5, 1.45), (2., 3., 2.)])
+def test_faster_lead_decay_attack_changes_obstacle_not_configured_comfort(jerk_factor, comfort_brake, t_follow):
+  from openpilot.selfdrive.carrot.radar_motion.lead_dynamics import LeadAccelTau
+
+  state = LeadAccelTau()
+  for i in range(6):
+    state.update(-2., -4., i * .05)
+  settings = {'jerk_factor': jerk_factor, 'comfort_brake': comfort_brake, 't_follow': t_follow, 'enabled': False}
+  baseline, _ = run_update(lead_tau=1.5 * .9**6, **settings)
+  changed, _ = run_update(lead_tau=state.tau, **settings)
+  # Execute production obstacle extrapolation and the MPC update/weight code.
+  # The recording solver cannot establish closed-loop braking or ride comfort.
+  assert np.any(changed.params[:,2] < baseline.params[:,2])
+  assert np.all(changed.params[:,2] <= baseline.params[:,2])
+  np.testing.assert_array_equal(changed.params[:,[0,1,3,4,5,6,7]], baseline.params[:,[0,1,3,4,5,6,7]])
+  assert changed.weight_calls == baseline.weight_calls
+  assert changed.a_change_cost == baseline.a_change_cost
+  assert changed.jerk_cost_factor == baseline.jerk_cost_factor
 
 
 def test_lane_change_metadata_never_adds_a_braking_obstacle():

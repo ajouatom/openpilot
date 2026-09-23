@@ -4,13 +4,15 @@ from openpilot.selfdrive.carrot.radar_motion.controller import (
   CORNER_RADAR_MEASUREMENT_DELAY_S,
   DPathRadarController,
   DPathRadarOutput,
+  RADAR_MOTION_MAX_TIME_SKEW_S,
+  RadarLeadDynamics,
+  stationary_shadow_corner_supported,
+)
+from openpilot.selfdrive.carrot.radar_motion.lead_dynamics import (
   LEAD_ACCEL_DT_S,
   LEAD_ACCEL_FILTER_ALPHA,
   LEAD_ACCEL_FILTER_TAU_S,
   LEAD_ACCEL_TAU_S,
-  RADAR_MOTION_MAX_TIME_SKEW_S,
-  RadarLeadDynamics,
-  stationary_shadow_corner_supported,
 )
 from openpilot.selfdrive.carrot.radar_motion.lead_selection import (
   CUTIN_MAX_DREL_M,

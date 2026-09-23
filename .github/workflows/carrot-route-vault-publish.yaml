@@ -46,8 +46,13 @@ jobs:
             opendbc_repo/opendbc/car/tests/test_radar_lead_filter.py \
             opendbc_repo/opendbc/car/tests/test_radar_group3.py
           python -m pytest -c /dev/null --rootdir=. --confcutdir=tools/carrot_route_vault tools/carrot_route_vault/tests
+          python -m pytest -c /dev/null --rootdir=. --confcutdir=openpilot/selfdrive/controls/tests \
+            openpilot/selfdrive/controls/tests/test_longitudinal_fast_radar.py \
+            openpilot/selfdrive/controls/tests/test_longitudinal_preview.py \
+            openpilot/selfdrive/controls/tests/test_longitudinal_preview_release.py
           python -m pytest -c /dev/null --rootdir=. --confcutdir=openpilot/selfdrive/carrot/tests \
             openpilot/selfdrive/carrot/tests/test_lane_change_gap.py \
+            openpilot/selfdrive/carrot/tests/test_lead_accel_tau.py \
             openpilot/selfdrive/carrot/tests/test_cutout_mpc_integration.py \
             openpilot/selfdrive/carrot/tests/test_trajectory_cutout.py \
             openpilot/selfdrive/carrot/tests/test_trajectory_cutin.py \

@@ -8,6 +8,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Any
 
+from openpilot.selfdrive.carrot.radar_motion.lead_dynamics import LEAD_ACCEL_TAU_S, LeadAccelTau
 from openpilot.selfdrive.carrot.radar_motion.lead_selection import (
   DPathLeadCandidate,
   DPathStationaryPrimaryHandoffTracker,
@@ -66,12 +67,6 @@ RADAR_MOTION_MAX_TIME_SKEW_S = 0.15
 # The 0x235/0x180/0x430 object stream is one radar cycle old when emitted.
 # Keep this separate from the vehicle's front-radar delay.
 CORNER_RADAR_MEASUREMENT_DELAY_S = 0.05
-LEAD_ACCEL_TAU_S = 1.5
-LEAD_ACCEL_FILTER_TAU_S = 0.45
-LEAD_ACCEL_DT_S = 0.05
-LEAD_ACCEL_FILTER_ALPHA = (
-  LEAD_ACCEL_DT_S / (LEAD_ACCEL_FILTER_TAU_S + LEAD_ACCEL_DT_S)
-)
 STATIONARY_SHADOW_CORNER_MIN_DREL_GATE_M = 7.0
 STATIONARY_SHADOW_CORNER_MAX_DREL_GATE_M = 12.0
 STATIONARY_SHADOW_CORNER_DREL_GATE_FRACTION = 0.15
@@ -419,10 +414,10 @@ class DPathRadarOutput:
 
 
 class RadarLeadDynamics:
-  """Mirror conventional radard's per-track aLeadTau and raw jLead output."""
+  """Keep acceleration persistence with the physical kinematics identity."""
 
   def __init__(self) -> None:
-    self._a_lead_tau: dict[tuple[str, int], float] = {}
+    self._a_lead_tau: dict[tuple[str, int], LeadAccelTau] = {}
 
   @staticmethod
   def _identity(point: RadarPointSnapshot) -> tuple[str, int]:
@@ -439,30 +434,23 @@ class RadarLeadDynamics:
   def update(
     self,
     points: tuple[RadarPointSnapshot, ...],
+    sample_time_s: float,
   ) -> None:
     active: set[tuple[str, int]] = set()
     for point in points:
       identity = point.source, point.track_id
       active.add(identity)
-      a_lead_tau = self._a_lead_tau.get(identity, LEAD_ACCEL_TAU_S)
-      if (
-        abs(point.a_lead) < 0.5
-        and abs(point.j_lead) < 0.5
-      ):
-        a_lead_tau = LEAD_ACCEL_TAU_S
-      else:
-        a_lead_tau *= 1.0 - LEAD_ACCEL_FILTER_ALPHA
-      self._a_lead_tau[identity] = a_lead_tau
+      if identity not in self._a_lead_tau:
+        self._a_lead_tau[identity] = LeadAccelTau()
+      self._a_lead_tau[identity].update(point.a_lead, point.j_lead, sample_time_s, measured=point.measured)
 
     for identity in tuple(self._a_lead_tau):
       if identity not in active:
         del self._a_lead_tau[identity]
 
   def a_lead_tau(self, point: RadarPointSnapshot) -> float:
-    return self._a_lead_tau.get(
-      self._identity(point),
-      LEAD_ACCEL_TAU_S,
-    )
+    state = self._a_lead_tau.get(self._identity(point))
+    return state.tau if state is not None else LEAD_ACCEL_TAU_S
 
 
 class DPathRadarController:
@@ -839,7 +827,7 @@ class DPathRadarController:
       v_ego,
       radar_to_model_time_s,
     )
-    self.lead_dynamics.update(points)
+    self.lead_dynamics.update(points, time_s - radar_to_model_time_s)
     front_kinematic_matches = self.front_kinematic_associator.update(points)
 
     # This is intentionally first: model lead zero identifies leadOne with
