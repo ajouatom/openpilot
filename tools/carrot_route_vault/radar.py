@@ -24,14 +24,16 @@ class RadarJobs:
       job.cancel()
     await asyncio.gather(*self.jobs.values(), return_exceptions=True)
 
-  async def response(self, source: Path, sensor: str, sensitivity: int):
+  async def response(self, source: Path, sensor: str, sensitivity: int, radar_track_flip: str = "recorded"):
     if sensor not in {"auto", "front", "corner"} or sensitivity not in range(6):
       raise web.HTTPBadRequest(text="invalid radar replay options")
+    if radar_track_flip not in {"recorded", "normal", "flipped"}:
+      raise web.HTTPBadRequest(text="invalid radar orientation")
     if self.version is None:
       from openpilot.selfdrive.carrot.radar.tools.radar_web_export import source_version
       self.version = source_version()
     stat = await asyncio.to_thread(source.stat)
-    key = hashlib.sha256(f"{source}\0{stat.st_size}\0{stat.st_mtime_ns}\0{self.version}\0{sensor}\0{sensitivity}".encode()).hexdigest()
+    key = hashlib.sha256(f"{source}\0{stat.st_size}\0{stat.st_mtime_ns}\0{self.version}\0{sensor}\0{sensitivity}\0{radar_track_flip}".encode()).hexdigest()
     output = self.cache / f"{key}.json.gz"
     if output.is_file():
       self.jobs.pop(key, None)
@@ -49,10 +51,10 @@ class RadarJobs:
           self.jobs.pop(other_key)
       if len(self.jobs) >= 4:
         return web.json_response({"status": "busy"}, status=503, headers={"Retry-After": "5"})
-      self.jobs[key] = asyncio.create_task(self.prepare(source, output, sensor, sensitivity))
+      self.jobs[key] = asyncio.create_task(self.prepare(source, output, sensor, sensitivity, radar_track_flip))
     return web.json_response({"status": "preparing"}, status=202, headers={"Retry-After": "2", "Cache-Control": "no-store"})
 
-  async def prepare(self, source, output, sensor, sensitivity):
+  async def prepare(self, source, output, sensor, sensitivity, radar_track_flip="recorded"):
     async with self.gate:
       self.cache.mkdir(parents=True, exist_ok=True)
       temporary = self.cache / f".{secrets.token_hex(12)}.json"
@@ -62,6 +64,7 @@ class RadarJobs:
         process = await asyncio.create_subprocess_exec(
           sys.executable, "-m", "openpilot.selfdrive.carrot.radar.tools.radar_web_export",
           str(source), str(temporary), "--sensor", sensor, "--sensitivity", str(sensitivity),
+          "--radar-track-flip", radar_track_flip,
           stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL,
         )
         await asyncio.wait_for(process.wait(), timeout=300)

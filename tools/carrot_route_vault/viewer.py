@@ -1096,7 +1096,8 @@ class RouteViewer:
         continue
     if source is None:
       raise web.HTTPNotFound(text="radar log not found")
-    return await self.radar_jobs.response(source, request.query.get("sensor", "auto"), 3)
+    return await self.radar_jobs.response(source, request.query.get("sensor", "auto"), 3,
+                                          request.query.get("radar_track_flip", "recorded"))
 
   async def public_radar(self, request):
     directory, route, _selection, indexes = self._public_request_selection(request)

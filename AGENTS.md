@@ -1,5 +1,15 @@
 # Repository memory
 
+- On 2026-09-23, Group1 video/CAN comparisons showed reversed front lateral
+  coordinates on one Tucson and one Sportage, but normal left/right on a
+  Staria; another Sportage was inconclusive. Do not infer upside-down mounting
+  or automatically invert a whole model/group. The user approved RadarTrackFlip:
+  default normal, manually invert frontRadar yRel/yvRel per vehicle at the next
+  onroad start. Preserve SCC/corner/vision and scheduling. liveTracks records
+  radarTrackFlipped; replay must avoid double inversion and preserve recorded
+  leads. NAS recorded/normal/flipped choices are analysis-only. See
+  docs/radar_track_flip.md for offline verification and vehicle-validation limits.
+
 - On 2026-09-23, the user approved the parked display-placement candidate:
   onroad main UI core6 and USB cluster core7, both SCHED_OTHER/nice19;
   offroad both return to cores0..3 before big-core power saving. This supersedes

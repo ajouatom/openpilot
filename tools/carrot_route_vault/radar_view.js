@@ -28,6 +28,7 @@ export function attachRadarReview(video) {
   panel.innerHTML = `<div class="eyebrow">Radar validation</div><h2>레이더 검증</h2>
     <div class="radar-toolbar"><label>레이더 소스<select data-sensor><option value="auto">자동</option><option value="front">전방</option><option value="corner">코너 포함</option></select></label>
     <label>표시 거리<select data-range><option>60</option><option selected>130</option><option>200</option></select></label>
+    <label>전방 레이더 좌우<select data-radar-flip><option value="recorded">기록된 설정</option><option value="normal">정상</option><option value="flipped">반전</option></select></label>
     <button type="button" data-retry>다시 불러오기</button></div>
     <p class="radar-status" role="status" aria-live="polite"></p>
     <canvas class="radar-map" aria-label="레이더와 차선, 선행차를 위에서 본 화면"></canvas>
@@ -51,7 +52,7 @@ export function attachRadarReview(video) {
   plots.innerHTML = `<div class="radar-plot-legend"><span style="color:#f68e37">L1 거리 (레이더)</span><span style="color:#f5d348">L2 거리</span><span style="color:#4891ff">비전 거리 / 비전 L1</span><span style="color:#f75ea0">SCC 거리·가속도</span><span style="color:#3ecd82">L1 속도·Carrot 목표 가속도</span></div>
     <canvas class="radar-graph" aria-label="선행차 거리와 속도, SCC와 Carrot 가속도 그래프. 누르면 재생 또는 일시정지"></canvas>
     <div class="radar-readout"></div>
-    <p class="muted tiny">기록된 Lead는 업로드 당시 차량의 판정입니다. 재계산은 서버의 검증 코드로 실행하며 민감도는 3으로 고정됩니다. 레이더 소스 선택은 이 화면의 분석에만 적용됩니다.</p>`;
+    <p class="muted tiny">기록된 Lead는 업로드 당시 차량의 판정입니다. 재계산은 서버의 검증 코드로 실행하며 민감도는 3으로 고정됩니다. 레이더 소스·좌우 선택은 이 화면의 분석에만 적용되며 차량 설정은 바꾸지 않습니다. 좌우 반전은 전방 트랙의 위치·횡속도에 적용하고 SCC·코너·비전과 기록된 Lead는 유지합니다.</p>`;
   review.append(transport, plots);
   video.controls = false;
   const find = s => review.querySelector(s);
@@ -163,7 +164,7 @@ export function attachRadarReview(video) {
     segment=selected;generation++;const token=generation;controller?.abort();controller=new AbortController();
     const signal=controller.signal;running=false;frames=[];times=[];payload=null;index=0;current=0;selectedTrack=null;scrub.disabled=true;draw();
     setStatus('레이더 검증 데이터를 준비하고 있습니다…');
-    const query=new URLSearchParams({sensor:find('[data-sensor]').value});
+    const query=new URLSearchParams({sensor:find('[data-sensor]').value,radar_track_flip:find('[data-radar-flip]').value});
     const url=`${location.pathname.replace(/\/$/,'')}/radar/${encodeURIComponent(selected.index)}?${query}`;
     try {
       const deadline=Date.now()+360000;
@@ -178,12 +179,14 @@ export function attachRadarReview(video) {
         graphTimes=new Map(frames.map((f,i)=>[f.time_s,times[i]]));graphCacheKey='';
         if(times.some((t,i)=>!valid(t)||(i&&t<times[i-1])))throw new Error('레이더 시간 정보가 올바르지 않습니다.');
         if(!data.videoAligned)video.pause();
-        setStatus(`${selected.name} · ${data.sensor} · 민감도 ${data.sensitivity} · 코드 ${data.sourceVersion} · ${frames.length} 프레임${data.videoAligned?' · 영상 동기화':' · 영상 시간 정보 없음: 레이더 별도 재생'}${data.sourceLog?.startsWith('qlog')?' · qlog 사용 (희소 기록)':''}`);
+        const orientation=find('[data-radar-flip]').selectedOptions[0].textContent;
+        setStatus(`${selected.name} · ${data.sensor} · 좌우: ${orientation} · 민감도 ${data.sensitivity} · 코드 ${data.sourceVersion} · ${frames.length} 프레임${data.videoAligned?' · 영상 동기화':' · 영상 시간 정보 없음: 레이더 별도 재생'}${data.sourceLog?.startsWith('qlog')?' · qlog 사용 (희소 기록)':''}`);
         current=data.videoAligned?Math.max(0,Math.min(video.currentTime,times.at(-1))):0;index=nearest(current);draw();animate();return;
       }
     } catch(error){if(error.name!=='AbortError'&&token===generation){frames=[];times=[];payload=null;draw();setStatus(error.message,true);}}
   }
   find('[data-sensor]').onchange=()=>{if(segment)load(segment);};
+  find('[data-radar-flip]').onchange=()=>{if(segment)load(segment);};
   find('[data-retry]').onclick=()=>{if(segment)load(segment);};
   window.addEventListener('pagehide',()=>{controller?.abort();cancelAnimationFrame(frameHandle);running=false;});
   draw();return {load};

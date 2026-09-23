@@ -414,6 +414,7 @@
           "zh": "雷达",
           "params": [
             "EnableRadarTracks",
+            "RadarTrackFlip",
             "EnableCornerRadar"
           ]
         },
@@ -2684,6 +2685,29 @@
       "max": 3,
       "default": 0,
       "unit": 1
+    },
+    {
+      "group": "레이더설정",
+      "name": "RadarTrackFlip",
+      "title": "레이더 좌우 반전",
+      "descr": "전방 레이더 트랙의 좌우 방향을 보정합니다.\n0: 정상(기본값)\n1: 좌우 위치와 횡속도 반전\nSCC·코너레이더·비전에는 적용하지 않습니다. 선행차 선택과 레이더 표시 모두에 적용됩니다. 차종별 자동 반전은 없으며, 실제 좌우 불일치를 확인한 차량에서만 선택하세요. 변경 후 차량을 재시동하거나 기기를 재부팅하세요.",
+      "egroup": "RADAR",
+      "etitle": "Radar Left/Right Inversion",
+      "edescr": "Corrects the lateral orientation of front radar tracks.\n0: Normal (default)\n1: Invert lateral position and velocity\nDoes not apply to SCC, corner radar or vision. Affects both lead selection and radar display. No vehicle is inverted automatically; select only after confirming a left/right mismatch. Restart the vehicle or reboot the device after changing this setting.",
+      "cgroup": "雷达设置",
+      "ctitle": "雷达左右反转",
+      "cdescr": "校正前雷达轨迹的左右方向。\n0：正常（默认）\n1：反转横向位置和横向速度\n不适用于 SCC、角雷达或视觉。同时影响前车选择和雷达显示。不按车型自动反转；仅在确认左右不一致后选择。更改后请重新启动车辆或设备。",
+      "min": 0,
+      "max": 1,
+      "default": 0,
+      "unit": 1,
+      "control": "select",
+      "options": {
+        "ko": ["정상", "좌우 반전"],
+        "en": ["Normal", "Invert left/right"],
+        "zh": ["正常", "左右反转"]
+      },
+      "risk": "high"
     },
     {
       "group": "레이더설정",

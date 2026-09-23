@@ -28,6 +28,15 @@ On non-CAN FD Hyundai/Kia vehicles, a positive value attempts to enable radar tr
 
 Legacy Mando front radars use the base 32 slots at `0x500–0x51F` for timing and CAN validity, and automatically consume the additional 32 slots at `0x520–0x53F` when the vehicle transmits them. The upper bank is optional, so it does not delay publication or invalidate CAN on a 32-slot vehicle; an upper-bank slot that stops arriving is removed on the next radar cycle.
 
+<a id="radar-track-flip"></a>
+## Radar left/right inversion
+
+`RadarTrackFlip` corrects front-radar orientation for the individual vehicle. In **Vehicle & Hardware > Radar > Radar Left/Right Inversion**, choose `0: Normal` (default) or `1: Invert left/right`.
+
+Inversion changes the signs of both front-track lateral position and lateral velocity, affecting lead selection, cut-in detection and radar display. SCC, corner radar, vision, longitudinal distance and longitudinal speed remain unchanged. No vehicle model is inverted automatically.
+
+Select inversion only after confirming a left/right mismatch between video and radar. The value is read at the next OnRoad start; restart the vehicle or reboot the device after changing it. Keep the default when the radar direction is already correct.
+
 <a id="corner-radar"></a>
 ## Corner radar
 

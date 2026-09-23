@@ -295,6 +295,7 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"VEgoStopping", {PERSISTENT, INT, "50"}},
 
     {"EnableRadarTracks", {PERSISTENT, INT, "0"}},
+    {"RadarTrackFlip", {PERSISTENT, BOOL, "0"}},
     {"RadarLatFactor", {PERSISTENT, INT, "0"}},
     {"EnableCornerRadar", {PERSISTENT, INT, "0"}},
 

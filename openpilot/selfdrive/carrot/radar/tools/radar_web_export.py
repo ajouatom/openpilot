@@ -90,8 +90,11 @@ def main():
   parser.add_argument("output", type=Path)
   parser.add_argument("--sensor", choices=("auto", "front", "corner"), default="auto")
   parser.add_argument("--sensitivity", type=int, choices=range(6), default=replay.VALIDATION_DEFAULT_SENSITIVITY)
+  parser.add_argument("--radar-track-flip", choices=("recorded", "normal", "flipped"), default="recorded")
   args = parser.parse_args()
-  payload = export_frames(replay.load_frames(args.log), sensor=args.sensor, sensitivity=args.sensitivity)
+  flip = {"recorded": None, "normal": False, "flipped": True}[args.radar_track_flip]
+  payload = export_frames(replay.load_frames(args.log, radar_track_flip=flip), sensor=args.sensor, sensitivity=args.sensitivity)
+  payload["radarTrackFlip"] = args.radar_track_flip
   payload["sourceLog"] = args.log.name
   args.output.write_text(json.dumps(payload, separators=(",", ":"), allow_nan=False), encoding="utf-8")
 

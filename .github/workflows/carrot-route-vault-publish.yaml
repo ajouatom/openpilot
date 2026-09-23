@@ -11,6 +11,7 @@ on:
       - 'openpilot/selfdrive/carrot/radar/tools/radar_web_export.py'
       - 'openpilot/selfdrive/carrot/radar/tools/radar_group3_replay.py'
       - 'openpilot/common/filter_simple.py'
+      - 'openpilot/selfdrive/carrot/radar/lateral.py'
       - 'openpilot/selfdrive/controls/lib/cutin_*.py'
       - 'openpilot/cereal/**'
       - 'opendbc_repo/opendbc/**'
@@ -52,6 +53,7 @@ jobs:
             openpilot/selfdrive/carrot/tests/test_trajectory_cutin.py \
             openpilot/selfdrive/carrot/tests/test_radar_cutout_fast_path.py \
             openpilot/selfdrive/carrot/tests/test_radar_can_batch.py \
+            openpilot/selfdrive/carrot/tests/test_radar_lateral.py \
             openpilot/selfdrive/carrot/tests/test_radar_motion_predictor.py \
             openpilot/selfdrive/carrot/tests/test_radar_lead_simulator.py \
             openpilot/selfdrive/carrot/tests/test_radard_dpath.py
@@ -84,6 +86,7 @@ jobs:
             openpilot/selfdrive/carrot/radar/tools/radar_web_export.py openpilot/selfdrive/controls/lib/cutin_alert.py \
             openpilot/selfdrive/controls/lib/cutin_helpers.py openpilot/cereal opendbc_repo/opendbc \
             openpilot/common/filter_simple.py openpilot/selfdrive/carrot/radar/tools/radar_group3_replay.py \
+            openpilot/selfdrive/carrot/radar/lateral.py \
             .github/workflows/carrot-route-vault-publish.yaml; then
             docker tag "$IMAGE:sha-$GITHUB_SHA" "$IMAGE:carrot-wip"
             docker push "$IMAGE:carrot-wip"
