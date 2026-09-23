@@ -34,7 +34,7 @@ def test_paddle_background_requires_enabled_paddle_mode(
     (8, 8), (9, 9), (10, 10), (11, 11), (12, 12), (13, 13), (14, 14),
   )),
 ])
-def test_cluster_objects_preserve_received_geometry_and_display_state(monkeypatch, message, distance, detect, expected_detect):
+def test_cluster_objects_restore_corner_state_without_blinking_or_distance_clamp(monkeypatch, message, distance, detect, expected_detect):
   monkeypatch.setattr(hyundaicanfd, "Params", lambda: SimpleNamespace(get_int=lambda key: 0))
   packer = CANPacker("hyundai_canfd_generated")
   definition = packer.dbc.name_to_msg[message]
@@ -72,7 +72,7 @@ def test_cluster_objects_preserve_received_geometry_and_display_state(monkeypatc
     for side in ("LF", "RF", "LR", "RR"):
       assert decoded[f"{side}_DETECT_DISTANCE"] == pytest.approx(distance)
       assert decoded[f"{side}_DETECT_LATERAL"] == pytest.approx(2.9)
-      assert decoded[f"{side}_DETECT"] == expected_detect
+      assert decoded[f"{side}_DETECT"] == (1 if detect >= 4 and distance != 0 else detect)
     if message == "CCNC_0x162":
       assert decoded["FF_DETECT"] == (expected_detect or 4)
       for key in ("FF_DISTANCE", "FF_LATERAL", "FF_DETECT_ALT", "FF_DISTANCE_ALT", "FF_LATERAL_ALT"):

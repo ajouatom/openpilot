@@ -785,12 +785,18 @@ def _apply_cluster_lane_lines(values, CS, lat_active, desire):
     _apply_lane_desire(values, desire)
 
 
-def _convert_ccnc_boxes_to_cars(values):
-  # Only 0x162 uses 1/2 for gray/white boxes and 3/4 for gray/white cars.
-  # 0x1ea has different display enums; FF_DETECT_ALT has no car enum.
-  for key in ("FF_DETECT", "LF_DETECT", "RF_DETECT", "LR_DETECT", "RR_DETECT"):
-    if values[key] in (1, 2):
-      values[key] += 2
+def _normalize_cluster_corner_objects(values):
+  # Restore the legacy corner display state without blinking or clamping distance.
+  for side in ("LF", "RF", "LR", "RR"):
+    key = f"{side}_DETECT"
+    if values[key] >= 4 and values[f"{side}_DETECT_DISTANCE"] != 0:
+      values[key] = 1
+
+
+def _convert_ccnc_front_box_to_car(values):
+  # Preserve the current front-lead presentation independently of corner objects.
+  if values["FF_DETECT"] in (1, 2):
+    values["FF_DETECT"] += 2
 
 
 def _apply_ccnc_lead(values, radar_state, enabled, model_v2=None, hud_lateral=None):
@@ -1000,13 +1006,15 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
         values['RIGHT_BLINK_HOLD'] = 1 if lane_changing == 4 else 0
 
         _apply_cluster_lane_lines(values, CS, lat_active, desire)
+        _normalize_cluster_corner_objects(values)
 
         ret.append(packer.make_can_msg("ADRV_0x1ea", CAN.ECAN, values, rx_counter = rx_counter))
 
       if CS.ccnc_0x162 is not None:
         values = copy.copy(CS.ccnc_0x162)
 
-        _convert_ccnc_boxes_to_cars(values)
+        _normalize_cluster_corner_objects(values)
+        _convert_ccnc_front_box_to_car(values)
         _apply_ccnc_lead(values, getattr(CS, "radarState", None), CC.enabled, getattr(CS, "modelV2", None), hud_lateral)
 
         if (left_lane_warning and not CS.out.leftBlinker) or (right_lane_warning and not CS.out.rightBlinker):
