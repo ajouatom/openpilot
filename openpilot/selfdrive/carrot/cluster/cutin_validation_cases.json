@@ -2162,6 +2162,19 @@
       "scene": "Saved user review scene 09: the uphill white SUV at corner C1013 must be tracked by 16.75s. Camera frames were corrected using qRoadEncodeIdx timestamps. Front F40 has a different bearing and is not assigned as the same target. The requested radar lead deadline remains an open regression."
     },
     {
+      "id": "ev9-125-20-right-roadside-stationary-pair",
+      "vehicle_folder": "KIA_EV9 76665b7de33d4586",
+      "log": "00000125--53364ef9d7--20/rlog.zst",
+      "source": "front+corner",
+      "window": [12.0, 18.0],
+      "expected": "clear",
+      "human_verified": true,
+      "target_track_ids": [2302, 52],
+      "forbidden_lead_one_ids": [2302, 52],
+      "forbidden_lead_two_ids": [2302, 52],
+      "scene": "User-reported false braking near video 14.4s: right roadside returns stay outside the ego lane. Corner 2302 briefly jumps inward in position while reporting almost zero inward velocity; paired front 52 remains near-stationary and outside. The association must not corroborate lane entry or seed a retained L2 through the pass. Check CUT-IN, risk and both lead roles across the complete 12-18s window."
+    },
+    {
       "id": "santafe-92-69-bridge-joint-scc-backup-39",
       "vehicle_folder": "HYUNDAI_SANTA_FE_2022 e2fbe393d4ab01fb",
       "log": "00000092--d1a1129c12--69/rlog.zst",
