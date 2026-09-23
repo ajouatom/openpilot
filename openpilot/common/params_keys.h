@@ -302,6 +302,7 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
 
     {"EnableRadarTracksResult", {PERSISTENT | CLEAR_ON_MANAGER_START, INT}},
     {"CanParserResult", {CLEAR_ON_MANAGER_START | CLEAR_ON_OFFROAD_TRANSITION, STRING}},
+    {"HyundaiCameraSccHint", {CLEAR_ON_MANAGER_START | CLEAR_ON_OFFROAD_TRANSITION, BOOL}},
 
     {"HotspotOnBoot", {PERSISTENT, INT, "0"}},
     {"SoftwareMenu", {PERSISTENT, INT, "1"}},

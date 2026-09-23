@@ -213,6 +213,10 @@ class CarState(CarStateBase):
 
     self.params = CarControllerParams(CP)
     self.op_params = Params()
+    # Diagnostic only: retain this onroad session's observed camera-bus SCC.
+    self.camera_scc_hint_enabled = self.op_params.get_int("HyundaiCameraSCC") == 0 and not (CP.flags & HyundaiFlags.CAMERA_SCC)
+    self.camera_scc_hint = False
+    self.op_params.put_bool("HyundaiCameraSccHint", False)
 
     self.main_enabled = True if self.op_params.get_int("AutoEngage") == 2 else False
     self.manual_main_off_latched = False
@@ -321,7 +325,18 @@ class CarState(CarStateBase):
     if self.CP.openpilotLongitudinalControl and self.MainMode_ACC and not self.manual_main_off_latched:
       self.main_enabled = True
 
+  def _update_camera_scc_hint(self, cp_cam, canfd):
+    if self.camera_scc_hint_enabled and not self.camera_scc_hint:
+      name = "SCC_CONTROL" if canfd else "SCC12"
+      msg = cp_cam.dbc.name_to_msg.get(name)
+      if msg is not None and msg.address in cp_cam.seen_addresses:
+        self.camera_scc_hint = True
+        self.op_params.put_bool_nonblocking("HyundaiCameraSccHint", True)
+
   def monitor_fingerprint(self, can_parsers, canfd):
+    # Keep observing after startup fingerprint registration has finished.
+    # Reading seen_addresses does not register extra CAN validity checks.
+    self._update_camera_scc_hint(can_parsers[Bus.cam], canfd)
     if self.controls_ready_count <= READY_COUNT_OK:
       if Params().get_bool("ControlsReady"):
         self.controls_ready_count += 1
