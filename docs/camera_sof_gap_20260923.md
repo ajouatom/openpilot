@@ -129,8 +129,12 @@ established by the desktop checks below.
   `--noconftest -o addopts=` because the repository-wide fixture requires the
   Linux Params extension. Ruff, Python parsing and the diff whitespace check
   passed for the changed files.
-- The existing Linux CI builds the full project. Its build-release job now
-  also runs the compiled diagnostic test before the model regression suite.
+- The existing Linux CI builds its normal desktop targets. Camerad itself
+  remains a device-only target (`arch == larch64`), so the portable diagnostic
+  test has a separate SConscript loaded on desktop and device builds with
+  extras enabled. CI runs that test before the model regression suite. The
+  initial CI attempt exposed the device-only build guard; the test target was
+  then moved out of that guard. A desktop CI pass is not an ARM camerad build.
 
 The portable host compiler was Zig 0.13.0/Clang with the repository's Catch2
 2.13.10 headers. No firmware, device parameters or live vehicle processes
