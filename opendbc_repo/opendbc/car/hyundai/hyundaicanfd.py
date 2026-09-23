@@ -37,10 +37,10 @@ def apply_canfd_stopping(values, CS, controller, accel, previous_value, jerk_u, 
 
   wheels = CS.out.wheelSpeeds
   speeds = [CS.out.vEgo, CS.out.vEgoRaw, wheels.fl, wheels.fr, wheels.rl, wheels.rr]
-  finite = all(math.isfinite(v) for v in (*speeds, accel, previous_value, jerk_u, jerk_l))
+  finite = all(math.isfinite(v) for v in (*speeds, accel, values["aReqValue"], previous_value, jerk_u, jerk_l))
   speed = max(abs(v) for v in speeds) if finite else 0.0
   soft_hold = CS.softHoldActive > 0 and CS.out.cruiseState.available
-  # Only an armed, stationary soft hold may prepare while the driver brakes.
+  # Only an armed, stationary soft hold may remain active while the driver brakes.
   # Ordinary braking and pedal input while moving keep their existing interlock.
   brake_blocked = CS.out.brakePressed and not (soft_hold and speed <= MOVING_SPEED)
   blocked = (not finite or not CS.out.canValid or brake_blocked or CS.out.gasPressed
@@ -48,9 +48,8 @@ def apply_canfd_stopping(values, CS, controller, accel, previous_value, jerk_u, 
   previous_phase = controller.phase
   command = controller.update(
     active=values["ACCMode"] == 1 and not blocked, requested=bool(values["StopReq"]), speed=speed,
-    held=CS.canfdSccHoldActive, accel=accel, previous_value=previous_value,
+    held=CS.canfdSccHoldActive, accel=accel, value=values["aReqValue"], previous_value=previous_value,
     jerk_u=max(0.0, min(jerk_u, 5.0)), jerk_l=max(1.0, min(jerk_l, 5.0)),
-    soft_hold=soft_hold,
   )
   if blocked or values["ACCMode"] != 1:
     values.update(StopReq=0, aReqRaw=0.0, aReqValue=0.0)
@@ -64,7 +63,7 @@ def apply_canfd_stopping(values, CS, controller, accel, previous_value, jerk_u, 
     carlog.warning({"event": "carrot_stopping", "from": str(previous_phase), "phase": str(controller.phase),
                     "reason": controller.reason, "speed": speed, "aEgo": CS.out.aEgo,
                     "held": CS.canfdSccHoldActive, "retry_used": controller.retried,
-                    "soft_hold": soft_hold, "prepare_cycles": controller.prepare_cycles,
+                    "soft_hold": soft_hold,
                     "StopReq": values["StopReq"], "aReqRaw": values["aReqRaw"], "aReqValue": values["aReqValue"]})
 
 
@@ -564,7 +563,7 @@ def create_acc_control(packer, CAN, enabled, accel_last, accel, stopping, gas_ov
   }
 
   # accel_last is the legacy raw target, not necessarily the previous SCC
-  # output. Keep ordinary packet limiting; anchor stop entry to the returned value.
+  # output. Keep ordinary packet limiting; anchor recovery to the returned value.
   previous_value = accel_last if accel_value_last is None else accel_value_last
   apply_canfd_stopping(values, CS, stop_controller, accel, previous_value, jerk_u, jerk_l)
   return packer.make_can_msg("SCC_CONTROL", CAN.ECAN, values), values["aReqValue"]

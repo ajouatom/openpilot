@@ -30,7 +30,7 @@ def test_controller_enables_canfd_stopping_by_vehicle_scope(monkeypatch, canfd, 
 
 def step(controller, **overrides):
   args = dict(active=True, requested=True, speed=0.3, held=False, accel=-0.5,
-              previous_value=-0.5, jerk_u=2.0, jerk_l=1.0)
+              value=-0.5, previous_value=-0.5, jerk_u=2.0, jerk_l=1.0)
   args.update(overrides)
   return controller.update(**args)
 
@@ -45,21 +45,12 @@ def test_normal_stop_keeps_request_asserted_without_toggle():
   assert not controller.retried
 
 
-@pytest.mark.parametrize('initial', [-1.0, -0.5, -0.3, 0.0, 0.2])
-@pytest.mark.parametrize('jerk_u, jerk_l', [(2.0, 1.0), (0.4, 0.6)])
-def test_stop_acceleration_converges_from_both_sides_without_overshoot(initial, jerk_u, jerk_l):
-  controller = CanfdStopping(stopping_rate=0.8)
-  commands = [step(controller, speed=0.0, held=True, previous_value=initial,
-                   accel=-2.0, jerk_u=jerk_u, jerk_l=jerk_l) for _ in range(160)]
-  assert commands[0].raw == commands[0].value == min(initial, 0.0)
-  values = [c.value for c in commands]
-  assert all(c.stop_req == 1 and c.raw == c.value for c in commands)
-  lo, hi = sorted((min(initial, 0.0), -0.5))
-  assert all(lo - 1e-9 <= v <= hi + 1e-9 for v in values)
-  for previous, current in zip(values, values[1:], strict=False):
-    assert abs(current + 0.5) <= abs(previous + 0.5) + 1e-9
-    assert -min(0.8, jerk_l) * DT - 1e-9 <= current - previous <= min(0.8, jerk_u) * DT + 1e-9
-  assert commands[-1].raw == commands[-1].value == pytest.approx(-0.5)
+@pytest.mark.parametrize('raw,value', [(-1., -.7), (-.5, -.3), (-.3, -.8), (0., 0.)])
+def test_stop_passes_normal_requests_without_fixed_convergence(raw, value):
+  controller = CanfdStopping()
+  for _ in range(160):
+    cmd = step(controller, speed=0., held=True, accel=raw, value=value, previous_value=value)
+    assert (cmd.stop_req, cmd.raw, cmd.value) == (1, raw, value)
 
 
 def test_creep_releases_reasserts_once_then_retains_deceleration():
@@ -86,16 +77,17 @@ def test_creep_releases_reasserts_once_then_retains_deceleration():
 
 def test_recovery_value_continues_actual_stop_output_and_respects_jerk():
   controller = CanfdStopping()
-  previous = -2.0
+  previous = -.3
   while controller.phase != StopPhase.release:
-    cmd = step(controller, previous_value=-2.0, accel=-2.0)
+    cmd = step(controller, previous_value=previous, accel=-2., value=-.3)
     if controller.phase != StopPhase.release:
       previous = cmd.value
-  assert cmd.raw == -2.0
+  assert cmd.raw == -2.
   assert cmd.value == pytest.approx(previous - DT)
-  for i in range(1, 20):
-    cmd = step(controller, previous_value=-2.0, accel=-2.0)
-    assert cmd.value == pytest.approx(max(-2.0, previous - (i + 1) * DT))
+  for _ in range(20):
+    previous = cmd.value
+    cmd = step(controller, previous_value=previous, accel=-2., value=-.3)
+    assert cmd.value == pytest.approx(previous - DT)
 
 
 def test_stop_during_release_reasserts_immediately_when_held():
@@ -130,12 +122,12 @@ def test_single_speed_spike_does_not_release_hold():
 def test_approach_keeps_negative_acceleration_until_low_speed():
   controller = CanfdStopping()
   for _ in range(100):
-    cmd = step(controller, speed=4.0, accel=-2.0, previous_value=-2.0)
+    cmd = step(controller, speed=4.0, accel=-2.0, value=-2.0, previous_value=-2.0)
     assert cmd.stop_req == 0
     assert cmd.raw == cmd.value == -2.0
-  cmd = step(controller, speed=ENTRY_SPEED)
-  assert (cmd.stop_req, cmd.raw, cmd.value) == (1, -2.0, -2.0)
-  assert step(controller, speed=ENTRY_SPEED).value == pytest.approx(-2.0 + 0.8 * DT)
+  cmd = step(controller, speed=ENTRY_SPEED, accel=-2., value=-2., previous_value=-2.)
+  assert (cmd.stop_req, cmd.raw, cmd.value) == (1, -2., -2.)
+  assert step(controller, speed=ENTRY_SPEED, accel=-2., value=-2., previous_value=-2.).value == -2.
 
 
 def test_request_speed_excursion_releases_without_waiting():
@@ -204,52 +196,46 @@ def send(camera, controller, CS, *, enabled=True, override=False, stopping=True,
 
 
 @pytest.mark.parametrize("camera", [True, False])
-@pytest.mark.parametrize("initial", [-1.0, -0.3])
-def test_packed_stop_starts_from_previous_output(camera, initial):
+@pytest.mark.parametrize("initial", [-1., -.3])
+@pytest.mark.parametrize("target", [-.5, -.8, -1.])
+def test_packed_normal_stop_matches_legacy_acceleration(camera, initial, target):
   cs = make_cs()
-  controller = CanfdStopping()
-  # Ordinary braking can have a raw target different from its limited output.
-  approach = send(camera, controller, cs, stopping=False, accel=-2.0, previous_value=initial, previous_target=initial)
-  assert approach["aReqRaw"] != approach["aReqValue"]
-  first = send(camera, controller, cs, accel=-2.0, previous_value=approach["aReqValue"], previous_target=approach["aReqRaw"])
-  assert first["StopReq"] == 1
-  assert first["aReqRaw"] == first["aReqValue"] == approach["aReqValue"]
-
-  # Confirm hold to isolate convergence from the separate persistent-motion retry.
   cs.canfdSccHoldActive = True
-  cs.out.vEgo = cs.out.vEgoRaw = 0.0
+  cs.out.vEgo = cs.out.vEgoRaw = 0.
   cs.out.wheelSpeeds = SimpleNamespace(fl=0., fr=0., rl=0., rr=0.)
-  previous = first["aReqValue"]
+  controller = CanfdStopping()
+  previous = previous_target = initial
   for _ in range(100):
-    values = send(camera, controller, cs, accel=-2.0, previous_value=previous, previous_target=-2.0)
-    assert values["StopReq"] == 1
-    assert values["aReqRaw"] == values["aReqValue"]
-    assert abs(values["aReqValue"] + 0.5) <= abs(previous + 0.5) + 1e-9
-    assert abs(values["aReqValue"] - previous) <= 0.02 + 1e-9  # 0.016 plus CAN quantization
-    previous = values["aReqValue"]
-  assert previous == pytest.approx(-0.5)
+    values = send(camera, controller, cs, accel=target, previous_value=previous, previous_target=previous_target)
+    legacy = send(camera, None, cs, accel=target, previous_value=previous, previous_target=previous_target)
+    assert values['StopReq'] == legacy['StopReq'] == 1
+    assert values['aReqRaw'] == legacy['aReqRaw'] == pytest.approx(target)
+    assert values['aReqValue'] == legacy['aReqValue']
+    previous, previous_target = values['aReqValue'], target
+  assert previous == pytest.approx(target)
+  assert not controller.retried
 
 
 @pytest.mark.parametrize("camera", [True, False])
-def test_packed_retry_restarts_convergence_from_release_output(camera):
+@pytest.mark.parametrize("target", [-.5, -.8, -1.])
+def test_packed_retry_keeps_requested_stopping_acceleration(camera, target):
   controller = CanfdStopping()
   cs = make_cs()
-  previous = -1.0
+  previous = target
   for _ in range(150):
     old_phase = controller.phase
-    values = send(camera, controller, cs, accel=-1.0, previous_value=previous, previous_target=-1.0)
+    values = send(camera, controller, cs, accel=target, previous_value=previous, previous_target=target)
     if controller.phase == StopPhase.retry:
       assert old_phase == StopPhase.release
-      assert values["StopReq"] == 1
-      assert values["aReqRaw"] == values["aReqValue"] == previous
-      assert previous < -0.5
-      following = send(camera, controller, cs, accel=-1.0, previous_value=previous, previous_target=-1.0)
-      assert following["StopReq"] == 1
-      assert previous < following["aReqValue"] <= -0.5
+      assert values['StopReq'] == 1
+      assert values['aReqRaw'] == values['aReqValue'] == pytest.approx(target)
+      following = send(camera, controller, cs, accel=target, previous_value=values['aReqValue'], previous_target=target)
+      assert following['StopReq'] == 1
+      assert following['aReqRaw'] == following['aReqValue'] == pytest.approx(target)
       break
-    previous = values["aReqValue"]
+    previous = values['aReqValue']
   else:
-    pytest.fail("persistent motion did not trigger the retained retry")
+    pytest.fail('persistent motion did not trigger the retained retry')
 
 
 @pytest.mark.parametrize("camera", [True, False])
@@ -358,35 +344,26 @@ def test_missing_stock_message_resets_camera_experiment():
 
 
 @pytest.mark.parametrize("camera", [True, False])
-@pytest.mark.parametrize("release_after", [None, 1, 10, 26])
-def test_soft_hold_prepares_two_negative_scc_frames_before_stop_req(camera, release_after):
+@pytest.mark.parametrize("brake_pressed", [False, True])
+def test_soft_hold_uses_original_request_without_preparation(camera, brake_pressed):
   cs = make_cs()
-  cs.softHoldActive = 1
-  cs.out.brakePressed = True
-  cs.out.vEgo = cs.out.vEgoRaw = 0.0
+  cs.softHoldActive = 1 if brake_pressed else 2
+  cs.out.brakePressed = brake_pressed
+  cs.out.vEgo = cs.out.vEgoRaw = 0.
   cs.out.wheelSpeeds = SimpleNamespace(fl=0., fr=0., rl=0., rr=0.)
   controller = CanfdStopping()
-  negative_frames = 0
-  for frame in range(50):
-    if release_after is not None and frame >= release_after:
-      cs.out.brakePressed = False
-      cs.softHoldActive = 2
-    # While braking, controlsd's requested acceleration can still be zero.
-    values = send(camera, controller, cs, enabled=False, stopping=False, accel=0.)
-    assert values['ACCMode'] == 1
-    if values['StopReq']:
-      assert negative_frames >= 2
-      assert values['aReqRaw'] == values['aReqValue'] == pytest.approx(-.5)
-      break
-    assert values['aReqRaw'] == pytest.approx(-.5)
-    assert values['aReqValue'] < 0.
-    negative_frames = negative_frames + 1 if values['aReqValue'] <= -.5 + 1e-6 else 0
-  else:
-    pytest.fail('soft hold never completed preparation')
-  assert controller.phase == StopPhase.request
-  for _ in range(12):
-    assert send(camera, controller, cs, enabled=False, stopping=False, accel=0.)['StopReq'] == 1
+  previous = previous_target = 0.
+  for _ in range(110):
+    values = send(camera, controller, cs, enabled=False, stopping=False, accel=-2.,
+                  previous_value=previous, previous_target=previous_target)
+    legacy = send(camera, None, cs, enabled=False, stopping=False, accel=-2.,
+                  previous_value=previous, previous_target=previous_target)
+    assert values['ACCMode'] == values['StopReq'] == 1
+    assert values['aReqRaw'] == legacy['aReqRaw'] == -2.
+    assert values['aReqValue'] == legacy['aReqValue']
+    previous, previous_target = values['aReqValue'], -2.
   assert controller.phase == StopPhase.held
+  assert previous == -2.
 
 
 @pytest.mark.parametrize('camera', [True, False])
@@ -399,7 +376,7 @@ def test_soft_hold_brake_exception_preserves_other_interlocks(camera, block):
   cs.out.wheelSpeeds = SimpleNamespace(fl=0., fr=0., rl=0., rr=0.)
   controller = CanfdStopping()
   send(camera, controller, cs, enabled=False, stopping=False, accel=0.)
-  assert controller.phase == StopPhase.prepare
+  assert controller.phase == StopPhase.request
   if block == 'canValid':
     cs.out.canValid = False
   elif block == 'gearShifter':
@@ -412,11 +389,10 @@ def test_soft_hold_brake_exception_preserves_other_interlocks(camera, block):
   assert values['StopReq'] == 0
   assert values['aReqRaw'] == values['aReqValue'] == 0.
   assert controller.phase == StopPhase.idle
-  assert controller.prepare_cycles == 0
 
 
-def test_soft_hold_does_not_release_confirmed_existing_hold_to_prepare():
+def test_confirmed_existing_hold_is_not_released():
   controller = CanfdStopping()
-  command = step(controller, speed=0., held=True, soft_hold=True)
+  command = step(controller, speed=0., held=True)
   assert command.stop_req == 1
   assert controller.phase == StopPhase.held

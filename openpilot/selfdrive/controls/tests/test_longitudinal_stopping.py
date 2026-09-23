@@ -1,4 +1,4 @@
-"""Stop-intent timing and publication, without a native MPC/vehicle simulation."""
+"""Baseline stop-intent timing and same-cycle publication."""
 import ast
 from pathlib import Path
 from types import SimpleNamespace
@@ -6,85 +6,38 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 
-from opendbc.car.hyundai.values import HyundaiFlags
-from openpilot.selfdrive.controls.lib.longitudinal_stopping import should_prepare_stop
+from openpilot.selfdrive.controls.lib.drive_helpers import get_accel_from_plan
 
 
-TIMES = np.array([0., .25, .5, 1., 1.25, 1.5, 2.25, 2.5])
-SPEEDS = np.array([.6, .48, .34, .08, 0., 0., 0., 0.])
-ACCELS = np.array([-.5, -.5, -.5, -.2, 0., 0., 0., 0.])
+@pytest.mark.parametrize('threshold', [.07, .5])
+def test_stop_waits_for_normal_action_horizon(threshold):
+  # The removed preview used to request a stop on this approaching trajectory.
+  times = np.array([0., .25, .5, 1., 1.25, 1.5, 2.25, 2.5])
+  speeds = np.array([.6, .55, .34, .08, 0., 0., 0., 0.])
+  accels = np.array([-.5, -.5, -.5, -.2, 0., 0., 0., 0.])
+  _, should_stop, _, _ = get_accel_from_plan(speeds, accels, times, action_t=.25, vEgoStopping=threshold)
+  assert not should_stop
+  _, should_stop, _, _ = get_accel_from_plan(speeds, accels, times, action_t=1.25, vEgoStopping=threshold)
+  assert should_stop
 
 
-def prepare(speeds=SPEEDS, accels=ACCELS, times=TIMES, **kwargs):
-  return should_prepare_stop(speeds, accels, times, **dict(v_ego=.6, action_t=.25, v_stop=.07, **kwargs))
-
-
-def test_stop_is_prepared_while_near_term_speed_still_exceeds_stop_threshold():
-  assert SPEEDS[1] > .07
-  assert prepare()
-
-
-@pytest.mark.parametrize('speeds,accels', [
-  (np.full(8, .3), np.zeros(8)),  # ordinary crawl
-  (np.linspace(0., 1., 8), np.full(8, .4)),  # launch
-  (np.array([.6, .5, .4, .2, .1, .1, .1, .1]), ACCELS),  # will keep creeping
-  (np.array([.6, .48, .34, .08, 0., .2, 0., 0.]), ACCELS),  # intervening restart
-])
-def test_moving_or_restarting_plan_does_not_prepare(speeds, accels):
-  assert not prepare(speeds, accels)
-
-
-@pytest.mark.parametrize('speed', [.7001, 3., -0.1, float('nan'), float('inf')])
-def test_early_stop_is_limited_to_valid_low_speed(speed):
-  assert not should_prepare_stop(SPEEDS, ACCELS, TIMES, v_ego=speed, action_t=.25, v_stop=.07)
-
-
-def test_early_stop_needs_valid_sufficient_prediction_horizon():
-  assert not prepare(SPEEDS[:-1])
-  assert not prepare(accels=[float('nan')]*8)
-  assert not prepare(times=np.zeros(8))
-  assert not prepare(times=TIMES / 3.)
-  assert not should_prepare_stop(SPEEDS, ACCELS, TIMES, v_ego=.6, action_t=.25, v_stop=0.)
-
-
-@pytest.fixture
-def planner_early_stop():
+@pytest.mark.parametrize('mode', ['acc', 'blended'])
+@pytest.mark.parametrize('mpc_stop', [False, True])
+@pytest.mark.parametrize('model_stop', [False, True])
+def test_planner_uses_current_mpc_or_model_stop_without_early_override(mode, mpc_stop, model_stop):
   path = Path(__file__).resolve().parents[1] / 'lib/longitudinal_planner.py'
   tree = ast.parse(path.read_text(encoding='utf-8'))
-  cls = next(n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == 'LongitudinalPlanner')
-  update = next(n for n in cls.body if isinstance(n, ast.FunctionDef) and n.name == 'update')
-  start = next(i for i, n in enumerate(update.body) if isinstance(n, ast.Assign)
-               and any(isinstance(t, ast.Name) and t.id == 'early_stop_enabled' for t in n.targets))
-  code = compile(ast.Module(body=update.body[start:start+2], type_ignores=[]), str(path), 'exec')
-
-  def run(*, brand='hyundai', flags=HyundaiFlags.CANFD, longitudinal=True, mode='acc',
-          reset=False, original=False, **overrides):
-    cs = SimpleNamespace(**({'gasPressed': False, 'brakePressed': False, 'canValid': True, 'gearShifter': 'drive',
-                             'brakeHoldActive': False, 'parkingBrake': False} | overrides))
-    state = SimpleNamespace(CP=SimpleNamespace(brand=brand, flags=flags, openpilotLongitudinalControl=longitudinal),
-                            params=SimpleNamespace(get_bool=lambda key: pytest.fail(f'Unexpected setting read: {key}')),
-                            mpc=SimpleNamespace(mode=mode),
-                            v_desired_trajectory=SPEEDS.copy(), a_desired_trajectory=ACCELS.copy(), output_should_stop=original)
-    exec(code, {'self': state, 'sm': {'carState': cs}, 'reset_state': reset, 'v_ego': .6, 'action_t': .25, 'vEgoStopping': .07,
-                'CONTROL_N_T_IDX': TIMES, 'HyundaiFlags': HyundaiFlags, 'should_prepare_stop': should_prepare_stop})
-    # Early preparation changes the stop indication, not the acceleration plan.
-    np.testing.assert_array_equal(state.a_desired_trajectory, ACCELS)
-    return state.output_should_stop
-  return run
-
-
-def test_planner_early_stop_is_default_and_does_not_suppress_existing_stop(planner_early_stop):
-  assert planner_early_stop()
-  assert planner_early_stop(flags=0, original=True)
-
-
-@pytest.mark.parametrize('blocked', [
-  {'brand': 'toyota'}, {'flags': 0}, {'longitudinal': False}, {'mode': 'blended'}, {'reset': True},
-  {'gasPressed': True}, {'brakePressed': True}, {'canValid': False}, {'gearShifter': 'reverse'},
-  {'brakeHoldActive': True}, {'parkingBrake': True},
-])
-def test_planner_retains_other_modes_and_interlocks(planner_early_stop, blocked):
-  assert not planner_early_stop(**blocked)
+  update = next(n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef) and n.name == 'update')
+  start = next(i for i, n in enumerate(update.body) if isinstance(n, ast.If)
+               and any(isinstance(x, ast.Assign) and any(ast.unparse(t) == 'self.output_should_stop' for t in x.targets)
+                       for x in n.body))
+  state = SimpleNamespace(mpc=SimpleNamespace(mode=mode))
+  ns = {'self': state, 'output_should_stop_mpc': mpc_stop, 'output_should_stop_e2e': model_stop,
+        'output_a_target_mpc': -.3, 'output_a_target_e2e': -.5, 'output_a_target_base': -.3,
+        'output_v_target_mpc': .6, 'output_v_target_now_e2e': .4}
+  state.j_desired_trajectory = [0.]
+  exec(compile(ast.Module(body=update.body[start:], type_ignores=[]), str(path), 'exec'), ns)
+  assert state.output_should_stop == (mpc_stop if mode == 'acc' else mpc_stop or model_stop)
 
 
 def test_controlsd_publishes_new_longitudinal_state_in_same_cycle():

@@ -1,3 +1,4 @@
+import math
 import numpy as np
 from openpilot.cereal import car
 from openpilot.common.realtime import DT_CTRL
@@ -5,25 +6,23 @@ from openpilot.selfdrive.controls.lib.drive_helpers import CONTROL_N
 from openpilot.common.pid import PIDController
 from openpilot.selfdrive.modeld.constants import ModelConstants
 from openpilot.common.params import Params
-from opendbc.car.hyundai.values import HyundaiFlags
-from opendbc.car.hyundai.stopping import converge_stopping_accel
 
 CONTROL_N_T_IDX = ModelConstants.T_IDXS[:CONTROL_N]
 
 HYUNDAI_LONGITUDINAL_KP = 1.0
 HYUNDAI_LONGITUDINAL_KI = 0.0
 HYUNDAI_LONGITUDINAL_KF = 1.0
-STOPPING_ACCEL = -0.5  # m/s^2; formerly StoppingAccel=-50
+STOPPING_ACCEL_DEFAULT = -50  # Params use hundredths of m/s^2
+STOPPING_ACCEL_MIN = -100
+STOPPING_ACCEL_MAX = -50
 
 LongCtrlState = car.CarControl.Actuators.LongControlState
 
 
 def long_control_state_trans(CP, active, long_control_state, v_ego,
-                             should_stop, brake_pressed, cruise_standstill, a_ego, stopping_accel, radarState,
-                             canfd_stopping=False):
+                             should_stop, brake_pressed, cruise_standstill, a_ego, stopping_accel, radarState):
   stopping_condition = should_stop
   stopping_accel = stopping_accel if stopping_accel < 0.0 else -0.5
-  stop_ready = a_ego >= stopping_accel
   starting_condition = (not should_stop and
                         not cruise_standstill and
                         not brake_pressed)
@@ -34,7 +33,7 @@ def long_control_state_trans(CP, active, long_control_state, v_ego,
 
   else:
     if long_control_state == LongCtrlState.off:
-      if not starting_condition and (not canfd_stopping or stop_ready):
+      if not starting_condition:
         long_control_state = LongCtrlState.stopping
       else:
         if starting_condition and CP.startingState:
@@ -52,11 +51,10 @@ def long_control_state_trans(CP, active, long_control_state, v_ego,
       if stopping_condition:
         leadOne = radarState.leadOne
         fcw_stop = leadOne.status and leadOne.dRel < 4.0
-        enter_stopping = stop_ready if canfd_stopping else (a_ego > stopping_accel or fcw_stop)
-        if enter_stopping:
+        if a_ego > stopping_accel or fcw_stop:
           long_control_state = LongCtrlState.stopping
         elif long_control_state == LongCtrlState.starting:
-          long_control_state = LongCtrlState.pid if canfd_stopping else LongCtrlState.stopping
+          long_control_state = LongCtrlState.stopping
       elif started_condition:
         long_control_state = LongCtrlState.pid
   return long_control_state
@@ -73,9 +71,7 @@ class LongControl:
 
     self.params = Params()
     self.readParamCount = 0
-    self.stopping_accel = STOPPING_ACCEL
-    self.canfd_stopping = (CP.brand == "hyundai" and bool(CP.flags & HyundaiFlags.CANFD)
-                          and CP.openpilotLongitudinalControl)
+    self._refresh_stopping_accel()
     self.j_lead = 0.0
 
     self.hyundai_fixed_longitudinal_tuning = CP.brand == "hyundai"
@@ -85,6 +81,16 @@ class LongControl:
     self.use_accel_pid = False
     if CP.brand == "toyota":
       self.use_accel_pid = True
+
+  def _refresh_stopping_accel(self):
+    try:
+      value = float(self.params.get_float("StoppingAccel"))
+    except (TypeError, ValueError):
+      value = STOPPING_ACCEL_DEFAULT
+    if not math.isfinite(value):
+      value = STOPPING_ACCEL_DEFAULT
+    # Enforce the menu bounds even for stale Params or direct writes.
+    self.stopping_accel = min(STOPPING_ACCEL_MAX, max(STOPPING_ACCEL_MIN, value)) * 0.01
 
   def _apply_hyundai_longitudinal_tuning(self):
     # Hyundai, Kia, and Genesis all use the opendbc "hyundai" brand. Keep the
@@ -118,6 +124,7 @@ class LongControl:
     self.readParamCount += 1
     if self.readParamCount >= 100:
       self.readParamCount = 0
+      self._refresh_stopping_accel()
     elif self.readParamCount == 10:
       self._refresh_longitudinal_tuning()
 
@@ -128,8 +135,7 @@ class LongControl:
 
     self.long_control_state = long_control_state_trans(self.CP, active, self.long_control_state, CS.vEgo,
                                                        should_stop, CS.brakePressed,
-                                                       CS.cruiseState.standstill, CS.aEgo, self.stopping_accel, radarState,
-                                                       canfd_stopping=self.canfd_stopping)
+                                                       CS.cruiseState.standstill, CS.aEgo, self.stopping_accel, radarState)
     if active and soft_hold_active:
       self.long_control_state = LongCtrlState.stopping
 
@@ -140,14 +146,12 @@ class LongControl:
     elif self.long_control_state == LongCtrlState.stopping:
       output_accel = self.last_output_accel
 
-      if self.canfd_stopping:
-        output_accel = converge_stopping_accel(output_accel, self.stopping_accel, self.CP.stoppingDecelRate, DT_CTRL)
-      else:
-        if soft_hold_active:
-          output_accel = self.CP.stopAccel
-        if output_accel > self.stopping_accel:
-          output_accel = min(output_accel, 0.0)
-          output_accel -= self.CP.stoppingDecelRate * DT_CTRL
+      if soft_hold_active:
+        output_accel = self.CP.stopAccel
+      # Restore the original one-way ramp. Do not unwind stronger braking.
+      if output_accel > self.stopping_accel:
+        output_accel = min(output_accel, 0.0)
+        output_accel -= self.CP.stoppingDecelRate * DT_CTRL
       self.reset()
 
     elif self.long_control_state == LongCtrlState.starting:
