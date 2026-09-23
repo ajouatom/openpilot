@@ -57,25 +57,25 @@ def planner_early_stop():
                and any(isinstance(t, ast.Name) and t.id == 'early_stop_enabled' for t in n.targets))
   code = compile(ast.Module(body=update.body[start:start+2], type_ignores=[]), str(path), 'exec')
 
-  def run(*, setting=True, brand='hyundai', flags=HyundaiFlags.CANFD, longitudinal=True, mode='acc',
+  def run(*, brand='hyundai', flags=HyundaiFlags.CANFD, longitudinal=True, mode='acc',
           reset=False, original=False, **overrides):
     cs = SimpleNamespace(**({'gasPressed': False, 'brakePressed': False, 'canValid': True, 'gearShifter': 'drive',
                              'brakeHoldActive': False, 'parkingBrake': False} | overrides))
     state = SimpleNamespace(CP=SimpleNamespace(brand=brand, flags=flags, openpilotLongitudinalControl=longitudinal),
-                            params=SimpleNamespace(get_bool=lambda key: setting), mpc=SimpleNamespace(mode=mode),
+                            params=SimpleNamespace(get_bool=lambda key: pytest.fail(f'Unexpected setting read: {key}')),
+                            mpc=SimpleNamespace(mode=mode),
                             v_desired_trajectory=SPEEDS.copy(), a_desired_trajectory=ACCELS.copy(), output_should_stop=original)
     exec(code, {'self': state, 'sm': {'carState': cs}, 'reset_state': reset, 'v_ego': .6, 'action_t': .25, 'vEgoStopping': .07,
                 'CONTROL_N_T_IDX': TIMES, 'HyundaiFlags': HyundaiFlags, 'should_prepare_stop': should_prepare_stop})
-    # The experiment changes the stop indication, not the acceleration plan.
+    # Early preparation changes the stop indication, not the acceleration plan.
     np.testing.assert_array_equal(state.a_desired_trajectory, ACCELS)
     return state.output_should_stop
   return run
 
 
-def test_planner_early_stop_is_opt_in_and_does_not_suppress_existing_stop(planner_early_stop):
+def test_planner_early_stop_is_default_and_does_not_suppress_existing_stop(planner_early_stop):
   assert planner_early_stop()
-  assert not planner_early_stop(setting=False)
-  assert planner_early_stop(setting=False, original=True)
+  assert planner_early_stop(flags=0, original=True)
 
 
 @pytest.mark.parametrize('blocked', [

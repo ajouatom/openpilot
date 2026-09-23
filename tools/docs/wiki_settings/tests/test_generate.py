@@ -85,19 +85,19 @@ class WikiSettingsGeneratorTest(unittest.TestCase):
       catalog_commit=COMMIT,
       generated_at=STAMP,
     )
-    self.assertEqual(len(result.generated_settings), 183)
+    self.assertEqual(len(result.generated_settings), 182)
     self.assertIn("RadarTrackFlip", result.index["settings"])
-    for retired in ("ClusterHudPriority", "ClusterHudCoreMode", "ClusterHudLiveFps"):
+    for retired in ("ClusterHudPriority", "ClusterHudCoreMode", "ClusterHudLiveFps", "CanfdStopRetry"):
       self.assertNotIn(retired, result.index["settings"])
-    self.assertEqual(result.index["review"], {"current": 0, "needs_review": 183})
+    self.assertEqual(result.index["review"], {"current": 0, "needs_review": 182})
     self.assertEqual(result.index["locales"], ["ko", "en", "zh"])
-    self.assertEqual(len(result.pages), (183 * 3) + 2)
+    self.assertEqual(len(result.pages), (182 * 3) + 2)
     setting_pages = {
       name: text
       for name, text in result.pages.items()
       if GENERATOR.GENERATED_PAGE_RE.fullmatch(name)
     }
-    self.assertEqual(len(setting_pages), 183 * 3)
+    self.assertEqual(len(setting_pages), 182 * 3)
     self.assertTrue(all(text.count("<!-- CARROT:SETTING:BEGIN ") == 1 for text in setting_pages.values()))
     for name, text in result.pages.items():
       if name.endswith(".md"):
