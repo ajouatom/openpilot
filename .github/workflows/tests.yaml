@@ -80,4 +80,4 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: '24'
-      - run: node --test openpilot/selfdrive/carrot/web/tests/bluetooth_mapping.test.mjs openpilot/selfdrive/carrot/web/tests/egpu_model.test.mjs
+      - run: node --test openpilot/selfdrive/carrot/web/tests/bluetooth_mapping.test.mjs openpilot/selfdrive/carrot/web/tests/egpu_model.test.mjs openpilot/selfdrive/carrot/web/tests/viewport_keyboard.test.mjs

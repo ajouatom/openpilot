@@ -11,9 +11,9 @@
        /support-terminal-assets/ and non-JS/CSS files such as images. -->
   <meta charset="utf-8" />
   <meta name="google" content="notranslate" />
-  <!-- Let keyboard-heavy pages follow the visible content viewport instead of
-       manually stacking keyboard offsets on top of the terminal/dialog layout. -->
-  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content" />
+  <!-- Keep CSS layout breakpoints stable when the keyboard opens. viewport.js
+       follows visualViewport for available height and keyboard-aware controls. -->
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-visual" />
   <title>CarrotPilot</title>
   <link rel="icon" type="image/png" href="/assets/img_chffr_wheel.png?v=2604-01" />
   <script>
