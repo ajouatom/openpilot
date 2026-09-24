@@ -12,7 +12,7 @@ import pytest
 
 from openpilot.common.basedir import BASEDIR
 from openpilot.common.file_chunker import get_manifest_path
-from openpilot.selfdrive.modeld import big_model, big_model_status, helpers, precompiled_model
+from openpilot.selfdrive.modeld import big_model, big_model_status, helpers, precompiled_model, precompiled_validation
 
 
 @pytest.mark.parametrize('artifact_ready, expected_rebuild', [(True, '0'), (False, '1')])
@@ -49,7 +49,7 @@ def test_optional_model_reuse_checks_dependencies(tmp_path: Path, monkeypatch, e
   manifest_path = Path(get_manifest_path(path))
   if exists:
     manifest_path.write_text('1')
-  manifest = SimpleNamespace(model_id='test', sha256='a' * 64, size=10)
+  manifest = SimpleNamespace(model_id='test', sha256='a' * 64, size=10, precompiled_only=False)
   monkeypatch.setattr(big_model, 'active_model_path', lambda: tmp_path / 'big.onnx')
   monkeypatch.setattr(big_model, 'active_manifest', lambda: manifest)
   monkeypatch.setattr(big_model, 'model_cache_dir', lambda: tmp_path)
@@ -88,7 +88,7 @@ def test_precompiled_delivery_or_local_compile_fallback(tmp_path, monkeypatch, d
   body = [n for n in tree.body if isinstance(n, ast.Assign) and any(
     isinstance(t, ast.Name) and t.id.startswith('USBGPU_') for t in n.targets)]
   body += [n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == 'build_usbgpu_model']
-  manifest = SimpleNamespace(model_id='test', sha256='a' * 64, size=10)
+  manifest = SimpleNamespace(model_id='test', sha256='a' * 64, size=10, precompiled_only=False)
   monkeypatch.setattr(big_model, 'active_model_path', lambda: tmp_path / 'model.onnx')
   monkeypatch.setattr(big_model, 'active_manifest', lambda: manifest)
   monkeypatch.setattr(big_model, 'model_cache_dir', lambda: tmp_path)
@@ -96,8 +96,12 @@ def test_precompiled_delivery_or_local_compile_fallback(tmp_path, monkeypatch, d
   monkeypatch.setattr(helpers, 'usbgpu_present', lambda: True)
   monkeypatch.setattr(big_model_status, 'write_big_model_status', lambda *a, **kw: None)
   path = tmp_path / 'model.pkl'
-  (tmp_path / 'installed.json').write_text(json.dumps({'pickle': {'sha256': 'a' * 64}}))
+  (tmp_path / 'installed.json').write_text(json.dumps({'pickle': {'sha256': 'a' * 64}, 'runtime_directory': 'runtime'}))
+  (tmp_path / 'runtime').mkdir()
+  monkeypatch.setattr(precompiled_validation, 'device_context', lambda: {'device': 'mici', 'machine_id': 'test-c4', 'os': 'test'})
+  checked, validated = [], []
   def ensure(*a, **kw):
+    checked.append(True)
     if delivery == 'missing':
       raise FileNotFoundError('no precompiled artifact')
     return path
@@ -106,7 +110,9 @@ def test_precompiled_delivery_or_local_compile_fallback(tmp_path, monkeypatch, d
   monkeypatch.setattr(precompiled_model, 'reject', rejected.append)
   monkeypatch.setitem(sys.modules, 'openpilot.system.hardware.usbgpu', SimpleNamespace(check_usbgpu=lambda **kw: None))
   def validate(command, **kw):
+    validated.append(True)
     assert 'openpilot.selfdrive.modeld.precompiled_runner' in command
+    assert command[-2:] == ['--camera', '1344x760']
     assert kw['stderr'] == subprocess.STDOUT and kw['text']
     if delivery == 'invalid':
       raise subprocess.CalledProcessError(1, command, output='ValueError: incompatible model metadata\n')
@@ -133,6 +139,15 @@ def test_precompiled_delivery_or_local_compile_fallback(tmp_path, monkeypatch, d
     with pytest.raises(RuntimeError, match='local compiler was invoked'):
       namespace['build_usbgpu_model'](SimpleNamespace(update=lambda text: None))
   assert rejected == ([path] if delivery == 'invalid' else [])
+  assert (tmp_path / 'boot_validation.json').exists() is (delivery == 'available')
+  if delivery == 'available':
+    # A second boot still checks artifact integrity but does not load the GPU
+    # twice more. A runtime failure must make the next boot validate again.
+    assert namespace['build_usbgpu_model'](SimpleNamespace(update=lambda text: None))
+    assert len(checked) == 2 and len(validated) == 1
+    precompiled_model.record_failure(path, TimeoutError('USB reset'), 'inference')
+    assert namespace['build_usbgpu_model'](SimpleNamespace(update=lambda text: None))
+    assert len(checked) == 3 and len(validated) == 2
 
 
 def test_scons_rebuilds_model_when_serialization_helper_changes(tmp_path: Path):

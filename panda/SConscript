@@ -1,5 +1,6 @@
 import os
-import subprocess
+from pathlib import Path
+import runpy
 
 
 PREFIX = "arm-none-eabi-"
@@ -26,11 +27,9 @@ def objcopy(source, target, env, for_signature):
     return '$OBJCOPY -O binary %s %s' % (source[0], target[0])
 
 def get_version(builder, build_type):
-  try:
-    git = subprocess.check_output(["git", "rev-parse", "--short=8", "HEAD"], encoding='utf8').strip()
-  except subprocess.CalledProcessError:
-    git = "unknown"
-  return f"{builder}-{git}-{build_type}"
+  root = Path(panda_root.srcnode().abspath)
+  source_version = runpy.run_path(str(root / 'firmware_version.py'))['firmware_source_version'](root, root.parent / 'opendbc/safety')
+  return f"{builder}-{source_version}-{build_type}"
 
 def get_key_header(name):
   from Crypto.PublicKey import RSA
@@ -173,7 +172,7 @@ with open("board/obj/gitversion.h", "w") as f:
   f.write(f'const uint8_t gitversion[{len(version)}] = "{version}";\n')
 
 with open("board/obj/version", "w") as f:
-  f.write(f'{get_version(BUILDER, BUILD_TYPE)}')
+  f.write(version)
 
 certs = [get_key_header(n) for n in ["debug", "release"]]
 with open("board/obj/cert.h", "w") as f:

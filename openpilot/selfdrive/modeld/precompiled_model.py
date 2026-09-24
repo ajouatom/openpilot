@@ -169,12 +169,14 @@ def ensure_precompiled(model=None, cache_dir: Path | None = None, progress=None)
 
 
 def reject(path: Path) -> None:
+  (path.parent / 'boot_validation.json').unlink(missing_ok=True)
   value = json.loads((path.parent / 'installed.json').read_text())
   (path.parent / 'rejected').write_text(value['pickle']['sha256'])
 
 
 def record_failure(path: Path, error: BaseException | str, phase: str) -> bool:
   """Keep transient device failures retryable; persist why an artifact was rejected."""
+  (path.parent / 'boot_validation.json').unlink(missing_ok=True)
   from openpilot.selfdrive.modeld.helpers import usbgpu_pcie_not_ready
   detail = str(error)
   transient = (usbgpu_pcie_not_ready(error) or isinstance(error, (TimeoutError, BrokenPipeError)) or
