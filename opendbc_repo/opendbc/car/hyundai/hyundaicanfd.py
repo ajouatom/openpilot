@@ -784,12 +784,14 @@ def _apply_cluster_lane_lines(values, CS, lat_active, desire):
     _apply_lane_desire(values, desire)
 
 
-def _normalize_cluster_corner_objects(values):
-  # Restore the legacy corner display state without blinking or clamping distance.
+def _normalize_cluster_corner_objects(values, *, ccnc=False):
+  # 0x162: restore the pre-September-14 gray-car override for present objects.
+  # 0x1ea uses different enums; retain its legacy hidden-to-visible normalization.
+  # Neither message blinks or clamps the received distance.
   for side in ("LF", "RF", "LR", "RR"):
     key = f"{side}_DETECT"
-    if values[key] >= 4 and values[f"{side}_DETECT_DISTANCE"] != 0:
-      values[key] = 1
+    if values[key] >= (1 if ccnc else 4) and values[f"{side}_DETECT_DISTANCE"] != 0:
+      values[key] = 3 if ccnc else 1
 
 
 def _convert_ccnc_front_box_to_car(values):
@@ -1012,7 +1014,7 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
       if CS.ccnc_0x162 is not None:
         values = copy.copy(CS.ccnc_0x162)
 
-        _normalize_cluster_corner_objects(values)
+        _normalize_cluster_corner_objects(values, ccnc=True)
         _convert_ccnc_front_box_to_car(values)
         _apply_ccnc_lead(values, getattr(CS, "radarState", None), CC.enabled, getattr(CS, "modelV2", None), hud_lateral)
 

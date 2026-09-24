@@ -48,7 +48,7 @@ def send_ccnc(monkeypatch, radar, *, enabled=True, stock=None, present=True, wit
   assert 0x162 in parser.update([1_000_000_000, messages])
   values = dict(parser.vl["CCNC_0x162"])
   assert values["CHECKSUM"] == hyundaicanfd.hkg_can_fd_checksum(0x162, None, bytearray(messages[-1][1]))
-  assert values["RF_DETECT"] == 1
+  assert values["RF_DETECT"] == 3
   for key in ("FF_DETECT_ALT", "FF_DISTANCE_ALT", "FF_LATERAL_ALT", "RF_DETECT_DISTANCE", "RF_DETECT_LATERAL"):
     assert values[key] == pytest.approx(original[key])
   if with_target:
