@@ -130,6 +130,43 @@ cause of the missing corner display. No runtime behavior was changed for
 this follow-up; raw logs, comparison scripts and summaries remain private
 in the local analysis archive.
 
+### Stock LFA/SCC overlap, from camera-bus input
+
+The following uses only `can` packets with `src=2`: SCC_CONTROL `0x1A0`
+(MainMode_ACC/ACCMode) and LFAHDA_CLUSTER `0x1E0`
+(HDA_LFA_SymSta/HDA_CntrlModSta). It does not infer stock state from
+`sendcan`, bus-0 display overrides, or carState.cruiseState. With openpilot
+longitudinal control, carState.cruiseState.enabled comes from TCS ACC_REQ,
+not the camera's SCC_CONTROL state.
+
+For f4--1, relative to the first CAN event:
+
+| Time (s) | Received stock LFA | Received stock SCC |
+| --- | --- | --- |
+| 0 to 23.38 | Off (0) | Main=0, ACCMode=0 |
+| 23.38 to 27.68 | Green (2) | Main=0, ACCMode=0 |
+| 27.68 to 28.68 | Green blink (3) | Main=0, ACCMode=0 |
+| 28.68 to 30.59 | Off (0) | Main=0, ACCMode=0 |
+| 30.59 to 36.28 | Off (0) | Main=1, ACCMode=1 (enabled) |
+| 36.28 to 39.68 | Off (0) | Main=0, ACCMode=0 |
+| 39.68 to 41.04 | Off (0) | Main=1, ACCMode=1 (enabled) |
+| 41.04 to 57.55 | Off (0) | Main=1, ACCMode=2 (driver override) |
+| 57.55 to segment end | Off (0) | Main=0, ACCMode=0 |
+
+There is no overlap between green/blinking stock LFA and enabled/override
+stock SCC in this segment. HDA stays zero throughout. By comparison, f3--97
+has stock SCC enabled from 0.44 to 26.00 seconds; stock LFA is green until
+12.18 seconds and again from 20.33 seconds. HDA becomes 2 at 0.53 seconds,
+drops at 12.23 seconds as LFA blinks, returns at 20.37 seconds, and drops at
+26.08 seconds after SCC switches off. That sequence supports checking the
+stock LFA/SCC prerequisites before changing the 0x4B9 request cadence.
+
+The f4--1 log also contains 135 outgoing camera-bus 0x1AA packets with
+LFA_BTN=1 and six with ADAPTIVE_CRUISE_MAIN_BTN=1. These counts are packets,
+not distinct button presses, and do not establish successful activation.
+The stock LFA response remains off during every stock SCC-active interval.
+No activation or vehicle-control behavior was changed for this analysis.
+
 ## Follow-up: reminder when downloaded code is not running
 
 The manager now snapshots the checkout commit during initialization, while the
