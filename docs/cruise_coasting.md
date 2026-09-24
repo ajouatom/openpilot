@@ -7,11 +7,13 @@ raise cruise/MPC speed targets, change SCC modes, or add propulsion commands.
 ## Control policy
 
 The longitudinal planner publishes `cruiseCoastingTarget` (physical m/s; zero
-means ineligible) and `cruiseCoastingPercent`. It retains a fixed reference only
-after the unmodified cruise target and eligibility have remained stable for one
-second. Display-speed calibration is applied consistently with the existing MPC
-target. A set-speed change resets permission immediately; small calibration
-noise cannot ratchet the reference upward.
+means ineligible) and `cruiseCoastingPercent`. At entry to an eligible interval it
+captures the unmodified cruise target converted to physical speed. Permission
+starts after the driver's set speed, margin setting and eligibility have remained
+unchanged for one second. Live display-speed conversion changes do not restart
+that timer or move the captured reference. A set-speed/margin change or any veto
+discards the reference and requires a new capture and wait. Existing MPC speed
+conversion remains unchanged.
 
 Permission requires openpilot longitudinal control, ACC rather than blended
 mode, a solved cruise-source plan, valid current inputs, and a reference above
@@ -23,7 +25,9 @@ deliberately leaves all detected-lead scenarios on the original controller.
 Camera, speed-bump, section/school-zone and other navigation caps are checked
 independently of the MPC source label: navigation targets are folded into the
 cruise target upstream. Any external cap at or below the full coasting ceiling
-blocks relief, including a cap above the original set speed. A previously seen
+blocks relief, including a cap above the original set speed. This check covers
+both the frozen-reference ceiling and the currently converted ceiling, so ratio
+drift cannot let an external cap enter either band unnoticed. A previously seen
 but stale navigation publisher also blocks permission. Signal-stop states block
 relief before the low-speed `shouldStop` flag becomes true. Force-deceleration,
 FCW, pedals, turn limiting, ATC, lane changes, reset/engagement, soft hold, economy
@@ -84,3 +88,17 @@ The added longitudinal metadata does not change radar replay inputs or results.
 User guides: [Korean](user/ko/cruise-gap.md#carrot-cruise),
 [English](user/en/cruise-gap.md#carrot-cruise). The generated settings Wiki uses
 the same catalog and separately reviewed manual descriptions.
+
+## Reference stability correction, 2026-09-25
+
+The original entry timer also restarted when the converted target changed by
+more than 0.02 m/s. This incorrectly treated live ego/cluster speed-ratio changes
+as a driver set-speed change. The corrected timer depends on the set speed and
+margin; the conversion is captured once per eligible interval. Regression tests
+exercise oscillating conversion ratios during entry and after activation, actual
+overspeed relief, changed settings, veto/re-entry, and external caps between the
+frozen and currently converted ceilings. Existing navigation, turn, lead and
+stopping vetoes are retained. No global vehicle speed-ratio constant is introduced.
+The focused control regression suite passes 443 tests, including seven new
+reference-stability and cap-protection cases. This validates the controller and
+permission logic offline; corrected vehicle behavior still requires a new drive.
