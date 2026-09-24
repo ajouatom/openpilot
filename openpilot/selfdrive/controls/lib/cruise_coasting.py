@@ -37,19 +37,24 @@ class CruiseCoastingPlan:
   def update(self, *, enabled, percent, set_speed, target, external_limit, dt):
     """Return a fixed physical-speed reference, or zero when ineligible.
 
-    An external cap anywhere inside the overspeed band blocks relief, even if
-    it has not yet reduced the ordinary cruise target. Targets are never raised.
+    Freeze the conversion to physical speed for each eligible interval. Live
+    speed-ratio changes must not restart the driver's set-speed stability timer.
+    External caps protect both the frozen band and the current conversion.
     """
     percent = coasting_percent(percent)
     if (not enabled or percent == 0 or
         not all(math.isfinite(v) for v in (set_speed, target, external_limit, dt)) or
-        target <= MIN_COASTING_SPEED or dt <= 0 or
-        external_limit <= target * (1.0 + percent / 100.0)):
+        target <= MIN_COASTING_SPEED or dt <= 0):
       self.reset()
       return 0.0
 
-    if (percent != self.percent or abs(set_speed - self.set_speed) > 0.001 or
-        abs(target - self.target) > 0.02):
+    changed = percent != self.percent or abs(set_speed - self.set_speed) > 0.001
+    reference = target if changed else self.target
+    if external_limit <= max(target, reference) * (1.0 + percent / 100.0):
+      self.reset()
+      return 0.0
+
+    if changed:
       self.target, self.set_speed, self.percent = target, set_speed, percent
       self.stable_time = 0.0
     else:

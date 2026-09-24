@@ -68,6 +68,55 @@ def inputs():
   return cs, plan, radar
 
 
+def test_live_speed_ratio_does_not_restart_entry_or_move_reference():
+  plan = CruiseCoastingPlan()
+  set_speed = 90.
+  reference = set_speed / 3.6 * .968
+  # Cluster quantization and ego-speed noise change the ratio even at a fixed
+  # set speed. These changes exceed the old 0.02 m/s restart threshold.
+  for frame in range(201):
+    ratio = .968 + .006 * np.sin(frame * .9)
+    result = plan.update(enabled=True, percent=10, set_speed=set_speed,
+                         target=set_speed / 3.6 * ratio, external_limit=200 / 3.6 * ratio, dt=.05)
+    assert result == (0 if frame < 20 else reference)
+    assert plan.target == reference
+  # With the reference frozen, actual overspeed enters the relief band.
+  assert coasting_relief(reference * 1.03, result, 10) == pytest.approx(1)
+
+
+@pytest.mark.parametrize('ratio', [.94, 1.02])
+def test_external_caps_protect_frozen_and_current_speed_bands(ratio):
+  plan = CruiseCoastingPlan()
+  args = {'enabled': True, 'percent': 5, 'set_speed': 100., 'target': 100 / 3.6,
+          'external_limit': 250 / 3.6, 'dt': .05}
+  for _ in range(21):
+    reference = plan.update(**args)
+  current = args['target'] * ratio
+  # Place the cap between the two ceilings: checking just one is insufficient.
+  cap = (current + reference) / 2 * 1.05
+  assert plan.update(**{**args, 'target': current, 'external_limit': cap}) == 0
+  assert plan.target == 0
+
+
+@pytest.mark.parametrize('change', ['set_speed', 'percent', 'veto'])
+def test_real_changes_restart_entry_and_capture_a_new_reference(change):
+  plan = CruiseCoastingPlan()
+  args = {'enabled': True, 'percent': 5, 'set_speed': 100., 'target': 100 / 3.6,
+          'external_limit': 250 / 3.6, 'dt': .05}
+  for _ in range(21):
+    assert plan.update(**args) >= 0
+  assert plan.stable_time == 1
+  args['target'] = 98 / 3.6
+  if change == 'veto':
+    assert plan.update(**{**args, 'enabled': False}) == 0
+  elif change == 'set_speed':
+    args['set_speed'] = 99.
+  else:
+    args['percent'] = 6
+  for frame in range(21):
+    assert plan.update(**args) == (0 if frame < 20 else args['target'])
+
+
 @pytest.fixture
 def control(monkeypatch):
   monkeypatch.setattr(lc, 'Params', lambda: DictParams({'StoppingAccel': -50, 'LongTuningKpV': 100,
@@ -248,6 +297,31 @@ def test_planner_permission_vetoes_even_if_source_was_cruise(planner_gate, veto)
   elif veto == 'reset':
     args['reset_state'] = True
   assert step() == 0
+
+
+def test_planner_and_controller_coast_with_a_changing_live_ratio(planner_gate, control):
+  step, state, sm, carrot, args = planner_gate
+  c = control()
+  cs, plan, radar = inputs()
+  initial_ratio = .968
+  reference = args['v_cruise_kph'] / 3.6 * initial_ratio
+  for frame in range(100):
+    ratio = initial_ratio + .006 * np.sin(frame * .9)
+    sm['carState'].vCluRatio = ratio
+    carrot.v_cruise = args['v_cruise'] = args['v_cruise_kph'] / 3.6 * ratio
+    plan.cruiseCoastingTarget = step()
+    assert plan.cruiseCoastingTarget == (0 if frame < 20 else reference)
+    cs.vEgo = reference * 1.02
+    plan.vTargetNow = reference
+    for _ in range(5):
+      c.update(True, cs, plan, (-3.5, 2.), .01, radar)
+  assert c.last_output_accel == 0
+  # A camera cap entering the frozen band cancels relief on the next plan.
+  sm.nav.desiredSpeed = 103
+  plan.cruiseCoastingTarget = step()
+  assert plan.cruiseCoastingTarget == 0
+  output, _, _ = c.update(True, cs, plan, (-3.5, 2.), .01, radar)
+  assert output == pytest.approx(plan.vTargetNow - cs.vEgo + plan.aTarget)
 
 
 @pytest.mark.parametrize('source', ['cam', 'bump', 'hda', 'hda_bump', 'section', 'hda_section', 'school', 'atc', 'vturn', 'route'])
