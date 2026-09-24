@@ -1507,3 +1507,11 @@ msgstr "CAN 错误：请启用 CameraSCC"
 #: openpilot/selfdrive/selfdrived/events.py
 msgid "SCC detected on camera bus"
 msgstr "在摄像头总线上检测到 SCC 信号"
+
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "Reboot to Apply Update"
+msgstr "请重启设备以应用更新"
+
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "Park safely before rebooting your device"
+msgstr "请安全停车后再重启设备"

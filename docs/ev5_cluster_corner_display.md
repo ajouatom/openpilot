@@ -81,3 +81,29 @@ These are offline CAN-output checks, not confirmation of physical dashboard
 visibility. Local scripts, summaries, and captures are retained in the ignored
 analysis archive, not in Git. This display-only correction does not change
 radar detection, lead selection, or NAS replay dependencies.
+
+## Follow-up: reminder when downloaded code is not running
+
+The manager now snapshots the checkout commit during initialization, while the
+launcher's boot checkout lock is still held. It keeps that identity across
+ignition cycles and checks the local checkout every five seconds in the
+normal-priority manager. Two matching changed-commit reads set
+`managerState.rebootRequired`. Missing/failed reads do not create a warning.
+Packaged installations without `.git` use the commit in `build.json` instead.
+Remote-only fetches, branch renames at the same commit, and uncommitted edits
+do not constitute a downloaded-commit mismatch.
+
+After 15 seconds of an initialized onroad session, selfdrived shows one
+eight-second NNFF-style prompt: "Reboot to Apply Update" / "Park safely before
+rebooting your device". Korean text is "업데이트 적용을 위해 재부팅하세요" /
+"안전한 곳에 주차한 뒤 재부팅하세요". It is informational: it neither blocks
+engagement nor disengages, and higher-priority alerts retain precedence.
+It can also report an update detected later in the drive, if not already shown
+in that session. A new onroad session repeats the reminder until the manager
+restarts into the installed checkout. Replay/simulation do not generate it.
+
+The feature itself must first be installed and restarted once; code already
+running before its installation cannot retroactively produce this new alert.
+Focused desktop tests cover real Git changes/worktrees, reverting/restarting,
+read failures, alert timing, translations, and unchanged engagement state.
+Device display/timing validation remains separate from these tests.

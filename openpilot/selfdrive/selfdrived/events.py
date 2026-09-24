@@ -1176,6 +1176,13 @@ EVENTS: dict[int, dict[str, Alert | AlertCallbackType]] = {
   EventName.torqueNNLoad: {
     ET.PERMANENT: torque_nn_load_alert,
   },
+  EventName.updateRebootRequired: {
+    ET.PERMANENT: Alert(
+      "Reboot to Apply Update",
+      "Park safely before rebooting your device",
+      AlertStatus.userPrompt, AlertSize.mid,
+      Priority.LOW, VisualAlert.none, AudibleAlert.prompt, 8.0),
+  },
 
 }
 if HARDWARE.get_device_type() == 'mici':
