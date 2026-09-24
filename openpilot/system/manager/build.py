@@ -51,6 +51,7 @@ def build_usbgpu_model(spinner: Spinner) -> bool:
   # Only ONNX models can fall back to local SCons compilation.
   fallback = 'internal model' if manifest.precompiled_only else 'local compiler'
   from openpilot.selfdrive.modeld.precompiled_model import ensure_precompiled, record_failure
+  from openpilot.selfdrive.modeld.precompiled_validation import camera_sizes, device_context, validation_key, validation_cached, save_validation
   precompiled = None
   try:
     spinner.update("USB eGPU big model\nChecking precompiled model")
@@ -64,11 +65,27 @@ def build_usbgpu_model(spinner: Spinner) -> bool:
   if precompiled is not None:
     try:
       if usbgpu_present():
-        spinner.update("USB eGPU big model\nValidating precompiled model")
-        validation = subprocess.run([sys.executable, '-m', 'openpilot.selfdrive.modeld.precompiled_runner', str(precompiled)],
-                                    cwd=BASEDIR, check=True, timeout=300, text=True,
-                                    stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-        print(validation.stdout, end='')
+        sizes, key = camera_sizes(''), None
+        try:
+          device = device_context()
+          sizes = camera_sizes(device['device'])
+          key = validation_key(precompiled, device, sizes)
+        except (OSError, ValueError, KeyError, TypeError, ImportError):
+          print('Precompiled validation identity unavailable; running smoke test without cache')
+        if validation_cached(precompiled, key):
+          print('Reusing successful precompiled eGPU validation for this device/runtime')
+        else:
+          spinner.update("USB eGPU big model\nValidating precompiled model")
+          command = [sys.executable, '-m', 'openpilot.selfdrive.modeld.precompiled_runner', str(precompiled)]
+          for width, height in sizes:
+            command += ['--camera', f'{width}x{height}']
+          validation = subprocess.run(command, cwd=BASEDIR, check=True, timeout=300, text=True,
+                                      stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+          print(validation.stdout, end='')
+          try:
+            save_validation(precompiled, key)
+          except OSError as exc:
+            print(f'Could not cache successful precompiled validation: {exc}')
       write_big_model_status(model_cache_dir(), "compiled", detail="downloaded precompiled model", **status_values)
       print(f"Using precompiled eGPU model without SCons compilation: {precompiled}")
       return True

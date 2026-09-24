@@ -151,4 +151,10 @@ def smoke_test(path: Path, camera_sizes=((1928, 1208), (1344, 760)), runs=5):
 
 
 if __name__ == '__main__':
-  print(json.dumps(smoke_test(Path(sys.argv[1])), indent=2))
+  import argparse
+  parser = argparse.ArgumentParser(description='Validate a precompiled model on selected camera resolutions')
+  parser.add_argument('path', type=Path)
+  parser.add_argument('--camera', action='append', choices=('1928x1208', '1344x760'))
+  args = parser.parse_args()
+  sizes = tuple(tuple(map(int, size.split('x'))) for size in (args.camera or ('1928x1208', '1344x760')))
+  print(json.dumps(smoke_test(args.path, camera_sizes=sizes), indent=2))
