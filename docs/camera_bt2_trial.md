@@ -5,7 +5,18 @@ This branch is an isolated parked-device experiment, not a completed camera fix.
 
 The builder branch is `ajouatom/agnos-builder:carrot-camera-bt2-19.8`.
 Target OS: `19.8-carrot-bt2`. Do not change the stable branch's OS selection.
-The first branch commit retains bt1 until built OTA manifests are verified.
+The trial branch now selects the verified C3/C4 release manifests. The C4 device
+continues running bt1 while the separate sensor-exposure hypothesis is compared;
+bt2 has not yet received device validation.
+
+Builder commit: `60b901ff2d9bad09403e745ef1bc6b2745b0c1d5`.
+[Build 35942144886](https://github.com/ajouatom/agnos-builder/actions/runs/35942144886)
+passed C3 and C4 compilation and frozen-userspace image checks.
+[Release](https://github.com/ajouatom/agnos-builder/releases/tag/agnos-19.8-carrot-bt2)
+manifest hashes and PROVENANCE were verified; all non-boot/system partition
+entries are unchanged. The system image derives from the immutable bt1 image,
+changing only VERSION/BUILD labels, so target apt packages and GPU firmware
+are not silently updated during this kernel comparison.
 
 The OS corrects Qualcomm diagnostic ACL routing (raw handle/flags 0x2edc),
 preserving ordinary Bluetooth traffic and monitor diagnostics. It also provides

@@ -28,7 +28,7 @@ def ev(p,name,filt=None):
  wr(q,'enable',1)
 def finish_signal(signum,frame):raise InterruptedError(f'signal {signum}')
 signal.signal(signal.SIGTERM,finish_signal);signal.signal(signal.SIGINT,finish_signal)
-rows=collections.deque(maxlen=9000);counts=collections.Counter();maxima={};last={};trigger=None
+rows=collections.deque(maxlen=9000);counts=collections.Counter();bad=collections.Counter();maxima={};last={};trigger=None
 meta={'mode':mode,'duration_requested':duration,'label':label,'guard':'P, stopped, disabled, started','build':Path('/BUILD').read_text(),'start_ns':time.clock_gettime_ns(time.CLOCK_BOOTTIME),'mem_before':Path('/proc/meminfo').read_text(),'irq_before':Path('/proc/interrupts').read_text()}
 meta['pid']=os.getpid()
 meta['params']={k:Path('/data/params/d',k).read_text() for k in ['DisableDM','UsbGpuActive','IsOnroad'] if Path('/data/params/d',k).exists()}
@@ -47,7 +47,7 @@ try:
    ev(cpu,e)
   for p in instances:wr(p,'tracing_on',1)
  poller=messaging.Poller()
- names=['roadCameraState','wideRoadCameraState','driverCameraState','cameraOdometry','livePose','carState','selfdriveState','deviceState','logMessage']
+ names=['roadCameraState','wideRoadCameraState','driverCameraState','cameraOdometry','livePose','driverStateV2','carState','selfdriveState','deviceState','logMessage']
  socks={messaging.sub_sock(n,poller=poller,conflate=(n in ['carState','selfdriveState','deviceState'])):n for n in names}
  start=time.monotonic();deadline=start+duration;next_status=start+30;last_guard=start
  print(json.dumps({'started':label,'mode':mode,'seconds':duration}),flush=True)
@@ -56,9 +56,10 @@ try:
    for msg in messaging.drain_sock(sock):
     n=msg.which()
     v=getattr(msg,n);now=time.monotonic();counts[n]+=1
+    if not msg.valid:bad[n+'.invalid']+=1
     row={'s':n,'t':msg.logMonoTime}
     if n.endswith('CameraState'):
-     row.update(f=v.frameId,r=v.requestId,sof=v.timestampSof,eof=v.timestampEof)
+     row.update(f=v.frameId,r=v.requestId,sof=v.timestampSof,eof=v.timestampEof,exposure=v.integLines,gain=v.gain,sensor=str(v.sensor))
      prev=last.get(n)
      if prev:
       row['dt_ms']=(v.timestampSof-prev['sof'])/1e6;row['df']=v.frameId-prev['f']
@@ -77,7 +78,10 @@ try:
     elif n=='deviceState':
      assert v.started,'Vehicle offroad'
      row.update(cpu=list(v.cpuUsagePercent),temp=list(v.cpuTempC),mem=v.memoryUsagePercent)
-    elif n=='livePose':row.update(inputsOK=v.inputsOK,sensorsOK=v.sensorsOK,posenetOK=v.posenetOK,valid=msg.valid)
+    elif n=='livePose':
+     row.update(inputsOK=v.inputsOK,sensorsOK=v.sensorsOK,posenetOK=v.posenetOK,valid=msg.valid)
+     if not(v.inputsOK and v.sensorsOK and v.posenetOK):bad['livePose.flags']+=1
+    elif n=='driverStateV2':row.update(valid=msg.valid,frameId=v.frameId,modelExecutionTime=v.modelExecutionTime)
     elif n=='cameraOdometry':row.update(frameId=v.frameId,valid=msg.valid)
     else:
      text=str(v)
@@ -93,7 +97,7 @@ except BaseException as e:
  raise
 finally:
  for p in instances:wr(p,'tracing_on',0)
- meta.update(trigger=trigger,max_sof_ms=maxima,counts=dict(counts),end_ns=time.clock_gettime_ns(time.CLOCK_BOOTTIME),mem_after=Path('/proc/meminfo').read_text(),irq_after=Path('/proc/interrupts').read_text())
+ meta.update(trigger=trigger,max_sof_ms=maxima,counts=dict(counts),bad=dict(bad),end_ns=time.clock_gettime_ns(time.CLOCK_BOOTTIME),mem_after=Path('/proc/meminfo').read_text(),irq_after=Path('/proc/interrupts').read_text())
  for p in instances:
   meta[p.name+'_stats']={q.parent.name:q.read_text() for q in (p/'per_cpu').glob('cpu*/stats')}
   with (p/'trace').open() as src,(outdir/(p.name+'.txt')).open('w') as dst:
