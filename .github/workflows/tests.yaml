@@ -74,6 +74,8 @@ jobs:
             openpilot/selfdrive/carrot/bluetooth/tests \
             openpilot/selfdrive/car/tests/test_carrot_cruise_buttons.py \
             opendbc_repo/opendbc/car/volkswagen/tests/test_carstate_buttons.py \
+            opendbc_repo/opendbc/car/hyundai/tests/test_stopping.py \
+            opendbc_repo/opendbc/car/hyundai/tests/test_jerk.py \
             openpilot/selfdrive/controls/tests/test_desire_helper.py \
             openpilot/system/tests/test_c3_agnos_manifest.py
 

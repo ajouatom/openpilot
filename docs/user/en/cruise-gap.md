@@ -133,7 +133,8 @@ Retry runs by default on Hyundai/Kia CANFD with openpilot longitudinal control. 
 
 - Stop intent and acceleration use the original control path. The additional one-second stop preview, forced convergence to -0.50 m/s² after StopReq, and two-frame soft-hold preparation are removed.
 - While StopReq is active, aReqRaw follows control with `StoppingAccel`, and aReqValue uses normal packet limiting. InfoDisplay and byte7 remain zero; the lower band uses a fixed experimental value of 0.20 without copying stock SCC values.
-- If motion persists, releases StopReq and requests the stronger deceleration of the existing request and -0.50 m/s², then reasserts once. If motion persists after retry, retains negative acceleration requests without repeated toggling.
+- At low speed, elapsed time or distance alone does not release StopReq while deceleration continues. Acceleration rising from negative toward zero alone does not trigger retry either. Retry requires a sustained speed rebound with positive acceleration, or sustained loss of deceleration with insufficient speed reduction.
+- Retry releases StopReq and requests the stronger deceleration of the existing request and -0.50 m/s², then reasserts once. Further failure retains negative acceleration requests without repeated toggling. This does not change the planner's departure decision or add reverse-direction detection.
 - Accelerator input, cruise disengagement, and interlocks such as Auto Hold cancel it. Requests while the brake is pressed are allowed only for an armed soft hold with every speed input at or below 0.10 m/s.
 
 > [!CAUTION]
