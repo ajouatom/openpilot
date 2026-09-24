@@ -785,12 +785,13 @@ def _apply_cluster_lane_lines(values, CS, lat_active, desire):
 
 
 def _normalize_cluster_corner_objects(values, *, ccnc=False):
-  # 0x162: restore the pre-September-14 gray-car override for present objects.
+  # EV5 can report 0x162 corner geometry with DETECT=0 while 0x1ea marks it visible.
+  # Use nonzero corner distance to show a gray car, including those hidden types.
   # 0x1ea uses different enums; retain its legacy hidden-to-visible normalization.
   # Neither message blinks or clamps the received distance.
   for side in ("LF", "RF", "LR", "RR"):
     key = f"{side}_DETECT"
-    if values[key] >= (1 if ccnc else 4) and values[f"{side}_DETECT_DISTANCE"] != 0:
+    if values[f"{side}_DETECT_DISTANCE"] != 0 and (ccnc or values[key] >= 4):
       values[key] = 3 if ccnc else 1
 
 
