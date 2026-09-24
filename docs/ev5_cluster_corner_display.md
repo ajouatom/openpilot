@@ -82,6 +82,54 @@ visibility. Local scripts, summaries, and captures are retained in the ignored
 analysis archive, not in Git. This display-only correction does not change
 radar detection, lead selection, or NAS replay dependencies.
 
+## Follow-up: f4 segment 1 and corner activation
+
+`000000f4--ef10fb59ef--1` covers September 24, 14:05:49.2 through
+14:06:49.1 KST by GPS. Upload metadata names `a92e6ffc`, but initData and
+pandad log context name `2bc1f8c1`. Unlike the two f3 segments, this capture
+does show a fresh startup: initData monotonic time is about 108 seconds,
+and Panda uptime is 62 through 123 seconds. Do not tell the user that no
+restart occurred. The recorded startup version still does not validate the
+latest fix; initData reads the manager's stored GitCommit parameter rather
+than independently identifying every running module.
+
+Both incoming `0x162` and `0x1EA` have 1,200 packets with all four corner
+types, distances, and lateral positions zero. The 1,198 outgoing packets
+of each message retain that empty geometry, have valid checksums, and
+appear in bus-128 transmit receipts. Applying the `a92e6ffc` distance-only
+normalization cannot change these zero-distance corner fields either.
+leadOne and leadTwo are absent in all 1,200 radarState messages; outgoing
+front FF type and 0x161 TARGET are also zero throughout. Corner radar itself
+is not silent: 1,086 corner235 points occur in 1,027 liveTracks frames, and
+leadRight is present in 160 radarState messages. Those tracks are not used
+to synthesize the OEM corner display slots.
+
+`EnableCornerRadar=2` remains enabled. The controller sends the existing
+0x4B9 activation sequence 72 times on camera bus 2, but incoming
+HDA_CntrlModSta and HDA_MODE2 remain zero throughout. The setting gates this
+request with `> 0`; changing 2 to 1 would not change that activation path.
+HDA_OptUsmSta is 2 (function on), so the option being enabled and the
+runtime HDA state being active must be distinguished.
+
+Comparison of incoming 0x1EA packets makes the association concrete:
+
+| Segment | HDA_MODE2 and corner geometry |
+| --- | --- |
+| f3--69 | 1,200 packets: mode 0, no geometry |
+| f3--97 | 284: mode 2 with geometry; 62: mode 2 without; 854: mode 0 without; 2: mode 0 with |
+| ed--22 | 273: mode 2 with geometry; 45: mode 1 with; 879: mode 0 without; 1: mode 0 with |
+| f4--1 | 1,200 packets: mode 0, no geometry |
+
+This implicates OEM display-object availability/activation as a separate
+condition from DETECT normalization. It does not establish why the OEM
+state did not activate, or prove a mode bit is sufficient to enable it.
+Do not force that bit or invent distances on this evidence. The captured
+Panda registerDivergent fault also occurs in the comparison segments with
+geometry; safetyTxBlocked stays zero in f4--1. It is not established as the
+cause of the missing corner display. No runtime behavior was changed for
+this follow-up; raw logs, comparison scripts and summaries remain private
+in the local analysis archive.
+
 ## Follow-up: reminder when downloaded code is not running
 
 The manager now snapshots the checkout commit during initialization, while the
