@@ -241,6 +241,67 @@ does not yet validate a replacement 0x10B transmitter or all of that
 message's integrity/forwarding requirements. No transmitter or Panda
 safety behavior was changed in this investigation.
 
+## Correction: native ALT2 automatic button requests
+
+For camera-SCC longitudinal control with an observed CRUISE_BUTTONS_ALT2,
+create_ccnc_messages now sends automatic LFA/SCC button intent using 0x10B
+instead of the inactive 0x1AA button layout. Vehicles without ALT2 retain
+their existing path. The sparse 0x10B DBC is unchanged: the host request
+contains only button intent and a verified Hyundai CAN-FD checksum. It is
+not suitable for direct vehicle transmission.
+
+Panda admits this request only on bus 2 with length 16, camera-SCC and
+longitudinal safety enabled, valid checksum, and one of neutral, LFA,
+SET, or MAIN. The TX hook consumes it using the existing buffered-for-forward
+mechanism; can_send does not put the sparse host packet onto CAN. The
+forwarding hook applies fresh intent to the original bus-0 0x10B, changing
+only byte 10's button bits and the checksum. Its original counter (which
+advances by two per received frame in these captures), reserved/unknown
+fields, input cadence and destination remain intact. It emits no frames
+without original vehicle input.
+
+Physical buttons take precedence in both host and Panda, including CANCEL
+and unrecognized nonzero cruise codes. Invalid original checksums are not
+repaired. A host neutral request releases immediately; a missing refresh
+expires after 120 ms, and even continuous refresh cannot hold a press for
+200 ms. A neutral request is required to rearm after timeout, overlong
+press, conflicting request or physical input. Safety initialization clears
+all pending intent. The existing camera-SCC steering, longitudinal limits,
+generic buffered forwarding and radar processing are unchanged.
+
+LFA retry remains approximately every two seconds while the received stock
+LFA state is off, and stops for any nonzero state. Missing LFA state is not
+treated as off. SCC MAIN/SET activation retains the Carrot-enabled,
+speed and brake-hold/parking-brake guards; its pulse follows the LFA pulse
+with a release interval. Stock SCC that is already active is no longer
+toggled with MAIN just because HDA is off on this ALT2 path. Existing
+standstill-resume/stopping behavior is retained.
+
+Validation:
+
+- 257 focused tests pass: existing CCNC display/lead/fault tests, new host
+  request tests, and a native C harness that compiles the production Panda
+  safety TX/forward hooks. Tests cover allowed/rejected modes and buses,
+  driver priority, release, expiry, bounded press, reset, checksum failures,
+  counter/unknown-bit preservation and timer wraparound.
+- Compiling the previous and modified Panda code with safetyParam 189 shows
+  the same valid host 0x10B request rejected before and accepted/consumed
+  after. Merely changing the Python address would indeed have been blocked.
+- Offline replay invokes the new Python request helper and compiled C hooks
+  against both full logs. All 3,003 original 0x10B frames are forwarded;
+  all 63 physical-button frames remain byte-identical. f4--1 modifies 66
+  idle frames to LFA requests; f3--97 modifies 11 to LFA and 16 to MAIN.
+  Every output checksum validates; only button bits and checksum change.
+  Recorded stock responses are held fixed: this is not a simulation of
+  successful activation or proof that the dashboard now renders cars.
+
+The update includes Panda firmware source, so the device must complete its
+normal build/Panda firmware update and restart. Old Panda firmware rejects
+the new host request. Native desktop compilation/replay does not establish
+an on-device firmware build or successful EV5 activation. A follow-up route
+must verify bus-130 0x10B button pulses, bus-2 LFA/SCC overlap, and the return
+of OEM corner display geometry. No vehicle operation was performed here.
+
 ## Follow-up: reminder when downloaded code is not running
 
 The manager now snapshots the checkout commit during initialization, while the
