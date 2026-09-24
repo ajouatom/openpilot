@@ -1,7 +1,6 @@
 #include <cmath>
 
 #include "system/camerad/sensors/sensor.h"
-#include <media/msm_camsensor_sdk.h>
 
 namespace {
 
@@ -41,7 +40,7 @@ OS04C10::OS04C10() {
   probe_expected_data = 0x5304;
   bits_per_pixel = 12;
   mipi_format = CAM_FORMAT_MIPI_RAW_12;
-  frame_data_type = CSI_RAW12;
+  frame_data_type = 0x2c;  // CSI-2 RAW12
   mclk_frequency = 24000000; // Hz
 
   // TODO: this was set from logs. actually calculate it out
