@@ -1,3 +1,4 @@
 Import('env')
 
 env.Program('test_camera_event_timing', ['test_camera_event_timing.cc'])
+env.Program('test_os04c10_exposure', ['test_os04c10_exposure.cc', '../sensors/os04c10.cc'])

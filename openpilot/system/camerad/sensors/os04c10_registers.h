@@ -307,6 +307,7 @@ const struct i2c_random_wr_payload init_array_os04c10[] = {
   // {0x3208, 0xa0},
 
   // initialize exposure
+  {0x320d, 0x00}, // manual group launch, no automatic context switching
   {0x3503, 0x88},
 
   // long exposure
