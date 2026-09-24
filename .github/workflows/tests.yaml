@@ -50,6 +50,8 @@ jobs:
         run: scons
       - name: Check passive camera SOF diagnostics
         run: openpilot/system/camerad/test/test_camera_event_timing
+      - name: Check coherent OS04C10 exposure updates
+        run: openpilot/system/camerad/test/test_os04c10_exposure
       - name: Check model, monitoring and Bluetooth integration
         run: |
           python -m pytest -o addopts='' -q \
