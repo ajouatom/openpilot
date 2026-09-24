@@ -26,6 +26,10 @@ a.out
 .*.un~
 *.tmp
 .tmp_radar_*
+# Local analysis archives and scratch work (never publish vehicle captures).
+/.analysis/
+/.tmp_*
+__pycache__/
 *.o
 *.o-*
 *.os

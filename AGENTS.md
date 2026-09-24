@@ -1,5 +1,20 @@
 # Repository memory
 
+- On 2026-09-24, the user requested cleanup of accumulated root `.tmp_*`
+  analysis work. Local archives and an index are under
+  `.analysis/archive/2026-09-24/`; they are private, ignored working data,
+  not Git-tracked documentation or a remote backup. Use
+  `.analysis/scratch/<date>-<task>/` for new temporary analysis, captures,
+  dependency installs and Wiki staging instead of new root `.tmp_*` paths.
+  At task completion, retain useful findings/reproduction evidence with an
+  index in `.analysis/archive/`, then remove reproducible caches and scratch.
+  Keep durable conclusions in the relevant tracked investigation document.
+  Archived scripts may contain old relative paths; restore their original
+  layout in scratch and adjust paths before running them. For radar lead
+  validation, pass `--cache-dir .analysis/scratch/radar-validation-cache`
+  explicitly to avoid the tool's legacy root cache default. Never include
+  local captures, settings snapshots or credentials in commits.
+
 - On 2026-09-24, parked C4 exposure A/B/A on original bt1 reproduced isolated
   driver-camera gaps of 95.671/95.653 ms when switching OS04C10 exposure
   2298 -> 2309. CSID hardware timestamps also gap by 95.677/95.656 ms;
