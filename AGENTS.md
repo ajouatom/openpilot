@@ -1,5 +1,25 @@
 # Repository memory
 
+- On 2026-09-24, parked C4 exposure A/B/A on original bt1 reproduced isolated
+  driver-camera gaps of 95.671/95.653 ms when switching OS04C10 exposure
+  2298 -> 2309. CSID hardware timestamps also gap by 95.677/95.656 ms;
+  both other streams stay near 50 ms. Four historical isolated wide gaps have
+  the same near-limit exposure-byte crossing and three-frame command offset.
+  Grouping exposure/gain writes with manual delayed group-0 launch completed
+  600 s / 12,000 frames per camera without a >75 ms gap (maximum57.112 ms).
+  A separate brightness trial verified commands affect actual image statistics.
+  Camera-only A/B/A had stale model IPC and does not establish model validity;
+  a separate 600 s normal-AE/DM/eGPU run after reboot had 12,000 camera/model/
+  pose/DM messages each, no invalidity or model skips, camera max57.540 ms and
+  accelerometer/gyro max ages34.973/35.796 ms. DisableDM restored to2. Parked C4
+  validation does not establish loaded driving or C3 behavior.
+  No thresholds, exposure limits, priorities or model behavior are weakened.
+  This hazard predates September19; the recent frequency change and BT causality
+  remain unproved. f8d--3 is a distinct low-exposure IFE error-signalled fence,
+  not a wait timeout, and is not shown fixed by grouping. Radar work did not
+  spike before either incident type. The bt2 OS trial remains separate and has
+  not been installed. See docs/os04c10_exposure_investigation.md.
+
 - On 2026-09-23, Ioniq 5 C4 `00000594--abf5912e57--7` on 1fbfe331 reproduced
   a 102.044 ms wide-camera BOOT_TS gap with consecutive raw-derived frame and
   request IDs, one skipped model input and about 304 ms invalid pose inputs.
