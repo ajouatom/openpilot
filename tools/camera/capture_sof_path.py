@@ -47,7 +47,7 @@ try:
    ev(cpu,e)
   for p in instances:wr(p,'tracing_on',1)
  poller=messaging.Poller()
- names=['roadCameraState','wideRoadCameraState','driverCameraState','cameraOdometry','livePose','driverStateV2','carState','selfdriveState','deviceState','logMessage']
+ names=['roadCameraState','wideRoadCameraState','driverCameraState','cameraOdometry','livePose','driverStateV2','modelV2','accelerometer','gyroscope','carState','selfdriveState','deviceState','logMessage']
  socks={messaging.sub_sock(n,poller=poller,conflate=(n in ['carState','selfdriveState','deviceState'])):n for n in names}
  start=time.monotonic();deadline=start+duration;next_status=start+30;last_guard=start
  print(json.dumps({'started':label,'mode':mode,'seconds':duration}),flush=True)
@@ -59,7 +59,7 @@ try:
     if not msg.valid:bad[n+'.invalid']+=1
     row={'s':n,'t':msg.logMonoTime}
     if n.endswith('CameraState'):
-     row.update(f=v.frameId,r=v.requestId,sof=v.timestampSof,eof=v.timestampEof,exposure=v.integLines,gain=v.gain,sensor=str(v.sensor))
+     row.update(f=v.frameId,r=v.requestId,sof=v.timestampSof,eof=v.timestampEof,exposure=v.integLines,gain=v.gain,sensor=str(v.sensor),grey=v.measuredGreyFraction,target_grey=v.targetGreyFraction)
      prev=last.get(n)
      if prev:
       row['dt_ms']=(v.timestampSof-prev['sof'])/1e6;row['df']=v.frameId-prev['f']
@@ -67,6 +67,13 @@ try:
       if row['dt_ms']>75 and now-start>3 and trigger is None:
        trigger=dict(row);deadline=min(deadline,now+.2)
        print(json.dumps({'trigger':trigger}),flush=True)
+     last[n]=dict(row)
+    elif n in ['accelerometer','gyroscope']:
+     maxima[n+'.age_ms']=max(maxima.get(n+'.age_ms',0),(msg.logMonoTime-v.timestamp)/1e6)
+     continue
+    elif n=='modelV2':
+     row.update(f=v.frameId,valid=msg.valid,execution_s=v.modelExecutionTime,drop=v.frameDropPerc)
+     if n in last and v.frameId-last[n]['f']!=1:bad['modelV2.frame_gap']+=1
      last[n]=dict(row)
     elif n=='carState':
      last_guard=now

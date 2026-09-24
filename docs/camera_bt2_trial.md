@@ -8,6 +8,9 @@ Target OS: `19.8-carrot-bt2`. Do not change the stable branch's OS selection.
 The trial branch now selects the verified C3/C4 release manifests. The C4 device
 continues running bt1 while the separate sensor-exposure hypothesis is compared;
 bt2 has not yet received device validation.
+The independent [OS04C10 exposure correction](os04c10_exposure_investigation.md)
+passed parked A/B/A and normal-runtime tests on bt1 and was also published to
+carrot-wip as 93d8ab1fbf. It does not depend on installing this experimental OS.
 
 Builder commit: `60b901ff2d9bad09403e745ef1bc6b2745b0c1d5`.
 [Build 35942144886](https://github.com/ajouatom/agnos-builder/actions/runs/35942144886)
