@@ -3,7 +3,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from opendbc.can import CANPacker
+from opendbc.can import CANDefine, CANPacker
 from opendbc.can.parser import get_raw_value
 from opendbc.car.hyundai import hyundaicanfd
 from opendbc.car.hyundai.hyundaicanfd import _select_cluster_background
@@ -27,16 +27,21 @@ def test_paddle_background_requires_enabled_paddle_mode(
 
 
 @pytest.mark.parametrize("distance", (0.0, 1.6, 14.0, 14.1, 20.0, 25.5))
-@pytest.mark.parametrize(("message", "detect", "expected_detect"), [
-  *(('ADRV_0x1ea', detect, detect) for detect in range(8)),
-  *(('CCNC_0x162', detect, expected) for detect, expected in (
-    (0, 0), (1, 3), (2, 4), (3, 3), (4, 4), (5, 5), (6, 6), (7, 7),
+@pytest.mark.parametrize(("message", "detect", "expected_corner", "expected_front"), [
+  *(('ADRV_0x1ea', detect, expected, None) for detect, expected in (
+    (0, 0), (1, 1), (2, 2), (3, 3), (4, 1), (5, 1), (6, 1), (7, 1),
+  )),
+  *(('CCNC_0x162', detect, 3, expected) for detect, expected in (
+    (1, 3), (2, 4), (3, 3), (4, 4), (5, 5), (6, 6), (7, 7),
     (8, 8), (9, 9), (10, 10), (11, 11), (12, 12), (13, 13), (14, 14),
   )),
+  ('CCNC_0x162', 0, 0, 0),
 ])
-def test_cluster_objects_restore_corner_state_without_blinking_or_distance_clamp(monkeypatch, message, distance, detect, expected_detect):
+def test_cluster_objects_restore_corner_state_without_blinking_or_distance_clamp(monkeypatch, message, distance, detect,
+                                                                               expected_corner, expected_front):
   monkeypatch.setattr(hyundaicanfd, "Params", lambda: SimpleNamespace(get_int=lambda key: 0))
   packer = CANPacker("hyundai_canfd_generated")
+  display_types = CANDefine("hyundai_canfd_generated").dv[message]
   definition = packer.dbc.name_to_msg[message]
   source = {key: 0 for key in definition.sigs}
   for side in ("LF", "RF", "LR", "RR"):
@@ -72,9 +77,11 @@ def test_cluster_objects_restore_corner_state_without_blinking_or_distance_clamp
     for side in ("LF", "RF", "LR", "RR"):
       assert decoded[f"{side}_DETECT_DISTANCE"] == pytest.approx(distance)
       assert decoded[f"{side}_DETECT_LATERAL"] == pytest.approx(2.9)
-      assert decoded[f"{side}_DETECT"] == (1 if detect >= 4 and distance != 0 else detect)
+      assert decoded[f"{side}_DETECT"] == (expected_corner if distance != 0 else detect)
+      if message == "CCNC_0x162" and distance != 0 and detect != 0:
+        assert display_types[f"{side}_DETECT"][decoded[f"{side}_DETECT"]] == "GRAY_CAR"
     if message == "CCNC_0x162":
-      assert decoded["FF_DETECT"] == (expected_detect or 4)
+      assert decoded["FF_DETECT"] == (expected_front or 4)
       for key in ("FF_DISTANCE", "FF_LATERAL", "FF_DETECT_ALT", "FF_DISTANCE_ALT", "FF_LATERAL_ALT"):
         assert decoded[key] == pytest.approx(original[key])
     else:
