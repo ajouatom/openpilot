@@ -441,6 +441,7 @@ def test_carrot_radar_is_fixed_without_mode_or_sensitivity(settings, params):
   radar = next(group for group in vehicle["groups"] if group["id"] == "VEH_RADAR")
   assert radar["params"] == [
     "EnableRadarTracks",
+    "RadarTrackFlip",
     "EnableCornerRadar",
   ]
 

@@ -6,6 +6,9 @@ from openpilot.selfdrive.controls.lib.drive_helpers import CONTROL_N
 from openpilot.common.pid import PIDController
 from openpilot.selfdrive.modeld.constants import ModelConstants
 from openpilot.common.params import Params
+from openpilot.selfdrive.controls.lib.cruise_coasting import (
+  CruiseCoastingControl, MAX_PLAN_AGE, coasting_relief, no_coasting_lead,
+)
 
 CONTROL_N_T_IDX = ModelConstants.T_IDXS[:CONTROL_N]
 
@@ -67,6 +70,7 @@ class LongControl:
                              (CP.longitudinalTuning.kiBP, CP.longitudinalTuning.kiV),
                              k_f=CP.longitudinalTuning.kf, rate=1 / DT_CTRL)
     self.last_output_accel = 0.0
+    self.coasting = CruiseCoastingControl()
 
 
     self.params = Params()
@@ -112,6 +116,7 @@ class LongControl:
 
   def reset(self):
     self.pid.reset()
+    self.coasting.reset()
 
   def update(self, active, CS, long_plan, accel_limits, t_since_plan, radarState):
 
@@ -159,12 +164,34 @@ class LongControl:
       self.reset()
 
     else:  # LongCtrlState.pid
+      target = getattr(long_plan, 'cruiseCoastingTarget', 0.0)
+      percent = getattr(long_plan, 'cruiseCoastingPercent', 0)
+      relief = 0.0
+      if (target > 0.0 and percent > 0 and self.CP.openpilotLongitudinalControl and
+          0.0 <= t_since_plan <= MAX_PLAN_AGE and
+          long_plan.longitudinalPlanSource == 'cruise' and not long_plan.fcw and not should_stop and
+          not CS.brakePressed and not CS.gasPressed and not CS.carrotCruise and
+          abs(long_plan.cruiseTarget - CS.vCruise) < 0.001 and
+          not CS.cruiseState.standstill and no_coasting_lead(radarState) and
+          math.isfinite(CS.aEgo) and math.isfinite(a_target_ff) and math.isfinite(v_target_now) and
+          accel_limits[1] >= 0.0):
+        relief = coasting_relief(CS.vEgo, target, percent)
+      if relief == 0.0:
+        self.coasting.reset()
       if self.use_accel_pid:
         error = a_target_ff - CS.aEgo
       else:
         error = v_target_now - CS.vEgo
-      output_accel = self.pid.update(error, speed=CS.vEgo,
-                                     feedforward=a_target_ff)
+      previous_integral = self.pid.i
+      output_accel = self.pid.update(error, speed=CS.vEgo, feedforward=a_target_ff)
+      if relief > 0.0 and output_accel < 0.0:
+        # Preserve the ordinary PID exactly for positive commands and at 0%.
+        # Do not integrate a speed error whose braking output we are suppressing.
+        self.pid.i = previous_integral
+        output_accel = self.pid.update(error, speed=CS.vEgo, feedforward=a_target_ff, freeze_integrator=True)
+        output_accel = self.coasting.apply(output_accel, relief, DT_CTRL)
+      else:
+        self.coasting.reset()
 
     self.last_output_accel = np.clip(output_accel, accel_limits[0], accel_limits[1])
     return self.last_output_accel, a_target_ff, j_target_now
