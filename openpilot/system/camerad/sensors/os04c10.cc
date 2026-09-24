@@ -113,9 +113,15 @@ std::vector<i2c_random_wr_payload> OS04C10::getExposureRegisters(int exposure_ti
   uint32_t real_gain = os04c10_analog_gains_reg[new_exp_g];
 
   return {
+    // Exposure spans two byte registers. Hold the complete update so a frame
+    // boundary cannot latch the new high byte with the previous low byte
+    // (e.g. 0x08fa -> 0x0905 would temporarily expose 0x09fa > VTS - 8).
+    {0x3208, 0x00},
     {0x3501, long_time>>8}, {0x3502, long_time&0xFF},
     {0x3508, real_gain>>8}, {0x3509, real_gain&0xFF},
     {0x350c, real_gain>>8}, {0x350d, real_gain&0xFF},
+    {0x3208, 0x10},
+    {0x3208, 0xa0},  // launch group 0 at the sensor's safe vertical blanking point
   };
 }
 
