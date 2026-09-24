@@ -167,6 +167,45 @@ not distinct button presses, and do not establish successful activation.
 The stock LFA response remains off during every stock SCC-active interval.
 No activation or vehicle-control behavior was changed for this analysis.
 
+### Carrot control state against stock LFA/SCC
+
+Carrot's own state comes from carControl.enabled, latActive and longActive.
+Join each sample to the latest past bus-2 SCC/LFA sample within 150 ms;
+f4--1 has no missing/stale SCC or LFA samples in this comparison. The
+times below share the first-CAN origin used above.
+
+| f4--1 time (s) | Carrot enabled | latActive | longActive |
+| --- | --- | --- | --- |
+| 0.01 to 23.23 | false | true | false |
+| 23.23 to 27.51 | false | false | false |
+| 27.51 to 40.70 | false | true | false |
+| 40.70 to 57.59 | true | true | false |
+| 57.59 to 59.90 | false | true | false |
+
+During all 1,689 samples with Carrot enabled, stock LFA is off. Stock SCC
+is enabled in 35 of those samples, in driver override in 1,651, and off in
+the last three samples just before Carrot disables. Thus Carrot cruise and
+steering being enabled does not imply that stock LFA is enabled alongside
+stock SCC. In contrast, stock LFA is green for most of the interval where
+Carrot latActive is false (23.39 to 27.51 seconds on the joined timeline).
+Short state-transition delays must not be interpreted as continuous overlap.
+
+For those same 1,689 enabled samples, carState.gasPressed is true,
+selfdriveState.state is overriding, and onroadEvents contains
+gasPressedOverride with overrideLongitudinal. This explains why longActive
+remains false despite enabled=true; the entire f4--1 segment has no active
+Carrot longitudinal control. It does not mean Carrot cruise was never enabled.
+
+The prior f3--97 comparison also has a mismatch, on the other axis: stock
+LFA stays green while Carrot cruise is enabled from 29.43 seconds onward,
+but stock SCC remains MainMode_ACC=0/ACCMode=0. Earlier HDA-active intervals
+(about 0.53 to 12.23 and 20.37 to 26.08 seconds) instead occur while Carrot
+enabled is false and stock LFA/SCC overlap. These observations support
+investigating stock activation/synchronization, rather than treating Carrot
+engagement flags or outgoing cluster icons as stock-state confirmation.
+They do not yet identify why an individual button request fails or a stock
+function switches off. No runtime code changed in this comparison.
+
 ## Follow-up: reminder when downloaded code is not running
 
 The manager now snapshots the checkout commit during initialization, while the
