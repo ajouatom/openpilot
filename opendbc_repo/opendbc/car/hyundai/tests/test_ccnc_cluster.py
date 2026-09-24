@@ -35,7 +35,8 @@ def test_paddle_background_requires_enabled_paddle_mode(
     (1, 3), (2, 4), (3, 3), (4, 4), (5, 5), (6, 6), (7, 7),
     (8, 8), (9, 9), (10, 10), (11, 11), (12, 12), (13, 13), (14, 14),
   )),
-  ('CCNC_0x162', 0, 0, 0),
+  # EV5 supplies nonzero corner geometry while 0x162 DETECT stays hidden.
+  ('CCNC_0x162', 0, 3, 0),
 ])
 def test_cluster_objects_restore_corner_state_without_blinking_or_distance_clamp(monkeypatch, message, distance, detect,
                                                                                expected_corner, expected_front):
@@ -78,7 +79,7 @@ def test_cluster_objects_restore_corner_state_without_blinking_or_distance_clamp
       assert decoded[f"{side}_DETECT_DISTANCE"] == pytest.approx(distance)
       assert decoded[f"{side}_DETECT_LATERAL"] == pytest.approx(2.9)
       assert decoded[f"{side}_DETECT"] == (expected_corner if distance != 0 else detect)
-      if message == "CCNC_0x162" and distance != 0 and detect != 0:
+      if message == "CCNC_0x162" and distance != 0:
         assert display_types[f"{side}_DETECT"][decoded[f"{side}_DETECT"]] == "GRAY_CAR"
     if message == "CCNC_0x162":
       assert decoded["FF_DETECT"] == (expected_front or 4)
