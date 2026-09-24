@@ -227,7 +227,7 @@ function agnos_init {
       sleep 2
     done
 
-    show_agnos_update_failure "The updater UI stopped three times. No unconfirmed update was installed."
+    show_agnos_update_failure "The automatic updater stopped three times. Check the updater log for the failure."
     return 1
   else
     rm -f "$AGNOS_UPDATE_CONFIRMATION_FILE"

@@ -75,3 +75,33 @@ it is not included as a proven SPI-error fix in this integration.
 
 Docs-Not-Needed: No global setting definition or setting semantics change;
 Bluetooth is an existing web-only feature with localized in-dialog guidance.
+
+## Automatic AGNOS updates (2026-09-24)
+
+The user requested unattended OS updates on `carrot-wip`. Both C3/tici and
+C4/mici startup updater screens now start the update immediately, without an
+Install button or a saved approval. The updater downloads and flashes the
+inactive slot, verifies it, activates it and reboots automatically on success.
+The existing device-specific manifests and required OS version are unchanged.
+
+The startup UI passes `--retry-network`: disconnects, timeouts, interrupted
+responses and temporary HTTP failures (408, 429 and 5xx) wait ten seconds
+between attempts and resume without a Retry tap, including after prolonged
+loss of connectivity. Existing cached-download and HTTP Range handling remain
+in use. This is not Wi-Fi-only enforcement; any working internet connection
+can supply the update. Both progress screens retain Wi-Fi configuration access
+while the update worker runs, and returning to progress does not spawn another
+worker. Connectivity HEAD probes never gate the actual download.
+
+Permanent server/TLS errors retain bounded retries and an error screen;
+partition-write and integrity failures do not enter the network retry loop.
+The existing image verification, bounded flash/swap attempts, updater lock and
+startup OS-version gate remain in force. An incomplete required update still
+blocks normal openpilot startup. Already verified inactive slots retain the
+offline activation/reboot fast path. The offroad background updater retains
+its existing metered-network and bounded retry policies.
+
+Validation uses mocked UI/hardware, simulated connectivity recovery after
+60 and 600 seconds, cached download/resume tests and CLI verification/swap
+tests. All 59 focused updater/startup tests passed, as did Ruff and shell syntax
+checks. It does not establish a new on-device flash or C3/C4 reboot result.
