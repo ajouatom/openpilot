@@ -751,6 +751,21 @@ function showSettingScreen(which, pushHistory = false) {
   }
 }
 
+async function goToSettingParent() {
+  // The header is an Up control: history may point at another app page after
+  // restoring a group or switching between the narrow and split layouts.
+  if (CURRENT_SETTING_DETAIL && CURRENT_GROUP) {
+    await transitionSettingItemsContent(
+      () => activateSettingGroup(CURRENT_GROUP, false, {
+        scrollMode: "restore", animateGroups: false, animateItems: false,
+      }),
+      "backward",
+    );
+    return;
+  }
+  resetSettingPageToRoot();
+}
+
 function resetSettingPageToRoot() {
   if (typeof closeSettingSearchPanel === "function") {
     closeSettingSearchPanel({ clear: false, syncHistory: false });
@@ -879,10 +894,9 @@ function goBackUnlessSettingSplit() {
 
 if (btnBackGroups) btnBackGroups.onclick = goBackUnlessSettingSplit;
 settingTitle.onclick = goBackUnlessSettingSplit;
-// The item title is the submenu back control in both layouts. In the split
-// layout the group rail remains visible, but the control must still unwind a
-// nested detail/history entry (or return to the previous page from a group).
-if (itemsTitle) itemsTitle.onclick = () => history.back();
+// In split layout the settings root (group rail) is already visible. Never
+// leave settings just because the previous browser entry belongs to a page.
+if (itemsTitle) itemsTitle.onclick = goToSettingParent;
 
 btnBackBranch.onclick = () => history.back();
 branchTitle.onclick = () => history.back();
