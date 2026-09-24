@@ -37,7 +37,7 @@ def apply_canfd_stopping(values, CS, controller, accel, previous_value, jerk_u, 
 
   wheels = CS.out.wheelSpeeds
   speeds = [CS.out.vEgo, CS.out.vEgoRaw, wheels.fl, wheels.fr, wheels.rl, wheels.rr]
-  finite = all(math.isfinite(v) for v in (*speeds, accel, values["aReqValue"], previous_value, jerk_u, jerk_l))
+  finite = all(math.isfinite(v) for v in (*speeds, CS.out.aEgo, accel, values["aReqValue"], previous_value, jerk_u, jerk_l))
   speed = max(abs(v) for v in speeds) if finite else 0.0
   soft_hold = CS.softHoldActive > 0 and CS.out.cruiseState.available
   # Only an armed, stationary soft hold may remain active while the driver brakes.
@@ -47,7 +47,7 @@ def apply_canfd_stopping(values, CS, controller, accel, previous_value, jerk_u, 
              or str(CS.out.gearShifter) != "drive" or longitudinal_interlock_active(CS))
   previous_phase = controller.phase
   command = controller.update(
-    active=values["ACCMode"] == 1 and not blocked, requested=bool(values["StopReq"]), speed=speed,
+    active=values["ACCMode"] == 1 and not blocked, requested=bool(values["StopReq"]), speed=speed, a_ego=CS.out.aEgo,
     held=CS.canfdSccHoldActive, accel=accel, value=values["aReqValue"], previous_value=previous_value,
     jerk_u=max(0.0, min(jerk_u, 5.0)), jerk_l=max(1.0, min(jerk_l, 5.0)),
   )
