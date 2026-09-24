@@ -1,5 +1,14 @@
 # Repository memory
 
+- On 2026-09-24, the user requested AGNOS updates without per-update approval:
+  automatically download/install, wait and retry transient network failures,
+  then reboot and continue normal startup. Both startup UIs now start the
+  updater without consulting saved confirmation. Keep Wi-Fi setup accessible
+  during retries, prevent duplicate workers, and retain image verification,
+  inactive-slot installation and fatal-error handling. This does not change
+  the required OS image/version or authorize weakening startup compatibility.
+  See docs/cinque_v3_integration_20260919.md for behavior and validation limits.
+
 - On 2026-09-24, the user requested cleanup of accumulated root `.tmp_*`
   analysis work. Local archives and an index are under
   `.analysis/archive/2026-09-24/`; they are private, ignored working data,

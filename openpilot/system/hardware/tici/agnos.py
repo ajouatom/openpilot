@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import hashlib
+import itertools
 import json
 import lzma
 import os
@@ -464,7 +465,18 @@ def swap(manifest_path: str, target_slot_number: int, cloudlog) -> None:
   raise RuntimeError(f"Failed to switch boot slot after {SWAP_MAX_ATTEMPTS} attempts: {last_output.strip()}")
 
 
-def flash_agnos_update(manifest_path: str, target_slot_number: int, cloudlog, standalone=False) -> None:
+def transient_download_error(error: requests.exceptions.RequestException) -> bool:
+  # Invalid URLs, certificate errors and permanent HTTP failures need repair,
+  # not an endless reconnect loop. Disconnections and server overload can wait.
+  if isinstance(error, requests.exceptions.SSLError):
+    return False
+  if isinstance(error, requests.exceptions.HTTPError):
+    return error.response is not None and (error.response.status_code in (408, 429) or error.response.status_code >= 500)
+  return isinstance(error, (requests.exceptions.ConnectionError, requests.exceptions.Timeout,
+                            requests.exceptions.ChunkedEncodingError))
+
+
+def flash_agnos_update(manifest_path: str, target_slot_number: int, cloudlog, standalone=False, retry_network=False) -> None:
   update = json.load(open(manifest_path))
 
   cloudlog.info(f"Target slot {target_slot_number}")
@@ -473,25 +485,19 @@ def flash_agnos_update(manifest_path: str, target_slot_number: int, cloudlog, st
   os.system(f"abctl --set_unbootable {target_slot_number}")
 
   for partition in update:
-    success = False
-
-    for retries in range(DOWNLOAD_RETRY_ATTEMPTS):
+    for attempt in itertools.count(1):
       try:
         flash_partition(target_slot_number, partition, cloudlog, standalone)
-        success = True
         break
 
       except requests.exceptions.RequestException as e:
         cloudlog.exception("Failed")
-        retry_number = retries + 1
-        if retry_number < DOWNLOAD_RETRY_ATTEMPTS:
-          cloudlog.info(f"Failed to download {partition['name']}, retrying ({retry_number}/{DOWNLOAD_RETRY_ATTEMPTS})")
-          report_progress(f"Network retry {retry_number}/{DOWNLOAD_RETRY_ATTEMPTS} in {DOWNLOAD_RETRY_DELAY:g}s: {type(e).__name__}", 0)
-          time.sleep(DOWNLOAD_RETRY_DELAY)
-
-    if not success:
-      cloudlog.info(f"Failed to flash {partition['name']}, aborting")
-      raise RuntimeError(f"Download failed after {DOWNLOAD_RETRY_ATTEMPTS} attempts. Check Wi-Fi, then tap Retry.")
+        keep_waiting = retry_network and transient_download_error(e)
+        if attempt >= DOWNLOAD_RETRY_ATTEMPTS and not keep_waiting:
+          raise RuntimeError(f"Download failed after {attempt} attempts. Check the connection or update server, then Retry.") from e
+        cloudlog.info(f"Failed to download {partition['name']}, retrying (attempt {attempt}): {type(e).__name__}")
+        report_progress("Waiting for internet" if keep_waiting else "Retrying download", 0)
+        time.sleep(DOWNLOAD_RETRY_DELAY)
 
   cloudlog.info(f"AGNOS ready on slot {target_slot_number}")
 
@@ -510,6 +516,7 @@ if __name__ == "__main__":
 
   parser.add_argument("--verify", action="store_true", help="Verify and perform swap if update ready")
   parser.add_argument("--swap", action="store_true", help="Verify and perform swap, downloads if necessary")
+  parser.add_argument("--retry-network", action="store_true", help="Wait for connectivity and retry transient download failures automatically")
   parser.add_argument("manifest", help="Manifest json")
   args = parser.parse_args()
 
@@ -531,10 +538,10 @@ if __name__ == "__main__":
       if attempt >= VERIFY_FLASH_MAX_ATTEMPTS:
         raise RuntimeError(f"AGNOS verification failed after {VERIFY_FLASH_MAX_ATTEMPTS} flash attempts")
       logging.error(f"Verification failed. Flashing AGNOS ({attempt + 1}/{VERIFY_FLASH_MAX_ATTEMPTS})")
-      flash_agnos_update(args.manifest, target_slot_number, logging, standalone=True)
+      flash_agnos_update(args.manifest, target_slot_number, logging, standalone=True, retry_network=args.retry_network)
 
     logging.warning(f"Verification succeeded. Swapping to slot {target_slot_number}")
     swap(args.manifest, target_slot_number, logging)
     report_progress("Update complete; rebooting", 100)
   else:
-    flash_agnos_update(args.manifest, target_slot_number, logging, standalone=True)
+    flash_agnos_update(args.manifest, target_slot_number, logging, standalone=True, retry_network=args.retry_network)

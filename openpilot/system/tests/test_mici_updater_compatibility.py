@@ -83,26 +83,24 @@ def test_standalone_widgets_tolerate_missing_params_binary(monkeypatch) -> None:
   assert namespace["device"].awake
 
 
-def test_tici_updater_only_installs_after_button_confirmation() -> None:
+def test_tici_updater_automatically_installs_with_network_retry() -> None:
   updater = Path(BASEDIR) / "openpilot/system/ui/tici_updater.py"
   source = updater.read_text(encoding="utf-8")
 
-  assert 'Button("Install", click_callback=self.install_update' in source
-  assert 'cmd = [self.updater, "--swap", self.manifest]' in source
-  assert "mark_update_confirmed(self.manifest)" in source
-  assert "if update_confirmed(manifest_path)" in source
+  assert 'cmd = [self.updater, "--swap", "--retry-network", self.manifest]' in source
+  assert "update_confirmed" not in source
   assert "stderr=subprocess.STDOUT" in source
   assert 'Button("Retry", click_callback=self.install_update' in source
 
 
-def test_mici_updater_checks_manifest_hosts_without_blocking_explicit_install() -> None:
+def test_mici_updater_checks_manifest_hosts_without_blocking_automatic_install() -> None:
   updater = Path(BASEDIR) / "openpilot/system/ui/mici_updater.py"
   source = updater.read_text(encoding="utf-8")
 
   assert "probe_urls=manifest_download_urls(manifest_path)" in source
   assert "self._continue_button.set_visible(True)" in source
-  assert "mark_update_confirmed(self.manifest)" in source
-  assert "if update_confirmed(manifest_path)" in source
+  assert "update_confirmed" not in source
+  assert 'cmd = [self.updater, "--swap", "--retry-network", self.manifest]' in source
   assert "stderr=subprocess.STDOUT" in source
   assert "self._failed_page.set_reason(reason)" in source
 
