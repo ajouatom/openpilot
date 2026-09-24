@@ -334,6 +334,21 @@ Designed to encourage HEV EV-mode behavior, but the code has no vehicle-type res
 
 For set speed 100, ego 96, and a value of 2, the temporary target is 102 km/h. Range is 0–10 km/h; zero disables it. This changes the target, not the maximum acceleration, so driving mode and the acceleration table still matter.
 
+### Cruise coasting margin (`CruiseCoastingPercent`)
+
+Relaxes cruise braking that would bring a small overspeed back to the set speed. The default is **0%**, the range is **0–10%**, and the step is **1%**. **0% retains existing control.**
+
+- Does not raise the set speed or MPC target, disable SCC, or add positive acceleration commands.
+- For a 100km/h set speed and a 5% margin, braking relief applies between 100 and 105km/h. It does not accelerate the vehicle to 105km/h.
+- Relief eases in over the first 10% of the band; normal braking returns over the final 40%. In this example, relief increases from 100 to 100.5km/h and braking returns from 103 to 105km/h. The ceiling is a brake-restoration threshold, not a guaranteed maximum actual speed.
+- Applies only to ordinary cruise with openpilot longitudinal control, a reference above 10km/h, and targets and eligibility stable for at least one second. Leads, cut-in candidates, stopping, curve acceleration limiting, ATC, lane changes, and Experimental Mode prevent relief.
+- Navigation or other speed caps at or below the coasting ceiling prevent relief. External deceleration, pedal input, target changes, or invalid inputs give priority to normal control.
+- Does not apply while `CruiseEcoControl` raises the target or the existing CarrotCruise acceleration-limiting mode is active. This setting is separate from `CarrotCruiseDecel`.
+
+Adjust under Settings > Driving > Cruise & Gap > Carrot Cruise. Changes are read approximately once per second while running. Increase the margin to allow more overspeed before normal braking returns, or select 0% to restore existing control.
+
+A zero SCC acceleration request does not guarantee zero regeneration or braking. Actual regeneration and ride comfort depend on the vehicle; driving validation has not yet been completed.
+
 ### Conditions for `CarrotCruiseDecel` and `CarrotCruiseAtcDecel`
 
 These are currently implemented only in the **Hyundai/Kia controller** and require all of the following:

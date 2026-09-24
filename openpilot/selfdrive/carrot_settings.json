@@ -371,6 +371,7 @@
               "zh": "Carrot巡航",
               "params": [
                 "CruiseEcoControl",
+                "CruiseCoastingPercent",
                 "CarrotCruiseDecel",
                 "CarrotCruiseAtcDecel"
               ]
@@ -1036,6 +1037,23 @@
       "default": 2,
       "unit": 1,
       "display_unit": "speedKph"
+    },
+    {
+      "group": "크루즈",
+      "name": "CruiseCoastingPercent",
+      "title": "크루즈 코스팅 여유",
+      "descr": "0%는 기존 제어를 유지합니다. 설정속도 초과 구간에서 크루즈 감속만 완화하고, 여유 상한에 가까워지면 감속을 복원합니다. 설정속도를 높이거나 SCC를 끄지 않습니다. 앞차·정지·외부 속도제어가 없는 일반 크루즈에서만 적용됩니다.",
+      "egroup": "CRUISE",
+      "etitle": "Cruise Coasting Margin",
+      "edescr": "0% keeps existing control. Relaxes cruise braking above the set speed and restores it near the margin ceiling, without raising the set speed or disabling SCC. Applies only to ordinary cruise without leads, stopping, or external speed control.",
+      "cgroup": "巡航设置",
+      "ctitle": "巡航滑行余量",
+      "cdescr": "0%保持原有控制。在超过设定速度时减弱巡航减速，接近余量上限时恢复减速。不提高设定速度，也不关闭SCC。仅在无前车、停车或外部速度控制介入的普通巡航中生效。",
+      "min": 0,
+      "max": 10,
+      "default": 0,
+      "unit": 1,
+      "display_unit": "percent"
     },
     {
       "group": "크루즈",
