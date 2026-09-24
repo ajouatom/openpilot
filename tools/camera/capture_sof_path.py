@@ -77,6 +77,7 @@ try:
      last[n]=dict(row)
     elif n=='carState':
      last_guard=now
+     if not v.canValid:bad['carState.canValid']+=1
      assert str(v.gearShifter)=='park' and v.vEgo<.1, 'Vehicle no longer parked'
      continue
     elif n=='selfdriveState':
