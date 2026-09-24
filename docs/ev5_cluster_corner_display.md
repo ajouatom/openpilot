@@ -206,6 +206,41 @@ engagement flags or outgoing cluster icons as stock-state confirmation.
 They do not yet identify why an individual button request fails or a stock
 function switches off. No runtime code changed in this comparison.
 
+### Automatic LFA button requests versus received button input
+
+The f4--1 retry loop is running: outgoing `sendcan` bus-2 `0x1AA` carries
+27 distinct LFA_BTN pulses, each five packets (135 asserted packets total),
+at roughly two-second intervals while received stock LFA is off. All 27
+pulses also occur in `can` bus 130 (Panda's bus-2 transmit receipts), with
+valid 0x1AA checksums. No stock LFA activation follows those automatic
+pulses. This is not merely a failure to enter the retry branch or enqueue
+the message.
+
+Received vehicle button input instead changes on `can` bus-0 `0x10B`
+(CRUISE_BUTTONS_ALT2); incoming bus-0 `0x1AA` LFA_BTN stays zero. The
+0x10B presses are also present in bus-130 forwarding receipts:
+
+| Segment | Received 0x10B LFA press (s) | Subsequent stock bus-2 LFA state |
+| --- | --- | --- |
+| f4--1 | 23.057 to 23.179 | Green at 23.380 |
+| f4--1 | 27.381 to 27.458 | Blink at 27.680, off at 28.681 |
+| f3--97 | 11.856 to 11.977 | Blink at 12.177, off at 13.225 |
+| f3--97 | 20.102 to 20.144 | Green at 20.331 |
+
+In f3--97 four automatic 0x1AA pulses at about 13.51, 15.51, 17.51 and
+19.51 seconds fail to restore LFA; the received 0x10B press at 20.10 seconds
+precedes its recovery. This repeats the distinction in a second segment.
+
+CarState already prefers the available CRUISE_BUTTONS_ALT2 for interpreting
+driver buttons. However, the automatic LFA request in create_ccnc_messages
+still packs CS.cruise_btns_msg_canfd, which selects CRUISE_BUTTONS_ALT
+(0x1AA) for this vehicle. The protocol mismatch is therefore a concrete
+candidate for ineffective automatic activation. The evidence establishes
+that the current retry does not achieve activation in these captures; it
+does not yet validate a replacement 0x10B transmitter or all of that
+message's integrity/forwarding requirements. No transmitter or Panda
+safety behavior was changed in this investigation.
+
 ## Follow-up: reminder when downloaded code is not running
 
 The manager now snapshots the checkout commit during initialization, while the
