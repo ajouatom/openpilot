@@ -5,6 +5,7 @@ set -euo pipefail
 ROOT=$(cd "$(dirname "$0")/../.." && pwd)
 MODEL=${1:?path to the verified Cinque v2 ONNX required}
 RUNTIME=${JETLINK_RUNTIME:-"$HOME/Library/Application Support/CarrotJetlink"}
+python3 -c 'import sys; assert sys.version_info >= (3, 10), "Python 3.10 or newer required"'
 python3 -m venv "$RUNTIME/venv"
 "$RUNTIME/venv/bin/python" -m pip install 'numpy>=1.24,<3' 'onnx>=1.16' 'onnxruntime>=1.22' 'libusb1>=3.0'
 export PYTHONPATH="$ROOT/third_party/jetlink"

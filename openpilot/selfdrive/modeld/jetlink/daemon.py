@@ -26,7 +26,11 @@ from hud_protocol import Publisher, HUD_CAPABILITY, HUD_MESSAGE
 
 def update_affinity():
   from openpilot.common.params import Params
-  cores = {7} if Params().get_bool('IsOnroad') and Path('/sys/devices/system/cpu/cpu7/online').read_text().strip() == '1' else set(range(4))
+  onroad = Params().get_bool('IsOnroad') and Path('/sys/devices/system/cpu/cpu7/online').read_text().strip() == '1'
+  cores = {7} if onroad else set(range(4))
+  # Only bounded IPC/USB work runs here. DM remains FIFO5, modeld FIFO54;
+  # slow cereal/JSON/JPEG work lives in normal-priority child processes.
+  os.sched_setscheduler(0, os.SCHED_FIFO if onroad else os.SCHED_OTHER, os.sched_param(1 if onroad else 0))
   for thread in Path('/proc/self/task').iterdir():
     try:
       os.sched_setaffinity(int(thread.name), cores)
@@ -66,9 +70,9 @@ class CarrotTransport(FfsTransport):
     os.sched_setaffinity(0, set(range(min(4, os.cpu_count() or 1))))
 
   def _raise_reader_priority(self):
-    # Only the short USB receive/copy worker is realtime, below modeld/DM.
-    # Main IPC/JSON and display workers remain normal priority. Existing
-    # camera/control/sensor placements and priorities are untouched.
+    # The short USB receive/copy worker is realtime, below modeld/DM.
+    # Display workers remain normal priority. Existing camera/control/sensor
+    # placements and priorities are untouched.
     os.sched_setscheduler(0, os.SCHED_FIFO, os.sched_param(1))
 
 

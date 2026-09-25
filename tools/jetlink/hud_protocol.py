@@ -31,7 +31,8 @@ class Publisher:
     import os
     self.path = Path(f'/dev/shm/carrot-jetlink-display-{os.getpid()}.packet')
     self.last_sent = 0.
-    self.process = subprocess.Popen([sys.executable, str(Path(__file__).with_name('hud_publisher.py')), str(self.path)],
+    self.process = subprocess.Popen(['chrt', '--other', '0', sys.executable,
+                                    str(Path(__file__).with_name('hud_publisher.py')), str(self.path)],
                                     stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
 
   def packet(self):
