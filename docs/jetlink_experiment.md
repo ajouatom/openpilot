@@ -21,6 +21,14 @@ slices are checked against `openpilot/selfdrive/modeld/jetlink/cinque_v2.json`.
 The AMD Cinque v3 compiled artifact is not a TensorRT model; this experiment
 does not implement Cinque v3 without its original portable model.
 
+Host provisioning uses a distinct NAS directory, `models/carrot-jetlink-cinque-v2`,
+with the original ONNX and `manifest.json`. Run
+`python tools/jetlink/download_model.py --output /path/to/cinque-v2.onnx`
+before building/importing an engine. It checks the manifest against the branch
+pin and verifies the complete file's size and SHA-256. It never replaces a
+different existing model. This path is separate from wip's eGPU v3 manifest;
+GitHub LFS is not the model download source.
+
 The comma is the USB **device**, Jetson/Mac the **host**. Use a SuperSpeed data
 cable from the comma USB-C port to a host-capable Jetson port. The tested
 Orin Nano developer kit uses its USB-A host port; its USB-C port is not an
