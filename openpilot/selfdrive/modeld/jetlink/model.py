@@ -35,10 +35,16 @@ class Warp:
       result = self.run_warp(**self.inputs, **dummy).numpy()
       if result.shape != SPEC.warped_shape or result.dtype != np.uint8:
         raise ValueError('unexpected camera warp contract')
+    from openpilot.system.hardware import HARDWARE
+    from openpilot.selfdrive.modeld.jetlink.warp import validated_warp
+    self.run_warp = validated_warp(self.run_warp, NV12Frame(width, height, *get_nv12_info(width, height)),
+                                   self.transforms, self.inputs, SPEC.frame_skip, HARDWARE.get_device_type())
     self.blobs = {}
+    self.timings = (0., 0., 0.)
 
   def __call__(self, bufs, transforms):
     from tinygrad import Tensor
+    started = time.monotonic()
     frames = {}
     for key, arg in (('img', 'frame'), ('big_img', 'big_frame')):
       source = np.frombuffer(bufs[key].data, np.uint8)
@@ -52,12 +58,20 @@ class Warp:
       frames[arg] = self.blobs[cache_key]
     self.transforms['tfm'][:] = transforms['img']
     self.transforms['big_tfm'][:] = transforms['big_img']
-    return self.run_warp(**self.inputs, **frames).numpy()
+    prepared = time.monotonic()
+    result = self.run_warp(**self.inputs, **frames)
+    submitted = time.monotonic()
+    output = result.numpy()
+    self.timings = (prepared - started, submitted - prepared, time.monotonic() - submitted)
+    return output
 
 
 class JoiningModel:
   def __init__(self, small, width, height):
     from openpilot.selfdrive.modeld.parse_model_outputs import Parser
+    from openpilot.system.hardware import HARDWARE
+    self.phase_enabled = HARDWARE.get_device_type() == 'mici'
+    self.source_sof = 0
     self.small = small
     self.warp = Warp(width, height)
     self.parser = Parser()
@@ -77,8 +91,10 @@ class JoiningModel:
     self.reset = True
     self.error = ''
     self.small_runs = 0
+    self.last_slow_log = 0.
 
-  def update(self, sm):
+  def update(self, sm, metadata):
+    self.source_sof = metadata.timestamp_sof if self.phase_enabled else 0
     now = time.monotonic()
     self.join_allowed = may_join(now, {k: sm[k] for k in ('carState', 'selfdriveState', 'carControl')},
                                 {k: sm.valid[k] and sm.alive[k] for k in ('carState', 'selfdriveState', 'carControl')}, sm.recv_time)
@@ -119,7 +135,11 @@ class JoiningModel:
         for name in ('traffic_convention', 'action_t'):
           self.views[name][:] = inputs[name]
         self.frame = (self.frame + 1) & 0xFFFFFFFF
-        result = self.client.infer(self.warp(bufs, transforms), self.packed, self.frame, self.reset)
+        started = time.monotonic()
+        images = self.warp(bufs, transforms)
+        warped = time.monotonic()
+        result = self.client.infer(images, self.packed, self.frame, self.reset, source_sof=self.source_sof)
+        replied = time.monotonic()
         self.reset = False
         self.views['prev_feat'][:] = result[SPEC.output_slices['hidden_state']]
         if not self.active:
@@ -132,6 +152,13 @@ class JoiningModel:
         parsed = self.parser.parse_outputs({k: result[np.newaxis, v] for k, v in SPEC.output_slices.items()})
         if os.getenv('SEND_RAW_PRED'):
           parsed['raw_pred'] = result.copy()
+        finished = time.monotonic()
+        if finished - started > .05 and finished - self.last_slow_log >= 1:
+          self.last_slow_log = finished
+          cloudlog.warning('Jetlink slow frame %d: warp %.2f (prepare/submit/read %.2f/%.2f/%.2f), '
+                           'roundtrip %.2f, parse %.2f ms; server gpu/queue/total %.2f/%.2f/%.2f ms',
+                           self.frame, (warped-started)*1000, *(v*1000 for v in self.warp.timings),
+                           (replied-warped)*1000, (finished-replied)*1000, *(v/1000 for v in self.client.timings))
         return parsed
       except Exception as exc:
         cloudlog.exception('Jetlink failed; restoring local model')

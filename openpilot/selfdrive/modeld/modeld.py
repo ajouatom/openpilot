@@ -401,7 +401,7 @@ def main(demo=False):
     camera_ready = time.monotonic()
     sm.update(0)
     if hasattr(model, 'update'):
-      model.update(sm)
+      model.update(sm, meta_main)
     desire = DH.desire
     is_rhd = sm["driverMonitoringState"].isRHD
     frame_id = sm["roadCameraState"].frameId
