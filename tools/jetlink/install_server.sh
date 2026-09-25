@@ -5,7 +5,6 @@ ROOT=$(realpath "${1:?prepared runtime directory required}")
 OWNER=${2:?service account required}
 id "$OWNER" >/dev/null
 test -x "$ROOT/venv/bin/python"
-test -f "$ROOT/source/jetlink/server/main.py"
 test -f "$ROOT/carrot/tools/jetlink/server.py"
 test -f "$ROOT/cache/last-loaded.json"
 getent group plugdev >/dev/null || groupadd --system plugdev
@@ -24,7 +23,7 @@ StartLimitIntervalSec=0
 Type=simple
 User=$OWNER
 SupplementaryGroups=plugdev
-WorkingDirectory=$ROOT/source
+WorkingDirectory=$ROOT/carrot
 Environment=PYTHONUNBUFFERED=1
 Environment=OPENBLAS_NUM_THREADS=1
 Environment=OMP_NUM_THREADS=1

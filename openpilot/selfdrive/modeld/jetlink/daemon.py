@@ -65,9 +65,10 @@ class CarrotTransport(FfsTransport):
     os.sched_setaffinity(0, set(range(min(4, os.cpu_count() or 1))))
 
   def _raise_reader_priority(self):
-    # Preserve the Carrot camera/control/sensor scheduling contract. Upstream
-    # raises this thread to FIFO51 on all cores; that is not our placement.
-    os.sched_setscheduler(0, os.SCHED_OTHER, os.sched_param(0))
+    # Only the short USB receive/copy worker is realtime, below modeld/DM.
+    # Main IPC/JSON and display workers remain normal priority. Existing
+    # camera/control/sensor placements and priorities are untouched.
+    os.sched_setscheduler(0, os.SCHED_FIFO, os.sched_param(1))
 
 
 def serve_local(listener, client, peer):
