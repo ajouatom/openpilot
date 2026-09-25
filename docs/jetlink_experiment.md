@@ -44,11 +44,15 @@ disengagement. The local request has a total 150 ms deadline, including partial
 reads, and rejects stale frame IDs, malformed lengths and nonfinite outputs.
 Model/camera gaps retain normal odometry and pose invalidity.
 
-The USB daemon is normal priority, on core7 onroad and cores0..3 offroad.
-Only its brief USB receive worker uses FIFO1, below model/DM. Existing camera,
+The bounded USB/IPC daemon and its receive worker use FIFO1 on core7 onroad,
+below DM (FIFO5) and modeld (FIFO54). Offroad, the main thread returns to normal
+priority and all daemon threads move to cores0..3. Existing camera,
 control, radar, sensor and model priorities/affinities are unchanged. Display
 snapshot/JPEG workers are separate processes using the existing display
 SCHED_OTHER/nice19, core7/onroad and cores0..3/offroad policy.
+The publisher is launched through `chrt --other 0` so it never inherits the
+transport's realtime policy. Cyclic garbage collection runs between USB
+sessions, outside inference deadlines.
 
 ## Jetson installation
 
@@ -103,7 +107,7 @@ Navigation guidance messages are forwarded; the separate navigation map-media
 stream is not implemented in this adapter. A Linux host advertises the display
 extension; the Mac launcher currently provides inference only. `run_mac.sh`
 requires Apple Silicon and a verified Cinque v2 ONNX. Intel Mac support and
-Mac performance have not been tested.
+Mac performance have not been tested. The Mac launcher requires Python3.10+.
 
 ## Validation record (2026-09-25)
 

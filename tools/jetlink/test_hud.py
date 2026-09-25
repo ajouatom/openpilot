@@ -36,3 +36,18 @@ def test_stale_and_oversized_display_data_are_not_shown(tmp_path, monkeypatch):
   path.write_bytes(p.HEADER.pack(9.9) + json.dumps({'version':1, 'params':{}}).encode())
   monkeypatch.setattr(p, '_next_snapshot_read', 0.)
   assert p.read_snapshot()[1]['version'] == 1
+
+
+def test_publisher_does_not_replay_stale_or_duplicate_snapshots(tmp_path, monkeypatch):
+  publisher = object.__new__(p.Publisher)
+  publisher.path = tmp_path / 'publisher'
+  publisher.last_sent = 0.
+  monkeypatch.setattr(p.time, 'monotonic', lambda: 10.)
+  assert publisher.packet() is None
+  publisher.path.write_bytes(p.HEADER.pack(9.9) + b'latest')
+  assert publisher.packet() == b'latest'
+  assert publisher.packet() is None
+  publisher.path.write_bytes(p.HEADER.pack(8.) + b'stale')
+  assert publisher.packet() is None
+  publisher.path.write_bytes(p.HEADER.pack(9.99) + b'x' * (96 * 1024 + 1))
+  assert publisher.packet() is None
