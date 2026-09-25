@@ -19,10 +19,15 @@ REPLY = struct.Struct('<I3I')
 MAX_PACKET = 1 << 20
 
 
-def read_exact(sock, size):
+def read_exact(sock, size, deadline=None):
   result = bytearray(size)
   offset = 0
   while offset < size:
+    if deadline is not None:
+      remaining = deadline - time.monotonic()
+      if remaining <= 0:
+        raise TimeoutError('IPC deadline exceeded')
+      sock.settimeout(remaining)
     try:
       n = sock.recv_into(memoryview(result)[offset:])
     except TimeoutError:
@@ -35,12 +40,12 @@ def read_exact(sock, size):
   return result
 
 
-def receive(sock):
-  size, = struct.unpack('<I', read_exact(sock, 4))
+def receive(sock, deadline=None):
+  size, = struct.unpack('<I', read_exact(sock, 4, deadline))
   if not 0 < size <= MAX_PACKET:
     raise ValueError('invalid IPC packet size')
   try:
-    return read_exact(sock, size)
+    return read_exact(sock, size, deadline)
   except TimeoutError:
     raise ConnectionError('IPC payload timed out') from None
 
@@ -94,11 +99,12 @@ def badge():
 
 class Client:
   def __init__(self, path=SOCKET, timeout=.15):
+    self.timeout = timeout
     self.sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     self.sock.settimeout(timeout)
     try:
       self.sock.connect(path)
-      hello = json.loads(receive(self.sock))
+      hello = json.loads(receive(self.sock, time.monotonic() + timeout))
       validate_spec(ModelSpec.from_dict(hello['spec']))
     except Exception:
       self.sock.close()
@@ -110,8 +116,10 @@ class Client:
       raise ValueError('invalid warped image')
     if packed.dtype != np.float32 or packed.size != SPEC.packed_nelem or not np.all(np.isfinite(packed)):
       raise ValueError('invalid recurrent input')
+    deadline = time.monotonic() + self.timeout
+    self.sock.settimeout(self.timeout)
     send(self.sock, REQUEST.pack(frame, int(reset)) + image.tobytes() + packed.tobytes())
-    reply = receive(self.sock)
+    reply = receive(self.sock, deadline)
     if len(reply) != REPLY.size + SPEC.output_nbytes:
       raise ValueError('invalid inference reply size')
     fid, *self.timings = REPLY.unpack_from(reply)
