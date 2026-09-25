@@ -76,6 +76,7 @@ class JoiningModel:
     self.ready = False
     self.reset = True
     self.error = ''
+    self.small_runs = 0
 
   def update(self, sm):
     now = time.monotonic()
@@ -100,7 +101,7 @@ class JoiningModel:
 
   def run(self, bufs, transforms, inputs, prepare_only):
     from openpilot.common.swaglog import cloudlog
-    if self.client is None and self.ready and self.join_allowed and time.monotonic() >= self.next_join:
+    if self.client is None and self.small_runs >= 3 and self.ready and self.join_allowed and time.monotonic() >= self.next_join:
       try:
         self.client = Client()
         self.packed[:] = 0
@@ -145,4 +146,9 @@ class JoiningModel:
         self.active = False
         self.next_join = time.monotonic() + 5
         self.next_status = 0
-    return self.small.run(bufs, transforms, inputs, prepare_only)
+    result = self.small.run(bufs, transforms, inputs, prepare_only)
+    if result is not None:
+      # Loading the PKL alone leaves its first execution cold (~0.8 s on C4).
+      # Execute the native fallback before allowing an external-model join.
+      self.small_runs += 1
+    return result
