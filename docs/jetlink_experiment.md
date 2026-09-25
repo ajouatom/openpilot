@@ -137,5 +137,64 @@ C3, Mac and driving behavior are not established by these observations.
   FIFO1 USB reader alone did not eliminate them. These are failed intermediate
   configurations, not evidence of validated driving safety.
 
-Further final-configuration results belong below. Private captures, device
-settings and access material are excluded from this repository.
+The final onroad configuration (`ea58c2d0d4`) completed a separate600 s parked
+trial with **DM enabled, both camera previews and USB HUD output**:
+
+| Measurement | Result |
+|---|---:|
+| Model executions observed | 11,999 |
+| Mean / p95 / p99 execution | 43.064 / 49.312 / 51.586 ms |
+| Maximum execution | 57.456 ms |
+| Executions over50 ms | 428 (3.57%) |
+| Model frame-ID gaps / invalid odometry / invalid pose inputs | 0 / 0 / 0 |
+| Camera SOF gaps over75 ms | 0 |
+| Maximum camera SOF interval | 58.940 ms |
+| External-model status samples | 599 active, none inactive/stale |
+| USB HUD reported output | 10 FPS |
+
+All three cameras and livePose had12,000 observations; odometry and DM had
+11,999. Counts at the observation boundaries differ by one; no model frame-ID
+gap was observed. Model time includes camera warp, USB/IPC, TensorRT and model
+processing, not merely GPU kernel time. Above50 ms samples are reported rather
+than hidden by an average; no deadlines or validity thresholds were relaxed.
+This is not a simultaneous controlled comparison with the disconnected eGPU.
+
+The final60 s whole-core observation measured C4 core7 mean60.46%, maximum71%.
+Core4 still briefly reached100%; average headroom is not a driving guarantee.
+The new USB owner used about87 MiB RSS, unchanged across observed checkpoints.
+Jetson samples with inference and display were about12.4 W VDD_IN and65 C;
+VDD_IN is board input power, not GPU-only power. Fan and thermal limits remain
+active. C4, Jetson server, Xorg and USB renderer all recovered after software
+reboots. Jetson reported20.832 s for kernel plus userspace startup; this does
+not include a measured physical ignition-to-display interval.
+
+An earlier600 s DM trial changed USB-owner priority partway through and had
+three frame-ID gaps before the change. It is retained as a mixed-condition
+failed trial and is not substituted for the separate final run above. Its
+120 s FIFO1 subset had2,400 frames, no invalidity, mean43.10 ms/max55.07 ms.
+The combined isolation, GC and scheduling changes improved the measured tail;
+these trials do not independently prove a single cause for every earlier stall.
+
+After the final run, restoring the user's DisableDM=2 stopped the DM processes
+and coincided with one150 ms local IPC timeout and two skipped model inputs.
+The native fallback ran and Jetlink rejoined automatically while parked. The
+hot DM-setting transition remains a known limitation; no claim is made that
+changing this setting under control is validated. DisableDM was restored to2.
+
+Separate process tests under comma UID1000 verified repeated onroad/offroad
+core7-to-cores0..3 transitions and that spawned display work uses SCHED_OTHER.
+They do not substitute for a physical ignition-off/hotplug test. Fifteen
+focused tests passed on C4, including Unix-socket deadline/error handling,
+stale display rejection and model-download integrity/preservation. The new
+NAS HTTPS model was downloaded in full and matched the pinned size/hash.
+
+After deployment of `89453fd137`, a final induced USB-owner SIGINT produced
+`commIssue`, restored native inference (first observed fallback69.66 ms), and
+rejoined the external model about5.05 s after the fault. Model publication
+remained alive throughout the80 s observation after initial subscription.
+The manager restarted the USB owner and the display publisher without manual
+intervention. This tests process/link loss, not physical cable integrity.
+
+Private captures, device settings and access material are excluded from this
+repository. Full measurements and reproduction tools are archived locally
+under `.analysis/archive/2026-09-25/jetlink-integration/`.
