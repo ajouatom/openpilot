@@ -18,7 +18,7 @@ def test_preview_preserves_full_camera_field_and_uv_order():
   uv[:, 0::2] = 71
   uv[:, 1::2] = 183
   frame = SimpleNamespace(width=width, height=height, stride=stride, uv_offset=height * stride,
-                          data=y.tobytes() + uv.tobytes())
+                          data=y.tobytes() + uv.tobytes() + b'padding beyond NV12 planes')
   out = np.frombuffer(preview_nv12(frame), np.uint8)
   np.testing.assert_array_equal(out[:WIDTH * HEIGHT].reshape(HEIGHT, WIDTH), y[::2, :width:2])
   assert np.all(out[WIDTH * HEIGHT::2] == 71)

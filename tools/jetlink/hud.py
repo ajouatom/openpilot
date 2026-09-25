@@ -29,7 +29,7 @@ class DisplayParams:
     return base64.b64decode(value) if value is not None else None
 
   def get_bool(self, key, *args, **kwargs):
-    return self.get(key) == b'1'
+    return self.get(key) in (b'1', b'True')
 
   def get_int(self, key, *args, **kwargs):
     try:
@@ -99,6 +99,11 @@ class RemoteSubMaster:
 
 
 def main():
+  if '--help' not in sys.argv:
+    settings = DisplayParams()
+    while not (settings.get_int('ClusterHud') == 1 and
+               (settings.get_bool('IsOnroad') or settings.get_int('ClusterHudDebug') >= 1)):
+      time.sleep(.2)
   from openpilot.cereal import log
   params_module = types.ModuleType('openpilot.common.params')
   params_module.Params = DisplayParams

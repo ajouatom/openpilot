@@ -3,6 +3,8 @@ import base64
 import json
 from pathlib import Path
 import struct
+import subprocess
+import sys
 import time
 
 HUD_MESSAGE = 0x4000
@@ -24,6 +26,40 @@ PARAMS = ('ClusterHud', 'ClusterHudDebug', 'ClusterHudBrightness', 'ClusterHudOr
 
 
 class Publisher:
+  """Keep cereal decoding, JSON and preview work outside the USB owner's GIL."""
+  def __init__(self):
+    import os
+    self.path = Path(f'/dev/shm/carrot-jetlink-display-{os.getpid()}.packet')
+    self.last_sent = 0.
+    self.process = subprocess.Popen([sys.executable, str(Path(__file__).with_name('hud_publisher.py')), str(self.path)],
+                                    stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
+
+  def packet(self):
+    try:
+      with self.path.open('rb') as f:
+        data = f.read(96 * 1024 + HEADER.size + 1)
+      if not HEADER.size < len(data) <= 96 * 1024 + HEADER.size:
+        return None
+      stamp, = HEADER.unpack_from(data)
+      if stamp == self.last_sent or not 0 <= time.monotonic() - stamp < .3:
+        return None
+      self.last_sent = stamp
+      return data[HEADER.size:]
+    except (OSError, struct.error):
+      return None
+
+  def close(self):
+    self.process.terminate()
+    try:
+      self.process.wait(timeout=2)
+    except subprocess.TimeoutExpired:
+      self.process.kill()
+      self.process.wait(timeout=1)
+    self.path.unlink(missing_ok=True)
+    self.path.with_suffix('.tmp').unlink(missing_ok=True)
+
+
+class SnapshotBuilder:
   def __init__(self):
     from openpilot.cereal import messaging
     from openpilot.common.params import Params
@@ -43,7 +79,7 @@ class Publisher:
     now = time.monotonic()
     if now < self.next_send:
       return None
-    self.next_send = now + .1
+    self.next_send = now + .1 if now - self.next_send > .2 else self.next_send + .1
     self.sm.update(0)
     for name in SERVICES:
       if self.sm.updated[name]:
@@ -56,6 +92,8 @@ class Publisher:
         try:
           value = self.params.get(key)
           if value is not None:
+            if isinstance(value, bool):
+              value = b'1' if value else b'0'
             self.settings[key] = base64.b64encode(value if isinstance(value, bytes) else str(value).encode()).decode()
         except Exception:
           pass
@@ -64,7 +102,13 @@ class Publisher:
               'received': self.sm.recv_time, 'mono': self.sm.logMonoTime,
               'valid': self.sm.valid, 'alive': self.sm.alive, 'cameras': self.camera.latest}
     data = json.dumps(record, separators=(',', ':')).encode()
-    if len(data) > MAX_HUD_BYTES:
+    if len(data) > 96 * 1024:
+      record['cameras'] = {}
+      data = json.dumps(record, separators=(',', ':')).encode()
+    if len(data) > 96 * 1024:
+      record['events'] = {k:v for k,v in self.cached.items() if k != 'navRoute'}
+      data = json.dumps(record, separators=(',', ':')).encode()
+    if len(data) > 96 * 1024:
       raise ValueError('HUD snapshot exceeds bounded USB allocation')
     return data
 
