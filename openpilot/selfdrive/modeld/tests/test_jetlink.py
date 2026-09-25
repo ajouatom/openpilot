@@ -66,7 +66,7 @@ def test_ipc_rejects_stale_nonfinite_truncated_and_missing_results(tmp_path, fai
   worker.start()
   client = link.Client(path, timeout=.05)
   try:
-    with pytest.raises((ValueError, TimeoutError)):
+    with pytest.raises((ValueError, TimeoutError, ConnectionError)):
       client.infer(np.zeros(link.SPEC.warped_shape, np.uint8), np.zeros(link.SPEC.packed_nelem, np.float32), 7)
   finally:
     client.close()
@@ -83,3 +83,26 @@ def test_ipc_rejects_oversized_packet_without_allocating():
   finally:
     a.close()
     b.close()
+
+
+def test_ipc_total_deadline_cannot_be_extended_by_partial_reads():
+  a, b = socket.socketpair()
+  def drip():
+    try:
+      a.sendall(struct.pack('<I', 100))
+      for _ in range(10):
+        a.sendall(b'x')
+        time.sleep(.02)
+    except OSError:
+      pass
+  worker = threading.Thread(target=drip)
+  worker.start()
+  start = time.monotonic()
+  try:
+    with pytest.raises((TimeoutError, ConnectionError)):
+      link.receive(b, start + .05)
+    assert time.monotonic() - start < .15
+  finally:
+    b.close()
+    worker.join()
+    a.close()

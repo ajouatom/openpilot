@@ -1,0 +1,140 @@
+"""Run the existing Carrot renderer using read-only, USB-forwarded cereal data."""
+import base64
+import json
+import os
+from pathlib import Path
+import sys
+import time
+import types
+
+ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(ROOT / 'openpilot/selfdrive/carrot/cluster'))
+from hud_protocol import read_snapshot, SERVICES
+
+
+class DisplayParams:
+  """Only this renderer sees this adapter; no vehicle Params can be written."""
+  def __init__(self, *args, **kwargs):
+    self.next_read = 0.
+    self.values = {}
+
+  def get(self, key, *args, **kwargs):
+    now = time.monotonic()
+    if now >= self.next_read:
+      record = read_snapshot()
+      self.values = record[1]['params'] if record else {}
+      self.next_read = now + .1
+    value = self.values.get(key)
+    return base64.b64decode(value) if value is not None else None
+
+  def get_bool(self, key, *args, **kwargs):
+    return self.get(key) == b'1'
+
+  def get_int(self, key, *args, **kwargs):
+    try:
+      return int(self.get(key) or 0)
+    except ValueError:
+      return 0
+
+  def get_float(self, key, *args, **kwargs):
+    try:
+      return float(self.get(key) or 0)
+    except ValueError:
+      return 0.
+
+  def put_bool_nonblocking(self, key, value):
+    if key == 'ClusterHudConnected':
+      Path('/dev/shm/carrot-jetlink-hud-connected').write_text(str(bool(value)))
+
+
+class RemoteSubMaster:
+  def __init__(self, services):
+    from openpilot.cereal import log
+    self.log = log
+    self.services = services
+    self.data = {}
+    self.updated = dict.fromkeys(services, False)
+    self.valid = dict.fromkeys(services, False)
+    self.alive = dict.fromkeys(services, False)
+    self.recv_time = dict.fromkeys(services, 0.)
+    self.logMonoTime = dict.fromkeys(services, 0)
+    self.generations = {}
+    self.last_received = 0.
+    for name in services:
+      self.data[name] = log.Event.new_message(**{name: {}}) if name != 'liveTracks' else log.Event.new_message(liveTracks={})
+
+  def __getitem__(self, key):
+    return getattr(self.data[key], key)
+
+  def update(self, timeout=0):
+    self.updated = dict.fromkeys(self.services, False)
+    snapshot = read_snapshot()
+    if snapshot is None:
+      self.valid = dict.fromkeys(self.services, False)
+      self.alive = dict.fromkeys(self.services, False)
+      return
+    received, value = snapshot
+    if received == self.last_received:
+      return
+    self.last_received = received
+    shift = received - value['sent']
+    for name in self.services:
+      if name not in SERVICES:
+        continue
+      self.valid[name] = bool(value['valid'].get(name, False))
+      self.alive[name] = bool(value['alive'].get(name, False))
+      self.recv_time[name] = value['received'].get(name, 0.) + shift
+      mono = value['mono'].get(name, 0)
+      self.logMonoTime[name] = int(mono + shift * 1e9)
+      if mono == self.generations.get(name) or name not in value['events']:
+        continue
+      raw = base64.b64decode(value['events'][name])
+      with self.log.Event.from_bytes(raw) as reader:
+        if reader.which() != name:
+          raise ValueError('display service identity mismatch')
+        self.data[name] = reader.as_builder()
+      self.generations[name] = mono
+      self.updated[name] = True
+
+
+def main():
+  from openpilot.cereal import log
+  params_module = types.ModuleType('openpilot.common.params')
+  params_module.Params = DisplayParams
+  sys.modules[params_module.__name__] = params_module
+  messaging = types.ModuleType('openpilot.cereal.messaging')
+  messaging.SubMaster = RemoteSubMaster
+  def from_bytes(data, schema=log.Event):
+    with schema.from_bytes(data) as reader:
+      return reader.as_builder()
+  messaging.log_from_bytes = from_bytes
+  sys.modules[messaging.__name__] = messaging
+  import cluster_live_camera
+  from hud_camera import RemoteRoadCamera
+  cluster_live_camera.LiveRoadCamera = RemoteRoadCamera
+  import main as cluster
+  class Display(cluster.TuringUsbDisplay):
+    next_status = 0.
+
+    def send_h264_chunk(self, *args, **kwargs):
+      result = super().send_h264_chunk(*args, **kwargs)
+      now = time.monotonic()
+      if now >= self.next_status:
+        path = Path('/dev/shm/carrot-jetlink-hud-status.json')
+        tmp = path.with_suffix('.tmp')
+        tmp.write_text(json.dumps({'updated': now}))
+        os.replace(tmp, path)
+        self.next_status = now + 1
+      return result
+  cluster.TuringUsbDisplay = Display
+  # Jetson has no video encoder block. Keep inference CPU/GPU headroom and
+  # use the existing software encoder at the normal 10 FPS cluster rate.
+  sys.argv = [__file__, '--input', 'live', '--output', 'usb', '--fps', '10',
+              '--usb-codec', 'h264', '--usb-h264-backend', 'ffmpeg',
+              '--usb-h264-ffmpeg-encoder', 'libx264', '--cluster-hud-mode', '1', *sys.argv[1:]]
+  cluster.main()
+
+
+if __name__ == '__main__':
+  main()

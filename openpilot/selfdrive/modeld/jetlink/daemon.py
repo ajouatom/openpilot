@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 import socket
 import subprocess
+import sys
 import time
 
 import numpy as np
@@ -18,6 +19,29 @@ from jetlink.transport.ffs import FfsTransport
 GADGET = '/sys/kernel/config/usb_gadget/jetlink'
 ROLE = Path('/sys/class/power_supply/usb/typec_mode')
 log = logging.getLogger('carrot.jetlink')
+sys.path.insert(0, str(VENDOR.parents[1] / 'tools/jetlink'))
+from hud_protocol import Publisher, HUD_CAPABILITY, HUD_MESSAGE
+
+
+def update_affinity():
+  from openpilot.common.params import Params
+  cores = {7} if Params().get_bool('IsOnroad') and Path('/sys/devices/system/cpu/cpu7/online').read_text().strip() == '1' else set(range(4))
+  for thread in Path('/proc/self/task').iterdir():
+    try:
+      os.sched_setaffinity(int(thread.name), cores)
+    except ProcessLookupError:
+      pass
+
+
+def publish_hud(client, publisher):
+  if publisher is not None:
+    try:
+      packet = publisher.packet()
+    except Exception:
+      log.exception('display snapshot unavailable')
+      return
+    if packet:
+      client.t.send(HUD_MESSAGE, client._next_seq(), [packet])
 
 
 def host_attached():
@@ -47,15 +71,28 @@ class CarrotTransport(FfsTransport):
 
 
 def serve_local(listener, client, peer):
+  publisher = Publisher() if peer.get(HUD_CAPABILITY) else None
+  try:
+    _serve_local(listener, client, peer, publisher)
+  finally:
+    if publisher is not None:
+      publisher.close()
+
+
+def _serve_local(listener, client, peer, publisher):
+  from openpilot.common.params import Params
+  params = Params()
   last_status = 0.
   last_ping = time.monotonic()
   while host_attached():
     if time.monotonic() - last_status >= 1:
+      update_affinity()
       publish('ready', peer=peer)
       last_status = time.monotonic()
     try:
       connection, _ = listener.accept()
     except TimeoutError:
+      publish_hud(client, publisher)
       if time.monotonic() - last_ping > 2:
         client.ping()
         last_ping = time.monotonic()
@@ -66,6 +103,9 @@ def serve_local(listener, client, peer):
         send(connection, json.dumps({'spec': SPEC.to_dict(), 'peer': peer}).encode())
         while host_attached():
           if time.monotonic() - last_status >= 1:
+            update_affinity()
+            if publisher is not None:
+              params.put_bool_nonblocking('ClusterHudConnected', bool((client.last_state or {}).get('carrot_hud_connected')))
             publish('ready', peer=peer, timings=list(client.last_timings))
             last_status = time.monotonic()
           try:
@@ -84,6 +124,7 @@ def serve_local(listener, client, peer):
             raise ValueError('invalid local model context')
           output = client.infer(images, packed, frame, reset=bool(reset), want_state=(frame % 20 == 0))
           send(connection, REPLY.pack(frame, *client.last_timings) + output.tobytes())
+          publish_hud(client, publisher)
       except (ConnectionError, BrokenPipeError, ValueError) as exc:
         log.info('local client ended: %s', exc)
     last_ping = time.monotonic()
@@ -100,7 +141,7 @@ def main():
   listener.bind(SOCKET)
   os.chmod(SOCKET, 0o600)
   listener.listen(1)
-  listener.settimeout(.5)
+  listener.settimeout(.05)
   setup = VENDOR.parents[1] / 'tools/jetlink/setup_gadget.sh'
   try:
     while True:
@@ -115,16 +156,23 @@ def main():
         udc = next(Path('/sys/class/udc').iterdir()).name
         client = JetlinkClient(CarrotTransport('/dev/ffs-jetlink', gadget=GADGET, udc=udc), name='carrot-jetlink')
         peer = client.hello()
+        speed = (Path('/sys/class/udc') / udc / 'current_speed').read_text().strip()
+        if speed not in ('super-speed', 'super-speed-plus'):
+          raise RuntimeError(f'USB 5Gbps or faster required; negotiated {speed}')
         publish('loading', peer=peer)
         validate_spec(client.ensure_engine(SPEC.sha256, SPEC.nbytes, frame_skip=SPEC.frame_skip, build_timeout=30))
         # Warm independently of camera/modeld; every real session resets state.
-        client.infer(np.zeros(SPEC.warped_shape, np.uint8), np.zeros(SPEC.packed_nelem, np.float32), 0, reset=True)
+        for frame in range(10):
+          client.infer(np.zeros(SPEC.warped_shape, np.uint8), np.zeros(SPEC.packed_nelem, np.float32), frame, reset=True)
         log.info('Jetlink ready: %s', peer)
         serve_local(listener, client, peer)
       except Exception as exc:
         log.exception('Jetlink connection failed')
         publish('retrying', error=str(exc)[:300])
       finally:
+        if client is not None and client.last_state is not None and 'carrot_hud_connected' in client.last_state:
+          from openpilot.common.params import Params
+          Params().put_bool_nonblocking('ClusterHudConnected', False)
         if client is not None:
           try:
             client.close()
