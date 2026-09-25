@@ -20,7 +20,8 @@ def main():
   parser = argparse.ArgumentParser(description=__doc__)
   parser.add_argument('output', type=Path)
   args = parser.parse_args()
-  git = ['git', '-c', f'safe.directory={ROOT.as_posix()}', '-C', str(ROOT)]
+  git = ['git', '-c', f'safe.directory={ROOT.as_posix()}', '-c', 'core.autocrlf=false',
+         '-c', 'core.eol=lf', '-C', str(ROOT)]
   subprocess.run([*git, 'diff', '--quiet', 'HEAD', '--', *PATHS], check=True)
   commit = subprocess.check_output([*git, 'rev-parse', 'HEAD'])
   archive = subprocess.check_output([*git, 'archive', 'HEAD', *PATHS])
