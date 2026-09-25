@@ -680,3 +680,30 @@ Evidence, scripts, captures and file hashes are retained privately under
 Git-tracked captures or a remote backup. This is a parked C4/Jetson improvement,
 not hard realtime, loaded-driving, C3 or Mac validation. Startup memory pressure
 and rare USB send tails remain unresolved work.
+
+
+Runtime commit `4c5be00b8d` was pushed only to `carrot-jetlink`, installed by
+verified fast-forward on C4 and rebooted. Linux target tests again passed28.
+The restored original DisableDM=2 observation ran90.002 seconds with1,800
+models: mean/p99/max36.682/40.237/46.810 ms, no >50 ms execution, no frame gaps
+or monitored pose/CAN invalidity, and90/90 external-active samples. DM was
+intentionally absent in this restoration check; full-DM evidence is the600 s
+run above. Live ClusterHudConnected was true. The tracked C4 tree was clean;
+model core7 FIFO54, USB owner/reader little cores FIFO1, HUD core7 normal/nice19
+and native GPU priority12 were verified. Original VM ratios20/10 and
+min_free_kbytes7423 were restored; no private GPU/phase trial module remains.
+Jetson server, HUD, Xorg and performance services were all active on unchanged
+compatible host source f5749653. No new host USB protocol or install is needed.
+
+Full cereal decoding of the pre-final boot additionally locates the two startup
+incidents at boot110.038 and153.048 seconds, before the157.339 s clean benchmark.
+The first included model execution844.926 ms on timeout/fallback and camera
+intervals up to500.974 ms; the second included116.034 ms execution, one skipped
+input and one invalid pose message. Do not attribute every startup failure to
+USB allocation or omit these failures when assessing ignition-on reliability.
+
+The final boot console also logged a later frame2413 beyond the90 s restoration
+window: warp4.24 + local roundtrip45.52 + parse0.66 ms (about50.42 ms), with
+server GPU22.28/queue1.43/total23.92 ms. Thus even the restored-DM-off session
+cannot be described as universally below50 ms. The bounded diagnostic remains
+enabled to preserve evidence of occasional communication/scheduling tails.
