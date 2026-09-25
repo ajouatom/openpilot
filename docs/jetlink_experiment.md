@@ -346,6 +346,23 @@ affinities verified the placements; main/reader remained FIFO1 and watchdog
 SCHED_OTHER. The return to A supports a roughly3 ms mean improvement from
 moving the whole USB process, rather than moving only its reader.
 
+The instrumented response interval fell from27.424 to25.722 ms mean, and
+the maximum reader-to-consumer handoff from5.933 to0.564 ms. Request submission
+mean increased from3.782 to4.564 ms; overall improvement is not faster request
+transmission. GPU means stayed near20.1 ms. Warp remained variable, with a
+maximum18.494 ms in the all-little condition. These overlapping intervals
+locate the improvement in response/IPC handling while retaining a separate
+preprocessing tail.
+
+Among the1,797 joined all-little records,17 instrumented calls exceeded50 ms
+(the enclosing published duration includes another approximately0.17 ms).
+Their warp mean was16.920 ms versus8.033 ms in other calls, while request
+submission means were4.556 versus4.564 ms. GPU means were21.092 versus20.103 ms
+and response means27.525 versus25.704 ms. The remaining slow-call group is
+dominated by additional warp elapsed time; this does not by itself distinguish
+QCOM queue/synchronization from CPU submission work. Cached output/binding
+micro-optimizations did not establish a fix for this tail.
+
 The adapter now keeps USB main/reader/watchdog on cores0..3. All existing
 camera/control/model/DM and display-worker placements/priorities are retained,
 as are watchdog deadlines, fallback/rejoin gates and model validity policies.
@@ -359,3 +376,52 @@ establish stable timing; both were discarded. The committed code retains the
 original warp implementation. Temporary recording modules and diagnostic
 mode switches are not part of the deployed change. Local tests passed18 host
 checks and4 model checks;4 Unix-socket cases require target Linux execution.
+
+On the target C4, all8 model/link tests subsequently passed using the existing
+isolated test dependencies. C4 and Jetson were updated to source
+`f5749653f5`; the Jetson source was staged separately with the old source
+retained for rollback. Windows checksum sidecars initially included CRLF,
+which Linux sha256sum interpreted as a carriage return in the archive name.
+The builder now emits LF and tests exact checksum bytes; the rebuilt bundle
+passed sha256sum on the Jetson. Its renderer resumed USB H.264 at10 Hz with
+26/26 forwarded services alive. The temporary host instrumentation override
+and C4 diagnostic flags/modules were removed before extended validation.
+
+### Clean deployment,600 s with DM and full USB HUD
+
+The deployed, uninstrumented runtime observed12,001 model/odometry messages,
+12,001 messages per camera and12,002 DM/pose messages. Model execution mean
+was40.721 ms, p9545.462 ms, p9949.215 ms and maximum61.053 ms. There were76
+executions above50 ms (0.633%) and none above75 ms. No model frame-ID gaps,
+invalid odometry/pose/CAN inputs or camera intervals above75 ms were observed;
+camera maximum was58.820 ms. DM mean/p99/maximum were20.770/28.584/32.949 ms.
+All599 periodic external-model status samples were active.
+
+Compared with the earlier600 s full-HUD/DM observation, mean and p99 improved
+from43.064/51.586 to40.721/49.215 ms, and above50 ms executions fell from
+428/11,999 (3.57%) to76/12,001 (0.633%). However, the new maximum61.053 ms
+exceeded the earlier57.456 ms. This is improved typical/tail frequency, **not
+a demonstrated bound of50 ms or elimination of rare long executions**. The
+long-run comparison spans different boots; the within-boot A/B/A above is
+the placement comparison. The clean run has no detailed stage trace and
+cannot assign its61 ms maximum to one stage.
+
+Read-only deployment checks confirmed C4 main/reader FIFO1 and watchdog
+SCHED_OTHER on cores0..3, no diagnostic source/flags/tracing instance, a live
+`jetSON` badge, and a fresh Jetson HUD snapshot with `external_compute_label`
+`jetSON`. All four host services were active, with no temporary instrumentation
+override. MAC identification is tested in software, not on a physical Mac.
+
+Original DisableDM=2 was restored before reboot. After automatic external
+rejoin, a60 s observation with the original DM-disabled setting and full HUD
+had1,200 model/odometry/pose/camera messages, no invalid inputs or frame gaps,
+and model mean39.501 ms, p9943.582 ms, maximum47.625 ms, zero above50 ms.
+The fresh `jetSON` status and little-core USB placement remained active.
+This short restoration check is not evidence of an all-conditions50 ms bound.
+Both devices retain tested runtime source `f5749653f5`; subsequent investigation
+documentation commits do not change that runtime.
+
+Private captures, diagnostic source, exact candidate comparisons, target
+verification and reproduction notes are retained with an index under
+`.analysis/archive/2026-09-25/jetlink-stability/`. No vehicle captures or
+credentials are part of the experiment commits.
