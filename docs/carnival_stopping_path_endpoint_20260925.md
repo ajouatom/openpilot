@@ -184,6 +184,22 @@ workflow and scheduled NAS updater. Completion requires the intended image
 commit, verified updater state, actual upload-result page and recalculated
 incident data to agree with the fresh committed bundle.
 
+Deployment was verified on September 25 at 13:43 KST for source commit
+`1b7dbbd3fef8e18f24e203971e1df402ead3f07e`. The
+[Carrot Routes image workflow](https://github.com/ajouatom/openpilot/actions/runs/36095183097)
+passed all 1,454 Linux tests and published the image. The scheduled NAS updater
+reports `updated` and the same source commit; the live health endpoint agrees.
+The actual incident result page returns HTTP 200 with its radar viewer.
+All 1,200 served frames and all seven graphs exactly match the fresh committed
+bundle. Front 43 occupies all 28 frames in the maintained continuity window,
+compared with 12/28 on the previous deployed replay.
+
+The deployed source fingerprint is `351876445bb5b8110b8a`. Computing the same
+fingerprint on Windows requires reproducing Linux's case-sensitive PosixPath
+sort order; the native Windows path sort gives a different hash over the same
+bytes. This ordering difference was resolved for verification without changing
+the production fingerprint implementation or any replay frame/graph content.
+
 Private reproduction scripts, selected telemetry CSV, frame contact sheet,
 counts and summaries are indexed in
 `.analysis/archive/2026-09-25/carnival-target-loss/INDEX.md`. Raw inputs remain
