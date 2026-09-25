@@ -425,3 +425,258 @@ Private captures, diagnostic source, exact candidate comparisons, target
 verification and reproduction notes are retained with an index under
 `.analysis/archive/2026-09-25/jetlink-stability/`. No vehicle captures or
 credentials are part of the experiment commits.
+
+### Further deadline work: C4 fused warp and bounded IPC buffers, September25
+
+The upstream comparison confirmed all45 vendored Python runtime files match
+Jetlink194ff6dc after newline normalization. Its separate comma integration
+uses endpoint lending/direct modeld IO, FIFO51 receive scheduling, precompiled
+warp and VM dirty/free-memory tuning. Carrot retains the separate USB process,
+FIFO1/little-core placement and150 ms IPC failure deadline. Do not import the
+upstream500 ms timeout as a latency fix. Upstream source comments describe
+100-350 ms allocation/reclaim stalls and a244-to72 ms maximum after VM tuning;
+these are author-reported observations, not a diagnosis of this C4's tail.
+The upstream31 ms table is recorded-segment replay, not the full camera/DM/HUD
+load measured here. Comparison sources and exact revisions are privately
+indexed in `.analysis/archive/2026-09-25/jetlink-upstream-review/`.
+
+A live modeld libusb_event thread inherited core7/FIFO54. A90-second-per-arm
+parked A/B/A moving only this helper to little/SCHED_OTHER gave mean model
+40.597/40.497/40.546 ms, maxima53.688/52.572/50.465 ms and10/7/4 executions
+above50 ms. There was no demonstrated causal tail improvement; its original
+policy was restored. Other model/DM/control/camera priorities remain unchanged.
+
+Further bounded instrumentation split warp preparation, dispatch, buffer
+resolution, GPU synchronization and CPU copy. In the original1801-frame arm,
+dispatch averaged4.749 ms (p9912.403), explicit GPU synchronization0.722 ms
+(p997.695), and the following copy1.987 ms (p992.356). Slow warp calls had
+9.180 ms dispatch and3.514 ms synchronization but1.960 ms copying. Their
+dispatch CPU time was3.801 ms and scheduling wait was negligible, localizing
+the variable time to blocking inside submission/completion rather than proving
+a CPU runqueue or USB bandwidth cause. The exact KGSL operation was not traced.
+
+The IPC optimization uses scatter/gather send and a per-connection bounded
+receive buffer, initially retaining the byte framing and copying model outputs
+so the next reply cannot overwrite retained results. Header/payload partial
+timeouts abandon the stream. The client's single existing150 ms deadline now
+also covers partial sends. Positive multi-frame, partial-write, fragmentation,
+oversize, stale/nonfinite/truncated reply and total-deadline tests exercise the
+protocol. No model inputs, recurrent state or validity thresholds change.
+
+In90-second arms with DM/full HUD, original/IPC-only/borrowed-GPU-view/original
+means were40.959/40.630/40.164/40.839 ms, maxima54.488/52.630/51.943/55.340 ms,
+and above50 counts14/10/6/15. Borrowing the GPU mapping moved most of the saved
+copy time into socket submission: warp7.927-to5.959 ms but roundtrip31.853-to
+33.350 ms. That candidate was discarded; production retains an owned CPU array.
+Replacing numpy() with data() alone is not allocation-free in this tinygrad:
+both use Buffer.as_memoryview(), which allocates and copies by default.
+
+The selected C4-only warp samples NV12 directly into Y00/Y10/Y01/Y11/U/V planes,
+fusing separate chroma extraction, plane warps and packing while preserving
+projection operation order, rounding and border clamping. A separate direct
+chroma-gather candidate did not materially improve timing. The fused candidate
+matched every393,216-byte output in27 synthetic geometry/rounding probes and
+32 real camera pairs. It also matched distinct transforms and random image
+contents for both cameras. Synthetic benchmarks ran alongside the live system
+on little cores: original/direct-chroma/fused/original means12.442/12.287/7.963/
+12.387 ms. These are not standalone GPU kernel times or production frame times.
+
+With IPC improvement held constant,90-second original/fused/original C4 arms
+with DM and full HUD gave:
+
+| Warp | Model mean | p99 | Maximum | Above50 ms |
+| --- | ---: | ---: | ---: | ---: |
+| Original A |40.826 ms|49.452 ms|53.202 ms|14/1802|
+| Fused B |38.383 ms|44.974 ms|49.169 ms|0/1800|
+| Original A2 |41.092 ms|49.409 ms|53.177 ms|11/1800|
+
+All three arms had no model frame gaps or pose/CAN invalidity. Fused warp mean
+was5.686 ms versus8.064/8.217 ms; fused dispatch mean/max1.660/2.094 ms.
+GPU completion still had an11.328 ms isolated wait, so this is not proof of
+bounded GPU latency. DM execution means also fell20.351-to18.457-to20.410 ms.
+
+Production selects the fused warp only on C4/mici, after exact startup GPU
+comparison against the original warp on27 seeded probes. Any compilation or
+pixel failure retains the original warp; C3 keeps the original path. Slow
+model frames record warp prepare/submit/read, IPC roundtrip and server timings
+at most once per second. Diagnostic mode switches/mmap recorders are excluded.
+No VM tuning, GPU context priority, process-priority or power changes are part
+of this candidate. Parked observations do not establish loaded driving, C3,
+Mac, thermal extremes or a hard50 ms guarantee.
+
+After removing the diagnostic modules and rebooting, the first clean600 s
+DM/full-HUD run produced12,000 valid model messages: mean37.906 ms,
+p9944.432 ms, maximum52.954 ms and4 above50 ms (0.0333%). There were no model
+frame gaps, pose/CAN invalidity or camera intervals above75 ms in that window;
+camera maximum59.694 ms. DM mean/p99/max18.534/25.763/32.735 ms. Original
+DisableDM=2 was restored afterward. Relative to the earlier600 s deployed run,
+above50 executions fell76-to4 and maximum61.053-to52.954 ms across boots;
+the same-boot A/B/A above supplies the controlled warp comparison.
+
+This clean observation began at uptime158.048 s. Earlier in the same boot,
+the bounded log recorded external frame826 with7.07 ms warp,149.92 ms IPC
+roundtrip and23.85 ms server total, followed by two dropped input frames and
+invalid pose inputs. That event is outside the clean window and is not fixed
+or explained by the steady-state result. Later over50 frames included both
+long GPU completion waits and elevated roundtrip times. Global direct-reclaim
+counters also increased, but without per-frame tracing that is not causal
+attribution. Further memory/GPU scheduling comparisons were therefore required.
+
+The full cold-start rlog and console localize frame826 further: camera maximum
+intervals were56.89/56.94/56.94 ms, while USB send took123.2 ms, response24.9 ms
+and local reply0.2 ms. Thus this event is in the request transmission path,
+not slow Jetson inference or a camera gap. This does not distinguish C4 kernel
+allocation, USB completion or a temporarily unavailable host reader. The same
+boot's cold native-model warmup also took764 ms before external join; startup
+and steady-state timings must remain separate.
+
+An180 s-per-arm VM A/B/A tested upstream dirty_bytes=16 MiB,
+dirty_background_bytes=8 MiB and min_free_kbytes=128 MiB against the original
+ratio20/10 and min_free_kbytes7423. Model means38.004/38.025/37.945 ms,
+p9944.415/44.386/44.300 ms, maxima49.047/50.736/48.873 ms and above50 counts
+0/2/0 showed no demonstrated latency benefit. All arms had3,600 models,
+normal DM and no pose/CAN failures. Direct reclaim counter increments were
+2/0/0; the two B deadline misses therefore cannot be attributed to those global
+reclaim counters. The original VM settings were restored; no global VM tuning
+is part of the selected change.
+
+GPU debugfs confirmed both the normal native-model and DM contexts use
+priority12, while UI uses8 (lower numeric value has higher GPU priority).
+CPU FIFO priorities do not order those separate GPU command streams. A private
+second-QCOM-context prototype at GPU priority8 left native fallback/DM at12
+and all CPU policies unchanged. It passed27 distinct-camera exact pixel probes
+and32 live-camera comparisons. Its120 s-per-arm original/priority8/original
+comparison measured mean38.134/37.069/38.225 ms, p9944.362/40.650/45.199 ms,
+maximum62.289/44.927/61.054 ms and above50 counts2/0/2. Each arm had about2,400
+models, normal20 Hz DM, no camera/model gaps and no pose/CAN invalidity.
+DM means18.389/17.732/17.981 ms, maxima29.468/29.664/30.785 ms.
+This short comparison supports a GPU scheduling contribution but does not
+establish a hard deadline or solve the separate long USB-send event.
+
+The prototype needs a QCOM allocator map hook for same-process KGSL signal
+buffers before creating a second context; stock tinygrad rejects that mapping.
+KGSL page tables are shared by process, and HCQ retains borrower timelines
+until free. This private backend experiment is not part of the current clean
+fused-warp/IPC change. A subsequent DM-enable warmup also exceeded the150 ms
+IPC deadline and correctly fell back/rejoined while parked; it is outside the
+settled comparison windows and must not be counted as a successful deadline.
+
+A thread inventory found two HUD snapshot/preview workers pinned to core7,
+using3.6% and8.9% CPU in that10 s sample. Model/DM also have mostly idle helper
+threads there; the inventory includes per-CPU kernel workers and a low-activity
+Wi-Fi receive worker, so application affinity is not exclusive core ownership.
+Moving only the two HUD workers to cores0..3 at normal/low priority in90 s
+A/B/A arms gave means38.365/38.002/37.895 ms, p9945.158/44.063/43.774 ms and
+maxima49.096/48.995/48.018 ms. All three had1,800 models, zero above50 and no
+pose/CAN/frame failures. The reversal did not reverse the improvement, so this
+does not establish a benefit from removing HUD CPU work. Original placement
+was restored. Jetson HUD/server services stayed active and the live C4 HUD
+connected parameter was true; the handshake's initial false telemetry is stale.
+
+A separate bounded kernel trace selected only the USB owner's writev syscall
+and direct-reclaim/compaction events in an independent trace instance. Across
+1,453 model writes of475,136 bytes, writev mean/p99/max were3.483/5.819/7.550 ms;
+703 HUD writes averaged1.522 ms, maximum3.942 ms. No selected reclaim/compaction
+event or100+ ms send reproduced, including this DM-enable transition. Trace
+settings and DisableDM were restored. This trace does not identify the cause
+of the earlier123.2 ms event. The AGNOS4.9 FunctionFS source allocates a kernel
+buffer for each request before queuing USB IO; allocation/reclaim is a candidate,
+not an established explanation. Splitting the message is not adopted because
+the upstream transport deliberately uses one write to avoid a known DWC3 replay.
+
+### Aligning DM after the current C4 image upload
+
+DM normally runs immediately after receiving its driver-camera buffer, without
+waiting for the driving-model warp/upload. The CPU FIFO54/5 ordering does not
+prevent an earlier DM GPU submission from overlapping a later driving warp.
+The user's proposed upload-then-DM ordering was tested without changing either
+model, cadence, recurrent state or validity policy.
+
+An initial notification carrying only wall-clock send completion was inadequate:
+the preceding road frame's upload can complete after the current driver SOF.
+That experiment barely waited and is not evidence for ordering the same frame.
+A follow-up explicitly joined the selected driving camera's SOF to its local
+inference request and upload completion. Without gating, DM began about46.7 ms
+after its SOF, while road upload completed about63.7 ms after its source SOF.
+The latest completed road image was normally one frame older than the driver's.
+
+With a12 ms maximum requested wait, only80/1801 samples in the selected arm
+reached the corresponding road upload before proceeding; mean actual wait was
+12.597 ms. Model means in90 s A/B/A arms were38.042/36.798/37.925 ms,
+p9944.380/40.308/44.200 ms and maxima49.084/44.125/49.235 ms. DM means changed
+18.365/27.189/18.490 ms including the wait, with B maximum33.542 ms. No frame
+gaps or pose/CAN failures occurred inside these settled arms.
+
+A25 ms requested cap reached the matching camera upload in1199/1200 B samples;
+the remaining sample proceeded on timeout. Actual wait mean/p99/max were
+17.061/23.309/25.124 ms. Separate60 s A/B/A arms gave:
+
+| DM scheduling | Model mean | p99 | Maximum | DM mean / maximum |
+| --- | ---: | ---: | ---: | ---: |
+| Immediate A |38.076 ms|44.610 ms|49.864 ms|18.157 /30.270 ms|
+| After matching upload B |36.838 ms|40.808 ms|41.794 ms|31.062 /41.960 ms|
+| Immediate A2 |38.271 ms|45.517 ms|49.338 ms|18.103 /26.973 ms|
+
+All arms retained20 Hz driving/DM outputs and had no camera/model/DM frame
+gaps or pose/CAN failures. The benefit trades later DM publication for less
+driving-warp contention; do not describe DM execution alone as unchanged or
+exclude its wait from modelExecutionTime. A scheduler timeout caps intentional
+waiting, not all kernel/scheduling delays, and is not a hard realtime proof.
+
+The clean candidate carries source SOF in the C4-local request header, then
+uses a nonblocking16-byte datagram after USB upload. The USB/Jetlink protocol
+and host source remain unchanged. Only C4 supplies the phase timestamp and
+only a Jetson peer emits notifications; native eGPU, C3 and Mac keep their
+existing scheduling. Local client/daemon must be restarted together for the
+expanded internal request header. The receiver rejects malformed, stale,
+future and reordered notifications, tolerates5 ms cross-camera SOF skew and
+waits at most25 ms intentionally. With no fresh publisher, missing current
+upload, bind failure or socket error, DM proceeds independently. No frame is
+skipped, no rate is reduced and no driver-monitoring threshold is changed.
+
+Private GPU-context changes, HUD placement switches, shared-memory timing
+recorders and runtime mode files are excluded from the clean candidate.
+Linux target tests passed28 cases, including actual local IPC and abstract
+datagram sockets, same-frame release, previous-frame timeout, absent publisher/
+DM, bind failure and malformed timestamps. Desktop tests passed18 with10
+platform socket cases skipped. A pre-existing unused `lat_delay` in modeld
+remains outside this change; the adapter/DM/new tests pass focused lint.
+
+
+### Clean phase candidate, full DM and USB display: 600 seconds
+
+The clean production candidate ran from boot157.339 to757.354 seconds with
+12,001 driving-model outputs and12,002 DM outputs. Model execution mean/p99/
+maximum were36.820/40.744/47.728 ms, with zero above50 ms. DM execution including
+phase wait was30.173/37.111/45.551 ms. No model/DM frame gap, invalid monitored
+message, pose input/sensor/posenet failure or CAN invalidity occurred. All599
+external-status samples were active Cinque v2 on Orin-sm87 TensorRT10.3. The
+USB display remained connected. The original DisableDM=2 was restored by the
+runner's finally block.
+
+This does not imply an exactly50 ms publication interval: model publication
+p99/max were61.487/69.072 ms and DM60.631/67.273 ms, with means49.993 ms. Driver
+camera SOF to DM publication mean/p99/max were77.670/87.023/91.963 ms, including
+camera delivery, waiting and inference. Camera interval maximum was58.477 ms.
+Execution duration, output cadence and source-image age are distinct metrics.
+
+The same boot outside that settled window still failed during DM initialization:
+a local send exceeded the150 ms deadline and fell back, with camera/model gaps.
+A later DM start logged FunctionFS write ENOMEM, a temporary write_chunk decrease
+to256 KiB, and USB frame1533 send83.1/response26.3/local reply0.2 ms, followed by
+one skipped model input and invalid odometry. The vendored implementation invokes
+that shrink only after ENOMEM and resets its512 KiB quantum on the next message.
+This directly associates allocation failure with this new send outlier; it does
+not prove the earlier123.2 ms event had the same cause. No transport chunk policy
+or kernel memory setting was changed. Full startup console is retained privately.
+
+The final diagnostic-only adjustment retains USB send/response timing in a
+finally block if the already-timed-out local client rejects the reply. It does
+not change successful inference, transport deadlines or fallback policy. The
+local IPC test also verifies a nonzero camera SOF survives request framing.
+
+Evidence, scripts, captures and file hashes are retained privately under
+`.analysis/archive/2026-09-25/jetlink-realtime/`; they are not public model files,
+Git-tracked captures or a remote backup. This is a parked C4/Jetson improvement,
+not hard realtime, loaded-driving, C3 or Mac validation. Startup memory pressure
+and rare USB send tails remain unresolved work.

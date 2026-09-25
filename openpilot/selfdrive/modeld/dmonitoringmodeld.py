@@ -132,6 +132,10 @@ def main():
   calib = np.zeros(model.numpy_inputs['calib'].size, dtype=np.float32)
   model_transform = None
 
+  from openpilot.system.hardware import HARDWARE
+  from openpilot.selfdrive.modeld.jetlink.phase import Gate
+  phase_gate = Gate() if HARDWARE.get_device_type() == 'mici' else None
+
   while True:
     if first_buf is not None:
       buf = first_buf
@@ -150,6 +154,8 @@ def main():
       calib[:] = np.array(sm["liveCalibration"].rpyCalib)
 
     t1 = time.perf_counter()
+    if phase_gate is not None:
+      phase_gate.wait(vipc_client.timestamp_sof)
     model_output, gpu_execution_time = model.run(buf, calib, model_transform)
     t2 = time.perf_counter()
     raw_pred = model_output.tobytes() if SEND_RAW_PRED else b''

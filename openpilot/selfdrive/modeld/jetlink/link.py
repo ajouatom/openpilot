@@ -15,29 +15,14 @@ SPEC = ModelSpec.from_dict(json.loads(Path(__file__).with_name('cinque_v2.json')
 SOCKET = '/dev/shm/carrot-jetlink.sock'
 STATUS = Path('/dev/shm/carrot-jetlink.json')
 FAULT = Path('/dev/shm/carrot-jetlink-fault')
-REQUEST = struct.Struct('<II')
+REQUEST = struct.Struct('<IIQ')
 REPLY = struct.Struct('<I3I')
 MAX_PACKET = 1 << 20
 
 
 def read_exact(sock, size, deadline=None):
   result = bytearray(size)
-  offset = 0
-  while offset < size:
-    if deadline is not None:
-      remaining = deadline - time.monotonic()
-      if remaining <= 0:
-        raise TimeoutError('IPC deadline exceeded')
-      sock.settimeout(remaining)
-    try:
-      n = sock.recv_into(memoryview(result)[offset:])
-    except TimeoutError:
-      if offset:
-        raise ConnectionError('partial IPC packet timed out') from None
-      raise
-    if not n:
-      raise ConnectionError('IPC disconnected')
-    offset += n
+  read_into(sock, memoryview(result), deadline)
   return result
 
 
@@ -51,10 +36,75 @@ def receive(sock, deadline=None):
     raise ConnectionError('IPC payload timed out') from None
 
 
-def send(sock, data):
-  if not 0 < len(data) <= MAX_PACKET:
+def send_parts(sock, *parts, deadline=None):
+  """Send one existing wire-format packet without concatenating image buffers."""
+  views = [memoryview(part).cast('B') for part in parts]
+  size = sum(part.nbytes for part in views)
+  if not 0 < size <= MAX_PACKET:
     raise ValueError('invalid IPC packet size')
-  sock.sendall(struct.pack('<I', len(data)) + data)
+  views.insert(0, memoryview(struct.pack('<I', size)))
+  while views:
+    if deadline is not None:
+      remaining = deadline - time.monotonic()
+      if remaining <= 0:
+        raise TimeoutError('IPC send deadline exceeded')
+      sock.settimeout(remaining)
+    if hasattr(sock, 'sendmsg'):
+      sent = sock.sendmsg(views)
+    else:
+      sent = sock.send(views[0])
+    if sent <= 0:
+      raise ConnectionError('IPC disconnected during send')
+    while views and sent >= views[0].nbytes:
+      sent -= views.pop(0).nbytes
+    if sent:
+      views[0] = views[0][sent:]
+
+
+def send(sock, data):
+  send_parts(sock, data)
+
+
+class PacketReader:
+  """Reuse bounded receive storage; a returned view lasts until the next read."""
+  def __init__(self, capacity):
+    if not 0 < capacity <= MAX_PACKET:
+      raise ValueError('invalid IPC receive capacity')
+    self.header = bytearray(4)
+    self.payload = bytearray(capacity)
+
+  def receive(self, sock, deadline=None):
+    read_into(sock, memoryview(self.header), deadline)
+    size, = struct.unpack('<I', self.header)
+    if not 0 < size <= len(self.payload):
+      raise ValueError('invalid IPC packet size')
+    result = memoryview(self.payload)[:size]
+    try:
+      read_into(sock, result, deadline)
+    except TimeoutError:
+      raise ConnectionError('IPC payload timed out') from None
+    return result
+
+
+def read_into(sock, result, deadline=None):
+  offset = 0
+  while offset < result.nbytes:
+    if deadline is not None:
+      remaining = deadline - time.monotonic()
+      if remaining <= 0:
+        if offset:
+          raise ConnectionError('partial IPC packet timed out')
+        raise TimeoutError('IPC deadline exceeded')
+      sock.settimeout(remaining)
+    try:
+      n = sock.recv_into(result[offset:])
+    except TimeoutError:
+      if offset:
+        raise ConnectionError('partial IPC packet timed out') from None
+      raise
+    if not n:
+      raise ConnectionError('IPC disconnected')
+    offset += n
 
 
 def state():
@@ -92,16 +142,17 @@ class Client:
       self.sock.close()
       raise
     self.timings = (0, 0, 0)
+    self.reader = PacketReader(REPLY.size + SPEC.output_nbytes)
 
-  def infer(self, image, packed, frame, reset=False):
-    if image.dtype != np.uint8 or image.shape != SPEC.warped_shape:
+  def infer(self, image, packed, frame, reset=False, source_sof=0):
+    if image.dtype != np.uint8 or image.shape != SPEC.warped_shape or not image.flags.c_contiguous:
       raise ValueError('invalid warped image')
-    if packed.dtype != np.float32 or packed.size != SPEC.packed_nelem or not np.all(np.isfinite(packed)):
+    if packed.dtype != np.float32 or packed.size != SPEC.packed_nelem or not packed.flags.c_contiguous or not np.all(np.isfinite(packed)):
       raise ValueError('invalid recurrent input')
     deadline = time.monotonic() + self.timeout
     self.sock.settimeout(self.timeout)
-    send(self.sock, REQUEST.pack(frame, int(reset)) + image.tobytes() + packed.tobytes())
-    reply = receive(self.sock, deadline)
+    send_parts(self.sock, REQUEST.pack(frame, int(reset), source_sof), image, packed, deadline=deadline)
+    reply = self.reader.receive(self.sock, deadline)
     if len(reply) != REPLY.size + SPEC.output_nbytes:
       raise ValueError('invalid inference reply size')
     fid, *self.timings = REPLY.unpack_from(reply)

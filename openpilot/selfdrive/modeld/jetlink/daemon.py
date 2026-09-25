@@ -13,7 +13,8 @@ import time
 import numpy as np
 
 from openpilot.selfdrive.modeld.jetlink import VENDOR
-from openpilot.selfdrive.modeld.jetlink.link import (SPEC, SOCKET, STATUS, REQUEST, REPLY, receive, send, validate_spec)
+from openpilot.selfdrive.modeld.jetlink.link import (SPEC, SOCKET, STATUS, REQUEST, REPLY, PacketReader, send, send_parts, validate_spec)
+from openpilot.selfdrive.modeld.jetlink.phase import Publisher as PhasePublisher
 from jetlink.client import JetlinkClient
 from jetlink.transport.ffs import FfsTransport
 
@@ -80,14 +81,16 @@ class CarrotTransport(FfsTransport):
 
 def serve_local(listener, client, peer):
   publisher = Publisher() if peer.get(HUD_CAPABILITY) else None
+  phase = PhasePublisher()
   try:
-    _serve_local(listener, client, peer, publisher)
+    _serve_local(listener, client, peer, publisher, phase)
   finally:
+    phase.close()
     if publisher is not None:
       publisher.close()
 
 
-def _serve_local(listener, client, peer, publisher):
+def _serve_local(listener, client, peer, publisher, phase):
   from openpilot.common.params import Params
   params = Params()
   last_status = 0.
@@ -107,6 +110,7 @@ def _serve_local(listener, client, peer, publisher):
       continue
     with connection:
       connection.settimeout(.5)
+      reader = PacketReader(REQUEST.size + SPEC.warped_nbytes + SPEC.packed_nbytes)
       try:
         send(connection, json.dumps({'spec': SPEC.to_dict(), 'peer': peer}).encode())
         while host_attached():
@@ -117,13 +121,13 @@ def _serve_local(listener, client, peer, publisher):
             publish('ready', peer=peer, timings=list(client.last_timings))
             last_status = time.monotonic()
           try:
-            request = receive(connection)
+            request = reader.receive(connection)
           except TimeoutError:
             client.ping()
             continue
           if len(request) != REQUEST.size + SPEC.warped_nbytes + SPEC.packed_nbytes:
             raise ValueError('invalid local inference request')
-          frame, reset = REQUEST.unpack_from(request)
+          frame, reset, source_sof = REQUEST.unpack_from(request)
           if reset not in (0, 1):
             raise ValueError('invalid reset flag')
           images = np.frombuffer(request, np.uint8, SPEC.warped_nbytes, REQUEST.size).reshape(SPEC.warped_shape)
@@ -133,12 +137,18 @@ def _serve_local(listener, client, peer, publisher):
           started = time.monotonic()
           seq = client.infer_begin(images, packed, frame, reset=bool(reset), want_state=(frame % 20 == 0))
           sent = time.monotonic()
+          if peer.get('carrot_host') == 'jetson':
+            phase.sent(source_sof)
           output = client.infer_end(seq)
           completed = time.monotonic()
-          send(connection, REPLY.pack(frame, *client.last_timings) + output.tobytes())
-          if completed - started > .05:
-            log.warning('USB frame %d: send %.1f response %.1f IPC %.1f ms', frame,
-                        (sent-started)*1000, (completed-sent)*1000, (time.monotonic()-completed)*1000)
+          try:
+            send_parts(connection, REPLY.pack(frame, *client.last_timings), output)
+          finally:
+            # Preserve the send/response split even when modeld already timed
+            # out and the local reply raises BrokenPipeError.
+            if completed - started > .05:
+              log.warning('USB frame %d: send %.1f response %.1f IPC %.1f ms', frame,
+                          (sent-started)*1000, (completed-sent)*1000, (time.monotonic()-completed)*1000)
           publish_hud(client, publisher)
       except (ConnectionError, BrokenPipeError, ValueError) as exc:
         log.info('local client ended: %s', exc)
