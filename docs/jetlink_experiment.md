@@ -52,6 +52,26 @@ disengagement. The local request has a total 150 ms deadline, including partial
 reads, and rejects stale frame IDs, malformed lengths and nonfinite outputs.
 Model/camera gaps retain normal odometry and pose invalidity.
 
+Late startup is not a one-time selection: native inference runs while the host
+is unavailable, readiness is refreshed about once per second, and a failed
+join is retried after five seconds when the same parked/disengaged conditions
+hold. Being onroad does not itself forbid a join. Being stopped with control
+still enabled does forbid it; a host that becomes ready during driving waits
+for a later valid stopped, fully disengaged state. No startup-wide wait is used.
+
+On September25 after the user restarted vehicle power, C4 uptime was about69
+minutes while Jetson uptime was about4 minutes. Both Jetson services were
+active and C4 reported active Cinque v2 inference. A separate five-second
+read-only parked observation received100 model/odometry/pose/camera messages,
+with no invalidity or frame-ID gaps; DM was disabled. Jetson's monotonic boot
+journal recorded service start at23.143 s, USB hello at34.789 s, and engine
+ready at45.370 s. Systemd startup itself took31.659 s, so OS/service startup
+must not be described as model-ready time. The wall clock jumped during time
+synchronization; elapsed time is taken from the monotonic journal. These
+observations verify the resulting active connection after late host startup,
+not the precise vehicle-side switching instant or repeated cold-boot reliability.
+Private evidence is under `.analysis/archive/2026-09-25/jetlink-late-start/`.
+
 The bounded USB/IPC daemon and its receive worker use FIFO1 on core7 onroad,
 below DM (FIFO5) and modeld (FIFO54). Offroad, the main thread returns to normal
 priority and all daemon threads move to cores0..3. Existing camera,
