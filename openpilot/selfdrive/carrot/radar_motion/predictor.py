@@ -660,6 +660,36 @@ def _radar_path(
   return _path_geometry(_path_key(path))[0]
 
 
+# Stopping trajectories pack their final time samples into centimetres. Their
+# individual headings cannot define the lateral offset of a point beyond the
+# observed path. Use a spatial chord there, without extending the search path.
+TERMINAL_PATH_TANGENT_SPAN_M = 2.0
+
+
+@lru_cache(maxsize=8)
+def _terminal_path_tangent(
+  path: tuple[tuple[float, float], ...],
+) -> tuple[float, float, float, float] | None:
+  points, segments = _path_geometry(path)
+  remaining = TERMINAL_PATH_TANGENT_SPAN_M
+  for x0, y0, tx, ty, length, _ in reversed(segments):
+    if length < remaining:
+      remaining -= length
+      continue
+    anchor_x = x0 + tx * (length - remaining)
+    anchor_y = y0 + ty * (length - remaining)
+    dx = points[-1][0] - anchor_x
+    dy = points[-1][1] - anchor_y
+    span = math.hypot(dx, dy)
+    # Arc length alone is not support if a looping/reversing tail folds back
+    # onto itself. Do not manufacture a heading from its tiny net movement.
+    if dx <= 0.0 or span < 0.5 * TERMINAL_PATH_TANGENT_SPAN_M:
+      return None
+    total_s = segments[-1][5] + segments[-1][4]
+    return dx / span, dy / span, total_s, max(point[0] for point in points)
+  return None
+
+
 @lru_cache(maxsize=256)
 def _project_to_model_path_cached(
   path: tuple[tuple[float, float], ...],
@@ -712,6 +742,18 @@ def _project_to_model_path_cached(
         -tangent_y * offset_x + tangent_x * offset_y,
       )
   assert best_values is not None
+  terminal = _terminal_path_tangent(path)
+  if terminal is not None:
+    tangent_x, tangent_y, total_s, max_x = terminal
+    path_s, center_x, center_y, _, _, _ = best_values
+    if x > max_x and path_s >= total_s - TERMINAL_PATH_TANGENT_SPAN_M:
+      # Keep the nearest point and arc position on the measured polyline.
+      # Only its terminal normal needs spatial support: a nearly sideways
+      # 3 cm segment must not turn 11 m of forward separation into dPath.
+      best_values = (
+        path_s, center_x, center_y, tangent_x, tangent_y,
+        -tangent_y * (x - center_x) + tangent_x * (y - center_y),
+      )
   return ModelPathProjection(*best_values)
 
 

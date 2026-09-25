@@ -1,0 +1,316 @@
+{
+  "baseline_commit": "dbd406583622a8555d839544392537bf0ef753fd",
+  "baseline_logs": 97,
+  "candidate_logs": 98,
+  "focused_tests": 866,
+  "new_regression_tests": 16,
+  "baseline_new_tests_failed": 13,
+  "baseline_preservation_tests_passed": 3,
+  "candidate_source_sha256": "46057975a43e2bc8130f1570e998fef5d01392cff21c5a49658537213e5af28d",
+  "modes": {
+    "1": {
+      "baseline_items": 494,
+      "candidate_items": 495,
+      "baseline_summary": {
+        "existing_radard": null,
+        "physical_dpath_shadow": {
+          "labels": 250,
+          "unverified_labels": 208,
+          "tp": 57,
+          "fp": 0,
+          "fn": 10,
+          "tn": 183,
+          "precision": 1.0,
+          "recall": 0.8507462686567164,
+          "f1": 0.9193548387096774,
+          "accuracy": 0.96
+        },
+        "missing": 0,
+        "unverified": 208,
+        "radard_expectation_failures": 0,
+        "physical_dpath_expectation_failures": 11,
+        "predeceleration_expectation_failures": 0
+      },
+      "candidate_summary": {
+        "existing_radard": null,
+        "physical_dpath_shadow": {
+          "labels": 251,
+          "unverified_labels": 208,
+          "tp": 58,
+          "fp": 0,
+          "fn": 10,
+          "tn": 183,
+          "precision": 1.0,
+          "recall": 0.8529411764705882,
+          "f1": 0.9206349206349206,
+          "accuracy": 0.9601593625498008
+        },
+        "missing": 0,
+        "unverified": 208,
+        "radard_expectation_failures": 0,
+        "physical_dpath_expectation_failures": 11,
+        "predeceleration_expectation_failures": 0
+      },
+      "existing_verdict_changes": [],
+      "new_cases": [
+        {
+          "id": "carnival-1dc-19-stopping-path-endpoint-front-43",
+          "validation_set": "cases",
+          "source": "front+corner",
+          "expected": "detect",
+          "input_valid": true,
+          "input_coverage": {
+            "valid": true,
+            "sample_frames": 28,
+            "target_frames": 28,
+            "scope": "target",
+            "reason": "observed"
+          },
+          "radard_event": null,
+          "shadow_event": [
+            26.800412785,
+            43
+          ],
+          "predecel_event": null,
+          "shadow_applicable": true,
+          "shadow_sensor": "corner",
+          "radard_pass": true,
+          "shadow_pass": true,
+          "predecel_pass": true,
+          "radard_continuous": null,
+          "shadow_continuous": true,
+          "radard_lead_two_continuous": null,
+          "shadow_lead_two_continuous": null,
+          "radard_required_lead_one": null,
+          "shadow_required_lead_one": [
+            26.800412785,
+            43
+          ],
+          "radard_forbidden_lead_one": null,
+          "shadow_forbidden_lead_one": null,
+          "radard_forbidden_lead_two": null,
+          "shadow_forbidden_lead_two": null
+        }
+      ],
+      "existing_failure_ids": [
+        "ioniq9-234-6-scc-corroborated-early-l2",
+        "manual-00000bef-024p30-front-34",
+        "ioniq5-cd0-1-user-lead-gap-1675",
+        "gv80-218-2-user-white-suv-1355",
+        "manual-00000c21-029p80-front-40",
+        "manual-00000c21-031p50-front-46",
+        "manual-00000c21-032p65-front-61",
+        "manual-00000c21-032p75-front-63",
+        "manual-00000c21-033p15-front-62",
+        "manual-00000c21-058p05-front-59",
+        "manual-00000c21-013p65-front-58"
+      ],
+      "existing_predecel_failure_ids": []
+    },
+    "2": {
+      "baseline_items": 494,
+      "candidate_items": 495,
+      "baseline_summary": {
+        "existing_radard": null,
+        "physical_dpath_shadow": {
+          "labels": 250,
+          "unverified_labels": 208,
+          "tp": 58,
+          "fp": 0,
+          "fn": 9,
+          "tn": 183,
+          "precision": 1.0,
+          "recall": 0.8656716417910447,
+          "f1": 0.928,
+          "accuracy": 0.964
+        },
+        "missing": 0,
+        "unverified": 208,
+        "radard_expectation_failures": 0,
+        "physical_dpath_expectation_failures": 10,
+        "predeceleration_expectation_failures": 0
+      },
+      "candidate_summary": {
+        "existing_radard": null,
+        "physical_dpath_shadow": {
+          "labels": 251,
+          "unverified_labels": 208,
+          "tp": 59,
+          "fp": 0,
+          "fn": 9,
+          "tn": 183,
+          "precision": 1.0,
+          "recall": 0.8676470588235294,
+          "f1": 0.9291338582677166,
+          "accuracy": 0.9641434262948207
+        },
+        "missing": 0,
+        "unverified": 208,
+        "radard_expectation_failures": 0,
+        "physical_dpath_expectation_failures": 10,
+        "predeceleration_expectation_failures": 0
+      },
+      "existing_verdict_changes": [],
+      "new_cases": [
+        {
+          "id": "carnival-1dc-19-stopping-path-endpoint-front-43",
+          "validation_set": "cases",
+          "source": "front+corner",
+          "expected": "detect",
+          "input_valid": true,
+          "input_coverage": {
+            "valid": true,
+            "sample_frames": 28,
+            "target_frames": 28,
+            "scope": "target",
+            "reason": "observed"
+          },
+          "radard_event": null,
+          "shadow_event": [
+            26.800412785,
+            43
+          ],
+          "predecel_event": null,
+          "shadow_applicable": true,
+          "shadow_sensor": "corner",
+          "radard_pass": true,
+          "shadow_pass": true,
+          "predecel_pass": true,
+          "radard_continuous": null,
+          "shadow_continuous": true,
+          "radard_lead_two_continuous": null,
+          "shadow_lead_two_continuous": null,
+          "radard_required_lead_one": null,
+          "shadow_required_lead_one": [
+            26.800412785,
+            43
+          ],
+          "radard_forbidden_lead_one": null,
+          "shadow_forbidden_lead_one": null,
+          "radard_forbidden_lead_two": null,
+          "shadow_forbidden_lead_two": null
+        }
+      ],
+      "existing_failure_ids": [
+        "manual-00000bef-024p30-front-34",
+        "ioniq5-cd0-1-user-lead-gap-1675",
+        "gv80-218-2-user-white-suv-1355",
+        "manual-00000c21-029p80-front-40",
+        "manual-00000c21-031p50-front-46",
+        "manual-00000c21-032p65-front-61",
+        "manual-00000c21-032p75-front-63",
+        "manual-00000c21-033p15-front-62",
+        "manual-00000c21-058p05-front-59",
+        "manual-00000c21-013p65-front-58"
+      ],
+      "existing_predecel_failure_ids": []
+    },
+    "3": {
+      "baseline_items": 494,
+      "candidate_items": 495,
+      "baseline_summary": {
+        "existing_radard": null,
+        "physical_dpath_shadow": {
+          "labels": 250,
+          "unverified_labels": 208,
+          "tp": 58,
+          "fp": 1,
+          "fn": 9,
+          "tn": 182,
+          "precision": 0.9830508474576272,
+          "recall": 0.8656716417910447,
+          "f1": 0.9206349206349207,
+          "accuracy": 0.96
+        },
+        "missing": 0,
+        "unverified": 208,
+        "radard_expectation_failures": 0,
+        "physical_dpath_expectation_failures": 13,
+        "predeceleration_expectation_failures": 1
+      },
+      "candidate_summary": {
+        "existing_radard": null,
+        "physical_dpath_shadow": {
+          "labels": 251,
+          "unverified_labels": 208,
+          "tp": 59,
+          "fp": 1,
+          "fn": 9,
+          "tn": 182,
+          "precision": 0.9833333333333333,
+          "recall": 0.8676470588235294,
+          "f1": 0.9218749999999999,
+          "accuracy": 0.9601593625498008
+        },
+        "missing": 0,
+        "unverified": 208,
+        "radard_expectation_failures": 0,
+        "physical_dpath_expectation_failures": 13,
+        "predeceleration_expectation_failures": 1
+      },
+      "existing_verdict_changes": [],
+      "new_cases": [
+        {
+          "id": "carnival-1dc-19-stopping-path-endpoint-front-43",
+          "validation_set": "cases",
+          "source": "front+corner",
+          "expected": "detect",
+          "input_valid": true,
+          "input_coverage": {
+            "valid": true,
+            "sample_frames": 28,
+            "target_frames": 28,
+            "scope": "target",
+            "reason": "observed"
+          },
+          "radard_event": null,
+          "shadow_event": [
+            26.800412785,
+            43
+          ],
+          "predecel_event": null,
+          "shadow_applicable": true,
+          "shadow_sensor": "corner",
+          "radard_pass": true,
+          "shadow_pass": true,
+          "predecel_pass": true,
+          "radard_continuous": null,
+          "shadow_continuous": true,
+          "radard_lead_two_continuous": null,
+          "shadow_lead_two_continuous": null,
+          "radard_required_lead_one": null,
+          "shadow_required_lead_one": [
+            26.800412785,
+            43
+          ],
+          "radard_forbidden_lead_one": null,
+          "shadow_forbidden_lead_one": null,
+          "radard_forbidden_lead_two": null,
+          "shadow_forbidden_lead_two": null
+        }
+      ],
+      "existing_failure_ids": [
+        "ioniq9-234-6-scc-corroborated-early-l2",
+        "manual-00000bef-024p30-front-34",
+        "ioniq5-cd0-1-user-lead-gap-1675",
+        "gv80-218-2-adjacent-pass-49",
+        "gv80-218-2-user-white-suv-1355",
+        "ioniq5-cfb-6-early-clear",
+        "manual-00000c21-029p80-front-40",
+        "manual-00000c21-031p50-front-46",
+        "manual-00000c21-032p65-front-61",
+        "manual-00000c21-032p75-front-63",
+        "manual-00000c21-033p15-front-62",
+        "manual-00000c21-058p05-front-59",
+        "manual-00000c21-013p65-front-58"
+      ],
+      "existing_predecel_failure_ids": [
+        "gv80-218-2-adjacent-pass-49"
+      ]
+    }
+  },
+  "limits": [
+    "Recorded-input selection replay, not closed-loop braking validation.",
+    "Pre-existing failures and 208 unverified labels per mode remain; strict corpus validation is not all-pass."
+  ]
+}

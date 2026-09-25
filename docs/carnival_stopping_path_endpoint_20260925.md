@@ -15,8 +15,9 @@ large apparent lateral offset. The resulting dPath rejects the measured front
 lead and also rejects the visual fallback. This is not evidence of the physical
 vehicle moving sideways, a radar measurement dropout, or a camera frame gap.
 
-No driving code, selection thresholds, settings, or model artifacts are changed
-by this investigation.
+The initial investigation changed no driving code. The subsequently authorized
+projection correction and its validation are described below; selection
+thresholds, settings and model artifacts remain unchanged.
 
 ## Recorded sequence
 
@@ -124,6 +125,64 @@ when a stopping trajectory ends before a continuously observed lead. Simply
 increasing dPath limits or holding all lost targets longer would obscure the
 geometry defect. A candidate needs regression checks for genuine curves,
 lane departures, roadside objects, and front/corner selection before deployment.
+
+## Projection correction
+
+For an object beyond the maximum forward extent of the measured model path,
+whose closest projection is in the last 2 m of path arc length, the projection
+now derives its tangent from a spatial chord across those last 2 m. It keeps
+the closest point and arc position clamped to the original polyline; no extra
+ray or segment participates in the nearest-point search. Interior projections
+remain unchanged. Long terminal segments already supply the same direction.
+
+Paths shorter than the required spatial support, backwards terminal chords,
+and folded tails with less than 1 m of net chord displacement retain the
+original geometry. This avoids deriving another unstable heading from a tail
+that travels back over itself. The same shared projection applies to radar and
+vision; no lead identity, confidence, distance, speed, acquisition threshold,
+retention duration, process placement or model output is overridden.
+
+At the first lost frame, front 43 dPath changes from 10.926 m to 1.098 m.
+The recorded-input controller keeps front 43 through all 16 formerly missing
+frames. The production/NAS replay adapter also retains front 43 throughout
+the maintained 26.8–28.2 s replay window in modes 1, 2 and 3. In the baseline,
+modes 1/2 lose L1 for 16 frames; mode 3 uses its existing SCC fallback instead.
+This correction preserves the front identity there rather than relying on SCC.
+
+Sixteen focused regression cases cover both lateral sides, actual adjacent-lane
+offsets, curved roads, unchanged interior projection, returning/folded paths and
+controller continuity in modes 1/2/3. Thirteen fail against the original
+projection, while the three preservation cases already pass. All sixteen pass
+with the correction. The combined isolated matcher, controller, cut-in/cut-out,
+lane-change, stationary-evidence and route-vault test run passes **866 tests**.
+The source paths were explicitly checked to ensure the isolated committed
+checkout plus this correction was imported, excluding other working-tree edits.
+
+The full corpus comparison is recorded in
+[the validation report](carnival_stopping_path_endpoint_validation.json).
+The baseline contains 97 logs / 494 items; adding this incident yields
+98 logs / 495 items in each of modes 1, 2 and 3. Every existing pass/fail,
+input-coverage and continuity verdict remains unchanged; the new front-43
+continuity case passes in all three modes. Missing logs: zero.
+
+| Mode | Existing selection failures, before → after | Pre-deceleration failures, before → after | Unverified items |
+|---|---:|---:|---:|
+| 1 | 11 → 11 | 0 → 0 | 208 |
+| 2 | 10 → 10 | 0 → 0 | 208 |
+| 3 | 13 → 13 | 1 → 1 | 208 |
+
+The strict validator remains nonzero when pre-existing failures or unverified
+labels remain; these must not be described as a complete corpus pass.
+
+The correction changes lead selection on recorded inputs. It does not provide
+counterfactual brake-pressure measurements or establish closed-loop stopping
+distance, on-device timing or vehicle-driving validation.
+
+The shared predictor is already included in the committed Carrot Routes image
+bundle and in its replay fingerprint. Deployment uses the existing image
+workflow and scheduled NAS updater. Completion requires the intended image
+commit, verified updater state, actual upload-result page and recalculated
+incident data to agree with the fresh committed bundle.
 
 Private reproduction scripts, selected telemetry CSV, frame contact sheet,
 counts and summaries are indexed in
