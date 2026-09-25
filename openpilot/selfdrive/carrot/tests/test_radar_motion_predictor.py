@@ -363,6 +363,75 @@ def test_projection_does_not_extend_a_reversing_terminal_path_segment() -> None:
   assert projection.d_path == pytest.approx(6.0)
 
 
+@pytest.mark.parametrize("tail_y", (-0.03, 0.03))
+@pytest.mark.parametrize("object_y", (-3.5, 0.0, 3.5))
+def test_short_stopping_path_uses_spatially_supported_terminal_normal(tail_y, object_y) -> None:
+  path = ((0.0, 0.0), (36.0, 0.0), (38.0, 0.0), (39.994, tail_y), (40.0, 0.0))
+
+  projection = project_to_model_path(path, 52.0, object_y)
+
+  # The forward 12 m gap is not a lane offset. Adjacent-lane points must
+  # nevertheless keep their actual lateral separation, on either side.
+  assert projection.d_path == pytest.approx(object_y, abs=0.04)
+  assert projection.tangent_x > 0.999
+  assert projection.center_x <= 40.0
+
+
+def test_short_terminal_normal_preserves_a_real_curve() -> None:
+  path = ((0.0, 0.0), (20.0, 0.0), (30.0, -10.0), (30.02, -10.001))
+
+  projection = project_to_model_path(path, 45.0, 0.0)
+
+  assert projection.d_path < -15.0
+  assert projection.tangent_y > 0.65
+  assert projection.center_x <= 30.02
+
+
+def test_terminal_normal_does_not_change_an_interior_projection() -> None:
+  path = ((0.0, 0.0), (20.0, 0.0), (30.0, -10.0), (30.006, -10.03))
+  projection = project_to_model_path(path, 25.0, 6.0)
+  reference = project_to_model_path(path[:-1], 25.0, 6.0)
+
+  assert projection == reference
+
+
+def test_terminal_normal_does_not_unroll_a_returning_path() -> None:
+  path = ((0.0, 0.0), (20.0, 0.0), (20.0, -10.0), (15.0, -10.0), (14.99, -10.03))
+  projection = project_to_model_path(path, 25.0, 10.0)
+
+  assert projection.center_x == pytest.approx(20.0)
+  assert abs(projection.d_path) == pytest.approx(5.0)
+
+
+def test_folded_terminal_path_does_not_get_a_heading_from_tiny_net_motion() -> None:
+  path = ((0.0, 0.0), (10.0, 0.0), (11.0, 0.0), (10.01, 0.01))
+  projection = project_to_model_path(path, 20.0, 0.0)
+
+  assert projection.center_x == pytest.approx(11.0)
+  assert projection.tangent_x == pytest.approx(1.0)
+  assert projection.d_path == pytest.approx(0.0)
+
+
+@pytest.mark.parametrize("mode", (1, 2, 3))
+@pytest.mark.parametrize("tail_y", (-0.03, 0.03))
+def test_controller_keeps_stopped_front_when_model_path_ends_before_it(mode, tail_y) -> None:
+  controller = DPathRadarController(enable_radar_tracks=mode)
+  for index in range(26):
+    distance = 58.0 - 0.65 * index
+    model = model_with_lead(distance, 0.0, 0.0, probability=0.98)
+    if index >= 10:
+      end = distance - 11.0
+      path = ((0.0, 0.0), (end - 4.0, 0.0), (end - 2.0, 0.0), (end - 0.006, tail_y), (end, 0.0))
+      model.position = SimpleNamespace(x=tuple(x for x, _ in path), y=tuple(y for _, y in path))
+    point = Point(43, distance, 0.0, v_rel=-13.0, v_lead=0.0, trackState=2)
+    output = controller.update(index * 0.05, 13.0, (point,), model)
+    if index >= 9:
+      assert output.lead_one is not None
+      assert output.lead_one["radarTrackId"] == 43
+      assert output.lead_one["dRel"] == pytest.approx(distance)
+      assert output.lead_one["vLead"] == pytest.approx(0.0)
+
+
 def test_point_outside_the_measured_path_polyline_scope_is_not_predicted() -> None:
   predictor = RadarMotionPredictor()
   path = ((0.0, 0.0), (10.0, 0.0), (20.0, 0.0), (19.95, -0.02))

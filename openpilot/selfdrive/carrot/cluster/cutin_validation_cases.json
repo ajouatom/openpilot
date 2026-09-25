@@ -2,6 +2,20 @@
   "sensitivity": 50,
   "cases": [
     {
+      "id": "carnival-1dc-19-stopping-path-endpoint-front-43",
+      "vehicle_folder": "KIA_CARNIVAL_4TH_GEN c4dcf95545dafe68",
+      "log": "000001dc--23e0551f1d--19/rlog.zst",
+      "source": "front+corner",
+      "window": [26.8, 28.2],
+      "expected": "detect",
+      "validation_stage": "lead_one",
+      "target_track_ids": [43],
+      "required_lead_one_ids": [43],
+      "latest_detection_s": 26.85,
+      "lead_one_continuous_window": [26.8, 28.2],
+      "scene": "Braking interruption on db4aed1e: measured front 43 and high-probability vision remain present, but the stopping model path ends about 11 m before the lead. A 3 cm terminal segment turns the forward separation into a false 10.93 m dPath. Recorded L1 disappears for 16 frames, replay 27.10-27.85 s, and acceleration requests weaken. Keep front 43 continuously selected through the short-path endpoint without enlarging selection gates. Video time is about 0.053 s after replay time; recorded radar publication time uses another origin. This is recorded-input lead-selection validation, not closed-loop braking validation."
+    },
+    {
       "id": "carnival-1c8-1-front-position-history-51",
       "vehicle_folder": "KIA_CARNIVAL_4TH_GEN c4dcf95545dafe68",
       "log": "000001c8--95bc7cab1c--1/rlog.zst",
