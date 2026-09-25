@@ -1,5 +1,6 @@
 """USB gadget owner and Jetlink client, isolated from modeld's frame deadline."""
 import fcntl
+import gc
 import json
 import logging
 import os
@@ -123,8 +124,15 @@ def _serve_local(listener, client, peer, publisher):
           packed = np.frombuffer(request, np.float32, SPEC.packed_nelem, REQUEST.size + SPEC.warped_nbytes)
           if not np.all(np.isfinite(packed)):
             raise ValueError('invalid local model context')
-          output = client.infer(images, packed, frame, reset=bool(reset), want_state=(frame % 20 == 0))
+          started = time.monotonic()
+          seq = client.infer_begin(images, packed, frame, reset=bool(reset), want_state=(frame % 20 == 0))
+          sent = time.monotonic()
+          output = client.infer_end(seq)
+          completed = time.monotonic()
           send(connection, REPLY.pack(frame, *client.last_timings) + output.tobytes())
+          if completed - started > .05:
+            log.warning('USB frame %d: send %.1f response %.1f IPC %.1f ms', frame,
+                        (sent-started)*1000, (completed-sent)*1000, (time.monotonic()-completed)*1000)
           publish_hud(client, publisher)
       except (ConnectionError, BrokenPipeError, ValueError) as exc:
         log.info('local client ended: %s', exc)
@@ -133,6 +141,9 @@ def _serve_local(listener, client, peer, publisher):
 
 def main():
   logging.basicConfig(level=logging.INFO)
+  # Like modeld, do not let cyclic GC scan the manager's inherited object graph
+  # while an inference reply is due. Collect between USB sessions instead.
+  gc.disable()
   os.sched_setscheduler(0, os.SCHED_OTHER, os.sched_param(0))
   os.sched_setaffinity(0, set(range(min(4, os.cpu_count() or 1))))
   lock = open('/dev/shm/carrot-jetlink.lock', 'w')
@@ -153,6 +164,7 @@ def main():
       client = None
       try:
         publish('connecting')
+        gc.collect()
         subprocess.run(['sudo', '-n', 'bash', str(setup)], check=True, timeout=15, capture_output=True)
         udc = next(Path('/sys/class/udc').iterdir()).name
         client = JetlinkClient(CarrotTransport('/dev/ffs-jetlink', gadget=GADGET, udc=udc), name='carrot-jetlink')
