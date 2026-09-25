@@ -43,11 +43,11 @@ def main():
     for block in iter(lambda: bundle.read(4 << 20), b''):
       sha.update(block)
   args.output.with_suffix(args.output.suffix + '.sha256').write_text(
-    f'{sha.hexdigest()}  {args.output.name}\n', encoding='utf-8')
+    f'{sha.hexdigest()}  {args.output.name}\n', encoding='utf-8', newline='\n')
   args.output.with_suffix(args.output.suffix + '.json').write_text(json.dumps({
     'source_commit': commit.decode().strip(), 'bundle': args.output.name,
     'size': args.output.stat().st_size, 'sha256': sha.hexdigest(),
-  }, indent=2) + '\n', encoding='utf-8')
+  }, indent=2) + '\n', encoding='utf-8', newline='\n')
   print(commit.decode().strip(), args.output)
 
 
