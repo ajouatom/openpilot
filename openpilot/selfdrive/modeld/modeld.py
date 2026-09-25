@@ -316,6 +316,14 @@ def main(demo=False):
   small_model = ModelState(vipc_client_main.width, vipc_client_main.height, False) if model is None or USBGPU else None
   if model is None:
     model = small_model
+  # The experimental branch keeps the existing eGPU selection unchanged. A
+  # separate USB owner handles external computers and late server startup.
+  if not USBGPU and os.path.isfile('/AGNOS'):
+    try:
+      from openpilot.selfdrive.modeld.jetlink.model import JoiningModel
+      model = JoiningModel(model, vipc_client_main.width, vipc_client_main.height)
+    except Exception:
+      cloudlog.exception('Jetlink camera adapter unavailable; retaining internal model')
   # Loading is not complete until the first model result is published. The
   # first eGPU execution can spend several seconds initializing queues/kernels
   # after the PKL has loaded; clearing this here causes a false commIssue while
@@ -327,7 +335,7 @@ def main(demo=False):
 
   # messaging
   pm = PubMaster(["modelV2", "drivingModelData", "cameraOdometry"])
-  sm = SubMaster(["deviceState", "carState", "roadCameraState", "liveCalibration", "driverMonitoringState", "carControl", "liveDelay", "carrotMan", "radarState"])
+  sm = SubMaster(["deviceState", "carState", "roadCameraState", "liveCalibration", "driverMonitoringState", "carControl", "selfdriveState", "liveDelay", "carrotMan", "radarState"])
 
   publish_state = PublishState()
   params = Params()
@@ -392,6 +400,8 @@ def main(demo=False):
 
     camera_ready = time.monotonic()
     sm.update(0)
+    if hasattr(model, 'update'):
+      model.update(sm)
     desire = DH.desire
     is_rhd = sm["driverMonitoringState"].isRHD
     frame_id = sm["roadCameraState"].frameId
