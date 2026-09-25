@@ -23,7 +23,11 @@ class DisplayParams:
     now = time.monotonic()
     if now >= self.next_read:
       record = read_snapshot()
-      self.values = record[1]['params'] if record else {}
+      # Missing telemetry is not an ignition-off command. Keep the last
+      # settings until a fresh C4 snapshot explicitly changes them; SubMaster
+      # still invalidates all vehicle data immediately on snapshot loss.
+      if record is not None:
+        self.values = record[1]['params']
       self.next_read = now + .1
     value = self.values.get(key)
     return base64.b64decode(value) if value is not None else None
@@ -115,6 +119,13 @@ def main():
   sys.modules[params_module.__name__] = params_module
   messaging = types.ModuleType('openpilot.cereal.messaging')
   messaging.SubMaster = RemoteSubMaster
+  from hud_navi import RemoteMediaSocket
+  def sub_sock(service, **kwargs):
+    if service != 'carrotNaviMedia':
+      raise ValueError(f'unsupported display subscription: {service}')
+    return RemoteMediaSocket()
+  messaging.sub_sock = sub_sock
+  messaging.drain_sock = lambda sock: sock.drain()
   def from_bytes(data, schema=log.Event):
     with schema.from_bytes(data) as reader:
       return reader.as_builder()
@@ -123,6 +134,24 @@ def main():
   import cluster_live_camera
   from hud_camera import RemoteRoadCamera
   cluster_live_camera.LiveRoadCamera = RemoteRoadCamera
+  import cluster_system_monitor
+  from hud_stats import VehicleSystemStats, VehicleCpuOverlay
+  cluster_system_monitor.SystemStatsSampler = VehicleSystemStats
+  cluster_system_monitor.ClusterProcessCoreUsageSampler = VehicleCpuOverlay
+  import cluster_navi_source
+  display_metrics = {}
+  class RemoteNaviSource(cluster_navi_source.NaviIpcMediaSource):
+    def update(self, navi_live):
+      dashboard = super().update(navi_live)
+      frame = next((f for f in dashboard.media if f.key == 'render:map_main' and f.present), None)
+      display_metrics['map'] = {'sequence': frame.sequence if frame else None,
+                                'width': frame.width if frame else None,
+                                'height': frame.height if frame else None,
+                                'age_ms': dashboard.map_frame_age_ms,
+                                'stalled': dashboard.map_stream_stalled}
+      return dashboard
+  cluster_navi_source.NaviIpcMediaSource = RemoteNaviSource
+  vehicle_stats = VehicleSystemStats()
   import main as cluster
   class Display(cluster.TuringUsbDisplay):
     next_status = 0.
@@ -133,7 +162,10 @@ def main():
       if now >= self.next_status:
         path = Path('/dev/shm/carrot-jetlink-hud-status.json')
         tmp = path.with_suffix('.tmp')
-        tmp.write_text(json.dumps({'updated': now}))
+        stats = vehicle_stats.sample()
+        tmp.write_text(json.dumps({'updated': now, **display_metrics,
+                                  'vehicle_cpu': stats.cpu_core_percents,
+                                  'vehicle_memory_percent': stats.memory_used_percent}))
         os.replace(tmp, path)
         self.next_status = now + 1
       return result

@@ -707,3 +707,94 @@ window: warp4.24 + local roundtrip45.52 + parse0.66 ms (about50.42 ms), with
 server GPU22.28/queue1.43/total23.92 ms. Thus even the restored-DM-off session
 cannot be described as universally below50 ms. The bounded diagnostic remains
 enabled to preserve evidence of occasional communication/scheduling tails.
+
+
+## Navigation video and vehicle system display (2026-09-25)
+
+A live12.040 s `carrotNaviMedia` sample contained116 events and1,678,140 payload
+bytes (about139 kB/s):98 video access units, five codec configurations, nine
+images and four removals. The map was960x540; keyframes reached249,715 bytes.
+This is low average bandwidth but exceeds the96 KiB HUD snapshot limit in one
+burst. Guidance capnp was already forwarded; the media service was not.
+
+The negotiated `carrot_navi_v1` extension fragments complete capnp media events
+into at most32 KiB payloads plus a24-byte header. A separate low-priority C4
+publisher reads non-conflated media, bounds event size to1 MiB and rejects input
+over1 s old. The USB owner sends at most one fragment per inference window.
+The existing snapshot bound and model150 ms failure deadline stay unchanged.
+Partial, out-of-order, oversized or more-than2 s fragment assemblies are rejected;
+a missed event or video sequence makes the receiver wait for an H.264 keyframe.
+The host uses nonblocking local datagrams, so an absent/slow renderer cannot
+block inference. The existing NaviIpcMediaSource decodes with PyAV17.1.0, using
+its existing bounded decode queue and stale-map handling. No model input,
+recurrent state, navigation speed-selection or vehicle-control policy changes.
+
+Upstream host Session performs inference synchronously and did not post the next
+USB read during inference. Merely moving the C4 display send earlier could wait
+for that inference to finish. The host now has a bounded two-message read-ahead
+queue: it owns copies of borrowed transport payloads before the next recv can
+overwrite them, while the original inference thread retains model execution.
+The C4 sends HUD and one map fragment after infer_begin, during Jetson inference,
+then consumes infer_end. Older peers without the capability retain their previous
+post-inference HUD scheduling. This overlaps transfer and computation; it does
+not make a hard USB completion or scheduling deadline guarantee.
+
+System panels previously read the renderer host's `/proc`, despite receiving C4
+`deviceState`. The host-only statistics adapter now takes all CPU cores (including
+0% idle), memory percentage and disk percentage from valid/live vehicle capnp.
+Missing/stale input shows unavailable rather than host numbers. Memory byte totals
+remain unavailable because deviceState does not carry them. The small footer uses
+the vehicle's average CPU percentage; it no longer describes Jetson render-process
+CPU. The external compute badge moves19 design pixels right, one font-size width.
+Local C3/C4 renderers otherwise keep their existing statistics samplers.
+
+Actual960x540 map imagery and turn graphics were verified through the live USB
+renderer, and the system panel showed eight C4 cores. Private one-shot rendering
+hooks were removed before timing measurement. The saved screen mode was2 (system
+details); mode0 automatically shows trip summary while parked in P, so mode6
+(existing navigation screen) was used for the map test. The original mode2 and
+DisableDM=2 are restored after the test. No setting definition/default was changed.
+
+Unit checks exercise large-keyframe reassembly, missing/reordered/stale/oversized
+fragments, keyframe recovery, vehicle-only CPU data including idle cores, invalid
+statistics, and read-ahead buffer ownership/bounded shutdown. Live timing and
+frame-cadence results follow below; read-ahead transfer adds a model-payload copy
+on Jetson and must be evaluated with actual video/DM load.
+
+
+Settled live-video timing, each120 seconds and2,400 model outputs:
+
+| Load | Model mean / p99 / max | >50 ms | DM mean / max |
+| --- | --- | ---: | --- |
+| Map + HUD, original DisableDM=2 |36.954 /40.564 /46.953 ms|0|off|
+| Map + HUD + full DM |36.912 /40.325 /45.119 ms|0|30.259 /41.770 ms|
+
+Both windows had no model/DM frame skips or monitored pose/CAN invalidity.
+Model publication interval maxima were67.419/64.548 ms, so zero execution
+misses must not be described as an exact50 ms cadence. DM camera-to-publication
+mean/max were78.601/89.526 ms. All120 external-active samples per arm were true.
+The live stream rather than the saved video sample was used in these trials.
+
+Outside the settled windows, enabling DM logged frame12923 warp4.47 + roundtrip
+110.63 + parse0.68 ms, one skipped input and invalid camera odometry. Jetson GPU
+was19.63 ms and response write14.9 ms; the additional wait is not proven to be
+GPU compute or fixed by the new read-ahead path. Earlier startup limitations
+therefore still apply. No inference deadline/validity policy was relaxed.
+
+A330-s display observation had325 fresh status samples,327 with a decoded map,
+and312 distinct map sequences. Eight C4 CPU cores were present in323 samples.
+A six-second renderer restart occurred around DM initialization because missing
+snapshots incorrectly returned IsOnroad=false. The final DisplayParams fix retains
+last-known configuration on snapshot absence; only a fresh C4 offroad snapshot
+turns it off. Vehicle SubMaster alive/valid flags still clear immediately when
+snapshots expire, and CPU statistics remain unavailable during actual data loss.
+A focused test verifies both transient-loss retention and a genuine offroad update.
+The final metadata-hold fix does not change model or media transfer scheduling.
+
+Map decode ages occasionally reached1.2 s during steady observation and2.512 s
+later; no configured map-stalled flag occurred. These values measure time since
+host decoding, not end-to-end phone capture latency. This is proof of live video
+operation with bounded recovery, not a guarantee of uninterrupted frame delivery
+or a demonstrated maximum phone-to-display delay. Sustained driving, reconnects
+under load, C3 and Mac remain unvalidated. Display captures and console evidence
+are kept privately in `.analysis/archive/2026-09-25/jetlink-hud/`.

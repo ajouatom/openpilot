@@ -3,6 +3,7 @@ import base64
 import json
 from pathlib import Path
 import struct
+import socket
 import subprocess
 import sys
 import time
@@ -27,13 +28,32 @@ PARAMS = ('ClusterHud', 'ClusterHudDebug', 'ClusterHudBrightness', 'ClusterHudOr
 
 class Publisher:
   """Keep cereal decoding, JSON and preview work outside the USB owner's GIL."""
-  def __init__(self):
+  def __init__(self, navi=False):
     import os
+    self.media_socket = self.media_process = None
+    if navi:
+      self.media_socket, child = socket.socketpair(socket.AF_UNIX, socket.SOCK_SEQPACKET)
+      self.media_socket.setblocking(False)
+      try:
+        self.media_process = subprocess.Popen(['chrt', '--other', '0', sys.executable,
+          str(Path(__file__).with_name('hud_navi.py')), str(child.fileno())], pass_fds=(child.fileno(),),
+          stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
+      finally:
+        child.close()
     self.path = Path(f'/dev/shm/carrot-jetlink-display-{os.getpid()}.packet')
     self.last_sent = 0.
     self.process = subprocess.Popen(['chrt', '--other', '0', sys.executable,
                                     str(Path(__file__).with_name('hud_publisher.py')), str(self.path)],
                                     stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
+
+  def media_packet(self):
+    if self.media_socket is not None:
+      from hud_navi import CHUNK, HEADER as MEDIA_HEADER
+      try:
+        return self.media_socket.recv(CHUNK + MEDIA_HEADER.size)
+      except BlockingIOError:
+        pass
+    return None
 
   def packet(self):
     try:
@@ -50,6 +70,14 @@ class Publisher:
       return None
 
   def close(self):
+    if self.media_process is not None:
+      self.media_process.terminate()
+      try:
+        self.media_process.wait(timeout=1)
+      except subprocess.TimeoutExpired:
+        self.media_process.kill()
+        self.media_process.wait(timeout=1)
+      self.media_socket.close()
     self.process.terminate()
     try:
       self.process.wait(timeout=2)
