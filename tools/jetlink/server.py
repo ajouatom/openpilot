@@ -9,6 +9,8 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / 'third_party/jetlink'))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from hud_protocol import HUD_CAPABILITY, HUD_MESSAGE, MAX_HUD_BYTES, HUD_PACKET, HEADER
+from hud_navi import CAPABILITY as NAVI_CAPABILITY, MESSAGE as NAVI_MESSAGE, HostForwarder
+from host_reader import ReadAheadTransport
 from jetlink import protocol as P
 from jetlink.server.session import Session
 from jetlink.server import main as server
@@ -31,16 +33,25 @@ class DisplayTelemetry:
 class CarrotSession(Session):
   def __init__(self, *args, **kwargs):
     super().__init__(*args, **kwargs)
+    if sys.platform == 'linux':
+      self.t = ReadAheadTransport(self.t)
     self.telemetry = DisplayTelemetry(self.telemetry)
+    self.navi = HostForwarder() if sys.platform == 'linux' else None
 
   def _send_json(self, msg_type, seq, obj, flags=0):
     if msg_type == P.Msg.HELLO_RESP:
       host = 'mac' if sys.platform == 'darwin' else (
         'jetson' if Path('/etc/nv_tegra_release').is_file() else 'unknown')
-      obj = {**obj, HUD_CAPABILITY: sys.platform == 'linux', 'carrot_host': host}
+      obj = {**obj, HUD_CAPABILITY: sys.platform == 'linux', NAVI_CAPABILITY: sys.platform == 'linux', 'carrot_host': host}
     return super()._send_json(msg_type, seq, obj, flags)
 
   def handle(self, msg):
+    if msg.msg_type == NAVI_MESSAGE:
+      if msg.seq > self.last_seq:
+        self.last_seq = msg.seq
+        if self.navi is not None:
+          self.navi.send(msg.payload)
+      return
     if msg.msg_type != HUD_MESSAGE:
       return super().handle(msg)
     if msg.seq <= self.last_seq:
@@ -56,6 +67,13 @@ class CarrotSession(Session):
       os.replace(temporary, HUD_PACKET)
     except OSError:
       pass  # An unavailable display does not stop inference.
+
+  def close(self):
+    if self.navi is not None:
+      self.navi.close()
+    if isinstance(self.t, ReadAheadTransport):
+      self.t.close()
+    super().close()
 
 
 if __name__ == '__main__':

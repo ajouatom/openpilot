@@ -23,6 +23,7 @@ ROLE = Path('/sys/class/power_supply/usb/typec_mode')
 log = logging.getLogger('carrot.jetlink')
 sys.path.insert(0, str(VENDOR.parents[1] / 'tools/jetlink'))
 from hud_protocol import Publisher, HUD_CAPABILITY, HUD_MESSAGE
+from hud_navi import CAPABILITY as NAVI_CAPABILITY, MESSAGE as NAVI_MESSAGE
 
 
 def update_affinity():
@@ -50,6 +51,11 @@ def publish_hud(client, publisher):
       return
     if packet:
       client.t.send(HUD_MESSAGE, client._next_seq(), [packet])
+    # At most one small fragment per inference window. No video
+    # decoding or unbounded stream draining occurs on the USB owner's thread.
+    media = publisher.media_packet()
+    if media:
+      client.t.send(NAVI_MESSAGE, client._next_seq(), [media])
 
 
 def host_attached():
@@ -80,7 +86,7 @@ class CarrotTransport(FfsTransport):
 
 
 def serve_local(listener, client, peer):
-  publisher = Publisher() if peer.get(HUD_CAPABILITY) else None
+  publisher = Publisher(navi=bool(peer.get(NAVI_CAPABILITY))) if peer.get(HUD_CAPABILITY) else None
   phase = PhasePublisher()
   try:
     _serve_local(listener, client, peer, publisher, phase)
@@ -139,6 +145,8 @@ def _serve_local(listener, client, peer, publisher, phase):
           sent = time.monotonic()
           if peer.get('carrot_host') == 'jetson':
             phase.sent(source_sof)
+          if peer.get(NAVI_CAPABILITY):
+            publish_hud(client, publisher)
           output = client.infer_end(seq)
           completed = time.monotonic()
           try:
@@ -149,7 +157,8 @@ def _serve_local(listener, client, peer, publisher, phase):
             if completed - started > .05:
               log.warning('USB frame %d: send %.1f response %.1f IPC %.1f ms', frame,
                           (sent-started)*1000, (completed-sent)*1000, (time.monotonic()-completed)*1000)
-          publish_hud(client, publisher)
+          if not peer.get(NAVI_CAPABILITY):
+            publish_hud(client, publisher)
       except (ConnectionError, BrokenPipeError, ValueError) as exc:
         log.info('local client ended: %s', exc)
     last_ping = time.monotonic()

@@ -11,3 +11,4 @@ pyserial==3.5
 pycryptodome==3.23.0
 aiohttp==3.14.3
 imageio-ffmpeg==0.6.0
+av==17.1.0
