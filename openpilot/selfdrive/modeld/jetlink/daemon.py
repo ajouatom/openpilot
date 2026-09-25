@@ -161,6 +161,7 @@ def main():
   setup = VENDOR.parents[1] / 'tools/jetlink/setup_gadget.sh'
   try:
     while True:
+      update_affinity()
       if not host_attached():
         publish('waiting')
         time.sleep(1)
