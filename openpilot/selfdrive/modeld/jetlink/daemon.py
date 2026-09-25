@@ -27,9 +27,11 @@ from hud_protocol import Publisher, HUD_CAPABILITY, HUD_MESSAGE
 def update_affinity():
   from openpilot.common.params import Params
   onroad = Params().get_bool('IsOnroad') and Path('/sys/devices/system/cpu/cpu7/online').read_text().strip() == '1'
-  cores = {7} if onroad else set(range(4))
-  # Only bounded IPC/USB work runs here. DM remains FIFO5, modeld FIFO54;
-  # slow cereal/JSON/JPEG work lives in normal-priority child processes.
+  # Keep USB completion and IPC work off modeld/DM's core7. Pinning the
+  # reader there delayed runnable reads behind DM and blocked the host's
+  # response write. Include the normal-priority watchdog in this placement.
+  # Model/DM policies and the display children's separate policy are unchanged.
+  cores = set(range(4))
   os.sched_setscheduler(0, os.SCHED_FIFO if onroad else os.SCHED_OTHER, os.sched_param(1 if onroad else 0))
   for thread in Path('/proc/self/task').iterdir():
     try:
