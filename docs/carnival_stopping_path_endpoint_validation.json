@@ -312,5 +312,20 @@
   "limits": [
     "Recorded-input selection replay, not closed-loop braking validation.",
     "Pre-existing failures and 208 unverified labels per mode remain; strict corpus validation is not all-pass."
-  ]
+  ],
+  "deployment": {
+    "commit": "1b7dbbd3fef8e18f24e203971e1df402ead3f07e",
+    "sourceVersion": "351876445bb5b8110b8a",
+    "frames": 1200,
+    "exact_bundle_match": true,
+    "window_front43": 28,
+    "window_frames": 28,
+    "updater_status": "updated",
+    "updater_verified_at": 1790311336,
+    "updater_source_commit": "1b7dbbd3fef8e18f24e203971e1df402ead3f07e",
+    "replayHash": "5b08bc45508b24a6a24c13bf3ef60e5037c6b006be8942e78001ed21c4d9ac24",
+    "verified_utc": "2026-09-25T04:43:49.614053+00:00",
+    "workflow_run": 36095183097,
+    "ci_passed": 1454
+  }
 }
