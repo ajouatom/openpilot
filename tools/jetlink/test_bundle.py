@@ -30,6 +30,9 @@ def test_bundle_tracks_exact_commit_and_refuses_uncommitted_sources(tmp_path, mo
   assert manifest['sha256'] == hashlib.sha256(output.read_bytes()).hexdigest()
   assert manifest['source_commit'] == expected_commit
   assert manifest['size'] == output.stat().st_size
+  # Linux sha256sum treats a Windows CR as part of the archive filename.
+  assert output.with_suffix('.gz.sha256').read_bytes() == (
+    f"{manifest['sha256']}  {output.name}\n".encode())
   with tarfile.open(output) as archive:
     assert archive.extractfile('SOURCE_COMMIT').read().decode().strip() == expected_commit
     assert archive.extractfile('host/server.py').read() == b'print("ready")\n'
