@@ -230,7 +230,7 @@ class UIState:
     self.usbgpu_loading = self.params.get_bool("UsbGpuLoading")
     self.usbgpu_active = self.params.get_bool("UsbGpuActive")
     self.usbgpu_startup_failed = self.params.get_bool("UsbGpuStartupFailed")
-    from openpilot.selfdrive.modeld.jetlink.link import badge
+    from openpilot.common.jetlink_status import badge
     self.jetlink_badge = badge()
 
     self._param_update_time = time.monotonic()

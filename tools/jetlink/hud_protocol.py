@@ -77,6 +77,7 @@ class SnapshotBuilder:
 
   def packet(self):
     from openpilot.cereal import log
+    from openpilot.common.jetlink_status import badge
     now = time.monotonic()
     if now < self.next_send:
       return None
@@ -99,7 +100,9 @@ class SnapshotBuilder:
         except Exception:
           pass
       self.next_params = now + 1
+    device_badge = badge()
     record = {'version': 1, 'sent': now, 'events': self.cached, 'params': self.settings,
+              'external_compute_label': device_badge[0] if device_badge and device_badge[1] == 'active' else '',
               'received': self.sm.recv_time, 'mono': self.sm.logMonoTime,
               'valid': self.sm.valid, 'alive': self.sm.alive, 'cameras': self.camera.latest}
     data = json.dumps(record, separators=(',', ':')).encode()

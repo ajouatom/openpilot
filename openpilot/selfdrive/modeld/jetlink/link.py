@@ -8,6 +8,7 @@ import time
 import numpy as np
 
 from openpilot.selfdrive.modeld.jetlink import VENDOR  # noqa: F401
+from openpilot.common.jetlink_status import badge  # noqa: F401
 from jetlink.spec import ModelSpec
 
 SPEC = ModelSpec.from_dict(json.loads(Path(__file__).with_name('cinque_v2.json').read_text()))
@@ -76,25 +77,6 @@ def fault_active():
     return 0 <= time.monotonic() - float(FAULT.read_text()) < 5
   except (OSError, ValueError):
     return False
-
-
-def badge():
-  """Separate Jetlink readiness from eGPU presence and from active inference."""
-  link = state()
-  try:
-    model = json.loads(Path('/dev/shm/carrot-jetlink-model.json').read_text())
-    if 0 <= time.monotonic() - model['updated'] < 3 and model['active']:
-      return 'Jetlink v2', 'active'
-  except (OSError, ValueError, KeyError, TypeError):
-    pass
-  status = link.get('state')
-  if status == 'ready':
-    return 'Jetlink READY', 'ready'
-  if status in ('connecting', 'loading'):
-    return 'Jetlink WAIT', 'loading'
-  if status == 'retrying':
-    return 'Jetlink RETRY', 'error'
-  return None
 
 
 class Client:

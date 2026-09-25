@@ -31,6 +31,11 @@ class DisplayParams:
   def get_bool(self, key, *args, **kwargs):
     return self.get(key) in (b'1', b'True')
 
+  def external_compute_label(self):
+    snapshot = read_snapshot()
+    label = snapshot[1].get('external_compute_label', '') if snapshot else ''
+    return label if label in ('jetSON', 'MAC', 'Jetlink') else ''
+
   def get_int(self, key, *args, **kwargs):
     try:
       return int(self.get(key) or 0)

@@ -35,7 +35,9 @@ class CarrotSession(Session):
 
   def _send_json(self, msg_type, seq, obj, flags=0):
     if msg_type == P.Msg.HELLO_RESP:
-      obj = {**obj, HUD_CAPABILITY: sys.platform == 'linux'}
+      host = 'mac' if sys.platform == 'darwin' else (
+        'jetson' if Path('/etc/nv_tegra_release').is_file() else 'unknown')
+      obj = {**obj, HUD_CAPABILITY: sys.platform == 'linux', 'carrot_host': host}
     return super()._send_json(msg_type, seq, obj, flags)
 
   def handle(self, msg):
