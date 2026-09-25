@@ -306,7 +306,7 @@ class HudRenderer(Widget):
   def _draw_egpu_badge(self, rect: rl.Rectangle) -> None:
     # Keep runtime state visible while the shared USB hub re-enumerates; a
     # transient missing sysfs sample must not hide loading or failure details.
-    if not (ui_state.usbgpu_present or ui_state.usbgpu_active or
+    if not (getattr(ui_state, 'jetlink_badge', None) or ui_state.usbgpu_present or ui_state.usbgpu_active or
             ui_state.usbgpu_loading or ui_state.usbgpu_startup_failed):
       return
 
@@ -314,6 +314,8 @@ class HudRenderer(Widget):
                                ui_state.usbgpu_active, ui_state.usbgpu_startup_failed,
                                ui_state.usbgpu_compile_pending)
     text = "eGPU REBOOT" if state == "compile_pending" else "eGPU"
+    if getattr(ui_state, 'jetlink_badge', None) and not ui_state.usbgpu_active:
+      text, state = ui_state.jetlink_badge
     font_size = 22
     text_size = measure_text_cached(self._font_semi_bold, text, font_size)
     pad_x, pad_y = 10, 5

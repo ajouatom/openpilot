@@ -64,6 +64,11 @@ sessions, outside inference deadlines.
 
 ## Jetson installation
 
+See [deployment automation review](jetlink_deployment_review.md) for the current
+packaging/checking tools, installation sequence and unimplemented update/rollback
+automation. Host badges now identify active Jetson/Mac peers as `jetSON`/`MAC`;
+the separate eGPU hardware diagnostics retain their existing meaning.
+
 The prepared runtime layout is `RUNTIME/{venv,carrot,cache}`. Export committed
 host sources with `python tools/jetlink/build_host_bundle.py host.tar.gz` and
 extract into `RUNTIME/carrot`; `SOURCE_COMMIT` records the exact exported revision.
@@ -198,3 +203,54 @@ intervention. This tests process/link loss, not physical cable integrity.
 Private captures, device settings and access material are excluded from this
 repository. Full measurements and reproduction tools are archived locally
 under `.analysis/archive/2026-09-25/jetlink-integration/`.
+
+## Incomplete latency isolation (2026-09-25)
+
+A subsequent parked, disengaged 120 s observation kept DM enabled while
+disabling all HUD packets, camera-preview production and the Jetson USB HUD
+renderer. C4 per-frame bounded timing records confirmed zero HUD bytes.
+The full five-condition comparison was stopped when the user needed the car;
+the capnp-only, preview, display and repeated-baseline conditions did not
+complete. Original DisableDM=2 and full display publication were restored,
+the Jetson HUD service was restarted, and external inference was active.
+
+The completed condition observed 2,401 model messages: mean41.574 ms,
+p9950.586 ms, maximum53.498 ms, with48 executions above50 ms. No frame-ID
+gaps, invalid odometry/pose inputs or camera intervals above75 ms were observed.
+Thus HUD/capnp traffic is not necessary for an execution to exceed50 ms.
+The difference from the earlier full-display run is not a controlled estimate
+of HUD cost: the planned repeat and other conditions remain incomplete.
+
+The following decomposition joins2,400 model/USB-owner records by session
+frame counter; it excludes about0.18 ms of enclosing model-loop overhead.
+
+| Interval | Mean | p99 | Maximum |
+|---|---:|---:|---:|
+| Instrumented model call | 41.398 ms | 50.410 ms | 53.322 ms |
+| C4 camera warp, wall time | 7.860 ms | 16.262 ms | 17.651 ms |
+| C4 warp thread CPU time | 5.819 ms | 6.352 ms | 6.592 ms |
+| Local request IPC | 2.535 ms | 6.817 ms | 8.700 ms |
+| USB request submission | 3.744 ms | 6.802 ms | 10.334 ms |
+| USB response wait/receive/parse | 25.774 ms | 30.608 ms | 35.799 ms |
+| Jetson reported GPU execution | 19.629 ms | 19.665 ms | 20.129 ms |
+| Jetson reported total processing | 21.066 ms | 21.146 ms | 21.736 ms |
+| Local reply IPC | 0.658 ms | 5.450 ms | 6.299 ms |
+| Model output parsing | 0.658 ms | 0.771 ms | 0.857 ms |
+
+These rows overlap (GPU is part of response time); maxima must not be added.
+For the44 instrumented calls above50 ms, mean warp time was14.927 ms versus
+7.728 ms in other calls, while warp thread CPU was6.035 versus5.814 ms.
+Mean response time was29.196 versus25.710 ms; GPU time remained19.629 ms
+in both groups. The longest call contained17.018 ms warp and29.357 ms
+response time, including19.619 ms GPU execution.
+
+This localizes the varying latency primarily to warp elapsed time and the
+response path rather than TensorRT execution. It does not distinguish QCOM
+queue/synchronization waits, CPU scheduling, kernel I/O or Python thread
+handoff. Transport read-wait includes peer/idle time, and handoff timing is
+not a pure scheduler measurement. Next device tests must measure scheduling
+and warp synchronization separately, then repeat identical DM/display
+conditions for any candidate change. No latency fix or driving validation is
+claimed from this interrupted investigation. Private raw captures, analysis
+and the opt-in instrumentation patch are archived under
+`.analysis/archive/2026-09-25/jetlink-latency/`.

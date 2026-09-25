@@ -6832,6 +6832,7 @@ class ClusterUiRenderer:
             and not self._cruise_set_visible(state)
             and state.lfa_active is None
             and not state.egpu_active
+            and not state.external_compute_label
         ):
             return
 
@@ -6840,17 +6841,19 @@ class ClusterUiRenderer:
         self._draw_lfa_status_icon(state, TOP_STATUS_CENTER_Y + LFA_STATUS_ICON_SIZE * 0.5)
 
     def _draw_egpu_status(self, state: ClusterUiState) -> None:
-        if not state.egpu_active:
+        label = 'eGPU' if state.egpu_active else state.external_compute_label
+        if not label:
             return
+        width = max(EGPU_STATUS_W, len(label) * EGPU_STATUS_FONT_SIZE * 0.7 + 16)
         rect = rl.Rectangle(
-            EGPU_STATUS_CENTER_X - EGPU_STATUS_W * 0.5,
+            EGPU_STATUS_CENTER_X - width * 0.5,
             TOP_STATUS_CENTER_Y - EGPU_STATUS_H * 0.5,
-            EGPU_STATUS_W,
+            width,
             EGPU_STATUS_H,
         )
         rl.draw_rectangle_rounded(rect, 0.35, 8, rl_color((0, 0, 0), 150))
         rl.draw_rectangle_rounded_lines_ex(rect, 0.35, 8, 2.0, rl_color(GREEN))
-        self._draw_text("eGPU", EGPU_STATUS_CENTER_X, TOP_STATUS_CENTER_Y + 1.0,
+        self._draw_text(label, EGPU_STATUS_CENTER_X, TOP_STATUS_CENTER_Y + 1.0,
                         EGPU_STATUS_FONT_SIZE, GREEN, anchor="center")
 
     def _draw_drive_status_box(
