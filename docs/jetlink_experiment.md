@@ -274,3 +274,88 @@ conditions for any candidate change. No latency fix or driving validation is
 claimed from this interrupted investigation. Private raw captures, analysis
 and the opt-in instrumentation patch are archived under
 `.analysis/archive/2026-09-25/jetlink-latency/`.
+
+## Two-sided USB timing investigation (2026-09-25)
+
+Follow-up parked observations kept DM enabled and used bounded per-frame
+records. Full HUD, capnp-only HUD and no HUD packets were each observed for
+90 s. Mean model executions were43.747,43.583 and41.128 ms respectively;
+maxima were54.904,54.885 and85.453 ms. The no-packet observation included one
+model input gap and invalid odometry/pose inputs despite complete camera
+streams. Its longest C4 request submission was49.307 ms. HUD traffic is
+therefore not necessary for the long transport tail. This comparison leaves
+the Jetson renderer service running; it is different from the earlier trial
+that stopped the renderer too. Capnp-only publication averaged about260 KB/s
+and full HUD about428 KB/s in these observations.
+
+Request submission is a synchronous FunctionFS write. A separate C4 thread
+receives responses; this does not make request writes asynchronous. A long
+send call can include waiting for the receiver, kernel work, or delayed CPU
+resumption. It must not be presented as measured wire transfer time or as
+proof that the sending endpoint is the cause.
+
+A temporary Jetson transport wrapper recorded request reads, inference
+handling and response writes. C4 kernel traces recorded writev/readv and
+thread wakeups/switches. Frames were joined by protocol frame ID; clocks on
+the two machines were not assumed synchronized. One120 s repeated baseline
+had2,400 valid model messages, mean44.510 ms, maximum55.271 ms and78 over50 ms,
+without camera/model gaps or invalid pose inputs. C4 request submission
+averaged3.936 ms, and the overlapping response interval28.026 ms. Jetson
+response writes averaged6.225 ms and reached13.092 ms. These intervals are
+not independent and must not be added to GPU time.
+
+For frame19802, C4 submission took13.914 ms including13.466 ms inside writev,
+while the complete Jetson receive call took4.139 ms. C4 then received the
+result in19.434 ms despite19.647 ms of GPU execution plus a4.197 ms Jetson
+response write. Work on the Jetson overlaps the tail of the C4 submission;
+the submission duration is not a direct measure of USB bandwidth.
+
+A subsequent60 s scheduler trace localized part of the response delay to C4.
+For frame23953, the reader woke at1280.664255 s but resumed at1280.667865 s,
+after dmonitoringmodeld yielded:3.610 ms runnable waiting. It was subsequently
+preempted for another0.973 and0.452 ms around model/DM execution. The same
+frame's Jetson response write lasted14.343 ms. The reader and USB main thread
+were both FIFO1 on core7, below unchanged modeld FIFO54 and DM FIFO5. The
+normal-priority watchdog was also repeatedly repinned there by update_affinity.
+This establishes a scheduling contribution to response delay, not that every
+transport tail has the same cause.
+
+Trace buffers were bounded and overwrote early events; scheduler conclusions
+use the retained core7 interval starting1268.512155 s. The largest82.239 ms
+model execution in that run occurred before the retained interval and cannot
+be assigned a kernel cause from that capture. Jetson schedstat accounting was
+disabled, so its zero runqueue samples do not establish absence of scheduling
+delay. No camera/control/model/DM priorities or validity limits were changed
+for this investigation.
+
+### USB-only affinity comparison
+
+After restarting with the same diagnostic build, four90 s observations used
+full HUD and DM, original warp execution, and no kernel or Jetson tracing:
+
+| USB placement | Model mean | p99 | Maximum | Above50 ms |
+|---|---:|---:|---:|---:|
+| A: all threads on core7 | 43.972 | 51.883 | 55.576 | 86/1,801 |
+| Reader/watchdog on cores0..3; main on7 | 44.098 | 51.298 | 61.252 | 55/1,801 |
+| Main/reader/watchdog on cores0..3 | 41.036 | 50.025 | 54.850 | 19/1,798 |
+| A repeated: all threads on core7 | 44.022 | 51.466 | 54.039 | 66/1,800 |
+
+Times are milliseconds. Every condition had no observed model frame gaps,
+invalid pose/odometry/CAN inputs or camera intervals above75 ms. Device thread
+affinities verified the placements; main/reader remained FIFO1 and watchdog
+SCHED_OTHER. The return to A supports a roughly3 ms mean improvement from
+moving the whole USB process, rather than moving only its reader.
+
+The adapter now keeps USB main/reader/watchdog on cores0..3. All existing
+camera/control/model/DM and display-worker placements/priorities are retained,
+as are watchdog deadlines, fallback/rejoin gates and model validity policies.
+This is a measured mitigation: maxima still exceeded50 ms, and the earlier
+49 ms submission outlier has not been reproduced with complete kernel tracing.
+Neither C3/Mac nor loaded driving is validated by these parked C4 trials.
+
+Private cached-warp-output and TinyJit input-binding candidates were also
+compared with exact pixel validation. Their small CPU reductions did not
+establish stable timing; both were discarded. The committed code retains the
+original warp implementation. Temporary recording modules and diagnostic
+mode switches are not part of the deployed change. Local tests passed18 host
+checks and4 model checks;4 Unix-socket cases require target Linux execution.
