@@ -110,7 +110,8 @@ def copy_user_dependencies(root):
 
 def provision(root, setup, bundle, stage):
   for name in ['proc', 'sys', 'dev', 'run', 'tmp', 'var/tmp', 'var/log', 'var/cache', 'var/spool',
-               'var/backups', 'var/crash', 'var/mail', 'boot/efi', 'mnt', 'media', 'root', 'home/jetlink',
+               'var/backups', 'var/crash', 'var/mail', 'var/spool/anacron', 'etc/openvpn',
+               'boot/efi', 'mnt', 'media', 'root', 'home/jetlink',
                'etc/NetworkManager/system-connections', 'etc/ssl/private', 'var/lib/NetworkManager',
                'var/lib/carrot-jetlink', 'var/lib/apt/lists/partial']:
     (root/name).mkdir(parents=True, exist_ok=True)
@@ -199,6 +200,11 @@ def provision(root, setup, bundle, stage):
       if updated != data:
         path.write_text(updated)
   run('chown', '-R', '1000:1000', str(runtime/'cache'))
+  # The vendor display library opens log.log on import. The immutable release
+  # must remain root-owned; systemd creates this writable directory as jetlink.
+  write(root, '/etc/systemd/system/carrot-jetlink-hud.service.d/log-directory.conf',
+        '[Service]\nLogsDirectory=carrot-jetlink-hud\nLogsDirectoryMode=0700\n'
+        'WorkingDirectory=/var/log/carrot-jetlink-hud\n')
   script = RUNTIME + '/current/tools/jetlink/'
   enable(root, 'carrot-image-setup.service',
          '[Unit]\nDescription=Carrot per-device SD provisioning\nAfter=local-fs.target\nBefore=ssh.service NetworkManager.service\n'

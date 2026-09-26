@@ -97,6 +97,42 @@ this is still not boot/inference validation of the spare SD.
 
 ## Additional boot experiment
 
+### Spare SD physical boot follow-up
+
+The owner booted the candidate SD successfully: unique SSH credentials and
+Wi-Fi provisioning worked, and APP expanded to approximately 116 GiB. Physical
+testing exposed a HUD packaging error missed by dependency-only imports: the
+vendor USB library opens `log.log` relative to its working directory, but the
+new release directory is root-owned. The renderer repeatedly exited with
+`PermissionError` even though USB `1cbe:0092` and Xorg were healthy.
+
+The HUD installer and image finalizer now select `/var/log/carrot-jetlink-hud`
+as the working directory using systemd `LogsDirectory` (mode 0700, owned by the
+service user). Release code remains root-owned. The finalizer also recreates
+empty `/etc/openvpn` and `/var/spool/anacron` directories after removing personal
+configuration; their missing directories had caused unrelated boot failures.
+
+These service/directory repairs were applied to the owner's new SD. A parked,
+disengaged reboot verified no failed units, zero HUD restart attempts, and
+automatic USB H.264 output at 10 FPS. Linux startup measured 15.678 s, engine
+ready 29.788 s and first HUD refresh 38.238 s, excluding firmware/shutdown time.
+A subsequent 60 s run recorded 1,200 model frames, mean 38.088 ms, maximum
+45.664 ms, no execution over 50 ms, no frame-skip events or model/pose/CAN
+invalidity. This is parked validation; the owner was away and did not visually
+confirm the panel. The reboot monitor still recorded the existing timeout
+transition with three missing frame IDs and a maximum receive gap of 207.101 ms;
+external activation was absent for about 59.85 s. Do not generalize the
+steady-state result to failover.
+
+The stored `a40643409b` raw/compressed images **still predate these repairs**.
+They must be regenerated before public release. Fixing the live card and image
+generation code does not modify previously created image files. Dependency
+imports alone are insufficient future HUD checks: exercise the USB vendor
+import under the actual non-root service user and working directory, then
+validate the physical panel and automatic startup.
+
+### Original SD utmp delay experiment
+
 The installed NVIDIA utmp override adds `/bin/sleep 2` before sysinit completes.
 `configure_utmp_delay.py` removes that delay only when it is the sole expected
 pre-start command. `--restore` removes our override. NVIDIA explains that it
