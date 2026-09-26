@@ -17,7 +17,11 @@ StartLimitIntervalSec=0
 [Service]
 User=$OWNER
 SupplementaryGroups=plugdev video render
-WorkingDirectory=$ROOT/carrot
+# The vendor USB library opens log.log relative to cwd. Keep release code
+# root-owned and give only its dedicated log directory to the service account.
+LogsDirectory=carrot-jetlink-hud
+LogsDirectoryMode=0700
+WorkingDirectory=/var/log/carrot-jetlink-hud
 Environment=DISPLAY=:0
 Environment=XAUTHORITY=/run/user/$UID_NUMBER/gdm/Xauthority
 Environment=PYTHONUNBUFFERED=1
