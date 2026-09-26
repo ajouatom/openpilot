@@ -88,6 +88,13 @@ firmware/Linux/model data remains a failure. This manual recovery case means
 the Windows writer is not yet an unattended consumer installer. Do not claim
 an exact raw-image hash match for a card verified through this separate method.
 
+The reference card completed the full 24 GiB comparison: only eight primary-GPT
+bytes and 1,217 setup-filesystem bytes differed. All firmware, Linux and model
+data matched exactly. Separate GPT/FAT inspection accounted for these changes,
+read-only Windows filesystem checking passed, and private setup was flushed and
+read back successfully. The card is ready for the owner's physical boot test;
+this is still not boot/inference validation of the spare SD.
+
 ## Additional boot experiment
 
 The installed NVIDIA utmp override adds `/bin/sleep 2` before sysinit completes.
