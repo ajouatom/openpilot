@@ -4,7 +4,9 @@ Requires a committed host bundle and zerofree. Output remains a candidate until
 boot, provisioning, model and USB checks pass on the spare SD card.
 """
 import argparse
+import base64
 import hashlib
+import importlib.metadata
 import json
 import os
 from pathlib import Path
@@ -73,6 +75,39 @@ def enable(root, name, body):
   link.symlink_to('../' + name)
 
 
+def copy_user_dependencies(root):
+  # Reference venv used --system-site-packages, which also exposed these four
+  # packages from its owner's user-site directory. Copy only verified package
+  # records, never the personal home or the unrelated torch/development stack.
+  site = Path('/home/yun/.local/lib/python3.10/site-packages')
+  wanted = {'typing-extensions': '4.15.0', 'cffi': '2.0.0', 'pycparser': '2.23', 'pycryptodome': '3.23.0'}
+  found = {}
+  destination = root/'opt/carrot-jetlink/venv/lib/python3.10/site-packages'
+  for dist in importlib.metadata.distributions(path=[str(site)]):
+    name = dist.metadata['Name'].lower().replace('_', '-')
+    if name not in wanted:
+      continue
+    if dist.version != wanted[name] or dist.files is None:
+      raise RuntimeError('Unreviewed reference dependency: ' + name)
+    for entry in dist.files:
+      source = Path(dist.locate_file(entry)).resolve()
+      if '__pycache__' in source.parts or source.suffix == '.pyc':
+        continue
+      if not source.is_relative_to(site):
+        raise RuntimeError('Package file escapes reviewed user-site directory')
+      if entry.hash:
+        digest = hashlib.new(entry.hash.mode, source.read_bytes()).digest()
+        if base64.urlsafe_b64encode(digest).rstrip(b'=').decode() != entry.hash.value:
+          raise RuntimeError('Reference package RECORD mismatch: ' + name)
+      target = destination/source.relative_to(site)
+      target.parent.mkdir(parents=True, exist_ok=True)
+      shutil.copy2(source, target)
+    found[name] = dist.version
+  if found != wanted:
+    raise RuntimeError('Reference user-site dependencies missing')
+  write(root, '/etc/carrot-jetlink-user-dependencies.json', json.dumps(found, indent=2) + '\n')
+
+
 def provision(root, setup, bundle, stage):
   for name in ['proc', 'sys', 'dev', 'run', 'tmp', 'var/tmp', 'var/log', 'var/cache', 'var/spool',
                'var/backups', 'var/crash', 'var/mail', 'boot/efi', 'mnt', 'media', 'root', 'home/jetlink',
@@ -126,16 +161,27 @@ def provision(root, setup, bundle, stage):
       path.unlink()
   runtime = root/RUNTIME.lstrip('/')
   releases = runtime/'releases'; releases.mkdir(exist_ok=True)
-  temporary = releases/'staging'; temporary.mkdir()
+  temporary = releases/'staging'
+  if temporary.exists():
+    shutil.rmtree(temporary)
+  temporary.mkdir()
   extract_bundle(bundle, temporary)
   commit = (temporary/'SOURCE_COMMIT').read_text().strip()
   if not re.fullmatch('[0-9a-f]{40}', commit):
     raise ValueError('Invalid committed source identity')
   release = releases/commit
+  if release.exists():
+    shutil.rmtree(release)
   temporary.rename(release)
+  for name in ['current', 'carrot']:
+    (runtime/name).unlink(missing_ok=True)
   (runtime/'current').symlink_to('releases/' + commit)
   # Keep the compatibility alias for existing static inventory tools.
   (runtime/'carrot').symlink_to('current')
+  for previous in releases.iterdir():
+    if previous != release:
+      shutil.rmtree(previous)
+  copy_user_dependencies(root)
   for path in (runtime/'venv/bin').iterdir():
     if path.is_file() and not path.is_symlink() and path.stat().st_size < 1 << 20:
       data = path.read_bytes()
