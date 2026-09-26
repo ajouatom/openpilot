@@ -13,6 +13,22 @@ sys.path.insert(0, str(ROOT / 'openpilot/selfdrive/carrot/cluster'))
 from hud_protocol import read_snapshot, SERVICES
 
 
+def require_usb_display(scan, expected):
+  product = scan(expected)
+  if product is None:
+    raise RuntimeError('Jetson USB display disappeared before opening; retrying')
+  return product
+
+
+def wait_for_usb_display(scan, expected, sleep=time.sleep):
+  announced = False
+  while scan(expected) is None:
+    if not announced:
+      print('Waiting for Jetson USB display', flush=True)
+      announced = True
+    sleep(1.)
+
+
 class DisplayParams:
   """Only this renderer sees this adapter; no vehicle Params can be written."""
   def __init__(self, *args, **kwargs):
@@ -153,6 +169,13 @@ def main():
   cluster_navi_source.NaviIpcMediaSource = RemoteNaviSource
   vehicle_stats = VehicleSystemStats()
   import main as cluster
+  if '--help' not in sys.argv:
+    scan = cluster.find_supported_usb_product
+    wait_for_usb_display(scan, cluster.product_id_for_hud_mode(1))
+    # The common PC renderer falls back to an invisible window if the USB
+    # panel is absent. A headless Jetson must wait/retry, including the race
+    # where it disappears between the preflight scan and opening the device.
+    cluster.find_supported_usb_product = lambda expected: require_usb_display(scan, expected)
   class Display(cluster.TuringUsbDisplay):
     next_status = 0.
 
