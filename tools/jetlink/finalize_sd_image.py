@@ -235,12 +235,20 @@ def main():
   parser.add_argument('--bundle', type=Path, required=True)
   parser.add_argument('--sha256', required=True)
   parser.add_argument('--zerofree', type=Path, required=True)
+  parser.add_argument('--refresh-source', action='store_true', help='Rebuild an unprovisioned local candidate with a newer committed bundle')
   args = parser.parse_args()
   if os.geteuid() != 0 or not Path('/etc/nv_tegra_release').is_file():
     raise RuntimeError('Run on the reference Jetson as root')
   if hashlib.sha256(args.bundle.read_bytes()).hexdigest() != args.sha256:
     raise RuntimeError('Host bundle checksum mismatch')
   stage = json.loads((WORK/'stage.json').read_text())
+  if args.refresh_source and stage['state'] == 'FINALIZED_CANDIDATE':
+    candidate = WORK/'carrot-jetson-candidate.img'
+    if candidate.is_symlink() or candidate.stat().st_size != stage['image_bytes'] or (WORK/'carrot-jetson-STAGING.img').exists():
+      raise RuntimeError('Unexpected local candidate file')
+    candidate.rename(WORK/'carrot-jetson-STAGING.img')
+    stage['state'] = 'UNFINISHED'
+    (WORK/'stage.json').write_text(json.dumps(stage, indent=2) + '\n')
   if stage['state'] != 'UNFINISHED':
     raise RuntimeError('Expected unfinished staging image')
   image = WORK/'carrot-jetson-STAGING.img'
@@ -255,6 +263,8 @@ def main():
   try:
     run('mount', loop+'p1', str(root)); mounted.append(root)
     run('mount', loop+'p16', str(setup)); mounted.append(setup)
+    if (root/'var/lib/carrot-jetlink/provisioned.json').exists() or (setup/'setup.json').exists():
+      raise RuntimeError('Never refinalize or distribute a personally provisioned image')
     marker = provision(root, setup, args.bundle, stage)
     # Minimal device nodes for offline Python/library checks; no live GPU/USB is mounted.
     for name, minor in [('null', 3), ('zero', 5), ('random', 8), ('urandom', 9)]:

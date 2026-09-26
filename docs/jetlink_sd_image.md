@@ -47,6 +47,15 @@ growth is retried until successful. Provisioning and expansion are first-boot
 work; normal ignition startup does not install packages, download models or
 compile TensorRT engines.
 
+Offline checks on the reference Jetson passed full server/HUD dependency
+imports, the pinned ONNX SHA-256, and first-boot provisioning in isolated mount
+and hostname namespaces. Synthetic Wi-Fi/SSH setup was removed afterwards and
+free ext4 blocks zeroed again. A separate miniature loop disk verified mounted
+APP growth. `parted --script` refused the in-use partition on this distribution;
+the implemented GPT update preserves APP's start, type and UUID, then refreshes
+the kernel partition size with `partx` and grows ext4. These checks do not
+replace booting the physical spare SD.
+
 An SD image does **not** update QSPI firmware. A fresh or differently configured
 Jetson may need matching NVIDIA firmware prepared first. The image is not a
 generic original Jetson Nano, Orin NX, NVMe or Mac image. NVIDIA describes SD

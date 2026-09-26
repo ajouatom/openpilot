@@ -37,10 +37,17 @@ def main():
   sectors = int(run('blockdev', '--getsz', '/dev/mmcblk0'))
   app = validate_layout(layout, marker['root_start'], sectors)
   if sectors - app['start'] - app['size'] > 4096:
+    if app.get('attrs') or not app.get('uuid') or app['type'].upper() != '0FC63DAF-8483-4772-8E79-3D69D8477DE4':
+      raise RuntimeError('Unexpected APP attributes or type')
     run('sgdisk', '-e', '/dev/mmcblk0')
-    # Explicit end avoids parted's interactive GPT-repair prompt.
-    run('parted', '--script', '/dev/mmcblk0', 'unit', 's', 'resizepart', '1', str(sectors - 34) + 's')
-    run('partx', '--update', '--nr', '1', '/dev/mmcblk0')
+    # parted --script refuses an in-use partition on the reference distribution.
+    # Rewrite only the APP table entry, preserving its start, type and UUID;
+    # no filesystem data is erased. One sgdisk invocation writes the new table.
+    run('sgdisk', '--delete=1', f'--new=1:{app["start"]}:{sectors - 34}',
+        '--typecode=1:' + app['type'], '--partition-guid=1:' + app['uuid'],
+        '--change-name=1:APP', '/dev/mmcblk0')
+  # Also refresh after an interrupted earlier attempt already wrote the GPT.
+  run('partx', '--update', '--nr', '1', '/dev/mmcblk0')
   run('resize2fs', '/dev/mmcblk0p1')
   state.parent.mkdir(parents=True, exist_ok=True)
   state.write_text(json.dumps({'disk_sectors': sectors}) + '\n')
