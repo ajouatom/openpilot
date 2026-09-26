@@ -81,6 +81,15 @@ units. Kernel time also varied (8.152 → 6.861 s), so the entire observed gain
 cannot be attributed solely to the removed two-second sleep. This is one warm
 reboot, not a repeated ignition/cold-boot guarantee.
 
+The C4 fault monitor observed approximately **58.7 s** without external-model
+activation across shutdown, firmware boot and reconnection. It continued
+internal inference, but the existing timeout transition still produced three
+missing model frame IDs and a maximum observed receive gap of **205.9 ms**.
+Do not describe reboot fallback as maintaining a hard 50 ms deadline. A separate
+60 s steady run after recovery recorded 1,200 model frames, mean **37.912 ms**,
+maximum **44.393 ms**, with no skipped frames or model/pose/CAN invalidity. DM
+remained at the owner's original disabled setting; this is parked validation.
+
 ## C4-triggered updates: proposed protocol, not yet implemented
 
 The recommended control flow is C4 request → Jetson download/stage → explicit
