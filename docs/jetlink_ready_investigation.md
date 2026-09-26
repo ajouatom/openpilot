@@ -190,3 +190,29 @@ bounded whole-event deadline. All nine focused media tests passed on C4.
 Windows passed seven portable tests; its two Unix socket tests were skipped.
 This corrects the identified navigation defects, not the separately observed
 long driving-model USB send interval whose lower-level cause is unresolved.
+
+The correction was deployed to C4 as `1a73e3c05c`, after fresh stopped and
+fully disengaged checks. Only the USB owner was restarted; the model rejoined
+automatically. No Jetson service update was required because the receiving
+protocol and implementation are unchanged.
+
+A 180 s parked observation recorded 3,600 model outputs and 3,600 frames from
+each camera, with no model frame gap, camera SOF gap above 75 ms, invalid
+pose inputs/sensors/posenet or CAN invalidity. External inference remained
+active in all 180 status samples. Model execution averaged 37.909 ms,
+p99 41.656 ms, maximum 52.253 ms (one above 50 ms). This is not a hard 50 ms
+latency guarantee or a demonstrated fix for the earlier driving USB stall.
+Driver monitoring retained the original DisableDM=2 setting.
+
+Actual phone media arrived for 58.67 s within that observation: 725 consecutive
+media messages, including 573 map messages. The new publisher sent all 725,
+with zero stale or abandoned events and maximum event-send duration 355.18 ms.
+During media input, interval CPU means were 38.23% for core7 and 0.632% for
+the navigation child (previously approximately 100% and 64%). At idle they
+were 35.35% and 0.257%. Jetson's once-per-second HUD status showed advancing
+map sequences throughout the active interval, with observed decoded-frame
+ages at most 201 ms before the final source frame. The final sequence then
+stopped when phone input stopped; this is not counted as an internal freeze.
+Sampling does not measure every rendered frame or end-to-end source latency.
+The earlier multi-second internal freezes were not reproduced in this short
+live-stream validation. Longer streaming and loaded driving remain unvalidated.
