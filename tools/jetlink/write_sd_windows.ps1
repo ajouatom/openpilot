@@ -85,11 +85,14 @@ public static class CarrotSdNative {
   $null = $device.Seek(0, [System.IO.SeekOrigin]::Begin)
   $hash = [System.Security.Cryptography.SHA256]::Create()
   $remaining = $imageFile.Length
+  $nextReport = [long]1GB
   while ($remaining -gt 0) {
     $count = $device.Read($buffer, 0, [int][Math]::Min($buffer.Length, $remaining))
     if ($count -le 0) { throw 'Short read during verification' }
     $null = $hash.TransformBlock($buffer, 0, $count, $null, 0)
     $remaining -= $count
+    $verified = $imageFile.Length - $remaining
+    if ($verified -ge $nextReport) { Write-Output "VERIFY $verified / $($imageFile.Length)"; $nextReport += 1GB }
   }
   $null = $hash.TransformFinalBlock([byte[]]::new(0), 0, 0)
   $readbackHash = ([BitConverter]::ToString($hash.Hash)).Replace('-', '').ToLowerInvariant()
@@ -115,7 +118,9 @@ public static class CarrotSdNative {
     $volume = $setupPartition | Get-Volume
     if ($volume.FileSystemLabel -ne 'CARROTSETUP') { throw 'Unexpected setup volume' }
     $setupPath = "$($setupPartition.DriveLetter):\setup.json"
-    [System.IO.File]::WriteAllBytes($setupPath, $setupBytes)
+    $setupStream = [System.IO.File]::Open($setupPath, [System.IO.FileMode]::Create, [System.IO.FileAccess]::Write, [System.IO.FileShare]::Read)
+    try { $setupStream.Write($setupBytes, 0, $setupBytes.Length); $setupStream.Flush($true) }
+    finally { $setupStream.Dispose() }
     Write-Output 'PRIVATE_SETUP_WRITTEN (contents intentionally omitted)'
   }
   Write-Output 'SD_WRITE_COMPLETE_AND_VERIFIED'
