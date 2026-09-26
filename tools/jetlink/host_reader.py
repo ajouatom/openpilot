@@ -10,6 +10,13 @@ class ReadAheadTransport:
     self.transport = transport
     self.queue = queue.Queue(maxsize=2)
     self.stopped = threading.Event()
+    from jetlink.transport.usbbulk import UsbBulkTransport
+    self.bulk_input = None
+    if isinstance(transport, UsbBulkTransport):
+      from host_usb import BulkInput
+      self.bulk_input = BulkInput(transport, self.stopped)
+      self.raw_read = transport._read_into
+      transport._read_into = self.bulk_input.read
     self.thread = threading.Thread(target=self._read, name='jetlink-usb-read', daemon=True)
     self.thread.start()
 
@@ -25,7 +32,7 @@ class ReadAheadTransport:
     try:
       while not self.stopped.is_set():
         try:
-          msg = self.transport.recv(timeout=.1)
+          msg = self.transport.recv(timeout=None if self.bulk_input is not None else .1)
         except LinkTimeout:
           continue
         # The upstream receive view is valid only until its next recv. Own
@@ -51,3 +58,9 @@ class ReadAheadTransport:
     self.thread.join(timeout=1)
     if self.thread.is_alive():
       raise LinkError('host reader did not stop before transport teardown')
+    if self.bulk_input is not None:
+      self.bulk_input.close()
+      # Upstream drains an already-desynced stream after session.close().
+      # Restore its raw I/O only after the async reader has relinquished it.
+      self.transport._read_into = self.raw_read
+      self.bulk_input = None

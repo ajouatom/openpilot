@@ -15,8 +15,10 @@ def may_join(now, messages, valid, received):
   required = ('carState', 'selfdriveState', 'carControl')
   if not all(valid.get(k, False) and 0 <= now - received.get(k, -1e6) < .25 for k in required):
     return False
-  cs, sd, cc = (messages[k] for k in required)
-  return cs.standstill and abs(cs.vEgo) < .01 and not (sd.enabled or cc.latActive or cc.longActive)
+  cs = messages['carState']
+  # User-authorized transition opportunities: stopped or a fresh physical
+  # steering override. Keep all freshness/validity gates and output checks.
+  return (cs.standstill and abs(cs.vEgo) < .01) or cs.steeringPressed
 
 
 class Warp:

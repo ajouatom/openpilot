@@ -43,8 +43,10 @@ general distribution needs an appropriate USB identity allocation.
 ## Failure behavior and scheduling
 
 Native inference executes three frames before an external join, warming the
-fallback. Joining or rejoining requires fresh, valid, parked and fully
-disengaged vehicle/control state. A connected external model can continue
+fallback. As authorized September26, joining or rejoining requires fresh,
+valid vehicle/control state and either standstill with abs(vEgo)<0.01 m/s or
+carState.steeringPressed. Engagement alone no longer forbids that transition.
+A connected external model can continue
 while moving, but a failed connection requests the existing `commIssue`
 event and restores the native model with recurrent queues cleared in place.
 This retains the existing soft-disable policy; it is not a claim of immediate
@@ -54,10 +56,10 @@ Model/camera gaps retain normal odometry and pose invalidity.
 
 Late startup is not a one-time selection: native inference runs while the host
 is unavailable, readiness is refreshed about once per second, and a failed
-join is retried after five seconds when the same parked/disengaged conditions
-hold. Being onroad does not itself forbid a join. Being stopped with control
-still enabled does forbid it; a host that becomes ready during driving waits
-for a later valid stopped, fully disengaged state. No startup-wide wait is used.
+join is retried after five seconds when the same stopped/steering-override
+conditions hold. Being onroad does not itself forbid a join. No startup-wide
+wait is used. Freshness and invalid-output checks are unchanged; the new
+moving steering-override case has unit coverage, not vehicle-driving validation.
 
 On September25 after the user restarted vehicle power, C4 uptime was about69
 minutes while Jetson uptime was about4 minutes. Both Jetson services were

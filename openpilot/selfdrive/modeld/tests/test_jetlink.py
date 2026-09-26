@@ -54,8 +54,8 @@ def test_fused_warp_requires_exact_parity_and_restores_transforms(monkeypatch, f
   assert all(np.array_equal(matrix, np.eye(3)) for matrix in transforms.values())
 
 
-def test_join_requires_fresh_stopped_fully_disengaged_messages():
-  messages = dict(carState=NS(standstill=True, vEgo=0.), selfdriveState=NS(enabled=False),
+def test_join_requires_fresh_stopped_or_steering_override_messages():
+  messages = dict(carState=NS(standstill=True, vEgo=0., steeringPressed=False), selfdriveState=NS(enabled=False),
                   carControl=NS(latActive=False, longActive=False))
   valid = dict.fromkeys(messages, True)
   received = dict.fromkeys(messages, 100.)
@@ -63,11 +63,19 @@ def test_join_requires_fresh_stopped_fully_disengaged_messages():
   for key in messages:
     assert not may_join(100.1, messages, {**valid, key: False}, received)
     assert not may_join(100.1, messages, valid, {**received, key: 99.})
-  for key, field in (('carState', 'vEgo'), ('selfdriveState', 'enabled'), ('carControl', 'latActive'), ('carControl', 'longActive')):
-    original = getattr(messages[key], field)
-    setattr(messages[key], field, 1)
-    assert not may_join(100.1, messages, valid, received)
-    setattr(messages[key], field, original)
+  messages['selfdriveState'].enabled = True
+  messages['carControl'].latActive = messages['carControl'].longActive = True
+  assert may_join(100.1, messages, valid, received)
+  messages['carState'].vEgo = 10.
+  messages['carState'].standstill = False
+  assert not may_join(100.1, messages, valid, received)
+  messages['carState'].steeringPressed = True
+  assert may_join(100.1, messages, valid, received)
+  for key in messages:
+    assert not may_join(100.1, messages, {**valid, key: False}, received)
+    assert not may_join(100.1, messages, valid, {**received, key: 99.})
+  messages['carState'].steeringPressed = False
+  assert not may_join(100.1, messages, valid, received)
 
 
 def test_model_contract_checks_checkpoint_and_every_output_slice():
