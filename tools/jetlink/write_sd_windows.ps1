@@ -5,6 +5,7 @@ param(
   [Parameter(Mandatory=$true)][int]$DiskNumber,
   [Parameter(Mandatory=$true)][string]$SerialNumber,
   [Parameter(Mandatory=$true)][long]$DiskBytes,
+  [switch]$VerifyOnly,
   [string]$SetupJson,
   [Parameter(Mandatory=$true)][string]$Log
 )
@@ -70,24 +71,28 @@ public static class CarrotSdNative {
   }
   $handle = [CarrotSdNative]::Open("\\.\PhysicalDrive$DiskNumber")
   $device = [System.IO.FileStream]::new($handle, [System.IO.FileAccess]::ReadWrite, 4MB, $false)
-  $inputImage = [System.IO.File]::OpenRead($imagePath)
   $buffer = New-Object byte[] (4MB)
-  $total = [long]0
-  $nextReport = [long]1GB
-  while (($count = $inputImage.Read($buffer, 0, $buffer.Length)) -gt 0) {
-    $device.Write($buffer, 0, $count)
-    $total += $count
-    if ($total -ge $nextReport) { Write-Output "WRITE $total / $($imageFile.Length)"; $nextReport += 1GB }
+  if (-not $VerifyOnly) {
+    $inputImage = [System.IO.File]::OpenRead($imagePath)
+    $total = [long]0
+    $nextReport = [long]1GB
+    while (($count = $inputImage.Read($buffer, 0, $buffer.Length)) -gt 0) {
+      $device.Write($buffer, 0, $count)
+      $total += $count
+      if ($total -ge $nextReport) { Write-Output "WRITE $total / $($imageFile.Length)"; $nextReport += 1GB }
+    }
+    $device.Flush($true)
+    $inputImage.Dispose(); $inputImage = $null
+    if ($total -ne $imageFile.Length) { throw 'Short image write' }
+  } else {
+    Write-Output 'VERIFY_ONLY: existing SD contents will be checked before adding setup'
   }
-  $device.Flush($true)
-  $inputImage.Dispose(); $inputImage = $null
-  if ($total -ne $imageFile.Length) { throw 'Short image write' }
   $null = $device.Seek(0, [System.IO.SeekOrigin]::Begin)
   $hash = [System.Security.Cryptography.SHA256]::Create()
   $remaining = $imageFile.Length
   $nextReport = [long]1GB
   while ($remaining -gt 0) {
-    $count = $device.Read($buffer, 0, [int][Math]::Min($buffer.Length, $remaining))
+    $count = $device.Read($buffer, 0, [int][Math]::Min([long]$buffer.Length, [long]$remaining))
     if ($count -le 0) { throw 'Short read during verification' }
     $null = $hash.TransformBlock($buffer, 0, $count, $null, 0)
     $remaining -= $count
