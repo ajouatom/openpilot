@@ -7,6 +7,64 @@ from hud_navi import Assembler, fragments, CHUNK, HEADER, MAX_EVENT
 from hud_stats import VehicleSystemStats, VehicleCpuOverlay
 
 
+def test_navigation_large_event_survives_slow_fragment_consumer():
+  """A >150ms pause must not truncate a keyframe or corrupt its successor."""
+  import socket, threading, time
+  import pytest
+  from hud_navi import send_event
+  if not hasattr(socket, 'AF_UNIX') or not hasattr(socket, 'SOCK_SEQPACKET'):
+    pytest.skip('Linux SEQPACKET regression')
+  writer, reader = socket.socketpair(socket.AF_UNIX, socket.SOCK_SEQPACKET)
+  writer.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, CHUNK * 2)
+  raw = bytes(range(256)) * 1040  # A real-size 266KB navigation keyframe.
+  completed = []
+  errors = []
+  def consume():
+    try:
+      time.sleep(.25)
+      assembler = Assembler()
+      reader.settimeout(3)
+      while len(completed) < 2:
+        result = assembler.feed(reader.recv(CHUNK + HEADER.size), time.monotonic())
+        if result is not None:
+          completed.append(result)
+        time.sleep(.05)  # The unchanged inference-window drain rate.
+    except Exception as exc:
+      errors.append(exc)
+  thread = threading.Thread(target=consume)
+  thread.start()
+  try:
+    assert send_event(writer, raw, 10, 1)
+    assert send_event(writer, b'next dependent frame', 10, 2)
+    thread.join(4)
+    assert not thread.is_alive() and not errors
+    assert completed == [(10, 1, raw), (10, 2, b'next dependent frame')]
+  finally:
+    writer.close()
+    reader.close()
+    thread.join(4)
+
+
+def test_navigation_stopped_consumer_has_one_bounded_event_deadline():
+  import socket, time
+  import pytest
+  from hud_navi import send_event
+  if not hasattr(socket, 'AF_UNIX') or not hasattr(socket, 'SOCK_SEQPACKET'):
+    pytest.skip('Linux SEQPACKET regression')
+  writer, reader = socket.socketpair(socket.AF_UNIX, socket.SOCK_SEQPACKET)
+  writer.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, CHUNK * 2)
+  try:
+    started = time.monotonic()
+    assert not send_event(writer, b'x' * MAX_EVENT, 10, 1, timeout=.2)
+    elapsed = time.monotonic() - started
+    assert .15 <= elapsed < 1.0
+    assert not send_event(writer, b'', 10, 2)
+    assert not send_event(writer, b'x' * (MAX_EVENT + 1), 10, 3)
+  finally:
+    writer.close()
+    reader.close()
+
+
 def test_large_keyframe_reassembles_without_truncation():
   raw=bytes(range(256))*977
   a=Assembler(); parts=list(fragments(raw,123,4))

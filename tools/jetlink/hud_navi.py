@@ -1,5 +1,7 @@
 ﻿"""Bounded, ordered navigation media fragments alongside Jetlink inference."""
 import os
+import json
+from pathlib import Path
 import socket
 import struct
 import time
@@ -10,6 +12,11 @@ ADDRESS = '\0carrot-jetlink-navi'
 HEADER = struct.Struct('<QQII')  # Publisher epoch, event id, offset, event length.
 CHUNK = 32 * 1024
 MAX_EVENT = 1024 * 1024
+# Only the low-priority navigation child waits. The USB owner still consumes
+# one fragment per inference window without waiting for this producer.
+# 32 fragments at 20 Hz take 1.6 s; stay below the receiver's 2 s assembly limit.
+EVENT_SEND_TIMEOUT = 1.8
+STATUS = Path('/dev/shm/carrot-jetlink-navi-status.json')
 
 
 def fragments(raw, epoch, sequence):
@@ -17,6 +24,31 @@ def fragments(raw, epoch, sequence):
     return
   for offset in range(0, len(raw), CHUNK):
     yield HEADER.pack(epoch, sequence, offset, len(raw)) + raw[offset:offset + CHUNK]
+
+
+def send_event(sock, raw, epoch, sequence, *, timeout=EVENT_SEND_TIMEOUT):
+  """Retain an unsent fragment across backpressure, with one event deadline.
+
+  SOCK_SEQPACKET sends are atomic. A timed-out readiness poll sent nothing,
+  so retry the same fragment rather than truncating the H.264 access unit.
+  A stopped consumer still expires this bounded, display-only transaction.
+  """
+  if not 0 < len(raw) <= MAX_EVENT:
+    return False
+  deadline = time.monotonic() + timeout
+  for packet in fragments(raw, epoch, sequence):
+    while True:
+      remaining = deadline - time.monotonic()
+      if remaining <= 0:
+        return False
+      sock.settimeout(min(.5, remaining))
+      try:
+        if sock.send(packet) != len(packet):
+          raise OSError('partial navigation SEQPACKET send')
+        break
+      except TimeoutError:
+        continue
+  return True
 
 
 class Assembler:
@@ -129,24 +161,37 @@ def publish(fd):
   scheduler = DisplayScheduler(7, enabled=True)
   params = Params()
   sock = socket.socket(fileno=fd)
-  sock.settimeout(.15)
   source = messaging.sub_sock('carrotNaviMedia', conflate=False, timeout=100)
   epoch = time.monotonic_ns()
   sequence = 0
+  stats = dict(pid=os.getpid(), received=0, sent=0, stale=0, abandoned=0, send_max_ms=0.)
+  next_status = 0.
   while True:
+    now = time.monotonic()
+    if now >= next_status:
+      temporary = STATUS.with_suffix('.tmp')
+      try:
+        temporary.write_text(json.dumps(dict(updated=now, **stats)))
+        os.replace(temporary, STATUS)
+      except OSError:
+        pass  # Diagnostics must not stop navigation delivery.
+      next_status = now + 1
     scheduler.update(params.get_bool('IsOnroad'))
-    event = messaging.recv_one_or_none(source)
+    # recv_one_or_none explicitly overrides the socket timeout and busy-spins
+    # when navigation is idle. This wait wakes immediately on incoming media.
+    event = messaging.recv_one(source)
     if event is None:
       continue
     sequence += 1
+    stats['received'] += 1
     if not 0 <= time.monotonic_ns() - event.logMonoTime < 1_000_000_000:
+      stats['stale'] += 1
       continue
     raw = event.as_builder().to_bytes()
-    try:
-      for packet in fragments(raw, epoch, sequence):
-        sock.send(packet)
-    except TimeoutError:
-      continue  # Receiver detects the discontinuity and waits for a keyframe.
+    started = time.monotonic()
+    complete = send_event(sock, raw, epoch, sequence)
+    stats['sent' if complete else 'abandoned'] += 1
+    stats['send_max_ms'] = max(stats['send_max_ms'], (time.monotonic() - started) * 1000)
 
 
 if __name__ == '__main__':

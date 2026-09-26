@@ -161,3 +161,32 @@ invalidity. All60 external-state samples were active. Model execution mean
 normal operation in this follow-up does not demonstrate a strict50 ms bound.
 The longest measured camera SOF interval was57.763 ms. Navigation video was
 absent, and these are parked C4 results only.
+
+## Navigation backpressure and idle CPU correction
+
+The navigation child previously overrode its subscription's 100 ms timeout
+with a nonblocking receive, repeatedly polling an empty stream. It now uses
+the blocking receive, which wakes immediately for incoming media. Its existing
+normal-priority display placement remains unchanged.
+
+Large H.264 access units are fragmented into 32 KiB packets. Abandoning the
+remaining fragments after a single 150 ms socket readiness timeout truncated
+keyframes and forced the receiver to wait for another keyframe. The child now
+retains and retries the unsent atomic SEQPACKET fragment. One 1.8 s deadline
+bounds the whole event, including all retries; each readiness wait is at most
+500 ms. This permits the maximum 32 fragments at 20 Hz to progress while
+remaining below the receiver's 2 s assembly limit. An expired event still
+causes the existing keyframe resynchronization rather than corrupt decoding.
+
+Only the navigation child waits. The USB owner still consumes at most one
+fragment per inference window without blocking on the child. Model deadlines,
+camera pairing, pose validity and inference scheduling are unchanged. A local
+status file records received, sent, stale and abandoned events plus maximum
+send duration; diagnostic write failure does not stop navigation.
+
+Linux regression tests exercise a 266 KB keyframe and its dependent successor
+with a 250 ms consumer pause and 20 Hz drain, and a stopped consumer with a
+bounded whole-event deadline. All nine focused media tests passed on C4.
+Windows passed seven portable tests; its two Unix socket tests were skipped.
+This corrects the identified navigation defects, not the separately observed
+long driving-model USB send interval whose lower-level cause is unresolved.
