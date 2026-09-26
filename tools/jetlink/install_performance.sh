@@ -6,6 +6,7 @@ cat > /etc/systemd/system/carrot-jetlink-performance.service <<'EOF'
 [Unit]
 Description=Jetson inference clocks within the selected MAXN_SUPER mode
 After=nvpmodel.service
+Requires=nvpmodel.service
 Before=carrot-jetlink.service
 
 [Service]
