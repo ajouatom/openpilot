@@ -98,9 +98,15 @@ public static class CarrotSdNative {
   Write-Output "READBACK_VERIFIED $readbackHash"
   $device.Dispose(); $device = $null
   foreach ($item in $locks) { $item.Dispose() }; $locks.Clear()
+  Update-Disk -Number $DiskNumber
   Update-HostStorageCache
   if ($setupBytes) {
-    $setupPartition = Get-Partition -DiskNumber $DiskNumber -PartitionNumber 16
+    $setupPartition = $null
+    for ($attempt = 0; $attempt -lt 10 -and -not $setupPartition; $attempt++) {
+      $setupPartition = Get-Partition -DiskNumber $DiskNumber -PartitionNumber 16 -ErrorAction SilentlyContinue
+      if (-not $setupPartition) { Start-Sleep -Milliseconds 500 }
+    }
+    if (-not $setupPartition) { throw 'Written image verified, but setup partition did not enumerate' }
     if ($setupPartition.Size -ne 64MB) { throw 'Unexpected setup partition' }
     if (-not $setupPartition.DriveLetter) {
       $setupPartition | Add-PartitionAccessPath -AssignDriveLetter
