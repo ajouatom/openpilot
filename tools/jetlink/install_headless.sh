@@ -11,7 +11,8 @@ fi
 cat > /etc/systemd/system/carrot-jetlink-xorg.service <<EOF
 [Unit]
 Description=Headless NVIDIA graphics for Carrot USB display
-After=local-fs.target
+After=local-fs.target nvpmodel.service carrot-jetlink-performance.service
+Requires=carrot-jetlink-performance.service
 Before=carrot-jetlink-hud.service
 StartLimitIntervalSec=0
 
