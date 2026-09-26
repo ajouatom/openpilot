@@ -102,7 +102,10 @@ public static class CarrotSdNative {
   $null = $hash.TransformFinalBlock([byte[]]::new(0), 0, 0)
   $readbackHash = ([BitConverter]::ToString($hash.Hash)).Replace('-', '').ToLowerInvariant()
   $hash.Dispose()
-  if ($readbackHash -ne $Sha256.ToLowerInvariant()) { throw 'SD readback checksum mismatch' }
+  if ($readbackHash -ne $Sha256.ToLowerInvariant()) {
+    Write-Output "RAW_READBACK_SHA256 $readbackHash"
+    throw 'SD readback checksum mismatch; Windows may alter GPT/FAT metadata after mounting. Full comparison is required; private setup was not written. See docs/jetlink_sd_image.md.'
+  }
   Write-Output "READBACK_VERIFIED $readbackHash"
   $device.Dispose(); $device = $null
   foreach ($item in $locks) { $item.Dispose() }; $locks.Clear()

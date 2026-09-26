@@ -63,6 +63,31 @@ image creation and APP expansion in its [flashing documentation](https://docs.nv
 Our added setup partition and sanitized reference-image workflow require their
 own physical SD validation.
 
+## Windows readback and automatic volume changes
+
+The raw image is 24 GiB (25,769,803,776 bytes); its current Zstandard archive is
+8,249,576,581 bytes. Keeping both on the PC uses approximately 34 GB. The archive
+contains the complete OS, NVIDIA runtime and model, rather than just Carrot.
+Routine application updates should not require downloading this entire image.
+
+Windows can modify a freshly written removable image when discovering its GPT
+and mounting its FAT setup volume. On the reference 128 GB card, it relocated
+the backup GPT to the actual card end, changed the primary header's backup LBA,
+last usable LBA and CRC, and added `System Volume Information` to `CARROTSETUP`.
+The partition-entry arrays and all three original setup files remained equal
+to the image, and both live GPT CRCs and FAT copies were valid.
+
+The Windows writer intentionally still requires exact whole-image readback.
+Its `-VerifyOnly` mode avoids rewriting a card after a script failure, but a
+Windows-modified card can fail this strict hash comparison. A mismatch is not
+permission to skip validation or copy private setup automatically. Diagnose it
+with a complete byte comparison, validate the primary and relocated backup GPT
+against the original entries and actual disk size, and compare all original FAT
+files before treating any differences as Windows metadata. Any difference in
+firmware/Linux/model data remains a failure. This manual recovery case means
+the Windows writer is not yet an unattended consumer installer. Do not claim
+an exact raw-image hash match for a card verified through this separate method.
+
 ## Additional boot experiment
 
 The installed NVIDIA utmp override adds `/bin/sleep 2` before sysinit completes.
