@@ -105,3 +105,59 @@ Private journals, raw receive rings, syscall traces and reproduction scripts
 are retained under `.analysis/archive/2026-09-26/jetlink-desync/`; they must not
 be committed or published. This is parked C4 evidence, not C3, Mac, loaded
 driving, or a hard-realtime guarantee.
+
+## Disconnect, process failure and reboot trials
+
+The committed runtime `1b110e8c15555d04d62e08a58272294ef484b06d` was installed
+on both devices. C4 was rebooted first so the manager's preimported model code
+also used the new join policy. Every fault injection was preceded by a fresh
+stopped, fully disengaged vehicle check. The original DisableDM=2 and
+ClusterHudScreenMode=0 were retained for these trials. The saved pre-trial
+settings file confirms0; the older working note saying2 was incorrect.
+
+Recovery below is measured on C4 from the first sampled inactive model status
+to the first active status. Status publication is approximately once a second;
+these are observed recovery intervals, not exact electrical disconnect times.
+
+| Fault | Observation | External inference recovery |
+| --- | --- | --- |
+| Jetlink USB deauthorization | IPC disconnected, native fallback, new USB session, READY | 5.24 s |
+| Host inference process SIGKILL | 150 ms IPC timeout, native fallback, systemd restart, READY | 8.20 s |
+| HUD USB deauthorization | Renderer restarted and USB/H.264 output resumed; inference stayed active throughout 60 s / 1,200 frames | No inference fallback |
+| Actual Jetson `reboot` | Native fallback while the host rebooted, then automatic engine load, READY and activation | 66.73 s |
+
+USB deauthorization is a software fault, not a physical cable removal. Although
+the Jetlink test helper scheduled reauthorization after10 seconds, the gadget
+re-enumerated and the host opened a new session after about4 seconds. Therefore
+this trial does not establish a continuously absent10-second cable. The reboot
+trial separately exercised about67 seconds without external inference. The
+user selected remote reboot instead of physically removing power: abrupt power
+loss, brownout and filesystem recovery after an unclean shutdown remain untested.
+
+The USB-link85-second observation recorded1,700 models with no frame-ID gap.
+The SIGKILL and reboot trials each recorded one jump of four frame IDs (three
+missing outputs). Maximum model publication intervals were195.47 and199.09 ms,
+respectively; the corresponding execution maxima were183.75 and182.38 ms.
+The unchanged150 ms timeout plus local fallback work explains why this is not
+seamless50 ms failover. The existing FAULT/commIssue disengagement request is
+retained; its behavior under engaged driving was not vehicle-tested here.
+The fault monitor checked message-envelope validity, not every livePose input
+flag, so its zero invalid-envelope count is not proof of uninterrupted pose
+input validity during these gaps.
+
+Jetson's new boot journal shows service startup at18.2 seconds, engine ready
+at36.1 seconds, and actual HUD USB/H.264 output at44.4 seconds. These times use
+the new Jetson boot clock; they cannot be subtracted from C4's clock. Both
+services recovered without manual restart. The previous boot's system journal
+was volatile, so raw USB/protocol evidence was captured before reboot; not all
+HUD restart log lines are retained. The new renderer PID and fresh USB status
+were independently observed after the HUD fault.
+
+A separate60-second post-reboot observation recorded1,200 models and1,200
+messages from each camera, with no model frame gap, camera gap above75 ms,
+message invalidity, livePose inputsOK/sensorsOK/posenetOK failure or CAN
+invalidity. All60 external-state samples were active. Model execution mean
+37.182 ms, p9941.313 ms, maximum54.738 ms (one frame above50 ms). Thus even
+normal operation in this follow-up does not demonstrate a strict50 ms bound.
+The longest measured camera SOF interval was57.763 ms. Navigation video was
+absent, and these are parked C4 results only.
