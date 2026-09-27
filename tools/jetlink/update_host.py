@@ -11,6 +11,7 @@ import json
 import os
 from pathlib import Path
 import re
+import signal
 import subprocess
 import tempfile
 import time
@@ -89,6 +90,25 @@ def validate_manifest(manifest):
     raise ValueError('Model identity required')
   checked_url(manifest['bundle']['url'])
   checked_url(manifest['model']['url'])
+
+
+def probe_release(release):
+  command = ['runuser', '-u', 'jetlink', '--', str(ROOT / 'venv/bin/python'),
+             str(release / 'tools/jetlink/probe_release.py'), str(ROOT / 'cache')]
+  process = subprocess.Popen(command, start_new_session=True)
+  try:
+    code = process.wait(timeout=960)
+  except BaseException:
+    # Killing only runuser can leave its GPU-building Python child alive.
+    # Reap the entire isolated probe group before the old server may start.
+    try:
+      os.killpg(process.pid, signal.SIGKILL)
+    except ProcessLookupError:
+      pass
+    process.wait()
+    raise
+  if code:
+    raise subprocess.CalledProcessError(code, command)
 
 
 def stage(manifest_url=DEFAULT_MANIFEST):
@@ -181,9 +201,7 @@ def activate():
   try:
     # No USB/control connection: load/build and execute synthetic tensors in a
     # separate process before the new sources are reachable by the vehicle.
-    subprocess.run(['runuser', '-u', 'jetlink', '--', str(ROOT / 'venv/bin/python'),
-                    str(release / 'tools/jetlink/probe_release.py'), str(ROOT / 'cache')],
-                   check=True, timeout=960)
+    probe_release(release)
     link = ROOT / 'current.next'
     link.unlink(missing_ok=True)
     link.symlink_to(release)
