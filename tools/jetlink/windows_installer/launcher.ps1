@@ -1,4 +1,4 @@
-param([ValidateSet('Prepare','Install')][string]$Stage)
+﻿param([ValidateSet('Prepare','Install')][string]$Stage)
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
 $elevated = $false
