@@ -192,6 +192,7 @@ class VCruiseCarrot:
     self._gas_pressed_value = 0
     self._gas_tok_timer = int(0.4 / 0.01) # 0.4 sec
     self._gas_tok = False
+    self.speedcam_gas_tok_consumed = False  # set by card when carstate spent this tap on a camera skip
     self._brake_pressed_count = 0
     self._soft_hold_count = 0
     self._soft_hold_active = 0
@@ -961,7 +962,7 @@ class VCruiseCarrot:
         self.carrot_cruise_active = False
         self._cruise_control(-1, 0, "Cruise off (gas pressed)")
     else:
-      self._gas_tok = True if 0 < self._gas_pressed_count < self._gas_tok_timer else False
+      self._gas_tok = True if 0 < self._gas_pressed_count < self._gas_tok_timer and not self.speedcam_gas_tok_consumed else False
       self._gas_pressed_count = min(-1, self._gas_pressed_count - 1)
       if self._gas_pressed_count < -1:
         self._gas_pressed_count_last = 0

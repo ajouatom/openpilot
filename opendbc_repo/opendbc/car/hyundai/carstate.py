@@ -9,6 +9,7 @@ from opendbc.car import Bus, create_button_events, structs, DT_CTRL
 from opendbc.car.common.conversions import Conversions as CV
 from opendbc.car.hyundai.hyundaicanfd import CanBus
 from opendbc.car.hyundai.navi_speedcam import SpeedcamPolicy
+from opendbc.car.hyundai.section_average import SectionAverage
 from opendbc.car.hyundai.steering_touch import HyundaiSteeringTouch
 from opendbc.car.hyundai.values import HyundaiFlags, CAR, DBC, Buttons, CarControllerParams, CAMERA_SCC_CAR, HyundaiExtFlags, \
                                        EV_MODE_ACTIVE_VALUES, EV_MODE_STATUS_ADDR, EV_MODE_STATUS_DLC, EV_MODE_STATUS_MSG, \
@@ -36,6 +37,7 @@ VEHICLE_NAVI_CONTROLLED_ACCESS_ROAD_CLASSES = (1, 2)  # Freeway, arterial/city f
 VEHICLE_NAVI_SCHOOL_ZONE_MAX_DISTANCE = 1000.0
 VEHICLE_NAVI_POSITION_TIMEOUT_NS = 1_000_000_000
 SPEEDCAM_SKIP_MIN_SPEED = 5.0  # m/s; below this + keeps its resume/set-speed role
+SPEEDCAM_GAS_TOK_FRAMES = 40   # matches cruise.py _gas_tok_timer (0.4 s at 100 Hz)
 VEHICLE_NAVI_ROUTE_TIMEOUT_NS = 2_000_000_000
 CANFD_HDA_INFO_MSG = "CANFD_HDA_INFO_364"
 CANFD_NAVI_PROFILE_MSG = "CANFD_NAVI_PROFILE_093"
@@ -237,6 +239,14 @@ class CarState(CarStateBase):
     # joongyu01/speedcam: stock-navigation camera-kind policy (mobile zones, +-button skip, section average)
     self.speedcam_policy = SpeedcamPolicy()
     self.speedcam_accel_swallow = False
+    self.speedcam_engaged = False            # set by card from carControl.enabled
+    self.speedcam_gas_count = 0
+    self.speedcam_gas_tok_consumed = False   # read by card, tells cruise.py to ignore this gas tap
+    self.speedcam_input_consumed = False
+    self.speedcam_v_cruise = 0.0             # set by card from the cruise set speed
+    self.speedcam_decel_count = 0
+    self.speedcam_time = 0.0
+    self.section_average = SectionAverage()
     self._read_speedcam_params()
     self.vehicleNaviSegmentTimestamp = 0
     self.vehicleNaviProfileTimestamp = 0
@@ -690,25 +700,74 @@ class CarState(CarStateBase):
     self.speedcamSkipBox = self.op_params.get_bool("VehicleNaviSkipBoxCamera")
     self.speedcamSkipMobileZone = self.op_params.get_bool("VehicleNaviSkipMobileZone")
     self.speedcamSectionAvgControl = self.op_params.get_bool("VehicleNaviSectionAvgControl")
+    # The existing section cap is limit x AutoNaviSpeedSafetyFactor (carrot_serv); unlock only above it.
+    self.speedcamSafetyFactor = self.op_params.get_int("AutoNaviSpeedSafetyFactor") * 0.01
+    self.speedcamLongPressFrames = self.op_params.get_int("CruiseButtonLongDelay")  # cruise.py long press
 
-  def _apply_speedcam_policy(self, ret, speed_limit_cam, warning_active, warning_speed, accel_rising):
-    """Suppress a stock camera warning for ignored mobile zones or a +-button skip."""
+  def _update_speedcam_decel_long_press(self):
+    """True once when cruise - has been held past cruise.py's long-press threshold (the -10 step)."""
+    if self.cruise_buttons[-1] != Buttons.SET_DECEL:
+      self.speedcam_decel_count = 0
+      return False
+    self.speedcam_decel_count += 1
+    return self.speedcam_decel_count == self.speedcamLongPressFrames + 1
+
+  def _update_speedcam_gas_tok(self, gas_pressed):
+    """Mirror cruise.py's gas tap: pressed for fewer than SPEEDCAM_GAS_TOK_FRAMES, reported on release."""
+    if gas_pressed:
+      self.speedcam_gas_count += 1
+      return False
+    gas_tok = 0 < self.speedcam_gas_count < SPEEDCAM_GAS_TOK_FRAMES
+    self.speedcam_gas_count = 0
+    return gas_tok
+
+  def _apply_speedcam_policy(self, ret, speed_limit_cam, warning_active, warning_speed, accel_rising, gas_tok=False):
+    """Suppress a stock camera warning for ignored mobile zones or a +-button / gas-tap skip."""
+    self.speedcam_gas_tok_consumed = False
+    self.speedcam_input_consumed = False
     if self.canfd_wrapped_navi or not self.vehicleNaviCanControl:
       self.speedcam_policy.reset_warning()
       return speed_limit_cam
+    # Only while engaged: otherwise + and a gas tap keep their resume/engage roles.
+    can_skip = self.speedcam_engaged and ret.vEgo > SPEEDCAM_SKIP_MIN_SPEED
     suppress, consume = self.speedcam_policy.update(
-      warning_active, int(round(warning_speed)), self.totalDistance, accel_rising and ret.vEgo > SPEEDCAM_SKIP_MIN_SPEED,
+      warning_active, int(round(warning_speed)), self.totalDistance, can_skip and (accel_rising or gas_tok),
       self.speedcamMobileZoneDecel, self.speedcamSkipBox, self.speedcamSkipMobileZone)
     if consume:
-      # The press that skips a camera must not also raise the cruise set speed.
-      self.speedcam_accel_swallow = True
+      self._consume_speedcam_input(accel_rising, gas_tok)
     return False if suppress else speed_limit_cam
 
-  def _apply_section_average_distance(self, ret):
-    """With section-average control, keep spot deceleration only for a same-speed camera ahead (the end camera)."""
-    if self.canfd_wrapped_navi or not (self.speedcamSectionAvgControl and self.vehicleNaviCanControl and ret.vehicleNaviSectionActive):
+  def _consume_speedcam_input(self, accel_rising, gas_tok):
+    # The input spent on a camera skip or section unlock must not also raise the set speed (+1 / gas tap +10).
+    self.speedcam_input_consumed = True
+    self.speedcam_accel_swallow = accel_rising
+    self.speedcam_gas_tok_consumed = gas_tok and not accel_rising
+
+  def _apply_section_average(self, ret, accel_rising, gas_tok, decel_long_press):
+    """Section cap stays at limit x factor until + / gas tap unlocks it; then spend banked time up to the set speed."""
+    self.speedcam_time += DT_CTRL
+    active = (not self.canfd_wrapped_navi and self.speedcamSectionAvgControl and self.vehicleNaviCanControl and
+              ret.vehicleNaviSectionActive and ret.vehicleNaviSpeed > 0)
+    section_speed = int(round(ret.vehicleNaviSpeed)) if active else 0
+    section = self.section_average
+    section.update(active, section_speed, self.speedcam_time, self.totalDistance)
+    if not active:
       return
-    section_speed = int(round(ret.vehicleNaviSpeed))
+
+    cap_kph = section_speed * self.speedcamSafetyFactor
+    if (not section.unlocked and not self.speedcam_input_consumed and (accel_rising or gas_tok) and self.speedcam_engaged and
+        ret.vEgo > SPEEDCAM_SKIP_MIN_SPEED and self.speedcam_v_cruise > cap_kph):
+      section.unlock()
+      self._consume_speedcam_input(accel_rising, gas_tok)
+    elif section.unlocked and decel_long_press:
+      section.lock()
+    if not section.unlocked:
+      return  # existing section cap and camera distances, unchanged
+
+    allowance = section.allowance_kph(self.speedcam_time, self.totalDistance)
+    if allowance > section_speed:
+      ret.vehicleNaviSpeed = allowance  # carrot_serv caps the section at vehicleNaviSpeed x factor
+    # Keep spot deceleration only for a same-speed camera ahead (the end camera); no virtual distance.
     ahead = [event["target"] - self.totalDistance for event in self.vehicleNaviEvents
              if event["type"] == "camera" and event["speed"] == section_speed and event["target"] > self.totalDistance]
     ret.speedLimitDistance = min(ahead) if ahead else 0.0
@@ -1412,10 +1471,11 @@ class CarState(CarStateBase):
     speedcam_warning_active, speedcam_warning_speed = speed_limit_cam, ret.speedLimit
     speed_limit_cam = self._update_vehicle_navi_events(cp, ret, speed_limit_cam, cp_alt) or speed_limit_cam
     speedcam_accel_rising = self.cruise_buttons[-1] == Buttons.RES_ACCEL and prev_cruise_buttons != Buttons.RES_ACCEL
+    speedcam_gas_tok = self._update_speedcam_gas_tok(ret.gasPressed)
     speed_limit_cam = self._apply_speedcam_policy(ret, speed_limit_cam, speedcam_warning_active, speedcam_warning_speed,
-                                                  speedcam_accel_rising)
+                                                  speedcam_accel_rising, speedcam_gas_tok)
     self.update_speed_limit(ret, speed_limit_cam, distance_time_changed)
-    self._apply_section_average_distance(ret)
+    self._apply_section_average(ret, speedcam_accel_rising, speedcam_gas_tok, self._update_speedcam_decel_long_press())
 
     paddle_button = self.paddle_button_prev
     if self.cruise_btns_msg_canfd == "CRUISE_BUTTONS":

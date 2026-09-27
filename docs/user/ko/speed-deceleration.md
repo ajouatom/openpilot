@@ -53,7 +53,7 @@ Carrot Web 기본값 복원에 쓰이는 `carrot_settings.json`과 Params 최초
 <a id="speed-camera"></a>
 ## 1. 과속카메라
 
-관련 설정은 `AutoNaviSpeedCtrlMode`, `AutoNaviSpeedCtrlEnd`, `AutoNaviRearCameraHoldDistance`, `AutoNaviSpeedDecelRate`, `AutoNaviSpeedSafetyFactor`, `AutoNaviCountDownMode`, `VehicleNaviCanControl`, `VehicleNaviSchoolZoneControl`, `VehicleNaviSkipBoxCamera`, `VehicleNaviSkipMobileZone`, `VehicleNaviSectionAvgControl`, `VehicleNaviSectionAvgMargin`, `VehicleSpeedCameraControlMode`, `VehicleSpeedCameraDistanceTime`입니다.
+관련 설정은 `AutoNaviSpeedCtrlMode`, `AutoNaviSpeedCtrlEnd`, `AutoNaviRearCameraHoldDistance`, `AutoNaviSpeedDecelRate`, `AutoNaviSpeedSafetyFactor`, `AutoNaviCountDownMode`, `VehicleNaviCanControl`, `VehicleNaviSchoolZoneControl`, `VehicleNaviSkipBoxCamera`, `VehicleNaviSkipMobileZone`, `VehicleNaviSectionAvgControl`, `VehicleSpeedCameraControlMode`, `VehicleSpeedCameraDistanceTime`입니다.
 
 ### `AutoNaviSpeedCtrlMode`
 
@@ -105,13 +105,13 @@ PV5 구간단속은 평균속도나 남은거리를 계산하지 않습니다. �
 
 ### `VehicleNaviSkipBoxCamera`, `VehicleNaviSkipMobileZone`
 
-켜면 해당 종류의 카메라로 감속하는 동안 크루즈 `+` 버튼을 한 번 눌러 그 카메라의 감속을 해제합니다. 이 누름은 설정 속도를 올리지 않고, 경고가 끝나면 다음 카메라에는 다시 감속합니다. 약 18km/h 미만에서는 `+`가 원래 역할(재개·속도 설정)을 합니다. `VehicleNaviSkipMobileZone`은 `AutoNaviSpeedCtrlMode`가 `3`이라 이동식 구간에서 감속할 때만 의미가 있습니다. 둘 다 기본값은 꺼짐입니다.
+켜면 openpilot 작동 중 해당 종류의 카메라로 감속하는 동안 크루즈 `+` 버튼을 한 번 누르거나 악셀톡(가속 페달을 0.4초 미만으로 밟았다 뗌)을 해서 그 카메라의 감속을 해제합니다. 이 입력은 설정 속도를 올리지 않고(`+1`, 악셀톡 `+10` 모두 반영 안 함), 경고가 끝나면 다음 카메라에는 다시 감속합니다. 미작동 상태이거나 약 18km/h 미만에서는 `+`와 악셀톡이 원래 역할(재개·작동·속도 설정)을 합니다. `VehicleNaviSkipMobileZone`은 `AutoNaviSpeedCtrlMode`가 `3`이라 이동식 구간에서 감속할 때만 의미가 있습니다. 둘 다 기본값은 꺼짐입니다.
 
-### `VehicleNaviSectionAvgControl`, `VehicleNaviSectionAvgMargin`
+### `VehicleNaviSectionAvgControl`
 
-켜면 순정 내비 구간단속(차량 평균속도 신호가 켜진 구간) 중 구간 제한속도로 계속 묶지 않고, 구간 진입 후 평균속도가 `제한속도 − VehicleNaviSectionAvgMargin` 이하로 유지되는 범위에서만 설정 속도까지 허용합니다. 정체 등으로 목표 평균보다 늦게 간 시간만 이후에 쓸 수 있으며, 적립된 시간이 없으면 기존 구간 제한과 같습니다. 시점 카메라는 구간 진입 전 지점 감속을 그대로 하고, 종점 카메라는 약 2km 전 예고를 받은 뒤 지점 감속합니다. 구간 안에서는 종점 예고가 없을 때 가상거리 감속을 쓰지 않습니다.
+켜면 순정 내비 구간단속(차량 평균속도 신호가 켜진 구간) 중에도 평소에는 구간 제한속도 × `AutoNaviSpeedSafetyFactor`로 고정합니다(예: 110 구간, 107% → 117). openpilot 작동 중이고 크루즈 설정 속도가 이 값보다 높을 때 크루즈 `+`를 한 번 누르거나 악셀톡을 하면 그 구간의 고정을 풉니다. 그 뒤로는 구간 진입 후 평균속도가 구간 제한속도 이하로 유지되는 범위에서만 설정 속도까지 허용합니다. 정체 등으로 늦게 간 시간만 쓸 수 있고, 적립이 없거나 다 쓰면 고정값과 같습니다. 해제에 쓴 입력은 설정 속도를 올리지 않습니다(`+1`, 악셀톡 `+10` 모두 반영 안 함). 크루즈 `-`를 길게 누르면(−10 동작) 다시 고정하며, 이때 −10은 그대로 반영됩니다. 구간이 끝나면 초기화됩니다.
 
-평균은 차량 주행거리(`vEgo`)로 계산합니다. 기록 주행에서 내비가 표시한 평균이 이 계산보다 2~3km/h 높았으므로 여유속도는 **3km/h(기본값)** 이상을 권장합니다. 구간 시작은 평균속도 신호가 켜진 시점으로 잡아 실제 시점 카메라와 차이가 있을 수 있습니다. 두 설정 모두 실험 기능입니다.
+해제 후에는 구간 안에서 가상거리 감속을 쓰지 않고, 종점 카메라는 약 2km 전 예고를 받은 뒤 지점 감속합니다. 평균은 차량 주행거리(`vEgo`)로 계산하며 여유를 두지 않습니다. 기록 주행에서 내비가 표시한 평균이 이 계산보다 2~3km/h 높았으므로 필요하면 크루즈 설정 속도로 직접 조절하세요. 구간 시작은 평균속도 신호가 켜진 시점으로 잡는 실험 기능입니다.
 
 ### `VehicleSpeedCameraControlMode`
 
