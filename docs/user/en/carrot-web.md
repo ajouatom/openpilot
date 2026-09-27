@@ -119,8 +119,8 @@ from active inference losing its connection, a real error or excessive heat.
 Do not suppress real faults to clear a warning. The eGPU model compilation button
 is unavailable for a Jetson-only installation.
 
-Use the [detailed Korean installation guide](https://github.com/ajouatom/carrot-jetson/blob/main/docs/INSTALL-WINDOWS-KO.md)
-for NAS image flashing and the PC hotfix. Wi-Fi settings come from the connected
+Use the [short Korean installation guide](https://github.com/ajouatom/carrot-jetson/blob/main/docs/INSTALL-WINDOWS-KO.md):
+extract the installer ZIP and run 01, then 02. Image preparation and the USB-C fix are automatic. Wi-Fi settings come from the connected
 comma, so changing its SSID/password does not require removing the SD card.
 The existing P-gear summary display remains intentional. See the guide's preview
 notice for physical validation limits of each installation path.
