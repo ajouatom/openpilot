@@ -941,6 +941,14 @@ WEBSOCKETS_KEY = web.AppKey("carrot_navi_websockets", set)
 MAP_CONFIG_READER_KEY = web.AppKey("carrot_navi_map_config_reader", Callable)
 
 
+@dataclass
+class ControlOwner:
+  socket: web.WebSocketResponse | None = None
+
+
+CONTROL_OWNER_KEY = web.AppKey("carrot_navi_control_owner", ControlOwner)
+
+
 class ClusterNaviMapParamReader:
   THEMES = {0: "auto", 1: "dark", 2: "light"}
   TYPES = {0: "normal", 1: "satellite"}
@@ -1086,6 +1094,7 @@ async def latest(request: web.Request) -> web.Response:
 
 async def ws_control(request: web.Request) -> web.WebSocketResponse:
   receiver = request.app[RECEIVER_KEY]
+  owner = request.app[CONTROL_OWNER_KEY]
   peer = _peer(request)
   app_version = request.match_info["version"]
   ws = web.WebSocketResponse(
@@ -1108,10 +1117,20 @@ async def ws_control(request: web.Request) -> web.WebSocketResponse:
       try:
         payload = parse_json_object(message.data)
         if payload.get("type") == "requirements_query":
+          # A second phone must not invalidate the still-connected publisher's
+          # session. Closing only its item sockets leaves it retrying the old
+          # session forever, even after the second phone disconnects.
+          if owner.socket is not None and owner.socket is not ws and not owner.socket.closed:
+            await _safe_send_json(ws, _protocol_error("receiver_busy", "another navigation control connection is active"))
+            await _safe_close_websocket(ws, 1013, b"navigation receiver busy")
+            break
           manifest = receiver.negotiate(payload, app_version)
+          owner.socket = ws
           if not await _safe_send_json(ws, manifest):
             break
         else:
+          if owner.socket is not ws:
+            raise ValueError("negotiate navigation control before sending events")
           receiver.record_control(payload, peer)
       except (TypeError, ValueError) as exc:
         receiver.fail(str(exc), peer)
@@ -1119,6 +1138,8 @@ async def ws_control(request: web.Request) -> web.WebSocketResponse:
         if not await _safe_send_json(ws, _protocol_error("invalid_control_message", str(exc))):
           break
   finally:
+    if owner.socket is ws:
+      owner.socket = None
     receiver.control_disconnected()
     _untrack_websocket(request, ws)
     print(f"[carrot_navi][WS] control disconnected peer={peer} app={app_version}", flush=True)
@@ -1197,6 +1218,7 @@ def create_app(
   app = web.Application(client_max_size=MAX_MESSAGE_BYTES)
   app[RECEIVER_KEY] = receiver or CarrotNaviReceiver()
   app[WEBSOCKETS_KEY] = set()
+  app[CONTROL_OWNER_KEY] = ControlOwner()
   if map_config_reader is not None:
     app[MAP_CONFIG_READER_KEY] = map_config_reader
     app.cleanup_ctx.append(_map_config_context)

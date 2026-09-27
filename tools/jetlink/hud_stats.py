@@ -1,7 +1,21 @@
 """Vehicle statistics from forwarded cereal, never from the rendering host."""
 import math
 
-from cluster_system_monitor import SystemStats
+from cluster_system_monitor import NetworkAddressProvider, SystemStats
+
+
+class VehicleNetworkAddress:
+  """Use the vehicle's fresh snapshot; never substitute the rendering host."""
+  def __init__(self, refresh_interval_s=1.):
+    pass
+
+  def address(self, now=None):
+    from hud_protocol import read_snapshot
+    snapshot = read_snapshot()
+    return NetworkAddressProvider._valid_address(snapshot[1].get('vehicle_network_address')) if snapshot else None
+
+  def close(self):
+    pass
 
 
 def percent(value):

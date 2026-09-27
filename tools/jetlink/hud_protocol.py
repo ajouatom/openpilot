@@ -99,9 +99,12 @@ class SnapshotBuilder:
     self.next_params = self.next_send = 0.
     from hud_camera import CameraPublisher
     self.camera = CameraPublisher()
+    from openpilot.selfdrive.carrot.cluster.cluster_system_monitor import NetworkAddressProvider
+    self.network = NetworkAddressProvider()
 
   def close(self):
     self.camera.close()
+    self.network.close()
 
   def packet(self):
     from openpilot.cereal import log
@@ -130,6 +133,7 @@ class SnapshotBuilder:
       self.next_params = now + 1
     device_badge = badge()
     record = {'version': 1, 'sent': now, 'events': self.cached, 'params': self.settings,
+              'vehicle_network_address': self.network.address(),
               'external_compute_label': device_badge[0] if device_badge and device_badge[1] == 'active' else '',
               'received': self.sm.recv_time, 'mono': self.sm.logMonoTime,
               'valid': self.sm.valid, 'alive': self.sm.alive, 'cameras': self.camera.latest}
