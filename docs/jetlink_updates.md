@@ -261,3 +261,50 @@ to display startup or this steady interval. The original HUD service and P-gear
 behavior were explicitly restored and verified after testing. This reproduces
 uneven map updates with healthy inference while parked; the precise contributions
 of transport queueing, source cadence and decoder scheduling remain unresolved.
+
+### Navigation correction and standalone host repository
+
+Host sources now have the public repository `https://github.com/ajouatom/carrot-jetson`.
+Its initial exported runtime records the originating Carrot commit and pins the
+NVIDIA ABI; OS images, weights, personal provisioning and signing private keys
+are excluded. GitHub CI checks sources and builds an unsigned candidate. A push
+alone does not authorize an installed vehicle update.
+
+Carrot now carries the signed host manifest in
+`openpilot/selfdrive/modeld/jetlink/host_release.json` and forwards it in the
+existing bounded HUD snapshot. On a fresh offroad snapshot the host stages that
+exact release/model, verifying its signature and compatibility. An invalid pin
+does not fall back to a different release. Older Carrot builds without the field
+retain the NAS stable fallback. The apply transaction and boot-time engine probe
+are unchanged. Existing images need the updated updater helper installed once
+to honor the pin; this owner's host was migrated as part of deployment. Future
+images must use the current helper. Merely updating a runtime does not rewrite
+the stable bootstrap files automatically.
+
+The navigation correction keeps one small fragment during inference. Only after
+returning the model reply may it admit additional ready fragments within a 2 ms
+admission budget: two for legacy hosts, up to eight for hosts advertising the
+independent media pump. A single transport write retains its existing watchdog,
+so 2 ms is not a hard write-duration guarantee. The host receives/decodes on a
+separate 100 Hz worker and publishes immutable latest snapshots to the unchanged
+10 Hz display. Ordered H.264/keyframe recovery and all control/model validity
+policies are retained.
+
+Early rolling-process comparisons were discarded as evidence of the C4 fix:
+the manager pre-imports Python modules before forking children, so restarting
+only Jetlink reused old in-memory daemon code. C4 was then rebooted while parked.
+The new `navigation_tail` counters and negotiated receiver capability confirmed
+the corrected code was actually executing. Do not attribute early timing changes
+to the C4 fix or repeat that process-only deployment method for changed modules.
+
+The accepted post-reboot 180-second observation recorded 3,600 model/odometry,
+road and wide frames, no gaps/invalidity/model inactivity, and execution mean/max
+37.810/48.678 ms (none above 50 ms). Temperature was 68.781-71.062 C, speed zero,
+and control disengaged. The source itself supplied 1,531 map frames (8.51 Hz),
+with a maximum input gap of 458.1 ms. Over the overlapping display observation,
+1,260 distinct map frames were selected in 190.91 seconds (6.60 Hz), no decoder
+requests were dropped, and 1 Hz status samples reached 509 ms map age versus
+1,004 ms in the original parked trial. These unequal live inputs do not establish
+a controlled improvement ratio or elimination of all driving stutter. Earlier
+startup stale-message counts remained unchanged during steady observation.
+P-gear temporary display overrides were removed after the accepted test.

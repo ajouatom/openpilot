@@ -97,6 +97,10 @@ class SnapshotBuilder:
     self.cached = {}
     self.settings = {}
     self.next_params = self.next_send = 0.
+    self.host_release = None
+    release_file = Path(__file__).resolve().parents[2] / 'openpilot/selfdrive/modeld/jetlink/host_release.json'
+    if release_file.is_file():
+      self.host_release = json.loads(release_file.read_text())
     from hud_camera import CameraPublisher
     self.camera = CameraPublisher()
     from openpilot.selfdrive.carrot.cluster.cluster_system_monitor import NetworkAddressProvider
@@ -133,6 +137,7 @@ class SnapshotBuilder:
       self.next_params = now + 1
     device_badge = badge()
     record = {'version': 1, 'sent': now, 'events': self.cached, 'params': self.settings,
+              **({'jetson_release': self.host_release} if self.host_release is not None else {}),
               'vehicle_network_address': self.network.address(),
               'external_compute_label': device_badge[0] if device_badge and device_badge[1] == 'active' else '',
               'received': self.sm.recv_time, 'mono': self.sm.logMonoTime,
