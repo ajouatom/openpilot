@@ -14,6 +14,6 @@ function Assert-SameDisk($Current, $Selected, [long]$ImageBytes, [int]$SourceDis
       $Current.Number -ne $Selected.Number -or $Current.Size -ne $Selected.Size -or
       $Current.UniqueId -ne $Selected.UniqueId -or
       ([string]$Current.SerialNumber).Trim() -ne ([string]$Selected.SerialNumber).Trim()) {
-    throw 'SD카드 연결 정보가 바뀌었습니다. 02를 다시 실행하세요. / Card identity changed. Check the card and retry 02.'
+    throw "SD카드 연결 정보가 바뀌었습니다. 02를 다시 실행하세요.`nCard identity changed. Check the card and retry 02."
   }
 }

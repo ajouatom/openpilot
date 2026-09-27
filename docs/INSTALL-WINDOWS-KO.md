@@ -1,24 +1,92 @@
-# Jetson 설치 / Installation
+# 🥕 Jetson 설치 안내
 
-**[설치파일 받기 / Download installer](https://upload.shind0.synology.me/downloads/jetson/v0.3.1-windows-preview/carrot-jetson-windows.zip)**
+*Carrot Jetson · Installation guide*
 
-1. PC에 **모두 압축 풀기** / **Extract all** on the PC.
-2. **`01_설치준비.cmd`** — 이미지 준비·검사, 약 **5~15분**, 질문 없이 진행. / Prepare and verify, about **5–15 min**, no answers needed.
-3. SD카드 연결 후 **`02_SD카드설치.cmd`** — 기록·검사, 약 **15~60분**. / Connect the SD card; write and verify, about **15–60 min**.
-   화면 안내대로 **Enter → 예/Yes → 카드 번호 → 설치 또는 INSTALL**을 입력합니다. / Answer **Enter → Yes → card number → INSTALL (or 설치)**.
-4. 완료 후 PC에서 **안전하게 제거**합니다. **Jetson 정상 종료 → 전원 분리 → 카드 삽입·콤마 연결 → 전원 켜기** 순서입니다.
-   / **Safely eject**. **Shut down Jetson → disconnect power → insert card/connect comma → power on**.
+**파일을 받고, 01 → 02 순서로 실행하세요. 나머지는 배치 파일이 알아서 합니다.**
 
-**나머지는 배치 파일이 알아서 합니다. / The batch files handle the rest.**
-시간은 대략적인 예상이며 PC·카드·리더 속도에 따라 더 걸릴 수 있습니다. / Slow hardware may take longer.
+> Download, extract, then run 01 followed by 02. The scripts handle the rest.
 
-**주의 / Safety:** 선택한 카드 내용은 지워지므로 먼저 백업하세요. 작업 중 카드/리더를 빼거나 창을 닫거나 PC 전원을 끄지 마세요.
-Jetson이 켜진 상태에서는 카드를 넣거나 빼지 마세요. 차량은 안전하게 주차하고 주행 보조를 해제하세요.
-/ Back up the card before erasing. Do not unplug, close the window or power off the PC during installation.
-Never insert/remove the card while Jetson is on. Work while safely parked with assistance disengaged.
+### 📦 [설치파일 받기](https://upload.shind0.synology.me/downloads/jetson/v0.3.2-windows-preview/carrot-jetson-windows.zip)
 
-Windows 10/11 x64, PC 여유 공간 약 45GB, USB 리더, 64GB 이상 microSD, Orin Nano Super 기본 보드용입니다.
-/ Requires Windows 10/11 x64, about 45 GB free, USB reader, 64 GB+ microSD and Orin Nano Super reference carrier.
-콤마는 Jetson 통합 이후 `carrot-wip`를 사용하세요. / Use `carrot-wip` with Jetson support on comma.
+*Download installer · 8.3 GB*
 
-시험판: 실제 카드 기록·첫 부팅 시험은 아직 남아 있습니다. / Preview: physical card write/first-boot testing is pending.
+Windows 10/11 64비트 · PC 여유 공간 약 45GB · 64GB 이상 microSD와 USB 리더를 준비하세요.
+
+> Requires 64-bit Windows 10/11, about 45 GB free, a 64 GB+ microSD card and a USB reader.
+
+---
+
+### ① 압축을 모두 풀기
+
+*Extract all files*
+
+다운로드한 파일에서 **모두 압축 풀기**를 선택하고, **CarrotJetson** 폴더를 엽니다.
+폴더의 **`설치안내.html`**을 열면 보기 편한 안내 화면이 나옵니다.
+
+> Choose **Extract all**, then open the **CarrotJetson** folder. Open **설치안내.html** for the visual step-by-step guide.
+
+### ② `01_설치준비.cmd` 실행
+
+*Prepare the installation image · About 5–15 min*
+
+**예상 약 5~15분.** 두 번 클릭하고 기다리세요. 이미지 검사·압축 해제·USB-C 수정은 자동입니다. **입력할 내용은 없습니다.**
+
+> Double-click and wait. Image checks, extraction and the USB-C fix run automatically. **No answers needed.**
+
+### ③ `02_SD카드설치.cmd` 실행
+
+*Write and verify your SD card · About 15–60 min*
+
+**예상 약 15~60분.** 카드 리더를 PC에 연결하고 두 번 클릭하세요. 안내를 읽고 **Enter**를 누르면 관리자 권한 창이 열립니다.
+
+> Connect the card reader and double-click. Read the introduction and press **Enter** to open the administrator prompt.
+
+**창에서 이렇게 답하세요**
+
+> **How to answer**
+
+1. 관리자 권한 창 → **예**
+   > Administrator prompt → **Yes**
+2. 카드 이름·용량 확인 → **대괄호 안 번호** 입력 → **Enter**
+   > Check the card name and capacity → type its **number in brackets** → **Enter**
+3. 삭제 확인 → **설치** 또는 **INSTALL** 입력 → **Enter**
+   > Erase confirmation → type **INSTALL** → **Enter**
+
+카드 번호나 확인 문구가 맞지 않으면 취소됩니다.
+
+> An invalid card number or confirmation cancels installation.
+
+### ④ 전원을 끄고 Jetson에 연결
+
+*Power off before connecting to Jetson*
+
+**PC에서 카드 안전하게 제거 → Jetson 정상 종료·전원 분리 → 완전히 꺼진 뒤 카드·콤마 연결 → 보드에 맞는 전원 연결 후 켜기**
+
+> **Safely eject the card → shut down Jetson and disconnect power → once fully off, insert the card and connect comma → reconnect the correct power supply and turn on.**
+
+Wi-Fi 정보는 연결한 콤마에서 자동으로 받습니다.
+
+> Wi-Fi settings come automatically from the connected comma.
+
+---
+
+### ⚠️ 시작 전, 이것만 확인하세요
+
+*A few important precautions*
+
+- **선택한 카드의 모든 파일이 지워집니다.** 중요한 파일은 먼저 백업하세요.
+  > **All files on the selected card will be erased.** Back up important files first.
+- 설치 중 카드·리더를 빼거나 창을 닫거나 PC 전원을 끄지 마세요.
+  > Do not unplug the card/reader, close the window or power off the PC during installation.
+- **Jetson이 켜진 상태에서는 카드를 넣거나 빼지 마세요.** 차량은 안전하게 주차하고 주행 보조를 해제하세요.
+  > **Never insert or remove the card while Jetson is on.** Work while safely parked with assistance disengaged.
+
+---
+
+Orin Nano Super 기본 보드용입니다. 콤마는 Jetson 지원이 포함된 `carrot-wip`를 사용하세요.
+
+> For the Orin Nano Super reference carrier. Use `carrot-wip` with Jetson support on comma.
+
+시간은 예상치이며 PC·카드 속도에 따라 더 걸릴 수 있습니다. **시험판:** 실제 카드 기록·첫 부팅 시험은 남아 있습니다.
+
+> Times depend on your hardware. **Preview:** physical card writing and first-boot testing are pending.

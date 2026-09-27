@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Carrot Jetson · 설치 안내</title>
+<style>
+:root{color-scheme:light;--ink:#203831;--muted:#63736c;--line:#dce5dd;--green:#225b40;--orange:#f18b43}
+*{box-sizing:border-box}body{word-break:keep-all;overflow-wrap:break-word;margin:0;background:#f4f6f1;color:var(--ink);font:16px/1.7 "Segoe UI","Malgun Gothic",sans-serif}
+main{max-width:980px;margin:auto;padding:54px 30px 38px}.brand{font-size:13px;font-weight:800;letter-spacing:.16em;display:flex;align-items:center;gap:10px}.mark{width:13px;height:23px;background:var(--orange);border-radius:8px 8px 10px 10px;transform:rotate(22deg)}
+header{padding:30px 0 34px;border-bottom:1px solid var(--line)}h1{font-size:42px;line-height:1.3;letter-spacing:-.045em;margin:0 0 8px}h2{font-size:23px;letter-spacing:-.025em;line-height:1.4;margin:0}h3{font-size:17px;margin:0}p{margin:0}.en{display:block;color:var(--muted);font-size:13px;line-height:1.6;margin-top:4px;font-weight:400;letter-spacing:0}.subtitle{font-size:18px;margin-top:20px}.header-en{font-size:19px}.download{display:inline-flex;flex-direction:column;margin-top:22px;background:var(--green);color:white;padding:11px 25px;border-radius:12px;text-decoration:none;font-size:16px;font-weight:700}.download .en{color:#deeee3;font-size:12px;margin-top:0}.download:hover{background:#18472f}.requirements{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;padding:25px 0}.requirements strong{display:block;font-size:15px}.requirements .en{font-size:12px}.section-label{font-size:12px;letter-spacing:.13em;color:var(--muted);margin:13px 0 15px;font-weight:700}
+.steps{display:grid;gap:16px}.step{background:white;border:1px solid var(--line);border-radius:18px;padding:25px 28px;display:grid;grid-template-columns:44px 1fr;gap:18px}.number{font-size:23px;font-weight:750;color:var(--green);line-height:1.6}.step-head{display:flex;justify-content:space-between;align-items:start;gap:16px;margin-bottom:16px}.time{flex-shrink:0;border-radius:9px;background:#eef4ed;padding:7px 12px;font-size:14px;font-weight:700;line-height:1.3;text-align:center}.time .en{font-size:11px;margin-top:3px}.file{display:inline-block;font-family:Consolas,"Malgun Gothic",monospace;font-size:15px;padding:5px 12px;border:1px solid #d7e4d8;background:#f4f8f2;border-radius:7px;margin:0 0 12px;overflow-wrap:anywhere}.answers{margin-top:18px;border-top:1px solid var(--line);padding-top:16px}.answer-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:12px}.answer b{font-size:15px;display:block}.answer .en{font-size:12px}kbd{font:600 12px "Segoe UI",sans-serif;border:1px solid #c9d5cd;border-bottom-width:2px;background:#fff;padding:1px 5px;border-radius:4px}.safety{background:#fff6e9;border:1px solid #eed7b1;border-radius:16px;padding:22px 27px;margin-top:24px}.safety h2{font-size:20px;color:#754a18}.safety .en{color:#826b4b}.safety p{margin-top:14px}.power{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:17px}.power b{display:block}.note{font-size:13px;margin-top:18px;color:var(--muted)}footer{border-top:1px solid var(--line);margin-top:30px;padding-top:18px;color:var(--muted);font-size:12px}.preview{margin-top:12px}a:focus-visible{outline:3px solid var(--orange);outline-offset:4px}
+@media(max-width:640px){main{padding:28px 18px}h1{font-size:32px}.requirements{grid-template-columns:1fr;gap:13px}.step{padding:21px 18px;grid-template-columns:30px 1fr;gap:10px}.step-head{flex-wrap:wrap;gap:10px}h2{font-size:20px}.answer-grid,.power{grid-template-columns:1fr}.time{text-align:left}.safety{padding:20px}.header-en{font-size:17px}}
+@media print{body{background:white}main{padding:0;max-width:none}.step,.safety{break-inside:avoid}.download{display:none}footer{margin-top:15px}}
+</style>
+</head>
+<body><main>
+<div class="brand"><span class="mark" aria-hidden="true"></span>CARROT / JETSON</div>
+<header>
+  <h1>Jetson 설치 안내</h1>
+  <p class="en header-en" lang="en">A simple start for your Jetson.</p>
+  <p class="subtitle">파일을 받고, 01 → 02 순서로 실행하세요.</p>
+  <p class="en" lang="en">Download, extract, then run 01 followed by 02. The scripts handle the rest.</p>
+  <a class="download" href="https://upload.shind0.synology.me/downloads/jetson/v0.3.2-windows-preview/carrot-jetson-windows.zip">설치파일 받기<span class="en" lang="en">Download installer · 8.3 GB</span></a>
+</header>
+<div class="requirements">
+  <div><strong>Windows 10 / 11 · 64비트</strong><span class="en" lang="en">64-bit Windows PC</span></div>
+  <div><strong>PC 여유 공간 약 45GB</strong><span class="en" lang="en">About 45 GB of free disk space</span></div>
+  <div><strong>64GB 이상 microSD + USB 리더</strong><span class="en" lang="en">64 GB+ microSD card and USB reader</span></div>
+</div>
+<div class="section-label">INSTALLATION · 4 STEPS</div>
+<div class="steps">
+  <section class="step"><div class="number">01</div><div>
+    <div class="step-head"><div><h2>받은 파일의 압축을 모두 풀기</h2><span class="en" lang="en">Extract all files on your PC</span></div></div>
+    <p>다운로드한 파일에서 <b>모두 압축 풀기</b>를 선택하세요.<br>압축이 풀린 <b>CarrotJetson</b> 폴더를 엽니다.</p>
+    <p class="en" lang="en">Choose “Extract all” on the downloaded ZIP, then open the extracted CarrotJetson folder.</p>
+  </div></section>
+  <section class="step"><div class="number">02</div><div>
+    <div class="step-head"><div><h2>설치 준비 파일 실행</h2><span class="en" lang="en">Prepare the installation image</span></div><div class="time">약 5~15분<span class="en" lang="en">About 5–15 min</span></div></div>
+    <code class="file">01_설치준비.cmd</code>
+    <p>두 번 클릭하고 기다리세요. 이미지 검사·압축 해제·USB-C 수정까지 자동으로 진행합니다. <b>입력할 내용은 없습니다.</b></p>
+    <p class="en" lang="en">Double-click and wait. Image checks, extraction and the USB-C fix run automatically. No answers needed.</p>
+  </div></section>
+  <section class="step"><div class="number">03</div><div>
+    <div class="step-head"><div><h2>SD카드에 설치</h2><span class="en" lang="en">Write and verify your SD card</span></div><div class="time">약 15~60분<span class="en" lang="en">About 15–60 min</span></div></div>
+    <code class="file">02_SD카드설치.cmd</code>
+    <p>카드 리더를 PC에 연결하고 두 번 클릭하세요.<br>안내를 읽고 <kbd>Enter</kbd>를 누르면 관리자 권한 창이 열립니다.</p>
+    <p class="en" lang="en">Connect the card reader and double-click. Read the introduction and press Enter to open the administrator prompt.</p>
+    <div class="answers"><h3>창에서 이렇게 답하세요</h3><span class="en" lang="en">How to answer</span>
+      <div class="answer-grid">
+        <div class="answer"><b>① 관리자 권한 → 예</b><span class="en" lang="en">Administrator prompt → Yes</span></div>
+        <div class="answer"><b>② 카드 번호 → Enter</b><span class="en" lang="en">Number in brackets → Enter</span></div>
+        <div class="answer"><b>③ 설치 → Enter</b><span class="en" lang="en">Type INSTALL → Enter</span></div>
+      </div>
+      <p class="note">카드 이름·용량을 확인하세요. 다른 번호나 확인 문구를 입력하면 취소됩니다.</p>
+      <p class="en" lang="en">Check the card name and capacity. An invalid number or confirmation cancels installation.</p>
+    </div>
+  </div></section>
+  <section class="step"><div class="number">04</div><div>
+    <div class="step-head"><div><h2>전원을 끄고 Jetson에 연결</h2><span class="en" lang="en">Power off before connecting to Jetson</span></div></div>
+    <div class="power">
+      <div><b>① PC에서 카드 안전하게 제거</b><span class="en" lang="en">Safely eject the card from the PC.</span></div>
+      <div><b>② Jetson 종료 후 전원 분리</b><span class="en" lang="en">Shut down Jetson and disconnect power.</span></div>
+      <div><b>③ 완전히 꺼진 뒤 카드·콤마 연결</b><span class="en" lang="en">Once fully off, insert the card and connect comma.</span></div>
+      <div><b>④ 보드에 맞는 전원 연결 후 켜기</b><span class="en" lang="en">Reconnect the correct power supply and turn on.</span></div>
+    </div>
+    <p class="note">Wi-Fi 정보는 연결한 콤마에서 자동으로 받습니다.</p>
+    <p class="en" lang="en">Wi-Fi settings come automatically from the connected comma.</p>
+  </div></section>
+</div>
+<aside class="safety"><h2>시작 전, 이것만 확인하세요</h2><span class="en" lang="en">A few important precautions</span>
+  <p><b>선택한 카드의 모든 파일이 지워집니다.</b> 중요한 파일은 먼저 백업하세요.</p><span class="en" lang="en">All files on the selected card will be erased. Back up important files first.</span>
+  <p>설치 중 카드·리더를 빼거나 창을 닫거나 PC 전원을 끄지 마세요.</p><span class="en" lang="en">Do not unplug the card/reader, close the window or power off the PC during installation.</span>
+  <p><b>Jetson이 켜진 상태에서는 카드를 넣거나 빼지 마세요.</b><br>차량은 안전하게 주차하고 주행 보조를 해제한 상태에서 작업하세요.</p><span class="en" lang="en">Never insert or remove the card while Jetson is powered on. Work only while safely parked with driver assistance disengaged.</span>
+</aside>
+<footer>
+  <p>Orin Nano Super 기본 보드용 · 콤마는 Jetson 지원이 포함된 carrot-wip 사용</p><p class="en" lang="en">For the Orin Nano Super reference carrier. Use carrot-wip with Jetson support on comma.</p>
+  <p class="preview">시간은 예상치이며 PC·카드 속도에 따라 더 걸릴 수 있습니다. 시험판: 실제 카드 기록·첫 부팅 시험은 남아 있습니다.</p><p class="en" lang="en">Times are estimates and depend on your hardware. Preview: physical card writing and first-boot testing are pending.</p>
+</footer>
+</main></body></html>

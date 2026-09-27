@@ -6,6 +6,9 @@
   exact response instructions and brief safety guidance; brevity must not
   remove backup/write-in-progress cautions or Jetson shutdown and power
   disconnection before card insertion. Label the link "설치파일 받기".
+  Present Korean first with English underneath on a separate, visually secondary
+  line. Use clear stage headings, spacing and a styled offline HTML guide; never
+  interleave Korean and English with slash-separated sentences.
   Keep hashes, portable dependencies, USB-C patching and readback automatic;
   do not restore manual Python/Etcher/hash/hotfix steps to the default guide.
   The package prepares a patched file before writing, preserves the published

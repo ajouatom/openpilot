@@ -37,3 +37,7 @@ foreach ($item in @(@($prepareText,'5-15 min'), @($prepareText,'설치 준비'),
   if (-not $item[0].Contains($item[1])) { throw 'Missing bilingual installer guidance' }
 }
 Write-Output 'PASS: explicit Korean/English erase confirmation and bilingual guidance; no disk opened'
+
+$pair = @(Write-InstallerPair '한글 설명' 'English explanation' 6>&1 | ForEach-Object { $_.ToString() })
+if ($pair.Count -ne 2 -or $pair[0].Trim() -ne '한글 설명' -or $pair[1].Trim() -ne 'English explanation') { throw 'Expected Korean then English on separate lines' }
+Write-Output 'PASS: Korean-first, separate-line console layout'
