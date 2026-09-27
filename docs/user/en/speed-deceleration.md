@@ -97,9 +97,9 @@ The current stock warning (0x4A3) carries no camera kind. The kind of the previe
 | Signal-and-speed | Traffic-light icon | Always decelerates; no skip |
 | Rear speed, rear signal-and-speed | — | Always decelerates; no skip (identified by the preview's rear flag) |
 | Mobile enforcement zone | Blue circle | Decelerates when `AutoNaviSpeedCtrlMode` is `3`; ignored at `2` or lower |
-| Box (presumed) | — | Decelerates; skippable with `VehicleNaviSkipBoxCamera` |
+| Mobile-camera box | — | Decelerates; skippable with `VehicleNaviSkipBoxCamera` |
 
-A warning that also carries a fixed, signal, or rear camera always decelerates, even inside a mobile zone. Box detection is not yet confirmed by labelled drives.
+A warning that also carries a fixed, signal, or rear camera always decelerates, even inside a mobile zone.
 
 ### `VehicleNaviSkipBoxCamera`, `VehicleNaviSkipMobileZone`
 

@@ -6,7 +6,7 @@ the stock navigation screen and labelled drives (2026-09-27):
 
   kind 0  fixed speed camera (also section start/end cameras)
   kind 1  signal-and-speed camera
-  kind 2  unconfirmed spot camera (likely a mobile-camera box)
+  kind 2  mobile-camera box (spot camera; labelled 2026-09-27, e.g. 0x152 = box @100 km/h)
   kind 3  mobile enforcement zone (blue circle; enforcement anywhere in the zone)
   value >> 9 == 0x321: rear-facing flag, independent of the kind
     kind 0 + 0x321  rear speed camera (TMAP 75)
