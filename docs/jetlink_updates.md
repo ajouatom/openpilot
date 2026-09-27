@@ -39,12 +39,12 @@ The updater accepts only signed manifests and HTTPS URLs on the configured NAS.
 Immutable runtime bundles use the existing NAS model-file allowlist:
 
 ```
-/models/jetlink-host/<source-commit>/precompiled-runtime.tar.gz
-/models/jetlink-host/<source-commit>/manifest.json
-/models/jetlink-host/stable/manifest.json
+/models/jetlink-host-<source-commit>/precompiled-runtime.tar.gz
+/models/jetlink-host-<source-commit>/manifest.json
+/models/jetlink-host-stable/manifest.json
 ```
 
-Only promote `stable/manifest.json` after testing the exact immutable release.
+Only promote `jetlink-host-stable/manifest.json` after testing the exact immutable release.
 The image itself remains a separate larger download; do not advertise it as
 available through the model-file endpoint (the image suffix is not allowed).
 

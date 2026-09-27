@@ -18,7 +18,7 @@ import urllib.parse
 import urllib.request
 
 ROOT = Path('/opt/carrot-jetlink')
-DEFAULT_MANIFEST = 'https://upload.shind0.synology.me/models/jetlink-host/stable/manifest.json'
+DEFAULT_MANIFEST = 'https://upload.shind0.synology.me/models/jetlink-host-stable/manifest.json'
 
 
 def verify_signature(manifest):
