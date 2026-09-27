@@ -25,6 +25,7 @@ sys.path.insert(0, str(VENDOR.parents[1] / 'tools/jetlink'))
 from hud_protocol import Publisher, HUD_CAPABILITY, HUD_MESSAGE
 from hud_navi import CAPABILITY as NAVI_CAPABILITY, MESSAGE as NAVI_MESSAGE
 from hud_navi import send_ready_after_reply, PUMP_CAPABILITY
+from wifi_protocol import CAPABILITY as WIFI_CAPABILITY, Publisher as WifiPublisher
 
 
 def update_affinity():
@@ -86,18 +87,18 @@ class CarrotTransport(FfsTransport):
     os.sched_setscheduler(0, os.SCHED_FIFO, os.sched_param(1))
 
 
-def serve_local(listener, client, peer):
+def serve_local(listener, client, peer, wifi=None):
   publisher = Publisher(navi=bool(peer.get(NAVI_CAPABILITY))) if peer.get(HUD_CAPABILITY) else None
   phase = PhasePublisher()
   try:
-    _serve_local(listener, client, peer, publisher, phase)
+    _serve_local(listener, client, peer, publisher, phase, wifi)
   finally:
     phase.close()
     if publisher is not None:
       publisher.close()
 
 
-def _serve_local(listener, client, peer, publisher, phase):
+def _serve_local(listener, client, peer, publisher, phase, wifi=None):
   from openpilot.common.params import Params
   params = Params()
   last_status = 0.
@@ -111,6 +112,8 @@ def _serve_local(listener, client, peer, publisher, phase):
     try:
       connection, _ = listener.accept()
     except TimeoutError:
+      if wifi is not None:
+        wifi.send(client)
       publish_hud(client, publisher)
       if time.monotonic() - last_ping > 2:
         client.last_state = client.state()
@@ -134,6 +137,9 @@ def _serve_local(listener, client, peer, publisher, phase):
           try:
             request = reader.receive(connection)
           except TimeoutError:
+            if wifi is not None:
+              wifi.send(client)
+            publish_hud(client, publisher)
             client.last_state = client.state()
             telemetry_updated = time.monotonic()
             continue
@@ -172,6 +178,8 @@ def _serve_local(listener, client, peer, publisher, phase):
             # modeld already has its reply. Drain only a bounded ready tail;
             # never add these fragments before infer_end or delay its reply.
             send_ready_after_reply(client, publisher, fast_receiver=peer.get(PUMP_CAPABILITY) is True)
+          if wifi is not None:
+            wifi.send(client)
       except (ConnectionError, BrokenPipeError, ValueError) as exc:
         log.info('local client ended: %s', exc)
     last_ping = time.monotonic()
@@ -202,6 +210,7 @@ def main():
         time.sleep(1)
         continue
       client = None
+      wifi = None
       try:
         publish('connecting', peer=peer)
         gc.collect()
@@ -212,17 +221,24 @@ def main():
         speed = (Path('/sys/class/udc') / udc / 'current_speed').read_text().strip()
         if speed not in ('super-speed', 'super-speed-plus'):
           raise RuntimeError(f'USB 5Gbps or faster required; negotiated {speed}')
+        if peer.get(WIFI_CAPABILITY) is True:
+          wifi = WifiPublisher()
+          # Provision before ensure_engine: a new host may need Internet to
+          # fetch its first model. This is outside every model frame deadline.
+          wifi.send(client, initial=True)
         publish('loading', peer=peer)
         validate_spec(client.ensure_engine(SPEC.sha256, SPEC.nbytes, frame_skip=SPEC.frame_skip, build_timeout=30))
         # Warm independently of camera/modeld; every real session resets state.
         for frame in range(10):
           client.infer(np.zeros(SPEC.warped_shape, np.uint8), np.zeros(SPEC.packed_nelem, np.float32), frame, reset=True)
         log.info('Jetlink ready: %s', peer)
-        serve_local(listener, client, peer)
+        serve_local(listener, client, peer, wifi)
       except Exception as exc:
         log.exception('Jetlink connection failed')
         publish('retrying', peer=peer, error=str(exc)[:300])
       finally:
+        if wifi is not None:
+          wifi.close()
         if client is not None and client.last_state is not None and 'carrot_hud_connected' in client.last_state:
           from openpilot.common.params import Params
           Params().put_bool_nonblocking('ClusterHudConnected', False)

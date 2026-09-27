@@ -13,6 +13,7 @@ from hud_navi import CAPABILITY as NAVI_CAPABILITY, MESSAGE as NAVI_MESSAGE, Hos
 from hud_navi import PUMP_CAPABILITY
 from host_reader import ReadAheadTransport
 from host_health import health_worker
+from wifi_protocol import CAPABILITY as WIFI_CAPABILITY, MESSAGE as WIFI_MESSAGE, receive as receive_wifi
 from jetlink import protocol as P
 from jetlink.server.session import Session
 from jetlink.server import main as server
@@ -61,10 +62,15 @@ class CarrotSession(Session):
       host = 'mac' if sys.platform == 'darwin' else (
         'jetson' if Path('/etc/nv_tegra_release').is_file() else 'unknown')
       obj = {**obj, HUD_CAPABILITY: sys.platform == 'linux', NAVI_CAPABILITY: sys.platform == 'linux',
-             PUMP_CAPABILITY: sys.platform == 'linux', 'carrot_host': host}
+             PUMP_CAPABILITY: sys.platform == 'linux', WIFI_CAPABILITY: host == 'jetson', 'carrot_host': host}
     return super()._send_json(msg_type, seq, obj, flags)
 
   def handle(self, msg):
+    if msg.msg_type == WIFI_MESSAGE:
+      if msg.seq > self.last_seq:
+        self.last_seq = msg.seq
+        receive_wifi(msg.payload)
+      return
     if msg.msg_type == NAVI_MESSAGE:
       if msg.seq > self.last_seq:
         self.last_seq = msg.seq

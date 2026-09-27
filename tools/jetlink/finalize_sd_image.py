@@ -206,6 +206,8 @@ def provision(root, setup, bundle, stage):
         '[Service]\nLogsDirectory=carrot-jetlink-hud\nLogsDirectoryMode=0700\n'
         'WorkingDirectory=/var/log/carrot-jetlink-hud\n')
   script = RUNTIME + '/current/tools/jetlink/'
+  from install_wifi import configure as configure_wifi
+  configure_wifi(root)
   enable(root, 'carrot-image-setup.service',
          '[Unit]\nDescription=Carrot per-device SD provisioning\nAfter=local-fs.target\nBefore=ssh.service NetworkManager.service\n'
          '[Service]\nType=oneshot\nExecStart=/usr/bin/python3 ' + script + 'image_first_boot.py\nRemainAfterExit=yes\n'

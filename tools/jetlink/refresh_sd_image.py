@@ -76,6 +76,15 @@ def refresh(root, setup, bundle):
   marker_path = root/'etc/carrot-jetlink-image.json'
   from install_updates import configure
   configure(root, release/'tools/jetlink')
+  from install_wifi import configure as configure_wifi
+  configure_wifi(root)
+  (setup/'README.txt').write_text(
+    'Carrot Jetson image. Connect USB to a compatible Carrot comma device.\n'
+    'Saved Wi-Fi client profiles are imported automatically over USB.\n'
+    'No owner Wi-Fi, SSH key or default password is included.\n'
+    'Optional SSH access: put your public key in setup.json.\n'
+    'setup.json is consumed on boot. Never redistribute a provisioned card.\n'
+    'Requires Jetson Orin Nano Super / matching QSPI / L4T 36.4.7.\n')
   marker = json.loads(marker_path.read_text())
   marker.update(state='CANDIDATE_PHYSICAL_BOOT_PENDING', source_commit=commit)
   marker_path.write_text(json.dumps(marker, indent=2) + '\n')
