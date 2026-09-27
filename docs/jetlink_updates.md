@@ -326,3 +326,27 @@ host health fault or model inactivity. Execution mean/max was 37.968/47.600 ms,
 temperature 70.250-71.062 C, speed zero and control disengaged. The original
 P-gear policy is restored. The initial SD master remains the separately hashed
 `e1237698` candidate; updating the runtime does not change that image artifact.
+
+### USB Wi-Fi bootstrap and distributable image correction
+
+The personally configured test medium did not establish a setup-free installation.
+The USB Wi-Fi extension now provisions before ensure_engine, so missing Internet
+cannot prevent receipt of credentials. A separate normal-priority comma process
+reads saved NetworkManager client profiles; a negotiated private message bypasses
+HUD/Params/logs. Packets have local freshness checks, 16 KiB and eight-profile
+bounds. The Jetson writes only 0600 private temporary data and managed NM profiles.
+It imports WPA-PSK, SAE and open networks, preferring the comma active connection;
+enterprise/captive-portal authentication is not implemented. The physically attached
+comma is trusted to provide Wi-Fi configuration. This does not provide USB NAT.
+
+Credentials and changes are refreshed without removing the SD card. Owner changes
+replace only prior carrot-usb profiles; independent manual profiles remain intact.
+Failed secret queries never send an empty deletion set. Model inference and camera
+policies are unchanged. A secret-free bootstrap subset carries the signed release
+and fresh explicit offroad state, supporting update selection before model readiness.
+The new image includes the Wi-Fi service and current updater bootstrap. Existing
+hosts need the service installed once; the owner's device is tested separately.
+
+Desktop checks passed 48 tests with five Linux-only skips. Physical USB transfer,
+clean-network reconnection, parked timing and the new image are being validated;
+this paragraph is not a completed deployment or physical image boot claim.

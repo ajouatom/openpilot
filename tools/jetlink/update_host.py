@@ -232,6 +232,17 @@ def activate():
 
 
 def automatic_stage():
+  # The private bootstrap channel arrives before model readiness. Its public
+  # subset allows a newly connected host to stage the comma's pinned release.
+  control_file = Path('/dev/shm/carrot-jetlink-bootstrap.json')
+  try:
+    control = json.loads(control_file.read_text())
+    if 0 <= time.monotonic() - control['received'] < 15:
+      if control.get('onroad') is False and control.get('jetson_release') is not None:
+        stage_manifest(control['jetson_release'])
+      return
+  except (OSError, ValueError, KeyError, TypeError):
+    pass
   from hud_protocol import read_snapshot
   snapshot = read_snapshot()
   if snapshot is None:
