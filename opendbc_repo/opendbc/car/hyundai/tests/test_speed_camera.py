@@ -1,4 +1,5 @@
 import math
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -1259,6 +1260,20 @@ def test_box_camera_skip_consumes_one_accel_press():
   assert state._swallow_speedcam_accel(release) == []
   assert not state.speedcam_accel_swallow
   assert state._swallow_speedcam_accel(press) == press
+
+
+def test_speedcam_button_filter_keeps_capnp_button_events_intact():
+  # Regression: `ret.buttonEvents = f(ret.buttonEvents)` on a capnp builder clears the
+  # source list first, so every button became unknown/released on the car.
+  state = _speedcam_state()
+  ret = structs.CarState()
+  ret.buttonEvents = state._swallow_speedcam_accel([
+    structs.CarState.ButtonEvent(type=ButtonType.accelCruise, pressed=True),
+    structs.CarState.ButtonEvent(type=ButtonType.paddleLeft, pressed=False)])
+  assert [(str(b.type), b.pressed) for b in ret.buttonEvents] == [("accelCruise", True), ("paddleLeft", False)]
+
+  source = (Path(__file__).resolve().parents[1] / "carstate.py").read_text(encoding="utf-8")
+  assert "_swallow_speedcam_accel(ret.buttonEvents)" not in source
 
 
 def test_speedcam_skip_needs_driving_speed_and_leaves_fixed_cameras():
