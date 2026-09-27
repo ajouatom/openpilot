@@ -79,11 +79,11 @@ def test_jetson_images_download_head_resume_and_file_allowlist(tmp_path):
   async def run():
     root = tmp_path / 'uploads/downloads/jetson/v0.2.0-preview'
     root.mkdir(parents=True)
-    for name in ['carrot-jetson.img.zst', 'release.json', 'SHA256SUMS', 'setup.json', 'image.partial']:
+    for name in ['carrot-jetson.img.zst', 'carrot-jetson-windows.zip', 'release.json', 'SHA256SUMS', 'setup.json', 'image.partial']:
       (root / name).write_bytes(b'0123456789')
     async with TestClient(TestServer(create_app(viewer_config(tmp_path), start_cleanup=False))) as client:
       prefix = '/downloads/jetson/v0.2.0-preview/'
-      for name in ['carrot-jetson.img.zst', 'release.json', 'SHA256SUMS']:
+      for name in ['carrot-jetson.img.zst', 'carrot-jetson-windows.zip', 'release.json', 'SHA256SUMS']:
         response = await client.get(prefix + name)
         assert response.status == 200 and await response.read() == b'0123456789'
         assert response.headers['Content-Disposition'] == f'attachment; filename="{name}"'
