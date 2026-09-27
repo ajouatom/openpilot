@@ -8,7 +8,9 @@ the stock navigation screen and labelled drives (2026-09-27):
   kind 1  signal-and-speed camera
   kind 2  unconfirmed spot camera (likely a mobile-camera box)
   kind 3  mobile enforcement zone (blue circle; enforcement anywhere in the zone)
-  value >> 9 == 0x321 on kind 1: rear signal-and-speed camera
+  value >> 9 == 0x321: rear-facing flag, independent of the kind
+    kind 0 + 0x321  rear speed camera (TMAP 75)
+    kind 1 + 0x321  rear signal-and-speed camera (TMAP 76)
 
 0x4A3 only says "a camera warning is active" without a kind, so this policy
 attaches the kind of the nearby same-speed preview to the current warning.
