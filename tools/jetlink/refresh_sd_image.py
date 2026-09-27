@@ -78,6 +78,8 @@ def refresh(root, setup, bundle):
   configure(root, release/'tools/jetlink')
   from install_wifi import configure as configure_wifi
   configure_wifi(root)
+  from install_usbc import configure as configure_usbc
+  configure_usbc(root)
   (setup/'README.txt').write_text(
     'Carrot Jetson image. Connect USB to a compatible Carrot comma device.\n'
     'Saved Wi-Fi client profiles are imported automatically over USB.\n'

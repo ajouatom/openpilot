@@ -437,3 +437,31 @@ the current model report is inactive with no error. The web diagnostic retains
 `Host not connected`; real inference errors, active-model link loss, stale state,
 retry failures and thermal faults remain visible. Control disengagement/fallback
 logic is untouched. Fourteen focused status/health tests passed.
+
+The user then booted the previous managed medium and connected C-to-C. SSH
+confirmed FUSB301 SNK(4), Try.SNK=1 and the Jetson's device role. Source inspection
+of NVIDIA jetson_36.4.7 established that fsw_trysnk=0 must precede fmode=1:
+otherwise detach can restore the preferred-sink policy. The driver performs
+error recovery and CC negotiation, then sets USB_ROLE_HOST after detecting Rd.
+No direct role override, I2C register write, firmware or kernel replacement is used.
+The trial enumerated the comma at 5000 Mbps in about six seconds. A guarded
+P3768/36.4.7 boot service now applies that policy before inference and makes no
+detach-inducing write if it is already selected. Reboot restored host/SRC(1),
+5Gbps and active model inference without cable reconnection.
+
+The first 120-second C-to-C trial had no frame-ID gaps or validity failure, but
+one 84.711ms model execution and one inactive diagnostic sample. USB logs did
+not show disconnection; their cause is unproved. A second 120-second capture
+after reboot had 2,400 model/odometry/road/wide/pose messages each, no skipped
+frames, validity failure, inactive sample or health fault. Execution mean/max
+36.582/43.226ms; temperature 66.281-68.656 C, speed zero and disengaged.
+Linux CI 36308578134 passed 68 tests on host source bae1927. Desktop image/role
+checks passed 30 tests with two Linux-specific skips. Suspension, driving and
+other carrier boards remain untested.
+
+The user's new 128GB medium was separately identified by its zero-key first-boot
+result. An owner public-key setup file and the 4,492-byte hotfix ZIP were added
+and read back without rewriting the image. This is staged data, not execution:
+the existing first-boot loader consumes the key but does not execute the ZIP.
+Authenticated installation and validation on that medium follow its next boot.
+Public base images and the hotfix ZIP contain no owner credentials.
