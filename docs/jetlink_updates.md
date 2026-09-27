@@ -308,3 +308,21 @@ requests were dropped, and 1 Hz status samples reached 509 ms map age versus
 a controlled improvement ratio or elimination of all driving stutter. Earlier
 startup stale-message counts remained unchanged during steady observation.
 P-gear temporary display overrides were removed after the accepted test.
+
+The first standalone release is `carrot-jetson` commit
+`3f3142e01a77a7c5f6f6111c9dba8843300e3b50`, published as `v0.1.0-preview`.
+Linux GitHub CI passed 28 tests. Its media/server/read-ahead sources are byte-for-
+byte identical to the accepted vehicle trial; the added updater pin path has a
+regression covering selection precedence and rejection without fallback.
+The actual host downloaded the signed NAS bundle, passed `CANDIDATE_PROBE_OK`,
+activated the release and installed the pin-aware bootstrap. The C4-forwarded
+manifest's signature and source matched the running host; staging that exact
+selection correctly performed no change. Both the NAS channel and GitHub release
+manifest were independently downloaded and verified after publication.
+
+After this final activation, a further 60-second parked observation recorded
+1,201 model/odometry and 1,200 frames from each camera with no gaps, invalidity,
+host health fault or model inactivity. Execution mean/max was 37.968/47.600 ms,
+temperature 70.250-71.062 C, speed zero and control disengaged. The original
+P-gear policy is restored. The initial SD master remains the separately hashed
+`e1237698` candidate; updating the runtime does not change that image artifact.
