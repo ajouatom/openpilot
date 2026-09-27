@@ -45,7 +45,7 @@ def build(image, compressed, patch, python_zip, output):
     if digest(path) != expected:
       raise ValueError(f'Wrong publisher input: {path.name}')
   tools = Path(__file__).resolve().parent
-  release = dict(version='v0.3.0-windows-preview', image_bytes=image.stat().st_size, image_sha256=IMAGE_SHA,
+  release = dict(version='v0.3.1-windows-preview', image_bytes=image.stat().st_size, image_sha256=IMAGE_SHA,
                  compressed_bytes=compressed.stat().st_size, compressed_sha256=COMPRESSED_SHA,
                  prepared_sha256=patched_digest(image, json.loads(patch.read_bytes())), patch_sha256=PATCH_SHA,
                  python_url=PYTHON_URL, python_sha256=PYTHON_SHA,
@@ -61,7 +61,7 @@ def build(image, compressed, patch, python_zip, output):
     for name in ('offline_hotfix.py', 'write_sd_windows.ps1'):
       data = (tools / name).read_text(encoding='utf-8-sig')
       add('support/' + name, data.encode('utf-8-sig' if name.endswith('.ps1') else 'utf-8'))
-    for name in ('prepare.py', 'launcher.ps1', 'disks.ps1'):
+    for name in ('prepare.py', 'launcher.ps1', 'disks.ps1', 'messages.ps1'):
       data = (tools / 'windows_installer' / name).read_text(encoding='utf-8-sig')
       add('support/' + name, data.encode('utf-8-sig' if name.endswith('.ps1') else 'utf-8'))
     with zipfile.ZipFile(python_zip) as runtime:
@@ -75,9 +75,9 @@ def build(image, compressed, patch, python_zip, output):
     for stage, filename in [('Prepare', '01_설치준비.cmd'), ('Install', '02_SD카드설치.cmd')]:
       script = ('@echo off\r\nchcp 65001 >nul\r\n'
                 'if not exist "%~dp0support\\launcher.ps1" (\r\n'
-                '  echo ZIP 안에서 실행하지 말고, 먼저 모두 압축을 풀어 주세요.\r\n  pause\r\n  exit /b 1\r\n)\r\n'
+                '  echo 먼저 모두 압축을 풀어 주세요. / Extract all files before running.\r\n  echo 아무 키나 누르면 닫습니다. / Press any key to close.\r\n  pause >nul\r\n  exit /b 1\r\n)\r\n'
                 'powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0support\\launcher.ps1" -Stage ' + stage + '\r\n'
-                'set "RESULT=%ERRORLEVEL%"\r\npause\r\nexit /b %RESULT%\r\n')
+                'set "RESULT=%ERRORLEVEL%"\r\necho 아무 키나 누르면 닫습니다. / Press any key to close.\r\npause >nul\r\nexit /b %RESULT%\r\n')
       add(filename, script.encode('utf-8'))
     add('먼저읽기.txt', (tools / 'windows_installer/먼저읽기.txt').read_bytes())
     add('support/SOURCE.txt', b'https://github.com/ajouatom/carrot-jetson\nhttps://www.python.org/downloads/release/python-3147/\n')

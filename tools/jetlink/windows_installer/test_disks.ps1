@@ -1,4 +1,4 @@
-$ErrorActionPreference = 'Stop'
+﻿$ErrorActionPreference = 'Stop'
 . "$PSScriptRoot\disks.ps1"
 $good = [pscustomobject]@{ Number=7; Size=128000000000; BusType='USB'; IsBoot=$false; IsSystem=$false; IsReadOnly=$false; IsOffline=$false; UniqueId='card-1'; SerialNumber='' }
 if (-not (Test-InstallDisk $good 25769803776 0)) { throw 'Eligible USB card rejected' }
@@ -16,9 +16,24 @@ foreach ($case in @(@('Number',8),@('Size',64000000000),@('UniqueId','card-2'),@
   try { Assert-SameDisk $disk $good 25769803776 0 } catch { $rejected = $true }
   if (-not $rejected) { throw "Replaced disk accepted: $($case[0])" }
 }
-foreach ($file in @('launcher.ps1','disks.ps1','../write_sd_windows.ps1')) {
+foreach ($file in @('launcher.ps1','disks.ps1','messages.ps1','../write_sd_windows.ps1')) {
   $tokens=$null; $errors=$null
   $null = [System.Management.Automation.Language.Parser]::ParseFile((Join-Path $PSScriptRoot $file),[ref]$tokens,[ref]$errors)
   if ($errors.Count) { throw ($errors | Out-String) }
 }
 Write-Output 'PASS: 15 disk guards and PowerShell syntax; no disk opened or written'
+
+foreach ($answer in @('설치','INSTALL',' INSTALL ')) {
+  if (-not (Test-EraseConfirmation $answer)) { throw 'Valid explicit erase confirmation rejected' }
+}
+foreach ($answer in @('', 'yes', 'Y', '7', 'install', 'CANCEL')) {
+  if (Test-EraseConfirmation $answer) { throw 'Ambiguous erase confirmation accepted' }
+}
+. "$PSScriptRoot/messages.ps1"
+$prepareText = (Show-InstallerIntro Prepare 6>&1 | Out-String)
+$installText = (Show-InstallerIntro Install 6>&1 | Out-String)
+$finishText = (Show-JetsonConnectionSteps 6>&1 | Out-String)
+foreach ($item in @(@($prepareText,'5-15 min'), @($prepareText,'설치 준비'), @($installText,'15-60 min'), @($installText,'INSTALL'), @($finishText,'disconnect its power supply'), @($finishText,'전원 공급'))) {
+  if (-not $item[0].Contains($item[1])) { throw 'Missing bilingual installer guidance' }
+}
+Write-Output 'PASS: explicit Korean/English erase confirmation and bilingual guidance; no disk opened'
