@@ -1423,10 +1423,12 @@ class CarState(CarStateBase):
     elif self.gear_msg_canfd == "GEAR":
       paddle_button = 1 if cp.vl["GEAR"]["LEFT_PADDLE"] == 1 else 2 if cp.vl["GEAR"]["RIGHT_PADDLE"] == 1 else 0
 
-    ret.buttonEvents = [*create_button_events(self.cruise_buttons[-1], prev_cruise_buttons, BUTTONS_DICT),
-                        *create_button_events(paddle_button, self.paddle_button_prev, {1: ButtonType.paddleLeft, 2: ButtonType.paddleRight}),
-                        *create_button_events(self.main_buttons[-1], prev_main_buttons, {1: ButtonType.mainCruise})]
-    ret.buttonEvents = self._swallow_speedcam_accel(ret.buttonEvents)
+    # Filter the Python list before the single capnp assignment: re-assigning a
+    # capnp list field from itself clears the source first and zeroes every event.
+    ret.buttonEvents = self._swallow_speedcam_accel([
+      *create_button_events(self.cruise_buttons[-1], prev_cruise_buttons, BUTTONS_DICT),
+      *create_button_events(paddle_button, self.paddle_button_prev, {1: ButtonType.paddleLeft, 2: ButtonType.paddleRight}),
+      *create_button_events(self.main_buttons[-1], prev_main_buttons, {1: ButtonType.mainCruise})])
 
     self.paddle_button_prev = paddle_button
 
