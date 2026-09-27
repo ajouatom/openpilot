@@ -20,7 +20,7 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
-      - run: python -m pip install pytest==8.3.5 numpy pillow pycapnp pycryptodome aiohttp
+      - run: python -m pip install pytest==8.3.5 pytest-asyncio numpy pillow pycapnp pycryptodome aiohttp raylib==5.5.0.4
       - name: USB, fallback, navigation, Wi-Fi, signed updates and image checks
         env:
           PYTHONPATH: .:opendbc_repo:tools/jetlink
