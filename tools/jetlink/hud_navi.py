@@ -9,6 +9,7 @@ import threading
 from dataclasses import replace
 
 CAPABILITY = 'carrot_navi_v1'
+PUMP_CAPABILITY = 'carrot_navi_pump_v1'
 MESSAGE = 0x4001
 ADDRESS = '\0carrot-jetlink-navi'
 HEADER = struct.Struct('<QQII')  # Publisher epoch, event id, offset, event length.
@@ -62,25 +63,34 @@ class MediaPump:
     self.source._socket.close()
 
 
-def send_ready_after_reply(client, publisher, *, clock=time.monotonic):
+def send_ready_after_reply(client, publisher, *, fast_receiver=False, clock=time.monotonic):
   """Use the idle tail only after modeld has its inference result.
 
   Retain the single fragment during GPU execution, then send at most two
-  additional ready fragments (64 KiB) after replying to modeld. Never wait for
+  additional ready fragments (64 KiB), or eight (256 KiB) when the host
+  advertises its independent receiver pump, after replying to modeld. Never wait for
   the producer. The 2 ms admission budget is checked before each send; a single
   USB write still uses the existing transport watchdog, not a hard 2 ms timeout.
-  This bounded burst also leaves room in the host's display datagram queue.
+  Legacy hosts retain the smaller burst for their display-tick datagram queue.
   """
   if publisher is None:
     return
-  deadline = clock() + .002
-  for _ in range(2):
+  started = clock()
+  deadline = started + .002
+  sent = 0
+  for _ in range(8 if fast_receiver else 2):
     if clock() >= deadline:
       break
     packet = publisher.media_packet()
     if not packet:
       break
     client.t.send(MESSAGE, client._next_seq(), [packet])
+    sent += 1
+  stats = getattr(publisher, 'tail_stats', {'calls': 0, 'fragments': 0, 'max_ms': 0.})
+  stats['calls'] += 1
+  stats['fragments'] += sent
+  stats['max_ms'] = max(stats['max_ms'], (clock()-started)*1000)
+  publisher.tail_stats = stats
 
 
 def fragments(raw, epoch, sequence):

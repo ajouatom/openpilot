@@ -10,6 +10,7 @@ sys.path.insert(0, str(ROOT / 'third_party/jetlink'))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from hud_protocol import HUD_CAPABILITY, HUD_MESSAGE, MAX_HUD_BYTES, HUD_PACKET, HEADER
 from hud_navi import CAPABILITY as NAVI_CAPABILITY, MESSAGE as NAVI_MESSAGE, HostForwarder
+from hud_navi import PUMP_CAPABILITY
 from host_reader import ReadAheadTransport
 from host_health import health_worker
 from jetlink import protocol as P
@@ -59,7 +60,8 @@ class CarrotSession(Session):
     if msg_type == P.Msg.HELLO_RESP:
       host = 'mac' if sys.platform == 'darwin' else (
         'jetson' if Path('/etc/nv_tegra_release').is_file() else 'unknown')
-      obj = {**obj, HUD_CAPABILITY: sys.platform == 'linux', NAVI_CAPABILITY: sys.platform == 'linux', 'carrot_host': host}
+      obj = {**obj, HUD_CAPABILITY: sys.platform == 'linux', NAVI_CAPABILITY: sys.platform == 'linux',
+             PUMP_CAPABILITY: sys.platform == 'linux', 'carrot_host': host}
     return super()._send_json(msg_type, seq, obj, flags)
 
   def handle(self, msg):
