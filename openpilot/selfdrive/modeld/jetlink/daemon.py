@@ -101,17 +101,19 @@ def _serve_local(listener, client, peer, publisher, phase):
   params = Params()
   last_status = 0.
   last_ping = time.monotonic()
+  telemetry_updated = 0.
   while host_attached():
     if time.monotonic() - last_status >= 1:
       update_affinity()
-      publish('ready', peer=peer)
+      publish('ready', peer=peer, telemetry=client.last_state, telemetry_updated=telemetry_updated)
       last_status = time.monotonic()
     try:
       connection, _ = listener.accept()
     except TimeoutError:
       publish_hud(client, publisher)
       if time.monotonic() - last_ping > 2:
-        client.ping()
+        client.last_state = client.state()
+        telemetry_updated = time.monotonic()
         last_ping = time.monotonic()
       continue
     with connection:
@@ -124,12 +126,14 @@ def _serve_local(listener, client, peer, publisher, phase):
             update_affinity()
             if publisher is not None:
               params.put_bool_nonblocking('ClusterHudConnected', bool((client.last_state or {}).get('carrot_hud_connected')))
-            publish('ready', peer=peer, timings=list(client.last_timings))
+            publish('ready', peer=peer, timings=list(client.last_timings),
+                    telemetry=client.last_state, telemetry_updated=telemetry_updated)
             last_status = time.monotonic()
           try:
             request = reader.receive(connection)
           except TimeoutError:
-            client.ping()
+            client.last_state = client.state()
+            telemetry_updated = time.monotonic()
             continue
           if len(request) != REQUEST.size + SPEC.warped_nbytes + SPEC.packed_nbytes:
             raise ValueError('invalid local inference request')
@@ -147,7 +151,10 @@ def _serve_local(listener, client, peer, publisher, phase):
             phase.sent(source_sof)
           if peer.get(NAVI_CAPABILITY):
             publish_hud(client, publisher)
+          previous_state = client.last_state
           output = client.infer_end(seq)
+          if client.last_state is not previous_state:
+            telemetry_updated = time.monotonic()
           completed = time.monotonic()
           try:
             send_parts(connection, REPLY.pack(frame, *client.last_timings), output)
@@ -180,16 +187,17 @@ def main():
   listener.listen(1)
   listener.settimeout(.05)
   setup = VENDOR.parents[1] / 'tools/jetlink/setup_gadget.sh'
+  peer = None
   try:
     while True:
       update_affinity()
       if not host_attached():
-        publish('waiting')
+        publish('waiting', peer=peer)
         time.sleep(1)
         continue
       client = None
       try:
-        publish('connecting')
+        publish('connecting', peer=peer)
         gc.collect()
         subprocess.run(['sudo', '-n', 'bash', str(setup)], check=True, timeout=15, capture_output=True)
         udc = next(Path('/sys/class/udc').iterdir()).name
@@ -207,7 +215,7 @@ def main():
         serve_local(listener, client, peer)
       except Exception as exc:
         log.exception('Jetlink connection failed')
-        publish('retrying', error=str(exc)[:300])
+        publish('retrying', peer=peer, error=str(exc)[:300])
       finally:
         if client is not None and client.last_state is not None and 'carrot_hud_connected' in client.last_state:
           from openpilot.common.params import Params

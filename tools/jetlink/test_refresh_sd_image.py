@@ -66,6 +66,8 @@ def test_refresh_selects_committed_release_and_repairs_hud(base, tmp_path):
     data = (commit + '\n').encode()
     member = tarfile.TarInfo('SOURCE_COMMIT'); member.size = len(data)
     t.addfile(member, io.BytesIO(data))
+    for name in ('update_host.py', 'finalize_sd_image.py', 'hud_protocol.py', 'release-signing-public.pem'):
+      t.add(Path(__file__).with_name(name), arcname='tools/jetlink/' + name)
   marker = refresh(root, setup, bundle)
   assert marker['state'] == 'CANDIDATE_PHYSICAL_BOOT_PENDING'
   assert marker['root_start'] == 3188736

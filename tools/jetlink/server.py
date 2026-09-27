@@ -11,6 +11,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from hud_protocol import HUD_CAPABILITY, HUD_MESSAGE, MAX_HUD_BYTES, HUD_PACKET, HEADER
 from hud_navi import CAPABILITY as NAVI_CAPABILITY, MESSAGE as NAVI_MESSAGE, HostForwarder
 from host_reader import ReadAheadTransport
+from host_health import health_worker
 from jetlink import protocol as P
 from jetlink.server.session import Session
 from jetlink.server import main as server
@@ -19,6 +20,7 @@ from jetlink.server import main as server
 class DisplayTelemetry:
   def __init__(self, original):
     self.original = original
+    self.health = health_worker() if Path('/etc/nv_tegra_release').is_file() else None
 
   def read(self):
     connected = False
@@ -27,10 +29,23 @@ class DisplayTelemetry:
       connected = 0 <= time.monotonic() - status['updated'] < 2
     except (OSError, ValueError, KeyError, TypeError):
       pass
-    return {**self.original.read(), 'carrot_hud_connected': connected}
+    return {**self.original.read(), 'carrot_hud_connected': connected,
+            **({'carrot_health': self.health.read()} if self.health else {})}
 
 
 class CarrotSession(Session):
+  def _send(self, msg_type, seq, parts=(), flags=0):
+    if msg_type == P.Msg.INFER_RESP and self.telemetry.health is not None:
+      status = P.unpack_infer_resp(parts[0])[1]
+      if status != P.Status.OK:
+        self.telemetry.health.record_error('Inference', f'result status {status}')
+    return super()._send(msg_type, seq, parts, flags)
+
+  def _error(self, seq, error, detail=''):
+    if self.telemetry.health is not None:
+      self.telemetry.health.record_error(error, detail)
+    return super()._error(seq, error, detail)
+
   def __init__(self, *args, **kwargs):
     super().__init__(*args, **kwargs)
     if sys.platform == 'linux':
@@ -39,6 +54,8 @@ class CarrotSession(Session):
     self.navi = HostForwarder() if sys.platform == 'linux' else None
 
   def _send_json(self, msg_type, seq, obj, flags=0):
+    if msg_type == P.Msg.ENGINE_RESP and obj.get('state') == 'failed' and self.telemetry.health is not None:
+      self.telemetry.health.record_error('Engine', obj.get('detail', 'failed'))
     if msg_type == P.Msg.HELLO_RESP:
       host = 'mac' if sys.platform == 'darwin' else (
         'jetson' if Path('/etc/nv_tegra_release').is_file() else 'unknown')
@@ -77,5 +94,7 @@ class CarrotSession(Session):
 
 
 if __name__ == '__main__':
+  if Path('/etc/nv_tegra_release').is_file():
+    health_worker()
   server.Session = CarrotSession
   raise SystemExit(server.main())

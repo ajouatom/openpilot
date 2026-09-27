@@ -5,6 +5,12 @@ window.CarrotTranslations.register("ko", {
   nativeName: "한국어",
   shortName: "KO",
   strings: {
+    egpu_model_host_ok: "???",
+    egpu_model_host_warning: "?? ??",
+    egpu_model_host_error: "??? ?? / ?? ??",
+    egpu_model_host_unknown: "?? ??? ?? ?? ??",
+    egpu_model_host_ip: "??? IP",
+    egpu_model_host_no_ip: "???? ??",
     egpu_model_title: "eGPU 빅모델",
     egpu_model_checking: "모델 확인 중",
     egpu_model_downloading: "다운로드 중",
