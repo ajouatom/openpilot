@@ -72,6 +72,13 @@ def test_post_reply_navigation_tail_preserves_order_and_stops_on_slow_write():
   assert complete[-1] == (42, 7, b'x' * 264752)
   send_ready_after_reply(client, publisher, clock=lambda: now[0])
   assert len(sent) == 9
+  assert publisher.tail_stats['fragments'] == 9
+  packets.extend(fragments(b'x' * 264752, 42, 8))
+  send_ready_after_reply(client, publisher, fast_receiver=True, clock=lambda: now[0])
+  assert len(sent) == 17 and len(packets) == 1
+  slow[0] = True
+  send_ready_after_reply(client, publisher, fast_receiver=True, clock=lambda: now[0])
+  assert len(sent) == 18 and not packets
 
 
 def test_navigation_large_event_survives_slow_fragment_consumer():

@@ -24,7 +24,7 @@ log = logging.getLogger('carrot.jetlink')
 sys.path.insert(0, str(VENDOR.parents[1] / 'tools/jetlink'))
 from hud_protocol import Publisher, HUD_CAPABILITY, HUD_MESSAGE
 from hud_navi import CAPABILITY as NAVI_CAPABILITY, MESSAGE as NAVI_MESSAGE
-from hud_navi import send_ready_after_reply
+from hud_navi import send_ready_after_reply, PUMP_CAPABILITY
 
 
 def update_affinity():
@@ -128,7 +128,8 @@ def _serve_local(listener, client, peer, publisher, phase):
             if publisher is not None:
               params.put_bool_nonblocking('ClusterHudConnected', bool((client.last_state or {}).get('carrot_hud_connected')))
             publish('ready', peer=peer, timings=list(client.last_timings),
-                    telemetry=client.last_state, telemetry_updated=telemetry_updated)
+                    telemetry=client.last_state, telemetry_updated=telemetry_updated,
+                    navigation_tail=getattr(publisher, 'tail_stats', {}))
             last_status = time.monotonic()
           try:
             request = reader.receive(connection)
@@ -170,7 +171,7 @@ def _serve_local(listener, client, peer, publisher, phase):
           else:
             # modeld already has its reply. Drain only a bounded ready tail;
             # never add these fragments before infer_end or delay its reply.
-            send_ready_after_reply(client, publisher)
+            send_ready_after_reply(client, publisher, fast_receiver=peer.get(PUMP_CAPABILITY) is True)
       except (ConnectionError, BrokenPipeError, ValueError) as exc:
         log.info('local client ended: %s', exc)
     last_ping = time.monotonic()
