@@ -32,9 +32,9 @@ class DrivingModeDetector:
 
   STOP_ENTRY_TIME = 0.30
   SLOW_ENTRY_TIME = 8.0
-  RECOVERY_TIME = 6.0
+  RECOVERY_TIME = 3.0
   CLEAR_ROAD_TIME = 4.0
-  ACCEL_EXIT_THRESHOLD = 1.5
+  ACCEL_EXIT_THRESHOLD = 1.0
   ACCEL_EXIT_TIME = 0.5
 
   def __init__(self):
@@ -87,8 +87,8 @@ class DrivingModeDetector:
     self.stop_time = min(self.STOP_ENTRY_TIME, self.stop_time + dt) if stopping else 0.0
     self.slow_time = min(self.SLOW_ENTRY_TIME, self.slow_time + dt) if slow else 0.0
 
-    # Restore prompt release for a strongly accelerating lead without waiting
-    # for six seconds of flow recovery. Stopping approaches still take priority.
+    # Sustained moderate lead acceleration can release the comfort allowance
+    # before the flow timer. Stopping approaches still take priority.
     accelerating = not stopping and lead.aLeadK > self.ACCEL_EXIT_THRESHOLD
     self.accel_time = min(self.ACCEL_EXIT_TIME, self.accel_time + dt) if accelerating else 0.0
     flowing = ego >= 35 * CV.KPH_TO_MS and speed >= 35 * CV.KPH_TO_MS
