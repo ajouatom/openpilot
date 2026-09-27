@@ -12,11 +12,31 @@ ADDRESS = '\0carrot-jetlink-navi'
 HEADER = struct.Struct('<QQII')  # Publisher epoch, event id, offset, event length.
 CHUNK = 32 * 1024
 MAX_EVENT = 1024 * 1024
-# Only the low-priority navigation child waits. The USB owner still consumes
-# one fragment per inference window without waiting for this producer.
-# 32 fragments at 20 Hz take 1.6 s; stay below the receiver's 2 s assembly limit.
+# Only the low-priority navigation child waits. Keep the fallback deadline
+# compatible with the original one-fragment-per-window receiver cadence.
 EVENT_SEND_TIMEOUT = 1.8
 STATUS = Path('/dev/shm/carrot-jetlink-navi-status.json')
+
+
+def send_ready_after_reply(client, publisher, *, clock=time.monotonic):
+  """Use the idle tail only after modeld has its inference result.
+
+  Retain the single fragment during GPU execution, then send at most two
+  additional ready fragments (64 KiB) after replying to modeld. Never wait for
+  the producer. The 2 ms admission budget is checked before each send; a single
+  USB write still uses the existing transport watchdog, not a hard 2 ms timeout.
+  This bounded burst also leaves room in the host's display datagram queue.
+  """
+  if publisher is None:
+    return
+  deadline = clock() + .002
+  for _ in range(2):
+    if clock() >= deadline:
+      break
+    packet = publisher.media_packet()
+    if not packet:
+      break
+    client.t.send(MESSAGE, client._next_seq(), [packet])
 
 
 def fragments(raw, epoch, sequence):

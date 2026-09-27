@@ -7,6 +7,39 @@ from hud_navi import Assembler, fragments, CHUNK, HEADER, MAX_EVENT
 from hud_stats import VehicleSystemStats, VehicleCpuOverlay
 
 
+def test_post_reply_navigation_tail_preserves_order_and_stops_on_slow_write():
+  from collections import deque
+  from hud_navi import send_ready_after_reply, MESSAGE
+  packets = deque(fragments(b'x' * 264752, 42, 7))
+  assembler = Assembler()
+  sent = []
+  now = [0.]
+  slow = [False]
+  class Client:
+    def __init__(self): self.t = self; self.seq = 0
+    def _next_seq(self): self.seq += 1; return self.seq
+    def send(self, message, seq, parts):
+      assert message == MESSAGE
+      sent.append((seq, parts[0]))
+      now[0] += .003 if slow[0] else .0001
+  publisher = SimpleNamespace(media_packet=lambda: packets.popleft() if packets else None)
+  client = Client()
+  send_ready_after_reply(client, publisher, clock=lambda: now[0])
+  assert len(sent) == 2 and len(packets) == 7
+  slow[0] = True
+  send_ready_after_reply(client, publisher, clock=lambda: now[0])
+  assert len(sent) == 3 and len(packets) == 6  # no read/discard of the next packet
+  slow[0] = False
+  while packets:
+    send_ready_after_reply(client, publisher, clock=lambda: now[0])
+  complete = [assembler.feed(packet, 1.) for _, packet in sent]
+  assert [seq for seq, _ in sent] == list(range(1, 10))
+  assert all(result is None for result in complete[:-1])
+  assert complete[-1] == (42, 7, b'x' * 264752)
+  send_ready_after_reply(client, publisher, clock=lambda: now[0])
+  assert len(sent) == 9
+
+
 def test_navigation_large_event_survives_slow_fragment_consumer():
   """A >150ms pause must not truncate a keyframe or corrupt its successor."""
   import socket, threading, time
