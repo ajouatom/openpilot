@@ -7,6 +7,52 @@ the spare SD**; file checks do not establish boot, inference or USB operation.
 
 ## Image preparation
 
+### Refreshing the sanitized candidate (2026-09-27)
+
+`tools/jetlink/refresh_sd_image.py` refreshes a hash-pinned unprovisioned base
+archive with a checksum-pinned committed host bundle. It makes a new file-backed
+image, rejects personal setup, generated host keys, network profiles, machine
+identity and password-bearing accounts, updates the selected release and HUD
+log-directory repair, then checks runtime imports, the pinned ONNX, GPT and both
+filesystems. It does not copy the current vehicle filesystem, access a physical
+SD for writing, compile models, restart services or change the P-gear trip-report
+policy. Run it with low CPU/I/O priority on an aarch64 build host with enough
+space for both compressed archives and the 24 GiB output image.
+
+The refreshed image remains `CANDIDATE_PHYSICAL_BOOT_PENDING`. Validation of the
+old SD plus application updates does not prove the newly packaged image boots.
+Test this exact image on a spare card before promotion; preserve the working SD.
+
+### NAS distribution proposal
+
+Keep immutable version directories containing `carrot-jetson.img.zst`,
+`release.json`, `SHA256SUMS`, setup instructions and the Windows writer.
+Retain the raw image privately for write/readback validation. The manifest must
+record source commit, base provenance, raw/compressed sizes and hashes, required
+Orin Nano Super/L4T/QSPI compatibility, and candidate versus tested state.
+
+Stage candidates outside the public route/model download trees. After exact-image
+physical boot validation, publish the tested directory and only then update a
+small `stable.json` pointer. Keep the previous tested directory for rollback.
+Download clients should support HTTP Range/resume and verify SHA-256 before
+writing. Hashes provide integrity; signed manifests remain required before
+implementing unattended device updates.
+
+The existing NAS `/models/{family}/{filename}` handler allows a fixed set of
+model filenames and does not serve `.img.zst`. Use a dedicated read-only
+`/downloads/jetson/<version>/<filename>` mapping with an explicit public file
+allowlist, no directory listing and no access to candidates, captures or setup
+credentials. This mapping is a proposal, not a deployed endpoint. A Synology
+File Station share link is an alternative for a limited candidate test, but its
+expiry, access controls and large-file resume must be checked on the actual NAS.
+
+Preserve shipped OS/package notices and provide the matching application source
+commit. Review the licenses of the exact included NVIDIA packages and model
+before public promotion; an application source license alone does not cover the
+complete OS image. Initial full-image installation and future application-only
+updates are separate deliveries; the latter's automatic protocol below is still
+unimplemented.
+
 `tools/jetlink/build_sd_image.py` runs on the prepared reference Jetson as root.
 It checks the reference SD layout and creates a 24 GiB sparse image under
 `/home/yun/jetlink-image-build`, never writing the running physical SD. It copies
