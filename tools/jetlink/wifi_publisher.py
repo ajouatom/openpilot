@@ -51,6 +51,17 @@ def collect():
   return profiles
 
 
+def road_state(raw):
+  # Current typed Params returns bool; older installations returned bytes.
+  if type(raw) is bool:
+    return raw
+  if raw in (b'0', '0'):
+    return False
+  if raw in (b'1', '1'):
+    return True
+  return None
+
+
 def main(fd):
   from openpilot.common.params import Params
   params = Params()
@@ -73,7 +84,7 @@ def main(fd):
         refresh = now + 5
     if profiles is not None:
       raw = params.get('IsOnroad')
-      onroad = {b'0': False, b'1': True}.get(raw)
+      onroad = road_state(raw)
       value = dict(version=1, owner=owner, profiles=profiles, onroad=onroad)
       if manifest is not None:
         value['jetson_release'] = manifest
