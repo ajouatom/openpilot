@@ -216,3 +216,26 @@ written personal provisioning file passed a byte-hash readback. Personal setup
 is exclusive to this owner's medium and is excluded from the NAS master image.
 This completes media preparation, not the new-media physical boot test or a
 connection test with another C4.
+
+### New-medium boot and navigation follow-up
+
+The owner subsequently confirmed booting the newly written medium. SSH presented
+a new per-device key, provisioning and root-growth services completed successfully,
+and `/dev/mmcblk0p1` reported 116 GiB with 99 GiB available. The running release
+was `e1237698`; inference, HUD and update timer were active, with no failed units.
+The HUD reported a decoded 960x540 map and the existing C4 connection was active.
+This establishes first provisioning/root growth and running display services on
+the new medium. Another C4 and navigation smoothness remain separate checks.
+
+The owner reported navigation stuttering while driving. A subsequent parked
+25.084-second observation saw 222 map video messages, with a maximum serialized
+event of 264,752 bytes and source-receive age below 8.2 ms. The forwarding child
+reported no stale/abandoned events, but maximum enqueue duration grew to 652.6 ms.
+The transport currently drains one 32 KiB navigation fragment per inference
+window: a 264,752-byte event needs nine windows, spanning approximately 400 ms
+at 20 Hz even before queueing. This is a concrete latency mechanism, not proof
+that it explains every reported driving interruption. A separate 30-second HUD
+status sample reached 402 ms map age (two samples above 300 ms, no stalled flag).
+The 1 Hz status sampling does not measure every displayed frame or end-to-end
+source latency. Host temperature was healthy at approximately 68 C. No transport
+budget or inference timing policy was changed during this diagnosis.
