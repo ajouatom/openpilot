@@ -2,6 +2,10 @@
 
 - On 2026-09-28, the user requested a single Windows installation ZIP and a
   minimal Korean guide: extract, run 01, run 02, insert the finished card.
+  Follow-up requires bilingual stage introductions, approximate durations,
+  exact response instructions and brief safety guidance; brevity must not
+  remove backup/write-in-progress cautions or Jetson shutdown and power
+  disconnection before card insertion. Label the link "설치파일 받기".
   Keep hashes, portable dependencies, USB-C patching and readback automatic;
   do not restore manual Python/Etcher/hash/hotfix steps to the default guide.
   The package prepares a patched file before writing, preserves the published
