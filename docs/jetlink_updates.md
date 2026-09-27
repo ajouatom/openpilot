@@ -8,9 +8,11 @@ and model updates do not require reflashing. OS/ABI/QSPI changes remain separate
 
 The distributable image must remain unprovisioned. It contains no owner's Wi-Fi
 profile, SSH authorization list, SSH host key, machine ID or C4 dongle binding.
-First boot creates per-device identity and host keys; owners provide their own
-network/access configuration. A personally provisioned test card is not the
-distribution master.
+First boot creates per-device identity and host keys. With C4 `526f81421c` and
+host `f2b22dc`, Wi-Fi configuration arrives automatically over the private USB
+bootstrap channel, before model readiness. Owners may optionally supply SSH
+public keys in setup.json; that is not required for Wi-Fi or inference. A
+personally provisioned test card is not the distribution master.
 
 USB discovery uses the Jetlink VID/PID, not a specific C4 serial number. The
 connection still requires compatible C4 Jetlink code and the exact supported
@@ -347,6 +349,66 @@ and fresh explicit offroad state, supporting update selection before model readi
 The new image includes the Wi-Fi service and current updater bootstrap. Existing
 hosts need the service installed once; the owner's device is tested separately.
 
-Desktop checks passed 48 tests with five Linux-only skips. Physical USB transfer,
-clean-network reconnection, parked timing and the new image are being validated;
-this paragraph is not a completed deployment or physical image boot claim.
+Initial desktop checks passed 48 tests with five Linux-only skips. The final
+validation results below supersede that preliminary test count; physical image
+boot remains a separate check.
+
+The final host candidate is `f2b22dcf0bd0708658668f7efa2dfb29f81b3bd1`
+with C4 `526f81421c`. Actual typed Params returns a boolean; the initial candidate
+sent an unknown road state and correctly blocked automatic updates. The corrected
+sender accepts typed booleans and legacy byte/string values. Actual USB reception
+now shows onroad=true and the exact signed final manifest; automatic_stage leaves
+pending absent while onroad. Linux CI passed 61 tests (run 36302510193); desktop
+passed 56 with five platform skips, plus 24 image tests with one Linux-only skip.
+
+Three parked clean-network trials backed up only local root-private profiles,
+removed every NM Wi-Fi profile, and restarted the receiver. All recreated the two
+comma profiles and connected over USB (6.36 s, 2.44 s, and 28.52 s respectively).
+The first two trials failed immediate/bounded HTTPS checks and restored their
+backup, so they are not end-to-end successes. The instrumented third trial recorded
+EAI_AGAIN DNS preparation failures until about 49 s, then NAS HTTPS 200 on attempt
+six (service total about 56 s). It passed with the original carrot-setup profile
+absent. A separate systemd-launched HTTPS probe also passed. Original secret
+backups were deleted from /run after success; no secret content was exported.
+No DNS addresses were hardcoded or validation bypassed to obtain success.
+
+After final C4 code activation, 120 s of unconflated observation recorded 2,400
+model/odometry/road/wide messages, no frame gaps, CAN/pose validity failure, model
+inactivity or host health fault. Execution mean/max was 37.958/47.799 ms, temperature
+71.156-72.062 C, zero speed and control disengaged. This overlapped low-priority
+image preparation. A candidate probe emitted an NvMap allocation warning but
+completed all finite inference checks; the subsequent normal runtime observation
+above is the accepted steady-state evidence. No driving benefit is claimed.
+
+SSID/password rotation and different-owner profile replacement are covered by
+synthetic NM-boundary tests; no router password or second physical comma was changed
+for this test. The signed host channel and GitHub v0.2.0-preview now designate f2b22dc.
+The new image was built from the hash-pinned unprovisioned e1237698 master,
+not from this live host. Image/USB completion and first physical boot remain separate.
+
+The refreshed unprovisioned image completed its offline checks and was downloaded
+and decompressed with complete SHA256 verification on the Windows PC. The NAS
+copy was independently read back and verified under
+`\\DS1821P\openpilot\dev\jetson-images\candidates\20260927-f2b22dc-wifi`.
+No Wi-Fi setup.json or SSH authorization key is appended to this owner's new USB.
+
+| Artifact | Bytes | SHA256 |
+| --- | ---: | --- |
+| carrot-jetson.img | 25,769,803,776 | 5a1e7a3ba6156c621d8a01412f062b6c16ecb8ef2274b82b6acdaadf4b19a516 |
+| carrot-jetson.img.zst | 8,249,905,714 | 61fce013d1fb9db548084ca4d2e9a3ea9d697717b1470725f0fec39830fc3285 |
+
+The image includes the Wi-Fi service and current bootstrap updater, with the
+same pinned model as the accepted runtime trial. Runtime imports, sudoers,
+model/privacy checks, ext4/FAT checks and GPT validation passed. The remote build
+workspace was removed after PC verification and log preservation, restoring
+98 GiB of free root space. Inference, HUD, Wi-Fi and update timer remained active.
+`v0.2.0-preview` includes image metadata/checksums and the explicit physical-boot
+pending status; its `manifest.json` is the separately signed runtime release.
+
+The authorized 128 GB medium was written with all 25,769,803,776 image bytes,
+then independently read in full. Its SHA256 matched the raw image above;
+the writer reported `SD_WRITE_COMPLETE_AND_VERIFIED`. No personal setup was
+appended. PC and NAS BUILD-STATUS records now report full USB readback success
+while retaining `physical_boot_verified=false`. The new medium still requires
+insertion and first boot in the Jetson; the existing-host tests do not establish
+that result or compatibility with a second physical comma.
