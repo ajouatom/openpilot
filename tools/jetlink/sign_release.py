@@ -22,7 +22,7 @@ def main():
     spec = json.load(archive.extractfile('openpilot/selfdrive/modeld/jetlink/cinque_v2.json'))
   manifest = {'format': 1, 'source_commit': commit,
               'runtime': {'arch': 'aarch64', 'l4t': '36.4.7', 'tensorrt': '10.3.0'},
-              'bundle': {'url': f'https://upload.shind0.synology.me/models/jetlink-host/{commit}/precompiled-runtime.tar.gz',
+              'bundle': {'url': f'https://upload.shind0.synology.me/models/jetlink-host-{commit}/precompiled-runtime.tar.gz',
                          'sha256': digest(args.bundle), 'size': args.bundle.stat().st_size},
               'model': {'url': args.model_url, 'sha256': spec['sha256'], 'size': spec['nbytes']}}
   validate_manifest(manifest)
