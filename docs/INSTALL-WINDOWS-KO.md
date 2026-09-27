@@ -21,7 +21,7 @@ Windows 10/11 64비트 · PC 여유 공간 약 45GB · 64GB 이상 microSD와 US
 *Extract all files*
 
 다운로드한 파일에서 **모두 압축 풀기**를 선택하고, **CarrotJetson** 폴더를 엽니다.
-폴더의 **`설치안내.html`**을 열면 보기 편한 안내 화면이 나옵니다.
+폴더의 `설치안내.html`을 열면 보기 편한 안내 화면이 나옵니다.
 
 > Choose **Extract all**, then open the **CarrotJetson** folder. Open **설치안내.html** for the visual step-by-step guide.
 

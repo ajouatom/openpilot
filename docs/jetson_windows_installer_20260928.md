@@ -66,3 +66,26 @@ PowerShell은 UTF-8 BOM으로 배포하여 영문 Windows에서도 한글 소스
   실제 SD 기록·UAC 클릭·Jetson 첫 부팅은 이번 안내 개정에서도 수행하지 않았습니다.
 - NAS 전체 읽기 SHA256과 공개 HEAD·앞뒤 Range·메타데이터 검증을 마친 뒤
   [v0.3.1 시험 릴리스](https://github.com/ajouatom/carrot-jetson/releases/tag/v0.3.1-windows-preview)를 게시했습니다.
+
+
+## v0.3.2 — 한글 아래 영어, 화면용 설치 안내
+
+- 한 줄에 한·영 문장을 섞던 안내를 제거했습니다. 실행창은 한글 다음 줄에
+  회색 영어 설명을 표시하고, 단계 제목·예상 시간·입력 안내·주의사항을 구분합니다.
+- ZIP에 외부 연결 없이 열리는 `설치안내.html`을 추가했습니다. 단계별 카드,
+  시간 표시, 입력 예시, 별도의 전원·백업 주의사항을 제공합니다.
+  GitHub README와 설치 문서도 같은 한글 우선 순서로 정리했습니다.
+- Chrome 실제 화면에서 상단·설치 단계·연결 순서의 배치와 줄바꿈을 확인했습니다.
+  GitHub 렌더링에서 드러난 파일명 강조 문법도 정리했습니다.
+- 기존 이미지·USB-C 패치·휴대용 Python 입력을 다시 해시 검사하여 묶었습니다.
+  준비 이미지 SHA256은 `423cf57a837d7a6d5dfec60bc28fd7721613b0e4bf8c3428d57b6661a893ce52`로 동일합니다.
+- ZIP: 8,274,619,308바이트, SHA256
+  `e11a0a1da0c7fc78ace17b527d0242c98d68a752888c072c6f18ed1151e506da`.
+- 로컬 Python 22개 통과, Linux 전용 1개 제외. PowerShell 디스크 보호·구문·확인 입력과
+  한글 다음 줄 영어 표시를 확인했습니다. 배포 ZIP의 소스/HTML 일치 및 휴대용 Python과
+  실제 01 CMD의 **합성 이미지** 실행도 통과했습니다. 실제 SD 기록은 수행하지 않았습니다.
+- [차량 CI](https://github.com/ajouatom/openpilot/actions/runs/36359052762)와
+  [호스트 CI](https://github.com/ajouatom/carrot-jetson/actions/runs/36359054768)의
+  Windows 및 Linux 검사가 성공했습니다.
+- NAS 업로드 전체 읽기 SHA256, 공개 HEAD·앞뒤 Range·release.json·SHA256SUMS가
+  배포 원본과 일치했습니다. [v0.3.2 시험 릴리스](https://github.com/ajouatom/carrot-jetson/releases/tag/v0.3.2-windows-preview)를 게시했습니다.
