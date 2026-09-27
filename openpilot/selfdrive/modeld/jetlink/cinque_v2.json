@@ -1,0 +1,107 @@
+{
+  "sha256": "09d080f36965bb2a0790500452bd328aa03c484d0222aa79d1ad9f021a522aec",
+  "nbytes": 766040736,
+  "frame_skip": 4,
+  "checkpoint": "b9facbcc-4d47-410e-b3ce-dfcbad12ba92/56320/1a421175-db71-4e3d-9d62-e2166421b02b/12864",
+  "input_shapes": {
+    "img": [
+      1,
+      12,
+      128,
+      256
+    ],
+    "big_img": [
+      1,
+      12,
+      128,
+      256
+    ],
+    "desire_pulse": [
+      1,
+      33,
+      8
+    ],
+    "traffic_convention": [
+      1,
+      2
+    ],
+    "action_t": [
+      1,
+      2
+    ],
+    "features_buffer": [
+      1,
+      32,
+      32,
+      512
+    ]
+  },
+  "output_shapes": {
+    "outputs": [
+      1,
+      18452
+    ]
+  },
+  "output_slices": {
+    "lane_lines": [
+      0,
+      528
+    ],
+    "lane_lines_prob": [
+      528,
+      536
+    ],
+    "road_edges": [
+      536,
+      800
+    ],
+    "meta": [
+      800,
+      855
+    ],
+    "desire_pred": [
+      855,
+      887
+    ],
+    "pose": [
+      887,
+      899
+    ],
+    "wide_from_device_euler": [
+      899,
+      905
+    ],
+    "road_transform": [
+      905,
+      917
+    ],
+    "plan": [
+      917,
+      1907
+    ],
+    "lead": [
+      1907,
+      2051
+    ],
+    "lead_prob": [
+      2051,
+      2054
+    ],
+    "desire_state": [
+      2054,
+      2062
+    ],
+    "action": [
+      2062,
+      2066
+    ],
+    "hidden_state": [
+      2066,
+      18450
+    ],
+    "pad": [
+      18450,
+      18452
+    ]
+  }
+}

@@ -26,6 +26,15 @@ const FALLBACK_STRINGS = {
   restart: "Restart & compile",
   restart_confirm: "Park the car and turn ignition on. Restart now to compile the eGPU big model?",
   restart_requested: "Restart requested. Compilation will begin during boot.",
+  host_ok: "Connected",
+  host_warning: "High temperature",
+  host_error: "Host error / connection lost",
+  host_unknown: "Waiting for current host health",
+  host_ip: "Host IP",
+  host_no_ip: "Unavailable",
+  host_not_connected: "Host not connected",
+  host_unavailable: "Host connection unavailable",
+  host_health_unavailable: "Host health unavailable",
 };
 
 function t(key) {
@@ -67,7 +76,7 @@ function render(status = lastStatus) {
   const card = document.getElementById("egpuModelCard");
   if (!card) return;
   lastStatus = status;
-  if (!status?.available) {
+  if (!status?.available && !status?.jetlink) {
     card.hidden = true;
     return;
   }
@@ -81,6 +90,39 @@ function render(status = lastStatus) {
   const progressBar = document.getElementById("egpuModelProgressBar");
   const amountEl = document.getElementById("egpuModelAmount");
   const action = document.getElementById("btnEgpuCompileRestart");
+
+  let hostEl = document.getElementById("jetlinkHealth");
+  if (!hostEl) {
+    hostEl = document.createElement("div");
+    hostEl.id = "jetlinkHealth";
+    hostEl.className = "egpu-model-card__detail";
+    detailEl.after(hostEl);
+  }
+  const host = status.jetlink;
+  hostEl.hidden = !host;
+  if (host) {
+    const severity = ["ok", "warning", "error", "unknown"].includes(host.severity) ? host.severity : "unknown";
+    hostEl.textContent = `${host.label} · ${t(`host_${severity}`)} · ${t("host_ip")}: ${(host.addresses || []).join(", ") || t("host_no_ip")}`
+      + (Number.isFinite(host.temp_c) ? ` · ${host.temp_c.toFixed(1)} °C` : "")
+        + (host.reason ? ` · ${({
+          "Host not connected": t("host_not_connected"),
+          "Host connection unavailable": t("host_unavailable"),
+          "Host health unavailable": t("host_health_unavailable"),
+        })[host.reason] || host.reason}` : "");
+    hostEl.style.color = severity === "error" ? "#ff7474" : severity === "warning" ? "#ffd166" : "";
+  }
+  if (!status.available) {
+    card.hidden = false;
+    card.dataset.state = host.severity === "error" ? "error" : "compiled";
+    card.classList.remove("is-running");
+    document.getElementById("egpuModelTitle").textContent = `${host.label} · Cinque v2`;
+    stateEl.textContent = t(`host_${host.severity || "unknown"}`);
+    detailEl.textContent = "";
+    progressEl.hidden = true;
+    amountEl.textContent = "";
+    action.hidden = true;
+    return;
+  }
 
   card.hidden = false;
   card.dataset.state = state;
@@ -105,7 +147,9 @@ async function refresh() {
   try {
     render(await getJson("/api/egpu/model"));
   } catch (_error) {
-    // An older/non-eGPU branch may not expose this endpoint. Stay invisible.
+    if (lastStatus?.jetlink) render({ ...lastStatus, jetlink: {
+      ...lastStatus.jetlink, severity: "unknown", addresses: [], temp_c: null, reason: "", fresh: false,
+    } });
   } finally {
     window.clearTimeout(pollTimer);
     pollTimer = window.setTimeout(refresh, POLL_INTERVAL_MS);

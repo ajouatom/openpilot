@@ -1,0 +1,34 @@
+name: Jetson integration checks
+on:
+  push:
+    branches: [carrot-wip]
+    paths:
+      - 'tools/jetlink/**'
+      - 'third_party/jetlink/**'
+      - 'openpilot/common/jetlink_status.py'
+      - 'openpilot/selfdrive/modeld/**'
+      - 'openpilot/selfdrive/carrot/carrot_navi.py'
+      - '.github/workflows/jetlink-checks.yaml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  contracts:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - run: python -m pip install pytest==8.3.5 numpy pillow pycapnp pycryptodome aiohttp
+      - name: USB, fallback, navigation, Wi-Fi, signed updates and image checks
+        env:
+          PYTHONPATH: .:opendbc_repo:tools/jetlink
+        run: |
+          python -m compileall -q tools/jetlink openpilot/selfdrive/modeld/jetlink
+          python -m pytest -c /dev/null --rootdir=. --confcutdir=tools/jetlink -q \
+            tools/jetlink openpilot/selfdrive/modeld/tests/test_jetlink.py \
+            openpilot/selfdrive/modeld/tests/test_jetlink_phase.py
+          python -m pytest -c /dev/null --rootdir=. --confcutdir=openpilot/selfdrive/carrot/tests -q \
+            openpilot/selfdrive/carrot/tests/test_carrot_navi.py \
+            openpilot/selfdrive/carrot/tests/test_cluster_scene.py

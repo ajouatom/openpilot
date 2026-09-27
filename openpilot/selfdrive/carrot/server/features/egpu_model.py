@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from aiohttp import web
+from openpilot.common.jetlink_status import diagnostics as jetlink_diagnostics
 
 from openpilot.selfdrive.modeld.big_model import active_manifest, active_model_compiled, active_model_path, model_cache_dir
 from openpilot.selfdrive.modeld.big_model_status import read_big_model_status, write_big_model_status
@@ -69,7 +70,7 @@ def build_status_payload(params: Any | None = None) -> dict[str, Any]:
 
 
 async def api_status(_request: web.Request) -> web.Response:
-  return web.json_response(build_status_payload())
+  return web.json_response({**build_status_payload(), 'jetlink': jetlink_diagnostics()})
 
 
 async def api_compile_restart(_request: web.Request) -> web.Response:

@@ -334,6 +334,17 @@ class OpenpilotLiveSource:
                 self._egpu_active = bool(params is not None and params.get_bool("UsbGpuActive"))
             except Exception:
                 self._egpu_active = False
+            self._external_compute_label = ''
+            try:
+                if callable(getattr(params, 'external_compute_label', None)):
+                    self._external_compute_label = params.external_compute_label()
+                else:
+                    from openpilot.common.jetlink_status import badge
+                    device_badge = badge()
+                    if device_badge and device_badge[1] == 'active':
+                        self._external_compute_label = device_badge[0]
+            except Exception:
+                pass
             self._next_egpu_param_read_t = now + 1.0
 
         device_state = self._service_data("deviceState")
@@ -450,6 +461,7 @@ class OpenpilotLiveSource:
             onroad=onroad,
             alert=self._live_cluster_alert(state.alert, onroad),
             egpu_active=getattr(self, "_egpu_active", False),
+            external_compute_label=getattr(self, '_external_compute_label', ''),
             external_nav_active=external_nav_active,
             vehicle_navi_available=vehicle_navi_available,
             speed_limit_kph=speed_limit_kph,

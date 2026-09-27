@@ -16,6 +16,7 @@ from openpilot.selfdrive.carrot.carrot_navi import (
   ClusterNaviMapParamReader,
   CarrotNaviReceiver,
   DISCOVERY_PORT,
+  MAP_SCREEN_CENTER_Y_RATIO_DEFAULT,
   PROTOCOL_VERSION,
   build_manifest,
   create_app,
@@ -392,7 +393,7 @@ def test_safe_websocket_error_send_ignores_closing_transport():
 
 
 def test_map_param_change_reconnects_websocket_with_new_manifest():
-  map_config = ["dark", "normal", 10, 3000]
+  map_config = ["dark", "normal", 10, 3000, MAP_SCREEN_CENTER_Y_RATIO_DEFAULT]
 
   async def scenario():
     receiver = CarrotNaviReceiver(
@@ -410,7 +411,7 @@ def test_map_param_change_reconnects_websocket_with_new_manifest():
       first_map = next(stream for stream in first_manifest["streams"] if stream["kind"] == "render")
       assert first_map["params"]["map_type"] == "normal"
 
-      map_config[:] = ["light", "satellite", 60, 12000]
+      map_config[:] = ["light", "satellite", 60, 12000, MAP_SCREEN_CENTER_Y_RATIO_DEFAULT]
       message = await first_control.receive(timeout=2.0)
       assert message.type in (WSMsgType.CLOSE, WSMsgType.CLOSED)
 
@@ -607,6 +608,77 @@ async def test_websocket_negotiation_and_json_receive():
       await item.close()
     if control is not None:
       await control.close()
+    await client.close()
+
+
+@pytest.mark.asyncio
+async def test_second_control_cannot_invalidate_active_navigation_and_release_allows_reconnect():
+  receiver = CarrotNaviReceiver()
+  client = TestClient(TestServer(create_app(receiver)))
+  await client.start_server()
+  sockets = []
+  try:
+    first = await client.ws_connect('/api/navi/ws/v2/control/first')
+    sockets.append(first)
+    await first.send_json(requirements_query())
+    manifest = await first.receive_json()
+    session_id = manifest['session_id']
+    vehicle = next(s for s in manifest['streams'] if s['name'] == 'vehicle')
+    item = await client.ws_connect(f'/api/navi/ws/v2/json/{session_id}/vehicle')
+    sockets.append(item)
+    async def publish(sequence):
+      await item.send_json(dict(type='item_update', protocol_version=2, session_id=session_id,
+                               manifest_revision=manifest['revision'], schema_version=1,
+                               kind='json', name='vehicle', stream_handle=vehicle['stream_handle'],
+                               sequence=sequence, source_timestamp_ms=1234, sent_at_ms=1235,
+                               present=True, value={'speed_kph': 42.}))
+      for _ in range(100):
+        if receiver.health()['session_received_count'] == sequence:
+          return
+        await asyncio.sleep(.005)
+      pytest.fail('original navigation stream stopped receiving')
+    await publish(1)
+    second = await client.ws_connect('/api/navi/ws/v2/control/second')
+    sockets.append(second)
+    await second.send_json(requirements_query())
+    error = await second.receive_json()
+    assert error['code'] == 'receiver_busy' and error['recoverable']
+    assert (await second.receive(timeout=1)).type in (WSMsgType.CLOSE, WSMsgType.CLOSED)
+    assert receiver.health()['session_id'] == session_id
+    assert receiver.health()['error'] is None
+    await publish(2)
+    await first.close()
+    for _ in range(100):
+      if receiver.health()['control_connections'] == 0:
+        break
+      await asyncio.sleep(.005)
+    third = await client.ws_connect('/api/navi/ws/v2/control/third')
+    sockets.append(third)
+    await third.send_json(requirements_query())
+    replacement = await third.receive_json()
+    assert replacement['type'] == 'subscription_manifest'
+    assert replacement['session_id'] != session_id
+  finally:
+    for ws in sockets:
+      await ws.close()
+    await client.close()
+
+
+@pytest.mark.asyncio
+async def test_unnegotiated_connection_does_not_reserve_navigation_owner():
+  client = TestClient(TestServer(create_app()))
+  await client.start_server()
+  sockets = []
+  try:
+    idle = await client.ws_connect('/api/navi/ws/v2/control/idle')
+    sockets.append(idle)
+    active = await client.ws_connect('/api/navi/ws/v2/control/active')
+    sockets.append(active)
+    await active.send_json(requirements_query())
+    assert (await active.receive_json())['type'] == 'subscription_manifest'
+  finally:
+    for ws in sockets:
+      await ws.close()
     await client.close()
 
 

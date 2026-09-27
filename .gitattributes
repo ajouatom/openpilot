@@ -1,5 +1,8 @@
 * text=auto
 
+# Offline bootstrap payloads must match Linux image bytes on every workstation.
+tools/jetlink/*.py text eol=lf
+
 # Large binaries stay in Git LFS to keep clones small.
 *.onnx filter=lfs diff=lfs merge=lfs -text
 selfdrive/car/tests/test_models_segs.txt filter=lfs diff=lfs merge=lfs -text
