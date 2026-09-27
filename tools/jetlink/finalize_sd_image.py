@@ -208,6 +208,8 @@ def provision(root, setup, bundle, stage):
   script = RUNTIME + '/current/tools/jetlink/'
   from install_wifi import configure as configure_wifi
   configure_wifi(root)
+  from install_usbc import configure as configure_usbc
+  configure_usbc(root)
   enable(root, 'carrot-image-setup.service',
          '[Unit]\nDescription=Carrot per-device SD provisioning\nAfter=local-fs.target\nBefore=ssh.service NetworkManager.service\n'
          '[Service]\nType=oneshot\nExecStart=/usr/bin/python3 ' + script + 'image_first_boot.py\nRemainAfterExit=yes\n'
