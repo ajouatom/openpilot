@@ -94,7 +94,8 @@ The current stock warning (0x4A3) carries no camera kind. The kind of the previe
 | Preview kind | Navigation icon | Handling |
 |---|---|---|
 | Fixed speed camera | Red square | Always decelerates; no skip |
-| Signal-and-speed, rear signal-and-speed | Traffic-light icon | Always decelerates; no skip |
+| Signal-and-speed | Traffic-light icon | Always decelerates; no skip |
+| Rear speed, rear signal-and-speed | — | Always decelerates; no skip (identified by the preview's rear flag) |
 | Mobile enforcement zone | Blue circle | Decelerates when `AutoNaviSpeedCtrlMode` is `3`; ignored at `2` or lower |
 | Box (presumed) | — | Decelerates; skippable with `VehicleNaviSkipBoxCamera` |
 

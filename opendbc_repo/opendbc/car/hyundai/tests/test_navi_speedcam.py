@@ -13,6 +13,8 @@ def test_decode_uses_low_nine_bits_and_keeps_rear_flag():
   # Labelled rear signal-and-speed cameras: kind 1 with 0x321 above bit 9.
   assert decode_camera_profile(0x64291, 487) == (1, 40, True)
   assert decode_camera_profile(0x64271, 791) == (1, 30, True)
+  # Labelled rear speed camera in a 30 km/h school zone: kind 0 with the same flag.
+  assert decode_camera_profile(0x64270, 78) == (0, 30, True)
   assert decode_camera_profile(0x6, 118) is None           # speed bump
   assert decode_camera_profile(0xD7, 0) is None            # kind 7 zone entry
   assert decode_camera_profile(0xFFFFFFFF, 8191) is None
