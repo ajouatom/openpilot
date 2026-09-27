@@ -20,6 +20,7 @@ from openpilot.selfdrive.navd.helpers import Coordinate
 from openpilot.common.constants import CV
 from openpilot.common.gps import get_gps_location_service
 from openpilot.selfdrive.carrot.carrot_navi_control import CarrotNaviControl, parse_carrot_navi_control
+from openpilot.selfdrive.carrot.section_average import SectionAverage
 
 nav_type_mapping = {
   12: ("turn", "left", 1),
@@ -163,6 +164,7 @@ class CarrotServ:
     self.xSpdDist = 0
     self.xSpdType = -1
     self.rear_camera_events = []
+    self.section_average = SectionAverage()
 
     self.xTurnInfo = -1
     self.xDistToTurn = 0
@@ -232,6 +234,8 @@ class CarrotServ:
     self.vehicleNaviCanControl = min(3, max(0, self.params.get_int("VehicleNaviCanControl")))
     self.vehicleNaviSchoolZoneControl = self.params.get_bool("VehicleNaviSchoolZoneControl")
     self.vehicleSpeedCameraControlMode = min(3, max(0, self.params.get_int("VehicleSpeedCameraControlMode")))
+    self.vehicleNaviSectionAvgControl = self.params.get_bool("VehicleNaviSectionAvgControl")
+    self.vehicleNaviSectionAvgMargin = min(10, max(0, self.params.get_int("VehicleNaviSectionAvgMargin")))
     self.autoNaviSpeedSafetyFactor = float(self.params.get_int("AutoNaviSpeedSafetyFactor")) * 0.01
     self.autoNaviSpeedDecelRate = float(self.params.get_int("AutoNaviSpeedDecelRate")) * 0.01
     self.autoNaviCountDownMode = self.params.get_int("AutoNaviCountDownMode")
@@ -1426,8 +1430,16 @@ class CarrotServ:
       vehicle_school_zone_speed = self._vehicle_school_zone_speed(CS)
       if vehicle_school_zone_speed < 250:
         self.active_carrot = 6
-      if self._vehicle_section_zone_enabled(CS):
+      section_zone_enabled = self._vehicle_section_zone_enabled(CS)
+      now = time.monotonic()
+      self.section_average.update(self.vehicleNaviSectionAvgControl and section_zone_enabled,
+                                  CS.vehicleNaviSpeed, now, self.totalDistance)
+      if section_zone_enabled:
         vehicle_section_zone_speed = CS.vehicleNaviSpeed * self.autoNaviSpeedSafetyFactor
+        if self.vehicleNaviSectionAvgControl:
+          # Time banked below the section average may be spent up to the cruise set speed.
+          allowance = self.section_average.allowance_kph(now, self.totalDistance, self.vehicleNaviSectionAvgMargin)
+          vehicle_section_zone_speed = max(vehicle_section_zone_speed, allowance * self.autoNaviSpeedSafetyFactor)
         self.active_carrot = 4
 
     #print(f"sdi_speed: {sdi_speed}, vehicle_speed_camera_active: {vehicle_speed_camera_active}, xSpdType: {self.xSpdType}, xSpdDist: {self.xSpdDist}, active_carrot: {self.active_carrot}, v_ego_kph: {v_ego_kph}, nRoadLimitSpeed: {self.nRoadLimitSpeed}")

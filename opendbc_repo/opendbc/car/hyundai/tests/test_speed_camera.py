@@ -4,13 +4,16 @@ from types import SimpleNamespace
 import pytest
 
 from opendbc.can import CANParser
-from opendbc.car import Bus
+from opendbc.car import Bus, structs
 from opendbc.car.hyundai.carstate import (
   CANFD_HDA_INFO_MSG, CANFD_NAVI_PROFILE_MSG, CANFD_NAVI_STATUS_MSG, CarState,
   VEHICLE_NAVI_POSITION_TIMEOUT_NS, VEHICLE_NAVI_ROUTE_TIMEOUT_NS, VEHICLE_NAVI_SCHOOL_ZONE_MAX_DISTANCE,
   VEHICLE_SPEED_CAMERA_PARAM_UPDATE_FRAMES, is_canfd_navi_camera_active,
 )
+from opendbc.car.hyundai.navi_speedcam import SpeedcamPolicy
 from opendbc.car.hyundai.values import CAR, HyundaiFlags
+
+ButtonType = structs.CarState.ButtonEvent.Type
 
 
 class FakeParams:
@@ -26,9 +29,13 @@ class FakeParams:
       return self.value
     if key == "VehicleNaviCanControl":
       return int(self.vehicle_navi)
+    if key == "AutoNaviSpeedCtrlMode":
+      return 2
     raise KeyError(key)
 
   def get_bool(self, key):
+    if key in ("VehicleNaviSkipBoxCamera", "VehicleNaviSkipMobileZone", "VehicleNaviSectionAvgControl"):
+      return False
     assert key == "VehicleNaviSchoolZoneControl"
     return self.school_zone
 
@@ -69,6 +76,9 @@ def _car_state(distance_time_tenths=60):
   state.navi_position_4b4 = None
   state.navi_profile_4be = None
   state.hda_info_4a3 = None
+  state.speedcam_policy = SpeedcamPolicy()
+  state.speedcam_accel_swallow = False
+  state._read_speedcam_params()
   return state
 
 
@@ -1211,3 +1221,91 @@ def test_vehicle_navi_section_end_camera_uses_logged_1997_meter_offset():
   speed_ret = SimpleNamespace(vEgo=10.0, speedLimit=ret.speedLimit, gasPressed=False)
   state.update_speed_limit(speed_ret, speed_limit_cam=True)
   assert speed_ret.speedLimitDistance == pytest.approx(1997.0 - 10.0 * 0.01)
+
+
+def _speedcam_state():
+  state = _car_state()
+  state.vehicleNaviCanControl = 1
+  return state
+
+
+def test_stock_mobile_zone_warning_is_ignored_below_navi_mode_three():
+  state = _speedcam_state()
+  state.speedcam_policy.add_preview(0xD3, 361, 0.0)        # kind 3 mobile zone at the 60 km/h lead
+  ret = SimpleNamespace(vEgo=16.0, speedLimit=60.0, gasPressed=False)
+
+  speed_limit_cam = state._apply_speedcam_policy(ret, True, True, 60.0, False)
+  state.update_speed_limit(ret, speed_limit_cam)
+  assert not speed_limit_cam
+  assert ret.speedLimitDistance == 0.0
+
+  state.speedcamMobileZoneDecel = True                      # AutoNaviSpeedCtrlMode 3
+  assert state._apply_speedcam_policy(ret, True, True, 60.0, False)
+
+
+def test_box_camera_skip_consumes_one_accel_press():
+  state = _speedcam_state()
+  state.speedcamSkipBox = True
+  state.speedcam_policy.add_preview(0xD2, 366, 0.0)        # kind 2 box at the 60 km/h lead
+  ret = SimpleNamespace(vEgo=16.0, speedLimit=60.0, gasPressed=False)
+
+  assert state._apply_speedcam_policy(ret, True, True, 60.0, False)
+  assert not state._apply_speedcam_policy(ret, True, True, 60.0, True)
+  assert state.speedcam_accel_swallow
+
+  press = [SimpleNamespace(type=ButtonType.accelCruise, pressed=True), SimpleNamespace(type=ButtonType.gapAdjustCruise, pressed=True)]
+  assert [event.type for event in state._swallow_speedcam_accel(press)] == [ButtonType.gapAdjustCruise]
+  release = [SimpleNamespace(type=ButtonType.accelCruise, pressed=False)]
+  assert state._swallow_speedcam_accel(release) == []
+  assert not state.speedcam_accel_swallow
+  assert state._swallow_speedcam_accel(press) == press
+
+
+def test_speedcam_skip_needs_driving_speed_and_leaves_fixed_cameras():
+  state = _speedcam_state()
+  state.speedcamSkipBox = True
+  state.speedcam_policy.add_preview(0xD2, 366, 0.0)
+  slow = SimpleNamespace(vEgo=2.0, speedLimit=60.0, gasPressed=False)
+  assert state._apply_speedcam_policy(slow, True, True, 60.0, True)
+  assert not state.speedcam_accel_swallow
+
+  fixed = _speedcam_state()
+  fixed.speedcamSkipBox = fixed.speedcamSkipMobileZone = True
+  fixed.speedcam_policy.add_preview(0xD0, 366, 0.0)        # kind 0 fixed camera
+  ret = SimpleNamespace(vEgo=16.0, speedLimit=60.0, gasPressed=False)
+  assert fixed._apply_speedcam_policy(ret, True, True, 60.0, True)
+  assert not fixed.speedcam_accel_swallow
+
+
+def test_speedcam_policy_leaves_pv5_and_disabled_navi_untouched():
+  state = _speedcam_state()
+  state.canfd_wrapped_navi = True
+  state.speedcam_policy.add_preview(0xD3, 361, 0.0)
+  ret = SimpleNamespace(vEgo=16.0, speedLimit=60.0, gasPressed=False)
+  assert state._apply_speedcam_policy(ret, True, True, 60.0, False)
+
+  state = _car_state()                                      # VehicleNaviCanControl 0
+  state.speedcam_policy.add_preview(0xD3, 361, 0.0)
+  assert state._apply_speedcam_policy(ret, True, True, 60.0, False)
+
+
+def test_section_average_keeps_only_the_camera_ahead_as_spot_distance():
+  state = _speedcam_state()
+  state.speedcamSectionAvgControl = True
+  state.totalDistance = 1000.0
+  state.vehicleNaviEvents = [{"type": "camera", "speed": 80, "kind": 0, "target": 900.0},
+                             {"type": "camera", "speed": 80, "kind": 0, "target": 2500.0},
+                             {"type": "camera", "speed": 60, "kind": 0, "target": 1200.0}]
+  ret = SimpleNamespace(vehicleNaviSectionActive=True, vehicleNaviSpeed=80.0, speedLimitDistance=1.0)
+  state._apply_section_average_distance(ret)
+  assert ret.speedLimitDistance == pytest.approx(1500.0)
+
+  state.vehicleNaviEvents = []
+  ret.speedLimitDistance = 1.0
+  state._apply_section_average_distance(ret)
+  assert ret.speedLimitDistance == 0.0                      # no virtual distance inside the section
+
+  state.speedcamSectionAvgControl = False
+  ret.speedLimitDistance = 1.0
+  state._apply_section_average_distance(ret)
+  assert ret.speedLimitDistance == 1.0

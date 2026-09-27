@@ -53,7 +53,7 @@ Carrot Web 기본값 복원에 쓰이는 `carrot_settings.json`과 Params 최초
 <a id="speed-camera"></a>
 ## 1. 과속카메라
 
-관련 설정은 `AutoNaviSpeedCtrlMode`, `AutoNaviSpeedCtrlEnd`, `AutoNaviRearCameraHoldDistance`, `AutoNaviSpeedDecelRate`, `AutoNaviSpeedSafetyFactor`, `AutoNaviCountDownMode`, `VehicleNaviCanControl`, `VehicleNaviSchoolZoneControl`, `VehicleSpeedCameraControlMode`, `VehicleSpeedCameraDistanceTime`입니다.
+관련 설정은 `AutoNaviSpeedCtrlMode`, `AutoNaviSpeedCtrlEnd`, `AutoNaviRearCameraHoldDistance`, `AutoNaviSpeedDecelRate`, `AutoNaviSpeedSafetyFactor`, `AutoNaviCountDownMode`, `VehicleNaviCanControl`, `VehicleNaviSchoolZoneControl`, `VehicleNaviSkipBoxCamera`, `VehicleNaviSkipMobileZone`, `VehicleNaviSectionAvgControl`, `VehicleNaviSectionAvgMargin`, `VehicleSpeedCameraControlMode`, `VehicleSpeedCameraDistanceTime`입니다.
 
 ### `AutoNaviSpeedCtrlMode`
 
@@ -88,6 +88,29 @@ Kia PV5는 구간단속 알림을 받으면 제한속도 상한도 유지합니�
 PV5 구간단속은 평균속도나 남은거리를 계산하지 않습니다. 재시작·신호 유실·설정 재활성화 후에는 새로운 구간 알림이 필요하므로 구간 중간에서 즉시 복원되지 않을 수 있습니다. 현재 주행 로그로는 진입·구간 중 유지·중간 이탈을 검증했으며 실제 단속 종점 통과는 추가 검증 대상입니다. `VehicleNaviSchoolZoneControl`은 PV5에서 계속 미지원입니다.
 
 이 기능은 기본값이 꺼진 실험 기능입니다. 화면의 이벤트 종류, 제한속도와 남은 거리가 실제 도로와 일치하는지 먼저 확인하고, 일치하지 않으면 즉시 끄세요.
+
+### 순정 내비 카메라 종류별 처리
+
+순정 내비 CAN의 현재 경고(0x4A3)에는 카메라 종류가 없습니다. 약 2km 앞에서 오는 예고(0x4BE)의 종류를 같은 제한속도·같은 위치의 경고에 붙여 처리합니다. 경고는 제한속도 1km/h당 약 6.1m 앞(60km/h면 약 366m)에서 시작하므로 그 위치의 예고만 연결합니다. 종류를 알 수 없는 경고는 지금처럼 감속합니다.
+
+| 예고 종류 | 내비 표시 | 처리 |
+|---|---|---|
+| 고정식 과속 | 빨간 사각 | 항상 감속, 건너뛰기 없음 |
+| 신호·과속, 후면 신호·과속 | 신호등 아이콘 | 항상 감속, 건너뛰기 없음 |
+| 이동식 단속 구간 | 파란 원 | `AutoNaviSpeedCtrlMode`가 `3`이면 감속, `2` 이하면 무시 |
+| 박스형(추정) | — | 감속, `VehicleNaviSkipBoxCamera`로 건너뛰기 가능 |
+
+같은 경고에 고정식·신호·후면 카메라가 함께 있으면 이동식 구간이어도 항상 감속합니다. 박스형 판별은 실차 라벨로 아직 확정되지 않았습니다.
+
+### `VehicleNaviSkipBoxCamera`, `VehicleNaviSkipMobileZone`
+
+켜면 해당 종류의 카메라로 감속하는 동안 크루즈 `+` 버튼을 한 번 눌러 그 카메라의 감속을 해제합니다. 이 누름은 설정 속도를 올리지 않고, 경고가 끝나면 다음 카메라에는 다시 감속합니다. 약 18km/h 미만에서는 `+`가 원래 역할(재개·속도 설정)을 합니다. `VehicleNaviSkipMobileZone`은 `AutoNaviSpeedCtrlMode`가 `3`이라 이동식 구간에서 감속할 때만 의미가 있습니다. 둘 다 기본값은 꺼짐입니다.
+
+### `VehicleNaviSectionAvgControl`, `VehicleNaviSectionAvgMargin`
+
+켜면 순정 내비 구간단속(차량 평균속도 신호가 켜진 구간) 중 구간 제한속도로 계속 묶지 않고, 구간 진입 후 평균속도가 `제한속도 − VehicleNaviSectionAvgMargin` 이하로 유지되는 범위에서만 설정 속도까지 허용합니다. 정체 등으로 목표 평균보다 늦게 간 시간만 이후에 쓸 수 있으며, 적립된 시간이 없으면 기존 구간 제한과 같습니다. 시점 카메라는 구간 진입 전 지점 감속을 그대로 하고, 종점 카메라는 약 2km 전 예고를 받은 뒤 지점 감속합니다. 구간 안에서는 종점 예고가 없을 때 가상거리 감속을 쓰지 않습니다.
+
+평균은 차량 주행거리(`vEgo`)로 계산합니다. 기록 주행에서 내비가 표시한 평균이 이 계산보다 2~3km/h 높았으므로 여유속도는 **3km/h(기본값)** 이상을 권장합니다. 구간 시작은 평균속도 신호가 켜진 시점으로 잡아 실제 시점 카메라와 차이가 있을 수 있습니다. 두 설정 모두 실험 기능입니다.
 
 ### `VehicleSpeedCameraControlMode`
 

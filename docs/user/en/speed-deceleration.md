@@ -51,7 +51,7 @@ Record the value currently shown on the device before changing anything.
 <a id="speed-camera"></a>
 ## 1. Speed cameras
 
-The related settings are `AutoNaviSpeedCtrlMode`, `AutoNaviSpeedCtrlEnd`, `AutoNaviRearCameraHoldDistance`, `AutoNaviSpeedDecelRate`, `AutoNaviSpeedSafetyFactor`, `AutoNaviCountDownMode`, `VehicleNaviCanControl`, `VehicleNaviSchoolZoneControl`, `VehicleSpeedCameraControlMode`, and `VehicleSpeedCameraDistanceTime`.
+The related settings are `AutoNaviSpeedCtrlMode`, `AutoNaviSpeedCtrlEnd`, `AutoNaviRearCameraHoldDistance`, `AutoNaviSpeedDecelRate`, `AutoNaviSpeedSafetyFactor`, `AutoNaviCountDownMode`, `VehicleNaviCanControl`, `VehicleNaviSchoolZoneControl`, `VehicleNaviSkipBoxCamera`, `VehicleNaviSkipMobileZone`, `VehicleNaviSectionAvgControl`, `VehicleNaviSectionAvgMargin`, `VehicleSpeedCameraControlMode`, and `VehicleSpeedCameraDistanceTime`.
 
 ### `AutoNaviSpeedCtrlMode`
 
@@ -86,6 +86,29 @@ The Kia PV5 also holds a section speed cap after a section alert. A currently ac
 PV5 section control does not calculate average speed or remaining distance. Restarting, losing signals, or re-enabling the setting requires a new section alert, so the cap may not resume immediately within a zone. Recorded driving validates entry, retention within the zone, and early exit; passage through the actual enforcement endpoint remains to be validated. `VehicleNaviSchoolZoneControl` remains unsupported on the PV5.
 
 This experimental control is off by default. First verify that the displayed event type, limit, and remaining distance match the road, and disable it immediately if they do not.
+
+### Stock-navigation camera kinds
+
+The current stock warning (0x4A3) carries no camera kind. The kind of the preview received about 2 km ahead (0x4BE) is attached to the warning with the same limit at the same position. A warning starts about 6.1 m per km/h of the limit before its camera (about 366 m at 60 km/h), so only previews at that position match. A warning of unknown kind still decelerates as before.
+
+| Preview kind | Navigation icon | Handling |
+|---|---|---|
+| Fixed speed camera | Red square | Always decelerates; no skip |
+| Signal-and-speed, rear signal-and-speed | Traffic-light icon | Always decelerates; no skip |
+| Mobile enforcement zone | Blue circle | Decelerates when `AutoNaviSpeedCtrlMode` is `3`; ignored at `2` or lower |
+| Box (presumed) | — | Decelerates; skippable with `VehicleNaviSkipBoxCamera` |
+
+A warning that also carries a fixed, signal, or rear camera always decelerates, even inside a mobile zone. Box detection is not yet confirmed by labelled drives.
+
+### `VehicleNaviSkipBoxCamera`, `VehicleNaviSkipMobileZone`
+
+When enabled, one press of cruise `+` while that kind of camera decelerates releases its deceleration. The press does not raise the set speed, and the next camera decelerates again after the warning ends. Below about 18 km/h, `+` keeps its normal resume/set-speed role. `VehicleNaviSkipMobileZone` matters only when `AutoNaviSpeedCtrlMode` is `3`, so mobile zones decelerate. Both are off by default.
+
+### `VehicleNaviSectionAvgControl`, `VehicleNaviSectionAvgMargin`
+
+When enabled, a stock-navigation section (vehicle average-speed signal present) no longer holds the section limit throughout. Up to the cruise set speed is allowed only while the average since entering the section stays at or below `limit − VehicleNaviSectionAvgMargin`. Only time banked by driving slower than that target (for example in congestion) can be spent later; without it the cap equals the existing section limit. The start camera still decelerates to the spot limit before the section, and the end camera does so after its preview about 2 km ahead. Inside the section no virtual camera distance is used when no end preview is known.
+
+The average uses the vehicle odometer (`vEgo`). In a recorded drive the navigation-displayed average was 2–3 km/h higher than this calculation, so a margin of at least **3 km/h (default)** is recommended. The section start is taken when the average-speed signal appears and may differ from the actual start camera. Both settings are experimental.
 
 ### `VehicleSpeedCameraControlMode`
 
