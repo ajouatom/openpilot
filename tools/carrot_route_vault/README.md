@@ -4,6 +4,17 @@ This directory maintains the deployed `carrot-route-vault` service, including
 its existing upload receiver, route sharing, video player, and model downloads.
 The older standalone receiver remains under `tools/carrot_upload_server`.
 
+Jetson SD images are separate from model downloads. Publish only pristine,
+verified artifacts under `<storage_root>/downloads/jetson/<version>/`.
+`GET/HEAD /downloads/jetson/<version>/<filename>` supports Range/resume through
+FileResponse and allows only `carrot-jetson.img.zst`, `release.json`, and
+`SHA256SUMS`. Versions use `vX.Y.Z` with an optional prerelease suffix. Files or
+directories that are symlinks are rejected, and directory browsing is absent.
+Copy large artifacts to a non-allowlisted temporary name, verify their SHA256,
+then rename on the NAS. Never put provisioned cards, settings or keys here.
+Installation instructions live in `ajouatom/carrot-jetson`; this endpoint does
+not promote candidate images to validated releases or change model updates.
+
 Every shared or direct upload-result page automatically loads the selected
 segment into a browser radar reviewer. Its server-side JSON adapter uses
 `ProductionDPathSelector`, the same production controller replay as the desktop
