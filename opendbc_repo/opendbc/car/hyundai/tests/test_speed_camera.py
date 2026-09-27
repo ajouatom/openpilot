@@ -1,4 +1,5 @@
 import math
+from collections import deque
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -12,7 +13,8 @@ from opendbc.car.hyundai.carstate import (
   VEHICLE_SPEED_CAMERA_PARAM_UPDATE_FRAMES, is_canfd_navi_camera_active,
 )
 from opendbc.car.hyundai.navi_speedcam import SpeedcamPolicy
-from opendbc.car.hyundai.values import CAR, HyundaiFlags
+from opendbc.car.hyundai.section_average import SectionAverage
+from opendbc.car.hyundai.values import CAR, Buttons, HyundaiFlags
 
 ButtonType = structs.CarState.ButtonEvent.Type
 
@@ -32,6 +34,10 @@ class FakeParams:
       return int(self.vehicle_navi)
     if key == "AutoNaviSpeedCtrlMode":
       return 2
+    if key == "AutoNaviSpeedSafetyFactor":
+      return 107
+    if key == "CruiseButtonLongDelay":
+      return 40
     raise KeyError(key)
 
   def get_bool(self, key):
@@ -79,6 +85,14 @@ def _car_state(distance_time_tenths=60):
   state.hda_info_4a3 = None
   state.speedcam_policy = SpeedcamPolicy()
   state.speedcam_accel_swallow = False
+  state.speedcam_engaged = False
+  state.speedcam_gas_count = 0
+  state.speedcam_gas_tok_consumed = False
+  state.speedcam_input_consumed = False
+  state.speedcam_v_cruise = 0.0
+  state.speedcam_decel_count = 0
+  state.speedcam_time = 0.0
+  state.section_average = SectionAverage()
   state._read_speedcam_params()
   return state
 
@@ -1227,7 +1241,38 @@ def test_vehicle_navi_section_end_camera_uses_logged_1997_meter_offset():
 def _speedcam_state():
   state = _car_state()
   state.vehicleNaviCanControl = 1
+  state.speedcam_engaged = True
   return state
+
+
+def test_speedcam_gas_tap_matches_cruise_timer():
+  state = _speedcam_state()
+  assert not any(state._update_speedcam_gas_tok(True) for _ in range(39))
+  assert state._update_speedcam_gas_tok(False)              # 39 pressed frames: a tap
+  assert not any(state._update_speedcam_gas_tok(True) for _ in range(40))
+  assert not state._update_speedcam_gas_tok(False)          # 40 frames: a hold
+  assert not state._update_speedcam_gas_tok(False)
+
+
+def test_gas_tap_skips_box_and_is_withheld_from_cruise():
+  state = _speedcam_state()
+  state.speedcamSkipBox = True
+  state.speedcam_policy.add_preview(0xD2, 366, 0.0)
+  ret = SimpleNamespace(vEgo=16.0, speedLimit=60.0, gasPressed=False)
+  assert not state._apply_speedcam_policy(ret, True, True, 60.0, False, True)
+  assert state.speedcam_gas_tok_consumed and not state.speedcam_accel_swallow
+  assert not state._apply_speedcam_policy(ret, True, True, 60.0, False, False)
+  assert not state.speedcam_gas_tok_consumed                # only the tap frame is reported
+
+
+def test_skip_inputs_keep_their_roles_while_disengaged():
+  state = _speedcam_state()
+  state.speedcam_engaged = False
+  state.speedcamSkipBox = True
+  state.speedcam_policy.add_preview(0xD2, 366, 0.0)
+  ret = SimpleNamespace(vEgo=16.0, speedLimit=60.0, gasPressed=False)
+  assert state._apply_speedcam_policy(ret, True, True, 60.0, True, True)
+  assert not state.speedcam_accel_swallow and not state.speedcam_gas_tok_consumed
 
 
 def test_stock_mobile_zone_warning_is_ignored_below_navi_mode_three():
@@ -1304,23 +1349,65 @@ def test_speedcam_policy_leaves_pv5_and_disabled_navi_untouched():
   assert state._apply_speedcam_policy(ret, True, True, 60.0, False)
 
 
-def test_section_average_keeps_only_the_camera_ahead_as_spot_distance():
+def _section_state():
   state = _speedcam_state()
   state.speedcamSectionAvgControl = True
-  state.totalDistance = 1000.0
+  state.speedcam_v_cruise = 130.0
+  state.cruise_buttons = deque([0])
+  return state
+
+
+def _section_ret(v_ego=16.0):
+  return SimpleNamespace(vEgo=v_ego, vehicleNaviSectionActive=True, vehicleNaviSpeed=80.0, speedLimitDistance=1.0)
+
+
+def test_section_stays_capped_until_unlocked():
+  state = _section_state()
+  ret = _section_ret()
+  state._apply_section_average(ret, False, False, False)
+  assert not state.section_average.unlocked
+  assert (ret.vehicleNaviSpeed, ret.speedLimitDistance) == (80.0, 1.0)   # existing cap and virtual distance
+
+  state.speedcam_v_cruise = 85.0                            # set speed not above 80 x 1.07
+  state._apply_section_average(ret, True, False, False)
+  assert not state.section_average.unlocked and not state.speedcam_accel_swallow
+
+
+def test_section_unlock_by_plus_or_gas_tap_spends_banked_time():
+  state = _section_state()
   state.vehicleNaviEvents = [{"type": "camera", "speed": 80, "kind": 0, "target": 900.0},
-                             {"type": "camera", "speed": 80, "kind": 0, "target": 2500.0},
-                             {"type": "camera", "speed": 60, "kind": 0, "target": 1200.0}]
-  ret = SimpleNamespace(vehicleNaviSectionActive=True, vehicleNaviSpeed=80.0, speedLimitDistance=1.0)
-  state._apply_section_average_distance(ret)
-  assert ret.speedLimitDistance == pytest.approx(1500.0)
+                             {"type": "camera", "speed": 80, "kind": 0, "target": 2500.0}]
+  state.totalDistance = 1000.0
+  ret = _section_ret()
+  state._apply_section_average(ret, True, False, False)
+  assert state.section_average.unlocked and state.speedcam_accel_swallow
+  assert ret.vehicleNaviSpeed == 80.0                       # no banked time yet
+  assert ret.speedLimitDistance == pytest.approx(1500.0)    # only the end camera ahead, no virtual distance
 
-  state.vehicleNaviEvents = []
-  ret.speedLimitDistance = 1.0
-  state._apply_section_average_distance(ret)
-  assert ret.speedLimitDistance == 0.0                      # no virtual distance inside the section
+  state.speedcam_time += 60.0                               # a slow minute: banked time
+  ret = _section_ret()
+  state._apply_section_average(ret, False, False, False)
+  assert ret.vehicleNaviSpeed > 80.0
 
-  state.speedcamSectionAvgControl = False
-  ret.speedLimitDistance = 1.0
-  state._apply_section_average_distance(ret)
-  assert ret.speedLimitDistance == 1.0
+  gas = _section_state()
+  gas._apply_section_average(_section_ret(), False, True, False)
+  assert gas.section_average.unlocked and gas.speedcam_gas_tok_consumed
+
+
+def test_section_long_minus_locks_again_and_camera_skip_wins_the_input():
+  state = _section_state()
+  state._apply_section_average(_section_ret(), True, False, False)
+  assert state.section_average.unlocked
+  state.speedcamLongPressFrames = 40
+  state.cruise_buttons = deque([Buttons.SET_DECEL])
+  assert not any(state._update_speedcam_decel_long_press() for _ in range(40))
+  assert state._update_speedcam_decel_long_press()          # 41st held frame = cruise.py long press
+  ret = _section_ret()
+  state._apply_section_average(ret, False, False, True)
+  assert not state.section_average.unlocked
+  assert (ret.vehicleNaviSpeed, ret.speedLimitDistance) == (80.0, 1.0)
+
+  skipped = _section_state()
+  skipped.speedcam_input_consumed = True                    # this press already skipped a camera
+  skipped._apply_section_average(_section_ret(), True, False, False)
+  assert not skipped.section_average.unlocked

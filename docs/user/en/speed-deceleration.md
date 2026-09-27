@@ -51,7 +51,7 @@ Record the value currently shown on the device before changing anything.
 <a id="speed-camera"></a>
 ## 1. Speed cameras
 
-The related settings are `AutoNaviSpeedCtrlMode`, `AutoNaviSpeedCtrlEnd`, `AutoNaviRearCameraHoldDistance`, `AutoNaviSpeedDecelRate`, `AutoNaviSpeedSafetyFactor`, `AutoNaviCountDownMode`, `VehicleNaviCanControl`, `VehicleNaviSchoolZoneControl`, `VehicleNaviSkipBoxCamera`, `VehicleNaviSkipMobileZone`, `VehicleNaviSectionAvgControl`, `VehicleNaviSectionAvgMargin`, `VehicleSpeedCameraControlMode`, and `VehicleSpeedCameraDistanceTime`.
+The related settings are `AutoNaviSpeedCtrlMode`, `AutoNaviSpeedCtrlEnd`, `AutoNaviRearCameraHoldDistance`, `AutoNaviSpeedDecelRate`, `AutoNaviSpeedSafetyFactor`, `AutoNaviCountDownMode`, `VehicleNaviCanControl`, `VehicleNaviSchoolZoneControl`, `VehicleNaviSkipBoxCamera`, `VehicleNaviSkipMobileZone`, `VehicleNaviSectionAvgControl`, `VehicleSpeedCameraControlMode`, and `VehicleSpeedCameraDistanceTime`.
 
 ### `AutoNaviSpeedCtrlMode`
 
@@ -103,13 +103,13 @@ A warning that also carries a fixed, signal, or rear camera always decelerates, 
 
 ### `VehicleNaviSkipBoxCamera`, `VehicleNaviSkipMobileZone`
 
-When enabled, one press of cruise `+` while that kind of camera decelerates releases its deceleration. The press does not raise the set speed, and the next camera decelerates again after the warning ends. Below about 18 km/h, `+` keeps its normal resume/set-speed role. `VehicleNaviSkipMobileZone` matters only when `AutoNaviSpeedCtrlMode` is `3`, so mobile zones decelerate. Both are off by default.
+When enabled, while engaged and that kind of camera decelerates, one press of cruise `+` or a gas tap (accelerator pressed for under 0.4 s) releases its deceleration. The input does not raise the set speed (neither `+1` nor the gas-tap `+10`), and the next camera decelerates again after the warning ends. While disengaged or below about 18 km/h, `+` and the gas tap keep their normal resume/engage/set-speed roles. `VehicleNaviSkipMobileZone` matters only when `AutoNaviSpeedCtrlMode` is `3`, so mobile zones decelerate. Both are off by default.
 
-### `VehicleNaviSectionAvgControl`, `VehicleNaviSectionAvgMargin`
+### `VehicleNaviSectionAvgControl`
 
-When enabled, a stock-navigation section (vehicle average-speed signal present) no longer holds the section limit throughout. Up to the cruise set speed is allowed only while the average since entering the section stays at or below `limit − VehicleNaviSectionAvgMargin`. Only time banked by driving slower than that target (for example in congestion) can be spent later; without it the cap equals the existing section limit. The start camera still decelerates to the spot limit before the section, and the end camera does so after its preview about 2 km ahead. Inside the section no virtual camera distance is used when no end preview is known.
+When enabled, a stock-navigation section (vehicle average-speed signal present) still stays capped at the section limit × `AutoNaviSpeedSafetyFactor` (for example 117 in a 110 section at 107%). While engaged and with the cruise set speed above that cap, one press of cruise `+` or a gas tap unlocks the section. Up to the set speed is then allowed only while the average since entering the section stays at or below the section limit. Only time banked by driving slower (for example in congestion) can be spent; without it, or once it is spent, the cap applies. The unlocking input does not raise the set speed (neither `+1` nor the gas-tap `+10`). A long press of cruise `-` (the −10 step) locks the section again, and the −10 still applies. Leaving the section resets it.
 
-The average uses the vehicle odometer (`vEgo`). In a recorded drive the navigation-displayed average was 2–3 km/h higher than this calculation, so a margin of at least **3 km/h (default)** is recommended. The section start is taken when the average-speed signal appears and may differ from the actual start camera. Both settings are experimental.
+Once unlocked, no virtual camera distance is used inside the section, and the end camera decelerates to the spot limit after its preview about 2 km ahead. The average uses the vehicle odometer (`vEgo`) with no margin. In a recorded drive the navigation-displayed average was 2–3 km/h higher than this calculation, so adjust the cruise set speed yourself if needed. The section start is taken when the average-speed signal appears; experimental.
 
 ### `VehicleSpeedCameraControlMode`
 
