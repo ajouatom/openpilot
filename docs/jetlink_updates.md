@@ -465,3 +465,19 @@ and read back without rewriting the image. This is staged data, not execution:
 the existing first-boot loader consumes the key but does not execute the ZIP.
 Authenticated installation and validation on that medium follow its next boot.
 Public base images and the hotfix ZIP contain no owner credentials.
+
+The new medium subsequently booted as its own generated machine identity and
+accepted the staged owner key under its previously observed SSH host key. Before
+installation it reproduced SNK(4)/device and the C4 waiting state. Installing the
+same hotfix restored 5Gbps, active inference and the USB display. A further reboot
+automatically restored SSH, USB host/SRC(1), inference, HUD, USB Wi-Fi and the
+update-stage timer. Two managed Wi-Fi profiles remained configured. The installed
+helper SHA256 matched the published hotfix manifest; model/runtime stayed f2b22dc.
+
+Final new-medium 120-second parked capture: 2,400 model/odometry/road/wide/pose
+messages each; zero frame-ID gaps, validity failures, inactive samples or health
+faults. Model mean/max37.362/44.149ms, no execution over50ms, camera SOF maximum
+57.529ms and temperature65.093-68.343C. Speed zero, control disengaged. This
+validates the new medium plus owner key plus USB-C hotfix, not unmodified-master
+C-to-C operation or driving. The published base image bytes were not regenerated;
+the public hotfix and updated image-building tools remain separate artifacts.
