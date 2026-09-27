@@ -112,11 +112,15 @@ def probe_release(release):
 
 
 def stage(manifest_url=DEFAULT_MANIFEST):
-  from finalize_sd_image import extract_bundle
   checked_url(manifest_url)
   with urllib.request.urlopen(manifest_url, timeout=30) as response:
     checked_url(response.url)
     manifest = json.loads(response.read(65537))
+  stage_manifest(manifest)
+
+
+def stage_manifest(manifest):
+  from finalize_sd_image import extract_bundle
   validate_manifest(manifest)
   verify_signature(manifest)
   commit = manifest['source_commit']
@@ -235,7 +239,13 @@ def automatic_stage():
   import base64
   if base64.b64decode(snapshot[1].get('params', {}).get('IsOnroad', '')) != b'0':
     return
-  stage()
+  manifest = snapshot[1].get('jetson_release')
+  if manifest is not None:
+    # Carrot selects the compatible signed host/model release. Never silently
+    # fall back to a different channel if that selection fails verification.
+    stage_manifest(manifest)
+  else:
+    stage()  # Compatibility for C4 releases predating version pinning.
 
 
 def main():

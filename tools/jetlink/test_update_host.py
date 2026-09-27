@@ -30,6 +30,24 @@ def test_reject_os_upgrade_or_untrusted_host():
       update.checked_url(url)
 
 
+def test_carrot_selected_release_takes_precedence_and_failure_does_not_fallback(monkeypatch):
+  import hud_protocol
+  selected = manifest()
+  monkeypatch.setattr(hud_protocol, 'read_snapshot', lambda: (1., {
+    'params': {'IsOnroad': 'MA=='}, 'jetson_release': selected}))
+  calls = []
+  monkeypatch.setattr(update, 'stage', lambda: calls.append('unselected-channel'))
+  monkeypatch.setattr(update, 'stage_manifest', lambda value: calls.append(value))
+  update.automatic_stage()
+  assert calls == [selected]
+  def reject(value):
+    raise ValueError('signature rejected')
+  monkeypatch.setattr(update, 'stage_manifest', reject)
+  with pytest.raises(ValueError, match='signature rejected'):
+    update.automatic_stage()
+  assert calls == [selected]
+
+
 def test_download_corruption_does_not_replace_current_file(tmp_path, monkeypatch):
   class Response(io.BytesIO):
     url = 'https://upload.shind0.synology.me/models/x'
