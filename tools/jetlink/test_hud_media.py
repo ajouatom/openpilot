@@ -112,6 +112,25 @@ def test_invalid_percentages_do_not_become_plausible_vehicle_values():
   assert stats.cpu_core_percents==(None,None,None,0)
   assert stats.cpu_used_percent==0 and stats.disk_used_percent is None
 
+def test_remote_network_address_uses_only_fresh_vehicle_snapshot(monkeypatch):
+  import hud_protocol
+  from hud_stats import VehicleNetworkAddress, NetworkAddressProvider
+  def unexpected_host_address(*args):
+    raise AssertionError('must not discover the rendering host IP')
+  monkeypatch.setattr(NetworkAddressProvider, '_socket_address', unexpected_host_address)
+  current = [(1., {'vehicle_network_address': '192.0.2.178'})]
+  monkeypatch.setattr(hud_protocol, 'read_snapshot', lambda: current[0])
+  provider = VehicleNetworkAddress()
+  assert provider.address() == '192.0.2.178'
+  for value in ('', '0.0.0.0', '127.0.0.1', 'invalid'):
+    current[0] = (1., {'vehicle_network_address': value})
+    assert provider.address() is None
+  current[0] = (1., {})
+  assert provider.address() is None
+  current[0] = None
+  assert provider.address() is None
+
+
 def test_host_read_ahead_owns_payload_and_stays_bounded():
   import queue, time
   sys.path.insert(0,str(Path(__file__).resolve().parents[2]/'third_party/jetlink'))

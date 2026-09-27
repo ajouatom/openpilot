@@ -151,9 +151,10 @@ def main():
   from hud_camera import RemoteRoadCamera
   cluster_live_camera.LiveRoadCamera = RemoteRoadCamera
   import cluster_system_monitor
-  from hud_stats import VehicleSystemStats, VehicleCpuOverlay
+  from hud_stats import VehicleSystemStats, VehicleCpuOverlay, VehicleNetworkAddress
   cluster_system_monitor.SystemStatsSampler = VehicleSystemStats
   cluster_system_monitor.ClusterProcessCoreUsageSampler = VehicleCpuOverlay
+  cluster_system_monitor.NetworkAddressProvider = VehicleNetworkAddress
   import cluster_navi_source
   display_metrics = {}
   class RemoteNaviSource(cluster_navi_source.NaviIpcMediaSource):
@@ -187,6 +188,7 @@ def main():
         tmp = path.with_suffix('.tmp')
         stats = vehicle_stats.sample()
         tmp.write_text(json.dumps({'updated': now, **display_metrics,
+                                  'vehicle_network_address': VehicleNetworkAddress().address(),
                                   'vehicle_cpu': stats.cpu_core_percents,
                                   'vehicle_memory_percent': stats.memory_used_percent}))
         os.replace(tmp, path)

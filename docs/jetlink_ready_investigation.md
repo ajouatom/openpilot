@@ -216,3 +216,23 @@ stopped when phone input stopped; this is not counted as an internal freeze.
 Sampling does not measure every rendered frame or end-to-end source latency.
 The earlier multi-second internal freezes were not reproduced in this short
 live-stream validation. Longer streaming and loaded driving remain unvalidated.
+
+## Navigation session ownership and vehicle IP
+
+A later missing-map incident occurred upstream of USB: another control socket
+negotiated a replacement global session while the original publisher remained
+connected. After that new socket left, the original kept retrying its rejected
+session. The receiver now reserves negotiation for the first successfully
+negotiated, live control socket. Other control connections receive
+`receiver_busy` and close code 1013; closing the owner releases ownership.
+Unnegotiated sockets do not reserve it. Session validation remains strict.
+Receiver tests cover continued original data, rejection, release/reconnect and
+map-setting renegotiation. This is distinct from USB backpressure or model latency.
+
+The external HUD now receives the vehicle's network address in its existing
+display snapshot. C4 resolves it using the same asynchronous address provider
+as its local display. The Jetson renderer accepts only a valid address from a
+fresh vehicle snapshot; unavailable or stale data produces no address, never
+a fallback to Jetson's own interface. CPU and memory remain vehicle telemetry.
+Portable tests cover valid, absent, invalid and stale addresses and prohibit
+host socket lookup. No model scheduling or transport deadlines change.
