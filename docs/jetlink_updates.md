@@ -4,6 +4,24 @@ Scope: `carrot-jetlink`, Jetson Orin Nano Super, L4T 36.4.7 / TensorRT
 10.3.0. Initial installation still uses the sanitized SD image. Routine source
 and model updates do not require reflashing. OS/ABI/QSPI changes remain separate.
 
+## Deployment compatibility
+
+The distributable image must remain unprovisioned. It contains no owner's Wi-Fi
+profile, SSH authorization list, SSH host key, machine ID or C4 dongle binding.
+First boot creates per-device identity and host keys; owners provide their own
+network/access configuration. A personally provisioned test card is not the
+distribution master.
+
+USB discovery uses the Jetlink VID/PID, not a specific C4 serial number. The
+connection still requires compatible C4 Jetlink code and the exact supported
+model contract. This is not a universal image for arbitrary Jetson hardware,
+JetPack versions, USB displays or unmodified openpilot branches. The supported
+image hardware is the Orin Nano Super developer kit with matching QSPI firmware.
+Another C4 connection and fresh-medium provisioning must be physically tested
+before describing cross-device deployment as validated. Shared NAS manifests
+and the embedded public signing key allow each compatible installation to update
+without receiving the publisher's private signing key or a replacement image.
+
 ## Health
 
 The host samples sysfs and IPv4 interface addresses on a separate worker, once
@@ -88,3 +106,59 @@ fault precedence over active status, malformed/unsigned manifests, download
 corruption, refusal to activate running services, missing offroad state and
 failed candidate preservation. Live and image results are recorded after the
 corresponding checks complete, with exact source IDs and artifact hashes.
+
+### 2026-09-27 release candidate
+
+The immutable host package is `e12376982fd0a522ea27bdd2a38966cd36e74f65`,
+47,194,420 bytes, SHA-256
+`64c787a90231675105a1b6512a45bb8aef194b8246a14fa7fbd38a6a139d7de5`.
+The pinned model remains Cinque v2; this release does not select Cinque v3.
+The NAS `jetlink-host-stable/manifest.json` channel serves this signed package;
+an independent HTTPS readback matched the immutable manifest and passed signature
+verification. This makes routine update discovery available, but is not evidence
+of the still-pending exact-release reboot or new-medium validation below. The
+initial-install image has not been promoted to a public download endpoint.
+
+The initial health/status/updater/image suite passed 44 tests on the Jetson;
+the web suite passed 9 tests. After the final timeout-cleanup change, all 12
+updater/host-health tests passed on the actual Linux host. The timeout test
+checks cleanup of the entire isolated probe process group, not just its
+`runuser` parent. Signature-tampering and interrupted-activation tests also
+exercise the installed updater. These are controlled software tests, not
+physical power-cut or overheating tests.
+
+The earlier `a5dc674a` package was downloaded through the real NAS endpoint,
+staged with signature/hash checks and activated by a real parked reboot. The
+boot probe produced `CANDIDATE_PROBE_OK` before normal inference/HUD startup.
+Carrot Web was visually checked with the Korean IP/temperature/status line.
+P-gear navigation hiding was retained.
+
+A 180-second observation during image construction included one approximately
+640 ms inference and a brief external-model fallback. Its cause is unproved;
+that loaded build interval is not accepted as a clean steady-state timing test.
+The first observer used conflated subscriptions, so its frame-ID discontinuities
+must not be reported as independent camera-drop evidence. Final steady-state
+verification uses non-conflated subscriptions after image work and transfer end.
+
+At the owner's departure on September 27, the live C4 was on `e1237698`; the
+Jetson was still running the successfully activated `a5dc674a` release, with
+`e1237698` staged for the next normal boot and its final updater bootstrap
+installed. A final parked snapshot showed active/fresh Jetson inference,
+72.062 C, no diagnostic error, both inference/HUD services active, valid/alive
+model and pose messages, valid CAN, and `inputsOK`/`posenetOK`. Speed was zero,
+gear P and engagement false. No departure-time reboot or model switch was
+performed. This snapshot does not establish clean driving timing.
+
+The rebuilt `e1237698` image passed imports, model/privacy/filesystem checks.
+A read-only image audit matched all eight checked boot/HUD/updater configuration
+files to the working host, including Xorg setup, the writable HUD log directory
+and the utmp delay override. Compression finished on the host, but its final
+hash/transfer and the new-media write were still pending when the vehicle's
+network disconnected. Partial PC captures must not be flashed or distributed.
+The final isolated timing run, exact-release reboot check, complete PC image
+verification and USB readback remain separate outstanding checks. Do not infer
+their completion from the successful source tests or offline image audit.
+
+New-media first boot remains a separate physical test. Updating and rebooting
+the existing vehicle SD does not validate first provisioning, partition growth,
+or the display on the newly written installation medium.
