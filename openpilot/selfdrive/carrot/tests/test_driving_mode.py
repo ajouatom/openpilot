@@ -52,30 +52,31 @@ def test_repeated_short_launches_preserve_safe():
   detector = DrivingModeDetector()
   assert advance(detector, .4)
   for _ in range(8):
-    assert advance(detector, 3., ego=20, lead_speed=30, distance=35)
+    assert advance(detector, 2., ego=20, lead_speed=30, distance=35)
     assert advance(detector, 2., ego=10, lead_speed=8, distance=16)
     assert advance(detector, .5)
 
 
 @pytest.mark.parametrize('dt', [.025, .05, .1])
 @pytest.mark.parametrize('automatic,base_mode', [(1, DrivingMode.Normal), (2, DrivingMode.Eco)])
-def test_strong_lead_acceleration_releases_safe_before_flow_recovery(dt, automatic, base_mode):
+@pytest.mark.parametrize('lead_accel', [1.1, 1.6])
+def test_sustained_lead_acceleration_releases_safe_before_flow_recovery(dt, automatic, base_mode, lead_accel):
   detector = DrivingModeDetector()
   advance(detector, .4, dt=dt)
-  assert advance(detector, .4, ego=10, lead_speed=10, distance=16, lead_accel=1.6, dt=dt)
-  assert not advance(detector, .2, ego=10, lead_speed=10, distance=16, lead_accel=1.6, dt=dt)
+  assert advance(detector, .4, ego=10, lead_speed=10, distance=16, lead_accel=lead_accel, dt=dt)
+  assert not advance(detector, .2, ego=10, lead_speed=10, distance=16, lead_accel=lead_accel, dt=dt)
   assert detector.get_mode(automatic) == base_mode
-  assert not advance(detector, 2., ego=10, lead_speed=10, distance=16, lead_accel=1.6, dt=dt)
+  assert not advance(detector, 2., ego=10, lead_speed=10, distance=16, lead_accel=lead_accel, dt=dt)
   assert advance(detector, .4, dt=dt)
 
 
 def test_acceleration_threshold_is_strict_and_spikes_do_not_accumulate():
   detector = DrivingModeDetector()
   advance(detector, .4)
-  assert advance(detector, 2., ego=10, lead_speed=10, distance=16, lead_accel=1.5)
+  assert advance(detector, 2., ego=10, lead_speed=10, distance=16, lead_accel=1.0)
   for _ in range(4):
     assert advance(detector, .4, ego=10, lead_speed=10, distance=16, lead_accel=2.)
-    assert advance(detector, .1, ego=10, lead_speed=10, distance=16, lead_accel=1.5)
+    assert advance(detector, .1, ego=10, lead_speed=10, distance=16, lead_accel=1.0)
 
 
 @pytest.mark.parametrize('interruption', [{'valid': False}, {'status': False}, {'track': 43},
@@ -99,7 +100,7 @@ def test_stopping_approach_keeps_safe_even_with_high_lead_acceleration():
 def test_sustained_flow_or_opening_gap_releases_safe(ego, lead_speed, distance):
   detector = DrivingModeDetector()
   advance(detector, .4)
-  assert advance(detector, 5., ego=ego, lead_speed=lead_speed, distance=distance)
+  assert advance(detector, 2., ego=ego, lead_speed=lead_speed, distance=distance)
   assert not advance(detector, 1.2, ego=ego, lead_speed=lead_speed, distance=distance)
 
 
@@ -107,7 +108,7 @@ def test_lead_change_resets_release_evidence_but_preserves_queue():
   detector = DrivingModeDetector()
   advance(detector, .4)
   for track in range(5):
-    assert advance(detector, 4., ego=20, lead_speed=30, distance=35, track=track)
+    assert advance(detector, 2., ego=20, lead_speed=30, distance=35, track=track)
   assert not advance(detector, 2.2, ego=20, lead_speed=30, distance=35, track=4)
 
 
@@ -127,7 +128,7 @@ def test_stale_or_invalid_data_neither_enters_nor_releases_safe():
   advance(detector, .4)
   assert advance(detector, 20., ego=60, status=False, valid=False)
   assert advance(detector, 20., ego=60, lead_speed=60, distance=float('nan'))
-  assert advance(detector, 5., ego=60, lead_speed=60, distance=35)
+  assert advance(detector, 2., ego=60, lead_speed=60, distance=35)
   assert not advance(detector, 1.2, ego=60, lead_speed=60, distance=35)
 
 
@@ -146,7 +147,7 @@ def test_open_road_never_enters_safe():
 def test_braking_wave_resets_recovery_even_above_35_kph():
   detector = DrivingModeDetector()
   advance(detector, .4)
-  assert advance(detector, 5., ego=45, lead_speed=45, distance=35)
+  assert advance(detector, 2., ego=45, lead_speed=45, distance=35)
   assert advance(detector, 1., ego=45, lead_speed=45, distance=35, lead_accel=-1.)
-  assert advance(detector, 5., ego=45, lead_speed=45, distance=35)
+  assert advance(detector, 2., ego=45, lead_speed=45, distance=35)
   assert not advance(detector, 1.2, ego=45, lead_speed=45, distance=35)
