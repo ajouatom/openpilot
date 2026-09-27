@@ -236,3 +236,13 @@ fresh vehicle snapshot; unavailable or stale data produces no address, never
 a fallback to Jetson's own interface. CPU and memory remain vehicle telemetry.
 Portable tests cover valid, absent, invalid and stale addresses and prohibit
 host socket lookup. No model scheduling or transport deadlines change.
+
+The combined correction (`03afd7b12f`) passed 45 receiver/control/HUD tests on
+C4 Linux (Windows: 43 passed, two Unix socket tests skipped). After deployment
+and a parked C4 reboot, 60 one-second HUD samples all contained fresh vehicle
+IP data and active external inference. A separate 90 s full-rate observation
+recorded 1,799 models and frames per camera, no frame-gap events or pose/CAN
+invalidity, and active external inference in all 90 state samples. Execution
+mean/p99/max were 37.626/41.678/47.594 ms. This is a short parked check, not a
+hard deadline guarantee. The phone did not establish a control connection or
+send media during this observation, so live navigation recovery is unverified.
