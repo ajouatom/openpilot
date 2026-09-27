@@ -3,7 +3,8 @@ param(
   [Parameter(Mandatory=$true)][string]$Image,
   [Parameter(Mandatory=$true)][ValidatePattern('^[0-9a-fA-F]{64}$')][string]$Sha256,
   [Parameter(Mandatory=$true)][int]$DiskNumber,
-  [Parameter(Mandatory=$true)][string]$SerialNumber,
+  [Parameter(Mandatory=$true)][AllowEmptyString()][string]$SerialNumber,
+  [string]$UniqueId,
   [Parameter(Mandatory=$true)][long]$DiskBytes,
   [switch]$VerifyOnly,
   [string]$SetupJson,
@@ -26,8 +27,10 @@ try {
     $null = [System.Text.Encoding]::UTF8.GetString($setupBytes) | ConvertFrom-Json
   }
   $disk = Get-Disk -Number $DiskNumber
+  if ([string]::IsNullOrWhiteSpace($SerialNumber) -and [string]::IsNullOrWhiteSpace($UniqueId)) { throw 'A stable disk identity is required' }
   if ($disk.IsBoot -or $disk.IsSystem -or $disk.IsReadOnly -or $disk.BusType -ne 'USB' -or
-      $disk.SerialNumber.Trim() -ne $SerialNumber.Trim() -or $disk.Size -ne $DiskBytes -or $imageFile.Length -gt $disk.Size) {
+      ([string]$disk.SerialNumber).Trim() -ne $SerialNumber.Trim() -or ($UniqueId -and $disk.UniqueId -ne $UniqueId) -or
+      $disk.Size -ne $DiskBytes -or $imageFile.Length -gt $disk.Size) {
     throw 'Disk identity, capacity or system-disk guard failed'
   }
   Write-Output "Verified USB target disk $DiskNumber serial $SerialNumber size $DiskBytes"
@@ -66,7 +69,9 @@ public static class CarrotSdNative {
   }
   # Recheck identity immediately before the first destructive write.
   $disk = Get-Disk -Number $DiskNumber
-  if ($disk.IsBoot -or $disk.IsSystem -or $disk.Size -ne $DiskBytes -or $disk.SerialNumber.Trim() -ne $SerialNumber.Trim()) {
+  if ($disk.IsBoot -or $disk.IsSystem -or $disk.IsReadOnly -or $disk.BusType -ne 'USB' -or
+      $disk.Size -ne $DiskBytes -or ([string]$disk.SerialNumber).Trim() -ne $SerialNumber.Trim() -or
+      ($UniqueId -and $disk.UniqueId -ne $UniqueId)) {
     throw 'Disk identity changed before write'
   }
   $handle = [CarrotSdNative]::Open("\\.\PhysicalDrive$DiskNumber")

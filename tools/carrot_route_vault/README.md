@@ -7,7 +7,7 @@ The older standalone receiver remains under `tools/carrot_upload_server`.
 Jetson SD images are separate from model downloads. Publish only pristine,
 verified artifacts under `<storage_root>/downloads/jetson/<version>/`.
 `GET/HEAD /downloads/jetson/<version>/<filename>` supports Range/resume through
-FileResponse and allows only `carrot-jetson.img.zst`, `release.json`, and
+FileResponse and allows only `carrot-jetson.img.zst`, `carrot-jetson-windows.zip`, `release.json`, and
 `SHA256SUMS`. Versions use `vX.Y.Z` with an optional prerelease suffix. Files or
 directories that are symlinks are rejected, and directory browsing is absent.
 Copy large artifacts to a non-allowlisted temporary name, verify their SHA256,

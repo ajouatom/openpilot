@@ -32,7 +32,7 @@ Wi-Fi 정보 전달, IP·온도·오류 표시와 서명된 업데이트 연동�
 기존 eGPU의 Cinque v3와 Jetson의 별도 Cinque v2 모델은 각각 유지합니다.
 
 **[Windows 초보자 설치 안내 — 한글](https://github.com/ajouatom/carrot-jetson/blob/main/docs/INSTALL-WINDOWS-KO.md)**에서
-다운로드 프로그램, NAS 이미지, SD 기록 버튼 순서와 핫픽스 실행 명령을 확인하세요.
+ZIP 하나를 받아 압축을 풀고 **01 → 02 배치 파일**을 실행하면 됩니다. 이미지 준비·USB-C 수정·기록·검증은 자동으로 처리합니다.
 [통합 범위와 검증 상태](docs/jetson_wip_integration_20260927.md)도 함께 확인합니다.
 PC 오프라인 핫픽스로 기록한 카드의 실물 첫 부팅 시험은 아직 남아 있으므로 해당 설치 경로는 시험판입니다.
 
