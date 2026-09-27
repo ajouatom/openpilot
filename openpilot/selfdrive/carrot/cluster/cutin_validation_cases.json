@@ -2,6 +2,19 @@
   "sensitivity": 50,
   "cases": [
     {
+      "id": "ev9-97-35-tentative-front-phantom-35",
+      "vehicle_folder": "KIA_EV9 a6444e342fe1700f",
+      "log": "00000097--e22228b4eb--35/rlog.zst",
+      "source": "front+corner",
+      "window": [39.5, 41.0],
+      "expected": "clear",
+      "validation_stage": "lead_one",
+      "target_track_ids": [35],
+      "forbidden_lead_one_ids": [35],
+      "forbidden_lead_two_ids": [35],
+      "scene": "EV9 phantom braking on 835bcce07c. Front radar 35 remains native state 1 for 22 central samples, raw range 31.05 to 8.55 m. After the tentative dwell it becomes L1 for one frame at replay 40.647 s (video 40.700 s), corrected range 9.80 m and absolute speed 6.42 m/s. Vision probability is below 0.01 and nearby video shows no corresponding vehicle. Recorded target acceleration reaches -2.04 m/s^2. A tentative front track must not acquire radar-only L1 merely by surviving a timer; retain vision-supported matching. Reflector identity and closed-loop corrected braking are unverified."
+    },
+    {
       "id": "carnival-1dc-19-stopping-path-endpoint-front-43",
       "vehicle_folder": "KIA_CARNIVAL_4TH_GEN c4dcf95545dafe68",
       "log": "000001dc--23e0551f1d--19/rlog.zst",
