@@ -57,6 +57,12 @@ def diagnostics():
   model_error = str(model.get('error') or '')[:240] if not model.get('active') else ''
   if model_error:
     result.update(severity='error', reason=model_error)
+  # An explicitly idle link and a current, healthy native-model report mean
+  # the optional host is absent. Keep real model failures and stale/unknown
+  # state visible; a previously remembered HELLO alone is not a fault.
+  if link.get('state') == 'waiting' and model and not model.get('active') and not model_error:
+    result.update(reason='Host not connected')
+    return result
   if result['state'] in ('retrying', 'stopped', 'disconnected', 'waiting'):
     result.update(severity='error', reason=str(link.get('error') or 'Host connection unavailable')[:240])
     return result
@@ -95,6 +101,8 @@ def badge():
   health = diagnostics()
   if health:
     label = health['label']
+    if health['state'] == 'waiting' and health['severity'] == 'unknown':
+      return None
     if health['severity'] == 'error':
       return f'{label} ERROR', 'error'
     if health['severity'] == 'warning':

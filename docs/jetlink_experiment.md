@@ -31,8 +31,12 @@ GitHub LFS is not the model download source.
 
 The comma is the USB **device**, Jetson/Mac the **host**. Use a SuperSpeed data
 cable from the comma USB-C port to a host-capable Jetson port. The tested
-Orin Nano developer kit uses its USB-A host port; its USB-C port is not an
-equivalent SuperSpeed host connection. Current AGNOS has FunctionFS but no
+Orin Nano developer kit was validated using its USB-A host port. USB-C host
+mode is supported by NVIDIA, but direct C-to-C role negotiation has not passed
+this setup's validation: September 27 observations instead enumerated Jetson
+as `0955:7020` under the comma USB host. This is a reversed-role connection,
+not evidence that the port cannot support SuperSpeed host operation.
+Current AGNOS has FunctionFS but no
 ECM/NCM gadget driver, so this uses bulk USB rather than USB Ethernet.
 The daemon checks source/host attachment and requires negotiated SuperSpeed.
 The existing eGPU path retains priority when UsbGpuActive is true.
