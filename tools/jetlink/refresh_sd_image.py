@@ -74,6 +74,8 @@ def refresh(root, setup, bundle):
         '[Service]\nLogsDirectory=carrot-jetlink-hud\nLogsDirectoryMode=0700\n'
         'WorkingDirectory=/var/log/carrot-jetlink-hud\n')
   marker_path = root/'etc/carrot-jetlink-image.json'
+  from install_updates import configure
+  configure(root, release/'tools/jetlink')
   marker = json.loads(marker_path.read_text())
   marker.update(state='CANDIDATE_PHYSICAL_BOOT_PENDING', source_commit=commit)
   marker_path.write_text(json.dumps(marker, indent=2) + '\n')

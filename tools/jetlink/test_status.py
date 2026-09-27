@@ -26,7 +26,7 @@ def test_active_ready_and_expired_host_status(tmp_path, monkeypatch):
   model.write_text(json.dumps({'updated': 9.9, 'active': True}))
   assert status.badge() == ('MAC', 'active')
   monkeypatch.setattr(status.time, 'monotonic', lambda: 14.)
-  assert status.badge() is None
+  assert status.badge() == ('MAC ERROR', 'error')
   link.write_text('invalid')
   model.write_text('[]')
   assert status.badge() is None

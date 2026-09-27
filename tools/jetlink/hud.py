@@ -170,6 +170,23 @@ def main():
   cluster_navi_source.NaviIpcMediaSource = RemoteNaviSource
   vehicle_stats = VehicleSystemStats()
   import main as cluster
+  from host_health import STATUS as HEALTH_STATUS
+  from openpilot.common.jetlink_status import _fresh
+  from cluster_renderer import ClusterUiRenderer, DESIGN_WIDTH, rl_color, rl
+  class HealthRenderer(ClusterUiRenderer):
+    def render(self, state, signal_lights=None):
+      super().render(state, signal_lights)
+      health = _fresh(HEALTH_STATUS, time.monotonic())
+      severity = health.get('severity', 'unknown')
+      if severity == 'ok':
+        return
+      color = (255, 90, 90) if severity == 'error' else (255, 205, 70)
+      message = health.get('reason') or 'Host health unavailable'
+      text = self._ellipsize_text(f'jetSON: {message}', 22, DESIGN_WIDTH - 40)
+      # Dedicated top strip; the vehicle alert retains its normal full area.
+      rl.draw_rectangle(0, 0, int(DESIGN_WIDTH), 32, rl_color((0, 0, 0), 220))
+      self._draw_text(text, DESIGN_WIDTH / 2, 16, 22, color, anchor='center')
+  cluster.ClusterUiRenderer = HealthRenderer
   if '--help' not in sys.argv:
     scan = cluster.find_supported_usb_product
     wait_for_usb_display(scan, cluster.product_id_for_hud_mode(1))

@@ -5,6 +5,12 @@ window.CarrotTranslations.register("en", {
   nativeName: "English",
   shortName: "EN",
   strings: {
+    egpu_model_host_ok: "Connected",
+    egpu_model_host_warning: "High temperature",
+    egpu_model_host_error: "Host error / connection lost",
+    egpu_model_host_unknown: "Waiting for current host health",
+    egpu_model_host_ip: "Host IP",
+    egpu_model_host_no_ip: "Unavailable",
     egpu_model_title: "eGPU big model",
     egpu_model_checking: "Checking model",
     egpu_model_downloading: "Downloading",

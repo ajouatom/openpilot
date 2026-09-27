@@ -36,3 +36,21 @@ test("model update card shows download progress before compilation is available"
   assert.equal(elements.get("btnEgpuCompileRestart").hidden, false);
   assert.equal(elements.get("btnEgpuCompileRestart").disabled, false);
 });
+
+test("Jetson-only card shows IP and temperature, clears stale values and cannot compile eGPU", (t) => {
+  const saved = globalThis.document;
+  t.after(() => { globalThis.document = saved; });
+  const elements = new Map();
+  globalThis.document = { getElementById(id) {
+    if (!elements.has(id)) elements.set(id, { dataset: {}, style: {}, classList: { toggle() {}, remove() {} } });
+    return elements.get(id);
+  } };
+  const jetlink = { label: "jetSON", severity: "ok", addresses: ["192.168.0.199"], temp_c: 64.5 };
+  CarrotEgpuModel.render({ available: false, jetlink });
+  assert.equal(elements.get("egpuModelCard").hidden, false);
+  assert.match(elements.get("jetlinkHealth").textContent, /192\.168\.0\.199.*64\.5/);
+  assert.equal(elements.get("btnEgpuCompileRestart").hidden, true);
+  CarrotEgpuModel.render({ available: false, jetlink: { ...jetlink, severity: "error", addresses: [], temp_c: null } });
+  assert.doesNotMatch(elements.get("jetlinkHealth").textContent, /192\.168|64\.5/);
+  assert.equal(elements.get("egpuModelCard").dataset.state, "error");
+});

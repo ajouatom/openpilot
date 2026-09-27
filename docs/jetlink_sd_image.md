@@ -241,3 +241,12 @@ The image's version-directory layout prepares for this design; it does not by
 itself implement signed releases, a C4 update command, the maintenance lease,
 engine health gating or automatic rollback. Those need protocol tests, failure
 injection and parked device validation before being advertised as available.
+
+## 2026-09-27 application update implementation
+
+The user subsequently requested routine updates without rebuilding the image.
+The signed NAS staging and boot-time engine validation implementation is described
+in [jetlink_updates.md](jetlink_updates.md). It supersedes the earlier statement
+that only a version-directory layout exists. The seamless C4 maintenance-lease
+workflow above remains future work; boot-time activation is implemented instead.
+P-gear navigation hiding remains intentional and unchanged.
