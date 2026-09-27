@@ -32,6 +32,9 @@ PowerShell은 UTF-8 BOM으로 배포하여 영문 Windows에서도 한글 소스
   Windows 디스크 보호 조건과 Linux 91개 통과.
 - 첫 Windows CI에서 BOM 없는 소스를 영문 Windows가 잘못 해석했습니다.
   소스에도 BOM을 보존하여 해결했습니다. 배포 ZIP은 처음부터 BOM을 포함했고 바이트가 동일합니다.
+- NAS 업로드 후 ZIP 전체를 다시 읽어 SHA256을 확인했습니다. 공개 HEAD·앞뒤 Range 응답·메타데이터도
+  원본과 일치합니다. NAS는 `5d7ebff7b8`을 자동 배포했으며 실제 결과 페이지와 1,196프레임 레이더 재계산 결과도 확인했습니다.
+- [간편 설치 시험 릴리스](https://github.com/ajouatom/carrot-jetson/releases/tag/v0.3.0-windows-preview)를 게시했습니다.
 
 ## 보호와 미확인 범위
 
