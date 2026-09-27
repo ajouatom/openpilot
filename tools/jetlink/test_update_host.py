@@ -55,12 +55,11 @@ def test_failed_candidate_preserves_running_release_and_model(tmp_path, monkeypa
   remembered = tmp_path / 'cache/last-loaded.json'
   remembered.write_text('old model')
   update.atomic_json(tmp_path / 'updates/pending.json', manifest())
-  def run(argv, **kwargs):
-    if argv[0] == 'systemctl':
-      return SimpleNamespace(returncode=3)
+  def probe(release):
     remembered.write_text('candidate model')
-    raise subprocess.CalledProcessError(1, argv)
-  monkeypatch.setattr(update.subprocess, 'run', run)
+    raise subprocess.CalledProcessError(1, ['synthetic-probe'])
+  monkeypatch.setattr(update, 'probe_release', probe)
+  monkeypatch.setattr(update.subprocess, 'run', lambda *a, **k: SimpleNamespace(returncode=3))
   update.activate()
   assert (tmp_path / 'current').resolve() == old
   assert remembered.read_text() == 'old model'
@@ -123,3 +122,23 @@ def test_interrupted_activation_recovers_before_any_new_probe(tmp_path, monkeypa
   assert not (tmp_path / 'updates/transaction.json').exists()
   assert not (tmp_path / 'updates/pending.json').exists()
   assert json.loads((tmp_path / 'updates/status.json').read_text())['state'] == 'recovered'
+
+
+def test_probe_timeout_kills_and_reaps_entire_child_group(monkeypatch):
+  calls = []
+  class Process:
+    pid = 12345
+    def wait(self, timeout=None):
+      calls.append(('wait', timeout))
+      if timeout is not None:
+        raise subprocess.TimeoutExpired('synthetic', timeout)
+      return -9
+  def popen(command, **kwargs):
+    assert kwargs['start_new_session'] is True
+    return Process()
+  monkeypatch.setattr(update.subprocess, 'Popen', popen)
+  monkeypatch.setattr(update.signal, 'SIGKILL', 9, raising=False)
+  monkeypatch.setattr(update.os, 'killpg', lambda pid, sig: calls.append(('kill', pid)), raising=False)
+  with pytest.raises(subprocess.TimeoutExpired):
+    update.probe_release(Path('/synthetic/release'))
+  assert calls == [('wait', 960), ('kill', 12345), ('wait', None)]
