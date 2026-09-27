@@ -31,6 +31,10 @@ def test_expiry_and_error_override_active_model(tmp_path, monkeypatch):
   link.write_text(json.dumps(record))
   assert status.diagnostics()['addresses'] == ['192.168.0.199']
   assert status.badge() == ('jetSON HOT', 'loading')
+  model.write_text(json.dumps({'updated': 20., 'active': False, 'error': 'inference timeout'}))
+  assert status.badge() == ('jetSON ERROR', 'error')
+  assert status.diagnostics()['reason'] == 'inference timeout'
+  model.write_text(json.dumps({'updated': 20., 'active': True, 'error': ''}))
   record['telemetry_updated'] = 10.
   link.write_text(json.dumps(record))
   assert status.diagnostics()['addresses'] == []

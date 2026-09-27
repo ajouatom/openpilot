@@ -86,3 +86,40 @@ def test_no_telemetry_does_not_authorize_automatic_download(monkeypatch):
 def test_unsigned_release_is_rejected():
   with pytest.raises(ValueError):
     update.verify_signature(manifest())
+
+
+def test_signature_detects_manifest_tampering(monkeypatch):
+  import base64
+  from Crypto.PublicKey import ECC
+  from Crypto.Signature import eddsa
+  key = ECC.generate(curve='Ed25519')
+  original = Path.read_text
+  monkeypatch.setattr(Path, 'read_text', lambda p, *a, **k:
+                      key.public_key().export_key(format='PEM') if p.name == 'release-signing-public.pem' else original(p, *a, **k))
+  value = manifest()
+  payload = json.dumps(value, sort_keys=True, separators=(',', ':')).encode()
+  value['signature'] = base64.b64encode(eddsa.new(key, 'rfc8032').sign(payload)).decode()
+  update.verify_signature(value)
+  value['model']['size'] += 1
+  with pytest.raises(ValueError):
+    update.verify_signature(value)
+
+
+@pytest.mark.skipif(sys.platform == 'win32', reason='Linux service/symlink semantics')
+def test_interrupted_activation_recovers_before_any_new_probe(tmp_path, monkeypatch):
+  monkeypatch.setattr(update, 'ROOT', tmp_path)
+  old, candidate = tmp_path / 'releases/old', tmp_path / 'releases/new'
+  old.mkdir(parents=True)
+  candidate.mkdir()
+  (tmp_path / 'current').symlink_to(candidate)
+  (tmp_path / 'cache').mkdir()
+  (tmp_path / 'cache/last-loaded.json').write_text('new model')
+  update.atomic_json(tmp_path / 'updates/transaction.json', {'release': str(old), 'last_loaded': 'old model'})
+  update.atomic_json(tmp_path / 'updates/pending.json', manifest())
+  monkeypatch.setattr(update.subprocess, 'run', lambda *a, **k: SimpleNamespace(returncode=3))
+  update.activate()
+  assert (tmp_path / 'current').resolve() == old
+  assert (tmp_path / 'cache/last-loaded.json').read_text() == 'old model'
+  assert not (tmp_path / 'updates/transaction.json').exists()
+  assert not (tmp_path / 'updates/pending.json').exists()
+  assert json.loads((tmp_path / 'updates/status.json').read_text())['state'] == 'recovered'

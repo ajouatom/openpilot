@@ -54,6 +54,9 @@ def diagnostics():
   result = {'label': host_label(saved.get('peer')), 'state': link.get('state', 'disconnected'),
             'severity': 'unknown', 'reason': '', 'addresses': [], 'temp_c': None,
             'active': bool(model.get('active')), 'fresh': False}
+  model_error = str(model.get('error') or '')[:240] if not model.get('active') else ''
+  if model_error:
+    result.update(severity='error', reason=model_error)
   if result['state'] in ('retrying', 'stopped', 'disconnected', 'waiting'):
     result.update(severity='error', reason=str(link.get('error') or 'Host connection unavailable')[:240])
     return result
@@ -79,6 +82,8 @@ def diagnostics():
         result['addresses'].append(str(address))
     except (KeyError, TypeError, ValueError):
       continue
+  if model_error:
+    result.update(severity='error', reason=model_error)
   return result
 
 
