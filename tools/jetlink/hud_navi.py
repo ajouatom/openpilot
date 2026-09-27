@@ -5,6 +5,8 @@ from pathlib import Path
 import socket
 import struct
 import time
+import threading
+from dataclasses import replace
 
 CAPABILITY = 'carrot_navi_v1'
 MESSAGE = 0x4001
@@ -16,6 +18,48 @@ MAX_EVENT = 1024 * 1024
 # compatible with the original one-fragment-per-window receiver cadence.
 EVENT_SEND_TIMEOUT = 1.8
 STATUS = Path('/dev/shm/carrot-jetlink-navi-status.json')
+
+
+class MediaPump:
+  """Receive/decode between display ticks, publishing one immutable dashboard.
+
+  Only this worker owns the source. The display reads a snapshot without
+  waiting for reception or decoding; H.264 ordering remains in the source.
+  """
+  def __init__(self, source):
+    self.source = source
+    self.navi_live = None
+    self.snapshot = (time.monotonic(), source.update(None))
+    self.stopped = threading.Event()
+    self.thread = threading.Thread(target=self._run, name='jetlink-navi-receive', daemon=True)
+    self.thread.start()
+
+  def _run(self):
+    while not self.stopped.is_set():
+      started = time.monotonic()
+      try:
+        dashboard = self.source.update(self.navi_live)
+      except Exception as exc:
+        dashboard = replace(self.snapshot[1], media=(), map_stream_stalled=True,
+                            error=f'Navigation receiver: {type(exc).__name__}: {exc}'[:256])
+      self.snapshot = (time.monotonic(), dashboard)
+      self.stopped.wait(max(0., .01 - (time.monotonic() - started)))
+
+  def update(self, navi_live):
+    self.navi_live = navi_live
+    stamp, dashboard = self.snapshot
+    age = max(0., time.monotonic() - stamp)
+    if age > .5:
+      return replace(dashboard, media=(), map_stream_stalled=True, error='Navigation receiver stale')
+    return dashboard
+
+  def close(self):
+    self.stopped.set()
+    self.thread.join(timeout=1.)
+    if self.thread.is_alive():
+      raise RuntimeError('Navigation receiver did not stop')
+    self.source._h264_worker.close()
+    self.source._socket.close()
 
 
 def send_ready_after_reply(client, publisher, *, clock=time.monotonic):

@@ -7,6 +7,40 @@ from hud_navi import Assembler, fragments, CHUNK, HEADER, MAX_EVENT
 from hud_stats import VehicleSystemStats, VehicleCpuOverlay
 
 
+def test_media_receiver_keeps_draining_while_display_is_idle():
+  import threading, time
+  from dataclasses import dataclass
+  from hud_navi import MediaPump
+  @dataclass(frozen=True)
+  class Dashboard:
+    media: tuple = ()
+    map_stream_stalled: bool = False
+    error: str = ''
+  calls = []
+  closed = []
+  progressed = threading.Event()
+  class Source:
+    _socket = SimpleNamespace(close=lambda: closed.append('socket'))
+    _h264_worker = SimpleNamespace(close=lambda: closed.append('decoder'))
+    def update(self, live):
+      calls.append(threading.get_ident())
+      if len(calls) >= 8: progressed.set()
+      return Dashboard(media=(len(calls),))
+  pump = MediaPump(Source())
+  try:
+    assert progressed.wait(1.)  # No display.update calls while packets arrive.
+    assert len(set(calls[1:])) == 1 and calls[0] != calls[1]
+    assert pump.update(None).media[0] >= 7
+    pump.snapshot = (time.monotonic()-1., Dashboard(media=('stale',)))
+    pump.stopped.set(); pump.thread.join(1.)
+    pump.snapshot = (time.monotonic()-1., Dashboard(media=('stale',)))
+    assert pump.update(None).media == ()
+    assert pump.update(None).map_stream_stalled
+  finally:
+    pump.close()
+  assert closed == ['decoder', 'socket']
+
+
 def test_post_reply_navigation_tail_preserves_order_and_stops_on_slow_write():
   from collections import deque
   from hud_navi import send_ready_after_reply, MESSAGE
