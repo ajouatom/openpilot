@@ -135,7 +135,7 @@ def main():
   sys.modules[params_module.__name__] = params_module
   messaging = types.ModuleType('openpilot.cereal.messaging')
   messaging.SubMaster = RemoteSubMaster
-  from hud_navi import RemoteMediaSocket
+  from hud_navi import RemoteMediaSocket, MediaPump
   def sub_sock(service, **kwargs):
     if service != 'carrotNaviMedia':
       raise ValueError(f'unsupported display subscription: {service}')
@@ -157,16 +157,26 @@ def main():
   cluster_system_monitor.NetworkAddressProvider = VehicleNetworkAddress
   import cluster_navi_source
   display_metrics = {}
-  class RemoteNaviSource(cluster_navi_source.NaviIpcMediaSource):
+  BaseNaviSource = cluster_navi_source.NaviIpcMediaSource
+  class RemoteNaviSource:
+    def __init__(self, *args, **kwargs):
+      self.source = BaseNaviSource(*args, **kwargs)
+      self.pump = MediaPump(self.source)
+
     def update(self, navi_live):
-      dashboard = super().update(navi_live)
+      dashboard = self.pump.update(navi_live)
       frame = next((f for f in dashboard.media if f.key == 'render:map_main' and f.present), None)
       display_metrics['map'] = {'sequence': frame.sequence if frame else None,
                                 'width': frame.width if frame else None,
                                 'height': frame.height if frame else None,
                                 'age_ms': dashboard.map_frame_age_ms,
-                                'stalled': dashboard.map_stream_stalled}
+                                'stalled': dashboard.map_stream_stalled,
+                                'decode_drops': self.source._h264_worker.dropped_requests,
+                                'received': dashboard.received_count}
       return dashboard
+
+    def close(self):
+      self.pump.close()
   cluster_navi_source.NaviIpcMediaSource = RemoteNaviSource
   vehicle_stats = VehicleSystemStats()
   import main as cluster
