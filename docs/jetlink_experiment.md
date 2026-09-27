@@ -1,5 +1,9 @@
 # Carrot Jetlink experiment
 
+> 현재 콤마 배포 기준은 `carrot-wip`입니다. 아래는 당시 실험 기록이며,
+> 최신 안내는 [한글 통합 기록](jetson_wip_integration_20260927.md)과
+> [초보자 설치 안내](INSTALL-WINDOWS-KO.md)를 보세요.
+
 This experiment is scoped to `carrot-jetlink`, branched from `carrot-wip`
 `db4aed1e22`. It does not change the maintained wip branch's eGPU model or OS.
 It integrates [Jetlink](https://github.com/zoompilot/jetlink) at

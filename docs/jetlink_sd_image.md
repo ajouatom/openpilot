@@ -1,5 +1,9 @@
 # Jetson SD image candidate and update design
 
+> 현재 콤마 배포 기준은 `carrot-wip`입니다. 아래는 당시 실험 기록이며,
+> 최신 안내는 [한글 통합 기록](jetson_wip_integration_20260927.md)과
+> [초보자 설치 안내](INSTALL-WINDOWS-KO.md)를 보세요.
+
 Scope: `carrot-jetlink` experiment, Jetson Orin Nano Super developer kit, L4T
 36.4.7 / CUDA 12.6 / TensorRT 10.3.0. This does not change carrot-wip or the
 existing eGPU runtime. A generated image is a **candidate until tested by booting

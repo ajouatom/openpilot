@@ -317,8 +317,8 @@ def main(demo=False):
   small_model = ModelState(vipc_client_main.width, vipc_client_main.height, False) if model is None or USBGPU else None
   if model is None:
     model = small_model
-  # The experimental branch keeps the existing eGPU selection unchanged. A
-  # separate USB owner handles external computers and late server startup.
+  # Keep the existing eGPU selection unchanged. A separate USB owner handles
+  # external computers and late server startup through the pinned Jetlink model.
   if not USBGPU and os.path.isfile('/AGNOS'):
     try:
       from openpilot.selfdrive.modeld.jetlink.model import JoiningModel

@@ -109,6 +109,25 @@ See [Understanding Settings](settings.md) for ranges, units, and a safe tuning o
 Tools contains management actions that can immediately change device or repository state.
 Manage `ONNX Lane and BSD Detection` in **Settings → Driving → Steering → ONNX Lane & BSD**, not through a Tools shortcut.
 
+### Jetson connection, IP and temperature
+
+After Jetson integration, the **Tools → eGPU status card** in `carrot-wip` also
+shows a connected Jetson's IP, temperature and current connection/error state,
+even without a previous eGPU connection. Open Carrot Web using the comma IP;
+the Jetson IP displayed inside the card is its management address. Expired
+temperature/address readings are not presented as current values.
+
+A healthy idle installation using the internal model without Jetson is distinct
+from active inference losing its connection, a real error or excessive heat.
+Do not suppress real faults to clear a warning. The eGPU model compilation button
+is unavailable for a Jetson-only installation.
+
+Use the [detailed Korean installation guide](https://github.com/ajouatom/carrot-jetson/blob/main/docs/INSTALL-WINDOWS-KO.md)
+for NAS image flashing and the PC hotfix. Wi-Fi settings come from the connected
+comma, so changing its SSID/password does not require removing the SD card.
+The existing P-gear summary display remains intentional. See the guide's preview
+notice for physical validation limits of each installation path.
+
 ### Quick actions
 
 - `Car Select`: choose the vehicle maker and model.

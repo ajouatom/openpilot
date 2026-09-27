@@ -32,6 +32,9 @@ const FALLBACK_STRINGS = {
   host_unknown: "Waiting for current host health",
   host_ip: "Host IP",
   host_no_ip: "Unavailable",
+  host_not_connected: "Host not connected",
+  host_unavailable: "Host connection unavailable",
+  host_health_unavailable: "Host health unavailable",
 };
 
 function t(key) {
@@ -101,7 +104,11 @@ function render(status = lastStatus) {
     const severity = ["ok", "warning", "error", "unknown"].includes(host.severity) ? host.severity : "unknown";
     hostEl.textContent = `${host.label} · ${t(`host_${severity}`)} · ${t("host_ip")}: ${(host.addresses || []).join(", ") || t("host_no_ip")}`
       + (Number.isFinite(host.temp_c) ? ` · ${host.temp_c.toFixed(1)} °C` : "")
-      + (host.reason ? ` · ${host.reason}` : "");
+        + (host.reason ? ` · ${({
+          "Host not connected": t("host_not_connected"),
+          "Host connection unavailable": t("host_unavailable"),
+          "Host health unavailable": t("host_health_unavailable"),
+        })[host.reason] || host.reason}` : "");
     hostEl.style.color = severity === "error" ? "#ff7474" : severity === "warning" ? "#ffd166" : "";
   }
   if (!status.available) {
