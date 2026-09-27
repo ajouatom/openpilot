@@ -441,7 +441,9 @@ def _apply_scc_lead(values, radar_state, model_v2=None, hud_lateral=None):
     lateral = _display_lead_lateral(lead, model_v2) if hud_lateral is None else hud_lateral
     values["ACC_ObjLatPos"] = float(np.clip(lateral, -45.6, 5.5))
     values["ACC_ObjRelSpd"] = float(np.clip(lead.vRel, -170.0, 239.3))
-    values["HUD_LEAD_INFO"] = 1 if lead.vRel > 0 else 2
+    # Keep the OEM HUD/cluster lead white around standstill; relative-speed
+    # noise near zero must not alternate white (2) and receding gray (1).
+    values["HUD_LEAD_INFO"] = 1 if lead.vRel > 0.3 else 2
 
 
 def create_acc_control_scc2(packer, CAN, enabled, accel_value_last, accel, stopping, gas_override, set_speed, hud_control, hyundai_jerk, CS,

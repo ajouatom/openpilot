@@ -68,6 +68,21 @@ def test_missing_or_invalid_lead_clears_previous_object(radar):
   }
 
 
+def test_stationary_lead_noise_keeps_white_hud_without_changing_control_fields():
+  cs = make_cs(make_radar(vRel=0.0))
+  baseline = send(cs)
+  # Incident lead speed ranged from -0.15 to +0.03 m/s while stopped.
+  for v_rel in (-0.15, 0.03, 0.0, 0.01, -0.01, 0.03, 0.3, 0.31, -0.1):
+    cs.radarState = make_radar(vRel=v_rel)
+    values = send(cs)
+    assert values["HUD_LEAD_INFO"] == (1 if v_rel > 0.3 else 2)
+    assert values["ACC_ObjRelSpd"] == pytest.approx(v_rel, abs=0.051)
+    changing_fields = {"CHECKSUM", "HUD_LEAD_INFO", "ACC_ObjRelSpd"}
+    assert {k: v for k, v in values.items() if k not in changing_fields} == {
+      k: v for k, v in baseline.items() if k not in changing_fields
+    }
+
+
 @pytest.mark.parametrize(("y_rel", "v_rel", "lat", "speed"), [(1000, -1000, -45.6, -170), (-1000, 1000, 5.5, 239.3)])
 def test_out_of_range_values_do_not_wrap_into_other_objects(y_rel, v_rel, lat, speed):
   values = send(make_cs(make_radar(dRel=1000, yRel=y_rel, vRel=v_rel)))
