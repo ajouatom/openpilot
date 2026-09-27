@@ -6718,49 +6718,48 @@ def test_radar_only_moving_front_accepts_unknown_or_confirmed_state(
   assert output.lead_one["radarTrackId"] == 52
 
 
-def test_radar_only_moving_front_requires_longer_tentative_confirmation() -> None:
+@pytest.mark.parametrize("confirmed_state", (2, 3))
+def test_tentative_front_requires_native_confirmation_without_vision(
+  confirmed_state: int,
+) -> None:
   controller = DPathRadarController(
-    prefer_corner_radar=True,
-    enable_radar_tracks=1,
-    cut_in_sensitivity=0,
+    prefer_corner_radar=True, enable_radar_tracks=1, cut_in_sensitivity=0,
   )
-  for index in range(12):
+  # A long-lived, kinematically consistent tentative return must not become L1.
+  # Once native confirmation arrives, it can acquire through the usual window.
+  for index in range(47):
     output = controller.update(
-      time_s=index * 0.05,
-      v_ego=16.0,
+      time_s=index * 0.05, v_ego=27.0,
       radar_points=(Point(
-        39,
-        20.0 - index * 0.45,
-        -0.1,
-        v_rel=-9.0,
-        source="frontRadar",
-        trackState=1,
+        35, 60.0 - index * 1.0, -0.05, v_rel=-20.0,
+        source="frontRadar", trackState=1 if index < 40 else confirmed_state,
       ),),
-      model=model_with_lead(
-        115.0, -0.3, 19.0, probability=0.02,
-      ),
+      model=model_with_lead(115.0, -0.3, 27.0, probability=0.005),
     )
-    assert output.lead_one is None
-
-  for index in range(12, 18):
-    output = controller.update(
-      time_s=index * 0.05,
-      v_ego=16.0,
-      radar_points=(Point(
-        39,
-        20.0 - index * 0.45,
-        -0.1,
-        v_rel=-9.0,
-        source="frontRadar",
-        trackState=1,
-      ),),
-      model=model_with_lead(
-        115.0, -0.3, 19.0, probability=0.02,
-      ),
-    )
-
+    if index < 45:
+      assert output.lead_one is None
   assert output.lead_one is not None
-  assert output.lead_one["radarTrackId"] == 39
+  assert output.lead_one["radarTrackId"] == 35
+
+
+def test_radar_only_front_loses_native_confirmation_and_reacquires() -> None:
+  controller = DPathRadarController(
+    prefer_corner_radar=True, enable_radar_tracks=1, cut_in_sensitivity=0,
+  )
+  for index in range(30):
+    output = controller.update(
+      time_s=index * 0.05, v_ego=20.0,
+      radar_points=(Point(
+        35, 40.0 - index * 0.1, 0.0, v_rel=-2.0,
+        source="frontRadar", trackState=1 if 8 <= index < 20 else 2,
+      ),),
+      model=model_with_lead(115.0, 0.0, 20.0, probability=0.0),
+    )
+    if 8 <= index < 25:
+      assert output.lead_one is None
+    elif index >= 26 or 6 <= index < 8:
+      assert output.lead_one is not None
+      assert output.lead_one["radarTrackId"] == 35
 
 
 def test_tentative_native_track_remains_available_to_vision_match() -> None:
@@ -7752,7 +7751,7 @@ def test_confirmed_closer_moving_radar_replaces_held_farther_identity() -> None:
   assert output.lead_one["modelProb"] == pytest.approx(0.0)
 
 
-def test_tentative_closer_moving_radar_requires_longer_confirmation() -> None:
+def test_tentative_closer_moving_radar_cannot_replace_supported_lead() -> None:
   controller = DPathRadarController(
     prefer_corner_radar=True,
     enable_radar_tracks=1,
@@ -7776,7 +7775,7 @@ def test_tentative_closer_moving_radar_requires_longer_confirmation() -> None:
     assert output.lead_one is not None
     assert output.lead_one["radarTrackId"] == 43
 
-  for index in range(7, 22):
+  for index in range(7, 47):
     time_s = index * 0.05
     far_d_rel = 35.0 + v_rel * time_s
     output = controller.update(
@@ -7799,7 +7798,7 @@ def test_tentative_closer_moving_radar_requires_longer_confirmation() -> None:
     assert output.lead_one is not None
     assert output.lead_one["radarTrackId"] == 43
 
-  time_s = 22 * 0.05
+  time_s = 47 * 0.05
   far_d_rel = 35.0 + v_rel * time_s
   output = controller.update(
     time_s=time_s,
@@ -7820,8 +7819,7 @@ def test_tentative_closer_moving_radar_requires_longer_confirmation() -> None:
   )
 
   assert output.lead_one is not None
-  assert output.lead_one["radarTrackId"] == 35
-  assert output.lead_one["modelProb"] == pytest.approx(0.0)
+  assert output.lead_one["radarTrackId"] == 43
 
 
 def test_off_center_moving_radar_does_not_replace_held_lead_one() -> None:
