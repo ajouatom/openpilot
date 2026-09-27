@@ -69,6 +69,13 @@ MODEL_CONTENT_TYPES = {
   "precompiled-runtime.tar.gz": "application/gzip",
 }
 
+JETSON_RELEASE_RE = re.compile(r"^v[0-9]+\.[0-9]+\.[0-9]+(?:-[A-Za-z0-9][A-Za-z0-9.-]{0,63})?$")
+JETSON_DOWNLOAD_TYPES = {
+  "carrot-jetson.img.zst": "application/zstd",
+  "release.json": "application/json",
+  "SHA256SUMS": "text/plain",
+}
+
 ADMIN_COOKIE = "carrot_route_admin"
 ADMIN_COOKIE_MESSAGE = b"carrot-route-admin-v1"
 ROUTE_VIEWER_KEY = web.AppKey("route_viewer", object)
@@ -290,6 +297,23 @@ class RouteViewer:
     if family_path.resolve() not in resolved.parents or root not in resolved.parents:
       raise web.HTTPBadRequest(text="invalid model file")
     return resolved
+
+  def _jetson_download_path(self, release: Any, filename: Any) -> Path:
+    version, name = str(release or ""), str(filename or "")
+    if not JETSON_RELEASE_RE.fullmatch(version) or name not in JETSON_DOWNLOAD_TYPES:
+      raise web.HTTPNotFound(text="Jetson download not found")
+    root = self.storage_root.resolve()
+    path = root
+    try:
+      for part in ("downloads", "jetson", version, name):
+        path = path / part
+        if path.is_symlink():
+          raise web.HTTPNotFound(text="Jetson download not found")
+      if not path.is_file() or root not in path.resolve().parents:
+        raise web.HTTPNotFound(text="Jetson download not found")
+      return path.resolve()
+    except OSError as exc:
+      raise web.HTTPNotFound(text="Jetson download not found") from exc
 
   def _catalog_sync(self) -> list[dict[str, Any]]:
     root = self.routes_root
@@ -853,6 +877,14 @@ class RouteViewer:
     )
     return web.FileResponse(path, headers={"Content-Type": MODEL_CONTENT_TYPES[filename]})
 
+  async def jetson_download(self, request: web.Request) -> web.StreamResponse:
+    filename = request.match_info.get("filename", "")
+    path = await asyncio.to_thread(self._jetson_download_path, request.match_info.get("release"), filename)
+    return web.FileResponse(path, headers={
+      "Content-Type": JETSON_DOWNLOAD_TYPES[filename],
+      "Content-Disposition": f'attachment; filename="{filename}"',
+    })
+
   async def public_file(self, request: web.Request) -> web.StreamResponse:
     directory, route, _selection, indexes = self._public_request_selection(request)
     device = request.match_info.get("device", "").lower()
@@ -1145,6 +1177,7 @@ class RouteViewer:
       app.router.add_get(f"{prefix}/devices/{{device}}/routes/preserved", self.api_share_device_routes)
 
     app.router.add_get("/models/{family}/{filename}", self.model_file)
+    app.router.add_get("/downloads/jetson/{release}/{filename}", self.jetson_download)
     app.router.add_get("/routes/{directory}/{selection}", self.public_page)
     app.router.add_get("/routes/{directory}/{selection}/manifest", self.api_public_manifest)
     app.router.add_get(

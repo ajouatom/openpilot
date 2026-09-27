@@ -5,6 +5,7 @@ import re
 from types import SimpleNamespace
 from urllib.parse import quote, urlparse
 
+import pytest
 from aiohttp.test_utils import TestClient, TestServer
 
 from .. import viewer as viewer_module
@@ -71,6 +72,58 @@ def test_precompiled_models_support_download_and_resume_without_exposing_other_f
       assert response.headers['Content-Range'] == 'bytes 4-9/10'
       assert (await client.get('/models/cinque-v2/private.txt')).status == 404
       assert (await client.get('/models/cinque-v2/missing.pkl')).status == 404
+  asyncio.run(run())
+
+
+def test_jetson_images_download_head_resume_and_file_allowlist(tmp_path):
+  async def run():
+    root = tmp_path / 'uploads/downloads/jetson/v0.2.0-preview'
+    root.mkdir(parents=True)
+    for name in ['carrot-jetson.img.zst', 'release.json', 'SHA256SUMS', 'setup.json', 'image.partial']:
+      (root / name).write_bytes(b'0123456789')
+    async with TestClient(TestServer(create_app(viewer_config(tmp_path), start_cleanup=False))) as client:
+      prefix = '/downloads/jetson/v0.2.0-preview/'
+      for name in ['carrot-jetson.img.zst', 'release.json', 'SHA256SUMS']:
+        response = await client.get(prefix + name)
+        assert response.status == 200 and await response.read() == b'0123456789'
+        assert response.headers['Content-Disposition'] == f'attachment; filename="{name}"'
+      head = await client.head(prefix + 'carrot-jetson.img.zst')
+      assert head.status == 200 and head.headers['Content-Length'] == '10'
+      partial = await client.get(prefix + 'carrot-jetson.img.zst', headers={'Range': 'bytes=4-'})
+      assert partial.status == 206 and await partial.read() == b'456789'
+      assert partial.headers['Content-Range'] == 'bytes 4-9/10'
+      for path in [prefix+'setup.json', prefix+'image.partial', prefix,
+                   '/downloads/jetson/not-a-version/carrot-jetson.img.zst',
+                   '/downloads/jetson/v9.0.0/carrot-jetson.img.zst',
+                   '/models/v0.2.0-preview/carrot-jetson.img.zst']:
+        assert (await client.get(path)).status == 404
+  asyncio.run(run())
+
+
+@pytest.mark.parametrize('component', ['downloads', 'jetson', 'v0.2.0-preview', 'carrot-jetson.img.zst'])
+def test_jetson_download_rejects_symlink_at_each_component(tmp_path, component):
+  async def run():
+    outside = tmp_path/'private'
+    outside.mkdir()
+    root = tmp_path/'uploads'
+    root.mkdir()
+    parts = ['downloads', 'jetson', 'v0.2.0-preview', 'carrot-jetson.img.zst']
+    index = parts.index(component)
+    parent = root.joinpath(*parts[:index])
+    parent.mkdir(parents=True, exist_ok=True)
+    target = outside/'target'
+    if index == 3:
+      target.write_bytes(b'private')
+    else:
+      secret = target.joinpath(*parts[index+1:])
+      secret.parent.mkdir(parents=True)
+      secret.write_bytes(b'private')
+    try:
+      (parent/component).symlink_to(target, target_is_directory=index != 3)
+    except OSError:
+      pytest.skip('Creating symlinks requires Windows permission')
+    async with TestClient(TestServer(create_app(viewer_config(tmp_path), start_cleanup=False))) as client:
+      assert (await client.get('/downloads/jetson/v0.2.0-preview/carrot-jetson.img.zst')).status == 404
   asyncio.run(run())
 
 
