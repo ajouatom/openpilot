@@ -239,3 +239,25 @@ status sample reached 402 ms map age (two samples above 300 ms, no stalled flag)
 The 1 Hz status sampling does not measure every displayed frame or end-to-end
 source latency. Host temperature was healthy at approximately 68 C. No transport
 budget or inference timing policy was changed during this diagnosis.
+
+At the owner's request, the P-gear trip-report override was temporarily disabled
+only inside the Jetson renderer process, using a `/run` service override with a
+180-second automatic restoration timer. Actual vehicle gear, Params, inference
+and committed release files were unchanged. After the display restart, excluding
+the first 20 seconds, 125.54 seconds contained 1,250 renderer updates and 814 new
+map frame presentations (approximately 9.96 and 6.48 Hz respectively). There were
+222 change intervals above 200 ms; 1 Hz diagnostic samples reached 1,004 ms map age
+and five exceeded 300 ms. The initial restart/reacquisition maximum of 9.94 seconds
+is excluded from the steady observation. This measures distinct frame selection
+inside the renderer, not optical panel timing or source-to-panel latency.
+
+During a simultaneous 120-second vehicle observation, all 2,400 model, odometry
+and each-camera messages were valid with no frame-ID gaps, CAN/pose invalidity
+or external-model inactivity. Model execution mean/max was 37.720/43.622 ms;
+temperature ranged 69.656-70.437 C, speed remained zero and control was disengaged.
+Forwarding stale count stayed at 86 during the later observed interval, with no
+abandoned events; the earlier increase was not timestamped and cannot be assigned
+to display startup or this steady interval. The original HUD service and P-gear
+behavior were explicitly restored and verified after testing. This reproduces
+uneven map updates with healthy inference while parked; the precise contributions
+of transport queueing, source cadence and decoder scheduling remain unresolved.
