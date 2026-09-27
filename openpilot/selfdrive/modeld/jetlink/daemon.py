@@ -24,6 +24,7 @@ log = logging.getLogger('carrot.jetlink')
 sys.path.insert(0, str(VENDOR.parents[1] / 'tools/jetlink'))
 from hud_protocol import Publisher, HUD_CAPABILITY, HUD_MESSAGE
 from hud_navi import CAPABILITY as NAVI_CAPABILITY, MESSAGE as NAVI_MESSAGE
+from hud_navi import send_ready_after_reply
 
 
 def update_affinity():
@@ -166,6 +167,10 @@ def _serve_local(listener, client, peer, publisher, phase):
                           (sent-started)*1000, (completed-sent)*1000, (time.monotonic()-completed)*1000)
           if not peer.get(NAVI_CAPABILITY):
             publish_hud(client, publisher)
+          else:
+            # modeld already has its reply. Drain only a bounded ready tail;
+            # never add these fragments before infer_end or delay its reply.
+            send_ready_after_reply(client, publisher)
       except (ConnectionError, BrokenPipeError, ValueError) as exc:
         log.info('local client ended: %s', exc)
     last_ping = time.monotonic()
