@@ -64,3 +64,5 @@ PowerShell은 UTF-8 BOM으로 배포하여 영문 Windows에서도 한글 소스
 - 실제 ZIP의 CMD·휴대용 Python을 한글/공백 경로에서 **작은 합성 이미지**로 실행하여
   시작 안내·준비 과정·한영 완료 안내를 확인했습니다. 이전 버전의 전체 원본 준비 시험과 구분합니다.
   실제 SD 기록·UAC 클릭·Jetson 첫 부팅은 이번 안내 개정에서도 수행하지 않았습니다.
+- NAS 전체 읽기 SHA256과 공개 HEAD·앞뒤 Range·메타데이터 검증을 마친 뒤
+  [v0.3.1 시험 릴리스](https://github.com/ajouatom/carrot-jetson/releases/tag/v0.3.1-windows-preview)를 게시했습니다.
