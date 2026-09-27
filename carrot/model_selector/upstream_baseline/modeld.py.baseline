@@ -13,6 +13,7 @@ from opendbc.car.car_helpers import get_demo_car_params
 from openpilot.common.swaglog import cloudlog
 from openpilot.common.runtime_diagnostics import RuntimeDiagnostics
 from openpilot.common.params import Params
+from openpilot.common.stopping_params import get_stopping_speed
 from openpilot.common.filter_simple import FirstOrderFilter
 from openpilot.common.realtime import config_realtime_process, DT_MDL
 from openpilot.common.transformations.camera import DEVICE_CAMERAS
@@ -316,6 +317,14 @@ def main(demo=False):
   small_model = ModelState(vipc_client_main.width, vipc_client_main.height, False) if model is None or USBGPU else None
   if model is None:
     model = small_model
+  # Keep the existing eGPU selection unchanged. A separate USB owner handles
+  # external computers and late server startup through the pinned Jetlink model.
+  if not USBGPU and os.path.isfile('/AGNOS'):
+    try:
+      from openpilot.selfdrive.modeld.jetlink.model import JoiningModel
+      model = JoiningModel(model, vipc_client_main.width, vipc_client_main.height)
+    except Exception:
+      cloudlog.exception('Jetlink camera adapter unavailable; retaining internal model')
   # Loading is not complete until the first model result is published. The
   # first eGPU execution can spend several seconds initializing queues/kernels
   # after the PKL has loaded; clearing this here causes a false commIssue while
@@ -327,7 +336,7 @@ def main(demo=False):
 
   # messaging
   pm = PubMaster(["modelV2", "drivingModelData", "cameraOdometry"])
-  sm = SubMaster(["deviceState", "carState", "roadCameraState", "liveCalibration", "driverMonitoringState", "carControl", "liveDelay", "carrotMan", "radarState"])
+  sm = SubMaster(["deviceState", "carState", "roadCameraState", "liveCalibration", "driverMonitoringState", "carControl", "selfdriveState", "liveDelay", "carrotMan", "radarState"])
 
   publish_state = PublishState()
   params = Params()
@@ -363,7 +372,7 @@ def main(demo=False):
   frame = 0
   custom_lat_delay = 0.0
   lat_smooth_seconds = LAT_SMOOTH_SECONDS
-  vEgoStopping = params.get_float("VEgoStopping") * 0.01
+  vEgoStopping = get_stopping_speed(params)
   camera_yaw_trim_deg = params.get_float("CameraYawTrimDeg") * 0.01
   lat_delay_dynamic = lat_smooth_seconds
   diagnostics = RuntimeDiagnostics('modeld', cloudlog.event)
@@ -374,7 +383,7 @@ def main(demo=False):
       custom_lat_delay = params.get_float("SteerActuatorDelay") * 0.01
       lat_smooth_seconds = params.get_float("LatSmoothSec") * 0.01
       long_delay = params.get_float("LongActuatorDelay")*0.01
-      vEgoStopping = params.get_float("VEgoStopping") * 0.01
+      vEgoStopping = get_stopping_speed(params)
       camera_yaw_trim_deg = params.get_float("CameraYawTrimDeg") * 0.01
       # eGPU power follows ignition on the vehicle. Keep UI state current when
       # the shared USB hub is connected or removed after modeld starts.
@@ -392,6 +401,8 @@ def main(demo=False):
 
     camera_ready = time.monotonic()
     sm.update(0)
+    if hasattr(model, 'update'):
+      model.update(sm, meta_main)
     desire = DH.desire
     is_rhd = sm["driverMonitoringState"].isRHD
     frame_id = sm["roadCameraState"].frameId
