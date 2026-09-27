@@ -145,6 +145,12 @@ def test_failed_profile_load_is_retried(tmp_path):
   assert len(calls) == 1
 
 
+@pytest.mark.parametrize('raw,expected', [(True, True), (False, False), (b'0', False),
+                                         (b'1', True), ('0', False), ('1', True), (None, None), ('', None)])
+def test_typed_and_legacy_road_state(raw, expected):
+  assert sender.road_state(raw) is expected
+
+
 def test_stale_sender_buffer_is_never_forwarded(monkeypatch):
   from types import SimpleNamespace
   class Socket:
