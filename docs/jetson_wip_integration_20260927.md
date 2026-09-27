@@ -1,7 +1,7 @@
 # Jetson 기능의 carrot-wip 통합 — 2026-09-27
 
 사용자 요청에 따라 `carrot-jetlink`의 전체 이력(끝 커밋 `b9950442ca`)을
-최신 `carrot-wip`(`c55e1e8346` 기준)에 병합합니다. 파일 일부만 복사한 통합이 아닙니다.
+최신 `carrot-wip`(`c55e1e8346` 기준)에 병합했습니다. 병합 커밋은 `af9fdea29b`입니다. 파일 일부만 복사한 통합이 아닙니다.
 이제 콤마의 배포·유지보수 기준은 `carrot-wip`이며, 기존 Jetson 전용 저장소
 [`ajouatom/carrot-jetson`](https://github.com/ajouatom/carrot-jetson)은 그대로 유지합니다.
 
@@ -63,8 +63,25 @@ Windows 통합 작업본에서 다음을 확인했습니다.
   내부/DM 모델 파일과 선택·OS 요구 버전 파일은 이 통합으로 바뀌지 않습니다.
 - 핫픽스 Python 소스는 Windows에서도 LF 줄바꿈을 유지하여 원본 해시·패키지 재현성을 보존합니다.
 
-Linux 전용 시험은 `Jetson integration checks`, NAS 공유 코드의 회귀·배포는 `Carrot Routes image`로 확인합니다.
-배포 완료 결과는 후속 검증 기록에 남깁니다.
+### Linux와 공개 배포 확인
+
+- [전체 openpilot 빌드 및 통합 검사](https://github.com/ajouatom/openpilot/actions/runs/36311993748):
+  병합 커밋 `af9fdea29b`의 SCons 빌드, 카메라 SOF·노출 검사, 모델·DM·관련 회귀 **629개** 모두 성공.
+  Windows에서 수집하지 못했던 DM 아티팩트 검사도 이 Linux 실행에 포함됩니다.
+- [Jetson 통합 CI](https://github.com/ajouatom/openpilot/actions/runs/36312101784): **158 + 119 = 277개 통과**.
+  첫 실행에서 빠진 렌더러·비동기 시험 의존성을 추가한 뒤 전체 성공했습니다. 차량 실행 코드를 바꾼 수정은 아닙니다.
+- [Jetson 저장소 CI](https://github.com/ajouatom/carrot-jetson/actions/runs/36312044436): 한글 안내 커밋 `2c07bcd` 성공.
+- [NAS 이미지 CI](https://github.com/ajouatom/openpilot/actions/runs/36311993753): **291 + 33 + 254 + 881 = 1,459개 통과**.
+- NAS 예약 업데이트가 `af9fdea29b32c8a1b5f6ce90e399f80142dd46cd`를 배포했습니다.
+  공개 서비스의 `sourceCommit`, 실제 업로드 결과 페이지, 재계산 레이더 **1,196프레임**을 직접 확인했습니다.
+  코드 지문은 `7d1a58c4bdcf7ab2041f`, 재계산 해시는
+  `c3b2d2a21a4d2c1112a3c5e93815676fbaf74cb4bd4212f4c7373255cc9d2a41`로 배포 전 검사와 일치했습니다.
+  후속 CI·문서 커밋은 NAS 실행 코드에 영향을 주지 않습니다.
+- 공개 SD 다운로드의 크기·앞/뒤 Range 응답·메타데이터와 NAS 원본 일치를 확인했습니다.
+  이미지와 핫픽스 ZIP은 재생성하지 않았고 기존 배포 해시를 유지합니다.
+- 공개 릴리스 4개의 제목·본문을 한글화했고, 기본 이미지 릴리스의 첨부 설치 안내가 저장소 최신본과 일치합니다.
+  실행 파일·서명 manifest·모델 핀은 안내 번역으로 바꾸지 않았습니다.
+
 기존 `carrot-jetlink`의 C4 정차 시험과 통합된 `carrot-wip`의 실물·주행 시험은 별개입니다.
 PC 오프라인 핫픽스 카드 첫 부팅, 다른 실물 콤마로 이동, C3와 주행 조건은 아직 통합 검증 완료로 간주하지 않습니다.
 기존 이미지/USB-C 정책 시험은 [Jetson 업데이트 조사 기록](jetlink_updates.md)에 있습니다.
