@@ -351,3 +351,51 @@ OEM ESC_02(0xE5)는 이 10개 원본의 선택한 CAN 추출에서 검출되지 
 패들 제어의 실시예이므로 SCC StopReq의 통신 규격으로 적용하지 않는다.
 이번 검색 범위에서 ESC_DclEnblReq와 StopReq의 정확한 수락식, aReq 우선순위,
 현재 CANFD ECU의 진단/제어 사양서는 확인하지 못했다. 제어 코드는 변경하지 않았다.
+
+### 2026-09-27: 정지 판단 속도 하한과 Ioniq 5 후진
+
+`HYUNDAI_IONIQ_5 a9c69015488bd517 / 0000044e--029303fb58--81`의 전체
+rlog를 재검사했다. 업로드 표시 커밋 `7e1a8031`과 달리 initData/card 로그는
+`1ab3448148`, carrot-wip, dirty=false다. 시간은 세그먼트 첫 CAN 기준이다.
+
+- 시작 Params는 VEgoStopping=2(0.02m/s), LongActuatorDelay=25,
+  StoppingAccel=-50. 계획의 0.30초/1.30초 속도가 모두 0.02m/s 미만인지
+  재계산한 결과 **1,199개 shouldStop이 모두 일치**했다.
+- 순정 bus2 StopReq=1은 **30.840808초**, 우리 TX echo(bus128)는
+  **48.417513초**다. bus2는 병행 계산된 순정 출력이며 순정 단독 제어 결과가 아니다.
+- 32.379361초부터 앞바퀴 backward가 보인다. 양쪽 앞바퀴가 모두 backward인
+  구간은 32.459–34.817, 36.699–38.367, 39.949–41.418, 42.900–44.300,
+  45.677–46.749초로 다섯 차례다. 앞뒤 방향이 반복되며 양쪽 후진 구간의
+  앞바퀴 평균 속도 최고치는 약 0.438km/h다. OEM DBC의 backward=2를 재확인했다.
+- 이 구간은 longActive/ACCMode=1, CAN valid, D단이며 페달·parkingBrake·
+  brakeHold 개입이 없다. shouldStop=false, LongControl=pid이므로
+  StoppingAccel 목표 램프와 정지 재시도 모두 아직 시작되지 않았다.
+  33.3초의 계획 0.30초 속도는 0.0200275m/s로 문턱보다 미세하게 높다.
+  일반 PID의 aReq는 0 부근을 오가며 소폭 양수도 나온다.
+- shouldStop=1은 **48.360602초**, stopping 진입은 **48.368004초**,
+  StopReq=1은 **48.417513초**, ESC AVH=1은 **48.769145초**다.
+  마지막 shouldStop 전환 직전/직후 계획 0.30초 속도는 0.02009/0.01952m/s다.
+- ESC_DclEnblReq는 32.177612초에 0, 48.448806초에 1,
+  AVH=1과 같은 48.769145초에 다시 0이다. ESC_StdStillVal은 29.7128초부터 1이어서
+  이 신호만으로 무동작이나 정지 유지 성공을 단정하면 안 된다.
+
+막힌 단계는 shouldStop이다. aEgo > StoppingAccel 검사나 CAN 송신 차단 때문이
+아니며, 정지 요청 이전의 움직임을 현재 재시도가 감시하지는 않는다.
+동일 기록 궤적에 임계값 0.10m/s를 대입하면 첫 shouldStop은 32.003008초다.
+이는 고정 궤적 조건 비교이며 설정 변경 후 차량 정지를 입증하는 폐루프 시험은 아니다.
+
+사용자 요청에 따라 VEgoStopping 설정을 유지하면서 최저값을 **10(0.10m/s)**으로
+올렸다. manager 시작 시 낮은 저장값을 보정하고, planner는 매번 하한을 적용하며
+주행 중 낮은 값이 다시 저장되면 비동기로 보정한다. 기본값 50, 상한 100, 단위 5와
+정상 범위 기존 값은 유지한다. 잘못된 비수치/무한 값은 기본값 50으로 복구한다.
+StoppingAccel 및 retry 상태기계는 변경하지 않았다. 차량별 밀림 해결은 아직 검증하지 않았다.
+
+앞서 받은 `HYUNDAI_IONIQ_5_PE 07b62e389ed26c81 / 00000fcc--1b43f2c870--16`은
+실제 `1a650ab00d`, carrot-jetlink, dirty=false로 업로드 표시 e1237698와 다르다.
+VEgoStopping=5, StoppingAccel=-50이고 1,200개 shouldStop 계산이 일치했다.
+shouldStop=1은 42.190595초, StopReq=1은 42.230019초, AVH=1은 44.641696초다.
+이 세그먼트의 앞바퀴 방향에는 backward가 없으므로 보고된 뒤로 밀림을 확인하지
+못했다. 인접 구간이나 바퀴 센서 검출보다 작은 움직임까지 부정하는 것은 아니다.
+
+원본 로그·스크립트·검증 결과는 로컬 비공개
+`.analysis/archive/2026-09-27/stop-logs/`에 보관한다.

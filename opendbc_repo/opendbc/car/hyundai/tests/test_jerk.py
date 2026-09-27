@@ -269,7 +269,7 @@ def test_canfd_cruise_unavailable_blocks_soft_hold_acc_control(camera_scc):
 def test_canfd_tcs_braking_signals_remain_blocked_during_auto_hold(brake_hold_active):
   class FakePacker:
     @staticmethod
-    def make_can_msg(name, bus, values):
+    def make_can_msg(name, bus, values, *, rx_counter=None):
       return name, bus, values.copy()
 
   CAN = SimpleNamespace(CAM=2)
