@@ -412,3 +412,28 @@ appended. PC and NAS BUILD-STATUS records now report full USB readback success
 while retaining `physical_boot_verified=false`. The new medium still requires
 insertion and first boot in the Jetson; the existing-host tests do not establish
 that result or compatibility with a second physical comma.
+
+### New-media C-to-C follow-up
+
+After the owner confirmed booting the new 128 GB medium, C4 logs at 17:40
+showed a Jetlink handshake, warmup and active inference, followed by USB
+detachment. The connector used for that successful interval was not established.
+Subsequent direct C-to-C reconnection showed `Powered cable w/ sink` on C4,
+`0955:7020 NVIDIA L4T` on its USB host bus, and no attached gadget UDC.
+Thus the current link has reversed roles, before Jetlink model loading; it is
+not demonstrated to be a model/image payload failure or a defective cable.
+The new Jetson responds to SSH at its previous address with a newly generated
+host key; no management key is installed in the generic image, so authenticated
+Jetson-side diagnostics are unavailable. No role registers were modified.
+
+NVIDIA's developer-kit hardware guide documents USB-C host support. A role
+fix requires checking the installed FUSB301 driver's semantics and a controlled
+SuperSpeed/inference trial before inclusion. The current first-boot setup reads
+SSH keys and optional Wi-Fi; it does not execute arbitrary hotfix files. Offline
+media patching is feasible, but no C-to-C hotfix has been validated or delivered.
+
+The optional-host badge no longer labels a fresh `waiting` link as ERROR when
+the current model report is inactive with no error. The web diagnostic retains
+`Host not connected`; real inference errors, active-model link loss, stale state,
+retry failures and thermal faults remain visible. Control disengagement/fallback
+logic is untouched. Fourteen focused status/health tests passed.
