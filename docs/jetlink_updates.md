@@ -71,6 +71,10 @@ available through the model-file endpoint (the image suffix is not allowed).
 `install_updates.py` installs a stable bootstrap under `/opt/carrot-jetlink/updater`.
 The timer checks every 15 minutes, starting after 2 minutes. Automatic staging
 requires a fresh forwarded `IsOnroad=0`; missing telemetry does not authorize it.
+P gear alone is not this condition. C4/Jetson power and networking must remain
+available long enough for an offroad timer check and download; installations
+that cut Jetson power immediately at ignition-off need a powered offroad window
+or explicit parked administrator staging.
 Downloads and hashes run at low CPU/I/O priority and never switch active code.
 Network failures leave the active release untouched and retry on the next timer.
 An administrator may explicitly stage while parked:
@@ -115,8 +119,8 @@ The immutable host package is `e12376982fd0a522ea27bdd2a38966cd36e74f65`,
 The pinned model remains Cinque v2; this release does not select Cinque v3.
 The NAS `jetlink-host-stable/manifest.json` channel serves this signed package;
 an independent HTTPS readback matched the immutable manifest and passed signature
-verification. This makes routine update discovery available, but is not evidence
-of the still-pending exact-release reboot or new-medium validation below. The
+verification. This makes routine update discovery available; actual activation
+and new-medium validation are recorded separately below. The
 initial-install image has not been promoted to a public download endpoint.
 
 The initial health/status/updater/image suite passed 44 tests on the Jetson;
@@ -155,10 +159,60 @@ files to the working host, including Xorg setup, the writable HUD log directory
 and the utmp delay override. Compression finished on the host, but its final
 hash/transfer and the new-media write were still pending when the vehicle's
 network disconnected. Partial PC captures must not be flashed or distributed.
-The final isolated timing run, exact-release reboot check, complete PC image
-verification and USB readback remain separate outstanding checks. Do not infer
-their completion from the successful source tests or offline image audit.
+At that point the final isolated timing run, exact-release reboot check, complete
+PC image verification and USB readback were outstanding. Subsequent completion
+must be established by their own evidence, not inferred from the source tests.
+
+### Completion after vehicle reconnection
+
+On reconnection the Jetson was running `e1237698`. Its durable updater status
+was `applied`, with no pending manifest or unfinished transaction. Both inference
+and HUD had zero restarts in the current boot and systemd reported no failed
+units. The normal startup had already applied the candidate; no additional
+reboot was needed. A request to the default stable update URL passed on the
+actual host and correctly kept the already-current version.
+
+With image downloading still active, a non-conflated 180-second observation
+recorded one missing model frame, one invalid cameraOdometry message and six
+invalid pose-input samples. One health sample showed the external model inactive.
+Mean/max model execution was 38.412/79.493 ms. These are retained as adverse
+observations; attribution to the download is not established by this single pair.
+
+After image construction and vehicle transfer both ended, a separate 180-second
+parked observation recorded 3,600 model/odometry frames and 3,600 frames from
+each camera, with no frame-ID gaps, model/odometry/CAN/pose invalidity or external
+model inactivity. All 180 health samples were fresh and OK. Model execution
+mean/max was 37.736/47.142 ms, with no execution above 50 ms; temperature was
+69.437-70.375 C. Road/wide SOF maxima were 57.761/57.818 ms and model publication
+maximum was 67.606 ms: this does **not** establish a hard 50 ms publication
+deadline. Both observations recorded zero speed and disengagement; gear was P
+when checked before testing. Driving is unvalidated.
+
+The exact image was downloaded, decompressed and fully hash-verified on the PC.
+The NAS candidate copy was independently read back and hash-verified.
+
+| Artifact | Bytes | SHA-256 |
+| --- | ---: | --- |
+| `carrot-jetson.img` | 25,769,803,776 | `c395607c51a4ba8eb4a6d7da729eac76bede7811b8105dc2df45e84677ed2606` |
+| `carrot-jetson.img.zst` | 8,249,732,184 | `9ff00027cb51d947eb8c2085db5dbc22f2af1104c4fe96358fc4b5b5286d3e71` |
+
+After preserving build logs and confirming no image loop mount or helper remained,
+the generated image workspace was removed from the Jetson. Its installed runtime,
+model cache, identity and rollback releases were retained; root usage returned
+to 18 GiB with about 99 GiB available. Final C4 telemetry still reported fresh,
+active Jetson inference with no error. NAS images contain no personal setup;
+the owner's installation medium is provisioned separately and is not a master
+to clone for distribution.
 
 New-media first boot remains a separate physical test. Updating and rebooting
 the existing vehicle SD does not validate first provisioning, partition growth,
 or the display on the newly written installation medium.
+
+The owner's selected 128 GB installation medium was subsequently written and
+all 25,769,803,776 bytes were read back with the exact original SHA-256 above.
+No GPT/FAT exception or partial comparison was needed. The 64 MiB CARROTSETUP
+partition and its `IMAGE.json` source commit were checked, and the separately
+written personal provisioning file passed a byte-hash readback. Personal setup
+is exclusive to this owner's medium and is excluded from the NAS master image.
+This completes media preparation, not the new-media physical boot test or a
+connection test with another C4.
