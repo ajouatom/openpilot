@@ -2,6 +2,7 @@ import pytest
 
 from openpilot.common.realtime import DT_DMON
 from openpilot.selfdrive.monitoring.dm2 import DriverMonitoring2
+from openpilot.selfdrive.monitoring.dm2_context import ObjectObservation, TrafficContext
 from openpilot.selfdrive.monitoring.policy import DriverMonitoring, AlertLevel
 from openpilot.selfdrive.monitoring.test_monitoring import make_msg
 
@@ -164,16 +165,57 @@ def test_camera_input_starts_full_grace_then_camera_clock(clear, allowance):
   assert dm.alert_level == AlertLevel.one
 
 
-def test_grace_shrinks_on_traffic_without_restarting_and_new_click_renews_it():
+def test_traffic_cancels_camera_grace_and_inputs_cannot_restore_it_during_hold():
   dm = DriverMonitoring2(experimental=True)
   camera(dm, DT_DMON, clear=True, response=True)
   camera(dm, 50, clear=True)
   assert dm.interaction_grace_remaining == pytest.approx(40)
   camera(dm, DT_DMON, strict=True)
   assert dm.interaction_grace_remaining == 0
-  assert dm.vision_factor == 2 and dm.awareness < 1
+  assert dm.vision_factor == 1 and dm.awareness < 1
   camera(dm, DT_DMON, response=True, strict=True)
+  assert dm.interaction_grace_remaining == 0 and dm.awareness < 1
+  camera(dm, DT_DMON)
+  assert dm.interaction_grace_remaining == 0
+  camera(dm, DT_DMON, response=True)
   assert dm.interaction_grace_remaining == 45 and dm.awareness == 1
+
+
+def test_first_traffic_only_uses_stock_for_twenty_seconds_then_returns_to_experimental():
+  dm, traffic = DriverMonitoring2(experimental=True), TrafficContext()
+  traffic.update(0, [], True, True, True)
+  assert traffic.update(10, [], True, True, True) == (False, True)
+  dm.configure_context(10, True, clear=True)
+  dm.record_interaction(10)
+  assert dm.vision_factor == 4 and dm.interaction_grace_remaining == 90
+  for i in range(601):
+    now = 11 + i / 20
+    objects = [ObjectObservation(30, 0, 20, 0)]
+    if i >= 100:
+      objects.append(ObjectObservation(60, 3, 20, 0))
+    strict, clear = traffic.update(now, objects, True, True, True)
+    dm.configure_context(now, True, strict, clear)
+    dm._update_states(make_msg(True), [0, 0, 0], 20, True, False)
+    dm._update_events(False, True, False, False)
+    assert dm.experimental  # Never overwrite the saved/requested mode.
+    assert dm.vision_factor == (1 if strict else 2)
+    assert dm.alert_level == AlertLevel.none  # Mere presence is not distraction.
+    if now >= 11.3:
+      assert dm.interaction_grace_remaining == 0
+  assert not strict and dm.experimental_active and not clear
+  assert traffic.strict_until <= 31.25
+
+
+def test_strict_camera_restores_pose_and_phone_criteria():
+  dm = DriverMonitoring2(experimental=True)
+  dm.configure_context(1, True, strict=True)
+  dm.pose.yaw = dm.settings._YAW_NATURAL_OFFSET + .44
+  dm.pose.pitch = dm.settings._PITCH_NATURAL_OFFSET
+  dm.phone_prob = .75
+  dm._get_distracted_types()
+  assert not dm.relax_pose and dm.distracted_types['pose'] and dm.distracted_types['phone']
+  assert dm._timeouts('VISION') == (5, 8, 13)
+  assert dm._timeouts('WHEELTOUCH') == (5, 15, 25)
 
 
 def test_stale_duplicate_or_future_input_cannot_restart_grace():
@@ -279,12 +321,13 @@ def test_mode_zero_camera_recovery_restores_stock_wheel_timing():
   assert dm._timeouts('VISION') == (5, 8, 13)
 
 
-def test_mode_zero_camera_matches_stock_including_face_loss_and_inputs():
-  standard, dm = DriverMonitoring(), DriverMonitoring2()
+@pytest.mark.parametrize('experimental', [False, True])
+def test_standard_camera_matches_stock_including_face_loss_and_inputs(experimental):
+  standard, dm = DriverMonitoring(), DriverMonitoring2(experimental=experimental)
   sequence = ([make_msg(True)] * 30 + [make_msg(True, distracted=True)] * 80 +
               [make_msg(True)] * 70 + [make_msg(False)] * 40 + [make_msg(True)] * 60)
   for i, sample in enumerate(sequence):
-    dm.configure_context(i * DT_DMON, True, strict=i % 2 == 0, clear=True)
+    dm.configure_context(i * DT_DMON, True, strict=experimental or i % 2 == 0, clear=True)
     dm.record_interaction(i * DT_DMON)  # added BT/buttons must not affect mode 0
     for policy in (standard, dm):
       policy._set_pose_strictness(.2, 20)

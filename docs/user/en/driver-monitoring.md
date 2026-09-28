@@ -16,11 +16,13 @@
 
 Times start from full attention and assume uninterrupted distraction or no response. Do not add the three numbers together. Stock low-speed exemptions below approximately 10 km/h, detection filtering and previous attention debt affect actual warning times. Terminal alerts and lockout are excluded from the resets described below.
 
+Experimental timing and interaction grace below apply outside the 20-second standard hold triggered by traffic appearance.
+
 ## When camera monitoring is available
 
 Mode 0 retains comma face, head-pose, eye-closure, sleep and phone detection, input handling and warnings. Normal forward attention recovers monitoring, so lack of interaction alone does not cause periodic vision warnings. Added vehicle/BT buttons do not reset this mode.
 
-Mode 1 uses twice the stock camera warning times, or four times with empty-road conditions, and widens head-pose tolerance by 20%. Eye-closure, sleep and phone detection probability thresholds remain unchanged, but their warning times are also extended. Additional head-pose tolerance is not applied during orange or terminal alerts.
+Mode 1 uses twice the stock camera warning times, or four times with empty-road conditions, and widens head-pose tolerance by 20%. Eye-closure and sleep detection probability thresholds remain unchanged; the phone threshold is relaxed to 0.98. Warning times for these detections are also extended. Additional head-pose tolerance is not applied during orange or terminal alerts.
 
 Fresh eligible driver or BT input resets monitoring before the terminal stage, including orange alerts. It then **defers camera warnings for 45 seconds, or 90 seconds with empty-road conditions**. The camera warning clock starts after this grace expires. If distraction persists immediately after input and conditions stay constant, the first warning can occur around 45+10=55 seconds later, or 90+20=110 seconds on an empty road. Terminal timing can likewise extend to approximately 71 or 142 seconds.
 
@@ -45,9 +47,11 @@ The additional doubling requires enabled, supported Hyundai/Kia corner radar, he
 
 Moving observations must be within -10 to 150 m longitudinally and 6 m on either side of the path, with **absolute ground speed at least 2 m/s (about 7.2 km/h)**. Equal-speed lead traffic counts; stationary and slow observations are excluded. This does not prove that stopped vehicles or blind spots are absent. Even a single candidate immediately revokes the empty-road bonus; approximately 0.2 seconds of continuous confirmation starts the 20-second hold. This is not complete radar-noise rejection.
 
-New confirmed moving traffic **removes the additional doubling for 20 seconds**. Unavailable-camera mode 1 returns to 15/30/45 seconds; camera mode 1 returns to 10/16/26 with at most 45-second interaction grace. Continuous observation of the same vehicle does not restart the hold, but its presence still prevents the empty-road condition.
+Only the transition from **no moving traffic to approximately 0.2 seconds of confirmed moving traffic starts 20 seconds of standard monitoring**. A healthy camera uses stock 5/8/13-second timing, detection and input handling; an unavailable camera uses 15/30/45-second interaction monitoring. Traffic presence alone does not force a warning while forward attention is normal.
 
-Elapsed time is retained. If traffic appears 50 seconds into a 90-second grace, the new 45-second allowance has expired, so grace ends and camera warning timing starts. An expired grace does not restart merely because the road clears again. Budget expansion alone cannot erase existing orange or terminal warnings.
+Neither continued observation nor additional vehicles extend the hold. Experimental monitoring resumes after 20 seconds, but remaining traffic still prevents the empty-road bonus. All observations must disappear beyond the two-second retention of the last observation before a later moving appearance starts another hold.
+
+Entry ends previous camera interaction grace and the forward-attention streak; BT, button and touch events cannot start experimental grace during the hold. Accumulated monitoring time, warnings and lockout remain; expiry cannot restore old grace or erase orange/terminal alerts. Invalid radar/road context uses standard criteria until healthy information returns.
 
 ## Eligible interactions
 

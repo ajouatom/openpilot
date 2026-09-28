@@ -1,5 +1,14 @@
 # Repository memory
 
+- On 2026-09-29, the user clarified that DM's 20-second standard hold starts
+  only when surrounding moving traffic appears after an absence. Additional
+  vehicles during occupancy do not extend it. Camera monitoring during the hold
+  uses stock timing/detection/inputs, expires prior grace and suspends experimental
+  resets; camera-unavailable timing stays 15/30/45. Then experimental criteria
+  resume, but occupied surroundings cannot earn the empty-road bonus. Retain
+  accumulated warnings/lockout and the two-second observation dropout retention.
+  No forced warning for attentive drivers. See docs/dm_traffic_hold_20260929.md.
+
 - On 2026-09-29, the user approved the C4 DM inset immediately right of D:
   84x84 at (382,144), leaving 10px before the right strip. VISION moves above it;
   confidence-dot travel returns to full height. C3 placement is unchanged.

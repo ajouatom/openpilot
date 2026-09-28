@@ -21,7 +21,22 @@ def test_new_vehicle_strict_window_is_not_occupancy_timer():
     assert strict == (.2 <= now < 20.2)
     assert not clear
   confirm(ctx, 30.05, [obj(), obj(60, 3)])
-  assert ctx.strict_until == pytest.approx(50.3, abs=.051)
+  assert ctx.strict_until == pytest.approx(20.2)
+
+
+def test_new_vehicles_during_hold_do_not_extend_it_and_all_must_leave_to_rearm():
+  ctx = TrafficContext()
+  confirm(ctx)
+  confirm(ctx, 1, [obj(), obj(60, 3)])
+  assert ctx.strict_until == pytest.approx(20.2)
+  for i in range(41):
+    # Original car leaves, but the adjacent vehicle stays: still occupied.
+    ctx.update(2 + i / 20, [obj(60, 3)], True, True, True)
+  confirm(ctx, 4.1, [obj(60, 3), obj(90, -3)])
+  assert ctx.strict_until == pytest.approx(20.2)
+  ctx.update(7, [], True, True, True)
+  confirm(ctx, 8)
+  assert 28.2 <= ctx.strict_until <= 28.25  # Confirmation is sampled at 20 Hz.
 
 
 def test_dropout_lane_change_and_duplicate_do_not_restart_timer():
