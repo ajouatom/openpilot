@@ -359,7 +359,7 @@ msgstr "속도를 mph 대신 km/h로 표시합니다."
 
 #: openpilot/selfdrive/selfdrived/events.py
 msgid "Distraction Level Too High"
-msgstr "방해 수준이 너무높습니다"
+msgstr "운전자 주의 부족으로 사용 제한"
 
 #: openpilot/selfdrive/selfdrived/events.py
 msgid "Donate logs to Twilsonco to get it added!"
