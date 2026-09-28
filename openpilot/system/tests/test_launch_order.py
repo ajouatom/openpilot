@@ -49,6 +49,7 @@ mkdir -p scripts
 printf 'exit 0\n' > scripts/ensure_params_build.sh
 exec 9>boot.lock
 export CARROT_BOOT_LOCK_FD=9
+run_startup_command() { "$@"; }
 start_carrot_web() {
   command bash -c 'printf "web=%s\n" "${CARROT_WEB_EXTERNAL-unset}"'
   if { true >&9; } 2>/dev/null; then
@@ -76,11 +77,11 @@ def test_recovery_and_agnos_precede_params_build() -> None:
   ssh_access = launch.index("/data/params/d/SshEnabled")
   recovery = launch.index("  start_carrot_recovery", ssh_access)
   agnos_update = launch.index("    if ! agnos_init; then")
-  dependencies = launch.index("  if ! bootstrap_runtime_dependencies; then")
+  dependencies = launch.index("  if ! run_startup_command bootstrap_runtime_dependencies; then")
   params_build = launch.index('bash "$DIR/scripts/ensure_params_build.sh"')
   web = launch.index("  start_carrot_web")
-  build = launch.index("    if ! ./build.py; then")
-  manager = launch.index("  start_manager")
+  build = launch.index("    if ! run_startup_command ./build.py; then")
+  manager = launch.index("  if ! run_startup_command start_manager; then")
 
   assert pythonpath < ssh_access < recovery < agnos_update < dependencies < params_build < web < build < manager
 

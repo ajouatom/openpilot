@@ -1,0 +1,76 @@
+# Startup update recovery — 2026-09-28
+
+The user requested a visible Git pull/reboot action after a failed build or
+manager startup, then authorized automatic polling until connectivity and a fix
+are available. The launcher now routes failed runtime dependency preparation,
+Params builds, SCons/model builds, Params compatibility checks and manager startup
+to one recovery screen. Each command's output is retained in
+`/tmp/carrot_startup_failure.log` (bounded to 64 KiB); the original exit status
+survives the output-capture pipeline. Build spinners close even on exceptions.
+
+The recovery screen shows Korean first, English underneath, the recovery address
+on port 6999, a short error excerpt and a large **Git pull 후 재부팅 / Git pull &
+reboot** action. It uses Raylib and selected TTF glyphs without importing Params,
+cereal, the normal application framework or vehicle models. C3/C3X and C4 use
+their respective display dimensions. The display is awakened when available.
+
+The first automatic check begins after five seconds. Completed failures and
+no-change results retry after thirty seconds; an in-progress network operation
+has its own bounded timeout. The updater fetches the current branch's configured
+upstream and fast-forwards to the verified commit under the shared repository
+lock. It never selects a new branch or hard-resets local files. Network failure,
+local modifications, divergence, a busy lock or failed update leaves recovery
+active without rebooting. Restoring connectivity permits the next attempt.
+
+Automatic reboot requires a newly applied commit, preventing a loop on the same
+broken revision. A failed reboot request after an update can be retried while
+the recovery UI remains running. The manual button can explicitly reboot after a
+successful up-to-date check. Only one worker runs at a time; the UI stays responsive
+during Git operations. A new commit is not evidence that the next build will pass:
+if that revision fails too, recovery waits for another revision.
+
+The failed startup has ended before the launcher's inherited build lock is
+released. Normal driving services are not started from the recovery path.
+Manager/build handlers defer to the launcher, so import failures also reach it.
+For standalone invocations, TextWindow now uses the current Python interpreter
+and stops waiting when its child exits with any code. This fixes a dead-child
+wait; it does not prove the cause of the user's logo-only display.
+
+If the recovery display itself fails, a standard-library-only update attempt
+runs before waiting thirty seconds and retrying the display. Existing web
+recovery stays available. A broken Python interpreter, Git installation, display
+driver or OS can still prevent parts of recovery; this is not an OS installer or
+an automatic Wi-Fi credentials setup screen. The AGNOS updater keeps its existing
+separate verification, network retry and installation policy.
+
+Validation uses temporary local Git remotes for successful updates, unchanged
+revisions, network loss/restoration, divergence, dirty files, repository locks,
+reboot failure and repeated taps. Shell checks cover preserved failure status and
+boot ordering. Hidden desktop renders verify Korean/English layouts at 536x240
+and 2160x1080. These do not validate physical C3/C4 touch, DRM/display takeover,
+actual device reboot or a complete on-device startup failure/recovery cycle.
+
+This change adds no setting. Existing installed devices need this launcher/UI
+revision installed once before they can use the new automatic recovery path.
+
+The subsequent user-supplied log completed SCons successfully and started the
+manager, but `dm2d` crashed because its SubMaster call supplied both `poll` and
+`frequency`. Commit `fd37eb15d0` removes the latter, matching stock DM in the
+locally available comma/master `a86351c3ef`. The 50 ms update timeout and 20 Hz
+Ratekeeper remain, allowing absent-camera fallback to continue. Enforcing the
+actual constructor constraint in the simulated dispatcher reproduced ten
+failures before the fix; all 107 adapted policy/parser/dispatcher tests passed
+afterwards. These adapters do not exercise native IPC or a vehicle boot.
+A child-process crash while the manager remains running does not enter the
+startup recovery path and must not cause automatic Git/reboot during driving.
+
+The same log's camera opcode 266 is `CAM_SENSOR_PROBE_CMD`. Both stock and this
+branch try alternate sensor models during discovery, so errno 19 at that point
+alone does not establish a failed camera stream. The excerpt ends before it can
+establish camera health; no camera fix or on-device recovery is claimed.
+
+Startup recovery validation passed 46 focused recovery, launcher, bootstrap UI,
+spinner and model-build-cache tests. The initial broader run lacked SCons on the
+Windows host; installing SCons only in the disposable test dependency directory
+allowed that test to pass. Lint found no new diagnostics; five existing build.py
+diagnostics are outside these changes.

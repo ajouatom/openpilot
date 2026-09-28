@@ -1,5 +1,15 @@
 # Repository memory
 
+- On 2026-09-28, the user authorized automatic Git update/reboot after failed
+  builds or manager startup, waiting through network loss. The launcher owns a
+  standalone recovery display and releases its build lock before recovery Git.
+  Retry after 30 seconds; automatic reboot requires a newly applied commit, so
+  the same broken revision cannot reboot-loop. Keep the manual Git pull/reboot
+  button, current branch/upstream, dirty-file protection and shared repo lock.
+  No hard reset, normal onroad update action or AGNOS-policy change is implied.
+  Graphics failure has a stdlib-only update fallback. Desktop tests/renders do
+  not validate physical C3/C4 touch or device reboot. See docs/startup_recovery.md.
+
 - On 2026-09-28, the user requested original Ioniq 5 PE wheel touch in DM,
   explicitly preserving existing ADAS transmission. ECAN 0x2AF raw bytes now
   feed separate CarState.steeringTouch; torque-based steeringPressed and TX
