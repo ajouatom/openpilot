@@ -46,7 +46,10 @@ def camera_sample_usable(sm, rhd, demo=False):
 
 def run_dm2(params, experimental):
   services = ['carState', 'selfdriveState', 'modelV2', 'radarState', 'liveCalibration', 'carParams', 'driverStateV2']
-  sm = messaging.SubMaster(services, poll='driverStateV2', frequency=int(1 / DT_DMON))
+  # Like stock DM, use the polled service's frequency (20 Hz). SubMaster
+  # forbids specifying both poll and frequency. The bounded update timeout
+  # below still lets the interaction fallback run when the camera is absent.
+  sm = messaging.SubMaster(services, poll='driverStateV2')
   pm = messaging.PubMaster(['driverMonitoringState'])
   # carState is 100 Hz; conflating it to 20 Hz can lose a complete button press.
   input_sock = messaging.sub_sock('carState', conflate=False)

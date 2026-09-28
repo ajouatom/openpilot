@@ -5,6 +5,15 @@ from openpilot.selfdrive.monitoring import dm2d
 from openpilot.selfdrive.monitoring.test_monitoring import make_msg
 
 
+def checked_submaster(state):
+  def create(services, *, poll=None, frequency=None):
+    # Preserve the real IPC API contract even in the simulated daemon loop.
+    assert frequency is None or poll is None
+    assert poll == 'driverStateV2' and poll in services
+    return state
+  return create
+
+
 @pytest.mark.parametrize('experimental', [False, True])
 @pytest.mark.parametrize('touch_signal', ['none', 'held', 'stale'])
 def test_missing_or_failed_camera_still_publishes_valid_interaction_monitoring(monkeypatch, experimental, touch_signal):
@@ -50,7 +59,7 @@ def test_missing_or_failed_camera_still_publishes_valid_interaction_monitoring(m
       assert service == 'driverMonitoringState'
       packets.append(packet.to_dict())
 
-  monkeypatch.setattr(dm2d.messaging, 'SubMaster', lambda *a, **kw: state, raising=False)
+  monkeypatch.setattr(dm2d.messaging, 'SubMaster', checked_submaster(state), raising=False)
   monkeypatch.setattr(dm2d.messaging, 'PubMaster', lambda *a: Publisher(), raising=False)
   monkeypatch.setattr(dm2d.messaging, 'sub_sock', lambda *a, **kw: None, raising=False)
   monkeypatch.setattr(dm2d.messaging, 'drain_sock', lambda *a, **kw: [], raising=False)
@@ -140,7 +149,7 @@ def test_live_camera_response_defers_only_experimental_monitoring(monkeypatch, e
     def send(self, _, packet):
       packets.append((clock[0], packet.to_dict()))
 
-  monkeypatch.setattr(dm2d.messaging, 'SubMaster', lambda *a, **kw: state)
+  monkeypatch.setattr(dm2d.messaging, 'SubMaster', checked_submaster(state))
   monkeypatch.setattr(dm2d.messaging, 'PubMaster', lambda *a: Publisher(), raising=False)
   monkeypatch.setattr(dm2d.messaging, 'sub_sock', lambda *a, **kw: None, raising=False)
   monkeypatch.setattr(dm2d.messaging, 'drain_sock', lambda *a, **kw: [], raising=False)
