@@ -33,7 +33,7 @@ foreach ($answer in @('', 'yes', 'Y', '7', 'install', 'CANCEL')) {
 $prepareText = (Show-InstallerIntro Prepare 6>&1 | Out-String)
 $installText = (Show-InstallerIntro Install 6>&1 | Out-String)
 $finishText = (Show-JetsonConnectionSteps 6>&1 | Out-String)
-foreach ($item in @(@($prepareText,'5-15 min'), @($prepareText,'설치 준비'), @($installText,'15-60 min'), @($installText,'INSTALL'), @($finishText,'disconnect its power supply'), @($finishText,'전원 공급'))) {
+foreach ($item in @(@($prepareText,'5-15 min'), @($prepareText,'설치 준비'), @($installText,'30-90 min'), @($installText,'INSTALL'), @($finishText,'disconnect its power supply'), @($finishText,'전원 공급'))) {
   if (-not $item[0].Contains($item[1])) { throw 'Missing bilingual installer guidance' }
 }
 Write-Output 'PASS: explicit Korean/English erase confirmation and bilingual guidance; no disk opened'
