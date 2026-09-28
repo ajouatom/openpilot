@@ -92,7 +92,9 @@ def test_updated_data_runtime_is_resolved_before_bind_mount(tmp_path, target):
 
 
 @pytest.mark.skipif(sys.platform == 'win32', reason='Linux symlink semantics')
-def test_protected_image_wiring_is_offline_only_and_network_independent(tmp_path):
+def test_protected_image_wiring_is_offline_only_and_network_independent(tmp_path, monkeypatch):
+  import initrd_readonly
+  monkeypatch.setattr(initrd_readonly, 'configure', lambda root: None)
   with pytest.raises(ValueError):
     configure(Path('/'), Path(__file__).parent)
   (tmp_path / 'etc').mkdir()
@@ -102,7 +104,7 @@ def test_protected_image_wiring_is_offline_only_and_network_independent(tmp_path
   boot.write_text('LABEL primary\n  APPEND root=/dev/mmcblk0p1 rw rootwait\n')
   configure(tmp_path, Path(__file__).parent)
   assert ' rw' not in boot.read_text() and ' ro' in boot.read_text()
-  assert '/dev/root / ext4 ro 0 0' in (tmp_path / 'etc/fstab').read_text()
+  assert '/dev/root / ext4 ro,noload 0 0' in (tmp_path / 'etc/fstab').read_text()
   wifi = (tmp_path / 'etc/systemd/system/carrot-jetlink-wifi.service').read_text()
   assert 'update-apply' not in wifi
   assert 'ExecStart=/usr/bin/python3 /usr/local/lib/carrot-jetlink/network/current/wifi_apply.py' in wifi
@@ -139,10 +141,11 @@ def test_real_readonly_filesystem_survives_runtime_writes_and_second_boot(tmp_pa
   try:
     assert Path(run('losetup', '-n', '-O', 'BACK-FILE', loop)).resolve() == image.resolve()
     run('mount', loop, root)
-    for name in ('etc', 'var/log', 'home/jetlink', 'root', 'tmp', 'usr', 'opt'):
+    for name in ('etc', 'var/log', 'home/jetlink', 'root', 'tmp', 'usr', 'opt', 'mnt', 'lib/firmware'):
       (root / name).mkdir(parents=True, exist_ok=True)
     (root / 'etc/machine-id').write_text('a' * 32 + '\n')
     (root / 'usr/base.txt').write_text('immutable OS')
+    (root / 'lib/firmware/pva_auth_allowlist').write_bytes(b'baseline-authentication')
     (root / 'root').chmod(0o700)
     run('umount', root)
     before = hashlib.sha256(image.read_bytes()).hexdigest()
@@ -154,6 +157,9 @@ def test_real_readonly_filesystem_survives_runtime_writes_and_second_boot(tmp_pa
         assert not (root / 'etc/temporary.conf').exists()
         (root / 'etc/temporary.conf').write_text('RAM only')
         (root / 'var/log/log.log').write_text('vendor log')
+        assert (root / 'lib/firmware/pva_auth_allowlist').read_bytes() == b'baseline-authentication'
+        (root / 'lib/firmware/pva_auth_allowlist').write_bytes(b'regenerated-authentication')
+        (root / 'mnt/nvidia-temporary').mkdir()
         (root / 'home/jetlink/.cache').mkdir()
         assert (root / 'root').stat().st_mode & 0o777 == 0o700
         with pytest.raises(OSError):

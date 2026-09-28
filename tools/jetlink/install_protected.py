@@ -14,6 +14,8 @@ def configure(root, source):
   root, source = Path(root).resolve(), Path(source).resolve()
   if root == Path('/') or not (root / 'etc/carrot-jetlink-image.json').is_file():
     raise ValueError('Only an offline Carrot image is supported')
+  from initrd_readonly import configure as configure_initrd
+  configure_initrd(root)
   from readonly_boot import patch_nv_script
   nv_script = root / 'etc/systemd/nv.sh'
   if nv_script.exists():
@@ -25,7 +27,7 @@ def configure(root, source):
     (destination / name).chmod(0o644)
   write(root, '/etc/carrot-jetlink-protected.json', json.dumps(
     dict(format=1, root='/dev/mmcblk0p1', data='/dev/mmcblk0p17', setup='/dev/mmcblk0p16')) + '\n')
-  write(root, '/etc/fstab', '/dev/root / ext4 ro 0 0\n/dev/mmcblk0p10 /boot/efi vfat ro,nofail 0 0\n')
+  write(root, '/etc/fstab', '/dev/root / ext4 ro,noload 0 0\n/dev/mmcblk0p10 /boot/efi vfat ro,nofail 0 0\n')
   extlinux = root / 'boot/extlinux/extlinux.conf'
   lines = extlinux.read_text().splitlines()
   found = False
@@ -65,6 +67,13 @@ WantedBy=local-fs-pre.target
         '[Journal]\nStorage=volatile\nRuntimeMaxUse=32M\nRuntimeKeepFree=64M\n')
   write(root, '/etc/security/limits.d/carrot-no-core.conf', '* hard core 0\n')
   write(root, '/etc/systemd/coredump.conf.d/carrot-volatile.conf', '[Coredump]\nStorage=none\nProcessSizeMax=0\n')
+  # Machine identity lives in RAM. Never commit it back to immutable APP.
+  commit_machine_id = root / 'etc/systemd/system/systemd-machine-id-commit.service'
+  commit_machine_id.unlink(missing_ok=True)
+  commit_machine_id.symlink_to('/dev/null')
+  for name in ('nv', 'nvidia-pva-allowd', 'nv-l4t-usb-device-mode'):
+    write(root, f'/etc/systemd/system/{name}.service.d/storage.conf',
+          '[Unit]\nRequires=carrot-protected-storage.service\nAfter=carrot-protected-storage.service\n')
   write(root, '/etc/systemd/system/carrot-image-setup.service.d/storage.conf',
         '[Unit]\nRequires=carrot-protected-storage.service\nAfter=carrot-protected-storage.service\n'
         '[Service]\nExecStart=\nExecStart=/usr/bin/python3 /usr/lib/carrot-jetlink-storage/protected_first_boot.py\n')

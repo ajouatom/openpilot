@@ -223,3 +223,23 @@ and still renders other sensors and boot errors. It reports NVIDIA initializatio
 failures too. The portrait JPEG correction and thermal fix were installed in RAM
 on the running device; they have not been persisted to its pinned owner payload.
 The old owner payload, public image and stable runtime channel remain unchanged.
+
+### Second image candidate: first-mount protection
+
+The owner subsequently confirmed that the USB diagnostic screen is visible.
+The new offline installer patches only the SHA256-reviewed L4T36.4.7 initrd init
+program, preserving other archive members. Its SD path disables the alternative
+EFI overlay selection, requires mmcblk0p1, mounts APP `ro,noload`, skips the DNS
+copy into immutable etc, and sets the root block device read-only before PID1.
+Unknown init programs/layouts are rejected. The kernel and firmware are unchanged.
+This is a candidate implementation; physical boot and power-cycle validation
+are still required before claiming the original early-write gap is closed.
+
+Normal systemd boot retains RAM machine identity instead of committing it to APP.
+The existing storage helper gives NVIDIA's temporary /mnt directory a small
+tmpfs and binds only the regenerated PVA authentication allowlist output to RAM.
+It does not disable PVA authentication or make the firmware tree writable.
+NVIDIA initialization services explicitly wait for these storage preparations.
+Real-loop tests write the PVA output and /mnt while checking the entire base
+filesystem remains byte-identical across two simulated helper boots. This is
+not a substitute for a physical PID1/USB/model startup test.
