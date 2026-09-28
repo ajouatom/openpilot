@@ -44,6 +44,19 @@ def camera_sample_usable(sm, rhd, demo=False):
              for values, length in zip(vectors, lengths, strict=True))
 
 
+def parked_reset_eligible(sm, now, demo=False):
+  if demo or not sm.all_checks(['carState', 'selfdriveState']):
+    return False
+  if not all(0 <= now - sm.logMonoTime.get(service, 0) / 1e9 < 0.25 for service in ('carState', 'selfdriveState')):
+    return False
+  cs, state = sm['carState'], sm['selfdriveState']
+  # Raw speed must report zero. Allow only a tiny settling residue in the speed
+  # filter, in addition to independent P/standstill/disengaged confirmations.
+  return (cs.canValid and cs.gearShifter == car.CarState.GearShifter.park and cs.standstill and
+          cs.vEgoRaw == 0 and math.isfinite(cs.vEgo) and abs(cs.vEgo) < 0.01 and
+          not state.enabled and not state.active)
+
+
 def run_dm2(params, experimental):
   services = ['carState', 'selfdriveState', 'modelV2', 'radarState', 'liveCalibration', 'carParams', 'driverStateV2']
   # Like stock DM, use the polled service's frequency (20 Hz). SubMaster
@@ -109,6 +122,7 @@ def run_dm2(params, experimental):
       dm.run_without_camera((response or touch_held) and valid, sm['selfdriveState'].enabled,
                             cs.vEgo < dm.settings._ALERT_MIN_SPEED,
                             cs.gearShifter not in (car.CarState.GearShifter.drive, car.CarState.GearShifter.low))
+    dm.update_parked_reset(now, parked_reset_eligible(sm, now, demo_mode))
     packet = dm.get_state_packet(valid=valid or (demo_mode and camera_ok))
     packet.driverMonitoringState.cameraUnavailable = not camera_ok
     packet.driverMonitoringState.dm2Experimental = experimental

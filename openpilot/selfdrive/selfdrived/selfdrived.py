@@ -133,7 +133,7 @@ class SelfdriveD:
     self.experimental_mode = False
     self.personality = self.read_personality_param()
     self.recalibrating_seen = False
-    self.dm_lockout_set = False
+    self.dm_lockout_set = self.params.get_bool("DriverTooDistracted")
     self.cutin_audio_tracker = CutinAlertTracker()
     self.dm_uncertain_alerted = False
     self.update_reboot_alerted = False
@@ -251,10 +251,7 @@ class SelfdriveD:
     if not self.CP.notCar:
       if self.sm.all_checks(['driverMonitoringState']) and self.sm['driverMonitoringState'].cameraUnavailable:
         self.events.add(EventName.driverMonitorFallback)
-      # Block engaging until ignition cycle after max number or time of distractions
-      if self.sm['driverMonitoringState'].lockout and not self.dm_lockout_set:
-        self.params.put_bool("DriverTooDistracted", True)
-        self.dm_lockout_set = True
+      self.update_dm_lockout()
       # No entry conditions
       if self.sm['driverMonitoringState'].lockout or self.sm['driverMonitoringState'].alwaysOnLockout:
         self.events.add(EventName.tooDistracted)
@@ -515,6 +512,19 @@ class SelfdriveD:
     #    self.personality = (self.personality - 1) % 3
     #    self.params.put_nonblocking('LongitudinalPersonality', str(self.personality))
     #    self.events.add(EventName.personalityChanged)
+
+  def update_dm_lockout(self):
+    # One writer persists both lock and release from fresh DM output. Otherwise
+    # restarting DM after a parked reset would reload the old saved lockout.
+    if not self.sm.all_checks(['driverMonitoringState']):
+      return
+    age = time.monotonic() - self.sm.logMonoTime['driverMonitoringState'] / 1e9
+    if not 0 <= age < 0.25:
+      return
+    locked = self.sm['driverMonitoringState'].lockout
+    if locked != self.dm_lockout_set:
+      self.params.put_bool("DriverTooDistracted", locked)
+      self.dm_lockout_set = locked
 
   def update_reboot_alert(self):
     # One NNFF-style notice per onroad session, after startup alerts finish.

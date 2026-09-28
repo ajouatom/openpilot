@@ -61,6 +61,10 @@ Vehicle speed buttons are excluded where stock ACC uses automatic speed-button i
 
 ## Terminal warnings and web video
 
-Once a terminal alert is reached, input, forward attention or context changes alone cannot clear it. Existing deceleration requests and lockout remain. This does not introduce guaranteed emergency stopping, and stock ACC cannot be assumed to execute equivalent deceleration.
+Once a terminal alert is reached, input, forward attention or context changes alone cannot clear it. Existing deceleration requests and lockout remain while driving. This does not introduce guaranteed emergency stopping, and stock ACC cannot be assumed to execute equivalent deceleration.
+
+**One continuous second of valid Park, standstill and disengaged status** resets accumulated warnings and the usage restriction. This exception to stock comma behavior applies in both modes with or without a camera. Engagement remains manual after parking, and monitoring continues.
+
+The vehicle must report zero raw speed, standstill and Park together; only a tiny settling residue in filtered speed is allowed. Zero speed in Drive, Neutral or Reverse, engagement OFF/ON alone, stale or invalid signals, and driver-camera preview cannot release the restriction. Vehicles that do not report Park cannot use this release condition.
 
 `CarrotVisionEnabled` independently controls web road video. Only the video function of old `DisableDM=2` is migrated once; monitoring starts in standard mode. Carrot Vision is unavailable while the USB cluster is enabled.
