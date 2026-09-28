@@ -1,5 +1,12 @@
 # Repository memory
 
+- On 2026-09-28, the user requested ordinary Git storage wherever possible to
+  eliminate this branch's Git LFS bandwidth dependency. All seven remaining
+  LFS pointers were converted to byte-identical Git blobs; bundled models and
+  the legacy updater are below GitHub's per-file limit. Do not reintroduce LFS
+  tracking or setup pulls. Existing NAS model delivery stays unchanged, and
+  historical refs are not rewritten. See docs/lfs_to_git_20260928.md.
+
 - On 2026-09-28, the user approved C3/C3X main UI onroad affinity cores0,1,2,3,6
   with SCHED_OTHER/nice19, superseding core6-only for tici/tizi. C4/mici stays
   core6. Apply to all UI threads; offroad returns to little cores, and onroad
