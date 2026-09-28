@@ -73,7 +73,7 @@ class TestManager:
     CP = car.CarParams.new_message()
     CP.notCar = False
     params = Params()
-    params.put("CarrotVisionEnabled", "1")
+    params.put_bool("CarrotVisionEnabled", True)
     params.put_bool("CarrotVisionActive", False)
 
     params.put("ClusterHud", "0")
@@ -92,7 +92,7 @@ class TestManager:
     CP = car.CarParams.new_message()
     CP.notCar = False
     params = Params()
-    params.put("CarrotVisionEnabled", "1")
+    params.put_bool("CarrotVisionEnabled", True)
     params.put_bool("CarrotVisionActive", True)
     params.put("ClusterHud", "2")
 
