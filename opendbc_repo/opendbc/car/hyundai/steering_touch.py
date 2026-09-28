@@ -1,4 +1,6 @@
-"""Read-only Ioniq 5 PE wheel-touch profile, independent of ADAS forwarding."""
+"""Receive-profile wheel touch, independent of vehicle name and ADAS forwarding."""
+import math
+
 from opendbc.car.crc import CRC8J1850, mk_crc8_fun
 
 TOUCH_ADDR = 0x2AF
@@ -15,17 +17,21 @@ def touch_checksum(data: bytes) -> int:
 
 
 class HyundaiSteeringTouch:
-  def __init__(self, supported: bool):
-    self.supported = supported
+  def __init__(self):
     self.last_timestamp = 0
     self.last_counter = None
     self.frame_valid = False
 
   def update(self, cp) -> dict:
-    # Read only the existing ECAN parser. Do not register a mandatory message,
-    # change steeringPressed, or inspect the modified forwarding cache.
-    if not self.supported:
+    # Scope the address to the named DBC message on original ECAN. A matching
+    # numeric ID in another vehicle protocol is not touch evidence.
+    message = cp.dbc.name_to_msg.get(TOUCH_MSG)
+    if message is None or message.address != TOUCH_ADDR or message.size != 8:
       return {}
+    # Observe even after the startup fingerprint window. Register only once a
+    # real frame was seen; absence/dropout must not create a CAN-validity fault.
+    if TOUCH_ADDR not in cp.addresses and TOUCH_ADDR in cp.seen_addresses:
+      cp._add_message(TOUCH_MSG, math.nan)
     timestamp = cp.ts_nanos.get(TOUCH_MSG, {}).get('TOUCH_DETECT', 0)
     data = cp.dat.get(TOUCH_ADDR, b'')
     now = cp._last_update_nanos

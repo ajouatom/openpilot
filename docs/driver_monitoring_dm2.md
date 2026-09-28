@@ -106,12 +106,19 @@ not count. Automatic ego/set-speed changes are never driver interactions.
 
 ### Original steering touch input (2026-09-28)
 
-Ioniq 5 PE alone enables the received `STEER_TOUCH_2AF` profile. `CarState.steeringTouch`
+The later user request removes the initial Ioniq 5 PE-only whitelist. All
+Hyundai/Kia/Genesis CAN-FD vehicle configurations now admit the same received
+`STEER_TOUCH_2AF` profile. `CarState.steeringTouch`
 records availability, validity, contact, original CAN timestamp and raw status /
 TOUCH1 / TOUCH2. It reads the existing ECAN parser's raw bytes, never the mutable
 forwarding cache, CAM input or Panda transmit receipts. Existing ADAS transmit
-code, safety rules, message registration and global torque-based steeringPressed
-remain unchanged. This bus distinction does not authenticate a sensor against
+code, safety rules and global torque-based steeringPressed remain unchanged.
+After an original frame is seen, an unregistered named message is registered
+with optional frequency so late arrivals work after startup fingerprinting.
+Absent hardware or later dropout cannot create a new CAN-liveness requirement.
+The decoder does not populate the ADAS forwarding cache. The DBC message name,
+address and size must match; numeric address 0x2AF alone cannot enable touch.
+This bus distinction does not authenticate a sensor against
 another device injecting frames onto ECAN.
 
 Six one-minute historical segments yielded 3,597 original 10 Hz frames. All fit
@@ -134,6 +141,13 @@ successive counters and sample age <=250 ms. Startup/recovery requires two
 consecutive valid frames; malformed, repeated-counter, unknown-layout or stale
 input grants no contact. Replay accepted 3,591 frames after the six initial
 counter baselines, including 1,015 contacts. No new mandatory CAN checks are added.
+
+The profile-based follow-up passes 184 adapted policy/parser/dispatcher tests,
+including real CAN parsers for all 37 configured CAN-FD platforms, discovery
+after startup, wrong-bus/TX receipt rejection, an unrelated DBC and optional
+message dropout. These are synthetic platform checks. Physical/log-derived
+touch evidence remains the six Ioniq 5 PE segments above, not a fleet-wide
+verification that every vehicle uses the same profile.
 
 Without a usable camera, fresh continuous contact maintains wheel awareness
 before terminal alert in both modes. In camera mode 1 only a valid release-to-
