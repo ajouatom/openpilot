@@ -89,3 +89,24 @@ PowerShell은 UTF-8 BOM으로 배포하여 영문 Windows에서도 한글 소스
   Windows 및 Linux 검사가 성공했습니다.
 - NAS 업로드 전체 읽기 SHA256, 공개 HEAD·앞뒤 Range·release.json·SHA256SUMS가
   배포 원본과 일치했습니다. [v0.3.2 시험 릴리스](https://github.com/ajouatom/carrot-jetson/releases/tag/v0.3.2-windows-preview)를 게시했습니다.
+
+## v0.4.0 — 사용자 정상 동작 확인 후 공개한 R2 이미지
+
+- [설치파일](https://upload.shind0.synology.me/downloads/jetson/v0.4.0-boot-preview/carrot-jetson-windows.zip)과
+  [공개 시험 릴리스](https://github.com/ajouatom/carrot-jetson/releases/tag/v0.4.0-boot-preview)를 게시했습니다.
+  이미지 소스는 `b4df5489b2`이며 소유자 매체에 기록한 R2와 같은 이미지입니다.
+- ZIP은 10,098,321,699바이트, SHA256
+  `b531393405eab54df134d51a3cad00f74430aca47e4068b855e92e2c58cc6be4`입니다.
+  원본 이미지 SHA256은
+  `b11f5601d3a713ad0de23315ee90daddf5452f8e548f2c87c8eeec28d321e55f`입니다.
+- 기존 시험 ZIP과 비교해 안내 메시지·배포 정보·HTML만 변경됐습니다. 실제 준비 CMD,
+  Python, 준비·기록 코드 및 이미지 내용은 같고, 새 ZIP의 CRC와 이미지 SHA를 확인했습니다.
+  앞선 실제 01 실행/전체 매체 읽기 검증을 재사용하며, 이번 포장으로 매체를 다시 쓰지는 않았습니다.
+- NAS ZIP·압축 이미지·메타데이터 전체 읽기 해시와 공개 HTTPS HEAD·앞뒤 Range·메타데이터
+  비교가 통과했습니다. 공개 파일은 네 종류만이며 소유자의 setup.json은 포함하지 않았습니다.
+- 로컬 준비 검사 11개, PowerShell 대상 디스크 보호·한영 입력·구문 검사가 통과했습니다.
+  [차량 CI](https://github.com/ajouatom/openpilot/actions/runs/36396961927)와
+  [호스트 CI](https://github.com/ajouatom/carrot-jetson/actions/runs/36397154644)도 성공했습니다.
+- 사용자 정상 동작 확인을 실측 결과와 구분했습니다. 배포 정보는 `validation_basis=owner_report`이며
+  APP 보호·모델 유효성·Wi-Fi/SSH 복구·DATA 업데이트 전환의 실측 완료를 주장하지 않습니다.
+  전원 차단 시험 횟수는 0으로 기록했습니다. 기존 자동 업데이트 채널과 이전 이미지들은 유지했습니다.
