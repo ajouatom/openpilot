@@ -83,3 +83,33 @@ def test_wrong_decompression_never_prepares(package):
   with pytest.raises(RuntimeError):
     prepare.prepare(root, lambda *_: io.BytesIO(b'wrong'))
   assert not (root / 'prepared.img').exists()
+
+
+def test_integrated_image_requires_no_hotfix_and_keeps_full_verification(package):
+  root, original, _ = package
+  manifest = root / 'support/release.json'
+  release = json.loads(manifest.read_text())
+  release.update(preparation='integrated', prepared_sha256=sha(original))
+  release.pop('patch_sha256')
+  manifest.write_text(json.dumps(release))
+  (root / 'support/offline-usbc.json').unlink()
+  prepare.prepare(root, open)
+  assert (root / 'prepared.img').read_bytes() == original
+  prepare.prepare(root, lambda *_: pytest.fail('Valid image decompressed again'))
+  (root / 'prepared.img').unlink()
+  (root / 'support/carrot-jetson.img.zst').write_bytes(b'corrupt')
+  with pytest.raises(RuntimeError):
+    prepare.prepare(root, open)
+  assert not (root / 'prepared.img').exists()
+
+
+@pytest.mark.parametrize('mode', ['integrated', 'unknown'])
+def test_invalid_preparation_metadata_refuses_before_writing(package, mode):
+  root, *_ = package
+  manifest = root / 'support/release.json'
+  release = json.loads(manifest.read_text())
+  release['preparation'] = mode
+  manifest.write_text(json.dumps(release))
+  with pytest.raises(RuntimeError):
+    prepare.prepare(root, open)
+  assert not (root / 'prepared.img.partial').exists()

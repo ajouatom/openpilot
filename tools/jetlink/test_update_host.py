@@ -30,6 +30,24 @@ def test_reject_os_upgrade_or_untrusted_host():
       update.checked_url(url)
 
 
+def test_protected_image_rejects_old_comma_release_before_download(tmp_path, monkeypatch):
+  marker = tmp_path / 'protected.json'
+  marker.write_text('{"format":1}')
+  monkeypatch.setattr(update, 'PROTECTED_MARKER', marker)
+  monkeypatch.setattr(update, 'verify_signature', lambda _: None)
+  monkeypatch.setattr(update, 'fetch', lambda *_: pytest.fail('Incompatible release downloaded'))
+  value = manifest()
+  with pytest.raises(ValueError, match='protected storage'):
+    update.stage_manifest(value)
+  value['storage_format'] = 1
+  update.validate_storage_compatibility(value)
+  value['storage_format'] = 2
+  with pytest.raises(ValueError):
+    update.validate_storage_compatibility(value)
+  marker.unlink()
+  update.validate_storage_compatibility(manifest())
+
+
 def test_carrot_selected_release_takes_precedence_and_failure_does_not_fallback(monkeypatch):
   import hud_protocol
   selected = manifest()

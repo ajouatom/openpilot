@@ -1,8 +1,9 @@
-"""Publisher: bundle the unchanged base image, pinned patch and portable tools."""
+"""Publisher: bundle a verified image and portable tools, with optional legacy patch."""
 import argparse
 import hashlib
 import json
 from pathlib import Path
+import re
 import zipfile
 
 from offline_hotfix import validate
@@ -40,16 +41,52 @@ def patched_digest(image, manifest):
   return result.hexdigest()
 
 
-def build(image, compressed, patch, python_zip, output):
-  for path, expected in ((compressed, COMPRESSED_SHA), (patch, PATCH_SHA), (python_zip, PYTHON_SHA)):
+def integrated_release(image, compressed, metadata):
+  value = json.loads(metadata.read_text(encoding='utf-8'))
+  if (value.get('storage_format') != 1 or value.get('data_partition') != 17
+      or value.get('image_bytes') != 40 * (1 << 30)
+      or not re.fullmatch('[0-9a-f]{40}', value.get('source_commit', ''))
+      or value.get('state') != 'PROTECTED_CANDIDATE_NOT_BOOT_TESTED'):
+    raise ValueError('Expected audited protected candidate metadata')
+  for path, size, sha in ((image, value['image_bytes'], value['image_sha256']),
+                          (compressed, value['compressed_bytes'], value['compressed_sha256'])):
+    if path.stat().st_size != size or digest(path) != sha:
+      raise ValueError('Protected candidate file/hash mismatch')
+  return dict(version='v0.4.0-storage-candidate', preparation='integrated',
+              image_bytes=value['image_bytes'], image_sha256=value['image_sha256'],
+              prepared_sha256=value['image_sha256'], compressed_bytes=value['compressed_bytes'],
+              compressed_sha256=value['compressed_sha256'], source_commit=value['source_commit'],
+              storage_format=1, validation='PRIVATE CANDIDATE: physical boot and power-loss tests pending')
+
+
+def candidate_guide(text, release):
+  """Keep the bilingual layout; never link a private candidate to the old download."""
+  text = re.sub(r'<a class="download".*?</a>',
+                '<div class="download">시험용 설치파일<span class="en" lang="en">Private test installer · not released</span></div>',
+                text)
+  # Download + extracted compressed payload + raw image + workspace margin.
+  gb = (release['image_bytes'] + 2 * release['compressed_bytes'] + 5 * (1 << 30) + 999999999) // 1000000000
+  text = text.replace('약 45GB', f'약 {gb}GB').replace('About 45 GB', f'About {gb} GB')
+  text = text.replace('이미지 검사·압축 해제·USB-C 수정까지', '수정사항이 포함된 이미지 검사·압축 해제·최종 검증까지')
+  return text.replace('Image checks, extraction and the USB-C fix', 'Image checks, extraction and final verification')
+
+
+def build(image, compressed, patch, python_zip, output, candidate_json=None):
+  inputs = [(python_zip, PYTHON_SHA)]
+  if candidate_json is None:
+    inputs += [(compressed, COMPRESSED_SHA), (patch, PATCH_SHA)]
+  elif patch is not None:
+    raise ValueError('Integrated images cannot also apply a legacy patch')
+  for path, expected in inputs:
     if digest(path) != expected:
       raise ValueError(f'Wrong publisher input: {path.name}')
   tools = Path(__file__).resolve().parent
-  release = dict(version='v0.3.2-windows-preview', image_bytes=image.stat().st_size, image_sha256=IMAGE_SHA,
+  release = integrated_release(image, compressed, candidate_json) if candidate_json else dict(version='v0.3.2-windows-preview', image_bytes=image.stat().st_size, image_sha256=IMAGE_SHA,
                  compressed_bytes=compressed.stat().st_size, compressed_sha256=COMPRESSED_SHA,
                  prepared_sha256=patched_digest(image, json.loads(patch.read_bytes())), patch_sha256=PATCH_SHA,
                  python_url=PYTHON_URL, python_sha256=PYTHON_SHA,
                  validation='PC preparation tested; physical card writing and first boot pending')
+  release.update(python_url=PYTHON_URL, python_sha256=PYTHON_SHA)
   temporary = output.with_suffix('.zip.partial')
   output.parent.mkdir(parents=True, exist_ok=True)
   prefix = 'CarrotJetson/'
@@ -57,7 +94,8 @@ def build(image, compressed, patch, python_zip, output):
     def add(name, data):
       package.writestr(prefix + name, data)
     package.write(compressed, prefix + 'support/carrot-jetson.img.zst')
-    package.write(patch, prefix + 'support/offline-usbc.json')
+    if patch is not None:
+      package.write(patch, prefix + 'support/offline-usbc.json')
     for name in ('offline_hotfix.py', 'write_sd_windows.ps1'):
       data = (tools / name).read_text(encoding='utf-8-sig')
       add('support/' + name, data.encode('utf-8-sig' if name.endswith('.ps1') else 'utf-8'))
@@ -80,7 +118,10 @@ def build(image, compressed, patch, python_zip, output):
                 'set "RESULT=%ERRORLEVEL%"\r\necho 아무 키나 누르면 닫습니다.\r\necho Press any key to close.\r\npause >nul\r\nexit /b %RESULT%\r\n')
       add(filename, script.encode('utf-8'))
     for name in ('먼저읽기.txt', '설치안내.html'):
-      add(name, (tools / 'windows_installer' / name).read_bytes())
+      content = (tools / 'windows_installer' / name).read_bytes()
+      if candidate_json and name.endswith('.html'):
+        content = candidate_guide(content.decode('utf-8'), release).encode('utf-8')
+      add(name, content)
     add('support/SOURCE.txt', b'https://github.com/ajouatom/carrot-jetson\nhttps://www.python.org/downloads/release/python-3147/\n')
     add('support/LICENSE-carrot.txt', (tools.parents[1] / 'LICENSE').read_bytes())
   temporary.replace(output)
@@ -93,7 +134,10 @@ def build(image, compressed, patch, python_zip, output):
 
 if __name__ == '__main__':
   p = argparse.ArgumentParser(description=__doc__)
-  for name in ('image', 'compressed', 'patch', 'python-zip', 'output'):
+  for name in ('image', 'compressed', 'python-zip', 'output'):
     p.add_argument('--'+name, type=Path, required=True)
+  mode = p.add_mutually_exclusive_group(required=True)
+  mode.add_argument('--patch', type=Path)
+  mode.add_argument('--candidate-json', type=Path)
   a = p.parse_args()
-  build(a.image, a.compressed, a.patch, a.python_zip, a.output)
+  build(a.image, a.compressed, a.patch, a.python_zip, a.output, a.candidate_json)
