@@ -167,4 +167,5 @@ def test_real_readonly_filesystem_survives_runtime_writes_and_second_boot(tmp_pa
   finally:
     subprocess.run(['umount', '-R', str(root)], capture_output=True)
     subprocess.run(['umount', str(ram)], capture_output=True)
+    run('blockdev', '--setrw', loop)
     run('losetup', '-d', loop)
