@@ -137,3 +137,26 @@ def test_public_integrated_package_requires_checks_for_exact_image(tmp_path, mon
     validation.write_text(json.dumps(evidence | changes))
     with pytest.raises(ValueError, match='Physical validation'):
       publisher.integrated_release(image, compressed, metadata, validation)
+
+  owner = tmp_path / 'owner.json'
+  report = dict(image_sha256='a' * 64, card_readback=True, owner_reported_boot=True, publication_requested=True)
+  owner.write_text(json.dumps(report))
+  preview = publisher.integrated_release(image, compressed, metadata, owner_boot=owner)
+  assert preview['version'] == 'v0.4.0-boot-preview'
+  assert preview['owner_reported_boot'] and preview['validation_basis'] == 'owner_report'
+  assert preview['validation_checks'] == dict(card_readback=True, protected_boot=False, model_ready=False,
+                                             wifi_reconnect=False, ssh_persistence=False, data_update=False)
+  assert preview['power_cut_cycles'] == 0
+  html = (Path(__file__).parent / 'windows_installer/설치안내.html').read_text(encoding='utf-8')
+  guide = publisher.candidate_guide(html, preview)
+  assert 'v0.4.0-boot-preview/carrot-jetson-windows.zip' in guide
+  assert 'owner reports normal operation' in guide and 'tests remain pending' in guide
+  assert 'boot and updates tested' not in guide and 'private test installer' not in guide.lower()
+  assert '약 30~90분' in guide
+  with pytest.raises(ValueError, match='not both'):
+    publisher.integrated_release(image, compressed, metadata, validation, owner)
+  for changes in ({'image_sha256': 'd' * 64}, {'card_readback': False},
+                  {'owner_reported_boot': False}, {'publication_requested': False}):
+    owner.write_text(json.dumps(report | changes))
+    with pytest.raises(ValueError, match='Owner preview'):
+      publisher.integrated_release(image, compressed, metadata, owner_boot=owner)

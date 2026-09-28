@@ -28,7 +28,7 @@ function Show-InstallerIntro([string]$Stage) {
     Write-InstallerPair 'PC에 파일을 준비합니다. SD카드 기록은 다음 단계입니다.' 'This step prepares files on the PC. Card writing is the next step.'
   } else {
     Write-InstallerHeading 'CARROT JETSON  |  02. SD카드 설치' 'Write and verify your SD card'
-    Write-InstallerPair '예상 시간  15~60분' 'Estimated time: 15-60 min; slow cards or readers may take longer.'
+    Write-InstallerPair '예상 시간  30~90분' 'Estimated time: 30-90 min; slow cards or readers may take longer.'
     Write-InstallerPair '선택한 카드 삭제 → 이미지 기록 → 전체 기록 검사' 'Erase selected card > Write image > Verify the entire written image'
     Write-Host ''
     Write-InstallerPair '화면에서 이렇게 답하세요' 'How to answer' Cyan

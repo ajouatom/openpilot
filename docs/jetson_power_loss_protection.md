@@ -288,3 +288,21 @@ manifest signature and full bundle download hash passed verification. This
 prepares a controlled activation test; it does not establish successful on-device
 activation or change the stable channel. The owner cannot return to the vehicle
 during this PC handoff, so physical boot validation remains a separate next step.
+
+### Owner-confirmed public boot preview
+
+After installing the recorded R2 media, the owner reported normal operation,
+requested publication and stated that power was off. This supports an
+owner-reported boot result, not measured APP immutability, model validity,
+Wi-Fi/SSH recovery, DATA activation or power-cut endurance. Those instrumented
+checks remain pending; no power-cut cycles are claimed.
+
+The publisher now has a distinct `v0.4.0-boot-preview` path requiring the exact
+image's card readback, owner boot report and explicit publication request. Its
+manifest records that evidence basis and leaves unmeasured checks false. The
+existing fully measured `v0.4.0-protected-preview` gate is unchanged. The preview
+packages the same sanitized R2 image, with refreshed Korean/English instructions
+and a 30–90 minute card-writing estimate reflecting the observed 80-minute run.
+The public ZIP contains no owner setup. Existing image versions and the signed
+automatic runtime channel are retained; publishing this image does not validate
+or activate the prepared DATA-update trial.
