@@ -182,6 +182,6 @@ def test_dispatcher_publishes_parked_release(monkeypatch, experimental, camera):
         raise Done
   monkeypatch.setattr(dm2d, 'Ratekeeper', lambda *a, **k: Rate())
   with pytest.raises(Done):
-    dm2d.run_dm2(SimpleNamespace(get_bool=lambda _: False), experimental)
+    dm2d.run_dm2(SimpleNamespace(get_bool=lambda _: False, get_int=lambda _: int(experimental)), experimental)
   assert packets[0]['driverMonitoringState']['lockout']
   assert packets[-1]['valid'] and not packets[-1]['driverMonitoringState']['lockout']

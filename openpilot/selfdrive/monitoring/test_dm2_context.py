@@ -129,12 +129,12 @@ def test_legacy_modes_never_migrate_to_experimental(old):
   configure_monitoring(params, env)
   assert params.get_int('DriverMonitoringMode') == 0
   assert params.get_bool('CarrotVisionEnabled') == (old == 2)
-  assert env['CARROT_DM_MODE'] == '0'
+  assert 'CARROT_DM_MODE' not in env
   params.put_bool('CarrotVisionEnabled', False)
   params.put('DriverMonitoringMode', 1)
   configure_monitoring(params, env)
   assert not params.get_bool('CarrotVisionEnabled')
-  assert env['CARROT_DM_MODE'] == '1'
+  assert 'CARROT_DM_MODE' not in env
 
 
 @pytest.mark.parametrize('existing_video', [None, False, True])
@@ -147,7 +147,7 @@ def test_first_boot_uses_typed_defaults_and_preserves_existing_video(existing_vi
   assert params.get('CarrotVisionEnabled') is bool(existing_video)
   saved = params.values.copy()
   configure_monitoring(params, env)
-  assert params.values == saved and env['CARROT_DM_MODE'] == '0'
+  assert params.values == saved and 'CARROT_DM_MODE' not in env
 
 
 def test_camera_failure_falls_back_immediately_and_recovery_needs_continuous_health():
@@ -161,3 +161,13 @@ def test_camera_failure_falls_back_immediately_and_recovery_needs_continuous_hea
   assert not camera.update(6, True)
   assert not camera.update(7.95, True)
   assert camera.update(8, True)
+
+
+@pytest.mark.parametrize('saved', [-1, 0, 1, 2])
+def test_live_mode_reads_params_and_ignores_retired_startup_environment(monkeypatch, saved):
+  from openpilot.selfdrive.monitoring.config import experimental_mode
+  monkeypatch.setenv('CARROT_DM_MODE', '0' if saved == 1 else '1')
+  params = FakeParams({'DriverMonitoringMode': saved})
+  assert experimental_mode(params) == (saved == 1)
+  params.put_int('DriverMonitoringMode', 1 if saved != 1 else 0)
+  assert experimental_mode(params) == (saved != 1)

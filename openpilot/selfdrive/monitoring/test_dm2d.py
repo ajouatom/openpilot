@@ -17,13 +17,17 @@ def checked_submaster(state):
 @pytest.mark.parametrize('experimental', [False, True])
 @pytest.mark.parametrize('touch_signal', ['none', 'held', 'stale'])
 @pytest.mark.parametrize('model_ready', [False, True])
-def test_missing_or_failed_camera_still_publishes_valid_interaction_monitoring(monkeypatch, experimental, touch_signal, model_ready):
+@pytest.mark.parametrize('live_mode', [False, True])
+def test_missing_or_failed_camera_still_publishes_valid_interaction_monitoring(monkeypatch, experimental, touch_signal, model_ready, live_mode):
   clock = [100.0]
   packets = []
 
   class Params:
     def get_bool(self, _):
       return False
+
+    def get_int(self, _):
+      return int(not experimental if live_mode and clock[0] >= 108 else experimental)
 
   class State(dict):
     updated = {'carParams': False, 'radarState': True, 'driverStateV2': False}
@@ -77,6 +81,11 @@ def test_missing_or_failed_camera_still_publishes_valid_interaction_monitoring(m
   state = packets[-1]['driverMonitoringState']
   assert state['alertLevel'] == ('none' if touch_signal == 'held' else 'one')
   assert state['dm2WheelTimeoutFactor'] == 1  # no verified empty-road coverage
+  assert packets[0]['driverMonitoringState']['dm2Experimental'] == experimental
+  assert state['dm2Experimental'] == (not experimental if live_mode else experimental)
+  if live_mode:
+    changed = next(i for i, p in enumerate(packets) if p['driverMonitoringState']['dm2Experimental'] != experimental)
+    assert 159 <= changed <= 171  # Next half-second check plus one 20 Hz update.
 
 
 def test_malformed_camera_outputs_cannot_reuse_previous_attention():
@@ -108,6 +117,9 @@ def test_live_camera_response_defers_only_experimental_monitoring(monkeypatch, e
   class Params:
     def get_bool(self, _):
       return False
+
+    def get_int(self, _):
+      return int(experimental)
 
   class State(dict):
     updated = {'carParams': False, 'radarState': True, 'driverStateV2': True}

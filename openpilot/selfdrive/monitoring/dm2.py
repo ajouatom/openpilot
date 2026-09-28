@@ -59,6 +59,19 @@ class DriverMonitoring2(DriverMonitoring):
   def _timeouts(self, kind):
     return tuple(getattr(self.settings, f'_{kind}_POLICY_ALERT_{i}_TIMEOUT') for i in (1, 2, 3))
 
+  def set_experimental(self, experimental):
+    """Switch policy on the existing monitor; never treat a mode edit as attention."""
+    if self.experimental == experimental:
+      return
+    self.experimental = experimental
+    # A previous mode's interaction allowance/forward streak cannot be replayed.
+    self.grace_started = -math.inf
+    self.grace_expired = True
+    self.forward_frames = 0
+    self.forward_recovery = False
+    # configure_context remaps elapsed time into the new budget on this frame.
+    # Awareness, calibration, traffic hold, terminal counts and lockout survive.
+
   def _active_kind(self):
     return 'VISION' if self.active_policy == MonitoringPolicy.vision else 'WHEELTOUCH'
 
