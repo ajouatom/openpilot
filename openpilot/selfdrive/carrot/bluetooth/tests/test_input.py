@@ -308,6 +308,23 @@ def test_command_queue_is_bounded_and_expires(tmp_path):
   assert json.loads(reader.path.read_text()) == {'events': []}
 
 
+def test_attention_journal_is_independent_fresh_and_one_shot_even_for_unmapped_buttons(tmp_path):
+  writer = CommandWriter(tmp_path)
+  attention = CommandReader('attention', tmp_path)
+  cruise = CommandReader('cruise', tmp_path)
+  attention.started = cruise.started = 10
+  writer.attention('A', 'none', 11)
+  writer.send('A', 'accelCruise', 11)
+  assert attention.read(now=11.05) == 'none'
+  assert attention.read(now=11.08) is None
+  assert cruise.read(now=11.05) == 'accelCruise'
+  writer.attention('A', 'gapAdjustCruise', 11.1)
+  assert attention.read(now=12) is None
+  writer.attention('A', 'none', 12.1)
+  writer.prune(set(), 12.2)
+  assert attention.read(now=12.2) is None
+
+
 def test_cancelled_device_events_cannot_return_when_writer_republishes(tmp_path):
   writer = CommandWriter(tmp_path)
   reader = CommandReader('cruise', tmp_path)

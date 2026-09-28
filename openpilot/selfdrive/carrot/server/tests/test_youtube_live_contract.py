@@ -110,7 +110,7 @@ def test_resource_observation_does_not_change_cluster_or_vision_state(monkeypatc
   reads: list[str] = []
   values = {
     "ClusterHud": 1,
-    "DisableDM": 2,
+    "CarrotVisionEnabled": 1,
     youtube_live.YOUTUBE_QUALITY_PARAM: 1,
   }
   processes = {
@@ -129,7 +129,7 @@ def test_resource_observation_does_not_change_cluster_or_vision_state(monkeypatc
 
   status = service._resource_status()
 
-  assert reads == ["ClusterHud", "DisableDM", youtube_live.YOUTUBE_QUALITY_PARAM]
+  assert reads == ["ClusterHud", "CarrotVisionEnabled", youtube_live.YOUTUBE_QUALITY_PARAM]
   assert status["cluster"]["running"] is True
   assert status["cluster"]["active"] is True
   assert status["carrot_vision"]["webrtcd_running"] is False

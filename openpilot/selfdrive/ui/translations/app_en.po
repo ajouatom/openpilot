@@ -1506,3 +1506,11 @@ msgstr "Reboot to Apply Update"
 #: openpilot/selfdrive/selfdrived/events.py
 msgid "Park safely before rebooting your device"
 msgstr "Park safely before rebooting your device"
+
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "Driver camera unavailable"
+msgstr "Driver camera unavailable"
+
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "Monitoring driver controls"
+msgstr "Monitoring driver controls"

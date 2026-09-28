@@ -28,6 +28,11 @@ function getParamCommitter() {
 }
 
 async function setParam(name, value, options) {
+  if (name === "DriverMonitoringMode" && Number(value) === 1) {
+    const accepted = await appConfirm(getUIText("dm_experimental_warning",
+      "Experimental driver monitoring may violate applicable law. Use only for experiments in a controlled test environment. Public-road legality and safety are not assured. Enable for experimental use only?"));
+    if (!accepted) throw new Error(getUIText("dm_experimental_cancelled", "Experimental mode was not enabled."));
+  }
   await getParamCommitter().commit(name, value, options);
   return true;
 }

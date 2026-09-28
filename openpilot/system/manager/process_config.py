@@ -75,7 +75,7 @@ def and_(*fns):
   return lambda *args: all(fn(*args) for fn in fns)
 
 def enable_dm(started, params, CP: car.CarParams) -> bool:
-  return (started or params.get_bool("IsDriverViewEnabled")) and params.get_int("DisableDM") == 0
+  return started or params.get_bool("IsDriverViewEnabled")
 
 #def enable_connect(started, params, CP: car.CarParams) -> bool:
 #  return params.get_int("EnableConnect") > 0
@@ -92,7 +92,7 @@ def cluster_hud_active(params: Params) -> bool:
 def enable_webrtc(started, params, CP: car.CarParams) -> bool:
   # Cluster HUD consumes the road camera directly. Keep Carrot Vision's
   # WebRTC/encoder processes out of the same onroad session.
-  return params.get_int("DisableDM") == 2 and not cluster_hud_active(params)
+  return params.get_bool("CarrotVisionEnabled") and not cluster_hud_active(params)
 
 def c3x_lite(started: bool, params: Params, CP: car.CarParams) -> bool:
   return started and params.get_bool("HardwareC3xLite")
@@ -131,7 +131,7 @@ procs = [
   NativeProcess("loggerd", "openpilot/system/loggerd", ["./loggerd"], logging),
   NativeProcess("encoderd", "openpilot/system/loggerd", ["./encoderd"], only_onroad),
   # Preserve generic multi-camera WebRTC for notCar users. Carrot Vision on a
-  # real device is road-only and remains gated by DisableDM == 2.
+  # real device is road-only and independently enabled by CarrotVisionEnabled.
   NativeProcess("stream_encoderd", "openpilot/system/loggerd", ["./encoderd", "--stream"], notcar),
   # Prewarm the hardware encoder with the rest of the onroad stack. The
   # encoder process stays idle until CarrotVisionActive is set by a session.
@@ -164,7 +164,7 @@ procs = [
   PythonProcess("selfdrived", "openpilot.selfdrive.selfdrived.selfdrived", only_onroad),
   PythonProcess("card", "openpilot.selfdrive.car.card", only_onroad),
   PythonProcess("deleter", "openpilot.system.loggerd.deleter", always_run),
-  PythonProcess("dmonitoringd", "openpilot.selfdrive.monitoring.dmonitoringd", enable_dm, enabled=(WEBCAM or not PC)),
+  PythonProcess("dmonitoringd", "openpilot.selfdrive.monitoring.dm2d", enable_dm, enabled=(WEBCAM or not PC)),
   PythonProcess("qcomgpsd", "openpilot.system.qcomgpsd.qcomgpsd", qcomgps, enabled=TICI),
   PythonProcess("navd", "openpilot.selfdrive.navd.navd", only_onroad),
   PythonProcess("pandad", "openpilot.selfdrive.pandad.pandad", always_run),

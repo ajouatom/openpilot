@@ -86,6 +86,8 @@ def main():
       reason = 'test' if testing else 'inactive'
       emitted = False
       if not testing and device['enabled'] and started and car_ok and not (token in held and hold_blocked) and now - last_fire.get((mac, token), 0) >= 0.18:
+        if token not in decoder.repeated:
+          writer.attention(mac, action, now)
         if action != 'none':
           writer.send(mac, action, now, hold=f'{path}:{token}' if token in held else None, repeat=token in decoder.repeated)
           last_fire[mac, token] = now

@@ -77,9 +77,8 @@ class SelfdriveD:
     self.gps_location_service = get_gps_location_service(self.params)
     self.gps_packets = [self.gps_location_service]
     self.sensor_packets = ["accelerometer", "gyroscope"]
-    self.disable_dm = self.params.get_int("DisableDM")
     self.use_wide_camera = bool(self.params.get("UseWideCamera", return_default=True))
-    self.camera_packets = get_camera_packets(self.use_wide_camera, self.disable_dm, SIMULATION)
+    self.camera_packets = get_camera_packets(self.use_wide_camera)
 
     # TODO: de-couple selfdrived with card/conflate on carState without introducing controls mismatches
     self.car_state_sock = messaging.sub_sock('carState', timeout=20)
@@ -87,7 +86,8 @@ class SelfdriveD:
     ignore = self.sensor_packets + self.gps_packets + ['alertDebug']
     if SIMULATION:
       ignore += ['driverCameraState', 'managerState']
-    ignore += ['driverMonitoringState']
+    if self.CP.notCar or SIMULATION:
+      ignore += ['driverMonitoringState']
 
     if REPLAY:
       # no vipc in replay will make them ignored anyways
@@ -248,7 +248,9 @@ class SelfdriveD:
       self.events.add(EventName.resumeBlocked)
 
     # Handle DM
-    if not self.CP.notCar and self.params.get_int("DisableDM") == 0:
+    if not self.CP.notCar:
+      if self.sm.all_checks(['driverMonitoringState']) and self.sm['driverMonitoringState'].cameraUnavailable:
+        self.events.add(EventName.driverMonitorFallback)
       # Block engaging until ignition cycle after max number or time of distractions
       if self.sm['driverMonitoringState'].lockout and not self.dm_lockout_set:
         self.params.put_bool("DriverTooDistracted", True)
@@ -396,7 +398,9 @@ class SelfdriveD:
       if not_running != self.not_running_prev:
         cloudlog.event("process_not_running", not_running=not_running, error=True)
       self.not_running_prev = not_running
-    if self.sm.recv_frame['managerState'] and (not_running - self.ignored_processes):
+    dm_fallback_processes = {'dmonitoringmodeld'} if (self.sm.all_checks(['driverMonitoringState']) and
+                            self.sm['driverMonitoringState'].cameraUnavailable) else set()
+    if self.sm.recv_frame['managerState'] and (not_running - self.ignored_processes - dm_fallback_processes):
       self.events.add(EventName.processNotRunning)
     else:
       if not SIMULATION and not self.rk.lagging:
