@@ -11,6 +11,7 @@ class DriverMonitoring2(DriverMonitoring):
   def __init__(self, *args, experimental=False, **kwargs):
     super().__init__(*args, **kwargs)
     self.experimental = experimental
+    self.context_strict = False
     self.stock_timeouts = {kind: self._timeouts(kind) for kind in ('VISION', 'WHEELTOUCH')}
     self.camera_available = True
     self.relax_pose = False
@@ -75,14 +76,27 @@ class DriverMonitoring2(DriverMonitoring):
   def _active_kind(self):
     return 'VISION' if self.active_policy == MonitoringPolicy.vision else 'WHEELTOUCH'
 
+  @property
+  def experimental_active(self):
+    return self.experimental and not self.context_strict
+
   def configure_context(self, now, camera_available, strict=False, clear=False):
     self.now = now
     self.input_credit_seconds = 0.0
     self.input_received = False
-    empty_bonus = self.experimental and clear and not strict
+    if strict and not self.context_strict:
+      # Entry is not a driver response. Old experimental grace must not mask
+      # stock monitoring now, or resume when the twenty-second hold ends.
+      self.grace_started = -math.inf
+      self.grace_expired = True
+      self.forward_frames = 0
+      self.forward_recovery = False
+    self.context_strict = strict
+    experimental = self.experimental_active
+    empty_bonus = experimental and clear
     wheel_factor = 2.0 if empty_bonus else 1.0
-    vision_factor = (4.0 if empty_bonus else 2.0) if self.experimental else 1.0
-    custom_wheel = self.experimental or not camera_available
+    vision_factor = (4.0 if empty_bonus else 2.0) if experimental else 1.0
+    custom_wheel = experimental or not camera_available
     wheel_base = self.INTERACTION_TIMEOUTS if custom_wheel else self.stock_timeouts['WHEELTOUCH']
     desired = {'VISION': tuple(v * vision_factor for v in self.stock_timeouts['VISION']),
                'WHEELTOUCH': tuple(v * wheel_factor for v in wheel_base)}
@@ -91,7 +105,7 @@ class DriverMonitoring2(DriverMonitoring):
     old_budget = self._timeouts(old_kind)[2]
     changed = source_changed or any(desired[kind] != self._timeouts(kind) for kind in desired)
     self.camera_available = camera_available
-    self.relax_pose = camera_available and self.experimental
+    self.relax_pose = camera_available and experimental
     if source_changed:
       self.forward_score = 0.0
       self.forward_frames = 0
@@ -125,7 +139,7 @@ class DriverMonitoring2(DriverMonitoring):
 
   @property
   def interaction_grace_remaining(self):
-    if not self.experimental or not self.camera_available or self.grace_expired or self.alert_level == AlertLevel.three or self.too_distracted:
+    if not self.experimental_active or not self.camera_available or self.grace_expired or self.alert_level == AlertLevel.three or self.too_distracted:
       return 0.0
     return max(0.0, self._timeouts('WHEELTOUCH')[2] - (self.now - self.grace_started))
 
@@ -141,13 +155,13 @@ class DriverMonitoring2(DriverMonitoring):
     if not (event_time > self.last_input_event and 0 <= self.now - event_time < 0.25):
       return
     self.last_input_event = event_time
-    if self.camera_available and not self.experimental:
+    if self.camera_available and not self.experimental_active:
       return
     previous = self.awareness
     if self._response_reset():
       self.input_received = True
       self.input_credit_seconds = max(0.0, 1 - previous) * self._timeouts(self._active_kind())[2]
-      if self.experimental:
+      if self.experimental_active:
         self.grace_started = event_time
         self.grace_expired = False
 
@@ -162,8 +176,8 @@ class DriverMonitoring2(DriverMonitoring):
         for field, value in zip(fields, previous, strict=True):
           setattr(self.settings, field, value * 1.2)
 
-      # 수면 기준은 실험모드 여부만으로 적용
-      if self.experimental:
+      # Temporary standard monitoring also restores the stock phone threshold.
+      if self.experimental_active:
         self.settings._PHONE_THRESH = 0.98
 
       super()._get_distracted_types()
@@ -187,12 +201,12 @@ class DriverMonitoring2(DriverMonitoring):
                                       1 - driver.sleepProb, 1 - driver.phoneProb, 1 - driver.sunglassesProb,
                                       1 - abs(self.pose.pitch - pitch_center) / 1.5,
                                       1 - abs(self.pose.yaw - yaw_center) / 1.5))
-    confident = self.experimental and self.forward_score >= 0.9 and self.pose.low_std and not self.driver_distracted
+    confident = self.experimental_active and self.forward_score >= 0.9 and self.pose.low_std and not self.driver_distracted
     self.forward_frames = min(self.forward_frames + 1, round(2 / DT_DMON)) if confident else 0
 
   def _update_events(self, driver_engaged, op_engaged, lowspeed, wrong_gear):
     self.forward_recovery = False
-    custom_camera = self.camera_available and self.experimental
+    custom_camera = self.camera_available and self.experimental_active
     grace = custom_camera and self.interaction_grace_remaining > 0
     if custom_camera:
       # Held stock steering/gas signals must not perpetually renew the grace.

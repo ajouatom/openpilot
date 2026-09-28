@@ -29,11 +29,13 @@ class TrafficContext:
     self.tracks = []
     self.strict_until = 0.0
     self.clear_since = None
+    self.moving_present = False
 
   def update(self, now, objects, healthy, straight, coverage):
     """Associate positions, including vision-only IDs and lane changes.
 
-    Twenty seconds starts on confirmed entry, not every occupied frame. Moving
+    Twenty seconds starts on empty-to-occupied transition, not each new vehicle.
+    Additional vehicles never extend it while the surroundings remain occupied. Moving
     candidates immediately revoke the empty-road bonus; persistence prevents a
     single radar spike from starting the full override. No radar outputs change.
     """
@@ -70,8 +72,11 @@ class TrafficContext:
         new_moving = True
       current.append(TrafficTrack(now, first_seen, obj, confirmed))
     self.tracks = current + [old[i] for i in remaining]
-    if new_moving:
+    if not self.tracks:
+      self.moving_present = False
+    elif new_moving and not self.moving_present:
       self.strict_until = now + self.STRICT_SECONDS
+      self.moving_present = True
     clear = coverage and straight and not self.tracks
     self.clear_since = (now if self.clear_since is None else self.clear_since) if clear else None
     return now < self.strict_until, self.clear_since is not None and now - self.clear_since >= 10
