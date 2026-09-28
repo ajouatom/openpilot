@@ -247,3 +247,22 @@ NVIDIA initialization services explicitly wait for these storage preparations.
 Real-loop tests write the PVA output and /mnt while checking the entire base
 filesystem remains byte-identical across two simulated helper boots. This is
 not a substitute for a physical PID1/USB/model startup test.
+
+The completed second private candidate uses source `b4df5489b2` and has raw
+SHA256 `b11f5601d3a713ad0de23315ee90daddf5452f8e548f2c87c8eeec28d321e55f`.
+Its full APP partition (24,136,122,368 bytes) has baseline SHA256
+`80fe3f9b746734696b1502820e9dd015f79d8465387886e34a7ffd88bd477ac0` for physical
+before/after boot comparison. The Linux-generated initrd decompresses byte-for-byte
+to the independently inspected Windows candidate; gzip's OS header byte accounts
+for their differing compressed hashes. No initrd member except init changed.
+
+Root/DATA filesystem checks, FAT, GPT, runtime imports, both unchanged model
+hashes, and the offline systemd unit graph passed. Separate mount/UTS/PID chroots
+passed normal DATA and unavailable-DATA recovery, including APP EROFS and RAM
+writes. Neither runs the physical firmware/PID1/GPU startup. During image building,
+a parked 60-second observation retained an active/ready host with no invalid
+model/pose messages; it validates that observed build interval, not the new image.
+The owner Jetson was subsequently shut down in P for the next card handoff.
+The comma then supplied 100 valid internal-model and pose messages in five seconds.
+The new image's physical boot, persisted identity and signed DATA update checks
+remain pending; public image and automatic release channel are unchanged.
