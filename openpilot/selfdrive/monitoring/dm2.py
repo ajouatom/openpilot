@@ -154,14 +154,23 @@ class DriverMonitoring2(DriverMonitoring):
   def _get_distracted_types(self):
     fields = ('_POSE_PITCH_THRESHOLD', '_PITCH_NATURAL_THRESHOLD', '_POSE_YAW_THRESHOLD')
     previous = [getattr(self.settings, field) for field in fields]
-    if self.relax_pose and self.alert_level not in (AlertLevel.two, AlertLevel.three):
-      for field, value in zip(fields, previous, strict=True):
-        setattr(self.settings, field, value * 1.2)
+    previous_phone = self.settings._PHONE_THRESH
+
     try:
+      # 기존 고개 방향 완화 조건 유지
+      if self.relax_pose and self.alert_level not in (AlertLevel.two, AlertLevel.three):
+        for field, value in zip(fields, previous, strict=True):
+          setattr(self.settings, field, value * 1.2)
+
+      # 수면 기준은 실험모드 여부만으로 적용
+      if self.experimental:
+        self.settings._PHONE_THRESH = 0.98
+
       super()._get_distracted_types()
     finally:
       for field, value in zip(fields, previous, strict=True):
         setattr(self.settings, field, value)
+      self.settings._PHONE_THRESH = previous_phone
 
   def _update_states(self, driver_state, *args, **kwargs):
     super()._update_states(driver_state, *args, **kwargs)
