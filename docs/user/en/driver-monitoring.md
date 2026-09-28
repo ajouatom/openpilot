@@ -70,3 +70,13 @@ Once a terminal alert is reached, input, forward attention or context changes al
 The vehicle must report zero raw speed, standstill and Park together; only a tiny settling residue in filtered speed is allowed. Zero speed in Drive, Neutral or Reverse, engagement OFF/ON alone, stale or invalid signals, and driver-camera preview cannot release the restriction. Vehicles that do not report Park cannot use this release condition.
 
 `CarrotVisionEnabled` independently controls web road video. Only the video function of old `DisableDM=2` is migrated once; monitoring starts in standard mode. Carrot Vision is unavailable while the USB cluster is enabled.
+
+## Onroad DM display and warning sounds
+
+C4 displays an 84×84 DM inset immediately to the right of the D gear indicator, clear of the right status strip. VISION information sits above it; C3/C3X retain their existing position below the clock.
+
+The inset appears while engaged or with Always On DM enabled, and hides during displayed alerts. An unavailable camera shows a steering-wheel symbol; stale data shows a check state instead of retaining an old face image.
+
+Warnings progress from a silent visual notice to the first audible warning and then the final audible warning. **The first sound has a 70% minimum gain; the final sound always uses 100%.** General/engagement volume settings and ambient-noise attenuation cannot reduce these levels.
+
+This sound policy applies to modes 0 and 1 with camera or interaction monitoring. Navigation and other events sharing the same sound assets retain their existing volume; percentages describe software output gain, not measured speaker sound pressure.

@@ -10,10 +10,11 @@ engagement, lockout, control outputs or scheduling.
 - C3/C3X: 260 x 180 logical pixels, at content-relative (40, 220), below the
   clock and above the speed/device panel. Position follows the content rectangle
   when the sidebar opens. The existing plot begins farther to the right.
-- C4: 56 x 64 pixels, at (width - 58, height - 68), in the 60-pixel right strip.
-  While visible, reserve its bottom 72 pixels from the confidence dot's travel,
-  including its black masking ring and disengagement animation. The top traffic
-  light keeps its existing position and priority over the confidence dot.
+- C4 (September 29 revision): 84 x 84 pixels at (width - 154, height - 96).
+  At 536 x 240 this is (382, 144), 9 pixels right of D and 10 pixels before
+  the 60-pixel right strip. Restore the confidence dot's full-height travel.
+  Move the VISION card above the inset to (382, 56), and keep its right BSD
+  label to the left and warning bar to the right. Compact status text is 11px.
 - Visible onroad while selfdriveState.enabled or AlwaysOnDM is true; hidden
   during any rendered alert (including C4 alert fade-out), offroad or ordinary
   disengagement. This reuses existing monitoring visibility inputs; no new toggle.
@@ -64,3 +65,25 @@ script: `.analysis/archive/2026-09-28/dm-preview/` (local, ignored).
 These checks do not establish physical C3/C4 camera cropping, EGL zero-copy
 behavior, display readability in the vehicle, or additional CPU/GPU load during
 driving. Frame binding uses the existing CameraView per-draw EGL binding path.
+
+## September 29 sound and layout verification
+
+DM event stage 1 remains visual-only. driverDistracted2/driverUnresponsive2
+with promptDistracted receive a final PCM gain floor of 0.7; stage 3 with
+warningImmediate always receives gain 1.0, including user multipliers above 1.
+The first audible stage keeps larger existing gains. Apply this after ambient
+and user volume calculations, keyed by the event's alertType and sound together.
+Navigation's reused promptDistracted asset does not inherit the DM floor.
+Finishing a one-shot retains its original event identity; a new event using the
+same WAV replaces that identity. Monitoring timers and policies are unchanged.
+
+148 focused desktop tests pass, including PCM output from selfdriveState events
+at seven volumes, both DM event families, shared-asset transitions and existing UI
+regressions. The native IPC timeout test is excluded on Windows; adapters replace
+IPC, Params and hardware imports, not the tested PCM/UI logic. Raylib captures use
+the actual inset, NV12 shader, VISION card and confidence dot with synthetic inputs
+and a schematic surrounding HUD. Camera, wheel, stale and alert states were checked
+at both sizes. Evidence: `.analysis/archive/2026-09-29/dm-ui-sound/`.
+
+No physical-device display or speaker measurement has been performed. Gain 1.0
+means software unity gain, not guaranteed hardware loudness or sound pressure.

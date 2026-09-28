@@ -132,6 +132,19 @@ def check_selfdrive_timeout_alert(sm):
 
   return False
 
+
+def dm_warning_volume(alert, alert_type, volume):
+  """Protect DM's two audible stages at the final PCM gain, not its shared asset.
+
+  Event stage 1 is visual-only; stage 2 is the first sound and stage 3 is final.
+  Other events (including navigation) reuse these sounds without DM's gain rule.
+  """
+  if alert_type in ('driverDistracted3/permanent', 'driverUnresponsive3/permanent') and alert == AudibleAlert.warningImmediate:
+    return MAX_VOLUME
+  if alert_type in ('driverDistracted2/permanent', 'driverUnresponsive2/permanent') and alert == AudibleAlert.promptDistracted:
+    return max(0.7, volume)
+  return volume
+
 def linear_resample(samples, original_rate, new_rate):
     if original_rate == new_rate:
         return samples
@@ -169,6 +182,7 @@ class Soundd:
     self.load_sounds()
 
     self.current_alert = AudibleAlert.none
+    self.current_alert_type = ""
     self.current_volume = MIN_VOLUME
     self.current_sound_frame = 0
 
@@ -226,10 +240,11 @@ class Soundd:
   def get_sound_data(self, frames): # get "frames" worth of data from the current alert sound, looping when required
 
     ret = np.zeros(frames, dtype=np.float32)
+    alert, alert_type, volume = self.current_alert, self.current_alert_type, self.current_volume
 
-    if self.current_alert != AudibleAlert.none:
-      num_loops = sound_list[self.current_alert][1]
-      sound_data = self.loaded_sounds[self.current_alert]
+    if alert != AudibleAlert.none:
+      num_loops = sound_list[alert][1]
+      sound_data = self.loaded_sounds[alert]
       written_frames = 0
 
       current_sound_frame = self.current_sound_frame % len(sound_data)
@@ -242,7 +257,7 @@ class Soundd:
         written_frames += frames_to_write
         self.current_sound_frame += frames_to_write
 
-    return ret * self.current_volume
+    return ret * dm_warning_volume(alert, alert_type, volume)
 
   def callback(self, data_out: np.ndarray, frames: int, time, status) -> None:
     if status:
@@ -250,7 +265,7 @@ class Soundd:
 
     data_out[:frames, 0] = self.get_sound_data(frames)
 
-  def update_alert(self, new_alert):
+  def update_alert(self, new_alert, alert_type=""):
     if new_alert != AudibleAlert.none and new_alert not in self.loaded_sounds:
       cloudlog.error(f"soundd received unsupported alert {new_alert}")
       new_alert = AudibleAlert.none
@@ -263,6 +278,10 @@ class Soundd:
     if self.current_alert != new_alert and (new_alert != AudibleAlert.none or current_alert_played_once):
       self.current_alert = new_alert
       self.current_sound_frame = 0
+      self.current_alert_type = alert_type
+    elif self.current_alert == new_alert:
+      # The same WAV may now belong to a different event; do not retain DM gain.
+      self.current_alert_type = alert_type
 
   def update_carrot_alert(self, sm, new_alert):
     if new_alert == AudibleAlert.none:
@@ -281,8 +300,9 @@ class Soundd:
   def get_audible_alert(self, sm):
     if sm.updated['selfdriveState'] or sm.updated['carrotMan']:
       new_alert = sm['selfdriveState'].alertSound.raw
+      alert_type = sm['selfdriveState'].alertType if new_alert != AudibleAlert.none else ""
       new_alert = self.update_carrot_alert(sm, new_alert)
-      self.update_alert(new_alert)
+      self.update_alert(new_alert, alert_type)
     elif check_selfdrive_timeout_alert(sm):
       self.update_alert(AudibleAlert.warningImmediate)
       self.selfdrive_timeout_alert = True

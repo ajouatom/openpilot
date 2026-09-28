@@ -58,15 +58,15 @@ class VisionRenderer(Widget):
     # These use merged vehicle BSD, so OEM warnings work with ShareData off too.
     for active, is_left in ((left, True), (right, False)):
       if active:
-        x = rect.x + 6 if is_left else rect.x + rect.width - 12
+        x = rect.x + 6 if is_left else rect.x + rect.width - 8
         rl.draw_rectangle_rounded(rl.Rectangle(x, rect.y + 78, 6, 56), 0.8, 6, AMBER)
-        self._text("BSD", rect.x + 16 if is_left else rect.x + rect.width - 45, rect.y + 84, AMBER, 12)
+        self._text("BSD", rect.x + 16 if is_left else rect.x + rect.width - 134, rect.y + 84, AMBER, 12)
 
     if not ui_state.share_data:
       return
     state = vision_display_state(self._packet, time.monotonic_ns())
-    # Keep clear of the speed panel, its override speed, and the gear box.
-    card = rl.Rectangle(rect.x + rect.width - 98, rect.y + rect.height - 96, 84, 78)
+    # Above the DM inset, below eGPU, beside the relocated right BSD label/bar.
+    card = rl.Rectangle(rect.x + rect.width - 94, rect.y + rect.height - 184, 84, 78)
     rl.draw_rectangle_rounded(card, 0.14, 6, rl.Color(0, 0, 0, 190))
     color = CYAN if state.state == "running" else AMBER if state.state == "stale" else GRAY
     self._text("VISION", card.x + 6, card.y + 5, color, 10, 40)

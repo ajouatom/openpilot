@@ -349,6 +349,8 @@ Carrot Vision에는 `carrot_settings.json` 카탈로그와 별도로 **AR 표시
 - `HotspotOnBoot`: USIM을 장착한 장치에서 자동 핫스팟을 사용할 때의 설정입니다.
 - `SoftwareMenu`: 메모리 문제가 있을 때 끌 수 있는 Carrot Web 메뉴 설정입니다.
 
+`SoundVolumeAdjust`는 일반 안내음의 음량을 조절합니다. DM 첫 경고음은 출력 음량 최소 70%, 마지막 경고음은 항상 100%이며 볼륨 설정이나 주변 소음에 의해 낮아지지 않습니다. 그보다 앞선 화면 예고는 무음입니다. 자세한 내용은 [운전자 모니터링](driver-monitoring.md)을 참고하세요.
+
 ## 위험도별로 접근하기
 
 ### 비교적 쉽게 되돌릴 수 있는 설정

@@ -7,11 +7,14 @@ from openpilot.selfdrive.ui.soundd import (
   check_selfdrive_timeout_alert,
   resolve_sound_path,
   sound_list,
+  dm_warning_volume,
 )
 
 import os
 import time
 import wave
+import numpy as np
+import pytest
 from types import SimpleNamespace
 
 from openpilot.common.basedir import BASEDIR
@@ -23,7 +26,7 @@ class _SoundSubMaster:
   def __init__(self, countdown, *, selfdrive_updated=False, carrot_updated=True):
     self.updated = {"selfdriveState": selfdrive_updated, "carrotMan": carrot_updated}
     self.services = {
-      "selfdriveState": SimpleNamespace(alertSound=SimpleNamespace(raw=AudibleAlert.none)),
+      "selfdriveState": SimpleNamespace(alertSound=SimpleNamespace(raw=AudibleAlert.none), alertType=""),
       "carrotMan": SimpleNamespace(leftSec=countdown),
     }
 
@@ -32,6 +35,50 @@ class _SoundSubMaster:
 
 
 class TestSoundd:
+  @pytest.mark.parametrize('name', ['driverDistracted', 'driverUnresponsive'])
+  @pytest.mark.parametrize('volume', [0., 0.05, 0.69, 0.7, 0.85, 1., 1.5])
+  @pytest.mark.parametrize('stage', [2, 3])
+  def test_dm_warning_gain_reaches_pcm_even_with_user_mute(self, name, volume, stage):
+    soundd = Soundd.__new__(Soundd)
+    alert = AudibleAlert.promptDistracted if stage == 2 else AudibleAlert.warningImmediate
+    soundd.current_alert = AudibleAlert.none
+    soundd.current_alert_type = ''
+    soundd.current_sound_frame = 0
+    soundd.current_volume = volume
+    samples = np.array([0.1, -0.3, 0.2, -0.4], dtype=np.float32)
+    soundd.loaded_sounds = {alert: samples}
+    sm = _SoundSubMaster(0, selfdrive_updated=True)
+    sm['selfdriveState'].alertSound.raw = alert
+    sm['selfdriveState'].alertType = f'{name}{stage}/permanent'
+    soundd.get_audible_alert(sm)
+    expected = max(0.7, volume) if stage == 2 else 1.
+    np.testing.assert_allclose(soundd.get_sound_data(4), samples * expected)
+
+  @pytest.mark.parametrize('volume', [0., 0.2, 0.9, 1.5])
+  @pytest.mark.parametrize('alert', [AudibleAlert.promptDistracted, AudibleAlert.warningImmediate, AudibleAlert.prompt])
+  def test_non_dm_sounds_keep_normal_volume(self, volume, alert):
+    assert dm_warning_volume(alert, '', volume) == volume
+    assert dm_warning_volume(alert, 'controlsMismatch/immediateDisable', volume) == volume
+    assert dm_warning_volume(alert, 'driverDistracted1/permanent', volume) == volume
+
+  def test_reused_wav_and_navigation_do_not_inherit_dm_gain(self):
+    soundd = Soundd.__new__(Soundd)
+    soundd.current_alert = AudibleAlert.none
+    soundd.current_alert_type = ''
+    soundd.current_sound_frame = 0
+    soundd.loaded_sounds = {AudibleAlert.promptDistracted: np.ones(4, dtype=np.float32)}
+    soundd.current_volume = 0.1
+    soundd.carrot_count_down = 100
+    soundd.update_alert(AudibleAlert.promptDistracted, 'driverDistracted2/permanent')
+    soundd.update_alert(AudibleAlert.none)
+    # Still finish the existing sound using its original DM floor.
+    np.testing.assert_allclose(soundd.get_sound_data(4), .7)
+    sm = _SoundSubMaster(11)
+    sm['selfdriveState'].alertType = 'driverDistracted2/permanent'
+    soundd.get_audible_alert(sm)
+    assert soundd.current_alert_type == ''
+    np.testing.assert_allclose(soundd.get_sound_data(4), .1)
+
   def test_countdown_reacts_to_carrot_man_update_without_selfdrive_update(self):
     soundd = Soundd.__new__(Soundd)
     soundd.carrot_count_down = 100
