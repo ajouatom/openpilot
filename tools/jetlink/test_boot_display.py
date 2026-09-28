@@ -31,6 +31,28 @@ def test_active_service_does_not_claim_model_ready():
   assert rows[-1] == ('콤마 USB 서비스', 'COMMA USB SERVICE', 'active')
 
 
+def test_unreadable_thermal_sensor_does_not_hide_boot_diagnosis(monkeypatch):
+  original = Path.read_text
+
+  def read(self, *args, **kwargs):
+    if self.as_posix().endswith('/thermal_zone0/temp'):
+      # Observed on Jetson Python3.10 when a sysfs read returns EAGAIN.
+      raise TypeError("can't concat NoneType to bytes")
+    if self.as_posix().endswith('/thermal_zone1/temp'):
+      return '55000'
+    return original(self, *args, **kwargs)
+
+  monkeypatch.setattr(Path, 'read_text', read)
+  monkeypatch.setattr(Path, 'glob', lambda self, pattern: iter([
+    Path('/sys/class/thermal/thermal_zone0/temp'),
+    Path('/sys/class/thermal/thermal_zone1/temp')]))
+  monkeypatch.setattr(boot_status.subprocess, 'run', lambda *a, **k:
+                      subprocess.CompletedProcess(a, 0, stdout='[]', stderr=''))
+  status = boot_status.collect()
+  assert status['temp_c'] == 55
+  assert render(status).size == (1920, 462)
+
+
 def test_panel_uses_existing_portrait_upload_geometry():
   from PIL import Image
   frame = Image.new('RGB', (1920, 462))
