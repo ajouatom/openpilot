@@ -8,7 +8,7 @@ import time
 import pytest
 
 sys.path.insert(0, str(Path(__file__).parent))
-from boot_display import lines, render
+from boot_display import lines, render, panel_frame
 import boot_status
 
 
@@ -29,6 +29,17 @@ def test_active_service_does_not_claim_model_ready():
   title, rows, _, _ = lines({'units': {'carrot-jetlink': {'ActiveState': 'active'}}})
   assert 'WAITING' in title[1]
   assert rows[-1] == ('콤마 USB 서비스', 'COMMA USB SERVICE', 'active')
+
+
+def test_panel_uses_existing_portrait_upload_geometry():
+  from PIL import Image
+  frame = Image.new('RGB', (1920, 462))
+  frame.putpixel((0, 0), (255, 0, 0))
+  frame.putpixel((1919, 461), (0, 255, 0))
+  portrait = panel_frame(frame)
+  assert portrait.size == (462, 1920)
+  assert portrait.getpixel((461, 0)) == (255, 0, 0)
+  assert portrait.getpixel((0, 1919)) == (0, 255, 0)
 
 
 @pytest.mark.skipif(sys.platform != 'linux', reason='Offline Linux service installation')
