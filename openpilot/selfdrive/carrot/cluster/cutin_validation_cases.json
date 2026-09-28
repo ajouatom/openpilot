@@ -2215,6 +2215,21 @@
       "forbidden_lead_one_ids": [39, 0],
       "forbidden_lead_two_ids": [39, 0],
       "scene": "User-reported bridge-joint false braking at 35.60s. Vision and front 35 continuously track the moving vehicle around 17m. SCC jumps to a stationary near-road return also reported as front 39 and previously bypassed independent confirmation into L2 at 35.55-36.05s. The camera shows the road joint approaching without a vehicle at that near range. SCC and front are the same radar, not independent vehicle evidence."
+    },
+    {
+      "id": "sonata-3f2-27-braking-front-continuity-50",
+      "vehicle_folder": "HYUNDAI_SONATA 81685acfb327ceef",
+      "log": "000003f2--3246ccd0e1--27/rlog.zst",
+      "source": "front",
+      "window": [0.3, 6.0],
+      "expected": "detect",
+      "human_verified": false,
+      "validation_stage": "lead_one",
+      "target_track_ids": [50],
+      "required_lead_one_ids": [50],
+      "lead_one_continuous_window": [0.3, 6.0],
+      "forbidden_lead_one_ids": [42],
+      "scene": "User-reported close automatic stop. Log-derived regression: confirmed center front 50 remains measured while braking through 4m/s to rest. A similar-speed front 42 appears about 2.3m farther away and must not replace it solely when the moving-acquisition speed gate closes. The screenshot and kinematics support the nearer return; physical identity of the farther reflection is not established. Times use replay frame origin; video is about 0.10s later."
     }
   ]
 }
