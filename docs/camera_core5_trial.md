@@ -1,5 +1,39 @@
 # Camera CPU placement trials
 
+## September 28: C3 UI shares little cores and core6
+
+The user approved expanding C3/C3X (`tici`/`tizi`) onroad main UI affinity
+from core6 to cores0,1,2,3,6, retaining SCHED_OTHER/nice19. C4 (`mici`) keeps
+core6. The scheduler applies the mask to all UI threads, including new workers
+on its existing half-second sweep. Affinity permits migration within a frame;
+it neither reserves a core nor guarantees little-first placement or parallel
+execution of a single rendering thread. Kernel isolation/load balancing can
+also affect where an eligible thread actually runs.
+
+Offroad still returns to cores0..3 before restoring nice0 when permitted.
+Onroad C3 retains nice19 even when core6 is unavailable; hotplug failures fall
+back to little cores and the next sweep retries the expanded mask. USB cluster
+core7/rates, camera, control, radar, model/DM and IRQ policies are unchanged.
+
+The Casper C3 route 00001e69--fe9b90d8dd segments0/1 measured UI redraw rates
+15.54/14.68 Hz, while camera publications remained near20 Hz with consecutive
+frame IDs. The original logs identify a3278c04, not the upload metadata's
+5f9a8b36. Steady UI diagnostics measured44.47 ms drawing wall time versus
+18.13 ms thread CPU time, and570.4 ms runnable scheduler wait per second.
+Core6 averaged88.4% utilization. These support scheduling contention as a
+material contributor, but do not prove this new mask improves physical display
+smoothness. uiDebug measures application redraw, not panel presentation.
+
+Windows mocked scheduling/startup tests cover all workers, new-worker policy,
+hotplug fallback/recovery, offroad restoration and C3/C3X/C4 selection. Target
+Linux affinity readback and comparable C3 driving measurements remain required;
+prior parked C4 measurements do not validate this C3 change.
+Validation: 27 tests passed, five Linux-only scheduler tests skipped; the UI
+guard suite used hardware/logging import stubs on Windows. Ruff and whitespace
+checks passed. These checks do not execute target Linux scheduler syscalls.
+
+Docs-Not-Needed: Internal C3 CPU-affinity trial; no setting or user workflow changes.
+
 ## September 23: approved onroad display placement and fixed USB rate
 
 The user approved main UI on core6 and USB cluster on core7 only while onroad,

@@ -42,16 +42,19 @@ def test_camera_irqs_follow_camerad_across_power_save():
 
 
 @pytest.mark.parametrize("big_ui", [False, True])
-def test_ui_updates_onroad_policy_even_without_a_render(big_ui):
+@pytest.mark.parametrize("device_type", ['tici', 'tizi', 'mici'])
+def test_ui_updates_onroad_policy_even_without_a_render(big_ui, device_type):
   calls, events = [], []
   states = iter([True, False, True])
   ui_state = SimpleNamespace(started=False)
   ui_state.update = lambda: setattr(ui_state, "started", next(states))
-  def scheduler(core, *, enabled):
+  def scheduler(core, *, enabled, include_little):
     assert core == 6 and enabled
+    assert include_little == (device_type in ('tici', 'tizi'))
     return SimpleNamespace(update=lambda onroad, **kw: calls.append(onroad))
   main = load_function("openpilot/selfdrive/ui/ui.py", "main", {
     "TICI": True, "BIG_UI": big_ui, "DisplayScheduler": scheduler,
+    "HARDWARE": SimpleNamespace(get_device_type=lambda: device_type),
     "gc": SimpleNamespace(disable=lambda: events.append("gc_disabled")),
     "set_core_affinity": lambda cores: events.append(tuple(cores)),
     "ensure_ui_sched_other": lambda: events.append("sched_other"),
