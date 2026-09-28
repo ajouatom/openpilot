@@ -1,5 +1,18 @@
 # Repository memory
 
+- On 2026-09-28, the user requested original Ioniq 5 PE wheel touch in DM,
+  explicitly preserving existing ADAS transmission. ECAN 0x2AF raw bytes now
+  feed separate CarState.steeringTouch; torque-based steeringPressed and TX
+  remain unchanged. Six historical segments verify the receive layout/checksum
+  and counter, not physical-contact ground truth or current vehicle validation.
+  Accept the lowest reported touch level 1; raw TOUCH1/2 ranges overlap and must
+  not become an unvalidated baseline-plus-one threshold. No-camera modes accept
+  fresh held contact; camera mode 1 accepts only release-to-contact edges, never
+  indefinite grace from holding or reconnecting. Camera mode 0 stays stock.
+  Unknown, stale, malformed or frozen-counter data grants no touch credit;
+  terminal alerts remain. Scope this empirical profile to Ioniq 5 PE until other
+  vehicles are verified. See docs/driver_monitoring_dm2.md.
+
 - On 2026-09-28, the user revised DriverMonitoringMode after the initial DM2
   implementation. Mode 0 keeps stock camera behavior, but unavailable-camera
   interaction timing is now 15/30/45 seconds. Mode 1 uses the same interaction

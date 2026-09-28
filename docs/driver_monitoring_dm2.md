@@ -75,6 +75,45 @@ not count. Automatic ego/set-speed changes are never driver interactions.
 
 ## Configuration, diagnostics and documentation
 
+### Original steering touch input (2026-09-28)
+
+Ioniq 5 PE alone enables the received `STEER_TOUCH_2AF` profile. `CarState.steeringTouch`
+records availability, validity, contact, original CAN timestamp and raw status /
+TOUCH1 / TOUCH2. It reads the existing ECAN parser's raw bytes, never the mutable
+forwarding cache, CAM input or Panda transmit receipts. Existing ADAS transmit
+code, safety rules, message registration and global torque-based steeringPressed
+remain unchanged. This bus distinction does not authenticate a sensor against
+another device injecting frames onto ECAN.
+
+Six one-minute historical segments yielded 3,597 original 10 Hz frames. All fit
+the receive checksum profile (CRC polynomial 0x1D, initial register zero, xor
+residual 0x32 across bytes 1..7) and a high-nibble counter 0..14. Three newer
+segments established the profile and three older segments independently checked
+it. This is empirical compatibility evidence, not an OEM protocol specification.
+The existing transmit checksum function differs and was not changed.
+
+Status 0 had raw TOUCH1 12..17 / TOUCH2 14..18; contact status 1 already included
+TOUCH1 15 and TOUCH2 14 on different samples. Raw ranges overlap, so a baseline
+plus one threshold is not established by these logs. The user confirmed that
+zero means released and a rising value represents touch. The decoder accepts
+the lowest reported contact status 1, through observed status 4. All 313 samples
+with logged steeringPressed were in nonzero status, including turns; this is
+corroboration, not hand-labeled physical-contact ground truth.
+
+The decoder requires the observed eight-byte layout, checksum, known status,
+successive counters and sample age <=250 ms. Startup/recovery requires two
+consecutive valid frames; malformed, repeated-counter, unknown-layout or stale
+input grants no contact. Replay accepted 3,591 frames after the six initial
+counter baselines, including 1,015 contacts. No new mandatory CAN checks are added.
+
+Without a usable camera, fresh continuous contact maintains wheel awareness
+before terminal alert in both modes. In camera mode 1 only a valid release-to-
+contact transition grants the existing interaction grace. Held contact and
+recovery while already held cannot renew camera grace. Camera mode 0 ignores
+this added signal, and terminal/lockout handling remains unchanged. No claim
+of gaze, sleep detection, legal certification or new-vehicle validation follows
+from capacitive contact or these desktop/log checks.
+
 DriverMonitoringMode is latched at startup: only value 1 is experimental. Old
 DisableDM never opts users into mode 1; only its old video choice migrates once to
 independent CarrotVisionEnabled. The experimental-use confirmation remains.

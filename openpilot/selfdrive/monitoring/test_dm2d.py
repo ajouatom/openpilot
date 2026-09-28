@@ -6,7 +6,8 @@ from openpilot.selfdrive.monitoring.test_monitoring import make_msg
 
 
 @pytest.mark.parametrize('experimental', [False, True])
-def test_missing_or_failed_camera_still_publishes_valid_interaction_monitoring(monkeypatch, experimental):
+@pytest.mark.parametrize('touch_signal', ['none', 'held', 'stale'])
+def test_missing_or_failed_camera_still_publishes_valid_interaction_monitoring(monkeypatch, experimental, touch_signal):
   clock = [100.0]
   packets = []
 
@@ -21,11 +22,15 @@ def test_missing_or_failed_camera_still_publishes_valid_interaction_monitoring(m
     def update(self, timeout):
       assert timeout == 50
       clock[0] += .05
+      if touch_signal == 'held':
+        self['carState'].steeringTouch.sampleMonoTime = int(clock[0] * 1e9)
 
     def all_checks(self, services):
       return 'driverStateV2' not in services
 
   cs = car.CarState.new_message(vEgo=20, canValid=True, gearShifter='drive')
+  if touch_signal != 'none':
+    cs.steeringTouch = {'available': True, 'valid': True, 'touched': True, 'sampleMonoTime': int(100e9)}
   state = State(carState=cs, selfdriveState=log.SelfdriveState.new_message(enabled=True),
                 radarState=log.RadarState.new_message(), modelV2=log.ModelDataV2.new_message())
 
@@ -56,7 +61,7 @@ def test_missing_or_failed_camera_still_publishes_valid_interaction_monitoring(m
   assert len(packets) == 310 and all(p['valid'] for p in packets)
   assert all(p['driverMonitoringState']['cameraUnavailable'] for p in packets)
   state = packets[-1]['driverMonitoringState']
-  assert state['alertLevel'] == 'one'
+  assert state['alertLevel'] == ('none' if touch_signal == 'held' else 'one')
   assert state['dm2WheelTimeoutFactor'] == 1  # no verified empty-road coverage
 
 
@@ -82,7 +87,8 @@ def test_malformed_camera_outputs_cannot_reuse_previous_attention():
 
 
 @pytest.mark.parametrize('experimental', [False, True])
-def test_live_camera_bt_event_defers_only_experimental_monitoring(monkeypatch, experimental):
+@pytest.mark.parametrize('source', ['bt', 'touch'])
+def test_live_camera_response_defers_only_experimental_monitoring(monkeypatch, experimental, source):
   clock, packets = [100.0], []
 
   class Params:
@@ -96,6 +102,9 @@ def test_live_camera_bt_event_defers_only_experimental_monitoring(monkeypatch, e
     def update(self, _):
       clock[0] += .05
       self.logMonoTime['driverStateV2'] = int(clock[0] * 1e9)
+      if source == 'touch':
+        self['carState'].steeringTouch = {'available': True, 'valid': True, 'touched': clock[0] >= 103,
+                                         'sampleMonoTime': int(clock[0] * 1e9)}
 
     def all_checks(self, _):
       return True
@@ -111,7 +120,7 @@ def test_live_camera_bt_event_defers_only_experimental_monitoring(monkeypatch, e
     sent = False
 
     def read(self, allowed, now):
-      if allowed and not self.sent and now >= 103:
+      if source == 'bt' and allowed and not self.sent and now >= 103:
         self.sent = True
         return 'none'  # an unmapped real BT button still counts
       return None
