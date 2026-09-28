@@ -216,6 +216,16 @@ def activate():
     os.sync()
     transaction.unlink()
     os.sync()
+    # Legacy images migrate networking independently of inference. Protected
+    # images keep their immutable recovery worker and never write the base OS.
+    installer = release / 'tools/jetlink/install_wifi.py'
+    if not Path('/etc/carrot-jetlink-protected.json').exists() and installer.is_file():
+      try:
+        subprocess.run(['/usr/bin/python3', str(installer)], check=True, timeout=30,
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        subprocess.run(['systemctl', 'daemon-reload'], check=True, timeout=10)
+      except (OSError, subprocess.SubprocessError):
+        print('Network helper refresh deferred; existing worker retained', flush=True)
   except Exception as error:
     if (ROOT / 'current').resolve() != previous:
       link = ROOT / 'current.rollback'

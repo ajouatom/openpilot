@@ -7,6 +7,26 @@ from host_health import thermal_health
 from openpilot.common import jetlink_status as status
 
 
+def test_storage_recovery_is_not_reported_as_heat_or_legacy_protection(tmp_path):
+  from host_health import storage_health
+  marker, state = tmp_path / 'marker', tmp_path / 'state'
+  value = {'severity': 'ok', 'reason': ''}
+  storage_health(value, state, marker)
+  assert value['storage_mode'] == 'legacy-writable' and value['severity'] == 'ok'
+  marker.write_text('{}')
+  for mode in ('protected', 'base-recovery'):
+    state.write_text(json.dumps({'state': mode, 'system_read_only': True}))
+    value = {'severity': 'ok', 'reason': ''}
+    storage_health(value, state, marker)
+    assert value['severity'] == ('ok' if mode == 'protected' else 'error')
+    assert value['storage_mode'] == mode
+  state.write_text('{torn')
+  value = {'severity': 'error', 'reason': 'thermal fault'}
+  storage_health(value, state, marker)
+  assert value['storage_mode'] == 'unknown'
+  assert value['reason'].startswith('thermal fault; ')
+
+
 def test_thermal_uses_zone_limits_and_ignores_disconnected_sensors(tmp_path):
   zone = tmp_path / 'thermal_zone0'
   zone.mkdir()
