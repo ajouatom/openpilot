@@ -43,7 +43,8 @@ To generate new logs:
 
 `./test_processes.py`
 
-Then, check in the new logs using git-lfs. Make sure to also update the `ref_commit` file to the current commit.
+Keep generated logs outside Git (for example, on the NAS); this fork does not use Git LFS for repository files.
+Make the reference logs available to the replay runner and update the `ref_commit` file to the current commit.
 
 ## API
 

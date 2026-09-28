@@ -1,3 +1,12 @@
-version https://git-lfs.github.com/spec/v1
-oid sha256:d0dea6745d5cd5cf8206ced256310fed587555b3309d80cad46a4c066a931401
-size 707
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="police">
+  <!-- Prepared asset — not yet wired into the HUD. Police peaked cap. -->
+  <!-- brim -->
+  <path d="M7 45 Q32 57 57 45 L57 49.5 Q32 61 7 49.5 Z" fill="#16212c" stroke="#0d1620" stroke-width="2"/>
+  <!-- band -->
+  <rect x="11.5" y="37" width="41" height="9.5" rx="2.5" fill="#e7ecf1" stroke="#0d1620" stroke-width="2"/>
+  <!-- crown -->
+  <path d="M13.5 37 Q13.5 16.5 32 16.5 Q50.5 16.5 50.5 37 Z" fill="#1e6fe0" stroke="#0d1620" stroke-width="3"/>
+  <!-- badge -->
+  <circle cx="32" cy="28.5" r="5" fill="#ffffff" stroke="#0d1620" stroke-width="2"/>
+  <circle cx="32" cy="28.5" r="1.7" fill="#1e6fe0"/>
+</svg>
