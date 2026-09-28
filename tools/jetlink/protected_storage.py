@@ -74,7 +74,13 @@ def valid_runtime(path):
   """Do not execute a half-copied DATA runtime; immutable base remains usable."""
   try:
     marker = json.loads((path / 'protected-runtime.json').read_text())
-    current = (path / 'current').resolve(strict=True)
+    target = (path / 'current').readlink()
+    # Existing updater versions persist an absolute /opt/... symlink. Before
+    # the DATA bind mount, resolving that literally would inspect the factory
+    # APP tree and incorrectly reject every newly activated release.
+    if target.is_absolute():
+      target = target.relative_to(RUNTIME)
+    current = (path / target).resolve(strict=True)
     releases = (path / 'releases').resolve(strict=True)
     return (marker == {'format': 1} and current.is_relative_to(releases)
             and (current / 'tools/jetlink/server.py').is_file()

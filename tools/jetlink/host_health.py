@@ -12,6 +12,26 @@ STATUS = Path('/dev/shm/carrot-jetlink-health.json')
 THERMAL = Path('/sys/class/thermal')
 
 
+def storage_health(value, status=Path('/run/carrot-storage.json'), marker=Path('/etc/carrot-jetlink-protected.json')):
+  if not marker.exists():
+    value['storage_mode'] = 'legacy-writable'
+    return
+  try:
+    data = json.loads(status.read_text())
+    mode = data['state']
+    if data.get('system_read_only') is not True or mode not in ('protected', 'base-recovery'):
+      raise ValueError('Unknown protected storage state')
+  except (OSError, ValueError, KeyError, TypeError):
+    mode = 'unknown'
+  value['storage_mode'] = mode
+  if mode != 'protected':
+    issue = 'Storage recovery: factory runtime, check SD DATA' if mode == 'base-recovery' else 'Storage protection status unavailable'
+    value['reason'] = '; '.join(filter(None, [value.get('reason'), issue]))[:240]
+    # Existing UI reserves warning/HOT for temperature. Storage recovery is a
+    # separate fault, not a thermal warning or proof that inference is invalid.
+    value.update(severity='error', storage_error=True)
+
+
 def thermal_health(root=THERMAL):
   sensors = []
   for zone in sorted(root.glob('thermal_zone*')):
@@ -88,6 +108,7 @@ class HostHealth:
       started = time.monotonic()
       try:
         value = thermal_health()
+        storage_health(value)
         try:
           value['addresses'] = network_addresses()
         except (OSError, ValueError, subprocess.SubprocessError):

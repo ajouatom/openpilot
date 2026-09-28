@@ -19,9 +19,11 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import re
 import shutil
 import time
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -121,11 +123,35 @@ class EngineCache:
     under another value hands the next client a spec it did not ask for. The
     backend is recorded for the log; the key already keeps artifacts apart.
     """
+    target = self.root / LAST_LOADED
+    value = {'sha256': sha256, 'frame_skip': frame_skip, 'backend': self.backend.name}
+    temporary = None
     try:
-      (self.root / LAST_LOADED).write_text(json.dumps(
-        {'sha256': sha256, 'frame_skip': frame_skip, 'backend': self.backend.name}))
+      try:
+        if json.loads(target.read_text()) == value:
+          return  # Routine model preload must not rewrite the SD every boot.
+      except (OSError, ValueError):
+        pass
+      with tempfile.NamedTemporaryFile(mode='w', dir=self.root, prefix='.last-loaded-', delete=False) as output:
+        temporary = Path(output.name)
+        json.dump(value, output)
+        output.flush()
+        os.fsync(output.fileno())
+      os.replace(temporary, target)
+      if os.name == 'posix':
+        fd = os.open(self.root, os.O_RDONLY | os.O_DIRECTORY)
+        try:
+          os.fsync(fd)
+        finally:
+          os.close(fd)
     except OSError:
       pass   # a read-only cache still serves; it just cannot preload next time
+    finally:
+      if temporary is not None:
+        try:
+          temporary.unlink(missing_ok=True)
+        except OSError:
+          pass
 
   def last_loaded(self) -> tuple[str, int] | None:
     try:

@@ -202,6 +202,20 @@ class Worker:
 def main():
   if os.geteuid() != 0:
     raise PermissionError('Network provisioning requires its root service')
+  # One-time bridge for already installed images whose old service points into
+  # a signed runtime. Install independent networking for the next start. Keep
+  # this worker running even if migration is interrupted or storage is full.
+  source = Path(__file__).resolve().parent
+  if source.is_relative_to(Path('/opt/carrot-jetlink/releases')) and not Path('/etc/carrot-jetlink-protected.json').exists():
+    try:
+      from install_wifi import configure
+      from install_updates import configure as configure_updates
+      configure(Path('/'), source)
+      configure_updates(Path('/'), source)
+      subprocess.run(['systemctl', 'daemon-reload'], check=True, timeout=10,
+                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except Exception:
+      pass  # Network recovery remains available; the next start retries.
   # Protected-image persistence is installed independently of updateable model
   # code. Legacy images keep their existing on-disk NetworkManager profiles.
   def persist():

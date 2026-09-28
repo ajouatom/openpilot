@@ -17,9 +17,12 @@ FIXED = {'etc/hostname', 'etc/hosts',
 
 
 def allowed(name):
-  return name in FIXED or bool(re.fullmatch(
-    r'etc/ssh/ssh_host_(?:rsa|ecdsa|ed25519)_key(?:\.pub)?|'
-    r'etc/NetworkManager/system-connections/[a-zA-Z0-9_.-]+\.nmconnection', name))
+  prefix = 'etc/NetworkManager/system-connections/'
+  if name.startswith(prefix):
+    filename = name[len(prefix):]
+    return (filename.endswith('.nmconnection') and len(filename.encode()) <= 255
+            and not any(c in filename for c in '/\\\x00\r\n'))
+  return name in FIXED or bool(re.fullmatch(r'etc/ssh/ssh_host_(?:rsa|ecdsa|ed25519)_key(?:\.pub)?', name))
 
 
 def canonical(value):

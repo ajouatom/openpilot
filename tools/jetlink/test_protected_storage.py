@@ -71,6 +71,27 @@ def test_restore_identity_does_not_modify_os_or_serialize_machine_id(tmp_path):
 
 
 @pytest.mark.skipif(sys.platform == 'win32', reason='Linux symlink semantics')
+@pytest.mark.parametrize('target', ['releases/updated', '/opt/carrot-jetlink/releases/updated'])
+def test_updated_data_runtime_is_resolved_before_bind_mount(tmp_path, target):
+  from protected_storage import valid_runtime
+  release = tmp_path / 'releases/updated'
+  for name in ('tools/jetlink/server.py', 'SOURCE_COMMIT'):
+    p = release / name
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text('synthetic')
+  for name in ('venv/bin/python', 'cache/last-loaded.json'):
+    p = tmp_path / name
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text('synthetic')
+  (tmp_path / 'protected-runtime.json').write_text('{"format":1}')
+  (tmp_path / 'current').symlink_to(target)
+  assert valid_runtime(tmp_path)
+  (tmp_path / 'current').unlink()
+  (tmp_path / 'current').symlink_to('/etc')
+  assert not valid_runtime(tmp_path)
+
+
+@pytest.mark.skipif(sys.platform == 'win32', reason='Linux symlink semantics')
 def test_protected_image_wiring_is_offline_only_and_network_independent(tmp_path):
   with pytest.raises(ValueError):
     configure(Path('/'), Path(__file__).parent)
@@ -84,6 +105,7 @@ def test_protected_image_wiring_is_offline_only_and_network_independent(tmp_path
   assert '/dev/root / ext4 ro 0 0' in (tmp_path / 'etc/fstab').read_text()
   wifi = (tmp_path / 'etc/systemd/system/carrot-jetlink-wifi.service').read_text()
   assert 'update-apply' not in wifi
+  assert 'ExecStart=/usr/bin/python3 /usr/local/lib/carrot-jetlink/network/current/wifi_apply.py' in wifi
   assert (tmp_path / 'usr/lib/carrot-jetlink-storage/wifi_apply.py').is_file()
   assert 'Legacy APP growth disabled' in (tmp_path / 'etc/systemd/system/carrot-image-grow.service').read_text()
 

@@ -88,7 +88,8 @@ def main():
     machine = Path('/etc/machine-id').read_text().strip()
     if not re.fullmatch('[0-9a-f]{32}', machine):
       raise RuntimeError('Unique machine identity is not ready')
-    hostname = config.get('hostname', 'carrot-jetson-' + machine[-6:])
+    previous = json.loads((STATE/'provisioned.json').read_text()) if (STATE/'provisioned.json').exists() else {}
+    hostname = config.get('hostname', previous.get('hostname', 'carrot-jetson-' + machine[-6:]))
     atomic(Path('/etc/hostname'), hostname + '\n')
     atomic(Path('/etc/hosts'), '127.0.0.1 localhost\n127.0.1.1 ' + hostname + '\n::1 localhost ip6-localhost ip6-loopback\n')
     subprocess.run(['hostname', hostname], check=True)
