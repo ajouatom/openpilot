@@ -81,8 +81,31 @@ limit or scheduling policy is changed.
   its continuity case passes in both modes after failing before the change.
 
 Replaying recorded trajectories verifies selection; it does not simulate
-closed-loop braking or prove a new physical stopping distance. GitHub image
-publication and NAS verification are recorded after deployment.
+closed-loop braking or prove a new physical stopping distance.
+
+## Publication verified
+
+- Vehicle/shared-code commit: `50eac829e8420b12b4231228ab7f03557aaeb083`,
+  pushed to `carrot-wip`.
+- [Carrot Routes image run 36404820189](https://github.com/ajouatom/openpilot/actions/runs/36404820189)
+  succeeded: 291 preprocessing tests, 33 vault tests, 254 planner tests and
+  900 radar tests (1,478 total), then image build/publication succeeded.
+- The existing NAS scheduled updater deployed image
+  `sha256:07baea5013cb5402a8b26a9b09700d328d6579c20c476532a2e427030b1ae142`
+  and reported `status=updated`, no error, and the intended `sourceCommit`.
+  Its independent configured 1,196-frame probe passed; this is separate from
+  the Sonata verification below.
+- The actual Sonata upload-result page returned HTTP 200 and its radar
+  endpoint recalculated all 1,199 frames with source fingerprint
+  `c14298e2adb3a62b3479`. The first 121 frames (replay 0-6 seconds) all select
+  #50. Every served frame and graph equals a fresh committed-bundle replay;
+  the canonical frames/graphs/sourceVersion hash is
+  `eba9e6e0f5e60fea0f03583261fa97a4047251231190adad7407af57f0511967`.
+  The local fingerprint calculation uses Linux's case-sensitive path ordering
+  for comparison with the deployed image; native Windows Path ordering differs.
+
+This verifies the vehicle branch publication and analysis service deployment,
+not installation or a new driving test on the Sonata.
 
 Private source logs, decoded data and reproduction scripts remain in
 `.analysis/archive/2026-09-28/sonata-stop` and the corresponding fix archive.
