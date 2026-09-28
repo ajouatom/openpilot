@@ -1,0 +1,157 @@
+"""Comma-side provisioning for the unmodified upstream Mac app only."""
+import hashlib
+import os
+from pathlib import Path
+import shutil
+import tempfile
+import time
+import urllib.request
+
+from openpilot.common.jetlink_peer import is_mac_peer
+from openpilot.selfdrive.modeld.jetlink.link import SPEC, validate_spec
+from jetlink.client import EngineMissing
+from jetlink.transport.base import LinkTimeout
+
+MODEL_URL = 'https://upload.shind0.synology.me/models/carrot-jetlink-cinque-v2/big_driving_supercombo.onnx'
+CACHE = Path('/data/models/carrot-jetlink-mac')
+
+
+class PreparationDeferred(RuntimeError):
+  pass
+
+
+def require_setup(offroad, connected):
+  if not connected():
+    raise PreparationDeferred('Mac disconnected; waiting for reconnection')
+  if not offroad():
+    raise PreparationDeferred('Mac model setup requires ignition off')
+
+
+def model_file(offroad, connected, progress, cache=CACHE):
+  require_setup(offroad, connected)
+  deadline = time.monotonic() + 1800
+  cache.mkdir(parents=True, exist_ok=True)
+  target = cache / (SPEC.sha256 + '.onnx')
+  if target.is_file() and target.stat().st_size == SPEC.nbytes:
+    value = hashlib.sha256()
+    with target.open('rb') as stream:
+      for block in iter(lambda: stream.read(4 << 20), b''):
+        require_setup(offroad, connected)
+        value.update(block)
+        progress('verify', 0., 'Checking cached Mac model')
+    if value.hexdigest() == SPEC.sha256:
+      return target
+  if shutil.disk_usage(cache).free < SPEC.nbytes + (64 << 20):
+    raise OSError('Not enough free space for the Mac model')
+  fd, name = tempfile.mkstemp(dir=cache, prefix='download-', suffix='.part')
+  temporary = Path(name)
+  try:
+    progress('download', 0., 'Downloading Cinque v2 for Mac')
+    with os.fdopen(fd, 'wb') as output:
+      with urllib.request.urlopen(MODEL_URL, timeout=10) as response:
+        if response.geturl() != MODEL_URL:
+          raise ValueError('Unexpected Mac model download redirect')
+        count, value = 0, hashlib.sha256()
+        while True:
+          require_setup(offroad, connected)
+          if time.monotonic() >= deadline:
+            raise TimeoutError('Mac model download exceeded 30 minutes')
+          block = response.read(1 << 20)
+          if not block:
+            break
+          count += len(block)
+          if count > SPEC.nbytes:
+            raise ValueError('Oversized Mac model download')
+          output.write(block)
+          value.update(block)
+          progress('download', count / SPEC.nbytes, 'Downloading Cinque v2 for Mac')
+      if count != SPEC.nbytes or value.hexdigest() != SPEC.sha256:
+        raise ValueError('Mac model checksum/size mismatch')
+      require_setup(offroad, connected)
+      output.flush()
+      os.fsync(output.fileno())
+    os.replace(temporary, target)
+    return target
+  finally:
+    temporary.unlink(missing_ok=True)
+
+
+class PreparationTransport:
+  """Poll setup cancellation while existing client waits for engine responses.
+
+  Installed only during Mac preparation; inference keeps the original transport
+  and deadlines. The underlying transport retains partially received messages.
+  """
+  def __init__(self, transport, check):
+    self.transport, self.check = transport, check
+
+  def __getattr__(self, name):
+    return getattr(self.transport, name)
+
+  def send(self, *args, **kwargs):
+    self.check()
+    return self.transport.send(*args, **kwargs)
+
+  def send_json(self, *args, **kwargs):
+    self.check()
+    return self.transport.send_json(*args, **kwargs)
+
+  def recv(self, timeout=None):
+    end = None if timeout is None else time.monotonic() + timeout
+    while True:
+      self.check()
+      remaining = 1. if end is None else min(1., end - time.monotonic())
+      if remaining <= 0:
+        raise LinkTimeout('Mac preparation response timeout')
+      try:
+        return self.transport.recv(timeout=remaining)
+      except LinkTimeout:
+        pass
+
+
+def prepare(client, peer, offroad, connected, progress, cache=CACHE):
+  """Retain the exact legacy call for every non-Mac, including all Jetsons."""
+  if not is_mac_peer(peer):
+    validate_spec(client.ensure_engine(SPEC.sha256, SPEC.nbytes, frame_skip=SPEC.frame_skip, build_timeout=30))
+    return
+
+  # HELLO resets the upstream session's requested model, so engine_state is
+  # normally "none" even when loaded names a resident engine. ENGINE_REQ below
+  # still verifies its full spec; pending setup remains offroad-only.
+  preloaded = peer.get('loaded') == SPEC.sha256
+  if not preloaded:
+    require_setup(offroad, connected)
+
+  def check():
+    if not connected():
+      raise PreparationDeferred('Mac disconnected; waiting for reconnection')
+    if not preloaded:
+      require_setup(offroad, connected)
+    progress('prepare', None, 'Waiting for Mac model preparation')
+
+  def stopped():
+    # A ready response returns without building. Any pending build/upload must
+    # still stop when ignition starts, including a stale preloaded HELLO.
+    require_setup(offroad, connected)
+    return False
+
+  def report(stage, fraction, message):
+    require_setup(offroad, connected)
+    progress(stage, fraction, message)
+
+  original = client.t
+  client.t = PreparationTransport(original, check)
+  try:
+    args = dict(frame_skip=SPEC.frame_skip, build_timeout=900, should_stop=stopped, progress=report)
+    try:
+      result = client.ensure_engine(SPEC.sha256, SPEC.nbytes, **args)
+    except EngineMissing:
+      require_setup(offroad, connected)
+      path = model_file(offroad, connected, progress, cache)
+      require_setup(offroad, connected)
+      result = client.ensure_engine(SPEC.sha256, SPEC.nbytes, onnx_path=path, **args)
+    validate_spec(result)
+  finally:
+    client.t = original
+    client.progress_cb = None
+    client._should_stop = lambda: False

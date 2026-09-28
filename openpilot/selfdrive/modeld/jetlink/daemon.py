@@ -13,8 +13,9 @@ import time
 import numpy as np
 
 from openpilot.selfdrive.modeld.jetlink import VENDOR
-from openpilot.selfdrive.modeld.jetlink.link import (SPEC, SOCKET, STATUS, REQUEST, REPLY, PacketReader, send, send_parts, validate_spec)
+from openpilot.selfdrive.modeld.jetlink.link import (SPEC, SOCKET, STATUS, REQUEST, REPLY, PacketReader, send, send_parts)
 from openpilot.selfdrive.modeld.jetlink.phase import Publisher as PhasePublisher
+from openpilot.selfdrive.modeld.jetlink.mac import prepare, PreparationDeferred
 from jetlink.client import JetlinkClient
 from jetlink.transport.ffs import FfsTransport
 
@@ -227,12 +228,26 @@ def main():
           # fetch its first model. This is outside every model frame deadline.
           wifi.send(client, initial=True)
         publish('loading', peer=peer)
-        validate_spec(client.ensure_engine(SPEC.sha256, SPEC.nbytes, frame_skip=SPEC.frame_skip, build_timeout=30))
+        from openpilot.common.params import Params
+        params = Params()
+        last_progress = 0.
+
+        def progress(stage, fraction, message):
+          nonlocal last_progress
+          if time.monotonic() - last_progress >= 1:
+            publish('loading', peer=peer, preparation={'stage': stage, 'fraction': fraction, 'message': str(message)[:160]})
+            last_progress = time.monotonic()
+
+        prepare(client, peer, lambda: params.get_bool('IsOffroad') and not params.get_bool('IsOnroad'),
+                host_attached, progress)
         # Warm independently of camera/modeld; every real session resets state.
         for frame in range(10):
           client.infer(np.zeros(SPEC.warped_shape, np.uint8), np.zeros(SPEC.packed_nelem, np.float32), frame, reset=True)
         log.info('Jetlink ready: %s', peer)
         serve_local(listener, client, peer, wifi)
+      except PreparationDeferred as exc:
+        log.info('%s', exc)
+        publish('loading', peer=peer, preparation={'stage': 'waiting', 'message': str(exc)})
       except Exception as exc:
         log.exception('Jetlink connection failed')
         publish('retrying', peer=peer, error=str(exc)[:300])

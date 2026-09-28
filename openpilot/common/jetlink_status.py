@@ -5,6 +5,8 @@ import math
 from pathlib import Path
 import time
 
+from openpilot.common.jetlink_peer import is_mac_peer
+
 LINK_STATUS = Path('/dev/shm/carrot-jetlink.json')
 MODEL_STATUS = Path('/dev/shm/carrot-jetlink-model.json')
 HOST_LABELS = {'jetson': 'jetSON', 'mac': 'MAC'}
@@ -28,7 +30,7 @@ def host_label(peer):
   device = str(peer.get('device', '')).lower()
   if peer.get('backend') == 'trt' and 'orin' in device:
     return 'jetSON'
-  if peer.get('backend') == 'ort' and 'coreml' in device:
+  if is_mac_peer(peer):
     return 'MAC'
   return 'Jetlink'
 
