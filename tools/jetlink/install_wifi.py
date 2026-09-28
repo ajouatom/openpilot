@@ -8,7 +8,7 @@ def configure(root):
   name = 'carrot-jetlink-wifi.service'
   (systemd/name).write_text('''[Unit]
 Description=Import attached comma Wi-Fi profiles over private USB channel
-After=NetworkManager.service carrot-jetlink-update-apply.service
+After=NetworkManager.service carrot-image-setup.service
 Wants=NetworkManager.service
 StartLimitIntervalSec=0
 [Service]

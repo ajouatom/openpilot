@@ -5,13 +5,19 @@ from pathlib import Path
 import subprocess
 import time
 import uuid
+import configparser
 
-from image_first_boot import atomic, nm_escape
+from image_first_boot import nm_escape
+from persistent_state import durable_write
 from wifi_protocol import read_packet, validate
 
 DIRECTORY = Path('/etc/NetworkManager/system-connections')
 STATUS = Path('/dev/shm/carrot-jetlink-network-status.json')
 PREFIX = 'carrot-usb-'
+
+
+def atomic(path, text, mode=0o644):
+  durable_write(path, text.encode(), mode)
 
 
 def nm(*args):
@@ -26,7 +32,7 @@ def nm(*args):
 def render(owner, profile, priority):
   uid = str(uuid.uuid5(uuid.NAMESPACE_URL, 'carrot-usb:' + owner + ':' + profile['id']))
   text = ('[connection]\nid=' + PREFIX + uid + '\nuuid=' + uid + '\ntype=wifi\n'
-          'autoconnect=true\nautoconnect-priority=' + str(priority) + '\n'
+          'autoconnect=true\nautoconnect-retries=0\nautoconnect-priority=' + str(priority) + '\n'
           '[wifi]\nmode=infrastructure\nssid=' + nm_escape(profile['ssid']) + '\n'
           'hidden=' + ('true' if profile['hidden'] else 'false') + '\n')
   if profile['security'] != 'open':
@@ -49,7 +55,7 @@ def install(value, directory=DIRECTORY, command=nm):
     path = directory/name
     if path.is_symlink():
       raise ValueError('Unexpected network profile symlink')
-    previous = path.read_text() if path.exists() else None
+    previous = path.read_text(encoding='utf-8') if path.exists() else None
     if previous != content:
       atomic(path, content, 0o600)
       try:
@@ -71,18 +77,19 @@ def install(value, directory=DIRECTORY, command=nm):
   return [uid for uid, _ in desired.values()]
 
 
-def connect(ids, command=nm, preferred=None):
+def connect(ids, command=nm, preferred=None, force=False):
   states = command('-t', '-f', 'DEVICE,TYPE,STATE', 'device', 'status').splitlines()
   connected = any(':wifi:connected' in row for row in states)
   active = command('-t', '-f', 'UUID', 'connection', 'show', '--active').splitlines() if preferred else []
-  if connected and (preferred is None or preferred in active):
+  if not force and connected and (preferred is None or preferred in active):
     return 'connected'
   if not ids:
     return 'waiting_for_comma_wifi'
   command('radio', 'wifi', 'on')
   # NetworkManager handles availability, password validation, and DHCP. Try
   # the comma's preferred profile first, retaining every imported fallback.
-  for uid in ([preferred] if connected and preferred else ids):
+  order = ([preferred] + [uid for uid in ids if uid != preferred]) if preferred else ids
+  for uid in order:
     try:
       command('--wait', '12', 'connection', 'up', 'uuid', uid)
       return 'connected'
@@ -91,34 +98,124 @@ def connect(ids, command=nm, preferred=None):
   return 'retrying'
 
 
+def saved_ids(directory=DIRECTORY):
+  """Only saved client networks; never activate a hotspot as a recovery path."""
+  profiles = []
+  for path in directory.glob('*.nmconnection'):
+    try:
+      if path.is_symlink() or path.stat().st_size > 32768:
+        continue
+      value = configparser.ConfigParser(interpolation=None, strict=False)
+      value.read_string(path.read_text(encoding='utf-8'))
+      connection = value['connection']
+      if connection.get('type') not in ('wifi', '802-11-wireless'):
+        continue
+      wifi = value['wifi'] if 'wifi' in value else value['802-11-wireless']
+      if wifi.get('mode', 'infrastructure') != 'infrastructure' or not connection.getboolean('autoconnect', fallback=True):
+        continue
+      uid = str(uuid.UUID(connection['uuid']))
+      profiles.append((connection.getint('autoconnect-priority', fallback=0), uid))
+    except (OSError, ValueError, KeyError, configparser.Error):
+      continue
+  return [uid for _, uid in sorted(profiles, reverse=True)]
+
+
+class Worker:
+  """Wi-Fi recovery does not depend on USB, a model, or an update succeeding."""
+  def __init__(self, directory=DIRECTORY, command=nm, persist=lambda: None):
+    self.directory, self.command, self.persist = directory, command, persist
+    self.applied = None
+    self.next_attempt = 0
+    self.state = 'starting'
+    self.count = 0
+    self.recovered = False
+
+  def rollback(self):
+    journal = self.directory / '.carrot-wifi-rollback.json'
+    if not journal.exists():
+      return
+    if journal.is_symlink() or journal.stat().st_size > 512 * 1024:
+      raise ValueError('Unexpected Wi-Fi recovery journal')
+    value = json.loads(journal.read_text(encoding='utf-8'))
+    old, new = value['old'], value['new']
+    for name in list(old) + new:
+      uid = name[len(PREFIX):-len('.nmconnection')]
+      if name != PREFIX + str(uuid.UUID(uid)) + '.nmconnection':
+        raise ValueError('Unexpected Wi-Fi recovery path')
+    for name in new:
+      if name not in old:
+        try:
+          self.command('connection', 'delete', 'uuid', name[len(PREFIX):-len('.nmconnection')])
+        except RuntimeError:
+          pass
+        (self.directory / name).unlink(missing_ok=True)
+    for name, content in old.items():
+      path = self.directory / name
+      atomic(path, content, 0o600)
+      self.command('connection', 'load', str(path))
+    journal.unlink()
+
+  def step(self, packet, now):
+    if now < self.next_attempt:
+      return self.state
+    self.next_attempt = now + 30
+    try:
+      if not self.recovered:
+        self.rollback()
+        self.recovered = True
+      # Snapshot profiles before replacement. Failed credentials must not remove
+      # the only previously working network, even across a service restart.
+      value = packet[1] if packet is not None else None
+      identity = (value['owner'], value['profiles']) if value is not None else None
+      changed = value is not None and bool(value['profiles']) and identity != self.applied
+      old = {p.name: p.read_text(encoding='utf-8') for p in self.directory.glob(PREFIX + '*.nmconnection') if not p.is_symlink()}
+      if changed:
+        try:
+          journal = self.directory / '.carrot-wifi-rollback.json'
+          rendered = [render(value['owner'], p, 100 - i) for i, p in enumerate(value['profiles'])]
+          desired = {PREFIX + uid + '.nmconnection': content for uid, content in rendered}
+          new = list(desired)
+          atomic(journal, json.dumps({'old': old, 'new': new}), 0o600)
+          ids = install(value, self.directory, self.command)
+          preferred = next((uid for uid, p in zip(ids, value['profiles']) if p['active']), None)
+          self.state = connect(ids, self.command, preferred=preferred, force=old != desired)
+          active = self.command('-t', '-f', 'UUID', 'connection', 'show', '--active').splitlines()
+          if self.state != 'connected' or not set(active).intersection(ids):
+            raise RuntimeError('Candidate Wi-Fi not connected')
+          self.persist()
+          self.applied = identity
+          journal.unlink()
+        except Exception:
+          self.rollback()
+          # Restore connectivity using saved profiles, then retry USB later.
+          connect(saved_ids(self.directory), self.command)
+          raise
+      else:
+        self.state = connect(saved_ids(self.directory), self.command)
+      self.count = len(saved_ids(self.directory))
+    except Exception:
+      self.state = 'retrying'
+      self.recovered = False
+    return self.state
+
+
 def main():
   if os.geteuid() != 0:
     raise PermissionError('Network provisioning requires its root service')
-  applied = None
-  ids = []
-  next_attempt = 0
+  # Protected-image persistence is installed independently of updateable model
+  # code. Legacy images keep their existing on-disk NetworkManager profiles.
+  def persist():
+    helper = Path('/usr/lib/carrot-jetlink-storage/protected_storage.py')
+    if helper.is_file():
+      subprocess.run(['/usr/bin/python3', str(helper), 'save'], check=True, timeout=20,
+                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+  worker = Worker(persist=persist)
   while True:
-    packet = read_packet()
-    state = 'waiting_for_usb'
     try:
-      if packet is not None:
-        value = packet[1]
-        # Includes owner and ordering, but never persist a password-derived hash.
-        identity = (value['owner'], value['profiles'])
-        if identity != applied:
-          ids = install(value)
-          applied = identity
-          next_attempt = 0
-        if time.monotonic() >= next_attempt:
-          preferred = next((uid for uid, p in zip(ids, value['profiles']) if p['active']), None)
-          state = connect(ids, preferred=preferred)
-          next_attempt = time.monotonic() + 30
-        else:
-          state = 'configured'
+      state = worker.step(read_packet(), time.monotonic())
     except Exception:
       state = 'retrying'
-      next_attempt = time.monotonic() + 30
-    atomic(STATUS, json.dumps({'state': state, 'profiles': len(ids), 'updated': time.monotonic()}) + '\n', 0o644)
+    atomic(STATUS, json.dumps({'state': state, 'profiles': worker.count, 'updated': time.monotonic()}) + '\n', 0o644)
     time.sleep(2)
 
 
