@@ -89,8 +89,8 @@ def run_dm2(params, experimental):
     if not road_ok or sm.updated['radarState']:
       model = sm['modelV2']
       straight = (abs(cs.steeringAngleDeg) < 5 and abs(cs.aEgo) < 0.5 and
-                  len(model.orientationRate.z) >= 10 and max(abs(v) for v in model.orientationRate.z[:10]) < 0.01 and
-                  len(model.laneLineProbs) == 4 and min(model.laneLineProbs[1:3]) > 0.8 and
+                  len(model.orientationRate.z) >= 10 and max(abs(model.orientationRate.z[i]) for i in range(10)) < 0.01 and
+                  len(model.laneLineProbs) == 4 and min(model.laneLineProbs[1], model.laneLineProbs[2]) > 0.8 and
                   not cs.leftBlinker and not cs.rightBlinker)
       strict, clear = traffic.update(now, traffic_observations(sm['radarState']), road_ok, straight, covered)
     camera_ok = camera_health.update(now, camera_sample_usable(sm, dm.wheel_on_right, demo_mode) and

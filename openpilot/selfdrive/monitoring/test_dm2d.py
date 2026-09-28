@@ -16,7 +16,8 @@ def checked_submaster(state):
 
 @pytest.mark.parametrize('experimental', [False, True])
 @pytest.mark.parametrize('touch_signal', ['none', 'held', 'stale'])
-def test_missing_or_failed_camera_still_publishes_valid_interaction_monitoring(monkeypatch, experimental, touch_signal):
+@pytest.mark.parametrize('model_ready', [False, True])
+def test_missing_or_failed_camera_still_publishes_valid_interaction_monitoring(monkeypatch, experimental, touch_signal, model_ready):
   clock = [100.0]
   packets = []
 
@@ -40,8 +41,12 @@ def test_missing_or_failed_camera_still_publishes_valid_interaction_monitoring(m
   cs = car.CarState.new_message(vEgo=20, canValid=True, gearShifter='drive')
   if touch_signal != 'none':
     cs.steeringTouch = {'available': True, 'valid': True, 'touched': True, 'sampleMonoTime': int(100e9)}
+  model = log.ModelDataV2.new_message()
+  if model_ready:
+    model.orientationRate.z = [0.] * 33
+    model.laneLineProbs = [0., 1., 1., 0.]
   state = State(carState=cs, selfdriveState=log.SelfdriveState.new_message(enabled=True),
-                radarState=log.RadarState.new_message(), modelV2=log.ModelDataV2.new_message())
+                radarState=log.RadarState.new_message(), modelV2=model.as_reader())
 
   class Done(Exception):
     pass
@@ -120,8 +125,12 @@ def test_live_camera_response_defers_only_experimental_monitoring(monkeypatch, e
 
   model = log.ModelDataV2.new_message()
   model.meta.disengagePredictions.brakeDisengageProbs = [0.0]
+  # Production SubMaster exposes read-only Cap'n Proto arrays, not Python
+  # lists. Populate the road fields so short-circuiting cannot hide API errors.
+  model.orientationRate.z = [0.] * 33
+  model.laneLineProbs = [0., 1., 1., 0.]
   state = State(carState=car.CarState.new_message(vEgo=20, canValid=True, gearShifter='drive'),
-                selfdriveState=log.SelfdriveState.new_message(enabled=True), modelV2=model,
+                selfdriveState=log.SelfdriveState.new_message(enabled=True), modelV2=model.as_reader(),
                 radarState=log.RadarState.new_message(), liveCalibration=log.LiveCalibrationData.new_message(rpyCalib=[0., 0., 0.]),
                 driverStateV2=make_msg(True, distracted=True))
 
