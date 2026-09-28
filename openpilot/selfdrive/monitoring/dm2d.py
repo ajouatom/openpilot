@@ -77,9 +77,13 @@ def run_dm2(params, experimental):
   covered = False
   allow_speed_buttons = False
   demo_mode = params.get_bool("IsDriverViewEnabled")
+  next_mode_check = time.monotonic() + 0.5
   while True:
     sm.update(int(DT_DMON * 1000))
     now = time.monotonic()
+    if now >= next_mode_check:
+      dm.set_experimental(experimental_mode(params))
+      next_mode_check = now + 0.5
     if sm.updated['carParams']:
       covered = side_coverage(params, sm['carParams'])
       # Stock-ACC speed button injection can be indistinguishable from driver
@@ -125,7 +129,7 @@ def run_dm2(params, experimental):
     dm.update_parked_reset(now, parked_reset_eligible(sm, now, demo_mode))
     packet = dm.get_state_packet(valid=valid or (demo_mode and camera_ok))
     packet.driverMonitoringState.cameraUnavailable = not camera_ok
-    packet.driverMonitoringState.dm2Experimental = experimental
+    packet.driverMonitoringState.dm2Experimental = dm.experimental
     packet.driverMonitoringState.dm2StrictTimeRemaining = max(0.0, traffic.strict_until - now)
     packet.driverMonitoringState.dm2WheelTimeoutFactor = dm.wheel_factor
     pm.send('driverMonitoringState', packet)

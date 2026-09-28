@@ -24,6 +24,61 @@ def camera(dm, seconds, msg=None, clear=False, response=False, held=False, stric
     dm._update_events(held, True, False, False)
 
 
+@pytest.mark.parametrize('camera_available', [False, True])
+@pytest.mark.parametrize('initial', [False, True])
+def test_live_mode_preserves_elapsed_and_accumulated_state(camera_available, initial):
+  dm = DriverMonitoring2(experimental=initial)
+  dm.configure_context(100, camera_available, clear=True)
+  dm.awareness = 0.9
+  elapsed = (1 - dm.awareness) * dm._timeouts(dm._active_kind())[2]
+  dm.alert_3_cnt, dm.no_response_cnt, dm.lockout_time = 1, 1, 42
+  dm.too_distracted = True
+  dm.set_experimental(not initial)
+  dm.configure_context(100.05, camera_available, clear=True)
+  assert (1 - dm.awareness) * dm._timeouts(dm._active_kind())[2] == pytest.approx(elapsed)
+  assert (dm.alert_3_cnt, dm.no_response_cnt, dm.lockout_time) == (1, 1, 42)
+  assert dm.too_distracted
+
+
+@pytest.mark.parametrize('level', [AlertLevel.two, AlertLevel.three])
+def test_live_mode_cannot_clear_orange_or_terminal_warning(level):
+  dm = DriverMonitoring2()
+  dm.configure_context(100, False)
+  dm.alert_level = level
+  dm.awareness = dm.threshold_alert_2 if level == AlertLevel.two else -0.1
+  previous = dm.awareness
+  dm.set_experimental(True)
+  dm.configure_context(100.05, False, clear=True)
+  assert dm.alert_level == level and dm.awareness <= previous
+  assert dm._timeouts('WHEELTOUCH') == dm.INTERACTION_TIMEOUTS
+
+
+def test_live_mode_expires_grace_and_forward_streak_without_creating_response():
+  dm = DriverMonitoring2(experimental=True)
+  dm.configure_context(100, True)
+  dm.record_interaction(100)
+  dm.forward_frames = 40
+  assert dm.interaction_grace_remaining == 45
+  dm.set_experimental(True)  # Re-reading the same setting must preserve genuine grace.
+  assert dm.interaction_grace_remaining == 45
+  dm.set_experimental(False)
+  dm.set_experimental(True)
+  dm.configure_context(100.1, True)
+  assert dm.interaction_grace_remaining == 0 and dm.forward_frames == 0
+  dm.record_interaction(100)  # Previously consumed input cannot be replayed.
+  assert not dm.input_received
+
+
+def test_shorter_live_budget_crosses_terminal_once():
+  dm = DriverMonitoring2(experimental=True)
+  wheel(dm, 46, clear=True)  # Still below the experimental orange threshold.
+  dm.set_experimental(False)
+  wheel(dm, DT_DMON)
+  assert dm.alert_level == AlertLevel.three and dm.alert_3_cnt == 1
+  wheel(dm, DT_DMON)
+  assert dm.alert_3_cnt == 1
+
+
 @pytest.mark.parametrize('experimental,clear,factor', [(False, False, 1), (False, True, 1), (True, False, 1), (True, True, 2)])
 def test_interaction_budgets_and_terminal_alert(experimental, clear, factor):
   dm = DriverMonitoring2(experimental=experimental)

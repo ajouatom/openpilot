@@ -1,5 +1,13 @@
 # Repository memory
 
+- On 2026-09-28, the user requested live DriverMonitoringMode changes. Poll
+  typed Params every 0.5 seconds in the existing DM dispatcher; ignore the retired
+  CARROT_DM_MODE startup latch. Preserve elapsed awareness, calibration, traffic
+  hold, warning counts and lockout. A real mode change ends previous interaction
+  grace and the forward-attention streak; an unchanged read must preserve them.
+  Shorter budgets may immediately trigger warnings; toggling is never attention
+  or a lockout reset. See docs/driver_monitoring_dm2.md for desktop validation.
+
 - On 2026-09-28, the user superseded the Ioniq 5 PE-only touch restriction:
   Hyundai/Kia/Genesis CAN-FD uses original ECAN STEER_TOUCH_2AF by received
   profile, without a vehicle-name whitelist. Require the named DBC/address/size,

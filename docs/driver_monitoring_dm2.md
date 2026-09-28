@@ -157,7 +157,7 @@ this added signal, and terminal/lockout handling remains unchanged. No claim
 of gaze, sleep detection, legal certification or new-vehicle validation follows
 from capacitive contact or these desktop/log checks.
 
-DriverMonitoringMode is latched at startup: only value 1 is experimental. Old
+DriverMonitoringMode is read live every 0.5 seconds: only value 1 is experimental. Old
 DisableDM never opts users into mode 1; only its old video choice migrates once to
 independent CarrotVisionEnabled. The experimental-use confirmation remains.
 
@@ -192,3 +192,28 @@ are retained locally under .analysis/archive/2026-09-28/dm2-revision/.
 
 Public guides: [Korean](user/ko/driver-monitoring.md),
 [English](user/en/driver-monitoring.md).
+
+
+## Live mode switching (2026-09-28)
+
+The running dispatcher polls the typed mode parameter every 0.5 seconds before
+configuring the current camera/traffic context. The retired CARROT_DM_MODE
+environment latch is ignored and removed at manager initialization. The existing
+monitor, calibration, interaction-edge history, traffic hold, elapsed awareness,
+terminal counters and lockout are retained. The published dm2Experimental reports
+the applied mode, not the initial startup choice.
+
+Actual mode changes expire old interaction grace and the forward-attention streak;
+re-reading an unchanged setting leaves these intact. configure_context remaps the
+active budget by elapsed seconds, so shortening a budget can cause a warning
+immediately. Existing orange/terminal alerts cannot be erased by increasing the
+budget. Repeated toggles neither reset accumulated time nor resurrect old inputs.
+This does not change either mode's thresholds, existing attention recovery,
+confirmed-parking reset, or the experimental-use confirmation.
+
+Validation uses real policy/cereal with desktop adapters for native IPC/Params;
+device polling latency and physical driving behavior remain unvalidated.
+All 208 focused monitoring/touch tests and 25 Wiki generator/validator tests
+passed. Four native typed-Params migration cases were skipped on Windows; the
+strict fake-Params migration tests passed. Local evidence is retained under
+`.analysis/archive/2026-09-28/dm-live/`.
