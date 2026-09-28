@@ -557,6 +557,10 @@ EVENTS: dict[int, dict[str, Alert | AlertCallbackType]] = {
       Priority.LOW, VisualAlert.steerRequired, AudibleAlert.none, 1.8),
   },
 
+  EventName.driverMonitorFallback: {
+    ET.PERMANENT: NormalPermanentAlert(tr_noop("Driver camera unavailable"), tr_noop("Monitoring driver controls"), creation_delay=3.),
+  },
+
   EventName.driverDistracted1: {
     ET.PERMANENT: Alert(
       "Pay Attention",

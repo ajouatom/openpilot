@@ -1,5 +1,16 @@
 # Repository memory
 
+- On 2026-09-28, the user requested DriverMonitoringMode: default 0 retains stock
+  camera criteria; 1 is explicitly experimental. DM2 is separate from unchanged
+  stock policy/dmonitoringd files. The user explicitly chose automatic interaction
+  fallback for both camera absence and failure, with recovery preserving progress;
+  do not restore a manual camera-installation requirement. Experimental control/BT
+  input and confident-forward-attention credit must preserve protected sleep/eye/
+  phone distraction and strong alerts. New moving traffic restores standard criteria
+  for ten seconds, not indefinitely while occupied. DisableDM is migration-only;
+  CarrotVisionEnabled is independent. Desktop tests are not device/driving or legal
+  certification. See docs/driver_monitoring_dm2.md and both localized DM guides.
+
 - On 2026-09-28, the user requested ordinary Git storage wherever possible to
   eliminate this branch's Git LFS bandwidth dependency. All seven remaining
   LFS pointers were converted to byte-identical Git blobs; bundled models and

@@ -263,7 +263,7 @@ class CommandWriter:
   """One writer, bounded per-channel event journals; devices never overwrite peers."""
   def __init__(self, root=RUNTIME):
     self.root = root
-    self.events = {'cruise': [], 'lane': []}
+    self.events = {'cruise': [], 'lane': [], 'attention': []}
     self.session = uuid.uuid4().hex
     self.sequence = 0
 
@@ -280,6 +280,13 @@ class CommandWriter:
 
   def send(self, mac, action, now, hold=None, repeat=False):
     channel = 'lane' if action in ('laneLeft', 'laneRight') else 'cruise'
+    self._append(channel, mac, action, now, hold, repeat)
+
+  def attention(self, mac, action, now):
+    # Independent journal: DM must not consume, synthesize or repeat cruise actions.
+    self._append('attention', mac, action, now, None, False)
+
+  def _append(self, channel, mac, action, now, hold, repeat):
     self.sequence += 1
     events = [e for e in self.events[channel] if 0 <= now - e['time'] <= COMMAND_TTL and (not hold or e.get('hold') != hold)]
     events.append({'id': f'{self.session}:{self.sequence}', 'time': now, 'action': action, 'address': mac, 'hold': hold, 'repeat': repeat})

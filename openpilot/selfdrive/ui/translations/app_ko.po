@@ -1508,3 +1508,11 @@ msgstr "업데이트 적용을 위해 재부팅하세요"
 #: openpilot/selfdrive/selfdrived/events.py
 msgid "Park safely before rebooting your device"
 msgstr "안전한 곳에 주차한 뒤 재부팅하세요"
+
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "Driver camera unavailable"
+msgstr "운전자 카메라 사용 불가"
+
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "Monitoring driver controls"
+msgstr "버튼·페달·핸들 조작으로 감시 중"

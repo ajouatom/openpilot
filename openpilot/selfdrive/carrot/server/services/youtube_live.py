@@ -438,7 +438,7 @@ class YouTubeLiveService:
         YOUTUBE_QUALITY_PARAM: self._param_int(YOUTUBE_QUALITY_PARAM, 0),
         YOUTUBE_TIMESTAMP_PARAM: self._param_bool(YOUTUBE_TIMESTAMP_PARAM),
         "ClusterHud": self._param_int("ClusterHud", 0),
-        "DisableDM": self._param_int("DisableDM", 0),
+        "CarrotVisionEnabled": self._param_int("CarrotVisionEnabled", 0),
         "IsOnroad": self._param_bool("IsOnroad", False),
       },
       "transport": {
@@ -1140,7 +1140,7 @@ class YouTubeLiveService:
   def _resource_status(self) -> dict[str, Any]:
     processes = self._process_status()
     cluster_param = self._param_int("ClusterHud", 0)
-    disable_dm = self._param_int("DisableDM", 0)
+    carrot_vision_enabled = self._param_int("CarrotVisionEnabled", 0)
     quality = self._param_int(YOUTUBE_QUALITY_PARAM, 0)
     selected_youtube_encoder = youtube_profile(quality).process_name
     selected_process = processes.get(selected_youtube_encoder, {"running": False, "pids": []})
@@ -1157,10 +1157,10 @@ class YouTubeLiveService:
         **cluster_process,
       },
       "carrot_vision": {
-        "enabled": disable_dm == 2,
-        "configured": disable_dm == 2,
+        "enabled": carrot_vision_enabled == 1,
+        "configured": carrot_vision_enabled == 1,
         "active": vision_active,
-        "disable_dm": disable_dm,
+        "carrot_vision_enabled": carrot_vision_enabled,
         "webrtcd_running": bool(vision_webrtc.get("running")),
         "stream_encoderd_running": bool(vision_encoder.get("running")),
         "webrtcd_pids": list(vision_webrtc.get("pids") or []),

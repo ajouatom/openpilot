@@ -425,7 +425,8 @@
           "en": "Driver Monitor",
           "zh": "驾驶员监控",
           "params": [
-            "DisableDM",
+            "DriverMonitoringMode",
+            "CarrotVisionEnabled",
             "MuteDoor",
             "MuteSeatbelt"
           ]
@@ -1963,19 +1964,66 @@
     },
     {
       "group": "시작",
-      "name": "DisableDM",
-      "title": "DisableDM",
-      "descr": "1.DisableDM, 2: +EnableWebRTC, reboot required",
+      "name": "DriverMonitoringMode",
+      "title": "운전자 감시 모드",
+      "descr": "0: 기본 감시, 1: 실험 모드. 실험 모드는 법규에 위배될 수 있으며 통제된 시험 환경의 실험 목적으로만 사용하세요. 공도 사용의 적법성이나 안전성을 보장하지 않습니다. 카메라 사용 시 고개 방향 허용 폭을 20% 늘리며 졸음·눈 감김·휴대전화 기준은 유지합니다. 카메라가 있어도 새 조작·BT 버튼으로 일반 주의분산 시간을 최대 2초 회복하고, 뚜렷한 전방주시가 2초간 이어지면 회복 속도가 1.5배가 됩니다. 강한 경고나 졸음 등에는 추가 회복을 적용하지 않습니다. 미장착·고장·데이터 끊김 시 자동으로 조작 기반 감시로 전환하며 대기시간은 2배, 조건부 최대 2.4배입니다. 새 이동 차량 감지 후 10초간 기본 기준을 적용합니다. 0도 모든 국가의 인증을 의미하지 않습니다. 변경 후 재부팅하세요.",
       "egroup": "START",
-      "etitle": "DisableDM",
-      "edescr": "1.DisableDM, 2: +EnableWebRTC, Reboot required",
+      "etitle": "Driver Monitoring Mode",
+      "edescr": "0: Standard; 1: Experimental. Experimental mode may violate applicable law. Use only for experiments in a controlled test environment; public-road legality and safety are not assured. With a camera, head-pose tolerance increases by 20%; sleep, eye closure and phone criteria remain unchanged. With a camera, new control or BT-button interactions restore up to two seconds of ordinary distraction allowance, and two seconds of confident forward attention gives 1.5x recovery. Strong alerts and sleep-related or phone distraction do not receive extra recovery. A missing, failed or stale camera automatically selects interaction monitoring with doubled response budgets, conditionally up to 2.4x. New moving vehicles trigger standard criteria for 10 seconds. Mode 0 is not worldwide certification. Reboot after changing.",
       "cgroup": "启动设置",
-      "ctitle": "禁用驾驶员监控",
-      "cdescr": "1. 禁用 DM, 2: + 开启 WebRTC, 需要重启",
+      "ctitle": "驾驶员监控模式",
+      "cdescr": "0：标准；1：实验。实验模式可能违反法规，仅限受控测试环境中的实验用途，不保证公路使用的合法性或安全性。有摄像头时头部姿态容差增加20%，困倦、闭眼及手机检测标准不变。摄像头可用时，新的操作或蓝牙按键最多恢复2秒普通分心余量，持续2秒明确注视前方时恢复速度为1.5倍；强警告或困倦、闭眼、手机分心不额外恢复。摄像头缺失、故障或数据中断时自动采用操作监控，响应时间为2倍，满足条件时最高2.4倍。新移动目标出现后10秒恢复标准。标准模式不代表全球认证。更改后重启。",
       "min": 0,
-      "max": 2,
+      "max": 1,
       "default": 0,
-      "unit": 1
+      "unit": 1,
+      "control": "select",
+      "options": {
+        "ko": [
+          "기본",
+          "실험 모드 (시험 전용)"
+        ],
+        "en": [
+          "Standard",
+          "Experimental (testing only)"
+        ],
+        "zh": [
+          "标准",
+          "实验（仅供测试）"
+        ]
+      },
+      "risk": "high"
+    },
+    {
+      "group": "시작",
+      "name": "CarrotVisionEnabled",
+      "title": "Carrot Vision 사용",
+      "descr": "웹 도로 영상 스트리밍을 활성화합니다. 운전자 감시와 독립적으로 동작합니다. USB 계기판 사용 중에는 Carrot Vision을 사용할 수 없습니다.",
+      "egroup": "START",
+      "etitle": "Enable Carrot Vision",
+      "edescr": "Enables web road-camera streaming independently of driver monitoring. Carrot Vision is unavailable while the USB cluster is enabled.",
+      "cgroup": "启动设置",
+      "ctitle": "启用 Carrot Vision",
+      "cdescr": "独立于驾驶员监控启用网页道路视频。启用USB仪表盘时无法使用Carrot Vision。",
+      "min": 0,
+      "max": 1,
+      "default": 0,
+      "unit": 1,
+      "control": "select",
+      "options": {
+        "ko": [
+          "끄기",
+          "켜기"
+        ],
+        "en": [
+          "Off",
+          "On"
+        ],
+        "zh": [
+          "关闭",
+          "开启"
+        ]
+      }
     },
     {
       "group": "시작",

@@ -1042,6 +1042,11 @@ void SpectraCamera::camera_map_bufs() {
 
 bool SpectraCamera::openSensor() {
   sensor_fd = open_v4l_by_name_and_index("cam-sensor-driver", cc.camera_num);
+  if (sensor_fd < 0 && cc.stream_type == VISION_STREAM_DRIVER) {
+    LOGE("driver sensor node unavailable; continuing with interaction-based driver monitoring");
+    enabled = false;
+    return false;
+  }
   assert(sensor_fd >= 0);
   LOGD("opened sensor for %d", cc.camera_num);
 

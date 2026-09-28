@@ -79,8 +79,13 @@ def test_held_speed_repeats_and_interruptions_remove_pending_ticks(tmp_path, mon
                                'mapping': {'key:115@long': 'accelCruiseLong'}}}}
   clock = [10.0]
   sent = []
+  attention_events = []
 
   class Writer(CommandWriter):
+    def attention(self, *args):
+      attention_events.append(args)
+      super().attention(*args)
+
     def send(self, *args, **kwargs):
       sent.append((args[1], kwargs['repeat']))
       super().send(*args, **kwargs)
@@ -139,4 +144,5 @@ def test_held_speed_repeats_and_interruptions_remove_pending_ticks(tmp_path, mon
   finally:
     os.close(output)
   assert sent == [('accelCruiseLong', False), ('accelCruiseLong', True)]
+  assert len(attention_events) == 1
   assert writer.events['cruise'] == []
