@@ -99,3 +99,41 @@ No vehicle/runtime code, model selection, deployed image or update channel was
 changed during this review. Adding these hosts does not itself require rebuilding
 the newly recorded Jetson image. The existing R2 physical boot/recovery/update
 validation remains pending independently. No new experiment branch was created.
+
+## Follow-up: unchanged upstream Mac app, no Jetson changes
+
+The owner has no Mac and requests an unchanged upstream-app integration, with
+Jetson behavior preserved. The immediate request is review, not implementation.
+
+Python `Session.on_hello` and Swift `Session.onHello` merge the backend's
+`describe()` into HELLO. Neither provides a dedicated OS/platform identifier.
+Both ORT implementations report backend `ort` and device tags such as
+`ane-Apple_M1_Pro`, `coreml-Apple_M1_Pro` or `ane-whole-Apple_M1_Pro`. Device
+names come from the CPU brand on Mac; Swift can fall back to Metal's device
+name. This is peer-reported identification, not authenticated device identity.
+
+Current Carrot `host_label` recognizes only `ort` plus a `coreml` substring.
+Consequently the upstream default `ane` reports generic Jetlink; a phone's
+CoreML tag could instead be labelled MAC. Do not use this display helper as
+the gate for Mac-specific model provisioning.
+
+Proposed eligibility requires the plain USB bulk transport, `ort`, a recognized
+CoreML/ANE device prefix and an Apple M-series chip tag, while explicit Carrot
+Jetson identity and existing TensorRT peers retain their original path. NCM/TCP
+is excluded, so an M-series iPad does not enter this Mac path. Missing, conflicting
+or unrecognized identity must not be guessed as Mac. CPU mode and future unknown
+device naming may require explicit support. For the current ordinary upstream
+app this is practical classification; the protocol does not certify macOS.
+
+To make an already-installed Mac app work without manual model import, add a
+Mac-only comma provisioning step: download the exact pinned Cinque v2 from NAS,
+verify SHA256/size, supply that local ONNX to the existing upload messages if
+the host needs it, and wait for preparation offroad. Reuse cached artifacts on
+reconnect. Full model-spec checks, frame validity, switching and fallback rules
+remain unchanged. No shared vendor-runtime refresh, Jetson server/image/update
+channel change, USB-network gadget or iOS integration is needed for this scope.
+
+Desktop verification can cover recorded/synthetic HELLO classifications, upload
+framing, model identity rejection, preparation/reconnect and Jetson regression
+branches. Real Mac USB, CoreML output parity and sustained20Hz performance still
+require a Mac owner to validate; passing desktop tests cannot establish them.
