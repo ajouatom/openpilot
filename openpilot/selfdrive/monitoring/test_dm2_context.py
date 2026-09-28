@@ -111,10 +111,16 @@ class FakeParams:
     return self.get_int(name) == 1
 
   def put(self, name, value):
+    expected = {'DriverMonitoringMode': int, 'DisableDM': int, 'CarrotVisionEnabled': bool}[name]
+    if type(value) is not expected:
+      raise TypeError(f'{name} requires {expected.__name__}, got {type(value).__name__}')
     self.values[name] = value
 
+  def put_int(self, name, value):
+    self.put(name, value)
+
   def put_bool(self, name, value):
-    self.put(name, int(value))
+    self.put(name, value)
 
 
 @pytest.mark.parametrize('old', [0, 1, 2])
@@ -129,6 +135,19 @@ def test_legacy_modes_never_migrate_to_experimental(old):
   configure_monitoring(params, env)
   assert not params.get_bool('CarrotVisionEnabled')
   assert env['CARROT_DM_MODE'] == '1'
+
+
+@pytest.mark.parametrize('existing_video', [None, False, True])
+def test_first_boot_uses_typed_defaults_and_preserves_existing_video(existing_video):
+  params = FakeParams({} if existing_video is None else {'CarrotVisionEnabled': existing_video})
+  env = {}
+  configure_monitoring(params, env)
+  assert params.get('DriverMonitoringMode') == 0
+  assert type(params.get('DriverMonitoringMode')) is int
+  assert params.get('CarrotVisionEnabled') is bool(existing_video)
+  saved = params.values.copy()
+  configure_monitoring(params, env)
+  assert params.values == saved and env['CARROT_DM_MODE'] == '0'
 
 
 def test_camera_failure_falls_back_immediately_and_recovery_needs_continuous_health():
