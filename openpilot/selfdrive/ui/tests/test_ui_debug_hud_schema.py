@@ -91,7 +91,7 @@ def test_augmented_road_view_publishes_compact_snapshot_after_render():
           _is_attribute(render_target, "self", "model_renderer", "render")
           or _is_attribute(render_target, "self", "_hud_renderer", "render")
           or _is_attribute(render_target, "self", "alert_renderer", "render")
-          or _is_attribute(render_target, "self", "driver_state_renderer", "render")
+          or _is_attribute(render_target, "self", "driver_state_renderer", "draw_onroad")
         )
       ):
         render_lines.append(node.lineno)

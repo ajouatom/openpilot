@@ -25,6 +25,7 @@ class ConfidenceBall(Widget):
   def __init__(self, demo: bool = False):
     super().__init__()
     self._demo = demo
+    self.bottom_reserved = 0
     self._confidence_filter = FirstOrderFilter(-0.5, 0.5, 1 / gui_app.target_fps)
 
   def update_filter(self, value: float):
@@ -46,11 +47,15 @@ class ConfidenceBall(Widget):
       self.rect.x + self.rect.width - SIDE_PANEL_WIDTH,
       self.rect.y,
       SIDE_PANEL_WIDTH,
-      self.rect.height,
+      self.rect.height - self.bottom_reserved,
     )
 
     status_dot_radius = 24
     dot_height = (1 - self._confidence_filter.x) * (content_rect.height - 2 * status_dot_radius) + status_dot_radius
+    if self.bottom_reserved:
+      # Include the black masking ring around the dot, and its disengage animation.
+      outer_radius = math.ceil(status_dot_radius * math.sqrt(2)) + 1
+      dot_height = min(max(dot_height, outer_radius), content_rect.height - outer_radius)
     dot_height = self._rect.y + dot_height
 
     # confidence zones

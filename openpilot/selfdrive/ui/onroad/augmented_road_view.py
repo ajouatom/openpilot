@@ -7,7 +7,7 @@ from openpilot.selfdrive.ui import UI_BORDER_SIZE
 from openpilot.selfdrive.ui.carrot_param_cache import BorderParamSnapshot, TimedSnapshotCache, read_border_params
 from openpilot.selfdrive.ui.ui_state import ui_state, UIStatus
 from openpilot.selfdrive.ui.onroad.alert_renderer import AlertRenderer
-from openpilot.selfdrive.ui.onroad.driver_state import DriverStateRenderer
+from openpilot.selfdrive.ui.onroad.driver_preview import DriverPreview
 from openpilot.selfdrive.ui.onroad.hud_renderer import HudRenderer
 from openpilot.selfdrive.ui.onroad.model_renderer import ModelRenderer
 from openpilot.selfdrive.ui.render_diagnostics import RenderDiagnostics
@@ -52,7 +52,7 @@ class AugmentedRoadView(CameraView):
     self._render_diagnostics = RenderDiagnostics('ui')
     self._hud_renderer = HudRenderer()
     self.alert_renderer = AlertRenderer()
-    self.driver_state_renderer = DriverStateRenderer()
+    self.driver_state_renderer = DriverPreview()
 
     # debug
     self._pm = messaging.PubMaster(['uiDebug'])
@@ -132,7 +132,8 @@ class AugmentedRoadView(CameraView):
     timing.call('alert', self.alert_renderer.render, self._content_rect)
     alert_ms = (time.monotonic() - _t) * 1000.0
     _t = time.monotonic()
-    timing.call('driver_state', self.driver_state_renderer.render, self._content_rect)
+    timing.call('driver_state', self.driver_state_renderer.draw_onroad, self._content_rect,
+                self.alert_renderer.get_alert(ui_state.sm) is not None)
     ds_ms = (time.monotonic() - _t) * 1000.0
 
     # Custom UI extension point - add custom overlays here
@@ -164,6 +165,11 @@ class AugmentedRoadView(CameraView):
   def _handle_mouse_press(self, _):
     if not self._hud_renderer.user_interacting() and self._click_callback is not None:
       self._click_callback()
+
+  def close(self):
+    if preview := getattr(self, 'driver_state_renderer', None):
+      preview.close()
+    super().close()
 
   def _handle_mouse_release(self, _):
     # We only call click callback on press if not interacting with HUD

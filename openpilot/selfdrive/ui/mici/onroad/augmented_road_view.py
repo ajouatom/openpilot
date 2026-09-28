@@ -3,10 +3,11 @@ import numpy as np
 import pyray as rl
 from openpilot.cereal import messaging, car, log
 from msgq.visionipc import VisionStreamType
-from openpilot.selfdrive.ui.ui_state import ui_state, UIStatus
+from openpilot.selfdrive.ui.ui_state import ui_state
 from openpilot.selfdrive.ui.mici.onroad import SIDE_PANEL_WIDTH
 from openpilot.selfdrive.ui.mici.onroad.alert_renderer import AlertRenderer
-from openpilot.selfdrive.ui.mici.onroad.driver_state import DriverStateRenderer
+from openpilot.selfdrive.ui.onroad.driver_preview import DriverPreview
+from openpilot.selfdrive.ui.dm_preview import COMPACT_RESERVED_HEIGHT
 from openpilot.selfdrive.ui.mici.onroad.hud_renderer import HudRenderer
 from openpilot.selfdrive.ui.mici.onroad.model_renderer import ModelRenderer
 from openpilot.selfdrive.ui.mici.onroad.vision_renderer import VisionRenderer
@@ -165,7 +166,7 @@ class AugmentedRoadView(CameraView):
     self._hud_renderer = HudRenderer()
     self._vision_renderer = VisionRenderer()
     self._alert_renderer = AlertRenderer()
-    self._driver_state_renderer = DriverStateRenderer()
+    self._driver_state_renderer = DriverPreview(compact=True)
     self._confidence_ball = ConfidenceBall()
     self._traffic_light = TrafficLight()
     self._offroad_label = UnifiedLabel("start the car to\nuse openpilot", 54, FontWeight.DISPLAY,
@@ -268,15 +269,6 @@ class AugmentedRoadView(CameraView):
     alert_to_render, not_animating_out = self._alert_renderer.will_render()
     alert_ms += (time.monotonic() - _t) * 1000.0
 
-    # Hide DMoji when disengaged unless AlwaysOnDM is enabled
-    should_draw_dmoji = (not self._hud_renderer.drawing_top_icons() and ui_state.is_onroad() and
-                         (ui_state.status != UIStatus.DISENGAGED or ui_state.always_on_dm))
-    self._driver_state_renderer.set_should_draw(should_draw_dmoji)
-    self._driver_state_renderer.set_position(self._rect.x + 16, self._rect.y + 10)
-    _t = time.monotonic()
-    self._driver_state_renderer.render()
-    ds_ms = (time.monotonic() - _t) * 1000.0
-
     self._hud_renderer.set_can_draw_top_icons(alert_to_render is None)
     self._hud_renderer.set_wheel_critical_icon(alert_to_render is not None and not not_animating_out and
                                                alert_to_render.visual_alert == car.CarControl.HUDControl.VisualAlert.steerRequired)
@@ -300,6 +292,10 @@ class AugmentedRoadView(CameraView):
 
     # Custom UI extension point - add custom overlays here
     # Use self._content_rect for positioning within camera bounds
+    _t = time.monotonic()
+    dm_visible = self._driver_state_renderer.draw_onroad(self.rect, alert_to_render is not None)
+    self._confidence_ball.bottom_reserved = COMPACT_RESERVED_HEIGHT if dm_visible else 0
+    ds_ms = (time.monotonic() - _t) * 1000.0
     _t = time.monotonic()
     self._traffic_light.render(self.rect)
     if not self._traffic_light.is_visible():
@@ -331,6 +327,11 @@ class AugmentedRoadView(CameraView):
     ud.plotMode = self._plot_mode
     ud.recording = gui_app.is_recording()
     self._pm.send('uiDebug', msg)
+
+  def close(self):
+    if preview := getattr(self, '_driver_state_renderer', None):
+      preview.close()
+    super().close()
 
   def _road_view_mode(self):
     mode = ui_state.show_model_view

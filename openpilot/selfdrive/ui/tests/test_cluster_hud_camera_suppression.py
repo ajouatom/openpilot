@@ -35,7 +35,9 @@ def _calls(node: ast.AST, attr: str) -> bool:
   return any(
     isinstance(child, ast.Call)
     and isinstance(child.func, ast.Attribute)
-    and child.func.attr == attr
+    and (child.func.attr == attr or
+         (child.func.attr == "call" and len(child.args) >= 2 and isinstance(child.args[1], ast.Attribute)
+          and child.args[1].attr == attr))
     for child in ast.walk(node)
   )
 
@@ -135,16 +137,14 @@ def test_external_hud_skips_camera_and_model_but_retains_device_hud():
   guarded_nodes = {id(child) for guard in connected + disconnected for child in ast.walk(guard)}
   retained_renderers = []
   for node in ast.walk(render):
-    if not (
-      isinstance(node, ast.Call)
-      and isinstance(node.func, ast.Attribute)
-      and node.func.attr == "render"
-      and isinstance(node.func.value, ast.Attribute)
-      and isinstance(node.func.value.value, ast.Name)
-      and node.func.value.value.id == "self"
-    ):
+    if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Attribute):
+      continue
+    callback = node.args[1] if node.func.attr == "call" and len(node.args) >= 2 else node.func
+    if not (isinstance(callback, ast.Attribute) and callback.attr in ("render", "draw_onroad")
+            and isinstance(callback.value, ast.Attribute) and isinstance(callback.value.value, ast.Name)
+            and callback.value.value.id == "self"):
       continue
     if id(node) not in guarded_nodes:
-      retained_renderers.append(node.func.value.attr)
+      retained_renderers.append(callback.value.attr)
 
   assert {"_hud_renderer", "alert_renderer", "driver_state_renderer"} <= set(retained_renderers)
