@@ -138,6 +138,9 @@ class Worker:
       raise ValueError('Unexpected Wi-Fi recovery journal')
     value = json.loads(journal.read_text(encoding='utf-8'))
     old, new = value['old'], value['new']
+    if (not isinstance(old, dict) or not isinstance(new, list) or len(old) > 64 or len(new) > 8
+        or any(not isinstance(v, str) or len(v) > 32768 for v in old.values())):
+      raise ValueError('Invalid Wi-Fi recovery journal')
     for name in list(old) + new:
       uid = name[len(PREFIX):-len('.nmconnection')]
       if name != PREFIX + str(uuid.UUID(uid)) + '.nmconnection':
@@ -161,7 +164,13 @@ class Worker:
     self.next_attempt = now + 30
     try:
       if not self.recovered:
-        self.rollback()
+        try:
+          self.rollback()
+        except (ValueError, KeyError, TypeError):
+          # A damaged journal must not disable all saved-network retries.
+          # Preserve it privately, then allow a fresh USB profile to recover.
+          journal = self.directory / '.carrot-wifi-rollback.json'
+          journal.replace(self.directory / '.carrot-wifi-rollback.invalid')
         self.recovered = True
       # Snapshot profiles before replacement. Failed credentials must not remove
       # the only previously working network, even across a service restart.
