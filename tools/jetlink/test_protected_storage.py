@@ -141,11 +141,13 @@ def test_real_readonly_filesystem_survives_runtime_writes_and_second_boot(tmp_pa
   try:
     assert Path(run('losetup', '-n', '-O', 'BACK-FILE', loop)).resolve() == image.resolve()
     run('mount', loop, root)
-    for name in ('etc', 'var/log', 'home/jetlink', 'root', 'tmp', 'usr', 'opt', 'mnt', 'lib/firmware'):
+    for name in ('etc', 'var/log', 'home/jetlink', 'root', 'tmp', 'usr',
+                 'opt/nvidia/l4t-usb-device-mode', 'mnt', 'lib/firmware'):
       (root / name).mkdir(parents=True, exist_ok=True)
     (root / 'etc/machine-id').write_text('a' * 32 + '\n')
     (root / 'usr/base.txt').write_text('immutable OS')
     (root / 'lib/firmware/pva_auth_allowlist').write_bytes(b'baseline-authentication')
+    (root / 'opt/nvidia/l4t-usb-device-mode/filesystem.img').write_bytes(b'baseline-usb-image')
     (root / 'root').chmod(0o700)
     run('umount', root)
     before = hashlib.sha256(image.read_bytes()).hexdigest()
@@ -160,6 +162,11 @@ def test_real_readonly_filesystem_survives_runtime_writes_and_second_boot(tmp_pa
         assert (root / 'lib/firmware/pva_auth_allowlist').read_bytes() == b'baseline-authentication'
         (root / 'lib/firmware/pva_auth_allowlist').write_bytes(b'regenerated-authentication')
         (root / 'mnt/nvidia-temporary').mkdir()
+        usb = root / 'opt/nvidia/l4t-usb-device-mode'
+        assert (usb / 'filesystem.img').read_bytes() == b'baseline-usb-image'
+        assert not (usb / 'mac-addresses').exists()
+        (usb / 'filesystem.img').write_bytes(b'generated-usb-image')
+        (usb / 'mac-addresses').write_text('synthetic per-board identity')
         (root / 'home/jetlink/.cache').mkdir()
         assert (root / 'root').stat().st_mode & 0o777 == 0o700
         with pytest.raises(OSError):

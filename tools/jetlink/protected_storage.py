@@ -99,9 +99,15 @@ def mount_volatile(root, ram, progress=lambda name: None):
   # Preserve PID1's already selected per-boot ID; never replace it with a
   # different identity after systemd has started. SSH keys/hostname are durable.
   machine = (root / 'etc/machine-id').read_bytes()
-  for name in ('etc', 'var', 'home', 'root'):
+  names = ['etc', 'var', 'home', 'root']
+  # NVIDIA's device-mode helper rewrites its 16MiB USB identification image
+  # and derives per-board MACs next to its scripts. Keep those writes in RAM.
+  if (root / 'opt/nvidia/l4t-usb-device-mode').is_dir():
+    names.append('opt/nvidia/l4t-usb-device-mode')
+  for name in names:
     progress('ram-' + name)
-    upper, work = ram / name, ram / (name + '-work')
+    key = name.replace('/', '-')
+    upper, work = ram / key, ram / (key + '-work')
     target = root / name
     upper.mkdir(mode=target.stat().st_mode & 0o7777); work.mkdir()
     run('mount', '-t', 'overlay', '-o', f'lowerdir={target},upperdir={upper},workdir={work}', 'overlay', str(target))
