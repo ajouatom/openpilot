@@ -8,6 +8,7 @@ from opendbc.can import CANDefine, CANParser
 from opendbc.car import Bus, create_button_events, structs, DT_CTRL
 from opendbc.car.common.conversions import Conversions as CV
 from opendbc.car.hyundai.hyundaicanfd import CanBus
+from opendbc.car.hyundai.steering_touch import HyundaiSteeringTouch
 from opendbc.car.hyundai.values import HyundaiFlags, CAR, DBC, Buttons, CarControllerParams, CAMERA_SCC_CAR, HyundaiExtFlags, \
                                        EV_MODE_ACTIVE_VALUES, EV_MODE_STATUS_ADDR, EV_MODE_STATUS_DLC, EV_MODE_STATUS_MSG, \
                                        EV_MODE_STATUS_SIGNAL
@@ -197,6 +198,7 @@ class CarState(CarStateBase):
     self.tcs = None
     self.mdps = None
     self.steer_touch_2af = None
+    self.steering_touch = HyundaiSteeringTouch(CP.carFingerprint == CAR.HYUNDAI_IONIQ_5_PE)
     self.cruise_buttons_msg = None
     self.cam_0x362 = None
     self.cam_0x2a4 = None
@@ -1082,6 +1084,7 @@ class CarState(CarStateBase):
     cp_alt = can_parsers[Bus.alt] if Bus.alt in can_parsers else None
 
     ret = structs.CarState()
+    ret.steeringTouch = self.steering_touch.update(cp)
 
     if self.CP.extFlags & HyundaiExtFlags.EV_MODE_STATUS_230:
       ret.evModeActive, ret.evModeValid = _get_ev_mode_state(cp)

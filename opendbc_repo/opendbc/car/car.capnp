@@ -272,6 +272,18 @@ struct CarState {
   vehicleNaviSpeed @91 :Float32; # raw speed from the active stock-navigation CAN profile, kph
   vehicleNaviAvailable @92 :Bool; # stock-navigation 0x4BE has been observed during this drive
   radarInput @93 :RadarInput;
+  steeringTouch @94 :SteeringTouch;
+
+  # Optional original vehicle receive signal. Separate from torque/override.
+  struct SteeringTouch {
+    available @0 :Bool;
+    valid @1 :Bool;
+    touched @2 :Bool;
+    sampleMonoTime @3 :UInt64;
+    rawStatus @4 :UInt8;
+    rawTouch1 @5 :UInt8;
+    rawTouch2 @6 :UInt8;
+  }
 
   # Bind independent radar decoding to the exact CAN batch and ego state used
   # by card. Empty batches still represent a control tick; receiveMonoTime is

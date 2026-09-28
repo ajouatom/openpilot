@@ -106,6 +106,28 @@ class InteractionEdges:
     return response
 
 
+class SteeringTouchEvidence:
+  """Continuous wheel contact is distinct from a new driver interaction."""
+  def __init__(self):
+    self.previous = None
+    self.last_timestamp = 0
+
+  def update(self, now, touch, car_valid):
+    timestamp = touch.sampleMonoTime
+    fresh = (car_valid and touch.available and touch.valid and timestamp > 0 and
+             0 <= now - timestamp / 1e9 <= 0.25 and timestamp >= self.last_timestamp)
+    if not fresh:
+      self.previous = None
+      return False, False
+    held = touch.touched
+    edge = held and self.previous is False and timestamp > self.last_timestamp
+    self.previous = held
+    self.last_timestamp = timestamp
+    # Reconnection while already held is not a new press. A valid release must
+    # precede each edge, so dropouts cannot repeatedly renew camera grace.
+    return held, edge
+
+
 class CameraAvailability:
   """Immediate fallback on unusable data, two seconds of health before recovery."""
   def __init__(self):

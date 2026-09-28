@@ -51,6 +51,10 @@ Elapsed time is retained. If traffic appears 50 seconds into a 90-second grace, 
 
 ## Eligible interactions
 
+Original steering-wheel touch input is supported on Ioniq 5 PE. Contact starts at the lowest reported level, `TOUCH_DETECT=1`; small fluctuations in raw `TOUCH1/2` alone are not treated as contact. Other platforms are not automatically enabled.
+
+With camera monitoring unavailable, both modes reset the interaction timer while valid contact continues. Releasing the wheel or losing the signal for more than 0.25 seconds resumes the normal timer. With a healthy camera in mode 1, only a new contact after a valid release starts interaction grace; holding the wheel or reconnecting does not repeatedly renew it. Healthy-camera mode 0 remains stock. Touch does not prove forward attention or wakefulness and cannot clear terminal alerts or lockout.
+
 New DM2 input handling recognizes the start of vehicle-reported pedal/steering input and new presses of supported cruise, gap and steering-assistance buttons. Held inputs, automatic speed changes and BT repeat events do not count again. Stock steering/gas handling remains unchanged in camera mode 0.
 
 Vehicle speed buttons are excluded where stock ACC uses automatic speed-button injection because physical input cannot reliably be distinguished from an echo. Pedals, steering and BT remain available. Registered and enabled BT remotes count actual clicks or the first long-press event, even for an unmapped button. Connection keepalives, learning/test events and stale events do not count.
