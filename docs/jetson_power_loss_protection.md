@@ -154,3 +154,46 @@ the comma's existing signed runtime pin have not been replaced.
 Docs-Not-Needed: Engineering candidate only; no new user setting or released
 installation procedure. Public beginner instructions change only with a tested
 installer artifact.
+
+## Physical candidate failure and USB diagnostics (2026-09-28)
+
+The owner card passed all 40 GiB of write/readback comparison before private
+public-key provisioning. The subsequent physical trial did **not** establish a
+working Jetson: comma reported USB not attached and the host model inactive,
+while native model/pose messages remained valid at rest. SSH was unavailable.
+The user has only a TURZX USB panel, not a DisplayPort boot console.
+
+Read-only inspection after returning the card to the PC found completed
+provisioning and checksum-valid identity generations 1 and 2. Generation 2
+contains two Wi-Fi profiles; the provisioning worker saves this generation only
+after NetworkManager reports a selected imported connection active. This shows
+the first run reached provisioning/network setup; it does not establish which
+later stage failed or why subsequent USB/SSH access disappeared. No raw profile
+or identity content belongs in this document or a public artifact.
+
+There is also a separate confirmed protection gap: NVIDIA's embedded initrd
+mounts the non-overlay root writable despite the kernel `ro` token, before
+systemd later remounts it. The card's formerly empty base machine-id was written.
+The current image must **not** be advertised as protected from the first mount.
+Fixing and physically validating the initrd path remains a release requirement;
+this finding alone is not proof of the observed connection failure's cause.
+
+The diagnostic candidate adds a CPU/Pillow JPEG screen independent of comma
+snapshots, Xorg and inference. It shows storage/boot stage, Wi-Fi, IP, SSH and
+service status, temperature and boot elapsed time. A live service is not labelled
+model-ready. A shared process lock hands the panel to the regular HUD; a killed
+HUD releases it, and stale requests cannot survive PID reuse. Diagnostics never
+reset the USB device and run at nice19/one frame per second. The diagnostic code
+is pinned outside updateable releases in new images, but still needs the supplied
+Python environment, working kernel/USB and a supported panel. It cannot display
+firmware, power or pre-userspace failures, nor take over a live wedged HUD's lock.
+
+Storage boot also records its stage/error class in RAM and attempts one bounded
+`BOOT-STATUS.json` write on CARROTSETUP at completion/failure. It excludes profiles,
+keys and journals. Failure before this helper starts can leave an older result;
+the boot ID distinguishes recorded runs. The first failing card predates this
+recording, so its original transient logs are unavailable.
+
+Windows tests and CPU rendering are not USB-panel or new-image boot validation.
+An owner-card diagnostic patch is being prepared separately from public artifacts;
+the NAS public image and signed automatic update channel remain unchanged.

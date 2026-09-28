@@ -13,6 +13,7 @@ import subprocess
 import re
 
 from persistent_state import collect, durable_write, latest, restore, save
+from boot_status import stage, read_json, STAGE, persist_result
 
 MARKER = Path('/etc/carrot-jetlink-protected.json')
 DATA = Path('/run/carrot-data')
@@ -91,7 +92,7 @@ def valid_runtime(path):
     return False
 
 
-def mount_volatile(root, ram):
+def mount_volatile(root, ram, progress=lambda name: None):
   """Mount only RAM upper layers; also exercised against a real Linux loop FS."""
   ram.mkdir(mode=0o700, exist_ok=True)
   run('mount', '-t', 'tmpfs', '-o', 'mode=0700,size=768M,nosuid,nodev', 'tmpfs', str(ram))
@@ -99,6 +100,7 @@ def mount_volatile(root, ram):
   # different identity after systemd has started. SSH keys/hostname are durable.
   machine = (root / 'etc/machine-id').read_bytes()
   for name in ('etc', 'var', 'home', 'root'):
+    progress('ram-' + name)
     upper, work = ram / name, ram / (name + '-work')
     target = root / name
     upper.mkdir(mode=target.stat().st_mode & 0o7777); work.mkdir()
@@ -109,6 +111,7 @@ def mount_volatile(root, ram):
 
 
 def boot():
+  stage('root-readonly-check')
   config = configuration()
   # Fail closed on a wrong/legacy layout. Enabling this service alone on an old
   # card is deliberately unsupported; the offline builder creates partition 17.
@@ -117,9 +120,10 @@ def boot():
   if root_source != config['root'] or 'ro' not in options:
     raise RuntimeError('Protected boot requires the expected read-only root')
   run('blockdev', '--setro', config['root'])
-  mount_volatile(Path('/'), Path('/run/carrot-volatile'))
+  mount_volatile(Path('/'), Path('/run/carrot-volatile'), stage)
   DATA.mkdir(mode=0o700, exist_ok=True)
   state = 'base-recovery'
+  stage('data-check')
   try:
     # Never fsck a mounted device. No -y, format, or automatic destructive reset.
     mounted = subprocess.run(['findmnt', '-n', '-S', config['data']], capture_output=True, timeout=5)
@@ -137,6 +141,7 @@ def boot():
     state = 'protected'
   except (OSError, ValueError, RuntimeError, subprocess.SubprocessError):
     pass  # Known baseline model + recovery network; never boot DATA code blindly.
+  stage('restore-identity')
   with setup_mount() as backup:
     record = latest(data_identity() + ([backup] if backup is not None else []))
     if record is not None:
@@ -145,6 +150,7 @@ def boot():
   if re.fullmatch(r'[a-z][a-z0-9-]{0,61}[a-z0-9]|[a-z]', hostname):
     run('hostname', hostname)
   durable_write(STATUS, json.dumps({'format': 1, 'state': state, 'system_read_only': True}).encode(), 0o644)
+  stage(state)
 
 
 def main():
@@ -155,7 +161,21 @@ def main():
     raise PermissionError('Root service required')
   if args.action == 'boot':
     with locked():
-      boot()
+      try:
+        boot()
+      except Exception as error:
+        previous = read_json(STAGE).get('stage', 'storage-start')
+        stage(previous, error)
+        raise
+      finally:
+        # At most one tiny result per attempted storage boot, never a log stream.
+        # Preserve the original boot failure if the setup medium is unavailable.
+        try:
+          with setup_mount(writable=True) as backup:
+            if backup is not None:
+              persist_result(backup.parent, read_json(STAGE))
+        except Exception:
+          pass
   else:
     persist()
 
