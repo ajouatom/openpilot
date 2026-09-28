@@ -239,6 +239,10 @@ Normal systemd boot retains RAM machine identity instead of committing it to APP
 The existing storage helper gives NVIDIA's temporary /mnt directory a small
 tmpfs and binds only the regenerated PVA authentication allowlist output to RAM.
 It does not disable PVA authentication or make the firmware tree writable.
+The NVIDIA USB-device-mode directory also has a RAM overlay: its helper rewrites
+a 16 MiB identification filesystem and caches MAC addresses beside its scripts.
+The offline installer removes that MAC cache so each board derives its own
+identity. The identification image and scripts in APP remain unchanged at boot.
 NVIDIA initialization services explicitly wait for these storage preparations.
 Real-loop tests write the PVA output and /mnt while checking the entire base
 filesystem remains byte-identical across two simulated helper boots. This is

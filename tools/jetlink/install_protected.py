@@ -20,6 +20,9 @@ def configure(root, source):
   nv_script = root / 'etc/systemd/nv.sh'
   if nv_script.exists():
     nv_script.write_text(patch_nv_script(nv_script.read_text()))
+  # The vendor script derives these from each board serial on every RAM boot.
+  # Never ship the build board's cached USB network identity to other devices.
+  (root / 'opt/nvidia/l4t-usb-device-mode/mac-addresses').unlink(missing_ok=True)
   destination = root / 'usr/lib/carrot-jetlink-storage'
   destination.mkdir(parents=True, exist_ok=True)
   for name in ('protected_storage.py', 'persistent_state.py', 'wifi_apply.py', 'wifi_protocol.py', 'image_first_boot.py', 'protected_first_boot.py', 'boot_status.py'):
