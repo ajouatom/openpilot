@@ -22,7 +22,7 @@ function Show-InstallerIntro([string]$Stage) {
     Write-InstallerHeading 'CARROT JETSON  |  01. 설치 준비' 'Prepare your installation image'
     Write-InstallerPair '예상 시간  5~15분' 'Estimated time: 5-15 min; slower PCs may take longer.'
     Write-Host ''
-    Write-InstallerPair '이미지 검사 → 압축 해제 → USB-C 수정 → 최종 검사' 'Check image > Extract > Apply USB-C fix > Verify'
+    Write-InstallerPair '이미지 검사 → 압축 해제 → 필요한 수정 자동 반영 → 최종 검사' 'Check image > Extract > Include required fixes > Verify'
     Write-Host ''
     Write-InstallerPair '입력할 내용은 없습니다. 완료되면 02_SD카드설치.cmd를 실행하세요.' 'No answers needed. When finished, run 02_SD카드설치.cmd.'
     Write-InstallerPair 'PC에 파일을 준비합니다. SD카드 기록은 다음 단계입니다.' 'This step prepares files on the PC. Card writing is the next step.'

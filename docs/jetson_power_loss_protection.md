@@ -48,6 +48,11 @@ import the model, CUDA, or candidate runtime. Runtime activation cannot prevent
 the network worker starting. Updates are disabled in base-recovery mode rather
 than appearing to install into volatile storage.
 
+The signed update manifest must explicitly declare `storage_format: 1` on a
+protected image. An older comma selecting a pre-protection release cannot
+downgrade its runtime. Legacy images still accept their original signed releases.
+The publisher derives this field from the committed bundle's compatibility file.
+
 ## Identity and credentials
 
 Hostname, SSH host keys, authorized public keys and NetworkManager client
@@ -78,7 +83,9 @@ the old payload would invalidate its exact original-image hash/extent contract.
 
 ## Validation and release gate
 
-Local Windows suite: 141 passed, 9 skipped. Identity fault-injection includes
+Local Windows suite before the installer/compatibility follow-up: 148 passed,
+12 skipped. Linux CI on source `8270a0fc32` passed, including the real loop
+filesystem job and Windows disk-selection checks. Identity fault-injection includes
 interruption before/after replacement, corrupt newest slots, cross-partition
 fallback and no writes for unchanged state. Wi-Fi tests cover no USB, empty
 profile sets, rejected credentials and worker restart during replacement.
@@ -89,8 +96,22 @@ Two mount cycles discarded transient changes, rejected writes to the base OS,
 and retained the exact base image hash. This did not reboot the Jetson, install
 the candidate, cut vehicle power or test SD controller failure.
 
-Still required before publication: Linux regression suite, systemd boot-order
-checks, full candidate image audit, physical SD boot, persistence of Wi-Fi/SSH
+The reference legacy Jetson received the independent network worker and stable
+updater while retaining runtime `f2b22dcf`. A deliberate NetworkManager disconnect
+followed by `Worker.step(None, ...)` recovered a saved connection in 0.549 seconds.
+No USB provisioning packet was supplied to that worker; the physical cable
+remained connected. Inference and HUD were not restarted. This tests recovery of
+a known available network, not availability of an absent access point.
+
+A 120-second parked C4 observation during the image workload recorded 2,400
+model/odometry/pose/road messages and 2,401 wide messages, no invalidity or frame
+gaps, maximum model execution 42.622 ms and road/wide gaps 57.448/57.449 ms.
+Temperature was 69.156–70.031 C, speed zero and assistance disengaged. This is
+parked validation only. The monitor's reused scope label is historical; this run
+does not establish a new USB role-change result.
+
+Systemd dependency checks against the reference image passed. Still required
+before publication: full candidate image audit, physical SD boot, persistence of Wi-Fi/SSH
 across boots without USB, failed DATA recovery, signed update/rollback on DATA,
 bounded log behavior, and repeated parked power interruption tests. Physical SD
 controller failure and electrical damage can still require reflashing/replacing

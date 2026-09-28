@@ -19,6 +19,7 @@ import urllib.parse
 import urllib.request
 
 ROOT = Path('/opt/carrot-jetlink')
+PROTECTED_MARKER = Path('/etc/carrot-jetlink-protected.json')
 DEFAULT_MANIFEST = 'https://upload.shind0.synology.me/models/jetlink-host-stable/manifest.json'
 
 
@@ -92,6 +93,13 @@ def validate_manifest(manifest):
   checked_url(manifest['model']['url'])
 
 
+def validate_storage_compatibility(manifest):
+  # An older comma may still select the last writable-image release. Never
+  # silently replace a protected runtime with code predating its storage contract.
+  if PROTECTED_MARKER.exists() and manifest.get('storage_format') != 1:
+    raise ValueError('Selected release does not support protected storage; keeping current runtime')
+
+
 def probe_release(release):
   command = ['runuser', '-u', 'jetlink', '--', str(ROOT / 'venv/bin/python'),
              str(release / 'tools/jetlink/probe_release.py'), str(ROOT / 'cache')]
@@ -123,6 +131,7 @@ def stage_manifest(manifest):
   from finalize_sd_image import extract_bundle
   validate_manifest(manifest)
   verify_signature(manifest)
+  validate_storage_compatibility(manifest)
   commit = manifest['source_commit']
   if (ROOT / 'current/SOURCE_COMMIT').read_text().strip() == commit:
     return
@@ -194,6 +203,7 @@ def activate():
   manifest = json.loads(pending.read_text())
   validate_manifest(manifest)
   verify_signature(manifest)
+  validate_storage_compatibility(manifest)
   release = ROOT / 'releases' / manifest['source_commit']
   if release.is_symlink() or release.resolve().parent != (ROOT / 'releases').resolve():
     raise ValueError('Invalid release directory')

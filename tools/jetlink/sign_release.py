@@ -20,11 +20,18 @@ def main():
   with tarfile.open(args.bundle) as archive:
     commit = archive.extractfile('SOURCE_COMMIT').read().decode().strip()
     spec = json.load(archive.extractfile('openpilot/selfdrive/modeld/jetlink/cinque_v2.json'))
+    compatibility = 'tools/jetlink/runtime_compatibility.json'
+    storage_format = (json.load(archive.extractfile(compatibility))['protected_storage_format']
+                      if compatibility in archive.getnames() else None)
   manifest = {'format': 1, 'source_commit': commit,
               'runtime': {'arch': 'aarch64', 'l4t': '36.4.7', 'tensorrt': '10.3.0'},
               'bundle': {'url': f'https://upload.shind0.synology.me/models/jetlink-host-{commit}/precompiled-runtime.tar.gz',
                          'sha256': digest(args.bundle), 'size': args.bundle.stat().st_size},
               'model': {'url': args.model_url, 'sha256': spec['sha256'], 'size': spec['nbytes']}}
+  if storage_format is not None:
+    if type(storage_format) is not int or storage_format != 1:
+      raise ValueError('Unsupported bundle storage compatibility')
+    manifest['storage_format'] = storage_format
   validate_manifest(manifest)
   key = ECC.import_key(args.key.read_text())
   expected = ECC.import_key(Path(__file__).with_name('release-signing-public.pem').read_text())
