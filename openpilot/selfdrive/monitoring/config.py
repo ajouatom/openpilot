@@ -1,4 +1,4 @@
-"""Boot-latched DM configuration; the retired DisableDM never disables monitoring."""
+"""Boot-latched DM mode and migration for the retired DisableDM setting."""
 import os
 
 

@@ -136,6 +136,7 @@ class SelfdriveD:
     self.dm_lockout_set = self.params.get_bool("DriverTooDistracted")
     self.cutin_audio_tracker = CutinAlertTracker()
     self.dm_uncertain_alerted = False
+    self.dm_disabled_prev = False
     self.update_reboot_alerted = False
     self.big_model_loading = False
     self.big_model_active = False
@@ -248,7 +249,12 @@ class SelfdriveD:
       self.events.add(EventName.resumeBlocked)
 
     # Handle DM
-    if not self.CP.notCar:
+    dm_disabled = self.sm['driverMonitoringState'].dm2Disabled
+    if dm_disabled and not self.dm_disabled_prev:
+      set_offroad_alert("Offroad_DriverMonitoringUncertain", False)
+      self.dm_uncertain_alerted = False
+    self.dm_disabled_prev = dm_disabled
+    if not self.CP.notCar and not dm_disabled:
       if self.sm.all_checks(['driverMonitoringState']) and self.sm['driverMonitoringState'].cameraUnavailable:
         self.events.add(EventName.driverMonitorFallback)
       self.update_dm_lockout()
@@ -396,7 +402,8 @@ class SelfdriveD:
         cloudlog.event("process_not_running", not_running=not_running, error=True)
       self.not_running_prev = not_running
     dm_fallback_processes = {'dmonitoringmodeld'} if (self.sm.all_checks(['driverMonitoringState']) and
-                            self.sm['driverMonitoringState'].cameraUnavailable) else set()
+                            (self.sm['driverMonitoringState'].cameraUnavailable or
+                             self.sm['driverMonitoringState'].dm2Disabled)) else set()
     if self.sm.recv_frame['managerState'] and (not_running - self.ignored_processes - dm_fallback_processes):
       self.events.add(EventName.processNotRunning)
     else:

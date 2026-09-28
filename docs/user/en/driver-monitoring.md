@@ -1,9 +1,19 @@
 # Driver monitoring
 
-`DriverMonitoringMode` defaults to `0: Standard`; select `1: Experimental` separately. Reboot after changing the mode. Old `DisableDM` values do not opt into experimental monitoring.
+`DriverMonitoringEnabled` enables driver monitoring by default. While monitoring is enabled, `DriverMonitoringMode` defaults to `0: Standard`; select `1: Experimental` separately. Reboot after changing the mode. Old `DisableDM` values do not opt into experimental monitoring.
 
 > [!CAUTION]
-> Experimental mode may violate applicable law. Use only for experiments in a controlled test environment. The times below are implementation choices, not statutory allowances or certification. Even mode 0 uses different timing from stock comma when camera monitoring is unavailable.
+> Turning off `DriverMonitoringEnabled` removes driver-monitoring alerts, force deceleration, and lockout. Experimental mode may violate applicable law. Use only for experiments in a controlled test environment. The times below are implementation choices, not statutory allowances or certification. Even mode 0 uses different timing from stock comma when camera monitoring is unavailable.
+
+## Enabling and disabling monitoring
+
+`DriverMonitoringEnabled` is on by default. Turning it off stops use of the driver-monitoring model and policy during normal driving, including driver-monitoring alerts, monitoring-triggered force deceleration, and lockout. Driver View may still run the model solely for face preview, while alert, deceleration, and lockout enforcement remains neutral. It does not change the selected `DriverMonitoringMode` or the independent `CarrotVisionEnabled` road-video setting.
+
+While driving, with the transmission in D or L and `vEgo` above 0.1 m/s, three presses of the physical vehicle CANCEL button within three seconds turn `DriverMonitoringEnabled` off. Each count requires a new press after release. A held button, repeated CAN packets, Bluetooth remote CANCEL, and a vehicle echo of an automatic control CANCEL request do not count. Any received non-CANCEL vehicle-button event, whether a press or release, resets the sequence. Invalid or stale vehicle state, leaving D/L, stopping, or allowing three seconds to pass from the first CANCEL also resets it. On stock-ACC configurations, an automatic speed-button echo may conservatively reset progress because it cannot be distinguished from intervening physical input.
+
+Echo filtering uses a short correlation window immediately after an automatic cancellation request and briefly suppresses its paired release. A physical CANCEL press interleaved with that echo may therefore be ignored, or the following press may need one extra release and press; this favors avoiding an unintended DM shutdown.
+
+The off state persists into later drives and across reboots. To resume monitoring, manually turn on **Vehicle & Hardware > Driver Monitor > Enable Driver Monitoring** in Carrot Web. CANCEL and reboot do not restore it automatically; re-enabling resumes monitoring under the saved `DriverMonitoringMode`.
 
 ## Four operating cases
 
@@ -63,7 +73,7 @@ Vehicle speed buttons are excluded where stock ACC uses automatic speed-button i
 
 ## Terminal warnings and web video
 
-Once a terminal alert is reached, input, forward attention or context changes alone cannot clear it. Existing deceleration requests and lockout remain while driving. This does not introduce guaranteed emergency stopping, and stock ACC cannot be assumed to execute equivalent deceleration.
+While `DriverMonitoringEnabled` is on, ordinary input, forward attention, and context changes alone cannot clear a terminal alert. Existing deceleration requests and lockout remain while driving. Turning monitoring off with the three-CANCEL sequence blocks the normal-driving model, alerts, monitoring-triggered force deceleration, and lockout together. The Driver View face-preview exception does not change this neutral enforcement state. This feature does not introduce guaranteed emergency stopping, and stock ACC cannot be assumed to execute equivalent deceleration.
 
 **One continuous second of valid Park, standstill and disengaged status** resets accumulated warnings and the usage restriction. This exception to stock comma behavior applies in both modes with or without a camera. Engagement remains manual after parking, and monitoring continues.
 

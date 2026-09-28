@@ -382,6 +382,9 @@ def set_param_value(name: str, value: Any, p: Optional[Dict[str, Any]] = None) -
       raise
     _put_unregistered_setting(params, name, value, p)
 
+  if name == "DriverMonitoringEnabled" and not _coerce_bool(value) and not params.get_bool("IsOnroad"):
+    params.remove("Offroad_DriverMonitoringUncertain")
+
 
 # -----------------------
 # Bulk backup / restore

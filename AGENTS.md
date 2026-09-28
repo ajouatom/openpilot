@@ -17,6 +17,27 @@
   lock/release transitions so a cleared saved flag cannot relock on DM restart.
   Desktop tests do not validate actual parking. See docs/driver_monitoring_dm2.md.
 
+- On 2026-09-28, the user requested a persistent manual DM switch triggered
+  in D/L at vEgo >0.1 m/s by three distinct physical vehicle CANCEL presses,
+  each separated by a release, within three seconds. Held/repeated packets, BT
+  CANCEL and automatic-control CANCEL echoes do not count. Another received
+  non-CANCEL button event, invalid/stale state, leaving D/L, stopping or timeout resets
+  progress. Ambiguous stock-ACC speed-button echoes conservatively reset progress
+  because they cannot be distinguished from a physical intervening press. The
+  cancel-echo filter correlates carControl requests rather than confirmed CAN
+  transmission, so a physical CANCEL overlapping that 150 ms window may be
+  conservatively ignored and must be pressed again. Its paired-release
+  suppression expires after 0.5 seconds; an interleaved physical press/release
+  can therefore require one additional press without causing a false disable.
+  DriverMonitoringEnabled defaults on, and the gesture turns it off across
+  drives and reboots until the user turns it back on in Carrot Web. Disabled DM
+  stops the model during normal onroad operation and gates alerts, monitoring
+  force deceleration and lockout while retaining a neutral state heartbeat.
+  Driver View may run the model only for face preview while enforcement remains
+  neutral. Keep DriverMonitoringMode and CarrotVisionEnabled independent;
+  DisableDM remains migration-only. Desktop tests do not establish vehicle
+  validation. See docs/driver_monitoring_dm2.md and both localized DM guides.
+
 - On 2026-09-28, the user authorized automatic Git update/reboot after failed
   builds or manager startup, waiting through network loss. The launcher owns a
   standalone recovery display and releases its build lock before recovery Git.

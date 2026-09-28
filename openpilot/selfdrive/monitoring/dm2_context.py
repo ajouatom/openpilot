@@ -1,4 +1,5 @@
 """DM2 context and input edges. No vehicle actuation or changes to radar selection."""
+from collections import deque
 from dataclasses import dataclass
 import math
 
@@ -75,6 +76,108 @@ class TrafficContext:
     clear = coverage and straight and not self.tracks
     self.clear_since = (now if self.clear_since is None else self.clear_since) if clear else None
     return now < self.strict_until, self.clear_since is not None and now - self.clear_since >= 10
+
+
+class CancelPressSequence:
+  """Detect three deliberate physical cancel presses within one time window."""
+  REQUIRED_PRESSES = 3
+  WINDOW_SECONDS = 3.0
+
+  def __init__(self):
+    self.press_count = 0
+    self.first_press_time = -math.inf
+    self.cancel_held = False
+
+  def _reset_sequence(self):
+    self.press_count = 0
+    self.first_press_time = -math.inf
+
+  def reset_input_stream(self):
+    self._reset_sequence()
+    self.cancel_held = False
+
+  def update(self, event_time, buttons, driving):
+    valid_driving = bool(driving) and math.isfinite(event_time)
+    if not valid_driving:
+      self._reset_sequence()
+
+    triggered = False
+    for kind, pressed in buttons:
+      if kind != "cancel":
+        self._reset_sequence()
+        triggered = False
+        continue
+
+      if not pressed:
+        self.cancel_held = False
+        continue
+      if self.cancel_held:
+        continue
+
+      self.cancel_held = True
+      if not valid_driving:
+        continue
+
+      elapsed = event_time - self.first_press_time
+      if self.press_count == 0 or elapsed < 0 or elapsed > self.WINDOW_SECONDS:
+        self.press_count = 1
+        self.first_press_time = event_time
+      else:
+        self.press_count += 1
+
+      if self.press_count == self.REQUIRED_PRESSES:
+        triggered = True
+        self._reset_sequence()
+
+    return triggered
+
+
+class AutomaticCancelFilter:
+  """Conservatively reject CANCEL edges correlated with our own request."""
+  ECHO_WINDOW_SECONDS = 0.15
+  RELEASE_SUPPRESSION_SECONDS = 0.5
+
+  def __init__(self):
+    self.requests = deque(maxlen=64)
+    self.suppress_release = False
+    self.suppress_release_until = -math.inf
+
+  def record(self, event_time, requested):
+    if requested and math.isfinite(event_time):
+      self.requests.append(event_time)
+
+  def reset_input_stream(self):
+    self.suppress_release = False
+    self.suppress_release_until = -math.inf
+
+  def is_physical(self, event_time):
+    if not math.isfinite(event_time):
+      return False
+    while self.requests and event_time - self.requests[0] > self.ECHO_WINDOW_SECONDS:
+      self.requests.popleft()
+    return not any(0 <= event_time - request <= self.ECHO_WINDOW_SECONDS for request in self.requests)
+
+  def filter_buttons(self, event_time, buttons):
+    """Remove an automatic CANCEL press and its paired release."""
+    if math.isfinite(event_time) and event_time > self.suppress_release_until:
+      self.suppress_release = False
+    filtered = []
+    for kind, pressed in buttons:
+      if kind != "cancel":
+        filtered.append((kind, pressed))
+      elif pressed:
+        automatic = not self.is_physical(event_time)
+        if automatic:
+          self.suppress_release = True
+          self.suppress_release_until = event_time + self.RELEASE_SUPPRESSION_SECONDS
+        else:
+          filtered.append((kind, pressed))
+      elif self.suppress_release:
+        self.suppress_release = False
+        self.suppress_release_until = -math.inf
+      else:
+        filtered.append((kind, pressed))
+    return filtered
 
 
 class InteractionEdges:

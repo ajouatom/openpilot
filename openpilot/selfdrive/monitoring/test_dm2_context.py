@@ -1,7 +1,8 @@
 import pytest
 
 from openpilot.selfdrive.monitoring.config import configure_monitoring
-from openpilot.selfdrive.monitoring.dm2_context import CameraAvailability, InteractionEdges, ObjectObservation, TrafficContext
+from openpilot.selfdrive.monitoring.dm2_context import (AutomaticCancelFilter, CameraAvailability, CancelPressSequence,
+                                                       InteractionEdges, ObjectObservation, TrafficContext)
 
 
 def obj(x=30, y=0, speed=20, relative_speed=0):
@@ -95,6 +96,110 @@ def test_supported_buttons_are_responses_and_unknown_buttons_are_not():
   assert edges.update(0, False, False, False, [('gapAdjustCruise', True)])
   assert not edges.update(1, False, False, False, [('unknown', True)])
   assert edges.last_response == 0
+
+
+def test_cancel_sequence_accepts_third_press_at_three_second_boundary():
+  sequence = CancelPressSequence()
+  assert not sequence.update(10.0, [('cancel', True)], True)
+  assert not sequence.update(10.1, [('cancel', False)], True)
+  assert not sequence.update(11.5, [('cancel', True)], True)
+  assert not sequence.update(11.6, [('cancel', False)], True)
+  assert sequence.update(13.0, [('cancel', True)], True)
+
+
+def test_cancel_sequence_counts_only_press_edges_rearmed_by_release():
+  sequence = CancelPressSequence()
+  assert not sequence.update(0.0, [('cancel', True)], True)
+  assert not sequence.update(0.5, [('cancel', True)], True)
+  assert not sequence.update(1.0, [('cancel', True)], True)
+  assert not sequence.update(1.1, [('cancel', False)], True)
+  assert not sequence.update(1.5, [('cancel', True)], True)
+  assert not sequence.update(1.6, [('cancel', False)], True)
+  assert sequence.update(2.0, [('cancel', True)], True)
+
+
+def test_cancel_sequence_timeout_restarts_with_latest_press():
+  sequence = CancelPressSequence()
+  assert not sequence.update(0.0, [('cancel', True), ('cancel', False)], True)
+  assert not sequence.update(1.0, [('cancel', True), ('cancel', False)], True)
+  assert not sequence.update(3.01, [('cancel', True), ('cancel', False)], True)
+  assert not sequence.update(4.0, [('cancel', True), ('cancel', False)], True)
+  assert sequence.update(6.0, [('cancel', True)], True)
+
+
+@pytest.mark.parametrize("pressed", [True, False])
+def test_cancel_sequence_other_button_event_resets_progress(pressed):
+  sequence = CancelPressSequence()
+  assert not sequence.update(0.0, [('cancel', True), ('cancel', False)], True)
+  assert not sequence.update(0.5, [('cancel', True), ('cancel', False)], True)
+  assert not sequence.update(1.0, [('gapAdjustCruise', pressed)], True)
+  assert not sequence.update(1.5, [('cancel', True), ('cancel', False)], True)
+  assert not sequence.update(2.0, [('cancel', True), ('cancel', False)], True)
+  assert sequence.update(2.5, [('cancel', True)], True)
+
+
+def test_cancel_sequence_invalid_driving_resets_and_does_not_seed_progress():
+  sequence = CancelPressSequence()
+  assert not sequence.update(0.0, [('cancel', True), ('cancel', False)], True)
+  assert not sequence.update(0.5, [('cancel', True), ('cancel', False)], True)
+  assert not sequence.update(1.0, [], False)
+  assert not sequence.update(1.5, [('cancel', True), ('cancel', False)], False)
+  assert not sequence.update(2.0, [('cancel', True), ('cancel', False)], True)
+  assert not sequence.update(2.5, [('cancel', True), ('cancel', False)], True)
+  assert sequence.update(3.0, [('cancel', True)], True)
+
+
+def test_cancel_sequence_stream_reset_rearms_after_a_lost_release():
+  sequence = CancelPressSequence()
+  assert not sequence.update(0.0, [('cancel', True)], True)
+  sequence.reset_input_stream()
+  assert not sequence.update(0.5, [('cancel', True), ('cancel', False)], True)
+  assert not sequence.update(1.0, [('cancel', True), ('cancel', False)], True)
+  assert sequence.update(1.5, [('cancel', True)], True)
+
+
+def test_automatic_cancel_filter_rejects_only_post_request_echo_window():
+  cancel_filter = AutomaticCancelFilter()
+  cancel_filter.record(10.0, requested=True)
+  cancel_filter.record(10.2, requested=True)
+  assert cancel_filter.is_physical(9.99)
+  assert not cancel_filter.is_physical(10.1)
+  assert not cancel_filter.is_physical(10.3)
+  assert cancel_filter.is_physical(10.351)
+  cancel_filter.record(float('nan'), requested=True)
+  cancel_filter.record(11.0, requested=False)
+  assert cancel_filter.is_physical(11.0)
+
+
+def test_automatic_cancel_filter_suppresses_echo_press_and_paired_release():
+  cancel_filter = AutomaticCancelFilter()
+  cancel_filter.record(10.0, requested=True)
+  assert cancel_filter.filter_buttons(10.1, [('cancel', True), ('gapAdjustCruise', True)]) == [('gapAdjustCruise', True)]
+  assert cancel_filter.filter_buttons(10.2, [('cancel', False)]) == []
+  assert cancel_filter.filter_buttons(10.351, [('cancel', True), ('cancel', False)]) == [('cancel', True), ('cancel', False)]
+
+
+def test_automatic_cancel_release_cannot_rearm_an_interleaved_physical_press():
+  cancel_filter = AutomaticCancelFilter()
+  cancel_filter.record(10.0, requested=True)
+  assert cancel_filter.filter_buttons(10.1, [('cancel', True)]) == []
+  assert cancel_filter.filter_buttons(10.2, [('cancel', True)]) == [('cancel', True)]
+  assert cancel_filter.filter_buttons(10.21, [('cancel', False)]) == []
+
+
+def test_automatic_cancel_suppression_resets_after_input_stream_loss():
+  cancel_filter = AutomaticCancelFilter()
+  cancel_filter.record(10.0, requested=True)
+  assert cancel_filter.filter_buttons(10.1, [('cancel', True)]) == []
+  cancel_filter.reset_input_stream()
+  assert cancel_filter.filter_buttons(10.2, [('cancel', True), ('cancel', False)]) == [('cancel', True), ('cancel', False)]
+
+
+def test_automatic_cancel_suppression_expires_after_a_lost_release():
+  cancel_filter = AutomaticCancelFilter()
+  cancel_filter.record(10.0, requested=True)
+  assert cancel_filter.filter_buttons(10.1, [('cancel', True)]) == []
+  assert cancel_filter.filter_buttons(10.7, [('cancel', True), ('cancel', False)]) == [('cancel', True), ('cancel', False)]
 
 
 class FakeParams:

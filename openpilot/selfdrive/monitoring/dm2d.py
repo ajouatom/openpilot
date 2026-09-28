@@ -1,15 +1,21 @@
 """20 Hz DM dispatcher: stock camera criteria or automatic interaction fallback."""
-import time
 import math
+import os
+import time
 
 from openpilot.cereal import car
 import openpilot.cereal.messaging as messaging
+from openpilot.cereal.services import SERVICE_LIST
 from openpilot.common.params import Params
 from openpilot.common.realtime import DT_DMON, Ratekeeper, config_realtime_process
 from openpilot.selfdrive.monitoring.config import experimental_mode
 from openpilot.selfdrive.carrot.bluetooth.model import CommandReader
 from openpilot.selfdrive.monitoring.dm2 import DriverMonitoring2
-from openpilot.selfdrive.monitoring.dm2_context import CameraAvailability, InteractionEdges, ObjectObservation, SteeringTouchEvidence, TrafficContext
+from openpilot.selfdrive.monitoring.dm2_context import (AutomaticCancelFilter, CameraAvailability, CancelPressSequence,
+                                                       InteractionEdges, ObjectObservation, SteeringTouchEvidence, TrafficContext)
+
+
+INPUT_FRESHNESS_SECONDS = 0.25
 
 
 def traffic_observations(radar):
@@ -27,8 +33,16 @@ def side_coverage(params, cp):
   return cp.brand == "hyundai" and params.get_int("EnableCornerRadar") > 0 and bool(int(cp.extFlags) & flags)
 
 
-def camera_sample_usable(sm, rhd, demo=False):
-  if not sm.all_checks(['driverStateV2'] if demo else ['driverStateV2', 'liveCalibration', 'modelV2']):
+def replay_services_fresh(sm, services, now):
+  return all(0 <= now - sm.logMonoTime.get(service, 0) / 1e9 < 10. / SERVICE_LIST[service].frequency
+             for service in services)
+
+
+def camera_sample_usable(sm, rhd, demo=False, replay_now=None):
+  required_services = ['driverStateV2'] if demo else ['driverStateV2', 'liveCalibration', 'modelV2']
+  if not sm.all_checks(required_services):
+    return False
+  if replay_now is not None and not replay_services_fresh(sm, required_services, replay_now):
     return False
   driver = sm['driverStateV2'].rightDriverData if rhd else sm['driverStateV2'].leftDriverData
   probabilities = (driver.faceProb, driver.leftEyeProb, driver.rightEyeProb, driver.leftBlinkProb, driver.rightBlinkProb,
@@ -57,18 +71,93 @@ def parked_reset_eligible(sm, now, demo=False):
           not state.enabled and not state.active)
 
 
+def new_driver_monitor(params, experimental):
+  return DriverMonitoring2(rhd_saved=params.get_bool("IsRhdDetected"), always_on=params.get_bool("AlwaysOnDM"),
+                           experimental=experimental)
+
+
+def disabled_state_packet(rhd, experimental, monitor=None, valid=True, camera_unavailable=False):
+  packet = monitor.get_state_packet(valid=valid) if monitor is not None else messaging.new_message('driverMonitoringState', valid=valid)
+  state = packet.driverMonitoringState
+  state.lockout = False
+  state.alertCountLockoutPercent = 0
+  state.alertTimeLockoutPercent = 0
+  state.lockoutRecoveryPercent = 0
+  state.alert3Count = 0
+  state.noResponseCount = 0
+  state.noResponseForceDecel = False
+  state.alwaysOn = False
+  state.alwaysOnLockout = False
+  state.alertLevel = 'none'
+  state.cameraUnavailable = camera_unavailable
+  state.dm2Disabled = True
+  state.dm2Experimental = experimental
+  state.dm2StrictTimeRemaining = 0
+  state.dm2WheelTimeoutFactor = 1
+  state.dm2ForwardAttentionScore = 0
+  state.dm2ForwardRecovery = False
+  state.dm2InteractionCredit = 0
+  state.dm2VisionTimeoutFactor = 1
+  state.dm2InteractionGraceRemaining = 0
+  if monitor is None:
+    state.activePolicy = 'wheeltouch'
+    state.isRHD = rhd
+  state.visionPolicyState.awarenessPercent = 100
+  state.visionPolicyState.awarenessStep = 0
+  state.visionPolicyState.isDistracted = False
+  state.visionPolicyState.distractedTypes.pose = False
+  state.visionPolicyState.distractedTypes.eye = False
+  state.visionPolicyState.distractedTypes.phone = False
+  state.visionPolicyState.distractedTypes.sleep = False
+  state.visionPolicyState.uncertainOffroadAlertPercent = 0
+  state.wheeltouchPolicyState.awarenessPercent = 100
+  state.wheeltouchPolicyState.awarenessStep = 0
+  state.wheeltouchPolicyState.driverInteracting = False
+  return packet
+
+
+def dm_clock(sm, replay):
+  # Replay preserves the route's monotonic timestamps but executes against the
+  # host clock. Use the newest received route input so Driver View and model
+  # gaps also keep all age, gesture and context calculations on one clock.
+  if replay:
+    route_time = max(sm.logMonoTime.get(service, 0)
+                     for service in ('driverStateV2', 'modelV2', 'carState', 'selfdriveState')) / 1e9
+    if math.isfinite(route_time) and route_time > 0:
+      return route_time
+  return time.monotonic()
+
+
+def input_packet_fresh(now, event_time):
+  return math.isfinite(event_time) and 0 <= now - event_time < INPUT_FRESHNESS_SECONDS
+
+
+def record_automatic_cancel_requests(sock, automatic_cancel, now, replay):
+  for packet in messaging.drain_sock(sock, wait_for_one=False):
+    event_time = packet.logMonoTime / 1e9
+    packet_now = now if replay else time.monotonic()
+    # card actuates every alive carControl packet, including one whose validity
+    # bit is false, so mirror that behavior for echo suppression.
+    if input_packet_fresh(packet_now, event_time):
+      automatic_cancel.record(event_time, packet.carControl.cruiseControl.cancel)
+
+
 def run_dm2(params, experimental):
+  # Read after process launch: process replay sets the environment before this
+  # worker starts, while Python's module cache can predate that environment.
+  replay = "REPLAY" in os.environ
   services = ['carState', 'selfdriveState', 'modelV2', 'radarState', 'liveCalibration', 'carParams', 'driverStateV2']
-  # Like stock DM, use the polled service's frequency (20 Hz). SubMaster
-  # forbids specifying both poll and frequency. The bounded update timeout
-  # below still lets the interaction fallback run when the camera is absent.
-  sm = messaging.SubMaster(services, poll='driverStateV2')
+  # Preserve driver-camera cadence on device. Replay uses modelV2 because a
+  # disabled route intentionally has no driverStateV2 messages.
+  sm = messaging.SubMaster(services, poll='modelV2' if replay else 'driverStateV2')
   pm = messaging.PubMaster(['driverMonitoringState'])
   # carState is 100 Hz; conflating it to 20 Hz can lose a complete button press.
   input_sock = messaging.sub_sock('carState', conflate=False)
-  dm = DriverMonitoring2(rhd_saved=params.get_bool("IsRhdDetected"), always_on=params.get_bool("AlwaysOnDM"),
-                         experimental=experimental)
+  control_sock = messaging.sub_sock('carControl', conflate=False)
+  dm = new_driver_monitor(params, experimental)
   traffic, inputs = TrafficContext(), InteractionEdges()
+  cancel_sequence = CancelPressSequence()
+  automatic_cancel = AutomaticCancelFilter()
   bluetooth = CommandReader('attention')
   camera_health = CameraAvailability()
   touch_evidence = SteeringTouchEvidence()
@@ -77,28 +166,107 @@ def run_dm2(params, experimental):
   covered = False
   allow_speed_buttons = False
   demo_mode = params.get_bool("IsDriverViewEnabled")
+  rhd_saved = params.get_bool("IsRhdDetected")
+  monitoring_enabled = params.get_bool("DriverMonitoringEnabled")
+  disable_write_pending = False
+  last_fresh_car_state = -math.inf
   while True:
     sm.update(int(DT_DMON * 1000))
-    now = time.monotonic()
+    now = dm_clock(sm, replay)
+    if disable_write_pending or rk.frame % 40 == 0:
+      requested_enabled = params.get_bool("DriverMonitoringEnabled")
+      if disable_write_pending:
+        # Keep the local gate closed until the asynchronous persistent write is
+        # observable, retrying at the ordinary two-second settings cadence.
+        if not requested_enabled:
+          disable_write_pending = False
+        elif rk.frame % 40 == 0:
+          params.put_bool_nonblocking("DriverMonitoringEnabled", False)
+        requested_enabled = False
+      if requested_enabled and not monitoring_enabled:
+        dm = new_driver_monitor(params, experimental)
+        traffic, inputs = TrafficContext(), InteractionEdges()
+        cancel_sequence = CancelPressSequence()
+        automatic_cancel = AutomaticCancelFilter()
+        camera_health = CameraAvailability()
+        touch_evidence = SteeringTouchEvidence()
+        strict, clear = True, False
+      monitoring_enabled = requested_enabled
+      if monitoring_enabled:
+        dm.always_on = params.get_bool("AlwaysOnDM")
+      demo_mode = params.get_bool("IsDriverViewEnabled")
+      rhd_saved = params.get_bool("IsRhdDetected")
     if sm.updated['carParams']:
       covered = side_coverage(params, sm['carParams'])
       # Stock-ACC speed button injection can be indistinguishable from driver
       # input after a gateway echo. Do not grant credit on that configuration.
       allow_speed_buttons = sm['carParams'].openpilotLongitudinalControl or params.get_int("SpeedFromPCM") == 0
     cs = sm['carState']
-    valid = sm.all_checks(['carState', 'selfdriveState']) and cs.canValid
+    state_services = ['carState', 'selfdriveState']
+    valid = sm.all_checks(state_services) and cs.canValid
+    if replay:
+      valid = valid and replay_services_fresh(sm, state_services, now)
     response = False
-    for packet in messaging.drain_sock(input_sock, wait_for_one=False):
+    record_automatic_cancel_requests(control_sock, automatic_cancel, now, replay)
+    state_packets = messaging.drain_sock(input_sock, wait_for_one=False)
+    # carControl causes the transmitted CANCEL. Drain once more after taking
+    # the carState snapshot so a cross-socket delivery race cannot make the
+    # resulting gateway echo look like a physical press.
+    record_automatic_cancel_requests(control_sock, automatic_cancel, now, replay)
+    for packet in state_packets:
       sample = packet.carState
-      if packet.valid and sample.canValid and 0 <= now - packet.logMonoTime / 1e9 < 0.25:
-        buttons = [(str(be.type), be.pressed) for be in sample.buttonEvents
-                   if allow_speed_buttons or str(be.type) not in inputs.SPEED_BUTTONS]
-        response |= inputs.update(now, sample.gasPressed, sample.brakePressed, sample.steeringPressed, buttons)
-    bt_action = bluetooth.read(allowed=valid, now=now)
+      event_time = packet.logMonoTime / 1e9
+      packet_now = now if replay else time.monotonic()
+      fresh = packet.valid and sample.canValid and input_packet_fresh(packet_now, event_time)
+      if fresh:
+        gap = event_time - last_fresh_car_state
+        if math.isfinite(last_fresh_car_state) and (gap < 0 or gap >= INPUT_FRESHNESS_SECONDS):
+          cancel_sequence.reset_input_stream()
+          automatic_cancel.reset_input_stream()
+        last_fresh_car_state = event_time
+        raw_buttons = [(str(be.type), be.pressed) for be in sample.buttonEvents]
+        physical_buttons = automatic_cancel.filter_buttons(event_time, raw_buttons)
+        buttons = [(kind, pressed) for kind, pressed in physical_buttons
+                   if allow_speed_buttons or kind not in inputs.SPEED_BUTTONS]
+        # The disable gesture is deliberately conservative: every received
+        # non-CANCEL button event breaks consecutiveness, even where stock-ACC
+        # speed-button echoes cannot be distinguished from physical input.
+        driving = (sample.vEgo > 0.1 and
+                   sample.gearShifter in (car.CarState.GearShifter.drive, car.CarState.GearShifter.low))
+        if monitoring_enabled and cancel_sequence.update(event_time, physical_buttons, driving):
+          monitoring_enabled = False
+          disable_write_pending = True
+          params.put_bool_nonblocking("DriverMonitoringEnabled", False)
+        response |= inputs.update(event_time, sample.gasPressed, sample.brakePressed, sample.steeringPressed, buttons)
+      else:
+        cancel_sequence.reset_input_stream()
+        automatic_cancel.reset_input_stream()
+        last_fresh_car_state = -math.inf
+    now = dm_clock(sm, replay)
+    if now - last_fresh_car_state >= INPUT_FRESHNESS_SECONDS:
+      cancel_sequence.reset_input_stream()
+      automatic_cancel.reset_input_stream()
+    bt_action = bluetooth.read(allowed=valid and monitoring_enabled, now=now)
     if bt_action is not None:
       response = True
       inputs.last_response = now
-    road_ok = sm.all_checks(['modelV2', 'radarState']) and not any(sm['radarState'].radarErrors.to_dict().values())
+    if not monitoring_enabled:
+      camera_ok = False
+      if demo_mode:
+        camera_ok = camera_health.update(now, camera_sample_usable(sm, dm.wheel_on_right, demo=True,
+                                                                  replay_now=now if replay else None) and
+                                         0 <= now - sm.logMonoTime['driverStateV2'] / 1e9 < 0.5)
+        if camera_ok and sm.updated['driverStateV2']:
+          dm.run_step(sm, demo=True)
+      preview_monitor = dm if demo_mode and camera_ok else None
+      pm.send('driverMonitoringState', disabled_state_packet(rhd_saved, experimental, preview_monitor,
+                                                             camera_unavailable=demo_mode and not camera_ok))
+      rk.keep_time()
+      continue
+    road_services = ['modelV2', 'radarState']
+    road_ok = sm.all_checks(road_services) and not any(sm['radarState'].radarErrors.to_dict().values())
+    if replay:
+      road_ok = road_ok and replay_services_fresh(sm, road_services, now)
     if not road_ok or sm.updated['radarState']:
       model = sm['modelV2']
       straight = (abs(cs.steeringAngleDeg) < 5 and abs(cs.aEgo) < 0.5 and
@@ -106,7 +274,8 @@ def run_dm2(params, experimental):
                   len(model.laneLineProbs) == 4 and min(model.laneLineProbs[1], model.laneLineProbs[2]) > 0.8 and
                   not cs.leftBlinker and not cs.rightBlinker)
       strict, clear = traffic.update(now, traffic_observations(sm['radarState']), road_ok, straight, covered)
-    camera_ok = camera_health.update(now, camera_sample_usable(sm, dm.wheel_on_right, demo_mode) and
+    camera_ok = camera_health.update(now, camera_sample_usable(sm, dm.wheel_on_right, demo_mode,
+                                                              replay_now=now if replay else None) and
                                      0 <= now - sm.logMonoTime['driverStateV2'] / 1e9 < 0.5)
     touch_held, touch_edge = touch_evidence.update(now, cs.steeringTouch, valid)
     if touch_edge:
@@ -126,12 +295,10 @@ def run_dm2(params, experimental):
     packet = dm.get_state_packet(valid=valid or (demo_mode and camera_ok))
     packet.driverMonitoringState.cameraUnavailable = not camera_ok
     packet.driverMonitoringState.dm2Experimental = experimental
+    packet.driverMonitoringState.dm2Disabled = False
     packet.driverMonitoringState.dm2StrictTimeRemaining = max(0.0, traffic.strict_until - now)
     packet.driverMonitoringState.dm2WheelTimeoutFactor = dm.wheel_factor
     pm.send('driverMonitoringState', packet)
-    if rk.frame % 40 == 0:
-      dm.always_on = params.get_bool("AlwaysOnDM")
-      demo_mode = params.get_bool("IsDriverViewEnabled")
     if camera_ok and rk.frame % 6000 == 0 and not demo_mode and dm.wheelpos_offsetter.filtered_stat.n > dm.settings._WHEELPOS_FILTER_MIN_COUNT:
       params.put_bool("IsRhdDetected", dm.wheel_on_right)
     rk.keep_time()

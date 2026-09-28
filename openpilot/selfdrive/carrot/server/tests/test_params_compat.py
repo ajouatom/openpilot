@@ -84,6 +84,64 @@ def test_unregistered_fallback_does_not_hide_other_write_failures(tmp_path, monk
     params_service.set_param_value("FutureIntSetting", 1, int_setting())
 
 
+@pytest.mark.parametrize(
+  ("enabled", "is_onroad", "clears_alert"),
+  ((False, False, True), (False, True, False), (True, False, False)),
+)
+def test_driver_monitoring_disable_clears_uncertain_alert_only_offroad(monkeypatch, enabled, is_onroad, clears_alert):
+  class FakeParams:
+    def __init__(self):
+      self.removed = []
+
+    def get_bool(self, key: str) -> bool:
+      assert key == "IsOnroad"
+      return is_onroad
+
+    def put_bool(self, key: str, value: bool) -> None:
+      assert (key, value) == ("DriverMonitoringEnabled", enabled)
+
+    def remove(self, key: str) -> None:
+      self.removed.append(key)
+
+  fake_params = FakeParams()
+  monkeypatch.setattr(params_service, "HAS_PARAMS", True)
+  monkeypatch.setattr(params_service, "Params", lambda: fake_params)
+  monkeypatch.setattr(params_service, "ParamKeyType", None)
+
+  params_service.set_param_value(
+    "DriverMonitoringEnabled",
+    enabled,
+    {"min": 0, "max": 1, "default": 1},
+  )
+
+  assert fake_params.removed == (["Offroad_DriverMonitoringUncertain"] if clears_alert else [])
+
+
+def test_failed_driver_monitoring_disable_does_not_clear_uncertain_alert(monkeypatch):
+  class BrokenParams:
+    removed = []
+
+    def put_bool(self, key: str, value: bool) -> None:
+      raise OSError("disk full")
+
+    def remove(self, key: str) -> None:
+      self.removed.append(key)
+
+  broken_params = BrokenParams()
+  monkeypatch.setattr(params_service, "HAS_PARAMS", True)
+  monkeypatch.setattr(params_service, "Params", lambda: broken_params)
+  monkeypatch.setattr(params_service, "ParamKeyType", None)
+
+  with pytest.raises(OSError, match="disk full"):
+    params_service.set_param_value(
+      "DriverMonitoringEnabled",
+      False,
+      {"min": 0, "max": 1, "default": 1},
+    )
+
+  assert broken_params.removed == []
+
+
 def test_map_param_reader_reads_map_fps_file_while_native_registry_is_stale(tmp_path):
   stale_params = StaleParams(tmp_path)
   (tmp_path / "ClusterNaviMapFps").write_text("3", encoding="utf-8")

@@ -278,6 +278,25 @@ def test_wide_camera_fallback_setting_is_exposed(settings, params):
   assert '{"UseWideCamera", {PERSISTENT, BOOL, "1"}}' in params_keys
 
 
+def test_driver_monitoring_enable_is_default_on_and_first_in_menu(settings, params):
+  by_name = {p["name"]: p for p in params}
+  enabled = by_name["DriverMonitoringEnabled"]
+  assert (enabled["min"], enabled["max"], enabled["default"]) == (0, 1, 1)
+  assert enabled["control"] == "toggle"
+  assert enabled["risk"] == "high"
+  assert "CANCEL" in enabled["descr"]
+  assert "CANCEL" in enabled["edescr"]
+  assert "CANCEL" in enabled["cdescr"]
+
+  vehicle = next(category for category in settings["menu"] if category["id"] == "VEHICLE")
+  driver_monitoring = next(group for group in vehicle["groups"] if group["id"] == "VEH_DM")
+  assert driver_monitoring["params"][0] == "DriverMonitoringEnabled"
+  assert driver_monitoring["params"][1] == "DriverMonitoringMode"
+
+  params_keys = PARAMS_KEYS_PATH.read_text(encoding="utf-8")
+  assert '{"DriverMonitoringEnabled", {PERSISTENT, BOOL, "1"}}' in params_keys
+
+
 def test_vehicle_navi_can_control_exposes_route_filter_modes(settings, params):
   by_name = {p["name"]: p for p in params}
   control = by_name["VehicleNaviCanControl"]

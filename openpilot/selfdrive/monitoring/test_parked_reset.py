@@ -167,7 +167,7 @@ def test_dispatcher_publishes_parked_release(monkeypatch, experimental, camera):
   monkeypatch.setattr(dm2d, 'DriverMonitoring2', lambda **k: dm)
   monkeypatch.setattr(dm2d, 'CommandReader', lambda *a: SimpleNamespace(read=lambda **k: None))
   monkeypatch.setattr(dm2d, 'CameraAvailability', lambda: SimpleNamespace(update=lambda *a: camera))
-  monkeypatch.setattr(dm2d, 'camera_sample_usable', lambda *a: camera)
+  monkeypatch.setattr(dm2d, 'camera_sample_usable', lambda *a, **k: camera)
   monkeypatch.setattr(dm2d.time, 'monotonic', lambda: clock[0])
 
   class Done(Exception):
@@ -182,6 +182,6 @@ def test_dispatcher_publishes_parked_release(monkeypatch, experimental, camera):
         raise Done
   monkeypatch.setattr(dm2d, 'Ratekeeper', lambda *a, **k: Rate())
   with pytest.raises(Done):
-    dm2d.run_dm2(SimpleNamespace(get_bool=lambda _: False), experimental)
+    dm2d.run_dm2(SimpleNamespace(get_bool=lambda key: key == 'DriverMonitoringEnabled'), experimental)
   assert packets[0]['driverMonitoringState']['lockout']
   assert packets[-1]['valid'] and not packets[-1]['driverMonitoringState']['lockout']

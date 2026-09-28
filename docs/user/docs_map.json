@@ -54,6 +54,28 @@
       ]
     },
     {
+      "id": "driver-monitoring",
+      "enforcement": "required",
+      "description": "운전자 감시 정책, 입력과 경고 동작",
+      "code_paths": [
+        "openpilot/selfdrive/monitoring/config.py",
+        "openpilot/selfdrive/monitoring/dm2.py",
+        "openpilot/selfdrive/monitoring/dm2_context.py",
+        "openpilot/selfdrive/monitoring/dm2d.py",
+        "openpilot/selfdrive/controls/controlsd.py",
+        "openpilot/selfdrive/selfdrived/selfdrived.py",
+        "openpilot/system/manager/process_config.py",
+        "openpilot/selfdrive/ui/mici/onroad/driver_state.py",
+        "openpilot/selfdrive/ui/onroad/driver_state.py"
+      ],
+      "doc_sets": [
+        [
+          "docs/user/ko/driver-monitoring.md",
+          "docs/user/en/driver-monitoring.md"
+        ]
+      ]
+    },
+    {
       "id": "cruise-buttons-and-shared-control",
       "enforcement": "advisory",
       "description": "크루즈 버튼, 속도 프리셋과 공용 크루즈 동작",

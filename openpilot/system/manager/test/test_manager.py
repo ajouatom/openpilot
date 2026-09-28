@@ -34,6 +34,25 @@ class TestManager:
   def test_duplicate_procs(self):
     assert len(procs) == len(managed_processes), "Duplicate process names"
 
+  def test_driver_monitoring_disable_stops_only_model(self):
+    CP = car.CarParams.new_message()
+    params = Params()
+    params.put_bool("IsDriverViewEnabled", False)
+
+    params.put_bool("DriverMonitoringEnabled", True)
+    assert managed_processes["dmonitoringmodeld"].should_run(True, params, CP)
+    assert managed_processes["dmonitoringd"].should_run(True, params, CP)
+
+    params.put_bool("DriverMonitoringEnabled", False)
+    assert not managed_processes["dmonitoringmodeld"].should_run(True, params, CP)
+    assert managed_processes["dmonitoringd"].should_run(True, params, CP)
+    assert not managed_processes["dmonitoringmodeld"].should_run(False, params, CP)
+    assert not managed_processes["dmonitoringd"].should_run(False, params, CP)
+
+    params.put_bool("IsDriverViewEnabled", True)
+    assert managed_processes["dmonitoringmodeld"].should_run(False, params, CP)
+    assert managed_processes["dmonitoringd"].should_run(False, params, CP)
+
   def test_wide_youtube_encoder_requires_wide_camera(self):
     class FakeParams:
       def __init__(self, use_wide_camera):
