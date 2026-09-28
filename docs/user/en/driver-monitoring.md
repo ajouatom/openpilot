@@ -51,7 +51,9 @@ Elapsed time is retained. If traffic appears 50 seconds into a 90-second grace, 
 
 ## Eligible interactions
 
-Original steering-wheel touch input is supported on Ioniq 5 PE. Contact starts at the lowest reported level, `TOUCH_DETECT=1`; small fluctuations in raw `TOUCH1/2` alone are not treated as contact. Other platforms are not automatically enabled.
+Hyundai/Kia/Genesis CAN-FD platforms process original `STEER_TOUCH_2AF` reception without a vehicle-name whitelist. Message layout, checksum, counter progression and freshness must pass validation; contact starts at the lowest reported level, `TOUCH_DETECT=1`. Small fluctuations in raw `TOUCH1/2`, or CAN address `0x2AF` alone, are not contact evidence.
+
+Signals arriving after initial startup detection are also checked. Missing or invalid signals provide no touch credit. Physical touch behavior on other vehicles has not been validated; existing ADAS transmissions and torque-based steering detection are unchanged.
 
 With camera monitoring unavailable, both modes reset the interaction timer while valid contact continues. Releasing the wheel or losing the signal for more than 0.25 seconds resumes the normal timer. With a healthy camera in mode 1, only a new contact after a valid release starts interaction grace; holding the wheel or reconnecting does not repeatedly renew it. Healthy-camera mode 0 remains stock. Touch does not prove forward attention or wakefulness and cannot clear terminal alerts or lockout.
 

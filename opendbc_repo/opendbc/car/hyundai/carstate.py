@@ -198,7 +198,7 @@ class CarState(CarStateBase):
     self.tcs = None
     self.mdps = None
     self.steer_touch_2af = None
-    self.steering_touch = HyundaiSteeringTouch(CP.carFingerprint == CAR.HYUNDAI_IONIQ_5_PE)
+    self.steering_touch = HyundaiSteeringTouch()
     self.cruise_buttons_msg = None
     self.cam_0x362 = None
     self.cam_0x2a4 = None
