@@ -266,3 +266,25 @@ The owner Jetson was subsequently shut down in P for the next card handoff.
 The comma then supplied 100 valid internal-model and pose messages in five seconds.
 The new image's physical boot, persisted identity and signed DATA update checks
 remain pending; public image and automatic release channel are unchanged.
+
+The Windows installer ZIP was extracted with CRC verification and its actual
+preparation CMD ran using the bundled portable Python from a Korean path with
+spaces. The resulting full 40 GiB image matched the R2 SHA256 above; no separate
+legacy hotfix was applied. The compressed image and installer ZIP were copied to
+the private NAS candidate directory and read back with matching full hashes.
+The ZIP SHA256 is
+`dfd8551acf72fb94ac387e740e583d8192460ba009ad32d85d654ba337be1b13`.
+
+The owner's identified 128 GB media was then recorded with R2. A full 40 GiB
+device readback matched the original image SHA256 before the separate owner
+public-key setup was added. That setup file was flushed and independently read
+back with a matching hash. Recording and readback finished on September 28;
+this is media verification, not a physical Jetson boot or power-loss result.
+
+A signed DATA-update trial from documentation-only commit `ef586a41637a` is
+staged at its immutable NAS model path. Its tar member contents, types, modes
+and links match the R2 runtime bundle except `SOURCE_COMMIT`. The actual HTTPS
+manifest signature and full bundle download hash passed verification. This
+prepares a controlled activation test; it does not establish successful on-device
+activation or change the stable channel. The owner cannot return to the vehicle
+during this PC handoff, so physical boot validation remains a separate next step.
