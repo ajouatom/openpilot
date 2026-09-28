@@ -186,6 +186,7 @@ def activate():
       (ROOT / 'cache/last-loaded.json').write_text(saved['last_loaded'])
     if pending.exists():
       os.replace(pending, pending.with_name('interrupted.json'))
+    os.sync()  # Recovery must be durable before its retry record disappears.
     transaction.unlink()
     atomic_json(ROOT / 'updates/status.json', {'state': 'recovered', 'updated': time.time()})
     os.sync()
@@ -237,7 +238,9 @@ def activate():
     atomic_json(ROOT / 'updates/status.json', {'state': 'rejected', 'error': str(error)[:240], 'updated': time.time()})
     if pending.exists():
       os.replace(pending, pending.with_name('rejected.json'))
+    os.sync()
     transaction.unlink(missing_ok=True)
+    os.sync()
     print('Candidate rejected; retaining previous release:', error, flush=True)
 
 
@@ -282,7 +285,7 @@ def main():
     if status.get('state') != 'protected':
       print('DATA unavailable; keeping immutable recovery runtime', flush=True)
       return
-  with (ROOT / 'update.lock').open('w') as lock:
+  with Path('/run/carrot-jetlink-update.lock').open('w') as lock:
     fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
     if args.action == 'activate':
       activate()

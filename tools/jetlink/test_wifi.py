@@ -196,6 +196,15 @@ def test_empty_usb_profile_set_does_not_erase_recovery_network(tmp_path):
   assert host.saved_ids(tmp_path) == ids
 
 
+def test_damaged_recovery_journal_does_not_block_saved_network(tmp_path):
+  ids = host.install(config(), tmp_path, lambda *a: '')
+  (tmp_path / '.carrot-wifi-rollback.json').write_text('{torn')
+  worker = host.Worker(tmp_path, lambda *a: 'wlan0:wifi:connected')
+  assert worker.step(None, 0) == 'connected'
+  assert host.saved_ids(tmp_path) == ids
+  assert (tmp_path / '.carrot-wifi-rollback.invalid').exists()
+
+
 @pytest.mark.parametrize('raw,expected', [(True, True), (False, False), (b'0', False),
                                          (b'1', True), ('0', False), ('1', True), (None, None), ('', None)])
 def test_typed_and_legacy_road_state(raw, expected):
