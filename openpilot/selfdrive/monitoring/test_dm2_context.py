@@ -8,41 +8,56 @@ def obj(x=30, y=0, speed=20, relative_speed=0):
   return ObjectObservation(x, y, speed, relative_speed)
 
 
+def confirm(ctx, start=0, objects=None):
+  for i in range(6):
+    ctx.update(start + i * .05, [obj()] if objects is None else objects, True, True, True)
+
+
 def test_new_vehicle_strict_window_is_not_occupancy_timer():
   ctx = TrafficContext()
-  for i in range(401):
+  for i in range(601):
     now = i / 20
     strict, clear = ctx.update(now, [obj()], True, True, True)
-    assert strict == (now < 10)
+    assert strict == (.2 <= now < 20.2)
     assert not clear
-  assert ctx.update(20.05, [obj(), obj(60, 3)], True, True, True)[0]
-  assert ctx.strict_until == 30.05
+  confirm(ctx, 30.05, [obj(), obj(60, 3)])
+  assert ctx.strict_until == pytest.approx(50.3, abs=.051)
 
 
 def test_dropout_lane_change_and_duplicate_do_not_restart_timer():
   ctx = TrafficContext()
-  ctx.update(0, [obj()], True, True, True)
+  confirm(ctx)
   ctx.update(1, [], True, True, True)
   ctx.update(1.5, [obj(31, 1), obj(31.2, 1.1)], True, True, True)
   ctx.update(2, [obj(32, 2.5)], True, True, True)
-  assert ctx.strict_until == 10
+  assert ctx.strict_until == pytest.approx(20.2)
   assert len(ctx.tracks) == 1
 
 
 def test_genuinely_new_appearance_after_absence_retriggers():
   ctx = TrafficContext()
-  ctx.update(0, [obj()], True, True, True)
+  confirm(ctx)
   ctx.update(3, [], True, True, True)
-  ctx.update(4, [obj()], True, True, True)
-  assert ctx.strict_until == 14
+  confirm(ctx, 4)
+  assert ctx.strict_until == pytest.approx(24.2)
 
 
-def test_same_speed_traffic_is_moving_and_stationary_objects_block_clear():
+def test_same_speed_traffic_counts_but_stationary_and_slow_noise_do_not():
   ctx = TrafficContext()
-  assert ctx.update(0, [obj(speed=20, relative_speed=0)], True, True, True)[0]
+  confirm(ctx, objects=[obj(speed=20, relative_speed=0)])
+  assert ctx.strict_until > 20
   ctx = TrafficContext()
   for t in range(20):
-    assert ctx.update(t, [obj(speed=0)], True, True, True) == (False, False)
+    assert ctx.update(t, [obj(speed=0), obj(60, 3, speed=1.9)], True, True, True) == (False, t >= 10)
+
+
+def test_single_moving_spike_revokes_clear_but_does_not_start_twenty_second_override():
+  ctx = TrafficContext()
+  ctx.update(0, [], True, True, True)
+  assert ctx.update(10, [], True, True, True) == (False, True)
+  assert ctx.update(11, [obj()], True, True, True) == (False, False)
+  assert ctx.update(11.1, [], True, True, True) == (False, False)
+  assert ctx.strict_until == 0
 
 
 @pytest.mark.parametrize('healthy,straight,coverage', [(False, True, True), (True, False, True), (True, True, False)])
@@ -69,20 +84,17 @@ def test_held_controls_and_repeated_button_packets_are_not_repeated_responses():
   assert edges.update(0, True, False, True, [('accelCruise', True)])
   for t in range(1, 21):
     assert not edges.update(t, True, False, True, [('accelCruise', True)])
-  assert edges.timeout_factor(20, True, False, False) == 2
+  assert edges.last_response == 0
   assert not edges.update(21, False, False, False, [('accelCruise', False)])
   assert edges.update(22, False, True, False, [('accelCruise', True)])
-  assert edges.timeout_factor(22, True, False, False) == 2.2
+  assert edges.last_response == 22
 
 
-def test_other_buttons_do_not_earn_pedal_bonus_and_strict_overrides_bonuses():
+def test_supported_buttons_are_responses_and_unknown_buttons_are_not():
   edges = InteractionEdges()
   assert edges.update(0, False, False, False, [('gapAdjustCruise', True)])
-  assert edges.timeout_factor(0, True, False, False) == 2
-  edges.update(1, True, False, False, [])
-  assert edges.timeout_factor(1, True, False, True) == pytest.approx(2.4)
-  assert edges.timeout_factor(1, True, True, True) == 1
-  assert edges.timeout_factor(1, False, False, True) == 1
+  assert not edges.update(1, False, False, False, [('unknown', True)])
+  assert edges.last_response == 0
 
 
 class FakeParams:

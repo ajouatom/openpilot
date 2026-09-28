@@ -1,108 +1,112 @@
-# DM2 implementation and validation — 2026-09-28
+# DM2 implementation and validation - 2026-09-28
 
-The user requested a new default-off experimental monitoring mode, then explicitly
-requested automatic interaction monitoring for both absent and failed cameras,
-strong-forward-attention recovery, and pedal/steering/vehicle/BT-button credit even
-with a working camera. This supersedes the initial proposal to require a manual
-camera-installation setting. There is no such setting in the final implementation.
+## Revised user contract
 
-## Configuration and stock boundary
+The user's follow-up supersedes the initial implementation's 5/15/25 fallback,
+2x-to-2.4x wheel timing, two-second camera input credit, protected distraction
+debt exclusion, 1.5x forward recovery and ten-second traffic window. The user
+explicitly selected delaying camera warnings for the unavailable-camera mode-1
+allowance after input, rather than immediately resuming camera evaluation.
 
-- `DriverMonitoringMode=0` is the boot-latched default; only an explicit value of
-  `1` selects experimental behavior. Existing `DisableDM` values never select 1.
-- Stock `monitoring/policy.py` and `monitoring/dmonitoringd.py` are unchanged.
-  The managed process retains its name and scheduling but runs `dm2d`, a bounded
-  20 Hz dispatcher. `DriverMonitoring2` inherits the original policy; when a
-  healthy camera is used in mode 0, the original criteria and state transitions
-  are used. Models, model selection and inference artifacts are unchanged.
-- `DisableDM` remains registered only for migration. Old value 2 preserves road
-  streaming through `CarrotVisionEnabled`; monitoring is enabled independently.
-  The web's individual setting writer asks for experimental-use acknowledgement.
-  This acknowledgement is not a certification or a legal exemption.
+- Camera mode 0: stock comma policy, including stock internal face-loss fallback.
+- Unavailable-camera mode 0: 15/30/45-second interaction alerts.
+- Unavailable-camera mode 1: same timing, doubled only with verified empty-road
+  conditions; eligible input resets the entire allowance before terminal alert.
+- Camera mode 1: 10/16/26-second vision alerts; 20/32/52 with empty-road conditions.
+  Head-pose tolerance is 20% wider before orange. Sleep, blink and phone detection
+  thresholds are unchanged, but warning timing for those detections is extended.
+- Fresh driver/BT input in camera mode 1 resets monitoring and starts 45 seconds
+  of camera-warning grace, or 90 seconds with empty-road conditions. Detections
+  continue during grace, including sleep/eye/phone, but the warning budget remains
+  full. After grace, the camera clock starts. Under sustained distraction, this
+  can place the first warning around 55/110 seconds and terminal around 71/142
+  seconds after input. These are requested experimental choices, not legal limits.
+- Confident forward attention for two seconds resets camera mode 1 without
+  renewing the interaction grace. Existing terminal alerts and lockout cannot be
+  reset by input, forward attention, camera recovery or empty-road expansion.
 
-## Policy
+## Stock boundary and state transitions
 
-Camera mode 1 multiplies only head-pose tolerances by 1.2. Sleep, eye closure,
-phone, confidence gates, terminal counters and lockout use the stock criteria.
-A fresh control edge restores at most two seconds of ordinary attention allowance,
-at most once per second and never above full awareness. No extra credit applies
-to orange/red alerts or current or outstanding eye/sleep/phone distraction.
+Stock monitoring/policy.py and monitoring/dmonitoringd.py remain unchanged. The
+manager runs the separate dm2d dispatcher at the existing scheduling placement.
+DriverMonitoring2 modifies its own settings instance, retaining normal camera
+mode-0 equivalence. Models, artifacts and inference behavior do not change.
 
-Forward-attention evidence combines face/eye confidence, open-eye, sleep, phone,
-sunglasses and centered head-pose signals. A minimum component score of 0.9 for
-two continuous seconds permits 1.5x recovery of ordinary distraction, capped at
-full awareness. This score is not a calibrated gaze or wakefulness probability.
-The same protected-distraction and orange/red exclusions apply. The relaxation
-is revoked immediately during the traffic override or unhealthy road context.
+Camera absence, failure, malformed probabilities/vectors and stale output select
+automatic interaction fallback. Two continuous seconds of healthy samples restore
+camera monitoring. Source transitions preserve fractional monitoring progress and
+strong alerts; they do not preserve identical absolute seconds across different
+source budgets. No manual camera-installed setting is required. Road/wide camera,
+CAN, process and other control health checks remain independent. A shared camerad
+failure is not rendered harmless, and this does not add hardware hotplug recovery.
 
-Missing, invalid, malformed or stale camera DM data selects interaction monitoring;
-healthy data must persist for two seconds to recover. There is no attempt to
-distinguish absent hardware from a fault. A driver sensor node missing at startup
-no longer asserts the whole camera daemon; road/wide failure handling remains.
-This does not make a shared camerad crash harmless or provide hardware hotplug
-reinitialization. Shared road-camera failures still use their normal handling.
+Within one source, changing traffic context preserves elapsed attention seconds.
+Expansion cannot erase orange/red. A shortening that crosses terminal counts the
+terminal transition once. Fresh input may reset before terminal; once terminal
+is reached the stock disengagement/lockout behavior remains. A grace that expires
+cannot reopen merely because the road clears later. Mode 0 camera inputs stay
+stock; mode 1 uses fresh edges rather than a continuously held steering/gas state.
 
-Interaction alert budgets are 5/15/25 seconds in mode 0 and 10/30/50 in mode 1.
-A pedal/eligible speed-button response supplies a temporary +0.2 multiplier for
-15 seconds. Another +0.2 requires ten seconds of stable, observed empty straight
-road. The maximum factor is 2.4. Corner coverage requires enabled, supported
-Hyundai corner radar and healthy radar/model data; no coverage or stale data is
-not evidence of an empty road. Unhealthy road context forces factor 1.
+## Traffic and input evidence
 
-New moving observations ahead or in adjacent lanes restore standard criteria for
-ten seconds. Positional association, relative-motion projection, duplicate removal
-and a two-second dropout hold prevent continuously visible cars from perpetually
-retriggering the timer. Radar selection and detection algorithms are not modified.
-Context-budget changes retain elapsed seconds, and orange/red cannot be cleared by
-budget expansion. Camera-source transitions retain awareness progress and alert
-stage instead of restoring an old stock-policy saved budget; the fraction is
-preserved across the different vision/wheel budgets, not their absolute seconds.
+DM only consumes existing radarState leads and lists. No radar detection, selection,
+shared replay adapter or radar model is changed, so this task does not deploy a new
+NAS radar replay algorithm. Appended fields describe DM only.
 
-CarState is read without conflation for interaction edges so a 100 Hz button press
-is not lost in the 20 Hz policy. Held inputs do not repeatedly reset monitoring;
-automatic vEgo/vCruise changes do not count. Vehicle speed buttons are excluded
-when stock ACC uses automatic speed-button injection. BT has a separate bounded
-`attention` journal emitted from the existing exclusive evdev reader. Unmapped
-buttons can count, but learning, stale/startup/cancelled events and automatic
-long-press repeats cannot. DM never consumes a driving-command journal.
+Moving observations use absolute ground speed >=2 m/s, longitudinal position
+-10..150 m and path lateral distance <=6 m. Equal-speed lead traffic counts.
+Stationary/slow observations are intentionally excluded; this is not proof of an
+obstacle-free road. A candidate immediately removes the empty-road bonus; 0.2 s
+of continuous confirmation starts a 20-second hold. Position association, relative
+velocity projection, deduplication and two-second dropout retention prevent each
+frame of one car from retriggering. A single spike cannot start the full hold.
+These gates reduce some noise; they do not establish physical target identity.
 
-## Health, alerts and diagnostics
+Empty-road doubling additionally requires healthy radar/model, supported enabled
+Hyundai/Kia corner coverage and ten seconds of stable straight-road conditions.
+A continuously present moving object blocks this condition after the hold ends.
+Unknown coverage, stale input, curves or invalid observations cannot earn it.
 
-Both modes retain DM warnings, lockout and the existing terminal-alert forceDecel
-connection. A dedicated, low-priority camera-unavailable notice appears only while
-a fresh, valid DM fallback is running. A dead camera-model process is exempted
-from processNotRunning only under that same healthy fallback condition. DM output
-itself is now required for normal cars. Road camera, model, CAN and other control
-validity checks remain separate. No new steering timeout or guaranteed emergency
-stop is introduced; stock ACC cannot be assumed to execute the same deceleration.
+CarState is drained without conflation to retain short control edges. Stock-ACC
+speed-button injection configurations exclude ambiguous vehicle speed buttons.
+Other eligible controls and the existing independent BT attention journal remain.
+Learning/test, stale/startup/cancelled events and long-press automatic repeats do
+not count. Automatic ego/set-speed changes are never driver interactions.
 
-Appended driverMonitoringState fields record camera availability, experimental
-selection, remaining traffic override, wheel factor, forward-attention evidence,
-extra recovery and granted interaction seconds. They do not change radar schemas
-or require a radar replay algorithm deployment.
+## Configuration, diagnostics and documentation
 
-## Validation and remaining limits
+DriverMonitoringMode is latched at startup: only value 1 is experimental. Old
+DisableDM never opts users into mode 1; only its old video choice migrates once to
+independent CarrotVisionEnabled. The experimental-use confirmation remains.
 
-- 96 policy, daemon-adapter and Bluetooth tests: stock regression, mode-0 camera
-  equivalence, sleep/eye/phone preservation, bounded input credit, forward recovery,
-  camera loss/recovery, actual fallback packet production, Bluetooth event journals
-  and pipe-fed daemon repeat handling.
-- 70 context, camera-health selection, settings-schema and video-service tests.
-- 41 web acknowledgement, typed-boolean and Carrot Vision regression tests.
-- 25 Wiki generator/validator tests and candidate Wiki validation; Korean/English
-  catalog and detailed guides are synchronized.
-- New DM code passes Python lint and the change passes whitespace checks. Lint of
-  all touched Python files reports the same 40 pre-existing diagnostics as HEAD,
-  with no new diagnostics. The unchanged stock DM files are checked against Git.
+New dm2VisionTimeoutFactor and dm2InteractionGraceRemaining fields complement the
+existing wheel factor and traffic hold. dm2ForwardRecovery now identifies a full
+forward-attention reset, and dm2InteractionCredit reports the full seconds restored
+by an input, not a fixed two-second credit. Historical packets retain their earlier
+semantics. Camera-unavailable notices and terminal forceDecel connections remain;
+this is not guaranteed emergency stopping or equivalent stock-ACC deceleration.
 
-Windows policy tests use real cereal schemas and policy calculations with adapters
-for native IPC, Params, hardware and process-title imports. Bluetooth pipe tests
-replace the OS flock call; they do not validate Linux exclusive-input ownership.
-Reproduction adapters and reports are retained in the local analysis archive.
-This is not a target-device native build, real camera-disconnection trial, hardware
-timing test or driving validation. C3/C3X/C4 camera faults, recovery, sustained load,
-actual input provenance, warning audibility, radar coverage and vehicle deceleration
-still require controlled target testing. Neither setting is worldwide legal approval.
+Korean/English guides and the localized catalog explain all four cases, grace
+composition, delayed sleep warnings, moving-target exclusions and terminal limits.
+Wiki MANUAL explanations are updated separately through the existing generator.
 
-Public guides: [한국어](user/ko/driver-monitoring.md),
+## Validation and limits
+
+- 103 stock/DM2 policy, daemon-adapter and Bluetooth tests passed. Coverage includes
+  all four modes, exact timing stages, sustained sleep/eye/phone detection, actual
+  dispatcher BT grace, reset/expiry, context shortening, source recovery, terminal
+  counters, lockout and stock camera mode-0 equivalence.
+- 60 traffic/context/config and settings-schema tests passed, including noise
+  persistence, twenty-second entry hold, dropout association and empty-road gates.
+- Focused Python lint passed. Stock policy and daemon content remain unchanged.
+- User-docs and Wiki validation accompany publication; generator tests are run.
+
+The Windows adapter uses real cereal schemas, policies and numpy, but substitutes
+native messaging, Params, hardware, process-title and flock interfaces. It does not
+validate Linux IPC or exclusive evdev ownership. No device native build, hardware
+camera-loss trial, C3/C4 timing, physical input provenance or driving validation was
+performed. Neither mode is legal certification. Reproduction scripts and reports
+are retained locally under .analysis/archive/2026-09-28/dm2-revision/.
+
+Public guides: [Korean](user/ko/driver-monitoring.md),
 [English](user/en/driver-monitoring.md).

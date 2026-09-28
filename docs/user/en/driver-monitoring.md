@@ -1,44 +1,62 @@
 # Driver monitoring
 
-`DriverMonitoringMode` defaults to `0: Standard`; `1: Experimental` must be selected separately. Reboot the device after changing it. Old `DisableDM` values do not enable experimental mode.
+`DriverMonitoringMode` defaults to `0: Standard`; select `1: Experimental` separately. Reboot after changing the mode. Old `DisableDM` values do not opt into experimental monitoring.
 
 > [!CAUTION]
-> Experimental mode may violate applicable law. Use only for experiments in a controlled test environment. Public-road legality, safety and country-specific certification are not assured. Mode 0's comma criteria are not a statement of the legal limit in every country.
+> Experimental mode may violate applicable law. Use only for experiments in a controlled test environment. The times below are implementation choices, not statutory allowances or certification. Even mode 0 uses different timing from stock comma when camera monitoring is unavailable.
+
+## Four operating cases
+
+| Camera and mode | Alert timing | Interaction and forward attention |
+|---|---|---|
+| Available · 0 | Stock comma: vision 5 / 8 / 13 seconds | Stock recovery and reset conditions |
+| Available · 1 | 10 / 16 / 26 seconds; 20 / 32 / 52 with empty-road conditions | Fresh input resets and starts 45/90-second grace; two seconds of confident forward attention resets |
+| Unavailable · 0 | 15 / 30 / 45 seconds | Fresh eligible input resets |
+| Unavailable · 1 | 15 / 30 / 45 seconds; 30 / 60 / 90 with empty-road conditions | Fresh eligible input resets |
+
+Times start from full attention and assume uninterrupted distraction or no response. Do not add the three numbers together. Stock low-speed exemptions below approximately 10 km/h, detection filtering and previous attention debt affect actual warning times. Terminal alerts and lockout are excluded from the resets described below.
 
 ## When camera monitoring is available
 
-Mode 0 uses comma's face, head-pose, eye-closure, sleep, phone and alert criteria. Mode 1 increases head-pose tolerance by 20%. Eye-closure, sleep and phone criteria, and the existing terminal-alert response, remain unchanged.
+Mode 0 retains comma face, head-pose, eye-closure, sleep and phone detection, input handling and warnings. Normal forward attention recovers monitoring, so lack of interaction alone does not cause periodic vision warnings. Added vehicle/BT buttons do not reset this mode.
 
-In mode 1, a new pedal, steering, vehicle-button or Bluetooth-button interaction restores up to two seconds of ordinary distraction allowance. This extra recovery is limited to once per second and cannot accumulate beyond full awareness. It does not apply to orange or terminal alerts, current eye-closure, sleep or phone detections, or remaining attention debt from those detections.
+Mode 1 uses twice the stock camera warning times, or four times with empty-road conditions, and widens head-pose tolerance by 20%. Eye-closure, sleep and phone detection probability thresholds remain unchanged, but their warning times are also extended. Additional head-pose tolerance is not applied during orange or terminal alerts.
 
-When a forward-attention evidence score remains at least 0.9 for two seconds, ordinary distraction recovers 1.5 times faster. The score combines face direction, both eyes' detection confidence, and eye-closure, sleep, phone and sunglasses probabilities; it is not a calibrated probability or guarantee of gaze or wakefulness. This additional recovery is limited to mode 1 and does not apply to orange or terminal alerts or remaining sleep, eye-closure or phone attention debt.
+Fresh eligible driver or BT input resets monitoring before the terminal stage, including orange alerts. It then **defers camera warnings for 45 seconds, or 90 seconds with empty-road conditions**. The camera warning clock starts after this grace expires. If distraction persists immediately after input and conditions stay constant, the first warning can occur around 45+10=55 seconds later, or 90+20=110 seconds on an empty road. Terminal timing can likewise extend to approximately 71 or 142 seconds.
 
-## When the camera is absent or fails
+> [!WARNING]
+> This grace also delays sleep, eye-closure and phone warnings. An interaction does not prove wakefulness or forward attention. Camera detections continue during grace, but its warning clock does not accumulate.
 
-Missing hardware, failure, malformed output or stale data automatically selects monitoring through button, pedal and steering interactions. This does not diagnose physical absence, and no camera-installation setting is needed. Camera monitoring resumes after two continuous seconds of healthy camera DM data.
+A forward-attention evidence score of at least 0.9 for two seconds resets monitoring. It combines face/eye confidence, head pose, eye closure, sleep, phone and sunglasses signals; it is not a calibrated wakefulness probability. This reset does not start another interaction grace. The former two-second credit and 1.5x recovery bonus are no longer used.
 
-| Mode | Alert-stage criteria without interaction | Condition |
-|---|---|---|
-| 0: Standard | 5 / 15 / 25 seconds | Comma's standard interaction-monitoring times |
-| 1: Experimental | 10 / 30 / 50 seconds | Twice the standard budget with healthy surrounding data |
-| 1: Additional relaxation | Up to 12 / 36 / 60 seconds | Conditionally up to 2.4 times the standard budget |
+Healthy camera data with a missing face or uncertain model can still select the stock internal interaction fallback. Mode 0 retains stock timing; mode 1 uses the same interaction timing as unavailable-camera mode 1: 15/30/45 or 30/60/90 seconds.
 
-Actual alert timing also depends on low-speed exemptions, interaction recovery and the current alert stage. A pedal or eligible speed-button interaction adds 0.2 to the multiplier for 15 seconds. Ten seconds of stable travel on an observed empty straight road adds another 0.2. Losing these conditions can shorten the applicable allowance.
+## When camera monitoring is unavailable
 
-The empty-road bonus requires supported Hyundai/Kia corner radars to be enabled and healthy radar and road-model data. It also requires no valid observed objects ahead or to either side and suitable lane confidence, steering angle, yaw rate and acceleration. An empty detection list is not evidence that sensor blind spots are empty. Missing or stale surrounding data selects standard criteria.
+Missing hardware, faults, malformed output or interrupted data automatically select interaction monitoring. This does not identify the physical fault, and no installation setting is required. Two seconds of healthy camera data restore camera monitoring without resetting monitoring progress merely because its source changed.
 
-Persistent camera unavailability displays “Driver camera unavailable / Monitoring driver controls.” Changing monitoring source preserves monitoring progress and orange/terminal alerts. Interaction monitoring cannot directly verify sleep or forward gaze.
+Both modes start with 15/30/45-second interaction timing. Only mode 1 doubles this to 30/60/90 with empty-road conditions. Fresh eligible input before the terminal alert resets the entire allowance. For example, a BT press after 20 seconds without input restarts the first warning approximately 15 seconds later under base conditions.
 
-## Vehicle entry and accepted interactions
+Without a camera, forward attention, eye closure and sleep cannot be observed directly; forward-attention reset cannot apply. A persistent camera-unavailable notice identifies interaction monitoring. Road-camera, vehicle-communication and monitoring-process failures retain separate handling.
 
-A newly observed moving vehicle ahead or in an adjacent lane selects standard criteria for ten seconds, including in mode 1. Continuous observation of the same vehicle and brief detection flicker do not continually restart the timer; another new vehicle may restart it. Expiry does not erase accumulated nonresponse time or strong alerts.
+## Empty road and new traffic
 
-Pedal and steering signals count on a new press; vehicle buttons count on a new button-down event. A continuously held input or an automatic speed change is not a new response. Vehicle speed-button credit is excluded on stock-ACC configurations that inject automatic speed-button commands, where physical input and gateway echoes can be ambiguous. Pedal, steering and Bluetooth inputs remain available.
+The additional doubling requires enabled, supported Hyundai/Kia corner radar, healthy radar and road-model data, and ten seconds of stable straight-road conditions without moving traffic in the observed area. Lane confidence, steering angle, yaw rate, acceleration and turn indicators are checked. Missing or stale context cannot earn the bonus.
 
-A registered, enabled Bluetooth remote contributes actual clicks and the first recognized long press, including buttons without a driving action assigned. Connection presence, learning/test input, stale events and automatic hold repeats do not earn recovery. An interaction is evidence of a response, not proof that drowsiness has ended.
+Moving observations must be within -10 to 150 m longitudinally and 6 m on either side of the path, with **absolute ground speed at least 2 m/s (about 7.2 km/h)**. Equal-speed lead traffic counts; stationary and slow observations are excluded. This does not prove that stopped vehicles or blind spots are absent. Even a single candidate immediately revokes the empty-road bonus; approximately 0.2 seconds of continuous confirmation starts the 20-second hold. This is not complete radar-noise rejection.
 
-## After alerts and web video
+New confirmed moving traffic **removes the additional doubling for 20 seconds**. Unavailable-camera mode 1 returns to 15/30/45 seconds; camera mode 1 returns to 10/16/26 with at most 45-second interaction grace. Continuous observation of the same vehicle does not restart the hold, but its presence still prevents the empty-road condition.
 
-The existing terminal-alert deceleration request and lockout remain connected. This change does not provide a new emergency-stop feature or guarantee a stop; equivalent deceleration cannot be guaranteed on stock-ACC vehicles. It adds no immediate steering release solely because a DM timeout expires. Road-camera, vehicle-communication and DM-process failures remain separately monitored.
+Elapsed time is retained. If traffic appears 50 seconds into a 90-second grace, the new 45-second allowance has expired, so grace ends and camera warning timing starts. An expired grace does not restart merely because the road clears again. Budget expansion alone cannot erase existing orange or terminal warnings.
 
-Web road video uses the independent `CarrotVisionEnabled` setting. On first migration, old `DisableDM=2` preserves its video function through this setting while driver monitoring starts in standard mode. Carrot Vision is unavailable while the USB cluster is enabled.
+## Eligible interactions
+
+New DM2 input handling recognizes the start of vehicle-reported pedal/steering input and new presses of supported cruise, gap and steering-assistance buttons. Held inputs, automatic speed changes and BT repeat events do not count again. Stock steering/gas handling remains unchanged in camera mode 0.
+
+Vehicle speed buttons are excluded where stock ACC uses automatic speed-button injection because physical input cannot reliably be distinguished from an echo. Pedals, steering and BT remain available. Registered and enabled BT remotes count actual clicks or the first long-press event, even for an unmapped button. Connection keepalives, learning/test events and stale events do not count.
+
+## Terminal warnings and web video
+
+Once a terminal alert is reached, input, forward attention or context changes alone cannot clear it. Existing deceleration requests and lockout remain. This does not introduce guaranteed emergency stopping, and stock ACC cannot be assumed to execute equivalent deceleration.
+
+`CarrotVisionEnabled` independently controls web road video. Only the video function of old `DisableDM=2` is migrated once; monitoring starts in standard mode. Carrot Vision is unavailable while the USB cluster is enabled.

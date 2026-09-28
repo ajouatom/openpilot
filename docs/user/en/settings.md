@@ -239,7 +239,7 @@ These settings describe the car, harness, and device hardware configuration. Do 
 > [!CAUTION]
 > Incorrect `HyundaiCameraSCC`, `CanfdHDA2`, `EnableRadarTracks`, `CarrotRadarMode`, `CarrotRadarCutInSensitivity`, or `SpeedFromPCM` values can change vehicle identification, SCC, radar, or longitudinal behavior. Confirm the vehicle, model year, HDA generation, harness location, and whether stock ACC is retained.
 
-`DriverMonitoringMode` defaults to 0 (comma standard criteria); 1 is experimental and for controlled testing only. Camera absence or failure automatically selects interaction monitoring. Reboot after changing the mode. See [driver monitoring and experimental-use conditions](driver-monitoring.md). `CarrotVisionEnabled` controls web road video independently; only the video function of old `DisableDM=2` is preserved on migration.
+`DriverMonitoringMode` defaults to 0: stock comma camera behavior, or 15/30/45-second interaction monitoring when the camera is absent or failed. Mode 1 is for controlled experiments, with empty-road timing extensions and an interaction grace before camera warnings. Reboot after changing the mode. See [driver monitoring and experimental-use conditions](driver-monitoring.md). `CarrotVisionEnabled` controls web road video independently; only the video function of old `DisableDM=2` is preserved on migration.
 
 See [Radar tracks and corner radar](radar.md) before changing radar modes.
 

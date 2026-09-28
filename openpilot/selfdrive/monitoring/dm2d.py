@@ -31,6 +31,10 @@ def camera_sample_usable(sm, rhd, demo=False):
   if not sm.all_checks(['driverStateV2'] if demo else ['driverStateV2', 'liveCalibration', 'modelV2']):
     return False
   driver = sm['driverStateV2'].rightDriverData if rhd else sm['driverStateV2'].leftDriverData
+  probabilities = (driver.faceProb, driver.leftEyeProb, driver.rightEyeProb, driver.leftBlinkProb, driver.rightBlinkProb,
+                   driver.sleepProb, driver.phoneProb, driver.sunglassesProb)
+  if not all(math.isfinite(v) and 0 <= v <= 1 for v in probabilities):
+    return False
   vectors = (driver.faceOrientation, driver.facePosition, driver.faceOrientationStd, driver.facePositionStd)
   lengths = (2, 2, 2, 2)
   if not demo:
@@ -46,7 +50,8 @@ def run_dm2(params, experimental):
   pm = messaging.PubMaster(['driverMonitoringState'])
   # carState is 100 Hz; conflating it to 20 Hz can lose a complete button press.
   input_sock = messaging.sub_sock('carState', conflate=False)
-  dm = DriverMonitoring2(rhd_saved=params.get_bool("IsRhdDetected"), always_on=params.get_bool("AlwaysOnDM"))
+  dm = DriverMonitoring2(rhd_saved=params.get_bool("IsRhdDetected"), always_on=params.get_bool("AlwaysOnDM"),
+                         experimental=experimental)
   traffic, inputs = TrafficContext(), InteractionEdges()
   bluetooth = CommandReader('attention')
   camera_health = CameraAvailability()
@@ -76,8 +81,6 @@ def run_dm2(params, experimental):
     if bt_action is not None:
       response = True
       inputs.last_response = now
-      if bt_action.removesuffix('Long') in inputs.SPEED_BUTTONS:
-        inputs.last_pedal_or_speed = now
     road_ok = sm.all_checks(['modelV2', 'radarState']) and not any(sm['radarState'].radarErrors.to_dict().values())
     if not road_ok or sm.updated['radarState']:
       model = sm['modelV2']
@@ -88,23 +91,21 @@ def run_dm2(params, experimental):
       strict, clear = traffic.update(now, traffic_observations(sm['radarState']), road_ok, straight, covered)
     camera_ok = camera_health.update(now, camera_sample_usable(sm, dm.wheel_on_right, demo_mode) and
                                      0 <= now - sm.logMonoTime['driverStateV2'] / 1e9 < 0.5)
-    factor = inputs.timeout_factor(now, experimental, strict, clear)
-    dm.set_camera_available(camera_ok, factor)
+    dm.configure_context(now, camera_ok, strict, clear)
+    if valid:
+      dm.record_interaction(inputs.last_response)
     if camera_ok:
       if sm.updated['driverStateV2'] and (valid or demo_mode):
-        dm.relax_pose = experimental and not strict
         dm.run_step(sm, demo=demo_mode)
-        dm.credit_camera_interaction(now, inputs.last_response)
     elif valid:
-      dm.input_credit_seconds = 0.0
       dm.run_without_camera(response and valid, sm['selfdriveState'].enabled,
                             cs.vEgo < dm.settings._ALERT_MIN_SPEED,
-                            cs.gearShifter not in (car.CarState.GearShifter.drive, car.CarState.GearShifter.low), factor)
+                            cs.gearShifter not in (car.CarState.GearShifter.drive, car.CarState.GearShifter.low))
     packet = dm.get_state_packet(valid=valid or (demo_mode and camera_ok))
     packet.driverMonitoringState.cameraUnavailable = not camera_ok
     packet.driverMonitoringState.dm2Experimental = experimental
     packet.driverMonitoringState.dm2StrictTimeRemaining = max(0.0, traffic.strict_until - now)
-    packet.driverMonitoringState.dm2WheelTimeoutFactor = dm.wheel_factor if not camera_ok else 1.0
+    packet.driverMonitoringState.dm2WheelTimeoutFactor = dm.wheel_factor
     pm.send('driverMonitoringState', packet)
     if rk.frame % 40 == 0:
       dm.always_on = params.get_bool("AlwaysOnDM")

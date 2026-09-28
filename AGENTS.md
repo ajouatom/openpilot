@@ -1,15 +1,24 @@
 # Repository memory
 
-- On 2026-09-28, the user requested DriverMonitoringMode: default 0 retains stock
-  camera criteria; 1 is explicitly experimental. DM2 is separate from unchanged
-  stock policy/dmonitoringd files. The user explicitly chose automatic interaction
-  fallback for both camera absence and failure, with recovery preserving progress;
-  do not restore a manual camera-installation requirement. Experimental control/BT
-  input and confident-forward-attention credit must preserve protected sleep/eye/
-  phone distraction and strong alerts. New moving traffic restores standard criteria
-  for ten seconds, not indefinitely while occupied. DisableDM is migration-only;
-  CarrotVisionEnabled is independent. Desktop tests are not device/driving or legal
-  certification. See docs/driver_monitoring_dm2.md and both localized DM guides.
+- On 2026-09-28, the user revised DriverMonitoringMode after the initial DM2
+  implementation. Mode 0 keeps stock camera behavior, but unavailable-camera
+  interaction timing is now 15/30/45 seconds. Mode 1 uses the same interaction
+  timing, doubled only on a verified empty straight road. New moving traffic
+  removes the empty-road bonus for 20 seconds. Camera mode 1 uses 2x stock vision
+  timing, 4x on a verified empty road, and 20% head-pose tolerance relaxation.
+  The user explicitly selected a full interaction grace: fresh control/BT input
+  resets monitoring and defers camera warnings for 45/90 seconds before its
+  warning clock starts. This supersedes the earlier two-second credit and
+  protected-distraction debt restriction; detection thresholds remain unchanged,
+  but sleep/eye/phone warnings are also delayed. Confident forward attention for
+  two seconds resets the camera clock without renewing interaction grace.
+  Terminal alerts and lockout remain; no input or context change clears them.
+  Camera absence AND failure automatically use interaction monitoring, with
+  recovery preserving progress; do not add a manual camera-installation setting.
+  Stock policy/dmonitoringd files stay unchanged. DisableDM is migration-only;
+  CarrotVisionEnabled is independent. These are requested experimental timing
+  choices, not statutory limits or device/driving validation. See
+  docs/driver_monitoring_dm2.md and both localized DM guides.
 
 - On 2026-09-28, the user requested ordinary Git storage wherever possible to
   eliminate this branch's Git LFS bandwidth dependency. All seven remaining

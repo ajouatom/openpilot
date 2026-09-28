@@ -2237,6 +2237,8 @@ struct DriverMonitoringState {
   dm2ForwardAttentionScore @19 :Float32;
   dm2ForwardRecovery @20 :Bool;
   dm2InteractionCredit @21 :Float32;
+  dm2VisionTimeoutFactor @22 :Float32 = 1;
+  dm2InteractionGraceRemaining @23 :Float32;
 
   alwaysOn @3 :Bool;
   alwaysOnLockout @4 :Bool;
