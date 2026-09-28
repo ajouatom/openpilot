@@ -23,7 +23,7 @@ def fake_scheduler(monkeypatch):
 
   def affinity(tid, cores):
     calls.append(('aff', tid, cores))
-    if state['race'] and cores == {6}:
+    if state['race'] and 6 in cores:
       raise OSError('CPU offlined between check and syscall')
     workers[tid]['aff'] = set(cores)
 
@@ -108,3 +108,22 @@ def test_encoder_process_workers_follow_onroad_and_offroad(fake_scheduler, monke
   assert f.workers[21] == {'aff': {7}, 'nice': 19, 'policy': 0}
   f.scheduler.update(False, child_pid=20)
   assert f.workers[21] == {'aff': {0, 1, 2, 3}, 'nice': 0, 'policy': 0}
+
+
+@pytest.mark.parametrize('online,race', [(True, False), (False, False), (True, True)])
+def test_shared_ui_cores_keep_low_priority_through_hotplug_and_new_workers(fake_scheduler, online, race):
+  f = fake_scheduler
+  f.scheduler.include_little = True
+  f.state.update(online=online, race=race)
+  f.scheduler.update(True)
+  expected = {0, 1, 2, 3, 6} if online and not race else {0, 1, 2, 3}
+  assert all(w == {'aff': expected, 'nice': 19, 'policy': 0} for w in f.workers.values())
+  assert f.calls[0] == ('nice', 11, 19)
+  f.workers[13] = {'aff': {0}, 'nice': 0, 'policy': 1}
+  f.state.update(online=True, race=False, now=2.0)
+  f.scheduler.update(True)
+  assert all(w == {'aff': {0, 1, 2, 3, 6}, 'nice': 19, 'policy': 0} for w in f.workers.values())
+  f.calls.clear()
+  f.scheduler.update(False)
+  assert all(w == {'aff': {0, 1, 2, 3}, 'nice': 0, 'policy': 0} for w in f.workers.values())
+  assert f.calls[0] == ('aff', 11, {0, 1, 2, 3})

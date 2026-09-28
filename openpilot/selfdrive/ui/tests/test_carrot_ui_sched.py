@@ -1,4 +1,4 @@
-"""UI normal-scheduler contract; onroad core6 and offroad little cores."""
+"""UI normal-scheduler contract; C3 shares little/core6, C4 retains core6."""
 import ast
 import os
 import sys
