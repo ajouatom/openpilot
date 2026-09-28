@@ -108,6 +108,16 @@ def mount_volatile(root, ram, progress=lambda name: None):
   durable_write(root / 'etc/machine-id', machine, 0o444)
   run('mount', '-t', 'tmpfs', '-o', 'mode=1777,size=256M,nosuid,nodev', 'tmpfs', str(root / 'tmp'))
   run('mount', '-t', 'tmpfs', '-o', 'mode=0755,size=64M,nosuid,nodev,noexec', 'tmpfs', str(root / 'var/log'))
+  # NVIDIA USB-device-mode creates a temporary loop mount below /mnt.
+  if (root / 'mnt').is_dir():
+    run('mount', '-t', 'tmpfs', '-o', 'mode=0755,size=16M,nosuid,nodev', 'tmpfs', str(root / 'mnt'))
+  # Keep PVA authentication enabled; only its regenerated output is volatile.
+  allowlist = root / 'lib/firmware/pva_auth_allowlist'
+  if allowlist.is_file():
+    output = ram / 'pva_auth_allowlist'
+    output.write_bytes(allowlist.read_bytes())
+    output.chmod(0o644)
+    run('mount', '--bind', str(output), str(allowlist))
 
 
 def boot():
