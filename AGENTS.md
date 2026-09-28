@@ -1,5 +1,13 @@
 # Repository memory
 
+- On 2026-09-28, the user authorized clearing DM lockout after confirmed parking:
+  valid/fresh Park, raw zero speed, standstill and disengaged/inactive status for
+  one continuous second, in both modes with or without camera. Filtered speed
+  may have only <0.01 m/s settling residue. Speed-only or engage OFF/ON resets
+  are excluded. Keep stock policy.py unchanged; selfdrived persists fresh DM
+  lock/release transitions so a cleared saved flag cannot relock on DM restart.
+  Desktop tests do not validate actual parking. See docs/driver_monitoring_dm2.md.
+
 - On 2026-09-28, the user authorized automatic Git update/reboot after failed
   builds or manager startup, waiting through network loss. The launcher owns a
   standalone recovery display and releases its build lock before recovery Git.

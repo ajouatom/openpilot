@@ -25,6 +25,36 @@ class DriverMonitoring2(DriverMonitoring):
     self.input_credit_seconds = 0.0
     self.input_received = False
     self.timing_crossed_terminal = False
+    self.parked_since = None
+    self.parked_last_check = None
+    self.parked_reset_done = False
+
+  def update_parked_reset(self, now, eligible):
+    """Clear accumulated DM state once per confirmed parking stop, never on an engage edge."""
+    continuous = self.parked_last_check is not None and 0 <= now - self.parked_last_check <= 0.25
+    self.parked_last_check = now
+    if not eligible or not continuous:
+      self.parked_since = None
+      self.parked_reset_done = False
+    if not eligible:
+      return False
+    if self.parked_since is None:
+      self.parked_since = now
+    if self.parked_reset_done or now - self.parked_since < 1.0:
+      return False
+    self.parked_reset_done = True
+    self.too_distracted = False
+    self.alert_3_cnt = self.cnt_since_alert_3 = self.no_response_cnt = self.lockout_time = 0
+    self._reset_awareness()
+    self.alert_level = AlertLevel.none
+    self.timing_crossed_terminal = False
+    self.grace_started = -math.inf
+    self.grace_expired = True
+    self.forward_frames = 0
+    self.forward_recovery = False
+    self.input_received = False
+    self.input_credit_seconds = 0.0
+    return True
 
   def _timeouts(self, kind):
     return tuple(getattr(self.settings, f'_{kind}_POLICY_ALERT_{i}_TIMEOUT') for i in (1, 2, 3))
