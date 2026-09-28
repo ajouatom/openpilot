@@ -1,7 +1,9 @@
 """Build a PRIVATE CANDIDATE from a verified pristine raw image, on Linux.
 
-Only newly created file-backed loop devices are modified. The input and live
-SD are never writable targets. Physical boot/power-cut tests remain mandatory
+Only file-backed loop devices in a new output directory are modified. By
+default the input is copied. --consume-staging-base explicitly consumes a
+disposable sibling *.STAGING.img file, avoiding another full SD write. The live
+SD is never a writable target. Physical boot/power-cut tests remain mandatory
 before replacing a public download or enabling automatic vehicle migration.
 """
 import argparse
@@ -41,6 +43,7 @@ def main():
     parser.add_argument('--' + name, type=Path, required=True)
   parser.add_argument('--base-sha256', required=True)
   parser.add_argument('--bundle-sha256', required=True)
+  parser.add_argument('--consume-staging-base', action='store_true')
   args = parser.parse_args()
   if os.name != 'posix' or os.geteuid() != 0:
     raise RuntimeError('Root on a Linux build host required')
@@ -50,11 +53,18 @@ def main():
   work = args.output_dir.absolute()
   if work.exists() or work.parent.resolve() != work.parent:
     raise ValueError('A new output directory under a real parent is required')
+  if args.consume_staging_base and (args.base.resolve().parent != work.parent
+                                    or not args.base.name.endswith('.STAGING.img')
+                                    or args.base.stat().st_nlink != 1):
+    raise ValueError('Only a disposable, unshared sibling STAGING image may be consumed')
   layout = json.loads(subprocess.check_output(['sfdisk', '--json', str(args.base)]))['partitiontable']
   validate_base(layout, args.base.stat().st_size)
   work.mkdir(mode=0o700)
   image = work / 'carrot-jetson-protected-CANDIDATE.img'
-  run('cp', '--reflink=auto', '--sparse=always', '--', args.base, image)
+  if args.consume_staging_base:
+    args.base.rename(image)
+  else:
+    run('cp', '--reflink=auto', '--sparse=always', '--', args.base, image)
   with image.open('r+b') as output:
     output.truncate(40 * GIB)
   run('sgdisk', '-e', image)
