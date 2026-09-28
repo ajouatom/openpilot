@@ -60,6 +60,12 @@ def render(status, root=ROOT, size=(1920, 462)):
   return image
 
 
+def panel_frame(frame):
+  from PIL import Image
+  # Match cluster_renderer portrait_upload's render/readback transform.
+  return frame.transpose(Image.Transpose.ROTATE_270)
+
+
 def main():
   import cluster_usb_display as usb
   import openpilot.common.usbgpu_bus_lock as bus
@@ -81,7 +87,7 @@ def main():
           while not hud_requested():
             frame = render(collect(), size=(panel.landscape_width, panel.landscape_height))
             stream = BytesIO()
-            frame.save(stream, format='JPEG', quality=82)
+            panel_frame(frame).save(stream, format='JPEG', quality=82)
             panel.send_jpeg(stream.getvalue())
             time.sleep(1)
         except Exception as error:
