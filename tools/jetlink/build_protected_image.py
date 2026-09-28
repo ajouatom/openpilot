@@ -78,6 +78,13 @@ def main():
     backing = subprocess.check_output(['losetup', '-n', '-O', 'BACK-FILE', loop], text=True).strip()
     if Path(backing).resolve() != image.resolve():
       raise RuntimeError('Unexpected loop backing file')
+    # BLKROSET can survive loop-device reuse on the reference kernel. Clear it
+    # only after proving this is our disposable file-backed output, never on a
+    # physical disk. Wait for udev before using newly scanned partition nodes.
+    run('udevadm', 'settle', '--timeout=10')
+    run('blockdev', '--setrw', loop)
+    for number in (1, 16, 17):
+      run('blockdev', '--setrw', loop + f'p{number}')
     root, setup, data = [work / name for name in ('rootfs', 'setup', 'data')]
     for path in (root, setup, data):
       path.mkdir()
