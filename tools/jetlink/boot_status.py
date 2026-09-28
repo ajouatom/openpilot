@@ -7,7 +7,8 @@ import time
 
 STAGE = Path('/run/carrot-boot-stage.json')
 UNITS = ('carrot-protected-storage', 'carrot-image-setup', 'carrot-jetlink-usbc-host',
-         'NetworkManager', 'ssh', 'carrot-jetlink-wifi', 'carrot-jetlink', 'carrot-jetlink-xorg', 'carrot-jetlink-hud')
+         'nv', 'nvpmodel', 'carrot-jetlink-performance', 'NetworkManager', 'ssh',
+         'carrot-jetlink-wifi', 'carrot-jetlink', 'carrot-jetlink-xorg', 'carrot-jetlink-hud')
 
 
 def read_json(path):
@@ -61,7 +62,7 @@ def collect():
       temperature = int(path.read_text()) / 1000
       if -20 <= temperature <= 150:
         temperatures.append(temperature)
-    except (OSError, ValueError):
+    except (OSError, ValueError, TypeError):
       pass
   return {'stage': read_json(STAGE), 'storage': read_json('/run/carrot-storage.json'),
           'units': units, 'addresses': addresses[:4], 'wifi': network.get('state', 'waiting'),

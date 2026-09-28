@@ -197,3 +197,29 @@ recording, so its original transient logs are unavailable.
 Windows tests and CPU rendering are not USB-panel or new-image boot validation.
 An owner-card diagnostic patch is being prepared separately from public artifacts;
 the NAS public image and signed automatic update channel remain unchanged.
+
+### Recovered connection and full-boot findings
+
+After the owner reconnected USB, the same candidate booted with fresh USB ready
+state, active Cinque v2 inference, Wi-Fi and SSH. This does not prove the earlier
+failure was a defective cable. Live root and root block device were read-only;
+etc/var/home/root used RAM overlays, logs used tmpfs, and the runtime used DATA.
+This verifies the post-helper state, not protection during the initial initrd mount.
+
+The full boot exposed NVIDIA `nv.sh` attempting to recreate already-correct
+Weston/Wayland symlinks on the immutable root. Its failure blocked nvpmodel,
+performance setup, Xorg and the normal USB HUD. The candidate image installer
+now makes those link operations idempotent: matching links need no write;
+missing/incorrect links retain their write failure. NVIDIA runtime initialization
+is retained. A RAM-only trial on the owner's Jetson made nv.service succeed.
+Because inference had already initialized the GPU, retrying nvpmodel then asked
+for a reboot and failed without rebooting; normal HUD recovery is not yet proved.
+Do not bypass that dependency or claim the power-mode label verifies every clock
+and gating setting. The owner card still needs the persistent image fix.
+
+The CPU diagnostic worker also encountered Python3.10 TypeError from a thermal
+sysfs read. It now skips that unavailable sensor, as host_health already does,
+and still renders other sensors and boot errors. It reports NVIDIA initialization
+failures too. The portrait JPEG correction and thermal fix were installed in RAM
+on the running device; they have not been persisted to its pinned owner payload.
+The old owner payload, public image and stable runtime channel remain unchanged.

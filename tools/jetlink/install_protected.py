@@ -14,6 +14,10 @@ def configure(root, source):
   root, source = Path(root).resolve(), Path(source).resolve()
   if root == Path('/') or not (root / 'etc/carrot-jetlink-image.json').is_file():
     raise ValueError('Only an offline Carrot image is supported')
+  from readonly_boot import patch_nv_script
+  nv_script = root / 'etc/systemd/nv.sh'
+  if nv_script.exists():
+    nv_script.write_text(patch_nv_script(nv_script.read_text()))
   destination = root / 'usr/lib/carrot-jetlink-storage'
   destination.mkdir(parents=True, exist_ok=True)
   for name in ('protected_storage.py', 'persistent_state.py', 'wifi_apply.py', 'wifi_protocol.py', 'image_first_boot.py', 'protected_first_boot.py', 'boot_status.py'):
