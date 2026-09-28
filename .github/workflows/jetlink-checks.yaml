@@ -39,3 +39,8 @@ jobs:
           python -m pytest -c /dev/null --rootdir=. --confcutdir=openpilot/selfdrive/carrot/tests -q \
             openpilot/selfdrive/carrot/tests/test_carrot_navi.py \
             openpilot/selfdrive/carrot/tests/test_cluster_scene.py
+      - name: Protected storage with real loop filesystem and isolated mounts
+        run: |
+          sudo --preserve-env=PATH unshare --mount --propagation private env CARROT_STORAGE_MOUNTS=1 \
+            "$(which python)" -m pytest -c /dev/null --rootdir=. --confcutdir=tools/jetlink -q \
+            tools/jetlink/test_protected_storage.py

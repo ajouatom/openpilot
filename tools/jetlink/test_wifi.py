@@ -26,7 +26,7 @@ def test_private_channel_excludes_credentials_from_update_control(tmp_path, monk
   value['jetson_release'] = {'synthetic': True}
   protocol.receive(json.dumps(value).encode())
   assert protocol.read_packet()[1] == value
-  control = json.loads(protocol.CONTROL.read_text())
+  control = json.loads(protocol.CONTROL.read_text(encoding='utf-8'))
   assert set(control) == {'onroad', 'received', 'jetson_release'}
   if sys.platform != 'win32':
     assert protocol.PACKET.stat().st_mode & 0o777 == 0o600
@@ -50,13 +50,13 @@ def test_move_to_another_comma_and_password_change_preserves_manual_profiles(tmp
   run = lambda *args: calls.append(args)
   first = host.install(config(), tmp_path, run)
   path = next(tmp_path.glob('carrot-usb-*'))
-  assert 'ssid=\\ssynthetic:한글\\swifi\\s' in path.read_text()
+  assert 'ssid=\\ssynthetic:한글\\swifi\\s' in path.read_text(encoding='utf-8')
   host.install(config(password='changed synthetic'), tmp_path, run)
-  assert 'psk=changed\\ssynthetic' in path.read_text()
+  assert 'psk=changed\\ssynthetic' in path.read_text(encoding='utf-8')
   second = host.install(config('b'), tmp_path, run)
   assert first != second and not path.exists()
   assert ('connection', 'delete', 'uuid', first[0]) in calls
-  assert manual.read_text() == 'untouched'
+  assert manual.read_text(encoding='utf-8') == 'untouched'
   count = len(calls)
   host.install(config('b'), tmp_path, run)
   assert len(calls) == count  # Periodic retransmission does not reconnect/rewrite.
@@ -143,6 +143,57 @@ def test_failed_profile_load_is_retried(tmp_path):
   calls = []
   host.install(config(), tmp_path, lambda *args: calls.append(args))
   assert len(calls) == 1
+
+
+def test_recovery_without_usb_uses_saved_client_and_retries(tmp_path):
+  ids = host.install(config(), tmp_path, lambda *a: '')
+  calls = []
+  def nm(*args):
+    calls.append(args)
+    if args[-1] == 'status':
+      return 'wlan0:wifi:disconnected'
+    return ''
+  worker = host.Worker(tmp_path, nm)
+  assert worker.step(None, 0) == 'connected'
+  assert ('--wait', '12', 'connection', 'up', 'uuid', ids[0]) in calls
+  count = len(calls)
+  worker.step(None, 2)
+  assert len(calls) == count
+  worker.step(None, 30)
+  assert len(calls) > count
+
+
+def test_bad_usb_password_recovers_previous_profile_without_persisting(tmp_path):
+  host.install(config(), tmp_path, lambda *a: '')
+  original = next(tmp_path.glob('*.nmconnection')).read_text(encoding='utf-8')
+  def nm(*args):
+    if args[0] == '--wait':
+      raise RuntimeError('failed')
+    return 'wlan0:wifi:disconnected' if args[-1] == 'status' else ''
+  worker = host.Worker(tmp_path, nm, lambda: pytest.fail('unverified credentials saved'))
+  assert worker.step((0, config(password='bad replacement')), 0) == 'retrying'
+  assert next(tmp_path.glob('*.nmconnection')).read_text(encoding='utf-8') == original
+
+
+def test_worker_restart_recovers_interrupted_profile_replacement(tmp_path):
+  ids = host.install(config(), tmp_path, lambda *a: '')
+  path = next(tmp_path.glob('*.nmconnection'))
+  original = path.read_text(encoding='utf-8')
+  (tmp_path / '.carrot-wifi-rollback.json').write_text(json.dumps({'old': {path.name: original}, 'new': [path.name]}))
+  path.write_text('interrupted replacement')
+  worker = host.Worker(tmp_path, lambda *a: 'wlan0:wifi:connected')
+  assert worker.step(None, 0) == 'connected'
+  assert path.read_text(encoding='utf-8') == original
+  assert host.saved_ids(tmp_path) == ids
+  assert not (tmp_path / '.carrot-wifi-rollback.json').exists()
+
+
+def test_empty_usb_profile_set_does_not_erase_recovery_network(tmp_path):
+  ids = host.install(config(), tmp_path, lambda *a: '')
+  value = config(); value['profiles'] = []
+  worker = host.Worker(tmp_path, lambda *a: 'wlan0:wifi:connected')
+  assert worker.step((0, value), 0) == 'connected'
+  assert host.saved_ids(tmp_path) == ids
 
 
 @pytest.mark.parametrize('raw,expected', [(True, True), (False, False), (b'0', False),

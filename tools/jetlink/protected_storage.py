@@ -1,0 +1,158 @@
+"""Early boot and identity persistence for *separately partitioned* SD images.
+
+Never remount the system writable, format a device, or repartition a live card.
+The immutable base runtime remains a recovery fallback if DATA cannot be used.
+This helper is installed in the base OS, independently of updateable releases.
+"""
+import argparse
+from contextlib import contextmanager
+import json
+import os
+from pathlib import Path
+import subprocess
+import re
+
+from persistent_state import collect, durable_write, latest, restore, save
+
+MARKER = Path('/etc/carrot-jetlink-protected.json')
+DATA = Path('/run/carrot-data')
+SETUP = Path('/run/carrot-identity-backup')
+STATUS = Path('/run/carrot-storage.json')
+RUNTIME = Path('/opt/carrot-jetlink')
+
+
+def run(*args, timeout=30):
+  return subprocess.run(args, check=True, capture_output=True, text=True, timeout=timeout).stdout.strip()
+
+
+@contextmanager
+def locked():
+  import fcntl
+  with Path('/run/carrot-storage.lock').open('a') as lock:
+    fcntl.flock(lock, fcntl.LOCK_EX)
+    yield
+
+
+def configuration():
+  value = json.loads(MARKER.read_text())
+  if value != {'format': 1, 'root': '/dev/mmcblk0p1', 'data': '/dev/mmcblk0p17', 'setup': '/dev/mmcblk0p16'}:
+    raise ValueError('Unsupported protected SD layout')
+  return value
+
+
+@contextmanager
+def setup_mount(writable=False):
+  config = configuration()
+  SETUP.mkdir(mode=0o700, exist_ok=True)
+  mounted = False
+  try:
+    options = ('rw' if writable else 'ro') + ',nosuid,nodev,noexec,umask=077'
+    run('mount', '-t', 'vfat', '-o', options, config['setup'], str(SETUP))
+    mounted = True
+    yield SETUP / 'identity'
+  except (OSError, subprocess.SubprocessError):
+    if mounted:
+      raise
+    yield None
+  finally:
+    if mounted:
+      run('umount', str(SETUP))
+
+
+def data_identity():
+  return [DATA / 'identity'] if os.path.ismount(DATA) else []
+
+
+def persist():
+  configuration()
+  with locked(), setup_mount(writable=True) as backup:
+    directories = data_identity() + ([backup] if backup is not None else [])
+    save(directories, collect())
+
+
+def valid_runtime(path):
+  """Do not execute a half-copied DATA runtime; immutable base remains usable."""
+  try:
+    marker = json.loads((path / 'protected-runtime.json').read_text())
+    current = (path / 'current').resolve(strict=True)
+    releases = (path / 'releases').resolve(strict=True)
+    return (marker == {'format': 1} and current.is_relative_to(releases)
+            and (current / 'tools/jetlink/server.py').is_file()
+            and (current / 'SOURCE_COMMIT').is_file()
+            and (path / 'venv/bin/python').is_file()
+            and (path / 'cache/last-loaded.json').is_file())
+  except (OSError, ValueError, RuntimeError):
+    return False
+
+
+def mount_volatile(root, ram):
+  """Mount only RAM upper layers; also exercised against a real Linux loop FS."""
+  ram.mkdir(mode=0o700, exist_ok=True)
+  run('mount', '-t', 'tmpfs', '-o', 'mode=0700,size=768M,nosuid,nodev', 'tmpfs', str(ram))
+  # Preserve PID1's already selected per-boot ID; never replace it with a
+  # different identity after systemd has started. SSH keys/hostname are durable.
+  machine = (root / 'etc/machine-id').read_bytes()
+  for name in ('etc', 'var', 'home', 'root'):
+    upper, work = ram / name, ram / (name + '-work')
+    target = root / name
+    upper.mkdir(mode=target.stat().st_mode & 0o7777); work.mkdir()
+    run('mount', '-t', 'overlay', '-o', f'lowerdir={target},upperdir={upper},workdir={work}', 'overlay', str(target))
+  durable_write(root / 'etc/machine-id', machine, 0o444)
+  run('mount', '-t', 'tmpfs', '-o', 'mode=1777,size=256M,nosuid,nodev', 'tmpfs', str(root / 'tmp'))
+  run('mount', '-t', 'tmpfs', '-o', 'mode=0755,size=64M,nosuid,nodev,noexec', 'tmpfs', str(root / 'var/log'))
+
+
+def boot():
+  config = configuration()
+  # Fail closed on a wrong/legacy layout. Enabling this service alone on an old
+  # card is deliberately unsupported; the offline builder creates partition 17.
+  root_source = run('findmnt', '-n', '-o', 'SOURCE', '/')
+  options = run('findmnt', '-n', '-o', 'OPTIONS', '/').split(',')
+  if root_source != config['root'] or 'ro' not in options:
+    raise RuntimeError('Protected boot requires the expected read-only root')
+  run('blockdev', '--setro', config['root'])
+  mount_volatile(Path('/'), Path('/run/carrot-volatile'))
+  DATA.mkdir(mode=0o700, exist_ok=True)
+  state = 'base-recovery'
+  try:
+    # Never fsck a mounted device. No -y, format, or automatic destructive reset.
+    mounted = subprocess.run(['findmnt', '-n', '-S', config['data']], capture_output=True, timeout=5)
+    if mounted.returncode != 1:
+      raise RuntimeError('Unexpected existing DATA mount')
+    if run('blkid', '-s', 'LABEL', '-o', 'value', config['data']) != 'CARROTDATA':
+      raise RuntimeError('Unexpected DATA partition')
+    check = subprocess.run(['e2fsck', '-p', config['data']], capture_output=True, timeout=60)
+    if check.returncode not in (0, 1):
+      raise RuntimeError('DATA requires offline repair')
+    run('mount', '-t', 'ext4', '-o', 'rw,nosuid,nodev,noatime', config['data'], str(DATA))
+    if not valid_runtime(DATA / 'runtime'):
+      raise RuntimeError('DATA runtime incomplete')
+    run('mount', '--bind', str(DATA / 'runtime'), str(RUNTIME))
+    state = 'protected'
+  except (OSError, ValueError, RuntimeError, subprocess.SubprocessError):
+    pass  # Known baseline model + recovery network; never boot DATA code blindly.
+  with setup_mount() as backup:
+    record = latest(data_identity() + ([backup] if backup is not None else []))
+    if record is not None:
+      restore(Path('/'), record)
+  hostname = Path('/etc/hostname').read_text().strip()
+  if re.fullmatch(r'[a-z][a-z0-9-]{0,61}[a-z0-9]|[a-z]', hostname):
+    run('hostname', hostname)
+  durable_write(STATUS, json.dumps({'format': 1, 'state': state, 'system_read_only': True}).encode(), 0o644)
+
+
+def main():
+  parser = argparse.ArgumentParser(description=__doc__)
+  parser.add_argument('action', choices=('boot', 'save'))
+  args = parser.parse_args()
+  if os.geteuid() != 0:
+    raise PermissionError('Root service required')
+  if args.action == 'boot':
+    with locked():
+      boot()
+  else:
+    persist()
+
+
+if __name__ == '__main__':
+  main()

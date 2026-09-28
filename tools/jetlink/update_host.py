@@ -267,6 +267,11 @@ def main():
   args = parser.parse_args()
   if os.geteuid() != 0:
     raise PermissionError('Run through the installed update service (root)')
+  if Path('/etc/carrot-jetlink-protected.json').exists():
+    status = json.loads(Path('/run/carrot-storage.json').read_text())
+    if status.get('state') != 'protected':
+      print('DATA unavailable; keeping immutable recovery runtime', flush=True)
+      return
   with (ROOT / 'update.lock').open('w') as lock:
     fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
     if args.action == 'activate':
