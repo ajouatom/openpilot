@@ -6,6 +6,7 @@ on:
       - 'tools/jetlink/**'
       - 'third_party/jetlink/**'
       - 'openpilot/common/jetlink_status.py'
+      - 'openpilot/common/jetlink_peer.py'
       - 'openpilot/selfdrive/modeld/**'
       - 'openpilot/selfdrive/carrot/carrot_navi.py'
       - '.github/workflows/jetlink-checks.yaml'
@@ -35,7 +36,8 @@ jobs:
           python -m compileall -q tools/jetlink openpilot/selfdrive/modeld/jetlink
           python -m pytest -c /dev/null --rootdir=. --confcutdir=tools/jetlink -q \
             tools/jetlink openpilot/selfdrive/modeld/tests/test_jetlink.py \
-            openpilot/selfdrive/modeld/tests/test_jetlink_phase.py
+            openpilot/selfdrive/modeld/tests/test_jetlink_phase.py \
+            openpilot/selfdrive/modeld/tests/test_jetlink_mac.py
           python -m pytest -c /dev/null --rootdir=. --confcutdir=openpilot/selfdrive/carrot/tests -q \
             openpilot/selfdrive/carrot/tests/test_carrot_navi.py \
             openpilot/selfdrive/carrot/tests/test_cluster_scene.py

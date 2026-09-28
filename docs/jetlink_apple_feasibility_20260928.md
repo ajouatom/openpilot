@@ -112,7 +112,7 @@ Both ORT implementations report backend `ort` and device tags such as
 names come from the CPU brand on Mac; Swift can fall back to Metal's device
 name. This is peer-reported identification, not authenticated device identity.
 
-Current Carrot `host_label` recognizes only `ort` plus a `coreml` substring.
+At review time Carrot `host_label` recognized only `ort` plus a `coreml` substring.
 Consequently the upstream default `ane` reports generic Jetlink; a phone's
 CoreML tag could instead be labelled MAC. Do not use this display helper as
 the gate for Mac-specific model provisioning.
@@ -137,3 +137,40 @@ Desktop verification can cover recorded/synthetic HELLO classifications, upload
 framing, model identity rejection, preparation/reconnect and Jetson regression
 branches. Real Mac USB, CoreML output parity and sustained20Hz performance still
 require a Mac owner to validate; passing desktop tests cannot establish them.
+
+## Mac-only implementation for external testing
+
+The owner subsequently authorized implementation with an unchanged upstream Mac
+app, preserving Jetson behavior. `jetlink_peer.is_mac_peer` now gates this path
+on protocol2, plain USB, ORT and a recognized Apple M-series CoreML/ANE tag.
+Conflicting host metadata, iOS/TCP, CPU and unknown device tags are excluded.
+The MAC display recognizes the same upstream tags.
+
+The comma's new `jetlink/mac.py` first requests the exact existing model. A
+missing host model triggers offroad-only NAS download into a dedicated comma
+cache, SHA256/size verification, and existing protocol upload. Download has a
+30-minute overall bound and10-second network timeout; preparation allows15
+minutes. Unverified/incomplete files are never installed. Cache reuse works
+without network. Ignition-on/disconnect cancels preparation at chunk/read poll
+boundaries; an already-started app build may continue. Existing ready engines
+can reconnect onroad, subject to unchanged full-spec and model-switch checks.
+
+Upstream HELLO's `engine_state` is scoped to the session request and normally
+returns `none` before the first ENGINE_REQ, even with a resident model. The
+ready reconnect hint therefore uses the exact `loaded` SHA and still requires
+a full ENGINE_RESP spec match. An upstream HELLO implementation is exercised
+in the desktop wire test so this is not inferred from a synthetic ready label.
+
+Non-Mac peers execute the original ensure_engine call with its30-second timeout,
+without Mac callbacks/downloads. No Jetson host source, image, model, signed
+channel, USB gadget policy, runtime validity or process placement was changed.
+The preparation transport wrapper is removed before normal inference. Tests
+cover identification, corruption/short/oversized/redirected downloads, cache
+reuse, interruption, unchanged non-Mac calls, actual protocol upload/inference,
+wrong-checkpoint rejection, cached reconnect and partial-message polling.
+
+See [bilingual tester instructions](jetlink_mac_testing.md). Actual Mac USB,
+CoreML numerical parity, sustained20Hz and driving behavior remain unvalidated.
+The Windows focused integration suite passed206 tests with25 platform-dependent
+skips; this includes the Mac protocol tests and existing Jetson/HUD/navigation/
+Wi-Fi/storage/update checks. The user-docs validator also passed for this change.
