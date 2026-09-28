@@ -141,6 +141,16 @@ The integrated Windows preparation mode verifies/extracts the finished image;
 it does not apply a separate legacy USB-C patch. Future runtime/model updates
 continue through the comma-selected signed channel.
 
+The private Windows ZIP is 10,078,859,286 bytes, SHA256
+`1dba6bacbaebdf8ce25bbabc10710a359c354e5c5a08733de9fec4b4140c637d`.
+The complete ZIP was extracted with CRC checks, then its actual `01` CMD and
+bundled Python prepared the full 40 GiB image in a Korean/space path. The final
+raw SHA256 matched independently; the run took 140 seconds on the reference PC.
+No legacy patch file is included or applied. Both compressed image and ZIP were
+copied to the private NAS candidate directory and fully read back for SHA256.
+Physical card writing and boot are still pending; the public v0.3.2 download and
+the comma's existing signed runtime pin have not been replaced.
+
 Docs-Not-Needed: Engineering candidate only; no new user setting or released
 installation procedure. Public beginner instructions change only with a tested
 installer artifact.
