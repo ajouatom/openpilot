@@ -284,7 +284,7 @@ def build(spinner: Spinner, dirty: bool = False, minimal: bool = False) -> None:
 
     # Show TextWindow
     spinner.close()
-    if not os.getenv("CI"):
+    if not os.getenv("CI") and os.getenv("CARROT_STARTUP_RECOVERY") != "1":
       with TextWindow("openpilot failed to build\n \n" + error_s) as t:
         t.wait_for_exit()
     exit(1)
@@ -301,8 +301,8 @@ def build(spinner: Spinner, dirty: bool = False, minimal: bool = False) -> None:
 
 
 if __name__ == "__main__":
-  spinner = Spinner()
-  spinner.update_progress(0, 100)
-  build_metadata = get_build_metadata()
-  build(spinner, build_metadata.openpilot.is_dirty, minimal = AGNOS)
-  build_usbgpu_model(spinner)
+  with Spinner() as spinner:
+    spinner.update_progress(0, 100)
+    build_metadata = get_build_metadata()
+    build(spinner, build_metadata.openpilot.is_dirty, minimal = AGNOS)
+    build_usbgpu_model(spinner)

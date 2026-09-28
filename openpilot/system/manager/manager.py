@@ -304,8 +304,9 @@ if __name__ == "__main__":
     # Show last 3 lines of traceback
     error = traceback.format_exc(-3)
     error = "Manager failed to start\n\n" + error
-    with TextWindow(error) as t:
-      t.wait_for_exit()
+    if os.getenv("CARROT_STARTUP_RECOVERY") != "1":
+      with TextWindow(error) as t:
+        t.wait_for_exit()
 
     raise
 
