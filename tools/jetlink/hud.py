@@ -227,7 +227,12 @@ def main():
   sys.argv = [__file__, '--input', 'live', '--output', 'usb', '--fps', '10',
               '--usb-codec', 'h264', '--usb-h264-backend', 'ffmpeg',
               '--usb-h264-ffmpeg-encoder', 'libx264', '--cluster-hud-mode', '1', *sys.argv[1:]]
-  cluster.main()
+  if '--help' in sys.argv:
+    cluster.main()
+  else:
+    from display_owner import panel_owner
+    with panel_owner(hud=True):
+      cluster.main()
 
 
 if __name__ == '__main__':

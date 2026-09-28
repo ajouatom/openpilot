@@ -53,7 +53,7 @@ def test_reject_machine_identity_and_password(base):
 
 
 @pytest.mark.skipif(sys.platform == 'win32', reason='Linux image symlink and ownership semantics')
-def test_refresh_selects_committed_release_and_repairs_hud(base, tmp_path):
+def test_refresh_selects_committed_release_and_repairs_hud(base, tmp_path, monkeypatch):
   root, setup = base
   runtime = root/'opt/carrot-jetlink'
   (runtime/'releases/old').mkdir(parents=True)
@@ -68,7 +68,11 @@ def test_refresh_selects_committed_release_and_repairs_hud(base, tmp_path):
     t.addfile(member, io.BytesIO(data))
     for name in ('update_host.py', 'finalize_sd_image.py', 'hud_protocol.py', 'release-signing-public.pem'):
       t.add(Path(__file__).with_name(name), arcname='tools/jetlink/' + name)
+  import install_boot_display
+  diagnostic_calls = []
+  monkeypatch.setattr(install_boot_display, 'configure', lambda r, s: diagnostic_calls.append((r, s)))
   marker = refresh(root, setup, bundle)
+  assert diagnostic_calls == [(root, runtime/'releases'/commit/'tools/jetlink')]
   assert marker['state'] == 'CANDIDATE_PHYSICAL_BOOT_PENDING'
   assert marker['root_start'] == 3188736
   assert (runtime/'current/SOURCE_COMMIT').read_text().strip() == commit

@@ -16,7 +16,7 @@ def configure(root, source):
     raise ValueError('Only an offline Carrot image is supported')
   destination = root / 'usr/lib/carrot-jetlink-storage'
   destination.mkdir(parents=True, exist_ok=True)
-  for name in ('protected_storage.py', 'persistent_state.py', 'wifi_apply.py', 'wifi_protocol.py', 'image_first_boot.py', 'protected_first_boot.py'):
+  for name in ('protected_storage.py', 'persistent_state.py', 'wifi_apply.py', 'wifi_protocol.py', 'image_first_boot.py', 'protected_first_boot.py', 'boot_status.py'):
     shutil.copyfile(source / name, destination / name)
     (destination / name).chmod(0o644)
   write(root, '/etc/carrot-jetlink-protected.json', json.dumps(
