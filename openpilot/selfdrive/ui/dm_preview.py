@@ -4,7 +4,6 @@ from dataclasses import dataclass
 
 
 PREVIEW_MAX_AGE = 0.5
-COMPACT_RESERVED_HEIGHT = 72
 
 
 @dataclass(frozen=True)
@@ -38,7 +37,8 @@ def preview_state(*, monitoring_fresh: bool, camera_unavailable: bool, driver_fr
 
 def preview_rect(x: float, y: float, width: float, height: float, compact: bool) -> tuple[float, float, float, float]:
   if compact:
-    return x + width - 58, y + height - 68, 56, 64
+    # D ends at x+373; the 60px side strip begins at x+476 on C4.
+    return x + width - 154, y + height - 96, 84, 84
   return x + 40, y + 220, 260, 180
 
 

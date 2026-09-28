@@ -1,5 +1,14 @@
 # Repository memory
 
+- On 2026-09-29, the user approved the C4 DM inset immediately right of D:
+  84x84 at (382,144), leaving 10px before the right strip. VISION moves above it;
+  confidence-dot travel returns to full height. C3 placement is unchanged.
+  DM event stage1 is visual-only; stage2 (first audible) has final PCM gain
+  >=0.7, and stage3 (final) always uses 1.0 regardless of user/ambient volume.
+  Match event identity and sound together so navigation sharing the WAV retains
+  normal volume. Desktop PCM/UI tests and synthetic rendering do not establish
+  physical-device loudness or readability. See docs/dm_onroad_preview_20260928.md.
+
 - On 2026-09-28, the user requested live DriverMonitoringMode changes. Poll
   typed Params every 0.5 seconds in the existing DM dispatcher; ignore the retired
   CARROT_DM_MODE startup latch. Preserve elapsed awareness, calibration, traffic

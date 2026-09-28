@@ -114,5 +114,5 @@ class DriverPreview(CameraView):
       rl.draw_text_ex(self._font, 'DM', rl.Vector2(viewport.x + 8, viewport.y + viewport.height / 2 - size / 2),
                       size, 0, color)
     rl.draw_rectangle_lines_ex(rect, 1 if self.compact else 2, color)
-    size = 9 if self.compact else 21
+    size = 11 if self.compact else 21
     rl.draw_text_ex(self._font, state.label, rl.Vector2(rect.x + 3, rect.y + rect.height - label_h + 1), size, 0, color)

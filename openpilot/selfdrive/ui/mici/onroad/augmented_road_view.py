@@ -7,7 +7,6 @@ from openpilot.selfdrive.ui.ui_state import ui_state
 from openpilot.selfdrive.ui.mici.onroad import SIDE_PANEL_WIDTH
 from openpilot.selfdrive.ui.mici.onroad.alert_renderer import AlertRenderer
 from openpilot.selfdrive.ui.onroad.driver_preview import DriverPreview
-from openpilot.selfdrive.ui.dm_preview import COMPACT_RESERVED_HEIGHT
 from openpilot.selfdrive.ui.mici.onroad.hud_renderer import HudRenderer
 from openpilot.selfdrive.ui.mici.onroad.model_renderer import ModelRenderer
 from openpilot.selfdrive.ui.mici.onroad.vision_renderer import VisionRenderer
@@ -293,8 +292,7 @@ class AugmentedRoadView(CameraView):
     # Custom UI extension point - add custom overlays here
     # Use self._content_rect for positioning within camera bounds
     _t = time.monotonic()
-    dm_visible = self._driver_state_renderer.draw_onroad(self.rect, alert_to_render is not None)
-    self._confidence_ball.bottom_reserved = COMPACT_RESERVED_HEIGHT if dm_visible else 0
+    self._driver_state_renderer.draw_onroad(self.rect, alert_to_render is not None)
     ds_ms = (time.monotonic() - _t) * 1000.0
     _t = time.monotonic()
     self._traffic_light.render(self.rect)

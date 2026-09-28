@@ -50,9 +50,11 @@ def test_layout_respects_existing_panels_and_parent_offsets():
   # C3 time ends at y+190, plot starts at x+350, speed panel occupies the bottom.
   x, y, w, h = preview_rect(300, 30, 1830, 1020, False)
   assert x + w < 300 + 350 and y > 30 + 190 and y + h < 30 + 600
-  # C4 stays wholly inside the side strip, below its reserved boundary.
+  # C4 sits right of D (ending at x+373), before the side strip (starting x+476).
   x, y, w, h = preview_rect(536, 0, 536, 240, True)
-  assert x >= 536 + 476 and x + w <= 536 + 536 and y >= 240 - 72 and y + h < 240
+  assert (w, h) == (84, 84)
+  assert x - (536 + 373) == 9 and (536 + 476) - (x + w) == 10
+  assert y == 144 and y + h == 228
 
 
 @pytest.fixture
