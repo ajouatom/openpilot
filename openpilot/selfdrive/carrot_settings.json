@@ -426,6 +426,7 @@
           "zh": "驾驶员监控",
           "params": [
             "DriverMonitoringMode",
+            "DisableDM",
             "CarrotVisionEnabled",
             "MuteDoor",
             "MuteSeatbelt"
@@ -1990,6 +1991,42 @@
         "zh": [
           "标准",
           "实验（仅供测试）"
+        ]
+      },
+      "risk": "high"
+    },
+    {
+      "group": "시작",
+      "name": "DisableDM",
+      "search_only": true,
+      "title": "운전자 감시 끄기",
+      "descr": "0: 감시 켜기, 1: 감시 끄기, 2: 감시 끄기 + Carrot Vision 웹 스트리밍. 변경값은 재부팅 후 함께 적용됩니다. 1/2에서는 감시 프로세스가 실행되지 않습니다. 초기 설정 프리셋은 0으로 되돌립니다. USB 계기판 사용 중에는 웹 스트리밍이 비활성화됩니다.",
+      "egroup": "START",
+      "etitle": "Disable Driver Monitoring",
+      "edescr": "0: DM on, 1: DM off, 2: DM off + Carrot Vision web streaming. Changes apply together after reboot. Monitoring processes do not run in modes 1/2. Intro presets restore 0. Web streaming is unavailable while the USB cluster is enabled.",
+      "cgroup": "启动设置",
+      "ctitle": "关闭驾驶员监控",
+      "cdescr": "0：开启监控，1：关闭监控，2：关闭监控 + Carrot Vision 网页视频。更改值在重启后一起生效。1/2不运行监控进程。初始设置预设恢复为0。启用USB仪表盘时无法使用网页视频。",
+      "min": 0,
+      "max": 2,
+      "default": 0,
+      "unit": 1,
+      "control": "select",
+      "options": {
+        "ko": [
+          "감시 켜기",
+          "감시 끄기",
+          "끄기 + 웹스트리밍"
+        ],
+        "en": [
+          "DM on",
+          "DM off",
+          "Off + Carrot Vision"
+        ],
+        "zh": [
+          "开启监控",
+          "关闭监控",
+          "关闭 + 网页视频"
         ]
       },
       "risk": "high"

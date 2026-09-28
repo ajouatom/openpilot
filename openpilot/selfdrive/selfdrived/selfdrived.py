@@ -17,6 +17,7 @@ from openpilot.common.gps import get_gps_location_service
 
 from openpilot.selfdrive.car.car_specific import CarSpecificEvents
 from openpilot.selfdrive.locationd.helpers import PoseCalibrator, Pose
+from openpilot.selfdrive.monitoring.config import disabled_mode
 from openpilot.selfdrive.selfdrived.camera_config import get_camera_packets
 from openpilot.selfdrive.selfdrived.events import Events, ET
 from openpilot.selfdrive.selfdrived.helpers import ExcessiveActuationCheck
@@ -77,6 +78,7 @@ class SelfdriveD:
     self.gps_location_service = get_gps_location_service(self.params)
     self.gps_packets = [self.gps_location_service]
     self.sensor_packets = ["accelerometer", "gyroscope"]
+    self.disable_dm = disabled_mode(self.params)
     self.use_wide_camera = bool(self.params.get("UseWideCamera", return_default=True))
     self.camera_packets = get_camera_packets(self.use_wide_camera)
 
@@ -86,7 +88,7 @@ class SelfdriveD:
     ignore = self.sensor_packets + self.gps_packets + ['alertDebug']
     if SIMULATION:
       ignore += ['driverCameraState', 'managerState']
-    if self.CP.notCar or SIMULATION:
+    if self.CP.notCar or SIMULATION or self.disable_dm != 0:
       ignore += ['driverMonitoringState']
 
     if REPLAY:
@@ -248,7 +250,7 @@ class SelfdriveD:
       self.events.add(EventName.resumeBlocked)
 
     # Handle DM
-    if not self.CP.notCar:
+    if not self.CP.notCar and self.disable_dm == 0:
       if self.sm.all_checks(['driverMonitoringState']) and self.sm['driverMonitoringState'].cameraUnavailable:
         self.events.add(EventName.driverMonitorFallback)
       # Block engaging until ignition cycle after max number or time of distractions

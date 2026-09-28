@@ -157,7 +157,7 @@ export function createSettingsDerivedModel(options = {}) {
     const profile = getProfileByGroup(group);
     if (profile) return getProfileEntries(profile);
     return (itemsByGroup[group] || [])
-      .filter((item) => !item?.detail_parent)
+      .filter((item) => !item?.detail_parent && !item?.search_only)
       .map((item) => ({ group, item }));
   }
 
@@ -241,7 +241,9 @@ export function createSettingsDerivedModel(options = {}) {
         };
       });
     }
-    const matches = inlineSearchIndex.filter(({ haystack }) => haystack.includes(needle));
+    const matches = inlineSearchIndex.filter(({ entry, haystack }) => entry.item.search_only
+      ? entry.item.name.toLowerCase() === needle
+      : haystack.includes(needle));
     return { entries: matches.slice(0, 20).map(({ entry }) => entry), total: matches.length };
   }
 
@@ -267,6 +269,7 @@ export function createSettingsDerivedModel(options = {}) {
       contextGroupLabel,
       contextLabel,
       name: item.name,
+      searchOnly: item.search_only === true,
       title,
       descr,
       // Empty for a top-level item; a detail child points at the parent whose

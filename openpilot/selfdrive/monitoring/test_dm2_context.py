@@ -111,7 +111,7 @@ class FakeParams:
     return self.get_int(name) == 1
 
   def put(self, name, value):
-    expected = {'DriverMonitoringMode': int, 'DisableDM': int, 'CarrotVisionEnabled': bool}[name]
+    expected = {'DriverMonitoringMode': int, 'DisableDM': int, 'DisableDMActive': int, 'CarrotVisionEnabled': bool}[name]
     if type(value) is not expected:
       raise TypeError(f'{name} requires {expected.__name__}, got {type(value).__name__}')
     self.values[name] = value

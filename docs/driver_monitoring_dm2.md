@@ -114,9 +114,39 @@ this added signal, and terminal/lockout handling remains unchanged. No claim
 of gaze, sleep detection, legal certification or new-vehicle validation follows
 from capacitive contact or these desktop/log checks.
 
+### Hidden legacy override
+
+The local legacy-override restoration retains DM2 driver-camera fallback: only
+road/wide-road camera packets participate in selfdrived's camera-fault checks.
+With monitoring enabled, driverMonitoringState health remains required. An
+unavailable driver camera therefore uses interaction monitoring while a failed
+DM dispatcher, road camera or vehicle communication retains its error handling.
+
+DisableDM is marked search_only in the settings catalog. Ordinary groups and
+substring searches omit it; a full case-insensitive parameter-name query reveals
+the existing control. Public Wiki generation excludes search-only settings.
+Explicitly saved favorites/profiles and parameter persistence retain their
+existing behavior.
+
+The DisableDM=2 follow-up applies the saved override once at manager startup to
+the internal, non-default DisableDMActive parameter. It is cleared on manager
+startup and excluded from normal parameter backups. Manager, selfdrived and
+controlsd use this snapshot, including when a child process restarts. Saving a
+different DisableDM value cannot stop/start DM or change warning handling during
+the current session; reboot applies it consistently. The legacy forceDecel
+condition is otherwise unchanged.
+
+Carrot Vision eligibility is CarrotVisionEnabled OR applied DisableDM=2, subject
+to the existing ClusterHud exclusion. The web runtime and resource diagnostics
+read the same applied value, including the externally launched web server; they
+do not depend on inheriting manager's environment. Old values still migrate the
+independent streaming preference once. All three introductory presets explicitly
+save DisableDM=0 and DriverMonitoringMode=0 without changing CarrotVisionEnabled;
+the reset takes effect on reboot.
+
 DriverMonitoringMode is latched at startup: only value 1 is experimental. Old
-DisableDM never opts users into mode 1; only its old video choice migrates once to
-independent CarrotVisionEnabled. The experimental-use confirmation remains.
+DisableDM never opts users into mode 1; its old video choice still migrates once to
+CarrotVisionEnabled. The experimental-use confirmation remains.
 
 New dm2VisionTimeoutFactor and dm2InteractionGraceRemaining fields complement the
 existing wheel factor and traffic hold. dm2ForwardRecovery now identifies a full
@@ -130,6 +160,28 @@ composition, delayed sleep warnings, moving-target exclusions and terminal limit
 Wiki MANUAL explanations are updated separately through the existing generator.
 
 ## Validation and limits
+
+After rebasing onto 3e2ea2ec, the DisableDM=2 fixes passed 119 focused Python
+tests and 30 web tests. These
+include all nine saved/applied mode transitions, restarting either control child
+before reboot, twelve DM/video/cluster combinations, all three preset reset
+paths from modes 1/2, the externally served video status and hidden-setting search.
+The control/manager contracts execute extracted source predicates without native
+imports; fake Params and HTTP responses stand in for device storage and IPC.
+The web build, user-docs check and 26 Wiki tests also passed (175 distinct tests
+in total). Python syntax and changed-line whitespace checks passed. Focused lint
+found no new diagnostics; 18 existing findings in controlsd, vision_test and the
+intro preset module were compared with HEAD and left outside this change.
+Both DM integer writes use put_int, and the desktop Params doubles reject
+incorrect value types. Four native Params tests cover the applied snapshot and
+pending values, but were skipped on Windows because params_pyx is not built.
+
+The visibility/fallback follow-up passed 18 camera/context tests, 47 settings
+schema tests, 229 web settings tests and 26 Wiki generator/validator tests.
+The web build and user-docs validator passed. A smoke check using the real server
+catalog and generated browser bundle confirmed ordinary/partial-search exclusion
+and full-name lookup. These desktop checks do not validate native IPC or a device
+camera-loss event.
 
 - 103 stock/DM2 policy, daemon-adapter and Bluetooth tests passed. Coverage includes
   all four modes, exact timing stages, sustained sleep/eye/phone detection, actual

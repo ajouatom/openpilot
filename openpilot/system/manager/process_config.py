@@ -4,6 +4,7 @@ import importlib.util
 
 from openpilot.cereal import car
 from openpilot.common.params import Params
+from openpilot.selfdrive.monitoring.config import disabled_mode
 from openpilot.system.hardware import PC, TICI
 from openpilot.system.manager.process import PythonProcess, NativeProcess, DaemonProcess
 
@@ -75,7 +76,7 @@ def and_(*fns):
   return lambda *args: all(fn(*args) for fn in fns)
 
 def enable_dm(started, params, CP: car.CarParams) -> bool:
-  return started or params.get_bool("IsDriverViewEnabled")
+  return (started or params.get_bool("IsDriverViewEnabled")) and disabled_mode(params) == 0
 
 #def enable_connect(started, params, CP: car.CarParams) -> bool:
 #  return params.get_int("EnableConnect") > 0
@@ -92,7 +93,7 @@ def cluster_hud_active(params: Params) -> bool:
 def enable_webrtc(started, params, CP: car.CarParams) -> bool:
   # Cluster HUD consumes the road camera directly. Keep Carrot Vision's
   # WebRTC/encoder processes out of the same onroad session.
-  return params.get_bool("CarrotVisionEnabled") and not cluster_hud_active(params)
+  return (params.get_bool("CarrotVisionEnabled") or disabled_mode(params) == 2) and not cluster_hud_active(params)
 
 def c3x_lite(started: bool, params: Params, CP: car.CarParams) -> bool:
   return started and params.get_bool("HardwareC3xLite")

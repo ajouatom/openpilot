@@ -13,6 +13,19 @@
   terminal alerts remain. Scope this empirical profile to Ioniq 5 PE until other
   vehicles are verified. See docs/driver_monitoring_dm2.md.
 
+- On 2026-09-28, the follow-up local DisableDM restoration keeps the legacy
+  override but marks it search_only in Carrot Web: ordinary groups, partial
+  searches and public Wiki indexes omit it; a full parameter-name query exposes
+  the existing control, ignoring case and surrounding whitespace. This supersedes
+  the migration-only description below. Keep DM2 driver-camera fallback separate
+  from road-camera health checks. This follow-up is scoped to that compatibility
+  fix and setting visibility. The later authorized DisableDM=2 fixes latch the
+  saved override into internal DisableDMActive at manager startup; manager,
+  selfdrived, controlsd and web video consume that applied value until reboot.
+  All intro presets reset DisableDM and DriverMonitoringMode to 0 for the next
+  reboot. The legacy forceDecel condition is otherwise unchanged. Desktop tests
+  do not establish vehicle validation.
+
 - On 2026-09-28, the user revised DriverMonitoringMode after the initial DM2
   implementation. Mode 0 keeps stock camera behavior, but unavailable-camera
   interaction timing is now 15/30/45 seconds. Mode 1 uses the same interaction

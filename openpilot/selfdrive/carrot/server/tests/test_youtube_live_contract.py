@@ -3,6 +3,8 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+import pytest
+
 from openpilot.selfdrive.carrot.server.services import youtube_live
 from openpilot.selfdrive.carrot.server.services import youtube_profiles
 from openpilot.selfdrive.carrot.server.services import youtube_test
@@ -129,14 +131,30 @@ def test_resource_observation_does_not_change_cluster_or_vision_state(monkeypatc
 
   status = service._resource_status()
 
-  assert reads == ["ClusterHud", "CarrotVisionEnabled", youtube_live.YOUTUBE_QUALITY_PARAM]
+  assert reads == ["ClusterHud", "CarrotVisionEnabled", "DisableDMActive", youtube_live.YOUTUBE_QUALITY_PARAM]
   assert status["cluster"]["running"] is True
   assert status["cluster"]["active"] is True
   assert status["carrot_vision"]["webrtcd_running"] is False
   assert status["carrot_vision"]["configured"] is True
+  assert status["carrot_vision"]["enabled"] is False
   assert status["carrot_vision"]["active"] is False
   assert status["youtube_encoder"]["selected"] == "youtube_medium_encoderd"
   assert status["youtube_encoder"]["running"] is True
+
+
+@pytest.mark.parametrize("active_mode", [0, 1, 2])
+@pytest.mark.parametrize("vision", [0, 1])
+@pytest.mark.parametrize("cluster", [0, 1])
+def test_vision_diagnostics_use_applied_mode(monkeypatch, active_mode, vision, cluster):
+  service = object.__new__(youtube_live.YouTubeLiveService)
+  values = {"DisableDM": 2 - active_mode, "DisableDMActive": active_mode,
+            "CarrotVisionEnabled": vision, "ClusterHud": cluster}
+  monkeypatch.setattr(service, "_param_int", lambda name, default=0: values.get(name, default))
+  monkeypatch.setattr(service, "_process_status", dict)
+  status = service._resource_status()["carrot_vision"]
+  assert status["configured"] == (vision == 1 or active_mode == 2)
+  assert status["enabled"] == (cluster == 0 and (vision == 1 or active_mode == 2))
+  assert status["disable_dm_active"] == active_mode
 
 
 def test_runtime_resolution_rejects_1280x800_for_1280x720_target():

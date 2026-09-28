@@ -17,7 +17,7 @@ Preset table (confirmed 2026-07-17):
   camera_long  (camera)        1               0               0                  1
   stock        (stock SCC)     0               2               0                  0
 
-  DriverMonitoringMode / EnableRadarTracks are 0 for all three; AutoEngage is 2 for all three.
+  DisableDM / DriverMonitoringMode / EnableRadarTracks are 0 for all three; AutoEngage is 2 for all three.
 
 EnableCornerRadar is the ONLY axis separating radar_long from camera_long.
 Changing it makes the two presets identical — do not "tidy" it away.
@@ -35,7 +35,8 @@ PRESETS: Dict[str, Dict[str, int]] = {
   "radar_long": {
     "HyundaiCameraSCC": 1,   # 1: long-con vehicle (interface.py forces OP long)
     "SpeedFromPCM": 0,       # 0: curve/camera decel + long
-    "DriverMonitoringMode": 0,          # driver monitoring stays ON
+    "DisableDM": 0,         # restore monitoring at the next reboot
+    "DriverMonitoringMode": 0,
     "EnableRadarTracks": 0,  # 0: use SCC radar
     "EnableCornerRadar": 1,  # harness is on ADAS/radar, so corner radar is reachable
     "AutoCruiseControl": 1,
@@ -44,6 +45,7 @@ PRESETS: Dict[str, Dict[str, int]] = {
   "camera_long": {
     "HyundaiCameraSCC": 1,
     "SpeedFromPCM": 0,
+    "DisableDM": 0,
     "DriverMonitoringMode": 0,
     "EnableRadarTracks": 0,
     "EnableCornerRadar": 0,  # harness is on the camera only
@@ -53,6 +55,7 @@ PRESETS: Dict[str, Dict[str, int]] = {
   "stock": {
     "HyundaiCameraSCC": 0,   # 0: no CAMERA_SCC flag -> stock SCC keeps longitudinal
     "SpeedFromPCM": 2,       # 2: curve/camera decel only (button spam)
+    "DisableDM": 0,
     "DriverMonitoringMode": 0,
     "EnableRadarTracks": 0,
     "EnableCornerRadar": 0,

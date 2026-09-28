@@ -1,6 +1,8 @@
 # Driver monitoring
 
-`DriverMonitoringMode` defaults to `0: Standard`; select `1: Experimental` separately. Reboot after changing the mode. Old `DisableDM` values do not opt into experimental monitoring.
+`DriverMonitoringMode` defaults to `0: Standard`; select `1: Experimental` separately. Reboot after changing the mode. The behavior below describes the default configuration with driver monitoring enabled.
+
+Applying a driving-control preset in initial setup saves a reset to standard driver monitoring. The reset takes effect after reboot.
 
 > [!CAUTION]
 > Experimental mode may violate applicable law. Use only for experiments in a controlled test environment. The times below are implementation choices, not statutory allowances or certification. Even mode 0 uses different timing from stock comma when camera monitoring is unavailable.
@@ -37,7 +39,7 @@ Missing hardware, faults, malformed output or interrupted data automatically sel
 
 Both modes start with 15/30/45-second interaction timing. Only mode 1 doubles this to 30/60/90 with empty-road conditions. Fresh eligible input before the terminal alert resets the entire allowance. For example, a BT press after 20 seconds without input restarts the first warning approximately 15 seconds later under base conditions.
 
-Without a camera, forward attention, eye closure and sleep cannot be observed directly; forward-attention reset cannot apply. A persistent camera-unavailable notice identifies interaction monitoring. Road-camera, vehicle-communication and monitoring-process failures retain separate handling.
+Without a camera, forward attention, eye closure and sleep cannot be observed directly; forward-attention reset cannot apply. A persistent camera-unavailable notice identifies interaction monitoring. While DM2 interaction monitoring is healthy, a driver-camera fault alone does not block engagement or disengage control. Road-camera, vehicle-communication and monitoring-process failures retain separate handling.
 
 ## Empty road and new traffic
 
@@ -63,4 +65,4 @@ Vehicle speed buttons are excluded where stock ACC uses automatic speed-button i
 
 Once a terminal alert is reached, input, forward attention or context changes alone cannot clear it. Existing deceleration requests and lockout remain. This does not introduce guaranteed emergency stopping, and stock ACC cannot be assumed to execute equivalent deceleration.
 
-`CarrotVisionEnabled` independently controls web road video. Only the video function of old `DisableDM=2` is migrated once; monitoring starts in standard mode. Carrot Vision is unavailable while the USB cluster is enabled.
+`CarrotVisionEnabled` independently controls web road video. Carrot Vision is unavailable while the USB cluster is enabled.

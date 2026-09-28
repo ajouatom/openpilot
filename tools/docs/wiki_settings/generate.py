@@ -456,6 +456,7 @@ def load_catalog(path: Path, locales: Iterable[str] = DEFAULT_LOCALES) -> tuple[
   settings = [
     CatalogSetting(order=index, raw=raw, leaf=placement[name])
     for name, (index, raw) in by_name.items()
+    if not raw.get("search_only")
   ]
   settings.sort(key=lambda item: item.order)
   return settings, leaves

@@ -31,6 +31,7 @@ from openpilot.selfdrive.modeld.constants import ModelConstants
 from openpilot.selfdrive.controls.lib.drive_helpers import CONTROL_N
 from openpilot.selfdrive.modeld.modeld import LAT_SMOOTH_SECONDS
 from openpilot.selfdrive.locationd.helpers import PoseCalibrator, Pose
+from openpilot.selfdrive.monitoring.config import disabled_mode
 
 from openpilot.selfdrive.carrot.carrot_controls import CarrotControls
 from openpilot.selfdrive.carrot.carrot_man_input import get_carrot_man
@@ -54,6 +55,7 @@ def lateral_control_allowed(selfdrive_active: bool, always_lateral: bool, lat_en
 class Controls:
   def __init__(self) -> None:
     self.params = Params()
+    self.disable_dm = disabled_mode(self.params)
     cloudlog.info("controlsd is waiting for CarParams")
     self.CP = messaging.log_from_bytes(self.params.get("CarParams", block=True), car.CarParams)
     cloudlog.info("controlsd got CarParams")
@@ -420,8 +422,10 @@ class Controls:
     cs.upAccelCmd = float(self.LoC.pid.p)
     cs.uiAccelCmd = float(self.LoC.pid.i)
     cs.ufAccelCmd = float(self.LoC.pid.f)
-    cs.forceDecel = bool((self.sm['driverMonitoringState'].alertLevel == log.DriverMonitoringState.AlertLevel.three) or
-                         (self.sm['selfdriveState'].state == State.softDisabling))
+    cs.forceDecel = False
+    if self.disable_dm == 0:
+      cs.forceDecel = bool((self.sm['driverMonitoringState'].alertLevel == log.DriverMonitoringState.AlertLevel.three) or
+                           (self.sm['selfdriveState'].state == State.softDisabling))
 
 
     lat_tuning = self.CP.lateralTuning.which()

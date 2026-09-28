@@ -79,6 +79,18 @@ def write_catalog(root, payload):
 
 
 class WikiSettingsGeneratorTest(unittest.TestCase):
+  def test_search_only_settings_are_excluded_from_public_pages_and_index(self):
+    with tempfile.TemporaryDirectory() as temp:
+      hidden = {**param("HiddenParam"), "search_only": True}
+      path = write_catalog(Path(temp), catalog(
+        [param("VisibleParam"), hidden],
+        [leaf("GROUP_A", ["VisibleParam", "HiddenParam"])],
+      ))
+      result = GENERATOR.generate(path, catalog_commit=COMMIT, generated_at=STAMP)
+      self.assertEqual(set(result.index["settings"]), {"VisibleParam"})
+      for text in result.pages.values():
+        self.assertNotIn("HiddenParam", text)
+
   def test_current_catalog_generates_all_settings_and_valid_markdown(self):
     result = GENERATOR.generate(
       GENERATOR.DEFAULT_CATALOG,

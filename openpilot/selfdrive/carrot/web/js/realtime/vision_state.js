@@ -66,6 +66,7 @@
     },
     environment: {
       carrotVisionEnabled: null,
+      disableDMActive: null,
       clusterHud: null,
       isOffroad: null,
       isOnroad: null,

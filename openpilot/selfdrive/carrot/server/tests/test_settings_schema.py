@@ -43,6 +43,23 @@ def test_the_catalogue_is_readable_and_populated(params):
   assert all(isinstance(p.get("name"), str) and p["name"] for p in params)
 
 
+@pytest.mark.parametrize("brand", ("", "hyundai", "toyota"))
+def test_search_only_settings_remain_indexed_without_inflating_visible_counts(settings, brand):
+  groups, by_name, groups_list = group_index(settings)
+  assert by_name["DisableDM"]["search_only"] is True
+  categories = build_menu_categories(settings, by_name)
+  groups, groups_list, categories, _ = filter_settings_catalog_for_brand(groups, groups_list, categories, brand)
+  assert any(item["name"] == "DisableDM" for items in groups.values() for item in items)
+  for group in groups_list:
+    assert group["count"] == sum(not item.get("detail_parent") and not item.get("search_only")
+                                 for item in groups[group["group"]])
+  for category in categories:
+    for group in category["groups"]:
+      names = [name for section in group["sections"] for name in section["items"]]
+      assert group["count"] == sum(not by_name[name].get("detail_parent") and not by_name[name].get("search_only")
+                                   for name in names)
+
+
 @pytest.mark.parametrize("maximum", (3, 4))
 def test_gap_cycle_catalog_uses_vehicle_maximum_without_mutating_cache(settings, maximum):
   groups, by_name, groups_list = group_index(settings)
@@ -211,7 +228,8 @@ def test_hyundai_catalog_hides_longitudinal_pid_settings(settings):
   assert hidden.isdisjoint(visible_names)
   assert hidden.isdisjoint(menu_names)
   assert all(
-    group["count"] == sum(1 for item in filtered_groups[group["group"]] if not item.get("detail_parent"))
+    group["count"] == sum(1 for item in filtered_groups[group["group"]]
+                          if not item.get("detail_parent") and not item.get("search_only"))
     for group in filtered_groups_list
   )
 

@@ -42,3 +42,50 @@ test("Carrot Vision accepts typed booleans from Params and raw legacy values", (
     assert.equal(context.CARROT_DEVICE_RUNTIME_STATE.carrotVisionEnabled, 0);
   }
 });
+
+function visionContext(values) {
+  const segments = [
+    ["function normalizeRuntimeBool(", "let _carrotVisionEnvironmentSignature"],
+    ["async function fetchCarrotDeviceRuntimeState(", "function updateCarrotVisionAvailabilityUi("],
+    ["async function syncCarrotVisionAvailability(", "window.CarrotVisionSyncAvailability"],
+  ].map(([start, end]) => runtime.slice(runtime.indexOf(start), runtime.indexOf(end, runtime.indexOf(start))));
+  const context = vm.createContext({
+    CARROT_DEVICE_RUNTIME_STATE: {}, window: {},
+    fetch: async (url) => ({ ok: true, json: async () => ({ ok: true, values: Object.fromEntries(
+      new URL(url, "http://localhost").searchParams.get("names").split(",").map(name => [name, values[name]])
+    ) }) }),
+    syncCarrotVisionEnvironmentState() {}, updateCarrotVisionAvailabilityUi() {}, syncCarrotRealtimeLifecycle() {},
+    isCarrotRecordedReplayActive: () => false, isCarrotVisionTestActive: () => false,
+    getUIText: (_key, fallback) => fallback,
+  });
+  vm.runInContext(segments.join("\n"), context);
+  return context;
+}
+
+test("Carrot Vision supports every applied DM, vision and cluster combination", async () => {
+  for (const dm of [0, 1, 2]) {
+    for (const vision of [false, true]) {
+      for (const cluster of [0, 1]) {
+        const values = { DisableDM: 2 - dm, DisableDMActive: String(dm), CarrotVisionEnabled: vision,
+          ClusterHud: cluster, IsOffroad: false, IsOnroad: true };
+        const context = visionContext(values);
+        assert.equal(await context.syncCarrotVisionAvailability(), cluster === 0 && (vision || dm === 2),
+          JSON.stringify(values));
+      }
+    }
+  }
+});
+
+test("saving DisableDM does not change video until manager applies it", async () => {
+  for (const initial of [0, 1, 2]) {
+    for (const saved of [0, 1, 2]) {
+      const values = { DisableDM: initial, DisableDMActive: initial, CarrotVisionEnabled: false, ClusterHud: 0 };
+      const context = visionContext(values);
+      assert.equal(await context.syncCarrotVisionAvailability(), initial === 2);
+      values.DisableDM = saved;
+      assert.equal(await context.syncCarrotVisionAvailability(), initial === 2);
+      values.DisableDMActive = saved;
+      assert.equal(await context.syncCarrotVisionAvailability(), saved === 2);
+    }
+  }
+});

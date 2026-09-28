@@ -33,6 +33,7 @@ export function collectSettingSearchMatches(entries, options = {}) {
 
   for (const entry of list) {
     if (!entry || typeof entry.haystack !== "string" || !entry.haystack.includes(query)) continue;
+    if (entry.searchOnly && String(entry.name || "").toLowerCase() !== query) continue;
     if (profileId !== null && !(entry.source === "profile" && entry.profileId === profileId)) continue;
     total += 1;
     if (matches.length < limit) matches.push(entry);

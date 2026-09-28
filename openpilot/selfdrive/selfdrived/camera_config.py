@@ -1,5 +1,5 @@
 def get_camera_packets(use_wide_camera: bool) -> list[str]:
-  # Driver-camera/model health is handled by the always-running DM2 fallback.
+  # DM2 handles driver-camera failures through interaction monitoring when DM is enabled.
   # Road-camera validity is independent and keeps the existing disable policy.
   packets = ["roadCameraState"]
   if use_wide_camera:

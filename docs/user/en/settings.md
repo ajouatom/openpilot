@@ -38,7 +38,7 @@ On a fresh install, `Tools > Web Settings > Layout` starts with **Area 1 full sc
 Carrot Web provides:
 
 - **Category navigation** through category, group, and section
-- **Search** by display title or parameter name
+- **Search** by display title or parameter name. Search-only entries are excluded from ordinary lists and partial searches; enter their full parameter name to display them. Matching ignores case and surrounding whitespace.
 - **Favorites** by pressing and holding an item
 - **Profiles** to save and restore named groups of values
 - **Compare** to inspect a profile or backup before applying it
@@ -103,7 +103,7 @@ Ignoring `x0.01`, `x0.001`, `cm`, `km/h`, or `%` can make a value appear one hun
 
 ## Settings map
 
-The current `carrot_settings.json` contains **185 parameters**. Every entry is assigned to one of these menus:
+The current public settings map contains **185 parameters**, assigned to the menus below. Search-only entries are excluded from this map and the public Wiki index.
 
 | Category | Count | Groups |
 |---|---:|---|

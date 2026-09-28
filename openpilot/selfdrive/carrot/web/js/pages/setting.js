@@ -1518,6 +1518,12 @@ async function selectSettingSearchEntry(entry) {
       settingProfileSectionExpandedState.set(`${entry.profileId}:${entry.originalGroup}`, true);
     }
     closeSettingSearchPanel({ syncHistory: false });
+    if (entry.searchOnly && entry.source !== "profile") {
+      pendingSettingFocus = { group: SETTING_INLINE_SEARCH_GROUP, name: entry.name };
+      restoreSettingInlineSearch(entry.name);
+      await applySettingInlineSearch(entry.name);
+      return;
+    }
     if (CURRENT_GROUP === entry.group && !CURRENT_SETTING_DETAIL && screenItems && screenItems.style.display !== "none") {
       focusSettingItem(entry.name);
       return;

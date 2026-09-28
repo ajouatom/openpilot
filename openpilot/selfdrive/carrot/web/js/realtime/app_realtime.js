@@ -63,6 +63,7 @@ const CARROT_VISION_TEST_STATE = {
 window.CarrotVisionTestState = CARROT_VISION_TEST_STATE;
 const CARROT_DEVICE_RUNTIME_STATE = {
   carrotVisionEnabled: null,
+  disableDMActive: null,
   clusterHud: null,
   isOffroad: null,
   isOnroad: null,
@@ -155,6 +156,7 @@ function normalizeRuntimeBool(value) {
 function updateCarrotDeviceRuntimeState(patch = {}) {
   const previous = JSON.stringify({
     carrotVisionEnabled: CARROT_DEVICE_RUNTIME_STATE.carrotVisionEnabled,
+    disableDMActive: CARROT_DEVICE_RUNTIME_STATE.disableDMActive,
     clusterHud: CARROT_DEVICE_RUNTIME_STATE.clusterHud,
     isOffroad: CARROT_DEVICE_RUNTIME_STATE.isOffroad,
     isOnroad: CARROT_DEVICE_RUNTIME_STATE.isOnroad,
@@ -162,6 +164,10 @@ function updateCarrotDeviceRuntimeState(patch = {}) {
   if (Object.prototype.hasOwnProperty.call(patch, "carrotVisionEnabled")) {
     const value = normalizeRuntimeBool(patch.carrotVisionEnabled);
     CARROT_DEVICE_RUNTIME_STATE.carrotVisionEnabled = value === null ? null : Number(value);
+  }
+  if (Object.prototype.hasOwnProperty.call(patch, "disableDMActive")) {
+    const value = Number.parseInt(String(patch.disableDMActive ?? ""), 10);
+    CARROT_DEVICE_RUNTIME_STATE.disableDMActive = [0, 1, 2].includes(value) ? value : null;
   }
   if (Object.prototype.hasOwnProperty.call(patch, "clusterHud")) {
     const value = Number.parseInt(String(patch.clusterHud ?? ""), 10);
@@ -177,6 +183,7 @@ function updateCarrotDeviceRuntimeState(patch = {}) {
   window.CarrotDeviceRuntimeState = CARROT_DEVICE_RUNTIME_STATE;
   return previous !== JSON.stringify({
     carrotVisionEnabled: CARROT_DEVICE_RUNTIME_STATE.carrotVisionEnabled,
+    disableDMActive: CARROT_DEVICE_RUNTIME_STATE.disableDMActive,
     clusterHud: CARROT_DEVICE_RUNTIME_STATE.clusterHud,
     isOffroad: CARROT_DEVICE_RUNTIME_STATE.isOffroad,
     isOnroad: CARROT_DEVICE_RUNTIME_STATE.isOnroad,
@@ -187,6 +194,7 @@ let _carrotVisionEnvironmentSignature = "";
 function syncCarrotVisionEnvironmentState(reason = "environment update") {
   const environment = {
     carrotVisionEnabled: CARROT_DEVICE_RUNTIME_STATE.carrotVisionEnabled,
+    disableDMActive: CARROT_DEVICE_RUNTIME_STATE.disableDMActive,
     clusterHud: CARROT_DEVICE_RUNTIME_STATE.clusterHud,
     isOffroad: CARROT_DEVICE_RUNTIME_STATE.isOffroad,
     isOnroad: CARROT_DEVICE_RUNTIME_STATE.isOnroad,
@@ -616,6 +624,7 @@ async function fetchCarrotVisionTestState() {
       const device = payload.device && typeof payload.device === "object" ? payload.device : {};
       runtimeChanged = updateCarrotDeviceRuntimeState({
         carrotVisionEnabled: device.carrot_vision_enabled,
+        disableDMActive: device.disable_dm_active,
         isOffroad: device.is_offroad,
         isOnroad: device.is_onroad,
       });
@@ -684,11 +693,12 @@ function showCarrotVisionBadgeHint(el) {
 }
 
 async function fetchCarrotDeviceRuntimeState() {
-  const r = await fetch("/api/params_bulk?names=CarrotVisionEnabled,ClusterHud,IsOffroad,IsOnroad", { cache: "no-store" });
+  const r = await fetch("/api/params_bulk?names=CarrotVisionEnabled,DisableDMActive,ClusterHud,IsOffroad,IsOnroad", { cache: "no-store" });
   const j = await r.json().catch(() => ({}));
   if (!r.ok || !j.ok) throw new Error(j.error || `HTTP ${r.status}`);
   const changed = updateCarrotDeviceRuntimeState({
     carrotVisionEnabled: j.values?.CarrotVisionEnabled,
+    disableDMActive: j.values?.DisableDMActive,
     clusterHud: j.values?.ClusterHud,
     isOffroad: j.values?.IsOffroad,
     isOnroad: j.values?.IsOnroad,
@@ -771,7 +781,7 @@ async function syncCarrotVisionAvailability() {
     const runtime = await fetchCarrotDeviceRuntimeState();
     if (isCarrotRecordedReplayActive()) return true;
     const clusterHudActive = Number(runtime.clusterHud || 0) > 0;
-    const available = !clusterHudActive && (isCarrotVisionTestActive() || runtime.carrotVisionEnabled === 1);
+    const available = !clusterHudActive && (isCarrotVisionTestActive() || runtime.carrotVisionEnabled === 1 || runtime.disableDMActive === 2);
     const unavailableMessage = clusterHudActive
       ? getUIText("vision_unavailable_cluster_hud", "Carrot Vision is unavailable while Cluster HUD is enabled.")
       : undefined;
@@ -863,7 +873,7 @@ function rtcInitAuto() {
 }
 
 window.addEventListener("carrot:paramchange", (ev) => {
-  if (!["CarrotVisionEnabled", "ClusterHud", "IsOffroad", "IsOnroad"].includes(ev?.detail?.name)) return;
+  if (!["CarrotVisionEnabled", "DisableDM", "DisableDMActive", "ClusterHud", "IsOffroad", "IsOnroad"].includes(ev?.detail?.name)) return;
   syncCarrotVisionAvailability().catch(() => {});
 });
 

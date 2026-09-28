@@ -14,6 +14,8 @@ def test_boot_configuration_with_native_params(tmp_path, legacy):
   configure_monitoring(params, env)
   assert type(params.get('DriverMonitoringMode')) is int
   assert params.get('DriverMonitoringMode') == 0
+  assert type(params.get('DisableDMActive')) is int
+  assert params.get('DisableDMActive') == (legacy or 0)
   assert params.get('CarrotVisionEnabled') is (legacy == 2)
   assert env['CARROT_DM_MODE'] == '0'
   params.put_int('DriverMonitoringMode', 1)
@@ -21,3 +23,7 @@ def test_boot_configuration_with_native_params(tmp_path, legacy):
   configure_monitoring(params, env)
   assert env['CARROT_DM_MODE'] == '1'
   assert params.get('CarrotVisionEnabled') is False
+  params.put_int('DisableDM', 2 if legacy != 2 else 0)
+  assert params.get('DisableDMActive') == (legacy or 0)
+  configure_monitoring(params, env)
+  assert params.get('DisableDMActive') == (2 if legacy != 2 else 0)

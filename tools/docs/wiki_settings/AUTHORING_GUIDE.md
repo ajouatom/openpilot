@@ -15,6 +15,7 @@
   바뀌면 생성기가 페이지를 이동하고 같은 파라미터의 `CARROT:MANUAL` 내용을
   그대로 보존한다.
 - 한 파일에는 `CARROT:SETTING` 블록이 정확히 하나만 있어야 한다.
+- `search_only: true` 설정은 일반 목록에서 숨기는 항목이므로 공개 Wiki 페이지와 인덱스를 생성하지 않는다.
 - 저장소에서 작업하는 AI는 이 문서를 먼저 읽고, Wiki만 받은 AI는 각 페이지 상단의
   `CARROT:AUTHORING` 링크로 이 규격을 확인한다.
 - 사람과 AI는 `CARROT:MANUAL` 영역만 작성한다. `CARROT:AUTO` 영역과 모든 마커는
