@@ -83,9 +83,10 @@ the old payload would invalidate its exact original-image hash/extent contract.
 
 ## Validation and release gate
 
-Local Windows suite before the installer/compatibility follow-up: 148 passed,
-12 skipped. Linux CI on source `8270a0fc32` passed, including the real loop
-filesystem job and Windows disk-selection checks. Identity fault-injection includes
+Local Windows suite: 149 passed, 12 skipped. Linux CI on source `8d5b944e06`
+passed 188 tests (1 skipped), 119 navigation/renderer checks, and 11 real-loop
+storage tests; Windows disk-selection checks also passed. The host mirror's
+114 tests passed (1 skipped). Identity fault-injection includes
 interruption before/after replacement, corrupt newest slots, cross-partition
 fallback and no writes for unchanged state. Wi-Fi tests cover no USB, empty
 profile sets, rejected credentials and worker restart during replacement.
@@ -111,11 +112,34 @@ parked validation only. The monitor's reused scope label is historical; this run
 does not establish a new USB role-change result.
 
 Systemd dependency checks against the reference image passed. Still required
-before publication: full candidate image audit, physical SD boot, persistence of Wi-Fi/SSH
+before publication: physical SD boot, persistence of Wi-Fi/SSH
 across boots without USB, failed DATA recovery, signed update/rollback on DATA,
 bounded log behavior, and repeated parked power interruption tests. Physical SD
 controller failure and electrical damage can still require reflashing/replacing
 the card even when the filesystem is read-only.
+
+## Full image candidate audit
+
+The final candidate is built from the pristine base and committed runtime
+`8d5b944e0643566e15b1a0868443298859a642fb`, never from the provisioned live SD.
+Raw size: 42,949,672,960 bytes; SHA256:
+`0802e60fe1886d53aae3881828a422819fe611d14f11fbaaee8296adeee1d5b9`.
+Compressed size: 10,054,161,819 bytes; SHA256:
+`1014dc56a8f595c8133e13f477e6b0962487a27cd194354fa241d8334676060c`.
+
+The actual candidate's helper was executed in separate mount/UTS/PID namespaces
+and chroots for normal DATA and simulated unavailable DATA. Each loaded the
+complete runtime imports, rejected `/usr` writes with EROFS and accepted RAM
+writes; the normal path also accepted a temporary DATA write. No physical SD
+device or GPU/USB device was exposed inside those chroots. Both factory and DATA
+model hashes, unprovisioned identity checks, filesystem checks and GPT passed.
+This does not execute PID1's full boot sequence, prove inference in recovery, or
+simulate electrical failure. Physical candidate validation remains outstanding.
+
+The user selected a complete replacement image release for this storage change.
+The integrated Windows preparation mode verifies/extracts the finished image;
+it does not apply a separate legacy USB-C patch. Future runtime/model updates
+continue through the comma-selected signed channel.
 
 Docs-Not-Needed: Engineering candidate only; no new user setting or released
 installation procedure. Public beginner instructions change only with a tested
