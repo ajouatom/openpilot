@@ -11,9 +11,19 @@ class ObjectObservation:
   relative_speed: float
 
 
+@dataclass(frozen=True)
+class TrafficTrack:
+  last_seen: float
+  first_seen: float
+  observation: ObjectObservation
+  confirmed: bool
+
+
 class TrafficContext:
-  STRICT_SECONDS = 10.0
+  STRICT_SECONDS = 20.0
   FORGET_SECONDS = 2.0
+  MIN_MOVING_SPEED = 2.0  # ground speed, m/s; equal-speed traffic still counts
+  CONFIRM_SECONDS = 0.2
 
   def __init__(self):
     self.tracks = []
@@ -23,13 +33,14 @@ class TrafficContext:
   def update(self, now, objects, healthy, straight, coverage):
     """Associate positions, including vision-only IDs and lane changes.
 
-    Ten seconds starts on entry, not every occupied frame. Brief dropouts retain
-    identity; an unobserved interval cannot be evidence of an empty road.
+    Twenty seconds starts on confirmed entry, not every occupied frame. Moving
+    candidates immediately revoke the empty-road bonus; persistence prevents a
+    single radar spike from starting the full override. No radar outputs change.
     """
     if not healthy:
       self.clear_since = None
       return True, False
-    old = [(t, obj) for t, obj in self.tracks if now - t <= self.FORGET_SECONDS]
+    old = [track for track in self.tracks if now - track.last_seen <= self.FORGET_SECONDS]
     remaining = set(range(len(old)))
     current = []
     new_moving = False
@@ -39,17 +50,25 @@ class TrafficContext:
         return True, False
       if not (-10 <= obj.x <= 150 and abs(obj.y) <= 6):
         continue
-      # Collapse duplicates across leadOne/leadTwo/adjacent lists.
-      if any(abs(obj.x - other.x) < 2 and abs(obj.y - other.y) < 1 for _, other in current):
+      if abs(obj.speed) < self.MIN_MOVING_SPEED:
         continue
-      candidates = [(abs(obj.x - (prev.x + prev.relative_speed * (now - t))) + 3 * abs(obj.y - prev.y), i)
-                    for i in remaining for t, prev in [old[i]]
-                    if abs(obj.x - (prev.x + prev.relative_speed * (now - t))) < 8 and abs(obj.y - prev.y) < 2]
+      # Collapse duplicates across leadOne/leadTwo/adjacent lists.
+      if any(abs(obj.x - track.observation.x) < 2 and abs(obj.y - track.observation.y) < 1 for track in current):
+        continue
+      candidates = [(abs(obj.x - (prev.x + prev.relative_speed * (now - track.last_seen))) + 3 * abs(obj.y - prev.y), i)
+                    for i in remaining for track in [old[i]] for prev in [track.observation]
+                    if abs(obj.x - (prev.x + prev.relative_speed * (now - track.last_seen))) < 8 and abs(obj.y - prev.y) < 2]
+      first_seen, confirmed = now, False
       if candidates:
-        remaining.remove(min(candidates)[1])
-      elif abs(obj.speed) > 1.0:
+        index = min(candidates)[1]
+        remaining.remove(index)
+        previous = old[index]
+        first_seen = previous.first_seen if now - previous.last_seen <= 0.3 else now
+        confirmed = previous.confirmed
+      if not confirmed and now - first_seen >= self.CONFIRM_SECONDS:
+        confirmed = True
         new_moving = True
-      current.append((now, obj))
+      current.append(TrafficTrack(now, first_seen, obj, confirmed))
     self.tracks = current + [old[i] for i in remaining]
     if new_moving:
       self.strict_until = now + self.STRICT_SECONDS
@@ -66,20 +85,17 @@ class InteractionEdges:
     self.previous = (False, False, False)
     self.held_buttons = set()
     self.last_response = -math.inf
-    self.last_pedal_or_speed = -math.inf
 
   def update(self, now, gas, brake, steering, buttons):
     state = (bool(gas), bool(brake), bool(steering))
     edges = tuple(value and not prev for value, prev in zip(state, self.previous, strict=True))
     self.previous = state
-    speed_edge = False
     button_edge = False
     for kind, pressed in buttons:
       if kind not in self.RESPONSE_BUTTONS:
         continue
       if pressed:
         button_edge |= kind not in self.held_buttons
-        speed_edge |= kind in self.SPEED_BUTTONS and kind not in self.held_buttons
         self.held_buttons.add(kind)
       else:
         self.held_buttons.discard(kind)
@@ -87,15 +103,7 @@ class InteractionEdges:
     response = any(edges) or button_edge
     if response:
       self.last_response = now
-    if edges[0] or edges[1] or speed_edge:
-      self.last_pedal_or_speed = now
     return response
-
-  def timeout_factor(self, now, experimental, strict, clear):
-    if not experimental or strict:
-      return 1.0
-    # Both bonuses are bounded; an automatic vCruise/vEgo change is never an input.
-    return 2.0 + (0.2 if now - self.last_pedal_or_speed < 15 else 0) + (0.2 if clear else 0)
 
 
 class CameraAvailability:
