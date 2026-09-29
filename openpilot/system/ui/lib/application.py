@@ -371,6 +371,10 @@ class GuiApplication:
     preset = "ultrafast"
 
     fps = self._target_fps if self._target_fps > 0 else _DEFAULT_FPS
+    # Frames reach ffmpeg only every `_record_every_n` render frames, so the
+    # declared input rate must match that real capture rate; otherwise the
+    # encoded video plays back exactly `_record_every_n` times too fast.
+    capture_fps = fps / max(1, self._record_every_n)
     output_fps = fps * record_speed
 
     ffmpeg_args = [
@@ -380,7 +384,7 @@ class GuiApplication:
       "-f", "rawvideo",
       "-pix_fmt", "rgba",
       "-s", f"{self._width}x{self._height}",
-      "-r", str(fps),
+      "-r", f"{capture_fps:g}",
       "-i", "pipe:0",
       "-vf", "vflip,format=yuv420p",
       "-r", str(output_fps),

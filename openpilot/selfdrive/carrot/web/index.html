@@ -351,6 +351,7 @@
           </button>
           <div id="toolsGroupBodySystem" class="tools-group__body">
             <div class="tools-group__bodyInner ui-action-grid">
+              <button id="btnRecordToggle" class="btn" type="button" aria-label="Record">Record</button>
               <button id="btnDeviceLang" class="btn" hidden style="display:none;">Device Lang</button>
               <button id="btnResetCalib" class="btn btn--danger">Reset Calib</button>
               <button id="btnSendTmuxLog" class="btn">capture tmux</button>
@@ -727,7 +728,7 @@
             </section>
           </div>
         </aside>
-        <div class="carrot-stage__controls" role="group" aria-label="Sound, HUD, display and recording controls">
+        <div class="carrot-stage__controls" role="group" aria-label="Sound, HUD and display controls">
           <label id="carrotReplayHudControl" class="carrot-stage__controlBtn carrot-stage__controlBtn--hud carrot-replay-controls__hudToggle" for="carrotReplayHudToggle" hidden>
             <input id="carrotReplayHudToggle" type="checkbox">
             <span id="carrotReplayHudToggleLabel">HUD</span>
@@ -735,7 +736,6 @@
           <button id="btnWebSound" class="carrot-stage__controlBtn carrot-stage__controlBtn--sound" type="button" aria-label="Web sound">Sound</button>
           <button id="btnCarrotReplaySpeed" class="carrot-stage__controlBtn carrot-stage__controlBtn--replay-speed" type="button" aria-label="Replay speed" hidden>1×</button>
           <button id="btnDisplayModeCycle" class="carrot-stage__controlBtn carrot-stage__controlBtn--display" type="button" aria-label="Display mode">Normal</button>
-          <button id="btnRecordToggle" class="carrot-stage__controlBtn carrot-stage__controlBtn--record" type="button" aria-label="Record">Record</button>
         </div>
         </div>
         <div id="carrotNaviDivider" class="carrot-navi-divider" data-drive-workspace-divider role="separator" aria-orientation="vertical" aria-label="Resize Carrot Navi" aria-valuemin="30" aria-valuemax="70" aria-valuenow="70" tabindex="0" hidden>
