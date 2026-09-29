@@ -512,7 +512,10 @@ class CarController(CarControllerBase):
 
       # LFA and HDA icons
       if self.frame % 5 == 0 and (not hda2 or hda2_long or camera_scc):
-        can_sends.extend(hyundaicanfd.create_lfahda_cluster(self.packer, CS, self.CAN, CC.longActive, CC.latActive))
+        can_sends.extend(hyundaicanfd.create_lfahda_cluster(
+          self.packer, CS, self.CAN, CC.longActive, CC.latActive,
+          suppress_camera_auto_disengage=bool(camera_scc and self.car_fingerprint == CAR.GENESIS_GV70_1ST_GEN),
+        ))
         if not camera_scc:
           can_sends.extend(hyundaicanfd.create_lfa_icon_non_camera_scc(self.packer, CS, self.CAN, CC))
 
