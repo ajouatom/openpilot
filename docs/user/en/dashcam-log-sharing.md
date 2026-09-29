@@ -2,6 +2,18 @@
 
 [한국어](../ko/dashcam-log-sharing.md)
 
+## Automatic Dashcam mode after a suspected impact
+
+While onroad, two consecutive fresh accelerometer samples with a calibrated longitudinal/lateral magnitude of **1.5g (about 14.7 m/s²)** trigger an **Impact suspected** notice, a ten-second countdown, and the existing notification sound. Gravity and mounting orientation are compensated; vertical acceleration alone does not trigger it. Valid sensor, pose, and calibration data are required. Wheel-speed-derived `aEgo` is recorded only as supporting information.
+
+- **Touch anywhere on the screen within ten seconds to cancel.** That touch does not activate the controls underneath.
+- Without a touch, the device saves **Enable openpilot OFF and reboots**. Control, including Always Lateral, stops; after reboot, Dashcam mode records without allowing engagement.
+- OFF persists through subsequent ignition cycles. To restore control, park safely, enable openpilot in the device settings, and perform the requested restart.
+- Recording pauses during reboot. This does not separately lock/save incident footage or upload it automatically.
+- A full-screen emergency alert or an unresponsive display that prevents continued notice presentation cancels automatic switching. After cancellation, valid horizontal acceleration must remain below 10 m/s² for one second before another impact can trigger a new notice.
+
+1.5g is an experimental threshold, not confirmation of a collision. Rough roads, mount impacts, and device drops can cause false triggers; sensor limits and short impulses can cause missed impacts. Vehicle detection rates, false triggers, display, sound, and physical reboot remain unvalidated. The notification respects existing volume and mute settings.
+
 When you ask a Carrot support specialist to analyze abnormal behavior, use `Logs > Dashcam` in Carrot Web to find and upload the affected time range. A dashcam upload can provide vehicle-state and control-decision data in addition to the visible road video.
 
 > [!WARNING]

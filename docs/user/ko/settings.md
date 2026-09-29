@@ -7,6 +7,8 @@
 
 carrotpilot의 세부 설정은 **Carrot Web에서 모두 확인하고 변경하는 것**을 기준으로 합니다. 장치 자체의 기본 설정 화면은 Wi-Fi, 장치 정보, openpilot 기본 토글과 소프트웨어 업데이트에 사용하고, 아래에서 설명하는 `carrot_settings.json`의 파라미터는 Carrot Web의 **설정** 화면에서 관리합니다.
 
+주행 중 가속도센서로 1.5g 이상의 수평 충격이 의심되면 경고와 10초 취소 안내를 표시합니다. 터치가 없으면 `OpenpilotEnabledToggle`을 꺼짐으로 저장하고 Dashcam 모드로 재부팅하며, 다시 켤 때까지 제어를 사용할 수 없습니다. [감지 조건·취소·복구와 녹화 공백](dashcam-log-sharing.md#충격-의심-시-자동-dashcam-모드)을 확인하세요.
+
 > [!IMPORTANT]
 > **현재 지원 상태**
 >

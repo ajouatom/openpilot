@@ -9,6 +9,7 @@ from openpilot.system.ui.lib.application import gui_app
 from openpilot.selfdrive.ui.layouts.main import MainLayout
 from openpilot.selfdrive.ui.mici.layouts.main import MiciMainLayout
 from openpilot.selfdrive.ui.ui_state import ui_state
+from openpilot.selfdrive.ui.impact_dashcam import ImpactDashcamPrompt
 
 BIG_UI = gui_app.big_ui()
 
@@ -31,10 +32,13 @@ def main():
     MainLayout()
   else:
     MiciMainLayout()
+  impact_prompt = ImpactDashcamPrompt()
 
-  for _ in gui_app.render():
+  for rendered in gui_app.render():
     ui_state.update()
     scheduler.update(ui_state.started)
+    if rendered:
+      impact_prompt.render()
 
 
 if __name__ == "__main__":

@@ -7,6 +7,8 @@
 
 Use **Carrot Web** to view and change all carrotpilot-specific settings. The device settings screen remains useful for Wi-Fi, device information, standard openpilot toggles, and software updates. Parameters defined by `carrot_settings.json` belong in the **Settings** screen in Carrot Web.
 
+An accelerometer-detected suspected horizontal impact of at least 1.5g displays a warning and a ten-second cancellation notice. Without a touch, it saves `OpenpilotEnabledToggle` OFF and reboots into Dashcam mode, preventing control until manually enabled again. See [detection, cancellation, recovery, and recording interruption](dashcam-log-sharing.md#automatic-dashcam-mode-after-a-suspected-impact).
+
 > [!IMPORTANT]
 > **Current support status**
 >
