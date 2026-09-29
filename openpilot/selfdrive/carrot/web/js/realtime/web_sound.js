@@ -3,6 +3,7 @@
 (function () {
   const STORAGE_KEY = "carrot.webSound.enabled.v1";
   const VOLUME_STORAGE_KEY = "carrot.webSound.volume.v1";
+  const SERVER_SETTINGS_URL = "/api/web_settings";
   const RECONNECT_MS = 1500;
   const AudioContextClass = window.AudioContext || window.webkitAudioContext;
   const button = document.getElementById("btnWebSound");
@@ -45,6 +46,9 @@
 
   let enabled = loadEnabled();
   let webVolume = loadWebVolume();
+  let serverSyncReady = false;
+  let localDirty = false;
+  let serverPushTimer = null;
   let context = null;
   let socket = null;
   let reconnectTimer = null;
@@ -88,13 +92,23 @@
     }
   }
 
-  function setWebVolume(value) {
-    webVolume = Math.max(0, Math.min(1, Number(value) || 0));
-    try { localStorage.setItem(VOLUME_STORAGE_KEY, String(webVolume)); } catch (_) {}
+  function saveVolume(value) {
+    try { localStorage.setItem(VOLUME_STORAGE_KEY, String(value)); } catch (_) {}
+  }
+
+  function applyGain() {
     if (current?.gain && context) {
       // Independent of device Settings > Sound volume — Web slider only.
       current.gain.gain.setValueAtTime(Math.max(0, Math.min(1, webVolume)), context.currentTime);
     }
+  }
+
+  function setWebVolume(value) {
+    webVolume = Math.max(0, Math.min(1, Number(value) || 0));
+    saveVolume(webVolume);
+    if (!serverSyncReady) localDirty = true;
+    applyGain();
+    pushServerState();
     return webVolume;
   }
 
@@ -375,6 +389,8 @@
   async function setEnabled(value, fromGesture = false) {
     enabled = Boolean(value);
     saveEnabled(enabled);
+    if (!serverSyncReady) localDirty = true;
+    pushServerState();
     setButtonState();
     if (!enabled) {
       disconnect();
@@ -523,6 +539,96 @@
     };
   }
 
+  function pushServerState(immediate = false) {
+    if (!serverSyncReady) return;
+    const send = () => {
+      fetch(SERVER_SETTINGS_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          web_sound_enabled: enabled,
+          web_sound_volume: Number(webVolume.toFixed(2)),
+        }),
+      }).catch(() => {});
+    };
+    if (immediate) {
+      if (serverPushTimer) {
+        clearTimeout(serverPushTimer);
+        serverPushTimer = null;
+      }
+      void send();
+      return;
+    }
+    if (serverPushTimer) clearTimeout(serverPushTimer);
+    serverPushTimer = window.setTimeout(() => {
+      serverPushTimer = null;
+      void send();
+    }, 150);
+  }
+
+  async function loadServerState() {
+    let settings = null;
+    try {
+      const response = await fetch(SERVER_SETTINGS_URL, { cache: "no-store" });
+      if (!response.ok) return;
+      const payload = await response.json();
+      settings = payload?.settings;
+    } catch (_) {
+      return;
+    }
+    if (!settings || typeof settings !== "object") return;
+
+    if (localDirty) {
+      // A change happened before the device answered; keep it and save it.
+      serverSyncReady = true;
+      localDirty = false;
+      pushServerState(true);
+      return;
+    }
+
+    const localEnabled = loadEnabled();
+    const localVolume = loadWebVolume();
+    let nextEnabled = typeof settings.web_sound_enabled === "boolean" ? settings.web_sound_enabled : null;
+    let nextVolume = Number(settings.web_sound_volume);
+    if (!Number.isFinite(nextVolume)) nextVolume = null;
+
+    let migrate = false;
+    if (nextEnabled === null) {
+      nextEnabled = localEnabled;
+      migrate = true;
+    }
+    if (nextVolume === null) {
+      nextVolume = localVolume;
+      migrate = true;
+    }
+    // Carry the previous browser-local choice onto the device once. Only a
+    // deliberate ON or a non-default volume migrates; a device OFF is kept.
+    if (nextEnabled === false && localEnabled === true) {
+      nextEnabled = true;
+      migrate = true;
+    }
+    if (Math.abs(nextVolume - 1) < 1e-9 && Math.abs(localVolume - 1) > 1e-9) {
+      nextVolume = localVolume;
+      migrate = true;
+    }
+
+    enabled = nextEnabled;
+    webVolume = Math.max(0, Math.min(1, nextVolume));
+    saveEnabled(enabled);
+    saveVolume(webVolume);
+    setButtonState();
+    applyGain();
+    serverSyncReady = true;
+    if (migrate) pushServerState(true);
+
+    if (enabled) {
+      connect();
+    } else {
+      disconnect();
+      stopCurrent(true);
+    }
+  }
+
   button?.addEventListener("click", openDialog);
   document.addEventListener("pointerdown", () => {
     if (!enabled || context?.state === "running") return;
@@ -539,6 +645,7 @@
 
   setButtonState();
   if (enabled) connect();
+  void loadServerState();
 
   window.CarrotWebSound = Object.freeze({
     isEnabled: () => enabled,
