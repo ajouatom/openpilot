@@ -78,3 +78,52 @@ Windows params_pyx; these pure-Python tests use their own directory boundary.
 Physical startup display behavior and the underlying isolated Jetlink latency
 remain unvalidated. Reproduction scripts and private evidence are indexed in
 `.analysis/archive/2026-09-29/ff1/` and are not committed.
+
+## Follow-up: narrow the missing measurement
+
+Further decoding of driverStateV2 places the two longest startup calls at
+1,976.799 ms (first result at 2.574 s, frame18) and 2,024.072 ms (result at
+10.519 s, frame176). Their gpuExecutionTime values are 1,976.623 and
+2,023.984 ms. Despite the field's name, this is wall time inside ModelState.run
+(warp, inference and synchronization), not a hardware GPU execution counter.
+It excludes Gate.wait. Thus the 25 ms phase gate is not the cause of these
+two-second calls. GPU/runtime waiting versus CPU scheduling inside that call
+still needs measurement.
+
+The modeld runtimeTiming interval containing segment2's fault reports maximum
+inference 102.845 ms, maximum inference thread CPU 7.444 ms, and total main
+thread runqueue wait 2.205 ms over 1.050 s. That recorded scheduling delay
+cannot explain the roughly 75 ms excess roundtrip over server internal time.
+It does not measure the USB worker's scheduling. No matching USB/GPU fault
+message was found in the decoded kernel records around 44-48 s. Absence of a
+kernel fault record does not prove a healthy transport.
+
+The USB daemon's existing send/response split used Python logging on stderr;
+the supplied rlogs contain no corresponding USB frame event. Add the shared,
+bounded runtimeTiming reporter to jetlinkd and dmonitoringmodeld so these data
+are retained in rlog at most once per second:
+
+- jetlinkd: housekeeping, IPC receive, request parse, USB send, phase publish,
+  HUD work, response wait, IPC reply, display tail and Wi-Fi tail, together
+  with server internal times and local thread CPU/scheduling totals.
+- dmonitoringmodeld: camera receive, phase wait, model call, postprocessing,
+  and thread CPU/scheduling totals.
+
+Each summary holds means/maxima/counts, not an unbounded per-frame trace.
+The context frame/USB sequence identifies the last sample in that interval;
+individual maxima need not belong to that same frame. IPC receive includes
+normal idle time. A slow tail after a reply can delay the next request, so
+look at adjacent intervals and the model-side roundtrip together. Server clocks
+must not be directly subtracted from C4 clocks.
+
+No timing budget, priority, model contract, validity criterion, output, or
+connection policy changes. Two deterministic daemon tests exercise both HUD
+paths, verify exact reply bytes/order and distinguish idle receive, USB wait
+and post-reply tail. Shared diagnostics tests: 3 passed. Existing Jetlink and
+phase tests on Windows: 18 passed, 10 skipped (platform conditions); Python
+compilation passes. Ruff reports only three pre-existing B023 findings in
+daemon startup callbacks, reproduced against the preceding commit. Physical
+runtime overhead and latency reduction are not
+validated. This is diagnostic coverage, not a claim that either delay is fixed.
+Private follow-up extracts/scripts are in
+`.analysis/archive/2026-09-29/ff1-followup/`.
