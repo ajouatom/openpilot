@@ -74,3 +74,22 @@ spinner and model-build-cache tests. The initial broader run lacked SCons on the
 Windows host; installing SCons only in the disposable test dependency directory
 allowed that test to pass. Lint found no new diagnostics; five existing build.py
 diagnostics are outside these changes.
+
+### 2026-09-29: delayed tmux output after successful startup
+
+On Ioniq 5 C4 `07b62e389ed26c81` at `ef6f56d3`, manager and its
+services were running while tmux output arrived in bursts. The manager's
+`unblock_stdout` relay now writes into the startup-capture pipe instead of
+directly into a terminal. Its Python stdout therefore uses block buffering;
+the capture process's own flush cannot release bytes still held upstream.
+Flush each relayed chunk inside the existing nonblocking/error-handling path.
+This preserves scheduling, process startup, and recovery behavior.
+
+An isolated Python/PTY probe on the same device extracted the existing relay
+function and compared it with the flush added. With stdout piped and a child
+printing one flushed marker before sleeping for one second, the original
+delivered no marker within 0.6 seconds (nor at exit, because the relay uses
+`os._exit`). The corrected relay delivered the marker within that window;
+both exited successfully without stderr. The running vehicle manager was
+not changed or restarted. Full launcher behavior after updating remains to
+be checked at the next startup.

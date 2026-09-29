@@ -36,6 +36,9 @@ def unblock_stdout() -> None:
 
       try:
         sys.stdout.write(dat.decode('utf8'))
+        # Startup recovery captures stdout through a pipe, so Python no longer
+        # line-buffers it as it did when connected directly to tmux.
+        sys.stdout.flush()
       except (OSError, UnicodeDecodeError):
         pass
 
