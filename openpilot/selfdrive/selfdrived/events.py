@@ -561,6 +561,18 @@ EVENTS: dict[int, dict[str, Alert | AlertCallbackType]] = {
     ET.PERMANENT: NormalPermanentAlert(tr_noop("Driver camera unavailable"), tr_noop("Monitoring driver controls"), creation_delay=3.),
   },
 
+  # The global UI renders the cancellable countdown, including over settings.
+  # Keep sound below critical driving alerts and honor normal user volume.
+  EventName.impactDetected: {
+    ET.PERMANENT: Alert("", "", AlertStatus.normal, AlertSize.none, Priority.LOW,
+                        VisualAlert.none, AudibleAlert.prompt, 0.2),
+  },
+  EventName.impactDashcamReboot: {
+    ET.IMMEDIATE_DISABLE: ImmediateDisableAlert("Rebooting into Dashcam Mode"),
+    ET.NO_ENTRY: NoEntryAlert("Dashcam Mode"),
+    ET.PERMANENT: NormalPermanentAlert("Rebooting into Dashcam Mode", priority=Priority.LOW),
+  },
+
   EventName.systemReady: {
     ET.PERMANENT: Alert("", "", AlertStatus.normal, AlertSize.none, Priority.LOWEST,
                         VisualAlert.none, AudibleAlert.systemReady, 0.2),

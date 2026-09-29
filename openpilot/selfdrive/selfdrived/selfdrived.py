@@ -10,6 +10,7 @@ from msgq.visionipc import VisionIpcClient, VisionStreamType
 
 
 from openpilot.common.params import Params
+from openpilot.common.impact_dashcam import ImpactDashcam
 from openpilot.common.realtime import config_realtime_process, Priority, Ratekeeper, DT_CTRL
 from openpilot.common.swaglog import cloudlog
 from openpilot.common.runtime_diagnostics import communication_snapshot
@@ -21,6 +22,7 @@ from openpilot.selfdrive.selfdrived.camera_config import get_camera_packets
 from openpilot.selfdrive.selfdrived.events import Events, ET, EmptyAlert
 from openpilot.selfdrive.selfdrived.helpers import ExcessiveActuationCheck
 from openpilot.selfdrive.selfdrived.state import StateMachine
+from openpilot.selfdrive.selfdrived.impact_detector import ImpactDetector
 from openpilot.selfdrive.selfdrived.alertmanager import AlertManager, set_offroad_alert
 from openpilot.selfdrive.controls.lib.cutin_alert import (
   CutinAlertCandidate,
@@ -54,6 +56,8 @@ IGNORED_SAFETY_MODES = (SafetyModel.silent, SafetyModel.noOutput)
 class SelfdriveD:
   def __init__(self, CP=None):
     self.params = Params()
+    self.impact_dashcam = ImpactDashcam(self.params, Params("/dev/shm/params"))
+    self.impact_detector = ImpactDetector()
 
     # Ensure the current branch is cached, otherwise the first cycle lags
     get_build_metadata()
@@ -610,6 +614,44 @@ class SelfdriveD:
     self.update_alerts(CS)
     self.system_ready_alerted = True
 
+  def update_impact_dashcam(self, CS):
+    if REPLAY or SIMULATION or self.CP.notCar:
+      return
+    now = time.monotonic()
+    trigger, quiet, accel = False, None, None
+    if self.sm.updated['accelerometer']:
+      sample = self.sm['accelerometer']
+      pose = self.sm['livePose']
+      calibration = self.sm['liveCalibration']
+      valid = (self.sm.valid['accelerometer'] and self.sm.alive['accelerometer']
+               and sample.which() == 'acceleration'
+               and sample.source in (log.SensorEventData.SensorSource.lsm6ds3,
+                                     log.SensorEventData.SensorSource.lsm6ds3trc)
+               and self.sm.all_checks(['livePose', 'liveCalibration'])
+               and pose.orientationNED.valid and pose.inputsOK and pose.sensorsOK
+               and 0 <= now - pose.timestamp / 1e9 < 0.2
+               and calibration.calStatus == log.LiveCalibrationData.Status.calibrated)
+      orientation = [pose.orientationNED.x, pose.orientationNED.y, pose.orientationNED.z]
+      trigger, quiet, accel = self.impact_detector.update(
+        now=now, timestamp=sample.timestamp / 1e9,
+        sensor=list(sample.acceleration.v) if sample.which() == 'acceleration' else [],
+        orientation=orientation, calibration=list(calibration.rpyCalib), valid=valid)
+    elif not self.sm.alive['accelerometer']:
+      self.impact_detector.above = False
+      quiet = False
+    was_pending, was_committed = self.impact_dashcam.pending, self.impact_dashcam.committed
+    try:
+      self.impact_dashcam.update(now=now,
+        allowed=self.initialized and not self.CP.passive and self.sm['deviceState'].started,
+        trigger=trigger, quiet=quiet, details={'acceleration': accel, 'aEgo': CS.aEgo})
+    except OSError:
+      self.impact_dashcam.cancel()
+      cloudlog.exception("Impact dashcam parameter write failed")
+    if self.impact_dashcam.pending and not was_pending:
+      cloudlog.warning(f"Impact suspected: acceleration={accel}, aEgo={CS.aEgo}")
+    if self.impact_dashcam.committed and not was_committed:
+      cloudlog.warning("Impact dashcam countdown completed; openpilot disabled, reboot requested")
+
   def update_alerts(self, CS):
     clear_event_types = set()
     if ET.WARNING not in self.state_machine.current_alert_types:
@@ -657,7 +699,12 @@ class SelfdriveD:
 
   def step(self):
     CS = self.data_sample()
+    self.update_impact_dashcam(CS)
     self.update_events(CS)
+    if self.impact_dashcam.pending:
+      self.events.add(EventName.impactDetected)
+    if self.impact_dashcam.committed:
+      self.events.add(EventName.impactDashcamReboot)
     if not self.CP.passive and self.initialized:
       self.enabled, self.active = self.state_machine.update(self.events)
     self.update_alerts(CS)

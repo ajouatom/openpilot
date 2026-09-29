@@ -1516,3 +1516,23 @@ msgstr "운전자 카메라 사용 불가"
 #: openpilot/selfdrive/selfdrived/events.py
 msgid "Monitoring driver controls"
 msgstr "버튼·페달·핸들 조작으로 감시 중"
+
+#: openpilot/selfdrive/ui/impact_dashcam.py
+msgid "Impact suspected"
+msgstr "충격 의심 감지"
+
+#: openpilot/selfdrive/ui/impact_dashcam.py
+msgid "Dashcam mode: reboot in {seconds}s"
+msgstr "Dashcam 모드: {seconds}초 후 재부팅"
+
+#: openpilot/selfdrive/ui/impact_dashcam.py
+msgid "Touch anywhere to cancel"
+msgstr "화면 어디든 터치하면 취소"
+
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "Rebooting into Dashcam Mode"
+msgstr "Dashcam 모드로 재부팅 중"
+
+#: openpilot/selfdrive/ui/impact_dashcam.py
+msgid "openpilot disabled"
+msgstr "openpilot 사용 꺼짐"
