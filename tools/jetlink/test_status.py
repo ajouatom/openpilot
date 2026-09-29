@@ -43,16 +43,25 @@ def test_remote_badge_disappears_with_expired_snapshot(monkeypatch):
   assert params.external_compute_label() == ''
 
 
-def test_unplugged_optional_host_is_quiet_only_with_current_healthy_native_model(tmp_path, monkeypatch):
+def test_unplugged_optional_host_is_quiet_before_model_start_and_recovers_to_ready(tmp_path, monkeypatch):
   link, model = tmp_path / 'link', tmp_path / 'model'
   monkeypatch.setattr(status, 'LINK_STATUS', link)
   monkeypatch.setattr(status, 'MODEL_STATUS', model)
   monkeypatch.setattr(status.time, 'monotonic', lambda: 20.)
   link.write_text(json.dumps({'updated': 20., 'state': 'waiting', 'peer': {'carrot_host': 'jetson'}}))
-  model.write_text(json.dumps({'updated': 20., 'active': False, 'error': ''}))
   assert status.badge() is None
   assert status.diagnostics()['reason'] == 'Host not connected'
+  for report in ({'updated': 20., 'active': False, 'error': ''},
+                 {'updated': 10., 'active': False}):
+    model.write_text(json.dumps(report))
+    assert status.badge() is None
   for report in ({'updated': 20., 'active': False, 'error': 'inference timeout'},
-                 {'updated': 20., 'active': True}, {'updated': 10., 'active': False}):
+                 {'updated': 20., 'active': True}):
     model.write_text(json.dumps(report))
     assert status.badge() == ('jetSON ERROR', 'error')
+  model.unlink()
+  link.write_text(json.dumps({'updated': 20., 'state': 'ready', 'peer': {'carrot_host': 'jetson'},
+                             'telemetry_updated': 20., 'telemetry': {'carrot_health': {'age_s': 0., 'severity': 'ok'}}}))
+  assert status.badge() == ('jetSON READY', 'ready')
+  monkeypatch.setattr(status.time, 'monotonic', lambda: 24.)
+  assert status.badge() == ('jetSON ERROR', 'error')

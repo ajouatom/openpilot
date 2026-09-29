@@ -1,5 +1,16 @@
 # Repository memory
 
+- On 2026-09-29, Ioniq 5 PE C4 ff1 segments 0/2 on 250f14ed showed startup
+  DM inference/model readiness delay and a separate Jetlink 97.28 ms roundtrip
+  causing one model input skip and transient downstream invalidity. Expected
+  process PIDs and all camera frame-ID sequences remain continuous; this is
+  not evidence of a process crash or sensor capture loss. The user requested
+  hiding an absent Jetson: a fresh waiting report is now quiet before modeld's
+  first report, with READY restored on healthy connection. Preserve fresh model
+  errors, active-session conflicts and stale-link errors. Physical display and
+  the underlying isolated latency remain unvalidated. See
+  docs/jetlink_ff1_investigation_20260929.md.
+
 - On 2026-09-29, after two GV70 camera-side warning recurrences with unknown
   cause, the user authorized blocking the observed stock-cluster popup and
   requested checking its sound. Scope suppression to GENESIS_GV70_1ST_GEN
