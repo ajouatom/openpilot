@@ -146,7 +146,7 @@ class CarInterface(CarInterfaceBase):
       # radarDelay 누락 시 레이더 리드의 위치/속도가 어긋나 조기제동·리드 불안정 유발.
       ret.longitudinalActuatorDelay = 0.5
       ret.radarDelay = 0.8
-      ret.longitudinalTuning.kiBP = [0., 30.]
-      ret.longitudinalTuning.kiV = [0.4, 0.]
+      ret.longitudinalTuning.kiBP = [0.]
+      ret.longitudinalTuning.kiV = [0.]
 
     return ret
