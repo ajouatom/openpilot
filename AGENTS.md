@@ -1,5 +1,18 @@
 # Repository memory
 
+- On 2026-09-29, after two GV70 camera-side warning recurrences with unknown
+  cause, the user authorized blocking the observed stock-cluster popup and
+  requested checking its sound. Scope suppression to GENESIS_GV70_1ST_GEN
+  camera-SCC, lateral-only control, HDA_InfoPUDis=3 with the observed camera
+  FCA_SYSWARN=1/VALUE63=15 signature and no decoded MDPS/SCC fault or separate
+  popup/sound request. Modify only the outgoing cluster copy; retain raw CAN,
+  camera state, actual control and other fault/hands-off alerts. Both logs have
+  HDA_LFA_WrnSnd=0 and openpilot alertSound=none; popup-associated chime is an
+  inference, not confirmed audio causality. Replay removes all four observed
+  popup frames; physical display/sound suppression remains unvalidated.
+  See docs/canfd_feedback_counters.md. This supersedes the earlier recommendation
+  to leave this popup unchanged pending root-cause diagnosis.
+
 - On 2026-09-29, the user clarified that DM's 20-second standard hold starts
   only when surrounding moving traffic appears after an absence. Additional
   vehicles during occupancy do not extend it. Camera monitoring during the hold
