@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 import pytest
@@ -162,6 +163,158 @@ def test_restore_rejects_internal_driver_monitoring_session_state(monkeypatch):
 
   restored = params_service.restore_param_values_validated({"DriverMonitoringSessionDisabled": True})
   assert restored["result"] == {"ok_cnt": 0, "fail_cnt": 0, "fails": []}
+
+
+def test_driver_monitoring_enabled_is_excluded_from_file_and_qr_backups(monkeypatch):
+  class FakeParamKeyType:
+    BOOL = "bool"
+    INT = "int"
+    FLOAT = "float"
+    TIME = "time"
+    STRING = "string"
+    JSON = "json"
+    BYTES = "bytes"
+
+  class BackupParams:
+    def all_keys(self):
+      return ["DriverMonitoringEnabled", "DriverMonitoringMode", "CarrotVisionEnabled"]
+
+    def get_type(self, key):
+      return FakeParamKeyType.INT if key == "DriverMonitoringMode" else FakeParamKeyType.BOOL
+
+    def get_default_value(self, key):
+      return "0" if key == "DriverMonitoringMode" else "1"
+
+    def get(self, key, **_kwargs):
+      return {
+        "DriverMonitoringEnabled": "0",
+        "DriverMonitoringMode": "1",
+        "CarrotVisionEnabled": "1",
+      }[key]
+
+  monkeypatch.setattr(params_service, "HAS_PARAMS", True)
+  monkeypatch.setattr(params_service, "ParamKeyType", FakeParamKeyType)
+  monkeypatch.setattr(params_service, "Params", BackupParams)
+
+  assert params_service.get_all_param_values_for_backup() == {
+    "DriverMonitoringMode": "1",
+    "CarrotVisionEnabled": "1",
+  }
+  # Keep the existing QR schema so older QR codes still decode the key and the
+  # restore filter can safely ignore its value.
+  assert params_service._backup_param_names() == [
+    "DriverMonitoringEnabled",
+    "DriverMonitoringMode",
+    "CarrotVisionEnabled",
+  ]
+
+  qr = params_service.build_params_qr_payload({
+    "DriverMonitoringEnabled": "0",
+    "DriverMonitoringSessionDisabled": "1",
+    "DriverMonitoringMode": "1",
+    "CarrotVisionEnabled": "1",
+  })
+  assert qr["count"] == 2
+  assert params_service.parse_params_qr_payload(qr["payload"]) == {
+    "DriverMonitoringMode": "1",
+    "CarrotVisionEnabled": "1",
+  }
+
+  # Simulate a QR made before the exclusion policy. The stable schema still
+  # decodes the key, but restore refuses to apply it even when selected.
+  old_qr = params_service._build_params_qr_payload_v4({
+    "DriverMonitoringEnabled": "0",
+    "DriverMonitoringMode": "1",
+  })
+  old_values = params_service.parse_params_qr_payload(old_qr["payload"])
+  assert old_values == {
+    "DriverMonitoringEnabled": "0",
+    "DriverMonitoringMode": "1",
+  }
+  monkeypatch.setattr(params_service, "get_param_values", lambda names, defaults: {
+    "DriverMonitoringEnabled": True,
+    "DriverMonitoringMode": 0,
+  })
+  restored = params_service.restore_param_values_validated(
+    old_values,
+    selected_keys=["DriverMonitoringEnabled"],
+  )
+  entries = {entry["key"]: entry for entry in restored["preview"]["entries"]}
+  assert entries["DriverMonitoringEnabled"]["reason"] == "excluded from backup restore"
+  assert not entries["DriverMonitoringEnabled"]["apply"]
+  assert restored["result"] == {"ok_cnt": 0, "fail_cnt": 0, "fails": []}
+
+
+def test_driver_monitoring_enabled_from_old_backup_is_not_restored(monkeypatch):
+  monkeypatch.setattr(params_service, "HAS_PARAMS", True)
+  monkeypatch.setattr(params_service, "ParamKeyType", object())
+  monkeypatch.setattr(params_service, "Params", object)
+  monkeypatch.setattr(params_service, "get_param_values", lambda names, defaults: {})
+
+  preview = params_service.preview_param_restore_values(
+    {"DriverMonitoringEnabled": "0"},
+    selected_keys=["DriverMonitoringEnabled"],
+  )
+  assert preview["summary"] == {"changed": 0, "same": 0, "skipped": 1, "invalid": 0, "selected": 0}
+  assert preview["entries"][0]["reason"] == "excluded from backup restore"
+  assert not preview["entries"][0]["apply"]
+
+  restored = params_service.restore_param_values_from_backup({"DriverMonitoringEnabled": "0"})
+  assert restored == {"ok_cnt": 0, "fail_cnt": 0, "fails": []}
+
+
+def test_reset_defaults_restores_driver_monitoring_enabled_to_on(monkeypatch):
+  class FakeParamKeyType:
+    BOOL = "bool"
+    INT = "int"
+    FLOAT = "float"
+    TIME = "time"
+    STRING = "string"
+    JSON = "json"
+    BYTES = "bytes"
+
+  class RestoreParams:
+    def get_type(self, key):
+      assert key == "DriverMonitoringEnabled"
+      return FakeParamKeyType.BOOL
+
+    def get_bool(self, key):
+      assert key == "DriverMonitoringEnabled"
+      return False
+
+  writes = []
+  monkeypatch.setattr(params_service, "HAS_PARAMS", True)
+  monkeypatch.setattr(params_service, "ParamKeyType", FakeParamKeyType)
+  monkeypatch.setattr(params_service, "Params", RestoreParams)
+  monkeypatch.setattr(params_service, "_catalog_definitions", dict)
+  monkeypatch.setattr(params_service, "get_param_values", lambda names, defaults: {"DriverMonitoringEnabled": False})
+  monkeypatch.setattr(params_service, "set_param_value", lambda key, value, definition=None: writes.append((key, value)))
+
+  restored = params_service.restore_param_values_validated(
+    {"DriverMonitoringEnabled": "1"},
+    source="reset_defaults",
+  )
+
+  assert restored["preview"]["summary"] == {
+    "changed": 1,
+    "same": 0,
+    "skipped": 0,
+    "invalid": 0,
+    "selected": 1,
+  }
+  assert restored["preview"]["entries"][0]["value"] is True
+  assert restored["result"] == {"ok_cnt": 1, "fail_cnt": 0, "fails": []}
+  assert writes == [("DriverMonitoringEnabled", True)]
+
+
+def test_old_params_backup_file_is_filtered_before_download(tmp_path):
+  backup_path = tmp_path / "params_backup.json"
+  backup_path.write_text(json.dumps({
+    "DriverMonitoringEnabled": "0",
+    "DriverMonitoringSessionDisabled": "1",
+    "DriverMonitoringMode": "1",
+  }), encoding="utf-8")
+  assert params_service.read_param_backup_values(str(backup_path)) == {"DriverMonitoringMode": "1"}
 
 
 def test_map_param_reader_reads_map_fps_file_while_native_registry_is_stale(tmp_path):

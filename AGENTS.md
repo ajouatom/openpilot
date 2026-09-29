@@ -109,7 +109,11 @@
   DM off may violate applicable laws or driving requirements without claiming
   universal illegality. The next ignition-on or manager/device restart clears
   only DriverMonitoringSessionDisabled; a saved Web OFF stays off until the
-  user manually enables DriverMonitoringEnabled again. Disabled DM
+  user manually enables DriverMonitoringEnabled again. File/QR backups and
+  file/QR/profile restore paths exclude DriverMonitoringEnabled, including
+  values in older backups; old backup downloads are filtered too. Resetting all
+  settings may restore the default ON value. Persistent OFF must be selected
+  locally on each device. Disabled DM
   stops the model during normal onroad operation and gates alerts, monitoring
   force deceleration and lockout while retaining a neutral state heartbeat.
   Driver View may run the model only for face preview while enforcement remains

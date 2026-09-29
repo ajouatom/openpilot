@@ -371,6 +371,23 @@ def put_typed(params: "Params", key: str, value: Any, p: Optional[Dict[str, Any]
 
 
 INTERNAL_SESSION_PARAMS = frozenset({"DriverMonitoringSessionDisabled"})
+BACKUP_EXCLUDED_PARAMS = frozenset({"DriverMonitoringEnabled"})
+
+
+def filter_param_backup_values(values: dict[str, Any]) -> dict[str, Any]:
+  return {
+    str(key): value
+    for key, value in values.items()
+    if str(key) not in INTERNAL_SESSION_PARAMS and str(key) not in BACKUP_EXCLUDED_PARAMS
+  }
+
+
+def read_param_backup_values(path: str) -> dict[str, Any]:
+  with open(path, "r", encoding="utf-8") as f:
+    values = json.load(f)
+  if not isinstance(values, dict):
+    raise ValueError("bad json format (must be object)")
+  return filter_param_backup_values(values)
 
 
 def set_param_value(name: str, value: Any, p: Optional[Dict[str, Any]] = None) -> None:
@@ -408,6 +425,9 @@ def get_all_param_values_for_backup() -> Dict[str, str]:
         continue
     else:
       key = str(k)
+
+    if key in INTERNAL_SESSION_PARAMS or key in BACKUP_EXCLUDED_PARAMS:
+      continue
 
     try:
       t = params.get_type(key)
@@ -507,6 +527,8 @@ def restore_param_values_from_backup(values: Dict[str, Any], source: str = "rest
 
   for key, value in values.items():
     if key in INTERNAL_SESSION_PARAMS:
+      continue
+    if source != "reset_defaults" and key in BACKUP_EXCLUDED_PARAMS:
       continue
     try:
       definition = definitions.get(key)
@@ -979,6 +1001,7 @@ def _build_params_qr_payload_v4(values: Dict[str, Any]) -> Dict[str, Any]:
 def build_params_qr_payload(values: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
   if values is None:
     values = get_all_param_values_for_backup()
+  values = filter_param_backup_values(values)
 
   try:
     return _build_params_qr_payload_v3(values)
@@ -1245,7 +1268,8 @@ def _values_equal(t: Any, left: Any, right: Any) -> bool:
     return str(left) == str(right)
 
 
-def preview_param_restore_values(values: Dict[str, Any], selected_keys: Optional[List[str]] = None) -> Dict[str, Any]:
+def preview_param_restore_values(values: Dict[str, Any], selected_keys: Optional[List[str]] = None,
+                                 source: str = "restore") -> Dict[str, Any]:
   if not HAS_PARAMS or ParamKeyType is None:
     raise RuntimeError("Params/ParamKeyType not available")
 
@@ -1267,6 +1291,10 @@ def preview_param_restore_values(values: Dict[str, Any], selected_keys: Optional
     if key in INTERNAL_SESSION_PARAMS:
       status = "invalid"
       reason = "controlled internally"
+      can_apply = False
+    elif source != "reset_defaults" and key in BACKUP_EXCLUDED_PARAMS:
+      status = "skipped"
+      reason = "excluded from backup restore"
       can_apply = False
     else:
       try:
@@ -1318,7 +1346,7 @@ def preview_param_restore_values(values: Dict[str, Any], selected_keys: Optional
 
 def restore_param_values_validated(values: Dict[str, Any], selected_keys: Optional[List[str]] = None,
                                    source: str = "restore") -> Dict[str, Any]:
-  preview = preview_param_restore_values(values, selected_keys)
+  preview = preview_param_restore_values(values, selected_keys, source=source)
   apply_values = {
     entry["key"]: entry["value"]
     for entry in preview["entries"]
