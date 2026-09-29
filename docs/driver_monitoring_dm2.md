@@ -168,6 +168,12 @@ enabled when `DriverMonitoringEnabled` is true and the session marker is false.
 A saved Web OFF survives later drives and restarts until the user manually turns
 the setting on again. Both switches are independent of the live
 `DriverMonitoringMode` and `CarrotVisionEnabled`; neither rewrites those values.
+File and QR backup generation excludes `DriverMonitoringEnabled`, and file, QR
+and profile restore paths ignore the key even when it is present in older data.
+Downloading a backup made before this policy also filters the key from the
+response. Resetting all settings to defaults remains allowed to restore the
+default ON value. Persistent OFF is therefore a deliberate local choice and
+cannot be transferred from another device's backup.
 
 During normal onroad operation, the disabled state stops driver-model execution
 and publishes a valid neutral monitoring heartbeat, so no driver-monitoring
