@@ -93,3 +93,15 @@ delivered no marker within 0.6 seconds (nor at exit, because the relay uses
 both exited successfully without stderr. The running vehicle manager was
 not changed or restarted. Full launcher behavior after updating remains to
 be checked at the next startup.
+
+The user then reproduced delayed manager status lines after restarting on
+`20e0775e`, with the relay flush present. The first probe explicitly flushed
+the child print, so it missed a second buffer: Python configures the manager's
+stdout while fd 1 is still the capture pipe. `forkpty()` changes fd 1 to a
+terminal but does not update that existing Python stream's buffering policy.
+Reconfigure the child stdout for line buffering after `forkpty`, retaining
+the parent relay flush. A second isolated probe on the same device used an
+ordinary unflushed `print`: the existing fix delivered it only at child exit,
+while child line buffering delivered it within 0.6 seconds. The regression
+test exercises the actual relay function with ordinary print and piped output.
+This corrects the incomplete first fix; the live manager is not hot-patched.

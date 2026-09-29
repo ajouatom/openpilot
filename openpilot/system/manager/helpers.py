@@ -47,6 +47,11 @@ def unblock_stdout() -> None:
     exit_status = os.wait()[1] >> 8
     os._exit(exit_status)
 
+  # forkpty replaces fd 1 with a terminal, but Python's existing stdout keeps
+  # the block-buffering policy selected at interpreter startup on the pipe.
+  # Restore terminal-style output for manager prints and forked services too.
+  sys.stdout.reconfigure(line_buffering=True)
+
 
 def write_onroad_params(started, params):
   params.put_bool("IsOnroad", started)
