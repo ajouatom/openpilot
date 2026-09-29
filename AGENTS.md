@@ -1,5 +1,13 @@
 # Repository memory
 
+- On 2026-09-29, the user required every future change to `ajouatom/openpilot`
+  to be submitted through a pull request from a separate branch. Do not push
+  directly to `carrot-wip` or another shared target branch unless the user gives
+  explicit permission for that specific direct push after this instruction.
+  Prepare and test the change on its branch, push that branch, then open a PR to
+  the intended target. General instructions elsewhere to finish, publish or push
+  shared work are not authorization to bypass this PR-only workflow.
+
 - On 2026-09-29, the user expanded the Carrot Web auto-update reboot sound request
   to ordinary reboots. Use the stdlib-parent common/reboot.py helper for hardware,
   manager, main Web tools and startup recovery: existing prompt.wav once before
@@ -432,9 +440,10 @@
   experiment local only; do not recreate or push its remote branch unless the
   user explicitly authorizes publication again. Continue applying common
   `carrot-wip` changes locally while preserving World Model-specific artifacts
-  and runtime work. Only `carrot-wip` must be pushed for shared changes; this
-  exception does not restore any retired branch. World Model has passed isolated
-  synthetic inference, but vehicle control integration remains unvalidated.
+  and runtime work. Only `carrot-wip` is the maintained destination for shared
+  changes; this exception does not restore any retired branch. World Model has
+  passed isolated synthetic inference, but vehicle control integration remains
+  unvalidated.
 
 - As of 2026-09-19, the user requests full integration of `carrot-cinque_v3` into
   `carrot-wip`, including the pinned Cinque v3 eGPU model/runtime, AGNOS
@@ -466,8 +475,9 @@
 - As of 2026-09-13, `carrot-wip` is the sole maintained top-level `carrot-*` branch.
   It incorporates the complete `carrot-cinque_v2` history. Its former Cinque v2
   selection was superseded by the 2026-09-19 integration above.
-  Commit and push common changes, including radar processing and Carrot Web, to `carrot-wip`;
-  verify it matches `origin/carrot-wip` with no unpushed commits before completion.
+  Submit common changes, including radar processing and Carrot Web, from a separate
+  branch in a pull request targeting `carrot-wip`; verify the contributor branch
+  matches its remote and the PR targets the current `carrot-wip` before completion.
   Do not recreate retired branches or synchronize changes to their archive tags or detached
   worktrees. Retired local branch tips are preserved under `archive/2026-09-13/<branch>`.
   Namespaced contributor branches such as `thftgr/carrot-*` are outside this consolidation.
