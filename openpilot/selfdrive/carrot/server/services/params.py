@@ -370,7 +370,12 @@ def put_typed(params: "Params", key: str, value: Any, p: Optional[Dict[str, Any]
     params.put(key, str(value))
 
 
+INTERNAL_SESSION_PARAMS = frozenset({"DriverMonitoringSessionDisabled"})
+
+
 def set_param_value(name: str, value: Any, p: Optional[Dict[str, Any]] = None) -> None:
+  if name in INTERNAL_SESSION_PARAMS:
+    raise ValueError(f"{name} is controlled internally")
   if not HAS_PARAMS:
     _mem_store[name] = str(value)
     return
@@ -382,6 +387,8 @@ def set_param_value(name: str, value: Any, p: Optional[Dict[str, Any]] = None) -
       raise
     _put_unregistered_setting(params, name, value, p)
 
+  if name == "DriverMonitoringEnabled" and not _coerce_bool(value) and not params.get_bool("IsOnroad"):
+    params.remove("Offroad_DriverMonitoringUncertain")
 
 # -----------------------
 # Bulk backup / restore
@@ -499,6 +506,8 @@ def restore_param_values_from_backup(values: Dict[str, Any], source: str = "rest
   fails = []
 
   for key, value in values.items():
+    if key in INTERNAL_SESSION_PARAMS:
+      continue
     try:
       definition = definitions.get(key)
       t = resolve_param_type(params, key, definition)
@@ -1255,31 +1264,36 @@ def preview_param_restore_values(values: Dict[str, Any], selected_keys: Optional
     type_name = "unknown"
     normalized_value: Any = raw_value
 
-    try:
-      # Same type resolution as the write path: a not-yet-registered key is
-      # typed from its catalog definition instead of being marked invalid.
-      t = resolve_param_type(params, key, definitions.get(key))
-      if t is None:
-        status = "invalid"
-        reason = "unknown parameter"
-        can_apply = False
-      else:
-        type_name = _param_type_name(t)
-        if _is_unsupported_param_type(t):
-          status = "skipped"
-          reason = "unsupported type"
+    if key in INTERNAL_SESSION_PARAMS:
+      status = "invalid"
+      reason = "controlled internally"
+      can_apply = False
+    else:
+      try:
+        # Same type resolution as the write path: a not-yet-registered key is
+        # typed from its catalog definition instead of being marked invalid.
+        t = resolve_param_type(params, key, definitions.get(key))
+        if t is None:
+          status = "invalid"
+          reason = "unknown parameter"
           can_apply = False
         else:
-          normalized_value = _normalize_param_value(t, raw_value)
-          current_value = current_values.get(key, "")
-          if _values_equal(t, current_value, normalized_value):
-            status = "same"
+          type_name = _param_type_name(t)
+          if _is_unsupported_param_type(t):
+            status = "skipped"
+            reason = "unsupported type"
             can_apply = False
-    except Exception as e:
-      current_value = current_values.get(key, "")
-      status = "invalid"
-      reason = str(e)
-      can_apply = False
+          else:
+            normalized_value = _normalize_param_value(t, raw_value)
+            current_value = current_values.get(key, "")
+            if _values_equal(t, current_value, normalized_value):
+              status = "same"
+              can_apply = False
+      except Exception as e:
+        current_value = current_values.get(key, "")
+        status = "invalid"
+        reason = str(e)
+        can_apply = False
 
     is_selected = can_apply and (not selected or key in selected)
     if is_selected:

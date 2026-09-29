@@ -12,10 +12,14 @@ import pytest
 from openpilot.selfdrive.carrot.server.services import setting_profiles
 
 
+SNAPSHOT_CURRENT_SETTING_VALUES = setting_profiles.snapshot_current_setting_values
+
+
 CATALOG = {
   "ApplyModelSpeed": {"default": 0, "min": -120, "max": 120},
   "TFollowDecelBoost": {"default": 50, "min": 0, "max": 100},
   "CruiseSpeed1": {"default": 30, "min": 0, "max": 160},
+  "DriverMonitoringEnabled": {"default": 1, "search_only": True},
 }
 
 
@@ -29,7 +33,11 @@ def profile_store(tmp_path, monkeypatch):
   # No git and no live params in the test environment.
   monkeypatch.setattr(setting_profiles, "read_git_profile_meta", lambda: {})
   monkeypatch.setattr(setting_profiles, "snapshot_current_setting_values",
-                      lambda: {"ApplyModelSpeed": 0, "TFollowDecelBoost": 50})
+                      lambda: {
+                        "ApplyModelSpeed": 0,
+                        "TFollowDecelBoost": 50,
+                        "DriverMonitoringEnabled": 0,
+                      })
   return path
 
 
@@ -53,6 +61,54 @@ def test_unknown_parameters_are_dropped_from_stored_values(profile_store, monkey
   created = setting_profiles.create_setting_profile("p")
   assert "GhostParam" not in created["values"]
   assert created["values"]["ApplyModelSpeed"] == 5
+
+
+def test_search_only_parameters_are_excluded_from_new_profiles(profile_store):
+  created = setting_profiles.create_setting_profile("p")
+  assert "DriverMonitoringEnabled" not in created["values"]
+
+
+def test_snapshot_does_not_read_search_only_parameters(profile_store, monkeypatch):
+  requested = []
+
+  def fake_get_param_values(names, defaults):
+    requested.extend(names)
+    return defaults
+
+  monkeypatch.setattr(setting_profiles, "get_param_values", fake_get_param_values)
+  monkeypatch.setattr(setting_profiles, "snapshot_current_setting_values", SNAPSHOT_CURRENT_SETTING_VALUES)
+
+  values = setting_profiles.snapshot_current_setting_values()
+
+  assert "DriverMonitoringEnabled" not in requested
+  assert "DriverMonitoringEnabled" not in values
+
+
+def test_search_only_only_update_is_rejected_without_changing_profile(profile_store):
+  created = setting_profiles.create_setting_profile("p")
+
+  with pytest.raises(setting_profiles.SettingProfileError) as no_values:
+    setting_profiles.update_setting_profile(
+      created["id"], {"values": {"DriverMonitoringEnabled": 0}}
+    )
+
+  assert no_values.value.code == "PROFILE_NO_VALUES"
+  assert setting_profiles.get_setting_profile(created["id"])["values"] == created["values"]
+
+
+def test_reading_an_old_profile_removes_search_only_values(profile_store):
+  profile_store.parent.mkdir(parents=True, exist_ok=True)
+  profile_store.write_text(json.dumps({"profiles": [{
+    "id": "old",
+    "name": "old profile",
+    "values": {
+      "ApplyModelSpeed": 5,
+      "DriverMonitoringEnabled": 0,
+    },
+  }]}), encoding="utf-8")
+
+  [profile] = setting_profiles.read_setting_profiles()["profiles"]
+  assert profile["values"] == {"ApplyModelSpeed": 5}
 
 
 # The new one used to be appended then trimmed away, reporting success.

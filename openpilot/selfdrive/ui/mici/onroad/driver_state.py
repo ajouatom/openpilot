@@ -74,6 +74,7 @@ class DriverStateRenderer(Widget):
   @property
   def should_draw(self):
     return (self._should_draw and ui_state.sm["selfdriveState"].alertSize == AlertSize.none and
+            (not ui_state.is_onroad() or not ui_state.sm["driverMonitoringState"].dm2Disabled) and
             ui_state.sm.recv_frame["driverStateV2"] > ui_state.started_frame)
 
   def set_force_active(self, force_active: bool):

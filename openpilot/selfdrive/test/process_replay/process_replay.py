@@ -422,11 +422,52 @@ class MessageBasedRcvCallback:
     return ((frame - 1) == 0 and self.first_frame) or msg.which() == self.trigger_msg_type
 
 
+class DriverMonitoringRcvCallback:
+  """Follow driver frames, with a 20 Hz route-input fallback when they stop."""
+  TIMEOUT_NS = int(0.05 * 1e9)
+
+  def __init__(self, initial_driver_time=None):
+    self.last_driver_time = initial_driver_time
+    self.last_trigger_time = None
+
+  def __call__(self, msg, cfg, frame):
+    msg_type = msg.which()
+    event_time = msg.logMonoTime
+    if msg_type == "driverStateV2":
+      self.last_driver_time = event_time
+      self.last_trigger_time = event_time
+      return True
+
+    if msg_type not in ("modelV2", "carState"):
+      return False
+
+    driver_stale = self.last_driver_time is None or event_time - self.last_driver_time > self.TIMEOUT_NS
+    cadence_due = self.last_trigger_time is None or event_time - self.last_trigger_time >= self.TIMEOUT_NS
+    if driver_stale and cadence_due:
+      self.last_trigger_time = event_time
+      return True
+    return False
+
+
 def selfdrived_config_callback(params, cfg, lr):
   ublox = params.get_bool("UbloxAvailable")
   sub_keys = ({"gpsLocation", } if ublox else {"gpsLocationExternal", })
 
   cfg.pubs = set(cfg.pubs) - sub_keys
+
+
+def dmonitoringd_config_callback(params, cfg, lr):
+  first_input_time = next((msg.logMonoTime for msg in lr
+                           if msg.which() in ("driverStateV2", "modelV2", "carState")), None)
+  first_driver_time = next((msg.logMonoTime for msg in lr if msg.which() == "driverStateV2"), None)
+  initial_driver_time = None
+  if (params.get_bool("DriverMonitoringEnabled") and not params.get_bool("DriverMonitoringSessionDisabled") and
+      first_input_time is not None and first_driver_time is not None and
+      first_driver_time - first_input_time <= DriverMonitoringRcvCallback.TIMEOUT_NS):
+    # Avoid an extra fallback cycle when an enabled route begins with the road
+    # model a few milliseconds before its first driver-model output.
+    initial_driver_time = first_driver_time
+  cfg.should_recv_callback = DriverMonitoringRcvCallback(initial_driver_time)
 
 
 CONFIGS = [
@@ -514,10 +555,14 @@ CONFIGS = [
   ),
   ProcessConfig(
     proc_name="dmonitoringd",
-    pubs=["driverStateV2", "liveCalibration", "carState", "modelV2", "selfdriveState"],
+    pubs=["driverStateV2", "liveCalibration", "carState", "carControl", "modelV2", "selfdriveState"],
     subs=["driverMonitoringState"],
     ignore=["logMonoTime"],
-    should_recv_callback=MessageBasedRcvCallback("driverStateV2"),
+    config_callback=dmonitoringd_config_callback,
+    should_recv_callback=DriverMonitoringRcvCallback(),
+    # dm2d polls modelV2 under REPLAY. A driver/carState fallback cycle releases
+    # this receive empty to reproduce its bounded update timeout.
+    main_pub="modelV2",
     tolerance=NUMPY_TOLERANCE,
   ),
   ProcessConfig(
@@ -751,6 +796,8 @@ def generate_params_config(lr=None, CP=None, fingerprint=None, custom_params=Non
     "OpenpilotEnabledToggle": True,
     "DisengageOnAccelerator": True,
     "DisableLogging": False,
+    "DriverMonitoringEnabled": True,
+    "DriverMonitoringSessionDisabled": False,
   }
 
   if custom_params is not None:
@@ -760,6 +807,10 @@ def generate_params_config(lr=None, CP=None, fingerprint=None, custom_params=Non
     params_dict["UbloxAvailable"] = has_ublox
     is_rhd = next((msg.driverMonitoringState.isRHD for msg in lr if msg.which() == "driverMonitoringState"), False)
     params_dict["IsRhdDetected"] = is_rhd
+    if custom_params is None or "DriverMonitoringSessionDisabled" not in custom_params:
+      dm_disabled = next((msg.driverMonitoringState.dm2Disabled for msg in lr
+                          if msg.which() == "driverMonitoringState" and msg.valid), False)
+      params_dict["DriverMonitoringSessionDisabled"] = dm_disabled
 
   if CP is not None:
     if fingerprint is None:

@@ -34,6 +34,50 @@ class TestManager:
   def test_duplicate_procs(self):
     assert len(procs) == len(managed_processes), "Duplicate process names"
 
+  def test_driver_monitoring_setting_and_session_disable_stop_only_model(self):
+    CP = car.CarParams.new_message()
+    params = Params()
+    params.put_bool("IsDriverViewEnabled", False)
+    params.put_bool("DriverMonitoringEnabled", True)
+
+    params.remove("DriverMonitoringSessionDisabled")
+    assert managed_processes["dmonitoringmodeld"].should_run(True, params, CP)
+    assert managed_processes["dmonitoringd"].should_run(True, params, CP)
+
+    params.put_bool("DriverMonitoringSessionDisabled", True)
+    assert not managed_processes["dmonitoringmodeld"].should_run(True, params, CP)
+    assert managed_processes["dmonitoringd"].should_run(True, params, CP)
+    assert not managed_processes["dmonitoringmodeld"].should_run(False, params, CP)
+    assert not managed_processes["dmonitoringd"].should_run(False, params, CP)
+
+    params.remove("DriverMonitoringSessionDisabled")
+    params.put_bool("DriverMonitoringEnabled", False)
+    assert not managed_processes["dmonitoringmodeld"].should_run(True, params, CP)
+    assert managed_processes["dmonitoringd"].should_run(True, params, CP)
+
+    params.put_bool("IsDriverViewEnabled", True)
+    assert managed_processes["dmonitoringmodeld"].should_run(False, params, CP)
+    assert managed_processes["dmonitoringd"].should_run(False, params, CP)
+
+  def test_ignition_reset_stops_dm_writer_before_clearing_session_params(self, monkeypatch):
+    events = []
+
+    class FakeDmProcess:
+      def stop(self, block=True):
+        events.append(("stop", block))
+
+    class FakeParams:
+      def clear_all(self, flag):
+        events.append(("clear", flag))
+
+    monkeypatch.setitem(manager.managed_processes, "dmonitoringd", FakeDmProcess())
+    manager.clear_ignition_on_params(FakeParams())
+
+    assert events == [
+      ("stop", True),
+      ("clear", manager.ParamKeyFlag.CLEAR_ON_IGNITION_ON),
+    ]
+
   def test_wide_youtube_encoder_requires_wide_camera(self):
     class FakeParams:
       def __init__(self, use_wide_camera):

@@ -68,6 +68,20 @@ test("normalizing replaces the legacy flat grouping", () => {
   assert.equal(catalog.items_by_group.LEGACY, undefined);
 });
 
+test("normalizing preserves search-only items referenced by the menu", () => {
+  const raw = createCatalog();
+  raw.categories[0].groups[0].sections[0].items.push("DriverMonitoringEnabled");
+  raw.items_by_group.LEGACY.push({
+    name: "DriverMonitoringEnabled",
+    default: 1,
+    search_only: true,
+  });
+
+  const catalog = normalizeSettingsCatalog(raw);
+  const item = catalog.items_by_group.SPEED.find((entry) => entry.name === "DriverMonitoringEnabled");
+  assert.equal(item.search_only, true);
+});
+
 test("commit normalizes once and reports whether anything changed", () => {
   const state = createSettingsCatalogState();
   const raw = createCatalog();

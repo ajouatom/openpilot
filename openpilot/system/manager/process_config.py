@@ -77,6 +77,10 @@ def and_(*fns):
 def enable_dm(started, params, CP: car.CarParams) -> bool:
   return started or params.get_bool("IsDriverViewEnabled")
 
+def enable_dm_model(started, params, CP: car.CarParams) -> bool:
+  return (started and params.get_bool("DriverMonitoringEnabled") and
+          not params.get_bool("DriverMonitoringSessionDisabled")) or params.get_bool("IsDriverViewEnabled")
+
 #def enable_connect(started, params, CP: car.CarParams) -> bool:
 #  return params.get_int("EnableConnect") > 0
 
@@ -151,7 +155,7 @@ procs = [
 
   PythonProcess("modeld", "openpilot.selfdrive.modeld.modeld", only_onroad),
   PythonProcess("jetlinkd", "openpilot.selfdrive.modeld.jetlink.daemon", always_run, enabled=TICI, restart_if_crash=True),
-  PythonProcess("dmonitoringmodeld", "openpilot.selfdrive.modeld.dmonitoringmodeld", enable_dm, enabled=(WEBCAM or not PC)),
+  PythonProcess("dmonitoringmodeld", "openpilot.selfdrive.modeld.dmonitoringmodeld", enable_dm_model, enabled=(WEBCAM or not PC)),
   PythonProcess("sensord", "openpilot.system.sensord.sensord", only_onroad, enabled=not PC),
   PythonProcess("ui", "openpilot.selfdrive.ui.ui", always_run, restart_if_crash=True),
   PythonProcess("soundd", "openpilot.selfdrive.ui.soundd", driverview),
