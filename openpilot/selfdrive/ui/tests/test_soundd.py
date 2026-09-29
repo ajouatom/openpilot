@@ -119,6 +119,7 @@ class TestSoundd:
   def test_radar_alert_sound_assets(self):
     expected = {
       AudibleAlert.radarCutin: ("prompt.wav", 1.506),
+      AudibleAlert.systemReady: ("prompt.wav", 1.506),
     }
     sound_dir = os.path.join(BASEDIR, "openpilot", "selfdrive", "assets", "sounds_eng")
 
@@ -129,6 +130,26 @@ class TestSoundd:
         assert sound.getsampwidth() == 2
         assert sound.getframerate() == 48000
         assert abs(sound.getnframes() / sound.getframerate() - duration) < 0.001
+
+  def test_ready_chime_plays_once_and_warning_interrupts_it(self):
+    soundd = Soundd.__new__(Soundd)
+    soundd.current_alert = AudibleAlert.none
+    soundd.current_alert_type = ''
+    soundd.current_sound_frame = 0
+    soundd.current_volume = 0.2
+    soundd.loaded_sounds = {
+      AudibleAlert.systemReady: np.ones(4, dtype=np.float32),
+      AudibleAlert.warningImmediate: np.ones(4, dtype=np.float32),
+    }
+    soundd.update_alert(AudibleAlert.systemReady, 'systemReady/permanent')
+    soundd.update_alert(AudibleAlert.none)
+    np.testing.assert_allclose(soundd.get_sound_data(4), .2)
+    np.testing.assert_allclose(soundd.get_sound_data(4), 0.)
+    soundd.update_alert(AudibleAlert.none)
+    soundd.update_alert(AudibleAlert.systemReady, 'systemReady/permanent')
+    soundd.get_sound_data(1)
+    soundd.update_alert(AudibleAlert.warningImmediate, 'driverDistracted3/permanent')
+    np.testing.assert_allclose(soundd.get_sound_data(4), 1.)
 
   def test_completed_one_shot_alert_returns_to_none(self):
     soundd = Soundd.__new__(Soundd)
