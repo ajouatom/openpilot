@@ -1,9 +1,19 @@
 # Driver monitoring
 
-`DriverMonitoringMode` defaults to `0: Standard`; select `1: Experimental` separately. Mode changes apply live at roughly half-second intervals without rebooting. Switching preserves accumulated monitoring time, warning counts and lockout, and ends the previous interaction grace and forward-attention streak. Old `DisableDM` values do not opt into experimental monitoring.
+`DriverMonitoringEnabled` defaults to ON and saves your choice across drives and restarts. While monitoring is enabled, `DriverMonitoringMode` defaults to `0: Standard`; select `1: Experimental` separately. Mode changes apply live at roughly half-second intervals without rebooting. Switching preserves accumulated monitoring time, warning counts and lockout, and ends the previous interaction grace and forward-attention streak. Old `DisableDM` values do not opt into experimental monitoring.
 
 > [!CAUTION]
-> Experimental mode may violate applicable law. Use only for experiments in a controlled test environment. The times below are implementation choices, not statutory allowances or certification. Even mode 0 uses different timing from stock comma when camera monitoring is unavailable.
+> Leave driver monitoring ON. Turning it off removes driver-monitoring alerts, force deceleration, and lockout, and may violate applicable laws or driving requirements depending on where and how the vehicle is used. Experimental mode may also violate applicable law; use it only for experiments in a controlled test environment. The times below are implementation choices, not statutory allowances or certification. Even mode 0 uses different timing from stock comma when camera monitoring is unavailable.
+
+## Enabling and disabling monitoring
+
+`DriverMonitoringEnabled` is on by default and appears only through Carrot Web setting search. Search for `DriverMonitoringEnabled` to find it. The OFF option is intended for an absent or failed DM camera; leaving the default ON unchanged is recommended. With monitoring on, an unavailable camera automatically uses interaction monitoring. Turning the setting off stops use of the driver-monitoring model and policy during normal driving, including interaction monitoring, driver-monitoring alerts, monitoring-triggered force deceleration, and lockout. Driver View may still run the model solely for face preview, while alert, deceleration, and lockout enforcement remains neutral. It does not change the selected `DriverMonitoringMode` or the independent `CarrotVisionEnabled` road-video setting.
+
+Regardless of gear or speed, including at standstill, three presses of the physical vehicle CANCEL button within three seconds turn driver monitoring off. Gear and speed changes do not reset the count. Each count requires a new press after release. A held button, repeated CAN packets, Bluetooth remote CANCEL, and a vehicle echo of an automatic control CANCEL request do not count. Any received non-CANCEL vehicle-button event, whether a press or release, resets the sequence. Invalid or stale vehicle state, an input-stream gap, or allowing three seconds to pass from the first CANCEL also resets it. On stock-ACC configurations, an automatic speed-button echo may conservatively reset progress because it cannot be distinguished from intervening physical input.
+
+Echo filtering uses a short correlation window immediately after an automatic cancellation request and briefly suppresses its paired release. Hyundai/Kia/Genesis openpilot longitudinal control bypasses this filter because its internal cancellation level can stay high even though that path does not transmit a CANCEL button; the internal level therefore cannot hide the first physical press. On stock longitudinal control and other filtered paths, a physical CANCEL press interleaved with an actual echo may still be ignored, or the following press may need one extra release and press; this favors avoiding an unintended DM shutdown.
+
+The three-CANCEL gesture turns monitoring off only for the current ignition session and does not change the saved `DriverMonitoringEnabled` setting. The next ignition-on or manager/device restart clears only this temporary off state. Monitoring resumes under the saved `DriverMonitoringMode` if `DriverMonitoringEnabled` is ON. If you turned it OFF in Carrot Web, it remains OFF across drives and restarts until you manually turn that setting back ON.
 
 ## Four operating cases
 
@@ -67,7 +77,7 @@ Vehicle speed buttons are excluded where stock ACC uses automatic speed-button i
 
 ## Terminal warnings and web video
 
-Once a terminal alert is reached, input, forward attention or context changes alone cannot clear it. Existing deceleration requests and lockout remain while driving. This does not introduce guaranteed emergency stopping, and stock ACC cannot be assumed to execute equivalent deceleration.
+While driver monitoring is on, ordinary input, forward attention, and context changes alone cannot clear a terminal alert. Existing deceleration requests and lockout remain while driving. Turning monitoring off with the three-CANCEL sequence blocks the normal-driving model, alerts, monitoring-triggered force deceleration, and lockout together. The Driver View face-preview exception does not change this neutral enforcement state. This feature does not introduce guaranteed emergency stopping, and stock ACC cannot be assumed to execute equivalent deceleration.
 
 **One continuous second of valid Park, standstill and disengaged status** resets accumulated warnings and the usage restriction. This exception to stock comma behavior applies in both modes with or without a camera. Engagement remains manual after parking, and monitoring continues.
 

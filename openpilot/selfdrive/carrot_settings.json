@@ -425,6 +425,7 @@
           "en": "Driver Monitor",
           "zh": "驾驶员监控",
           "params": [
+            "DriverMonitoringEnabled",
             "DriverMonitoringMode",
             "CarrotVisionEnabled",
             "MuteDoor",
@@ -1961,6 +1962,25 @@
       "unit": 1,
       "control": "toggle",
       "risk": "high"
+    },
+    {
+      "group": "시작",
+      "name": "DriverMonitoringEnabled",
+      "title": "운전자 감시 사용 (예외 설정)",
+      "descr": "기본값은 켜짐이며 그대로 두는 것을 권장합니다. 이 예외 옵션은 DM 카메라가 없거나 고장 나서 정상 운전자 감시를 사용할 수 없는 장치를 위한 것입니다. 끄면 일반 주행의 DM 모델과 경고, 감시로 인한 강제 감속 및 재사용 제한이 비활성화됩니다. 운전자 감시 없이 운행하면 지역 법규, 차량 요건 또는 사용 조건을 위반할 수 있으므로 적용 요건과 안전 책임을 확인한 경우에만 끄세요.",
+      "egroup": "START",
+      "etitle": "Enable Driver Monitoring (Exception)",
+      "edescr": "Enabled by default, and leaving it enabled is recommended. This exception is intended only for devices without a DM camera or with a failed DM camera that cannot provide normal driver monitoring. Turning it off disables the normal-driving DM model and alerts, monitoring-triggered force deceleration, and lockout. Driving without driver monitoring may violate applicable laws, vehicle requirements, or terms of use; turn it off only after checking the requirements and accepting the safety responsibility.",
+      "cgroup": "启动设置",
+      "ctitle": "启用驾驶员监控（例外设置）",
+      "cdescr": "默认开启，建议保持开启。此例外选项仅供未安装 DM 摄像头，或 DM 摄像头故障而无法正常进行驾驶员监控的设备使用。关闭后，正常行驶时的 DM 模型与警告、监控触发的强制减速及锁定都会停用。未启用驾驶员监控时驾驶，可能违反所在地法律、车辆要求或使用条件；请仅在确认适用要求并承担安全责任后关闭。",
+      "min": 0,
+      "max": 1,
+      "default": 1,
+      "unit": 1,
+      "control": "toggle",
+      "risk": "high",
+      "search_only": true
     },
     {
       "group": "시작",

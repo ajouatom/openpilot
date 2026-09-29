@@ -67,6 +67,39 @@
   lock/release transitions so a cleared saved flag cannot relock on DM restart.
   Desktop tests do not validate actual parking. See docs/driver_monitoring_dm2.md.
 
+- On 2026-09-28, the user requested a manual DM switch triggered by three
+  distinct physical vehicle CANCEL presses,
+  each separated by a release, within three seconds. Held/repeated packets, BT
+  CANCEL and automatic-control CANCEL echoes do not count. Another received
+  non-CANCEL button event, invalid/stale state, input-stream gap or timeout resets
+  progress. On 2026-09-29, the user removed all gear and speed restrictions:
+  every gear and standstill are eligible, and gear or speed changes alone do not
+  reset progress. Ambiguous stock-ACC speed-button echoes conservatively reset
+  progress because they cannot be distinguished from a physical intervening
+  press. The
+  cancel-echo filter correlates carControl requests rather than confirmed CAN
+  transmission, so a physical CANCEL overlapping that 150 ms window may be
+  conservatively ignored and must be pressed again. Hyundai/Kia/Genesis
+  openpilot-long bypasses this filter because its controller does not transmit
+  CANCEL buttons from that path even though the internal request level can stay
+  high; stock-long and other platforms retain the filter. Its paired-release
+  suppression expires after 0.5 seconds; an interleaved physical press/release
+  can therefore require one additional press without causing a false disable.
+  The gesture turns DM off only for the current ignition session. The later
+  2026-09-29 revision also retains DriverMonitoringEnabled as a persistent,
+  default-on switch exposed only through Carrot Web search. It is intended for
+  absent or failed DM cameras; recommend leaving it on, and explain that turning
+  DM off may violate applicable laws or driving requirements without claiming
+  universal illegality. The next ignition-on or manager/device restart clears
+  only DriverMonitoringSessionDisabled; a saved Web OFF stays off until the
+  user manually enables DriverMonitoringEnabled again. Disabled DM
+  stops the model during normal onroad operation and gates alerts, monitoring
+  force deceleration and lockout while retaining a neutral state heartbeat.
+  Driver View may run the model only for face preview while enforcement remains
+  neutral. Keep DriverMonitoringMode and CarrotVisionEnabled independent;
+  DisableDM remains migration-only. Desktop tests do not establish vehicle
+  validation. See docs/driver_monitoring_dm2.md and both localized DM guides.
+
 - On 2026-09-28, the user authorized automatic Git update/reboot after failed
   builds or manager startup, waiting through network loss. The launcher owns a
   standalone recovery display and releases its build lock before recovery Git.

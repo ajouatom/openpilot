@@ -1513,11 +1513,18 @@ function highlightSettingSearchText(text, query) {
 async function selectSettingSearchEntry(entry) {
   try {
     const detailParent = String(entry.detailParent || "");
-    pendingSettingFocus = { group: entry.group, name: entry.name };
     if (entry.source === "profile" && entry.profileId && entry.originalGroup) {
       settingProfileSectionExpandedState.set(`${entry.profileId}:${entry.originalGroup}`, true);
     }
     closeSettingSearchPanel({ syncHistory: false });
+    if (entry.searchOnly) {
+      // This row is intentionally absent from its normal group. Render the
+      // matching live control in the inline-search virtual group instead.
+      await applySettingInlineSearch(entry.name);
+      focusSettingItem(entry.name);
+      return;
+    }
+    pendingSettingFocus = { group: entry.group, name: entry.name };
     if (CURRENT_GROUP === entry.group && !CURRENT_SETTING_DETAIL && screenItems && screenItems.style.display !== "none") {
       focusSettingItem(entry.name);
       return;

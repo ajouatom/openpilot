@@ -376,6 +376,8 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"MaxTimeOffroadMin", {PERSISTENT, INT, "60"}},
 
     {"DisableDM", {PERSISTENT, INT, "0"}},  // retired; read only for one-time streaming migration
+    {"DriverMonitoringEnabled", {PERSISTENT, BOOL, "1"}},
+    {"DriverMonitoringSessionDisabled", {CLEAR_ON_MANAGER_START | CLEAR_ON_IGNITION_ON, BOOL}},
     {"DriverMonitoringMode", {PERSISTENT, INT, "0"}},
     {"CarrotVisionEnabled", {PERSISTENT, BOOL, "0"}},
     {"MuteDoor", {PERSISTENT, INT, "0"}},
