@@ -105,3 +105,56 @@ feedback semantics solely on this correlation. Existing captures identify the
 camera state transition and remaining inconsistent feedback, but not the
 camera's internal reason for rejecting/disengaging. No runtime change was made.
 Private scripts and evidence: `.analysis/archive/2026-09-29/gv70-cause/`.
+
+## Matched conditions and negative controls (2026-09-29)
+
+The two captures have the same observed warning signature, not merely the same
+cluster appearance: FCA_SYSWARN 0->1, VALUE63 0->15, LKA_ACTIVE 3->0,
+LKA_MODE 2->7->2, and HDA_InfoPUDis=3. This supports treating them as recurrence
+of the same camera-side event family, without establishing identical ECU DTCs.
+
+Clarification: selfdrive/longitudinal disengagement is **not lateral shutdown**.
+At all six short camera request-off/re-enable cycles below, carControl has
+`enabled=false, latActive=true, longActive=false`, original TCS ACC_REQ=0,
+and vehicle-bound LFA STEER_REQ=1. Camera-bound MDPS mirrors the camera request
+while actual MDPS remains active. This mixed state also occurs without warning.
+
+| Capture / re-enable time | Warning within 200 ms | Speed km/h | Brake pressed | Steering torque, decoded DBC units | MDPS active feedback delay ms |
+| --- | --- | --- | --- | --- | --- |
+| Previous +7.498 s | No | 47.1 | Yes | -241 | 4.42 |
+| Previous +9.487 s | No | 38.0 | No | -188 | 5.07 |
+| Previous +10.607 s | Yes | 36.7 | No | -206 | 4.25 |
+| Previous +15.287 s | No | 35.5 | No | -142 | 4.91 |
+| Current +34.166 s | Yes | 71.5 | Yes | -389 | 5.98 |
+| Current +59.807 s | No | 47.2 | No | -262 | 5.76 |
+
+Values are sampled at camera request re-enable, not at warning onset. Torque
+is not labelled N m: these DBC column-torque units must not be assumed physical
+units. All six have both blinkers off. Braking at that instant, a single speed
+threshold, torque magnitude, camera icon state, and MDPS feedback latency do
+not separate the two warnings from all four non-warning cases. This does not
+rule out history-dependent or combined conditions.
+
+For the interval from 200 ms before request-off to 50 ms after re-enable, both
+warning cases have camera-bound button counters with fifteen +1 steps and one
++2 step (current has fourteen +1 and one +2); input has the same patterns in
+those cases. There are no extra outgoing repeats or +3 steps in these windows.
+Current warning-window MDPS steps are all +1, with max host-publication gap
+13.13 ms; its non-warning comparison is 12.43 ms. Prior warning-window max is
+14.56 ms versus up to 14.94 ms in a non-warning window. No exceptional transport
+stall or button-counter anomaly distinguishes the warning onset here.
+
+Additional same-revision GV70 segment `000002f0--aa7506f9ed--3` has no camera
+warning, popup or short request-off/re-enable cycle. Its speed is 0..18.7 km/h,
+with 24.98 seconds of lateral-only control and the rest fully inactive. It is
+a low-speed non-warning comparison, not a matched validation of the suspected
+higher-speed transition. Do not infer a speed threshold from it.
+
+Next comparison should preserve separate clocks and states for actual EPS,
+camera command, modified EPS feedback, brake/ACC, and camera warning, and
+collect diagnostic reason information around a naturally recurring event.
+These offline observations do not justify changing the active-bit semantics,
+forcing the camera enabled, or suppressing the warning. Any target-side A/B
+needs a concrete test scope and independent assessment of steering effects;
+no such deployment or runtime modification was performed in this analysis.
+Private reproduction: `.analysis/archive/2026-09-29/gv70-conditions/`.
