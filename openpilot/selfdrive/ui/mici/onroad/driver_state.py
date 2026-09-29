@@ -1,15 +1,20 @@
+import time
 import pyray as rl
 import numpy as np
 import math
 from openpilot.cereal import log
 from openpilot.common.filter_simple import FirstOrderFilter
-from openpilot.system.ui.lib.application import gui_app
+from openpilot.system.ui.lib.application import gui_app, FontWeight
+from openpilot.system.ui.lib.text_draw import draw_text_ui_style
 from openpilot.system.ui.widgets import Widget
 from openpilot.selfdrive.ui.ui_state import ui_state
 
 AlertSize = log.SelfdriveState.AlertSize
 
 DEBUG = False
+
+TIMER_FONT_SIZE = 30
+TIMER_COLOR = rl.Color(255, 255, 0, 255)
 
 LOOKING_CENTER_THRESHOLD_UPPER = math.radians(6)
 LOOKING_CENTER_THRESHOLD_LOWER = math.radians(3)
@@ -48,6 +53,9 @@ class DriverStateRenderer(Widget):
     self._rotation_filter = FirstOrderFilter(0.0, 0.1, 1 / gui_app.target_fps, initialized=False)
     self._looking_center_filter = FirstOrderFilter(0.0, 0.1, 1 / gui_app.target_fps)
 
+    self._font_timer: rl.Font = gui_app.font(FontWeight.BLACK)
+    self._timer_text = ""
+
     # Load the driver face icons
     self.load_icons()
 
@@ -74,7 +82,8 @@ class DriverStateRenderer(Widget):
   @property
   def should_draw(self):
     return (self._should_draw and ui_state.sm["selfdriveState"].alertSize == AlertSize.none and
-            ui_state.sm.recv_frame["driverStateV2"] > ui_state.started_frame)
+            ui_state.sm.recv_frame["driverStateV2"] > ui_state.started_frame and
+            not ui_state.dm_quiet and ui_state.dm_pause_until <= time.monotonic())
 
   def set_force_active(self, force_active: bool):
     """Force the dmoji to always appear active (green) regardless of actual state"""
@@ -145,6 +154,16 @@ class DriverStateRenderer(Widget):
           f.update(target)
           self._draw_line(angle, f, self._looking_center)
 
+    if self._timer_text and self._should_draw and ui_state.sm["selfdriveState"].alertSize == AlertSize.none and not ui_state.dm_quiet:
+      if self._is_rhd:
+        draw_text_ui_style(self._timer_text, 8, gui_app.height - 8, TIMER_FONT_SIZE, TIMER_COLOR,
+                           font=self._font_timer, border_width=2.0, shadow_offset=0.0,
+                           align="left_bottom", y_offset=0.0)
+      else:
+        draw_text_ui_style(self._timer_text, gui_app.width - 8, gui_app.height - 8, TIMER_FONT_SIZE, TIMER_COLOR,
+                           font=self._font_timer, border_width=2.0, shadow_offset=0.0,
+                           align="right_bottom", y_offset=0.0)
+
   def _draw_line(self, angle: int, f: FirstOrderFilter, grey: bool):
     line_length = self._rect.width / 6
     line_length = round(np.interp(f.x, [0.0, 1.0], [0, line_length]))
@@ -179,6 +198,9 @@ class DriverStateRenderer(Widget):
     return driver_data
 
   def _update_state(self):
+    remaining = ui_state.dm_pause_until - time.monotonic()
+    self._timer_text = f"{int(remaining // 3600)}:{int((remaining % 3600) // 60):02d}" if remaining > 0 else ""
+
     # Get monitoring state
     driver_data = self.get_driver_data()
     driver_orient = driver_data.faceOrientation

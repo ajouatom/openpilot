@@ -81,12 +81,14 @@ class UIState:
     # Core state variables
     self._realtime_params = TimedSnapshotCache(
       RealtimeUiParamSnapshot(),
-      lambda: read_realtime_ui_params(self.params),
+      lambda: read_realtime_ui_params(self.params, self.params_memory),
     )
     realtime_params = self._realtime_params.refresh(time.monotonic())
     self.is_metric: bool = realtime_params.is_metric
     self.is_release = self.params.get_bool("IsReleaseBranch")
     self.always_on_dm: bool = realtime_params.always_on_dm
+    self.dm_quiet: bool = realtime_params.dm_quiet
+    self.dm_pause_until: float = realtime_params.dm_pause_until
     self._record_audio_param: bool = realtime_params.record_audio
     self.started: bool = False
     self.ignition: bool = False
@@ -172,6 +174,8 @@ class UIState:
     self.recording_audio = self._record_audio_param and self.started
     self.is_metric = realtime_params.is_metric
     self.always_on_dm = realtime_params.always_on_dm
+    self.dm_quiet = realtime_params.dm_quiet
+    self.dm_pause_until = realtime_params.dm_pause_until
 
   def _update_status(self) -> None:
     if self.started and self.sm.updated["selfdriveState"]:

@@ -43,6 +43,12 @@ def get_text_draw_pos(font, text, x, y, font_size, align="center_bottom", y_offs
   elif align == "left_center":
     draw_x = x
     draw_y = y + y_offset - text_size.y * 0.5
+  elif align == "left_bottom":
+    draw_x = x
+    draw_y = (y + y_offset) - text_size.y
+  elif align == "right_bottom":
+    draw_x = x - text_size.x
+    draw_y = (y + y_offset) - text_size.y
   elif align == "center":
     draw_x = x - text_size.x * 0.5
     draw_y = y + y_offset - text_size.y * 0.5

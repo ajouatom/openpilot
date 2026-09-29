@@ -2,14 +2,19 @@
 import time
 import math
 
-from openpilot.cereal import car
+from openpilot.cereal import car, log
 import openpilot.cereal.messaging as messaging
 from openpilot.common.params import Params
 from openpilot.common.realtime import DT_DMON, Ratekeeper, config_realtime_process
+from openpilot.common.swaglog import cloudlog
 from openpilot.selfdrive.monitoring.config import experimental_mode
 from openpilot.selfdrive.carrot.bluetooth.model import CommandReader
 from openpilot.selfdrive.monitoring.dm2 import DriverMonitoring2
 from openpilot.selfdrive.monitoring.dm2_context import CameraAvailability, InteractionEdges, ObjectObservation, SteeringTouchEvidence, TrafficContext
+
+PAUSE_BRAKE_SECONDS = 10.0
+PAUSE_DURATION_SECONDS = 3 * 3600
+PAUSE_PARAM = "CarrotDmPauseUntil"
 
 
 def traffic_observations(radar):
@@ -57,6 +62,13 @@ def parked_reset_eligible(sm, now, demo=False):
           not state.enabled and not state.active)
 
 
+def read_pause_until(pause_params):
+  try:
+    return max(0.0, float(pause_params.get_float(PAUSE_PARAM)))
+  except Exception:
+    return 0.0
+
+
 def run_dm2(params, experimental):
   services = ['carState', 'selfdriveState', 'modelV2', 'radarState', 'liveCalibration', 'carParams', 'driverStateV2']
   # Like stock DM, use the polled service's frequency (20 Hz). SubMaster
@@ -66,8 +78,13 @@ def run_dm2(params, experimental):
   pm = messaging.PubMaster(['driverMonitoringState'])
   # carState is 100 Hz; conflating it to 20 Hz can lose a complete button press.
   input_sock = messaging.sub_sock('carState', conflate=False)
+  pause_params = Params("/dev/shm/params")
   dm = DriverMonitoring2(rhd_saved=params.get_bool("IsRhdDetected"), always_on=params.get_bool("AlwaysOnDM"),
                          experimental=experimental)
+  pause_until = read_pause_until(pause_params)
+  if pause_until > time.monotonic():
+    cloudlog.event("dm_pause_resumed", seconds=round(pause_until - time.monotonic(), 1))
+  brake_since = None
   traffic, inputs = TrafficContext(), InteractionEdges()
   bluetooth = CommandReader('attention')
   camera_health = CameraAvailability()
@@ -116,22 +133,54 @@ def run_dm2(params, experimental):
     if touch_edge:
       inputs.last_response = max(inputs.last_response, cs.steeringTouch.sampleMonoTime / 1e9)
       response = True
-    dm.configure_context(now, camera_ok, strict, clear)
-    if valid:
-      dm.record_interaction(inputs.last_response)
-    if camera_ok:
-      if sm.updated['driverStateV2'] and (valid or demo_mode):
-        dm.run_step(sm, demo=demo_mode)
-    elif valid:
-      dm.run_without_camera((response or touch_held) and valid, sm['selfdriveState'].enabled,
-                            cs.vEgo < dm.settings._ALERT_MIN_SPEED,
-                            cs.gearShifter not in (car.CarState.GearShifter.drive, car.CarState.GearShifter.low))
-    dm.update_parked_reset(now, parked_reset_eligible(sm, now, demo_mode))
-    packet = dm.get_state_packet(valid=valid or (demo_mode and camera_ok))
-    packet.driverMonitoringState.cameraUnavailable = not camera_ok
-    packet.driverMonitoringState.dm2Experimental = dm.experimental
-    packet.driverMonitoringState.dm2StrictTimeRemaining = max(0.0, traffic.strict_until - now)
-    packet.driverMonitoringState.dm2WheelTimeoutFactor = dm.wheel_factor
+    pause_active = now < pause_until
+    if not pause_active and pause_until > 0.0:
+      pause_until = 0.0
+      cloudlog.event("dm_pause_ended")
+    if pause_active:
+      brake_since = None
+    elif valid and cs.brakePressed and cs.gearShifter in (car.CarState.GearShifter.park, car.CarState.GearShifter.neutral):
+      if brake_since is None:
+        brake_since = now
+      elif now - brake_since >= PAUSE_BRAKE_SECONDS:
+        pause_until = now + PAUSE_DURATION_SECONDS
+        pause_params.put_float(PAUSE_PARAM, pause_until)
+        dm.reset_state()
+        traffic, inputs = TrafficContext(), InteractionEdges()
+        brake_since = None
+        pause_active = True
+        cloudlog.event("dm_pause_started", seconds=PAUSE_DURATION_SECONDS)
+    else:
+      brake_since = None
+    if pause_active:
+      packet = dm.get_state_packet(valid=valid)
+      state = packet.driverMonitoringState
+      state.alertLevel = log.DriverMonitoringState.AlertLevel.none
+      state.lockout = False
+      state.alwaysOnLockout = False
+      state.noResponseForceDecel = False
+      state.cameraUnavailable = False
+      state.visionPolicyState.uncertainOffroadAlertPercent = 0
+      state.dm2Experimental = dm.experimental
+      state.dm2StrictTimeRemaining = 0.0
+      state.dm2WheelTimeoutFactor = dm.wheel_factor
+    else:
+      dm.configure_context(now, camera_ok, strict, clear)
+      if valid:
+        dm.record_interaction(inputs.last_response)
+      if camera_ok:
+        if sm.updated['driverStateV2'] and (valid or demo_mode):
+          dm.run_step(sm, demo=demo_mode)
+      elif valid:
+        dm.run_without_camera((response or touch_held) and valid, sm['selfdriveState'].enabled,
+                              cs.vEgo < dm.settings._ALERT_MIN_SPEED,
+                              cs.gearShifter not in (car.CarState.GearShifter.drive, car.CarState.GearShifter.low))
+      dm.update_parked_reset(now, parked_reset_eligible(sm, now, demo_mode))
+      packet = dm.get_state_packet(valid=valid or (demo_mode and camera_ok))
+      packet.driverMonitoringState.cameraUnavailable = not camera_ok
+      packet.driverMonitoringState.dm2Experimental = dm.experimental
+      packet.driverMonitoringState.dm2StrictTimeRemaining = max(0.0, traffic.strict_until - now)
+      packet.driverMonitoringState.dm2WheelTimeoutFactor = dm.wheel_factor
     pm.send('driverMonitoringState', packet)
     if rk.frame % 40 == 0:
       dm.always_on = params.get_bool("AlwaysOnDM")

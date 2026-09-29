@@ -11,6 +11,7 @@ from pathlib import Path
 # while everything else is passed through to the shell/program unchanged.
 META_COMMAND_PREFIX = "::"
 SHELL_COMMAND_NAME = "carrot"
+ALIAS_COMMAND_NAME = "madmax"
 _CLI_MODULE = "selfdrive.carrot.server.terminal_commands.cli"
 _OPENPILOT_PACKAGE_ROOT = Path(__file__).resolve().parents[4]
 
@@ -37,8 +38,10 @@ def shell_function_definition() -> str:
   """Return a shell-native command backed by the same registered handlers."""
   pythonpath = shlex.quote(_pythonpath())
   module = shlex.quote(_CLI_MODULE)
-  return (
-    f"{SHELL_COMMAND_NAME}() {{ "
-    f"env PYTHONPATH={pythonpath} python3 -m {module} \"$@\"; "
-    f"}}; export -f {SHELL_COMMAND_NAME}"
-  )
+  parts = [
+    f"{SHELL_COMMAND_NAME}() {{ env PYTHONPATH={pythonpath} python3 -m {module} \"$@\"; }}",
+    f"export -f {SHELL_COMMAND_NAME}",
+    f"{ALIAS_COMMAND_NAME}() {{ {SHELL_COMMAND_NAME} {ALIAS_COMMAND_NAME} \"$@\"; }}",
+    f"export -f {ALIAS_COMMAND_NAME}",
+  ]
+  return "; ".join(parts)

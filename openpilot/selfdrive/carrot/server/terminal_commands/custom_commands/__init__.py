@@ -10,10 +10,11 @@ def load_commands() -> None:
     return
 
   from . import help as _help
+  from . import quiet as _quiet
   from . import vision_test as _vision_test
   from . import web_intro as _web_intro
   from . import web_lab as _web_lab
   from . import youtube_test as _youtube_test
 
-  del _help, _vision_test, _web_intro, _web_lab, _youtube_test
+  del _help, _quiet, _vision_test, _web_intro, _web_lab, _youtube_test
   _loaded = True

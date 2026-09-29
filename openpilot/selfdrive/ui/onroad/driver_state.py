@@ -1,13 +1,18 @@
+import time
 import numpy as np
 import pyray as rl
 from openpilot.cereal import log
 from dataclasses import dataclass
 from openpilot.selfdrive.ui import UI_BORDER_SIZE
 from openpilot.selfdrive.ui.ui_state import ui_state
-from openpilot.system.ui.lib.application import gui_app
+from openpilot.system.ui.lib.application import gui_app, FontWeight
+from openpilot.system.ui.lib.text_draw import draw_text_ui_style
 from openpilot.system.ui.widgets import Widget
 
 AlertSize = log.SelfdriveState.AlertSize
+
+TIMER_FONT_SIZE = 38
+TIMER_COLOR = rl.Color(255, 255, 0, 255)
 
 # Default 3D coordinates for face keypoints as a NumPy array
 DEFAULT_FACE_KPTS_3D = np.array([
@@ -72,6 +77,9 @@ class DriverStateRenderer(Widget):
     # Load the driver face icon
     self.dm_img = gui_app.texture("icons/driver_face.png", IMG_SIZE, IMG_SIZE)
 
+    self._font_timer: rl.Font = gui_app.font(FontWeight.BLACK)
+    self.timer_text = ""
+
     # Colors
     self.white_color = rl.Color(255, 255, 255, 255)
     self.arc_color = rl.Color(26, 242, 66, 255)
@@ -79,43 +87,63 @@ class DriverStateRenderer(Widget):
     self.disengaged_color = rl.Color(139, 139, 139, 255)
 
     self.set_visible(lambda: (ui_state.sm["selfdriveState"].alertSize == AlertSize.none and
-                              ui_state.sm.recv_frame["driverStateV2"] > ui_state.started_frame))
+                              ui_state.sm.recv_frame["driverStateV2"] > ui_state.started_frame and
+                              not ui_state.dm_quiet))
 
   def _render(self, rect):
-    # Set opacity based on active state
-    opacity = 0.65 if self.is_active else 0.2
+    # Keep the icon hidden while monitoring is deferred; the timer stays visible.
+    if ui_state.dm_pause_until <= time.monotonic():
+      # Set opacity based on active state
+      opacity = 0.65 if self.is_active else 0.2
 
-    # Draw background circle
-    rl.draw_circle(int(self.position_x), int(self.position_y), BTN_SIZE // 2, rl.Color(0, 0, 0, 70))
+      # Draw background circle
+      rl.draw_circle(int(self.position_x), int(self.position_y), BTN_SIZE // 2, rl.Color(0, 0, 0, 70))
 
-    # Draw face icon
-    icon_pos = rl.Vector2(self.position_x - self.dm_img.width // 2, self.position_y - self.dm_img.height // 2)
-    rl.draw_texture_v(self.dm_img, icon_pos, rl.Color(255, 255, 255, int(255 * opacity)))
+      # Draw face icon
+      icon_pos = rl.Vector2(self.position_x - self.dm_img.width // 2, self.position_y - self.dm_img.height // 2)
+      rl.draw_texture_v(self.dm_img, icon_pos, rl.Color(255, 255, 255, int(255 * opacity)))
 
-    # Draw face outline
-    self.white_color.a = int(255 * opacity)
-    rl.draw_spline_linear(self.face_lines, len(self.face_lines), 5.2, self.white_color)
+      # Draw face outline
+      self.white_color.a = int(255 * opacity)
+      rl.draw_spline_linear(self.face_lines, len(self.face_lines), 5.2, self.white_color)
 
-    # Set arc color based on engaged state
-    self.arc_color = self.engaged_color if ui_state.engaged else self.disengaged_color
-    self.arc_color.a = int(0.4 * 255 * (1.0 - self.dm_fade_state))  # Fade out when inactive
+      # Set arc color based on engaged state
+      self.arc_color = self.engaged_color if ui_state.engaged else self.disengaged_color
+      self.arc_color.a = int(0.4 * 255 * (1.0 - self.dm_fade_state))  # Fade out when inactive
 
-    # Draw arcs
-    if self.h_arc_data:
-      rl.draw_spline_linear(self.h_arc_lines, len(self.h_arc_lines), self.h_arc_data.thickness, self.arc_color)
-    if self.v_arc_data:
-      rl.draw_spline_linear(self.v_arc_lines, len(self.v_arc_lines), self.v_arc_data.thickness, self.arc_color)
+      # Draw arcs
+      if self.h_arc_data:
+        rl.draw_spline_linear(self.h_arc_lines, len(self.h_arc_lines), self.h_arc_data.thickness, self.arc_color)
+      if self.v_arc_data:
+        rl.draw_spline_linear(self.v_arc_lines, len(self.v_arc_lines), self.v_arc_data.thickness, self.arc_color)
+
+    if self.timer_text:
+      if self.is_rhd:
+        draw_text_ui_style(self.timer_text, self._rect.x + 8, self._rect.y + self._rect.height / 2, TIMER_FONT_SIZE,
+                           TIMER_COLOR, font=self._font_timer, border_width=2.0, shadow_offset=0.0,
+                           align="left_center", y_offset=0.0)
+      else:
+        draw_text_ui_style(self.timer_text, self._rect.x + self._rect.width - 8, self._rect.y + self._rect.height / 2,
+                           TIMER_FONT_SIZE, TIMER_COLOR, font=self._font_timer, border_width=2.0, shadow_offset=0.0,
+                           align="right_center", y_offset=0.0)
 
   def _update_state(self):
     """Update the driver monitoring state based on model data"""
     sm = ui_state.sm
     if not self.is_visible:
+      self.timer_text = ""
       return
 
     # Get monitoring state
     dm_state = sm["driverMonitoringState"]
     self.is_active = dm_state.activePolicy == log.DriverMonitoringState.MonitoringPolicy.vision
     self.is_rhd = dm_state.isRHD
+
+    remaining = ui_state.dm_pause_until - time.monotonic()
+    if remaining > 0:
+      self.timer_text = f"{int(remaining // 3600)}:{int((remaining % 3600) // 60):02d}"
+    else:
+      self.timer_text = ""
 
     # Update fade state (smoother transition between active/inactive)
     fade_target = 0.0 if self.is_active else 0.5

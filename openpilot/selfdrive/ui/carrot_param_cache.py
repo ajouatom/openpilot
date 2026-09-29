@@ -81,6 +81,8 @@ class RealtimeUiParamSnapshot:
   record_audio: bool = False
   is_metric: bool = False
   always_on_dm: bool = False
+  dm_quiet: bool = False
+  dm_pause_until: float = 0.0
 
 
 def read_border_params(params, params_memory) -> BorderParamSnapshot:
@@ -106,11 +108,19 @@ def read_border_params(params, params_memory) -> BorderParamSnapshot:
   )
 
 
-def read_realtime_ui_params(params) -> RealtimeUiParamSnapshot:
+def read_realtime_ui_params(params, params_memory=None) -> RealtimeUiParamSnapshot:
+  pause_until = 0.0
+  if params_memory is not None:
+    try:
+      pause_until = max(0.0, float(params_memory.get_float("CarrotDmPauseUntil")))
+    except Exception:
+      pause_until = 0.0
   return RealtimeUiParamSnapshot(
     record_audio=params.get_bool("RecordAudio"),
     is_metric=params.get_bool("IsMetric"),
     always_on_dm=params.get_bool("AlwaysOnDM"),
+    dm_quiet=params.get_bool("CarrotQuiet"),
+    dm_pause_until=pause_until,
   )
 
 

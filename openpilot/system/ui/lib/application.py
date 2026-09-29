@@ -112,6 +112,7 @@ class FontWeight(StrEnum):
   NORMAL = "Inter-Regular.fnt" if BIG_UI else "Inter-Medium.fnt"
   MEDIUM = "Inter-Medium.fnt"
   BOLD = "Inter-Bold.fnt"
+  BLACK = "Inter-Black.fnt"
   SEMI_BOLD = "Inter-SemiBold.fnt"
   PRETENDARD = "Pretendard-SemiBold.fnt"
   UNIFONT = "unifont.fnt"

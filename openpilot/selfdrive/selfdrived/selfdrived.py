@@ -79,6 +79,9 @@ class SelfdriveD:
     self.sensor_packets = ["accelerometer", "gyroscope"]
     self.use_wide_camera = bool(self.params.get("UseWideCamera", return_default=True))
     self.camera_packets = get_camera_packets(self.use_wide_camera)
+    self.dm_disabled = self.params.get_bool("CarrotQuiet")
+    self.dm_ignore_until_alive = False
+    self.dm_service_ignored = self.CP.notCar or SIMULATION or self.dm_disabled
 
     # TODO: de-couple selfdrived with card/conflate on carState without introducing controls mismatches
     self.car_state_sock = messaging.sub_sock('carState', timeout=20)
@@ -86,7 +89,7 @@ class SelfdriveD:
     ignore = self.sensor_packets + self.gps_packets + ['alertDebug']
     if SIMULATION:
       ignore += ['driverCameraState', 'managerState']
-    if self.CP.notCar or SIMULATION:
+    if self.dm_service_ignored:
       ignore += ['driverMonitoringState']
 
     if REPLAY:
@@ -248,7 +251,15 @@ class SelfdriveD:
       self.events.add(EventName.resumeBlocked)
 
     # Handle DM
-    if not self.CP.notCar:
+    dm_disabled = self.params.get_bool("CarrotQuiet")
+    if dm_disabled != self.dm_disabled:
+      self.dm_disabled = dm_disabled
+      # Wait for a fresh DM sample before re-enabling communication checks.
+      self.dm_ignore_until_alive = not dm_disabled
+    if self.dm_ignore_until_alive and self.sm.alive['driverMonitoringState']:
+      self.dm_ignore_until_alive = False
+    self.update_dm_service_ignore()
+    if not self.CP.notCar and not self.dm_disabled:
       if self.sm.all_checks(['driverMonitoringState']) and self.sm['driverMonitoringState'].cameraUnavailable:
         self.events.add(EventName.driverMonitorFallback)
       self.update_dm_lockout()
@@ -525,6 +536,19 @@ class SelfdriveD:
     if locked != self.dm_lockout_set:
       self.params.put_bool("DriverTooDistracted", locked)
       self.dm_lockout_set = locked
+
+  def update_dm_service_ignore(self) -> None:
+    # Keep an intentionally stopped DM service out of the global communication
+    # checks until it republishes after being turned back on.
+    ignored = self.CP.notCar or SIMULATION or self.dm_disabled or self.dm_ignore_until_alive
+    if ignored == self.dm_service_ignored:
+      return
+    self.dm_service_ignored = ignored
+    for ignore_list in (self.sm.ignore_alive, self.sm.ignore_average_freq, self.sm.ignore_valid):
+      if ignored and 'driverMonitoringState' not in ignore_list:
+        ignore_list.append('driverMonitoringState')
+      elif not ignored and 'driverMonitoringState' in ignore_list:
+        ignore_list.remove('driverMonitoringState')
 
   def update_reboot_alert(self):
     # One NNFF-style notice per onroad session, after startup alerts finish.
