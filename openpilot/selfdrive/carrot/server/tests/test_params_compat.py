@@ -84,6 +84,86 @@ def test_unregistered_fallback_does_not_hide_other_write_failures(tmp_path, monk
     params_service.set_param_value("FutureIntSetting", 1, int_setting())
 
 
+def test_web_params_cannot_write_internal_driver_monitoring_session_state():
+  with pytest.raises(ValueError, match="controlled internally"):
+    params_service.set_param_value("DriverMonitoringSessionDisabled", True, {"min": 0, "max": 1, "default": 0})
+
+
+@pytest.mark.parametrize(
+  ("enabled", "is_onroad", "clears_alert"),
+  ((False, False, True), (False, True, False), (True, False, False)),
+)
+def test_driver_monitoring_disable_clears_uncertain_alert_only_offroad(monkeypatch, enabled, is_onroad, clears_alert):
+  class FakeParams:
+    def __init__(self):
+      self.removed = []
+
+    def get_bool(self, key: str) -> bool:
+      assert key == "IsOnroad"
+      return is_onroad
+
+    def put_bool(self, key: str, value: bool) -> None:
+      assert (key, value) == ("DriverMonitoringEnabled", enabled)
+
+    def remove(self, key: str) -> None:
+      self.removed.append(key)
+
+  fake_params = FakeParams()
+  monkeypatch.setattr(params_service, "HAS_PARAMS", True)
+  monkeypatch.setattr(params_service, "Params", lambda: fake_params)
+  monkeypatch.setattr(params_service, "ParamKeyType", None)
+
+  params_service.set_param_value(
+    "DriverMonitoringEnabled",
+    enabled,
+    {"min": 0, "max": 1, "default": 1},
+  )
+
+  assert fake_params.removed == (["Offroad_DriverMonitoringUncertain"] if clears_alert else [])
+
+
+def test_failed_driver_monitoring_disable_does_not_clear_uncertain_alert(monkeypatch):
+  class BrokenParams:
+    removed = []
+
+    def put_bool(self, key: str, value: bool) -> None:
+      raise OSError("disk full")
+
+    def remove(self, key: str) -> None:
+      self.removed.append(key)
+
+  broken_params = BrokenParams()
+  monkeypatch.setattr(params_service, "HAS_PARAMS", True)
+  monkeypatch.setattr(params_service, "Params", lambda: broken_params)
+  monkeypatch.setattr(params_service, "ParamKeyType", None)
+
+  with pytest.raises(OSError, match="disk full"):
+    params_service.set_param_value(
+      "DriverMonitoringEnabled",
+      False,
+      {"min": 0, "max": 1, "default": 1},
+    )
+
+  assert broken_params.removed == []
+
+
+def test_restore_rejects_internal_driver_monitoring_session_state(monkeypatch):
+  # The internal-key branch does not need a native Params registry, but the
+  # preview API performs its environment check before iterating entries.
+  monkeypatch.setattr(params_service, "HAS_PARAMS", True)
+  monkeypatch.setattr(params_service, "ParamKeyType", object())
+  monkeypatch.setattr(params_service, "Params", object)
+  monkeypatch.setattr(params_service, "get_param_values", lambda names, defaults: {})
+
+  preview = params_service.preview_param_restore_values({"DriverMonitoringSessionDisabled": True})
+  assert preview["summary"] == {"changed": 0, "same": 0, "skipped": 0, "invalid": 1, "selected": 0}
+  assert preview["entries"][0]["reason"] == "controlled internally"
+  assert not preview["entries"][0]["apply"]
+
+  restored = params_service.restore_param_values_validated({"DriverMonitoringSessionDisabled": True})
+  assert restored["result"] == {"ok_cnt": 0, "fail_cnt": 0, "fails": []}
+
+
 def test_map_param_reader_reads_map_fps_file_while_native_registry_is_stale(tmp_path):
   stale_params = StaleParams(tmp_path)
   (tmp_path / "ClusterNaviMapFps").write_text("3", encoding="utf-8")

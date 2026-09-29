@@ -19,3 +19,8 @@ test("the inline search field carries its own icon and no title/hint", () => {
   assert.doesNotMatch(html, /settingInlineSearchLabel|settingInlineSearchHint/);
   assert.match(html, /id="settingInlineSearchInput"[^>]*aria-label="설정 찾기"/);
 });
+
+test("overlay search-only results are rendered through inline search", () => {
+  assert.match(settingJs, /if \(entry\.searchOnly\) \{[\s\S]*?await applySettingInlineSearch\(entry\.name\);[\s\S]*?focusSettingItem\(entry\.name\);[\s\S]*?return;/);
+  assert.match(settingJs, /pendingSettingFocus = \{ group: entry\.group, name: entry\.name \};/);
+});

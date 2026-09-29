@@ -93,7 +93,7 @@ def group_index(settings: Dict[str, Any]) -> Tuple[Dict[str, list], Dict[str, Di
       "group": g,
       "egroup": egroup,
       "cgroup": cgroup,
-      "count": sum(1 for item in items if not item.get("detail_parent")),
+      "count": sum(1 for item in items if not item.get("detail_parent") and not item.get("search_only")),
     })
 
   return groups, by_name, groups_list
@@ -162,7 +162,7 @@ def build_menu_categories(data: Dict[str, Any], by_name: Dict[str, Dict[str, Any
         1
         for section in sections
         for name in section["items"]
-        if not by_name[name].get("detail_parent")
+        if not by_name[name].get("detail_parent") and not by_name[name].get("search_only")
       )
       groups_out.append({**_label(grp), "id": grp.get("id"), "count": count, "sections": sections})
     cats.append({**_label(cat), "id": cat.get("id"), "groups": groups_out})
@@ -204,12 +204,18 @@ def filter_settings_catalog_for_brand(
     for item in items
     if item.get("detail_parent")
   }
+  search_only_names = {
+    str(item.get("name"))
+    for items in filtered_groups.values()
+    for item in items
+    if item.get("search_only")
+  }
   filtered_groups_list = [
     {
       **group,
       "count": sum(
         1 for item in filtered_groups.get(group.get("group"), [])
-        if not item.get("detail_parent")
+        if not item.get("detail_parent") and not item.get("search_only")
       ),
     }
     for group in groups_list
@@ -230,7 +236,7 @@ def filter_settings_catalog_for_brand(
           1
           for section in visible_sections
           for name in section["items"]
-          if name not in detail_names
+          if name not in detail_names and name not in search_only_names
         )
         if group["count"]:
           visible_groups.append(group)

@@ -83,6 +83,13 @@ class TestParams:
     self.params.put("IsMetric", False)
     assert not self.params.get_bool("IsMetric")
 
+  @pytest.mark.parametrize("flag", [ParamKeyFlag.CLEAR_ON_MANAGER_START, ParamKeyFlag.CLEAR_ON_IGNITION_ON])
+  def test_driver_monitoring_session_disable_clears_at_lifecycle_boundary(self, flag):
+    self.params.put_bool("DriverMonitoringSessionDisabled", True)
+    assert self.params.get_bool("DriverMonitoringSessionDisabled")
+    self.params.clear_all(flag)
+    assert not self.params.get_bool("DriverMonitoringSessionDisabled")
+
   def test_put_non_blocking_with_get_block(self):
     q = Params()
     def _delayed_writer():
