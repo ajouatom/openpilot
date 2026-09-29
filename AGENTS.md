@@ -1,5 +1,14 @@
 # Repository memory
 
+- On 2026-09-29, the user expanded the Carrot Web auto-update reboot sound request
+  to ordinary reboots. Use the stdlib-parent common/reboot.py helper for hardware,
+  manager, main Web tools and startup recovery: existing prompt.wav once before
+  reboot, separate audio child, four-second timeout, saved volume/mute respected.
+  Audio failure must not block reboot. Keep update eligibility and recovery policy
+  unchanged. Raw OS/factory-reset/standalone-recovery-web commands are not hooked.
+  Desktop tests do not establish physical speaker/reboot behavior. See
+  docs/reboot_sound_20260929.md.
+
 - On 2026-09-29, the user requested one onroad readiness sound at the first
   engageable state (no NO_ENTRY event), preferring an existing sound. Use
   prompt.wav once after 0.5 seconds of initialized, non-passive, onroad, healthy

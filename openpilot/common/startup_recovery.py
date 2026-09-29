@@ -7,6 +7,7 @@ import threading
 import time
 
 from openpilot.common.repo_update import child_lock_kwargs, recover_stale_index_lock, repo_lock
+from openpilot.common.reboot import reboot_device
 from openpilot.selfdrive.carrot.server.services.git_config import prepare_git_pull
 
 
@@ -50,12 +51,6 @@ def pull_current_branch(repo: Path) -> tuple[str, bool]:
   if git('rev-parse', 'HEAD') != target:
     raise RuntimeError('Local commits differ from the update. Resolve them in the recovery terminal.')
   return target, target != before
-
-
-def reboot_device():
-  if not (Path('/AGNOS').exists() or Path('/TICI').exists()):
-    raise RuntimeError('Device reboot is disabled on this computer.')
-  subprocess.run(['sudo', '-n', 'reboot'], check=True, capture_output=True, timeout=15)
 
 
 class RecoveryUpdate:
