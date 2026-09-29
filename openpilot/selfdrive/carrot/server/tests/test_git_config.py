@@ -226,6 +226,37 @@ def web_dispatcher(tmp_path, monkeypatch):
   return dispatcher, device, commands
 
 
+@pytest.mark.parametrize('api', ['job', 'sync'])
+@pytest.mark.parametrize('action', ['reboot', 'reset_calib', 'rebuild_all'])
+def test_web_reboots_use_chime_helper(web_dispatcher, monkeypatch, api, action):
+  dispatcher, _, _ = web_dispatcher
+  calls = []
+  real_popen = subprocess.Popen
+
+  def popen(argv, **kwargs):
+    if argv[0] == 'bash':
+      calls.append(('command', argv))
+      return None
+    return real_popen(argv, **kwargs)
+
+  monkeypatch.setattr(dispatcher, 'spawn_reboot', lambda **kw: calls.append(('reboot', kw)))
+  monkeypatch.setattr(dispatcher.subprocess, 'Popen', popen)
+  monkeypatch.setattr(dispatcher.os, 'remove', lambda path: None)
+
+  async def no_sleep(delay):
+    pass
+
+  monkeypatch.setattr(dispatcher.asyncio, 'sleep', no_sleep)
+  result = dispatch(dispatcher, api, action)
+  assert result['ok']
+  if action == 'rebuild_all':
+    assert calls == [('command', ['bash', '-lc',
+                                 'cd /data/openpilot && scons -c && rm -rf prebuilt && python3 -m openpilot.common.reboot'])]
+  else:
+    delay = {'delay': 1.0} if action == 'reset_calib' and api == 'sync' else {}
+    assert calls == [('reboot', delay)]
+
+
 def dispatch(dispatcher, api, action, **payload):
   if api == "job":
     job = {"id": "git-repair-test", "action": action, "payload": payload}

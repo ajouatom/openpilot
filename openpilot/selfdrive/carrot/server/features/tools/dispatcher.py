@@ -24,6 +24,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from aiohttp import web
 
 from openpilot.common.async_process import prepare_repo, run_locked_thread
+from openpilot.common.reboot import spawn_reboot
 from openpilot.common.repo_update import RepoBusyError, child_lock_kwargs, repo_lock
 from openpilot.system.hardware import HARDWARE
 
@@ -773,18 +774,18 @@ async def _run_tool_job(job: Dict[str, Any]) -> None:
           jobs.append(job, f"error removing {f}: {e}")
       jobs.finish(job, ok=True, result={"ok": True, "out": "calibration reset"})
       await asyncio.sleep(1)
-      subprocess.Popen(["sudo", "reboot"])
+      spawn_reboot()
       return
 
     if action == "reboot":
       jobs.progress(job, message="request reboot", current=1, total=1)
-      subprocess.Popen(["sudo", "reboot"])
+      spawn_reboot()
       jobs.finish(job, ok=True, result={"ok": True, "out": "reboot requested"})
       return
 
     if action == "rebuild_all":
       jobs.progress(job, message="rebuild all", current=1, total=1)
-      cmd = "cd /data/openpilot && scons -c && rm -rf prebuilt && sudo reboot"
+      cmd = "cd /data/openpilot && scons -c && rm -rf prebuilt && python3 -m openpilot.common.reboot"
       subprocess.Popen(["bash", "-lc", cmd])
       jobs.finish(job, ok=True, result={"ok": True, "out": "rebuild_all requested (clean + remove prebuilt + reboot)"})
       return
@@ -1235,15 +1236,15 @@ async def _dispatch_sync(request: web.Request, body: Dict[str, Any]) -> web.Resp
           pass
         except Exception as e:
           out_msg.append(f"error removing {f}: {e}")
-      subprocess.Popen(["bash", "-lc", "sleep 1 && sudo reboot"])
+      spawn_reboot(delay=1.0)
       return web.json_response({"ok": True, "out": "\n".join(out_msg) or "calibration reset"})
 
     if action == "reboot":
-      subprocess.Popen(["sudo", "reboot"])
+      spawn_reboot()
       return web.json_response({"ok": True, "out": "reboot requested"})
 
     if action == "rebuild_all":
-      cmd = "cd /data/openpilot && scons -c && rm -rf prebuilt && sudo reboot"
+      cmd = "cd /data/openpilot && scons -c && rm -rf prebuilt && python3 -m openpilot.common.reboot"
       subprocess.Popen(["bash", "-lc", cmd])
       return web.json_response({"ok": True, "out": "rebuild_all requested (clean + remove prebuilt + reboot)"})
 

@@ -87,7 +87,8 @@ class Tici(HardwareBase):
     return get_device_type()
 
   def reboot(self, reason=None):
-    subprocess.check_output(["sudo", "reboot"])
+    from openpilot.common.reboot import reboot_device
+    reboot_device()
 
   def uninstall(self):
     Path("/data/__system_reset__").touch()
