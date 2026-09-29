@@ -18,7 +18,7 @@ from openpilot.common.gps import get_gps_location_service
 from openpilot.selfdrive.car.car_specific import CarSpecificEvents
 from openpilot.selfdrive.locationd.helpers import PoseCalibrator, Pose
 from openpilot.selfdrive.selfdrived.camera_config import get_camera_packets
-from openpilot.selfdrive.selfdrived.events import Events, ET
+from openpilot.selfdrive.selfdrived.events import Events, ET, EmptyAlert
 from openpilot.selfdrive.selfdrived.helpers import ExcessiveActuationCheck
 from openpilot.selfdrive.selfdrived.state import StateMachine
 from openpilot.selfdrive.selfdrived.alertmanager import AlertManager, set_offroad_alert
@@ -138,6 +138,8 @@ class SelfdriveD:
     self.dm_uncertain_alerted = False
     self.dm_disabled_prev = False
     self.update_reboot_alerted = False
+    self.system_ready_alerted = False
+    self.system_ready_since = None
     self.big_model_loading = False
     self.big_model_active = False
     self.big_model_ready_t = 0.0
@@ -589,6 +591,25 @@ class SelfdriveD:
 
     return CS
 
+  def update_system_ready_alert(self, CS):
+    # Initialization can time out with unhealthy services. Require actual health
+    # and engageability for half a second, then wait for existing alerts to clear.
+    if self.system_ready_alerted or REPLAY or SIMULATION:
+      return
+    ready = (self.initialized and not self.CP.passive and self.sm['deviceState'].started
+             and CS.canValid and not CS.canTimeout and self.sm.all_checks()
+             and not self.events.contains(ET.NO_ENTRY))
+    if not ready:
+      self.system_ready_since = None
+      return
+    if self.system_ready_since is None:
+      self.system_ready_since = self.sm.frame
+    if (self.sm.frame - self.system_ready_since) * DT_CTRL < 0.5 or self.AM.current_alert is not EmptyAlert:
+      return
+    self.events.add(EventName.systemReady)
+    self.update_alerts(CS)
+    self.system_ready_alerted = True
+
   def update_alerts(self, CS):
     clear_event_types = set()
     if ET.WARNING not in self.state_machine.current_alert_types:
@@ -640,6 +661,8 @@ class SelfdriveD:
     if not self.CP.passive and self.initialized:
       self.enabled, self.active = self.state_machine.update(self.events)
     self.update_alerts(CS)
+
+    self.update_system_ready_alert(CS)
 
     self.publish_selfdriveState(CS)
 

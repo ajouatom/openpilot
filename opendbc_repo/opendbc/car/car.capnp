@@ -563,6 +563,7 @@ struct CarControl {
       nnff @34;
       radarCutin @35;
       radarStationaryLead @36;
+      systemReady @37;
     }
   }
 

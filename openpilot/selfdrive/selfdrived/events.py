@@ -561,6 +561,11 @@ EVENTS: dict[int, dict[str, Alert | AlertCallbackType]] = {
     ET.PERMANENT: NormalPermanentAlert(tr_noop("Driver camera unavailable"), tr_noop("Monitoring driver controls"), creation_delay=3.),
   },
 
+  EventName.systemReady: {
+    ET.PERMANENT: Alert("", "", AlertStatus.normal, AlertSize.none, Priority.LOWEST,
+                        VisualAlert.none, AudibleAlert.systemReady, 0.2),
+  },
+
   EventName.driverDistracted1: {
     ET.PERMANENT: Alert(
       "Pay Attention",

@@ -1,5 +1,13 @@
 # Repository memory
 
+- On 2026-09-29, the user requested one onroad readiness sound at the first
+  engageable state (no NO_ENTRY event), preferring an existing sound. Use
+  prompt.wav once after 0.5 seconds of initialized, non-passive, onroad, healthy
+  CAN/service readiness and after current alerts finish. systemReady is sound-only
+  and lowest priority; preserve warning precedence and normal user/ambient volume.
+  The latch lasts for selfdrived's onroad process lifetime. Desktop tests do not
+  establish vehicle speaker/timing validation. See docs/system_ready_sound_20260929.md.
+
 - On 2026-09-29, Ioniq 5 PE C4 ff1 segments 0/2 on 250f14ed showed startup
   DM inference/model readiness delay and a separate Jetlink 97.28 ms roundtrip
   causing one model input skip and transient downstream invalidity. Expected
