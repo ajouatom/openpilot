@@ -11,6 +11,7 @@ from openpilot.cereal.messaging import PubMaster, SubMaster
 from msgq.visionipc import VisionIpcClient, VisionStreamType, VisionBuf
 from openpilot.common.swaglog import cloudlog
 from openpilot.common.realtime import config_realtime_process
+from openpilot.common.runtime_diagnostics import RuntimeDiagnostics
 from openpilot.common.transformations.model import dmonitoringmodel_intrinsics
 from openpilot.common.transformations.camera import _ar_ox_fisheye, _os_fisheye
 from openpilot.system.camerad.cameras.nv12_info import get_nv12_info
@@ -135,8 +136,10 @@ def main():
   from openpilot.system.hardware import HARDWARE
   from openpilot.selfdrive.modeld.jetlink.phase import Gate
   phase_gate = Gate() if HARDWARE.get_device_type() == 'mici' else None
+  diagnostics = RuntimeDiagnostics('dmonitoringmodeld', cloudlog.event)
 
   while True:
+    loop_started, cpu_started = time.monotonic(), time.thread_time()
     if first_buf is not None:
       buf = first_buf
       first_buf = None
@@ -144,6 +147,7 @@ def main():
       buf = vipc_client.recv()
     if buf is None:
       continue
+    camera_received = time.monotonic()
 
     if model_transform is None:
       cam = _os_fisheye if buf.width == _os_fisheye.width else _ar_ox_fisheye
@@ -156,14 +160,27 @@ def main():
     t1 = time.perf_counter()
     if phase_gate is not None:
       phase_gate.wait(vipc_client.timestamp_sof)
+    phase_done = time.perf_counter()
+    inference_cpu_started = time.thread_time()
     model_output, gpu_execution_time = model.run(buf, calib, model_transform)
     t2 = time.perf_counter()
+    inference_cpu_ms = (time.thread_time() - inference_cpu_started) * 1000
     raw_pred = model_output.tobytes() if SEND_RAW_PRED else b''
     model_output = slice_outputs(model_output, model.output_slices)
     model_output = parse_model_output(model_output)
     model_output['raw_pred'] = raw_pred
     msg = get_driverstate_packet(model_output, vipc_client.frame_id, vipc_client.timestamp_sof, t2 - t1, gpu_execution_time)
     pm.send("driverStateV2", msg)
+    diagnostics.record(
+      context={'frame_id': vipc_client.frame_id},
+      camera_wait_ms=(camera_received-loop_started)*1000,
+      phase_wait_ms=(phase_done-t1)*1000,
+      inference_ms=(t2-phase_done)*1000,
+      inference_thread_cpu_ms=inference_cpu_ms,
+      postprocess_ms=(time.perf_counter()-t2)*1000,
+      loop_ms=(time.monotonic()-loop_started)*1000,
+      thread_cpu_ms=(time.thread_time()-cpu_started)*1000,
+    )
 
 
 if __name__ == "__main__":
