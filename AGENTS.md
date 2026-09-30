@@ -1,5 +1,19 @@
 # Repository memory
 
+- On 2026-09-30, the user requested original-RX-paced forwarding of Hyundai
+  CAN-FD CAMERA_SCC cluster 0x161/162/1e0/1ea/200 from bus2 to bus0. Consume
+  allowed host copies into independent latest-value caches; use each stock RX
+  counter and recompute CRC, including byte-2 8-bit COUNTER for 8-byte 0x200.
+  No independent send without RX. Missing/expired host (150 ms) returns stock;
+  invalid original frames pass unchanged and invalidate the cache. Preserve
+  allowlists, relay protection, non-camera paths and existing control FIFO/reuse.
+  Latest-value sampling supports differing rates but can coalesce transient
+  displays and delay changes until next RX; freshness bounds host arrival only.
+  348 tests, 36,120-frame replay, 285,594 unchanged control comparisons and
+  F4/H7 builds pass. Wire timing, vehicle warning resolution and display/chime
+  behavior remain unvalidated. Requires updated Panda firmware. See
+  docs/canfd_cluster_rx_forwarding.md.
+
 - On 2026-09-30, the user requested live SteerHandoverMode for Hyundai/Kia/Genesis
   angle control: 0 preserves legacy/default, 1 offers bounded recovery using
   continuous driver effort and angle-error trends, 2 confirms abrupt force release
