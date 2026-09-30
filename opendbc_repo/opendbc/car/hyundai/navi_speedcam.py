@@ -38,6 +38,7 @@ MATCH_BEHIND_M = 50.0
 # within -12..+17 m, 2026-09-30). A kind 3 preview elsewhere never turns a warning into a zone.
 ZONE_LEAD_TOLERANCE_M = 60.0
 RECENT_PREVIEW_M = 2600.0
+PREVIEW_MERGE_M = 20.0  # the stock navigation repeats each preview (~3x); same as carstate event merging
 PREVIEW_KEEP_M = 3000.0
 
 
@@ -74,11 +75,21 @@ class SpeedcamPolicy:
     if decoded is None:
       return
     kind, speed, flagged = decoded
+    target = total_distance + offset
+    saturated = offset >= PREVIEW_SATURATED_OFFSET
+    self.previews = [p for p in self.previews if total_distance - p["received"] <= PREVIEW_KEEP_M]
+    for p in self.previews:
+      if (p["kind"], p["speed"], p["flagged"]) == (kind, speed, flagged) and abs(p["target"] - target) < PREVIEW_MERGE_M:
+        # A repeat refreshes the entry; a precise position wins over a horizon-bound one.
+        p["received"] = total_distance
+        if not saturated or p["saturated"]:
+          p["target"] = target
+        p["saturated"] = p["saturated"] and saturated
+        return
     self.previews.append({
       "kind": kind, "speed": speed, "flagged": flagged, "received": total_distance,
-      "target": total_distance + offset, "saturated": offset >= PREVIEW_SATURATED_OFFSET,
+      "target": target, "saturated": saturated,
     })
-    self.previews = [p for p in self.previews if total_distance - p["received"] <= PREVIEW_KEEP_M]
 
   def classify(self, speed, total_distance, starting=True, start_distance=None):
     """Classify the warning at total_distance from same-speed previews (None when none match).
