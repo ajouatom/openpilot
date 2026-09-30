@@ -113,13 +113,11 @@ class Controls:
     # Update VehicleModel
     lp = self.sm['liveParameters']
     x = max(lp.stiffnessFactor, 0.1)
-    # VW MEB uses the learned ratio directly. Other platforms may scale it or
-    # override it, but legacy/out-of-range persisted rates must never collapse
-    # the vehicle-model ratio and destabilize lateral feedback.
+    # All platforms, including VW MEB, honor the manual ratio and live scaling.
+    # Invalid persisted rates still fall back to the unscaled learned ratio.
     sr = resolve_vehicle_model_steer_ratio(lp.steerRatio,
                                            self.params.get_float("SteerRatioRate"),
-                                           self.params.get_float("CustomSR"),
-                                           self.is_vw_meb)
+                                           self.params.get_float("CustomSR"))
     self.VM.update_params(x, sr)
 
     steer_angle_without_offset = math.radians(CS.steeringAngleDeg - lp.angleOffsetDeg)
