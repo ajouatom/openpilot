@@ -176,6 +176,7 @@ typedef struct {
 
 bool safety_rx_hook(const CANPacket_t *to_push);
 bool safety_tx_hook(CANPacket_t *to_send);
+static bool tx_msg_safety_check(const CANPacket_t *to_send, const CanMsg msg_list[], int len);
 uint32_t get_ts_elapsed(uint32_t ts, uint32_t ts_last);
 int to_signed(int d, int bits);
 void update_sample(struct sample_t *sample, int sample_new);

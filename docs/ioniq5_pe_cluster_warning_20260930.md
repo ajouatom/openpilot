@@ -404,3 +404,14 @@ suppression or runtime behavior was changed.
 
 Private reproduction and compact results:
 `.analysis/archive/2026-09-30/ioniq5-cadence-comparison/`.
+
+## Authorized RX-paced cluster forwarding
+
+The user subsequently requested changing all five direct cluster streams to
+send on original bus-2 reception, including support for differing vehicle
+periods and validation of error/timing behavior. Implementation, replay,
+firmware builds and limitations are in
+[CAN-FD cluster forwarding](canfd_cluster_rx_forwarding.md). This is an
+authorized delivery change, not a demonstrated diagnosis or vehicle warning
+fix. MDPS/TCS host counter generation and the existing buffered control paths
+remain unchanged.

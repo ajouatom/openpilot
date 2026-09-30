@@ -315,6 +315,7 @@ static void hyundai_canfd_update_checksum(CANPacket_t* to_push) {
   hyundai_canfd_set_checksum(to_push, (uint16_t)checksum);
 }
 #include "safety_hyundai_canfd_alt_buttons.h"
+#include "safety_hyundai_canfd_cluster.h"
 
 static void canfd_apply_counter_and_update_checksum(CANPacket_t* dst, uint8_t counter) {
   hyundai_canfd_set_counter(dst, counter);
@@ -604,6 +605,22 @@ static bool hyundai_canfd_tx_hook(const CANPacket_t *to_send_const) {
     return accepted;
   }
 
+  if (hyundai_camera_scc && (GET_BUS(to_send) == 0)) {
+    HyundaiCanfdCluster *cluster = hyundai_canfd_cluster_find(addr);
+    if (cluster != NULL) {
+      // Reject before caching: the outer hook's whitelist alone cannot undo
+      // a cached packet later used by forwarding.
+      bool accepted = !relay_malfunction &&
+                      tx_msg_safety_check(to_send, current_safety_config.tx_msgs, current_safety_config.tx_msgs_len) &&
+                      hyundai_canfd_cluster_store(cluster, to_send, microsecond_timer_get());
+      if (accepted) {
+        extern bool safety_tx_buffered_for_fwd;
+        safety_tx_buffered_for_fwd = true;
+      }
+      return accepted;
+    }
+  }
+
   // steering
   const int steer_addr = (hyundai_canfd_hda2 && !hyundai_longitudinal) ? hyundai_canfd_hda2_get_lkas_addr() : 0x12a;
   if (addr == steer_addr) {
@@ -704,6 +721,16 @@ static int hyundai_canfd_fwd_hook(CANPacket_t* to_send) {
     return -1;
   }
 
+  if (hyundai_camera_scc && (bus_num == 2)) {
+    HyundaiCanfdCluster *cluster = hyundai_canfd_cluster_find(addr);
+    if (cluster != NULL) {
+      hyundai_canfd_cluster_forward(cluster, to_send, now);
+      // One output per stock RX, including startup/stale fallback. Skip the
+      // old direct-TX blocking timer, which could otherwise drop stock frames.
+      return 0;
+    }
+  }
+
   if (hyundai_canfd_buffered_fwd) {
     CanfdBufferedFwd* bfwd = canfd_bfwd_find(addr, bus_fwd);
     if (bfwd != NULL) {
@@ -774,6 +801,7 @@ static int hyundai_canfd_fwd_hook(CANPacket_t* to_send) {
 
 static safety_config hyundai_canfd_init(uint16_t param) {
   hyundai_alt2_reset();
+  hyundai_canfd_cluster_reset();
 
   for (int i = 0; canfd_tx_states[i].addr > 0; i++) {
     canfd_tx_states[i].timeout_us = (uint32_t)(1000000.0 / canfd_tx_states[i].hz) + 20000U;
