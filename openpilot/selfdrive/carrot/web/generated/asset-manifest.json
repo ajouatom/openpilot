@@ -111,7 +111,7 @@
       "kind": "bundle",
       "source": "src/entries/settings.css",
       "path": "css/generated/settings.css",
-      "hash": "5157724ee1c8d68674fc6fa105171838415bea2d020b6a447d0b1271409fe1ab"
+      "hash": "f2419d6ce3913def8db9c54996acbcbe733432a1badb05d71ac256d9d0ebebd3"
     },
     {
       "id": "tools.styles",
