@@ -162,3 +162,12 @@ it does not resolve them. No production controller, setting or device was change
 Private scripts and results are indexed in
 `.analysis/archive/2026-09-30/handover-review/`. Closed-loop response, calibration
 and physical handover feel remain unvalidated.
+
+## Subsequent implementation decision
+
+After approving implementation, the user explicitly selected torque-ceiling-only
+recovery: retain the existing target angle and its limits, and vary the ceiling
+rise rate continuously with current angle error. This supersedes the offset-
+blending proposal in this review. The implemented revision and complete-trace
+results are documented in `steering_handover_20260930.md`; the isolated candidate
+offer values above must not be presented as its full-trace outputs.

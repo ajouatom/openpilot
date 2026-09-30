@@ -175,13 +175,15 @@ Choose this in Carrot Web **Driving → Steering → Steering Feel → Steering 
 | Value | Method | Behavior |
 |---|---|---|
 | **0 (default)** | Existing recovery | Retains existing driver-override and recovery behavior. |
-| 1 | Convergence recovery | Offers limited recovery when steering error is small or decreasing and driver force is stable. Stronger force lowers the additional ceiling. |
-| 2 | Abrupt-release recovery | After sustained override, a rapid force reduction held low for about 0.1 seconds starts recovery earlier if steering error is small. |
+| 1 | Convergence recovery | Combines steering-error and driver-force levels and trends for limited recovery. Small error fluctuations are tolerated; unclear convergence pauses the increase or gently reduces it. |
+| 2 | Abrupt-release recovery | A rapid force decline after sustained override starts limited recovery. Once low force is confirmed, smaller steering error permits faster torque-ceiling recovery and larger error slows it. |
 | 3 | Combined 1+2 | Prioritizes mode 2 when abrupt release is confirmed during mode 1. The increases are never added together. |
 
 **Changes apply live at roughly half-second intervals without rebooting.** An actual mode change clears experimental evidence while preserving the legacy recovery history. Re-reading the same value does not reset anything. Returning to 0 ends additional recovery and uses the existing behavior. Operate the setting while parked.
 
-Mode 1 briefly offers limited authority while waiting for driver force to decrease. Opposing or increasing force, growing error, or no response withdraws the addition. After rejection, it does not repeat until force release is confirmed. The offer ceiling of `80` is neither a physical torque unit nor a guaranteed tactile cue. Mode 2 also ramps authority instead of jumping to maximum; renewed force withdraws the addition.
+Mode 1 briefly offers limited authority while waiting for driver force to decrease. Stronger force lowers the ceiling; clear opposing or increasing force yields quickly. Error growth alone does not abruptly cancel the offer, and no response withdraws it gradually. After rejection, it does not repeat until force release is confirmed. The offer ceiling of `80` is neither a physical torque unit nor a guaranteed tactile cue.
+
+Mode 2 does not block recovery solely for large steering error or jump directly to maximum authority. Current error adjusts the rise rate throughout recovery, and renewed intervention yields quickly. Every mode preserves the target angle and existing angle limits. During experimental recovery, a higher legacy ceiling cannot bypass the selected rise rate.
 
 This feature uses force-sensor trends and cannot establish loss of hand contact or driver consent to handover. Existing `steeringPressed` and driver monitoring remain unchanged. Modes 1, 2 and 3 have not been validated for vehicle steering feel; compare them only in controlled tests.
 

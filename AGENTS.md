@@ -1,5 +1,19 @@
 # Repository memory
 
+- On 2026-09-30, the user approved the handover revision and then explicitly
+  selected torque-ceiling-only rapid recovery: keep target angles and existing
+  angle limits unchanged, raise the ceiling faster for small error and slower
+  for large error, with no angle-error entry gate. This supersedes the earlier
+  captured-angle/offset-blending design proposal below. Mode 1 combines effort
+  and error levels/trends with tolerance, paused increases and gradual error-only
+  withdrawal; strong renewed force still yields quickly. Modes 2/3 use limited
+  early capture then low-force confirmation and continuous error-dependent rise.
+  Active experimental transitions own the total ceiling, so legacy max() cannot
+  bypass their rate; preserve independent legacy history, mode 0 and live polling.
+  88 focused tests and 6,000-frame mode-0 CAN/angle equivalence pass. Recorded-input
+  schedules are not vehicle response or steering-feel validation. See
+  docs/steering_handover_20260930.md for constants, replay and limitations.
+
 - On 2026-09-30, the handover follow-up review uses both angle-error and driver-
   effort trends for mode 1, with tolerance and paused/gradual withdrawal for
   ambiguous error growth, retaining fast yield for strong renewed driver effort.

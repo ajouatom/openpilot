@@ -12,8 +12,8 @@ read preserves it. The existing recovery state continues independently in every 
 | Mode | Method | Selection |
 |---|---|---|
 | 0 | Existing recovery | Exact legacy authority output |
-| 1 | Limited authority offer | Small/converging angle error and stable/decreasing driver effort |
-| 2 | Abrupt-release recovery | Sustained override followed by confirmed rapid force release |
+| 1 | Limited authority offer | Joint error/effort convergence with error tolerance and gradual withdrawal |
+| 2 | Abrupt-release recovery | Early limited capture, then error-dependent ceiling rise after low-force confirmation |
 | 3 | Combined | Mode 2 takes priority over mode 1; increases are never added |
 
 Only Hyundai/Kia/Genesis `ANGLE_CONTROL` uses the helper. Both camera-SCC and
@@ -23,52 +23,103 @@ limits, CAN safety checks, `steeringPressed`, touch reception and DM are unchang
 The ceiling affects potential physical assistance; it is **not** a calibrated
 physical torque command or a guaranteed tactile notification.
 
-## Signal and transition contract
+## Current signal and transition contract (September 30 follow-up)
 
-- Driver effort is `abs(steeringTorque) / STEER_THRESHOLD`, with a three-sample
-  magnitude median and 0.12-second low-pass filter. It is deliberately not clipped
-  at 2: the observed late-curve effort often exceeded 2. Signed/raw force remains
-  available for reversal and rising-force vetoes. Alternating force cannot cancel
-  itself into a false release through a signed low-pass filter.
-- Error uses the greater magnitude of target-minus-actual and limited-command-minus-
-  actual steering angle, filtered at 0.08 seconds. Both raw and filtered error must
-  fit a two-degree ceiling, tightened at speed by a bicycle-model 0.5 m/s² error
-  equivalent. This is an experimental gate, not a validated vehicle envelope.
-- Mode 1 requires 0.25 seconds of qualifying evidence, a stable force direction,
-  and either a small/stable error or a decreasing bounded error. It ramps the
-  offered CAN ceiling at 110 units/s. The upper ceiling is 80 through effort 1.3,
-  falling linearly to 45 at 2 and 25 at 3. Both current raw and filtered effort
-  constrain it. Effort above the threshold can therefore receive a limited offer,
-  without changing the existing boolean pressed signal.
-- Opposing/increasing force or growing/out-of-bounds error withdraws the offer.
-  An effort decrease of at least 0.1 is needed after 0.6 seconds; the offer lasts
-  no more than 1.5 seconds. Rejection blocks repeated offers until 0.2 seconds of
-  confirmed low, unpressed force. Invalidity interrupting an offer preserves this
-  block. With a confirmed release, mode 1 holds only the offered ceiling while
-  legacy recovery catches up.
-- Mode 2 arms after 0.3 seconds of sustained pressed effort above 1. It requires
-  raw and median effort at or below 0.3, unpressed, reached within 0.25 seconds of
-  strong effort and maintained for 0.1 seconds. Only bounded angle error permits
-  faster recovery. Its ramp is 450 CAN units/s (25→250 in 0.5 seconds), matching
-  the fastest legacy ramp but starting without the legacy filtered-release wait.
-  It can also bypass the legacy repeated-override delay while its own conditions
-  hold. Renewed pressed force, raw effort above 0.6 or growing/unbounded error
-  withdraws the additional authority.
-- Mode 3 selects the rapid branch before processing the offer branch. It never
-  applies both ramp increments in one update. Withdrawal reduces the experimental
-  ceiling at 2,000 units/s; mode change, disengagement or invalidity discards it
-  immediately. The selected output never falls below the independently calculated
-  legacy ceiling. The helper cannot erase the legacy override or repetition latch.
-- Experimental recovery requires valid CAN, no reported steering fault, a present
-  model with a changing frame ID within 150 ms, finite one-second position yStd in
-  [0, 0.3], finite inputs and consecutive controller timestamps within 30 ms.
-  Failure grants no additional authority. These checks do not replace existing
-  model/control validity gates.
-- Diagnostic logging records mode changes and one sample per second of state,
-  effort, error, legacy ceiling and selected ceiling. It is sampled diagnostic
-  output, not a complete transition trace. CAN/carOutput remain the output record.
+The user explicitly selected torque-ceiling-only recovery in the follow-up.
+Do not add a captured-angle reference, offset, or target blend. The existing
+model target, angle rate/acceleration limits and steering CAN angle fields remain
+unchanged. This supersedes the offset-blending design review in
+`steering_handover_ff6_ff7_20260930.md`.
 
-## Evidence and limits
+- Driver effort remains abs(steeringTorque) / STEER_THRESHOLD with a three-sample
+  magnitude median and 0.12 s low-pass filter; it is not clipped at 2. Raw force
+  remains available for prompt yielding, and signed force for offer opposition.
+- Error is the greater magnitude of target-minus-actual and limited-command-minus-
+  actual angle, with a 0.08 s filter. The full-offer tolerance is min(3 degrees,
+  the bicycle-model 0.8 m/s^2 angle-error equivalent at current speed). Above it,
+  offer quality rolls off linearly to zero at twice that tolerance. These constants
+  are experimental calibrations, not a validated vehicle operating envelope.
+- Mode 1 requires 0.25 s of qualifying evidence after a stable force direction and
+  about 0.2 s of history. Both levels and trends matter: error must be inside the
+  tolerance or decrease by more than 0.05 degrees over the history window; effort
+  may rise by at most 0.05. Stable large error does not qualify. Raw and filtered
+  effort limit the offer to 80 through strength 1.3, 45 at 2, and 25 at 3.
+- During an offer, an unclear convergence trend pauses increases; a lower
+  error/force-dependent ceiling reduces authority at 110 CAN units/s. There is
+  no derivative-only error veto. Opposite raw force above 0.7, raw force above
+  3.2 or initial effort +0.4, filtered effort above initial +0.15, or a history
+  effort increase above 0.2 triggers fast yielding at 2,000 units/s. These are
+  force-based heuristics, not proof of driver intent.
+- No effort reduction of 0.1 after 0.6 s, or a 1.5 s offer duration, starts gradual
+  withdrawal at 110 units/s. Renewed strong effort still interrupts withdrawal
+  quickly. Repeated offers are blocked until low unpressed force is confirmed.
+  A mode-1 release held low for 0.1 s holds the offered ceiling while the legacy
+  recovery catches up, then joins it with at most 110 units/s of increase.
+- Modes 2/3 arm after 0.15 s of sustained, same-direction pressed effort above 1.
+  Within 0.5 s of that evidence, unpressed raw/median force at or below 1, a
+  0.25 decrease from a recent peak of at least 1.05, and a decline rate of at
+  least 0.5/s must persist for 30 ms. A 0.4 s force history supplies this test.
+  Capture then moves toward a ceiling of 45 at 110 units/s; an existing mode-1
+  offer above 45 also approaches it gradually. Angle error does not gate entry.
+- After raw/median effort stays at or below 0.6, unpressed, for 60 ms, recovery
+  rises toward maximum. Its rate is (maximum-minimum)/0.5 multiplied by
+  clip(tolerance / max(tolerance, raw error, filtered error), 0.25, 1).
+  With 25/250 bounds this is 112.5 to 450 CAN units/s. Small error permits faster
+  recovery, large error slows it, and changing error updates the rate every tick.
+  Error alone neither prevents recovery nor suddenly reduces the current ceiling.
+- Capture without confirmed low force expires after 0.3 s and withdraws gradually.
+  Pressed status or renewed raw force cancels capture/recovery promptly. Capture
+  uses max(0.8, initial strength +0.15); confirmed recovery uses 0.8. Mode 3
+  selects capture ahead of an offer, without adding the two ramp increments.
+- While an experimental transition is active, its selected total ceiling replaces
+  max(legacy, extra), so a larger legacy ceiling cannot bypass the chosen ramp.
+  Legacy override/repetition state remains untouched. After yielding, 0.2 s of
+  low unpressed force permits bounded handback to legacy; an accepted mode-1
+  offer does not drop solely because legacy is still release-latched.
+- Healthy CAN, no steering fault, fresh changing model frame ID within 150 ms,
+  finite yStd[10] in [0, 0.3], finite inputs and consecutive timestamps within
+  30 ms remain required. Invalidity clears evidence and returns at most both the
+  legacy and previously owned ceilings; it cannot jump a reduced ceiling upward.
+  Deactivation and actual mode changes reset experimental state immediately.
+  Switching to mode 0 selects legacy behavior immediately, so a mode change is
+  not itself a rate-blended handover.
+- Diagnostics log state transitions as well as one sample per second. CAN and
+  carOutput retain the actual output record; logging is not physical torque sensing.
+
+## Follow-up validation
+
+- 88 focused helper/controller/steering-mode tests pass, with only native Params
+  storage substituted on Windows. Coverage includes small-error tolerance, both
+  force/error trends, gradual versus fast withdrawal, release noise, error- and
+  speed-dependent recovery, large-error entry, legacy-cap bypass prevention,
+  invalidity, mode polling, all directed mode changes, and both CAN-FD paths.
+- Identical inputs produce identical angle outputs in all four modes, including
+  release with substantial angle error and a changing model target. A separate
+  6,000-frame full-controller replay preserves mode-0 angle, authority and steering
+  CAN bytes exactly against pre-feature 0c492cd14c. The legacy block is unchanged.
+- On the supplied ff6/ff7 input traces, the updated helper begins limited capture
+  32/32/95 ms after the 5.488/13.001/50.714 s pressed falling edges. Recorded legacy
+  recovery began after 350/320/520 ms. Several other releases are captured, while
+  two ff6 releases still do not qualify. These are output scheduling comparisons
+  on unchanged feedback, not measured steering response improvements.
+- Full-trace mode-1 timing differs from the already-started offer study: ff7 now
+  offers at 48.096 s and withdraws at 48.629 s when filtered effort increases from
+  the initial 1.934 to 2.085. It remains blocked at the old 50.078 s error-only
+  withdrawal point, then captures release at 50.809 s. Do not claim the earlier
+  isolated 47-versus-25 comparison is the final full-trace output.
+- A sustained zero crossing can still look like release before force returns;
+  the regression test retains that counterexample and checks renewed-force yield.
+  Faster force detection does not establish hand removal or consent. No physical
+  vehicle response, closed-loop stability, steering feel or road benefit is proven.
+- The 25 focused Wiki tests and user-documentation checks pass. Generation
+  against the existing Wiki validates 187 settings / 564 generated files with
+  zero structural errors; 28 unrelated pre-existing description warnings remain.
+  Korean/English guides and all three catalog descriptions match the revision.
+
+Private reproduction scripts and outputs are indexed in
+`.analysis/archive/2026-09-30/handover-update/`.
+
+## Initial implementation evidence and limits (historical)
 
 The incident's final curve had continued driver effort with the authority ceiling
 at 25. At some instants actual steering and target were close despite continued
