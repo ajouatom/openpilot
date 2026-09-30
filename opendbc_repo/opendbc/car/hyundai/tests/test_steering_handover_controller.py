@@ -81,7 +81,7 @@ def test_live_switch_is_polled_and_same_value_keeps_state(monkeypatch):
   step(controller, cs, cc)
   assert controller.steer_handover_mode == 1
   assert controller.steer_handover.effort is None
-  for _ in range(114):
+  for _ in range(99):
     actuators, _ = step(controller, cs, cc)
   assert actuators.torqueOutputCan > 70  # several unchanged polls did not reset
   settings["SteerHandoverMode"] = 0
@@ -132,3 +132,40 @@ def test_disengagement_clears_authority_and_experimental_evidence(monkeypatch):
   assert output.torqueOutputCan == 0
   assert next(data[6] for address, data, bus in messages if address == 0xCB) == 0
   assert controller.steer_handover.effort is None
+
+
+@pytest.mark.parametrize("camera", [False, True])
+def test_all_modes_preserve_angle_commands_during_release_and_model_changes(monkeypatch, camera):
+  angles = []
+  for mode in range(4):
+    controller, cs, cc, _ = setup_controller(monkeypatch, mode=mode, camera=camera)
+    trace = []
+    for tick in range(300):
+      cc.actuators.steeringAngleDeg = 30 if tick < 150 else -10
+      cs.out.steeringAngleDeg = 25 if tick < 120 else 20
+      cs.out.steeringTorque = 350 if tick < 100 else 0
+      cs.out.steeringPressed = tick < 100
+      output, _ = step(controller, cs, cc)
+      trace.append(output.steeringAngleDeg)
+    angles.append(trace)
+  assert all(trace == angles[0] for trace in angles[1:])
+
+
+@pytest.mark.parametrize("camera", [False, True])
+def test_recovery_selected_total_cap_reaches_both_can_paths(monkeypatch, camera):
+  controller, cs, cc, _ = setup_controller(monkeypatch, mode=2, camera=camera)
+  cc.actuators.steeringAngleDeg = 12
+  for _ in range(100):
+    step(controller, cs, cc)
+  cs.out.steeringPressed = False
+  cs.out.steeringTorque = 0
+  for _ in range(10):
+    step(controller, cs, cc)
+  assert controller.steer_handover.state == "recover"
+  # Force the independent legacy recovery ahead: it cannot bypass the helper.
+  controller.lkas_max_torque = 250
+  output, messages = step(controller, cs, cc)
+  assert 25 < output.torqueOutputCan < 80
+  address, byte = (0xCB, 6) if camera else (0x12A, 12)
+  data = next(data for addr, data, _ in messages if addr == address)
+  assert abs(data[byte] - output.torqueOutputCan) <= 0.5

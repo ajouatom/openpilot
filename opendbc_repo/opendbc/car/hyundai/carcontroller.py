@@ -450,7 +450,8 @@ class CarController(CarControllerBase):
 
     self.steering_pressed_prev = CS.out.steeringPressed if CC.latActive else False
 
-    # Keep legacy recovery state independent of the experimental ceiling.
+    # Keep legacy history independent, but let an active handover select total
+    # authority. A legacy max() would bypass its error-dependent recovery rate.
     steering_authority = self.lkas_max_torque
     if angle_control:
       model = CS.modelV2
@@ -460,6 +461,7 @@ class CarController(CarControllerBase):
       model_valid = (model is not None and 0 <= now_nanos - self.handover_model_time <= 150_000_000 and
                      len(model.position.yStd) > 10 and np.isfinite(model.position.yStd[10]) and
                      0 <= model.position.yStd[10] <= 0.3)
+      previous_handover_state = self.steer_handover.state
       steering_authority = self.steer_handover.update(
         mode=self.steer_handover_mode, now=now_nanos * 1e-9, baseline=self.lkas_max_torque,
         minimum=self.params.ANGLE_MIN_TORQUE, maximum=self.angle_max_torque,
@@ -469,7 +471,7 @@ class CarController(CarControllerBase):
         wheelbase=self.CP.wheelbase, steer_ratio=self.CP.steerRatio, active=CC.latActive,
         valid=bool(CS.out.canValid and not CS.out.steerFaultTemporary and not CS.out.steerFaultPermanent and model_valid),
       )
-      if self.steer_handover_mode and self.frame % 100 == 0:
+      if self.steer_handover_mode and (self.frame % 100 == 0 or previous_handover_state != self.steer_handover.state):
         carlog.info("SteeringHandover mode=%d state=%s effort=%.3f error=%.3f legacy=%.1f cap=%.1f",
                     self.steer_handover_mode, self.steer_handover.state, self.steer_handover.effort or 0.0,
                     self.steer_handover.error, self.lkas_max_torque, steering_authority)
