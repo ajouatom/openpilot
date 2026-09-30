@@ -244,3 +244,62 @@ reuse producing a corrupt or stale-value message. It does not exclude a timing
 or cross-message interaction, a separate earlier angle/feedback event, or an
 unobserved ECU/cluster diagnostic condition. Reuse must not be equated with
 either a checksum error or a proven warning cause.
+
+## Longer recurrence: same route, segment 32
+
+The user supplied `000005ca--e39250b8f6--32` and reported a longer occurrence.
+It is the same clean a315e806 revision and Hyundai CAN-FD safety parameter 157.
+Full carState coverage spans 59.999 s from monotonic 1979.689016651 s.
+The exact onset/end of the visible warning has not been synchronized to this
+segment. Only segments 3, 4 and 32 of this route are present on the NAS;
+preceding segment 31 is unavailable in the uploaded set.
+
+- There are **no reuse diagnostics** among 500 parsed log/errorLog messages.
+  There are also no Panda serial messages at all. This is absence of a report,
+  not independent per-frame proof of zero reuse: diagnostic aggregation and
+  serial delivery limits still apply, as does the unknown pre-segment history.
+- All 13 original and transmitted CCNC_0x162 fault fields remain zero.
+  Original MDPS LKA_FAULT/LFA2_FAULT, camera FCA_SYSWARN, SCC SysFailState and
+  HDA_InfoPUDis remain zero. Each original cluster stream has 1,200 frames.
+- All 1,200 host sends for each direct cluster stream (0x161, 0x162, 0x1e0,
+  0x1ea, 0x200) have byte-identical returned echoes within 16.067 ms of host
+  publication. The 1,201 returned frames per stream include one initial echo
+  before the first logged host send. Maximum cluster host-send gap is
+  57.983 ms and returned-echo gap 64.953 ms; these are host-log intervals.
+- Independent checksum verification covers 27,611 returned frames across the
+  same eight addresses as above: zero invalid Hyundai payload CRCs, and every
+  adjacent returned counter step is +1. No rejected frames are recorded.
+- All 6,001 carState samples have valid CAN and no steering/ACC fault. All
+  6,004 carControl samples remain enabled, lateral active and longitudinal
+  active. Model/odometry messages remain valid; all 1,200 livePose samples have
+  inputsOK/sensorsOK/posenetOK true. Two brief radarCutin sounds at +33.299
+  and +45.783 s are separate Openpilot events, not decoded OEM service popups.
+- SPI checksum count is already **67 at segment start and stays 67** in all
+  530 Panda state samples. It was 1 throughout segments 3/4. Therefore the
+  cumulative count increased before segment 32, in the unprovided interval;
+  this is not evidence of an SPI error during the long visible warning.
+  CAN error/loss/reset counters do not increase and safety blocks, bus-off
+  and hardware RX/TX buffer overflows remain zero in this segment.
+- At +56.345788 s, 0x738 on bus 2 replies `03 59 02 89 aa aa aa aa` to
+  `19 02 0d`: no DTC entries matching that mask. There is no 0x7c4/0x7cc
+  camera-DTC query/response pair in this segment; do not infer its result.
+
+The long recurrence has no accompanying reported reuse, message checksum
+failure, counter discontinuity or host/Panda transmission interruption. This
+weakens a simple immediate-reuse explanation, without excluding an earlier
+trigger or an ECU/cluster-local condition. If the popup was already visible
+at segment start, the preceding log is needed to locate its initiation and
+to place the earlier SPI errors relative to it. No runtime change was made.
+
+### Audio availability
+
+FFmpeg inspection of the actual uploaded `qcamera.ts` reports a 60.00-second
+MPEG-TS program containing one H.264 video stream (526x330, 20 fps), with no
+audio stream. The full rlog also has no rawAudioData messages. This file
+cannot supply recorded warning audio. Source `loggerd.h` includes audio in
+qcamera.ts only when RecordAudio is enabled; the loggerd audio test checks
+both the TS audio stream and rawAudioData recording for that parameter.
+No recording setting was changed. Local audio/video metadata is archived
+with the analysis, not the source media.
+
+Private reproduction: `.analysis/archive/2026-09-30/ioniq5-cluster32/`.
