@@ -54,22 +54,28 @@
   max-width: 100%;
 }
 
-.page--setting #settingScreenItems .ctrl > :nth-child(1) {
+/* Control placement is keyed on the control classes, not on child position:
+   a slider variant carries four children (track + three buttons) while the
+   stepper carries three, so positional rules used to stretch the trailing
+   button across the whole row when the order changed. */
+.page--setting #settingScreenItems .ctrl > .setting-value-arrow--prev,
+.page--setting #settingScreenItems .ctrl > .setting-step--minus {
   grid-column: 1;
   grid-row: 2;
 }
 
-.page--setting #settingScreenItems .ctrl > :nth-child(2) {
+.page--setting #settingScreenItems .ctrl > .val {
   grid-column: 2;
   grid-row: 2;
 }
 
-.page--setting #settingScreenItems .ctrl > :nth-child(3) {
+.page--setting #settingScreenItems .ctrl > .setting-value-arrow--next,
+.page--setting #settingScreenItems .ctrl > .setting-step--plus {
   grid-column: 3;
   grid-row: 2;
 }
 
-.page--setting #settingScreenItems .ctrl > :nth-child(4) {
+.page--setting #settingScreenItems .ctrl > .setting-slider {
   grid-column: 1 / -1;
   grid-row: 1;
   justify-self: stretch;
@@ -108,9 +114,9 @@
   background: var(--md-surface-cont-h);
 }
 
-.page--setting #settingScreenItems .ctrl--value > :nth-child(1),
-.page--setting #settingScreenItems .ctrl--value > :nth-child(2),
-.page--setting #settingScreenItems .ctrl--value > :nth-child(3) {
+.page--setting #settingScreenItems .ctrl--value > .setting-value-arrow--prev,
+.page--setting #settingScreenItems .ctrl--value > .val,
+.page--setting #settingScreenItems .ctrl--value > .setting-value-arrow--next {
   grid-row: 1;
 }
 
@@ -279,6 +285,7 @@
 
 .page--setting #settingScreenItems .setting {
   position: relative;
+  container-type: inline-size;
 }
 
 .page--setting #settingScreenItems .setting--has-unit-cycle {
@@ -393,4 +400,24 @@
   border-color: color-mix(in srgb, var(--md-outline-var) 68%, transparent);
   background: color-mix(in srgb, var(--md-surface-cont-hh) 88%, var(--md-on-surface));
   color: var(--md-on-surface);
+}
+
+/* The item row is stacked as soon as the pane holding it is too narrow for
+   both columns, even when the viewport-level breakpoints still call for the
+   split layout (tablet with the groups rail visible). Keyed on the pane, not
+   the viewport, so the copy column can never collapse to one character beside
+   a wide segmented control. */
+@container (max-width: 600px) {
+  .page--setting #settingScreenItems .settingTop {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .page--setting #settingScreenItems .ctrl {
+    justify-self: start;
+    justify-content: start;
+  }
+
+  .page--setting #settingScreenItems .setting-segments {
+    max-width: 100%;
+  }
 }
