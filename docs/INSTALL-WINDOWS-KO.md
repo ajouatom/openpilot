@@ -98,6 +98,14 @@ Wi-Fi 정보는 연결한 콤마에서 자동으로 받습니다. 시스템은 �
 
 ---
 
+### 🔑 SSH로 Jetson에 접속하기 · 선택 사항
+
+*Optional SSH access*
+
+PC에서 상태를 확인할 분은 **[SSH 접속 안내](JETSON-SSH.md)**를 따라 주세요. **키 만들기 → 카드·SSD에 공개키 등록 → IP 확인 → 접속** 순서로 설명합니다. 계정은 `jetlink`이며 기본 비밀번호는 없습니다. 이미지 재설치 없이 키를 등록할 수 있습니다.
+
+> Follow the **SSH guide** linked above to create a key, enroll it on the card/SSD, find the IP and connect. The account is `jetlink`; there is no default password. No image rewrite is required.
+
 ### ⚠️ 시작 전, 이것만 확인하세요
 
 *A few important precautions*
