@@ -7,9 +7,10 @@ header{background:#163351;color:white;padding:30px;border-radius:20px}h1{font-si
 section{background:white;margin:20px 0;padding:25px 30px;border-radius:16px;box-shadow:0 3px 16px #1232}.en{display:block;color:#66768b;font-size:14px;line-height:1.6;margin:4px 0 16px}header .en{color:#c4d8ed}
 p{margin:12px 0}.note{border-left:5px solid #f3af35}code{background:#edf2f7;padding:3px 6px;border-radius:5px;overflow-wrap:anywhere}b{color:#135e9d}header b{color:white}
 </style><main>
-<header><small>CARROT JETSON · Orin Nano · R2</small><h1>이미지는 그대로.<br>패치 하나로 SD와 NVMe.</h1><span class="en" lang="en">Keep your existing image. One patch for microSD and M.2 NVMe.</span>
+<header><small>CARROT JETSON · Orin Nano · R2 · PATCH v2</small><h1>이미지는 그대로.<br>패치 하나로 SD와 NVMe.</h1><span class="en" lang="en">Keep your existing image. One patch for microSD and M.2 NVMe.</span>
 <p>추가 다운로드 약 32MB · 패치 약 5~20분</p><span class="en" lang="en">About 32 MB to download · Patching takes about 5–20 minutes; slow readers may take longer.</span></header>
 <section class="note"><h2>시험 패치입니다</h2><span class="en" lang="en">Experimental patch</span>
+<p><b>v2는 v1의 초기 부팅 오류를 수정합니다.</b> 이미 기록·패치한 SSD는 이미지를 다시 설치하지 말고, 새 패치를 풀어 03만 다시 실행하세요.</p><span class="en" lang="en">v2 fixes an early-boot defect in v1. For an already written/patched SSD, extract this update and rerun only 03. Do not rewrite the image.</span>
 <p>v0.4.0-boot-preview의 R2 이미지 전용입니다. 실제 NVMe 부팅은 아직 확인 전입니다. 정상 동작하던 SD는 복구용으로 보관하세요.</p><span class="en" lang="en">For the R2 image in v0.4.0-boot-preview only. Physical NVMe boot is not yet verified. Keep your working SD as a fallback. Other versions are rejected before writing.</span></section>
 <section><h2>1 · 기존 설치파일에 패치 풀기</h2><span class="en" lang="en">Extract into your existing installer</span>
 <p>패치 ZIP 안의 내용을 기존 <b>CarrotJetson 폴더 안에</b> 풀어 주세요. <code>support</code> 폴더는 합치고 같은 이름의 파일은 교체하세요.</p><span class="en" lang="en">Extract the patch ZIP contents inside your existing CarrotJetson folder. Merge the support folders and replace matching files. The original installer supplies Python; no separate installation is needed.</span>

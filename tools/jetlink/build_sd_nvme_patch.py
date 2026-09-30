@@ -141,7 +141,7 @@ def build(image, output):
     path = '/etc/fstab'
     replacements[path] = fit_text(b'/dev/root / ext4 ro,noload 0 0\n/run/carrot-efi /boot/efi vfat ro,nofail 0 0\n', len(read(path)))
     patches = sorted(p for path, body in replacements.items() for p in file_patches(stream, volume, start, path, body))
-    manifest = dict(format=2, release='r2-sd-nvme-v1-candidate', base_image_sha256=BASE_SHA,
+    manifest = dict(format=2, release='r2-sd-nvme-v2-candidate', base_image_sha256=BASE_SHA,
                     image_bytes=BASE_BYTES, root_offset=start, root_bytes=length,
                     root_sha256='80fe3f9b746734696b1502820e9dd015f79d8465387886e34a7ffd88bd477ac0',
                     partition_guard=dict(offset=1024, data=base64.b64encode(guard).decode()),

@@ -18,6 +18,10 @@ Windows 10/11 64비트 · PC 여유 공간 약 70GB · 64GB 이상 microSD와 US
 
 > **Installing to M.2 NVMe?** Use the same installer, then **01 → 02 → 03 common patch**. See the patch download and instructions below. No new image download is needed.
 
+**9월 30일 수정 — 공용 패치 v2:** v1에 초기 부팅을 막는 오류가 있어 교체했습니다. 이미 SSD에 설치·패치했다면 **새 패치를 기존 폴더에 덮어 풀고 03만 다시 실행**하세요. 01·02나 이미지 재기록은 필요 없습니다.
+
+> **September 30 fix — common patch v2:** v1 contained an early-boot defect. For an already installed/patched SSD, **extract the new patch over the existing folder and rerun only 03**. Skip 01 and 02; no image rewrite is needed.
+
 ---
 
 ### ① 압축을 모두 풀기
@@ -64,7 +68,7 @@ Windows 10/11 64비트 · PC 여유 공간 약 70GB · 64GB 이상 microSD와 US
 
 *Additional step for NVMe · Common microSD/NVMe patch · About 5–20 min*
 
-**[공용 패치파일 받기 · 약 32MB](https://upload.shind0.synology.me/downloads/jetson/v0.4.0-sd-nvme-patch-preview/carrot-jetson-windows.zip)**
+**[공용 패치파일 받기 · 약 32MB](https://upload.shind0.synology.me/downloads/jetson/v0.4.0-sd-nvme-patch-v2-preview/carrot-jetson-windows.zip)**
 
 > **Download the common patch · About 32 MB**
 

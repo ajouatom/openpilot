@@ -6,7 +6,8 @@ try {
   $env:PYTHONIOENCODING = 'utf-8'
   . "$PSScriptRoot\messages.ps1"
   . "$PSScriptRoot\disks.ps1"
-  Write-InstallerHeading 'CARROT JETSON | SD·NVMe 공용 패치' 'One patch for microSD and M.2 NVMe'
+  Write-InstallerHeading 'CARROT JETSON | SD·NVMe 공용 패치 v2' 'Common microSD / M.2 NVMe patch v2'
+  Write-InstallerPair 'v1 부팅 오류를 수정합니다. 이미 기록·패치한 SSD는 01·02 없이 이 파일만 다시 실행하세요.' 'Fixes the v1 boot failure. For an already written/patched SSD, rerun only this step; skip 01 and 02.'
   Write-InstallerPair '기존 R2 이미지의 부팅 파일만 수정합니다. 이미지를 다시 받거나 만들지 않습니다.' 'Patches boot files in the existing R2 image. No image rebuild or download.'
   Write-InstallerPair '예상 시간 5~20분. 느린 리더에서는 더 걸릴 수 있습니다.' 'Estimated time: 5–20 minutes; slow readers may take longer.'
   Write-InstallerPair '실제 NVMe 부팅은 아직 검증 전인 시험 패치입니다. 정상 동작하던 카드는 보관하세요.' 'Test patch: physical NVMe boot is unverified. Keep your working card as a fallback.' Yellow

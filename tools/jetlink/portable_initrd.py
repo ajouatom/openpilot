@@ -12,11 +12,13 @@ carrot_root=""
 for carrot_attempt in {1..50}; do
   carrot_matches=$(blkid -t "PARTUUID=APP_UUID" -o device)
   if [ -n "${carrot_matches}" ]; then
-    if [ "$(printf '%s\\n' "${carrot_matches}" | wc -l)" -ne 1 ]; then
+    # R2 initrd has no wc/readlink executables. blkid returns device paths;
+    # use Bash builtins to reject multiple lines and retain the exact path.
+    if [[ "${carrot_matches}" == *$'\\n'* ]]; then
       echo "CARROT: remove the duplicate SD/NVMe image" > /dev/kmsg
       exec /bin/bash
     fi
-    carrot_root=$(readlink -f -- "${carrot_matches}")
+    carrot_root="${carrot_matches}"
     break
   fi
   sleep 0.2

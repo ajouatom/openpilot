@@ -110,22 +110,44 @@ def test_boot_keeps_root_readonly_and_uses_same_disk_data(tmp_path, monkeypatch,
     assert mounts[0][-2] == config['data']
 
 
-@pytest.mark.skipif(os.name == 'nt' or not shutil.which('bash'), reason='Execute Linux initrd shell logic')
+BASH = shutil.which('bash') or (r'C:\Program Files\Git\bin\bash.exe' if Path(r'C:\Program Files\Git\bin\bash.exe').is_file() else None)
+
+
+@pytest.mark.skipif(not BASH, reason='Bash required for initrd shell logic')
 @pytest.mark.parametrize('matches,expected', [('/dev/mmcblk0p1', 'mmcblk0p1'), ('/dev/nvme0n1p1', 'nvme0n1p1'),
                                            ('/dev/nvme1n1p1', 'nvme1n1p1'), ('', None),
                                            ('/dev/mmcblk0p1\n/dev/nvme0n1p1', None),
                                            ('/dev/sda1', None), ('/dev/nvme0n1p2', None)])
-def test_actual_initrd_shell_selects_one_supported_partition(matches, expected):
+def test_actual_initrd_shell_selects_one_supported_partition(tmp_path, matches, expected):
   stubs = '''blkid() { printf '%s\\n' "$MATCHES"; }
-readlink() { printf '%s\\n' "${@: -1}"; }
 sleep() { :; }
 exec() { exit 77; }
 '''
-  script = stubs + RESOLVE.replace('/dev/kmsg', '/dev/null') + '\nprintf "ROOT=%s" "$rootdev"\n'
-  result = subprocess.run(['bash', '-c', script], env=dict(os.environ, MATCHES=matches), capture_output=True, text=True)
+  script = 'PATH=/carrot-test-no-external-commands\n' + stubs + RESOLVE.replace('/dev/kmsg', '/dev/null') + '\nprintf "ROOT=%s" "$rootdev"\n'
+  # Do not inherit desktop utilities. The real R2 initrd lacks wc/readlink;
+  # mocking readlink previously hid the resulting pre-root boot failure.
+  result = subprocess.run([BASH, '--noprofile', '--norc', '-c', script],
+                          env=dict(os.environ, PATH=str(tmp_path), MATCHES=matches), capture_output=True, text=True)
   assert result.returncode == (0 if expected else 77)
+  assert 'command not found' not in result.stderr
   if expected:
     assert result.stdout == 'ROOT=' + expected
+
+
+@pytest.mark.skipif(not BASH, reason='Bash required for regression reproduction')
+def test_v1_failure_reproduces_without_unshipped_desktop_tools(tmp_path):
+  # Exact two v1 operations against the dependency environment present in R2.
+  script = '''PATH=/carrot-test-no-external-commands
+carrot_matches=/dev/nvme0n1p1
+if [ "$(printf '%s\\n' "${carrot_matches}" | wc -l)" -ne 1 ]; then exit 77; fi
+carrot_root=$(readlink -f -- "${carrot_matches}")
+if [[ ! "${carrot_root}" =~ ^/dev/(mmcblk[0-9]+|nvme[0-9]+n[0-9]+)p1$ ]]; then exit 77; fi
+'''
+  result = subprocess.run([BASH, '--noprofile', '--norc', '-c', script],
+                          env=dict(os.environ, PATH=str(tmp_path)), capture_output=True, text=True)
+  assert result.returncode == 77
+  assert 'wc: command not found' in result.stderr
+  assert 'readlink: command not found' in result.stderr
 
 
 def test_unknown_initrd_and_oversized_replacements_rejected():
