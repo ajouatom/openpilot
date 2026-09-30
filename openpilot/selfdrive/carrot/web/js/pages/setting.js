@@ -732,6 +732,9 @@ function formatSettingRangeMeta(p) {
   if (String(p?.name || "") === "SoundLanguageSetting") {
     return "";
   }
+  if (p?.options && getDeclaredSettingOptionLabel(p.name, p.default) !== null) {
+    return `${getUIText("default_value", "Default")}: ${formatSettingDisplayValue(p, p.default)}`;
+  }
   return [
     `min=${formatSettingDisplayValue(p, p?.min)}`,
     `max=${formatSettingDisplayValue(p, p?.max)}`,
@@ -2489,6 +2492,7 @@ async function renderItems(group, options = {}) {
     `;
 
     const controlConfig = getSettingControlConfig(p);
+    top.classList.toggle("settingTop--choices", controlConfig.kind === "segmented" && Boolean(p.options));
     const compactNumeric = controlConfig.kind === "slider";
     // The markup comes from the shared component; this file keeps the wiring.
     const control = window.CarrotUI.settingRow.createControl({

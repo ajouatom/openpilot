@@ -408,7 +408,8 @@
    the viewport, so the copy column can never collapse to one character beside
    a wide segmented control. */
 @container (max-width: 600px) {
-  .page--setting #settingScreenItems .settingTop {
+  .page--setting #settingScreenItems .settingTop,
+  .page--setting.setting-layout-split #settingScreenItems .settingTop {
     grid-template-columns: minmax(0, 1fr);
   }
 
@@ -420,4 +421,33 @@
   .page--setting #settingScreenItems .setting-segments {
     max-width: 100%;
   }
+}
+
+/* Named choices can be wider than the copy even in a large viewport with a
+   narrow settings pane. Give them a full row in both split and single layouts. */
+.page--setting #settingScreenItems .settingTop.settingTop--choices {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.page--setting #settingScreenItems .settingTop--choices .ctrl--segmented {
+  width: 100%;
+  min-width: 0;
+  justify-self: stretch;
+  justify-content: flex-start;
+}
+
+.page--setting #settingScreenItems .settingTop--choices .setting-segments {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 140px), 1fr));
+  width: 100%;
+  max-width: 100%;
+}
+
+.page--setting #settingScreenItems .settingTop--choices .setting-segment {
+  min-width: 0;
+  min-height: 42px;
+  padding: 8px 10px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.4;
 }
