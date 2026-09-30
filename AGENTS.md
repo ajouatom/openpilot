@@ -1,5 +1,17 @@
 # Repository memory
 
+- On 2026-09-30, the handover follow-up review uses both angle-error and driver-
+  effort trends for mode 1, with tolerance and paused/gradual withdrawal for
+  ambiguous error growth, retaining fast yield for strong renewed driver effort.
+  For rapid release, onset angle error is an initial transition condition, not
+  a delayed small-error permission gate. Offline prototypes avoid ff7's short
+  46-to-25 withdrawal and schedule earlier limited offers, but unchanged-input
+  replay cannot establish vehicle response. The existing max(legacy, extra)
+  ceiling defeats bounded recovery; any implementation must coordinate total
+  authority and reference transition while preserving mode 0 and actuator limits.
+  This review changes no production code. See
+  docs/steering_handover_ff6_ff7_20260930.md for evidence and unresolved cases.
+
 - On 2026-09-30, Ioniq 5 PE ff6 segments 2/3 and ff7 segment 1 on b8a8a532
   confirmed live handover mode 2→3 but delayed recovery after torque release.
   Low-force confirmation can let angle error exceed the two-degree fast-recovery

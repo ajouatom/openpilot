@@ -108,3 +108,57 @@ and vehicle testing; replay of unchanged inputs cannot establish its effect.
 Private traces, diagnostic messages, contact sheets and reproduction scripts are
 indexed in `.analysis/archive/2026-09-30/ff6-ff7-handover/`. No captured images or
 raw logs are committed. Controller behavior remains at the tested revision.
+
+## Follow-up: combined convergence and release-onset error review
+
+The user clarified that mode 1 should combine angle error and continuous driver
+effort, including both trends. For rapid release, angle error at the onset is an
+initial condition for recovery, not a later small-error prerequisite after waiting
+at low authority. This supersedes the pre-release alignment prerequisite suggested
+above. Small angle excursions need tolerance rather than immediate withdrawal.
+
+An offline, already-started offer study used an error deadband with gradual
+rolloff, the effort-dependent ceiling, and 150 ms trend comparisons. Increasing
+authority requires error within tolerance or converging, together with effort
+not materially increasing. Ambiguous convergence pauses the increase; error alone
+causes a bounded fade. Strong renewed effort remains a fast-yield condition and
+cannot be cancelled by a favorable angle error. Torque sign alone does not prove
+driver intent, so the study's sign veto is not a validated intent detector.
+
+At ff7's original 50.078 s withdrawal, the candidate keeps a ceiling near 47
+instead of the recorded drop to 25. Hypothetical 2/3/4-degree margins all avoid
+that drop; these are sensitivity values, not selected vehicle calibrations.
+Five synthetic assertions check convergence, paused increase, gradual error-only
+withdrawal and rapid renewed-force withdrawal. This studies an existing offer,
+not complete mode-1 entry, rearming or closed-loop stability.
+
+Separately, reducing the existing release confirmation from 100 to 30 ms still
+selects no rapid recovery in the supplied windows. A broader force-decline
+prototype with two-stage confirmation can begin a bounded offer 32/32/95 ms after
+the 5.488/13.001/50.714 s steeringPressed falling edges, compared with the recorded
+350/320/520 ms waits. Those are counterfactual scheduling times on recorded inputs,
+not measured improvements in vehicle response. Several other releases remain
+uncaptured, and broadening detection also admits a large-error late event.
+
+The release prototype records actual-minus-target angle at detection. A candidate
+reference follows the current model plus this initial offset, then fades the
+offset through a bounded transition. Permanently freezing the captured wheel
+angle would fail to follow an unwinding curve. Neither offset blending nor angle
+agreement guarantees the correct road-load torque or absence of driver conflict.
+The comparison variants also differ in opposition thresholds; their aggregate
+counts must not be attributed solely to reference blending.
+
+An integration issue prevents treating this prototype as a controller patch:
+the current max(legacy ceiling, experimental ceiling) contract can override a
+bounded experimental offer. In the offset study this occurs on 284 ff6 and 174
+ff7 capture/recovery samples. A revised experimental state must coordinate the
+selected total ceiling and angle transition, preserving mode 0 and existing
+actuator limits. Merely adding a faster helper ramp cannot provide that contract.
+
+Eleven synthetic release tests pass, including explicit counterexamples: a
+prolonged zero crossing can resemble release until force returns, and the legacy
+ceiling can override the proposed cap. Passing these tests records limitations;
+it does not resolve them. No production controller, setting or device was changed.
+Private scripts and results are indexed in
+`.analysis/archive/2026-09-30/handover-review/`. Closed-loop response, calibration
+and physical handover feel remain unvalidated.
