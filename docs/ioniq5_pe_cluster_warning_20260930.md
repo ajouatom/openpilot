@@ -303,3 +303,40 @@ No recording setting was changed. Local audio/video metadata is archived
 with the analysis, not the source media.
 
 Private reproduction: `.analysis/archive/2026-09-30/ioniq5-cluster32/`.
+
+## Photo alignment and repeated-occurrence clarification
+
+The user subsequently supplied another photo, suggested approximately forty
+seconds based on road appearance, and clarified that the warning appeared
+several times. Treat occurrence counts and exact per-segment warning times as
+unresolved. In particular, the earlier unreported ca/4 interval must not be
+used as a confirmed warning-free negative control.
+
+The new photo again shows "Check Driver Assistance system", with indicated
+speed 30 mph, set speed 75 mph, a right-side concrete barrier, an overhead
+sign and a dark SUV ahead. Sequential decoding of all 1,200 qcamera frames
+places a visually similar sign/barrier/lead-vehicle arrangement around video
++50..53 s, rather than the van and roadside guardrail seen near +40 s. This
+is visual scene matching, not a synchronized exact photograph timestamp or
+the time at which the warning first appeared.
+
+Video/host alignment was checked independently with qRoadEncodeIdx and decoded
+PTS: frame 800 has PTS +40.001011 s, frame 1040 +52.002578 s and frame 1060
++53.002467 s. The first video PTS is monotonic 1979.608389 s, approximately
+80.6 ms before the first carState. qRoadEncodeIdx timestampEof agrees with
+these PTS to microsecond-scale container rounding; no seconds-long video/log
+offset was found in this check.
+
+Logged indicated speed near +40 s is about 34.2 mph, with set speed 74.6 mph.
+Around +50..53 s, indicated speed is about 26.7..28.6 mph and the set speed
+remains 74.6 mph; around +54 s it reaches about 29.8 mph. Thus the photo's
+speed readout does not justify selecting a single exact frame from the visual
+candidate range. Preserve this limitation rather than asserting +40 s or an
+exact +52 s occurrence. The entire candidate window retains the previously
+verified zero known fault fields, valid payload CRC/counters, unchanged SPI
+error count and absent reuse diagnostics. Multiple visible popups do not
+identify their source among still-undecoded or ECU/cluster-internal paths.
+
+Private frame samples, sequential contact sheet, timing verification and
+reproduction: `.analysis/archive/2026-09-30/ioniq5-photo32/`. No source media
+or photo was committed, and no runtime/diagnostic behavior was changed.
