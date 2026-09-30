@@ -124,3 +124,25 @@ def test_mobile_zone_far_from_the_start_lead_is_ignored_even_at_warning_start():
   policy.add_preview(0xD3, 200, 0.0)                      # precise, 200 m ahead: inside the old window
   assert _update(policy, 0.0) == (False, False)
   assert policy.warning_class is None
+
+
+def test_repeated_previews_merge_and_do_not_pile_up_while_stopped():
+  policy = SpeedcamPolicy()
+  for _ in range(50):                                     # stationary: repeats at the same odometer
+    policy.add_preview(0xD3, 361, 0.0)
+  assert len(policy.previews) == 1
+  policy.add_preview(0xD3, 351, 10.0)                     # same camera 10 m later: same target
+  policy.add_preview(0xD0, 361, 10.0)                     # a different kind at that spot stays separate
+  assert len(policy.previews) == 2
+  assert policy.previews[0]["received"] == 10.0
+
+
+def test_precise_repeat_replaces_a_horizon_bound_position():
+  policy = SpeedcamPolicy()
+  policy.add_preview(0xD3, 1995, 0.0)                     # saturated: target only bounded
+  policy.add_preview(0xD3, 1980, 10.0)                    # precise repeat, 5 m further
+  assert len(policy.previews) == 1
+  p = policy.previews[0]
+  assert (p["target"], p["saturated"]) == (1990.0, False)
+  policy.add_preview(0xD3, 1990, 12.0)                    # a later saturated repeat keeps the precise target
+  assert (p["target"], p["saturated"]) == (1990.0, False)
