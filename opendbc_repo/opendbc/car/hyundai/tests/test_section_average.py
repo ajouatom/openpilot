@@ -1,6 +1,6 @@
 import pytest
 
-from opendbc.car.hyundai.section_average import SECTION_END_DEBOUNCE_S, SectionAverage
+from opendbc.car.hyundai.section_average import DISTANCE_SCALE, SECTION_END_DEBOUNCE_S, SectionAverage
 
 
 def _drive(avg, speeds_kph, dt=0.05, start_time=0.0, start_distance=0.0, limit=80):
@@ -37,7 +37,7 @@ def test_no_bank_means_no_allowance():
 def test_congestion_banks_time_and_allows_more_than_the_limit():
   avg = _unlocked()
   now, distance = _drive(avg, [30] * int(60 / 0.05))         # one minute at 30 km/h
-  assert avg.bank_seconds(now, distance) == pytest.approx(60 - 500 / (80 / 3.6), rel=0.01)
+  assert avg.bank_seconds(now, distance) == pytest.approx(60 - 500 * DISTANCE_SCALE / (80 / 3.6), rel=0.01)
   assert avg.allowance_kph(now, distance) > 80
 
 
@@ -50,8 +50,8 @@ def test_running_average_never_exceeds_the_limit_while_spending_the_bank():
     if allowance == 0.0:
       break                                                   # bank spent: back to the normal cap
     now += 0.05
-    distance += min(130, max(80, allowance)) / 3.6 * 0.05
-    assert distance / now * 3.6 <= 80 + 0.5
+    distance += min(130, max(80, allowance)) / DISTANCE_SCALE / 3.6 * 0.05   # vEgo odometer
+    assert distance * DISTANCE_SCALE / now * 3.6 <= 80 + 0.5                  # true average
   assert avg.bank_seconds(now, distance) <= 1.0
 
 

@@ -6,7 +6,7 @@ from types import SimpleNamespace
 import pytest
 
 from opendbc.can import CANParser
-from opendbc.car import Bus, structs
+from opendbc.car import Bus, DT_CTRL, structs
 from opendbc.car.hyundai.carstate import (
   CANFD_HDA_INFO_MSG, CANFD_NAVI_PROFILE_MSG, CANFD_NAVI_STATUS_MSG, CarState,
   VEHICLE_NAVI_POSITION_TIMEOUT_NS, VEHICLE_NAVI_ROUTE_TIMEOUT_NS, VEHICLE_NAVI_SCHOOL_ZONE_MAX_DISTANCE,
@@ -1359,8 +1359,13 @@ def _section_state():
   return state
 
 
+CLU_RATIO = 0.968  # vEgo / cluster speed on this car (1/1.033)
+TRUE_OVER_VEGO = 1.0074  # GPS / vEgo, largest drive median (2026-09-30)
+
+
 def _section_ret(v_ego=16.0):
-  return SimpleNamespace(vEgo=v_ego, vehicleNaviSectionActive=True, vehicleNaviSpeed=80.0, speedLimitDistance=1.0)
+  return SimpleNamespace(vEgo=v_ego, vehicleNaviSectionActive=True, vehicleNaviSpeed=80.0, speedLimitDistance=1.0,
+                         vCluRatio=CLU_RATIO)
 
 
 def test_section_stays_capped_until_unlocked():
@@ -1467,3 +1472,51 @@ def test_minus_passes_through_while_section_locked():
   assert state._hold_speedcam_decel(press, False) == press
   assert state._hold_speedcam_decel([], True) == []
   assert state._hold_speedcam_decel(release, False) == release
+
+
+def test_section_allowance_is_inverted_through_factor_and_cluster_ratio():
+  state = _section_state()
+  state._apply_section_average(_section_ret(), True, False, False)       # unlock
+  state.speedcam_time += 60.0                                            # bank a minute
+  ret = _section_ret()
+  state._apply_section_average(ret, False, False, False)
+  allowance = state.section_average.allowance_kph(state.speedcam_time, state.totalDistance)
+  assert ret.vehicleNaviSpeed == pytest.approx(allowance / 1.015 / CLU_RATIO / 1.07)
+  # What the car then drives (carrot_serv x factor, planner x vCluRatio) is the allowance in vEgo units.
+  assert ret.vehicleNaviSpeed * 1.07 * CLU_RATIO == pytest.approx(allowance / 1.015)
+
+
+def test_section_true_average_stays_at_or_below_the_limit_end_to_end():
+  # Congestion banks time; the driver unlocks with the set speed at 130 and the car follows the
+  # section target the way carrot_serv (x factor, cluster speed) and the planner (x vCluRatio) do.
+  # Its true speed is vEgo x TRUE_OVER_VEGO. While banked time is being spent the true running
+  # average must stay at or below the limit.
+  state = _section_state()
+  state.speedcam_v_cruise = 130.0
+  dt = DT_CTRL * 10
+  true_distance = 0.0
+
+  def step(v_ego, unlock=False):
+    nonlocal true_distance
+    ret = _section_ret(v_ego)
+    state.speedcam_time += dt - DT_CTRL                    # _apply_section_average adds DT_CTRL itself
+    state._apply_section_average(ret, unlock, False, False)
+    state.totalDistance += v_ego * dt
+    true_distance += v_ego * TRUE_OVER_VEGO * dt
+    return ret
+
+  for _ in range(int(120 / dt)):
+    step(40 / 3.6 / TRUE_OVER_VEGO)                        # two minutes at a true 40 km/h
+  ret = step(40 / 3.6 / TRUE_OVER_VEGO, unlock=True)
+  assert state.section_average.unlocked
+
+  spent_steps = 0
+  while state.section_average.allowance_kph(state.speedcam_time, state.totalDistance) > 0.0:
+    v_ego = min(130.0, ret.vehicleNaviSpeed * 1.07) * CLU_RATIO / 3.6
+    ret = step(v_ego)
+    elapsed = state.speedcam_time - state.section_average.start_time
+    assert true_distance / elapsed * 3.6 <= 80.0 + 0.1
+    spent_steps += 1
+    assert spent_steps < int(1200 / dt)
+  assert spent_steps * dt > 30                             # the bank was actually used above the limit
+

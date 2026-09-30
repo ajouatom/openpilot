@@ -7,12 +7,17 @@ B = elapsed_time - distance / limit, and B >= 0 keeps the running average at or
 below the limit whatever the remaining length is. The allowance spends B over a
 fixed horizon and falls back to the limit cap as B runs out. A long press of
 cruise - locks the section again; leaving the section resets it.
+
+Distances are carstate's vEgo odometer. vEgo reads about 0.6 % below GPS speed on
+this car (1.0054-1.0074 in five drives, p90 1.012; 2026-09-30), so the bank scales
+them by DISTANCE_SCALE and the allowance is an estimate of true (camera) speed.
 """
 
 SECTION_END_DEBOUNCE_S = 3.0
 SPEND_HORIZON_M = 1000.0
 MIN_BANK_S = 0.5
 MAX_ALLOWANCE_KPH = 250.0
+DISTANCE_SCALE = 1.015  # vEgo odometer -> true distance, with margin over the measured 1.006
 
 
 class SectionAverage:
@@ -56,10 +61,10 @@ class SectionAverage:
   def bank_seconds(self, now, total_distance):
     if not self.active:
       return 0.0
-    return (now - self.start_time) - (total_distance - self.start_distance) / self._limit_ms()
+    return (now - self.start_time) - (total_distance - self.start_distance) * DISTANCE_SCALE / self._limit_ms()
 
   def allowance_kph(self, now, total_distance):
-    """Speed (km/h, actual) that spends the bank over SPEND_HORIZON_M; 0 when locked or without bank."""
+    """True speed (km/h) that spends the bank over SPEND_HORIZON_M; 0 when locked or without bank."""
     if not self.unlocked:
       return 0.0
     bank = self.bank_seconds(now, total_distance)
