@@ -245,6 +245,8 @@ class CarState(CarStateBase):
     self.speedcam_input_consumed = False
     self.speedcam_v_cruise = 0.0             # set by card from the cruise set speed
     self.speedcam_decel_count = 0
+    self.speedcam_decel_hold = False         # cruise - held back from cruise.py while a section is unlocked
+    self.speedcam_decel_long_fired = False   # that held press reached the long press (section relocked)
     self.speedcam_time = 0.0
     self.section_average = SectionAverage()
     self._read_speedcam_params()
@@ -782,6 +784,29 @@ class CarState(CarStateBase):
           self.speedcam_accel_swallow = False
         continue
       kept.append(event)
+    return kept
+
+  def _hold_speedcam_decel(self, button_events, decel_long_press):
+    """While a section is unlocked, cruise - goes to carstate only: a long press relocks the section
+    without cruise.py's -10 step, and a short press is handed to cruise.py at release (where it acts)."""
+    if decel_long_press and self.speedcam_decel_hold:
+      self.speedcam_decel_long_fired = True
+    kept = []
+    for event in button_events:
+      if event.type != ButtonType.decelCruise:
+        kept.append(event)
+      elif event.pressed:
+        if self.section_average.unlocked:
+          self.speedcam_decel_hold = True
+          self.speedcam_decel_long_fired = False
+        else:
+          kept.append(event)
+      elif self.speedcam_decel_hold:
+        if not self.speedcam_decel_long_fired:
+          kept += [structs.CarState.ButtonEvent(pressed=True, type=ButtonType.decelCruise), event]
+        self.speedcam_decel_hold = False
+      else:
+        kept.append(event)
     return kept
 
   def _clear_vehicle_navi_events(self):
@@ -1475,7 +1500,8 @@ class CarState(CarStateBase):
     speed_limit_cam = self._apply_speedcam_policy(ret, speed_limit_cam, speedcam_warning_active, speedcam_warning_speed,
                                                   speedcam_accel_rising, speedcam_gas_tok)
     self.update_speed_limit(ret, speed_limit_cam, distance_time_changed)
-    self._apply_section_average(ret, speedcam_accel_rising, speedcam_gas_tok, self._update_speedcam_decel_long_press())
+    speedcam_decel_long_press = self._update_speedcam_decel_long_press()
+    self._apply_section_average(ret, speedcam_accel_rising, speedcam_gas_tok, speedcam_decel_long_press)
 
     paddle_button = self.paddle_button_prev
     if self.cruise_btns_msg_canfd == "CRUISE_BUTTONS":
@@ -1485,10 +1511,10 @@ class CarState(CarStateBase):
 
     # Filter the Python list before the single capnp assignment: re-assigning a
     # capnp list field from itself clears the source first and zeroes every event.
-    ret.buttonEvents = self._swallow_speedcam_accel([
+    ret.buttonEvents = self._hold_speedcam_decel(self._swallow_speedcam_accel([
       *create_button_events(self.cruise_buttons[-1], prev_cruise_buttons, BUTTONS_DICT),
       *create_button_events(paddle_button, self.paddle_button_prev, {1: ButtonType.paddleLeft, 2: ButtonType.paddleRight}),
-      *create_button_events(self.main_buttons[-1], prev_main_buttons, {1: ButtonType.mainCruise})])
+      *create_button_events(self.main_buttons[-1], prev_main_buttons, {1: ButtonType.mainCruise})]), speedcam_decel_long_press)
 
     self.paddle_button_prev = paddle_button
 

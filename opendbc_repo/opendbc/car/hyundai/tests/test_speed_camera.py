@@ -91,6 +91,8 @@ def _car_state(distance_time_tenths=60):
   state.speedcam_input_consumed = False
   state.speedcam_v_cruise = 0.0
   state.speedcam_decel_count = 0
+  state.speedcam_decel_hold = False
+  state.speedcam_decel_long_fired = False
   state.speedcam_time = 0.0
   state.section_average = SectionAverage()
   state._read_speedcam_params()
@@ -1411,3 +1413,57 @@ def test_section_long_minus_locks_again_and_camera_skip_wins_the_input():
   skipped.speedcam_input_consumed = True                    # this press already skipped a camera
   skipped._apply_section_average(_section_ret(), True, False, False)
   assert not skipped.section_average.unlocked
+
+
+def _decel(pressed):
+  return structs.CarState.ButtonEvent(type=ButtonType.decelCruise, pressed=pressed)
+
+
+def _decel_types(events):
+  return [(str(event.type), event.pressed) for event in events if event.type == ButtonType.decelCruise]
+
+
+def test_section_long_minus_relock_never_reaches_cruise():
+  # A long cruise - that relocks an unlocked section must not also step the set speed down by 10.
+  state = _section_state()
+  state._apply_section_average(_section_ret(), True, False, False)
+  assert state.section_average.unlocked
+  state.speedcamLongPressFrames = 40
+  state.cruise_buttons = deque([Buttons.SET_DECEL])
+  paddle = structs.CarState.ButtonEvent(type=ButtonType.paddleLeft, pressed=True)
+
+  assert _decel_types(state._hold_speedcam_decel([_decel(True), paddle], False)) == []
+  forwarded = []
+  for _ in range(80):                                       # hold past the long press and one repeat
+    long_press = state._update_speedcam_decel_long_press()
+    state._apply_section_average(_section_ret(), False, False, long_press)
+    forwarded += state._hold_speedcam_decel([], long_press)
+  assert not state.section_average.unlocked                 # relocked
+  assert forwarded == []
+  assert state._hold_speedcam_decel([_decel(False)], False) == []   # release swallowed too
+  assert not state.speedcam_decel_hold
+
+
+def test_section_short_minus_is_handed_to_cruise_at_release():
+  state = _section_state()
+  state._apply_section_average(_section_ret(), True, False, False)
+  state.speedcamLongPressFrames = 40
+  state.cruise_buttons = deque([Buttons.SET_DECEL])
+
+  assert state._hold_speedcam_decel([_decel(True)], False) == []
+  for _ in range(10):
+    assert state._hold_speedcam_decel([], state._update_speedcam_decel_long_press()) == []
+  ret = structs.CarState()
+  ret.buttonEvents = state._hold_speedcam_decel([_decel(False)], False)
+  # cruise.py handles a same-frame press + release as one short press (as for remote buttons)
+  assert _decel_types(ret.buttonEvents) == [("decelCruise", True), ("decelCruise", False)]
+  assert state.section_average.unlocked and not state.speedcam_decel_hold
+
+
+def test_minus_passes_through_while_section_locked():
+  state = _section_state()
+  assert not state.section_average.unlocked
+  press, release = [_decel(True)], [_decel(False)]
+  assert state._hold_speedcam_decel(press, False) == press
+  assert state._hold_speedcam_decel([], True) == []
+  assert state._hold_speedcam_decel(release, False) == release
