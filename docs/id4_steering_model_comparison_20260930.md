@@ -1,5 +1,20 @@
 # ID.4 same-road model and learned-parameter comparison
 
+Follow-up implementation: the user subsequently requested applying manual SR
+and live scaling to MEB. The MEB bypass described below applies to the recorded
+commits, not the updated controller. The new controller honors CustomSR and
+SteerRatioRate; defaults 0/100 retain unscaled learned SR. See
+[the settings guide](user/en/settings.md). This change is not a validated fix
+for the inward-curve complaint analyzed here.
+
+History: the bypass originated in
+[tjddyd0130's PR #427](https://github.com/ajouatom/openpilot/pull/427), merged
+2026-07-04 as `f24623f3950f49aa289077baf38235be6c223542` (Git author sodoii3).
+`99319aa7b0fc76f109f4688e02078cbec2f0356d` later extracted the existing bypass
+into steer_ratio.py while adding invalid-rate validation; it did not originate
+the MEB exception. The original rationale was preserving infiniteCable2's
+learned-ratio convention for the curvature frame correction.
+
 ## Scope and conclusion
 
 The user reported inward curve positioning around 13.1 s and 28.6 s of
