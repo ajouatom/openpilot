@@ -33,6 +33,10 @@ WARNING_LEAD_M_PER_KPH = 6.1
 WARNING_LEAD_TOLERANCE = 0.2
 WARNING_LEAD_MIN_TOLERANCE_M = 60.0
 MATCH_BEHIND_M = 50.0
+# A mobile zone suppresses deceleration, so it must be the zone that started this warning:
+# its target sits one lead ahead of the warning start (44/44 zone warnings in 37 drives
+# within -12..+17 m, 2026-09-30). A kind 3 preview elsewhere never turns a warning into a zone.
+ZONE_LEAD_TOLERANCE_M = 60.0
 RECENT_PREVIEW_M = 2600.0
 PREVIEW_KEEP_M = 3000.0
 
@@ -57,6 +61,7 @@ class SpeedcamPolicy:
   def reset_warning(self):
     self.warning_active = False
     self.warning_speed = 0
+    self.warning_start_distance = None
     self.warning_class = None
     self.skipped = False
 
@@ -75,19 +80,25 @@ class SpeedcamPolicy:
     })
     self.previews = [p for p in self.previews if total_distance - p["received"] <= PREVIEW_KEEP_M]
 
-  def classify(self, speed, total_distance, starting=True):
+  def classify(self, speed, total_distance, starting=True, start_distance=None):
     """Classify the warning at total_distance from same-speed previews (None when none match).
 
     When a warning starts its camera sits one warning lead ahead. A saturated preview
     (entered at the ~2 km horizon) matches only when its target is at that lead;
     a precise preview may also be nearer, e.g. a warning that began before logging.
-    Upgrades during a warning use precise previews only.
+    Upgrades during a warning use precise previews only. A mobile zone (unflagged kind 3)
+    counts only when its target is one lead ahead of the warning start, whenever it arrived.
     """
     lead = speed * WARNING_LEAD_M_PER_KPH
     tolerance = max(WARNING_LEAD_MIN_TOLERANCE_M, lead * WARNING_LEAD_TOLERANCE)
+    if start_distance is None:
+      start_distance = total_distance
     candidates = []
     for p in self.previews:
       if p["speed"] != speed or total_distance - p["received"] > RECENT_PREVIEW_M:
+        continue
+      if (p["kind"] == KIND_MOBILE_ZONE and not p["flagged"] and
+          abs(p["target"] - start_distance - lead) > ZONE_LEAD_TOLERANCE_M):
         continue
       ahead = p["target"] - total_distance
       if p["saturated"]:
@@ -116,8 +127,9 @@ class SpeedcamPolicy:
       self.reset_warning()
       self.warning_active = True
       self.warning_speed = warning_speed
+      self.warning_start_distance = total_distance
 
-    current = self.classify(warning_speed, total_distance, starting=starting)
+    current = self.classify(warning_speed, total_distance, starting=starting, start_distance=self.warning_start_distance)
     # A warning never downgrades: a fixed camera inside a mobile zone keeps it hard.
     if current is not None and (self.warning_class is None or current > self.warning_class):
       self.warning_class = current
