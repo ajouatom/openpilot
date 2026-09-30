@@ -8,6 +8,7 @@ import argparse
 import base64
 import hashlib
 import json
+import gzip
 import os
 from pathlib import Path
 
@@ -23,7 +24,7 @@ def read_exact(stream, size):
 
 
 def validate(manifest):
-  if manifest['format'] != 1:
+  if manifest['format'] not in (1, 2):
     raise ValueError('Unknown patch format')
   start, length = manifest['root_offset'], manifest['root_bytes']
   if start < 512 or start % 512 or length <= 0 or length % 512:
@@ -40,9 +41,23 @@ def validate(manifest):
       raise ValueError('Patch data checksum mismatch')
     previous = offset + len(old)
     patches.append((offset, old, new))
-  if not patches or sum(len(p[1]) for p in patches) > 65536:
+  limit = 65536 if manifest['format'] == 1 else 32 * (1 << 20)
+  if not patches or sum(len(p[1]) for p in patches) > limit:
     raise ValueError('Unexpected patch size')
   return patches
+
+
+def load_manifest(path, expected):
+  data = Path(path).read_bytes()
+  if len(data) > 96 * (1 << 20) or hashlib.sha256(data).hexdigest() != expected:
+    raise RuntimeError('Release manifest checksum mismatch')
+  if str(path).endswith('.gz'):
+    import io
+    with gzip.GzipFile(fileobj=io.BytesIO(data)) as stream:
+      data = stream.read(96 * (1 << 20) + 1)
+    if len(data) > 96 * (1 << 20):
+      raise ValueError('Manifest decompression limit exceeded')
+  return json.loads(data)
 
 
 def normalized_hash(stream, start, length, patches, report=print):
@@ -74,7 +89,7 @@ def apply(stream, manifest, *, verify_only=False, sync=None, report=print):
   if len(expected) != 512 or read_exact(stream, 512) != expected:
     raise RuntimeError('Partition identity differs from the supported release')
   if normalized_hash(stream, start, length, patches, report) != manifest['root_sha256']:
-    raise RuntimeError('Not the pristine supported root filesystem; nothing was written. Booted cards require the online installer.')
+    raise RuntimeError('Unsupported or modified root filesystem; nothing was written. This patch requires its exact base release; do not bypass verification.')
   changes = []
   for offset, old, new in patches:
     stream.seek(offset)
@@ -115,15 +130,20 @@ def apply(stream, manifest, *, verify_only=False, sync=None, report=print):
 
 def main():
   parser = argparse.ArgumentParser(description=__doc__)
-  parser.add_argument('--target', required=True, help='unmounted disk, or disposable test image')
+  parser.add_argument('--target', help='unmounted disk, or disposable test image')
   parser.add_argument('--manifest', required=True)
   parser.add_argument('--manifest-sha256', required=True)
   parser.add_argument('--verify-only', action='store_true')
+  parser.add_argument('--inspect', action='store_true', help='Validate manifest and print bounds without opening any disk')
   args = parser.parse_args()
-  data = Path(args.manifest).read_bytes()
-  if hashlib.sha256(data).hexdigest() != args.manifest_sha256:
-    raise RuntimeError('Release manifest checksum mismatch')
-  manifest = json.loads(data)
+  manifest = load_manifest(args.manifest, args.manifest_sha256)
+  if args.inspect:
+    validate(manifest)
+    print(json.dumps(dict(root_offset=manifest['root_offset'], root_bytes=manifest['root_bytes'],
+                         image_bytes=manifest.get('image_bytes', manifest['root_offset'] + manifest['root_bytes']))))
+    return
+  if not args.target:
+    parser.error('--target is required except with --inspect')
   with open(args.target, 'rb' if args.verify_only else 'r+b', buffering=0) as stream:
     def sync():
       stream.flush()

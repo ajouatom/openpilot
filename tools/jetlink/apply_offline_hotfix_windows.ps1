@@ -1,7 +1,8 @@
 #Requires -RunAsAdministrator
 param(
   [Parameter(Mandatory=$true)][int]$DiskNumber,
-  [Parameter(Mandatory=$true)][string]$SerialNumber,
+  [Parameter(Mandatory=$true)][AllowEmptyString()][string]$SerialNumber,
+  [string]$UniqueId,
   [Parameter(Mandatory=$true)][long]$DiskBytes,
   [Parameter(Mandatory=$true)][string]$Python,
   [Parameter(Mandatory=$true)][ValidatePattern('^[0-9a-f]{64}$')][string]$ManifestSha256,
@@ -17,12 +18,15 @@ try {
   if ((Get-FileHash -LiteralPath $Manifest -Algorithm SHA256).Hash.ToLowerInvariant() -ne $ManifestSha256) {
     throw 'Release manifest checksum mismatch'
   }
-  $patch = Get-Content -LiteralPath $Manifest -Raw | ConvertFrom-Json
+  $info = & $pythonPath "$PSScriptRoot\offline_hotfix.py" --manifest $Manifest --manifest-sha256 $ManifestSha256 --inspect
+  if ($LASTEXITCODE -ne 0) { throw 'Invalid patch manifest' }
+  $patch = $info | ConvertFrom-Json
   function Assert-Target {
     $disk = Get-Disk -Number $DiskNumber
-    if ($disk.IsBoot -or $disk.IsSystem -or $disk.IsReadOnly -or $disk.BusType -ne 'USB' -or
-        $disk.SerialNumber.Trim() -ne $SerialNumber.Trim() -or $disk.Size -ne $DiskBytes -or
-        $disk.Size -lt ($patch.root_offset + $patch.root_bytes)) {
+    if ([string]::IsNullOrWhiteSpace($SerialNumber) -and [string]::IsNullOrWhiteSpace($UniqueId)) { throw 'Stable disk identity required' }
+    if ($disk.IsBoot -or $disk.IsSystem -or $disk.IsReadOnly -or $disk.IsOffline -or $disk.BusType -ne 'USB' -or
+        ([string]$disk.SerialNumber).Trim() -ne $SerialNumber.Trim() -or ($UniqueId -and $disk.UniqueId -ne $UniqueId) -or
+        $disk.Size -ne $DiskBytes -or $disk.Size -lt $patch.image_bytes) {
       throw 'USB disk identity/capacity/system-disk guard failed'
     }
   }

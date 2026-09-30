@@ -36,9 +36,28 @@ def locked():
 
 def configuration():
   value = json.loads(MARKER.read_text())
+  if value == {'format': 2, 'layout': 'carrot-r2-sd-nvme'}:
+    return portable_configuration()
   if value != {'format': 1, 'root': '/dev/mmcblk0p1', 'data': '/dev/mmcblk0p17', 'setup': '/dev/mmcblk0p16'}:
     raise ValueError('Unsupported protected SD layout')
   return value
+
+
+def portable_configuration(sys_root=Path('/sys/dev/block')):
+  # Resolve the mounted root through the kernel, never through a global label
+  # search: an attached clone must not donate its DATA or identity partition.
+  number = run('findmnt', '-n', '-o', 'MAJ:MIN', '/')
+  if not re.fullmatch(r'[0-9]+:[0-9]+', number):
+    raise ValueError('Root is not a block filesystem')
+  partition = (sys_root / number).resolve(strict=True)
+  disk = partition.parent.name
+  if (not re.fullmatch(r'mmcblk[0-9]+|nvme[0-9]+n[0-9]+', disk)
+      or partition.name != disk + 'p1' or (partition / 'partition').read_text().strip() != '1'):
+    raise ValueError('Expected SD or NVMe APP partition 1')
+  root = '/dev/' + partition.name
+  if run('blkid', '-s', 'PARTUUID', '-o', 'value', root) != 'd3fb8cf2-60ea-44b1-bec1-63a7417719cf':
+    raise ValueError('Unexpected portable APP identity')
+  return dict(format=2, root=root, data=f'/dev/{disk}p17', setup=f'/dev/{disk}p16', efi=f'/dev/{disk}p10')
 
 
 @contextmanager
@@ -48,16 +67,24 @@ def setup_mount(writable=False):
   mounted = False
   try:
     options = ('rw' if writable else 'ro') + ',nosuid,nodev,noexec,umask=077'
+    if config['format'] == 2:
+      validate_setup(config)
     run('mount', '-t', 'vfat', '-o', options, config['setup'], str(SETUP))
     mounted = True
     yield SETUP / 'identity'
-  except (OSError, subprocess.SubprocessError):
+  except (OSError, RuntimeError, subprocess.SubprocessError):
     if mounted:
       raise
     yield None
   finally:
     if mounted:
       run('umount', str(SETUP))
+
+
+def validate_setup(config):
+  if (run('blkid', '-s', 'LABEL', '-o', 'value', config['setup']) != 'CARROTSETUP'
+      or run('blkid', '-s', 'TYPE', '-o', 'value', config['setup']) != 'vfat'):
+    raise RuntimeError('Unexpected SETUP partition')
 
 
 def data_identity():
@@ -136,6 +163,12 @@ def boot():
   if root_source != config['root'] or 'ro' not in options:
     raise RuntimeError('Protected boot requires the expected read-only root')
   run('blockdev', '--setro', config['root'])
+  if config['format'] == 2:
+    # local-fs-pre ordering creates this before fstab's optional read-only EFI
+    # mount. No filesystem lookup on another disk and no persistent OS write.
+    efi = Path('/run/carrot-efi')
+    efi.unlink(missing_ok=True)
+    efi.symlink_to(config['efi'])
   mount_volatile(Path('/'), Path('/run/carrot-volatile'), stage)
   DATA.mkdir(mode=0o700, exist_ok=True)
   state = 'base-recovery'

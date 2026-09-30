@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="ko"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Carrot Jetson · SD / NVMe 패치</title>
+<style>
+body{margin:0;background:#eff3f8;color:#192b43;font:17px/1.7 system-ui,sans-serif}main{max-width:820px;margin:40px auto;padding:0 24px}
+header{background:#163351;color:white;padding:30px;border-radius:20px}h1{font-size:30px;line-height:1.3;margin:8px 0}h2{font-size:21px;margin:0 0 12px}
+section{background:white;margin:20px 0;padding:25px 30px;border-radius:16px;box-shadow:0 3px 16px #1232}.en{display:block;color:#66768b;font-size:14px;line-height:1.6;margin:4px 0 16px}header .en{color:#c4d8ed}
+p{margin:12px 0}.note{border-left:5px solid #f3af35}code{background:#edf2f7;padding:3px 6px;border-radius:5px;overflow-wrap:anywhere}b{color:#135e9d}header b{color:white}
+</style><main>
+<header><small>CARROT JETSON · Orin Nano · R2</small><h1>이미지는 그대로.<br>패치 하나로 SD와 NVMe.</h1><span class="en" lang="en">Keep your existing image. One patch for microSD and M.2 NVMe.</span>
+<p>추가 다운로드 약 32MB · 패치 약 5~20분</p><span class="en" lang="en">About 32 MB to download · Patching takes about 5–20 minutes; slow readers may take longer.</span></header>
+<section class="note"><h2>시험 패치입니다</h2><span class="en" lang="en">Experimental patch</span>
+<p>v0.4.0-boot-preview의 R2 이미지 전용입니다. 실제 NVMe 부팅은 아직 확인 전입니다. 정상 동작하던 SD는 복구용으로 보관하세요.</p><span class="en" lang="en">For the R2 image in v0.4.0-boot-preview only. Physical NVMe boot is not yet verified. Keep your working SD as a fallback. Other versions are rejected before writing.</span></section>
+<section><h2>1 · 기존 설치파일에 패치 풀기</h2><span class="en" lang="en">Extract into your existing installer</span>
+<p>패치 ZIP 안의 내용을 기존 <b>CarrotJetson 폴더 안에</b> 풀어 주세요. <code>support</code> 폴더는 합치고 같은 이름의 파일은 교체하세요.</p><span class="en" lang="en">Extract the patch ZIP contents inside your existing CarrotJetson folder. Merge the support folders and replace matching files. The original installer supplies Python; no separate installation is needed.</span>
+<p>처음 설치하는 매체는 기존 <b>01 → 02</b>를 실행하세요. 이미 R2 이미지를 기록한 매체는 다시 기록하지 않아도 됩니다.</p><span class="en" lang="en">For new media, run the existing steps 01 then 02. Media that already contains the R2 image does not need rewriting. Step 02 erases the selected medium: back it up first.</span>
+<p>NVMe는 <b>NVMe용 USB 외장 케이스</b>로 PC에 연결하세요.</p><span class="en" lang="en">Connect NVMe to the PC using a USB NVMe enclosure. Internal PC SSDs are intentionally excluded.</span></section>
+<section><h2>2 · 공용 패치 실행</h2><span class="en" lang="en">Apply the common patch</span>
+<p><code>03_SD_SSD공용패치.cmd</code>를 더블클릭하세요.</p><span class="en" lang="en">Double-click 03_SD_SSD공용패치.cmd.</span>
+<p>관리자 권한 <b>예</b> → 대상 디스크의 <b>번호</b> 입력 → 확인 후 <b>PATCH</b> 입력</p><span class="en" lang="en">Choose Yes at the administrator prompt, enter the target disk number, then type PATCH to confirm. Any other confirmation cancels.</span>
+<p>검사·패치·기록 확인은 자동입니다. 완료 표시가 나올 때까지 기다리세요.</p><span class="en" lang="en">Verification, patching and readback are automatic. Wait for completion. Do not unplug, close the window or turn off the PC. If interrupted, reconnect and run the same patch again; do not boot a partly patched device.</span></section>
+<section class="note"><h2>3 · 전원을 끄고 장착</h2><span class="en" lang="en">Install only with power disconnected</span>
+<p>PC에서 안전하게 제거한 뒤, Jetson을 정상 종료하고 <b>전원을 완전히 분리</b>하세요. 사용할 SD 또는 NVMe를 장착한 다음 전원을 연결하세요.</p><span class="en" lang="en">Safely eject from the PC. Shut down Jetson and fully disconnect power before inserting SD or installing NVMe. Reconnect power afterwards.</span>
+<p>같은 이미지를 기록한 <b>SD와 NVMe를 동시에 꽂지 마세요.</b></p><span class="en" lang="en">Install only one copy of the image. Cloned SD and NVMe have identical partition identities and must not be connected together.</span>
+<p>첫 시험은 안전하게 정차하고 주행 보조를 해제한 상태에서 부팅·Wi-Fi·모델 연결을 확인하세요.</p><span class="en" lang="en">Test boot, Wi-Fi and model connection while safely parked with driver assistance disengaged. This patch does not update QSPI firmware; compatible JetPack 6 / L4T 36 firmware is still required.</span>
+<p>나중에 02로 원본 이미지를 다시 기록했다면 03 패치도 다시 실행하세요.</p><span class="en" lang="en">After any later rewrite of the original image with step 02, run the patch again. SSD capacity beyond the existing image layout is not automatically expanded.</span></section>
+</main></html>
