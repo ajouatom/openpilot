@@ -79,7 +79,14 @@ def main():
     return
   SETUP.mkdir(parents=True, exist_ok=True)
   # The image partition number is fixed; never select an unrelated labelled USB disk.
-  subprocess.run(['mount', '-o', 'rw,nosuid,nodev,noexec,umask=077', '/dev/mmcblk0p16', str(SETUP)], check=True)
+  setup_device = '/dev/mmcblk0p16'
+  if protected:
+    from protected_storage import configuration, validate_setup
+    layout = configuration()
+    if layout['format'] == 2:
+      validate_setup(layout)
+    setup_device = layout['setup']
+  subprocess.run(['mount', '-o', 'rw,nosuid,nodev,noexec,umask=077', setup_device, str(SETUP)], check=True)
   try:
     config_file = SETUP/'setup.json'
     if protected and (STATE/'provisioned.json').exists() and not config_file.exists():

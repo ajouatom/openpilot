@@ -16,9 +16,10 @@ foreach ($case in @(@('Number',8),@('Size',64000000000),@('UniqueId','card-2'),@
   try { Assert-SameDisk $disk $good 25769803776 0 } catch { $rejected = $true }
   if (-not $rejected) { throw "Replaced disk accepted: $($case[0])" }
 }
-foreach ($file in @('launcher.ps1','disks.ps1','messages.ps1','../write_sd_windows.ps1')) {
+foreach ($file in @('launcher.ps1','disks.ps1','messages.ps1','sd_nvme_patch.ps1','../write_sd_windows.ps1','../apply_offline_hotfix_windows.ps1')) {
   $tokens=$null; $errors=$null
-  $null = [System.Management.Automation.Language.Parser]::ParseFile((Join-Path $PSScriptRoot $file),[ref]$tokens,[ref]$errors)
+  $body = Get-Content -LiteralPath (Join-Path $PSScriptRoot $file) -Raw -Encoding UTF8
+  $null = [System.Management.Automation.Language.Parser]::ParseInput($body,[ref]$tokens,[ref]$errors)
   if ($errors.Count) { throw ($errors | Out-String) }
 }
 Write-Output 'PASS: 15 disk guards and PowerShell syntax; no disk opened or written'
