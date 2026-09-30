@@ -1,5 +1,10 @@
 # Jetson microSD / NVMe 공용 패치
 
+**v2 수정 안내:** v1은 초기 부팅 이미지에 없는 `wc`·`readlink` 명령을 사용하여
+부팅을 막는 결함이 있었습니다. v2는 해당 명령 없이 동작합니다. 이미 v1을 적용했다면
+새 패치를 기존 CarrotJetson 폴더에 덮어 풀고 **03만 다시 실행**하세요.
+이미지 재다운로드·재기록은 필요 없습니다. v1 배포는 중단합니다.
+
 기존 **v0.4.0-boot-preview의 R2 이미지**를 그대로 사용합니다. 새 이미지를
 제작하거나 다시 다운로드하지 않고, 약 32 MB 패치만 추가합니다.
 대상은 Orin Nano 개발자 키트의 microSD와 **M.2 NVMe**입니다.
@@ -8,7 +13,7 @@ USB 외장 케이스는 PC에서 기록할 때 사용하며, Jetson에서는 NVM
 **시험 패치:** PC 검사는 통과했지만 패치된 매체의 실제 SD/NVMe 부팅은 아직
 검증 전입니다. 기존 정상 작동 SD를 복구용으로 보관하세요.
 
-1. [패치파일 받기](https://upload.shind0.synology.me/downloads/jetson/v0.4.0-sd-nvme-patch-preview/carrot-jetson-windows.zip)
+1. [패치파일 받기](https://upload.shind0.synology.me/downloads/jetson/v0.4.0-sd-nvme-patch-v2-preview/carrot-jetson-windows.zip)
    후 내용을 기존 **CarrotJetson 폴더 안에** 풀어 `support` 폴더를 합칩니다.
 2. 처음 설치하는 매체라면 기존 **01 → 02**를 완료합니다. 이미 R2를 기록했다면
    다시 기록하지 않습니다. NVMe는 **NVMe용 USB 외장 케이스**로 PC에 연결합니다.
@@ -25,6 +30,11 @@ USB 외장 케이스는 PC에서 기록할 때 사용하며, Jetson에서는 NVM
 
 ## English
 
+**v2 correction:** v1 called `wc` and `readlink`, which are absent from the R2
+initrd, preventing early boot. v2 uses Bash builtins instead. If v1 is already
+applied, extract the new patch into the same CarrotJetson folder and **rerun only
+03**. No image download or rewrite is required. v1 is withdrawn.
+
 Keep the existing **R2 image from v0.4.0-boot-preview**. No new image build or
 download is needed. This approximately 32 MB add-on patch supports microSD and
 M.2 NVMe on the Orin Nano developer kit. Use a USB NVMe enclosure for PC writing,
@@ -33,7 +43,7 @@ then install the SSD in Jetson's NVMe slot.
 **Experimental:** desktop checks passed; physical boot of the patched SD/NVMe
 is not yet verified. Keep your working SD as a recovery option.
 
-1. [Download the patch](https://upload.shind0.synology.me/downloads/jetson/v0.4.0-sd-nvme-patch-preview/carrot-jetson-windows.zip)
+1. [Download the patch](https://upload.shind0.synology.me/downloads/jetson/v0.4.0-sd-nvme-patch-v2-preview/carrot-jetson-windows.zip)
    and extract its contents **inside the existing CarrotJetson folder**. Merge
    `support` folders and replace matching files. Existing portable Python is reused.
 2. For new media, run the original **01 → 02**. Already recorded R2 media does
@@ -84,7 +94,7 @@ integrity checking, not an unattended signed OS updater.
 Base image SHA256:
 `b11f5601d3a713ad0de23315ee90daddf5452f8e548f2c87c8eeec28d321e55f`.
 Virtual patched image SHA256 (no image file was created):
-`213d0d9f30ad72cd3ed1752d32f2619bda6484198abe8b843fcb921633ff75d9`.
+`2f97e66ea533c34750ba676a81df51e4485eb6ed742dcbe48a324ad605ade62b` (v2).
 
 Checks cover the exact R2 base, full virtual-result hash, independent ext4 file
 reads, full normalized APP validation, in-memory patch writes/readback and retry,
@@ -92,3 +102,29 @@ SD/NVMe device selection, wrong-root rejection, recovery branches, Linux shell
 selection and Windows disk guards. Physical media patching, UEFI selection,
 SD/NVMe boot, inference, Wi-Fi persistence and power-cut endurance remain untested.
 The normal image download and signed automatic runtime channel are not changed.
+
+### September 30: v1 boot failure investigation
+
+An owner reported that SD displayed Jetson diagnostics while the patched NVMe
+left the USB display on its own default screen. This establishes absence of
+Jetson-rendered diagnostics, not the exact firmware/kernel stopping point.
+
+Inspection of the actual shipped R2 initrd confirmed NVMe, NVMe-core, PCIe and
+PHY modules are present, as is util-linux blkid with the requested options.
+However, neither wc nor readlink is installed. The v1 selector called both before
+mounting APP. Its failed readlink leaves an empty root path, triggering the rescue
+shell. This is a reproducible patch defect consistent with the report; the
+owner's exact stopping point still needs physical confirmation.
+
+The previous desktop test incorrectly supplied a readlink mock and inherited
+the desktop wc. It therefore could not detect this dependency failure. Tests
+now clear PATH inside Bash (including on Git Bash, which otherwise adds its own
+utilities), supply only the existing blkid/sleep operations and exercise SD,
+NVMe, duplicate, missing and unsupported roots. The old two-command sequence
+fails under these conditions; v2's newline detection and assignment use builtins.
+
+The v2 package changes only initrd relative to v1's installed system. The patch
+retains all original sector extents, so the full normalized APP check also accepts
+v1 and interrupted patch writes. Independent virtual-disk validation applies v2
+over v1, reads every changed file through ext4 and verifies a repeated run without
+creating or writing a disk image. This does not substitute for physical SSD boot.
