@@ -14,6 +14,10 @@ Windows 10/11 64비트 · PC 여유 공간 약 70GB · 64GB 이상 microSD와 US
 
 > Requires 64-bit Windows 10/11, about 70 GB free, a 64 GB+ microSD card and a USB reader.
 
+**M.2 NVMe SSD에 설치할 분:** 같은 설치파일을 사용하고, **01 → 02 → 03 공용 패치** 순서로 진행하세요. 아래에 패치 다운로드와 실행 방법이 있습니다. 이미지를 새로 받을 필요는 없습니다.
+
+> **Installing to M.2 NVMe?** Use the same installer, then **01 → 02 → 03 common patch**. See the patch download and instructions below. No new image download is needed.
+
 ---
 
 ### ① 압축을 모두 풀기
@@ -29,9 +33,9 @@ Windows 10/11 64비트 · PC 여유 공간 약 70GB · 64GB 이상 microSD와 US
 
 *Prepare the installation image · About 5–15 min*
 
-**예상 약 5~15분.** 두 번 클릭하고 기다리세요. 수정사항이 포함된 이미지 검사·압축 해제·최종 검증은 자동입니다. 별도 핫픽스는 필요 없습니다. **입력할 내용은 없습니다.**
+**예상 약 5~15분.** 두 번 클릭하고 기다리세요. 수정사항이 포함된 이미지 검사·압축 해제·최종 검증은 자동입니다. 기존 USB-C 수정은 포함되어 있습니다. **입력할 내용은 없습니다.** SSD용 공용 패치는 02 완료 후 적용합니다.
 
-> Double-click and wait. Image checks, extraction and final verification run automatically. No separate hotfix is needed. **No answers needed.**
+> Double-click and wait. Image checks, extraction and final verification run automatically. The USB-C fix is included. **No answers needed.** Apply the common SSD patch after step 02.
 
 ### ③ `02_SD카드설치.cmd` 실행
 
@@ -55,6 +59,26 @@ Windows 10/11 64비트 · PC 여유 공간 약 70GB · 64GB 이상 microSD와 US
 카드 번호나 확인 문구가 맞지 않으면 취소됩니다.
 
 > An invalid card number or confirmation cancels installation.
+
+### SSD 사용 시 추가 · `03_SD_SSD공용패치.cmd`
+
+*Additional step for NVMe · Common microSD/NVMe patch · About 5–20 min*
+
+**[공용 패치파일 받기 · 약 32MB](https://upload.shind0.synology.me/downloads/jetson/v0.4.0-sd-nvme-patch-preview/carrot-jetson-windows.zip)**
+
+> **Download the common patch · About 32 MB**
+
+패치 내용을 기존 **CarrotJetson 폴더 안에** 풀고 `support` 폴더를 합쳐 주세요. **02가 끝난 뒤**, Jetson에 넣기 전에 **03_SD_SSD공용패치.cmd**를 실행합니다. 관리자 권한 **예** → 대상 **디스크 번호** → **PATCH** 입력. 나머지 검사·패치·기록 확인은 자동입니다.
+
+> Extract the patch inside your existing **CarrotJetson folder**, merging `support` folders and replacing matching files. **After 02**, before installing the medium in Jetson, run **03_SD_SSD공용패치.cmd**. Choose administrator **Yes**, enter the **disk number**, then type **PATCH**. Verification, patching and readback are automatic.
+
+SSD는 **64GB 이상 M.2 NVMe + NVMe용 USB 외장 케이스**를 사용해 PC에서 기록·패치한 뒤 Jetson의 NVMe 슬롯에 장착합니다. 02의 이름은 SD카드 설치이지만 USB 케이스의 SSD도 선택할 수 있습니다. PC 내부 SSD는 선택되지 않습니다.
+
+> Use a **64 GB+ M.2 NVMe SSD and a USB NVMe enclosure** for PC writing and patching, then install it in Jetson's NVMe slot. Step 02 retains its SD-card filename but also lists eligible USB-enclosed SSDs. Internal PC SSDs are excluded.
+
+**이 페이지의 R2 이미지 전용 시험 패치입니다.** microSD에도 같은 패치를 적용할 수 있습니다. 이미 R2를 기록했다면 다시 기록하지 않고 03만 실행하세요. 실제 패치 후 SD·NVMe 부팅은 아직 검증 전이므로 정상 작동하던 SD는 보관하고, 복제된 SD와 NVMe를 동시에 장착하지 마세요. [자세한 패치 안내](jetson_sd_nvme_patch.md)
+
+> **Experimental patch for this page's R2 image only.** The same patch also applies to microSD. Already recorded R2 media needs only step 03. Physical patched SD/NVMe boot is unverified: keep your working SD as a fallback and never install both clones together. See the detailed patch guide linked above.
 
 ### ④ 전원을 끄고 Jetson에 연결
 
