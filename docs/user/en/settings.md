@@ -106,18 +106,18 @@ Ignoring `x0.01`, `x0.001`, `cm`, `km/h`, or `%` can make a value appear one hun
 
 ## Settings map
 
-The current `carrot_settings.json` contains **186 parameters**. One driver-monitoring exception is search only; the remaining entries appear in these menus:
+The current `carrot_settings.json` contains **187 parameters**. One driver-monitoring exception is search only; the remaining entries appear in these menus:
 
 | Category | Count | Groups |
 |---|---:|---|
-| Driving control | 123 | Startup and auto, buttons and presets, steering, speed and deceleration, cruise and following gap |
+| Driving control | 124 | Startup and auto, buttons and presets, steering, speed and deceleration, cruise and following gap |
 | Vehicle and hardware | 16 | Hyundai/Kia, CAN FD/HDA, radar, driver monitoring, vehicle assistance, device hardware |
 | Display | 34 | Information, path, brightness/on-road view, external HUD |
 | System | 12 | Recording/power, network/map, sound, software |
 
 ## Driving control
 
-These 123 settings can affect vehicle motion. Change one item at a time.
+These 124 settings can affect vehicle motion. Change one item at a time.
 
 <a id="start-auto"></a>
 ### Startup and auto — 9 settings
@@ -148,13 +148,13 @@ The result depends heavily on whether the car uses stock SCC and which button me
 Volkswagen's separate `SET` button sets current speed and `RES` restores the previous set speed, while `+`/`-` follow the button mode, speed units, and long-press setting. Manual engagement with openpilot longitudinal control remains tied to the physical `SET`/`RES` buttons.
 
 <a id="vehicle-steering"></a>
-### Vehicle steering — 37 top-level + 5 ONNX detail settings
+### Vehicle steering — 38 top-level + 5 ONNX detail settings
 
 | Section | Parameters | Purpose |
 |---|---|---|
 | ONNX Lane and BSD | `ShareData`, `OnnxLaneThreshold`, `OnnxLaneIntervalMs`, `OnnxBsdThreshold`, `OnnxBsdSmoothingMs`, `OnnxBsdIntervalMs` | On-device lane-type and gated camera-BSD detection and tuning |
 | Centering | `PathOffset`, `CameraYawTrimDeg` | Path position and camera-yaw trim |
-| Steering feel | `SteerActuatorDelay`, `LatSmoothSec`, `LatSuspendAngleDeg`, `CustomSR`, `SteerRatioRate` | Timing, smoothing, suspension angle, and steering ratio |
+| Steering feel | `SteerActuatorDelay`, `LatSmoothSec`, `SteerHandoverMode`, `LatSuspendAngleDeg`, `CustomSR`, `SteerRatioRate` | Timing, smoothing, handover recovery, suspension angle, and steering ratio |
 | [Lane change](lane-change.md) and automatic turn | `LaneChangeNeedTorque`, `LaneChangeDelay`, `LaneChangeBsd`, `LaneLineCheck`, `AutoTurnControl`, `AutoTurnControlSpeedTurn`, `AutoTurnControlTurnEnd`, `AutoTurnMapChange` | Lane-change entry conditions and ATC behavior |
 | Lane mode | `LatMpcPathCost`, `LatMpcMotionCost`, `LatMpcAccelCost`, `LatMpcJerkCost`, `LatMpcSteeringRateCost`, `LatMpcInputOffset`, `UseLaneLineSpeed`, `UseLaneLineCurveSpeed`, `AdjustLaneOffset` | Lane-mode MPC weights and lane-line conditions |
 | Advanced torque | `LateralTorqueCustom`, `LateralTorqueAccelFactor`, `LateralTorqueFriction`, `LateralTorqueKpV`, `LateralTorqueKiV`, `LateralTorqueKf`, `LateralTorqueKd` | Custom torque-control gains |
@@ -167,6 +167,23 @@ A larger `SteerActuatorDelay` compensates by commanding earlier. A larger `LatSm
 The default `SteerRatioRate` of `100%` applies the learned steering ratio without scaling. It is used when `CustomSR=0`; a stored rate outside the allowed range (`30–200%`) safely falls back to `100%`.
 
 `LateralTorqueCustom` and `CustomSteer*` are advanced settings that can affect the vehicle tune and safety limits. Do not alter them without a vehicle-specific validated baseline and a recovery path.
+
+#### Steering Handover Mode — SteerHandoverMode
+
+Choose this in Carrot Web **Driving → Steering → Steering Feel → Steering Handover Mode (Test)**. It applies only to Hyundai/Kia/Genesis angle-control vehicles; torque-control vehicles are unaffected.
+
+| Value | Method | Behavior |
+|---|---|---|
+| **0 (default)** | Existing recovery | Retains existing driver-override and recovery behavior. |
+| 1 | Convergence recovery | Offers limited recovery when steering error is small or decreasing and driver force is stable. Stronger force lowers the additional ceiling. |
+| 2 | Abrupt-release recovery | After sustained override, a rapid force reduction held low for about 0.1 seconds starts recovery earlier if steering error is small. |
+| 3 | Combined 1+2 | Prioritizes mode 2 when abrupt release is confirmed during mode 1. The increases are never added together. |
+
+**Changes apply live at roughly half-second intervals without rebooting.** An actual mode change clears experimental evidence while preserving the legacy recovery history. Re-reading the same value does not reset anything. Returning to 0 ends additional recovery and uses the existing behavior. Operate the setting while parked.
+
+Mode 1 briefly offers limited authority while waiting for driver force to decrease. Opposing or increasing force, growing error, or no response withdraws the addition. After rejection, it does not repeat until force release is confirmed. The offer ceiling of `80` is neither a physical torque unit nor a guaranteed tactile cue. Mode 2 also ramps authority instead of jumping to maximum; renewed force withdraws the addition.
+
+This feature uses force-sensor trends and cannot establish loss of hand contact or driver consent to handover. Existing `steeringPressed` and driver monitoring remain unchanged. Modes 1, 2 and 3 have not been validated for vehicle steering feel; compare them only in controlled tests.
 
 ### Speed and deceleration — 23 settings
 
