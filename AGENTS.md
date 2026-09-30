@@ -1,5 +1,17 @@
 # Repository memory
 
+- On 2026-09-30, Ioniq 5 PE ff6 segments 2/3 and ff7 segment 1 on b8a8a532
+  confirmed live handover mode 2→3 but delayed recovery after torque release.
+  Low-force confirmation can let angle error exceed the two-degree fast-recovery
+  gate; other releases miss arming/deadline conditions. No rapid recovery is
+  reconstructed in these windows. Legacy repeated-override ramps reach three
+  seconds; ff7's last release waits 520 ms then ramps for three seconds. One
+  short convergence offer is withdrawn 46→25 in about 12 ms on error growth
+  despite decreasing force. This may explain a tactile discontinuity but is not
+  proof of the user's exact felt moment. Touch-release edges arrive later and
+  are not demonstrated to be a faster cue. No controller change was requested
+  or made during this analysis. See docs/steering_handover_ff6_ff7_20260930.md.
+
 - On 2026-09-30, the user requested original-RX-paced forwarding of Hyundai
   CAN-FD CAMERA_SCC cluster 0x161/162/1e0/1ea/200 from bus2 to bus0. Consume
   allowed host copies into independent latest-value caches; use each stock RX
