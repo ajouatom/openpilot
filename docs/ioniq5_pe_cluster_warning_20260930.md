@@ -134,3 +134,113 @@ Conclusion: no host/Panda transmission-stream interruption is observed around
 the reported event. A cluster-internal receive/interpretation fault is not
 excluded by this log. No runtime change was made. Reproduction and compact
 results: `.analysis/archive/2026-09-30/ioniq5-can-gap/`.
+
+## Comparison with the previous reported warning
+
+The previous same-vehicle investigation was recovered from
+`.analysis/archive/2026-09-29/cluster-error-7f419ed56030e135/README.md`.
+Its full logs are `000005c5--55be38ea85--0` and `--1`, clean commit
+`26706b95698c28fce9ff95efb1ae5e507680d5fb`. Both were reread alongside the
+current segments 3/4 with the full cereal schema. The buffered-forwarding
+safety header and H7 FDCAN driver have no source differences between these
+two incident revisions. This is a source comparison, not an independent
+firmware-binary attestation.
+
+All times in this comparison start at each segment's first carState. The
+previous segment 0's first CAN is 1.323491 s earlier, so times from the older
+CAN-anchored report differ by that amount.
+
+| Capture | Reuse diagnostics published near the early part of the segment | Later observations |
+| --- | --- | --- |
+| Previous c5/0 | MDPS +7.602 s; angle command +8.062 s; LFA +11.466 s, each count=1/exhausted=0 | At +40.915..40.916 s MDPS/angle/LFA each report count=2/exhausted=1 |
+| Previous c5/1 | No reuse diagnostic reported | Serial logging exists; absence of a report is not per-frame proof that no reuse occurred |
+| Current ca/3 | MDPS and angle +8.126 s; LFA +9.611 s, each count=1/exhausted=0 | Further MDPS/angle/LFA reuses at +27.415 s |
+| Current ca/4 | MDPS/angle +4.044 s; LFA +11.296 s, each count=1/exhausted=0 | Further reuses near +56.910 s |
+
+Thus reuse is present in both reported-warning captures, including an early
+LFA reuse near the current user-reported warning time. It is not unique to
+that occurrence. The user reported only one current popup; ca/4 is a useful
+unreported comparison interval, not independently verified video evidence
+of no warning. The previous popup's exact timestamp is still unspecified.
+No causal timing claim can be made for its +11.466 or +40.916 s activity.
+
+The previous segment 0 also contains a distinct SPI disturbance:
+spiChecksumErrorCount is 1 initially, 7 by +40.672 s and 21 by +40.998 s.
+The +40.915 s reuse reports consume the second allowed reuse, but this is not
+itself evidence of a subsequent fallback or dropped CAN frame. In +/-250 ms
+windows around the inspected early and later reuse reports, returned angle
+commands stay active (LKAS_ANGLE_ACTIVE=2), original camera commands remain 1,
+and inspected returned-stream counters remain consecutive. The largest
+host-published returned gap around +40.916 s is 42.666 ms. Current ca/3 and
+ca/4 retain spiChecksumErrorCount=1 throughout, so that SPI disturbance is not
+a shared observed condition of the two incidents.
+
+### Diagnostic-code comparison
+
+The previous c5/0 response at +50.294669 s from 0x738 on bus 2 is
+`07 59 02 89 68 c5 86 08`; c5/1 response at +27.996818 s from 0x7cc on bus 0
+is `07 59 02 0d 68 c5 86 08`. Both contain DTC C28C5:86, status 0x08
+(confirmedDTC set, testFailed clear). Its manufacturer-specific definition,
+creation time and relationship to the photographed warning remain unknown.
+
+Current ca/3 at +28.086707 s returns `03 59 02 89 aa aa aa aa` from 0x738;
+ca/4 at +6.046391 s returns `03 59 02 0d aa aa aa aa` from 0x7cc. All these
+reads follow the same `19 02 0d` request. The current positive responses
+contain no DTC entries matching that requested status mask. This is stronger
+than merely failing to log a diagnostic service, but does not mean every
+possible ECU fault is absent, or prove that any earlier DTC was cleared.
+
+### Further discriminating evidence
+
+1. Correlate a cluster recording or passenger-created incident mark with the
+   host monotonic timeline. Retain the preceding and following segments, and
+   record non-warning intervals containing reuse as comparisons.
+2. If adding diagnostics, use bounded event storage in Panda for the original
+   MCU timestamp, address/destination, host-command sequence, queue depth,
+   last fresh command age, reuse index, and whether original-frame fallback
+   actually occurred. Drain at a bounded rate; do not print synchronously on
+   every reuse or change buffer/control behavior. Existing serial summaries
+   have neither per-frame identity nor exact host/MCU clock alignment.
+3. Compare pre/post-incident read-only ECU DTC status and supported freeze-frame
+   or extended records, including the cluster, while parked. Preserve records
+   before any clearing. Manufacturer diagnostic documentation is needed to
+   identify C28C5:86's specific monitored signal. No active diagnostic command
+   was sent to a vehicle during this task.
+
+No warning suppression, buffer policy, control change, or new firmware logging
+was deployed. Compact results and reproducible scripts are archived at
+`.analysis/archive/2026-09-30/ioniq5-reuse-compare/`.
+
+### Checksum and unchanged-payload follow-up
+
+The user specifically questioned whether reuse produces checksum failures.
+`canfd_apply_counter_and_update_checksum` replaces the counter with the current
+original-RX counter and then recalculates the Hyundai message checksum. The
+earlier SPI checksum diagnostic is a separate host/Panda transport error,
+not the checksum embedded in vehicle CAN payloads.
+
+Independent CRC16 calculation over the returned payloads for eight addresses
+(0xcb, 0x12a, 0xea, 0x175, 0x1a0, 0x161, 0x162, 0x1e0) found:
+
+| Segment | Returned frames checked | Bad Hyundai payload CRC | Frames within +/-250 ms of reuse reports / bad CRC |
+| --- | --- | --- | --- |
+| c5/0 | 24,797 | 0 | 1,358 / 0 |
+| c5/1 | 27,597 | 0 | No reuse report window |
+| ca/3 | 27,591 | 0 | 1,350 / 0 |
+| ca/4 | 27,610 | 0 | 918 / 0 |
+
+Total: 107,595 returned frames, zero invalid payload checksums. This checks
+the Hyundai application checksum in the submitted CAN data, not the CAN
+controller's physical-link CRC or receiving ECU's acceptance.
+
+More specifically, in +/-500 ms windows around c5/0 +11.466436 s, ca/3
++9.611457 s and ca/4 +11.296011 s, every LFA (0x12a) host command and returned
+frame has the same bytes after checksum/counter:
+`18 80 00 00 00 00 0a 00 04 00 00 00 00` (100 host and 100 returned frames
+per window). Thus the reported LFA reuse has no distinguishable old command
+content in these windows: a fresh host LFA body would be identical. Together
+with counter continuity and valid CRC, this weighs against that isolated LFA
+reuse producing a corrupt or stale-value message. It does not exclude a timing
+or cross-message interaction, a separate earlier angle/feedback event, or an
+unobserved ECU/cluster diagnostic condition. Reuse must not be equated with
+either a checksum error or a proven warning cause.
