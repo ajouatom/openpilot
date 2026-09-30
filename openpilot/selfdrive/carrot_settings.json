@@ -133,6 +133,7 @@
               "params": [
                 "SteerActuatorDelay",
                 "LatSmoothSec",
+                "SteerHandoverMode",
                 "LatSuspendAngleDeg",
                 "CustomSR",
                 "SteerRatioRate"
@@ -989,6 +990,28 @@
       "max": 30,
       "default": 13,
       "unit": 1
+    },
+    {
+      "group": "조향튜닝",
+      "name": "SteerHandoverMode",
+      "title": "조향 복구 모드 (시험)",
+      "descr": "현대·기아·제네시스 조향각 제어 차량 전용. 0: 기존 방식(기본), 1: 조향 오차와 운전자 힘의 추세에 따른 제한적 복구, 2: 힘의 급격한 해제를 확인한 뒤 빠른 복구, 3: 1+2 조합. 3은 급해제 확인 시 2를 우선하며 증가량을 더하지 않습니다. 1은 힘이 강할수록 복구 상한을 낮추고 반대 힘·힘 증가·오차 확대·무응답 시 추가 복구를 거둡니다. 2는 짧은 저토크 유지 확인과 작은 조향 오차가 필요하며 한 번에 최대 제어로 전환하지 않습니다. 손 접촉 해제를 감지하거나 인계 의사를 확정하는 기능은 아닙니다. 약 0.5초 주기로 변경 적용하며 전환 시 실험 이력을 초기화합니다. 실제 차량 조향감은 미검증입니다. 정차 후 설정하고 통제된 시험 환경에서만 비교하세요.",
+      "egroup": "LAT",
+      "etitle": "Steering Handover Mode (Test)",
+      "edescr": "Hyundai/Kia/Genesis angle-control vehicles only. 0: Existing behavior (default); 1: Limited recovery using steering error and driver-force trends; 2: Faster recovery after confirmed abrupt force release; 3: Combine 1 and 2. Mode 3 prioritizes confirmed release without adding both increases. Mode 1 reduces its ceiling with stronger force and withdraws extra recovery on opposing/increasing force, growing error or no response. Mode 2 requires sustained low force and small steering error; it does not jump to full authority. This does not detect hand contact release or establish handover intent. Changes apply at roughly half-second intervals and reset experimental history. Vehicle steering feel is unvalidated. Change settings while parked and compare only in controlled tests.",
+      "cgroup": "转向",
+      "ctitle": "转向恢复模式（测试）",
+      "cdescr": "仅适用于现代、起亚、捷尼赛思转角控制车辆。0：原有方式（默认）；1：根据转角误差及驾驶员施力趋势有限恢复；2：确认施力骤降后快速恢复；3：结合1和2。3在确认骤降后优先使用2，不叠加增量。1在施力增强时降低上限，遇反向或增强施力、误差扩大、无响应时撤回额外恢复。2要求低施力持续片刻且转角误差小，不会瞬间恢复最大控制。本功能不能检测手部接触解除或确认交接意图。约每0.5秒应用更改并清除实验历史。实车转向感受尚未验证；请停车设置，仅在受控测试环境比较。",
+      "min": 0,
+      "max": 3,
+      "default": 0,
+      "unit": 1,
+      "options": {
+        "ko": ["0: 기존 방식", "1: 수렴 기반 복구", "2: 급해제 빠른 복구", "3: 1+2 조합"],
+        "en": ["0: Existing", "1: Convergence recovery", "2: Abrupt-release recovery", "3: Combined 1+2"],
+        "zh": ["0：原有方式", "1：收敛恢复", "2：骤降快速恢复", "3：组合1+2"]
+      },
+      "risk": "high"
     },
     {
       "group": "조향튜닝",

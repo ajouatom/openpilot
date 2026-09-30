@@ -1,5 +1,18 @@
 # Repository memory
 
+- On 2026-09-30, the user requested live SteerHandoverMode for Hyundai/Kia/Genesis
+  angle control: 0 preserves legacy/default, 1 offers bounded recovery using
+  continuous driver effort and angle-error trends, 2 confirms abrupt force release
+  before faster recovery, and 3 combines them with release priority and no summed
+  gains. Poll every 0.5 seconds; only actual mode changes reset experimental history.
+  Keep legacy recovery state independent, steeringPressed boolean, torque-control
+  vehicles, touch/DM and angle/CAN limits unchanged. Effort is unbounded above 2;
+  the offer ceiling 80 is not physical torque or a proven tactile notification.
+  Reversal, rising force, error and invalidity withdraw added authority. Mode 0
+  matches the prior controller in a 6,000-frame input replay; synthetic/CAN tests
+  do not establish closed-loop driving or driver consent. A prolonged zero crossing
+  remains ambiguous. See docs/steering_handover_20260930.md for tests and limits.
+
 - On 2026-09-29, the user selected IMU-based suspected-impact detection at 1.5g
   horizontal acceleration, with a visible/audible warning, ten seconds to cancel
   by touching anywhere, then OpenpilotEnabledToggle=false and manager DoReboot.

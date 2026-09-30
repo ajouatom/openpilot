@@ -105,18 +105,18 @@ Carrot Web 설정 화면에서는 다음 기능을 사용할 수 있습니다.
 
 ## 전체 설정 지도
 
-현재 `carrot-wip`의 `carrot_settings.json`에는 **186개 파라미터**가 있습니다. 운전자 감시 예외 설정 1개는 검색으로만 표시되며, 나머지는 아래 메뉴에 표시됩니다.
+현재 `carrot-wip`의 `carrot_settings.json`에는 **187개 파라미터**가 있습니다. 운전자 감시 예외 설정 1개는 검색으로만 표시되며, 나머지는 아래 메뉴에 표시됩니다.
 
 | 대분류 | 항목 수 | 중분류 |
 |---|---:|---|
-| 주행 제어 | 123 | 시작·오토, 버튼·프리셋, 차량 조향, 속도·감속, 크루즈·차간 |
+| 주행 제어 | 124 | 시작·오토, 버튼·프리셋, 차량 조향, 속도·감속, 크루즈·차간 |
 | 차량·하드웨어 | 16 | 현대·기아, CANFD·HDA, 레이더, 운전자 모니터링, 차량 보조, 기기 하드웨어 |
 | 화면 표시 | 34 | 정보 표시, 경로 표시, 밝기·주행화면, 외부 HUD |
 | 시스템 | 12 | 녹화·전원, 네트워크·지도, 사운드, 소프트웨어 |
 
 ## 주행 제어
 
-주행 제어는 차량 움직임에 영향을 줄 수 있는 123개 항목입니다. 한 번에 여러 값을 변경하지 마세요.
+주행 제어는 차량 움직임에 영향을 줄 수 있는 124개 항목입니다. 한 번에 여러 값을 변경하지 마세요.
 
 <a id="start-auto"></a>
 ### 시작·오토 — 9개
@@ -147,13 +147,13 @@ Carrot Web 설정 화면에서는 다음 기능을 사용할 수 있습니다.
 폭스바겐의 별도 `SET`은 현재 속도 설정, `RES`는 이전 설정속도 복원에 사용하고, `+`·`-`는 버튼 모드·속도 단위·길게 누르기 설정을 따릅니다. 오픈파일럿 종방향 제어의 수동 인게이지 버튼은 기존 물리 `SET`·`RES`로 유지됩니다.
 
 <a id="vehicle-steering"></a>
-### 차량 조향 — 상위 37개 + ONNX 상세 5개
+### 차량 조향 — 상위 38개 + ONNX 상세 5개
 
 | 세부 구역 | 파라미터 | 용도 |
 |---|---|---|
 | ONNX 차선·BSD | `ShareData`, `OnnxLaneThreshold`, `OnnxLaneIntervalMs`, `OnnxBsdThreshold`, `OnnxBsdSmoothingMs`, `OnnxBsdIntervalMs` | 장치의 차선 종류와 조건부 카메라 BSD 인식·세부 조정 |
 | 중앙 보정 | `PathOffset`, `CameraYawTrimDeg` | 레인모드 경로의 좌우 위치와 카메라 YAW 미세 보정 |
-| 조향감 | `SteerActuatorDelay`, `LatSmoothSec`, `LatSuspendAngleDeg`, `CustomSR`, `SteerRatioRate` | 조향 시점, 평활화, 일시중지 각도와 조향비 |
+| 조향감 | `SteerActuatorDelay`, `LatSmoothSec`, `SteerHandoverMode`, `LatSuspendAngleDeg`, `CustomSR`, `SteerRatioRate` | 조향 시점, 평활화, 개입 후 복구, 일시중지 각도와 조향비 |
 | [차로 변경](lane-change.md)·자동 턴 | `LaneChangeNeedTorque`, `LaneChangeDelay`, `LaneChangeBsd`, `LaneLineCheck`, `AutoTurnControl`, `AutoTurnControlSpeedTurn`, `AutoTurnControlTurnEnd`, `AutoTurnMapChange` | 차로 변경 진입 조건과 ATC 동작 |
 | 레인모드 | `LatMpcPathCost`, `LatMpcMotionCost`, `LatMpcAccelCost`, `LatMpcJerkCost`, `LatMpcSteeringRateCost`, `LatMpcInputOffset`, `UseLaneLineSpeed`, `UseLaneLineCurveSpeed`, `AdjustLaneOffset` | 레인모드 MPC 가중치와 차선 사용 조건 |
 | 고급 토크·토크 계수 | `LateralTorqueCustom`, `LateralTorqueAccelFactor`, `LateralTorqueFriction`, `LateralTorqueKpV`, `LateralTorqueKiV`, `LateralTorqueKf`, `LateralTorqueKd` | 커스텀 토크 제어 계수 |
@@ -166,6 +166,23 @@ Carrot Web 설정 화면에서는 다음 기능을 사용할 수 있습니다.
 `SteerRatioRate`의 기본값 `100%`는 학습된 조향비를 그대로 적용합니다. `CustomSR=0`일 때 사용되며, 저장된 비율이 허용 범위(`30~200%`)를 벗어나면 안전하게 `100%`로 대체됩니다.
 
 `LateralTorqueCustom`과 `CustomSteer*` 계열은 차량의 기본 조향 튜닝과 안전 제한에 영향을 줄 수 있는 고급 항목입니다. 차종별 검증값과 복구 방법이 없으면 변경하지 마세요.
+
+#### 조향 복구 모드 — SteerHandoverMode
+
+Carrot Web **주행 제어 → 차량 조향 → 조향감 → 조향 복구 모드 (시험)**에서 선택합니다. 현대·기아·제네시스의 조향각 제어 차량에만 적용되며 토크 제어 차량에는 효과가 없습니다.
+
+| 값 | 방식 | 동작 |
+|---|---|---|
+| **0 (기본)** | 기존 복구 | 기존 운전자 개입·복구 동작을 유지합니다. |
+| 1 | 수렴 기반 복구 | 실제 조향과 목표의 오차가 작거나 줄어들고 운전자 힘이 안정되면 제한적으로 복구합니다. 힘이 강할수록 추가 복구 상한을 낮춥니다. |
+| 2 | 급해제 빠른 복구 | 지속된 개입 뒤 힘이 급격히 줄고 약 0.1초간 낮게 유지되면, 조향 오차가 작은 경우 복구를 일찍 시작합니다. |
+| 3 | 1+2 조합 | 1번 동작 중 급해제가 확인되면 2번을 우선합니다. 두 증가량을 더하지 않습니다. |
+
+**재부팅 없이 약 0.5초 주기로 변경을 반영합니다.** 실제 모드 전환은 실험 판단 이력을 초기화하며 기존 복구 로직의 이력은 유지합니다. 같은 값을 다시 읽는 것으로는 초기화하지 않습니다. 0번으로 돌아가면 추가 복구를 종료하고 기존 방식으로 동작합니다. 설정 조작은 정차 후 하세요.
+
+1번의 제한적 복구는 운전자의 힘 감소를 기다리는 짧은 제안입니다. 반대 방향 힘, 힘 증가, 오차 확대 또는 제안 후 무응답이면 추가 복구를 거둡니다. 거절 후에는 힘 해제가 확인되기 전까지 반복하지 않습니다. 제안 상한 `80`은 실제 토크 단위나 일정한 손 느낌을 보장하는 값이 아닙니다. 2번도 최대 제어로 즉시 뛰지 않고 점진적으로 복구하며, 다시 힘을 주면 추가 복구를 거둡니다.
+
+이 기능은 힘 센서의 추세를 사용하며 손 접촉 해제나 운전자의 인계 동의를 확인하지 못합니다. 기존 `steeringPressed` 판정과 운전자 감시는 그대로입니다. 1·2·3은 실제 차량 조향감이 검증되지 않은 실험 모드이므로 통제된 시험 환경에서만 비교하세요.
 
 ### 속도·감속 — 23개
 
