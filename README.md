@@ -33,6 +33,11 @@ Wi-Fi 정보 전달, IP·온도·오류 표시와 서명된 업데이트 연동�
 
 **[Windows 초보자 설치 안내 — 한글](https://github.com/ajouatom/carrot-jetson/blob/main/docs/INSTALL-WINDOWS-KO.md)**에서
 ZIP 하나를 받아 압축을 풀고 **01 → 02 배치 파일**을 실행하면 됩니다. 이미지 준비·USB-C 수정·기록·검증은 자동으로 처리합니다.
+M.2 NVMe SSD는 같은 이미지 기록 후 **03 공용 패치**를 적용하는 시험 경로를 제공합니다.
+[microSD·NVMe 공용 패치 안내](https://github.com/ajouatom/carrot-jetson/blob/main/docs/jetson_sd_nvme_patch.md)에서 추가 파일과 실행 순서를 확인하세요. 실제 패치 후 부팅은 검증 전입니다.
+
+> For M.2 NVMe, use the same image followed by the experimental common SD/NVMe patch. The linked guide provides the download and steps; physical patched-media boot remains unverified.
+
 [통합 범위와 검증 상태](docs/jetson_wip_integration_20260927.md)도 함께 확인합니다.
 PC 오프라인 핫픽스로 기록한 카드의 실물 첫 부팅 시험은 아직 남아 있으므로 해당 설치 경로는 시험판입니다.
 
