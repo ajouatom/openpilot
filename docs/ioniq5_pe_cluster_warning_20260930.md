@@ -340,3 +340,67 @@ identify their source among still-undecoded or ECU/cluster-internal paths.
 Private frame samples, sequential contact sheet, timing verification and
 reproduction: `.analysis/archive/2026-09-30/ioniq5-photo32/`. No source media
 or photo was committed, and no runtime/diagnostic behavior was changed.
+
+## Cadence comparison with the user's vehicle
+
+The user correctly emphasized that buffered reuse exists to preserve outgoing
+cadence when a new host command is late. The buffered path consumes a command
+or reuses its last body on each original incoming frame, substitutes that
+incoming frame's counter and recomputes CRC. It is not an independent periodic
+transmitter when original RX itself stops. Host sendcan jitter must not be
+treated as an equal gap on the vehicle bus. Reuse exhaustion and the separate
+direct cluster-message path require their own evidence.
+
+Compared full rlogs from the user's Ioniq 5 PE `07b62e389ed26c81`,
+`00000ff1--64803a8344--2` on clean `250f14ed`, and the reporting vehicle's
+`000005aa--eadc607bce--46` on clean `db4aed1e` and ca/32 on clean `a315e806`.
+The older 5aa upload is dated September 25; its warning status is unknown.
+The user's report of no cluster warning in their car is contextual evidence,
+not synchronized proof that the selected ff1 segment was warning-free.
+
+All three record Ioniq 5 PE, flags 16787977, Hyundai CAN-FD safetyParam 157,
+angle steering, Openpilot longitudinal control and alternativeExperience 1.
+There are no carFw entries to compare ECU firmware versions. The Hyundai
+vehicle source tree and safety_hyundai_canfd.h are byte-identical between
+the user's 250f14ed and the incident a315e806 revisions. Reviewing September
+18-30 changes found no change to the nominal rates of these buffered controls
+or five direct cluster streams, nor the buffered queue/reuse limits. Changes
+to payload generation are distinct from cadence changes.
+
+| Observation | Older reporting vehicle 5aa/46 | Reporting vehicle ca/32 | User's vehicle ff1/2 |
+| --- | ---: | ---: | ---: |
+| Direct cluster host rate | 19.995 Hz | 20.000 Hz | 19.991 Hz |
+| Maximum host cluster interval | 57.984 ms | 57.983 ms | 67.161 ms |
+| Maximum returned cluster log interval | 65.796 ms | 64.953 ms | 73.579 ms |
+| Maximum host-to-return delay | 17.284 ms | 16.067 ms | 29.818 ms |
+| Unmatched direct cluster host packets | 0 | 0 | 0 |
+| SPI checksum count, minimum/maximum | 1/1 | 67/67 | 1/9 |
+| Reuse diagnostic reports | 8 | 0 | 8 |
+
+The five direct streams are 0x161, 0x162, 0x1e0, 0x1ea and 0x200; all
+their host packets have byte-identical returned echoes within 100 ms.
+Their receive/return intervals are host log timestamps, not physical TX
+timestamps. In particular, ff1's 73.579 ms returned interval cannot establish
+expiration of Panda's 70 ms direct-forward blocking timer.
+
+The user's ff1 segment includes reuse of MDPS, angle/LFA, SCC and TCS, with
+no reported exhaustion. Returned counters for those buffered controls are
+continuous, and all selected CAN-FD payload CRC checks pass. Its direct
+CCNC_0x162 counter has 27 repeats and 27 +2 steps, confirming that this
+previously observed counter-copy behavior is not unique to the reporting car.
+The reporting vehicle's older 5aa segment already contains buffered reuse;
+it is not a newly introduced behavior in ca/32. Its old host MDPS/TCS copied
+counters repeat/skip, while buffered returned counters remain consecutive.
+
+These comparisons do not support attributing the warning to reuse itself,
+a recently changed nominal send rate, or greater host-log jitter in ca/32.
+They do not prove ECU acceptance, identical regional firmware/configuration,
+or absence of an earlier trigger. Returned echoes establish FIFO submission,
+not successful bus ACK or receiving-ECU acceptance. A passive measurement of
+actual TX completion / receiving-side traffic together with synchronized
+warning occurrence would distinguish a physical delivery problem from an
+ECU payload/state-consistency rejection. No cadence, reuse limit, warning
+suppression or runtime behavior was changed.
+
+Private reproduction and compact results:
+`.analysis/archive/2026-09-30/ioniq5-cadence-comparison/`.
