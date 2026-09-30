@@ -95,3 +95,32 @@ def test_speed_change_starts_a_new_warning():
   policy.add_preview(0xB1, 305, 300.0)                   # 50 km/h signal camera
   assert _update(policy, 300.0, speed=50, mobile_decel=True, skip_mobile=True, accel=True) == (False, False)
   assert not policy.skipped and policy.warning_class == CLASS_HARD
+
+
+def test_late_mobile_zone_preview_at_the_start_lead_still_counts():
+  # 00000462 / 00000473 (2026-09): the zone preview arrived 7-9 m after the warning began,
+  # its target still one lead (366 m @60) ahead of the warning start.
+  policy = SpeedcamPolicy()
+  assert _update(policy, 0.0) == (False, False)           # no match yet: hard
+  policy.add_preview(0xD3, 347, 8.0)                      # target 355 m = start + lead - 11
+  assert _update(policy, 8.0) == (True, False)
+  assert policy.warning_class == CLASS_MOBILE_ZONE
+
+
+def test_unrelated_mobile_zone_cannot_release_a_running_warning():
+  # A warning with no preview of its own (e.g. a signal camera) must stay hard even when
+  # a same-speed mobile-zone preview shows up nearby later in the warning.
+  policy = SpeedcamPolicy()
+  assert _update(policy, 0.0) == (False, False)
+  policy.add_preview(0xD3, 150, 100.0)                    # target 250 m: 116 m off the start lead
+  assert _update(policy, 100.0) == (False, False)
+  assert policy.warning_class is None                     # still unknown, treated as hard
+  policy.add_preview(0xD3, 150, 300.0)                    # target 450 m, also nowhere near the lead
+  assert _update(policy, 300.0) == (False, False)
+
+
+def test_mobile_zone_far_from_the_start_lead_is_ignored_even_at_warning_start():
+  policy = SpeedcamPolicy()
+  policy.add_preview(0xD3, 200, 0.0)                      # precise, 200 m ahead: inside the old window
+  assert _update(policy, 0.0) == (False, False)
+  assert policy.warning_class is None
