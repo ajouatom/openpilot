@@ -9,7 +9,7 @@ from opendbc.car import Bus, create_button_events, structs, DT_CTRL
 from opendbc.car.common.conversions import Conversions as CV
 from opendbc.car.hyundai.hyundaicanfd import CanBus
 from opendbc.car.hyundai.navi_speedcam import SpeedcamPolicy
-from opendbc.car.hyundai.section_average import SectionAverage
+from opendbc.car.hyundai.section_average import DISTANCE_SCALE as SECTION_DISTANCE_SCALE, SectionAverage
 from opendbc.car.hyundai.steering_touch import HyundaiSteeringTouch
 from opendbc.car.hyundai.values import HyundaiFlags, CAR, DBC, Buttons, CarControllerParams, CAMERA_SCC_CAR, HyundaiExtFlags, \
                                        EV_MODE_ACTIVE_VALUES, EV_MODE_STATUS_ADDR, EV_MODE_STATUS_DLC, EV_MODE_STATUS_MSG, \
@@ -766,9 +766,13 @@ class CarState(CarStateBase):
     if not section.unlocked:
       return  # existing section cap and camera distances, unchanged
 
+    # allowance is a true speed; carrot_serv caps at vehicleNaviSpeed x factor as a cluster speed and
+    # the planner drives cluster x vCluRatio in vEgo units, so invert that chain (else ~+3.6 % over).
     allowance = section.allowance_kph(self.speedcam_time, self.totalDistance)
-    if allowance > section_speed:
-      ret.vehicleNaviSpeed = allowance  # carrot_serv caps the section at vehicleNaviSpeed x factor
+    clu_ratio = ret.vCluRatio if ret.vCluRatio > 0.5 else 1.0
+    navi_speed = allowance / SECTION_DISTANCE_SCALE / clu_ratio / max(self.speedcamSafetyFactor, 0.5)
+    if navi_speed > section_speed:
+      ret.vehicleNaviSpeed = navi_speed
     # Keep spot deceleration only for a same-speed camera ahead (the end camera); no virtual distance.
     ahead = [event["target"] - self.totalDistance for event in self.vehicleNaviEvents
              if event["type"] == "camera" and event["speed"] == section_speed and event["target"] > self.totalDistance]
