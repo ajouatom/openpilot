@@ -26,6 +26,11 @@ The web replay sensitivity is fixed to 3, including requests with an old sensiti
 query parameter. The browser source control only changes replay analysis. The
 front-radar orientation selector offers recorded/normal/inverted coordinates for
 analysis only; it never changes the vehicle setting or recorded lead decisions.
+Replay restores the vehicle's recorded `EnableRadarTracks` source policy from
+`initData` and `carParams`, including SCC-only mode 0. The motion-sensor selector
+does not override that policy. Historical Hyundai logs without a valid recorded
+setting retain analysis mode 2; non-Hyundai logs use the runtime radar-availability
+policy. The JSON `enableRadarTracks` field reports the effective replay mode.
 New liveTracks messages mark applied `RadarTrackFlip`, so replay preserves logged
 orientation by default and explicit overrides never invert a corrected log twice.
 The override changes front-track lateral position and velocity before selection;

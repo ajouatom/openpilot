@@ -122,3 +122,20 @@ def test_graph_preserves_missing_scc_samples_and_desktop_series():
   assert payload['graphs']['carrotAccel'][0]['samples'] == [[0.0, -.5], [.05, -.5], [.1, -.5]]
   assert payload['frames'][0]['video_time_s'] == 10
   assert set(payload['graphs']) == {'leadOne', 'leadTwo', 'vision', 'leadSpeed', 'sccDistance', 'sccAccel', 'carrotAccel'}
+
+
+@pytest.mark.parametrize("mode", (-2, -1, 0, 1, 2, 3, None))
+def test_export_uses_recorded_source_policy_including_zero(mode):
+  from dataclasses import asdict, replace
+  from openpilot.selfdrive.carrot.radar.tools import radar_web_export as exporter
+  from openpilot.selfdrive.carrot.tests.test_radar_lead_simulator import frame, point
+
+  frames = [replace(frame((replace(point(0, 25.0, 4.0), source="scc"),), time_s=i * .05),
+                    recorded_radar_track_mode=mode) for i in range(20)]
+  effective = 2 if mode is None else mode
+  payload = exporter.export_frames(frames)
+  desktop = exporter.replay.ProductionDPathSelector(frames, enable_radar_tracks=effective)
+  assert payload["enableRadarTracks"] == effective
+  for i, item in enumerate(payload["frames"]):
+    lead = desktop.select(frames[i], i).lead_one
+    assert item["selection"]["lead_one"] == (exporter.finite_json(asdict(lead)) if lead else None)
