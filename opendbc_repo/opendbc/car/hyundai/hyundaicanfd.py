@@ -372,17 +372,15 @@ def _apply_driver_monitoring_alert(values, hud_control, stock):
   level = getattr(hud_control, "driverMonitoringAlert", 0)
   if level not in (1, 2, 3):
     return
-  # Use the documented DAW/break reminder, escalating to takeover at terminal
-  # DM. Apply after the legacy stock-warning filter, on a fresh copy each tick.
+  # Use the documented hands-on warning, red at terminal DM. Apply after the
+  # legacy stock-warning filter, on a fresh copy each tick.
   # Do not replace another OEM popup or add a second, unsynchronised chime.
-  if values["DAW_ICON"] == 0:
-    values["DAW_ICON"] = 1
   if stock["ALERTS_2"] in (7, 8, 9, 10, 14, 21):
     values["ALERTS_2"] = stock["ALERTS_2"]
     for i in range(1, 5):
       values[f"SOUNDS_{i}"] = stock[f"SOUNDS_{i}"]
   if values["ALERTS_2"] == 0:
-    values["ALERTS_2"] = 9 if level == 3 else 5
+    values["ALERTS_2"] = 2 if level == 3 else 1
 
 
 def create_lfa_icon_non_camera_scc(packer, CS, CAN, CC):

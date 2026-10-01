@@ -47,7 +47,7 @@ disengaged. Warning timing and the existing openpilot sound stages are unchanged
 
 | Existing output path | DM stages 1/2 | DM stage 3 |
 | --- | --- | --- |
-| CAN-FD ADRV_0x161 | DAW_ICON=1, ALERTS_2=5 (consider a break) | DAW_ICON=1, ALERTS_2=9 (take control immediately) |
+| CAN-FD ADRV_0x161 | ALERTS_2=1 (keep hands on steering wheel) | ALERTS_2=2 (keep hands on steering wheel, red) |
 | CAN-FD LFAHDA_CLUSTER fallback | HDA_InfoPUDis=5 (hands-off popup) | Same visual popup |
 | Classic SEND_LFA LFAHDA_MFC | LFA_SysWarning=5 (orange hands-on) | LFA_SysWarning=6 (red hands-on) |
 | Classic Santa Fe without SEND_LFA | LKAS11 SysWarning=4 | LKAS11 SysWarning=5 |
@@ -63,6 +63,10 @@ fallback is used only when the existing controller sends that message and no
 No new message is fabricated when its stock snapshot is absent. HDA2 stock-long
 configurations without an existing permitted cluster sender are not expanded.
 
+The user's follow-up corrected the initial rest-reminder mapping: DM now requests
+the DBC's hands-on warning (1/2), not the break reminder (5). It no longer turns
+on DAW_ICON. Existing stock-icon handling is unchanged.
+
 Classic LFA warning enums are defined in `hyundai_kia_generic.dbc`; older LKAS11
 values reuse the existing port's warning mappings/comments. Optima's known value
 4 includes a beep, so it is not newly requested during silent DM stage 1. Classic
@@ -77,7 +81,7 @@ cluster forwarding contract and its previously required firmware.
 
 ## Validation
 
-- 335 desktop tests: DM notice/HUD qualification, both CAN-FD display paths,
+- 337 desktop tests after the hands-on follow-up: DM notice/HUD qualification, both CAN-FD display paths,
   stock popup and sound precedence, CAN checksums/counters, classic warning
   mapping, cluster/lead/fault regression and handover-controller regression.
 - 269 existing monitoring, traffic context, parking reset, daemon and wheel-touch
