@@ -26,7 +26,7 @@ def suppress_casper_ev_fca11_fault(values):
 def create_lkas11(packer, frame, CP, apply_torque, steer_req,
                   torque_fault, lkas11, sys_warning, sys_state, enabled,
                   left_lane, right_lane,
-                  left_lane_depart, right_lane_depart, is_ldws_car):
+                  left_lane_depart, right_lane_depart, is_ldws_car, dm_alert=0):
 
   values = {s: lkas11[s] for s in [
     "CF_Lkas_LdwsActivemode",
@@ -97,6 +97,21 @@ def create_lkas11(packer, frame, CP, apply_torque, steer_req,
   if is_ldws_car:
     values["CF_Lkas_LdwsOpt_USM"] = 3
 
+  # SEND_LFA cars use the DBC-defined LFAHDA_MFC warning below. Older cars
+  # use their existing LKAS11 hands-on encoding, without changing actuation.
+  if dm_alert in (1, 2, 3) and not CP.flags & HyundaiFlags.SEND_LFA:
+    if CP.carFingerprint == CAR.HYUNDAI_SANTA_FE:
+      values["CF_Lkas_SysWarning"] = 5 if dm_alert == 3 else 4
+    elif CP.carFingerprint in (CAR.KIA_OPTIMA_G4, CAR.KIA_OPTIMA_G4_FL):
+      # Its known warning encoding includes a beep: keep stage 1 visual-only
+      # on the openpilot display, preserving an independent existing warning.
+      if dm_alert >= 2:
+        values["CF_Lkas_SysWarning"] = 4
+    else:
+      values["CF_Lkas_SysWarning"] = 3
+    if values["CF_Lkas_SysWarning"]:
+      values["CF_Lkas_LdwsSysState"] = 3  # permit the warning even for AlwaysOnDM while disengaged
+
   values["CF_Lkas_Chksum"] = 0
 
   dat = packer.make_can_msg("LKAS11", 0, values)[1]
@@ -141,8 +156,10 @@ def create_clu11(packer, frame, clu11, button, CP):
 
 def create_lfahda_mfc(packer, CC, blinking_signal):
   activeCarrot = CC.hudControl.activeCarrot
+  dm_alert = getattr(CC.hudControl, "driverMonitoringAlert", 0)
   values = {
     "LFA_Icon_State": 2 if CC.latActive else 1 if CC.enabled else 0,
+    "LFA_SysWarning": (6 if dm_alert == 3 else 5) if dm_alert in (1, 2, 3) else 0,
     #"HDA_Active": 1 if activeCarrot >= 2 else 0,
     #"HDA_Icon_State": 2 if activeCarrot == 3 and blinking_signal else 2 if activeCarrot >= 2 else 0,
     "HDA_Icon_State": 0 if activeCarrot == 3 and blinking_signal else 2 if activeCarrot >= 1 else 0,

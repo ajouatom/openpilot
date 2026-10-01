@@ -23,6 +23,7 @@ from openpilot.selfdrive.selfdrived.events import Events, ET, EmptyAlert
 from openpilot.selfdrive.selfdrived.helpers import ExcessiveActuationCheck
 from openpilot.selfdrive.selfdrived.state import StateMachine
 from openpilot.selfdrive.selfdrived.impact_detector import ImpactDetector
+from openpilot.selfdrive.monitoring.dm_alerts import CameraFallbackNotice
 from openpilot.selfdrive.selfdrived.alertmanager import AlertManager, set_offroad_alert
 from openpilot.selfdrive.controls.lib.cutin_alert import (
   CutinAlertCandidate,
@@ -141,6 +142,7 @@ class SelfdriveD:
     self.cutin_audio_tracker = CutinAlertTracker()
     self.dm_uncertain_alerted = False
     self.dm_disabled_prev = False
+    self.dm_camera_notice = CameraFallbackNotice()
     self.update_reboot_alerted = False
     self.system_ready_alerted = False
     self.system_ready_since = None
@@ -261,7 +263,8 @@ class SelfdriveD:
       self.dm_uncertain_alerted = False
     self.dm_disabled_prev = dm_disabled
     if not self.CP.notCar and not dm_disabled:
-      if self.sm.all_checks(['driverMonitoringState']) and self.sm['driverMonitoringState'].cameraUnavailable:
+      if self.dm_camera_notice.update(self.sm.frame * DT_CTRL, self.sm.all_checks(['driverMonitoringState']),
+                                      self.sm['driverMonitoringState'].cameraUnavailable, dm_disabled):
         self.events.add(EventName.driverMonitorFallback)
       self.update_dm_lockout()
       # No entry conditions
