@@ -45,7 +45,12 @@ def export_frames(frames, *, sensor="auto", sensitivity=replay.VALIDATION_DEFAUL
   if not frames:
     raise ValueError("No radar replay frames were found in this log")
   selected_sensor = replay.preferred_radar_motion_sensor(frames) if sensor == "auto" else sensor
+  # Source selection controls the motion sensor, not the vehicle's SCC/front
+  # policy. Historical logs without settings retain the analysis default.
+  recorded_mode = frames[0].recorded_radar_track_mode
+  enable_radar_tracks = recorded_mode if recorded_mode is not None else 2
   selector = replay.ProductionDPathSelector(frames, motion_sensor=selected_sensor,
+                                          enable_radar_tracks=enable_radar_tracks,
                                           cut_in_sensitivity=sensitivity)
   output = []
   selections = []
@@ -76,7 +81,7 @@ def export_frames(frames, *, sensor="auto", sensitivity=replay.VALIDATION_DEFAUL
     "engine": selector.name,
     "sensor": selected_sensor,
     "sensitivity": sensitivity,
-    "enableRadarTracks": 2,
+    "enableRadarTracks": enable_radar_tracks,
     "radarToCamera": replay.RADAR_TO_CAMERA,
     "videoAligned": all(frame.video_time_s is not None for frame in frames),
     "frames": output,

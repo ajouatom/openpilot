@@ -303,6 +303,7 @@ class RadarFrame:
   car_state_age_s: float = math.inf
   lane_change_model_path: tuple[tuple[float, float], ...] = ()
   lane_change_device_yaw: float | None = None
+  recorded_radar_track_mode: int | None = None
 
 
 @dataclass(frozen=True)
@@ -3031,6 +3032,19 @@ def load_frames(log_path: Path, *, radar_track_flip: bool | None = None) -> list
   latest_carrot_a_target_ns = 0
   scc_dbc_messages: dict[int, tuple[str, dict[str, Any]]] = {}
   car_brand = ""
+  recorded_radar_track_mode = None
+  configured_radar_track_mode = None
+  for event in events:
+    if event.which() == "initData":
+      for entry in event.initData.params.entries:
+        if entry.key == "EnableRadarTracks":
+          try:
+            mode = int(entry.value)
+            if -2 <= mode <= 3:
+              configured_radar_track_mode = mode
+          except (ValueError, TypeError):
+            pass
+      break
   group3_enabled = False
   # carParams can be emitted well into a segment. Resolve the static vehicle
   # metadata before consuming events so legacy corner-ID recovery is limited
@@ -3039,6 +3053,10 @@ def load_frames(log_path: Path, *, radar_track_flip: bool | None = None) -> list
     try:
       if event.which() == "carParams":
         car_brand = str(event.carParams.brand)
+        recorded_radar_track_mode = (
+          configured_radar_track_mode if car_brand == "hyundai"
+          else (-2 if event.carParams.radarUnavailable else 1)
+        )
         group3_enabled = car_brand == "hyundai" and bool(int(event.carParams.extFlags) & 2048)
         scc_dbc_messages = _hyundai_scc_dbc_messages(
           route_replay,
@@ -3354,6 +3372,7 @@ def load_frames(log_path: Path, *, radar_track_flip: bool | None = None) -> list
       )
     frames.append(replace(
       frame, time_s=(predictor_time_ns - origin_ns) / 1e9,
+      recorded_radar_track_mode=recorded_radar_track_mode,
     ))
   return frames
 

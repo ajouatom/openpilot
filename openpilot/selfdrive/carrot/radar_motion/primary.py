@@ -38,7 +38,6 @@ VISION_ONLY_CORROBORATION_MAX_DPATH_DELTA_M = 2.0
 VISION_ONLY_CORROBORATION_MAX_VLEAD_DELTA_MPS = 20.0
 VISION_CORROBORATED_MIN_OBSERVED_S = 0.25
 VISION_CORROBORATED_MAX_OBSERVATION_GAP_S = 0.15
-VISION_ONLY_RADAR_TRACK_MODE = -2
 PRIMARY_RADAR_SOURCES = frozenset(("frontRadar", "scc"))
 LOW_SPEED_SCC_MAX_VLEAD_MPS = 5.0
 STATIONARY_VISION_MIN_PROB = VISION_LEAD_MIN_PROB
@@ -752,8 +751,8 @@ def select_dpath_fallback_radar_points(
 def vision_only_lead_allowed(
   enable_radar_tracks: int,
 ) -> bool:
-  """Allow blue leadOne only when radar tracks are disabled."""
-  return enable_radar_tracks <= VISION_ONLY_RADAR_TRACK_MODE
+  """Keep model lead zero when vision-only/SCC-only has no measured object."""
+  return enable_radar_tracks <= 0
 
 
 def unconditional_scc_match(
@@ -1548,7 +1547,7 @@ class VisionRadarMatcher:
     )
     lateral_gate = max(2.0, min(4.0, abs(vision.y_std) * 3.0))
     distance_error = abs(point.d_rel - vision.d_rel)
-    lateral_error = abs(point.y_rel - vision.y_rel)
+    lateral_error = 0.0 if point.source == "scc" else abs(point.y_rel - vision.y_rel)
     if distance_error > distance_gate or lateral_error > lateral_gate:
       return None
     return (
@@ -3419,7 +3418,7 @@ class VisionRadarMatcher:
         continue
       score = (
         _laplacian(point.d_rel, vision.d_rel, vision.x_std)
-        * _laplacian(point.y_rel, vision.y_rel, vision.y_std)
+        * (1.0 if point.source == "scc" else _laplacian(point.y_rel, vision.y_rel, vision.y_std))
         * _laplacian(point.v_lead, vision.velocity, vision.v_std)
       )
       velocity_error = abs(point.v_lead - vision.velocity)
@@ -3436,7 +3435,7 @@ class VisionRadarMatcher:
             else 0.0
           )
         )
-        or abs(point.y_rel - vision.y_rel) >= 2.0
+        or (point.source != "scc" and abs(point.y_rel - vision.y_rel) >= 2.0)
         or not (
           velocity_error < velocity_tolerance
           or (
@@ -3447,14 +3446,14 @@ class VisionRadarMatcher:
         )
       ):
         continue
-      projection = project_to_model_path(path, point.d_rel, point.y_rel)
-      if abs(projection.d_path) > (
+      d_path = 0.0 if point.source == "scc" else project_to_model_path(path, point.d_rel, point.y_rel).d_path
+      if abs(d_path) > (
         VISION_MATCH_HELD_MAX_DPATH_M
         if held_identity
         else VISION_MATCH_FRESH_MAX_DPATH_M
       ):
         continue
-      candidates.append((point, score, projection.d_path, held_identity))
+      candidates.append((point, score, d_path, held_identity))
     if not candidates:
       self._reset_moving()
       return None
@@ -3658,6 +3657,10 @@ class VisionRadarMatcher:
       if stationary_points is None
       else tuple(stationary_points)
     )
+    # SCC has no trustworthy lateral measurement. Keep it in longitudinal
+    # vision association, but never infer path occupancy, cross-sensor
+    # geometry or radar-only stationary/moving evidence from its yRel.
+    stationary_values = tuple(point for point in stationary_values if point.source != "scc")
     if (
       math.isfinite(yaw_rate_rad_s)
       and abs(yaw_rate_rad_s)
@@ -3844,8 +3847,8 @@ def lead_from_radar_point(
 ) -> dict[str, Any]:
   return {
     "dRel": float(point.d_rel),
-    "yRel": float(point.y_rel),
-    "dPath": float(d_path),
+    "yRel": 0.0 if point.source == "scc" else float(point.y_rel),
+    "dPath": 0.0 if point.source == "scc" else float(d_path),
     "vRel": float(point.v_rel),
     "aRel": float(point.a_rel),
     "vLead": float(point.v_lead),
@@ -3854,7 +3857,7 @@ def lead_from_radar_point(
     "aLeadK": float(point.a_lead),
     "aLeadTau": 1.5,
     "jLead": float(point.j_lead),
-    "vLat": float(point.yv_rel),
+    "vLat": 0.0 if point.source == "scc" else float(point.yv_rel),
     "status": True,
     "fcw": False,
     "modelProb": float(model_probability),

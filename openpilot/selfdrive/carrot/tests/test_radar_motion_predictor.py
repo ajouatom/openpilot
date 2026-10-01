@@ -6224,7 +6224,7 @@ def test_unconditional_scc_mode_uses_scc_without_vision_match() -> None:
   assert output.lead_one["dPath"] == pytest.approx(0.0)
 
 
-def test_stock_scc_mode_uses_vision_while_scc_object_conflicts() -> None:
+def test_stock_scc_mode_keeps_oem_object_despite_vision_range_conflict() -> None:
   output = DPathRadarController(
     prefer_corner_radar=True,
     enable_radar_tracks=0,
@@ -6240,13 +6240,13 @@ def test_stock_scc_mode_uses_vision_while_scc_object_conflicts() -> None:
   )
 
   assert output.lead_one is not None
-  assert not output.lead_one["radar"]
-  assert output.lead_one["dRel"] == pytest.approx(30.0)
+  assert output.lead_one["radar"]
+  assert output.lead_one["dRel"] == pytest.approx(80.0)
 
 
 @pytest.mark.parametrize(
   "enable_radar_tracks,scc_y_rel",
-  ((-1, -4.0), (-1, 4.0), (3, -4.0), (3, 4.0)),
+  ((-1, -4.0), (-1, 4.0), (0, -4.0), (0, 4.0), (3, -4.0), (3, 4.0)),
 )
 def test_always_scc_mode_ignores_scc_lateral_position(
   enable_radar_tracks: int,
@@ -6275,7 +6275,7 @@ def test_always_scc_mode_ignores_scc_lateral_position(
   assert output.lead_one["dPath"] == pytest.approx(0.0)
 
 
-def test_stock_scc_mode_uses_vision_for_lateral_conflict() -> None:
+def test_stock_scc_mode_ignores_lateral_conflict() -> None:
   output = DPathRadarController(
     prefer_corner_radar=True,
     enable_radar_tracks=0,
@@ -6291,8 +6291,9 @@ def test_stock_scc_mode_uses_vision_for_lateral_conflict() -> None:
   )
 
   assert output.lead_one is not None
-  assert not output.lead_one["radar"]
-  assert output.lead_one["yRel"] == pytest.approx(-1.0)
+  assert output.lead_one["radar"]
+  assert output.lead_one["yRel"] == 0.0
+  assert output.lead_one["dPath"] == 0.0
 
 
 def test_mode_three_uses_unmatched_scc_before_vision() -> None:
@@ -7306,8 +7307,8 @@ def test_controller_stationary_mismatch_uses_configured_primary_only() -> None:
         ),
       ),
       2,
-      0,
-      "scc",
+      None,
+      None,
     ),
     (
       (
@@ -7471,7 +7472,7 @@ def test_in_path_moving_radar_fallback_prefers_front_then_corner_scc() -> None:
         ),
       ),
       2,
-      0,
+      None,
     ),
     (
       (
@@ -7501,8 +7502,8 @@ def test_in_path_moving_radar_fallback_prefers_front_then_corner_scc() -> None:
       enable_radar_tracks=enable_radar_tracks,
     )
     output = None
-    # Moving candidates confirm at 0.25 s; the permitted SCC case in the
-    # stationary speed band now uses the stricter 0.50 s radar-only dwell.
+    # Physical moving candidates confirm at 0.25 s. SCC-only modes use the
+    # OEM object immediately; mode 2 cannot infer occupancy from SCC yRel.
     for index in range(12):
       time_s = index * 0.05
       moving_points = tuple(
@@ -7520,7 +7521,7 @@ def test_in_path_moving_radar_fallback_prefers_front_then_corner_scc() -> None:
           30.0, 0.0, 0.0, probability=0.0,
         ),
       )
-      if index < 5 and enable_radar_tracks != -1:
+      if index < 5 and enable_radar_tracks not in (-1, 0):
         assert output.lead_one is None
 
     assert output is not None

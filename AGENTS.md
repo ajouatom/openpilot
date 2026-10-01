@@ -1,5 +1,19 @@
 # Repository memory
 
+- On 2026-10-01, Casper EV `00001e75--ace5ac2325--9` confirmed SCC-only mode 0
+  with every SCC lateral measurement zero. The user requested always using the
+  measured SCC object in SCC-only modes and ignoring unreliable SCC lateral
+  position. Modes 0/-1 now use SCC longitudinal range/speed directly, then the
+  existing probability-qualified vision lead without an extra dPath gate when
+  SCC is absent. All SCC matching excludes its lateral coordinate; it cannot
+  establish geometric path occupancy. Mode 2 retains low-speed longitudinal
+  vision matching and independently corroborated SCC L2; mode 1 excludes SCC
+  and mode 3 retains front-first/SCC fallback. Web replay restores the recorded
+  source policy instead of forcing mode 2. Original mode-0 replay loses L1 on
+  30/1,199 frames with SCC and strong vision; corrected replay loses none and
+  uses vision on all 45 SCC-absent frames. Replay is not vehicle-response
+  validation. See docs/scc_longitudinal_lead_20261001.md.
+
 - On 2026-09-30, the user approved the handover revision and then explicitly
   selected torque-ceiling-only rapid recovery: keep target angles and existing
   angle limits unchanged, raise the ceiling faster for small error and slower

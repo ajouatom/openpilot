@@ -117,3 +117,32 @@ def test_meb_flag_matches_persisted_vehicle_definition():
   flags = next(node for node in tree.body if isinstance(node, ast.ClassDef) and node.name == "VolkswagenFlags")
   value = next(node.value for node in flags.body if isinstance(node, ast.Assign) and node.targets[0].id == "MEB")
   assert ast.literal_eval(value) == VOLKSWAGEN_MEB_FLAG
+
+
+@pytest.mark.parametrize("brand,unavailable,setting,expected", (
+  ("hyundai", False, b"0", 0), ("hyundai", False, b"-1", -1),
+  ("hyundai", False, b"-2", -2), ("hyundai", False, b"3", 3),
+  ("hyundai", False, b"invalid", None), ("hyundai", False, b"99", None),
+  ("hyundai", False, None, None), ("volkswagen", False, b"0", 1),
+  ("volkswagen", True, b"3", -2),
+))
+def test_replay_restores_source_policy_from_late_metadata(tmp_path, brand, unavailable, setting, expected):
+  from openpilot.cereal import log
+  from openpilot.selfdrive.carrot.radar.tools.radar_validation_replay import load_frames
+
+  tracks = log.Event.new_message(logMonoTime=2_000_000_000)
+  tracks.init("liveTracks").init("points", 0)
+  model = log.Event.new_message(logMonoTime=3_000_000_000)
+  model.init("modelV2").timestampEof = 2_950_000_000
+  params = log.Event.new_message(logMonoTime=4_000_000_000)
+  cp = params.init("carParams")
+  cp.brand, cp.carFingerprint, cp.radarUnavailable = brand, "unknown", unavailable
+  init = log.Event.new_message(logMonoTime=5_000_000_000)
+  entries = init.init("initData").params.init("entries", int(setting is not None))
+  if setting is not None:
+    entries[0].key, entries[0].value = "EnableRadarTracks", setting
+  path = tmp_path / "rlog"
+  path.write_bytes(b"".join(event.to_bytes() for event in (tracks, model, params, init)))
+  frames = load_frames(path)
+  assert len(frames) == 1
+  assert frames[0].recorded_radar_track_mode == expected

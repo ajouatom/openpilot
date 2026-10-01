@@ -842,9 +842,9 @@ class DPathRadarController:
       yaw_rate_rad_s=yaw_rate_rad_s,
     )
     vision = self.primary_matcher.vision_fallback
-    if self.enable_radar_tracks == -1:
-      # -1 is the legacy unconditional SCC mode. It intentionally does not
-      # require a vision match and ignores SCC lateral position entirely.
+    if self.enable_radar_tracks in (-1, 0):
+      # SCC-only modes use the OEM-selected longitudinal object. Its lateral
+      # field may be fixed at zero or unreliable, so it cannot gate selection.
       primary_match = unconditional_scc_match(points)
       self._reset_stationary_vision_range_mismatch()
       self._moving_range_last_point = None
