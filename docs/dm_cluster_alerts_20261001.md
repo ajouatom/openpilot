@@ -47,7 +47,7 @@ disengaged. Warning timing and the existing openpilot sound stages are unchanged
 
 | Existing output path | DM stages 1/2 | DM stage 3 |
 | --- | --- | --- |
-| CAN-FD ADRV_0x161 | ALERTS_2=1 (keep hands on steering wheel) | ALERTS_2=2 (keep hands on steering wheel, red) |
+| CAN-FD ADRV_0x161 | ALERTS_2=1 (keep hands on steering wheel), no added chime | ALERTS_2=2 (red hands-on), SOUNDS_2=3 (constant chime) when no other sound request is present |
 | CAN-FD LFAHDA_CLUSTER fallback | HDA_InfoPUDis=5 (hands-off popup) | Same visual popup |
 | Classic SEND_LFA LFAHDA_MFC | LFA_SysWarning=5 (orange hands-on) | LFA_SysWarning=6 (red hands-on) |
 | Classic Santa Fe without SEND_LFA | LKAS11 SysWarning=4 | LKAS11 SysWarning=5 |
@@ -57,7 +57,7 @@ disengaged. Warning timing and the existing openpilot sound stages are unchanged
 CAN-FD 0x161 changes are applied after the existing suppression filter to fresh
 copies, preserving the input snapshot. Other surviving popup identities remain;
 stock collision/takeover identities 7/8/9/10/14/21 and their stock sound fields
-take precedence during DM alerts. No new CAN-FD sound request is added. 0x1e0
+take precedence during DM alerts. The added 0x161 terminal chime is described below. 0x1e0
 fallback is used only when the existing controller sends that message and no
 0x161 display path is active; nonzero primary/secondary stock popups are retained.
 No new message is fabricated when its stock snapshot is absent. HDA2 stock-long
@@ -66,6 +66,19 @@ configurations without an existing permitted cluster sender are not expanded.
 The user's follow-up corrected the initial rest-reminder mapping: DM now requests
 the DBC's hands-on warning (1/2), not the break reminder (5). It no longer turns
 on DAW_ICON. Existing stock-icon handling is unchanged.
+
+The user subsequently reported observing ALERTS_2=2 together with SOUNDS_2=3 in
+a log. The DBC independently defines these as red hands-on and constant chime.
+That particular log has not been supplied/independently checked; the report does
+not establish universal cluster behavior or actual audio. To reproduce the
+reported pair, stage 3 now sets SOUNDS_2=3 when inserting its own red DM popup
+and all four outgoing sound requests are zero. Surviving stock popups or sounds
+take precedence; stages 1/2 add no sound request. New copies each cycle prevent
+the injected chime persisting after the exported DM level clears. This updates
+the initial implementation's no-added-CAN-FD-sound choice. The openpilot terminal
+sound remains, so it can overlap the cluster chime. The 0x1e0 fallback and classic
+CAN mappings are unchanged. Device stage-1 silence is not a guarantee of cluster
+silence: implicit popup-associated chimes remain a physical validation question.
 
 Classic LFA warning enums are defined in `hyundai_kia_generic.dbc`; older LKAS11
 values reuse the existing port's warning mappings/comments. Optima's known value
@@ -81,7 +94,7 @@ cluster forwarding contract and its previously required firmware.
 
 ## Validation
 
-- 337 desktop tests after the hands-on follow-up: DM notice/HUD qualification, both CAN-FD display paths,
+- 343 desktop tests after the paired-chime follow-up: DM notice/HUD qualification, both CAN-FD display paths,
   stock popup and sound precedence, CAN checksums/counters, classic warning
   mapping, cluster/lead/fault regression and handover-controller regression.
 - 269 existing monitoring, traffic context, parking reset, daemon and wheel-touch
