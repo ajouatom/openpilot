@@ -51,7 +51,7 @@ Record the value currently shown on the device before changing anything.
 <a id="speed-camera"></a>
 ## 1. Speed cameras
 
-The related settings are `AutoNaviSpeedCtrlMode`, `AutoNaviSpeedCtrlEnd`, `AutoNaviRearCameraHoldDistance`, `AutoNaviSpeedDecelRate`, `AutoNaviSpeedSafetyFactor`, `AutoNaviCountDownMode`, `VehicleNaviCanControl`, `VehicleNaviSchoolZoneControl`, `VehicleNaviSkipBoxCamera`, `VehicleNaviSkipMobileZone`, `VehicleNaviSectionAvgControl`, `VehicleSpeedCameraControlMode`, and `VehicleSpeedCameraDistanceTime`.
+The related settings are `AutoNaviSpeedCtrlMode`, `AutoNaviSpeedCtrlEnd`, `AutoNaviRearCameraHoldDistance`, `AutoNaviSpeedDecelRate`, `AutoNaviSpeedSafetyFactor`, `AutoNaviCountDownMode`, `VehicleNaviCanControl`, `VehicleNaviSchoolZoneControl`, `VehicleNaviDecelCancel`(`VehicleNaviDecelCancelBox`, `VehicleNaviDecelCancelMobileZone`, `VehicleNaviDecelCancelBump`), `VehicleNaviSectionAvgControl`, `VehicleSpeedCameraControlMode`, and `VehicleSpeedCameraDistanceTime`.
 
 ### `AutoNaviSpeedCtrlMode`
 
@@ -97,13 +97,21 @@ The current stock warning (0x4A3) carries no camera kind. The kind of the previe
 | Signal-and-speed | Traffic-light icon | Always decelerates; no skip |
 | Rear speed, rear signal-and-speed | — | Always decelerates; no skip (identified by the preview's rear flag) |
 | Mobile enforcement zone | Blue circle | Decelerates when `AutoNaviSpeedCtrlMode` is `3`; ignored at `2` or lower |
-| Mobile-camera box | — | Decelerates; skippable with `VehicleNaviSkipBoxCamera` |
+| Mobile-camera box | — | Decelerates; can be cancelled with the deceleration cancel request |
 
 A warning that also carries a fixed, signal, or rear camera always decelerates, even inside a mobile zone.
 
-### `VehicleNaviSkipBoxCamera`, `VehicleNaviSkipMobileZone`
+### `VehicleNaviDecelCancel` (deceleration cancel request)
 
-When enabled, while engaged and that kind of camera decelerates, one press of cruise `+` or a gas tap (accelerator pressed for under 0.4 s) releases its deceleration. The input does not raise the set speed (neither `+1` nor the gas-tap `+10`), and the next camera decelerates again after the warning ends. While disengaged or below about 18 km/h, `+` and the gas tap keep their normal resume/engage/set-speed roles. `VehicleNaviSkipMobileZone` matters only when `AutoNaviSpeedCtrlMode` is `3`, so mobile zones decelerate. Both are off by default.
+When enabled, while engaged and one of the kinds enabled in its details is decelerating, one press of cruise `+` or a gas tap (accelerator pressed for under 0.4 s) cancels that deceleration. The input does not raise the set speed (neither `+1` nor the gas-tap `+10`), and the cancel applies to that one camera or bump; the next one decelerates again. While disengaged, below about 18 km/h, or when that kind is not actually decelerating, `+` and the gas tap keep their normal resume/engage/set-speed roles. Fixed, signal and rear cameras and section enforcement cannot be cancelled. Off by default.
+
+Per-kind toggles (in the setting's detail screen, on by default so turning on the master enables all):
+
+| Key | Applies to |
+|---|---|
+| `VehicleNaviDecelCancelBox` | Mobile-camera box |
+| `VehicleNaviDecelCancelMobileZone` | Mobile enforcement zone; matters only when `AutoNaviSpeedCtrlMode` is `3`, so zones decelerate |
+| `VehicleNaviDecelCancelBump` | Stock-navigation speed bump. The input is used only while the bump target (from the speed-bump settings) is below the set speed, i.e. actually decelerating, and cancels the nearest bump only |
 
 ### `VehicleNaviSectionAvgControl`
 
@@ -236,7 +244,7 @@ For `-1`, a non-negative offset selects limit + offset; a negative offset select
 <a id="speed-bump"></a>
 ## 3. Speed bumps
 
-Speed-bump control uses `AutoNaviSpeedBumpTime`, `AutoNaviSpeedBumpSpeed`, and `AutoNaviSpeedBumpEndDistance`. It requires `AutoNaviSpeedCtrlMode >= 2`, a bump event and distance, and a road category that the code does not treat as highway. A stock-navigation CAN bump must also satisfy the route condition selected by `VehicleNaviCanControl`.
+Speed-bump control uses `AutoNaviSpeedBumpTime`, `AutoNaviSpeedBumpSpeed`, and `AutoNaviSpeedBumpEndDistance`. It requires `AutoNaviSpeedCtrlMode >= 2`, a bump event and distance, and a road category that the code does not treat as highway. A stock-navigation CAN bump must also satisfy the route condition selected by `VehicleNaviCanControl`. With the deceleration cancel request on (`VehicleNaviDecelCancel` + `VehicleNaviDecelCancelBump`), `+` or a gas tap during a bump deceleration cancels the nearest bump.
 
 ### `AutoNaviSpeedBumpSpeed`
 

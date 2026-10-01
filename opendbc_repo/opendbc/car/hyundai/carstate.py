@@ -724,8 +724,17 @@ class CarState(CarStateBase):
   def _read_speedcam_params(self):
     # AutoNaviSpeedCtrlMode 3 (+mobile cameras) also decelerates for stock mobile zones (0x4BE kind 3).
     self.speedcamMobileZoneDecel = self.op_params.get_int("AutoNaviSpeedCtrlMode") >= 3
-    self.speedcamSkipBox = self.op_params.get_bool("VehicleNaviSkipBoxCamera")
-    self.speedcamSkipMobileZone = self.op_params.get_bool("VehicleNaviSkipMobileZone")
+    # Deceleration cancel request (+ / gas tap): one master toggle with a toggle per kind in its details.
+    cancel = self.op_params.get_bool("VehicleNaviDecelCancel")
+    self.speedcamSkipBox = cancel and self.op_params.get_bool("VehicleNaviDecelCancelBox")
+    self.speedcamSkipMobileZone = cancel and self.op_params.get_bool("VehicleNaviDecelCancelMobileZone")
+    self.speedcamCancelBump = cancel and self.op_params.get_bool("VehicleNaviDecelCancelBump")
+    # carrot_serv's stock-navigation bump source, mirrored to tell when a bump is actually decelerating.
+    self.speedcamBumpDecel = self.op_params.get_int("AutoNaviSpeedCtrlMode") >= 2
+    self.speedcamBumpSpeed = float(self.op_params.get_int("AutoNaviSpeedBumpSpeed"))
+    self.speedcamBumpTime = float(self.op_params.get_int("AutoNaviSpeedBumpTime"))
+    self.speedcamBumpEndDistance = min(5000, max(0, self.op_params.get_int("AutoNaviSpeedBumpEndDistance"))) * 0.01
+    self.speedcamDecelRate = self.op_params.get_int("AutoNaviSpeedDecelRate") * 0.01
     self.speedcamSectionAvgControl = self.op_params.get_bool("VehicleNaviSectionAvgControl")
     # The existing section cap is limit x AutoNaviSpeedSafetyFactor (carrot_serv); unlock only above it.
     self.speedcamSafetyFactor = self.op_params.get_int("AutoNaviSpeedSafetyFactor") * 0.01
@@ -763,6 +772,32 @@ class CarState(CarStateBase):
     if consume:
       self._consume_speedcam_input(accel_rising, gas_tok)
     return False if suppress else speed_limit_cam
+
+  def _speedcam_bump_target_kph(self, distance):
+    """carrot_serv.calculate_current_speed for the bump source (cluster km/h)."""
+    safe = self.speedcamBumpSpeed / 3.6
+    decel_dist = distance - safe * self.speedcamBumpTime
+    if decel_dist <= 0:
+      return self.speedcamBumpSpeed
+    return max(self.speedcamBumpSpeed, min(250.0, math.sqrt(safe ** 2 + 2 * self.speedcamDecelRate * decel_dist) * 3.6))
+
+  def _apply_speedcam_bump_cancel(self, ret, accel_rising, gas_tok):
+    """Deceleration cancel request for stock-navigation speed bumps: while the nearest bump is
+    actually slowing the car (its target below the set speed), + or a gas tap cancels that bump."""
+    if self.canfd_wrapped_navi or not self.vehicleNaviCanControl:
+      return
+    live = [event for event in self.vehicleNaviEvents
+            if event["type"] == "bump" and event["target"] > self.totalDistance and not event.get("cancelled")]
+    ret.speedBumpDistance = live[0]["target"] - self.totalDistance if live else 0.0
+    if (not live or not self.speedcamCancelBump or not self.speedcamBumpDecel or self.speedcam_input_consumed or
+        not (accel_rising or gas_tok) or not self.speedcam_engaged or ret.vEgo <= SPEEDCAM_SKIP_MIN_SPEED):
+      return
+    distance = ret.speedBumpDistance
+    if distance <= self.speedcamBumpEndDistance or self._speedcam_bump_target_kph(distance) >= self.speedcam_v_cruise:
+      return  # carrot_serv is not slowing for this bump: + and the gas tap keep their roles
+    live[0]["cancelled"] = True
+    ret.speedBumpDistance = live[1]["target"] - self.totalDistance if len(live) > 1 else 0.0
+    self._consume_speedcam_input(accel_rising, gas_tok)
 
   def _consume_speedcam_input(self, accel_rising, gas_tok):
     # The input spent on a camera skip or section unlock must not also raise the set speed (+1 / gas tap +10).
@@ -1528,6 +1563,7 @@ class CarState(CarStateBase):
     speedcam_gas_tok = self._update_speedcam_gas_tok(ret.gasPressed)
     speed_limit_cam = self._apply_speedcam_policy(ret, speed_limit_cam, speedcam_warning_active, speedcam_warning_speed,
                                                   speedcam_accel_rising, speedcam_gas_tok)
+    self._apply_speedcam_bump_cancel(ret, speedcam_accel_rising, speedcam_gas_tok)
     self.update_speed_limit(ret, speed_limit_cam, distance_time_changed)
     speedcam_decel_long_press = self._update_speedcam_decel_long_press()
     self._apply_section_average(ret, speedcam_accel_rising, speedcam_gas_tok, speedcam_decel_long_press)

@@ -38,11 +38,16 @@ class FakeParams:
       return 107
     if key == "CruiseButtonLongDelay":
       return 40
+    if key in ("AutoNaviSpeedBumpSpeed", "AutoNaviSpeedBumpTime", "AutoNaviSpeedBumpEndDistance", "AutoNaviSpeedDecelRate"):
+      return {"AutoNaviSpeedBumpSpeed": 35, "AutoNaviSpeedBumpTime": 1,
+              "AutoNaviSpeedBumpEndDistance": 200, "AutoNaviSpeedDecelRate": 120}[key]
     raise KeyError(key)
 
   def get_bool(self, key):
-    if key in ("VehicleNaviSkipBoxCamera", "VehicleNaviSkipMobileZone", "VehicleNaviSectionAvgControl"):
+    if key in ("VehicleNaviDecelCancel", "VehicleNaviSectionAvgControl"):
       return False
+    if key in ("VehicleNaviDecelCancelBox", "VehicleNaviDecelCancelMobileZone", "VehicleNaviDecelCancelBump"):
+      return True
     assert key == "VehicleNaviSchoolZoneControl"
     return self.school_zone
 
@@ -1520,3 +1525,78 @@ def test_section_true_average_stays_at_or_below_the_limit_end_to_end():
     assert spent_steps < int(1200 / dt)
   assert spent_steps * dt > 30                             # the bank was actually used above the limit
 
+
+def _bump_state(cancel=True):
+  state = _speedcam_state()
+  state.speedcamCancelBump = cancel
+  state.speedcam_v_cruise = 60.0
+  state.vehicleNaviEvents = [{"type": "bump", "speed": 0, "kind": 6, "target": 80.0},
+                             {"type": "bump", "speed": 0, "kind": 6, "target": 300.0}]
+  return state
+
+
+def _bump_ret():
+  return SimpleNamespace(vEgo=16.0, speedBumpDistance=80.0)
+
+
+def test_bump_decel_cancel_releases_only_the_decelerating_bump():
+  state = _bump_state()
+  assert state._speedcam_bump_target_kph(80.0) < 60.0        # 35 km/h bump 80 m ahead: slowing below the set 60
+  ret = _bump_ret()
+  state._apply_speedcam_bump_cancel(ret, True, False)
+  assert ret.speedBumpDistance == pytest.approx(300.0)      # the next bump still decelerates
+  assert state.speedcam_input_consumed and state.speedcam_accel_swallow
+  assert state.vehicleNaviEvents[0]["cancelled"]
+
+  ret = _bump_ret()                                         # following frames keep the cancel
+  state.speedcam_input_consumed = state.speedcam_accel_swallow = False
+  state._apply_speedcam_bump_cancel(ret, False, False)
+  assert ret.speedBumpDistance == pytest.approx(300.0)
+
+
+def test_bump_cancel_needs_actual_deceleration_and_its_toggles():
+  far = _bump_state()
+  far.vehicleNaviEvents = [{"type": "bump", "speed": 0, "kind": 6, "target": 400.0}]
+  assert far._speedcam_bump_target_kph(400.0) > 60.0        # not slowing yet
+  ret = SimpleNamespace(vEgo=16.0, speedBumpDistance=400.0)
+  far._apply_speedcam_bump_cancel(ret, True, False)
+  assert ret.speedBumpDistance == pytest.approx(400.0) and not far.speedcam_input_consumed
+
+  off = _bump_state(cancel=False)                           # master or bump toggle off
+  ret = _bump_ret()
+  off._apply_speedcam_bump_cancel(ret, True, True)
+  assert ret.speedBumpDistance == pytest.approx(80.0) and not off.speedcam_input_consumed
+
+  disengaged = _bump_state()
+  disengaged.speedcam_engaged = False
+  ret = _bump_ret()
+  disengaged._apply_speedcam_bump_cancel(ret, False, True)
+  assert ret.speedBumpDistance == pytest.approx(80.0) and not disengaged.speedcam_gas_tok_consumed
+
+
+def test_bump_gas_tap_cancel_and_camera_skip_win_the_input():
+  state = _bump_state()
+  ret = _bump_ret()
+  state._apply_speedcam_bump_cancel(ret, False, True)
+  assert ret.speedBumpDistance == pytest.approx(300.0) and state.speedcam_gas_tok_consumed
+
+  taken = _bump_state()
+  taken.speedcam_input_consumed = True                      # this press already skipped a camera
+  ret = _bump_ret()
+  taken._apply_speedcam_bump_cancel(ret, True, False)
+  assert ret.speedBumpDistance == pytest.approx(80.0)
+
+
+def test_bump_cancel_survives_a_repeated_announcement():
+  state = _bump_state()
+  state._apply_speedcam_bump_cancel(_bump_ret(), True, False)
+  state._add_vehicle_navi_event("bump", 0, 6, 85.0)         # same bump announced again, 5 m further
+  assert len(state.vehicleNaviEvents) == 2 and state.vehicleNaviEvents[0]["cancelled"]
+
+
+def test_decel_cancel_master_gates_every_kind():
+  state = _car_state()
+  assert not (state.speedcamSkipBox or state.speedcamSkipMobileZone or state.speedcamCancelBump)
+  state.op_params.get_bool = lambda key: True
+  state._read_speedcam_params()
+  assert state.speedcamSkipBox and state.speedcamSkipMobileZone and state.speedcamCancelBump
