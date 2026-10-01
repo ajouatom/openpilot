@@ -553,6 +553,8 @@ class CarController(CarControllerBase):
         can_sends.extend(hyundaicanfd.create_lfahda_cluster(
           self.packer, CS, self.CAN, CC.longActive, CC.latActive,
           suppress_camera_auto_disengage=bool(camera_scc and self.car_fingerprint == CAR.GENESIS_GV70_1ST_GEN),
+          dm_alert=hud_control.driverMonitoringAlert if (CS.adrv_0x161 is None or
+                   (camera_scc and not self.CP.openpilotLongitudinalControl)) else 0,
         ))
         if not camera_scc:
           can_sends.extend(hyundaicanfd.create_lfa_icon_non_camera_scc(self.packer, CS, self.CAN, CC))
@@ -609,7 +611,8 @@ class CarController(CarControllerBase):
           can_sends.append(hyundaican.create_lkas11(self.packer, self.frame, self.CP, apply_torque, apply_steer_req,
                                                     torque_fault, CS.lkas11, sys_warning, sys_state, CC.enabled,
                                                     hud_control.leftLaneVisible, hud_control.rightLaneVisible,
-                                                    left_lane_warning, right_lane_warning, self.is_ldws_car))
+                                                    left_lane_warning, right_lane_warning, self.is_ldws_car,
+                                                    dm_alert=hud_control.driverMonitoringAlert))
         self.lkas11_active = True
 
       if not self.CP.openpilotLongitudinalControl:

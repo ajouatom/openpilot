@@ -34,6 +34,7 @@ from openpilot.selfdrive.locationd.helpers import PoseCalibrator, Pose
 
 from openpilot.selfdrive.carrot.carrot_controls import CarrotControls
 from openpilot.selfdrive.carrot.carrot_man_input import get_carrot_man
+from openpilot.selfdrive.monitoring.dm_alerts import driver_monitoring_hud_alert
 
 State = log.SelfdriveState.OpenpilotState
 LaneChangeState = log.LaneChangeState
@@ -357,6 +358,7 @@ class Controls:
     hudControl.leadVisible = self.sm['longitudinalPlan'].hasLead
     hudControl.leadDistanceBars = self.sm['selfdriveState'].personality.raw + 1
     hudControl.visualAlert = self.sm['selfdriveState'].alertHudVisual
+    hudControl.driverMonitoringAlert = driver_monitoring_hud_alert(self.sm)
 
     radarState = self.sm['radarState']
     leadOne = radarState.leadOne

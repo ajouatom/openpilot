@@ -504,6 +504,8 @@ struct CarControl {
     naviEventSpeed @20: Int16;  # VW MEB cluster: 목표속도 kph (커브는 부호=방향: +우/-좌) -> ACC_Event_Wunschgeschw
     leadLimiting @21: Bool;     # VW MEB cluster: 앞차가 속도를 제한 중(xState lead) -> 앞차 하이라이트 우선
 
+    driverMonitoringAlert @22: UInt8;  # 0=none, 1=initial, 2=audible, 3=terminal; fresh enabled DM only
+
     # not used with the dash, TODO: separate structs for dash UI and device UI
     audibleAlert @5: AudibleAlert;
 
