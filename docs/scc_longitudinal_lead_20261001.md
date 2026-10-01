@@ -65,10 +65,31 @@ recorded decision from this different-policy recalculation.
 - Corrected mode-0 replay has no absent leadOne across all 1,199 frames: measured
   SCC owns 1,154 frames and vision owns the 45 SCC-absent frames. No last SCC
   object is fabricated through those gaps. The web adapter uses the same mode.
-- Full maintained mode-2 corpus: 100 logs / 497 labelled items. The complete
-  before/after result objects are identical. Existing expectation failures stay
-  at 10, pre-deceleration failures at zero, and 208 items lack their labelled
-  target input. This is a no-regression comparison, not an all-pass claim.
+- Full maintained corpus in each of modes 2 and 3: 100 logs / 497 labelled items.
+  Complete before/after result objects are identical in both modes. Existing
+  expectation failures stay at 10 / 13, pre-deceleration failures at 0 / 1,
+  and 208 items lack their labelled target input. This is a no-regression
+  comparison, not an all-pass claim.
+
+## Publication
+
+- Implementation commit `b3354534acebe83179730d1f3675dd047a2fe83e` is pushed
+  to `carrot-wip`.
+- [Carrot Routes image run 36795665603](https://github.com/ajouatom/openpilot/actions/runs/36795665603)
+  passed all 1,523 Linux tests, built the committed bundle, and published image
+  `sha256:abaad63ab16fea7fe68ef4fb70a306fad176d46698b88a0b4e099f35176c59f7`.
+- [Settings Wiki run 36795665513](https://github.com/ajouatom/openpilot/actions/runs/36795665513)
+  completed successfully for the same implementation commit.
+- The fresh committed bundle reproduces every locally verified Casper frame
+  and graph, with Linux source fingerprint `06dd76693d1aad2a37f4`.
+- The existing NAS scheduled updater reports `updated`, no error, and the same
+  implementation commit/image. Its independent configured 1,196-frame probe
+  passed. No source files were manually copied to the NAS.
+- The actual Casper upload-result page and radar endpoint both return HTTP 200.
+  The endpoint reports mode 0 and fingerprint `06dd76693d1aad2a37f4`; every one
+  of its 1,199 frames and every graph equals the fresh committed-bundle export.
+  All served frames have leadOne. This verifies deployment and recalculation,
+  not installation on the vehicle or a new driving test.
 
 Recorded-input replay verifies lead selection, not closed-loop braking or a new
 driving test. The SCC output represents the OEM-selected object; always using it
