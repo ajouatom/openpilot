@@ -4,6 +4,30 @@ The user explicitly requested a separate trial branch after the EV9 CPU review.
 `carrot-native-cpu` starts at `a4d8ef647c` on `carrot-wip`. Production branch,
 vehicle settings and production NAS deployment remain separate.
 
+## Promotion to carrot-wip
+
+After reviewing the Ioniq 5 PE before/after logs, the user explicitly approved
+promoting the tested native code to `carrot-wip` and deleting the remote
+`carrot-native-cpu` branch. The experiment-only restriction above is superseded
+by this approval. The proposed trajectory prefilter remains deferred; no target
+selection, history retention, driving threshold or CPU placement changes belong
+to this promotion.
+
+Ioniq 5 PE `00001005--f5fbe6ee48--3` records clean abe1a232 (pre-native), while
+`00001006--475cef72a1--3` records 64aa1b9b with `cython` in every card/radard
+backend summary. Core5 averages 77.7 -> 70.9%; radard CPU/update 7.70 -> 4.73 ms,
+card 6.02 -> 5.80 ms. Both already maintain 20 Hz radar with valid CAN/model/pose.
+Workload, temperature and engagement differ, so observed reductions are not
+isolated causal estimates. Same-input replay of each segment matches all 1,200
+radar outputs and reduces PC radar compute by 30-31%. This does not establish
+native behavior on the originally overloaded EV9.
+
+[Final experiment CI](https://github.com/ajouatom/openpilot/actions/runs/36959176906)
+passes the exact native SConscript targets on Linux x86_64 and ARM64 plus replay
+image build. The native kernel workflow now follows `carrot-wip`; the production
+replay workflow builds native kernels before tests and asserts the image backend.
+Production rollout uses the existing scheduled NAS updater and its replay probe.
+
 ## Why this work
 
 EV9 `000002df--25c01be8dd--0` on `abe1a232` saturates core5. During 30–54 s,

@@ -5,6 +5,7 @@ on:
     branches: [carrot-wip]
     paths:
       - 'tools/carrot_route_vault/**'
+      - 'tools/build_native_cpu.py'
       - 'openpilot/selfdrive/carrot/radar_motion/**'
       - 'openpilot/selfdrive/carrot/cluster/**'
       - 'openpilot/selfdrive/carrot/radar/tools/radar_validation_replay.py'
@@ -37,7 +38,9 @@ jobs:
         with:
           python-version: '3.12'
       - name: Install focused test dependencies
-        run: pip install -r tools/carrot_route_vault/requirements.txt pytest raylib==5.5.0.4
+        run: pip install -r tools/carrot_route_vault/requirements.txt pytest raylib==5.5.0.4 Cython==3.2.9 setuptools
+      - name: Build native radar and CAN kernels for replay tests
+        run: python tools/build_native_cpu.py build_ext --inplace
       - name: Test receiver and production radar replay
         env:
           PYTHONPATH: .:opendbc_repo
@@ -75,7 +78,7 @@ jobs:
             --label "org.opencontainers.image.revision=$GITHUB_SHA" \
             -t "$IMAGE:sha-$GITHUB_SHA" "$RUNNER_TEMP/vault-bundle"
           docker run --rm "$IMAGE:sha-$GITHUB_SHA" python -c \
-            'import server, deploy_probe; from openpilot.selfdrive.carrot.radar.tools.radar_web_export import source_version; print(source_version())'
+            'import server, deploy_probe; from openpilot.selfdrive.carrot.radar.tools.radar_web_export import source_version; from openpilot.selfdrive.carrot.radar_motion.native import BACKEND; assert BACKEND == "cython"; print(source_version())'
       - name: Publish tested image
         env:
           GH_TOKEN: ${{ github.token }}
@@ -87,7 +90,7 @@ jobs:
           # An unrelated vehicle/UI commit must not suppress the last replay update.
           git fetch --depth=1 origin carrot-wip
           if git diff --quiet "$GITHUB_SHA" FETCH_HEAD -- \
-            tools/carrot_route_vault openpilot/selfdrive/carrot/radar_motion \
+            tools/carrot_route_vault tools/build_native_cpu.py openpilot/selfdrive/carrot/radar_motion \
             openpilot/selfdrive/carrot/cluster openpilot/selfdrive/carrot/radar/tools/radar_validation_replay.py \
             openpilot/selfdrive/carrot/radar/tools/radar_web_export.py openpilot/selfdrive/controls/lib/cutin_alert.py \
             openpilot/selfdrive/controls/lib/cutin_helpers.py openpilot/cereal opendbc_repo/opendbc \

@@ -1,15 +1,17 @@
 # Repository memory
 
-- On 2026-10-02, the user explicitly requested a separate native CPU experiment.
-  `carrot-native-cpu` branches from a4d8ef647c; do not merge/deploy it to
-  `carrot-wip` or the production NAS image implicitly. Cython accelerates radar
-  history statistics/path projection and CAN raw extraction/packing, preserving
-  Python policy, checksums, counters, validity and scheduling. Python remains the
-  reference/fallback (`CARROT_NATIVE_CPU=0`); runtimeTiming identifies each backend.
-  EV9 2df--0 replay matches 990 radar outputs and 5,983 reconstructed carState/CAN
-  iterations. PC timings improve about 32%/12%; they are not device CPU results.
-  Verify target build, backend activation, core5 headroom, radard 20 Hz and faults
-  on a parked device before promoting. See docs/native_cpu_experiment_20261002.md.
+- On 2026-10-02, after the native CPU experiment and Ioniq 5 PE before/after
+  logs, the user explicitly approved promotion to `carrot-wip` and deletion of
+  the remote `carrot-native-cpu` branch. Keep the tested Cython radar statistics/
+  path projection and CAN extraction/packing kernels, Python comparison/fallback,
+  strict floating-point build flags and backend timing diagnostics. Preserve
+  radar algorithms, history, thresholds, validity, counters and CPU placement.
+  The discussed trajectory prefilter is deferred and must not be included.
+  Ioniq 5 logs confirm native activation and core5 mean 77.7 -> 70.9%, but input
+  workload differs; same-input replay matches all 2,400 radar frames with 30-31%
+  lower PC compute time. EV9 overloaded mode-3 native vehicle behavior is still
+  unvalidated. Maintain native x86/ARM CI and the shared NAS replay build.
+  See docs/native_cpu_experiment_20261002.md.
 
 - On 2026-10-01, Casper EV `00001e75--ace5ac2325--9` confirmed SCC-only mode 0
   with every SCC lateral measurement zero. The user requested always using the
