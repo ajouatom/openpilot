@@ -2,6 +2,7 @@ import math
 
 from opendbc.car.carlog import carlog
 from opendbc.can.dbc import DBC, Signal, SignalType
+from opendbc.can import native
 
 
 class CANPacker:
@@ -10,6 +11,11 @@ class CANPacker:
     self.counters: dict[int, int] = {}
 
   def pack(self, address: int, values: dict[str, float], rx_counter: int | None = None) -> bytearray:
+    if native.pack is not None:
+      return native.pack(self.dbc, self.counters, address, values, rx_counter)
+    return self.pack_python(address, values, rx_counter)
+
+  def pack_python(self, address: int, values: dict[str, float], rx_counter: int | None = None) -> bytearray:
     msg = self.dbc.addr_to_msg.get(address)
     if msg is None:
       carlog.error(f"msg not found for {address=}")

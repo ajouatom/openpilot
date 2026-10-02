@@ -1,0 +1,50 @@
+name: Native CPU experiment
+
+on:
+  push:
+    branches: [carrot-native-cpu]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  kernels:
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-24.04, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
+    env:
+      PYTHONPATH: .:opendbc_repo
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - run: pip install Cython==3.2.9 setuptools pytest -r tools/carrot_route_vault/requirements.txt
+      - run: python tools/build_native_cpu.py build_ext --inplace
+      - run: python opendbc_repo/opendbc/dbc/generator/generator.py
+      - name: Exact kernel, CAN payload and rejection-state comparisons
+        # Existing startup test expects no grace; this fork grants two seconds.
+        # It also fails with CARROT_NATIVE_CPU=0. Do not change that policy here.
+        run: >-
+          python -m pytest -q -c /dev/null --rootdir=. --confcutdir=tools/native_cpu
+          tools/native_cpu/test_kernels.py opendbc_repo/opendbc/can/tests
+          -k 'not test_parser_can_valid'
+      - name: Radar regression tests
+        run: >-
+          python -m pytest -q -c /dev/null --rootdir=. --confcutdir=openpilot/selfdrive/carrot/tests
+          openpilot/selfdrive/carrot/tests/test_trajectory_cutin.py
+          openpilot/selfdrive/carrot/tests/test_trajectory_cutout.py
+          openpilot/selfdrive/carrot/tests/test_radar_motion_predictor.py
+          openpilot/selfdrive/carrot/tests/test_radar_cutout_fast_path.py
+          openpilot/selfdrive/carrot/tests/test_scc_lead_policy.py
+          openpilot/selfdrive/carrot/tests/test_radard_dpath.py
+      - name: Build replay image without publishing or deploying it
+        if: matrix.runner == 'ubuntu-24.04'
+        run: |
+          python tools/carrot_route_vault/build_bundle.py "$RUNNER_TEMP/native-vault" --ref "$GITHUB_SHA"
+          docker build -f "$RUNNER_TEMP/native-vault/Dockerfile.vault" -t native-vault-test "$RUNNER_TEMP/native-vault"
+          docker run --rm native-vault-test python -c 'import server; from openpilot.selfdrive.carrot.radar_motion.native import BACKEND; assert BACKEND == "cython"'

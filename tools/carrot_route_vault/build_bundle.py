@@ -10,6 +10,8 @@ import subprocess
 
 ROOT = Path(__file__).resolve().parents[2]
 SOURCES = (
+  "tools/build_native_cpu.py",
+  "opendbc_repo/opendbc/can",
   "openpilot/common/filter_simple.py",
   "openpilot/selfdrive/carrot/radar/lateral.py",
   "openpilot/selfdrive/carrot/radar/tools/radar_group3_replay.py",
@@ -31,7 +33,7 @@ def build(destination: Path, ref: str):
   commit = subprocess.check_output(["git", "rev-parse", "--verify", ref + "^{commit}"], cwd=ROOT, text=True).strip()
   files = subprocess.check_output(["git", "ls-tree", "-r", "--name-only", commit, "--", *SOURCES], cwd=ROOT, text=True).splitlines()
   for name in files:
-    if Path(name).suffix not in {".py", ".capnp", ".dbc"}:
+    if Path(name).suffix not in {".py", ".pyx", ".capnp", ".dbc"}:
       continue
     target = destination / name
     target.parent.mkdir(parents=True, exist_ok=True)

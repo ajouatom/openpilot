@@ -110,3 +110,6 @@ Pipfile
 .history
 .ionide
 .vs
+
+# Local Windows native CPU test builds
+*.pyd
