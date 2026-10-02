@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 
 from opendbc.car.carlog import carlog
 from opendbc.can.dbc import DBC, Signal
+from opendbc.can import native
 
 
 MAX_BAD_COUNTER = 5
@@ -59,10 +60,14 @@ class MessageState:
     if self.first_seen_nanos == 0:
       self.first_seen_nanos = nanos
 
+    decoded = native.raw_values(dat, self.signals) if native.raw_values is not None else None
     for i, sig in enumerate(self.signals):
-      tmp = get_raw_value(dat, sig)
-      if sig.is_signed:
-        tmp -= ((tmp >> (sig.size - 1)) & 0x1) * (1 << sig.size)
+      if decoded is not None:
+        tmp = decoded[i]
+      else:
+        tmp = get_raw_value(dat, sig)
+        if sig.is_signed:
+          tmp -= ((tmp >> (sig.size - 1)) & 0x1) * (1 << sig.size)
 
       if not self.ignore_checksum and sig.calc_checksum is not None:
         expected_checksum = sig.calc_checksum(self.address, sig, bytearray(dat))

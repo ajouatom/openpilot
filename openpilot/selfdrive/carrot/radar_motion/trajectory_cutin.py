@@ -10,10 +10,13 @@ from __future__ import annotations
 
 import math
 import statistics
+
 from collections import deque
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any
+
+from openpilot.selfdrive.carrot.radar_motion import native
 
 from openpilot.selfdrive.carrot.radar_motion.predictor import (
   ModelPathProjection,
@@ -246,7 +249,7 @@ def _values_since(
   return tuple(value for value in observations if value.time_s >= start_s)
 
 
-def _median_slope(
+def _median_slope_python(
   observations: Sequence[_Observation],
   attribute: str,
   window_s: float,
@@ -266,7 +269,7 @@ def _median_slope(
   return float(statistics.median(slopes)) if slopes else 0.0
 
 
-def _motion_metrics(
+def _motion_metrics_python(
   observations: Sequence[_Observation],
   window_s: float = LONG_MOTION_WINDOW_S,
   attribute: str = "d_path",
@@ -275,7 +278,7 @@ def _motion_metrics(
   if len(values) < 2:
     return 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, False
 
-  d_path_rate = _median_slope(values, attribute, window_s)
+  d_path_rate = _median_slope_python(values, attribute, window_s)
   current_side = math.copysign(1.0, getattr(values[-1], attribute) or getattr(values[0], attribute) or 1.0)
   inward_rate = max(0.0, -current_side * d_path_rate)
   start_count = min(3, max(1, len(values) // 3))
@@ -312,6 +315,22 @@ def _motion_metrics(
     direction_consistency,
     jittering,
   )
+
+
+def _median_slope(observations, attribute, window_s):
+  if native.motion is not None:
+    result = native.motion(observations, window_s, attribute, False)
+    if result is not None:
+      return result
+  return _median_slope_python(observations, attribute, window_s)
+
+
+def _motion_metrics(observations, window_s=LONG_MOTION_WINDOW_S, attribute="d_path"):
+  if native.motion is not None:
+    result = native.motion(observations, window_s, attribute, True, JITTER_MIN_TRAVEL_M, JITTER_MIN_NET_FRACTION)
+    if result is not None:
+      return result
+  return _motion_metrics_python(observations, window_s, attribute)
 
 
 def _vision_supports(

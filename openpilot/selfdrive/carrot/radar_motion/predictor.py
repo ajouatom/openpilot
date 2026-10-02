@@ -17,6 +17,8 @@ from functools import lru_cache
 from statistics import median
 from typing import Any
 
+from openpilot.selfdrive.carrot.radar_motion import native
+
 
 MOTION_HORIZONS_S = (
   0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0,
@@ -690,26 +692,7 @@ def _terminal_path_tangent(
   return None
 
 
-@lru_cache(maxsize=256)
-def _project_to_model_path_cached(
-  path: tuple[tuple[float, float], ...],
-  x: float,
-  y: float,
-) -> ModelPathProjection:
-  points, segments = _path_geometry(path)
-  if not points:
-    raise ValueError("model path is required for dPath prediction")
-  if not segments:
-    center_x, center_y = points[0]
-    return ModelPathProjection(
-      x - center_x,
-      center_x,
-      center_y,
-      1.0,
-      0.0,
-      y - center_y,
-    )
-
+def _nearest_segment_python(segments, x, y):
   best_values: tuple[
     float, float, float, float, float, float,
   ] | None = None
@@ -741,6 +724,32 @@ def _project_to_model_path_cached(
         tangent_y,
         -tangent_y * offset_x + tangent_x * offset_y,
       )
+  return best_values
+
+
+@lru_cache(maxsize=256)
+def _project_to_model_path_cached(
+  path: tuple[tuple[float, float], ...],
+  x: float,
+  y: float,
+) -> ModelPathProjection:
+  points, segments = _path_geometry(path)
+  if not points:
+    raise ValueError("model path is required for dPath prediction")
+  if not segments:
+    center_x, center_y = points[0]
+    return ModelPathProjection(
+      x - center_x,
+      center_x,
+      center_y,
+      1.0,
+      0.0,
+      y - center_y,
+    )
+
+  best_values = native.nearest_segment(segments, x, y) if native.nearest_segment is not None else None
+  if best_values is None:
+    best_values = _nearest_segment_python(segments, x, y)
   assert best_values is not None
   terminal = _terminal_path_tangent(path)
   if terminal is not None:

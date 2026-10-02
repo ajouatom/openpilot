@@ -1,5 +1,16 @@
 # Repository memory
 
+- On 2026-10-02, the user explicitly requested a separate native CPU experiment.
+  `carrot-native-cpu` branches from a4d8ef647c; do not merge/deploy it to
+  `carrot-wip` or the production NAS image implicitly. Cython accelerates radar
+  history statistics/path projection and CAN raw extraction/packing, preserving
+  Python policy, checksums, counters, validity and scheduling. Python remains the
+  reference/fallback (`CARROT_NATIVE_CPU=0`); runtimeTiming identifies each backend.
+  EV9 2df--0 replay matches 990 radar outputs and 5,983 reconstructed carState/CAN
+  iterations. PC timings improve about 32%/12%; they are not device CPU results.
+  Verify target build, backend activation, core5 headroom, radard 20 Hz and faults
+  on a parked device before promoting. See docs/native_cpu_experiment_20261002.md.
+
 - On 2026-10-01, Casper EV `00001e75--ace5ac2325--9` confirmed SCC-only mode 0
   with every SCC lateral measurement zero. The user requested always using the
   measured SCC object in SCC-only modes and ignoring unreliable SCC lateral

@@ -113,3 +113,6 @@ Pipfile
 
 # Local-only model selector design notes (not shipped)
 docs/MODEL_SELECTOR_*.md
+
+# Local Windows native CPU test builds
+*.pyd

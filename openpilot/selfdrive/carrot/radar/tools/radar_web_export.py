@@ -9,6 +9,7 @@ import math
 from pathlib import Path
 
 from openpilot.selfdrive.carrot.radar.tools import radar_validation_replay as replay
+from openpilot.selfdrive.carrot.radar_motion.native import BACKEND as MOTION_BACKEND
 
 
 SCHEMA_VERSION = 1
@@ -16,14 +17,16 @@ SCHEMA_VERSION = 1
 
 def source_version() -> str:
   digest = hashlib.sha256()
+  digest.update(f"motion_backend={MOTION_BACKEND}".encode())
   roots = (replay.CARROT_ROOT / "radar_motion", replay.CARROT_ROOT / "cluster",
            replay.REPO_ROOT / "openpilot/selfdrive/controls/lib")
   files = {Path(__file__), Path(replay.__file__), *replay._radar_input_sources()}
   for root in roots:
     files.update(root.glob("*.py"))
+    files.update(root.glob("*.pyx"))
   files.update((replay.REPO_ROOT / "openpilot/cereal").glob("*.capnp"))
   for path in (replay.REPO_ROOT / "opendbc_repo/opendbc").rglob("*"):
-    if path.suffix in {".py", ".capnp", ".dbc"}:
+    if path.suffix in {".py", ".pyx", ".capnp", ".dbc"}:
       files.add(path)
   for path in sorted(files):
     digest.update(path.relative_to(replay.REPO_ROOT).as_posix().encode())
