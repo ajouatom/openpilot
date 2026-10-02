@@ -19,6 +19,63 @@ from openpilot.system.ui.lib.multilang import TRANSLATIONS_DIR
 
 AlertSize = log.SelfdriveState.AlertSize
 
+class TestElantraSteeringWarningDelay:
+  @staticmethod
+  def callback_args(**changes):
+    from opendbc.car.hyundai.values import CAR, HyundaiFlags
+    values = {"brand": "hyundai", "carFingerprint": CAR.HYUNDAI_ELANTRA,
+              "steerControlType": "torque", "flags": int(HyundaiFlags.LEGACY)}
+    return [car.CarParams(**(values | changes)), car.CarState(), None, False, 300, log.LongitudinalPersonality.standard]
+
+  def test_warning_starts_after_twelve_completed_cycles(self):
+    for event, kind in ((log.OnroadEvent.EventName.steerTempUnavailable, ET.SOFT_DISABLE),
+                        (log.OnroadEvent.EventName.steerTempUnavailableSilent, ET.WARNING)):
+      events = Events()
+      args = self.callback_args()
+      for cycle in range(14):
+        events.add(event)
+        assert events.contains(kind)  # Internal fault handling starts immediately.
+        assert bool(events.create_alerts([kind], args)) == (cycle >= 12)
+        events.clear()
+
+  def test_short_pulse_clears_and_new_pulse_waits_again(self):
+    events = Events()
+    event = log.OnroadEvent.EventName.steerTempUnavailable
+    for _ in range(3):
+      for _ in range(10):
+        events.add(event)
+        assert not events.create_alerts([ET.SOFT_DISABLE], self.callback_args())
+        events.clear()
+      events.clear()  # One observed cycle with no event resets its counter.
+      assert events.event_counters[event] == 0
+
+  def test_no_entry_and_critical_takeover_are_immediate(self):
+    events = Events()
+    events.add(log.OnroadEvent.EventName.steerTempUnavailable)
+    args = self.callback_args()
+    assert events.create_alerts([ET.NO_ENTRY], args)
+    args[4] = 49  # Existing soft-disable deadline is already near expiry.
+    alerts = events.create_alerts([ET.SOFT_DISABLE], args)
+    assert len(alerts) == 1 and alerts[0].alert_status == log.SelfdriveState.AlertStatus.critical
+
+  def test_other_vehicles_keep_immediate_warning(self):
+    from opendbc.car.hyundai.values import HyundaiFlags
+    for changes in ({"brand": "kia"}, {"carFingerprint": "HYUNDAI_SONATA"}, {"steerControlType": "angle"},
+                    {"flags": 0}, {"flags": int(HyundaiFlags.LEGACY | HyundaiFlags.CANFD)},
+                    {"flags": int(HyundaiFlags.LEGACY | HyundaiFlags.ANGLE_CONTROL)}):
+      events = Events()
+      events.add(log.OnroadEvent.EventName.steerTempUnavailable)
+      assert events.create_alerts([ET.SOFT_DISABLE], self.callback_args(**changes))
+
+  def test_other_fault_warnings_are_immediate(self):
+    for event, kind in ((log.OnroadEvent.EventName.steerUnavailable, ET.IMMEDIATE_DISABLE),
+                        (log.OnroadEvent.EventName.canError, ET.IMMEDIATE_DISABLE),
+                        (log.OnroadEvent.EventName.vehicleSensorsInvalid, ET.IMMEDIATE_DISABLE)):
+      events = Events()
+      events.add(event)
+      assert events.create_alerts([kind], self.callback_args())
+
+
 OFFROAD_ALERTS_PATH = os.path.join(BASEDIR, "openpilot/selfdrive/selfdrived/alerts_offroad.json")
 
 # TODO: add callback alerts
