@@ -43,8 +43,7 @@ jobs:
           msgq_repo/msgq/ipc_pyx.so
           msgq_repo/msgq/visionipc/visionipc_pyx.so
           openpilot/common/params_pyx.so
-          opendbc_repo/opendbc/can/parser_pyx.so
-          opendbc_repo/opendbc/can/packer_pyx.so
+          opendbc_repo/opendbc/can/_can_native.so
       - name: Run the five Elantra warning regression tests
         run: >-
           python -m pytest -o addopts='' -q
