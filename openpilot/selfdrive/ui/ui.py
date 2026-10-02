@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import gc
+import os
 
 from openpilot.system.hardware import HARDWARE, TICI
 from openpilot.common.realtime import set_core_affinity
@@ -16,8 +17,13 @@ BIG_UI = gui_app.big_ui()
 
 def main():
   # C3/C3X can also use little cores rather than waiting only on core6.
-  # C4 retains core6; all onroad UI workers remain SCHED_OTHER/nice19.
-  scheduler = DisplayScheduler(6, enabled=TICI, include_little=TICI and HARDWARE.get_device_type() in ('tici', 'tizi'))
+  # C4 retains core6; workers stay SCHED_OTHER/nice19.  The render thread
+  # additionally gets a bounded onroad RT slice (see display_scheduling) so
+  # background bursts cannot push frames past their 50 ms deadline.
+  scheduler = DisplayScheduler(6, enabled=TICI,
+                               include_little=TICI and HARDWARE.get_device_type() in ('tici', 'tizi'),
+                               rt_budget=TICI,
+                               schedtune_boost=TICI and os.getenv('CARROT_UI_SCHEDTUNE', '0') == '1')
   # GC는 계속 끈다 — 기존 config_realtime_process가 하던 GC pause(프레임
   # 히치) 방지는 유지해야 한다.
   gc.disable()
@@ -39,6 +45,8 @@ def main():
     scheduler.update(ui_state.started)
     if rendered:
       impact_prompt.render()
+
+  scheduler.update(False, force=True)  # drop the RT slice and restore offroad placement
 
 
 if __name__ == "__main__":
