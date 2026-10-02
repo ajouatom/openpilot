@@ -5,7 +5,7 @@ import time
 from pathlib import Path
 
 LITTLE_CORES = {0, 1, 2, 3}
-DISPLAY_NICE = 19
+DISPLAY_NICE = -10
 
 
 def core_online(core: int) -> bool:
