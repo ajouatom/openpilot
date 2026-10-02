@@ -105,3 +105,46 @@ ordinary unflushed `print`: the existing fix delivered it only at child exit,
 while child line buffering delivered it within 0.6 seconds. The regression
 test exercises the actual relay function with ordinary print and piped output.
 This corrects the incomplete first fix; the live manager is not hot-patched.
+
+### 2026-10-02: preserve startup errors and offer an offline rebuild
+
+The update result previously replaced the startup diagnostic (`detail or reason`).
+After the first automatic check, the screen therefore showed only "No new commit"
+even though the launcher had captured the failure. The display now keeps the
+startup error in its own four-line area in every recovery state, with the update
+or cleanup status underneath. It reads the bounded 64 KiB failure log, strips ANSI
+color escapes and starts at the first recognized compiler/Python error. Remaining
+lines, including preceding context, stay available by tapping the error area to
+cycle pages. Long lines wrap rather than losing their suffix. If no log is
+available, the launcher's failed-stage reason remains visible.
+
+The new **리빌드 · 재부팅 / Clean build & reboot** button runs `scons -c`
+(`--minimal` on AGNOS), then removes the `prebuilt` marker and requests reboot
+through the existing sound-aware helper. SCons owns the generated-target/cache
+cleanup; the next normal startup builds the current checkout. This action needs
+no network, does not fetch or reset Git, and preserves source edits. It is offered
+for all startup failures, since a stale native build can also cause manager import
+failures; its presence is not a diagnosis that rebuilding will fix the error.
+
+Cleanup shares the repository lock with Git and startup, has a 180-second command
+timeout, and blocks repeated rebuild/update requests while active. Failed cleanup
+does not request reboot or remove `prebuilt`; partial SCons cleanup can already
+have occurred. Cleanup/lock/reboot failures leave a retryable recovery screen.
+The original startup error is preserved separately from those action failures.
+The existing automatic update policy and same-revision reboot-loop protection
+remain unchanged. There is no automatic repeated clean/rebuild loop.
+
+A stale generated build can be repaired by rebuilding; a source defect needs a
+fixed revision, and missing dependencies need their own repair. Git hard reset is
+not a general build repair and is deliberately absent from this screen. A failing
+SCons configuration can also prevent its clean action; this remains visible and
+does not trigger broader file deletion as a fallback.
+
+Validation passed 75 focused recovery, bootstrap UI, launcher, model-cache and
+reboot-sound tests, plus Ruff and whitespace checks. Coverage includes diagnostic
+retention and wrapping, all display states, offline
+cleanup ordering, source preservation, cleanup failure/timeout, lock contention,
+reboot failure, and mutual exclusion between rebuild and update. C4 536x240 and
+C3 2160x1080 desktop previews use a synthetic compiler error after the "No new
+commit" result. These checks do not establish physical touch/readability, actual
+device SCons cleanup/rebuild, or a successful vehicle reboot/recovery cycle.
