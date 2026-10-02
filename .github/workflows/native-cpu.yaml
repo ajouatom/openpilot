@@ -23,8 +23,9 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
-      - run: pip install Cython==3.2.9 setuptools pytest -r tools/carrot_route_vault/requirements.txt
-      - run: python tools/build_native_cpu.py build_ext --inplace
+      - run: pip install Cython==3.2.9 setuptools scons pytest -r tools/carrot_route_vault/requirements.txt
+      - name: Build the device SConscript targets
+        run: scons -f tools/native_cpu/SConstruct -j2
       - run: python opendbc_repo/opendbc/dbc/generator/generator.py
       - name: Exact kernel, CAN payload and rejection-state comparisons
         # Existing startup test expects no grace; this fork grants two seconds.

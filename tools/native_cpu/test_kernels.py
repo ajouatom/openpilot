@@ -1,5 +1,6 @@
 """Differential checks: require compiled kernels, never silently test fallback."""
 from collections import deque
+import importlib
 import math
 import random
 import struct
@@ -41,6 +42,20 @@ def exact(actual, expected):
 
 def test_native_loaded():
   assert radar_backend.BACKEND == can_backend.BACKEND == 'cython'
+
+
+def test_explicit_python_comparison_mode(monkeypatch):
+  try:
+    with monkeypatch.context() as patch:
+      patch.setenv('CARROT_NATIVE_CPU', '0')
+      importlib.reload(radar_backend)
+      importlib.reload(can_backend)
+      assert radar_backend.BACKEND == can_backend.BACKEND == 'python'
+      assert radar_backend.motion is radar_backend.nearest_segment is None
+      assert can_backend.pack is can_backend.raw_values is None
+  finally:
+    importlib.reload(radar_backend)
+    importlib.reload(can_backend)
 
 
 @pytest.mark.parametrize('seed', range(20))

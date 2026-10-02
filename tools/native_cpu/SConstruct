@@ -1,0 +1,9 @@
+"""Linux smoke build of the exact device SConscript targets, without UI/models."""
+import os
+import sysconfig
+
+envCython = Environment(tools=['default', 'cython'], toolpath=['site_scons/site_tools'],
+                       ENV=os.environ, CCFLAGS=['-O2', '-fPIC'], LINKFLAGS=['-pthread', '-shared'],
+                       CPPPATH=[sysconfig.get_paths()['include']], CYTHONFLAGS=['-3', '--cplus'], LIBS=[])
+Export('envCython')
+SConscript(['openpilot/selfdrive/carrot/radar_motion/SConscript', 'opendbc_repo/opendbc/can/SConscript'])

@@ -65,12 +65,16 @@ short histories, nonfinite fallback, path projections, both CAN endiannesses,
 rejection state. Existing CAN tests also exercise many DBC/checksum combinations.
 
 - 682 initial radar tests and 256 additional radar/integration tests pass.
-- Native differential + existing CAN suite: 120 tests and 586 subtests pass.
+- Native differential + existing CAN suite: 121 tests and 586 subtests pass.
   One pre-existing `test_parser_can_valid` expects initial invalidity, contrary
   to this fork's two-second first-seen grace; it fails identically in Python and
   native modes and is excluded explicitly. The experiment does not alter grace.
 - Replay service tests: 36 pass, four platform-dependent skips on Windows.
-- Linux/ARM and image CI results are recorded after the branch run completes.
+- [Linux x86_64/ARM64 kernel build and image CI](https://github.com/ajouatom/openpilot/actions/runs/36958959655)
+  passes on bc0aa059cc. The follow-up workflow also builds the exact device
+  SConscript targets through a minimal Linux harness. This does not build the
+  entire AGNOS/device application or establish target-device runtime behavior.
+- Another 254 longitudinal-control regression tests pass on Windows.
 
 ### EV9 recorded-input comparison
 
@@ -80,7 +84,7 @@ variants on exactly the same reconstructed input schedule.
 
 | Computation | Python mean | Native mean | Reduction |
 |---|---:|---:|---:|
-| Radar controller, 990 model-paced frames | 3.737 ms | 2.540 ms | 32.0% |
+| Radar controller, 990 model-paced frames | 3.685 ms | 2.447 ms | 33.6% |
 | CarInterface update+apply, 4,782 steady iterations | 0.628 ms | 0.554 ms | 11.8% |
 
 Each mean averages three full replay runs. Radar excludes the first 30 frames;
