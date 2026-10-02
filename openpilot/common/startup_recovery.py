@@ -1,5 +1,6 @@
 """Startup-only update action. No Params, cereal, hardware or UI imports."""
 import os
+import re
 from collections import deque
 from pathlib import Path
 import subprocess
@@ -9,6 +10,43 @@ import time
 from openpilot.common.repo_update import child_lock_kwargs, recover_stale_index_lock, repo_lock
 from openpilot.common.reboot import reboot_device
 from openpilot.selfdrive.carrot.server.services.git_config import prepare_git_pull
+
+
+BUSY_STATES = ('updating', 'cleaning', 'rebooting', 'rebuild_rebooting')
+
+
+def read_startup_error(log_path: Path | None) -> str:
+  """Keep the bounded failure log, starting with a useful diagnostic when possible."""
+  if log_path is None:
+    return ''
+  try:
+    with log_path.open('rb') as log:
+      log.seek(max(0, log_path.stat().st_size - 65536))
+      text = log.read(65536).decode('utf-8', 'replace')
+  except OSError:
+    return ''
+  text = re.sub(r'\x1b\[[0-?]*[ -/]*[@-~]', '', text)
+  lines = [line.rstrip() for line in text.splitlines() if line.strip()]
+  # Build logs often end with generic SCons failure lines. Show the compiler or
+  # Python diagnostic first, but retain all other lines for paging on the display.
+  for i, line in enumerate(lines):
+    if re.search(r'\b(?:fatal error:|error:|\w*(?:Error|Exception):)', line, re.IGNORECASE):
+      lines = lines[i:] + lines[:i]
+      break
+  return '\n'.join(lines)
+
+
+def clean_startup_build(repo: Path):
+  """Use the project's clean targets; never reset sources or fetch an update."""
+  command = ['scons', '-c']
+  if Path('/AGNOS').exists():
+    command.append('--minimal')
+  result = subprocess.run(command, cwd=repo, capture_output=True, text=True,
+                          encoding='utf-8', errors='replace', timeout=180, **child_lock_kwargs())
+  if result.returncode:
+    detail = (result.stdout + '\n' + result.stderr).strip()[-2000:]
+    raise RuntimeError(detail or 'Build cleanup failed; no reboot requested.')
+  (repo / 'prebuilt').unlink(missing_ok=True)
 
 
 def capture_startup_output(source, destination, log_path: Path):
@@ -72,11 +110,29 @@ class RecoveryUpdate:
 
   def start(self, automatic=False):
     with self._lock:
-      if self._state[0] in ('updating', 'rebooting'):
+      if self._state[0] in BUSY_STATES:
         return False
       self._state = ('updating', '')
     threading.Thread(target=self._run, args=(automatic,), name='startup-recovery-update', daemon=True).start()
     return True
+
+  def start_rebuild(self):
+    with self._lock:
+      if self._state[0] in BUSY_STATES:
+        return False
+      self._state = ('cleaning', '')
+    threading.Thread(target=self._rebuild, name='startup-recovery-rebuild', daemon=True).start()
+    return True
+
+  def _rebuild(self):
+    try:
+      with repo_lock():
+        clean_startup_build(self.repo)
+        self._set('rebuild_rebooting', 'Build cleanup complete. Rebuilding after reboot.')
+        self.reboot()
+    except Exception as exc:
+      print(f'Startup recovery rebuild failed: {exc}', flush=True)
+      self._set('failed', str(exc)[-2000:])
 
   def _run(self, automatic=False):
     try:
