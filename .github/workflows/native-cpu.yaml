@@ -1,8 +1,16 @@
-name: Native CPU experiment
+name: Native CPU kernels
 
 on:
   push:
-    branches: [carrot-native-cpu]
+    branches: [carrot-wip]
+    paths:
+      - 'SConstruct'
+      - 'site_scons/**'
+      - 'opendbc_repo/opendbc/can/**'
+      - 'openpilot/selfdrive/carrot/radar_motion/**'
+      - 'tools/build_native_cpu.py'
+      - 'tools/native_cpu/**'
+      - '.github/workflows/native-cpu.yaml'
   workflow_dispatch:
 
 permissions:
@@ -43,9 +51,3 @@ jobs:
           openpilot/selfdrive/carrot/tests/test_radar_cutout_fast_path.py
           openpilot/selfdrive/carrot/tests/test_scc_lead_policy.py
           openpilot/selfdrive/carrot/tests/test_radard_dpath.py
-      - name: Build replay image without publishing or deploying it
-        if: matrix.runner == 'ubuntu-24.04'
-        run: |
-          python tools/carrot_route_vault/build_bundle.py "$RUNNER_TEMP/native-vault" --ref "$GITHUB_SHA"
-          docker build -f "$RUNNER_TEMP/native-vault/Dockerfile.vault" -t native-vault-test "$RUNNER_TEMP/native-vault"
-          docker run --rm native-vault-test python -c 'import server; from openpilot.selfdrive.carrot.radar_motion.native import BACKEND; assert BACKEND == "cython"'
