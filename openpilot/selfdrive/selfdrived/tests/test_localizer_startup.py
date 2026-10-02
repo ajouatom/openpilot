@@ -14,10 +14,10 @@ def localizer_check():
   cls = next(n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == 'SelfdriveD')
   method = next(n for n in cls.body if isinstance(n, ast.FunctionDef) and n.name == 'update_events')
   block = next(n for n in method.body if isinstance(n, ast.If) and ast.unparse(n.test) == 'not self.CP.notCar')
-  module = ast.parse('def check(self, cal_status, TESTING_CLOSET=False, SIMULATION=False, REPLAY=False): pass')
+  module = ast.parse('def check(self, cal_status, TESTING_CLOSET=False, SIMULATION=False, REPLAY=False, model_starting=False): pass')
   module.body[0].body = [block]
   namespace = {'log': log, 'EventName': SimpleNamespace(posenetInvalid='posenet', locationdTemporaryError='location',
-                                                     paramsdTemporaryError='params')}
+                                                     paramsdTemporaryError='params', selfdriveInitializing='initializing')}
   exec(compile(ast.fix_missing_locations(module), '<localizer startup>', 'exec'), namespace)
   return namespace['check']
 
