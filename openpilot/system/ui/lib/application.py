@@ -529,6 +529,8 @@ class GuiApplication:
       self._load_fonts(font_weights)
       self._patch_text_functions()
       self._patch_scissor_mode()
+      from openpilot.system.ui.lib import text_texture
+      text_texture.cache.initialize_shader(rl)
       if BURN_IN_MODE and self._burn_in_shader is None:
         self._burn_in_shader = rl.load_shader_from_memory(BURN_IN_VERTEX_SHADER, BURN_IN_FRAGMENT_SHADER)
 
@@ -799,7 +801,8 @@ class GuiApplication:
       rl.unload_texture(texture)
     self._textures = {}
 
-    from openpilot.system.ui.lib import native_text, text_measure
+    from openpilot.system.ui.lib import native_text, text_measure, text_texture
+    text_texture.cache.clear(rl)
     native_text.clear()
     text_measure._cache.clear()
 
@@ -833,6 +836,7 @@ class GuiApplication:
     return self._last_mouse_event
 
   def render(self):
+    from openpilot.system.ui.lib import text_texture
     try:
       if self._profile_render_frames > 0:
         import cProfile
@@ -859,6 +863,7 @@ class GuiApplication:
           continue
 
         self._release_unused_render_texture()
+        text_texture.cache.prepare(rl, self._scale, direct=self._render_texture is None)
         # Start/stop can happen during widget rendering. Pair begin/end with the
         # target selected at frame start, never a newly allocated recording one.
         render_texture = self._render_texture

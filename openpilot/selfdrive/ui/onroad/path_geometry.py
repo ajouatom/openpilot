@@ -2,8 +2,10 @@
 import numpy as np
 
 from openpilot.system.ui.lib import native_draw, native_geometry
+from openpilot.system.ui.lib.geometry_cache import cached_projection
 
 
+@cached_projection
 def sample_path(line, distances):
   line = np.asarray(line, dtype=np.float32)
   idxs = np.arange(len(line), dtype=np.float32)
@@ -12,9 +14,12 @@ def sample_path(line, distances):
   return np.column_stack((distances, np.interp(indices, idxs, line[:, 1]), np.interp(indices, idxs, line[:, 2])))
 
 
+@cached_projection
 def project_path(line, width, z_start, z_end, transform, clip, allow_invert=True):
   if len(line) == 0:
     return np.empty((0, 2), dtype=np.float32)
+  if native_geometry.active() and hasattr(native_draw._draw_native, 'project_path_batch'):
+    return native_draw._draw_native.project_path_batch(line, width, z_start, z_end, transform, clip, allow_invert)
   # Float64 matches the scalar interpolation/projection at clipping boundaries.
   points = np.asarray(line, dtype=np.float64)
   z_off = np.interp(points[:, 0], [0., 100.], [z_start, z_end])

@@ -18,7 +18,7 @@ from openpilot.selfdrive.ui.road_markings import (
 from openpilot.system.ui.lib.application import gui_app, FontWeight
 from openpilot.system.ui.lib.text_draw import draw_text_ui_style
 from openpilot.system.ui.lib.shader_polygon import draw_polygon, draw_polygon_solid, Gradient
-from openpilot.system.ui.lib import native_draw, native_geometry, native_text
+from openpilot.system.ui.lib import native_draw, native_geometry, native_text, text_texture
 from openpilot.system.ui.widgets import Widget
 
 CLIP_MARGIN = 500
@@ -166,6 +166,8 @@ class ModelRenderer(Widget):
     timing.values['native_draw'] = float(native_draw.active())
     timing.values['native_geometry'] = float(native_geometry.active())
     timing.values['native_text'] = float(native_text.active())
+    timing.values['text_texture_hits'] = float(text_texture.cache.frame_hits)
+    timing.values['text_texture_build_cpu_ms'] = text_texture.cache.build_cpu_ms
     timing.finish()
 
   def _update_raw_points(self, model):
