@@ -1,5 +1,20 @@
 # Repository memory
 
+- On 2026-10-03, Tucson `0000030c--adf522a321--4` showed unnecessary left
+  steering while passing a transporter. Actual speed stayed near 104 km/h
+  while the model velocity trajectory fell to about 36 km/h; lane MPC remained
+  active because the old end/start 70% test missed whole-trajectory collapse.
+  The user requested diagnosis through correction. LaneModelSpeedGuard now
+  also requires model starting speed >=70% of measured speed, retaining the
+  original future-deceleration gate and continuous one-second reacquisition.
+  Preserve model paths/speeds, MPC tuning, actuator limits and angle handover.
+  26 focused tests pass; same-input target replay reduces initial left peak
+  about 79% with fallback around 6.33 s. Small-angle MPC reconstruction matches
+  logged mode decisions and incident curvature closely; this is not native
+  acados or vehicle-response validation. Shadow versus transporter influence
+  on the original model output remains unresolved. See
+  docs/tucson_30c_left_steering_20261003.md.
+
 - On 2026-10-03, the user selected existing combined handover mode 3 as
   standard for Hyundai/Kia/Genesis angle control and removed the selector.
   CarController always uses mode 3 inside ANGLE_CONTROL; SteerHandoverMode
