@@ -11,6 +11,7 @@ from openpilot.common.realtime import DT_DMON, Ratekeeper, config_realtime_proce
 from openpilot.selfdrive.monitoring.config import experimental_mode
 from openpilot.selfdrive.carrot.bluetooth.model import CommandReader
 from openpilot.selfdrive.monitoring.dm2 import DriverMonitoring2
+from openpilot.selfdrive.monitoring.dm2_cadence import DmRatekeeper
 from openpilot.selfdrive.monitoring.dm2_context import (AutomaticCancelFilter, CameraAvailability, CancelPressSequence,
                                                        InteractionEdges, ObjectObservation, SteeringTouchEvidence, TrafficContext)
 
@@ -170,7 +171,7 @@ def run_dm2(params, experimental, initial_car_params=None):
   bluetooth = CommandReader('attention')
   camera_health = CameraAvailability()
   touch_evidence = SteeringTouchEvidence()
-  rk = Ratekeeper(int(1 / DT_DMON), print_delay_threshold=None)
+  rk = Ratekeeper(int(1 / DT_DMON), print_delay_threshold=None) if replay else DmRatekeeper(DT_DMON)
   strict, clear = True, False
   covered = False
   allow_speed_buttons = False
