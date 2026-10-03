@@ -291,6 +291,7 @@ SConscript([
   'openpilot/selfdrive/locationd/SConscript',
   'openpilot/selfdrive/modeld/SConscript',
   'openpilot/selfdrive/ui/SConscript',
+  'openpilot/system/ui/lib/native/SConscript',
   'openpilot/selfdrive/carrot/realtime/SConscript',
   'openpilot/selfdrive/carrot/radar_motion/SConscript',
   'opendbc_repo/opendbc/can/SConscript',

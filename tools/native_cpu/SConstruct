@@ -7,3 +7,4 @@ envCython = Environment(tools=['default', 'cython'], toolpath=['site_scons/site_
                        CPPPATH=[sysconfig.get_paths()['include']], CYTHONFLAGS=['-3', '--cplus'], LIBS=[])
 Export('envCython')
 SConscript(['openpilot/selfdrive/carrot/radar_motion/SConscript', 'opendbc_repo/opendbc/can/SConscript'])
+SConscript(['openpilot/system/ui/lib/native/SConscript'])

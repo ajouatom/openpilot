@@ -18,6 +18,7 @@ from openpilot.selfdrive.ui.road_markings import (
 from openpilot.system.ui.lib.application import gui_app, FontWeight
 from openpilot.system.ui.lib.text_draw import draw_text_ui_style
 from openpilot.system.ui.lib.shader_polygon import draw_polygon, draw_polygon_solid, Gradient
+from openpilot.system.ui.lib import native_draw
 from openpilot.system.ui.widgets import Widget
 
 CLIP_MARGIN = 500
@@ -162,6 +163,7 @@ class ModelRenderer(Widget):
     timing.call('lanes', self._draw_lane_lines_carrot, sm)
     timing.call('blindspot', self._draw_blind_spot_carrot, sm)
     timing.call('radar', self._draw_radar_info_carrot, sm)
+    timing.values['native_draw'] = float(native_draw.active())
     timing.finish()
 
   def _update_raw_points(self, model):
@@ -564,6 +566,8 @@ class ModelRenderer(Widget):
 
   def _draw_polygon_outline_carrot(self, points: np.ndarray, color: rl.Color, thickness: float):
     if points.shape[0] < 2:
+      return
+    if native_draw.try_outline(rl, points, color, thickness):
       return
     for i in range(points.shape[0] - 1):
       rl.draw_line_ex(

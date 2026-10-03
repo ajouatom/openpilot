@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 import os
+import time
 from typing import NoReturn, TypedDict
 
 from openpilot.cereal import messaging
-from openpilot.common.realtime import Ratekeeper
 from openpilot.common.swaglog import cloudlog
+from openpilot.system.proclog_smaps import MIN_RSS_BYTES, SmapsSampler
 
 JIFFY = os.sysconf(os.sysconf_names['SC_CLK_TCK'])
 PAGE_SIZE = os.sysconf(os.sysconf_names['SC_PAGE_SIZE'])
@@ -115,55 +116,6 @@ def _parse_proc_stat(stat: str) -> ProcStat | None:
     cloudlog.exception("failed to parse /proc/<pid>/stat")
     return None
 
-class SmapsData(TypedDict):
-  pss: int       # bytes
-  pss_anon: int  # bytes
-  pss_shmem: int # bytes
-
-
-_SMAPS_KEYS = {b'Pss:', b'Pss_Anon:', b'Pss_Shmem:'}
-
-# smaps_rollup (kernel 4.14+) is ideal but missing on some BSP kernels;
-# fall back to per-VMA smaps (any kernel). Pss_Anon/Pss_Shmem only in 5.x+.
-_smaps_path: str | None = None  # auto-detected on first call
-
-# per-VMA smaps is expensive (kernel walks page tables for every VMA).
-# cache results and only refresh every N cycles to keep CPU low.
-_smaps_cache: dict[int, SmapsData] = {}
-_smaps_cycle = 0
-_SMAPS_EVERY = 20  # refresh every 20th cycle (40s at 0.5Hz)
-
-
-def _read_smaps(pid: int) -> SmapsData:
-  global _smaps_path
-  try:
-    if _smaps_path is None:
-      _smaps_path = 'smaps_rollup' if os.path.exists(f'/proc/{pid}/smaps_rollup') else 'smaps'
-
-    result: SmapsData = {'pss': 0, 'pss_anon': 0, 'pss_shmem': 0}
-    with open(f'/proc/{pid}/{_smaps_path}', 'rb') as f:
-      for line in f:
-        parts = line.split()
-        if len(parts) >= 2 and parts[0] in _SMAPS_KEYS:
-          val = int(parts[1]) * 1024  # kB -> bytes
-          if parts[0] == b'Pss:':
-            result['pss'] += val
-          elif parts[0] == b'Pss_Anon:':
-            result['pss_anon'] += val
-          elif parts[0] == b'Pss_Shmem:':
-            result['pss_shmem'] += val
-    return result
-  except (FileNotFoundError, PermissionError, ProcessLookupError, OSError):
-    return {'pss': 0, 'pss_anon': 0, 'pss_shmem': 0}
-
-
-def _get_smaps_cached(pid: int) -> SmapsData:
-  """Return cached smaps data, refreshing every _SMAPS_EVERY cycles."""
-  if _smaps_cycle == 0 or pid not in _smaps_cache:
-    _smaps_cache[pid] = _read_smaps(pid)
-  return _smaps_cache.get(pid, {'pss': 0, 'pss_anon': 0, 'pss_shmem': 0})
-
-
 class ProcExtra(TypedDict):
   pid: int
   name: str
@@ -209,10 +161,12 @@ def _procs() -> list[ProcStat]:
   return stats
 
 
-def build_proc_log_message(msg) -> None:
+def build_proc_log_message(msg, sampler: SmapsSampler) -> None:
   pl = msg.procLog
 
   procs = _procs()
+  sampler.update({r['pid']: r['starttime'] for r in procs if r['rss'] * PAGE_SIZE > MIN_RSS_BYTES})
+  now = time.monotonic()
   l = pl.init('procs', len(procs))
   for i, r in enumerate(procs):
     proc = l[i]
@@ -238,12 +192,12 @@ def build_proc_log_message(msg) -> None:
     for j, arg in enumerate(extra['cmdline']):
       cmdline[j] = arg
 
-    # smaps is expensive (kernel walks page tables); skip small processes, use cache
-    if r['rss'] * PAGE_SIZE > 5 * 1024 * 1024:
-      smaps = _get_smaps_cached(r['pid'])
-      proc.memPss = smaps['pss']
-      proc.memPssAnon = smaps['pss_anon']
-      proc.memPssShmem = smaps['pss_shmem']
+    # Only completed, identity-checked samples; no expensive reads in publication.
+    smaps = sampler.get(r['pid'], r['starttime'], now)
+    proc.memPss = smaps.pss
+    proc.memPssAnon = smaps.pss_anon
+    proc.memPssShmem = smaps.pss_shmem
+    proc.memPssMonoTime = int(smaps.mono_time * 1e9)
 
   cpu_times = _cpu_times()
   cpu_list = pl.init('cpuTimes', len(cpu_times))
@@ -268,18 +222,24 @@ def build_proc_log_message(msg) -> None:
   pl.mem.inactive = mem_info["Inactive:"]
   pl.mem.shared = mem_info["Shmem:"]
 
-  global _smaps_cycle
-  _smaps_cycle = (_smaps_cycle + 1) % _SMAPS_EVERY
-
-
 def main() -> NoReturn:
   pm = messaging.PubMaster(['procLog'])
-  rk = Ratekeeper(0.5)
-  while True:
-    msg = messaging.new_message('procLog', valid=True)
-    build_proc_log_message(msg)
-    pm.send('procLog', msg)
-    rk.keep_time()
+  sampler = SmapsSampler()
+  next_publish = 0.0
+  try:
+    while True:
+      now = time.monotonic()
+      if now >= next_publish:
+        msg = messaging.new_message('procLog', valid=True)
+        build_proc_log_message(msg, sampler)
+        pm.send('procLog', msg)
+        next_publish = now + 2.0
+      sampler.step()
+      # No burst catch-up after a stall. Publication and sampling share one thread;
+      # a chunk can delay publication only by that individual read/parse operation.
+      time.sleep(max(0.0, min(next_publish, sampler.next_step) - time.monotonic()))
+  finally:
+    sampler.close()
 
 
 if __name__ == '__main__':

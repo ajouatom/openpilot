@@ -1,0 +1,5 @@
+Import('envCython')
+
+native_env = envCython.Clone()
+native_env.Append(CCFLAGS=['-fno-fast-math', '-ffp-contract=off'])
+native_env.Program('../_draw_native.so', '../_draw_native.pyx')
