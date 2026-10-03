@@ -59,6 +59,8 @@ jobs:
           openpilot/selfdrive/ui/tests/test_carrot_model_renderer.py
           openpilot/selfdrive/ui/tests/test_carrot_model_renderer_lane_visibility.py
           openpilot/selfdrive/ui/tests/test_render_diagnostics.py
+          openpilot/selfdrive/ui/tests/test_text_draw_offsets.py
+          openpilot/selfdrive/ui/tests/test_ui_render_costs.py
       - name: Check model, monitoring and Bluetooth integration
         run: |
           python -m pytest -o addopts='' -q \

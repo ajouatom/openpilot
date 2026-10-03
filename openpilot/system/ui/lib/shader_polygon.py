@@ -107,6 +107,7 @@ class ShaderState:
 
     self.initialized = False
     self.shader = None
+    self.uniform_values = {}
 
     # Shader uniform locations
     self.locations = {
@@ -151,40 +152,53 @@ class ShaderState:
       self.shader = None
 
     self.initialized = False
+    self.uniform_values.clear()
 
 
-def _configure_shader_color(state: ShaderState, color: Optional[rl.Color],
+def _configure_shader_color(state: ShaderState, color: Optional[rl.Color],  # noqa: UP045 - pyray Color is a factory, not a type
                             gradient: Gradient | None, origin_rect: rl.Rectangle):
   assert (color is not None) != (gradient is not None), "Either color or gradient must be provided"
 
   use_gradient = 1 if (gradient is not None and len(gradient.colors) >= 1) else 0
-  state.use_gradient_ptr[0] = use_gradient
-  rl.set_shader_value(state.shader, state.locations['useGradient'], state.use_gradient_ptr, UNIFORM_INT)
+  previous = state.uniform_values
+  if previous.get('useGradient') != use_gradient:
+    state.use_gradient_ptr[0] = use_gradient
+    rl.set_shader_value(state.shader, state.locations['useGradient'], state.use_gradient_ptr, UNIFORM_INT)
+    previous['useGradient'] = use_gradient
 
   if use_gradient:
     gradient = cast(Gradient, gradient)
-    state.color_count_ptr[0] = len(gradient.colors)
-    for i in range(len(gradient.colors)):
-      c = gradient.colors[i]
-      base = i * 4
-      state.gradient_colors_ptr[base:base + 4] = [c.r / 255.0, c.g / 255.0, c.b / 255.0, c.a / 255.0]
-    rl.set_shader_value_v(state.shader, state.locations['gradientColors'], state.gradient_colors_ptr, UNIFORM_VEC4, len(gradient.colors))
+    colors = tuple((c.r, c.g, c.b, c.a) for c in gradient.colors)
+    if previous.get('gradientColors') != colors:
+      for i, rgba in enumerate(colors):
+        state.gradient_colors_ptr[i * 4:i * 4 + 4] = [v / 255.0 for v in rgba]
+      rl.set_shader_value_v(state.shader, state.locations['gradientColors'], state.gradient_colors_ptr, UNIFORM_VEC4, len(colors))
+      previous['gradientColors'] = colors
 
-    for i in range(len(gradient.stops)):
-      s = float(gradient.stops[i])
-      state.gradient_stops_ptr[i] = 0.0 if s < 0.0 else 1.0 if s > 1.0 else s
-    rl.set_shader_value_v(state.shader, state.locations['gradientStops'], state.gradient_stops_ptr, UNIFORM_FLOAT, len(gradient.stops))
-    rl.set_shader_value(state.shader, state.locations['gradientColorCount'], state.color_count_ptr, UNIFORM_INT)
+    stops = tuple(0.0 if s < 0.0 else 1.0 if s > 1.0 else s for s in map(float, gradient.stops))
+    if previous.get('gradientStops') != stops:
+      for i, s in enumerate(stops):
+        state.gradient_stops_ptr[i] = s
+      rl.set_shader_value_v(state.shader, state.locations['gradientStops'], state.gradient_stops_ptr, UNIFORM_FLOAT, len(stops))
+      previous['gradientStops'] = stops
+    if previous.get('gradientColorCount') != len(colors):
+      state.color_count_ptr[0] = len(colors)
+      rl.set_shader_value(state.shader, state.locations['gradientColorCount'], state.color_count_ptr, UNIFORM_INT)
+      previous['gradientColorCount'] = len(colors)
 
     # Map normalized start/end to screen pixels
-    start_vec = rl.Vector2(origin_rect.x + gradient.start[0] * origin_rect.width, origin_rect.y + gradient.start[1] * origin_rect.height)
-    end_vec = rl.Vector2(origin_rect.x + gradient.end[0] * origin_rect.width, origin_rect.y + gradient.end[1] * origin_rect.height)
-    rl.set_shader_value(state.shader, state.locations['gradientStart'], start_vec, UNIFORM_VEC2)
-    rl.set_shader_value(state.shader, state.locations['gradientEnd'], end_vec, UNIFORM_VEC2)
+    for name, point in (('gradientStart', gradient.start), ('gradientEnd', gradient.end)):
+      value = (origin_rect.x + point[0] * origin_rect.width, origin_rect.y + point[1] * origin_rect.height)
+      if previous.get(name) != value:
+        rl.set_shader_value(state.shader, state.locations[name], rl.Vector2(*value), UNIFORM_VEC2)
+        previous[name] = value
   else:
     color = color or rl.WHITE
-    state.fill_color_ptr[0:4] = [color.r / 255.0, color.g / 255.0, color.b / 255.0, color.a / 255.0]
-    rl.set_shader_value(state.shader, state.locations['fillColor'], state.fill_color_ptr, UNIFORM_VEC4)
+    rgba = (color.r, color.g, color.b, color.a)
+    if previous.get('fillColor') != rgba:
+      state.fill_color_ptr[0:4] = [v / 255.0 for v in rgba]
+      rl.set_shader_value(state.shader, state.locations['fillColor'], state.fill_color_ptr, UNIFORM_VEC4)
+      previous['fillColor'] = rgba
 
 
 def triangulate(pts: np.ndarray) -> list[tuple[float, float]]:
@@ -205,7 +219,7 @@ def triangulate(pts: np.ndarray) -> list[tuple[float, float]]:
 
 
 def draw_polygon(origin_rect: rl.Rectangle, points: np.ndarray,
-                 color: Optional[rl.Color] = None, gradient: Gradient | None = None):
+                 color: Optional[rl.Color] = None, gradient: Gradient | None = None):  # noqa: UP045
 
   """
   Draw a ribbon polygon (two chains) with a triangle strip and gradient.
