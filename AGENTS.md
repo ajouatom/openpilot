@@ -1,5 +1,14 @@
 # Repository memory
 
+- On 2026-10-03, the user explicitly approved adding core7 to C3/C3X main UI
+  onroad affinity: cores0,1,2,3,6,7 with SCHED_OTHER/nice19 for all UI threads.
+  This supersedes the earlier core7 exclusion for this UI. C4 stays core6;
+  offroad returns to cores0..3. Check each big core independently; preserve
+  model/DM, control/camera, IRQ and USB cluster policies. An allowed mask is
+  not a CPU quota or parallel rendering and may concentrate UI work on core7.
+  Device affinity/FPS and model/DM impact remain unvalidated. See
+  docs/camera_core5_trial.md.
+
 - On 2026-10-03, Tucson `0000030c--adf522a321--4` showed unnecessary left
   steering while passing a transporter. Actual speed stayed near 104 km/h
   while the model velocity trajectory fell to about 36 km/h; lane MPC remained

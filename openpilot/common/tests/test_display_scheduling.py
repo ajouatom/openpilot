@@ -114,16 +114,29 @@ def test_encoder_process_workers_follow_onroad_and_offroad(fake_scheduler, monke
 def test_shared_ui_cores_keep_low_priority_through_hotplug_and_new_workers(fake_scheduler, online, race):
   f = fake_scheduler
   f.scheduler.include_little = True
+  f.scheduler.extra_onroad_cores = (7,)
   f.state.update(online=online, race=race)
   f.scheduler.update(True)
-  expected = {0, 1, 2, 3, 6} if online and not race else {0, 1, 2, 3}
+  expected = {0, 1, 2, 3, 6, 7} if online and not race else {0, 1, 2, 3}
   assert all(w == {'aff': expected, 'nice': 19, 'policy': 0} for w in f.workers.values())
   assert f.calls[0] == ('nice', 11, 19)
   f.workers[13] = {'aff': {0}, 'nice': 0, 'policy': 1}
   f.state.update(online=True, race=False, now=2.0)
   f.scheduler.update(True)
-  assert all(w == {'aff': {0, 1, 2, 3, 6}, 'nice': 19, 'policy': 0} for w in f.workers.values())
+  assert all(w == {'aff': {0, 1, 2, 3, 6, 7}, 'nice': 19, 'policy': 0} for w in f.workers.values())
   f.calls.clear()
   f.scheduler.update(False)
   assert all(w == {'aff': {0, 1, 2, 3}, 'nice': 0, 'policy': 0} for w in f.workers.values())
   assert f.calls[0] == ('aff', 11, {0, 1, 2, 3})
+
+
+@pytest.mark.parametrize('online', [{6}, {7}, {6, 7}, set()])
+def test_c3_checks_each_big_core_independently(fake_scheduler, monkeypatch, online):
+  f = fake_scheduler
+  f.scheduler.include_little = True
+  f.scheduler.extra_onroad_cores = (7,)
+  monkeypatch.setattr(ds, 'core_online', lambda core: core in online)
+  f.scheduler.update(True)
+  assert all(w == {'aff': {0, 1, 2, 3} | online, 'nice': 19, 'policy': 0} for w in f.workers.values())
+  f.scheduler.update(False)
+  assert all(w == {'aff': {0, 1, 2, 3}, 'nice': 0, 'policy': 0} for w in f.workers.values())

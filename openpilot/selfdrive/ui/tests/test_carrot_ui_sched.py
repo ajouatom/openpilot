@@ -1,4 +1,4 @@
-"""UI normal-scheduler contract; C3 shares little/core6, C4 retains core6."""
+"""UI normal-scheduler contract; C3 shares little/core6/core7, C4 retains core6."""
 import ast
 import os
 import sys
@@ -145,14 +145,6 @@ class TestUiStartupAst:
     call_const_args = {a.value for n in ast.walk(tree) if isinstance(n, ast.Call)
                        for a in n.args if isinstance(a, ast.Constant)}
     assert 51 not in call_const_args and 53 not in call_const_args
-
-  def test_no_core7_ui_affinity(self):
-    # core7은 modeld(FIFO54)+dmonitoringmodeld(FIFO5) 전용 — UI 재배치 금지
-    tree = _ui_py_tree()
-    for node in ast.walk(tree):
-      if isinstance(node, (ast.Set, ast.List, ast.Tuple)):
-        consts = {e.value for e in node.elts if isinstance(e, ast.Constant)}
-        assert 7 not in consts
 
 
 

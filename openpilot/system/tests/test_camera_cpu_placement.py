@@ -48,9 +48,10 @@ def test_ui_updates_onroad_policy_even_without_a_render(big_ui, device_type):
   states = iter([True, False, True])
   ui_state = SimpleNamespace(started=False)
   ui_state.update = lambda: setattr(ui_state, "started", next(states))
-  def scheduler(core, *, enabled, include_little):
+  def scheduler(core, *, enabled, include_little, extra_onroad_cores):
     assert core == 6 and enabled
     assert include_little == (device_type in ('tici', 'tizi'))
+    assert extra_onroad_cores == ((7,) if device_type in ('tici', 'tizi') else ())
     return SimpleNamespace(update=lambda onroad, **kw: calls.append(onroad))
   main = load_function("openpilot/selfdrive/ui/ui.py", "main", {
     "TICI": True, "BIG_UI": big_ui, "DisplayScheduler": scheduler,
@@ -60,6 +61,7 @@ def test_ui_updates_onroad_policy_even_without_a_render(big_ui, device_type):
     "ensure_ui_sched_other": lambda: events.append("sched_other"),
     "gui_app": SimpleNamespace(init_window=lambda _: None, render=lambda: iter([True, False, True])),
     "ui_state": ui_state, "MainLayout": lambda: None, "MiciMainLayout": lambda: None,
+    "ImpactDashcamPrompt": lambda: SimpleNamespace(render=lambda: None),
   })
   main()
   assert events == ["gc_disabled", (0,), "sched_other"]

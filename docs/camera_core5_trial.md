@@ -1,5 +1,34 @@
 # Camera CPU placement trials
 
+## October 3: C3 UI also permits core7
+
+The user explicitly approved adding core7 to C3/C3X main UI affinity after
+reviewing the Casper scheduling delay. This supersedes the earlier exclusion
+of core7 for this UI. Onroad `tici`/`tizi` now permit cores0,1,2,3,6,7 with
+SCHED_OTHER/nice19. C4 (`mici`) remains on core6. This expands the allowed mask;
+it neither pins the UI to core7 nor reserves a CPU share or creates parallel
+render workers. The scheduler may run most UI work on core7.
+
+The existing half-second worker sweep applies the mask to all UI threads.
+Each big core is checked independently, so either core6 or core7 may remain
+eligible when the other is offline. Offroad returns to cores0..3, and a hotplug
+race falls back to those cores until the next sweep. Model/DM, camera/control,
+GPU/camera IRQ, USB cluster placement and realtime priorities are unchanged.
+
+The previous Casper `a0f1a004` route recorded about 602 ms/s of UI runnable
+wait, 28.3% main-thread CPU allocation and 13.8 Hz redraws. This motivates the
+trial, but predates recent geometry/text optimizations and does not validate
+this new mask. Its rendering timers combine geometry and drawing. No current
+C3 report establishes the new affinity, FPS improvement or model/DM impact.
+See `casper_c3_ui_after_20261003.md` for measurements and accounting limits.
+
+Focused tests cover C3/C3X/C4 selection, independent core availability, worker
+inheritance/correction, SCHED_OTHER/nice19, and offroad/hotplug fallback. Desktop
+tests mock Linux scheduling syscalls; Linux CI also checks the UI scheduler
+contract. No live device installation or affinity modification is performed.
+
+Docs-Not-Needed: Internal C3 CPU-affinity trial; no setting or user workflow changes.
+
 ## September 28: C3 UI shares little cores and core6
 
 The user approved expanding C3/C3X (`tici`/`tizi`) onroad main UI affinity
