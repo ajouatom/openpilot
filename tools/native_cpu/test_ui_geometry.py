@@ -6,9 +6,15 @@ import ast
 import numpy as np
 import pytest
 
-from openpilot.system.ui.lib import _draw_native as native, native_draw, native_geometry as geometry
+from openpilot.system.ui.lib import _draw_native as native, native_draw, native_geometry as geometry, geometry_cache
 from openpilot.selfdrive.ui.onroad.path_geometry import project_path
 from openpilot.selfdrive.ui.road_markings import lane_dash_segments, project_lane_segments, project_blindspot_barrier
+
+
+@pytest.fixture(autouse=True)
+def no_projection_cache(monkeypatch):
+  # Every comparison must execute both kernels, not reuse a previous result.
+  monkeypatch.setattr(geometry_cache, 'ENABLED', False)
 
 
 @pytest.mark.parametrize('dtype', [np.float32, np.float64])

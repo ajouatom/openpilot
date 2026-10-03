@@ -14,6 +14,50 @@ ctypedef fused coordinate:
   double
 
 
+def project_ribbon_batch(const coordinate[:, :] line, double half_width, double z_offset, Py_ssize_t max_idx,
+                         transform, clip, bint allow_invert=True, max_distance=None, double y_shift=0., Py_ssize_t start_idx=0):
+  """Prepare both sides in one allocation; retain NumPy's exact matrix product."""
+  cdef Py_ssize_t first, stop, step, i, j = 0, n = 0
+  cdef float left_y = -half_width + y_shift, right_y = half_width + y_shift, dz = z_offset
+  cdef coordinate x, y, z
+  cdef bint endpoint = max_distance is not None and 0 < max_idx < line.shape[0] - 1
+  if line.shape[1] != 3:
+    raise ValueError('expected (N,3) points')
+  first, stop, step = slice(start_idx, max_idx + 1).indices(line.shape[0])
+  for i in range(first, stop):
+    if line[i, 0] >= 0:
+      n += 1
+  if endpoint:
+    # np.interp owns repeated-node/NaN/boundary behavior and float64 rounding.
+    x = max_distance
+    y = np.interp(max_distance, [line[max_idx, 0], line[max_idx+1, 0]], [line[max_idx, 1], line[max_idx+1, 1]])
+    z = np.interp(max_distance, [line[max_idx, 0], line[max_idx+1, 0]], [line[max_idx, 2], line[max_idx+1, 2]])
+    if x >= 0:
+      n += 1
+    else:
+      endpoint = False
+  if n == 0:
+    return np.empty((0, 2), dtype=np.float32)
+  sides = np.empty((2, n, 3), dtype=np.float32 if coordinate is float else np.float64)
+  cdef coordinate[:, :, ::1] out = sides
+  for i in range(first, stop):
+    if not line[i, 0] >= 0:
+      continue
+    out[0, j, 0] = out[1, j, 0] = line[i, 0] + <coordinate>0.
+    out[0, j, 1] = line[i, 1] + left_y
+    out[1, j, 1] = line[i, 1] + right_y
+    out[0, j, 2] = out[1, j, 2] = line[i, 2] + dz
+    j += 1
+  if endpoint:
+    out[0, j, 0] = out[1, j, 0] = x + <coordinate>0.
+    out[0, j, 1] = y + left_y
+    out[1, j, 1] = y + right_y
+    out[0, j, 2] = out[1, j, 2] = z + dz
+  projected = (transform @ sides.reshape(2*n, 3).T).reshape(3, 2, n)
+  # Transform and line can have different dtypes. Dispatch by product dtype.
+  return clip_ribbon(projected, clip.x, clip.x + clip.width, clip.y, clip.y + clip.height, allow_invert)
+
+
 def offset_sides(const coordinate[:, :] points, float left_y, float right_y, float left_z, float right_z):
   """Keep the original float32 offsets, including for float64 input points."""
   cdef Py_ssize_t i, n = points.shape[0]
@@ -45,6 +89,20 @@ def path_sides(const double[:, :] points, const double[:] y_offset, const double
     result[0, i, 2] = points[i, 2] + z_offset[i]
     result[1, i, 2] = points[i, 2] + z_offset[i]
   return out
+
+
+def project_path_batch(line, double width, double z_start, double z_end, transform, clip, bint allow_invert=True):
+  """Keep interpolation/BLAS rounding while preparing and clipping in one call."""
+  points = np.asarray(line, dtype=np.float64)
+  if points.ndim != 2 or points.shape[1] != 3:
+    raise ValueError('expected (N,3) points')
+  if len(points) == 0:
+    return np.empty((0, 2), dtype=np.float32)
+  z_off = np.interp(points[:, 0], [0., 100.], [z_start, z_end])
+  y_off = np.interp(z_off, [-3., 0., 3.], [1.5, .5, 1.5]) * width
+  sides = path_sides(points, y_off, z_off)
+  projected = (sides @ transform.T).transpose(2, 0, 1)
+  return _clip_ribbon[double](projected, clip.x, clip.x + clip.width, clip.y, clip.y + clip.height, allow_invert, None)
 
 
 cdef _clip_ribbon(const coordinate[:, :, :] projected, coordinate x_min, coordinate x_max,
@@ -171,6 +229,7 @@ cdef extern from *:
   """
   struct CarrotRectangle { float x, y, width, height; };
   struct CarrotTexture { unsigned int id; int width, height, mipmaps, format; };
+  struct CarrotMatrix { float values[16]; };
   struct CarrotImage { void *data; int width, height, mipmaps, format; };
   struct CarrotGlyph { int value, offsetX, offsetY, advanceX; CarrotImage image; };
   struct CarrotFont {
@@ -181,12 +240,15 @@ cdef extern from *:
   typedef void (*CarrotTexturePro)(CarrotTexture, CarrotRectangle, CarrotRectangle, CarrotVector2, float, CarrotColor);
   typedef int (*CarrotGlyphIndex)(CarrotFont, int);
   typedef int (*CarrotCodepoint)(const char*, int*);
+  typedef CarrotMatrix (*CarrotGetMatrix)();
   """
   cdef struct CarrotRectangle:
     float x, y, width, height
   cdef struct CarrotTexture:
     unsigned int id
     int width, height, mipmaps, format
+  cdef struct CarrotMatrix:
+    float values[16]
   cdef struct CarrotImage:
     void *data
     int width, height, mipmaps, format
@@ -202,6 +264,45 @@ cdef extern from *:
   ctypedef void (*CarrotTexturePro)(CarrotTexture, CarrotRectangle, CarrotRectangle, CarrotVector2, float, CarrotColor) noexcept
   ctypedef int (*CarrotGlyphIndex)(CarrotFont, int) noexcept
   ctypedef int (*CarrotCodepoint)(const char*, int*) noexcept
+  ctypedef CarrotMatrix (*CarrotGetMatrix)() noexcept
+
+
+cdef class TextCompositor:
+  """One finished label quad without interrupting Raylib's render batch."""
+  cdef CarrotTexturePro texture_fn
+  cdef CarrotGetMatrix transform_fn, modelview_fn
+
+  def __init__(self, uintptr_t texture, uintptr_t transform, uintptr_t modelview):
+    if not (texture and transform and modelview):
+      raise ValueError('expected loaded Raylib functions')
+    self.texture_fn = <CarrotTexturePro>texture
+    self.transform_fn = <CarrotGetMatrix>transform
+    self.modelview_fn = <CarrotGetMatrix>modelview
+
+  def identity(self):
+    cdef CarrotMatrix a = self.transform_fn(), b = self.modelview_fn()
+    cdef int i
+    for i in range(16):
+      if a.values[i] != (1. if i % 5 == 0 else 0.) or b.values[i] != (1. if i % 5 == 0 else 0.):
+        return False
+    return True
+
+  def draw(self, uintptr_t texture_address, float x, float y, float width, float height):
+    cdef CarrotRectangle src, dst
+    cdef CarrotVector2 origin
+    cdef CarrotColor white
+    if not texture_address:
+      raise ValueError('expected cached textures')
+    src.x = src.y = 0
+    src.width = width
+    src.height = -height
+    dst.x = x
+    dst.y = y
+    dst.width = width
+    dst.height = height
+    origin.x = origin.y = 0
+    white.r = white.g = white.b = white.a = 255
+    self.texture_fn((<CarrotTexture*>texture_address)[0], src, dst, origin, 0, white)
 
 
 def text_abi():
@@ -382,3 +483,41 @@ cdef class TextRenderer:
     tint.r, tint.g, tint.b, tint.a = color
     position.x, position.y = x, y
     self.layer(font, text, size, position, tint, run, spacing)
+
+  def bounds(self, uintptr_t font_address, bytes text, float size, double x, double y,
+             const double[:, ::1] offsets, double border, double shadow):
+    """Actual submitted glyph rectangles, including padding and styled layers."""
+    cdef CarrotFont font
+    cdef TextLayout run
+    cdef TextQuad quad
+    cdef float px, py, gx, gy, dx, dy
+    cdef double x0 = INFINITY, y0 = INFINITY, x1 = -INFINITY, y1 = -INFINITY
+    cdef size_t i
+    if not font_address or len(text) > 512 or b'\n' in text or offsets.shape[0] != 8 or offsets.shape[1] != 2:
+      return None
+    font = (<CarrotFont*>font_address)[0]
+    if not font.texture.id or font.baseSize <= 0 or font.glyphCount <= 0 or font.recs == NULL or font.glyphs == NULL:
+      return None
+    run = self.layout(font, text, size, 0)
+    if run is None or run.quads.empty():
+      return None
+    positions = [(x, y)]
+    if border > 0:
+      positions.extend((x + border * offsets[j, 0], y + border * offsets[j, 1]) for j in range(8))
+    if shadow != 0:
+      positions.append((x + shadow, y + shadow))
+    for pos in positions:
+      px, py = pos
+      for i in range(run.quads.size()):
+        quad = run.quads[i]
+        gx = px + quad.advance
+        gy = py + <float>0
+        dx = gx + quad.offset_x
+        dx = dx - quad.padding
+        dy = gy + quad.offset_y
+        dy = dy - quad.padding
+        x0 = min(x0, dx)
+        y0 = min(y0, dy)
+        x1 = max(x1, dx + quad.width)
+        y1 = max(y1, dy + quad.height)
+    return x0, y0, x1, y1
