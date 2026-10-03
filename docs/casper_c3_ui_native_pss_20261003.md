@@ -123,6 +123,9 @@ polygons use it. C4 torque-bar polygons also use that shared helper. Projection
 and styled text remain candidates, not part of the promoted native code.
 
 The exact SConscript builds on C4 ARM, and both x86/ARM CI targets include it.
+The first full-build CI exposed a missing source-level C++ directive masked by
+the focused harness's `--cplus` flag. The directive is now explicit and the
+harness no longer forces that flag, matching the production Cython invocation.
 27 native/ABI/fallback/C4-call-order tests pass on Windows and C4. Existing
 polygon and lane tests pass (4 and 11), as do 2 compact UI schema tests. Desktop
 production-path pixel checks match all 32 solid/gradient/outline/combined scenes
