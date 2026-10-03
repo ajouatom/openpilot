@@ -28,10 +28,12 @@ import datetime
 #_DEFAULT_FPS = int(os.getenv("FPS", {'tizi': 20}.get(HARDWARE.get_device_type(), 60)))
 _DEFAULT_FPS = 20 
 
-# Screen recording captures every `CARROT_RECORD_EVERY_N` render frames and
-# downscales the GPU readback by `CARROT_RECORD_SCALE` before handing frames to
-# ffmpeg.  The old every-3rd-frame capture only produced 6.7 fps of content,
-# which is what made recordings look stuttery despite a 20 fps container.
+# Screen recording is fed on a fixed `CARROT_RECORD_FPS` timeline: when the UI
+# cannot produce a fresh frame in time the last capture is repeated, so clips
+# always play back at real time instead of running fast. Fresh captures are the
+# expensive part (a synchronous GPU readback), so they are limited to
+# `CARROT_RECORD_CAPTURE_FPS` per second and downscaled on the GPU to
+# `CARROT_RECORD_SCALE` before the readback.
 def _record_env_int(name: str, default: int, low: int, high: int) -> int:
   try:
     value = int(os.getenv(name, str(default)))
@@ -44,6 +46,24 @@ def _record_env_float(name: str, default: float, low: float, high: float) -> flo
   try:
     value = float(os.getenv(name, str(default)))
   except ValueError:
+    value = default
+  return min(max(value, low), high)
+
+
+def _record_param_int(name: str, default: int, low: int, high: int) -> int:
+  # Params are plain files on device; reading them at recording start makes
+  # field tuning possible without restarting the UI (env value is the fallback).
+  try:
+    value = int(Path(f"/data/params/d/{name}").read_text().strip())
+  except Exception:
+    value = default
+  return min(max(value, low), high)
+
+
+def _record_param_float(name: str, default: float, low: float, high: float) -> float:
+  try:
+    value = float(Path(f"/data/params/d/{name}").read_text().strip())
+  except Exception:
     value = default
   return min(max(value, low), high)
 
@@ -340,8 +360,15 @@ class GuiApplication:
     self._record_t0 = 0.0
     self._record_every_n = _record_env_int("CARROT_RECORD_EVERY_N", 1, 1, 10)
     self._record_scale = _record_env_float("CARROT_RECORD_SCALE", 0.5, 0.25, 1.0)
+    self._record_fps = _record_env_int("CARROT_RECORD_FPS", 10, 5, 30)
+    self._record_capture_fps = _record_env_int("CARROT_RECORD_CAPTURE_FPS", 10, 1, 30)
+    self._record_threads = _record_env_int("CARROT_RECORD_THREADS", 2, 1, 8)
     self._record_size: tuple[int, int] | None = None
     self._record_frame_idx = 0
+    self._record_next_t = 0.0
+    self._record_next_capture_t = 0.0
+    self._record_last_frame: bytes | None = None
+    self._record_capture_texture: rl.RenderTexture | None = None
 
   def _new_record_path(self) -> Path:
     self._record_dir.mkdir(parents=True, exist_ok=True)
@@ -349,16 +376,29 @@ class GuiApplication:
     return self._record_dir / name
 
   def _record_frame_size(self) -> tuple[int, int]:
-    # yuv420p needs even dimensions; scale the capture down so the GPU readback
-    # and the encoder can keep up with every-frame (20 fps) capture.
+    # yuv420p needs even dimensions. Recording draws into a separate capture
+    # texture so the readback never has to touch the full resolution target.
+    texture = self._record_capture_texture.texture if self._record_capture_texture is not None else None
+    if texture is not None and texture.width > 1 and texture.height > 1:
+      return int(texture.width) & ~1, int(texture.height) & ~1
     width = max(2, (int(self._width * self._record_scale) // 2) * 2)
     height = max(2, (int(self._height * self._record_scale) // 2) * 2)
     return width, height
-  
+
+  def _refresh_record_tuning(self):
+    # Re-read tuning on every recording start so Params can be changed between
+    # field tests without restarting the UI (env values are the fallback).
+    self._record_scale = _record_param_float("CarrotRecordScale", self._record_scale, 0.25, 1.0)
+    self._record_fps = _record_param_int("CarrotRecordFps", self._record_fps, 5, 30)
+    self._record_capture_fps = _record_param_int("CarrotRecordCaptureFps", self._record_capture_fps, 1, 30)
+    self._record_threads = _record_param_int("CarrotRecordThreads", self._record_threads, 1, 8)
+    self._record_every_n = _record_param_int("CarrotRecordEveryN", self._record_every_n, 1, 10)
+
   def start_recording(self):
     if self._record_enabled:
       return
 
+    self._refresh_record_tuning()
     self._ensure_render_texture_for_recording()
     if not self._render_texture:
       return
@@ -368,6 +408,10 @@ class GuiApplication:
 
     self._record_enabled = True
     self._record_t0 = time.monotonic()
+    self._record_frame_idx = 0
+    self._record_next_t = 0.0
+    self._record_next_capture_t = 0.0
+    self._record_last_frame = None
     print(f"[REC] start -> {out_path}")
 
   def stop_recording(self):
@@ -391,12 +435,73 @@ class GuiApplication:
       self._render_texture = rl.load_render_texture(self._width, self._height)
       rl.set_texture_filter(self._render_texture.texture, rl.TextureFilter.TEXTURE_FILTER_BILINEAR)
 
+    if self._record_capture_texture is None:
+      width, height = self._record_frame_size()
+      self._record_capture_texture = rl.load_render_texture(width, height)
+      rl.set_texture_filter(self._record_capture_texture.texture, rl.TextureFilter.TEXTURE_FILTER_BILINEAR)
+
   def _release_unused_render_texture(self):
     # Only at a frame boundary: a widget can stop recording inside texture mode.
     # Preserve targets required by scaling, burn-in visualization or CLI recording.
     if self._render_texture is not None and not (self._record_enabled or RECORD or BURN_IN_MODE or self._scale != 1.0):
       rl.unload_render_texture(self._render_texture)
       self._render_texture = None
+    if self._record_capture_texture is not None and not self._record_enabled:
+      rl.unload_render_texture(self._record_capture_texture)
+      self._record_capture_texture = None
+
+  def _record_capture_due(self) -> bool:
+    if not self._record_enabled or self._record_capture_texture is None:
+      return False
+    self._record_frame_idx += 1
+    if self._record_frame_idx % self._record_every_n != 0:
+      return False
+    if self._ffmpeg_queue is None or self._ffmpeg_queue.full():
+      return False
+    return time.monotonic() >= self._record_next_capture_t
+
+  def _grab_record_frame(self, texture: rl.Texture):
+    # Downscale on the GPU first: the synchronous readback is the expensive part
+    # of recording and its cost scales with the number of pixels read back.
+    capture = self._record_capture_texture
+    if capture is None:
+      return
+    started = time.monotonic()
+    rl.begin_texture_mode(capture)
+    rl.clear_background(rl.BLACK)
+    src = rl.Rectangle(0, 0, float(texture.width), -float(texture.height))
+    dst = rl.Rectangle(0, 0, float(capture.texture.width), float(capture.texture.height))
+    rl.draw_texture_pro(texture, src, dst, rl.Vector2(0, 0), 0.0, rl.WHITE)
+    rl.end_texture_mode()
+
+    image = rl.load_image_from_texture(capture.texture)
+    data_size = image.width * image.height * 4
+    self._record_last_frame = bytes(rl.ffi.buffer(image.data, data_size))
+    rl.unload_image(image)
+
+    # Keep captures under ~1/3 of the frame budget: if a readback turns out to
+    # be slow, capture less often instead of stalling the whole UI.
+    cost = time.monotonic() - started
+    self._record_next_capture_t = time.monotonic() + max(1.0 / max(1, self._record_capture_fps), cost * 3.0)
+
+  def _pump_record_timeline(self):
+    # Feed ffmpeg on a wall-clock schedule, repeating the last capture while the
+    # UI is slower than the timeline so playback speed stays real time.
+    if self._ffmpeg_queue is None or self._record_last_frame is None:
+      return
+    now = time.monotonic()
+    if self._record_next_t <= 0.0:
+      self._record_next_t = now
+    interval = 1.0 / max(1, self._record_fps)
+    while now >= self._record_next_t:
+      try:
+        self._ffmpeg_queue.put_nowait(self._record_last_frame)
+      except queue.Full:
+        break
+      self._record_next_t += interval
+    if self._record_next_t < now - interval:
+      # The encoder is behind; resync instead of banking a burst of frames.
+      self._record_next_t = now
 
   def _init_ffmpeg(self, out_path: Path):
     self.close_ffmpeg()
@@ -404,15 +509,11 @@ class GuiApplication:
     # 내부 튜닝(원하면 여기만 조절)
     record_quality = 23          # CRF
     record_bitrate = ""          # e.g. "2000k" (원하면 사용)
-    record_speed = 1             # 배속(출력 fps = 입력 fps * speed)
     preset = "ultrafast"
 
-    fps = self._target_fps if self._target_fps > 0 else _DEFAULT_FPS
-    # Frames reach ffmpeg only every `_record_every_n` render frames, so the
-    # declared input rate must match that real capture rate; otherwise the
-    # encoded video plays back exactly `_record_every_n` times too fast.
-    capture_fps = fps / max(1, self._record_every_n)
-    output_fps = fps * record_speed
+    # The render loop feeds a fixed-rate timeline (repeating frames when
+    # needed), so input and output rate are both the timeline rate.
+    fps = self._record_fps
     record_width, record_height = self._record_frame_size()
     self._record_size = (record_width, record_height)
 
@@ -423,13 +524,14 @@ class GuiApplication:
       "-f", "rawvideo",
       "-pix_fmt", "rgba",
       "-s", f"{record_width}x{record_height}",
-      "-r", f"{capture_fps:g}",
+      "-r", str(fps),
       "-i", "pipe:0",
       "-vf", "vflip,format=yuv420p",
-      "-r", str(output_fps),
+      "-r", str(fps),
       "-c:v", "libx264",
       "-preset", preset,
       "-crf", str(record_quality),
+      "-threads", str(self._record_threads),
     ]
 
     if record_bitrate:
@@ -843,6 +945,10 @@ class GuiApplication:
       rl.unload_render_texture(self._render_texture)
       self._render_texture = None
 
+    if self._record_capture_texture is not None:
+      rl.unload_render_texture(self._record_capture_texture)
+      self._record_capture_texture = None
+
     if self._burn_in_shader:
       rl.unload_shader(self._burn_in_shader)
       self._burn_in_shader = None
@@ -945,25 +1051,28 @@ class GuiApplication:
         rl.end_drawing()
 
         if (RECORD or self._record_enabled) and render_texture is not None:
-          self._record_frame_idx += 1
-          # A saturated encoder queue cannot use another frame. Skip the costly
-          # synchronous GPU readback and copy rather than discarding it afterward.
-          if self._record_frame_idx % self._record_every_n == 0 and self._ffmpeg_queue is not None and not self._ffmpeg_queue.full():
-            image = rl.load_image_from_texture(render_texture.texture)
-            if self._record_size and (image.width, image.height) != self._record_size:
-              rl.image_resize(image, self._record_size[0], self._record_size[1])
-            data_size = image.width * image.height * 4
-            data = bytes(rl.ffi.buffer(image.data, data_size))
-            try:
-              self._ffmpeg_queue.put_nowait(data)  # Async write via background thread
-            except queue.Full:
-              pass          
-            rl.unload_image(image)
-            
           if self._record_enabled:
+            if self._record_capture_due():
+              self._grab_record_frame(render_texture.texture)
+            self._pump_record_timeline()
             if (time.monotonic() - self._record_t0) >= self._record_max_sec:
               self.stop_recording()
               self.start_recording()
+          else:
+            self._record_frame_idx += 1
+            # Legacy RECORD=1 (CLI/dev) path: one frame per `every_n`, no pump.
+            if (self._record_frame_idx % self._record_every_n == 0
+                and self._ffmpeg_queue is not None and not self._ffmpeg_queue.full()):
+              image = rl.load_image_from_texture(render_texture.texture)
+              if self._record_size and (image.width, image.height) != self._record_size:
+                rl.image_resize(image, self._record_size[0], self._record_size[1])
+              data_size = image.width * image.height * 4
+              data = bytes(rl.ffi.buffer(image.data, data_size))
+              try:
+                self._ffmpeg_queue.put_nowait(data)  # Async write via background thread
+              except queue.Full:
+                pass
+              rl.unload_image(image)
 
         self._monitor_fps()
         self._frame += 1
