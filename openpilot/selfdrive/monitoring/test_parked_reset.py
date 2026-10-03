@@ -180,7 +180,7 @@ def test_dispatcher_publishes_parked_release(monkeypatch, experimental, camera):
       self.frame += 1
       if self.frame == 25:
         raise Done
-  monkeypatch.setattr(dm2d, 'Ratekeeper', lambda *a, **k: Rate())
+  monkeypatch.setattr(dm2d, 'DmRatekeeper', lambda *a, **k: Rate())
   with pytest.raises(Done):
     dm2d.run_dm2(SimpleNamespace(get_bool=lambda key: key == 'DriverMonitoringEnabled',
                                  get_int=lambda _: int(experimental)), experimental)

@@ -1,3 +1,4 @@
+import bisect
 from types import SimpleNamespace
 
 import pytest
@@ -15,6 +16,100 @@ def checked_submaster(state, replay=False):
     assert poll == expected_poll and poll in services
     return state
   return create
+
+
+@pytest.mark.parametrize('experimental', [False, True])
+def test_live_reenable_cadence_and_camera_recovery(monkeypatch, experimental):
+  from openpilot.cereal.messaging import FrequencyTracker
+  from openpilot.selfdrive.monitoring import dm2_cadence
+  from openpilot.selfdrive.monitoring.test_dm2_cadence import Clock
+
+  clock = Clock()
+  enable_time = clock.now + 780
+  end_time = enable_time + 70
+  # Model startup, irregular inference, a camera outage and recovery.
+  arrivals = [enable_time + 2 + i * .05 + (.028 if i % 2 else 0)
+              for i in range(1500) if not 600 <= i < 800]
+  packets = []
+  input_trackers = {s: FrequencyTracker(100, 20, False) for s in ('carState', 'selfdriveState')}
+  output_tracker = FrequencyTracker(20, 100, False)
+
+  class Done(Exception):
+    pass
+
+  class State(dict):
+    updated = {'carParams': False, 'radarState': True, 'driverStateV2': False}
+    logMonoTime = {'driverStateV2': 0}
+    received = 0
+
+    def update(self, timeout):
+      assert timeout == 50
+      if clock.now >= end_time:
+        raise Done
+      if self.received < len(arrivals) and arrivals[self.received] <= clock.now:
+        new_received = bisect.bisect_right(arrivals, clock.now)
+      elif self.received < len(arrivals) and arrivals[self.received] <= clock.now + .05:
+        clock.now = arrivals[self.received]
+        new_received = self.received + 1
+      else:
+        clock.now += .05
+        new_received = self.received
+      self.updated['driverStateV2'] = new_received != self.received
+      if new_received:
+        self.logMonoTime['driverStateV2'] = int(arrivals[new_received - 1] * 1e9)
+      self.received = new_received
+      for service, tracker in input_trackers.items():
+        tracker.record_recv_time(clock.now)
+        self.logMonoTime[service] = int(clock.now * 1e9)
+      clock.now += .003  # processing beyond the blocking camera poll
+
+    def all_checks(self, services):
+      return all((input_trackers[s].valid if s in input_trackers else
+                  self.received > 0 and clock.now - self.logMonoTime['driverStateV2'] / 1e9 < .5
+                  if s == 'driverStateV2' else True) for s in services)
+
+  model = log.ModelDataV2.new_message()
+  model.meta.disengagePredictions.brakeDisengageProbs = [0.0]
+  model.orientationRate.z = [0.] * 33
+  model.laneLineProbs = [0., 1., 1., 0.]
+  state = State(carState=car.CarState.new_message(vEgo=20, canValid=True, gearShifter='drive'),
+                selfdriveState=log.SelfdriveState.new_message(enabled=True), modelV2=model.as_reader(),
+                radarState=log.RadarState.new_message(), liveCalibration=log.LiveCalibrationData.new_message(rpyCalib=[0., 0., 0.]),
+                driverStateV2=make_msg(True))
+
+  class Params:
+    def get_bool(self, name):
+      return name == 'DriverMonitoringEnabled' and clock.now >= enable_time
+
+    def get_int(self, _):
+      return int(experimental)
+
+    def put_bool(self, *_args):
+      pass
+
+  class Publisher:
+    def send(self, service, packet):
+      assert service == 'driverMonitoringState'
+      output_tracker.record_recv_time(clock.now)
+      if clock.now >= enable_time:
+        packets.append((clock.now, packet.to_dict(), output_tracker.valid))
+
+  monkeypatch.delenv('REPLAY', raising=False)
+  monkeypatch.setattr(dm2d.messaging, 'SubMaster', checked_submaster(state))
+  monkeypatch.setattr(dm2d.messaging, 'PubMaster', lambda *a: Publisher(), raising=False)
+  monkeypatch.setattr(dm2d.messaging, 'sub_sock', lambda *a, **kw: None, raising=False)
+  monkeypatch.setattr(dm2d.messaging, 'drain_sock', lambda *a, **kw: [], raising=False)
+  monkeypatch.setattr(dm2d, 'CommandReader', lambda *a: SimpleNamespace(read=lambda **kw: None))
+  monkeypatch.setattr(dm2d, 'time', clock)
+  monkeypatch.setattr(dm2_cadence, 'time', clock)
+  # Keep the real production ratekeeper and dispatcher; earlier policy tests
+  # mocked the timer and could not expose accumulated timing debt.
+  with pytest.raises(Done):
+    dm2d.run_dm2(Params(), experimental)
+  assert packets and all(p['valid'] and freq_ok for _, p, freq_ok in packets)
+  for start, end, unavailable in ((5, 30, False), (33, 41, True), (45, 69, False)):
+    window = [p['driverMonitoringState'] for t, p, _ in packets if enable_time + start < t < enable_time + end]
+    assert window and all(not p['dm2Disabled'] and p['cameraUnavailable'] == unavailable for p in window)
 
 
 def test_replay_dm_clock_uses_route_timeline(monkeypatch):
@@ -91,7 +186,7 @@ def test_missing_or_failed_camera_still_publishes_valid_interaction_monitoring(m
   monkeypatch.setattr(dm2d.messaging, 'PubMaster', lambda *a: Publisher(), raising=False)
   monkeypatch.setattr(dm2d.messaging, 'sub_sock', lambda *a, **kw: None, raising=False)
   monkeypatch.setattr(dm2d.messaging, 'drain_sock', lambda *a, **kw: [], raising=False)
-  monkeypatch.setattr(dm2d, 'Ratekeeper', lambda *a, **kw: Rate())
+  monkeypatch.setattr(dm2d, 'DmRatekeeper', lambda *a, **kw: Rate())
   monkeypatch.setattr(dm2d.time, 'monotonic', lambda: clock[0])
   with pytest.raises(Done):
     dm2d.run_dm2(Params(), experimental)
@@ -220,7 +315,7 @@ def test_disabled_driver_view_keeps_face_preview_without_enforcement(monkeypatch
   monkeypatch.setattr(dm2d.messaging, 'sub_sock', lambda *a, **kw: None, raising=False)
   monkeypatch.setattr(dm2d.messaging, 'drain_sock', lambda *a, **kw: [], raising=False)
   monkeypatch.setattr(dm2d, 'CommandReader', lambda *a: Bluetooth())
-  monkeypatch.setattr(dm2d, 'Ratekeeper', lambda *a, **kw: Rate())
+  monkeypatch.setattr(dm2d, 'DmRatekeeper', lambda *a, **kw: Rate())
   monkeypatch.setattr(dm2d.time, 'monotonic', lambda: clock[0])
   with pytest.raises(Done):
     dm2d.run_dm2(Params(), experimental=False)
@@ -313,7 +408,7 @@ def test_three_physical_cancel_presses_disable_for_current_session_at_any_gear_o
   monkeypatch.setattr(dm2d.messaging, 'sub_sock', lambda service, **kw: service, raising=False)
   monkeypatch.setattr(dm2d.messaging, 'drain_sock', drain_sock, raising=False)
   monkeypatch.setattr(dm2d, 'CommandReader', lambda *a: Bluetooth())
-  monkeypatch.setattr(dm2d, 'Ratekeeper', lambda *a, **kw: Rate())
+  monkeypatch.setattr(dm2d, 'DmRatekeeper', lambda *a, **kw: Rate())
   monkeypatch.setattr(dm2d.time, 'monotonic', lambda: clock[0])
   with pytest.raises(Done):
     dm2d.run_dm2(params, experimental=False)
@@ -399,7 +494,7 @@ def test_automatic_cancel_echo_racing_between_socket_drains_is_not_counted(monke
   monkeypatch.setattr(dm2d.messaging, 'sub_sock', lambda service, **kw: service, raising=False)
   monkeypatch.setattr(dm2d.messaging, 'drain_sock', drain_sock, raising=False)
   monkeypatch.setattr(dm2d, 'CommandReader', lambda *a: Bluetooth())
-  monkeypatch.setattr(dm2d, 'Ratekeeper', lambda *a, **kw: Rate())
+  monkeypatch.setattr(dm2d, 'DmRatekeeper', lambda *a, **kw: Rate())
   monkeypatch.setattr(dm2d.time, 'monotonic', lambda: clock[0])
   with pytest.raises(Done):
     dm2d.run_dm2(params, experimental=False)
@@ -490,7 +585,7 @@ def test_hyundai_openpilot_long_cancel_level_does_not_mask_physical_gesture(monk
   monkeypatch.setattr(dm2d.messaging, 'sub_sock', lambda service, **kw: service, raising=False)
   monkeypatch.setattr(dm2d.messaging, 'drain_sock', drain_sock, raising=False)
   monkeypatch.setattr(dm2d, 'CommandReader', lambda *a: Bluetooth())
-  monkeypatch.setattr(dm2d, 'Ratekeeper', lambda *a, **kw: Rate())
+  monkeypatch.setattr(dm2d, 'DmRatekeeper', lambda *a, **kw: Rate())
   monkeypatch.setattr(dm2d.time, 'monotonic', lambda: clock[0])
   with pytest.raises(Done):
     dm2d.run_dm2(params, experimental=False, initial_car_params=cp)
@@ -663,7 +758,7 @@ def test_monitoring_enable_change_reenables_with_fresh_state(monkeypatch, initia
   monkeypatch.setattr(dm2d.messaging, 'drain_sock', lambda *a, **kw: [], raising=False)
   monkeypatch.setattr(dm2d, 'CommandReader', lambda *a: Bluetooth())
   monkeypatch.setattr(dm2d, 'new_driver_monitor', factory)
-  monkeypatch.setattr(dm2d, 'Ratekeeper', lambda *a, **kw: Rate())
+  monkeypatch.setattr(dm2d, 'DmRatekeeper', lambda *a, **kw: Rate())
   monkeypatch.setattr(dm2d.time, 'monotonic', lambda: clock[0])
   with pytest.raises(Done):
     dm2d.run_dm2(params, experimental=False)
@@ -739,7 +834,7 @@ def test_live_camera_response_defers_only_experimental_monitoring(monkeypatch, e
   monkeypatch.setattr(dm2d.messaging, 'sub_sock', lambda *a, **kw: None, raising=False)
   monkeypatch.setattr(dm2d.messaging, 'drain_sock', lambda *a, **kw: [], raising=False)
   monkeypatch.setattr(dm2d, 'CommandReader', lambda *a: Bluetooth())
-  monkeypatch.setattr(dm2d, 'Ratekeeper', lambda *a, **kw: Rate())
+  monkeypatch.setattr(dm2d, 'DmRatekeeper', lambda *a, **kw: Rate())
   monkeypatch.setattr(dm2d.time, 'monotonic', lambda: clock[0])
   with pytest.raises(Done):
     dm2d.run_dm2(Params(), experimental)

@@ -21,6 +21,20 @@ env:
   CI: 1
 
 jobs:
+  dm_cadence:
+    name: DM live restart cadence
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - run: python -m pip install pytest
+      - name: Check prolonged camera absence, restart and scheduling stalls
+        run: >-
+          python -m pytest -c /dev/null --rootdir=. --confcutdir=openpilot/selfdrive/monitoring -q
+          openpilot/selfdrive/monitoring/test_dm2_cadence.py
+
   lane_model_speed:
     name: Lane-mode model speed fallback
     runs-on: ubuntu-24.04
@@ -80,6 +94,12 @@ jobs:
         run: |
           python -m pytest -o addopts='' -q \
             openpilot/selfdrive/monitoring/test_monitoring.py \
+            openpilot/selfdrive/monitoring/test_dm2.py \
+            openpilot/selfdrive/monitoring/test_dm2d.py \
+            openpilot/selfdrive/monitoring/test_dm2_cadence.py \
+            openpilot/selfdrive/monitoring/test_dm2_context.py \
+            openpilot/selfdrive/monitoring/test_parked_reset.py \
+            openpilot/selfdrive/monitoring/test_steering_touch.py \
             openpilot/selfdrive/modeld/tests/test_big_model.py \
             openpilot/selfdrive/modeld/tests/test_precompiled_model.py \
             openpilot/selfdrive/modeld/tests/test_precompiled_runner.py \
