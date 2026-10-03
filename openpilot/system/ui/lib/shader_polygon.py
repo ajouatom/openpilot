@@ -3,6 +3,7 @@ import numpy as np
 from dataclasses import dataclass
 from typing import Any, Optional, cast
 from openpilot.system.ui.lib.application import gui_app, GL_VERSION
+from openpilot.system.ui.lib import native_draw
 
 MAX_GRADIENT_COLORS = 20  # includes stops as well
 
@@ -225,12 +226,9 @@ def draw_polygon(origin_rect: rl.Rectangle, points: np.ndarray,
   # Configure gradient shader
   _configure_shader_color(state, color, gradient, origin_rect)
 
-  # Triangulate via interleaving
-  tri_strip = triangulate(pts)
-
   # Draw strip, color here doesn't matter
   rl.begin_shader_mode(state.shader)
-  rl.draw_triangle_strip(tri_strip, len(tri_strip), rl.WHITE)
+  _draw_ribbon(pts, rl.WHITE)
   rl.end_shader_mode()
 
 
@@ -241,8 +239,13 @@ def draw_polygon_solid(points: np.ndarray, color: rl.Color):
 
   pts = np.ascontiguousarray(points, dtype=np.float32)
   assert pts.ndim == 2 and pts.shape[1] == 2, "points must be (N,2)"
-  tri_strip = triangulate(pts)
-  rl.draw_triangle_strip(tri_strip, len(tri_strip), color)
+  _draw_ribbon(pts, color)
+
+
+def _draw_ribbon(pts: np.ndarray, color):
+  if not native_draw.try_ribbon(rl, pts, color):
+    tri_strip = triangulate(pts)
+    rl.draw_triangle_strip(tri_strip, len(tri_strip), color)
 
 
 def cleanup_shader_resources():

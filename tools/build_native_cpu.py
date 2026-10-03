@@ -12,6 +12,7 @@ from setuptools import Extension, setup
 ROOT = Path(__file__).resolve().parents[1]
 flags = ['/O2', '/fp:strict'] if sys.platform == 'win32' else ['-O2', '-fno-fast-math', '-ffp-contract=off']
 modules = [
+  ('openpilot.system.ui.lib._draw_native', 'openpilot/system/ui/lib/_draw_native.pyx'),
   ('openpilot.selfdrive.carrot.radar_motion._motion_native', 'openpilot/selfdrive/carrot/radar_motion/_motion_native.pyx'),
   ('opendbc.can._can_native', 'opendbc_repo/opendbc/can/_can_native.pyx'),
 ]

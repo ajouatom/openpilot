@@ -12,6 +12,7 @@ from openpilot.selfdrive.ui.mici.onroad import blend_colors
 from openpilot.system.ui.lib.application import gui_app, FontWeight
 from openpilot.system.ui.lib.text_draw import draw_text_ui_style
 from openpilot.system.ui.lib.shader_polygon import draw_polygon, Gradient
+from openpilot.system.ui.lib import native_draw
 from openpilot.system.ui.widgets import Widget
 from typing import Optional, Any
 
@@ -504,6 +505,8 @@ class ModelRenderer(Widget):
       pts = lead.rect
       c = lead.color
 
+      if native_draw.try_outline(rl, pts, c, thickness):
+        continue
       rl.draw_line_ex(pts[0], pts[1], thickness, c)
       rl.draw_line_ex(pts[1], pts[2], thickness, c)
       rl.draw_line_ex(pts[2], pts[3], thickness, c)
