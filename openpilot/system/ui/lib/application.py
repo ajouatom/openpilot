@@ -27,6 +27,27 @@ import datetime
 
 #_DEFAULT_FPS = int(os.getenv("FPS", {'tizi': 20}.get(HARDWARE.get_device_type(), 60)))
 _DEFAULT_FPS = 20 
+
+# Screen recording captures every `CARROT_RECORD_EVERY_N` render frames and
+# downscales the GPU readback by `CARROT_RECORD_SCALE` before handing frames to
+# ffmpeg.  The old every-3rd-frame capture only produced 6.7 fps of content,
+# which is what made recordings look stuttery despite a 20 fps container.
+def _record_env_int(name: str, default: int, low: int, high: int) -> int:
+  try:
+    value = int(os.getenv(name, str(default)))
+  except ValueError:
+    value = default
+  return min(max(value, low), high)
+
+
+def _record_env_float(name: str, default: float, low: float, high: float) -> float:
+  try:
+    value = float(os.getenv(name, str(default)))
+  except ValueError:
+    value = default
+  return min(max(value, low), high)
+
+
 FPS_LOG_INTERVAL = 5  # Seconds between logging FPS drops
 FPS_DROP_THRESHOLD = 0.9  # FPS drop threshold for triggering a warning
 FPS_CRITICAL_THRESHOLD = 0.5  # Critical threshold for triggering strict actions
@@ -317,13 +338,22 @@ class GuiApplication:
     self._record_dir = Path("/data/media/0/videos")
     self._record_max_sec = 60
     self._record_t0 = 0.0
-    self._record_every_n = 3
+    self._record_every_n = _record_env_int("CARROT_RECORD_EVERY_N", 1, 1, 10)
+    self._record_scale = _record_env_float("CARROT_RECORD_SCALE", 0.5, 0.25, 1.0)
+    self._record_size: tuple[int, int] | None = None
     self._record_frame_idx = 0
 
   def _new_record_path(self) -> Path:
     self._record_dir.mkdir(parents=True, exist_ok=True)
     name = datetime.datetime.now().strftime("%Y%m%d-%H%M%S") + ".mp4"
     return self._record_dir / name
+
+  def _record_frame_size(self) -> tuple[int, int]:
+    # yuv420p needs even dimensions; scale the capture down so the GPU readback
+    # and the encoder can keep up with every-frame (20 fps) capture.
+    width = max(2, (int(self._width * self._record_scale) // 2) * 2)
+    height = max(2, (int(self._height * self._record_scale) // 2) * 2)
+    return width, height
   
   def start_recording(self):
     if self._record_enabled:
@@ -383,6 +413,8 @@ class GuiApplication:
     # encoded video plays back exactly `_record_every_n` times too fast.
     capture_fps = fps / max(1, self._record_every_n)
     output_fps = fps * record_speed
+    record_width, record_height = self._record_frame_size()
+    self._record_size = (record_width, record_height)
 
     ffmpeg_args = [
       "ffmpeg",
@@ -390,7 +422,7 @@ class GuiApplication:
       "-nostats",
       "-f", "rawvideo",
       "-pix_fmt", "rgba",
-      "-s", f"{self._width}x{self._height}",
+      "-s", f"{record_width}x{record_height}",
       "-r", f"{capture_fps:g}",
       "-i", "pipe:0",
       "-vf", "vflip,format=yuv420p",
@@ -918,6 +950,8 @@ class GuiApplication:
           # synchronous GPU readback and copy rather than discarding it afterward.
           if self._record_frame_idx % self._record_every_n == 0 and self._ffmpeg_queue is not None and not self._ffmpeg_queue.full():
             image = rl.load_image_from_texture(render_texture.texture)
+            if self._record_size and (image.width, image.height) != self._record_size:
+              rl.image_resize(image, self._record_size[0], self._record_size[1])
             data_size = image.width * image.height * 4
             data = bytes(rl.ffi.buffer(image.data, data_size))
             try:
