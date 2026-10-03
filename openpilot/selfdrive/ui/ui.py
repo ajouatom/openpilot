@@ -15,9 +15,10 @@ BIG_UI = gui_app.big_ui()
 
 
 def main():
-  # C3/C3X can also use little cores rather than waiting only on core6.
+  # C3/C3X can use core7 as well as little cores and core6.
   # C4 retains core6; all onroad UI workers remain SCHED_OTHER/nice19.
-  scheduler = DisplayScheduler(6, enabled=TICI, include_little=TICI and HARDWARE.get_device_type() in ('tici', 'tizi'))
+  c3 = TICI and HARDWARE.get_device_type() in ('tici', 'tizi')
+  scheduler = DisplayScheduler(6, enabled=TICI, include_little=c3, extra_onroad_cores=(7,) if c3 else ())
   # GC는 계속 끈다 — 기존 config_realtime_process가 하던 GC pause(프레임
   # 히치) 방지는 유지해야 한다.
   gc.disable()

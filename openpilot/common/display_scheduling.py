@@ -23,9 +23,11 @@ def thread_ids(pid: int | str = 'self') -> list[int]:
 
 
 class DisplayScheduler:
-  def __init__(self, onroad_core: int, *, enabled: bool, include_little: bool = False):
+  def __init__(self, onroad_core: int, *, enabled: bool, include_little: bool = False,
+               extra_onroad_cores: tuple[int, ...] = ()):
     self.core = onroad_core
     self.include_little = include_little
+    self.extra_onroad_cores = extra_onroad_cores
     self.enabled = enabled and sys.platform == 'linux'
     self.onroad = None
     self.next_check = 0.0
@@ -38,11 +40,11 @@ class DisplayScheduler:
       return
     self.onroad = onroad
     self.next_check = now + 0.5
-    use_big = onroad and core_online(self.core)
-    cores = {self.core} if use_big else LITTLE_CORES
+    big_cores = {core for core in (self.core, *self.extra_onroad_cores) if onroad and core_online(core)}
+    cores = big_cores or LITTLE_CORES
     if onroad and self.include_little:
       cores = cores | LITTLE_CORES
-    low_priority = use_big or (onroad and self.include_little)
+    low_priority = bool(big_cores) or (onroad and self.include_little)
     nice = DISPLAY_NICE if low_priority else 0
     workers = thread_ids()
     if child_pid is not None:
