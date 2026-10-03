@@ -5,9 +5,50 @@ intermittent Ioniq 5 PE "Check Driver Assistance system" warnings. This changes
 the delivery mechanism; the existing captures do not establish that host
 cadence caused the warnings, or that this change fixes them.
 
+## Optional direct transmission (2026-10-03)
+
+**Cluster CAN Direct Send** (`HyundaiCanfdClusterDirectTx`) is a persistent,
+default-OFF user setting under Vehicle and Hardware / CANFD·HDA. No vehicle,
+including EV6, enables it automatically. Reboot after changing the setting;
+CarParams and Panda safety configuration select the mode at startup, without
+live switching.
+
+For CAN-FD CAMERA_SCC only, the enabled setting adds
+`HyundaiFlags.CANFD_CLUSTER_DIRECT_TX` (bit 27) and
+`HyundaiSafetyFlags.CANFD_CLUSTER_DIRECT_TX` (2048). Panda then bypasses both
+the host cache and RX replacement for the five cluster IDs below. Allowed
+host frames follow the pre-existing direct TX path, preserving their supplied
+counter and CRC. Stock forwarding uses the existing per-ID 70 ms suppression
+after host TX. Host generation rates, steering/SCC/MDPS/control FIFOs, reuse,
+allowlists and relay protection remain unchanged. Safety initialization still
+clears caches and timers when entering either mode. The setting has no effect
+outside CAMERA_SCC CAN-FD; OFF retains the RX-paced behavior described below.
+
+This is a manual compatibility comparison, not a diagnosis or an automatic
+timeout fallback. RX-paced output requires the corresponding stock RX trigger;
+direct TX removes that dependency but still requires host packets to reach
+Panda. Neither path can promise delivery during an SPI or physical CAN failure.
+Direct TX also restores the earlier host/stock counter handover behavior;
+it does not introduce independent counter sequencing or repair +2 increments.
+Updated Panda firmware is required. No device flashing or physical warning
+resolution is established by desktop tests.
+
+Validation for the option: 459 focused native/Python tests, 45 settings-schema
+tests, 25 Wiki tests and 14 firmware identity tests pass. Native tests cover
+missing RX, unchanged host counters/CRC (including +2/wrap), the exact legacy
+70 ms boundary, cache reset on mode changes, allowlists/relay rejection,
+non-camera behavior, and unchanged control FIFO drain/reuse/exhaustion.
+Interface tests cover every CAN-FD platform with an existing torque-parameter
+entry in HDA1/HDA2 configurations; the pre-existing incomplete K5 HEV entry
+cannot construct CarParams. No platform has a static direct-TX flag.
+ARM GCC 13.3.1 builds F4/H7 main firmware and bootstubs with `-Werror`, and
+development signing passes. Windows Params is substituted only in desktop
+tests. Reproduction scripts and results are retained locally under
+`.analysis/archive/2026-10-03/ev6-direct-cluster/`.
+
 ## Behavior
 
-In Hyundai CAN-FD CAMERA_SCC mode, host bus-0 copies of 0x161 (32 bytes),
+With direct transmission OFF, in Hyundai CAN-FD CAMERA_SCC mode, host bus-0 copies of 0x161 (32 bytes),
 0x162 (32), 0x1e0 (16), 0x1ea (32), and 0x200 (8) are consumed into independent
 latest-value caches. Host TX does not put these copies directly onto the bus.
 Every corresponding bus-2 RX frame produces one forwarding decision to bus 0:

@@ -10,6 +10,7 @@ import pytest
 
 
 LAYOUTS = {0x161: 32, 0x162: 32, 0x1E0: 16, 0x1EA: 32, 0x200: 8}
+DIRECT_TX = 2048
 
 
 def checksum(address, data):
@@ -221,3 +222,86 @@ def test_other_tx_bus_does_not_populate_cluster_cache(hooks, address):
   assert not hooks.tx(address, message(address, marker=42), bus=1) & 2
   raw = message(address)
   assert hooks.rx(address, raw) == (0, raw)
+
+
+@pytest.mark.parametrize("param", [29, 157])
+@pytest.mark.parametrize("address", LAYOUTS)
+def test_direct_tx_without_stock_rx_and_legacy_forwarding_timeout(native, param, address):
+  hooks = Hooks(native, param | DIRECT_TX)
+  stock = message(address, counter=77)
+  assert hooks.rx(address, stock, 100000) == (0, stock)
+  # Direct mode preserves the host's counter/CRC, including +2 and wrap.
+  for index, counter in enumerate([252, 254, 0, 2, 3]):
+    now = 200000 + index * 50000
+    host = message(address, counter=counter, marker=42)
+    assert hooks.packet(address, host, now, tx=True) == (1, host)
+    assert hooks.rx(address, stock, now + 1) == (-1, stock)
+  # When host TX stops, the original 20 Hz + 20 ms suppression expires.
+  assert hooks.rx(address, stock, now + 69999) == (-1, stock)
+  assert hooks.rx(address, stock, now + 70000) == (0, stock)
+
+
+@pytest.mark.parametrize("address", LAYOUTS)
+def test_direct_tx_mode_switch_clears_cache(native, address):
+  hooks = Hooks(native)
+  host = message(address, marker=42)
+  stock = message(address)
+  assert hooks.tx(address, host, 100000) == 3
+  native.alt2_test_init(157 | DIRECT_TX)
+  assert hooks.rx(address, stock, 200000) == (0, stock)
+  assert hooks.tx(address, host, 210000) == 1
+  native.alt2_test_init(157)
+  assert hooks.rx(address, stock, 220000) == (0, stock)
+  assert hooks.tx(address, host, 230000) == 3
+  assert hooks.rx(address, stock, 230001)[1][3:] == host[3:]
+
+
+@pytest.mark.parametrize("address", LAYOUTS)
+def test_direct_tx_retains_whitelist_and_relay_protection(native, address):
+  hooks = Hooks(native, 157 | DIRECT_TX)
+  assert hooks.tx(address, message(address), relay=True) == 0
+  assert hooks.tx(address, message(address), bus=2) == 0
+  wrong_size = 16 if LAYOUTS[address] != 16 else 32
+  assert hooks.tx(address, message(address, length=wrong_size)) == 0
+
+
+@pytest.mark.parametrize("param", [8, 9, 12, 13])
+def test_direct_tx_does_not_expand_hda1_allowlist(native, param):
+  hooks = Hooks(native, param | DIRECT_TX)
+  assert hooks.tx(0x1EA, message(0x1EA)) == 0
+
+
+@pytest.mark.parametrize("param", [1, 5, 17, 21, 145, 149])
+def test_direct_tx_flag_has_no_effect_without_camera_scc(native, param):
+  def run(selected):
+    hooks = Hooks(native, selected)
+    result = []
+    for address in LAYOUTS:
+      result.append(hooks.tx(address, message(address), 100000))
+      result.append(hooks.rx(address, message(address), 110000))
+    return result
+  assert run(param) == run(param | DIRECT_TX)
+
+
+@pytest.mark.parametrize("address,bus,size", [(0x1A0, 0, 32), (0x12A, 0, 16), (0xCB, 0, 24),
+                                            (0xEA, 2, 24), (0x1AA, 2, 16), (0x175, 2, 24)])
+def test_direct_cluster_setting_preserves_control_fifo_and_reuse(native, address, bus, size):
+  def run(param):
+    hooks = Hooks(native, param)
+    results = []
+    # Push a burst, drain it, then exercise empty-FIFO reuse and exhaustion.
+    for index in range(4):
+      host = bytearray(size)
+      host[2] = index
+      if address == 0x1A0:  # zero acceleration in both offset-encoded fields
+        host[16:19] = bytes([0xFF, 0xF3, 0x3F])
+      elif address == 0x12A:
+        host[6] = 8  # zero torque, no request
+      result = hooks.tx(address, checksum(address, host), 100000 + index, bus=bus)
+      assert result == 3
+      results.append(result)
+    for index in range(20):
+      stock = message(address, counter=index, marker=64, length=size)
+      results.append(hooks.rx(address, stock, 110000 + index * 10000, bus=2 - bus))
+    return results
+  assert run(157) == run(157 | DIRECT_TX)
