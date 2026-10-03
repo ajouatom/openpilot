@@ -61,6 +61,28 @@ def test_sampled_path_reuses_only_identical_curve_and_distances(monkeypatch):
   assert not np.array_equal(fresh, newest)
 
 
+def test_changing_inputs_bypass_cache_cost_and_recover_on_repetition(monkeypatch):
+  monkeypatch.setattr(geometry_cache, 'ENABLED', True)
+  key_calls = []
+  original = geometry_cache._key
+  def count(value):
+    key_calls.append(1)
+    return original(value)
+  monkeypatch.setattr(geometry_cache, '_key', count)
+  @geometry_cache.cached_projection
+  def compute(value):
+    return np.array([value])
+  for i in range(geometry_cache.MAX_ENTRIES):
+    np.testing.assert_array_equal(compute(i), [i])
+  key_calls.clear()
+  for i in range(1000, 1032):
+    np.testing.assert_array_equal(compute(i), [i])
+  assert len(key_calls) == 2  # one full cache probe per 16 calculations
+  for _ in range(33):
+    result = compute(9999)
+  assert compute(9999) is result
+
+
 @pytest.mark.parametrize('dtype', [np.float32, np.float64])
 @pytest.mark.parametrize('invert', [True, False])
 def test_batched_preparation_boundary_cases(monkeypatch, dtype, invert):
