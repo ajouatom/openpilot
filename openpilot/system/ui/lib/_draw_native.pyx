@@ -6,6 +6,7 @@ from libc.limits cimport INT_MAX
 from libcpp.vector cimport vector
 from libc.math cimport fabs, INFINITY
 from libc.string cimport memmove
+from collections import OrderedDict
 import numpy as np
 
 ctypedef fused coordinate:
@@ -161,3 +162,223 @@ def ribbon(const float[:, ::1] points, uintptr_t address,
     strip[2*i+1].x = points[n-i-1, 0]; strip[2*i+1].y = points[n-i-1, 1]
   color.r = r; color.g = g; color.b = b; color.a = a
   draw(&strip[0], <int>n, color)
+
+
+# Match the loaded Raylib ABI before using these declarations (native_text.py).
+# Call its own GetGlyphIndex/GetCodepointNext so fallback glyph selection and
+# UTF-8 decoding stay with the installed library.
+cdef extern from *:
+  """
+  struct CarrotRectangle { float x, y, width, height; };
+  struct CarrotTexture { unsigned int id; int width, height, mipmaps, format; };
+  struct CarrotImage { void *data; int width, height, mipmaps, format; };
+  struct CarrotGlyph { int value, offsetX, offsetY, advanceX; CarrotImage image; };
+  struct CarrotFont {
+    int baseSize, glyphCount, glyphPadding;
+    CarrotTexture texture; CarrotRectangle *recs; CarrotGlyph *glyphs;
+  };
+  typedef void (*CarrotText)(CarrotFont, const char*, CarrotVector2, float, float, CarrotColor);
+  typedef void (*CarrotTexturePro)(CarrotTexture, CarrotRectangle, CarrotRectangle, CarrotVector2, float, CarrotColor);
+  typedef int (*CarrotGlyphIndex)(CarrotFont, int);
+  typedef int (*CarrotCodepoint)(const char*, int*);
+  """
+  cdef struct CarrotRectangle:
+    float x, y, width, height
+  cdef struct CarrotTexture:
+    unsigned int id
+    int width, height, mipmaps, format
+  cdef struct CarrotImage:
+    void *data
+    int width, height, mipmaps, format
+  cdef struct CarrotGlyph:
+    int value, offsetX, offsetY, advanceX
+    CarrotImage image
+  cdef struct CarrotFont:
+    int baseSize, glyphCount, glyphPadding
+    CarrotTexture texture
+    CarrotRectangle *recs
+    CarrotGlyph *glyphs
+  ctypedef void (*CarrotText)(CarrotFont, const char*, CarrotVector2, float, float, CarrotColor) noexcept
+  ctypedef void (*CarrotTexturePro)(CarrotTexture, CarrotRectangle, CarrotRectangle, CarrotVector2, float, CarrotColor) noexcept
+  ctypedef int (*CarrotGlyphIndex)(CarrotFont, int) noexcept
+  ctypedef int (*CarrotCodepoint)(const char*, int*) noexcept
+
+
+def text_abi():
+  return {
+    'Vector2': (sizeof(CarrotVector2), (<uintptr_t>&(<CarrotVector2*>0).x, <uintptr_t>&(<CarrotVector2*>0).y)),
+    'Color': (sizeof(CarrotColor), tuple(range(4))),
+    'Rectangle': (sizeof(CarrotRectangle), (<uintptr_t>&(<CarrotRectangle*>0).x, <uintptr_t>&(<CarrotRectangle*>0).y,
+                                         <uintptr_t>&(<CarrotRectangle*>0).width, <uintptr_t>&(<CarrotRectangle*>0).height)),
+    'Texture': (sizeof(CarrotTexture), (<uintptr_t>&(<CarrotTexture*>0).id, <uintptr_t>&(<CarrotTexture*>0).width,
+                                     <uintptr_t>&(<CarrotTexture*>0).height, <uintptr_t>&(<CarrotTexture*>0).mipmaps,
+                                     <uintptr_t>&(<CarrotTexture*>0).format)),
+    'Image': (sizeof(CarrotImage), (<uintptr_t>&(<CarrotImage*>0).data, <uintptr_t>&(<CarrotImage*>0).width,
+                                 <uintptr_t>&(<CarrotImage*>0).height, <uintptr_t>&(<CarrotImage*>0).mipmaps,
+                                 <uintptr_t>&(<CarrotImage*>0).format)),
+    'GlyphInfo': (sizeof(CarrotGlyph), (<uintptr_t>&(<CarrotGlyph*>0).value, <uintptr_t>&(<CarrotGlyph*>0).offsetX,
+                                     <uintptr_t>&(<CarrotGlyph*>0).offsetY, <uintptr_t>&(<CarrotGlyph*>0).advanceX,
+                                     <uintptr_t>&(<CarrotGlyph*>0).image)),
+    'Font': (sizeof(CarrotFont), (<uintptr_t>&(<CarrotFont*>0).baseSize, <uintptr_t>&(<CarrotFont*>0).glyphCount,
+                               <uintptr_t>&(<CarrotFont*>0).glyphPadding, <uintptr_t>&(<CarrotFont*>0).texture,
+                               <uintptr_t>&(<CarrotFont*>0).recs, <uintptr_t>&(<CarrotFont*>0).glyphs)),
+  }
+
+
+cdef struct TextQuad:
+  CarrotRectangle source
+  float advance, offset_x, offset_y, padding, width, height
+
+
+cdef class TextLayout:
+  cdef vector[TextQuad] quads
+
+
+cdef class TextRenderer:
+  """Bounded glyph-layout reuse; no extra textures, GL state or frame delay.
+
+  Retain the exact DrawTextEx -> DrawTextCodepoint float operation order and
+  submit the same DrawTexturePro primitives, including all eight outlines.
+  Multiline text uses DrawTextEx so global line spacing remains authoritative.
+  """
+  cdef CarrotText text_fn
+  cdef CarrotTexturePro texture_fn
+  cdef CarrotGlyphIndex glyph_fn
+  cdef CarrotCodepoint codepoint_fn
+  cdef object layouts
+  cdef Py_ssize_t glyph_count, hits, misses
+
+  def __init__(self, uintptr_t text_fn, uintptr_t texture_fn, uintptr_t glyph_fn, uintptr_t codepoint_fn):
+    if not (text_fn and texture_fn and glyph_fn and codepoint_fn):
+      raise ValueError('expected loaded Raylib functions')
+    self.text_fn = <CarrotText>text_fn
+    self.texture_fn = <CarrotTexturePro>texture_fn
+    self.glyph_fn = <CarrotGlyphIndex>glyph_fn
+    self.codepoint_fn = <CarrotCodepoint>codepoint_fn
+    self.layouts = OrderedDict()
+    self.glyph_count = self.hits = self.misses = 0
+
+  def clear(self):
+    self.layouts.clear()
+    self.glyph_count = self.hits = self.misses = 0
+
+  def stats(self):
+    return {'entries': len(self.layouts), 'glyphs': self.glyph_count, 'hits': self.hits, 'misses': self.misses}
+
+  cdef TextLayout layout(self, CarrotFont font, bytes text, float size, float spacing):
+    cdef TextLayout result, removed
+    cdef TextQuad quad
+    cdef const char* encoded = text
+    cdef Py_ssize_t i = 0, n = len(text)
+    cdef int codepoint, byte_count, index
+    cdef float advance = 0, scale = size / font.baseSize
+    key = (font.texture.id, font.texture.width, font.texture.height, font.texture.mipmaps, font.texture.format,
+           <uintptr_t>font.recs, <uintptr_t>font.glyphs, font.baseSize, font.glyphCount, font.glyphPadding, size, spacing, text)
+    result = self.layouts.get(key)
+    if result is not None:
+      self.layouts.move_to_end(key)
+      self.hits += 1
+      return result
+    self.misses += 1
+    result = TextLayout()
+    while i < n and encoded[i] != 0:
+      byte_count = 0
+      codepoint = self.codepoint_fn(encoded + i, &byte_count)
+      if byte_count <= 0 or byte_count > n - i:
+        return None
+      index = self.glyph_fn(font, codepoint)
+      if not 0 <= index < font.glyphCount:
+        return None
+      if codepoint != 32 and codepoint != 9:
+        quad.source.x = font.recs[index].x - <float>font.glyphPadding
+        quad.source.y = font.recs[index].y - <float>font.glyphPadding
+        quad.source.width = font.recs[index].width + <float>2 * font.glyphPadding
+        quad.source.height = font.recs[index].height + <float>2 * font.glyphPadding
+        quad.width = quad.source.width * scale
+        quad.height = quad.source.height * scale
+        quad.advance = advance
+        quad.offset_x = font.glyphs[index].offsetX * scale
+        quad.offset_y = font.glyphs[index].offsetY * scale
+        quad.padding = <float>font.glyphPadding * scale
+        result.quads.push_back(quad)
+      if font.glyphs[index].advanceX == 0:
+        advance += font.recs[index].width * scale + spacing
+      else:
+        advance += <float>font.glyphs[index].advanceX * scale + spacing
+      i += byte_count
+    self.layouts[key] = result
+    self.glyph_count += result.quads.size()
+    while len(self.layouts) > 256 or self.glyph_count > 8192:
+      _, removed = self.layouts.popitem(last=False)
+      self.glyph_count -= removed.quads.size()
+    return result
+
+  cdef void layer(self, CarrotFont font, bytes text, float size, CarrotVector2 position,
+                  CarrotColor color, TextLayout layout, float spacing=0):
+    cdef size_t i
+    cdef TextQuad quad
+    cdef CarrotRectangle dest
+    cdef CarrotVector2 origin
+    cdef float glyph_x, glyph_y
+    if layout is None:
+      self.text_fn(font, text, position, size, spacing, color)
+      return
+    origin.x = origin.y = 0
+    for i in range(layout.quads.size()):
+      quad = layout.quads[i]
+      # Keep each float rounding point used by the original library. Do not
+      # combine advance/offset/padding or translate a pre-rounded rectangle.
+      glyph_x = position.x + quad.advance
+      glyph_y = position.y + <float>0
+      dest.x = glyph_x + quad.offset_x
+      dest.x = dest.x - quad.padding
+      dest.y = glyph_y + quad.offset_y
+      dest.y = dest.y - quad.padding
+      dest.width = quad.width
+      dest.height = quad.height
+      self.texture_fn(font.texture, quad.source, dest, origin, 0, color)
+
+  def draw(self, uintptr_t font_address, bytes text, double x, double y, float size,
+           const double[:, ::1] offsets, double border, double shadow, color, border_color, shadow_color,
+           bint cache=True):
+    cdef CarrotFont font
+    cdef CarrotColor tint
+    cdef CarrotVector2 position
+    cdef TextLayout run = None
+    cdef Py_ssize_t i
+    if not font_address or offsets.shape[0] != 8 or offsets.shape[1] != 2:
+      raise ValueError('expected a Font and eight outline directions')
+    font = (<CarrotFont*>font_address)[0]
+    if cache and len(text) <= 512 and b'\n' not in text and font.texture.id and font.baseSize > 0 and font.glyphCount > 0:
+      if font.recs != NULL and font.glyphs != NULL:
+        run = self.layout(font, text, size, 0)
+    if border > 0:
+      tint.r, tint.g, tint.b, tint.a = border_color
+      for i in range(8):
+        position.x = <float>(x + border * offsets[i, 0])
+        position.y = <float>(y + border * offsets[i, 1])
+        self.layer(font, text, size, position, tint, run)
+    if shadow != 0:
+      tint.r, tint.g, tint.b, tint.a = shadow_color
+      position.x = <float>(x + shadow)
+      position.y = <float>(y + shadow)
+      self.layer(font, text, size, position, tint, run)
+    tint.r, tint.g, tint.b, tint.a = color
+    position.x = <float>x
+    position.y = <float>y
+    self.layer(font, text, size, position, tint, run)
+
+  def draw_plain(self, uintptr_t font_address, bytes text, float x, float y, float size, float spacing, color, bint cache=True):
+    cdef CarrotFont font
+    cdef CarrotColor tint
+    cdef CarrotVector2 position
+    cdef TextLayout run = None
+    if not font_address:
+      raise ValueError('expected a Font')
+    font = (<CarrotFont*>font_address)[0]
+    if cache and len(text) <= 512 and b'\n' not in text and font.texture.id and font.baseSize > 0 and font.glyphCount > 0:
+      if font.recs != NULL and font.glyphs != NULL:
+        run = self.layout(font, text, size, spacing)
+    tint.r, tint.g, tint.b, tint.a = color
+    position.x, position.y = x, y
+    self.layer(font, text, size, position, tint, run, spacing)

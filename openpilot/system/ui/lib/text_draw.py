@@ -2,6 +2,7 @@ import math
 import pyray as rl
 from openpilot.system.ui.lib.application import FONT_SCALE, FontWeight, font_fallback, gui_app
 from openpilot.system.ui.lib.text_measure import measure_text_cached
+from openpilot.system.ui.lib import native_text
 
 
 _OUTLINE_UNIT_OFFSETS = tuple(
@@ -73,7 +74,6 @@ def draw_text_ui_style(text: str,
 
   draw_x, draw_y, _ = get_text_draw_pos(font, text, x, y, font_size, align, y_offset)
   draw_size = float(font_size)
-  position = rl.Vector2(float(draw_x), float(draw_y))
 
   # The pyray wrapper encodes Python strings and converts every argument on each
   # call. Styled text can submit the same string up to ten times, so use the raw
@@ -83,10 +83,14 @@ def draw_text_ui_style(text: str,
     font = font_fallback(font)
     draw_text = text.encode("utf-8")
     draw_size *= FONT_SCALE
+    if native_text.try_text(rl, font, draw_text, draw_x, draw_y, draw_size, border_width, shadow_offset,
+                            color, border_color, shadow_color):
+      return
   else:
     draw_text_ex = rl.draw_text_ex
     draw_text = text
 
+  position = rl.Vector2(float(draw_x), float(draw_y))
   if border_width > 0.0:
     for unit_x, unit_y in _OUTLINE_UNIT_OFFSETS:
       position.x = float(draw_x + border_width * unit_x)
