@@ -6,7 +6,47 @@ This follows `f5b056c397` (native text layout reuse) and `6be41624` (geometry
 kernels). No CPU placement, priority, control/model/camera or validity policy
 changes are included.
 
-## Implementation
+## Review follow-up: current implementation
+
+The user approved simplifying this work after reviewing its maintenance cost and
+cache-miss overhead. Keep native ribbon/path batching and the earlier native text
+layout cache. Remove the generic projected-geometry cache and finished-label
+image cache, including their runtime switches, shader/compositor, staged GPU
+jobs and per-frame hooks. This applies to both C3 and C4. No replacement cache
+or update-skipping heuristic is introduced; geometry uses the current inputs
+on every call, and text uses its original native primitives and fallback.
+
+Reasons for withdrawing the two added caches:
+
+- Changing-input geometry already took 222.4 us with batching alone versus
+  249.9 us with adaptive caching in the isolated C4 comparison below. A mixed
+  workload also defeats the consecutive-miss bypass: 15 distinct values then
+  one repeated value, repeated 100 times, performs 1,600 full key lookups despite
+  only 6.25% hits. This reproduces a policy weakness, not a driving regression.
+- For six outlined labels, measured build-stage CPU totals were 24.1-24.9 ms,
+  while warm-cache savings were only 0.128-0.305 ms per frame. Aggregate cost
+  recovery therefore needs about 79-194 reused frames (4-10 seconds at 20 FPS)
+  after preparation. The former eight-frame admission did not establish that
+  lifetime. These are estimates from isolated measurements, excluding shader
+  setup and admission delays, not whole-UI timing guarantees.
+- Restricting images to explicitly fixed labels could be a separate measured
+  experiment later. Keeping the general compositor and fallback complexity now
+  is not justified by full-scene evidence. Removing it also restores the same
+  text primitives for direct display, recording and scaled targets.
+
+The measurements below document the previous candidate, not the current runtime.
+Whole-frame FPS, scheduling waits and loaded driving remain unvalidated by these
+isolated tests. The earlier glyph-layout cache is distinct from the removed
+finished-label images and remains enabled.
+
+Desktop validation after removal: rebuilt the native extension, passed 85 native
+drawing/geometry/text tests and 36 path/text/render-lifecycle/diagnostic tests.
+The batching boundary comparisons were moved into the retained geometry suite;
+only tests of removed cache APIs were deleted. CI continues to build the exact
+device SConscript targets on both x86 and ARM. No device installation, process
+restart or fresh whole-UI performance measurement is part of this cleanup.
+
+## Previous candidate implementation (superseded)
 
 - C3/C4 styled text shares a bounded complete-label texture cache. Text, absolute
   subpixel position, size, font identity, colors, outline and shadow participate

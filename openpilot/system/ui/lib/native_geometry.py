@@ -2,7 +2,6 @@
 import numpy as np
 
 from openpilot.system.ui.lib import native_draw
-from openpilot.system.ui.lib.geometry_cache import cached_projection
 
 
 def active() -> bool:
@@ -32,7 +31,6 @@ def clip_ribbon(projected, clip, allow_invert=True):
   return np.concatenate((left.T, right[:, ::-1].T)).astype(np.float32)
 
 
-@cached_projection
 def project_ribbon(line, half_width, z_offset, max_idx, transform, clip, allow_invert=True,
                    max_distance=None, y_shift=0., start_idx=0):
   """C3 adds an interpolated distance endpoint; C4 uses only recorded nodes."""

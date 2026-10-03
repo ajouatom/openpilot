@@ -2,7 +2,7 @@ import math
 import pyray as rl
 from openpilot.system.ui.lib.application import FONT_SCALE, FontWeight, font_fallback, gui_app
 from openpilot.system.ui.lib.text_measure import measure_text_cached
-from openpilot.system.ui.lib import native_text, text_texture
+from openpilot.system.ui.lib import native_text
 
 
 _OUTLINE_UNIT_OFFSETS = tuple(
@@ -83,9 +83,6 @@ def draw_text_ui_style(text: str,
     font = font_fallback(font)
     draw_text = text.encode("utf-8")
     draw_size *= FONT_SCALE
-    if text_texture.cache.draw(rl, font, draw_text, draw_x, draw_y, draw_size, border_width, shadow_offset,
-                               color, border_color, shadow_color):
-      return
     if native_text.try_text(rl, font, draw_text, draw_x, draw_y, draw_size, border_width, shadow_offset,
                             color, border_color, shadow_color):
       return
