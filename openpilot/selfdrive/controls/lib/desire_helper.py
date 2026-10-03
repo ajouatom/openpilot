@@ -12,6 +12,10 @@ from openpilot.selfdrive.controls.lib.desire_lib.constants import (
 from openpilot.selfdrive.controls.lib.desire_lib.side_state import SideState
 from openpilot.selfdrive.controls.lib.desire_lib.maneuver_classifier import classify_maneuver_type
 
+# A lever press this early in laneChangeFinishing is still the driver re-lighting the lamp of the change
+# that just crossed, not a request for the next one.
+STALK_QUEUE_GUARD_S = 0.3
+
 
 class DesireHelper:
   def __init__(self):
@@ -50,6 +54,11 @@ class DesireHelper:
     # auto lane change
     self.auto_lane_change_enable = False
     self.next_lane_change = False
+
+    # turn-signal lever presses (carState.*BlinkerStalkCount): an explicit request for the next lane change
+    self.stalk_counts = None
+    self.queued_lane_change = BLINKER_NONE
+    self.finishing_timer = 0.0
 
     # keep pulse
     self.keep_pulse_timer = 0.0
@@ -102,6 +111,24 @@ class DesireHelper:
     if self.laneChangeNeedTorque < 0:
       enabled = False
     return st, changed, enabled
+
+  def _update_stalk(self, carstate) -> int:
+    """Side of a turn-signal lever press since the last update (BLINKER_LEFT/RIGHT), else BLINKER_NONE.
+
+    The lamp-based blinker cannot show a press while the lamp is already flashing (one press flashes
+    for ~4 s); the lever counters can, and a counter never misses a press between 20 Hz updates.
+    """
+    counts = (getattr(carstate, "leftBlinkerStalkCount", None), getattr(carstate, "rightBlinkerStalkCount", None))
+    if counts[0] is None or counts[1] is None:
+      return BLINKER_NONE
+    last, self.stalk_counts = self.stalk_counts, counts
+    if last is None:
+      return BLINKER_NONE
+    if counts[0] != last[0]:
+      return BLINKER_LEFT
+    if counts[1] != last[1]:
+      return BLINKER_RIGHT
+    return BLINKER_NONE
 
   def _update_atc_blinker(self, carrotMan, driver_blinker_state, remote=None):
     atc_type = carrotMan.atcType
@@ -242,6 +269,7 @@ class DesireHelper:
 
     # blinkers
     driver_st, driver_changed, driver_enabled = self._update_driver_blinker(carstate)
+    stalk_press = self._update_stalk(carstate)
     remote = self.bluetooth_commands.read(allowed=(lateral_active and carstate.canValid and
       not below_lane_change_speed and not trailer_maneuver_blocked))
     atc_st, atc_enabled = self._update_atc_blinker(carrotMan, driver_st, remote)
@@ -349,7 +377,8 @@ class DesireHelper:
         self.turn_direction = TurnDirection.none
 
         if self.lane_change_state == LaneChangeState.off:
-          driver_desire_started = driver_enabled and driver_changed
+          # A lever press while the lamp is still flashing has no lamp edge but is still a fresh request.
+          driver_desire_started = driver_enabled and (driver_changed or stalk_press == blinker_state)
           if desire_enabled and (not self.prev_desire_enabled or driver_desire_started) and \
              not below_lane_change_speed and side is not None:
             self.lane_change_state = LaneChangeState.preLaneChange
@@ -367,6 +396,9 @@ class DesireHelper:
             self.lane_change_direction = LaneChangeDirection.none
           else:
             self.lane_change_direction = LaneChangeDirection.left if blinker_state == BLINKER_LEFT else LaneChangeDirection.right
+            # An explicit lever press asks for this change: no steering-torque confirmation needed.
+            if self.next_lane_change and driver_enabled and stalk_press == blinker_state:
+              self.next_lane_change = False
 
             # torque direction cond
             torque_cond = (carstate.steeringTorque > 0) if blinker_state == BLINKER_LEFT else (carstate.steeringTorque < 0)
@@ -428,19 +460,28 @@ class DesireHelper:
                       self.lane_change_state = LaneChangeState.laneChangeStarting
 
         elif self.lane_change_state == LaneChangeState.laneChangeStarting:
+          # Lever presses while crossing are ignored (re-lighting the lamp must not ask for a second lane).
           self.lane_change_ll_prob = max(self.lane_change_ll_prob - 2 * DT_MDL, 0.0)
           if lane_change_prob < 0.02 and self.lane_change_ll_prob < 0.01:
             self.lane_change_state = LaneChangeState.laneChangeFinishing
+            self.finishing_timer = 0.0
+            self.queued_lane_change = BLINKER_NONE
 
         elif self.lane_change_state == LaneChangeState.laneChangeFinishing:
+          self.finishing_timer += DT_MDL
+          if stalk_press != BLINKER_NONE and self.finishing_timer >= STALK_QUEUE_GUARD_S:
+            self.queued_lane_change = stalk_press
           self.lane_change_ll_prob = min(self.lane_change_ll_prob + DT_MDL, 1.0)
           if self.lane_change_ll_prob > 0.99:
             self.lane_change_direction = LaneChangeDirection.none
             if desire_enabled:
               self.lane_change_state = LaneChangeState.preLaneChange
-              self.next_lane_change = True
+              # Holding the blinker through the change still needs torque for the next one; a lever press
+              # made during finishing (same side as the lamp) is an explicit request and does not.
+              self.next_lane_change = not (driver_enabled and self.queued_lane_change == blinker_state)
             else:
               self.lane_change_state = LaneChangeState.off
+            self.queued_lane_change = BLINKER_NONE
 
     # timer
     if self.lane_change_state in (LaneChangeState.off, LaneChangeState.preLaneChange):
