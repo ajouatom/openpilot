@@ -18,6 +18,10 @@ DEFAULT_DEVICE_PATH = "/dev/v4l/by-path/platform-aa00000.qcom_vidc-video-index1"
 INPUT_FORMAT_NV12 = 1
 RATE_CONTROL_VBR_CFR = 2
 
+# <package>/system/loggerd/libcluster_h264_encoder_bridge.so (encoder.py lives
+# at <package>/selfdrive/carrot/screen_record/encoder.py).
+_PACKAGE_ROOT = Path(__file__).resolve().parents[3]
+
 _PACKET_CALLBACK = ctypes.CFUNCTYPE(
   None,
   ctypes.c_void_p,
@@ -266,16 +270,17 @@ class HwNv12Encoder:
   @staticmethod
   def _load_library() -> ctypes.CDLL:
     candidates = (
-      str(Path(BASEDIR) / "system" / "loggerd" / "libcluster_h264_encoder_bridge.so"),
+      str(_PACKAGE_ROOT / "system" / "loggerd" / "libcluster_h264_encoder_bridge.so"),
+      str(Path(BASEDIR) / "openpilot" / "system" / "loggerd" / "libcluster_h264_encoder_bridge.so"),
       "libcluster_h264_encoder_bridge.so",
     )
-    error: OSError | None = None
+    errors: list[str] = []
     for candidate in candidates:
       try:
         return ctypes.CDLL(candidate)
       except OSError as exc:
-        error = exc
-    raise HwEncoderUnavailable(f"encoder bridge library unavailable: {error}")
+        errors.append(f"{candidate}: {exc}")
+    raise HwEncoderUnavailable("encoder bridge library unavailable; " + "; ".join(errors[:2]))
 
   def _configure_library(self) -> None:
     lib = self._lib
