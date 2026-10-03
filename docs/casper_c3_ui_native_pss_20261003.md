@@ -4,6 +4,11 @@ Follow-up to [route analysis](casper_c3_ui_20261003.md) and
 [optimization review](casper_c3_ui_optimization_review_20261003.md).
 Source: `00001e83--386b0dd089`, segments 0/1, recorded on `076e5cf4`.
 
+Actual C3 follow-up on `a0f1a004` is analyzed in
+[the after-update comparison](casper_c3_ui_after_20261003.md): native activation
+and PSS burst smoothing are confirmed, while steady driving UI remains about
+13.8 Hz. Different stop/driving proportions preclude a whole-route A/B claim.
+
 The user authorized spreading memory-accounting work and evaluating UI native
 conversion. Core7 remains excluded. The user clarified that mean CPU 50% is an
 aspirational headroom target, not a hard acceptance gate. Prioritize smoother
