@@ -404,6 +404,7 @@
           "zh": "CANFD·HDA",
           "params": [
             "CanfdHDA2",
+            "HyundaiCanfdClusterDirectTx",
             "CanfdDebug",
             "HDPuse"
           ]
@@ -2721,6 +2722,24 @@
       "max": 1,
       "default": 0,
       "unit": 1
+    },
+    {
+      "group": "시작",
+      "name": "HyundaiCanfdClusterDirectTx",
+      "title": "계기판 CAN 직접 송신",
+      "descr": "현대·기아·제네시스 CAN-FD CameraSCC 차량에서 간헐적인 계기판 경고가 발생할 때 켜서 비교하세요. 계기판 메시지를 기존 직접 송신 방식으로 보냅니다. 모든 차량에서 기본 꺼짐이며, 변경 후 기기를 재부팅해야 적용됩니다.",
+      "egroup": "START",
+      "etitle": "Cluster CAN Direct Send",
+      "edescr": "For Hyundai/Kia/Genesis CAN-FD CameraSCC vehicles with intermittent cluster warnings, enable this to compare the original direct-send method for cluster messages. Defaults to OFF for every vehicle. Reboot the device after changing it.",
+      "cgroup": "启动设置",
+      "ctitle": "仪表 CAN 直接发送",
+      "cdescr": "现代、起亚、捷尼赛思 CAN-FD CameraSCC 车辆出现间歇性仪表警告时，可开启此项以对比原有的仪表消息直接发送方式。所有车辆默认关闭。更改后须重启设备。",
+      "min": 0,
+      "max": 1,
+      "default": 0,
+      "unit": 1,
+      "control": "toggle",
+      "risk": "high"
     },
     {
       "group": "시작",

@@ -1,5 +1,17 @@
 # Repository memory
 
+- On 2026-10-03, the user requested a manual compatibility option for intermittent
+  cluster warnings: HyundaiCanfdClusterDirectTx defaults OFF on every vehicle,
+  including EV6. In CAN-FD CAMERA_SCC only, enabling it at startup selects the
+  legacy direct host-TX path for 0x161/162/1e0/1ea/200 via Hyundai flag bit 27
+  and Panda safetyParam 2048. Preserve other control FIFOs/reuse, allowlists,
+  relay protection and the default RX-paced path. This explicitly permits
+  independent cluster TX only when selected; no automatic RX timeout fallback,
+  vehicle-specific default or live switching. Reboot and updated Panda firmware
+  are required. 543 focused/settings/Wiki/firmware-identity tests and F4/H7
+  builds pass; actual warning resolution and physical timing remain unvalidated.
+  See docs/canfd_cluster_rx_forwarding.md. Keep incident data local.
+
 - On 2026-10-03, the user explicitly approved adding core7 to C3/C3X main UI
   onroad affinity: cores0,1,2,3,6,7 with SCHED_OTHER/nice19 for all UI threads.
   This supersedes the earlier core7 exclusion for this UI. C4 stays core6;

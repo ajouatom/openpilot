@@ -221,6 +221,8 @@ const int HYUNDAI_PARAM_CANFD_HDA2_ALT_STEERING = 128;
 bool hyundai_canfd_alt_buttons = false;
 bool hyundai_canfd_hda2_alt_steering = false;
 bool hyundai_canfd_buffered_fwd = false;
+const int HYUNDAI_PARAM_CANFD_CLUSTER_DIRECT_TX = 2048;
+bool hyundai_canfd_cluster_rx_forwarding = false;
 
 int hyundai_canfd_hda2_get_lkas_addr(void) {
   return hyundai_canfd_hda2_alt_steering ? 0x110 : 0x50;
@@ -605,7 +607,7 @@ static bool hyundai_canfd_tx_hook(const CANPacket_t *to_send_const) {
     return accepted;
   }
 
-  if (hyundai_camera_scc && (GET_BUS(to_send) == 0)) {
+  if (hyundai_canfd_cluster_rx_forwarding && (GET_BUS(to_send) == 0)) {
     HyundaiCanfdCluster *cluster = hyundai_canfd_cluster_find(addr);
     if (cluster != NULL) {
       // Reject before caching: the outer hook's whitelist alone cannot undo
@@ -721,7 +723,7 @@ static int hyundai_canfd_fwd_hook(CANPacket_t* to_send) {
     return -1;
   }
 
-  if (hyundai_camera_scc && (bus_num == 2)) {
+  if (hyundai_canfd_cluster_rx_forwarding && (bus_num == 2)) {
     HyundaiCanfdCluster *cluster = hyundai_canfd_cluster_find(addr);
     if (cluster != NULL) {
       hyundai_canfd_cluster_forward(cluster, to_send, now);
@@ -818,6 +820,8 @@ static safety_config hyundai_canfd_init(uint16_t param) {
   hyundai_canfd_alt_buttons = GET_FLAG(param, HYUNDAI_PARAM_CANFD_ALT_BUTTONS);
   hyundai_canfd_hda2_alt_steering = GET_FLAG(param, HYUNDAI_PARAM_CANFD_HDA2_ALT_STEERING);
   hyundai_canfd_buffered_fwd = hyundai_camera_scc;
+  // Optional legacy host-TX path for cluster displays only; control FIFOs stay RX-paced.
+  hyundai_canfd_cluster_rx_forwarding = hyundai_camera_scc && !GET_FLAG(param, HYUNDAI_PARAM_CANFD_CLUSTER_DIRECT_TX);
 
   // no long for radar-SCC HDA1 yet
   //if (!hyundai_canfd_hda2 && !hyundai_camera_scc) {
