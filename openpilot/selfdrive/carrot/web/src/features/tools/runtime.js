@@ -512,13 +512,15 @@ function renderToolsMeta() {
     const page = document.getElementById("pageTools");
     setToolsLogExpanded(!page?.classList.contains("tools-log-expanded"));
   });
-  meta.appendChild(statusEl);
-
+  // The last-update time keeps the left slot (the log-title spot) so it is
+  // always visible, even when the status text next to it has to truncate.
   const agoEl = document.createElement("span");
   agoEl.id = "toolsUpdateAgo";
   agoEl.className = "tools-meta__update";
   agoEl.title = formatToolsMetaDateTime(toolsMetaLastValues?.GitPullTime) || "";
   meta.appendChild(agoEl);
+
+  meta.appendChild(statusEl);
   syncToolsUpdateAgo();
   if (!meta.dataset.metaTapBound) {
     meta.dataset.metaTapBound = "1";

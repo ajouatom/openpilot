@@ -64,7 +64,7 @@
   min-height: 30px;
   max-height: 30px;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: auto minmax(0, 1fr);
   align-items: center;
   gap: 16px;
   overflow: visible;
@@ -122,12 +122,11 @@
 }
 
 .tools-meta__update {
-  min-width: 0;
-  max-width: 52%;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  /* Left slot, log-title position: never truncated, no shrink. */
+  max-width: none;
+  overflow: visible;
   white-space: nowrap;
-  text-align: right;
+  text-align: left;
   color: color-mix(in srgb, var(--md-on-surface-var) 82%, transparent);
   font-size: 12px;
   font-weight: 750;
