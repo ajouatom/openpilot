@@ -762,6 +762,42 @@ def _get_desire_and_lane_changing(md):
       if ds[4] > 0.9: lane_changing = 4
   return desire, lane_changing
 
+BLINK_HOLD_CROSS_NEAR_M = 1.0     # the target-side line came this close to the car centre ...
+BLINK_HOLD_CROSS_JUMP_M = 1.5     # ... then moved this far away again: the model relabelled it, the centre is across
+BLINK_HOLD_BODY_CLEAR_M = 1.0     # crossed line this far from the centre: the body (~0.95 m half width) is across
+
+
+def _blink_hold_side(md, desire, state):
+  """Turn-signal hold for ADRV_0x1ea: 3 (left), 4 (right) or 0.
+
+  Held for the whole confirmed lane change (desire 3/4 = starting + finishing, same as the green
+  cluster lane) instead of the model's desireState > 0.9, which falls ~2 s before the change ends and
+  let the lamp stop mid-change (2026-09-19 drive: hold covered 49-65 % of the change). Released as soon
+  as the model's lane lines show the body across the crossed line, so the lamp does not keep flashing
+  ~2 s after the car is already in the new lane. Without a detectable crossing the hold lasts to the end
+  of the desire.
+  """
+  if desire not in (3, 4):
+    state.update(crossed=False, released=False, y_min=None)
+    return 0
+  if state.get("released"):
+    return 0
+  lines = getattr(md, "laneLines", None) if md is not None else None
+  if lines is not None and len(lines) >= 3 and len(lines[1].y) and len(lines[2].y):
+    target, other = (1, 2) if desire == 3 else (2, 1)
+    y_target, y_other = float(lines[target].y[0]), float(lines[other].y[0])
+    # The relabel is spread over 2-3 model frames (e.g. -0.28 -> -1.36 -> -3.46 m), so compare with the
+    # closest approach instead of the previous frame.
+    y_min = abs(y_target) if state.get("y_min") is None else min(state["y_min"], abs(y_target))
+    state["y_min"] = y_min
+    if not state.get("crossed") and y_min < BLINK_HOLD_CROSS_NEAR_M and abs(y_target) - y_min > BLINK_HOLD_CROSS_JUMP_M:
+      state["crossed"] = True
+    if state.get("crossed") and abs(y_other) >= BLINK_HOLD_BODY_CLEAR_M:
+      state["released"] = True
+      return 0
+  return desire
+
+
 def _apply_lane_desire(values, desire):
   #values['LANE_CHANGING'] = 0
 
@@ -906,7 +942,7 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
   if not hasattr(create_ccnc_messages, '_lane_line_check') or frame % 100 == 0:
     create_ccnc_messages._lane_line_check = Params().get_int("LaneLineCheck")
   lane_line_check = create_ccnc_messages._lane_line_check
-  desire, lane_changing = _get_desire_and_lane_changing(md)
+  desire, _ = _get_desire_and_lane_changing(md)
 
   if CP.flags & HyundaiFlags.CAMERA_SCC.value:
     HDA_CntrlModSta = 0
@@ -1074,9 +1110,10 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
       if CS.adrv_0x1ea is not None:
         values = copy.copy(CS.adrv_0x1ea)
         rx_counter = values.pop("COUNTER", None)
-        # blinker hold
-        values['LEFT_BLINK_HOLD'] = 1 if lane_changing == 3 else 0
-        values['RIGHT_BLINK_HOLD'] = 1 if lane_changing == 4 else 0
+        # blinker hold: the confirmed lane change until the body is across (see _blink_hold_side)
+        hold = _blink_hold_side(md, desire, create_ccnc_messages.__dict__.setdefault("_blink_hold", {}))
+        values['LEFT_BLINK_HOLD'] = 1 if hold == 3 else 0
+        values['RIGHT_BLINK_HOLD'] = 1 if hold == 4 else 0
 
         _apply_cluster_lane_lines(values, CS, lat_active, desire)
         _normalize_cluster_corner_objects(values)
