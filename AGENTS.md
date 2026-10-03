@@ -1,5 +1,17 @@
 # Repository memory
 
+- On 2026-10-03, the user selected existing combined handover mode 3 as
+  standard for Hyundai/Kia/Genesis angle control and removed the selector.
+  CarController always uses mode 3 inside ANGLE_CONTROL; SteerHandoverMode
+  registration, catalog/menu and runtime reads are removed. Saved values no
+  longer affect behavior. Preserve the combined algorithm, thresholds, targets,
+  angle/CAN limits, torque-control paths and touch/DM. Internal helper variants
+  remain for comparisons; diagnostics still identify mode 3. 83 steering tests,
+  45 settings tests, 25 Wiki tests and 6,000-frame old-mode-3/new CAN equality
+  pass on desktop with Windows Params storage substituted. This promotion is
+  not a new retry fix or vehicle-response validation. See
+  docs/steering_handover_20260930.md.
+
 - On 2026-10-02, after the native CPU experiment and Ioniq 5 PE before/after
   logs, the user explicitly approved promotion to `carrot-wip` and deletion of
   the remote `carrot-native-cpu` branch. Keep the tested Cython radar statistics/

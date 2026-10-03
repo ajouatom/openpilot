@@ -223,7 +223,6 @@ class CarController(CarControllerBase):
     self.driver_torque_filtered_prev = 0.0
     self.pre_override_frames = 0
 
-    self.steer_handover_mode = 0
     self.steer_handover = SteeringHandover()
     self.handover_model_frame = None
     self.handover_model_time = 0
@@ -287,11 +286,6 @@ class CarController(CarControllerBase):
       self.camera_scc_params = params.get_int("HyundaiCameraSCC")
       self.enable_corner_radar = params.get_int("EnableCornerRadar")
       self.paddle_mode = params.get_int("PaddleMode")
-      handover_mode = params.get_int("SteerHandoverMode")
-      handover_mode = handover_mode if handover_mode in (1, 2, 3) else 0
-      if handover_mode != self.steer_handover_mode:
-        carlog.info("SteeringHandover mode=%d", handover_mode)
-      self.steer_handover_mode = handover_mode
 
     actuators = CC.actuators
     hud_control = CC.hudControl
@@ -463,7 +457,8 @@ class CarController(CarControllerBase):
                      0 <= model.position.yStd[10] <= 0.3)
       previous_handover_state = self.steer_handover.state
       steering_authority = self.steer_handover.update(
-        mode=self.steer_handover_mode, now=now_nanos * 1e-9, baseline=self.lkas_max_torque,
+        # Combined convergence/release recovery is standard for angle control.
+        mode=3, now=now_nanos * 1e-9, baseline=self.lkas_max_torque,
         minimum=self.params.ANGLE_MIN_TORQUE, maximum=self.angle_max_torque,
         driver=driver_torque, threshold=torque_threshold, pressed=CS.out.steeringPressed,
         target_error=actuators.steeringAngleDeg - CS.out.steeringAngleDeg,
@@ -471,9 +466,9 @@ class CarController(CarControllerBase):
         wheelbase=self.CP.wheelbase, steer_ratio=self.CP.steerRatio, active=CC.latActive,
         valid=bool(CS.out.canValid and not CS.out.steerFaultTemporary and not CS.out.steerFaultPermanent and model_valid),
       )
-      if self.steer_handover_mode and (self.frame % 100 == 0 or previous_handover_state != self.steer_handover.state):
-        carlog.info("SteeringHandover mode=%d state=%s effort=%.3f error=%.3f legacy=%.1f cap=%.1f",
-                    self.steer_handover_mode, self.steer_handover.state, self.steer_handover.effort or 0.0,
+      if self.frame % 100 == 0 or previous_handover_state != self.steer_handover.state:
+        carlog.info("SteeringHandover mode=3 state=%s effort=%.3f error=%.3f legacy=%.1f cap=%.1f",
+                    self.steer_handover.state, self.steer_handover.effort or 0.0,
                     self.steer_handover.error, self.lkas_max_torque, steering_authority)
 
     self.apply_angle_last = apply_angle
