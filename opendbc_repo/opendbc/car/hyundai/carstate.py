@@ -219,6 +219,9 @@ class CarState(CarStateBase):
     self.accelerator = None
     self.blinkers = None
     self.blinkers_alt = None
+    self.blinker_stalks = None
+    self.left_stalk_prev = self.right_stalk_prev = False
+    self.left_blinker_stalk_count = self.right_blinker_stalk_count = 0
     self.doors_seatbelts = None
     self.cruise_buttons_alt2 = None
 
@@ -476,6 +479,9 @@ class CarState(CarStateBase):
             add_and_cache(self.cp, "ACCELERATOR", "accelerator", ignore_counter = True)
           add_and_cache(self.cp, "BLINKERS", "blinkers")
           add_and_cache(self.cp, "BLINKERS_ALT", "blinkers_alt")
+          # Turn-signal lever pulses (0.04-0.2 s per press, ~5 Hz) on the PT bus only: the alt bus carries an
+          # unrelated 24-byte frame with the same 0x3C1 id (Ioniq 5 PE, 2026-09-19 drive).
+          add_and_cache(self.cp, "BLINKER_STALKS", "blinker_stalks", ignore_counter=True)
           add_and_cache(self.cp, "DOORS_SEATBELTS", "doors_seatbelts")
         elif self.controls_ready_count == 126:
           add_and_cache(self.cp, "CRUISE_BUTTONS_ALT2", "cruise_buttons_alt2", ignore_counter = True)
@@ -854,6 +860,18 @@ class CarState(CarStateBase):
         continue
       kept.append(event)
     return kept
+
+  def _update_blinker_stalks(self, ret):
+    """Count turn-signal lever presses (BLINKER_STALKS rising edges) into carState.*BlinkerStalkCount."""
+    if self.blinker_stalks is not None:
+      left_stalk, right_stalk = bool(self.blinker_stalks["LEFT_BLINKER"]), bool(self.blinker_stalks["RIGHT_BLINKER"])
+      if left_stalk and not self.left_stalk_prev:
+        self.left_blinker_stalk_count = (self.left_blinker_stalk_count + 1) % 256
+      if right_stalk and not self.right_stalk_prev:
+        self.right_blinker_stalk_count = (self.right_blinker_stalk_count + 1) % 256
+      self.left_stalk_prev, self.right_stalk_prev = left_stalk, right_stalk
+    ret.leftBlinkerStalkCount = self.left_blinker_stalk_count
+    ret.rightBlinkerStalkCount = self.right_blinker_stalk_count
 
   def _hold_speedcam_decel(self, button_events, decel_long_press):
     """While a section is unlocked, cruise - goes to carstate only: a long press relocks the section
@@ -1371,6 +1389,8 @@ class CarState(CarStateBase):
     ret.steeringPressed = self.update_steering_pressed(abs(ret.steeringTorque) > self.params.STEER_THRESHOLD, 5)
     ret.steerFaultTemporary = cp.vl["MDPS"]["LKA_FAULT"] != 0 or cp.vl["MDPS"]["LFA2_FAULT"] != 0
     #ret.steerFaultTemporary = False
+
+    self._update_blinker_stalks(ret)
 
     blinkers_info = self.blinkers if self.blinkers is not None else self.blinkers_alt if self.blinkers_alt is not None else None
     if blinkers_info is not None:
