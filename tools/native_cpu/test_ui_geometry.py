@@ -6,15 +6,9 @@ import ast
 import numpy as np
 import pytest
 
-from openpilot.system.ui.lib import _draw_native as native, native_draw, native_geometry as geometry, geometry_cache
+from openpilot.system.ui.lib import _draw_native as native, native_draw, native_geometry as geometry
 from openpilot.selfdrive.ui.onroad.path_geometry import project_path
 from openpilot.selfdrive.ui.road_markings import lane_dash_segments, project_lane_segments, project_blindspot_barrier
-
-
-@pytest.fixture(autouse=True)
-def no_projection_cache(monkeypatch):
-  # Every comparison must execute both kernels, not reuse a previous result.
-  monkeypatch.setattr(geometry_cache, 'ENABLED', False)
 
 
 @pytest.mark.parametrize('dtype', [np.float32, np.float64])
@@ -134,3 +128,22 @@ def test_real_renderer_uses_shared_geometry(variant):
   else:
     result = scope[node.name](renderer, line, .16, 0., 1)
     np.testing.assert_array_equal(result[:, 0], [0., 10., 10., 0.])
+
+
+@pytest.mark.parametrize('dtype', [np.float32, np.float64])
+@pytest.mark.parametrize('invert', [True, False])
+def test_batched_preparation_boundary_cases(monkeypatch, dtype, invert):
+  line = np.array([np.linspace(-2, 100, 33), np.sin(np.arange(33)), np.zeros(33)], dtype=dtype).T
+  transform = np.array([[540, -900, 0], [360, 0, 900], [1, 0, 0]], dtype=dtype)
+  clip = SimpleNamespace(x=-500., y=-500., width=2080., height=1720.)
+  line[4:6, 0] = line[3, 0]  # repeated interpolation nodes
+  line[8, 1] = np.nan
+  for start in (0, 3, -4, 50):
+    for end in (-1, 0, 4, 16, 32, 50):
+      for distance in (None, -1., 0., 5., 50., np.nan):
+        args = (line, .16, 1.22, end, transform, clip, invert, distance, -.9, start)
+        monkeypatch.setattr(native_draw, '_ENABLED', False)
+        expected = geometry.project_ribbon(*args)
+        monkeypatch.setattr(native_draw, '_ENABLED', True)
+        actual = geometry.project_ribbon(*args)
+        np.testing.assert_array_equal(actual, expected)

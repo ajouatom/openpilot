@@ -2,10 +2,8 @@
 import numpy as np
 
 from openpilot.system.ui.lib import native_draw, native_geometry
-from openpilot.system.ui.lib.geometry_cache import cached_projection
 
 
-@cached_projection
 def sample_path(line, distances):
   line = np.asarray(line, dtype=np.float32)
   idxs = np.arange(len(line), dtype=np.float32)
@@ -14,7 +12,6 @@ def sample_path(line, distances):
   return np.column_stack((distances, np.interp(indices, idxs, line[:, 1]), np.interp(indices, idxs, line[:, 2])))
 
 
-@cached_projection
 def project_path(line, width, z_start, z_end, transform, clip, allow_invert=True):
   if len(line) == 0:
     return np.empty((0, 2), dtype=np.float32)

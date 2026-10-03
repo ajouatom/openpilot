@@ -46,7 +46,7 @@ jobs:
         run: >-
           python -m pytest -q -c /dev/null --rootdir=. --confcutdir=tools/native_cpu
           tools/native_cpu/test_kernels.py tools/native_cpu/test_ui_draw.py tools/native_cpu/test_ui_geometry.py tools/native_cpu/test_ui_text.py
-          tools/native_cpu/test_ui_reuse.py tools/native_cpu/test_ui_texture_cache.py opendbc_repo/opendbc/can/tests
+          opendbc_repo/opendbc/can/tests
           -k 'not test_parser_can_valid'
       - name: Radar regression tests
         run: >-

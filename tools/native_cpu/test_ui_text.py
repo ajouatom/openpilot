@@ -197,15 +197,3 @@ def test_unrecognized_cffi_typedef_is_an_optional_backend_failure(monkeypatch):
   monkeypatch.setattr(native_draw, '_ENABLED', True)
   monkeypatch.setattr(native_draw, '_draw_native', native)
   assert native_text._backend(SimpleNamespace(ffi=SimpleNamespace(sizeof=unknown))) is None
-
-
-@pytest.mark.parametrize('border,shadow', [(0., 0.), (2.7, -5.3), (3., 8.)])
-def test_texture_bounds_enclose_every_original_primitive(renderer, border, shadow):
-  backend, font, calls, _, _, _callbacks = renderer
-  args = (c.addressof(font), 'A한글 B'.encode(), 210.137, -20.291, 36.712, OFFSETS, border, shadow)
-  backend.draw(*args, WHITE, BLACK, SHADOW)
-  x0, y0, x1, y1 = backend.bounds(args[0], args[1], args[4], args[2], args[3], OFFSETS, border, shadow)
-  for _, _, (x, y, w, h), *_ in calls:
-    assert x0 <= x and y0 <= y and x1 >= np.float32(x + w) and y1 >= np.float32(y + h)
-  assert backend.bounds(args[0], b'\n', 32., 0., 0., OFFSETS, 2., 3.) is None
-  assert backend.bounds(args[0], b'   ', 32., 0., 0., OFFSETS, 2., 3.) is None

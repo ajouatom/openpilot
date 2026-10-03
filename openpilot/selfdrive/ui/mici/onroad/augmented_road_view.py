@@ -5,7 +5,7 @@ from openpilot.cereal import messaging, car, log
 from msgq.visionipc import VisionStreamType
 from openpilot.selfdrive.ui.ui_state import ui_state
 from openpilot.selfdrive.ui.render_diagnostics import RenderDiagnostics
-from openpilot.system.ui.lib import native_draw, native_geometry, native_text, text_texture
+from openpilot.system.ui.lib import native_draw, native_geometry, native_text
 from openpilot.selfdrive.ui.mici.onroad import SIDE_PANEL_WIDTH
 from openpilot.selfdrive.ui.mici.onroad.alert_renderer import AlertRenderer
 from openpilot.selfdrive.ui.onroad.driver_preview import DriverPreview
@@ -334,8 +334,6 @@ class AugmentedRoadView(CameraView):
     timing.values['native_draw'] = float(native_draw.active())
     timing.values['native_geometry'] = float(native_geometry.active())
     timing.values['native_text'] = float(native_text.active())
-    timing.values['text_texture_hits'] = float(text_texture.cache.frame_hits)
-    timing.values['text_texture_build_cpu_ms'] = text_texture.cache.build_cpu_ms
     timing.finish()
 
   def close(self):
