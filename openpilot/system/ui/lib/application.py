@@ -68,6 +68,14 @@ def _record_param_float(name: str, default: float, low: float, high: float) -> f
   return min(max(value, low), high)
 
 
+def _record_param_str(name: str, default: str, allowed: tuple[str, ...]) -> str:
+  try:
+    value = Path(f"/data/params/d/{name}").read_text().strip().lower()
+  except Exception:
+    value = default
+  return value if value in allowed else default
+
+
 FPS_LOG_INTERVAL = 5  # Seconds between logging FPS drops
 FPS_DROP_THRESHOLD = 0.9  # FPS drop threshold for triggering a warning
 FPS_CRITICAL_THRESHOLD = 0.5  # Critical threshold for triggering strict actions
@@ -360,9 +368,15 @@ class GuiApplication:
     self._record_t0 = 0.0
     self._record_every_n = _record_env_int("CARROT_RECORD_EVERY_N", 1, 1, 10)
     self._record_scale = _record_env_float("CARROT_RECORD_SCALE", 0.5, 0.25, 1.0)
-    self._record_fps = _record_env_int("CARROT_RECORD_FPS", 10, 5, 30)
+    self._record_fps = _record_env_int("CARROT_RECORD_FPS", 20, 5, 30)
     self._record_capture_fps = _record_env_int("CARROT_RECORD_CAPTURE_FPS", 10, 1, 30)
     self._record_threads = _record_env_int("CARROT_RECORD_THREADS", 2, 1, 8)
+    self._record_backend = os.getenv("CARROT_RECORD_BACKEND", "auto").strip().lower()
+    if self._record_backend not in ("auto", "hw", "x264"):
+      self._record_backend = "auto"
+    self._record_backend_used = "x264"
+    self._record_bitrate = _record_env_int("CARROT_RECORD_BITRATE", 6_000_000, 500_000, 50_000_000)
+    self._hw_recorder = None
     self._record_size: tuple[int, int] | None = None
     self._record_frame_idx = 0
     self._record_next_t = 0.0
@@ -393,6 +407,8 @@ class GuiApplication:
     self._record_capture_fps = _record_param_int("CarrotRecordCaptureFps", self._record_capture_fps, 1, 30)
     self._record_threads = _record_param_int("CarrotRecordThreads", self._record_threads, 1, 8)
     self._record_every_n = _record_param_int("CarrotRecordEveryN", self._record_every_n, 1, 10)
+    self._record_backend = _record_param_str("CarrotRecordBackend", self._record_backend, ("auto", "hw", "x264"))
+    self._record_bitrate = _record_param_int("CarrotRecordBitrate", self._record_bitrate, 500_000, 50_000_000)
 
   def start_recording(self):
     if self._record_enabled:
@@ -404,7 +420,29 @@ class GuiApplication:
       return
 
     out_path = self._new_record_path()
-    self._init_ffmpeg(out_path)
+    self._record_backend_used = "x264"
+    self._hw_recorder = None
+    if self._record_backend in ("auto", "hw"):
+      try:
+        from openpilot.selfdrive.carrot.screen_record import ScreenRecordHw
+
+        recorder = ScreenRecordHw(
+          out_path,
+          (self._width, self._height),
+          fps=self._record_fps,
+          scale=self._record_scale,
+          bitrate=self._record_bitrate,
+        )
+        recorder.start()
+        self._hw_recorder = recorder
+        self._record_backend_used = "hw"
+      except Exception as e:
+        cloudlog.warning(f"screen record: hardware backend unavailable ({e}); falling back to x264")
+        self._hw_recorder = None
+        self._record_fps = min(self._record_fps, 10)
+
+    if self._record_backend_used == "x264":
+      self._init_ffmpeg(out_path)
 
     self._record_enabled = True
     self._record_t0 = time.monotonic()
@@ -412,13 +450,20 @@ class GuiApplication:
     self._record_next_t = 0.0
     self._record_next_capture_t = 0.0
     self._record_last_frame = None
-    print(f"[REC] start -> {out_path}")
+    print(f"[REC] start ({self._record_backend_used}) -> {out_path}")
 
   def stop_recording(self):
     if not self._record_enabled:
       return
     self._record_enabled = False
-    self.close_ffmpeg()  # application.py에 이미 있는 close_ffmpeg 그대로 사용
+    if self._hw_recorder is not None:
+      try:
+        self._hw_recorder.stop()
+      except Exception:
+        cloudlog.exception("screen record: hardware stop failed")
+      self._hw_recorder = None
+    else:
+      self.close_ffmpeg()  # application.py에 이미 있는 close_ffmpeg 그대로 사용
     print("[REC] stop")
 
   def toggle_recording(self):
@@ -1052,12 +1097,25 @@ class GuiApplication:
 
         if (RECORD or self._record_enabled) and render_texture is not None:
           if self._record_enabled:
-            if self._record_capture_due():
-              self._grab_record_frame(render_texture.texture)
-            self._pump_record_timeline()
-            if (time.monotonic() - self._record_t0) >= self._record_max_sec:
+            if self._hw_recorder is not None and self._hw_recorder.failed:
+              cloudlog.error("screen record: hardware recorder failed; stopping")
               self.stop_recording()
-              self.start_recording()
+            elif self._hw_recorder is not None:
+              self._hw_recorder.tick(
+                render_texture.texture,
+                render_texture.texture.width,
+                render_texture.texture.height,
+              )
+              if (time.monotonic() - self._record_t0) >= self._record_max_sec:
+                self.stop_recording()
+                self.start_recording()
+            else:
+              if self._record_capture_due():
+                self._grab_record_frame(render_texture.texture)
+              self._pump_record_timeline()
+              if (time.monotonic() - self._record_t0) >= self._record_max_sec:
+                self.stop_recording()
+                self.start_recording()
           else:
             self._record_frame_idx += 1
             # Legacy RECORD=1 (CLI/dev) path: one frame per `every_n`, no pump.
