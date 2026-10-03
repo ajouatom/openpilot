@@ -3,7 +3,8 @@
 The UI render texture is downscaled on the GPU, packed to Venus-style NV12 by a
 fragment shader, and rendered straight into the encoder's ION/V4L2 input
 DMA-BUF (no glReadPixels, no PBO, no CPU frame copy). The encoder emits H.264
-access units which ffmpeg remuxes into MP4 with `-c copy` (no re-encode).
+access units which are muxed into MP4 by a small self-contained ISO-BMFF
+writer (the device's ffmpeg build cannot demux raw H.264).
 
 Self-contained: cluster feature sources are neither imported nor modified. The
 only shared runtime asset is the compiled encoder bridge, which is instantiated
@@ -13,7 +14,6 @@ from __future__ import annotations
 
 import ctypes
 import queue
-import subprocess
 import threading
 import time
 from pathlib import Path
@@ -23,6 +23,7 @@ import pyray as rl
 from openpilot.common.swaglog import cloudlog
 from openpilot.selfdrive.carrot.screen_record.dmabuf_pool import create_packed_nv12_pool
 from openpilot.selfdrive.carrot.screen_record.encoder import HwEncoderUnavailable, HwNv12Encoder
+from openpilot.selfdrive.carrot.screen_record.mp4_mux import Mp4H264Writer
 from openpilot.selfdrive.carrot.screen_record.pack import Nv12Packer
 
 _MAX_CATCH_UP_FRAMES = 2
@@ -55,7 +56,7 @@ class ScreenRecordHw:
     self._pool = None
     self._use_dmabuf = False
 
-    self._ffmpeg: subprocess.Popen | None = None
+    self._muxer: Mp4H264Writer | None = None
     self._writer: threading.Thread | None = None
     self._write_queue: queue.Queue = queue.Queue()
 
@@ -93,7 +94,7 @@ class ScreenRecordHw:
         self._cpu_target = rl.load_render_texture(layout.pack_width, layout.pack_height)
         rl.set_texture_filter(self._cpu_target.texture, rl.TextureFilter.TEXTURE_FILTER_POINT)
 
-      self._start_ffmpeg()
+      self._muxer = Mp4H264Writer(self._out_path, self._fps, self._size[0], self._size[1])
       self._start_writer()
     except Exception:
       self._close_resources()
@@ -233,42 +234,26 @@ class ScreenRecordHw:
       clear_target=False,
     )
 
-  def _start_ffmpeg(self) -> None:
-    args = [
-      "ffmpeg",
-      "-hide_banner",
-      "-loglevel", "warning",
-      "-nostats",
-      "-f", "h264",
-      "-r", str(self._fps),
-      "-i", "pipe:0",
-      "-c:v", "copy",
-      "-movflags", "+faststart",
-      "-y",
-      str(self._out_path),
-    ]
-    self._ffmpeg = subprocess.Popen(args, stdin=subprocess.PIPE)
-
   def _start_writer(self) -> None:
     self._writer = threading.Thread(target=self._writer_loop, name="screen-record-writer", daemon=True)
     self._writer.start()
 
   def _writer_loop(self) -> None:
-    stdin = self._ffmpeg.stdin if self._ffmpeg is not None else None
-    while stdin is not None:
+    muxer = self._muxer
+    while muxer is not None:
       packet = self._write_queue.get()
       if packet is None:
         break
       try:
-        stdin.write(packet)
-      except (BrokenPipeError, OSError, ValueError):
+        muxer.add_access_unit(packet)
+      except Exception:
+        cloudlog.exception("screen record: muxing failed")
         break
-    if stdin is not None:
+    if muxer is not None:
       try:
-        stdin.flush()
-        stdin.close()
-      except (BrokenPipeError, OSError, ValueError):
-        pass
+        muxer.close()
+      except Exception:
+        cloudlog.exception("screen record: muxer close failed")
 
   def _flush_packets(self) -> None:
     if self._encoder is None:
@@ -308,17 +293,12 @@ class ScreenRecordHw:
       self._writer.join(timeout=10)
       self._writer = None
 
-    if self._ffmpeg is not None:
+    if self._muxer is not None:
       try:
-        self._ffmpeg.wait(timeout=30)
-      except subprocess.TimeoutExpired:
-        self._ffmpeg.terminate()
-        try:
-          self._ffmpeg.wait(timeout=5)
-        except subprocess.TimeoutExpired:
-          self._ffmpeg.kill()
-          self._ffmpeg.wait()
-      self._ffmpeg = None
+        self._muxer.close()
+      except Exception:
+        pass
+      self._muxer = None
 
     if self._cpu_target is not None:
       rl.unload_render_texture(self._cpu_target)
