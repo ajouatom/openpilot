@@ -18,7 +18,7 @@ from openpilot.selfdrive.ui.road_markings import (
 from openpilot.system.ui.lib.application import gui_app, FontWeight
 from openpilot.system.ui.lib.text_draw import draw_text_ui_style
 from openpilot.system.ui.lib.shader_polygon import draw_polygon, draw_polygon_solid, Gradient
-from openpilot.system.ui.lib import native_draw
+from openpilot.system.ui.lib import native_draw, native_geometry
 from openpilot.system.ui.widgets import Widget
 
 CLIP_MARGIN = 500
@@ -164,6 +164,7 @@ class ModelRenderer(Widget):
     timing.call('blindspot', self._draw_blind_spot_carrot, sm)
     timing.call('radar', self._draw_radar_info_carrot, sm)
     timing.values['native_draw'] = float(native_draw.active())
+    timing.values['native_geometry'] = float(native_geometry.active())
     timing.finish()
 
   def _update_raw_points(self, model):
@@ -370,81 +371,8 @@ class ModelRenderer(Widget):
     return (x, y)
 
   def _map_line_to_polygon(self, line: np.ndarray, y_off: float, z_off: float, max_idx: int, max_distance: float, allow_invert: bool = True, y_shift: float = 0.0, start_idx: int = 0) -> np.ndarray:
-    """Convert 3D line to 2D polygon for rendering."""
-    if line.shape[0] == 0:
-      return np.empty((0, 2), dtype=np.float32)
-
-    # Slice points and filter non-negative x-coordinates
-    points = line[start_idx:max_idx + 1]
-
-    # Interpolate around max_idx so path end is smooth (max_distance is always >= p0.x)
-    if 0 < max_idx < line.shape[0] - 1:
-      p0 = line[max_idx]
-      p1 = line[max_idx + 1]
-      x0, x1 = p0[0], p1[0]
-      interp_y = np.interp(max_distance, [x0, x1], [p0[1], p1[1]])
-      interp_z = np.interp(max_distance, [x0, x1], [p0[2], p1[2]])
-      interp_point = np.array([max_distance, interp_y, interp_z], dtype=points.dtype)
-      points = np.concatenate((points, interp_point[None, :]), axis=0)
-
-    points = points[points[:, 0] >= 0]
-    if points.shape[0] == 0:
-      return np.empty((0, 2), dtype=np.float32)
-
-    N = points.shape[0]
-    # Generate left and right 3D points in one array using broadcasting
-    offsets = np.array([[0, -y_off + y_shift, z_off], [0, y_off + y_shift, z_off]], dtype=np.float32)
-    points_3d = points[None, :, :] + offsets[:, None, :]  # Shape: 2xNx3
-    points_3d = points_3d.reshape(2 * N, 3)  # Shape: (2*N)x3
-
-    # Transform all points to projected space in one operation
-    proj = self._car_space_transform @ points_3d.T  # Shape: 3x(2*N)
-    proj = proj.reshape(3, 2, N)
-    left_proj = proj[:, 0, :]
-    right_proj = proj[:, 1, :]
-
-    # Filter points where z is sufficiently large
-    valid_proj = (np.abs(left_proj[2]) >= 1e-6) & (np.abs(right_proj[2]) >= 1e-6)
-    if not np.any(valid_proj):
-      return np.empty((0, 2), dtype=np.float32)
-
-    # Compute screen coordinates
-    left_screen = left_proj[:2, valid_proj] / left_proj[2, valid_proj][None, :]
-    right_screen = right_proj[:2, valid_proj] / right_proj[2, valid_proj][None, :]
-
-    # Define clip region bounds
-    clip = self._clip_region
-    x_min, x_max = clip.x, clip.x + clip.width
-    y_min, y_max = clip.y, clip.y + clip.height
-
-    # Filter points within clip region
-    left_in_clip = (
-      (left_screen[0] >= x_min) & (left_screen[0] <= x_max) &
-      (left_screen[1] >= y_min) & (left_screen[1] <= y_max)
-    )
-    right_in_clip = (
-      (right_screen[0] >= x_min) & (right_screen[0] <= x_max) &
-      (right_screen[1] >= y_min) & (right_screen[1] <= y_max)
-    )
-    both_in_clip = left_in_clip & right_in_clip
-
-    if not np.any(both_in_clip):
-      return np.empty((0, 2), dtype=np.float32)
-
-    # Select valid and clipped points
-    left_screen = left_screen[:, both_in_clip]
-    right_screen = right_screen[:, both_in_clip]
-
-    # Handle Y-coordinate inversion on hills
-    if not allow_invert and left_screen.shape[1] > 1:
-      y = left_screen[1, :]  # y-coordinates
-      keep = y == np.minimum.accumulate(y)
-      if not np.any(keep):
-        return np.empty((0, 2), dtype=np.float32)
-      left_screen = left_screen[:, keep]
-      right_screen = right_screen[:, keep]
-
-    return np.vstack((left_screen.T, right_screen[:, ::-1].T)).astype(np.float32)
+    return native_geometry.project_ribbon(line, y_off, z_off, max_idx, self._car_space_transform,
+                                          self._clip_region, allow_invert, max_distance, y_shift, start_idx)
 
   @staticmethod
   def _hsla_to_color(h, s, l, a):
@@ -1502,7 +1430,7 @@ class ModelRenderer(Widget):
 
   def _draw_path_carrot(self, sm):
     self._refresh_carrot_params(rl.get_time())
-    if not self._make_path_data_carrot(sm):
+    if not self._render_diagnostics.call('path_geometry', self._make_path_data_carrot, sm):
       return
 
     self._update_path_end_carrot(sm)
@@ -1549,8 +1477,8 @@ class ModelRenderer(Widget):
     else:
       self._draw_animated_path_carrot(sm, show_path_mode, show_path_color, brake_valid)
 
-    self._draw_path_end_overlay_carrot()
-    self._draw_tire_trajectory_carrot(sm)
+    self._render_diagnostics.call('path_labels', self._draw_path_end_overlay_carrot)
+    self._render_diagnostics.call('tire', self._draw_tire_trajectory_carrot, sm)
 
   @staticmethod
   def _tire_grad_color(d: float, a: int) -> rl.Color:

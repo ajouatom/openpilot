@@ -52,6 +52,13 @@ jobs:
         run: openpilot/system/camerad/test/test_camera_event_timing
       - name: Check coherent OS04C10 exposure updates
         run: openpilot/system/camerad/test/test_os04c10_exposure
+      - name: Check UI geometry and rendering regressions
+        run: >-
+          python -m pytest -o addopts='' -q
+          openpilot/selfdrive/ui/tests/test_path_geometry.py
+          openpilot/selfdrive/ui/tests/test_carrot_model_renderer.py
+          openpilot/selfdrive/ui/tests/test_carrot_model_renderer_lane_visibility.py
+          openpilot/selfdrive/ui/tests/test_render_diagnostics.py
       - name: Check model, monitoring and Bluetooth integration
         run: |
           python -m pytest -o addopts='' -q \
