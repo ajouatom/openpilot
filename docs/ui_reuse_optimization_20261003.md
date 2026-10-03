@@ -39,6 +39,10 @@ changes are included.
   and inversion policy participate. In-place mutation invalidates the result.
   Returned cached arrays are immutable; colors, warnings and animation still
   execute each frame. No model timestamp alone is treated as a complete key.
+- After 64 consecutive misses, geometry reuse probes only once per 16 calls;
+  other calls immediately use the native calculation. Any hit restores normal
+  lookup. This avoids paying full cache-key/storage costs for continuously
+  changing model inputs, without delaying a new coordinate or frame.
 - `CARROT_UI_TEXT_TEXTURE=0` disables finished labels;
   `CARROT_UI_GEOMETRY_CACHE=0` disables geometry reuse. Existing native/text
   switches remain available. `uiModel`/`uiC4` include current-frame texture hits
@@ -46,7 +50,7 @@ changes are included.
 
 ## Validation and measurements
 
-Desktop: 113 native/cache tests and 36 locally runnable UI regression tests.
+Desktop: 114 native/cache tests and 36 locally runnable UI regression tests.
 Tests cover old/missing backend fallback, C3/C4 endpoint policy, float32/64,
 NaNs, repeated interpolation nodes, clipping/inversion, read-only strided input,
 cache mutation/size, new text/style/position/font, frame-stage admission and
@@ -77,6 +81,16 @@ not full UI frames or driving FPS.
 | Previous native geometry | 380.3 us |
 | Batched native preparation, changing/uncached calculation | 217.4 us |
 | Identical input reuse | 112.4 us |
+
+The table isolates native work with caching disabled for the middle row. A
+follow-up continuously changing-input test exposed an important distinction:
+unconditional cache misses took 427 us versus the previous native 394 us, an
+8% regression. That candidate was replaced by the adaptive probe policy above.
+In the final changing-input comparison, previous native was 390.7 us, batched
+calculation with caching disabled 222.4 us, and enabled adaptive caching with
+continuous misses **249.9 us (36% lower than previous native)**. Identical-input
+hits were 117.7 us. Seven rounds of 4,000 two-ribbon operations include cold
+cache resets and input mutation; these remain isolated CPU measurements.
 
 For 108 measured label-build stages after shader initialization, median CPU was
 1.450 ms and maximum 2.191 ms. The initial unpartitioned prototype's shader/build
