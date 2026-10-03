@@ -1,5 +1,30 @@
 # Experimental Hyundai angle-steering handover
 
+## October 3: combined recovery is standard
+
+The user selected the existing mode 3 behavior as standard for Hyundai/Kia/
+Genesis angle control and requested removing the selector. CarController now
+always calls the helper with mode 3 inside the existing ANGLE_CONTROL branch.
+SteerHandoverMode is removed from Params registration, the settings catalog and
+menu; saved values are no longer read. The helper's internal mode variants remain
+available for focused comparisons, not as user settings. Runtime diagnostics
+retain `mode=3` so existing log analysis can identify the combined behavior.
+
+This promotion preserves the existing combined algorithm, thresholds, target
+angles, CAN limits, driver-override detection, touch/DM and torque-control paths.
+It does not implement new release retries or change the previously investigated
+handover edge cases. The sections below describe the earlier selectable
+implementation and the unchanged recovery mechanics.
+
+Validation: 83 helper/controller/steering-mode tests, 45 settings-schema tests
+and 25 Wiki tests pass. A 6,000-frame comparison against pre-change `92fb3a0873`
+with mode 3 selected matches every actuator output and steering CAN message,
+covering angle/torque control and camera/non-camera SCC. Native Params storage
+is substituted on Windows; the controller, helper, limiters and CAN packer are
+real. Desktop equivalence is not additional vehicle-response validation. The
+Korean/English settings guides describe the standard behavior; Wiki generation
+uses the reduced catalog and removes the retired setting pages.
+
 The user requested selectable experiments after observing prolonged reduced steering
 authority in a curve, then explicitly requested their combination and live setting
 changes. `SteerHandoverMode` is persistent, defaults to **0**, and is polled every

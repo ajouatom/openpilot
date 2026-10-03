@@ -133,7 +133,6 @@
               "params": [
                 "SteerActuatorDelay",
                 "LatSmoothSec",
-                "SteerHandoverMode",
                 "LatSuspendAngleDeg",
                 "CustomSR",
                 "SteerRatioRate"
@@ -990,28 +989,6 @@
       "max": 30,
       "default": 13,
       "unit": 1
-    },
-    {
-      "group": "조향튜닝",
-      "name": "SteerHandoverMode",
-      "title": "조향 복구 모드 (시험)",
-      "descr": "운전자 개입 후 조향 토크의 복구 방식을 선택합니다.\n0 · 기존 방식 (기본값)\n1 · 조향 오차와 운전자 힘이 수렴하면 제한적으로 복구\n2 · 급해제 후 오차가 작으면 빠르게, 크면 완만하게 복구\n3 · 1번과 2번을 함께 사용\n다시 강하게 개입하면 빠르게 양보합니다. 목표 조향각은 바꾸지 않습니다.\n현대·기아·제네시스 조향각 제어 차량 전용이며, 변경은 약 0.5초 내 반영됩니다.\n실차 조향감은 미검증입니다. 정차 후 설정하고 통제된 환경에서 시험하세요.",
-      "egroup": "LAT",
-      "etitle": "Steering Handover Mode (Test)",
-      "edescr": "Choose how steering authority recovers after driver intervention.\n0 · Existing behavior (default)\n1 · Limited recovery as steering error and driver effort converge\n2 · After abrupt release, recover faster with small error and slower with large error\n3 · Combine modes 1 and 2\nStrong renewed intervention yields quickly. Target steering angles stay unchanged.\nHyundai/Kia/Genesis angle-control vehicles only. Changes apply within about 0.5 seconds.\nVehicle steering feel is unvalidated. Change settings while parked and test in a controlled environment.",
-      "cgroup": "转向",
-      "ctitle": "转向恢复模式（测试）",
-      "cdescr": "选择驾驶员介入后的转向恢复方式。\n0 · 原有方式（默认）\n1 · 转角误差与驾驶员施力趋于收敛时有限恢复\n2 · 施力骤降后，误差小时快速恢复，误差大时缓慢恢复\n3 · 结合1和2\n驾驶员再次明显施力时快速让出控制，目标转角保持不变。\n仅适用于现代、起亚、捷尼赛思转角控制车辆，约0.5秒内应用更改。\n实车转向感受尚未验证。请停车设置，并在受控环境中测试。",
-      "min": 0,
-      "max": 3,
-      "default": 0,
-      "unit": 1,
-      "options": {
-        "ko": ["0: 기존 방식", "1: 수렴 기반 복구", "2: 급해제 빠른 복구", "3: 1+2 조합"],
-        "en": ["0: Existing", "1: Convergence recovery", "2: Abrupt-release recovery", "3: Combined 1+2"],
-        "zh": ["0：原有方式", "1：收敛恢复", "2：骤降快速恢复", "3：组合1+2"]
-      },
-      "risk": "high"
     },
     {
       "group": "조향튜닝",
