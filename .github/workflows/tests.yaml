@@ -21,6 +21,21 @@ env:
   CI: 1
 
 jobs:
+  lane_model_speed:
+    name: Lane-mode model speed fallback
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - run: python -m pip install pytest numpy
+      - name: Check speed mismatch, original deceleration and planner routing
+        run: >-
+          python -m pytest -c /dev/null --rootdir=. --confcutdir=openpilot/selfdrive/controls/tests -q
+          openpilot/selfdrive/controls/tests/test_lane_model_speed.py
+          openpilot/selfdrive/controls/tests/test_lane_model_speed_planner.py
+
   git_update:
     name: Git update lifecycle
     runs-on: ubuntu-24.04
