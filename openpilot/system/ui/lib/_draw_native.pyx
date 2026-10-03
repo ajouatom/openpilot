@@ -1,4 +1,5 @@
 # cython: language_level=3, boundscheck=False, wraparound=False
+# distutils: language=c++
 """Same Raylib primitives/order, with per-vertex work kept across one boundary."""
 from libc.stdint cimport uintptr_t
 from libc.limits cimport INT_MAX
