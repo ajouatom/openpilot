@@ -1,6 +1,8 @@
 """Batch the interpolation and projection of the Carrot path ribbon."""
 import numpy as np
 
+from openpilot.system.ui.lib import native_draw, native_geometry
+
 
 def sample_path(line, distances):
   line = np.asarray(line, dtype=np.float32)
@@ -17,6 +19,10 @@ def project_path(line, width, z_start, z_end, transform, clip, allow_invert=True
   points = np.asarray(line, dtype=np.float64)
   z_off = np.interp(points[:, 0], [0., 100.], [z_start, z_end])
   y_off = np.interp(z_off, [-3., 0., 3.], [1.5, .5, 1.5]) * width
+  if native_geometry.active():
+    sides = native_draw._draw_native.path_sides(points, y_off, z_off)
+    projected = sides @ transform.T
+    return native_geometry.clip_ribbon(projected.transpose(2, 0, 1), clip, allow_invert)
   sides = np.broadcast_to(points, (2, *points.shape)).copy()
   sides[0, :, 1] -= y_off
   sides[1, :, 1] += y_off

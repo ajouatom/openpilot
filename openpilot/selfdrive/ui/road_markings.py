@@ -4,6 +4,8 @@ import math
 
 import numpy as np
 
+from openpilot.system.ui.lib import native_draw, native_geometry
+
 LANE_DASH_LENGTH_M = 5.2
 LANE_DASH_GAP_M = 4.2
 
@@ -58,6 +60,10 @@ def project_lane_segments(segments: list[np.ndarray], half_width: float, transfo
   offsets = np.array([[0., -half_width, 0.], [0., half_width, 0.]], dtype=np.float32)
   sides = (points[None, :, :] + offsets[:, None, :]).reshape(2 * n, 3)
   projected = (transform @ sides.T).reshape(3, 2, n)
+  if native_geometry.active():
+    return native_draw._draw_native.clip_dashes(projected, np.asarray(points[:, 0], dtype=projected.dtype),
+                                                np.asarray(lengths, dtype=np.int64), clip.x, clip.x + clip.width,
+                                                clip.y, clip.y + clip.height)
   depth_ok = np.abs(projected[2]) >= 1e-6
   xy = np.divide(projected[:2], projected[2:3], out=np.full_like(projected[:2], np.nan), where=depth_ok[None, :, :])
   valid = ((points[:, 0] >= 0) & depth_ok.all(axis=0)
@@ -93,6 +99,8 @@ def project_blindspot_barrier(points: np.ndarray, y_shift: float, transform: np.
     transform[:, 1, None, None] * points_3d[None, :, :, 1] +
     transform[:, 2, None, None] * points_3d[None, :, :, 2]
   )
+  if native_geometry.active():
+    return native_geometry.clip_ribbon(projected, clip, allow_invert=False)
   upper_projected = projected[:, 0, :]
   lower_projected = projected[:, 1, :]
 

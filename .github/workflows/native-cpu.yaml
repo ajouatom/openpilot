@@ -9,6 +9,10 @@ on:
       - 'opendbc_repo/opendbc/can/**'
       - 'openpilot/selfdrive/carrot/radar_motion/**'
       - 'openpilot/system/ui/lib/**'
+      - 'openpilot/selfdrive/ui/onroad/path_geometry.py'
+      - 'openpilot/selfdrive/ui/road_markings.py'
+      - 'openpilot/selfdrive/ui/onroad/model_renderer.py'
+      - 'openpilot/selfdrive/ui/mici/onroad/model_renderer.py'
       - 'tools/build_native_cpu.py'
       - 'tools/native_cpu/**'
       - '.github/workflows/native-cpu.yaml'
@@ -41,7 +45,7 @@ jobs:
         # It also fails with CARROT_NATIVE_CPU=0. Do not change that policy here.
         run: >-
           python -m pytest -q -c /dev/null --rootdir=. --confcutdir=tools/native_cpu
-          tools/native_cpu/test_kernels.py tools/native_cpu/test_ui_draw.py opendbc_repo/opendbc/can/tests
+          tools/native_cpu/test_kernels.py tools/native_cpu/test_ui_draw.py tools/native_cpu/test_ui_geometry.py opendbc_repo/opendbc/can/tests
           -k 'not test_parser_can_valid'
       - name: Radar regression tests
         run: >-
