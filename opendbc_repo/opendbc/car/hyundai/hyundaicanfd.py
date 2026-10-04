@@ -764,7 +764,7 @@ def _get_desire_and_lane_changing(md):
 
 BLINK_HOLD_CROSS_NEAR_M = 1.0     # the target-side line came this close to the car centre ...
 BLINK_HOLD_CROSS_JUMP_M = 1.5     # ... then moved this far away again: the model relabelled it, the centre is across
-BLINK_HOLD_BODY_CLEAR_M = 1.0     # crossed line this far from the centre: the body (~0.95 m half width) is across
+BLINK_HOLD_RELEASE_PROGRESS = 0.6  # release once the car centre has moved this fraction of a lane width into the new lane
 
 
 def _blink_hold_side(md, desire, state):
@@ -772,10 +772,10 @@ def _blink_hold_side(md, desire, state):
 
   Held for the whole confirmed lane change (desire 3/4 = starting + finishing, same as the green
   cluster lane) instead of the model's desireState > 0.9, which falls ~2 s before the change ends and
-  let the lamp stop mid-change (2026-09-19 drive: hold covered 49-65 % of the change). Released as soon
-  as the model's lane lines show the body across the crossed line, so the lamp does not keep flashing
-  ~2 s after the car is already in the new lane. Without a detectable crossing the hold lasts to the end
-  of the desire.
+  let the lamp stop mid-change (2026-09-19 drive: hold covered 49-65 % of the change). Released once the
+  model's lane lines show the car centre 60 % of a lane width over (the crossed line, now on the other
+  side, 0.1 lane width away), so the lamp does not keep flashing ~2 s after the car is already in the new
+  lane. Without a detectable crossing the hold lasts to the end of the desire.
   """
   if desire not in (3, 4):
     state.update(crossed=False, released=False, y_min=None)
@@ -792,7 +792,8 @@ def _blink_hold_side(md, desire, state):
     state["y_min"] = y_min
     if not state.get("crossed") and y_min < BLINK_HOLD_CROSS_NEAR_M and abs(y_target) - y_min > BLINK_HOLD_CROSS_JUMP_M:
       state["crossed"] = True
-    if state.get("crossed") and abs(y_other) >= BLINK_HOLD_BODY_CLEAR_M:
+    lane_width = abs(y_target) + abs(y_other)
+    if state.get("crossed") and abs(y_other) >= (BLINK_HOLD_RELEASE_PROGRESS - 0.5) * lane_width:
       state["released"] = True
       return 0
   return desire
