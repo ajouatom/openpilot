@@ -307,12 +307,9 @@
 
   function relocalizeCarrotVisionState() {
     const phase = CARROT_VISION_STATE.phase || CARROT_VISION_PHASE.UNAVAILABLE;
-    const clusterHudActive = Number(CARROT_VISION_STATE.environment?.clusterHud || 0) > 0;
     const disabledMessage = CARROT_VISION_STATE.available
       ? ""
-      : (clusterHudActive
-        ? getUIText("vision_unavailable_cluster_hud", "Carrot Vision is unavailable while Cluster HUD is enabled.")
-        : getUIText("vision_unavailable_hint", "Enable Carrot Vision in settings."));
+      : getUIText("vision_unavailable_hint", "Enable Carrot Vision in settings.");
     if (disabledMessage) CARROT_VISION_STATE.disabledMessage = disabledMessage;
     setCarrotVisionState({
       statusText: getCarrotVisionPhaseStatusText(phase),

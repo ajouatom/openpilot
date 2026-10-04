@@ -885,7 +885,6 @@ window.CarrotTranslations.register("zh", {
     dm_experimental_warning: "实验性驾驶员监控可能违反法规。仅限受控测试环境中的实验用途，不保证公路使用的合法性或安全性。是否同意仅用于实验并启用？",
     dm_experimental_cancelled: "未启用实验模式。",
     vision_unavailable_hint: "请在设置中启用 Carrot Vision。",
-    vision_unavailable_cluster_hud: "启用 Cluster HUD 时无法使用 Carrot Vision。",
     vision_step_unavailable: "请检查设置。",
     vision_step_inactive: "等待启动",
     vision_step_starting: "准备摄像头",

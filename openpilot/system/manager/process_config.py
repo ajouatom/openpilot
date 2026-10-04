@@ -94,9 +94,9 @@ def cluster_hud_active(params: Params) -> bool:
     return False
 
 def enable_webrtc(started, params, CP: car.CarParams) -> bool:
-  # Cluster HUD consumes the road camera directly. Keep Carrot Vision's
-  # WebRTC/encoder processes out of the same onroad session.
-  return params.get_bool("CarrotVisionEnabled") and not cluster_hud_active(params)
+  # Cluster HUD and Carrot Vision can consume the road camera concurrently.
+  # The web encoder remains idle until a Carrot Vision session requests it.
+  return params.get_bool("CarrotVisionEnabled")
 
 def c3x_lite(started: bool, params: Params, CP: car.CarParams) -> bool:
   return started and params.get_bool("HardwareC3xLite")

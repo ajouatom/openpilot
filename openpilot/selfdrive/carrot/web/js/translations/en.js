@@ -897,7 +897,6 @@ window.CarrotTranslations.register("en", {
     dm_experimental_warning: "Experimental driver monitoring may violate applicable law. Use only for experiments in a controlled test environment; public-road legality and safety are not assured. Do you agree to experimental use only and wish to enable it?",
     dm_experimental_cancelled: "Experimental mode was not enabled.",
     vision_unavailable_hint: "Enable Carrot Vision in settings.",
-    vision_unavailable_cluster_hud: "Carrot Vision is unavailable while Cluster HUD is enabled.",
     vision_step_unavailable: "Check the setting.",
     vision_step_inactive: "Waiting to start",
     vision_step_starting: "Preparing camera",
