@@ -63,12 +63,15 @@ def test_blink_hold_request_overrides_the_release_of_the_current_change():
   assert _blink_hold_side(md, 3, state) == 3
 
 
-def test_lever_turn_shows_the_cluster_message_only_when_flagged():
-  values = {"AUTOLANECHANGE_MSG": 0}
+def test_lever_turn_shows_the_cluster_alert_only_when_flagged():
+  values = {"ALERTS_3": 0}
   _apply_lever_turn_msg(values, NS(meta=NS(leverTurn=False)))
-  assert values["AUTOLANECHANGE_MSG"] == 0
+  assert values["ALERTS_3"] == 0
   _apply_lever_turn_msg(values, None)
   _apply_lever_turn_msg(values, NS(meta=NS()))                        # older schema
-  assert values["AUTOLANECHANGE_MSG"] == 0
+  assert values["ALERTS_3"] == 0
   _apply_lever_turn_msg(values, NS(meta=NS(leverTurn=True)))
-  assert values["AUTOLANECHANGE_MSG"] == 1
+  assert values["ALERTS_3"] == 18                                       # CHECK_SURROUNDINGS
+  values = {"ALERTS_3": 2}                                              # another alert is up: keep it
+  _apply_lever_turn_msg(values, NS(meta=NS(leverTurn=True)))
+  assert values["ALERTS_3"] == 2

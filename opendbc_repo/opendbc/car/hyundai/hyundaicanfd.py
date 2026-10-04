@@ -870,15 +870,16 @@ def _apply_cluster_lane_lines(values, CS, lat_active, desire):
     _apply_lane_desire(values, desire)
 
 
-# ADRV_0x1ea AUTOLANECHANGE_MSG 1 "Check surrounding conditions" (the cluster has no "turn" message)
-LEVER_TURN_CLUSTER_MSG = 1
+# ADRV_0x161 ALERTS_3 18 "CHECK_SURROUNDINGS" (the cluster has no "turn" message). ADRV_0x1ea AUTOLANECHANGE_MSG
+# was tried first and the cluster did not show it (2026-10-05 route 00000494: sent 1 with HDA_MODE2 1, nothing shown).
+LEVER_TURN_ALERT = 18
 
 
 def _apply_lever_turn_msg(values, md):
-  """BlinkerLatchedTurn: while a latched lever makes the turn desire, say so in the cluster's lane-change slot."""
+  """BlinkerLatchedTurn: while a latched lever makes the turn desire, show a cluster alert (unless one is up)."""
   meta = getattr(md, "meta", None) if md is not None else None
-  if getattr(meta, "leverTurn", False):
-    values["AUTOLANECHANGE_MSG"] = LEVER_TURN_CLUSTER_MSG
+  if getattr(meta, "leverTurn", False) and values.get("ALERTS_3", 0) == 0:
+    values["ALERTS_3"] = LEVER_TURN_ALERT
 
 
 def _normalize_cluster_corner_objects(values, *, ccnc=False):
@@ -1076,6 +1077,8 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
         if values["ALERTS_5"] in [11] and CS.softHoldActive == 0:
           values["ALERTS_5"] = 0
 
+        _apply_lever_turn_msg(values, md)
+
         # curvature 표시(0x161쪽 기존 로직 유지)
         _suppress_trailer_mode_warning(values, CS)
 
@@ -1141,7 +1144,6 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
         values['RIGHT_BLINK_HOLD'] = 1 if hold == 4 else 0
 
         _apply_cluster_lane_lines(values, CS, lat_active, desire)
-        _apply_lever_turn_msg(values, md)
         _normalize_cluster_corner_objects(values)
 
         ret.append(packer.make_can_msg("ADRV_0x1ea", CAN.ECAN, values, rx_counter = rx_counter))
