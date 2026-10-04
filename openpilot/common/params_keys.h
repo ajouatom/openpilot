@@ -246,6 +246,7 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"VehicleNaviDecelCancelBox", {PERSISTENT, BOOL, "1"}},
     {"VehicleNaviDecelCancelMobileZone", {PERSISTENT, BOOL, "1"}},
     {"VehicleNaviDecelCancelBump", {PERSISTENT, BOOL, "1"}},
+    {"VehicleNaviDecelCancelFixed", {PERSISTENT, BOOL, "0"}},
     {"VehicleNaviSectionAvgControl", {PERSISTENT, BOOL, "0"}},
     {"VehicleSpeedCameraControlMode", {PERSISTENT, INT, "1"}},
     {"VehicleSpeedCameraDistanceTime", {PERSISTENT, INT, "60"}},

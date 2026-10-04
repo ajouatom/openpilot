@@ -368,7 +368,8 @@ def test_speedcam_decel_cancel_and_section_average_settings_are_opt_in(settings,
   by_name = {p["name"]: p for p in params}
   master, children = "VehicleNaviDecelCancel", ("VehicleNaviDecelCancelBox", "VehicleNaviDecelCancelMobileZone",
                                                  "VehicleNaviDecelCancelBump")
-  defaults = {master: 0, "VehicleNaviSectionAvgControl": 0, **{name: 1 for name in children}}
+  defaults = {master: 0, "VehicleNaviSectionAvgControl": 0, **{name: 1 for name in children},
+              "VehicleNaviDecelCancelFixed": 0}  # real enforcement cameras: opt-in even with the master on
   for name, default in defaults.items():
     control = by_name[name]
     assert (control["min"], control["max"], control["default"]) == (0, 1, default)
@@ -377,7 +378,7 @@ def test_speedcam_decel_cancel_and_section_average_settings_are_opt_in(settings,
   # Per-kind toggles live in the master's detail screen; only the master is opt-in.
   assert not by_name[master].get("detail_parent")
   assert all(by_name[name]["detail_parent"] == master and by_name[name]["group"] == by_name[master]["group"]
-             for name in children)
+             for name in (*children, "VehicleNaviDecelCancelFixed"))
 
   driving = next(category for category in settings["menu"] if category["id"] == "DRIVING")
   speed = next(group for group in driving["groups"] if group["id"] == "SPEED")

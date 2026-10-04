@@ -24,7 +24,8 @@ CAMERA_KINDS = (KIND_FIXED, KIND_SIGNAL, KIND_BOX, KIND_MOBILE_ZONE)
 
 CLASS_MOBILE_ZONE = 1
 CLASS_BOX = 2
-CLASS_HARD = 3  # fixed, signal, rear and unknown cameras always decelerate
+CLASS_FIXED = 3  # unflagged fixed speed camera: skippable only with its own toggle
+CLASS_HARD = 4  # signal, rear and unknown cameras always decelerate
 
 PREVIEW_SATURATED_OFFSET = 1985  # offsets near the ~2 km horizon only bound the position
 # A stock warning starts about 6.1 m per km/h of the enforced speed before its camera
@@ -120,14 +121,16 @@ class SpeedcamPolicy:
         candidates.append(p)
     if not candidates:
       return None
-    if any(p["flagged"] or p["kind"] in (KIND_FIXED, KIND_SIGNAL) for p in candidates):
+    if any(p["flagged"] or p["kind"] == KIND_SIGNAL for p in candidates):
       return CLASS_HARD
+    if any(p["kind"] == KIND_FIXED for p in candidates):
+      return CLASS_FIXED
     if any(p["kind"] == KIND_BOX for p in candidates):
       return CLASS_BOX
     return CLASS_MOBILE_ZONE
 
   def update(self, warning_active, warning_speed, total_distance, accel_rising,
-             mobile_zone_decel, skip_box, skip_mobile_zone):
+             mobile_zone_decel, skip_box, skip_mobile_zone, skip_fixed=False):
     """Return (suppress_warning, consume_accel_button)."""
     if not warning_active or warning_speed <= 0:
       self.reset_warning()
@@ -141,7 +144,7 @@ class SpeedcamPolicy:
       self.warning_start_distance = total_distance
 
     current = self.classify(warning_speed, total_distance, starting=starting, start_distance=self.warning_start_distance)
-    # A warning never downgrades: a fixed camera inside a mobile zone keeps it hard.
+    # A warning never downgrades: a fixed camera inside a mobile zone keeps it fixed.
     if current is not None and (self.warning_class is None or current > self.warning_class):
       self.warning_class = current
     warning_class = CLASS_HARD if self.warning_class is None else self.warning_class
@@ -150,7 +153,8 @@ class SpeedcamPolicy:
       return True, False
 
     skippable = ((warning_class == CLASS_BOX and skip_box) or
-                 (warning_class == CLASS_MOBILE_ZONE and skip_mobile_zone))
+                 (warning_class == CLASS_MOBILE_ZONE and skip_mobile_zone) or
+                 (warning_class == CLASS_FIXED and skip_fixed))
     consume = False
     if skippable and accel_rising and not self.skipped:
       self.skipped = True

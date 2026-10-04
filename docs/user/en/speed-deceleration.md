@@ -51,7 +51,7 @@ Record the value currently shown on the device before changing anything.
 <a id="speed-camera"></a>
 ## 1. Speed cameras
 
-The related settings are `AutoNaviSpeedCtrlMode`, `AutoNaviSpeedCtrlEnd`, `AutoNaviRearCameraHoldDistance`, `AutoNaviSpeedDecelRate`, `AutoNaviSpeedSafetyFactor`, `AutoNaviCountDownMode`, `VehicleNaviCanControl`, `VehicleNaviSchoolZoneControl`, `VehicleNaviDecelCancel`(`VehicleNaviDecelCancelBox`, `VehicleNaviDecelCancelMobileZone`, `VehicleNaviDecelCancelBump`), `VehicleNaviSectionAvgControl`, `VehicleSpeedCameraControlMode`, and `VehicleSpeedCameraDistanceTime`.
+The related settings are `AutoNaviSpeedCtrlMode`, `AutoNaviSpeedCtrlEnd`, `AutoNaviRearCameraHoldDistance`, `AutoNaviSpeedDecelRate`, `AutoNaviSpeedSafetyFactor`, `AutoNaviCountDownMode`, `VehicleNaviCanControl`, `VehicleNaviSchoolZoneControl`, `VehicleNaviDecelCancel`(`VehicleNaviDecelCancelBox`, `VehicleNaviDecelCancelMobileZone`, `VehicleNaviDecelCancelBump`, `VehicleNaviDecelCancelFixed`), `VehicleNaviSectionAvgControl`, `VehicleSpeedCameraControlMode`, and `VehicleSpeedCameraDistanceTime`.
 
 ### `AutoNaviSpeedCtrlMode`
 
@@ -93,7 +93,7 @@ The current stock warning (0x4A3) carries no camera kind. The kind of the previe
 
 | Preview kind | Navigation icon | Handling |
 |---|---|---|
-| Fixed speed camera | Red square | Always decelerates; no skip |
+| Fixed speed camera | Red square | Decelerates; can be cancelled when the fixed-camera kind of the deceleration cancel request is on |
 | Signal-and-speed | Traffic-light icon | Always decelerates; no skip |
 | Rear speed, rear signal-and-speed | — | Always decelerates; no skip (identified by the preview's rear flag) |
 | Mobile enforcement zone | Blue circle | Decelerates when `AutoNaviSpeedCtrlMode` is `3`; ignored at `2` or lower |
@@ -103,7 +103,7 @@ A warning that also carries a fixed, signal, or rear camera always decelerates, 
 
 ### `VehicleNaviDecelCancel` (deceleration cancel request)
 
-When enabled, while engaged and one of the kinds enabled in its details is decelerating, one press of cruise `+` or a gas tap (accelerator pressed for under 0.4 s) cancels that deceleration. The input does not raise the set speed (neither `+1` nor the gas-tap `+10`), and the cancel applies to that one camera or bump; the next one decelerates again. While disengaged, below about 18 km/h, or when that kind is not actually decelerating, `+` and the gas tap keep their normal resume/engage/set-speed roles. Fixed, signal and rear cameras and section enforcement cannot be cancelled. Off by default.
+When enabled, while engaged and one of the kinds enabled in its details is decelerating, one press of cruise `+` or a gas tap (accelerator pressed for under 0.4 s) cancels that deceleration. The input does not raise the set speed (neither `+1` nor the gas-tap `+10`), and the cancel applies to that one camera or bump; the next one decelerates again. While disengaged, below about 18 km/h, or when that kind is not actually decelerating, `+` and the gas tap keep their normal resume/engage/set-speed roles. Signal and rear cameras, warnings without a preview and section enforcement cannot be cancelled; fixed cameras only when the fixed-camera kind is on. Off by default.
 
 Per-kind toggles (in the setting's detail screen, on by default so turning on the master enables all):
 
@@ -111,6 +111,7 @@ Per-kind toggles (in the setting's detail screen, on by default so turning on th
 |---|---|
 | `VehicleNaviDecelCancelBox` | Mobile-camera box |
 | `VehicleNaviDecelCancelMobileZone` | Mobile enforcement zone; matters only when `AutoNaviSpeedCtrlMode` is `3`, so zones decelerate |
+| `VehicleNaviDecelCancelFixed` | Fixed speed camera (preview kind 0, no rear flag). Real enforcement cameras, so **off by default** — it must be turned on separately even with the master on. Not applied inside a section, where `+` is the section unlock |
 | `VehicleNaviDecelCancelBump` | Stock-navigation speed bump. The input is used only while the bump target (from the speed-bump settings) is below the set speed, i.e. actually decelerating, and cancels the nearest bump only |
 
 ### `VehicleNaviSectionAvgControl`

@@ -1,10 +1,11 @@
 from opendbc.car.hyundai.navi_speedcam import (
-  CLASS_BOX, CLASS_HARD, CLASS_MOBILE_ZONE, SpeedcamPolicy, decode_camera_profile,
+  CLASS_BOX, CLASS_FIXED, CLASS_HARD, CLASS_MOBILE_ZONE, SpeedcamPolicy, decode_camera_profile,
 )
 
 
-def _update(policy, distance, active=True, speed=60, accel=False, mobile_decel=False, skip_box=False, skip_mobile=False):
-  return policy.update(active, speed, distance, accel, mobile_decel, skip_box, skip_mobile)
+def _update(policy, distance, active=True, speed=60, accel=False, mobile_decel=False, skip_box=False, skip_mobile=False,
+            skip_fixed=False):
+  return policy.update(active, speed, distance, accel, mobile_decel, skip_box, skip_mobile, skip_fixed)
 
 
 def test_decode_uses_low_nine_bits_and_keeps_rear_flag():
@@ -43,7 +44,7 @@ def test_fixed_camera_inside_mobile_zone_always_decelerates():
   policy.add_preview(0xD0, 1682, -1318.0)
   policy.add_preview(0xD3, 1714, -1316.0)
   assert _update(policy, 0.0, accel=True, skip_mobile=True, skip_box=True) == (False, False)
-  assert policy.warning_class == CLASS_HARD
+  assert policy.warning_class == CLASS_FIXED
 
 
 def test_precise_fixed_preview_upgrades_a_running_mobile_zone():
@@ -52,7 +53,7 @@ def test_precise_fixed_preview_upgrades_a_running_mobile_zone():
   _update(policy, 0.0)
   policy.add_preview(0xD0, 200, 100.0)
   assert _update(policy, 100.0) == (False, False)
-  assert policy.warning_class == CLASS_HARD
+  assert policy.warning_class == CLASS_FIXED
 
 
 def test_unknown_warning_is_hard():
@@ -146,3 +147,27 @@ def test_precise_repeat_replaces_a_horizon_bound_position():
   assert (p["target"], p["saturated"]) == (1990.0, False)
   policy.add_preview(0xD3, 1990, 12.0)                    # a later saturated repeat keeps the precise target
   assert (p["target"], p["saturated"]) == (1990.0, False)
+
+
+def test_fixed_camera_skip_needs_its_own_toggle():
+  policy = SpeedcamPolicy()
+  policy.add_preview(0xD0, 366, 0.0)                      # kind 0 fixed @60 at the warning lead
+  assert _update(policy, 0.0, accel=True, skip_box=True, skip_mobile=True) == (False, False)
+  assert policy.warning_class == CLASS_FIXED
+  assert _update(policy, 10.0, accel=True, skip_fixed=True) == (True, True)
+  assert _update(policy, 20.0, accel=True, skip_fixed=True) == (True, False)
+
+
+def test_signal_rear_and_unknown_never_skip_with_the_fixed_toggle():
+  signal = SpeedcamPolicy()
+  signal.add_preview(0xD1, 366, 0.0)                      # kind 1 signal-and-speed
+  signal.add_preview(0xD0, 366, 0.0)                      # with a fixed camera at the same spot
+  assert _update(signal, 0.0, accel=True, skip_fixed=True) == (False, False)
+  assert signal.warning_class == CLASS_HARD
+
+  rear = SpeedcamPolicy()
+  rear.add_preview(0x642D0, 366, 0.0)                     # kind 0 + rear flag
+  assert _update(rear, 0.0, accel=True, skip_fixed=True) == (False, False)
+
+  unknown = SpeedcamPolicy()                              # no preview at all
+  assert _update(unknown, 0.0, accel=True, skip_fixed=True) == (False, False)
