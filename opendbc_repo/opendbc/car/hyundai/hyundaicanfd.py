@@ -870,6 +870,17 @@ def _apply_cluster_lane_lines(values, CS, lat_active, desire):
     _apply_lane_desire(values, desire)
 
 
+# ADRV_0x1ea AUTOLANECHANGE_MSG 1 "Check surrounding conditions" (the cluster has no "turn" message)
+LEVER_TURN_CLUSTER_MSG = 1
+
+
+def _apply_lever_turn_msg(values, md):
+  """BlinkerLatchedTurn: while a latched lever makes the turn desire, say so in the cluster's lane-change slot."""
+  meta = getattr(md, "meta", None) if md is not None else None
+  if getattr(meta, "leverTurn", False):
+    values["AUTOLANECHANGE_MSG"] = LEVER_TURN_CLUSTER_MSG
+
+
 def _normalize_cluster_corner_objects(values, *, ccnc=False):
   # EV5 can report 0x162 corner geometry with DETECT=0 while 0x1ea marks it visible.
   # Use nonzero corner distance to show a gray car, including those hidden types.
@@ -1130,6 +1141,7 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
         values['RIGHT_BLINK_HOLD'] = 1 if hold == 4 else 0
 
         _apply_cluster_lane_lines(values, CS, lat_active, desire)
+        _apply_lever_turn_msg(values, md)
         _normalize_cluster_corner_objects(values)
 
         ret.append(packer.make_can_msg("ADRV_0x1ea", CAN.ECAN, values, rx_counter = rx_counter))

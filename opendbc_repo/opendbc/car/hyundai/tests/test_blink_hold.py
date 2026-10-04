@@ -1,6 +1,6 @@
 from types import SimpleNamespace as NS
 
-from opendbc.car.hyundai.hyundaicanfd import _blink_hold_side
+from opendbc.car.hyundai.hyundaicanfd import _apply_lever_turn_msg, _blink_hold_side
 
 
 def _md(y_left, y_right):
@@ -61,3 +61,14 @@ def test_blink_hold_request_overrides_the_release_of_the_current_change():
   assert [_blink_hold_side(_md(*f), 3, state) for f in frames][-1] == 0      # released at 60 %
   md = NS(laneLines=_md(-2.4, 1.0).laneLines, meta=NS(laneChangeBlinkerHold="left"))
   assert _blink_hold_side(md, 3, state) == 3
+
+
+def test_lever_turn_shows_the_cluster_message_only_when_flagged():
+  values = {"AUTOLANECHANGE_MSG": 0}
+  _apply_lever_turn_msg(values, NS(meta=NS(leverTurn=False)))
+  assert values["AUTOLANECHANGE_MSG"] == 0
+  _apply_lever_turn_msg(values, None)
+  _apply_lever_turn_msg(values, NS(meta=NS()))                        # older schema
+  assert values["AUTOLANECHANGE_MSG"] == 0
+  _apply_lever_turn_msg(values, NS(meta=NS(leverTurn=True)))
+  assert values["AUTOLANECHANGE_MSG"] == 1

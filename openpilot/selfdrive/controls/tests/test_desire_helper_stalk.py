@@ -233,6 +233,27 @@ class TestBlinkerLatchedTurn:
     self.helper.blinkerLatchedTurn = 50 / 3.6
     self.lever_on(2, v_kph=50.0, steps=3)
     assert self.helper.maneuver_type == "turn"
+    assert self.helper.lever_turn                           # cluster message: the lever made this turn
+
+  def test_lever_turn_flag_only_for_a_lever_made_turn(self):
+    # off: a navigation turn guessed by the classifier is a turn, but not the lever's
+    self.carrot_man.atcType = "turn left"
+    self.helper.left.dist_to_edge_far = 5.0
+    self.lever_on(2, v_kph=80.0, steps=3)
+    assert self.helper.maneuver_type == "turn" and not self.helper.lever_turn
+    # on, one-touch at 45 km/h: a lane change, no message
+    self.setup_method()
+    self.helper.blinkerLatchedTurn = 50 / 3.6
+    self.lever_on(1, steps=2)
+    self.update(lever=0, v_kph=45.0)
+    assert self.helper.maneuver_type == "lane_change" and not self.helper.lever_turn
+    # the lever released: the message goes with the turn
+    self.setup_method()
+    self.helper.blinkerLatchedTurn = 50 / 3.6
+    self.lever_on(2, steps=3)
+    assert self.helper.lever_turn
+    self.update(left_blinker=False, lever=0, v_kph=45.0)
+    assert not self.helper.lever_turn
 
 
 class TestLaneChangeLeverWait:

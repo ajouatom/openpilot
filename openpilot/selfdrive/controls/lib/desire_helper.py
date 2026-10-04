@@ -65,6 +65,7 @@ class DesireHelper:
     self.lever_wait = LeverRequestWait()
     self.crossing = LaneCrossing()
     self.blinker_hold_direction = LaneChangeDirection.none  # modelV2.meta.laneChangeBlinkerHold
+    self.lever_turn = False  # modelV2.meta.leverTurn: the turn desire comes from a latched lever
 
     # keep pulse
     self.keep_pulse_timer = 0.0
@@ -264,6 +265,7 @@ class DesireHelper:
     trailer_maneuver_blocked = carstate.trailerConnected
 
     prev_lane_change_state = self.lane_change_state
+    lever_decided_turn = False
 
     # per-side compute (좌/우 모두)
     self._process_sides(carstate, modeldata, radarState)
@@ -372,6 +374,7 @@ class DesireHelper:
         lever_type, lever_undecided = lever_maneuver(lever, v_ego, self.blinkerLatchedTurn)
       if lever_type is not None:
         new_type = lever_type
+      lever_decided_turn = lever_type == "turn"
 
       if trailer_maneuver_blocked and new_type in ("lane_change", "turn"):
         new_type = "none"
@@ -559,6 +562,7 @@ class DesireHelper:
       self.lane_change_direction = self.turn_direction
     else:
       self.desire = DESIRES[self.lane_change_direction][self.lane_change_state]
+    self.lever_turn = lever_decided_turn and self.turn_direction != TurnDirection.none
 
     # keep pulse
     if self.lane_change_state in (LaneChangeState.off, LaneChangeState.laneChangeStarting):
