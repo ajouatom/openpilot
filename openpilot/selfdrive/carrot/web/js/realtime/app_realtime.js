@@ -770,12 +770,8 @@ async function syncCarrotVisionAvailability() {
   try {
     const runtime = await fetchCarrotDeviceRuntimeState();
     if (isCarrotRecordedReplayActive()) return true;
-    const clusterHudActive = Number(runtime.clusterHud || 0) > 0;
-    const available = !clusterHudActive && (isCarrotVisionTestActive() || runtime.carrotVisionEnabled === 1);
-    const unavailableMessage = clusterHudActive
-      ? getUIText("vision_unavailable_cluster_hud", "Carrot Vision is unavailable while Cluster HUD is enabled.")
-      : undefined;
-    updateCarrotVisionAvailabilityUi(available, unavailableMessage);
+    const available = isCarrotVisionTestActive() || runtime.carrotVisionEnabled === 1;
+    updateCarrotVisionAvailabilityUi(available);
     if (runtime.changed) syncCarrotRealtimeLifecycle(true);
     return available;
   } catch (e) {

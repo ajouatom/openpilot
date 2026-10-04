@@ -39,6 +39,8 @@ The Drive page displays live video and driving state. Its usual layout contains 
 
 ### Live video and HUD
 
+With `CarrotVisionEnabled` on, you can start the web camera view while the external HUD is enabled. Simultaneous video use may increase device load; if video stutters, stop the web camera view and compare.
+
 - Select `Start Drive Vision` to begin connecting to the camera stream.
 - The HUD may show vehicle speed, set speed, speed limit, following gap, lead vehicle, and driving alerts.
 - Enable or disable AR in `Tools > Web Settings`.

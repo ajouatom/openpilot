@@ -287,6 +287,8 @@ VW MEB(ID.4 포함)에도 수동 조향비와 학습 비율이 적용됩니다. 
 
 화면 표시에는 34개 항목이 있습니다. 외부 HUD 항목은 별도 하드웨어의 화면 구성과 출력 방식을 조정합니다.
 
+`CarrotVisionEnabled`를 켜면 외부 HUD와 웹 카메라뷰를 함께 사용할 수 있습니다. 동시 영상 사용 시 기기 부하가 증가할 수 있습니다. 사용 방법은 [웹당근 안내](carrot-web.md)를 참고하세요.
+
 | 중분류 | 파라미터 | 용도 |
 |---|---|---|
 | 정보 표시 | `ShowDebugUI`, `ShowTpms`, `ShowDateTime`, `ShowPathEnd`, `ShowDeviceState`, `ShowLaneInfo`, `ShowRadarInfo`, `ShowRouteInfo`, `ShowPlotMode` | 주행 화면의 디버그, 타이어, 시간, 차선, 레이더와 경로 정보 |
