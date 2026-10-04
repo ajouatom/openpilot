@@ -770,6 +770,19 @@ BLINK_HOLD_RELEASE_PROGRESS = 0.6  # release once the car centre has moved this 
 def _blink_hold_side(md, desire, state):
   """Turn-signal hold for ADRV_0x1ea: 3 (left), 4 (right) or 0.
 
+  DesireHelper's request (modelV2.meta.laneChangeBlinkerHold) wins: it holds the lamp while a lever-requested
+  change waits (LaneChangeLeverWait) and while a next change asked for during this one is queued. Otherwise the
+  current change decides (_blink_hold_change).
+  """
+  change_hold = _blink_hold_change(md, desire, state)
+  meta = getattr(md, "meta", None) if md is not None else None
+  requested = str(getattr(meta, "laneChangeBlinkerHold", "none"))
+  return 3 if requested == "left" else 4 if requested == "right" else change_hold
+
+
+def _blink_hold_change(md, desire, state):
+  """Hold for the current lane change: 3 (left), 4 (right) or 0.
+
   Held for the whole confirmed lane change (desire 3/4 = starting + finishing, same as the green
   cluster lane) instead of the model's desireState > 0.9, which falls ~2 s before the change ends and
   let the lamp stop mid-change (2026-09-19 drive: hold covered 49-65 % of the change). Released once the
@@ -779,10 +792,7 @@ def _blink_hold_side(md, desire, state):
   """
   if desire not in (3, 4):
     state.update(crossed=False, released=False, y_min=None)
-    # before the change: DesireHelper may hold the lamp while a lever-requested change waits (LaneChangeLeverWait)
-    meta = getattr(md, "meta", None) if md is not None else None
-    pre_hold = str(getattr(meta, "laneChangeBlinkerHold", "none"))
-    return 3 if pre_hold == "left" else 4 if pre_hold == "right" else 0
+    return 0
   if state.get("released"):
     return 0
   lines = getattr(md, "laneLines", None) if md is not None else None

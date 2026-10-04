@@ -12,10 +12,10 @@ from openpilot.selfdrive.controls.lib.desire_lib.constants import (
 )
 from openpilot.selfdrive.controls.lib.desire_lib.side_state import SideState
 from openpilot.selfdrive.controls.lib.desire_lib.maneuver_classifier import classify_maneuver_type
-from openpilot.selfdrive.controls.lib.desire_lib.lever import LeverRequestWait, lever_maneuver
+from openpilot.selfdrive.controls.lib.desire_lib.lever import LEVER_REQUEST_WAIT_S, LaneCrossing, LeverRequestWait, lever_maneuver
 
-# A lever press this early in laneChangeFinishing is still the driver re-lighting the lamp of the change
-# that just crossed, not a request for the next one.
+# Without a model-detected crossing, a lever press this early in laneChangeFinishing is still the driver
+# re-lighting the lamp of the change that just crossed, not a request for the next one.
 STALK_QUEUE_GUARD_S = 0.3
 
 
@@ -61,7 +61,9 @@ class DesireHelper:
     self.stalk_counts = None
     self.queued_lane_change = BLINKER_NONE
     self.finishing_timer = 0.0
+    self.queued_wait = 0.0
     self.lever_wait = LeverRequestWait()
+    self.crossing = LaneCrossing()
     self.blinker_hold_direction = LaneChangeDirection.none  # modelV2.meta.laneChangeBlinkerHold
 
     # keep pulse
@@ -260,6 +262,8 @@ class DesireHelper:
     v_ego = carstate.vEgo
     below_lane_change_speed = v_ego < LANE_CHANGE_SPEED_MIN
     trailer_maneuver_blocked = carstate.trailerConnected
+
+    prev_lane_change_state = self.lane_change_state
 
     # per-side compute (좌/우 모두)
     self._process_sides(carstate, modeldata, radarState)
@@ -479,16 +483,22 @@ class DesireHelper:
                       self.lane_change_state = LaneChangeState.laneChangeStarting
 
         elif self.lane_change_state == LaneChangeState.laneChangeStarting:
-          # Lever presses while crossing are ignored (re-lighting the lamp must not ask for a second lane).
+          # A press before the car centre crossed the line re-lights this change's lamp and is ignored (never a second
+          # lane at once); one after it asks for the next change. The model keeps the lane-change probability up
+          # ~1.5 s past the crossing, so waiting for laneChangeFinishing missed them (2026-10-05 drive: 4/4 next-lane
+          # presses came 0.1-1.1 s after the crossing, all still in laneChangeStarting).
+          since_crossing = self.crossing.update(modeldata, self.lane_change_direction == LaneChangeDirection.left)
+          if stalk_press != BLINKER_NONE and since_crossing >= 0.0:
+            self.queued_lane_change = stalk_press
           self.lane_change_ll_prob = max(self.lane_change_ll_prob - 2 * DT_MDL, 0.0)
           if lane_change_prob < 0.02 and self.lane_change_ll_prob < 0.01:
             self.lane_change_state = LaneChangeState.laneChangeFinishing
             self.finishing_timer = 0.0
-            self.queued_lane_change = BLINKER_NONE
 
         elif self.lane_change_state == LaneChangeState.laneChangeFinishing:
           self.finishing_timer += DT_MDL
-          if stalk_press != BLINKER_NONE and self.finishing_timer >= STALK_QUEUE_GUARD_S:
+          crossed = self.crossing.since >= 0.0  # the crossing was seen during laneChangeStarting
+          if stalk_press != BLINKER_NONE and (crossed or self.finishing_timer >= STALK_QUEUE_GUARD_S):
             self.queued_lane_change = stalk_press
           self.lane_change_ll_prob = min(self.lane_change_ll_prob + DT_MDL, 1.0)
           if self.lane_change_ll_prob > 0.99:
@@ -498,9 +508,9 @@ class DesireHelper:
               # Holding the blinker through the change still needs torque for the next one; a lever press
               # made during finishing (same side as the lamp) is an explicit request and does not.
               self.next_lane_change = not (driver_enabled and self.queued_lane_change == blinker_state)
+              self.queued_wait = 0.0
             else:
               self.lane_change_state = LaneChangeState.off
-            self.queued_lane_change = BLINKER_NONE
 
     # timer
     if self.lane_change_state in (LaneChangeState.off, LaneChangeState.preLaneChange):
@@ -524,7 +534,22 @@ class DesireHelper:
       self.lane_change_state = LaneChangeState.off
       self.blinker_ignore = True
 
+    if self.lane_change_state in (LaneChangeState.off, LaneChangeState.preLaneChange):
+      self.crossing = LaneCrossing()
+    # A queued request lives until the next change starts; waiting in preLaneChange (blocked) it gets the same
+    # 5 flashes as a one-touch press, and it ends if the lamp side changes or everything goes off.
+    if self.lane_change_state == LaneChangeState.preLaneChange and self.queued_lane_change != BLINKER_NONE:
+      self.queued_wait += DT_MDL
+    if self.lane_change_state == LaneChangeState.off or        (self.lane_change_state == LaneChangeState.laneChangeStarting and
+        prev_lane_change_state == LaneChangeState.preLaneChange) or        (self.lane_change_state == LaneChangeState.preLaneChange and
+        (self.queued_wait >= LEVER_REQUEST_WAIT_S or self.queued_lane_change != blinker_state)):
+      self.queued_lane_change = BLINKER_NONE
+
     hold = self.lever_wait.update_hold(self.lane_change_state, blinker_state)
+    if self.queued_lane_change != BLINKER_NONE:
+      # The lamp of a press made during a change may stop before that change ends (2026-10-05: ~2.5 s after the
+      # press), which would drop the request just as it becomes due: keep it lit until the queued change starts.
+      hold = self.queued_lane_change
     self.blinker_hold_direction = {BLINKER_LEFT: LaneChangeDirection.left,
                                    BLINKER_RIGHT: LaneChangeDirection.right}.get(hold, LaneChangeDirection.none)
 

@@ -3,6 +3,7 @@
 Both rules are opt-in and live here so the lane-change FSM only asks two questions:
 - lever_maneuver(): BlinkerLatchedTurn - the lever decides turn / lane change.
 - LeverRequestWait: LaneChangeLeverWait - a one-touch press asks for one lane change for a fixed number of flashes.
+- LaneCrossing: when the car centre crossed the line, so a press after it can ask for the next lane change.
 """
 from openpilot.common.realtime import DT_MDL
 from openpilot.selfdrive.controls.lib.desire_lib.constants import BLINKER_NONE, LaneChangeState
@@ -72,3 +73,31 @@ class LeverRequestWait:
     waiting = lane_change_state == LaneChangeState.preLaneChange and blinker_state == self.side
     self.hold_side = self.side if waiting else BLINKER_NONE
     return self.hold_side
+
+
+class LaneCrossing:
+  """Seconds since the car centre crossed the line toward the change side (-1 before), from the model lane lines.
+
+  The change-side line comes within NEAR_M of the centre, then the model relabels it and it jumps JUMP_M further
+  out; the relabel is spread over 2-3 frames, so compare with the closest approach rather than the previous frame.
+  Same rule as the turn-signal release in hyundaicanfd._blink_hold_side. Without lane lines it never fires.
+  """
+  NEAR_M = 1.0
+  JUMP_M = 1.5
+
+  def __init__(self):
+    self.y_min = None
+    self.since = -1.0
+
+  def update(self, model, left: bool) -> float:
+    if self.since >= 0.0:
+      self.since += DT_MDL
+      return self.since
+    lines = getattr(model, "laneLines", None)
+    if lines is None or len(lines) < 3 or not len(lines[1].y) or not len(lines[2].y):
+      return self.since
+    y = abs(float(lines[1 if left else 2].y[0]))
+    self.y_min = y if self.y_min is None else min(self.y_min, y)
+    if self.y_min < self.NEAR_M and y - self.y_min > self.JUMP_M:
+      self.since = 0.0
+    return self.since

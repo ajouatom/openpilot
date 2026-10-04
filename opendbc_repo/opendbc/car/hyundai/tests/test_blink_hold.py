@@ -52,3 +52,12 @@ def test_blink_hold_before_the_change_follows_the_lever_wait():
   assert _blink_hold_side(NS(laneLines=[], meta=NS(laneChangeBlinkerHold="right")), 0, state) == 4
   assert _blink_hold_side(NS(laneLines=[], meta=NS(laneChangeBlinkerHold="none")), 0, state) == 0
   assert _blink_hold_side(NS(laneLines=[]), 0, state) == 0          # older schema without the field
+
+
+def test_blink_hold_request_overrides_the_release_of_the_current_change():
+  # a next change queued while this one crosses keeps the lamp lit past the 60 % release
+  state = {}
+  frames = [(-1.75, 1.75), (-0.6, 2.8), (-0.28, 3.04), (-3.46, 0.12), (-2.62, 0.76)]
+  assert [_blink_hold_side(_md(*f), 3, state) for f in frames][-1] == 0      # released at 60 %
+  md = NS(laneLines=_md(-2.4, 1.0).laneLines, meta=NS(laneChangeBlinkerHold="left"))
+  assert _blink_hold_side(md, 3, state) == 3

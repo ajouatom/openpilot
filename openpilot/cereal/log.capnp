@@ -1097,7 +1097,7 @@ struct ModelDataV2 {
     modelTurnSpeed @17 :Float32;
     laneChangeAvailableLeft @18 :Bool;
     laneChangeAvailableRight @19 :Bool;
-    laneChangeBlinkerHold @20 :LaneChangeDirection;  # carrot: hold this turn signal while a lever-requested change waits
+    laneChangeBlinkerHold @20 :LaneChangeDirection;  # carrot: hold this turn signal while a lever-requested change waits or is queued
 
     deprecated :group {
       brakeDisengageProb @2 :Float32;

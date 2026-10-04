@@ -38,14 +38,15 @@ class TestDesireHelperStalkRequest:
     self.carrot_man = SimpleNamespace(atcType="", carrotCmdIndex=0, carrotCmd="", carrotArg="")
     self.left_count = 0
 
-  def update(self, left_blinker=True, lane_change_prob=0.5, press=False, counters=True, lever=0, v_kph=90.0):
+  def update(self, left_blinker=True, lane_change_prob=0.5, press=False, counters=True, lever=0, v_kph=90.0, lines=None):
     if press:
       self.left_count = (self.left_count + 1) % 256
     car = SimpleNamespace(canValid=True, leftBlinker=left_blinker, rightBlinker=False, vEgo=v_kph / 3.6, aEgo=0.0,
                           trailerConnected=False, steeringTorque=0.0, steeringPressed=False, blinkerLever=lever)
     if counters:
       car.leftBlinkerStalkCount, car.rightBlinkerStalkCount = self.left_count, 0
-    self.helper.update(car, SimpleNamespace(), True, lane_change_prob, self.carrot_man, SimpleNamespace())
+    model = SimpleNamespace(laneLines=[SimpleNamespace(y=[y]) for y in (-5.0, *lines, 5.0)]) if lines else SimpleNamespace()
+    self.helper.update(car, model, True, lane_change_prob, self.carrot_man, SimpleNamespace())
     return self.helper.lane_change_state
 
   def start_and_cross(self, counters=True):
@@ -88,6 +89,68 @@ class TestDesireHelperStalkRequest:
     assert self.finish(press_at_s=STALK_QUEUE_GUARD_S + 0.2) == LCS.preLaneChange
     assert not self.helper.next_lane_change
     assert self.update() == LCS.laneChangeStarting          # one lane at a time: starts after the first ended
+
+  # left change, 2026-10-05 drive: the left line closes in, the model relabels it, then the car settles in the new lane
+  CROSSING = [(-1.3, 1.9), (-0.9, 2.2), (-0.5, 2.7), (-0.34, 2.84), (-0.41, 2.83), (-2.5, 0.47), (-2.94, 0.16)]
+
+  def cross(self, press_after_s=None, press_before=False):
+    """Still in laneChangeStarting: the car centre crosses the left line; optionally press before or after it."""
+    for i, lines in enumerate(self.CROSSING):
+      self.update(lines=lines, press=press_before and i == 1)
+    t = DT_MDL
+    for _ in range(int(1.2 / DT_MDL)):                      # the model keeps the change probability up after it
+      press = press_after_s is not None and abs(t - press_after_s) < DT_MDL / 2
+      self.update(lines=(-2.6, 0.6), press=press)
+      t += DT_MDL
+    assert self.helper.lane_change_state == LCS.laneChangeStarting
+
+  def test_press_after_the_crossing_queues_the_next_change(self):
+    self.start_and_cross()
+    self.cross(press_after_s=0.1)                          # 2026-10-05 #1: pressed 0.1 s after the relabel
+    assert self.helper.queued_lane_change == 1
+    assert self.helper.blinker_hold_direction == LCD.left  # keep the lamp lit until the queued change starts
+    assert self.finish() == LCS.preLaneChange
+    assert not self.helper.next_lane_change
+    assert self.update() == LCS.laneChangeStarting
+
+  def test_queued_request_keeps_the_lamp_until_the_next_change_starts(self):
+    self.start_and_cross()
+    self.cross(press_after_s=0.5)
+    side = self.helper.left
+    side.bsd_hold_counter, side.lane_change_available = 40, False   # BSD when the next change becomes due
+    assert self.finish() == LCS.preLaneChange
+    assert self.helper.blinker_hold_direction == LCD.left
+    for _ in range(int(2.0 / DT_MDL)):
+      self.update()
+    assert self.helper.blinker_hold_direction == LCD.left     # still waiting, lamp held
+    side.bsd_hold_counter, side.lane_change_available = 0, True
+    assert self.update() == LCS.laneChangeStarting
+    assert self.helper.queued_lane_change == 0                # the queued change started
+    self.update()
+    assert self.helper.blinker_hold_direction == LCD.none
+
+  def test_blocked_queued_request_is_dropped_after_five_flashes(self):
+    self.start_and_cross()
+    self.cross(press_after_s=0.5)
+    side = self.helper.left
+    side.bsd_hold_counter, side.lane_change_available = 40, False
+    self.finish()
+    for _ in range(int((LEVER_REQUEST_WAIT_S + 0.2) / DT_MDL)):
+      self.update()
+    assert self.helper.queued_lane_change == 0
+    assert self.helper.blinker_hold_direction == LCD.none
+
+  def test_press_before_the_crossing_is_ignored(self):
+    self.start_and_cross()
+    self.cross(press_before=True)
+    assert self.helper.queued_lane_change == 0
+    assert self.finish() == LCS.preLaneChange
+    assert self.helper.next_lane_change
+
+  def test_press_late_in_the_change_after_the_crossing_still_queues(self):
+    self.start_and_cross()
+    self.cross(press_after_s=1.1)
+    assert self.helper.queued_lane_change == 1
 
   def test_press_right_after_the_crossing_is_still_the_same_change(self):
     self.start_and_cross()
