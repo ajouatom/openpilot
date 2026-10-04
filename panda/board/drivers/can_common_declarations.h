@@ -45,6 +45,7 @@ extern bool can_loopback;
 
 // ******************* functions prototypes *********************
 bool can_init(uint8_t can_number);
+void can_set_mode(uint8_t mode);
 void process_can(uint8_t can_number);
 
 // ********************* instantiate queues *********************

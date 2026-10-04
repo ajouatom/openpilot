@@ -8,19 +8,29 @@ static bool fdcan_request_init(FDCAN_GlobalTypeDef *FDCANx) {
   bool ret = true;
   // Exit from sleep mode
   FDCANx->CCCR &= ~(FDCAN_CCCR_CSR);
-  while ((FDCANx->CCCR & FDCAN_CCCR_CSA) == FDCAN_CCCR_CSA);
-
-  // Request init
-  uint32_t timeout_counter = 0U;
-  FDCANx->CCCR |= FDCAN_CCCR_INIT;
-  while ((FDCANx->CCCR & FDCAN_CCCR_INIT) == 0U) {
-    // Delay for about 1ms
+  uint32_t sleep_timeout_counter = 0U;
+  while ((FDCANx->CCCR & FDCAN_CCCR_CSA) == FDCAN_CCCR_CSA) {
     delay(10000);
-    timeout_counter++;
-
-    if (timeout_counter >= CAN_INIT_TIMEOUT_MS){
+    sleep_timeout_counter++;
+    if (sleep_timeout_counter >= CAN_INIT_TIMEOUT_MS) {
       ret = false;
       break;
+    }
+  }
+
+  if (ret) {
+    // Request init
+    uint32_t timeout_counter = 0U;
+    FDCANx->CCCR |= FDCAN_CCCR_INIT;
+    while ((FDCANx->CCCR & FDCAN_CCCR_INIT) == 0U) {
+      // Delay for about 1ms
+      delay(10000);
+      timeout_counter++;
+
+      if (timeout_counter >= CAN_INIT_TIMEOUT_MS){
+        ret = false;
+        break;
+      }
     }
   }
   return ret;

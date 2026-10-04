@@ -18,6 +18,18 @@ int pending_can_live = 0;
 int can_silent = ALL_CAN_SILENT;
 bool can_loopback = false;
 
+// Record actual mux applications, including direct USB requests and orientation
+// changes. Safety policy alone does not establish the physical CAN routing.
+#ifndef PANDA_JUNGLE
+static uint8_t applied_can_mode = 0xFFU;
+static uint8_t applied_can_harness_status = 0xFFU;
+void can_set_mode(uint8_t mode) {
+  current_board->set_can_mode(mode);
+  applied_can_mode = mode;
+  applied_can_harness_status = harness.status;
+}
+#endif
+
 // ********************* instantiate queues *********************
 #define can_buffer(x, size) \
   static CANPacket_t elems_##x[size]; \
