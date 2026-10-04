@@ -15,6 +15,8 @@ from openpilot.selfdrive.controls.lib.desire_lib.maneuver_classifier import clas
 # A lever press this early in laneChangeFinishing is still the driver re-lighting the lamp of the change
 # that just crossed, not a request for the next one.
 STALK_QUEUE_GUARD_S = 0.3
+# BlinkerLatchedTurn: up to this speed the lever decides the manoeuvre (latched = turn, one-touch = lane change).
+LEVER_TURN_SPEED_MAX = 50 / 3.6
 
 
 class DesireHelper:
@@ -68,6 +70,7 @@ class DesireHelper:
     self.laneChangeBsd = 0
     self.laneLineCheck = 0
     self.laneChangeDelay = 0.0
+    self.blinkerLatchedTurn = False
 
     # misc
     self.prev_desire_enabled = False
@@ -86,6 +89,7 @@ class DesireHelper:
       self.laneChangeBsd = self.params.get_int("LaneChangeBsd")
       self.laneLineCheck = self.params.get_int("LaneLineCheck")
       self.laneChangeDelay = self.params.get_float("LaneChangeDelay") * 0.1
+      self.blinkerLatchedTurn = self.params.get_bool("BlinkerLatchedTurn")
 
   def _check_desire_state(self, modeldata, carstate, maneuver_type):
     desire_state = modeldata.meta.desireState
@@ -350,6 +354,14 @@ class DesireHelper:
       else:
         new_type = "none"
 
+      # BlinkerLatchedTurn: the lever replaces the speed/lane-line guess. A latch passes through the one-touch
+      # detent (~0.1 s), so a lane change must not start while the lever is still there (lever_undecided).
+      lever = getattr(carstate, "blinkerLever", 0)
+      lever_mode = self.blinkerLatchedTurn and driver_enabled and side is not None and v_ego <= LEVER_TURN_SPEED_MAX
+      lever_undecided = lever_mode and lever == 1
+      if lever_mode:
+        new_type = "turn" if lever == 2 else "lane_change"
+
       if trailer_maneuver_blocked and new_type in ("lane_change", "turn"):
         new_type = "none"
 
@@ -436,7 +448,7 @@ class DesireHelper:
                                     not atc_lane_change_retry_line_blocked
               start_gate = (side.lane_change_available_geom and self.lane_change_delay == 0) or \
                            side.lane_line_info_edge_detect or solid_line_blocked or block_released_auto or atc_line_release
-              if start_gate:
+              if start_gate and not lever_undecided:
                 if solid_line_blocked:
                   if atc_line_release or (torque_applied and not (bsd_active and block_lanechange_bsd)):
                     self.lane_change_state = LaneChangeState.laneChangeStarting

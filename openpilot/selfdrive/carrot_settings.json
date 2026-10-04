@@ -148,6 +148,7 @@
                 "LaneChangeDelay",
                 "LaneChangeBsd",
                 "LaneLineCheck",
+                "BlinkerLatchedTurn",
                 "AutoTurnControl",
                 "AutoTurnControlSpeedTurn",
                 "AutoTurnControlTurnEnd",
@@ -2465,6 +2466,24 @@
       "max": 1,
       "default": 0,
       "unit": 1
+    },
+    {
+      "group": "조향일반",
+      "name": "BlinkerLatchedTurn",
+      "title": "깜빡이 레버로 회전/차선변경 구분",
+      "descr": "현대 CAN-FD(0x3C1 레버 신호) 전용. 50km/h 이하에서 레버를 끝까지 걸면(고정식) 좌/우회전, 반만 밀면(원터치) 차선변경으로 정합니다. 레버가 원터치 위치에 있는 동안은 차선변경을 시작하지 않습니다(고정식도 걸리기 전 약 0.1초 그 위치를 지나감). 50km/h 초과에서는 기존 자동 판단을 씁니다.",
+      "egroup": "LAT",
+      "etitle": "Turn-signal lever selects turn / lane change",
+      "edescr": "Hyundai CAN-FD only (0x3C1 lever signal). At or below 50 km/h a latched lever means a left/right turn and a one-touch (half) press means a lane change. No lane change starts while the lever is still in the one-touch position (a latch passes through it for about 0.1 s). Above 50 km/h the existing automatic guess is used.",
+      "cgroup": "转向",
+      "ctitle": "转向灯拨杆区分转弯/变道",
+      "cdescr": "仅限现代 CAN-FD（0x3C1 拨杆信号）。50km/h 以下时，拨杆拨到底（锁定）为左/右转弯，半拨（单触）为变道。拨杆仍在单触位置时不开始变道（锁定前也会经过该位置约 0.1 秒）。超过 50km/h 时使用原有自动判断。",
+      "min": 0,
+      "max": 1,
+      "default": 0,
+      "unit": 1,
+      "control": "toggle",
+      "risk": "high"
     },
     {
       "group": "조향일반",

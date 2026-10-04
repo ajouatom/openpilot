@@ -11,7 +11,7 @@ def _stalk_state():
 
 
 def _counts(cs, left, right):
-  cs.blinker_stalks = {"LEFT_BLINKER": left, "RIGHT_BLINKER": right}
+  cs.blinker_stalks = {"LEFT_BLINKER": left, "RIGHT_BLINKER": right, "LEFT_BLINKER_TAP": 0, "RIGHT_BLINKER_TAP": 0}
   ret = structs.CarState()
   cs._update_blinker_stalks(ret)
   return ret.leftBlinkerStalkCount, ret.rightBlinkerStalkCount
@@ -35,3 +35,20 @@ def test_stalk_counter_wraps_and_survives_a_missing_message():
   ret = structs.CarState()
   cs._update_blinker_stalks(ret)
   assert (ret.leftBlinkerStalkCount, ret.rightBlinkerStalkCount) == (0, 0)
+
+
+def test_lever_position_one_touch_vs_latched():
+  # 2026-10-04 lever test (route 0000048b): one-touch sets *_BLINKER and *_TAP together; a latch keeps
+  # *_BLINKER only, after passing the one-touch detent for ~0.1 s on the right side.
+  cs = _stalk_state()
+  def lever(left, right, left_tap, right_tap):
+    cs.blinker_stalks = {"LEFT_BLINKER": left, "RIGHT_BLINKER": right, "LEFT_BLINKER_TAP": left_tap, "RIGHT_BLINKER_TAP": right_tap}
+    ret = structs.CarState()
+    cs._update_blinker_stalks(ret)
+    return ret.blinkerLever
+  assert lever(0, 0, 0, 0) == 0
+  assert lever(1, 0, 1, 0) == 1                                     # left one-touch
+  assert lever(0, 0, 0, 0) == 0
+  assert lever(0, 1, 0, 1) == 1                                     # right latch, passing the detent
+  assert lever(0, 1, 0, 0) == 2                                     # latched
+  assert lever(1, 0, 0, 0) == 2

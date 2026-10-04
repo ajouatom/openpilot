@@ -3,6 +3,7 @@ from types import SimpleNamespace
 from openpilot.cereal import log
 from openpilot.common.realtime import DT_MDL
 from openpilot.selfdrive.controls.lib.desire_helper import DesireHelper, STALK_QUEUE_GUARD_S
+from openpilot.selfdrive.controls.lib.desire_lib.constants import TurnDirection
 
 LCS = log.LaneChangeState
 
@@ -35,11 +36,11 @@ class TestDesireHelperStalkRequest:
     self.carrot_man = SimpleNamespace(atcType="", carrotCmdIndex=0, carrotCmd="", carrotArg="")
     self.left_count = 0
 
-  def update(self, left_blinker=True, lane_change_prob=0.5, press=False, counters=True):
+  def update(self, left_blinker=True, lane_change_prob=0.5, press=False, counters=True, lever=0, v_kph=90.0):
     if press:
       self.left_count = (self.left_count + 1) % 256
-    car = SimpleNamespace(canValid=True, leftBlinker=left_blinker, rightBlinker=False, vEgo=25.0, aEgo=0.0,
-                          trailerConnected=False, steeringTorque=0.0, steeringPressed=False)
+    car = SimpleNamespace(canValid=True, leftBlinker=left_blinker, rightBlinker=False, vEgo=v_kph / 3.6, aEgo=0.0,
+                          trailerConnected=False, steeringTorque=0.0, steeringPressed=False, blinkerLever=lever)
     if counters:
       car.leftBlinkerStalkCount, car.rightBlinkerStalkCount = self.left_count, 0
     self.helper.update(car, SimpleNamespace(), True, lane_change_prob, self.carrot_man, SimpleNamespace())
@@ -111,3 +112,45 @@ class TestDesireHelperStalkRequest:
     assert self.finish(counters=False) == LCS.preLaneChange
     assert self.helper.next_lane_change
     assert self.update(counters=False) == LCS.preLaneChange
+
+
+class TestBlinkerLatchedTurn:
+  """BlinkerLatchedTurn: at or below 50 km/h a latched lever is a turn, a one-touch press a lane change."""
+  setup_method = TestDesireHelperStalkRequest.setup_method
+  update = TestDesireHelperStalkRequest.update
+
+  def lever_on(self, lever, v_kph=45.0, steps=1):
+    self.update(left_blinker=False, v_kph=v_kph)
+    for i in range(steps):
+      state = self.update(press=(i == 0), lever=lever, v_kph=v_kph)
+    return state
+
+  def test_off_keeps_the_classifier(self):
+    self.lever_on(2, steps=3)
+    assert self.helper.maneuver_type == "lane_change"       # 45 km/h, lanes visible: the classifier says lane change
+
+  def test_latched_lever_is_a_turn(self):
+    self.helper.blinkerLatchedTurn = True
+    self.lever_on(2, steps=3)
+    assert self.helper.maneuver_type == "turn"
+    assert self.helper.lane_change_state == LCS.off
+    assert self.helper.turn_direction == TurnDirection.turnLeft
+
+  def test_latch_passing_the_one_touch_detent_does_not_start_a_lane_change(self):
+    self.helper.blinkerLatchedTurn = True
+    assert self.lever_on(1, steps=3) == LCS.preLaneChange    # still in the detent: wait
+    self.update(lever=2, v_kph=45.0)
+    assert self.helper.maneuver_type == "turn"
+    assert self.helper.lane_change_state == LCS.off
+
+  def test_one_touch_is_a_lane_change_after_the_lever_returns(self):
+    self.helper.blinkerLatchedTurn = True
+    assert self.lever_on(1, steps=2) == LCS.preLaneChange
+    assert self.update(lever=0, v_kph=45.0) == LCS.laneChangeStarting
+    assert self.helper.maneuver_type == "lane_change"
+
+  def test_latched_lever_above_50_kph_is_the_classifier(self):
+    self.helper.blinkerLatchedTurn = True
+    self.lever_on(2, v_kph=60.0, steps=3)
+    assert self.helper.maneuver_type == "lane_change"
+    assert self.helper.lane_change_state == LCS.laneChangeStarting

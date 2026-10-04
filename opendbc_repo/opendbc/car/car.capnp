@@ -275,6 +275,7 @@ struct CarState {
   steeringTouch @94 :SteeringTouch;
   leftBlinkerStalkCount @95 :UInt8;  # +1 (wrapping) on every left turn-signal lever press; the lamp-based leftBlinker cannot show a press while the lamp is already flashing
   rightBlinkerStalkCount @96 :UInt8; # +1 (wrapping) on every right turn-signal lever press
+  blinkerLever @97 :UInt8;           # turn-signal lever position: 0 released, 1 one-touch (half) detent, 2 latched
 
   # Optional original vehicle receive signal. Separate from torque/override.
   struct SteeringTouch {

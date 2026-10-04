@@ -862,7 +862,7 @@ class CarState(CarStateBase):
     return kept
 
   def _update_blinker_stalks(self, ret):
-    """Count turn-signal lever presses (BLINKER_STALKS rising edges) into carState.*BlinkerStalkCount."""
+    """Turn-signal lever (BLINKER_STALKS): presses (rising edges) into carState.*BlinkerStalkCount, position into blinkerLever."""
     if self.blinker_stalks is not None:
       left_stalk, right_stalk = bool(self.blinker_stalks["LEFT_BLINKER"]), bool(self.blinker_stalks["RIGHT_BLINKER"])
       if left_stalk and not self.left_stalk_prev:
@@ -870,6 +870,9 @@ class CarState(CarStateBase):
       if right_stalk and not self.right_stalk_prev:
         self.right_blinker_stalk_count = (self.right_blinker_stalk_count + 1) % 256
       self.left_stalk_prev, self.right_stalk_prev = left_stalk, right_stalk
+      # *_TAP is set only in the one-touch detent; a latch passes through it for ~0.1 s (2026-10-04 lever test)
+      tap = self.blinker_stalks["LEFT_BLINKER_TAP"] or self.blinker_stalks["RIGHT_BLINKER_TAP"]
+      ret.blinkerLever = 1 if tap else 2 if (left_stalk or right_stalk) else 0
     ret.leftBlinkerStalkCount = self.left_blinker_stalk_count
     ret.rightBlinkerStalkCount = self.right_blinker_stalk_count
 
