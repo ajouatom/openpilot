@@ -43,3 +43,12 @@ def test_blink_hold_without_a_visible_crossing_lasts_to_the_end_of_the_desire():
   for y_left, y_right in [(-2.9, 1.5), (-2.4, 1.1), (-2.2, 0.8), (-1.5, 1.3), (-1.2, 1.9), (-1.7, 1.8)]:
     assert _blink_hold_side(_md(y_left, y_right), 3, state) == 3
   assert _blink_hold_side(_md(-1.7, 1.8), 0, state) == 0
+
+
+def test_blink_hold_before_the_change_follows_the_lever_wait():
+  # LaneChangeLeverWait: DesireHelper asks for the lamp while a lever-requested change waits (desire not 3/4 yet).
+  state = {}
+  assert _blink_hold_side(NS(laneLines=[], meta=NS(laneChangeBlinkerHold="left")), 0, state) == 3
+  assert _blink_hold_side(NS(laneLines=[], meta=NS(laneChangeBlinkerHold="right")), 0, state) == 4
+  assert _blink_hold_side(NS(laneLines=[], meta=NS(laneChangeBlinkerHold="none")), 0, state) == 0
+  assert _blink_hold_side(NS(laneLines=[]), 0, state) == 0          # older schema without the field

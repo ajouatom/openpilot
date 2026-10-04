@@ -779,7 +779,10 @@ def _blink_hold_side(md, desire, state):
   """
   if desire not in (3, 4):
     state.update(crossed=False, released=False, y_min=None)
-    return 0
+    # before the change: DesireHelper may hold the lamp while a lever-requested change waits (LaneChangeLeverWait)
+    meta = getattr(md, "meta", None) if md is not None else None
+    pre_hold = str(getattr(meta, "laneChangeBlinkerHold", "none"))
+    return 3 if pre_hold == "left" else 4 if pre_hold == "right" else 0
   if state.get("released"):
     return 0
   lines = getattr(md, "laneLines", None) if md is not None else None

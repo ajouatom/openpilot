@@ -96,6 +96,14 @@ OpenCV is included with the update and installed automatically during normal dev
 
 The camera or vehicle can misclassify markings, and value `2` does not make crossing a solid line safe or legal. The driver must verify road markings and applicable traffic rules.
 
+### Turn-signal lever (Hyundai CAN-FD)
+
+Hyundai CAN-FD cars also read the lever itself (`0x3C1`), separate from the lamp: every press is counted and the lever position (released, one-touch, latched) is known, so a press made while the lamp is already flashing is seen.
+
+- A press in the last phase of a lane change (the second half of the green lane display) asks for the next change. When the change ends, the next one waits without the steering-torque requirement and still passes the existing lane-line and BSD checks. Presses while crossing are ignored.
+- `BlinkerLatchedTurn` (km/h, `0` = off): at or below the set speed a latched lever is a left/right turn and a one-touch press is a lane change; no lane change starts while the lever is still in the one-touch position (a latch passes through it for about 0.1 s). Above the set speed a latched lever is a lane change only.
+- `LaneChangeLeverWait` (default off): when a one-touch lane change is not approved at once (BSD, side vehicle, lane lines: the existing checks), the turn signal is held and the request waits for 5 flashes (about 4 s) from the press. If it clears in time the change starts; otherwise the request is dropped and the remaining flashes do not start it. A latched lever keeps waiting as before.
+
 ## What these settings do not change
 
 - `LaneChangeDelay` delays **entry**; it does not make an active lane change slower.

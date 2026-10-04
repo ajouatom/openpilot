@@ -3,9 +3,11 @@ from types import SimpleNamespace
 from openpilot.cereal import log
 from openpilot.common.realtime import DT_MDL
 from openpilot.selfdrive.controls.lib.desire_helper import DesireHelper, STALK_QUEUE_GUARD_S
+from openpilot.selfdrive.controls.lib.desire_lib.lever import LEVER_REQUEST_WAIT_S
 from openpilot.selfdrive.controls.lib.desire_lib.constants import TurnDirection
 
 LCS = log.LaneChangeState
+LCD = log.LaneChangeDirection
 
 
 class TestDesireHelperStalkRequest:
@@ -115,7 +117,8 @@ class TestDesireHelperStalkRequest:
 
 
 class TestBlinkerLatchedTurn:
-  """BlinkerLatchedTurn: at or below 50 km/h a latched lever is a turn, a one-touch press a lane change."""
+  """BlinkerLatchedTurn (here 50 km/h): at or below it a latched lever is a turn, a one-touch press a lane change;
+  above it every lever input is a lane change."""
   setup_method = TestDesireHelperStalkRequest.setup_method
   update = TestDesireHelperStalkRequest.update
 
@@ -130,27 +133,109 @@ class TestBlinkerLatchedTurn:
     assert self.helper.maneuver_type == "lane_change"       # 45 km/h, lanes visible: the classifier says lane change
 
   def test_latched_lever_is_a_turn(self):
-    self.helper.blinkerLatchedTurn = True
+    self.helper.blinkerLatchedTurn = 50 / 3.6
     self.lever_on(2, steps=3)
     assert self.helper.maneuver_type == "turn"
     assert self.helper.lane_change_state == LCS.off
     assert self.helper.turn_direction == TurnDirection.turnLeft
 
   def test_latch_passing_the_one_touch_detent_does_not_start_a_lane_change(self):
-    self.helper.blinkerLatchedTurn = True
+    self.helper.blinkerLatchedTurn = 50 / 3.6
     assert self.lever_on(1, steps=3) == LCS.preLaneChange    # still in the detent: wait
     self.update(lever=2, v_kph=45.0)
     assert self.helper.maneuver_type == "turn"
     assert self.helper.lane_change_state == LCS.off
 
   def test_one_touch_is_a_lane_change_after_the_lever_returns(self):
-    self.helper.blinkerLatchedTurn = True
+    self.helper.blinkerLatchedTurn = 50 / 3.6
     assert self.lever_on(1, steps=2) == LCS.preLaneChange
     assert self.update(lever=0, v_kph=45.0) == LCS.laneChangeStarting
     assert self.helper.maneuver_type == "lane_change"
 
-  def test_latched_lever_above_50_kph_is_the_classifier(self):
-    self.helper.blinkerLatchedTurn = True
-    self.lever_on(2, v_kph=60.0, steps=3)
+  def test_latched_lever_above_the_set_speed_is_a_lane_change(self):
+    # At 80 km/h the classifier calls a navigation turn with a far road edge a turn; the lever setting overrides it.
+    self.carrot_man.atcType = "turn left"
+    self.helper.left.dist_to_edge_far = 5.0
+    self.lever_on(2, v_kph=80.0, steps=3)
+    assert self.helper.maneuver_type == "turn"               # off: the classifier's guess
+    self.setup_method()
+    self.carrot_man.atcType = "turn left"
+    self.helper.left.dist_to_edge_far = 5.0
+    self.helper.blinkerLatchedTurn = 50 / 3.6
+    self.lever_on(2, v_kph=80.0, steps=3)
     assert self.helper.maneuver_type == "lane_change"
     assert self.helper.lane_change_state == LCS.laneChangeStarting
+
+  def test_latched_lever_at_the_set_speed_is_a_turn(self):
+    self.helper.blinkerLatchedTurn = 50 / 3.6
+    self.lever_on(2, v_kph=50.0, steps=3)
+    assert self.helper.maneuver_type == "turn"
+
+
+class TestLaneChangeLeverWait:
+  """LaneChangeLeverWait: a blocked one-touch request holds the lamp for 5 flashes from the press, then gives up."""
+  update = TestDesireHelperStalkRequest.update
+
+  def setup_method(self):
+    TestDesireHelperStalkRequest.setup_method(self)
+    self.helper.laneChangeLeverWait = True
+    self.block(True)
+
+  def block(self, blocked):
+    side = self.helper.left                                 # BSD on the left: the FSM waits for torque
+    side.bsd_hold_counter = 40 if blocked else 0
+    side.lane_change_available = not blocked
+
+  def press(self, lever=0):
+    self.update(left_blinker=False)
+    assert self.update(press=True, lever=lever) == LCS.preLaneChange
+
+  def wait(self, seconds, lever=0):
+    for _ in range(round(seconds / DT_MDL)):
+      self.update(lever=lever)
+    return self.helper.lane_change_state
+
+  def test_blocked_request_holds_the_lamp_then_gives_up(self):
+    self.press()
+    assert self.helper.blinker_hold_direction == LCD.left
+    assert self.wait(LEVER_REQUEST_WAIT_S - 0.2) == LCS.preLaneChange
+    assert self.helper.blinker_hold_direction == LCD.left
+    assert self.wait(0.3) == LCS.off                        # 5 flashes after the press: dropped
+    assert self.helper.blinker_hold_direction == LCD.none
+    self.block(False)
+    assert self.wait(1.0) == LCS.off                        # lamp still flashing: no restart from it
+    self.update(left_blinker=False)                         # lamp dark: the next input is a new request
+    assert self.update() == LCS.preLaneChange
+
+  def test_clearing_within_the_wait_starts_the_change(self):
+    self.press()
+    self.wait(2.0)
+    self.block(False)
+    assert self.update() == LCS.laneChangeStarting
+    self.update()
+    assert self.helper.blinker_hold_direction == LCD.none  # the change itself holds the lamp from here
+
+  def test_a_new_press_restarts_the_count(self):
+    self.press()
+    self.wait(3.0)
+    self.update(press=True)
+    assert self.wait(LEVER_REQUEST_WAIT_S - 0.5) == LCS.preLaneChange
+    assert self.wait(0.6) == LCS.off
+
+  def test_latched_lever_keeps_waiting(self):
+    self.press(lever=2)
+    assert self.wait(LEVER_REQUEST_WAIT_S + 1.0, lever=2) == LCS.preLaneChange
+    assert self.helper.blinker_hold_direction == LCD.none
+
+  def test_lane_change_delay_extends_the_wait(self):
+    self.helper.laneChangeDelay = 5.0                       # longer than the 5 flashes: must not give up first
+    self.block(False)
+    self.press()
+    assert self.wait(LEVER_REQUEST_WAIT_S + 0.5) == LCS.preLaneChange
+    assert self.wait(1.0) == LCS.laneChangeStarting
+
+  def test_off_keeps_waiting_on_the_lamp(self):
+    self.helper.laneChangeLeverWait = False
+    self.press()
+    assert self.wait(LEVER_REQUEST_WAIT_S + 1.0) == LCS.preLaneChange
+    assert self.helper.blinker_hold_direction == LCD.none

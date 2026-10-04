@@ -1,4 +1,5 @@
 from openpilot.cereal import log
+from openpilot.common.constants import CV
 from openpilot.common.realtime import DT_MDL
 from openpilot.common.params import Params
 from openpilot.selfdrive.carrot.bluetooth.model import CommandReader
@@ -11,12 +12,11 @@ from openpilot.selfdrive.controls.lib.desire_lib.constants import (
 )
 from openpilot.selfdrive.controls.lib.desire_lib.side_state import SideState
 from openpilot.selfdrive.controls.lib.desire_lib.maneuver_classifier import classify_maneuver_type
+from openpilot.selfdrive.controls.lib.desire_lib.lever import LeverRequestWait, lever_maneuver
 
 # A lever press this early in laneChangeFinishing is still the driver re-lighting the lamp of the change
 # that just crossed, not a request for the next one.
 STALK_QUEUE_GUARD_S = 0.3
-# BlinkerLatchedTurn: up to this speed the lever decides the manoeuvre (latched = turn, one-touch = lane change).
-LEVER_TURN_SPEED_MAX = 50 / 3.6
 
 
 class DesireHelper:
@@ -61,6 +61,8 @@ class DesireHelper:
     self.stalk_counts = None
     self.queued_lane_change = BLINKER_NONE
     self.finishing_timer = 0.0
+    self.lever_wait = LeverRequestWait()
+    self.blinker_hold_direction = LaneChangeDirection.none  # modelV2.meta.laneChangeBlinkerHold
 
     # keep pulse
     self.keep_pulse_timer = 0.0
@@ -70,7 +72,8 @@ class DesireHelper:
     self.laneChangeBsd = 0
     self.laneLineCheck = 0
     self.laneChangeDelay = 0.0
-    self.blinkerLatchedTurn = False
+    self.blinkerLatchedTurn = 0.0  # m/s, 0 = off
+    self.laneChangeLeverWait = False
 
     # misc
     self.prev_desire_enabled = False
@@ -89,7 +92,8 @@ class DesireHelper:
       self.laneChangeBsd = self.params.get_int("LaneChangeBsd")
       self.laneLineCheck = self.params.get_int("LaneLineCheck")
       self.laneChangeDelay = self.params.get_float("LaneChangeDelay") * 0.1
-      self.blinkerLatchedTurn = self.params.get_bool("BlinkerLatchedTurn")
+      self.blinkerLatchedTurn = self.params.get_int("BlinkerLatchedTurn") * CV.KPH_TO_MS
+      self.laneChangeLeverWait = self.params.get_bool("LaneChangeLeverWait")
 
   def _check_desire_state(self, modeldata, carstate, maneuver_type):
     desire_state = modeldata.meta.desireState
@@ -274,6 +278,10 @@ class DesireHelper:
     # blinkers
     driver_st, driver_changed, driver_enabled = self._update_driver_blinker(carstate)
     stalk_press = self._update_stalk(carstate)
+    lever = getattr(carstate, "blinkerLever", 0)
+    if self.lever_wait.update(self.laneChangeLeverWait, stalk_press, lever, driver_st, self.lane_change_state,
+                              self.laneChangeDelay):
+      driver_enabled = driver_changed = False  # one-touch request timed out: ignore the lamp until it goes dark
     remote = self.bluetooth_commands.read(allowed=(lateral_active and carstate.canValid and
       not below_lane_change_speed and not trailer_maneuver_blocked))
     atc_st, atc_enabled = self._update_atc_blinker(carrotMan, driver_st, remote)
@@ -354,13 +362,12 @@ class DesireHelper:
       else:
         new_type = "none"
 
-      # BlinkerLatchedTurn: the lever replaces the speed/lane-line guess. A latch passes through the one-touch
-      # detent (~0.1 s), so a lane change must not start while the lever is still there (lever_undecided).
-      lever = getattr(carstate, "blinkerLever", 0)
-      lever_mode = self.blinkerLatchedTurn and driver_enabled and side is not None and v_ego <= LEVER_TURN_SPEED_MAX
-      lever_undecided = lever_mode and lever == 1
-      if lever_mode:
-        new_type = "turn" if lever == 2 else "lane_change"
+      # BlinkerLatchedTurn: the driver's lever replaces the speed/lane-line guess (see lever_maneuver).
+      lever_type, lever_undecided = (None, False)
+      if driver_enabled and side is not None:
+        lever_type, lever_undecided = lever_maneuver(lever, v_ego, self.blinkerLatchedTurn)
+      if lever_type is not None:
+        new_type = lever_type
 
       if trailer_maneuver_blocked and new_type in ("lane_change", "turn"):
         new_type = "none"
@@ -516,6 +523,10 @@ class DesireHelper:
       self.lane_change_direction = LaneChangeDirection.none
       self.lane_change_state = LaneChangeState.off
       self.blinker_ignore = True
+
+    hold = self.lever_wait.update_hold(self.lane_change_state, blinker_state)
+    self.blinker_hold_direction = {BLINKER_LEFT: LaneChangeDirection.left,
+                                   BLINKER_RIGHT: LaneChangeDirection.right}.get(hold, LaneChangeDirection.none)
 
     # final desire
     if self.turn_direction != TurnDirection.none:
