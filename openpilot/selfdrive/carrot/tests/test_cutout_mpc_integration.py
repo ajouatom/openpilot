@@ -30,7 +30,7 @@ def run_update(*, confidence=0., mode="acc", reset=False, enabled=True, second_d
                    "FCW_IDXS": times<5., "PRED_DANGER_IDXS": (times>.2)&(times<3.),
                    "SOURCES": ["lead0", "lead1", "cruise", "e2e"], "LEAD_DANGER_FACTOR": .8,
                    "A_CHANGE_COST_STARTING": 10., "COST_E_DIM": 5, "CRASH_DISTANCE": .25,
-                   "A_CHANGE_COST": 200., "J_EGO_COST": 5., "X_EGO_OBSTACLE_COST": 5.,
+                   "A_CHANGE_COST": 200., "X_EGO_OBSTACLE_COST": 5.,
                    "X_EGO_COST": 0., "V_EGO_COST": 0., "A_EGO_COST": 0.,
                    "LIMIT_COST": 1e6, "DANGER_ZONE_COST": 100., "LEAD_ACCEL_TAU": 1.5,
                    "LEAD_ACCEL_MIN_TRACK_FRAMES": 3,
@@ -39,7 +39,9 @@ def run_update(*, confidence=0., mode="acc", reset=False, enabled=True, second_d
                    "get_traffic_stop_distance_adjust": get_traffic_stop_distance_adjust,
                    "get_traffic_stop_obstacle_distance": get_traffic_stop_obstacle_distance,
                    "cutout_obstacle_relief": cutout_obstacle_relief, "LaneChangeGapPlan": LaneChangeGapPlan}
-  exec(compile(ast.Module(body=helpers+methods, type_ignores=[]), str(path), "exec"), namespace)
+  jerk_cost = next(node for node in tree.body if isinstance(node, ast.Assign)
+                   and any(isinstance(target, ast.Name) and target.id == 'J_EGO_COST' for target in node.targets))
+  exec(compile(ast.Module(body=[jerk_cost]+helpers+methods, type_ignores=[]), str(path), "exec"), namespace)
   lead = NS(status=selected_status, radar=True, radarTrackId=50, dRel=25., vRel=-1., vLead=14.,
             aLeadK=-.5 if lead_tau is None else -2., aLeadTau=1.5 if lead_tau is None else lead_tau,
             modelProb=.99, cutOutTime=1., cutOutConfidence=confidence)
