@@ -21,7 +21,25 @@ VALID_STATES = {
   "compiling",
   "compiled",
   "error",
+  "waiting_for_network",
+  "installing",
+  "installed",
 }
+
+
+def delivery_badge(status: dict | None) -> tuple[str, str] | None:
+  """Compact onroad labels; runtime active/loading/failure takes precedence."""
+  status = status or {}
+  state = status.get('state')
+  if state == 'waiting_for_network':
+    return ('eGPU CLOCK' if status.get('error_code') == 'clock' else 'eGPU NET', 'loading')
+  if state in ('downloading', 'verifying', 'installing'):
+    return ('eGPU SETUP', 'loading')
+  if state == 'installed':
+    return ('eGPU NEXT', 'ready')
+  if state == 'error':
+    return ('eGPU FILE' if status.get('error_code') == 'rejected' else 'eGPU ERROR', 'error')
+  return None
 
 
 def status_path(cache_dir: Path) -> Path:
@@ -44,7 +62,8 @@ def read_big_model_status(cache_dir: Path) -> dict[str, Any] | None:
 def write_big_model_status(cache_dir: Path, state: str, *, model_id: str | None = None,
                            sha256: str | None = None, downloaded_bytes: int | None = None,
                            total_bytes: int | None = None, detail: str | None = None,
-                           started_at: float | None = None) -> dict[str, Any]:
+                           started_at: float | None = None, error_code: str | None = None,
+                           retry_count: int | None = None, retry_in_seconds: int | None = None) -> dict[str, Any]:
   if state not in VALID_STATES:
     raise ValueError(f"invalid big model status: {state}")
 
@@ -68,6 +87,9 @@ def write_big_model_status(cache_dir: Path, state: str, *, model_id: str | None 
     ("downloaded_bytes", downloaded_bytes),
     ("total_bytes", total_bytes),
     ("detail", detail),
+    ("error_code", error_code),
+    ("retry_count", retry_count),
+    ("retry_in_seconds", retry_in_seconds),
   ):
     if item is not None:
       value[key] = item

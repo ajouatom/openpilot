@@ -9,12 +9,15 @@ storage across source updates.
 from __future__ import annotations
 
 import argparse
+import errno
 import hashlib
+import http.client
 import json
 import os
 import re
 import shutil
 import socket
+import ssl
 import sys
 import tempfile
 import time
@@ -22,6 +25,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, Callable
 from urllib.parse import urljoin, urlparse
+from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 from openpilot.selfdrive.modeld.big_model_status import BigModelStatusReporter
@@ -214,7 +218,7 @@ def _download_model(manifest: BigModelManifest, cache_dir: Path, timeout: float 
 
   required = manifest.size - offset + DOWNLOAD_HEADROOM
   if shutil.disk_usage(cache_dir).free < required:
-    raise OSError(f"not enough free space for big model (need {required} bytes)")
+    raise OSError(errno.ENOSPC, f"not enough free space for big model (need {required} bytes)")
 
   headers = {"Accept-Encoding": "identity", "User-Agent": "carrot-modeld/1"}
   if offset:
@@ -243,6 +247,8 @@ def _download_model(manifest: BigModelManifest, cache_dir: Path, timeout: float 
       os.fsync(f.fileno())
 
   actual_size = partial_path.stat().st_size
+  if actual_size < manifest.size:
+    raise ConnectionError(f"incomplete model download: expected {manifest.size}, got {actual_size}")
   if actual_size != manifest.size:
     raise OSError(f"model size mismatch: expected {manifest.size}, got {actual_size}")
   if phase_callback is not None:
@@ -318,6 +324,74 @@ def remember_usbgpu_connection(params, present: bool, compiled_model: bool) -> b
   return known
 
 
+def delivery_error(error: Exception) -> tuple[str, bool]:
+  """Classify delivery failures without weakening TLS or artifact verification."""
+  if isinstance(error, HTTPError):
+    return ('server', True) if error.code in (408, 429) or 500 <= error.code < 600 else ('download', False)
+  if isinstance(error, URLError) and isinstance(error.reason, Exception):
+    return delivery_error(error.reason)
+  if isinstance(error, ssl.SSLCertVerificationError):
+    return ('clock', True) if 'not yet valid' in str(error).lower() else ('certificate', False)
+  if isinstance(error, socket.gaierror):
+    return 'dns', True
+  if isinstance(error, (TimeoutError, ConnectionError, http.client.IncompleteRead)):
+    return 'network', True
+  if isinstance(error, OSError) and error.errno in (errno.ENETUNREACH, errno.EHOSTUNREACH, errno.ETIMEDOUT,
+                                                   errno.ECONNREFUSED, errno.ECONNRESET, errno.EPIPE):
+    return 'network', True
+  if isinstance(error, OSError) and error.errno == errno.ENOSPC:
+    return 'storage', False
+  return 'install', False
+
+
+def deliver_model(manifest_url: str, cache_dir: Path, reporter: BigModelStatusReporter, *, retry_network: bool = False) -> bool:
+  """Install verified files in the background; never initialize a GPU or restart modeld."""
+  from openpilot.selfdrive.modeld.precompiled_model import ensure_precompiled, installed
+  attempts = 0
+  while True:
+    values = {}
+    try:
+      reporter.update('checking', detail='checking model and runtime package')
+      def phase(state: str, manifest: BigModelManifest) -> None:
+        reporter.update(state, model_id=manifest.model_id, sha256=manifest.sha256,
+                        downloaded_bytes=manifest.size, total_bytes=manifest.size)
+      path, changed = ensure_big_model(manifest_url, cache_dir, progress_callback=reporter.download_progress,
+                                       phase_callback=phase)
+      manifest = active_manifest(cache_dir)
+      if manifest is None:
+        raise ValueError('verified active model unavailable')
+      values = {'model_id': manifest.model_id, 'sha256': manifest.sha256,
+                'downloaded_bytes': manifest.size, 'total_bytes': manifest.size}
+      if manifest.precompiled_only:
+        if installed(manifest, cache_dir) is not None:
+          # Boot already verifies installed artifacts. Do not hash a second large
+          # copy or replace active status on every onroad background check.
+          reporter.update('compiled', **values)
+          return True
+        reporter.update('installing', detail='installing verified eGPU runtime package', **values)
+        target = ensure_precompiled(manifest, cache_dir)
+        if target is None:
+          reporter.update('error', error_code='rejected', detail='model rejected after an earlier runtime failure; see diagnostic report', **values)
+          return False
+        if installed(manifest, cache_dir) is None:
+          raise ValueError('installed runtime package is incomplete')
+        reporter.update('installed', detail='verified model and runtime installed; used on next model start', **values)
+      else:
+        reporter.update('compiled' if active_model_compiled() else 'ready', **values)
+      print(f"big model {'updated' if changed else 'ready'}: {path}; runtime delivery complete")
+      return True
+    except Exception as exc:
+      code, retryable = delivery_error(exc)
+      attempts += 1
+      retry = retry_network and retryable
+      reporter.update('waiting_for_network' if retry else 'error', error_code=code,
+                      detail=str(exc)[:2000], retry_count=attempts, retry_in_seconds=30 if retry else 0, **values)
+      print(f'eGPU delivery {code}: {exc}; ' + ('retrying in 30 seconds' if retry else 'stopped'), file=sys.stderr)
+      if not retry:
+        return False
+      time.sleep(30)
+
+
 def main() -> int:
   parser = argparse.ArgumentParser(description=__doc__)
   parser.add_argument("--ensure-if-egpu", action="store_true")
@@ -325,6 +399,7 @@ def main() -> int:
   parser.add_argument("--active-path", action="store_true")
   parser.add_argument("--manifest-url", default=os.getenv("CARROT_BIG_MODEL_MANIFEST", DEFAULT_MANIFEST_URL))
   parser.add_argument("--network-wait-seconds", type=float, default=0.0)
+  parser.add_argument("--retry-network", action="store_true")
   args = parser.parse_args()
 
   if args.network_wait_seconds < 0.0:
@@ -339,25 +414,12 @@ def main() -> int:
       reporter = BigModelStatusReporter(cache_dir)
       try:
         reporter.update("checking", detail="checking model catalog")
-        if active_manifest() is None and args.network_wait_seconds > 0.0:
+        if not args.retry_network and active_manifest() is None and args.network_wait_seconds > 0.0:
           print(f"waiting up to {args.network_wait_seconds:g}s for the big model server")
           reporter.update("checking", detail="waiting for network")
           if not wait_for_manifest_network(args.manifest_url, args.network_wait_seconds):
             raise TimeoutError(f"big model server unavailable after {args.network_wait_seconds:g}s")
-        def phase(state: str, manifest: BigModelManifest) -> None:
-          reporter.update(state, model_id=manifest.model_id, sha256=manifest.sha256,
-                          downloaded_bytes=manifest.size, total_bytes=manifest.size)
-
-        path, changed = ensure_big_model(args.manifest_url, cache_dir,
-                                         progress_callback=reporter.download_progress,
-                                         phase_callback=phase)
-        manifest = active_manifest(cache_dir)
-        reporter.update("compiled" if active_model_compiled() else "ready",
-                        model_id=manifest.model_id if manifest is not None else None,
-                        sha256=manifest.sha256 if manifest is not None else None,
-                        downloaded_bytes=manifest.size if manifest is not None else None,
-                        total_bytes=manifest.size if manifest is not None else None)
-        print(f"big model {'updated' if changed else 'ready'}: {path}")
+        deliver_model(args.manifest_url, cache_dir, reporter, retry_network=args.retry_network)
       except Exception as e:
         # Model delivery must never prevent the normal internal-GPU build.
         reporter.update("error", detail=str(e))

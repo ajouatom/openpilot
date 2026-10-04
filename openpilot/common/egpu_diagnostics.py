@@ -63,7 +63,8 @@ def collect_report(cache: Path, params: Path, usb_root: Path, repo: Path, update
             'git_head': command_tail(['git', 'rev-parse', 'HEAD'], cwd=repo),
             'git_changed_files': command_tail(['git', 'diff', 'HEAD', '--name-only'], cwd=repo),
             'status': select(read_json(cache / 'status.json'),
-                             ('state', 'detail', 'sha256', 'downloaded_bytes', 'total_bytes', 'updated_at', 'read_error'))}
+                             ('state', 'detail', 'error_code', 'retry_count', 'retry_in_seconds', 'sha256',
+                              'downloaded_bytes', 'total_bytes', 'updated_at', 'read_error'))}
   state = read_json(cache / 'state.json')
   active = state.get('active')
   report['active_model'] = (select(active, ('model_id', 'sha256', 'filename', 'size'))

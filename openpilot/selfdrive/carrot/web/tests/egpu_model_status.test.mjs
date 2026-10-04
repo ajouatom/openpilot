@@ -3,6 +3,29 @@ import test from "node:test";
 
 import { CarrotEgpuModel } from "../src/features/tools/egpu_model.js";
 
+test("delivery failures explain automatic recovery and installed files do not imply active inference", (t) => {
+  const saved = globalThis.document;
+  t.after(() => { globalThis.document = saved; });
+  const elements = new Map();
+  globalThis.document = { getElementById(id) {
+    if (!elements.has(id)) elements.set(id, { dataset: {}, style: {}, classList: { toggle() {} } });
+    return elements.get(id);
+  } };
+  CarrotEgpuModel.render({ available: true, state: "waiting_for_network", error_code: "dns",
+    detail: "Temporary failure in name resolution", can_restart: false });
+  assert.match(elements.get("egpuModelState").textContent, /automatic retry/);
+  assert.match(elements.get("egpuModelDetail").textContent, /resolve.*retry is automatic.*Temporary failure/);
+  assert.equal(elements.get("btnEgpuCompileRestart").hidden, true);
+  CarrotEgpuModel.render({ available: true, state: "installed", compiled: true, active: false });
+  assert.match(elements.get("egpuModelState").textContent, /next start/);
+  assert.doesNotMatch(elements.get("egpuModelState").textContent, /running/);
+  assert.equal(elements.get("btnEgpuCompileRestart").hidden, true);
+  CarrotEgpuModel.render({ available: true, state: "compiled", compiled: true, active: true });
+  assert.equal(elements.get("egpuModelState").textContent, "eGPU running");
+  CarrotEgpuModel.render({ available: true, state: "error", error_code: "runtime", active: false });
+  assert.match(elements.get("egpuModelDetail").textContent, /internal model is selected/);
+});
+
 test("model update card shows download progress before compilation is available", (t) => {
   const elements = new Map();
   const previousDocument = Object.getOwnPropertyDescriptor(globalThis, "document");

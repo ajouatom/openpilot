@@ -15,6 +15,24 @@ const FALLBACK_STRINGS = {
   compiling: "Compiling eGPU model",
   compiled: "Ready to use",
   error: "Needs attention",
+  waiting_for_network: "Waiting for network / automatic retry",
+  installing: "Installing eGPU package",
+  installed: "Installed · next start",
+  active: "eGPU running",
+  waiting_for_network_detail: "Keep an internet connection available. Installation retries automatically every 30 seconds.",
+  installing_detail: "Preparing the verified model and runtime. The current driving model continues running.",
+  installed_detail: "Installation is complete. The eGPU will be tried at the next ignition session; no restart is needed while driving.",
+  active_detail: "The eGPU is currently running the driving model.",
+  failure_dns: "Cannot resolve the download server address. Check the internet connection; retry is automatic.",
+  failure_clock: "Certificate not yet valid. Waiting for the device clock/network to recover; retry is automatic.",
+  failure_network: "Download connection interrupted. Retrying automatically.",
+  failure_server: "The download server is temporarily unavailable. Retrying automatically.",
+  failure_certificate: "Server certificate verification failed. The download was stopped; verification remains enabled.",
+  failure_download: "The server refused the download or the requested file is unavailable.",
+  failure_storage: "Not enough free storage to install the eGPU package.",
+  failure_install: "The eGPU package could not be installed or verified. The saved diagnostic report contains the cause.",
+  failure_rejected: "This model was blocked after an earlier runtime failure. The saved diagnostic report contains the cause.",
+  failure_runtime: "The eGPU failed to start or run. The internal model is selected; the saved diagnostic report contains the cause.",
   checking_detail: "Checking the model catalog. You can keep using openpilot.",
   downloading_detail: "Download may continue while driving. Do not restart or power off until it finishes.",
   verifying_detail: "Checking the complete file. This can take a moment.",
@@ -83,7 +101,7 @@ function render(status = lastStatus) {
 
   const state = String(status.state || "checking");
   const percent = Number(status.progress);
-  const running = ["checking", "downloading", "verifying", "compiling"].includes(state);
+  const running = ["checking", "downloading", "verifying", "compiling", "waiting_for_network", "installing"].includes(state);
   const stateEl = document.getElementById("egpuModelState");
   const detailEl = document.getElementById("egpuModelDetail");
   const progressEl = document.getElementById("egpuModelProgress");
@@ -128,8 +146,10 @@ function render(status = lastStatus) {
   card.dataset.state = state;
   card.classList.toggle("is-running", running);
   document.getElementById("egpuModelTitle").textContent = modelDisplayTitle(status);
-  stateEl.textContent = t(state);
-  detailEl.textContent = t(`${state}_detail`);
+  const active = status.active && ["compiled", "installed"].includes(state);
+  stateEl.textContent = t(active ? "active" : state);
+  detailEl.textContent = status.error_code ? t(`failure_${status.error_code}`) : t(active ? "active_detail" : `${state}_detail`);
+  if (status.error_code && status.detail) detailEl.textContent += ` (${String(status.detail).slice(0, 500)})`;
 
   const showProgress = state === "downloading" && Number.isFinite(percent);
   progressEl.hidden = !showProgress;
