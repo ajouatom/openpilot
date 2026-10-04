@@ -7,6 +7,7 @@ import ast
 from opendbc.can import CANDefine, CANParser
 from opendbc.car import Bus, create_button_events, structs, DT_CTRL
 from opendbc.car.common.conversions import Conversions as CV
+from opendbc.car.carlog import carlog
 from opendbc.car.hyundai.hyundaicanfd import CanBus
 from opendbc.car.hyundai.steering_touch import HyundaiSteeringTouch
 from opendbc.car.hyundai.values import HyundaiFlags, CAR, DBC, Buttons, CarControllerParams, CAMERA_SCC_CAR, HyundaiExtFlags, \
@@ -50,6 +51,14 @@ BUTTONS_DICT = {Buttons.RES_ACCEL: ButtonType.accelCruise, Buttons.SET_DECEL: Bu
 GearShifter = structs.CarState.GearShifter
 
 READY_COUNT_OK = 200
+CANFD_CAMERA_TX_MESSAGES = (
+  ("LFA", "lfa", 121), ("LFA_ALT", "lfa_alt", 121),
+  ("LFAHDA_CLUSTER", "lfahda_cluster", 121),
+  ("ADRV_0x161", "adrv_0x161", 122), ("ADRV_0x200", "adrv_0x200", 122),
+  ("ADRV_0x1ea", "adrv_0x1ea", 122), ("ADRV_0x160", "adrv_0x160", 122),
+  ("CCNC_0x162", "ccnc_0x162", 122),
+)
+CANFD_CAMERA_FIRST_FRAME_MAX_AGE_NS = 150_000_000
 TRAILER_DISCONNECT_GRACE_FRAMES = int(5.0 / DT_CTRL)
 EV_MODE_STATUS_TIMEOUT_NS = 500_000_000
 LEGACY_LFA_BUTTON_ADDR = 0x391
@@ -335,6 +344,28 @@ class CarState(CarStateBase):
         self.camera_scc_hint = True
         self.op_params.put_bool_nonblocking("HyundaiCameraSccHint", True)
 
+  def _discover_canfd_camera_tx_messages(self, parser):
+    # Startup CAN interruptions must not permanently disable host copies.
+    # Keep the original earliest registration time, but retry missing messages
+    # throughout the session. Absent variants must not add CAN validity checks.
+    for name, attr, ready_count in CANFD_CAMERA_TX_MESSAGES:
+      if self.controls_ready_count < ready_count or getattr(self, attr) is not None:
+        continue
+      msg = parser.dbc.name_to_msg.get(name)
+      if msg is None or msg.address not in parser.seen_addresses:
+        continue
+      if msg.address not in parser.addresses:
+        parser._add_message(name)
+
+      # _add_message creates a zero-filled dictionary. Do not expose it to TX;
+      # wait for a real frame accepted by the existing CRC/counter checks.
+      timestamp = self._vehicle_navi_message_timestamp(parser, name)
+      age = parser._last_update_nanos - timestamp
+      if (timestamp > 0 and 0 <= age <= CANFD_CAMERA_FIRST_FRAME_MAX_AGE_NS and
+          len(parser.dat.get(msg.address, b"")) == msg.size):
+        setattr(self, attr, parser.vl[name])
+        carlog.info(f"CAN-FD camera TX template ready: {name} bus={parser.bus} ready_count={self.controls_ready_count}")
+
   def monitor_fingerprint(self, can_parsers, canfd):
     # Keep observing after startup fingerprint registration has finished.
     # Reading seen_addresses does not register extra CAN validity checks.
@@ -403,15 +434,6 @@ class CarState(CarStateBase):
         elif self.controls_ready_count == 121:
           add_and_cache(self.cp, "TCS", "tcs")
           add_and_cache(self.cp, "MDPS", "mdps")
-          add_and_cache(self.cp_cam, "LFA", "lfa")
-          add_and_cache(self.cp_cam, "LFA_ALT", "lfa_alt")
-          add_and_cache(self.cp_cam, "LFAHDA_CLUSTER", "lfahda_cluster")
-        elif self.controls_ready_count == 122:
-          add_and_cache(self.cp_cam, "ADRV_0x161", "adrv_0x161")
-          add_and_cache(self.cp_cam, "ADRV_0x200", "adrv_0x200")
-          add_and_cache(self.cp_cam, "ADRV_0x1ea", "adrv_0x1ea")
-          add_and_cache(self.cp_cam, "ADRV_0x160", "adrv_0x160")
-          add_and_cache(self.cp_cam, "CCNC_0x162", "ccnc_0x162")
         elif self.controls_ready_count == 123:
           if self.canfd_wrapped_navi:
             add_and_cache(self.cp, CANFD_HDA_INFO_MSG, "hda_info_4a3")
@@ -440,6 +462,9 @@ class CarState(CarStateBase):
         elif self.controls_ready_count == 126:
           add_and_cache(self.cp, "CRUISE_BUTTONS_ALT2", "cruise_buttons_alt2", ignore_counter = True)
           add_and_cache(self.cp, "TRAILER_STATUS", "trailer_status", ignore_counter = True)
+
+    if canfd and self.CP.flags & HyundaiFlags.CANFD:
+      self._discover_canfd_camera_tx_messages(can_parsers[Bus.cam])
 
 
 
