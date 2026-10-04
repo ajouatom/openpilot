@@ -105,6 +105,7 @@ jobs:
             openpilot/selfdrive/monitoring/test_parked_reset.py \
             openpilot/selfdrive/monitoring/test_steering_touch.py \
             openpilot/selfdrive/modeld/tests/test_big_model.py \
+            openpilot/selfdrive/modeld/tests/test_big_model_delivery.py \
             openpilot/selfdrive/modeld/tests/test_precompiled_model.py \
             openpilot/selfdrive/modeld/tests/test_precompiled_runner.py \
             openpilot/selfdrive/modeld/tests/test_precompiled_validation.py \

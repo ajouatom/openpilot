@@ -9,6 +9,8 @@ from openpilot.common.filter_simple import FirstOrderFilter
 from openpilot.common.params import Params
 from openpilot.common.swaglog import cloudlog
 from openpilot.selfdrive.modeld.helpers import active_usbgpu_compiled_path, usbgpu_compile_pending
+from openpilot.selfdrive.modeld.big_model import model_cache_dir
+from openpilot.selfdrive.modeld.big_model_status import delivery_badge, read_big_model_status
 from openpilot.selfdrive.ui.carrot_param_cache import RealtimeUiParamSnapshot, TimedSnapshotCache, read_realtime_ui_params
 from openpilot.selfdrive.ui.lib.prime_state import PrimeState
 from openpilot.system.ui.lib.application import gui_app
@@ -110,6 +112,7 @@ class UIState:
     self.usbgpu_present: bool = False
     self.usbgpu_compiled: bool = False
     self.usbgpu_compile_pending: bool = False
+    self.usbgpu_delivery_badge = None
     self.usbgpu_loading: bool = False
     self.usbgpu_active: bool = False
     self.usbgpu_startup_failed: bool = False
@@ -227,6 +230,7 @@ class UIState:
     # not look like the newly downloaded model was already compiled.
     self.usbgpu_compiled = active_usbgpu_compiled_path() is not None
     self.usbgpu_compile_pending = usbgpu_compile_pending()
+    self.usbgpu_delivery_badge = delivery_badge(read_big_model_status(model_cache_dir()))
     self.usbgpu_loading = self.params.get_bool("UsbGpuLoading")
     self.usbgpu_active = self.params.get_bool("UsbGpuActive")
     self.usbgpu_startup_failed = self.params.get_bool("UsbGpuStartupFailed")

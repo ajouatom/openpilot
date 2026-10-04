@@ -30,7 +30,7 @@ def build_status_payload(params: Any | None = None) -> dict[str, Any]:
   # to the previous model until the new download passes verification.
   same_model = manifest is not None and (not status or status.get("sha256") == manifest.sha256)
   phase = status.get("state")
-  updating = phase in {"checking", "downloading", "verifying", "compiling", "error"}
+  updating = phase in {"checking", "downloading", "verifying", "compiling", "error", "waiting_for_network", "installing"}
   try:
     compiled = active_model_compiled() if same_model and not updating else False
   except Exception:
@@ -38,7 +38,7 @@ def build_status_payload(params: Any | None = None) -> dict[str, Any]:
   if updating:
     state = phase
   elif compiled:
-    state = "compiled"
+    state = "installed" if phase == "installed" else "compiled"
   elif same_model:
     state = "waiting_for_ignition" if phase == "waiting_for_ignition" else "ready"
   else:
@@ -48,6 +48,11 @@ def build_status_payload(params: Any | None = None) -> dict[str, Any]:
   total = int(status.get("total_bytes", fallback_size))
   progress = round(min(100.0, max(0.0, downloaded * 100.0 / total)), 1) if total > 0 else None
   engaged = _params_bool(params, "IsEngaged") if params is not None else False
+  active = (_params_bool(params, "UsbGpuActive") and not _params_bool(params, "UsbGpuLoading")) if params is not None else False
+  error_code, detail = status.get('error_code'), status.get('detail')
+  if params is not None and _params_bool(params, 'UsbGpuStartupFailed') and not active:
+    state, error_code = 'error', 'runtime'
+    detail = 'eGPU startup or execution failed; internal model selected. See the saved diagnostic report.'
 
   return {
     "ok": True,
@@ -58,13 +63,17 @@ def build_status_payload(params: Any | None = None) -> dict[str, Any]:
     "downloaded_bytes": downloaded,
     "total_bytes": total,
     "progress": progress,
-    "detail": status.get("detail"),
+    "detail": detail,
+    "error_code": error_code,
+    "retry_count": status.get("retry_count", 0),
+    "retry_in_seconds": status.get("retry_in_seconds", 0),
+    "active": active,
     "started_at": status.get("started_at"),
     "updated_at": status.get("updated_at"),
     "compiled": compiled,
     "engaged": engaged,
     "can_restart": same_model and not compiled and not engaged and state not in {
-      "checking", "downloading", "verifying", "compiling",
+      "checking", "downloading", "verifying", "compiling", "waiting_for_network", "installing",
     },
   }
 
