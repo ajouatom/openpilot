@@ -96,6 +96,7 @@ jobs:
       - name: Check model, monitoring and Bluetooth integration
         run: |
           python -m pytest -o addopts='' -q \
+            openpilot/common/tests/test_egpu_diagnostics.py \
             openpilot/selfdrive/monitoring/test_monitoring.py \
             openpilot/selfdrive/monitoring/test_dm2.py \
             openpilot/selfdrive/monitoring/test_dm2d.py \
