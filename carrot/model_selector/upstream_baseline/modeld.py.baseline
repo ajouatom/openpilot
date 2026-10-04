@@ -236,6 +236,8 @@ def main(demo=False):
   params.put_bool("UsbGpuCompiled", _compiled)
   params.put_bool("UsbGpuLoading", USBGPU)
   params.put_bool("UsbGpuActive", False)
+  if _present and (not _compiled or _startup_failed):
+    queue_usbgpu_error_tmux(params, "USB present but eGPU model unavailable at startup")
   use_wide_camera = bool(params.get("UseWideCamera", return_default=True))
 
   config_realtime_process(7, 54)
