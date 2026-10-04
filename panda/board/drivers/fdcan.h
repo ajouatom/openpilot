@@ -2,6 +2,54 @@
 
 FDCAN_GlobalTypeDef *cans[CANS_ARRAY_SIZE] = {FDCAN1, FDCAN2, FDCAN3};
 
+typedef struct {
+  bool initialized;
+  uint8_t bus;
+  uint32_t speed;
+  uint32_t data_speed;
+  bool non_iso;
+  bool loopback;
+  int silent;
+} fdcan_config_t;
+static fdcan_config_t initialized_can_config[CANS_ARRAY_SIZE];
+
+// Caller holds the critical section through the policy/relay change. Never
+// preserve a pending old-policy hardware TX, failed init, or changed settings.
+#ifndef PANDA_JUNGLE
+static bool can_preserve_configuration(void) {
+  bool ready = true;
+  for (uint8_t i = 0U; i < PANDA_CAN_CNT; i++) {
+    const fdcan_config_t *saved = &initialized_can_config[i];
+    const uint8_t bus = BUS_NUM_FROM_CAN_NUM(i);
+    const FDCAN_GlobalTypeDef *can = CANIF_FROM_CAN_NUM(i);
+    ready &= saved->initialized && (saved->bus == bus) &&
+             (saved->speed == bus_config[bus].can_speed) &&
+             (saved->data_speed == bus_config[bus].can_data_speed) &&
+             (saved->non_iso == bus_config[bus].canfd_non_iso) &&
+             (saved->loopback == can_loopback) && (saved->silent == can_silent) &&
+             ((can->CCCR & (FDCAN_CCCR_INIT | FDCAN_CCCR_CSR | FDCAN_CCCR_CSA | FDCAN_CCCR_MON | FDCAN_CCCR_TEST)) == 0U) &&
+             ((can->PSR & (FDCAN_PSR_BO | FDCAN_PSR_EP | FDCAN_PSR_EW)) == 0U) &&
+             ((can->IR & (FDCAN_IR_BO | FDCAN_IR_EP | FDCAN_IR_PEA | FDCAN_IR_PED | FDCAN_IR_RF0L)) == 0U) &&
+             (can->TXBRP == 0U);
+  }
+  return ready;
+}
+
+static void can_clear_safety_transition_queues(void) {
+  for (uint8_t i = 0U; i < PANDA_CAN_CNT; i++) {
+    can_clear(can_queues[i]);
+    FDCAN_GlobalTypeDef *can = CANIF_FROM_CAN_NUM(i);
+    // Discard the pre-transition RX snapshot without stopping the controller.
+    // Bound the work even if new frames keep arriving. Leave interrupt flags
+    // intact so a concurrent new arrival is serviced after the transition.
+    const uint32_t pending = MIN(can->RXF0S & FDCAN_RXF0S_F0FL, FDCAN_RX_FIFO_0_EL_CNT);
+    for (uint32_t n = 0U; n < pending; n++) {
+      can->RXF0A = (can->RXF0S & FDCAN_RXF0S_F0GI) >> FDCAN_RXF0S_F0GI_Pos;
+    }
+  }
+}
+#endif
+
 static bool can_set_speed(uint8_t can_number) {
   bool ret = true;
   FDCAN_GlobalTypeDef *FDCANx = CANIF_FROM_CAN_NUM(can_number);
@@ -266,8 +314,14 @@ bool can_init(uint8_t can_number) {
 
   if (can_number != 0xffU) {
     FDCAN_GlobalTypeDef *FDCANx = CANIF_FROM_CAN_NUM(can_number);
-    ret &= can_set_speed(can_number);
+    ret = can_set_speed(can_number);
     ret &= llcan_init(FDCANx);
+    const uint8_t bus = BUS_NUM_FROM_CAN_NUM(can_number);
+    initialized_can_config[can_number] = (fdcan_config_t) {
+      .initialized = ret, .bus = bus, .speed = bus_config[bus].can_speed,
+      .data_speed = bus_config[bus].can_data_speed, .non_iso = bus_config[bus].canfd_non_iso,
+      .loopback = can_loopback, .silent = can_silent,
+    };
     // in case there are queued up messages
     process_can(can_number);
   }

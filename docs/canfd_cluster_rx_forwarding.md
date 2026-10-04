@@ -199,3 +199,58 @@ are not recorded, so replay timings are reconstructed, with the first generated
 MDPS used as an additional bound. Incident data and reproduction scripts remain
 local only. This does not prove repair of the initial SPI failure, ECU fault
 clearance, or vehicle warning resolution.
+
+## Avoid redundant CAN restart during H7 safety handoff (2026-10-04)
+
+Safety command 0xDC executes synchronously inside the SPI receive DMA handler.
+The previous normal-ELM327 to Hyundai CAN-FD transition reapplied the CAN mux
+and initialized all three controllers even though both policies used normal
+routing and live CAN. Each controller's speed setup and FIFO initialization
+enters/exits INIT separately. These waits share the MCU with SPI servicing;
+electrically separate CAN and SPI buses do not imply independent CPU progress.
+This code path is a plausible interruption trigger, not a measurement proving
+that an observed multi-second SPI retry burst was spent inside CAN init.
+
+H7 now preserves running controllers only for ELM327 with nonzero parameter to
+Hyundai CAN-FD, with a present, unchanged harness, recorded normal mux routing,
+power saving off, live/non-loopback configuration, and all three controllers
+successfully initialized with unchanged bus mapping, bitrates and ISO mode.
+Hardware checks reject INIT/sleep/monitor/test state, bus-off/error-passive/
+error-warning, pending CAN error flags and any pending hardware TX request.
+All other cases retain full reinitialization, including F4, SILENT transitions,
+OBD mux changes, invalid safety modes and repeated Hyundai safety requests.
+
+The eligibility decision, old software-TX cleanup, pre-transition hardware RX
+FIFO cleanup, safety hook reset and relay handoff share a bounded critical
+section. RX cleanup acknowledges at most the initial FIFO fill level, capped
+at hardware capacity, and does not clear new-arrival interrupt flags. Host RX
+history is retained. No old hardware TX is carried into the optimized path:
+pending TX selects the old reset path because FIFO cancellation is not a safe
+substitute. The optimized path skips mux reapplication and controller INIT;
+the relay still switches normally. No new forwarding policy or early relay
+activation is introduced. Slow initialization remains outside the added
+critical section. Electrical relay timing and MCU worst-case duration have
+not been measured on a device.
+
+The driver also fixes its always-false initialization return value so successful
+configuration can be recorded, and bounds the previously unbounded clock-stop
+acknowledge wait using the existing 500-iteration nominal-ms timeout policy.
+This is not a hard 500 ms response guarantee or a redesign of CAN error-ISR
+recovery. SPI framing, retry rules and interrupt priorities are unchanged.
+
+One `safety_can_transition` serial diagnostic reports mode, preservation choice
+and MCU elapsed microseconds, all printed in hexadecimal. Duration is captured
+before formatting. Serial log retrieval is delayed by transport and can lose
+old lines; its host log timestamp is not the physical relay timestamp. A new
+capture can distinguish an actual controller restart from a preserved handoff.
+
+Validation: 17 tests pass (three native C tests covering F4/H7 transition
+matrices, queue/configuration/failure conditions and bounded sleep exit, plus
+14 firmware identity tests). Tests compile extracted production functions with
+mock registers; they do not emulate peripheral timing or physical FIFO ACKs.
+ARM GCC 13.3.1 builds Panda and Jungle F4/H7 main firmware and bootstubs, eight
+targets, with `-Werror`; Panda development signing succeeds. Existing unrelated
+working-tree experiments are excluded from build inputs. Physical SPI response,
+relay behavior and warning resolution still require repeated device startups.
+This change modifies Panda firmware and requires its normal startup rebuild/
+installation, unlike the preceding host-only template-recovery correction.
