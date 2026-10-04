@@ -109,3 +109,26 @@ def test_no_status_uses_verified_active_model(feature):
 
 def test_card_hidden_without_egpu_history(feature):
   assert feature.build_status_payload(SimpleNamespace(get_bool=lambda _key: False)) == {"ok": True, "available": False}
+
+
+@pytest.mark.parametrize('state', ['waiting_for_network', 'installing'])
+def test_auto_delivery_explains_failure_without_requesting_reboot(feature, tmp_path, state):
+  write_big_model_status(tmp_path, state, sha256='a' * 64, error_code='dns', detail='resolver unavailable',
+                         retry_count=2, retry_in_seconds=30)
+  result = payload(feature)
+  assert result['state'] == state
+  assert result['error_code'] == 'dns' and result['retry_in_seconds'] == 30
+  assert not result['can_restart']
+
+
+def test_installed_runtime_is_not_claimed_to_be_running(feature, tmp_path):
+  write_big_model_status(tmp_path, 'installed', sha256='a' * 64)
+  result = payload(feature)
+  assert result['state'] == 'installed' and result['compiled']
+  assert not result['active'] and not result['can_restart']
+
+
+def test_runtime_failure_overrides_stale_successful_installation(feature, tmp_path):
+  write_big_model_status(tmp_path, 'compiled', sha256='a' * 64)
+  result = feature.build_status_payload(SimpleNamespace(get_bool=lambda k: k in {'UsbGpuHardwareSeen', 'UsbGpuStartupFailed'}))
+  assert result['state'] == 'error' and result['error_code'] == 'runtime'

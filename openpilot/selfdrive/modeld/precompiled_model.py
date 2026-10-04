@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import hashlib
+import errno
 import json
 import os
 from pathlib import Path
@@ -63,7 +64,7 @@ def download(artifact: dict, target: Path, progress=None) -> None:
     partial.unlink()
     offset = 0
   if shutil.disk_usage(target.parent).free < artifact['size'] - offset + 256 * 1024**2:
-    raise OSError('insufficient storage for precompiled model')
+    raise OSError(errno.ENOSPC, 'insufficient storage for precompiled model')
   headers = {'Accept-Encoding': 'identity', 'User-Agent': 'carrot-precompiled/1'}
   if offset:
     headers['Range'] = f'bytes={offset}-'
@@ -86,7 +87,7 @@ def download(artifact: dict, target: Path, progress=None) -> None:
       f.flush()
       os.fsync(f.fileno())
   if offset != artifact['size']:
-    raise OSError('incomplete precompiled artifact')
+    raise ConnectionError('incomplete precompiled artifact')
   if sha256(partial) != artifact['sha256']:
     partial.unlink()
     raise ValueError('precompiled artifact hash mismatch')
