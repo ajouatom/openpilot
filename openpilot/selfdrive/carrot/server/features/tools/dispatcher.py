@@ -62,6 +62,8 @@ def capture_tmux_log_sync() -> Tuple[int, str]:
   os.makedirs(os.path.dirname(TMUX_LOG_PATH), exist_ok=True)
   with open(TMUX_LOG_PATH, "w", encoding="utf-8") as f:
     f.write(proc.stdout or "")
+  from openpilot.common.egpu_diagnostics import append_report
+  append_report(TMUX_LOG_PATH)
   return 0, ""
 
 

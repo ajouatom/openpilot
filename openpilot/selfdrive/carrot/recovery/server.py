@@ -755,6 +755,12 @@ def _capture_tmux_log() -> tuple[int, str]:
   os.makedirs(os.path.dirname(TMUX_LOG_PATH), exist_ok=True)
   with open(TMUX_LOG_PATH, "w", encoding="utf-8") as f:
     f.write(proc.stdout or "")
+  # Keep recovery independent of the openpilot package and native extensions.
+  try:
+    subprocess.run(['python3', str(REPO_ROOT / 'common/egpu_diagnostics.py'), TMUX_LOG_PATH],
+                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=8, check=False)
+  except (OSError, subprocess.TimeoutExpired):
+    pass
   return 0, ""
 
 

@@ -831,6 +831,8 @@ class CarrotMan:
     try:
       subprocess.run("rm -f /data/media/tmux.log; tmux capture-pane -pq -S-1000 > /data/media/tmux.log", shell=True, capture_output=True, text=False, check=True)
       subprocess.run("/data/openpilot/openpilot/selfdrive/apilot.py", shell=True, capture_output=True, text=False)
+      from openpilot.common.egpu_diagnostics import append_report
+      append_report('/data/media/tmux.log')
       return True
     except Exception as e:
       print(f"TMUX creation error: {e}")
