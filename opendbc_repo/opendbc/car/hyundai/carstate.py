@@ -730,6 +730,7 @@ class CarState(CarStateBase):
     self.speedcamSkipMobileZone = cancel and self.op_params.get_bool("VehicleNaviDecelCancelMobileZone")
     self.speedcamCancelBump = cancel and self.op_params.get_bool("VehicleNaviDecelCancelBump")
     self.speedcamSkipFixed = cancel and self.op_params.get_bool("VehicleNaviDecelCancelFixed")
+    self.speedcamSkipUnknown = cancel and self.op_params.get_bool("VehicleNaviDecelCancelUnknown")
     # carrot_serv's stock-navigation bump source, mirrored to tell when a bump is actually decelerating.
     self.speedcamBumpDecel = self.op_params.get_int("AutoNaviSpeedCtrlMode") >= 2
     self.speedcamBumpSpeed = float(self.op_params.get_int("AutoNaviSpeedBumpSpeed"))
@@ -771,7 +772,8 @@ class CarState(CarStateBase):
       warning_active, int(round(warning_speed)), self.totalDistance, can_skip and (accel_rising or gas_tok),
       self.speedcamMobileZoneDecel, self.speedcamSkipBox, self.speedcamSkipMobileZone,
       # inside a section its cameras are the section's: + stays the section unlock
-      self.speedcamSkipFixed and not getattr(ret, "vehicleNaviSectionActive", False))
+      self.speedcamSkipFixed and not getattr(ret, "vehicleNaviSectionActive", False),
+      self.speedcamSkipUnknown and not getattr(ret, "vehicleNaviSectionActive", False))
     if consume:
       self._consume_speedcam_input(accel_rising, gas_tok)
     return False if suppress else speed_limit_cam

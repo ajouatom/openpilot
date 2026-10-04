@@ -4,8 +4,8 @@ from opendbc.car.hyundai.navi_speedcam import (
 
 
 def _update(policy, distance, active=True, speed=60, accel=False, mobile_decel=False, skip_box=False, skip_mobile=False,
-            skip_fixed=False):
-  return policy.update(active, speed, distance, accel, mobile_decel, skip_box, skip_mobile, skip_fixed)
+            skip_fixed=False, skip_unknown=False):
+  return policy.update(active, speed, distance, accel, mobile_decel, skip_box, skip_mobile, skip_fixed, skip_unknown)
 
 
 def test_decode_uses_low_nine_bits_and_keeps_rear_flag():
@@ -171,3 +171,28 @@ def test_signal_rear_and_unknown_never_skip_with_the_fixed_toggle():
 
   unknown = SpeedcamPolicy()                              # no preview at all
   assert _update(unknown, 0.0, accel=True, skip_fixed=True) == (False, False)
+
+
+def test_unknown_warning_skip_is_experimental_and_spares_protected_zones():
+  # 2026-10-04 field report: a 60 km/h warning with no camera preview stayed hard and uncancellable.
+  policy = SpeedcamPolicy()
+  assert _update(policy, 0.0, accel=True, skip_fixed=True) == (False, False)      # toggle off: hard
+  assert _update(policy, 10.0, accel=True, skip_unknown=True) == (True, True)     # toggle on: one press skips
+  assert _update(policy, 20.0, accel=True, skip_unknown=True) == (True, False)
+
+  school = SpeedcamPolicy()                                                       # 30 km/h zones never skip
+  assert _update(school, 0.0, speed=30, accel=True, skip_unknown=True) == (False, False)
+
+
+def test_unknown_skip_ends_when_a_signal_camera_is_matched():
+  policy = SpeedcamPolicy()
+  assert _update(policy, 0.0, accel=True, skip_unknown=True) == (True, True)
+  policy.add_preview(0xD1, 200, 100.0)                                            # signal camera turns up
+  assert _update(policy, 100.0, skip_unknown=True) == (False, False)              # decelerates again
+  assert policy.warning_class == CLASS_HARD
+
+
+def test_unknown_skip_does_not_touch_classified_warnings():
+  policy = SpeedcamPolicy()
+  policy.add_preview(0xD0, 366, 0.0)                                              # fixed camera at the lead
+  assert _update(policy, 0.0, accel=True, skip_unknown=True) == (False, False)

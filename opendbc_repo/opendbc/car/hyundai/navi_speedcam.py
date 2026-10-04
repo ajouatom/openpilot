@@ -26,6 +26,9 @@ CLASS_MOBILE_ZONE = 1
 CLASS_BOX = 2
 CLASS_FIXED = 3  # unflagged fixed speed camera: skippable only with its own toggle
 CLASS_HARD = 4  # signal, rear and unknown cameras always decelerate
+# [experimental] an unknown warning (no camera preview matched) may be skipped with its own
+# toggle, but never at 30 km/h or below: school and senior zones warn there, often without a preview.
+PROTECTED_ZONE_KPH = 30
 
 PREVIEW_SATURATED_OFFSET = 1985  # offsets near the ~2 km horizon only bound the position
 # A stock warning starts about 6.1 m per km/h of the enforced speed before its camera
@@ -130,7 +133,7 @@ class SpeedcamPolicy:
     return CLASS_MOBILE_ZONE
 
   def update(self, warning_active, warning_speed, total_distance, accel_rising,
-             mobile_zone_decel, skip_box, skip_mobile_zone, skip_fixed=False):
+             mobile_zone_decel, skip_box, skip_mobile_zone, skip_fixed=False, skip_unknown=False):
     """Return (suppress_warning, consume_accel_button)."""
     if not warning_active or warning_speed <= 0:
       self.reset_warning()
@@ -154,7 +157,8 @@ class SpeedcamPolicy:
 
     skippable = ((warning_class == CLASS_BOX and skip_box) or
                  (warning_class == CLASS_MOBILE_ZONE and skip_mobile_zone) or
-                 (warning_class == CLASS_FIXED and skip_fixed))
+                 (warning_class == CLASS_FIXED and skip_fixed) or
+                 (self.warning_class is None and skip_unknown and warning_speed > PROTECTED_ZONE_KPH))
     consume = False
     if skippable and accel_rising and not self.skipped:
       self.skipped = True

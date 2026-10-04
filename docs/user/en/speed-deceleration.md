@@ -51,7 +51,7 @@ Record the value currently shown on the device before changing anything.
 <a id="speed-camera"></a>
 ## 1. Speed cameras
 
-The related settings are `AutoNaviSpeedCtrlMode`, `AutoNaviSpeedCtrlEnd`, `AutoNaviRearCameraHoldDistance`, `AutoNaviSpeedDecelRate`, `AutoNaviSpeedSafetyFactor`, `AutoNaviCountDownMode`, `VehicleNaviCanControl`, `VehicleNaviSchoolZoneControl`, `VehicleNaviDecelCancel`(`VehicleNaviDecelCancelBox`, `VehicleNaviDecelCancelMobileZone`, `VehicleNaviDecelCancelBump`, `VehicleNaviDecelCancelFixed`), `VehicleNaviSectionAvgControl`, `VehicleSpeedCameraControlMode`, and `VehicleSpeedCameraDistanceTime`.
+The related settings are `AutoNaviSpeedCtrlMode`, `AutoNaviSpeedCtrlEnd`, `AutoNaviRearCameraHoldDistance`, `AutoNaviSpeedDecelRate`, `AutoNaviSpeedSafetyFactor`, `AutoNaviCountDownMode`, `VehicleNaviCanControl`, `VehicleNaviSchoolZoneControl`, `VehicleNaviDecelCancel`(`VehicleNaviDecelCancelBox`, `VehicleNaviDecelCancelMobileZone`, `VehicleNaviDecelCancelBump`, `VehicleNaviDecelCancelFixed`, `VehicleNaviDecelCancelUnknown`), `VehicleNaviSectionAvgControl`, `VehicleSpeedCameraControlMode`, and `VehicleSpeedCameraDistanceTime`.
 
 ### `AutoNaviSpeedCtrlMode`
 
@@ -112,6 +112,7 @@ Per-kind toggles (in the setting's detail screen, on by default so turning on th
 | `VehicleNaviDecelCancelBox` | Mobile-camera box |
 | `VehicleNaviDecelCancelMobileZone` | Mobile enforcement zone; matters only when `AutoNaviSpeedCtrlMode` is `3`, so zones decelerate |
 | `VehicleNaviDecelCancelFixed` | Fixed speed camera (preview kind 0, no rear flag). Real enforcement cameras, so **off by default** — it must be turned on separately even with the master on. Not applied inside a section, where `+` is the section unlock |
+| `VehicleNaviDecelCancelUnknown` | **[Experimental]** Warnings whose camera kind preview was not received or not understood. It can include signal or speed cameras that send no preview, so **off by default** and must be turned on separately from the master. Not applied at 30 km/h or below (school and senior zones) or inside a section; if a signal, rear or fixed preview is matched after the cancel, that rule applies |
 | `VehicleNaviDecelCancelBump` | Stock-navigation speed bump. The input is used only while the bump target (from the speed-bump settings) is below the set speed, i.e. actually decelerating, and cancels the nearest bump only |
 
 ### `VehicleNaviSectionAvgControl`
