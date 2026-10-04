@@ -8,14 +8,6 @@ from ..config import WEBRTCD_URL
 from ..services.vision_diag import record_stream_proxy_event
 
 
-def _cluster_hud_active(request: web.Request) -> bool:
-  params = request.app.get("params")
-  try:
-    return params is not None and params.get_int("ClusterHud") == 1
-  except Exception:
-    return False
-
-
 def _request_summary(body: bytes) -> dict:
   try:
     payload = json.loads(body.decode("utf-8", errors="replace"))
@@ -42,20 +34,6 @@ async def proxy_stream(request: web.Request) -> web.StreamResponse:
     "request_bytes": len(body),
     **_request_summary(body),
   }
-
-  if _cluster_hud_active(request):
-    record_stream_proxy_event({
-      **base_event,
-      "ok": False,
-      "status": 409,
-      "error": "cluster HUD active",
-      "elapsed_ms": round((time.monotonic() - started_at) * 1000, 1),
-    })
-    return web.json_response({
-      "ok": False,
-      "error": "Carrot Vision is unavailable while Cluster HUD is active",
-      "code": "cluster_hud_active",
-    }, status=409)
 
   sess: ClientSession = request.app["http"]
 

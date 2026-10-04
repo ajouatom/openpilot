@@ -870,7 +870,6 @@ window.CarrotTranslations.register("ko", {
     dm_experimental_warning: "실험적 운전자 감시는 법규에 위배될 수 있습니다. 통제된 시험 환경의 실험 목적으로만 사용하며 공도 사용의 적법성이나 안전성을 보장하지 않습니다. 실험 용도로만 사용한다는 조건에 동의하고 활성화할까요?",
     dm_experimental_cancelled: "실험 모드를 켜지 않았습니다.",
     vision_unavailable_hint: "Carrot Vision 사용 설정을 켜세요.",
-    vision_unavailable_cluster_hud: "Cluster HUD 사용 중에는 당근 비전을 사용할 수 없습니다.",
     vision_step_unavailable: "설정을 확인해 주세요.",
     vision_step_inactive: "시작 대기 중",
     vision_step_starting: "카메라 준비 중",
