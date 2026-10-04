@@ -28,7 +28,7 @@ def load_mpc_update(path):
             'MODEL_NAME': 'long', 'ACADOS_SOLVER_TYPE': 'SQP_RTI', 'COST_DIM': 6, 'COST_E_DIM': 5, 'X_DIM': 3, 'PARAM_DIM': 8,
             'A_CHANGE_COST': 200., 'A_CHANGE_COST_STARTING': 10., 'LEAD_DANGER_FACTOR': .8, 'LIMIT_COST': 1e6,
             'DANGER_ZONE_COST': 100., 'CRASH_DISTANCE': .25, 'X_EGO_OBSTACLE_COST': 5., 'X_EGO_COST': 0.,
-            'V_EGO_COST': 0., 'A_EGO_COST': 0., 'J_EGO_COST': 5., 'SOURCES': ['lead0','lead1','cruise','e2e'],
+            'V_EGO_COST': 0., 'A_EGO_COST': 0., 'SOURCES': ['lead0','lead1','cruise','e2e'],
             'AcadosOcpSolverCython': RecordingSolver, 'LEAD_ACCEL_MIN_TRACK_FRAMES': 3,
             'LeadAccelResponseState': preview.LeadAccelResponseState, 'get_lead_accel_mpc_request': preview.get_lead_accel_mpc_request,
             'LeadGapState': LeadGapState, 'gap_reference': gap_reference, 'displayed_follow_distance': displayed_follow_distance,
@@ -40,8 +40,10 @@ def load_mpc_update(path):
   ns['FCW_IDXS'] = ns['T_IDXS'] < 5
   ns['PRED_DANGER_IDXS'] = (ns['T_IDXS'] > .2) & (ns['T_IDXS'] < 3.)
   tree = ast.parse(path.read_text(encoding='utf-8'))
+  jerk_cost = next(node for node in tree.body if isinstance(node, ast.Assign)
+                   and any(isinstance(target, ast.Name) and target.id == 'J_EGO_COST' for target in node.targets))
   nodes = [node for node in tree.body if isinstance(node, (ast.FunctionDef, ast.ClassDef)) and not node.name.startswith('gen_')]
-  exec(compile(ast.Module(body=nodes, type_ignores=[]), str(path), 'exec'), ns)
+  exec(compile(ast.Module(body=[jerk_cost]+nodes, type_ignores=[]), str(path), 'exec'), ns)
   cls = ns['LongitudinalMpc']
   cls.run = lambda self: None
   return cls
