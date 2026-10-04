@@ -158,3 +158,44 @@ remain to be verified, including behavior during host fallback.
 Private scripts, summaries and build results:
 `.analysis/archive/2026-09-30/cluster-rx-forwarding/`.
 Incident evidence: [Ioniq investigation](ioniq5_pe_cluster_warning_20260930.md).
+
+## Host template recovery after startup CAN interruptions (2026-10-04)
+
+The host previously attempted to register camera-side transmit templates only
+at ControlsReady counts 121/122. If the message had not been observed by that
+single update, its template stayed absent for the whole session, even after
+CAN reception recovered. Direct cluster TX cannot restore a message that the
+host never generates. This is separate from the cause of a transport outage.
+
+CarState now retries discovery of LFA, LFA_ALT, LFAHDA_CLUSTER, ADRV_0x161,
+ADRV_0x200, ADRV_0x1ea, ADRV_0x160 and CCNC_0x162 after their original earliest
+registration count. Only an observed address on the configured camera bus is
+registered; absent variants add no checks. A template becomes available only
+after the existing parser accepts an actual counter/checksum-validated frame,
+with the expected payload length and initial age at most 150 ms. Registration's
+zero-filled dictionary cannot initialize TX. Thereafter the template retains
+the original live-dictionary behavior; this is not a new ongoing freshness
+policy. Counter algorithms, control limits, Panda forwarding and the direct-TX
+setting/default are unchanged. No Panda firmware change is required by this
+host recovery correction.
+
+Each template's first activation produces one bounded carlog entry, forwarded
+by card to cloudlog, with message name, bus and ready count. Normal startup may
+wait an additional received frame for validated data rather than transmitting
+an initial zero template. In the healthy recorded-input replay this delayed
+LFA availability by about 8 ms and the 20 Hz templates by about 45 ms; these
+are host publication-time estimates, not physical CAN latency. Independently
+seeded TX counters can consequently start at a different value; no bit-for-bit
+initial TX equivalence is claimed.
+
+Validation: 487 focused Hyundai tests pass, including delayed arrival beyond
+the entire startup window, zero-template exclusion, bad CRC/counter/length,
+wrong bus/TX echoes, absent variants and the existing cluster, MDPS, touch and
+configuration tests. Desktop Params storage is substituted. Paired recorded
+CAN/CarState replays reproduce permanent template omission with the old code
+and restoration with the new code; 26,276 common healthy decoded-template
+comparisons match. ControlsReady write completion and exact subscriber batching
+are not recorded, so replay timings are reconstructed, with the first generated
+MDPS used as an additional bound. Incident data and reproduction scripts remain
+local only. This does not prove repair of the initial SPI failure, ECU fault
+clearance, or vehicle warning resolution.
