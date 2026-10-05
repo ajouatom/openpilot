@@ -53,6 +53,8 @@ def test_generic_dispatch_uploads_warps_and_feeds_back_state(monkeypatch):
     monotonic=lambda: next(wall_clock), thread_time=lambda: next(cpu_clock)))
   runtime = object.__new__(GenericModelRuntime)
   calls = []
+  stages = []
+  runtime.progress = stages.append
   runtime.host, runtime.frames, runtime.transforms = object(), object(), object()
   runtime.device_buffer = SimpleNamespace(copy_from=lambda host: calls.append(('upload', host)))
   state = np.zeros(1)
@@ -75,6 +77,7 @@ def test_generic_dispatch_uploads_warps_and_feeds_back_state(monkeypatch):
   runtime.run()
   assert state[0] == 2
   assert [call[0] for call in calls] == ['upload', 'warp', 'model'] * 2
+  assert stages == ['input_upload', 'warp', 'model_call', 'output_read'] * 2
   assert runtime.last_timings == pytest.approx({
     'input_upload_ms': 20, 'input_upload_cpu_ms': 2,
     'warp_call_ms': 10, 'warp_call_cpu_ms': 1,

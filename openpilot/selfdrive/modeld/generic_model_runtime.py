@@ -104,13 +104,18 @@ class GenericModelRuntime:
     self.frames = input_view(self.device_buffer, (2, self.frame_size), dtypes.uint8, self.frames_offset)
 
   def run(self):
+    progress = getattr(self, 'progress', lambda stage: None)
     started, cpu_started = time.monotonic(), time.thread_time()
+    progress('input_upload')
     self.device_buffer.copy_from(self.host)
     uploaded, cpu_uploaded = time.monotonic(), time.thread_time()
+    progress('warp')
     self.queues['new_img'] = self.run_warp(input_frame=self.frames, M_inv=self.transforms)
     warped, cpu_warped = time.monotonic(), time.thread_time()
+    progress('model_call')
     self.run_model(output_buffers=self.outputs, **self.queues)
     dispatched, cpu_dispatched = time.monotonic(), time.thread_time()
+    progress('output_read')
     result = self.outputs['outputs'].numpy().reshape(-1)
     finished, cpu_finished = time.monotonic(), time.thread_time()
     # Call boundaries only: GPU work may finish in a later call. Do not insert

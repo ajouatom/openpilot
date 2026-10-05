@@ -183,8 +183,11 @@ def record_failure(path: Path, error: BaseException | str, phase: str) -> bool:
   transient = (usbgpu_pcie_not_ready(error) or isinstance(error, (TimeoutError, BrokenPipeError)) or
                'precompiled eGPU worker timed out' in detail or 'precompiled eGPU worker exited' in detail)
   value = json.loads((path.parent / 'installed.json').read_text())
+  from openpilot.selfdrive.modeld.egpu_worker_progress import boot_identity
   failure = {'time': time.time(), 'phase': phase, 'rejected': not transient,  # noqa: TID251 - correlate persisted failures with boot logs
-             'pickle_sha256': value['pickle']['sha256'], 'error': detail[-16384:]}
+             'pickle_sha256': value['pickle']['sha256'], 'error': detail[-16384:], 'boot_id': boot_identity()}
+  if isinstance(worker := getattr(error, 'worker_diagnostics', None), dict):
+    failure['worker'] = worker
   target = path.parent / 'last_failure.json'
   temporary = target.with_suffix('.json.tmp')
   temporary.write_text(json.dumps(failure, indent=2))

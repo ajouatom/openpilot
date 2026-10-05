@@ -111,6 +111,37 @@ def test_worker_reports_real_checksum_failure_before_gpu_access(tmp_path):
   assert 'precompiled PKL checksum mismatch' in json.loads(result.stdout[6:])
 
 
+def test_timeout_saves_worker_stage_before_cleanup(tmp_path, monkeypatch):
+  from openpilot.selfdrive.modeld.egpu_worker_progress import WorkerProgress
+  (tmp_path / 'installed.json').write_text(json.dumps({'pickle': {'sha256': 'a' * 64}}))
+  paths = []
+  def start(command, **kwargs):
+    path = Path(command[3] + '.progress')
+    progress = WorkerProgress(path)
+    progress.frame = 42
+    progress.mark('output_read')
+    progress.close()
+    paths.append(path)
+    return SimpleNamespace(stdin=io.BytesIO(), stdout=io.BytesIO(), pid=987654321, poll=lambda: 0)
+  class TimeoutSelector:
+    def __enter__(self):
+      return self
+    def __exit__(self, *args):
+      pass
+    def register(self, *args):
+      pass
+    def select(self, timeout):
+      return []
+  monkeypatch.setattr(runner.subprocess, 'Popen', start)
+  monkeypatch.setattr(runner.selectors, 'DefaultSelector', TimeoutSelector)
+  with pytest.raises(TimeoutError, match='timed out'):
+    runner.PrecompiledModelState(1928, 1208, tmp_path / 'model.pkl')
+  failure = json.loads((tmp_path / 'last_failure.json').read_text())
+  assert failure['worker']['stage'] == 'output_read' and failure['worker']['frame'] == 42
+  assert not failure['rejected'] and failure['phase'] == 'load'
+  assert not paths[0].exists()
+
+
 def test_generic_runner_advances_dropped_frames_without_external_feature_queue(monkeypatch):
   model = object.__new__(runner.PrecompiledModelState)
   model.process = SimpleNamespace(stdin=io.BytesIO())

@@ -132,3 +132,14 @@ def test_runtime_failure_overrides_stale_successful_installation(feature, tmp_pa
   write_big_model_status(tmp_path, 'compiled', sha256='a' * 64)
   result = feature.build_status_payload(SimpleNamespace(get_bool=lambda k: k in {'UsbGpuHardwareSeen', 'UsbGpuStartupFailed'}))
   assert result['state'] == 'error' and result['error_code'] == 'runtime'
+
+
+def test_current_failure_explained_but_never_overrides_active_gpu(feature, monkeypatch):
+  monkeypatch.setattr(feature, 'current_failure', lambda *args: {'error_code': 'timeout', 'worker': {'stage': 'output_read'}})
+  flags = {'UsbGpuHardwareSeen', 'UsbGpuStartupFailed'}
+  params = SimpleNamespace(get_bool=lambda key: key in flags)
+  result = feature.build_status_payload(params)
+  assert result['error_code'] == 'timeout' and result['detail'] == 'Last worker stage: output_read'
+  flags.add('UsbGpuActive')
+  result = feature.build_status_payload(params)
+  assert result['active'] and result['error_code'] != 'timeout'
