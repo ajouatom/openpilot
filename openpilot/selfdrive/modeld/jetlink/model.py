@@ -6,7 +6,7 @@ import time
 
 import numpy as np
 
-from openpilot.selfdrive.modeld.jetlink.link import Client, SPEC, FAULT, state
+from openpilot.selfdrive.modeld.jetlink.link import ClientConnection, SPEC, FAULT, state
 
 MODEL_STATUS = Path('/dev/shm/carrot-jetlink-model.json')
 
@@ -78,6 +78,7 @@ class JoiningModel:
     self.warp = Warp(width, height)
     self.parser = Parser()
     self.client = None
+    self.connection = None
     self.active = False
     self.usbgpu = False
     self.vision_input_names = ['img', 'big_img']
@@ -109,6 +110,9 @@ class JoiningModel:
       self.next_status = now + 1
 
   def _reset_small(self):
+    if hasattr(self.small, 'reset'):
+      self.small.reset()
+      return
     # Captured JITs keep buffer identities: clear in place, never replace queues.
     self.small.prev_desire[:] = 0
     for array in self.small.npy.values():
@@ -119,13 +123,21 @@ class JoiningModel:
 
   def run(self, bufs, transforms, inputs, prepare_only):
     from openpilot.common.swaglog import cloudlog
+    if self.connection is not None and not (self.ready and self.join_allowed):
+      self.connection.close()
+      self.connection = None
     if self.client is None and self.small_runs >= 3 and self.ready and self.join_allowed and time.monotonic() >= self.next_join:
       try:
-        self.client = Client()
-        self.packed[:] = 0
-        self.prev_desire[:] = 0
-        self.reset = True
+        if self.connection is None:
+          self.connection = ClientConnection()
+        if self.connection.future.done():
+          self.client = self.connection.future.result()
+          self.connection = None
+          self.packed[:] = 0
+          self.prev_desire[:] = 0
+          self.reset = True
       except Exception as exc:
+        self.connection = None
         self.error = str(exc)
         self.next_join = time.monotonic() + 5
     if self.client is not None:
