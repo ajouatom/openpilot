@@ -1,4 +1,5 @@
 import asyncio
+import datetime
 import mimetypes
 import os
 import threading
@@ -7,11 +8,18 @@ import time
 from aiohttp import web
 
 from ...config import SCREEN_RECORDING_DIRS
-from .catalog import build_videos, find_file, thumbnail_path
+from .catalog import build_videos, clear_video_info_cache, delete_recording, find_file, probe_video_info, thumbnail_path
 
 VIDEO_CACHE_TTL = 3.0
 _video_cache_lock = threading.Lock()
 _video_cache = {"time": 0.0, "videos": []}
+
+
+def invalidate_screenrecord_cache() -> None:
+  clear_video_info_cache()
+  with _video_cache_lock:
+    _video_cache["time"] = 0.0
+    _video_cache["videos"] = []
 
 
 def cached_screenrecord_videos() -> list[dict]:
@@ -44,6 +52,9 @@ async def api_screenrecord_videos(request: web.Request) -> web.Response:
       "total": total,
       "nextOffset": end if end < total else None,
       "hasMore": end < total,
+      # Device wall clock so clients can derive elapsed times without trusting
+      # their own clock or timezone.
+      "now": int(datetime.datetime.now().timestamp()),
     })
   except Exception as e:
     return web.json_response({"ok": False, "error": str(e)}, status=500)
@@ -85,8 +96,39 @@ async def api_screenrecord_download(request: web.Request) -> web.StreamResponse:
   )
 
 
+async def api_screenrecord_info(request: web.Request) -> web.Response:
+  try:
+    file_id_in = request.match_info.get("file_id", "")
+    path = await asyncio.to_thread(find_file, file_id_in)
+    info = await asyncio.to_thread(probe_video_info, path)
+    return web.json_response({"ok": True, "name": os.path.basename(path), **info})
+  except web.HTTPException:
+    raise
+  except Exception as e:
+    return web.json_response({"ok": False, "error": str(e)}, status=500)
+
+
+async def api_screenrecord_delete(request: web.Request) -> web.Response:
+  try:
+    file_id_in = request.match_info.get("file_id", "")
+    path = await asyncio.to_thread(find_file, file_id_in)
+    await asyncio.to_thread(delete_recording, path)
+    invalidate_screenrecord_cache()
+    return web.json_response({"ok": True})
+  except web.HTTPException:
+    raise
+  except PermissionError as e:
+    return web.json_response({"ok": False, "error": str(e)}, status=403)
+  except FileNotFoundError:
+    return web.json_response({"ok": False, "error": "not found"}, status=404)
+  except Exception as e:
+    return web.json_response({"ok": False, "error": str(e)}, status=500)
+
+
 def register(app: web.Application) -> None:
   app.router.add_get("/api/screenrecord/videos", api_screenrecord_videos)
   app.router.add_get("/api/screenrecord/thumbnail/{file_id}", api_screenrecord_thumbnail)
   app.router.add_get("/api/screenrecord/video/{file_id}", api_screenrecord_video)
   app.router.add_get("/api/screenrecord/download/{file_id}", api_screenrecord_download)
+  app.router.add_get("/api/screenrecord/info/{file_id}", api_screenrecord_info)
+  app.router.add_delete("/api/screenrecord/video/{file_id}", api_screenrecord_delete)
