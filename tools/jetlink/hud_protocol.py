@@ -111,9 +111,18 @@ class SnapshotBuilder:
     self.network.close()
 
   def camera_previews(self):
-    # The host waits for these same display gates. Keep control/settings
-    # snapshots flowing, but do not allocate a camera worker for a hidden HUD.
-    enabled = (self.params.get_int('ClusterHud') == 1 and
+    from openpilot.common.jetlink_status import LINK_STATUS, _fresh, host_label
+    now = time.monotonic()
+    link = _fresh(LINK_STATUS, now)
+    try:
+      host_display = (host_label(link.get('peer')) == 'jetSON' and
+                      0 <= now - float(link['telemetry_updated']) < 3 and
+                      link['telemetry'].get('carrot_hud_connected') is True)
+    except (KeyError, TypeError, ValueError):
+      host_display = False
+    # A host panel can start rendering without a camera preview. Only its
+    # fresh output heartbeat starts this worker; no panel means no allocation.
+    enabled = ((host_display or self.params.get_int('ClusterHud') == 1) and
                (self.params.get_bool('IsOnroad') or self.params.get_int('ClusterHudDebug') >= 1))
     if enabled and self.camera is None:
       from hud_camera import CameraPublisher

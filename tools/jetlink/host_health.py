@@ -69,7 +69,14 @@ def thermal_health(root=THERMAL):
         severity = 'error' if temp >= limit else 'warning'
         issues.append((severity, f"{sensor['name']} {temp:.1f}C / {kind} {limit:.1f}C"))
   severity = 'error' if any(i[0] == 'error' for i in issues) else 'warning' if issues else 'ok' if sensors else 'unknown'
-  return {'severity': severity, 'reason': '; '.join(i[1] for i in issues)[:240],
+  reason = '; '.join(i[1] for i in issues)[:240]
+  trips = [(limit - sensor['temp_c'], sensor['temp_c'], limit)
+           for sensor in sensors for _, limit in sensor['limits']]
+  nearest = min(trips) if trips else None
+  # Preserve thermal identity when storage/runtime health overrides severity.
+  return {'severity': severity, 'reason': reason,
+          'thermal_severity': severity, 'thermal_reason': reason,
+          'thermal_trip': {'temp_c': nearest[1], 'limit_c': nearest[2]} if nearest else None,
           'temp_c': max((s['temp_c'] for s in sensors), default=None), 'sensors': sensors}
 
 
