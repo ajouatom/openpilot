@@ -7,6 +7,21 @@ sys.path.insert(0, str(Path(__file__).parent))
 from hud import require_usb_display, wait_for_usb_display
 
 
+def test_host_switch_is_independent_but_ignition_and_preferences_are_forwarded(monkeypatch):
+  import base64
+  import hud
+  settings = {'ClusterHud': '0', 'IsOnroad': '0', 'ClusterHudDebug': '0', 'ClusterHudBrightness': '42'}
+  monkeypatch.setattr(hud, 'read_snapshot', lambda: (1., {'params': {
+    key: base64.b64encode(value.encode()).decode() for key, value in settings.items()}}))
+  params = hud.DisplayParams()
+  assert params.get_int('ClusterHud') == 1
+  assert not params.get_bool('IsOnroad') and params.get_int('ClusterHudDebug') == 0
+  assert params.get_int('ClusterHudBrightness') == 42
+  settings['IsOnroad'] = '1'
+  params.next_read = 0.
+  assert params.get_bool('IsOnroad') and params.get_int('ClusterHud') == 1
+
+
 def test_absent_display_waits_until_it_arrives_without_window_fallback():
   replies = iter([None, None, 0x0092])
   sleeps = []
