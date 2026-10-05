@@ -196,3 +196,28 @@ def test_unknown_skip_does_not_touch_classified_warnings():
   policy = SpeedcamPolicy()
   policy.add_preview(0xD0, 366, 0.0)                                              # fixed camera at the lead
   assert _update(policy, 0.0, accel=True, skip_unknown=True) == (False, False)
+
+
+def test_early_lead_window_matches_warnings_that_start_early():
+  # 2026-10-05 field logs (Gangwon, 60 km/h): the warning started 462 m before a box camera
+  # (lead 366 m). Off: unknown (hard). On: the saturated preview at 1.26x lead is the box.
+  for early, expected in ((False, None), (True, CLASS_BOX)):
+    policy = SpeedcamPolicy()
+    policy.early_lead = early
+    policy.add_preview(0xD2, 1999, -1537.0)              # saturated, lands 462 m ahead of the warning start
+    _update(policy, 0.0)
+    assert policy.warning_class == expected
+
+
+def test_early_lead_also_covers_a_mobile_zone_but_never_a_late_start():
+  zone = SpeedcamPolicy()
+  zone.early_lead = True
+  zone.add_preview(0xD3, 1463, -997.0)                   # kind 3 target 466 m ahead of the start
+  _update(zone, 0.0)
+  assert zone.warning_class == CLASS_MOBILE_ZONE
+
+  late = SpeedcamPolicy()
+  late.early_lead = True
+  late.add_preview(0xD2, 1999, -1749.0)                  # 250 m ahead: below the unchanged near end
+  _update(late, 0.0)
+  assert late.warning_class is None

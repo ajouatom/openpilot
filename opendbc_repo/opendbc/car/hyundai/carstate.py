@@ -737,6 +737,7 @@ class CarState(CarStateBase):
     self.speedcamCancelBump = cancel and self.op_params.get_bool("VehicleNaviDecelCancelBump")
     self.speedcamSkipFixed = cancel and self.op_params.get_bool("VehicleNaviDecelCancelFixed")
     self.speedcamSkipUnknown = cancel and self.op_params.get_bool("VehicleNaviDecelCancelUnknown")
+    self.speedcam_policy.early_lead = cancel and self.op_params.get_bool("VehicleNaviDecelCancelEarlyWarning")
     # carrot_serv's stock-navigation bump source, mirrored to tell when a bump is actually decelerating.
     self.speedcamBumpDecel = self.op_params.get_int("AutoNaviSpeedCtrlMode") >= 2
     self.speedcamBumpSpeed = float(self.op_params.get_int("AutoNaviSpeedBumpSpeed"))

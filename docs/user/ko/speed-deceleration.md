@@ -53,7 +53,7 @@ Carrot Web 기본값 복원에 쓰이는 `carrot_settings.json`과 Params 최초
 <a id="speed-camera"></a>
 ## 1. 과속카메라
 
-관련 설정은 `AutoNaviSpeedCtrlMode`, `AutoNaviSpeedCtrlEnd`, `AutoNaviRearCameraHoldDistance`, `AutoNaviSpeedDecelRate`, `AutoNaviSpeedSafetyFactor`, `AutoNaviCountDownMode`, `VehicleNaviCanControl`, `VehicleNaviSchoolZoneControl`, `VehicleNaviDecelCancel`(`VehicleNaviDecelCancelBox`, `VehicleNaviDecelCancelMobileZone`, `VehicleNaviDecelCancelBump`, `VehicleNaviDecelCancelFixed`, `VehicleNaviDecelCancelUnknown`), `VehicleNaviSectionAvgControl`, `VehicleSpeedCameraControlMode`, `VehicleSpeedCameraDistanceTime`입니다.
+관련 설정은 `AutoNaviSpeedCtrlMode`, `AutoNaviSpeedCtrlEnd`, `AutoNaviRearCameraHoldDistance`, `AutoNaviSpeedDecelRate`, `AutoNaviSpeedSafetyFactor`, `AutoNaviCountDownMode`, `VehicleNaviCanControl`, `VehicleNaviSchoolZoneControl`, `VehicleNaviDecelCancel`(`VehicleNaviDecelCancelBox`, `VehicleNaviDecelCancelMobileZone`, `VehicleNaviDecelCancelBump`, `VehicleNaviDecelCancelFixed`, `VehicleNaviDecelCancelUnknown`, `VehicleNaviDecelCancelEarlyWarning`), `VehicleNaviSectionAvgControl`, `VehicleSpeedCameraControlMode`, `VehicleSpeedCameraDistanceTime`입니다.
 
 ### `AutoNaviSpeedCtrlMode`
 
@@ -115,6 +115,7 @@ PV5 구간단속은 평균속도나 남은거리를 계산하지 않습니다. �
 | `VehicleNaviDecelCancelMobileZone` | 이동식 단속 구간. `AutoNaviSpeedCtrlMode`가 `3`이라 감속할 때만 의미 |
 | `VehicleNaviDecelCancelFixed` | 고정식 과속카메라(예고 종류 0, 후면 표시 없음). 실제 단속 카메라라서 **기본값 꺼짐** — 상위를 켜도 이 항목은 따로 켜야 동작. 구간단속 중에는 `+`가 구간 해제에 쓰이므로 적용하지 않음 |
 | `VehicleNaviDecelCancelUnknown` | **[실험]** 카메라 종류 예고를 받지 못했거나 해석하지 못한 경고(CAN 미수신·미처리). 예고 없이 오는 신호·과속 카메라도 포함될 수 있어 **기본값 꺼짐**, 상위와 별도로 켜야 동작. 30km/h 이하(어린이·노인보호구역)와 구간단속 중에는 적용하지 않고, 중지 뒤 신호·후면·고정식 예고가 확인되면 그 규칙을 따름 |
+| `VehicleNaviDecelCancelEarlyWarning` | **[실험]** 경고가 평소(카메라 앞 6.1m×제한속도)보다 일찍 켜지는 지역·차량용. 짝 찾기 범위의 앞쪽 끝을 최대 1.35배로 넓혀 박스형·고정식·이동식 구간을 찾음. **위험**: 이동식 구간 예고가 엉뚱한 경고에 붙으면, 이동식 구간 감속 중지가 켜져 있거나 `AutoNaviSpeedCtrlMode` 2 이하일 때 낮은 확률로 실제 단속 카메라 감속을 건너뛸 수 있으니 반드시 확인. 기본값 꺼짐 |
 | `VehicleNaviDecelCancelBump` | 순정 내비 과속방지턱. 방지턱 감속 목표(방지턱 설정으로 계산)가 설정 속도보다 낮아 실제로 감속 중일 때만 입력을 쓰고, 가장 가까운 방지턱 하나만 중지 |
 
 ### `VehicleNaviSectionAvgControl`

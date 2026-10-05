@@ -41,6 +41,10 @@ MATCH_BEHIND_M = 50.0
 # its target sits one lead ahead of the warning start (44/44 zone warnings in 37 drives
 # within -12..+17 m, 2026-09-30). A kind 3 preview elsewhere never turns a warning into a zone.
 ZONE_LEAD_TOLERANCE_M = 60.0
+# [experimental] Some cars/roads start the warning earlier: 2026-10-05 field logs (Gangwon, 60 km/h)
+# had a box, a fixed camera and a mobile zone all at 7.6-7.7 m/km/h. With early_lead the far end of
+# every lead window grows to EARLY_LEAD_FACTOR x lead; the near end is unchanged.
+EARLY_LEAD_FACTOR = 1.35
 RECENT_PREVIEW_M = 2600.0
 PREVIEW_MERGE_M = 20.0  # the stock navigation repeats each preview (~3x); same as carstate event merging
 PREVIEW_KEEP_M = 3000.0
@@ -61,6 +65,7 @@ def decode_camera_profile(value, offset):
 class SpeedcamPolicy:
   def __init__(self):
     self.previews = []
+    self.early_lead = False
     self.reset_warning()
 
   def reset_warning(self):
@@ -108,18 +113,23 @@ class SpeedcamPolicy:
     tolerance = max(WARNING_LEAD_MIN_TOLERANCE_M, lead * WARNING_LEAD_TOLERANCE)
     if start_distance is None:
       start_distance = total_distance
+    far = lead + tolerance
+    zone_far = lead + ZONE_LEAD_TOLERANCE_M
+    if self.early_lead:
+      far = max(far, lead * EARLY_LEAD_FACTOR)
+      zone_far = max(zone_far, lead * EARLY_LEAD_FACTOR)
     candidates = []
     for p in self.previews:
       if p["speed"] != speed or total_distance - p["received"] > RECENT_PREVIEW_M:
         continue
       if (p["kind"] == KIND_MOBILE_ZONE and not p["flagged"] and
-          abs(p["target"] - start_distance - lead) > ZONE_LEAD_TOLERANCE_M):
+          not lead - ZONE_LEAD_TOLERANCE_M <= p["target"] - start_distance <= zone_far):
         continue
       ahead = p["target"] - total_distance
       if p["saturated"]:
-        matched = starting and abs(ahead - lead) <= tolerance
+        matched = starting and lead - tolerance <= ahead <= far
       else:
-        matched = -MATCH_BEHIND_M <= ahead <= lead + tolerance
+        matched = -MATCH_BEHIND_M <= ahead <= far
       if matched:
         candidates.append(p)
     if not candidates:

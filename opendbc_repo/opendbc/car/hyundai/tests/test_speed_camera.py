@@ -47,7 +47,8 @@ class FakeParams:
     if key in ("VehicleNaviDecelCancel", "VehicleNaviSectionAvgControl"):
       return False
     if key in ("VehicleNaviDecelCancelBox", "VehicleNaviDecelCancelMobileZone", "VehicleNaviDecelCancelBump",
-               "VehicleNaviDecelCancelFixed", "VehicleNaviDecelCancelUnknown"):
+               "VehicleNaviDecelCancelFixed", "VehicleNaviDecelCancelUnknown",
+               "VehicleNaviDecelCancelEarlyWarning"):
       return True
     assert key == "VehicleNaviSchoolZoneControl"
     return self.school_zone
@@ -1602,7 +1603,7 @@ def test_decel_cancel_master_gates_every_kind():
   state.op_params.get_bool = lambda key: True
   state._read_speedcam_params()
   assert state.speedcamSkipBox and state.speedcamSkipMobileZone and state.speedcamCancelBump and state.speedcamSkipFixed
-  assert state.speedcamSkipUnknown
+  assert state.speedcamSkipUnknown and state.speedcam_policy.early_lead
 
 
 def test_fixed_camera_skip_outside_a_section_only():
