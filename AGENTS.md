@@ -1,5 +1,30 @@
 # Repository memory
 
+- On 2026-10-05, the user clarified that instructions such as "작업해" or
+  "진행해" include committing and pushing the completed task unless explicitly
+  instructed otherwise. Commit only the task's changes; preserve unrelated work.
+
+- On 2026-10-05, the user requested an offline clock floor after pull/reboot,
+  before building. AGNOS startup reads local HEAD's committer timestamp before
+  dependency/Params/main builds; only an earlier clock advances to commit+1s.
+  Log and verify correction; failures enter existing startup recovery. Preserve
+  later clocks, NTP/GPS, file mtimes, caches and Cython/SCons behavior. 26 focused
+  desktop tests pass; device clock setting and native builds remain unvalidated.
+  This does not establish the cause or cure of intermittent native build errors.
+  See docs/build_time_floor_20261005.md.
+
+- On 2026-10-05, the user approved a distance range for holding extra following
+  headroom. Define D as ego speed times base TF plus configured stop distance,
+  excluding extra TF. Preserve existing hold at <=1.2D; smoothly reduce its
+  envelope/rise rate and restore recovery strength through 1.2-1.5D; at >=1.5D
+  recover at the existing level rate even for a stopped/opening lead. Use the
+  same rule in live state and MPC prediction. Preserve new-lead entry, level-5
+  bypass, physical obstacles, base TF, stopping logic/limits and the J20 trial.
+  299 focused tests pass; recorded-input reference replay reduces one approach's
+  extra margin from 1.916 to 0.142 m, not a vehicle stopping-time/clearance result.
+  Closed-loop comfort and clearance remain unvalidated. Keep incident data local.
+  See docs/longitudinal_gap_hold_band_20261005.md.
+
 - On 2026-10-03, the user requested a manual compatibility option for intermittent
   cluster warnings: HyundaiCanfdClusterDirectTx defaults OFF on every vehicle,
   including EV6. In CAN-FD CAMERA_SCC only, enabling it at startup selects the

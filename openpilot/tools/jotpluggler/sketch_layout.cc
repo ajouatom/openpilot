@@ -1378,6 +1378,27 @@ void constrain_route_time_range_to_loaded_segments(RouteData *route_data,
     route_data->x_min = constrained_min;
     route_data->x_max = constrained_max;
   }
+
+  // A single log uses segment-relative seconds. Shift every synchronized data
+  // source together; camera indices are built from these series after this call.
+  if (segments.size() == 1) {
+    const double time_offset = route_data->x_min;
+    for (RouteSeries &series : route_data->series) {
+      for (double &tm : series.times) tm -= time_offset;
+    }
+    for (LogEntry &entry : route_data->logs) entry.mono_time -= time_offset;
+    for (CanMessageData &message : route_data->can_messages) {
+      for (CanFrameSample &sample : message.samples) sample.mono_time -= time_offset;
+    }
+    for (TimelineEntry &entry : route_data->timeline) {
+      entry.start_time -= time_offset;
+      entry.end_time -= time_offset;
+    }
+    for (ThumbnailFrame &thumbnail : route_data->thumbnails) thumbnail.timestamp -= time_offset;
+    for (GpsPoint &point : route_data->gps_trace.points) point.time -= time_offset;
+    route_data->x_max -= time_offset;
+    route_data->x_min = 0.0;
+  }
 }
 
 const RouteSeries *find_route_series(const RouteData &route_data, std::string_view path) {
