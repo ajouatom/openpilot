@@ -50,3 +50,12 @@ Host changes require a signed Jetson source bundle; a vehicle-only commit does
 not update an already-installed host. Model, TensorRT/JetPack ABI and base image
 stay pinned. Release hashes and local render/test evidence are retained in
 `.analysis/archive/2026-10-06/jetson-hud/` (private, not committed).
+
+Source release `a564ce1dc082909b1fdc73b72e64d920336b34d6` was exported and
+signed with the existing updater trust root. Bundle size is 64,503,897 bytes;
+SHA-256 is `84aae85882796c72d62c824585e62e953e953c7ac1d145c315c7660e5915c701`.
+The immutable NAS bundle and manifest passed full HTTPS readback. The vehicle
+pin selects this release through the existing offroad staging/boot activation
+path; the NAS stable channel and SD installation image are unchanged.
+Focused checks: 65 passed, 5 platform skips; Wiki tests: 25 passed; user-guide
+and generated Wiki validation passed. Physical host activation is unvalidated.
