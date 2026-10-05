@@ -222,6 +222,11 @@ def main():
   # Like modeld, do not let cyclic GC scan the manager's inherited object graph
   # while an inference reply is due. Collect between USB sessions instead.
   gc.disable()
+  # The manager forks us with its large, long-lived Python object graph.
+  # Session cleanup must not dirty all those shared pages on the first plug-in.
+  # Freeze only once, before creating any USB session; new session cycles still
+  # participate in the existing between-session collections below.
+  gc.freeze()
   os.sched_setscheduler(0, os.SCHED_OTHER, os.sched_param(0))
   os.sched_setaffinity(0, set(range(min(4, os.cpu_count() or 1))))
   lock = open('/dev/shm/carrot-jetlink.lock', 'w')

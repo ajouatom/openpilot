@@ -1,9 +1,12 @@
 """Bounded local IPC; the USB owner never executes on modeld's realtime thread."""
 import json
+from concurrent.futures import Future, InvalidStateError
+import os
 from pathlib import Path
 import socket
 import struct
 import time
+import threading
 
 import numpy as np
 
@@ -165,3 +168,36 @@ class Client:
 
   def close(self):
     self.sock.close()
+
+
+class ClientConnection:
+  """One bounded handshake, without waiting on the camera inference thread."""
+  def __init__(self):
+    self.future = Future()
+    threading.Thread(target=self._connect, args=(self.future,), name='jetlink-connect', daemon=True).start()
+
+  @staticmethod
+  def _connect(future):
+    client = None
+    try:
+      # A thread otherwise inherits modeld's realtime scheduling policy.
+      if hasattr(os, 'sched_setscheduler'):
+        os.sched_setscheduler(0, os.SCHED_OTHER, os.sched_param(0))
+      client = Client()
+      future.set_result(client)
+    except InvalidStateError:
+      if client is not None:
+        client.close()  # The join opportunity expired during the handshake.
+    except Exception as exc:
+      try:
+        future.set_exception(exc)
+      except InvalidStateError:
+        pass
+
+  def close(self):
+    if not self.future.cancel():
+      try:
+        client = self.future.result()
+      except Exception:
+        return
+      client.close()
