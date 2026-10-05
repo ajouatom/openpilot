@@ -507,6 +507,11 @@ function launch {
       flock -u 9
       while true; do sleep 1; done
     fi
+    # Offline wall-clock floor after any OS update, before dependency/bootstrap
+    # or Params SCons work. GPS timed starts only after the main build.
+    if ! run_startup_command python3 "$DIR/openpilot/common/build_time.py"; then
+      show_startup_failure "System clock correction failed before build"
+    fi
   fi
 
   # AGNOS must be current before installing its matching offline wheels. SCons

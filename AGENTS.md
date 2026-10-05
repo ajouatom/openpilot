@@ -1,5 +1,18 @@
 # Repository memory
 
+- On 2026-10-05, the user clarified that instructions such as "작업해" or
+  "진행해" include committing and pushing the completed task unless explicitly
+  instructed otherwise. Commit only the task's changes; preserve unrelated work.
+
+- On 2026-10-05, the user requested an offline clock floor after pull/reboot,
+  before building. AGNOS startup reads local HEAD's committer timestamp before
+  dependency/Params/main builds; only an earlier clock advances to commit+1s.
+  Log and verify correction; failures enter existing startup recovery. Preserve
+  later clocks, NTP/GPS, file mtimes, caches and Cython/SCons behavior. 26 focused
+  desktop tests pass; device clock setting and native builds remain unvalidated.
+  This does not establish the cause or cure of intermittent native build errors.
+  See docs/build_time_floor_20261005.md.
+
 - On 2026-10-05, the user approved a distance range for holding extra following
   headroom. Define D as ego speed times base TF plus configured stop distance,
   excluding extra TF. Preserve existing hold at <=1.2D; smoothly reduce its
