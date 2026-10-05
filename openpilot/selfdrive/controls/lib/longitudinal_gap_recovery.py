@@ -16,6 +16,8 @@ OPENING_SPEED = 0.2
 OPENING_FILTER_TAU = 0.3
 ENTRY_TIME = 0.8
 MAX_CAPTURE_RISE = 0.5  # seconds of additional TF per second, after acquisition
+HOLD_DISTANCE_START = 1.2
+HOLD_DISTANCE_END = 1.5
 
 
 class LeadGapState:
@@ -31,10 +33,10 @@ class LeadGapState:
     self.relative_speed = 0.0
 
   def update(self, *, level, track_id, enabled, dt, ego_speed, lead_speed, relative_speed,
-             distance, desired_distance, base_tf):
-    values = (dt, ego_speed, lead_speed, relative_speed, distance, desired_distance, base_tf)
+             distance, desired_distance, base_tf, stop_distance=6.0):
+    values = (dt, ego_speed, lead_speed, relative_speed, distance, desired_distance, base_tf, stop_distance)
     if (not enabled or level not in range(len(RECOVERY_TAU)) or track_id < 0
-        or not all(map(math.isfinite, values)) or dt <= 0.0 or ego_speed < 0.0 or distance <= 0.0 or base_tf < 0.0):
+        or not all(map(math.isfinite, values)) or dt <= 0.0 or ego_speed < 0.0 or distance <= 0.0 or base_tf < 0.0 or stop_distance < 0.0):
       self.__init__()
       return 0.0
 
@@ -51,12 +53,13 @@ class LeadGapState:
     # speed. Opening can continue through a lead acceleration lull or restart.
     self.filtered_relative_speed += -math.expm1(-dt / OPENING_FILTER_TAU) * (relative_speed - self.filtered_relative_speed)
     if not acquired:
-      # An opening gap is deliberate comfort headroom, including when lead
-      # acceleration has already eased. Follow its envelope rather than only
-      # accepting candidate increments while simultaneously draining it.
+      # Preserve opening-gap comfort inside the distance band, then gradually
+      # remove its hold and the low-speed release restriction. Extra headroom
+      # must not enlarge the distance used to decide whether to keep it.
+      release = distance_recovery_weight(distance, ego_speed, base_tf, stop_distance)
       target = max(candidate, self.recovery_tf, self.extra_tf) if self.filtered_relative_speed > OPENING_SPEED else None
       self.recovery_tf, self.extra_tf = advance_headroom(
-        self.recovery_tf, self.extra_tf, target, dt, lead_speed, RECOVERY_TAU[level], cap)
+        self.recovery_tf, self.extra_tf, target, dt, lead_speed, RECOVERY_TAU[level], cap, release)
 
     self.extra_tf = min(cap, self.extra_tf)
     self.recovery_tf = min(cap, self.recovery_tf)
@@ -66,7 +69,7 @@ class LeadGapState:
     return self.extra_tf * entry_weight(self.strength)
 
   def margins(self, *, level, times, ego_speeds, lead_speeds, base_tf,
-              lead_distances=None, desired_distances=None):
+              lead_distances=None, desired_distances=None, stop_distance=6.0):
     if self.key is None or level not in range(len(RECOVERY_TAU)):
       return np.zeros_like(times)
     # Roll a copy through the SAME capture, entry and recovery rules. Anchor
@@ -91,7 +94,7 @@ class LeadGapState:
         predicted.update(level=level, track_id=self.key[1], enabled=True, dt=dt,
                          ego_speed=float(ego_speeds[i]), lead_speed=float(lead_speeds[i]),
                          relative_speed=float(relative_speeds[i]), distance=max(1e-3, float(lead_distances[i])),
-                         desired_distance=float(desired_distances[i]), base_tf=base_tf)
+                         desired_distance=float(desired_distances[i]), base_tf=base_tf, stop_distance=stop_distance)
       margins[i] = max(0.0, ego_speeds[i]) * min(predicted.extra_tf, max(0.0, MAX_TOTAL_TF - base_tf)) * entry_weight(predicted.strength)
       previous_time = t
     return margins
@@ -102,30 +105,45 @@ def entry_weight(strength):
   return strength * strength * (3.0 - 2.0 * strength)
 
 
-def advance_headroom(reservoir, extra, target, dt, lead_speed, tau, cap):
+def distance_recovery_weight(distance, ego_speed, base_tf, stop_distance):
+  """Smoothly remove hold between 1.2 and 1.5 times TF distance plus standstill gap."""
+  reference = max(1e-3, ego_speed * base_tf + stop_distance)
+  fraction = min(1.0, max(0.0, (distance / reference - HOLD_DISTANCE_START) / (HOLD_DISTANCE_END - HOLD_DISTANCE_START)))
+  return entry_weight(fraction)
+
+
+def advance_headroom(reservoir, extra, target, dt, lead_speed, tau, cap, release=0.0):
   """Charge/hold an absolute envelope, or release through two filter stages.
 
   The reservoir rises at a bounded rate while opening, never accumulating the
   same candidate repeatedly. The output always follows extra'=k*(reservoir-extra),
   including across charge/hold/release transitions. On release the reservoir
   decays too: equal initial states give extra=H*(1+k*t)*exp(-k*t).
+  Distance release lowers the opening envelope and its charge rate, while
+  restoring the level's ordinary recovery rate even for a stopped lead.
   """
   reservoir, extra = min(cap, reservoir), min(cap, extra)
-  k = 2.0 * float(recovery_strength(lead_speed)) / tau
+  strength = float(recovery_strength(lead_speed))
+  k = 2.0 * (strength + release * (1.0 - strength)) / tau
   if target is not None:
-    charge_time = min(dt, max(0.0, min(cap, target) - reservoir) / MAX_CAPTURE_RISE)
-    if k > 0.0:
-      following = -math.expm1(-k * charge_time)
-      extra += (reservoir - extra) * following + MAX_CAPTURE_RISE * (charge_time - following / k)
-    reservoir += MAX_CAPTURE_RISE * charge_time
-    if k > 0.0:
-      extra += (reservoir - extra) * -math.expm1(-k * (dt - charge_time))
-    return reservoir, min(cap, max(0.0, extra))
+    target = min(cap, target) * (1.0 - release)
+    rise = MAX_CAPTURE_RISE * (1.0 - release)
+    if target >= reservoir and rise > 0.0:
+      charge_time = min(dt, (target - reservoir) / rise)
+      if k > 0.0:
+        following = -math.expm1(-k * charge_time)
+        extra += (reservoir - extra) * following + rise * (charge_time - following / k)
+      reservoir += rise * charge_time
+      if k > 0.0:
+        extra += (reservoir - extra) * -math.expm1(-k * (dt - charge_time))
+      return reservoir, min(cap, max(0.0, extra))
+  else:
+    target = 0.0
   if k <= 0.0:
     return reservoir, extra
   z = k * dt
   decay = math.exp(-z)
-  return reservoir * decay, (extra + z * reservoir) * decay
+  return target + (reservoir - target) * decay, target + (extra - target + z * (reservoir - target)) * decay
 
 
 def recovery_strength(lead_speed):
