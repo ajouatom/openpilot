@@ -88,6 +88,11 @@ def collect_report(cache: Path, params: Path, usb_root: Path, repo: Path, update
     runtime_safe = isinstance(runtime_name, str) and re.fullmatch(r'runtime-[0-9a-f]{16}', runtime_name)
     entry = 'examples/openpilot/compile_warp.py' if installed.get('format') == 'comma-generic-onnx' else 'model_runtime.py'
     model_file = root / 'model.pkl'
+    failure = read_json(root / 'last_failure.json')
+    failure_report = select(failure, ('time', 'phase', 'rejected', 'pickle_sha256', 'error', 'boot_id', 'read_error'))
+    if isinstance(failure.get('worker'), dict):
+      failure_report['worker'] = select(failure['worker'], ('pid', 'stage', 'frame', 'stage_age_ms', 'thread_cpu_seconds',
+                                                         'thread_id', 'stat', 'schedstat', 'wchan'))
     artifacts.append({'model_sha256': root.name, 'is_active': root.name == active_sha,
                       'model_exists': model_file.is_file(), 'model_bytes': model_file.stat().st_size if model_file.is_file() else None,
                       'pickle': select(installed.get('pickle', {}) if isinstance(installed.get('pickle'), dict) else {}, ('sha256', 'size')),
@@ -95,7 +100,7 @@ def collect_report(cache: Path, params: Path, usb_root: Path, repo: Path, update
                       'runtime_entry_exists': bool(runtime_safe and (root / runtime_name / entry).is_file()),
                       'runtime_tinygrad_exists': bool(runtime_safe and (root / runtime_name / 'tinygrad/__init__.py').is_file()),
                       'rejected': (root / 'rejected').exists(), 'rejected_hash': read_text(root / 'rejected', 128).strip(),
-                      'last_failure': select(read_json(root / 'last_failure.json'), ('time', 'phase', 'rejected', 'pickle_sha256', 'error', 'read_error')),
+                      'last_failure': failure_report,
                       'boot_validation_exists': (root / 'boot_validation.json').is_file()})
   report['artifacts'] = artifacts
   report['usb_devices'] = []

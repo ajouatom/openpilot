@@ -27,7 +27,11 @@ def main():
   control = sys.stdout.buffer
   sys.stdout = sys.stderr  # tinygrad diagnostics must not enter the control protocol
   pkl, shared_path, width, height = Path(sys.argv[1]), Path(sys.argv[2]), int(sys.argv[3]), int(sys.argv[4])
+  # This entry point is executed by filename; keep early diagnostics stdlib-only.
+  from egpu_worker_progress import WorkerProgress
+  progress = WorkerProgress(Path(str(shared_path) + '.progress'))
   manifest = json.loads((pkl.parent / 'installed.json').read_text())
+  progress.mark('verify_model')
   with pkl.open('rb') as f:
     if hashlib.file_digest(f, 'sha256').hexdigest() != manifest['pickle']['sha256']:
       raise ValueError('precompiled PKL checksum mismatch')
@@ -46,6 +50,7 @@ def main():
   from openpilot.common.swaglog import cloudlog
   from openpilot.system.camerad.cameras.nv12_info import get_nv12_info
 
+  progress.mark('load_model')
   with pkl.open('rb') as f:
     jits = load_oob(f)
     if f.read(1):
@@ -53,6 +58,7 @@ def main():
   if not generic and ('run_policy' in jits or 'run_model' not in jits):
     raise ValueError('wrong precompiled runtime format')
   if generic:
+    progress.mark('prepare_runtime')
     from openpilot.selfdrive.modeld.generic_model_runtime import model_metadata
     from openpilot.selfdrive.modeld.local_gpu_warp import LocalWarpRuntime, bind_runtime, create_runtime, vehicle_device_type
     checkpoint, _, _, _ = model_metadata(jits)
@@ -85,6 +91,7 @@ def main():
   input_bytes = packed.nbytes
   total = input_bytes + count * 4
   with shared_path.open('r+b') as f:
+    progress.mark('bind_buffers')
     f.truncate(total)
     with mmap.mmap(f.fileno(), total) as shared:
       packed_shared = np.ndarray((input_bytes,), np.uint8, buffer=shared)
@@ -92,6 +99,7 @@ def main():
       output = np.ndarray((count,), np.float32, buffer=shared, offset=input_bytes)
       if generic:
         adapter = bind_runtime(adapter, adapter_args, packed_shared, cloudlog.exception)
+        adapter.progress = progress.mark
         cloudlog.event('precompiledWarp', backend='qcom' if isinstance(adapter, LocalWarpRuntime) else 'amd',
                        input_bytes=input_bytes, usb_input_bytes=getattr(adapter, 'upload_bytes', input_bytes))
       else:
@@ -102,26 +110,32 @@ def main():
               'checkpoint': metadata['model_checkpoint'], 'frame_size': frame_size}
       control.write(json.dumps(info).encode() + b'\n')
       control.flush()
+      progress.mark('idle')
       diagnostics = RuntimeDiagnostics('precompiled_worker', cloudlog.event)
       while command := sys.stdin.buffer.read(1):
         if command == b'q':
           break
         if command != b'r':
           raise ValueError('invalid model worker command')
+        progress.frame += 1
         started, cpu_started = time.monotonic(), time.thread_time()
         if generic:
           result = adapter.run()
           dispatched = time.monotonic()
         else:
+          progress.mark('model_call')
           outs, = run_model(**{k: queues[k] for k in model_runtime.MODELD_INPUTS})
           dispatched = time.monotonic()
+          progress.mark('output_read')
           result = outs.numpy().reshape(-1)
         if result.size != count or not np.isfinite(result).all():
           raise ValueError('invalid precompiled model output')
+        progress.mark('publish')
         output[:] = result
         finished, cpu_finished = time.monotonic(), time.thread_time()
         control.write(b'1\n')
         control.flush()
+        progress.mark('idle')
         # Timings include transfers/synchronization; these are not pure GPU
         # kernel durations. Keep the pipe protocol and the compiled graph intact.
         diagnostics.record(context={'gpu_arch': manifest['gpu_arch'], 'format': manifest['format'],

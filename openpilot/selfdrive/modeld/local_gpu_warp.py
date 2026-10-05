@@ -190,15 +190,20 @@ class LocalWarpRuntime(GenericModelRuntime):
       self.raw[:] = 0
 
   def run(self):
+    progress = getattr(self, 'progress', lambda stage: None)
     started, cpu_started = time.monotonic(), time.thread_time()
+    progress('local_prepare')
     images = self.prepare_images()
     np.copyto(self.compact[:self.frames_offset], self.raw[:self.frames_offset])
     np.copyto(self.compact[self.frames_offset:], images.reshape(-1))
     prepared, cpu_prepared = time.monotonic(), time.thread_time()
+    progress('input_upload')
     self.device_buffer.copy_from(self.host)
     uploaded, cpu_uploaded = time.monotonic(), time.thread_time()
+    progress('model_call')
     self.run_model(output_buffers=self.outputs, **self.queues)
     dispatched, cpu_dispatched = time.monotonic(), time.thread_time()
+    progress('output_read')
     result = self.outputs['outputs'].numpy().reshape(-1)
     finished, cpu_finished = time.monotonic(), time.thread_time()
     self.last_timings = {

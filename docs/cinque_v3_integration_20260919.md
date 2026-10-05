@@ -105,3 +105,43 @@ Validation uses mocked UI/hardware, simulated connectivity recovery after
 60 and 600 seconds, cached download/resume tests and CLI verification/swap
 tests. All 59 focused updater/startup tests passed, as did Ruff and shell syntax
 checks. It does not establish a new on-device flash or C3/C4 reboot result.
+
+## eGPU failure handling and evidence (2026-10-06)
+
+For installed precompiled artifacts, modeld now makes at most two loader
+attempts when the existing readiness-error classifier permits retry, instead
+of six. A recovered second attempt still selects eGPU; persistent failure
+retains the existing internal-model fallback and automatic error-tmux request.
+Legacy local-model loading keeps six attempts. Existing worker/inference and
+outer loader deadlines remain unchanged: two attempts are not a fixed startup
+time guarantee and do not repair a persistently unavailable PCIe link.
+
+The isolated worker publishes a 48-byte shared progress record at call
+boundaries: model verification/loading, runtime/buffer preparation, input
+upload, warp, model execution, output read and publication. This uses mmap,
+without per-frame filesystem open/write/fsync, network probes or GPU
+synchronization. On response timeout, the parent saves the latest consistent
+record and bounded worker-thread stat/schedstat/wchan reads before terminating
+the worker. The existing last_failure.json and tmux diagnostic attachment
+retain this evidence. Missing diagnostics do not prevent inference. A recorded
+stage is the last entered CPU call, not proof of which asynchronous GPU kernel
+or hardware component failed; the record is best-effort diagnostic evidence.
+
+The Korean/English Web card distinguishes PCIe readiness, worker timeout and
+USB communication errors, states that the internal model was selected, and
+does not claim that the saved report establishes the root cause. Current boot
+and installed-artifact identities prevent older failures being presented as
+current evidence; active eGPU status takes precedence over a saved failure.
+
+Desktop validation: 105 model/runtime/delivery tests, 12 diagnostic-attachment
+tests, 23 Web backend tests and 11 Web rendering tests passed. The Web bundle
+was regenerated; only the tools bundle and its manifest hash changed. New
+tests are included in CI. Existing modeld lint findings outside the changed
+lines remain. No device inference, timing or physical fault-recovery validation
+was performed for this change.
+
+This does not change the signed runtime/model, inference timeout, CPU policy,
+camera validity or engagement checks. It does not add an in-motion GPU reset.
+The internal model is loaded in advance but not warmed by executing frames;
+first-use fallback latency remains unresolved. Incident captures and detailed
+vehicle analysis are retained in the private analysis archive, not this repo.

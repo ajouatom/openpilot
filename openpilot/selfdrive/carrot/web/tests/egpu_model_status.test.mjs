@@ -24,6 +24,12 @@ test("delivery failures explain automatic recovery and installed files do not im
   assert.equal(elements.get("egpuModelState").textContent, "eGPU running");
   CarrotEgpuModel.render({ available: true, state: "error", error_code: "runtime", active: false });
   assert.match(elements.get("egpuModelDetail").textContent, /internal model is selected/);
+  for (const [error_code, expected] of [["pcie", /PCIe link/], ["timeout", /stopped responding/], ["usb", /USB communication error/]]) {
+    CarrotEgpuModel.render({ available: true, state: "error", error_code, active: false });
+    assert.match(elements.get("egpuModelDetail").textContent, expected);
+    assert.match(elements.get("egpuModelDetail").textContent, /internal model is selected/);
+    assert.doesNotMatch(elements.get("egpuModelDetail").textContent, /contains the cause/);
+  }
 });
 
 test("model update card shows download progress before compilation is available", (t) => {

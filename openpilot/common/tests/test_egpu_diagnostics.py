@@ -28,7 +28,8 @@ def test_rejected_artifact_retains_failure_and_usb_evidence(evidence):
   (root / 'model.pkl').write_bytes(b'abc')
   (root / 'installed.json').write_text(json.dumps({'pickle': {'sha256': sha, 'size': 3}}))
   (root / 'rejected').write_text(sha)
-  failure = {'phase': 'inference', 'rejected': True, 'error': 'libusb_control_transfer: Input/Output Error'}
+  failure = {'phase': 'inference', 'rejected': True, 'error': 'libusb_control_transfer: Input/Output Error',
+             'worker': {'stage': 'output_read', 'schedstat': '100 200 3'}, 'boot_id': 'current-boot'}
   (root / 'last_failure.json').write_text(json.dumps(failure))
   (params / 'UsbGpuCompiled').write_text('0')
   device = usb / '1-1'
