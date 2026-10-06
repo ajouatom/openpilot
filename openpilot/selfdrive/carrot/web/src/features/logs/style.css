@@ -1144,23 +1144,11 @@
   line-height: 1.25;
 }
 
-.screenrecord-download {
-  appearance: none;
-  border: 0;
+.screenrecord-menu-btn {
   width: 36px;
   height: 36px;
   flex: 0 0 36px;
-  display: grid;
-  place-items: center;
   border-radius: 8px;
-  color: var(--md-on-surface-var);
-  background: transparent;
-  cursor: pointer;
-}
-
-.screenrecord-download:hover {
-  color: var(--md-primary);
-  background: color-mix(in srgb, var(--md-primary) 10%, transparent);
 }
 
 @media (min-width: 900px) {

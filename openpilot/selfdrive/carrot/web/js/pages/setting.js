@@ -640,7 +640,7 @@ async function applySettingInlineSearch(query = settingInlineSearchView.getQuery
   CURRENT_SETTING_DETAIL = null;
   const restoreInputFocus = settingInlineSearchView.isFocused();
   showSettingScreen("items", !wasSearching);
-  renderGroups({ animateGroups: false });
+  if (!wasSearching) renderGroups({ animateGroups: false });
   mountSettingInlineSearch("items");
   if (restoreInputFocus) settingInlineSearchView.focus();
   history.replaceState({ page: "setting", screen: "items", group: CURRENT_GROUP, inlineSearchQuery: nextQuery }, "");
@@ -2339,10 +2339,6 @@ async function renderItems(group, options = {}) {
   const allowHidden = options.allowHidden === true;
   const requestedScrollTop = Number.isFinite(options.scrollTop) ? options.scrollTop : null;
   destroySettingProfileActionMenus();
-  itemsBox.innerHTML = "";
-  delete itemsBox.dataset.renderedGroup;
-  delete itemsBox.dataset.renderedDetail;
-  itemsBox.dataset.renderedSearchQuery = group === SETTING_INLINE_SEARCH_GROUP ? settingInlineSearchQuery : "";
 
   const allEntries = getSettingItemEntriesForGroup(group);
   const detailEntry = detailMode ? getSettingDetailEntry(group, detailName) : null;
@@ -2383,6 +2379,14 @@ async function renderItems(group, options = {}) {
   ) {
     return;
   }
+
+  // Clear only once the fresh values are ready: the inline search re-enters
+  // here on every debounced keystroke, and emptying the list up front made
+  // each keystroke flash like a full refresh.
+  itemsBox.innerHTML = "";
+  delete itemsBox.dataset.renderedGroup;
+  delete itemsBox.dataset.renderedDetail;
+  itemsBox.dataset.renderedSearchQuery = group === SETTING_INLINE_SEARCH_GROUP ? settingInlineSearchQuery : "";
 
   if (!list.length && detailMode) {
     settingViewRuntime.renderEmptyState(itemsBox, {
