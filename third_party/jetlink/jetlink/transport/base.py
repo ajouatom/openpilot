@@ -131,6 +131,10 @@ class StreamTransport(Transport):
   Subclasses supply only the two primitives that differ.
   """
 
+  # Carrot extension: select a strict wire version per fresh connection.
+  # The default remains the unmodified v2 contract used by deployed Jetsons.
+  wire_protocol = P
+
   # Extra capacity past the current message, for transports whose reads need a
   # minimum buffer size (a bulk OUT endpoint wants a whole packet).
   read_slack = 0
@@ -177,6 +181,7 @@ class StreamTransport(Transport):
   # -- framing -------------------------------------------------------------
 
   def send(self, msg_type: int, seq: int, parts=(), flags: int = 0, timeout: float | None = None) -> None:
+    P = self.wire_protocol
     # cast('B'): slicing a float32 view in advance() would step by elements
     bufs = [memoryview(p).cast('B') for p in parts]
     length = sum(b.nbytes for b in bufs)
@@ -261,6 +266,7 @@ class StreamTransport(Transport):
         last = time.monotonic()
 
   def recv(self, timeout: float | None = None) -> Message:
+    P = self.wire_protocol
     if self._desynced:
       raise LinkError("stream desynced; the link must be reopened")
     end = None if timeout is None else time.monotonic() + timeout

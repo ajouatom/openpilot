@@ -16,7 +16,7 @@ from openpilot.selfdrive.modeld.jetlink import VENDOR
 from openpilot.selfdrive.modeld.jetlink.link import (SPEC, SOCKET, STATUS, REQUEST, REPLY, PacketReader, send, send_parts)
 from openpilot.selfdrive.modeld.jetlink.phase import Publisher as PhasePublisher
 from openpilot.selfdrive.modeld.jetlink.mac import prepare, PreparationDeferred
-from jetlink.client import JetlinkClient
+from openpilot.selfdrive.modeld.jetlink.compat import ProtocolAttempts
 from jetlink.transport.ffs import FfsTransport
 
 GADGET = '/sys/kernel/config/usb_gadget/jetlink'
@@ -239,10 +239,12 @@ def main():
   listener.settimeout(.05)
   setup = VENDOR.parents[1] / 'tools/jetlink/setup_gadget.sh'
   peer = None
+  protocols = ProtocolAttempts()
   try:
     while True:
       update_affinity()
       if not host_attached():
+        protocols.reset()
         publish('waiting', peer=peer)
         time.sleep(1)
         continue
@@ -253,8 +255,7 @@ def main():
         gc.collect()
         subprocess.run(['sudo', '-n', 'bash', str(setup)], check=True, timeout=15, capture_output=True)
         udc = next(Path('/sys/class/udc').iterdir()).name
-        client = JetlinkClient(CarrotTransport('/dev/ffs-jetlink', gadget=GADGET, udc=udc), name='carrot-jetlink')
-        peer = client.hello()
+        client, peer = protocols.hello(CarrotTransport('/dev/ffs-jetlink', gadget=GADGET, udc=udc))
         speed = (Path('/sys/class/udc') / udc / 'current_speed').read_text().strip()
         if speed not in ('super-speed', 'super-speed-plus'):
           raise RuntimeError(f'USB 5Gbps or faster required; negotiated {speed}')
