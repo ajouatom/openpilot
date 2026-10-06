@@ -177,8 +177,8 @@ function screenrecordVideoRowHtml(video, index = 0) {
         <span>${ext}</span>
       </div>
     </div>
-    <button class="screenrecord-download" type="button" data-action="download-screenrecord" data-id="${id}" aria-label="${escapeHtml(getUIText("download", "Download"))}" title="${escapeHtml(getUIText("download", "Download"))}">
-      <svg viewBox="0 0 24 24"><path fill="currentColor" d="M5 20h14v-2H5m14-9h-4V3H9v6H5l7 7z"/></svg>
+    <button class="dashcam-menu-btn screenrecord-menu-btn" type="button" data-action="screenrecord-menu" data-id="${id}" data-name="${name}" aria-label="${escapeHtml(getUIText("screenrecord_menu", "Screen record menu"))}" title="${escapeHtml(getUIText("screenrecord_menu", "Screen record menu"))}">
+      <svg viewBox="0 0 24 24"><path fill="currentColor" d="M12 8a2 2 0 1 0 0-4 2 2 0 0 0 0 4m0 2a2 2 0 1 0 0 4 2 2 0 0 0 0-4m0 6a2 2 0 1 0 0 4 2 2 0 0 0 0-4"/></svg>
     </button>
   </article>`;
 }
@@ -274,6 +274,91 @@ async function loadScreenrecordVideos({ silent = false, append = false } = {}) {
   }
 }
 
+function formatScreenrecordDuration(seconds) {
+  const total = Math.max(0, Math.round(Number(seconds) || 0));
+  const hours = Math.floor(total / 3600);
+  const minutes = Math.floor((total % 3600) / 60);
+  const secs = total % 60;
+  const pad = (value) => String(value).padStart(2, "0");
+  return hours > 0 ? `${hours}:${pad(minutes)}:${pad(secs)}` : `${minutes}:${pad(secs)}`;
+}
+
+async function showScreenrecordInfo(id, name) {
+  const info = await getJson(screenrecordApiPath("info", id));
+  if (info?.ok === false) throw new Error(info.error || "failed");
+  const line = (label, value) => `<div class="app-dialog__metaLine">${escapeHtml(label)}: ${escapeHtml(value)}</div>`;
+  const rows = [
+    line(getUIText("video_resolution", "Resolution"),
+      info.width && info.height ? `${info.width} x ${info.height}` : "-"),
+    line(getUIText("video_fps", "FPS"), info.fps ? String(info.fps) : "-"),
+    line(getUIText("video_frames", "Frames"), info.frameCount ? String(info.frameCount) : "-"),
+    line(getUIText("video_duration", "Duration"),
+      info.durationSeconds ? formatScreenrecordDuration(info.durationSeconds) : "-"),
+    line(getUIText("video_size", "Size"), formatLogBytes(info.size)),
+    line(getUIText("video_codec", "Codec"), info.codec || "H.264"),
+    line(getUIText("video_created", "Recorded"),
+      info.startLabel || info.modifiedLabel || "-"),
+  ];
+  await openAppDialog({
+    mode: "alert",
+    title: name || getUIText("video_info", "Info"),
+    html: true,
+    messageHtml: `<div class="app-dialog__metaList">${rows.join("")}</div>`,
+  });
+}
+
+async function deleteScreenrecordVideo(id, name) {
+  const confirmed = await openAppDialog({
+    mode: "confirm",
+    title: getUIText("delete", "Delete"),
+    message: getUIText("delete_video_confirm", "Delete this recording?\n{name}").replace("{name}", name || ""),
+    confirmLabel: getUIText("delete", "Delete"),
+    cancelLabel: getUIText("cancel", "Cancel"),
+  });
+  if (!confirmed) return;
+  try {
+    const response = await fetch(screenrecordApiPath("video", id), { method: "DELETE" });
+    const json = await response.json().catch(() => ({}));
+    if (!response.ok || json.ok === false) throw new Error(json.error || `HTTP ${response.status}`);
+    showAppToast(getUIText("video_deleted", "Recording deleted"), { tone: "success" });
+    await loadScreenrecordVideos({ silent: false });
+  } catch (e) {
+    showAppToast(e?.message || String(e), { tone: "error" });
+  }
+}
+
+async function showScreenrecordMenu(id, name) {
+  if (!id) return;
+  const video = (screenrecordState.videos || []).find((entry) => String(entry?.id || "") === String(id));
+  const meta = [
+    formatRelativeEpoch(video?.modifiedEpoch) || localizeRelativeLabel(video?.modifiedLabel || video?.relativeModifiedLabel || ""),
+    formatLogBytes(video?.size || 0),
+  ].filter(Boolean).join(" | ");
+  const selected = await openAppDialog({
+    mode: "choice",
+    title: name || getUIText("logs_screenrecord", "Screen Record"),
+    message: meta,
+    choiceLayout: "list",
+    choices: [
+      { label: getUIText("play", "Play"), value: "play" },
+      { label: getUIText("download", "Download"), value: "download" },
+      { label: getUIText("video_info", "Info"), value: "info" },
+      { label: getUIText("delete", "Delete"), value: "delete", danger: true },
+    ],
+  });
+  if (selected === "play") {
+    openScreenrecordPlayer(id, name);
+  } else if (selected === "download") {
+    window.open(screenrecordApiPath("download", id), "_blank", "noopener");
+  } else if (selected === "info") {
+    await showScreenrecordInfo(id, name).catch((e) => {
+      showAppToast(e?.message || String(e), { tone: "error" });
+    });
+  } else if (selected === "delete") {
+    await deleteScreenrecordVideo(id, name);
+  }
+}
+
 export {
   loadScreenrecordVideos,
   openScreenrecordPlayer,
@@ -282,4 +367,5 @@ export {
   screenrecordApiPath,
   screenrecordShouldLoadMore,
   screenrecordState,
+  showScreenrecordMenu,
 };

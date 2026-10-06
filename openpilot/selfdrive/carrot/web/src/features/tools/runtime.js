@@ -62,6 +62,7 @@ let toolsNotificationJobs = [];
 let toolsNotificationRefreshPromise = null;
 let toolsLogAttentionTimer = null;
 let toolsMetaTickerRaf = 0;
+let toolsUpdateAgoTimer = null;
 
 function normalizeToolsOutText(s) {
   return String(s ?? "").replace(/\s+$/, "");
@@ -433,6 +434,53 @@ async function openToolsLanguageDialog() {
   }
 }
 
+function parseToolsMetaTimestamp(value) {
+  const raw = String(value || "").replace(/['"]/g, "").trim();
+  if (!raw) return NaN;
+
+  if (/^\d+$/.test(raw)) {
+    const n = Number(raw);
+    return raw.length >= 13 ? n : n * 1000;
+  }
+  const parts = raw.split(" ");
+  if (parts.length > 1 && /^\d{10,}$/.test(parts[0])) {
+    const n = Number(parts[0]);
+    if (Number.isFinite(n)) return n * 1000;
+  }
+  const ts = Date.parse(raw);
+  return Number.isFinite(ts) ? ts : NaN;
+}
+
+// Relative "last git pull" label for the tools header. The absolute timestamp
+// stays available through formatToolsMetaDateTime (tooltip / device info).
+function formatToolsMetaAgo(value) {
+  const ts = parseToolsMetaTimestamp(value);
+  if (!Number.isFinite(ts)) return "";
+  const secs = Math.max(0, Math.floor((Date.now() - ts) / 1000));
+  const d = Math.floor(secs / 86400);
+  const h = Math.floor((secs % 86400) / 3600);
+  const m = Math.floor((secs % 3600) / 60);
+  const s = secs % 60;
+  if (d > 0) return getUIText("update_ago_days", "{d}d {h}h ago", { d, h });
+  if (h > 0) return getUIText("update_ago_hours", "{h}h {m}m ago", { h, m });
+  if (m > 0) return getUIText("update_ago_minutes", "{m}m {s}s ago", { m, s });
+  if (s > 0) return getUIText("update_ago_seconds", "{s}s ago", { s });
+  return getUIText("update_ago_now", "just now");
+}
+
+function syncToolsUpdateAgo() {
+  const el = document.getElementById("toolsUpdateAgo");
+  if (!el) return;
+  const ago = formatToolsMetaAgo(toolsMetaLastValues?.GitPullTime);
+  el.textContent = ago ? `${getUIText("update_ago_label", "Updated")} ${ago}` : "";
+  el.hidden = !ago;
+}
+
+function ensureToolsUpdateAgoTicker() {
+  if (toolsUpdateAgoTimer) return;
+  toolsUpdateAgoTimer = window.setInterval(syncToolsUpdateAgo, 10000);
+}
+
 function renderToolsMeta() {
   const meta = document.getElementById("toolsMeta");
   if (!meta) return;
@@ -464,7 +512,25 @@ function renderToolsMeta() {
     const page = document.getElementById("pageTools");
     setToolsLogExpanded(!page?.classList.contains("tools-log-expanded"));
   });
+  // The last-update time keeps the left slot (the log-title spot) so it is
+  // always visible, even when the status text next to it has to truncate.
+  const agoEl = document.createElement("span");
+  agoEl.id = "toolsUpdateAgo";
+  agoEl.className = "tools-meta__update";
+  agoEl.title = formatToolsMetaDateTime(toolsMetaLastValues?.GitPullTime) || "";
+  meta.appendChild(agoEl);
+
   meta.appendChild(statusEl);
+  syncToolsUpdateAgo();
+  if (!meta.dataset.metaTapBound) {
+    meta.dataset.metaTapBound = "1";
+    meta.addEventListener("click", (event) => {
+      if (event.target !== meta) return;
+      const page = document.getElementById("pageTools");
+      setToolsLogExpanded(!page?.classList.contains("tools-log-expanded"));
+    });
+  }
+  ensureToolsUpdateAgoTicker();
   requestToolsMetaTickerSync();
 }
 

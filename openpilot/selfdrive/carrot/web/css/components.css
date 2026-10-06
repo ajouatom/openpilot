@@ -927,3 +927,29 @@ pre {
 
 .state-layer:focus-visible::after { opacity: var(--state-focus); }
 .state-layer:active::after        { opacity: var(--state-pressed); }
+
+/* Recording state: elapsed-time label + a soft pulsing red highlight while
+   screen recording is active (tools page record button). */
+#btnRecordToggle[data-state="on"] {
+  border-color: rgba(255, 82, 82, 0.55);
+  color: #ff6b6b;
+  animation: recordButtonPulse 1.8s ease-in-out infinite;
+}
+
+@keyframes recordButtonPulse {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(255, 82, 82, 0.12);
+    border-color: rgba(255, 82, 82, 0.42);
+  }
+  50% {
+    box-shadow: 0 0 10px 2px rgba(255, 82, 82, 0.4);
+    border-color: rgba(255, 82, 82, 0.95);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #btnRecordToggle[data-state="on"] {
+    animation: none;
+    border-color: rgba(255, 82, 82, 0.85);
+  }
+}
