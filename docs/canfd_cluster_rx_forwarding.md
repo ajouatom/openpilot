@@ -254,3 +254,28 @@ working-tree experiments are excluded from build inputs. Physical SPI response,
 relay behavior and warning resolution still require repeated device startups.
 This change modifies Panda firmware and requires its normal startup rebuild/
 installation, unlike the preceding host-only template-recovery correction.
+
+## Independent CCNC host counter (2026-10-06)
+
+The host's `CCNC_0x162` copy now removes the snapshot's explicit `COUNTER` and
+uses the existing CANPacker per-address counter, as the other cluster messages
+already do. The first generated message uses the initial RX counter plus one,
+modulo 256. Later generated messages increment that stored value by one;
+repeated, skipped or wrapped RX snapshots cannot reseed it. Unscheduled calls
+and absent templates do not advance the sequence, and a new packer starts a new
+sequence. Display fields, transmission schedule and automatic CRC calculation
+are unchanged.
+
+Direct-TX mode passes this independent host sequence through. Default RX-paced
+mode still replaces it with each original vehicle RX counter and recomputes
+CRC inside Panda; its final output is unchanged. This is a host-only correction,
+with no Panda firmware or setting/default change.
+
+Validation: 303 focused Hyundai tests pass, including Python and native packer
+wrap/seed/repeated-RX tests, plus 183 compiled Panda cluster-hook tests. A
+1,201-message recorded-payload replay produces only +1 counter steps with valid
+CRCs and identical display bytes on both packer backends. Production C hooks
+preserve the new direct-TX sequence and produce byte-identical old/new RX-paced
+outputs for all replay inputs. Desktop replay does not establish physical ECU
+acceptance or resolution of the reported cluster warning. Incident data remains
+local only.

@@ -1085,6 +1085,9 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
 
       if CS.ccnc_0x162 is not None:
         values = copy.copy(CS.ccnc_0x162)
+        # Seed once from RX; the packer owns the per-message TX counter after that.
+        # RX-paced Panda forwarding replaces it with the original RX counter.
+        rx_counter = values.pop("COUNTER", None)
 
         _normalize_cluster_corner_objects(values, ccnc=True)
         _convert_ccnc_front_box_to_car(values)
@@ -1099,7 +1102,7 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
           values["FAULT_LSS"] = 0
           values["FAULT_DAS"] = 0
 
-        ret.append(packer.make_can_msg("CCNC_0x162", CAN.ECAN, values))
+        ret.append(packer.make_can_msg("CCNC_0x162", CAN.ECAN, values, rx_counter=rx_counter))
 
     # --- NEW_MSG_4B9 (corner radar keep-alive?) ---
     if enable_corner_radar > 0:
