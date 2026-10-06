@@ -1,4 +1,4 @@
-"""Comma-side provisioning for the unmodified upstream Mac app only."""
+"""Pinned model provisioning for the upstream Mac app and protocol-v3 hosts."""
 import hashlib
 import os
 from pathlib import Path
@@ -22,9 +22,9 @@ class PreparationDeferred(RuntimeError):
 
 def require_setup(offroad, connected):
   if not connected():
-    raise PreparationDeferred('Mac disconnected; waiting for reconnection')
+    raise PreparationDeferred('External host disconnected; waiting for reconnection')
   if not offroad():
-    raise PreparationDeferred('Mac model setup requires ignition off')
+    raise PreparationDeferred('External model setup requires ignition off')
 
 
 def model_file(offroad, connected, progress, cache=CACHE):
@@ -38,7 +38,7 @@ def model_file(offroad, connected, progress, cache=CACHE):
       for block in iter(lambda: stream.read(4 << 20), b''):
         require_setup(offroad, connected)
         value.update(block)
-        progress('verify', 0., 'Checking cached Mac model')
+        progress('verify', 0., 'Checking cached external model')
     if value.hexdigest() == SPEC.sha256:
       return target
   if shutil.disk_usage(cache).free < SPEC.nbytes + (64 << 20):
@@ -110,8 +110,8 @@ class PreparationTransport:
 
 
 def prepare(client, peer, offroad, connected, progress, cache=CACHE):
-  """Retain the exact legacy call for every non-Mac, including all Jetsons."""
-  if not is_mac_peer(peer):
+  """Keep deployed v2 Jetsons unchanged; provision Mac/v3 only while offroad."""
+  if not is_mac_peer(peer) and peer.get('protocol') != 3:
     validate_spec(client.ensure_engine(SPEC.sha256, SPEC.nbytes, frame_skip=SPEC.frame_skip, build_timeout=30))
     return
 
@@ -124,10 +124,10 @@ def prepare(client, peer, offroad, connected, progress, cache=CACHE):
 
   def check():
     if not connected():
-      raise PreparationDeferred('Mac disconnected; waiting for reconnection')
+      raise PreparationDeferred('External host disconnected; waiting for reconnection')
     if not preloaded:
       require_setup(offroad, connected)
-    progress('prepare', None, 'Waiting for Mac model preparation')
+    progress('prepare', None, 'Waiting for external model preparation')
 
   def stopped():
     # A ready response returns without building. Any pending build/upload must
