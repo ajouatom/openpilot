@@ -321,17 +321,23 @@ def main(demo=False):
 
   # Keep the internal-GPU model ready so a USB disconnect or runtime error does
   # not take modeld down while driving.
+  phase_start = time.monotonic()
   small_model = ModelState(vipc_client_main.width, vipc_client_main.height, False) if model is None or USBGPU else None
+  cloudlog.warning("model startup internal model: %.3fs, loaded=%s", time.monotonic() - phase_start, small_model is not None)
   if model is None:
     model = small_model
   # Keep the existing eGPU selection unchanged. A separate USB owner handles
   # external computers and late server startup through the pinned Jetlink model.
   if not USBGPU and os.path.isfile('/AGNOS'):
+    phase_start = time.monotonic()
+    adapter_ready = False
     try:
       from openpilot.selfdrive.modeld.jetlink.model import JoiningModel
       model = JoiningModel(model, vipc_client_main.width, vipc_client_main.height)
+      adapter_ready = True
     except Exception:
       cloudlog.exception('Jetlink camera adapter unavailable; retaining internal model')
+    cloudlog.warning("model startup Jetlink wrapper: %.3fs, created=%s", time.monotonic() - phase_start, adapter_ready)
   # Loading is not complete until the first model result is published. The
   # first eGPU execution can spend several seconds initializing queues/kernels
   # after the PKL has loaded; clearing this here causes a false commIssue while
