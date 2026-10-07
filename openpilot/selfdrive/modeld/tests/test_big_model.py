@@ -233,6 +233,9 @@ def test_status_is_atomic_and_preserves_stage_start(tmp_path: Path):
 
 
 def test_status_reporter_rate_limits_download_updates(monkeypatch, tmp_path: Path):
+  # Exercise rate limiting independently of the CI runner's uptime. A newly
+  # booted runner can have monotonic() < this test's 60-second interval.
+  monkeypatch.setattr('openpilot.selfdrive.modeld.big_model_status.time.monotonic', lambda: 120.0)
   manifest = BigModelManifest.from_dict(manifest_for(b"model"), "https://example.com/models/manifest.json")
   reporter = BigModelStatusReporter(tmp_path, min_interval=60.0)
   reporter.download_progress(manifest, 1, manifest.size)
