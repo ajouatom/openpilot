@@ -8,29 +8,6 @@ MESSAGE = 0x4003
 RELEASE = Path(__file__).with_name('host_release.json')
 
 
-def wait_for_legacy_update(client, peer, wifi, params, connected, publish, sleep=time.sleep):
-  from openpilot.common.jetson_maintenance import PENDING, migrated
-  if migrated(peer):
-    if params.get_bool(PENDING):
-      params.put_bool(PENDING, False)
-    return
-  manifest = json.loads(RELEASE.read_text()) if params.get_bool(PENDING) else None
-  while params.get_bool(PENDING) and connected():
-    if wifi is not None:
-      wifi.send(client)
-    if peer.get('carrot_hud_v1') is True:
-      # Older updaters only read the HUD snapshot. Send a tiny, genuine road
-      # state + signed pin; no preview worker or camera allocation is needed.
-      onroad = params.get_bool('IsOnroad') or not params.get_bool('IsOffroad')
-      client.t.send_json(0x4000, client._next_seq(), {
-        'version': 1, 'params': {'IsOnroad': 'MQ==' if onroad else 'MA=='},
-        'jetson_release': manifest, 'events': {}, 'received': {}, 'mono': {}, 'valid': {}, 'alive': {},
-      })
-    client.state()
-    publish('maintenance', peer=peer)
-    sleep(.2)
-
-
 def wait_for_boot_update(client, peer, wifi, connected, publish, sleep=time.sleep):
   if peer.get('carrot_host') != 'jetson' or peer.get(CAPABILITY) is not True:
     return

@@ -1,4 +1,4 @@
-#Requires -RunAsAdministrator
+﻿#Requires -RunAsAdministrator
 param(
   [Parameter(Mandatory=$true)][int]$DiskNumber,
   [Parameter(Mandatory=$true)][AllowEmptyString()][string]$SerialNumber,
@@ -7,6 +7,7 @@ param(
   [Parameter(Mandatory=$true)][string]$Python,
   [Parameter(Mandatory=$true)][ValidatePattern('^[0-9a-f]{64}$')][string]$ManifestSha256,
   [string]$Manifest = "$PSScriptRoot\offline-usbc.json",
+  [ValidateSet('offline_hotfix.py', 'offline_boot_patch.py')][string]$Engine = 'offline_hotfix.py',
   [switch]$VerifyOnly,
   [Parameter(Mandatory=$true)][string]$Log
 )
@@ -18,7 +19,7 @@ try {
   if ((Get-FileHash -LiteralPath $Manifest -Algorithm SHA256).Hash.ToLowerInvariant() -ne $ManifestSha256) {
     throw 'Release manifest checksum mismatch'
   }
-  $info = & $pythonPath "$PSScriptRoot\offline_hotfix.py" --manifest $Manifest --manifest-sha256 $ManifestSha256 --inspect
+  $info = & $pythonPath "$PSScriptRoot\$Engine" --manifest $Manifest --manifest-sha256 $ManifestSha256 --inspect
   if ($LASTEXITCODE -ne 0) { throw 'Invalid patch manifest' }
   $patch = $info | ConvertFrom-Json
   function Assert-Target {
@@ -31,7 +32,7 @@ try {
     }
   }
   Assert-Target
-  Add-Type -TypeDefinition @'
+  if (-not ('CarrotOfflineNative' -as [type])) { Add-Type -TypeDefinition @'
 using System;
 using System.ComponentModel;
 using System.Runtime.InteropServices;
@@ -53,6 +54,7 @@ public static class CarrotOfflineNative {
   }
 }
 '@
+  }
   foreach ($partition in (Get-Partition -DiskNumber $DiskNumber)) {
     foreach ($path in $partition.AccessPaths) {
       if ($path -like '\\?\Volume{*') {
@@ -66,7 +68,7 @@ public static class CarrotOfflineNative {
   Assert-Target
   # Keep volume locks throughout the Python process. No drive letters, mounted
   # filesystems, base image file or other partitions are written by the patcher.
-  $arguments = @("$PSScriptRoot\offline_hotfix.py", '--target', "\\.\PhysicalDrive$DiskNumber",
+  $arguments = @("$PSScriptRoot\$Engine", '--target', "\\.\PhysicalDrive$DiskNumber",
                  '--manifest', $Manifest, '--manifest-sha256', $ManifestSha256)
   if ($VerifyOnly) { $arguments += '--verify-only' }
   & $pythonPath @arguments

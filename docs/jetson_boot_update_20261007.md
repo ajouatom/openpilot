@@ -1,5 +1,11 @@
 # Jetson boot update and first-time transition
 
+**Superseded first-time workflow:** later on October 7 the user selected a
+[one-time Windows storage patch](jetson_offline_boot_patch_20261007.md) instead.
+The Web wait card/timer, API and manual offroad hold described below are retired;
+saved holds clear at updated manager startup. The automatic USB boot gate remains.
+The sections below retain the earlier implementation and test history.
+
 The user requested checking the comma-selected Jetson release at startup,
 holding Jetson inference/HUD while an update is required, waiting through
 Internet loss, and showing the reason on the comma. Existing cars power the

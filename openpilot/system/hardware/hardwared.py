@@ -16,7 +16,6 @@ from openpilot.common.utils import strip_deprecated_keys
 from openpilot.common.filter_simple import FirstOrderFilter
 from openpilot.common.gpio import gpio_set
 from openpilot.common.params import Params
-from openpilot.common.jetson_maintenance import PENDING as JETSON_UPDATE_PENDING, ALERT as JETSON_UPDATE_ALERT, alert_text as jetson_update_text
 from openpilot.common.realtime import DT_HW
 from openpilot.selfdrive.selfdrived.alertmanager import set_offroad_alert
 from openpilot.system.hardware import HARDWARE, TICI, AGNOS, PC
@@ -341,13 +340,6 @@ def hardware_thread(end_event, hw_queue) -> None:
       # we enforce this for our software, but you are welcome
       # to make a different decision in your software
       startup_conditions["registered_device"] = True #PC or (params.get("DongleId") != UNREGISTERED_DONGLE_ID)
-
-    # An explicit parked maintenance action keeps physical ignition/power intact
-    # while manager performs a real offroad transition for the legacy updater.
-    jetson_update_pending = params.get_bool(JETSON_UPDATE_PENDING)
-    onroad_conditions["not_jetson_update_wait"] = not jetson_update_pending
-    set_offroad_alert_if_changed(JETSON_UPDATE_ALERT, jetson_update_pending,
-                                extra_text=jetson_update_text(params.get('LanguageSetting')) if jetson_update_pending else None)
 
     # Handle offroad/onroad transition
     should_start = all(onroad_conditions.values())

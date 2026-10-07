@@ -1,8 +1,4 @@
 {
-  "Offroad_JetsonLegacyUpdate": {
-    "text": "%1",
-    "severity": 1
-  },
   "Offroad_TemperatureTooHigh": {
     "text": "Device temperature too high. System cooling down before starting. Current internal component temperature: %1",
     "severity": 0
