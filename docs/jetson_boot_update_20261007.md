@@ -88,3 +88,15 @@ been validated. Existing Linux-only filesystem/update tests skip on Windows.
 Two broader pre-existing eGPU source-contract tests expect an old loader
 timeout and settling expression; they are unrelated to this change and are
 tracked separately from the focused checks.
+
+## Published release
+
+Source: `84087a5b78118acc40234bfd8ef64235421f1aab`.
+The signed comma pin selects the immutable NAS directory
+`jetlink-host-84087a5b78118acc40234bfd8ef64235421f1aab`.
+Bundle size: 64,518,963 bytes; SHA-256:
+`6e9706ab60008695f9cb28d3ef792be8465c9f1eb2e961f1c43726e3f9e56d91`.
+Signature validation, committed-source byte comparison, NAS copy verification,
+and complete HTTPS readback of both bundle and manifest passed. Private keys,
+untracked work and captures are absent. The pinned Cinque v2 model and
+L4T/TensorRT ABI are unchanged; the SD-image/stable-channel pointers are unchanged.
