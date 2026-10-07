@@ -6,6 +6,7 @@ zeros or changing modeld's IPC. This intentionally does not take the compact
 reply optimization. Reference: zoompilot/jetlink 24e8917673829cbe1d146735956e9038cc93f227.
 """
 import json
+import os
 import time
 
 import numpy as np
@@ -32,6 +33,7 @@ class ProtocolAttempts:
   def hello(self, transport):
     version = self.version
     transport.wire_protocol = V2 if version == 2 else V3
+    transport.protocol_version = version
     client = (JetlinkClient if version == 2 else V3Client)(transport, name='carrot-jetlink')
     try:
       peer = client.hello()
@@ -106,3 +108,16 @@ class V3Client(JetlinkClient):
     except (LinkError, ValueError) as exc:
       self.dead = True
       raise LinkError(f'v3 inference failed; link abandoned: {exc}') from exc
+
+
+class ProtocolChoice:
+  def __init__(self, setting=None):
+    setting = os.environ.get('JETLINK_PROTOCOL', 'auto') if setting is None else setting
+    if setting not in ('auto', '2', '3'):
+      raise ValueError('JETLINK_PROTOCOL must be auto, 2 or 3')
+    self.automatic = setting == 'auto'
+    self.version = 3 if self.automatic else int(setting)
+
+  def handshake_failed(self):
+    if self.automatic:
+      self.version = 2 if self.version == 3 else 3

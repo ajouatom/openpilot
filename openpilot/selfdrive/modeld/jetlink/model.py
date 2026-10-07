@@ -9,6 +9,7 @@ import numpy as np
 
 from openpilot.selfdrive.modeld.jetlink.link import ClientConnection, SPEC, FAULT, state
 from openpilot.selfdrive.modeld.jetlink.prepare import WarpPreparation
+from openpilot.selfdrive.modeld.jetlink.contracts import model_name, parse_outputs
 
 MODEL_STATUS = Path('/dev/shm/carrot-jetlink-model.json')
 
@@ -123,6 +124,7 @@ class JoiningModel:
     self.usbgpu = False
     self.vision_input_names = ['img', 'big_img']
     self.packed = np.zeros(SPEC.packed_nelem, np.float32)
+    self.spec = SPEC
     self.views = {name: a.reshape(shape) for (name, shape), a in zip(
       SPEC.packed_shapes.items(), np.split(self.packed, np.cumsum(SPEC.packed_sizes[:-1])), strict=True)}
     self.prev_desire = np.zeros(8, np.float32)
@@ -143,7 +145,8 @@ class JoiningModel:
                                 {k: sm.valid[k] and sm.alive[k] for k in ('carState', 'selfdriveState', 'carControl')}, sm.recv_time)
     if now >= self.next_status:
       self.ready = state().get('state') == 'ready'
-      record = dict(active=self.active, ready=self.ready, model='Cinque v2', error=self.error, updated=now)
+      record = {'active': self.active, 'ready': self.ready, 'model': model_name(self.spec), 'sha256': self.spec.sha256,
+                'error': self.error, 'updated': now}
       tmp = MODEL_STATUS.with_suffix('.tmp')
       tmp.write_text(json.dumps(record))
       os.replace(tmp, MODEL_STATUS)
@@ -196,7 +199,10 @@ class JoiningModel:
         if self.connection.future.done():
           self.client = self.connection.future.result()
           self.connection = None
-          self.packed[:] = 0
+          self.spec = self.client.spec
+          self.packed = np.zeros(self.spec.packed_nelem, np.float32)
+          self.views = {name: a.reshape(shape) for (name, shape), a in zip(
+            self.spec.packed_shapes.items(), np.split(self.packed, np.cumsum(self.spec.packed_sizes[:-1])), strict=True)}
           self.prev_desire[:] = 0
           self.reset = True
       except Exception as exc:
@@ -218,15 +224,16 @@ class JoiningModel:
         result = self.client.infer(images, self.packed, self.frame, self.reset, source_sof=self.source_sof)
         replied = time.monotonic()
         self.reset = False
-        self.views['prev_feat'][:] = result[SPEC.output_slices['hidden_state']]
+        if 'prev_feat' in self.views:
+          self.views['prev_feat'][:] = result[self.spec.output_slices['hidden_state']]
         if not self.active:
-          cloudlog.warning('Jetlink active: Cinque v2 %s', SPEC.sha256)
+          cloudlog.warning('Jetlink active: %s %s', model_name(self.spec), self.spec.sha256)
           self.active = True
           self.error = ''
           self.next_status = 0
         # As in the generic eGPU runtime, run the full recurrent graph for each
         # received pair. Camera gaps still propagate unchanged into pose validity.
-        parsed = self.parser.parse_outputs({k: result[np.newaxis, v] for k, v in SPEC.output_slices.items()})
+        parsed = parse_outputs(self.parser, self.spec, result)
         if os.getenv('SEND_RAW_PRED'):
           parsed['raw_pred'] = result.copy()
         finished = time.monotonic()
