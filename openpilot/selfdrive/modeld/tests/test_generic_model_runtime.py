@@ -93,8 +93,8 @@ def test_precompiled_only_boot_failure_skips_local_compilation(monkeypatch, tmp_
   function = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == 'build_usbgpu_model')
   namespace = {'Spinner': object}
   exec(compile(ast.Module(body=[function], type_ignores=[]), str(source), 'exec'), namespace)
-  monkeypatch.setattr(big_model, 'active_manifest', big_model.fetch_manifest)
-  monkeypatch.setattr(big_model, 'active_model_path', lambda: tmp_path / 'model.pkl')
+  monkeypatch.setattr(big_model, 'selected_manifest', big_model.fetch_manifest)
+  monkeypatch.setattr(big_model, 'model_path', lambda _manifest: tmp_path / 'model.pkl')
   monkeypatch.setattr(big_model, 'model_cache_dir', lambda: tmp_path)
   statuses = []
   monkeypatch.setattr(big_model_status, 'write_big_model_status', lambda *args, **kw: statuses.append((args, kw)))

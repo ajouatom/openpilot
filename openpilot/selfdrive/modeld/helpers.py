@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import TypeVar
 
 from openpilot.common.file_chunker import get_manifest_path
-from openpilot.selfdrive.modeld.big_model import active_manifest, read_state
+from openpilot.selfdrive.modeld.big_model import selected_manifest
 
 MODELS_DIR = Path(__file__).resolve().parent / 'models'
 TG_INPUT_DEVICES_PATH = MODELS_DIR / 'tg_input_devices.json'
@@ -65,7 +65,7 @@ def modeld_pkl_path(usbgpu: bool, model_sha256: str | None = None):
   if not usbgpu:
     return MODELS_DIR / 'driving_tinygrad.pkl'
   if model_sha256 is None:
-    model = active_manifest()
+    model = selected_manifest()
     model_sha256 = model.sha256 if model is not None else 'unavailable'
   return MODELS_DIR / f'big_driving_{model_sha256[:16]}_tinygrad.pkl'
 
@@ -177,7 +177,7 @@ def usbgpu_pcie_not_ready(error: BaseException | str) -> bool:
 
 
 def active_usbgpu_compiled_path() -> Path | None:
-  model = active_manifest()
+  model = selected_manifest()
   if model is None:
     return None
   from openpilot.selfdrive.modeld.precompiled_model import installed
@@ -190,7 +190,7 @@ def active_usbgpu_compiled_path() -> Path | None:
 
 
 def usbgpu_compile_pending() -> bool:
-  model = active_manifest()
+  model = selected_manifest()
   if model is None:
     return False
   from openpilot.selfdrive.modeld.precompiled_model import installed
@@ -201,18 +201,7 @@ def usbgpu_compile_pending() -> bool:
 
 
 def usbgpu_compiled_path() -> Path | None:
-  if (path := active_usbgpu_compiled_path()) is not None:
-    return path
-
-  current = active_manifest()
-  if current is not None and current.precompiled_only:
-    return None
-  previous = read_state()['previous']
-  if previous is not None:
-    path = modeld_pkl_path(usbgpu=True, model_sha256=previous.sha256)
-    if Path(get_manifest_path(path)).is_file():
-      return path
-  return None
+  return active_usbgpu_compiled_path()
 
 
 def usbgpu_compiled() -> bool:
