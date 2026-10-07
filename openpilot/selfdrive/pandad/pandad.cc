@@ -216,6 +216,7 @@ void fill_panda_state(cereal::PandaState::Builder &ps, cereal::PandaState::Panda
   ps.setSafetyRxInvalid(health.safety_rx_invalid_pkt);
   ps.setIgnitionLine(health.ignition_line_pkt);
   ps.setIgnitionCan(health.ignition_can_pkt);
+  ps.setWakeOnCan(health.wake_on_can_pkt);
   ps.setControlsAllowed(health.controls_allowed_pkt);
   ps.setTxBufferOverflow(health.tx_buffer_overflow_pkt);
   ps.setRxBufferOverflow(health.rx_buffer_overflow_pkt);

@@ -1,6 +1,6 @@
 // When changing these structs, python/__init__.py needs to be kept up to date!
 
-#define HEALTH_PACKET_VERSION 16
+#define HEALTH_PACKET_VERSION 17
 struct __attribute__((packed)) health_t {
   uint32_t uptime_pkt;
   uint32_t voltage_pkt;
@@ -12,6 +12,7 @@ struct __attribute__((packed)) health_t {
   uint32_t faults_pkt;
   uint8_t ignition_line_pkt;
   uint8_t ignition_can_pkt;
+  uint8_t wake_on_can_pkt;
   uint8_t controls_allowed_pkt;
   uint8_t car_harness_status_pkt;
   uint8_t safety_mode_pkt;

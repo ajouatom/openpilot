@@ -6,6 +6,7 @@ from panda import LEN_TO_DLC
 
 libpanda_dir = os.path.dirname(os.path.abspath(__file__))
 libpanda_fn = os.path.join(libpanda_dir, "libpanda.so")
+libpanda_stock_fn = os.path.join(libpanda_dir, "libpanda_stock.so")
 
 ffi = FFI()
 
@@ -53,6 +54,11 @@ extern bool ignition_can;
 extern uint32_t ignition_can_cnt;
 extern bool wake_on_can;
 extern uint32_t wake_on_can_cnt;
+extern bool tesla_power_on_can;
+extern uint32_t tesla_power_on_can_cnt;
+void bootkick_test_reset(void);
+void bootkick_test_tick(bool ignition, bool recent_heartbeat, bool wake);
+uint8_t bootkick_test_get_state(void);
 """)
 
 class CANPacket:
@@ -77,6 +83,10 @@ class Panda(Protocol):
 
 
 libpanda: Panda = ffi.dlopen(libpanda_fn)
+
+
+def load_libpanda_stock() -> Panda:
+  return ffi.dlopen(libpanda_stock_fn)
 
 
 # helpers
