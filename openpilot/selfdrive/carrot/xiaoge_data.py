@@ -22,6 +22,11 @@ TESLA_AUTOPILOT_PARTY_BUS = 2
 TESLA_DAS_ROAD_TIMEOUT_S = 1.0
 
 
+def capnp_items(values, limit: int) -> list[Any]:
+  """Read a bounded prefix without slicing Cap'n Proto dynamic lists."""
+  return [values[index] for index in range(min(len(values), limit))]
+
+
 class XiaogeDataBroadcaster:
   def __init__(self):
     self.tcp_port = 7711
@@ -40,7 +45,7 @@ class XiaogeDataBroadcaster:
     self.tesla_can_sock = None
     self.tesla_can_parser = None
     self.tesla_das_road_updated_at = 0.0
-    self.sm = messaging.SubMaster(["carState", "modelV2", "selfdriveState"])
+    self.sm = messaging.SubMaster(["carState", "modelV2", "selfdriveState", "controlsState"])
 
   @staticmethod
   def get_ip_address() -> str:
@@ -193,9 +198,26 @@ class XiaogeDataBroadcaster:
       }
     else:
       data["lead0"] = {"x": 0.0, "y": 0.0, "v": 0.0, "prob": 0.0}
-    data["laneLineProbs"] = [
-      float(model_v2.laneLineProbs[1]) if len(model_v2.laneLineProbs) >= 3 else 0.0,
-      float(model_v2.laneLineProbs[2]) if len(model_v2.laneLineProbs) >= 3 else 0.0,
+    data["laneLineProbs"] = [float(prob) for prob in capnp_items(model_v2.laneLineProbs, 4)]
+    lane_line_stds = getattr(model_v2, "laneLineStds", [])
+    data["laneLineStds"] = [float(std) for std in capnp_items(lane_line_stds, 4)]
+    data["laneLines"] = [
+      {
+        "x": [float(x) for x in capnp_items(lane_line.x, 33)],
+        "y": [float(y) for y in capnp_items(lane_line.y, 33)],
+        "z": [float(z) for z in capnp_items(lane_line.z, 33)],
+      }
+      for lane_line in capnp_items(model_v2.laneLines, 4)
+    ]
+    road_edge_stds = getattr(model_v2, "roadEdgeStds", [])
+    data["roadEdgeStds"] = [float(std) for std in capnp_items(road_edge_stds, 2)]
+    data["roadEdges"] = [
+      {
+        "x": [float(x) for x in capnp_items(road_edge.x, 33)],
+        "y": [float(y) for y in capnp_items(road_edge.y, 33)],
+        "z": [float(z) for z in capnp_items(road_edge.z, 33)],
+      }
+      for road_edge in capnp_items(model_v2.roadEdges, 2)
     ]
     meta = model_v2.meta
     data["meta"] = {
@@ -211,6 +233,17 @@ class XiaogeDataBroadcaster:
   @staticmethod
   def collect_system_state(selfdrive_state) -> dict[str, bool]:
     return {"enabled": bool(selfdrive_state.enabled), "active": bool(selfdrive_state.active)}
+
+  @staticmethod
+  def collect_controls_state(controls_state, selfdrive_state=None) -> dict[str, Any]:
+    return {
+      "enabled": bool(getattr(selfdrive_state, "enabled", False)),
+      "active": bool(getattr(selfdrive_state, "active", False)),
+      "vCruise": float(getattr(selfdrive_state, "vCruise", 0.0)),
+      "curvature": float(getattr(controls_state, "curvature", 0.0)),
+      "state": str(getattr(selfdrive_state, "state", "")),
+      "experimentalMode": bool(getattr(selfdrive_state, "experimentalMode", False)),
+    }
 
   def create_packet(self, data: dict[str, Any]) -> bytes:
     return json.dumps({
@@ -239,6 +272,9 @@ class XiaogeDataBroadcaster:
           data["modelV2"] = self.collect_model_data(self.sm["modelV2"])
         if self.sm.alive["selfdriveState"]:
           data["systemState"] = self.collect_system_state(self.sm["selfdriveState"])
+        if self.sm.alive["controlsState"]:
+          selfdrive_state = self.sm["selfdriveState"] if self.sm.alive["selfdriveState"] else None
+          data["controlsState"] = self.collect_controls_state(self.sm["controlsState"], selfdrive_state)
         self.broadcast_to_clients(self.create_packet(data))
         self.sequence += 1
         rk.keep_time()
