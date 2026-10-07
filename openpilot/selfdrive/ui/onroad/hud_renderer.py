@@ -330,8 +330,9 @@ class HudRenderer(Widget):
       "not_compiled": COLORS.ORANGE_230,
       "ready": COLORS.WHITE_210,
     }[state]
-    font_size = 38
-    text_size = measure_text_cached(self._font_semi_bold, text, font_size)
+    font = gui_app.font(FontWeight.DISPLAY) if not text.isascii() else self._font_semi_bold
+    font_size = 30 if not text.isascii() else 38
+    text_size = measure_text_cached(font, text, font_size)
     pad_x, pad_y = 18, 8
     badge_w = text_size.x + pad_x * 2
     exp_button_left = rect.x + rect.width - UI_CONFIG.border_size - UI_CONFIG.button_size
@@ -344,7 +345,7 @@ class HudRenderer(Widget):
     rl.draw_rectangle_rounded(badge, 0.35, 8, rl.Color(0, 0, 0, 150))
     rl.draw_rectangle_rounded_lines_ex(badge, 0.35, 8, 3, color)
     rl.draw_text_ex(
-      self._font_semi_bold,
+      font,
       text,
       rl.Vector2(badge.x + pad_x, badge.y + pad_y),
       font_size,

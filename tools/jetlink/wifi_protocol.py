@@ -58,26 +58,28 @@ def validate(value):
   return value
 
 
-def private_write(path, data):
+def private_write(path, data, owner=None):
   temporary = path.with_suffix('.new')
   fd = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | getattr(os, 'O_NOFOLLOW', 0), 0o600)
   with os.fdopen(fd, 'wb') as stream:
     os.chmod(temporary, 0o600)
+    if owner is not None:
+      os.fchown(stream.fileno(), *owner)
     stream.write(data)
   os.replace(temporary, path)
 
 
-def receive(payload):
+def receive(payload, owner=None):
   if not 0 < len(payload) <= LIMIT:
     return
   try:
     value = validate(json.loads(bytes(payload)))
     stamp = time.monotonic()
-    private_write(PACKET, HEADER.pack(stamp) + bytes(payload))
+    private_write(PACKET, HEADER.pack(stamp) + bytes(payload), owner=owner)
     # Only this secret-free subset is visible to the updater before an engine
     # is ready. A missing/invalid onroad flag never authorizes downloading.
     control = {k: value[k] for k in ('onroad', 'jetson_release') if k in value}
-    private_write(CONTROL, json.dumps(dict(control, received=stamp)).encode())
+    private_write(CONTROL, json.dumps(dict(control, received=stamp)).encode(), owner=owner)
   except (OSError, ValueError, TypeError):
     pass
 

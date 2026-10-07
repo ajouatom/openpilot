@@ -92,6 +92,8 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"ObdMultiplexingEnabled", {CLEAR_ON_MANAGER_START | CLEAR_ON_ONROAD_TRANSITION, BOOL}},
     {"Offroad_CarUnrecognized", {CLEAR_ON_MANAGER_START | CLEAR_ON_ONROAD_TRANSITION, JSON}},
     {"Offroad_CarrotAutoUpdateFailed", {PERSISTENT, JSON}},
+    {"JetsonLegacyUpdatePending", {PERSISTENT, BOOL}},
+    {"Offroad_JetsonLegacyUpdate", {CLEAR_ON_MANAGER_START, JSON}},
     {"Offroad_ConnectivityNeeded", {CLEAR_ON_MANAGER_START, JSON}},
     {"Offroad_ConnectivityNeededPrompt", {CLEAR_ON_MANAGER_START, JSON}},
     {"Offroad_ExcessiveActuation", {CLEAR_ON_MANAGER_START, JSON}},
