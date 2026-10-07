@@ -85,7 +85,8 @@ def enable_dm_model(started, params, CP: car.CarParams) -> bool:
 #  return params.get_int("EnableConnect") > 0
 
 def enable_xiaoge_data(started, params, CP: car.CarParams) -> bool:
-  return params.get_bool("ShareData")
+  # Manager additionally waits for this onroad session's healthy startup.
+  return started and params.get_bool("ShareData")
 
 def cluster_hud_active(params: Params) -> bool:
   try:
