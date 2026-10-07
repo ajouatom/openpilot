@@ -75,8 +75,8 @@ def test_default_manifest_is_pinned_to_cinque_v3(monkeypatch):
 def test_precompiled_only_model_never_uses_a_local_onnx_build(tmp_path, monkeypatch):
   from openpilot.selfdrive.modeld import helpers, precompiled_model
   manifest = big_model.fetch_manifest()
-  monkeypatch.setattr(big_model, 'active_manifest', lambda: manifest)
-  monkeypatch.setattr(helpers, 'active_manifest', lambda: manifest)
+  monkeypatch.setattr(big_model, 'selected_manifest', lambda: manifest)
+  monkeypatch.setattr(helpers, 'selected_manifest', lambda: manifest)
   monkeypatch.setattr(precompiled_model, 'installed', lambda *args: None)
   monkeypatch.setattr(helpers, 'modeld_pkl_path', lambda **kw: pytest.fail('no ONNX compiler artifact for v3'))
   assert not big_model.active_model_compiled()

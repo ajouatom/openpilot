@@ -443,14 +443,16 @@ def test_wait_for_usbgpu_present_stops_at_deadline(monkeypatch):
   assert sum(sleeps) == pytest.approx(0.25)
 
 
-def test_usbgpu_compiled_path_falls_back_to_previous_model(monkeypatch, tmp_path: Path):
+def test_usbgpu_compiled_path_waits_for_selected_model_instead_of_previous(monkeypatch, tmp_path: Path):
   cache_dir = tmp_path / "cache"
   compiled_dir = tmp_path / "compiled"
   monkeypatch.setenv("CARROT_BIG_MODEL_DIR", str(cache_dir))
+  catalog = 'https://example.com/selected/manifest.json'
+  monkeypatch.setenv('CARROT_BIG_MODEL_MANIFEST', catalog)
   monkeypatch.setattr(helpers, "MODELS_DIR", compiled_dir)
   active = BigModelManifest("big-401", "big_driving_supercombo.onnx", 1, "a" * 64, "https://example.com/401.onnx")
   previous = BigModelManifest("big-400", "big_driving_supercombo.onnx", 1, "b" * 64, "https://example.com/400.onnx")
-  _write_state(active, previous, cache_dir)
+  _write_state(active, previous, cache_dir, catalog)
   (cache_dir / active.cache_filename).write_bytes(b"1")
 
   previous_pkl = modeld_pkl_path(True, previous.sha256)
@@ -458,7 +460,7 @@ def test_usbgpu_compiled_path_falls_back_to_previous_model(monkeypatch, tmp_path
   Path(get_manifest_path(previous_pkl)).write_text("1")
   assert active_usbgpu_compiled_path() is None
   assert usbgpu_compile_pending()
-  assert usbgpu_compiled_path() == previous_pkl
+  assert usbgpu_compiled_path() is None
 
   active_pkl = modeld_pkl_path(True, active.sha256)
   Path(get_manifest_path(active_pkl)).write_text("1")

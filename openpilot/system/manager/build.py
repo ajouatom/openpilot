@@ -32,15 +32,15 @@ USBGPU_ENUMERATION_POLL_INTERVAL = 1.0
 
 def build_usbgpu_model(spinner: Spinner) -> bool:
   """Build the optional big model without making the normal build depend on it."""
-  from openpilot.selfdrive.modeld.big_model import active_manifest, active_model_path, model_cache_dir
+  from openpilot.selfdrive.modeld.big_model import selected_manifest, model_path as cached_model_path, model_cache_dir
   from openpilot.selfdrive.modeld.big_model_status import write_big_model_status
   from openpilot.selfdrive.modeld.helpers import modeld_pkl_path, usbgpu_pcie_not_ready, usbgpu_present
   from openpilot.system.hardware.usbgpu import check_usbgpu
 
-  model_path = active_model_path()
-  manifest = active_manifest()
-  if model_path is None or manifest is None:
+  manifest = selected_manifest()
+  if manifest is None:
     return False
+  model_path = cached_model_path(manifest)
 
   status_values = {
     "model_id": manifest.model_id,
