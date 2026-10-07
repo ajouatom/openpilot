@@ -143,14 +143,17 @@ def test_plain_setup_does_not_continue_after_unowned_or_bound_ncm(monkeypatch, s
 
 
 @pytest.mark.parametrize('value', ['usb', 'android'])
-def test_plain_setup_leaves_retained_detached_ncm_alone(monkeypatch, scratch, value):
+def test_plain_setup_verifies_retained_ncm_without_deleting_function(monkeypatch, scratch, value):
   gadget = scratch / 'gadget'
   (gadget / 'functions' / mobile.NCM_FUNCTION).mkdir(parents=True)
   monkeypatch.setattr(mobile, 'GADGET', gadget)
   root = Mock()
   monkeypatch.setattr(mobile, '_root', root)
   mobile.setup_gadget(value)
-  root.assert_called_once_with('setup_gadget.sh')
+  assert [entry.args for entry in root.call_args_list] == [
+    ('setup_mobile.sh', '--teardown'), ('setup_gadget.sh',),
+  ]
+  assert (gadget / 'functions' / mobile.NCM_FUNCTION).is_dir()
 
 
 def test_root_helper_uses_noninteractive_sudo_and_reports_stderr(monkeypatch):

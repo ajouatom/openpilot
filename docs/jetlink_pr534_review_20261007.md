@@ -60,6 +60,11 @@ The PR's iOS transport code is included; physical iPhone stability is unvalidate
   `model.py` (ISC002); that log was retained.
 - Native Linux CI is required after push for the real socket/IPC, helper and
   storage coverage. Results are recorded in the task's local evidence archive.
+  Its first pass exposed two old expectations that detached NCM needed no
+  cleanup verification, plus a pre-existing refresh-image fixture missing
+  `wifi_protocol.py` and `boot_update.py`. Updated those expectations and the
+  fixture, and assert that the stable updater receives both files and the
+  next-boot gate marker. No image test is excluded from native CI.
 
 Desktop and CI tests do not establish physical cable negotiation, Jetson boot
 timing, accelerator output parity, thermal behavior or driving performance.
