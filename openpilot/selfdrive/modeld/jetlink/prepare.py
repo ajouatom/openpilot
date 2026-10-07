@@ -28,6 +28,9 @@ class WarpPreparation:
       with tempfile.TemporaryDirectory(prefix='jetlink-warp-', dir='/dev/shm' if sys.platform == 'linux' else None) as directory:
         target = Path(directory) / 'warp.pkl'
         env = dict(os.environ, PYTHONPATH=os.pathsep.join(str(Path(p or '.').resolve()) for p in sys.path))
+        # This adapter always targets the local QCOM GPU, regardless of any
+        # unrelated default-device discovery or optional external model backend.
+        env.update(DEV='QCOM', WARP_DEV='QCOM')
         process = None
         try:
           with (Path(directory) / 'prepare.log').open('w+b') as output:

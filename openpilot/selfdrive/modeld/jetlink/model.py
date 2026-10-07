@@ -32,10 +32,11 @@ def may_join(now, messages, valid, received):
 class Warp:
   def __init__(self, width, height, prepared=None, input_buffers=None):
     started, cpu_started = time.monotonic(), time.thread_time()
-    from tinygrad import Tensor, TinyJit, Device
-    from openpilot.selfdrive.modeld.compile_modeld import NV12Frame, make_warp
+    from tinygrad import Device
     from openpilot.system.camerad.cameras.nv12_info import get_nv12_info
-    if Device.DEFAULT != 'QCOM':
+    # The local model already uses QCOM explicitly. DEFAULT can still be unset
+    # and probe every earlier backend, blocking live inference for hundreds of ms.
+    if Device['QCOM'].device != 'QCOM':
       raise RuntimeError('Jetlink camera adapter requires the native QCOM device')
     self.size = get_nv12_info(width, height)[3]
     self.transforms, self.inputs = input_buffers if input_buffers is not None else make_warp_inputs()
@@ -50,6 +51,8 @@ class Warp:
       self.run_warp = value['warp']
       self.init_timings = (inputs_ready - started, time.monotonic() - inputs_ready, time.thread_time() - cpu_started)
       return
+    from tinygrad import Tensor, TinyJit
+    from openpilot.selfdrive.modeld.compile_modeld import NV12Frame, make_warp
     self.run_warp = TinyJit(make_warp(NV12Frame(width, height, *get_nv12_info(width, height)), 512, 256, SPEC.frame_skip))
     dummy = {k: Tensor(np.zeros(self.size, np.uint8), device='QCOM').realize() for k in ('frame', 'big_frame')}
     for _ in range(3):
@@ -110,8 +113,7 @@ class JoiningModel:
     self.small = small
     self.warp = None
     self.warp_size = (width, height)
-    # NPY-only buffers, independent of the local model's inputs. Creating Tensor
-    # wrappers after sustained inference can stall even without GPU compilation.
+    # Keep small NPY-only inputs ready, independent of the local model's buffers.
     self.warp_inputs = make_warp_inputs()
     self.preparation = None
     self.parser = Parser()
