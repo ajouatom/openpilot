@@ -17,8 +17,7 @@ from openpilot.selfdrive.modeld.jetlink.link import (SPEC, SOCKET, STATUS, REQUE
 from openpilot.selfdrive.modeld.jetlink.phase import Publisher as PhasePublisher
 from openpilot.selfdrive.modeld.jetlink.mac import prepare, PreparationDeferred
 from openpilot.selfdrive.modeld.jetlink.compat import ProtocolAttempts
-from openpilot.selfdrive.modeld.jetlink.startup import wait_for_boot_update, wait_for_legacy_update
-from openpilot.common.jetson_maintenance import PENDING as JETSON_UPDATE_PENDING
+from openpilot.selfdrive.modeld.jetlink.startup import wait_for_boot_update
 from jetlink.transport.ffs import FfsTransport
 
 GADGET = '/sys/kernel/config/usb_gadget/jetlink'
@@ -112,8 +111,6 @@ def _serve_local(listener, client, peer, publisher, phase, wifi=None):
   telemetry_updated = 0.
   while host_attached():
     if time.monotonic() - last_status >= 1:
-      if params.get_bool(JETSON_UPDATE_PENDING):
-        return  # Reconnect into provisioning-only maintenance, without inference.
       update_affinity()
       publish('ready', peer=peer, telemetry=client.last_state, telemetry_updated=telemetry_updated)
       last_status = time.monotonic()
@@ -136,8 +133,6 @@ def _serve_local(listener, client, peer, publisher, phase, wifi=None):
         while host_attached():
           loop_started, cpu_started = time.monotonic(), time.thread_time()
           if time.monotonic() - last_status >= 1:
-            if params.get_bool(JETSON_UPDATE_PENDING):
-              return
             update_affinity()
             if publisher is not None:
               params.put_bool_nonblocking('ClusterHudConnected', bool((client.last_state or {}).get('carrot_hud_connected')))
@@ -274,7 +269,6 @@ def main():
         publish('loading', peer=peer)
         from openpilot.common.params import Params
         params = Params()
-        wait_for_legacy_update(client, peer, wifi, params, host_attached, publish)
         last_progress = 0.
 
         def progress(stage, fraction, message):

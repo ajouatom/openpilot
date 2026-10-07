@@ -49,27 +49,6 @@
   min-width: 0;
 }
 
-/* This card has no icon: its only child must span both grid columns,
-   including the narrower icon column at the mobile breakpoint. */
-#jetsonUpdateCard > .egpu-model-card__body {
-  grid-column: 1 / -1;
-  overflow-wrap: anywhere;
-  word-break: keep-all;
-}
-
-.jetson-update-timer {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 8px 16px;
-  margin: 16px 0 8px;
-}
-
-.jetson-update-timer strong {
-  font-size: 32px;
-  font-variant-numeric: tabular-nums;
-}
-
 .egpu-model-card__heading,
 .egpu-model-card__footer {
   display: flex;
