@@ -64,7 +64,7 @@ pre{white-space:pre-wrap;word-break:break-word}.ok{color:#4ade80}.bad{color:#f87
     <aside class="card">
       <h2 data-i18n="vasmSettings">盲区 V-ASM 设置</h2>
       <form id="settings-vasm">
-        <label><span data-i18n="threshold">置信度阈值</span> <input id="threshold" type="number" min=".25" max="1" step=".05"></label>
+        <label><span data-i18n="threshold">置信度阈值</span> <input id="threshold" type="number" min="0" max="1" step=".01"></label>
         <label><span data-i18n="smoothing">平滑时间（秒）</span> <input id="smoothing" type="number" min=".1" max=".5" step=".1"></label>
         <label><span data-i18n="baseInterval">基础推理间隔（秒）</span> <input id="baseInterval" type="number" min=".05" max="1" step=".05"></label>
         <button data-i18n="apply">应用盲区设置</button>
@@ -126,7 +126,7 @@ pre{white-space:pre-wrap;word-break:break-word}.ok{color:#4ade80}.bad{color:#f87
     <aside class="card">
       <h2 data-i18n="laneSettings">车道线识别设置</h2>
       <form id="settings-lane">
-        <label><span data-i18n="laneThreshold">车道线阈值</span> <input id="laneThreshold" type="number" min=".05" max="1" step=".05"></label>
+        <label><span data-i18n="laneThreshold">车道线阈值</span> <input id="laneThreshold" type="number" min="0" max="1" step=".01"></label>
         <label><span data-i18n="laneInterval">推理间隔（秒）</span> <input id="laneInterval" type="number" min=".05" max="2" step=".05"></label>
         <button data-i18n="apply">应用车道线设置</button>
       </form>

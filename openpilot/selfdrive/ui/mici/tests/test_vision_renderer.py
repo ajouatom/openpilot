@@ -1,6 +1,8 @@
 import importlib.util
+import json
 from pathlib import Path
 import sys
+import time
 from types import SimpleNamespace
 
 import numpy as np
@@ -69,6 +71,46 @@ def test_mici_blindspot_is_independent_of_radar(mici_modules, monkeypatch, left,
     alive = {'carState': True, 'modelV2': True}
   renderer._draw_blindspots(SM(carState=SimpleNamespace(leftBlindspot=left, rightBlindspot=right)))
   assert len(calls) == expected_sides
+
+
+@pytest.mark.parametrize(
+  "side,oem,vision,expected_rgb",
+  [
+    ("left", True, False, (255, 215, 0)),
+    ("left", False, True, (64, 156, 255)),
+    ("left", True, True, (255, 128, 128)),
+    ("right", False, True, (64, 156, 255)),
+    ("right", True, True, (255, 128, 128)),
+  ],
+)
+def test_mici_blindspot_wall_color_reflects_source(mici_modules, monkeypatch, side, oem, vision, expected_rgb):
+  module, _ = mici_modules
+  renderer = object.__new__(module.ModelRenderer)
+  renderer._path = module.ModelPoints(raw_points=np.array([[x, 0, 0] for x in range(0, 61, 2)], dtype=np.float32))
+  renderer._car_space_transform = np.eye(3)
+  renderer._clip_region = None
+  renderer._rect = None
+  monkeypatch.setattr(module, "project_blindspot_barrier", lambda *_args: np.arange(12, dtype=np.float32).reshape(6, 2))
+  colors = []
+  monkeypatch.setattr(module, "draw_polygon", lambda _rect, _quad, color: colors.append((color.r, color.g, color.b)))
+
+  class SM(dict):
+    valid = {"carState": True, "modelV2": True, "customReservedRawData1": True}
+    alive = {"carState": True, "modelV2": True}
+
+  car_state = SimpleNamespace(
+    leftBlindspot=side == "left", rightBlindspot=side == "right",
+  )
+  sources = json.dumps({
+    "type": "xiaogeBlindspotSources",
+    "version": 1,
+    "receivedMonoTimeNanos": time.monotonic_ns(),
+    "left": {"oem": oem if side == "left" else False, "vision": vision if side == "left" else False},
+    "right": {"oem": oem if side == "right" else False, "vision": vision if side == "right" else False},
+  }).encode()
+  renderer._draw_blindspots(SM(carState=car_state, customReservedRawData1=sources))
+
+  assert colors and all(color == expected_rgb for color in colors)
 
 
 @pytest.mark.parametrize('enabled,detected,clear_side,expected', [

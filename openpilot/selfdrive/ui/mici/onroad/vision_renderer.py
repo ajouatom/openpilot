@@ -3,7 +3,7 @@ import time
 import pyray as rl
 
 from openpilot.selfdrive.ui.ui_state import ui_state
-from openpilot.selfdrive.ui.vision_status import parse_vision_display_packet, vision_display_state
+from openpilot.selfdrive.ui.vision_status import blindspot_source_packet, blindspot_sources, parse_vision_display_packet, vision_display_state
 from openpilot.system.ui.lib.application import FontWeight, gui_app
 from openpilot.system.ui.lib.multilang import tr
 from openpilot.system.ui.lib.text_measure import measure_text_cached
@@ -13,6 +13,8 @@ from openpilot.system.ui.widgets import Widget
 GRAY = rl.Color(160, 168, 177, 255)
 CYAN = rl.Color(100, 220, 255, 255)
 AMBER = rl.Color(255, 215, 0, 255)
+BLUE = rl.Color(64, 156, 255, 255)
+LIGHT_RED = rl.Color(255, 128, 128, 255)
 
 
 class VisionRenderer(Widget):
@@ -52,15 +54,20 @@ class VisionRenderer(Widget):
       return
     sm = ui_state.sm
     car_fresh = (sm.valid['carState'] and sm.alive['carState'] and sm.recv_frame['carState'] >= ui_state.started_frame)
-    left = bool(car_fresh and sm['carState'].leftBlindspot)
-    right = bool(car_fresh and sm['carState'].rightBlindspot)
+    car_state = sm['carState'] if car_fresh else None
+    left = bool(car_state and car_state.leftBlindspot)
+    right = bool(car_state and car_state.rightBlindspot)
+    source_packet = blindspot_source_packet(sm, time.monotonic_ns())
 
-    # These use merged vehicle BSD, so OEM warnings work with ShareData off too.
-    for active, is_left in ((left, True), (right, False)):
+    source_colors = {}
+    for side, active, is_left in (("left", left, True), ("right", right, False)):
       if active:
-        x = rect.x + 6 if is_left else rect.x + rect.width - 8
-        rl.draw_rectangle_rounded(rl.Rectangle(x, rect.y + 78, 6, 56), 0.8, 6, AMBER)
-        self._text("BSD", rect.x + 16 if is_left else rect.x + rect.width - 134, rect.y + 84, AMBER, 12)
+        oem, vision = blindspot_sources(car_state, side, source_packet)
+        source_color = LIGHT_RED if oem and vision else BLUE if vision else AMBER
+        source_colors[side] = source_color
+        x = rect.x + 6 if is_left else rect.x + rect.width - 12
+        rl.draw_rectangle_rounded(rl.Rectangle(x, rect.y + 78, 6, 56), 0.8, 6, source_color)
+        self._text("BSD", rect.x + 16 if is_left else rect.x + rect.width - 45, rect.y + 84, source_color, 12)
 
     if not ui_state.share_data:
       return
@@ -81,7 +88,10 @@ class VisionRenderer(Widget):
     label = ""
     if left or right:
       label = "L+R" if left and right else "L" if left else "R"
-      text, color = tr("DETECTED"), AMBER
+      active_colors = [source_colors[side] for side in ("left", "right") if side in source_colors]
+      color = LIGHT_RED if any(item.r == LIGHT_RED.r and item.g == LIGHT_RED.g for item in active_colors) else \
+              BLUE if any(item.r == BLUE.r and item.g == BLUE.g for item in active_colors) else AMBER
+      text = tr("DETECTED")
     elif car_fresh and state.clear_side:
       label = "L" if state.clear_side == "left" else "R"
       text, color = tr("NO DETECTION"), CYAN

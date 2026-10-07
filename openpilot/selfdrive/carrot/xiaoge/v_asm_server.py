@@ -18,7 +18,6 @@ if __package__ in (None, ""):
   sys.path.insert(0, str(Path(__file__).resolve().parents[4]))
 
 import openpilot.cereal.messaging as messaging
-from openpilot.cereal import log
 from openpilot.selfdrive.carrot.xiaoge.lane_inference import DEFAULT_LANE_MODEL_PATH, LaneInference, prepare_lane_image
 from openpilot.selfdrive.carrot.xiaoge.nv12 import nv12_y_plane, pack_nv12
 from openpilot.selfdrive.carrot.xiaoge.v_asm_inference import DEFAULT_MODEL_PATH, VASMInference
@@ -39,7 +38,7 @@ except ModuleNotFoundError as error:
 HOST = "127.0.0.1"
 PORT = 8082
 CONFIG_PATH = Path(__file__).resolve().parent / "v_asm_config.json"
-MIN_THRESHOLD = 0.25
+MIN_THRESHOLD = 0.0
 MAX_THRESHOLD = 1.0
 MIN_SMOOTHING_SECONDS = 0.1
 MAX_SMOOTHING_SECONDS = 0.5
@@ -48,9 +47,7 @@ MAX_BASE_INTERVAL_SECONDS = 1.0
 BASE_INTERVAL_SECONDS = 0.25
 FOLLOWUP_INTERVAL_SECONDS = 0.15
 FOLLOWUP_WINDOW_SECONDS = 1.5
-VASM_MIN_SPEED_MPS = 30.0 / 3.6
-VASM_MAX_SPEED_MPS = 120.0 / 3.6
-VASM_MIN_LANE_WIDTH_METERS = 3.0
+VASM_MIN_LANE_WIDTH_METERS = 2.0
 CAMERA_TIMEOUT_SECONDS = 2.0
 SNAPSHOT_TIMEOUT_SECONDS = 5.0
 # VisionIPC recv holds the GIL while waiting. Poll without blocking, then sleep
@@ -59,7 +56,7 @@ CAMERA_POLL_INTERVAL_SECONDS = 0.005
 PARAM_REFRESH_SECONDS = 1.0
 
 PARAM_SETTING_DEFAULTS = {
-  "OnnxBsdThreshold": 45,
+  "OnnxBsdThreshold": 94,
   "OnnxBsdSmoothingMs": 200,
   "OnnxBsdIntervalMs": 250,
   "OnnxLaneThreshold": 25,
@@ -154,7 +151,7 @@ class VASMService:
     self.config = self._read_config()
     if self.config:
       self.inference.load_config(self.config)
-    self.threshold = 0.45
+    self.threshold = 0.94
     self.smoothing_seconds = 0.2
     self.base_interval_seconds = BASE_INTERVAL_SECONDS
     self.running = True
@@ -169,17 +166,25 @@ class VASMService:
     self._fps_window_count = 0
     self.last_side_at = {"left": 0.0, "right": 0.0}
     self.next_side = "left"
-    self.followup_until = 0.0
+    self.followup_until = {"left": 0.0, "right": 0.0}
     self.camera_error = "waiting for wide road camera"
     self.sm = messaging.SubMaster(["carState", "modelV2"])
     self.pm = messaging.PubMaster(["customReservedRawData0"])
     self.vasm_gate = {
       "active": False,
       "side": "",
+      "eligibleSides": [],
       "reason": "waiting for carState and modelV2",
       "laneWidth": 0.0,
+      "laneWidths": {"left": 0.0, "right": 0.0},
     }
-    self.vasm_result = {"left": False, "right": False, "side": "", "updatedMonoTimeNanos": 0}
+    self.vasm_result = {
+      "left": False,
+      "right": False,
+      "side": "",
+      "updatedMonoTimeNanos": 0,
+      "updatedMonoTimeNanosBySide": {"left": 0, "right": 0},
+    }
 
     # Lane inference engine setup
     self.lane_inference = LaneInference(DEFAULT_LANE_MODEL_PATH)
@@ -222,10 +227,10 @@ class VASMService:
       for name, default in PARAM_SETTING_DEFAULTS.items()
     }
     with self.lock:
-      self.threshold = min(max(values["OnnxBsdThreshold"], 25), 100) / 100.0
+      self.threshold = min(max(values["OnnxBsdThreshold"], 0), 100) / 100.0
       self.smoothing_seconds = min(max(values["OnnxBsdSmoothingMs"], 100), 500) / 1000.0
       self.base_interval_seconds = min(max(values["OnnxBsdIntervalMs"], 50), 1000) / 1000.0
-      self.lane_threshold = min(max(values["OnnxLaneThreshold"], 5), 100) / 100.0
+      self.lane_threshold = min(max(values["OnnxLaneThreshold"], 0), 100) / 100.0
       self.lane_interval_seconds = min(max(values["OnnxLaneIntervalMs"], 50), 2000) / 1000.0
 
   def _persist_settings(self, values: dict[str, int]) -> None:
@@ -284,8 +289,8 @@ class VASMService:
       raise ValueError(f"smoothingSeconds must be {MIN_SMOOTHING_SECONDS:.1f} to {MAX_SMOOTHING_SECONDS:.1f}")
     if not MIN_BASE_INTERVAL_SECONDS <= base_interval_seconds <= MAX_BASE_INTERVAL_SECONDS:
       raise ValueError(f"baseIntervalSeconds must be {MIN_BASE_INTERVAL_SECONDS:.2f} to {MAX_BASE_INTERVAL_SECONDS:.2f}")
-    if not 0.05 <= lane_threshold <= 1.0:
-      raise ValueError("laneThreshold must be 0.05 to 1.0")
+    if not 0.0 <= lane_threshold <= 1.0:
+      raise ValueError("laneThreshold must be 0.0 to 1.0")
     if not 0.05 <= lane_interval_seconds <= 2.0:
       raise ValueError("laneIntervalSeconds must be 0.05 to 2.0")
 
@@ -314,15 +319,17 @@ class VASMService:
       camera_available = camera_age is not None and camera_age <= CAMERA_TIMEOUT_SECONDS and not self.camera_error
       road_camera_available = road_camera_age is not None and road_camera_age <= CAMERA_TIMEOUT_SECONDS and not self.lane_camera_error
       vasm_timestamp = self.vasm_result["updatedMonoTimeNanos"]
-      vasm_fresh = vasm_timestamp > 0 and 0 <= now_nanos - vasm_timestamp <= XIAOGE_BLINDSPOT_TIMEOUT_NS
       vehicle_sides = {}
       for side in ("left", "right"):
-        valid = bool(camera_available and self.inference.valid and vasm_fresh and self.vasm_gate["active"] and
-                     self.vasm_gate["side"] == side and self.vasm_result["side"] == side)
+        side_timestamp = self.vasm_result["updatedMonoTimeNanosBySide"][side]
+        side_fresh = side_timestamp > 0 and 0 <= now_nanos - side_timestamp <= XIAOGE_BLINDSPOT_TIMEOUT_NS
+        valid = bool(camera_available and self.inference.valid and self.vasm_gate["active"] and side_fresh and
+                     side in self.vasm_gate["eligibleSides"])
         vehicle_sides[side] = {
           "valid": valid,
           "active": self.vasm_result[side] if valid else False,
           "confidence": self.inference.confidence[side] if valid else 0.0,
+          "updatedMonoTimeNanos": side_timestamp,
         }
       lane_timestamp = self.lane_result["updatedMonoTimeNanos"]
       lane_fresh = bool(road_camera_available and self.lane_inference.valid and self.lane_result["valid"] and
@@ -390,36 +397,41 @@ class VASMService:
         return None
       return self.last_road_jpeg if stream_type == "road" else self.last_jpeg
 
-  def _update_vasm_gate(self) -> tuple[bool, str]:
+  def _update_vasm_gate(self) -> tuple[str, ...]:
     self.sm.update(0)
     services = ["carState", "modelV2"]
     if not (self.sm.all_alive(services) and self.sm.all_valid(services)):
-      gate = {"active": False, "side": "", "reason": "carState or modelV2 is unavailable", "laneWidth": 0.0}
+      widths = {"left": 0.0, "right": 0.0}
+      eligible_sides = ()
+      reason = "carState or modelV2 is unavailable"
     else:
-      speed = float(self.sm["carState"].vEgo)
-      direction = self.sm["modelV2"].meta.laneChangeDirection
-      if speed < VASM_MIN_SPEED_MPS or speed > VASM_MAX_SPEED_MPS:
-        gate = {"active": False, "side": "", "reason": "speed outside 30-120 km/h", "laneWidth": 0.0}
-      elif direction == log.LaneChangeDirection.left:
-        width = float(self.sm["modelV2"].meta.laneWidthLeft)
-        gate = {"active": width >= VASM_MIN_LANE_WIDTH_METERS, "side": "left", "reason": "", "laneWidth": width}
-      elif direction == log.LaneChangeDirection.right:
-        width = float(self.sm["modelV2"].meta.laneWidthRight)
-        gate = {"active": width >= VASM_MIN_LANE_WIDTH_METERS, "side": "right", "reason": "", "laneWidth": width}
-      else:
-        gate = {"active": False, "side": "", "reason": "no lane-change direction", "laneWidth": 0.0}
-      if gate["side"] and not gate["active"]:
-        gate["reason"] = "target lane width below 3.0 m"
+      meta = self.sm["modelV2"].meta
+      widths = {"left": float(meta.laneWidthLeft), "right": float(meta.laneWidthRight)}
+      eligible_sides = tuple(
+        side for side in ("left", "right")
+        if widths[side] >= VASM_MIN_LANE_WIDTH_METERS and side in self.inference.configured_sides
+      )
+      reason = "" if eligible_sides else "configured lane widths below 2.0 m"
+    selected_side = self.next_side if self.next_side in eligible_sides else (eligible_sides[0] if eligible_sides else "")
+    gate = {
+      "active": bool(eligible_sides),
+      "side": selected_side,
+      "eligibleSides": list(eligible_sides),
+      "reason": reason,
+      "laneWidth": widths.get(selected_side, 0.0),
+      "laneWidths": widths,
+    }
     with self.lock:
       self.vasm_gate = gate
-    return bool(gate["active"]), str(gate["side"])
+    return eligible_sides
 
   def publish_vision_result(self) -> None:
     status = self.status()
     lane = status["lane"]["result"]
     sides = status["vehicleSide"]
-    blindspot_valid = any(side["valid"] for side in status["vehicleSide"].values())
-    blindspot_side = next((side for side in ("left", "right") if sides[side]["valid"]), "")
+    valid_sides = [side for side in ("left", "right") if sides[side]["valid"]]
+    blindspot_valid = bool(valid_sides)
+    blindspot_side = status["gate"]["side"] if status["gate"]["side"] in valid_sides else (valid_sides[0] if valid_sides else "")
     now_nanos = time.monotonic_ns()
     payload = json.dumps({
       "type": "xiaogeVision",
@@ -436,7 +448,11 @@ class VASMService:
         "right": sides["right"]["active"],
         "valid": blindspot_valid,
         "side": blindspot_side,
+        "validSides": valid_sides,
         "receivedMonoTimeNanos": status["inference"]["updatedMonoTimeNanos"] or now_nanos,
+        "receivedMonoTimeNanosBySide": {
+          side: sides[side]["updatedMonoTimeNanos"] for side in ("left", "right")
+        },
       },
     }, separators=(",", ":")).encode()
     with self.publish_lock:
@@ -481,7 +497,7 @@ class VASMService:
           continue
         now = time.monotonic()
         self._refresh_settings_from_params()
-        gate_active, side = self._update_vasm_gate()
+        eligible_sides = self._update_vasm_gate()
         publish_clear = False
         with self.lock:
           self.last_frame_at = now
@@ -490,14 +506,22 @@ class VASMService:
             self.last_jpeg = self._jpeg_from_nv12(buffer.data, buffer.width, buffer.height, buffer.stride, buffer.uv_offset)
             self.snapshot_responses["wide"] = self.snapshot_requests["wide"]
             self.snapshot_condition.notify_all()
-          if not gate_active:
-            publish_clear = self.vasm_result["left"] or self.vasm_result["right"]
-            self.vasm_result = {"left": False, "right": False, "side": "", "updatedMonoTimeNanos": time.monotonic_ns()}
+          for candidate in ("left", "right"):
+            if candidate not in eligible_sides:
+              publish_clear = publish_clear or self.vasm_result[candidate]
+              self.vasm_result[candidate] = False
+              self.vasm_result["updatedMonoTimeNanosBySide"][candidate] = 0
+          if not eligible_sides:
+            publish_clear = publish_clear or self.vasm_result["left"] or self.vasm_result["right"]
+            self.vasm_result["left"] = self.vasm_result["right"] = False
+            self.vasm_result["side"] = ""
+            self.vasm_result["updatedMonoTimeNanos"] = time.monotonic_ns()
           else:
-            interval = FOLLOWUP_INTERVAL_SECONDS if now < self.followup_until else self.base_interval_seconds
+            side = self.next_side if self.next_side in eligible_sides else eligible_sides[0]
+            interval = FOLLOWUP_INTERVAL_SECONDS if now < self.followup_until[side] else self.base_interval_seconds
             if now - self.last_inference_at < interval:
               continue
-        if not gate_active:
+        if not eligible_sides:
           if publish_clear:
             self.publish_vision_result()
           continue
@@ -524,13 +548,14 @@ class VASMService:
             self._fps_window_count = 0
           self.last_inference_at = self.last_side_at[side] = now
           if active:
-            self.followup_until = now + FOLLOWUP_WINDOW_SECONDS
-          self.vasm_result = {
-            "left": self.inference.active["left"] if side == "left" else False,
-            "right": self.inference.active["right"] if side == "right" else False,
-            "side": side,
-            "updatedMonoTimeNanos": time.monotonic_ns(),
-          }
+            self.followup_until[side] = now + FOLLOWUP_WINDOW_SECONDS
+          updated_nanos = time.monotonic_ns()
+          self.vasm_result[side] = self.inference.active[side]
+          self.vasm_result["side"] = side
+          self.vasm_result["updatedMonoTimeNanos"] = updated_nanos
+          self.vasm_result["updatedMonoTimeNanosBySide"][side] = updated_nanos
+          other_side = "right" if side == "left" else "left"
+          self.next_side = other_side if other_side in eligible_sides else side
         self.publish_vision_result()
       except (OSError, ValueError, cv2.error) as error:
         with self.lock:

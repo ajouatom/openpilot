@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import json
 import os
 import time
 import threading
@@ -29,10 +30,12 @@ from openpilot.selfdrive.carrot.xiaoge.xiaoge_vision import (
   XiaogeVisionResult,
   apply_xiaoge_vision_result,
   parse_xiaoge_vision_payload,
+  xiaoge_blindspot_vision,
 )
 
 REPLAY = "REPLAY" in os.environ
 XIAOGE_LANE_ERROR_LOG_INTERVAL_NS = 5_000_000_000
+XIAOGE_SOURCE_HEARTBEAT_NS = 1_000_000_000
 
 EventName = log.OnroadEvent.EventName
 ButtonType = car.CarState.ButtonEvent.Type
@@ -78,7 +81,7 @@ class Car:
     self.can_sock = messaging.sub_sock('can', timeout=20)
     self.sm = messaging.SubMaster(['pandaStates', 'carControl', 'onroadEvents', 'carrotMan', 'longitudinalPlan',
                                    'radarState', 'modelV2', 'drivingModelData', 'customReservedRawData0'])
-    self.pm = messaging.PubMaster(['sendcan', 'carState', 'carParams', 'carOutput'])
+    self.pm = messaging.PubMaster(['sendcan', 'carState', 'carParams', 'carOutput', 'customReservedRawData1'])
 
     self.can_rcv_cum_timeout_counter = 0
 
@@ -181,6 +184,9 @@ class Car:
     self.card_diag_slow_process = 0
     self.card_diag_can_timeouts = 0
     self.xiaoge_vision_result: XiaogeVisionResult | None = None
+    self.xiaoge_blindspot_sources = (False, False, False, False)
+    self.xiaoge_blindspot_sources_published = None
+    self.xiaoge_blindspot_sources_published_ns = 0
     self.xiaoge_vision_error_log_at_ns = 0
     self.card_diag_stage_names = ('decode', 'ci_update', 'sm_update', 'vision', 'state_tail',
                                   'state_total', 'publish', 'apply', 'sendcan', 'total')
@@ -219,6 +225,14 @@ class Car:
         if sm_done_ns - self.xiaoge_vision_error_log_at_ns >= XIAOGE_LANE_ERROR_LOG_INTERVAL_NS:
           cloudlog.warning(f"invalid Xiaoge vision payload: {error}")
           self.xiaoge_vision_error_log_at_ns = sm_done_ns
+    left_oem, right_oem = bool(CS.leftBlindspot), bool(CS.rightBlindspot)
+    left_vision, right_vision = xiaoge_blindspot_vision(self.xiaoge_vision_result, sm_done_ns)
+    self.xiaoge_blindspot_sources = (left_oem, right_oem, left_vision, right_vision)
+    CS.leftBlindspotOem = left_oem
+    CS.rightBlindspotOem = right_oem
+    CS.leftBlindspotOnnx = left_vision
+    CS.rightBlindspotOnnx = right_vision
+    CS.blindspotSplitSourcesValid = True
     apply_xiaoge_vision_result(CS, self.xiaoge_vision_result, sm_done_ns)
     #self.t1 = time.monotonic()
 
@@ -296,7 +310,24 @@ class Car:
     co_send.carOutput.actuatorsOutput = self.last_actuators_output
     self.pm.send('carOutput', co_send)
 
-    # kick off controlsd step while we actuate the latest carControl packet
+    now_ns = time.monotonic_ns()
+    sources = self.xiaoge_blindspot_sources
+    if sources != self.xiaoge_blindspot_sources_published or \
+       now_ns - self.xiaoge_blindspot_sources_published_ns >= XIAOGE_SOURCE_HEARTBEAT_NS:
+      payload = json.dumps({
+        "type": "xiaogeBlindspotSources",
+        "version": 1,
+        "receivedMonoTimeNanos": now_ns,
+        "left": {"oem": sources[0], "vision": sources[2]},
+        "right": {"oem": sources[1], "vision": sources[3]},
+      }, separators=(",", ":")).encode()
+      source_msg = messaging.new_message("customReservedRawData1", size=len(payload), valid=True)
+      source_msg.customReservedRawData1 = payload
+      self.pm.send("customReservedRawData1", source_msg)
+      self.xiaoge_blindspot_sources_published = sources
+      self.xiaoge_blindspot_sources_published_ns = now_ns
+
+    # Publish source metadata before the merged carState so UI never sees a new warning with old source colors.
     cs_send = messaging.new_message('carState')
     cs_send.valid = CS.canValid
     cs_send.carState = CS

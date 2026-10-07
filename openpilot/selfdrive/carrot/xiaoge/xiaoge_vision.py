@@ -20,6 +20,8 @@ class XiaogeVisionResult:
   right_blindspot: bool
   blindspot_valid: bool
   blindspot_received_nanos: int
+  left_blindspot_received_nanos: int = 0
+  right_blindspot_received_nanos: int = 0
 
 
 class VisionState(Protocol):
@@ -55,6 +57,10 @@ def parse_xiaoge_vision_payload(payload: bytes) -> XiaogeVisionResult:
   blindspot = data.get("blindspot")
   if not isinstance(lane, dict) or not isinstance(blindspot, dict):
     raise ValueError("lane and blindspot must be objects")
+  blindspot_received_nanos = _received_nanos(blindspot.get("receivedMonoTimeNanos"), "blindspot.receivedMonoTimeNanos")
+  by_side = blindspot.get("receivedMonoTimeNanosBySide", {})
+  if not isinstance(by_side, dict):
+    raise ValueError("blindspot.receivedMonoTimeNanosBySide must be an object")
   return XiaogeVisionResult(
     _lane_type(lane.get("leftLine"), "lane.leftLine"),
     _lane_type(lane.get("rightLine"), "lane.rightLine"),
@@ -63,7 +69,9 @@ def parse_xiaoge_vision_payload(payload: bytes) -> XiaogeVisionResult:
     _bool(blindspot.get("left"), "blindspot.left"),
     _bool(blindspot.get("right"), "blindspot.right"),
     _bool(blindspot.get("valid"), "blindspot.valid"),
-    _received_nanos(blindspot.get("receivedMonoTimeNanos"), "blindspot.receivedMonoTimeNanos"),
+    blindspot_received_nanos,
+    _received_nanos(by_side.get("left", blindspot_received_nanos), "blindspot.receivedMonoTimeNanosBySide.left"),
+    _received_nanos(by_side.get("right", blindspot_received_nanos), "blindspot.receivedMonoTimeNanosBySide.right"),
   )
 
 
@@ -80,6 +88,18 @@ def _is_fresh(received_nanos: int, now_nanos: int, timeout_nanos: int) -> bool:
   return received_nanos != 0 and 0 <= age_nanos <= timeout_nanos
 
 
+def xiaoge_blindspot_vision(result: XiaogeVisionResult | None, now_nanos: int) -> tuple[bool, bool]:
+  if result is None or not result.blindspot_valid or \
+     not _is_fresh(result.blindspot_received_nanos, now_nanos, XIAOGE_BLINDSPOT_TIMEOUT_NS):
+    return False, False
+  left_received = result.left_blindspot_received_nanos or result.blindspot_received_nanos
+  right_received = result.right_blindspot_received_nanos or result.blindspot_received_nanos
+  return (
+    result.left_blindspot and _is_fresh(left_received, now_nanos, XIAOGE_BLINDSPOT_TIMEOUT_NS),
+    result.right_blindspot and _is_fresh(right_received, now_nanos, XIAOGE_BLINDSPOT_TIMEOUT_NS),
+  )
+
+
 def apply_xiaoge_vision_result(CS: VisionState, result: XiaogeVisionResult | None, now_nanos: int) -> bool:
   if result is None:
     return False
@@ -93,8 +113,9 @@ def apply_xiaoge_vision_result(CS: VisionState, result: XiaogeVisionResult | Non
       CS.rightLaneLine = merge_xiaoge_lane_type(CS.rightLaneLine, result.right_lane)
       applied = True
 
-  if result.blindspot_valid and _is_fresh(result.blindspot_received_nanos, now_nanos, XIAOGE_BLINDSPOT_TIMEOUT_NS):
-    CS.leftBlindspot = CS.leftBlindspot or result.left_blindspot
-    CS.rightBlindspot = CS.rightBlindspot or result.right_blindspot
-    applied = applied or result.left_blindspot or result.right_blindspot
+  left_vision, right_vision = xiaoge_blindspot_vision(result, now_nanos)
+  if left_vision or right_vision:
+    CS.leftBlindspot = bool(CS.leftBlindspot) or left_vision
+    CS.rightBlindspot = bool(CS.rightBlindspot) or right_vision
+    applied = True
   return applied
