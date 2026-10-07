@@ -1,6 +1,5 @@
 ﻿param([switch]$Elevated)
 $ErrorActionPreference = 'Stop'
-$assignedPath = $null
 $selected = $null
 try {
   [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
@@ -27,6 +26,7 @@ try {
     exit $child.ExitCode
   }
   $meta = Get-Content -LiteralPath "$PSScriptRoot\boot-patch-release.json" -Raw -Encoding UTF8 | ConvertFrom-Json
+  Write-Host ("PATCH_VERSION: {0}" -f $meta.version)
   $manifest = Join-Path $PSScriptRoot 'boot-patch.json'
   $payload = Join-Path $PSScriptRoot 'carrot-boot-update.zip'
   if ((Get-FileHash -LiteralPath $manifest -Algorithm SHA256).Hash.ToLowerInvariant() -ne $meta.patch_sha256 -or
@@ -67,25 +67,18 @@ try {
   & "$PSScriptRoot\apply_offline_hotfix_windows.ps1" @common -VerifyOnly -Log $log
   if (-not (Test-Path -LiteralPath ($log + '.success'))) { throw 'Installation verification failed; nothing patched.' }
   Write-InstallerHeading '2 / 3 · 업데이트 준비 파일 복사' 'Copy update preparation files'
-  $partition = Assert-BootTarget
-  $volume = $partition | Get-Volume
-  if ($volume.SizeRemaining -lt ($index.payload_bytes * 2 + 1048576)) { throw 'Not enough free space in SETUP; no existing files will be removed.' }
-  if (-not $partition.DriveLetter) {
-    Add-PartitionAccessPath -DiskNumber $number -PartitionNumber 16 -AssignDriveLetter
-    $partition = Assert-BootTarget
-    $assignedPath = ([string]$partition.DriveLetter) + ':\'
-  }
-  $setupRoot = ([string]$partition.DriveLetter) + ':\'
-  if ($setupRoot -notmatch '^[A-Za-z]:\\$') { throw 'SETUP drive letter unavailable' }
-  $destination = Join-Path $setupRoot 'carrot-boot-update.zip'
-  $temporary = $destination + '.new'
-  Copy-Item -LiteralPath $payload -Destination $temporary -Force
-  $stream = [IO.File]::Open($temporary,[IO.FileMode]::Open,[IO.FileAccess]::ReadWrite,[IO.FileShare]::Read)
-  try { $stream.Flush($true) } finally { $stream.Dispose() }
-  if ((Get-FileHash -LiteralPath $temporary -Algorithm SHA256).Hash.ToLowerInvariant() -ne $meta.payload_sha256) { throw 'Payload readback failed' }
   $null = Assert-BootTarget
-  Move-Item -LiteralPath $temporary -Destination $destination -Force
-  if ((Get-FileHash -LiteralPath $destination -Algorithm SHA256).Hash.ToLowerInvariant() -ne $meta.payload_sha256) { throw 'Payload final readback failed' }
+  # Finish all filesystem activity in a child process before taking raw volume locks.
+  # A fresh child also prevents PowerShell provider handles surviving into stage 3.
+  $copyArguments = @('-NoProfile','-ExecutionPolicy','Bypass','-File',"$PSScriptRoot\copy_boot_payload.ps1",
+    '-DiskNumber',$number,'-UniqueId',([string]$selected.UniqueId),'-DiskBytes',$selected.Size,
+    '-SourceDisk',$source[0].DiskNumber,'-Support',$PSScriptRoot)
+  # Windows PowerShell drops empty native-command arguments; omit an absent serial.
+  if (-not [string]::IsNullOrWhiteSpace([string]$selected.SerialNumber)) {
+    $copyArguments += @('-SerialNumber',([string]$selected.SerialNumber))
+  }
+  & powershell.exe @copyArguments
+  if ($LASTEXITCODE -ne 0) { throw 'Payload copy/cleanup failed. Close target USB windows and rerun this patch.' }
   Write-InstallerHeading '3 / 3 · 부팅 패치 및 기록 확인' 'Patch boot helper and verify readback'
   $null = Assert-BootTarget
   $log = Join-Path $logs ($stamp + '-patch.txt')
@@ -102,12 +95,5 @@ try {
   Write-Host 'Do not format after a failure. Check logs; after interruption, rerun this same patch.'
   if ($Elevated) { Read-Host 'Enter' }
   exit 1
-} finally {
-  if ($assignedPath -and $selected) {
-    try {
-      $null = Assert-BootTarget
-      Remove-PartitionAccessPath -DiskNumber $number -PartitionNumber 16 -AccessPath $assignedPath
-    } catch { Write-Host '임시 드라이브 문자를 해제하지 못했습니다. Windows에서 안전하게 제거하세요.' }
-  }
 }
 if ($Elevated) { Read-Host 'Enter' }

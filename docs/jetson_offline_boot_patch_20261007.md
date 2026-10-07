@@ -2,7 +2,14 @@
 
 ## 자동 업데이트 패치 받기
 
-[설치파일 받기 — 약 12.4 MB](https://upload.shind0.synology.me/downloads/jetson/v0.4.1-boot-update-patch-preview/carrot-jetson-windows.zip)
+[설치파일 받기 — v0.4.2, 약 12.4 MB](https://upload.shind0.synology.me/downloads/jetson/v0.4.2-boot-update-patch-preview/carrot-jetson-windows.zip)
+
+**3단계 `Access is denied` 수정본:** 대상 USB를 열어 둔 탐색기 창을 닫고,
+새 ZIP을 **새 폴더에 모두 풀어** `Jetson_자동업데이트패치.cmd`를 처음부터 다시
+실행하세요. 기존 설치를 다시 검사하고 이어서 적용하므로 포맷·이미지 재설치는
+필요 없습니다. 2단계 복사를 별도 프로세스에서 마치고 임시 드라이브 문자를
+해제한 뒤 3단계로 넘어갑니다. 볼륨 잠금은 최대 30초 재시도하며 계속 실패하면
+작업명·파티션·Windows 오류 번호를 로그에 표시하고 기록하지 않습니다.
 
 기존 R2 또는 SD/NVMe v2 설치에 자동 업데이트 기능을 추가하는 최초 1회용
 Windows 패치입니다. 기존 **SD/NVMe 공용 패치와는 별개**입니다.
@@ -108,11 +115,11 @@ the PC Python installation. The guide rendered without horizontal overflow at
 selection, 6,144-byte virtual application/readback and independent ext4 decoding;
 their original apply-service ordering and executable test helper were checked.
 
-The self-contained ZIP is 12,448,084 bytes, SHA256
+The original v0.4.1 self-contained ZIP was 12,448,084 bytes, SHA256
 `7ae15ab13011f1f3d84ef4a80a899d070841d52f7a8a30a17d60b43f375dc597`.
 The boot payload is 21,941 bytes; bundled Windows Python is the same verified
 3.14.7 embedded release used by the earlier installer. The release location is
-[the Windows patch ZIP](https://upload.shind0.synology.me/downloads/jetson/v0.4.1-boot-update-patch-preview/carrot-jetson-windows.zip).
+[the Windows patch ZIP](https://upload.shind0.synology.me/downloads/jetson/v0.4.2-boot-update-patch-preview/carrot-jetson-windows.zip).
 The public server permits the existing `carrot-jetson-windows.zip` filename;
 this is a byte-identical alias of the locally named automatic-update package.
 Private publication/readback evidence is retained in the local investigation
@@ -120,3 +127,36 @@ archive, rather than committing disk captures or private device information.
 
 Physical USB-media writes, actual systemd startup ordering with this APP hook,
 first patched boot and vehicle operation are not established by desktop checks.
+
+## v0.4.2 Windows volume access correction
+
+The owner reported stages 1/2 succeeding and stage 3 failing inside the native
+`Control` call with access denied. Both lock and dismount used that same method,
+so the old log cannot identify which operation or volume failed. The exception
+occurs before invoking the Python APP writer in that stage; the verified SETUP
+payload from stage 2 may already be present. An open file/directory handle can
+prevent locking according to [Microsoft's FSCTL_LOCK_VOLUME contract](https://learn.microsoft.com/en-us/windows/win32/api/winioctl/ni-winioctl-fsctl_lock_volume).
+The owning process on the reporter's PC is not established by this log.
+
+The SETUP copy now runs in a separate PowerShell process, preserving disk/source,
+layout, filesystem and payload checks. It removes only its own temporary drive
+letter before exit; existing drive letters remain. The parent waits for successful
+copy and cleanup before raw locking. Lock acquisition closes failed handles and
+retries Win32 5/32/33 at one-second intervals (31 attempts), rechecking disk identity
+before every reopen. Other failures abort immediately. Operation, partition,
+volume path and native error are logged. Duplicate volume paths are locked once.
+Every volume must still be locked before APP writes; there is no forced dismount
+before a successful lock, lock bypass or disk-offline workaround.
+
+PowerShell tests simulate transient/permanent lock and dismount failures, verify
+handle cleanup and identity-change rejection, and exercise actual copy/readback
+with mocked Storage cmdlets on local files, including empty serials, existing/new
+letters, retries and corrupt input. Disk guards and parser checks pass; 39 focused
+Python tests pass with one platform skip. These do not reproduce the reporter's
+physical USB setup. The APP patch and Jetson boot payload are byte-identical to
+v0.4.1; only the Windows distribution and guidance change.
+
+The v0.4.2 ZIP is 12,450,553 bytes, SHA256
+`e927309fc2225f3ffc2f1b298b1c922161c600506e15f6126528cb35df663cbb`.
+Package CRC, UTF-8 PowerShell encoding, exact source/payload comparison and the
+bundled Python inspection passed, including an extraction path containing spaces.

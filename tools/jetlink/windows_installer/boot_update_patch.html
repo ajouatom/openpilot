@@ -8,7 +8,8 @@ body{margin:0;background:#eef3f8;color:#182e47;font:17px/1.7 system-ui,sans-seri
 <p>이후 필요한 Jetson 업데이트는 시동 후 자동으로 진행됩니다.</p><span class="en" lang="en">After migration, required Jetson updates run automatically at startup.</span></header>
 <section class="note"><h2>사용 전 확인</h2><span class="en" lang="en">Before you begin</span>
 <p>기존 R2 설치 또는 SD/NVMe v2 패치 적용본용 시험판입니다. PC 검사는 완료했으나 실제 저장장치 기록·Jetson 부팅은 아직 확인 전입니다.</p><span class="en" lang="en">Preview for existing R2 or SD/NVMe v2 installations. Desktop checks passed; physical media patching and Jetson boot remain unverified.</span>
-<p>다른 설치는 검사 후 중단합니다. 포맷하거나 새 이미지를 설치하지 마세요. 중요한 내용은 먼저 백업하세요.</p><span class="en" lang="en">Other installations are rejected. Do not format or reinstall an image. Back up important data first.</span></section>
+<p>다른 설치는 검사 후 중단합니다. 포맷하거나 새 이미지를 설치하지 마세요. 중요한 내용은 먼저 백업하세요.</p><span class="en" lang="en">Other installations are rejected. Do not format or reinstall an image. Back up important data first.</span>
+<p><b>v0.4.2 수정:</b> 3단계의 Access is denied 오류에 대응하여 파일 복사를 별도 프로세스에서 종료하고 볼륨 잠금을 최대 30초 재시도합니다. 대상 USB를 열어 둔 탐색기 창을 닫으세요. 이전 버전에서 실패했다면 이 ZIP을 새 폴더에 모두 풀어 처음부터 다시 실행하세요.</p><span class="en" lang="en">v0.4.2: file copying finishes in a separate process before volume locking, with up to 30 seconds of retries. Close Explorer windows using the target USB. After a previous failure, extract this ZIP to a new folder and rerun from the beginning.</span></section>
 <section><h2>1 · 전원을 끄고 PC에 연결</h2><span class="en" lang="en">Power off and connect to your PC</span>
 <p>Jetson을 정상 종료하고 <b>전원을 완전히 분리</b>한 뒤 부팅용 저장장치를 빼세요. USB 케이스·리더를 통해 Windows PC에 연결하세요.</p><span class="en" lang="en">Shut down Jetson and disconnect power completely before removing its boot storage. Connect it to Windows through a USB enclosure or reader.</span>
 <p>Windows가 포맷하겠냐고 물으면 <b>취소</b>하세요.</p><span class="en" lang="en">Cancel any Windows prompt to format the drive.</span></section>
