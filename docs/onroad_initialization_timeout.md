@@ -148,6 +148,14 @@ Isolated warm/prepared tests (20-31 ms) had not exposed this live-process cost.
 JoiningModel now allocates the two independent 3x3 NPY transform tensors before
 starting inference and passes them to the installed Warp. This adds no GPU
 compilation or peer wait, and never shares the local model's mutable inputs.
-Late installation reuses these buffers instead of creating new Tensor wrappers
-after sustained inference. One-time phase diagnostics retain input setup,
-executable restore and thread CPU durations for device verification.
+Late installation reuses these buffers. This alone did **not** fix the stall:
+the next startup still measured 0.736 s before restoration. That phase included
+`Device.DEFAULT`, not just input creation. A fresh parked-device reproduction
+had QCOM and NPY already open with DEV unset; querying DEFAULT still searched
+other backends and consumed 2.450 s wall / 2.071 s thread CPU under low priority.
+
+Warp now checks the explicit QCOM device, avoiding default-backend discovery in
+live modeld. The isolated compiler receives DEV=QCOM and WARP_DEV=QCOM; this
+does not change the parent model's backend selection. Compilation-only imports
+remain in the worker construction path. One-time phase diagnostics retain input
+setup, executable restore and thread CPU durations for device verification.
