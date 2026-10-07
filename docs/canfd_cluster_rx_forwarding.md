@@ -308,3 +308,37 @@ preserve the new direct-TX sequence and produce byte-identical old/new RX-paced
 outputs for all replay inputs. Desktop replay does not establish physical ECU
 acceptance or resolution of the reported cluster warning. Incident data remains
 local only.
+
+## Forwarding timer rollover (2026-10-07)
+
+The legacy per-ID forwarding suppression table previously treated an initial
+`last_tx_us=0` as a recent host transmission whenever the 32-bit microsecond
+timer wrapped (about 71 minutes 35 seconds). Unreplaced stock messages could
+therefore be blocked for their configured period plus 20 ms, even though no
+host replacement was sent. This affects the fallback forwarding table, not
+only the optional direct-cluster path.
+
+Each entry now records whether a replacement was accepted and the existing
+1 Hz safety-mode tick at that time. Forwarding expires that state at the
+original microsecond deadline. A coarse age greater than two ticks also
+expires it, preventing an old timestamp from becoming fresh after an entire
+timer wrap with no intervening traffic on the ID. Two tick boundaries are
+allowed because the longest existing deadline is 1.02 seconds. A legitimate
+TX at microsecond zero remains valid, and mode initialization clears all
+entries. Allowlist or relay rejection cannot arm suppression.
+
+The original suppression durations, control FIFOs, RX-paced cluster delivery,
+direct-send setting/default, counters, CRCs and relay protection remain intact.
+No generic safety tick callback, CAN reset or SPI retry change is introduced.
+This is a Panda firmware change and requires the rebuilt firmware on the
+device; a host-only update cannot change forwarding already running in Panda.
+
+Validation: 57 focused startup/full-wrap cases fail against the old compiled
+C hooks. The corrected native forwarding, cluster and button tests plus
+firmware-identity checks pass (408 tests). ARM GCC 13.3.1 builds F4/H7 main and
+bootstub targets with `-Werror`; development signing passes. A local recorded
+input replay of 7,774 frames, using an inferred timer phase, reproduces eleven
+old-hook blocks and none with the corrected hooks, with identical payloads.
+Builds and C tests exclude unrelated local safety experiments. These results
+establish the forwarding correction, not physical ECU acceptance or resolution
+of every intermittent cluster warning. Incident data remains local only.
