@@ -49,6 +49,14 @@
   min-width: 0;
 }
 
+/* This card has no icon: its only child must span both grid columns,
+   including the narrower icon column at the mobile breakpoint. */
+#jetsonUpdateCard > .egpu-model-card__body {
+  grid-column: 1 / -1;
+  overflow-wrap: anywhere;
+  word-break: keep-all;
+}
+
 .egpu-model-card__heading,
 .egpu-model-card__footer {
   display: flex;

@@ -100,3 +100,21 @@ Signature validation, committed-source byte comparison, NAS copy verification,
 and complete HTTPS readback of both bundle and manifest passed. Private keys,
 untracked work and captures are absent. The pinned Cinque v2 model and
 L4T/TensorRT ABI are unchanged; the SD-image/stable-channel pointers are unchanged.
+
+## Follow-up: first-update wait screen
+
+The iconless maintenance card originally placed its sole body in the shared
+54px icon grid column (44px at the mobile breakpoint). The body now spans both
+columns. Production CSS/markup were rendered in Chrome at 1030px and a real
+390px iframe viewport; the text/button stay inside the card without horizontal
+overflow. The localized waiting text now explicitly distinguishes the roughly
+15-minute legacy check interval from download time and completion.
+
+The published older updater was checked directly: boot check after two minutes,
+15-minute subsequent interval, and up to 30 seconds randomized delay. A parked
+device reporting fresh offroad and the correct signed pin completed an explicitly
+triggered existing stage service in about 18 seconds, with the 64.5MB bundle and
+the 766MB model already cached. Its status was `staged`; this was download and
+verification, not runtime activation or a general duration guarantee. Triggering
+the service preserves its offroad/signature/ABI checks. SSH diagnostic access
+requires an individually authorized key; no fleet-wide SSH credential is added.

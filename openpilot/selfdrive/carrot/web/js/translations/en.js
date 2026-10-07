@@ -6,6 +6,7 @@ window.CarrotTranslations.register("en", {
   shortName: "EN",
   strings: {
     jetson_update_title: "Jetson first update",
+    jetson_update_timing: "Older Jetsons check for updates about every 15 minutes. The next check may take about 15 minutes, then downloading takes additional time. This screen cannot confirm completion: it checks the installed version after an ignition power cycle. Elapsed time alone does not mean the update is complete.",
     jetson_update_start: "Wait for first Jetson update",
     jetson_update_cancel: "Cancel Jetson first-update wait",
     jetson_update_detail: "For older Jetsons, enter this mode while parked in P with assistance disengaged. Keep ignition and Internet on. Driving assistance stops during the wait. After an ignition power cycle, the hold clears when the new runtime is confirmed.",
