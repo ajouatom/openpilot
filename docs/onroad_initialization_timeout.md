@@ -86,7 +86,52 @@ all adapter time to CPU contention, Xiaoge, or SPI.
 
 The ten-second change is active but still expires before model readiness in
 this case. Raising a finite timeout alone cannot guarantee readiness-ordered
-startup. This task has not yet changed adapter scheduling or the existing
-finite fault-diagnosis escape path. Fresh Park, zero speed, inactive controls,
+startup. At this measurement point, adapter scheduling and the existing
+finite fault-diagnosis escape path were unchanged. Fresh Park, zero speed, inactive controls,
 valid CAN and active/ready Jetlink were verified after startup. Private captures
 and the reproducible comparison remain in the local analysis archive.
+
+## Internal model first, optional Jetlink preparation afterward
+
+The user then requested that the internal model run before preparing the
+Jetson camera adapter. JoiningModel construction no longer constructs Warp.
+It publishes internal outputs first. Only after at least three internal results,
+a fresh ready Jetlink peer and the existing join opportunity does it start
+preparation. Without a ready peer, there is no optional GPU preparation.
+
+Preparation runs in an exec'd subprocess: sharing a background Python thread's
+tinygrad capture/context state with live model inference would be unsafe.
+The supervisor uses SCHED_OTHER on little cores 0/1/2; its child additionally
+uses nice19. The process builds/warms the existing reference and C4 candidate,
+retains the existing exact 27-probe acceptance and reference fallback, and
+serializes the chosen captured executable using the existing model format.
+Before delivery, it reloads and checks pixel equality across three executions.
+The private temporary directory is removed after the process has exited.
+
+Modeld continues internal inference while the subprocess runs. It polls
+completion and installs the prepared executable only at a current join
+opportunity. Dimensions, frame size and pinned model identity are checked.
+Connection and inference retain the original freshness, transition, history
+reset, output validation and active-session fault behavior. A lost ready peer
+cancels preparation; a failed preparation keeps the internal model and delays
+another attempt by 30 seconds. The worker has a 60-second limit and Linux
+parent-death termination. There is no blocking worker join in the model loop.
+
+The existing absent-AMD-eGPU five-second discovery policy is unchanged. This
+change does not alter internal model weights or the signed Jetson release, and
+does not fix the separate boot-gate protocol error described in
+`jetson_boot_update_20261007.md`. It is not an established Panda SPI remedy.
+
+Focused tests cover lazy construction, readiness/output/transition gates,
+continued internal frames during pending work, cancellation, install/worker
+failure, bounded retry, child reaping and cleanup, plus existing Jetlink tests.
+A separate low-priority process on a parked C4 passed the exact GPU probes and
+serialization check; prepared payload was 823,548 bytes, restoration 8.25 ms
+and first execution 13.23 ms. Its build took 17.98 s under low priority and
+concurrent device workload. These values are a parked sample, not latency
+bounds or loaded-driving validation; whole onroad startup is checked separately.
+
+Desktop validation: 40 Jetlink tests pass with five platform-dependent skips;
+14 firmware identity tests pass separately. New helper/tests pass Ruff; the
+model wrapper retains its two pre-existing style findings. No test weakens
+camera/model validity or treats optional preparation completion as engagement.
