@@ -14,9 +14,12 @@ def test_constructor_never_prepares_gpu_or_connects(monkeypatch):
   monkeypatch.setitem(sys.modules, 'openpilot.selfdrive.modeld.parse_model_outputs', NS(Parser=lambda: None))
   monkeypatch.setitem(sys.modules, 'openpilot.system.hardware', NS(HARDWARE=NS(get_device_type=lambda: 'mici')))
   monkeypatch.setattr(model, 'Warp', lambda *a, **k: pytest.fail('eager GPU preparation'))
+  buffers = object()
+  monkeypatch.setattr(model, 'make_warp_inputs', lambda: buffers)
   monkeypatch.setattr(model, 'ClientConnection', lambda: pytest.fail('eager connection'))
   m = model.JoiningModel(NS(), 1344, 760)
   assert m.warp is None and m.preparation is None and m.small_runs == 0
+  assert m.warp_inputs is buffers
 
 
 @pytest.mark.parametrize('ready,allowed,outputs', [(False, True, 3), (True, False, 3), (True, True, 0), (True, True, 2)])
@@ -52,7 +55,8 @@ def test_completed_preparation_obeys_current_join_permission(monkeypatch):
   m.preparation = NS(future=future)
   m.join_allowed = False
   installed = []
-  def install(*args, prepared):
+  def install(*args, prepared, input_buffers):
+    assert input_buffers is m.warp_inputs
     installed.append(prepared)
     return lambda *a: None
   monkeypatch.setattr(model, 'Warp', install)
