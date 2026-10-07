@@ -13,6 +13,12 @@ from openpilot.selfdrive.modeld.jetlink.prepare import WarpPreparation
 MODEL_STATUS = Path('/dev/shm/carrot-jetlink-model.json')
 
 
+def make_warp_inputs():
+  from tinygrad import Tensor
+  transforms = {k: np.eye(3, dtype=np.float32) for k in ('tfm', 'big_tfm')}
+  return transforms, {k: Tensor(v, device='NPY').realize() for k, v in transforms.items()}
+
+
 def may_join(now, messages, valid, received):
   required = ('carState', 'selfdriveState', 'carControl')
   if not all(valid.get(k, False) and 0 <= now - received.get(k, -1e6) < .25 for k in required):
@@ -24,7 +30,7 @@ def may_join(now, messages, valid, received):
 
 
 class Warp:
-  def __init__(self, width, height, prepared=None):
+  def __init__(self, width, height, prepared=None, input_buffers=None):
     started, cpu_started = time.monotonic(), time.thread_time()
     from tinygrad import Tensor, TinyJit, Device
     from openpilot.selfdrive.modeld.compile_modeld import NV12Frame, make_warp
@@ -32,8 +38,7 @@ class Warp:
     if Device.DEFAULT != 'QCOM':
       raise RuntimeError('Jetlink camera adapter requires the native QCOM device')
     self.size = get_nv12_info(width, height)[3]
-    self.transforms = {k: np.eye(3, dtype=np.float32) for k in ('tfm', 'big_tfm')}
-    self.inputs = {k: Tensor(v, device='NPY').realize() for k, v in self.transforms.items()}
+    self.transforms, self.inputs = input_buffers if input_buffers is not None else make_warp_inputs()
     self.blobs = {}
     self.timings = (0., 0., 0.)
     if prepared is not None:
@@ -105,6 +110,9 @@ class JoiningModel:
     self.small = small
     self.warp = None
     self.warp_size = (width, height)
+    # NPY-only buffers, independent of the local model's inputs. Creating Tensor
+    # wrappers after sustained inference can stall even without GPU compilation.
+    self.warp_inputs = make_warp_inputs()
     self.preparation = None
     self.parser = Parser()
     self.client = None
@@ -164,7 +172,7 @@ class JoiningModel:
         if self.preparation.future.done():
           prepared, seconds = self.preparation.future.result()
           started = time.monotonic()
-          self.warp = Warp(*self.warp_size, prepared=prepared)
+          self.warp = Warp(*self.warp_size, prepared=prepared, input_buffers=self.warp_inputs)
           self.preparation = None
           cloudlog.warning('Jetlink warp prepared in %.3fs; installed in %.3fs', seconds, time.monotonic() - started)
           cloudlog.warning('Jetlink warp install input/restore/cpu seconds: %s', getattr(self.warp, 'init_timings', ()))

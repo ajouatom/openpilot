@@ -135,3 +135,19 @@ Desktop validation: 40 Jetlink tests pass with five platform-dependent skips;
 14 firmware identity tests pass separately. New helper/tests pass Ruff; the
 model wrapper retains its two pre-existing style findings. No test weakens
 camera/model validity or treats optional preparation completion as engagement.
+
+### Parked startup and installation follow-up
+
+On the first C4 deployment, first valid modelV2 advanced from CAN-relative
+15.717 s to 8.287 s; initialization completed in 7.54 s without the timeout.
+However, installing the prepared adapter later stalled model output: installation
+took 0.723 s. A second startup reproduced 0.729 s, split into 0.724 s before
+restoration and 0.005 s restoring the executable, with 0.701 s thread CPU.
+Isolated warm/prepared tests (20-31 ms) had not exposed this live-process cost.
+
+JoiningModel now allocates the two independent 3x3 NPY transform tensors before
+starting inference and passes them to the installed Warp. This adds no GPU
+compilation or peer wait, and never shares the local model's mutable inputs.
+Late installation reuses these buffers instead of creating new Tensor wrappers
+after sustained inference. One-time phase diagnostics retain input setup,
+executable restore and thread CPU durations for device verification.
