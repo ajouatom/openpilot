@@ -6,6 +6,7 @@ window.CarrotTranslations.register("ko", {
   shortName: "KO",
   strings: {
     jetson_update_title: "Jetson 최초 업데이트",
+    jetson_update_timing: "구형 Jetson은 약 15분마다 업데이트를 확인합니다. 다음 확인까지 약 15분이 걸릴 수 있고, 다운로드 시간은 별도입니다. 이 화면에서는 완료 여부를 확인할 수 없으며, 시동을 껐다 켠 뒤 적용된 버전을 확인합니다. 시간이 지났다고 업데이트 완료를 의미하지는 않습니다.",
     jetson_update_start: "Jetson 최초 업데이트 대기",
     jetson_update_cancel: "Jetson 최초 업데이트 대기 취소",
     jetson_update_detail: "기존 Jetson을 새 업데이트 방식으로 전환하는 최초 1회 대기입니다. 정차·P단에서 주행 보조를 해제한 뒤 시작하세요. 대기 중에는 주행 보조가 중지됩니다. 시동과 인터넷 연결을 유지하고, 시동을 껐다 켠 뒤 새 프로그램 적용이 확인되면 자동 해제됩니다.",
