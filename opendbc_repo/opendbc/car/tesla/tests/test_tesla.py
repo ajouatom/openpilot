@@ -81,6 +81,22 @@ class TestTeslaFingerprint(unittest.TestCase):
 
     self.assertFalse(ret.vehicleSensorsInvalid)
 
+  def test_low_speed_eac_inhibit_is_not_temporary_fault(self):
+    CP = CarInterface.get_params(CAR.TESLA_MODEL_Y, gen_empty_fingerprint(), [], False, False, False)
+    car_state = CarState(CP)
+    can_parsers = CarState.get_can_parsers(CP)
+    epas = can_parsers[Bus.party].vl["EPAS3S_sysStatus"]
+
+    epas["EPAS3S_eacStatus"] = 0  # EAC_INHIBITED
+    epas["EPAS3S_eacErrorCode"] = 1  # EAC_ERROR_MIN_SPEED
+    ret = car_state.update(can_parsers)
+    self.assertFalse(ret.steerFaultTemporary)
+    self.assertFalse(ret.steerFaultPermanent)
+
+    epas["EPAS3S_eacErrorCode"] = 9  # EAC_ERROR_HIGH_ANGLE_RATE_SAFETY
+    ret = car_state.update(can_parsers)
+    self.assertTrue(ret.steerFaultTemporary)
+
   def test_standstill_uses_esp_not_cruise_state(self):
     CP = CarInterface.get_params(CAR.TESLA_MODEL_Y, gen_empty_fingerprint(), [], False, False, False)
     car_state = CarState(CP)
