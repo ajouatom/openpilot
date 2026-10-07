@@ -118,3 +118,14 @@ the 766MB model already cached. Its status was `staged`; this was download and
 verification, not runtime activation or a general duration guarantee. Triggering
 the service preserves its offroad/signature/ABI checks. SSH diagnostic access
 requires an individually authorized key; no fleet-wide SSH credential is added.
+
+The user then explicitly requested a Jetson reboot. After rechecking fresh
+offroad state and the exact staged signed target, the host was rebooted through
+its authorized SSH account. A changed kernel boot ID, `applied` status and
+current source `84087a5b78118acc40234bfd8ef64235421f1aab` were confirmed. The boot
+apply service ran from 12:40:28 to 12:40:44 KST and emitted `CANDIDATE_PROBE_OK`.
+The runtime installed its bootstrap without per-car manual installation, both
+runtime/HUD services became active, USB reconnected, and fresh comma telemetry
+returned to onroad. This establishes the first migration and existing candidate
+probe on one parked device. It does not yet validate a subsequent boot using
+the new USB-only gate, physical HUD output, or loaded driving behavior.
