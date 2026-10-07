@@ -129,6 +129,9 @@ class RemoteSubMaster:
 
 def main():
   if '--help' not in sys.argv:
+    from boot_update import wait_for_runtime
+    wait_for_runtime()
+  if '--help' not in sys.argv:
     settings = DisplayParams()
     while not (settings.get_int('ClusterHud') == 1 and
                (settings.get_bool('IsOnroad') or settings.get_int('ClusterHudDebug') >= 1)):

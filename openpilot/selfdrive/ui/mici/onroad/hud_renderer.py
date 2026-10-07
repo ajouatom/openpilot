@@ -320,8 +320,9 @@ class HudRenderer(Widget):
       text, state = ui_state.usbgpu_delivery_badge
     if getattr(ui_state, 'jetlink_badge', None) and not ui_state.usbgpu_active:
       text, state = ui_state.jetlink_badge
+    font = gui_app.font(FontWeight.DISPLAY) if not text.isascii() else self._font_semi_bold
     font_size = 22
-    text_size = measure_text_cached(self._font_semi_bold, text, font_size)
+    text_size = measure_text_cached(font, text, font_size)
     pad_x, pad_y = 10, 5
     badge_w = text_size.x + pad_x * 2
     badge = rl.Rectangle(
@@ -341,7 +342,7 @@ class HudRenderer(Widget):
     rl.draw_rectangle_rounded(badge, 0.35, 8, rl.Color(0, 0, 0, 150))
     rl.draw_rectangle_rounded_lines_ex(badge, 0.35, 8, 2, color)
     rl.draw_text_ex(
-      self._font_semi_bold,
+      font,
       text,
       rl.Vector2(badge.x + pad_x, badge.y + pad_y),
       font_size,

@@ -111,6 +111,9 @@ async def api_tools_device_info(_request: web.Request) -> web.Response:
 
 
 def register(app: web.Application) -> None:
+  from .jetson_update import get_status, request_wait
+  app.router.add_get("/api/tools/jetson-update", get_status)
+  app.router.add_post("/api/tools/jetson-update", request_wait)
   jobs.load_persisted()
   app.router.add_post("/api/tools", api_tools)
   app.router.add_post("/api/tools/start", api_tools_start)
