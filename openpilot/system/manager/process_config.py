@@ -207,7 +207,9 @@ procs = [
   PythonProcess("carrot_cluster", "openpilot.selfdrive.carrot.cluster_autorun", enable_cluster_hud, restart_if_crash=True),
 
   #Xiaoge data broadcaster (conditional on ShareData param)
-  PythonProcess("xiaoge_data", "openpilot.selfdrive.carrot.xiaoge_data", enable_xiaoge_data),
+  # Starts after onroad readiness, when manager already has live IPC mappings.
+  # Launch a fresh interpreter instead of forking that running manager state.
+  PythonProcess("xiaoge_data", "openpilot.selfdrive.carrot.xiaoge_data", enable_xiaoge_data, spawn=True),
 
   # C3x lite has no speaker; mirror alerts to the GPIO buzzer instead.
   PythonProcess("beep", "openpilot.selfdrive.controls.beep", c3x_lite, enabled=TICI),
