@@ -35,7 +35,7 @@ def configure_cluster_scheduling() -> None:
 
     drop_realtime()
     # Bootstrap on always-online CPUs. The live render loop handles transitions.
-    DisplayScheduler(7, enabled=TICI).update(False, force=True)
+    DisplayScheduler(4, enabled=TICI).update(False, force=True)
 
 
 def main(*, exit_on_error: bool = True) -> None:

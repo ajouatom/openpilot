@@ -316,7 +316,7 @@ def test_cluster_run_drops_realtime_before_affinity_despite_legacy_overrides(mon
 
   cluster_run.configure_cluster_scheduling()
 
-  assert calls == ["SCHED_OTHER", (7, False)]
+  assert calls == ["SCHED_OTHER", (4, False)]
 
 
 def test_cluster_run_stops_if_dropping_realtime_fails(monkeypatch):

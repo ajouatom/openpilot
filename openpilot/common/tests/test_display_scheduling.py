@@ -23,7 +23,7 @@ def fake_scheduler(monkeypatch):
 
   def affinity(tid, cores):
     calls.append(('aff', tid, cores))
-    if state['race'] and 6 in cores:
+    if state['race'] and any(core >= 4 for core in cores):
       raise OSError('CPU offlined between check and syscall')
     workers[tid]['aff'] = set(cores)
 
@@ -67,14 +67,16 @@ def test_new_workers_and_affinity_drift_are_corrected_without_per_frame_sweeps(f
 
 
 @pytest.mark.parametrize('online,race', [(False, False), (True, True)])
-def test_unavailable_big_core_falls_back_and_recovers(fake_scheduler, online, race):
+@pytest.mark.parametrize('core', [4, 6])
+def test_unavailable_big_core_falls_back_and_recovers(fake_scheduler, online, race, core):
   f = fake_scheduler
+  f.scheduler.core = core
   f.state.update(online=online, race=race)
   f.scheduler.update(True)
   assert all(w['aff'] == {0, 1, 2, 3} for w in f.workers.values())
   f.state.update(online=True, race=False, now=2.0)
   f.scheduler.update(True)
-  assert all(w['aff'] == {6} and w['nice'] == 19 for w in f.workers.values())
+  assert all(w['aff'] == {core} and w['nice'] == 19 for w in f.workers.values())
 
 
 def test_offroad_affinity_remains_safe_when_nice_cannot_be_raised(fake_scheduler):
@@ -85,11 +87,11 @@ def test_offroad_affinity_remains_safe_when_nice_cannot_be_raised(fake_scheduler
   assert all(w['aff'] == {0, 1, 2, 3} and w['nice'] == 19 for w in f.workers.values())
 
 
-def test_cluster_uses_core7_with_the_same_transition_contract(fake_scheduler):
+def test_cluster_uses_core4_with_the_same_transition_contract(fake_scheduler):
   f = fake_scheduler
-  f.scheduler.core = 7
+  f.scheduler.core = 4
   f.scheduler.update(True)
-  assert all(w['aff'] == {7} and w['nice'] == 19 for w in f.workers.values())
+  assert all(w['aff'] == {4} and w['nice'] == 19 for w in f.workers.values())
   f.scheduler.update(False)
   assert all(w['aff'] == {0, 1, 2, 3} for w in f.workers.values())
 
@@ -103,9 +105,9 @@ def test_encoder_process_workers_follow_onroad_and_offroad(fake_scheduler, monke
   f = fake_scheduler
   f.workers[21] = {'aff': {0}, 'nice': 0, 'policy': 0}
   monkeypatch.setattr(ds, 'thread_ids', lambda pid='self': [11, 12] if pid == 'self' else [21])
-  f.scheduler.core = 7
+  f.scheduler.core = 4
   f.scheduler.update(True, child_pid=20)
-  assert f.workers[21] == {'aff': {7}, 'nice': 19, 'policy': 0}
+  assert f.workers[21] == {'aff': {4}, 'nice': 19, 'policy': 0}
   f.scheduler.update(False, child_pid=20)
   assert f.workers[21] == {'aff': {0, 1, 2, 3}, 'nice': 0, 'policy': 0}
 
