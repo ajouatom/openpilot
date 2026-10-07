@@ -50,3 +50,43 @@ dt/timeout, safety selection, Xiaoge process start, SPI failure phases/recovery
 times, raw CAN gaps and the vehicle's retained ACC fault. Reduced SPI errors
 with both changes would support an effect of startup scheduling but would not
 isolate which change mattered or prove an electrical/firmware root cause.
+
+## Parked C4 measurement on 2026-10-07
+
+The requested change was installed on a parked C4 and verified after a normal
+manager reboot. Its CAN-FD vehicle profile and disabled ShareData differ from
+the original classic-CAN report; this does not validate the Xiaoge gate's load
+reduction or resolution of that incident. The baseline was an onroad start on
+an already-running device; the comparison followed a device reboot and native
+relink. Jetson stayed running during the comparison.
+
+| Observation | Before (9fc06dcd) | After (26c6fa54) |
+| --- | --- | --- |
+| Initialization frame budget at timeout | 6.01 s | 10.01 s |
+| First valid modelV2, from first CAN batch | 13.981 s | 15.717 s |
+| Hyundai safety selection, same origin | 7.451 s | 11.509 s |
+| Maximum per-bus CAN batch interval, buses 0/1/2 | 22.911 ms | 24.345 ms |
+| RX/TX buffer overflow during segment | 0 / 0 | 0 / 0 |
+| SPI checksum counter increase during segment | 0 | 0 |
+
+The before/after checksum totals were 43 and 1 respectively; a reboot resets
+the counter, so their difference is not an improvement measurement. After
+reboot, tmux contained one all-zero invalid SPI-header diagnostic before the
+first logged CAN batch. Neither segment reproduced the multi-second NACK burst.
+
+New phase logging measured 1.693 s for the internal model and 6.861 s for the
+Jetlink adapter, giving the reported 8.6 s total construction time. Before
+construction, the existing absent-eGPU grace consumed about five seconds.
+The adapter includes synchronous Warp preparation and verification; its log
+does not individually time compilation, warmup, and the 27 probe comparisons.
+The internal model was constructed at CAN-relative 6.904 s, but modelV2 did
+not publish until 15.717 s. This establishes that delaying the first usable
+model output for adapter setup matters on this device. It does not attribute
+all adapter time to CPU contention, Xiaoge, or SPI.
+
+The ten-second change is active but still expires before model readiness in
+this case. Raising a finite timeout alone cannot guarantee readiness-ordered
+startup. This task has not yet changed adapter scheduling or the existing
+finite fault-diagnosis escape path. Fresh Park, zero speed, inactive controls,
+valid CAN and active/ready Jetlink were verified after startup. Private captures
+and the reproducible comparison remain in the local analysis archive.
