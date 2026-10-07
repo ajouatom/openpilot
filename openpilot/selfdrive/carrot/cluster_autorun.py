@@ -536,7 +536,7 @@ def main() -> None:
     _ensure_cluster_paths()
     from cluster_usb_display import find_supported_usb_product, product_id_for_hud_mode, product_label
 
-    scheduler = DisplayScheduler(7, enabled=TICI)
+    scheduler = DisplayScheduler(4, enabled=TICI)
     scheduler.update(False, force=True)
     params = Params()
     params.put_bool_nonblocking("ClusterHudConnected", False)

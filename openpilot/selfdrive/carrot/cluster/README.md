@@ -360,7 +360,8 @@ vendor USB initialization does not fail before the renderer is launched.
 Manager autostart and `cluster_run` use normal `SCHED_OTHER` scheduling, so
 realtime sensor and control work takes precedence. Inherited realtime policy
 is dropped before starting display workers; failure to drop it stops startup.
-Onroad, UI workers use core6 and HUD workers use core7 at nice19. Offroad,
+Onroad, HUD workers use core4 at nice19. The main UI retains its separate
+device-specific placement (C4 core6; C3/C3X cores0..3,6,7). Offroad,
 all workers return to cores0..3, including always-on debug output. A missing
 or offlining target core falls back to little cores and is retried. Old CPU
 selection, FPS and realtime-priority settings/environment overrides are ignored.

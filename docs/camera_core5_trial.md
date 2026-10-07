@@ -1,5 +1,35 @@
 # Camera CPU placement trials
 
+## October 7: USB cluster moves from core7 to core4
+
+After reviewing the September 23 conversation and current parked MDM/eGPU
+measurements, the user explicitly requested changing and pushing the cluster
+placement to the maintained `carrot-*` branches (`carrot-wip`, `carrot-mdm`).
+Onroad USB cluster workers now use core4 with the existing SCHED_OTHER/nice19
+policy, including render/USB/native encoder threads and the software encoder
+child. The supervisor still waits on little cores. Offroad, unavailable-core
+fallback, half-second worker correction and fixed10FPS/active-eGPU5FPS are
+unchanged. Main UI, model/DM, planner/radarcan, controls/camera and IRQ policies
+are unchanged. This supersedes the September 23 USB cluster core7 selection.
+
+The original comparison selected UI6/cluster7 among original/common6-7/split6-7
+arrangements; it did not compare cluster4. Core7 still briefly reached100%.
+The current parked C4 MDM observation before this change measured core4 mean
+46.2% (maximum60.8%), core7 mean83.1% (maximum94.8%), and cluster threads about
+14.6% of one CPU. Core4 planner and radarcan used about17.4% and18.6%, both
+FIFO51, above ordinary cluster workers. These measurements motivate moving
+display work; they are not measurements of the new placement's performance.
+
+Focused desktop checks passed71 cases covering core4 onroad/offroad transitions,
+encoder-child placement and core4 unavailability/hotplug recovery, alongside
+the existing display, USB rate and main UI placement contracts. One Linux-only
+thread-policy test was skipped on Windows; autorun imports used Params/hardware
+stubs for three tests. Target Linux scheduling, post-change
+planner/radar latency, actual cluster cadence, loaded driving and C3 behavior
+remain unvalidated. No device installation or restart is part of this change.
+
+Docs-Not-Needed: Internal CPU placement change; no setting or user workflow changes.
+
 ## October 3: C3 UI also permits core7
 
 The user explicitly approved adding core7 to C3/C3X main UI affinity after

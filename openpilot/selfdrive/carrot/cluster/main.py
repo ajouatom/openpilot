@@ -687,7 +687,7 @@ def run_demo(
     language: str | None,
     is_metric: bool | None,
 ) -> None:
-    scheduler = DisplayScheduler(7, enabled=TICI)
+    scheduler = DisplayScheduler(4, enabled=TICI)
     scheduler.update(False, force=True)
     profile = ProfileReporter(profile_render, profile_interval_s)
     gc_hook = GcProfileHook(profile) if profile_render else None
