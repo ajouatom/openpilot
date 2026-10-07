@@ -129,3 +129,36 @@ runtime/HUD services became active, USB reconnected, and fresh comma telemetry
 returned to onroad. This establishes the first migration and existing candidate
 probe on one parked device. It does not yet validate a subsequent boot using
 the new USB-only gate, physical HUD output, or loaded driving behavior.
+
+## Follow-up: visible elapsed time and maintenance meaning
+
+The Web first-update card now shows **Wait elapsed / 대기 경과** as minutes and
+seconds, plus the current USB connection state. The backend measures monotonic
+elapsed time from the first observation of the pending hold and stores its start
+in `/dev/shm/carrot-jetson-wait-start`. Page refresh, Web worker restart and Jetson
+power cycles retain the clock. C4 reboot clears the boot-local clock; an already
+pending hold starts measuring again at its first status request. Cancel/completion
+removes the clock on the next status read. Invalid clocks start over, storage
+failure leaves the timer unavailable, and neither case modifies the pending hold.
+The page refreshes status once per second and blanks stale time on API failure.
+
+Localized explanations distinguish the C4 software offroad state from physical
+ignition. Pending maintenance continues to hold C4 offroad even if the vehicle
+moves, with driving assistance stopped. It therefore still supplies an offroad
+selection to the old updater while powered and connected; this is not a new
+driving mode or a claim of loaded driving validation. Canceling the hold restores
+normal startup eligibility. The old updater checks offroad at stage entry; it
+does not continuously cancel an already-running download when road state changes.
+
+Restarting only Jetson immediately after entering maintenance retains the C4
+hold and timer, and gives the old updater its approximately two-minute boot
+check instead of waiting for a later approximately 15-minute periodic check.
+USB reconnection is not proof of reboot, download start or completion. The UI
+does not infer those events, show a completion countdown, or release maintenance
+after a duration. Twenty elapsed minutes do not guarantee a staged download.
+
+Validation: 31 focused Python tests and 5 Web tests passed, along with Ruff and
+the Web build. Production markup/styles rendered with a visible `02:05` timer
+at 1030px and a true 390px CSS viewport, with no horizontal overflow. Device
+display and actual power-cycle timer behavior remain unvalidated. This change
+does not republish or change the selected Jetson runtime.

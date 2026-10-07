@@ -1,5 +1,6 @@
 """Persistent, explicitly requested first-update hold for deployed Jetsons."""
 import json
+import math
 from pathlib import Path
 import time
 
@@ -8,6 +9,28 @@ from openpilot.common.jetlink_status import LINK_STATUS, _fresh, host_label
 PENDING = 'JetsonLegacyUpdatePending'
 ALERT = 'Offroad_JetsonLegacyUpdate'
 RELEASE = Path(__file__).resolve().parents[1] / 'selfdrive/modeld/jetlink/host_release.json'
+# Boot-local storage survives Web/Jetson restarts, but never spans C4 boots.
+WAIT_CLOCK = Path('/dev/shm/carrot-jetson-wait-start')
+
+
+def wait_elapsed(pending, now):
+  """UI observation only; elapsed time must never release the maintenance hold."""
+  try:
+    if not pending:
+      WAIT_CLOCK.unlink(missing_ok=True)
+      return None
+    try:
+      started = float(WAIT_CLOCK.read_text())
+      if not math.isfinite(started) or not 0 <= started <= now:
+        raise ValueError('Invalid wait clock')
+    except (FileNotFoundError, ValueError):
+      started = now
+      temporary = WAIT_CLOCK.with_suffix('.tmp')
+      temporary.write_text(str(started))
+      temporary.replace(WAIT_CLOCK)
+    return int(now - started)
+  except OSError:
+    return None  # A display timer failure cannot affect the persistent hold.
 
 
 def migrated(peer):
@@ -21,11 +44,13 @@ def migrated(peer):
 
 
 def status(params):
-  link = _fresh(LINK_STATUS, time.monotonic())
+  now = time.monotonic()
+  link = _fresh(LINK_STATUS, now)
   peer = link.get('peer') or {}
   connected = link.get('state') in ('ready', 'loading', 'maintenance', 'updating') and host_label(peer) == 'jetSON'
-  return {'pending': params.get_bool(PENDING), 'connected': connected,
-          'migrated': connected and migrated(peer)}
+  pending = params.get_bool(PENDING)
+  return {'pending': pending, 'connected': connected,
+          'migrated': connected and migrated(peer), 'wait_elapsed_seconds': wait_elapsed(pending, now)}
 
 
 def parked(sm):
