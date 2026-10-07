@@ -102,6 +102,49 @@ def test_alert_explicitly_describes_legacy_limitation():
   assert 'cannot report download completion' in maintenance.alert_text('en-US')
 
 
+def test_wait_clock_survives_usb_loss_but_never_clears_hold(tmp_path, monkeypatch):
+  clock = tmp_path / 'wait-start'
+  monkeypatch.setattr(maintenance, 'WAIT_CLOCK', clock)
+  now = [100.]
+  monkeypatch.setattr(maintenance.time, 'monotonic', lambda: now[0])
+  link = {'state': 'maintenance', 'peer': {'carrot_host': 'jetson'}}
+  monkeypatch.setattr(maintenance, '_fresh', lambda *args: link)
+  params = Params()
+  assert maintenance.status(params)['wait_elapsed_seconds'] == 0
+  now[0] += 125
+  link.clear()  # Jetson power cycle or unplug does not reset the C4 clock.
+  result = maintenance.status(params)
+  assert not result['connected'] and result['wait_elapsed_seconds'] == 125
+  now[0] += 3600
+  result = maintenance.status(params)
+  assert result['pending'] and result['wait_elapsed_seconds'] == 3725
+  params.pending = False
+  assert maintenance.status(params)['wait_elapsed_seconds'] is None
+  assert not clock.exists()
+  params.pending = True
+  assert maintenance.status(params)['wait_elapsed_seconds'] == 0
+  clock.unlink()  # /dev/shm is cleared by C4 reboot; pending remains persistent.
+  assert maintenance.status(params)['wait_elapsed_seconds'] == 0
+  assert params.pending
+
+
+@pytest.mark.parametrize('corrupt', ['garbage', 'nan', 'inf', '-1', '99999'])
+def test_invalid_wait_clock_restarts_measurement(tmp_path, monkeypatch, corrupt):
+  clock = tmp_path / 'wait-start'
+  clock.write_text(corrupt)
+  monkeypatch.setattr(maintenance, 'WAIT_CLOCK', clock)
+  assert maintenance.wait_elapsed(True, 10.) == 0
+  assert maintenance.wait_elapsed(True, 72.) == 62
+
+
+def test_wait_clock_storage_failure_does_not_change_pending(tmp_path, monkeypatch):
+  monkeypatch.setattr(maintenance, 'WAIT_CLOCK', tmp_path / 'missing' / 'wait-start')
+  monkeypatch.setattr(maintenance, '_fresh', lambda *args: {})
+  params = Params()
+  result = maintenance.status(params)
+  assert result['pending'] and result['wait_elapsed_seconds'] is None
+
+
 @pytest.mark.parametrize('safe', [True, False])
 def test_web_entry_checks_continuous_vehicle_state(monkeypatch, safe):
   import asyncio

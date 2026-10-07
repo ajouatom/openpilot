@@ -57,6 +57,19 @@
   word-break: keep-all;
 }
 
+.jetson-update-timer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px 16px;
+  margin: 16px 0 8px;
+}
+
+.jetson-update-timer strong {
+  font-size: 32px;
+  font-variant-numeric: tabular-nums;
+}
+
 .egpu-model-card__heading,
 .egpu-model-card__footer {
   display: flex;

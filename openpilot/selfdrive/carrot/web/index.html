@@ -300,6 +300,11 @@
           <div class="egpu-model-card__body">
             <strong id="jetsonUpdateTitle">Jetson first update</strong>
             <p id="jetsonUpdateDetail" class="egpu-model-card__detail"></p>
+            <div id="jetsonUpdateProgress" hidden>
+              <p class="jetson-update-timer" aria-live="off"><span id="jetsonUpdateElapsedLabel"></span><strong id="jetsonUpdateElapsed">--:--</strong></p>
+              <p id="jetsonUpdateConnection" class="egpu-model-card__detail"></p>
+              <p id="jetsonUpdateTimerNote" class="egpu-model-card__detail"></p>
+            </div>
             <p id="jetsonUpdateTiming" class="egpu-model-card__detail" hidden></p>
             <button id="btnJetsonUpdateWait" class="btn" type="button">Wait for first Jetson update</button>
           </div>
