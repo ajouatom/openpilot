@@ -1,5 +1,17 @@
 # Mac Jetlink 연결 시험
 
+Protocol 3 compatibility and current phone setup are documented in
+[Jetlink protocol 3 compatibility](jetlink_protocol3_compatibility.md).
+The older protocol-2-only app assumption below no longer applies to the
+updated comma adapter; model identity and parked-test restrictions still do.
+
+The comma now defaults to automatic Mac/Android/iOS transport discovery when
+no transport override exists. If you previously selected a phone mode, opt in
+once with `printf 'auto\n' > /data/jetlink-transport` and restart the comma.
+Explicit `usb`, `android` and `ios` modes remain available for diagnosis.
+Automatic discovery does not fix USB host/device role negotiation; retain a
+working data cable/hub topology and perform device changes while parked.
+
 기존 **zoompilot Jetlink Mac 앱**과 Carrot를 연결하는 시험용 기능입니다.
 Mac 앱을 수정하거나 Carrot 전용 앱을 설치할 필요가 없습니다. 현재 실제 Mac USB 연결과
 CoreML 추론 성능은 검증 전이며, PC 통신 시험을 통과한 상태입니다.
@@ -10,8 +22,8 @@ CoreML 추론 성능은 검증 전이며, PC 통신 시험을 통과한 상태�
 - [원본 Jetlink Mac 앱](https://github.com/zoompilot/jetlink/releases)을 설치합니다.
 - 콤마는 이 기능이 포함된 최신 `carrot-wip`으로 업데이트합니다.
 - Mac과 콤마의 전원을 확보하고 USB 3 데이터 케이블을 준비합니다.
-- Mac 앱의 **Settings → Server**에서 **Python (bundled runtime)**,
-  **Automatic**, **USB**를 사용합니다. 먼저 이 조합으로 시험해 주세요.
+- 최신 앱의 기본 네이티브 서버와 **Automatic**, **USB**를 사용합니다.
+  별도의 구형 Python 서버는 필요하지 않습니다.
 
 ## 1. 최초 모델 준비 — 시동 끈 상태
 
@@ -19,14 +31,15 @@ CoreML 추론 성능은 검증 전이며, PC 통신 시험을 통과한 상태�
    시동을 켠 P단은 이 단계의 대기 상태가 아닙니다.
 2. Mac에서 Jetlink 앱을 열고 USB 3 케이블로 콤마에 연결합니다.
    연결되지 않으면 USB 3 허브/어댑터의 USB-A 포트와 A-to-C 데이터 케이블로 확인합니다.
-3. 콤마가 Mac을 판별하고, 필요한 경우 약 766MB의 **지정된 Cinque v2**를 NAS에서 받아
-   검증한 뒤 앱으로 전송합니다. 별도로 모델을 고르거나 내려받을 필요가 없습니다.
+3. 앱에서 호환되는 주행 모델을 선택하고 **Use Model**로 준비합니다.
+   콤마는 앱에 로드된 모델의 SHA와 입력·출력 규격을 검증한 뒤 사용합니다.
+   Cinque v2로 고정되지 않으며, 호환되는 queued/stateful 모델을 지원합니다.
 4. 앱의 모델 준비가 끝나고 콤마에 **MAC READY**가 나타날 때까지 기다립니다.
-   다운로드는 회선 속도에 따라 수 분 이상 걸릴 수 있으며, 앱 모델 준비는 최대 15분 기다립니다.
+   다운로드는 회선 속도에 따라 수 분 이상 걸릴 수 있습니다. 앱 Logs에서 준비 진행을 확인하세요.
 
-준비 도중 시동을 켜거나 연결을 끊으면 콤마의 다운로드·전송·준비 대기가 중단될 수 있습니다.
-다시 대기 상태로 연결하면 재시도합니다. 검증을 끝낸 콤마 모델 파일과 Mac 엔진은 재사용하지만,
-중단된 파일 전송은 처음부터 다시 할 수 있습니다. 앱에서 이미 시작한 빌드는 계속될 수 있습니다.
+준비 도중 시동을 켜면 콤마는 새 모델 승인을 중단합니다. 앱에서 이미 시작한 다운로드나
+빌드는 계속될 수 있습니다. 다시 시동을 끈 상태로 연결하면 준비된 Mac 엔진을 검증하고
+재사용합니다. 콤마가 앱의 선택을 다른 고정 모델로 바꾸지는 않습니다.
 
 ## 2. 정차 상태에서 연결 확인
 
@@ -40,7 +53,8 @@ Mac은 전원에 연결하고 절전되지 않게 유지하세요. 시험 중 �
 - 주행 성능과 안전성은 이 정차 시험만으로 검증되지 않습니다.
 
 `MAC WAIT`는 준비/대기, `MAC RETRY` 또는 `MAC ERROR`는 연결·준비·추론 오류일 수 있습니다.
-모델 규격과 기존 전환·오류 검사는 유지됩니다. iPhone/iPad 연결은 이 기능의 대상이 아닙니다.
+모델 규격과 기존 전환·오류 검사는 유지됩니다. iPhone/iPad와 Android의 연결 방법은
+위 protocol 3 문서에 설명되어 있습니다. 모델 변경은 시동을 끈 상태에서만 준비하세요.
 Jetson 전용 지도 스트리밍·Wi-Fi 설정 전달·온도 진단은 원본 Mac 앱에서 제공되지 않습니다.
 
 ## 결과를 알려주실 때
@@ -61,8 +75,8 @@ Desktop protocol tests passed; actual Mac USB and CoreML performance remain unva
 
 Use an Apple Silicon Mac with macOS15+ (16GB recommended), the
 [upstream app](https://github.com/zoompilot/jetlink/releases), an updated `carrot-wip`
-comma, separate power and a USB3 data cable. In the app select **Python (bundled
-runtime)**, **Automatic**, and **USB** for the initial test.
+comma, separate power and a USB3 data cable. Use the current native App server,
+**Automatic**, and **USB**; a separate old Python server is not needed.
 
 ## 1. First model setup — ignition off
 
@@ -70,14 +84,16 @@ runtime)**, **Automatic**, and **USB** for the initial test.
    Park with ignition on is not offroad for this setup.
 2. Open the Mac app and connect USB3. If needed, try a USB3 hub/adapter's USB-A
    port with an A-to-C data cable.
-3. The comma identifies the Mac and, if needed, downloads the pinned766MB
-   Cinque v2 from NAS, verifies it and uploads it. No manual model selection is needed.
+3. Select a compatible driving model in the App and choose **Use Model**.
+   The comma validates the loaded model's SHA and complete driving contract.
+   Current Apps are not pinned to Cinque v2; compatible queued and stateful
+   graphs use their own input/output metadata.
 4. Wait for preparation and **MAC READY**. Download time depends on the connection;
-   engine preparation is allowed up to15 minutes.
+   inspect the App's Logs for preparation progress.
 
-Ignition-on or disconnect can interrupt comma preparation. Reconnect offroad to
-retry. Verified comma downloads and cached Mac engines are reused; interrupted
-transfers may restart. A build already running in the app can continue.
+Ignition-on cancels comma approval of a different model. An App download/build
+already in progress can continue. Reconnect offroad to validate and reuse the
+prepared Mac engine. The comma does not replace the App's pick with a fixed model.
 
 ## 2. Parked connection check
 
@@ -88,8 +104,10 @@ and errors for several minutes. While parked/disengaged, check cable reconnectio
 and cached model reuse; test app restart offroad. This does not validate driving.
 
 **MAC WAIT** means waiting/preparing; **MAC RETRY/ERROR** can indicate setup, link
-or inference failures. Existing model/switch/fault checks remain. iOS and Jetson's
-navigation, Wi-Fi provisioning and temperature extensions are outside this scope.
+or inference failures. Existing model/switch/fault checks remain. Prepare model
+changes with ignition off. iPhone/iPad and Android setup is in the protocol-3
+document above; Jetson's navigation, Wi-Fi provisioning and temperature
+extensions are outside this Mac test.
 
 ## Report
 
