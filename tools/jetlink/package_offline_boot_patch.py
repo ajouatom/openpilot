@@ -22,7 +22,7 @@ def build(patch, python_zip, output):
     raise ValueError('Portable Python release mismatch')
   if digest(patch / 'carrot-boot-update.zip') != index['payload_sha256']:
     raise ValueError('Boot payload mismatch')
-  release = {'version': 'v0.4.1-boot-update-patch-preview',
+  release = {'version': 'v0.4.2-boot-update-patch-preview',
                  'image_bytes': first['image_bytes'], 'patch_sha256': digest(patch / 'boot-patch.json'),
                  'payload_sha256': index['payload_sha256'], 'payload_bytes': index['payload_bytes'],
                  'host_source': index['host_source'], 'python_sha256': PYTHON_SHA, 'python_url': PYTHON_URL,
@@ -43,7 +43,7 @@ def build(patch, python_zip, output):
     for name in ('offline_boot_patch.py', 'offline_hotfix.py', 'apply_offline_hotfix_windows.ps1'):
       body = (source / name).read_text(encoding='utf-8-sig')
       package.writestr(prefix + 'support/' + name, body.encode('utf-8-sig' if name.endswith('.ps1') else 'utf-8'))
-    for name in ('boot_update_patch.ps1', 'messages.ps1', 'disks.ps1'):
+    for name in ('boot_update_patch.ps1', 'copy_boot_payload.ps1', 'messages.ps1', 'disks.ps1'):
       package.writestr(prefix + 'support/' + name,
                        (source / 'windows_installer' / name).read_text(encoding='utf-8-sig').encode('utf-8-sig'))
     with zipfile.ZipFile(python_zip) as runtime:
