@@ -168,3 +168,36 @@ the Web build. Production markup/styles rendered with a visible `02:05` timer
 at 1030px and a true 390px CSS viewport, with no horizontal overflow. Device
 display and actual power-cycle timer behavior remain unvalidated. This change
 does not republish or change the selected Jetson runtime.
+
+## Follow-up: subsequent-boot handover error, 2026-10-07
+
+A subsequent boot with the signed 84087a5b host reached boot-ready successfully,
+then the normal server logged `unknown_message: type 16387` before its first
+normal HELLO. The vehicle logged the corresponding connection exception and
+subsequently reconnected successfully. This is a boot protocol transition
+failure, separate from Panda SPI transport errors.
+
+The bootstrap loop calls `Gate.tick()` after every received message. A valid
+manifest matching the installed source makes it ready immediately; the loop
+can close the transport before answering the vehicle's following STATE_REQ.
+The normal server can then answer that request without a `carrot_update`
+object. The vehicle currently treats this as an empty update status and sends
+another manifest (`0x4003`, decimal 16387). The normal inference server does
+not implement this bootstrap-only command and correctly rejects it.
+
+An in-memory reproduction using the production Gate, BootstrapSession,
+JetlinkClient and vehicle wait function reproduced that exact error. The
+simulated normal server supplied the production STATE response fields and
+unknown-message behavior. Signature verification was stubbed only in the
+local reproduction; the actual boot used the signed matching release. On the
+device, gate exit occurred at boot+16.833 s, normal control-listener startup
+at +20.271 s, rejection at +20.924 s and fresh HELLO at +25.057 s.
+
+There is also a separate expected-transition issue: even receiving explicit
+`ready` raises a generic ConnectionError, which the daemon currently presents
+as a connection failure. A correction needs an explicit successful handover
+and fresh runtime handshake, while retaining real manifest, transport and
+runtime errors. No protocol fix or new signed host release was applied in
+this investigation. Rebooting only the vehicle while Jetson was already in
+normal runtime reconnected without this gate-specific error; that is not a
+validation of a fix. Private journals and the reproducer remain local.
