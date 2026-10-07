@@ -65,7 +65,7 @@ Vehicle BSD is an assistive signal. It cannot cover every fast-closing vehicle, 
 
 ### `ShareData` — ONNX lane and BSD detection
 
-Enable **Carrot Web → Settings → Driving → Steering → ONNX Lane & BSD → ONNX Lane and BSD Detection**. It defaults to off; an existing saved enabled value is preserved.
+Enable **Carrot Web → Settings → Driving → Steering → ONNX Lane & BSD → ONNX Lane and BSD Detection**. It defaults to off; an existing saved enabled value is preserved. When enabled, the service starts after onroad initialization and model/CAN/Panda readiness have settled for 0.5 seconds. Engaging cruise is not required. It stops offroad and waits again at the next onroad start.
 
 - **On:** the comma device computes lane types and camera BSD. Inference does not run on the phone. Solid/dashed classification runs continuously. BSD checks only the requested lane-change side at 30–120 km/h when that lane is at least 3 m wide.
 - **Off:** the vision service stops. Its last results expire after their validity period; vehicle-provided lane information and BSD remain available. The setting and mici status display update within a few seconds.
