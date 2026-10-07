@@ -42,6 +42,8 @@ def joining_model(monkeypatch):
   monkeypatch.setitem(sys.modules, 'openpilot.common.swaglog', NS(cloudlog=NS(warning=lambda *a: None, exception=lambda *a: None)))
   m = object.__new__(model.JoiningModel)
   m.client = m.connection = None
+  m.preparation = None
+  m.warp_size = (1344, 760)
   m.small_runs = 3
   m.ready = m.join_allowed = True
   m.next_join = m.next_status = 0

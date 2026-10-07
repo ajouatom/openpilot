@@ -255,6 +255,35 @@ relay behavior and warning resolution still require repeated device startups.
 This change modifies Panda firmware and requires its normal startup rebuild/
 installation, unlike the preceding host-only template-recovery correction.
 
+## Extend the same H7 handoff to classic Hyundai CAN (2026-10-07)
+
+The user requested the same conditional controller preservation for classic
+CAN. The destination allowlist now includes SAFETY_HYUNDAI (8) and
+SAFETY_HYUNDAI_LEGACY (23), alongside SAFETY_HYUNDAI_CANFD (28). This is about
+vehicle safety modes on H7's FDCAN hardware: classic CAN frames also use that
+controller. F4's bxCAN driver and all other manufacturers remain unchanged.
+
+No eligibility check was relaxed. Only live normal-ELM327 handoff with the
+same known-good timing/mapping, harness/mux, no hardware errors and no pending
+TX may skip controller INIT and mux reapplication. Safety hooks, queue cleanup,
+relay ownership and transition diagnostics still execute. Every ineligible
+case retains full initialization. In particular, this does not remove initial
+boot configuration, bitrate changes, fault recovery or safety-state resets.
+
+The production-function C harness now covers each of modes 8/23/28 on H7 and
+the unchanged F4 branch, the 64-pair mode transition matrix and 20 rejection
+conditions for each target. SPI retry duration is not a measurement of CAN
+initialization duration. Root cause of the reported SPI burst remains
+unconfirmed, and this extension is not a demonstrated cure. Updated Panda
+firmware and classic-CAN device startup evidence are required to establish that
+`preserve=1` is actually selected and whether NACK/CAN gaps improve.
+
+Validation: seven compiled C harness cases and 14 firmware source-identity
+tests pass. ARM GCC 13.3.1 builds all eight Panda/Jungle F4/H7 main/bootstub
+targets with `-Werror`, and Panda development signing passes. Build inputs
+come from a clean HEAD archive with only this task's main.c change overlaid;
+unrelated working-tree safety experiments are excluded.
+
 ## Independent CCNC host counter (2026-10-06)
 
 The host's `CCNC_0x162` copy now removes the snapshot's explicit `COUNTER` and

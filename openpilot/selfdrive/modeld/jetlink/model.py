@@ -1,4 +1,5 @@
 """Native camera warp and a guarded switch between local and Jetlink inference."""
+import io
 import json
 import os
 from pathlib import Path
@@ -7,6 +8,7 @@ import time
 import numpy as np
 
 from openpilot.selfdrive.modeld.jetlink.link import ClientConnection, SPEC, FAULT, state
+from openpilot.selfdrive.modeld.jetlink.prepare import WarpPreparation
 
 MODEL_STATUS = Path('/dev/shm/carrot-jetlink-model.json')
 
@@ -22,7 +24,7 @@ def may_join(now, messages, valid, received):
 
 
 class Warp:
-  def __init__(self, width, height):
+  def __init__(self, width, height, prepared=None):
     from tinygrad import Tensor, TinyJit, Device
     from openpilot.selfdrive.modeld.compile_modeld import NV12Frame, make_warp
     from openpilot.system.camerad.cameras.nv12_info import get_nv12_info
@@ -31,6 +33,15 @@ class Warp:
     self.size = get_nv12_info(width, height)[3]
     self.transforms = {k: np.eye(3, dtype=np.float32) for k in ('tfm', 'big_tfm')}
     self.inputs = {k: Tensor(v, device='NPY').realize() for k, v in self.transforms.items()}
+    self.blobs = {}
+    self.timings = (0., 0., 0.)
+    if prepared is not None:
+      from openpilot.selfdrive.modeld.helpers import load_oob
+      value = load_oob(io.BytesIO(prepared))
+      if value['identity'] != (width, height, self.size, SPEC.sha256):
+        raise ValueError('prepared Jetlink warp contract mismatch')
+      self.run_warp = value['warp']
+      return
     self.run_warp = TinyJit(make_warp(NV12Frame(width, height, *get_nv12_info(width, height)), 512, 256, SPEC.frame_skip))
     dummy = {k: Tensor(np.zeros(self.size, np.uint8), device='QCOM').realize() for k in ('frame', 'big_frame')}
     for _ in range(3):
@@ -41,8 +52,22 @@ class Warp:
     from openpilot.selfdrive.modeld.jetlink.warp import validated_warp
     self.run_warp = validated_warp(self.run_warp, NV12Frame(width, height, *get_nv12_info(width, height)),
                                    self.transforms, self.inputs, SPEC.frame_skip, HARDWARE.get_device_type())
-    self.blobs = {}
-    self.timings = (0., 0., 0.)
+
+  def save_prepared(self, path, width, height):
+    from tinygrad import Tensor
+    from openpilot.selfdrive.modeld.helpers import dump_oob
+    with path.open('wb') as output:
+      dump_oob({'identity': (width, height, self.size, SPEC.sha256), 'warp': self.run_warp}, output)
+    # Verify serialization before handing the executable to modeld. The existing
+    # 27-probe exact GPU validation has already selected the implementation.
+    restored = Warp(width, height, path.read_bytes())
+    rng = np.random.default_rng(7527)
+    frames = {k: Tensor(rng.integers(0, 256, self.size, dtype=np.uint8), device='QCOM').realize() for k in ('frame', 'big_frame')}
+    expected = self.run_warp(**self.inputs, **frames).numpy()
+    for _ in range(3):
+      actual = restored.run_warp(**restored.inputs, **frames).numpy()
+      if actual.shape != expected.shape or actual.dtype != expected.dtype or not np.array_equal(actual, expected):
+        raise ValueError('prepared Jetlink warp serialization changed pixels')
 
   def __call__(self, bufs, transforms):
     from tinygrad import Tensor
@@ -75,7 +100,9 @@ class JoiningModel:
     self.phase_enabled = HARDWARE.get_device_type() == 'mici'
     self.source_sof = 0
     self.small = small
-    self.warp = Warp(width, height)
+    self.warp = None
+    self.warp_size = (width, height)
+    self.preparation = None
     self.parser = Parser()
     self.client = None
     self.connection = None
@@ -123,10 +150,32 @@ class JoiningModel:
 
   def run(self, bufs, transforms, inputs, prepare_only):
     from openpilot.common.swaglog import cloudlog
+    if self.preparation is not None and not self.ready:
+      self.preparation.close()
+      self.preparation = None
+    if self.warp is None and self.small_runs >= 3 and self.ready and self.join_allowed and time.monotonic() >= self.next_join:
+      try:
+        if self.preparation is None:
+          cloudlog.warning('Jetlink warp preparation starting after %d internal outputs', self.small_runs)
+          self.preparation = WarpPreparation(*self.warp_size)
+        if self.preparation.future.done():
+          prepared, seconds = self.preparation.future.result()
+          started = time.monotonic()
+          self.warp = Warp(*self.warp_size, prepared=prepared)
+          self.preparation = None
+          cloudlog.warning('Jetlink warp prepared in %.3fs; installed in %.3fs', seconds, time.monotonic() - started)
+      except Exception as exc:
+        cloudlog.exception('Jetlink warp preparation failed; retaining internal model')
+        if self.preparation is not None:
+          self.preparation.close()
+          self.preparation = None
+        self.error = str(exc)
+        self.next_join = time.monotonic() + 30
     if self.connection is not None and not (self.ready and self.join_allowed):
       self.connection.close()
       self.connection = None
-    if self.client is None and self.small_runs >= 3 and self.ready and self.join_allowed and time.monotonic() >= self.next_join:
+    if (self.warp is not None and self.client is None and self.small_runs >= 3 and
+        self.ready and self.join_allowed and time.monotonic() >= self.next_join):
       try:
         if self.connection is None:
           self.connection = ClientConnection()

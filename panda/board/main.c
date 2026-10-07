@@ -71,7 +71,8 @@ void set_safety_mode(uint16_t mode, uint16_t param) {
   // running instead of busy-waiting through six INIT cycles inside SPI RX.
   ENTER_CRITICAL();
   if ((current_safety_mode == SAFETY_ELM327) && (current_safety_param != 0U) &&
-      (mode == SAFETY_HYUNDAI_CANFD) && (can_silent == ALL_CAN_LIVE) && !can_loopback &&
+      ((mode == SAFETY_HYUNDAI) || (mode == SAFETY_HYUNDAI_LEGACY) || (mode == SAFETY_HYUNDAI_CANFD)) &&
+      (can_silent == ALL_CAN_LIVE) && !can_loopback &&
       (power_save_status == POWER_SAVE_STATUS_DISABLED) &&
       current_board->harness_config->has_harness &&
       (harness.status != HARNESS_STATUS_NC) &&

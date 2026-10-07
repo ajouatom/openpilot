@@ -26,7 +26,8 @@ def function(path, signature):
 
 
 @pytest.mark.parametrize("h7", [True, False])
-def test_production_safety_transition(tmp_path, h7):
+@pytest.mark.parametrize("hyundai_mode", [8, 23, 28])
+def test_production_safety_transition(tmp_path, h7, hyundai_mode):
   common = "panda/board/drivers/can_common.h"
   fdcan = "panda/board/drivers/fdcan.h"
   prefix = r'''
@@ -56,7 +57,8 @@ def test_production_safety_transition(tmp_path, h7):
 #define FDCAN_RX_FIFO_0_EL_CNT 46U
 #define MIN(a,b) ((a)<(b)?(a):(b))
 #define REGISTER_INTERRUPT(...)
-enum { SAFETY_SILENT=0, SAFETY_ELM327=3, SAFETY_NOOUTPUT=19, SAFETY_HYUNDAI_CANFD=28,
+enum { SAFETY_SILENT=0, SAFETY_ELM327=3, SAFETY_HYUNDAI=8, SAFETY_NOOUTPUT=19,
+       SAFETY_HYUNDAI_LEGACY=23, SAFETY_HYUNDAI_CANFD=28,
        CAN_MODE_NORMAL=0, CAN_MODE_OBD_CAN2=1, ALL_CAN_LIVE=0, ALL_CAN_SILENT=255,
        POWER_SAVE_STATUS_DISABLED=0, HARNESS_STATUS_NC=0 };
 typedef struct { uint32_t CCCR, PSR, IR, TXBRP, RXF0S, RXF0A; } FDCAN_GlobalTypeDef;
@@ -87,7 +89,7 @@ static void print(const char *s) { (void)s; }
 static void puth(uint32_t x) { (void)x; }
 static void assert_fatal(bool ok, const char *s) { (void)s; assert(ok); }
 static int set_safety_hooks(uint16_t mode, uint16_t param) {
-  if (mode==65535 || (hook_fail && mode==SAFETY_HYUNDAI_CANFD)) return -1;
+  if (mode==65535 || (hook_fail && mode==HYUNDAI_MODE)) return -1;
   current_safety_mode=mode; current_safety_param=param; return 0;
 }
 static void set_intercept_relay(bool on, bool ignition) { (void)ignition; relay=on; }
@@ -122,9 +124,9 @@ static void setup(void) {
 int main(void) {
   const bool fast_supported = FAST_SUPPORTED;
   setup(); regs[0].RXF0S=3U | (5U<<8); regs[1].RXF0S=127U | (9U<<8);
-  set_safety_mode(SAFETY_HYUNDAI_CANFD,2077);
+  set_safety_mode(HYUNDAI_MODE,2077);
   assert(init_calls==(fast_supported?0:3) && mux_calls==(fast_supported?0:1) && relay && critical==0);
-  assert(current_safety_mode==28 && current_safety_param==2077);
+  assert(current_safety_mode==HYUNDAI_MODE && current_safety_param==2077);
   assert(queue[0]==0 && queue[1]==0 && queue[2]==0 && host_rx==7);
   if (fast_supported) assert(regs[0].RXF0A==5 && regs[1].RXF0A==9);
   // Every unhealthy/changed configuration must retain full reinitialization.
@@ -152,18 +154,19 @@ int main(void) {
       case 18: hook_fail=true; break;
       case 19: harness.status=0; applied_can_harness_status=0; break;
     }
-    set_safety_mode(SAFETY_HYUNDAI_CANFD,29);
+    set_safety_mode(HYUNDAI_MODE,29);
     assert(init_calls==3 && critical==0);
     assert(queue[0]==0 && queue[1]==0 && queue[2]==0 && host_rx==7);
     if (cause==18) assert(!relay && can_silent==ALL_CAN_SILENT);
   }
-  const uint16_t modes[]={0,19,3,65535,1,28};
+  const uint16_t modes[]={0,19,3,65535,1,8,23,28};
   for(unsigned int i=0;i<sizeof(modes)/sizeof(modes[0]);i++) {
     for(unsigned int j=0;j<sizeof(modes)/sizeof(modes[0]);j++) {
       setup(); current_safety_mode=modes[i];
       set_safety_mode(modes[j],1);
       assert(critical==0);
-      assert(init_calls==((fast_supported && modes[i]==3 && modes[j]==28)?0:3));
+      const bool hyundai = modes[j]==8 || modes[j]==23 || modes[j]==28;
+      assert(init_calls==((fast_supported && modes[i]==3 && hyundai)?0:3));
       if(modes[j]==0 || modes[j]==65535) assert(can_silent==ALL_CAN_SILENT && !relay);
     }
   }
@@ -180,7 +183,8 @@ int main(void) {
   executable = tmp_path / ("transition.exe" if os.name == "nt" else "transition")
   if not h7:
     prefix = prefix.replace("#define STM32H7", "")
-  source.write_text(prefix + functions + body.replace("FAST_SUPPORTED", "true" if h7 else "false"), encoding="utf-8")
+  source.write_text((prefix + functions + body.replace("FAST_SUPPORTED", "true" if h7 else "false"))
+                    .replace("HYUNDAI_MODE", str(hyundai_mode)), encoding="utf-8")
   compiler = shlex.split(os.environ.get("CC", "cc"))
   subprocess.run([*compiler, "-std=gnu11", "-O2", "-Wall", "-Wextra", "-Werror", str(source), "-o", str(executable)], check=True)
   subprocess.run([str(executable)], check=True, timeout=10)

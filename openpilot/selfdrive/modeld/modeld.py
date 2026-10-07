@@ -337,7 +337,7 @@ def main(demo=False):
       adapter_ready = True
     except Exception:
       cloudlog.exception('Jetlink camera adapter unavailable; retaining internal model')
-    cloudlog.warning("model startup Jetlink adapter: %.3fs, ready=%s", time.monotonic() - phase_start, adapter_ready)
+    cloudlog.warning("model startup Jetlink wrapper: %.3fs, created=%s", time.monotonic() - phase_start, adapter_ready)
   # Loading is not complete until the first model result is published. The
   # first eGPU execution can spend several seconds initializing queues/kernels
   # after the PKL has loaded; clearing this here causes a false commIssue while
