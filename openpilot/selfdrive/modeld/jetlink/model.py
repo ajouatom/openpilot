@@ -25,6 +25,7 @@ def may_join(now, messages, valid, received):
 
 class Warp:
   def __init__(self, width, height, prepared=None):
+    started, cpu_started = time.monotonic(), time.thread_time()
     from tinygrad import Tensor, TinyJit, Device
     from openpilot.selfdrive.modeld.compile_modeld import NV12Frame, make_warp
     from openpilot.system.camerad.cameras.nv12_info import get_nv12_info
@@ -36,11 +37,13 @@ class Warp:
     self.blobs = {}
     self.timings = (0., 0., 0.)
     if prepared is not None:
+      inputs_ready = time.monotonic()
       from openpilot.selfdrive.modeld.helpers import load_oob
       value = load_oob(io.BytesIO(prepared))
       if value['identity'] != (width, height, self.size, SPEC.sha256):
         raise ValueError('prepared Jetlink warp contract mismatch')
       self.run_warp = value['warp']
+      self.init_timings = (inputs_ready - started, time.monotonic() - inputs_ready, time.thread_time() - cpu_started)
       return
     self.run_warp = TinyJit(make_warp(NV12Frame(width, height, *get_nv12_info(width, height)), 512, 256, SPEC.frame_skip))
     dummy = {k: Tensor(np.zeros(self.size, np.uint8), device='QCOM').realize() for k in ('frame', 'big_frame')}
@@ -164,6 +167,7 @@ class JoiningModel:
           self.warp = Warp(*self.warp_size, prepared=prepared)
           self.preparation = None
           cloudlog.warning('Jetlink warp prepared in %.3fs; installed in %.3fs', seconds, time.monotonic() - started)
+          cloudlog.warning('Jetlink warp install input/restore/cpu seconds: %s', getattr(self.warp, 'init_timings', ()))
       except Exception as exc:
         cloudlog.exception('Jetlink warp preparation failed; retaining internal model')
         if self.preparation is not None:
