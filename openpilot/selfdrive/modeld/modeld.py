@@ -327,7 +327,7 @@ def main(demo=False):
   if model is None:
     model = small_model
   # Keep the existing eGPU selection unchanged. A separate USB owner handles
-  # external computers and late server startup through the pinned Jetlink model.
+  # external computers and late server startup through the selected Jetlink model.
   if not USBGPU and os.path.isfile('/AGNOS'):
     phase_start = time.monotonic()
     adapter_ready = False

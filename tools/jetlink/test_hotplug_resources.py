@@ -51,6 +51,8 @@ def joining_model(monkeypatch):
   m.error = ''
   m.small = NS(run=lambda *a: 'local')
   m.packed = np.zeros(link.SPEC.packed_nelem, np.float32)
+  m.spec = link.SPEC
+  m.reset = True
   m.prev_desire = np.zeros(8, np.float32)
   m.views = {name: a.reshape(shape) for (name, shape), a in zip(
     link.SPEC.packed_shapes.items(), np.split(m.packed, np.cumsum(link.SPEC.packed_sizes[:-1])), strict=True)}
@@ -58,6 +60,7 @@ def joining_model(monkeypatch):
   m.last_slow_log = 0
   m.warp = lambda *a: None
   m.parser = NS(parse_outputs=lambda _: 'external')
+  monkeypatch.setattr(model, 'parse_outputs', lambda parser, spec, result: parser.parse_outputs(result))
   return m
 
 
@@ -87,7 +90,7 @@ def test_completed_handshake_still_resets_external_history_and_recovers_on_failu
       raise ConnectionError('unplugged')
     return output
 
-  client = NS(infer=infer, close=lambda: calls.append('closed'))
+  client = NS(spec=link.SPEC, infer=infer, close=lambda: calls.append('closed'))
   future = Future()
   future.set_result(client)
   m.connection = NS(future=future)
