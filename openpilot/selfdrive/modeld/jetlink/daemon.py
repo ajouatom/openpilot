@@ -20,7 +20,7 @@ from openpilot.selfdrive.modeld.jetlink.compat import ProtocolChoice
 from openpilot.selfdrive.modeld.jetlink.mobile import transport_mode, setup_gadget, MobileCable, AutoTransport, MobileLinkError
 from openpilot.selfdrive.modeld.jetlink.contracts import model_name
 from openpilot.selfdrive.modeld.jetlink.selection import ModelChanged, check_loaded
-from openpilot.selfdrive.modeld.jetlink.startup import wait_for_boot_update
+from openpilot.selfdrive.modeld.jetlink.startup import CAPABILITY as BOOT_UPDATE_CAPABILITY, wait_for_boot_update
 from jetlink.client import JetlinkClient
 from jetlink.transport.base import LinkError, LinkTimeout
 from jetlink.transport.ffs import FfsTransport
@@ -360,6 +360,7 @@ def main():
   usb_probes = 0
   usb_mode = None
   tcp_seen = False
+  mobile_unavailable = False
   try:
     while True:
       update_affinity()
@@ -374,6 +375,7 @@ def main():
         peer = None
         SESSION_MODE = TRANSPORT_MODE
         usb_probes, usb_mode, tcp_seen = 0, None, False
+        mobile_unavailable = False
         ACTIVE_UDC, SESSION_DETACHED = None, False
         # Forget a previous host's wire choice after a physical detach.
         protocol = ProtocolChoice()
@@ -394,10 +396,12 @@ def main():
         publish('connecting', peer=peer, protocol=protocol.version)
         gc.collect()
         if owner is None:
-          setup_gadget(TRANSPORT_MODE)
+          # Optional iOS networking must not make existing bulk USB depend on
+          # NCM, dnsmasq or a firewall backend. Cleanup is verified below first.
+          setup_gadget('usb' if mobile_unavailable else TRANSPORT_MODE)
           udc = next(Path('/sys/class/udc').iterdir()).name
           owner = CarrotTransport('/dev/ffs-jetlink', gadget=GADGET, udc=udc)
-          if TRANSPORT_MODE in ('auto', 'ios'):
+          if TRANSPORT_MODE in ('auto', 'ios') and not mobile_unavailable:
             cable = MobileCable(owner)
             cable.start()
             if TRANSPORT_MODE == 'auto':
@@ -407,13 +411,17 @@ def main():
         transport = owner
         if TRANSPORT_MODE == 'auto' and usb_mode is not None:
           SESSION_MODE = usb_mode
-        elif TRANSPORT_MODE in ('auto', 'ios'):
+        elif TRANSPORT_MODE in ('auto', 'ios') and not mobile_unavailable:
           limit = 2 if protocol.automatic else 1
-          arbitration = AutoTransport(owner, cable, allow_usb=not tcp_seen and usb_probes < limit) if TRANSPORT_MODE == 'auto' else None
+          arbitration = (AutoTransport(owner, cable, allow_usb=not tcp_seen,
+                                       grace=AutoTransport.RETRY_GRACE if usb_probes >= limit else None)
+                         if TRANSPORT_MODE == 'auto' else None)
           while host_attached():
             try:
               if arbitration is not None:
                 transport, SESSION_MODE = arbitration.accept(timeout=1.)
+                if transport is owner and usb_probes >= limit:
+                  usb_probes = 0
                 if transport is not owner:
                   # A decisive dial locks this attachment to NCM even if its
                   # HELLO fails or the App takes a long time to redial.
@@ -437,7 +445,7 @@ def main():
           wire_protocol = ProtocolChoice('3')
         transport.protocol_version = wire_protocol.version
         client = JetlinkClient(transport, name='carrot-jetlink')
-        if TRANSPORT_MODE == 'auto' and transport is owner and usb_mode is None:
+        if TRANSPORT_MODE == 'auto' and transport is owner and usb_mode is None and not mobile_unavailable:
           usb_probes += 1
           publish('connecting', peer=None, preparation={'stage': 'usb-probe',
                   'message': f'Bounded USB HELLO probe {usb_probes}/{limit}, protocol {wire_protocol.version} (3 seconds); failure re-enumerates NCM'})
@@ -493,9 +501,9 @@ def main():
         publish('blocked', peer=None, error=cleanup_error)
       except MobileLinkError as exc:
         log.exception('Jetlink cable setup failed')
-        if TRANSPORT_MODE == 'auto':
-          cleanup_error = f'Auto unavailable: iOS/NCM setup failed; no USB-only fallback. Resolve offroad: {exc}'[:300]
-          publish('blocked', peer=None, error=cleanup_error)
+        if TRANSPORT_MODE == 'auto' and not mobile_unavailable:
+          mobile_unavailable = True
+          publish('retrying', peer=None, error=f'iOS/NCM unavailable; retrying bulk USB after verified cleanup: {exc}'[:300])
         else:
           publish('retrying', peer=None, error=str(exc)[:300])
       except Exception as exc:
@@ -548,8 +556,13 @@ def session_mode():
 
 
 def legacy_usb_peer(peer):
-  return (isinstance(peer, dict) and type(peer.get('protocol')) is int and peer['protocol'] in (2, 3)
-          and peer.get('carrot_host') in (None, 'jetson') and peer.get('backend') == 'trt'
+  if not (isinstance(peer, dict) and type(peer.get('protocol')) is int and peer['protocol'] in (2, 3)):
+    return False
+  # The signed-update bootstrap intentionally has no inference backend/device.
+  # It must reach Wi-Fi provisioning and wait_for_boot_update before model setup.
+  if peer.get('carrot_host') == 'jetson' and peer.get(BOOT_UPDATE_CAPABILITY) is True:
+    return True
+  return (peer.get('carrot_host') in (None, 'jetson') and peer.get('backend') == 'trt'
           and isinstance(peer.get('device'), str) and 'orin' in peer['device'].lower())
 
 

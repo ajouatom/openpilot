@@ -99,7 +99,8 @@ def setup_gadget(mode=None):
   if mode in ('auto', 'ios'):
     _root('setup_mobile.sh', 'gadget')
   else:
-    if (GADGET / 'configs' / 'c.1' / NCM_FUNCTION).is_symlink():
+    if ((GADGET / 'configs' / 'c.1' / NCM_FUNCTION).is_symlink() or
+        (GADGET / 'functions' / NCM_FUNCTION).exists()):
       # A retained, detached NCM function requires no further teardown.
       # The helper refuses bound/unowned NCM rather than altering another owner.
       teardown_gadget()
@@ -151,20 +152,21 @@ class AutoTransport:
   synchronous write cannot be cancelled without unbinding the entire gadget.
   After the grace period, a probe can interrupt a late phone's enumeration.
   The caller must bound it and rebuild after failure. Automatic wire selection
-  permits at most two fresh probes (v3, v2); then no further USB discovery until
-  physical detach. A TCP dial is always checked first.
+  tries both versions, then leaves NCM undisturbed for a longer retry window.
+  Late Jetson boot/update servers can recover without physical replug. Once a
+  TCP dial selects NCM, no further USB probes occur until detach.
   """
   diagnostic = ('Auto pending: TCP gets a 5-second grace period before bounded USB HELLO discovery. ' +
-                'At most two fresh probes (v3 then v2); failures re-enumerate, late iOS must redial. No concurrent HELLO.')
-  fallback_diagnostic = ('USB discovery exhausted; waiting only for NCM TCP until unplug. The gadget was ' +
-                         're-enumerated after each failed probe; reopen iOS to redial. Select usb/android manually ' +
-                         'if a slow USB server missed discovery.')
+                'Two fresh probes (v3 then v2), then a 30-second NCM grace before retry; failures re-enumerate. No concurrent HELLO.')
+  fallback_diagnostic = ('Waiting for NCM TCP before the next USB retry; late USB servers recover without unplugging. ' +
+                         'An established NCM selection is never interrupted by USB probing.')
   GRACE = 5.
+  RETRY_GRACE = 30.
 
-  def __init__(self, owner, cable, allow_usb=True):
+  def __init__(self, owner, cable, allow_usb=True, grace=None):
     self.owner, self.cable = owner, cable
     self.allow_usb = allow_usb
-    self.deadline = time.monotonic() + self.GRACE
+    self.deadline = time.monotonic() + (self.GRACE if grace is None else grace)
 
   def accept(self, timeout=1.):
     try:

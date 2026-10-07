@@ -24,6 +24,33 @@ IPAD = {'protocol': 3, 'backend': 'ort', 'device': 'ane-Apple_M4'}
 JETSON = {'protocol': 2, 'backend': 'trt', 'device': 'orin', 'carrot_host': 'jetson'}
 
 
+def test_real_bootstrap_hello_is_accepted_before_wifi_and_signed_update(monkeypatch):
+  import boot_update
+  from openpilot.selfdrive.modeld.jetlink import startup
+  sent = []
+  bootstrap = boot_update.BootstrapSession(SimpleNamespace(send_json=lambda *args: sent.append(args)), None)
+  bootstrap.handle(SimpleNamespace(msg_type=P.Msg.HELLO_REQ, seq=1))
+  peer = sent[0][2]
+  assert 'backend' not in peer and 'device' not in peer
+  assert daemon.legacy_usb_peer(peer)
+  assert peer[daemon.WIFI_CAPABILITY] is True
+  actions = []
+  client = SimpleNamespace(t=SimpleNamespace(send_json=lambda *args: actions.append('signed-release')),
+                           _next_seq=lambda: 2, state=lambda: {'carrot_update': {'state': 'ready'}})
+  wifi = SimpleNamespace(send=lambda *args: actions.append('wifi'))
+  with pytest.raises(ConnectionError, match='reconnecting to runtime'):
+    startup.wait_for_boot_update(client, peer, wifi, lambda: True, lambda *a, **kw: None)
+  assert actions == ['signed-release', 'wifi']
+
+
+@pytest.mark.parametrize('changes', [
+  {'protocol': True}, {'protocol': 4}, {'carrot_host': 'mac'}, {'carrot_boot_update_v1': 'true'},
+])
+def test_incomplete_bootstrap_identity_is_not_accepted(changes):
+  peer = {'protocol': 2, 'carrot_host': 'jetson', 'carrot_boot_update_v1': True, **changes}
+  assert not daemon.legacy_usb_peer(peer)
+
+
 @pytest.mark.parametrize('peer,path,expected', [
   (MAC, 'usb', 'usb'), (ANDROID, 'usb', 'android'),
   (IPHONE, 'tcp', 'ios'), (IPAD, 'tcp', 'ios'),
@@ -107,6 +134,20 @@ def test_grace_expiry_never_opens_endpoints_before_configuration(monkeypatch):
   monkeypatch.setattr(mobile.time, 'monotonic', lambda: automatic.deadline + 1)
   with pytest.raises(LinkTimeout):
     automatic.accept()
+
+
+def test_late_usb_retry_keeps_ncm_undisturbed_for_longer_grace(monkeypatch):
+  now = [0.]
+  monkeypatch.setattr(mobile.time, 'monotonic', lambda: now[0])
+  owner = SimpleNamespace(_configured=Mock(return_value=True))
+  cable = SimpleNamespace(accept=Mock(side_effect=LinkTimeout('no dial')))
+  automatic = mobile.AutoTransport(owner, cable, grace=mobile.AutoTransport.RETRY_GRACE)
+  now[0] = 29.
+  with pytest.raises(LinkTimeout):
+    automatic.accept()
+  assert not owner._configured.called
+  now[0] = 30.
+  assert automatic.accept() == (owner, 'usb')
 
 
 @pytest.mark.parametrize('failure', [False, True])

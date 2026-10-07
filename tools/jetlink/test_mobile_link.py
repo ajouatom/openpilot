@@ -113,11 +113,13 @@ def test_setup_before_binding_preserves_default(monkeypatch, mode, call):
 
 
 @pytest.mark.parametrize('value', ['usb', 'android'])
-def test_plain_setup_removes_previous_owned_ncm_first(monkeypatch, scratch, value):
+@pytest.mark.parametrize('linked', [False, True])
+def test_plain_setup_removes_previous_owned_ncm_first(monkeypatch, scratch, value, linked):
   gadget = scratch / 'gadget'
   (gadget / 'functions' / mobile.NCM_FUNCTION).mkdir(parents=True)
   (gadget / 'configs' / 'c.1').mkdir(parents=True)
-  (gadget / 'configs' / 'c.1' / mobile.NCM_FUNCTION).symlink_to(gadget / 'functions' / mobile.NCM_FUNCTION)
+  if linked:
+    (gadget / 'configs' / 'c.1' / mobile.NCM_FUNCTION).symlink_to(gadget / 'functions' / mobile.NCM_FUNCTION)
   monkeypatch.setattr(mobile, 'GADGET', gadget)
   root = Mock()
   monkeypatch.setattr(mobile, '_root', root)

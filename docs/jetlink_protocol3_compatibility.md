@@ -210,23 +210,29 @@ and must redial; setup/DHCP and the two-second retry delay add latency beyond
 the grace/probe budget. The watchdog's UDC cancellation is not guaranteed to
 return on a broken native kernel. Cleanup verifies reader/watchdog termination
 and controller unbind; uncertainty blocks further attempts. USB discovery is
-limited to **two fresh probes** with automatic wire selection: protocol 3,
+grouped into **two fresh probes** with automatic wire selection: protocol 3,
 then protocol 2 on a freshly cleaned/rebound gadget, with TCP grace/checks
 before each. Explicit `JETLINK_PROTOCOL` pinning permits only one discovery
-probe. After exhaustion USB discovery is disabled until physical detach:
-TCP-only waiting explicitly reports the fallback, so there is no repeated
-15-second watchdog bounce loop. A decisive
+probe per group. After both fail, leave NCM undisturbed for a **30-second
+grace period** before another group. This lets a late-booting Jetson or USB
+App recover without unplugging, while allowing a slow iPhone time to dial.
+A decisive
 TCP dial also disables USB probing for that attachment, including App retries.
-If NCM setup is unavailable, auto blocks with an explicit error rather than
-silently becoming USB-only.
+If NCM setup is unavailable, auto reports the reason and retries plain bulk
+USB only after verifying resource cleanup and detaching any helper-owned NCM
+configuration. The TCP listener remains disabled; firewall isolation is never
+bypassed. Unsafe cleanup still blocks. Physical detach permits another NCM
+setup attempt. Explicit iOS mode does not fall back to USB.
 
 Path-aware USB HELLO classification recognizes Apple Silicon Mac and Android
 tags; recognized Apps permit USB 2 in auto with a throughput warning. Known
 legacy Orin/Jetson USB peers retain SuperSpeed and the fixed legacy model path.
 Automatic discovery therefore supports the legacy protocol-2 fallback without
-changing framing in a live stream. A slow-starting USB App may still miss both
-bounded attempts. Select manual `usb` or `android` for persistent USB-only
-retries. These limitations and unavoidable
+changing framing in a live stream. The Jetson boot-update gate is also recognized
+by its explicit `carrot_host=jetson` and `carrot_boot_update_v1=true` capability,
+without requiring a model backend before its signed update. Wi-Fi provisioning
+and the existing signed-release gate still run before engine preparation.
+Select manual `usb` or `android` to avoid NCM discovery delays. These limitations and unavoidable
 late-iOS re-enumeration mean auto is **not** seamless simultaneous arbitration
 or a physical compatibility guarantee.
 
@@ -271,7 +277,8 @@ pixel parity, thermal behavior or sustained driving performance. Confirm
 those separately while parked before considering driving evaluation.
 
 Auto tests additionally cover TCP grace, bounded sequential v3/v2 USB attempts,
-fresh gadget/TCP recovery without repeated probing, real framed TCP
+delayed USB-server recovery, NCM-unavailable fallback with verified cleanup,
+Jetson boot-update HELLO, fresh gadget/TCP recovery, real framed TCP
 HELLO and reconnect, path-aware classifications, configuration overrides,
 data-role/eGPU exclusions, speed policy and cleanup failures. No desktop test
 can establish physical USB-claim detection, cable negotiation, endpoint
