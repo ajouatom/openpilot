@@ -58,13 +58,28 @@ The PR's iOS transport code is included; physical iPhone stability is unvalidate
 - Python compilation and mobile helper shell syntax passed. Focused lint
   passes apart from the destination's pre-existing multiline log literal in
   `model.py` (ISC002); that log was retained.
-- Native Linux CI is required after push for the real socket/IPC, helper and
-  storage coverage. Results are recorded in the task's local evidence archive.
-  Its first pass exposed two old expectations that detached NCM needed no
+- [Native Linux/Windows integration CI](https://github.com/ajouatom/openpilot/actions/runs/37608151227)
+  passed: 643 contract tests (two platform/reference skips), 119 navigation/UI
+  tests, 11 real isolated-filesystem tests, and the Windows disk guard.
+  Documentation CI also passed. Results are retained in the local evidence archive.
+  The first pass exposed two old expectations that detached NCM needed no
   cleanup verification, plus a pre-existing refresh-image fixture missing
   `wifi_protocol.py` and `boot_update.py`. Updated those expectations and the
   fixture, and assert that the stable updater receives both files and the
   next-boot gate marker. No image test is excluded from native CI.
+- Separate existing eGPU suites: 70 passed on desktop, covering initialization
+  retries, worker progress, generic model execution and precompiled-model
+  loading/validation. These run independently of the full native build.
+
+## Unrelated full-build limitation
+
+The [full build](https://github.com/ajouatom/openpilot/actions/runs/37607843008)
+stopped compiling `panda/tests/libpanda/panda.c`: `drivers/can_common.h` reads
+`harness.status`, but that host-test translation unit does not declare `harness`.
+The reference predates this PR (Panda change `b1485d40e3`); the reviewed merge
+changes no Panda files. Its downstream eGPU tests therefore did not run there,
+so they were executed separately as reported above. This task does not claim
+a green full build or alter unrelated Panda/runtime safety code to obtain one.
 
 Desktop and CI tests do not establish physical cable negotiation, Jetson boot
 timing, accelerator output parity, thermal behavior or driving performance.
