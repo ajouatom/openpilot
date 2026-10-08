@@ -8,6 +8,8 @@ import time
 
 import numpy as np
 
+from openpilot.selfdrive.modeld.precompiled_artifact import compile_warp, load_warp, prepare_jit
+
 
 def input_view(buffer, shape, dtype, offset=0):
   from tinygrad import Tensor
@@ -44,7 +46,7 @@ class GenericModelRuntime:
   def __init__(self, jits, width, height, runtime_dir: Path, frame_info):
     # Imports must happen after the worker selects the artifact's tinygrad.
     from tinygrad import Tensor, Device
-    from examples.openpilot.compile_warp import NV12Frame, compile_warp
+    from examples.openpilot.compile_warp import NV12Frame
 
     self.checkpoint, self.output_slices, self.state_pairs, self.count = model_metadata(jits)
     self.device = jits['input_specs']['new_img'][2]
@@ -52,7 +54,7 @@ class GenericModelRuntime:
     if self.gpu_arch != 'gfx1200':
       raise ValueError('precompiled GPU architecture mismatch')
     self.specs = jits['input_specs']
-    self.run_model = jits['run']
+    self.run_model = prepare_jit(jits['run'])
     stride, y_height, uv_height = frame_info[:3]
     self.frame_size = stride * (y_height + uv_height)
     self.input_shapes = {'img': [self.frame_size], 'big_img': [self.frame_size]}
@@ -79,8 +81,7 @@ class GenericModelRuntime:
       self.outputs[next_name] = input_view(state._buffer(), state.shape, state.dtype)
     warp_path = runtime_dir / f'warp-{self.gpu_arch}-{width}x{height}.pkl'
     if warp_path.is_file():
-      with warp_path.open('rb') as f:
-        warp = pickle.load(f)
+      self.run_warp = load_warp(warp_path)
     else:
       warp = compile_warp(NV12Frame(width, height, stride, y_height, uv_height, self.frame_size),
                           (512, 256), layout='yuv420', frames=2, benchmark_runs=1)
@@ -88,7 +89,7 @@ class GenericModelRuntime:
       with temporary.open('wb') as f:
         pickle.dump(warp, f)
       os.replace(temporary, warp_path)
-    self.run_warp = warp['run']
+      self.run_warp = prepare_jit(warp['run'])
 
   def bind_shared(self, packed):
     from tinygrad import Tensor
