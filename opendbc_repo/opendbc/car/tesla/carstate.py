@@ -15,6 +15,7 @@ TESLA_TPMS_BAR_TO_PSI = 14.5037738
 SPEED_AUTO_RESUME_GESTURE_NS = 1_000_000_000
 STOCK_ACC_CANCEL_STATES = (0, 1, 2, 12, 13, 14, 15)
 STOCK_ACC_CANCEL_PULSE_FRAMES = 4
+TESLA_EAC_NON_FAULT_INHIBITS = ("EAC_ERROR_IDLE", "EAC_ERROR_MIN_SPEED")
 
 
 def update_tesla_gas_pressed(previous: bool, pedal_position: float) -> bool:
@@ -170,14 +171,16 @@ class CarState(CarStateBase):
     ret.steeringPressed = self.update_steering_pressed(abs(ret.steeringTorque) > STEER_THRESHOLD, 5)
 
     eac_status = self.can_define.dv["EPAS3S_sysStatus"]["EPAS3S_eacStatus"].get(int(epas_status["EPAS3S_eacStatus"]), None)
+    eac_error_code = self.can_define.dv["EPAS3S_sysStatus"]["EPAS3S_eacErrorCode"].get(int(epas_status["EPAS3S_eacErrorCode"]), None)
     ret.steerFaultPermanent = eac_status == "EAC_FAULT"
-    ret.steerFaultTemporary = eac_status == "EAC_INHIBITED"
+    # Tesla reports INHIBITED + IDLE/MIN_SPEED during normal EPS transitions,
+    # including startup, standstill, and low-speed operation.
+    ret.steerFaultTemporary = eac_status == "EAC_INHIBITED" and eac_error_code not in TESLA_EAC_NON_FAULT_INHIBITS
 
     # Do not set vehicleSensorsInvalid from SCCM_steeringAngleValidity: refreshed
     # Model Y vehicles report 0 while angle/rate remain valid. EPS faults are covered above.
 
     # FSD disengages on strong user override (handsOnLevel >= 3) or high angle rate faults (fast override, high speed)
-    eac_error_code = self.can_define.dv["EPAS3S_sysStatus"]["EPAS3S_eacErrorCode"].get(int(epas_status["EPAS3S_eacErrorCode"]), None)
     self.steering_disengage = self.hands_on_level >= 3 or (eac_status == "EAC_INHIBITED" and
                                                            eac_error_code == "EAC_ERROR_HIGH_ANGLE_RATE_SAFETY")
 

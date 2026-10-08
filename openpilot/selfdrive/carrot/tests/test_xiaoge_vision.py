@@ -21,6 +21,7 @@ from openpilot.selfdrive.carrot.xiaoge.xiaoge_vision import (
   apply_xiaoge_vision_result,
   merge_xiaoge_lane_type,
   parse_xiaoge_vision_payload,
+  xiaoge_blindspot_vision,
 )
 
 
@@ -61,6 +62,8 @@ def gate_service(message_transport):
   service = VASMService.__new__(VASMService)
   service.lock = threading.Lock()
   service.vasm_gate = {}
+  service.next_side = "left"
+  service.inference = SimpleNamespace(configured_sides=("left", "right"))
   service.sm = messaging.SubMaster(["carState", "modelV2"])
   return service
 
@@ -98,7 +101,19 @@ def test_vision_result_merges_lane_type_and_oem_blindspot():
   assert (state.leftLaneLine, state.rightLaneLine) == (20, 11)
   assert state.leftBlindspot
   assert state.rightBlindspot
+  assert xiaoge_blindspot_vision(result, 1_000_000_001) == (True, False)
   assert merge_xiaoge_lane_type(-1, 0) == 0
+
+
+def test_vision_result_merges_into_existing_cereal_fields_only():
+  state = messaging.new_message("carState").carState
+  state.leftBlindspot = True
+  result = parse_xiaoge_vision_payload(vision_payload())
+
+  apply_xiaoge_vision_result(state, result, 1_000_000_001)
+
+  assert state.leftBlindspot
+  assert not state.rightBlindspot
 
 
 def test_stale_vision_result_does_not_modify_state():
@@ -109,9 +124,9 @@ def test_stale_vision_result_does_not_modify_state():
   assert (state.leftLaneLine, state.rightLaneLine, state.leftBlindspot, state.rightBlindspot) == (24, 14, False, False)
 
 
-def test_vasm_gate_requires_speed_direction_and_target_lane_width(monkeypatch, gate_service, message_transport):
+def test_vasm_gate_requires_each_side_lane_width_but_not_speed_or_direction(monkeypatch, gate_service, message_transport):
   service = gate_service
-  car_state = {"vEgo": 20.0}
+  car_state = {"vEgo": 0.0}
   model_meta = {"laneChangeDirection": "left", "laneWidthLeft": 3.2, "laneWidthRight": 2.8}
   now = 10.0
   monkeypatch.setattr(v_asm_server.time, "monotonic", lambda: now)
@@ -123,25 +138,18 @@ def test_vasm_gate_requires_speed_direction_and_target_lane_width(monkeypatch, g
     message_transport.publish("modelV2", meta=model_meta)
     return service._update_vasm_gate()
 
-  assert update_gate() == (True, "left")
+  assert update_gate() == ("left", "right")
 
-  model_meta["laneChangeDirection"] = "right"
-  assert update_gate() == (False, "right")
-  assert service.vasm_gate["reason"] == "target lane width below 3.0 m"
-
-  car_state["vEgo"] = 5.0
-  assert update_gate() == (False, "")
-
-  car_state["vEgo"] = 20.0
   model_meta["laneChangeDirection"] = "none"
-  assert update_gate() == (False, "")
+  car_state["vEgo"] = 100.0
+  assert update_gate() == ("left", "right")
 
-  model_meta["laneChangeDirection"] = "right"
-  model_meta["laneWidthRight"] = 3.0
-  # Test either side of the limits without depending on Float32 rounding at equality.
-  for speed, expected in ((29.9, False), (30.1, True), (119.9, True), (120.1, False)):
-    car_state["vEgo"] = speed / 3.6
-    assert update_gate()[0] is expected
+  model_meta["laneWidthLeft"] = 1.99
+  assert update_gate() == ("right",)
+
+  model_meta["laneWidthRight"] = 1.99
+  assert update_gate() == ()
+  assert service.vasm_gate["reason"] == "configured lane widths below 2.0 m"
 
 
 @pytest.mark.parametrize("service_name", ["carState", "modelV2"])
@@ -154,13 +162,13 @@ def test_vasm_gate_rejects_unavailable_messages(monkeypatch, gate_service, messa
     if failure != "missing" or name != service_name:
       message_transport.publish(name, valid=not (failure == "invalid" and name == service_name), **fields)
   if failure == "stale":
-    assert service._update_vasm_gate() == (True, "left")
+    assert service._update_vasm_gate() == ("left",)
     monkeypatch.setattr(v_asm_server.time, "monotonic", lambda: 11.0)
     for name, fields in data.items():
       if name != service_name:
         message_transport.publish(name, **fields)
 
-  assert service._update_vasm_gate() == (False, "")
+  assert service._update_vasm_gate() == ()
   assert service.vasm_gate["reason"] == "carState or modelV2 is unavailable"
 
 
@@ -176,6 +184,21 @@ def test_lane_and_blindspot_expire_independently(age):
   assert (state.leftLaneLine, state.rightLaneLine) == ((20, 11) if lanes_fresh else (24, 14))
   assert state.leftBlindspot is (0 <= age <= XIAOGE_BLINDSPOT_TIMEOUT_NS)
   assert state.rightBlindspot  # OEM state survives even an expired visual result.
+
+
+def test_each_visual_blindspot_side_expires_independently():
+  received = 10_000_000_000
+  state = SimpleNamespace(leftLaneLine=0, rightLaneLine=0, leftBlindspot=False, rightBlindspot=False)
+  result = XiaogeVisionResult(
+    -1, -1, False, 0, True, True, True, received,
+    received - XIAOGE_BLINDSPOT_TIMEOUT_NS - 1, received,
+  )
+
+  assert xiaoge_blindspot_vision(result, received) == (False, True)
+  apply_xiaoge_vision_result(state, result, received)
+
+  assert not state.leftBlindspot
+  assert state.rightBlindspot
 
 
 @pytest.mark.parametrize("overrides", [
@@ -220,14 +243,17 @@ def test_vision_service_publishes_the_composite_payload(vision_service):
   now = time.monotonic_ns()
   service.last_frame_at = service.last_road_frame_at = time.monotonic()
   service.camera_error = service.lane_camera_error = ""
-  service.vasm_gate = {"active": True, "side": "left", "reason": "", "laneWidth": 3.2}
+  service.vasm_gate = {"active": True, "side": "left", "eligibleSides": ["left"], "reason": "", "laneWidth": 3.2}
   service.lane_result = {
     "leftLine": 0,
     "rightLine": 1,
     "valid": True,
     "updatedMonoTimeNanos": now,
   }
-  service.vasm_result = {"left": True, "right": False, "side": "left", "updatedMonoTimeNanos": now}
+  service.vasm_result = {
+    "left": True, "right": False, "side": "left", "updatedMonoTimeNanos": now,
+    "updatedMonoTimeNanosBySide": {"left": now, "right": 0},
+  }
 
   service.publish_vision_result()
 
@@ -244,22 +270,26 @@ def test_vision_service_publishes_the_composite_payload(vision_service):
   assert payload["lane"]["latencyMs"] == 0.0
 
 
-@pytest.mark.parametrize("invalid_reason", ["gate", "side", "camera", "expired"])
+@pytest.mark.parametrize("invalid_reason", ["gate", "eligibility", "camera", "expired"])
 def test_vision_payload_never_reports_unevaluated_blindspot_as_valid(vision_service, invalid_reason):
   service = vision_service
   now = time.monotonic_ns()
   service.last_frame_at = time.monotonic()
   service.camera_error = ""
-  service.vasm_gate = {"active": True, "side": "left", "reason": "", "laneWidth": 3.2}
-  service.vasm_result = {"left": True, "right": False, "side": "left", "updatedMonoTimeNanos": now}
+  service.vasm_gate = {"active": True, "side": "left", "eligibleSides": ["left"], "reason": "", "laneWidth": 3.2}
+  service.vasm_result = {
+    "left": True, "right": False, "side": "left", "updatedMonoTimeNanos": now,
+    "updatedMonoTimeNanosBySide": {"left": now, "right": 0},
+  }
   if invalid_reason == "gate":
     service.vasm_gate["active"] = False
-  elif invalid_reason == "side":
-    service.vasm_gate["side"] = "right"
+  elif invalid_reason == "eligibility":
+    service.vasm_gate["eligibleSides"] = ["right"]
   elif invalid_reason == "camera":
     service.camera_error = "camera unavailable"
   else:
     service.vasm_result["updatedMonoTimeNanos"] = now - XIAOGE_BLINDSPOT_TIMEOUT_NS - 1
+    service.vasm_result["updatedMonoTimeNanosBySide"]["left"] = service.vasm_result["updatedMonoTimeNanos"]
   service.publish_vision_result()
   event = messaging.log_from_bytes(service.sent[-1][1])
   payload = json.loads(bytes(event.customReservedRawData0))
@@ -283,7 +313,7 @@ def test_runtime_settings_load_from_and_persist_to_params(vision_service):
   class FakeParams:
     def __init__(self):
       self.values = {
-        "OnnxBsdThreshold": 60,
+        "OnnxBsdThreshold": 96,
         "OnnxBsdSmoothingMs": 300,
         "OnnxBsdIntervalMs": 350,
         "OnnxLaneThreshold": 40,
@@ -300,26 +330,37 @@ def test_runtime_settings_load_from_and_persist_to_params(vision_service):
   params = FakeParams()
   vision_service.params = params
   vision_service._refresh_settings_from_params(force=True)
-  assert vision_service.threshold == 0.60
+  assert vision_service.threshold == 0.96
   assert vision_service.smoothing_seconds == 0.30
   assert vision_service.base_interval_seconds == 0.35
   assert vision_service.lane_threshold == 0.40
   assert vision_service.lane_interval_seconds == 0.55
 
   vision_service.set_settings({
-    "threshold": 0.5,
+    "threshold": 0.9,
     "smoothingSeconds": 0.2,
     "baseIntervalSeconds": 0.15,
     "laneThreshold": 0.3,
     "laneIntervalSeconds": 0.45,
   })
   assert params.values == {
-    "OnnxBsdThreshold": 50,
+    "OnnxBsdThreshold": 90,
     "OnnxBsdSmoothingMs": 200,
     "OnnxBsdIntervalMs": 150,
     "OnnxLaneThreshold": 30,
     "OnnxLaneIntervalMs": 450,
   }
+
+
+def test_legacy_bsd_threshold_accepts_zero_to_hundred_percent(vision_service):
+  class FakeParams:
+    def get(self, name):
+      return b"45" if name == "OnnxBsdThreshold" else None
+
+  vision_service.params = FakeParams()
+  vision_service._refresh_settings_from_params(force=True)
+
+  assert vision_service.threshold == 0.45
 
 
 @pytest.mark.parametrize("stream", ["road", "wide"])
@@ -524,8 +565,11 @@ def test_status_invalidates_results_after_camera_or_inference_stops(monkeypatch,
   monkeypatch.setattr(v_asm_server.time, "monotonic_ns", lambda: 10_000_000_000)
   service.last_frame_at = service.last_road_frame_at = 10.0
   service.camera_error = service.lane_camera_error = ""
-  service.vasm_gate = {"active": True, "side": "left"}
-  service.vasm_result = {"left": False, "right": False, "side": "left", "updatedMonoTimeNanos": 10_000_000_000}
+  service.vasm_gate = {"active": True, "side": "left", "eligibleSides": ["left"]}
+  service.vasm_result = {
+    "left": False, "right": False, "side": "left", "updatedMonoTimeNanos": 10_000_000_000,
+    "updatedMonoTimeNanosBySide": {"left": 10_000_000_000, "right": 0},
+  }
   service.lane_result.update(valid=True, leftLine=1, rightLine=0, updatedMonoTimeNanos=10_000_000_000)
   assert service.status()["vehicleSide"]["left"]["valid"]
   assert service.status()["lane"]["resultFresh"]
@@ -536,11 +580,14 @@ def test_status_invalidates_results_after_camera_or_inference_stops(monkeypatch,
     service.last_frame_at = service.last_road_frame_at = 7.0
   elif failure == "inference_stale":
     service.vasm_result["updatedMonoTimeNanos"] = 8_000_000_000
+    service.vasm_result["updatedMonoTimeNanosBySide"]["left"] = 8_000_000_000
     service.lane_result["updatedMonoTimeNanos"] = 5_000_000_000
   elif failure == "gate_closed":
     service.vasm_gate["active"] = False
+    service.vasm_gate["eligibleSides"] = []
   else:
     service.vasm_gate["side"] = "right"
+    service.vasm_gate["eligibleSides"] = ["right"]
 
   status = service.status()
   assert not status["vehicleSide"]["left"]["valid"]

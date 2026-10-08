@@ -1,5 +1,6 @@
 import math
 import colorsys
+import time
 import numpy as np
 
 from openpilot.selfdrive.ui.onroad.path_geometry import project_path, sample_path
@@ -11,6 +12,7 @@ from openpilot.common.filter_simple import FirstOrderFilter
 from openpilot.common.params import Params
 from openpilot.selfdrive.locationd.calibrationd import HEIGHT_INIT
 from openpilot.selfdrive.ui.ui_state import ui_state
+from openpilot.selfdrive.ui.vision_status import blindspot_source_packet, blindspot_sources
 from openpilot.selfdrive.ui.road_markings import (
   LANE_DASH_LENGTH_M as LANE_DASH_LENGTH_M, LANE_DASH_GAP_M as LANE_DASH_GAP_M,
   lane_dash_segments, project_lane_segments, project_blindspot_barrier, blindspot_barrier_quads,
@@ -1013,22 +1015,28 @@ class ModelRenderer(Widget):
 
 
   def _draw_blind_spot_carrot(self, sm) -> None:
-    input_services = ("modelV2", "carState", "radarState")
+    input_services = ("modelV2", "carState")
     if not all(sm.valid[service] for service in input_services):
       return
 
     car_state = sm['carState']
-    radar_state = sm['radarState']
     meta = sm['modelV2'].meta
-
-    left_blindspot, right_blindspot, left_assist, right_assist = self._blind_spot_draw_state_carrot(
-      car_state, radar_state, meta,
-    )
+    if sm.valid["radarState"]:
+      left_blindspot, right_blindspot, left_assist, right_assist = self._blind_spot_draw_state_carrot(
+        car_state, sm["radarState"], meta,
+      )
+    else:
+      left_blindspot = bool(car_state.leftBlindspot)
+      right_blindspot = bool(car_state.rightBlindspot)
+      left_assist = right_assist = False
     if not (left_blindspot or right_blindspot or left_assist or right_assist):
       return
 
-    warn_color = rl.Color(255, 215, 0, 150)
+    oem_color = rl.Color(255, 215, 0, 150)
+    vision_color = rl.Color(64, 156, 255, 165)
+    combined_color = rl.Color(255, 128, 128, 190)
     assist_color = rl.Color(0, 204, 0, 150)
+    source_packet = blindspot_source_packet(sm, time.monotonic_ns())
     self._update_blind_spot_barriers_carrot(
       sm,
       update_left=left_blindspot or left_assist,
@@ -1036,12 +1044,16 @@ class ModelRenderer(Widget):
     )
 
     if left_blindspot:
-      self._draw_blind_spot_segments_carrot(self._carrot_lane_barrier_vertices[0], warn_color)
+      left_oem, left_vision = blindspot_sources(car_state, "left", source_packet)
+      color = combined_color if left_oem and left_vision else vision_color if left_vision else oem_color
+      self._draw_blind_spot_segments_carrot(self._carrot_lane_barrier_vertices[0], color)
     elif left_assist:
       self._draw_blind_spot_segments_carrot(self._carrot_lane_barrier_vertices[0], assist_color)
 
     if right_blindspot:
-      self._draw_blind_spot_segments_carrot(self._carrot_lane_barrier_vertices[1], warn_color)
+      right_oem, right_vision = blindspot_sources(car_state, "right", source_packet)
+      color = combined_color if right_oem and right_vision else vision_color if right_vision else oem_color
+      self._draw_blind_spot_segments_carrot(self._carrot_lane_barrier_vertices[1], color)
     elif right_assist:
       self._draw_blind_spot_segments_carrot(self._carrot_lane_barrier_vertices[1], assist_color)
 

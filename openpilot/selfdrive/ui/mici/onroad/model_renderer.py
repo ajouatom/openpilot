@@ -1,4 +1,5 @@
 import colorsys
+import time
 import numpy as np
 import pyray as rl
 from openpilot.cereal import messaging, car
@@ -7,6 +8,7 @@ from openpilot.common.params import Params
 from openpilot.common.filter_simple import FirstOrderFilter
 from openpilot.selfdrive.locationd.calibrationd import HEIGHT_INIT
 from openpilot.selfdrive.ui.ui_state import ui_state, UIStatus
+from openpilot.selfdrive.ui.vision_status import blindspot_source_packet, blindspot_sources
 from openpilot.selfdrive.ui.road_markings import lane_dash_segments, project_blindspot_barrier, blindspot_barrier_quads
 from openpilot.selfdrive.ui.mici.onroad import blend_colors
 from openpilot.system.ui.lib.application import gui_app, FontWeight
@@ -447,11 +449,18 @@ class ModelRenderer(Widget):
     if not (car_state.leftBlindspot or car_state.rightBlindspot) or self._path.raw_points.shape[0] < 2:
       return
     max_idx = self._get_path_length_idx(self._path.raw_points[:, 0], 40.0)
-    for active, shift in ((car_state.leftBlindspot, -1.7), (car_state.rightBlindspot, 1.7)):
+    source_packet = blindspot_source_packet(sm, time.monotonic_ns())
+    for side, active, shift in (
+      ("left", car_state.leftBlindspot, -1.7),
+      ("right", car_state.rightBlindspot, 1.7),
+    ):
       if active:
+        oem, vision = blindspot_sources(car_state, side, source_packet)
+        color = rl.Color(255, 128, 128, 190) if oem and vision else \
+                rl.Color(64, 156, 255, 165) if vision else rl.Color(255, 215, 0, 150)
         polygon = project_blindspot_barrier(self._path.raw_points[:max_idx + 1], shift, self._car_space_transform, self._clip_region)
         for quad in blindspot_barrier_quads(polygon):
-          draw_polygon(self._rect, quad, rl.Color(255, 215, 0, 150))
+          draw_polygon(self._rect, quad, color)
 
   def _draw_path(self, sm):
     """Draw path with dynamic coloring based on mode and throttle state."""
@@ -700,4 +709,3 @@ class ModelRenderer(Widget):
       #)
 
       draw_text_ui_style(item.text, tx, ty, font_size, rl.WHITE, font=self._font_display, border_width=1.0, shadow_offset=8.0, align="left_top", y_offset=0.0)
-
