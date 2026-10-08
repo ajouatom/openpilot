@@ -74,6 +74,8 @@ def test_inference_shutdown_releases_worker_without_rejecting_artifact(monkeypat
 
 
 @pytest.mark.parametrize('message,rejected', [('RuntimeError: PCIe link not up (LTSSM=0x00)', False),
+                                             ('RuntimeError: bulk OUT 0x02 failed: Input/Output Error', False),
+                                             ('OSError: Input/Output Error reading model.pkl', True),
                                              ('ValueError: precompiled checkpoint mismatch', True)])
 def test_worker_error_protocol_preserves_cause_and_artifact_decision(tmp_path, monkeypatch, message, rejected):
   (tmp_path / 'installed.json').write_text(json.dumps({'pickle': {'sha256': 'a' * 64}}))

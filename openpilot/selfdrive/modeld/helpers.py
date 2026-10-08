@@ -26,6 +26,7 @@ USBGPU_TRANSIENT_INIT_TEXT = (
   "f0 out failed: -1",
   "libusb_open: no such device",
   "amd:0 does not exist",
+  "bulk out 0x02 failed: input/output error",
 )
 VisionStreamT = TypeVar("VisionStreamT")
 
