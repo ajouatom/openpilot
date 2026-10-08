@@ -42,8 +42,6 @@ WIDE_CAM_MAX_SPEED = 5.0  # m/s (10 mph)
 ROAD_CAM_MIN_SPEED = 10  # m/s (25 mph)
 
 CAM_Y_OFFSET = 20
-ROAD_VIEW_HIDE_DELAY = 10.0
-ROAD_VIEW_HIDE_TOLERANCE = 3.0
 
 
 class BookmarkIcon(Widget):
@@ -342,20 +340,9 @@ class AugmentedRoadView(CameraView):
     super().close()
 
   def _road_view_mode(self):
-    mode = ui_state.show_model_view
-    if mode <= 0:
+    if not ui_state.started:
       return 0
-
-    ratio = ui_state.show_brightness_ratio
-    if not ui_state.started or ratio <= 0.0 or ratio >= 1.0:
-      return 0
-
-    if time.monotonic() - ui_state.started_time < ROAD_VIEW_HIDE_DELAY:
-      return 0
-
-    target_brightness = ratio * 100.0
-    current_brightness = ui_state.sm['deviceState'].screenBrightnessPercent
-    return min(mode, 3) if current_brightness <= target_brightness + ROAD_VIEW_HIDE_TOLERANCE else 0
+    return max(0, min(ui_state.show_model_view, 3))
 
   def _switch_stream_if_needed(self, sm):
     if sm['selfdriveState'].experimentalMode and WIDE_CAM in self.available_streams:
