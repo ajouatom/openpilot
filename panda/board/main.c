@@ -37,6 +37,11 @@ static bool check_started(void) {
   return started;
 }
 
+static bool check_started_ignition_only(void) {
+  bool started = current_board->check_ignition() || ignition_can;
+  return started;
+}
+
 void debug_ring_callback(uart_ring *ring) {
   char rcv;
   while (get_char(ring, &rcv)) {
@@ -233,7 +238,7 @@ static void tick_handler(void) {
       const bool recent_heartbeat = heartbeat_counter == 0U;
 
       // tick drivers at 1Hz
-      bootkick_tick(check_started(), recent_heartbeat);
+      bootkick_tick(check_started_ignition_only(), recent_heartbeat, wake_on_can);
 
       // increase heartbeat counter and cap it at the uint32 limit
       if (heartbeat_counter < UINT32_MAX) {

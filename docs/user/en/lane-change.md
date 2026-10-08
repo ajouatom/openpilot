@@ -67,24 +67,26 @@ Vehicle BSD is an assistive signal. It cannot cover every fast-closing vehicle, 
 
 Enable **Carrot Web → Settings → Driving → Steering → ONNX Lane & BSD → ONNX Lane and BSD Detection**. It defaults to off; an existing saved enabled value is preserved. When enabled, the service starts after onroad initialization and model/CAN/Panda readiness have settled for 0.5 seconds. Engaging cruise is not required. It stops offroad and waits again at the next onroad start.
 
-- **On:** the comma device computes lane types and camera BSD. Inference does not run on the phone. Solid/dashed classification runs continuously. BSD checks only the requested lane-change side at 30–120 km/h when that lane is at least 3 m wide.
+- **On:** the comma device computes lane types and camera BSD. Inference does not run on the phone. Solid/dashed classification runs continuously. BSD alternates between every configured side whose model-estimated lane width is at least 2 m; speed and lane-change direction do not gate detection.
 - **Off:** the vision service stops. Its last results expire after their validity period; vehicle-provided lane information and BSD remain available. The setting and mici status display update within a few seconds.
 
 The detail screen exposes these persistent device settings:
 
 | Setting | Range · default | Effect |
 |---|---:|---|
-| Lane confidence `OnnxLaneThreshold` | 5–100% · 25% | Accept lane classifications at or above this confidence |
+| Lane confidence `OnnxLaneThreshold` | 0–100% · 25% | Accept lane classifications at or above this confidence |
 | Lane interval `OnnxLaneIntervalMs` | 50–2000ms · 400ms | Shorter intervals update more often but may increase device load |
-| BSD confidence `OnnxBsdThreshold` | 25–100% · 45% | Treat objects at or above this confidence as detected |
-| BSD hold time `OnnxBsdSmoothingMs` | 100–500ms · 200ms | Hold brief detection gaps to reduce indicator flicker |
+| BSD confidence `OnnxBsdThreshold` | 0–100% · 94% | Activate camera BSD when the near-vehicle class reaches this confidence |
+| BSD hold time `OnnxBsdSmoothingMs` | 100–500ms · 200ms | Smooth confidence; once active, BSD clears 15 percentage points below the activation threshold |
 | BSD interval `OnnxBsdIntervalMs` | 50–1000ms · 250ms | Shorter intervals check more often but may increase device load |
 
 The ONNX detail screen keeps the feature toggle at the top and shows the wide-camera BSD detection-area editor in a separate card directly below it. Runtime state, lane/BSD tuning, and diagnostics open from the simple **Expand/Collapse advanced settings** text at the editor's lower right and are collapsed by default. The routine camera-waiting state is not shown beside that text. Select left or right above the image, then choose a point from the basic rectangular picker at the image's upper left, where entries use `1(L)` and `1(R)`, or tap its numbered label directly. Tap the selected point again or briefly tap an empty position to clear the selection; dragging anywhere in the editor while a point is selected moves only that point. Zoom, viewport panning, and whole-area dragging are omitted so they cannot compete with point movement. When no point is selected, a short tap on an empty position adds a new point without a separate mode. The selection state takes priority in the lower-left image status. Each newly received camera JPEG replaces the single last-frame copy in browser cache and current-session memory. If a new frame is unavailable, the editor shows that last frame, then a more strongly dimmed default road example when no cached frame exists. The example keeps the earlier compact editor height and fills the entire editor with the road graphic without an empty upper band. The point picker and real-image reminder overlay the detection graphic, while points, labels, and area lines remain on a separate crisp layer above the dim background. The example cannot be used to save an area. Saving is allowed only after receiving a real image in the current session; otherwise the editor asks the user to refresh the real image and set the area again. The invisible touch target remains generous. Use **Refresh image**, **Undo point**, **Reset points**, and **Save area** for the primary workflow. The two equal-width **View road camera** and **View wide camera** buttons directly below those actions open their images in pop-up dialogs. Mounting position and vehicle geometry affect the detection area; adjust it while parked and treat the result only as driver assistance.
 
-The mici VISION card shows left/right lane types and the latest processing time. BSD distinguishes standby, no detection on the evaluated side, and detection. The card and warning indicators remain visible with the camera hidden. Amber BSD warnings combine vehicle BSD and ONNX detections.
+The mici VISION card shows left/right lane types and the latest processing time. BSD distinguishes standby, no detection on the evaluated side, and detection. The card and warning indicators remain visible with the camera hidden. A BSD wall is amber for vehicle/OEM-only detection, blue for vision-only detection, and light red when both sources detect that side. Left and right are colored independently.
 
 OpenCV is included with the update and installed automatically during normal device startup. No separate pip command or internet connection while driving is required. Standby means BSD is not being evaluated; no detection does not guarantee that the entire blind spot is clear.
+
+The BSD classifier preserves the annotated area's aspect ratio by padding it to a square input. Its three outputs distinguish no nearby vehicle, a blind-spot threat, and a distant/rear vehicle; only the blind-spot-threat class activates camera BSD.
 
 ### `LaneLineCheck` — lane-marking handling
 

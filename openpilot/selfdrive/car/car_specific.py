@@ -16,6 +16,8 @@ ButtonType = structs.CarState.ButtonEvent.Type
 GearShifter = structs.CarState.GearShifter
 EventName = log.OnroadEvent.EventName
 NetworkLocation = structs.CarParams.NetworkLocation
+TESLA_STANDSTILL_STEER_FAULT_DEBOUNCE_FRAMES = int(2.0 / DT_CTRL)
+TESLA_STANDSTILL_STEER_FAULT_SPEED = 0.5
 
 
 # TODO: the goal is to abstract this file into the CarState struct and make events generic
@@ -52,6 +54,7 @@ class CarSpecificEvents:
     self.vCruise_prev = 250
     self.carrotCruise_prev = False
     self.tesla_lkas_button_prev = False
+    self.tesla_standstill_steer_fault_frames = 0
 
   def update_params(self):
     if self.frame % 100 == 0:
@@ -195,6 +198,7 @@ class CarSpecificEvents:
 
     return events
 
+
   def create_common_events(self, CS: structs.CarState, CS_prev: car.CarState, extra_gears=None, pcm_enable=True,
                            allow_enable=True, allow_button_cancel=True):
     events = Events()
@@ -259,19 +263,33 @@ class CarSpecificEvents:
     # Handle permanent and temporary steering faults
     self.steering_unpressed = 0 if CS.steeringPressed else self.steering_unpressed + 1
     if CS.steerFaultTemporary:
-      if CS.steeringPressed and (not CS_prev.steerFaultTemporary or self.no_steer_warning):
-        self.no_steer_warning = True
+      # Tesla EPS can briefly report an inhibited state while settling into a
+      # stop before standstill has latched. Require it to persist before alerting.
+      tesla_standstill_transient = (
+        self.CP.brand == 'tesla' and
+        (CS.standstill or CS.cruiseState.standstill or abs(CS.vEgo) < TESLA_STANDSTILL_STEER_FAULT_SPEED)
+      )
+      if tesla_standstill_transient:
+        self.tesla_standstill_steer_fault_frames += 1
       else:
-        self.no_steer_warning = False
+        self.tesla_standstill_steer_fault_frames = 0
 
-        # if the user overrode recently, show a less harsh alert
-        if self.silent_steer_warning > 0 or CS.standstill or self.steering_unpressed < int(1.5 / DT_CTRL):
-          self.silent_steer_warning += 1
-          if self.silent_steer_warning > 20:
-            events.add(EventName.steerTempUnavailableSilent)
+      if not (tesla_standstill_transient and
+              self.tesla_standstill_steer_fault_frames < TESLA_STANDSTILL_STEER_FAULT_DEBOUNCE_FRAMES):
+        if CS.steeringPressed and (not CS_prev.steerFaultTemporary or self.no_steer_warning):
+          self.no_steer_warning = True
         else:
-          events.add(EventName.steerTempUnavailable)
+          self.no_steer_warning = False
+
+          # if the user overrode recently, show a less harsh alert
+          if self.silent_steer_warning > 0 or CS.standstill or self.steering_unpressed < int(1.5 / DT_CTRL):
+            self.silent_steer_warning += 1
+            if self.silent_steer_warning > 20:
+              events.add(EventName.steerTempUnavailableSilent)
+          else:
+            events.add(EventName.steerTempUnavailable)
     else:
+      self.tesla_standstill_steer_fault_frames = 0
       self.no_steer_warning = False
       self.silent_steer_warning = 0
     if CS.steerFaultPermanent:

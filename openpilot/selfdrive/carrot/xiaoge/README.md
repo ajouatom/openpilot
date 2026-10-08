@@ -22,14 +22,17 @@ Xiaoge Vision 是 CarrotPilot 的本地视觉扩展。它使用 comma3 的 Visio
 | 功能 | 相机与模型 | 工作方式 |
 |---|---|---|
 | 车道线识别 | 前向道路相机 `VISION_STREAM_ROAD`、`assets/lane.onnx` | 始终运行。直接从 NV12 的 Y 平面进行居中正方形裁切，缩放至 416x416 灰度图，复制为三个归一化通道后输入 YOLOv8-Seg 模型。输出左/右车道线：`1` 实线、`0` 虚线、`-1` 未知。 |
-| V-ASM 盲区识别 | 广角道路相机 `VISION_STREAM_WIDE_ROAD`、`assets/v_asm_model.onnx` | 仅在必要时运行。根据当前变道方向只检测目标侧的用户标注 ROI，减少 CPU 使用并提高目标侧响应速度。 |
-| 车载合并 | `customReservedRawData0` -> `card.py` | 车道类型只覆盖模型已识别的一侧，同时保留车辆原有颜色编码。视觉盲区与 OEM `leftBlindspot/rightBlindspot` 做 OR 合并，视觉结果永远不会清除 OEM 盲区。 |
+| V-ASM 盲区识别 | 广角道路相机 `VISION_STREAM_WIDE_ROAD`、`assets/v_asm_model.onnx` | 轮流检测模型估算车道宽度至少 2m 的已配置左右 ROI；保持比例缩放至 352x352，并只使用近距离危险车辆类别。 |
+| 车载合并 | `customReservedRawData0` -> `card.py` | 车道类型只覆盖模型已识别的一侧，同时保留车辆原有颜色编码。视觉盲区与 OEM `leftBlindspot/rightBlindspot` 做 OR 合并，视觉结果永远不会清除 OEM 盲区；拆分来源写入带有效标记的 `CarState` 字段，并通过包含单调时钟时间戳的 `customReservedRawData1` 消息单独送给 UI。 |
 
-V-ASM 仅在以下条件全部满足时推理：
+V-ASM 每一侧仅在以下条件全部满足时推理：
 
-1. 车速为 30-120 km/h。
-2. `modelV2.meta.laneChangeDirection` 明确为左或右。
-3. 目标侧的 `laneWidthLeft` 或 `laneWidthRight` 不低于 3.0 m。
+1. `ShareData` 已启用，并且 V-ASM 模型和广角相机可用。
+2. `carState` 与 `modelV2` 均处于 alive、valid 状态。
+3. 该侧 ROI 已配置。
+4. 该侧 `laneWidthLeft` 或 `laneWidthRight` 不低于 2.0 m。
+
+车速和 `modelV2.meta.laneChangeDirection` 不再是启动条件。满足条件的左右侧每次只推理一侧并轮流执行。
 
 车道结果超过 4 秒、盲区结果超过 1.5 秒未更新时，`card.py` 自动忽略它们。这样相机、模型或进程异常
 时不会将过期视觉信息继续用于 UI 或变道判断。
@@ -39,9 +42,10 @@ V-ASM 仅在以下条件全部满足时推理：
 启用 `ShareData` 后，mici 右下角显示 VISION 状态、最近一次车道推理耗时和左右实线/虚线图标。
 `?` 表示无法识别；等待或过期结果不会保留已识别图标。BSD 区分待机、指定侧未检测到和检测到；
 只有当前已评估的侧才会显示未检测到，另一侧不会被当作已检查。
-相机画面隐藏时仍保留状态卡和黄色侧边 BSD 提示。显示道路模型时，车道使用与 c3 相同的虚线分段规则，
-BSD 使用黄色侧边路障。车道位置来自驾驶模型，`lane.onnx` 只提供实线/虚线分类。
-OEM BSD 提示不依赖 `ShareData`；驾驶告警仍在最上层。V-ASM 的速度、方向和车道宽度条件保持不变。
+相机画面隐藏时仍保留状态卡和侧边 BSD 提示。显示道路模型时，车道使用与 c3 相同的虚线分段规则。
+BSD 路障在仅车辆/OEM 检测时为琥珀色、仅视觉检测时为蓝色、同侧两种来源同时检测时为淡红色；
+左右侧分别独立着色。车道位置来自驾驶模型，`lane.onnx` 只提供实线/虚线分类。
+OEM BSD 提示不依赖 `ShareData`；驾驶告警仍在最上层。
 
 ### Web 设置与调试
 
@@ -103,14 +107,18 @@ Use **Carrot Web (port 7000) → Settings → Driving → Steering → ONNX Lane
 | Feature | Camera and model | Operation |
 |---|---|---|
 | Lane detection | `VISION_STREAM_ROAD`, `assets/lane.onnx` | Always enabled. The NV12 Y plane is center-square cropped, resized to a 416x416 grayscale image, copied into three normalized channels, and passed to the YOLOv8-Seg model. Lane types are `1` solid, `0` dashed, and `-1` unknown. |
-| V-ASM blindspot detection | `VISION_STREAM_WIDE_ROAD`, `assets/v_asm_model.onnx` | Runs only when needed. It evaluates only the user-annotated ROI for the target lane-change side, reducing CPU use and improving target-side responsiveness. |
-| Vehicle-state merge | `customReservedRawData0` -> `card.py` | A recognized lane type replaces only its corresponding type digit while preserving the vehicle color code. Visual blindspot state is OR-merged with OEM `leftBlindspot/rightBlindspot`; vision can never clear an OEM blindspot. |
+| V-ASM blindspot detection | `VISION_STREAM_WIDE_ROAD`, `assets/v_asm_model.onnx` | Alternates across configured left/right ROIs whose model-estimated lane width is at least 2 m. It letterboxes each ROI to 352x352 and uses only the near-threat vehicle class. |
+| Vehicle-state merge | `customReservedRawData0` -> `card.py` | A recognized lane type replaces only its corresponding type digit while preserving the vehicle color code. Visual blindspot state is OR-merged with OEM `leftBlindspot/rightBlindspot`; vision can never clear an OEM blindspot. Split sources are written to `CarState` fields guarded by a validity marker and are also sent to the UI through a `customReservedRawData1` message with a monotonic timestamp. |
 
-V-ASM runs only when all conditions hold:
+Each V-ASM side runs only when all conditions hold:
 
-1. Speed is between 30 and 120 km/h.
-2. `modelV2.meta.laneChangeDirection` is explicitly left or right.
-3. The target-side `laneWidthLeft` or `laneWidthRight` is at least 3.0 m.
+1. `ShareData` is enabled and the V-ASM model and wide-road camera are available.
+2. `carState` and `modelV2` are both alive and valid.
+3. That side has a configured ROI.
+4. Its `laneWidthLeft` or `laneWidthRight` is at least 2.0 m.
+
+Speed and `modelV2.meta.laneChangeDirection` are not activation gates. Eligible left and right sides
+are evaluated alternately, one side per inference.
 
 `card.py` discards lane results older than four seconds and blindspot results older than 1.5 seconds.
 This prevents stale visual state from affecting the UI or lane-change decision after a camera, model,
@@ -122,11 +130,11 @@ With `ShareData` enabled, a card at the lower right shows VISION status, the lat
 time, and left/right solid or dashed icons. `?` means unknown; waiting or stale results do not retain
 recognized icons. BSD distinguishes standby, no detection on the evaluated side, and detection.
 Only a freshly evaluated side can show no detection; the other side is not assumed to have been checked.
-The card and amber side warnings remain visible with the camera hidden. With the road model visible,
-lanes use the same dash geometry as c3 and BSD adds amber roadside barriers. Lane positions still come
-from the driving model; `lane.onnx` supplies only solid/dashed classification.
-OEM BSD warnings also work with `ShareData` off. Driving alerts remain on top. The existing V-ASM
-speed, direction, and lane-width conditions are unchanged.
+The card and side warnings remain visible with the camera hidden. With the road model visible,
+lanes use the same dash geometry as c3. A BSD barrier is amber for vehicle/OEM-only detection, blue
+for vision-only detection, and light red when both sources detect the same side; left and right are
+colored independently. Lane positions still come from the driving model; `lane.onnx` supplies only
+solid/dashed classification. OEM BSD warnings also work with `ShareData` off. Driving alerts remain on top.
 
 ### Web settings and diagnostics
 
@@ -196,14 +204,18 @@ ONNX 모델을 실행하고, 하나의 버전 관리된 `xiaogeVision` JSON 메�
 | 기능 | 카메라 및 모델 | 동작 |
 |---|---|---|
 | 차선 인식 | `VISION_STREAM_ROAD`, `assets/lane.onnx` | 항상 활성화됩니다. NV12 Y 평면을 중앙 정사각형으로 자르고 416x416 그레이스케일로 조정한 뒤, 정규화된 동일한 세 채널로 복사하여 YOLOv8-Seg 모델에 입력합니다. `1`은 실선, `0`은 점선, `-1`은 알 수 없음입니다. |
-| V-ASM 사각지대 인식 | `VISION_STREAM_WIDE_ROAD`, `assets/v_asm_model.onnx` | 필요한 경우에만 실행됩니다. 차선 변경 대상 측의 사용자가 지정한 ROI만 평가하므로 CPU 사용량을 줄이고 대상 측 응답을 높입니다. |
-| 차량 상태 병합 | `customReservedRawData0` -> `card.py` | 인식된 차선 종류는 차량 색상 코드를 보존한 채 해당 종류 자리만 갱신합니다. 비전 사각지대 상태는 OEM `leftBlindspot/rightBlindspot`과 OR 병합되므로 비전 결과가 OEM 사각지대 상태를 해제할 수 없습니다. |
+| V-ASM 사각지대 인식 | `VISION_STREAM_WIDE_ROAD`, `assets/v_asm_model.onnx` | 모델 추정 차로 폭이 2m 이상인 설정된 좌우 ROI를 번갈아 종횡비를 유지한 352x352 입력으로 분류하고, 근접 위험 차량 클래스만 BSD로 사용합니다. |
+| 차량 상태 병합 | `customReservedRawData0` -> `card.py` | 인식된 차선 종류는 차량 색상 코드를 보존한 채 해당 종류 자리만 갱신합니다. 비전 사각지대 상태는 OEM `leftBlindspot/rightBlindspot`과 OR 병합되므로 비전 결과가 OEM 사각지대 상태를 해제할 수 없습니다. 분리된 출처는 유효성 표시 필드가 있는 `CarState`에 기록하고, 단조 시계 타임스탬프를 포함한 `customReservedRawData1` 메시지로 UI에도 전달합니다. |
 
-V-ASM은 다음 조건을 모두 만족할 때만 실행됩니다.
+V-ASM의 각 측면은 다음 조건을 모두 만족할 때 실행됩니다.
 
-1. 속도가 30-120 km/h입니다.
-2. `modelV2.meta.laneChangeDirection`이 명시적으로 left 또는 right입니다.
-3. 대상 측 `laneWidthLeft` 또는 `laneWidthRight`가 3.0m 이상입니다.
+1. `ShareData`가 켜져 있고 V-ASM 모델과 광각 카메라를 사용할 수 있습니다.
+2. `carState`와 `modelV2`가 alive·valid 상태입니다.
+3. 해당 측 ROI가 설정되어 있습니다.
+4. 해당 측 `laneWidthLeft` 또는 `laneWidthRight`가 2.0m 이상입니다.
+
+속도와 `modelV2.meta.laneChangeDirection`은 실행 조건이 아닙니다. 조건을 만족하는 좌우 측면은 한 번에
+한 측면씩 번갈아 검사합니다.
 
 `card.py`는 4초가 지난 차선 결과와 1.5초가 지난 사각지대 결과를 무시합니다. 따라서 카메라, 모델 또는
 프로세스 장애 후 오래된 비전 상태가 UI나 차선 변경 판단에 사용되지 않습니다.
@@ -214,11 +226,12 @@ V-ASM은 다음 조건을 모두 만족할 때만 실행됩니다.
 `?`는 차선 종류를 알 수 없다는 뜻이며, 결과를 기다리거나 오래된 결과만 남으면 인식 아이콘을 유지하지 않습니다.
 BSD는 ‘대기’, 검사한 쪽의 ‘미감지’, ‘감지’를 구분합니다. 방금 검사한 쪽만 미감지로 표시하고,
 검사하지 않은 반대쪽을 검사한 것으로 간주하지 않습니다.
-카메라 화면을 숨겨도 상태 표시와 노란색 좌우 BSD 경고는 남습니다. 도로 모델이 보일 때는 c3와 같은
-점선 구간을 사용하고 BSD를 노란색 도로 옆 표시로 그립니다. 차선 위치는 주행 모델에서 가져오며,
+카메라 화면을 숨겨도 상태 표시와 좌우 BSD 경고는 남습니다. 도로 모델이 보일 때는 c3와 같은
+점선 구간을 사용합니다. 차선 위치는 주행 모델에서 가져오며,
 `lane.onnx`는 실선·점선 종류만 제공합니다.
 차량 자체 BSD 경고는 `ShareData`가 꺼져 있어도 표시하며, 주행 경고는 가장 위에 나옵니다.
-V-ASM의 기존 속도·방향·차선 폭 조건은 유지합니다.
+V-ASM은 속도와 방향 요청에 관계없이 폭 2m 이상인 설정 측면을 검사합니다. BSD 벽은 차량·OEM만
+감지하면 호박색, 비전만 감지하면 파란색, 두 출처가 같은 쪽을 감지하면 연한 빨간색입니다.
 
 ### 웹 설정과 진단
 
@@ -231,7 +244,9 @@ Carrot Web의 **설정 → 주행 제어 → 차량 조향 → ONNX 차선·BSD*
 - V-ASM 패널은 실행 조건, 대상 측, 차선 폭을 표시하며 광각 영상에서 좌우 사각지대 다각형을 편집할 수 있습니다.
 - 로컬 설정을 저장하기 전에는 내장 1928x1208 광각 기본 다각형을 사용합니다. 주석을 초기화하면 로컬 설정이 제거됩니다.
 
-웹의 임계값, 평활 시간, 추론 간격은 검증용입니다. 서비스가 실행되는 동안 차선 인식은 항상 활성화되어 웹
+BSD 신뢰도 기본값은 94%이고 조정 범위는 0-100%입니다. 활성화된 BSD는 시작 기준보다 신뢰도가
+15%p 낮아질 때 해제되어 임계값 주변의 표시 변동을 줄입니다. 웹의 임계값, 평활 시간, 추론 간격은
+검증용입니다. 서비스가 실행되는 동안 차선 인식은 항상 활성화되어 웹
 동작 때문에 시스템 차선 결과가 중단되지 않습니다.
 
 `Latency`는 영상 전처리, 모델 계산, 후처리 한 번에 걸린 실제 시간이며 스레드 대기도 포함합니다. 웹 통신

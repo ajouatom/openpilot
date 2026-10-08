@@ -13,10 +13,8 @@ except ModuleNotFoundError as error:
   raise
 
 
-MODEL_INPUT_HEIGHT = 256
-MODEL_INPUT_WIDTH = 352
-HYSTERESIS_ON = 0.65
-HYSTERESIS_OFF = 0.25
+MODEL_INPUT_SIZE = 352
+HYSTERESIS_GAP = 0.15
 ASSETS_DIR = Path(__file__).resolve().parent / "assets"
 DEFAULT_MODEL_PATH = ASSETS_DIR / "v_asm_model.onnx"
 
@@ -103,26 +101,29 @@ class VASMInference:
     uv_crop = nv12[frame_height + y // 2:frame_height + (y + height) // 2, x:x + width]
     rgb = cv2.cvtColor(np.vstack((y_crop, uv_crop)), cv2.COLOR_YUV2RGB_NV12)
     rgb = cv2.bitwise_and(rgb, rgb, mask=self.masks[side])
-    rgb = cv2.resize(rgb, (MODEL_INPUT_WIDTH, MODEL_INPUT_HEIGHT), interpolation=cv2.INTER_LINEAR)
-    blob = np.transpose(rgb.astype(np.float32) / 255.0, (2, 0, 1))[None, :]
+    height, width = rgb.shape[:2]
+    scale = MODEL_INPUT_SIZE / max(height, width)
+    resized_width = max(1, round(width * scale))
+    resized_height = max(1, round(height * scale))
+    resized = cv2.resize(rgb, (resized_width, resized_height), interpolation=cv2.INTER_LINEAR)
+    square = np.zeros((MODEL_INPUT_SIZE, MODEL_INPUT_SIZE, 3), dtype=np.uint8)
+    top = (MODEL_INPUT_SIZE - resized_height) // 2
+    left = (MODEL_INPUT_SIZE - resized_width) // 2
+    square[top:top + resized_height, left:left + resized_width] = resized
+    blob = np.transpose(square.astype(np.float32) / 255.0, (2, 0, 1))[None, :]
     self.net.setInput(blob)
     predictions = np.squeeze(self.net.forward())
-    if predictions.ndim == 2:
-      if predictions.shape[0] < predictions.shape[1]:
-        predictions = predictions.T
-      if predictions.shape[1] >= 6:
-        predictions = predictions[np.round(predictions[:, 5]).astype(int) == 0]
-        return float(np.max(predictions[:, 4])) if len(predictions) else 0.0
-      return float(np.max(predictions[:, 4 if predictions.shape[1] >= 5 else 0]))
-    return float(np.max(predictions)) if predictions.size else 0.0
+    if predictions.ndim != 1 or predictions.size not in (2, 3):
+      raise ValueError(f"unexpected V-ASM model output shape: {predictions.shape}")
+    return float(predictions[1])
 
   def update(self, nv12: np.ndarray, width: int, height: int, side: str, threshold: float, smoothing_seconds: float, dt: float) -> None:
     self._prepare_geometry(height, width)
     confidence = self._confidence(nv12, height, side)
-    score_delta = min(1.0, dt / max(smoothing_seconds, 0.001))
-    self.scores[side] = min(1.0, self.scores[side] + score_delta) if confidence >= threshold else max(0.0, self.scores[side] - score_delta)
+    alpha = min(1.0, dt / max(smoothing_seconds, 0.001))
+    self.scores[side] = (1.0 - alpha) * self.scores[side] + alpha * confidence
     self.confidence[side] = confidence
-    if self.scores[side] >= HYSTERESIS_ON:
+    if not self.active[side] and self.scores[side] >= threshold:
       self.active[side] = True
-    elif self.scores[side] <= HYSTERESIS_OFF:
+    elif self.active[side] and self.scores[side] < max(0.0, threshold - HYSTERESIS_GAP):
       self.active[side] = False

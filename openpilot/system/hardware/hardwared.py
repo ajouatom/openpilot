@@ -362,7 +362,8 @@ def hardware_thread(end_event, hw_queue) -> None:
       except Exception:
         pass
 
-    # Tesla vehicles can keep CAN powered while parked, so keep the device awake.
+    # Tesla vehicles can keep CAN powered while parked, so keep the device awake
+    # without keeping onroad-only processes running after ignition drops.
     cp_cache.update(params)
     tesla_no_sleep = cp_cache.is_tesla
 
@@ -390,10 +391,6 @@ def hardware_thread(end_event, hw_queue) -> None:
       started_ts = None
       if off_ts is None:
         off_ts = time.monotonic()
-
-    # Keep onroad processes alive on Tesla even when parked.
-    if tesla_no_sleep and started_ts is None and started_seen:
-      started_ts = time.monotonic()
 
     # Offroad power monitoring
     voltage = None if peripheralState.pandaType == log.PandaState.PandaType.unknown else peripheralState.voltage
