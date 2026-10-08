@@ -90,6 +90,9 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"ObdMultiplexingEnabled", {CLEAR_ON_MANAGER_START | CLEAR_ON_ONROAD_TRANSITION, BOOL}},
     {"Offroad_CarUnrecognized", {CLEAR_ON_MANAGER_START | CLEAR_ON_ONROAD_TRANSITION, JSON}},
     {"Offroad_CarrotAutoUpdateFailed", {PERSISTENT, JSON}},
+    // Retired manual wait: clear saved holds when the updated manager starts.
+    {"JetsonLegacyUpdatePending", {CLEAR_ON_MANAGER_START, BOOL}},
+    {"Offroad_JetsonLegacyUpdate", {CLEAR_ON_MANAGER_START, JSON}},
     {"Offroad_ConnectivityNeeded", {CLEAR_ON_MANAGER_START, JSON}},
     {"Offroad_ConnectivityNeededPrompt", {CLEAR_ON_MANAGER_START, JSON}},
     {"Offroad_ExcessiveActuation", {CLEAR_ON_MANAGER_START, JSON}},
@@ -386,6 +389,7 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
 
     {"SpeedFromPCM", {PERSISTENT, INT, "2"}},
     {"MaxTimeOffroadMin", {PERSISTENT, INT, "60"}},
+    {"TeslaWakeOnCAN", {PERSISTENT, BOOL, "1"}},
 
     {"DisableDM", {PERSISTENT, INT, "0"}},  // retired; read only for one-time streaming migration
     {"DriverMonitoringEnabled", {PERSISTENT, BOOL, "1"}},
@@ -420,7 +424,7 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"ShareData", {PERSISTENT, INT, "0"}},
     {"OnnxLaneThreshold", {PERSISTENT, INT, "25"}},
     {"OnnxLaneIntervalMs", {PERSISTENT, INT, "400"}},
-    {"OnnxBsdThreshold", {PERSISTENT, INT, "45"}},
+    {"OnnxBsdThreshold", {PERSISTENT, INT, "94"}},
     {"OnnxBsdSmoothingMs", {PERSISTENT, INT, "200"}},
     {"OnnxBsdIntervalMs", {PERSISTENT, INT, "250"}},
 };

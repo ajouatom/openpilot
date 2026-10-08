@@ -64,7 +64,7 @@
   min-height: 30px;
   max-height: 30px;
   display: grid;
-  grid-template-columns: minmax(0, 1fr);
+  grid-template-columns: auto minmax(0, 1fr);
   align-items: center;
   gap: 16px;
   overflow: visible;
@@ -118,6 +118,23 @@
 }
 
 .tools-meta__info {
+  display: none;
+}
+
+.tools-meta__update {
+  /* Left slot, log-title position: never truncated, no shrink. */
+  max-width: none;
+  overflow: visible;
+  white-space: nowrap;
+  text-align: left;
+  color: color-mix(in srgb, var(--md-on-surface-var) 82%, transparent);
+  font-size: 12px;
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
+
+.tools-meta__update[hidden] {
   display: none;
 }
 

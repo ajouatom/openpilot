@@ -10,12 +10,22 @@ from openpilot.common import jetlink_status as status
   ({'backend': 'trt', 'device': 'Orin-sm87'}, 'jetSON'),
   ({'protocol': 2, 'backend': 'ort', 'device': 'coreml-Apple-M1'}, 'MAC'),
   ({'protocol': 2, 'backend': 'ort', 'device': 'ane-Apple_M1_Pro'}, 'MAC'),
+  ({'protocol': 3, 'backend': 'ort', 'device': 'ane-Apple_M4'}, 'MAC'),
   ({'protocol': 2, 'backend': 'ort', 'device': 'coreml-Apple_A17_Pro'}, 'Jetlink'),
   ({'backend': 'trt', 'device': 'RTX-sm89'}, 'Jetlink'),
   ({'carrot_host': 'untrusted text'}, 'Jetlink'), ({'carrot_host': []}, 'Jetlink'), (None, 'Jetlink'),
 ))
 def test_host_identity_compatibility(peer, expected):
   assert status.host_label(peer) == expected
+
+
+def test_phone_label_uses_explicit_transport_not_apple_m_chip_alone():
+  ipad = {'protocol': 3, 'backend': 'ort', 'device': 'ane-whole-Apple_M4'}
+  android = {'protocol': 3, 'backend': 'litert', 'device': 'gpu-Tensor_G4'}
+  assert status.host_label(ipad, 'ios') == 'iOS'
+  assert status.host_label(android, 'android') == 'Android'
+  assert status.host_label(ipad) == 'MAC'
+  assert status.host_label(android) == 'Jetlink'
 
 
 def test_active_ready_and_expired_host_status(tmp_path, monkeypatch):

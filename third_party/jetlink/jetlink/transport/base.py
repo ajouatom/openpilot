@@ -6,6 +6,8 @@ See the LICENSE file in the root directory for more details.
 """
 from __future__ import annotations
 
+import os
+import socket
 import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
@@ -16,6 +18,25 @@ from jetlink import protocol as P
 # ~460 KB.
 MAX_MESSAGE = 16 << 20
 _PAD = bytes(P.GADGET_TX_ALIGN)
+UDC_SYSFS = '/sys/class/udc'
+USB_MEDIA = {'super-speed-plus': 'usb3', 'super-speed': 'usb3', 'high-speed': 'usb2',
+             'full-speed': 'usb1', 'low-speed': 'usb1'}
+CABLE_ADDRESS = '192.168.60.1'
+
+
+def udc_speed(udc: str | None = None, root: str = UDC_SYSFS) -> str | None:
+  """Read the negotiated USB speed for a bound gadget controller, if available."""
+  try:
+    name = udc or sorted(os.listdir(root))[0]
+    with open(os.path.join(root, name, 'current_speed')) as f:
+      speed = f.read().strip()
+  except (OSError, IndexError):
+    return None
+  return speed if speed in USB_MEDIA else None
+
+
+def usb_link_info(kind: str, speed: str | None) -> dict:
+  return {'kind': kind, **({'usb_speed': speed} if speed else {})}
 
 
 class LinkError(IOError):
@@ -40,6 +61,10 @@ class Transport(ABC):
   Implementations must preserve message boundaries and ordering. recv() hands
   back a view into a reusable buffer: copy anything you need to keep.
   """
+
+  def link_info(self) -> dict:
+    """Optional transport metadata to include in a protocol 3 hello."""
+    return {}
 
   @abstractmethod
   def send(self, msg_type: int, seq: int, parts=(), flags: int = 0, timeout: float | None = None) -> None:
@@ -131,6 +156,10 @@ class StreamTransport(Transport):
   Subclasses supply only the two primitives that differ.
   """
 
+  # Carrot extension: select a strict wire version per fresh connection.
+  # The default remains the unmodified v2 contract used by deployed Jetsons.
+  wire_protocol = P
+
   # Extra capacity past the current message, for transports whose reads need a
   # minimum buffer size (a bulk OUT endpoint wants a whole packet).
   read_slack = 0
@@ -147,10 +176,46 @@ class StreamTransport(Transport):
   # hundred KB of inference does not. 0 means no cap (TCP).
   write_chunk = 0
 
-  def __init__(self, rx_size: int = 1 << 20):
+  def __init__(self, rx_size: int = 1 << 20, protocol_version: int = P.VERSION):
     self.rx = RxBuffer(rx_size)
     self._desynced = False
     self._send_deadline: float | None = None
+    self._protocol_locked = False
+    self._locked_protocol_version: int | None = None
+    self.protocol_version = protocol_version
+
+  @property
+  def protocol_version(self) -> int:
+    return self._protocol_version
+
+  @protocol_version.setter
+  def protocol_version(self, version: int) -> None:
+    selected = P.validate_version(version)
+    if self._protocol_locked and selected != self._locked_protocol_version:
+      raise ValueError(f"protocol version is locked to {self._locked_protocol_version} on this stream")
+    self._protocol_version = selected
+
+  def _lock_protocol_version(self) -> None:
+    if not self._protocol_locked:
+      self._protocol_locked = True
+      self._locked_protocol_version = self._protocol_version
+
+  def link_info(self) -> dict:
+    udc = getattr(self, 'bound_udc', None)
+    if udc is not None:
+      return usb_link_info('usb', udc_speed(udc))
+    sock = getattr(self, 'sock', None)
+    if sock is not None and getattr(sock, 'family', None) in (socket.AF_INET, socket.AF_INET6):
+      try:
+        endpoints = {sock.getsockname()[0], sock.getpeername()[0]}
+      except OSError:
+        return {'kind': 'tcp'}
+      if CABLE_ADDRESS in endpoints:
+        return usb_link_info('cable', udc_speed())
+      return {'kind': 'tcp'}
+    if getattr(self, 'handle', None) is not None:
+      return {'kind': 'usb'}
+    return {}
 
   def _write_timeout(self, default: float | None = None) -> float | None:
     if self._send_deadline is None:
@@ -177,6 +242,9 @@ class StreamTransport(Transport):
   # -- framing -------------------------------------------------------------
 
   def send(self, msg_type: int, seq: int, parts=(), flags: int = 0, timeout: float | None = None) -> None:
+    P = self.wire_protocol
+    self._lock_protocol_version()
+    multiple = P.packet_multiple(self.protocol_version) if hasattr(P, 'packet_multiple') else P.PACKET_MULTIPLE
     # cast('B'): slicing a float32 view in advance() would step by elements
     bufs = [memoryview(p).cast('B') for p in parts]
     length = sum(b.nbytes for b in bufs)
@@ -185,11 +253,14 @@ class StreamTransport(Transport):
       pad = -(P.HEADER_SIZE + length) % self.tx_align
       if pad:
         bufs.append(memoryview(_PAD)[:pad])
-    elif (P.HEADER_SIZE + length) % P.PACKET_MULTIPLE == 0:
+    elif (P.HEADER_SIZE + length) % multiple == 0:
       # A bulk transfer only ends on a short packet; see protocol.PACKET_MULTIPLE.
       flags |= P.Flag.PADDED
       bufs.append(memoryview(_PAD)[:1])
-    header = P.pack_header(msg_type, seq, length, flags)
+    if P.VERSION == 3:
+      header = P.pack_header(msg_type, seq, length, flags)
+    else:
+      header = P.pack_header(msg_type, seq, length, flags, version=self.protocol_version)
     bufs.insert(0, memoryview(header))
     self._send_deadline = None if timeout is None else time.monotonic() + timeout
     try:
@@ -261,13 +332,19 @@ class StreamTransport(Transport):
         last = time.monotonic()
 
   def recv(self, timeout: float | None = None) -> Message:
+    P = self.wire_protocol
+    self._lock_protocol_version()
     if self._desynced:
       raise LinkError("stream desynced; the link must be reopened")
     end = None if timeout is None else time.monotonic() + timeout
     self._fill(P.HEADER_SIZE, timeout)
     try:
-      _, _, msg_type, seq, flags, length, _reserved = P.unpack_header(
-        self.rx.view[self.rx.start:self.rx.start + P.HEADER_SIZE])
+      if P.VERSION == 3:
+        _, _, msg_type, seq, flags, length, _reserved = P.unpack_header(
+          self.rx.view[self.rx.start:self.rx.start + P.HEADER_SIZE])
+      else:
+        _, _, msg_type, seq, flags, length, _reserved = P.unpack_header(
+          self.rx.view[self.rx.start:self.rx.start + P.HEADER_SIZE], version=self.protocol_version)
       if length > MAX_MESSAGE:
         raise P.ProtocolError(f"message claims {length} bytes, over the {MAX_MESSAGE} cap")
     except P.ProtocolError as e:

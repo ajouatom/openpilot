@@ -101,14 +101,36 @@ class SnapshotBuilder:
     release_file = Path(__file__).resolve().parents[2] / 'openpilot/selfdrive/modeld/jetlink/host_release.json'
     if release_file.is_file():
       self.host_release = json.loads(release_file.read_text())
-    from hud_camera import CameraPublisher
-    self.camera = CameraPublisher()
+    self.camera = None
     from openpilot.selfdrive.carrot.cluster.cluster_system_monitor import NetworkAddressProvider
     self.network = NetworkAddressProvider()
 
   def close(self):
-    self.camera.close()
+    if self.camera is not None:
+      self.camera.close()
     self.network.close()
+
+  def camera_previews(self):
+    from openpilot.common.jetlink_status import LINK_STATUS, _fresh, host_label
+    now = time.monotonic()
+    link = _fresh(LINK_STATUS, now)
+    try:
+      host_display = (host_label(link.get('peer')) == 'jetSON' and
+                      0 <= now - float(link['telemetry_updated']) < 3 and
+                      link['telemetry'].get('carrot_hud_connected') is True)
+    except (KeyError, TypeError, ValueError):
+      host_display = False
+    # A host panel can start rendering without a camera preview. Only its
+    # fresh output heartbeat starts this worker; no panel means no allocation.
+    enabled = ((host_display or self.params.get_int('ClusterHud') == 1) and
+               (self.params.get_bool('IsOnroad') or self.params.get_int('ClusterHudDebug') >= 1))
+    if enabled and self.camera is None:
+      from hud_camera import CameraPublisher
+      self.camera = CameraPublisher()
+    elif not enabled and self.camera is not None:
+      self.camera.close()
+      self.camera = None
+    return self.camera.latest if self.camera is not None else {}
 
   def packet(self):
     from openpilot.cereal import log
@@ -141,7 +163,7 @@ class SnapshotBuilder:
               'vehicle_network_address': self.network.address(),
               'external_compute_label': device_badge[0] if device_badge and device_badge[1] == 'active' else '',
               'received': self.sm.recv_time, 'mono': self.sm.logMonoTime,
-              'valid': self.sm.valid, 'alive': self.sm.alive, 'cameras': self.camera.latest}
+              'valid': self.sm.valid, 'alive': self.sm.alive, 'cameras': self.camera_previews()}
     data = json.dumps(record, separators=(',', ':')).encode()
     if len(data) > 96 * 1024:
       record['cameras'] = {}

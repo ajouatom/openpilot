@@ -53,6 +53,8 @@ def test_generic_dispatch_uploads_warps_and_feeds_back_state(monkeypatch):
     monotonic=lambda: next(wall_clock), thread_time=lambda: next(cpu_clock)))
   runtime = object.__new__(GenericModelRuntime)
   calls = []
+  stages = []
+  runtime.progress = stages.append
   runtime.host, runtime.frames, runtime.transforms = object(), object(), object()
   runtime.device_buffer = SimpleNamespace(copy_from=lambda host: calls.append(('upload', host)))
   state = np.zeros(1)
@@ -75,6 +77,7 @@ def test_generic_dispatch_uploads_warps_and_feeds_back_state(monkeypatch):
   runtime.run()
   assert state[0] == 2
   assert [call[0] for call in calls] == ['upload', 'warp', 'model'] * 2
+  assert stages == ['input_upload', 'warp', 'model_call', 'output_read'] * 2
   assert runtime.last_timings == pytest.approx({
     'input_upload_ms': 20, 'input_upload_cpu_ms': 2,
     'warp_call_ms': 10, 'warp_call_cpu_ms': 1,
@@ -90,8 +93,8 @@ def test_precompiled_only_boot_failure_skips_local_compilation(monkeypatch, tmp_
   function = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == 'build_usbgpu_model')
   namespace = {'Spinner': object}
   exec(compile(ast.Module(body=[function], type_ignores=[]), str(source), 'exec'), namespace)
-  monkeypatch.setattr(big_model, 'active_manifest', big_model.fetch_manifest)
-  monkeypatch.setattr(big_model, 'active_model_path', lambda: tmp_path / 'model.pkl')
+  monkeypatch.setattr(big_model, 'selected_manifest', big_model.fetch_manifest)
+  monkeypatch.setattr(big_model, 'model_path', lambda _manifest: tmp_path / 'model.pkl')
   monkeypatch.setattr(big_model, 'model_cache_dir', lambda: tmp_path)
   statuses = []
   monkeypatch.setattr(big_model_status, 'write_big_model_status', lambda *args, **kw: statuses.append((args, kw)))

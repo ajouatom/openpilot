@@ -56,9 +56,72 @@ def test_blindspot_onnx_loads_and_infers_target_side_only():
   frame = np.zeros((384, 352), dtype=np.uint8)
   frame[256:] = 128
 
-  inference.update(frame, 352, 256, "left", 0.45, 0.2, 0.25)
+  inference.update(frame, 352, 256, "left", 0.94, 0.2, 0.25)
 
   assert math.isfinite(inference.confidence["left"])
   assert 0 <= inference.confidence["left"] <= 1
   assert inference.confidence["right"] == 0
   assert not inference.active["right"]
+
+
+def test_blindspot_classifier_maps_car_class_and_letterboxes_roi():
+  inference = VASMInference()
+  inference.load_config({
+    "width": 8, "height": 4,
+    "poly_left": [[0, 0], [7, 0], [7, 3], [0, 3]],
+    "poly_right": [],
+  })
+  recorded = {}
+
+  class FakeNet:
+    def setInput(self, blob):
+      recorded["blob"] = blob
+
+    def forward(self):
+      return np.array([[0.03, 0.96, 0.01]], dtype=np.float32)
+
+  inference.net = FakeNet()
+  inference.valid = True
+  frame = np.zeros((6, 8), dtype=np.uint8)
+  frame[:4] = 255
+  frame[4:] = 128
+
+  inference.update(frame, 8, 4, "left", 0.94, 0.2, 0.25)
+
+  assert inference.confidence["left"] == pytest.approx(0.96)
+  assert inference.active["left"]
+  assert recorded["blob"].shape == (1, 3, 352, 352)
+  assert np.all(recorded["blob"][:, :, :88] == 0)
+  assert np.any(recorded["blob"][:, :, 88:264] > 0)
+  assert np.all(recorded["blob"][:, :, 264:] == 0)
+
+
+def test_blindspot_classifier_uses_dual_threshold_hysteresis():
+  inference = VASMInference()
+  inference.load_config({
+    "width": 4, "height": 4,
+    "poly_left": [[0, 0], [3, 0], [3, 3], [0, 3]],
+    "poly_right": [],
+  })
+
+  class FakeNet:
+    confidence = 0.95
+
+    def setInput(self, _blob):
+      pass
+
+    def forward(self):
+      return np.array([[1.0 - self.confidence, self.confidence]], dtype=np.float32)
+
+  inference.net = FakeNet()
+  inference.valid = True
+  frame = np.zeros((6, 4), dtype=np.uint8)
+
+  inference.update(frame, 4, 4, "left", 0.94, 0.2, 0.2)
+  assert inference.active["left"]
+  inference.net.confidence = 0.80
+  inference.update(frame, 4, 4, "left", 0.94, 0.2, 0.2)
+  assert inference.active["left"]
+  inference.net.confidence = 0.78
+  inference.update(frame, 4, 4, "left", 0.94, 0.2, 0.2)
+  assert not inference.active["left"]

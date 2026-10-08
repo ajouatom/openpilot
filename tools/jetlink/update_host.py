@@ -1,7 +1,9 @@
 """Verified NAS runtime/model updates; activation only with both services stopped.
 
-The timer stages while C4 explicitly reports offroad. The boot service validates
-the staged engine before switching sources. A failed probe keeps the old release.
+Migrated hosts check the attached comma's pin before first inference, including
+onroad startup; a separate USB-only gate waits for Internet and applies updates.
+Legacy hosts retain offroad staging and next-boot activation until migration.
+Failed probes preserve the old release; the new gate still withholds execution.
 No OS, user identity, network credentials or vehicle settings are updated.
 """
 import argparse
@@ -57,7 +59,7 @@ def checked_url(url):
   return url
 
 
-def fetch(url, path, sha256, size):
+def fetch(url, path, sha256, size, progress=None):
   checked_url(url)
   if not re.fullmatch('[0-9a-f]{64}', sha256) or not isinstance(size, int) or not 0 < size <= 4 << 30:
     raise ValueError('Invalid download identity')
@@ -73,6 +75,8 @@ def fetch(url, path, sha256, size):
         if count > size:
           raise ValueError('Oversized download')
         output.write(block)
+        if progress is not None:
+          progress(count / size)
       output.flush()
       os.fsync(output.fileno())
     if count != size or digest(temporary) != sha256:
@@ -127,7 +131,7 @@ def stage(manifest_url=DEFAULT_MANIFEST):
   stage_manifest(manifest)
 
 
-def stage_manifest(manifest):
+def stage_manifest(manifest, progress=None):
   from finalize_sd_image import extract_bundle
   validate_manifest(manifest)
   verify_signature(manifest)
@@ -146,7 +150,7 @@ def stage_manifest(manifest):
   updates.mkdir(exist_ok=True)
   bundle = updates / (commit + '.tar.gz')
   item = manifest['bundle']
-  fetch(item['url'], bundle, item['sha256'], item['size'])
+  fetch(item['url'], bundle, item['sha256'], item['size'], progress=progress)
   release = ROOT / 'releases' / commit
   if not release.exists():
     with tempfile.TemporaryDirectory(dir=ROOT / 'releases', prefix='update-') as temporary:
@@ -164,7 +168,7 @@ def stage_manifest(manifest):
     raise ValueError('Existing release has a different identity')
   model = manifest['model']
   destination = ROOT / 'cache/models' / (model['sha256'][:16] + '.onnx')
-  fetch(model['url'], destination, model['sha256'], model['size'])
+  fetch(model['url'], destination, model['sha256'], model['size'], progress=progress)
   # Cache files are consumed and managed by the unprivileged inference service.
   import pwd
   owner = pwd.getpwnam('jetlink')
@@ -285,19 +289,37 @@ def automatic_stage():
 def main():
   import fcntl
   parser = argparse.ArgumentParser(description=__doc__)
-  parser.add_argument('action', choices=['stage', 'activate', 'automatic'])
+  parser.add_argument('action', choices=['stage', 'activate', 'automatic', 'boot'])
   parser.add_argument('--manifest', default=DEFAULT_MANIFEST)
   args = parser.parse_args()
   if os.geteuid() != 0:
     raise PermissionError('Run through the installed update service (root)')
+  from boot_update import enabled, boot
+  boot_gate = enabled()
+  if args.action == 'automatic' and boot_gate:
+    return  # All required updates now complete before this boot's first model.
+  if args.action == 'activate' and boot_gate:
+    # A separate transient service has no startup timeout and survives the old
+    # image's oneshot apply service finishing. No writes to a protected OS.
+    subprocess.run(['systemd-run', '--unit=carrot-jetlink-boot-gate',
+                    '--property=Restart=on-failure', '--property=RestartSec=3',
+                    '--property=Nice=19', '--property=CPUAffinity=0 1',
+                    str(ROOT / 'venv/bin/python'), str(Path(__file__).resolve()), 'boot'], check=True, timeout=15)
+    return
   if Path('/etc/carrot-jetlink-protected.json').exists():
     status = json.loads(Path('/run/carrot-storage.json').read_text())
     if status.get('state') != 'protected':
       print('DATA unavailable; keeping immutable recovery runtime', flush=True)
-      return
+      if not boot_gate:
+        return
+      # Leave the services blocked and expose the storage failure over USB.
   with Path('/run/carrot-jetlink-update.lock').open('w') as lock:
     fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-    if args.action == 'activate':
+    if args.action == 'boot':
+      if not boot_gate:
+        raise RuntimeError('Boot gate policy is not enabled for this boot')
+      boot()
+    elif args.action == 'activate':
       activate()
     elif args.action == 'automatic':
       automatic_stage()

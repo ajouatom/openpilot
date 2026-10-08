@@ -64,9 +64,11 @@ def test_refresh_selects_committed_release_and_repairs_hud(base, tmp_path, monke
   commit = 'a' * 40
   with tarfile.open(bundle, 'w:gz') as t:
     data = (commit + '\n').encode()
-    member = tarfile.TarInfo('SOURCE_COMMIT'); member.size = len(data)
+    member = tarfile.TarInfo('SOURCE_COMMIT')
+    member.size = len(data)
     t.addfile(member, io.BytesIO(data))
-    for name in ('update_host.py', 'finalize_sd_image.py', 'hud_protocol.py', 'release-signing-public.pem'):
+    for name in ('update_host.py', 'finalize_sd_image.py', 'hud_protocol.py', 'release-signing-public.pem',
+                 'wifi_protocol.py', 'boot_update.py'):
       t.add(Path(__file__).with_name(name), arcname='tools/jetlink/' + name)
   import install_boot_display
   diagnostic_calls = []
@@ -76,6 +78,9 @@ def test_refresh_selects_committed_release_and_repairs_hud(base, tmp_path, monke
   assert marker['state'] == 'CANDIDATE_PHYSICAL_BOOT_PENDING'
   assert marker['root_start'] == 3188736
   assert (runtime/'current/SOURCE_COMMIT').read_text().strip() == commit
+  assert (runtime/'updater/boot_update.py').read_bytes() == Path(__file__).with_name('boot_update.py').read_bytes()
+  assert (runtime/'updater/wifi_protocol.py').read_bytes() == Path(__file__).with_name('wifi_protocol.py').read_bytes()
+  assert (runtime/'boot-update-required').read_text() == 'next-boot\n'
   assert not (runtime/'releases/old').exists()
   assert (root/'var/spool/anacron').is_dir() and (root/'etc/openvpn').is_dir()
   assert 'WorkingDirectory=/var/log/carrot-jetlink-hud' in (

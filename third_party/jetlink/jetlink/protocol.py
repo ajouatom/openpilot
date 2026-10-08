@@ -19,14 +19,14 @@ import struct
 from enum import IntEnum
 
 MAGIC = 0x4B4E4C4A  # b'JLNK'
-# Bumped so a new client cannot silently pair with a legacy server. Tensors are
-# unchanged, so existing plans still load.
+# Keep the vendored server pinned at v2; clients select v3 per stream.
 VERSION = 2
+SUPPORTED_VERSIONS = (2, 3)
 
-# A bulk transfer ends on a short packet, so a message that is an exact multiple
-# of the packet size never terminates the peer's read and arrives a frame late;
-# the sender appends a pad byte and sets Flag.PADDED. 1024 divides all the rest.
+# Legacy v2 packet size. A transfer that is an exact multiple does not terminate
+# a bulk read, so the sender adds one byte; v3 uses 512 (see packet_multiple()).
 PACKET_MULTIPLE = 1024
+_PACKET_MULTIPLES = {2: 1024, 3: 512}
 
 # The gadget pads every message to a burst so it never ends on a short packet:
 # dwc3 flushed its TX FIFO past one about once in 400 frames, and the host read
@@ -66,6 +66,7 @@ class Flag(IntEnum):
   WANT_STATE = 1 << 1     # on INFER_REQ: append telemetry json to the response.
                           # Piggybacked because at 20 Hz a separate exchange
                           # would race a frame.
+  WANT_HIDDEN = 1 << 2    # on protocol 3 INFER_REQ: include hidden state in the response
   PADDED = 1 << 7         # one pad byte follows the payload; see PACKET_MULTIPLE
 
 
@@ -84,17 +85,32 @@ class ProtocolError(RuntimeError):
   pass
 
 
-def pack_header(msg_type: int, seq: int, length: int, flags: int = 0, reserved: int = 0) -> bytes:
-  return _header.pack(MAGIC, VERSION, int(msg_type), seq, flags, length, reserved)
+def validate_version(version: int) -> int:
+  if type(version) is not int or version not in SUPPORTED_VERSIONS:
+    raise ValueError(f"unsupported protocol version {version!r}; supported versions are {SUPPORTED_VERSIONS}")
+  return version
 
 
-def unpack_header(buf) -> tuple[int, int, int, int, int, int, int]:
-  magic, version, msg_type, seq, flags, length, reserved = _header.unpack_from(buf)
+def packet_multiple(version: int = VERSION) -> int:
+  return _PACKET_MULTIPLES[validate_version(version)]
+
+
+def pack_header(msg_type: int, seq: int, length: int, flags: int = 0, reserved: int = 0,
+                version: int = VERSION) -> bytes:
+  return _header.pack(MAGIC, validate_version(version), int(msg_type), seq, flags, length, reserved)
+
+
+def unpack_header(buf, version: int = VERSION) -> tuple[int, int, int, int, int, int, int]:
+  magic, wire_version, msg_type, seq, flags, length, reserved = _header.unpack_from(buf)
   if magic != MAGIC:
     raise ProtocolError(f"bad magic 0x{magic:08x} (link desynced or not a jetlink peer)")
-  if version != VERSION:
-    raise ProtocolError(f"peer speaks protocol v{version}, we speak v{VERSION}")
-  return magic, version, msg_type, seq, flags, length, reserved
+  try:
+    expected = validate_version(version)
+  except ValueError as e:
+    raise ProtocolError(str(e)) from e
+  if wire_version != expected:
+    raise ProtocolError(f"peer speaks protocol v{wire_version}, we speak protocol v{expected}")
+  return magic, wire_version, msg_type, seq, flags, length, reserved
 
 
 def pack_infer_req(frame_id: int, flags: int = 0) -> bytes:

@@ -42,6 +42,7 @@ USBGPU_MODEL_LOAD_TIMEOUT = 120
 USBGPU_DISCOVERY_GRACE_SECONDS = 5.0
 USBGPU_DISCOVERY_POLL_INTERVAL = 0.1
 USBGPU_INIT_ATTEMPTS = 6
+USBGPU_PRECOMPILED_INIT_ATTEMPTS = 2
 USBGPU_INIT_RETRY_INTERVAL = 2.0
 USBGPU_TMUX_ERROR_REASON = "egpu_error"
 
@@ -275,20 +276,24 @@ def main(demo=False):
   usbgpu_model_loaded = False
   if USBGPU:
     usbgpu_model = None
+    precompiled = usbgpu_pkl_path.name == 'model.pkl' and (usbgpu_pkl_path.parent / 'installed.json').is_file()
+    # Repeatedly reloading the same large PKL cannot repair a persistently down
+    # PCIe link. One retry allows delayed readiness, then start the internal model.
+    init_attempts = USBGPU_PRECOMPILED_INIT_ATTEMPTS if precompiled else USBGPU_INIT_ATTEMPTS
 
     def load_usbgpu_model():
       nonlocal usbgpu_model
-      for attempt in range(1, USBGPU_INIT_ATTEMPTS + 1):
+      for attempt in range(1, init_attempts + 1):
         try:
-          if usbgpu_pkl_path.name == 'model.pkl' and (usbgpu_pkl_path.parent / 'installed.json').is_file():
+          if precompiled:
             from openpilot.selfdrive.modeld.precompiled_runner import PrecompiledModelState
             usbgpu_model = PrecompiledModelState(vipc_client_main.width, vipc_client_main.height, usbgpu_pkl_path)
           else:
             usbgpu_model = ModelState(vipc_client_main.width, vipc_client_main.height, True, usbgpu_pkl_path)
           return
         except Exception as exc:
-          if usbgpu_pcie_not_ready(exc) and attempt < USBGPU_INIT_ATTEMPTS:
-            cloudlog.warning(f"eGPU PCIe link not ready; retrying ({attempt}/{USBGPU_INIT_ATTEMPTS}): {exc!r}")
+          if usbgpu_pcie_not_ready(exc) and attempt < init_attempts:
+            cloudlog.warning(f"eGPU PCIe link not ready; retrying ({attempt}/{init_attempts}): {exc!r}")
             time.sleep(USBGPU_INIT_RETRY_INTERVAL)
             refresh_usbgpu_device_cache()
             continue
@@ -316,17 +321,23 @@ def main(demo=False):
 
   # Keep the internal-GPU model ready so a USB disconnect or runtime error does
   # not take modeld down while driving.
+  phase_start = time.monotonic()
   small_model = ModelState(vipc_client_main.width, vipc_client_main.height, False) if model is None or USBGPU else None
+  cloudlog.warning("model startup internal model: %.3fs, loaded=%s", time.monotonic() - phase_start, small_model is not None)
   if model is None:
     model = small_model
   # Keep the existing eGPU selection unchanged. A separate USB owner handles
-  # external computers and late server startup through the pinned Jetlink model.
+  # external computers and late server startup through the selected Jetlink model.
   if not USBGPU and os.path.isfile('/AGNOS'):
+    phase_start = time.monotonic()
+    adapter_ready = False
     try:
       from openpilot.selfdrive.modeld.jetlink.model import JoiningModel
       model = JoiningModel(model, vipc_client_main.width, vipc_client_main.height)
+      adapter_ready = True
     except Exception:
       cloudlog.exception('Jetlink camera adapter unavailable; retaining internal model')
+    cloudlog.warning("model startup Jetlink wrapper: %.3fs, created=%s", time.monotonic() - phase_start, adapter_ready)
   # Loading is not complete until the first model result is published. The
   # first eGPU execution can spend several seconds initializing queues/kernels
   # after the PKL has loaded; clearing this here causes a false commIssue while

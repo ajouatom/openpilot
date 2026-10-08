@@ -36,6 +36,10 @@ class DisplayParams:
     self.values = {}
 
   def get(self, key, *args, **kwargs):
+    # This adapter exists only inside the Jetson renderer. The saved switch
+    # controls the vehicle's USB panel, not a panel attached to this host.
+    if key == 'ClusterHud':
+      return b'1'
     now = time.monotonic()
     if now >= self.next_read:
       record = read_snapshot()
@@ -125,6 +129,9 @@ class RemoteSubMaster:
 
 def main():
   if '--help' not in sys.argv:
+    from boot_update import wait_for_runtime
+    wait_for_runtime()
+  if '--help' not in sys.argv:
     settings = DisplayParams()
     while not (settings.get_int('ClusterHud') == 1 and
                (settings.get_bool('IsOnroad') or settings.get_int('ClusterHudDebug') >= 1)):
@@ -180,22 +187,7 @@ def main():
   cluster_navi_source.NaviIpcMediaSource = RemoteNaviSource
   vehicle_stats = VehicleSystemStats()
   import main as cluster
-  from host_health import STATUS as HEALTH_STATUS
-  from openpilot.common.jetlink_status import _fresh
-  from cluster_renderer import ClusterUiRenderer, DESIGN_WIDTH, rl_color, rl
-  class HealthRenderer(ClusterUiRenderer):
-    def render(self, state, signal_lights=None):
-      super().render(state, signal_lights)
-      health = _fresh(HEALTH_STATUS, time.monotonic())
-      severity = health.get('severity', 'unknown')
-      if severity == 'ok':
-        return
-      color = (255, 90, 90) if severity == 'error' else (255, 205, 70)
-      message = health.get('reason') or 'Host health unavailable'
-      text = self._ellipsize_text(f'jetSON: {message}', 22, DESIGN_WIDTH - 40)
-      # Dedicated top strip; the vehicle alert retains its normal full area.
-      rl.draw_rectangle(0, 0, int(DESIGN_WIDTH), 32, rl_color((0, 0, 0), 220))
-      self._draw_text(text, DESIGN_WIDTH / 2, 16, 22, color, anchor='center')
+  from hud_health import HealthRenderer
   cluster.ClusterUiRenderer = HealthRenderer
   if '--help' not in sys.argv:
     scan = cluster.find_supported_usb_product

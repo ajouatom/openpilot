@@ -105,6 +105,8 @@ def test_prepared_transfer_preserves_controls_and_recurrent_state():
   runtime.compact = np.zeros(512 + images.size, np.uint8)
   runtime.host = runtime.compact
   calls = []
+  stages = []
+  runtime.progress = stages.append
   runtime.prepare_images = lambda: images
   def upload(host):
     assert host.size == 393728
@@ -125,6 +127,7 @@ def test_prepared_transfer_preserves_controls_and_recurrent_state():
     np.testing.assert_array_equal(runtime.run(), [1, 2])
   assert state[0] == 2
   assert calls == ['upload', 'model', 'upload', 'model']
+  assert stages == ['local_prepare', 'input_upload', 'model_call', 'output_read'] * 2
   assert runtime.last_timings['local_prepare_ms'] >= 0
   assert runtime.last_timings['input_upload_ms'] >= 0
 

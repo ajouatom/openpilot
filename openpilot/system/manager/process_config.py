@@ -85,7 +85,8 @@ def enable_dm_model(started, params, CP: car.CarParams) -> bool:
 #  return params.get_int("EnableConnect") > 0
 
 def enable_xiaoge_data(started, params, CP: car.CarParams) -> bool:
-  return params.get_bool("ShareData")
+  # Manager additionally waits for this onroad session's healthy startup.
+  return started and params.get_bool("ShareData")
 
 def cluster_hud_active(params: Params) -> bool:
   try:
@@ -206,7 +207,9 @@ procs = [
   PythonProcess("carrot_cluster", "openpilot.selfdrive.carrot.cluster_autorun", enable_cluster_hud, restart_if_crash=True),
 
   #Xiaoge data broadcaster (conditional on ShareData param)
-  PythonProcess("xiaoge_data", "openpilot.selfdrive.carrot.xiaoge_data", enable_xiaoge_data),
+  # Starts after onroad readiness, when manager already has live IPC mappings.
+  # Launch a fresh interpreter instead of forking that running manager state.
+  PythonProcess("xiaoge_data", "openpilot.selfdrive.carrot.xiaoge_data", enable_xiaoge_data, spawn=True),
 
   # C3x lite has no speaker; mirror alerts to the GPIO buzzer instead.
   PythonProcess("beep", "openpilot.selfdrive.controls.beep", c3x_lite, enabled=TICI),

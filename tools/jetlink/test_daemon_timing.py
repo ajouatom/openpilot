@@ -9,7 +9,7 @@ import pytest
 def test_timing_records_usb_and_display_tail_after_unchanged_reply(monkeypatch, navigation):
   if sys.platform == 'win32':
     monkeypatch.setitem(sys.modules, 'fcntl', NS())
-  from openpilot.selfdrive.modeld.jetlink import daemon
+  from openpilot.selfdrive.modeld.jetlink import daemon, link
   from openpilot.common import runtime_diagnostics
 
   now = [10.]
@@ -30,14 +30,14 @@ def test_timing_records_usb_and_display_tail_after_unchanged_reply(monkeypatch, 
   monkeypatch.setattr(daemon, 'publish', lambda *a, **kw: None)
   monkeypatch.setattr(daemon, 'send', lambda *a: None)
 
-  request = (daemon.REQUEST.pack(42, 1, 123) + bytes(daemon.SPEC.warped_nbytes) + bytes(daemon.SPEC.packed_nbytes))
+  request = (daemon.REQUEST.pack(42, 1, 123) + bytes(link.SPEC.warped_nbytes) + bytes(link.SPEC.packed_nbytes))
 
   def receive(connection):
     step('receive', 1.)  # Normal idle time must stay separate from USB work.
     return request
 
   monkeypatch.setattr(daemon, 'PacketReader', lambda _: NS(receive=receive))
-  output = np.zeros(daemon.SPEC.output_nelem, np.float32)
+  output = np.zeros(link.SPEC.output_nelem, np.float32)
 
   class Connection:
     def __enter__(self): return self
@@ -48,7 +48,7 @@ def test_timing_records_usb_and_display_tail_after_unchanged_reply(monkeypatch, 
 
   def begin(images, packed, frame, reset, want_state):
     assert frame == 42 and reset and not want_state
-    assert images.shape == daemon.SPEC.warped_shape and packed.size == daemon.SPEC.packed_nelem
+    assert images.shape == link.SPEC.warped_shape and packed.size == link.SPEC.packed_nelem
     step('usb_send', .003)
     return 99
 
@@ -65,7 +65,7 @@ def test_timing_records_usb_and_display_tail_after_unchanged_reply(monkeypatch, 
   monkeypatch.setattr(daemon, 'send_parts', reply)
   monkeypatch.setattr(daemon, 'publish_hud', lambda *a: step('hud', .004))
   monkeypatch.setattr(daemon, 'send_ready_after_reply', lambda *a, **kw: step('tail', .006))
-  client = NS(last_state=None, last_timings=(20000, 1000, 22000), infer_begin=begin, infer_end=end)
+  client = NS(spec=link.SPEC, last_state=None, last_timings=(20000, 1000, 22000), infer_begin=begin, infer_end=end)
   peer = {'carrot_host': 'jetson', daemon.NAVI_CAPABILITY: navigation}
   daemon._serve_local(NS(accept=lambda: (connection, None)), client, peer, NS(),
                       NS(sent=lambda sof: step('phase', .001)), NS(send=lambda _: step('wifi', .007)))

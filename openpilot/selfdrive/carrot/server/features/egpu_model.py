@@ -7,6 +7,7 @@ from openpilot.common.jetlink_status import diagnostics as jetlink_diagnostics
 
 from openpilot.selfdrive.modeld.big_model import active_manifest, active_model_compiled, active_model_path, model_cache_dir
 from openpilot.selfdrive.modeld.big_model_status import read_big_model_status, write_big_model_status
+from openpilot.selfdrive.modeld.egpu_worker_progress import current_failure
 
 from ..services.params import HAS_PARAMS, Params
 
@@ -51,8 +52,11 @@ def build_status_payload(params: Any | None = None) -> dict[str, Any]:
   active = (_params_bool(params, "UsbGpuActive") and not _params_bool(params, "UsbGpuLoading")) if params is not None else False
   error_code, detail = status.get('error_code'), status.get('detail')
   if params is not None and _params_bool(params, 'UsbGpuStartupFailed') and not active:
-    state, error_code = 'error', 'runtime'
-    detail = 'eGPU startup or execution failed; internal model selected. See the saved diagnostic report.'
+    failure = current_failure(model_cache_dir(), manifest.sha256) if manifest else {}
+    state, error_code = 'error', failure.get('error_code', 'runtime')
+    worker = failure.get('worker') or {}
+    stage = worker.get('stage')
+    detail = f'Last worker stage: {stage}' if isinstance(stage, str) else None
 
   return {
     "ok": True,

@@ -117,6 +117,27 @@ def installed(model=None, cache_dir: Path | None = None) -> Path | None:
     return None
 
 
+def retry_usb_rejection(root: Path, pickle_sha256: str) -> bool:
+  """Migrate the old USB-I/O misclassification only after a device reboot.
+
+  This grants another verified load attempt, never a validation receipt.
+  Missing/mismatched diagnostics and actual model errors remain rejected.
+  """
+  from openpilot.selfdrive.modeld.egpu_worker_progress import boot_identity
+  try:
+    failure = json.loads((root / 'last_failure.json').read_text())
+    current_boot = boot_identity()
+    return (isinstance(failure, dict) and failure.get('rejected') is True and
+            failure.get('pickle_sha256') == pickle_sha256 and
+            failure.get('phase') in ('load', 'boot_validation') and
+            isinstance(failure.get('boot_id'), str) and bool(failure['boot_id']) and
+            bool(current_boot) and failure['boot_id'] != current_boot and
+            isinstance(failure.get('error'), str) and
+            'bulk out 0x02 failed: input/output error' in failure['error'].lower())
+  except (OSError, ValueError, TypeError):
+    return False
+
+
 def ensure_precompiled(model=None, cache_dir: Path | None = None, progress=None) -> Path | None:
   model = model or active_manifest()
   if model is None:
@@ -135,7 +156,10 @@ def ensure_precompiled(model=None, cache_dir: Path | None = None, progress=None)
   value = validate_catalog(json.loads(data), model.sha256, catalog_url)
   # A runtime rejected on this device must use the local compiler until the artifact changes.
   if (root / 'rejected').exists() and (root / 'rejected').read_text() == value['pickle']['sha256']:
-    return None
+    if not retry_usb_rejection(root, value['pickle']['sha256']):
+      return None
+    (root / 'boot_validation.json').unlink(missing_ok=True)
+    print('Retrying model rejected by an earlier-boot USB transfer failure; revalidating artifacts.')
   root.mkdir(parents=True, exist_ok=True)
   target = root / 'model.pkl'
   if value['format'] == 'comma-generic-onnx' and not target.exists():
@@ -183,8 +207,11 @@ def record_failure(path: Path, error: BaseException | str, phase: str) -> bool:
   transient = (usbgpu_pcie_not_ready(error) or isinstance(error, (TimeoutError, BrokenPipeError)) or
                'precompiled eGPU worker timed out' in detail or 'precompiled eGPU worker exited' in detail)
   value = json.loads((path.parent / 'installed.json').read_text())
+  from openpilot.selfdrive.modeld.egpu_worker_progress import boot_identity
   failure = {'time': time.time(), 'phase': phase, 'rejected': not transient,  # noqa: TID251 - correlate persisted failures with boot logs
-             'pickle_sha256': value['pickle']['sha256'], 'error': detail[-16384:]}
+             'pickle_sha256': value['pickle']['sha256'], 'error': detail[-16384:], 'boot_id': boot_identity()}
+  if isinstance(worker := getattr(error, 'worker_diagnostics', None), dict):
+    failure['worker'] = worker
   target = path.parent / 'last_failure.json'
   temporary = target.with_suffix('.json.tmp')
   temporary.write_text(json.dumps(failure, indent=2))

@@ -597,6 +597,7 @@ struct PandaState @0xa7649e2575e4591e {
   # reserved for forks building alternate experiences.
   controlsAllowedRESERVED1 @38 :Bool;
   controlsAllowedRESERVED2 @39 :Bool;
+  wakeOnCan @40 :Bool;
 
   enum FaultStatus {
     none @0;
@@ -2719,6 +2720,7 @@ struct Event {
     customReservedRawData0 @124 :Data;
     navRouteNavd @125 :NavRoute;
     navInstructionCarrot @126 :NavInstruction;
+    customReservedRawData1 @154 :Data;
 
     # DO change the name of the field and struct
     # DON'T change the ID (e.g. @107)

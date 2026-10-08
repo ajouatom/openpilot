@@ -141,3 +141,47 @@ def test_generic_install_reuses_verified_download(tmp_path, monkeypatch):
   path = pm.ensure_precompiled(model, tmp_path)
   assert path.read_bytes() == data['pickle']
   assert pm.installed(model, tmp_path) == path
+
+
+@pytest.mark.parametrize('change,allowed', [
+  ({}, True), ({'boot_id': 'this-boot'}, False), ({'boot_id': ''}, False),
+  ({'pickle_sha256': 'b' * 64}, False), ({'phase': 'inference'}, False),
+  ({'error': 'ValueError: checkpoint mismatch'}, False), ({'rejected': False}, False),
+  ({'error': 'OSError: Input/Output Error reading model.pkl'}, False),
+])
+def test_old_usb_rejection_requires_matching_previous_boot_evidence(tmp_path, monkeypatch, change, allowed):
+  from openpilot.selfdrive.modeld import egpu_worker_progress
+  value, data = catalog()
+  model = SimpleNamespace(sha256='a' * 64, url='https://nas.example/models/v2/model.onnx')
+  def fetch(request, **kwargs):
+    name = request.full_url.rsplit('/', 1)[-1]
+    return Response(json.dumps(value).encode() if name == 'precompiled.json' else data[name])
+  monkeypatch.setattr(pm, 'urlopen', fetch)
+  monkeypatch.setattr(egpu_worker_progress, 'boot_identity', lambda: 'this-boot')
+  path = pm.ensure_precompiled(model, tmp_path)
+  failure = {'rejected': True, 'pickle_sha256': value['pickle']['sha256'], 'phase': 'load',
+             'boot_id': 'previous-boot', 'error': 'RuntimeError: bulk OUT 0x02 failed: Input/Output Error'} | change
+  (path.parent / 'last_failure.json').write_text(json.dumps(failure))
+  pm.reject(path)
+  # A stale receipt must not bypass a new smoke test after recovery.
+  (path.parent / 'boot_validation.json').write_text('{"key": "old"}')
+  # Recovered artifacts must still be rehashed/repaired before accepting them.
+  path.write_bytes(b'corrupt')
+  (path.parent / 'runtime.tar.gz').write_bytes(b'corrupt')
+  result = pm.ensure_precompiled(model, tmp_path)
+  assert (result == path) == allowed
+  assert (path.parent / 'rejected').exists() == (not allowed)
+  assert json.loads((path.parent / 'last_failure.json').read_text()) == failure
+  if allowed:
+    assert path.read_bytes() == data['pickle']
+    assert (path.parent / 'runtime.tar.gz').read_bytes() == data['runtime']
+    assert not (path.parent / 'boot_validation.json').exists()
+  else:
+    assert pm.installed(model, tmp_path) is None
+
+
+@pytest.mark.parametrize('contents', [None, 'invalid', '[]', '{}'])
+def test_usb_rejection_is_not_recovered_without_diagnostics(tmp_path, contents):
+  if contents is not None:
+    (tmp_path / 'last_failure.json').write_text(contents)
+  assert not pm.retry_usb_rejection(tmp_path, 'a' * 64)

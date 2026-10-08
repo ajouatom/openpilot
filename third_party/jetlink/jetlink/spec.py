@@ -26,6 +26,7 @@ MODEL_CONTEXT_FREQ = 5
 DEFAULT_FRAME_SKIP = MODEL_RUN_FREQ // MODEL_CONTEXT_FREQ  # 4
 
 CHUNK = 4 << 20  # model upload chunk
+STATEFUL_FRAME = 'new_img'
 
 
 @dataclass(frozen=True)
@@ -41,6 +42,17 @@ class ModelSpec:
 
   # --- vision ---
   @property
+  def stateful(self) -> bool:
+    """Whether the graph carries its temporal state in its inputs."""
+    return STATEFUL_FRAME in self.input_shapes
+
+  @property
+  def state_pairs(self) -> dict[str, str]:
+    """State input -> corresponding advanced-state output."""
+    return {name: f'next_{name}' for name in self.input_shapes
+            if name.startswith('state_') and f'next_{name}' in self.output_shapes}
+
+  @property
   def img_shape(self) -> tuple[int, ...]:
     return self.input_shapes['img']  # (1, 12, H, W)
 
@@ -50,7 +62,8 @@ class ModelSpec:
 
   @property
   def model_hw(self) -> tuple[int, int]:
-    return self.img_shape[2], self.img_shape[3]
+    shape = self.input_shapes[STATEFUL_FRAME] if self.stateful else self.img_shape
+    return shape[-2], shape[-1]
 
   @property
   def img_buf_shape(self) -> tuple[int, int, int, int]:
@@ -76,6 +89,12 @@ class ModelSpec:
 
   @property
   def packed_shapes(self) -> dict[str, tuple[int, ...]]:
+    if self.stateful:
+      return {
+        'desire': (math.prod(self.input_shapes['desire']),),
+        'traffic_convention': tuple(self.input_shapes['traffic_convention']),
+        'action_t': tuple(self.input_shapes['action_t']),
+      }
     dp = self.input_shapes['desire_pulse']
     tc = self.input_shapes['traffic_convention']
     at = self.input_shapes['action_t']

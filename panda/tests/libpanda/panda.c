@@ -17,6 +17,8 @@ void can_tx_comms_resume_spi(void) { };
 #include "boards/board_declarations.h"
 #include "safety.h"
 #include "main_definitions.h"
+#include "drivers/harness_declarations.h"
+extern struct harness_t harness;
 #include "drivers/can_common.h"
 
 can_ring *rx_q = &can_rx_q;

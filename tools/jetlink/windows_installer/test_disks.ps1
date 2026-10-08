@@ -16,7 +16,7 @@ foreach ($case in @(@('Number',8),@('Size',64000000000),@('UniqueId','card-2'),@
   try { Assert-SameDisk $disk $good 25769803776 0 } catch { $rejected = $true }
   if (-not $rejected) { throw "Replaced disk accepted: $($case[0])" }
 }
-foreach ($file in @('launcher.ps1','disks.ps1','messages.ps1','sd_nvme_patch.ps1','../write_sd_windows.ps1','../apply_offline_hotfix_windows.ps1')) {
+foreach ($file in @('launcher.ps1','disks.ps1','messages.ps1','sd_nvme_patch.ps1','boot_update_patch.ps1','copy_boot_payload.ps1','../write_sd_windows.ps1','../apply_offline_hotfix_windows.ps1')) {
   $tokens=$null; $errors=$null
   $body = Get-Content -LiteralPath (Join-Path $PSScriptRoot $file) -Raw -Encoding UTF8
   $null = [System.Management.Automation.Language.Parser]::ParseInput($body,[ref]$tokens,[ref]$errors)

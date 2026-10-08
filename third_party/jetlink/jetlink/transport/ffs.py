@@ -508,8 +508,12 @@ class FfsTransport(StreamTransport):
     # As in _write: an interrupted read drops the packets it already took. This
     # thread handles no signals, so mask them for its whole life.
     signal.pthread_sigmask(signal.SIG_BLOCK, _IO_SIGNALS)
-    self._widen_affinity()
-    self._raise_reader_priority()
+    try:
+      self._widen_affinity()
+      self._raise_reader_priority()
+    except OSError as exc:
+      self._fail(f"gadget reader setup failed: {exc}")
+      return
     # Fill the pool up front: recycling alone leaves a gap while a reply's
     # chunks arrive and the consumer is a scheduling beat behind, and an
     # allocation there reclaims under memory pressure (24 ms, over budget).

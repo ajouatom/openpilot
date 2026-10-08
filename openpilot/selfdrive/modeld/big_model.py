@@ -21,9 +21,10 @@ import ssl
 import sys
 import tempfile
 import time
+from collections.abc import Callable
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 from urllib.parse import urljoin, urlparse
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
@@ -126,9 +127,11 @@ def read_state(cache_dir: Path | None = None) -> dict[str, BigModelManifest | No
     return {"active": None, "previous": None}
 
 
-def _write_state(active: BigModelManifest, previous: BigModelManifest | None, cache_dir: Path) -> None:
+def _write_state(active: BigModelManifest, previous: BigModelManifest | None, cache_dir: Path,
+                 manifest_url: str = DEFAULT_MANIFEST_URL) -> None:
   cache_dir.mkdir(parents=True, exist_ok=True)
-  value = {"active": asdict(active), "previous": asdict(previous) if previous is not None else None}
+  value = {"active": asdict(active), "previous": asdict(previous) if previous is not None else None,
+           "manifest_url": manifest_url}
   fd, tmp_name = tempfile.mkstemp(prefix=".state-", suffix=".json", dir=cache_dir)
   try:
     with os.fdopen(fd, "w", encoding="utf-8") as f:
@@ -270,19 +273,23 @@ def ensure_big_model(manifest_url: str = DEFAULT_MANIFEST_URL, cache_dir: Path |
   active = state["active"]
   path = model_path(manifest, cache_dir)
   if active is not None and active.sha256 == manifest.sha256 and path.is_file() and path.stat().st_size == manifest.size:
+    if active != manifest or _read_json(state_path(cache_dir)).get('manifest_url') != manifest_url:
+      _write_state(manifest, state['previous'], cache_dir, manifest_url)
     return path, False
 
   path = _download_model(manifest, cache_dir, progress_callback=progress_callback, phase_callback=phase_callback)
   changed = active is None or active.sha256 != manifest.sha256
   if changed:
     previous = active if active is not None and model_path(active, cache_dir).is_file() else state["previous"]
-    _write_state(manifest, previous, cache_dir)
+    _write_state(manifest, previous, cache_dir, manifest_url)
     keep = {manifest.cache_filename}
     if previous is not None:
       keep.add(previous.cache_filename)
     for old_model in cache_dir.glob("big_driving_supercombo-*.onnx"):
       if old_model.name not in keep:
         old_model.unlink()
+  elif active != manifest:
+    _write_state(manifest, state['previous'], cache_dir, manifest_url)
   return path, changed
 
 
@@ -301,12 +308,31 @@ def active_model_path(cache_dir: Path | None = None) -> Path | None:
   return model_path(active, cache_dir) if active is not None else None
 
 
+def selected_manifest(cache_dir: Path | None = None) -> BigModelManifest | None:
+  """Only the current selection may execute; an old download is not a fallback."""
+  if os.getenv('CARROT_BIG_MODEL_STARTUP_FAILED') == '1':
+    return None
+  active = active_manifest(cache_dir)
+  if active is None:
+    return None
+  manifest_url = os.getenv('CARROT_BIG_MODEL_MANIFEST', DEFAULT_MANIFEST_URL)
+  if manifest_url == DEFAULT_MANIFEST_URL:
+    # This lookup is pinned in source and never uses the network.
+    selected = fetch_manifest(DEFAULT_MANIFEST_URL)
+    return active if (active.sha256, active.size, active.filename) == (selected.sha256, selected.size, selected.filename) else None
+  try:
+    # Explicit custom catalogs are resolved by delivery, never by modeld.
+    return active if _read_json(state_path(cache_dir)).get('manifest_url') == manifest_url else None
+  except (OSError, ValueError, TypeError, AttributeError):
+    return None
+
+
 def active_model_compiled() -> bool:
-  manifest = active_manifest()
+  manifest = selected_manifest()
   if manifest is None:
     return False
   from openpilot.selfdrive.modeld.precompiled_model import installed
-  if installed() is not None:
+  if installed(manifest) is not None:
     return True
   if manifest.precompiled_only:
     return False
@@ -392,9 +418,28 @@ def deliver_model(manifest_url: str, cache_dir: Path, reporter: BigModelStatusRe
       time.sleep(30)
 
 
+class StartupModelStatusReporter(BigModelStatusReporter):
+  def __init__(self, cache_dir: Path, spinner):
+    super().__init__(cache_dir)
+    self.spinner = spinner
+
+  def update(self, state: str, **values):
+    result = super().update(state, **values)
+    if result is not None:
+      detail = result.get('detail') or state.replace('_', ' ')
+      total = result.get('total_bytes', 0)
+      if state == 'downloading' and total:
+        detail = f"Downloading {100 * result.get('downloaded_bytes', 0) // total}%"
+      if state == 'waiting_for_network':
+        detail = f"Waiting for network ({result.get('error_code', 'network')}); retrying in 30s"
+      self.spinner.update(f"USB eGPU model\n{detail}")
+    return result
+
+
 def main() -> int:
   parser = argparse.ArgumentParser(description=__doc__)
   parser.add_argument("--ensure-if-egpu", action="store_true")
+  parser.add_argument("--prepare-for-startup", action="store_true")
   parser.add_argument("--active-sha", action="store_true")
   parser.add_argument("--active-path", action="store_true")
   parser.add_argument("--manifest-url", default=os.getenv("CARROT_BIG_MODEL_MANIFEST", DEFAULT_MANIFEST_URL))
@@ -404,6 +449,12 @@ def main() -> int:
 
   if args.network_wait_seconds < 0.0:
     parser.error("--network-wait-seconds must be non-negative")
+
+  if args.prepare_for_startup:
+    from openpilot.common.spinner import Spinner
+    with Spinner() as spinner:
+      reporter = StartupModelStatusReporter(model_cache_dir(), spinner)
+      return 0 if deliver_model(args.manifest_url, model_cache_dir(), reporter, retry_network=args.retry_network) else 1
 
   if args.ensure_if_egpu:
     from openpilot.common.params import Params
@@ -426,11 +477,11 @@ def main() -> int:
         print(f"big model update skipped: {e}", file=sys.stderr)
     return 0
 
-  manifest = active_manifest()
+  manifest = selected_manifest()
   if args.active_sha:
     print(manifest.sha256 if manifest is not None else "")
   elif args.active_path:
-    path = active_model_path()
+    path = model_path(manifest) if manifest is not None else None
     print(path if path is not None else "")
   else:
     parser.error("select an action")

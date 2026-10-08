@@ -37,6 +37,11 @@ static bool check_started(void) {
   return started;
 }
 
+static bool check_started_ignition_only(void) {
+  bool started = current_board->check_ignition() || ignition_can;
+  return started;
+}
+
 void debug_ring_callback(uart_ring *ring) {
   char rcv;
   while (get_char(ring, &rcv)) {
@@ -71,7 +76,8 @@ void set_safety_mode(uint16_t mode, uint16_t param) {
   // running instead of busy-waiting through six INIT cycles inside SPI RX.
   ENTER_CRITICAL();
   if ((current_safety_mode == SAFETY_ELM327) && (current_safety_param != 0U) &&
-      (mode == SAFETY_HYUNDAI_CANFD) && (can_silent == ALL_CAN_LIVE) && !can_loopback &&
+      ((mode == SAFETY_HYUNDAI) || (mode == SAFETY_HYUNDAI_LEGACY) || (mode == SAFETY_HYUNDAI_CANFD)) &&
+      (can_silent == ALL_CAN_LIVE) && !can_loopback &&
       (power_save_status == POWER_SAVE_STATUS_DISABLED) &&
       current_board->harness_config->has_harness &&
       (harness.status != HARNESS_STATUS_NC) &&
@@ -232,7 +238,7 @@ static void tick_handler(void) {
       const bool recent_heartbeat = heartbeat_counter == 0U;
 
       // tick drivers at 1Hz
-      bootkick_tick(check_started(), recent_heartbeat);
+      bootkick_tick(check_started_ignition_only(), recent_heartbeat, wake_on_can);
 
       // increase heartbeat counter and cap it at the uint32 limit
       if (heartbeat_counter < UINT32_MAX) {

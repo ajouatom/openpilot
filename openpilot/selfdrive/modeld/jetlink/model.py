@@ -1,4 +1,5 @@
 """Native camera warp and a guarded switch between local and Jetlink inference."""
+import io
 import json
 import os
 from pathlib import Path
@@ -6,9 +7,17 @@ import time
 
 import numpy as np
 
-from openpilot.selfdrive.modeld.jetlink.link import Client, SPEC, FAULT, state
+from openpilot.selfdrive.modeld.jetlink.link import ClientConnection, SPEC, FAULT, state
+from openpilot.selfdrive.modeld.jetlink.prepare import WarpPreparation
+from openpilot.selfdrive.modeld.jetlink.contracts import model_name, parse_outputs
 
 MODEL_STATUS = Path('/dev/shm/carrot-jetlink-model.json')
+
+
+def make_warp_inputs():
+  from tinygrad import Tensor
+  transforms = {k: np.eye(3, dtype=np.float32) for k in ('tfm', 'big_tfm')}
+  return transforms, {k: Tensor(v, device='NPY').realize() for k, v in transforms.items()}
 
 
 def may_join(now, messages, valid, received):
@@ -22,15 +31,29 @@ def may_join(now, messages, valid, received):
 
 
 class Warp:
-  def __init__(self, width, height):
-    from tinygrad import Tensor, TinyJit, Device
-    from openpilot.selfdrive.modeld.compile_modeld import NV12Frame, make_warp
+  def __init__(self, width, height, prepared=None, input_buffers=None):
+    started, cpu_started = time.monotonic(), time.thread_time()
+    from tinygrad import Device
     from openpilot.system.camerad.cameras.nv12_info import get_nv12_info
-    if Device.DEFAULT != 'QCOM':
+    # The local model already uses QCOM explicitly. DEFAULT can still be unset
+    # and probe every earlier backend, blocking live inference for hundreds of ms.
+    if Device['QCOM'].device != 'QCOM':
       raise RuntimeError('Jetlink camera adapter requires the native QCOM device')
     self.size = get_nv12_info(width, height)[3]
-    self.transforms = {k: np.eye(3, dtype=np.float32) for k in ('tfm', 'big_tfm')}
-    self.inputs = {k: Tensor(v, device='NPY').realize() for k, v in self.transforms.items()}
+    self.transforms, self.inputs = input_buffers if input_buffers is not None else make_warp_inputs()
+    self.blobs = {}
+    self.timings = (0., 0., 0.)
+    if prepared is not None:
+      inputs_ready = time.monotonic()
+      from openpilot.selfdrive.modeld.helpers import load_oob
+      value = load_oob(io.BytesIO(prepared))
+      if value['identity'] != (width, height, self.size, SPEC.sha256):
+        raise ValueError('prepared Jetlink warp contract mismatch')
+      self.run_warp = value['warp']
+      self.init_timings = (inputs_ready - started, time.monotonic() - inputs_ready, time.thread_time() - cpu_started)
+      return
+    from tinygrad import Tensor, TinyJit
+    from openpilot.selfdrive.modeld.compile_modeld import NV12Frame, make_warp
     self.run_warp = TinyJit(make_warp(NV12Frame(width, height, *get_nv12_info(width, height)), 512, 256, SPEC.frame_skip))
     dummy = {k: Tensor(np.zeros(self.size, np.uint8), device='QCOM').realize() for k in ('frame', 'big_frame')}
     for _ in range(3):
@@ -41,8 +64,22 @@ class Warp:
     from openpilot.selfdrive.modeld.jetlink.warp import validated_warp
     self.run_warp = validated_warp(self.run_warp, NV12Frame(width, height, *get_nv12_info(width, height)),
                                    self.transforms, self.inputs, SPEC.frame_skip, HARDWARE.get_device_type())
-    self.blobs = {}
-    self.timings = (0., 0., 0.)
+
+  def save_prepared(self, path, width, height):
+    from tinygrad import Tensor
+    from openpilot.selfdrive.modeld.helpers import dump_oob
+    with path.open('wb') as output:
+      dump_oob({'identity': (width, height, self.size, SPEC.sha256), 'warp': self.run_warp}, output)
+    # Verify serialization before handing the executable to modeld. The existing
+    # 27-probe exact GPU validation has already selected the implementation.
+    restored = Warp(width, height, path.read_bytes())
+    rng = np.random.default_rng(7527)
+    frames = {k: Tensor(rng.integers(0, 256, self.size, dtype=np.uint8), device='QCOM').realize() for k in ('frame', 'big_frame')}
+    expected = self.run_warp(**self.inputs, **frames).numpy()
+    for _ in range(3):
+      actual = restored.run_warp(**restored.inputs, **frames).numpy()
+      if actual.shape != expected.shape or actual.dtype != expected.dtype or not np.array_equal(actual, expected):
+        raise ValueError('prepared Jetlink warp serialization changed pixels')
 
   def __call__(self, bufs, transforms):
     from tinygrad import Tensor
@@ -75,13 +112,19 @@ class JoiningModel:
     self.phase_enabled = HARDWARE.get_device_type() == 'mici'
     self.source_sof = 0
     self.small = small
-    self.warp = Warp(width, height)
+    self.warp = None
+    self.warp_size = (width, height)
+    # Keep small NPY-only inputs ready, independent of the local model's buffers.
+    self.warp_inputs = make_warp_inputs()
+    self.preparation = None
     self.parser = Parser()
     self.client = None
+    self.connection = None
     self.active = False
     self.usbgpu = False
     self.vision_input_names = ['img', 'big_img']
     self.packed = np.zeros(SPEC.packed_nelem, np.float32)
+    self.spec = SPEC
     self.views = {name: a.reshape(shape) for (name, shape), a in zip(
       SPEC.packed_shapes.items(), np.split(self.packed, np.cumsum(SPEC.packed_sizes[:-1])), strict=True)}
     self.prev_desire = np.zeros(8, np.float32)
@@ -102,13 +145,17 @@ class JoiningModel:
                                 {k: sm.valid[k] and sm.alive[k] for k in ('carState', 'selfdriveState', 'carControl')}, sm.recv_time)
     if now >= self.next_status:
       self.ready = state().get('state') == 'ready'
-      record = dict(active=self.active, ready=self.ready, model='Cinque v2', error=self.error, updated=now)
+      record = {'active': self.active, 'ready': self.ready, 'model': model_name(self.spec), 'sha256': self.spec.sha256,
+                'error': self.error, 'updated': now}
       tmp = MODEL_STATUS.with_suffix('.tmp')
       tmp.write_text(json.dumps(record))
       os.replace(tmp, MODEL_STATUS)
       self.next_status = now + 1
 
   def _reset_small(self):
+    if hasattr(self.small, 'reset'):
+      self.small.reset()
+      return
     # Captured JITs keep buffer identities: clear in place, never replace queues.
     self.small.prev_desire[:] = 0
     for array in self.small.npy.values():
@@ -119,13 +166,47 @@ class JoiningModel:
 
   def run(self, bufs, transforms, inputs, prepare_only):
     from openpilot.common.swaglog import cloudlog
-    if self.client is None and self.small_runs >= 3 and self.ready and self.join_allowed and time.monotonic() >= self.next_join:
+    if self.preparation is not None and not self.ready:
+      self.preparation.close()
+      self.preparation = None
+    if self.warp is None and self.small_runs >= 3 and self.ready and self.join_allowed and time.monotonic() >= self.next_join:
       try:
-        self.client = Client()
-        self.packed[:] = 0
-        self.prev_desire[:] = 0
-        self.reset = True
+        if self.preparation is None:
+          cloudlog.warning('Jetlink warp preparation starting after %d internal outputs', self.small_runs)
+          self.preparation = WarpPreparation(*self.warp_size)
+        if self.preparation.future.done():
+          prepared, seconds = self.preparation.future.result()
+          started = time.monotonic()
+          self.warp = Warp(*self.warp_size, prepared=prepared, input_buffers=self.warp_inputs)
+          self.preparation = None
+          cloudlog.warning('Jetlink warp prepared in %.3fs; installed in %.3fs', seconds, time.monotonic() - started)
+          cloudlog.warning('Jetlink warp install input/restore/cpu seconds: %s', getattr(self.warp, 'init_timings', ()))
       except Exception as exc:
+        cloudlog.exception('Jetlink warp preparation failed; retaining internal model')
+        if self.preparation is not None:
+          self.preparation.close()
+          self.preparation = None
+        self.error = str(exc)
+        self.next_join = time.monotonic() + 30
+    if self.connection is not None and not (self.ready and self.join_allowed):
+      self.connection.close()
+      self.connection = None
+    if (self.warp is not None and self.client is None and self.small_runs >= 3 and
+        self.ready and self.join_allowed and time.monotonic() >= self.next_join):
+      try:
+        if self.connection is None:
+          self.connection = ClientConnection()
+        if self.connection.future.done():
+          self.client = self.connection.future.result()
+          self.connection = None
+          self.spec = self.client.spec
+          self.packed = np.zeros(self.spec.packed_nelem, np.float32)
+          self.views = {name: a.reshape(shape) for (name, shape), a in zip(
+            self.spec.packed_shapes.items(), np.split(self.packed, np.cumsum(self.spec.packed_sizes[:-1])), strict=True)}
+          self.prev_desire[:] = 0
+          self.reset = True
+      except Exception as exc:
+        self.connection = None
         self.error = str(exc)
         self.next_join = time.monotonic() + 5
     if self.client is not None:
@@ -143,15 +224,16 @@ class JoiningModel:
         result = self.client.infer(images, self.packed, self.frame, self.reset, source_sof=self.source_sof)
         replied = time.monotonic()
         self.reset = False
-        self.views['prev_feat'][:] = result[SPEC.output_slices['hidden_state']]
+        if 'prev_feat' in self.views:
+          self.views['prev_feat'][:] = result[self.spec.output_slices['hidden_state']]
         if not self.active:
-          cloudlog.warning('Jetlink active: Cinque v2 %s', SPEC.sha256)
+          cloudlog.warning('Jetlink active: %s %s', model_name(self.spec), self.spec.sha256)
           self.active = True
           self.error = ''
           self.next_status = 0
         # As in the generic eGPU runtime, run the full recurrent graph for each
         # received pair. Camera gaps still propagate unchanged into pose validity.
-        parsed = self.parser.parse_outputs({k: result[np.newaxis, v] for k, v in SPEC.output_slices.items()})
+        parsed = parse_outputs(self.parser, self.spec, result)
         if os.getenv('SEND_RAW_PRED'):
           parsed['raw_pred'] = result.copy()
         finished = time.monotonic()

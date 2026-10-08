@@ -16,3 +16,4 @@ for project_name, project in build_projects.items():
     flags.append('-DENABLE_SPI')
 
   build_project(project_name, project, flags)
+  build_project(f"{project_name}_tesla_wake", project, [*flags, "-DPANDA_TESLA_WAKE_ON_CAN"])

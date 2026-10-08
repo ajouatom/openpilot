@@ -254,3 +254,91 @@ working-tree experiments are excluded from build inputs. Physical SPI response,
 relay behavior and warning resolution still require repeated device startups.
 This change modifies Panda firmware and requires its normal startup rebuild/
 installation, unlike the preceding host-only template-recovery correction.
+
+## Extend the same H7 handoff to classic Hyundai CAN (2026-10-07)
+
+The user requested the same conditional controller preservation for classic
+CAN. The destination allowlist now includes SAFETY_HYUNDAI (8) and
+SAFETY_HYUNDAI_LEGACY (23), alongside SAFETY_HYUNDAI_CANFD (28). This is about
+vehicle safety modes on H7's FDCAN hardware: classic CAN frames also use that
+controller. F4's bxCAN driver and all other manufacturers remain unchanged.
+
+No eligibility check was relaxed. Only live normal-ELM327 handoff with the
+same known-good timing/mapping, harness/mux, no hardware errors and no pending
+TX may skip controller INIT and mux reapplication. Safety hooks, queue cleanup,
+relay ownership and transition diagnostics still execute. Every ineligible
+case retains full initialization. In particular, this does not remove initial
+boot configuration, bitrate changes, fault recovery or safety-state resets.
+
+The production-function C harness now covers each of modes 8/23/28 on H7 and
+the unchanged F4 branch, the 64-pair mode transition matrix and 20 rejection
+conditions for each target. SPI retry duration is not a measurement of CAN
+initialization duration. Root cause of the reported SPI burst remains
+unconfirmed, and this extension is not a demonstrated cure. Updated Panda
+firmware and classic-CAN device startup evidence are required to establish that
+`preserve=1` is actually selected and whether NACK/CAN gaps improve.
+
+Validation: seven compiled C harness cases and 14 firmware source-identity
+tests pass. ARM GCC 13.3.1 builds all eight Panda/Jungle F4/H7 main/bootstub
+targets with `-Werror`, and Panda development signing passes. Build inputs
+come from a clean HEAD archive with only this task's main.c change overlaid;
+unrelated working-tree safety experiments are excluded.
+
+## Independent CCNC host counter (2026-10-06)
+
+The host's `CCNC_0x162` copy now removes the snapshot's explicit `COUNTER` and
+uses the existing CANPacker per-address counter, as the other cluster messages
+already do. The first generated message uses the initial RX counter plus one,
+modulo 256. Later generated messages increment that stored value by one;
+repeated, skipped or wrapped RX snapshots cannot reseed it. Unscheduled calls
+and absent templates do not advance the sequence, and a new packer starts a new
+sequence. Display fields, transmission schedule and automatic CRC calculation
+are unchanged.
+
+Direct-TX mode passes this independent host sequence through. Default RX-paced
+mode still replaces it with each original vehicle RX counter and recomputes
+CRC inside Panda; its final output is unchanged. This is a host-only correction,
+with no Panda firmware or setting/default change.
+
+Validation: 303 focused Hyundai tests pass, including Python and native packer
+wrap/seed/repeated-RX tests, plus 183 compiled Panda cluster-hook tests. A
+1,201-message recorded-payload replay produces only +1 counter steps with valid
+CRCs and identical display bytes on both packer backends. Production C hooks
+preserve the new direct-TX sequence and produce byte-identical old/new RX-paced
+outputs for all replay inputs. Desktop replay does not establish physical ECU
+acceptance or resolution of the reported cluster warning. Incident data remains
+local only.
+
+## Forwarding timer rollover (2026-10-07)
+
+The legacy per-ID forwarding suppression table previously treated an initial
+`last_tx_us=0` as a recent host transmission whenever the 32-bit microsecond
+timer wrapped (about 71 minutes 35 seconds). Unreplaced stock messages could
+therefore be blocked for their configured period plus 20 ms, even though no
+host replacement was sent. This affects the fallback forwarding table, not
+only the optional direct-cluster path.
+
+Each entry now records whether a replacement was accepted and the existing
+1 Hz safety-mode tick at that time. Forwarding expires that state at the
+original microsecond deadline. A coarse age greater than two ticks also
+expires it, preventing an old timestamp from becoming fresh after an entire
+timer wrap with no intervening traffic on the ID. Two tick boundaries are
+allowed because the longest existing deadline is 1.02 seconds. A legitimate
+TX at microsecond zero remains valid, and mode initialization clears all
+entries. Allowlist or relay rejection cannot arm suppression.
+
+The original suppression durations, control FIFOs, RX-paced cluster delivery,
+direct-send setting/default, counters, CRCs and relay protection remain intact.
+No generic safety tick callback, CAN reset or SPI retry change is introduced.
+This is a Panda firmware change and requires the rebuilt firmware on the
+device; a host-only update cannot change forwarding already running in Panda.
+
+Validation: 57 focused startup/full-wrap cases fail against the old compiled
+C hooks. The corrected native forwarding, cluster and button tests plus
+firmware-identity checks pass (408 tests). ARM GCC 13.3.1 builds F4/H7 main and
+bootstub targets with `-Werror`; development signing passes. A local recorded
+input replay of 7,774 frames, using an inferred timer phase, reproduces eleven
+old-hook blocks and none with the corrected hooks, with identical payloads.
+Builds and C tests exclude unrelated local safety experiments. These results
+establish the forwarding correction, not physical ECU acceptance or resolution
+of every intermittent cluster warning. Incident data remains local only.

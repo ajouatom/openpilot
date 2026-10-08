@@ -50,8 +50,8 @@ def test_optional_model_reuse_checks_dependencies(tmp_path: Path, monkeypatch, e
   if exists:
     manifest_path.write_text('1')
   manifest = SimpleNamespace(model_id='test', sha256='a' * 64, size=10, precompiled_only=False)
-  monkeypatch.setattr(big_model, 'active_model_path', lambda: tmp_path / 'big.onnx')
-  monkeypatch.setattr(big_model, 'active_manifest', lambda: manifest)
+  monkeypatch.setattr(big_model, 'model_path', lambda _manifest: tmp_path / 'big.onnx')
+  monkeypatch.setattr(big_model, 'selected_manifest', lambda: manifest)
   monkeypatch.setattr(big_model, 'model_cache_dir', lambda: tmp_path)
   monkeypatch.setattr(helpers, 'modeld_pkl_path', lambda **kwargs: path)
   monkeypatch.setattr(helpers, 'usbgpu_present', lambda: True)
@@ -89,8 +89,8 @@ def test_precompiled_delivery_or_local_compile_fallback(tmp_path, monkeypatch, d
     isinstance(t, ast.Name) and t.id.startswith('USBGPU_') for t in n.targets)]
   body += [n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == 'build_usbgpu_model']
   manifest = SimpleNamespace(model_id='test', sha256='a' * 64, size=10, precompiled_only=False)
-  monkeypatch.setattr(big_model, 'active_model_path', lambda: tmp_path / 'model.onnx')
-  monkeypatch.setattr(big_model, 'active_manifest', lambda: manifest)
+  monkeypatch.setattr(big_model, 'model_path', lambda _manifest: tmp_path / 'model.onnx')
+  monkeypatch.setattr(big_model, 'selected_manifest', lambda: manifest)
   monkeypatch.setattr(big_model, 'model_cache_dir', lambda: tmp_path)
   monkeypatch.setattr(helpers, 'modeld_pkl_path', lambda **kw: tmp_path / 'local.pkl')
   monkeypatch.setattr(helpers, 'usbgpu_present', lambda: True)

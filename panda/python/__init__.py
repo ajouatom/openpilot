@@ -128,9 +128,9 @@ class Panda:
   HW_TYPE_CUATRO = b'\x0a'
 
   CAN_PACKET_VERSION = 4
-  HEALTH_PACKET_VERSION = 16
+  HEALTH_PACKET_VERSION = 17
   CAN_HEALTH_PACKET_VERSION = 5
-  HEALTH_STRUCT = struct.Struct("<IIIIIIIIBBBBBHBBBHfBBHBHHB")
+  HEALTH_STRUCT = struct.Struct("<IIIIIIIIBBBBBBHBBBHfBBHBHHB")
   CAN_HEALTH_STRUCT = struct.Struct("<BIBBBBBBBBIIIIIIIHHBBBIIII")
 
   F4_DEVICES = [HW_TYPE_WHITE_PANDA, HW_TYPE_GREY_PANDA, HW_TYPE_BLACK_PANDA, HW_TYPE_UNO, HW_TYPE_DOS]
@@ -561,22 +561,23 @@ class Panda:
       "faults": a[7],
       "ignition_line": a[8],
       "ignition_can": a[9],
-      "controls_allowed": a[10],
-      "car_harness_status": a[11],
-      "safety_mode": a[12],
-      "safety_param": a[13],
-      "fault_status": a[14],
-      "power_save_enabled": a[15],
-      "heartbeat_lost": a[16],
-      "alternative_experience": a[17],
-      "interrupt_load": a[18],
-      "fan_power": a[19],
-      "safety_rx_checks_invalid": a[20],
-      "spi_checksum_error_count": a[21],
-      "fan_stall_count": a[22],
-      "sbu1_voltage_mV": a[23],
-      "sbu2_voltage_mV": a[24],
-      "som_reset_triggered": a[25],
+      "wake_on_can": a[10],
+      "controls_allowed": a[11],
+      "car_harness_status": a[12],
+      "safety_mode": a[13],
+      "safety_param": a[14],
+      "fault_status": a[15],
+      "power_save_enabled": a[16],
+      "heartbeat_lost": a[17],
+      "alternative_experience": a[18],
+      "interrupt_load": a[19],
+      "fan_power": a[20],
+      "safety_rx_checks_invalid": a[21],
+      "spi_checksum_error_count": a[22],
+      "fan_stall_count": a[23],
+      "sbu1_voltage_mV": a[24],
+      "sbu2_voltage_mV": a[25],
+      "som_reset_triggered": a[26],
     }
 
   @ensure_can_health_packet_version
