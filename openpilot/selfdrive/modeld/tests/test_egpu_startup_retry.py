@@ -10,7 +10,8 @@ from openpilot.selfdrive.modeld.helpers import usbgpu_pcie_not_ready
 
 
 @pytest.mark.parametrize('precompiled,failures,expected_calls', [(True, 10, 2), (True, 1, 2), (False, 10, 6)])
-def test_link_retry_stops_then_preserves_internal_fallback(monkeypatch, tmp_path, precompiled, failures, expected_calls):
+@pytest.mark.parametrize('message', ['PCIe link not up (LTSSM=0x00)', 'bulk OUT 0x02 failed: Input/Output Error'])
+def test_link_retry_stops_then_preserves_internal_fallback(monkeypatch, tmp_path, precompiled, failures, expected_calls, message):
   source = Path(__file__).parents[1] / 'modeld.py'
   tree = ast.parse(source.read_text(encoding='utf8'))
   constants = [node for node in tree.body if isinstance(node, ast.Assign)
@@ -26,7 +27,7 @@ def test_link_retry_stops_then_preserves_internal_fallback(monkeypatch, tmp_path
   def construct(*args):
     calls.append(args)
     if len(calls) <= failures:
-      raise RuntimeError('PCIe link not up (LTSSM=0x00)')
+      raise RuntimeError(message)
     return sentinel
   monkeypatch.setattr(precompiled_runner, 'PrecompiledModelState', construct)
   namespace = {
