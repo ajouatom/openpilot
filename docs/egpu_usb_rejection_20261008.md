@@ -28,7 +28,22 @@ must succeed. No onroad hot swap or automatic reboot is introduced.
 serialized worker errors, previous-boot migration, corruption repair, retained
 permanent rejection, delivery, startup selection and validation receipt behavior.
 Ruff passes. Local diagnostic captures remain private under `.analysis/`.
-Device recovery and the underlying USB issue require separate live verification.
+
+After explicit approval, the parked/disengaged C4 was fast-forwarded from
+be76615d to 699f9424 and rebooted through manager. Startup recovered the matching
+previous-boot rejection, reverified artifacts and passed the GPU smoke test.
+Changing the shared helper also triggered internal-model recompilation; normal
+model output resumed roughly five minutes after reboot. The active eGPU worker
+used the e20cde17 PKL and reported checkpoint 870a4823/12864. The retained failure
+report belongs to the old boot; no rejected marker or new failure appeared.
+
+A 30.04-second parked observation received 602 model messages (20.04 Hz), zero
+invalid model/pose/DM updates and zero model frame-ID gaps or reported drops.
+Model execution time averaged 40.02 ms, maximum 42.70 ms; aggregate core7 usage
+was 67.2%. These are current parked measurements, not a matched before/after CPU
+comparison or driving validation. The underlying physical USB-error cause is
+still unresolved. Linux MDM2 CI passed 163 contract/retry tests, one native CPU
+runtime test and 11 Web tests with generated assets unchanged.
 
 Docs-Not-Needed: Internal artifact rejection/retry correction; no setting change
 or user guide work requested.
