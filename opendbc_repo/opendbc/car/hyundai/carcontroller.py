@@ -547,7 +547,9 @@ class CarController(CarControllerBase):
       if self.frame % 5 == 0 and (not hda2 or hda2_long or camera_scc):
         can_sends.extend(hyundaicanfd.create_lfahda_cluster(
           self.packer, CS, self.CAN, CC.longActive, CC.latActive,
-          suppress_camera_auto_disengage=bool(camera_scc and self.car_fingerprint == CAR.GENESIS_GV70_1ST_GEN),
+          suppress_camera_auto_disengage=bool(camera_scc and self.car_fingerprint in (
+            CAR.GENESIS_GV70_1ST_GEN, CAR.KIA_SORENTO_HEV_4TH_GEN,
+          )),
           dm_alert=hud_control.driverMonitoringAlert if (CS.adrv_0x161 is None or
                    (camera_scc and not self.CP.openpilotLongitudinalControl)) else 0,
         ))
