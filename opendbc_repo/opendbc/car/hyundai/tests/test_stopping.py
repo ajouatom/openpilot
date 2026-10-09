@@ -223,15 +223,15 @@ def make_cs():
 
 
 def send(camera, controller, CS, *, enabled=True, override=False, stopping=True, accel=-0.5,
-         previous_value=-0.5, previous_target=-0.5):
+         previous_value=-0.5, previous_target=-0.5, jerk_upper=2.0):
   packer = CANPacker("hyundai_canfd_generated")
   can = SimpleNamespace(ECAN=0)
   hud = SimpleNamespace(leadDistanceBars=2, leadVisible=False)
-  jerk = SimpleNamespace(carrot_cruise=0, jerk_u=2.0, jerk_l=1.0)
+  jerk = SimpleNamespace(carrot_cruise=0, jerk_u=jerk_upper, jerk_l=1.0)
   if camera:
     msg, actual_value = create_acc_control_scc2(packer, can, enabled, previous_value, accel, stopping, override, 30.0, hud, jerk, CS, controller)
   else:
-    msg, actual_value = create_acc_control(packer, can, enabled, previous_target, accel, stopping, override, 30.0, hud, 2.0, 1.0, CS,
+    msg, actual_value = create_acc_control(packer, can, enabled, previous_target, accel, stopping, override, 30.0, hud, jerk_upper, 1.0, CS,
                                          controller, accel_value_last=previous_value)
   if msg is None:
     return None
@@ -246,6 +246,7 @@ def send(camera, controller, CS, *, enabled=True, override=False, stopping=True,
     assert values["InfoDisplay"] == 0
   assert packed >> 74 & 7 == values["InfoDisplay"]
   assert packed >> 184 & 3 == values["StopReq"]
+  assert ((packed >> 152) & 127) * 0.1 == pytest.approx(values["JerkUpperLimit"])
   assert (packed >> 176 & 63) * 0.02 == pytest.approx(values["AccelLimitBandLower"])
   return values
 
@@ -478,3 +479,109 @@ def test_confirmed_existing_hold_is_not_released():
   command = step(controller, speed=0., held=True)
   assert command.stop_req == 1
   assert controller.phase == StopPhase.held
+
+
+@pytest.mark.parametrize('camera', [True, False])
+@pytest.mark.parametrize('previous_upper', [.5, 1., 2., 5.])
+@pytest.mark.parametrize('soft_hold', [False, True])
+def test_stop_upper_increase_waits_one_packet_without_delaying_stop(camera, previous_upper, soft_hold):
+  cs = make_cs()
+  controller = CanfdStopping()
+  first = send(camera, controller, cs, stopping=False, jerk_upper=previous_upper)
+  assert first['StopReq'] == 0
+  assert first['JerkUpperLimit'] == previous_upper
+  if soft_hold:
+    cs.softHoldActive = 2
+    cs.out.vEgo = cs.out.vEgoRaw = 0.
+    cs.out.wheelSpeeds = SimpleNamespace(fl=0., fr=0., rl=0., rr=0.)
+  first = send(camera, controller, cs, stopping=not soft_hold, jerk_upper=2.)
+  second = send(camera, controller, cs, stopping=not soft_hold, jerk_upper=2.)
+  assert first['StopReq'] == second['StopReq'] == 1
+  assert first['JerkUpperLimit'] == min(previous_upper, 2.)
+  assert second['JerkUpperLimit'] == 2.
+  assert first['aReqRaw'] == second['aReqRaw'] == -.5
+  assert first['aReqValue'] == second['aReqValue'] == -.5
+  assert first['AccelLimitBandLower'] == second['AccelLimitBandLower'] == STOP_LOWER_BAND
+
+
+@pytest.mark.parametrize('camera', [True, False])
+def test_initial_stop_without_previous_packet_uses_upper_one(camera):
+  controller = CanfdStopping()
+  cs = make_cs()
+  assert send(camera, controller, cs)['JerkUpperLimit'] == 1.
+  assert send(camera, controller, cs)['JerkUpperLimit'] == 2.
+
+
+@pytest.mark.parametrize('camera', [True, False])
+def test_upper_history_survives_departure_and_interlock_episode_resets(camera):
+  cs = make_cs()
+  controller = CanfdStopping()
+  for _ in range(2):
+    send(camera, controller, cs)
+  send(camera, controller, cs, stopping=False, jerk_upper=.5)
+  assert controller.phase == StopPhase.idle
+  assert send(camera, controller, cs)['JerkUpperLimit'] == .5
+  cs.out.canValid = False
+  blocked = send(camera, controller, cs, stopping=False, jerk_upper=.5)
+  assert blocked['StopReq'] == 0
+  assert controller.phase == StopPhase.idle
+  cs.out.canValid = True
+  assert send(camera, controller, cs)['JerkUpperLimit'] == .5
+  assert send(camera, controller, cs)['JerkUpperLimit'] == 2.
+
+
+@pytest.mark.parametrize('camera', [True, False])
+def test_upper_edge_uses_final_request_after_approach_and_retry(camera):
+  cs = make_cs()
+  controller = CanfdStopping()
+  cs.out.vEgo = cs.out.vEgoRaw = 1.
+  cs.out.wheelSpeeds = SimpleNamespace(fl=1., fr=1., rl=1., rr=1.)
+  approach = send(camera, controller, cs)
+  assert approach['StopReq'] == 0
+  assert approach['JerkUpperLimit'] == 2.
+  cs.out.vEgo = cs.out.vEgoRaw = .3
+  cs.out.wheelSpeeds = SimpleNamespace(fl=.3, fr=.3, rl=.3, rr=.3)
+  request = send(camera, controller, cs)
+  assert request['StopReq'] == 1
+  assert request['JerkUpperLimit'] == 2.  # already sent before the real edge
+  for _ in range(170):
+    previous_phase = controller.phase
+    packet = send(camera, controller, cs)
+    assert packet['JerkUpperLimit'] == 2.
+    if controller.phase == StopPhase.retry:
+      assert previous_phase == StopPhase.release
+      assert packet['StopReq'] == 1
+      break
+  else:
+    pytest.fail('retry must remain available')
+
+
+def test_missing_camera_snapshot_does_not_consume_first_upper_packet():
+  cs = make_cs()
+  controller = CanfdStopping()
+  send(True, controller, cs, stopping=False, jerk_upper=.5)
+  snapshot = cs.scc_control
+  cs.scc_control = None
+  assert send(True, controller, cs) is None
+  cs.scc_control = snapshot
+  assert send(True, controller, cs)['JerkUpperLimit'] == .5
+  assert send(True, controller, cs)['JerkUpperLimit'] == 2.
+
+
+@pytest.mark.parametrize('camera', [True, False])
+def test_upper_sequence_changes_no_other_decoded_packet_fields(camera):
+  controller, reference = CanfdStopping(), CanfdStopping()
+  reference.limit_scc_jerk_upper = lambda stop_req, upper: upper
+  cs = make_cs()
+  for tick in range(220):
+    # Include ordinary PID frames, stopping, release, retry and fallback.
+    args = dict(stopping=tick >= 5, jerk_upper=1. if tick < 5 else 2.,
+                accel=-.5, previous_value=-.8, previous_target=-.8)
+    actual = dict(send(camera, controller, cs, **args))
+    expected = dict(send(camera, reference, cs, **args))
+    actual.pop('CHECKSUM')
+    expected.pop('CHECKSUM')
+    actual.pop('JerkUpperLimit')
+    expected.pop('JerkUpperLimit')
+    assert actual == expected
+    assert controller.phase == reference.phase
