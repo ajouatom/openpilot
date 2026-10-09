@@ -23,8 +23,12 @@ def fake_state(current_speed=20.0, target_speed=25.0, template_time=2_000_000_00
   )
 
 
-def fake_control():
-  return SimpleNamespace(enabled=True, cruiseControl=SimpleNamespace(cancel=False))
+def fake_control(active_carrot=0):
+  return SimpleNamespace(
+    enabled=True,
+    cruiseControl=SimpleNamespace(cancel=False),
+    hudControl=SimpleNamespace(activeCarrot=active_carrot),
+  )
 
 
 def test_speed_wheel_frame_only_changes_signed_tick():
@@ -48,6 +52,31 @@ def test_controller_waits_for_stable_target_and_feedback():
   state.out.cruiseState.speedCluster += 1.0 / 3.6
   state.tesla_speed_limit_target_nanos = 3_100_000_000
   assert len(controller.update(fake_control(), state, 3_100_000_000)) == 1
+
+
+@pytest.mark.parametrize("active_carrot", [0, 1])
+def test_controller_runs_when_carrot_speed_control_is_inactive(active_carrot):
+  controller = TeslaSpeedLimitController(SimpleNamespace(flags=TeslaFlags.AUTO_SPEED_LIMIT))
+  state = fake_state()
+
+  assert controller.update(fake_control(active_carrot), state, 2_000_000_000) == []
+  assert len(controller.update(fake_control(active_carrot), state, 2_500_000_000)) == 1
+
+
+@pytest.mark.parametrize("active_carrot", [2, 3, 4, 5, 6])
+def test_controller_waits_while_carrot_speed_control_is_active(active_carrot):
+  controller = TeslaSpeedLimitController(SimpleNamespace(flags=TeslaFlags.AUTO_SPEED_LIMIT))
+  state = fake_state()
+
+  assert controller.update(fake_control(active_carrot), state, 2_000_000_000) == []
+  state.tesla_speed_limit_target_nanos = 3_000_000_000
+  assert controller.update(fake_control(active_carrot), state, 3_000_000_000) == []
+
+  state.tesla_speed_limit_target_nanos = 3_100_000_000
+  assert controller.update(fake_control(1), state, 3_100_000_000) == []
+  state.tesla_speed_limit_target_nanos = 3_600_000_000
+  state.tesla_speed_button_template_nanos = 3_600_000_000
+  assert len(controller.update(fake_control(1), state, 3_600_000_000)) == 1
 
 
 def test_manual_adjustment_pauses_until_opposite_direction_gesture():
