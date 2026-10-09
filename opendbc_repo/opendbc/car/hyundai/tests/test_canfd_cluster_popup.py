@@ -5,7 +5,10 @@ from types import SimpleNamespace
 import pytest
 
 from opendbc.can import CANPacker
+from opendbc.car import Bus, structs
+from opendbc.car.hyundai import carcontroller, hyundaicanfd
 from opendbc.car.hyundai.hyundaicanfd import create_lfahda_cluster
+from opendbc.car.hyundai.values import CAR, HyundaiFlags
 
 
 def state(popup=3):
@@ -91,3 +94,37 @@ def test_counter_crc_and_input_survive_suppression_transitions(longitudinal):
     assert len(data) == 16
     crc = binascii.crc_hqx(data[2:] + address.to_bytes(2, "little"), 0) ^ 0x041D
     assert int.from_bytes(data[:2], "little") == crc
+
+
+@pytest.mark.parametrize("candidate,eligible", [
+  (CAR.GENESIS_GV70_1ST_GEN, True),
+  (CAR.KIA_SORENTO_HEV_4TH_GEN, True),
+  (CAR.KIA_SORENTO_4TH_GEN, False),
+  (CAR.KIA_EV6, False),
+  (CAR.HYUNDAI_IONIQ_5_PE, False),
+])
+@pytest.mark.parametrize("camera", [False, True])
+@pytest.mark.parametrize("lateral", [False, True])
+@pytest.mark.parametrize("longitudinal", [False, True])
+def test_controller_popup_vehicle_scope(monkeypatch, candidate, eligible, camera, lateral, longitudinal):
+  params = SimpleNamespace(get_int=lambda key: 0, get_bool=lambda key: False)
+  monkeypatch.setattr(carcontroller, "Params", lambda: params)
+  # Exercise the real controller selection and cluster packer; other CAN paths
+  # are unrelated to this display-only vehicle restriction.
+  for name in ("create_steering_messages_camera_scc", "create_steering_messages", "create_lfa_icon_non_camera_scc"):
+    monkeypatch.setattr(hyundaicanfd, name, lambda *a, **kw: [])
+  monkeypatch.setattr(carcontroller.CarController, "create_button_messages", lambda *a, **kw: [])
+  flags = HyundaiFlags.CANFD | (HyundaiFlags.CAMERA_SCC if camera else 0)
+  cp = structs.CarParams(carFingerprint=candidate, flags=int(flags), wheelbase=2.9, steerRatio=14.0,
+                        safetyConfigs=[structs.CarParams.SafetyConfig(safetyModel=structs.CarParams.SafetyModel.hyundaiCanfd)])
+  controller = carcontroller.CarController({Bus.pt: "hyundai_canfd_generated"}, cp)
+  cs = state()
+  cs.out = structs.CarState(canValid=True, vEgoRaw=15)
+  cs.modelV2 = None
+  cs.is_metric = True
+  cs.adrv_0x161 = None
+  cc = structs.CarControl(enabled=True, latActive=lateral, longActive=longitudinal)
+  _, messages = controller.update(cc.as_reader(), cs, 10_000_000)
+  cluster = [data for address, data, bus in messages if address == 0x1E0 and bus == 0]
+  assert len(cluster) == 1
+  assert cluster[0][4] & 7 == (0 if eligible and camera and lateral else 3)

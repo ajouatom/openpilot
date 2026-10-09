@@ -225,3 +225,26 @@ popup requests and their CRCs; counters and other bytes are unchanged. The
 underlying ADAS warning cause and physical popup/chime suppression remain
 unverified. This is a host change; no new Panda firmware change is required by
 this extension. Incident captures and identifiers remain local only.
+
+## Sorento HEV scope extension (2026-10-09)
+
+The user authorized the same observed-popup filter for
+`KIA_SORENTO_HEV_4TH_GEN` with CAMERA_SCC. Two captures show the same camera
+FCA_SYSWARN=1 / VALUE63=15 signature and HDA_InfoPUDis=3 request, without decoded
+MDPS/SCC faults or a separate cluster sound request. The controller now enables
+the existing predicate for this exact platform as well as GV70. Other Sorento
+variants and other platforms remain excluded. Lateral control must still be
+active; longitudinal ON/OFF, fault guards, other popup identities and raw camera
+evidence keep their existing behavior. No steering, forwarding, timing or Panda
+firmware change is included.
+
+Recorded-snapshot comparison covers 2,399 cluster outputs and changes only the
+three matching popup frames and their CRCs, retaining counters and other bytes.
+Neither capture contains recorded audio, so a popup-associated chime remains an
+inference. The shared underlying camera-warning cause and physical display/sound
+suppression remain unvalidated. Incident files and reproduction evidence stay
+local. Controller scope tests exercise the actual cluster output for both target
+platforms, three excluded platforms, CAMERA_SCC ON/OFF, and lateral/longitudinal
+ON/OFF. The two eligible Sorento cases fail before this change; all 251 focused
+popup, feedback-counter, DM-cluster and direct-TX tests pass afterward on desktop
+with native Windows Params storage substituted.

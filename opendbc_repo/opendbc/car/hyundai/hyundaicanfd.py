@@ -355,7 +355,7 @@ def create_lfahda_cluster(packer, CS, CAN, long_active, lat_active, *, suppress_
     values["HDA_OptUsmSta"] = 2
   values["HDA_CntrlModSta"] = 2 if long_active else 0
   values["HDA_LFA_SymSta"] = 2 if lat_active else 0
-  # GV70's blocked stock camera can request this popup with lateral control,
+  # The scoped GV70/Sorento HEV stock cameras can request this popup with lateral control,
   # including while longitudinal control is active. Suppress only the observed
   # signature in the outgoing cluster copy;
   # retain raw camera evidence and all fault / hands-off popup identities.
