@@ -81,11 +81,16 @@ def client_replay_source_description(segment: str) -> dict:
   }
 
 
-async def request_upload_segments(request: web.Request) -> list[str]:
+async def request_upload_segments(request: web.Request) -> tuple[list[str], bool]:
   try:
     body = await request.json()
   except Exception:
     body = {}
+  if not isinstance(body, dict):
+    raise web.HTTPBadRequest(text="invalid upload request")
+  include_all_files = body.get("includeAllFiles", False)
+  if not isinstance(include_all_files, bool):
+    raise web.HTTPBadRequest(text="includeAllFiles must be a boolean")
   segments = body.get("segments")
   if not isinstance(segments, list):
     one = body.get("segment")
@@ -98,7 +103,7 @@ async def request_upload_segments(request: web.Request) -> list[str]:
   )
   if incomplete:
     raise web.HTTPConflict(text=f"segment is still recording or incomplete: {incomplete[0]}")
-  return segments
+  return segments, include_all_files
 
 
 def _realdata_signature() -> tuple | None:
@@ -465,12 +470,12 @@ async def api_dashcam_download(request: web.Request) -> web.StreamResponse:
 
 async def api_dashcam_upload_summary(request: web.Request) -> web.Response:
   try:
-    segments = await request_upload_segments(request)
+    segments, include_all_files = await request_upload_segments(request)
 
     summaries = []
     for segment in segments:
       segment_path = segment_dir(segment)
-      files = await asyncio.to_thread(segment_file_summary, segment_path)
+      files = await asyncio.to_thread(segment_file_summary, segment_path, include_all_files)
       total_size = sum(int(item.get("size") or 0) for item in files)
       summaries.append({
         "segment": segment,
@@ -489,8 +494,8 @@ async def api_dashcam_upload_summary(request: web.Request) -> web.Response:
 
 async def api_dashcam_upload(request: web.Request) -> web.Response:
   try:
-    segments = await request_upload_segments(request)
-    return web.json_response(await upload_jobs.run_upload_segments(segments))
+    segments, include_all_files = await request_upload_segments(request)
+    return web.json_response(await upload_jobs.run_upload_segments(segments, include_all_files=include_all_files))
   except web.HTTPException as e:
     return web.json_response({"ok": False, "error": e.text or e.reason}, status=e.status)
   except Exception as e:
@@ -499,7 +504,7 @@ async def api_dashcam_upload(request: web.Request) -> web.Response:
 
 async def api_dashcam_upload_start(request: web.Request) -> web.Response:
   try:
-    segments = await request_upload_segments(request)
+    segments, include_all_files = await request_upload_segments(request)
     running = upload_jobs.running_job()
     if running:
       return web.json_response({
@@ -508,7 +513,7 @@ async def api_dashcam_upload_start(request: web.Request) -> web.Response:
         "job_id": running.get("id"),
         "job": upload_jobs.snapshot(running),
       }, status=409)
-    job = upload_jobs.create_job(segments)
+    job = upload_jobs.create_job(segments, include_all_files=include_all_files)
     upload_jobs.start_job(job)
     return web.json_response({"ok": True, "job_id": job["id"], "status": job["status"]})
   except web.HTTPException as e:

@@ -24,6 +24,68 @@ def clear_upload_env(monkeypatch):
     monkeypatch.delenv(key, raising=False)
 
 
+@pytest.mark.parametrize("body, expected", [
+  ({"segments": ["route--0"]}, False),
+  ({"segment": "route--0", "includeAllFiles": False}, False),
+  ({"segments": ["route--0"], "includeAllFiles": True}, True),
+])
+def test_dashcam_upload_request_scope(monkeypatch, body, expected):
+  class Request:
+    async def json(self):
+      return body
+
+  monkeypatch.setattr(routes, "segment_is_complete", lambda segment: True)
+  assert asyncio.run(routes.request_upload_segments(Request())) == (["route--0"], expected)
+
+
+@pytest.mark.parametrize("value", ["false", "true", 1, None, []])
+def test_dashcam_upload_request_rejects_non_boolean_scope(value):
+  class Request:
+    async def json(self):
+      return {"segments": ["route--0"], "includeAllFiles": value}
+
+  with pytest.raises(web.HTTPBadRequest, match="Bad Request"):
+    asyncio.run(routes.request_upload_segments(Request()))
+
+
+@pytest.mark.parametrize("include_all_files", [False, True])
+def test_dashcam_upload_endpoints_preserve_scope(monkeypatch, tmp_path, include_all_files):
+  class Request:
+    async def json(self):
+      return {"segments": ["route--0"], "includeAllFiles": include_all_files}
+
+  for name in ("qcamera.ts", "rlog.zst", "ecamera.hevc", "fcamera.hevc"):
+    (tmp_path / name).write_bytes(b"data")
+  monkeypatch.setattr(routes, "segment_is_complete", lambda segment: True)
+  monkeypatch.setattr(routes, "segment_dir", lambda segment: str(tmp_path))
+  expected = ["ecamera.hevc", "fcamera.hevc", "qcamera.ts", "rlog.zst"] if include_all_files else ["qcamera.ts", "rlog.zst"]
+  response = asyncio.run(routes.api_dashcam_upload_summary(Request()))
+  assert response.status == 200
+  summary = json.loads(response.text)["summaries"][0]
+  assert [item["name"] for item in summary["files"]] == expected
+  assert summary["totalSize"] == len(expected) * 4
+
+  async def fake_run(segments, *, include_all_files=False):
+    return {"segments": segments, "includeAllFiles": include_all_files}
+
+  monkeypatch.setattr(upload_jobs, "run_upload_segments", fake_run)
+  response = asyncio.run(routes.api_dashcam_upload(Request()))
+  assert response.status == 200
+  assert json.loads(response.text)["includeAllFiles"] is include_all_files
+
+  started = []
+  monkeypatch.setattr(upload_jobs, "running_job", lambda: None)
+  monkeypatch.setattr(upload_jobs, "start_job", started.append)
+  try:
+    response = asyncio.run(routes.api_dashcam_upload_start(Request()))
+    assert response.status == 200
+    assert started[0]["include_all_files"] is include_all_files
+    assert started[0]["segments"] == ["route--0"]
+  finally:
+    for job in started:
+      upload_jobs.jobs().pop(job["id"], None)
+
+
 class FakeUploadTask:
   def __init__(self, *, done=False):
     self._done = done
@@ -371,18 +433,24 @@ def test_dashcam_upload_report_does_not_merge_nonconsecutive_segments():
   assert "### Open & Analyze" not in report
 
 
-def test_dashcam_upload_completion_notifies_web_server_and_discord(monkeypatch):
+@pytest.mark.parametrize("include_all_files", [False, True])
+def test_dashcam_upload_completion_notifies_web_server_and_discord(monkeypatch, tmp_path, include_all_files):
   segment = "00000cfb--69588de3d7--10"
   notifications = []
   uploaded_files = []
   progress_snapshots = []
+  for name, size in (("qcamera.ts", 12), ("rlog.zst", 34), ("ecamera.hevc", 56), ("fcamera.hevc", 78)):
+    (tmp_path / name).write_bytes(b"x" * size)
+  expected_files = ["ecamera.hevc", "fcamera.hevc", "qcamera.ts", "rlog.zst"] if include_all_files else ["qcamera.ts", "rlog.zst"]
+  expected_size = 180 if include_all_files else 46
 
   async def fake_upload_folder(*args, **kwargs):
     uploaded_files.extend(kwargs["filenames"])
     on_progress = kwargs.get("on_progress")
     if on_progress:
-      on_progress("qcamera.ts", 12, 12, 12)
-      on_progress("rlog.zst", 34, 34, 34)
+      for name in kwargs["filenames"]:
+        size = (tmp_path / name).stat().st_size
+        on_progress(name, size, size, size)
     return True
 
   async def fake_web_complete(base_url, token, payload):
@@ -404,11 +472,7 @@ def test_dashcam_upload_completion_notifies_web_server_and_discord(monkeypatch):
   monkeypatch.setattr(upload, "upload_share_text", lambda payload: "shared upload report")
   monkeypatch.setattr(upload, "discord_webhook_url", lambda params: "https://discord.example/webhook")
   monkeypatch.setattr(upload, "send_discord_webhook", fake_discord)
-  monkeypatch.setattr(upload_jobs, "segment_dir", lambda value: "/tmp/segment")
-  monkeypatch.setattr(upload_jobs, "segment_file_summary", lambda value: [
-    {"kind": "qcamera", "name": "qcamera.ts", "size": 12},
-    {"kind": "rlog", "name": "rlog.zst", "size": 34},
-  ])
+  monkeypatch.setattr(upload_jobs, "segment_dir", lambda value: str(tmp_path))
   monkeypatch.setattr(upload_jobs, "upload_folder_to_web", fake_upload_folder)
   monkeypatch.setattr(upload_jobs, "send_web_upload_complete", fake_web_complete)
   real_progress = upload_jobs.progress
@@ -420,8 +484,9 @@ def test_dashcam_upload_completion_notifies_web_server_and_discord(monkeypatch):
   monkeypatch.setattr(upload_jobs, "progress", capture_progress)
 
   upload_jobs.jobs().clear()
-  job = upload_jobs.create_job([segment])
-  result = asyncio.run(upload_jobs.run_upload_segments([segment], job))
+  job = upload_jobs.create_job([segment], include_all_files=include_all_files)
+  asyncio.run(upload_jobs.run_job(job))
+  result = job["result"]
 
   assert result["ok"] is True
   assert result["webComplete"] == {"ok": True, "status": 200}
@@ -430,17 +495,19 @@ def test_dashcam_upload_completion_notifies_web_server_and_discord(monkeypatch):
     ("web", "https://upload.example", "session-token", segment),
     ("discord", "https://discord.example/webhook", "shared upload report"),
   ]
-  assert uploaded_files == ["qcamera.ts", "rlog.zst"]
+  assert uploaded_files == expected_files
+  assert [item["name"] for item in result["results"][0]["files"]] == expected_files
   snapshot = upload_jobs.snapshot(job)
-  assert snapshot["bytes_current"] == 46
-  assert snapshot["bytes_total"] == 46
+  assert snapshot["includeAllFiles"] is include_all_files
+  assert snapshot["bytes_current"] == expected_size
+  assert snapshot["bytes_total"] == expected_size
   assert snapshot["bytes_per_second"] >= 0
   assert snapshot["step_current"] == 1
   assert snapshot["step_total"] == 1
-  assert snapshot["progress"] == 99
-  assert snapshot["phase"] == "notifying"
-  assert snapshot["phase_current"] == 2
-  assert snapshot["phase_total"] == 2
+  assert snapshot["progress"] == 100
+  assert snapshot["phase"] == "complete"
+  assert snapshot["phase_current"] == 1
+  assert snapshot["phase_total"] == 1
   assert [item["progress"] for item in progress_snapshots] == sorted(
     item["progress"] for item in progress_snapshots
   )
@@ -943,11 +1010,25 @@ def test_dashcam_upload_summary_allows_rlog_without_qcamera(tmp_path: Path):
   assert [(item["kind"], item["name"]) for item in files] == [("rlog", "rlog.bz2")]
 
 
-def test_dashcam_upload_summary_requires_rlog(tmp_path: Path):
+def test_dashcam_upload_summary_all_files_includes_auxiliary_and_empty_files(tmp_path: Path):
+  names = ["rlog.zst", "rlog.bz2", "qcamera.ts", "qcamera.mp4", "qlog.zst", "ecamera.hevc", "fcamera.hevc", "dcamera.hevc", "marker"]
+  for name in names:
+    (tmp_path / name).write_bytes(b"" if name == "marker" else b"data")
+  (tmp_path / "subdirectory").mkdir()
+  (tmp_path / "subdirectory" / "excluded").write_bytes(b"nested")
+
+  files = catalog.segment_file_summary(str(tmp_path), include_all_files=True)
+
+  assert [item["name"] for item in files] == sorted(names)
+  assert sum(item["size"] for item in files) == 32
+
+
+@pytest.mark.parametrize("include_all_files", [False, True])
+def test_dashcam_upload_summary_requires_rlog(tmp_path: Path, include_all_files):
   (tmp_path / "qcamera.ts").write_bytes(b"original-video")
 
   with pytest.raises(web.HTTPNotFound) as exc_info:
-    catalog.segment_file_summary(str(tmp_path))
+    catalog.segment_file_summary(str(tmp_path), include_all_files=include_all_files)
   assert exc_info.value.text == "rlog not found"
 
 

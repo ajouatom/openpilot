@@ -246,12 +246,12 @@ def route_time_bounds(segments_asc: list[str]) -> tuple[int, int]:
   return route_start, route_end
 
 
-def segment_file_summary(segment_dir_path: str) -> list[dict[str, Any]]:
+def segment_file_summary(segment_dir_path: str, include_all_files: bool = False) -> list[dict[str, Any]]:
   """Return the original files selected for a segment upload.
 
   Upload exactly one qcamera source and one rlog source. Prefer logger output
-  over browser-oriented derivatives and never include reduced or auxiliary
-  artifacts. An rlog is required because the uploaded segment cannot be
+  over browser-oriented derivatives unless all files are explicitly requested.
+  An rlog is required because the uploaded segment cannot be
   analyzed without it; qcamera is optional so log-only segments remain useful.
   """
   out: list[dict[str, Any]] = []
@@ -275,4 +275,17 @@ def segment_file_summary(segment_dir_path: str) -> list[dict[str, Any]]:
       break
   if not any(item["kind"] == "rlog" for item in out):
     raise web.HTTPNotFound(text="rlog not found")
+  if include_all_files:
+    out = []
+    with os.scandir(segment_dir_path) as entries:
+      for entry in sorted(entries, key=lambda item: item.name):
+        if not entry.is_file(follow_symlinks=False):
+          continue
+        size = entry.stat(follow_symlinks=False).st_size
+        out.append({
+          "kind": entry.name.split(".", 1)[0],
+          "name": entry.name,
+          "size": size,
+          "sizeLabel": file_size_label(size),
+        })
   return out

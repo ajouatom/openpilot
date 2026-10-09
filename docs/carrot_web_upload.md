@@ -38,6 +38,18 @@ Operator overrides are target-specific:
 - `CARROT_TMUX_WEB_UPLOAD_URL` (independent Carrot Logs endpoint)
 - `CARROT_WEB_UPLOAD_CONCURRENCY` (1-6, default 3)
 
+Dashcam uploads offer a per-upload file scope before the size confirmation:
+the default sends one original `qcamera` and one `rlog`; **All files in selected
+folders** also includes `ecamera`, `fcamera`, `qlog`, and every other regular
+file directly in those segment folders. Subdirectories and symlinks are not
+followed. A usable `rlog` remains required. The summary, transfer byte totals,
+and completion manifest use the selected scope. The choice is not saved for
+future uploads, and requests without `includeAllFiles: true` keep the default.
+
+The scope change passes 46 upload/API tests and 24 focused Web tests, plus the
+Web build and user-docs validator. Desktop tests substitute hardware metadata
+and network transfers; physical-device uploads are not validated here.
+
 ## Shared upload API
 
 Both targets use the same streamed file and completion API after authentication:
