@@ -1,6 +1,6 @@
 from types import SimpleNamespace as NS
 
-from opendbc.car.hyundai.hyundaicanfd import _apply_lever_turn_msg, _blink_hold_side
+from opendbc.car.hyundai.hyundaicanfd import _blink_hold_side, _select_cluster_background
 
 
 def _md(y_left, y_right):
@@ -63,15 +63,10 @@ def test_blink_hold_request_overrides_the_release_of_the_current_change():
   assert _blink_hold_side(md, 3, state) == 3
 
 
-def test_lever_turn_shows_the_cluster_alert_only_when_flagged():
-  values = {"ALERTS_3": 0}
-  _apply_lever_turn_msg(values, NS(meta=NS(leverTurn=False)))
-  assert values["ALERTS_3"] == 0
-  _apply_lever_turn_msg(values, None)
-  _apply_lever_turn_msg(values, NS(meta=NS()))                        # older schema
-  assert values["ALERTS_3"] == 0
-  _apply_lever_turn_msg(values, NS(meta=NS(leverTurn=True)))
-  assert values["ALERTS_3"] == 18                                       # CHECK_SURROUNDINGS
-  values = {"ALERTS_3": 2}                                              # another alert is up: keep it
-  _apply_lever_turn_msg(values, NS(meta=NS(leverTurn=True)))
-  assert values["ALERTS_3"] == 2
+def test_turn_model_flashes_the_cluster_red_like_a_held_paddle():
+  assert _select_cluster_background(True, True, False, 0, turning=True) == 6       # FLASHING RED
+  assert _select_cluster_background(False, True, False, 0, turning=True) == 6      # lateral only too
+  assert _select_cluster_background(True, True, True, 2) == 6                      # held paddle, unchanged
+  assert _select_cluster_background(True, True, False, 2) == 1                     # cruise: blue
+  assert _select_cluster_background(False, True, False, 0) == 3                    # lateral only: orange
+  assert _select_cluster_background(False, False, False, 0) == 7                   # gray

@@ -858,8 +858,13 @@ def _hide_replaced_adas_service_warning(values):
     values["FAULT_DAS"] = 0
 
 
-def _select_cluster_background(cruise_enabled, lat_active, paddle_pressed, paddle_mode):
-  if paddle_mode > 0 and paddle_pressed:
+# log.Desire turnLeft / turnRight: the turn model is driving the car.
+TURN_DESIRES = (1, 2)
+
+
+def _select_cluster_background(cruise_enabled, lat_active, paddle_pressed, paddle_mode, turning=False):
+  # 6 = FLASHING RED: a held paddle (PaddleMode) and, whatever started it, the turn model
+  if turning or (paddle_mode > 0 and paddle_pressed):
     return 6
   return 1 if cruise_enabled else 3 if lat_active else 7
 
@@ -873,18 +878,6 @@ def _apply_cluster_lane_lines(values, CS, lat_active, desire):
   values["LANELINE_CURVATURE_DIRECTION"] = direction if lat_active else 0
   if desire:
     _apply_lane_desire(values, desire)
-
-
-# ADRV_0x161 ALERTS_3 18 "CHECK_SURROUNDINGS" (the cluster has no "turn" message). ADRV_0x1ea AUTOLANECHANGE_MSG
-# was tried first and the cluster did not show it (2026-10-05 route 00000494: sent 1 with HDA_MODE2 1, nothing shown).
-LEVER_TURN_ALERT = 18
-
-
-def _apply_lever_turn_msg(values, md):
-  """BlinkerLatchedTurn: while a latched lever makes the turn desire, show a cluster alert (unless one is up)."""
-  meta = getattr(md, "meta", None) if md is not None else None
-  if getattr(meta, "leverTurn", False) and values.get("ALERTS_3", 0) == 0:
-    values["ALERTS_3"] = LEVER_TURN_ALERT
 
 
 def _normalize_cluster_corner_objects(values, *, ccnc=False):
@@ -1052,7 +1045,7 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
         values["TARGET_DISTANCE"] = lead_distance
 
         values["BACKGROUND"] = _select_cluster_background(
-          cruise_enabled, lat_active, CS.paddle_button_prev > 0, paddle_mode,
+          cruise_enabled, lat_active, CS.paddle_button_prev > 0, paddle_mode, turning=desire in TURN_DESIRES,
         )
         values["CENTERLINE"] = 1 if HDA_CntrlModSta > 0 else 0
         values["CAR_CIRCLE"] = 2 if hdp_active else 1 if cruise_enabled else 0
@@ -1081,8 +1074,6 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
 
         if values["ALERTS_5"] in [11] and CS.softHoldActive == 0:
           values["ALERTS_5"] = 0
-
-        _apply_lever_turn_msg(values, md)
 
         # curvature 표시(0x161쪽 기존 로직 유지)
         _suppress_trailer_mode_warning(values, CS)
