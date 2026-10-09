@@ -181,6 +181,7 @@ def snapshot(job: dict[str, Any]) -> dict[str, Any]:
     "ok": True,
     "id": job["id"],
     "action": job["action"],
+    "includeAllFiles": bool(job.get("include_all_files")),
     "status": job["status"],
     "done": job["status"] in ("done", "failed", "canceled"),
     "cancel_requested": bool(job.get("cancel_requested")),
@@ -280,13 +281,14 @@ def prune() -> None:
     _jobs.pop(old["id"], None)
 
 
-def create_job(segments: list[str]) -> dict[str, Any]:
+def create_job(segments: list[str], *, include_all_files: bool = False) -> dict[str, Any]:
   job_id = uuid.uuid4().hex[:12]
   now = time.time()  # noqa: TID251
   job = {
     "id": job_id,
     "action": "dashcam_upload",
     "segments": list(segments),
+    "include_all_files": include_all_files,
     "status": "running",
     "log": "",
     "progress": 0,
@@ -332,7 +334,9 @@ def start_job(job: dict[str, Any]) -> asyncio.Task:
   return task
 
 
-async def run_upload_segments(segments: list[str], job: dict[str, Any] | None = None) -> dict[str, Any]:
+async def run_upload_segments(
+  segments: list[str], job: dict[str, Any] | None = None, *, include_all_files: bool = False,
+) -> dict[str, Any]:
   params = Params() if HAS_PARAMS else None
   base_url, token = upload.upload_target_settings()
   meta = upload.upload_metadata(params)
@@ -376,7 +380,7 @@ async def run_upload_segments(segments: list[str], job: dict[str, Any] | None = 
   async def prepare_one(idx0: int, segment: str) -> tuple[int, list[Any], Exception | None]:
     try:
       async with prepare_sem:
-        return idx0, await asyncio.to_thread(segment_file_summary, segment_dir(segment)), None
+        return idx0, await asyncio.to_thread(segment_file_summary, segment_dir(segment), include_all_files), None
     except Exception as exc:
       return idx0, [], exc
 
@@ -625,7 +629,9 @@ async def run_upload_segments(segments: list[str], job: dict[str, Any] | None = 
 
 async def run_job(job: dict[str, Any]) -> None:
   try:
-    result = await run_upload_segments(list(job.get("segments") or []), job)
+    result = await run_upload_segments(
+      list(job.get("segments") or []), job, include_all_files=bool(job.get("include_all_files")),
+    )
     finish(job, ok=bool(result.get("ok")), result=result)
   except UploadCanceled as exc:
     results = list(job.get("partial_results") or [])
