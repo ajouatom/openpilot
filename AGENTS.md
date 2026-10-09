@@ -1,5 +1,13 @@
 # Repository memory
 
+- On 2026-10-09, after trying Mountain Dew 870a4823, the user requested
+  returning carrot-wip's eGPU model to Cinque v3 (892fc3a1, AMD e758b96d,
+  isolated tinygrad d5e17c93). This supersedes the MDM selection below, not
+  the completed branch consolidation. Retain shared HUD/camera/startup/UI
+  fixes, MDM format compatibility, internal/DM models and Jetson Cinque v2.
+  Do not recreate retired branches. A user-facing model selector was discussed
+  as a possible follow-up, not implemented. See docs/mdm2_20261008.md.
+
 - On 2026-10-09, the user requested full integration of `carrot-mdm2` into
   `carrot-wip` and deletion of the local and remote `carrot-mdm2`/`carrot-mdm`
   branches. `carrot-wip` now selects Mountain Dew v1 checkpoint 870a4823,
