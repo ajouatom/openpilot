@@ -1,5 +1,14 @@
 # Repository memory
 
+- On 2026-10-09, the user requested full integration of `carrot-mdm2` into
+  `carrot-wip` and deletion of the local and remote `carrot-mdm2`/`carrot-mdm`
+  branches. `carrot-wip` now selects Mountain Dew v1 checkpoint 870a4823,
+  AMD model e20cde17, with the existing pinned runtime and NAS mdm2 package URL.
+  This supersedes the branch-only restriction below; do not recreate the retired
+  branches. Keep the newer wip HUD/camera recovery, DM notices and GV70 fixes.
+  Internal/DM models, Jetson Cinque v2 and control/validity policies remain
+  unchanged. Model compatibility CI follows carrot-wip. See docs/mdm2_20261008.md.
+
 - On 2026-10-08, the user confirmed PR #39047 commit 4bfb534063 for `carrot-mdm2`,
   starting from carrot-wip ca8f553d1e. The previous bea3fd4 remains carrot-mdm.
   Pin the new e20cde17 AMD model and 870a4823/12864 metadata checkpoint on this

@@ -1,7 +1,7 @@
-name: MDM2 model compatibility
+name: Mountain Dew model compatibility
 on:
   push:
-    branches: [carrot-mdm2]
+    branches: [carrot-wip]
   workflow_dispatch:
 permissions:
   contents: read
