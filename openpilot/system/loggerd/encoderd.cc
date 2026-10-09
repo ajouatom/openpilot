@@ -190,14 +190,6 @@ int main(int argc, char* argv[]) {
       encoderd_thread(stream_cameras_logged);
     } else if (carrot_vision_mode) {
       encoderd_thread(carrot_vision_cameras_logged, true);
-    } else if (mode == "--youtube-low") {
-      encoderd_thread(youtube_low_cameras_logged);
-    } else if (mode == "--youtube-medium") {
-      encoderd_thread(youtube_medium_cameras_logged);
-    } else if (mode == "--youtube") {
-      encoderd_thread(youtube_cameras_logged);
-    } else if (mode == "--youtube-wide") {
-      encoderd_thread(youtube_wide_cameras_logged);
     } else {
       LOGE("Argument '%s' is not supported", mode.c_str());
     }

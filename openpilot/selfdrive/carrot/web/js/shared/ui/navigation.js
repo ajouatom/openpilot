@@ -752,6 +752,19 @@ function showSettingScreen(which, pushHistory = false) {
 }
 
 async function goToSettingParent() {
+  if (
+    CURRENT_SETTING_DETAIL
+    && typeof SETTING_INLINE_SEARCH_GROUP !== "undefined"
+    && CURRENT_GROUP === SETTING_INLINE_SEARCH_GROUP
+    && typeof showSettingInlineSearchResultsInGroups === "function"
+    && typeof isCompactLandscapeMode === "function"
+    && !isCompactLandscapeMode()
+  ) {
+    // Single-column search: the results sit on the group screen below this
+    // detail, so return to them instead of re-rendering the items list.
+    await showSettingInlineSearchResultsInGroups();
+    return;
+  }
   // The header is an Up control: history may point at another app page after
   // restoring a group or switching between the narrow and split layouts.
   if (CURRENT_SETTING_DETAIL && CURRENT_GROUP) {
@@ -769,6 +782,10 @@ async function goToSettingParent() {
 function resetSettingPageToRoot() {
   if (typeof closeSettingSearchPanel === "function") {
     closeSettingSearchPanel({ clear: false, syncHistory: false });
+  }
+
+  if (typeof exitSettingInlineSearchSurface === "function") {
+    exitSettingInlineSearchSurface();
   }
 
   if (shouldUseSettingSplitLayout("setting")) {

@@ -172,5 +172,5 @@ test("landscape settings keep the shared submenu back control", () => {
   const navigation = read("js/shared/ui/navigation.js");
 
   assert.doesNotMatch(chrome, /setting-layout-split[^{}]*\.setting-title-backIcon\s*\{[^}]*display:\s*none/s);
-  assert.match(navigation, /itemsTitle\.onclick\s*=\s*\(\)\s*=>\s*history\.back\(\)/);
+  assert.match(navigation, /itemsTitle\.onclick\s*=\s*goToSettingParent/);
 });

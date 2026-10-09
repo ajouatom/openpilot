@@ -8,14 +8,14 @@
    (e.g. ko/zh). The media queries below still refine the gap and the
    single-column wrap; this base rule fills the gaps they don't cover
    (notably portrait wider than 640px). */
-.page--setting #settingScreenItems .settingTop {
+.page--setting :is(#settingScreenItems, #settingInlineSearchResults) .settingTop {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: var(--sp-md);
   align-items: start;
 }
 
-.page--setting #settingScreenItems .settingTop > :first-child {
+.page--setting :is(#settingScreenItems, #settingInlineSearchResults) .settingTop > :first-child {
   min-width: 0;
 }
 
@@ -25,10 +25,10 @@
    push the right-side control off-screen. CJK wraps per-character on its own,
    which is why this only surfaced in English. The landscape split layout
    already applies this; promote it to every layout. */
-.page--setting #settingScreenItems .title,
-.page--setting #settingScreenItems .name,
-.page--setting #settingScreenItems .muted,
-.page--setting #settingScreenItems .descr {
+.page--setting :is(#settingScreenItems, #settingInlineSearchResults) .title,
+.page--setting :is(#settingScreenItems, #settingInlineSearchResults) .name,
+.page--setting :is(#settingScreenItems, #settingInlineSearchResults) .muted,
+.page--setting :is(#settingScreenItems, #settingInlineSearchResults) .descr {
   max-width: 100%;
   overflow-wrap: anywhere;
   word-break: break-word;
@@ -37,11 +37,11 @@
 /* Safety net: never let a single item bleed past its box and drag the control
    column with it (matches the known-good split layout). The title/name marquees
    keep their own inner overflow-x scroller, so this does not clip them. */
-.page--setting #settingScreenItems .setting {
+.page--setting :is(#settingScreenItems, #settingInlineSearchResults) .setting {
   overflow: hidden;
 }
 
-.page--setting #settingScreenItems .ctrl {
+.page--setting :is(#settingScreenItems, #settingInlineSearchResults) .ctrl {
   --setting-control-side: 42px;
   --setting-control-value: 88px;
   --setting-control-gap: 6px;
@@ -58,53 +58,53 @@
    a slider variant carries four children (track + three buttons) while the
    stepper carries three, so positional rules used to stretch the trailing
    button across the whole row when the order changed. */
-.page--setting #settingScreenItems .ctrl > .setting-value-arrow--prev,
-.page--setting #settingScreenItems .ctrl > .setting-step--minus {
+.page--setting :is(#settingScreenItems, #settingInlineSearchResults) .ctrl > .setting-value-arrow--prev,
+.page--setting :is(#settingScreenItems, #settingInlineSearchResults) .ctrl > .setting-step--minus {
   grid-column: 1;
   grid-row: 2;
 }
 
-.page--setting #settingScreenItems .ctrl > .val {
+.page--setting :is(#settingScreenItems, #settingInlineSearchResults) .ctrl > .val {
   grid-column: 2;
   grid-row: 2;
 }
 
-.page--setting #settingScreenItems .ctrl > .setting-value-arrow--next,
-.page--setting #settingScreenItems .ctrl > .setting-step--plus {
+.page--setting :is(#settingScreenItems, #settingInlineSearchResults) .ctrl > .setting-value-arrow--next,
+.page--setting :is(#settingScreenItems, #settingInlineSearchResults) .ctrl > .setting-step--plus {
   grid-column: 3;
   grid-row: 2;
 }
 
-.page--setting #settingScreenItems .ctrl > .setting-slider {
+.page--setting :is(#settingScreenItems, #settingInlineSearchResults) .ctrl > .setting-slider {
   grid-column: 1 / -1;
   grid-row: 1;
   justify-self: stretch;
   width: 100%;
 }
 
-.page--setting #settingScreenItems .smallBtn {
+.page--setting :is(#settingScreenItems, #settingInlineSearchResults) .smallBtn {
   width: 100%;
   min-width: var(--setting-control-side);
   padding-inline: 9px;
 }
 
-.page--setting #settingScreenItems .val {
+.page--setting :is(#settingScreenItems, #settingInlineSearchResults) .val {
   width: 100%;
   min-width: var(--setting-control-value);
   max-width: var(--setting-control-value);
 }
 
-.page--setting #settingScreenItems .ctrl--toggle,
-.page--setting #settingScreenItems .ctrl--value,
-.page--setting #settingScreenItems .ctrl--segmented,
-.page--setting #settingScreenItems .ctrl--select {
+.page--setting :is(#settingScreenItems, #settingInlineSearchResults) .ctrl--toggle,
+.page--setting :is(#settingScreenItems, #settingInlineSearchResults) .ctrl--value,
+.page--setting :is(#settingScreenItems, #settingInlineSearchResults) .ctrl--segmented,
+.page--setting :is(#settingScreenItems, #settingInlineSearchResults) .ctrl--select {
   display: flex;
   justify-content: flex-end;
   align-items: center;
   width: auto;
 }
 
-.page--setting #settingScreenItems .ctrl--value {
+.page--setting :is(#settingScreenItems, #settingInlineSearchResults) .ctrl--value {
   display: inline-grid;
   grid-template-columns: 38px minmax(66px, auto) 38px;
   gap: 0;
@@ -114,13 +114,13 @@
   background: var(--md-surface-cont-h);
 }
 
-.page--setting #settingScreenItems .ctrl--value > .setting-value-arrow--prev,
-.page--setting #settingScreenItems .ctrl--value > .val,
-.page--setting #settingScreenItems .ctrl--value > .setting-value-arrow--next {
+.page--setting :is(#settingScreenItems, #settingInlineSearchResults) .ctrl--value > .setting-value-arrow--prev,
+.page--setting :is(#settingScreenItems, #settingInlineSearchResults) .ctrl--value > .val,
+.page--setting :is(#settingScreenItems, #settingInlineSearchResults) .ctrl--value > .setting-value-arrow--next {
   grid-row: 1;
 }
 
-.page--setting #settingScreenItems .ctrl--value .val {
+.page--setting :is(#settingScreenItems, #settingInlineSearchResults) .ctrl--value .val {
   position: relative;
   width: auto;
   min-width: 66px;
@@ -137,7 +137,7 @@
   text-align: center;
 }
 
-.page--setting #settingScreenItems .setting-value-compact {
+.page--setting :is(#settingScreenItems, #settingInlineSearchResults) .setting-value-compact {
   border-color: transparent;
   background: color-mix(in srgb, var(--md-surface-cont-hh) 72%, var(--md-surface-cont-h));
   color: var(--md-on-surface);
@@ -145,7 +145,7 @@
   font-weight: 900;
 }
 
-.page--setting #settingScreenItems .setting-value-arrow {
+.page--setting :is(#settingScreenItems, #settingInlineSearchResults) .setting-value-arrow {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -163,20 +163,20 @@
   touch-action: manipulation;
 }
 
-.page--setting #settingScreenItems .setting-value-arrow:active,
-.page--setting #settingScreenItems .setting-value-arrow.is-holding,
-.page--setting #settingScreenItems .setting-step:active,
-.page--setting #settingScreenItems .setting-step.is-holding {
+.page--setting :is(#settingScreenItems, #settingInlineSearchResults) .setting-value-arrow:active,
+.page--setting :is(#settingScreenItems, #settingInlineSearchResults) .setting-value-arrow.is-holding,
+.page--setting :is(#settingScreenItems, #settingInlineSearchResults) .setting-step:active,
+.page--setting :is(#settingScreenItems, #settingInlineSearchResults) .setting-step.is-holding {
   background: color-mix(in srgb, var(--md-surface-cont-hh) 88%, var(--md-on-surface));
 }
 
-.page--setting #settingScreenItems .setting-icon {
+.page--setting :is(#settingScreenItems, #settingInlineSearchResults) .setting-icon {
   display: block;
   width: 18px;
   height: 18px;
 }
 
-.page--setting #settingScreenItems .setting-icon path {
+.page--setting :is(#settingScreenItems, #settingInlineSearchResults) .setting-icon path {
   fill: none;
   stroke: currentColor;
   stroke-width: 2.7;
@@ -184,20 +184,20 @@
   stroke-linejoin: round;
 }
 
-.page--setting #settingScreenItems .ctrl--toggle .val,
-.page--setting #settingScreenItems .ctrl--segmented .val,
-.page--setting #settingScreenItems .ctrl--select .val {
+.page--setting :is(#settingScreenItems, #settingInlineSearchResults) .ctrl--toggle .val,
+.page--setting :is(#settingScreenItems, #settingInlineSearchResults) .ctrl--segmented .val,
+.page--setting :is(#settingScreenItems, #settingInlineSearchResults) .ctrl--select .val {
   display: none;
 }
 
-.page--setting #settingScreenItems .setting-segment:focus-visible,
-.page--setting #settingScreenItems .setting-select:focus-visible,
-.page--setting #settingScreenItems .setting-slider__input:focus-visible {
+.page--setting :is(#settingScreenItems, #settingInlineSearchResults) .setting-segment:focus-visible,
+.page--setting :is(#settingScreenItems, #settingInlineSearchResults) .setting-select:focus-visible,
+.page--setting :is(#settingScreenItems, #settingInlineSearchResults) .setting-slider__input:focus-visible {
   outline: var(--focus-ring-width, 2px) solid var(--focus-ring-color, var(--md-primary));
   outline-offset: 2px;
 }
 
-.page--setting #settingScreenItems .setting-segments {
+.page--setting :is(#settingScreenItems, #settingInlineSearchResults) .setting-segments {
   display: inline-flex;
   max-width: min(216px, 100%);
   overflow: hidden;
@@ -206,7 +206,7 @@
   background: var(--md-surface-cont-h);
 }
 
-.page--setting #settingScreenItems .setting-segment {
+.page--setting :is(#settingScreenItems, #settingInlineSearchResults) .setting-segment {
   min-width: 38px;
   min-height: 32px;
   padding: 0 10px;
@@ -218,16 +218,16 @@
   font-weight: 800;
 }
 
-.page--setting #settingScreenItems .setting-segment:last-child {
+.page--setting :is(#settingScreenItems, #settingInlineSearchResults) .setting-segment:last-child {
   border-right: 0;
 }
 
-.page--setting #settingScreenItems .setting-segment.is-active {
+.page--setting :is(#settingScreenItems, #settingInlineSearchResults) .setting-segment.is-active {
   background: var(--md-primary-state);
   color: var(--md-primary);
 }
 
-.page--setting #settingScreenItems .setting-select {
+.page--setting :is(#settingScreenItems, #settingInlineSearchResults) .setting-select {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -249,32 +249,32 @@
   appearance: none;
 }
 
-.page--setting #settingScreenItems .ctrl--slider {
+.page--setting :is(#settingScreenItems, #settingInlineSearchResults) .ctrl--slider {
   grid-template-columns: var(--setting-control-side) var(--setting-control-value) var(--setting-control-side);
 }
 
-.page--setting #settingScreenItems .ctrl--slider .setting-slider {
+.page--setting :is(#settingScreenItems, #settingInlineSearchResults) .ctrl--slider .setting-slider {
   grid-column: 1 / -1;
   grid-row: 1;
   width: 100%;
 }
 
-.page--setting #settingScreenItems .ctrl--slider .setting-step--minus {
+.page--setting :is(#settingScreenItems, #settingInlineSearchResults) .ctrl--slider .setting-step--minus {
   grid-column: 1;
   grid-row: 2;
 }
 
-.page--setting #settingScreenItems .ctrl--slider .val {
+.page--setting :is(#settingScreenItems, #settingInlineSearchResults) .ctrl--slider .val {
   grid-column: 2;
   grid-row: 2;
 }
 
-.page--setting #settingScreenItems .ctrl--slider .setting-step--plus {
+.page--setting :is(#settingScreenItems, #settingInlineSearchResults) .ctrl--slider .setting-step--plus {
   grid-column: 3;
   grid-row: 2;
 }
 
-.page--setting #settingScreenItems .setting-slider__input {
+.page--setting :is(#settingScreenItems, #settingInlineSearchResults) .setting-slider__input {
   width: 100%;
   accent-color: var(--md-primary);
   /* Vertical gestures stay with the scrolling list; only horizontal drags
@@ -283,16 +283,16 @@
   touch-action: pan-y;
 }
 
-.page--setting #settingScreenItems .setting {
+.page--setting :is(#settingScreenItems, #settingInlineSearchResults) .setting {
   position: relative;
   container-type: inline-size;
 }
 
-.page--setting #settingScreenItems .setting--has-unit-cycle {
+.page--setting :is(#settingScreenItems, #settingInlineSearchResults) .setting--has-unit-cycle {
   padding-bottom: var(--sp-md);
 }
 
-.page--setting #settingScreenItems .setting-unit-cycle {
+.page--setting :is(#settingScreenItems, #settingInlineSearchResults) .setting-unit-cycle {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -311,7 +311,7 @@
   box-shadow: none;
 }
 
-.page--setting #settingScreenItems .setting-unit-cycle:active {
+.page--setting :is(#settingScreenItems, #settingInlineSearchResults) .setting-unit-cycle:active {
   border-color: color-mix(in srgb, var(--md-outline-var) 68%, transparent);
   background: color-mix(in srgb, var(--md-surface-cont-hh) 88%, var(--md-on-surface));
   color: var(--md-on-surface);
@@ -319,11 +319,11 @@
 
 /* Footer actions row ??holds the optional unit-cycle (諛곗쑉) and the
    reset-to-default (湲곕낯媛? button, right-aligned under the item. */
-.page--setting #settingScreenItems .setting--has-actions {
+.page--setting :is(#settingScreenItems, #settingInlineSearchResults) .setting--has-actions {
   padding-bottom: var(--sp-md);
 }
 
-.page--setting #settingScreenItems .setting-actions {
+.page--setting :is(#settingScreenItems, #settingInlineSearchResults) .setting-actions {
   display: flex;
   align-items: center;
   justify-content: flex-end;
@@ -331,7 +331,7 @@
   margin-top: 8px;
 }
 
-.page--setting #settingScreenItems .setting-popular-value-chip {
+.page--setting :is(#settingScreenItems, #settingInlineSearchResults) .setting-popular-value-chip {
   display: inline-flex;
   align-items: center;
   justify-content: flex-start;
@@ -356,7 +356,7 @@
   opacity: 0.74;
 }
 
-.page--setting #settingScreenItems .setting-popular-value-chip__car {
+.page--setting :is(#settingScreenItems, #settingInlineSearchResults) .setting-popular-value-chip__car {
   min-width: 0;
   max-width: 170px;
   overflow: hidden;
@@ -365,20 +365,20 @@
   white-space: nowrap;
 }
 
-.page--setting #settingScreenItems .setting-popular-value-chip__accent {
+.page--setting :is(#settingScreenItems, #settingInlineSearchResults) .setting-popular-value-chip__accent {
   color: color-mix(in srgb, var(--md-primary) 56%, var(--md-on-surface-var));
   font-weight: 800;
 }
 
-.page--setting #settingScreenItems .setting-popular-value-chip__label {
+.page--setting :is(#settingScreenItems, #settingInlineSearchResults) .setting-popular-value-chip__label {
   color: inherit;
 }
 
-.page--setting #settingScreenItems .setting-actions .setting-unit-cycle {
+.page--setting :is(#settingScreenItems, #settingInlineSearchResults) .setting-actions .setting-unit-cycle {
   margin: 0;
 }
 
-.page--setting #settingScreenItems .setting-default-reset {
+.page--setting :is(#settingScreenItems, #settingInlineSearchResults) .setting-default-reset {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -396,7 +396,7 @@
   box-shadow: none;
 }
 
-.page--setting #settingScreenItems .setting-default-reset:active {
+.page--setting :is(#settingScreenItems, #settingInlineSearchResults) .setting-default-reset:active {
   border-color: color-mix(in srgb, var(--md-outline-var) 68%, transparent);
   background: color-mix(in srgb, var(--md-surface-cont-hh) 88%, var(--md-on-surface));
   color: var(--md-on-surface);
@@ -408,42 +408,42 @@
    the viewport, so the copy column can never collapse to one character beside
    a wide segmented control. */
 @container (max-width: 600px) {
-  .page--setting #settingScreenItems .settingTop,
-  .page--setting.setting-layout-split #settingScreenItems .settingTop {
+  .page--setting :is(#settingScreenItems, #settingInlineSearchResults) .settingTop,
+  .page--setting.setting-layout-split :is(#settingScreenItems, #settingInlineSearchResults) .settingTop {
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .page--setting #settingScreenItems .ctrl {
+  .page--setting :is(#settingScreenItems, #settingInlineSearchResults) .ctrl {
     justify-self: start;
     justify-content: start;
   }
 
-  .page--setting #settingScreenItems .setting-segments {
+  .page--setting :is(#settingScreenItems, #settingInlineSearchResults) .setting-segments {
     max-width: 100%;
   }
 }
 
 /* Named choices can be wider than the copy even in a large viewport with a
    narrow settings pane. Give them a full row in both split and single layouts. */
-.page--setting #settingScreenItems .settingTop.settingTop--choices {
+.page--setting :is(#settingScreenItems, #settingInlineSearchResults) .settingTop.settingTop--choices {
   grid-template-columns: minmax(0, 1fr);
 }
 
-.page--setting #settingScreenItems .settingTop--choices .ctrl--segmented {
+.page--setting :is(#settingScreenItems, #settingInlineSearchResults) .settingTop--choices .ctrl--segmented {
   width: 100%;
   min-width: 0;
   justify-self: stretch;
   justify-content: flex-start;
 }
 
-.page--setting #settingScreenItems .settingTop--choices .setting-segments {
+.page--setting :is(#settingScreenItems, #settingInlineSearchResults) .settingTop--choices .setting-segments {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 140px), 1fr));
   width: 100%;
   max-width: 100%;
 }
 
-.page--setting #settingScreenItems .settingTop--choices .setting-segment {
+.page--setting :is(#settingScreenItems, #settingInlineSearchResults) .settingTop--choices .setting-segment {
   min-width: 0;
   min-height: 42px;
   padding: 8px 10px;

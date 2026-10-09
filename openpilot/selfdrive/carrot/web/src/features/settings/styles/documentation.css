@@ -1,5 +1,5 @@
 /* Verified remote Wiki AST shown only on a setting's detail screen. */
-.page--setting #settingScreenItems .setting-doc-language-fallback {
+.page--setting :is(#settingScreenItems, #settingInlineSearchResults) .setting-doc-language-fallback {
   margin-bottom: 12px;
   padding: 9px 11px;
   border-left: 3px solid var(--md-primary);
@@ -10,19 +10,19 @@
   font-weight: 780;
 }
 
-.page--setting #settingScreenItems .setting-doc-markdown > :first-child {
+.page--setting :is(#settingScreenItems, #settingInlineSearchResults) .setting-doc-markdown > :first-child {
   margin-top: 0;
 }
 
-.page--setting #settingScreenItems .setting-doc-markdown > :last-child {
+.page--setting :is(#settingScreenItems, #settingInlineSearchResults) .setting-doc-markdown > :last-child {
   margin-bottom: 0;
 }
 
-.page--setting #settingScreenItems .setting-doc-markdown h2,
-.page--setting #settingScreenItems .setting-doc-markdown h3,
-.page--setting #settingScreenItems .setting-doc-markdown h4,
-.page--setting #settingScreenItems .setting-doc-markdown h5,
-.page--setting #settingScreenItems .setting-doc-markdown h6 {
+.page--setting :is(#settingScreenItems, #settingInlineSearchResults) .setting-doc-markdown h2,
+.page--setting :is(#settingScreenItems, #settingInlineSearchResults) .setting-doc-markdown h3,
+.page--setting :is(#settingScreenItems, #settingInlineSearchResults) .setting-doc-markdown h4,
+.page--setting :is(#settingScreenItems, #settingInlineSearchResults) .setting-doc-markdown h5,
+.page--setting :is(#settingScreenItems, #settingInlineSearchResults) .setting-doc-markdown h6 {
   margin: 18px 0 8px;
   color: var(--md-on-surface);
   font-size: var(--fs-body-md);
@@ -30,28 +30,28 @@
   line-height: 1.3;
 }
 
-.page--setting #settingScreenItems .setting-doc-markdown h3,
-.page--setting #settingScreenItems .setting-doc-markdown h4,
-.page--setting #settingScreenItems .setting-doc-markdown h5,
-.page--setting #settingScreenItems .setting-doc-markdown h6 {
+.page--setting :is(#settingScreenItems, #settingInlineSearchResults) .setting-doc-markdown h3,
+.page--setting :is(#settingScreenItems, #settingInlineSearchResults) .setting-doc-markdown h4,
+.page--setting :is(#settingScreenItems, #settingInlineSearchResults) .setting-doc-markdown h5,
+.page--setting :is(#settingScreenItems, #settingInlineSearchResults) .setting-doc-markdown h6 {
   font-size: var(--fs-body-sm);
 }
 
-.page--setting #settingScreenItems .setting-doc-markdown p {
+.page--setting :is(#settingScreenItems, #settingInlineSearchResults) .setting-doc-markdown p {
   margin: 8px 0;
 }
 
-.page--setting #settingScreenItems .setting-doc-markdown ul,
-.page--setting #settingScreenItems .setting-doc-markdown ol {
+.page--setting :is(#settingScreenItems, #settingInlineSearchResults) .setting-doc-markdown ul,
+.page--setting :is(#settingScreenItems, #settingInlineSearchResults) .setting-doc-markdown ol {
   margin: 8px 0;
   padding-left: 22px;
 }
 
-.page--setting #settingScreenItems .setting-doc-markdown li + li {
+.page--setting :is(#settingScreenItems, #settingInlineSearchResults) .setting-doc-markdown li + li {
   margin-top: 4px;
 }
 
-.page--setting #settingScreenItems .setting-doc-markdown code {
+.page--setting :is(#settingScreenItems, #settingInlineSearchResults) .setting-doc-markdown code {
   padding: 1px 5px;
   border-radius: 5px;
   background: color-mix(in srgb, var(--md-on-surface) 7%, transparent);
@@ -60,7 +60,7 @@
   font-size: 0.94em;
 }
 
-.page--setting #settingScreenItems .setting-doc-markdown pre {
+.page--setting :is(#settingScreenItems, #settingInlineSearchResults) .setting-doc-markdown pre {
   max-width: 100%;
   margin: 10px 0;
   padding: 11px 12px;
@@ -70,7 +70,7 @@
   background: color-mix(in srgb, #05080c 78%, var(--md-surface-cont));
 }
 
-.page--setting #settingScreenItems .setting-doc-markdown pre code {
+.page--setting :is(#settingScreenItems, #settingInlineSearchResults) .setting-doc-markdown pre code {
   padding: 0;
   border-radius: 0;
   background: transparent;
@@ -78,12 +78,12 @@
   white-space: pre-wrap;
 }
 
-.page--setting #settingScreenItems .setting-doc-markdown a {
+.page--setting :is(#settingScreenItems, #settingInlineSearchResults) .setting-doc-markdown a {
   color: var(--md-primary);
   text-decoration: none;
 }
 
-.page--setting #settingScreenItems .setting-doc-table-wrap {
+.page--setting :is(#settingScreenItems, #settingInlineSearchResults) .setting-doc-table-wrap {
   max-width: 100%;
   margin: 10px 0;
   overflow-x: auto;
@@ -91,14 +91,14 @@
   border-radius: var(--r-sm);
 }
 
-.page--setting #settingScreenItems .setting-doc-markdown table {
+.page--setting :is(#settingScreenItems, #settingInlineSearchResults) .setting-doc-markdown table {
   width: 100%;
   border-collapse: collapse;
   font-size: 11px;
 }
 
-.page--setting #settingScreenItems .setting-doc-markdown th,
-.page--setting #settingScreenItems .setting-doc-markdown td {
+.page--setting :is(#settingScreenItems, #settingInlineSearchResults) .setting-doc-markdown th,
+.page--setting :is(#settingScreenItems, #settingInlineSearchResults) .setting-doc-markdown td {
   min-width: 72px;
   padding: 8px 10px;
   border-right: 1px solid color-mix(in srgb, var(--md-outline-var) 20%, transparent);
@@ -107,22 +107,22 @@
   vertical-align: top;
 }
 
-.page--setting #settingScreenItems .setting-doc-markdown th:last-child,
-.page--setting #settingScreenItems .setting-doc-markdown td:last-child {
+.page--setting :is(#settingScreenItems, #settingInlineSearchResults) .setting-doc-markdown th:last-child,
+.page--setting :is(#settingScreenItems, #settingInlineSearchResults) .setting-doc-markdown td:last-child {
   border-right: 0;
 }
 
-.page--setting #settingScreenItems .setting-doc-markdown tbody tr:last-child td {
+.page--setting :is(#settingScreenItems, #settingInlineSearchResults) .setting-doc-markdown tbody tr:last-child td {
   border-bottom: 0;
 }
 
-.page--setting #settingScreenItems .setting-doc-markdown th {
+.page--setting :is(#settingScreenItems, #settingInlineSearchResults) .setting-doc-markdown th {
   background: color-mix(in srgb, var(--md-on-surface) 6%, transparent);
   color: var(--md-on-surface);
   font-weight: 820;
 }
 
-.page--setting #settingScreenItems .setting-doc-callout {
+.page--setting :is(#settingScreenItems, #settingInlineSearchResults) .setting-doc-callout {
   margin: 10px 0;
   padding: 10px 12px;
   border-left: 3px solid color-mix(in srgb, var(--md-primary) 76%, transparent);
@@ -130,13 +130,13 @@
   background: color-mix(in srgb, var(--md-primary) 8%, transparent);
 }
 
-.page--setting #settingScreenItems .setting-doc-callout--warning,
-.page--setting #settingScreenItems .setting-doc-callout--caution {
+.page--setting :is(#settingScreenItems, #settingInlineSearchResults) .setting-doc-callout--warning,
+.page--setting :is(#settingScreenItems, #settingInlineSearchResults) .setting-doc-callout--caution {
   border-left-color: var(--md-warning);
   background: color-mix(in srgb, var(--md-warning) 9%, transparent);
 }
 
-.page--setting #settingScreenItems .setting-doc-markdown hr {
+.page--setting :is(#settingScreenItems, #settingInlineSearchResults) .setting-doc-markdown hr {
   margin: 14px 0;
   border: 0;
   border-top: 1px solid color-mix(in srgb, var(--md-outline-var) 28%, transparent);

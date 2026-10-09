@@ -213,7 +213,7 @@ async def on_cleanup(app: web.Application) -> None:
 
 
 def make_app() -> web.Application:
-  # Bring forward user state (web settings, YouTube stream key, favorites) from
+  # Bring forward user state (web settings, favorites) from
   # the old in-repo location before any service reads it, so upgrading devices
   # keep their settings instead of seeing defaults once.
   migrate_legacy_carrot_state()
