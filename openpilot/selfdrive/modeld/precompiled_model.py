@@ -121,8 +121,17 @@ def installed(model=None, cache_dir: Path | None = None) -> Path | None:
     return None
 
 
+def gpu_bootloader_timeout(detail: str, phase: str) -> bool:
+  # Worker exceptions cross the process boundary as RuntimeError(traceback),
+  # losing their original TimeoutError type. Match the AMD PSP bootloader's
+  # terminal exception, not arbitrary model/serialization errors mentioning time.
+  return (phase in ('load', 'boot_validation') and
+          re.search(r'^TimeoutError: BL not ready\. Timed out after [0-9]+ ms, condition not met: [0-9]+ != [0-9]+\Z',
+                    detail.rstrip(), re.MULTILINE) is not None)
+
+
 def retry_usb_rejection(root: Path, pickle_sha256: str) -> bool:
-  """Migrate the old USB-I/O misclassification only after a device reboot.
+  """Migrate old USB-I/O/PSP startup misclassification after a device reboot.
 
   This grants another verified load attempt, never a validation receipt.
   Missing/mismatched diagnostics and actual model errors remain rejected.
@@ -137,7 +146,8 @@ def retry_usb_rejection(root: Path, pickle_sha256: str) -> bool:
             isinstance(failure.get('boot_id'), str) and bool(failure['boot_id']) and
             bool(current_boot) and failure['boot_id'] != current_boot and
             isinstance(failure.get('error'), str) and
-            'bulk out 0x02 failed: input/output error' in failure['error'].lower())
+            ('bulk out 0x02 failed: input/output error' in failure['error'].lower() or
+             gpu_bootloader_timeout(failure['error'], failure['phase'])))
   except (OSError, ValueError, TypeError):
     return False
 
@@ -163,7 +173,7 @@ def ensure_precompiled(model=None, cache_dir: Path | None = None, progress=None)
     if not retry_usb_rejection(root, value['pickle']['sha256']):
       return None
     (root / 'boot_validation.json').unlink(missing_ok=True)
-    print('Retrying model rejected by an earlier-boot USB transfer failure; revalidating artifacts.')
+    print('Retrying model rejected by an earlier-boot GPU initialization failure; revalidating artifacts.')
   root.mkdir(parents=True, exist_ok=True)
   target = root / 'model.pkl'
   if value['format'] == 'comma-generic-onnx' and not target.exists():
@@ -209,6 +219,7 @@ def record_failure(path: Path, error: BaseException | str, phase: str) -> bool:
   from openpilot.selfdrive.modeld.helpers import usbgpu_pcie_not_ready
   detail = str(error)
   transient = (usbgpu_pcie_not_ready(error) or isinstance(error, (TimeoutError, BrokenPipeError)) or
+               gpu_bootloader_timeout(detail, phase) or
                'precompiled eGPU worker timed out' in detail or 'precompiled eGPU worker exited' in detail)
   value = json.loads((path.parent / 'installed.json').read_text())
   from openpilot.selfdrive.modeld.egpu_worker_progress import boot_identity

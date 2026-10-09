@@ -17,6 +17,9 @@ class Response(io.BytesIO):
     self.status, self.headers = status, headers or {}
 
 
+BOOTLOADER_TIMEOUT = 'TimeoutError: BL not ready. Timed out after 10000 ms, condition not met: 0 != 2147483648\n'
+
+
 def catalog():
   runtime = io.BytesIO()
   with tarfile.open(fileobj=runtime, mode='w:gz') as tar:
@@ -149,7 +152,8 @@ def test_generic_install_reuses_verified_download(tmp_path, monkeypatch):
   ({'error': 'ValueError: checkpoint mismatch'}, False), ({'rejected': False}, False),
   ({'error': 'OSError: Input/Output Error reading model.pkl'}, False),
 ])
-def test_old_usb_rejection_requires_matching_previous_boot_evidence(tmp_path, monkeypatch, change, allowed):
+@pytest.mark.parametrize('error', ['RuntimeError: bulk OUT 0x02 failed: Input/Output Error', BOOTLOADER_TIMEOUT])
+def test_old_usb_rejection_requires_matching_previous_boot_evidence(tmp_path, monkeypatch, change, allowed, error):
   from openpilot.selfdrive.modeld import egpu_worker_progress
   value, data = catalog()
   model = SimpleNamespace(sha256='a' * 64, url='https://nas.example/models/v2/model.onnx')
@@ -160,7 +164,7 @@ def test_old_usb_rejection_requires_matching_previous_boot_evidence(tmp_path, mo
   monkeypatch.setattr(egpu_worker_progress, 'boot_identity', lambda: 'this-boot')
   path = pm.ensure_precompiled(model, tmp_path)
   failure = {'rejected': True, 'pickle_sha256': value['pickle']['sha256'], 'phase': 'load',
-             'boot_id': 'previous-boot', 'error': 'RuntimeError: bulk OUT 0x02 failed: Input/Output Error'} | change
+             'boot_id': 'previous-boot', 'error': error} | change
   (path.parent / 'last_failure.json').write_text(json.dumps(failure))
   pm.reject(path)
   # A stale receipt must not bypass a new smoke test after recovery.
@@ -185,3 +189,13 @@ def test_usb_rejection_is_not_recovered_without_diagnostics(tmp_path, contents):
   if contents is not None:
     (tmp_path / 'last_failure.json').write_text(contents)
   assert not pm.retry_usb_rejection(tmp_path, 'a' * 64)
+
+
+@pytest.mark.parametrize('phase,allowed', [('load', True), ('boot_validation', True), ('inference', False)])
+def test_bootloader_timeout_is_retryable_only_during_startup(tmp_path, phase, allowed):
+  path = tmp_path / 'model.pkl'
+  (tmp_path / 'installed.json').write_text(json.dumps({'pickle': {'sha256': 'a' * 64}}))
+  (tmp_path / 'boot_validation.json').write_text('{"key":"old"}')
+  assert pm.record_failure(path, RuntimeError(BOOTLOADER_TIMEOUT), phase) == (not allowed)
+  assert (tmp_path / 'rejected').exists() == (not allowed)
+  assert not (tmp_path / 'boot_validation.json').exists()

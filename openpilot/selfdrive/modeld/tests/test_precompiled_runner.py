@@ -75,6 +75,12 @@ def test_inference_shutdown_releases_worker_without_rejecting_artifact(monkeypat
 
 @pytest.mark.parametrize('message,rejected', [('RuntimeError: PCIe link not up (LTSSM=0x00)', False),
                                              ('RuntimeError: bulk OUT 0x02 failed: Input/Output Error', False),
+                                             ('Traceback (most recent call last):\n  worker startup\n'
+                                              'TimeoutError: BL not ready. Timed out after 10000 ms, condition not met: 0 != 2147483648\n', False),
+                                             ('TimeoutError: unrelated model operation timed out', True),
+                                             ('ValueError: "TimeoutError: BL not ready. Timed out after 10000 ms, condition not met: 0 != 2147483648"', True),
+                                             ('TimeoutError: BL not ready. Timed out after 10000 ms, condition not met: 0 != 2147483648\n'
+                                              'ValueError: precompiled checkpoint mismatch', True),
                                              ('OSError: Input/Output Error reading model.pkl', True),
                                              ('ValueError: precompiled checkpoint mismatch', True)])
 def test_worker_error_protocol_preserves_cause_and_artifact_decision(tmp_path, monkeypatch, message, rejected):
@@ -92,8 +98,9 @@ def test_worker_error_protocol_preserves_cause_and_artifact_decision(tmp_path, m
     def select(self, timeout):
       return [True]
   monkeypatch.setattr(runner.selectors, 'DefaultSelector', ReadySelector)
-  with pytest.raises(RuntimeError, match=message.split(':')[0]):
+  with pytest.raises(RuntimeError) as raised:
     runner.PrecompiledModelState(1928, 1208, tmp_path / 'model.pkl')
+  assert str(raised.value) == message
   failure = json.loads((tmp_path / 'last_failure.json').read_text())
   assert failure['error'] == message and failure['phase'] == 'load'
   assert failure['rejected'] == rejected
