@@ -47,7 +47,7 @@ class FakeParams:
     if key in ("VehicleNaviDecelCancel", "VehicleNaviSectionAvgControl"):
       return False
     if key in ("VehicleNaviDecelCancelBox", "VehicleNaviDecelCancelMobileZone", "VehicleNaviDecelCancelBump",
-               "VehicleNaviDecelCancelFixed", "VehicleNaviDecelCancelUnknown",
+               "VehicleNaviDecelCancelUnknown",
                "VehicleNaviDecelCancelEarlyWarning"):
       return True
     assert key == "VehicleNaviSchoolZoneControl"
@@ -1598,25 +1598,18 @@ def test_bump_cancel_survives_a_repeated_announcement():
 
 def test_decel_cancel_master_gates_every_kind():
   state = _car_state()
-  assert not (state.speedcamSkipBox or state.speedcamSkipMobileZone or state.speedcamCancelBump or state.speedcamSkipFixed
+  assert not (state.speedcamSkipBox or state.speedcamSkipMobileZone or state.speedcamCancelBump
               or state.speedcamSkipUnknown)
   state.op_params.get_bool = lambda key: True
   state._read_speedcam_params()
-  assert state.speedcamSkipBox and state.speedcamSkipMobileZone and state.speedcamCancelBump and state.speedcamSkipFixed
+  assert state.speedcamSkipBox and state.speedcamSkipMobileZone and state.speedcamCancelBump
   assert state.speedcamSkipUnknown and state.speedcam_policy.early_lead
 
 
-def test_fixed_camera_skip_outside_a_section_only():
+def test_fixed_camera_always_decelerates():
   state = _speedcam_state()
-  state.speedcamSkipFixed = True
+  state.speedcamSkipBox = state.speedcamSkipMobileZone = state.speedcamSkipUnknown = True
   state.speedcam_policy.add_preview(0xD0, 366, 0.0)        # kind 0 fixed @60
   ret = SimpleNamespace(vEgo=16.0, speedLimit=60.0, gasPressed=False, vehicleNaviSectionActive=False)
-  assert not state._apply_speedcam_policy(ret, True, True, 60.0, True)
-  assert state.speedcam_accel_swallow
-
-  section = _speedcam_state()
-  section.speedcamSkipFixed = True
-  section.speedcam_policy.add_preview(0xD0, 366, 0.0)      # a section's start/end camera is kind 0 too
-  ret = SimpleNamespace(vEgo=16.0, speedLimit=60.0, gasPressed=False, vehicleNaviSectionActive=True)
-  assert section._apply_speedcam_policy(ret, True, True, 60.0, True)
-  assert not section.speedcam_accel_swallow               # + stays the section unlock
+  assert state._apply_speedcam_policy(ret, True, True, 60.0, True)
+  assert not state.speedcam_accel_swallow                 # + keeps raising the set speed
