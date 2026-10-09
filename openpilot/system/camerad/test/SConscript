@@ -1,4 +1,6 @@
-Import('env')
+Import('env', 'arch')
 
 env.Program('test_camera_event_timing', ['test_camera_event_timing.cc'])
+if arch != "Darwin":
+  env.Program('test_async_frame_wait', ['test_async_frame_wait.cc'], LIBS=['pthread'])
 env.Program('test_os04c10_exposure', ['test_os04c10_exposure.cc', '../sensors/os04c10.cc'])

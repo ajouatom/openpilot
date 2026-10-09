@@ -79,7 +79,7 @@ from cluster_route_replay import (
 )
 from cluster_simulator import ClusterSimulator, RandomInputSource
 from cluster_system_monitor import ClusterProcessCoreUsageSampler, NetworkAddressProvider
-from cluster_usb_display import TuringUsbDisplay, find_supported_usb_product, product_id_for_hud_mode
+from cluster_usb_display import TuringUsbDisplay, find_supported_usb_product, product_id_for_hud_mode, _set_cluster_hud_connected
 from cluster_usb_pipeline import AsyncJpegUsbPipeline
 from openpilot.common.display_scheduling import DisplayScheduler
 from openpilot.selfdrive.controls.lib.cutin_alert import CutinAlertCandidate, CutinAlertTracker
@@ -1897,6 +1897,8 @@ def run_demo(
                 report_frames = 0
                 last_report_time = now
     finally:
+        if usb_display is not None:
+            _set_cluster_hud_connected(False)
         scheduler.update(False, force=True, child_pid=h264_pipeline.encoder_pid if h264_pipeline is not None else None)
         if signal_installed:
             signal.signal(signal.SIGTERM, previous_sigterm_handler)
