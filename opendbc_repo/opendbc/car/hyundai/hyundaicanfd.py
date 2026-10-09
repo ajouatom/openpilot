@@ -59,6 +59,10 @@ def apply_canfd_stopping(values, CS, controller, accel, previous_value, jerk_u, 
     values.update(StopReq=command.stop_req, aReqRaw=command.raw, aReqValue=command.value,
                   AccelLimitBandUpper=0.0, AccelLimitBandLower=command.lower)
 
+  # Apply only to the final packet, after retry and interlocks have selected
+  # StopReq. Keep the existing acceleration calculation and stop timing.
+  values["JerkUpperLimit"] = controller.limit_scc_jerk_upper(values["StopReq"], values["JerkUpperLimit"])
+
   if controller.phase != previous_phase:
     carlog.warning({"event": "carrot_stopping", "from": str(previous_phase), "phase": str(controller.phase),
                     "reason": controller.reason, "speed": speed, "aEgo": CS.out.aEgo,
