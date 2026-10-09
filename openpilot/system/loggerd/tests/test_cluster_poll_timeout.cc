@@ -56,7 +56,7 @@ void test_indefinite_wait_returns_ready() {
   std::thread sender([&] {
     std::this_thread::sleep_for(std::chrono::milliseconds(10));
     char value = 1;
-    write(pipes[1], &value, 1);
+    assert(write(pipes[1], &value, 1) == 1);
   });
   pollfd fd = {.fd = pipes[0], .events = POLLIN, .revents = 0};
   const int ret = poll_with_timeout(&fd, 1, -1);
