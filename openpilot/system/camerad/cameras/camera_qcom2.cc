@@ -9,6 +9,7 @@
 #include <cerrno>
 #include <cmath>
 #include <cstring>
+#include <deque>
 #include <string>
 #include <vector>
 
@@ -44,6 +45,7 @@ public:
 
   float fl_pix = 0;
   std::unique_ptr<PubMaster> pm;
+  std::deque<cam_req_mgr_message> queued_events;
 
   CameraState(SpectraMaster *master, const CameraConfig &config) : camera(master, config) {};
   ~CameraState();
@@ -270,40 +272,66 @@ void camerad_thread() {
   // poll events
   LOG("-- Dequeueing Video events");
   while (!do_exit) {
-    struct pollfd fds[1] = {{.fd = m.video0_fd, .events = POLLPRI}};
-    int ret = poll(fds, std::size(fds), 1000);
+    // Driver IFE/BPS waits must not stall road/wide event delivery. Its result
+    // wakes this same owner thread, which still owns all camera state/recovery.
+    std::vector<pollfd> fds = {{.fd = m.video0_fd, .events = POLLPRI}};
+    for (auto &cam : cams) {
+      fds.push_back({.fd = cam->camera.frame_wait_fd(), .events = POLLIN});
+    }
+    int ret = poll(fds.data(), fds.size(), 1000);
     if (ret < 0) {
       if (errno == EINTR || errno == EAGAIN) continue;
       LOGE("poll failed (%d - %d)", ret, errno);
       break;
     }
 
-    if (!(fds[0].revents & POLLPRI)) continue;
+    for (size_t i = 0; i < cams.size(); ++i) {
+      if ((fds[i + 1].revents & POLLIN) && cams[i]->camera.complete_frame_wait()) {
+        cams[i]->sendState();
+      }
+    }
 
-    struct v4l2_event ev = {0};
-    ret = HANDLE_EINTR(ioctl(fds[0].fd, VIDIOC_DQEVENT, &ev));
-    if (ret == 0) {
-      if (ev.type == V4L_EVENT_CAM_REQ_MGR_EVENT) {
-        struct cam_req_mgr_message *event_data = (struct cam_req_mgr_message *)ev.u.data;
-        if (env_debug_frames) {
-          printf("sess_hdl 0x%6X, link_hdl 0x%6X, frame_id %lu, req_id %lu, timestamp %.2f ms, sof_status %d\n", event_data->session_hdl, event_data->u.frame_msg.link_hdl,
-                 event_data->u.frame_msg.frame_id, event_data->u.frame_msg.request_id, event_data->u.frame_msg.timestamp/1e6, event_data->u.frame_msg.sof_status);
-          do_exit = do_exit || event_data->u.frame_msg.frame_id > (1*20);
-        }
-
-        for (auto &cam : cams) {
-          if (event_data->session_hdl == cam->camera.session_handle) {
-            if (cam->camera.handle_camera_event(event_data)) {
-              cam->sendState();
-            }
-            break;
+    if (fds[0].revents & POLLPRI) {
+      struct v4l2_event ev = {0};
+      ret = HANDLE_EINTR(ioctl(fds[0].fd, VIDIOC_DQEVENT, &ev));
+      if (ret == 0) {
+        if (ev.type == V4L_EVENT_CAM_REQ_MGR_EVENT) {
+          struct cam_req_mgr_message *event_data = (struct cam_req_mgr_message *)ev.u.data;
+          if (env_debug_frames) {
+            printf("sess_hdl 0x%6X, link_hdl 0x%6X, frame_id %lu, req_id %lu, timestamp %.2f ms, sof_status %d\n", event_data->session_hdl, event_data->u.frame_msg.link_hdl,
+                   event_data->u.frame_msg.frame_id, event_data->u.frame_msg.request_id, event_data->u.frame_msg.timestamp/1e6, event_data->u.frame_msg.sof_status);
+            do_exit = do_exit || event_data->u.frame_msg.frame_id > (1*20);
           }
+
+          for (auto &cam : cams) {
+            if (event_data->session_hdl == cam->camera.session_handle) {
+              if (cam->camera.cc.stream_type == VISION_STREAM_DRIVER) {
+                // Bound backlog during a failed fence. A discarded event is
+                // detected by the existing raw/request-ID gap recovery.
+                if (cam->queued_events.size() >= 32) {
+                  cam->queued_events.pop_front();
+                  LOGE("driver camera event backlog overflow");
+                }
+                cam->queued_events.push_back(*event_data);
+              } else if (cam->camera.handle_camera_event(event_data)) {
+                cam->sendState();
+              }
+              break;
+            }
+          }
+        } else {
+          LOGE("unhandled event %d\n", ev.type);
         }
       } else {
-        LOGE("unhandled event %d\n", ev.type);
+        LOGE("VIDIOC_DQEVENT failed, errno=%d", errno);
       }
-    } else {
-      LOGE("VIDIOC_DQEVENT failed, errno=%d", errno);
+    }
+    for (auto &cam : cams) {
+      while (!cam->camera.frame_wait_pending() && !cam->queued_events.empty()) {
+        const auto event = cam->queued_events.front();
+        cam->queued_events.pop_front();
+        if (cam->camera.handle_camera_event(&event)) cam->sendState();
+      }
     }
   }
 }

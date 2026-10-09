@@ -1,7 +1,10 @@
 import sys
+import ast
+from types import SimpleNamespace
 from pathlib import Path
 
 import usb.util
+import pytest
 
 CLUSTER_DIR = Path(__file__).resolve().parents[1] / "cluster"
 sys.path.insert(0, str(CLUSTER_DIR))
@@ -13,6 +16,26 @@ from cluster_usb_display import (
   TuringUsbDisplay,
   _transparent_h264_overlay_png,
 )
+
+
+def test_connection_clears_before_encoder_teardown_can_fail():
+  tree = ast.parse((CLUSTER_DIR / 'main.py').read_text(encoding='utf8'))
+  cleanup = next(n.finalbody for n in ast.walk(tree) if isinstance(n, ast.Try) and
+                 any('scheduler.update(False' in ast.unparse(s) for s in n.finalbody))
+  calls = []
+  def encoder_close():
+    calls.append('encoder.close')
+    raise RuntimeError('encoder failure')
+  noop = SimpleNamespace(close=lambda: None)
+  scope = dict(usb_display=object(), _set_cluster_hud_connected=lambda value: calls.append(value),
+               scheduler=SimpleNamespace(update=lambda *a, **kw: None),
+               h264_pipeline=SimpleNamespace(encoder_pid=None, close=encoder_close),
+               signal_installed=False, gc_hook=None, network_address_provider=noop,
+               cluster_core_usage_sampler=None,
+               renderer=SimpleNamespace(release_nv12_dmabuf_output=lambda: None))
+  with pytest.raises(RuntimeError, match='encoder failure'):
+    exec(compile(ast.Module(body=cleanup, type_ignores=[]), '<HUD cleanup>', 'exec'), scope)
+  assert calls == [False, 'encoder.close']
 
 
 def successful_response(command_id: int) -> bytes:

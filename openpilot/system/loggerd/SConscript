@@ -42,4 +42,6 @@ if arch in ("aarch64", "larch64"):
   )
 
 if GetOption('extras'):
+  if arch != "Darwin":
+    env.Program('tests/test_cluster_poll_timeout', ['tests/test_cluster_poll_timeout.cc'], LIBS=['pthread'])
   env.Program('tests/test_logger', ['tests/test_runner.cc', 'tests/test_logger.cc', 'tests/test_zstd_writer.cc'], LIBS=libs)

@@ -2,6 +2,8 @@
 import ast
 from pathlib import Path
 from types import SimpleNamespace
+from dataclasses import dataclass
+from collections import defaultdict
 
 import pytest
 
@@ -194,3 +196,64 @@ def test_engaged_communication_failure_is_not_exempt_during_gpu_settling():
                    'no_system_errors' in ast.unparse(n.test))
   ns = {'self': state, 'no_system_errors': True, 'model_starting': False, 'big_model_settling': True}
   assert eval(compile(ast.Expression(condition), '<communication check>', 'eval'), ns)
+
+
+def alert_harness():
+  tree = ast.parse((ROOT / 'selfdrived.py').read_text(encoding='utf8'))
+  update = next(n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef) and n.name == 'update_alerts')
+  manager = ast.parse((ROOT / 'alertmanager.py').read_text(encoding='utf8'))
+  ns = {'dataclass': dataclass, 'defaultdict': defaultdict, 'Alert': object,
+        'EmptyAlert': SimpleNamespace(alert_type=''), 'LONGITUDINAL_PERSONALITY_MAP': {0: 'standard'},
+        'ET': SimpleNamespace(WARNING='warning', NO_ENTRY='noEntry'), 'EventName': EventName}
+  classes = [n for n in manager.body if isinstance(n, ast.ClassDef)]
+  exec(compile(ast.Module(body=classes + [update], type_ignores=[]), '<startup alerts>', 'exec'), ns)
+  return ns['update_alerts'], ns['AlertManager']()
+
+
+def entry_alert(name, priority=3):
+  return SimpleNamespace(alert_type=name, event_type='noEntry', priority=priority, duration=100)
+
+
+def test_early_engage_shows_initializing_while_gear_still_blocks_enable():
+  update, manager = alert_harness()
+  gear = entry_alert('wrongGear/noEntry')
+  initializing = entry_alert('selfdriveInitializing/noEntry')
+  manager.add_many(0, [gear])  # clear a previously displayed gear message too
+  events = Events({EventName.wrongGear, EventName.selfdriveInitializing, EventName.buttonEnable})
+  events.create_alerts = lambda *args: [gear, initializing]
+  state = SimpleNamespace(enabled=False, events=events, AM=manager, sm=SimpleNamespace(frame=1),
+                          CP=None, personality=0, is_metric=True,
+                          state_machine=SimpleNamespace(current_alert_types=['noEntry'], soft_disable_timer=0))
+  update(state, None)
+  assert manager.current_alert.alert_type == 'selfdriveInitializing/noEntry'
+  assert EventName.wrongGear in events
+  assert state_machine().update(events) == (False, False)
+  # Startup explanation must not cover a real higher-priority fault.
+  events.create_alerts = lambda *args: [gear, initializing, entry_alert('canError/noEntry', 5)]
+  state.sm.frame += 1
+  update(state, None)
+  assert manager.current_alert.alert_type == 'canError/noEntry'
+
+
+def test_gear_alert_returns_after_initialization_and_disable_alerts_are_retained():
+  update, manager = alert_harness()
+  gear = entry_alert('wrongGear/noEntry')
+  events = Events({EventName.wrongGear, EventName.buttonEnable})
+  events.create_alerts = lambda *args: [gear]
+  state = SimpleNamespace(enabled=False, events=events, AM=manager, sm=SimpleNamespace(frame=1),
+                          CP=None, personality=0, is_metric=True,
+                          state_machine=SimpleNamespace(current_alert_types=['noEntry'], soft_disable_timer=0))
+  update(state, None)
+  assert manager.current_alert.alert_type == 'wrongGear/noEntry'
+  assert state_machine().update(events) == (False, False)
+  # Only the no-entry presentation is filtered; the USER_DISABLE alert survives.
+  events.add(EventName.selfdriveInitializing)
+  disable = entry_alert('wrongGear/userDisable')
+  disable.event_type = 'userDisable'
+  events.create_alerts = lambda *args: [disable]
+  state.sm.frame += 1
+  update(state, None)
+  assert manager.current_alert.alert_type == 'wrongGear/userDisable'
+  machine = state_machine()
+  machine.state = State.enabled
+  assert machine.update(events) == (False, False)
