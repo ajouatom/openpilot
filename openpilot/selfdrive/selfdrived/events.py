@@ -557,9 +557,8 @@ EVENTS: dict[int, dict[str, Alert | AlertCallbackType]] = {
       Priority.LOW, VisualAlert.steerRequired, AudibleAlert.none, 1.8),
   },
 
-  EventName.driverMonitorFallback: {
-    ET.PERMANENT: NormalPermanentAlert(tr_noop("Driver camera unavailable"), tr_noop("Monitoring driver controls"), creation_delay=3.),
-  },
+  # Retain the schema event for historical logs, without a fallback banner.
+  EventName.driverMonitorFallback: {},
 
   # The global UI renders the cancellable countdown, including over settings.
   # Keep sound below critical driving alerts and honor normal user volume.

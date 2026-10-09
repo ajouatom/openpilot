@@ -3,25 +3,7 @@ from types import SimpleNamespace
 import pytest
 
 from openpilot.cereal import log
-from openpilot.selfdrive.monitoring.dm_alerts import CameraFallbackNotice, driver_monitoring_hud_alert
-
-
-def test_startup_notice_is_bounded_without_requiring_camera_recovery():
-  notice = CameraFallbackNotice()
-  for t in (0, 3, 10, 17, 29.99):
-    assert not notice.update(t, True, True, False)
-  assert notice.update(30, True, True, False)
-  assert notice.update(300, True, True, False)
-  assert not notice.update(301, True, False, False)
-
-
-def test_recovered_camera_lost_during_startup_gets_normal_notice():
-  notice = CameraFallbackNotice()
-  assert not notice.update(4, True, False, False)
-  assert notice.update(5, True, True, False)
-  assert not notice.update(6, False, True, False)
-  assert not notice.update(7, True, True, True)
-  assert notice.update(8, True, True, False)
+from openpilot.selfdrive.monitoring.dm_alerts import driver_monitoring_hud_alert
 
 
 @pytest.mark.parametrize('invalid,disabled', [(False, False), (True, False), (False, True), (True, True)])
