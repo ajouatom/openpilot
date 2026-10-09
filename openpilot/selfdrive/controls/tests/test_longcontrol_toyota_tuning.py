@@ -29,7 +29,7 @@ def test_toyota_ignores_saved_and_live_outer_gains(monkeypatch):
   monkeypatch.setattr(lc, 'Params', lambda: params)
   control = lc.LongControl(make_cp('toyota'))
   for gains in ((100, 0, 100), (0, 100, 200)):
-    params.values.update(zip(('LongTuningKpV', 'LongTuningKiV', 'LongTuningKf'), gains))
+    params.values.update(zip(('LongTuningKpV', 'LongTuningKiV', 'LongTuningKf'), gains, strict=True))
     control._refresh_longitudinal_tuning()
     assert control.pid._k_p == ([0.], [0.])
     assert control.pid._k_i == ([0.], [0.])
