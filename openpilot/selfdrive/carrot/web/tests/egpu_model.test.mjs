@@ -39,4 +39,6 @@ test("Cinque v2 model gets a distinct friendly eGPU title", () => {
 
 test("Cinque v3 has its own eGPU title", () => {
   assert.equal(modelDisplayName({ model_id: "comma-pr38932-cinque-v3-892fc3a1-e758b96d" }), "Cinque v3");
+  assert.equal(modelDisplayName({ model_id: "comma-pr39047-mdm-v1-bea3fd4f-4fe66440" }), "Mountain Dew v1");
+  assert.equal(modelDisplayName({ model_id: "comma-pr39047-mdm-v1-4bfb5340-e20cde17" }), "Mountain Dew v1 (870a4823)");
 });

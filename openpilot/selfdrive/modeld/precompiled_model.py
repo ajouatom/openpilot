@@ -15,6 +15,7 @@ from urllib.parse import urljoin, urlparse
 from urllib.request import Request, urlopen
 
 from openpilot.selfdrive.modeld.big_model import active_manifest, model_cache_dir, model_path
+from openpilot.selfdrive.modeld.precompiled_artifact import SERIALIZATIONS
 
 PROTOCOL = 1
 MAX_CATALOG = 64 * 1024
@@ -28,6 +29,9 @@ def sha256(path: Path) -> str:
 
 def validate_catalog(value: dict, model_sha: str, catalog_url: str) -> dict:
   generic = value.get('format') == 'comma-generic-onnx'
+  serialization = value.get('serialization', 'oob-v1')
+  if serialization not in SERIALIZATIONS or (serialization != 'oob-v1' and not generic):
+    raise ValueError('unsupported precompiled serialization')
   identity = 'model_sha256' if generic else 'onnx_sha256'
   if value.get('protocol') != PROTOCOL or value.get(identity) != model_sha:
     raise ValueError('precompiled model does not match the selected ONNX/protocol')

@@ -1,0 +1,51 @@
+name: Mountain Dew model compatibility
+on:
+  push:
+    branches: [carrot-wip]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  model:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - run: python -m pip install numpy pytest requests psutil
+      - name: Check model contract, delivery and existing warp policy
+        run: >-
+          python -m pytest -c /dev/null --rootdir=. --confcutdir=openpilot/selfdrive/modeld/tests -q
+          openpilot/selfdrive/modeld/tests/test_big_model.py
+          openpilot/selfdrive/modeld/tests/test_precompiled_model.py
+          openpilot/selfdrive/modeld/tests/test_precompiled_runner.py
+          openpilot/selfdrive/modeld/tests/test_egpu_startup_retry.py
+          openpilot/selfdrive/modeld/tests/test_generic_model_runtime.py
+          openpilot/selfdrive/modeld/tests/test_local_gpu_warp.py
+          openpilot/selfdrive/modeld/tests/test_precompiled_artifact.py
+          openpilot/selfdrive/modeld/tests/test_big_model_delivery.py
+          openpilot/selfdrive/modeld/tests/test_big_model_startup.py
+          openpilot/selfdrive/modeld/tests/test_egpu_worker_progress.py
+          openpilot/selfdrive/modeld/tests/test_precompiled_validation.py
+      - name: Download the pinned isolated runtime
+        run: |
+          curl --fail --retry 3 -o /tmp/mdm-runtime.tar.gz https://upload.shind0.synology.me/models/comma4-big-mdm2/precompiled-runtime.tar.gz
+          echo '6a65495ec80afe8a3114c2f19dcf63a4e7d4654c2fc977e9acacb646f3f7c2c9  /tmp/mdm-runtime.tar.gz' | sha256sum -c -
+          mkdir /tmp/mdm-runtime
+          tar -xzf /tmp/mdm-runtime.tar.gz -C /tmp/mdm-runtime
+      - name: Execute pinned native CPU warp and persistent-buffer roundtrip
+        env:
+          MDM_RUNTIME_ROOT: /tmp/mdm-runtime
+          PYTHONPATH: .
+        run: python -m pytest -c /dev/null --rootdir=. --confcutdir=tools/modeld -q tools/modeld/test_mdm_runtime.py
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+      - name: Check Web model name and generated assets
+        working-directory: openpilot/selfdrive/carrot/web
+        run: |
+          npm ci
+          node --test tests/egpu_model.test.mjs tests/egpu_model_status.test.mjs
+          npm run build
+          git diff --exit-code
