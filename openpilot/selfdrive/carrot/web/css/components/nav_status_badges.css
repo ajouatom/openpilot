@@ -71,7 +71,7 @@
 
 @media (prefers-reduced-motion: reduce) {
   .topbar #btnHome.recording,
-    .topbar #btnTerminal.remote-support {
+  .topbar #btnTerminal.remote-support {
     animation: none;
     background: color-mix(in srgb, #c9827b 10%, transparent);
   }

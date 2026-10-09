@@ -674,7 +674,10 @@ async function showSettingInlineSearchResultsInGroups(options = {}) {
     requestAnimationFrame(() => setSettingItemsScrollTop(getSavedSettingScrollPosition(SETTING_INLINE_SEARCH_GROUP)));
   }
   mountSettingInlineSearch();
-  if (!options.forceRender && hasRenderedInlineSearchResults()) return true;
+  if (!options.forceRender && hasRenderedInlineSearchResults()) {
+    scheduleSettingLiveRefresh(0);
+    return true;
+  }
   if (entering) {
     box.classList.remove("is-entering");
     void box.offsetWidth;
@@ -1809,7 +1812,7 @@ function resetSettingItemsViewport() {
 }
 
 function hasRenderedSettingItems(group = CURRENT_GROUP) {
-  const itemsBox = document.getElementById("items");
+  const itemsBox = getSettingItemRenderContainer(group) || document.getElementById("items");
   if (!itemsBox || !group) return false;
   if (group === SETTING_INLINE_SEARCH_GROUP && itemsBox.dataset.renderedSearchQuery !== settingInlineSearchQuery) return false;
   return itemsBox.dataset.renderedGroup === group && !itemsBox.dataset.renderedDetail && itemsBox.childElementCount > 0;
@@ -3375,8 +3378,10 @@ window.addEventListener("carrot:paramsrestored", (event) => {
   const currentTop = getSettingItemsScrollTop();
   settingRestoreRefreshTimer = window.setTimeout(() => {
     settingRestoreRefreshTimer = null;
+    const container = getSettingItemRenderContainer(CURRENT_GROUP);
     renderItems(CURRENT_GROUP, {
-      container: getSettingItemRenderContainer(CURRENT_GROUP) || undefined,
+      container: container || undefined,
+      allowHidden: Boolean(container),
       detailName: CURRENT_SETTING_DETAIL || "",
       scrollMode: "restore",
       scrollTop: currentTop,
@@ -3424,6 +3429,7 @@ function shouldRefreshSettingValues() {
     isCarrotSettingTabActive() &&
     !document.hidden &&
     Boolean(CURRENT_GROUP) &&
+    (isSettingItemsScreenActive() || isSettingInlineSearchSurfaceActive()) &&
     hasRenderedSettingItems(CURRENT_GROUP) &&
     !getSettingProfileByGroup(CURRENT_GROUP)
   );
