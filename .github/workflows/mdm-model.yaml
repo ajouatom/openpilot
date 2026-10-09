@@ -1,4 +1,4 @@
-name: Mountain Dew model compatibility
+name: eGPU model compatibility
 on:
   push:
     branches: [carrot-wip]
