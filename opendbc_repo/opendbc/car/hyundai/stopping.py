@@ -46,7 +46,19 @@ class StopCommand:
 
 class CanfdStopping:
   def __init__(self):
+    # Packet history survives episode resets; it follows the final StopReq,
+    # including approach, release/retry and interlock overrides.
+    self.last_scc_stop_req = 0
+    self.last_scc_jerk_upper = 1.0
     self.reset()
+
+  def limit_scc_jerk_upper(self, stop_req: int, jerk_upper: float) -> float:
+    """Separate an Upper increase from the first StopReq frame, not its onset."""
+    if stop_req == 1 and self.last_scc_stop_req != 1:
+      jerk_upper = min(jerk_upper, self.last_scc_jerk_upper)
+    self.last_scc_stop_req = stop_req
+    self.last_scc_jerk_upper = jerk_upper
+    return jerk_upper
 
   def reset(self):
     self.phase = StopPhase.idle

@@ -59,6 +59,10 @@ def apply_canfd_stopping(values, CS, controller, accel, previous_value, jerk_u, 
     values.update(StopReq=command.stop_req, aReqRaw=command.raw, aReqValue=command.value,
                   AccelLimitBandUpper=0.0, AccelLimitBandLower=command.lower)
 
+  # Apply only to the final packet, after retry and interlocks have selected
+  # StopReq. Keep the existing acceleration calculation and stop timing.
+  values["JerkUpperLimit"] = controller.limit_scc_jerk_upper(values["StopReq"], values["JerkUpperLimit"])
+
   if controller.phase != previous_phase:
     carlog.warning({"event": "carrot_stopping", "from": str(previous_phase), "phase": str(controller.phase),
                     "reason": controller.reason, "speed": speed, "aEgo": CS.out.aEgo,
@@ -351,13 +355,14 @@ def create_lfahda_cluster(packer, CS, CAN, long_active, lat_active, *, suppress_
     values["HDA_OptUsmSta"] = 2
   values["HDA_CntrlModSta"] = 2 if long_active else 0
   values["HDA_LFA_SymSta"] = 2 if lat_active else 0
-  # GV70's blocked stock camera can request this popup during lateral-only
-  # control. Suppress only the observed signature in the outgoing cluster copy;
+  # GV70's blocked stock camera can request this popup with lateral control,
+  # including while longitudinal control is active. Suppress only the observed
+  # signature in the outgoing cluster copy;
   # retain raw camera evidence and all fault / hands-off popup identities.
   lfa = CS.lfa if suppress_camera_auto_disengage else None
   mdps = CS.mdps if suppress_camera_auto_disengage else None
   scc = CS.scc_control if suppress_camera_auto_disengage else None
-  if (suppress_camera_auto_disengage and lat_active and not long_active
+  if (suppress_camera_auto_disengage and lat_active
       and values.get("HDA_InfoPUDis") == 3 and values.get("HDA_InfoPUDis1") == 0
       and values.get("HDA_LFA_WrnSnd") == 0
       and lfa is not None and lfa.get("FCA_SYSWARN") == 1 and lfa.get("VALUE63") == 15

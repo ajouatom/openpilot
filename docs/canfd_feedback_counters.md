@@ -205,3 +205,23 @@ Validation:
 
 Physical GV70 display and sound behavior remain to be verified after updating.
 Private reproduction: `.analysis/archive/2026-09-29/gv70-popup/`.
+
+## Include active longitudinal control (2026-10-09)
+
+The authorized GV70 CAMERA_SCC popup filter now also applies while longitudinal
+control is active. The controller's existing `GENESIS_GV70_1ST_GEN` and
+CAMERA_SCC restriction is unchanged; lateral control must still be active.
+Only the `not long_active` condition is removed. The exact popup/signature,
+zero separate sound request, and absence of decoded MDPS/SCC faults remain
+required. Other vehicles, popup identities, missing evidence and lateral-off
+states retain their previous behavior. This affects the display request only,
+not the original camera warning, control commands or CAN scheduling.
+
+Validation: 211 popup, feedback-counter, DM-cluster and direct-TX configuration
+tests pass, including longitudinal ON/OFF fault and sound preservation. Two
+new longitudinal-ON cases fail against the previous implementation. A local
+recorded-snapshot replay of 1,199 cluster outputs changes only the two matching
+popup requests and their CRCs; counters and other bytes are unchanged. The
+underlying ADAS warning cause and physical popup/chime suppression remain
+unverified. This is a host change; no new Panda firmware change is required by
+this extension. Incident captures and identifiers remain local only.

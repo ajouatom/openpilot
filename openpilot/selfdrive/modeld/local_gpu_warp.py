@@ -8,6 +8,7 @@ import time
 import numpy as np
 
 from openpilot.selfdrive.modeld.generic_model_runtime import GenericModelRuntime, input_view
+from openpilot.selfdrive.modeld.precompiled_artifact import compile_warp, load_warp, prepare_jit
 
 
 def use_local_warp(device_type: str) -> bool:
@@ -108,7 +109,7 @@ class LocalWarpRuntime(GenericModelRuntime):
   """
   def __init__(self, jits, width, height, runtime_dir, frame_info):
     from tinygrad import Context
-    from examples.openpilot.compile_warp import NV12Frame, compile_warp
+    from examples.openpilot.compile_warp import NV12Frame
 
     super().__init__(jits, width, height, runtime_dir, frame_info)
     self.camera_size, self.frame_info = (width, height), frame_info
@@ -116,8 +117,7 @@ class LocalWarpRuntime(GenericModelRuntime):
     cache = runtime_dir / f'warp-qcom-preupload-v1-{width}x{height}.pkl'
     with Context(DEV='QCOM'):
       if cache.is_file():
-        with cache.open('rb') as f:
-          warp = pickle.load(f)
+        self.run_warp = load_warp(cache)
       else:
         warp = compile_warp(NV12Frame(width, height, *frame_info[:3], self.frame_size),
                             (512, 256), layout='yuv420', frames=2, benchmark_runs=1)
@@ -125,7 +125,7 @@ class LocalWarpRuntime(GenericModelRuntime):
         with temporary.open('wb') as f:
           pickle.dump(warp, f)
         os.replace(temporary, cache)
-    self.run_warp = warp['run']
+        self.run_warp = prepare_jit(warp['run'])
     self.upload_bytes = self.frames_offset + int(np.prod(self.specs['new_img'][0]))
 
   def bind_shared(self, packed):

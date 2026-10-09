@@ -1,5 +1,33 @@
 # Repository memory
 
+- On 2026-10-09, after trying Mountain Dew 870a4823, the user requested
+  returning carrot-wip's eGPU model to Cinque v3 (892fc3a1, AMD e758b96d,
+  isolated tinygrad d5e17c93). This supersedes the MDM selection below, not
+  the completed branch consolidation. Retain shared HUD/camera/startup/UI
+  fixes, MDM format compatibility, internal/DM models and Jetson Cinque v2.
+  Do not recreate retired branches. A user-facing model selector was discussed
+  as a possible follow-up, not implemented. See docs/mdm2_20261008.md.
+
+- On 2026-10-09, the user requested full integration of `carrot-mdm2` into
+  `carrot-wip` and deletion of the local and remote `carrot-mdm2`/`carrot-mdm`
+  branches. `carrot-wip` now selects Mountain Dew v1 checkpoint 870a4823,
+  AMD model e20cde17, with the existing pinned runtime and NAS mdm2 package URL.
+  This supersedes the branch-only restriction below; do not recreate the retired
+  branches. Keep the newer wip HUD/camera recovery, DM notices and GV70 fixes.
+  Internal/DM models, Jetson Cinque v2 and control/validity policies remain
+  unchanged. Model compatibility CI follows carrot-wip. See docs/mdm2_20261008.md.
+
+- On 2026-10-08, the user confirmed PR #39047 commit 4bfb534063 for `carrot-mdm2`,
+  starting from carrot-wip ca8f553d1e. The previous bea3fd4 remains carrot-mdm.
+  Pin the new e20cde17 AMD model and 870a4823/12864 metadata checkpoint on this
+  branch only; upstream's commit subject says 1284 but the file says 12864.
+  Keep the 9d0446a4 tinygrad runtime and MDM compatibility adapter. The matching
+  870a4823 ONNX is absent from the public export catalog; Jetson stays Cinque v2.
+  Do not label this a new official MDM v2 or claim Jetson MDM support. Preserve
+  internal/DM models, control, validity and C3 warp policy. Include the inherited
+  boot selected-model delivery gate and core4 USB cluster placement.
+  See docs/mdm2_20261008.md for artifact identity and validation limits.
+
 - On 2026-10-05, the user clarified that instructions such as "작업해" or
   "진행해" include committing and pushing the completed task unless explicitly
   instructed otherwise. Commit only the task's changes; preserve unrelated work.

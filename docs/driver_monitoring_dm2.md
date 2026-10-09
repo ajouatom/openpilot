@@ -248,9 +248,33 @@ New dm2VisionTimeoutFactor and dm2InteractionGraceRemaining fields complement th
 existing wheel factor and traffic hold. dm2ForwardRecovery now identifies a full
 forward-attention reset, and dm2InteractionCredit reports the full seconds restored
 by an input, not a fixed two-second credit. Historical packets retain their earlier
-semantics. While monitoring is enabled, camera-unavailable notices and terminal
-forceDecel connections remain; this is not guaranteed emergency stopping or
+semantics. While monitoring is enabled, terminal forceDecel connections remain;
+camera availability now changes monitoring silently (2026-10-09). This is not guaranteed emergency stopping or
 equivalent stock-ACC deceleration.
+
+### Quiet camera availability transitions (2026-10-09)
+
+The user requested removing the camera-unavailable banner for absent cameras
+and startup/recovery transitions. Removed its selfdrived producer and timer;
+the historical driverMonitorFallback enum retains an empty event definition.
+The prior notice qualified any missing/unusable driver model, driving model
+or calibration input as unavailable, not just physically missing hardware.
+It waited 30 seconds initially, but a single earlier healthy state bypassed
+that startup gate; the event then had its own three-second display delay.
+This permits startup notices with installed cameras. No new incident log was
+provided to establish the cause of the user's particular intermittent notice.
+
+The dispatcher still immediately selects interaction monitoring for unusable
+camera inputs and requires two continuous healthy seconds to restore camera
+monitoring. Monitoring progress, modes, button/pedal/touch inputs, attention
+warnings, lockout, model supervision and road-camera/CAN/DM-state health
+checks are unchanged. No camera-installation setting or alert bypass is added.
+Validation: 300 focused monitoring/policy/cadence/parking/touch/HUD tests pass
+with Windows native IPC/Params/hardware adapters and real cereal messages.
+The existing tests retain coverage of immediate fallback, continuous two-second
+recovery, camera outages and actual unresponsive warnings. Korean/English guide
+validation, both edited Wiki pages and 21 Wiki generator/validator tests pass.
+Physical startup and display behavior remain unvalidated.
 
 Korean/English guides explain the search-only persistent switch, the session
 switch, physical CANCEL sequence, conditional restoration, all four monitoring cases,

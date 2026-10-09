@@ -42,19 +42,18 @@ def main():
   generic = manifest['format'] == 'comma-generic-onnx'
   if generic:
     os.environ.update(FLOAT16='1', TC_OPT='2', TC_MIN_GLOBALS='32')
+    if manifest.get('serialization') == 'persistent-buffer-v1':
+      os.environ['OPENPILOT_HACKS'] = '1'
   if not generic:
     import model_runtime
   from tinygrad import Device, Tensor
-  from openpilot.selfdrive.modeld.helpers import load_oob
+  from openpilot.selfdrive.modeld.precompiled_artifact import load_artifact
   from openpilot.common.runtime_diagnostics import RuntimeDiagnostics
   from openpilot.common.swaglog import cloudlog
   from openpilot.system.camerad.cameras.nv12_info import get_nv12_info
 
   progress.mark('load_model')
-  with pkl.open('rb') as f:
-    jits = load_oob(f)
-    if f.read(1):
-      raise ValueError('trailing precompiled model data')
+  jits = load_artifact(pkl, manifest.get('serialization', 'oob-v1'))
   if not generic and ('run_policy' in jits or 'run_model' not in jits):
     raise ValueError('wrong precompiled runtime format')
   if generic:

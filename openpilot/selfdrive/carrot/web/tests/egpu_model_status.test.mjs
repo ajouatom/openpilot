@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { readFileSync } from "node:fs";
+import vm from "node:vm";
 
 import { CarrotEgpuModel } from "../src/features/tools/egpu_model.js";
 
@@ -14,7 +16,9 @@ test("delivery failures explain automatic recovery and installed files do not im
   CarrotEgpuModel.render({ available: true, state: "waiting_for_network", error_code: "dns",
     detail: "Temporary failure in name resolution", can_restart: false });
   assert.match(elements.get("egpuModelState").textContent, /automatic retry/);
-  assert.match(elements.get("egpuModelDetail").textContent, /resolve.*retry is automatic.*Temporary failure/);
+  assert.match(elements.get("egpuModelDetail").textContent, /resolve.*retry is automatic/);
+  assert.doesNotMatch(elements.get("egpuModelDetail").textContent, /Temporary failure/);
+  assert.equal(elements.get("egpuModelRecovery").hidden, true);
   assert.equal(elements.get("btnEgpuCompileRestart").hidden, true);
   CarrotEgpuModel.render({ available: true, state: "installed", compiled: true, active: false });
   assert.match(elements.get("egpuModelState").textContent, /next start/);
@@ -24,12 +28,52 @@ test("delivery failures explain automatic recovery and installed files do not im
   assert.equal(elements.get("egpuModelState").textContent, "eGPU running");
   CarrotEgpuModel.render({ available: true, state: "error", error_code: "runtime", active: false });
   assert.match(elements.get("egpuModelDetail").textContent, /internal model is selected/);
-  for (const [error_code, expected] of [["pcie", /PCIe link/], ["timeout", /stopped responding/], ["usb", /USB communication error/]]) {
-    CarrotEgpuModel.render({ available: true, state: "error", error_code, active: false });
+  for (const [error_code, expected] of [["pcie", /connection could not start/], ["timeout", /too long to respond/], ["usb", /Communication.*interrupted/]]) {
+    CarrotEgpuModel.render({ available: true, state: "error", error_code, active: false, compiled: true,
+      detail: "Last worker stage: load_model" });
     assert.match(elements.get("egpuModelDetail").textContent, expected);
     assert.match(elements.get("egpuModelDetail").textContent, /internal model is selected/);
-    assert.doesNotMatch(elements.get("egpuModelDetail").textContent, /contains the cause/);
+    assert.doesNotMatch(elements.get("egpuModelDetail").textContent, /load_model|worker|contains the cause/);
+    assert.equal(elements.get("egpuModelState").textContent, "eGPU unavailable");
+    assert.equal(elements.get("egpuModelRecovery").hidden, false);
+    assert.match(elements.get("egpuModelRecovery").textContent, /parked.*User \/ System.*Reboot once.*screenshot/);
+    assert.equal(elements.get("btnEgpuCompileRestart").hidden, true);
   }
+  CarrotEgpuModel.render({ available: true, state: "compiled", compiled: true, active: true });
+  assert.equal(elements.get("egpuModelRecovery").hidden, true);
+  assert.equal(elements.get("egpuModelRecovery").textContent, "");
+  CarrotEgpuModel.render({ available: true, state: "error", error_code: "future_code", detail: "internal stack trace" });
+  assert.match(elements.get("egpuModelDetail").textContent, /screenshot/);
+  assert.doesNotMatch(elements.get("egpuModelDetail").textContent, /future_code|stack trace/);
+});
+
+test("Korean timeout guidance names the actual reboot menu without exposing worker details", (t) => {
+  const savedDocument = globalThis.document;
+  const savedTranslator = globalThis.getUIText;
+  t.after(() => {
+    globalThis.document = savedDocument;
+    if (savedTranslator === undefined) delete globalThis.getUIText;
+    else globalThis.getUIText = savedTranslator;
+  });
+  let strings;
+  vm.runInNewContext(readFileSync(new URL("../js/translations/ko.js", import.meta.url), "utf8"), {
+    window: { CarrotTranslations: { register(_language, translation) { strings = translation.strings; } } },
+  });
+  const elements = new Map();
+  globalThis.document = { getElementById(id) {
+    if (!elements.has(id)) elements.set(id, { dataset: {}, style: {}, classList: { toggle() {} } });
+    return elements.get(id);
+  } };
+  globalThis.getUIText = (key, fallback) => strings[key] || fallback;
+  CarrotEgpuModel.render({ available: true, state: "error", compiled: true, error_code: "timeout",
+    detail: "Last worker stage: load_model", can_restart: false });
+  assert.equal(elements.get("egpuModelState").textContent, "eGPU 사용 중단");
+  assert.equal(elements.get("egpuModelDetail").textContent, "eGPU 응답이 늦어 내부 모델을 선택했습니다.");
+  const recovery = elements.get("egpuModelRecovery");
+  assert.equal(recovery.hidden, false);
+  assert.ok(recovery.textContent.includes(strings.user_system));
+  assert.ok(recovery.textContent.includes(strings.reboot));
+  assert.match(recovery.textContent, /주차 후.*한 번.*다시 발생하면/);
 });
 
 test("model update card shows download progress before compilation is available", (t) => {

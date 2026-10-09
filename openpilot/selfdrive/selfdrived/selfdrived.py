@@ -23,7 +23,6 @@ from openpilot.selfdrive.selfdrived.events import Events, ET, EmptyAlert
 from openpilot.selfdrive.selfdrived.helpers import ExcessiveActuationCheck
 from openpilot.selfdrive.selfdrived.state import StateMachine
 from openpilot.selfdrive.selfdrived.impact_detector import ImpactDetector
-from openpilot.selfdrive.monitoring.dm_alerts import CameraFallbackNotice
 from openpilot.selfdrive.selfdrived.alertmanager import AlertManager, set_offroad_alert
 from openpilot.selfdrive.controls.lib.cutin_alert import (
   CutinAlertCandidate,
@@ -142,7 +141,6 @@ class SelfdriveD:
     self.cutin_audio_tracker = CutinAlertTracker()
     self.dm_uncertain_alerted = False
     self.dm_disabled_prev = False
-    self.dm_camera_notice = CameraFallbackNotice()
     self.update_reboot_alerted = False
     self.system_ready_alerted = False
     self.system_ready_since = None
@@ -264,9 +262,8 @@ class SelfdriveD:
       self.dm_uncertain_alerted = False
     self.dm_disabled_prev = dm_disabled
     if not self.CP.notCar and not dm_disabled:
-      if self.dm_camera_notice.update(self.sm.frame * DT_CTRL, self.sm.all_checks(['driverMonitoringState']),
-                                      self.sm['driverMonitoringState'].cameraUnavailable, dm_disabled):
-        self.events.add(EventName.driverMonitorFallback)
+      # Camera availability silently selects vision or interaction monitoring.
+      # Actual attention warnings, lockout and service-health checks still apply.
       self.update_dm_lockout()
       # No entry conditions
       if self.sm['driverMonitoringState'].lockout or self.sm['driverMonitoringState'].alwaysOnLockout:
@@ -692,6 +689,11 @@ class SelfdriveD:
     pers = LONGITUDINAL_PERSONALITY_MAP[self.personality]
     alerts = self.events.create_alerts(self.state_machine.current_alert_types, [self.CP, CS, self.sm, self.is_metric,
                                                                                 self.state_machine.soft_disable_timer, pers])
+    if not self.enabled and EventName.selfdriveInitializing in self.events.names:
+      # Retain wrongGear in the state machine/logs, but explain the current
+      # startup block when an early enable request also finds Park/Neutral.
+      alerts = [a for a in alerts if a.alert_type != 'wrongGear/noEntry']
+      self.AM.alerts.pop('wrongGear/noEntry', None)
     self.AM.add_many(self.sm.frame, alerts)
     self.AM.process_alerts(self.sm.frame, clear_event_types)
 

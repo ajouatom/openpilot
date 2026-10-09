@@ -14,6 +14,7 @@
 #include "system/camerad/cameras/hw.h"
 #include "system/camerad/cameras/camera_common.h"
 #include "system/camerad/cameras/camera_event_timing.h"
+#include "system/camerad/cameras/async_frame_wait.h"
 #include "system/camerad/sensors/sensor.h"
 
 #define MAX_IFE_BUFS 20
@@ -139,6 +140,9 @@ public:
 
   void camera_open(VisionIpcServer *v);
   bool handle_camera_event(const cam_req_mgr_message *event_data);
+  int frame_wait_fd() const { return frame_wait ? frame_wait->fd() : -1; }
+  bool frame_wait_pending() const { return frame_wait && frame_wait->busy(); }
+  bool complete_frame_wait();
   void camera_close();
   void camera_map_bufs();
   void config_bps(int idx, int request_id);
@@ -219,7 +223,10 @@ public:
 private:
   void clearAndRequeue(uint64_t from_request_id);
   bool validateEvent(uint64_t request_id, uint64_t frame_id_raw);
-  bool waitForFrameReady(uint64_t request_id);
+  std::function<bool()> frameWaitTask(uint64_t request_id);
+  bool finishFrame(uint64_t request_id, uint64_t frame_id_raw, uint64_t timestamp, bool ready);
+  std::unique_ptr<AsyncFrameWait> frame_wait;
+  uint64_t pending_request = 0, pending_frame = 0, pending_timestamp = 0;
   bool processFrame(int buf_idx, uint64_t request_id, uint64_t frame_id_raw, uint64_t timestamp);
   static bool syncFirstFrame(int camera_id, uint64_t request_id, uint64_t raw_id, uint64_t timestamp, bool staggered);
   struct SyncData {

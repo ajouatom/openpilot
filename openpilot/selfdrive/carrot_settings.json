@@ -3938,18 +3938,39 @@
     {
       "group": "화면",
       "name": "ShowModelView",
-      "title": "주행화면 표시 모드(C4)",
-      "descr": "주행 중 화면 밝기가 설정값 근처까지 낮아졌을 때 표시 방식\n0: 카메라와 모델 표시\n1: 카메라만 표시\n2: 모델만 표시\n3: 카메라와 모델 숨김",
+      "title": "주행화면 구성(C4)",
+      "descr": "C4 주행화면에서 카메라 영상과 차선·주행 경로 그림을 선택합니다. 차선·경로에는 앞차 표시도 포함됩니다.\n밝기 설정과 관계없이 적용되며, 주행 중 변경하면 약 5초 안에 반영됩니다.\n둘 다 숨겨도 속도와 경고는 계속 표시됩니다. 외부 HUD 연결 시에는 ‘외부 HUD 연결 시 본체 카메라’ 설정이 우선합니다.",
       "egroup": "DISPLAY",
-      "etitle": "Onroad Display Mode(C4)",
-      "edescr": "Display mode when onroad screen brightness reaches the configured level\n0: Show camera and model\n1: Show camera only\n2: Show model only\n3: Hide camera and model",
+      "etitle": "Driving Screen Layout(C4)",
+      "edescr": "Choose camera video and lane/path graphics on the C4 driving screen. Lane/path graphics include lead-vehicle markers.\nApplies regardless of brightness; changes while driving appear within about 5 seconds.\nSpeed and alerts stay visible even when both are hidden. When an external HUD is connected, On-device Camera with External HUD takes precedence.",
       "cgroup": "显示",
-      "ctitle": "行车画面显示模式(C4)",
-      "cdescr": "行车中屏幕亮度接近设定值时的显示方式\n0: 显示摄像头和模型\n1: 仅显示摄像头\n2: 仅显示模型\n3: 隐藏摄像头和模型",
+      "ctitle": "行车画面布局(C4)",
+      "cdescr": "选择 C4 行车画面的摄像头视频和车道线/行驶路径图形。车道线/路径图形包含前车标记。\n不受亮度设置影响，行车中更改后约 5 秒内生效。\n即使隐藏两者，速度和警告仍会显示。连接外部 HUD 时，优先遵循“外部 HUD 连接时本机摄像头”设置。",
       "min": 0,
       "max": 3,
       "default": 0,
-      "unit": 1
+      "unit": 1,
+      "control": "select",
+      "options": {
+        "ko": [
+          "0 카메라 + 차선·경로",
+          "1 카메라만",
+          "2 차선·경로만",
+          "3 둘 다 숨김"
+        ],
+        "en": [
+          "0 Camera + lanes/path",
+          "1 Camera only",
+          "2 Lanes/path only",
+          "3 Hide both"
+        ],
+        "zh": [
+          "0 摄像头 + 车道线/路径",
+          "1 仅摄像头",
+          "2 仅车道线/路径",
+          "3 隐藏两者"
+        ]
+      }
     },
     {
       "group": "화면",

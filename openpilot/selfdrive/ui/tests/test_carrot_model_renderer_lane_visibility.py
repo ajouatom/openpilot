@@ -396,7 +396,12 @@ def test_blind_spot_segment_vectorization_preserves_fill_outline_order(model_ren
     assert outline[3] == 2.0
 
 
-def test_blind_spot_invalid_input_skips_draw(model_renderer_module):
+@pytest.mark.parametrize('invalid_service, expected_draws', [
+  ('radarState', ['left', 'left']),  # OEM blind-spot warnings do not depend on radarState.
+  ('carState', ['left']),
+  ('modelV2', ['left']),
+])
+def test_blind_spot_invalid_service_keeps_only_valid_oem_input(model_renderer_module, invalid_service, expected_draws):
   module = model_renderer_module
   renderer = object.__new__(module.ModelRenderer)
   renderer._carrot_lane_barrier_vertices = [np.ones((4, 2), dtype=np.float32), np.ones((4, 2), dtype=np.float32)]
@@ -424,6 +429,6 @@ def test_blind_spot_invalid_input_skips_draw(model_renderer_module):
   renderer._draw_blind_spot_carrot(sm)
   assert draws == ["left"]
 
-  sm.valid["radarState"] = False
+  sm.valid[invalid_service] = False
   renderer._draw_blind_spot_carrot(sm)
-  assert draws == ["left"]
+  assert draws == expected_draws
