@@ -58,49 +58,7 @@ struct EncoderSettings {
     };
   }
 
-  static EncoderSettings YouTubeLowEncoderSettings() {
-    return EncoderSettings{
-      .encode_type = cereal::EncodeIndex::Type::QCAMERA_H264,
-      .bitrate = 750'000,
-      .gop_size = 40,
-      .cbr = true,
-      .frame_width = 854,
-      .frame_height = 480,
-    };
-  }
 
-  static EncoderSettings YouTubeMediumEncoderSettings() {
-    return EncoderSettings{
-      .encode_type = cereal::EncodeIndex::Type::QCAMERA_H264,
-      .bitrate = 2'000'000,
-      .gop_size = 40,
-      .cbr = true,
-      .frame_width = 1280,
-      .frame_height = 720,
-    };
-  }
-
-  static EncoderSettings YouTubeEncoderSettings() {
-    return EncoderSettings{
-      .encode_type = cereal::EncodeIndex::Type::QCAMERA_H264,
-      .bitrate = 4'200'000,
-      .gop_size = 40,
-      .cbr = true,
-      .frame_width = 1920,
-      .frame_height = 1080,
-    };
-  }
-
-  static EncoderSettings YouTubeWideEncoderSettings() {
-    return EncoderSettings{
-      .encode_type = cereal::EncodeIndex::Type::QCAMERA_H264,
-      .bitrate = 2'700'000,
-      .gop_size = 40,
-      .cbr = true,
-      .frame_width = 1280,
-      .frame_height = 720,
-    };
-  }
 };
 
 class EncoderInfo {
@@ -175,36 +133,6 @@ const EncoderInfo stream_driver_encoder_info = {
   INIT_ENCODE_FUNCTIONS(LivestreamDriverEncode),
 };
 
-const EncoderInfo youtube_road_low_encoder_info = {
-  .publish_name = "youtubeRoadEncodeData",
-  .record = false,
-  .get_settings = [](int){return EncoderSettings::YouTubeLowEncoderSettings();},
-  INIT_ENCODE_FUNCTIONS(YoutubeRoadEncode),
-};
-
-const EncoderInfo youtube_road_medium_encoder_info = {
-  .publish_name = "youtubeRoadEncodeData",
-  .record = false,
-  .get_settings = [](int){return EncoderSettings::YouTubeMediumEncoderSettings();},
-  INIT_ENCODE_FUNCTIONS(YoutubeRoadEncode),
-};
-
-const EncoderInfo youtube_road_encoder_info = {
-  .publish_name = "youtubeRoadEncodeData",
-  .record = false,
-  .frame_width = 1920,
-  .frame_height = 1080,
-  .get_settings = [](int){return EncoderSettings::YouTubeEncoderSettings();},
-  INIT_ENCODE_FUNCTIONS(YoutubeRoadEncode),
-};
-
-const EncoderInfo youtube_wide_road_encoder_info = {
-  .publish_name = "youtubeRoadEncodeData",
-  .record = false,
-  .get_settings = [](int){return EncoderSettings::YouTubeWideEncoderSettings();},
-  INIT_ENCODE_FUNCTIONS(YoutubeRoadEncode),
-};
-
 const EncoderInfo qcam_encoder_info = {
   .publish_name = "qRoadEncodeData",
   .filename = "qcamera.ts",
@@ -260,34 +188,6 @@ const LogCameraInfo carrot_vision_road_camera_info{
   .encoder_infos = {stream_road_encoder_info},
 };
 
-const LogCameraInfo youtube_road_low_camera_info{
-  .thread_name = "youtube_road_low_encoder",
-  .stream_type = VISION_STREAM_ROAD,
-  .encoder_infos = {youtube_road_low_encoder_info}
-};
-
-const LogCameraInfo youtube_road_medium_camera_info{
-  .thread_name = "youtube_road_medium_encoder",
-  .stream_type = VISION_STREAM_ROAD,
-  .encoder_infos = {youtube_road_medium_encoder_info}
-};
-
-const LogCameraInfo youtube_road_camera_info{
-  .thread_name = "youtube_road_encoder",
-  .stream_type = VISION_STREAM_ROAD,
-  .encoder_infos = {youtube_road_encoder_info}
-};
-
-const LogCameraInfo youtube_wide_road_camera_info{
-  .thread_name = "youtube_wide_road_encoder",
-  .stream_type = VISION_STREAM_WIDE_ROAD,
-  .encoder_infos = {youtube_wide_road_encoder_info}
-};
-
 const LogCameraInfo cameras_logged[] = {road_camera_info, wide_road_camera_info, driver_camera_info};
 const LogCameraInfo stream_cameras_logged[] = {stream_road_camera_info, stream_wide_road_camera_info, stream_driver_camera_info};
 const LogCameraInfo carrot_vision_cameras_logged[] = {carrot_vision_road_camera_info};
-const LogCameraInfo youtube_low_cameras_logged[] = {youtube_road_low_camera_info};
-const LogCameraInfo youtube_medium_cameras_logged[] = {youtube_road_medium_camera_info};
-const LogCameraInfo youtube_cameras_logged[] = {youtube_road_camera_info};
-const LogCameraInfo youtube_wide_cameras_logged[] = {youtube_wide_road_camera_info};

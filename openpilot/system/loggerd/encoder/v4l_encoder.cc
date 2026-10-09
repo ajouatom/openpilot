@@ -149,7 +149,6 @@ void V4LEncoder::dequeue_handler(V4LEncoder *e) {
 V4LEncoder::V4LEncoder(const EncoderInfo &encoder_info, int in_width, int in_height)
     : VideoEncoder(encoder_info, in_width, in_height) {
   const bool carrot_livestream_road = strcmp(encoder_info.publish_name, "livestreamRoadEncodeData") == 0;
-  const bool youtube_road = strcmp(encoder_info.publish_name, "youtubeRoadEncodeData") == 0;
   if (carrot_livestream_road) {
     out_width = 964;
     out_height = 604;
@@ -181,13 +180,6 @@ V4LEncoder::V4LEncoder(const EncoderInfo &encoder_info, int in_width, int in_hei
     }
   };
   util::safe_ioctl(fd, VIDIOC_S_FMT, &fmt_out, "VIDIOC_S_FMT failed");
-  if (youtube_road
-      && (fmt_out.fmt.pix_mp.width != (unsigned int)out_width
-          || fmt_out.fmt.pix_mp.height != (unsigned int)out_height)) {
-    throw std::runtime_error(util::string_format(
-      "YouTube encoder output contract rejected: requested=%dx%d applied=%ux%u",
-      out_width, out_height, fmt_out.fmt.pix_mp.width, fmt_out.fmt.pix_mp.height));
-  }
 
   v4l2_streamparm streamparm = {
     .type = V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE,
@@ -216,50 +208,6 @@ V4LEncoder::V4LEncoder(const EncoderInfo &encoder_info, int in_width, int in_hei
     }
   };
   util::safe_ioctl(fd, VIDIOC_S_FMT, &fmt_in, "VIDIOC_S_FMT failed");
-
-  if (youtube_road) {
-    int crop_width = in_width & ~1;
-    int crop_height = ((crop_width * 9) / 16) & ~1;
-    if (crop_height > in_height) {
-      crop_height = in_height & ~1;
-      crop_width = ((crop_height * 16) / 9) & ~1;
-    }
-    const int crop_left = ((in_width - crop_width) / 2) & ~1;
-    const int crop_top = ((in_height - crop_height) / 2) & ~1;
-
-    struct v4l2_selection selection = {};
-    // VIDIOC_S_SELECTION uses the logical queue type even when the negotiated
-    // pixel format and buffers use the multi-planar API.
-    selection.type = V4L2_BUF_TYPE_VIDEO_OUTPUT;
-    selection.target = V4L2_SEL_TGT_CROP;
-    selection.r.left = crop_left;
-    selection.r.top = crop_top;
-    selection.r.width = (unsigned int)crop_width;
-    selection.r.height = (unsigned int)crop_height;
-    const bool crop_set = util::safe_ioctl(fd, VIDIOC_S_SELECTION, &selection) == 0;
-    const bool crop_exact = crop_set
-                            && selection.r.left == crop_left
-                            && selection.r.top == crop_top
-                            && selection.r.width == (unsigned int)crop_width
-                            && selection.r.height == (unsigned int)crop_height;
-    if (crop_exact) {
-      LOGW("YouTube encoder crop=%dx%d+%d+%d output=%dx%d bitrate=%d",
-           crop_width, crop_height, selection.r.left, selection.r.top,
-           out_width, out_height, encoder_settings.bitrate);
-    } else {
-      // Keep the coded output on the declared YouTube profile even if this
-      // driver cannot crop. Changing the coded height here made the service
-      // advertise 720p while actually publishing 1280x800.
-      if (crop_set) {
-        LOGW("YouTube encoder adjusted crop to %ux%u+%d+%d; scaling full frame to exact %dx%d",
-             selection.r.width, selection.r.height, selection.r.left, selection.r.top,
-             out_width, out_height);
-      } else {
-        LOGW("YouTube encoder crop unavailable; scaling full frame to exact %dx%d",
-             out_width, out_height);
-      }
-    }
-  }
 
   LOGD("in buffer size %d, out buffer size %d",
     fmt_in.fmt.pix_mp.plane_fmt[0].sizeimage,

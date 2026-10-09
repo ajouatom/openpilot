@@ -65,7 +65,6 @@ from ...config import (
   CARROT_SETTING_PROFILES_PATH,
   CARROT_STATE_DIR,
   CARROT_WEB_SETTINGS_PATH,
-  CARROT_YOUTUBE_LIVE_STATE_PATH,
 )
 from ...services.params import HAS_PARAMS, Params
 from ...services.settings import get_settings_cached
@@ -163,7 +162,6 @@ def _web_state_files() -> str:
     (CARROT_WEB_SETTINGS_PATH, "web_settings_exists"),
     (CARROT_SETTING_PROFILES_PATH, "setting_profiles_exists"),
     (CARROT_SETTING_FAVORITES_PATH, "setting_favorites_exists"),
-    (CARROT_YOUTUBE_LIVE_STATE_PATH, "youtube_live_exists"),
   ):
     if os.path.isfile(path):
       return label

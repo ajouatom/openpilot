@@ -15,22 +15,9 @@
   display: flex;
 }
 
-.topbar #btnHome.youtube-live,
-.topbar #btnHome.youtube-live.active {
-  color: #ff8f84;
-}
-
 .topbar #btnTerminal.remote-support,
 .topbar #btnTerminal.remote-support.active {
   color: var(--md-primary);
-}
-
-.topbar #btnHome.youtube-live.active {
-  background: color-mix(in srgb, #ff6b6b 18%, transparent);
-}
-
-.topbar #btnHome.youtube-live.active > span:last-child::after {
-  background: currentColor;
 }
 
 .topbar #btnTerminal.remote-support.active > span:last-child::after {
@@ -38,7 +25,6 @@
 }
 
 .topbar #btnHome.recording,
-.topbar #btnHome.youtube-live,
 .topbar #btnTerminal.remote-support {
   animation: nav-status-button-fade 2.4s ease-in-out infinite;
 }
@@ -60,10 +46,6 @@
 .topbar .nav-btn .nav-status-badge--record {
   background: rgba(118, 18, 20, 0.92);
   color: #ffd7d3;
-}
-
-.topbar .nav-btn .nav-status-badge--live {
-  background: var(--md-error, #ba1a1a);
 }
 
 .topbar .nav-btn .nav-status-badge--remote {
@@ -89,8 +71,7 @@
 
 @media (prefers-reduced-motion: reduce) {
   .topbar #btnHome.recording,
-  .topbar #btnHome.youtube-live,
-  .topbar #btnTerminal.remote-support {
+    .topbar #btnTerminal.remote-support {
     animation: none;
     background: color-mix(in srgb, #c9827b 10%, transparent);
   }
