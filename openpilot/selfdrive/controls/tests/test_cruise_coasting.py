@@ -133,7 +133,7 @@ def control(monkeypatch):
 @pytest.mark.parametrize('brand', ['hyundai', 'gm', 'toyota'])
 def test_zero_percent_matches_unmodified_pid_over_time(control, brand):
   c = control(brand)
-  kp, ki = (1., 0.) if brand == 'hyundai' else (1., .2)
+  kp, ki = {'hyundai': (1., 0.), 'toyota': (0., 0.), 'gm': (1., .2)}[brand]
   legacy = PIDController(kp, ki, k_f=1., neg_limit=-3.5, pos_limit=2., rate=100)
   cs, plan, radar = inputs()
   plan.cruiseCoastingPercent = 0

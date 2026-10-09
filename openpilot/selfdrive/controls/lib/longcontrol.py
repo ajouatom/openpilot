@@ -81,6 +81,8 @@ class LongControl:
     self.hyundai_fixed_longitudinal_tuning = CP.brand == "hyundai"
     if self.hyundai_fixed_longitudinal_tuning:
       self._apply_hyundai_longitudinal_tuning()
+    elif CP.brand == "toyota":
+      self._apply_toyota_longitudinal_tuning()
 
     self.use_accel_pid = False
     if CP.brand == "toyota":
@@ -107,12 +109,22 @@ class LongControl:
   def _refresh_longitudinal_tuning(self):
     if self.hyundai_fixed_longitudinal_tuning:
       self._apply_hyundai_longitudinal_tuning()
+    elif self.CP.brand == "toyota":
+      self._apply_toyota_longitudinal_tuning()
     elif len(self.CP.longitudinalTuning.kpBP) == 1 and len(self.CP.longitudinalTuning.kiBP) == 1:
       longitudinalTuningKpV = self.params.get_float("LongTuningKpV") * 0.01
       longitudinalTuningKiV = self.params.get_float("LongTuningKiV") * 0.001
       self.pid._k_p = (self.CP.longitudinalTuning.kpBP, [longitudinalTuningKpV])
       self.pid._k_i = (self.CP.longitudinalTuning.kiBP, [longitudinalTuningKiV])
       self.pid.k_f = self.params.get_float("LongTuningKf") * 0.01
+
+  def _apply_toyota_longitudinal_tuning(self):
+    # Toyota's CarController closes the acceleration loop at the PCM send rate.
+    # Pass the planner target through; a second acceleration PID here feeds
+    # measured-acceleration noise and duplicate correction into that loop.
+    self.pid._k_p = ([0.0], [0.0])
+    self.pid._k_i = ([0.0], [0.0])
+    self.pid.k_f = 1.0
 
   def reset(self):
     self.pid.reset()
