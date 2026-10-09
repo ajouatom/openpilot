@@ -14,7 +14,7 @@ function functionSource(text, name) {
   return text.slice(start, end + 2);
 }
 
-function createView({ split = false, detail = null, group = "Cruise", previousPage = "tools" } = {}) {
+function createView({ split = false, detail = null, group = "Cruise", previousPage = "tools", inlineSearch = false } = {}) {
   const calls = [];
   const history = {
     state: { page: "setting", screen: detail ? "detail" : "items", group },
@@ -42,6 +42,9 @@ function createView({ split = false, detail = null, group = "Cruise", previousPa
       if (group === "search") history.state.inlineSearchQuery = "StoppingAccel";
     },
     renderItems: async (name, options) => calls.push(["render", name, options.scrollMode]),
+    ...(inlineSearch ? {
+      showSettingInlineSearchResultsInGroups: async () => calls.push(["inlineSearchSurface"]),
+    } : {}),
   });
   vm.runInContext([
     functionSource(source, "goToSettingParent"),
@@ -92,4 +95,21 @@ test("search detail returns to results with its query, then to the settings root
   await view.click();
   assert.equal(view.history.state.screen, "groups");
   assert.equal(view.calls.some((call) => call[0] === "browserBack"), false);
+});
+
+test("single-column search detail header returns to the in-place results", async () => {
+  const view = createView({ group: "search", detail: "StoppingAccel", inlineSearch: true });
+  await view.click();
+  assert.ok(view.calls.some((call) => call.join() === "inlineSearchSurface"));
+  assert.equal(view.calls.some((call) => call[0] === "transition"), false);
+  assert.equal(view.calls.some((call) => call[0] === "render"), false);
+  assert.equal(view.history.state.screen, "detail");
+  assert.equal(view.history.state.group, "search");
+});
+
+test("split layout keeps the items flow for a search detail header", async () => {
+  const view = createView({ split: true, group: "search", detail: "StoppingAccel", inlineSearch: true });
+  await view.click();
+  assert.equal(view.calls.some((call) => call.join() === "inlineSearchSurface"), false);
+  assert.ok(view.calls.some((call) => call.join() === "transition,backward"));
 });

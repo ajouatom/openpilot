@@ -65,7 +65,14 @@ window.addEventListener("popstate", async (ev) => {
         animateItems: false,
       }), previousDetail ? "backward" : "forward");
     } else if (screen === "items" && CURRENT_GROUP) {
-      if (itemsWereActive && previousDetail) {
+      if (
+        CURRENT_GROUP === SETTING_INLINE_SEARCH_GROUP
+        && typeof showSettingInlineSearchResultsInGroups === "function"
+      ) {
+        // Single-column search lives in place on the group screen, not on a
+        // separate results screen.
+        await showSettingInlineSearchResultsInGroups();
+      } else if (itemsWereActive && previousDetail) {
         await transitionSettingItemsContent(
           () => renderItems(CURRENT_GROUP, { scrollMode: "restore", animateItems: false }),
           "backward",
@@ -80,6 +87,7 @@ window.addEventListener("popstate", async (ev) => {
     } else {
       CURRENT_SETTING_DETAIL = null;
       showSettingScreen("groups", false);
+      if (typeof exitSettingInlineSearchSurface === "function") exitSettingInlineSearchSurface();
     }
     if (st.search) {
       openSettingSearchPanel({ pushHistory: false }).catch(() => {});

@@ -6,51 +6,25 @@
   const badgeGroup = document.getElementById("navHomeStatusBadges");
   const terminalBadgeGroup = document.getElementById("navTerminalStatusBadges");
   const recordBadge = document.getElementById("navRecordStatusBadge");
-  const liveBadge = document.getElementById("navYouTubeStatusBadge");
   const remoteBadge = document.getElementById("navRemoteStatusBadge");
-  if (!homeButton || !terminalButton || !badgeGroup || !terminalBadgeGroup || !recordBadge || !liveBadge || !remoteBadge) return;
+  if (!homeButton || !terminalButton || !badgeGroup || !terminalBadgeGroup || !recordBadge || !remoteBadge) return;
 
   const POLL_INTERVAL_MS = 2000;
   const STALE_AFTER_MS = 8000;
-  let youtubeLive = false;
   let remoteSupport = false;
-  let lastSuccessAt = 0;
   let lastSupportSuccessAt = 0;
-  let pollPending = false;
   let supportPollPending = false;
   let pollTimer = null;
 
   function syncBadges() {
-    if (homeButton.classList.contains("youtube-live") !== youtubeLive) {
-      homeButton.classList.toggle("youtube-live", youtubeLive);
-    }
     const recording = homeButton.classList.contains("recording")
       && homeButton.dataset.recordBadge === "REC";
     recordBadge.hidden = !recording;
-    liveBadge.hidden = !youtubeLive;
-    badgeGroup.classList.toggle("is-visible", recording || youtubeLive);
+    badgeGroup.classList.toggle("is-visible", recording);
 
     terminalButton.classList.toggle("remote-support", remoteSupport);
     remoteBadge.hidden = !remoteSupport;
     terminalBadgeGroup.classList.toggle("is-visible", remoteSupport);
-  }
-
-  async function pollYouTubeStatus() {
-    if (pollPending || document.hidden) return;
-    pollPending = true;
-    try {
-      const status = await getJson("/api/youtube_live/status");
-      lastSuccessAt = Date.now();
-      youtubeLive = status?.state === "live" && status?.running === true;
-      syncBadges();
-    } catch (_) {
-      if (!lastSuccessAt || Date.now() - lastSuccessAt >= STALE_AFTER_MS) {
-        youtubeLive = false;
-        syncBadges();
-      }
-    } finally {
-      pollPending = false;
-    }
   }
 
   async function pollSupportStatus() {
@@ -73,12 +47,8 @@
 
   function startPolling() {
     if (pollTimer !== null) return;
-    pollYouTubeStatus();
     pollSupportStatus();
-    pollTimer = window.setInterval(() => {
-      pollYouTubeStatus();
-      pollSupportStatus();
-    }, POLL_INTERVAL_MS);
+    pollTimer = window.setInterval(pollSupportStatus, POLL_INTERVAL_MS);
   }
 
   function stopPolling() {
@@ -96,7 +66,6 @@
     if (document.hidden) stopPolling();
     else startPolling();
   });
-  window.addEventListener("online", pollYouTubeStatus);
   window.addEventListener("online", pollSupportStatus);
   window.addEventListener("carrot:support-terminal-status", (event) => {
     remoteSupport = Boolean(event?.detail?.active);

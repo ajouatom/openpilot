@@ -365,7 +365,6 @@ The 12 system settings cover recording, power, network, maps, sound, and softwar
 | Group | Parameters | Purpose |
 |---|---|---|
 | Recording and power | `RecordRoadCam`, `MaxTimeOffroadMin` | Road-camera storage and delayed shutdown |
-| YouTube Live | `CarrotYouTubeLive`, `CarrotYouTubeQuality`, `CarrotYouTubeTimestamp` | Video streaming, quality, and timestamp |
 | Network and map | `HotspotOnBoot`, `MapboxStyle` | Boot hotspot and map background style |
 | Sound | `SoundLanguageSetting`, `SoundVolumeAdjust`, `SoundVolumeAdjustEngage` | Prompt language and volume |
 | Software | `SoftwareMenu` | Carrot Web software-menu availability |

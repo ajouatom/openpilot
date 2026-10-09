@@ -8,12 +8,12 @@
   min-width: min(360px, calc(100vw - 56px));
 }
 
-.page--setting #settingScreenItems .setting-popular-detail-block {
+.page--setting :is(#settingScreenItems, #settingInlineSearchResults) .setting-popular-detail-block {
   width: min(520px, 100%);
   margin-top: 12px;
 }
 
-.page--setting #settingScreenItems .setting-popular-detail-block .setting-popular-detail {
+.page--setting :is(#settingScreenItems, #settingInlineSearchResults) .setting-popular-detail-block .setting-popular-detail {
   gap: 9px;
   min-width: 0;
   width: 100%;
@@ -34,7 +34,7 @@
   overflow-wrap: anywhere;
 }
 
-.page--setting #settingScreenItems .setting-popular-detail-block .setting-popular-detail__name {
+.page--setting :is(#settingScreenItems, #settingInlineSearchResults) .setting-popular-detail-block .setting-popular-detail__name {
   color: color-mix(in srgb, var(--md-on-surface-var) 66%, transparent);
   font-size: 12px;
   font-weight: 780;
@@ -82,7 +82,7 @@
   cursor: pointer;
 }
 
-.page--setting #settingScreenItems .setting-popular-detail-block .setting-popular-detail__rows {
+.page--setting :is(#settingScreenItems, #settingInlineSearchResults) .setting-popular-detail-block .setting-popular-detail__rows {
   gap: 6px;
   overflow: visible;
   border: 0;
@@ -90,7 +90,7 @@
   background: transparent;
 }
 
-.page--setting #settingScreenItems .setting-popular-detail-block .setting-popular-detail__row {
+.page--setting :is(#settingScreenItems, #settingInlineSearchResults) .setting-popular-detail-block .setting-popular-detail__row {
   grid-template-columns: 18px minmax(0, 1fr) 48px;
   min-height: 48px;
   padding: 8px 11px;
@@ -103,12 +103,12 @@
   font-weight: 760;
 }
 
-.page--setting #settingScreenItems .setting-popular-detail-block .setting-popular-detail__row:active {
+.page--setting :is(#settingScreenItems, #settingInlineSearchResults) .setting-popular-detail-block .setting-popular-detail__row:active {
   border-color: color-mix(in srgb, var(--md-primary) 24%, var(--md-outline-var));
   background: color-mix(in srgb, var(--md-primary) 9%, var(--md-surface-cont));
 }
 
-.page--setting #settingScreenItems .setting-popular-detail-block .setting-popular-detail--single .setting-popular-detail__row {
+.page--setting :is(#settingScreenItems, #settingInlineSearchResults) .setting-popular-detail-block .setting-popular-detail--single .setting-popular-detail__row {
   min-height: 44px;
 }
 
@@ -153,7 +153,7 @@
   white-space: nowrap;
 }
 
-.page--setting #settingScreenItems .setting-popular-detail-block .setting-popular-detail__value {
+.page--setting :is(#settingScreenItems, #settingInlineSearchResults) .setting-popular-detail-block .setting-popular-detail__value {
   color: color-mix(in srgb, var(--md-primary) 68%, var(--md-on-surface));
   font-size: 13px;
   font-weight: 860;
@@ -163,7 +163,7 @@
   text-align: right;
 }
 
-.page--setting #settingScreenItems .setting-popular-detail-block .setting-popular-detail__count {
+.page--setting :is(#settingScreenItems, #settingInlineSearchResults) .setting-popular-detail-block .setting-popular-detail__count {
   color: color-mix(in srgb, var(--md-on-surface-var) 66%, transparent);
   font-size: 11px;
   font-weight: 820;

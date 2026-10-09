@@ -2,7 +2,7 @@
    Description, popular values and history share the same tabs and content box
    at every viewport size; only one panel is exposed at a time. */
 
-.page--setting #settingScreenItems .setting-context {
+.page--setting :is(#settingScreenItems, #settingInlineSearchResults) .setting-context {
   width: 100%;
   min-width: 0;
   margin: 14px 0 var(--sp-md);
@@ -13,7 +13,7 @@
   box-shadow: var(--setting-card-shadow);
 }
 
-.page--setting #settingScreenItems .setting-context__tabs {
+.page--setting :is(#settingScreenItems, #settingInlineSearchResults) .setting-context__tabs {
   --segmented-control-gap: 0;
   --segmented-control-padding: 0;
   --segmented-control-item-min-height: var(--control-min-height);
@@ -37,7 +37,7 @@
   background: color-mix(in srgb, var(--md-surface-cont-h) 72%, var(--setting-card-surface));
 }
 
-.page--setting #settingScreenItems .setting-context__tab {
+.page--setting :is(#settingScreenItems, #settingInlineSearchResults) .setting-context__tab {
   position: relative;
   gap: 5px;
   overflow: hidden;
@@ -51,42 +51,42 @@
     color var(--motion-quick) var(--ease-standard);
 }
 
-.page--setting #settingScreenItems .setting-context__tab:not(:last-child) {
+.page--setting :is(#settingScreenItems, #settingInlineSearchResults) .setting-context__tab:not(:last-child) {
   border-right-color: color-mix(in srgb, var(--setting-card-outline) 62%, transparent);
 }
 
-.page--setting #settingScreenItems .setting-context__tab:first-child {
+.page--setting :is(#settingScreenItems, #settingInlineSearchResults) .setting-context__tab:first-child {
   border-top-left-radius: var(--setting-card-radius);
 }
 
-.page--setting #settingScreenItems .setting-context__tab:last-child {
+.page--setting :is(#settingScreenItems, #settingInlineSearchResults) .setting-context__tab:last-child {
   border-top-right-radius: var(--setting-card-radius);
 }
 
-.page--setting #settingScreenItems .setting-context__tab:hover {
+.page--setting :is(#settingScreenItems, #settingInlineSearchResults) .setting-context__tab:hover {
   background: color-mix(in srgb, var(--md-on-surface) 5%, var(--md-surface-cont-h));
   color: var(--md-on-surface);
 }
 
-.page--setting #settingScreenItems .setting-context__tab[aria-selected="true"] {
+.page--setting :is(#settingScreenItems, #settingInlineSearchResults) .setting-context__tab[aria-selected="true"] {
   border-color: var(--segmented-control-selected-border);
   background: var(--segmented-control-selected-bg);
   color: var(--segmented-control-selected-fg);
 }
 
-.page--setting #settingScreenItems .setting-context__tab:focus-visible {
+.page--setting :is(#settingScreenItems, #settingInlineSearchResults) .setting-context__tab:focus-visible {
   outline: var(--focus-ring-width) solid var(--focus-ring-color);
   outline-offset: -2px;
 }
 
-.page--setting #settingScreenItems .setting-context__tab-label {
+.page--setting :is(#settingScreenItems, #settingInlineSearchResults) .setting-context__tab-label {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.page--setting #settingScreenItems .setting-context__tab-count {
+.page--setting :is(#settingScreenItems, #settingInlineSearchResults) .setting-context__tab-count {
   display: inline-grid;
   min-width: 18px;
   height: 18px;
@@ -101,29 +101,29 @@
   font-weight: 850;
 }
 
-.page--setting #settingScreenItems
+.page--setting :is(#settingScreenItems, #settingInlineSearchResults)
   .setting-context__tab[aria-selected="true"]
   .setting-context__tab-count {
   background: color-mix(in srgb, var(--md-primary) 16%, var(--md-surface-cont-hh));
   color: var(--md-primary);
 }
 
-.page--setting #settingScreenItems .setting-context__panel {
+.page--setting :is(#settingScreenItems, #settingInlineSearchResults) .setting-context__panel {
   min-width: 0;
 }
 
-.page--setting #settingScreenItems .setting-context__panel[hidden] {
+.page--setting :is(#settingScreenItems, #settingInlineSearchResults) .setting-context__panel[hidden] {
   display: none;
 }
 
-.page--setting #settingScreenItems .setting-context__content {
+.page--setting :is(#settingScreenItems, #settingInlineSearchResults) .setting-context__content {
   min-width: 0;
   min-height: 168px;
   padding: clamp(var(--sp-md), 2.5vw, var(--sp-lg));
   color: var(--md-on-surface-var);
 }
 
-.page--setting #settingScreenItems .setting-context__state {
+.page--setting :is(#settingScreenItems, #settingInlineSearchResults) .setting-context__state {
   display: grid;
   min-height: 136px;
   align-content: center;
@@ -133,7 +133,7 @@
   text-align: center;
 }
 
-.page--setting #settingScreenItems .setting-context__state strong {
+.page--setting :is(#settingScreenItems, #settingInlineSearchResults) .setting-context__state strong {
   max-width: 34rem;
   font-size: var(--fs-label-md);
   font-weight: 780;
@@ -141,22 +141,22 @@
   text-wrap: balance;
 }
 
-.page--setting #settingScreenItems .setting-context__state--loading strong {
+.page--setting :is(#settingScreenItems, #settingInlineSearchResults) .setting-context__state--loading strong {
   animation: setting-context-loading var(--setting-context-loading-duration) ease-in-out infinite alternate;
 }
 
-.page--setting #settingScreenItems .setting-context .setting-popular-detail-block,
-.page--setting #settingScreenItems .setting-context .setting-history-detail-block {
+.page--setting :is(#settingScreenItems, #settingInlineSearchResults) .setting-context .setting-popular-detail-block,
+.page--setting :is(#settingScreenItems, #settingInlineSearchResults) .setting-context .setting-history-detail-block {
   width: 100%;
   margin: 0;
 }
 
-.page--setting #settingScreenItems .setting-context .setting-popular-detail {
+.page--setting :is(#settingScreenItems, #settingInlineSearchResults) .setting-context .setting-popular-detail {
   width: 100%;
   min-width: 0;
 }
 
-.page--setting #settingScreenItems .setting-context .setting-popular-detail__rows {
+.page--setting :is(#settingScreenItems, #settingInlineSearchResults) .setting-context .setting-popular-detail__rows {
   gap: 6px;
   overflow: visible;
   border: 0;
@@ -164,7 +164,7 @@
   background: transparent;
 }
 
-.page--setting #settingScreenItems .setting-context .setting-popular-detail__row {
+.page--setting :is(#settingScreenItems, #settingInlineSearchResults) .setting-context .setting-popular-detail__row {
   grid-template-columns: 18px minmax(0, 1fr) minmax(44px, auto);
   min-height: 46px;
   padding: 7px 11px;
@@ -175,27 +175,27 @@
   font-size: var(--fs-label-md);
 }
 
-.page--setting #settingScreenItems .setting-context .setting-popular-detail__row:last-child {
+.page--setting :is(#settingScreenItems, #settingInlineSearchResults) .setting-context .setting-popular-detail__row:last-child {
   border-bottom-color: color-mix(in srgb, var(--md-outline-var) 22%, transparent);
 }
 
-.page--setting #settingScreenItems .setting-context .setting-popular-detail__row:active {
+.page--setting :is(#settingScreenItems, #settingInlineSearchResults) .setting-context .setting-popular-detail__row:active {
   border-color: color-mix(in srgb, var(--md-primary) 32%, var(--md-outline-var));
   background: var(--md-primary-state-soft);
 }
 
-.page--setting #settingScreenItems .setting-context .setting-popular-detail__updated {
+.page--setting :is(#settingScreenItems, #settingInlineSearchResults) .setting-context .setting-popular-detail__updated {
   margin-top: var(--sp-sm);
   color: color-mix(in srgb, var(--md-on-surface-var) 54%, transparent);
   font-size: var(--fs-label-sm);
 }
 
-.page--setting #settingScreenItems .setting-context__history-summary {
+.page--setting :is(#settingScreenItems, #settingInlineSearchResults) .setting-context__history-summary {
   display: grid;
   gap: var(--sp-md);
 }
 
-.page--setting #settingScreenItems .setting-context__more {
+.page--setting :is(#settingScreenItems, #settingInlineSearchResults) .setting-context__more {
   width: 100%;
   min-height: var(--control-min-height);
   border: 1px solid color-mix(in srgb, var(--md-outline-var) 42%, transparent);
@@ -208,8 +208,8 @@
   cursor: pointer;
 }
 
-.page--setting #settingScreenItems .setting-context__more:hover,
-.page--setting #settingScreenItems .setting-context__more:focus-visible {
+.page--setting :is(#settingScreenItems, #settingInlineSearchResults) .setting-context__more:hover,
+.page--setting :is(#settingScreenItems, #settingInlineSearchResults) .setting-context__more:focus-visible {
   border-color: color-mix(in srgb, var(--md-primary) 42%, var(--md-outline-var));
   background: var(--md-primary-state-soft);
 }
@@ -272,11 +272,11 @@
   display: none;
 }
 
-.page--setting #settingScreenItems .setting-doc-ast details {
+.page--setting :is(#settingScreenItems, #settingInlineSearchResults) .setting-doc-ast details {
   border-top: 1px solid color-mix(in srgb, var(--md-outline-var) 24%, transparent);
 }
 
-.page--setting #settingScreenItems .setting-doc-ast details > summary {
+.page--setting :is(#settingScreenItems, #settingInlineSearchResults) .setting-doc-ast details > summary {
   display: flex;
   min-height: var(--control-min-height);
   align-items: center;
@@ -288,21 +288,21 @@
   list-style: none;
 }
 
-.page--setting #settingScreenItems .setting-doc-ast details > summary::-webkit-details-marker {
+.page--setting :is(#settingScreenItems, #settingInlineSearchResults) .setting-doc-ast details > summary::-webkit-details-marker {
   display: none;
 }
 
-.page--setting #settingScreenItems .setting-doc-ast details > summary::after {
+.page--setting :is(#settingScreenItems, #settingInlineSearchResults) .setting-doc-ast details > summary::after {
   content: "+";
   color: color-mix(in srgb, var(--md-on-surface-var) 58%, transparent);
   font-size: 18px;
 }
 
-.page--setting #settingScreenItems .setting-doc-ast details[open] > summary::after {
+.page--setting :is(#settingScreenItems, #settingInlineSearchResults) .setting-doc-ast details[open] > summary::after {
   content: "−";
 }
 
-.page--setting #settingScreenItems .setting-doc-callout__label {
+.page--setting :is(#settingScreenItems, #settingInlineSearchResults) .setting-doc-callout__label {
   display: block;
   margin-bottom: 5px;
   color: var(--md-on-surface);
@@ -310,7 +310,7 @@
   font-weight: 880;
 }
 
-.page--setting #settingScreenItems .setting-doc-markdown img {
+.page--setting :is(#settingScreenItems, #settingInlineSearchResults) .setting-doc-markdown img {
   display: block;
   width: auto;
   max-width: 100%;
@@ -319,35 +319,35 @@
   border-radius: var(--r-sm);
 }
 
-.page--setting #settingScreenItems .setting-doc-task-item {
+.page--setting :is(#settingScreenItems, #settingInlineSearchResults) .setting-doc-task-item {
   list-style: none;
 }
 
-.page--setting #settingScreenItems .setting-doc-task {
+.page--setting :is(#settingScreenItems, #settingInlineSearchResults) .setting-doc-task {
   margin-right: var(--sp-sm);
   accent-color: var(--md-primary);
 }
 
-.page--setting #settingScreenItems .setting-doc-markdown [data-align="center"] {
+.page--setting :is(#settingScreenItems, #settingInlineSearchResults) .setting-doc-markdown [data-align="center"] {
   text-align: center;
 }
 
-.page--setting #settingScreenItems .setting-doc-markdown [data-align="right"] {
+.page--setting :is(#settingScreenItems, #settingInlineSearchResults) .setting-doc-markdown [data-align="right"] {
   text-align: right;
 }
 
 @media (max-width: 640px) {
-  .page--setting #settingScreenItems .setting-context {
+  .page--setting :is(#settingScreenItems, #settingInlineSearchResults) .setting-context {
     margin-top: 12px;
   }
 
-  .page--setting #settingScreenItems .setting-context__tabs {
+  .page--setting :is(#settingScreenItems, #settingInlineSearchResults) .setting-context__tabs {
     --segmented-control-item-min-height: 42px;
     --segmented-control-item-padding: 0 var(--sp-xs);
     --segmented-control-item-font-size: var(--fs-label-sm);
   }
 
-  .page--setting #settingScreenItems .setting-context__content {
+  .page--setting :is(#settingScreenItems, #settingInlineSearchResults) .setting-context__content {
     min-height: 152px;
     padding: var(--sp-md);
   }
@@ -368,7 +368,7 @@
 }
 
 @media (max-height: 500px) and (orientation: landscape) {
-  .page--setting #settingScreenItems .setting-context__content {
+  .page--setting :is(#settingScreenItems, #settingInlineSearchResults) .setting-context__content {
     min-height: 132px;
   }
 
@@ -382,7 +382,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .page--setting #settingScreenItems .setting-context__state--loading strong {
+  .page--setting :is(#settingScreenItems, #settingInlineSearchResults) .setting-context__state--loading strong {
     animation: none;
   }
 }
