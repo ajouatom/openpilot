@@ -255,7 +255,53 @@
   line-height: 1.5;
 }
 
-.page--setting.setting-tab-device #settingScreenItems > .setting-inline-search {
+/* ── In-place results (single-column layouts) ────────────────────── */
+
+/* On phones the field keeps its slot and the results render right below it
+   instead of the page sliding to the items screen. The rows reuse the item
+   styles through the widened :is(#settingScreenItems, …) scopes in the item
+   stylesheets. Scoped with .page--setting + id so it also beats the
+   id-scoped screen rules the :is() scopes inject (e.g. padding-top: 0). */
+.page--setting #settingInlineSearchResults {
+  min-width: 0;
+  padding: 4px 0 0;
+}
+
+.page--setting #settingInlineSearchResults:empty {
+  display: none;
+}
+
+.page--setting #settingInlineSearchResults.is-entering {
+  animation: setting-inline-search-enter 180ms var(--ease-emphasized) both;
+}
+
+@keyframes setting-inline-search-enter {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .page--setting #settingInlineSearchResults.is-entering {
+    animation: none;
+  }
+}
+
+/* While the in-place surface is open the group menu yields to the results. */
+@media (aspect-ratio < 13/10) and (max-width: 639px), (aspect-ratio < 13/10) and (max-height: 649px) {
+  .page--setting #carrotTabContent.is-inline-search #groupList > :not(.setting-inline-search-slot) {
+    display: none;
+  }
+}
+
+/* Wide split layout: the results belong to the items pane, never to the
+   group rail. */
+.page--setting.setting-layout-split #settingInlineSearchResults {
   display: none;
 }
 

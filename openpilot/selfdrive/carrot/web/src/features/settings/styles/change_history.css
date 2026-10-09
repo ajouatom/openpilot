@@ -3,7 +3,7 @@
    keeps one visual language. Sizes and colours reference the same tokens the
    popular block uses rather than repeating literals. */
 
-.page--setting #settingScreenItems .setting-history-detail-block {
+.page--setting :is(#settingScreenItems, #settingInlineSearchResults) .setting-history-detail-block {
   width: min(520px, 100%);
   margin-top: 12px;
 }

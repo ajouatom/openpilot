@@ -123,6 +123,27 @@ test("entries without a haystack are skipped instead of throwing", () => {
   assert.deepEqual(names(filterSettingSearchEntries(odd, { query: "ok" })), ["Ok"]);
 });
 
+test("consonant-only keywords match the chosung projection when provided", () => {
+  const list = [
+    { source: "carrot", name: "Decel", haystack: "감속 조절", chosung: "ㄱㅅ ㅈㅈ" },
+    { source: "carrot", name: "Gap", haystack: "차간거리" },
+  ];
+  assert.deepEqual(names(filterSettingSearchEntries(list, { query: "ㄱㅅ" })), ["Decel"]);
+  assert.deepEqual(names(filterSettingSearchEntries(list, { query: "ᄀᄉ" })), ["Decel"], "canonical jamo input");
+  assert.deepEqual(names(filterSettingSearchEntries(list, { query: "ㅊㄱ" })), [], "entries without a chosung never match");
+  assert.deepEqual(names(filterSettingSearchEntries(list, { query: "차간" })), ["Gap"]);
+});
+
+test("keywords are ANDed across haystack text and chosung", () => {
+  const list = [
+    { source: "carrot", name: "Decel", haystack: "감속 조절", chosung: "ㄱㅅ ㅈㅈ" },
+    { source: "carrot", name: "Gap", haystack: "부드러운 감속", chosung: "ㅂㄷㄹㅇ ㄱㅅ" },
+  ];
+  assert.deepEqual(names(filterSettingSearchEntries(list, { query: "조절 감속" })), ["Decel"]);
+  assert.deepEqual(names(filterSettingSearchEntries(list, { query: "ㄱㅅ ㅈㅈ" })), ["Decel"]);
+  assert.deepEqual(names(filterSettingSearchEntries(list, { query: "감속 부드러운" })), ["Gap"]);
+});
+
 test("scope normalization rejects incomplete profile scopes", () => {
   assert.deepEqual(normalizeSearchScope(null), { type: "all", profileId: "" });
   assert.deepEqual(normalizeSearchScope({ type: "profile" }), { type: "all", profileId: "" });

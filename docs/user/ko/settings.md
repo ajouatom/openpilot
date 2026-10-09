@@ -370,14 +370,12 @@ Carrot Vision에는 `carrot_settings.json` 카탈로그와 별도로 **AR 표시
 | 중분류 | 파라미터 | 용도 |
 |---|---|---|
 | 녹화·전원 | `RecordRoadCam`, `MaxTimeOffroadMin` | 도로 카메라 저장과 시동 OFF 후 자동 전원 종료 시간 |
-| YouTube 라이브 | `CarrotYouTubeLive`, `CarrotYouTubeQuality`, `CarrotYouTubeTimestamp` | 카메라 영상 송출, 품질과 타임스탬프 |
 | 네트워크·지도 | `HotspotOnBoot`, `MapboxStyle` | 부팅 시 핫스팟과 지도 배경 스타일 |
 | 사운드 | `SoundLanguageSetting`, `SoundVolumeAdjust`, `SoundVolumeAdjustEngage` | 안내음 언어와 일반·인게이지 볼륨 |
 | 소프트웨어 | `SoftwareMenu` | Carrot Web의 소프트웨어 메뉴 활성화 |
 
 - `RecordRoadCam`: `0` 녹화 안 함, `1` 일반 카메라, `2` 일반+광각 카메라입니다. 저장 공간 사용량을 확인하세요.
 - `MaxTimeOffroadMin`: 시동이 꺼진 뒤 장치가 자동으로 꺼질 때까지의 시간입니다.
-- `CarrotYouTubeLive`: 네트워크 사용량, 발열과 개인정보 노출 가능성을 함께 확인하세요.
 - `HotspotOnBoot`: USIM을 장착한 장치에서 자동 핫스팟을 사용할 때의 설정입니다.
 - `SoftwareMenu`: 메모리 문제가 있을 때 끌 수 있는 Carrot Web 메뉴 설정입니다.
 

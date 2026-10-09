@@ -53,38 +53,38 @@
    foldables ??the complement of the wide (>= 13/10) split block below, so the
    two stay mutually exclusive and exhaustive (no square-aspect gap). */
 @media (aspect-ratio < 13/10) and (max-width: 639px), (aspect-ratio < 13/10) and (max-height: 649px) {
-  .page--setting #settingScreenItems {
+  .page--setting :is(#settingScreenItems, #settingInlineSearchResults) {
     padding-top: 0;
   }
 
-  .page--setting #settingScreenItems.setting-screen-items--profile {
+  .page--setting :is(#settingScreenItems, #settingInlineSearchResults).setting-screen-items--profile {
     padding-top: 0;
     --setting-profile-panel-sticky-top: 0px;
     --setting-profile-section-sticky-top: 72px;
   }
 
-  .page--setting #settingScreenItems.setting-screen-items--profile #items {
+  .page--setting :is(#settingScreenItems, #settingInlineSearchResults).setting-screen-items--profile #items {
     padding-top: 0;
   }
 
-  .page--setting #settingScreenItems.setting-screen-items--profile .setting-profile-row {
+  .page--setting :is(#settingScreenItems, #settingInlineSearchResults).setting-screen-items--profile .setting-profile-row {
     min-height: 46px;
     gap: var(--sp-sm);
   }
 
-  .page--setting #settingScreenItems.setting-screen-items--profile .setting-profile-action__icon {
+  .page--setting :is(#settingScreenItems, #settingInlineSearchResults).setting-screen-items--profile .setting-profile-action__icon {
     width: 20px;
     height: 20px;
   }
 
-  .page--setting #settingScreenItems.setting-screen-items--profile .setting-profile-section__header {
+  .page--setting :is(#settingScreenItems, #settingInlineSearchResults).setting-screen-items--profile .setting-profile-section__header {
     margin-left: 0;
     margin-right: 0;
     padding-left: 2px;
     padding-right: 2px;
   }
 
-  .page--setting #settingScreenItems.setting-screen-items--profile > .row-between.mb-sm {
+  .page--setting :is(#settingScreenItems, #settingInlineSearchResults).setting-screen-items--profile > .row-between.mb-sm {
     display: grid;
   }
 
@@ -112,7 +112,7 @@
   }
 
   .page.page--setting > #settingScreenHost > #settingScreenGroups,
-  .page.page--setting > #settingScreenHost > #settingScreenItems {
+  .page.page--setting > #settingScreenHost > :is(#settingScreenItems, #settingInlineSearchResults) {
     position: absolute;
     inset: 0;
     overflow-x: hidden;
@@ -130,7 +130,7 @@
             mask-image: none;
   }
 
-  .page.page--setting > #settingScreenHost > #settingScreenItems {
+  .page.page--setting > #settingScreenHost > :is(#settingScreenItems, #settingInlineSearchResults) {
     /* #000 in a mask is an alpha channel, not a colour: black means fully
        opaque. Theme independent, so it must not become a surface token. */
     -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 12px, #000 calc(100% - 6px), transparent 100%);
@@ -190,7 +190,7 @@
   }
 
   .page.page--setting > #settingScreenHost > #settingScreenGroups,
-  .page.page--setting > #settingScreenHost > #settingScreenItems {
+  .page.page--setting > #settingScreenHost > :is(#settingScreenItems, #settingInlineSearchResults) {
     height: 100%;
     min-height: 0;
     max-height: none;
@@ -206,7 +206,7 @@
   }
 
   /* 媛濡쒕え?쒕룄 ?섏쐞 ?ㅼ젙 ?붾㈃?먮쭔 ?ㅽ겕濡?媛?μ옄由??섏씠?쒕? ?좎??쒕떎. */
-  .page.page--setting > #settingScreenHost > #settingScreenItems {
+  .page.page--setting > #settingScreenHost > :is(#settingScreenItems, #settingInlineSearchResults) {
     -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 12px, #000 calc(100% - 6px), transparent 100%);
             mask-image: linear-gradient(to bottom, transparent 0, #000 12px, #000 calc(100% - 6px), transparent 100%);
   }
@@ -222,7 +222,7 @@
       var(--setting-landscape-page-inset);
   }
 
-  .page.page--setting > #settingScreenHost > #settingScreenItems {
+  .page.page--setting > #settingScreenHost > :is(#settingScreenItems, #settingInlineSearchResults) {
     min-width: 0;
     padding:
       var(--setting-landscape-page-inset)
@@ -231,7 +231,7 @@
       var(--setting-landscape-page-inset);
   }
 
-  .page.page--setting > #settingScreenHost > #settingScreenItems.setting-screen-items--profile {
+  .page.page--setting > #settingScreenHost > :is(#settingScreenItems, #settingInlineSearchResults).setting-screen-items--profile {
     padding-top: 0;
     --setting-profile-panel-sticky-top: 0px;
     --setting-profile-section-sticky-top: 68px;
@@ -328,48 +328,48 @@
     bottom: auto;
   }
 
-  .page--setting.setting-layout-split #settingScreenItems .title {
+  .page--setting.setting-layout-split :is(#settingScreenItems, #settingInlineSearchResults) .title {
     font-size: 16px;
     font-weight: 700;
     line-height: 1.18;
   }
 
-  .page--setting.setting-layout-split #settingScreenItems .name {
+  .page--setting.setting-layout-split :is(#settingScreenItems, #settingInlineSearchResults) .name {
     font-size: 12px;
     line-height: 1.28;
   }
 
-  .page--setting.setting-layout-split #settingScreenItems .muted,
-  .page--setting.setting-layout-split #settingScreenItems .descr {
+  .page--setting.setting-layout-split :is(#settingScreenItems, #settingInlineSearchResults) .muted,
+  .page--setting.setting-layout-split :is(#settingScreenItems, #settingInlineSearchResults) .descr {
     font-size: 13px;
     line-height: 1.38;
   }
 
-  .page--setting.setting-layout-split #settingScreenItems .setting {
+  .page--setting.setting-layout-split :is(#settingScreenItems, #settingInlineSearchResults) .setting {
     overflow: hidden;
   }
 
-  .page--setting.setting-layout-split #settingScreenItems .settingTop {
+  .page--setting.setting-layout-split :is(#settingScreenItems, #settingInlineSearchResults) .settingTop {
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
     gap: 8px;
     align-items: start;
   }
 
-  .page--setting.setting-layout-split #settingScreenItems .settingTop > :first-child {
+  .page--setting.setting-layout-split :is(#settingScreenItems, #settingInlineSearchResults) .settingTop > :first-child {
     min-width: 0;
   }
 
-  .page--setting.setting-layout-split #settingScreenItems .title,
-  .page--setting.setting-layout-split #settingScreenItems .name,
-  .page--setting.setting-layout-split #settingScreenItems .muted,
-  .page--setting.setting-layout-split #settingScreenItems .descr {
+  .page--setting.setting-layout-split :is(#settingScreenItems, #settingInlineSearchResults) .title,
+  .page--setting.setting-layout-split :is(#settingScreenItems, #settingInlineSearchResults) .name,
+  .page--setting.setting-layout-split :is(#settingScreenItems, #settingInlineSearchResults) .muted,
+  .page--setting.setting-layout-split :is(#settingScreenItems, #settingInlineSearchResults) .descr {
     max-width: 100%;
     overflow-wrap: anywhere;
     word-break: break-word;
   }
 
-  .page--setting.setting-layout-split #settingScreenItems .setting-copy {
+  .page--setting.setting-layout-split :is(#settingScreenItems, #settingInlineSearchResults) .setting-copy {
     min-width: 0;
     max-width: 100%;
   }
@@ -392,7 +392,7 @@
     column-gap: 10px;
   }
 
-  .page--setting.setting-layout-split #settingScreenItems .settingTop {
+  .page--setting.setting-layout-split :is(#settingScreenItems, #settingInlineSearchResults) .settingTop {
     grid-template-columns: minmax(0, 1fr);
   }
 

@@ -85,3 +85,36 @@ test("invalidating a changing search result set prevents reuse of an older pendi
   await old;
   assert.deepEqual(await cache.loadGroup("search", { names: ["TfMode"] }), { TfMode: 3 });
 });
+
+test("consonant-only queries match the chosung projection of the haystack", () => {
+  const chosungModel = createSettingsDerivedModel({
+    catalog: {
+      groups: [{ group: "KR", ko: "테스트" }],
+      items_by_group: {
+        KR: [
+          { name: "Decel", title: "감속" },
+          { name: "Set", title: "가속 설정" },
+          { name: "Honey", title: "꿀단지" },
+          { name: "Brake", title: "브레이크" },
+          { name: "Tf", title: "차간거리" },
+        ],
+      },
+    },
+    language: "ko",
+  });
+  assert.deepEqual(names(chosungModel.searchItemEntries("ㄱㅅ")), ["Decel", "Set"]);
+  assert.deepEqual(names(chosungModel.searchItemEntries("ᄀᄉ")), ["Decel", "Set"], "canonical jamo input");
+  assert.deepEqual(names(chosungModel.searchItemEntries("ㄲ")), ["Honey"], "double consonants");
+  assert.deepEqual(names(chosungModel.searchItemEntries("ㅂㄹ")), ["Brake"]);
+  assert.deepEqual(names(chosungModel.searchItemEntries("tf")), ["Tf"], "Latin words do not go through chosung");
+  assert.deepEqual(model().searchItemEntries("ㄱㅁ"), { entries: [], total: 0 }, "final consonants are not initials");
+});
+
+test("space-separated keywords are all required, mixing text and chosung", () => {
+  assert.deepEqual(names(model().searchItemEntries("감속 조절")), ["Decel"]);
+  assert.deepEqual(names(model().searchItemEntries("조절 감속")), ["Decel"], "keyword order does not matter");
+  assert.deepEqual(names(model().searchItemEntries("감속조절")), ["Decel"], "no-space compound finds the spaced title");
+  assert.deepEqual(names(model().searchItemEntries("차간 감속")), ["Gap"]);
+  assert.deepEqual(names(model().searchItemEntries("ㄱㅅ ㅈㅈ")), ["Decel"]);
+  assert.deepEqual(model().searchItemEntries("감속 브레이크"), { entries: [], total: 0 });
+});

@@ -22,7 +22,7 @@ DEFAULT_SETTINGS_PATH = os.environ.get(
 )
 
 # Carrot data dirs.
-# Kept OUTSIDE the git working tree so user state (web settings, YouTube stream
+# Kept OUTSIDE the git working tree so user state (web settings, stream
 # key, favorites/profiles) survives `git reset --hard` + `git clean -xfd`, which
 # the reset/sync tools run and which wipes untracked files. The old location was
 # inside the repo (selfdrive/carrot/data) and got erased on every reset; files
@@ -40,8 +40,6 @@ CARROT_SETTING_PROFILES_PATH = os.path.join(CARROT_STATE_DIR, "setting_profiles.
 CARROT_PARAM_CHANGES_PATH = os.path.join(CARROT_STATE_DIR, "param_changes.jsonl")
 CARROT_SETTING_UNIT_INDEX_PATH = os.path.join(CARROT_STATE_DIR, "setting_unit_index.json")
 CARROT_FINGERPRINT_BASELINE_PATH = os.path.join(CARROT_STATE_DIR, "fingerprint_baseline.json")
-CARROT_YOUTUBE_LIVE_STATE_PATH = os.path.join(CARROT_STATE_DIR, "youtube_live.json")
-CARROT_YOUTUBE_LIVE_SECRET_PATH = os.path.join(CARROT_STATE_DIR, "youtube_live_secret.json")
 
 # Dashcam
 DASHCAM_ROOT = "/data/media/0/realdata"
@@ -95,8 +93,6 @@ UNIT_CYCLE = [1, 2, 5, 10, 50, 100]
 # legacy in-repo location to CARROT_STATE_DIR under /data.
 _LEGACY_STATE_FILES = (
   "web_settings.json",
-  "youtube_live.json",
-  "youtube_live_secret.json",
   "setting_favorites.json",
   "setting_profiles.json",
   "git.json",
