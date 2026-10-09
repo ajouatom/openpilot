@@ -384,7 +384,9 @@ class VCruiseCarrot:
         self.v_cruise_kph = np.clip(v_cruise_kph, self._cruise_speed_min, self._cruise_speed_max)
         self.v_cruise_cluster_kph = self.v_cruise_kph
       else:
-        if self.speed_from_pcm == 1:
+        if self.speed_from_pcm == 1 or (self.speed_from_pcm == 3 and self.CP.brand == "toyota"):
+          # Toyota reports RES/SET through the PCM set speed, not buttonEvents.
+          # Its dedicated mode must not retain an unrelated Carrot set speed.
           self.v_cruise_kph = CS.cruiseState.speed * CV.MS_TO_KPH
           self.v_cruise_cluster_kph = CS.cruiseState.speedCluster * CV.MS_TO_KPH
         else:

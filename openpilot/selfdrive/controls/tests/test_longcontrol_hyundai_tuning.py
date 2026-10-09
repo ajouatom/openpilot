@@ -72,6 +72,7 @@ def make_control(*, hyundai, params):
   control.hyundai_fixed_longitudinal_tuning = hyundai
   control.pid = SimpleNamespace(_k_p=([0.0], [9.0]), _k_i=([0.0], [9.0]), k_f=9.0)
   control.CP = SimpleNamespace(
+    brand="hyundai" if hyundai else "mock",
     longitudinalTuning=SimpleNamespace(kpBP=[0.0], kiBP=[0.0]),
   )
   control.params = params

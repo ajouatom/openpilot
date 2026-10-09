@@ -168,7 +168,7 @@ Range 0–200, step 10, catalog default 10. Zero permits the quickest accelerati
 > [!IMPORTANT]
 > The displayed `LongTuningKiV` title says `×0.01`, but `longcontrol.py` currently applies **×0.001**. Stored `100` is Ki `0.100`, not `1.00`.
 
-Hyundai, Kia, and Genesis do not read the stored `LongTuningKpV`, `LongTuningKiV`, or `LongTuningKf` values. On other brands, the overrides apply only when the vehicle's base longitudinal tune has a single Kp point and a single Ki point. Multi-point vehicle tunes retain their defaults. These gains are also not the primary controller when stock SCC controls acceleration and braking.
+Hyundai, Kia, and Genesis do not read the stored `LongTuningKpV`, `LongTuningKiV`, or `LongTuningKf` values. Toyota/Lexus also ignore and hide these three settings. Their dedicated vehicle controller corrects acceleration tracking, so the common controller passes the target through with `Kp=0`, `Ki=0`, and `Kf=1`. Stopping control and acceleration limits remain active. On other brands, the overrides apply only when the vehicle's base longitudinal tune has a single Kp point and a single Ki point. Multi-point vehicle tunes retain their defaults. These gains are also not the primary controller when stock SCC controls acceleration and braking.
 
 Volkswagen MEB vehicles, including ID.4, use a single base Ki point of zero, so all three gain settings apply. Previously saved values also apply; the default stored values `100/0/100` produce `Kp=1`, `Ki=0`, and `Kf=1`. Updating does not reset saved gains.
 

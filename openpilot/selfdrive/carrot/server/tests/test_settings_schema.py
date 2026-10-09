@@ -177,7 +177,8 @@ def test_longitudinal_pid_defaults_match_registry(params):
     "LongTuningKpV", "LongTuningKiV", "LongTuningKf",
   )) == (100, 0, 100)
   for name in ("LongTuningKpV", "LongTuningKiV", "LongTuningKf"):
-    assert by_name[name]["hidden_brands"] == ["hyundai"]
+    assert by_name[name]["hidden_brands"] == ["hyundai", "toyota"]
+    assert "Toyota/Lexus" in by_name[name]["edescr"]
     assert "현대·기아·제네시스" in by_name[name]["descr"]
     assert "hidden and ignored" in by_name[name]["edescr"]
 
@@ -190,13 +191,14 @@ def test_longitudinal_pid_defaults_match_registry(params):
     assert f'{{"{name}", {{PERSISTENT, INT, "{default}"}}}}' in params_keys
 
 
-def test_hyundai_catalog_hides_longitudinal_pid_settings(settings):
+@pytest.mark.parametrize("brand", ["hyundai", "toyota"])
+def test_fixed_tuning_catalog_hides_longitudinal_pid_settings(settings, brand):
   groups, by_name, groups_list = group_index(settings)
   categories = build_menu_categories(settings, by_name)
   hidden = {"LongTuningKpV", "LongTuningKiV", "LongTuningKf"}
 
   filtered_groups, filtered_groups_list, filtered_categories, hidden_names = filter_settings_catalog_for_brand(
-    groups, groups_list, categories, "hyundai",
+    groups, groups_list, categories, brand,
   )
   visible_names = {item["name"] for items in filtered_groups.values() for item in items}
   menu_names = {
@@ -221,7 +223,7 @@ def test_other_brands_keep_longitudinal_pid_settings(settings):
   groups, by_name, groups_list = group_index(settings)
   categories = build_menu_categories(settings, by_name)
   filtered_groups, _filtered_groups_list, _filtered_categories, hidden_names = filter_settings_catalog_for_brand(
-    groups, groups_list, categories, "toyota",
+    groups, groups_list, categories, "gm",
   )
   visible_names = {item["name"] for items in filtered_groups.values() for item in items}
 
