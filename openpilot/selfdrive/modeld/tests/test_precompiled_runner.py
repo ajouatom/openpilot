@@ -75,6 +75,7 @@ def test_inference_shutdown_releases_worker_without_rejecting_artifact(monkeypat
 
 @pytest.mark.parametrize('message,rejected', [('RuntimeError: PCIe link not up (LTSSM=0x00)', False),
                                              ('RuntimeError: bulk OUT 0x02 failed: Input/Output Error', False),
+                                             ('RuntimeError: libusb_control_transfer: No such device (it may have been disconnected)', False),
                                              ('Traceback (most recent call last):\n  worker startup\n'
                                               'TimeoutError: BL not ready. Timed out after 10000 ms, condition not met: 0 != 2147483648\n', False),
                                              ('TimeoutError: unrelated model operation timed out', True),
