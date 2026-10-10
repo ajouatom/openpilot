@@ -1,5 +1,20 @@
 # Repository memory
 
+- On 2026-10-10, the user requested actual retraining on added drives. Refit the
+  39-parameter camera color model and trained a 2,215-parameter color+CNN model;
+  new private ONNXs 5146a59c/db3f511c match Torch decisions on all 370 inputs.
+  Whole-encounter splits are 129 train/88 development/153 reused evaluation;
+  all daylight/dusk school data stay outside fitting/selection. Hybrid full-scan
+  evaluation improves pooled cameras134/153 to143/153, but road-only108/109
+  regresses to107/109 and development green16/33 to7/33. Wide false green7/34
+  drops to1/34 while green9/10 drops to6/10. Five training sign crops clear0.8
+  false-green5/5 to0/5, yet their full frames still have1/5 false green (old2/5).
+  School full-scan first-green sample is unchanged; ROI gains are not departure
+  gains. Reject both candidates for promotion. Original x/v/a, thresholds and
+  vehicle files/config are unchanged. Device replay was not run because fresh
+  valid parked state was unavailable. Keep artifacts local. See
+  docs/signal_dusk_training_20261010.md.
+
 - On 2026-10-10, dusk route1090 segments64..83 were collected with 100/100
   source SHA256 matches. Segment81 school signal is green in both cameras;
   Go takes4.254..4.298s, briefly reverts, and persists at4.908..4.952s. Ego
