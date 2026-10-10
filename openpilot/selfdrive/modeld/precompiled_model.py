@@ -130,6 +130,21 @@ def gpu_bootloader_timeout(detail: str, phase: str) -> bool:
                     detail.rstrip(), re.MULTILINE) is not None)
 
 
+def gpu_transport_failure(detail: str) -> bool:
+  """Recognize terminal USB transport errors, never a model-file I/O error.
+
+  The worker and boot validator serialize exceptions as text. Match the actual
+  libusb operation and error, including hot-unplug, across either boundary.
+  These do not establish artifact corruption and must not blacklist its hash.
+  """
+  return re.search(
+    r'^(?:RuntimeError: )?(?:libusb_(?:control_transfer|bulk_transfer|interrupt_transfer|open|claim_interface)|'
+    r'bulk (?:OUT|IN) 0x[0-9a-f]+ failed): '
+    r'(?:No such device \(it may have been disconnected\)|Input/Output Error|Operation timed out|'
+    r'Pipe error|Resource busy|System call interrupted(?: \(perhaps due to signal\))?)\Z',
+    detail.rstrip(), re.MULTILINE | re.IGNORECASE) is not None
+
+
 def retry_usb_rejection(root: Path, pickle_sha256: str) -> bool:
   """Migrate old USB-I/O/PSP startup misclassification after a device reboot.
 
@@ -146,7 +161,7 @@ def retry_usb_rejection(root: Path, pickle_sha256: str) -> bool:
             isinstance(failure.get('boot_id'), str) and bool(failure['boot_id']) and
             bool(current_boot) and failure['boot_id'] != current_boot and
             isinstance(failure.get('error'), str) and
-            ('bulk out 0x02 failed: input/output error' in failure['error'].lower() or
+            (gpu_transport_failure(failure['error']) or
              gpu_bootloader_timeout(failure['error'], failure['phase'])))
   except (OSError, ValueError, TypeError):
     return False
@@ -219,6 +234,7 @@ def record_failure(path: Path, error: BaseException | str, phase: str) -> bool:
   from openpilot.selfdrive.modeld.helpers import usbgpu_pcie_not_ready
   detail = str(error)
   transient = (usbgpu_pcie_not_ready(error) or isinstance(error, (TimeoutError, BrokenPipeError)) or
+               gpu_transport_failure(detail) or
                gpu_bootloader_timeout(detail, phase) or
                'precompiled eGPU worker timed out' in detail or 'precompiled eGPU worker exited' in detail)
   value = json.loads((path.parent / 'installed.json').read_text())
