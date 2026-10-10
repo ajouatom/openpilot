@@ -24,6 +24,7 @@ from openpilot.selfdrive.controls.lib.latcontrol_angle import LatControlAngle, S
 from openpilot.selfdrive.controls.lib.latcontrol_torque import LatControlTorque
 from openpilot.selfdrive.controls.lib.longcontrol import LongControl
 from openpilot.selfdrive.controls.lib.steer_ratio import resolve_vehicle_model_steer_ratio
+from openpilot.selfdrive.controls.lib.lateral_readiness import lateral_inputs_ready, lateral_vehicle_parameters
 
 
 from openpilot.common.realtime import DT_CTRL, DT_MDL
@@ -70,6 +71,7 @@ class Controls:
     self.steer_limited_by_safety = False
     self.curvature = 0.0
     self.desired_curvature = 0.0
+    self.lat_active_prev = False
 
     # VW MEB(ID.4/ID.5)에서만 사용. infiniteCable2 LatControlCurvature 정확 복제:
     # EnableCurvatureController=1(기본 ON) 상태의 곡률 폐루프 PID + useCarSteerCurvature 보정
@@ -112,7 +114,7 @@ class Controls:
     CS = self.sm['carState']
 
     # Update VehicleModel
-    lp = self.sm['liveParameters']
+    lp = lateral_vehicle_parameters(self.sm, self.CP)
     x = max(lp.stiffnessFactor, 0.1)
     # All platforms, including VW MEB, honor the manual ratio and live scaling.
     # Invalid persisted rates still fall back to the unscaled learned ratio.
@@ -151,6 +153,9 @@ class Controls:
                                            CS.steerFaultTemporary, CS.steerFaultPermanent, below_min_speed,
                                            CS.standstill, steer_at_standstill)
     CC.latActive = self.carrot_controls.lat_suspend_control(CS, CC.latActive)
+    # AlwaysLateral is a request to steer, not permission to use startup or
+    # stale inputs. Apply the same readiness gate to ordinary engagement.
+    CC.latActive = CC.latActive and self.sm.all_checks(['carState']) and lateral_inputs_ready(self.sm, CS)
     CC.longActive = CC.enabled and not any(e.overrideLongitudinal for e in self.sm['onroadEvents']) and self.CP.openpilotLongitudinalControl
 
     # AlwaysLateral must also stop while manager drains workers for this reboot.
@@ -164,8 +169,10 @@ class Controls:
       CC.leftBlinker = model_v2.meta.laneChangeDirection == LaneChangeDirection.left
       CC.rightBlinker = model_v2.meta.laneChangeDirection == LaneChangeDirection.right
 
-    if not CC.latActive:
+    if not CC.latActive or not self.lat_active_prev:
       self.LaC.reset()
+      self.desired_curvature = self.curvature
+    self.lat_active_prev = CC.latActive
     if not CC.longActive:
       self.LoC.reset()
 

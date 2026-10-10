@@ -6,6 +6,7 @@ from types import SimpleNamespace
 import pytest
 
 from openpilot.selfdrive.controls.lib.steer_ratio import resolve_vehicle_model_steer_ratio
+from openpilot.selfdrive.controls.lib.lateral_readiness import lateral_vehicle_parameters
 
 
 @pytest.mark.parametrize("invalid_rate", [-math.inf, math.nan, 0.0, 29.0, 201.0, math.inf])
@@ -39,13 +40,21 @@ def test_controlsd_applies_live_setting_changes_to_vehicle_model(is_vw_meb):
              and isinstance(n.value, ast.Call) and ast.unparse(n.value.func) == "self.VM.update_params")
   method.body = method.body[:end + 1]
   module = ast.Module(body=[method], type_ignores=[])
-  namespace = {"resolve_vehicle_model_steer_ratio": resolve_vehicle_model_steer_ratio}
+  namespace = {"resolve_vehicle_model_steer_ratio": resolve_vehicle_model_steer_ratio,
+               "lateral_vehicle_parameters": lateral_vehicle_parameters}
   exec(compile(module, str(path), "exec"), namespace)
   settings = {"CustomSR": 0.0, "SteerRatioRate": 100.0}
-  live = SimpleNamespace(stiffnessFactor=0.69, steerRatio=14.97)
+  live = SimpleNamespace(stiffnessFactor=0.69, steerRatio=14.97, valid=True, sensorValid=True,
+                         posenetValid=True, angleOffsetDeg=0.0, roll=0.0)
+  class Messages(dict):
+    seen = {'liveParameters': True}
+
+    def all_checks(self, _services):
+      return True
   updates = []
   instance = SimpleNamespace(is_vw_meb=is_vw_meb,
-                             sm={"carState": SimpleNamespace(), "liveParameters": live},
+                             CP=SimpleNamespace(steerRatio=15.0),
+                             sm=Messages(carState=SimpleNamespace(), liveParameters=live),
                              params=SimpleNamespace(get_float=lambda key: settings[key]),
                              VM=SimpleNamespace(update_params=lambda stiff, sr: updates.append((stiff, sr))))
   for custom, rate, learned, expected in [(0, 100, 14.97, 14.97), (159, 30, 14.97, 15.9),

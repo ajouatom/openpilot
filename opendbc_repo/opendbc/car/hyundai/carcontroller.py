@@ -244,6 +244,16 @@ class CarController(CarControllerBase):
 
   def update(self, CC, CS, now_nanos):
 
+    if self.CP.flags & HyundaiFlags.CANFD and self.CP.flags & HyundaiFlags.CAMERA_SCC:
+      template = CS.lfa_alt if self.CP.flags & HyundaiFlags.ANGLE_CONTROL else CS.lfa
+      if template is None and CC.latActive:
+        # Do not run an invisible steering ramp while camera TX discovery is
+        # pending. Inactive handling below tracks the wheel and clears torque
+        # and handover history, so the first emitted command starts bounded.
+        CC = CC.as_builder()
+        CC.latActive = False
+        CC = CC.as_reader()
+
     if self.frame % 50 == 0:
       params = Params()
       self.max_angle_frames = params.get_int("MaxAngleFrames")
