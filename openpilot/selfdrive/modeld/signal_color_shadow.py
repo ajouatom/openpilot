@@ -135,6 +135,22 @@ def next_delay(work_wall, work_cpu):
   return max(.05, 1.0 - work_wall, 3 * work_cpu)
 
 
+def configure_worker_scheduling():
+  # The manager's spawn launcher can create logging/IPC threads before main().
+  # Linux affinity/nice are per-thread; include those existing threads too.
+  allowed = os.sched_getaffinity(0) & {0, 1, 2, 3}
+  if not allowed:
+    raise RuntimeError('no permitted little CPU for signal observer')
+  for task in Path('/proc/self/task').iterdir():
+    try:
+      tid = int(task.name)
+      os.sched_setaffinity(tid, allowed)
+      os.sched_setscheduler(tid, os.SCHED_OTHER, os.sched_param(0))
+      os.setpriority(os.PRIO_PROCESS, tid, 19)
+    except ProcessLookupError:
+      pass
+
+
 def run(directory=DIRECTORY, duration=None):
   import sys
   import fcntl
@@ -147,9 +163,7 @@ def run(directory=DIRECTORY, duration=None):
       fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
     except BlockingIOError:
       return
-    os.sched_setaffinity(0, os.sched_getaffinity(0) & {0, 1, 2, 3})
-    os.sched_setscheduler(0, os.SCHED_OTHER, os.sched_param(0))
-    os.nice(max(0, 19 - os.getpriority(os.PRIO_PROCESS, 0)))
+    configure_worker_scheduling()
     for name in ('OPENBLAS_NUM_THREADS', 'OMP_NUM_THREADS', 'MKL_NUM_THREADS'):
       os.environ[name] = '1'
     sys.path.insert(0, '/data/signal-model-shadow/runtime')

@@ -71,7 +71,7 @@ NV12 원본 한 장을 FFmpeg 기본 NV12→RGB 변환과 비교한 평균 채�
 압축 영상과 실제 작은 신호에서의 색 차이는 추가 검토 대상이다. 이전 영상은
 HEVC yuv420p(tv) 1344x760이었다.
 
-Windows 25개 focused tests는 모델 식별/기본 OFF, 패딩 NV12 색, 입력 불변,
+Windows 26개 focused tests는 모델 식별/기본 OFF, 패딩 NV12 색, 입력 불변,
 잘못된 버퍼/확률 거부, 기존 crop 픽셀 일치, 최고 후보 보존, stale 결과 거부,
 부하 간격 및 오류 대기 경로와 기존 정책 관찰기를 검증한다. Ruff가 통과했다.
 최초 수동 실행에서는 차량 pydeps 경로 누락을 수정했고, 유한 시험의 종료 대기 시간도
@@ -98,3 +98,7 @@ python -m openpilot.selfdrive.modeld.signal_color_shadow on
 
 로컬 재현/검증 자료는 `.analysis/archive/2026-10-10-signal-color-live/`에 보관한다.
 영구 설치 후 부팅·rlog 저장 검증 결과는 이 문서에 추가한다.
+
+첫 재부팅 검증에서 manager launcher가 main 전에 생성한 IPC/logging 스레드 두 개가
+기존 CPU 0~5/nice0를 유지하는 것을 발견했다. affinity/nice가 스레드별 속성이므로
+시작 시 기존 모든 스레드에도 CPU 0~3/SCHED_OTHER/nice19를 적용하도록 수정했다.

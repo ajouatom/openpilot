@@ -132,3 +132,21 @@ def test_error_latches_without_repeated_inference(monkeypatch):
   module.main()
   assert failures == ['called']
   assert len(errors) == 1 and sleeps == [1, 1]
+
+
+def test_scheduling_includes_preexisting_ipc_threads(monkeypatch):
+  from openpilot.selfdrive.modeld import signal_color_shadow as module
+  calls = []
+  monkeypatch.setattr(module.Path, 'iterdir', lambda p: iter([Path('10'), Path('11')]))
+  monkeypatch.setattr(module.os, 'sched_getaffinity', lambda pid: {0, 1, 2, 3, 4, 5}, raising=False)
+  monkeypatch.setattr(module.os, 'sched_setaffinity', lambda tid, cpus: calls.append(('affinity', tid, cpus)), raising=False)
+  monkeypatch.setattr(module.os, 'sched_setscheduler', lambda tid, policy, param: calls.append(('policy', tid, policy)), raising=False)
+  monkeypatch.setattr(module.os, 'sched_param', lambda priority: priority, raising=False)
+  monkeypatch.setattr(module.os, 'SCHED_OTHER', 0, raising=False)
+  monkeypatch.setattr(module.os, 'PRIO_PROCESS', 0, raising=False)
+  monkeypatch.setattr(module.os, 'setpriority', lambda who, tid, nice: calls.append(('nice', tid, nice)), raising=False)
+  module.configure_worker_scheduling()
+  for tid in (10, 11):
+    assert ('affinity', tid, {0, 1, 2, 3}) in calls
+    assert ('policy', tid, 0) in calls
+    assert ('nice', tid, 19) in calls
