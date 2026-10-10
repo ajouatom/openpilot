@@ -57,7 +57,17 @@ class TrafficState(Enum):
 A_CRUISE_MAX_BP_CARROT = [0., 10 * CV.KPH_TO_MS, 40 * CV.KPH_TO_MS, 60 * CV.KPH_TO_MS, 80 * CV.KPH_TO_MS, 110 * CV.KPH_TO_MS, 140 * CV.KPH_TO_MS]
 
 class CarrotPlanner:
-  def __init__(self):
+  def __init__(self, signal_assist=None):
+    # Per-device opt-in only; no flag means the original controller path.
+    self.signal_assist = signal_assist
+    self._signal_runtime = None
+    if signal_assist is None:
+      from openpilot.selfdrive.carrot.signal_assist_runtime import SignalAssistRuntime
+      runtime = SignalAssistRuntime()
+      if runtime.assist is not None:
+        self._signal_runtime = runtime
+        self.signal_assist = runtime.assist
+    self.signal_decision = None
     self.params = Params()
     self.params_count = 0
     self.frame = 0
@@ -435,7 +445,7 @@ class CarrotPlanner:
     if self.myDrivingModeAuto > 0 and not self.myDrivingMode_disable_auto:
       self.myDrivingMode = self.drivingModeDetector.get_mode(self.myDrivingModeAuto)
 
-  def update(self, sm, v_cruise_kph, mode):
+  def update(self, sm, v_cruise_kph, mode, *, signal_observation=None, signal_context=None):
     self._params_update()
     self._update_driving_mode(sm)
     self.leadAccelResponse = get_mode_lead_response(get_lead_response_for_gap(
@@ -507,11 +517,38 @@ class CarrotPlanner:
     if self.myDrivingMode == DrivingMode.High or self.trafficLightDetectMode == 0:
       self.trafficState = TrafficState.off
 
+    signal_hold = False
+    if self.signal_assist is not None:
+      if signal_context is None and self._signal_runtime is not None:
+        signal_observation, signal_context = self._signal_runtime.read(sm)
+      context = signal_context or {}
+      self.signal_decision = self.signal_assist.update(
+        context.get('now', time.monotonic()), signal_observation,
+        enabled=bool(context.get('enabled', False)) and self.myDrivingMode != DrivingMode.High and self.trafficLightDetectMode != 0,
+        valid=bool(context.get('valid', False)), drive=bool(context.get('drive', False)),
+        gas=carstate.gasPressed, speed=float(v_ego), model_distance=float(stop_model_x_rl),
+        model_y=float(y[-1]), comfort_brake=float(mode_comfort_brake), lead=lead_detected,
+        entry_allowed=is_traffic_stop_entry_allowed(carstate.steeringAngleDeg) and self.traffic_starting_count == 0,
+        turning=carstate.leftBlinker or carstate.rightBlinker)
+      signal_hold = self.signal_decision.hold
+      if self.signal_decision.red_sign:
+        self.trafficState = TrafficState.red
+      if self._signal_runtime is not None:
+        self._signal_runtime.record(self.signal_decision, v_ego, stop_model_x_rl)
+
     #self.update_user_control()
     if carstate.gasPressed or carstate.brakePressed:
       self.user_stop_distance = -1
 
-    if self.soft_hold_active > 0:
+    if signal_hold:
+      # Keep the stop even if a lead appears/moves. Radar obstacles remain in MPC.
+      # Green only removes this override; it never manufactures a go request.
+      self.xState = XState.e2eStopped
+      self.actual_stop_distance = 0.0
+      stop_model_x = 0.0
+      self.stopping_count = max(self.stopping_count, 0.5 / DT_MDL)
+      v_cruise = 0.0
+    elif self.soft_hold_active > 0:
       self.xState = XState.e2eStopped
       if trafficState_last in [TrafficState.off, TrafficState.red] and self.trafficState == TrafficState.green:
         self.add_event(EventName.trafficSignChanged)

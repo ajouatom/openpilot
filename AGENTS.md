@@ -1,5 +1,20 @@
 # Repository memory
 
+- On 2026-10-10, after successful parked installation, user requested bringing
+  the signal experiment into carrot-wip. Imported signal camera observation,
+  causal tracking, optional stop assistance, offline tools and investigation
+  documents from e3dc031730. Keep per-device opt-in default OFF; the user's
+  installed b80db2c97d vehicle has it ON. CANFD zero-aReq/no-retry is already
+  present here as2608792bdd and must not be applied twice. Original driving
+  ONNX/x/v unchanged; no failed trained model is promoted. Red hold survives
+  unknown, same-track green only removes the constraint, gas overrides with
+  10s cooldown. Moving red uses plausible original model distance and existing
+  lead/turn/speed gates. This is not lane/arrow association or guaranteed stop.
+  All300 focused observer/tracker/assist/CANFD tests pass (Windows Params stub,
+  OpenCV4.13). Prior parked checks belong to the signal branch; no carrot-wip
+  vehicle installation or closed-loop validation is implied by this promotion.
+  Preserve unrelated local edits. See docs/signal_assist_trial_20261010.md.
+
 - On 2026-10-10, RAV4 route 0d segments 5-9 on e7987ed confirmed an
   onroadEvents cadence regression: healthy event-change bursts exceed the 1 Hz
   tracker's upper bound and the continuous readiness gate interrupts steering.
