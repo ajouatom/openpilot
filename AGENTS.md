@@ -1,5 +1,16 @@
 # Repository memory
 
+- On 2026-10-10, the user requested continuing from visual labels into training.
+  Trained new binary signal heads on frozen internal vision512 and policy256
+  features; only the former has camera-only graph ancestry. Vision gives 46/57
+  development and 44/44 high-confidence heldout correctness, but misses 11/23
+  development greens and 10/11 separate dim school greens. Do not advertise the
+  small heldout 100% as resolving the incident. Saved private camera classifier
+  ONNX dba6728b and tiny head 033fa90e; 237-head/27-full-feed checks pass. No x/v/a
+  weights, device models or start thresholds changed. Reconstructed school signal
+  ROI is outside the road crop, with a small signal in wide input; this is not
+  causal or bit-exact device proof. See docs/signal_visual_training_20261010.md.
+
 - On 2026-10-10, the user requested assistant-created visual signal labels and
   questions only for unresolved scenes. The first local batch directly reviews
   237 frames from nine encounters; 158 high-confidence color/shape labels are
