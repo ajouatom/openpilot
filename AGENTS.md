@@ -1,5 +1,15 @@
 # Repository memory
 
+- On 2026-10-10, the user requested assistant-created visual signal labels and
+  questions only for unresolved scenes. The first local batch directly reviews
+  237 frames from nine encounters; 158 high-confidence color/shape labels are
+  exported with existing encounter splits (57/57/44). Vehicle state and model
+  predictions are not label targets. Preserve uncertainty, camera frame/time
+  provenance and separate user testimony from pixel observations. Two dark
+  return intersections await user clarification. Data/HTML/crops remain private
+  in the signal-labels archive; this is not whole-corpus labeling, model training
+  or independent accuracy validation. See docs/signal_visual_labels_20261010.md.
+
 - On 2026-10-10, the user requested collection and retraining on all recordings
   after the first observer drive. Collected 79 segments/395 files (7.209 GB) and
   replayed 67,845 dual-camera pairs from 57 segments. Balanced final-head fitting
