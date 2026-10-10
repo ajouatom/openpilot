@@ -1,5 +1,21 @@
 # Repository memory
 
+- On 2026-10-11, first post-assist night/morning drives confirm a helper
+  regression: two visible green transitions remain hold_through_unknown until
+  gas/inactive override. Native stopping-function reconstruction is green on
+  69/13 overlapping held frames; not a full vehicle counterfactual. Tracker
+  confirmation restarts above125ms while44.1%/51.2% of real gaps exceed it.
+  Same103 observations yield0 green at recorded times vs24 at artificial100ms;
+  this diagnoses timing, not a deployable fix. A208ms stale result also wipes
+  red identity before green; morning visible-red housing proposals are missed.
+  23 driving segments,161 source files/2.21GB SHA256 verified;27,380 valid model
+  results. Existing internal ONNX hash unchanged, eGPU and Jetlink inactive.
+  Vehicle stays b80db2c97d with assist ON; analysis changed no vehicle settings.
+  Recommend disabling assist pending timing/identity/day-detector corrections
+  and both green-release/red-false-start regression validation. Parked readiness
+  and old replay were insufficient; do not claim the helper is road-validated.
+  Keep raw evidence private. See docs/signal_assist_followup_20261011.md.
+
 - On 2026-10-10, after successful parked installation, user requested bringing
   the signal experiment into carrot-wip. Imported signal camera observation,
   causal tracking, optional stop assistance, offline tools and investigation
