@@ -177,8 +177,7 @@ def test_recovery_selected_total_cap_reaches_both_can_paths(monkeypatch, camera)
 
 
 @pytest.mark.parametrize('angle', [False, True])
-@pytest.mark.parametrize('previously_active', [False, True])
-def test_missing_camera_template_cannot_accumulate_first_transmitted_command(monkeypatch, angle, previously_active):
+def test_missing_camera_template_cannot_accumulate_first_transmitted_command(monkeypatch, angle):
   controller, cs, cc, settings = setup_controller(monkeypatch, angle=angle)
   settings.update(CustomSteerMax=409, CustomSteerDeltaUp=3)
   cs.out.steeringPressed = False
@@ -186,9 +185,6 @@ def test_missing_camera_template_cannot_accumulate_first_transmitted_command(mon
   cs.out.steeringAngleDeg = -2.2
   cc.actuators.torque = 1.0
   cc.actuators.steeringAngleDeg = 30
-  if previously_active:
-    for _ in range(150):
-      step(controller, cs, cc)
   attr = 'lfa_alt' if angle else 'lfa'
   setattr(cs, attr, None)
   address = 0xCB if angle else 0x12A
@@ -210,3 +206,23 @@ def test_missing_camera_template_cannot_accumulate_first_transmitted_command(mon
   else:
     assert output.torqueOutputCan == 3
     assert ((int.from_bytes(data, 'little') >> 41) & 0x7ff) - 1024 == 3
+
+
+@pytest.mark.parametrize('angle', [False, True])
+def test_initial_template_guard_does_not_rearm_during_operation(monkeypatch, angle):
+  controller, cs, cc, _ = setup_controller(monkeypatch, angle=angle)
+  cs.out.steeringPressed = False
+  cs.out.steeringTorque = 0
+  cc.actuators.torque = 1.0
+  cc.actuators.steeringAngleDeg = 30
+  step(controller, cs, cc)
+  assert controller.steering_template_ready
+  setattr(cs, 'lfa_alt' if angle else 'lfa', None)
+  for _ in range(10):
+    output, _ = step(controller, cs, cc)
+    assert output.torqueOutputCan > 0
+  cc.latActive = False
+  step(controller, cs, cc)
+  cc.latActive = True
+  output, _ = step(controller, cs, cc)
+  assert output.torqueOutputCan > 0 and controller.steering_template_ready

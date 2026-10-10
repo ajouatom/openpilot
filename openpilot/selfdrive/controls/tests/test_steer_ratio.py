@@ -6,7 +6,7 @@ from types import SimpleNamespace
 import pytest
 
 from openpilot.selfdrive.controls.lib.steer_ratio import resolve_vehicle_model_steer_ratio
-from openpilot.selfdrive.controls.lib.lateral_readiness import lateral_vehicle_parameters
+from openpilot.selfdrive.controls.lib.lateral_readiness import LateralStartupGate, lateral_vehicle_parameters
 
 
 @pytest.mark.parametrize("invalid_rate", [-math.inf, math.nan, 0.0, 29.0, 201.0, math.inf])
@@ -53,6 +53,7 @@ def test_controlsd_applies_live_setting_changes_to_vehicle_model(is_vw_meb):
       return True
   updates = []
   instance = SimpleNamespace(is_vw_meb=is_vw_meb,
+                             lateral_startup=LateralStartupGate(ready=True),
                              CP=SimpleNamespace(steerRatio=15.0),
                              sm=Messages(carState=SimpleNamespace(), liveParameters=live),
                              params=SimpleNamespace(get_float=lambda key: settings[key]),

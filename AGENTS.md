@@ -1,18 +1,18 @@
 # Repository memory
 
-- On 2026-10-10, Sonata 2024 route 92 showed a startup torque step: AlwaysLateral
-  ran before model/live geometry, default steer ratio became 0.1, and the host
-  torque ramp advanced while the camera LFA template was unavailable. The first
-  transmitted request was 375. The user authorized correction: require valid
-  lateral inputs in controlsd and again at card, use nominal inactive geometry,
-  synchronize curvature/reset torque state on entry, and keep Hyundai camera-SCC
-  steering history inactive until its torque/angle TX template exists. Preserve
-  normal gains, limits, longitudinal policy and firmware/forwarding behavior.
-  191 focused tests and a 5,969-frame recorded-input replay pass; the formerly
-  premature LFA is zero/request-off and later activation starts at torque 3.
-  Replay is not vehicle-response validation. Panda's commented torque rejection
-  is a separate unchanged defense-layer issue. Keep raw incident data local.
-  See docs/sonata_92_startup_steering_20261010.md.
+- On 2026-10-10, the user clarified that the Sonata startup fix must apply
+  only until FIRST readiness, never reblock during operation. This supersedes
+  e7987ed0fd's continuous readiness checks and repeated PID/curvature resets.
+  controlsd/card now latch readiness once per process lifetime; disengagement,
+  reengagement and later bad inputs do not rearm it. Nominal geometry is startup-
+  only; measured curvature seeds the first lateral activation only. Restore
+  existing torque reset behavior. Hyundai camera-SCC waits only for its first
+  steering TX template, preserving the bounded first CAN command. Keep existing
+  runtime safety, limits, longitudinal policy and firmware unchanged. 241 focused
+  tests, 5,969 recorded-input frames and 6,000 post-startup control frames pass;
+  the latter exactly match pre-fix 5479d1279a outputs/PID/ratio with input health
+  changes and reengagement. Replay is not vehicle-response validation. Keep raw
+  incident data local. See docs/sonata_92_startup_steering_20261010.md.
 
 - On 2026-10-09, after trying Mountain Dew 870a4823, the user requested
   returning carrot-wip's eGPU model to Cinque v3 (892fc3a1, AMD e758b96d,

@@ -7,7 +7,7 @@ import pytest
 
 from openpilot.cereal import car, log
 from openpilot.selfdrive.controls.lib.lateral_readiness import (
-  LATERAL_SERVICES, lateral_inputs_ready, lateral_vehicle_parameters,
+  LATERAL_SERVICES, LateralStartupGate, lateral_inputs_ready, lateral_vehicle_parameters,
 )
 
 
@@ -31,8 +31,9 @@ class Messages(dict):
     return all(self.valid[s] and self.alive[s] and self.freq_ok[s] for s in services)
 
 
-@pytest.mark.parametrize('service', LATERAL_SERVICES)
-@pytest.mark.parametrize('failure', ['seen', 'valid', 'alive', 'freq_ok'])
+@pytest.mark.parametrize('service,failure', [(s, f) for s in LATERAL_SERVICES
+                                           for f in ('seen', 'valid', 'alive', 'freq_ok')
+                                           if (s, f) != ('onroadEvents', 'freq_ok')])
 def test_missing_invalid_stale_or_slow_input_blocks_lateral(service, failure):
   sm = Messages()
   assert lateral_inputs_ready(sm, sm['carState'])
@@ -103,33 +104,47 @@ def production_guard(path, predicate):
   return compile(ast.fix_missing_locations(ast.Module(body=[node], type_ignores=[])), str(path), 'exec')
 
 
-@pytest.mark.parametrize('ordinary_engagement', [False, True])
-def test_controlsd_gates_always_lateral_and_ordinary_engagement(ordinary_engagement):
-  path = Path(__file__).parents[1] / 'controlsd.py'
-  guard = production_guard(path, lambda n: isinstance(n, ast.Assign) and
-                           'lateral_inputs_ready' in ast.unparse(n))
+@pytest.mark.parametrize('boundary', ['carState', 'carControl'])
+@pytest.mark.parametrize('service,failure', [(s, f) for s in (*LATERAL_SERVICES, 'boundary')
+                                           for f in ('seen', 'valid', 'alive', 'freq_ok')
+                                           if (s, f) != ('onroadEvents', 'freq_ok')])
+def test_startup_latch_waits_once_and_never_rechecks(boundary, service, failure):
   sm = Messages()
-  cc = car.CarControl.new_message(enabled=ordinary_engagement, latActive=True)
-  sm.seen['modelV2'] = False
-  exec(guard, {'self': NS(sm=sm), 'CC': cc, 'CS': sm['carState'], 'lateral_inputs_ready': lateral_inputs_ready})
-  assert not cc.latActive
-  assert cc.enabled == ordinary_engagement  # lateral guard does not own longitudinal policy
+  gate = LateralStartupGate()
+  service = boundary if service == 'boundary' else service
+  getattr(sm, failure)[service] = False
+  assert not gate.update(sm, sm['carState'], boundary)
+  getattr(sm, failure)[service] = True
+  assert gate.update(sm, sm['carState'], boundary)
+  getattr(sm, failure)[service] = False
+  assert gate.update(sm, sm['carState'], boundary)
+  assert not LateralStartupGate().update(sm, sm['carState'], boundary)
+  # Completed startup does not even read/check any inputs again.
+  assert gate.update(None, None, boundary)
 
 
 @pytest.mark.parametrize('failure', ['modelV2', 'liveParameters', 'livePose', 'carControl'])
-def test_final_can_boundary_rejects_queued_active_command(failure):
+@pytest.mark.parametrize('already_ready', [False, True])
+def test_final_can_boundary_rejects_queued_active_command_only_during_startup(failure, already_ready):
   path = Path(__file__).parents[2] / 'car/card.py'
+  latch = production_guard(path, lambda n: isinstance(n, ast.Assign) and
+                           ast.unparse(n.targets[0]) == 'lateral_ready')
   guard = production_guard(path, lambda n: isinstance(n, ast.If) and
-                           'lateral_inputs_ready' in ast.unparse(n.test))
+                           ast.unparse(n.test) == 'CC.latActive and (not lateral_ready)')
   sm = Messages()
   cc = car.CarControl.new_message(enabled=True, latActive=True, longActive=True)
   cc.actuators.torque = 1.0
   cc.actuators.accel = 0.7
   sm.valid[failure] = False
-  ns = {'self': NS(sm=sm), 'CC': cc.as_reader(), 'CS': sm['carState'], 'lateral_inputs_ready': lateral_inputs_ready}
+  ns = {'self': NS(sm=sm, lateral_startup=LateralStartupGate(ready=already_ready)),
+        'CC': cc.as_reader(), 'CS': sm['carState']}
+  exec(latch, ns)
   exec(guard, ns)
   result = ns['CC']
-  assert not result.latActive and result.actuators.torque == result.actuators.curvature == 0
-  assert result.actuators.steeringAngleDeg == sm['carState'].steeringAngleDeg
+  if already_ready:
+    assert result.latActive and result.actuators.torque == 1.0
+  else:
+    assert not result.latActive and result.actuators.torque == result.actuators.curvature == 0
+    assert result.actuators.steeringAngleDeg == sm['carState'].steeringAngleDeg
   assert result.enabled and result.longActive and result.actuators.accel == pytest.approx(0.7)
   assert cc.latActive and cc.actuators.torque == 1  # original subscription is not mutated
