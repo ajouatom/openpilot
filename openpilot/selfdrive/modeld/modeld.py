@@ -27,7 +27,7 @@ from openpilot.selfdrive.modeld.fill_model_msg import fill_model_msg, fill_drivi
 from openpilot.common.file_chunker import open_file_chunked
 from openpilot.selfdrive.modeld.camera_sync import FrameMeta, receive_camera_pair
 from openpilot.selfdrive.modeld.constants import ModelConstants, Plan
-from openpilot.selfdrive.modeld.signal_shadow import ShadowLogger, selected_artifact, split_output, validate_metadata
+from openpilot.selfdrive.modeld.signal_shadow import ShadowClient
 from openpilot.selfdrive.modeld.helpers import (get_tg_input_devices, load_oob, modeld_pkl_path,
                                                 refresh_usbgpu_device_cache, select_vision_streams, usbgpu_compiled_path,
                                                 usbgpu_pcie_not_ready, usbgpu_present, wait_for_usbgpu_present)
@@ -130,11 +130,6 @@ class ModelState:
     self.WARP_DEV, self.QUEUE_DEV = input_devices['WARP_DEV'], input_devices['QUEUE_DEV']
     jits = load_oob(open_file_chunked(pkl_path or modeld_pkl_path(usbgpu)))
     metadata = jits['metadata']
-    self.signal_shadow = metadata.get('signal_shadow') if not usbgpu else None
-    if self.signal_shadow is not None:
-      validate_metadata(self.signal_shadow)
-      if list(metadata['output_shapes'].values()) != [(1, 2675)]:
-        raise ValueError('signal comparison compiled output shape mismatch')
     self.input_shapes = metadata['input_shapes']
     self.vision_input_names = [k for k in self.input_shapes if 'img' in k]
     self.output_slices = metadata['output_slices']
@@ -150,6 +145,7 @@ class ModelState:
     self.frame_buf_params = {k: get_nv12_info(cam_w, cam_h) for k in ('img', 'big_img')}
     self.run_policy = jits['run_policy']
     self.warp = jits[(cam_w,cam_h)]
+    self.signal_shadow = ShadowClient.optional(modeld_pkl_path(False).parent / 'driving_supercombo.onnx') if not usbgpu else None
 
   def slice_outputs(self, model_outputs: np.ndarray, output_slices: dict[str, slice]) -> dict[str, np.ndarray]:
     parsed_model_outputs = {k: model_outputs[np.newaxis, v] for k,v in output_slices.items()}
@@ -207,9 +203,7 @@ class ModelState:
       **{k: self.input_queues[k] for k in POLICY_INPUTS if k in self.input_queues}, warped=warped
     )
     model_output = outs.numpy()[0]
-    shadow_payload = None
-    if self.signal_shadow is not None:
-      model_output, shadow_payload = split_output(model_output, self.signal_shadow)
+    shadow_payload = self.signal_shadow.capture(model_output, self.npy) if self.signal_shadow is not None else None
     if self.usbgpu and not np.all(np.isfinite(model_output)):
       raise RuntimeError("eGPU model output is not finite")
     outputs_dict = self.parser.parse_outputs(self.slice_outputs(model_output, self.output_slices))
@@ -220,21 +214,6 @@ class ModelState:
     if shadow_payload is not None:
       outputs_dict['_signal_shadow'] = shadow_payload
     return outputs_dict
-
-
-def load_internal_model(cam_w, cam_h):
-  try:
-    selected = selected_artifact(modeld_pkl_path(False).parent / 'driving_supercombo.onnx')
-    if selected is not None:
-      path, metadata = selected
-      model = ModelState(cam_w, cam_h, False, path)
-      if model.signal_shadow != metadata:
-        raise ValueError('signal comparison artifact metadata mismatch')
-      cloudlog.event('signalModelShadowLoaded', **metadata)
-      return model
-  except Exception:
-    cloudlog.exception('signal comparison unavailable; loading original internal model')
-  return ModelState(cam_w, cam_h, False)
 
 
 def main(demo=False):
@@ -348,7 +327,7 @@ def main(demo=False):
   # Keep the internal-GPU model ready so a USB disconnect or runtime error does
   # not take modeld down while driving.
   phase_start = time.monotonic()
-  small_model = load_internal_model(vipc_client_main.width, vipc_client_main.height) if model is None or USBGPU else None
+  small_model = ModelState(vipc_client_main.width, vipc_client_main.height, False) if model is None or USBGPU else None
   cloudlog.warning("model startup internal model: %.3fs, loaded=%s", time.monotonic() - phase_start, small_model is not None)
   if model is None:
     model = small_model
@@ -415,7 +394,6 @@ def main(demo=False):
   camera_yaw_trim_deg = params.get_float("CameraYawTrimDeg") * 0.01
   lat_delay_dynamic = lat_smooth_seconds
   diagnostics = RuntimeDiagnostics('modeld', cloudlog.event)
-  shadow_logger = ShadowLogger(cloudlog.event)
   while True:
     loop_start, cpu_start = time.monotonic(), time.thread_time()
     frame += 1
@@ -522,7 +500,8 @@ def main(demo=False):
     if model_output is not None:
       shadow_payload = model_output.pop('_signal_shadow', None)
       if shadow_payload is not None:
-        shadow_logger.record(shadow_payload, meta_main.frame_id, meta_extra.frame_id, meta_main.timestamp_eof)
+        shadow_client, shadow_sample = shadow_payload
+        shadow_client.submit(shadow_sample, meta_main.frame_id, meta_extra.frame_id, meta_main.timestamp_eof)
       modelv2_send = messaging.new_message('modelV2')
       drivingdata_send = messaging.new_message('drivingModelData')
       posenet_send = messaging.new_message('cameraOdometry')

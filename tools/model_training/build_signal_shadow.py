@@ -56,7 +56,14 @@ def build(base_path, candidate_path, output_path):
                      name='signal_shadow/output', axis=1),
   ])
   output.type.tensor_type.shape.dim[1].dim_value = 2675
-  metadata = {'version': 1, 'mode': 'comparison_only', 'base_size': 2576, 'shadow_size': 99,
+  # Cut at the original camera encoder's exposed hidden state. This artifact is
+  # NEVER compiled into the controlling QCOM model; a separate CPU worker uses it.
+  for name, size in [('current_hidden_flat', 512), ('policy/mul_1', 990), ('signal_shadow/longitudinal', 99)]:
+    base.graph.value_info.append(helper.make_tensor_value_info(name, onnx.TensorProto.FLOAT16, [1, size]))
+  base = onnx.utils.Extractor(base).extract_model(
+    ['current_hidden_flat', 'features_buffer', 'desire_pulse', 'traffic_convention', 'action_t'],
+    ['policy/mul_1', 'signal_shadow/longitudinal'])
+  metadata = {'version': 2, 'mode': 'comparison_only', 'base_size': 2576, 'shadow_size': 99,
               'base_sha256': hashlib.sha256(Path(base_path).read_bytes()).hexdigest(),
               'candidate_sha256': hashlib.sha256(Path(candidate_path).read_bytes()).hexdigest()}
   properties = {p.key: p.value for p in base.metadata_props}

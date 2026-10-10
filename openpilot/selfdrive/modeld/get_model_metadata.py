@@ -3,7 +3,6 @@ import sys
 import pathlib
 import codecs
 import pickle
-import json
 from typing import Any
 
 from tinygrad.nn.onnx import OnnxPBParser
@@ -40,17 +39,12 @@ def make_metadata_dict(model_path):
   model = MetadataOnnxPBParser(model_path).parse()
   output_slices = get_metadata_value_by_name(model, 'output_slices')
   assert output_slices is not None, 'output_slices not found in metadata'
-  metadata = {
+  return {
     'model_checkpoint': get_metadata_value_by_name(model, 'model_checkpoint'),
     'output_slices': pickle.loads(codecs.decode(output_slices.encode(), "base64")),
     'input_shapes': dict(get_name_and_shape(x) for x in model["graph"]["input"]),
     'output_shapes': dict(get_name_and_shape(x) for x in model["graph"]["output"]),
   }
-  signal_shadow = get_metadata_value_by_name(model, 'signal_shadow')
-  if signal_shadow is not None:
-    from openpilot.selfdrive.modeld.signal_shadow import validate_metadata
-    metadata['signal_shadow'] = validate_metadata(json.loads(signal_shadow))
-  return metadata
 
 
 if __name__ == "__main__":
