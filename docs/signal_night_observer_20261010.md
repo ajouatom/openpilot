@@ -103,3 +103,20 @@ Private evidence and annotated videos are indexed under
 or private model artifacts are committed. Next recognition work needs causal
 ego-lane/signal association, longer green continuity and separately scored
 distant-red approach/stop-line evidence before any control integration.
+
+## Installation verified
+
+Installed `b57b81835d` on the existing experimental branch with fresh valid Park,
+standstill and inactive-control checks, tracked-dirty protection and the shared
+repository lock. Only the observer was restarted; no vehicle reboot was needed.
+Both local observer flags remain enabled. Canonical algorithm SHA256 is
+`b0dd5cd6fa5d3eca49d065f82a22e4f60654c2e58cd0793c36f53a9f0d07b92f`.
+
+The final automatic-worker observation confirmed 600/600 valid model frames at
+19.999 Hz without gaps or reported drop. There were 395/395 fresh observer events
+at11.977 Hz, median work44.31 ms and result-age p95122.29 ms. All three worker
+threads retained CPUs0..3/nice19/SCHED_OTHER;52 manager observations retained one
+running PID. A closed saved rlog contained98 new-worker events from this interval,
+all matching recorded road frame IDs with the video file present. The original
+driving ONNX hash remains unchanged. These are execution/recording checks, not
+proof of onroad signal accuracy or false-departure prevention.

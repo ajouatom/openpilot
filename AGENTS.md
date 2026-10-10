@@ -12,7 +12,9 @@
   x[-1] about1.4m, followed by a model-speed surge. Exact stopping method matches
   318/318 traffic states, not whole-controller or network causal proof. Logging
   only, not false-departure prevention. See docs/signal_night_observer_20261010.md;
-  retain private incident evidence locally.
+  installed b57b81835d on parked C4:600/600 valid model frames/no gaps,395/395
+  fresh observer events at11.98Hz, little/nice19 threads and98 saved rlog events
+  joined to camera frames. Retain private incident evidence locally.
 
 - On 2026-10-10, user requested live installation of the automatic signal
   tracker. Existing opt-in signalcolord dispatches to signal_tracking_shadow
