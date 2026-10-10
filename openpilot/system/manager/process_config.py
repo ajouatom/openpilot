@@ -62,6 +62,11 @@ def only_onroad(started: bool, params: Params, CP: car.CarParams) -> bool:
   return started
 
 
+def signal_color_observer(started: bool, params: Params, CP: car.CarParams) -> bool:
+  from openpilot.selfdrive.modeld.signal_color_shadow import requested
+  return started and requested()
+
+
 def only_offroad(started: bool, params: Params, CP: car.CarParams) -> bool:
   return not started
 
@@ -128,6 +133,7 @@ procs = [
   PythonProcess("timed", "openpilot.system.timed", always_run, enabled=not PC),
 
   PythonProcess("modeld", "openpilot.selfdrive.modeld.modeld", only_onroad),
+  PythonProcess("signalcolord", "openpilot.selfdrive.modeld.signal_color_shadow", signal_color_observer, spawn=True),
   PythonProcess("jetlinkd", "openpilot.selfdrive.modeld.jetlink.daemon", always_run, enabled=TICI, restart_if_crash=True),
   PythonProcess("dmonitoringmodeld", "openpilot.selfdrive.modeld.dmonitoringmodeld", enable_dm_model, enabled=(WEBCAM or not PC)),
   PythonProcess("sensord", "openpilot.system.sensord.sensord", only_onroad, enabled=not PC),
