@@ -138,9 +138,9 @@ def gpu_transport_failure(detail: str) -> bool:
   These do not establish artifact corruption and must not blacklist its hash.
   """
   return re.search(
-    r'^(?:RuntimeError: )?(?:libusb_(?:control_transfer|bulk_transfer|interrupt_transfer|open|claim_interface)|'
-    r'bulk (?:OUT|IN) 0x[0-9a-f]+ failed): '
-    r'(?:No such device \(it may have been disconnected\)|Input/Output Error|Operation timed out|'
+    r'^(?:RuntimeError: )?(?:libusb_(?:control_transfer|bulk_transfer|interrupt_transfer|open|claim_interface)|' +
+    r'bulk (?:OUT|IN) 0x[0-9a-f]+ failed): ' +
+    r'(?:No such device \(it may have been disconnected\)|Input/Output Error|Operation timed out|' +
     r'Pipe error|Resource busy|System call interrupted(?: \(perhaps due to signal\))?)\Z',
     detail.rstrip(), re.MULTILINE | re.IGNORECASE) is not None
 

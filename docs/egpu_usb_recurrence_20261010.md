@@ -31,6 +31,13 @@ private; do not publish settings, identifiers or complete logs.
   reconnecting cables after the initial fault; not all reconnects can therefore
   be attributed to an uncommanded hardware fault.
 
+A later read at boot monotonic 1327.788 still shows the eGPU behind the same
+SuperSpeed hub, bridge power 14490 mV / 1354 mA with fault=false, and the
+existing controller link-error diagnostic at 8338. This is a point-in-time
+power observation, not evidence excluding earlier voltage drops. The preserved
+kernel ring contains 67 eGPU disconnect entries and 69 hub reset entries,
+including normal controller re-enumeration and possible user cable operations.
+
 ## Controlled comparison
 
 Fresh valid CAN state confirmed Park, standstill, zero speed and disabled/
@@ -56,8 +63,36 @@ The diagnostic collector previously truncated raw dmesg before filtering, hiding
 USB events behind camera traffic. It now filters the complete file-backed output
 first while retaining bounded memory/output. This improves evidence only.
 
-157 focused model/runtime/startup/build/diagnostic tests pass. The actual captured
+157 focused model/runtime/startup/build/diagnostic tests pass. Ruff passes after
+explicit string-concatenation cleanup; the 95 artifact/runner tests pass again.
+The actual captured
 hot-unplug traceback matches the transport classifier. This repairs the persistent
 software lockout; it does not establish a cure for the physical/driver link loss
-or the initial output-read stall. Direct-connection comparison and device recovery
-verification remain pending.
+or the initial output-read stall.
+
+## Device verification
+
+With Park/standstill/zero speed and disabled/inactive control checked again,
+the device cleanly fast-forwarded to e394b17f07 and used the normal manager
+reboot once. Normal startup migrated the old transport rejection, reverified
+artifacts and passed the C4 smoke test (load 23.71 seconds). No manual rejection
+deletion or integrity bypass was used. The original hub topology was retained.
+
+Three separate 55-second observation windows (165.04 seconds total, covering
+boot monotonic 165.75 through 383.19 with gaps between windows) received 3,302
+modelV2 and 3,302 cameraOdometry messages, all valid, about 20 Hz. eGPU and HUD
+were connected in every one-second flag sample; startup_failed remained absent.
+Mean model execution in each window was 40.58-40.65 ms, maximum 43.51 ms.
+The maximum subscriber receive interval was 89.61 ms, not a sensor-gap measure.
+At monotonic 399.40, eGPU remained active with a valid model, no rejection,
+a validation receipt and no new same-boot failure. The new boot's preserved
+kernel evidence contains no eGPU/hub disconnect or reset. Park, zero speed and
+disabled/inactive control were retained.
+
+This confirms recovery from the software lockout and several minutes of parked
+operation, not an intermittent-link cure or next-cold-start/driving reliability.
+The user was asked to compare a direct eGPU connection without the hub; that
+physical comparison remains pending. Do not attribute every historical disconnect
+to a defective cable or claim that the earlier output stall is fully explained.
+Evidence and reproduction scripts are retained locally under
+`.analysis/archive/2026-10-10-egpu-recurrence/`.
