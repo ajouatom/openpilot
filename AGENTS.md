@@ -1,5 +1,16 @@
 # Repository memory
 
+- On 2026-10-10, the user authorized connecting the color classifier to live
+  driving footage. `signalcolord` is opt-in, separate, logging-only, reading road
+  VisionIPC; no control/modelV2 return path. Pinned private c091fad2 color ONNX,
+  667-window search, top-three candidates, frame/time/age/CPU logging. Little
+  cores0..3/nice19/single-thread, max1Hz and adaptive 25%-of-one-CPU duty target;
+  ordinary failures latch until disable/restart. Preserve actual wrong selections.
+  Parked preinstall trial: 1301/1301 valid model frames, 20Hz, no gaps; 26 color
+  events at median1.751s with six false greens in a no-signal doorway scene.
+  These verify recording, not detector accuracy or loaded driving performance.
+  See docs/signal_color_live_trial_20261010.md for install status and limitations.
+
 - On 2026-10-10, the user requested actual follow-through beyond failed signal
   training. Trained a 2,179-parameter RGB ROI CNN (poor generalization), then a
   39-parameter classifier on fixed pooled RGB/chroma features. Given reviewed
