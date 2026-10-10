@@ -135,11 +135,13 @@ class TextAlignmentVertical(IntEnum):
   BOTTOM = 2
 
 
-def font_fallback(font: rl.Font) -> rl.Font:
-  """Fall back to unifont for languages that require it."""
-  if multilang.requires_unifont() and gui_app.has_font(FontWeight.DISPLAY):
-    return gui_app.font(FontWeight.DISPLAY)
+def font_fallback(font: rl.Font, text: str | None = None) -> rl.Font:
+  """Fall back to DISPLAY/Unifont for languages or texts that require it."""
+  if gui_app.has_font(FontWeight.DISPLAY):
+    if multilang.requires_unifont() or (text is not None and any(ord(c) > 127 for c in str(text))):
+      return gui_app.font(FontWeight.DISPLAY)
   return font
+
 
 
 class MousePos(NamedTuple):
@@ -998,9 +1000,16 @@ class GuiApplication:
   def _font_codepoints(self, font_weight: FontWeight) -> list[int]:
     codepoints = set(range(32, 127))
     if font_weight in (FontWeight.DISPLAY, FontWeight.UNIFONT):
+      # Korean syllables, jamo, compatibility jamo
       codepoints.update(range(0xAC00, 0xD7A4))
+      codepoints.update(range(0x1100, 0x1200))
+      codepoints.update(range(0x3130, 0x3190))
+      # CJK
       codepoints.update(range(0x4E00, 0xA000))
       codepoints.update(range(0x3400, 0x4DC0))
+      # Extra symbols
+      extra_symbols = "–‑✓×°§•X⚙✕◀▶✔⌫⇧␣○●↳çêüñ–‑✓×°§•€£¥🛑⚠️"
+      codepoints.update(ord(c) for c in extra_symbols)
     return sorted(codepoints)
 
   @staticmethod
