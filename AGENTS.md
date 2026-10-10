@@ -1,5 +1,16 @@
 # Repository memory
 
+- On 2026-10-10, the user requested a separate internal signal-model trial branch
+  and installation on their connected parked C4. `carrot-signal-shadow` retains
+  original control and runs a policy-only CPU observer at 5 Hz, using original
+  camera features and matching temporal inputs. Candidate outputs only enter
+  logMessage/rlog. The initial combined QCOM graph failed original-output parity
+  and was never enabled; version 2 rejects it. The candidate still fails prior
+  green-progress preservation criteria. Device tests (39), parked 40-second
+  20 Hz/zero-drop observation and saved-rlog comparison entries were verified;
+  recognition gains and vehicle-response validation remain unproven. Keep wip's
+  model selection unchanged. See docs/signal_shadow_trial_20261010.md.
+
 - On 2026-10-09, after trying Mountain Dew 870a4823, the user requested
   returning carrot-wip's eGPU model to Cinque v3 (892fc3a1, AMD e758b96d,
   isolated tinygrad d5e17c93). This supersedes the MDM selection below, not

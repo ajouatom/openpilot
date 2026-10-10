@@ -1,4 +1,4 @@
-﻿# Internal signal model observer — 2026-10-10
+# Internal signal model observer — 2026-10-10
 
 The user requested a separate trial branch and installation on their parked Ioniq 5 PE C4.
 `carrot-signal-shadow` keeps the original internal model in control and runs the trained
@@ -84,3 +84,31 @@ and transition times. Split train/validation by drive or intersection, not adjac
 More diverse labelled data can improve training and reveal regressions; quantity alone
 does not establish improvement. Closed-loop behavior and signal recognition gains remain
 unvalidated by this comparison-only installation.
+
+## Installed device verification
+
+Installed and normally rebooted the connected C4 at 192.168.0.178 while fresh valid
+carState/selfdriveState/carControl confirmed Park, standstill and inactive control.
+eGPU was physically absent and UsbGpuActive remained false. Runtime code commit
+`cb45d99b61` uses policy artifact SHA256
+`8b0941e9e36b3b869918dccde613a1365e36ee1ec160ba884c228f9594f871a2`.
+
+- Device tests: 39 passed (observer, existing helpers and eGPU startup retry).
+  Three warnings concern absent optional pytest plugins in the isolated test environment.
+- 40-second live observation: 800/800 valid model frames, 20.0106 Hz, zero frame gaps,
+  zero model frame-drop percentage; mean execution 24.656 ms, max 30.805 ms.
+- 200 comparison events (5 Hz); 199 frame IDs matched the model subscription window.
+  Live baseline values agree with published modelV2 within the five-decimal logging
+  rounding bound (maximum 0.000005).
+- Worker mean 28.542 ms, p95 38.645 ms, max 51.267 ms under live load. Eight comparison
+  packets were dropped during worker startup; the counter stayed at eight throughout
+  the observation window. Worker affinity 0..3, SCHED_OTHER, nice19 were verified.
+- Live separate-policy versus QCOM baseline maximum differences: x 0.03311 m,
+  v 0.01028 m/s, a 0.00097 m/s?. These remain logged separately.
+- Completed segment `0000108c--e6597f4447--0` contains 1,053 modelV2 messages and
+  247 signalModelShadow events (frame IDs 217..1201); both fcamera.hevc and ecamera.hevc
+  exist. This verifies storage in rlog, not just display/subscription.
+
+The vehicle remains on the comparison branch with observation enabled. These are parked
+runtime and recording checks, not proof of improved traffic-signal recognition or driving.
+Private reproduction and validation evidence is indexed in the local analysis archive.
