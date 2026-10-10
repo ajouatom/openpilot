@@ -20,6 +20,8 @@ The former behavior could repeatedly report `0x39D IBST_status not valid` and ma
 
 On supported Tesla vehicles with the additional vehicle CAN bus connected and detected, enabling **alpha longitudinal** (`AlphaLongitudinalEnabled`) also enables automatic cruise set-speed adjustment. While cruise and carrotpilot are engaged, the set speed follows the speed limit reported by the vehicle's DAS. This feature has no separate Carrot Web toggle; vehicles using stock longitudinal control do not use it.
 
+Navigation/Carrot speed control takes precedence: while it is active, DAS-based set-speed adjustment pauses. When it ends, the controller waits for a stable DAS limit again before resuming; any manual wheel pause remains in effect. Simply connecting navigation without active speed control does not pause this feature.
+
 The controller waits for a stable limit, then adjusts the set speed one displayed unit at a time: 1 km/h or 1 mph. It waits at least 0.5 seconds between adjustments and checks that the vehicle has responded before sending another one. Missing or stale limit data, braking, cancellation, or disengagement stops automatic output.
 
 - Turning the right speed wheel manually pauses automatic adjustment, including when limit data is temporarily unavailable. A new speed limit does not clear this pause.
