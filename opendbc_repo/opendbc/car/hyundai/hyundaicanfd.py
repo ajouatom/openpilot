@@ -31,7 +31,7 @@ def apply_accel_jerk_limit(a_raw: float, a_value_last: float, jerk_u: float, jer
 
 
 def apply_canfd_stopping(values, CS, controller, accel, previous_value, jerk_u, jerk_l):
-  """Apply the stopping/re-entry sequence after the normal SCC interlocks."""
+  """Apply the zero-aReq stopping sequence after the normal SCC interlocks."""
   if controller is None:
     return
 
@@ -47,8 +47,8 @@ def apply_canfd_stopping(values, CS, controller, accel, previous_value, jerk_u, 
              or str(CS.out.gearShifter) != "drive" or longitudinal_interlock_active(CS))
   previous_phase = controller.phase
   command = controller.update(
-    active=values["ACCMode"] == 1 and not blocked, requested=bool(values["StopReq"]), speed=speed, a_ego=CS.out.aEgo,
-    held=CS.canfdSccHoldActive, accel=accel, value=values["aReqValue"], previous_value=previous_value,
+    active=values["ACCMode"] == 1 and not blocked, requested=bool(values["StopReq"]), speed=speed,
+    held=CS.canfdSccHoldActive, accel=accel, previous_value=previous_value,
     jerk_u=max(0.0, min(jerk_u, 5.0)), jerk_l=max(1.0, min(jerk_l, 5.0)),
   )
   if blocked or values["ACCMode"] != 1:
@@ -59,14 +59,14 @@ def apply_canfd_stopping(values, CS, controller, accel, previous_value, jerk_u, 
     values.update(StopReq=command.stop_req, aReqRaw=command.raw, aReqValue=command.value,
                   AccelLimitBandUpper=0.0, AccelLimitBandLower=command.lower)
 
-  # Apply only to the final packet, after retry and interlocks have selected
-  # StopReq. Keep the existing acceleration calculation and stop timing.
+  # Apply only to the final packet, after approach and interlocks select StopReq.
+  # The first StopReq frame already carries zero Raw/Value; Upper may rise next.
   values["JerkUpperLimit"] = controller.limit_scc_jerk_upper(values["StopReq"], values["JerkUpperLimit"])
 
   if controller.phase != previous_phase:
     carlog.warning({"event": "carrot_stopping", "from": str(previous_phase), "phase": str(controller.phase),
                     "reason": controller.reason, "speed": speed, "aEgo": CS.out.aEgo,
-                    "held": CS.canfdSccHoldActive, "retry_used": controller.retried,
+                    "held": CS.canfdSccHoldActive,
                     "soft_hold": soft_hold,
                     "StopReq": values["StopReq"], "aReqRaw": values["aReqRaw"], "aReqValue": values["aReqValue"]})
 
