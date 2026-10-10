@@ -1,5 +1,19 @@
 # Repository memory
 
+- On 2026-10-10, dusk route1090 segments64..83 were collected with 100/100
+  source SHA256 matches. Segment81 school signal is green in both cameras;
+  Go takes4.254..4.298s, briefly reverts, and persists at4.908..4.952s. Ego
+  slows to0.182m/s, not full standstill. Segment68 waits1.690..1.740s after
+  green until driver gas/disengagement; do not count it as automatic departure.
+  Stop trajectories persist, then the low-speed x<20/terminal-v<10 gate can
+  override an already-true start candidate. Segment66 repeats red-light Go
+  with brake interventions. Replay matches1380/1380 traffic decisions in six
+  windows; no thresholds/weights/device changes. Logging-only color model
+  also falsely selects green electronic text/signs; it is not a solved detector.
+  Added123 reviewed rows from five encounters, including five hard negatives
+  and one excluded mixed transition; no new fitting. Keep overlapping-location
+  and adjacent-frame splits honest. See docs/ioniq5_signal_dusk_20261010.md.
+
 - On 2026-10-10, latest Ioniq 5 PE route 1090 segment 30 shows red-light
   reacceleration at 47.108s with x[-1]=34.458m: averaged terminal speed 4.967
   exceeds v[0]+2=4.303; five consecutive start candidates change state to Go.
