@@ -128,6 +128,7 @@ Carrot Web 설정 화면에서는 다음 기능을 사용할 수 있습니다.
 | 오토크루즈 | `AutoCruiseControl`, `AutoGasTokSpeed`, `AutoGasCancelSpeed`, `AutoGasSyncSpeed`, `CruiseOnDist` | 크루즈 자동 활성화와 가속 페달 입력 시 동작 |
 
 - `AlwaysLateral`: 크루즈가 켜져 있지 않아도 조향 제어를 허용합니다. 지원 Tesla 차량에서는 전진 기어의 실제 정차 상태에서도 조향할 수 있으며, 최소 조향 속도 이하로 이동할 때의 제한은 유지됩니다. [Tesla 제어 진입](tesla.md#engagement-and-standstill)을 참고하세요.
+- 상시 조향을 켜도 모델·차량 파라미터·자세 정보 등 조향에 필요한 입력이 정상적으로 준비되기 전에는 조향하지 않습니다. 작동 중 필수 입력이 끊기거나 유효하지 않으면 조향을 중지하며, 입력이 정상으로 돌아오고 기존 조향 조건을 만족하면 다시 허용합니다. 초기 대기시간이 지났다는 이유만으로 조향을 시작하지 않습니다.
 - `AutoEngage`: `0` 끄기, `1` 조향 ON, `2` 조향 ON과 크루즈 대기입니다.
 - `AutoCruiseControl`: 현대·기아 차량용 오토크루즈와 소프트홀드 관련 설정입니다.
 - `DisableMinSteerSpeed`: SMDPS 장착 차량의 저속 조향 제한과 관련된 차량별 설정입니다.

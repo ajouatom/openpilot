@@ -128,6 +128,7 @@ These 123 settings can affect vehicle motion. Change one item at a time.
 | Auto cruise | `AutoCruiseControl`, `AutoGasTokSpeed`, `AutoGasCancelSpeed`, `AutoGasSyncSpeed`, `CruiseOnDist` | Automatic cruise activation and accelerator-pedal behavior |
 
 - `AlwaysLateral` permits lateral control even when cruise is not engaged. On supported Tesla vehicles it can also steer at true standstill in a forward-driving gear; moving below the minimum steering speed remains restricted. See [Tesla engagement](tesla.md#engagement-and-standstill).
+- Always Lateral waits for valid model, vehicle-parameter, pose, and other required lateral inputs before steering. It stops steering if a required input becomes unavailable or invalid, and permits steering again when inputs recover and the existing steering conditions are satisfied. Expiry of the startup waiting period alone does not permit steering.
 - `AutoEngage`: `0` off, `1` lateral on, `2` lateral on with cruise ready.
 - `AutoCruiseControl` covers Hyundai/Kia auto-cruise and soft-hold behavior.
 - `DisableMinSteerSpeed` is vehicle-specific and relates to low-speed steering restrictions on SMDPS-equipped cars.
