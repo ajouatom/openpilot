@@ -1,5 +1,21 @@
 # Repository memory
 
+- On 2026-10-10, after failed ONNX retraining, user explicitly authorized
+  auxiliary red-stop hold, moving-red injection into existing stopping logic,
+  and installation for driving on the connected parked Ioniq. Added per-device
+  assist_enabled opt-in (default OFF), fresh tmpfs tracked-camera observations,
+  red0.3s/green0.4s confirmation, same-track release and nested-lamp rejection.
+  Unknown retains a committed stop; driver gas overrides with10s cooldown.
+  Moving entry preserves lead/turn/steering/speed gates and needs plausible
+  original model stop distance, never a color-derived distance. Original ONNX,
+  x/v, departure thresholds and actuator limits unchanged.70 focused tests;
+  disabled14,242-frame replay exact. Three active incident non-stop-state counts
+  49/59/4 become0/0/0 at125ms in full/recorded/parked-pattern cadence; no reviewed
+  red green-release, observed green release .716-.915s. Not MPC/vehicle-response
+  proof; forward ROI is not ego-lane or arrow-permission proof.200ms latency
+  prevents new arming. Keep private evidence local; document actual installation
+  separately in docs/signal_assist_trial_20261010.md.
+
 - On 2026-10-10, user requested proceeding with spatial labels and original
   driving ONNX retraining. Reviewed206 accepted points;102 are in actual model
   crops (41 train/25 development/36 evaluation). Of12 stop-line points,8 are
