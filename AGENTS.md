@@ -1,5 +1,18 @@
 # Repository memory
 
+- On 2026-10-10, the user requested actual follow-through beyond failed signal
+  training. Trained a 2,179-parameter RGB ROI CNN (poor generalization), then a
+  39-parameter classifier on fixed pooled RGB/chroma features. Given reviewed
+  ROIs, the latter scores 57/57 development and 44/44 reused heldout frames;
+  separate medium-confidence school greens improve from 1/11 to 10/11. Blind
+  667-window search falls to 44/57 development and 7/11 school greens, selecting
+  brake lamps or other objects. Do not claim a solved detector or original x/v/a
+  improvement. Both ONNXs match PC decisions on 252 recorded device inputs in
+  Park; color ROI median 0.395 ms, full scan inference median 129 ms/p95 487 ms.
+  Finite low-priority device test ended; no live service/control/model replacement.
+  Keep artifacts private and follow up on signal location/lane association plus
+  unseen encounters. See docs/signal_roi_trial_20261010.md.
+
 - On 2026-10-10, the user requested continuing from visual labels into training.
   Trained new binary signal heads on frozen internal vision512 and policy256
   features; only the former has camera-only graph ancestry. Vision gives 46/57
