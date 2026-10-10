@@ -1,5 +1,22 @@
 # Repository memory
 
+- On 2026-10-10, completed an offline automatic horizontal-signal detector,
+  causal tracker and bounded lamp-state observer after the user requested a
+  concrete result. School development then frozen six-clip replay gives
+  red-as-green 0/1043, correct green361/404, unknown58/1447; four first-green
+  delays0.155..0.205s. Clips were previously reviewed, not unseen validation.
+  Eight temporal tests and a20-frame generic CLI replay pass. Private report
+  and six annotated videos remain local. This iteration is image-processing
+  engineering, not new ONNX training. No ego-lane/arrow assignment or stop-line
+  distance; startup green is unarmed. User also wants distant-red approach
+  learning: document sequence/lane/stop-line labels and separate stopping
+  evaluation, without claiming these are implemented. Original x/v/a,
+  departure thresholds and vehicle configuration remain unchanged. User
+  prioritizes red stopping and preventing false departures: report red-as-green
+  errors separately; unknown is not confirmed green. Do not claim offline
+  observer success prevents actual vehicle departures. See
+  docs/signal_tracking_trial_20261010.md.
+
 - On 2026-10-10, user requested object-location learning and asked about lamp
   brightness/history. Added75 manual housing boxes (73 eligible:21/17/35),
   trained two tile detectors with class+box losses and exported private ONNXs
