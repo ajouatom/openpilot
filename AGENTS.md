@@ -1,5 +1,16 @@
 # Repository memory
 
+- On 2026-10-10, the user requested collection and retraining on all recordings
+  after the first observer drive. Collected 79 segments/395 files (7.209 GB) and
+  replayed 67,845 dual-camera pairs from 57 segments. Balanced final-head fitting
+  used 829 red, 55 recorded green-departure and 1,118 preservation samples. All
+  12 development candidates failed; the saved diagnostic ONNX 91d47a89 increases
+  red-wait speed error and does not resolve heldout school green delay. Full ONNX
+  validation on 114 feeds preserves outputs outside 75 future longitudinal mean
+  rows exactly. No new artifact was installed or enabled for control. Keep data
+  and models private/local; do not promote or change signal-start thresholds on
+  this evidence. See docs/ioniq5_signal_retrain_20261010.md.
+
 - On 2026-10-10, first internal observer drive `0000108c--e6597f4447` was collected
   directly (segments 11..21, 3,300 comparison entries). Video confirms green-to-Go
   delays of 0.51..0.56 s and 2.61..2.66 s; driver gas precedes the latter Go state.
