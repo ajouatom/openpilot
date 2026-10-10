@@ -1,5 +1,19 @@
 # Repository memory
 
+- On 2026-10-10, user requested object-location learning and asked about lamp
+  brightness/history. Added75 manual housing boxes (73 eligible:21/17/35),
+  trained two tile detectors with class+box losses and exported private ONNXs
+  bac2f128/41d3a430; each matches Torch on3456 augmented inputs. Scratch detector
+  fails; frozen-color-plus-learned-residual improves development green16/33 to
+  23/33 but adds road-heldout false greens2/66 and wide26/34. Top5 correct-color
+  target recall atIoU0.3 is5/17 dev,13/35 reused evaluation; reject promotion.
+  User's grayscale inner-lamp/3-frame transition prototype finds four first
+  changes in0.099..0.400s with manually interpolated boxes (future labels assist;
+  not automatic causal tracking). School green remains unstable47/145 confirmed;
+  separate static red20 has2 false greens. Do not claim solved signal recognition
+  or departure improvement. No original x/v/a, thresholds or vehicle changes.
+  Keep models/data local. See docs/signal_object_brightness_20261010.md.
+
 - On 2026-10-10, the user requested actual retraining on added drives. Refit the
   39-parameter camera color model and trained a 2,215-parameter color+CNN model;
   new private ONNXs 5146a59c/db3f511c match Torch decisions on all 370 inputs.
