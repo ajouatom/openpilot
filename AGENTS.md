@@ -1,5 +1,16 @@
 # Repository memory
 
+- On 2026-10-10, user requested live installation of the automatic signal
+  tracker. Existing opt-in signalcolord dispatches to signal_tracking_shadow
+  only with the additional local tracking_enabled flag. Same causal tracker,
+  road NV12, diagnostic logs only; no control or departure-threshold changes.
+  Little CPUs0..3/nice19, OpenCV single-thread, max20Hz and50% one-CPU duty
+  target. Actual parked trial averages15.5 observations/s:388 fresh unknown
+  observations, model640/640 valid at20Hz without gaps. 36 desktop tests and
+  OpenCV4.13 equality on1447 recorded frames pass. Do not claim stopping or
+  false-departure prevention. See docs/signal_tracking_live_20261010.md;
+  retain private installation and validation evidence locally.
+
 - On 2026-10-10, completed an offline automatic horizontal-signal detector,
   causal tracker and bounded lamp-state observer after the user requested a
   concrete result. School development then frozen six-clip replay gives

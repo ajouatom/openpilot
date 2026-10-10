@@ -152,6 +152,9 @@ def configure_worker_scheduling():
 
 
 def run(directory=DIRECTORY, duration=None):
+  from openpilot.selfdrive.modeld.signal_tracking_shadow import tracking_requested, run as run_tracking
+  if tracking_requested(directory):
+    return run_tracking(directory, duration)
   import sys
   import fcntl
   directory = Path(directory)
