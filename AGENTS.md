@@ -1,5 +1,18 @@
 # Repository memory
 
+- On 2026-10-10, user additionally requested b80db2c97d on their car. It was
+  already the signal experiment branch HEAD; do not duplicate its cherry-pick.
+  Installed that exact commit on the parked, inactive car and used normal
+  DoReboot to reload card and the planners. This combines auxiliary signal
+  assistance with the separate zero-aReq/no-retry CANFD stopping trial.
+  Assist flag is ON. Post-reboot 25s: CAN valid, 500 consecutive valid model
+  frames at20.008Hz, 500 valid plans, 245/245 fresh tracking observations,
+  25 enabled assist diagnostics with no Park hold/red action, stable PIDs and
+  unchanged original ONNX. Combined70+181 desktop tests pass. Earlier individual
+  restart attempts failed readiness timeouts and cleared the flag; final boot
+  validation supersedes them. No physical red-stop/green-start or b80 ECU
+  response validation. See docs/signal_assist_trial_20261010.md.
+
 - On 2026-10-10, after failed ONNX retraining, user explicitly authorized
   auxiliary red-stop hold, moving-red injection into existing stopping logic,
   and installation for driving on the connected parked Ioniq. Added per-device
