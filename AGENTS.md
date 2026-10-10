@@ -1,5 +1,18 @@
 # Repository memory
 
+- On 2026-10-10, RAV4 route 0d segments 5-9 on e7987ed confirmed an
+  onroadEvents cadence regression: healthy event-change bursts exceed the 1 Hz
+  tracker's upper bound and the continuous readiness gate interrupts steering.
+  Check event receipt/validity/liveness without fixed-rate rejection; retain
+  periodic-input checks and the separately requested startup-only latch in
+  7ceee11642, which includes this correction. Lateral selection alone still
+  needs active cruise or AlwaysLateral. All five minutes have cruise inactive;
+  no Panda TX rejection or new CAN errors. The long segment 6-7 inactivity is
+  not fully explained by event cadence; live setting changes are not captured.
+  166 focused tests pass; recorded-input readiness matches all 11,201 examined
+  decisions in segments 5/8 after warmup. No physical steering validation.
+  Keep incident data local. See docs/rav4_steering_20261010.md.
+
 - On 2026-10-10, the user clarified that the Sonata startup fix must apply
   only until FIRST readiness, never reblock during operation. This supersedes
   e7987ed0fd's continuous readiness checks and repeated PID/curvature resets.
