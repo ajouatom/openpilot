@@ -1,5 +1,23 @@
 # Repository memory
 
+- On 2026-10-10, user requested proceeding with spatial labels and original
+  driving ONNX retraining. Reviewed206 accepted points;102 are in actual model
+  crops (41 train/25 development/36 evaluation). Of12 stop-line points,8 are
+  in-crop; only6 from one training approach have uncertain flat-ground distance
+  targets. Exclude inconsistent school distances and out-of-crop labels.
+  Fine-tuned6,152,000 original camera weights from add_8; temporal/final heads
+  frozen. Four3000-step matched trials, discarded training-only spatial/geometry
+  heads, original graph/IO unchanged. All fail development; selected a79c9acd
+  fails24 development/41 evaluation checks. Auxiliary41/41 train versus28/36
+  evaluation, including7 red-as-green, is provided-location classification,
+  not autonomous detection. All4 ONNXs pass259-feed numerical checks each;
+  selected/control each pass19,200-frame own-history full-video calculation.
+  Main false Go counts88->89 and19->19 remain; brief1->0 and green1.575->0.868s
+  also occur in the no-spatial-gradient control, so not added-label benefit.
+  No vehicle/model/controller/observer deployment, QCOM compilation or closed-loop
+  validation. Do not claim this original/spatial retraining is untried, impossible
+  or successful. See docs/signal_spatial_finetune_20261010.md and private archive.
+
 - On 2026-10-10, user requested trying and verifying actual image-layer driving
   ONNX fine-tuning. Trained original final vision conv/SE/projection (2,241,600
   weights), optionally original temporal encoders/attention/MLP; early CNN and

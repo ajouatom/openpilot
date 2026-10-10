@@ -31,17 +31,18 @@ class OriginalWeights(nn.Module):
 
 
 class VisionTail(OriginalWeights):
-  def __init__(self, graph, arrays):
-    start = next(i for i, n in enumerate(graph.node) if n.output[0] == 'vision/conv2d_57')
+  def __init__(self, graph, arrays, start_output='vision/conv2d_57', input_name='vision/add_11'):
+    start = next(i for i, n in enumerate(graph.node) if n.output[0] == start_output)
     stop = next(i for i, n in enumerate(graph.node) if n.output[0] == 'vision/outputs')
     nodes = list(graph.node[start:stop + 1])
     names = {k for n in nodes for k in n.input if k in arrays}
     super().__init__(arrays, names)
+    self.input_name = input_name
     self.nodes = [(n.op_type, list(n.input), n.output[0], {a.name: helper.get_attribute_value(a) for a in n.attribute}) for n in nodes]
 
-  def forward(self, spatial):
+  def forward(self, spatial, capture=()):
     env = {name: self.w(name) for name in self.names}
-    env['vision/add_11'] = spatial
+    env[self.input_name] = spatial
     for op, inputs, output, attr in self.nodes:
       x = [env[name] for name in inputs]
       if op == 'Conv':
@@ -83,6 +84,8 @@ class VisionTail(OriginalWeights):
       else:
         raise NotImplementedError((op, output))
       env[output] = y
+    if capture:
+      return env['vision/outputs'], {name: env[name] for name in capture}
     return env['vision/outputs']
 
 
