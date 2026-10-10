@@ -131,14 +131,6 @@ class LatControlTorque(LatControl):
       self.past_future_len = len(self.past_times) + len(self.nn_future_times)
 
 
-  def reset(self):
-    super().reset()
-    self.pid.reset()
-    if self.use_nnff:
-      self.lateral_accel_desired_deque.clear()
-      self.roll_deque.clear()
-      self.error_deque.clear()
-
   def update_live_torque_params(self, latAccelFactor, latAccelOffset, friction):
     if self.lateralTorqueCustom > 0:
       return

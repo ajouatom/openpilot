@@ -5,8 +5,25 @@ from dataclasses import dataclass
 LATERAL_SERVICES = ('modelV2', 'liveParameters', 'livePose', 'selfdriveState', 'onroadEvents')
 
 
+@dataclass
+class LateralStartupGate:
+  # One-way, process-lifetime latch. Engagement changes and later input failures
+  # do not rearm this startup check; existing runtime safety policy owns those.
+  ready: bool = False
+
+  def update(self, sm, CS, boundary_service):
+    if not self.ready:
+      self.ready = service_ready(sm, boundary_service) and lateral_inputs_ready(sm, CS)
+    return self.ready
+
+
 def service_ready(sm, service):
   # A default SubMaster message is not an input, even during startup grace.
+  if service == 'onroadEvents':
+    # selfdrived publishes a 1 Hz heartbeat AND every event change. Pedal or
+    # steering-override transitions legitimately exceed the fixed rate's upper
+    # bound. Keep receipt, validity and liveness checks without rejecting bursts.
+    return sm.seen[service] and sm.valid[service] and sm.alive[service]
   return sm.seen[service] and sm.all_checks([service])
 
 

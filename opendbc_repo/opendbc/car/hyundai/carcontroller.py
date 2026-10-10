@@ -211,6 +211,7 @@ class CarController(CarControllerBase):
     self.button_spam3 = 1
 
     self.apply_angle_last = 0
+    self.steering_template_ready = False
     self.lkas_max_torque = 0
     self.angle_max_torque = 250
     self.steering_pressed_prev = False
@@ -244,9 +245,10 @@ class CarController(CarControllerBase):
 
   def update(self, CC, CS, now_nanos):
 
-    if self.CP.flags & HyundaiFlags.CANFD and self.CP.flags & HyundaiFlags.CAMERA_SCC:
+    if not self.steering_template_ready and self.CP.flags & HyundaiFlags.CANFD and self.CP.flags & HyundaiFlags.CAMERA_SCC:
       template = CS.lfa_alt if self.CP.flags & HyundaiFlags.ANGLE_CONTROL else CS.lfa
-      if template is None and CC.latActive:
+      self.steering_template_ready = template is not None
+      if not self.steering_template_ready and CC.latActive:
         # Do not run an invisible steering ramp while camera TX discovery is
         # pending. Inactive handling below tracks the wheel and clears torque
         # and handover history, so the first emitted command starts bounded.

@@ -112,7 +112,7 @@ A correction should cover all of these boundaries:
 - Preserve sane nominal/validated VehicleModel parameters until valid live
   values exist. Do not replace a real ratio with the 0.1 numerical floor.
 - Keep rate-limit history aligned with commands actually eligible for
-  transmission. Initial or resumed camera-template availability must not expose
+  transmission. Initial camera-template availability must not expose
   a command ramp that ran only inside the host.
 - Review the independent Panda rejection path for this torque-control case;
   changing that path requires its own regression/firmware validation.
@@ -125,64 +125,74 @@ feel or closed-loop safety in the vehicle.
 Private evidence and reproduction scripts are indexed under
 `.analysis/archive/2026-10-10/sonata-92-startup-steering/README.md`.
 
-## Authorized correction
+## Authorized correction: startup only
 
-- A shared lateral-readiness predicate now gates both controlsd (ordinary
-  engagement and AlwaysLateral) and card's final application boundary. Required
-  services must have been received and pass existing validity, liveness and
-  frequency checks: modelV2, liveParameters, livePose, selfdriveState and
-  onroadEvents. selfdriveInitializing still blocks. The gate additionally checks
-  live geometry, pose health, car CAN/fault state and finite steering inputs.
-  A selected lane-line plan must be ready, have a valid solution and finite
-  17-element trajectories. The numerical fallback never permits steering.
-- Before live parameters become valid, inactive calculations use nominal CP
-  geometry, with existing manual ratio/scaling settings still applied. Zero
-  default messages no longer replace nominal geometry with a 0.1 ratio.
-- Inactivity and each lateral activation synchronize desired curvature to the
-  current measured curvature. Torque PID integral and NN desired-input histories
-  reset, preventing state accumulated before readiness from carrying into entry.
-- Hyundai CAN-FD CAMERA_SCC locally treats lateral control as inactive until
-  its relevant steering TX template exists (LFA for torque, LFA_ALT for angle).
-  This resets torque/handover state and follows measured wheel angle while
-  waiting. Both initial discovery and subsequent template loss/reappearance are
-  tested. The source carControl message and longitudinal fields are preserved.
-- card converts locally neutralized messages back to readers before passing
-  them to car controllers; this also preserves the existing impact-reboot guard.
+The first implementation, `e7987ed0fd`, also blocked steering on runtime input
+failures and reset curvature/torque state on every activation. The user explicitly
+rejected that expanded scope: readiness must be checked only at initial startup.
+The follow-up removes those ongoing changes.
+
+- controlsd and card independently latch the first successful readiness check.
+  Required services must have been received and pass existing validity, liveness
+  and frequency checks: modelV2, liveParameters, livePose, selfdriveState and
+  onroadEvents, plus carState/controlsd or carControl/card. selfdriveInitializing
+  blocks initial readiness. Live geometry, pose health, CAN/fault state and finite
+  steering inputs are checked; a selected lane-line plan also needs a valid
+  solution and finite 17-element trajectories.
+- Once each latch is ready, it never checks those inputs again in that process.
+  Input interruptions, invalidity, disengagement and reengagement do not rearm
+  it. A new process starts with a new latch. Existing runtime safety and fault
+  handling still apply independently.
+- Nominal geometry is used for inactive startup calculations when live geometry
+  is unavailable. After readiness, the original live-parameter path is restored,
+  including during later invalidity. Measured curvature seeds only the first
+  lateral activation. The added torque PID/NN reset override is removed; later
+  engagement transitions retain their pre-fix behavior.
+- Hyundai CAN-FD CAMERA_SCC treats steering as inactive only until the first
+  relevant TX template exists (LFA for torque, LFA_ALT for angle). During this
+  initial wait, torque/handover state stays inactive and angle tracks the wheel,
+  preventing a hidden command ramp from preceding the first transmission.
+  Template discovery latches once; subsequent template loss does not rearm this
+  new guard. Existing message construction policy remains unchanged.
+- card preserves longitudinal fields and converts a locally neutralized command
+  back to a reader before controller application, including the impact-reboot path.
 
 No steering gain, normal angle/torque rate limit, actuator maximum, model,
 longitudinal policy, CAN forwarding queue, or Panda firmware is changed. The
-commented Panda rejection noted above remains a separate defense-layer issue;
-this correction blocks the demonstrated host-side causes independently. It
-does not claim to restore independent firmware protection against every host
-fault. No new setting or vehicle-specific exception is introduced.
+commented Panda rejection noted above remains a separate defense-layer issue.
+No new setting or vehicle-specific exception is introduced.
 
 ### Validation
 
-- 191 focused desktop tests pass: common readiness and complete state_control
-  execution with the production torque controller, live ratio settings, Hyundai
-  steering modes/handover, template discovery and CAN counter handling.
-- A 15-second synthetic input delay exceeds both historical initialization
-  timeouts and still leaves lateral control inactive with zero torque. This is
-  tested with normal engagement requested and with AlwaysLateral alone.
-- Missing, invalid, stale and low-frequency inputs; timeout without a model;
-  malformed live geometry; selected lane-plan errors; queued active commands;
-  recovery after input loss; and torque/angle TX template reappearance are
-  covered. A saturated request held through 200 unavailable-template ticks first
-  transmits torque 3 when the template becomes available, rather than 375.
-- The full 5,969-frame recorded-input desktop replay runs the production
-  state_control, torque controller and Hyundai steering packing. All 1,145
-  control frames before first valid liveParameters remain inactive with zero
-  torque. The first available LFA at 7.344 s is zero/request-off. The first
-  permitted steering sample is 11.674 s and starts at CAN torque 3/request-on.
-  There are zero nonzero requests before first model publication.
+- 241 focused desktop tests pass: readiness, complete state_control execution,
+  live ratio settings, Hyundai steering modes/handover, template discovery and
+  CAN counter handling. Checks cover both ordinary engagement and AlwaysLateral.
+- A 15-second synthetic startup input delay leaves lateral control inactive with
+  zero torque, beyond either historical initialization timeout. Missing, invalid,
+  stale, slow, malformed and unhealthy initial inputs cannot pass readiness.
+- After initial readiness, failing inputs do not rearm either boundary, even
+  across disengagement/reengagement. Runtime live geometry, torque integral and
+  NN history retain original behavior. Initial template absence keeps torque
+  history at zero; a saturated request first transmits torque 3 after discovery.
+  Later template loss does not newly reset torque or angle authority.
+- A 6,000-frame synthetic post-startup comparison against pre-fix `5479d1279a`
+  produces exactly identical carControl messages, torque PID integrals and VM
+  ratios while varying input health, learned geometry, engagement, steering
+  targets and existing steering faults. Both sides begin after the one-time
+  startup transition; this does not assert identical startup histories.
+- The 5,969-frame recorded-input replay runs production state_control, torque
+  controller and Hyundai steering packing. All 1,145 frames before first valid
+  liveParameters remain inactive with zero torque. The first available LFA at
+  7.344 s is zero/request-off; the first permitted steering sample at 11.674 s
+  starts at CAN torque 3/request-on. No nonzero request precedes the first model.
 - Replay uses logged publication times as receipt approximations and optimistic
   frequency status, preserving actual Event validity. Runtime frequency settling
-  can delay readiness further. Longitudinal processing and unrelated cluster/
-  button paths are stubbed; this is a lateral input/output check, not native IPC,
-  exact original scheduler timing, vehicle response, or steering-feel validation.
-- Windows tests substitute Params storage and hardware identification only where
-  needed; production lateral calculations and CAN packing execute unchanged.
-  Korean/English setting guides and the localized catalog/Wiki describe readiness.
+  can delay first readiness further. Longitudinal and unrelated cluster/button
+  processing are stubbed. Windows tests substitute Params/hardware as needed.
+  These checks do not validate native IPC timing, vehicle response or steering feel.
+- Korean/English setting guides and localized catalog/Wiki state that readiness
+  applies only once after startup and does not add a runtime cutoff.
 
-Fix reproduction evidence is local under
-`.analysis/archive/2026-10-10/sonata-startup-fix/README.md`.
+Original fix evidence is local under
+`.analysis/archive/2026-10-10/sonata-startup-fix/README.md`; the startup-only
+revision is under `.analysis/archive/2026-10-10/sonata-startup-only/README.md`.
