@@ -1,5 +1,21 @@
 # Repository memory
 
+- On 2026-10-10, user requested trying and verifying actual image-layer driving
+  ONNX fine-tuning. Trained original final vision conv/SE/projection (2,241,600
+  weights), optionally original temporal encoders/attention/MLP; early CNN and
+  final heads frozen. Four400-step and four4000-step candidates; all fail
+  development. Regenerate each candidate's full consumed image history; x/v/a
+  gradients reach camera weights. Original graph/IO unchanged, auxiliary color
+  head discarded. 44,400-frame original numerical parity and four full ONNXs
+  on259 real feeds each pass calculation checks. Selected failed807f758c keeps
+  major incident Go counts88->89 and19->20; brief third1->0. One trained green
+  predicate response improves1.575->0.868s, not physical launch validation.
+  Reused reviewed data, no metric stop-line targets, full-controller/vehicle
+  simulation or QCOM compilation. No vehicle/model/control/observer deployment.
+  Do not say original vision fine-tuning has never been tried, impossible, or
+  these failed models are ready. See docs/signal_vision_finetune_20261010.md;
+  retain private artifacts under the matching local analysis archive.
+
 - On 2026-10-10, user correctly noted earlier ONNX failures predated the new
   night drive and requested retry. Replayed37 segments/44,400 road+wide pairs,
   trained on new1091 night plus old day data, and exported six original driving
