@@ -1,5 +1,21 @@
 # Repository memory
 
+- On 2026-10-10, user correctly noted earlier ONNX failures predated the new
+  night drive and requested retry. Replayed37 segments/44,400 road+wide pairs,
+  trained on new1091 night plus old day data, and exported six original driving
+  ONNX candidates. Compare final75 future x/v/a rows with existing nonlinear
+  plan-branch fine-tuning plus discarded auxiliary color head; image/shared
+  temporal backbone stays frozen, graph/IO unchanged. All six fail development.
+  One night red error improves0.563->0.495m/s in broader fit, but another red
+  worsens0.364->0.753 and plan lateral outputs drift. Selected failed candidate
+  a68a29bf retains two incident Go-frame counts88->88 and19->19; third1->0 is
+  not vehicle-response proof. Two full ONNXs verified on259 feeds each; nonplan
+  outputs exact. Recorded stopping method matches318/318 incident states.
+  No surveyed stop-line targets, full-controller simulation, QCOM compilation
+  or vehicle installation. Keep original controller/model and private evidence
+  local. Do not call this new data untested or model fine-tuning impossible.
+  See docs/signal_night_finetune_20261010.md.
+
 - On 2026-10-10, user asked to use the improved signal version now. Fresh vehicle
   read confirms b57b81835d observer already installed and parked/inactive. A new
   decision-availability comparison does not validate direct control promotion:
