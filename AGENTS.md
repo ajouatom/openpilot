@@ -1,5 +1,19 @@
 # Repository memory
 
+- On 2026-10-10, new night logs exposed all11,061 observer outputs unknown.
+  Added saturated-core/color-halo night proposals and125ms tracking continuity.
+  Reflection rejection and image-only processing; original ONNX/x/v/a, departure
+  thresholds and control unchanged. Reused night scoring:0/7427 red-as-green,
+  520/688 correct green; recorded cadence0/5704 and339/540. Side red plus frontal
+  green still abstains; ego-lane association remains unresolved. Prior1447
+  day/dusk decisions unchanged;42 desktop tests pass. Optimized parked trial:
+  42.7ms median work,302/302 fresh observations,640/640 valid model frames/no gaps.
+  Three red acceleration windows include lead-mode exit while still red and
+  x[-1] about1.4m, followed by a model-speed surge. Exact stopping method matches
+  318/318 traffic states, not whole-controller or network causal proof. Logging
+  only, not false-departure prevention. See docs/signal_night_observer_20261010.md;
+  retain private incident evidence locally.
+
 - On 2026-10-10, user requested live installation of the automatic signal
   tracker. Existing opt-in signalcolord dispatches to signal_tracking_shadow
   only with the additional local tracking_enabled flag. Same causal tracker,

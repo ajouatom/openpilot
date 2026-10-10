@@ -49,7 +49,7 @@ def lamp_evidence(rgb, box):
   return state, max(r, g), dict(red_score=r, green_score=g, left_brightness=peaks[0], right_brightness=peaks[1])
 
 
-def detect(rgb):
+def housing_proposals(rgb):
   """Current-image housing proposals. Never accepts annotations or future frames."""
   height, width = rgb.shape[:2]
   y_end = int(height*.60)
@@ -86,6 +86,100 @@ def detect(rgb):
     if all(overlap(c['box'], k['box']) < .35 for k in kept):
       kept.append(c)
   return kept[:20]
+
+
+def night_proposals(rgb):
+  """Recover saturated lamps from a compact white core and its colored halo.
+
+  Inferred horizontal boxes are proposals, not measured housings or lane labels.
+  Red halos must surround the core: one-sided reflections cannot seed a track.
+  """
+  h, w = rgb.shape[:2]
+  end = int(h * 0.55)
+  gray = cv2.cvtColor(rgb[:end], cv2.COLOR_RGB2GRAY)
+  # This extension is used only when the upper scene is dark.
+  # Exact linear 70th percentile for uint8, avoiding a full-frame partition.
+  cumulative = np.cumsum(cv2.calcHist([gray], [0], None, [256], [0, 256]).ravel())
+  rank = .7 * (gray.size - 1)
+  lower, upper = np.searchsorted(cumulative, [math.floor(rank), math.ceil(rank)], side='right')
+  if lower + (upper - lower) * (rank - math.floor(rank)) > 45:
+    return []
+  # Keep a full maximum-core margin around eligible centers. Color conversion
+  # is restricted to each small halo; full-scene HSV was too slow on C4 little CPUs.
+  ox, oy = max(0, int(.12 * w) - 38), max(0, int(.08 * h) - 22)
+  ex, ey = min(w, math.ceil(.88 * w) + 38), min(end, math.ceil(.52 * h) + 22)
+  mask = cv2.compare(gray[oy:ey, ox:ex], 180, cv2.CMP_GT)
+  _, _, stats, cents = cv2.connectedComponentsWithStats(mask, 8)
+  seeds = []
+  for stat, center in zip(stats[1:], cents[1:], strict=True):
+    x, y, cw, ch, area = map(int, stat)
+    cx, cy = map(float, center)
+    x, y, cx, cy = x + ox, y + oy, cx + ox, cy + oy
+    diam = max(cw, ch)
+    if not (3 <= cw <= 38 and 3 <= ch <= 22 and 7 <= area <= 350 and 0.4 <= cw / ch <= 3.5 and area / (cw * ch) >= 0.35):
+      continue
+    if not 0.12 * w < cx < 0.88 * w or not 0.08 * h < cy < 0.52 * h:
+      continue
+    ax = max(0, int(cx - 1.4 * diam))
+    bx = min(w, int(cx + 1.4 * diam) + 1)
+    ay = max(0, int(cy - 1.4 * diam))
+    by = min(end, int(cy + 1.4 * diam) + 1)
+    hue, sat, val = cv2.split(cv2.cvtColor(rgb[ay:by, ax:bx], cv2.COLOR_RGB2HSV))
+    color = ((hue <= 12) | (hue >= 170)) & (sat >= 90) & (val >= 110)
+    yy, xx = np.mgrid[ay:by, ax:bx]
+    ring = ((xx - cx) ** 2 + (yy - cy) ** 2 >= 0.35**2 * diam**2) & ((xx - cx) ** 2 + (yy - cy) ** 2 <= 1.3**2 * diam**2)
+    is_red = np.count_nonzero(color & ring) >= max(8, np.count_nonzero(ring) * 0.22)
+    if is_red:
+      if not (0.65 <= cw / ch <= 1.55 and area / (cw * ch) >= 0.55):
+        continue
+      quadrants = [(xx < cx) & (yy < cy), (xx >= cx) & (yy < cy), (xx < cx) & (yy >= cy), (xx >= cx) & (yy >= cy)]
+      coverage = [float(np.mean(color[ring & q])) for q in quadrants]
+      if min(coverage) < 0.4 or max(coverage) - min(coverage) > 0.45:
+        continue
+      state = 'red'
+      xc = 0.125
+    else:
+      # Split a connected arrow+round green core by its largest inscribed disk.
+      distance = cv2.distanceTransform(np.pad((gray[y : y + ch, x : x + cw] > 180).astype(np.uint8), 1), cv2.DIST_L2, 5)
+      _, radius, _, location = cv2.minMaxLoc(distance)
+      if radius < 1.5:
+        continue
+      cx = x + location[0] - 1
+      cy = y + location[1] - 1
+      diam = max(3, int(round(2 * radius)))
+      ax = max(0, int(cx - 1.4 * diam))
+      bx = min(w, int(cx + 1.4 * diam) + 1)
+      ay = max(0, int(cy - 1.4 * diam))
+      by = min(end, int(cy + 1.4 * diam) + 1)
+      yy, xx = np.mgrid[ay:by, ax:bx]
+      ring = ((xx - cx) ** 2 + (yy - cy) ** 2 >= 0.35**2 * diam**2) & ((xx - cx) ** 2 + (yy - cy) ** 2 <= 1.3**2 * diam**2)
+      hue, sat, val = cv2.split(cv2.cvtColor(rgb[ay:by, ax:bx], cv2.COLOR_RGB2HSV))
+      green = (hue >= 38) & (hue <= 105) & (sat >= 65) & (val >= 110)
+      if np.count_nonzero(green & ring) < max(8, np.count_nonzero(ring) * 0.22):
+        continue
+      state = 'green'
+      xc = 0.875
+    # Nearby white characters of a sign must not form a compact lamp core.
+    if state == 'red' and np.count_nonzero((gray[ay:by, ax:bx] > 180) & (((xx - cx) ** 2 + (yy - cy) ** 2) > diam**2)) > area * 0.3:
+      continue
+    bw = 4 * diam
+    bh = max(6, 2 * diam)
+    box = [int(cx - bw * xc), int(cy - bh / 2), int(cx + bw * (1 - xc)), int(cy + bh / 2)]
+    if box[0] < 0 or box[1] < 0 or box[2] >= w or box[3] >= end:
+      continue
+    raw, strength, evidence = lamp_evidence(rgb, box)
+    if raw != state:
+      continue
+    seeds.append(dict(box=box, raw=state, quality=max(0.25, strength), source='night_lamp_core', core_diameter=diam, **evidence))
+  return seeds
+
+def detect(rgb):
+  """Combine dark housings and night lamp cores; neither establishes ego lane."""
+  candidates = housing_proposals(rgb)
+  for candidate in night_proposals(rgb):
+    if all(overlap(candidate['box'], other['box']) < .35 for other in candidates):
+      candidates.append(candidate)
+  return candidates[:20]
 
 
 @dataclass
@@ -140,7 +234,8 @@ class SignalTracker:
         t.pending = 'unknown'
         if timestamp-t.last_support > .15:
           t.state = 'unknown'
-      elif raw != t.pending or gap > .10:
+      # Two camera periods plus timing tolerance; longer gaps restart confirmation.
+      elif raw != t.pending or gap > .125:
         t.pending = raw;t.pending_since = timestamp
         # A contradictory observation removes an earlier green immediately.
         if raw != t.state:
@@ -154,7 +249,7 @@ class SignalTracker:
     visible = []
     for t in self.tracks:
       age = timestamp-t.last_seen
-      state = t.state if age <= .10 else 'unknown'
+      state = t.state if age <= .125 else 'unknown'
       visible.append(dict(id=t.ident, box=t.box, state=state, age=age, observations=t.observations, seen_red=t.seen_red, evidence=t.evidence))
     # No ego-lane claim. Conflicting visible signals cannot become a green vote.
     reliable = [t for t in visible if t['state'] != 'unknown' and t['observations'] >= 3]
@@ -165,9 +260,9 @@ class SignalTracker:
   def process(self, rgb, timestamp):
     detections = detect(rgb)
     gray = cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY)
-    if self.previous_gray is not None and self.last_timestamp is not None and 0 < timestamp-self.last_timestamp <= .10:
+    if self.previous_gray is not None and self.last_timestamp is not None and 0 < timestamp-self.last_timestamp <= .125:
       for track in self.tracks:
-        if not track.seen_red or timestamp-track.last_seen > .10:
+        if not track.seen_red or timestamp-track.last_seen > .125:
           continue
         if any(overlap(track.box,d['box']) > .25 for d in detections):
           continue

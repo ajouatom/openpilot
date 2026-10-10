@@ -1,5 +1,7 @@
 import unittest
-from signal_tracker import SignalTracker
+import cv2
+import numpy as np
+from signal_tracker import SignalTracker, night_proposals
 
 
 def detection(state, box=None):
@@ -62,6 +64,51 @@ class TestCausalState(unittest.TestCase):
     for _ in range(5):
       result=self.observer.update(self.time,[detection('green'),detection('red',[300,100,340,110])]);self.time+=.05
     self.assertEqual(result['state'],'unknown')
+
+  def test_two_frame_cadence_confirms_but_long_gap_restarts(self):
+    for t in [1., 1.1004, 1.2008]:
+      result = self.observer.update(t, [detection('red')])
+    self.assertEqual(result['state'], 'red')
+    for t in [1.3009, 1.4011, 1.5012]:
+      result = self.observer.update(t, [detection('green')])
+    self.assertEqual(result['state'], 'green')
+    result = self.observer.update(1.64, [])
+    self.assertEqual(result['state'], 'unknown')
+    result = self.observer.update(1.65, [detection('red')])
+    self.assertEqual(result['state'], 'unknown')
+
+
+class TestNightProposals(unittest.TestCase):
+  @staticmethod
+  def frame(color=(255, 0, 0), reflected=False, background=0):
+    rgb = np.full((760, 1344, 3), background, dtype=np.uint8)
+    cv2.circle(rgb, (650, 260), 9, color, -1)
+    if reflected:
+      rgb[:260] = background
+    cv2.circle(rgb, (650, 260), 3, (255, 255, 255), -1)
+    return rgb
+
+  def test_white_center_retains_red_halo_evidence(self):
+    proposals = night_proposals(self.frame())
+    self.assertEqual(len(proposals), 1)
+    self.assertEqual(proposals[0]['raw'], 'red')
+
+  def test_one_sided_red_reflection_does_not_seed(self):
+    self.assertEqual(night_proposals(self.frame(reflected=True)), [])
+
+  def test_white_core_without_color_is_not_signal(self):
+    self.assertEqual(night_proposals(self.frame(color=(0, 0, 0))), [])
+
+  def test_night_extension_is_inactive_in_bright_scene(self):
+    self.assertEqual(night_proposals(self.frame(background=100)), [])
+
+  def test_night_green_does_not_grant_startup_green(self):
+    proposals = night_proposals(self.frame(color=(0, 255, 0)))
+    self.assertTrue(proposals)
+    tracker = SignalTracker()
+    for t in np.arange(1., 2., .05):
+      result = tracker.update(float(t), proposals)
+    self.assertEqual(result['state'], 'unknown')
 
 
 if __name__=='__main__':unittest.main()
