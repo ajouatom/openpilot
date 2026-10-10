@@ -60,3 +60,28 @@ this observer supplies live comparison evidence toward that objective.
 Private staging scripts, trial records and installation evidence stay under
 `.analysis/archive/2026-10-10-signal-tracking-live/`. No private video/model data
 are included in this commit.
+
+## Installation confirmed
+
+Installed commit `b83c003d73` on the connected C4 using its existing experimental
+branch and the shared repository lock, with fresh valid Park/inactive checks and
+tracked-dirty protection. The original driving ONNX hash is unchanged. Only the
+observer was stopped/restarted; no manager restart or reboot was needed. The local
+`enabled` and `tracking_enabled` files are both `1`. Manager automatically starts
+the selected tracker on subsequent normal onroad sessions.
+
+Final live observation verified 600/600 valid model frames at 20.007 Hz, no frame
+gaps and 0% maximum reported drop. There were 518 fresh tracker records at 15.667 Hz
+over the subscription interval (which includes initialization collection). Median
+work was 32.95 ms and result-age p95 was 110.87 ms. All three actual worker threads
+used CPUs 0–3, nice19 and SCHED_OTHER; 53 manager observations retained one running
+PID. A completed rlog segment contained 26 installed-worker observations from the
+verification interval; all 26 matched recorded road camera frame IDs and the
+camera video file was present. Private JSON records retain the complete evidence.
+
+The user can now collect live tracking evidence without another Git pull. This
+installation does not yet change stopping or prevent a false departure. Future
+road/night review must compare the logged selected signal and its relevance with
+the actual video and original control decisions. In tracking mode, inspect
+`tracking_latest.json` and `signalTrackingShadow` events; the old color observer's
+`latest.json` retains historical color-model output and is not the active tracker.
