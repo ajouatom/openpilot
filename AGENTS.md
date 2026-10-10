@@ -1,5 +1,15 @@
 # Repository memory
 
+- On 2026-10-10, first internal observer drive `0000108c--e6597f4447` was collected
+  directly (segments 11..21, 3,300 comparison entries). Video confirms green-to-Go
+  delays of 0.51..0.56 s and 2.61..2.66 s; driver gas precedes the latter Go state.
+  The candidate does not resolve the delayed green response, suppresses progress
+  and produces negative future velocities despite reduced pooled red-wait error.
+  Keep comparison-only; do not promote or alter signal-start conditions on this
+  evidence. Two return-junction stop forecasts have unresolved applicable signal
+  color. Preserve private recordings locally and event-level validation separation.
+  See docs/ioniq5_signal_first_drive_20261010.md.
+
 - On 2026-10-10, the user requested a separate internal signal-model trial branch
   and installation on their connected parked C4. `carrot-signal-shadow` retains
   original control and runs a policy-only CPU observer at 5 Hz, using original
