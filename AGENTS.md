@@ -1,5 +1,15 @@
 # Repository memory
 
+- On 2026-10-10, user asked to use the improved signal version now. Fresh vehicle
+  read confirms b57b81835d observer already installed and parked/inactive. A new
+  decision-availability comparison does not validate direct control promotion:
+  125ms result delay plus measured frame gaps can expire red at one stopped
+  incident; requiring scene green has about5.2s confirmation in one encounter
+  and no green over its reviewed6.4s window with the parked gap pattern. This is
+  not full-controller/closed-loop simulation or actual departure-delay proof.
+  Retain improved observer; no control hook/hold latch or new ONNX was installed.
+  See follow-up in docs/signal_night_observer_20261010.md; keep incident data local.
+
 - On 2026-10-10, new night logs exposed all11,061 observer outputs unknown.
   Added saturated-core/color-halo night proposals and125ms tracking continuity.
   Reflection rejection and image-only processing; original ONNX/x/v/a, departure

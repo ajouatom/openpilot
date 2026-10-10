@@ -120,3 +120,39 @@ running PID. A closed saved rlog contained98 new-worker events from this interva
 all matching recorded road frame IDs with the video file present. The original
 driving ONNX hash remains unchanged. These are execution/recording checks, not
 proof of onroad signal accuracy or false-departure prevention.
+
+## Follow-up: direct stop-hold promotion was not validated
+
+The user asked to use the improved version rather than keep driving with the
+old one. A fresh vehicle read confirmed the improved observer commit is already
+installed, ignition on, valid Park/zero speed and inactive control. There is no
+new driving ONNX to switch to; observation and longitudinal control are separate.
+
+An additional private decision-availability comparison used full video, the
+original logged cadence and the measured parked frame-gap pattern. Each case
+assumed fixed 50/125/200 ms processing delay, selected only results available at
+the original plan timestamp, and expired evidence at camera age200 ms. This is
+not a planner/MPC, changed-state-machine or closed-loop simulation. An illustrative
+stopped-only scope used |logged vEgo|<=0.3 m/s without changing vehicle thresholds.
+
+At50 ms delay, both reviewed near-stopped false-departure instants have available
+red evidence in all three cadences. The moving red-approach case is outside a
+stopped-only intervention. At125 ms delay with the parked gap pattern, one of
+the two stopped instants instead has expired evidence. At200 ms all three
+incident instants lack usable evidence by their plan timestamps. Merely gating
+on currently available red therefore does not establish retained stopping.
+
+Conversely, requiring scene green to release a latched stop has an observed
+failure: the side-red/frontal-green encounter first reports scene green about
+5.15-5.43 seconds after the first reviewed green image at50/125 ms assumed delay
+in full/original-cadence replay. Repeating the parked gaps produces no scene
+green anywhere in that reviewed approximately6.4-second green window. These
+are observer availability times, not measured added vehicle departure delays;
+manual release, vehicle motion and the changed future camera view are not modeled.
+
+Direct promotion to vehicle control is therefore not supported by this comparison.
+The improved observer remains enabled; no control hook, hold latch, new model or
+departure-policy change was installed. Resolve relevant-signal selection and
+define/test stale-evidence and release behavior before claiming a usable hold
+controller. Private reproduction is tools/compare_hold_decisions.py and
+hold_decision_comparison.json in the night investigation archive.
