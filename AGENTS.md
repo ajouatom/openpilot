@@ -8,6 +8,10 @@
   ordinary failures latch until disable/restart. Preserve actual wrong selections.
   Parked preinstall trial: 1301/1301 valid model frames, 20Hz, no gaps; 26 color
   events at median1.751s with six false greens in a no-signal doorway scene.
+  Installed/enabled df7cc14549 on the parked C4 and verified automatic startup.
+  Include launcher-created IPC threads in scheduling; all three verified on
+  cores0..3/nice19. Final 700/700 valid model frames at20Hz/no gaps, 26 desktop
+  and 26 device tests pass; 90 saved rlog color entries join recorded camera IDs.
   These verify recording, not detector accuracy or loaded driving performance.
   See docs/signal_color_live_trial_20261010.md for install status and limitations.
 

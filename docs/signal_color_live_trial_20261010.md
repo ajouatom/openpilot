@@ -97,8 +97,33 @@ python -m openpilot.selfdrive.modeld.signal_color_shadow on
 일반 설정 메뉴/백업/공개 배포 모델 선택을 추가하지 않는다.
 
 로컬 재현/검증 자료는 `.analysis/archive/2026-10-10-signal-color-live/`에 보관한다.
-영구 설치 후 부팅·rlog 저장 검증 결과는 이 문서에 추가한다.
-
 첫 재부팅 검증에서 manager launcher가 main 전에 생성한 IPC/logging 스레드 두 개가
 기존 CPU 0~5/nice0를 유지하는 것을 발견했다. affinity/nice가 스레드별 속성이므로
 시작 시 기존 모든 스레드에도 CPU 0~3/SCHED_OTHER/nice19를 적용하도록 수정했다.
+
+## 설치 및 최종 저장 검증 완료
+
+연결된 C4의 P단·정지·비활성을 다시 확인하고 공유 repo lock 안에서 tracked dirty
+보호를 유지하며 `carrot-signal-shadow`를 fast-forward 설치했다. 모델 manifest와
+SHA를 검사하고 정상 manager `DoReboot`로 재부팅했다. 이후 보조 스레드 수정은
+관찰기만 OFF→업데이트→ON으로 반영했으며 기존 주행 프로세스는 재시작하지 않았다.
+차량 실행 코드 커밋은 **df7cc14549**, 모델은 **c091fad2**이다. 요청 파일은 ON이며
+앞으로 정상 시동 중 manager가 자동 실행한다. 오류나 OFF가 없으면 별도 조작 없이 기록한다.
+
+- 최종 35초: modelV2 **700/700 유효, 20.0008Hz, frame ID 누락 0, drop 0%**.
+  모델 실행 평균 24.915ms, 최대 28.734ms. 이 정지 시험으로 주행 중 부하를 보장하지 않는다.
+- 새 색 결과 20개, 간격 중앙값 **1.750초**, 전체 처리 중앙값 495.5ms.
+- manager 관찰 61회 모두 같은 PID로 running. 실제 스레드 3개 모두 CPU 0~3,
+  SCHED_OTHER, nice19 확인. Windows와 차량에서 각각 **26 tests 통과**.
+  차량의 격리 pytest에는 선택 플러그인이 없어 관련 설정 경고 3개가 있었으며 테스트는 통과했다.
+- 재부팅 후 route `00001090--7b14158a8e`의 완료 segment 2/3/4에서 색 결과
+  31/31/28개, 합계 **90개**를 full-schema rlog로 읽었다. **90개 모두 roadEncodeIdx
+  frame ID와 연결**됐으며 각 `fcamera.hevc` 존재를 확인했다. 이 구간에는 보조 스레드
+  수정 전후 기록이 함께 포함된다. subscriber만 확인한 결과가 아니다.
+- 기존 내부 주행 ONNX SHA256
+  `f73a9e535523d5e9acb9e642c64e33d631825dc8ba74123757d107cedd047bb5` 불변 확인.
+
+`live_verification.json`과 원시 관찰, 설치/재시작 스크립트, 실제 카메라 샘플은 개인
+archive에 보존했다. 기존 정책 observer와 새 색 observer는 별개의 로그이며 둘 다
+제어를 변경하지 않는다. 새 모델의 잘못된 녹색 선택도 기록 대상이다. 이번 완료는
+**주행 자료 수집 준비와 기기 검증**이며 신호 인식 개선이나 출발 동작의 실차 검증은 아니다.
