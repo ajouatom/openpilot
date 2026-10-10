@@ -236,7 +236,7 @@ Deceleration preview operates independently of the response level. During active
 
 `VEgoStopping` has a range of `10–100` and a default of `50`; `10` means `0.10 m/s`. Previously stored values below `10` are automatically raised to `10`, and control enforces the same minimum during driving.
 
-Hyundai/Kia CANFD with openpilot longitudinal control retains one stop retry by default after a confirmed speed rebound or sustained loss of deceleration. At low speed, elapsed time or distance alone does not trigger retry while deceleration continues. See [CANFD stopping control](cruise-gap.md#canfd-stopping).
+For Hyundai/Kia CANFD openpilot longitudinal control, aReqRaw and aReqValue become zero in the first StopReq frame, so this setting does not change transmitted acceleration while StopReq remains active. Automatic release/retry is removed.
 
 On supported Tesla vehicles with the additional vehicle bus detected, the device's **alpha longitudinal** (`AlphaLongitudinalEnabled`) toggle also enables [automatic cruise set-speed adjustment](tesla.md#automatic-cruise-speed) to the vehicle-reported limit. Turning the right speed wheel pauses it; an opposite-direction wheel gesture within one second or disengaging and re-engaging resumes it. There is no separate Carrot Web setting for this feature.
 
