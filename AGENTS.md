@@ -1,5 +1,21 @@
 # Repository memory
 
+- On 2026-10-10, latest Ioniq 5 PE route 1090 segment 30 shows red-light
+  reacceleration at 47.108s with x[-1]=34.458m: averaged terminal speed 4.967
+  exceeds v[0]+2=4.303; five consecutive start candidates change state to Go.
+  traffic off already removes the stop-model obstacle, and positive acceleration
+  precedes green by 102ms. Brake disengages, then RES reenables after a second
+  false Go at 51.108s. Exact stopping-function replay matches 220/220 decisions.
+  Logging-only color ONNX reports red on all six sampled incident inputs and
+  cannot affect control. Later actual green is visible in wide at segment31 23s
+  while road remains visually dark until about26.75s; do not label that departure
+  false based only on road footage. Added 82 reviewed images (50 red/12 green/20
+  unknown), one encounter. Frozen color ONNX on supplied visible ROIs scores
+  16/18 road, 3/44 wide at0.8; this is not blind detection or new model training.
+  Need camera/scale-aware learning, localization and temporal evidence, plus
+  separate encounters for validation. No weights, start thresholds or vehicle
+  configuration changed. See docs/ioniq5_signal_1090_20261010.md; data stay private.
+
 - On 2026-10-10, the user authorized connecting the color classifier to live
   driving footage. `signalcolord` is opt-in, separate, logging-only, reading road
   VisionIPC; no control/modelV2 return path. Pinned private c091fad2 color ONNX,
