@@ -77,6 +77,41 @@ class TestCausalState(unittest.TestCase):
     result = self.observer.update(1.65, [detection('red')])
     self.assertEqual(result['state'], 'unknown')
 
+  def test_recorded_internal_worker_cadence_confirms_each_color(self):
+    # The 150-200 ms measured duty-limited cadence used to reset every sample.
+    for t in [1., 1.2, 1.35]:
+      result = self.observer.update(t, [detection('red')])
+    self.assertEqual(result['state'], 'red')
+    for t in [1.55, 1.75]:
+      result = self.observer.update(t, [detection('green')])
+      self.assertEqual(result['state'], 'unknown')
+    result = self.observer.update(1.95, [detection('green')])
+    self.assertEqual(result['state'], 'green')
+    # Continuity tolerance does not extend output freshness.
+    self.assertEqual(self.observer.update(2.09, [])['state'], 'unknown')
+
+  def test_unknown_breaks_color_count_despite_long_track_history(self):
+    for t in [1., 1.2, 1.4, 1.6]:
+      self.observer.update(t, [detection('red')])
+    self.observer.update(1.8, [detection('green')])
+    self.observer.update(2., [detection('unknown')])
+    self.observer.update(2.2, [detection('green')])
+    self.assertEqual(self.observer.update(2.4, [detection('green')])['state'], 'unknown')
+    self.assertEqual(self.observer.update(2.6, [detection('green')])['state'], 'green')
+
+  def test_late_result_is_invalid_without_erasing_red_identity(self):
+    from openpilot.selfdrive.modeld.signal_tracking_shadow import result_fields
+    for t in [1., 1.2, 1.4]:
+      result = self.observer.update(t, [detection('red')])
+    fields = result_fields(result, 208.)
+    self.assertFalse(fields['fresh'])
+    self.assertEqual(fields['prediction'], 'unknown')
+    for t in [1.6, 1.8, 2.]:
+      result = self.observer.update(t, [detection('green')])
+    self.assertEqual(result['state'], 'green')
+    # A true camera gap still expires identity, even without a worker reset.
+    self.assertEqual(self.observer.update(2.3, [detection('green')])['state'], 'unknown')
+
 
 class TestNightProposals(unittest.TestCase):
   @staticmethod

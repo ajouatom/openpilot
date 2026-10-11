@@ -129,6 +129,8 @@ def run(directory=DIRECTORY, duration=None):
         temp.write_text(json.dumps(record))
         temp.replace(directory / 'tracking_latest.json')
         last_file = time.monotonic()
-      if not record['fresh']:
-        tracker, session_id = new_tracker()
+      # A late result is unusable by the consumer's unchanged 200 ms age gate.
+      # Do not erase object identity merely because computation ran late: the
+      # next camera timestamp still has to pass the tracker's bounded gap and
+      # geometric matching. Reconnects, bad input and reordered frames reset it.
       time.sleep(next_delay(time.monotonic() - work_start, time.process_time() - cpu_start))

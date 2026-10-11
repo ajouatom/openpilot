@@ -65,6 +65,43 @@ def test_one_green_flash_cannot_release():
   assert step(a, 2).hold
 
 
+def supported_green(t, **changes):
+  obs = observation(t, 'green')
+  obs['tracks'][0].update(seen_red=True, support_state='green', support_since=t-.4, support_count=3)
+  obs['tracks'][0].update(changes)
+  return obs
+
+
+def test_fresh_same_track_producer_history_avoids_second_confirmation_streak():
+  a = SignalAssist()
+  assert confirm(a).hold
+  # Intermediate results can miss the consumer deadline; all three camera
+  # observations were consecutive, and the final result is still fresh.
+  r = step(a, 1.59, supported_green(1.4))
+  assert r.released and not r.hold
+
+
+@pytest.mark.parametrize('changes', [
+  dict(id=2), dict(seen_red=False), dict(support_state='red'),
+  dict(support_count=2), dict(support_count=11), dict(support_since=float('nan')),
+  dict(support_since=1.2), dict(support_since=0.), dict(age=.05),
+  dict(state='unknown'), dict(evidence={'raw': 'red'}),
+])
+def test_bad_producer_history_cannot_bypass_green_confirmation(changes):
+  a = SignalAssist()
+  assert confirm(a).hold
+  assert step(a, 1.59, supported_green(1.4, **changes)).hold
+
+
+def test_producer_history_does_not_extend_freshness_or_survive_restart():
+  a = SignalAssist()
+  confirm(a)
+  assert step(a, 1.601, supported_green(1.4)).hold
+  obs = supported_green(1.8)
+  obs['session'] = 'restarted'
+  assert step(a, 1.99, obs).hold
+
+
 @pytest.mark.parametrize('override', [dict(enabled=False), dict(valid=False), dict(drive=False), dict(gas=True)])
 def test_explicit_exit_overrides_hold(override):
   a = SignalAssist()

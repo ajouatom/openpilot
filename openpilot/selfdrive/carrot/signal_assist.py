@@ -114,6 +114,21 @@ class SignalAssist:
         duration = self.RED_CONFIRM if state == 'red' else self.GREEN_CONFIRM
         if self.count >= 3 and timestamp - self.pending_since >= duration - 1e-9:
           self.confirmed = state
+      # A duty-limited producer may observe 3-4 consecutive green frames while
+      # only two of its results arrive before the consumer's 200 ms deadline.
+      # Reuse the producer's same-ID history instead of requiring a second
+      # independent 400 ms streak. The final image must still be fresh, seen
+      # now, raw green, confirmed green, and attached to our selected red ID.
+      # Older producers omit these fields and retain the consumer-only path.
+      since = selected.get('support_since')
+      count = selected.get('support_count', 0)
+      if (state == 'green' and selected.get('seen_red') is True and selected['age'] == 0
+          and selected.get('support_state') == 'green'
+          and isinstance(since, (int, float)) and math.isfinite(since)
+          and isinstance(count, int) and 3 <= count <= selected['observations']
+          and self.GREEN_CONFIRM - 1e-9 <= timestamp - since
+          and timestamp - since <= (count - 1) * self.MAX_GAP + 1e-6):
+        self.confirmed = 'green'
       return 'selected_forward_track'
     except (KeyError, TypeError, ValueError, OverflowError):
       self.pending = self.confirmed = 'unknown'

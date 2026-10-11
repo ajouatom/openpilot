@@ -55,3 +55,30 @@ def test_runtime_gates_vehicle_context(tmp_path, condition):
   elif condition == 'inactive': sm['carControl'].longActive = False
   _, context = SignalAssistRuntime(flag, tmp_path / 'absent').read(sm, 10.1)
   assert not all(context[x] for x in ('valid', 'enabled', 'drive'))
+
+
+def test_producer_history_survives_transport_and_fresh_consumer_release(tmp_path):
+  from tools.signal_analysis.signal_tracker import SignalTracker
+  from openpilot.selfdrive.carrot.tests.test_signal_assist import step
+  flag, path = tmp_path / 'enable', tmp_path / 'obs'
+  flag.write_text('1')
+  runtime = SignalAssistRuntime(flag, path)
+  tracker = SignalTracker()
+  def consume(now):
+    sm = SM()
+    sm.recv_time = dict.fromkeys(sm.recv_time, now)
+    obs, context = runtime.read(sm, now)
+    context.pop('now')
+    return step(runtime.assist, now, obs, **context)
+  for i in range(11):
+    t = 9. + i * .1
+    result = tracker.update(t, [dict(box=[640, 250, 680, 270], raw='red', quality=.8)])
+    publish_observation(result, i, t, 'worker', path)
+    dec = consume(t+.1)
+  assert dec.hold
+  for i in range(3):
+    t = 10.2 + i * .2
+    result = tracker.update(t, [dict(box=[640, 250, 680, 270], raw='green', quality=.8)])
+    publish_observation(result, 11+i, t, 'worker', path)
+  dec = consume(10.79)
+  assert dec.released and not dec.hold
