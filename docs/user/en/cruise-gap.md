@@ -418,6 +418,12 @@ Related: [Understanding Settings](settings.md) · [Tuning introduction](https://
 - `openpilot/selfdrive/controls/radard.py`
 - `opendbc_repo/opendbc/car/hyundai/carcontroller.py`
 
+### Following distance during shared braking
+
+When both vehicles brake while the gap is closing, ACC can retain a bounded portion of the distance at braking onset and reduce it gradually as speed falls. This applies to all following-response levels, including level 5; the level-5 exclusion described above concerns opening-gap extra TF only. Track replacement, invalid data and disengagement clear this distance memory. It combines with existing headroom without adding the same allowance twice.
+
+With ample measured and predicted clearance, ACC may temporarily relax the comfort TF reference by up to 0.4 seconds, with a 0.7-second reference floor. This is automatic and does not change the saved gap setting. Closing speed, lead motion and predicted reserve must qualify; short gaps, stopped leads and constrained approaches receive no allowance. The reference floor is not a guaranteed safe following time or a brake limit. Original physical-obstacle and stopping constraints remain active, so strong braking can still be necessary. Actual vehicle clearance and ride comfort have not been validated for this change.
+
 ### Predicted departure of the lead vehicle
 
 When a previously confirmed moving front vehicle is leaving your path and vision has switched to a farther vehicle, ACC can gradually reduce the following-distance demand for the future period after its predicted departure. The radar track and its measured distance and speed remain available.

@@ -558,6 +558,15 @@ class DPathRadarController:
     path: tuple[tuple[float, float], ...],
     time_s: float,
   ) -> bool:
+    confirmed = self.primary_matcher.closing_range_match
+    if (match is not None and confirmed is not None
+        and (match.point.source, match.point.track_id) == (confirmed.point.source, confirmed.point.track_id)):
+      # This exact current frame passed range/velocity continuity, path and
+      # stopped-equivalent urgency checks; do not reapply a distance-only veto.
+      self._moving_range_last_point = match.point
+      self._moving_range_last_time_s = time_s
+      self._reset_stationary_vision_range_mismatch()
+      return False
     # Only an accepted, continuously measured moving front may use vision's
     # range uncertainty. A fresh ID, a position jump, or a missed match must
     # qualify again under the normal nearer-car guard.

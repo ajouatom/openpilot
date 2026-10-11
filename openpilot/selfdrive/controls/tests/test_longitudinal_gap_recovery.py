@@ -9,6 +9,7 @@ import pytest
 from openpilot.selfdrive.controls.lib.longitudinal_gap_recovery import (
   LeadGapState, advance_headroom, distance_recovery_weight, gap_reference, displayed_follow_distance,
 )
+from openpilot.selfdrive.controls.lib.longitudinal_braking_gap import BrakingGapState, braking_gap_reference, comfort_path_has_reserve
 
 
 def load_mpc_update(path):
@@ -34,6 +35,8 @@ def load_mpc_update(path):
             'AcadosOcpSolverCython': RecordingSolver, 'LEAD_ACCEL_MIN_TRACK_FRAMES': 3,
             'LeadAccelResponseState': preview.LeadAccelResponseState, 'get_lead_accel_mpc_request': preview.get_lead_accel_mpc_request,
             'LeadGapState': LeadGapState, 'gap_reference': gap_reference, 'displayed_follow_distance': displayed_follow_distance,
+            'BrakingGapState': BrakingGapState, 'braking_gap_reference': braking_gap_reference,
+            'comfort_path_has_reserve': comfort_path_has_reserve,
             'get_traffic_stop_distance_adjust': get_traffic_stop_distance_adjust,
             'get_traffic_stop_obstacle_distance': get_traffic_stop_obstacle_distance,
             'LaneChangeGapPlan': LaneChangeGapPlan, 'cutout_obstacle_relief': cutout_obstacle_relief}
@@ -76,6 +79,26 @@ def run_update(cls, level=1, *, distance=45.15, speed=79.04/3.6, lead_speed=None
 @pytest.fixture
 def mpc_class():
   return load_mpc_update(Path(__file__).resolve().parents[1]/'lib/longitudinal_mpc_lib/long_mpc.py')
+
+
+def test_braking_slack_is_resolved_without_relief_if_new_trajectory_loses_reserve(mpc_class, monkeypatch):
+  solves = []
+  def solve(mpc):
+    solves.append((mpc.params.copy(), mpc.yref.copy()))
+    mpc.x_sol[:, 0] = 10000.0  # A trial trajectory which consumes the clearance.
+    mpc.x_sol[:, 1] = 20.0
+  monkeypatch.setattr(mpc_class, 'run', solve)
+  def trial_relief(self, **kw):
+    self.relief = .5 if kw['enabled'] else 0.
+    return np.full_like(kw['times'], self.relief)
+  monkeypatch.setattr(BrakingGapState, 'comfort_relief', trial_relief)
+  result = run_update(mpc_class, level=5, distance=40., speed=20., lead_speed=19., lead_accel=-1.)
+  assert len(solves) == 40
+  for trial, fallback in zip(solves[::2], solves[1::2], strict=True):
+    np.testing.assert_array_equal(trial[0], fallback[0])
+    assert np.any(trial[1][:,0] < fallback[1][:,0])
+    np.testing.assert_array_equal(fallback[1][:,0], 0.)
+  assert not result.lead_gap_margins.any()
 
 
 def step(state, **kwargs):
