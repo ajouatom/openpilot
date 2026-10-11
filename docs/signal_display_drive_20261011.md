@@ -66,6 +66,15 @@ lost-track rejection and control transport remain unchanged. This clarifies
 what the detector saw; it does not fix the remaining timing-related flicker.
 Renderer status adds display_revision=2 for runtime activation verification.
 
+Installed implementation c4702e4238 on the parked vehicle by guarded fast-forward.
+The initial SIGTERM-based restart did not produce revision 2 within its timeout.
+Temporarily setting ClusterHud to zero and restoring its saved value 1 restarted
+the display successfully. Fresh revision-2 status and progressing road frames
+were then observed, with valid CAN/model state and unchanged modeld/camerad/card/
+plannerd/selfdrived PIDs. No whole-device reboot occurred. This confirms activation,
+not a new road-accuracy result. 68 focused display/camera/performance tests pass
+with one existing Linux-only skip; desktop tests substitute Windows Params.
+
 ## A concrete continuity failure
 
 In 1096--37, trial track 1267 covers a forward signal from encoded frame 467 to
