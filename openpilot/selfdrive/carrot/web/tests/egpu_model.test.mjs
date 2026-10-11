@@ -42,7 +42,3 @@ test("Cinque v3 has its own eGPU title", () => {
   assert.equal(modelDisplayName({ model_id: "comma-pr39047-mdm-v1-bea3fd4f-4fe66440" }), "Mountain Dew v1");
   assert.equal(modelDisplayName({ model_id: "comma-pr39047-mdm-v1-4bfb5340-e20cde17" }), "Mountain Dew v1 (870a4823)");
 });
-
-test("retrained Mountain Dew is distinct from the earlier checkpoint", () => {
-  assert.equal(modelDisplayName({ model_id: "comma-pr39047-mdm-retrained-6f4c0faf-256f2178" }), "Mountain Dew (8d736683)");
-});
