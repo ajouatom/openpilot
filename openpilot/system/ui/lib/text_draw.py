@@ -72,6 +72,7 @@ def draw_text_ui_style(text: str,
   if font is None:
     font = gui_app.font(FontWeight.DISPLAY)
 
+  font = font_fallback(font, text)
   draw_x, draw_y, _ = get_text_draw_pos(font, text, x, y, font_size, align, y_offset)
   draw_size = float(font_size)
 
@@ -80,7 +81,6 @@ def draw_text_ui_style(text: str,
   # CFFI symbol when available and prepare its immutable arguments once.
   draw_text_ex = _RAW_DRAW_TEXT_EX
   if draw_text_ex is not None:
-    font = font_fallback(font)
     draw_text = text.encode("utf-8")
     draw_size *= FONT_SCALE
     if native_text.try_text(rl, font, draw_text, draw_x, draw_y, draw_size, border_width, shadow_offset,

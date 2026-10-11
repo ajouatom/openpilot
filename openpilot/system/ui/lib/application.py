@@ -3,6 +3,7 @@ import cffi
 import math
 import os
 import queue
+import re
 import time
 import signal
 import sys
@@ -135,9 +136,19 @@ class TextAlignmentVertical(IntEnum):
   BOTTOM = 2
 
 
-def font_fallback(font: rl.Font) -> rl.Font:
-  """Fall back to unifont for languages that require it."""
-  if multilang.requires_unifont() and gui_app.has_font(FontWeight.DISPLAY):
+_KOREAN_TEXT_RE = re.compile(r"[\u1100-\u11ff\u3130-\u318f\uac00-\ud7a3]")
+
+
+def font_fallback(font: rl.Font, text: str | bytes | None = None) -> rl.Font:
+  """Keep locale fallback and also render Korean text in other locales."""
+  if not gui_app.has_font(FontWeight.DISPLAY):
+    return font
+  if multilang.requires_unifont():
+    return gui_app.font(FontWeight.DISPLAY)
+  if isinstance(text, bytes):
+    text = text.decode("utf-8", errors="replace")
+  # Non-ASCII punctuation, Latin accents and emoji do not require a font change.
+  if isinstance(text, str) and _KOREAN_TEXT_RE.search(text):
     return gui_app.font(FontWeight.DISPLAY)
   return font
 
@@ -997,8 +1008,12 @@ class GuiApplication:
 
   def _font_codepoints(self, font_weight: FontWeight) -> list[int]:
     codepoints = set(range(32, 127))
+    # Match the common symbols in the generated atlases (fonts/process.py).
+    codepoints.update(map(ord, "–‑✓×°§•X⚙✕◀▶✔⌫⇧␣○●↳çêüñ–‑✓×°§•€£¥"))
     if font_weight in (FontWeight.DISPLAY, FontWeight.UNIFONT):
       codepoints.update(range(0xAC00, 0xD7A4))
+      codepoints.update(range(0x1100, 0x1200))
+      codepoints.update(range(0x3130, 0x3190))
       codepoints.update(range(0x4E00, 0xA000))
       codepoints.update(range(0x3400, 0x4DC0))
     return sorted(codepoints)
@@ -1017,7 +1032,7 @@ class GuiApplication:
       rl._orig_draw_text_ex = rl.draw_text_ex
 
     def _draw_text_ex_scaled(font, text, position, font_size, spacing, tint):
-      font = font_fallback(font)
+      font = font_fallback(font, text)
       if native_text.try_plain_text(rl, font, text, position, font_size * FONT_SCALE, spacing, tint):
         return
       return rl._orig_draw_text_ex(font, text, position, font_size * FONT_SCALE, spacing, tint)

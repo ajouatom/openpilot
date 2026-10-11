@@ -10,7 +10,7 @@ _cache: OrderedDict[tuple, rl.Vector2] = OrderedDict()
 
 def measure_text_cached(font: rl.Font, text: str, font_size: int, spacing: float = 0) -> rl.Vector2:
   """Caches text measurements to avoid redundant calculations."""
-  font = font_fallback(font)
+  font = font_fallback(font, text)
   spacing = round(spacing, 4)
   # Retain the full key: a hash collision must never return another label's size.
   key = (font.texture.id, font.baseSize, font.glyphCount, font.glyphPadding, text, font_size, spacing)
