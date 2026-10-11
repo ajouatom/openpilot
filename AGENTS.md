@@ -1,5 +1,19 @@
 # Repository memory
 
+- On 2026-10-11, Ioniq 5 PE 1095 segments 65/66 show two red-light
+  departures without gas while original x/v changes produce trafficState green.
+  Both legacy and daytime shadow detectors recorded red; current c115ce4 vehicle
+  uses original internal ONNX with assist OFF and comparison-only publication.
+  Same-recorded-input planner replay blocks both departures with either observer,
+  but delaying daytime arrivals by 20 ms loses both holds: fresh observations
+  miss stop-time acquisition and consumer confirmation resets across gaps.
+  Sequential dual-engine timing penalizes the second result. No confirmed green
+  tracks in this drive; manual overrides prevent continuous green-release proof.
+  Do not treat replay as vehicle-response validation or enable failed candidate.
+  No vehicle/model/control changes in this investigation; CPL is not supported
+  as the remedy by these images. See docs/signal_1095_red_departure_20261011.md.
+  Keep raw logs and captures private.
+
 - On 2026-10-11, the user authorized installing the new signal detector for
   live comparison recording, with the same pushed code on the vehicle. Add
   explicit per-device daytime_comparison_enabled: one camera copy, independent
