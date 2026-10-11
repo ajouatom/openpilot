@@ -90,5 +90,21 @@ transport and existing camera/performance checks. Windows Params is substituted
 for these tests; GPU timing above comes from the native parked device.
 
 Private reproductions and telemetry are retained in
-`.analysis/archive/2026-10-11-dm-flicker/`. Final installed revision and native live
-checks will be recorded below after deployment.
+`.analysis/archive/2026-10-11-dm-flicker/`.
+
+Native device: 115 focused display/worker/start-guard tests pass. Pytest reports
+three unrecognized optional configuration keys, without test failures.
+Installed runtime commit `0bfcb01d13` on `carrot-signal-shadow`; corresponding
+shared-code commit on `carrot-wip` is `1042cdd954`. A process-only USB display
+restart retained revision 3 through manager preimports, so a guarded normal
+manager reboot was required. Post-reboot display status confirms revision 4.
+
+The final 30-second parked measurement has 600/600 valid driver-camera frames,
+600/600 valid DM outputs at 20.004 Hz, 27.26 ms mean DM inference, and zero missing
+frame IDs. All 599 DM-state reports have cameraUnavailable=false. The driving
+model has 600/600 valid frames at 19.998 Hz, 36.80 ms mean inference, zero skipped
+IDs. No QCOM signal observation occurs; live CPU comparison observations and
+fresh start-guard transport are present. DM remains enabled, mode 1, no session
+disable; UsbGpuActive=true. Signal auto/display/start guard are ON, moving assist
+OFF. Parked camera availability does not demonstrate actual distracted-driver
+warning timing, physical chime loudness or signal recognition on the next drive.
