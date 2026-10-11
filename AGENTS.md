@@ -1,16 +1,12 @@
 # Repository memory
 
-- On 2026-10-11, the user selected upstream 6f4c0faf for carrot-wip eGPU:
-  retrained Mountain Dew 8d736683/12864, AMD 256f2178, isolated tinygrad
-  d3f09c9b. This supersedes the October 9 Cinque v3 selection. New NAS package
-  comma4-big-mdm-8d736683 includes verified model/runtime; support the runtime's
-  byte-addressed Buffer API while retaining prior dtype-bearing buffers.
-  Empty-cache HTTPS installation and offline reuse pass; keep startup delivery
-  before build/manager, resume/retry and internal fallback on permanent failure.
-  Official ONNX catalog now includes old 870a4823, but not this 8d736683 model.
-  Jetson stays Cinque v2; internal/DM models and control/validity/warp policies
-  stay unchanged. Desktop checks are not physical GPU, first-boot or driving
-  validation. See docs/mdm_retrained_20261011.md.
+- On 2026-10-11, the user redirected the new upstream 6f4c0faf eGPU model
+  to carrot-signal-shadow for testing before a combined promotion. Revert the
+  just-pushed 03142df861 model/runtime change from carrot-wip; wip keeps Cinque
+  v3. Retrained Mountain Dew 8d736683 and its d3f09c9 runtime belong only on
+  carrot-signal-shadow until the user approves promotion. Its verified NAS
+  package is comma4-big-mdm-8d736683. The public ONNX catalog now includes old
+  870a4823, but not 8d736683; keep Jetson Cinque v2 and internal/DM models.
 
 - On 2026-10-11, the user explicitly requested connecting the new neural
   signal detector to the vehicle, engine-off camera testing and CPU/QCOM GPU

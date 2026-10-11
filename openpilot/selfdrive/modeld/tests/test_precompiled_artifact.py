@@ -13,15 +13,13 @@ from openpilot.selfdrive.modeld.precompiled_model import validate_catalog
 from openpilot.selfdrive.modeld.parse_model_outputs import Parser
 
 
-@pytest.mark.parametrize('fixture,checkpoint_id', [('mdm2_metadata.json', '870a4823-d2ec-4b9a-8015-b947e9901fc7'),
-                                                  ('mdm_retrained_metadata.json', '8d736683-fed4-4e48-96fd-eae5d9d5bc56')])
 @pytest.mark.parametrize('previous_fixture', ['cinque_v3_metadata.json', 'mdm_v1_metadata.json'])
-def test_mdm_contract_matches_parser_and_preserves_history(previous_fixture, fixture, checkpoint_id):
+def test_mdm_contract_matches_parser_and_preserves_history(previous_fixture):
   fixtures = Path(__file__).parent / 'fixtures'
-  mdm = json.loads((fixtures / fixture).read_text())
+  mdm = json.loads((fixtures / 'mdm2_metadata.json').read_text())
   previous = json.loads((fixtures / previous_fixture).read_text())
   checkpoint, slices, pairs, count = model_metadata(mdm)
-  assert f'/{checkpoint_id}/12864' in checkpoint
+  assert '/870a4823-d2ec-4b9a-8015-b947e9901fc7/12864' in checkpoint
   def normalize(specs):
     return {name: (shape, np.dtype(dtype), device) for name, (shape, dtype, device) in specs.items()}
   for kind in ('input_specs', 'output_specs'):
