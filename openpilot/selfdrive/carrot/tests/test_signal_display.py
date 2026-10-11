@@ -21,6 +21,26 @@ def test_red_green_unknown_are_observations_not_permissions():
   assert visible_tracks(r, 10.2, CAMERA)[0]['state'] == 'unknown'
 
 
+def test_green_first_candidate_is_visible_without_claiming_confirmation():
+  r = record()
+  r['tracks'][0].update(raw='green', state='unknown')
+  track = visible_tracks(r, 10.2, CAMERA)[0]
+  assert track['state'] == 'green' and not track['confirmed']
+  r['tracks'][0]['state'] = 'red'
+  assert not visible_tracks(r, 10.2, CAMERA)[0]['confirmed']
+  r['tracks'][0]['state'] = 'green'
+  assert visible_tracks(r, 10.2, CAMERA)[0]['confirmed']
+
+
+def test_remembered_green_does_not_override_missing_or_red_current_evidence():
+  r = record()
+  r['tracks'][0].update(raw='unknown', state='green')
+  assert visible_tracks(r, 10.2, CAMERA)[0]['state'] == 'unknown'
+  r['tracks'][0]['raw'] = 'red'
+  track = visible_tracks(r, 10.2, CAMERA)[0]
+  assert track['state'] == 'red' and not track['confirmed']
+
+
 @pytest.mark.parametrize('change', [dict(timestamp=9.8), dict(timestamp=11), dict(timestamp=float('nan')),
                                   dict(stream='wide'), dict(size=[1928, 1208]), dict(frame_id=5),
                                   dict(version=2), dict(tracks=None), dict(session=None)])
