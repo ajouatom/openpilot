@@ -20,11 +20,22 @@ A radar fitted to the vehicle does not guarantee that carrotpilot can read the r
 | `-2` | VOACC vision-only experiment | Development testing only |
 | `-1` | Always use SCC range and relative speed without vision matching; use vision if SCC is absent | Confirm the vehicle configuration |
 | `0` | Always use SCC range and relative speed; use vision if SCC is absent | Default; same SCC-only policy as `-1` |
-| `1` | Match raw front-radar tracks to vision without SCC; use vision if matching fails | Requires vehicle-specific activation and message support |
+| `1` | Match raw front-radar tracks to vision without SCC; use vision if matching fails | Requires vehicle-specific message support; activation has the Bosch exception below |
 | `2` | Match front-radar tracks and low-speed SCC to vision; use vision if matching fails | Test only on an identical validated configuration |
 | `3` | Match front radar to vision first; if it fails, always use SCC, then vision if SCC is absent | Experimental; false detections are possible |
 
-On non-CAN FD Hyundai/Kia vehicles, a positive value attempts to enable radar tracks during startup and stores the result in `EnableRadarTracksResult`. Confirm both the activation result and actual incoming tracks; physical radar presence alone is not enough.
+On non-CAN FD Hyundai/Kia vehicles, a positive value normally attempts to enable radar tracks during startup and stores the result in `EnableRadarTracksResult`. The Bosch receive path below is an exception; for other configurations requiring activation, confirm both the activation result and actual incoming tracks.
+
+<a id="bosch-passive-reception"></a>
+### Bosch MRRevo14F passive reception exception
+
+In versions supporting Bosch MRRevo14F reception, the Bosch path is selected for a non-CAN FD Bosch MRRevo14F candidate platform (Elantra AD `HYUNDAI_ELANTRA`, i30 PD `HYUNDAI_ELANTRA_GT_I30`, Kona `HYUNDAI_KONA`, Kona Electric `HYUNDAI_KONA_EV`/`HYUNDAI_KONA_EV_2022`, K3 BD/Forte `KIA_FORTE`) when startup CAN detection finds every message from `0x601` through `0x612`, each eight bytes long, on the same receive bus. Only the Elantra AD is vehicle-validated; the other platforms are unvalidated candidates that enable this path only when the same messages are detected. Detection prefers the camera wiring bus and also supports the alternate ACAN bus; harness connector names alone do not identify the receive bus.
+
+With this Bosch path and `EnableRadarTracks=1`, `2`, or `3`, the provider passively receives object messages the radar already transmits. Startup skips both the UDS configuration write used to enable radar tracks and the request to disable SCC ECU communication.
+
+This path does not update `EnableRadarTracksResult`, so a missing value or a value retained from an earlier run does not indicate current Bosch reception success or failure. Check actual `0x601`–`0x612` messages, incoming tracks, CAN validity and radar errors.
+
+Here, passive describes how radar input is received; it does not put all of carrotpilot into dashcam-only operation or disable steering or longitudinal control. The exception does not apply when Bosch is not detected or `EnableRadarTracks` is not positive.
 
 Legacy Mando front radars use the base 32 slots at `0x500–0x51F` for timing and CAN validity, and automatically consume the additional 32 slots at `0x520–0x53F` when the vehicle transmits them. The upper bank is optional, so it does not delay publication or invalidate CAN on a 32-slot vehicle; an upper-bank slot that stops arriving is removed on the next radar cycle.
 

@@ -1,0 +1,32 @@
+diff --git a/EN-Enable-radar-tracks(0).md b/EN-Enable-radar-tracks(0).md
+index 65ac033..38b5d7a 100644
+--- a/EN-Enable-radar-tracks(0).md
++++ b/EN-Enable-radar-tracks(0).md
+@@ -38 +38 @@ The selected value determines the L1 radar sources and vision matching policy.
+-- `0` — Match SCC to vision; use vision when matching fails.
++- `0` — Always use valid SCC range and relative speed; use vision when SCC is absent.
+@@ -42,0 +43,2 @@ The selected value determines the L1 radar sources and vision matching policy.
++In versions supporting Bosch MRRevo14F reception, the Bosch path requires startup CAN detection of every `0x601`–`0x612` message, each eight bytes long, on the same receive bus of a non-CAN FD Bosch MRRevo14F candidate (Elantra AD, i30 PD, Kona, Kona Electric, K3 BD/Forte; vehicle-validated only on the Elantra AD). With a positive value, this path passively receives object messages already being transmitted and skips startup radar-activation UDS writes and the request to disable SCC ECU communication.
++
+@@ -61,0 +64,2 @@ On a supported radar configuration, change one item at a time and verify detecti
++
++The Bosch passive path does not update `EnableRadarTracksResult`, so a missing or retained value does not indicate current reception success or failure. Restart the vehicle or reboot the device after changing the setting, then check actual message and track reception, CAN validity and radar errors.
+@@ -66,0 +71,2 @@ On a supported radar configuration, change one item at a time and verify detecti
++Passive describes radar input reception; it does not put all of carrotpilot into dashcam-only operation or disable steering or longitudinal control. The exception does not apply when Bosch is not detected or the setting is not positive.
++
+diff --git "a/KO-\353\240\210\354\235\264\353\215\224\355\212\270\353\236\231,SCC\353\240\210\354\235\264\353\215\224\354\204\244\354\240\225(0).md" "b/KO-\353\240\210\354\235\264\353\215\224\355\212\270\353\236\231,SCC\353\240\210\354\235\264\353\215\224\354\204\244\354\240\225(0).md"
+index 57ae69f..343ca92 100644
+--- "a/KO-\353\240\210\354\235\264\353\215\224\355\212\270\353\236\231,SCC\353\240\210\354\235\264\353\215\224\354\204\244\354\240\225(0).md"
++++ "b/KO-\353\240\210\354\235\264\353\215\224\355\212\270\353\236\231,SCC\353\240\210\354\235\264\353\215\224\354\204\244\354\240\225(0).md"
+@@ -38 +38 @@
+-- `0` — SCC와 비전을 매칭하며, 실패하면 비전을 사용합니다.
++- `0` — 유효한 SCC 종거리·상대속도를 항상 사용하고, SCC가 없으면 비전을 사용합니다.
+@@ -42,0 +43,2 @@
++Bosch MRRevo14F 수신을 지원하는 버전에서는 비-CAN FD Bosch MRRevo14F 후보 차종(아반떼 AD, i30 PD, 코나, 코나 일렉트릭, K3 BD/Forte; 실차 검증은 아반떼 AD뿐)의 시작 시 CAN 감지에서 `0x601~0x612` 전체가 같은 수신 버스에 각각 8바이트로 확인되어야 Bosch 경로를 선택합니다. 이 경로에서 양수 값을 선택하면 이미 전송 중인 객체 메시지를 passive 방식으로 수신하며, 시작 시 레이더 활성화 UDS 쓰기와 SCC ECU 통신 비활성화 요청을 건너뜁니다.
++
+@@ -61,0 +64,2 @@
++
++Bosch passive 경로에서는 `EnableRadarTracksResult`를 갱신하지 않으므로, 값이 없거나 이전 값이 남아 있어도 현재 수신 성공·실패를 뜻하지 않습니다. 변경 후 차량을 재시동하거나 기기를 재부팅하고 실제 메시지·트랙 수신, CAN 유효성과 레이더 오류를 확인하세요.
+@@ -66,0 +71,2 @@
++passive는 레이더 입력의 수신 방식을 뜻하며, carrotpilot 전체가 대시캠 전용이 되거나 조향·가감속 제어가 꺼진다는 뜻은 아닙니다. Bosch가 감지되지 않거나 설정값이 양수가 아니면 이 예외는 적용되지 않습니다.
++
