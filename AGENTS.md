@@ -1,5 +1,16 @@
 # Repository memory
 
+- On 2026-10-11, the post-overlay 1096/1097 drive contains 22 collected segments.
+  Helper observations run 3.23--4.93 Hz; median result age is 178 ms and
+  2,345/5,345 gaps exceed the 250 ms color-confirmation limit. Track 1267
+  keeps identity but never confirms 13 raw green observations after red.
+  Display expiry and red-history qualification also cause hiding/unknown labels.
+  User requested installation before departure: display-only revision 2 uses
+  current color R?/G? for unconfirmed candidates, R/G for matching confirmation.
+  Preserve freshness/lost-track gates, original ONNX and assist OFF; no memory
+  hold or control timing change. 68 focused tests pass, one Linux-only skip.
+  See docs/signal_display_drive_20261011.md; keep all recordings private.
+
 - On 2026-10-11, the user requested signal candidate boxes on the USB
   camera image and vehicle installation. display_enabled opts into a separate
   bounded tmpfs display endpoint; comparison's experimental observer supplies
