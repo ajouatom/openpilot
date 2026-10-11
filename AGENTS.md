@@ -1,5 +1,17 @@
 # Repository memory
 
+- On 2026-10-11, the user authorized installing the new signal detector for
+  live comparison recording, with the same pushed code on the vehicle. Add
+  explicit per-device daytime_comparison_enabled: one camera copy, independent
+  legacy/daytime trackers and separate signalTrackingShadow/DaytimeShadow logs.
+  In comparison mode never publish either engine to the control transport;
+  install with assist_enabled=0. Missing opt-in preserves legacy operation.
+  Keep original driving ONNX/x/v, CPU duty/affinity and freshness limits. The
+  failed daytime candidate is authorized for observation only, not braking/go.
+  329 related desktop tests pass, including actual worker logging/no-publish.
+  Use guarded Park/inactive installation and verify commit/model/log identity.
+  See docs/signal_live_comparison_20261011.md; keep vehicle evidence private.
+
 - On 2026-10-11, the user demanded actual corrections and validation of the
   remaining daytime signal miss and latency failures. A compact colored-core
   plus dark-bar trial fixes the reviewed morning underpass red-to-green case,

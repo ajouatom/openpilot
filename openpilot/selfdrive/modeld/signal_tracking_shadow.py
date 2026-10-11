@@ -19,6 +19,26 @@ def tracking_requested(directory=DIRECTORY):
     return False
 
 
+def comparison_requested(directory=DIRECTORY):
+  try:
+    return (Path(directory) / 'daytime_comparison_enabled').read_text().strip() == '1'
+  except OSError:
+    return False
+
+
+def new_trackers(factory, comparison):
+  legacy = factory()
+  daytime = factory(daytime_cores=True) if comparison else None
+  return legacy, daytime
+
+
+def publish_control_observation(result, frame_id, timestamp, session, *, comparison, publisher):
+  # Comparison sessions never publish either engine to the control transport,
+  # even if assist_enabled is accidentally re-enabled separately.
+  if not comparison:
+    publisher(result, frame_id, timestamp, session)
+
+
 def next_delay(wall, cpu):
   # At most 20 Hz and a target <=50% of one CPU, without catching up.
   return max(0., .05 - wall, cpu)
@@ -68,24 +88,27 @@ def run(directory=DIRECTORY, duration=None):
     configure_worker_scheduling()
     source_sha = hashlib.sha256(Path(signal_tracker.__file__).read_bytes()).hexdigest()
     from openpilot.selfdrive.carrot.signal_assist_runtime import publish_observation
+    comparison = comparison_requested(directory)
     def new_tracker():
-      return signal_tracker.SignalTracker(), f'{os.getpid()}:{time.monotonic_ns()}'
-    tracker, session_id = new_tracker()
+      return (*new_trackers(signal_tracker.SignalTracker, comparison), f'{os.getpid()}:{time.monotonic_ns()}')
+    tracker, daytime_tracker, session_id = new_tracker()
     client = VisionIpcClient('camerad', VisionStreamType.VISION_STREAM_ROAD, True)
     start = time.monotonic()
     cloudlog.event('signalTrackingShadowLoaded', mode='tracking_observation', algorithm_sha256=source_sha,
                    runtime=cv2.__version__, pid=os.getpid(), max_hz=20, target_cpu_duty=.5,
-                   stream='road', reference_width=1344, reference_height=760, control_permission=False, assist_transport=True)
+                   stream='road', reference_width=1344, reference_height=760, control_permission=False,
+                   assist_transport=not comparison, daytime_comparison=comparison)
     previous_id = None
     last_file = 0.
-    while requested(directory) and tracking_requested(directory) and (duration is None or time.monotonic() - start < duration):
+    while (requested(directory) and tracking_requested(directory) and comparison_requested(directory) == comparison
+           and (duration is None or time.monotonic() - start < duration)):
       if not client.is_connected() and not client.connect(False):
-        tracker, session_id = new_tracker()
+        tracker, daytime_tracker, session_id = new_tracker()
         time.sleep(.2)
         continue
       frame = client.recv(timeout_ms=100)
       if frame is None:
-        tracker, session_id = new_tracker()
+        tracker, daytime_tracker, session_id = new_tracker()
         continue
       frame_id, eof = int(client.frame_id), int(client.timestamp_eof)
       if frame_id == previous_id:
@@ -93,19 +116,19 @@ def run(directory=DIRECTORY, duration=None):
         continue
       gap = None if previous_id is None else frame_id - previous_id
       if gap is not None and gap <= 0:
-        tracker, session_id = new_tracker()
+        tracker, daytime_tracker, session_id = new_tracker()
       previous_id = frame_id
       work_start, cpu_start = time.monotonic(), time.process_time()
       input_age = (time.monotonic_ns() - eof) / 1e6
       if not 0 <= input_age <= MAX_INPUT_AGE_MS:
-        tracker, session_id = new_tracker()
+        tracker, daytime_tracker, session_id = new_tracker()
         cloudlog.event('signalTrackingShadowSkipped', frame_id=frame_id, timestamp_eof=eof,
                        reason='stale_input', input_age_ms=input_age)
         time.sleep(.05)
         continue
       rgb = copy_nv12_rgb(frame)
       if int(frame.frame_id) != frame_id:
-        tracker, session_id = new_tracker()
+        tracker, daytime_tracker, session_id = new_tracker()
         cloudlog.event('signalTrackingShadowSkipped', frame_id=frame_id, timestamp_eof=eof,
                        reason='buffer_reused_during_copy')
         time.sleep(.05)
@@ -118,16 +141,35 @@ def run(directory=DIRECTORY, duration=None):
                 'input_age_ms': input_age, 'result_age_ms': age,
                 'work_ms': (time.monotonic() - work_start) * 1000,
                 'cpu_ms': (time.process_time() - cpu_start) * 1000,
-                'tracks': result['tracks'], **result_fields(result, age)}
+                'tracks': result['tracks'], 'daytime_comparison': comparison,
+                'assist_transport': not comparison, 'session': session_id, **result_fields(result, age)}
       try:
-        publish_observation(result, frame_id, eof / 1e9, session_id)
+        publish_control_observation(result, frame_id, eof / 1e9, session_id,
+                                    comparison=comparison, publisher=publish_observation)
       except (OSError, ValueError):
         cloudlog.exception('signalObservationPublishFailed')
       cloudlog.event('signalTrackingShadow', **record)
+      comparison_record = None
+      if daytime_tracker is not None:
+        candidate_start, candidate_cpu = time.monotonic(), time.process_time()
+        candidate = daytime_tracker.process(rgb, eof / 1e9)
+        candidate_age = (time.monotonic_ns() - eof) / 1e6
+        comparison_record = dict(record, mode='daytime_comparison', tracks=candidate['tracks'],
+                                 recorded_monotonic_ns=time.monotonic_ns(), result_age_ms=candidate_age,
+                                 work_ms=(time.monotonic() - candidate_start) * 1000,
+                                 cpu_ms=(time.process_time() - candidate_cpu) * 1000,
+                                 pair_work_ms=(time.monotonic() - work_start) * 1000,
+                                 baseline_prediction=record['prediction'],
+                                 **result_fields(candidate, candidate_age))
+        cloudlog.event('signalTrackingDaytimeShadow', **comparison_record)
       if time.monotonic() - last_file >= 1:
         temp = directory / 'tracking_latest.tmp'
         temp.write_text(json.dumps(record))
         temp.replace(directory / 'tracking_latest.json')
+        if comparison_record is not None:
+          temp = directory / 'daytime_comparison_latest.tmp'
+          temp.write_text(json.dumps(comparison_record))
+          temp.replace(directory / 'daytime_comparison_latest.json')
         last_file = time.monotonic()
       # A late result is unusable by the consumer's unchanged 200 ms age gate.
       # Do not erase object identity merely because computation ran late: the
