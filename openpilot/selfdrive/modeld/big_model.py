@@ -32,13 +32,13 @@ from urllib.request import Request, urlopen
 from openpilot.selfdrive.modeld.big_model_status import BigModelStatusReporter
 
 
-DEFAULT_MANIFEST_URL = "https://upload.shind0.synology.me/models/comma4-big-cinque-v3/manifest.json"
-CINQUE_V3_MODEL = {
-  "model_id": "comma-pr38932-cinque-v3-892fc3a1-e758b96d",
+DEFAULT_MANIFEST_URL = "https://upload.shind0.synology.me/models/comma4-big-mdm-8d736683/manifest.json"
+MDM_RETRAINED_MODEL = {
+  "model_id": "comma-pr39047-mdm-retrained-6f4c0faf-256f2178",
   "filename": "big_driving_tinygrad.pkl",
-  "size": 776_634_338,
-  "sha256": "e758b96df27858ea97122d18554930d04f9f8bda417417074edfb3a72b008d0b",
-  "url": "https://upload.shind0.synology.me/models/comma4-big-cinque-v3/big_driving_tinygrad.pkl",
+  "size": 799_942_179,
+  "sha256": "256f2178366479a211933701c03518621ed3970289e6a8a43e5a2bcb15e55b5f",
+  "url": "https://upload.shind0.synology.me/models/comma4-big-mdm-8d736683/big_driving_tinygrad.pkl",
 }
 MAX_MANIFEST_SIZE = 64 * 1024
 MAX_MODEL_SIZE = 4 * 1024 * 1024 * 1024
@@ -148,12 +148,12 @@ def _write_state(active: BigModelManifest, previous: BigModelManifest | None, ca
 
 
 def fetch_manifest(manifest_url: str = DEFAULT_MANIFEST_URL, timeout: float = 15.0) -> BigModelManifest:
-  # Pin Cinque v3 from commaai/openpilot#38932 at 892fc3a1 on this branch.
+  # Pin retrained Mountain Dew from commaai/openpilot#39047 at 6f4c0faf.
   # Upstream publishes only a generic precompiled PKL for this checkpoint.
   # Keep the environment/CLI override path below so a different manifest can
   # still be tested explicitly without changing this branch.
   if manifest_url == DEFAULT_MANIFEST_URL:
-    return BigModelManifest.from_dict(CINQUE_V3_MODEL, manifest_url)
+    return BigModelManifest.from_dict(MDM_RETRAINED_MODEL, manifest_url)
 
   req = Request(manifest_url, headers={"Accept": "application/json", "User-Agent": "carrot-modeld/1"})
   with urlopen(req, timeout=timeout) as response:
