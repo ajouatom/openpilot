@@ -4,6 +4,7 @@ Reference artifacts and interpretation limits: docs/signal_detection_strategy_20
 Boxes and lamp classes do not establish which signal applies to the ego vehicle.
 """
 import hashlib
+import json
 from pathlib import Path
 
 import cv2
@@ -43,19 +44,31 @@ class QcomSession:
   """
   def __init__(self, path):
     import os
-    os.environ['DEV'] = 'QCOM'
+    os.environ.update(QCOM_FLAGS)
     from tinygrad import Tensor, Device, TinyJit
     from tinygrad.nn.onnx import OnnxRunner
     if Device.DEFAULT != 'QCOM':
       raise RuntimeError('QCOM session requires a dedicated QCOM process')
-    self.runner = OnnxRunner(str(path))
     self.Tensor = Tensor
-    self.input_names = tuple(self.runner.graph_inputs)
     self.inputs = None
+    compiled = Path(path).with_suffix('.qcom.pkl')
+    if compiled.exists():
+      import pickle
+      metadata = json.loads(compiled.with_suffix('.json').read_text())
+      if (metadata.get('version') != 1 or metadata.get('model_sha256') != hashlib.sha256(Path(path).read_bytes()).hexdigest()
+          or metadata.get('runtime') != qcom_runtime_identity()
+          or metadata.get('compiled_sha256') != hashlib.sha256(compiled.read_bytes()).hexdigest()):
+        raise ValueError('compiled signal QCOM identity mismatch')
+      # Only locally compiled, identity-checked artifacts; never download a pickle.
+      with compiled.open('rb') as f:
+        self.input_names, self.forward = pickle.load(f)
+      return
+    self.runner = OnnxRunner(str(path))
+    self.input_names = tuple(self.runner.graph_inputs)
     def forward(*values):
       outputs = self.runner(dict(zip(self.input_names, values)))
       return tuple(outputs[n].realize() for n in self.runner.graph_outputs)
-    self.forward = TinyJit(forward)
+    self.forward = TinyJit(forward, prune=True)
 
   def run(self, output_names, values):
     if output_names is not None or set(values) != set(self.input_names):
@@ -69,6 +82,23 @@ class QcomSession:
           raise ValueError('QCOM input shape changed')
         tensor.assign(array).realize()
     return [output.numpy() for output in self.forward(*self.inputs)]
+
+
+QCOM_FLAGS = dict(DEV='QCOM', IMAGE='1', FLOAT16='0', NOLOCALS='1', JIT_BATCH_SIZE='0', OPENPILOT_HACKS='1')
+
+
+def qcom_runtime_identity():
+  """Bind local compiled code to its runtime tree, Python ABI and GPU."""
+  import platform
+  import subprocess
+  import sys
+  import tinygrad
+  repository = Path(tinygrad.__file__).resolve().parents[2]
+  subprocess.run(['git', '-C', str(repository), 'diff', '--quiet', 'HEAD', '--', 'tinygrad_repo'], check=True)
+  tree = subprocess.check_output(['git', '-C', str(repository), 'rev-parse', 'HEAD:tinygrad_repo'], text=True).strip()
+  chip = Path('/sys/class/kgsl/kgsl-3d0/gpu_model')
+  return dict(tree=tree, python=sys.implementation.cache_tag, machine=platform.machine(),
+              gpu=chip.read_text().strip() if chip.exists() else 'local-qcom', flags=QCOM_FLAGS)
 
 
 class NeuralSignal:

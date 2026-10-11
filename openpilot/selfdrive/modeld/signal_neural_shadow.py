@@ -1,4 +1,4 @@
-"""Opt-in neural camera observer. Display/log output only; no control transport."""
+"""Opt-in neural observer with a separately enabled stopped-car veto transport."""
 import hashlib
 import json
 import os
@@ -20,9 +20,72 @@ def backend_requested(directory=DIRECTORY):
     backend = (Path(directory) / 'neural_backend').read_text().strip()
   except FileNotFoundError:
     backend = 'cpu'
-  if backend not in ('cpu', 'qcom'):
+  if backend not in ('cpu', 'qcom', 'auto'):
     raise ValueError('invalid neural backend selection')
   return backend
+
+
+def run_selected(directory, backend):
+  if backend == 'qcom':
+    if any(not (Path(directory) / 'neural' / (name + '.qcom' + suffix)).is_file()
+           for name in ('detector', 'classifier') for suffix in ('.pkl', '.json')):
+      raise RuntimeError('auto neural mode requires locally validated QCOM caches')
+    run(directory, backend_override='qcom')
+  else:
+    from openpilot.selfdrive.modeld.signal_tracking_shadow import run as run_tracking
+    run_tracking(directory, comparison_override=True)
+
+
+def run_auto(directory=DIRECTORY, duration=None):
+  """Keep QCOM neural work off the GPU used by the internal driving model.
+
+  A process boundary releases all GPU buffers on a mode change. The CPU mode
+  deliberately uses the existing lightweight camera tracker, not CPU YOLOX.
+  """
+  import multiprocessing
+  import signal
+  from openpilot.common.params import Params
+  from openpilot.common.swaglog import cloudlog
+  params = Params()
+  child, selected = None, None
+  start = time.monotonic()
+
+  def stop_child():
+    nonlocal child
+    if child is not None:
+      if child.is_alive():
+        child.terminate()
+      child.join(2)
+      if child.is_alive():
+        child.kill()
+        child.join(2)
+      if child.is_alive():
+        raise RuntimeError('signal backend did not stop')
+      child.close()
+      child = None
+
+  def terminate(_signum, _frame):
+    raise SystemExit(0)
+
+  previous = signal.signal(signal.SIGTERM, terminate)
+  try:
+    while (requested(directory) and neural_requested(directory) and backend_requested(directory) == 'auto'
+           and (duration is None or time.monotonic()-start < duration)):
+      mode = 'qcom' if params.get_bool('UsbGpuActive') else 'tracking_cpu'
+      if mode != selected:
+        stop_child()
+        child = multiprocessing.get_context('spawn').Process(target=run_selected, args=(directory, mode), daemon=True)
+        child.start()
+        selected = mode
+        cloudlog.event('signalAutoBackend', backend=mode, pid=child.pid, control_permission=False)
+      elif child.exitcode is not None:
+        raise RuntimeError(f'signal backend {selected} exited: {child.exitcode}')
+      time.sleep(.1)
+  finally:
+    try:
+      stop_child()
+    finally:
+      signal.signal(signal.SIGTERM, previous)
 
 
 def display_tracks(tracks):
@@ -38,12 +101,15 @@ def display_tracks(tracks):
   return result
 
 
-def run(directory=DIRECTORY, duration=None):
+def run(directory=DIRECTORY, duration=None, backend_override=None):
   import fcntl
   import sys
   directory = Path(directory)
   if not requested(directory) or not neural_requested(directory):
     return
+  selection = backend_requested(directory)
+  if selection == 'auto' and backend_override is None:
+    return run_auto(directory, duration)
   with (directory / 'worker.lock').open('w') as lock:
     try:
       fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -60,9 +126,10 @@ def run(directory=DIRECTORY, duration=None):
     from tools.signal_analysis import neural_signal
     from openpilot.selfdrive.modeld.signal_tracking_shadow import copy_nv12_rgb, next_delay, MAX_INPUT_AGE_MS
     from openpilot.selfdrive.carrot.signal_display import display_requested, publish_display
+    from openpilot.selfdrive.carrot.signal_start_guard import publish_start_observation
     cv2.setNumThreads(1)
     cv2.ocl.setUseOpenCL(False)
-    backend = backend_requested(directory)
+    backend = backend_override or selection
     model_dir = directory / 'neural'
     network = neural_signal.NeuralSignal(model_dir / 'detector.onnx', model_dir / 'classifier.onnx', backend=backend)
     # Compile/capture before subscribing: startup cannot create a camera backlog.
@@ -80,7 +147,7 @@ def run(directory=DIRECTORY, duration=None):
                    detector_sha256=network.DETECTOR_SHA, classifier_sha256=network.CLASSIFIER_SHA,
                    pid=os.getpid(), control_permission=False, assist_transport=False)
     previous_id, last_file = None, 0.
-    while (requested(directory) and neural_requested(directory) and backend_requested(directory) == backend
+    while (requested(directory) and neural_requested(directory) and backend_requested(directory) == selection
            and (duration is None or time.monotonic()-start < duration)):
       if not client.is_connected() and not client.connect(False):
         sequence, session = reset(); time.sleep(.2); continue
@@ -108,8 +175,13 @@ def run(directory=DIRECTORY, duration=None):
                     input_age_ms=age, result_age_ms=(time.monotonic_ns()-eof)/1e6,
                     recorded_monotonic_ns=time.monotonic_ns(), work_ms=(time.monotonic()-begin)*1000,
                     cpu_ms=(time.process_time()-cpu)*1000, tracks=display_tracks(result['tracks']),
+                    start_guard_transport=requested(directory / 'start_guard_enabled'),
                     control_permission=False, assist_transport=False)
       cloudlog.event('signalNeuralShadow', **record)
+      try:
+        publish_start_observation(record, directory)
+      except (OSError, ValueError, TypeError, KeyError):
+        cloudlog.exception('signalStartObservationPublishFailed')
       if display_requested(directory / 'display_enabled'):
         publish_display(record)
       if time.monotonic()-last_file >= 1:

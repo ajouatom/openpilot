@@ -53,3 +53,30 @@ def test_lost_object_search_uses_ten_hz_without_float_schedule_drift():
   rgb = np.zeros((100, 160, 3), np.uint8)
   frames = [observer.process(rgb, 30.+i*.05) for i in range(9)]
   assert [i for i, r in enumerate(frames) if r['detected']] == [0, 2, 4, 6, 8]
+
+
+@pytest.mark.parametrize('mutation', ['none', 'model', 'compiled', 'runtime'])
+def test_qcom_compiled_cache_checks_identity_before_loading(monkeypatch, tmp_path, mutation):
+  import hashlib
+  import json
+  import pickle
+  import sys
+  from tools.signal_analysis import neural_signal as module
+  model = tmp_path / 'detector.onnx'; model.write_bytes(b'reference')
+  compiled = model.with_suffix('.qcom.pkl')
+  compiled.write_bytes(pickle.dumps((('images',), 'captured-test')))
+  identity = {'tree': 'test', 'flags': module.QCOM_FLAGS}
+  meta = dict(version=1, model_sha256=hashlib.sha256(model.read_bytes()).hexdigest(),
+              compiled_sha256=hashlib.sha256(compiled.read_bytes()).hexdigest(), runtime=identity)
+  compiled.with_suffix('.json').write_text(json.dumps(meta))
+  if mutation == 'model': model.write_bytes(b'changed')
+  if mutation == 'compiled': compiled.write_bytes(b'untrusted-not-a-pickle')
+  if mutation == 'runtime': identity = {'tree': 'other'}
+  monkeypatch.setattr(module, 'qcom_runtime_identity', lambda: identity)
+  monkeypatch.setitem(sys.modules, 'tinygrad', SimpleNamespace(Tensor=object, Device=SimpleNamespace(DEFAULT='QCOM'), TinyJit=object))
+  monkeypatch.setitem(sys.modules, 'tinygrad.nn.onnx', SimpleNamespace(OnnxRunner=lambda _: pytest.fail('cache recompiled')))
+  if mutation == 'none':
+    session = module.QcomSession(model)
+    assert session.input_names == ('images',) and session.forward == 'captured-test'
+  else:
+    with pytest.raises(ValueError, match='identity mismatch'): module.QcomSession(model)
