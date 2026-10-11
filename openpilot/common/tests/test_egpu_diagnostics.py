@@ -98,6 +98,15 @@ def test_command_output_and_runtime_are_bounded(monkeypatch):
   assert 'TimeoutExpired' in diag.command_tail(['dmesg'])
 
 
+def test_kernel_usb_events_survive_large_unrelated_tail(monkeypatch):
+  def run(argv, **kwargs):
+    kwargs['stdout'].write(b'[100] usb 4-1.2: USB disconnect\n' + b'camera message\n' * diag.LIMIT)
+    return SimpleNamespace(returncode=0)
+  monkeypatch.setattr(diag.subprocess, 'run', run)
+  assert 'USB disconnect' in diag.command_tail(['dmesg'], pattern='usb|xhci')
+  assert 'USB disconnect' not in diag.command_tail(['dmesg'])
+
+
 def test_main_web_capture_upload_file_contains_report(tmp_path, monkeypatch):
   # Exercise the actual capture function without importing platform-only web/Params dependencies.
   import os

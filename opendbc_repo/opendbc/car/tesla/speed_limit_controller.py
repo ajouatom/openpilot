@@ -87,6 +87,10 @@ class TeslaSpeedLimitController:
       self.manual_override_active = True
       self._reset_pending()
 
+    if CC.hudControl.activeCarrot >= 2:
+      self._reset(clear_manual_override=False)
+      return []
+
     if CS.out.brakePressed or not CS.tesla_speed_limit_target_valid or not target_is_fresh:
       self._reset(clear_manual_override=False)
       return []

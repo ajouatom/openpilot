@@ -1269,6 +1269,9 @@ function dashcamUploadConfirmHtml(stats) {
     name: "rlog",
     count: Number(stats?.rlog || 0),
   });
+  const otherCount = Number(stats?.files || 0) - Number(stats?.qcamera || 0) - Number(stats?.rlog || 0);
+  const kindsLabel = `${qcameraLabel} · ${rlogLabel}` + (otherCount > 0
+    ? ` · ${getUIText("upload_other_count", "Other {count}", { count: otherCount })}` : "");
   const totalCountLabel = getUIText("upload_total_count", "{count} files total", {
     count: Number(stats?.files || 0),
   });
@@ -1277,7 +1280,7 @@ function dashcamUploadConfirmHtml(stats) {
   return `<section class="app-dialog__uploadBrief" aria-label="${escapeHtml(getUIText("upload_summary_label", "Upload summary"))}">
     <div class="app-dialog__uploadBriefCopy">
       <strong class="app-dialog__uploadBriefTitle">${escapeHtml(segmentCountLabel)}</strong>
-      <span class="app-dialog__uploadBriefKinds">${escapeHtml(`${qcameraLabel} · ${rlogLabel}`)}</span>
+      <span class="app-dialog__uploadBriefKinds">${escapeHtml(kindsLabel)}</span>
     </div>
     <div class="app-dialog__uploadBriefAmount">
       <strong>${escapeHtml(sizeLabel)}</strong>
@@ -1630,9 +1633,22 @@ async function uploadDashcamSegments(segments, options = {}) {
     rlog: 0,
     bytes: 0,
   };
+  let includeAllFiles = false;
   if (options.confirm !== false) {
+    const scope = await openAppDialog({
+      mode: "choice",
+      title: getUIText("log_upload", "Upload Logs"),
+      message: getUIText("upload_scope_help", "Choose which files to send. All files includes ecamera, fcamera and other files in the selected folders, and may take longer."),
+      choiceLayout: "list",
+      choices: [
+        { label: getUIText("upload_scope_default", "Default: qcamera + rlog"), value: "default", current: true },
+        { label: getUIText("upload_scope_all", "All files in selected folders"), value: "all" },
+      ],
+    });
+    if (scope !== "default" && scope !== "all") return;
+    includeAllFiles = scope === "all";
     try {
-      const summary = await postJson("/api/dashcam/upload/summary", { segments: targets });
+      const summary = await postJson("/api/dashcam/upload/summary", { segments: targets, includeAllFiles });
       if (!Array.isArray(summary?.summaries) || summary.summaries.length !== targets.length) {
         throw new Error(getUIText("upload_summary_unavailable", "Upload information is unavailable."));
       }
@@ -1697,7 +1713,7 @@ async function uploadDashcamSegments(segments, options = {}) {
       progress: null,
     }, targets.length);
     if (cancelRequested) throw makeDashcamUploadCanceledError();
-    const started = await postJson("/api/dashcam/upload/start", { segments: targets });
+    const started = await postJson("/api/dashcam/upload/start", { segments: targets, includeAllFiles });
     jobId = started.job_id;
     rememberDashcamUploadJob(jobId);
     if (cancelRequested) {

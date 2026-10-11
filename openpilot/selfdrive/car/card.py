@@ -26,6 +26,7 @@ from openpilot.selfdrive.car.card_diagnostics import should_log_card_diagnostics
 from openpilot.selfdrive.car.cruise import VCruiseCarrot
 from openpilot.selfdrive.car.car_specific import MockCarState
 from openpilot.selfdrive.car.openpilot_toggle import CruiseMainOpenpilotToggle
+from openpilot.selfdrive.controls.lib.lateral_readiness import LateralStartupGate
 from openpilot.selfdrive.carrot.xiaoge.xiaoge_vision import (
   XiaogeVisionResult,
   apply_xiaoge_vision_result,
@@ -80,7 +81,8 @@ class Car:
   def __init__(self, CI=None) -> None:
     self.can_sock = messaging.sub_sock('can', timeout=20)
     self.sm = messaging.SubMaster(['pandaStates', 'carControl', 'onroadEvents', 'carrotMan', 'longitudinalPlan',
-                                   'radarState', 'modelV2', 'drivingModelData', 'customReservedRawData0'])
+                                   'radarState', 'modelV2', 'drivingModelData', 'customReservedRawData0',
+                                   'liveParameters', 'livePose', 'selfdriveState', 'lateralPlan'])
     self.pm = messaging.PubMaster(['sendcan', 'carState', 'carParams', 'carOutput', 'customReservedRawData1'])
 
     self.can_rcv_cum_timeout_counter = 0
@@ -88,6 +90,7 @@ class Car:
     self.CC_prev = car.CarControl.new_message()
     self.CS_prev = car.CarState.new_message()
     self.initialized_prev = False
+    self.lateral_startup = LateralStartupGate()
     self.cruise_main_toggle = CruiseMainOpenpilotToggle(ButtonType.mainCruise)
 
     self.last_actuators_output = structs.CarControl.Actuators()
@@ -359,6 +362,17 @@ class Car:
         CC.actuators = car.CarControl.Actuators.new_message()
         CC.cruiseControl.resume = CC.cruiseControl.override = False
         CC.cruiseControl.cancel = CS.cruiseState.enabled
+        CC = CC.as_reader()
+      # Independently confirm startup once at the final application boundary.
+      # Later input failures do not rearm this process-lifetime latch.
+      lateral_ready = self.lateral_startup.update(self.sm, CS, 'carControl')
+      if CC.latActive and not lateral_ready:
+        CC = CC.as_builder()
+        CC.latActive = False
+        CC.actuators.torque = 0.0
+        CC.actuators.steeringAngleDeg = CS.steeringAngleDeg
+        CC.actuators.curvature = 0.0
+        CC = CC.as_reader()
       # send car controls over can
       apply_start_ns = time.monotonic_ns()
       now_nanos = self.can_log_mono_time if REPLAY else int(time.monotonic() * 1e9)

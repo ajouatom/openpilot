@@ -127,6 +127,7 @@ Carrot Web 설정 화면에서는 다음 기능을 사용할 수 있습니다.
 | 오토크루즈 | `AutoCruiseControl`, `AutoGasTokSpeed`, `AutoGasCancelSpeed`, `AutoGasSyncSpeed`, `CruiseOnDist` | 크루즈 자동 활성화와 가속 페달 입력 시 동작 |
 
 - `AlwaysLateral`: 크루즈가 켜져 있지 않아도 조향 제어를 허용합니다. 지원 Tesla 차량에서는 전진 기어의 실제 정차 상태에서도 조향할 수 있으며, 최소 조향 속도 이하로 이동할 때의 제한은 유지됩니다. [Tesla 제어 진입](tesla.md#engagement-and-standstill)을 참고하세요.
+- 상시 조향도 시스템 시작 후 최초 준비 확인 전에는 조향하지 않습니다. 모델·차량 파라미터·자세 정보 등 필수 입력이 한 번 정상으로 확인되면 이 시작 검사는 종료되며, 이후 입력의 일시적 불량이나 조향 해제·재작동으로 다시 차단하지 않습니다. 기존 주행 중 안전 처리는 그대로 유지됩니다. 초기 대기시간 경과만으로 준비를 통과하지 않습니다.
 - `AutoEngage`: `0` 끄기, `1` 조향 ON, `2` 조향 ON과 크루즈 대기입니다.
 - `AutoCruiseControl`: 현대·기아 차량용 오토크루즈와 소프트홀드 관련 설정입니다.
 - `DisableMinSteerSpeed`: SMDPS 장착 차량의 저속 조향 제한과 관련된 차량별 설정입니다.
@@ -214,7 +215,7 @@ VW MEB(ID.4 포함)에도 수동 조향비와 학습 비율이 적용됩니다. 
 | [가속 성향·드라이브 모드](cruise-gap.md#driving-mode) | `MyDrivingMode`, `MyDrivingModeAuto` | 연비, 안전, 일반, 고속 모드와 자동 전환 |
 | [가속 성향·속도별 가속값](cruise-gap.md#acceleration-table) | `CruiseMaxVals0`, `CruiseMaxVals1`, `CruiseMaxVals2`, `CruiseMaxVals3`, `CruiseMaxVals4`, `CruiseMaxVals5`, `CruiseMaxVals6` | 속도 구간별 최대 가속 성향 |
 | [정차·재출발](cruise-gap.md#stop-resume) | `StopDistanceCarrot`, `StoppingAccel`, `VEgoStopping`, `AChangeCostStarting` | 정지 위치, 정지 진입과 재출발 특성 |
-| [가감속 튜닝](cruise-gap.md#longitudinal-tuning) | `LongTuningKpV`, `LongTuningKiV`, `LongTuningKf`, `LongActuatorDelay` | 현기차는 Kp/Ki/Kf `100/0/100` 고정·숨김; VW MEB(ID.4 포함)는 저장 게인 적용 |
+| [가감속 튜닝](cruise-gap.md#longitudinal-tuning) | `LongTuningKpV`, `LongTuningKiV`, `LongTuningKf`, `LongActuatorDelay` | 현기차 `100/0/100`, 토요타·렉서스 `0/0/100` 고정·숨김; VW MEB(ID.4 포함)는 저장 게인 적용 |
 | [차간거리](cruise-gap.md#following-gap) | `TFollowGap1`, `TFollowGap2`, `TFollowGap3`, `TFollowGap4`, `DynamicTFollowLC`, `SpeedTFFactor`, `TFollowDecelBoost` | 차간 단계별 시간, 정상 선택 앞차 기준 차로 변경 완화와 감속 여유(기본 0%) |
 | [추종응답성](cruise-gap.md#lead-response) | `LeadAccelResponse`, `LeadAccelResponseTF1`–`LeadAccelResponseTF4` | 모든 차간 단계의 앞차 출발·가속 추종과 접근 반응 |
 | [당근 크루즈](cruise-gap.md#carrot-cruise) | `CruiseEcoControl`, `CruiseCoastingPercent`, `CarrotCruiseDecel`, `CarrotCruiseAtcDecel` | 연비 제어, 진입 기준속도를 고정하는 코스팅 여유(기본 0%: 기존 제어), 당근 크루즈 감속 특성 |
@@ -234,15 +235,15 @@ VW MEB(ID.4 포함)에도 수동 조향비와 학습 비율이 적용됩니다. 
 
 감속 미리보기는 반응 단계와 별도로 동작합니다. 상대 가속도가 줄거나 앞차가 레이더·비전 사이에서 전환되거나 사라져도, 제어 중에는 남은 보정을 점진적으로 해제합니다. 가속·브레이크 페달 개입이나 종방향 제어 종료 시에는 초기화합니다.
 
-`LongTuning*`, `LongActuatorDelay`는 openpilot이 가감속을 제어하는 차량에서 직접적인 영향을 줄 수 있는 고급 항목입니다. 현대·기아·제네시스에서는 `LongTuningKpV`, `LongTuningKiV`, `LongTuningKf`가 안전값 `100/0/100`으로 고정되어 설정 화면에 나오지 않으며, 순정 ACC 차량에서는 관련 없는 항목도 있습니다.
+`LongTuning*`, `LongActuatorDelay`는 openpilot이 가감속을 제어하는 차량에서 직접적인 영향을 줄 수 있는 고급 항목입니다. 현대·기아·제네시스에서는 `LongTuningKpV`, `LongTuningKiV`, `LongTuningKf`가 안전값 `100/0/100`으로 고정되어 설정 화면에 나오지 않으며, 토요타·렉서스는 전용 보정기 앞의 중복 보정을 막기 위해 공통 게인을 `0/0/100`으로 고정·숨깁니다. 순정 ACC 차량에서는 관련 없는 항목도 있습니다.
 
 `StoppingAccel`(정지시작가속도)은 기본 `-50`, 범위 `-100~-50`, 변경 단위 `10`으로 다시 조정할 수 있습니다. 저장값에 0.01을 곱한 가속도를 사용하며, 제어에서도 범위를 제한합니다. 기존 정지 진입·감속 방식과 차종별 소프트홀드를 사용하고 변경은 약 1초 안에 반영됩니다. [정차·재출발](cruise-gap.md#stop-resume)을 참고하세요.
 
 `VEgoStopping`(정지출발민감도)은 범위 `10~100`, 기본 `50`이며, `10`은 `0.10m/s`입니다. 기존의 `10` 미만 저장값은 자동으로 `10`으로 올리고, 주행 중에도 같은 최저값을 적용합니다.
 
-현대·기아 CANFD 오픈파일럿 종방향 제어는 실제 속도 재상승 또는 지속적인 감속 소실을 확인해 한 번의 정지 재시도를 기본 적용합니다. 저속에서 감속이 이어지면 거리·시간 조건만으로 재시도하지 않습니다. [CANFD 정지 제어](cruise-gap.md#canfd-stopping)를 참고하세요.
+현대·기아 CANFD 오픈파일럿 종방향 제어에서는 StopReq를 켜는 첫 프레임부터 aReqRaw·aReqValue를 0으로 보내므로, 이 설정은 StopReq 유지 중 송신 가속도를 바꾸지 않습니다. 자동 해제·재시도는 제거되었습니다.
 
-지원되는 Tesla 차량에서 추가 차량 버스가 감지되면 장치의 **alpha longitudinal**(`AlphaLongitudinalEnabled`) 토글을 켤 때 차량 수신 제한속도에 맞춘 [크루즈 설정속도 자동 조절](tesla.md#automatic-cruise-speed)도 활성화됩니다. 오른쪽 속도 휠을 직접 돌리면 일시 중지하며, 1초 안에 반대 방향으로 돌리거나 제어를 해제했다가 다시 켜면 재개합니다. 별도의 Carrot Web 설정은 없습니다.
+지원되는 Tesla 차량에서 추가 차량 버스가 감지되면 장치의 **alpha longitudinal**(`AlphaLongitudinalEnabled`) 토글을 켤 때 차량 수신 제한속도에 맞춘 [크루즈 설정속도 자동 조절](tesla.md#automatic-cruise-speed)도 활성화됩니다. 내비게이션·Carrot 속도 제어가 활성 상태이면 DAS 기반 조절을 중지하고, 해당 제어가 끝난 뒤 제한속도가 다시 안정되면 재개합니다. 수동 조작에 따른 중지는 그대로 유지됩니다. 오른쪽 속도 휠을 직접 돌리면 일시 중지하며, 1초 안에 반대 방향으로 돌리거나 제어를 해제했다가 다시 켜면 재개합니다. 별도의 Carrot Web 설정은 없습니다.
 
 <a id="vehicle-hardware"></a>
 ## 차량·하드웨어
@@ -278,7 +279,7 @@ VW MEB(ID.4 포함)에도 수동 조향비와 학습 비율이 적용됩니다. 
 
 - `DriverMonitoringMode`: 운전자 감시가 켜져 있을 때 적용됩니다. 기본값 0은 카메라 사용 시 콤마 순정 감시 기준이며, 카메라 미장착·고장 시에는 15·30·45초 조작 감시로 전환합니다. 1은 빈 도로 시간 완화와 조작 후 카메라 경고 유예를 적용하는 시험 전용 실험 모드입니다. 공통 예외로 P단·완전 정차·인게이지 해제가 유효한 신호로 1초간 확인되면 재사용 제한을 초기화합니다. 모드 변경은 재부팅 없이 약 0.5초 주기로 적용됩니다. 전환해도 누적 감시시간·경고 횟수·재사용 제한은 초기화되지 않으며, 이전 조작 유예와 전방주시 연속 판정은 종료됩니다. [운전자 감시와 실험 모드 조건](driver-monitoring.md)을 확인하세요. 현대·기아·제네시스 CAN-FD의 검증된 원본 `STEER_TOUCH_2AF` 수신 신호를 차종명 제한 없이 처리하며 카메라·모드에 따라 유지와 새 접촉을 구분합니다.
 - `CarrotVisionEnabled`: 운전자 감시와 별도로 웹 도로 영상을 켭니다. `DisableDM`은 이관 전용이며, 기존 `DisableDM=2`의 영상 기능만 최초 전환 시 `CarrotVisionEnabled`로 승계합니다.
-- `SpeedFromPCM`: 기본값은 `2`(커브·카메라 감속)이며, 비롱컨 순정 SCC의 버튼 스패밍과 감속 방식에 영향을 줍니다. [버튼 전송 상세](buttons-presets.md#button-spam)를 참고하세요.
+- `SpeedFromPCM`: 기본값은 `2`(커브·카메라 감속)이며, PCM 차량의 버튼 스패밍과 속도 선택에 영향을 줍니다. `3`에서 토요타·렉서스는 순정 설정속도를 사용하며 가감속 제어 방식은 바뀌지 않습니다. [버튼 전송 상세](buttons-presets.md#button-spam)를 참고하세요.
 
 `HardwareC3xLite`는 일반 C3/C3X에서는 반드시 꺼 두고 C3X Lite에서만 켠 뒤 기기를 재부팅하세요. 이 설정을 켜면 존재하지 않는 앰프를 초기화하지 않아 I2C 재시도로 인한 시작 지연을 없애고, 경고음을 GPIO 부저로 출력합니다. 또한 `micd`, `soundd`, `loggerd`를 실행하지 않고 `RecordAudio`를 끄므로 이 하드웨어 모드에서는 일반 주행 로그 기록을 사용할 수 없습니다.
 

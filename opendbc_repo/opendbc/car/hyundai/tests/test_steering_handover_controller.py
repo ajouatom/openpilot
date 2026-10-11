@@ -174,3 +174,55 @@ def test_recovery_selected_total_cap_reaches_both_can_paths(monkeypatch, camera)
   address, byte = (0xCB, 6) if camera else (0x12A, 12)
   data = next(data for addr, data, _ in messages if addr == address)
   assert abs(data[byte] - output.torqueOutputCan) <= 0.5
+
+
+@pytest.mark.parametrize('angle', [False, True])
+def test_missing_camera_template_cannot_accumulate_first_transmitted_command(monkeypatch, angle):
+  controller, cs, cc, settings = setup_controller(monkeypatch, angle=angle)
+  settings.update(CustomSteerMax=409, CustomSteerDeltaUp=3)
+  cs.out.steeringPressed = False
+  cs.out.steeringTorque = 0
+  cs.out.steeringAngleDeg = -2.2
+  cc.actuators.torque = 1.0
+  cc.actuators.steeringAngleDeg = 30
+  attr = 'lfa_alt' if angle else 'lfa'
+  setattr(cs, attr, None)
+  address = 0xCB if angle else 0x12A
+  for _ in range(200):
+    output, messages = step(controller, cs, cc)
+    assert not any(addr == address for addr, _, _ in messages)
+    assert output.torqueOutputCan == 0
+    assert controller.apply_torque_last == 0
+    assert controller.apply_angle_last == pytest.approx(-2.2)
+    assert controller.lkas_max_torque == 0
+    assert cc.latActive  # local guard must not mutate the subscription
+  setattr(cs, attr, {})
+  output, messages = step(controller, cs, cc)
+  data = next(data for addr, data, _ in messages if addr == address)
+  if angle:
+    assert output.torqueOutputCan == controller.params.ANGLE_MIN_TORQUE
+    assert abs(output.steeringAngleDeg - cs.out.steeringAngleDeg) <= 1.0
+    assert data[6] == controller.params.ANGLE_MIN_TORQUE
+  else:
+    assert output.torqueOutputCan == 3
+    assert ((int.from_bytes(data, 'little') >> 41) & 0x7ff) - 1024 == 3
+
+
+@pytest.mark.parametrize('angle', [False, True])
+def test_initial_template_guard_does_not_rearm_during_operation(monkeypatch, angle):
+  controller, cs, cc, _ = setup_controller(monkeypatch, angle=angle)
+  cs.out.steeringPressed = False
+  cs.out.steeringTorque = 0
+  cc.actuators.torque = 1.0
+  cc.actuators.steeringAngleDeg = 30
+  step(controller, cs, cc)
+  assert controller.steering_template_ready
+  setattr(cs, 'lfa_alt' if angle else 'lfa', None)
+  for _ in range(10):
+    output, _ = step(controller, cs, cc)
+    assert output.torqueOutputCan > 0
+  cc.latActive = False
+  step(controller, cs, cc)
+  cc.latActive = True
+  output, _ = step(controller, cs, cc)
+  assert output.torqueOutputCan > 0 and controller.steering_template_ready

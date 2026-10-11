@@ -24,6 +24,7 @@ from openpilot.selfdrive.controls.lib.latcontrol_angle import LatControlAngle, S
 from openpilot.selfdrive.controls.lib.latcontrol_torque import LatControlTorque
 from openpilot.selfdrive.controls.lib.longcontrol import LongControl
 from openpilot.selfdrive.controls.lib.steer_ratio import resolve_vehicle_model_steer_ratio
+from openpilot.selfdrive.controls.lib.lateral_readiness import LateralStartupGate, lateral_vehicle_parameters
 
 
 from openpilot.common.realtime import DT_CTRL, DT_MDL
@@ -70,6 +71,8 @@ class Controls:
     self.steer_limited_by_safety = False
     self.curvature = 0.0
     self.desired_curvature = 0.0
+    self.lateral_startup = LateralStartupGate()
+    self.lateral_started = False
 
     # VW MEB(ID.4/ID.5)에서만 사용. infiniteCable2 LatControlCurvature 정확 복제:
     # EnableCurvatureController=1(기본 ON) 상태의 곡률 폐루프 PID + useCarSteerCurvature 보정
@@ -110,9 +113,10 @@ class Controls:
 
   def state_control(self):
     CS = self.sm['carState']
+    lateral_ready = self.lateral_startup.update(self.sm, CS, 'carState')
 
     # Update VehicleModel
-    lp = self.sm['liveParameters']
+    lp = self.sm['liveParameters'] if lateral_ready else lateral_vehicle_parameters(self.sm, self.CP)
     x = max(lp.stiffnessFactor, 0.1)
     # All platforms, including VW MEB, honor the manual ratio and live scaling.
     # Invalid persisted rates still fall back to the unscaled learned ratio.
@@ -151,6 +155,8 @@ class Controls:
                                            CS.steerFaultTemporary, CS.steerFaultPermanent, below_min_speed,
                                            CS.standstill, steer_at_standstill)
     CC.latActive = self.carrot_controls.lat_suspend_control(CS, CC.latActive)
+    # Wait only for the first readiness confirmation, including AlwaysLateral.
+    CC.latActive = CC.latActive and lateral_ready
     CC.longActive = CC.enabled and not any(e.overrideLongitudinal for e in self.sm['onroadEvents']) and self.CP.openpilotLongitudinalControl
 
     # AlwaysLateral must also stop while manager drains workers for this reboot.
@@ -166,6 +172,9 @@ class Controls:
 
     if not CC.latActive:
       self.LaC.reset()
+    if CC.latActive and not self.lateral_started:
+      self.desired_curvature = self.curvature
+      self.lateral_started = True
     if not CC.longActive:
       self.LoC.reset()
 

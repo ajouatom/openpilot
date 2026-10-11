@@ -1,5 +1,78 @@
 # Repository memory
 
+- On 2026-10-11, the user requested latest-drive signal transition training and
+  validation using lamp brightness/color changes plus original ONNX x/v. Three
+  offline logistic probes were actually fitted; x/v reduced reviewed red abstention
+  but did not improve held-out-encounter green detection. Original driving ONNX
+  and vehicle files/settings remain unchanged; learned weights are analysis-only.
+  Fix the helper's 125 ms confirmation/cadence mismatch, count consecutive color
+  samples, retain bounded identity after a late result, and transport same-ID
+  producer green history (>=400 ms, >=3 samples) to avoid a second missed streak.
+  Keep 200 ms final freshness, 250 ms camera-gap expiry, default OFF, original
+  x/v and normal departure gates. Recorded-input replay releases both known
+  night holds and reaches normal departure states; 318 tests pass. Extra delay
+  still loses red acquisition, and daytime housing proposals merge into dark
+  background. No device deployment or vehicle-response validation is implied.
+  Keep footage, labels and weights private. See docs/signal_transition_training_20261011.md.
+
+- On 2026-10-11, first post-assist night/morning drives confirm a helper
+  regression: two visible green transitions remain hold_through_unknown until
+  gas/inactive override. Native stopping-function reconstruction is green on
+  69/13 overlapping held frames; not a full vehicle counterfactual. Tracker
+  confirmation restarts above125ms while44.1%/51.2% of real gaps exceed it.
+  Same103 observations yield0 green at recorded times vs24 at artificial100ms;
+  this diagnoses timing, not a deployable fix. A208ms stale result also wipes
+  red identity before green; morning visible-red housing proposals are missed.
+  23 driving segments,161 source files/2.21GB SHA256 verified;27,380 valid model
+  results. Existing internal ONNX hash unchanged, eGPU and Jetlink inactive.
+  Vehicle stays b80db2c97d with assist ON; analysis changed no vehicle settings.
+  Recommend disabling assist pending timing/identity/day-detector corrections
+  and both green-release/red-false-start regression validation. Parked readiness
+  and old replay were insufficient; do not claim the helper is road-validated.
+  Keep raw evidence private. See docs/signal_assist_followup_20261011.md.
+
+- On 2026-10-10, after successful parked installation, user requested bringing
+  the signal experiment into carrot-wip. Imported signal camera observation,
+  causal tracking, optional stop assistance, offline tools and investigation
+  documents from e3dc031730. Keep per-device opt-in default OFF; the user's
+  installed b80db2c97d vehicle has it ON. CANFD zero-aReq/no-retry is already
+  present here as2608792bdd and must not be applied twice. Original driving
+  ONNX/x/v unchanged; no failed trained model is promoted. Red hold survives
+  unknown, same-track green only removes the constraint, gas overrides with
+  10s cooldown. Moving red uses plausible original model distance and existing
+  lead/turn/speed gates. This is not lane/arrow association or guaranteed stop.
+  All300 focused observer/tracker/assist/CANFD tests pass (Windows Params stub,
+  OpenCV4.13). Prior parked checks belong to the signal branch; no carrot-wip
+  vehicle installation or closed-loop validation is implied by this promotion.
+  Preserve unrelated local edits. See docs/signal_assist_trial_20261010.md.
+
+- On 2026-10-10, RAV4 route 0d segments 5-9 on e7987ed confirmed an
+  onroadEvents cadence regression: healthy event-change bursts exceed the 1 Hz
+  tracker's upper bound and the continuous readiness gate interrupts steering.
+  Check event receipt/validity/liveness without fixed-rate rejection; retain
+  periodic-input checks and the separately requested startup-only latch in
+  7ceee11642, which includes this correction. Lateral selection alone still
+  needs active cruise or AlwaysLateral. All five minutes have cruise inactive;
+  no Panda TX rejection or new CAN errors. The long segment 6-7 inactivity is
+  not fully explained by event cadence; live setting changes are not captured.
+  166 focused tests pass; recorded-input readiness matches all 11,201 examined
+  decisions in segments 5/8 after warmup. No physical steering validation.
+  Keep incident data local. See docs/rav4_steering_20261010.md.
+
+- On 2026-10-10, the user clarified that the Sonata startup fix must apply
+  only until FIRST readiness, never reblock during operation. This supersedes
+  e7987ed0fd's continuous readiness checks and repeated PID/curvature resets.
+  controlsd/card now latch readiness once per process lifetime; disengagement,
+  reengagement and later bad inputs do not rearm it. Nominal geometry is startup-
+  only; measured curvature seeds the first lateral activation only. Restore
+  existing torque reset behavior. Hyundai camera-SCC waits only for its first
+  steering TX template, preserving the bounded first CAN command. Keep existing
+  runtime safety, limits, longitudinal policy and firmware unchanged. 241 focused
+  tests, 5,969 recorded-input frames and 6,000 post-startup control frames pass;
+  the latter exactly match pre-fix 5479d1279a outputs/PID/ratio with input health
+  changes and reengagement. Replay is not vehicle-response validation. Keep raw
+  incident data local. See docs/sonata_92_startup_steering_20261010.md.
+
 - On 2026-10-09, after trying Mountain Dew 870a4823, the user requested
   returning carrot-wip's eGPU model to Cinque v3 (892fc3a1, AMD e758b96d,
   isolated tinygrad d5e17c93). This supersedes the MDM selection below, not

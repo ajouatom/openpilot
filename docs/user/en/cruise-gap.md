@@ -126,19 +126,20 @@ The original behavior enters stopping after `shouldStop` when actual acceleratio
 
 Changes apply within about one second, including while driving. Stronger output already reached during a stop is retained, so selecting a weaker target does not immediately reduce braking. Control clamps old or directly written out-of-range values to the range endpoints; unreadable values use the default.
 
+The description above concerns upstream control. The final CANFD request override is described below.
+
 <a id="canfd-stopping"></a>
-### CANFD stopping and retry
+### CANFD stopping control
 
-Retry runs by default on Hyundai/Kia CANFD with openpilot longitudinal control. There is no separate setting, and the removed `CanfdStopRetry` value is not read. Conventional CAN vehicles and stock ACC longitudinal control are outside its scope.
+This experimental sequence applies to Hyundai/Kia CANFD openpilot longitudinal control without a separate setting. Conventional CAN vehicles and stock ACC longitudinal control are unchanged.
 
-- Stop intent and acceleration use the original control path. The additional one-second stop preview, forced convergence to -0.50 m/s² after StopReq, and two-frame soft-hold preparation are removed.
-- While StopReq is active, aReqRaw follows control with `StoppingAccel`, and aReqValue uses normal packet limiting. InfoDisplay and byte7 remain zero; the lower band uses a fixed experimental value of 0.20 without copying stock SCC values.
-- At low speed, elapsed time or distance alone does not release StopReq while deceleration continues. Acceleration rising from negative toward zero alone does not trigger retry either. Retry requires a sustained speed rebound with positive acceleration, or sustained loss of deceleration with insufficient speed reduction.
-- Retry releases StopReq and requests the stronger deceleration of the existing request and -0.50 m/s², then reasserts once. Further failure retains negative acceleration requests without repeated toggling. This does not change the planner's departure decision or add reverse-direction detection.
-- Accelerator input, cruise disengagement, and interlocks such as Auto Hold cancel it. Requests while the brake is pressed are allowed only for an armed soft hold with every speed input at or below 0.10 m/s.
+- `StoppingAccel` still affects the original stop-entry decision and upstream acceleration calculation. However, both aReqRaw and aReqValue are overridden to zero from the first StopReq frame, including soft hold.
+- Initial entry requires the maximum absolute speed input to be at or below 0.7 m/s. After entry, speed rebound, loss of deceleration, time and distance do not release StopReq or trigger retry.
+- An increase in jerkUpper is blocked on the first StopReq frame; the ordinary value is allowed from the next frame. Decreases are immediate. InfoDisplay and byte7 remain zero, and the lower band remains the fixed experimental value 0.20.
+- Existing departure decisions, disengagement, pedal, CAN and gear interlocks remain. The brake-input exception requires an armed soft hold with every speed input at or below 0.10 m/s.
 
 > [!CAUTION]
-> Retry does not guarantee complete stopping or collision prevention across vehicles. Any reduction in stopping impact also requires vehicle validation.
+> This trial adopts part of an observed stock sequence; complete stopping and prevention of rolling have not been validated on the vehicle.
 
 ### `VEgoStopping`
 
@@ -168,7 +169,7 @@ Range 0–200, step 10, catalog default 10. Zero permits the quickest accelerati
 > [!IMPORTANT]
 > The displayed `LongTuningKiV` title says `×0.01`, but `longcontrol.py` currently applies **×0.001**. Stored `100` is Ki `0.100`, not `1.00`.
 
-Hyundai, Kia, and Genesis do not read the stored `LongTuningKpV`, `LongTuningKiV`, or `LongTuningKf` values. On other brands, the overrides apply only when the vehicle's base longitudinal tune has a single Kp point and a single Ki point. Multi-point vehicle tunes retain their defaults. These gains are also not the primary controller when stock SCC controls acceleration and braking.
+Hyundai, Kia, and Genesis do not read the stored `LongTuningKpV`, `LongTuningKiV`, or `LongTuningKf` values. Toyota/Lexus also ignore and hide these three settings. Their dedicated vehicle controller corrects acceleration tracking, so the common controller passes the target through with `Kp=0`, `Ki=0`, and `Kf=1`. Stopping control and acceleration limits remain active. On other brands, the overrides apply only when the vehicle's base longitudinal tune has a single Kp point and a single Ki point. Multi-point vehicle tunes retain their defaults. These gains are also not the primary controller when stock SCC controls acceleration and braking.
 
 Volkswagen MEB vehicles, including ID.4, use a single base Ki point of zero, so all three gain settings apply. Previously saved values also apply; the default stored values `100/0/100` produce `Kp=1`, `Ki=0`, and `Kf=1`. Updating does not reset saved gains.
 
