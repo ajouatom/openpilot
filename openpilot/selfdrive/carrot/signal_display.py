@@ -10,7 +10,7 @@ STATUS_PATH = Path('/dev/shm/carrot_signal_display_status.json')
 MAX_BYTES = 8192
 MAX_AGE = .35
 MAX_CAMERA_SKEW = .25
-DISPLAY_HOLD = .8  # UI memory only; never extends the control observation lifetime.
+DISPLAY_HOLD = 2.0  # UI memory only; never extends the control observation lifetime.
 SIZE = (1344, 760)
 
 
@@ -47,7 +47,7 @@ def valid_record(record, now, camera_frame, *, hold=False):
             and record['stream'] == 'road' and record['size'] == list(SIZE)
             and 0 <= now - timestamp <= MAX_AGE and 0 <= now - record['timestamp'] <= limit
             and abs(timestamp - record['timestamp']) <= skew
-            and abs(fid - record['frame_id']) <= (16 if hold else 5)
+            and abs(fid - record['frame_id']) <= (40 if hold else 5)
             and isinstance(record['session'], str) and bool(record['session'])
             and isinstance(record['tracks'], list) and len(record['tracks']) <= 20)
   except (KeyError, TypeError, ValueError, OverflowError):
@@ -99,6 +99,23 @@ class DisplayContinuity:
     if key != self.key:
       current = visible_tracks(record, now, camera_frame, hold=True)
       current_ids = {t['id'] for t in current}
+      inherited = {}
+      # Neural inference can assign a new ID to the same housing. Preserve
+      # display color through a unique geometric match, without renewing its
+      # timestamp or changing any observer/control state.
+      def same_housing(a, b):
+        intersection = max(0, min(a[2], b[2])-max(a[0], b[0])) * max(0, min(a[3], b[3])-max(a[1], b[1]))
+        union = (a[2]-a[0])*(a[3]-a[1]) + (b[2]-b[0])*(b[3]-b[1]) - intersection
+        return intersection / max(union, 1) >= .5
+      for t in current:
+        if t['id'] in self.tracks or t['state'] != 'unknown':
+          continue
+        matches = [(tid, old) for tid, old in self.tracks.items() if tid not in current_ids
+                   and now-old['color_time'] <= DISPLAY_HOLD and same_housing(old['track']['box'], t['box'])]
+        if len(matches) == 1:
+          tid, old = matches[0]
+          if sum(same_housing(old['track']['box'], other['box']) for other in current) == 1:
+            inherited[t['id']] = old
       # A replacement ID at the same housing must not leave a duplicate old color.
       for tid, old in list(self.tracks.items()):
         a = old['track']['box']
@@ -107,7 +124,7 @@ class DisplayContinuity:
             and max(a[1], t['box'][1]) < min(a[3], t['box'][3]) for t in current):
           del self.tracks[tid]
       for t in current:
-        previous = self.tracks.get(t['id'])
+        previous = self.tracks.get(t['id'], inherited.get(t['id']))
         color_time = record['timestamp']
         if t['state'] == 'unknown' and previous and now - previous['color_time'] <= DISPLAY_HOLD:
           t = dict(t, state=previous['track']['state'], confirmed=False)
@@ -157,7 +174,7 @@ class SignalDisplayReader:
     self.next_status = now + 1.
     try:
       record = self.record if isinstance(self.record, dict) else {}
-      value = dict(display_revision=3, timestamp=now, boxes_drawn=count, held_boxes=self.held_count, camera_frame=camera_frame,
+      value = dict(display_revision=4, timestamp=now, boxes_drawn=count, held_boxes=self.held_count, camera_frame=camera_frame,
                    observation_frame=record.get('frame_id'), engine=record.get('engine'),
                    observation_timestamp=record.get('timestamp'))
       path = Path(path); temp = path.with_suffix('.tmp')

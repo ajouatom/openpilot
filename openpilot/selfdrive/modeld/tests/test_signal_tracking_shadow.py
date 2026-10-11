@@ -94,10 +94,11 @@ def test_existing_worker_dispatches_only_with_opt_in(monkeypatch, tmp_path):
   assert calls == [(tmp_path, 2)]
 
 
+@pytest.mark.parametrize('start_enabled', [False, True])
 @pytest.mark.parametrize('comparison,revalidated,override', [
   (True,False,None),(True,True,None),(False,False,None),(False,True,None),(False,False,True),(False,True,True),
 ])
-def test_worker_modes_select_engines_and_bound_transport(monkeypatch, tmp_path, comparison, revalidated, override):
+def test_worker_modes_select_engines_and_bound_transport(monkeypatch, tmp_path, comparison, revalidated, override, start_enabled):
   import sys
   from openpilot.selfdrive.modeld import signal_tracking_shadow as worker
   from openpilot.selfdrive.carrot import signal_assist_runtime
@@ -109,6 +110,9 @@ def test_worker_modes_select_engines_and_bound_transport(monkeypatch, tmp_path, 
   (tmp_path / 'daytime_comparison_enabled').write_text(str(int(comparison)))
   (tmp_path / 'revalidated_enabled').write_text(str(int(revalidated)))
   (tmp_path / 'display_enabled').write_text('1')
+  (tmp_path / 'start_guard_enabled').write_text(str(int(start_enabled)))
+  from openpilot.selfdrive.carrot import signal_start_guard
+  monkeypatch.setattr(signal_start_guard, 'publish_start_observation', lambda *a: None)
   rgb = object()
   calls, events, published = [], [], []
   displays = []
@@ -155,4 +159,5 @@ def test_worker_modes_select_engines_and_bound_transport(monkeypatch, tmp_path, 
     assert records['signalTrackingDaytimeShadow']['prediction'] == 'green'
   assert all(r['assist_transport'] == (not comparison) and not r['control_permission'] for r in records.values())
   assert all(r['revalidated'] == revalidated for r in records.values())
+  assert displays[0]['start_guard_transport'] == start_enabled
   assert (tmp_path / 'daytime_comparison_latest.json').exists() == comparison

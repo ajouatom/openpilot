@@ -76,13 +76,13 @@ def test_reader_expires_even_when_file_does_not_change_and_handles_invalid_data(
   reader = SignalDisplayReader(flag, path)
   assert len(reader.read(CAMERA, 10.2)) == 1
   assert reader.read(CAMERA, 10.4)[0]['held']
-  assert reader.read((37, 10.85, 1344, 760, False), 10.9) == ()
+  assert reader.read((62, 12.08, 1344, 760, False), 12.1) == ()
   for bad in ['x'*9000, '[]', 'null', '{']:
     path.write_text(bad)
     reader.next_read = 0
     assert reader.read(CAMERA, 10.2) == ()
   flag.write_text('0')
-  assert reader.read(CAMERA, 11.5) == () and not reader.enabled
+  assert reader.read(CAMERA, 13.5) == () and not reader.enabled
 
 
 def test_display_has_separate_endpoint_and_no_control_fields(tmp_path):
@@ -121,7 +121,8 @@ def test_continuity_bridges_pending_result_without_refreshing_its_timestamp():
   held = memory.update(r, 10.5, camera(10.5))[0]
   assert held['held'] and held['state'] == 'red' and not held['confirmed']
   assert held['age'] == pytest.approx(.5)
-  assert memory.update(r, 10.81, camera(10.81)) == ()
+  assert memory.update(r, 11.8, camera(11.8))[0]['held']
+  assert memory.update(r, 12.01, camera(12.01)) == ()
 
 
 def test_new_opposite_color_replaces_previous_immediately():
@@ -138,23 +139,23 @@ def test_unknown_frames_move_box_but_cannot_renew_old_green():
   memory = DisplayContinuity(); r = record()
   r['tracks'][0].update(raw='green', state='green')
   memory.update(r, 10.1, camera(10.1))
-  for timestamp in [10.3, 10.6, 10.9]:
+  for timestamp in [10.3, 10.6, 11.5, 12.1]:
     r.update(frame_id=20 + round((timestamp-10)*20), timestamp=timestamp)
     r['tracks'][0].update(raw='unknown', box=[610, 210, 650, 225])
     track = memory.update(r, timestamp+.05, camera(timestamp+.05))[0]
     assert track['box'] == (610, 210, 650, 225)
-    assert track['state'] == ('green' if timestamp < 10.8 else 'unknown')
-    if timestamp < 10.8:
+    assert track['state'] == ('green' if timestamp < 12.0 else 'unknown')
+    if timestamp < 12.0:
       assert track['held'] and not track['confirmed']
 
 
 def test_temporarily_missing_object_expires_despite_new_empty_observations():
   memory = DisplayContinuity(); r = record()
   memory.update(r, 10.1, camera(10.1))
-  for timestamp in [10.3, 10.6, 10.9]:
+  for timestamp in [10.3, 10.6, 11.5, 12.1]:
     r.update(timestamp=timestamp, frame_id=20+round((timestamp-10)*20), tracks=[])
     tracks = memory.update(r, timestamp+.05, camera(timestamp+.05))
-    assert bool(tracks) == (timestamp < 10.8)
+    assert bool(tracks) == (timestamp < 12.0)
     if tracks:
       assert tracks[0]['held']
 
@@ -166,6 +167,30 @@ def test_replacement_track_removes_overlapping_old_color():
   r['tracks'][0].update(id=4, raw='green')
   tracks = memory.update(r, 10.4, camera(10.4))
   assert len(tracks) == 1 and tracks[0]['id'] == 4 and tracks[0]['state'] == 'green'
+
+
+def test_same_housing_unknown_new_ids_retain_color_without_renewing_age():
+  memory = DisplayContinuity(); r = record()
+  r['tracks'][0].update(raw='green', state='unknown')
+  memory.update(r, 10.4, camera(10.4))
+  for tid, timestamp in [(4, 10.45), (5, 10.9), (6, 11.35), (7, 11.8)]:
+    r.update(timestamp=timestamp, frame_id=20+round((timestamp-10)*20))
+    r['tracks'][0].update(id=tid, raw='unknown')
+    tracks = memory.update(r, timestamp+.1, camera(timestamp+.1))
+    assert len(tracks) == 1 and tracks[0]['id'] == tid
+    assert tracks[0]['state'] == 'green' and tracks[0]['held']
+  r.update(timestamp=12.05, frame_id=61)
+  r['tracks'][0]['id'] = 8
+  assert memory.update(r, 12.1, camera(12.1))[0]['state'] == 'unknown'
+
+
+def test_ambiguous_housing_does_not_transfer_previous_color():
+  memory = DisplayContinuity(); r = record()
+  r['tracks'].append(dict(r['tracks'][0], id=4, box=[602, 200, 642, 215], raw='green'))
+  memory.update(r, 10.1, camera(10.1))
+  r.update(timestamp=10.4, frame_id=28, tracks=[dict(r['tracks'][0], id=5, raw='unknown')])
+  tracks = memory.update(r, 10.5, camera(10.5))
+  assert len(tracks) == 1 and tracks[0]['state'] == 'unknown'
 
 
 @pytest.mark.parametrize('failure', ['wide', 'frozen', 'malformed', 'disabled', 'session'])
