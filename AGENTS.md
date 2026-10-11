@@ -1,5 +1,18 @@
 # Repository memory
 
+- On 2026-10-12, during the color experiment, the user prioritized avoiding
+  false green over missed detections, accepted rejecting turn-time readings,
+  and suggested pose. Offline rotation variants now reject green before tracker
+  confirmation, immediately remove old confirmed green and preserve red history.
+  Existing red start latch holds through unknown; old green never releases it.
+  Steering+speed avoids treating a stationary -39.5-degree wheel as rotation.
+  Preferred pose experiment uses calibrated livePose yaw, required validity,
+  uncertainty and separate arrival/sample freshness; no permissive fallback.
+  Four-way3348-frame replay: pose gates898 observations with zero fresh/confirmed
+  green outputs, retains the stationary real green;108 tests pass. Counts are
+  not accuracy and LED/reflection false greens remain. Both variants stay
+  offline, no vehicle deployment. See docs/signal_color_experiment_20261012.md.
+
 - On 2026-10-12, the user requested a signal correction experiment. Add
   default-OFF offline conservative_green HSV38-90 consistently across housing,
   day/night seeds and templates. Exact-frame paired replay of13 full videos and

@@ -391,7 +391,7 @@ class SignalTracker:
     state = next(iter(states)) if len(states) == 1 else 'unknown'
     return dict(state=state, reason='agreeing_visible_tracks' if len(states)==1 else 'conflict_or_unconfirmed', tracks=visible)
 
-  def process(self, rgb, timestamp):
+  def process(self, rgb, timestamp, *, allow_green=True):
     detections = detect(rgb, daytime_cores=self.daytime_cores, conservative_green=self.conservative_green)
     gray = cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY)
     if self.previous_gray is not None and self.last_timestamp is not None and 0 < timestamp-self.last_timestamp <= self.identity_gap:
@@ -431,5 +431,18 @@ class SignalTracker:
           detections = [d for d in detections if overlap(box,d['box']) <= .35]
         detections.append(dict(box=box,raw=raw,quality=strength,source='causal_template',match_score=score,
                                **({'continuity_id':track.ident} if bridge else {}),**evidence))
+    if not allow_green:
+      # Offline steering experiment: preserve red acquisition/history, but never
+      # grant a green vote or retain a confirmed green through rejected input.
+      for detection in detections:
+        if detection['raw'] == 'green':
+          detection['raw'] = 'unknown'
+          detection['green_rejected'] = 'motion_context'
+      for track in self.tracks:
+        if track.state == 'green':
+          track.state = 'unknown'
+        if track.pending == 'green':
+          track.pending = 'unknown'
+          track.pending_count = 0
     self.previous_gray=gray
     return self.update(timestamp,detections)

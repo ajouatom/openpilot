@@ -103,3 +103,103 @@ Private evidence: `.analysis/archive/2026-10-12-signal-color-experiment/` contai
 paired traces, labels, screenshots, totals and reproduction scripts. Raw drives,
 captures and labels remain local. The preceding collection and investigation are
 documented in [the morning report](signal_morning_false_green_20261012.md).
+
+## Follow-up: user prioritizes rejecting false green over missed observations
+
+During the experiment the user explicitly accepted discarding turn-time results
+and retaining past observations through misses, prioritizing prevention of
+red-to-green false classification. Add an offline third variant using recorded
+valid carState steering angle/rate and speed, sampled causally before each image.
+All recorded yawRate fields in these segments are zero, so yawRate is not treated
+as a measured rotation signal.
+
+The experimental `GreenMotionGate` uses these provisional thresholds:
+
+- While moving above 0.3 m/s, absolute steering >=15 degrees or steering rate
+  >=90 degrees/s immediately rejects green. Red observations remain eligible.
+- Resume after 0.5 s continuously at <=8 degrees and <=30 degrees/s, or after
+  0.5 s stopped at <=0.3 m/s. These are experimental gates, not calibrated yaw
+  or proof of straight travel. Curved approaches can intentionally lose green.
+- Missing/invalid, nonfinite, stale (>200 ms), future or reordered motion context
+  cannot grant green. Angle hysteresis prevents repeated reopening near a limit.
+- Rejection converts fresh green to unknown before tracker confirmation and
+  clears a previously confirmed/pending green immediately. It preserves red
+  history. The existing start guard keeps a latched red through unknown/missing
+  observations; stored/displayed green never releases it. Existing explicit
+  manual gas, disable and gear reset policies remain unchanged.
+
+An initial angle-only version was rejected: the real segment8 stop has steering
+-39.5 degrees at zero speed. Calling this a turn would suppress a legitimate
+green while stationary. Speed-aware gating retains this observed stop's green.
+The blurred nighttime green at 109e-3 frame635 occurs at +160.2 degrees and
+3.88 m/s, so it is now explicitly outside the accepted measurement conditions,
+consistent with the user's revised priority. This does not prove that all missed
+greens occur during turns or remove the need to test straight motion blur.
+
+The same 3,348-image causal replay with the third variant gives:
+
+| Fresh green candidate samples | Existing | Color-only | Color + motion |
+|---|---:|---:|---:|
+| Morning | 5,608 | 581 | 509 |
+| Night | 437 | 419 | 338 |
+
+692 morning and269 night observations are gated (turns, startup, context recovery
+or straight/stopped dwell). All961 contain neither a fresh green vote nor a
+confirmed green state in the gated tracker. Red counts stay931 morning/203 night,
+identical to color-only. Normal green in stopped segment8 remains; the diagnostic
+confirmation time remains21.090 s, with the same live-reconstruction limitations
+above. Existing variants' candidate counts remain identical to the first replay.
+
+93 focused tests pass, including fresh-context gating, stationary turned wheels,
+hysteresis/dwell, future-data exclusion in replay, immediate old-green removal
+and an actual start-guard unit sequence that holds red through rejected greens.
+LED-text and reflection false greens in accepted conditions remain unresolved.
+No blanket claim of zero red-to-green errors or validated autonomous departure is
+made. Both experimental options remain offline; the vehicle was not changed.
+
+Private `motion/` contains full-rate extracted carState, `replay_motion/` is the
+rejected angle-only replay, and `replay_motion_final/` plus `motion_results.json`
+contain the speed-aware results. Reproduce with `--motion-dir MOTION_DIRECTORY`.
+
+## Follow-up: pose as the direct rotation cue
+
+The user then asked to use pose instead of steering angle. The fourth offline
+variant uses `livePose.angularVelocityDevice` rotated into the calibrated vehicle
+frame through the repository's `PoseCalibrator`, as in locationd/torqued. It uses
+calibrated yaw rate, not differentiated absolute heading. Calibration must be
+valid and <=1 s old; pose event/measurement, orientation, inputs, posenet and
+sensors validity are required. Raw carState yawRate remains unused (all zero).
+
+`GreenPoseGate` rejects green at absolute yaw >=3 degrees/s, resumes after0.5 s
+continuously <=1.5 degrees/s, and rejects yaw standard deviation >2 degrees/s.
+Both arrival and measurement timestamps are checked: pose must already be
+available before image capture, with measurement age <=200 ms. Frozen/reordered,
+future, nonfinite or invalid pose resets permission. No steering-based fallback
+can turn unavailable pose into a green authorization. These yaw thresholds are
+provisional and do not claim a calibrated error bound or no motion below3 deg/s.
+
+Recorded examples make the distinction concrete:
+
+- Night blurred green during a turn: steering+160.2 degrees, calibrated yaw
+  about-13.7 degrees/s. Both motion variants reject green.
+- Morning signal stop: steering-39.5 degrees, yaw approximately0.0005 degrees/s
+  in magnitude. Pose accepts fresh green without a special steering-angle excuse.
+- Morning segment6 miscrop: steering7.4 degrees and yaw about-0.61 degrees/s.
+  Steering recovery dwell still rejects this frame; pose permits color measurement.
+  The color candidate remains unknown, not green. This separates actual rotation
+  rejection from the indispensable color/housing false-positive work.
+- Segment10 red miscrop: yaw about+4.1 degrees/s, rejected by pose as well as by
+  the narrower color evidence.
+
+All3,348 images were replayed again with existing, color, steering and pose
+variants. Pose+color produces514 morning/375 nighttime fresh green candidates,
+versus steering+color509/338 and color-only581/419. These are candidate counts,
+not precision/recall. Pose gates692 morning+206 night observations; all898 have
+zero fresh or confirmed green outputs. Red counts remain931/203. The stopped
+segment8 real green and its21.090 s diagnostic confirmation are retained.
+
+108 focused tests pass. Existing default output still matches the pre-experiment
+tracker on21 reviewed images. The pose variant is the more direct rotation
+experiment; steering remains a comparison/diagnostic signal. LED/reflection false
+greens remain, so neither variant is promoted or deployed. Private `pose/`,
+`replay_pose_final/`, `extract_pose.py` and `pose_results.json` retain the evidence.
