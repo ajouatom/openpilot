@@ -26,7 +26,8 @@ def publish_display(record, *, path=DISPLAY_PATH):
             for t in record['tracks'][:20]]
   payload = dict(version=1, stream='road', size=SIZE, frame_id=record['frame_id'],
                  timestamp=record['timestamp_eof'] / 1e9, session=record['session'],
-                 engine='trial' if record.get('revalidated') or record.get('daytime_comparison') else 'legacy',
+                 engine=('neural_' + record['backend']) if record.get('neural') else
+                        'trial' if record.get('revalidated') or record.get('daytime_comparison') else 'legacy',
                  tracks=tracks)
   text = json.dumps(payload, allow_nan=False)
   if len(text.encode()) > MAX_BYTES:
