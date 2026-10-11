@@ -15,8 +15,15 @@ def input_view(buffer, shape, dtype, offset=0):
   from tinygrad import Tensor
   from tinygrad.uop.ops import UOp
 
-  buf = buffer.view(math.prod(shape), dtype, offset).ensure_allocated()
-  return Tensor(UOp.from_buffer(buf)).reshape(shape)
+  if hasattr(buffer, 'dtype'):
+    # Cinque and the earlier MDM runtime carry the dtype on each Buffer.
+    buf = buffer.view(math.prod(shape), dtype, offset).ensure_allocated()
+    uop = UOp.from_buffer(buf)
+  else:
+    # Retrained MDM uses byte-addressed storage; interpretation belongs to UOp.
+    buf = buffer.view(math.prod(shape) * dtype.itemsize, offset).ensure_allocated()
+    uop = UOp.from_buffer(buf, dtype)
+  return Tensor(uop).reshape(shape)
 
 
 def model_metadata(jits):
