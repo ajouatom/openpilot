@@ -1,5 +1,19 @@
 # Repository memory
 
+- On 2026-10-11, the next drive exposed signal QCOM GPU contention with DM:
+  parked A/B/A gives DM 10.6-10.8 Hz with neural GPU versus 20 Hz with CPU;
+  priority15 also fails. This supersedes eGPU-implies-QCOM eligibility below.
+  Auto AND explicit QCOM now use CPU comparison whenever DM or Driver View
+  needs the internal GPU; never disable DM or use camera failure as permission.
+  Preserve DM policies and external/internal driving-model selections. Latest
+  drive neural observations at 2.33-2.67 Hz reset identity on every >250 ms gap.
+  Display revision4 extends UI-only memory to two seconds from capture, unique
+  same-housing unknown-ID carry without renewing old color, dim/~ previous and
+  immediate new color replacement. Ten-phase replay reduces visibility dropouts
+  146-162 to14, not recognition accuracy. Stopped red guard stays650 ms, warning
+  ON and moving assist OFF. 163 desktop tests pass, one Linux-only skip.
+  See docs/signal_dm_flicker_20261011.md for native verification and limitations.
+
 - On 2026-10-11, the user explicitly requested red automatic-departure blocking
   AND one warning sound. Add separate default-OFF start_guard_enabled, fresh
   observation transport and stopped-only veto for both observer backends. Keep

@@ -94,7 +94,7 @@ def run(directory=DIRECTORY, duration=None, comparison_override=None):
     cv2.ocl.setUseOpenCL(False)
     configure_worker_scheduling()
     source_sha = hashlib.sha256(Path(signal_tracker.__file__).read_bytes()).hexdigest()
-    from openpilot.selfdrive.carrot.signal_assist_runtime import publish_observation
+    from openpilot.selfdrive.carrot.signal_assist_runtime import publish_observation, requested as flag_requested
     from openpilot.selfdrive.carrot.signal_display import display_requested, publish_display
     from openpilot.selfdrive.carrot.signal_start_guard import publish_start_observation
     comparison_selection = comparison_requested(directory)
@@ -154,7 +154,7 @@ def run(directory=DIRECTORY, duration=None, comparison_override=None):
                 'work_ms': (time.monotonic() - work_start) * 1000,
                 'cpu_ms': (time.process_time() - cpu_start) * 1000,
                 'tracks': result['tracks'], 'daytime_comparison': comparison,
-                'start_guard_transport': requested(directory / 'start_guard_enabled'),
+                'start_guard_transport': flag_requested(directory / 'start_guard_enabled'),
                 'assist_transport': not comparison, 'revalidated': revalidated,
                 'session': session_id, **result_fields(result, age)}
       try:

@@ -36,8 +36,17 @@ def run_selected(directory, backend):
     run_tracking(directory, comparison_override=True)
 
 
+def automatic_backend(params):
+  # The DM model also runs on the internal GPU with an external driving model.
+  # Parked A/B/A showed ~20 -> 10 Hz DM even at QCOM priority 15. Camera failure
+  # must never grant GPU access: that would keep the overloaded DM in fallback.
+  dm_needed = (params.get_bool('DriverMonitoringEnabled') and
+               not params.get_bool('DriverMonitoringSessionDisabled')) or params.get_bool('IsDriverViewEnabled')
+  return 'qcom' if params.get_bool('UsbGpuActive') and not dm_needed else 'tracking_cpu'
+
+
 def run_auto(directory=DIRECTORY, duration=None):
-  """Keep QCOM neural work off the GPU used by the internal driving model.
+  """Keep QCOM neural work off the GPU needed by the driving or DM model.
 
   A process boundary releases all GPU buffers on a mode change. The CPU mode
   deliberately uses the existing lightweight camera tracker, not CPU YOLOX.
@@ -47,6 +56,7 @@ def run_auto(directory=DIRECTORY, duration=None):
   from openpilot.common.params import Params
   from openpilot.common.swaglog import cloudlog
   params = Params()
+  selection = backend_requested(directory)
   child, selected = None, None
   start = time.monotonic()
 
@@ -69,9 +79,9 @@ def run_auto(directory=DIRECTORY, duration=None):
 
   previous = signal.signal(signal.SIGTERM, terminate)
   try:
-    while (requested(directory) and neural_requested(directory) and backend_requested(directory) == 'auto'
+    while (requested(directory) and neural_requested(directory) and backend_requested(directory) == selection
            and (duration is None or time.monotonic()-start < duration)):
-      mode = 'qcom' if params.get_bool('UsbGpuActive') else 'tracking_cpu'
+      mode = automatic_backend(params)
       if mode != selected:
         stop_child()
         child = multiprocessing.get_context('spawn').Process(target=run_selected, args=(directory, mode), daemon=True)
@@ -102,14 +112,14 @@ def display_tracks(tracks):
 
 
 def run(directory=DIRECTORY, duration=None, backend_override=None):
-  import fcntl
   import sys
   directory = Path(directory)
   if not requested(directory) or not neural_requested(directory):
     return
   selection = backend_requested(directory)
-  if selection == 'auto' and backend_override is None:
+  if selection in ('auto', 'qcom') and backend_override is None:
     return run_auto(directory, duration)
+  import fcntl
   with (directory / 'worker.lock').open('w') as lock:
     try:
       fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -127,6 +137,7 @@ def run(directory=DIRECTORY, duration=None, backend_override=None):
     from openpilot.selfdrive.modeld.signal_tracking_shadow import copy_nv12_rgb, next_delay, MAX_INPUT_AGE_MS
     from openpilot.selfdrive.carrot.signal_display import display_requested, publish_display
     from openpilot.selfdrive.carrot.signal_start_guard import publish_start_observation
+    from openpilot.selfdrive.carrot.signal_assist_runtime import requested as flag_requested
     cv2.setNumThreads(1)
     cv2.ocl.setUseOpenCL(False)
     backend = backend_override or selection
@@ -175,7 +186,7 @@ def run(directory=DIRECTORY, duration=None, backend_override=None):
                     input_age_ms=age, result_age_ms=(time.monotonic_ns()-eof)/1e6,
                     recorded_monotonic_ns=time.monotonic_ns(), work_ms=(time.monotonic()-begin)*1000,
                     cpu_ms=(time.process_time()-cpu)*1000, tracks=display_tracks(result['tracks']),
-                    start_guard_transport=requested(directory / 'start_guard_enabled'),
+                    start_guard_transport=flag_requested(directory / 'start_guard_enabled'),
                     control_permission=False, assist_transport=False)
       cloudlog.event('signalNeuralShadow', **record)
       try:
