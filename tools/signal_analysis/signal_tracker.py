@@ -192,6 +192,7 @@ class Track:
   pending: str = 'unknown'
   pending_since: float = 0.
   observations: int = 0
+  pending_count: int = 0
   seen_red: bool = False
   last_support: float = 0.
   evidence: dict = field(default_factory=dict)
@@ -199,6 +200,11 @@ class Track:
 
 class SignalTracker:
   """Bounded confirmation and expiry per tracked housing; never carries state across IDs."""
+  # Object continuity and output freshness are separate contracts. The worker's
+  # CPU duty limit produces 150-200 ms observations on the internal-model C4.
+  MAX_OBSERVATION_GAP = .25
+  MAX_VISIBLE_AGE = .125
+
   def __init__(self):
     self.tracks = []
     self.next_id = 1
@@ -206,10 +212,10 @@ class SignalTracker:
     self.previous_gray = None
 
   def update(self, timestamp, detections):
-    if self.last_timestamp is not None and (timestamp <= self.last_timestamp or timestamp-self.last_timestamp > .25):
+    if self.last_timestamp is not None and (timestamp <= self.last_timestamp or timestamp-self.last_timestamp > self.MAX_OBSERVATION_GAP):
       self.tracks = []
     self.last_timestamp = timestamp
-    self.tracks = [t for t in self.tracks if timestamp-t.last_seen <= .25]
+    self.tracks = [t for t in self.tracks if timestamp-t.last_seen <= self.MAX_OBSERVATION_GAP]
     used = set()
     for d in detections:
       candidates = []
@@ -232,25 +238,30 @@ class SignalTracker:
       raw = d['raw']
       if raw == 'unknown':
         t.pending = 'unknown'
+        t.pending_count = 0
         if timestamp-t.last_support > .15:
           t.state = 'unknown'
-      # Two camera periods plus timing tolerance; longer gaps restart confirmation.
-      elif raw != t.pending or gap > .125:
+      elif raw != t.pending or gap > self.MAX_OBSERVATION_GAP:
         t.pending = raw;t.pending_since = timestamp
+        t.pending_count = 1
         # A contradictory observation removes an earlier green immediately.
         if raw != t.state:
           t.state = 'unknown'
-      elif timestamp-t.pending_since >= (.10 if raw == 'red' else .15)-1e-6 and t.observations >= 3:
-        if raw == 'red':
-          t.seen_red = True
-        t.state = raw if raw == 'red' or t.seen_red else 'unknown'
+      else:
+        t.pending_count += 1
+        if timestamp-t.pending_since >= (.10 if raw == 'red' else .15)-1e-6 and t.pending_count >= 3:
+          if raw == 'red':
+            t.seen_red = True
+          t.state = raw if raw == 'red' or t.seen_red else 'unknown'
       if raw == t.state and raw != 'unknown':
         t.last_support = timestamp
     visible = []
     for t in self.tracks:
       age = timestamp-t.last_seen
-      state = t.state if age <= .125 else 'unknown'
-      visible.append(dict(id=t.ident, box=t.box, state=state, age=age, observations=t.observations, seen_red=t.seen_red, evidence=t.evidence))
+      state = t.state if age <= self.MAX_VISIBLE_AGE else 'unknown'
+      visible.append(dict(id=t.ident, box=t.box, state=state, age=age, observations=t.observations, seen_red=t.seen_red,
+                          support_state=t.pending, support_since=t.pending_since, support_count=t.pending_count,
+                          evidence=t.evidence))
     # No ego-lane claim. Conflicting visible signals cannot become a green vote.
     reliable = [t for t in visible if t['state'] != 'unknown' and t['observations'] >= 3]
     states = {t['state'] for t in reliable}
@@ -260,9 +271,11 @@ class SignalTracker:
   def process(self, rgb, timestamp):
     detections = detect(rgb)
     gray = cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY)
-    if self.previous_gray is not None and self.last_timestamp is not None and 0 < timestamp-self.last_timestamp <= .125:
+    if self.previous_gray is not None and self.last_timestamp is not None and 0 < timestamp-self.last_timestamp <= self.MAX_OBSERVATION_GAP:
       for track in self.tracks:
-        if not track.seen_red or timestamp-track.last_seen > .125:
+        # The template must belong to the immediately preceding image. An old
+        # box alone cannot identify the object in that intervening image.
+        if not track.seen_red or track.last_seen != self.last_timestamp:
           continue
         if any(overlap(track.box,d['box']) > .25 for d in detections):
           continue
