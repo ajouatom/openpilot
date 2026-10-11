@@ -1130,6 +1130,15 @@ EVENTS: dict[int, dict[str, Alert | AlertCallbackType]] = {
   EventName.audioTurn: {
      ET.WARNING: EngagementAlert(AudibleAlert.audioTurn),
   },
+  # Voice only, and also while only lateral is active (most lever turns happen without longitudinal).
+  EventName.turnModel: {
+    ET.PERMANENT: Alert("", "", AlertStatus.normal, AlertSize.none, Priority.LOW,
+                        VisualAlert.none, AudibleAlert.turnModel, .2),
+  },
+  EventName.turnModelEnd: {
+    ET.PERMANENT: Alert("", "", AlertStatus.normal, AlertSize.none, Priority.LOW,
+                        VisualAlert.none, AudibleAlert.turnModelEnd, .2),
+  },
   EventName.trafficSignGreen: {
     ET.WARNING: EngagementAlert(AudibleAlert.trafficSignGreen),
     #ET.WARNING: Alert(

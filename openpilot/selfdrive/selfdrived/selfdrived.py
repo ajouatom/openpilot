@@ -22,6 +22,7 @@ from openpilot.selfdrive.selfdrived.camera_config import get_camera_packets
 from openpilot.selfdrive.selfdrived.events import Events, ET, EmptyAlert
 from openpilot.selfdrive.selfdrived.helpers import ExcessiveActuationCheck
 from openpilot.selfdrive.selfdrived.state import StateMachine
+from openpilot.selfdrive.selfdrived.turn_prompt import TURN_DESIRES, TurnPrompt, TurnPromptTracker
 from openpilot.selfdrive.selfdrived.impact_detector import ImpactDetector
 from openpilot.selfdrive.selfdrived.alertmanager import AlertManager, set_offroad_alert
 from openpilot.selfdrive.controls.lib.cutin_alert import (
@@ -152,6 +153,7 @@ class SelfdriveD:
     self.rk = Ratekeeper(100, print_delay_threshold=None)
 
     self.atc_type_last = ""
+    self.turn_prompt = TurnPromptTracker()
 
 
     # some comma three with NVMe experience NVMe dropouts mid-drive that
@@ -365,6 +367,13 @@ class SelfdriveD:
         elif "turn" in atc_type and "turn" not in self.atc_type_last:   # fork left/right -> turn left/right
           self.events.add(EventName.audioTurn)
         self.atc_type_last = atc_type
+
+    turn_prompt = self.turn_prompt.update(self.sm['modelV2'].meta.desire.raw in TURN_DESIRES,
+                                          self.sm['carControl'].latActive, self.sm.frame * DT_CTRL)
+    if turn_prompt == TurnPrompt.TURN:
+      self.events.add(EventName.turnModel)
+    elif turn_prompt == TurnPrompt.STRAIGHT:
+      self.events.add(EventName.turnModelEnd)
 
     # Handle lane change
     if self.sm['modelV2'].meta.laneChangeState == LaneChangeState.preLaneChange:
