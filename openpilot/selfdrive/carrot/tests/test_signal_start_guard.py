@@ -90,6 +90,8 @@ def test_gas_override_cooldown_and_disable_park():
   for k in ('enabled', 'drive'):
     g = held()
     assert not step(g, .7, **{k: False}).hold
+  g = held()
+  assert not step(g, -1., gas=True).hold
 
 
 def test_warning_waits_for_departure_request():
@@ -121,6 +123,7 @@ def test_publisher_opt_in_raw_only_and_neural_confidence(tmp_path):
   (tmp_path/'start_guard_enabled').write_text('1')
   for label, score, age, expected in [('red', .9, 0, 'red'), ('green', .9, 0, 'green'),
                                        ('green,left', .9, 0, 'unknown'), ('red', .7, 0, 'unknown'),
+                                       ('red', float('nan'), 0, 'unknown'), ('green', float('inf'), 0, 'unknown'),
                                        ('red', .9, .1, 'unknown'), ('red,left', .9, 0, 'red')]:
     rec['tracks'][0].update(label=label, score=score, age=age)
     publish_start_observation(rec, tmp_path, path)
