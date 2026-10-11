@@ -57,8 +57,11 @@ def visible_tracks(record, now, camera_frame):
               and 0 <= x1 < x2 <= width and 0 <= y1 < y2 <= height
               and t['age'] == 0 and isinstance(t['id'], int) and 0 < t['id'] < 1_000_000):
         continue
-      state = t['state'] if t['state'] in ('red', 'green') and t['raw'] == t['state'] else 'unknown'
-      result.append(dict(id=t['id'], box=tuple(t['box']), state=state))
+      # Display current color evidence independently of departure qualification.
+      # A green-first track cannot satisfy the observer's red-history gate.
+      state = t['raw'] if t['raw'] in ('red', 'green') else 'unknown'
+      confirmed = state != 'unknown' and t['state'] == state
+      result.append(dict(id=t['id'], box=tuple(t['box']), state=state, confirmed=confirmed))
     return tuple(result)
   except (KeyError, TypeError, ValueError, OverflowError):
     return ()
@@ -86,7 +89,7 @@ class SignalDisplayReader:
     self.next_status = now + 1.
     try:
       record = self.record if isinstance(self.record, dict) else {}
-      value = dict(timestamp=now, boxes_drawn=count, camera_frame=camera_frame,
+      value = dict(display_revision=2, timestamp=now, boxes_drawn=count, camera_frame=camera_frame,
                    observation_frame=record.get('frame_id'), engine=record.get('engine'),
                    observation_timestamp=record.get('timestamp'))
       path = Path(path); temp = path.with_suffix('.tmp')
