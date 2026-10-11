@@ -1678,9 +1678,10 @@ class ClusterUiRenderer:
             rl.draw_rectangle_lines_ex(rect, 2., rl_color(color))
             label_x = max(dest.x+4, min(x, dest.x+dest.width-90))
             label_y = max(dest.y+font_size*2, y-font_size*.7)
-            self._draw_text_with_stroke(f"{letters[track['state']]} #{track['id']}", label_x, label_y,
+            qualifier = '?' if track['state'] != 'unknown' and not track['confirmed'] else ''
+            self._draw_text_with_stroke(f"{letters[track['state']]}{qualifier} #{track['id']}", label_x, label_y,
                                         font_size, color, (0, 0, 0), 2)
-        caption = f"신호 관찰 {visible}" if self.language == CLUSTER_LANGUAGE_KO else f"SIGNAL VIEW {visible}"
+        caption = f"신호 후보 {visible}" if self.language == CLUSTER_LANGUAGE_KO else f"SIGNAL CANDIDATES {visible}"
         if live_camera.is_wide:
             caption = "신호 관찰: 일반 카메라에서 표시" if self.language == CLUSTER_LANGUAGE_KO else 'SIGNAL VIEW: ROAD CAMERA ONLY'
         self._draw_text_with_stroke(caption, dest.x+12, dest.y+font_size, font_size,
