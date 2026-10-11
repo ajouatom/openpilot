@@ -25,7 +25,8 @@ def publish_start_observation(record, directory=ENABLE_PATH.parent, path=OBSERVA
     if record.get('neural'):
       labels = t.get('label', '').split(',')
       raw = ('red' if 'red' in labels else 'green' if labels == ['green'] else 'unknown')
-      if t.get('score', 0) < .8 or not 0 <= t.get('neural_age', math.inf) <= .5:
+      score = t.get('score', 0)
+      if not math.isfinite(score) or not .8 <= score <= 1. or not 0 <= t.get('neural_age', math.inf) <= .5:
         raw = 'unknown'
     elif t.get('observations', 0) < 3:
       raw = 'unknown'
@@ -141,18 +142,20 @@ class SignalStartGuard:
       return 'malformed'
 
   def update(self, now, observation, *, enabled, valid, drive, gas, speed, departure):
+    if not enabled or not drive:
+      self.reset()
+      self.last_now = now if math.isfinite(now) else -math.inf
+      return StartDecision()
+    if gas:
+      self.reset()
+      self.last_now = now if math.isfinite(now) else -math.inf
+      self.cooldown = now+10. if math.isfinite(now) else math.inf
+      return StartDecision(reason='driver_gas')
     if not math.isfinite(now) or now < self.last_now:
       # Clock discontinuity cannot turn a held red into permission to go.
       self.pending, self.count, self.box, self.session = None, 0, None, None
       return StartDecision(self.hold, reason='clock_discontinuity')
     self.last_now = now
-    if not enabled or not drive:
-      self.reset()
-      return StartDecision()
-    if gas:
-      self.reset()
-      self.cooldown = now+10.
-      return StartDecision(reason='driver_gas')
     if now < self.cooldown:
       return StartDecision(reason='driver_cooldown')
     if not valid or not math.isfinite(speed):
