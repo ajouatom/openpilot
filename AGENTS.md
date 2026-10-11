@@ -1,5 +1,19 @@
 # Repository memory
 
+- On 2026-10-11, the user requested the best distant/fast/accurate signal
+  recognition approach, including upper-path ROI and overlapping frames. Offline
+  pretrained Autoware YOLOX-s on 73 selected boxes improves IoU>=0.5 coverage
+  from rules 49 to whole-frame 63, upper ROI 68 and two tiles 70; this is not
+  exhaustive precision or vehicle timing. A separate MobileNet classifier still
+  misses arrow combinations and returns unknown on dark real-green frames.
+  Five-frame averaging retains old red across a green transition even after
+  alignment. Prefer native-pixel ROI, neural detection, tracking and fresh lamp
+  evidence; dynamic ROI/full-resolution/vehicle integration are not implemented.
+  Logs confirm OS04C10; code downsamples 2688x1520 to1344x760 and has a full-res
+  placeholder, whose safe per-frame access remains unverified. Preserve original
+  driving ONNX and assist OFF; no vehicle changes in this investigation.
+  See docs/signal_detection_strategy_20261011.md; keep all raw evidence private.
+
 - On 2026-10-11, the post-overlay 1096/1097 drive contains 22 collected segments.
   Helper observations run 3.23--4.93 Hz; median result age is 178 ms and
   2,345/5,345 gaps exceed the 250 ms color-confirmation limit. Track 1267
