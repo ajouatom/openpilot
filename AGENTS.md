@@ -1,5 +1,19 @@
 # Repository memory
 
+- On 2026-10-12, the user requested collecting unseen night/morning logs and
+  evaluating signal size/height/road-edge filtering, analysis first. All52
+  completed segments/169 source files are locally SHA256-verified. Morning CPU
+  observer emits6792 fresh green candidate samples,6011 from day_color_core;
+  reviewed branches/sky pass hue38-105. Two still-red signals receive green
+  through tiny/cropped housings and adjacent cyan sky. This is not just UI hold.
+  In73 selected labels, conservative geometry removes8/62 background candidates
+  and neither red miscrop; an exploratory narrower-hue pixel test removes61/62
+  and both miscrops but is not a validated detector or night regression test.
+  No runtime/settings/model change or deployment. Prioritize sky rejection and
+  complete housing/lamp alignment; road edges are supporting evidence, not lane
+  assignment. Keep DM GPU protection. See docs/signal_morning_false_green_20261012.md
+  and private .analysis/archive/2026-10-12-day-signal/ for evidence and limits.
+
 - On 2026-10-11, the next drive exposed signal QCOM GPU contention with DM:
   parked A/B/A gives DM 10.6-10.8 Hz with neural GPU versus 20 Hz with CPU;
   priority15 also fails. This supersedes eGPU-implies-QCOM eligibility below.
