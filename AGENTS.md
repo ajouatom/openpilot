@@ -1,5 +1,75 @@
 # Repository memory
 
+- On 2026-10-11, the next drive exposed signal QCOM GPU contention with DM:
+  parked A/B/A gives DM 10.6-10.8 Hz with neural GPU versus 20 Hz with CPU;
+  priority15 also fails. This supersedes eGPU-implies-QCOM eligibility below.
+  Auto AND explicit QCOM now use CPU comparison whenever DM or Driver View
+  needs the internal GPU; never disable DM or use camera failure as permission.
+  Preserve DM policies and external/internal driving-model selections. Latest
+  drive neural observations at 2.33-2.67 Hz reset identity on every >250 ms gap.
+  Display revision4 extends UI-only memory to two seconds from capture, unique
+  same-housing unknown-ID carry without renewing old color, dim/~ previous and
+  immediate new color replacement. Ten-phase replay reduces visibility dropouts
+  146-162 to14, not recognition accuracy. Stopped red guard stays650 ms, warning
+  ON and moving assist OFF. 163 desktop tests pass, one Linux-only skip.
+  See docs/signal_dm_flicker_20261011.md for native verification and limitations.
+
+- On 2026-10-11, the user explicitly requested red automatic-departure blocking
+  AND one warning sound. Add separate default-OFF start_guard_enabled, fresh
+  observation transport and stopped-only veto for both observer backends. Keep
+  old moving assist OFF. Red needs two samples/150 ms; green same red-anchored
+  housing needs three/700 ms with no competing forward red. Unknown/stale and
+  observer restart never grant green release. Stop-only freshness is 650 ms
+  for measured GPU latency; old moving-assist 200 ms stays unchanged. Gas
+  overrides with 10 s cooldown. Final shouldStop/vTarget/aTarget and ACC mode
+  enforce the veto; audioRefuse is once per blocked stop's departure request.
+  264 checks pass, one skip. 43,090-frame nominal/+20 ms replays block both
+  1095 red departures; reviewed-red green releases are zero, but green holds
+  remain. Forward ROI is not lane association and detection can still fail.
+  New MDM stays trial-only; auto chooses QCOM neural with eGPU, lightweight
+  CPU tracker with internal model. Both sustain ~20 Hz parked; internal+QCOM
+  co-load falls to ~8 Hz and is rejected. See docs/signal_start_guard_20261011.md
+  and docs/signal_gpu_dual_model_20261011.md for evidence and device status.
+
+- On 2026-10-11, the user redirected the new upstream 6f4c0faf eGPU model
+  to carrot-signal-shadow for testing before a combined promotion. Revert the
+  just-pushed 03142df861 model/runtime change from carrot-wip; wip keeps Cinque
+  v3. Retrained Mountain Dew 8d736683 and its d3f09c9 runtime belong only on
+  carrot-signal-shadow until the user approves promotion. Its verified NAS
+  package is comma4-big-mdm-8d736683. The public ONNX catalog now includes old
+  870a4823, but not 8d736683; keep Jetson Cinque v2 and internal/DM models.
+
+- On 2026-10-11, the user explicitly requested connecting the new neural
+  signal detector to the vehicle, engine-off camera testing and CPU/QCOM GPU
+  timing comparison. Add opt-in neural_enabled dispatch in signalcolord, a
+  display/log-only VisionIPC worker, hash-pinned artifacts and explicit CPU/QCOM
+  backends. Preserve original ONNX/x/v and assist OFF; no control transport.
+  Default remains existing observer unless explicitly selected. QCOM uses the
+  existing tinygrad runtime, fixed-shape JIT and synchronous readback; no hidden
+  CPU fallback. 130 desktop tests pass, one skip. Vehicle offroad/noOutput and
+  runtime inventory were read, but intermittent SSH timeouts interrupted model
+  upload. GPU speed/parity, new live inference and forced camera/model co-load
+  remain unvalidated and must not be called installed or activated. Last checked
+  vehicle HEAD fc7588d67a contains only the earlier display-continuity deployment.
+  Resume private scripts/data in .analysis/scratch/2026-10-11-signal-live/ after
+  connection recovery. See docs/signal_neural_live_20261011.md.
+
+- On 2026-10-11, the user requested holding prior signal display results and
+  combining upper ROI, neural detection, fast tracking and high-resolution crop.
+  New 26-segment data has 5,714 observations at2.71--4.99 Hz, median gap250 ms
+  and result age183 ms. Display revision3 remembers candidates up to800 ms from
+  capture, marks them dim/~ previous, immediately replaces new red/green and
+  never renews old color from unknown/repeated data. Camera/session failures reset
+  it. This supersedes display-only no-hold policy; control freshness stays200 ms.
+  Offline pinned neural+tracking on381 new frames reduces PC mean work100 to33 ms;
+  faster search after loss removes a150 ms green reacquisition delay in that case.
+  Dark-light loss/arrows remain unresolved. ROI NV12 copying is implemented, but
+  native full-resolution camerad access, dynamic path ROI and GPU inference are
+  not connected. New neural reference remains offline, original ONNX/assist OFF
+  preserved. 123 related tests pass, one Linux-only skip. Vehicle install guards
+  offroad/inactive Park; see private deployment.json for live activation status.
+  See docs/signal_continuity_20261011.md. Keep recordings private.
+
 - On 2026-10-11, the user requested the best distant/fast/accurate signal
   recognition approach, including upper-path ROI and overlapping frames. Offline
   pretrained Autoware YOLOX-s on 73 selected boxes improves IoU>=0.5 coverage

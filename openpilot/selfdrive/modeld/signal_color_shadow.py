@@ -152,6 +152,9 @@ def configure_worker_scheduling():
 
 
 def run(directory=DIRECTORY, duration=None):
+  from openpilot.selfdrive.modeld.signal_neural_shadow import neural_requested, run as run_neural
+  if neural_requested(directory):
+    return run_neural(directory, duration)
   from openpilot.selfdrive.modeld.signal_tracking_shadow import tracking_requested, run as run_tracking
   if tracking_requested(directory):
     return run_tracking(directory, duration)

@@ -823,6 +823,8 @@ class VisionRadarMatcher:
   """Match vision/radar leads and confirm no-vision moving radar leads."""
 
   def __init__(self) -> None:
+    self._closing_range_history: dict[tuple[str, int], tuple[float, float, RadarPointSnapshot]] = {}
+    self.closing_range_match: VisionRadarMatch | None = None
     self.last_identity: tuple[str, int] | None = None
     self.low_probability_hold_frames = 0
     self.stationary_identity: tuple[str, int] | None = None
@@ -888,6 +890,8 @@ class VisionRadarMatcher:
     self._rejected_radar_only_moving_last_time_s: float | None = None
 
   def reset(self) -> None:
+    self._closing_range_history.clear()
+    self.closing_range_match = None
     self._reset_moving()
     self._reset_stationary()
     self._reset_radar_only_moving()
@@ -3476,6 +3480,56 @@ class VisionRadarMatcher:
       d_path=d_path,
     )
 
+  def _match_closing_range(self, vision, points, path, time_s, yaw_rate_rad_s):
+    """Qualify a slower measured front despite uncertain visual range/speed.
+
+    Distance times speed is not an urgency metric. Compare the stopped-equivalent
+    obstacles at 2.5 m/s^2 instead, without changing either measurement. This
+    exception cannot replace a closer regular match or a braking visual lead.
+    """
+    self.closing_range_match = None
+    history = {}
+    matches = []
+    if (vision is not None and time_s is not None and math.isfinite(time_s)
+        and math.isfinite(yaw_rate_rad_s) and abs(yaw_rate_rad_s) < 0.05
+        and all(math.isfinite(value) for value in (vision.d_rel, vision.y_rel, vision.velocity,
+                                                 vision.acceleration, vision.probability, vision.x_std))
+        and vision.probability >= 0.6 and vision.acceleration >= -0.5):
+      vision_path = project_to_model_path(path, vision.d_rel, vision.y_rel).d_path
+      for point in points:
+        if not all(math.isfinite(value) for value in (point.d_rel, point.y_rel, point.v_rel, point.v_lead, point.yv_rel)):
+          continue
+        delta = point.d_rel - vision.d_rel
+        limit = min(35.0, 0.4 * vision.d_rel, max(15.0, 2.5 * abs(vision.x_std)))
+        d_path = project_to_model_path(path, point.d_rel, point.y_rel).d_path
+        if (point.source != "frontRadar" or not point.measured or point.radar_track_state < 2
+            or not 40.0 <= point.d_rel <= 150.0 or point.v_rel >= -1.0
+            or not 4.0 < point.v_lead < vision.velocity - 2.0
+            or vision.velocity - point.v_lead > 20.0 or not 0.0 <= delta <= limit
+            or abs(d_path) > 1.5 or abs(vision_path) > 1.0
+            or abs(point.y_rel - vision.y_rel) > 1.25
+            or point.d_rel + point.v_lead ** 2 / 5.0 + 5.0
+            > vision.d_rel + vision.velocity ** 2 / 5.0):
+          continue
+        key = self._identity(point)
+        previous = self._closing_range_history.get(key)
+        since = time_s
+        if previous is not None:
+          start, last, old = previous
+          dt = time_s - last
+          if (0.0 < dt <= 0.15
+              and abs(point.d_rel - old.d_rel - old.v_rel * dt) <= 1.0
+              and abs(point.y_rel - old.y_rel - old.yv_rel * dt) <= 0.5
+              and abs(point.v_lead - old.v_lead) <= 2.0):
+            since = start
+        history[key] = (since, time_s, point)
+        if time_s - since >= 0.25:
+          matches.append(VisionRadarMatch(point, vision.probability, 1.0 - delta / max(limit, 1.0), d_path))
+    self._closing_range_history = history
+    if matches:
+      self.closing_range_match = min(matches, key=lambda match: match.point.d_rel)
+    return self.closing_range_match
+
   def _match_moving(
     self,
     vision: VisionLead | None,
@@ -3869,6 +3923,7 @@ class VisionRadarMatcher:
         if point.source in allowed_output_sources
       )
     )
+    closing_range = self._match_closing_range(vision, output_values, path, time_s, yaw_rate_rad_s)
     far_corroborated = self._match_far_vision_corroborated_radar(
       vision,
       output_values,
@@ -3934,7 +3989,7 @@ class VisionRadarMatcher:
       vision, output_values, path, time_s,
     )
     if corroborated is None:
-      corroborated = far_corroborated
+      corroborated = closing_range if closing_range is not None else far_corroborated
     if (
       radar_moving is not None
       and (
