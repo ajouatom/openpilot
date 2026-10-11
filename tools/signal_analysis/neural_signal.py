@@ -1,4 +1,4 @@
-"""Offline neural signal/crop experiment. No messaging, vehicle settings or control.
+"""Neural signal/crop inference shared by offline tests and opt-in visualization.
 
 Reference artifacts and interpretation limits: docs/signal_detection_strategy_20261011.md.
 Boxes and lamp classes do not establish which signal applies to the ego vehicle.
@@ -35,22 +35,64 @@ def copy_nv12_crop_rgb(frame, rect):
   return cv2.cvtColor(packed, cv2.COLOR_YUV2RGB_NV12)
 
 
+class QcomSession:
+  """Explicit QCOM execution with fixed-shape JIT and synchronous output copies.
+
+  Own this in a dedicated process: tinygrad's default device is process-global.
+  No automatic CPU fallback can conceal a failed GPU measurement.
+  """
+  def __init__(self, path):
+    import os
+    os.environ['DEV'] = 'QCOM'
+    from tinygrad import Tensor, Device, TinyJit
+    from tinygrad.nn.onnx import OnnxRunner
+    if Device.DEFAULT != 'QCOM':
+      raise RuntimeError('QCOM session requires a dedicated QCOM process')
+    self.runner = OnnxRunner(str(path))
+    self.Tensor = Tensor
+    self.input_names = tuple(self.runner.graph_inputs)
+    self.inputs = None
+    def forward(*values):
+      outputs = self.runner(dict(zip(self.input_names, values)))
+      return tuple(outputs[n].realize() for n in self.runner.graph_outputs)
+    self.forward = TinyJit(forward)
+
+  def run(self, output_names, values):
+    if output_names is not None or set(values) != set(self.input_names):
+      raise ValueError('unexpected QCOM input/output contract')
+    arrays = [np.ascontiguousarray(values[n], dtype=np.float32) for n in self.input_names]
+    if self.inputs is None:
+      self.inputs = [self.Tensor(a, device='QCOM').realize() for a in arrays]
+    else:
+      for tensor, array in zip(self.inputs, arrays):
+        if tensor.shape != array.shape:
+          raise ValueError('QCOM input shape changed')
+        tensor.assign(array).realize()
+    return [output.numpy() for output in self.forward(*self.inputs)]
+
+
 class NeuralSignal:
-  """Pinned pretrained ONNX reference; one CPU thread, explicit artifact paths."""
+  """Pinned pretrained ONNX; explicit CPU or QCOM backend and artifact paths."""
   DETECTOR_SHA = '1ad633066a1195006f4709f8fa07800dd65a74a814b3efb4c99bcc5a1a7962f6'
   CLASSIFIER_SHA = '455b71b3b20d3a96aa0e49f32714ba50421f668a2f9b9907c30b1346ac8a3703'
   LABELS = ('green', 'left,red', 'left,red,straight', 'red', 'red,right', 'red,straight',
             'unknown', 'yellow', 'red,up_left', 'red,right,straight', 'red,up_right')
 
-  def __init__(self, detector, classifier):
-    import onnxruntime as ort
-    options = ort.SessionOptions()
-    options.intra_op_num_threads = options.inter_op_num_threads = 1
+  def __init__(self, detector, classifier, backend='cpu'):
+    if backend not in ('cpu', 'qcom'):
+      raise ValueError('unsupported neural backend')
+    self.backend = backend
+    if backend == 'cpu':
+      import onnxruntime as ort
+      options = ort.SessionOptions()
+      options.intra_op_num_threads = options.inter_op_num_threads = 1
+      options.add_session_config_entry('session.intra_op.allow_spinning', '0')
     sessions = []
     for path, expected in [(detector, self.DETECTOR_SHA), (classifier, self.CLASSIFIER_SHA)]:
       if hashlib.sha256(Path(path).read_bytes()).hexdigest() != expected:
         raise ValueError('reference ONNX hash mismatch')
-      sessions.append(ort.InferenceSession(str(path), options, providers=['CPUExecutionProvider']))
+      sessions.append(QcomSession(path) if backend == 'qcom' else
+                      ort.InferenceSession(str(path), options, providers=['CPUExecutionProvider']))
     self.detector, self.classifier = sessions
     self.grid = np.array([(x, y, s) for s in (8, 16, 32) for y in range(416//s) for x in range(416//s)], np.float32)
 
@@ -72,7 +114,9 @@ class NeuralSignal:
     boxes = np.concatenate((centers-sizes/2, centers+sizes/2), axis=1)/scale + [x1, y1, x1, y1]
     kept = []
     for j in np.argsort(-score[indices]):
-      box = boxes[j].tolist()
+      box = np.clip(boxes[j], [0, 0, 0, 0], [rgb.shape[1], rgb.shape[0]]*2).tolist()
+      if not all(np.isfinite(box)) or box[0] >= box[2] or box[1] >= box[3]:
+        continue
       if all(overlap(box, old['box']) < .65 for old in kept):
         kept.append(dict(box=box, score=float(score[indices[j]])))
     return kept
@@ -85,7 +129,7 @@ class NeuralSignal:
       return dict(label='unknown', score=0.)
     h, w = crop.shape[:2]
     scale = min(224/w, 224/h)
-    resized = cv2.resize(crop, (round(w*scale), round(h*scale)))
+    resized = cv2.resize(crop, (max(1, round(w*scale)), max(1, round(h*scale))))
     tensor = np.zeros((224, 224, 3), np.float32)
     tensor[:resized.shape[0], :resized.shape[1]] = resized
     tensor = (tensor-np.array([123.675, 116.28, 103.53], np.float32))/np.array([58.395, 57.12, 57.375], np.float32)

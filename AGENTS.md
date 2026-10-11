@@ -1,5 +1,20 @@
 # Repository memory
 
+- On 2026-10-11, the user explicitly requested connecting the new neural
+  signal detector to the vehicle, engine-off camera testing and CPU/QCOM GPU
+  timing comparison. Add opt-in neural_enabled dispatch in signalcolord, a
+  display/log-only VisionIPC worker, hash-pinned artifacts and explicit CPU/QCOM
+  backends. Preserve original ONNX/x/v and assist OFF; no control transport.
+  Default remains existing observer unless explicitly selected. QCOM uses the
+  existing tinygrad runtime, fixed-shape JIT and synchronous readback; no hidden
+  CPU fallback. 130 desktop tests pass, one skip. Vehicle offroad/noOutput and
+  runtime inventory were read, but intermittent SSH timeouts interrupted model
+  upload. GPU speed/parity, new live inference and forced camera/model co-load
+  remain unvalidated and must not be called installed or activated. Last checked
+  vehicle HEAD fc7588d67a contains only the earlier display-continuity deployment.
+  Resume private scripts/data in .analysis/scratch/2026-10-11-signal-live/ after
+  connection recovery. See docs/signal_neural_live_20261011.md.
+
 - On 2026-10-11, the user requested holding prior signal display results and
   combining upper ROI, neural detection, fast tracking and high-resolution crop.
   New 26-segment data has 5,714 observations at2.71--4.99 Hz, median gap250 ms
