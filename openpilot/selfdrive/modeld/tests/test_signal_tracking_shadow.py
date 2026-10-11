@@ -99,14 +99,17 @@ def test_worker_modes_select_engines_and_bound_transport(monkeypatch, tmp_path, 
   import sys
   from openpilot.selfdrive.modeld import signal_tracking_shadow as worker
   from openpilot.selfdrive.carrot import signal_assist_runtime
+  from openpilot.selfdrive.carrot import signal_display
   from tools.signal_analysis import signal_tracker
 
   for name in ['enabled', 'tracking_enabled']:
     (tmp_path / name).write_text('1')
   (tmp_path / 'daytime_comparison_enabled').write_text(str(int(comparison)))
   (tmp_path / 'revalidated_enabled').write_text(str(int(revalidated)))
+  (tmp_path / 'display_enabled').write_text('1')
   rgb = object()
   calls, events, published = [], [], []
+  displays = []
   class Tracker:
     def __init__(self, **kwargs):
       self.trial = kwargs.get('daytime_cores', False)
@@ -135,10 +138,13 @@ def test_worker_modes_select_engines_and_bound_transport(monkeypatch, tmp_path, 
   monkeypatch.setattr(worker.time, 'sleep', lambda seconds: None)
   monkeypatch.setattr(signal_tracker, 'SignalTracker', Tracker)
   monkeypatch.setattr(signal_assist_runtime, 'publish_observation', lambda *a: published.append(a))
+  monkeypatch.setattr(signal_display, 'publish_display', lambda record: displays.append(record))
   worker.run(tmp_path)
   assert [c[0] for c in calls] == ([False, True] if comparison else [revalidated])
   assert [c[2] for c in calls] == ([False, revalidated] if comparison else [revalidated])
   assert len(published) == (0 if comparison else 1)
+  assert len(displays) == 1
+  assert displays[0]['prediction'] == ('green' if comparison or revalidated else 'red')
   records = {name: record for name, record in events}
   assert records['signalTrackingShadow']['prediction'] == ('green' if revalidated and not comparison else 'red')
   if comparison:

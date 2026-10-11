@@ -89,6 +89,8 @@ def test_camera_switch_waits_for_wide_frame_before_changing_projection(monkeypat
   class FakeClient:
     streams = {road_stream, wide_stream}
     target_frame = None
+    frame_id = 1
+    timestamp_eof = 1_000_000_000
 
     def __init__(self, _name, stream, conflate=True):
       self.stream = stream
@@ -137,6 +139,18 @@ def test_camera_switch_waits_for_wide_frame_before_changing_projection(monkeypat
   assert camera.select_stream(True)
   assert camera._stream_type == wide_stream
   assert camera._frame is FakeClient.target_frame
+
+
+def test_display_frame_rejects_reused_camera_buffer():
+  camera = object.__new__(LiveRoadCamera)
+  camera._frame_id, camera._frame_eof = 20, 10.0
+  camera._stream_type, camera._wide_stream_type = 0, 2
+  camera._frame = SimpleNamespace(frame_id=20, width=1344, height=760)
+  assert camera.display_frame == (20, 10.0, 1344, 760, False)
+  camera._frame.frame_id = 24
+  assert camera.display_frame is None
+  camera._frame = None
+  assert camera.display_frame is None
 
 
 def test_camera_wide_request_falls_back_when_stream_is_unavailable():

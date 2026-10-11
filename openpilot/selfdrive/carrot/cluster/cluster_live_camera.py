@@ -85,6 +85,8 @@ class LiveRoadCamera:
         self._available_streams: set[object] = set()
         self._last_stream_discovery = 0.0
         self._frame = None
+        self._frame_id = None
+        self._frame_eof = 0.0
         self._last_connection_attempt = 0.0
         self._connected_at = 0.0
         self._last_frame_poll = 0.0
@@ -159,6 +161,8 @@ class LiveRoadCamera:
         self._target_client = None
         self._target_stream_type = None
         self._frame = target_frame
+        self._frame_id = int(self._client.frame_id)
+        self._frame_eof = self._client.timestamp_eof / 1e9
         self._connected_at = now
         self._last_frame_at = now
         self._texture_needs_update = True
@@ -210,6 +214,8 @@ class LiveRoadCamera:
         frame = self._client.recv(timeout_ms=0)
         if frame is not None:
             self._frame = frame
+            self._frame_id = int(self._client.frame_id)
+            self._frame_eof = self._client.timestamp_eof / 1e9
             self._last_frame_at = now
             self._texture_needs_update = True
         elif not self._client.is_connected():
@@ -334,6 +340,12 @@ class LiveRoadCamera:
         finally:
             rl.end_shader_mode()
         return True
+
+    @property
+    def display_frame(self):
+        if self._frame is None or getattr(self._frame, 'frame_id', None) != getattr(self, '_frame_id', None):
+            return None
+        return (self._frame_id, self._frame_eof, int(self._frame.width), int(self._frame.height), self.is_wide)
 
     def draw(self, destination: "rl.Rectangle") -> bool:
         now = time.monotonic()

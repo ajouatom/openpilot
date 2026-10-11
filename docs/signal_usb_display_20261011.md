@@ -1,0 +1,17 @@
+# Signal candidate boxes on the USB camera view
+
+The user requested the detected objects directly on the USB display's camera image and installation on their car. This change renders the existing observer output; it adds no detector, model training, braking or departure permission.
+
+Red `R #id` means a currently visible, confirmed red observation. Green `G #id` means confirmed green observation. Yellow `? #id` means unconfirmed or conflicting evidence. The small `신호 관찰 N` / `SIGNAL VIEW N` caption counts visible candidates. These are detector hypotheses, not applicable-lane or permission-to-proceed labels.
+
+The local experiment flag `/data/signal-color-shadow/display_enabled=1` enables a separate bounded tmpfs endpoint, `/dev/shm/carrot_signal_display.json`. In comparison mode the second, experimental observer supplies the display. Its transport is independent of `/dev/shm/carrot_signal_observation.json`; comparison mode still forbids control publication and the vehicle's assist flag stays OFF. The `revalidated_enabled` flag selects the previously tested candidate for observation only; its known failed control-validation gates remain in [the revalidation report](signal_revalidation_20261011.md).
+
+Boxes use the same full-road-image destination rectangle as the camera texture, including zoom, crop, calibration-induced translation and driving-panel placement. Drawing occurs inside the camera's scissor rectangle. The 1344×760 road detections are not projected onto the wide camera, replay video or synthetic 3D scene. Wide mode shows a road-camera-only notice. The installation uses the existing normal-road-camera setting `ClusterHudCameraViewMode=2`.
+
+Only current-image tracks (`age == 0`) are drawn. Observations expire after 350 ms for visualization, and both the displayed camera image and observation must be fresh, within 250 ms and five frame IDs of one another. This is bounded asynchronous visualization, not exact-frame tracking. The control freshness limit remains 200 ms. Reused VisionIPC buffers, unsupported geometry, invalid/out-of-bounds boxes, oversized payloads and stale/future timestamps hide boxes. A zero count means no eligible displayed candidates; it does not establish absence of a red light.
+
+The renderer reads at most 8 KiB, polls the enable flag twice a second and writes a small display-only status once a second. It does not copy camera pixels, rerun inference, modify camera scheduling, or alter USB encoding/FPS. Existing alerts and the normal HUD are drawn afterward. Other devices without the local flag have no boxes.
+
+Desktop validation: 425 focused tests pass and one pre-existing platform-dependent test skips. Tests cover stale/malformed observations, camera-stream mismatch, pixel mapping, buffer reuse, publication separation, independent opt-ins and existing camera/USB/control regressions. Windows Params are substituted for the larger suite. Hidden-window Raylib previews at 1344×760 and 1920×480 were visually inspected. The full-size preview uses a recorded red-light image; the isolated color-key preview additionally contains explicitly synthetic green/unknown examples, not detector accuracy evidence.
+
+Private scripts, previews, test output and installation evidence belong under `.analysis/archive/2026-10-11-signal-display/`. No images, raw logs or vehicle snapshots are committed. Installation verification must distinguish renderer/USB process operation from physical-panel inspection and signal-recognition accuracy.
