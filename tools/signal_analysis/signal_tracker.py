@@ -14,6 +14,25 @@ def overlap(a, b):
   return inter / max(1, (a[2]-a[0])*(a[3]-a[1]) + (b[2]-b[0])*(b[3]-b[1]) - inter)
 
 
+def small_percentile(values, percentile):
+  """Linear percentile for nonempty finite image samples, without generic setup."""
+  a = values.ravel()
+  rank = (a.size - 1) * (percentile / 100.)
+  lo, hi = math.floor(rank), math.ceil(rank)
+  work = np.partition(a, (lo, hi))
+  low, high = float(work[lo]), float(work[hi])
+  fraction = rank - lo
+  return high - (high - low) * (1. - fraction) if fraction >= .5 else low + (high - low) * fraction
+
+
+def dark_scene(rgb):
+  gray = cv2.cvtColor(rgb[:int(rgb.shape[0] * .55)], cv2.COLOR_RGB2GRAY)
+  cumulative = np.cumsum(cv2.calcHist([gray], [0], None, [256], [0, 256]).ravel())
+  rank = .7 * (gray.size - 1)
+  lower, upper = np.searchsorted(cumulative, [math.floor(rank), math.ceil(rank)], side='right')
+  return lower + (upper - lower) * (rank - math.floor(rank)) <= 45
+
+
 def lamp_evidence(rgb, box):
   x1, y1, x2, y2 = map(int, box)
   a = rgb[y1:y2, x1:x2]
@@ -28,6 +47,8 @@ def lamp_evidence(rgb, box):
   # Use interior lamps, excluding housing borders and bright adjacent sky.
   scores = []
   peaks = []
+  gray = cv2.cvtColor(a, cv2.COLOR_RGB2GRAY)/255.
+  median = float(np.median(gray))
   for mask, xc in [(red, .125), (green, .875)]:
     valid = mask & (xx >= (xc-.13)*w) & (xx <= (xc+.13)*w) & (yy >= .15*h) & (yy <= .85*h)
     count, ids, stats, centroids = cv2.connectedComponentsWithStats(valid.astype(np.uint8), 8)
@@ -38,12 +59,11 @@ def lamp_evidence(rgb, box):
         continue
       cx, cy = centroids[k]
       position = max(0., 1-abs(cx/w-xc)/.22) * max(0., 1-abs(cy/h-.5)/.6)
-      strength = float(np.percentile(val[ids == k], 80))/255
+      strength = small_percentile(val[ids == k], 80)/255
       best = max(best, position*strength*min(1., area/max(2., h*h*.12)))
     scores.append(best)
     disk = (xx+.5-xc*w)**2 + (yy+.5-.5*h)**2 <= max(1., .32*h)**2
-    gray = cv2.cvtColor(a, cv2.COLOR_RGB2GRAY)/255.
-    peaks.append(max(0., float(np.percentile(gray[disk], 85))-float(np.median(gray))))
+    peaks.append(max(0., small_percentile(gray[disk], 85)-median))
   r, g = scores
   state = 'red' if r >= .18 and g < .12 else 'green' if g >= .18 and r < .12 else 'unknown'
   return state, max(r, g), dict(red_score=r, green_score=g, left_brightness=peaks[0], right_brightness=peaks[1])
@@ -56,7 +76,7 @@ def housing_proposals(rgb):
   gray = cv2.cvtColor(rgb[:y_end], cv2.COLOR_RGB2GRAY)
   candidates = []
   for threshold in (45, 70, 100, 130):
-    dark = (gray < threshold).astype(np.uint8)*255
+    dark = cv2.compare(gray, threshold, cv2.CMP_LT)
     dark = cv2.morphologyEx(dark, cv2.MORPH_OPEN, np.ones((2, 3), np.uint8))
     contours, _ = cv2.findContours(dark, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     for contour in contours:
@@ -173,13 +193,81 @@ def night_proposals(rgb):
     seeds.append(dict(box=box, raw=state, quality=max(0.25, strength), source='night_lamp_core', core_diameter=diam, **evidence))
   return seeds
 
-def detect(rgb):
-  """Combine dark housings and night lamp cores; neither establishes ego lane."""
+def detect(rgb, *, daytime_cores=False):
+  """Daytime core proposals are replay-only pending failed-transition correction."""
+  if daytime_cores and not dark_scene(rgb):
+    return day_proposals(rgb)[:20]
   candidates = housing_proposals(rgb)
   for candidate in night_proposals(rgb):
     if all(overlap(candidate['box'], other['box']) < .35 for other in candidates):
       candidates.append(candidate)
   return candidates[:20]
+
+
+def day_proposals(rgb):
+  """Forward compact lamps with adjoining dark bar evidence.
+
+  A dark housing can merge into trees/background, so its connected outer contour
+  cannot supply the box. Seed a locally bright colored core instead. These are
+  inferred boxes, not object/lane labels. Saturation alone is insufficient.
+  """
+  h, w = rgb.shape[:2]
+  ox, oy, ex, ey = int(.25*w), int(.08*h), int(.80*w), int(.52*h)
+  hsv = cv2.cvtColor(rgb[oy:ey, ox:ex], cv2.COLOR_RGB2HSV)
+  val = hsv[:, :, 2]
+  bright = cv2.compare(cv2.morphologyEx(val, cv2.MORPH_TOPHAT, np.ones((15, 15), np.uint8)), 70, cv2.CMP_GE)
+  red = cv2.bitwise_and(cv2.bitwise_or(cv2.inRange(hsv, (0, 90, 140), (12, 255, 255)),
+                                     cv2.inRange(hsv, (170, 90, 140), (179, 255, 255))), bright)
+  green = cv2.bitwise_and(cv2.inRange(hsv, (38, 65, 140), (105, 255, 255)), bright)
+  _, ids, stats, centers = cv2.connectedComponentsWithStats(cv2.bitwise_or(red, green), 8)
+  gray = cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY)
+  out = []
+  for k, stat in enumerate(stats[1:], 1):
+    x, y, cw, ch, area = map(int, stat)
+    if not (3 <= cw <= 30 and 3 <= ch <= 25 and 5 <= area <= 400 and .55 <= cw/ch <= 1.7 and area/(cw*ch) >= .35):
+      continue
+    red_count = np.count_nonzero(red[y:y+ch, x:x+cw][ids[y:y+ch, x:x+cw] == k])
+    if red_count >= area*.9:
+      color = 'red'
+    elif red_count <= area*.1:
+      color = 'green'
+    else:
+      continue
+    x += ox
+    y += oy
+    cx, cy = centers[k] + [ox, oy]
+    v = val[y-oy:y-oy+ch, x-ox:x-ox+cw]
+    # Include the saturated white center even when the colored halo is a ring.
+    core = (v >= max(95, float(v.max())*.85)).astype(np.uint8)
+    _, _, core_stats, core_centers = cv2.connectedComponentsWithStats(core, 8)
+    index = 1 + int(np.argmax(core_stats[1:, cv2.CC_STAT_AREA]))
+    _, _, bw, bh, core_area = core_stats[index]
+    ccx, ccy = core_centers[index]
+    if not (3 <= bw <= 18 and 3 <= bh <= 18 and .6 <= bw/bh <= 1.6 and core_area/(bw*bh) >= .55):
+      continue
+    if abs(ccx+x-cx) > cw*.25 or abs(ccy+y-cy) > ch*.25:
+      continue
+    cx, cy = ccx+x, ccy+y
+    diameter = max(bw, bh)
+    width, height = 4*diameter, 2*diameter
+    xc = .125 if color == 'red' else .875
+    box = [int(cx-width*xc), int(cy-height/2), int(cx+width*(1-xc)), int(cy+height/2)]
+    x1, y1, x2, y2 = box
+    if x1 < 0 or y1 < 3 or x2 > w or y2+3 > h:
+      continue
+    ux1, ux2 = (int(cx+diameter*.75), x2) if color == 'red' else (x1, int(cx-diameter*.75))
+    uy1, uy2 = int(cy-diameter*.35), int(cy+diameter*.35)+1
+    dark = gray[uy1:uy2, ux1:ux2]
+    surround = np.r_[gray[y1-3:y1, ux1:ux2].ravel(), gray[y2:y2+3, ux1:ux2].ravel()]
+    if not dark.size or not surround.size:
+      continue
+    contrast = float(np.median(surround)) - float(np.median(dark))
+    if contrast < 8 or float(np.median(dark)) > 80:
+      continue
+    state, quality, evidence = lamp_evidence(rgb, box)
+    if state == color and quality >= .25:
+      out.append(dict(box=box, raw=state, quality=float(quality), source='day_color_core', contrast=contrast, **evidence))
+  return out
 
 
 @dataclass
@@ -205,7 +293,10 @@ class SignalTracker:
   MAX_OBSERVATION_GAP = .25
   MAX_VISIBLE_AGE = .125
 
-  def __init__(self):
+  def __init__(self, *, daytime_cores=False):
+    # Keep the unsuccessful daytime experiment out of the live worker. Callers
+    # must explicitly select it for offline/isolated validation.
+    self.daytime_cores = daytime_cores
     self.tracks = []
     self.next_id = 1
     self.last_timestamp = None
@@ -269,7 +360,7 @@ class SignalTracker:
     return dict(state=state, reason='agreeing_visible_tracks' if len(states)==1 else 'conflict_or_unconfirmed', tracks=visible)
 
   def process(self, rgb, timestamp):
-    detections = detect(rgb)
+    detections = detect(rgb, daytime_cores=self.daytime_cores)
     gray = cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY)
     if self.previous_gray is not None and self.last_timestamp is not None and 0 < timestamp-self.last_timestamp <= self.MAX_OBSERVATION_GAP:
       for track in self.tracks:

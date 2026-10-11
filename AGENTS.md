@@ -1,5 +1,21 @@
 # Repository memory
 
+- On 2026-10-11, the user demanded actual corrections and validation of the
+  remaining daytime signal miss and latency failures. A compact colored-core
+  plus dark-bar trial fixes the reviewed morning underpass red-to-green case,
+  but full 23-segment replay exposes a new retained stop request at green in
+  1094-8 after selected-track loss. Do NOT promote this daytime detector into
+  the live worker: SignalTracker(daytime_cores=True) is analysis-only; default
+  construction preserves legacy proposals with equivalent compute optimizations.
+  10,631 trial observations match the clean port; 459 final default/trial image
+  comparisons and 324 related tests pass. Park-only camera-timed stored-image
+  workload reduces >200ms results from12/150 to0/107, but this is the rejected
+  daytime candidate's timing, not a guarantee for the default/live pipeline.
+  Keep 200ms freshness, same-track release, original ONNX/x/v and opt-in policy.
+  Vehicle production remains b80db2c97d; only an isolated test folder was used.
+  Validation was performed and partially failed, not left unperformed. Preserve
+  failed evidence privately; see docs/signal_day_latency_fix_20261011.md.
+
 - On 2026-10-11, the user requested latest-drive signal transition training and
   validation using lamp brightness/color changes plus original ONNX x/v. Three
   offline logistic probes were actually fitted; x/v reduced reviewed red abstention
