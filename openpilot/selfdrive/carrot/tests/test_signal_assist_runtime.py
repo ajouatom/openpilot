@@ -21,6 +21,17 @@ def test_default_does_not_enable_control(tmp_path):
   assert runtime.assist is None
 
 
+@pytest.mark.parametrize('assist,trial', [(False, False), (False, True), (True, False), (True, True)])
+def test_revalidation_requires_both_explicit_flags(tmp_path, assist, trial):
+  flag = tmp_path / 'assist_enabled'
+  flag.write_text('1' if assist else '0')
+  (tmp_path / 'revalidated_enabled').write_text('1' if trial else '0')
+  runtime = SignalAssistRuntime(flag, tmp_path / 'obs')
+  assert (runtime.assist is not None) == assist
+  if assist:
+    assert runtime.assist.producer_red_history == trial
+
+
 def test_atomic_round_trip_and_disable(tmp_path):
   flag, path = tmp_path / 'enable', tmp_path / 'obs'
   flag.write_text('1')

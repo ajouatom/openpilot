@@ -17,6 +17,7 @@ import pyray as rl
 from openpilot.common.transformations.camera import DEVICE_CAMERAS, view_frame_from_device_frame
 from openpilot.common.transformations.orientation import rot_from_euler
 from openpilot.selfdrive.carrot.deceleration_source import navigation_status_presentation
+from openpilot.selfdrive.carrot.signal_display import SignalDisplayReader, project_box
 
 from cluster_gles_dmabuf import DirectNv12DmabufError, create_tici_nv12_dmabuf_pool
 from cluster_gles_readback import DirectNv12ReadbackError, create_tici_direct_readback
@@ -1647,8 +1648,44 @@ class ClusterUiRenderer:
                         self._close_live_road_camera()
             if drew_camera:
                 rl.draw_rectangle_rec(projection.dest, rl_color((0, 0, 0), CAMERA_BACKGROUND_VIGNETTE_ALPHA))
+                if texture is None and live_camera is not None:
+                    self._draw_signal_detections(projection, live_camera)
         finally:
             rl.end_scissor_mode()
+
+    def _draw_signal_detections(self, projection, live_camera) -> None:
+        reader = getattr(self, '_signal_display_reader', None)
+        if reader is None:
+            reader = self._signal_display_reader = SignalDisplayReader()
+        tracks = reader.read(live_camera.display_frame)
+        if not reader.enabled:
+            return
+        dest = projection.dest
+        video = projection.video_dest
+        font_size = max(14., self.height / DESIGN_HEIGHT * 17.)
+        colors = {'red': (255, 65, 65), 'green': (50, 255, 120), 'unknown': (255, 210, 65)}
+        letters = {'red': 'R', 'green': 'G', 'unknown': '?'}
+        visible = 0
+        for track in tracks:
+            x, y, w, h = project_box(track['box'], (video.x, video.y, video.width, video.height))
+            if x+w < dest.x or y+h < dest.y or x > dest.x+dest.width or y > dest.y+dest.height:
+                continue
+            visible += 1
+            color = colors[track['state']]
+            # Padding improves visibility without hiding the tiny lamp itself.
+            rect = rl.Rectangle(x-2, y-2, w+4, h+4)
+            rl.draw_rectangle_lines_ex(rect, 4., rl_color((0, 0, 0)))
+            rl.draw_rectangle_lines_ex(rect, 2., rl_color(color))
+            label_x = max(dest.x+4, min(x, dest.x+dest.width-90))
+            label_y = max(dest.y+font_size*2, y-font_size*.7)
+            self._draw_text_with_stroke(f"{letters[track['state']]} #{track['id']}", label_x, label_y,
+                                        font_size, color, (0, 0, 0), 2)
+        caption = f"신호 관찰 {visible}" if self.language == CLUSTER_LANGUAGE_KO else f"SIGNAL VIEW {visible}"
+        if live_camera.is_wide:
+            caption = "신호 관찰: 일반 카메라에서 표시" if self.language == CLUSTER_LANGUAGE_KO else 'SIGNAL VIEW: ROAD CAMERA ONLY'
+        self._draw_text_with_stroke(caption, dest.x+12, dest.y+font_size, font_size,
+                                    (230, 230, 230), (0, 0, 0), 2)
+        reader.record_draw(live_camera.display_frame, visible)
 
     def _live_road_camera_view(self):
         live_camera = getattr(self, "_live_road_camera", None)

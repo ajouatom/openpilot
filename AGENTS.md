@@ -1,5 +1,77 @@
 # Repository memory
 
+- On 2026-10-11, the user requested signal candidate boxes on the USB
+  camera image and vehicle installation. display_enabled opts into a separate
+  bounded tmpfs display endpoint; comparison's experimental observer supplies
+  R/G/? boxes and track IDs. Use the road camera's actual image rectangle,
+  reject wide/replay/3D overlays, expired/lost tracks and reused camera buffers.
+  Display age is <=350 ms with <=250 ms/five-frame camera skew; control freshness
+  stays 200 ms. Installed 64151b60ff with revalidated/comparison/display ON and
+  assist OFF, original ONNX unchanged, existing camera mode 2. This supersedes
+  the prior vehicle-code-unchanged status only for observation/visualization;
+  the candidate remains unapproved for control. Parked verification saw 501
+  valid consecutive model frames at 20.01 Hz, 501 plans, 25 renderer updates,
+  an open USB device and unchanged process PIDs/control transport. 425 desktop
+  tests pass, one Linux-only skip. Physical panel/road accuracy remain distinct.
+  See docs/signal_usb_display_20261011.md; keep captures and telemetry private.
+
+- On 2026-10-11, accumulated signal replay tested 37 segments / 15,422
+  images and 43,090 planner updates. The opt-in candidate combines housing/core
+  proposals, image-supported 500 ms identity retention with unchanged 250 ms
+  color continuity and 200 ms freshness, and explicit producer-red-history reuse.
+  Five nominal false-start windows are blocked, but added-latency trials still
+  fail acquisition; 1094-10's new green release lacks visually verified green.
+  Eight isolated parked camera-timed sequences improve nominal holds/releases
+  but 1093-6 loses acquisition with +20 ms. Earlier dusk green coverage regresses.
+  Do not enable this candidate for control. revalidated_enabled is only an
+  experimental opt-in name, default OFF, with separate assist_enabled required.
+  Vehicle remains c115ce4, original ONNX, comparison ON and assist OFF; no vehicle
+  code/settings changes. 360 tests and production/prototype parity pass, not
+  perception or closed-loop validation. This is hand-written OpenCV, not neural
+  retraining. See docs/signal_revalidation_20261011.md. Keep raw evidence private.
+
+- On 2026-10-11, Ioniq 5 PE 1095 segments 65/66 show two red-light
+  departures without gas while original x/v changes produce trafficState green.
+  Both legacy and daytime shadow detectors recorded red; current c115ce4 vehicle
+  uses original internal ONNX with assist OFF and comparison-only publication.
+  Same-recorded-input planner replay blocks both departures with either observer,
+  but delaying daytime arrivals by 20 ms loses both holds: fresh observations
+  miss stop-time acquisition and consumer confirmation resets across gaps.
+  Sequential dual-engine timing penalizes the second result. No confirmed green
+  tracks in this drive; manual overrides prevent continuous green-release proof.
+  Do not treat replay as vehicle-response validation or enable failed candidate.
+  No vehicle/model/control changes in this investigation; CPL is not supported
+  as the remedy by these images. See docs/signal_1095_red_departure_20261011.md.
+  Keep raw logs and captures private.
+
+- On 2026-10-11, the user authorized installing the new signal detector for
+  live comparison recording, with the same pushed code on the vehicle. Add
+  explicit per-device daytime_comparison_enabled: one camera copy, independent
+  legacy/daytime trackers and separate signalTrackingShadow/DaytimeShadow logs.
+  In comparison mode never publish either engine to the control transport;
+  install with assist_enabled=0. Missing opt-in preserves legacy operation.
+  Keep original driving ONNX/x/v, CPU duty/affinity and freshness limits. The
+  failed daytime candidate is authorized for observation only, not braking/go.
+  329 related desktop tests pass, including actual worker logging/no-publish.
+  Use guarded Park/inactive installation and verify commit/model/log identity.
+  See docs/signal_live_comparison_20261011.md; keep vehicle evidence private.
+
+- On 2026-10-11, the user demanded actual corrections and validation of the
+  remaining daytime signal miss and latency failures. A compact colored-core
+  plus dark-bar trial fixes the reviewed morning underpass red-to-green case,
+  but full 23-segment replay exposes a new retained stop request at green in
+  1094-8 after selected-track loss. Do NOT promote this daytime detector into
+  the live worker: SignalTracker(daytime_cores=True) is analysis-only; default
+  construction preserves legacy proposals with equivalent compute optimizations.
+  10,631 trial observations match the clean port; 459 final default/trial image
+  comparisons and 324 related tests pass. Park-only camera-timed stored-image
+  workload reduces >200ms results from12/150 to0/107, but this is the rejected
+  daytime candidate's timing, not a guarantee for the default/live pipeline.
+  Keep 200ms freshness, same-track release, original ONNX/x/v and opt-in policy.
+  Vehicle production remains b80db2c97d; only an isolated test folder was used.
+  Validation was performed and partially failed, not left unperformed. Preserve
+  failed evidence privately; see docs/signal_day_latency_fix_20261011.md.
+
 - On 2026-10-11, the user requested latest-drive signal transition training and
   validation using lamp brightness/color changes plus original ONNX x/v. Three
   offline logistic probes were actually fitted; x/v reduced reviewed red abstention

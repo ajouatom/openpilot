@@ -14,6 +14,25 @@ def overlap(a, b):
   return inter / max(1, (a[2]-a[0])*(a[3]-a[1]) + (b[2]-b[0])*(b[3]-b[1]) - inter)
 
 
+def small_percentile(values, percentile):
+  """Linear percentile for nonempty finite image samples, without generic setup."""
+  a = values.ravel()
+  rank = (a.size - 1) * (percentile / 100.)
+  lo, hi = math.floor(rank), math.ceil(rank)
+  work = np.partition(a, (lo, hi))
+  low, high = float(work[lo]), float(work[hi])
+  fraction = rank - lo
+  return high - (high - low) * (1. - fraction) if fraction >= .5 else low + (high - low) * fraction
+
+
+def dark_scene(rgb):
+  gray = cv2.cvtColor(rgb[:int(rgb.shape[0] * .55)], cv2.COLOR_RGB2GRAY)
+  cumulative = np.cumsum(cv2.calcHist([gray], [0], None, [256], [0, 256]).ravel())
+  rank = .7 * (gray.size - 1)
+  lower, upper = np.searchsorted(cumulative, [math.floor(rank), math.ceil(rank)], side='right')
+  return lower + (upper - lower) * (rank - math.floor(rank)) <= 45
+
+
 def lamp_evidence(rgb, box):
   x1, y1, x2, y2 = map(int, box)
   a = rgb[y1:y2, x1:x2]
@@ -28,6 +47,8 @@ def lamp_evidence(rgb, box):
   # Use interior lamps, excluding housing borders and bright adjacent sky.
   scores = []
   peaks = []
+  gray = cv2.cvtColor(a, cv2.COLOR_RGB2GRAY)/255.
+  median = float(np.median(gray))
   for mask, xc in [(red, .125), (green, .875)]:
     valid = mask & (xx >= (xc-.13)*w) & (xx <= (xc+.13)*w) & (yy >= .15*h) & (yy <= .85*h)
     count, ids, stats, centroids = cv2.connectedComponentsWithStats(valid.astype(np.uint8), 8)
@@ -38,29 +59,33 @@ def lamp_evidence(rgb, box):
         continue
       cx, cy = centroids[k]
       position = max(0., 1-abs(cx/w-xc)/.22) * max(0., 1-abs(cy/h-.5)/.6)
-      strength = float(np.percentile(val[ids == k], 80))/255
+      strength = small_percentile(val[ids == k], 80)/255
       best = max(best, position*strength*min(1., area/max(2., h*h*.12)))
     scores.append(best)
     disk = (xx+.5-xc*w)**2 + (yy+.5-.5*h)**2 <= max(1., .32*h)**2
-    gray = cv2.cvtColor(a, cv2.COLOR_RGB2GRAY)/255.
-    peaks.append(max(0., float(np.percentile(gray[disk], 85))-float(np.median(gray))))
+    peaks.append(max(0., small_percentile(gray[disk], 85)-median))
   r, g = scores
   state = 'red' if r >= .18 and g < .12 else 'green' if g >= .18 and r < .12 else 'unknown'
   return state, max(r, g), dict(red_score=r, green_score=g, left_brightness=peaks[0], right_brightness=peaks[1])
 
 
-def housing_proposals(rgb):
+def housing_proposals(rgb, *, forward_only=False):
   """Current-image housing proposals. Never accepts annotations or future frames."""
   height, width = rgb.shape[:2]
   y_end = int(height*.60)
   gray = cv2.cvtColor(rgb[:y_end], cv2.COLOR_RGB2GRAY)
+  ox, oy, ex, ey = (int(width*.25), int(height*.08), int(width*.80), int(height*.52)) if forward_only else (0,0,width,y_end)
   candidates = []
   for threshold in (45, 70, 100, 130):
-    dark = (gray < threshold).astype(np.uint8)*255
+    dark = cv2.compare(gray[oy:ey,ox:ex], threshold, cv2.CMP_LT)
     dark = cv2.morphologyEx(dark, cv2.MORPH_OPEN, np.ones((2, 3), np.uint8))
     contours, _ = cv2.findContours(dark, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     for contour in contours:
       x, y, w, h = cv2.boundingRect(contour)
+      x += ox
+      y += oy
+      if forward_only and (x <= ox or y <= oy or x+w >= ex or y+h >= ey):
+        continue
       if not (16 <= w <= 220 and 4 <= h <= 65 and 2.6 <= w/h <= 6.8):
         continue
       if x < width*.04 or x+w > width*.96 or y < 3 or y+h >= y_end:
@@ -173,13 +198,85 @@ def night_proposals(rgb):
     seeds.append(dict(box=box, raw=state, quality=max(0.25, strength), source='night_lamp_core', core_diameter=diam, **evidence))
   return seeds
 
-def detect(rgb):
-  """Combine dark housings and night lamp cores; neither establishes ego lane."""
+def detect(rgb, *, daytime_cores=False):
+  """Explicit trial: preserve housing candidates and supplement merged backgrounds."""
+  if daytime_cores and not dark_scene(rgb):
+    candidates = housing_proposals(rgb, forward_only=True)
+    for candidate in day_proposals(rgb):
+      if all(overlap(candidate['box'], other['box']) < .35 for other in candidates):
+        candidates.append(candidate)
+    return candidates[:20]
   candidates = housing_proposals(rgb)
   for candidate in night_proposals(rgb):
     if all(overlap(candidate['box'], other['box']) < .35 for other in candidates):
       candidates.append(candidate)
   return candidates[:20]
+
+
+def day_proposals(rgb):
+  """Forward compact lamps with adjoining dark bar evidence.
+
+  A dark housing can merge into trees/background, so its connected outer contour
+  cannot supply the box. Seed a locally bright colored core instead. These are
+  inferred boxes, not object/lane labels. Saturation alone is insufficient.
+  """
+  h, w = rgb.shape[:2]
+  ox, oy, ex, ey = int(.25*w), int(.08*h), int(.80*w), int(.52*h)
+  hsv = cv2.cvtColor(rgb[oy:ey, ox:ex], cv2.COLOR_RGB2HSV)
+  val = hsv[:, :, 2]
+  bright = cv2.compare(cv2.morphologyEx(val, cv2.MORPH_TOPHAT, np.ones((15, 15), np.uint8)), 70, cv2.CMP_GE)
+  red = cv2.bitwise_and(cv2.bitwise_or(cv2.inRange(hsv, (0, 90, 140), (12, 255, 255)),
+                                     cv2.inRange(hsv, (170, 90, 140), (179, 255, 255))), bright)
+  green = cv2.bitwise_and(cv2.inRange(hsv, (38, 65, 140), (105, 255, 255)), bright)
+  _, ids, stats, centers = cv2.connectedComponentsWithStats(cv2.bitwise_or(red, green), 8)
+  gray = cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY)
+  out = []
+  for k, stat in enumerate(stats[1:], 1):
+    x, y, cw, ch, area = map(int, stat)
+    if not (3 <= cw <= 30 and 3 <= ch <= 25 and 5 <= area <= 400 and .55 <= cw/ch <= 1.7 and area/(cw*ch) >= .35):
+      continue
+    red_count = np.count_nonzero(red[y:y+ch, x:x+cw][ids[y:y+ch, x:x+cw] == k])
+    if red_count >= area*.9:
+      color = 'red'
+    elif red_count <= area*.1:
+      color = 'green'
+    else:
+      continue
+    x += ox
+    y += oy
+    cx, cy = centers[k] + [ox, oy]
+    v = val[y-oy:y-oy+ch, x-ox:x-ox+cw]
+    # Include the saturated white center even when the colored halo is a ring.
+    core = (v >= max(95, float(v.max())*.85)).astype(np.uint8)
+    _, _, core_stats, core_centers = cv2.connectedComponentsWithStats(core, 8)
+    index = 1 + int(np.argmax(core_stats[1:, cv2.CC_STAT_AREA]))
+    _, _, bw, bh, core_area = core_stats[index]
+    ccx, ccy = core_centers[index]
+    if not (3 <= bw <= 18 and 3 <= bh <= 18 and .6 <= bw/bh <= 1.6 and core_area/(bw*bh) >= .55):
+      continue
+    if abs(ccx+x-cx) > cw*.25 or abs(ccy+y-cy) > ch*.25:
+      continue
+    cx, cy = ccx+x, ccy+y
+    diameter = max(bw, bh)
+    width, height = 4*diameter, 2*diameter
+    xc = .125 if color == 'red' else .875
+    box = [int(cx-width*xc), int(cy-height/2), int(cx+width*(1-xc)), int(cy+height/2)]
+    x1, y1, x2, y2 = box
+    if x1 < 0 or y1 < 3 or x2 > w or y2+3 > h:
+      continue
+    ux1, ux2 = (int(cx+diameter*.75), x2) if color == 'red' else (x1, int(cx-diameter*.75))
+    uy1, uy2 = int(cy-diameter*.35), int(cy+diameter*.35)+1
+    dark = gray[uy1:uy2, ux1:ux2]
+    surround = np.r_[gray[y1-3:y1, ux1:ux2].ravel(), gray[y2:y2+3, ux1:ux2].ravel()]
+    if not dark.size or not surround.size:
+      continue
+    contrast = float(np.median(surround)) - float(np.median(dark))
+    if contrast < 8 or float(np.median(dark)) > 80:
+      continue
+    state, quality, evidence = lamp_evidence(rgb, box)
+    if state == color and quality >= .25:
+      out.append(dict(box=box, raw=state, quality=float(quality), source='day_color_core', contrast=contrast, **evidence))
+  return out
 
 
 @dataclass
@@ -203,29 +300,52 @@ class SignalTracker:
   # Object continuity and output freshness are separate contracts. The worker's
   # CPU duty limit produces 150-200 ms observations on the internal-model C4.
   MAX_OBSERVATION_GAP = .25
+  MAX_IDENTITY_GAP = .5
   MAX_VISIBLE_AGE = .125
 
-  def __init__(self):
+  def __init__(self, *, daytime_cores=False, robust_tracking=False):
+    # Opt-ins keep the default observer unchanged. Color confirmation and final
+    # freshness remain independent from image-supported identity retention.
+    self.daytime_cores = daytime_cores
+    self.robust_tracking = robust_tracking
+    self.identity_gap = self.MAX_IDENTITY_GAP if robust_tracking else self.MAX_OBSERVATION_GAP
     self.tracks = []
     self.next_id = 1
     self.last_timestamp = None
     self.previous_gray = None
 
   def update(self, timestamp, detections):
-    if self.last_timestamp is not None and (timestamp <= self.last_timestamp or timestamp-self.last_timestamp > self.MAX_OBSERVATION_GAP):
+    if self.last_timestamp is not None and (timestamp <= self.last_timestamp or timestamp-self.last_timestamp > self.identity_gap):
       self.tracks = []
+    if self.last_timestamp is not None and timestamp-self.last_timestamp > self.MAX_OBSERVATION_GAP:
+      for t in self.tracks:
+        t.state = t.pending = 'unknown'
+        t.pending_count = 0
     self.last_timestamp = timestamp
-    self.tracks = [t for t in self.tracks if timestamp-t.last_seen <= self.MAX_OBSERVATION_GAP]
+    self.tracks = [t for t in self.tracks if timestamp-t.last_seen <= (self.identity_gap if t.seen_red else self.MAX_OBSERVATION_GAP)]
     used = set()
     for d in detections:
       candidates = []
       for t in self.tracks:
         if t.ident in used:
           continue
+        if 'continuity_id' in d and d['continuity_id'] != t.ident:
+          continue
         a, b = t.box, d['box'];aw, ah = a[2]-a[0], a[3]-a[1];bw, bh = b[2]-b[0], b[3]-b[1]
         distance = math.hypot((a[0]+a[2]-b[0]-b[2])/2, (a[1]+a[3]-b[1]-b[3])/2)
-        if .65 <= bw/aw <= 1.55 and .5 <= bh/ah <= 2 and distance < max(6, aw*.3) and overlap(a,b) > .12:
+        if timestamp-t.last_seen > self.MAX_OBSERVATION_GAP and d.get('continuity_id') != t.ident:
+          # One missed switching image can interrupt detections. Reacquire only
+          # a uniquely overlapping, independently detected housing with nearly
+          # unchanged size/center. No templates from an intervening image.
+          if (d['source'] not in ('detected','day_color_core','night_lamp_core') or
+              not (.8 <= bw/aw <= 1.25 and .75 <= bh/ah <= 1.33 and
+                   distance <= max(2., aw*.15) and overlap(a,b) >= .6)):
+            continue
+        limit = max(10, aw//5)+1 if d.get('continuity_id') == t.ident else max(6, aw*.3)
+        if .65 <= bw/aw <= 1.55 and .5 <= bh/ah <= 2 and distance < limit and overlap(a,b) > .12:
           candidates.append((distance, t))
+      if len(candidates) > 1 and any(timestamp-t.last_seen > self.MAX_OBSERVATION_GAP for _,t in candidates):
+        candidates = []
       if candidates:
         t = min(candidates, key=lambda v:v[0])[1]
       else:
@@ -245,7 +365,7 @@ class SignalTracker:
         t.pending = raw;t.pending_since = timestamp
         t.pending_count = 1
         # A contradictory observation removes an earlier green immediately.
-        if raw != t.state:
+        if raw != t.state or gap > self.MAX_OBSERVATION_GAP:
           t.state = 'unknown'
       else:
         t.pending_count += 1
@@ -269,15 +389,16 @@ class SignalTracker:
     return dict(state=state, reason='agreeing_visible_tracks' if len(states)==1 else 'conflict_or_unconfirmed', tracks=visible)
 
   def process(self, rgb, timestamp):
-    detections = detect(rgb)
+    detections = detect(rgb, daytime_cores=self.daytime_cores)
     gray = cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY)
-    if self.previous_gray is not None and self.last_timestamp is not None and 0 < timestamp-self.last_timestamp <= self.MAX_OBSERVATION_GAP:
+    if self.previous_gray is not None and self.last_timestamp is not None and 0 < timestamp-self.last_timestamp <= self.identity_gap:
+      bridge = timestamp-self.last_timestamp > self.MAX_OBSERVATION_GAP
       for track in self.tracks:
         # The template must belong to the immediately preceding image. An old
         # box alone cannot identify the object in that intervening image.
         if not track.seen_red or track.last_seen != self.last_timestamp:
           continue
-        if any(overlap(track.box,d['box']) > .25 for d in detections):
+        if not bridge and any(overlap(track.box,d['box']) > .25 for d in detections):
           continue
         x1,y1,x2,y2 = map(int,track.box);w=x2-x1;h=y2-y1;pad=max(6,h//2)
         ax=max(0,x1-pad);ay=max(0,y1-pad);bx=min(gray.shape[1],x2+pad);by=min(gray.shape[0],y2+pad)
@@ -285,12 +406,27 @@ class SignalTracker:
         margin=max(10,w//5);sx=max(0,ax-margin);sy=max(0,ay-margin);ex=min(gray.shape[1],bx+margin);ey=min(gray.shape[0],by+margin)
         if template.size == 0 or ey-sy < template.shape[0] or ex-sx < template.shape[1]:
           continue
-        scores=cv2.matchTemplate(gray[sy:ey,sx:ex],template,cv2.TM_CCOEFF_NORMED)
+        mask = None
+        # Lamp switching also breaks full-image matching at ordinary cadence.
+        # Prefer stable surrounding structure whenever it has usable texture.
+        proposed_mask = np.ones(template.shape, np.uint8)
+        proposed_mask[y1-ay:y2-ay, x1-ax:x2-ax] = 0
+        if self.robust_tracking and np.count_nonzero(proposed_mask) >= 24 and np.std(template[proposed_mask != 0]) >= 8:
+          mask = proposed_mask
+        elif bridge:
+          continue
+        scores=cv2.matchTemplate(gray[sy:ey,sx:ex],template,cv2.TM_CCOEFF_NORMED,mask=mask)
+        scores[~np.isfinite(scores)] = -1
         _,score,_,loc=cv2.minMaxLoc(scores)
-        if score < .75:
+        if score < (.85 if mask is not None else .75):
           continue
         dx=sx+loc[0]-ax;dy=sy+loc[1]-ay;box=[x1+dx,y1+dy,x2+dx,y2+dy]
         raw,strength,evidence=lamp_evidence(rgb,box)
-        detections.append(dict(box=box,raw=raw,quality=strength,source='causal_template',match_score=score,**evidence))
+        if bridge:
+          # Image correspondence keeps identity, never a previous color streak.
+          # The current image must independently contain the same lamp housing.
+          detections = [d for d in detections if overlap(box,d['box']) <= .35]
+        detections.append(dict(box=box,raw=raw,quality=strength,source='causal_template',match_score=score,
+                               **({'continuity_id':track.ident} if bridge else {}),**evidence))
     self.previous_gray=gray
     return self.update(timestamp,detections)
