@@ -26,3 +26,14 @@ No vehicle messaging, Params or control outputs are implemented.
 See [the trial report](../../docs/signal_tracking_trial_20261010.md) for the six
 previously reviewed clip results and their limitations. Private recordings,
 annotations and generated videos are intentionally not included.
+## Offline color-correction experiment
+
+`replay_color_experiment.py ROUTES OUTPUT` compares the existing tracker and
+`conservative_green=True` on local `ROUTES/<segment>/fcamera.hevc` and
+`decoded.json.gz` investigation data. It joins exact frame IDs across segment
+boundaries, retains recorded cadence and writes paired compressed traces and
+summary counts. Install this directory's OpenCV/NumPy requirements first.
+
+The option is default OFF and has no live-worker selector. It is not ONNX
+retraining. See `docs/signal_color_experiment_20261012.md` for the measured sky
+rejection, remaining LED/reflection false positives and motion-blur regression.

@@ -1,5 +1,18 @@
 # Repository memory
 
+- On 2026-10-12, the user requested a signal correction experiment. Add
+  default-OFF offline conservative_green HSV38-90 consistently across housing,
+  day/night seeds and templates. Exact-frame paired replay of13 full videos and
+  3348 observations reduces morning green candidates5608->581, not an accuracy
+  metric. Selected development boxes remove61 replayed background greens;
+  21 newly reviewed frames keep37 visible green lamps and reject29/36 backgrounds.
+  LED text/reflections remain; one motion-blurred real night green is lost.
+  Only one of two live red miscrops reproduces green in encoded pixels.
+  Guard color-confirmation probe differs from live release and is not control
+  validation. 84 tests pass;21 default-OFF image results match prior code.
+  No deployment, model training or live enable; keep DM GPU/start-guard policy.
+  See docs/signal_color_experiment_20261012.md and its private evidence archive.
+
 - On 2026-10-12, the user requested collecting unseen night/morning logs and
   evaluating signal size/height/road-edge filtering, analysis first. All52
   completed segments/169 source files are locally SHA256-verified. Morning CPU
