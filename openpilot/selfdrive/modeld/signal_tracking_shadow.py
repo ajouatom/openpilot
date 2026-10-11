@@ -73,7 +73,7 @@ def result_fields(result, age_ms):
           'reason': result['reason'] if fresh else 'stale_result', 'control_permission': False}
 
 
-def run(directory=DIRECTORY, duration=None):
+def run(directory=DIRECTORY, duration=None, comparison_override=None):
   import fcntl
   directory = Path(directory)
   if not requested(directory) or not tracking_requested(directory):
@@ -96,7 +96,9 @@ def run(directory=DIRECTORY, duration=None):
     source_sha = hashlib.sha256(Path(signal_tracker.__file__).read_bytes()).hexdigest()
     from openpilot.selfdrive.carrot.signal_assist_runtime import publish_observation
     from openpilot.selfdrive.carrot.signal_display import display_requested, publish_display
-    comparison = comparison_requested(directory)
+    from openpilot.selfdrive.carrot.signal_start_guard import publish_start_observation
+    comparison_selection = comparison_requested(directory)
+    comparison = comparison_selection if comparison_override is None else comparison_override
     revalidated = revalidated_requested(directory)
     def new_tracker():
       return (*new_trackers(signal_tracker.SignalTracker, comparison, revalidated), f'{os.getpid()}:{time.monotonic_ns()}')
@@ -109,7 +111,7 @@ def run(directory=DIRECTORY, duration=None):
                    assist_transport=not comparison, daytime_comparison=comparison, revalidated=revalidated)
     previous_id = None
     last_file = 0.
-    while (requested(directory) and tracking_requested(directory) and comparison_requested(directory) == comparison
+    while (requested(directory) and tracking_requested(directory) and comparison_requested(directory) == comparison_selection
            and revalidated_requested(directory) == revalidated
            and (duration is None or time.monotonic() - start < duration)):
       if not client.is_connected() and not client.connect(False):
@@ -152,6 +154,7 @@ def run(directory=DIRECTORY, duration=None):
                 'work_ms': (time.monotonic() - work_start) * 1000,
                 'cpu_ms': (time.process_time() - cpu_start) * 1000,
                 'tracks': result['tracks'], 'daytime_comparison': comparison,
+                'start_guard_transport': requested(directory / 'start_guard_enabled'),
                 'assist_transport': not comparison, 'revalidated': revalidated,
                 'session': session_id, **result_fields(result, age)}
       try:
@@ -173,6 +176,10 @@ def run(directory=DIRECTORY, duration=None):
                                  baseline_prediction=record['prediction'],
                                  **result_fields(candidate, candidate_age))
         cloudlog.event('signalTrackingDaytimeShadow', **comparison_record)
+      try:
+        publish_start_observation(comparison_record if comparison_record is not None else record, directory)
+      except (OSError, ValueError, TypeError, KeyError):
+        cloudlog.exception('signalStartObservationPublishFailed')
       if display_requested(directory / 'display_enabled'):
         try:
           # Independent tmpfs endpoint remains available in comparison mode.

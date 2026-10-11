@@ -365,6 +365,15 @@ class LongitudinalPlanner:
 
     self.update_coasting(sm, carrot, v_cruise_kph, v_cruise, reset_state,
                          force_slow_decel, coasting_turn_blocked, cutin_predecel_limit)
+    self.apply_signal_start_guard(carrot)
+
+  def apply_signal_start_guard(self, carrot):
+    if getattr(getattr(carrot, 'start_decision', None), 'hold', False):
+      # Explicit departure veto, including the first constrained MPC cycle.
+      # Preserve any stronger braking and normal longitudinal/Panda gating.
+      self.output_should_stop = True
+      self.output_v_target_now = 0.0
+      self.output_a_target = min(self.output_a_target, 0.0)
 
   def update_coasting(self, sm, carrot, v_cruise_kph, v_cruise, reset_state,
                       force_slow_decel, coasting_turn_blocked, cutin_predecel_limit):

@@ -20,6 +20,7 @@ def main():
   parser.add_argument('--backend', choices=['cpu', 'qcom'], required=True)
   parser.add_argument('--output', type=Path, required=True)
   parser.add_argument('--repeats', type=int, default=3)
+  parser.add_argument('--export-qcom', action='store_true', help='Save locally compiled, identity-checked JITs beside the ONNX files')
   args = parser.parse_args()
   if not 1 <= args.repeats <= 20:
     parser.error('repeats must be 1..20')
@@ -45,6 +46,22 @@ def main():
         timings.append((time.monotonic()-start)*1000)
         if repeat == 0: predictions.append(prediction)
     output[name] = np.concatenate(predictions)
+    if args.export_qcom:
+      if args.backend != 'qcom':
+        raise ValueError('compiled export requires QCOM')
+      import hashlib
+      import pickle
+      from tools.signal_analysis.neural_signal import qcom_runtime_identity
+      model = args.models / ('detector.onnx' if name == 'images' else 'classifier.onnx')
+      compiled = model.with_suffix('.qcom.pkl')
+      temporary = compiled.with_suffix('.tmp')
+      with temporary.open('wb') as f:
+        pickle.dump((session.input_names, session.forward), f, protocol=5)
+      metadata = dict(version=1, model_sha256=hashlib.sha256(model.read_bytes()).hexdigest(),
+                      compiled_sha256=hashlib.sha256(temporary.read_bytes()).hexdigest(), runtime=qcom_runtime_identity())
+      temporary.replace(compiled)
+      temporary = compiled.with_suffix('.json.tmp')
+      temporary.write_text(json.dumps(metadata, indent=2)); temporary.replace(compiled.with_suffix('.json'))
     results[name] = dict(warmup_s=startup, mean_ms=float(np.mean(timings)),
                          p50_p95_ms=np.percentile(timings,[50,95]).tolist(), timings_ms=timings)
     print(json.dumps(dict(backend=args.backend, model=name, **results[name])), flush=True)

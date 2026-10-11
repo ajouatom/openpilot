@@ -1,5 +1,22 @@
 # Repository memory
 
+- On 2026-10-11, the user explicitly requested red automatic-departure blocking
+  AND one warning sound. Add separate default-OFF start_guard_enabled, fresh
+  observation transport and stopped-only veto for both observer backends. Keep
+  old moving assist OFF. Red needs two samples/150 ms; green same red-anchored
+  housing needs three/700 ms with no competing forward red. Unknown/stale and
+  observer restart never grant green release. Stop-only freshness is 650 ms
+  for measured GPU latency; old moving-assist 200 ms stays unchanged. Gas
+  overrides with 10 s cooldown. Final shouldStop/vTarget/aTarget and ACC mode
+  enforce the veto; audioRefuse is once per blocked stop's departure request.
+  264 checks pass, one skip. 43,090-frame nominal/+20 ms replays block both
+  1095 red departures; reviewed-red green releases are zero, but green holds
+  remain. Forward ROI is not lane association and detection can still fail.
+  New MDM stays trial-only; auto chooses QCOM neural with eGPU, lightweight
+  CPU tracker with internal model. Both sustain ~20 Hz parked; internal+QCOM
+  co-load falls to ~8 Hz and is rejected. See docs/signal_start_guard_20261011.md
+  and docs/signal_gpu_dual_model_20261011.md for evidence and device status.
+
 - On 2026-10-11, the user redirected the new upstream 6f4c0faf eGPU model
   to carrot-signal-shadow for testing before a combined promotion. Revert the
   just-pushed 03142df861 model/runtime change from carrot-wip; wip keeps Cinque

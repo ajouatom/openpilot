@@ -94,8 +94,10 @@ def test_existing_worker_dispatches_only_with_opt_in(monkeypatch, tmp_path):
   assert calls == [(tmp_path, 2)]
 
 
-@pytest.mark.parametrize('comparison,revalidated', [(True,False),(True,True),(False,False),(False,True)])
-def test_worker_modes_select_engines_and_bound_transport(monkeypatch, tmp_path, comparison, revalidated):
+@pytest.mark.parametrize('comparison,revalidated,override', [
+  (True,False,None),(True,True,None),(False,False,None),(False,True,None),(False,False,True),(False,True,True),
+])
+def test_worker_modes_select_engines_and_bound_transport(monkeypatch, tmp_path, comparison, revalidated, override):
   import sys
   from openpilot.selfdrive.modeld import signal_tracking_shadow as worker
   from openpilot.selfdrive.carrot import signal_assist_runtime
@@ -139,7 +141,8 @@ def test_worker_modes_select_engines_and_bound_transport(monkeypatch, tmp_path, 
   monkeypatch.setattr(signal_tracker, 'SignalTracker', Tracker)
   monkeypatch.setattr(signal_assist_runtime, 'publish_observation', lambda *a: published.append(a))
   monkeypatch.setattr(signal_display, 'publish_display', lambda record: displays.append(record))
-  worker.run(tmp_path)
+  worker.run(tmp_path, comparison_override=override)
+  comparison = comparison if override is None else override
   assert [c[0] for c in calls] == ([False, True] if comparison else [revalidated])
   assert [c[2] for c in calls] == ([False, revalidated] if comparison else [revalidated])
   assert len(published) == (0 if comparison else 1)
