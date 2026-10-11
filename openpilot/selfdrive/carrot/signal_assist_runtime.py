@@ -37,7 +37,7 @@ def publish_observation(result, frame_id, timestamp, session, path=OBSERVATION_P
 class SignalAssistRuntime:
   def __init__(self, enable_path=ENABLE_PATH, observation_path=OBSERVATION_PATH):
     self.enable_path, self.observation_path = Path(enable_path), Path(observation_path)
-    self.assist = SignalAssist() if requested(self.enable_path) else None
+    self.assist = SignalAssist(producer_red_history=requested(self.enable_path.parent / 'revalidated_enabled')) if requested(self.enable_path) else None
     self.last_mode_check = -1.
     self.enabled = self.assist is not None
     self.last_log = -1.

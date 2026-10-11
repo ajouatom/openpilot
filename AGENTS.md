@@ -1,5 +1,20 @@
 # Repository memory
 
+- On 2026-10-11, accumulated signal replay tested 37 segments / 15,422
+  images and 43,090 planner updates. The opt-in candidate combines housing/core
+  proposals, image-supported 500 ms identity retention with unchanged 250 ms
+  color continuity and 200 ms freshness, and explicit producer-red-history reuse.
+  Five nominal false-start windows are blocked, but added-latency trials still
+  fail acquisition; 1094-10's new green release lacks visually verified green.
+  Eight isolated parked camera-timed sequences improve nominal holds/releases
+  but 1093-6 loses acquisition with +20 ms. Earlier dusk green coverage regresses.
+  Do not enable this candidate for control. revalidated_enabled is only an
+  experimental opt-in name, default OFF, with separate assist_enabled required.
+  Vehicle remains c115ce4, original ONNX, comparison ON and assist OFF; no vehicle
+  code/settings changes. 360 tests and production/prototype parity pass, not
+  perception or closed-loop validation. This is hand-written OpenCV, not neural
+  retraining. See docs/signal_revalidation_20261011.md. Keep raw evidence private.
+
 - On 2026-10-11, Ioniq 5 PE 1095 segments 65/66 show two red-light
   departures without gas while original x/v changes produce trafficState green.
   Both legacy and daytime shadow detectors recorded red; current c115ce4 vehicle
