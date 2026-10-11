@@ -1,5 +1,21 @@
 # Repository memory
 
+- On 2026-10-11, the user requested holding prior signal display results and
+  combining upper ROI, neural detection, fast tracking and high-resolution crop.
+  New 26-segment data has 5,714 observations at2.71--4.99 Hz, median gap250 ms
+  and result age183 ms. Display revision3 remembers candidates up to800 ms from
+  capture, marks them dim/~ previous, immediately replaces new red/green and
+  never renews old color from unknown/repeated data. Camera/session failures reset
+  it. This supersedes display-only no-hold policy; control freshness stays200 ms.
+  Offline pinned neural+tracking on381 new frames reduces PC mean work100 to33 ms;
+  faster search after loss removes a150 ms green reacquisition delay in that case.
+  Dark-light loss/arrows remain unresolved. ROI NV12 copying is implemented, but
+  native full-resolution camerad access, dynamic path ROI and GPU inference are
+  not connected. New neural reference remains offline, original ONNX/assist OFF
+  preserved. 123 related tests pass, one Linux-only skip. Vehicle install guards
+  offroad/inactive Park; see private deployment.json for live activation status.
+  See docs/signal_continuity_20261011.md. Keep recordings private.
+
 - On 2026-10-11, the user requested the best distant/fast/accurate signal
   recognition approach, including upper-path ROI and overlapping frames. Offline
   pretrained Autoware YOLOX-s on 73 selected boxes improves IoU>=0.5 coverage

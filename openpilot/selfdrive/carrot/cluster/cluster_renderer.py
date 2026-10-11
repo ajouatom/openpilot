@@ -1672,16 +1672,20 @@ class ClusterUiRenderer:
                 continue
             visible += 1
             color = colors[track['state']]
+            if track.get('held'):
+                color = tuple(int(c * .65) for c in color)
             # Padding improves visibility without hiding the tiny lamp itself.
             rect = rl.Rectangle(x-2, y-2, w+4, h+4)
             rl.draw_rectangle_lines_ex(rect, 4., rl_color((0, 0, 0)))
             rl.draw_rectangle_lines_ex(rect, 2., rl_color(color))
             label_x = max(dest.x+4, min(x, dest.x+dest.width-90))
             label_y = max(dest.y+font_size*2, y-font_size*.7)
-            qualifier = '?' if track['state'] != 'unknown' and not track['confirmed'] else ''
+            qualifier = '~' if track.get('held') else '?' if track['state'] != 'unknown' and not track['confirmed'] else ''
             self._draw_text_with_stroke(f"{letters[track['state']]}{qualifier} #{track['id']}", label_x, label_y,
                                         font_size, color, (0, 0, 0), 2)
         caption = f"신호 후보 {visible}" if self.language == CLUSTER_LANGUAGE_KO else f"SIGNAL CANDIDATES {visible}"
+        if any(t.get('held') for t in tracks):
+            caption += " · ~ 이전 판독" if self.language == CLUSTER_LANGUAGE_KO else ' · ~ PREVIOUS'
         if live_camera.is_wide:
             caption = "신호 관찰: 일반 카메라에서 표시" if self.language == CLUSTER_LANGUAGE_KO else 'SIGNAL VIEW: ROAD CAMERA ONLY'
         self._draw_text_with_stroke(caption, dest.x+12, dest.y+font_size, font_size,

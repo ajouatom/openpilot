@@ -1,7 +1,7 @@
 import json
 import pytest
 
-from openpilot.selfdrive.carrot.signal_display import SignalDisplayReader, publish_display, visible_tracks, project_box
+from openpilot.selfdrive.carrot.signal_display import DisplayContinuity, SignalDisplayReader, publish_display, visible_tracks, project_box
 
 
 def record():
@@ -75,13 +75,14 @@ def test_reader_expires_even_when_file_does_not_change_and_handles_invalid_data(
   flag.write_text('1')
   reader = SignalDisplayReader(flag, path)
   assert len(reader.read(CAMERA, 10.2)) == 1
-  assert reader.read(CAMERA, 10.4) == ()
+  assert reader.read(CAMERA, 10.4)[0]['held']
+  assert reader.read((37, 10.85, 1344, 760, False), 10.9) == ()
   for bad in ['x'*9000, '[]', 'null', '{']:
     path.write_text(bad)
     reader.next_read = 0
     assert reader.read(CAMERA, 10.2) == ()
   flag.write_text('0')
-  assert reader.read(CAMERA, 11.) == () and not reader.enabled
+  assert reader.read(CAMERA, 11.5) == () and not reader.enabled
 
 
 def test_display_has_separate_endpoint_and_no_control_fields(tmp_path):
@@ -108,3 +109,78 @@ def test_renderer_status_is_bounded_and_display_only(tmp_path):
   assert path.read_bytes() == before
   reader.record_draw(CAMERA, 0, path=path, now=11.)
   assert json.loads(path.read_text())['boxes_drawn'] == 0
+
+
+def camera(now):
+  return (20 + round((now - 10.) * 20), now - .01, 1344, 760, False)
+
+
+def test_continuity_bridges_pending_result_without_refreshing_its_timestamp():
+  memory = DisplayContinuity(); r = record()
+  assert not memory.update(r, 10.2, camera(10.2))[0]['held']
+  held = memory.update(r, 10.5, camera(10.5))[0]
+  assert held['held'] and held['state'] == 'red' and not held['confirmed']
+  assert held['age'] == pytest.approx(.5)
+  assert memory.update(r, 10.81, camera(10.81)) == ()
+
+
+def test_new_opposite_color_replaces_previous_immediately():
+  memory = DisplayContinuity(); r = record()
+  r['tracks'][0].update(raw='green', state='green')
+  memory.update(r, 10.2, camera(10.2))
+  r.update(frame_id=26, timestamp=10.3)
+  r['tracks'][0].update(raw='red', state='unknown')
+  track = memory.update(r, 10.4, camera(10.4))[0]
+  assert track['state'] == 'red' and not track['held'] and not track['confirmed']
+
+
+def test_unknown_frames_move_box_but_cannot_renew_old_green():
+  memory = DisplayContinuity(); r = record()
+  r['tracks'][0].update(raw='green', state='green')
+  memory.update(r, 10.1, camera(10.1))
+  for timestamp in [10.3, 10.6, 10.9]:
+    r.update(frame_id=20 + round((timestamp-10)*20), timestamp=timestamp)
+    r['tracks'][0].update(raw='unknown', box=[610, 210, 650, 225])
+    track = memory.update(r, timestamp+.05, camera(timestamp+.05))[0]
+    assert track['box'] == (610, 210, 650, 225)
+    assert track['state'] == ('green' if timestamp < 10.8 else 'unknown')
+    if timestamp < 10.8:
+      assert track['held'] and not track['confirmed']
+
+
+def test_temporarily_missing_object_expires_despite_new_empty_observations():
+  memory = DisplayContinuity(); r = record()
+  memory.update(r, 10.1, camera(10.1))
+  for timestamp in [10.3, 10.6, 10.9]:
+    r.update(timestamp=timestamp, frame_id=20+round((timestamp-10)*20), tracks=[])
+    tracks = memory.update(r, timestamp+.05, camera(timestamp+.05))
+    assert bool(tracks) == (timestamp < 10.8)
+    if tracks:
+      assert tracks[0]['held']
+
+
+def test_replacement_track_removes_overlapping_old_color():
+  memory = DisplayContinuity(); r = record()
+  memory.update(r, 10.1, camera(10.1))
+  r.update(timestamp=10.3, frame_id=26)
+  r['tracks'][0].update(id=4, raw='green')
+  tracks = memory.update(r, 10.4, camera(10.4))
+  assert len(tracks) == 1 and tracks[0]['id'] == 4 and tracks[0]['state'] == 'green'
+
+
+@pytest.mark.parametrize('failure', ['wide', 'frozen', 'malformed', 'disabled', 'session'])
+def test_continuity_cannot_cross_camera_failure_disable_or_worker_session(tmp_path, failure):
+  flag, path = tmp_path/'flag', tmp_path/'data'
+  flag.write_text('1'); r = record(); path.write_text(json.dumps(r))
+  reader = SignalDisplayReader(flag, path)
+  assert reader.read(camera(10.1), 10.1)
+  cam = camera(10.7)
+  if failure == 'wide': cam = (*cam[:4], True)
+  elif failure == 'frozen': cam = CAMERA
+  elif failure == 'malformed': path.write_text('invalid')
+  elif failure == 'disabled': flag.write_text('0')
+  else:
+    r.update(session='new worker', timestamp=10.6, frame_id=32, tracks=[])
+    path.write_text(json.dumps(r))
+  assert reader.read(cam, 10.7) == ()
+  assert not reader.continuity.tracks
