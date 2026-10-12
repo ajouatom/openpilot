@@ -13,7 +13,11 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
-      - run: python -m pip install numpy pytest requests psutil scons
+      - run: python -m pip install numpy pytest requests psutil scons cython setuptools
+      - name: Build deterministic native map rasterizer
+        env:
+          CFLAGS: -O3 -fno-fast-math -ffp-contract=off
+        run: cythonize -i openpilot/selfdrive/navigation/_rasterizer.pyx
       - name: Check model contract, delivery and existing warp policy
         run: >-
           python -m pytest -c /dev/null --rootdir=. --confcutdir=openpilot/selfdrive/modeld/tests -q
@@ -43,6 +47,7 @@ jobs:
           openpilot/selfdrive/navigation/tests/test_inputs.py
           openpilot/selfdrive/navigation/tests/test_position.py
           openpilot/selfdrive/navigation/tests/test_mapbox_tiles.py
+          openpilot/selfdrive/navigation/tests/test_native_rasterizer.py
       - name: Execute pinned native CPU warp and persistent-buffer roundtrip
         env:
           MDM_RUNTIME_ROOT: /tmp/mdm-runtime

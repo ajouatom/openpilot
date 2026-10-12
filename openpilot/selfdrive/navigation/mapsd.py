@@ -80,6 +80,7 @@ def main():
         started, cpu_started = time.monotonic(), time.process_time()
         image.fill(0)
         valid = False
+        reason = 'idle' if not demand else 'route' if tracker is None else 'position' if gps is None else 'instruction' if not fresh_tbt else 'tiles'
         try:
           if ready and now >= retry_at:
             if renderer is None:
@@ -92,6 +93,7 @@ def main():
             distance = np.hypot((lon - gps.longitude) * 111320 * np.cos(np.radians(lat)), (lat - gps.latitude) * 110540)
             result = renderer.render(Position(lat, lon, bearing), route) if distance <= 50 else None
             valid = result is not None and result.valid
+            reason = 'ready' if valid else 'route_position' if distance > 50 else 'tiles'
             if valid:
               image = result.image
         except (OSError, ValueError, RuntimeError):
@@ -104,13 +106,14 @@ def main():
         if finished - started >= .5:
           image.fill(0)
           valid = False
+          reason = 'slow'
         cpu = time.process_time() - cpu_started
-        next_render = finished + (render_interval(cpu) if ready else 1.)
+        next_render = finished + (render_interval(cpu) if valid else max(1., render_interval(cpu)))
         # Timestamp at render START prevents a slow tile request looking fresh.
         server.send(VisionStreamType.VISION_STREAM_MAP, image.tobytes(), rk.frame,
                     route_id, int(started * 1e9))
         if finished >= next_preview:
-          write_preview(image)
+          write_preview(image, reason=reason)
           next_preview = finished + .5
         diagnostics.record(render_ms=(finished - started) * 1000, cpu_ms=cpu * 1000,
                            context={'map_valid': valid, 'route_points': len(route), 'interval': render_interval(cpu)})

@@ -36,11 +36,11 @@ def sample(seconds):
           'core_max_percent': [max(r['cores'][i] for r in records) for i in range(len(records[0]['cores']))], 'samples': records}
 
 
-def benchmark():
+def benchmark(frames=120, paced=False):
   import numpy as np
   from types import SimpleNamespace
   from openpilot.selfdrive.navigation.mapsd import render_interval
-  from openpilot.selfdrive.navigation.renderer import MapRenderer, Position, mercator
+  from openpilot.selfdrive.navigation.renderer import MapRenderer, Position, mercator, _native_draw_segments
   # Dense synthetic local roads, with a maximum-size route. No network or GPU.
   center = np.array([127., 37.])
   scale = np.array([111320 * np.cos(np.radians(center[1])), 110540])
@@ -55,14 +55,17 @@ def benchmark():
   renderer.roads = lambda x, y: data if (x, y) == tiles[0] else empty
   route = center + np.column_stack((np.zeros(4096), np.linspace(-200, 100000, 4096))) / scale
   wall, cpu = [], []
-  for frame in range(120):
+  for frame in range(frames):
     start, cpu_start = time.perf_counter(), time.process_time()
     result = renderer.render(Position(center[1], center[0], frame / 4), route)
     cpu.append(time.process_time() - cpu_start)
     wall.append(time.perf_counter() - start)
     assert result.valid and result.image.shape == (256, 256)
+    if paced:
+      time.sleep(render_interval(cpu[-1]))
   mean = float(np.mean(cpu))
-  return {'kind': 'desktop synthetic dense roads; not vehicle timing', 'frames': len(cpu),
+  return {'kind': 'synthetic dense roads; not road validation', 'host': platform.machine(),
+          'native_rasterizer': _native_draw_segments is not None, 'frames': len(cpu),
           'wall_ms_mean': float(np.mean(wall) * 1000), 'wall_ms_p95': float(np.percentile(wall, 95) * 1000),
           'cpu_ms_mean': mean * 1000, 'uncapped_20hz_one_core_percent': mean * 20 * 100,
           'adaptive_one_core_percent': mean / (float(np.mean(wall)) + render_interval(mean)) * 100}
@@ -72,10 +75,14 @@ if __name__ == '__main__':
   parser = argparse.ArgumentParser(description=__doc__)
   parser.add_argument('--seconds', type=int, default=30)
   parser.add_argument('--benchmark', action='store_true')
+  parser.add_argument('--frames', type=int, default=120)
+  parser.add_argument('--paced', action='store_true', help='apply the live render duty limit during a target benchmark')
   parser.add_argument('--output', type=Path, required=True)
   args = parser.parse_args()
   if not 1 <= args.seconds <= 3600:
     parser.error('seconds must be between 1 and 3600')
-  report = benchmark() if args.benchmark else sample(args.seconds)
+  if not 1 <= args.frames <= 600:
+    parser.error('frames must be between 1 and 600')
+  report = benchmark(args.frames, args.paced) if args.benchmark else sample(args.seconds)
   args.output.write_text(json.dumps(report, indent=2) + '\n')
   print(json.dumps({k: v for k, v in report.items() if k != 'samples'}, indent=2))

@@ -11,7 +11,7 @@ from aiohttp import web
 
 from ..config import WEB_DIR
 from ..services.params import get_param_value, set_param_value
-from openpilot.selfdrive.navigation.preview import PREVIEW_PATH, WEB_DEMAND_PATH, preview_fresh
+from openpilot.selfdrive.navigation.preview import PREVIEW_PATH, WEB_DEMAND_PATH, preview_fresh, preview_reason
 
 MAX_RESPONSE = 1024 * 1024
 
@@ -105,7 +105,7 @@ async def preview(request):
     pass
   if not preview_fresh():
     return web.Response(status=204, headers={'Cache-Control': 'no-store'})
-  return web.FileResponse(PREVIEW_PATH, headers={'Cache-Control': 'no-store'})
+  return web.FileResponse(PREVIEW_PATH, headers={'Cache-Control': 'no-store', 'X-Nav-Map-Status': preview_reason()})
 
 
 def register(app):

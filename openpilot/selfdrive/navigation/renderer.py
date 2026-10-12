@@ -10,6 +10,11 @@ from functools import lru_cache
 
 import numpy as np
 
+try:
+  from openpilot.selfdrive.navigation._rasterizer import draw_segments as _native_draw_segments
+except ImportError:
+  _native_draw_segments = None
+
 from openpilot.selfdrive.navigation.pmtiles import PMTiles
 from openpilot.selfdrive.navigation.route import MAX_LATITUDE
 from openpilot.selfdrive.navigation.vector_tile import Road, decode_roads
@@ -126,6 +131,16 @@ def project(points: np.ndarray, position: Position) -> np.ndarray:
 
 
 def draw_segments(image: np.ndarray, starts: np.ndarray, ends: np.ndarray, radii: np.ndarray | float, intensity: int,
+                  *, overlay: bool = False, caps: np.ndarray | None = None):
+  if _native_draw_segments is None:
+    return draw_segments_reference(image, starts, ends, radii, intensity, overlay=overlay, caps=caps)
+  radii = np.ascontiguousarray(np.broadcast_to(np.asarray(radii, dtype=np.float64), (len(starts),)))
+  round_caps = np.ones((len(starts), 2), dtype=np.uint8) if caps is None else np.ascontiguousarray(caps, dtype=np.uint8)
+  _native_draw_segments(image, np.ascontiguousarray(starts, dtype=np.float64), np.ascontiguousarray(ends, dtype=np.float64),
+                        radii, intensity, overlay, round_caps)
+
+
+def draw_segments_reference(image: np.ndarray, starts: np.ndarray, ends: np.ndarray, radii: np.ndarray | float, intensity: int,
                   *, overlay: bool = False, caps: np.ndarray | None = None):
   """Strokes with round joins and one pixel of analytic edge antialiasing.
 
