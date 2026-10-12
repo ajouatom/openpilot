@@ -430,7 +430,10 @@ e4c9730510 integrates the trial through5ce8faa735 as a SINGLE-PARENT commit; no
 historical rewrite or merge commit. Existing wip radar/MPC/font fixes remain.
 Retrained Mountain Dew8d736683 and its pinned runtime are included by that explicit
 full-branch request; internal/DM and Jetson selections remain unchanged. The old
-trial ref is retained but will not receive parallel changes. Integration checks:
+local trial ref is retained but will not receive parallel changes. The remote
+carrot-signal-shadow branch was subsequently deleted at the user's request after
+verifying its model/runtime and signal contents on carrot-wip. Do not recreate
+the remote branch; continue with single-parent commits on carrot-wip. Integration checks:
 247 Python tests and the later combined Web checks pass; no device deployment.
 
 `SignalAssistMode` is a persistent integer default0, exposed in Carrot Web's
