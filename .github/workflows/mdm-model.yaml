@@ -17,7 +17,12 @@ jobs:
       - name: Build deterministic native map rasterizer
         env:
           CFLAGS: -O3 -fno-fast-math -ffp-contract=off
-        run: cythonize -i openpilot/selfdrive/navigation/_rasterizer.pyx
+        run: |
+          raster_build=$(mktemp -d)
+          cp openpilot/selfdrive/navigation/_rasterizer.pyx "$raster_build/"
+          cd "$raster_build"
+          cythonize -i _rasterizer.pyx
+          cp _rasterizer*.so "$GITHUB_WORKSPACE/openpilot/selfdrive/navigation/"
       - name: Check model contract, delivery and existing warp policy
         run: >-
           python -m pytest -c /dev/null --rootdir=. --confcutdir=openpilot/selfdrive/modeld/tests -q
