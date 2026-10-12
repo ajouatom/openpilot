@@ -4,6 +4,7 @@ Geometry rejects implausible housings; it cannot prove signal identity or lane
 applicability. Metric ranges assume housing dimensions and mounting heights.
 """
 from dataclasses import dataclass
+from itertools import combinations
 import math
 
 import numpy as np
@@ -105,6 +106,7 @@ class PrepareDecision:
   reason: str = 'disabled'
   track_id: int = -1
   distance_range: tuple | None = None
+  track_ids: tuple = ()
 
 
 class SignalStopPrepare:
@@ -115,20 +117,17 @@ class SignalStopPrepare:
   RAMP = .25  # m/s^3; zero to -0.5 takes two seconds
 
   def __init__(self):
-    self.key = None
+    self.session = None
     self.last_frame = -1
     self.last_capture = -math.inf
-    self.since = None
-    self.count = 0
+    self.histories = {}
     self.active = False
     self.last_now = None
     self.cooldown = -math.inf
     self.last_sound = -math.inf
 
   def reset(self, reason):
-    self.key = None
-    self.since = None
-    self.count = 0
+    self.histories.clear()
     self.active = False
     return PrepareDecision(reason=reason)
 
@@ -144,51 +143,79 @@ class SignalStopPrepare:
         or not 5/3.6 < speed < 82/3.6 or now < self.cooldown):
       return self.reset('ineligible')
     try:
-      stamp = float(observation['timestamp']); frame = int(observation['frame_id'])
+      stamp = float(observation['timestamp'])
+      frame = int(observation['frame_id'])
       session = observation['session']
       if (observation.get('version') != 1 or observation.get('stream') != 'road'
           or observation.get('size') != [1344, 760] or not isinstance(session, str) or not session
           or not math.isfinite(stamp) or not 0 <= now-stamp <= self.MAX_AGE):
         return self.reset('stale')
+      if session != self.session:
+        self.reset('new_session')
+        self.session = session
+        self.last_frame, self.last_capture = -1, -math.inf
+      if frame < self.last_frame or stamp < self.last_capture:
+        return self.reset('reordered')
+      fresh = frame != self.last_frame and stamp > self.last_capture
+      if not fresh and (frame != self.last_frame or stamp != self.last_capture):
+        return self.reset('inconsistent_frame')
+      if fresh:
+        if stamp-self.last_capture > self.MAX_GAP:
+          self.reset('capture_gap')
+        self.last_frame, self.last_capture = frame, stamp
       candidates = []
+      green = False
       for t in observation['tracks']:
         e = t['evidence']
         # Core proposals synthesize a box around one lamp; its width is NOT a
         # measured housing width. Templates alone cannot establish a new red.
-        if (t['age'] != 0 or t['state'] != 'red' or e['raw'] != 'red'
+        if (t['age'] != 0 or t['state'] not in ('red', 'green') or e['raw'] != t['state']
             or e.get('source') != 'detected' or t['observations'] < 3
-            or not .5 <= float(e.get('quality', 0)) <= 1
-            or not .4 <= float(e.get('red_score', 0)) <= 1
-            or not 0 <= float(e.get('green_score', 1)) < .08):
+            or not .5 <= float(e.get('quality', 0)) <= 1):
           continue
         distance = geometry(t['box'])
-        if distance is not None:
-          candidates.append((int(t['id']), distance))
-      # Ambiguous multiple housings do not select one arbitrarily.
-      if len(candidates) != 1:
-        return self.reset('no_unique_red')
-      tid, distance = candidates[0]
-      key = (session, tid)
-      if key != self.key:
-        self.reset('new_track')
-        self.key = key
-        self.last_frame = -1
-        self.last_capture = -math.inf
-      if frame < self.last_frame or stamp < self.last_capture:
-        return self.reset('reordered')
-      if frame != self.last_frame and stamp > self.last_capture:
-        if stamp-self.last_capture > self.MAX_GAP:
-          self.since, self.count, self.active = stamp, 0, False
-        self.count += 1
-        self.last_frame, self.last_capture = frame, stamp
-      elif frame != self.last_frame or stamp != self.last_capture:
-        return self.reset('inconsistent_frame')
+        if distance is None:
+          continue
+        if t['state'] == 'green':
+          green = True
+        elif (.4 <= float(e.get('red_score', 0)) <= 1
+              and 0 <= float(e.get('green_score', 1)) < .08):
+          candidates.append((int(t['id']), distance, t['box']))
+      # No majority vote: a qualifying green anywhere in the search corridor
+      # vetoes preparation. This never releases the separate stopped-red guard.
+      if green and candidates:
+        return self.reset('mixed_colors')
+      if not 1 <= len(candidates) <= 4:
+        return self.reset('no_red' if not candidates else 'too_many_red')
+      ids = tuple(sorted(tid for tid, _, _ in candidates))
+      distance = (max(d[0] for _, d, _ in candidates), min(d[1] for _, d, _ in candidates))
+      if len(set(ids)) != len(ids) or distance[0] >= distance[1]:
+        return self.reset('incompatible_red_group')
+      # A common plausible distance plus a similar row/scale supports a group
+      # hypothesis, NOT proof of common lane/direction. Reject overlapping boxes
+      # (duplicate detections), distinct rows and very different apparent scales.
+      for (_, _, a), (_, _, b) in combinations(candidates, 2):
+        aw, bw = a[2]-a[0], b[2]-b[0]
+        overlaps = min(a[2], b[2]) > max(a[0], b[0]) and min(a[3], b[3]) > max(a[1], b[1])
+        if (overlaps or max(aw, bw) > 2*min(aw, bw)
+            or abs((a[1]+a[3]-b[1]-b[3])/2) > 2*max(a[3]-a[1], b[3]-b[1])):
+          return self.reset('incompatible_red_group')
+      # Confirm each identity independently. Extra lamps do not multiply frame
+      # counts, and a newly appearing lamp cannot inherit a vanished lamp's age.
+      self.histories = {tid: h for tid, h in self.histories.items() if tid in ids}
+      if fresh:
+        for tid in ids:
+          since, count = self.histories.get(tid, (stamp, 0))
+          self.histories[tid] = (since, count+1)
+      confirmed = [tid for tid, (since, count) in self.histories.items()
+                   if count >= 4 and stamp-since >= self.CONFIRM-1e-9]
+      tid = min(confirmed) if confirmed else ids[0]
       was_active = self.active
-      self.active = self.count >= 4 and self.since is not None and stamp-self.since >= self.CONFIRM-1e-9
+      self.active = bool(confirmed)
       entered = self.active and not was_active and now-self.last_sound >= 10.
       if entered:
         self.last_sound = now
-      return PrepareDecision(self.active, entered, 'red_prepare' if self.active else 'confirming', tid, distance)
+      return PrepareDecision(self.active, entered, 'red_prepare' if self.active else 'confirming', tid, distance, ids)
     except (KeyError, TypeError, ValueError, OverflowError):
       return self.reset('malformed')
 
