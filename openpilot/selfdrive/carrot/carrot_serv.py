@@ -993,19 +993,27 @@ class CarrotServ:
 
   def _apply_carrot_navi_vehicle(self, navi: CarrotNaviControl):
     vehicle = navi.vehicle
-    self.carrot_navi_vehicle_sequence = vehicle.sequence
     if not vehicle.present:
       self.last_update_gps_time_navi = 0
       self.szPosRoadName = ""
       return
 
+    if vehicle.sequence == self.carrot_navi_vehicle_sequence:
+      return
     now = time.monotonic()
+    # A cereal heartbeat is not a GPS fix. Retain the original local receipt
+    # time so dead reckoning and map freshness cannot restart on repeated data.
+    # Older senders without receipt metadata use their first observation only.
+    received = vehicle.received_mono_time_ns / 1e9 if vehicle.received_mono_time_ns else now
+    if received > now:
+      return
+    self.carrot_navi_vehicle_sequence = vehicle.sequence
     self.vpPosPointLatNavi = vehicle.latitude
     self.vpPosPointLonNavi = vehicle.longitude
     self.nPosAngle = vehicle.heading_deg
     self.nPosSpeed = vehicle.speed_kph
     self.szPosRoadName = vehicle.road_name
-    self.last_update_gps_time_navi = self.last_calculate_gps_time = now
+    self.last_update_gps_time_navi = self.last_calculate_gps_time = received
 
   def _apply_carrot_navi_route(self, navi: CarrotNaviControl):
     route = navi.route
@@ -1097,8 +1105,7 @@ class CarrotServ:
       self.carrot_navi_speed_sequence = navi.speed.sequence
       self._apply_carrot_navi_speed(navi)
 
-    # The cereal service repeats at 2 Hz even when item sequences do not change.
-    # Refresh GPS and Params freshness from that heartbeat.
+    # Traffic Params still use the service heartbeat; GPS only accepts new fixes.
     self._apply_carrot_navi_vehicle(navi)
     self._apply_carrot_navi_traffic(navi)
     if new_session or navi.route.sequence != self.carrot_navi_route_sequence:

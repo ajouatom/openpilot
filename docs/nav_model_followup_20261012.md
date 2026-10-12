@@ -1,5 +1,7 @@
 # Nav model follow-up: USB layout and missed navigation turns
 
+For the subsequent drive's external GPS/pose timing analysis and repeated-fix correction, see [nav_gps_timing_20261012.md](nav_gps_timing_20261012.md).
+
 The user requested the nav map beside the driving view, on the right. USB screen mode 7 now retains the complete driving camera/3D view and HUD in the existing 1124-pixel left region and draws the shared map only in the 792-pixel right region. Alerts still draw last. This mode keeps the requested left/right order even when the general panel-swap setting is enabled. No driving-model or control policy changes accompany this layout correction.
 
 The production renderer was exercised with synthetic 3D and camera scenes and its PNG outputs visually inspected. All 138 focused display, map-texture, driving-report and scene tests pass. The map texture retains its two-Hz cache and expiry; the UI does not start another map renderer.
