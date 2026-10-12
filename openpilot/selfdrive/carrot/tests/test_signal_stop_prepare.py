@@ -84,11 +84,127 @@ def test_geometry_and_conflict_fail_closed():
     assert not SignalStopPrepare().update(.8,malformed,**context()).active
 
 
+def group_observation(t, ids=(1, 2, 3, 4), green_ids=()):
+  o = observation(t)
+  o['tracks'] = [dict(observation(t, 'green' if tid in green_ids else 'red')['tracks'][0],
+                      id=tid, box=[487+60*tid, 260, 527+60*tid, 270]) for tid in ids]
+  return o
+
+
+@pytest.mark.parametrize('size', [1, 2, 3, 4])
+def test_multiple_reds_need_time_not_votes(size):
+  p = SignalStopPrepare()
+  ids = tuple(range(1, size+1))
+  sounds = []
+  for i in range(11):
+    t = i*.1
+    o = group_observation(t, ids if i % 2 else ids[::-1])
+    d = p.update(t, o, **context())
+    assert d.active == (i >= 6)
+    assert d.track_ids == ids and d.distance_range == (30., 70.)
+    sounds.append(d.entered)
+  assert sum(sounds) == 1
+
+
+def test_group_membership_retains_only_each_members_own_confirmation():
+  p = SignalStopPrepare()
+  for i in range(8):
+    t = i*.1
+    d = p.update(t, group_observation(t, (1, 2)), **context())
+  assert d.active
+  # One independently confirmed housing remains; no interruption or new sound.
+  d = p.update(.8, group_observation(.8, (2, 3)), **context())
+  assert d.active and not d.entered and d.track_id == 2
+  # Newly joined 3 cannot inherit 2's history when 2 disappears.
+  assert not p.update(.9, group_observation(.9, (3,)), **context()).active
+  for i in range(10, 15):
+    t = i*.1
+    d = p.update(t, group_observation(t, (3,)), **context())
+  assert d.active and d.track_id == 3
+  # A lost member's previous confirmation is discarded, even if its ID returns.
+  assert not p.update(1.5, group_observation(1.5, (1,)), **context()).active
+
+
+@pytest.mark.parametrize('kind', ['duplicate_id', 'overlap', 'row', 'scale', 'distance', 'five'])
+def test_incompatible_groups_cancel(kind):
+  p = confirmed()
+  o = group_observation(.8, (1, 2))
+  c = context()
+  if kind == 'duplicate_id':
+    o['tracks'][1]['id'] = 1
+  if kind == 'overlap':
+    o['tracks'][1]['box'] = o['tracks'][0]['box']
+  if kind == 'row':
+    o['tracks'][1]['box'] = [607, 310, 647, 320]
+  if kind == 'scale':
+    o['tracks'][1]['box'] = [607, 250, 697, 272]
+  if kind == 'distance':
+    c['geometry'] = lambda b: (30., 50.) if b[0] < 600 else (60., 90.)
+  if kind == 'five':
+    o = group_observation(.8, (1, 2, 3, 4, 5))
+  assert not p.update(.8, o, **c).active
+
+
+def test_green_vetoes_red_majority_without_issuing_go():
+  p = confirmed()
+  d = p.update(.8, group_observation(.8, green_ids=(4,)), **context())
+  assert not d.active and d.reason == 'mixed_colors'
+  # Removing green requires fresh red confirmation again.
+  assert not p.update(.9, group_observation(.9, (1, 2, 3)), **context()).active
+
+
+def test_green_outside_geometry_is_not_part_of_search_corridor():
+  p = SignalStopPrepare()
+  c = context()
+  c['geometry'] = lambda b: (30., 70.) if b[0] < 700 else None
+  for i in range(8):
+    t = i*.1
+    d = p.update(t, group_observation(t, green_ids=(4,)), **c)
+  assert d.active and d.track_ids == (1, 2, 3)
+
+
+def test_group_repeats_gaps_session_and_alternating_ids_cannot_accumulate():
+  p = SignalStopPrepare()
+  for t in (0., .05, .1, .15):
+    assert not p.update(t, group_observation(0.), **context()).active
+  p = SignalStopPrepare()
+  for i in range(20):
+    t = i*.1
+    assert not p.update(t, group_observation(t, (1, 2) if i % 2 else (3, 4)), **context()).active
+  p = SignalStopPrepare()
+  for i in range(8):
+    t = i*.1
+    d = p.update(t, group_observation(t), **context())
+  assert d.active
+  assert not p.update(1.1, group_observation(1.1), **context()).active
+  for i in range(12, 19):
+    t = i*.1
+    d = p.update(t, group_observation(t), **context())
+  assert d.active
+  o = group_observation(1.9)
+  o['session'] = 'new'
+  assert not p.update(1.9, o, **context()).active
+
+
 def geometry():
   xs=np.linspace(0,200,33)
   curve=lambda y: NS(x=xs,y=np.full(33,y),z=np.zeros(33))
   return dict(focal=1141.5,rpy=[0.,0.,0.],edges=[curve(-4),curve(4)],edge_stds=[.2,.2],
               lane_lines=[curve(-5.4),curve(-1.8),curve(1.8),curve(5.4)],lane_probs=[.9]*4,lane_stds=[.2]*4)
+
+
+def test_four_housings_with_actual_road_projection():
+  p = SignalStopPrepare()
+  c = context()
+  c['geometry'] = lambda b: housing_range(b, **geometry())
+  for i in range(8):
+    t = i*.1
+    o = group_observation(t)
+    for track, x in zip(o['tracks'], (590, 635, 680, 725), strict=True):
+      track['box'] = [x, 260, x+40, 270]
+    d = p.update(t, o, **c)
+  assert d.active and d.track_ids == (1, 2, 3, 4)
+  assert 25 <= d.distance_range[0] < d.distance_range[1] <= 140
 
 
 def test_housing_height_road_edges_lanes_and_uncertainty():
