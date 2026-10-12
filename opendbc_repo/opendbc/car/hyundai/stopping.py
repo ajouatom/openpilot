@@ -13,7 +13,7 @@ STOP_SPEED = 0.05
 MOVING_SPEED = 0.10
 STOP_CONFIRM_TIME = 0.2
 APPROACH_ACCEL = -0.5
-STOP_LOWER_BAND = 0.20  # fixed experimental value; never copied from the stock SCC
+STOP_LOWER_BAND = 0.20  # fixed during active ACC, including before StopReq; never copied from stock
 
 
 class StopPhase(StrEnum):
@@ -86,4 +86,4 @@ class CanfdStopping:
     # Preserve the existing approach deceleration until initial low-speed entry.
     raw = min(accel, APPROACH_ACCEL)
     value = min(0.0, max(previous_value - jerk_l * DT, min(raw, previous_value + jerk_u * DT)))
-    return StopCommand(0, raw, value, 0.0)
+    return StopCommand(0, raw, value, STOP_LOWER_BAND)

@@ -33,7 +33,39 @@ def dark_scene(rgb):
   return lower + (upper - lower) * (rank - math.floor(rank)) <= 45
 
 
-def lamp_evidence(rgb, box):
+def illuminated_green(rgb, box):
+  """Require a compact green/cyan light inside the right lamp, not sky at a rim.
+
+  This verifies current pixels only. A dark lamp never supplies a green vote;
+  retained red history and template correspondence cannot substitute for light.
+  Housing layout is still a hypothesis, not signal-to-lane or arrow recognition.
+  """
+  x1, y1, x2, y2 = map(int, box)
+  patch = rgb[y1:y2, x1:x2]
+  if patch.size == 0:
+    return False
+  h, w = patch.shape[:2]
+  r, g, b = np.moveaxis(patch.astype(np.int16), -1, 0)
+  yy, xx = np.mgrid[:h, :w]
+  interior = (xx >= .70*w) & (xx < .97*w) & (yy >= .18*h) & (yy < .82*h)
+  # Weakly saturated blue sky can be locally bright too. Cyan LEDs may have
+  # slightly more blue than green, but then require a strong chromatic core.
+  color = (g >= 70) & (g-r >= 30) & (g >= .9*b) & ((g >= .98*b) | (g-r >= 60))
+  count, ids, stats, _ = cv2.connectedComponentsWithStats((interior & color).astype(np.uint8), 8)
+  for k in range(1, count):
+    x, y, cw, ch, area = stats[k]
+    if area < 2 or not .4 <= cw/max(1, ch) <= 2.5:
+      continue
+    component = ids == k
+    # Compare with the unlit housing, excluding the sky outside its boundary.
+    housing = (xx >= .35*w) & (xx < .70*w) & (yy >= .18*h) & (yy < .82*h)
+    if (housing.any() and small_percentile(g[component], 80)-float(np.median(g[housing])) >= 18
+        and small_percentile((g-r)[component], 80)-float(np.median((g-r)[housing])) >= 12):
+      return True
+  return False
+
+
+def lamp_evidence(rgb, box, *, conservative_green=False):
   x1, y1, x2, y2 = map(int, box)
   a = rgb[y1:y2, x1:x2]
   if a.size == 0:
@@ -42,7 +74,9 @@ def lamp_evidence(rgb, box):
   hsv = cv2.cvtColor(a, cv2.COLOR_RGB2HSV)
   hue, sat, val = cv2.split(hsv)
   red = ((hue <= 12) | (hue >= 170)) & (sat >= 90) & (val >= 95)
-  green = (hue >= 38) & (hue <= 105) & (sat >= 65) & (val >= 95)
+  # Offline opt-in: blue-dominant sky must not contribute to a green score.
+  # Hue 90 still includes cyan. This is color evidence, not proof of a housing.
+  green = (hue >= 38) & (hue <= (90 if conservative_green else 105)) & (sat >= 65) & (val >= 95)
   yy, xx = np.mgrid[:h, :w]
   # Use interior lamps, excluding housing borders and bright adjacent sky.
   scores = []
@@ -69,7 +103,7 @@ def lamp_evidence(rgb, box):
   return state, max(r, g), dict(red_score=r, green_score=g, left_brightness=peaks[0], right_brightness=peaks[1])
 
 
-def housing_proposals(rgb, *, forward_only=False):
+def housing_proposals(rgb, *, forward_only=False, conservative_green=False):
   """Current-image housing proposals. Never accepts annotations or future frames."""
   height, width = rgb.shape[:2]
   y_end = int(height*.60)
@@ -94,7 +128,7 @@ def housing_proposals(rgb, *, forward_only=False):
       if fill < .5:
         continue
       box = [x, y, x+w, y+h]
-      state, strength, evidence = lamp_evidence(rgb, box)
+      state, strength, evidence = lamp_evidence(rgb, box, conservative_green=conservative_green)
       if state == 'unknown':
         continue
       # Dark horizontal housing with lit lamp at its expected end.
@@ -113,7 +147,7 @@ def housing_proposals(rgb, *, forward_only=False):
   return kept[:20]
 
 
-def night_proposals(rgb):
+def night_proposals(rgb, *, conservative_green=False):
   """Recover saturated lamps from a compact white core and its colored halo.
 
   Inferred horizontal boxes are proposals, not measured housings or lane labels.
@@ -179,7 +213,7 @@ def night_proposals(rgb):
       yy, xx = np.mgrid[ay:by, ax:bx]
       ring = ((xx - cx) ** 2 + (yy - cy) ** 2 >= 0.35**2 * diam**2) & ((xx - cx) ** 2 + (yy - cy) ** 2 <= 1.3**2 * diam**2)
       hue, sat, val = cv2.split(cv2.cvtColor(rgb[ay:by, ax:bx], cv2.COLOR_RGB2HSV))
-      green = (hue >= 38) & (hue <= 105) & (sat >= 65) & (val >= 110)
+      green = (hue >= 38) & (hue <= (90 if conservative_green else 105)) & (sat >= 65) & (val >= 110)
       if np.count_nonzero(green & ring) < max(8, np.count_nonzero(ring) * 0.22):
         continue
       state = 'green'
@@ -192,28 +226,28 @@ def night_proposals(rgb):
     box = [int(cx - bw * xc), int(cy - bh / 2), int(cx + bw * (1 - xc)), int(cy + bh / 2)]
     if box[0] < 0 or box[1] < 0 or box[2] >= w or box[3] >= end:
       continue
-    raw, strength, evidence = lamp_evidence(rgb, box)
+    raw, strength, evidence = lamp_evidence(rgb, box, conservative_green=conservative_green)
     if raw != state:
       continue
     seeds.append(dict(box=box, raw=state, quality=max(0.25, strength), source='night_lamp_core', core_diameter=diam, **evidence))
   return seeds
 
-def detect(rgb, *, daytime_cores=False):
+def detect(rgb, *, daytime_cores=False, conservative_green=False):
   """Explicit trial: preserve housing candidates and supplement merged backgrounds."""
   if daytime_cores and not dark_scene(rgb):
-    candidates = housing_proposals(rgb, forward_only=True)
-    for candidate in day_proposals(rgb):
+    candidates = housing_proposals(rgb, forward_only=True, conservative_green=conservative_green)
+    for candidate in day_proposals(rgb, conservative_green=conservative_green):
       if all(overlap(candidate['box'], other['box']) < .35 for other in candidates):
         candidates.append(candidate)
     return candidates[:20]
-  candidates = housing_proposals(rgb)
-  for candidate in night_proposals(rgb):
+  candidates = housing_proposals(rgb, conservative_green=conservative_green)
+  for candidate in night_proposals(rgb, conservative_green=conservative_green):
     if all(overlap(candidate['box'], other['box']) < .35 for other in candidates):
       candidates.append(candidate)
   return candidates[:20]
 
 
-def day_proposals(rgb):
+def day_proposals(rgb, *, conservative_green=False):
   """Forward compact lamps with adjoining dark bar evidence.
 
   A dark housing can merge into trees/background, so its connected outer contour
@@ -227,7 +261,7 @@ def day_proposals(rgb):
   bright = cv2.compare(cv2.morphologyEx(val, cv2.MORPH_TOPHAT, np.ones((15, 15), np.uint8)), 70, cv2.CMP_GE)
   red = cv2.bitwise_and(cv2.bitwise_or(cv2.inRange(hsv, (0, 90, 140), (12, 255, 255)),
                                      cv2.inRange(hsv, (170, 90, 140), (179, 255, 255))), bright)
-  green = cv2.bitwise_and(cv2.inRange(hsv, (38, 65, 140), (105, 255, 255)), bright)
+  green = cv2.bitwise_and(cv2.inRange(hsv, (38, 65, 140), (90 if conservative_green else 105, 255, 255)), bright)
   _, ids, stats, centers = cv2.connectedComponentsWithStats(cv2.bitwise_or(red, green), 8)
   gray = cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY)
   out = []
@@ -273,7 +307,7 @@ def day_proposals(rgb):
     contrast = float(np.median(surround)) - float(np.median(dark))
     if contrast < 8 or float(np.median(dark)) > 80:
       continue
-    state, quality, evidence = lamp_evidence(rgb, box)
+    state, quality, evidence = lamp_evidence(rgb, box, conservative_green=conservative_green)
     if state == color and quality >= .25:
       out.append(dict(box=box, raw=state, quality=float(quality), source='day_color_core', contrast=contrast, **evidence))
   return out
@@ -303,11 +337,13 @@ class SignalTracker:
   MAX_IDENTITY_GAP = .5
   MAX_VISIBLE_AGE = .125
 
-  def __init__(self, *, daytime_cores=False, robust_tracking=False):
+  def __init__(self, *, daytime_cores=False, robust_tracking=False, conservative_green=False, verified_lamps=False):
     # Opt-ins keep the default observer unchanged. Color confirmation and final
     # freshness remain independent from image-supported identity retention.
     self.daytime_cores = daytime_cores
     self.robust_tracking = robust_tracking
+    self.conservative_green = conservative_green
+    self.verified_lamps = verified_lamps
     self.identity_gap = self.MAX_IDENTITY_GAP if robust_tracking else self.MAX_OBSERVATION_GAP
     self.tracks = []
     self.next_id = 1
@@ -319,10 +355,13 @@ class SignalTracker:
       self.tracks = []
     if self.last_timestamp is not None and timestamp-self.last_timestamp > self.MAX_OBSERVATION_GAP:
       for t in self.tracks:
+        if self.verified_lamps and t.pending == 'red':
+          continue  # Fresh matching red may accumulate at the bounded identity cadence.
         t.state = t.pending = 'unknown'
         t.pending_count = 0
     self.last_timestamp = timestamp
-    self.tracks = [t for t in self.tracks if timestamp-t.last_seen <= (self.identity_gap if t.seen_red else self.MAX_OBSERVATION_GAP)]
+    self.tracks = [t for t in self.tracks if timestamp-t.last_seen <= (
+      self.identity_gap if t.seen_red or (self.verified_lamps and t.pending == 'red') else self.MAX_OBSERVATION_GAP)]
     used = set()
     for d in detections:
       candidates = []
@@ -356,16 +395,17 @@ class SignalTracker:
       gap = timestamp-t.last_seen
       t.box = d['box'];t.last_seen = timestamp;t.observations += 1;t.evidence = d
       raw = d['raw']
+      confirmation_gap = self.identity_gap if self.verified_lamps and raw == 'red' else self.MAX_OBSERVATION_GAP
       if raw == 'unknown':
         t.pending = 'unknown'
         t.pending_count = 0
         if timestamp-t.last_support > .15:
           t.state = 'unknown'
-      elif raw != t.pending or gap > self.MAX_OBSERVATION_GAP:
+      elif raw != t.pending or gap > confirmation_gap:
         t.pending = raw;t.pending_since = timestamp
         t.pending_count = 1
         # A contradictory observation removes an earlier green immediately.
-        if raw != t.state or gap > self.MAX_OBSERVATION_GAP:
+        if raw != t.state or gap > confirmation_gap:
           t.state = 'unknown'
       else:
         t.pending_count += 1
@@ -388,8 +428,8 @@ class SignalTracker:
     state = next(iter(states)) if len(states) == 1 else 'unknown'
     return dict(state=state, reason='agreeing_visible_tracks' if len(states)==1 else 'conflict_or_unconfirmed', tracks=visible)
 
-  def process(self, rgb, timestamp):
-    detections = detect(rgb, daytime_cores=self.daytime_cores)
+  def process(self, rgb, timestamp, *, allow_green=True):
+    detections = detect(rgb, daytime_cores=self.daytime_cores, conservative_green=self.conservative_green)
     gray = cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY)
     if self.previous_gray is not None and self.last_timestamp is not None and 0 < timestamp-self.last_timestamp <= self.identity_gap:
       bridge = timestamp-self.last_timestamp > self.MAX_OBSERVATION_GAP
@@ -421,12 +461,30 @@ class SignalTracker:
         if score < (.85 if mask is not None else .75):
           continue
         dx=sx+loc[0]-ax;dy=sy+loc[1]-ay;box=[x1+dx,y1+dy,x2+dx,y2+dy]
-        raw,strength,evidence=lamp_evidence(rgb,box)
+        raw,strength,evidence=lamp_evidence(rgb,box,conservative_green=self.conservative_green)
         if bridge:
           # Image correspondence keeps identity, never a previous color streak.
           # The current image must independently contain the same lamp housing.
           detections = [d for d in detections if overlap(box,d['box']) <= .35]
         detections.append(dict(box=box,raw=raw,quality=strength,source='causal_template',match_score=score,
                                **({'continuity_id':track.ident} if bridge else {}),**evidence))
+    if not allow_green:
+      # Offline steering experiment: preserve red acquisition/history, but never
+      # grant a green vote or retain a confirmed green through rejected input.
+      for detection in detections:
+        if detection['raw'] == 'green':
+          detection['raw'] = 'unknown'
+          detection['green_rejected'] = 'motion_context'
+      for track in self.tracks:
+        if track.state == 'green':
+          track.state = 'unknown'
+        if track.pending == 'green':
+          track.pending = 'unknown'
+          track.pending_count = 0
+    if self.verified_lamps:
+      for detection in detections:
+        if detection['raw'] == 'green' and not illuminated_green(rgb, detection['box']):
+          detection['raw'] = 'unknown'
+          detection['green_rejected'] = 'unlit_or_border'
     self.previous_gray=gray
     return self.update(timestamp,detections)

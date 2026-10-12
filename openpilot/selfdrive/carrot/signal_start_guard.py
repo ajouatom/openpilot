@@ -179,9 +179,11 @@ class SignalStartGuard:
 class SignalStartRuntime(SignalAssistRuntime):
   def __init__(self, enable_path=ENABLE_PATH, observation_path=OBSERVATION_PATH):
     super().__init__(enable_path, observation_path)
-    self.guard = SignalStartGuard() if self.enabled else None
+    self.guard = SignalStartGuard()  # mode 0 may be enabled later without restart
 
   def record(self, decision, speed, distance):
+    if not self.enabled and self.last_decision is None:
+      return
     now = time.monotonic()
     key = (decision.hold, decision.warn, decision.released, decision.reason)
     if key != self.last_decision or now-self.last_log >= 1:

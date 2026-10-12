@@ -10,6 +10,7 @@ from openpilot.system.ui.widgets import Widget
 from openpilot.system.ui.lib.text_measure import measure_text_cached
 from openpilot.system.ui.lib.emoji import find_emoji, emoji_tex
 from openpilot.system.ui.lib.wrap_text import wrap_text
+from openpilot.system.ui.lib.application import font_fallback
 
 ICON_PADDING = 15
 
@@ -37,7 +38,7 @@ def gui_label(
   alignment_vertical: int = TextAlignmentVertical.MIDDLE,
   elide_right: bool = True
 ):
-  font = gui_app.font(font_weight)
+  font = font_fallback(gui_app.font(font_weight), text)
   text_size = measure_text_cached(font, text, font_size)
   display_text = text
 
@@ -137,6 +138,9 @@ class Label(Widget):
     self._emojis = []
     self._text_size = []
     text = _resolve_value(text)
+    # Resolve once for the whole label so ASCII fragments, ellipses and emoji
+    # splits use the same font as wrapping and measurement.
+    self._font = font_fallback(gui_app.font(self._font_weight), text)
 
     if self._elide_right:
       display_text = text
@@ -388,13 +392,15 @@ class UnifiedLabel(Widget):
   def _update_text_cache(self, available_width: int):
     """Update cached text processing data."""
     text = self.text
+    font = font_fallback(gui_app.font(self._font_weight), text)
 
     # Check if cache is still valid
-    if (self._cached_text == text and
+    if (self._font == font and self._cached_text == text and
         self._cached_width == available_width and
         self._cached_wrapped_lines):
       return
 
+    self._font = font
     self._cached_text = text
     self._cached_width = available_width
 

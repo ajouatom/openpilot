@@ -1681,7 +1681,7 @@ class ClusterUiRenderer:
             label_x = max(dest.x+4, min(x, dest.x+dest.width-90))
             label_y = max(dest.y+font_size*2, y-font_size*.7)
             qualifier = '~' if track.get('held') else '?' if track['state'] != 'unknown' and not track['confirmed'] else ''
-            self._draw_text_with_stroke(f"{letters[track['state']]}{qualifier} #{track['id']}", label_x, label_y,
+            self._draw_text_with_stroke(f"{letters[track['state']]}{qualifier}", label_x, label_y,
                                         font_size, color, (0, 0, 0), 2)
         caption = f"신호 후보 {visible}" if self.language == CLUSTER_LANGUAGE_KO else f"SIGNAL CANDIDATES {visible}"
         if any(t.get('held') for t in tracks):

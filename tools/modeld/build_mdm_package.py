@@ -1,4 +1,4 @@
-"""Build the pinned MDM v1 NAS package from verified upstream downloads."""
+"""Build the pinned retrained Mountain Dew NAS package from verified upstream downloads."""
 import argparse
 import gzip
 import hashlib
@@ -8,12 +8,12 @@ from pathlib import Path
 import shutil
 import tarfile
 
-MODEL_SHA = 'e20cde17a9b0a397524c5f0745c5ac47393fd9db40d10f3ea928e6c1fafef4b7'
-MODEL_SIZE = 799992777
-SOURCE = '4bfb53406352e2c8716ab06e23b57b4e3c00b45c'
-TINYGRAD = '9d0446a4ba8a532c8b674fb6ad795af015cd9dcf'
-SOURCE_TAR_SHA = 'ca794475451a9d4f94b3d34a814efd72b6338fe5b59a2be329a0dbf9df8cc62a'
-CHECKPOINT = 'f22e06e5-3b3f-48d2-a6b9-2f32dc20e707/56320/870a4823-d2ec-4b9a-8015-b947e9901fc7/12864'
+MODEL_SHA = '256f2178366479a211933701c03518621ed3970289e6a8a43e5a2bcb15e55b5f'
+MODEL_SIZE = 799942179
+SOURCE = '6f4c0faf1f85132734e94aa39c67143f823b9324'
+TINYGRAD = 'd3f09c9bbd542fbfbe68c8569a1173550c408969'
+SOURCE_TAR_SHA = 'bcb4dbf8538879a7d3f2dc1968bca2b9c63ac2cc81489c54640a05564149464f'
+CHECKPOINT = 'f22e06e5-3b3f-48d2-a6b9-2f32dc20e707/56320/8d736683-fed4-4e48-96fd-eae5d9d5bc56/12864'
 
 
 def digest(path):
@@ -41,7 +41,7 @@ def build(model, source_tar, output):
           info = tarfile.TarInfo(name)
           info.size, info.mode, info.mtime = len(data), 0o644, 0
           archive.addfile(info, io.BytesIO(data))
-  manifest = {'model_id': 'comma-pr39047-mdm-v1-4bfb5340-e20cde17', 'filename': 'big_driving_tinygrad.pkl',
+  manifest = {'model_id': 'comma-pr39047-mdm-retrained-6f4c0faf-256f2178', 'filename': 'big_driving_tinygrad.pkl',
               'size': MODEL_SIZE, 'sha256': MODEL_SHA, 'url': 'big_driving_tinygrad.pkl'}
   catalog = {'protocol': 1, 'format': 'comma-generic-onnx', 'serialization': 'persistent-buffer-v1',
              'gpu_arch': 'gfx1200', 'frame_skip': 4, 'camera_resolutions': [[1928, 1208], [1344, 760]],

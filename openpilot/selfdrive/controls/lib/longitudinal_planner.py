@@ -365,7 +365,36 @@ class LongitudinalPlanner:
 
     self.update_coasting(sm, carrot, v_cruise_kph, v_cruise, reset_state,
                          force_slow_decel, coasting_turn_blocked, cutin_predecel_limit)
+    self.apply_signal_stop_prepare(sm, carrot, reset_state)
     self.apply_signal_start_guard(carrot)
+
+  def apply_signal_stop_prepare(self, sm, carrot, reset_state, now=None):
+    import time
+    from openpilot.selfdrive.carrot.signal_stop_prepare import PrepareAccel
+    if not hasattr(self, '_signal_prepare_accel'):
+      self._signal_prepare_accel = PrepareAccel()
+    now = time.monotonic() if now is None else now
+    elapsed = now-getattr(self, '_signal_prepare_time', now-self.dt)
+    self._signal_prepare_time = now
+    cs = sm['carState']
+    active = (getattr(getattr(carrot, 'prepare_decision', None), 'active', False)
+              and getattr(carrot, 'prepare_control_active', True)
+              and not reset_state and not cs.gasPressed and not cs.brakePressed
+              and 0 < elapsed <= .2
+              and not self.output_should_stop and self.mpc.mode == 'acc'
+              and not sm['radarState'].leadOne.status and not sm['radarState'].leadTwo.status)
+    previous = getattr(self, '_signal_prepare_previous', cs.aEgo)
+    uncapped = self.output_a_target
+    self.output_a_target = self._signal_prepare_accel.apply(self.output_a_target, previous, elapsed, active)
+    self._signal_prepare_previous = self.output_a_target
+    if active:
+      # Coasting must not cancel the requested gentle deceleration downstream.
+      self.coasting_target = 0.0
+      self.output_v_target_now = min(self.output_v_target_now, max(0., cs.vEgo+self.output_a_target*self.dt))
+      self.a_desired = min(self.a_desired, self.output_a_target)
+      if self.output_a_target < uncapped:
+        self.output_j_target_now = min(self.output_j_target_now, (self.output_a_target-previous)/elapsed)
+      # No shouldStop or go request: the existing model owns stopping/handover.
 
   def apply_signal_start_guard(self, carrot):
     if getattr(getattr(carrot, 'start_decision', None), 'hold', False):

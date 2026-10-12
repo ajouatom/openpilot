@@ -115,7 +115,7 @@ def test_text_measurement_cache_bounds_and_freshness(monkeypatch):
     return SimpleNamespace(x=len(text)*size, y=size)
   fake_rl = SimpleNamespace(Font=object, Vector2=object, measure_text_ex=measure)
   monkeypatch.setitem(sys.modules, 'pyray', fake_rl)
-  monkeypatch.setitem(sys.modules, 'openpilot.system.ui.lib.application', SimpleNamespace(FONT_SCALE=1.16, font_fallback=lambda f: f))
+  monkeypatch.setitem(sys.modules, 'openpilot.system.ui.lib.application', SimpleNamespace(FONT_SCALE=1.16, font_fallback=lambda f, text=None: f))
   monkeypatch.setitem(sys.modules, 'openpilot.system.ui.lib.emoji', SimpleNamespace(find_emoji=lambda _: []))
   spec = importlib.util.spec_from_file_location('_measure_test', LIB/'text_measure.py')
   module = importlib.util.module_from_spec(spec)
@@ -137,7 +137,8 @@ def test_text_measurement_cache_bounds_and_freshness(monkeypatch):
 
 
 @pytest.mark.parametrize('native', [False, True])
-def test_plain_text_hook_keeps_font_fallback_scale_and_spacing(monkeypatch, native):
+@pytest.mark.parametrize('text', ['한글', '한글'.encode(), '35° / €'])
+def test_plain_text_hook_keeps_font_fallback_scale_and_spacing(monkeypatch, native, text):
   from openpilot.system.ui.lib import native_text
   original_calls, native_calls = [], []
   def original(*args):
@@ -147,13 +148,18 @@ def test_plain_text_hook_keeps_font_fallback_scale_and_spacing(monkeypatch, nati
     return native
   monkeypatch.setattr(native_text, 'try_plain_text', optimized)
   rl = SimpleNamespace(draw_text_ex=original)
-  scope = {'rl': rl, 'FONT_SCALE': 1.16, 'font_fallback': lambda _: 'fallback'}
+  fallback_calls = []
+  def fallback(font, value):
+    fallback_calls.append((font, value))
+    return 'fallback'
+  scope = {'rl': rl, 'FONT_SCALE': 1.16, 'font_fallback': fallback}
   cls = methods('application.py', 'GuiApplication', ['_patch_text_functions'], scope)
   app = cls()
   app._patch_text_functions()
   app._patch_text_functions()  # Reinitialization must not multiply the scale twice.
-  rl.draw_text_ex('input_font', '한글', (10, 20), 40, 1.7, 'white')
-  expected = ('fallback', '한글', (10, 20), 40*1.16, 1.7, 'white')
+  rl.draw_text_ex('input_font', text, (10, 20), 40, 1.7, 'white')
+  expected = ('fallback', text, (10, 20), 40*1.16, 1.7, 'white')
+  assert fallback_calls == [('input_font', text)]
   assert native_calls == [(rl, *expected)]
   assert original_calls == ([] if native else [expected])
 
