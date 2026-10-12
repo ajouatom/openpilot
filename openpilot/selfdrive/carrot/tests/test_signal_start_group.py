@@ -33,15 +33,13 @@ def test_two_independent_red_housings_turn_green_when_primary_disappears():
   assert result.released and not result.hold
 
 
-@pytest.mark.parametrize('kind', ['one', 'unseen', 'red_conflict', 'duplicate', 'gap', 'invalid', 'stale', 'restart'])
-def test_group_cannot_release_without_two_fresh_red_anchored_transitions(kind):
+@pytest.mark.parametrize('kind', ['unseen', 'red_conflict', 'duplicate', 'gap', 'invalid', 'stale', 'restart'])
+def test_group_cannot_release_without_fresh_red_anchored_transitions(kind):
   guard = held()
   for t in (.6, .8, 1., 1.2, 1.4):
     tracks = [(LEFT, 'green'), (RIGHT, 'green')]
-    if kind == 'one':
-      tracks = tracks[:1]
     if kind == 'unseen':
-      tracks = [(LEFT, 'green'), ([800, 288, 840, 308], 'green')]
+      tracks = [([720, 286, 756, 304], 'green'), ([800, 288, 840, 308], 'green')]
     if kind == 'red_conflict':
       tracks += [(SMALL, 'red')]
     if kind == 'duplicate':
@@ -61,11 +59,50 @@ def test_group_cannot_release_without_two_fresh_red_anchored_transitions(kind):
 
 def test_overlapping_red_anchors_cannot_make_two_housings():
   guard = SignalStartGuard()
-  overlap = [607, 286, 643, 304]
+  # Outside the single-transition band, two overlapping fits are not a pair.
+  left = [470, 286, 506, 304]
+  overlap = [487, 286, 523, 304]
   for t in (0., .2, .4):
-    step(guard, t, [(SMALL, 'red'), (LEFT, 'red'), (overlap, 'red')])
+    step(guard, t, [(SMALL, 'red'), (left, 'red'), (overlap, 'red')])
   for t in (.6, .8, 1., 1.2, 1.4):
-    assert step(guard, t, [(LEFT, 'green'), (overlap, 'green')]).hold
+    assert step(guard, t, [(left, 'green'), (overlap, 'green')]).hold
+
+
+@pytest.mark.parametrize('box', [LEFT, RIGHT])
+def test_one_central_transition_releases_lost_primary(box):
+  guard = held()
+  for t in (.6, .8, 1., 1.2):
+    assert step(guard, t, [(box, 'green')]).hold
+  result = step(guard, 1.4, [(box, 'green')])
+  assert result.released and not result.hold and result.reason == 'green_transition'
+
+
+def test_one_peripheral_transition_does_not_replace_lost_primary():
+  guard = SignalStartGuard()
+  side = [800, 286, 840, 304]
+  for t in (0., .2, .4):
+    step(guard, t, [(SMALL, 'red'), (side, 'red')])
+  for t in (.6, .8, 1., 1.2, 1.4):
+    assert step(guard, t, [(side, 'green')]).hold
+
+
+def test_central_green_without_its_own_confirmed_red_cannot_release():
+  guard = SignalStartGuard()
+  for t in (0., .2, .4):
+    step(guard, t, [(SMALL, 'red')] + ([(RIGHT, 'red')] if t == .4 else []))
+  for t in (.6, .8, 1., 1.2, 1.4):
+    assert step(guard, t, [(RIGHT, 'green')]).hold
+
+
+def test_two_offcentre_transitions_keep_existing_pair_fallback():
+  guard = SignalStartGuard()
+  pair = [[500, 286, 536, 304], [800, 286, 840, 304]]
+  for t in (0., .2, .4):
+    step(guard, t, [(SMALL, 'red')] + [(b, 'red') for b in pair])
+  for t in (.6, .8, 1., 1.2):
+    assert step(guard, t, [(b, 'green') for b in pair]).hold
+  result = step(guard, 1.4, [(b, 'green') for b in pair])
+  assert result.released and result.reason == 'green_group'
 
 
 def test_repeated_frames_do_not_advance_group_votes():
