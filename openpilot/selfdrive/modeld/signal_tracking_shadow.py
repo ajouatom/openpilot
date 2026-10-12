@@ -97,7 +97,6 @@ def run(directory=DIRECTORY, duration=None, comparison_override=None):
     from openpilot.selfdrive.carrot.signal_assist_runtime import publish_observation, requested as flag_requested
     from openpilot.selfdrive.carrot.signal_display import display_requested, publish_display
     from openpilot.selfdrive.carrot.signal_start_guard import publish_start_observation
-    from openpilot.selfdrive.carrot.signal_stop_prepare_runtime import publish_prepare_observation
     comparison_selection = comparison_requested(directory)
     comparison = comparison_selection if comparison_override is None else comparison_override
     revalidated = revalidated_requested(directory)
@@ -181,10 +180,6 @@ def run(directory=DIRECTORY, duration=None, comparison_override=None):
         publish_start_observation(comparison_record if comparison_record is not None else record, directory)
       except (OSError, ValueError, TypeError, KeyError):
         cloudlog.exception('signalStartObservationPublishFailed')
-      try:
-        publish_prepare_observation(comparison_record if comparison_record is not None else record, directory)
-      except (OSError, ValueError, TypeError, KeyError):
-        cloudlog.exception('signalPrepareObservationPublishFailed')
       if display_requested(directory / 'display_enabled'):
         try:
           # Independent tmpfs endpoint remains available in comparison mode.
