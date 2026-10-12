@@ -271,3 +271,56 @@ Private reproducibility evidence is retained under
 `.analysis/archive/2026-10-12-stop-prepare/`; dependencies are disposable. The prior
 night-log numerical stopping-distance review is separately retained under
 `.analysis/archive/2026-10-12-red-stop-target/` and is not native acados validation.
+
+### Follow-up: use spatial road edges / lane lines, not position range
+
+The user requested constructing and checking the geometry with `roadEdges` or
+`laneLines` x/y/z, because the time-indexed `position` shrinks while stopping.
+`housing_range` now has no position input or path-range requirement. Use the
+two inner lane lines when both probabilities>=0.8 and lateral std<=0.5m; otherwise
+use both road edges with std<=0.5m. All curves must have finite, strictly increasing
+x and consistent x/y/z lengths. Lane widths2–5m and road widths2–20m bound obvious
+geometric failures. Interpolate z at each distance hypothesis and do not extrapolate.
+When both sources are trustworthy, intersect their lateral bounds; conflicting
+geometry is not silently ignored. Road edges alone are not ego-lane assignment.
+The previous 3–9m height,25–140m distance-range, measured-housing/color/temporal
+requirements remain experimental and unchanged.
+
+Reading the real rlogs also exposed an input-adapter defect from the initial
+preparation implementation: livePose angular velocity is an XYZMeasurement with
+x/y/z and xStd/yStd/zStd, not value/std lists. The old reader failed closed on its
+AttributeError. It is corrected here; the runtime regression now uses an actual
+Cap'n Proto LivePose reader rather than a permissive fabricated structure. This
+does not affect the earlier independent pose replay, which used PoseCalibrator.
+
+Paired check reuses the3,348 original-cadence candidate records and reads full-rate
+model messages (including lane lines), calibration, car state, radar, engagement
+and pose from the13 original rlogs. It is still a recorded-input eligibility
+screen, not native MPC or vehicle-response validation. Observer pixels are not
+rerun; its input candidates remain the prior pose/color experiment. Driver mode,
+user stop-distance and all entry-policy histories are not reconstructed, so the
+screen must not be used to authorize activation even if a future entry appears.
+
+Results:1,134 fresh red samples;94 measured-housing red samples;6 pass the strict
+color/state requirement. Old geometry can provide a trusted road pair for none
+of those94; the new lane fallback provides a corridor for9. All9 have possible
+height hypotheses, but all fail the lateral corridor test. Neither old nor new
+geometry accepts a complete candidate; preparation entries remain0. The six
+strict red samples still have no trustworthy road/lane pair. These counts are
+repeated observations, not intersections or an accuracy score.
+
+Exact video-frame review of109f-6index764 and109f-7index103 confirms real red lamps
+inside the detected boxes. They are NOT examples of false-red rejection. Their
+failure demonstrates that requiring the signal to project directly over the
+inferred ego lane can discard real signals; the housing-size distance hypotheses
+also remain uncertain. This supports the user's observation of distant detection,
+but does not establish that either particular lamp governs the ego lane. The
+filter must not be described as an accuracy improvement or enabled for braking
+from this result. Geometry can support height estimation without solving signal
+applicability; broadening lateral permission needs separate negative validation.
+
+187 focused tests pass, including edge/lane fallback, conflicting sources,
+non-extrapolation, camera rotation, road-height changes, and real pose-message
+input. Feature remains default OFF; no vehicle connection or deployment.
+Private before/after data, exact review PNGs and the reproduction script are in
+`.analysis/archive/2026-10-12-signal-road-geometry/`.

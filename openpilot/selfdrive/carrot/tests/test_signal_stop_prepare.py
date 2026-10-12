@@ -6,7 +6,7 @@ from types import SimpleNamespace as NS
 import numpy as np
 import pytest
 
-from openpilot.selfdrive.carrot.signal_stop_prepare import SignalStopPrepare, PrepareAccel, housing_range
+from openpilot.selfdrive.carrot.signal_stop_prepare import SignalStopPrepare, PrepareAccel, housing_range, road_corridor
 from openpilot.selfdrive.carrot.signal_stop_prepare_runtime import publish_prepare_observation
 from tools.signal_analysis.replay_signal_assist import planner_class, REPO
 from tools.signal_analysis.test_signal_assist_planner import inputs
@@ -87,19 +87,56 @@ def test_geometry_and_conflict_fail_closed():
 def geometry():
   xs=np.linspace(0,200,33)
   curve=lambda y: NS(x=xs,y=np.full(33,y),z=np.zeros(33))
-  return dict(focal=1141.5,rpy=[0.,0.,0.],edges=[curve(-4),curve(4)],edge_stds=[.2,.2],path=curve(0))
+  return dict(focal=1141.5,rpy=[0.,0.,0.],edges=[curve(-4),curve(4)],edge_stds=[.2,.2],
+              lane_lines=[curve(-5.4),curve(-1.8),curve(1.8),curve(5.4)],lane_probs=[.9]*4,lane_stds=[.2]*4)
 
 
-def test_housing_height_road_edges_path_and_uncertainty():
+def test_housing_height_road_edges_lanes_and_uncertainty():
   box=[667,260,707,270];g=geometry()
   result=housing_range(box,**g)
   assert result is not None and 25<=result[0]<result[1]<=140
   assert housing_range([667,400,707,410],**g) is None  # below horizon / taillights
   assert housing_range([1100,260,1140,270],**g) is None
   g['edge_stds']=[2.,.2]
+  assert housing_range(box,**g) is not None  # lanes replace uncertain road edges
+  g['lane_probs']=[.1]*4
   assert housing_range(box,**g) is None
-  g=geometry();g['path'].x=[0.]*33
+  g=geometry()
+  for curve in (*g['edges'],*g['lane_lines']):curve.x=[0.]*33
   assert housing_range(box,**g) is None
+
+
+def test_corridor_source_conflict_and_no_extrapolation():
+  g=geometry();args={k:g[k] for k in ('edges','edge_stds','lane_lines','lane_probs','lane_stds')}
+  assert road_corridor(np.array([50.]),**args)[-1]=='lanes+edges'
+  args['edge_stds']=[2.,2.]
+  assert road_corridor(np.array([50.]),**args)[-1]=='lanes'
+  args['lane_probs']=[.1]*4
+  assert road_corridor(np.array([50.]),**args) is None
+  args['edge_stds']=[.2,.2]
+  assert road_corridor(np.array([50.]),**args)[-1]=='edges'
+  assert not road_corridor(np.array([250.]),**args)[3][0]
+  args['lane_probs']=[.9]*4
+  args['lane_lines'][1].y=np.full(33,8.)
+  args['lane_lines'][2].y=np.full(33,11.6)
+  assert not road_corridor(np.array([50.]),**args)[3][0]
+
+
+def test_road_z_and_camera_rotation_define_height_without_position():
+  g=geometry();box=[667,310,707,320]
+  base=housing_range(box,**g)
+  assert base is not None
+  for curve in (*g['edges'],*g['lane_lines']):curve.z=np.full(33,-5.)
+  assert housing_range(box,**g) is None
+  g=geometry();g['rpy']=[0.,.3,0.]
+  assert housing_range(box,**g) is None
+
+
+def test_high_confidence_lane_limits_adjacent_road_candidates():
+  g=geometry();box=[722,260,762,270]
+  assert housing_range(box,**g) is None
+  g['lane_probs']=[.1]*4
+  assert housing_range(box,**g) is not None
 
 
 def test_acceleration_ramp_cancellation_and_stronger_brake():
@@ -164,6 +201,7 @@ def test_final_output_cap_after_coasting(reset,lead,gas,brake):
 @pytest.mark.parametrize('yaw,age,calibrated,expected', [(0.,0.,True,True), (4.,0.,True,False),
   (0.,.3,True,False),(0.,0.,False,False)])
 def test_runtime_pose_camera_and_calibration(monkeypatch,yaw,age,calibrated,expected):
+  from openpilot.cereal import log
   from openpilot.selfdrive.carrot.signal_stop_prepare_runtime import SignalPrepareRuntime
   from openpilot.selfdrive.carrot.signal_assist_runtime import SignalAssistRuntime
   class SM(dict):
@@ -171,9 +209,14 @@ def test_runtime_pose_camera_and_calibration(monkeypatch,yaw,age,calibrated,expe
   extra=SM(liveCalibration=NS(calStatus='calibrated' if calibrated else 'uncalibrated',rpyCalib=[0.,0.,0.]),
            roadCameraState=NS(sensor='os04c10'),deviceState=NS(deviceType='mici'))
   extra.seen=extra.valid=extra.alive=dict.fromkeys(extra,True);extra.recv_time=dict.fromkeys(extra,1.)
-  sm=SM(livePose=NS(timestamp=int((1.-age)*1e9),inputsOK=True,posenetOK=True,sensorsOK=True,
-       angularVelocityDevice=NS(valid=True,value=[0.,0.,np.deg2rad(yaw)],std=[.001]*3),orientationNED=NS(valid=True)),
-       modelV2=NS(roadEdges=geometry()['edges'],roadEdgeStds=[.2,.2],position=geometry()['path']))
+  pose=log.LivePose.new_message(timestamp=int((1.-age)*1e9),inputsOK=True,posenetOK=True,sensorsOK=True,
+       angularVelocityDevice=dict(valid=True,x=0.,y=0.,z=float(np.deg2rad(yaw)),xStd=.001,yStd=.001,zStd=.001),orientationNED=dict(valid=True))
+  g=geometry()
+  curve=lambda c:{k:getattr(c,k).tolist() for k in ('x','y','z')}
+  model=log.ModelDataV2.new_message(roadEdges=[curve(c) for c in g['edges']],roadEdgeStds=[.2,.2],
+      laneLines=[curve(c) for c in g['lane_lines']],laneLineProbs=[.9]*4,laneLineStds=[.2]*4)
+  assert len(model.position.x)==0  # road/lane geometry does not require a plan
+  sm=SM(livePose=pose.as_reader(),modelV2=model.as_reader())
   sm.seen=sm.valid=sm.alive=dict.fromkeys(sm,True);sm.recv_time=dict.fromkeys(sm,1.)
   monkeypatch.setattr(SignalAssistRuntime,'read',lambda *a:(observation(1.),dict(now=1.,enabled=True,valid=True,drive=True)))
   runtime=SignalPrepareRuntime.__new__(SignalPrepareRuntime);runtime.enabled=True;runtime.extra=extra
