@@ -36,6 +36,7 @@ def runtime_fixture(monkeypatch, receipt_offset=0., main_age=0., receive_delay=.
   monkeypatch.setattr(SignalAssistRuntime, 'read', lambda *a: (
     observation(clock[0]), {'now': clock[0], 'enabled': True, 'valid': True, 'drive': True}))
   runtime = SignalPrepareRuntime.__new__(SignalPrepareRuntime)
+  runtime.mode, runtime.mode_since = None, -float('inf')
   runtime.enabled, runtime.extra, runtime.prepare = True, extra, SignalStopPrepare()
   return runtime, sm, clock
 
