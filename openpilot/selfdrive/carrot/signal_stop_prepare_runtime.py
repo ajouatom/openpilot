@@ -3,6 +3,7 @@ from dataclasses import asdict
 import json
 import math
 from pathlib import Path
+import time
 
 import numpy as np
 
@@ -58,6 +59,14 @@ class SignalPrepareRuntime(SignalAssistRuntime):
       from openpilot.common.transformations.camera import DEVICE_CAMERAS
       from openpilot.common.transformations.orientation import rot_from_euler
       self.extra.update(0)
+      if now is None:
+        # SubMaster timestamps receipts inside update(). Comparing them with
+        # the earlier transport-read time rejects newly arrived data as future
+        # data and repeatedly clears the preparation confirmation history.
+        context['now'] = time.monotonic()
+        services = ('carState', 'modelV2', 'radarState', 'selfdriveState', 'carControl')
+        context['valid'] = context['valid'] and all(
+          0 <= context['now']-sm.recv_time[s] <= .25 for s in services)
       now = context['now']; extra = self.extra
       ok = all(extra.seen[k] and extra.valid[k] and extra.alive[k]
                and 0 <= now-extra.recv_time[k] <= age
