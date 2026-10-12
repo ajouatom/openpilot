@@ -121,8 +121,9 @@ def state():
   return {'state': 'unavailable'}
 
 
-def validate_spec(spec):
-  if spec.to_dict() != SPEC.to_dict():
+def validate_spec(spec, expected=None):
+  expected = SPEC if expected is None else expected
+  if spec.to_dict() != expected.to_dict():
     raise ValueError('Jetlink model identity or input/output contract mismatch')
 
 

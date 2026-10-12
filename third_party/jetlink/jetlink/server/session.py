@@ -452,12 +452,12 @@ class EngineHost:
       entry.write_meta({**meta, 'spec': spec.to_dict()})
 
   def _warm(self, engine, spec: ModelSpec) -> Loaded:
-    from jetlink.queues import PolicyQueues
-    queues = PolicyQueues(spec)
+    from jetlink.queues import make_queues
     _check_shapes(engine, spec)
     # Warm runs on zeros, so the first real frame pays for nothing lazy: CUDA
     # state and the graph capture for TensorRT, a first replay for the others.
     host_inputs = {n: engine.host_input(n) for n in engine.inputs}
+    queues = make_queues(spec, host_inputs)
     warped = np.zeros(spec.warped_shape, np.uint8)
     packed = np.zeros(spec.packed_nelem, np.float32)
     queues.step_into(warped, packed, host_inputs)
@@ -524,9 +524,11 @@ def _check_shapes(engine, spec: ModelSpec) -> None:
   missing = set(spec.input_shapes) - set(engine.inputs)
   if missing:
     raise ValueError(f"engine has no input(s) {sorted(missing)} the model spec declares")
-  out = next(iter(engine.outputs.values())).shape
-  if int(np.prod(out)) != spec.output_nelem:
-    raise ValueError(f"output: engine {tuple(out)} vs spec {spec.output_nelem}")
+  if set(engine.outputs) != set(spec.output_shapes):
+    raise ValueError('Engine output names do not match the model spec')
+  for name, shape in spec.output_shapes.items():
+    if tuple(engine.outputs[name].shape) != shape:
+      raise ValueError(f'output {name}: engine {tuple(engine.outputs[name].shape)} vs spec {shape}')
 
 
 class Session:
@@ -753,7 +755,7 @@ class Session:
     queue_us = int((time.perf_counter() - t0) * 1e6)
 
     outputs = loaded.engine.run()
-    out = next(iter(outputs.values())).reshape(-1)
+    out = outputs['outputs'].reshape(-1)
 
     # asarray, not astype: a no-op when the engine already outputs float32.
     # isfinite is ~7x faster on float32 and the non-finites map across exactly.
@@ -761,6 +763,13 @@ class Session:
     # checking here saves the comma rescanning 18452 floats to find out.
     out32 = np.asarray(out, dtype=np.float32)
     status = P.Status.OK if np.all(np.isfinite(out32)) else P.Status.NOT_FINITE
+    try:
+      if status == P.Status.OK:
+        loaded.queues.feedback(outputs)
+      else:
+        loaded.queues.reset()
+    except FloatingPointError:
+      status = P.Status.NOT_FINITE
 
     total_us = int((time.perf_counter() - t0) * 1e6)
     parts = [P.pack_infer_resp(frame_id, status, loaded.engine.last_gpu_us, queue_us, total_us),

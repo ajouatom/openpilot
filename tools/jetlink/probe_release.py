@@ -1,6 +1,6 @@
 """Before activation only: imports, pinned engine load/build and finite inference."""
-import json
 from pathlib import Path
+from model_pin import read_spec
 import sys
 import time
 
@@ -16,7 +16,7 @@ def main():
   from jetlink.server.backends.trt import TrtBackend
   from jetlink.server.cache import EngineCache
   from jetlink.server.session import EngineHost, Request
-  spec = json.loads((ROOT / 'openpilot/selfdrive/modeld/jetlink/cinque_v2.json').read_text())
+  spec = read_spec(ROOT)
   host = EngineHost(EngineCache(Path(sys.argv[1]), TrtBackend()))
   try:
     host.request(Request(spec['sha256'], spec['nbytes'], spec['frame_skip']), None)
@@ -40,6 +40,7 @@ def main():
       values = loaded.engine.run()
       if not values or not all(np.isfinite(v).all() for v in values.values()):
         raise ValueError('Candidate inference is not finite')
+      loaded.queues.feedback(values)
     print('CANDIDATE_PROBE_OK', spec['sha256'], flush=True)
   finally:
     host.close()

@@ -5,8 +5,10 @@ from pathlib import Path
 import re
 
 from jetlink.spec import ModelSpec
+from openpilot.common.jetson_model import read_spec
 
 DEFAULT_SPEC = ModelSpec.from_dict(json.loads(Path(__file__).with_name('cinque_v2.json').read_text()))
+JETSON_SPEC = ModelSpec.from_dict(read_spec())
 
 # Widths consumed by Carrot's parser, message publisher and action calculation.
 OUTPUT_WIDTHS = {
@@ -75,12 +77,15 @@ def validate_model_spec(spec):
   action = spec.output_slices.get('action')
   if action is not None and slice_range(spec, action)[1] - slice_range(spec, action)[0] not in (2, 4):
     raise ValueError('Unsupported Jetlink action output')
-  if spec.sha256 == DEFAULT_SPEC.sha256 and spec.to_dict() != DEFAULT_SPEC.to_dict():
-    raise ValueError('Jetlink model identity or input/output contract mismatch')
+  for pinned in (DEFAULT_SPEC, JETSON_SPEC):
+    if spec.sha256 == pinned.sha256 and spec.to_dict() != pinned.to_dict():
+      raise ValueError('Jetlink model identity or input/output contract mismatch')
   return spec
 
 
 def model_name(spec):
+  if spec.sha256 == JETSON_SPEC.sha256:
+    return 'ResAction (2fb4ac4)'
   return 'Cinque v2' if spec.sha256 == DEFAULT_SPEC.sha256 else f'App model {spec.sha256[:12]}'
 
 

@@ -99,8 +99,8 @@ class SnapshotBuilder:
     self.next_params = self.next_send = 0.
     self.host_release = None
     release_file = Path(__file__).resolve().parents[2] / 'openpilot/selfdrive/modeld/jetlink/host_release.json'
-    if release_file.is_file():
-      self.host_release = json.loads(release_file.read_text())
+    from openpilot.common.jetson_model import matching_release
+    self.host_release = matching_release(release_file)
     self.camera = None
     from openpilot.selfdrive.carrot.cluster.cluster_system_monitor import NetworkAddressProvider
     self.network = NetworkAddressProvider()

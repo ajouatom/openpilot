@@ -137,7 +137,10 @@ def test_boot_usb_handles_version_wifi_status_but_never_inference(env, monkeypat
 def test_vehicle_pumps_updates_before_engine_and_ignores_non_gate_peers(tmp_path, monkeypatch):
   from openpilot.selfdrive.modeld.jetlink import startup
   release = tmp_path / 'release'
-  release.write_text(json.dumps(manifest()))
+  from openpilot.common.jetson_model import read_spec
+  value, spec = manifest(), read_spec()
+  value['model'].update(sha256=spec['sha256'], size=spec['nbytes'])
+  release.write_text(json.dumps(value))
   monkeypatch.setattr(startup, 'RELEASE', release)
   calls = []
   states = iter(['waiting_internet', 'downloading', 'verifying', 'ready'])

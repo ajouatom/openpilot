@@ -158,7 +158,10 @@ def stage_manifest(manifest, progress=None):
       extract_bundle(bundle, candidate)
       if (candidate / 'SOURCE_COMMIT').read_text().strip() != commit:
         raise ValueError('Bundle source identity mismatch')
-      spec = json.loads((candidate / 'openpilot/selfdrive/modeld/jetlink/cinque_v2.json').read_text())
+      pin = candidate / 'openpilot/selfdrive/modeld/jetlink/jetson_model.json'
+      if not pin.is_file():
+        pin = pin.with_name('cinque_v2.json')
+      spec = json.loads(pin.read_text())
       if (spec['sha256'], spec['nbytes']) != (manifest['model']['sha256'], manifest['model']['size']):
         raise ValueError('Bundle model contract differs from manifest')
       (candidate / '.bundle-sha256').write_text(item['sha256'])

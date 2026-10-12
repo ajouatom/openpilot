@@ -19,7 +19,10 @@ def main():
   args = parser.parse_args()
   with tarfile.open(args.bundle) as archive:
     commit = archive.extractfile('SOURCE_COMMIT').read().decode().strip()
-    spec = json.load(archive.extractfile('openpilot/selfdrive/modeld/jetlink/cinque_v2.json'))
+    pin = 'openpilot/selfdrive/modeld/jetlink/jetson_model.json'
+    if pin not in archive.getnames():
+      pin = 'openpilot/selfdrive/modeld/jetlink/cinque_v2.json'
+    spec = json.load(archive.extractfile(pin))
     compatibility = 'tools/jetlink/runtime_compatibility.json'
     storage_format = (json.load(archive.extractfile(compatibility))['protected_storage_format']
                       if compatibility in archive.getnames() else None)

@@ -135,6 +135,9 @@ class PolicyQueues:
     for q in (self.img_q, self.big_img_q, self.feat_q, self.desire_q):
       q.reset()
 
+  def feedback(self, outputs: dict[str, np.ndarray]) -> None:
+    """Queued graphs receive their previous features from the client."""
+
   def _unpack(self, packed: np.ndarray):
     # slice views, not np.split: the offsets never change and split allocates
     return tuple(packed[a:b].reshape(shape) for a, b, shape in self._packed_layout)
@@ -186,3 +189,58 @@ class PolicyQueues:
     dest['traffic_convention'][...] = traffic_convention.reshape(
       dest['traffic_convention'].shape)
     dest['action_t'][...] = action_t.reshape(dest['action_t'].shape)
+
+
+class StatefulQueues:
+  """Keep graph-owned history on the host; only images/scalars cross USB.
+
+  State uses the engine's actual dtype (the TRT image queue is promoted to
+  fp16). All next-state tensors are checked before any feedback is committed.
+  """
+  def __init__(self, spec: ModelSpec, inputs: dict[str, np.ndarray]):
+    self.spec = spec
+    self.state = {name: inputs[name] for name in spec.state_pairs}
+    if not self.state or set(spec.input_shapes) != set(self.state) | {'new_img', *spec.packed_shapes}:
+      raise ValueError('Unsupported stateful graph inputs')
+    if set(spec.output_shapes) != {'outputs', *spec.state_pairs.values()}:
+      raise ValueError('Unsupported stateful graph outputs')
+    for name, output in spec.state_pairs.items():
+      if inputs[name].shape != spec.input_shapes[name] or spec.output_shapes[output] != spec.input_shapes[name]:
+        raise ValueError(f'State shape mismatch: {name}')
+    self.reset()
+
+  def reset(self) -> None:
+    for value in self.state.values():
+      value.fill(0)
+
+  def step_into(self, warped, packed, dest):
+    if warped.shape != self.spec.warped_shape or warped.dtype != np.uint8 or packed.size != self.spec.packed_nelem:
+      raise ValueError('Invalid stateful frame shape/type')
+    if not np.isfinite(packed).all():
+      self.reset()
+      raise ValueError('Non-finite stateful scalar input')
+    dest['new_img'][...] = warped
+    offset = 0
+    for name, size in zip(self.spec.packed_shapes, self.spec.packed_sizes, strict=True):
+      dest[name][...] = packed[offset:offset + size].reshape(dest[name].shape)
+      offset += size
+
+  def feedback(self, outputs):
+    try:
+      for name, shape in self.spec.output_shapes.items():
+        if name not in outputs or outputs[name].shape != shape:
+          raise ValueError(f'Invalid stateful output shape: {name}')
+        if not np.isfinite(outputs[name]).all():
+          raise FloatingPointError(f'Non-finite stateful output: {name}')
+      for name, output in self.spec.state_pairs.items():
+        if outputs[output].dtype != self.state[name].dtype:
+          raise ValueError(f'State feedback dtype mismatch: {name}')
+      for name, output in self.spec.state_pairs.items():
+        np.copyto(self.state[name], outputs[output], casting='no')
+    except (ValueError, FloatingPointError):
+      self.reset()
+      raise
+
+
+def make_queues(spec, host_inputs):
+  return StatefulQueues(spec, host_inputs) if spec.stateful else PolicyQueues(spec)

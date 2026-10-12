@@ -1,7 +1,7 @@
 """Keep USB provisioning alive while a Jetson checks/updates its boot release."""
-import json
 from pathlib import Path
 import time
+from openpilot.common.jetson_model import matching_release
 
 CAPABILITY = 'carrot_boot_update_v1'
 MESSAGE = 0x4003
@@ -11,7 +11,7 @@ RELEASE = Path(__file__).with_name('host_release.json')
 def wait_for_boot_update(client, peer, wifi, connected, publish, sleep=time.sleep):
   if peer.get('carrot_host') != 'jetson' or peer.get(CAPABILITY) is not True:
     return
-  manifest = json.loads(RELEASE.read_text())
+  manifest = matching_release(RELEASE, required=True)
   while connected():
     # The signed public release is independent of NetworkManager profile reads.
     # Network provisioning stays on its private channel and out of status/logs.
