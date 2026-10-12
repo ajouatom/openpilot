@@ -70,6 +70,152 @@ def test_other_brands_without_radar_use_vision(configured_mode: int) -> None:
   ) == -2
 
 
+# --- Bosch RadarTracks liveTracks polling (candidate A') -------------------------
+
+from openpilot.selfdrive.carrot.radar import radard_dpath
+from openpilot.selfdrive.carrot.radar.radard_dpath import bosch_radar_tracks_active
+from opendbc.car.hyundai.values import HyundaiExtFlags
+
+BOSCH = int(HyundaiExtFlags.BOSCH_RADAR)
+
+
+def _cp(brand="hyundai", ext_flags=BOSCH, radar_unavailable=False):
+  return SimpleNamespace(brand=brand, extFlags=ext_flags, radarUnavailable=radar_unavailable)
+
+
+@pytest.mark.parametrize("mode", (1, 2, 3))
+def test_bosch_radar_tracks_active_for_hyundai_bosch(mode: int) -> None:
+  assert bosch_radar_tracks_active(_cp(), mode)
+
+
+@pytest.mark.parametrize(
+  "cp, mode",
+  (
+    (_cp(ext_flags=0), 1),                      # Hyundai, but not the Bosch provider
+    (_cp(), 0),                                 # Bosch hardware, RadarTracks disabled
+    (_cp(), -1),
+    (_cp(brand="volkswagen", ext_flags=0), 1),  # other brands
+    (_cp(brand="toyota", ext_flags=0), 1),
+    (_cp(brand="honda", ext_flags=0), 3),
+  ),
+)
+def test_bosch_radar_tracks_inactive_elsewhere(cp, mode: int) -> None:
+  assert not bosch_radar_tracks_active(cp, mode)
+
+
+class _FakeSubMaster:
+  """Scripted SubMaster: replays a list of `updated` dicts, then stops the loop."""
+
+  class Stop(Exception):
+    pass
+
+  def __init__(self, services, poll=None, ignore_alive=None, ignore_valid=None):
+    self.services = services
+    self.poll = poll
+    self.ignore_alive = ignore_alive
+    self.ignore_valid = ignore_valid
+    self.script: list[dict] = []
+    self.updated: dict = {}
+    self.data = {s: object() for s in services}
+    self.logMonoTime = dict.fromkeys(services, 0)
+
+  def update(self):
+    if not self.script:
+      raise _FakeSubMaster.Stop
+    self.updated = self.script.pop(0)
+
+  def __getitem__(self, s):
+    return self.data[s]
+
+
+class _SpyRadar:
+  def __init__(self, CP):
+    self.CP = CP
+    self.updates = 0
+    self.publishes = 0
+
+  def update(self, sm, rr):
+    self.updates += 1
+
+  def publish(self, pm):
+    self.publishes += 1
+
+
+def _run_main(monkeypatch, cp, mode, script):
+  """Run the real radard main() loop against fakes and return (submaster, radar)."""
+  made = {}
+
+  def make_sm(services, poll=None, ignore_alive=None, ignore_valid=None):
+    sm = _FakeSubMaster(services, poll, ignore_alive, ignore_valid)
+    sm.script = list(script)
+    made["sm"] = sm
+    return sm
+
+  def make_radar(CP):
+    made["radar"] = _SpyRadar(CP)
+    return made["radar"]
+
+  monkeypatch.setattr(radard_dpath, "config_realtime_process", lambda *a, **k: None)
+  monkeypatch.setattr(radard_dpath.messaging, "SubMaster", make_sm)
+  monkeypatch.setattr(radard_dpath.messaging, "PubMaster", lambda services: object())
+  monkeypatch.setattr(radard_dpath.messaging, "log_from_bytes", lambda *a, **k: cp)
+  monkeypatch.setattr(radard_dpath, "DPathRadarD", make_radar)
+  monkeypatch.setattr(
+    radard_dpath, "Params",
+    lambda: SimpleNamespace(get=lambda *a, **k: b"", get_int=lambda _k: mode),
+  )
+  with pytest.raises(_FakeSubMaster.Stop):
+    radard_dpath.main()
+  return made["sm"], made["radar"]
+
+
+@pytest.mark.parametrize("mode", (1, 2, 3))
+def test_bosch_radar_tracks_also_polls_live_tracks(monkeypatch, mode: int) -> None:
+  sm, _ = _run_main(monkeypatch, _cp(), mode, [])
+  assert sm.poll == ["modelV2", "liveTracks"]
+  # the rest of the subscription is untouched
+  assert sm.services == ["modelV2", "carState", "liveTracks", "livePose"]
+  assert sm.ignore_alive == ["livePose"]
+  assert sm.ignore_valid == ["livePose"]
+
+
+@pytest.mark.parametrize(
+  "cp, mode",
+  (
+    (_cp(ext_flags=0), 1),
+    (_cp(), 0),
+    (_cp(brand="volkswagen", ext_flags=0), 1),
+    (_cp(brand="toyota", ext_flags=0), 3),
+    (_cp(brand="mazda", ext_flags=0, radar_unavailable=True), 1),
+  ),
+)
+def test_non_bosch_cars_keep_the_single_model_poll(monkeypatch, cp, mode: int) -> None:
+  sm, _ = _run_main(monkeypatch, cp, mode, [])
+  assert sm.poll == "modelV2"
+
+
+def test_live_tracks_only_wake_does_not_touch_radar_state(monkeypatch) -> None:
+  script = [
+    {"modelV2": False, "liveTracks": True},
+    {"modelV2": False, "liveTracks": True},
+  ]
+  _, radar = _run_main(monkeypatch, _cp(), 1, script)
+  assert radar.updates == 0
+  assert radar.publishes == 0
+
+
+def test_model_wake_updates_and_publishes_exactly_once(monkeypatch) -> None:
+  script = [
+    {"modelV2": True, "liveTracks": True},
+    {"modelV2": False, "liveTracks": True},
+    {"modelV2": True, "liveTracks": False},
+    {"modelV2": False, "liveTracks": True},
+  ]
+  _, radar = _run_main(monkeypatch, _cp(), 1, script)
+  assert radar.updates == 2
+  assert radar.publishes == 2
+
+
 @pytest.mark.parametrize("flags", (VOLKSWAGEN_MEB_FLAG, VOLKSWAGEN_MEB_FLAG | 128, 16496))
 def test_meb_distance_delay_does_not_change_ego_history(flags):
   from openpilot.cereal import car

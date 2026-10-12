@@ -97,6 +97,15 @@ jobs:
       - run: ./tools/op.sh setup
       - name: Build openpilot
         run: scons
+      - name: Bosch provider regression tests
+        run: |
+          python -m pytest -o addopts='' -q \
+            opendbc_repo/opendbc/car/hyundai/tests/test_radar.py \
+            opendbc_repo/opendbc/car/hyundai/tests/test_bosch_mature_retention.py \
+            opendbc_repo/opendbc/car/hyundai/tests/test_bosch_camera_extended.py \
+            opendbc_repo/opendbc/car/hyundai/tests/test_bosch_mirror_birth.py \
+            opendbc_repo/opendbc/car/hyundai/tests/test_bosch_mirror_m3.py \
+            opendbc_repo/opendbc/car/hyundai/tests/test_bosch_road_edge.py
       - name: Check passive camera SOF diagnostics
         run: openpilot/system/camerad/test/test_camera_event_timing
       - name: Check coherent OS04C10 exposure updates

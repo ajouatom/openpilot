@@ -154,6 +154,8 @@ class HyundaiExtFlags(IntFlag):
   CORNER_RADAR_OBJECTS_430 = 2 ** 14  # 0x430-0x437 left + 0x440-0x447 right IONIQ 9 corner radar bins
   RADAR_GROUP4 = 2 ** 15  # 0x500-0x507 Denso DNMWR006 stable radar tracks
   EV_MODE_STATUS_230 = 2 ** 16  # ECAN 0x230/DLC32 exposes the hybrid power-flow mode used for the EV indicator
+  BOSCH_RADAR = 2 ** 17  # passive Bosch MRRevo14F 0x601-0x612 receive provider (see BOSCH_MRREVO14F_CAR)
+  BOSCH_RADAR_BUS1 = 2 ** 18  # Observed receive src=1; otherwise use LKAS camera CAN (src=2)
 
 class Footnote(Enum):
   CANFD = CarFootnote(
@@ -1055,6 +1057,27 @@ LEGACY_SAFETY_MODE_CAR = CAR.with_flags(HyundaiFlags.LEGACY)
 # TODO: another PR with (HyundaiFlags.LEGACY | HyundaiFlags.UNSUPPORTED_LONGITUDINAL | HyundaiFlags.CAMERA_SCC |
 #       HyundaiFlags.CANFD_RADAR_SCC | HyundaiFlags.CANFD_NO_RADAR_DISABLE | )
 UNSUPPORTED_LONGITUDINAL_CAR = CAR.with_flags(HyundaiFlags.LEGACY) | CAR.with_flags(HyundaiFlags.UNSUPPORTED_LONGITUDINAL)
+
+# Non-CAN-FD platforms reported to use the Bosch MRRevo14F front radar. Only HYUNDAI_ELANTRA (Elantra AD) is
+# vehicle-validated; the others are candidates and enable the passive receiver only when the full object set is seen.
+BOSCH_MRREVO14F_CAR = {CAR.HYUNDAI_ELANTRA, CAR.HYUNDAI_ELANTRA_GT_I30, CAR.HYUNDAI_KONA, CAR.HYUNDAI_KONA_EV,
+                       CAR.HYUNDAI_KONA_EV_2022, CAR.KIA_FORTE}
+BOSCH_MRREVO14F_OBJECT_ADDRS = range(0x601, 0x613)
+
+
+def bosch_mrrevo14f_bus(candidate, flags: int, fingerprint: dict, buses) -> int | None:
+  """First bus in `buses` on which every 0x601-0x612 object message is seen with 8 bytes, else None.
+
+  Bosch streams its objects on a rewired radar/camera bus, so the receive bus is selected from observation;
+  Panda connector names must not be treated as src IDs.
+  """
+  if candidate not in BOSCH_MRREVO14F_CAR or flags & HyundaiFlags.CANFD:
+    return None
+  for bus in buses:
+    if all(fingerprint.get(bus, {}).get(addr) == 8 for addr in BOSCH_MRREVO14F_OBJECT_ADDRS):
+      return bus
+  return None
+
 
 DBC = CAR.create_dbc_map()
 
