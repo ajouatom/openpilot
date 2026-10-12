@@ -1,5 +1,18 @@
 # Repository memory
 
+- On 2026-10-12, 10a5 on nav ac1da01591/mode2 reproduces a real green held by
+  a tiny sole red anchor and zero moving preparation after small night lamps
+  repeatedly lose IDs. Add a two-housing red-to-green release: each anchor needs
+  independent red history and fresh 700ms green, with no forward red conflict.
+  Night-only pending-red templates and unique >=0.9 image correspondence retain
+  small red identity through bounded motion; do not relax green/daytime rules.
+  512 tests pass; prior 43,090-frame guard summaries match at nominal/+20ms;
+  3,347 prior image comparisons have unchanged fresh colors/green boxes. New
+  replay releases the reviewed green hold; image replay requests preparation
+  5.60s earlier for only0.9s, cap about-0.19m/s2. Not sustained braking or a full
+  stop; no vehicle install/native timing/closed-loop claim. Publish to BOTH
+  carrot-nav and carrot-wip, single-parent only. See docs/signal_a5_followup_20261012.md.
+
 - On 2026-10-12, the user reaffirmed that corrections must be committed and
   pushed to ALL maintained carrot-* branches unless explicitly excepted. This
   supersedes the earlier wip-only signal scope. Current remote targets are
