@@ -80,6 +80,7 @@ def test_approach_preserves_braking_until_first_entry_then_zeros_immediately():
     assert cmd.stop_req == 0
     assert cmd.raw == -2.
     assert cmd.value == pytest.approx(previous - DT)
+    assert cmd.lower == STOP_LOWER_BAND
     previous = cmd.value
   cmd = step(controller, speed=ENTRY_SPEED, accel=-2., previous_value=previous)
   assert (cmd.stop_req, cmd.raw, cmd.value) == (1, 0., 0.)
@@ -135,6 +136,40 @@ def send(camera, controller, CS, *, enabled=True, override=False, stopping=True,
   assert ((packed >> 152) & 127) * 0.1 == pytest.approx(values["JerkUpperLimit"])
   assert (packed >> 176 & 63) * 0.02 == pytest.approx(values["AccelLimitBandLower"])
   return values
+
+
+@pytest.mark.parametrize("camera", [True, False])
+@pytest.mark.parametrize("stock_band", [0., .06, 1.26])
+@pytest.mark.parametrize("approach", [False, True])
+def test_lower_band_precedes_stop_and_survives_hold_and_departure(camera, stock_band, approach):
+  cs = make_cs()
+  cs.scc_control["AccelLimitBandLower"] = stock_band
+  controller = CanfdStopping()
+  # Include positive acceleration and ordinary deceleration before shouldStop,
+  # plus direct low-speed entry where there is no requested approach phase.
+  stages = [(False, 10., .4, 0), (False, 2., -.5, 0)]
+  if approach:
+    stages.append((True, 1., -.8, 0))
+  stages += [(True, .3, -.5, 1), (True, 0., -.5, 1),
+             (True, .3, -.5, 1), (False, .3, .4, 0)]
+  for stopping, speed, accel, stop_req in stages:
+    cs.out.vEgo = cs.out.vEgoRaw = speed
+    cs.out.wheelSpeeds = SimpleNamespace(fl=speed, fr=speed, rl=speed, rr=speed)
+    cs.canfdSccHoldActive = speed == 0.
+    for _ in range(15):
+      values = send(camera, controller, cs, stopping=stopping, accel=accel)
+      assert values["ACCMode"] == 1
+      assert values["AccelLimitBandLower"] == STOP_LOWER_BAND
+      assert values["AccelLimitBandUpper"] == 0.
+      assert values["StopReq"] == stop_req
+      if stop_req:
+        assert values["aReqRaw"] == values["aReqValue"] == 0.
+  disabled = send(camera, controller, cs, enabled=False, stopping=False)
+  assert disabled["AccelLimitBandLower"] == disabled["StopReq"] == 0.
+  # Reengagement must not wait for a new stopping episode to restore the band.
+  resumed = send(camera, controller, cs, stopping=False)
+  assert resumed["AccelLimitBandLower"] == STOP_LOWER_BAND
+  assert resumed["StopReq"] == 0
 
 
 @pytest.mark.parametrize("camera", [True, False])
@@ -213,9 +248,10 @@ def test_invalid_measured_acceleration_blocks_stop_commands(camera, a_ego):
 
 
 @pytest.mark.parametrize("camera", [True, False])
+@pytest.mark.parametrize("stopping", [False, True])
 @pytest.mark.parametrize("block", ["brakePressed", "gasPressed", "brakeHoldActive", "parkingBrake", "canValid", "gearShifter",
                                    "unavailable", "disabled", "override", "nan_speed"])
-def test_interlocks_and_motion_sources(camera, block):
+def test_interlocks_and_motion_sources(camera, stopping, block):
   controller = CanfdStopping()
   cs = make_cs()
   for _ in range(40):
@@ -231,10 +267,11 @@ def test_interlocks_and_motion_sources(camera, block):
     cs.out.cruiseState.available = False
   elif block == "nan_speed":
     cs.out.vEgo = float("nan")
-  values = send(camera, controller, cs, enabled=block != "disabled", override=block == "override")
+  values = send(camera, controller, cs, enabled=block != "disabled", override=block == "override", stopping=stopping)
   assert values["StopReq"] == 0
   assert values["aReqRaw"] == pytest.approx(0)
   assert values["aReqValue"] == pytest.approx(0)
+  assert values["AccelLimitBandLower"] == 0.
   assert controller.phase == StopPhase.idle
 
 
@@ -265,6 +302,7 @@ def test_departure_releases_and_resumes_normal_acceleration_limiter(camera):
   assert actual['aReqRaw'] == expected['aReqRaw'] == .5
   assert actual['aReqValue'] == expected['aReqValue']
   assert actual['aReqValue'] == pytest.approx(.04 if camera else .1)
+  assert actual['AccelLimitBandLower'] == STOP_LOWER_BAND
   assert controller.phase == StopPhase.idle
 
 

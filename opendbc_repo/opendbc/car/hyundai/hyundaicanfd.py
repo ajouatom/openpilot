@@ -5,7 +5,7 @@ from opendbc.car import CanBusBase, DT_CTRL
 from opendbc.car.carlog import carlog
 from opendbc.car.crc import CRC16_XMODEM
 from opendbc.car.hyundai.values import HyundaiFlags, HyundaiExtFlags
-from opendbc.car.hyundai.stopping import MOVING_SPEED
+from opendbc.car.hyundai.stopping import MOVING_SPEED, STOP_LOWER_BAND
 from openpilot.common.params import Params
 from openpilot.common.filter_simple import FirstOrderFilter
 from opendbc.car.common.conversions import Conversions as CV
@@ -52,12 +52,17 @@ def apply_canfd_stopping(values, CS, controller, accel, previous_value, jerk_u, 
     jerk_u=max(0.0, min(jerk_u, 5.0)), jerk_l=max(1.0, min(jerk_l, 5.0)),
   )
   if blocked or values["ACCMode"] != 1:
-    values.update(StopReq=0, aReqRaw=0.0, aReqValue=0.0)
+    values.update(StopReq=0, aReqRaw=0.0, aReqValue=0.0, AccelLimitBandLower=0.0)
     if not finite:
       values.update(ACCMode=0, JerkUpperLimit=1.0, JerkLowerLimit=1.0)
   elif command is not None:
     values.update(StopReq=command.stop_req, aReqRaw=command.raw, aReqValue=command.value,
                   AccelLimitBandUpper=0.0, AccelLimitBandLower=command.lower)
+  else:
+    # Establish the fixed band during ordinary active ACC, before any stop
+    # request. Approach/held packets retain it instead of adding a band edge
+    # alongside StopReq. This is a timing trial, not an OEM hold guarantee.
+    values["AccelLimitBandLower"] = STOP_LOWER_BAND
 
   # Apply only to the final packet, after approach and interlocks select StopReq.
   # The first StopReq frame already carries zero Raw/Value; Upper may rise next.
