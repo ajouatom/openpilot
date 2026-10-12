@@ -515,7 +515,7 @@ CONFIGS = [
     # carState must carry batch metadata from a replay of the matching card.
     # Old recorded carState alone cannot reconstruct card's exact CAN drains.
     proc_name="radarcan",
-    pubs=["can", "carState"],
+    pubs=["can", "carState", "livePose", "modelV2"],
     subs=["liveTracks"],
     ignore=["logMonoTime"],
     init_callback=get_car_params_callback,

@@ -14,6 +14,16 @@ from openpilot.selfdrive.pandad import can_capnp_to_list
 from opendbc.car.car_helpers import interfaces
 
 
+def _set_bosch_context(radar, sm, now_ns):
+  radar.set_bosch_context(
+    now_ns,
+    sm['livePose'] if sm.valid['livePose'] else None,
+    sm.logMonoTime['livePose'],
+    sm['modelV2'] if sm.valid['modelV2'] else None,
+    sm.logMonoTime['modelV2'],
+  )
+
+
 def main():
   # Share core4/FIFO51 with planner. Card/radard use core5; short control/state
   # work shares core6 with camera; model/DM remain on core7.
@@ -25,6 +35,7 @@ def main():
   CP = messaging.log_from_bytes(Params().get('CarParams', block=True), car.CarParams)
   radar_interface = interfaces[CP.carFingerprint].RadarInterface
   radar = radar_interface(CP)
+  bosch_context_sm = messaging.SubMaster(['livePose', 'modelV2']) if getattr(radar, 'bosch', None) is not None else None
   # Latch once per onroad start; never change a track's side during a drive.
   radar_track_flip = Params().get_bool('RadarTrackFlip')
   batches = RadarCanBatches()
@@ -35,6 +46,7 @@ def main():
   needs_reset = False
   replay = 'REPLAY' in os.environ
   replay_ns = last_input_ns
+  bosch_replay_ns = 0
 
   def now():
     return replay_ns if replay else time.monotonic_ns()
@@ -64,6 +76,8 @@ def main():
       batches.add_state(ego)
       if replay:
         replay_ns = ego.receive_ns
+    if bosch_context_sm is not None:
+      bosch_context_sm.update(0)
     decode_done = time.monotonic()
     processed = 0
     max_input_age_ms = 0.0
@@ -84,6 +98,11 @@ def main():
         needs_reset = False
       last_input_ns = ego.receive_ns
       max_input_age_ms = max(max_input_age_ms, (now_ns - ego.receive_ns) / 1e6)
+      if bosch_context_sm is not None:
+        if replay and packets:
+          bosch_replay_ns = max(bosch_replay_ns, ego.last_can_ns)
+        context_ns = bosch_replay_ns if replay else ego.receive_ns
+        _set_bosch_context(radar, bosch_context_sm, context_ns)
       result = radar.update_carrot(ego.v_ego, ego.a_ego, ego.receive_ns * 1e-9, packets)
       processed += 1
       if now() - ego.receive_ns > MAX_INPUT_AGE_NS:

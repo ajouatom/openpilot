@@ -6,6 +6,27 @@ import time
 
 import pytest
 
+from openpilot.selfdrive.carrot.radar.radarcan import _set_bosch_context
+
+
+def test_bosch_context_preserves_validity_and_timestamps():
+  class Radar:
+    def set_bosch_context(self, *args):
+      self.context = args
+
+  pose = object()
+  model = object()
+  sm = type('Context', (), {
+    'valid': {'livePose': True, 'modelV2': False},
+    'logMonoTime': {'livePose': 90, 'modelV2': 80},
+    '__getitem__': lambda self, service: {'livePose': pose, 'modelV2': model}[service],
+  })()
+  radar = Radar()
+
+  _set_bosch_context(radar, sm, 100)
+
+  assert radar.context == (100, pose, 90, None, 80)
+
 
 @pytest.mark.skipif(sys.platform != 'linux', reason='requires built Linux msgq/Params runtime')
 @pytest.mark.parametrize('radar_track_flip', [False, True])
