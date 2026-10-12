@@ -1,5 +1,18 @@
 # Repository memory
 
+- On 2026-10-12, SignalAssistMode adds the requested live0/1/2 selection on
+  carrot-wip only:0 auxiliary OFF,1 display/alerts and stopped-red departure veto,
+  2 also conditional red preparation toward-0.5m/s2. Default0; old production
+  enable files cannot bypass it. Mode2 uses CPU housing evidence alongside either
+  driving model; preserve DM protection. Mode changes reject pre-activation
+  observations;0 clears the auxiliary veto without issuing go. Native rebuild
+  after pull is required for the new Params key. The user requested all signal
+  trial content on wip and SINGLE-PARENT commits going forward, superseding the
+  trial-only correction. Leave old topology/ref alone; no parallel trial changes.
+  Range audit finds6 observations of a real red outside3.5m, all with blinker on;
+  close signals mostly fail boundary confidence, not proven lateral exclusion.
+  See docs/signal_color_experiment_20261012.md for validation and limits.
+
 - On 2026-10-12, after correcting branch mistakes, the user superseded the
   earlier trial-only instruction and explicitly requested ALL carrot-signal-shadow
   contents integrated into carrot-wip. Preserve existing wip radar/font fixes.

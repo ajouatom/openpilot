@@ -59,7 +59,7 @@ A_CRUISE_MAX_BP_CARROT = [0., 10 * CV.KPH_TO_MS, 40 * CV.KPH_TO_MS, 60 * CV.KPH_
 
 class CarrotPlanner:
   def __init__(self, signal_assist=None, start_guard=None, stop_prepare=None):
-    # Per-device opt-in only; no flag means the original controller path.
+    # SignalAssistMode defaults OFF; injected helpers support offline comparison.
     self.signal_assist = signal_assist
     self._signal_runtime = None
     if signal_assist is None:
@@ -77,6 +77,7 @@ class CarrotPlanner:
     self._prepare_runtime = SignalPrepareRuntime() if stop_prepare is None else None
     self.stop_prepare = stop_prepare if stop_prepare is not None else self._prepare_runtime.prepare
     self.prepare_decision = None
+    self.prepare_control_active = False
     self.params = Params()
     self.params_count = 0
     self.frame = 0
@@ -720,10 +721,11 @@ class CarrotPlanner:
         model_stopping=self.xState in (XState.e2eStop, XState.e2eStopped, XState.e2ePrepare),
         entry_allowed=self.traffic_starting_count == 0 and self.user_stop_distance < 0 and mode == 'acc',
         geometry=context.get('geometry', lambda box: None))
-      if self.prepare_decision.active:
+      self.prepare_control_active = self.prepare_decision.active and context.get('actuate', True)
+      if self.prepare_control_active:
         self.xState = XState.e2eStopPrepare
-        if self.prepare_decision.entered:
-          self.events.add(EventName.trafficSignChanged)
+      if self.prepare_decision.entered:
+        self.events.add(EventName.trafficSignChanged)
       if self._prepare_runtime is not None:
         self._prepare_runtime.record_prepare(self.prepare_decision)
     #return v_cruise, stop_dist, mode

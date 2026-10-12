@@ -19,6 +19,10 @@ MAX_AGE_MS = 1500
 
 
 def requested(directory=DIRECTORY):
+  from openpilot.selfdrive.carrot.signal_mode import flag_override
+  override = flag_override(Path(directory) / 'enabled')
+  if override is not None:
+    return override
   try:
     return (Path(directory) / 'enabled').read_text().strip() == '1'
   except OSError:
@@ -152,6 +156,11 @@ def configure_worker_scheduling():
 
 
 def run(directory=DIRECTORY, duration=None):
+  Path(directory).mkdir(parents=True, exist_ok=True)
+  from openpilot.selfdrive.carrot.signal_mode import signal_mode
+  if Path(directory) == DIRECTORY and signal_mode() == 2:
+    from openpilot.selfdrive.modeld.signal_tracking_shadow import run as run_tracking
+    return run_tracking(directory, duration, comparison_override=True)
   from openpilot.selfdrive.modeld.signal_neural_shadow import neural_requested, run as run_neural
   if neural_requested(directory):
     return run_neural(directory, duration)

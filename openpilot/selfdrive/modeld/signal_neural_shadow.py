@@ -37,6 +37,10 @@ def run_selected(directory, backend):
 
 
 def automatic_backend(params):
+  from openpilot.selfdrive.carrot.signal_mode import read_mode
+  if read_mode(params) == 2:
+    # Preparation requires the measured-housing CPU evidence contract.
+    return 'tracking_cpu'
   # The DM model also runs on the internal GPU with an external driving model.
   # Parked A/B/A showed ~20 -> 10 Hz DM even at QCOM priority 15. Camera failure
   # must never grant GPU access: that would keep the overloaded DM in fallback.
@@ -158,7 +162,10 @@ def run(directory=DIRECTORY, duration=None, backend_override=None):
                    detector_sha256=network.DETECTOR_SHA, classifier_sha256=network.CLASSIFIER_SHA,
                    pid=os.getpid(), control_permission=False, assist_transport=False)
     previous_id, last_file = None, 0.
+    from openpilot.selfdrive.carrot.signal_mode import signal_mode
+    selected_mode = signal_mode() if directory == DIRECTORY else None
     while (requested(directory) and neural_requested(directory) and backend_requested(directory) == selection
+           and (selected_mode is None or signal_mode() == selected_mode)
            and (duration is None or time.monotonic()-start < duration)):
       if not client.is_connected() and not client.connect(False):
         sequence, session = reset(); time.sleep(.2); continue

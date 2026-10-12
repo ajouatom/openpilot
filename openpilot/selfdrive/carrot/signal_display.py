@@ -15,6 +15,10 @@ SIZE = (1344, 760)
 
 
 def display_requested(path=DISPLAY_FLAG):
+  from openpilot.selfdrive.carrot.signal_mode import flag_override
+  override = flag_override(path)
+  if override is not None:
+    return override
   try:
     return Path(path).read_text().strip() == '1'
   except OSError:
