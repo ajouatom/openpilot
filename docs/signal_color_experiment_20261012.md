@@ -380,3 +380,95 @@ source conflict, expanded bounds and road clipping. **193 focused tests pass**.
 No new camera inference or vehicle-response replay was performed. Default OFF;
 no vehicle connection, enable or deployment. Private reproduction and review
 frames: `.analysis/archive/2026-10-12-signal-lateral-margin/`.
+
+
+### Range audit: outside the 3.5m allowance and close signals
+
+This is a read-only audit of the same13 retained night/morning video segments,
+3348 result records and fresh full-rlog road/lane/calibration context. All186
+fresh measured housings were included:94 red,86 green,6 unknown. No observer
+rerun or control threshold change was made. First failing geometry reason:
+176 unreliable boundary pairs,6 lateral exclusions,2 intervals extending beyond
+140m,2 accepted (one red and one green). Counts are observations, not lights.
+Core-generated/template boxes are not measured housings and are excluded from
+metric inference. These gates belong to moving preparation, not camera display.
+
+YES, an actual red lamp lies outside the expanded projected lane region.
+Morning109f-6 indices737,741,746,764,773,783 show the same overhead signal to the
+left of the approaching car. Inner lanes satisfy the current confidence rule.
+For height-compatible size/distance hypotheses, at least6.3-6.8m EXTRA allowance
+beyond the left lane boundary would be needed;3.5m and5m both miss it. This is
+modeled geometry, not surveyed lateral placement or proof of ego-signal ownership.
+All six have a blinker on; the car subsequently turns right. The separate turn
+exclusion would therefore prevent preparation even if the lateral gate widened.
+Do not promote a wider margin just to make this signal trigger braking.
+
+Close signals are detected but can fail preparation for other reasons. All35
+measured boxes at least50px wide first fail boundary confidence. Width is a
+review-selection heuristic, NOT a verified distance label. Exact-frame109f-8
+index614 shows two large overhead green signals while driving nearly straight
+(38.3km/h, steering0.7deg, no blinker). Inner probabilities0.420/0.137 and road
+stds1.995/1.348 fail. The center housing spans105px: assumed0.7-2.5m width implies
+7.6-27.2m forward range. If confidence is bypassed FOR DIAGNOSTICS ONLY, its
+nominal lateral location fits within the lane and its supported interval still
+includes distances below the25m preparation minimum. Thus widening the lane
+allowance does not solve this close-signal exclusion. No actual distance was
+measured, and the confidence bypass is not part of production code.
+
+Exact109f-10index24 shows nearby red housings while turning (steering-109.8deg,
+blinker on). Boundaries are unreliable (inner probabilities0.006/0.011). Depending
+on uncertain distance assumptions some nominal positions fit and others exceed
+3.5m; do not claim a reliable close-signal lateral miss. Distinguish missing road
+geometry, distance uncertainty, turning and actual detector failure. Review
+frames/context/reproduction: `.analysis/archive/2026-10-12-signal-range-audit/`.
+
+### Integration and one user-facing mode selection
+
+The user superseded the brief trial-only correction and requested the entire
+signal-shadow contents on carrot-wip, with all future work linear on wip. Commit
+e4c9730510 integrates the trial through5ce8faa735 as a SINGLE-PARENT commit; no
+historical rewrite or merge commit. Existing wip radar/MPC/font fixes remain.
+Retrained Mountain Dew8d736683 and its pinned runtime are included by that explicit
+full-branch request; internal/DM and Jetson selections remain unchanged. The old
+trial ref is retained but will not receive parallel changes. Integration checks:
+247 Python tests and the later combined Web checks pass; no device deployment.
+
+`SignalAssistMode` is a persistent integer default0, exposed in Carrot Web's
+Traffic Light menu and searchable by name. Native Params registration is included;
+after pulling, restart/build before selecting it. Subsequent mode changes are live.
+
+- 0: auxiliary observer, camera overlays, helper alerts, departure veto and moving
+  preparation OFF. Original driving-model signal logic is independent.
+- 1: signal recognition/display; stopped-red departure veto with its existing
+  once-per-blocked-departure audioRefuse warning. Moving preparation can evaluate
+  and announce a qualified red using trafficSignChanged, but cannot change
+  preparation xState or cap acceleration.
+- 2: all mode1 features plus existing e2eStopPrepare and gradual acceleration cap
+  toward-0.5m/s2 (0.25m/s3 ramp), with unchanged lead/pose/color/geometry/freshness,
+  driver-override, speed and model-stop handover conditions. It is conditional
+  assistance, not braking on every red-shaped box or permission to depart.
+
+The selection supersedes production enabled/tracking/display/start/prepare files;
+stale old enable files cannot bypass0. Retired moving assist_enabled cannot turn
+on its older red override. Backend configuration files still select observation
+implementation in1. Mode2 uses the CPU measured-housing tracker even with an eGPU
+because preparation consumes that evidence contract; the external driving model
+continues independently and DM GPU protections remain. This is not a new GPU
+performance claim. Missing/unreadable/unregistered values remain OFF.
+
+Selection is polled every0.5s; consumer/producer polling may take about1s and
+observer process startup can take longer. Enabling discards observations captured
+before activation. Preparation mode changes discard pending confirmation and
+require new observations. Mode1<->2 retains an already latched stopped-red veto;
+0 removes that helper veto, without issuing a go command. Camera display retains
+its existing bounded visual memory only while enabled. Mode/control_active are
+logged separately so a mode1 observation is not mistaken for actuation.
+
+Validation includes mode0/1/2 planner+final acceleration checks,2->1->0 cap removal,
+OFF->ON freshness, red-veto clearing, old-flag override, backend selection and
+catalog/native-key registration. Focused signal suite275 tests passes on Windows
+with native Params storage substituted;25 Wiki-generator tests and250 Web/eGPU
+UI tests pass. The camera validity tests still use real Cap'n Proto messages.
+Native rebuild, observer restart, hardware audio and actual vehicle response are
+not validated by these desktop tests. The retained log screen still has ZERO
+fully-qualified preparation entries; adding mode2 does not change that result.

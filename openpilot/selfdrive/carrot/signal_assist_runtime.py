@@ -12,6 +12,10 @@ MAX_BYTES = 32768
 
 
 def requested(path=ENABLE_PATH):
+  from openpilot.selfdrive.carrot.signal_mode import flag_override
+  override = flag_override(path)
+  if override is not None:
+    return override
   try:
     return Path(path).read_text().strip() == '1'
   except OSError:
@@ -43,12 +47,16 @@ class SignalAssistRuntime:
     self.last_log = -1.
     self.last_decision = None
     self.read_ms = 0.
+    self.enabled_since = -float('inf')
 
   def read(self, sm, now=None):
     now = time.monotonic() if now is None else now
     start = time.monotonic()
     if now - self.last_mode_check >= .5:
-      self.enabled = requested(self.enable_path)
+      enabled = requested(self.enable_path)
+      if enabled and not self.enabled:
+        self.enabled_since = now
+      self.enabled = enabled
       self.last_mode_check = now
     observation = None
     if self.enabled:
@@ -58,9 +66,13 @@ class SignalAssistRuntime:
         if len(raw) <= MAX_BYTES:
           obj = json.loads(raw)
           if obj.get('version') == 1 and obj.get('stream') == 'road' and obj.get('size') == [1344, 760]:
-            observation = obj
+            if obj.get('timestamp', -float('inf')) >= self.enabled_since:
+              observation = obj
       except (OSError, ValueError, TypeError, AttributeError):
         pass
+    if not self.enabled:
+      self.read_ms = (time.monotonic() - start) * 1000
+      return None, dict(now=now, enabled=False, valid=False, drive=False)
     services = ('carState', 'modelV2', 'radarState', 'selfdriveState', 'carControl')
     valid = all(sm.seen[s] and sm.valid[s] and sm.alive[s] and 0 <= now - sm.recv_time[s] <= .25 for s in services)
     cs, sd, cc = sm['carState'], sm['selfdriveState'], sm['carControl']

@@ -1,4 +1,4 @@
-"""Opt-in road-camera observer; control consumes it only with separate assist opt-in."""
+"""Road-camera observer; SignalAssistMode selects display/veto and preparation."""
 import hashlib
 import json
 import os
@@ -13,6 +13,10 @@ MAX_RESULT_AGE_MS = 200
 
 
 def tracking_requested(directory=DIRECTORY):
+  from openpilot.selfdrive.carrot.signal_mode import flag_override
+  override = flag_override(Path(directory) / 'tracking_enabled')
+  if override is not None:
+    return override
   try:
     return (Path(directory) / 'tracking_enabled').read_text().strip() == '1'
   except OSError:
@@ -78,6 +82,7 @@ def run(directory=DIRECTORY, duration=None, comparison_override=None):
   directory = Path(directory)
   if not requested(directory) or not tracking_requested(directory):
     return
+  directory.mkdir(parents=True, exist_ok=True)
   with (directory / 'worker.lock').open('w') as lock:
     try:
       fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -112,7 +117,10 @@ def run(directory=DIRECTORY, duration=None, comparison_override=None):
                    assist_transport=not comparison, daytime_comparison=comparison, revalidated=revalidated)
     previous_id = None
     last_file = 0.
+    from openpilot.selfdrive.carrot.signal_mode import signal_mode
+    selected_mode = signal_mode() if directory == DIRECTORY else None
     while (requested(directory) and tracking_requested(directory) and comparison_requested(directory) == comparison_selection
+           and (selected_mode is None or signal_mode() == selected_mode)
            and revalidated_requested(directory) == revalidated
            and (duration is None or time.monotonic() - start < duration)):
       if not client.is_connected() and not client.connect(False):

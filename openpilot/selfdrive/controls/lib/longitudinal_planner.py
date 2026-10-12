@@ -378,6 +378,7 @@ class LongitudinalPlanner:
     self._signal_prepare_time = now
     cs = sm['carState']
     active = (getattr(getattr(carrot, 'prepare_decision', None), 'active', False)
+              and getattr(carrot, 'prepare_control_active', True)
               and not reset_state and not cs.gasPressed and not cs.brakePressed
               and 0 < elapsed <= .2
               and not self.output_should_stop and self.mpc.mode == 'acc'

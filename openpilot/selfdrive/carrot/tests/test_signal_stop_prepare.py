@@ -250,6 +250,7 @@ def test_runtime_pose_camera_and_calibration(monkeypatch,yaw,age,calibrated,expe
   sm.seen=sm.valid=sm.alive=dict.fromkeys(sm,True);sm.recv_time=dict.fromkeys(sm,1.)
   monkeypatch.setattr(SignalAssistRuntime,'read',lambda *a:(observation(1.),dict(now=1.,enabled=True,valid=True,drive=True)))
   runtime=SignalPrepareRuntime.__new__(SignalPrepareRuntime);runtime.enabled=True;runtime.extra=extra
+  runtime.prepare=SignalStopPrepare()
   _,ctx=runtime.read(sm,1.)
   assert (ctx['valid'] and not ctx['turning'])==expected
   if expected:assert ctx['geometry']([667,260,707,270]) is not None
