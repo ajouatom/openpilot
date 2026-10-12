@@ -26,7 +26,7 @@ def bootstrap(root, source, defer_this_boot=False):
   target.mkdir(parents=True, exist_ok=True)
   # Dependencies first, entry point last; enable only after every file is durable.
   for name in ('finalize_sd_image.py', 'hud_protocol.py', 'release-signing-public.pem',
-               'wifi_protocol.py', 'boot_update.py', 'update_host.py'):
+               'wifi_protocol.py', 'local_release.py', 'boot_update.py', 'update_host.py'):
     temporary = target / (name + '.new')
     with temporary.open('wb') as stream:
       stream.write((source / name).read_bytes())

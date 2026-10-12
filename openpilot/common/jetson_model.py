@@ -1,6 +1,7 @@
 """Model pin shared by the comma client and Jetson release tooling."""
 import json
 from pathlib import Path
+import re
 
 ROOT = Path(__file__).resolve().parents[2]
 MODEL_DIR = Path('openpilot/selfdrive/modeld/jetlink')
@@ -34,3 +35,16 @@ def matching_release(path, required=False):
   if required:
     raise ValueError('Jetson ResAction requires a matching signed host_release.json; release deployment is not configured')
   return None
+
+
+def selected_release(path, required=False):
+  local = Path(path).with_name('local_host_release.json')
+  if not local.is_file():
+    return matching_release(path, required)
+  value, spec = json.loads(local.read_text()), read_spec()
+  if (not isinstance(value, dict) or set(value) != {'format', 'delivery', 'profile', 'model'} or
+      value['format'] != 1 or value['delivery'] != 'local' or
+      re.fullmatch('[a-z][a-z0-9-]{0,63}', str(value['profile'])) is None or
+      value['model'] != {'sha256': spec['sha256'], 'size': spec['nbytes']}):
+    raise ValueError('Local Jetson selection does not match this branch model')
+  return value

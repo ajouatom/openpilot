@@ -14,6 +14,7 @@ import urllib.error
 import update_host as update
 
 CAPABILITY = 'carrot_boot_update_v1'
+LOCAL_CAPABILITY = 'carrot_local_release_v1'
 MESSAGE = 0x4003
 READY = Path('/run/carrot-jetlink-boot-ready.json')
 STATUS = Path('/run/carrot-jetlink-boot-update.json')
@@ -56,6 +57,7 @@ class Gate:
     self.state = 'checking'
     self.fraction = None
     self.selected = None
+    self.source_commit = None
     self.received = 0.
     self.next_try = 0.
     self.worker = None
@@ -70,27 +72,27 @@ class Gate:
 
   def select(self, manifest):
     # Validate before trusting equality, downloading or granting permission.
-    update.validate_manifest(manifest)
-    update.verify_signature(manifest)
-    update.validate_storage_compatibility(manifest)
+    commit = update.selected_commit(manifest)
     if update.PROTECTED_MARKER.exists():
       if json.loads(Path('/run/carrot-storage.json').read_text()).get('state') != 'protected':
         raise ValueError('Protected DATA storage unavailable')
     if manifest != self.selected:
       self.next_try = 0.
     self.selected = manifest
+    self.source_commit = commit
     self.received = time.monotonic()
 
   def _install(self, manifest):
     try:
-      self.report('downloading', 0.)
-      update.stage_manifest(manifest, progress=lambda fraction: self.report('downloading', fraction))
+      stage = 'verifying' if manifest.get('delivery') == 'local' else 'downloading'
+      self.report(stage, 0.)
+      update.stage_manifest(manifest, progress=lambda fraction: self.report(stage, fraction))
       self.report('verifying')
       # These services are still in wait_for_runtime(), but stop them before
       # swapping files so their next process imports the complete new release.
       subprocess.run(['systemctl', 'stop', 'carrot-jetlink', 'carrot-jetlink-hud'], check=True, timeout=45)
       update.activate()
-      if (update.ROOT / 'current/SOURCE_COMMIT').read_text().strip() != manifest['source_commit']:
+      if (update.ROOT / 'current/SOURCE_COMMIT').read_text().strip() != update.selected_commit(manifest):
         raise RuntimeError('Candidate validation failed; previous release retained')
       self.report('checking')
       self.error = ''
@@ -111,8 +113,8 @@ class Gate:
         self.report('checking')
       return
     manifest = self.selected
-    if (update.ROOT / 'current/SOURCE_COMMIT').read_text().strip() == manifest['source_commit']:
-      update.atomic_json(READY, {'boot_id': BOOT_ID.read_text().strip(), 'source_commit': manifest['source_commit']})
+    if (update.ROOT / 'current/SOURCE_COMMIT').read_text().strip() == self.source_commit:
+      update.atomic_json(READY, {'boot_id': BOOT_ID.read_text().strip(), 'source_commit': self.source_commit})
       READY.chmod(0o644)  # The unprivileged model/HUD guards must read this.
       self.report('ready')
       self.done = True
@@ -132,7 +134,7 @@ class BootstrapSession:
     if msg.msg_type == p.Msg.HELLO_REQ:
       self.last_seq = msg.seq
       self.transport.send_json(p.Msg.HELLO_RESP, msg.seq, {
-        'protocol': p.VERSION, 'carrot_host': 'jetson', CAPABILITY: True,
+        'protocol': p.VERSION, 'carrot_host': 'jetson', CAPABILITY: True, LOCAL_CAPABILITY: True,
         wifi_capability: True, 'engine_state': 'none', 'loaded': None, 'sleep_after': 0,
       })
       return

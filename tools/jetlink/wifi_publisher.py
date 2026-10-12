@@ -10,7 +10,7 @@ import sys
 import time
 
 from wifi_protocol import HEADER, LIMIT, validate
-from openpilot.common.jetson_model import matching_release
+from openpilot.common.jetson_model import selected_release
 
 
 def nm(*args):
@@ -68,7 +68,7 @@ def main(fd):
   params = Params()
   owner = hashlib.sha256(Path('/etc/machine-id').read_bytes()).hexdigest()
   release = Path(__file__).resolve().parents[2] / 'openpilot/selfdrive/modeld/jetlink/host_release.json'
-  manifest = matching_release(release)
+  manifest = selected_release(release)
   channel = socket.socket(fileno=fd)
   channel.setblocking(False)
   profiles = None

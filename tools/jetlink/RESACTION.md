@@ -2,8 +2,11 @@
 
 This branch adds client and host code for the **specific ONNX export** in
 [commaai/openpilot commit 2fb4ac4](https://github.com/commaai/openpilot/commit/2fb4ac4aa0b2e6438ae2b8330295aa71df9a184a).
-It is a source-code integration, not an installable or signed Jetson release.
-Pulling this branch onto a comma alone does not install the new model on Jetson.
+The experiment can be preinstalled once from a PC. The comma branch then selects
+it over USB; restoring the official comma branch selects the official Internet
+release again at the next Jetson boot. No QSPI, JetPack or OS replacement is part
+of this installation. Pulling this branch onto a comma alone is insufficient
+until the PC package has been registered on Jetson.
 
 ## Pinned model
 
@@ -15,11 +18,11 @@ Pulling this branch onto a comma alone does not install the new model on Jetson.
 | Checkpoint | `b9facbcc-4d47-410e-b3ce-dfcbad12ba92/56320/7a933c1c-b3ba-4b31-be45-d2a03ca9fa9d/12864` |
 | Client/host contract | `openpilot/selfdrive/modeld/jetlink/jetson_model.json` |
 
-The pin was checked against the upstream LFS pointer and ONNX metadata.
-Only bounded ranges of the public ONNX were fetched for code review; the full
-weight file was not downloaded or executed during this change. Deployment must
-verify the entire file's size and SHA-256. Do not substitute a later PR revision
-or a model sharing the same display name.
+The pin was checked against the upstream LFS pointer and ONNX metadata. The
+complete public weight file was downloaded for the PC package and its size and
+SHA-256 were verified. Package preparation and installation repeat those checks.
+The full model has not been executed during this change. Do not substitute a
+later PR revision or a model sharing the same display name.
 
 ## What changes
 
@@ -39,32 +42,64 @@ or a model sharing the same display name.
 - Release tooling reads the Jetson pin and retains support for older bundles
   that contain only `cinque_v2.json`.
 
-## Deployment prerequisites (not performed)
+## PC package and branch switching
 
-1. Prepare the exact ONNX and build a committed host bundle with
-   `python tools/jetlink/build_host_bundle.py <output.tar.gz>`.
-2. On the target Orin, build and probe that model using the matching host code,
-   L4T/TensorRT environment and existing provisioning workflow. The probe now
-   advances recurrent state across frames. Measure end-to-end latency and test
-   output parity on recorded inputs before using the branch on a vehicle.
-3. Publish the model and bundle through an authorized release location and
-   generate a matching signed manifest using `tools/jetlink/sign_release.py`.
-   That tool still requires the private key corresponding to the installed
-   public trust root and the existing download-host policy. No signing key,
-   trust-root replacement, hosted weights or new signed manifest is included.
-4. Older installed standalone updaters read only `cinque_v2.json`. They need the
-   updated bootstrap/updater from this source before accepting a bundle with
-   the separate ResAction pin. This migration requires its own device install;
-   a new `host_release.json` alone is insufficient for such installations.
-5. Commit the matching signed `host_release.json` to the client branch when that
-   deployment is ready. Until then the old Cinque manifest is retained as a
-   reference but is not sent over the boot, Wi-Fi or HUD provisioning channels.
-   A Jetson boot gate reports the missing matching release explicitly.
+| Comma selection | Jetson at its next boot |
+| --- | --- |
+| `codex/jetson-resaction` | Verify and activate the root-registered local ResAction bundle/model; no model download server needed |
+| Official Carrot branch | Verify its signed manifest, download the official bundle/model if needed, probe and activate them using the existing Internet path |
 
-For manual model provisioning, `download_model.py --output <path>
---manifest-url <https-url>` accepts a manifest naming
-`big_driving_supercombo.onnx` in the same directory. It verifies the pinned file
-size and SHA-256. There is no default ResAction hosting URL in this branch.
+Switch the comma branch first, then restart Jetson with the USB connection
+attached. Switching the comma alone while Jetson stays powered does not rerun
+the boot selector. Internet must be available for uncached official downloads.
+The official model cache and local experiment are retained, allowing later
+switches without installing from the PC again.
+
+Build the preparation package from committed sources on the PC:
+
+```sh
+python tools/jetlink/download_resaction.py --output /path/to/package/model.onnx
+python tools/jetlink/build_host_bundle.py /path/to/host.tar.gz
+python tools/jetlink/prepare_local_experiment.py \
+  --bundle /path/to/host.tar.gz --model /path/to/package/model.onnx \
+  --output /path/to/package
+```
+
+The package includes the original hash-verified ONNX, the exact committed host
+bundle, an installer and a checksum manifest. No model weights are committed to
+Git. The host runtime must already provide L4T 36.4.7 and TensorRT 10.3.0, just as
+the official update policy requires.
+
+For installation, access the Jetson in recovery mode and identify/mount its
+existing protected DATA partition. Use a root Linux Python process against the
+**DATA `runtime` directory**, not the immutable APP recovery runtime:
+
+```sh
+sudo python3 /path/to/package/install_local_experiment.py \
+  --package /path/to/package --runtime /mounted/DATA/runtime
+```
+
+This command requires an existing protected runtime and boot-update marker.
+It verifies every package file, registers a fixed local profile, backs up the
+previous small updater scripts, and extends the updater's selection handling.
+It does not switch `current`, replace the official public signing key, change
+Wi-Fi/accounts, disable updates, write firmware, or repartition storage. The
+original `boot-update-required` policy is retained. A package with the same
+profile but different contents is rejected; use a new profile for a new host
+revision. The installer is also usable on a live host only with the model, HUD,
+boot gate and staging services stopped; recovery mode is preferred.
+
+The USB request `local_host_release.json` can select only that root-owned local
+record. It cannot register a new package, provide paths or URLs, or grant trust
+to arbitrary unsigned network content. Official selections still pass the
+original signature/host checks. Local and official activation share the same
+probe, transaction, crash recovery and rollback handling. A failed experimental
+probe retains the prior release and withholds readiness for the failed selection.
+
+The first experimental boot builds the engine on Jetson and runs the existing
+finite-inference probe with recurrent feedback before activation. The experiment
+has not yet been installed or executed on the user's hardware. Measure latency
+and full-model parity on the target before treating this integration as verified.
 
 ## Validation scope
 
@@ -75,6 +110,11 @@ the image-queue transformation. The parity fixture follows the exact export's
 image-queue operations and exercises all byte pixel values across frames and
 resets; it is not a full-model numerical parity result.
 
+The downloaded full export also passed input/output shape agreement and the
+ONNX checker with `full_check=True` after applying the same layout-node removal
+and UINT8 promotion used by the TensorRT backend. This checks graph structure
+and inferred types, not TensorRT execution or prediction parity.
+
 Run on Linux from the repository root with numpy, pytest, onnx and pycryptodome:
 
 ```sh
@@ -83,11 +123,14 @@ PYTHONPATH=.:third_party/jetlink:tools/jetlink python3 -m pytest \
   tools/jetlink/test_resaction.py tools/jetlink/test_stateful_protocol.py \
   tools/jetlink/test_v3.py tools/jetlink/test_app_models.py \
   tools/jetlink/test_download_model.py tools/jetlink/test_boot_update.py \
-  tools/jetlink/test_update_host.py tools/jetlink/test_bundle.py
+  tools/jetlink/test_update_host.py tools/jetlink/test_bundle.py \
+  tools/jetlink/test_local_experiment.py
 ```
 
 The initial host implementation copies recurrent states through pinned CPU
 buffers each frame. Actual Orin TensorRT compatibility, full-model parity,
 memory use and sustained 20 Hz performance of **this integration** still need
 measurement; reports about another Orin implementation do not measure this
-branch's transport and state-copy overhead. No hardware installation was done.
+branch's transport and state-copy overhead. The local catalog/installer
+integration tests use a Linux root test environment and temporary files; they
+exercise local → official Internet → local switching without touching hardware.

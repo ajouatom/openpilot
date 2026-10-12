@@ -131,7 +131,43 @@ def stage(manifest_url=DEFAULT_MANIFEST):
   stage_manifest(manifest)
 
 
+def check_runtime(manifest):
+  l4t = subprocess.check_output(['dpkg-query', '-W', '-f=${Version}', 'nvidia-l4t-core'], text=True)
+  if not l4t.startswith('36.4.7-'):
+    raise ValueError('Installed L4T does not match the release')
+  runtime = subprocess.check_output([str(ROOT / 'venv/bin/python'), '-c', 'import tensorrt; print(tensorrt.__version__)'], text=True).strip()
+  if runtime != manifest['runtime']['tensorrt'] or os.uname().machine != 'aarch64':
+    raise ValueError('Installed TensorRT/architecture does not match')
+
+
+def check_bundle(candidate, manifest):
+  if (candidate / 'SOURCE_COMMIT').read_text().strip() != manifest['source_commit']:
+    raise ValueError('Bundle source identity mismatch')
+  pin = candidate / 'openpilot/selfdrive/modeld/jetlink/jetson_model.json'
+  if not pin.is_file():
+    pin = pin.with_name('cinque_v2.json')
+  spec = json.loads(pin.read_text())
+  if (spec['sha256'], spec['nbytes']) != (manifest['model']['sha256'], manifest['model']['size']):
+    raise ValueError('Bundle model contract differs from manifest')
+
+
+def selected_commit(selection):
+  if selection.get('delivery') == 'local':
+    from local_release import resolve
+    record = resolve(ROOT, selection)
+    validate_storage_compatibility(record)
+    return record['source_commit']
+  validate_manifest(selection)
+  verify_signature(selection)
+  validate_storage_compatibility(selection)
+  return selection['source_commit']
+
+
 def stage_manifest(manifest, progress=None):
+  if manifest.get('delivery') == 'local':
+    from local_release import stage as stage_local
+    stage_local(ROOT, manifest, progress)
+    return
   from finalize_sd_image import extract_bundle
   validate_manifest(manifest)
   verify_signature(manifest)
@@ -140,12 +176,7 @@ def stage_manifest(manifest, progress=None):
   if (ROOT / 'current/SOURCE_COMMIT').read_text().strip() == commit:
     return
   # Installation dependencies and kernel changes need a separately tested image.
-  l4t = subprocess.check_output(['dpkg-query', '-W', '-f=${Version}', 'nvidia-l4t-core'], text=True)
-  if not l4t.startswith('36.4.7-'):
-    raise ValueError('Installed L4T does not match the release')
-  runtime = subprocess.check_output([str(ROOT / 'venv/bin/python'), '-c', 'import tensorrt; print(tensorrt.__version__)'], text=True).strip()
-  if runtime != manifest['runtime']['tensorrt'] or os.uname().machine != 'aarch64':
-    raise ValueError('Installed TensorRT/architecture does not match')
+  check_runtime(manifest)
   updates = ROOT / 'updates'
   updates.mkdir(exist_ok=True)
   bundle = updates / (commit + '.tar.gz')
@@ -156,14 +187,7 @@ def stage_manifest(manifest, progress=None):
     with tempfile.TemporaryDirectory(dir=ROOT / 'releases', prefix='update-') as temporary:
       candidate = Path(temporary)
       extract_bundle(bundle, candidate)
-      if (candidate / 'SOURCE_COMMIT').read_text().strip() != commit:
-        raise ValueError('Bundle source identity mismatch')
-      pin = candidate / 'openpilot/selfdrive/modeld/jetlink/jetson_model.json'
-      if not pin.is_file():
-        pin = pin.with_name('cinque_v2.json')
-      spec = json.loads(pin.read_text())
-      if (spec['sha256'], spec['nbytes']) != (manifest['model']['sha256'], manifest['model']['size']):
-        raise ValueError('Bundle model contract differs from manifest')
+      check_bundle(candidate, manifest)
       (candidate / '.bundle-sha256').write_text(item['sha256'])
       candidate.chmod(0o755)
       os.rename(candidate, release)
@@ -208,9 +232,13 @@ def activate():
     os.sync()
     return
   manifest = json.loads(pending.read_text())
-  validate_manifest(manifest)
-  verify_signature(manifest)
-  validate_storage_compatibility(manifest)
+  if manifest.get('delivery') == 'local':
+    from local_release import verify_staged
+    manifest = verify_staged(ROOT, manifest)
+  else:
+    validate_manifest(manifest)
+    verify_signature(manifest)
+    validate_storage_compatibility(manifest)
   release = ROOT / 'releases' / manifest['source_commit']
   if release.is_symlink() or release.resolve().parent != (ROOT / 'releases').resolve():
     raise ValueError('Invalid release directory')

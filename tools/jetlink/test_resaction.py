@@ -158,7 +158,7 @@ def test_v3_adapter_sends_only_resaction_scalars_and_receives_full_driving_outpu
 def test_old_release_is_not_sent_by_any_bootstrap_path(tmp_path):
   old_release = ROOT / 'openpilot/selfdrive/modeld/jetlink/host_release.json'
   assert jetson_model.matching_release(old_release) is None
-  with pytest.raises(ValueError, match='matching signed'):
+  with pytest.raises(ValueError, match='PC-prepared'):
     startup.wait_for_boot_update(NS(), {'carrot_host': 'jetson', startup.CAPABILITY: True}, None, lambda: True, None)
   release = json.loads(old_release.read_text())
   release['model'].update(sha256=SPEC.sha256, size=SPEC.nbytes)

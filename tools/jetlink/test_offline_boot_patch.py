@@ -80,7 +80,7 @@ def test_installer_enables_once_and_preserves_newer_updater_and_identity(tmp_pat
   source = root / 'source'
   source.mkdir()
   names = ('boot_update.py', 'update_host.py', 'wifi_protocol.py', 'hud_protocol.py',
-           'finalize_sd_image.py', 'release-signing-public.pem')
+           'finalize_sd_image.py', 'release-signing-public.pem', 'local_release.py')
   for name in names:
     (source / name).write_text(name)
   identity = root / 'identity.json'
