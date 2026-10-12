@@ -34,9 +34,12 @@ restart confirmation. This does not extend control validity using display hold.
 
 A fresh confirmed green measured housing with quality >=0.5 that passes the same
 geometry screen vetoes moving preparation when reds are present (`mixed_colors`).
-This applies across the eligible search corridor, even if another row is involved;
-there is no majority vote. It can conservatively suppress preparation for an
-adjacent movement. Unqualified/unseen green is not proof of its absence.
+The initial revision applied this across the eligible search corridor. The later
+[central-red priority revision](signal_central_red_priority_20261012.md) permits
+an exception for temporally confirmed central red support with clearly separated
+lateral greens, using calibrated ego-lane geometry. Missing/ambiguous association
+still vetoes preparation; there is no majority vote. Unqualified/unseen green is
+not proof of its absence.
 
 The separate stopped-red guard is unchanged: another forward red prevents a
 green release. It retains a latched hold through unknown/stale observations;

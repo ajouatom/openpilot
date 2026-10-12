@@ -99,6 +99,88 @@ def housing_range(box, focal, rpy, edges, edge_stds, lane_lines=(), lane_probs=(
     return None
 
 
+def housing_alignment(box, distance, focal, rpy, edges, edge_stds, lane_lines=(), lane_probs=(), lane_stds=()):
+  """Signed housing extent relative to ego-lane half-width over the FULL range.
+
+  Zero is the projected ego-lane center; +/-1 are the unexpanded boundaries.
+  Use both housing ends, not the illuminated lamp, to avoid color-dependent
+  position. This is a geometric hypothesis, not signal-to-movement assignment.
+  Road edges can constrain lanes, but road center alone cannot identify ego lane.
+  """
+  try:
+    from openpilot.common.transformations.orientation import rot_from_euler
+    x1, y1, x2, y2 = map(float, box)
+    lo, hi = map(float, distance)
+    if (len(rpy) != 3 or not all(math.isfinite(v) for v in (*box, lo, hi, focal, *rpy))
+        or focal <= 0 or not 25 <= lo < hi <= 140
+        or not (0 <= x1 < x2 <= 1344 and 0 <= y1 < y2 <= 760)):
+      return None
+    # Include every source knot: lane interpolation is piecewise linear, so the
+    # normalized lateral extrema occur at knots or range endpoints, not between.
+    knots = [v for curve in (*edges, *lane_lines) for v in curve.x if lo < v < hi]
+    ds = np.unique([lo, hi, *knots])
+    corridor = road_corridor(ds, edges, edge_stds, lane_lines, lane_probs, lane_stds, lane_margin=0.)
+    if corridor is None or corridor[-1] == 'edges' or not corridor[3].all():
+      return None
+    # Road clipping must not move the ego-lane center toward one edge.
+    lane = road_corridor(ds, (), (), lane_lines, lane_probs, lane_stds, lane_margin=0.)
+    if lane is None or not lane[3].all():
+      return None
+    left, right = lane[:2]
+    half_width = (right-left)/2
+    if np.any(half_width < 1.):
+      return None
+    rays = rot_from_euler(rpy).T @ np.array([
+      [1., 1.], [(x1-672)/focal, (x2-672)/focal], [((y1+y2)/2-380)/focal]*2])
+    if np.any(rays[0] <= 0):
+      return None
+    sides = rays[1]/rays[0]
+    bounds = (sides[:, None]*ds-(left+right)/2)/half_width
+    return float(bounds.min()), float(bounds.max())
+  except (AttributeError, TypeError, ValueError, IndexError):
+    return None
+
+
+def central_red_priority(reds, greens, alignment):
+  """Return stable support IDs only for clearly central red versus lateral green.
+
+  Bands are experimental half-lane-width units, not learned probabilities.
+  One red must fit +/-0.75; two distinct reds may fit +/-1.25. Every green must
+  lie wholly outside +/-1.75 and at least0.5 farther out than the red support.
+  """
+  if alignment is None:
+    return None
+  red_extents = {}
+  for tid, distance, box in reds:
+    bounds = alignment(box, distance)
+    if bounds is not None and len(bounds) == 2 and all(math.isfinite(v) for v in bounds) and bounds[0] <= bounds[1]:
+      red_extents[tid] = max(abs(v) for v in bounds)
+  support = tuple(sorted(tid for tid, extent in red_extents.items() if extent <= .75))
+  kind = 'central_red'
+  if not support:
+    support = tuple(sorted(tid for tid, extent in red_extents.items() if extent <= 1.25))
+    if len(support) < 2:
+      return None
+    kind = 'central_red_pair'
+  extent = max(red_extents[tid] for tid in support)
+  green_ids = []
+  for tid, distance, box in greens:
+    bounds = alignment(box, distance)
+    if (bounds is None or len(bounds) != 2 or not all(math.isfinite(v) for v in bounds)
+        or bounds[0] > bounds[1] or bounds[0] <= 0 <= bounds[1]):
+      return None
+    nearest = min(abs(v) for v in bounds)
+    if nearest < 1.75 or nearest-extent < .5:
+      return None
+    for _, _, red_box in reds:
+      if min(box[2], red_box[2]) > max(box[0], red_box[0]) and min(box[3], red_box[3]) > max(box[1], red_box[1]):
+        return None
+    green_ids.append(tid)
+  if len(set(green_ids)) != len(green_ids) or set(green_ids) & {tid for tid, _, _ in reds}:
+    return None
+  return kind, support, tuple(sorted(green_ids))
+
+
 @dataclass(frozen=True)
 class PrepareDecision:
   active: bool = False
@@ -107,6 +189,9 @@ class PrepareDecision:
   track_id: int = -1
   distance_range: tuple | None = None
   track_ids: tuple = ()
+  priority: str = 'none'
+  priority_ids: tuple = ()
+  side_green_ids: tuple = ()
 
 
 class SignalStopPrepare:
@@ -121,6 +206,9 @@ class SignalStopPrepare:
     self.last_frame = -1
     self.last_capture = -math.inf
     self.histories = {}
+    self.priority_key = None
+    self.priority_since = None
+    self.priority_count = 0
     self.active = False
     self.last_now = None
     self.cooldown = -math.inf
@@ -128,11 +216,14 @@ class SignalStopPrepare:
 
   def reset(self, reason):
     self.histories.clear()
+    self.priority_key = None
+    self.priority_since = None
+    self.priority_count = 0
     self.active = False
     return PrepareDecision(reason=reason)
 
   def update(self, now, observation, *, enabled, valid, drive, speed, gas, brake,
-             lead, turning, model_stopping, entry_allowed, geometry):
+             lead, turning, model_stopping, entry_allowed, geometry, alignment=None):
     if not math.isfinite(now) or (self.last_now is not None and now <= self.last_now):
       return self.reset('clock')
     self.last_now = now
@@ -164,7 +255,7 @@ class SignalStopPrepare:
           self.reset('capture_gap')
         self.last_frame, self.last_capture = frame, stamp
       candidates = []
-      green = False
+      greens = []
       for t in observation['tracks']:
         e = t['evidence']
         # Core proposals synthesize a box around one lamp; its width is NOT a
@@ -177,14 +268,10 @@ class SignalStopPrepare:
         if distance is None:
           continue
         if t['state'] == 'green':
-          green = True
+          greens.append((int(t['id']), distance, t['box']))
         elif (.4 <= float(e.get('red_score', 0)) <= 1
               and 0 <= float(e.get('green_score', 1)) < .08):
           candidates.append((int(t['id']), distance, t['box']))
-      # No majority vote: a qualifying green anywhere in the search corridor
-      # vetoes preparation. This never releases the separate stopped-red guard.
-      if green and candidates:
-        return self.reset('mixed_colors')
       if not 1 <= len(candidates) <= 4:
         return self.reset('no_red' if not candidates else 'too_many_red')
       ids = tuple(sorted(tid for tid, _, _ in candidates))
@@ -200,6 +287,20 @@ class SignalStopPrepare:
         if (overlaps or max(aw, bw) > 2*min(aw, bw)
             or abs((a[1]+a[3]-b[1]-b[3])/2) > 2*max(a[3]-a[1], b[3]-b[1])):
           return self.reset('incompatible_red_group')
+      priority = ('red_only', (), ())
+      if greens:
+        priority = central_red_priority(candidates, greens, alignment)
+        if priority is None:
+          return self.reset('mixed_colors')
+      # The same central support AND lateral green identities must maintain
+      # their separation over time; a one-frame geometry jump is insufficient.
+      if priority != self.priority_key:
+        self.priority_key = priority
+        self.priority_since, self.priority_count = None, 0
+      if fresh:
+        if self.priority_since is None:
+          self.priority_since = stamp
+        self.priority_count += 1
       # Confirm each identity independently. Extra lamps do not multiply frame
       # counts, and a newly appearing lamp cannot inherit a vanished lamp's age.
       self.histories = {tid: h for tid, h in self.histories.items() if tid in ids}
@@ -212,10 +313,15 @@ class SignalStopPrepare:
       tid = min(confirmed) if confirmed else ids[0]
       was_active = self.active
       self.active = bool(confirmed)
+      if greens:
+        self.active = (self.active and all(tid in confirmed for tid in priority[1])
+                       and self.priority_count >= 4 and self.priority_since is not None
+                       and stamp-self.priority_since >= self.CONFIRM-1e-9)
+        tid = priority[1][0]
       entered = self.active and not was_active and now-self.last_sound >= 10.
       if entered:
         self.last_sound = now
-      return PrepareDecision(self.active, entered, 'red_prepare' if self.active else 'confirming', tid, distance, ids)
+      return PrepareDecision(self.active, entered, 'red_prepare' if self.active else 'confirming', tid, distance, ids, *priority)
     except (KeyError, TypeError, ValueError, OverflowError):
       return self.reset('malformed')
 

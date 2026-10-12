@@ -369,4 +369,7 @@ def test_runtime_pose_camera_and_calibration(monkeypatch,yaw,age,calibrated,expe
   runtime.prepare=SignalStopPrepare()
   _,ctx=runtime.read(sm,1.)
   assert (ctx['valid'] and not ctx['turning'])==expected
-  if expected:assert ctx['geometry']([667,260,707,270]) is not None
+  if expected:
+    distance = ctx['geometry']([667,260,707,270])
+    assert distance is not None
+    assert ctx['alignment']([667,260,707,270], distance) is not None
