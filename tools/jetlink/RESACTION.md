@@ -21,8 +21,8 @@ until the PC package has been registered on Jetson.
 The pin was checked against the upstream LFS pointer and ONNX metadata. The
 complete public weight file was downloaded for the PC package and its size and
 SHA-256 were verified. Package preparation and installation repeat those checks.
-The full model has not been executed during this change. Do not substitute a
-later PR revision or a model sharing the same display name.
+PC validation executes the full model; target Orin execution remains pending.
+Do not substitute a later PR revision or a model sharing the same display name.
 
 ## What changes
 
@@ -41,6 +41,9 @@ later PR revision or a model sharing the same display name.
   Pixels 0..255 remain exactly representable. The original ONNX stays unchanged.
 - Release tooling reads the Jetson pin and retains support for older bundles
   that contain only `cinque_v2.json`.
+- The v2 host explicitly advertises `stateful_v2`. The client accepts stateful
+  inference over v2 only after this capability is confirmed by HELLO. Older v2
+  peers remain rejected; v3 behavior and queued v2 models are unchanged.
 
 ## PC package and branch switching
 
@@ -115,6 +118,24 @@ ONNX checker with `full_check=True` after applying the same layout-node removal
 and UINT8 promotion used by the TensorRT backend. This checks graph structure
 and inferred types, not TensorRT execution or prediction parity.
 
+A complete client/host session test caught an integration error missed by the
+earlier isolated tests: the deployed host speaks v2, while the client rejected
+all stateful models on v2 before sending the first frame. Explicit capability
+negotiation fixes that path. The `resaction-2fb4ac4-v2` PC package supersedes v1;
+use the updated comma branch and package together.
+
+On 2026-10-12, ONNX Runtime 1.31.0's CPU provider executed the full original
+export (only its layout hint removed) against the promoted export through the
+production Jetlink client, v2 host Session, StatefulQueues and output parser.
+All 18,452 driving values and all three next-state tensors were exactly equal
+over 140 continuous synthetic frames plus eight frames replayed after reset.
+Inputs covered black/white images, all byte values, seeded noise, desire pulses,
+both traffic conventions and changing action delays. A NaN injected into the
+next feature state was rejected, abandoned the client link and cleared queues.
+The focused Linux suite passed 304 tests with one external-reference test
+skipped. These are synthetic PC results, not road-data replay or a vehicle
+safety result. CPU loopback latency is not an Orin performance measurement.
+
 Run on Linux from the repository root with numpy, pytest, onnx and pycryptodome:
 
 ```sh
@@ -124,11 +145,11 @@ PYTHONPATH=.:third_party/jetlink:tools/jetlink python3 -m pytest \
   tools/jetlink/test_v3.py tools/jetlink/test_app_models.py \
   tools/jetlink/test_download_model.py tools/jetlink/test_boot_update.py \
   tools/jetlink/test_update_host.py tools/jetlink/test_bundle.py \
-  tools/jetlink/test_local_experiment.py
+  tools/jetlink/test_local_experiment.py tools/jetlink/test_resaction_session.py
 ```
 
 The initial host implementation copies recurrent states through pinned CPU
-buffers each frame. Actual Orin TensorRT compatibility, full-model parity,
+buffers each frame. Actual Orin TensorRT compatibility, TensorRT output parity,
 memory use and sustained 20 Hz performance of **this integration** still need
 measurement; reports about another Orin implementation do not measure this
 branch's transport and state-copy overhead. The local catalog/installer

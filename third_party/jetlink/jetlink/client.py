@@ -100,6 +100,7 @@ class JetlinkClient:
     self._infer_started = 0.0
     self._infer_frame_id: int | None = None
     self._infer_flags = 0
+    self._stateful_v2 = False
 
   # -- construction ---------------------------------------------------------
 
@@ -212,6 +213,7 @@ class JetlinkClient:
     """Introduce this client. The server starts its session over on a hello,
     so this is also how a new owner of the gadget takes over one the server
     never saw end; see Session._greet."""
+    self._stateful_v2 = False
     seq = self._next_seq()
     version = self._protocol_version()
     client = {'nonce': self.nonce, 'name': self.name}
@@ -232,6 +234,7 @@ class JetlinkClient:
       raise LinkError(str(e)) from e
     if selected != version:
       raise LinkError(f"server selected protocol {selected!r}, transport speaks protocol {version}")
+    self._stateful_v2 = selected == 2 and response.get('stateful_v2') is True
     return response
 
   def state(self, timeout: float = 2.0) -> dict:
@@ -379,8 +382,8 @@ class JetlinkClient:
     if self.dead:
       raise LinkError("link previously failed")
     version = self._protocol_version()
-    if self.spec.stateful and version == 2:
-      raise LinkError("stateful models require protocol 3")
+    if self.spec.stateful and version == 2 and not self._stateful_v2:
+      raise LinkError("stateful models require protocol 3 or explicit stateful_v2 host support")
     warped = _as_bytes(warped, self.spec.warped_nbytes, 'warped')
     packed = _as_bytes(packed, self.spec.packed_nbytes, 'packed')
     if version == 3:

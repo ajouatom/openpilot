@@ -658,6 +658,9 @@ class Session:
     info = self.host.backend.describe()
     resp = {
       'protocol': P.VERSION,
+      # This host implements graph-owned queues with the original v2 framing.
+      # Legacy v2 hosts must not be assumed to support stateful input contracts.
+      'stateful_v2': True,
       **info,   # backend, runtime_version, device
       'engine_state': self.host.status(*self._wanted())['state'],
       'loaded': self.host.loaded_sha(),
