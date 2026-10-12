@@ -1,65 +1,12 @@
 # Repository memory
 
-- On 2026-10-12, the user clarified that traffic-light geometry must allow
-  space on both sides of the ego lane. The opt-in stop preparation now expands
-  each inner lane boundary by3.5m, clipped by reliable road edges with0.3m inward
-  clearance. Check original source agreement before expansion. This provisional
-  search region is not signal-to-lane assignment. The3348-observation screen
-  restores lateral/height support for3 observations of one real red signal;
-  only1 passes the unchanged full25-140m distance-interval requirement, and none
-  passes all color/context/temporal gates. Wider margins also widen distance
-  uncertainty; do not claim measured range or earlier braking. 193 focused tests
-  pass. Default OFF, no vehicle deployment. See docs/signal_color_experiment_20261012.md.
-
-- On 2026-10-12, the user requested edge/lane XYZ geometry for red preparation.
-  Remove position input/range constraints; use confident inner lanes or road
-  edges, intersect when both reliable, and never extrapolate. Correct the new
-  runtime pose reader to actual XYZMeasurement fields (previous adapter failed
-  closed). 187 tests pass, including a real Cap'n Proto pose. Full-rate-context
-  screening of3,348 retained observations gives9 new usable lane corridors but
-  zero qualified candidates/entries. Exact frames confirm real red lamps among
-  lateral rejects: do not call these false-positive removals or claim improved
-  braking. Signal mounting need not align with the ego lane. Keep OFF; no vehicle
-  deployment. See docs/signal_color_experiment_20261012.md and private road-geometry
-  archive for assumptions and negative results.
-
-- On 2026-10-12, the user requested red pre-deceleration before model stopping.
-  Add default-OFF per-device stop_prepare_enabled and state6 e2eStopPrepare:
-  confirmed measured red housing, calibrated pose/road-edge/path geometry,
-  no lead or driver override; final acceleration cap ramps0.25m/s3 to-0.5m/s2.
-  Release on missing/changed evidence, preserve model-stop handover and stronger
-  braking, and reuse trafficSignChanged audio once with cooldown. Remove only
-  visible signal track numbers. Geometry ranges are assumed, not metric truth.
-  184 desktop tests and1,200 default-OFF target comparisons pass. Screening3,348
-  retained night/morning observations yields zero qualified entries: do not claim
-  better stopping or activate from this result. No vehicle deployment. See
-  docs/signal_color_experiment_20261012.md and private stop-prepare archive.
-
-- On 2026-10-12, during the color experiment, the user prioritized avoiding
-  false green over missed detections, accepted rejecting turn-time readings,
-  and suggested pose. Offline rotation variants now reject green before tracker
-  confirmation, immediately remove old confirmed green and preserve red history.
-  Existing red start latch holds through unknown; old green never releases it.
-  Steering+speed avoids treating a stationary -39.5-degree wheel as rotation.
-  Preferred pose experiment uses calibrated livePose yaw, required validity,
-  uncertainty and separate arrival/sample freshness; no permissive fallback.
-  Four-way3348-frame replay: pose gates898 observations with zero fresh/confirmed
-  green outputs, retains the stationary real green;108 tests pass. Counts are
-  not accuracy and LED/reflection false greens remain. Both variants stay
-  offline, no vehicle deployment. See docs/signal_color_experiment_20261012.md.
-
-- On 2026-10-12, the user requested a signal correction experiment. Add
-  default-OFF offline conservative_green HSV38-90 consistently across housing,
-  day/night seeds and templates. Exact-frame paired replay of13 full videos and
-  3348 observations reduces morning green candidates5608->581, not an accuracy
-  metric. Selected development boxes remove61 replayed background greens;
-  21 newly reviewed frames keep37 visible green lamps and reject29/36 backgrounds.
-  LED text/reflections remain; one motion-blurred real night green is lost.
-  Only one of two live red miscrops reproduces green in encoded pixels.
-  Guard color-confirmation probe differs from live release and is not control
-  validation. 84 tests pass;21 default-OFF image results match prior code.
-  No deployment, model training or live enable; keep DM GPU/start-guard policy.
-  See docs/signal_color_experiment_20261012.md and its private evidence archive.
+- On 2026-10-12, the user explicitly corrected the branch scope: current
+  signal experiments belong ONLY on carrot-signal-shadow, not carrot-wip.
+  Remove the five experimental commits5a80605d61,3f537bc13f,6df4f6296f,
+  df51eed7fb,4bc5307d0b from wip by a normal corrective commit; preserve the
+  trial branch, prior deployed helper/DM fixes and unrelated work. Future
+  signal experiments/settings/validation are trial-only until explicitly promoted.
+  Wip runtime/tools are restored byte-for-byte to85d97b3160. No vehicle action.
 
 - On 2026-10-12, the user requested collecting unseen night/morning logs and
   evaluating signal size/height/road-edge filtering, analysis first. All52
