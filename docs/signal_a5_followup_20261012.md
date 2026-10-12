@@ -75,8 +75,9 @@ navigation, GPU/DM policy and SignalAssistMode semantics are unchanged.
   3,342 entire tracker results match, all fresh raw-color counts match, and no
   current green box differs. The five changes concern night-red tracking history.
   This is regression evidence, not exhaustive recognition accuracy.
-- The prior 43,090-input start-guard corpus matches the archived summary exactly
-  at nominal arrival times and at +20 ms. Reviewed-red releases remain zero;
+- The prior 43,090-input start-guard corpus preserves archived hold counts and
+  release times at nominal arrival times and at +20 ms. Three already-valid
+  releases are now labelled `green_group` instead of `green`; reviewed-red releases remain zero.
   both 1095 false-start windows remain blocked. Existing misses, including the
   unacquired 1091-20 hold, are not fixed by this change.
 
