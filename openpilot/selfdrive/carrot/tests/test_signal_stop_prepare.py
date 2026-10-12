@@ -132,11 +132,41 @@ def test_road_z_and_camera_rotation_define_height_without_position():
   assert housing_range(box,**g) is None
 
 
-def test_high_confidence_lane_limits_adjacent_road_candidates():
-  g=geometry();box=[722,260,762,270]
-  assert housing_range(box,**g) is None
+def test_lane_margin_accepts_offset_housing_and_keeps_road_limit():
+  g=geometry();box=[750,260,790,270]
+  assert housing_range(box,**g,lane_margin=0.) is None
+  assert housing_range(box,**g) is not None
+  # Road edges still bound the expanded lane region, including their clearance.
+  args={k:g[k] for k in ('edges','edge_stds','lane_lines','lane_probs','lane_stds')}
+  left,right,_,valid,_=road_corridor(np.array([50.]),**args)
+  assert valid[0] and left[0]==pytest.approx(-3.7) and right[0]==pytest.approx(3.7)
+  args['edge_stds']=[2.,2.]
+  left,right,_,valid,_=road_corridor(np.array([50.]),**args)
+  assert valid[0] and left[0]==pytest.approx(-5.3) and right[0]==pytest.approx(5.3)
   g['lane_probs']=[.1]*4
   assert housing_range(box,**g) is not None
+
+
+@pytest.mark.parametrize('margin', [-1., 5.1, float('nan'), float('inf')])
+def test_invalid_lane_margin_rejected(margin):
+  assert housing_range([667,260,707,270],**geometry(),lane_margin=margin) is None
+
+
+def test_margin_does_not_reconcile_conflicting_source_geometry():
+  g=geometry()
+  # Expansion overlaps the road, but the ORIGINAL ego lane is entirely outside.
+  g['lane_lines'][1].y=np.full(33,4.2)
+  g['lane_lines'][2].y=np.full(33,7.8)
+  args={k:g[k] for k in ('edges','edge_stds','lane_lines','lane_probs','lane_stds')}
+  left,right,_,valid,_=road_corridor(np.array([50.]),**args)
+  assert left[0]<right[0] and not valid[0]
+  assert housing_range([722,260,762,270],**g) is None
+
+
+def test_lane_margin_does_not_make_taillights_or_far_side_targets_eligible():
+  g=geometry();g['edge_stds']=[2.,2.]
+  assert housing_range([667,400,707,410],**g) is None
+  assert housing_range([1100,260,1140,270],**g) is None
 
 
 def test_acceleration_ramp_cancellation_and_stronger_brake():

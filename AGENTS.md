@@ -1,5 +1,16 @@
 # Repository memory
 
+- On 2026-10-12, the user clarified that traffic-light geometry must allow
+  space on both sides of the ego lane. The opt-in stop preparation now expands
+  each inner lane boundary by3.5m, clipped by reliable road edges with0.3m inward
+  clearance. Check original source agreement before expansion. This provisional
+  search region is not signal-to-lane assignment. The3348-observation screen
+  restores lateral/height support for3 observations of one real red signal;
+  only1 passes the unchanged full25-140m distance-interval requirement, and none
+  passes all color/context/temporal gates. Wider margins also widen distance
+  uncertainty; do not claim measured range or earlier braking. 193 focused tests
+  pass. Default OFF, no vehicle deployment. See docs/signal_color_experiment_20261012.md.
+
 - On 2026-10-12, the user requested edge/lane XYZ geometry for red preparation.
   Remove position input/range constraints; use confident inner lanes or road
   edges, intersect when both reliable, and never extrapolate. Correct the new

@@ -9,13 +9,19 @@ import math
 import numpy as np
 
 
-def road_corridor(distances, edges, edge_stds, lane_lines=(), lane_probs=(), lane_stds=()):
+LANE_SIGNAL_MARGIN = 3.5  # metres outside EACH ego-lane boundary; experimental
+
+
+def road_corridor(distances, edges, edge_stds, lane_lines=(), lane_probs=(), lane_stds=(), *, lane_margin=LANE_SIGNAL_MARGIN):
   """Interpolate trustworthy road/ego-lane boundaries, never the time-based plan.
 
-  Prefer the two ego-lane lines. Road edges are the fallback, not evidence of
-  which lane a signal controls. When both are reliable, require their agreement
-  by intersecting their lateral bounds. Never extrapolate beyond either curve.
+  Expand the two ego-lane lines to include offset/adjacent overhead signals.
+  This is a candidate search region, not proof of which lane a signal controls.
+  Reliable road edges bound it with 0.3m inward clearance, or act as fallback.
+  Check source agreement BEFORE expansion. Never extrapolate either curve.
   """
+  if not math.isfinite(lane_margin) or not 0 <= lane_margin <= 5.:
+    return None
   def pair(curves, confidences, lanes=False):
     try:
       if len(curves) != 2 or len(confidences) != 2 or not all(math.isfinite(s) and 0 <= s <= .5 for s in confidences):
@@ -36,6 +42,8 @@ def road_corridor(distances, edges, edge_stds, lane_lines=(), lane_probs=(), lan
       return None
 
   road = pair(edges, edge_stds)
+  if road is not None:
+    road = (road[0]+.3, road[1]-.3, road[2], road[3])
   lane = None
   try:
     if (len(lane_lines) == len(lane_probs) == len(lane_stds) == 4
@@ -48,13 +56,15 @@ def road_corridor(distances, edges, edge_stds, lane_lines=(), lane_probs=(), lan
   left, right, z, valid = lane
   if road is not None:
     # A reliable road corridor contradicting reliable lanes must not be ignored.
+    valid &= road[3] & (np.maximum(left, road[0]) < np.minimum(right, road[1]))
+  left, right = left-lane_margin, right+lane_margin
+  if road is not None:
     left = np.maximum(left, road[0])
     right = np.minimum(right, road[1])
-    valid &= road[3] & (left < right)
   return left, right, z, valid, 'lanes' if road is None else 'lanes+edges'
 
 
-def housing_range(box, focal, rpy, edges, edge_stds, lane_lines=(), lane_probs=(), lane_stds=()):
+def housing_range(box, focal, rpy, edges, edge_stds, lane_lines=(), lane_probs=(), lane_stds=(), *, lane_margin=LANE_SIGNAL_MARGIN):
   """Return a plausible range, not a measured distance. Full housings only."""
   try:
     from openpilot.common.transformations.orientation import rot_from_euler
@@ -72,13 +82,13 @@ def housing_range(box, focal, rpy, edges, edge_stds, lane_lines=(), lane_probs=(
     ray /= ray[0]
     lo, hi = focal*.7/(x2-x1), focal*2.5/(x2-x1)
     ds = np.linspace(lo, hi, 65)
-    corridor = road_corridor(ds, edges, edge_stds, lane_lines, lane_probs, lane_stds)
+    corridor = road_corridor(ds, edges, edge_stds, lane_lines, lane_probs, lane_stds, lane_margin=lane_margin)
     if corridor is None:
       return None
     left, right, road_z, valid, _ = corridor
     side = ray[1]*ds
     height = road_z-ray[2]*ds
-    possible = (valid & (side >= left+.3) & (side <= right-.3)
+    possible = (valid & (side >= left) & (side <= right)
                 & (height >= 3.) & (height <= 9.))
     valid = ds[possible]
     if len(valid) < 3 or valid[0] < 25 or valid[-1] > 140:
