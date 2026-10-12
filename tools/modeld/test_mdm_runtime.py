@@ -9,14 +9,42 @@ import pytest
 pytestmark = pytest.mark.skipif(not os.getenv('MDM_RUNTIME_ROOT'), reason='requires the verified pinned MDM runtime')
 
 
+def test_pinned_shared_input_views_preserve_offsets_and_state_aliases(monkeypatch):
+  monkeypatch.syspath_prepend(os.environ['MDM_RUNTIME_ROOT'])
+  monkeypatch.setenv('DEV', 'CPU')
+  monkeypatch.setenv('DEBUG', '0')
+  from tinygrad import Tensor, dtypes
+  from openpilot.selfdrive.modeld.generic_model_runtime import input_view
+
+  # Mixed packed input types exercise byte offsets and float element counts.
+  packed = np.zeros(128, np.uint8)
+  packed[32:56].view(np.float32)[:] = np.arange(6, dtype=np.float32)
+  packed[64:76] = np.arange(12, dtype=np.uint8)
+  host = Tensor(packed, device='NPY')._buffer()
+  device = Tensor(np.zeros_like(packed), device='CPU')._buffer()
+  device.copy_from(host)
+  floats = input_view(device, (2, 3), dtypes.float32, 32)
+  image = input_view(device, (2, 6), dtypes.uint8, 64)
+  np.testing.assert_array_equal(floats.numpy(), np.arange(6).reshape(2, 3))
+  np.testing.assert_array_equal(image.numpy(), np.arange(12).reshape(2, 6))
+  # Reuse views after a new frame upload; they must never snapshot old data.
+  packed[32:56].view(np.float32)[:] += 10
+  device.copy_from(host)
+  np.testing.assert_array_equal(floats.numpy(), (np.arange(6) + 10).reshape(2, 3))
+  state = Tensor(np.arange(8, dtype=np.float32), device='CPU').realize()
+  feedback = input_view(state._buffer(), state.shape, state.dtype)
+  feedback._buffer().copy_from(Tensor(np.arange(8, dtype=np.float32) + 1, device='NPY')._buffer())
+  np.testing.assert_array_equal(state.numpy(), np.arange(8) + 1)
+  assert Path(os.environ['MDM_RUNTIME_ROOT']) in Path(sys.modules['tinygrad'].__file__).parents
+
+
 def test_pinned_warp_capture_reload_and_persistent_arena(tmp_path, monkeypatch):
   monkeypatch.syspath_prepend(os.environ['MDM_RUNTIME_ROOT'])
   monkeypatch.setenv('DEV', 'CPU')
   monkeypatch.setenv('DEBUG', '0')
-  assert 'tinygrad' not in sys.modules, 'run the isolated runtime test in its own process'
   from tinygrad import Tensor
   from examples.openpilot.compile_warp import NV12Frame
-  from examples.openpilot.helpers import dump_pickle, benchmark
+  from examples.openpilot.helpers import dump_pickle, benchmark, make_retargetable
   from openpilot.selfdrive.modeld.precompiled_artifact import compile_warp, load_artifact, prepare_jit, load_warp
   import pickle
 
@@ -32,6 +60,9 @@ def test_pinned_warp_capture_reload_and_persistent_arena(tmp_path, monkeypatch):
   np.testing.assert_array_equal(benchmark(reloaded, **inputs), expected)
 
   # Real upstream persistent buffer writer and reader, including loaded JIT.
+  # Strip the export host's CPU dispatch binary just as upstream does for the
+  # AMD model; loading must compile dispatch for the installation host again.
+  make_retargetable(artifact['run'])
   path = tmp_path / 'persistent.pkl'
   dump_pickle(artifact, path)
   loaded = load_artifact(path, 'persistent-buffer-v1')

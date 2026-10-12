@@ -1,7 +1,7 @@
 name: eGPU model compatibility
 on:
   push:
-    branches: [carrot-wip]
+    branches: [carrot-wip, carrot-signal-shadow]
   workflow_dispatch:
 permissions:
   contents: read
@@ -13,7 +13,7 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
-      - run: python -m pip install numpy pytest requests psutil
+      - run: python -m pip install numpy pytest requests psutil scons
       - name: Check model contract, delivery and existing warp policy
         run: >-
           python -m pytest -c /dev/null --rootdir=. --confcutdir=openpilot/selfdrive/modeld/tests -q
@@ -28,10 +28,12 @@ jobs:
           openpilot/selfdrive/modeld/tests/test_big_model_startup.py
           openpilot/selfdrive/modeld/tests/test_egpu_worker_progress.py
           openpilot/selfdrive/modeld/tests/test_precompiled_validation.py
+          openpilot/system/tests/test_launch_order.py
+          openpilot/system/tests/test_model_build_cache.py
       - name: Download the pinned isolated runtime
         run: |
-          curl --fail --retry 3 -o /tmp/mdm-runtime.tar.gz https://upload.shind0.synology.me/models/comma4-big-mdm2/precompiled-runtime.tar.gz
-          echo '6a65495ec80afe8a3114c2f19dcf63a4e7d4654c2fc977e9acacb646f3f7c2c9  /tmp/mdm-runtime.tar.gz' | sha256sum -c -
+          curl --fail --retry 3 -o /tmp/mdm-runtime.tar.gz https://upload.shind0.synology.me/models/comma4-big-mdm-8d736683/precompiled-runtime.tar.gz
+          echo '90970e01f2ba70d553294c0f9d5c6fe1678827f750705cab679a7b19b7bcb0b2  /tmp/mdm-runtime.tar.gz' | sha256sum -c -
           mkdir /tmp/mdm-runtime
           tar -xzf /tmp/mdm-runtime.tar.gz -C /tmp/mdm-runtime
       - name: Execute pinned native CPU warp and persistent-buffer roundtrip

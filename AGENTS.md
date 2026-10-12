@@ -1,5 +1,95 @@
 # Repository memory
 
+- On 2026-10-12, after correcting branch mistakes, the user superseded the
+  earlier trial-only instruction and explicitly requested ALL carrot-signal-shadow
+  contents integrated into carrot-wip. Preserve existing wip radar/font fixes.
+  Continue ONLY on carrot-wip with linear, single-parent commits; no merge
+  commits or parallel signal-branch development. Leave historical topology alone.
+  This includes the retrained Mountain Dew eGPU selection8d736683 and its pinned
+  runtime, while keeping internal/DM models and Jetson selection unchanged.
+  Add SignalAssistMode:0 fully OFF,1 display/alerts and red departure veto,
+  2 additionally gentle red stop preparation. This supersedes old per-file enables.
+
+- On 2026-10-12, the user clarified that traffic-light geometry must allow
+  space on both sides of the ego lane. The opt-in stop preparation now expands
+  each inner lane boundary by3.5m, clipped by reliable road edges with0.3m inward
+  clearance. Check original source agreement before expansion. This provisional
+  search region is not signal-to-lane assignment. The3348-observation screen
+  restores lateral/height support for3 observations of one real red signal;
+  only1 passes the unchanged full25-140m distance-interval requirement, and none
+  passes all color/context/temporal gates. Wider margins also widen distance
+  uncertainty; do not claim measured range or earlier braking. 193 focused tests
+  pass. Default OFF, no vehicle deployment. See docs/signal_color_experiment_20261012.md.
+
+- On 2026-10-12, the user requested edge/lane XYZ geometry for red preparation.
+  Remove position input/range constraints; use confident inner lanes or road
+  edges, intersect when both reliable, and never extrapolate. Correct the new
+  runtime pose reader to actual XYZMeasurement fields (previous adapter failed
+  closed). 187 tests pass, including a real Cap'n Proto pose. Full-rate-context
+  screening of3,348 retained observations gives9 new usable lane corridors but
+  zero qualified candidates/entries. Exact frames confirm real red lamps among
+  lateral rejects: do not call these false-positive removals or claim improved
+  braking. Signal mounting need not align with the ego lane. Keep OFF; no vehicle
+  deployment. See docs/signal_color_experiment_20261012.md and private road-geometry
+  archive for assumptions and negative results.
+
+- On 2026-10-12, the user requested red pre-deceleration before model stopping.
+  Add default-OFF per-device stop_prepare_enabled and state6 e2eStopPrepare:
+  confirmed measured red housing, calibrated pose/road-edge/path geometry,
+  no lead or driver override; final acceleration cap ramps0.25m/s3 to-0.5m/s2.
+  Release on missing/changed evidence, preserve model-stop handover and stronger
+  braking, and reuse trafficSignChanged audio once with cooldown. Remove only
+  visible signal track numbers. Geometry ranges are assumed, not metric truth.
+  184 desktop tests and1,200 default-OFF target comparisons pass. Screening3,348
+  retained night/morning observations yields zero qualified entries: do not claim
+  better stopping or activate from this result. No vehicle deployment. See
+  docs/signal_color_experiment_20261012.md and private stop-prepare archive.
+
+- On 2026-10-12, during the color experiment, the user prioritized avoiding
+  false green over missed detections, accepted rejecting turn-time readings,
+  and suggested pose. Offline rotation variants now reject green before tracker
+  confirmation, immediately remove old confirmed green and preserve red history.
+  Existing red start latch holds through unknown; old green never releases it.
+  Steering+speed avoids treating a stationary -39.5-degree wheel as rotation.
+  Preferred pose experiment uses calibrated livePose yaw, required validity,
+  uncertainty and separate arrival/sample freshness; no permissive fallback.
+  Four-way3348-frame replay: pose gates898 observations with zero fresh/confirmed
+  green outputs, retains the stationary real green;108 tests pass. Counts are
+  not accuracy and LED/reflection false greens remain. Both variants stay
+  offline, no vehicle deployment. See docs/signal_color_experiment_20261012.md.
+
+- On 2026-10-12, the user requested a signal correction experiment. Add
+  default-OFF offline conservative_green HSV38-90 consistently across housing,
+  day/night seeds and templates. Exact-frame paired replay of13 full videos and
+  3348 observations reduces morning green candidates5608->581, not an accuracy
+  metric. Selected development boxes remove61 replayed background greens;
+  21 newly reviewed frames keep37 visible green lamps and reject29/36 backgrounds.
+  LED text/reflections remain; one motion-blurred real night green is lost.
+  Only one of two live red miscrops reproduces green in encoded pixels.
+  Guard color-confirmation probe differs from live release and is not control
+  validation. 84 tests pass;21 default-OFF image results match prior code.
+  No deployment, model training or live enable; keep DM GPU/start-guard policy.
+  See docs/signal_color_experiment_20261012.md and its private evidence archive.
+
+- On 2026-10-11, user requested the latest signal camera observer with both
+  internal and retrained eGPU models, parked switching and performance checks.
+  Integrate the already deployed 42760 signal/display revisions into this trial;
+  retain its newer comparison/assist-OFF policy and preserve 7f3bfcd7 model/runtime
+  selection. The old October 10 assist-ON snapshot is historical, not the current
+  requested configuration. New camera neural output remains display/log only.
+
+- On 2026-10-11, the user selected upstream 6f4c0faf eGPU on this
+  carrot-signal-shadow branch only, for testing before a combined promotion.
+  Wip publication 03142df861 was reverted by b09ae3ddad; wip keeps Cinque v3.
+  Use retrained Mountain Dew 8d736683/12864, AMD 256f2178, isolated tinygrad
+  d3f09c9b and verified NAS package comma4-big-mdm-8d736683. Adapt byte-addressed
+  buffers while retaining prior dtype-bearing buffers. Empty-cache HTTPS
+  install and offline reuse pass; preserve startup delivery before build/manager.
+  Public ONNX catalog now has old 870a4823 but no matching 8d736683. Jetson
+  stays Cinque v2; internal/DM models and control/validity/warp policies stay
+  unchanged. No physical GPU, first-boot or driving validation is implied.
+  See docs/mdm_retrained_20261011.md. Keep the existing signal experiment scope.
+
 - On 2026-10-12, the user explicitly corrected the branch scope: current
   signal experiments belong ONLY on carrot-signal-shadow, not carrot-wip.
   Remove the five experimental commits5a80605d61,3f537bc13f,6df4f6296f,
