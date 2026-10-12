@@ -37,7 +37,9 @@ def revalidated_requested(directory=DIRECTORY):
     return False
 
 
-def new_trackers(factory, comparison, revalidated=False):
+def new_trackers(factory, comparison, revalidated=False, *, single=False):
+  if single:
+    return factory(daytime_cores=True, robust_tracking=True, verified_lamps=True), None
   legacy = factory(daytime_cores=True, robust_tracking=True) if revalidated and not comparison else factory()
   daytime = (factory(daytime_cores=True, robust_tracking=True) if revalidated else factory(daytime_cores=True)) if comparison else None
   return legacy, daytime
@@ -106,22 +108,28 @@ def run(directory=DIRECTORY, duration=None, comparison_override=None):
     comparison_selection = comparison_requested(directory)
     comparison = comparison_selection if comparison_override is None else comparison_override
     revalidated = revalidated_requested(directory)
+    single = directory == DIRECTORY
+    if single:
+      # Production consumes one selected tracker. Legacy A/B remains available
+      # only in a separate experiment directory, never as extra onroad work.
+      comparison, revalidated = True, True
     def new_tracker():
-      return (*new_trackers(signal_tracker.SignalTracker, comparison, revalidated), f'{os.getpid()}:{time.monotonic_ns()}')
+      return (*new_trackers(signal_tracker.SignalTracker, comparison, revalidated, single=single), f'{os.getpid()}:{time.monotonic_ns()}')
     tracker, daytime_tracker, session_id = new_tracker()
     client = VisionIpcClient('camerad', VisionStreamType.VISION_STREAM_ROAD, True)
     start = time.monotonic()
     cloudlog.event('signalTrackingShadowLoaded', mode='tracking_observation', algorithm_sha256=source_sha,
                    runtime=cv2.__version__, pid=os.getpid(), max_hz=20, target_cpu_duty=.5,
                    stream='road', reference_width=1344, reference_height=760, control_permission=False,
-                   assist_transport=not comparison, daytime_comparison=comparison, revalidated=revalidated)
+                   assist_transport=not comparison, daytime_comparison=comparison, revalidated=revalidated,
+                   single_tracker=single, verified_lamps=single)
     previous_id = None
     last_file = 0.
     from openpilot.selfdrive.carrot.signal_mode import signal_mode
     selected_mode = signal_mode() if directory == DIRECTORY else None
     while (requested(directory) and tracking_requested(directory) and comparison_requested(directory) == comparison_selection
            and (selected_mode is None or signal_mode() == selected_mode)
-           and revalidated_requested(directory) == revalidated
+           and (single or revalidated_requested(directory) == revalidated)
            and (duration is None or time.monotonic() - start < duration)):
       if not client.is_connected() and not client.connect(False):
         tracker, daytime_tracker, session_id = new_tracker()
@@ -165,6 +173,7 @@ def run(directory=DIRECTORY, duration=None, comparison_override=None):
                 'tracks': result['tracks'], 'daytime_comparison': comparison,
                 'start_guard_transport': flag_requested(directory / 'start_guard_enabled'),
                 'assist_transport': not comparison, 'revalidated': revalidated,
+                'single_tracker': single, 'verified_lamps': single,
                 'session': session_id, **result_fields(result, age)}
       try:
         publish_control_observation(result, frame_id, eof / 1e9, session_id,

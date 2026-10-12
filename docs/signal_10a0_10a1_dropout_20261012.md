@@ -128,3 +128,73 @@ general mechanisms do not establish this signal's exact physical behavior.
 
 Docs-Not-Needed: read-only incident analysis and private offline replay; no user
 setting, production behavior or vehicle deployment changed.
+
+## Requested correction and replay verification
+
+The user subsequently requested correction, commit and push on carrot-wip.
+The production CPU observer now runs one daytime/robust tracker with
+`verified_lamps=True`; it no longer runs the legacy tracker first. Separate
+experiment directories retain explicit two-engine comparisons. Production logs
+use `signalTrackingShadow` with `single_tracker=True` and `verified_lamps=True`;
+the loaded event carries the same fields. `daytime_comparison=True` continues
+to mark the isolated helper path: legacy moving-assist publication remains
+disabled, while the existing display, stopped-red veto and stop-preparation
+publishers receive the single selected result. No extra detector thread or GPU
+work is introduced. Mode0/1/2 and the DM-aware neural backend selection remain.
+
+Within that tracker, fresh red detections can accumulate through at most the
+existing 500 ms identity interval. Gaps over 250 ms require the existing tight,
+unique geometric reacquisition or verified template correspondence. Long gaps,
+reordered time and incompatible housings still discard identity. Unknown images
+do not count as red observations. Confirmed red history can remain with the
+image-tracked object through a dark exposure, but its *current* color becomes
+unknown; no stale red is fabricated for moving preparation. Existing stopped
+red latching and bounded display memory remain separate.
+
+Green still requires current evidence and its original confirmation interval.
+A new image check requires a connected green/cyan component inside the right
+lamp, with green intensity and chromatic contrast above the unlit housing.
+Weak blue-sky color and housing-border pixels cannot supply it. All proposal
+sources, including templates, use the same check. Cyan with a strong color core
+is retained. This is still an empirical lamp-layout check, not semantic object,
+arrow or lane recognition. Control freshness deadlines and braking limits are
+unchanged; increasing red acquisition continuity does not extend result age.
+
+The final paired replay uses the pre-change committed tracker as the baseline.
+Four retained HEVC segments, exact camera times and recorded frame IDs are used.
+For 10a1-3, extra 5/10 Hz frame schedules isolate cadence effects:
+
+| Segment / sample schedule | Before confirmed red | After confirmed red | Before / after aggregate green |
+| --- | ---: | ---: | ---: |
+| 10a1-3 / recorded, 201 frames | 0 | 104 | 0 / 0 |
+| 10a1-3 / 5 Hz, 299 frames | 160 | 160 | 3 / 0 |
+| 10a1-3 / 10 Hz, 599 frames | 336 | 343 | 43 / 0 |
+| Morning 109f-6 / recorded, 282 frames | 1 | 3 | 0 / 0 |
+| Morning 109f-8 / recorded, 233 frames | 19 | 46 | 1 / 1 |
+| Night 109e-3 / recorded, 265 frames | 0 | 0 | 0 / 0 |
+
+The 19 premature aggregate-green samples at 10a1-3 indices210-254 in the 10 Hz
+baseline disappear. However, the faint late green-looking lamps in this segment
+still do not yield a confirmed green in the new replay. This remains a possible
+late/non-release case, not a demonstrated correct departure. Night raw-green
+candidates remain available; aggregate green requires preceding red history and
+is not a detector recall measure when starting mid-sequence.
+
+Two previously reviewed crop sets contain 140 old-green candidate boxes. The
+new current-image check retains all40 visually labeled green-lamp boxes, rejects
+both known red-signal wrong-crop cases, and rejects90/98 background boxes.
+Eight background candidates still pass. The sets are selected development
+examples, not held-out accuracy or proof of zero false green. Stored compressed
+pixels also differ from original live NV12, so these are offline measurements.
+
+381 focused tests pass, including delayed red acquisition, tight identity
+matching, expiry, dark images followed by illuminated green, sky/border rejection,
+green-without-red rejection, single production processing, transport isolation,
+mode switching, existing start veto and final preparation acceleration limits.
+Windows substitutes native Params storage only; no physical driving response or
+onroad CPU/DM timing is established. Actual device rate after removing paired
+work remains to be measured. No vehicle installation or restart was performed.
+
+Private reproducible evidence is retained in
+`.analysis/archive/2026-10-12-signal-improve/`; recordings remain in their prior
+archives. No new ONNX or driving-model weights are created by this correction.
