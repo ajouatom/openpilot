@@ -39,6 +39,55 @@ class Response(io.BytesIO):
   status = 200
 
 
+@pytest.mark.parametrize('interrupted', ['source', 'runtime'])
+def test_first_install_without_state_resumes_and_prepares_runtime(package, tmp_path, monkeypatch, interrupted):
+  from openpilot.selfdrive.modeld.tests.test_big_model import FakeResponse
+
+  model, catalog, runtime = package
+  source = bm.model_path(model, tmp_path)
+  data = source.read_bytes()
+  source.unlink()
+  bm.state_path(tmp_path).unlink()
+  monkeypatch.setenv('CARROT_BIG_MODEL_DIR', str(tmp_path))
+  monkeypatch.delenv('CARROT_BIG_MODEL_MANIFEST', raising=False)
+  monkeypatch.delenv('CARROT_BIG_MODEL_STARTUP_FAILED', raising=False)
+  calls, waits = [], []
+
+  def fetch(request, **kwargs):
+    url = request.full_url
+    kind = 'source' if url.endswith('model.pkl') else 'runtime' if url.endswith('runtime.tar.gz') else 'catalog'
+    payload = {'source': data, 'runtime': runtime, 'catalog': json.dumps(catalog).encode()}[kind]
+    previous = calls.count(kind)
+    calls.append(kind)
+    if kind == interrupted and previous == 0:
+      return FakeResponse(payload[:4])
+    if kind == interrupted:
+      assert request.headers['Range'] == 'bytes=4-'
+      return FakeResponse(payload[4:], status=206, headers={'Content-Range': f'bytes 4-{len(payload)-1}/{len(payload)}'})
+    return FakeResponse(payload)
+
+  def wait(seconds):
+    assert pm.installed(model, tmp_path) is None
+    waits.append(seconds)
+
+  monkeypatch.setattr(bm, 'urlopen', fetch)
+  monkeypatch.setattr(pm, 'urlopen', fetch)
+  monkeypatch.setattr(bm.time, 'sleep', wait)
+  assert bm.selected_manifest() is None
+  assert bm.deliver_model(bm.DEFAULT_MANIFEST_URL, tmp_path, BigModelStatusReporter(tmp_path), retry_network=True)
+  assert waits == [30]
+  assert calls.count('source') == (2 if interrupted == 'source' else 1)
+  assert bm.selected_manifest() == model
+  assert bm.read_state(tmp_path)['previous'] is None
+  target = pm.installed(model, tmp_path)
+  assert target.read_bytes() == data
+  assert (target.parent / 'runtime.tar.gz').read_bytes() == runtime
+  assert read_big_model_status(tmp_path)['state'] == 'installed'
+  monkeypatch.setattr(bm, 'urlopen', lambda *a, **kw: pytest.fail('cached restart must be offline'))
+  monkeypatch.setattr(pm, 'urlopen', lambda *a, **kw: pytest.fail('cached restart must be offline'))
+  assert bm.deliver_model(bm.DEFAULT_MANIFEST_URL, tmp_path, BigModelStatusReporter(tmp_path), retry_network=True)
+
+
 def test_existing_model_dns_then_clock_error_recovers_complete_runtime(package, tmp_path, monkeypatch):
   model, catalog, runtime = package
   calls, sleeps, snapshots = [], [], []
