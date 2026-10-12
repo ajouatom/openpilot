@@ -81,6 +81,7 @@ function modelDisplayName(status) {
   if (explicitName) return explicitName;
 
   const modelId = String(status?.model_id || "").toLowerCase();
+  if (modelId.includes("comma-nav-")) return "Nav Model (cf8f6120)";
   if (modelId.includes("pr39047") || modelId.includes("mdm-v1") || modelId.includes("6f4c0faf-256f2178") || modelId.includes("4bfb5340-e20cde17")) return "Mountain Dew";
   if (modelId.includes("pr38932") || modelId.includes("cinque-v3")) return "Cinque v3";
   if (modelId.includes("pr38823") || modelId.includes("cinque-v2")) return "Cinque v2";

@@ -337,6 +337,8 @@ The final `ClusterHudScreenMode` layout is:
 - `3` disables the driving scene and shows the `ShowPlotMode` graph at large size.
 - `4` fits the 3D world and driving HUD into the same 1124 px driving region as mode `0` and uses the complete opposite 792 px information region for the graph. The acceleration, steering, fuel, and DEF gauges plus TPMS remain inside the driving region's right edge. Swapping the panel layout exchanges the graph and driving regions together.
 - `5` always shows the driving report.
+- `6` shows external navigation fullscreen.
+- `7` shows the grayscale Nav model map. It reuses the shared rendered image and retains speed and alerts. Missing route, GPS, or map data produces a black image or waiting message. The display refreshes at most twice per second; this setting does not select the driving model.
 
 `ClusterHudScreenMode=5` shows a live driving report in the information panel. In default screen mode (`0`), the same report is shown automatically while no live navigation is being received, and the navigation panel returns when reception starts. The report background, cards, outlines, primary text, secondary text, and unavailable-value colors follow the active `ClusterHudTheme`, including Auto, Dark, and Light modes. Its large card summarizes driving time, distance, average and maximum speed, the automated-driving ratio, maximum acceleration/deceleration, and hard acceleration/braking/corner counts. The small card presents CPU load, temperature, memory, and disk use as a 2×2 set of circular gauges. Its lower target plots the stored device pitch (P) vertically and yaw (Y) horizontally relative to the calibrated center while retaining the numeric angles. The driving area retains the branch, network address, and frame-rate status; the core-usage text is omitted when it would overlap the report. In road-camera view, detected vehicles are enclosed by transparent rounded frames whose border retains the existing detection color; ungrouped radar detections use smaller transparent rounded markers in their source color. Vehicle frames use one lightweight outline, and frames that would be partially projected at the screen edge or stretched by a noisy radar heading are omitted.
 
@@ -387,3 +389,9 @@ Experimental DM switches to standard monitoring for 20 seconds only when moving 
 7. Restore the previous value or baseline profile immediately if the result is worse or unclear.
 
 See the Wiki [Tuning introduction](https://github.com/ajouatom/openpilot/wiki/Guide-Tuning) for the recommended steering and longitudinal adjustment order.
+
+### Nav map and destinations on carrot-nav
+
+Open **Tools ? Nav Map / ?? ??** in Carrot Web to view the map, search/select a destination, or clear it. Register a Public key under **Settings ? Network ? Mapbox** first; this feature does not need a Secret key. Destinations survive restart. A connected external navigator owns both TBT and route; a missing external route is never replaced with saved Mapbox geometry.
+
+The map is generated onroad with usable position and guidance. USB screen mode `ClusterHudScreenMode=7` displays the same image. Model navigation inputs are used by this branch's matching eGPU model; internal, DM, and Jetson models remain unchanged. Mapbox search, directions and tiles require network access and a suitable account/key. Search requests use Permanent Geocoding so selected destinations can be saved. See [design and validation limits](../../nav_model_integration_20261012.md).

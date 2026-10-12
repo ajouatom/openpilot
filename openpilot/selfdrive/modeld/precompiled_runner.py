@@ -72,6 +72,9 @@ class PrecompiledModelState:
     self.prev_desire[:] = inputs['desire_pulse']
     for name in ('traffic_convention', 'action_t'):
       self.views[name][:] = inputs[name]
+    for name in ('nav_map', 'navigation'):
+      if name in self.views:
+        self.views[name][:] = inputs.get(name, 0)
     self.views['tfm'][:] = transforms['img']
     self.views['big_tfm'][:] = transforms['big_img']
     try:

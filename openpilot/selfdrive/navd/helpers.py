@@ -111,14 +111,17 @@ def coordinate_from_param(param: str, params: Optional[Params] = None) -> Tuple[
     params = Params()
 
   json_str = params.get(param)
-  if json_str is None:
+  if not json_str:
     return None, None
 
-  pos = json.loads(json_str)
-  if 'latitude' not in pos or 'longitude' not in pos:
+  try:
+    pos = json.loads(json_str)
+    lat, lon = float(pos['latitude']), float(pos['longitude'])
+    if not math.isfinite(lat) or not math.isfinite(lon) or abs(lat) > 85.05112878 or abs(lon) > 180:
+      return None, None
+    return Coordinate(lat, lon), pos.get('place_name')
+  except (ValueError, TypeError, KeyError):
     return None, None
-  place_name = pos.get('place_name', None)
-  return Coordinate(pos['latitude'], pos['longitude']), place_name
 
 
 def string_to_direction(direction: str) -> str:

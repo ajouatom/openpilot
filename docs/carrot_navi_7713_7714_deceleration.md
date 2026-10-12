@@ -673,3 +673,7 @@ km/h다.
   실행하여 각각 `(22,22,93)`과 `(-1,0,0)`을 재현했다.
 - `test_carrot_navi_route_bridge.py`는 양쪽 route 경로와 7714 tombstone/disconnect ownership을 단언한다.
 - Windows 환경에는 전체 openpilot Linux 의존성과 pytest가 없어 전체 test suite는 실행하지 못했다.
+
+## 2026-10-12 carrot-nav 지도 모델 연동
+
+`carrot-nav`에서 기존 7713/7714 TBT·route를 콤마의 새 eGPU Nav 모델 입력에 연결했습니다. 연결된 외부 네비가 지도 경로와 안내를 모두 소유하며, 경로가 없거나 이탈 상태이면 저장된 Mapbox 경로를 섞지 않습니다. 외부 경로 수신은 Mapbox 목적지를 덮어쓰지 않고, 연결 종료 후 Mapbox가 재계산합니다. 기존 과속카메라·구간·회전 감속 계산과 순정 네비 우선순위 규칙은 유지합니다. [통합 설계와 검증 범위](nav_model_integration_20261012.md)를 참고하세요. 이 변경은 carrot-nav 전용이며 다른 브랜치의 동작을 변경한 것으로 해석하지 않습니다.

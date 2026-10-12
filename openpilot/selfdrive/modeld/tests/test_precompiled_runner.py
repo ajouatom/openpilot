@@ -11,6 +11,29 @@ import pytest
 from openpilot.selfdrive.modeld import precompiled_runner as runner
 
 
+def test_nav_inputs_keep_byte_layout_and_clear_when_missing():
+  model = object.__new__(runner.PrecompiledModelState)
+  model.close = lambda: None
+  model.process = SimpleNamespace(stdin=io.BytesIO())
+  model.first_run = False
+  model.frame_size = 16
+  model.prev_desire = np.zeros(8, np.float32)
+  model.views = {key: np.zeros(shape, np.float32) for key, shape in
+                 {'img': 16, 'big_img': 16, 'desire': 8, 'traffic_convention': 2, 'action_t': 2,
+                  'tfm': (3, 3), 'big_tfm': (3, 3), 'navigation': 47}.items()}
+  model.views['nav_map'] = np.zeros((1, 1, 256, 256), np.uint8)
+  model._receive = lambda _: b'1\n'
+  model.output, model.output_slices = np.zeros(4), {}
+  model.parser = SimpleNamespace(parse_outputs=lambda value: value)
+  frames = {key: SimpleNamespace(data=np.zeros(16, np.uint8)) for key in ('img', 'big_img')}
+  transforms = {key: np.eye(3, dtype=np.float32) for key in frames}
+  inputs = {'desire_pulse': np.zeros(8, np.float32), 'traffic_convention': np.zeros(2), 'action_t': np.zeros(2)}
+  model.run(frames, transforms, dict(inputs, nav_map=np.full((256, 256), 255, np.uint8), navigation=np.ones(47)), False)
+  assert model.views['nav_map'].min() == 255 and model.views['navigation'].min() == 1
+  model.run(frames, transforms, inputs, False)
+  assert not model.views['nav_map'].any() and not model.views['navigation'].any()
+
+
 def test_precompiled_state_exposes_camera_inputs_required_by_modeld(tmp_path, monkeypatch):
   info = {'size': 48, 'input_bytes': 32, 'output_count': 4,
           'layout': {'img': {'offset': 0, 'shape': [16], 'dtype': 'uint8'},

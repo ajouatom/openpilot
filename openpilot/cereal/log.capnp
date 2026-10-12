@@ -2539,6 +2539,7 @@ struct NavInstruction {
 
 struct NavRoute {
   coordinates @0 :List(Coordinate);
+  carrotRouteId @1 :UInt64;  # stable across route heartbeats; changes on source/geometry replacement
 
   struct Coordinate {
     latitude @0 :Float32;

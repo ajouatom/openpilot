@@ -151,6 +151,7 @@ procs = [
   PythonProcess("dmonitoringd", "openpilot.selfdrive.monitoring.dm2d", enable_dm, enabled=(WEBCAM or not PC)),
   PythonProcess("qcomgpsd", "openpilot.system.qcomgpsd.qcomgpsd", qcomgps, enabled=TICI),
   PythonProcess("navd", "openpilot.selfdrive.navd.navd", only_onroad),
+  PythonProcess("mapsd", "openpilot.selfdrive.navigation.mapsd", only_onroad),
   PythonProcess("pandad", "openpilot.selfdrive.pandad.pandad", always_run),
   PythonProcess("paramsd", "openpilot.selfdrive.locationd.paramsd", only_onroad),
   PythonProcess("lagd", "openpilot.selfdrive.locationd.lagd", only_onroad),

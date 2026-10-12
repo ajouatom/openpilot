@@ -32,13 +32,13 @@ from urllib.request import Request, urlopen
 from openpilot.selfdrive.modeld.big_model_status import BigModelStatusReporter
 
 
-DEFAULT_MANIFEST_URL = "https://upload.shind0.synology.me/models/comma4-big-mdm-8d736683/manifest.json"
-MDM_RETRAINED_MODEL = {
-  "model_id": "comma-pr39047-mdm-retrained-6f4c0faf-256f2178",
+DEFAULT_MANIFEST_URL = "https://upload.shind0.synology.me/models/comma4-big-nav-cf8f6120/manifest.json"
+NAV_MODEL = {
+  "model_id": "comma-nav-df7fb184-17c06f92",
   "filename": "big_driving_tinygrad.pkl",
-  "size": 799_942_179,
-  "sha256": "256f2178366479a211933701c03518621ed3970289e6a8a43e5a2bcb15e55b5f",
-  "url": "https://upload.shind0.synology.me/models/comma4-big-mdm-8d736683/big_driving_tinygrad.pkl",
+  "size": 806_704_311,
+  "sha256": "17c06f9208ab9d1529b52589662af85734425a482e5972d342f676e5d6597f56",
+  "url": "https://upload.shind0.synology.me/models/comma4-big-nav-cf8f6120/big_driving_tinygrad.pkl",
 }
 MAX_MANIFEST_SIZE = 64 * 1024
 MAX_MODEL_SIZE = 4 * 1024 * 1024 * 1024
@@ -148,12 +148,12 @@ def _write_state(active: BigModelManifest, previous: BigModelManifest | None, ca
 
 
 def fetch_manifest(manifest_url: str = DEFAULT_MANIFEST_URL, timeout: float = 15.0) -> BigModelManifest:
-  # Pin retrained Mountain Dew from commaai/openpilot#39047 at 6f4c0faf.
+  # Pin the navigation model from nav-model-integration at df7fb184.
   # Upstream publishes only a generic precompiled PKL for this checkpoint.
   # Keep the environment/CLI override path below so a different manifest can
   # still be tested explicitly without changing this branch.
   if manifest_url == DEFAULT_MANIFEST_URL:
-    return BigModelManifest.from_dict(MDM_RETRAINED_MODEL, manifest_url)
+    return BigModelManifest.from_dict(NAV_MODEL, manifest_url)
 
   req = Request(manifest_url, headers={"Accept": "application/json", "User-Agent": "carrot-modeld/1"})
   with urlopen(req, timeout=timeout) as response:

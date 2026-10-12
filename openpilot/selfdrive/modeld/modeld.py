@@ -27,6 +27,7 @@ from openpilot.selfdrive.modeld.fill_model_msg import fill_model_msg, fill_drivi
 from openpilot.common.file_chunker import open_file_chunked
 from openpilot.selfdrive.modeld.camera_sync import FrameMeta, receive_camera_pair
 from openpilot.selfdrive.modeld.constants import ModelConstants, Plan
+from openpilot.selfdrive.navigation.map_client import MapInput
 from openpilot.selfdrive.modeld.signal_shadow import ShadowClient
 from openpilot.selfdrive.modeld.helpers import (get_tg_input_devices, load_oob, modeld_pkl_path,
                                                 refresh_usbgpu_device_cache, select_vision_streams, usbgpu_compiled_path,
@@ -354,7 +355,7 @@ def main(demo=False):
 
   # messaging
   pm = PubMaster(["modelV2", "drivingModelData", "cameraOdometry"])
-  sm = SubMaster(["deviceState", "carState", "roadCameraState", "liveCalibration", "driverMonitoringState", "carControl", "selfdriveState", "liveDelay", "carrotMan", "radarState"])
+  sm = SubMaster(["deviceState", "carState", "roadCameraState", "liveCalibration", "driverMonitoringState", "carControl", "selfdriveState", "liveDelay", "carrotMan", "radarState", "navInstructionCarrot", "navRoute"])
 
   publish_state = PublishState()
   params = Params()
@@ -386,6 +387,7 @@ def main(demo=False):
   prev_action = log.ModelDataV2.Action()
 
   DH = DesireHelper()
+  nav_input = MapInput()
 
   frame = 0
   custom_lat_delay = 0.0
@@ -472,6 +474,8 @@ def main(demo=False):
       'traffic_convention': traffic_convention,
       'action_t': np.array([lat_action_t, long_action_t], dtype=np.float32),
     }
+
+    inputs.update(nav_input.update(model, sm, v_ego))
 
     mt1 = time.perf_counter()
     camera_age_at_run_ms = (time.monotonic() - meta_main.timestamp_eof * 1e-9) * 1000

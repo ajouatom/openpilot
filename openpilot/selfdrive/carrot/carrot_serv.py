@@ -144,6 +144,7 @@ class CarrotServ:
 
     self.diff_angle_count = 0
     self.last_calculate_gps_time = 0
+    self.position_mono_time = 0
     self.last_update_gps_time = 0
     self.last_update_gps_time_phone = 0
     self.last_update_gps_time_navi = 0
@@ -1162,6 +1163,7 @@ class CarrotServ:
     bearing_calculated = (bearing + self.bearing_offset) % 360
 
     dt = now - self.last_calculate_gps_time
+    self.position_mono_time = now
     #print(f"dt = {dt:.1f}, {self.vpPosPointLatNavi}, {self.vpPosPointLonNavi}")
     if dt > 5.0:
       self.vpPosPointLat, self.vpPosPointLon = 0.0, 0.0
@@ -1263,6 +1265,8 @@ class CarrotServ:
     return atc_desired, atc_type, atc_speed, atc_dist
 
   def update_nav_instruction(self, sm):
+    if self._external_navigation_connected():
+      return
     if sm.alive['navInstruction'] and sm.valid['navInstruction']:
       msg_nav = sm['navInstruction']
 
@@ -1549,6 +1553,8 @@ class CarrotServ:
     msg.carrotMan.xPosSpeed = float(v_ego_kph) #float(self.nPosSpeed)
     msg.carrotMan.xPosAngle = float(self.bearing)
     msg.carrotMan.xPosLat = float(self.vpPosPointLat)
+    msg.carrotMan.positionFixMonoTime = max(0, int(self.last_calculate_gps_time * 1e9))
+    msg.carrotMan.positionMonoTime = max(0, int(self.position_mono_time * 1e9))
     msg.carrotMan.xPosLon = float(self.vpPosPointLon)
 
     msg.carrotMan.nGoPosDist = self.nGoPosDist
@@ -1565,7 +1571,7 @@ class CarrotServ:
     msg.carrotMan.leftSec = int(self.carrot_left_sec)
     pm.send('carrotMan', msg)
 
-    inst = messaging.new_message('navInstructionCarrot')
+    inst = messaging.new_message('navInstructionCarrot', valid=False)
     if self.active_carrot > 1 and self.active_kisa_count <= 0:
       inst.valid = True
 
@@ -1605,7 +1611,8 @@ class CarrotServ:
           maneuvers.append(maneuver)
 
       instruction.allManeuvers = maneuvers
-    elif sm.alive['navInstruction'] and sm.valid['navInstruction']:
+    elif not self._external_navigation_connected() and sm.alive['navInstruction'] and sm.valid['navInstruction']:
+      inst.valid = True
       inst.navInstructionCarrot = sm['navInstruction']
 
     pm.send('navInstructionCarrot', inst)
