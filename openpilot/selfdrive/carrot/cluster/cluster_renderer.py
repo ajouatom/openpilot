@@ -975,6 +975,7 @@ class ClusterUiRenderer:
         self._route_video_frame_id: str | None = None
         self._live_road_camera = None
         self._live_road_camera_failed = False
+        self._signal_display_reader = SignalDisplayReader()
         self._camera_overlay_wide = False
         self._left_turn_signal_started_at: float | None = None
         self._right_turn_signal_started_at: float | None = None
@@ -1654,9 +1655,7 @@ class ClusterUiRenderer:
             rl.end_scissor_mode()
 
     def _draw_signal_detections(self, projection, live_camera) -> None:
-        reader = getattr(self, '_signal_display_reader', None)
-        if reader is None:
-            reader = self._signal_display_reader = SignalDisplayReader()
+        reader = self._signal_display_reader
         tracks = reader.read(live_camera.display_frame)
         if not reader.enabled:
             return

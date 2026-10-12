@@ -167,6 +167,7 @@ class SignalDisplayReader:
     self.enabled = False
     self.next_flag_read = self.next_read = 0.
     self.record = None
+    self._record_bytes = None
     self.next_status = 0.
     self.continuity = DisplayContinuity()
     self.held_count = 0
@@ -193,6 +194,7 @@ class SignalDisplayReader:
       self.next_flag_read = now + .5
     if not self.enabled:
       self.record = None
+      self._record_bytes = None
       self.continuity.reset()
       return ()
     if now >= self.next_read:
@@ -200,9 +202,13 @@ class SignalDisplayReader:
       try:
         with self.path.open('rb') as f:
           raw = f.read(MAX_BYTES + 1)
-        self.record = json.loads(raw) if len(raw) <= MAX_BYTES else None
+        if len(raw) > MAX_BYTES:
+          self.record = self._record_bytes = None
+        elif raw != self._record_bytes:
+          self.record = json.loads(raw)
+          self._record_bytes = raw
       except (OSError, ValueError):
-        self.record = None
+        self.record = self._record_bytes = None
     tracks = self.continuity.update(self.record, now, camera_frame)
     self.held_count = sum(t['held'] for t in tracks)
     return tracks

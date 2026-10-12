@@ -42,7 +42,7 @@ class SignalPrepareRuntime(SignalAssistRuntime):
     obs, context = super().read(sm, now)
     from openpilot.selfdrive.carrot.signal_mode import signal_mode
     mode = signal_mode()
-    if mode != getattr(self, 'mode', None):
+    if mode != self.mode:
       self.mode, self.mode_since = mode, context['now']
       self.prepare.reset('mode_change')
     context['actuate'] = mode == 2

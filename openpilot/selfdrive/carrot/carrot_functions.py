@@ -532,11 +532,11 @@ class CarrotPlanner:
     if self.start_guard is not None:
       if start_context is None and self._start_runtime is not None:
         start_observation, start_context = self._start_runtime.read(sm)
-      context = start_context or {}
+      context = start_context or {'now': time.monotonic(), 'enabled': False, 'valid': False, 'drive': False}
       self.start_decision = self.start_guard.update(
-        context.get('now', time.monotonic()), start_observation,
-        enabled=bool(context.get('enabled', False)), valid=bool(context.get('valid', False)),
-        drive=bool(context.get('drive', False)), gas=carstate.gasPressed, speed=float(v_ego),
+        context['now'], start_observation,
+        enabled=context['enabled'], valid=context['valid'],
+        drive=context['drive'], gas=carstate.gasPressed, speed=v_ego,
         departure=self.trafficState == TrafficState.green or lead_detected or
                   self.xState not in (XState.e2eStop, XState.e2eStopped))
       start_hold = self.start_decision.hold
@@ -550,13 +550,13 @@ class CarrotPlanner:
     if self.signal_assist is not None:
       if signal_context is None and self._signal_runtime is not None:
         signal_observation, signal_context = self._signal_runtime.read(sm)
-      context = signal_context or {}
+      context = signal_context or {'now': time.monotonic(), 'enabled': False, 'valid': False, 'drive': False}
       self.signal_decision = self.signal_assist.update(
-        context.get('now', time.monotonic()), signal_observation,
-        enabled=bool(context.get('enabled', False)) and self.myDrivingMode != DrivingMode.High and self.trafficLightDetectMode != 0,
-        valid=bool(context.get('valid', False)), drive=bool(context.get('drive', False)),
-        gas=carstate.gasPressed, speed=float(v_ego), model_distance=float(stop_model_x_rl),
-        model_y=float(y[-1]), comfort_brake=float(mode_comfort_brake), lead=lead_detected,
+        context['now'], signal_observation,
+        enabled=context['enabled'] and self.myDrivingMode != DrivingMode.High and self.trafficLightDetectMode != 0,
+        valid=context['valid'], drive=context['drive'],
+        gas=carstate.gasPressed, speed=v_ego, model_distance=stop_model_x_rl,
+        model_y=y[-1], comfort_brake=mode_comfort_brake, lead=lead_detected,
         entry_allowed=is_traffic_stop_entry_allowed(carstate.steeringAngleDeg) and self.traffic_starting_count == 0,
         turning=carstate.leftBlinker or carstate.rightBlinker)
       signal_hold = self.signal_decision.hold
@@ -710,13 +710,13 @@ class CarrotPlanner:
     if self.stop_prepare is not None:
       if prepare_context is None and self._prepare_runtime is not None:
         prepare_observation, prepare_context = self._prepare_runtime.read(sm)
-      context = prepare_context or {}
+      context = prepare_context or {'now': time.monotonic(), 'enabled': False, 'valid': False, 'drive': False}
       self.prepare_decision = self.stop_prepare.update(
-        context.get('now', time.monotonic()), prepare_observation,
-        enabled=bool(context.get('enabled', False)) and self.myDrivingMode != DrivingMode.High and self.trafficLightDetectMode != 0,
-        valid=bool(context.get('valid', False)), drive=bool(context.get('drive', False)),
-        speed=float(v_ego), gas=carstate.gasPressed, brake=carstate.brakePressed,
-        lead=lead_detected or bool(getattr(getattr(radarstate, 'leadTwo', None), 'status', False)),
+        context['now'], prepare_observation,
+        enabled=context['enabled'] and self.myDrivingMode != DrivingMode.High and self.trafficLightDetectMode != 0,
+        valid=context['valid'], drive=context['drive'],
+        speed=v_ego, gas=carstate.gasPressed, brake=carstate.brakePressed,
+        lead=lead_detected or radarstate.leadTwo.status,
         turning=bool(context.get('turning', True)) or carstate.leftBlinker or carstate.rightBlinker,
         model_stopping=self.xState in (XState.e2eStop, XState.e2eStopped, XState.e2ePrepare),
         entry_allowed=self.traffic_starting_count == 0 and self.user_stop_distance < 0 and mode == 'acc',
