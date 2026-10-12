@@ -1,5 +1,20 @@
 # Repository memory
 
+- On 2026-10-12, the user requested solving the failed night-red preparation.
+  A separate night contract now requires 2–4 persistent compact red lamps with
+  compatible road-direction support, NOT a bounded distance or stop-line target.
+  Same-ID current-red templates bridge a direct core <=500ms without renewing
+  it. Night capture freshness is350ms; missing pair evidence is inactive with
+  <=350ms confirmation retention, and fresh forward green cancels. Only night
+  geometry erodes road edges by0.3+2*std (std<=1m); measured housing policy stays.
+  Mode2 alone actuates; keep CPU/DM protection and original ONNX. 492 tests pass.
+  Nine-minute replay enters once6.10s before original stopping, for1.1s to target
+  -0.27m/s2; +20/+100ms still enter, +250ms rejects. Prior4329-input regression
+  adds no entries. Not closed-loop improvement or guaranteed stop: identity loss
+  and applicability remain limitations. No vehicle deployment; read-only vehicle
+  remains carrot-nav135020d1. Work remains carrot-wip, single-parent only. See
+  docs/signal_night_group_20261012.md and private2026-10-12-night-geometry archive.
+
 - On 2026-10-12, the latest 10a4 evening drive has 1,063 fresh-red observer
   outputs but zero moving preparation: every confirmed red box is a night core
   or template, not a measured housing. Preserve confirmation across repeated
