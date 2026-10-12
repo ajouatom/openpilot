@@ -50,4 +50,27 @@ Vehicle 192.168.0.178 installed `59f6081712` on carrot-nav through the normal st
 
 With real Mapbox tiles and external guidance, the initial Python renderer averaged 9.29% of one CPU core. Model and DM each published 601 valid results over 30 seconds, approximately 20 Hz. Core means 0–7 were 82.99, 82.03, 92.19, 85.65, 69.82, 75.76, 76.11, 72.25%; core 2 has limited headroom. This motivates native rasterization without changing protected affinities.
 
-Parked target synthetic dense-road benchmark (20 paced frames, 120 roads, 4096 route points): Python mean CPU 118.09 ms / wall 154.17 ms / wall p95 212.29 ms; native mean CPU 33.96 ms / wall 46.98 ms / wall p95 57.20 ms. CPU work fell about 71%. Nine native/reference parity cases pass on aarch64, including 2880 randomized strokes and complete road/bridge/tunnel images. These are synthetic timing and pixel parity results, not driving validation. Final installed native/USB measurements follow separately. Private device evidence stays under `.analysis`.
+Parked target synthetic dense-road benchmark (20 paced frames, 120 roads, 4096 route points): Python mean CPU 118.09 ms / wall 154.17 ms / wall p95 212.29 ms; native mean CPU 33.96 ms / wall 46.98 ms / wall p95 57.20 ms. CPU work fell about 71%. Nine native/reference parity cases pass on aarch64, including 2880 randomized strokes and complete road/bridge/tunnel images. These are synthetic timing and pixel parity results, not driving validation. Private device evidence stays under `.analysis`.
+
+## Final vehicle validation
+
+Runtime revision `fa69187f9b` built through the native SCons C++ path and passed all nine installed-extension parity cases. Restarting only mapsd retained the manager's preimported Python module, so the vehicle was rebooted in Park/inactive to activate the new renderer. The `ready` status file and Web header confirm the new process code. Model delivery/boot validation succeeds and the actual worker uses the pinned `17c06f92…` artifact.
+
+With 162 external route points, Mapbox basemap, Web preview and USB screen mode 7, a 30-second sample recorded:
+
+| Measurement | Result |
+| --- | --- |
+| mapsd CPU, one-core scale | 5.23% mean, little cores 0–3 |
+| USB display CPU, one-core scale | 9.52% mean, core 4 |
+| Driving model | 601/601 valid, 19.999 Hz |
+| Driver monitoring | 601/601 valid, 19.998 Hz |
+| CPU core means 0–7 | 81.29, 81.01, 91.04, 84.80, 66.74, 73.77, 74.67, 69.76% |
+| CPU core maxima 0–7 | 91.7, 92.0, 95.1, 90.9, 92.1, 87.8, 78.1, 72.6% |
+
+A separate read-only inspection of the live model's shared input buffer found nonzero `nav_map` and `navigation` in all 197 samples. Native map publication was 4.995 Hz with receive-age p95 62.54 ms; this age is measured from render start to the observing client, not camera-to-actuation latency. USB connected state and approximately 5 Hz H264 output were observed. Physical panel appearance was requested from the user but was not independently captured. The temporary screen mode 7 test was restored to the prior camera mode 2.
+
+The live before/after samples have different route lengths and a reboot between them; they are operational observations, not an isolated CPU speedup experiment. The paired synthetic workload supports the 71% raster CPU reduction. Core 2 still has limited headroom despite normal model/DM cadence. Keep the bounded duty/caches and lower preview/cadence before expanding auxiliary work; no protected process affinities or DM policy were changed. These parked checks do not establish moving-route availability, physical USB appearance, or driving behavior.
+
+After restoring camera mode 2, another 30-second sample recorded mapsd 5.13% and USB display 16.92% of one core. Model and DM each had 601/601 valid messages at 20.007 Hz. Core means 0–7 were 80.98, 82.39, 90.79, 87.23, 72.07, 72.96, 78.26, 70.27%; the largest one-second sample was core 2 at 95.9%. USB remained connected. Model/DM/worker PIDs were unchanged between the two final display-mode samples. The vehicle retains mode 2, SignalAssistMode 2 and the new eGPU nav model.
+
+[Linux CI 38232319180](https://github.com/ajouatom/openpilot/actions/runs/38232319180) passes: 251 model/delivery/startup checks, 34 navigation checks including native pixel parity, two pinned-runtime CPU warp/buffer checks and 13 Web JS checks. Final focused Windows tests pass 39 checks with nine native-extension skips; the installed aarch64 tests and Linux CI cover those native cases.
