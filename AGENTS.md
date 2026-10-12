@@ -1,5 +1,14 @@
 # Repository memory
 
+- On 2026-10-12, the user reaffirmed that corrections must be committed and
+  pushed to ALL maintained carrot-* branches unless explicitly excepted. This
+  supersedes the earlier wip-only signal scope. Current remote targets are
+  carrot-wip and carrot-nav; do not recreate retired branches or modify other
+  contributors' namespaced branches. Port both signal preparation cadence and
+  night red-group corrections to nav, preserving its navigation/model/runtime
+  choices. Keep every new commit single-parent, preserve unrelated local work,
+  and distinguish branch publication from vehicle installation and road validation.
+
 - On 2026-10-12, the user requested solving the failed night-red preparation.
   A separate night contract now requires 2–4 persistent compact red lamps with
   compatible road-direction support, NOT a bounded distance or stop-line target.
