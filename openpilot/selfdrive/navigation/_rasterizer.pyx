@@ -1,4 +1,6 @@
 # cython: boundscheck=False, wraparound=False, cdivision=True
+# cython: language_level=3
+# distutils: language=c++
 """Analytic stroke rasterization with the reference renderer's rounding/order."""
 from libc.math cimport floor, ceil, hypot, nearbyint, fabs
 
