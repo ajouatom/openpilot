@@ -81,10 +81,11 @@ class SignalStartGuard:
       anchor['pending'], anchor['count'] = None, 0
 
   def observe_group(self, tracks, timestamp, gap):
-    """Two independently red-confirmed housings may resolve a lost primary.
+    """A central red-to-green transition may resolve a lost primary.
 
     Green never moves an anchor. Duplicate/overlapping detections cannot become
-    two votes; a fresh forward red vetoes the group just as it vetoes the primary.
+    two votes; a fresh forward red vetoes release just as it vetoes the primary.
+    Outside the central image band, keep the existing two-housing fallback.
     """
     reds = [t for t in tracks if t['raw'] == 'red']
     for track in reds:
@@ -106,14 +107,19 @@ class SignalStartGuard:
           anchor['red'] = True
       elif color == 'green' and anchor['count'] >= 3 and timestamp-anchor['since'] >= .7-1e-9:
         greens.append(anchor['box'])
+    # Image-centre support is a hypothesis, not signal-to-lane assignment.
+    # Each candidate already needs its own confirmed red history and fresh
+    # same-box green streak; a newly appearing green cannot release the stop.
+    if any(.45 <= (box[0]+box[2])/2688 <= .55 for box in greens):
+      return 'green_transition'
     for i, a in enumerate(greens):
       for b in greens[i+1:]:
         # Disjoint housings, comparable size and row: not two fits to one lamp.
         aw, bw = a[2]-a[0], b[2]-b[0]
         if (min(a[2], b[2]) <= max(a[0], b[0]) and max(aw, bw) <= 2*min(aw, bw)
             and abs((a[1]+a[3]-b[1]-b[3])/2) <= max(a[3]-a[1], b[3]-b[1])):
-          return True
-    return False
+          return 'green_group'
+    return None
 
   @staticmethod
   def front(box):
@@ -172,7 +178,7 @@ class SignalStartGuard:
       if color == 'green' and red:
         color = 'unknown'
       if group_green:
-        return 'green_group'
+        return group_green
       if color not in ('red', 'green') or color != self.pending or gap > self.MAX_GAP:
         self.pending, self.since, self.count = color, ts, 1
       else:
@@ -214,7 +220,7 @@ class SignalStartGuard:
     released = False
     if evidence == 'red':
       self.hold = True
-    elif evidence in ('green', 'green_group') and self.hold:
+    elif evidence in ('green', 'green_group', 'green_transition') and self.hold:
       released = True
       self.reset()
     warn = self.hold and departure and not self.warned
