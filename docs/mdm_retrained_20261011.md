@@ -1,5 +1,19 @@
 # Retrained Mountain Dew eGPU selection, October 11, 2026
 
+## Current status, October 12
+
+The user subsequently requested full integration into carrot-wip. Single-parent
+commit e4c9730510 includes this model selection, delivery and runtime compatibility
+work; 2b6229340b simplifies the Web display name to `Mountain Dew`. The remote
+carrot-signal-shadow branch was deleted at the user's request after verifying
+integration through 5ce8faa735. Continue on carrot-wip only, with single-parent
+commits; do not recreate the retired remote branch. The model artifacts remain
+at the NAS URLs below. Internal/DM and Jetson model selections are unchanged.
+
+The following sections record the original trial and its validation limits.
+
+## Original trial scope
+
 The user selected upstream [6f4c0faf](https://github.com/commaai/openpilot/commit/6f4c0faf1f85132734e94aa39c67143f823b9324)
 for carrot-signal-shadow only, after redirecting the trial from carrot-wip.
 The brief carrot-wip publication was reverted by b09ae3ddad; carrot-wip keeps
