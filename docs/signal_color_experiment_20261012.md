@@ -324,3 +324,59 @@ non-extrapolation, camera rotation, road-height changes, and real pose-message
 input. Feature remains default OFF; no vehicle connection or deployment.
 Private before/after data, exact review PNGs and the reproduction script are in
 `.analysis/archive/2026-10-12-signal-road-geometry/`.
+
+
+### Follow-up: lateral allowance outside the ego lane
+
+The user clarified that the signal search region must extend to both sides of
+lane boundaries. The previous exact-lane corridor was too narrow. Expand each
+inner lane boundary by **3.5m per side** (roughly one extra lane), in road
+coordinates at each distance hypothesis, not a fixed pixel rectangle. This is a
+provisional engineering allowance, not an optimum fitted to these few samples.
+Road-edge fallback retains its 0.3m inward clearance. When both sources are
+reliable, reject disagreement of the ORIGINAL lane/road regions before expansion,
+then clip the expanded lane region to the road bounds. Do not expand uncertain
+geometry or extrapolate curves. A lamp accepted here is only a candidate; the
+region does not establish which lane it controls. Other color, height, distance,
+pose, lead, freshness and confirmation requirements remain unchanged.
+
+Repeated the retained-candidate/full-rlog screen on all 3,348 observations from
+13 night/morning segments. There are 94 fresh measured-housing red candidates,
+86 green and 6 unknown. These are repeated observations, NOT separate lights.
+
+| Extra allowance per side | Red observations with lateral/height support | Red observations also passing distance-interval check |
+| --- | ---: | ---: |
+| 0m | 0 | 0 |
+| 1m | 3 | 3 |
+| 2m | 3 | 3 |
+| 3.5m (experimental default) | 3 | 1 |
+| 5m | 3 | 0 |
+
+All three are track476 at morning109f-7 indices103,107,126; exact video review
+confirms a real red lamp, not a taillight. The non-monotonic last column comes
+from retaining the conservative distance rule: the ENTIRE supported interval
+must lie within25-140m. Wider lateral allowance admits farther hypotheses too.
+At3.5m, the intervals are approximately50-158,50-152 and50-134m respectively.
+These are size/height-based hypotheses, NOT measured distances. Do not trim them
+to140m and then claim reduced uncertainty. The default is not selected by
+maximizing this last column; distance uncertainty is a separate unresolved limit.
+The farther-left real red in109f-6 remains outside even the5m allowance.
+
+None of those three passes the separate strict color/quality/state requirement;
+the six strict red observations elsewhere still lack trustworthy boundaries.
+Preparation entries remain zero. This corrects lateral candidate coverage; it
+does not demonstrate earlier braking or improved driving. No ONNX weights,
+detector color thresholds, stopped-red veto or acceleration limits are changed.
+
+Negative checks: one green candidate passes geometry at every width; exact
+109f-2index859 review shows a real green signal. A reviewed night109e-3index728
+red candidate is a vehicle rear lamp. Morning109f-4index538 is an amber warning
+signal, not established red-stop ground truth (a still does not establish its
+flashing sequence). Both remain rejected for missing reliable geometry, so this
+is NOT proof that the lateral margin itself rejects such objects. There is no
+exhaustive annotated background/sign/branch false-positive rate in this screen.
+Synthetic tests additionally check low rear lamps, far lateral objects, original
+source conflict, expanded bounds and road clipping. **193 focused tests pass**.
+No new camera inference or vehicle-response replay was performed. Default OFF;
+no vehicle connection, enable or deployment. Private reproduction and review
+frames: `.analysis/archive/2026-10-12-signal-lateral-margin/`.
