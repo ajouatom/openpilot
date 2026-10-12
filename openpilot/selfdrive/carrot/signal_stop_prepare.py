@@ -239,7 +239,18 @@ class SignalStopPrepare:
       session = observation['session']
       if (observation.get('version') != 1 or observation.get('stream') != 'road'
           or observation.get('size') != [1344, 760] or not isinstance(session, str) or not session
-          or not math.isfinite(stamp) or not 0 <= now-stamp <= self.MAX_AGE):
+          or not math.isfinite(stamp) or now < stamp):
+        return self.reset('stale')
+      if now-stamp > self.MAX_AGE:
+        # Planner reads faster than camera inference publishes. An unchanged
+        # accepted sample ageing out between arrivals is NOT a new negative
+        # observation. Retain its confirmation only until the latest possible
+        # timely successor (capture gap + freshness); never actuate on it.
+        # An unseen late frame/session, or a longer outage, still clears history.
+        if (session == self.session and frame == self.last_frame and stamp == self.last_capture
+            and now-stamp <= self.MAX_GAP+self.MAX_AGE):
+          self.active = False
+          return PrepareDecision(reason='awaiting_fresh')
         return self.reset('stale')
       if session != self.session:
         self.reset('new_session')

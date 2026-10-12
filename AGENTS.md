@@ -1,5 +1,18 @@
 # Repository memory
 
+- On 2026-10-12, the latest 10a4 evening drive has 1,063 fresh-red observer
+  outputs but zero moving preparation: every confirmed red box is a night core
+  or template, not a measured housing. Preserve confirmation across repeated
+  accepted samples ageing beyond 200ms, for at most 450ms from capture; output
+  remains inactive, and fresh new evidence/context/gap/session checks still win.
+  448 focused tests pass. Recorded-input replay of 10,276 planner samples and
+  +20ms delay still gives zero entries, as does an offline night lamp-ray/height
+  experiment: road confidence and broad/truncated range remain blocking. Do not
+  connect the failed night candidate, pretend inferred width is metric housing
+  size, or claim better stopping. No vehicle deployment/model changes. Work only
+  on carrot-wip with single-parent commits; preserve the separate nav checkout.
+  See docs/signal_night_prepare_20261012.md and private evidence archives.
+
 - On 2026-10-12, SignalAssistMode adds the requested live0/1/2 selection on
   carrot-wip only:0 auxiliary OFF,1 display/alerts and stopped-red departure veto,
   2 also conditional red preparation toward-0.5m/s2. Default0; old production
