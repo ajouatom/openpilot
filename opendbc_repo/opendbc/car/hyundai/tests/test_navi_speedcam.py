@@ -38,6 +38,30 @@ def test_saturated_preview_matches_only_at_warning_lead():
   assert policy.warning_class == CLASS_MOBILE_ZONE
 
 
+def test_horizon_bound_fixed_camera_upgrades_a_running_zone_after_the_zone():
+  # 2026-10-11 23:36:31: one continuous 100 km/h warning covered a mobile zone (+622 m) and then a
+  # section-start fixed camera (+1498 m); both previews arrived at the ~2 km horizon (saturated).
+  policy = SpeedcamPolicy()
+  policy.add_preview(0x153, 1988, -1366.0)               # zone @100, target +622
+  policy.add_preview(0x150, 1990, -492.0)                # fixed @100, target +1498
+  assert _update(policy, 0.0, speed=100) == (True, False)    # zone, ignored below mode 3
+  assert _update(policy, 600.0, speed=100) == (True, False)  # still in the zone
+  assert _update(policy, 700.0, speed=100) == (True, False)  # zone passed, camera 798 m > lead window
+  assert _update(policy, 780.0, speed=100) == (False, False)  # camera within the lead window: decelerate
+  assert policy.warning_class == CLASS_HARD
+
+
+def test_next_cameras_horizon_preview_does_not_upgrade_a_box_still_ahead():
+  # 2026-10-11 23:56:56: a 60 km/h box warning (+364 m) and the next signal camera (+756 m, own warning).
+  policy = SpeedcamPolicy()
+  policy.add_preview(0xD2, 1999, -1635.0)                # box @60, target +364
+  policy.add_preview(0xD1, 1997, -1241.0)                # signal @60, target +756
+  _update(policy, 0.0)
+  assert policy.warning_class == CLASS_BOX
+  _update(policy, 330.0)                                 # signal within the lead window, box 34 m ahead
+  assert policy.warning_class == CLASS_BOX
+
+
 def test_fixed_camera_inside_mobile_zone_always_decelerates():
   # 18:54 drive: fixed 364 m and mobile zone 398 m ahead of the same 60 km/h warning.
   policy = SpeedcamPolicy()

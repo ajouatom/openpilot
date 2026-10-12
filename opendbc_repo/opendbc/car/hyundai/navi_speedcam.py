@@ -118,6 +118,7 @@ class SpeedcamPolicy:
       far = max(far, lead * EARLY_LEAD_FACTOR)
       zone_far = max(zone_far, lead * EARLY_LEAD_FACTOR)
     candidates = []
+    late_hard = []
     for p in self.previews:
       if p["speed"] != speed or total_distance - p["received"] > RECENT_PREVIEW_M:
         continue
@@ -127,10 +128,20 @@ class SpeedcamPolicy:
       ahead = p["target"] - total_distance
       if p["saturated"]:
         matched = starting and lead - tolerance <= ahead <= far
+        # A horizon-bound fixed/signal camera may still upgrade a running warning (the safe direction):
+        # one continuous warning can cover a mobile zone and then a section-start camera (2026-10-11 23:37).
+        if (not starting and not matched and (p["flagged"] or p["kind"] in (KIND_FIXED, KIND_SIGNAL)) and
+            -MATCH_BEHIND_M <= ahead <= far):
+          late_hard.append(p)
       else:
         matched = -MATCH_BEHIND_M <= ahead <= far
       if matched:
         candidates.append(p)
+    # ... but only once the box/zone that started it (one lead ahead of the start) is behind, so the
+    # next camera's preview cannot take over a warning that is still about its own box.
+    if late_hard and not any(p["speed"] == speed and not p["flagged"] and p["kind"] in (KIND_BOX, KIND_MOBILE_ZONE) and
+                             total_distance < p["target"] <= start_distance + far for p in self.previews):
+      candidates += late_hard
     if not candidates:
       return None
     if any(p["flagged"] or p["kind"] in (KIND_FIXED, KIND_SIGNAL) for p in candidates):
