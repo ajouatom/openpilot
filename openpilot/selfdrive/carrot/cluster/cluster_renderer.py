@@ -1059,6 +1059,7 @@ class ClusterUiRenderer:
         return getattr(self, "screen_mode", CLUSTER_SCREEN_MODE_DEFAULT) not in (
             CLUSTER_SCREEN_MODE_DEBUG_GRAPH,
             CLUSTER_SCREEN_MODE_NAVI,
+            CLUSTER_SCREEN_MODE_NAV_MODEL,
         )
 
     def _driving_panel_offset_design_x(self) -> float:
@@ -1494,7 +1495,7 @@ class ClusterUiRenderer:
         if signal_lights is None:
             signal_lights = self._turn_signal_lights(state)
         profile_stage = self._profile_start()
-        if self.screen_mode in (CLUSTER_SCREEN_MODE_DEBUG_GRAPH, CLUSTER_SCREEN_MODE_NAVI, CLUSTER_SCREEN_MODE_NAV_MODEL):
+        if self.screen_mode in (CLUSTER_SCREEN_MODE_DEBUG_GRAPH, CLUSTER_SCREEN_MODE_NAVI):
             self._clear_world()
         else:
             self._render_world(state, signal_lights)
@@ -1508,6 +1509,10 @@ class ClusterUiRenderer:
 
     def _draw_nav_model_map(self):
         from openpilot.selfdrive.navigation.preview import PREVIEW_PATH, preview_fresh
+        # Mode 7 keeps the normal driving view/HUD on the left. The map uses
+        # only the existing right information panel, including in 3D views.
+        rl.draw_rectangle(NAVI_LIVE_PANEL_X, 0, NAVI_LIVE_PANEL_W, DESIGN_HEIGHT, rl.BLACK)
+        center_x = NAVI_LIVE_PANEL_X + NAVI_LIVE_PANEL_W / 2
         now = time.monotonic()
         if now >= self._nav_model_checked:
             self._nav_model_checked = now + .5
@@ -1527,14 +1532,14 @@ class ClusterUiRenderer:
                 except OSError:
                     self._nav_model_fresh = False
         if self._nav_model_fresh and self._nav_model_texture is not None:
-            size = min(DESIGN_HEIGHT - 100, DESIGN_WIDTH * .65)
+            size = min(DESIGN_HEIGHT - 80, NAVI_LIVE_PANEL_W - 32)
             rl.draw_texture_pro(self._nav_model_texture, rl.Rectangle(0, 0, 256, 256),
-                                rl.Rectangle((DESIGN_WIDTH - size) / 2, 25, size, size),
+                                rl.Rectangle(center_x - size / 2, 20, size, size),
                                 rl.Vector2(0, 0), 0, rl.WHITE)
-            self._draw_text("Mapbox / Protomaps | (c) OpenStreetMap", DESIGN_WIDTH / 2,
-                            DESIGN_HEIGHT - 62, 14, (180, 180, 180), "center")
+            self._draw_text("Mapbox / Protomaps | (c) OpenStreetMap", center_x,
+                            DESIGN_HEIGHT - 40, 14, (180, 180, 180), "center")
         else:
-            self._draw_text("NAV MAP: waiting for route / GPS / tiles", DESIGN_WIDTH / 2,
+            self._draw_text("NAV MAP: waiting for route / GPS / tiles", center_x,
                             DESIGN_HEIGHT / 2, 24, (255, 255, 255), "center")
 
     def _prepare_trip_report_cache(self, state: ClusterUiState, now: float | None = None) -> None:
@@ -3177,6 +3182,7 @@ class ClusterUiRenderer:
             CLUSTER_SCREEN_MODE_DEBUG_SYSTEM,
             CLUSTER_SCREEN_MODE_DEBUG_GRAPH_RIGHT,
             CLUSTER_SCREEN_MODE_TRIP_REPORT,
+            CLUSTER_SCREEN_MODE_NAV_MODEL,
         ):
             return NAVI_WORLD_VIEW_SHIFT_X * self.width / DESIGN_WIDTH
         if screen_mode != CLUSTER_SCREEN_MODE_DEFAULT:
@@ -3908,8 +3914,8 @@ class ClusterUiRenderer:
         try:
             screen_mode = self._effective_screen_mode(state)
             if screen_mode == CLUSTER_SCREEN_MODE_NAV_MODEL:
+                self._draw_driving_hud_content(state, screen_mode, left_signal_lit, right_signal_lit)
                 self._draw_nav_model_map()
-                self._draw_speed_block(state)
                 self._draw_status_footer(state)
                 return
             if screen_mode == CLUSTER_SCREEN_MODE_NAVI:

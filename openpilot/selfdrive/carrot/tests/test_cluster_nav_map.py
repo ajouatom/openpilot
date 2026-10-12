@@ -18,10 +18,15 @@ def test_usb_map_reuses_texture_and_hides_expired_image(monkeypatch, tmp_path):
   def load(path):
     calls.append('load')
     return NS(id=1)
-  rl = NS(load_texture=load, unload_texture=lambda _: calls.append('unload'),
-          draw_texture_pro=lambda *args: calls.append('draw'), Rectangle=lambda *args: args,
-          Vector2=lambda *args: args, WHITE=object())
-  scope = dict(rl=rl, time=NS(monotonic=lambda: now[0]), DESIGN_WIDTH=1920, DESIGN_HEIGHT=720)
+  destinations = []
+  def draw_texture(*args):
+    calls.append('draw')
+    destinations.append(args[2])
+  rl = NS(load_texture=load, unload_texture=lambda _: calls.append('unload'), draw_rectangle=lambda *args: None,
+          draw_texture_pro=draw_texture, Rectangle=lambda *args: args,
+          Vector2=lambda *args: args, WHITE=object(), BLACK=object())
+  scope = dict(rl=rl, time=NS(monotonic=lambda: now[0]), DESIGN_HEIGHT=480,
+               NAVI_LIVE_PANEL_X=1124, NAVI_LIVE_PANEL_W=792)
   exec(compile(ast.Module(body=[method], type_ignores=[]), '<USB nav map>', 'exec'), scope)
   renderer = NS(_nav_model_checked=0., _nav_model_fresh=False, _nav_model_mtime=0, _nav_model_texture=None,
                 _draw_text=lambda *args: calls.append(args[0]))
@@ -30,6 +35,8 @@ def test_usb_map_reuses_texture_and_hides_expired_image(monkeypatch, tmp_path):
   now[0] += .6
   draw(renderer)
   assert calls.count('load') == 1 and calls.count('draw') == 2
+  x, y, w, h = destinations[0]
+  assert 1124 <= x < x + w <= 1916 and 0 <= y < y + h < 480
   now[0] += .6
   fresh[0] = False
   draw(renderer)

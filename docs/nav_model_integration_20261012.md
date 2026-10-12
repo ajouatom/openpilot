@@ -31,7 +31,7 @@ With a configured key, basemap roads come from [Mapbox Streets v8](https://docs.
 
 Carrot Web Tools → **Nav Map / 내비 지도**, `/navigation`, provides the rendered image, destination search/selection and clear action. The page pauses image requests when hidden. Network and provider account requirements apply; live paid API requests are not exercised by desktop tests.
 
-`ClusterHudScreenMode=7` displays the shared rendered image on the external USB HUD, retaining speed and alerts. It does not select a driving model. The PNG is produced at most 2 Hz in tmpfs; USB texture updates only when its timestamp changes. Display expiry is two seconds. Default screen mode stays 0. Korean, English and Chinese setting descriptions include modes 6 and 7. Korean/English user guides are updated. The experimental branch's Wiki preview was generated and 559 Markdown pages validated; the shared production Wiki remains sourced only from carrot-wip.
+`ClusterHudScreenMode=7` displays the shared rendered image on the right of the external USB HUD, retaining the camera/3D driving view and complete driving HUD on the left. See the [layout correction and missed-turn investigation](nav_model_followup_20261012.md). It does not select a driving model. The PNG is produced at most 2 Hz in tmpfs; USB texture updates only when its timestamp changes. Display expiry is two seconds. Default screen mode stays 0. Korean, English and Chinese setting descriptions include modes 6 and 7. Korean/English user guides are updated. The experimental branch's Wiki preview was generated and 559 Markdown pages validated; the shared production Wiki remains sourced only from carrot-wip.
 
 ## CPU policy and verification
 
