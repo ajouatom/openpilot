@@ -66,15 +66,18 @@ class SignalPrepareRuntime(SignalAssistRuntime):
       if not ok:
         context['valid'] = False
         return obs, context
-      omega = np.asarray(pose.angularVelocityDevice.value)
-      std = np.asarray(pose.angularVelocityDevice.std)
+      angular = pose.angularVelocityDevice
+      omega = np.array([angular.x, angular.y, angular.z])
+      std = np.array([angular.xStd, angular.yStd, angular.zStd])
       if omega.shape != (3,) or std.shape != (3,) or not np.isfinite(omega).all() or not np.isfinite(std).all() or np.any(std < 0):
         context['valid'] = False
         return obs, context
       yaw = math.degrees((rot_from_euler(rpy).T @ omega)[2])
       context['turning'] = abs(yaw) > 1.5 or math.degrees(np.linalg.norm(std)) > 2.
       model = sm['modelV2']
-      context['geometry'] = lambda box: housing_range(box, config.fcam.focal_length, rpy, model.roadEdges, model.roadEdgeStds, model.position)
+      context['geometry'] = lambda box: housing_range(
+        box, config.fcam.focal_length, rpy, model.roadEdges, model.roadEdgeStds,
+        model.laneLines, model.laneLineProbs, model.laneLineStds)
     except (AttributeError, KeyError, TypeError, ValueError, IndexError):
       context['valid'] = False
     return obs, context

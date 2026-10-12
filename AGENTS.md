@@ -1,5 +1,17 @@
 # Repository memory
 
+- On 2026-10-12, the user requested edge/lane XYZ geometry for red preparation.
+  Remove position input/range constraints; use confident inner lanes or road
+  edges, intersect when both reliable, and never extrapolate. Correct the new
+  runtime pose reader to actual XYZMeasurement fields (previous adapter failed
+  closed). 187 tests pass, including a real Cap'n Proto pose. Full-rate-context
+  screening of3,348 retained observations gives9 new usable lane corridors but
+  zero qualified candidates/entries. Exact frames confirm real red lamps among
+  lateral rejects: do not call these false-positive removals or claim improved
+  braking. Signal mounting need not align with the ego lane. Keep OFF; no vehicle
+  deployment. See docs/signal_color_experiment_20261012.md and private road-geometry
+  archive for assumptions and negative results.
+
 - On 2026-10-12, the user requested red pre-deceleration before model stopping.
   Add default-OFF per-device stop_prepare_enabled and state6 e2eStopPrepare:
   confirmed measured red housing, calibrated pose/road-edge/path geometry,

@@ -9,17 +9,61 @@ import math
 import numpy as np
 
 
-def housing_range(box, focal, rpy, edges, edge_stds, path):
+def road_corridor(distances, edges, edge_stds, lane_lines=(), lane_probs=(), lane_stds=()):
+  """Interpolate trustworthy road/ego-lane boundaries, never the time-based plan.
+
+  Prefer the two ego-lane lines. Road edges are the fallback, not evidence of
+  which lane a signal controls. When both are reliable, require their agreement
+  by intersecting their lateral bounds. Never extrapolate beyond either curve.
+  """
+  def pair(curves, confidences, lanes=False):
+    try:
+      if len(curves) != 2 or len(confidences) != 2 or not all(math.isfinite(s) and 0 <= s <= .5 for s in confidences):
+        return None
+      values = []
+      for curve in curves:
+        xs, ys, zs = [np.asarray(getattr(curve, k), dtype=float) for k in ('x', 'y', 'z')]
+        if (len(xs) < 2 or xs.ndim != 1 or ys.shape != xs.shape or zs.shape != xs.shape
+            or not all(np.isfinite(a).all() for a in (xs, ys, zs)) or np.any(np.diff(xs) <= 0)):
+          return None
+        values.append((np.interp(distances, xs, ys), np.interp(distances, xs, zs),
+                       (distances >= xs[0]) & (distances <= xs[-1])))
+      left, right = values
+      width = right[0]-left[0]
+      valid = left[2] & right[2] & (width >= 2.) & (width <= (5. if lanes else 20.))
+      return left[0], right[0], (left[1]+right[1])/2, valid
+    except (AttributeError, TypeError, ValueError, IndexError):
+      return None
+
+  road = pair(edges, edge_stds)
+  lane = None
+  try:
+    if (len(lane_lines) == len(lane_probs) == len(lane_stds) == 4
+        and all(math.isfinite(lane_probs[i]) and .8 <= lane_probs[i] <= 1. for i in (1, 2))):
+      lane = pair(list(lane_lines)[1:3], list(lane_stds)[1:3], lanes=True)
+  except (TypeError, ValueError, IndexError):
+    pass
+  if lane is None:
+    return None if road is None else (*road, 'edges')
+  left, right, z, valid = lane
+  if road is not None:
+    # A reliable road corridor contradicting reliable lanes must not be ignored.
+    left = np.maximum(left, road[0])
+    right = np.minimum(right, road[1])
+    valid &= road[3] & (left < right)
+  return left, right, z, valid, 'lanes' if road is None else 'lanes+edges'
+
+
+def housing_range(box, focal, rpy, edges, edge_stds, lane_lines=(), lane_probs=(), lane_stds=()):
   """Return a plausible range, not a measured distance. Full housings only."""
   try:
     from openpilot.common.transformations.orientation import rot_from_euler
     x1, y1, x2, y2 = map(float, box)
-    if not (all(math.isfinite(v) for v in (*box, focal, *rpy, *edge_stds))
-            and len(rpy) == 3 and len(edge_stds) == 2 and focal > 0
+    if not (all(math.isfinite(v) for v in (*box, focal, *rpy))
+            and len(rpy) == 3 and focal > 0
             and 0 <= x1 < x2 <= 1344 and 0 <= y1 < y2 <= 760
             and 16 <= x2-x1 <= 160 and 4 <= y2-y1 <= 50
-            and 2.6 <= (x2-x1)/(y2-y1) <= 6.8
-            and all(0 <= s <= .5 for s in edge_stds)):
+            and 2.6 <= (x2-x1)/(y2-y1) <= 6.8):
       return None
     # Red lamp occupies the left end of the measured horizontal housing.
     ray = rot_from_euler(rpy).T @ np.array([1., (x1+.125*(x2-x1)-672)/focal, ((y1+y2)/2-380)/focal])
@@ -28,19 +72,14 @@ def housing_range(box, focal, rpy, edges, edge_stds, path):
     ray /= ray[0]
     lo, hi = focal*.7/(x2-x1), focal*2.5/(x2-x1)
     ds = np.linspace(lo, hi, 65)
-    values = []
-    for curve in (*edges, path):
-      xs, ys, zs = [np.asarray(getattr(curve, k), dtype=float) for k in ('x', 'y', 'z')]
-      if (len(xs) < 2 or len(xs) != len(ys) or len(xs) != len(zs)
-          or not all(np.isfinite(a).all() for a in (xs, ys, zs)) or np.any(np.diff(xs) <= 0)):
-        return None
-      values.append((np.interp(ds, xs, ys), np.interp(ds, xs, zs), (ds >= xs[0]) & (ds <= xs[-1])))
-    left, right, center = values
+    corridor = road_corridor(ds, edges, edge_stds, lane_lines, lane_probs, lane_stds)
+    if corridor is None:
+      return None
+    left, right, road_z, valid, _ = corridor
     side = ray[1]*ds
-    height = (left[1]+right[1])/2-ray[2]*ds
-    possible = (left[2] & right[2] & center[2] & (left[0] < right[0])
-                & (side >= left[0]+.3) & (side <= right[0]-.3)
-                & (np.abs(side-center[0]) <= 2.) & (height >= 3.) & (height <= 9.))
+    height = road_z-ray[2]*ds
+    possible = (valid & (side >= left+.3) & (side <= right-.3)
+                & (height >= 3.) & (height <= 9.))
     valid = ds[possible]
     if len(valid) < 3 or valid[0] < 25 or valid[-1] > 140:
       return None
