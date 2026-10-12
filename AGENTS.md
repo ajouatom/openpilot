@@ -1,5 +1,17 @@
 # Repository memory
 
+- On 2026-10-12, the user requested red pre-deceleration before model stopping.
+  Add default-OFF per-device stop_prepare_enabled and state6 e2eStopPrepare:
+  confirmed measured red housing, calibrated pose/road-edge/path geometry,
+  no lead or driver override; final acceleration cap ramps0.25m/s3 to-0.5m/s2.
+  Release on missing/changed evidence, preserve model-stop handover and stronger
+  braking, and reuse trafficSignChanged audio once with cooldown. Remove only
+  visible signal track numbers. Geometry ranges are assumed, not metric truth.
+  184 desktop tests and1,200 default-OFF target comparisons pass. Screening3,348
+  retained night/morning observations yields zero qualified entries: do not claim
+  better stopping or activate from this result. No vehicle deployment. See
+  docs/signal_color_experiment_20261012.md and private stop-prepare archive.
+
 - On 2026-10-12, during the color experiment, the user prioritized avoiding
   false green over missed detections, accepted rejecting turn-time readings,
   and suggested pose. Offline rotation variants now reject green before tracker

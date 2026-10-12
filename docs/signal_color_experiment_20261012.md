@@ -203,3 +203,71 @@ tracker on21 reviewed images. The pose variant is the more direct rotation
 experiment; steering remains a comparison/diagnostic signal. LED/reflection false
 greens remain, so neither variant is promoted or deployed. Private `pose/`,
 `replay_pose_final/`, `extract_pose.py` and `pose_results.json` retain the evidence.
+
+## 2026-10-12: opt-in red preparation before model stopping
+
+The user requested a separate `e2eStopPrepare` state: when a convincing red is
+observed before the model enters stopping, gradually request about -0.5 m/s²,
+announce the existing “신호가바뀌었어요” sound, release when the observation
+disappears/changes, ignore leads, and hand over to the original model stop.
+
+Implemented as state6; existing values0..5 are unchanged. A separate startup
+opt-in `/data/signal-color-shadow/stop_prepare_enabled` defaults absent/OFF.
+This does not enable the old latched moving-red assist. Tracking CPU observation
+can publish a dedicated tmpfs endpoint even in comparison mode; display and
+stopped-red guard endpoints keep their previous roles. No new model or process
+is introduced; additional calibration/camera/device subscriptions exist only
+when the planner starts with this opt-in. Turning the flag off releases the
+preparation at the existing0.5-second flag poll; enabling initially requires a
+planner restart. Do not enable from the present validation results.
+
+Entry requires active/valid longitudinal control in Drive,5<speed<82 km/h,
+no gas/brake, no leadOne/leadTwo, no blinkers, and fresh valid calibrated pose
+with |yaw|<=1.5 degrees/s and conservative angular standard deviation<=2 degrees/s.
+Require one unambiguous same-session/same-ID current red housing for>=0.6 seconds
+and>=4 distinct observations, frame age<=200ms and gap<=250ms. Unknown, changed
+color, disappearance, stale/invalid context, a lead or driver intervention cancels
+the preparation. Gas/brake keeps a ten-second re-entry cooldown. Existing model
+stopping/stop hold wins; no forced red trafficState or fabricated model x/v.
+
+Only a currently measured `detected` horizontal housing with quality>=0.5,
+red score>=0.4 and green score<0.08 is eligible. Single-core proposals and template
+matches cannot establish metric housing size. OS04C10 road-camera geometry,
+calibration, modeled road edges and model path reject implausible candidates.
+Housing width0.7–2.5m and mounting height3–9m are **assumptions**, not measured
+dimensions. The supported distance interval must lie within25–140m, inside both
+road edges with0.3m margin and within2m of the modeled path; each road-edge std
+must be<=0.5m. Do not extrapolate model curves. These are provisional filters,
+not proof of ego-lane relevance, perfect red recognition or stop-line distance.
+
+The final longitudinal output, after coasting, applies an upper acceleration cap
+that ramps down at0.25m/s³ to-0.5m/s². It starts at the preceding output (or measured
+acceleration); zero to-0.5 takes two seconds, positive acceleration takes longer.
+Use elapsed monotonic time so additional radar-triggered updates cannot accelerate
+the ramp. Preserve stronger braking, ordinary actuator limits, DM and stopped-red
+veto. Keep velocity/jerk outputs and next planner acceleration consistent with the
+cap. This is a requested acceleration, not a guarantee of measured deceleration.
+No shouldStop/go request is manufactured. Cancellation removes the cap and returns
+to ordinary planning; an independently stronger braking request can remain.
+
+The existing trafficSignChanged event provides the requested WAV at entry, with
+ten-second re-announcement suppression. Camera overlays keep R/G/? and the stale
+`~` qualifier but remove visible track numbers; internal IDs remain for continuity.
+The main onroad renderer labels state6 “신호 감속 준비”. Physical sound/display
+and onroad integration are not yet device-validated.
+
+Validation:184 focused helper/runtime/planner/display/observer regression tests
+pass on desktop. Default-OFF state and targets match the prior source across
+1,200 synthetic input frames. The existing3,348-image night/morning candidate
+replay was screened against the new gates:1,134 fresh red candidate samples,
+only6 strict measured-housing red samples, **zero geometry-qualified samples and
+zero preparation entries**. All six have at least one road-edge std>0.5m; several
+also have insufficient modeled path range. This is a retained-observation/context
+screen, not a new full camera/native-MPC/vehicle replay; it cannot establish false
+positive rate or improved stopping. The helper is implemented but current detector
+evidence does not justify activation. No vehicle was connected or modified.
+
+Private reproducibility evidence is retained under
+`.analysis/archive/2026-10-12-stop-prepare/`; dependencies are disposable. The prior
+night-log numerical stopping-distance review is separately retained under
+`.analysis/archive/2026-10-12-red-stop-target/` and is not native acados validation.
