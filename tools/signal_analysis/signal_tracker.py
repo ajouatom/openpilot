@@ -381,7 +381,10 @@ class SignalTracker:
                    distance <= max(2., aw*.15) and overlap(a,b) >= .6)):
             continue
         limit = max(10, aw//5)+1 if d.get('continuity_id') == t.ident else max(6, aw*.3)
-        if .65 <= bw/aw <= 1.55 and .5 <= bh/ah <= 2 and distance < limit and overlap(a,b) > .12:
+        red_motion = (self.verified_lamps and d.get('continuity_id') == t.ident
+                      and d.get('red_motion_verified', False) and d['raw'] == t.pending == 'red'
+                      and d.get('match_score', 0) >= .9 and timestamp-t.last_seen <= self.MAX_OBSERVATION_GAP)
+        if .65 <= bw/aw <= 1.55 and .5 <= bh/ah <= 2 and distance < limit and (overlap(a,b) > .12 or red_motion):
           candidates.append((distance, t))
       if len(candidates) > 1 and any(timestamp-t.last_seen > self.MAX_OBSERVATION_GAP for _,t in candidates):
         candidates = []
@@ -436,7 +439,9 @@ class SignalTracker:
       for track in self.tracks:
         # The template must belong to the immediately preceding image. An old
         # box alone cannot identify the object in that intervening image.
-        if not track.seen_red or track.last_seen != self.last_timestamp:
+        pending_red = (self.verified_lamps and track.pending == 'red' and track.observations >= 2
+                       and track.evidence.get('source') == 'night_lamp_core')
+        if (not track.seen_red and not pending_red) or track.last_seen != self.last_timestamp:
           continue
         if not bridge and any(overlap(track.box,d['box']) > .25 for d in detections):
           continue
@@ -462,12 +467,23 @@ class SignalTracker:
           continue
         dx=sx+loc[0]-ax;dy=sy+loc[1]-ay;box=[x1+dx,y1+dy,x2+dx,y2+dy]
         raw,strength,evidence=lamp_evidence(rgb,box,conservative_green=self.conservative_green)
+        red_motion = False
+        if (self.verified_lamps and not bridge and raw == track.pending == 'red' and score >= .9
+            and track.evidence.get('source') == 'night_lamp_core'):
+          # A small lamp can move farther than its height after a road bump.
+          # Require an isolated image-match peak; nearby identical lamps must
+          # not exchange identities. Only current red evidence uses this path.
+          alternatives = scores.copy()
+          lx, ly = loc
+          alternatives[max(0,ly-2):ly+3, max(0,lx-2):lx+3] = -1
+          red_motion = score-float(alternatives.max()) >= .05
         if bridge:
           # Image correspondence keeps identity, never a previous color streak.
           # The current image must independently contain the same lamp housing.
           detections = [d for d in detections if overlap(box,d['box']) <= .35]
         detections.append(dict(box=box,raw=raw,quality=strength,source='causal_template',match_score=score,
-                               **({'continuity_id':track.ident} if bridge else {}),**evidence))
+                               **({'continuity_id':track.ident} if bridge or red_motion else {}),
+                               **({'red_motion_verified': True} if red_motion else {}),**evidence))
     if not allow_green:
       # Offline steering experiment: preserve red acquisition/history, but never
       # grant a green vote or retain a confirmed green through rejected input.
