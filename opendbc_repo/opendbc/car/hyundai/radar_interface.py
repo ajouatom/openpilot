@@ -1,11 +1,20 @@
+import bisect
+import copy
 import math
 import os
-from collections import deque
+import time
+from collections import Counter, deque
+from dataclasses import dataclass, field
+from numbers import Integral, Real
+from typing import Sequence
+
+import numpy as np
 
 from opendbc import DBC_PATH
 from opendbc.can import CANParser
 from opendbc.car import Bus, structs
 from opendbc.car.interfaces import RadarInterfaceBase
+from opendbc.car.radar_lead_filter import RadarLeadFilter
 from opendbc.car.hyundai.values import DBC, HyundaiFlags, HyundaiExtFlags
 from openpilot.common.params import Params
 from opendbc.car.hyundai.hyundaicanfd import CanBus
@@ -251,6 +260,286 @@ def get_radar_can_parser_scc(CP):
   bus = CAN.CAM if CP.flags & HyundaiFlags.CAMERA_SCC else bus
   return CANParser(DBC[CP.carFingerprint][Bus.pt], messages, bus)
 
+from opendbc.car.hyundai.radar_bosch import (  # noqa: E402
+  BOSCH_INACTIVE_WORD,
+  BOSCH_MAX_RAW_TRACK_ID,
+  BOSCH_TRACK_ADDRESSES,
+  BOSCH_WINDOW_NS,
+  BOSCH_STALE_NS,
+  BOSCH_OUTPUT_INTERVAL_NS,
+  BOSCH_SAMPLE_HOLD_NS,
+  BOSCH_ALEAD_SAMPLE_PERIOD_S,
+  BOSCH_ALEAD_STATE_MAX,
+  BOSCH_B5_OFF,
+  BOSCH_B5_ACTIVE,
+  BOSCH_B5_MODE,
+  BOSCH_B5_PARENT_STABILITY_SCANS,
+  BOSCH_B5_COUNTER_MAX,
+  BOSCH_B5_CONTEXT_MAX_AGE_NS,
+  BOSCH_B5_HISTORY_NS,
+  BOSCH_B5_HISTORY_MIN_SPAN_NS,
+  BOSCH_B5_MOTION_HISTORY_NS,
+  BOSCH_B5_RADAR_TO_DEVICE_X_M,
+  BOSCH_B5_OUTSIDE_MARGIN_M,
+  BOSCH_B5_PARENT_MIN_AGE_SCANS,
+  BOSCH_B5_MIN_WORLD_SPEED_MPS,
+  BOSCH_B5_MAX_D_M,
+  BOSCH_B5_MAX_Y_M,
+  BOSCH_B5_MAX_DV_MPS,
+  BOSCH_B5_MAX_DWORLD_MPS,
+  BOSCH_B5_MIN_VEGO_MPS,
+  BOSCH_B5_MAX_CURVATURE_1PM,
+  BOSCH_B5_EDGE_STD_MAX_M,
+  BOSCH_B5_EDGE_WIDTH_MIN_M,
+  BOSCH_B5_EDGE_WIDTH_MAX_M,
+  BOSCH_B5_LANE_PROB_MIN,
+  BOSCH_B5_LANE_STD_MAX_M,
+  BOSCH_B5_LANE_STABILITY_MAX_M,
+  BOSCH_B5_CORRIDOR_WIDTH_MIN_M,
+  BOSCH_B5_CORRIDOR_WIDTH_MAX_M,
+  BOSCH_B5_EDGE_LANE_BAND_MAX_M,
+  BOSCH_B5_DIVERGENCE_MIN_M,
+  BOSCH_P91_OFF,
+  BOSCH_P91_SHADOW,
+  BOSCH_P91_ACTIVE,
+  BOSCH_P91_ACTIVE_TEST,
+  BOSCH_P91_MODE,
+  BOSCH_P91_SUPPORT_HOLD_NS,
+  BOSCH_FAMILY_COMPANION_OFF,
+  BOSCH_FAMILY_COMPANION_SHADOW,
+  BOSCH_FAMILY_COMPANION_ACTIVE,
+  BOSCH_FAMILY_COMPANION_MODE,
+  BOSCH_FAMILY_MIN_ANCHOR_AGE_SCANS,
+  BOSCH_FAMILY_MIN_D_M,
+  BOSCH_FAMILY_MAX_D_M,
+  BOSCH_FAMILY_MAX_Y_M,
+  BOSCH_FAMILY_MAX_DV_MPS,
+  BOSCH_FAMILY_MAX_WORLD_SPEED_MPS,
+  BOSCH_FAMILY_MAX_D_STEP_M,
+  BOSCH_FAMILY_MAX_Y_STEP_M,
+  BOSCH_FAMILY_MIN_WORLD_SPEED_MPS,
+  BOSCH_FAMILY_MAX_GAP_NS,
+  BOSCH_FAMILY_INWARD_SCANS,
+  BOSCH_FAMILY_INWARD_MPS,
+  BOSCH_BURST_MULTIRETURN_OFF,
+  BOSCH_BURST_MULTIRETURN_SHADOW,
+  BOSCH_BURST_MULTIRETURN_ACTIVE,
+  BOSCH_BURST_MULTIRETURN_MODE,
+  BOSCH_BURST_MIN_MEMBERS,
+  BOSCH_BURST_MAX_WORLD_SPAN_MPS,
+  BOSCH_BURST_MAX_D_SPAN_M,
+  BOSCH_BURST_MIN_Y_SPAN_M,
+  BOSCH_BURST_MIN_WORLD_SPEED_MPS,
+  BOSCH_BURST_MIN_VEGO_MPS,
+  BOSCH_BURST_NEIGHBOUR_AGE_SCANS,
+  BOSCH_BURST_NEIGHBOUR_D_M,
+  BOSCH_BURST_HOLD_MAX_SCANS,
+  BOSCH_BURST_MAX_MISSING_SCANS,
+  BOSCH_BURST_MAX_GAP_NS,
+  BOSCH_BURST_STATE_MAX,
+  BOSCH_SIDEPASS_LATERAL_OFF,
+  BOSCH_SIDEPASS_LATERAL_SHADOW,
+  BOSCH_SIDEPASS_LATERAL_ACTIVE,
+  BOSCH_SIDEPASS_LATERAL_MODE,
+  BOSCH_SIDEPASS_WINDOW_NS,
+  BOSCH_SIDEPASS_MIN_SCANS,
+  BOSCH_SIDEPASS_MIN_SPAN_NS,
+  BOSCH_SIDEPASS_SLIDE_ARM_MPS,
+  BOSCH_SIDEPASS_SLIDE_RELEASE_MPS,
+  BOSCH_SIDEPASS_RELEASE_SCANS,
+  BOSCH_SIDEPASS_CLOSING_MPS,
+  BOSCH_SIDEPASS_MIN_LEAD_SPEED_MPS,
+  BOSCH_SIDEPASS_CORRIDOR_M,
+  BOSCH_SIDEPASS_ZONE_M,
+  BOSCH_SIDEPASS_MAX_D_M,
+  BOSCH_SIDEPASS_MAX_OFFSET_M,
+  BOSCH_SIDEPASS_REALIGN_MPS,
+  BOSCH_SIDEPASS_MAX_GAP_NS,
+  BOSCH_SIDEPASS_STATE_MAX,
+  BOSCH_OEM_STATE_NONE,
+  BOSCH_OEM_STATE_TENTATIVE,
+  BOSCH_OEM_STATE_SELECTED,
+  BOSCH_OEM_STATE_VALIDATED,
+  BOSCH_OEM_GATE_OFF,
+  BOSCH_OEM_GATE_SHADOW,
+  BOSCH_OEM_GATE_ACTIVE,
+  BOSCH_OEM_GATE_MODE,
+  BOSCH_OEM_EVIDENCE_HOLD_NS,
+  BOSCH_OEM_INTENT_MIN_MPS2,
+  BOSCH_OEM_INTENT_MAX_MPS2,
+  BOSCH_OEM_INTENT_FRESH_NS,
+  BOSCH_OEM_INTENT_WINDOW_NS,
+  BOSCH_OEM_INTENT_MIN_SAMPLES,
+  BOSCH_OEM_GATE_NEUTRAL_MPS2,
+  BOSCH_OEM_GATE_PERSIST_SCANS,
+  BOSCH_OEM_GATE_MIN_SPEED_MPS,
+  BOSCH_OEM_GATE_MIN_RANGE_M,
+  BOSCH_OEM_GATE_MIN_TTC_S,
+  BOSCH_OEM_GATE_CUTIN_MPS,
+  BOSCH_OEM_GATE_CUTIN_SCANS,
+  BOSCH_OEM_GATE_LATERAL_WINDOW_NS,
+  BOSCH_OEM_GATE_IN_PATH_M,
+  BOSCH_OEM_GATE_SETTLED_SCANS,
+  BOSCH_OEM_GATE_SIBLING_D_M,
+  BOSCH_OEM_GATE_SIBLING_Y_M,
+  BOSCH_OEM_GATE_SIBLING_V_MPS,
+  BOSCH_SCC_BUS,
+  BOSCH_SCC11_ADDR,
+  BOSCH_SCC12_ADDR,
+  BOSCH_SCC11_OBJ_VALID_BIT,
+  BOSCH_SCC12_AREQ_RAW_BIT,
+  BOSCH_SCC_ADDRESSES,
+  BOSCH_SCC_STALE_NS,
+  BOSCH_CAMERA_EXTENDED_OFF,
+  BOSCH_CAMERA_EXTENDED_SHADOW,
+  BOSCH_CAMERA_EXTENDED_ACTIVE,
+  BOSCH_CAMERA_EXTENDED_PUBLICATION,
+  BOSCH_CAMERA_EXTENDED_ACTIVE_TEST,
+  BOSCH_CAMERA_EXTENDED_TEST_INTERVALS,
+  BOSCH_CAMERA_MATURITY_HOLD_NS,
+  BOSCH_CAMERA_MATURITY_WORD1_INTERVALS,
+  BOSCH_CAMERA_EXTENDED_MODE,
+  BOSCH_CAMERA_HEADER,
+  BOSCH_CAMERA_FIRST_OBJECT,
+  BOSCH_CAMERA_LAST_OBJECT,
+  BOSCH_CAMERA_LAST_FAMILY,
+  BOSCH_CAMERA_SLOTS,
+  BOSCH_CAMERA_PERIOD_NS,
+  BOSCH_CAMERA_FRAME_TOLERANCE_NS,
+  BOSCH_CAMERA_OBSERVATION_GAP_NS,
+  BOSCH_CAMERA_E2_HOLD_NS,
+  BOSCH_CAMERA_SNAPSHOT_COUNT,
+  BOSCH_CAMERA_WIDTH_REF_M,
+  BOSCH_CAMERA_RANGE_LSB,
+  BOSCH_CAMERA_LONG_BASE_M,
+  BOSCH_CAMERA_LONG_RANGE_K,
+  BOSCH_CAMERA_LONG_POS_WIDTH_K,
+  BOSCH_CAMERA_LONG_NEG_WIDTH_K,
+  BOSCH_CAMERA_LONG_MAX_M,
+  BOSCH_CAMERA_LAT_MAX_M,
+  BOSCH_CAMERA_ANGLE_LSB,
+  BOSCH_CAMERA_ASSOC_UNRESOLVED,
+  BOSCH_CAMERA_ASSOC_ASSIGNED,
+  BOSCH_CAMERA_ASSOC_AMBIGUOUS,
+  BOSCH_CAMERA_CURVE_REACQUIRE_OFF,
+  BOSCH_CAMERA_CURVE_REACQUIRE_SHADOW,
+  BOSCH_CAMERA_CURVE_REACQUIRE_ACTIVE,
+  BOSCH_CAMERA_CURVE_REACQUIRE_MODE,
+  BOSCH_CAMERA_CURVE_REACQUIRE_HOLD_NS,
+  BOSCH_CAMERA_CURVE_REACQUIRE_MIN_D_M,
+  BOSCH_CAMERA_CURVE_REACQUIRE_MAX_D_M,
+  BOSCH_CAMERA_CURVE_REACQUIRE_MIN_YAW_RATE,
+  BOSCH_CAMERA_CURVE_REACQUIRE_LAT_MAX_M,
+  BOSCH_CAMERA_CURVE_REACQUIRE_BEAR_MAX_RAD,
+  BOSCH_CAMERA_CURVE_REACQUIRE_STATE_MAX,
+  BOSCH_TRUCK_P2_CLASS,
+  BOSCH_TRUCK_P2_CONFIRMATIONS,
+  BOSCH_TRUCK_P2_STATE_MAX,
+  BOSCH_TRUCK_P2_WIDTH_MIN_M,
+  BOSCH_TRUCK_P2_DD_MIN_M,
+  BOSCH_TRUCK_P2_DD_MAX_M,
+  BOSCH_TRUCK_P2_DY_MAX_M,
+  BOSCH_TRUCK_P2_DV_MAX_MPS,
+  BOSCH_TRUCK_A0_RECOVERY_HOLD_SCANS,
+  BOSCH_TRUCK_A0_RECOVERY_BEARING_EXCESS_RAD,
+  BOSCH_TRUCK_A0_RECOVERY_COST_MARGIN,
+  BOSCH_COMPANION_DEFER_OFF,
+  BOSCH_COMPANION_DEFER_ACTIVE,
+  BOSCH_COMPANION_DEFER_MODE,
+  BOSCH_COMPANION_DEFER_CONFIRMATIONS,
+  BOSCH_COMPANION_DEFER_HOLD_NS,
+  BOSCH_COMPANION_DEFER_STATE_MAX,
+  BOSCH_COMPANION_DEFER_DD_MIN_M,
+  BOSCH_COMPANION_DEFER_DD_MAX_M,
+  BOSCH_COMPANION_DEFER_DY_MAX_M,
+  BOSCH_COMPANION_DEFER_DV_MAX_MPS,
+  BOSCH_COMPANION_DEFER_Y_MAX_M,
+  BOSCH_COMMON_ANCESTRY_MAX_AGE_NS,
+  BOSCH_COMMON_ANCESTRY_RAW_PAIR_MAX,
+  BOSCH_COMPANION_DEFER_WIDTH_DD_M,
+  BOSCH_OEM_NEARER_PUBLICATION_OFF,
+  BOSCH_OEM_NEARER_PUBLICATION_ACTIVE,
+  BOSCH_OEM_NEARER_PUBLICATION_MODE,
+  _bosch_camera_signed,
+  _bosch_camera_range_span,
+  _bosch_camera_long_window,
+  BoschCameraObject,
+  BoschCameraCycleCache,
+  _BoschExtendedHistory,
+  _BoschCurveReacquireHistory,
+  _BoschTruckPairHistory,
+  _BoschExtendedRepresentative,
+  BoschCameraExtendedGrouping,
+  bosch_numpy_linear_sum_assignment,
+  _bosch_integer,
+  _bosch_finite,
+  BoschRawDetection,
+  BoschRawTrackingConfig,
+  BoschRawTrack,
+  BoschRawAssociationDecision,
+  _BoschRawState,
+  _bosch_advance,
+  _bosch_admissible_cycle,
+  _bosch_rectangular_unique,
+  _bosch_component_matching,
+  _bosch_raw_unique_component,
+  _bosch_raw_assignment,
+  BoschRawTrackManager,
+  BoschGroupingConfig,
+  BoschModelSnapshot,
+  BoschVisionCue,
+  BoschPublishedSurface,
+  BoschPhysicalObject,
+  BoschAssociationDecision,
+  _BoschPairEvidence,
+  _BoschCommonGroupAncestry,
+  _BoschPhysicalState,
+  _BoschProvisionalBundleState,
+  BoschProvisionalBundleDecision,
+  _bosch_group_representative,
+  _bosch_physical_component,
+  _bosch_physical_assignment,
+  BoschObjectGroupManager,
+  BoschPhysicalTracker,
+  _BoschPublicationPassThrough,
+  _BoschFamilyCompanionState,
+  BoschFamilyCompanionDecision,
+  _BoschFamilyCompanionFilter,
+  _BoschBurstMultiReturnState,
+  BoschBurstMultiReturnDecision,
+  _BoschBurstMultiReturnDefer,
+  _BoschSidePassLateralState,
+  BoschSidePassLateralDecision,
+  _BoschSidePassLateralEstimator,
+  _BoschP91PairState,
+  _BoschPersistentSpatialCloneFilter,
+  _BoschOemGateState,
+  _BoschOemIntentTracker,
+  _BoschOemValidationGate,
+  BOSCH_PUBLICATION_ALIAS_START,
+  BOSCH_PUBLICATION_ALIAS_COUNT,
+  BOSCH_PUBLICATION_ALIAS_GRACE_S,
+  BoschPublicationAliasAllocator,
+  BoschB5ModelContext,
+  _BoschB5ParentState,
+  BoschB5Decision,
+  BoschBirthB5Defer,
+  bosch_published_surface,
+  BoschLeadAccelerationState,
+  BoschLeadAccelerationEstimator,
+  bosch_fill_point,
+  bosch_append_points,
+  bosch_to_native_radar_data,
+  _BoschCanFrame,
+  bosch_decode_frame,
+  _bosch_match_processed_target_word,
+  bosch_make_points,
+  BoschRadarProvider,
+)
+
+
+
+
 class RadarInterface(RadarInterfaceBase):
   def __init__(self, CP):
     super().__init__(CP)
@@ -279,7 +568,27 @@ class RadarInterface(RadarInterfaceBase):
       self.radar_required_msg_count = RADAR_REQUIRED_MSG_COUNT
 
     self.params = Params()
-    self.radar_tracks = self.params.get_int("EnableRadarTracks") >= 1
+    self.radar_track_mode = self.params.get_int("EnableRadarTracks")
+    self.radar_tracks = self.radar_track_mode >= 1
+    self.bosch = None
+    self._bosch_objects = ()
+    self._bosch_now_ns = 0
+    self._bosch_context = None
+    self._bosch_path_ns = None
+    self._bosch_path_source_ns = 0
+    self._bosch_path = ()
+    self._bosch_last_pose = (None, 0)
+    self._bosch_last_model = (None, 0)
+    if self.radar_tracks and CP.extFlags & HyundaiExtFlags.BOSCH_RADAR:
+      CAN = CanBus(CP)
+      bus = CAN.ACAN if CP.extFlags & HyundaiExtFlags.BOSCH_RADAR_BUS1 else CAN.CAM
+      # Same bus the stock SCC parser uses, so the gate reads the factory
+      # module rather than openpilot's own SCC11/SCC12 transmissions.
+      scc_bus = CAN.CAM if CP.flags & HyundaiFlags.CAMERA_SCC else CAN.ECAN
+      self.bosch = BoschRadarProvider(bus, camera_bus=CAN.ACAN, scc_bus=scc_bus,
+                                      camera_extended_mode=BOSCH_CAMERA_EXTENDED_MODE)
+      self._bosch_lead_acceleration = BoschLeadAccelerationEstimator()
+      self._bosch_make_points = bosch_make_points
     self.corner_object_tracks = bool(CP.extFlags & HyundaiExtFlags.CORNER_RADAR_OBJECTS_235.value) and self.params.get_int("EnableCornerRadar") > 0
     self.corner_object_180_tracks = bool(CP.extFlags & HyundaiExtFlags.CORNER_RADAR_OBJECTS_180.value) and self.params.get_int("EnableCornerRadar") > 0
     # The 0x430/0x440 DBC exposes unvalidated range-bin candidates rather than
@@ -296,7 +605,7 @@ class RadarInterface(RadarInterfaceBase):
     self.corner_object_430_missed_updates = 0
     self.corner_object_track_ids = CornerObjectTrackIdManager()
     self.rcp_tracks = get_radar_can_parser(
-      CP, self.radar_tracks, self.radar_start_addr, self.radar_msg_count,
+      CP, self.radar_tracks and self.bosch is None, self.radar_start_addr, self.radar_msg_count,
       self.radar_required_msg_count, self.radar_group4,
     )
     self.rcp_corner_objects = get_corner_object_can_parser(CP, self.corner_object_tracks)
@@ -304,7 +613,7 @@ class RadarInterface(RadarInterfaceBase):
     self.rcp_corner_objects_430 = get_corner_object_430_can_parser(CP, self.corner_object_430_tracks)
     # Enabling raw radar tracks on legacy CAN disables the stock SCC11 stream on
     # some Hyundai/Kia platforms. Camera-SCC cars may still use SCC11.
-    use_scc_parser = not (self.radar_tracks and not self.canfd and not (CP.flags & HyundaiFlags.CAMERA_SCC))
+    use_scc_parser = self.bosch is not None or not (self.radar_tracks and not self.canfd and not (CP.flags & HyundaiFlags.CAMERA_SCC))
     self.rcp_scc = get_radar_can_parser_scc(CP) if use_scc_parser else None
     self.trigger_msg_scc = 416 if self.canfd else 0x420
 
@@ -315,7 +624,7 @@ class RadarInterface(RadarInterfaceBase):
     self.track_id = 0
 
     self.corner_objects_available = self.rcp_corner_objects is not None or self.rcp_corner_objects_180 is not None or self.rcp_corner_objects_430 is not None
-    self.radar_off_can = CP.radarUnavailable and not self.corner_objects_available
+    self.radar_off_can = CP.radarUnavailable and not self.corner_objects_available and self.bosch is None
     print(
       "RadarInterface: "
       f"radarUnavailable={CP.radarUnavailable} radarTracks={self.radar_tracks} "
@@ -374,10 +683,93 @@ class RadarInterface(RadarInterfaceBase):
 
     self.frame = 0
 
+  def set_bosch_context(self, now_ns, pose=None, pose_ns=0, model=None, model_ns=0):
+    """Optional receive context; Device yaw is right-positive, radar y is left."""
+    if self.bosch is None:
+      return
+    # A message stamped after now_ns (IPC/scheduling order) is not current for
+    # this batch yet. Keep the previously accepted one instead of dropping the
+    # context; the newer message is taken on the first call that reaches its
+    # stamp. Otherwise a few ms of delivery latency decides whether road-edge,
+    # path and yaw context exist for a scan.
+    last_pose, last_model = getattr(self, '_bosch_last_pose', (None, 0)), getattr(self, '_bosch_last_model', (None, 0))
+    if pose is not None and pose_ns > now_ns:
+      pose, pose_ns = last_pose
+    else:
+      self._bosch_last_pose = (pose, pose_ns)
+    if model is not None and model_ns > now_ns:
+      model, model_ns = last_model
+    else:
+      self._bosch_last_model = (model, model_ns)
+    yaw = None
+    if pose is not None and 0 <= now_ns - pose_ns <= 200_000_000:
+      # pose is an immutable message reused at 100 Hz; read its fields once.
+      cached = getattr(self, '_bosch_pose_yaw', None)
+      if cached is None or cached[0] is not pose:
+        angular = getattr(pose, 'angularVelocityDevice', None)
+        pose_yaw = None
+        if pose.inputsOK and pose.sensorsOK and angular is not None and angular.valid and math.isfinite(angular.z):
+          pose_yaw = -float(angular.z)
+        cached = self._bosch_pose_yaw = (pose, pose_yaw)
+      yaw = cached[1]
+    self.bosch.b5_birth_defer.ingest_pose(int(pose_ns), yaw)
+    cues = ()
+    path = ()
+    source_ns = 0
+    if model is not None and 0 <= now_ns - model_ns <= 200_000_000:
+      # One plain snapshot per message, keyed like the path cache below by its
+      # stamp (and object). Keeping two covers a held-back newer message
+      # (model_ns > now_ns above) alternating with the accepted one.
+      snapshots = getattr(self, '_bosch_model_snapshots', ())
+      snapshot = next((snap for source, ns, snap in snapshots if source is model and ns == model_ns), None)
+      if snapshot is None:
+        snapshot = BoschModelSnapshot(model)
+        self._bosch_model_snapshots = snapshots[-1:] + ((model, model_ns, snapshot),)
+      self.bosch.road_edge_filter.ingest_model(snapshot, int(model_ns))
+      self.bosch.b5_birth_defer.ingest_model(snapshot, int(model_ns))
+      self.bosch.mirror_m3_shadow.ingest_model(snapshot, int(model_ns))
+      cues = snapshot.cues
+      model = snapshot
+      if self._bosch_path_ns != model_ns:
+        position = getattr(model, 'position', None)
+        self._bosch_path = tuple(zip(position.x, position.y)) if position is not None else ()
+        # The camera frame the model consumed, not the time it finished.
+        self._bosch_path_source_ns = int(getattr(model, 'timestampEof', 0) or 0)
+        self._bosch_path_ns = model_ns
+      path = self._bosch_path
+      source_ns = self._bosch_path_source_ns
+    else:
+      self.bosch.road_edge_filter.invalidate_model()
+    self._bosch_context = (int(now_ns), yaw, cues, path, model_ns, source_ns)
+
+  def update_carrot(self, v_ego, a_ego, rcv_time, can_packets):
+    # Keep the legacy SCC/corner MyTrack processing intact. Bosch objects are
+    # deliberately outside self.pts: MyTrack synthesizes lateral velocity and
+    # acceleration, which have not been decoded for this sensor.
+    ret = super().update_carrot(v_ego, a_ego, rcv_time, can_packets)
+    if ret is not None and self.bosch is not None:
+      scan_ns = self.bosch.last_scan_timestamp_ns
+      objects = (self._bosch_objects if scan_ns is not None and 0 <= self._bosch_now_ns - scan_ns <= BOSCH_SAMPLE_HOLD_NS
+                 else ())
+      alias = self.bosch.publication_aliases.update(
+        self._bosch_now_ns, (obj.physical_track_id for obj in objects), self.bosch.tracker.group_manager.states)
+      # Some replay/test harnesses construct RadarInterface without __init__.
+      # Keep the estimator Bosch-local and initialize it on first use there too.
+      if not hasattr(self, '_bosch_lead_acceleration'):
+        self._bosch_lead_acceleration = BoschLeadAccelerationEstimator()
+      if self.bosch._debug_timeout:
+        self._bosch_lead_acceleration.reset('PROVIDER_TIMEOUT')
+        a_lead_by_pid = {}
+      else:
+        a_lead_by_pid = self._bosch_lead_acceleration.update(
+          objects, scan_ns, self.v_ego, self.bosch.tracker.group_manager.states)
+      objects = self.bosch.publication_view(objects, self._bosch_now_ns)
+      bosch_append_points(ret, objects, self.v_ego, self._bosch_now_ns, alias, a_lead_by_pid)
+    return ret
 
   def update(self, can_strings):
     self.frame += 1
-    if self.radar_off_can or (self.rcp_tracks is None and self.rcp_scc is None and self.rcp_corner_objects is None and self.rcp_corner_objects_180 is None and self.rcp_corner_objects_430 is None):
+    if self.radar_off_can or (self.bosch is None and self.rcp_tracks is None and self.rcp_scc is None and self.rcp_corner_objects is None and self.rcp_corner_objects_180 is None and self.rcp_corner_objects_430 is None):
       return super().update(None)
 
     if self.rcp_scc is not None:
@@ -385,6 +777,18 @@ class RadarInterface(RadarInterfaceBase):
       self.updated_scc.update(vls_s)
 
     track_ready = False
+    if self.bosch is not None:
+      now_ns, yaw, cues, path, path_ns, path_source_ns = (
+        self._bosch_context or (time.monotonic_ns(), None, (), (), None, 0))
+      self._bosch_now_ns = now_ns
+      self._bosch_context = None
+      self.bosch.b5_birth_defer.ingest_speed(now_ns, self.v_ego)
+      objects = self.bosch.update(can_strings, now_ns=now_ns, v_ego=self.v_ego,
+                                  yaw_rate_left=yaw, vision=cues, path=path, path_ns=path_ns,
+                                  path_source_ns=path_source_ns)
+      if objects is not None:
+        self._bosch_objects = objects
+        track_ready = True
     if self.radar_tracks and self.rcp_tracks is not None:
       vls_t = self.rcp_tracks.update(can_strings)
       self.updated_tracks.update(vls_t)
@@ -408,9 +812,9 @@ class RadarInterface(RadarInterfaceBase):
       self.updated_corner_objects_430.update(vls_430)
       corner_430_ready = self.trigger_msg_corner_objects_430 in self.updated_corner_objects_430
 
-    scc_ready = not self.radar_tracks and self.frame % 5 == 0 and self.rcp_scc is not None
+    scc_ready = (not self.radar_tracks or self.bosch is not None) and self.frame % 5 == 0 and self.rcp_scc is not None
 
-    if track_ready:
+    if track_ready and self.rcp_tracks is not None:
       self._update(self.updated_tracks)
       self.updated_tracks.clear()
 
@@ -431,7 +835,11 @@ class RadarInterface(RadarInterfaceBase):
 
     # Corner radar runs at its own cadence. Do not let corner-only frames publish
     # RadarData, since liveTracks uses a fixed radarTimeStep for aLead/jLead.
-    publish_ready = track_ready or scc_ready
+    bosch_front_only = self.bosch is not None and self.radar_track_mode == 1
+    publish_ready = scc_ready if self.bosch is not None else track_ready or scc_ready
+    if bosch_front_only:
+      # Mode 1 consumes frontRadar; optional SCC reception cannot gate its clock.
+      publish_ready = self.frame % 5 == 0
     if not publish_ready:
       return None
 
@@ -467,8 +875,11 @@ class RadarInterface(RadarInterfaceBase):
     self.updated_corner_objects_430.clear()
 
     ret = structs.RadarData()
+    if self.bosch is not None:
+      ret.errors.canError = self.bosch.can_error
+      ret.errors.wrongConfig = self.bosch.wrong_config
     if ((self.rcp_tracks is not None and self.radar_tracks and not self.rcp_tracks.can_valid) or
-        (self.rcp_scc is not None and not self.corner_objects_available and not self.rcp_scc.can_valid) or
+        (self.rcp_scc is not None and not bosch_front_only and not self.corner_objects_available and not self.rcp_scc.can_valid) or
         (self.rcp_corner_objects is not None and not self.rcp_corner_objects.can_valid) or
         (self.rcp_corner_objects_180 is not None and not self.rcp_corner_objects_180.can_valid) or
         (self.rcp_corner_objects_430 is not None and not self.rcp_corner_objects_430.can_valid)):
