@@ -720,7 +720,8 @@ class CarrotPlanner:
         turning=bool(context.get('turning', True)) or carstate.leftBlinker or carstate.rightBlinker,
         model_stopping=self.xState in (XState.e2eStop, XState.e2eStopped, XState.e2ePrepare),
         entry_allowed=self.traffic_starting_count == 0 and self.user_stop_distance < 0 and mode == 'acc',
-        geometry=context.get('geometry', lambda box: None), alignment=context.get('alignment'))
+        geometry=context.get('geometry', lambda box: None), alignment=context.get('alignment'),
+        night_geometry=context.get('night_geometry'))
       self.prepare_control_active = self.prepare_decision.active and context.get('actuate', True)
       if self.prepare_control_active:
         self.xState = XState.e2eStopPrepare
