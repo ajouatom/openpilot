@@ -31,8 +31,14 @@ class RuntimeDiagnostics:
     self.frames += 1
     for name, value in values.items():
       if math.isfinite(value):
-        total, maximum, count = self.samples.get(name, (0.0, float('-inf'), 0))
-        self.samples[name] = (total + value, max(maximum, value), count + 1)
+        sample = self.samples.get(name)
+        if sample is None:
+          self.samples[name] = [0.0 + value, value, 1]
+        else:
+          sample[0] += value
+          if value > sample[1]:
+            sample[1] = value
+          sample[2] += 1
     now = time.monotonic()
     if now - self.started < self.interval:
       return

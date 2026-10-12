@@ -16,6 +16,8 @@ class ImpactDetector:
   def __init__(self):
     self.last_timestamp = 0.0
     self.above = False
+    self.orientation = self.calibration = None
+    self.gravity_device = self.device_from_calib = None
 
   def update(self, *, now, timestamp, sensor, orientation, calibration, valid):
     """Return (trigger, quiet, calibrated acceleration); duplicates never count twice."""
@@ -35,8 +37,16 @@ class ImpactDetector:
 
     # Same sensor->device mapping and gravity sign as locationd/PoseKalman.
     device_accel = -values[0, ::-1]
-    gravity_device = rot_from_euler(values[1]).T @ np.array([0.0, 0.0, -9.81])
-    accel = rot_from_euler(values[2]).T @ (device_accel - gravity_device)
+    # IMU updates faster than pose/calibration. Keep only the transforms of the
+    # last validated values, not an old sample or a cached validity decision.
+    orientation_key, calibration_key = tuple(values[1]), tuple(values[2])
+    if orientation_key != self.orientation:
+      self.gravity_device = rot_from_euler(values[1]).T @ np.array([0.0, 0.0, -9.81])
+      self.orientation = orientation_key
+    if calibration_key != self.calibration:
+      self.device_from_calib = rot_from_euler(values[2]).T
+      self.calibration = calibration_key
+    accel = self.device_from_calib @ (device_accel - self.gravity_device)
     horizontal = math.hypot(accel[0], accel[1])
     above = horizontal >= IMPACT_ACCEL
     trigger = above and self.above and timestamp - self.last_timestamp <= MAX_SAMPLE_GAP

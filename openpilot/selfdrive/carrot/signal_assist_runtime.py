@@ -48,6 +48,8 @@ class SignalAssistRuntime:
     self.last_decision = None
     self.read_ms = 0.
     self.enabled_since = -float('inf')
+    self._observation_bytes = None
+    self._observation = None
 
   def read(self, sm, now=None):
     now = time.monotonic() if now is None else now
@@ -64,13 +66,22 @@ class SignalAssistRuntime:
         with self.observation_path.open('rb') as f:
           raw = f.read(MAX_BYTES + 1)
         if len(raw) <= MAX_BYTES:
-          obj = json.loads(raw)
+          # Re-read the endpoint every cycle, but decode identical bytes once.
+          # Consumers treat this packet as read-only. Freshness, mode and vehicle
+          # context are still checked on every use, never cached with the JSON.
+          if raw != self._observation_bytes:
+            self._observation = json.loads(raw)
+            self._observation_bytes = raw
+          obj = self._observation
           if obj.get('version') == 1 and obj.get('stream') == 'road' and obj.get('size') == [1344, 760]:
             if obj.get('timestamp', -float('inf')) >= self.enabled_since:
               observation = obj
+        else:
+          self._observation_bytes = self._observation = None
       except (OSError, ValueError, TypeError, AttributeError):
-        pass
+        self._observation_bytes = self._observation = None
     if not self.enabled:
+      self._observation_bytes = self._observation = None
       self.read_ms = (time.monotonic() - start) * 1000
       return None, dict(now=now, enabled=False, valid=False, drive=False)
     services = ('carState', 'modelV2', 'radarState', 'selfdriveState', 'carControl')
@@ -83,10 +94,9 @@ class SignalAssistRuntime:
 
   def record(self, decision, speed, distance):
     now = time.monotonic()
-    value = asdict(decision)
     key = (decision.hold, decision.red_sign, decision.released, decision.track_id)
     if key != self.last_decision or now - self.last_log >= 1.:
       from openpilot.common.swaglog import cloudlog
-      cloudlog.event('signalAssist', **value, speed=float(speed), model_stop_distance=float(distance),
+      cloudlog.event('signalAssist', **asdict(decision), speed=float(speed), model_stop_distance=float(distance),
                      transport_read_ms=self.read_ms, enabled=self.enabled)
       self.last_decision, self.last_log = key, now

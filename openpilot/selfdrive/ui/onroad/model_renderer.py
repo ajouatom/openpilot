@@ -424,6 +424,7 @@ class ModelRenderer(Widget):
     self._carrot_tire_trajectory = 0
 
     self._carrot_path_draw_seq = 0.0
+    self._carrot_path_draw_seq2 = -1
     self._carrot_pos_t = 0.0
 
     self._carrot_path_x = 0
@@ -1422,9 +1423,6 @@ class ModelRenderer(Widget):
       forward = True
 
     max_seq = min(track_vertices_len // 4 + 3, 16)
-
-    if not hasattr(self, "_carrot_path_draw_seq2"):
-      self._carrot_path_draw_seq2 = -1
 
     if forward:
       self._carrot_path_draw_seq += seq
