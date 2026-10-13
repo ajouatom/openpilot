@@ -1,0 +1,41 @@
+name: Startup recovery checks
+on:
+  push:
+    branches: [carrot-wip, carrot-nav]
+    paths:
+      - 'launch_chffrplus.sh'
+      - 'SConstruct'
+      - 'scripts/ensure_params_build.sh'
+      - 'openpilot/common/*rebuild*'
+      - 'openpilot/common/*cache*lock*'
+      - 'openpilot/common/startup*'
+      - 'openpilot/system/manager/build.py'
+      - 'openpilot/system/ui/startup_recovery.py'
+      - 'openpilot/system/tests/**'
+      - '.github/workflows/startup-recovery.yaml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  recovery:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - run: python -m pip install pytest==8.3.5 aiohttp numpy raylib==5.5.0.4
+      - name: Recovery and real process-lock regression checks
+        env:
+          PYTHONPATH: .:opendbc_repo
+        run: |
+          bash -n launch_chffrplus.sh scripts/ensure_params_build.sh
+          python -m pytest --noconftest -o addopts= -q \
+            openpilot/system/tests/test_build_cache.py \
+            openpilot/system/tests/test_rebuild_cleanup.py \
+            openpilot/system/tests/test_startup_recovery.py \
+            openpilot/system/tests/test_startup_touch_log.py \
+            openpilot/system/tests/test_reboot_sound.py \
+            openpilot/system/tests/test_bootstrap_ui.py \
+            openpilot/selfdrive/carrot/server/tests/test_git_config.py
