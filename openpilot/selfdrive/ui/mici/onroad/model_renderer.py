@@ -16,7 +16,6 @@ from openpilot.system.ui.lib.text_draw import draw_text_ui_style
 from openpilot.system.ui.lib.shader_polygon import draw_polygon, Gradient
 from openpilot.system.ui.lib import native_draw, native_geometry
 from openpilot.system.ui.widgets import Widget
-from openpilot.system.ui.lib.overlay_cache import OverlayLayer, DisplayClock
 from typing import Optional, Any
 
 CLIP_MARGIN = 500
@@ -69,12 +68,6 @@ class RadarInfoItem:
 class ModelRenderer(Widget):
   def __init__(self):
     super().__init__()
-    self._overlay = OverlayLayer(0)
-    self._overlay_state = None
-    self._display_clock = DisplayClock()
-    self._model_frame = -1
-    self._radar_frame = -1
-    self._params_frame = -1
     self._longitudinal_control = False
     self._experimental_mode = False
     self._blend_filter = FirstOrderFilter(1.0, 0.25, 1 / gui_app.target_fps)
@@ -123,14 +116,8 @@ class ModelRenderer(Widget):
     self._transform_dirty = True
 
   def _render(self, rect: rl.Rectangle):
-    state = self._overlay_state
-    self._overlay.draw(rect, self._paint, state.key if state else None,
-                       enabled=state is not None and state.enabled, urgent=state is not None and state.urgent)
-
-  def _paint(self, rect: rl.Rectangle):
-    self._display_clock.tick()
     sm = ui_state.sm
-    self._display_clock.update_filter(self._torque_filter, -sm['carOutput'].actuatorsOutput.torque)
+    self._torque_filter.update(-ui_state.sm['carOutput'].actuatorsOutput.torque)
 
     # Check if data is up-to-date
     if (sm.recv_frame["liveCalibration"] < ui_state.started_frame or
@@ -148,8 +135,7 @@ class ModelRenderer(Widget):
     live_calib = sm['liveCalibration']
     self._path_offset_z = live_calib.height[0] if live_calib.height else HEIGHT_INIT[0]
 
-    if sm.recv_frame['carParams'] != self._params_frame:
-      self._params_frame = sm.recv_frame['carParams']
+    if sm.updated['carParams']:
       self._longitudinal_control = sm['carParams'].openpilotLongitudinalControl
 
     model = sm['modelV2']
@@ -158,11 +144,9 @@ class ModelRenderer(Widget):
     render_lead_indicator = self._longitudinal_control and radar_state is not None
 
     # Update model data when needed
-    model_updated = sm.recv_frame['modelV2'] != self._model_frame
-    if model_updated or sm.recv_frame['radarState'] != self._radar_frame or self._transform_dirty:
-      self._radar_frame = sm.recv_frame['radarState']
+    model_updated = sm.updated['modelV2']
+    if model_updated or sm.updated['radarState'] or self._transform_dirty:
       if model_updated:
-        self._model_frame = sm.recv_frame['modelV2']
         self._update_raw_points(model)
 
       path_x_array = self._path.raw_points[:, 0]
@@ -236,7 +220,6 @@ class ModelRenderer(Widget):
         self._lead_pt_filt[slot] = (float(pt[0]), float(pt[1]))
         return float(pt[0]), float(pt[1])
 
-      alpha = 1.0 - self._display_clock.retention(1.0 - alpha)
       x = prev[0] + (float(pt[0]) - prev[0]) * alpha
       y = prev[1] + (float(pt[1]) - prev[1]) * alpha
       self._lead_pt_filt[slot] = (x, y)
@@ -330,8 +313,8 @@ class ModelRenderer(Widget):
       max_distance = np.clip(lead_d - min(lead_d * 0.35, 10.0), 0.0, max_distance)
 
     soon_acceleration = self._acceleration_x[len(self._acceleration_x) // 4] if len(self._acceleration_x) > 0 else 0
-    self._display_clock.update_filter(self._acceleration_x_filter, soon_acceleration)
-    self._display_clock.update_filter(self._acceleration_x_filter2, soon_acceleration)
+    self._acceleration_x_filter.update(soon_acceleration)
+    self._acceleration_x_filter2.update(soon_acceleration)
 
     # make path width wider/thinner when initially braking/accelerating
     if self._experimental_mode and False:
@@ -485,7 +468,7 @@ class ModelRenderer(Widget):
       return
 
     allow_throttle = sm['longitudinalPlan'].allowThrottle or not self._longitudinal_control
-    self._display_clock.update_filter(self._blend_filter, int(allow_throttle))
+    self._blend_filter.update(int(allow_throttle))
 
     if self._experimental_mode:
       # Draw with acceleration coloring

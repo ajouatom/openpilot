@@ -1,5 +1,33 @@
 # Alternating onroad display work and receipt-cached health checks
 
+## Current status: UI layer experiment withdrawn after C3 flicker
+
+The user subsequently reported C3 flicker, then clarified that the camera stays
+visible while the overlays intermittently disappear. The offscreen tests below
+did not exercise a connected C3 camera and its
+live window/presentation path, so they did not validate that combination. The
+specific graphics-state/presentation failure has not been reproduced locally;
+the report must not be explained away as the expected difference in paint rate.
+C4 road behavior has not been confirmed either.
+
+Restore both C3 and C4 UI files, including display timing and recording changes,
+byte-for-byte to the parent of `d6a92d91e2`. Remove the layer-cache helpers and
+their now-inapplicable tests. Camera, model overlays and HUD return to the
+previous per-frame rendering path. Retain the independent messaging frequency
+cache and selfdrived manager-process cache. Preserve later Jetlink/model changes
+and unrelated local work.
+
+The UI timing results below are historical experimental measurements, not gains
+available after this rollback. Real-C3 confirmation of the rollback and a
+camera-connected/window-presented reproduction are still needed before any
+replacement layer cache is promoted. Branch publication is not vehicle install.
+
+Rollback validation: the full tracked UI trees match the pre-experiment parent
+exactly, 117 focused UI tests pass, Python compilation succeeds and the diff has
+no whitespace errors. These checks do not establish physical C3 recovery.
+
+## Historical experiment
+
 The user requested lower CPU occupancy while retaining the existing driving
 behavior. This change applies to the Python C3/C3X and C4 onroad UI, plus common
 SubMaster checks and selfdrived's manager-process decoding. Publish it to both
