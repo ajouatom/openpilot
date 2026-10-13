@@ -333,10 +333,14 @@ def test_final_output_cap_after_coasting(reset,lead,gas,brake):
   path=REPO/'openpilot/selfdrive/controls/lib/longitudinal_planner.py'
   tree=ast.parse(path.read_text());cls=next(n for n in tree.body if isinstance(n,ast.ClassDef) and n.name=='LongitudinalPlanner')
   method=next(n for n in cls.body if isinstance(n,ast.FunctionDef) and n.name=='apply_signal_stop_prepare')
-  ns={};exec(compile(ast.Module([method],type_ignores=[]),str(path),'exec'),ns)
+  import time
+  ns={'time':time}
+  exec(compile(ast.Module([method],type_ignores=[]),str(path),'exec'),ns)
   p=NS(output_a_target=1.,output_v_target_now=20.,output_j_target_now=1.,output_should_stop=False,mpc=NS(mode='acc'),dt=.05,a_desired=1.,coasting_target=70.)
+  p._signal_prepare_accel = PrepareAccel()
+  p._signal_prepare_time = p._signal_prepare_previous = None
   sm={'carState':NS(gasPressed=gas,brakePressed=brake,aEgo=0.,vEgo=15.),'radarState':NS(leadOne=NS(status=lead),leadTwo=NS(status=False))}
-  ns['apply_signal_stop_prepare'](p,sm,NS(prepare_decision=NS(active=True)),reset)
+  ns['apply_signal_stop_prepare'](p,sm,NS(prepare_decision=NS(active=True),prepare_control_active=True),reset)
   if not (reset or lead or gas or brake):
     assert p.output_a_target==pytest.approx(-.0125) and p.coasting_target==0
     assert p.output_j_target_now==pytest.approx(-.25)
@@ -366,6 +370,7 @@ def test_runtime_pose_camera_and_calibration(monkeypatch,yaw,age,calibrated,expe
   sm.seen=sm.valid=sm.alive=dict.fromkeys(sm,True);sm.recv_time=dict.fromkeys(sm,1.)
   monkeypatch.setattr(SignalAssistRuntime,'read',lambda *a:(observation(1.),dict(now=1.,enabled=True,valid=True,drive=True)))
   runtime=SignalPrepareRuntime.__new__(SignalPrepareRuntime);runtime.enabled=True;runtime.extra=extra
+  runtime.mode, runtime.mode_since = None, -float('inf')
   runtime.prepare=SignalStopPrepare()
   _,ctx=runtime.read(sm,1.)
   assert (ctx['valid'] and not ctx['turning'])==expected

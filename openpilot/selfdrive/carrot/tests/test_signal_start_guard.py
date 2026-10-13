@@ -180,6 +180,45 @@ def test_actual_planner_green_does_not_override_original_stop():
   assert not p.start_decision.hold and p.v_cruise == 0 and p.xState.name == 'e2eStopped'
 
 
+@pytest.mark.parametrize('mode', ['acc', 'blended'])
+@pytest.mark.parametrize('model_go', [False, True])
+@pytest.mark.parametrize('inhibit', ['none', 'left_blinker', 'soft_hold', 'detect_only'])
+def test_single_transition_leaves_departure_to_original_planner(mode, model_go, inhibit):
+  from openpilot.selfdrive.carrot.tests.test_signal_start_group import SMALL, RIGHT
+
+  cls, _ = planner_class((REPO/'openpilot/selfdrive/carrot/carrot_functions.py').read_text(encoding='utf-8'))
+  p = cls(start_guard=SignalStartGuard())
+  sm = inputs(distance=3.)
+  sm['modelV2'].velocity.x = [0.]*33
+  releases = []
+  for i in range(100):
+    t = i*.05
+    if i == 20:
+      if model_go:
+        sm['modelV2'].position.x = [100.*j/32 for j in range(33)]
+        sm['modelV2'].velocity.x = [0.]+[15.]*32
+      sm['carState'].leftBlinker = inhibit == 'left_blinker'
+      sm['carState'].softHoldActive = int(inhibit == 'soft_hold')
+      if inhibit == 'detect_only':
+        p.trafficLightDetectMode = 1
+    tracks = [(SMALL, 'red'), (RIGHT, 'red')] if i < 20 else [(RIGHT, 'green')]
+    obs = dict(timestamp=t, frame_id=i, session='camera', tracks=[dict(box=b, raw=c) for b, c in tracks])
+    p.update(sm, 80., mode, start_observation=obs,
+             start_context=dict(now=t+.2, enabled=True, valid=True, drive=True))
+    if p.start_decision.released:
+      releases.append(p.start_decision.reason)
+    if 4 <= i < 20:
+      assert p.start_decision.hold and p.xState.name == 'e2eStopped' and p.v_cruise == 0
+  assert releases == ['green_transition'] and not p.start_decision.hold
+  if model_go and inhibit == 'none':
+    assert p.xState.name == 'e2eCruise' and p.v_cruise > 0
+  elif inhibit == 'soft_hold':
+    # Soft hold is carried separately from the cruise speed setting.
+    assert p.xState.name == 'e2eStopped' and p.soft_hold_active > 0
+  else:
+    assert p.xState.name == 'e2eStopped' and p.v_cruise == 0
+
+
 @pytest.mark.parametrize('hold,accel', [(True, 1.2), (True, -1.5), (False, 1.2)])
 def test_production_output_veto_after_mpc_and_coasting(hold, accel):
   path = REPO/'openpilot/selfdrive/controls/lib/longitudinal_planner.py'

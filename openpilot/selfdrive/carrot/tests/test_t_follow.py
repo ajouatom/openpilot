@@ -138,6 +138,9 @@ def test_safe_t_follow_does_not_compound_during_repeated_deceleration():
   planner.myTFollowFactor = 1.2
   planner._tf_decel_extra = 0.0
   planner._tf_applied = 0.72
+  planner._tf_decel_base = 0.72
+  planner._tf_mode_factor = None
+  planner._tf_base_last = 0.72
   planner.t_follow_last = 0.72
 
   values = [
@@ -160,6 +163,9 @@ def _speed_tf_planner(lead_accel_response: int, applied_t_follow: float) -> Carr
   planner.myTFollowFactor = 1.2
   planner._tf_decel_extra = 0.0
   planner._tf_applied = applied_t_follow
+  planner._tf_decel_base = applied_t_follow
+  planner._tf_mode_factor = None
+  planner._tf_base_last = applied_t_follow
   planner.t_follow_last = applied_t_follow
   return planner
 

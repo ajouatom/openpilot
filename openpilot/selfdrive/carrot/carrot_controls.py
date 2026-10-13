@@ -10,14 +10,13 @@ class CarrotControls:
     self.lat_suspend_hold_t = 0.0
 
   def lat_suspend_control(self, CS, latActive):
-    suspend_angle = float(self.params.get_int("LatSuspendAngleDeg"))
     resume_angle  = 15
     delay_sec     = 1.0
     hold_sec      = 0.5
 
     # 1) enter condition timer
-    enter_cond = CS.steeringPressed and abs(CS.steeringAngleDeg) > suspend_angle
     if not self.lat_suspend_active:
+      enter_cond = CS.steeringPressed and abs(CS.steeringAngleDeg) > float(self.params.get_int("LatSuspendAngleDeg"))
       if enter_cond:
         self.lat_suspend_enter_t += DT_CTRL
         if self.lat_suspend_enter_t >= delay_sec:

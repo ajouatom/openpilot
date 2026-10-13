@@ -3,11 +3,12 @@ from dataclasses import asdict
 import json
 import math
 from pathlib import Path
+import time
 
 import numpy as np
 
 from openpilot.selfdrive.carrot.signal_assist_runtime import SignalAssistRuntime, requested, MAX_BYTES
-from openpilot.selfdrive.carrot.signal_stop_prepare import SignalStopPrepare, housing_range, housing_alignment
+from openpilot.selfdrive.carrot.signal_stop_prepare import SignalStopPrepare, housing_range, housing_alignment, night_lamp_support
 
 ENABLE_PATH = Path('/data/signal-color-shadow/stop_prepare_enabled')
 OBSERVATION_PATH = Path('/dev/shm/carrot_signal_prepare_observation.json')
@@ -41,13 +42,13 @@ class SignalPrepareRuntime(SignalAssistRuntime):
     obs, context = super().read(sm, now)
     from openpilot.selfdrive.carrot.signal_mode import signal_mode
     mode = signal_mode()
-    if mode != getattr(self, 'mode', None):
+    if mode != self.mode:
       self.mode, self.mode_since = mode, context['now']
       self.prepare.reset('mode_change')
     context['actuate'] = mode == 2
     if obs is not None and obs.get('timestamp', -math.inf) < self.mode_since:
       obs = None
-    context.update(geometry=lambda box: None, alignment=None, turning=True)
+    context.update(geometry=lambda box: None, alignment=None, night_geometry=None, turning=True)
     if not self.enabled:
       context['valid'] = False
       return obs, context
@@ -58,6 +59,14 @@ class SignalPrepareRuntime(SignalAssistRuntime):
       from openpilot.common.transformations.camera import DEVICE_CAMERAS
       from openpilot.common.transformations.orientation import rot_from_euler
       self.extra.update(0)
+      if now is None:
+        # SubMaster timestamps receipts inside update(). Comparing them with
+        # the earlier transport-read time rejects newly arrived data as future
+        # data and repeatedly clears the preparation confirmation history.
+        context['now'] = time.monotonic()
+        services = ('carState', 'modelV2', 'radarState', 'selfdriveState', 'carControl')
+        context['valid'] = context['valid'] and all(
+          0 <= context['now']-sm.recv_time[s] <= .25 for s in services)
       now = context['now']; extra = self.extra
       ok = all(extra.seen[k] and extra.valid[k] and extra.alive[k]
                and 0 <= now-extra.recv_time[k] <= age
@@ -90,6 +99,9 @@ class SignalPrepareRuntime(SignalAssistRuntime):
         model.laneLines, model.laneLineProbs, model.laneLineStds)
       context['alignment'] = lambda box, distance: housing_alignment(
         box, distance, config.fcam.focal_length, rpy, model.roadEdges, model.roadEdgeStds,
+        model.laneLines, model.laneLineProbs, model.laneLineStds)
+      context['night_geometry'] = lambda box: night_lamp_support(
+        box, config.fcam.focal_length, rpy, model.roadEdges, model.roadEdgeStds,
         model.laneLines, model.laneLineProbs, model.laneLineStds)
     except (AttributeError, KeyError, TypeError, ValueError, IndexError):
       context['valid'] = False

@@ -1,6 +1,7 @@
 from collections import deque
 
 import numpy as np
+from opendbc.car.hyundai.scalar import clip_float
 from opendbc.can import CANPacker
 from opendbc.car import Bus, DT_CTRL, apply_driver_steer_torque_limits, common_fault_avoidance, make_tester_present_msg, structs, apply_std_steer_angle_limits
 from opendbc.car.common.conversions import Conversions as CV
@@ -85,7 +86,7 @@ def process_hud_alert(enabled, fingerprint, hud_control):
   return sys_warning, sys_state, left_lane_warning, right_lane_warning
 
 def rate_limit(x, x_last, lo, hi):
-  return float(np.clip(x, x_last + lo, x_last + hi))
+  return clip_float(x, x_last + lo, x_last + hi)
 
 
 def calculate_canfd_jerk_limits(accel: float, jerk: float, tracking_error: float = 0.0) -> tuple[float, float]:
@@ -124,7 +125,7 @@ def apply_steer_angle_limits_physics(desired_sw_deg: float,
   max_sw_rate_deg_per_tick = float(np.interp(y_std_1s, [0.1, 0.2, 0.4], [2.0, 1.5, 0.8]))
   v = max(float(v_ego), 1.0)
 
-  target_sw = float(np.clip(desired_sw_deg, -steer_sw_max_deg, steer_sw_max_deg))
+  target_sw = clip_float(desired_sw_deg, -steer_sw_max_deg, steer_sw_max_deg)
   if v_ego < MID_SPEED_ANGLE_RATE_LIMIT_SPEED:
     # Keep low/mid-speed angle commands quieter without reducing LKAS_ANGLE_MAX_TORQUE.
     # Allow the angle, but slow the arrival: 0~15 kph ramps 0.8->1.1 deg/tick,
@@ -167,13 +168,13 @@ def apply_steer_angle_limits_physics(desired_sw_deg: float,
   cmd_rw = rate_limit(target_rw, last_rw, -max_drw_per_tick_deg, max_drw_per_tick_deg)
 
   # --- accel clip ---
-  cmd_rw = float(np.clip(cmd_rw, -rw_max, rw_max))
+  cmd_rw = clip_float(cmd_rw, -rw_max, rw_max)
 
   if not lat_active:
     cmd_rw = float(steering_sw_deg) / steer_ratio
 
   cmd_sw = cmd_rw * steer_ratio
-  return float(np.clip(cmd_sw, -steer_sw_max_deg, steer_sw_max_deg))
+  return clip_float(cmd_sw, -steer_sw_max_deg, steer_sw_max_deg)
 
 class CarController(CarControllerBase):
   def __init__(self, dbc_names, CP):
@@ -430,8 +431,7 @@ class CarController(CarControllerBase):
 
       # During recovery, taper the rate to zero. Only steeringPressed can reduce authority.
       torque_delta = base_rate_up * float(np.interp(torque_ratio, [0.6, 0.8], [1.0, 0.0]))
-    self.lkas_max_torque = float(np.clip(self.lkas_max_torque + torque_delta,
-                                         self.params.ANGLE_MIN_TORQUE, angle_torque_cap))
+    self.lkas_max_torque = clip_float(self.lkas_max_torque + torque_delta, self.params.ANGLE_MIN_TORQUE, angle_torque_cap)
 
     if not CS.out.steeringPressed and self.recovering_from_override and self.lkas_max_torque >= self.angle_max_torque:
       self.recovering_from_override = False
@@ -491,7 +491,7 @@ class CarController(CarControllerBase):
     self.apply_torque_last = apply_torque
 
     # accel + longitudinal
-    accel = float(np.clip(actuators.accel, CarControllerParams.ACCEL_MIN, CarControllerParams.ACCEL_MAX))
+    accel = clip_float(actuators.accel, CarControllerParams.ACCEL_MIN, CarControllerParams.ACCEL_MAX)
     stopping = actuators.longControlState == LongCtrlState.stopping
     set_speed_in_units = hud_control.setSpeed * (CV.MS_TO_KPH if CS.is_metric else CV.MS_TO_MPH)
 

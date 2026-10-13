@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 import os
 import time
+import math
+import struct
 import numpy as np
 
 from casadi import SX, vertcat, sin, cos
@@ -136,6 +138,8 @@ class LateralMpc:
     self.reset(x0)
 
   def reset(self, x0=None):
+    self._cost_key = None
+    self._cost_solver = None
     if x0 is None:
       x0 = np.zeros(X_DIM)
     self.x_sol = np.zeros((N+1, X_DIM))
@@ -159,12 +163,19 @@ class LateralMpc:
   def set_weights(self, path_weight, heading_weight,
                   lat_accel_weight, lat_jerk_weight,
                   steering_rate_weight):
+    values = (path_weight, heading_weight, lat_accel_weight, lat_jerk_weight, steering_rate_weight)
+    key = struct.pack('5d', *values) if all(map(math.isfinite, values)) else None
+    if key is not None and key == self._cost_key and self.solver is self._cost_solver:
+      return
+    self._cost_key = None
     W = np.asfortranarray(np.diag([path_weight, heading_weight,
                                    lat_accel_weight, lat_jerk_weight,
                                    steering_rate_weight]))
     for i in range(N):
       self.solver.cost_set(i, 'W', W)
     self.solver.cost_set(N, 'W', W[:COST_E_DIM,:COST_E_DIM])
+    self._cost_key = key
+    self._cost_solver = self.solver
 
   def run(self, x0, p, y_pts, heading_pts, yaw_rate_pts):
     x0_cp = np.copy(x0)

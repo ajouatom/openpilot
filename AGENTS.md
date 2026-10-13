@@ -1,5 +1,55 @@
 # Repository memory
 
+- On 2026-10-12, 10a5 on nav ac1da01591/mode2 reproduces a real green held by
+  a tiny sole red anchor and zero moving preparation after small night lamps
+  repeatedly lose IDs. Add a two-housing red-to-green release: each anchor needs
+  independent red history and fresh 700ms green, with no forward red conflict.
+  Night-only pending-red templates and unique >=0.9 image correspondence retain
+  small red identity through bounded motion; do not relax green/daytime rules.
+  512 tests pass; prior 43,090-frame guard summaries match at nominal/+20ms;
+  3,347 prior image comparisons have unchanged fresh colors/green boxes. New
+  replay releases the reviewed green hold; image replay requests preparation
+  5.60s earlier for only0.9s, cap about-0.19m/s2. Not sustained braking or a full
+  stop; no vehicle install/native timing/closed-loop claim. Publish to BOTH
+  carrot-nav and carrot-wip, single-parent only. See docs/signal_a5_followup_20261012.md.
+
+- On 2026-10-12, the user reaffirmed that corrections must be committed and
+  pushed to ALL maintained carrot-* branches unless explicitly excepted. This
+  supersedes the earlier wip-only signal scope. Current remote targets are
+  carrot-wip and carrot-nav; do not recreate retired branches or modify other
+  contributors' namespaced branches. Port both signal preparation cadence and
+  night red-group corrections to nav, preserving its navigation/model/runtime
+  choices. Keep every new commit single-parent, preserve unrelated local work,
+  and distinguish branch publication from vehicle installation and road validation.
+
+- On 2026-10-12, the user requested solving the failed night-red preparation.
+  A separate night contract now requires 2–4 persistent compact red lamps with
+  compatible road-direction support, NOT a bounded distance or stop-line target.
+  Same-ID current-red templates bridge a direct core <=500ms without renewing
+  it. Night capture freshness is350ms; missing pair evidence is inactive with
+  <=350ms confirmation retention, and fresh forward green cancels. Only night
+  geometry erodes road edges by0.3+2*std (std<=1m); measured housing policy stays.
+  Mode2 alone actuates; keep CPU/DM protection and original ONNX. 492 tests pass.
+  Nine-minute replay enters once6.10s before original stopping, for1.1s to target
+  -0.27m/s2; +20/+100ms still enter, +250ms rejects. Prior4329-input regression
+  adds no entries. Not closed-loop improvement or guaranteed stop: identity loss
+  and applicability remain limitations. No vehicle deployment; read-only vehicle
+  remains carrot-nav135020d1. Work remains carrot-wip, single-parent only. See
+  docs/signal_night_group_20261012.md and private2026-10-12-night-geometry archive.
+
+- On 2026-10-12, the latest 10a4 evening drive has 1,063 fresh-red observer
+  outputs but zero moving preparation: every confirmed red box is a night core
+  or template, not a measured housing. Preserve confirmation across repeated
+  accepted samples ageing beyond 200ms, for at most 450ms from capture; output
+  remains inactive, and fresh new evidence/context/gap/session checks still win.
+  448 focused tests pass. Recorded-input replay of 10,276 planner samples and
+  +20ms delay still gives zero entries, as does an offline night lamp-ray/height
+  experiment: road confidence and broad/truncated range remain blocking. Do not
+  connect the failed night candidate, pretend inferred width is metric housing
+  size, or claim better stopping. No vehicle deployment/model changes. Work only
+  on carrot-wip with single-parent commits; preserve the separate nav checkout.
+  See docs/signal_night_prepare_20261012.md and private evidence archives.
+
 - On 2026-10-12, SignalAssistMode adds the requested live0/1/2 selection on
   carrot-wip only:0 auxiliary OFF,1 display/alerts and stopped-red departure veto,
   2 also conditional red preparation toward-0.5m/s2. Default0; old production

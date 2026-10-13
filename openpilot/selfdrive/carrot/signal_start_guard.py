@@ -73,6 +73,53 @@ class SignalStartGuard:
     self.pending = None
     self.since = 0.
     self.count = 0
+    self.red_anchors = []
+
+  def reset_votes(self):
+    self.pending, self.count = None, 0
+    for anchor in self.red_anchors:
+      anchor['pending'], anchor['count'] = None, 0
+
+  def observe_group(self, tracks, timestamp, gap):
+    """A central red-to-green transition may resolve a lost primary.
+
+    Green never moves an anchor. Duplicate/overlapping detections cannot become
+    two votes; a fresh forward red vetoes release just as it vetoes the primary.
+    Outside the central image band, keep the existing two-housing fallback.
+    """
+    reds = [t for t in tracks if t['raw'] == 'red']
+    for track in reds:
+      if len(self.red_anchors) < 8 and not any(self.matches(a['box'], track['box']) for a in self.red_anchors):
+        self.red_anchors.append({'box': list(track['box']), 'red': False, 'pending': None, 'count': 0, 'since': timestamp})
+    greens = []
+    for anchor in self.red_anchors:
+      matches = [t for t in tracks if self.matches(anchor['box'], t['box'])]
+      color = matches[0]['raw'] if len(matches) == 1 else 'unknown'
+      if color == 'green' and (reds or not anchor['red']):
+        color = 'unknown'
+      if color not in ('red', 'green') or color != anchor['pending'] or gap > self.MAX_GAP:
+        anchor.update(pending=color, since=timestamp, count=1)
+      else:
+        anchor['count'] += 1
+      if color == 'red':
+        anchor['box'] = list(matches[0]['box'])
+        if anchor['count'] >= 2 and timestamp-anchor['since'] >= .15-1e-9:
+          anchor['red'] = True
+      elif color == 'green' and anchor['count'] >= 3 and timestamp-anchor['since'] >= .7-1e-9:
+        greens.append(anchor['box'])
+    # Image-centre support is a hypothesis, not signal-to-lane assignment.
+    # Each candidate already needs its own confirmed red history and fresh
+    # same-box green streak; a newly appearing green cannot release the stop.
+    if any(.45 <= (box[0]+box[2])/2688 <= .55 for box in greens):
+      return 'green_transition'
+    for i, a in enumerate(greens):
+      for b in greens[i+1:]:
+        # Disjoint housings, comparable size and row: not two fits to one lamp.
+        aw, bw = a[2]-a[0], b[2]-b[0]
+        if (min(a[2], b[2]) <= max(a[0], b[0]) and max(aw, bw) <= 2*min(aw, bw)
+            and abs((a[1]+a[3]-b[1]-b[3])/2) <= max(a[3]-a[1], b[3]-b[1])):
+          return 'green_group'
+    return None
 
   @staticmethod
   def front(box):
@@ -95,7 +142,7 @@ class SignalStartGuard:
     try:
       ts, fid, session = observation['timestamp'], observation['frame_id'], observation['session']
       if not math.isfinite(ts) or not 0 <= now-ts <= self.MAX_AGE:
-        self.pending, self.count = None, 0
+        self.reset_votes()
         return 'stale_or_future'
       if not isinstance(fid, int) or not isinstance(session, str) or not session:
         raise ValueError('invalid identity')
@@ -104,11 +151,13 @@ class SignalStartGuard:
         self.session, self.box = session, None
         self.timestamp, self.frame = -math.inf, -1
         self.pending, self.count = None, 0
+        self.red_anchors = []
       if ts <= self.timestamp or fid <= self.frame:
         return 'repeated_or_reordered'
       gap = ts-self.timestamp
       self.timestamp, self.frame = ts, fid
       tracks = [t for t in observation['tracks'] if self.front(t['box'])]
+      group_green = self.observe_group(tracks, ts, gap)
       matches = [t for t in tracks if self.box is not None and self.matches(self.box, t['box'])]
       red = [t for t in tracks if t['raw'] == 'red']
       if self.box is None or (not matches and red):
@@ -128,6 +177,8 @@ class SignalStartGuard:
         self.box = selected['box']
       if color == 'green' and red:
         color = 'unknown'
+      if group_green:
+        return group_green
       if color not in ('red', 'green') or color != self.pending or gap > self.MAX_GAP:
         self.pending, self.since, self.count = color, ts, 1
       else:
@@ -138,7 +189,7 @@ class SignalStartGuard:
         return 'green'
       return 'unconfirmed'
     except (KeyError, TypeError, ValueError, OverflowError):
-      self.pending, self.count = None, 0
+      self.reset_votes()
       return 'malformed'
 
   def update(self, now, observation, *, enabled, valid, drive, gas, speed, departure):
@@ -154,12 +205,13 @@ class SignalStartGuard:
     if not math.isfinite(now) or now < self.last_now:
       # Clock discontinuity cannot turn a held red into permission to go.
       self.pending, self.count, self.box, self.session = None, 0, None, None
+      self.red_anchors = []
       return StartDecision(self.hold, reason='clock_discontinuity')
     self.last_now = now
     if now < self.cooldown:
       return StartDecision(reason='driver_cooldown')
     if not valid or not math.isfinite(speed):
-      self.pending, self.count = None, 0
+      self.reset_votes()
       return StartDecision(self.hold, reason='invalid_context')
     if not self.hold and abs(speed) > .3:
       self.reset()
@@ -168,7 +220,7 @@ class SignalStartGuard:
     released = False
     if evidence == 'red':
       self.hold = True
-    elif evidence == 'green' and self.hold:
+    elif evidence in ('green', 'green_group', 'green_transition') and self.hold:
       released = True
       self.reset()
     warn = self.hold and departure and not self.warned

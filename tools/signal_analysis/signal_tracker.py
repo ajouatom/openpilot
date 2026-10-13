@@ -25,8 +25,9 @@ def small_percentile(values, percentile):
   return high - (high - low) * (1. - fraction) if fraction >= .5 else low + (high - low) * fraction
 
 
-def dark_scene(rgb):
-  gray = cv2.cvtColor(rgb[:int(rgb.shape[0] * .55)], cv2.COLOR_RGB2GRAY)
+def dark_scene(rgb, *, gray=None):
+  end = int(rgb.shape[0] * .55)
+  gray = cv2.cvtColor(rgb[:end], cv2.COLOR_RGB2GRAY) if gray is None else gray[:end]
   cumulative = np.cumsum(cv2.calcHist([gray], [0], None, [256], [0, 256]).ravel())
   rank = .7 * (gray.size - 1)
   lower, upper = np.searchsorted(cumulative, [math.floor(rank), math.ceil(rank)], side='right')
@@ -103,11 +104,11 @@ def lamp_evidence(rgb, box, *, conservative_green=False):
   return state, max(r, g), dict(red_score=r, green_score=g, left_brightness=peaks[0], right_brightness=peaks[1])
 
 
-def housing_proposals(rgb, *, forward_only=False, conservative_green=False):
+def housing_proposals(rgb, *, forward_only=False, conservative_green=False, gray=None):
   """Current-image housing proposals. Never accepts annotations or future frames."""
   height, width = rgb.shape[:2]
   y_end = int(height*.60)
-  gray = cv2.cvtColor(rgb[:y_end], cv2.COLOR_RGB2GRAY)
+  gray = cv2.cvtColor(rgb[:y_end], cv2.COLOR_RGB2GRAY) if gray is None else gray[:y_end]
   ox, oy, ex, ey = (int(width*.25), int(height*.08), int(width*.80), int(height*.52)) if forward_only else (0,0,width,y_end)
   candidates = []
   for threshold in (45, 70, 100, 130):
@@ -147,7 +148,7 @@ def housing_proposals(rgb, *, forward_only=False, conservative_green=False):
   return kept[:20]
 
 
-def night_proposals(rgb, *, conservative_green=False):
+def night_proposals(rgb, *, conservative_green=False, gray=None, is_dark=None):
   """Recover saturated lamps from a compact white core and its colored halo.
 
   Inferred horizontal boxes are proposals, not measured housings or lane labels.
@@ -155,13 +156,12 @@ def night_proposals(rgb, *, conservative_green=False):
   """
   h, w = rgb.shape[:2]
   end = int(h * 0.55)
-  gray = cv2.cvtColor(rgb[:end], cv2.COLOR_RGB2GRAY)
+  gray = cv2.cvtColor(rgb[:end], cv2.COLOR_RGB2GRAY) if gray is None else gray[:end]
   # This extension is used only when the upper scene is dark.
   # Exact linear 70th percentile for uint8, avoiding a full-frame partition.
-  cumulative = np.cumsum(cv2.calcHist([gray], [0], None, [256], [0, 256]).ravel())
-  rank = .7 * (gray.size - 1)
-  lower, upper = np.searchsorted(cumulative, [math.floor(rank), math.ceil(rank)], side='right')
-  if lower + (upper - lower) * (rank - math.floor(rank)) > 45:
+  if is_dark is None:
+    is_dark = dark_scene(rgb, gray=gray)
+  if not is_dark:
     return []
   # Keep a full maximum-core margin around eligible centers. Color conversion
   # is restricted to each small halo; full-scene HSV was too slow on C4 little CPUs.
@@ -232,22 +232,25 @@ def night_proposals(rgb, *, conservative_green=False):
     seeds.append(dict(box=box, raw=state, quality=max(0.25, strength), source='night_lamp_core', core_diameter=diam, **evidence))
   return seeds
 
-def detect(rgb, *, daytime_cores=False, conservative_green=False):
+def detect(rgb, *, daytime_cores=False, conservative_green=False, gray=None):
   """Explicit trial: preserve housing candidates and supplement merged backgrounds."""
-  if daytime_cores and not dark_scene(rgb):
-    candidates = housing_proposals(rgb, forward_only=True, conservative_green=conservative_green)
-    for candidate in day_proposals(rgb, conservative_green=conservative_green):
+  if gray is None:
+    gray = cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY)
+  is_dark = dark_scene(rgb, gray=gray)
+  if daytime_cores and not is_dark:
+    candidates = housing_proposals(rgb, forward_only=True, conservative_green=conservative_green, gray=gray)
+    for candidate in day_proposals(rgb, conservative_green=conservative_green, gray=gray):
       if all(overlap(candidate['box'], other['box']) < .35 for other in candidates):
         candidates.append(candidate)
     return candidates[:20]
-  candidates = housing_proposals(rgb, conservative_green=conservative_green)
-  for candidate in night_proposals(rgb, conservative_green=conservative_green):
+  candidates = housing_proposals(rgb, conservative_green=conservative_green, gray=gray)
+  for candidate in night_proposals(rgb, conservative_green=conservative_green, gray=gray, is_dark=is_dark):
     if all(overlap(candidate['box'], other['box']) < .35 for other in candidates):
       candidates.append(candidate)
   return candidates[:20]
 
 
-def day_proposals(rgb, *, conservative_green=False):
+def day_proposals(rgb, *, conservative_green=False, gray=None):
   """Forward compact lamps with adjoining dark bar evidence.
 
   A dark housing can merge into trees/background, so its connected outer contour
@@ -263,7 +266,8 @@ def day_proposals(rgb, *, conservative_green=False):
                                      cv2.inRange(hsv, (170, 90, 140), (179, 255, 255))), bright)
   green = cv2.bitwise_and(cv2.inRange(hsv, (38, 65, 140), (90 if conservative_green else 105, 255, 255)), bright)
   _, ids, stats, centers = cv2.connectedComponentsWithStats(cv2.bitwise_or(red, green), 8)
-  gray = cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY)
+  if gray is None:
+    gray = cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY)
   out = []
   for k, stat in enumerate(stats[1:], 1):
     x, y, cw, ch, area = map(int, stat)
@@ -381,7 +385,10 @@ class SignalTracker:
                    distance <= max(2., aw*.15) and overlap(a,b) >= .6)):
             continue
         limit = max(10, aw//5)+1 if d.get('continuity_id') == t.ident else max(6, aw*.3)
-        if .65 <= bw/aw <= 1.55 and .5 <= bh/ah <= 2 and distance < limit and overlap(a,b) > .12:
+        red_motion = (self.verified_lamps and d.get('continuity_id') == t.ident
+                      and d.get('red_motion_verified', False) and d['raw'] == t.pending == 'red'
+                      and d.get('match_score', 0) >= .9 and timestamp-t.last_seen <= self.MAX_OBSERVATION_GAP)
+        if .65 <= bw/aw <= 1.55 and .5 <= bh/ah <= 2 and distance < limit and (overlap(a,b) > .12 or red_motion):
           candidates.append((distance, t))
       if len(candidates) > 1 and any(timestamp-t.last_seen > self.MAX_OBSERVATION_GAP for _,t in candidates):
         candidates = []
@@ -429,14 +436,17 @@ class SignalTracker:
     return dict(state=state, reason='agreeing_visible_tracks' if len(states)==1 else 'conflict_or_unconfirmed', tracks=visible)
 
   def process(self, rgb, timestamp, *, allow_green=True):
-    detections = detect(rgb, daytime_cores=self.daytime_cores, conservative_green=self.conservative_green)
+    # Share current pixels only; never reuse a previous frame's color/brightness.
     gray = cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY)
+    detections = detect(rgb, daytime_cores=self.daytime_cores, conservative_green=self.conservative_green, gray=gray)
     if self.previous_gray is not None and self.last_timestamp is not None and 0 < timestamp-self.last_timestamp <= self.identity_gap:
       bridge = timestamp-self.last_timestamp > self.MAX_OBSERVATION_GAP
       for track in self.tracks:
         # The template must belong to the immediately preceding image. An old
         # box alone cannot identify the object in that intervening image.
-        if not track.seen_red or track.last_seen != self.last_timestamp:
+        pending_red = (self.verified_lamps and track.pending == 'red' and track.observations >= 2
+                       and track.evidence.get('source') == 'night_lamp_core')
+        if (not track.seen_red and not pending_red) or track.last_seen != self.last_timestamp:
           continue
         if not bridge and any(overlap(track.box,d['box']) > .25 for d in detections):
           continue
@@ -462,12 +472,23 @@ class SignalTracker:
           continue
         dx=sx+loc[0]-ax;dy=sy+loc[1]-ay;box=[x1+dx,y1+dy,x2+dx,y2+dy]
         raw,strength,evidence=lamp_evidence(rgb,box,conservative_green=self.conservative_green)
+        red_motion = False
+        if (self.verified_lamps and not bridge and raw == track.pending == 'red' and score >= .9
+            and track.evidence.get('source') == 'night_lamp_core'):
+          # A small lamp can move farther than its height after a road bump.
+          # Require an isolated image-match peak; nearby identical lamps must
+          # not exchange identities. Only current red evidence uses this path.
+          alternatives = scores.copy()
+          lx, ly = loc
+          alternatives[max(0,ly-2):ly+3, max(0,lx-2):lx+3] = -1
+          red_motion = score-float(alternatives.max()) >= .05
         if bridge:
           # Image correspondence keeps identity, never a previous color streak.
           # The current image must independently contain the same lamp housing.
           detections = [d for d in detections if overlap(box,d['box']) <= .35]
         detections.append(dict(box=box,raw=raw,quality=strength,source='causal_template',match_score=score,
-                               **({'continuity_id':track.ident} if bridge else {}),**evidence))
+                               **({'continuity_id':track.ident} if bridge or red_motion else {}),
+                               **({'red_motion_verified': True} if red_motion else {}),**evidence))
     if not allow_green:
       # Offline steering experiment: preserve red acquisition/history, but never
       # grant a green vote or retain a confirmed green through rejected input.

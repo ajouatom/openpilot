@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import time
 import numpy as np
 
 import openpilot.cereal.messaging as messaging
@@ -27,6 +28,7 @@ from openpilot.common.swaglog import cloudlog
 from openpilot.common.params import Params
 from openpilot.common.stopping_params import get_stopping_speed
 from openpilot.selfdrive.carrot.carrot_man_input import get_carrot_man
+from openpilot.selfdrive.carrot.signal_stop_prepare import PrepareAccel
 from openpilot.selfdrive.controls.lib.cruise_coasting import CruiseCoastingPlan, coasting_percent, no_coasting_lead
 
 
@@ -65,6 +67,9 @@ class LongitudinalPlanner:
     self.output_v_target_now = 0.0
     self.output_j_target_now = 0.0
     self.output_should_stop = False
+    self._signal_prepare_accel = PrepareAccel()
+    self._signal_prepare_time = None
+    self._signal_prepare_previous = None
     self.lead_preview = 0.0
     self.lead_preview_action_time = 0.0
     self.lead_preview_accel = 0.0
@@ -369,21 +374,17 @@ class LongitudinalPlanner:
     self.apply_signal_start_guard(carrot)
 
   def apply_signal_stop_prepare(self, sm, carrot, reset_state, now=None):
-    import time
-    from openpilot.selfdrive.carrot.signal_stop_prepare import PrepareAccel
-    if not hasattr(self, '_signal_prepare_accel'):
-      self._signal_prepare_accel = PrepareAccel()
     now = time.monotonic() if now is None else now
-    elapsed = now-getattr(self, '_signal_prepare_time', now-self.dt)
+    elapsed = now-(now-self.dt) if self._signal_prepare_time is None else now-self._signal_prepare_time
     self._signal_prepare_time = now
     cs = sm['carState']
-    active = (getattr(getattr(carrot, 'prepare_decision', None), 'active', False)
-              and getattr(carrot, 'prepare_control_active', True)
+    active = (carrot.prepare_decision is not None and carrot.prepare_decision.active
+              and carrot.prepare_control_active
               and not reset_state and not cs.gasPressed and not cs.brakePressed
               and 0 < elapsed <= .2
               and not self.output_should_stop and self.mpc.mode == 'acc'
               and not sm['radarState'].leadOne.status and not sm['radarState'].leadTwo.status)
-    previous = getattr(self, '_signal_prepare_previous', cs.aEgo)
+    previous = cs.aEgo if self._signal_prepare_previous is None else self._signal_prepare_previous
     uncapped = self.output_a_target
     self.output_a_target = self._signal_prepare_accel.apply(self.output_a_target, previous, elapsed, active)
     self._signal_prepare_previous = self.output_a_target
@@ -397,7 +398,7 @@ class LongitudinalPlanner:
       # No shouldStop or go request: the existing model owns stopping/handover.
 
   def apply_signal_start_guard(self, carrot):
-    if getattr(getattr(carrot, 'start_decision', None), 'hold', False):
+    if carrot.start_decision is not None and carrot.start_decision.hold:
       # Explicit departure veto, including the first constrained MPC cycle.
       # Preserve any stronger braking and normal longitudinal/Panda gating.
       self.output_should_stop = True
@@ -407,31 +408,43 @@ class LongitudinalPlanner:
   def update_coasting(self, sm, carrot, v_cruise_kph, v_cruise, reset_state,
                       force_slow_decel, coasting_turn_blocked, cutin_predecel_limit):
     self.coasting_target = 0.0
-    if self.coasting_percent > 0:
-      carrot_man = get_carrot_man(sm)
-      # A stale navigation publisher must not authorize ignoring a speed cap.
-      navigation_current = not sm.seen['carrotMan'] or carrot_man is not None
-      ratio = sm['carState'].vCluRatio if sm['carState'].vCluRatio > 0.5 else 1.0
-      external_limit = carrot_man.desiredSpeed * CV.KPH_TO_MS * ratio if carrot_man is not None else 250 * CV.KPH_TO_MS
-      enabled = (
-        self.CP.openpilotLongitudinalControl and not reset_state and self.reset_decel_timer == 0
-        and sm.all_checks(service_list=['carState', 'controlsState', 'selfdriveState', 'radarState', 'modelV2'])
-        and self.mpc.mode == 'acc' and self.mpc.source == 'cruise' and self.mpc.solution_status == 0
-        and navigation_current and not force_slow_decel and not self.output_should_stop and not self.fcw
-        and not sm['carState'].gasPressed and not sm['carState'].brakePressed and not sm['carState'].carrotCruise
-        and not sm['carState'].standstill and not carrot.soft_hold_active
-        and no_coasting_lead(sm['radarState']) and cutin_predecel_limit is None
-        and not coasting_turn_blocked and not carrot.atc_active and not carrot.lane_change_active
-        and carrot.xState.name in ('cruise', 'e2eCruise') and carrot.eco_target_speed == 0
-        and abs(self.v_cruise_kph - v_cruise_kph) < 0.001
-        and abs(carrot.v_cruise - v_cruise) < 0.001
-      )
-      self.coasting_target = self.coasting.update(
-        enabled=enabled, percent=self.coasting_percent, set_speed=v_cruise_kph,
-        target=v_cruise, external_limit=external_limit, dt=self.dt,
-      )
-    else:
+    # Reject cheap controller/driver states before walking subscriber health or
+    # reading navigation. Every veto still clears the coasting stability history.
+    if not self.coasting_percent > 0 or not self.CP.openpilotLongitudinalControl or reset_state or self.reset_decel_timer != 0:
       self.coasting.reset()
+      return
+    if self.mpc.mode != 'acc' or self.mpc.source != 'cruise' or self.mpc.solution_status != 0:
+      self.coasting.reset()
+      return
+    if force_slow_decel or self.output_should_stop or self.fcw:
+      self.coasting.reset()
+      return
+    cs = sm['carState']
+    if cs.gasPressed or cs.brakePressed or cs.carrotCruise or cs.standstill or carrot.soft_hold_active:
+      self.coasting.reset()
+      return
+    if cutin_predecel_limit is not None or coasting_turn_blocked or carrot.atc_active or carrot.lane_change_active:
+      self.coasting.reset()
+      return
+    if (carrot.xState.name not in ('cruise', 'e2eCruise') or carrot.eco_target_speed != 0
+        or not abs(self.v_cruise_kph - v_cruise_kph) < 0.001 or not abs(carrot.v_cruise - v_cruise) < 0.001):
+      self.coasting.reset()
+      return
+    if not no_coasting_lead(sm['radarState']) or not sm.all_checks(
+        service_list=('carState', 'controlsState', 'selfdriveState', 'radarState', 'modelV2')):
+      self.coasting.reset()
+      return
+    carrot_man = get_carrot_man(sm)
+    # An unseen publisher is optional; a seen but stale one still cancels relief.
+    if sm.seen['carrotMan'] and carrot_man is None:
+      self.coasting.reset()
+      return
+    ratio = cs.vCluRatio if cs.vCluRatio > 0.5 else 1.0
+    external_limit = carrot_man.desiredSpeed * CV.KPH_TO_MS * ratio if carrot_man is not None else 250 * CV.KPH_TO_MS
+    self.coasting_target = self.coasting.update(
+      enabled=True, percent=self.coasting_percent, set_speed=v_cruise_kph,
+      target=v_cruise, external_limit=external_limit, dt=self.dt,
+    )
 
   def publish(
     self,
@@ -487,6 +500,7 @@ class LongitudinalPlanner:
 
     longitudinalPlan.xState = carrot.xState.value
     longitudinalPlan.trafficState = carrot.trafficState.value
+    longitudinalPlan.signalDetectionSuspended = carrot.signal_detection_suspended
     longitudinalPlan.cruiseTarget = self.v_cruise_kph
     longitudinalPlan.cruiseCoastingTarget = self.coasting_target
     longitudinalPlan.cruiseCoastingPercent = self.coasting_percent

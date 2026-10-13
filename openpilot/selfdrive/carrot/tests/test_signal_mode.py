@@ -7,7 +7,7 @@ import pytest
 
 from openpilot.selfdrive.carrot import signal_mode as policy
 from openpilot.selfdrive.carrot.signal_start_guard import SignalStartRuntime
-from openpilot.selfdrive.carrot.signal_stop_prepare import SignalStopPrepare
+from openpilot.selfdrive.carrot.signal_stop_prepare import SignalStopPrepare, PrepareAccel
 from openpilot.selfdrive.carrot.tests.test_signal_assist_runtime import SM
 from openpilot.selfdrive.carrot.tests.test_signal_stop_prepare import observation
 from tools.signal_analysis.replay_signal_assist import planner_class, REPO
@@ -81,6 +81,8 @@ def test_mode_one_notifies_without_moving_deceleration(monkeypatch,mode):
   ns={};exec(compile(ast.Module([method],type_ignores=[]),str(source),'exec'),ns)
   target=NS(output_a_target=1.,output_v_target_now=20.,output_j_target_now=1.,output_should_stop=False,
     mpc=NS(mode='acc'),dt=.05,a_desired=1.,coasting_target=70.)
+  target._signal_prepare_accel = PrepareAccel()
+  target._signal_prepare_time = target._signal_prepare_previous = None
   sm['carState'].aEgo=0.
   sm['radarState'].leadTwo=NS(status=False)
   ns['apply_signal_stop_prepare'](target,sm,p,False,now=1.3)

@@ -72,9 +72,41 @@ def test_other_brands_without_radar_use_vision(configured_mode: int) -> None:
 
 # --- Bosch RadarTracks liveTracks polling (candidate A') -------------------------
 
-from openpilot.selfdrive.carrot.radar import radard_dpath
-from openpilot.selfdrive.carrot.radar.radard_dpath import bosch_radar_tracks_active
 from opendbc.car.hyundai.values import HyundaiExtFlags
+
+
+def _load_polling_functions():
+  # These tests replace every IPC endpoint and RadarD before running main().
+  # Load those exact production functions without importing device-only IPC,
+  # Params or hardware extensions into the lightweight replay CI environment.
+  import ast
+  import time
+  from pathlib import Path
+  from types import ModuleType
+  from openpilot.cereal import car
+  from openpilot.common.runtime_diagnostics import RuntimeDiagnostics
+
+  path = Path(__file__).parents[1] / 'radar/radard_dpath.py'
+  tree = ast.parse(path.read_text(encoding='utf8'))
+  names = {'bosch_radar_tracks_active', 'main'}
+  nodes = [n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name in names]
+  assert {n.name for n in nodes} == names
+  module = ModuleType('radard_polling_under_test')
+  module.__dict__.update(
+    car=car, time=time, HyundaiExtFlags=HyundaiExtFlags,
+    effective_radar_track_mode=effective_radar_track_mode,
+    RuntimeDiagnostics=RuntimeDiagnostics, MOTION_BACKEND='test',
+    Priority=SimpleNamespace(CTRL_LOW=0), config_realtime_process=None,
+    Params=None, DPathRadarD=None,
+    messaging=SimpleNamespace(SubMaster=None, PubMaster=None, log_from_bytes=None),
+    cloudlog=SimpleNamespace(info=lambda *args: None, event=lambda *args, **kwargs: None),
+  )
+  exec(compile(ast.Module(body=nodes, type_ignores=[]), str(path), 'exec'), module.__dict__)
+  return module
+
+
+radard_dpath = _load_polling_functions()
+bosch_radar_tracks_active = radard_dpath.bosch_radar_tracks_active
 
 BOSCH = int(HyundaiExtFlags.BOSCH_RADAR)
 

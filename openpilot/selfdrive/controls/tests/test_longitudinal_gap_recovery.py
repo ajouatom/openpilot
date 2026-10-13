@@ -1,4 +1,6 @@
 import ast
+import math
+import struct
 from copy import copy
 from pathlib import Path
 from types import SimpleNamespace
@@ -9,7 +11,7 @@ import pytest
 from openpilot.selfdrive.controls.lib.longitudinal_gap_recovery import (
   LeadGapState, advance_headroom, distance_recovery_weight, gap_reference, displayed_follow_distance,
 )
-from openpilot.selfdrive.controls.lib.longitudinal_braking_gap import BrakingGapState, braking_gap_reference, comfort_path_has_reserve
+from openpilot.selfdrive.controls.lib.longitudinal_braking_gap import LeadComfortState, braking_gap_reference, comfort_path_has_reserve
 
 
 def load_mpc_update(path):
@@ -26,7 +28,7 @@ def load_mpc_update(path):
     def cost_set(self, i, key, value): self.weights[i, key] = np.copy(value)
     def constraints_set(self, *args): pass
 
-  ns = {'np': np, 'log': SimpleNamespace(LongitudinalPersonality=SimpleNamespace(standard=1, aggressive=0)),
+  ns = {'np': np, 'math': math, 'struct': struct, 'log': SimpleNamespace(LongitudinalPersonality=SimpleNamespace(standard=1, aggressive=0)),
             'DT_MDL': .05, 'N': 12, 'COMFORT_BRAKE': 2.5, 'STOP_DISTANCE': 6., 'ACCEL_MIN': -3.5, 'LEAD_ACCEL_TAU': 1.5,
             'MODEL_NAME': 'long', 'ACADOS_SOLVER_TYPE': 'SQP_RTI', 'COST_DIM': 6, 'COST_E_DIM': 5, 'X_DIM': 3, 'PARAM_DIM': 8,
             'A_CHANGE_COST': 200., 'A_CHANGE_COST_STARTING': 10., 'LEAD_DANGER_FACTOR': .8, 'LIMIT_COST': 1e6,
@@ -35,13 +37,14 @@ def load_mpc_update(path):
             'AcadosOcpSolverCython': RecordingSolver, 'LEAD_ACCEL_MIN_TRACK_FRAMES': 3,
             'LeadAccelResponseState': preview.LeadAccelResponseState, 'get_lead_accel_mpc_request': preview.get_lead_accel_mpc_request,
             'LeadGapState': LeadGapState, 'gap_reference': gap_reference, 'displayed_follow_distance': displayed_follow_distance,
-            'BrakingGapState': BrakingGapState, 'braking_gap_reference': braking_gap_reference,
+            'LeadComfortState': LeadComfortState, 'braking_gap_reference': braking_gap_reference,
             'comfort_path_has_reserve': comfort_path_has_reserve,
             'get_traffic_stop_distance_adjust': get_traffic_stop_distance_adjust,
             'get_traffic_stop_obstacle_distance': get_traffic_stop_obstacle_distance,
             'LaneChangeGapPlan': LaneChangeGapPlan, 'cutout_obstacle_relief': cutout_obstacle_relief}
   ns['T_IDXS'] = 10*(np.arange(13)/12)**2
   ns['T_DIFFS'] = np.diff(ns['T_IDXS'], prepend=0.)
+  ns['A_CHANGE_FACTORS'] = tuple(np.interp(t, [0., 1., 2.], [1., 1., 0.]) for t in ns['T_IDXS'][:12])
   ns['FCW_IDXS'] = ns['T_IDXS'] < 5
   ns['PRED_DANGER_IDXS'] = (ns['T_IDXS'] > .2) & (ns['T_IDXS'] < 3.)
   tree = ast.parse(path.read_text(encoding='utf-8'))
@@ -81,6 +84,49 @@ def mpc_class():
   return load_mpc_update(Path(__file__).resolve().parents[1]/'lib/longitudinal_mpc_lib/long_mpc.py')
 
 
+@pytest.mark.parametrize('level', range(6))
+@pytest.mark.parametrize('lead_index', [0, 1])
+def test_shared_braking_to_standstill_never_retains_onset_distance(mpc_class, level, lead_index):
+  """Gap 1, short TF: no new reference margin after slowing or while stopped.
+
+  Fixed measured inputs exercise production wiring, not vehicle response.
+  The initial gap is inside the braking-aware target, so there is no legacy
+  opening-gap reservoir. Both lead slots and every response level are covered.
+  """
+  lead = SimpleNamespace(status=True, radar=True, radarTrackId=49, dRel=25.,
+                         vLead=19., vRel=-1., aLeadK=-1.125, aLeadTau=1.5, modelProb=1.)
+  absent = SimpleNamespace(status=False, radar=False, radarTrackId=-1, vRel=0., aLeadK=0., modelProb=0.)
+  radar = SimpleNamespace(leadOne=lead if lead_index == 0 else absent,
+                          leadTwo=lead if lead_index == 1 else absent)
+  carrot = SimpleNamespace(leadAccelResponse=level, myDrivingMode=3, jerk_factor=.5,
+                           comfort_brake=2.4, stop_distance=6., mode='acc', v_cruise=30.,
+                           stop_dist=1000., trafficStopDistanceAdjust=0., lane_change_active=False,
+                           get_T_FOLLOW=lambda *args: .6)
+  mpc = mpc_class()
+  mpc.set_accel_limits(-1.2, 2.)
+  for frame in range(421):
+    t = frame * .05
+    if t < 8.:
+      speed, lead.vLead = 20. - 1.25 * t, 19. - 1.125 * t
+      ego_accel, lead.aLeadK = -1.25, -1.125
+      lead.dRel = 25. - t + .0625 * t**2
+    else:
+      speed = lead.vLead = max(0., 10. - (t - 8.))
+      ego_accel = lead.aLeadK = -1. if speed > 0. else 0.
+      lead.dRel = 21.
+    lead.vRel = lead.vLead - speed
+    mpc.set_cur_state(speed, ego_accel)
+    mpc.x_sol[:, 1] = speed
+    mpc.x_sol[:, 2] = ego_accel
+    mpc.update(carrot, False, radar, 30., *(np.zeros(13) for _ in range(4)),
+               personality=0, lead_accel_response_enabled=True, lead_gap_enabled=True,
+               lead_track_frames=(20, 20), measured_a_ego=ego_accel)
+    np.testing.assert_allclose(mpc.lead_gap_margins, 0., atol=1e-10)
+    np.testing.assert_allclose(mpc.yref[:, 0], 0., atol=1e-10)
+    assert mpc.desired_distance == pytest.approx(mpc.base_desired_distances[lead_index])
+  assert mpc.desired_distance == pytest.approx(6.)
+
+
 def test_braking_slack_is_resolved_without_relief_if_new_trajectory_loses_reserve(mpc_class, monkeypatch):
   solves = []
   def solve(mpc):
@@ -91,7 +137,7 @@ def test_braking_slack_is_resolved_without_relief_if_new_trajectory_loses_reserv
   def trial_relief(self, **kw):
     self.relief = .5 if kw['enabled'] else 0.
     return np.full_like(kw['times'], self.relief)
-  monkeypatch.setattr(BrakingGapState, 'comfort_relief', trial_relief)
+  monkeypatch.setattr(LeadComfortState, 'comfort_relief', trial_relief)
   result = run_update(mpc_class, level=5, distance=40., speed=20., lead_speed=19., lead_accel=-1.)
   assert len(solves) == 40
   for trial, fallback in zip(solves[::2], solves[1::2], strict=True):

@@ -275,8 +275,30 @@ class MouseState:
       self._prev_mouse_event[slot] = ev
 
 
+def _make_framebuffer_reader():
+  if PC:
+    return rl.rl_get_active_framebuffer
+
+  # The ES2 raylib build stubs rlGetActiveFramebuffer to zero. Allocate once;
+  # the real ES2 binding query then needs no per-frame allocation or API lookup.
+  ffi = cffi.FFI()
+  ffi.cdef('void glGetIntegerv(unsigned int pname, int *data);')
+  gles = ffi.dlopen('libGLESv2.so')
+  binding = ffi.new('int *')
+
+  def read_framebuffer():
+    gles.glGetIntegerv(0x8CA6, binding)  # GL_FRAMEBUFFER_BINDING (ES2)
+    return binding[0]
+
+  return read_framebuffer
+
+
 class GuiApplication:
   def __init__(self, width: int | None = None, height: int | None = None):
+    # Capture the actual target after BeginDrawing: PLATFORM_COMMA binds its
+    # internal rotated_fb even when screen recording is disabled.
+    self.render_framebuffer = 0
+    self._read_framebuffer = rl.rl_get_active_framebuffer
     self._set_log_callback()
 
     self._fonts: dict[FontWeight, rl.Font] = {}
@@ -494,6 +516,7 @@ class GuiApplication:
       rl.set_config_flags(flags)
 
       rl.init_window(self._scaled_width, self._scaled_height, title)
+      self._read_framebuffer = _make_framebuffer_reader()
 
       needs_render_texture = self._scale != 1.0 or BURN_IN_MODE or RECORD
       if self._scale != 1.0:
@@ -875,9 +898,11 @@ class GuiApplication:
         render_texture = self._render_texture
         if render_texture:
           rl.begin_texture_mode(render_texture)
+          self.render_framebuffer = render_texture.id
           rl.clear_background(rl.BLACK)
         else:
           rl.begin_drawing()
+          self.render_framebuffer = self._read_framebuffer()
           rl.clear_background(rl.BLACK)
 
         if self._scale != 1.0:

@@ -11,6 +11,7 @@ from openpilot.system.ui.lib.multilang import tr
 from openpilot.system.ui.lib.text_measure import measure_text_cached
 from openpilot.system.ui.lib.text_draw import draw_text_ui_style
 from openpilot.system.ui.widgets import Widget
+from openpilot.system.ui.lib.overlay_cache import OverlayLayer, DisplayClock
 
 # Constants
 SET_SPEED_NA = 255
@@ -144,6 +145,11 @@ class SetSpeedOverride:
 class HudRenderer(Widget):
   def __init__(self):
     super().__init__()
+    self._overlay = OverlayLayer(1)
+    self._overlay_state = None
+    self._display_clock = DisplayClock()
+    self._blink_phase = 0.0
+    self._cruise_speed_animation_started = 0.0
     self.is_cruise_set = False
     self.is_cruise_available = True
     self.set_speed = SET_SPEED_NA
@@ -192,7 +198,7 @@ class HudRenderer(Widget):
     self._memory_usage_text = "0%"
     self._disk_usage_text = "100%"
     self._voltage_text = "0.0V"
-    self._plot_renderer = None
+    self._plot_renderer = PlotRenderer()
     self._round_box_rect = rl.Rectangle(0.0, 0.0, 0.0, 0.0)
 
     self._hud_params_next_refresh_time = 0.0
@@ -236,6 +242,9 @@ class HudRenderer(Widget):
 
   def _update_state(self) -> None:
     """Update HUD state based on car state and controls state."""
+    self._blink_phase = (self._blink_phase + self._display_clock.tick()) % 64
+    self._blink_timer = int(self._blink_phase) % 16
+    self._disp_timer = int(self._blink_phase)
     sm = ui_state.sm
     device_info_recv_frames = (sm.recv_frame["deviceState"], sm.recv_frame["peripheralState"])
     if not self._device_info_loaded or device_info_recv_frames != self._device_info_recv_frames:
@@ -263,6 +272,8 @@ class HudRenderer(Widget):
     #  self.set_speed *= KM_TO_MILE
 
     self._engaged = sm['selfdriveState'].enabled
+    display_speed = self.set_speed * (1.0 if ui_state.is_metric else KM_TO_MILE)
+    self._update_cruise_speed_animation(str(int(round(display_speed))) if self._engaged and self.is_cruise_set else "--")
 
     v_ego_cluster = car_state.vEgoCluster
     self.v_ego_cluster_seen = self.v_ego_cluster_seen or v_ego_cluster != 0.0
@@ -273,6 +284,19 @@ class HudRenderer(Widget):
   def _render(self, rect: rl.Rectangle) -> None:
     """Render HUD elements to the screen."""
     self._refresh_hud_params(time.monotonic())
+    self._plot_renderer.update(self._show_plot_mode)
+    state = self._overlay_state
+    key = (state.key if state else None, self._blink_timer <= 8, self._disp_timer < 32, self._show_plot_mode)
+    self._overlay.draw(rect, self._paint, key, enabled=state is not None and state.enabled,
+                       urgent=state is not None and state.urgent)
+
+    # Input handling and the short speed-change popup remain at camera cadence.
+    button_x = rect.x + rect.width - UI_CONFIG.border_size - UI_CONFIG.button_size
+    button_y = rect.y + UI_CONFIG.border_size
+    self._exp_button.render(rl.Rectangle(button_x, button_y, UI_CONFIG.button_size, UI_CONFIG.button_size))
+    self._draw_cruise_speed_animation(rect)
+
+  def _paint(self, rect: rl.Rectangle) -> None:
 
     # Draw the header background
     rl.draw_rectangle_gradient_v(
@@ -289,18 +313,11 @@ class HudRenderer(Widget):
 
     #self._draw_current_speed(rect)
 
-    button_x = rect.x + rect.width - UI_CONFIG.border_size - UI_CONFIG.button_size
-    button_y = rect.y + UI_CONFIG.border_size
-    self._exp_button.render(rl.Rectangle(button_x, button_y, UI_CONFIG.button_size, UI_CONFIG.button_size))
-
-    if self._plot_renderer is None:
-      self._plot_renderer = PlotRenderer()
-    self._plot_renderer.draw(rect, self._font_display, self._show_plot_mode)
+    self._plot_renderer.paint(rect, self._font_display)
 
     self._draw_date_time(rect)
     self._draw_tpms(rect)
     self._draw_egpu_badge(rect)
-    self._draw_cruise_speed_animation(rect)
 
   def user_interacting(self) -> bool:
     return self._exp_button.is_pressed
@@ -623,6 +640,10 @@ class HudRenderer(Widget):
     return False
 
   def _draw_carrot_traffic_light(self, bx: int, by: int):
+    from openpilot.selfdrive.ui.signal_status import signal_detection_paused, draw_signal_pause
+    if signal_detection_paused(ui_state.sm):
+      draw_signal_pause(bx, by + 270, 32)
+      return
     traffic_state = self._get_traffic_state()
     traffic_state_carrot = self._get_traffic_state_carrot()
 
@@ -672,8 +693,6 @@ class HudRenderer(Widget):
       cruise_text = str(int(round(set_speed)))
     else:
       cruise_text = "--"
-
-    self._update_cruise_speed_animation(cruise_text)
 
     draw_text_ui_style(
       cruise_text, bx + 170, by + 15, 60, COLORS.CARROT_GREEN,
@@ -729,14 +748,16 @@ class HudRenderer(Widget):
         return
       self._cruise_speed_animation_text = cruise_text
       self._cruise_speed_animation_time = CRUISE_SPEED_ANIMATION_START
+      self._cruise_speed_animation_started = time.monotonic()
 
   def _draw_cruise_speed_animation(self, rect: rl.Rectangle) -> None:
     if self._cruise_speed_animation_time <= 0 or not self._cruise_speed_animation_text:
       return
 
-    # c3-wip's integer state machine, tuned for a smaller and quicker BIG popup.
-    # At 20 Hz this renders for 10 frames and starts shrinking almost at once.
-    self._cruise_speed_animation_time -= CRUISE_SPEED_ANIMATION_STEP
+    elapsed = time.monotonic() - self._cruise_speed_animation_started
+    self._cruise_speed_animation_time = max(0.0, CRUISE_SPEED_ANIMATION_START - CRUISE_SPEED_ANIMATION_STEP * (1.0 + elapsed * 20.0))
+    if elapsed >= 0.5:
+      return
     animation_time = self._cruise_speed_animation_time
     interpolation_time = min(animation_time, CRUISE_SPEED_ANIMATION_MAX)
 
@@ -1363,8 +1384,6 @@ class HudRenderer(Widget):
       )
 
   def _draw_set_speed_carrot(self, rect: rl.Rectangle) -> None:
-    self._blink_timer = (self._blink_timer + 1) % 16
-    self._disp_timer = (self._disp_timer + 1) % 64
 
     # C drawHud anchor
     bx = int(rect.x + 140)
@@ -1398,6 +1417,8 @@ class PlotRenderer:
     self._plot_height = 300.0
     self._plot_dx = 2.0
     self._show_plot_mode_prev = -1
+    self._ready = False
+    self._title = ''
 
   def _clear(self):
     self._plot_size = 0
@@ -1584,6 +1605,11 @@ class PlotRenderer:
       )
 
   def draw(self, rect: rl.Rectangle, font, show_plot_mode: int) -> None:
+    self.update(show_plot_mode)
+    self.paint(rect, font)
+
+  def update(self, show_plot_mode: int) -> None:
+    self._ready = False
     if show_plot_mode == 0:
       return
     try:
@@ -1602,8 +1628,11 @@ class PlotRenderer:
       return
 
     self._update_plot_queue(plot_data)
+    self._title = title
+    self._ready = True
 
-    if rect.width < 1200:
+  def paint(self, rect: rl.Rectangle, font) -> None:
+    if not self._ready or rect.width < 1200:
       return
 
     x_base = rect.x + self._plot_x
@@ -1614,6 +1643,6 @@ class PlotRenderer:
       self._draw_plotting(i, x_base, y_base, colors[i], font)
 
     draw_text_ui_style(
-      title, x_base + 400, y_base - 20, 25, rl.WHITE,
+      self._title, x_base + 400, y_base - 20, 25, rl.WHITE,
       font=font, border_width=2.0, shadow_offset=4.0, align='center_bottom',
     )
