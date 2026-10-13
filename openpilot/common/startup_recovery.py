@@ -9,6 +9,7 @@ import time
 
 from openpilot.common.repo_update import child_lock_kwargs, recover_stale_index_lock, repo_lock
 from openpilot.common.reboot import reboot_device
+from openpilot.common.rebuild_request import request_full_rebuild
 from openpilot.selfdrive.carrot.server.services.git_config import prepare_git_pull
 
 
@@ -34,19 +35,6 @@ def read_startup_error(log_path: Path | None) -> str:
       lines = lines[i:] + lines[:i]
       break
   return '\n'.join(lines)
-
-
-def clean_startup_build(repo: Path):
-  """Use the project's clean targets; never reset sources or fetch an update."""
-  command = ['scons', '-c']
-  if Path('/AGNOS').exists():
-    command.append('--minimal')
-  result = subprocess.run(command, cwd=repo, capture_output=True, text=True,
-                          encoding='utf-8', errors='replace', timeout=180, **child_lock_kwargs())
-  if result.returncode:
-    detail = (result.stdout + '\n' + result.stderr).strip()[-2000:]
-    raise RuntimeError(detail or 'Build cleanup failed; no reboot requested.')
-  (repo / 'prebuilt').unlink(missing_ok=True)
 
 
 def capture_startup_output(source, destination, log_path: Path):
@@ -126,9 +114,12 @@ class RecoveryUpdate:
 
   def _rebuild(self):
     try:
+      # Defer cleanup to the launcher: a broken build environment can prevent
+      # SCons cleanup, and cached outputs must also be removed. Reset build state
+      # and cache on the next boot, before the Params build.
       with repo_lock():
-        clean_startup_build(self.repo)
-        self._set('rebuild_rebooting', 'Build cleanup complete. Rebuilding after reboot.')
+        request_full_rebuild()
+        self._set('rebuild_rebooting', 'Full rebuild requested. Rebuilding after reboot.')
         self.reboot()
     except Exception as exc:
       print(f'Startup recovery rebuild failed: {exc}', flush=True)

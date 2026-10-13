@@ -680,13 +680,9 @@ def _git_command(action: str, payload: dict) -> str | None:
       "git clean -xfd"
     )
   if action == "git_rebuild":
-    return (
-      "cd /data/openpilot && "
-      "scons -c && "
-      "rm -f .sconsign.dblite && "
-      "rm -rf /tmp/scons_cache && "
-      "rm -f prebuilt"
-    )
+    # "Will rebuild on next boot": leave the request for launch_chffrplus.sh,
+    # which resets build state and /data/scons_cache (not /tmp on AGNOS).
+    return "touch /data/rebuild_all.request && sync"
   return None
 
 
@@ -766,9 +762,10 @@ def _capture_tmux_log() -> tuple[int, str]:
 
 def _tool_action(action: str, payload: dict) -> dict:
   if action == "rebuild_all":
-    # Same as the tools button: clean build + drop prebuilt, then reboot.
-    # Returned as a command so it runs in the visible PTY (like the git menu).
-    return {"ok": True, "command": "cd /data/openpilot && scons -c && rm -rf prebuilt && sudo reboot"}
+    # Same as the tools button: request a full clean build at next boot, then
+    # reboot. No scons here: the login-shell PTY resets PYTHONPATH, and a broken
+    # build environment is exactly when this button is needed.
+    return {"ok": True, "command": "touch /data/rebuild_all.request && sync && sudo reboot"}
   if action == "send_tmux_log":
     rc, err = _capture_tmux_log()
     if rc != 0:
@@ -2339,7 +2336,7 @@ RECOVERY_JS = """\"use strict\";
   async function onTool(action) {
     closeMenus();
     if (action === \"rebuild_all\") {
-      if (await appConfirm(\"Clean the build cache and reboot.\\n\\n\\u2022 scons -c\\n\\u2022 rm -rf prebuilt\\n\\u2022 sudo reboot\", { title: \"rebuild\", confirmLabel: \"Rebuild\" })) {
+      if (await appConfirm(\"Clean the build cache and reboot.\\n\\nA full clean build runs on the next boot (several minutes).\", { title: \"rebuild\", confirmLabel: \"Rebuild\" })) {
         await dispatchGit(\"rebuild_all\");
       }
       return;
