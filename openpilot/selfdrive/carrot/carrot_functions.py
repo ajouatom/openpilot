@@ -148,6 +148,8 @@ class CarrotPlanner:
     self.speedTFFactor = 10
     self.tFollowDecelBoost = 0.0
     self._tf_decel_extra = 0.0
+    self._tf_decel_base = None
+    self._tf_mode_factor = None
     self.personality = 1
 
     self.cruiseMaxVals0 = 1.6
@@ -257,8 +259,8 @@ class CarrotPlanner:
   def _apply_decel_hold_and_boost_t_follow(self, tf_target, a_ego):
     # Hold only the unboosted baseline. Feeding the previous boosted target
     # back here would add the same margin on every planner cycle.
-    previous_extra = getattr(self, "_tf_decel_extra", 0.0)
-    previous_base = getattr(self, "_tf_decel_base", getattr(self, "_tf_applied", tf_target) - previous_extra)
+    previous_extra = self._tf_decel_extra
+    previous_base = tf_target - previous_extra if self._tf_decel_base is None else self._tf_decel_base
     self._tf_decel_base = max(tf_target, previous_base) if a_ego <= -0.2 else tf_target
     requested_extra = float(np.interp(a_ego, [-2.5, -1.0, -0.3, 0.0], [0.50, 0.25, 0.06, 0.0])) * self.tFollowDecelBoost
     # Add braking margin promptly; release only the extra margin progressively
@@ -270,7 +272,7 @@ class CarrotPlanner:
   def _clip_t_follow(self, t_follow):
     # The selected, speed-scaled baseline can exceed every configured static gap.
     # Preserve the deceleration hold when speed (and its multiplier) falls.
-    tf_max = max(getattr(self, '_tf_mode_target', t_follow), getattr(self, '_tf_decel_base', t_follow))
+    tf_max = max(self._tf_mode_target, self._tf_decel_base)
     tf_max = get_t_follow_mode_max(tf_max, 1.0, self._tf_decel_extra)
     return float(np.clip(t_follow, 0.3, max(0.3, tf_max)))
 
@@ -278,7 +280,7 @@ class CarrotPlanner:
     tf_base = self._get_base_t_follow(personality, v_ego)
     tf_target = self._apply_speed_t_follow_scale(tf_base, v_ego)
     self._tf_mode_factor = ramp_mode_t_follow_factor(
-      self.myTFollowFactor, getattr(self, "_tf_mode_factor", self.myTFollowFactor), DT_MDL,
+      self.myTFollowFactor, self.myTFollowFactor if self._tf_mode_factor is None else self._tf_mode_factor, DT_MDL,
     )
     tf_mode_target = float(tf_target * self._tf_mode_factor)
     self._tf_mode_target = tf_mode_target
@@ -286,7 +288,7 @@ class CarrotPlanner:
     tf_final = self._clip_t_follow(tf_adjusted)
     self._tf_applied = float(tf_final)
     # Apply the baseline increase ramp once per planner cycle.
-    self._tf_base_last = ramp_t_follow(tf_final, getattr(self, '_tf_base_last', self.t_follow_last), self._tf_decel_extra, DT_MDL)
+    self._tf_base_last = ramp_t_follow(tf_final, self._tf_base_last, self._tf_decel_extra, DT_MDL)
     self.t_follow_last = float(self._tf_base_last)
     return self.t_follow_last
 

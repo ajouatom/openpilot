@@ -191,10 +191,11 @@ class Controls:
     lat_plan = self.sm['lateralPlan']
     curve_speed_abs = abs(self.sm['carrotMan'].vTurnSpeed)
     self.lanefull_mode_enabled = (lat_plan.useLaneLines and curve_speed_abs > self.params.get_int("UseLaneLineCurveSpeed"))
-    lat_smooth_seconds = self.params.get_float("LatSmoothSec") * 0.01
-    steer_actuator_delay = self.params.get_float("SteerActuatorDelay") * 0.01
-    if steer_actuator_delay == 0.0:
-      steer_actuator_delay = self.sm['liveDelay'].lateralDelay 
+    if CC.latActive and len(lat_plan.curvatures) > 0 and (lat_plan.useLaneLines if self.is_vw_meb else self.lanefull_mode_enabled):
+      lat_smooth_seconds = self.params.get_float("LatSmoothSec") * 0.01
+      steer_actuator_delay = self.params.get_float("SteerActuatorDelay") * 0.01
+      if steer_actuator_delay == 0.0:
+        steer_actuator_delay = self.sm['liveDelay'].lateralDelay
     
     def smooth_value(val, prev_val, tau):
       alpha = 1 - np.exp(-DT_CTRL / tau) if tau > 0 else 1
