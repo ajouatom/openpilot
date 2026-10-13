@@ -15,20 +15,64 @@ LEVER_REQUEST_FLASHES = 5
 LEVER_REQUEST_WAIT_S = LEVER_REQUEST_FLASHES * TURN_SIGNAL_FLASH_S
 
 
-def lever_maneuver(lever: int, v_ego: float, turn_speed_max: float):
+def lever_maneuver(lever: int, v_ego: float, turn_speed_max: float, forced_turn: bool = False):
   """(maneuver, undecided) chosen by the driver's lever, or (None, False) when the lever does not decide.
 
-  turn_speed_max (m/s, 0 = off). At or below it a latched lever is a turn and anything else a lane change; a lever
-  still in the one-touch detent is undecided, because a latch passes through it for ~0.1 s. Above it every lever
-  input is a lane change.
+  turn_speed_max (m/s, 0 = off). At or below it only the forced-turn gesture (LeverForcedTurn: one-touch, two lamp
+  lightings, then latched) is a turn; a plain latch, like a one-touch, is a lane change (e.g. holding the signal for
+  the next lane). A lever still in the one-touch detent is undecided, because a latch passes through it for ~0.1 s.
+  Above it every lever input is a lane change.
   """
   if turn_speed_max <= 0:
     return None, False
   if v_ego > turn_speed_max:
     return "lane_change", False
-  if lever == LEVER_LATCHED:
+  if forced_turn:
     return "turn", False
   return "lane_change", lever == LEVER_ONE_TOUCH
+
+
+LAMP_DARK_RESET_S = 1.0  # dark longer than one off phase (0.4 s): the signal has stopped
+
+
+class LeverForcedTurn:
+  """One-touch lever, lamp lit -> dark -> lit, then latched: the turn gesture below BlinkerLatchedTurn (lever_maneuver).
+
+  The two lamp lightings take about one flash (0.8 s), so a plain latch, which passes the one-touch detent for
+  ~0.1 s, never qualifies. The turn lasts while the lever stays latched. lamp: carState.blinkerLamp (no hold).
+  """
+
+  def __init__(self):
+    self.armed = False
+    self.side = BLINKER_NONE
+    self.lightings = 0
+    self.lit = False
+    self.dark_s = 0.0
+    self.active = False
+
+  def update(self, lever: int, lamp: int) -> bool:
+    if lever == LEVER_LATCHED:
+      self.active = self.active or (self.armed and self.lightings >= 2)
+      self.armed = False
+      return self.active
+    self.active = False
+    if lever == LEVER_ONE_TOUCH and not self.armed:
+      self.armed, self.side, self.lightings, self.lit, self.dark_s = True, lamp, int(lamp != BLINKER_NONE), lamp != BLINKER_NONE, 0.0
+      return False
+    if not self.armed:
+      return False
+    if lamp != BLINKER_NONE:
+      if lamp != self.side:
+        self.side, self.lightings = lamp, 0
+      if not self.lit:
+        self.lightings += 1
+      self.dark_s = 0.0
+    else:
+      self.dark_s += DT_MDL
+      if self.dark_s > LAMP_DARK_RESET_S:
+        self.armed = False
+    self.lit = lamp != BLINKER_NONE
+    return False
 
 
 class LeverRequestWait:

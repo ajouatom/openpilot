@@ -12,7 +12,7 @@ from openpilot.selfdrive.controls.lib.desire_lib.constants import (
 )
 from openpilot.selfdrive.controls.lib.desire_lib.side_state import SideState
 from openpilot.selfdrive.controls.lib.desire_lib.maneuver_classifier import classify_maneuver_type
-from openpilot.selfdrive.controls.lib.desire_lib.lever import LEVER_REQUEST_WAIT_S, LaneCrossing, LeverRequestWait, lever_maneuver
+from openpilot.selfdrive.controls.lib.desire_lib.lever import LEVER_REQUEST_WAIT_S, LaneCrossing, LeverForcedTurn, LeverRequestWait, lever_maneuver
 
 # Without a model-detected crossing, a lever press this early in laneChangeFinishing is still the driver
 # re-lighting the lamp of the change that just crossed, not a request for the next one.
@@ -63,6 +63,7 @@ class DesireHelper:
     self.finishing_timer = 0.0
     self.queued_wait = 0.0
     self.lever_wait = LeverRequestWait()
+    self.lever_forced_turn = LeverForcedTurn()
     self.crossing = LaneCrossing()
     self.blinker_hold_direction = LaneChangeDirection.none  # modelV2.meta.laneChangeBlinkerHold
     self.lever_turn = False  # modelV2.meta.leverTurn: the turn desire comes from a latched lever
@@ -285,6 +286,7 @@ class DesireHelper:
     driver_st, driver_changed, driver_enabled = self._update_driver_blinker(carstate)
     stalk_press = self._update_stalk(carstate)
     lever = getattr(carstate, "blinkerLever", 0)
+    forced_turn = self.lever_forced_turn.update(lever, getattr(carstate, "blinkerLamp", 0))
     if self.lever_wait.update(self.laneChangeLeverWait, stalk_press, lever, driver_st, self.lane_change_state,
                               self.laneChangeDelay):
       driver_enabled = driver_changed = False  # one-touch request timed out: ignore the lamp until it goes dark
@@ -371,7 +373,7 @@ class DesireHelper:
       # BlinkerLatchedTurn: the driver's lever replaces the speed/lane-line guess (see lever_maneuver).
       lever_type, lever_undecided = (None, False)
       if driver_enabled and side is not None:
-        lever_type, lever_undecided = lever_maneuver(lever, v_ego, self.blinkerLatchedTurn)
+        lever_type, lever_undecided = lever_maneuver(lever, v_ego, self.blinkerLatchedTurn, forced_turn)
       if lever_type is not None:
         new_type = lever_type
       lever_decided_turn = lever_type == "turn"

@@ -180,8 +180,8 @@ class TestDesireHelperStalkRequest:
 
 
 class TestBlinkerLatchedTurn:
-  """BlinkerLatchedTurn (here 50 km/h): at or below it a latched lever is a turn, a one-touch press a lane change;
-  above it every lever input is a lane change."""
+  """BlinkerLatchedTurn (here 50 km/h): at or below it the turn gesture (one-touch, two lamp lightings, then latched)
+  is a turn and any other lever input a lane change; above it every lever input is a lane change."""
   setup_method = TestDesireHelperStalkRequest.setup_method
   update = TestDesireHelperStalkRequest.update
 
@@ -191,12 +191,21 @@ class TestBlinkerLatchedTurn:
       state = self.update(press=(i == 0), lever=lever, v_kph=v_kph)
     return state
 
+  def gesture(self):
+    # LeverForcedTurn itself is covered by test_lever_forced_turn.py; here a latch counts as the finished gesture.
+    self.helper.lever_forced_turn.update = lambda lever, lamp: lever == 2
+
   def test_off_keeps_the_classifier(self):
     self.lever_on(2, steps=3)
     assert self.helper.maneuver_type == "lane_change"       # 45 km/h, lanes visible: the classifier says lane change
 
-  def test_latched_lever_is_a_turn(self):
+  def test_plain_latch_is_a_lane_change_the_gesture_a_turn(self):
     self.helper.blinkerLatchedTurn = 50 / 3.6
+    self.lever_on(2, steps=3)
+    assert self.helper.maneuver_type == "lane_change"       # e.g. holding the signal for the next lane
+    self.setup_method()
+    self.helper.blinkerLatchedTurn = 50 / 3.6
+    self.gesture()
     self.lever_on(2, steps=3)
     assert self.helper.maneuver_type == "turn"
     assert self.helper.lane_change_state == LCS.off
@@ -204,6 +213,7 @@ class TestBlinkerLatchedTurn:
 
   def test_latch_passing_the_one_touch_detent_does_not_start_a_lane_change(self):
     self.helper.blinkerLatchedTurn = 50 / 3.6
+    self.gesture()
     assert self.lever_on(1, steps=3) == LCS.preLaneChange    # still in the detent: wait
     self.update(lever=2, v_kph=45.0)
     assert self.helper.maneuver_type == "turn"
@@ -229,8 +239,9 @@ class TestBlinkerLatchedTurn:
     assert self.helper.maneuver_type == "lane_change"
     assert self.helper.lane_change_state == LCS.laneChangeStarting
 
-  def test_latched_lever_at_the_set_speed_is_a_turn(self):
+  def test_gesture_at_the_set_speed_is_a_turn(self):
     self.helper.blinkerLatchedTurn = 50 / 3.6
+    self.gesture()
     self.lever_on(2, v_kph=50.0, steps=3)
     assert self.helper.maneuver_type == "turn"
     assert self.helper.lever_turn                           # cluster message: the lever made this turn
@@ -250,6 +261,7 @@ class TestBlinkerLatchedTurn:
     # the lever released: the message goes with the turn
     self.setup_method()
     self.helper.blinkerLatchedTurn = 50 / 3.6
+    self.gesture()
     self.lever_on(2, steps=3)
     assert self.helper.lever_turn
     self.update(left_blinker=False, lever=0, v_kph=45.0)
