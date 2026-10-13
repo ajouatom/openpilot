@@ -159,12 +159,14 @@ def test_v3_adapter_sends_only_resaction_scalars_and_receives_full_driving_outpu
   assert len(stream.out) == 32 + P.INFER_REQ_SIZE + SPEC.warped_nbytes + SPEC.packed_nbytes
 
 
-def test_old_release_is_not_sent_by_any_bootstrap_path(tmp_path):
-  old_release = ROOT / 'openpilot/selfdrive/modeld/jetlink/host_release.json'
+def test_old_release_is_not_sent_by_any_bootstrap_path(tmp_path, monkeypatch):
+  old_release = tmp_path / 'host_release.json'
+  release = {'model': {'sha256': contracts.DEFAULT_SPEC.sha256, 'size': contracts.DEFAULT_SPEC.nbytes}}
+  old_release.write_text(json.dumps(release))
+  monkeypatch.setattr(startup, 'RELEASE', old_release)
   assert jetson_model.matching_release(old_release) is None
-  with pytest.raises(ValueError, match='PC-prepared'):
+  with pytest.raises(ValueError, match='matching signed'):
     startup.wait_for_boot_update(NS(), {'carrot_host': 'jetson', startup.CAPABILITY: True}, None, lambda: True, None)
-  release = json.loads(old_release.read_text())
   release['model'].update(sha256=SPEC.sha256, size=SPEC.nbytes)
   path = tmp_path / 'release.json'
   path.write_text(json.dumps(release))

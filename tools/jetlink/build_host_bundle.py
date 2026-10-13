@@ -13,10 +13,24 @@ PATHS = ['LICENSE', 'opendbc_repo/LICENSE', 'openpilot/__init__.py', 'openpilot/
          'openpilot/selfdrive/carrot/carrot_navi_cereal.py', 'openpilot/selfdrive/carrot/deceleration_source.py',
          'openpilot/selfdrive/controls/lib', 'openpilot/selfdrive/modeld/constants.py',
          'openpilot/selfdrive/modeld/jetlink/cinque_v2.json', 'openpilot/selfdrive/modeld/jetlink/jetson_model.json', 'openpilot/selfdrive/assets',
-         'openpilot/selfdrive/modeld/jetlink/local_host_release.json',
          'openpilot/system/hardware', 'openpilot/system/version.py',
          'opendbc_repo/opendbc/car/car.capnp', 'opendbc_repo/opendbc/car/include',
          'third_party/jetlink', 'tools/jetlink']
+
+
+def export_members(source, target):
+  # Installed bootstrap revisions read this legacy filename before running
+  # any candidate code. Give them the selected pin too; the checkout keeps
+  # the historical Cinque spec for Mac/phone compatibility and regression tests.
+  legacy = 'openpilot/selfdrive/modeld/jetlink/cinque_v2.json'
+  selected = 'openpilot/selfdrive/modeld/jetlink/jetson_model.json'
+  for member in source:
+    if member.name == legacy and selected in source.getnames():
+      data = source.extractfile(selected).read()
+      member.size = len(data)
+      target.addfile(member, io.BytesIO(data))
+    else:
+      target.addfile(member, source.extractfile(member) if member.isfile() else None)
 
 
 def main():
@@ -34,8 +48,7 @@ def main():
   archive = subprocess.check_output([*git, '-c', 'core.autocrlf=false', '-c', 'core.eol=lf',
                                      'archive', 'HEAD', *PATHS])
   with tarfile.open(fileobj=io.BytesIO(archive), mode='r:') as source, tarfile.open(args.output, 'w:gz') as target:
-    for member in source:
-      target.addfile(member, source.extractfile(member) if member.isfile() else None)
+    export_members(source, target)
     entry = tarfile.TarInfo('SOURCE_COMMIT')
     entry.size = len(commit)
     target.addfile(entry, io.BytesIO(commit))

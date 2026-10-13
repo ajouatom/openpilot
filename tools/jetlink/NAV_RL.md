@@ -1,5 +1,40 @@
 # Experimental RL navigation model on Jetson Orin
 
+## carrot-nav integration (2026-10-13)
+
+Imported from `tjdgus200/openpilot` commit `38b06d6a48` with its three
+ResAction/runtime prerequisites, using single-parent commits on `carrot-nav`.
+The sections below describe the contributor's local experiment and evidence.
+**This maintained branch instead selects a signed `host_release.json`.** No
+PC package registration is required on a Jetson that already has the boot
+updater. The local experiment helpers remain available for separate tests, but
+`local_host_release.json` is absent here and cannot override the signed pin.
+
+The published host bundle includes the selected pin under both `jetson_model.json`
+and the legacy `cinque_v2.json` filename. This is needed because installed older
+bootstraps check the latter before executing any candidate code. The repository's
+historical Cinque specification stays unchanged for other clients and tests.
+Only the branch's immutable signed release is selected; the shared stable channel
+and `carrot-wip` are not changed.
+
+At the next normal Jetson boot with the updated comma attached, its existing
+updater downloads the original ONNX and the signed runtime bundle, builds a
+device-specific TensorRT engine and probes finite recurrent inference before
+activation. A failed build/probe preserves the previous files and withholds
+Jetson readiness; it does not silently activate the wrong driving model.
+
+No Jetson is connected for this integration. TensorRT compilation, native USB
+timing, CPU load, thermal behavior and driving behavior remain unverified.
+The imported host implementation copies and validates recurrent state through
+host buffers; sustained 20 Hz must be measured on Orin before claiming its
+performance. GPU-resident state is a possible follow-up only if profiling shows
+that these transfers are a bottleneck.
+
+See [the integration verification record](../../docs/jetson_nav_integration_20261013.md)
+for checks performed on this maintained branch.
+
+## Contributor experiment (historical instructions)
+
 Branch: `tjdgus200/openpilot:codex/jetson-nav-rl`.
 Base: `ajouatom/openpilot:carrot-nav` at
 `d6a92d91e2cada40ab588427d039b935ef063a1a`.
