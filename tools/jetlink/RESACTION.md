@@ -1,5 +1,9 @@
 # Experimental Jetson ResAction branch
 
+This document records the earlier `codex/jetson-resaction` experiment. The
+current `codex/jetson-nav-rl` branch selects a different model and package;
+use [NAV_RL.md](NAV_RL.md) for its contract, preparation and validation.
+
 This branch adds client and host code for the **specific ONNX export** in
 [commaai/openpilot commit 2fb4ac4](https://github.com/commaai/openpilot/commit/2fb4ac4aa0b2e6438ae2b8330295aa71df9a184a).
 The experiment can be preinstalled once from a PC. The comma branch then selects
@@ -61,7 +65,7 @@ switches without installing from the PC again.
 Build the preparation package from committed sources on the PC:
 
 ```sh
-python tools/jetlink/download_resaction.py --output /path/to/package/model.onnx
+python tools/jetlink/download_experiment.py --output /path/to/package/model.onnx
 python tools/jetlink/build_host_bundle.py /path/to/host.tar.gz
 python tools/jetlink/prepare_local_experiment.py \
   --bundle /path/to/host.tar.gz --model /path/to/package/model.onnx \

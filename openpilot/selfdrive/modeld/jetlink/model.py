@@ -10,6 +10,7 @@ import numpy as np
 from openpilot.selfdrive.modeld.jetlink.link import ClientConnection, SPEC, FAULT, state
 from openpilot.selfdrive.modeld.jetlink.prepare import WarpPreparation
 from openpilot.selfdrive.modeld.jetlink.contracts import model_name, parse_outputs
+from openpilot.selfdrive.modeld.jetlink.inputs import fill_inputs
 
 MODEL_STATUS = Path('/dev/shm/carrot-jetlink-model.json')
 
@@ -146,6 +147,7 @@ class JoiningModel:
     if now >= self.next_status:
       self.ready = state().get('state') == 'ready'
       record = {'active': self.active, 'ready': self.ready, 'model': model_name(self.spec), 'sha256': self.spec.sha256,
+                'nav_model': 'nav_map' in self.spec.input_shapes,
                 'error': self.error, 'updated': now}
       tmp = MODEL_STATUS.with_suffix('.tmp')
       tmp.write_text(json.dumps(record))
@@ -211,12 +213,7 @@ class JoiningModel:
         self.next_join = time.monotonic() + 5
     if self.client is not None:
       try:
-        desire = inputs['desire_pulse'].copy()
-        desire[0] = 0
-        self.views['desire'][:] = np.where(desire - self.prev_desire > .99, desire, 0)
-        self.prev_desire[:] = desire
-        for name in ('traffic_convention', 'action_t'):
-          self.views[name][:] = inputs[name]
+        fill_inputs(self.views, inputs, self.prev_desire)
         self.frame = (self.frame + 1) & 0xFFFFFFFF
         started = time.monotonic()
         images = self.warp(bufs, transforms)

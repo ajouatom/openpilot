@@ -20,7 +20,7 @@ def is_jetson(peer):
 
 
 def matching_release(path, required=False):
-  """Never advertise the old signed Cinque release for a ResAction client.
+  """Never advertise a different model's signed release for this client.
 
   This checks model compatibility only; the Jetson still verifies the signature
   and download trust policy. Nothing here grants trust to an unsigned manifest.
@@ -33,7 +33,7 @@ def matching_release(path, required=False):
   except (OSError, ValueError, KeyError, TypeError):
     pass
   if required:
-    raise ValueError('Jetson ResAction requires a matching signed host_release.json; release deployment is not configured')
+    raise ValueError('Selected Jetson model requires a matching signed host_release.json; release deployment is not configured')
   return None
 
 

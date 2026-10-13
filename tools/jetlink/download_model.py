@@ -25,7 +25,7 @@ def provision(output, manifest_url=None):
   spec = read_spec(ROOT)
   if manifest_url is None:
     if (ROOT / 'openpilot/selfdrive/modeld/jetlink/jetson_model.json').is_file():
-      raise ValueError('ResAction deployment requires --manifest-url for the pinned model release')
+      raise ValueError('Experimental Jetson deployment requires --manifest-url for the pinned model release')
     manifest_url = MANIFEST_URL
   if urllib.parse.urlsplit(manifest_url).scheme != 'https':
     raise ValueError('Model manifest requires HTTPS')
@@ -68,6 +68,6 @@ def provision(output, manifest_url=None):
 if __name__ == '__main__':
   parser = argparse.ArgumentParser(description=__doc__)
   parser.add_argument('--output', type=Path, required=True)
-  parser.add_argument('--manifest-url', help='HTTPS manifest for this branch model (required for ResAction)')
+  parser.add_argument('--manifest-url', help='HTTPS manifest for this branch model (required for experimental models)')
   args = parser.parse_args()
   provision(args.output, args.manifest_url)

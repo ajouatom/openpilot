@@ -14,7 +14,7 @@ import numpy as np
 from openpilot.selfdrive.modeld.jetlink.link import SPEC, validate_spec
 from openpilot.selfdrive.modeld.jetlink.contracts import JETSON_SPEC
 from jetlink import protocol as V2, protocol_v3 as V3
-from jetlink.client import JetlinkClient, _as_bytes
+from jetlink.client import JetlinkClient, _as_bytes, _protocol3_packed
 from jetlink.transport.base import LinkError
 
 
@@ -58,9 +58,9 @@ class V3Client(JetlinkClient):
     validate_spec(self.spec, JETSON_SPEC if self.spec.sha256 == JETSON_SPEC.sha256 else SPEC)
     images = _as_bytes(warped, self.spec.warped_nbytes, 'warped')
     context = _as_bytes(packed, self.spec.packed_nbytes, 'packed')
-    # The pinned packed layout is desire[8], traffic[2], action_t[2], prev_feat.
-    # The server owns prev_feat in v3, including resets and finite-only feedback.
-    scalars = context[:48]
+    # Only legacy prev_feat is omitted. Stateful models also send their current
+    # map/instruction inputs; their temporal history already lives on the host.
+    scalars = _protocol3_packed(self.spec, context)
     if not np.isfinite(np.frombuffer(scalars, dtype=np.float32)).all():
       raise LinkError('non-finite v3 scalar input')
     flags = V3.Flag.WANT_HIDDEN | (V3.Flag.RESET_QUEUES if reset else 0) | (V3.Flag.WANT_STATE if want_state else 0)

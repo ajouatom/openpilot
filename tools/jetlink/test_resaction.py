@@ -1,4 +1,4 @@
-"""ResAction host history, wire contract, model pin and byte-queue parity."""
+"""Selected stateful host history, wire contract and byte-queue parity."""
 from copy import deepcopy
 from dataclasses import replace
 import json
@@ -37,9 +37,11 @@ def advanced(dest, value=1):
 
 
 def test_exact_export_identity_and_unchanged_driving_parser_contract():
-  assert SPEC.sha256 == '1563b85f6bd00d9e2edf50bdb69646f0d95d5ac0f218d5abe3fe54a13427d71b'
-  assert SPEC.nbytes == 792485215 and SPEC.frame_skip == 4 and SPEC.packed_nbytes == 48
-  assert SPEC.output_slices == contracts.DEFAULT_SPEC.output_slices
+  assert SPEC.sha256 == '1d18c42ea4cd95c8bffab4635844b78b8e2d4e25b9de44a9c5ac2e0961371a2e'
+  assert SPEC.nbytes == 814591106 and SPEC.frame_skip == 4 and SPEC.packed_nbytes == (12 + 65536 + 47) * 4
+  for name, at in contracts.DEFAULT_SPEC.output_slices.items():
+    if name != 'pad':
+      assert SPEC.output_slices[name] == at
   assert SPEC.warped_shape == contracts.DEFAULT_SPEC.warped_shape
   assert contracts.validate_model_spec(SPEC) == SPEC
   with pytest.raises(ValueError, match='contract mismatch'):
@@ -51,13 +53,15 @@ def test_history_feedback_is_retained_and_reset_without_client_feature_upload():
   queues = make_queues(SPEC, dest)
   assert isinstance(queues, StatefulQueues)
   warped = np.arange(SPEC.warped_nbytes, dtype=np.uint8).reshape(SPEC.warped_shape)
-  packed = np.arange(12, dtype=np.float32)
+  packed = np.arange(SPEC.packed_nelem, dtype=np.float32)
   for value in (1, 2, 3):
     queues.step_into(warped, packed, dest)
     np.testing.assert_array_equal(dest['new_img'], warped)
     np.testing.assert_array_equal(dest['desire'], packed[:8])
     np.testing.assert_array_equal(dest['traffic_convention'], packed[8:10].reshape(1, 2))
-    np.testing.assert_array_equal(dest['action_t'], packed[10:].reshape(1, 2))
+    np.testing.assert_array_equal(dest['action_t'], packed[10:12].reshape(1, 2))
+    np.testing.assert_array_equal(dest['nav_map'], packed[12:12 + 65536].reshape(1, 1, 256, 256))
+    np.testing.assert_array_equal(dest['navigation'], packed[-47:].reshape(1, 47))
     assert all(np.all(array == value - 1) for array in queues.state.values())
     result = advanced(dest, value)
     queues.feedback(result)
@@ -85,7 +89,7 @@ def test_invalid_frame_discards_all_recurrent_state(failure):
     values['next_state_img_q'] = values['next_state_img_q'].astype(np.uint8)
   with pytest.raises(error):
     if failure == 'scalar':
-      queues.step_into(np.zeros(SPEC.warped_shape, np.uint8), np.full(12, np.inf, np.float32), dest)
+      queues.step_into(np.zeros(SPEC.warped_shape, np.uint8), np.full(SPEC.packed_nelem, np.inf, np.float32), dest)
     else:
       queues.feedback(values)
   assert all(not np.any(array) for array in queues.state.values())
@@ -116,7 +120,7 @@ def test_session_uses_named_driving_output_and_reset_and_rejects_nonfinite_state
     assert len(response) == P.INFER_RESP_SIZE + SPEC.output_nbytes
     assert np.all(np.frombuffer(response, np.float32, offset=P.INFER_RESP_SIZE) == (1 if reset else 2))
   bad[0] = True
-  session._infer(loaded, NS(seq=4, payload=memoryview(P.pack_infer_req(4, 0) + bytes(SPEC.warped_nbytes + 48))))
+  session._infer(loaded, NS(seq=4, payload=memoryview(P.pack_infer_req(4, 0) + bytes(SPEC.warped_nbytes + SPEC.packed_nbytes))))
   assert P.unpack_infer_resp(memoryview(sent[-1]))[1] == P.Status.NOT_FINITE
   assert all(not np.any(array) for array in loaded.queues.state.values())
   engine.outputs['next_state_feat_q'] = NS(shape=(1,))
@@ -150,9 +154,9 @@ def test_v3_adapter_sends_only_resaction_scalars_and_receives_full_driving_outpu
   stream = MemoryStream(3, incoming=packet(3, 9, 1, reply))
   client = compat.V3Client(stream, deadline=2)
   client.spec = SPEC
-  result = client.infer(np.zeros(SPEC.warped_shape, np.uint8), np.arange(12, dtype=np.float32), 17, reset=True)
+  result = client.infer(np.zeros(SPEC.warped_shape, np.uint8), np.arange(SPEC.packed_nelem, dtype=np.float32), 17, reset=True)
   np.testing.assert_array_equal(result, expected)
-  assert len(stream.out) == 32 + P.INFER_REQ_SIZE + SPEC.warped_nbytes + 48
+  assert len(stream.out) == 32 + P.INFER_REQ_SIZE + SPEC.warped_nbytes + SPEC.packed_nbytes
 
 
 def test_old_release_is_not_sent_by_any_bootstrap_path(tmp_path):

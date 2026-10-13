@@ -13,7 +13,7 @@ def wait_for_boot_update(client, peer, wifi, connected, publish, sleep=time.slee
     return
   manifest = selected_release(RELEASE, required=True)
   if manifest.get('delivery') == 'local' and peer.get('carrot_local_release_v1') is not True:
-    raise ValueError('Install the PC-prepared ResAction package on Jetson first')
+    raise ValueError('Install the PC-prepared package for this Jetson model on Jetson first')
   while connected():
     # The release selection is independent of NetworkManager profile reads.
     # Network provisioning stays on its private channel and out of status/logs.

@@ -190,7 +190,7 @@ def test_stale_hello_pick_is_not_requested_or_restored(tmp_path):
   assert not (tmp_path / 'selected.json').exists()
 
 
-@pytest.mark.parametrize('factory', [queued_spec, stateful_spec, compact_spec])
+@pytest.mark.parametrize('factory', [queued_spec, stateful_spec, compact_spec, lambda: contracts.JETSON_SPEC])
 def test_dynamic_ipc_handshake_and_reply_sizes(tmp_path, factory):
   spec = factory()
   listener = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)

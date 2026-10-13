@@ -42,7 +42,7 @@ def test_pinned_host_hello_to_stateful_inference_and_reset():
     assert peer_info['protocol'] == 2 and peer_info['stateful_v2'] is True
     assert client.ensure_engine(SPEC.sha256, SPEC.nbytes, frame_skip=4) == SPEC
     for frame, reset, expected in ((1, True, 1), (2, False, 2), (3, True, 1)):
-      result = client.infer(np.zeros(SPEC.warped_shape, np.uint8), np.zeros(12, np.float32), frame, reset=reset)
+      result = client.infer(np.zeros(SPEC.warped_shape, np.uint8), np.zeros(SPEC.packed_nelem, np.float32), frame, reset=reset)
       np.testing.assert_array_equal(result, np.full(SPEC.output_nelem, expected, np.float32))
   finally:
     client.close()
@@ -68,5 +68,5 @@ def test_stateful_v2_permission_is_strict_and_revoked_on_new_hello(capability):
   client.spec = SPEC
   before = len(stream.out)
   with pytest.raises(LinkError, match='stateful models require'):
-    client.infer_begin(np.zeros(SPEC.warped_shape, np.uint8), np.zeros(12, np.float32))
+    client.infer_begin(np.zeros(SPEC.warped_shape, np.uint8), np.zeros(SPEC.packed_nelem, np.float32))
   assert len(stream.out) == before

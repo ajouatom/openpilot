@@ -1,4 +1,4 @@
-"""Fetch the exact public upstream ONNX into a PC preparation directory."""
+"""Fetch this branch's exact upstream ONNX into a PC preparation directory."""
 import argparse
 import hashlib
 import json

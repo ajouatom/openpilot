@@ -47,6 +47,12 @@ def validate_model_spec(spec):
     if spec.input_shapes.get('new_img') != (2, 6, 128, 256) or math.prod(spec.input_shapes.get('desire', ())) != 8:
       raise ValueError('Unsupported Jetlink stateful camera/desire contract')
     scalar_names = {'new_img', 'desire', 'traffic_convention', 'action_t'}
+    nav = set(spec.input_shapes) & {'nav_map', 'navigation'}
+    if nav:
+      if (nav != {'nav_map', 'navigation'} or spec.input_shapes['nav_map'] != (1, 1, 256, 256) or
+          spec.input_shapes['navigation'] != (1, 47)):
+        raise ValueError('Unsupported Jetlink navigation contract')
+      scalar_names |= nav
     states = set(spec.input_shapes) - scalar_names
     if not states or any(not name.startswith('state_') or
                          spec.output_shapes.get('next_' + name) != spec.input_shapes[name] for name in states):
@@ -85,7 +91,7 @@ def validate_model_spec(spec):
 
 def model_name(spec):
   if spec.sha256 == JETSON_SPEC.sha256:
-    return 'ResAction (2fb4ac4)'
+    return 'RL Nav (80eedcdd)'
   return 'Cinque v2' if spec.sha256 == DEFAULT_SPEC.sha256 else f'App model {spec.sha256[:12]}'
 
 
