@@ -2,6 +2,7 @@
 from pathlib import Path
 from model_pin import read_spec
 import sys
+import subprocess
 import time
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -11,7 +12,10 @@ sys.path[:0] = [str(ROOT), str(ROOT / 'third_party/jetlink')]
 def main():
   import numpy as np
   import server  # noqa: F401 -- verify the application entry point's imports
-  import hud  # noqa: F401
+  # Importing hud alone misses the renderer imports inside main(). Exercise
+  # the real entry point without opening a panel or waiting for vehicle data.
+  subprocess.run([sys.executable, str(ROOT / 'tools/jetlink/hud.py'), '--help'],
+                 cwd=ROOT, check=True, timeout=30, stdout=subprocess.DEVNULL)
   import update_host  # noqa: F401
   from jetlink.server.backends.trt import TrtBackend
   from jetlink.server.cache import EngineCache

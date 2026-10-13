@@ -20,9 +20,11 @@ def wait_for_boot_update(client, peer, wifi, connected, publish, sleep=time.slee
     client.t.send_json(MESSAGE, client._next_seq(), manifest)
     if wifi is not None:
       wifi.send(client)
-    value = client.state().get('carrot_update', {})
+    value = client.state().get('carrot_update')
     if not isinstance(value, dict):
-      value = {}
+      # The gate may hand USB to the runtime before our final STATE_REQ.
+      # Greet the new server instead of sending boot selections indefinitely.
+      break
     publish('updating', peer=peer, host_update=value)
     if value.get('state') == 'ready':
       break

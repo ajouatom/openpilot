@@ -11,6 +11,8 @@ ROOT = Path(__file__).resolve().parents[2]
 PATHS = ['LICENSE', 'opendbc_repo/LICENSE', 'openpilot/__init__.py', 'openpilot/common', 'openpilot/cereal',
          'openpilot/selfdrive/carrot/cluster', 'openpilot/selfdrive/carrot/carrot_navi.py',
          'openpilot/selfdrive/carrot/carrot_navi_cereal.py', 'openpilot/selfdrive/carrot/deceleration_source.py',
+         'openpilot/selfdrive/carrot/signal_display.py', 'openpilot/selfdrive/carrot/signal_mode.py',
+         'openpilot/selfdrive/navigation/preview.py',
          'openpilot/selfdrive/controls/lib', 'openpilot/selfdrive/modeld/constants.py',
          'openpilot/selfdrive/modeld/jetlink/cinque_v2.json', 'openpilot/selfdrive/modeld/jetlink/jetson_model.json', 'openpilot/selfdrive/assets',
          'openpilot/system/hardware', 'openpilot/system/version.py',

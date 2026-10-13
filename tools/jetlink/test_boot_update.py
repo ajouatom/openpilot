@@ -198,3 +198,16 @@ def test_existing_apply_service_launches_gate_without_old_start_timeout(env, mon
   assert command[0] == 'systemd-run' and command[-1] == 'boot'
   assert '--property=Restart=on-failure' in command
   assert not any('reboot' in part for part in command)
+
+
+@pytest.mark.parametrize('reply', [{'engine_state': 'none'}, {'carrot_update': None}])
+def test_vehicle_reconnects_if_gate_hands_usb_to_runtime_before_ready(monkeypatch, reply):
+  from openpilot.selfdrive.modeld.jetlink import startup
+  monkeypatch.setattr(startup, 'selected_release', lambda *a, **k: manifest())
+  sent = []
+  client = NS(t=NS(send_json=lambda *a: sent.append(a)), _next_seq=lambda: 1, state=lambda: reply)
+  with pytest.raises(ConnectionError, match='reconnecting'):
+    startup.wait_for_boot_update(client, {'carrot_host': 'jetson', startup.CAPABILITY: True}, None,
+                                lambda: True, lambda *a, **k: pytest.fail('not an update response'),
+                                sleep=lambda _: pytest.fail('must reconnect immediately'))
+  assert len(sent) == 1
