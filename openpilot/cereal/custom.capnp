@@ -110,6 +110,7 @@ struct CarrotNaviState @0xaedffd8f31e7b55d {
 		guideLineColor @10 :Int16;
 		roadCategory @11 :Int16;
 		voiceCode @12 :Int16;
+		roadCategoryValid @13 :Bool; # explicit source field, not the default zero
 	}
 
 	struct Speed {
