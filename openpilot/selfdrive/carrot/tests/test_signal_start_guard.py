@@ -183,7 +183,7 @@ def test_actual_planner_green_does_not_override_original_stop():
 @pytest.mark.parametrize('mode', ['acc', 'blended'])
 @pytest.mark.parametrize('model_go', [False, True])
 @pytest.mark.parametrize('inhibit', ['none', 'left_blinker', 'soft_hold', 'detect_only'])
-def test_single_transition_leaves_departure_to_original_planner(mode, model_go, inhibit):
+def test_confirmed_transition_supplies_normal_departure_with_driver_gates(mode, model_go, inhibit):
   from openpilot.selfdrive.carrot.tests.test_signal_start_group import SMALL, RIGHT
 
   cls, _ = planner_class((REPO/'openpilot/selfdrive/carrot/carrot_functions.py').read_text(encoding='utf-8'))
@@ -210,7 +210,7 @@ def test_single_transition_leaves_departure_to_original_planner(mode, model_go, 
     if 4 <= i < 20:
       assert p.start_decision.hold and p.xState.name == 'e2eStopped' and p.v_cruise == 0
   assert releases == ['green_transition'] and not p.start_decision.hold
-  if model_go and inhibit == 'none':
+  if inhibit == 'none':
     assert p.xState.name == 'e2eCruise' and p.v_cruise > 0
   elif inhibit == 'soft_hold':
     # Soft hold is carried separately from the cruise speed setting.
