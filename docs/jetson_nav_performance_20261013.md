@@ -76,3 +76,37 @@ Required next validation: signed candidate with matching client, actual camera
 and USB, repaired HUD rendering, sustained valid model/DM 20 Hz, frame loss,
 latency tails and per-core load. Route imagery is not validated while the
 external route is absent. No closed-loop or traffic-light performance claim.
+
+## First deployed candidate and follow-up
+
+The user explicitly approved signing, publication and parked installation of
+`174dc5a145` and the follow-ups needed for 20 Hz validation. Its immutable bundle
+was signature/hash verified over HTTPS and installed by the existing reboot
+gate. Engine cache reuse and `CANDIDATE_PROBE_OK` were observed. The vehicle
+retains HEAD `5e85695197`, with backed-up, hash-checked client/codec/manifest
+overlays. The earlier startup overlay remains. Linux CI passed 732 integration,
+119 navigation/cluster and 11 protected-storage tests, plus Windows installer
+and eGPU compatibility checks.
+
+HUD now starts successfully in screen mode 7/camera mode 2. Its service and
+inference remain alive without restarts. The boot-local display override uses
+the signed implementation. One boot handoff unknown-message/reconnect remains;
+current health subsequently returned to OK. Physical panel appearance and map
+delivery remain distinct from renderer process health.
+
+Actual 60-second camera/USB/HUD co-load: 1,186 valid model outputs, 1,200 valid
+DM outputs, 1,201 camera messages. Model mean interval 50.60 ms, p99 56.40 ms,
+maximum 72.43 ms; 14 skipped camera frames. This is **19.77 Hz, still failing
+the requested sustained 20 Hz criterion**. Mean full loop 50.58 ms, inference
+46.27 ms, host total 28.25 ms and USB send 7.04 ms. Per-core comma CPU was
+80.5/79.1/83.3/83.3/53.7/74.4/70.8/50.4%, aggregate 71.8%; Jetson aggregate
+10.9%, busiest core 24.6%, including the working HUD. Jetson temperature was
+about 67.7 C with thermal health OK.
+
+The follow-up negotiates optional system LZ4 compression of the exact camera
+and context bytes. Both devices already provide liblz4. No image resampling or
+lossy compression is used. Incompressible data keeps raw framing, unavailable
+libraries never negotiate it, and decoding requires exact bounded output size
+before inference/reset. Compression can compose with integer-map packing.
+Add request byte counts to existing timing diagnostics to measure actual
+benefit; sustained live performance must be retested after deployment.

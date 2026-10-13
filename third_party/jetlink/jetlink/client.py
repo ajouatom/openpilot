@@ -102,6 +102,8 @@ class JetlinkClient:
     self._infer_flags = 0
     self._stateful_v2 = False
     self._nav_u8 = False
+    self._lz4 = False
+    self.last_request_bytes = 0
 
   # -- construction ---------------------------------------------------------
 
@@ -216,6 +218,7 @@ class JetlinkClient:
     never saw end; see Session._greet."""
     self._stateful_v2 = False
     self._nav_u8 = False
+    self._lz4 = False
     seq = self._next_seq()
     version = self._protocol_version()
     client = {'nonce': self.nonce, 'name': self.name}
@@ -239,6 +242,8 @@ class JetlinkClient:
     self._stateful_v2 = selected == 2 and response.get('stateful_v2') is True
     from jetlink.packed_codec import CAPABILITY
     self._nav_u8 = self._stateful_v2 and response.get(CAPABILITY) is True
+    from jetlink.block_codec import CAPABILITY as LZ4_CAPABILITY, library
+    self._lz4 = self._stateful_v2 and response.get(LZ4_CAPABILITY) is True and library() is not None
     return response
 
   def state(self, timeout: float = 2.0) -> dict:
@@ -404,8 +409,16 @@ class JetlinkClient:
         packed, compressed = encode(packed, self.spec)
         if compressed:
           flags |= FLAG
+      parts = (warped, packed)
+      if version == 2 and self.spec.stateful and self._lz4:
+        from jetlink.block_codec import encode as encode_block, FLAG as LZ4_FLAG
+        block = encode_block(parts)
+        if block is not None:
+          flags |= LZ4_FLAG
+          parts = (block,)
       self._infer_flags = flags
-      self.t.send(P.Msg.INFER_REQ, seq, (P.pack_infer_req(frame_id, flags), warped, packed),
+      self.last_request_bytes = P.INFER_REQ_SIZE + sum(memoryview(p).nbytes for p in parts)
+      self.t.send(P.Msg.INFER_REQ, seq, (P.pack_infer_req(frame_id, flags), *parts),
                   timeout=self.deadline if deadline is None else deadline)
     except LinkError:
       self.dead = True

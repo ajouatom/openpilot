@@ -664,6 +664,7 @@ class Session:
       # Legacy v2 hosts must not be assumed to support stateful input contracts.
       'stateful_v2': True,
       'carrot_nav_u8_v1': True,
+      'carrot_lz4_v1': self._block_codec_available(),
       **info,   # backend, runtime_version, device
       'engine_state': self.host.status(*self._wanted())['state'],
       'loaded': self.host.loaded_sha(),
@@ -736,30 +737,44 @@ class Session:
         return
       self._infer(loaded, msg)
 
+  @staticmethod
+  def _block_codec_available():
+    from jetlink.block_codec import library
+    return library() is not None
+
   def _infer(self, loaded: Loaded, msg: Message) -> None:
     t0 = time.perf_counter()
     spec = loaded.spec
     from jetlink.packed_codec import decode, FLAG
-    off = P.INFER_REQ_SIZE + spec.warped_nbytes
+    from jetlink.block_codec import decode as decode_block, FLAG as LZ4_FLAG
     try:
-      if msg.payload.nbytes < off:
+      if msg.payload.nbytes < P.INFER_REQ_SIZE:
         raise ValueError('Incomplete frame')
       frame_id, flags = P.unpack_infer_req(msg.payload)
+      frame = msg.payload[P.INFER_REQ_SIZE:]
+      if flags & (FLAG | LZ4_FLAG) and (not spec.stateful or self.t.protocol_version != 2):
+        raise ValueError('Compact frame unsupported for this contract')
+      if flags & FLAG and 'nav_map' not in spec.packed_shapes:
+        raise ValueError('Missing compact map contract')
+      if flags & LZ4_FLAG:
+        expected = spec.warped_nbytes + spec.packed_nbytes - (3 * 65536 if flags & FLAG else 0)
+        frame = memoryview(decode_block(frame, expected))
+      off = spec.warped_nbytes
+      if len(frame) < off:
+        raise ValueError('Incomplete image')
       if flags & FLAG:
-        if not spec.stateful or 'nav_map' not in spec.packed_shapes or self.t.protocol_version != 2:
-          raise ValueError('Compact context unsupported for this contract')
-        context = decode(msg.payload[off:], spec)
+        context = decode(frame[off:], spec)
       else:
-        if msg.payload.nbytes != spec.infer_req_nbytes:
+        if len(frame) != spec.warped_nbytes + spec.packed_nbytes:
           raise ValueError('Invalid frame size')
-        context = msg.payload[off:]
+        context = frame[off:]
     except ValueError:
       self._send(P.Msg.INFER_RESP, msg.seq,
                  (P.pack_infer_resp(0, P.Status.BAD_SHAPE, 0, 0, 0),))
       return
     if flags & P.Flag.RESET_QUEUES:
       loaded.queues.reset()
-    warped = np.frombuffer(msg.payload, np.uint8, spec.warped_nbytes, P.INFER_REQ_SIZE).reshape(spec.warped_shape)
+    warped = np.frombuffer(frame, np.uint8, spec.warped_nbytes).reshape(spec.warped_shape)
     packed = np.frombuffer(context, np.float32, spec.packed_nelem)
 
     # Gathers land straight in TensorRT's pinned input buffers: between the

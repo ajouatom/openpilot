@@ -308,6 +308,7 @@ def _serve_local(listener, client, peer, publisher, phase, wifi=None):
             ipc_receive_ms=(received-receive_started)*1000,
             request_parse_ms=(started-received)*1000,
             usb_send_ms=(sent-started)*1000,
+            request_bytes=getattr(client, 'last_request_bytes', spec.infer_req_nbytes),
             phase_ms=(phase_done-sent)*1000,
             hud_ms=(hud_done-phase_done)*1000,
             usb_response_ms=(completed-hud_done)*1000,
