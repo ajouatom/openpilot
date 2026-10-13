@@ -1,4 +1,4 @@
-# Signal transition departure and USB status ? 2026-10-14
+# Signal transition departure and USB status - 2026-10-14
 
 The latest stopped red-to-green failures were reproduced from the Ioniq's
 recorded camera and planner inputs. This change corrects the stop guard's
@@ -33,7 +33,7 @@ Jetlink work was present on the device and was not modified.
 The producer now carries its session-local track ID and red-history flag in
 the existing stopped-guard transport. Ordinary IoU matching remains intact.
 Only the same ID with producer red history can use the bounded resize match:
-IoU >=0.4, area ratio 0.5?2, centre displacement <= one quarter of the fixed
+IoU >=0.4, area ratio 0.5 to 2, centre displacement <= one quarter of the fixed
 red box's width/height. Green never moves the red reference.
 
 The two-housing fallback may exclude another red only when its width and
