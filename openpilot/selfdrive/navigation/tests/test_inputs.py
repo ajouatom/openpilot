@@ -11,23 +11,42 @@ from openpilot.selfdrive.navigation.map_client import MapInput
 from openpilot.selfdrive.navigation.source import RouteSource, coordinates
 
 
-def test_real_nav_artifact_mixed_width_inputs_and_feedback():
-  artifact = json.loads((Path(__file__).parents[2] / 'modeld/tests/fixtures/nav_metadata.json').read_text())
-  checkpoint, _, pairs, count = model_metadata(artifact)
-  assert checkpoint == 'cf8f6120-49ee-48f8-b2d7-d663a4708271/56320'
-  assert count == 18452
-  assert {'state_map_q', 'state_nav_q'} <= pairs.keys()
+@pytest.mark.parametrize('filename,dtype,command_shape,count,states,suffix', [
+  ('nav_metadata.json', np.uint8, (47,), 18452, {'state_map_q', 'state_nav_q'}, '56320'),
+  ('nav_rl_metadata.json', np.float32, (1, 47), 18580,
+   {'state_map_features_q', 'state_navigation_features_q'}, '80eedcdd-f97b-46d0-9b94-780685292acf/12864'),
+])
+def test_real_nav_artifact_mixed_width_inputs_and_feedback(filename, dtype, command_shape, count, states, suffix):
+  from openpilot.selfdrive.modeld.parse_model_outputs import Parser
+  artifact = json.loads((Path(__file__).parents[2] / 'modeld/tests/fixtures' / filename).read_text())
+  checkpoint, slices, pairs, output_count = model_metadata(artifact)
+  assert checkpoint.endswith(suffix)
+  assert output_count == count
+  assert states <= pairs.keys()
+  raw = np.zeros((1, count), np.float32)
+  parsed = Parser().parse_outputs({name: raw[:, section].copy() for name, section in slices.items()})
+  assert parsed['plan'].shape == (1, 33, 15) and np.isfinite(parsed['action']).all()
   packed, views, offset = host_input_layout(artifact['input_specs'], 1234, pairs)
   assert views['nav_map'].shape == (1, 1, 256, 256)
-  assert views['nav_map'].dtype == np.uint8
+  assert views['nav_map'].dtype == dtype
+  assert views['navigation'].shape == command_shape
   assert views['navigation'].dtype == np.float32
   views['nav_map'][:] = 255
-  views['navigation'][-1] = 1.25
-  assert np.all(views['nav_map'] == 255) and views['navigation'][-1] == 1.25
+  views['navigation'].flat[-1] = 1.25
+  assert np.all(views['nav_map'] == 255) and views['navigation'].flat[-1] == 1.25
   assert np.all(views['img'] == 0) and packed.size == offset + 2468
   for name, view in views.items():
     if name not in ('tfm', 'big_tfm', 'img', 'big_img'):
       assert (view.ctypes.data - packed.ctypes.data) % 128 == 0
+
+
+@pytest.mark.parametrize('dtype,shape', [('float16', [1, 47]), ('float32', [47]), ('uint8', [1, 47])])
+def test_unrecognized_nav_layout_is_rejected(dtype, shape):
+  artifact = json.loads((Path(__file__).parents[2] / 'modeld/tests/fixtures/nav_rl_metadata.json').read_text())
+  artifact['input_specs']['nav_map'][1] = dtype
+  artifact['input_specs']['navigation'][0] = shape
+  with pytest.raises(ValueError, match='navigation input contract'):
+    model_metadata(artifact)
 
 
 def test_unknown_tbt_does_not_become_straight_and_distance_is_finite():

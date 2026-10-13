@@ -2,6 +2,8 @@
 
 ## Scope and model identity
 
+The current eGPU selection is superseded by the [2026-10-13 RL nav update](nav_rl_model_20261013.md), including its archived ONNX. The deployment and timing results below describe the original model.
+
 This branch starts at carrot-wip `0e4ee1bdbef3ad7284b136fddf31592e3f8a785f` and ports [comma nav-model-integration](https://github.com/commaai/openpilot/commits/nav-model-integration/) through `df7fb1843a0affc3d9b50e6d7f5ccdd98c58ebf4` into the existing Carrot navigation paths.
 
 This upstream revision is a new **eGPU driving model** with `nav_map` uint8 `[1,1,256,256]`, `navigation` float32 `[47]`, and additional recurrent map/navigation state. It is not the old separate navModel neural process. Internal driving, driver monitoring and Jetson model selections stay unchanged; they do not gain model navigation inputs from this change. Existing signal/DM protection is retained.

@@ -34,10 +34,15 @@ def model_metadata(jits):
     raise ValueError('unsupported generic model image input')
   state_pairs = {name: f'next_{name}' for name in specs if f'next_{name}' in outputs}
   nav = set(specs) & {'nav_map', 'navigation'}
-  if nav and (nav != {'nav_map', 'navigation'} or tuple(specs['nav_map'][0]) != (1, 1, 256, 256)
-              or np.dtype(specs['nav_map'][1]) != np.uint8 or tuple(specs['navigation'][0]) != (47,)
-              or np.dtype(specs['navigation'][1]) != np.float32):
-    raise ValueError('unsupported navigation input contract')
+  if nav:
+    if nav != {'nav_map', 'navigation'}:
+      raise ValueError('unsupported navigation input contract')
+    # Original nav uses byte maps/flat commands; RL nav exports float maps and
+    # batched commands. Both take 0..255 pixels (normalization is in the model).
+    contract = (np.dtype(specs['nav_map'][1]), tuple(specs['navigation'][0]))
+    if (tuple(specs['nav_map'][0]) != (1, 1, 256, 256) or np.dtype(specs['navigation'][1]) != np.float32
+        or contract not in ((np.dtype(np.uint8), (47,)), (np.dtype(np.float32), (1, 47)))):
+      raise ValueError('unsupported navigation input contract')
   if set(specs) != {'new_img', 'desire', 'traffic_convention', 'action_t'} | set(state_pairs) | nav:
     raise ValueError('unsupported generic model inputs')
   for name, next_name in state_pairs.items():

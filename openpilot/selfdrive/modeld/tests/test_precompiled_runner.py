@@ -11,7 +11,8 @@ import pytest
 from openpilot.selfdrive.modeld import precompiled_runner as runner
 
 
-def test_nav_inputs_keep_byte_layout_and_clear_when_missing():
+@pytest.mark.parametrize('map_dtype,command_shape', [(np.uint8, (47,)), (np.float32, (1, 47))])
+def test_nav_inputs_keep_pixel_range_and_clear_when_missing(map_dtype, command_shape):
   model = object.__new__(runner.PrecompiledModelState)
   model.close = lambda: None
   model.process = SimpleNamespace(stdin=io.BytesIO())
@@ -21,7 +22,8 @@ def test_nav_inputs_keep_byte_layout_and_clear_when_missing():
   model.views = {key: np.zeros(shape, np.float32) for key, shape in
                  {'img': 16, 'big_img': 16, 'desire': 8, 'traffic_convention': 2, 'action_t': 2,
                   'tfm': (3, 3), 'big_tfm': (3, 3), 'navigation': 47}.items()}
-  model.views['nav_map'] = np.zeros((1, 1, 256, 256), np.uint8)
+  model.views['nav_map'] = np.zeros((1, 1, 256, 256), map_dtype)
+  model.views['navigation'] = np.zeros(command_shape, np.float32)
   model._receive = lambda _: b'1\n'
   model.output, model.output_slices = np.zeros(4), {}
   model.parser = SimpleNamespace(parse_outputs=lambda value: value)

@@ -32,13 +32,13 @@ from urllib.request import Request, urlopen
 from openpilot.selfdrive.modeld.big_model_status import BigModelStatusReporter
 
 
-DEFAULT_MANIFEST_URL = "https://upload.shind0.synology.me/models/comma4-big-nav-cf8f6120/manifest.json"
+DEFAULT_MANIFEST_URL = "https://upload.shind0.synology.me/models/comma4-big-nav-rl-80eedcdd/manifest.json"
 NAV_MODEL = {
-  "model_id": "comma-nav-df7fb184-17c06f92",
+  "model_id": "comma-nav-rl-a03bb1d4-20cae5d0",
   "filename": "big_driving_tinygrad.pkl",
-  "size": 806_704_311,
-  "sha256": "17c06f9208ab9d1529b52589662af85734425a482e5972d342f676e5d6597f56",
-  "url": "https://upload.shind0.synology.me/models/comma4-big-nav-cf8f6120/big_driving_tinygrad.pkl",
+  "size": 822_465_506,
+  "sha256": "20cae5d01d0c59352fa6bf23cb0bf2a9c6c7257f6b9997652f6ef64669e194f8",
+  "url": "https://upload.shind0.synology.me/models/comma4-big-nav-rl-80eedcdd/big_driving_tinygrad.pkl",
 }
 MAX_MANIFEST_SIZE = 64 * 1024
 MAX_MODEL_SIZE = 4 * 1024 * 1024 * 1024
@@ -148,8 +148,8 @@ def _write_state(active: BigModelManifest, previous: BigModelManifest | None, ca
 
 
 def fetch_manifest(manifest_url: str = DEFAULT_MANIFEST_URL, timeout: float = 15.0) -> BigModelManifest:
-  # Pin the navigation model from nav-model-integration at df7fb184.
-  # Upstream publishes only a generic precompiled PKL for this checkpoint.
+  # Pin the navigation model from nav-model-integration at a03bb1d4.
+  # Select the generic precompiled PKL; archive the matching ONNX for later Jetson work.
   # Keep the environment/CLI override path below so a different manifest can
   # still be tested explicitly without changing this branch.
   if manifest_url == DEFAULT_MANIFEST_URL:

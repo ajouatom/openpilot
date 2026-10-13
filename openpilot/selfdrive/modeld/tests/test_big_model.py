@@ -63,13 +63,13 @@ def test_manifest_resolves_relative_https_url():
 def test_default_manifest_is_pinned_to_navigation_model(monkeypatch):
   monkeypatch.setattr(big_model, "urlopen", lambda *_args, **_kwargs: pytest.fail("default manifest must be built in"))
   manifest = big_model.fetch_manifest()
-  assert big_model.DEFAULT_MANIFEST_URL == "https://upload.shind0.synology.me/models/comma4-big-nav-cf8f6120/manifest.json"
-  assert manifest.model_id == "comma-nav-df7fb184-17c06f92"
-  assert manifest.size == 806_704_311
-  assert manifest.sha256 == "17c06f9208ab9d1529b52589662af85734425a482e5972d342f676e5d6597f56"
-  assert manifest.url == "https://upload.shind0.synology.me/models/comma4-big-nav-cf8f6120/big_driving_tinygrad.pkl"
+  assert big_model.DEFAULT_MANIFEST_URL == "https://upload.shind0.synology.me/models/comma4-big-nav-rl-80eedcdd/manifest.json"
+  assert manifest.model_id == "comma-nav-rl-a03bb1d4-20cae5d0"
+  assert manifest.size == 822_465_506
+  assert manifest.sha256 == "20cae5d01d0c59352fa6bf23cb0bf2a9c6c7257f6b9997652f6ef64669e194f8"
+  assert manifest.url == "https://upload.shind0.synology.me/models/comma4-big-nav-rl-80eedcdd/big_driving_tinygrad.pkl"
   assert manifest.precompiled_only
-  assert manifest.cache_filename == "big_driving_tinygrad-17c06f9208ab9d15.pkl"
+  assert manifest.cache_filename == "big_driving_tinygrad-20cae5d01d0c5935.pkl"
 
 
 def test_precompiled_only_model_never_uses_a_local_onnx_build(tmp_path, monkeypatch):
