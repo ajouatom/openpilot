@@ -420,7 +420,7 @@ Related: [Understanding Settings](settings.md) · [Tuning introduction](https://
 
 ### Following distance during shared braking
 
-When both vehicles brake while the gap is closing, ACC can retain a bounded portion of the distance at braking onset and reduce it gradually as speed falls. This applies to all following-response levels, including level 5; the level-5 exclusion described above concerns opening-gap extra TF only. Track replacement, invalid data and disengagement clear this distance memory. It combines with existing headroom without adding the same allowance twice.
+ACC does not separately remember the distance at braking onset or hold that distance after stopping. Every following-response level uses current speed, the selected TF and the lead braking-distance prediction. Existing opening-gap extra TF remains available only at levels 0–4; it is separate from retaining a braking-onset distance.
 
 With ample measured and predicted clearance, ACC may temporarily relax the comfort TF reference by up to 0.4 seconds, with a 0.7-second reference floor. This is automatic and does not change the saved gap setting. Closing speed, lead motion and predicted reserve must qualify; short gaps, stopped leads and constrained approaches receive no allowance. The reference floor is not a guaranteed safe following time or a brake limit. Original physical-obstacle and stopping constraints remain active, so strong braking can still be necessary. Actual vehicle clearance and ride comfort have not been validated for this change.
 
