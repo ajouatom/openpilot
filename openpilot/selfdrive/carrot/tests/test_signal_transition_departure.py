@@ -139,3 +139,23 @@ def test_confirmed_transition_only_bridges_initial_low_speed_launch():
   assert guard.update(2.,observation(1.8,'green'),**dict(kw,speed=.5)).green_confirmed
   assert not guard.update(2.2,observation(2.,'green'),**dict(kw,speed=2.)).green_confirmed
   assert not guard.update(2.4,observation(2.2,'green'),**kw).green_confirmed
+
+
+@pytest.mark.parametrize('speed,standstill,immediate', [(0.,True,True),(.05,True,True),(.15,True,False),(0.,False,False)])
+def test_confirmed_stopped_release_does_not_wait_for_a_second_timer(speed, standstill, immediate):
+  cls, _ = planner_class((REPO/'openpilot/selfdrive/carrot/carrot_functions.py').read_text(encoding='utf8'))
+  p = cls(start_guard=SignalStartGuard())
+  sm = inputs(speed=speed,distance=3.)
+  sm['carState'].standstill = standstill
+  sm['modelV2'].velocity.x = [0.]*33
+  released = False
+  for i in range(40):
+    t = i*.1
+    p.update(sm,80.,'acc',start_observation=observation(t,'red' if i<5 else 'green'),
+             start_context=dict(now=t,enabled=True,valid=True,drive=True))
+    if p.start_decision.released:
+      released = True
+      assert (p.xState.name == 'e2eCruise') is immediate
+      assert (p.stopping_count == 0) is immediate
+      break
+  assert released
