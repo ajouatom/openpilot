@@ -167,6 +167,8 @@ def test_production_tf_update_cycle_has_no_repeated_reduction(changing, ratio):
   p._clip_t_follow = lambda tf: tf
   p.myTFollowFactor = 1.
   p._tf_decel_extra = 0.
+  p._tf_mode_factor = None
+  p._tf_base_last = 1.3
   p.t_follow_last = 1.3
   p.lane_change_active = changing
   p.dynamicTFollowLC, p.leadAccelResponse, p.jerk_factor = ratio, 0, .7
