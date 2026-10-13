@@ -306,6 +306,10 @@ Jetson HUD에는 `jetSON` 아래에 Jetson 내부 센서의 최고 온도가 표
 | 외부 HUD·레이더 표시 | `ClusterHudRadarInfo`, `ClusterHudRadarDisplay`, `ClusterHudRadarSourceColor` | 외부 HUD의 레이더 정보와 색상 |
 | 외부 HUD·디버그 | `ClusterHudDebug` | 진단 정보 |
 
+ARS 표시 스트림을 지원하는 RAV4 2022에서는 장치 기본 주행 화면의 `ShowRadarInfo=3`이
+제어용 앞차 목록과 분리한 옆 차선 객체도 표시합니다. 1/2와 다른 수신기의 동작은 유지합니다.
+표시가 제동 대상 선택이나 Toyota 코너레이더 지원을 뜻하지는 않습니다. [표시 조건](radar.md)을 참고하세요.
+
 USB 외부 HUD 출력은 **10 FPS**로 고정되며, eGPU가 활성화되면 렌더링·인코딩·USB 출력 모두 **5 FPS**로 전환됩니다. eGPU 활성 상태가 바뀌면 자동 반영되며, H.264 인코더의 FPS 변경에는 HUD 재시작이 동반됩니다. Android 지도 입력의 `ClusterNaviMapFps`는 별도 설정입니다.
 
 Onroad에서는 본체 UI가 CPU 6번, 외부 HUD가 CPU 7번을 일반 스케줄링의 낮은 우선순위(nice 19)로 사용합니다. Offroad에서는 4~7번 코어 절전에 대응해 0~3번으로 복귀하며, 항상 켜짐 디버그 출력도 같은 복귀 규칙을 따릅니다. FPS·CPU 코어 선택과 실시간 우선순위 설정은 제거되어 이전 저장값은 적용되지 않습니다. 부하가 높으면 실제 갱신율은 출력 제한보다 낮아질 수 있습니다.

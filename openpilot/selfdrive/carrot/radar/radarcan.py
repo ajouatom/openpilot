@@ -70,6 +70,8 @@ def main():
       msg = messaging.new_message('liveTracks')
       msg.valid = False
       msg.liveTracks.errors.canError = True
+      # 호스트 오류도 표시 스트림 지원을 유지해 이전 선행차 목록으로 돌아가지 않는다.
+      msg.liveTracks.hasDisplayData = getattr(radar, 'DISPLAY_POINTS_SUPPORTED', False) is True
       msg.liveTracks.radarTrackFlipped = radar_track_flip
       pm.send('liveTracks', msg)
       last_error_publish_ns = now_ns

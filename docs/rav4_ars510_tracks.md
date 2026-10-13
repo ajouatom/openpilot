@@ -5,6 +5,29 @@ Toyota RAV4 TSS2 2022의 RADAR_ACC 구성은 기존 Toyota 레이더 DBC가 없�
 ARS 수신기로 해석하고 기존 `liveTracks`와 Carrot `MyTrack` 경로에 전달한다.
 다른 Toyota의 기존 파서와 현대 Bosch의 문맥·주기 처리는 유지한다.
 
+## 옆 차선 표시와 제어의 분리
+
+원형 fused의 경로 필터는 신선한 요레이트가 있을 때 15m 밖·예측 경로에서 2.5m
+벗어난 비ACC 객체를 제외한다. 근거리 정지 객체에는 더 좁은 범위를 사용한다.
+이 제어용 목록만 표시에도 사용하면 옆 차선 차량을 감지해도 표시가 빠질 수 있다.
+
+`RadarData.displayPoints`는 별도 표시용 디코더의 결과다. 동일한 프레임 검증을 거쳐
+원형 fused의 `path_gate_m`만 표시에서 해제하고, 최소 나이·CRC·속도 품질·60m 밖의
+비ACC 객체 제외는 유지한다. `points`, MyTrack, DPath, 선행차·끼어들기·계획 입력에는
+합치지 않으며 표시 객체 번호와 복구 이력도 제어와 독립적이다. 표시 오류가 제어
+수신기의 상태나 객체 번호를 바꾸지 않도록 분리한다.
+
+Konik 기본 주행 화면은 `liveTracks`를 구독해 `ShowRadarInfo=3`에서 이 목록으로
+기존 레이더 정보 그룹을 대체한다. `hasDisplayData`는 빈 정상 목록과 오류에도 지원을
+알리므로 이전 제어 목록으로 돌아가 오래된 표시를 남기지 않는다. 수신·게시 시각,
+유효성·오류·측정 여부·유한 값을 검사하고, 1/2 또는 미지원 수신기는 기존 표시를 유지한다.
+좌우 반전은 게시 사본의 두 목록에 한 번씩 적용하며 UI는 다시 반전하지 않는다.
+화면의 기존 `radarState`·`modelV2` 유효성 및 차선 높이·투영 조건은 유지한다.
+
+메시지 필드는 기존 번호를 바꾸지 않고 뒤에 추가했다. 구버전 메시지의 표시 지원
+표지는 기본 false다. 실제 적용에는 스키마·수신기·UI의 동시 업데이트와 정상 빌드,
+새 프로세스 시작이 필요하다. 웹과 mici 표시 및 실제 장치 화면 검증은 이 변경의 범위 밖이다.
+
 ## 커브·지도 감속과 PCM 모드 0
 
 도로 곡률과 지도 경로의 속도 제한은 이미 브랜드 공통이다. `carrot_serv`가
@@ -67,6 +90,8 @@ pytest opendbc_repo/opendbc/car/toyota/tests/test_ars510_carrot.py
 pytest openpilot/selfdrive/carrot/tests/test_radarcan_process.py
 pytest openpilot/selfdrive/car/tests/test_toyota_pcm_mode0.py openpilot/selfdrive/car/tests/test_toyota_pcm_speed.py
 pytest openpilot/selfdrive/carrot/tests/test_rav4_radar_slowdown.py
+pytest opendbc_repo/opendbc/car/toyota/tests/test_ars510_display.py
+pytest openpilot/selfdrive/ui/tests/test_radar_display.py openpilot/selfdrive/carrot/tests/test_radar_display_flip.py
 ```
 
 미빌드 수신기 검사에는 `tools/ars510_validation/offline_io.py`를 명시적으로

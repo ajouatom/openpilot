@@ -2,6 +2,23 @@
 
 [한국어](../ko/radar.md)
 
+## RAV4 2022 radar-info mode 3
+
+On the standard Konik driving screen in versions with the ARS receiver, `ShowRadarInfo=3`
+uses a separate display-only object list. The control-oriented fused list excludes some
+adjacent-lane objects beyond 15 m, which previously also removed their display markers.
+Only the display list omits this path gate; control leads and cut-in decisions remain unchanged.
+
+Moving objects retain the existing speed marker, while slow or stationary objects retain
+the star marker. A visible object is not necessarily a braking target. CRC, object age,
+speed validity, the original non-ACC exclusion beyond 60 m and projection limits still apply.
+Stale, invalid or empty display input clears the markers. Modes 1/2 and other receivers
+keep their existing policy. This does not add Toyota side-corner radar support.
+
+This feature targets the standard device driving screen. Web and mici screens keep their
+existing display path. Update the receiver, screen and message schema together, build
+successfully and start fresh processes; copying a single file is insufficient.
+
 > [!NOTE]
 > This is the canonical English user guide maintained with the `carrot-wip` code. When user-visible behavior changes, update this document together with the related code and tests.
 

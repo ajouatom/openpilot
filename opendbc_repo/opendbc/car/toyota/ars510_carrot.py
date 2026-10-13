@@ -2,10 +2,11 @@
 
 디코더 9개 파일은 ds-sebastian/ars510-radar의 fb5b29c2 커밋을 그대로
 포함하며 라이선스는 ars510/LICENSE다. 이 파일만 Carrot 수신 계약을 추가한다.
-CP·필터 계수·Panda·PCS를 변경하지 않으며 CAN 송신/ECU 초기화 API가 없다.
+CP·제어 필터 계수·Panda·PCS를 변경하지 않으며 CAN 송신/ECU 초기화 API가 없다.
 """
 
 from collections import Counter
+from dataclasses import replace
 from math import isfinite
 
 from opendbc.car import structs
@@ -106,6 +107,7 @@ class Ars510RadarInterface(RadarInterfaceBase):
   """원형 fused 결과를 실제 Carrot RadarData와 MyTrack 처리에 연결한다."""
 
   ARS510_INPUT_RECOVERY_API = 1
+  DISPLAY_POINTS_SUPPORTED = True
 
   def __init__(self, CP):
     if not is_supported_ars510(CP):
@@ -115,6 +117,12 @@ class Ars510RadarInterface(RadarInterfaceBase):
     self.dt = RADAR_CYCLE_S
     self.init_done = True
     self.decoder = self._new_decoder()
+    self.display_decoder = self._new_display_decoder()
+    self._display_points = {}
+    self._display_namespace_offset = 1000
+    self._display_max_track_id = 999
+    self._display_counters = Counter()
+    self._display_decoder_counters = Counter()
     self._counters = Counter()
     self._decoder_counters = Counter()
     self._assembler_counters = Counter()
@@ -141,6 +149,13 @@ class Ars510RadarInterface(RadarInterfaceBase):
     decoder._assembler = StrictId80RecordAssembler()
     return decoder
 
+  @staticmethod
+  def _new_display_decoder():
+    # 제어 fused는 그대로 둔다. 표시는 경로 폭만 해제하고 나이·거리·속도 품질을 유지한다.
+    decoder = Ars510NativeRadarInterface(replace(FUSED_CONFIG, path_gate_m=0.0))
+    decoder._assembler = StrictId80RecordAssembler()
+    return decoder
+
   def recover_from_input_fault(self, previous):
     """재구성 후에도 오류를 유지한다. 이전 객체·필터는 정상 기록까지 재사용하지 않는다."""
     if not isinstance(previous, Ars510RadarInterface):
@@ -149,6 +164,8 @@ class Ars510RadarInterface(RadarInterfaceBase):
     # 새 namespace가 이전 정상 객체나 아직 소진 중인 번호 경계로 돌아가지 않게 한다.
     self._max_track_id = max(self._max_track_id, self._namespace_offset - 1,
                              previous._max_track_id, previous._namespace_offset - 1)
+    self._display_max_track_id = max(self._display_max_track_id, self._display_namespace_offset - 1,
+                                    previous._display_max_track_id, previous._display_namespace_offset - 1)
     self._fault_latched = True
     self._reset_history()
     self._counters["input_recovery_resets"] += 1
@@ -166,6 +183,11 @@ class Ars510RadarInterface(RadarInterfaceBase):
         values[key] = value
     values["namespace_offset"] = self._namespace_offset
     values["active_points"] = len(self.pts)
+    for key in ("records", "crc_failures", "settling_suppressed", "unresolved_suppressed", "path_gated"):
+      values[f"display_{key}"] = self._display_decoder_counters[key] + getattr(self.display_decoder, key)
+    values.update({f"display_{key}": value for key, value in self._display_counters.items()})
+    values["display_namespace_offset"] = self._display_namespace_offset
+    values["active_display_points"] = len(self._display_points)
     for key in ("starts", "completed_records", "sequence_errors", "bad_frame_length", "bad_frame_type",
                 "assembly_timeout", "nonfinite_time", "reversed_time", "interrupted_records",
                 "orphan_continuations", "no_record_updates", "timeouts", "history_resets",
@@ -176,11 +198,76 @@ class Ars510RadarInterface(RadarInterfaceBase):
       values.setdefault(key, 0)
     return dict(values)
 
+  def _reset_display_history(self):
+    for key in ("records", "crc_failures", "settling_suppressed", "unresolved_suppressed", "path_gated"):
+      self._display_decoder_counters[key] += getattr(self.display_decoder, key)
+    self.display_decoder = self._new_display_decoder()
+    self._display_points.clear()
+    self._display_namespace_offset = self._display_max_track_id + 1
+    self._display_counters["history_resets"] += 1
+
+  def _display_error(self, reason):
+    # 표시 장애가 제어 오류·기존 MyTrack·제어 객체 번호를 바꾸지 않게 격리한다.
+    self._display_counters[reason] += 1
+    self._reset_display_history()
+
+  def _convert_display(self, decoded):
+    points = {}
+    for value in decoded["radarData"]["points"]:
+      required = (value["dRel"], value["yRel"], value["vRel"], value["v_long_ground"])
+      if not all(_finite(v) for v in required) or value["dRel"] <= 0:
+        self._display_error("invalid_points")
+        return
+      native_id = value["trackId"]
+      if not isinstance(native_id, int) or isinstance(native_id, bool):
+        self._display_error("invalid_track_id")
+        return
+      track_id = native_id + self._display_namespace_offset
+      if native_id < 0 or track_id >= TRACK_ID_LIMIT or track_id in points:
+        self._display_error("invalid_track_id")
+        return
+      self._display_max_track_id = max(self._display_max_track_id, track_id)
+      yv_rel = value.get("yvRel", 0.0)
+      points[track_id] = structs.RadarData.RadarPoint(
+        trackId=track_id,
+        dRel=float(value["dRel"]),
+        yRel=float(value["yRel"]),
+        vRel=float(value["vRel"]),
+        vLead=float(value["v_long_ground"]),
+        aRel=float(value.get("aRel", float("nan"))),
+        yvRel=float(yv_rel) if _finite(yv_rel) else 0.0,
+        measured=bool(value["measured"]),
+        radarSource="frontRadar",
+        trackState=0,
+      )
+    self._display_points = points
+    self._display_counters["published_records"] += 1
+    self._display_counters["published_points"] += len(points)
+
+  def _update_display_frame(self, time_s, src, address, data, control_decoded):
+    try:
+      assembler = self.display_decoder._assembler
+      rejected_before = assembler.rejections
+      crc_before = self.display_decoder.crc_failures
+      decoded = self.display_decoder.update_frame(time_s, src, address, data)
+      if assembler.rejections > rejected_before or self.display_decoder.crc_failures > crc_before:
+        self._display_error("invalid_record")
+      elif control_decoded is None:
+        if decoded is not None:
+          self._display_error("record_mismatch")
+      elif decoded is None or decoded["time_s"] != control_decoded["time_s"]:
+        self._display_error("record_mismatch")
+      else:
+        self._convert_display(decoded)
+    except Exception:
+      self._display_error("decoder_exceptions")
+
   def _reset_history(self):
     for key in ("records", "crc_failures", "settling_suppressed", "unresolved_suppressed", "path_gated"):
       self._decoder_counters[key] += getattr(self.decoder, key)
     self._assembler_counters.update(self.decoder._assembler.counters)
     self.decoder = self._new_decoder()
+    self._reset_display_history()
     self.pts.clear()
     self.tracks.clear()
     self._namespace_offset = self._max_track_id + 1
@@ -210,11 +297,15 @@ class Ars510RadarInterface(RadarInterfaceBase):
       return self._unavailable_result(can_error=self._fault_latched)
     # 새 레코드/객체를 만들지 않는다. 원형 upstream의 cold-start 빈 상태다.
     self._counters["cold_start_publications"] += 1
-    return structs.RadarData()
+    return self._new_result()
+
+  @staticmethod
+  def _new_result():
+    return structs.RadarData(hasDisplayData=True)
 
   @staticmethod
   def _unavailable_result(*, can_error=False):
-    ret = structs.RadarData()
+    ret = Ars510RadarInterface._new_result()
     ret.errors.canError = can_error
     ret.errors.radarUnavailableTemporary = True
     return ret
@@ -258,8 +349,9 @@ class Ars510RadarInterface(RadarInterfaceBase):
     self.pts = points
     self._counters["published_records"] += 1
     self._counters["published_points"] += len(points)
-    ret = structs.RadarData()
+    ret = self._new_result()
     ret.points = list(points.values())
+    ret.displayPoints = list(self._display_points.values())
     return ret
 
   def update_carrot(self, v_ego, a_ego, rcv_time, can_packets):
@@ -389,6 +481,8 @@ class Ars510RadarInterface(RadarInterfaceBase):
         if assembler.rejections > rejected_before or self.decoder.crc_failures > crc_before:
           result = self._input_error()
           continue
+        # 공통 길이·체크섬·순서·CRC를 통과한 동일 프레임만 표시 디코더에도 전달한다.
+        self._update_display_frame(time_s, src, address, bytes(data), decoded)
         if decoded is not None:
           record_time_s = decoded["time_s"]
           if (time_s == self._completion_time_s

@@ -48,3 +48,19 @@ git apply --unidiff-zero /absolute/path/to/rav4-pcm-mode0.patch
 
 The patch uses zero context lines. Validate both edited pages and regenerate the catalog using the authoring guide
 before publishing. Reconcile later manual edits if the check fails.
+
+## RAV4 radar display
+
+`rav4-radar-display.patch` updates the Korean and English `ShowRadarInfo` manual
+regions from Wiki commit `fbe96d08c066844a60dc909500c1e2d9393bca5d`. It describes
+the separate ARS display stream on the standard device screen in mode 3,
+unchanged control targets, freshness checks, and the web/mici limitation.
+The live Wiki has not been changed.
+
+```sh
+git apply --check --unidiff-zero /absolute/path/to/rav4-radar-display.patch
+git apply --unidiff-zero /absolute/path/to/rav4-radar-display.patch
+```
+
+Only the matching manual regions are edited. Validate both pages and regenerate
+the catalog before publishing, following the authoring guide.
