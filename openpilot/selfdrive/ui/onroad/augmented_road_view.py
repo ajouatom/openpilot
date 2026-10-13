@@ -11,6 +11,7 @@ from openpilot.selfdrive.ui.onroad.driver_preview import DriverPreview
 from openpilot.selfdrive.ui.onroad.hud_renderer import HudRenderer
 from openpilot.selfdrive.ui.onroad.model_renderer import ModelRenderer
 from openpilot.selfdrive.ui.render_diagnostics import RenderDiagnostics
+from openpilot.selfdrive.ui.overlay_state import OverlayState
 from openpilot.selfdrive.ui.onroad.cameraview import CameraView
 from openpilot.system.ui.lib.application import gui_app
 from openpilot.system.ui.lib.text_draw import draw_text_ui_style
@@ -51,6 +52,9 @@ class AugmentedRoadView(CameraView):
     self.model_renderer = ModelRenderer()
     self._render_diagnostics = RenderDiagnostics('ui')
     self._hud_renderer = HudRenderer()
+    self._overlay_state = OverlayState()
+    self.model_renderer._overlay_state = self._overlay_state
+    self._hud_renderer._overlay_state = self._overlay_state
     self.alert_renderer = AlertRenderer()
     self.driver_state_renderer = DriverPreview()
 
@@ -120,6 +124,8 @@ class AugmentedRoadView(CameraView):
       timing.call('camera', super()._render, rect)
     cam_ms = (time.monotonic() - _t) * 1000.0
 
+    self._overlay_state.update(ui_state, self.client, self.stream_type, self._suppress_camera_for_cluster)
+
     if not self._suppress_camera_for_cluster:
       # Draw the model overlay only with the camera view
       _t = time.monotonic()
@@ -167,6 +173,8 @@ class AugmentedRoadView(CameraView):
       self._click_callback()
 
   def close(self):
+    self.model_renderer._overlay.close()
+    self._hud_renderer._overlay.close()
     if preview := getattr(self, 'driver_state_renderer', None):
       preview.close()
     super().close()

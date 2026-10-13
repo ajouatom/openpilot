@@ -5,6 +5,7 @@ from openpilot.cereal import messaging, car, log
 from msgq.visionipc import VisionStreamType
 from openpilot.selfdrive.ui.ui_state import ui_state
 from openpilot.selfdrive.ui.render_diagnostics import RenderDiagnostics
+from openpilot.selfdrive.ui.overlay_state import OverlayState
 from openpilot.system.ui.lib import native_draw, native_geometry, native_text
 from openpilot.selfdrive.ui.mici.onroad import SIDE_PANEL_WIDTH
 from openpilot.selfdrive.ui.mici.onroad.alert_renderer import AlertRenderer
@@ -145,6 +146,7 @@ class AugmentedRoadView(CameraView):
 
     self.params = Params()
     self._last_device_position = ""
+    self._render_diagnostics = RenderDiagnostics('uiC4')
 
     self.device_camera: DeviceCameraConfig | None = None
     self.view_from_calib = view_frame_from_device_frame.copy()
@@ -163,6 +165,9 @@ class AugmentedRoadView(CameraView):
 
     self._model_renderer = ModelRenderer()
     self._hud_renderer = HudRenderer()
+    self._overlay_state = OverlayState()
+    self._model_renderer._overlay_state = self._overlay_state
+    self._hud_renderer._overlay_state = self._overlay_state
     self._vision_renderer = VisionRenderer()
     self._alert_renderer = AlertRenderer()
     self._driver_state_renderer = DriverPreview(compact=True)
@@ -218,8 +223,6 @@ class AugmentedRoadView(CameraView):
     # plotMode 갱신(가끔 파일 읽기)은 drawTime 창 밖에서 — total을 오염시키지 않는다
     self._refresh_plot_mode(time.monotonic())
     start_draw = time.monotonic()
-    if not hasattr(self, '_render_diagnostics'):
-      self._render_diagnostics = RenderDiagnostics('uiC4')
     timing = self._render_diagnostics
     timing.start()
     # 구간별 계측(계측 전용) — 렌더 호출 순서는 그대로, 각 구간 전후 monotonic만 잰다.
@@ -255,6 +258,8 @@ class AugmentedRoadView(CameraView):
       # Render the base camera view
       super()._render(self._content_rect)
     cam_ms = (time.monotonic() - _t) * 1000.0
+
+    self._overlay_state.update(ui_state, self.client, self.stream_type, (self._suppress_camera_for_cluster, road_view_mode))
 
     if not self._suppress_camera_for_cluster and road_view_mode in (0, 2):
       # Draw all UI overlays
@@ -335,6 +340,8 @@ class AugmentedRoadView(CameraView):
     timing.finish()
 
   def close(self):
+    self._model_renderer._overlay.close()
+    self._hud_renderer._overlay.close()
     if preview := getattr(self, '_driver_state_renderer', None):
       preview.close()
     super().close()

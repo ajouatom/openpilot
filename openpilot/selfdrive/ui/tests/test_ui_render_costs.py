@@ -49,7 +49,7 @@ def recording():
 @pytest.mark.parametrize('keep', ['record', 'cli_record', 'scale', 'burn_in', 'none'])
 def test_recording_target_released_only_when_unused(recording, keep):
   app, calls, scope = recording
-  app._render_texture = target = SimpleNamespace(texture=9)
+  app._render_texture = target = SimpleNamespace(id=7, texture=9)
   app._record_enabled = keep == 'record'
   app._scale = .75 if keep == 'scale' else 1.
   scope['RECORD'] = keep == 'cli_record'
@@ -67,10 +67,12 @@ def test_start_recording_midframe_does_not_end_or_capture_an_unbegun_target(reco
   app, calls, _ = recording
   frames = app.render()
   assert next(frames)
+  assert app.render_framebuffer == 0
   app._record_enabled = True
-  app._render_texture = SimpleNamespace(texture=9)
+  app._render_texture = SimpleNamespace(id=7, texture=9)
   app._window_close_requested = True
   assert list(frames) == []
+  assert app.render_framebuffer == 0
   names = [c[0] for c in calls]
   assert 'begin_drawing' in names and 'end_drawing' in names
   assert 'end_texture_mode' not in names
@@ -80,11 +82,13 @@ def test_start_recording_midframe_does_not_end_or_capture_an_unbegun_target(reco
 def test_stop_recording_midframe_releases_after_matching_end(recording):
   app, calls, _ = recording
   app._record_enabled = True
-  app._render_texture = SimpleNamespace(texture=9)
+  app._render_texture = SimpleNamespace(id=7, texture=9)
   frames = app.render()
   assert next(frames)
+  assert app.render_framebuffer == 7
   app._record_enabled = False
   assert next(frames)
+  assert app.render_framebuffer == 0
   names = [c[0] for c in calls]
   assert names.index('end_texture_mode') < names.index('unload_render_texture')
   assert app._render_texture is None
@@ -97,7 +101,7 @@ def test_stop_recording_midframe_releases_after_matching_end(recording):
 def test_encoder_backpressure_skips_gpu_readback(recording, full):
   app, calls, _ = recording
   app._record_enabled = True
-  app._render_texture = SimpleNamespace(texture=9)
+  app._render_texture = SimpleNamespace(id=7, texture=9)
   if full:
     app._ffmpeg_queue.put_nowait(b'previous')
   frames = app.render()
