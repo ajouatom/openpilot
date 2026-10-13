@@ -1,5 +1,10 @@
 # Jetson RL navigation integration — 2026-10-13
 
+Follow-up: the user later powered the Orin. See the
+[device check](jetson_nav_device_20261013.md) for the successful engine build,
+synthetic timing, prebuilt archive and still-unresolved physical USB link.
+The no-device statements below describe the original integration phase.
+
 User-requested source: https://github.com/tjdgus200/openpilot/tree/codex/jetson-nav-rl
 at `38b06d6a481ad15e7a999abc53c85eb1e966743f`. Scope is **carrot-nav only**.
 All four prerequisite/runtime/model commits were imported as single-parent
