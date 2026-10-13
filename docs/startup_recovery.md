@@ -148,3 +148,25 @@ reboot failure, and mutual exclusion between rebuild and update. C4 536x240 and
 C3 2160x1080 desktop previews use a synthetic compiler error after the "No new
 commit" result. These checks do not establish physical touch/readability, actual
 device SCons cleanup/rebuild, or a successful vehicle reboot/recovery cycle.
+
+
+### 2026-10-13: deferred Rebuild All and serialized cache recovery
+
+The previous immediate `scons -c` behavior described above is superseded.
+Rebuild All writes `/data/rebuild_all.request` and reboots; the launcher consumes
+it before Params is built. SCons cleanup is best effort, followed by verified
+removal of incremental state, `prebuilt` and the selected SCons cache. A failed
+reset retains the request and stops startup. Successful cleanup consumes the
+request and forces the full build; it is not reported as a successful build.
+
+Builders, Params rebuilding, startup cleanup and cache pruning share a stable
+sibling `*.build.lock` using flock. Builders wait at most 300 seconds; cleanup
+fails rather than removing a live cache. Cache config and Params stamps are not
+pruned as build results. Only cooperating processes are protected. No onroad
+process or sampling rate is added.
+
+The failure display polls input explicitly only for the loaded COMMA backend.
+Touch coordinates, hit decisions and reboot state are retained in a rotating
+`/data/startup_recovery_touch.jsonl` log (256 KiB threshold and one previous file;
+a final record can exceed the threshold). Logging failure never blocks recovery.
+See [the PR review](pr_review_20261013.md) for checks and device-validation limits.
