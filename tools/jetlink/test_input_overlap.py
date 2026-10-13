@@ -73,5 +73,3 @@ def test_gpu_read_failure_is_not_replaced_with_a_previous_image(monkeypatch):
   with pytest.raises(RuntimeError, match='GPU read failed'):
     warp(bufs, transforms, prepare=lambda: calls.append('prepare'))
   assert calls == ['submit', 'prepare', 'read']
-
-
