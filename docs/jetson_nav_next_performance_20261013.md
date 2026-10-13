@@ -1,5 +1,10 @@
 # Next parked performance investigation
 
+Follow-up: `jetson_nav_retest_20261014.md` records the completed native A/B/A,
+the small state-copy gain, the stale manager-import discovery and the actual
+LZ4 regression. Default map-only packing sustained 20 Hz for two minutes with
+camera/HUD/DM and no model frame-ID skips; active-route rendering is pending.
+
 User request: investigate faster approaches for tomorrow. Scope remains
 carrot-nav only. This preparation changes no production inference path, model,
 vehicle files, settings, services or installed release. No device was contacted
