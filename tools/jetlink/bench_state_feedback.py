@@ -16,8 +16,9 @@ import time
 
 import numpy as np
 
-ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(ROOT / 'third_party/jetlink'))
+ROOT = next((p for p in Path(__file__).resolve().parents if (p / 'third_party/jetlink/jetlink/spec.py').is_file()), None)
+if ROOT is not None:
+  sys.path.insert(0, str(ROOT / 'third_party/jetlink'))
 from jetlink.queues import StatefulQueues
 from jetlink.spec import ModelSpec
 
@@ -59,6 +60,15 @@ def reset_device_feedback(engine, cuda):
 
 def digest_outputs(values):
   return {name: hashlib.sha256(memoryview(value).cast('B')).hexdigest() for name, value in values.items()}
+
+
+def digest_file(path):
+  # Jetson's Python 3.10 predates hashlib.file_digest.
+  digest = hashlib.sha256()
+  with path.open('rb') as stream:
+    while chunk := stream.read(1 << 20):
+      digest.update(chunk)
+  return digest.hexdigest()
 
 
 def summarize(rows):
@@ -161,7 +171,8 @@ def compare(spec, engine_path, frames, rate):
 def main():
   parser = argparse.ArgumentParser(description=__doc__)
   parser.add_argument('--engine', type=Path, required=True)
-  parser.add_argument('--spec', type=Path, default=ROOT / 'openpilot/selfdrive/modeld/jetlink/jetson_model.json')
+  parser.add_argument('--spec', type=Path, default=(ROOT or Path('/opt/carrot-jetlink/current')) /
+                      'openpilot/selfdrive/modeld/jetlink/jetson_model.json')
   parser.add_argument('--frames', type=int, default=150)
   parser.add_argument('--rate', type=float, default=20)
   parser.add_argument('--output', type=Path, required=True)
@@ -174,8 +185,7 @@ def main():
   if not spec.stateful:
     parser.error('This comparison requires a stateful model')
   require_stopped_service()
-  with args.engine.open('rb') as plan:
-    engine_sha256 = hashlib.file_digest(plan, 'sha256').hexdigest()
+  engine_sha256 = digest_file(args.engine)
   result = compare(spec, args.engine, args.frames, args.rate)
   result['engine_sha256'] = engine_sha256
   with args.output.open('x', encoding='utf-8') as out:

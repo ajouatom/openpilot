@@ -32,7 +32,7 @@ def test_missing_library_keeps_raw_protocol(monkeypatch):
   monkeypatch.setattr(B, 'library', lambda: None)
   stream = MemoryStream(incoming=packet(2, P.Msg.HELLO_RESP, 1,
                         json.dumps({'protocol': 2, 'stateful_v2': True, B.CAPABILITY: True}).encode()))
-  client = JetlinkClient(stream)
+  client = JetlinkClient(stream, allow_block_compression=True)
   client.hello()
   assert not client._lz4
   assert B.encode((b'hello',)) is None
@@ -40,12 +40,24 @@ def test_missing_library_keeps_raw_protocol(monkeypatch):
     B.decode(b'hello', 5)
 
 
+@pytest.mark.parametrize('opt_in', [False, True])
+@pytest.mark.parametrize('peer_support', [False, True])
+def test_full_block_compression_requires_local_opt_in_and_peer_support(monkeypatch, opt_in, peer_support):
+  monkeypatch.setattr(B, 'library', lambda: object())
+  response = {'protocol': 2, 'stateful_v2': True, B.CAPABILITY: peer_support, M.CAPABILITY: True}
+  wire = MemoryStream(incoming=packet(2, P.Msg.HELLO_RESP, 1, json.dumps(response).encode()))
+  client = JetlinkClient(wire, **({'allow_block_compression': True} if opt_in else {}))
+  client.hello()
+  assert client._lz4 == (opt_in and peer_support)
+  assert client._nav_u8
+
+
 @pytest.mark.skipif(B.library() is None, reason='System liblz4 unavailable')
 @pytest.mark.parametrize('compact_map', [False, True])
 def test_real_client_server_roundtrip_and_corrupt_frame_stops_before_inference(compact_map):
   response = {'protocol': 2, 'stateful_v2': True, B.CAPABILITY: True, M.CAPABILITY: compact_map}
   wire = MemoryStream(incoming=packet(2, P.Msg.HELLO_RESP, 1, json.dumps(response).encode()))
-  client = JetlinkClient(wire)
+  client = JetlinkClient(wire, allow_block_compression=True)
   client.hello()
   client.spec = SPEC
   wire.out.clear()

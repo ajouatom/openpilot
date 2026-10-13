@@ -5,7 +5,7 @@ import subprocess
 import numpy as np
 import pytest
 
-from bench_state_feedback import enqueue_candidate, reset_device_feedback, require_stopped_service, digest_outputs
+from bench_state_feedback import enqueue_candidate, reset_device_feedback, require_stopped_service, digest_outputs, digest_file
 
 
 def fixture():
@@ -79,3 +79,9 @@ def test_digest_checks_bits_in_every_output_including_negative_zero():
   a['state'][0] = -0.
   assert digest_outputs(a)['output'] == expected['output']
   assert digest_outputs(a)['state'] != expected['state']
+
+
+def test_engine_digest_supports_jetson_python_without_file_digest(tmp_path):
+  path = tmp_path / 'engine.plan'
+  path.write_bytes(b'abc')
+  assert digest_file(path) == 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad'

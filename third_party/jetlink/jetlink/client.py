@@ -81,7 +81,7 @@ def _transport_layers(transport):
 
 class JetlinkClient:
   def __init__(self, transport: Transport, deadline: float = FRAME_TIMEOUT,
-               name: str | None = None):
+               name: str | None = None, *, allow_block_compression: bool = False):
     self.t = transport
     self.deadline = deadline
     # Who the server logs this connection as. The nonce is per client object,
@@ -102,6 +102,9 @@ class JetlinkClient:
     self._infer_flags = 0
     self._stateful_v2 = False
     self._nav_u8 = False
+    # Native comma measurements show LZ4 encoding costs more than USB savings.
+    # Keep exact map packing; full-block compression requires an explicit trial.
+    self._allow_block_compression = allow_block_compression
     self._lz4 = False
     self.last_request_bytes = 0
 
@@ -243,7 +246,8 @@ class JetlinkClient:
     from jetlink.packed_codec import CAPABILITY
     self._nav_u8 = self._stateful_v2 and response.get(CAPABILITY) is True
     from jetlink.block_codec import CAPABILITY as LZ4_CAPABILITY, library
-    self._lz4 = self._stateful_v2 and response.get(LZ4_CAPABILITY) is True and library() is not None
+    self._lz4 = (self._allow_block_compression and self._stateful_v2 and
+                 response.get(LZ4_CAPABILITY) is True and library() is not None)
     return response
 
   def state(self, timeout: float = 2.0) -> dict:
