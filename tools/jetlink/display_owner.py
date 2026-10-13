@@ -5,8 +5,11 @@ import json
 from pathlib import Path
 import time
 
-# Runtime updates also work on legacy images without a new systemd drop-in.
-DIRECTORY = Path('/dev/shm') / ('carrot-jetlink-display-' + str(getattr(os, 'getuid', lambda: 0)()))
+# logind RemoveIPC can unlink /dev/shm locks when the final SSH/probe session
+# ends, even while system services still hold them. RuntimeDirectory survives.
+DIRECTORY = Path('/run/carrot-jetlink-display')
+if not DIRECTORY.is_dir():  # Legacy images without the boot display service.
+  DIRECTORY = Path('/tmp') / ('carrot-jetlink-display-' + str(getattr(os, 'getuid', lambda: 0)()))
 
 
 def process_identity(pid):
