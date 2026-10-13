@@ -112,11 +112,15 @@ def test_cold_start_has_no_firmware_or_fake_tracks_and_does_not_learn_20hz(CP, r
   assert cp_wire(CP) == before
 
 
-def test_cold_start_warning_is_once_and_does_not_create_error(radar, caplog):
+def test_cold_start_warning_is_once_and_does_not_create_error(radar, monkeypatch):
+  # The built runtime routes carlog to its own handler without root propagation.
+  # Check the logger boundary instead of depending on pytest's root-log capture.
+  warnings = []
+  monkeypatch.setattr('opendbc.car.toyota.ars510_carrot.carlog.warning', warnings.append)
   for index in range(1601):
     radar.update_carrot(15.0, 0.0, 1.0 + index * .01, [])
   assert radar.diagnostics["cold_start_warnings"] == 1
-  assert sum("첫 CRC 정상" in record.message for record in caplog.records) == 1
+  assert len(warnings) == 1 and "첫 CRC 정상" in warnings[0]
   assert not radar.pts and not radar.tracks
   assert radar.diagnostics["history_resets"] == 0
 
