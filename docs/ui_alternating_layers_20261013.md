@@ -1,30 +1,59 @@
 # Alternating onroad display work and receipt-cached health checks
 
-## Current status: UI layer experiment withdrawn after C3 flicker
+## Current status: restore alternating work with the real window target
 
-The user subsequently reported C3 flicker, then clarified that the camera stays
-visible while the overlays intermittently disappear. The offscreen tests below
-did not exercise a connected C3 camera and its
-live window/presentation path, so they did not validate that combination. The
-specific graphics-state/presentation failure has not been reproduced locally;
-the report must not be explained away as the expected difference in paint rate.
-C4 road behavior has not been confirmed either.
+The C3 report was clarified: the camera remains visible while overlays disappear
+and reappear. The first mitigation withdrew the UI changes on both branches.
+The subsequent code audit found a concrete target-restoration defect in the
+withdrawn implementation, and the corrected implementation restores alternating
+model/HUD painting while still compositing both layers every frame.
 
-Restore both C3 and C4 UI files, including display timing and recording changes,
-byte-for-byte to the parent of `d6a92d91e2`. Remove the layer-cache helpers and
-their now-inapplicable tests. Camera, model overlays and HUD return to the
-previous per-frame rendering path. Retain the independent messaging frequency
-cache and selfdrived manager-process cache. Preserve later Jetlink/model changes
-and unrelated local work.
+The old application set `render_framebuffer = 0` whenever its own recording
+texture was absent. However, comma's `BeginDrawing()` starts drawing into its
+internal `CORE.Window.rotated_fb`; `EndDrawing()` later presents that texture.
+The camera reached this internal target, but refreshing a cached layer restored
+FBO 0 and composited overlays there. Final presentation then replaced those
+writes with the internal texture. Urgent frames bypass caching and draw into the
+correct target, explaining intermittent reappearance. The previous offscreen
+benchmark always supplied a known outer texture and therefore missed this path.
 
-The UI timing results below are historical experimental measurements, not gains
-available after this rollback. Real-C3 confirmation of the rollback and a
-camera-connected/window-presented reproduction are still needed before any
-replacement layer cache is promoted. Branch publication is not vehicle install.
+Source: [comma raylib rcore.c, pinned caa64e15](https://github.com/commaai/raylib/blob/caa64e15ac20a47804a8048029c921ac091fef12/src/rcore.c#L908).
+This platform code is shared by the C3/C4 paths; a C4 road failure was not reported.
 
-Rollback validation: the full tracked UI trees match the pre-experiment parent
-exactly, 117 focused UI tests pass, Python compilation succeeds and the diff has
-no whitespace errors. These checks do not establish physical C3 recovery.
+The application now captures the actual framebuffer **after** `BeginDrawing()`.
+On devices it uses ES2 `glGetIntegerv(GL_FRAMEBUFFER_BINDING)` because the shipped
+ES2 raylib wrapper returns zero. The function and output storage are bound once
+at window initialization; the query runs once per unrecorded display frame, not
+once per overlay. Recording/scaled targets retain their explicit IDs. Allocation
+also checks framebuffer completeness before using a layer and otherwise keeps
+direct drawing. Control, camera and warning cadence remain unchanged.
+
+### Regression evidence
+
+- Hidden desktop GPU reproduction uses the production application frame loop
+  and layer code with a nonzero internal window target, matching comma's target
+  structure. The simulated camera background stays visible.
+- Before the correction, overlays are incomplete/missing in 37/40 unrecorded
+  frames; the three urgent direct-paint frames restore both. Recording ON passes
+  40/40, matching the earlier benchmark's blind spot.
+- After the correction, all 80 paired recorded/unrecorded frames preserve both
+  layers and the background. Both variants still paint each layer only 23 times
+  in 40 frames, including urgent bypasses.
+- A checked-in GPU regression covers C3 2160x1080 and C4 536x240 layouts, recording
+  ON/OFF and urgent/reuse transitions: all 160 frames pass. Run explicitly with
+  `CARROT_UI_GPU_TEST=1` and `test_overlay_window_gpu.py` in a desktop GPU context.
+- 134 focused CPU-side UI tests pass, including nonzero window targets, ES2 query
+  storage reuse, incomplete FBO fallback and recording transitions.
+- The separate model-renderer suite cannot collect on this Windows environment
+  because native `msgq` is absent; it is not included in those passing counts.
+  Python compilation and focused lint/whitespace checks pass.
+
+This reproduces and fixes a code-level cause with real desktop GPU pixels; it is
+not a physical C3 panel/camera test. No new live-core utilization measurement or
+vehicle installation is claimed. Historical performance results below remain
+benchmarks, not a promise of a particular live-core reduction. The independent
+messaging/selfdrived caches and later model/Jetlink changes are retained.
+Private reproduction output lives under `.analysis/scratch/2026-10-13-ui-flicker/`.
 
 ## Historical experiment
 

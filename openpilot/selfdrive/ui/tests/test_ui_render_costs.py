@@ -42,14 +42,15 @@ def recording():
     _should_render=True, _render_texture=None, _record_enabled=False, _scale=1., _nav_stack_ticks=[], _nav_stack=[],
     _nav_stack_widgets_to_render=1, _show_fps=False, _show_touches=False, _grid_size=0, _record_frame_idx=2,
     _record_every_n=3, _ffmpeg_queue=queue.Queue(maxsize=1), _record_t0=0, _record_max_sec=60, _frame=0,
-    _scaled_width=100, _scaled_height=50, _monitor_fps=lambda: None)
+    width=100, height=50, _scaled_width=100, _scaled_height=50, _monitor_fps=lambda: None,
+    _read_framebuffer=lambda: 73)
   return app, calls, scope
 
 
 @pytest.mark.parametrize('keep', ['record', 'cli_record', 'scale', 'burn_in', 'none'])
 def test_recording_target_released_only_when_unused(recording, keep):
   app, calls, scope = recording
-  app._render_texture = target = SimpleNamespace(texture=9)
+  app._render_texture = target = SimpleNamespace(id=7, texture=9)
   app._record_enabled = keep == 'record'
   app._scale = .75 if keep == 'scale' else 1.
   scope['RECORD'] = keep == 'cli_record'
@@ -67,24 +68,68 @@ def test_start_recording_midframe_does_not_end_or_capture_an_unbegun_target(reco
   app, calls, _ = recording
   frames = app.render()
   assert next(frames)
+  assert app.render_framebuffer == 73
   app._record_enabled = True
-  app._render_texture = SimpleNamespace(texture=9)
+  app._render_texture = SimpleNamespace(id=7, texture=9)
   app._window_close_requested = True
   assert list(frames) == []
+  assert app.render_framebuffer == 73
   names = [c[0] for c in calls]
   assert 'begin_drawing' in names and 'end_drawing' in names
   assert 'end_texture_mode' not in names
   assert 'load_image_from_texture' not in names
 
 
+@pytest.mark.parametrize('window_target', (0, 31, 92))
+def test_window_target_is_captured_after_begin_before_widgets(recording, window_target):
+  app, _, scope = recording
+  active = [-1]
+  scope['rl'].begin_drawing = lambda: active.__setitem__(0, window_target)
+  app._read_framebuffer = lambda: active[0]
+  rendered_targets = []
+  app._nav_stack = [SimpleNamespace(render=lambda _: rendered_targets.append(app.render_framebuffer))]
+  frames = app.render()
+  assert next(frames)
+  assert rendered_targets == [window_target]
+  app._window_close_requested = True
+  assert list(frames) == []
+
+
+def test_es2_framebuffer_reader_does_not_use_zero_returning_raylib_stub():
+  tree = ast.parse((LIB / 'application.py').read_text(encoding='utf8'))
+  node = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == '_make_framebuffer_reader')
+  allocations, queries = [], []
+  def allocate(kind):
+    result = [0]
+    allocations.append(result)
+    return result
+  def query(pname, pointer):
+    assert pname == 0x8CA6
+    queries.append(pointer)
+    pointer[0] = 73
+  ffi = SimpleNamespace(cdef=lambda _: None, new=allocate,
+                        dlopen=lambda _: SimpleNamespace(glGetIntegerv=query))
+  scope = {'PC': False, 'cffi': SimpleNamespace(FFI=lambda: ffi),
+           'rl': SimpleNamespace(rl_get_active_framebuffer=lambda: 0)}
+  exec(compile(ast.Module(body=[node], type_ignores=[]), 'application.py', 'exec'), scope)
+  reader = scope['_make_framebuffer_reader']()
+  assert [reader() for _ in range(10)] == [73] * 10
+  assert len(allocations) == 1
+  assert all(pointer is allocations[0] for pointer in queries)
+  scope['PC'] = True
+  assert scope['_make_framebuffer_reader']() is scope['rl'].rl_get_active_framebuffer
+
+
 def test_stop_recording_midframe_releases_after_matching_end(recording):
   app, calls, _ = recording
   app._record_enabled = True
-  app._render_texture = SimpleNamespace(texture=9)
+  app._render_texture = SimpleNamespace(id=7, texture=9)
   frames = app.render()
   assert next(frames)
+  assert app.render_framebuffer == 7
   app._record_enabled = False
   assert next(frames)
+  assert app.render_framebuffer == 73
   names = [c[0] for c in calls]
   assert names.index('end_texture_mode') < names.index('unload_render_texture')
   assert app._render_texture is None
@@ -97,7 +142,7 @@ def test_stop_recording_midframe_releases_after_matching_end(recording):
 def test_encoder_backpressure_skips_gpu_readback(recording, full):
   app, calls, _ = recording
   app._record_enabled = True
-  app._render_texture = SimpleNamespace(texture=9)
+  app._render_texture = SimpleNamespace(id=7, texture=9)
   if full:
     app._ffmpeg_queue.put_nowait(b'previous')
   frames = app.render()
