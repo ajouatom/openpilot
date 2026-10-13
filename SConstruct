@@ -306,4 +306,7 @@ if arch != "larch64":
   ])
 
 
-env.CompilationDatabase('compile_commands.json')
+# Compilation database generation can end a clean without removing outputs.
+# Skip this build-only step when cleaning.
+if not GetOption('clean'):
+  env.CompilationDatabase('compile_commands.json')

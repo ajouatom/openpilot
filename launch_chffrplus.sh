@@ -393,6 +393,57 @@ function invalidate_native_build_if_needed {
   fi
 }
 
+# Clear incremental state and cache together to avoid reusing corrupt outputs.
+# Cleanup success only permits the next build; it does not prove build success.
+# Concurrency protection is provided separately by the common cache guard.
+BUILD_STATE_RESET=0
+
+function reset_build_state {
+  local target
+  # The cache is disposable. One created by another user (e.g. `sudo scons`)
+  # cannot be removed as this user, so fall back to sudo before giving up.
+  if ! rm -rf "$DIR/.sconsign.dblite" "$DIR/prebuilt" /data/scons_cache; then
+    sudo -n rm -rf "$DIR/.sconsign.dblite" "$DIR/prebuilt" /data/scons_cache
+  fi
+  for target in "$DIR/.sconsign.dblite" /data/scons_cache "$DIR/prebuilt"; do
+    if [ -e "$target" ] || [ -L "$target" ]; then
+      echo "Build state cleanup incomplete: $target remains" >&2
+      return 1
+    fi
+  done
+  BUILD_STATE_RESET=1
+  FORCE_REBUILD=1
+}
+
+# Persist rebuild requests outside the repository so repository cleanup cannot
+# remove them. Request creation must not require a working build environment.
+REBUILD_REQUEST="/data/rebuild_all.request"
+REBUILD_LOG="/data/rebuild_all.last.log"
+
+function consume_rebuild_request {
+  [ -f "$REBUILD_REQUEST" ] || return 0
+  # Keep the request if cleanup fails or is interrupted. This function never
+  # reboots; successful cleanup consumes it before compilation starts.
+  echo "Rebuild All requested: clearing build outputs, build state and cache"
+  {
+    date
+    # Best effort: removes generated outputs. It must not gate the reset below,
+    # because the environment it needs may be exactly what is broken.
+    if ! (cd "$DIR" && timeout 600 scons -c); then
+      echo "scons -c failed; continuing with state/cache reset"
+    fi
+    if ! reset_build_state; then
+      echo "state/cache reset failed; request retained"
+      return 1
+    fi
+    if ! rm -f "$REBUILD_REQUEST" || [ -e "$REBUILD_REQUEST" ] || [ -L "$REBUILD_REQUEST" ]; then
+      echo "Cannot consume rebuild request; cleanup will need to be retried"
+      return 1
+    fi
+    echo "state/cache reset done (full build still pending)"
+  } > "$REBUILD_LOG" 2>&1
+}
+
 function start_manager {
   # A warm start or a long build can leave the launcher on an isolated CPU.
   # Set the manager's initial mask before Python creates threads or forks:
@@ -517,6 +568,13 @@ function launch {
     show_startup_failure "Runtime dependency installation failed"
   fi
 
+  # A Rebuild All request must reset build state before the Params build, which
+  # shares /data/scons_cache; otherwise a failure there would keep it pending.
+  if ! consume_rebuild_request; then
+    show_startup_failure "Rebuild All cleanup failed; see /data/rebuild_all.last.log"
+    return 1
+  fi
+
   # Build Params before any long-running carrot service imports it.
   if ! run_startup_command bash "$DIR/scripts/ensure_params_build.sh"; then
     echo "Params registry build failed, not starting openpilot."
@@ -535,6 +593,8 @@ function launch {
 
 
   FORCE_REBUILD=0
+  # A reset before the Params build must still force the full build below.
+  [ "$BUILD_STATE_RESET" = "1" ] && FORCE_REBUILD=1
   prepare_big_model_if_needed
   invalidate_modeld_build_if_needed
   invalidate_native_build_if_needed

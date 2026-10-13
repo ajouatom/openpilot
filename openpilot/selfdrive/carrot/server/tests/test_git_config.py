@@ -240,6 +240,7 @@ def test_web_reboots_use_chime_helper(web_dispatcher, monkeypatch, api, action):
     return real_popen(argv, **kwargs)
 
   monkeypatch.setattr(dispatcher, 'spawn_reboot', lambda **kw: calls.append(('reboot', kw)))
+  monkeypatch.setattr(dispatcher, 'request_full_rebuild', lambda: calls.append(('request', None)))
   monkeypatch.setattr(dispatcher.subprocess, 'Popen', popen)
   monkeypatch.setattr(dispatcher.os, 'remove', lambda path: None)
 
@@ -249,12 +250,25 @@ def test_web_reboots_use_chime_helper(web_dispatcher, monkeypatch, api, action):
   monkeypatch.setattr(dispatcher.asyncio, 'sleep', no_sleep)
   result = dispatch(dispatcher, api, action)
   assert result['ok']
-  if action == 'rebuild_all':
-    assert calls == [('command', ['bash', '-lc',
-                                 'cd /data/openpilot && scons -c && rm -rf prebuilt && python3 -m openpilot.common.reboot'])]
-  else:
-    delay = {'delay': 1.0} if action == 'reset_calib' and api == 'sync' else {}
-    assert calls == [('reboot', delay)]
+  delay = {'delay': 1.0} if action in ('reset_calib', 'rebuild_all') and api == 'sync' else {}
+  # Rebuild All never runs SCons from the web server; it leaves a request for
+  # the launcher and reboots.
+  assert calls == ([('request', None)] if action == 'rebuild_all' else []) + [('reboot', delay)]
+
+
+@pytest.mark.parametrize('api', ['job', 'sync'])
+def test_rebuild_all_does_not_reboot_without_request(web_dispatcher, monkeypatch, api):
+  dispatcher, _, _ = web_dispatcher
+  calls = []
+
+  def fail():
+    raise OSError('read-only file system')
+
+  monkeypatch.setattr(dispatcher, 'spawn_reboot', lambda **kw: calls.append(('reboot', kw)))
+  monkeypatch.setattr(dispatcher, 'request_full_rebuild', fail)
+  result = dispatch(dispatcher, api, 'rebuild_all')
+  assert not result['ok'] and 'read-only file system' in result['error']
+  assert calls == []
 
 
 def dispatch(dispatcher, api, action, **payload):
