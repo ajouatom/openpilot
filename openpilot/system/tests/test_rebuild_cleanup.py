@@ -4,7 +4,7 @@ import subprocess
 import tempfile
 import unittest  # noqa: TID251 -- preserve contributed process-lifetime cleanup fixtures
 
-ROOT = Path(__file__).resolve().parents[4]
+ROOT = next(parent for parent in Path(__file__).resolve().parents if (parent / 'SConstruct').is_file())
 
 
 class RebuildCleanupTests(unittest.TestCase):
