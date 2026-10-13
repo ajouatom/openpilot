@@ -9,7 +9,7 @@ from types import SimpleNamespace
 import unittest  # noqa: TID251 -- preserve contributed process-lifetime cleanup fixtures
 from unittest.mock import patch  # noqa: TID251
 
-ROOT = Path(__file__).resolve().parents[4]
+ROOT = next(parent for parent in Path(__file__).resolve().parents if (parent / 'SConstruct').is_file())
 sys.path.insert(0, str(ROOT))
 from openpilot.common.scons_cache_lock import acquire_cache_lock, CacheBusyError
 
