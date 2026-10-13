@@ -171,7 +171,7 @@ function show_agnos_update_failure {
 function agnos_init {
   # TODO: move this to agnos
   sudo rm -f /data/etc/NetworkManager/system-connections/*.nmmeta
-  rm -f /data/scons_cache/config.lock
+  # Cache repair runs under the common cache guard before any Params build.
 
   sudo abctl --set_success
 
@@ -398,21 +398,85 @@ function invalidate_native_build_if_needed {
 # Concurrency protection is provided separately by the common cache guard.
 BUILD_STATE_RESET=0
 
-function reset_build_state {
+SCONS_CACHE="/data/scons_cache"
+SCONS_CACHE_GUARD="${SCONS_CACHE}.build.lock"
+
+# Run "$@" holding the SCons cache guard, the flock SConstruct holds for a whole
+# build (also taken by build.py's cache pruning and ensure_params_build.sh).
+# Exits 75 without running anything if a build is using the cache. The guard
+# is opened read-only and is never removed or replaced.
+function with_cache_guard {
+  (
+    if [ -L "$SCONS_CACHE_GUARD" ]; then
+      echo "SCons cache guard must not be a symlink; no cleanup performed" >&2
+      exit 1
+    fi
+    if ! { [ -e "$SCONS_CACHE_GUARD" ] || : >> "$SCONS_CACHE_GUARD"; } || [ ! -f "$SCONS_CACHE_GUARD" ] ||
+       ! exec 8<"$SCONS_CACHE_GUARD"; then
+      echo "Cannot open SCons cache guard; no cleanup performed" >&2
+      exit 1
+    fi
+    if ! flock -n 8; then
+      echo "SCons cache is in use; no cleanup performed" >&2
+      exit 75
+    fi
+    "$@"
+  )
+}
+
+function remove_build_state {
   local target
   # The cache is disposable. One created by another user (e.g. `sudo scons`)
   # cannot be removed as this user, so fall back to sudo before giving up.
-  if ! rm -rf "$DIR/.sconsign.dblite" "$DIR/prebuilt" /data/scons_cache; then
-    sudo -n rm -rf "$DIR/.sconsign.dblite" "$DIR/prebuilt" /data/scons_cache
+  if ! rm -rf "$DIR/.sconsign.dblite" "$DIR/prebuilt" "$SCONS_CACHE"; then
+    sudo -n rm -rf "$DIR/.sconsign.dblite" "$DIR/prebuilt" "$SCONS_CACHE"
   fi
-  for target in "$DIR/.sconsign.dblite" /data/scons_cache "$DIR/prebuilt"; do
+  for target in "$DIR/.sconsign.dblite" "$SCONS_CACHE" "$DIR/prebuilt"; do
     if [ -e "$target" ] || [ -L "$target" ]; then
       echo "Build state cleanup incomplete: $target remains" >&2
       return 1
     fi
   done
+}
+
+function reset_build_state {
+  with_cache_guard remove_build_state || return 1
   BUILD_STATE_RESET=1
   FORCE_REBUILD=1
+}
+
+# Both a stale config.lock and an inaccessible cache can cause SConsLockFailure.
+# All cache users must follow the same guard protocol. Once this guard is held,
+# no cooperating build is using the cache: remove a leftover config.lock
+# or discard an unusable cache. Builds that bypass the guard are not protected.
+function repair_scons_cache {
+  if [ -e "$SCONS_CACHE/config.lock" ] && ! rm -f "$SCONS_CACHE/config.lock"; then
+    sudo -n rm -f "$SCONS_CACHE/config.lock"
+  fi
+  [ -e "$SCONS_CACHE" ] || [ -L "$SCONS_CACHE" ] || return 0
+  if [ -L "$SCONS_CACHE" ] || [ ! -d "$SCONS_CACHE" ] || [ ! -O "$SCONS_CACHE" ] || [ ! -w "$SCONS_CACHE" ] ||
+     [ ! -x "$SCONS_CACHE" ] || [ -e "$SCONS_CACHE/config.lock" ] ||
+     [ -n "$(find "$SCONS_CACHE" -maxdepth 2 ! -user "$(id -un)" -print -quit 2>/dev/null)" ]; then
+    echo "SCons cache is not usable by $(id -un); removing $SCONS_CACHE"
+    if ! rm -rf "$SCONS_CACHE" 2>/dev/null; then
+      sudo -n rm -rf "$SCONS_CACHE"
+    fi
+    if [ -e "$SCONS_CACHE" ] || [ -L "$SCONS_CACHE" ]; then
+      echo "Cannot remove unusable SCons cache: $SCONS_CACHE" >&2
+      return 1
+    fi
+  fi
+}
+
+function heal_scons_cache {
+  local rc=0
+  with_cache_guard repair_scons_cache || rc=$?
+  if [ "$rc" = 75 ]; then
+    # A cooperating build holds the guard; leave its cache unchanged.
+    echo "SCons cache is in use; repair skipped"
+    return 0
+  fi
+  return "$rc"
 }
 
 # Persist rebuild requests outside the repository so repository cleanup cannot
@@ -568,8 +632,13 @@ function launch {
     show_startup_failure "Runtime dependency installation failed"
   fi
 
-  # A Rebuild All request must reset build state before the Params build, which
-  # shares /data/scons_cache; otherwise a failure there would keep it pending.
+  # A Rebuild All request and an unusable SCons cache must be handled before the
+  # Params build, which shares /data/scons_cache; otherwise a failure there would
+  # keep them pending.
+  if ! heal_scons_cache; then
+    show_startup_failure "SCons cache is unusable and could not be removed: /data/scons_cache"
+    return 1
+  fi
   if ! consume_rebuild_request; then
     show_startup_failure "Rebuild All cleanup failed; see /data/rebuild_all.last.log"
     return 1
@@ -598,6 +667,7 @@ function launch {
   prepare_big_model_if_needed
   invalidate_modeld_build_if_needed
   invalidate_native_build_if_needed
+
 
   rm -f openpilot/selfdrive/pandad/*.so
   # write tmux scrollback to a file
