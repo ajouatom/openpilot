@@ -116,6 +116,12 @@ class RemoteRoadCamera:
     self.texture = None
     self.last_frame = None
 
+  @property
+  def display_frame(self):
+    # The compressed preview has no original-resolution signal observation
+    # transport. Preserve the camera interface without inventing frame evidence.
+    return None
+
   def select_stream(self, prefer_wide):
     self.is_wide = prefer_wide
     return self.is_wide
