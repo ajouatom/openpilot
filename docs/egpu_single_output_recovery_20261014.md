@@ -57,6 +57,11 @@ protocol abuse, desire history, next-boot evidence, and existing delivery/warp
 contracts. Ruff passes. CI also exercises actual state copies and alias
 restoration with the pinned tinygrad runtime on CPU; that is not GPU timing.
 
+Commit `dabe4f1d67` passed both Linux CI workflows: 297 model/delivery tests,
+38 navigation tests, three pinned-runtime CPU tests (including state rollback),
+761 Jetson tests with 11 skips, 119 navigation/cluster tests, and 11 protected
+storage tests. The Windows installer checks also passed.
+
 The extra checkpoint requires GPU copies and synchronization after each good
 inference. The failed-frame path additionally downloads saved state to check
 finiteness. Actual eGPU overhead and recovery latency are not measured because
@@ -64,3 +69,31 @@ the eGPU is currently disconnected. Parked Jetson verification cannot establish
 eGPU behavior or safe closed-loop handling of a missing frame. The existing
 fallback can still take substantial time; this change does not claim to shorten
 the previously observed 1.49-second fallback gap.
+
+## Vehicle installation
+
+All committed carrot-nav work through `dabe4f1d67`, including the other tasks'
+commits since vehicle HEAD `5e85695197`, was installed after fresh, valid Park,
+standstill, zero-speed and inactive-control checks. The five tracked overlays
+and three colliding untracked source files were hashed and backed up under
+`/data/carrot-nav-update-backup-20261014-dabe4f1d67` before the fast-forward.
+No unrelated workstation changes were committed. The vehicle rebooted, finished
+its required native build and started the manager, cameras, model and DM.
+Tracked vehicle files match the commit. The existing signed Jetson release
+`f1838e2c54` and full-block compression OFF policy were preserved.
+
+After startup preparation, a 60.011-second parked sample contains 1,200 model,
+1,200 road-camera and 1,200 driver-state messages, all valid. All 1,199 adjacent
+model frame-ID increments are one. Jetson RL Nav is active/ready in all 60
+one-second status samples. Mean inference is **45.287 ms**, p99 **48.987 ms**,
+maximum **61.166 ms**. Publication intervals average 50.009 ms, p99 55.841 ms,
+maximum 65.758 ms. The smoothed frame-drop statistic retains startup history;
+there are no observed frame-ID skips in this measured interval. This still does
+not achieve the 40 ms goal or guarantee every inference completes within 50 ms.
+
+A concurrent roughly 10-second CPU sample gives vehicle aggregate 70.4%,
+busiest core 82.5%, and Jetson aggregate 11.4%, busiest core 22.9%.
+The eGPU is absent, so the installed recovery code's actual GPU overhead and
+fault recovery remain unmeasured. No injected faults were sent to live control.
+The navigation status was `route` before reboot (no usable route); this check
+does not establish route guidance or driving behavior.
