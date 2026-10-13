@@ -8,7 +8,7 @@ import threading
 
 import pytest
 
-from openpilot.common import repo_update, startup_recovery
+from openpilot.common import rebuild_request, repo_update, startup_recovery
 from openpilot.common import text_window
 
 
@@ -214,31 +214,42 @@ def test_error_log_handles_tracebacks_missing_and_large_logs(tmp_path):
   assert 'File "manager.py"' in text and len(text) <= 65536
 
 
-@pytest.mark.parametrize('clean_fails', [False, True])
-def test_rebuild_cleans_offline_and_reboots_only_on_success(tmp_path, monkeypatch, clean_fails):
+def test_rebuild_request_is_written_atomically(tmp_path):
+  path = tmp_path / 'rebuild_all.request'
+  rebuild_request.request_full_rebuild(path)
+  assert path.read_text().strip()
+  assert [p.name for p in tmp_path.iterdir()] == ['rebuild_all.request']
+
+
+@pytest.mark.parametrize('request_fails', [False, True])
+def test_rebuild_requests_boot_reset_and_reboots_only_on_success(tmp_path, monkeypatch, request_fails):
   monkeypatch.setattr(repo_update, 'LOCK_PATH', str(tmp_path / 'update.lock'))
-  (tmp_path / 'prebuilt').touch()
-  (tmp_path / 'source.txt').write_text('local source changes')
+  repo, request = tmp_path / 'repo', tmp_path / 'rebuild_all.request'
+  repo.mkdir()
+  (repo / 'prebuilt').touch()
+  (repo / 'source.txt').write_text('local source changes')
   calls = []
 
-  def run(command, **kwargs):
-    assert command[:2] == ['scons', '-c']
-    assert kwargs['cwd'] == tmp_path
-    # Cleanup must own the same lock used by Git and the launcher.
+  def write_request():
+    # The request must own the same lock used by Git and the launcher.
     with pytest.raises(repo_update.RepoBusyError), repo_update.repo_lock():
-      pytest.fail('cleanup did not hold repository lock')
-    calls.append('clean')
-    return subprocess.CompletedProcess(command, int(clean_fails), '', 'cleanup error' if clean_fails else '')
+      pytest.fail('rebuild request did not hold repository lock')
+    calls.append('request')
+    if request_fails:
+      raise OSError('read-only file system')
+    rebuild_request.request_full_rebuild(request)
 
-  monkeypatch.setattr(startup_recovery.subprocess, 'run', run)
-  update = startup_recovery.RecoveryUpdate(tmp_path, reboot=lambda: calls.append('reboot'))
+  monkeypatch.setattr(startup_recovery, 'request_full_rebuild', write_request)
+  update = startup_recovery.RecoveryUpdate(repo, reboot=lambda: calls.append('reboot'))
   update._rebuild()
-  assert (tmp_path / 'source.txt').read_text() == 'local source changes'
-  assert (tmp_path / 'prebuilt').exists() == clean_fails
-  assert calls == (['clean'] if clean_fails else ['clean', 'reboot'])
-  assert update.state[0] == ('failed' if clean_fails else 'rebuild_rebooting')
-  if clean_fails:
-    assert 'cleanup error' in update.state[1]
+  # Nothing is cleaned here; the launcher resets build state on the next boot.
+  assert (repo / 'source.txt').read_text() == 'local source changes'
+  assert (repo / 'prebuilt').exists()
+  assert request.exists() != request_fails
+  assert calls == (['request'] if request_fails else ['request', 'reboot'])
+  assert update.state[0] == ('failed' if request_fails else 'rebuild_rebooting')
+  if request_fails:
+    assert 'read-only file system' in update.state[1]
 
 
 def test_rebuild_and_git_exclude_each_other(tmp_path, monkeypatch):
@@ -262,21 +273,21 @@ def test_rebuild_and_git_exclude_each_other(tmp_path, monkeypatch):
   assert done.wait(2)
 
 
-@pytest.mark.parametrize('failure', ['busy', 'timeout', 'reboot'])
+@pytest.mark.parametrize('failure', ['busy', 'write', 'reboot'])
 def test_rebuild_failure_is_retryable(tmp_path, monkeypatch, failure):
   monkeypatch.setattr(repo_update, 'LOCK_PATH', str(tmp_path / 'update.lock'))
   calls = []
 
-  def clean(repo):
-    calls.append('clean')
-    if failure == 'timeout':
-      raise subprocess.TimeoutExpired('scons', 180)
+  def write_request():
+    calls.append('request')
+    if failure == 'write':
+      raise OSError('disk full')
 
   def reboot():
     calls.append('reboot')
     raise OSError('reboot failed')
 
-  monkeypatch.setattr(startup_recovery, 'clean_startup_build', clean)
+  monkeypatch.setattr(startup_recovery, 'request_full_rebuild', write_request)
   update = startup_recovery.RecoveryUpdate(tmp_path, reboot=reboot)
   if failure == 'busy':
     with repo_update.repo_lock():
@@ -284,7 +295,7 @@ def test_rebuild_failure_is_retryable(tmp_path, monkeypatch, failure):
   else:
     update._rebuild()
   assert update.state[0] == 'failed' and update.state[1]
-  assert calls == {'busy': [], 'timeout': ['clean'], 'reboot': ['clean', 'reboot']}[failure]
+  assert calls == {'busy': [], 'write': ['request'], 'reboot': ['request', 'reboot']}[failure]
 
 
 def test_error_pages_wrap_without_losing_long_paths(monkeypatch):

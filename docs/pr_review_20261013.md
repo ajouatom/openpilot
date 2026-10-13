@@ -1,0 +1,92 @@
+# PR review — 2026-10-13
+
+Scope: PRs created on October 13 in Asia/Seoul, checked against maintained
+`carrot-wip` and `carrot-nav`. The user requested useful changes, with CPU-impacting
+features reviewed rather than enabled. Preserve branch-specific models/navigation,
+unrelated local changes and single-parent history. This is code publication, not
+vehicle installation or driving validation.
+
+## Decisions
+
+| PR | Decision | Reason |
+| --- | --- | --- |
+| [541](https://github.com/ajouatom/openpilot/pull/541), chant555, `c691f10971` | Adopt with 542 | Persist Rebuild All requests; clean at next boot before Params, preserve request and stop startup when cleanup fails. |
+| [542](https://github.com/ajouatom/openpilot/pull/542), chant555, `e5e9611416` | Adopt with corrections | Serialize cooperating SCons builds, cleanup and cache pruning; recover inaccessible/stale cache. Startup/build only. |
+| [543](https://github.com/ajouatom/openpilot/pull/543), chant555, `f7f36343fc` | Adopt with compatibility guard | Poll the loaded COMMA backend in the recovery screen and preserve bounded touch/action diagnostics. No onroad worker. |
+| [547](https://github.com/ajouatom/openpilot/pull/547), joongyu01, `5ce6cbb4d4` | Only active-turn cluster background | Reuse the existing 0x161 BACKGROUND=6 indicator while lateral control is active and desire is turnLeft/turnRight; no extra frame, process, sensor, schema, Params read or sound. |
+
+PR 540 was updated today but created October 12 KST and already merged; it is
+not a new October 13 submission. Earlier joongyu01 PR 523 is also already merged.
+PR 542 includes 541, so the latter is applied only once. The four GitHub PRs are
+left open: this task integrates selected code rather than merging the whole bundles.
+
+## Integration corrections
+
+- The Params wrapper and SConstruct originally could lock different cache paths:
+  the wrapper supports a fallback/custom cache while SConstruct selected only by
+  architecture. Export and honor SCONS_CACHE_DIR consistently in startup, Params,
+  SConstruct and pruning. Desktop defaults use /tmp; /TICI selects /data, matching
+  the device SConstruct test. Keep inherited-descriptor inode validation.
+- Do not follow a cache-directory symlink when deleting config.lock. Unlink the
+  disposable cache path without touching an external target's lock.
+- Preserve the recovery screen on raylib versions without the private _BACKEND
+  attribute. Only an explicitly identified COMMA backend receives an extra poll.
+- Use repository-root discovery for the contributed tests and repair their
+  obsolete launcher extraction marker. Add cache-path, external-symlink, touch-log and input-poll
+  regressions plus Linux CI using actual flock/processes.
+- The turn indication is gated by latActive; an inactive/stale turn desire must
+  not imply that the model is steering. Existing paddle indication is preserved.
+
+## PR 547 parts deferred
+
+1. **Forced SCC rejection (mode 3): correctness and extra radar work.**
+   `_reject_forced_scc` stores one timestamp, not a target identity. An isolated
+   execution of the PR method rejects body A at t=10.0, then also rejects a new
+   body B at t=10.1 with no lateral evidence; it stops rejecting at t=11.01.
+   This demonstrates cross-target retention in the helper, not a full driving
+   counterfactual. The added front/corner scans and path projections also require
+   same-input CPU and lead-selection validation. Do not install this gate.
+2. **Camera kind, cancellation and section-average control:** add classification,
+   list scans and button/gas bookkeeping to the 100 Hz CAN-FD update even with
+   new opt-ins off. AutoNaviSpeedCtrlMode <=2 starts suppressing matched mobile
+   zones by default. Section allowance assumes a single-car odometer scale 1.015
+   and can raise the effective navigation limit after an unlock. These are
+   substantive behavior changes requiring vehicle-specific replay/performance
+   work, not a drop-in camera bug fix. The late fixed-camera upgrade fixes a
+   regression introduced by this new policy; current carrot does not have that
+   suppression policy and does not need the dependent fix in isolation.
+3. **Lever-based turns, repeat lane changes and blinker hold:** new per-cycle
+   state/schema/parser work, including allocation of LaneCrossing in off/pre-change
+   states. Repeat requests remove torque confirmation for the next lane. Crossing
+   uses lane-position jumps without lane-probability qualification. Keep existing
+   lane-change behavior until those interactions and timing are evaluated.
+4. **Turn/Straight speech:** new 100 Hz tracker, event/schema changes and audio
+   playback. Potentially useful but separate from the near-cost-free existing
+   cluster indicator; defer under the user's CPU constraint.
+
+A Windows PC microbenchmark of the new SpeedcamPolicy.update alone, eight
+previews and 100,000 calls per repeat, measured a best 1.90 microseconds/call.
+It is additional work, but this does **not** establish a significant vehicle CPU
+increase or bound the whole 100 Hz pipeline. No device timing claim is made.
+
+## Validation
+
+- Windows: 106 recovery/reboot/bootstrap/web/touch checks and 242 Hyundai
+  cluster/DM/MDPS checks pass (348 total). Native Params storage is substituted
+  for Hyundai tests; DBC packing/checksums use the real implementation.
+- Ten new actual 0x161 packing cases cover all five desires and lateral on/off.
+  Only BACKGROUND and its resulting checksum may differ; frame count, address,
+  bus, counters, other signals and source templates remain unchanged.
+- Shell syntax, focused Ruff and Git whitespace checks pass.
+- Linux: all 144 recovery checks pass on both
+  [carrot-wip](https://github.com/ajouatom/openpilot/actions/runs/38386635451) and
+  [carrot-nav](https://github.com/ajouatom/openpilot/actions/runs/38386645133),
+  including actual flock exclusion, inherited descriptors, process death,
+  cache recreation, permissions, symlinks and request retention. An initial CI
+  run exposed a test-path error; corrected root discovery passes all checks.
+- Native CPU kernel CI (x86/ARM), selected-model startup, eGPU model
+  compatibility and user-documentation checks pass on the integration.
+- No C3/C4 full native rebuild, physical touch/speaker/panel or road test is claimed.
+
+Private reproduction: `.analysis/archive/2026-10-13-pr-review/` retains the
+isolated SCC probe and PC timing result without vehicle recordings.

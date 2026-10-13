@@ -864,13 +864,9 @@ def _hide_replaced_adas_service_warning(values):
     values["FAULT_DAS"] = 0
 
 
-# log.Desire turnLeft / turnRight: the turn model is driving the car.
-TURN_DESIRES = (1, 2)
-
-
 def _select_cluster_background(cruise_enabled, lat_active, paddle_pressed, paddle_mode, turning=False):
-  # 6 = FLASHING RED: a held paddle (PaddleMode) and, whatever started it, the turn model
-  if turning or (paddle_mode > 0 and paddle_pressed):
+  # Reuse the existing flashing-red background to identify an active model turn.
+  if (lat_active and turning) or (paddle_mode > 0 and paddle_pressed):
     return 6
   return 1 if cruise_enabled else 3 if lat_active else 7
 
@@ -1051,7 +1047,7 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
         values["TARGET_DISTANCE"] = lead_distance
 
         values["BACKGROUND"] = _select_cluster_background(
-          cruise_enabled, lat_active, CS.paddle_button_prev > 0, paddle_mode, turning=desire in TURN_DESIRES,
+          cruise_enabled, lat_active, CS.paddle_button_prev > 0, paddle_mode, turning=desire in (1, 2),
         )
         values["CENTERLINE"] = 1 if HDA_CntrlModSta > 0 else 0
         values["CAR_CIRCLE"] = 2 if hdp_active else 1 if cruise_enabled else 0

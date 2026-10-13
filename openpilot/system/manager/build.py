@@ -8,6 +8,7 @@ from pathlib import Path
 
 # NOTE: Do NOT import anything here that needs be built (e.g. params)
 from openpilot.common.basedir import BASEDIR
+from openpilot.common.scons_cache_lock import acquire_cache_lock
 from openpilot.common.file_chunker import get_manifest_path
 from openpilot.common.spinner import Spinner
 from openpilot.common.text_window import TextWindow
@@ -16,7 +17,7 @@ from openpilot.system.hardware import HARDWARE, AGNOS
 from openpilot.system.version import get_build_metadata
 
 MAX_CACHE_SIZE = 4e9 if "CI" in os.environ else 2e9
-CACHE_DIR = Path("/data/scons_cache" if AGNOS else "/tmp/scons_cache")
+CACHE_DIR = Path(os.environ.get("SCONS_CACHE_DIR") or ("/data/scons_cache" if AGNOS else "/tmp/scons_cache"))
 
 TOTAL_SCONS_NODES = 2705
 MAX_BUILD_PROGRESS = 100
@@ -271,6 +272,14 @@ def build(spinner: Spinner, dirty: bool = False, minimal: bool = False) -> None:
 
     if scons.returncode == 0:
       break
+    compile_output += scons.stdout.read().split(b'\n')
+    if is_cache_lock_failure(compile_output) or any(b'SCons cache is in use:' in line for line in compile_output):
+      message = ("SCons cache lock failed; cache preserved. Reboot to let the launcher repair "
+                 "/data/scons_cache, or check for another running build.")
+      print(message)
+      spinner.update(message)
+      compile_output.append(message.encode('utf8'))
+      break
 
   if scons.returncode != 0:
     # Read remaining output
@@ -289,15 +298,39 @@ def build(spinner: Spinner, dirty: bool = False, minimal: bool = False) -> None:
         t.wait_for_exit()
     exit(1)
 
-  # enforce max cache size
-  cache_files = [f for f in CACHE_DIR.rglob('*') if f.is_file()]
-  cache_files.sort(key=lambda f: f.stat().st_mtime)
-  cache_size = sum(f.stat().st_size for f in cache_files)
-  for f in cache_files:
-    if cache_size < MAX_CACHE_SIZE:
-      break
-    cache_size -= f.stat().st_size
-    f.unlink()
+  # enforce max cache size only while no other patched SCons process uses it
+  prune_cache(CACHE_DIR)
+
+
+def prunable_cache_files(cache_dir: Path) -> list[Path]:
+  # Only cached build results, which SCons keeps in two-character bucket
+  # directories. The top level holds the SCons config (and its lock) and
+  # carrot's Params stamp; pruning those by age breaks or slows the next boot.
+  if not cache_dir.is_dir():
+    return []
+  return [f for d in cache_dir.iterdir() if d.is_dir() and len(d.name) == 2 for f in d.iterdir() if f.is_file()]
+
+
+def is_cache_lock_failure(output: list[bytes]) -> bool:
+  return any(b'SConsLockFailure' in line for line in output)
+
+
+def prune_cache(cache_dir: Path) -> None:
+  # The build just finished, but another process may already have started.
+  try:
+    guard = acquire_cache_lock(cache_dir)
+  except (OSError, RuntimeError) as exc:
+    print(f"Skipping cache pruning: {exc}")
+    return
+  with guard:
+    cache_files = prunable_cache_files(cache_dir)
+    cache_files.sort(key=lambda f: f.stat().st_mtime)
+    cache_size = sum(f.stat().st_size for f in cache_files)
+    for f in cache_files:
+      if cache_size < MAX_CACHE_SIZE:
+        break
+      cache_size -= f.stat().st_size
+      f.unlink()
 
 
 if __name__ == "__main__":

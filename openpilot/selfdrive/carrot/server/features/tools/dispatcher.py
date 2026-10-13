@@ -25,6 +25,7 @@ from aiohttp import web
 
 from openpilot.common.async_process import prepare_repo, run_locked_thread
 from openpilot.common.reboot import spawn_reboot
+from openpilot.common.rebuild_request import request_full_rebuild
 from openpilot.common.repo_update import RepoBusyError, child_lock_kwargs, repo_lock
 from openpilot.system.hardware import HARDWARE
 
@@ -787,9 +788,16 @@ async def _run_tool_job(job: Dict[str, Any]) -> None:
 
     if action == "rebuild_all":
       jobs.progress(job, message="rebuild all", current=1, total=1)
-      cmd = "cd /data/openpilot && scons -c && rm -rf prebuilt && python3 -m openpilot.common.reboot"
-      subprocess.Popen(["bash", "-lc", cmd])
-      jobs.finish(job, ok=True, result={"ok": True, "out": "rebuild_all requested (clean + remove prebuilt + reboot)"})
+      # No SCons here: a login shell resets PYTHONPATH, and a broken build is
+      # exactly when this button is needed. The launcher resets on next boot.
+      try:
+        request_full_rebuild()
+      except OSError as e:
+        jobs.finish(job, ok=False, result={"ok": False, "error": f"rebuild request failed: {e}"}, error=str(e))
+        return
+      jobs.finish(job, ok=True, result={"ok": True, "out": "rebuild scheduled: rebooting, full clean build runs at boot"})
+      await asyncio.sleep(1)
+      spawn_reboot()
       return
 
     if action == "shell_cmd":
@@ -1246,9 +1254,12 @@ async def _dispatch_sync(request: web.Request, body: Dict[str, Any]) -> web.Resp
       return web.json_response({"ok": True, "out": "reboot requested"})
 
     if action == "rebuild_all":
-      cmd = "cd /data/openpilot && scons -c && rm -rf prebuilt && python3 -m openpilot.common.reboot"
-      subprocess.Popen(["bash", "-lc", cmd])
-      return web.json_response({"ok": True, "out": "rebuild_all requested (clean + remove prebuilt + reboot)"})
+      try:
+        request_full_rebuild()
+      except OSError as e:
+        return web.json_response({"ok": False, "error": f"rebuild request failed: {e}"}, status=500)
+      spawn_reboot(delay=1.0)
+      return web.json_response({"ok": True, "out": "rebuild scheduled: rebooting, full clean build runs at boot"})
 
     if action == "shell_cmd":
       cmd_str = (body.get("cmd") or "").strip()

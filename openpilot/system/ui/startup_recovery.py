@@ -8,11 +8,15 @@ import struct
 import time
 
 import pyray as rl
+import raylib
 
+from openpilot.common.reboot import reboot_device
+from openpilot.common.startup_touch_log import TouchLog
 from openpilot.common.network_info import label_with_port, start_ip_monitor
 from openpilot.common.startup_recovery import BUSY_STATES, RecoveryUpdate, read_startup_error
 
 ROOT = Path(__file__).resolve().parents[3]
+RAYLIB_BACKEND = getattr(raylib, '_BACKEND', '')
 EVENT = struct.Struct('llHHi')
 TOUCH_DEVICE = '/dev/input/by-path/platform-894000.i2c-event'
 LABELS = {
@@ -157,6 +161,12 @@ def draw_screen(font, width, height, state, reason, address, pages, page=0):
   return *buttons, rl.Rectangle(x + 16 * scale, y + 63 * scale, 504 * scale, 79 * scale)
 
 
+def poll_recovery_input():
+  # The COMMA backend does not update input in end_drawing; desktop does.
+  if RAYLIB_BACKEND == "comma":
+    rl.poll_input_events()
+
+
 def main():
   parser = argparse.ArgumentParser()
   parser.add_argument('--reason', default='Startup failed')
@@ -198,7 +208,14 @@ def main():
     rl.close_window()
     return
   touch = TouchPress()
-  update = RecoveryUpdate(ROOT)
+  touch_log = TouchLog(Path('/data/startup_recovery_touch.jsonl'))
+
+  def logged_reboot():
+    touch_log.record('reboot', sync=True, request_exists=Path('/data/rebuild_all.request').exists())
+    reboot_device()
+
+  update = RecoveryUpdate(ROOT, reboot=logged_reboot)
+  touch_log.record('start', sync=True, backend=RAYLIB_BACKEND, width=width, height=height, raw_touch=touch.fd is not None)
   next_check = time.monotonic() + 5
   was_busy = False
   wake_display()
@@ -215,13 +232,18 @@ def main():
       rl.begin_drawing()
       rebuild_button, update_button, error_area = draw_screen(font, width, height, update.state, reason, label_with_port(6999), pages, page)
       rl.end_drawing()
+      # Poll the loaded COMMA backend even if evdev is unavailable; desktop already polls.
+      poll_recovery_input()
       if touch.pressed():
         position = rl.get_touch_position(0) if touch.fd is not None else rl.get_mouse_position()
-        if rl.check_collision_point_rec(position, rebuild_button):
-          update.start_rebuild()
-        elif rl.check_collision_point_rec(position, update_button):
-          update.start()
-        elif rl.check_collision_point_rec(position, error_area):
+        hit = next((name for name, area in (('rebuild', rebuild_button), ('update', update_button), ('error', error_area))
+                    if rl.check_collision_point_rec(position, area)), 'outside')
+        # Save the hit and coordinates before starting an action that may reboot.
+        touch_log.record('press', sync=True, x=position.x, y=position.y, hit=hit, state=update.state[0])
+        if hit in ('rebuild', 'update'):
+          accepted = update.start_rebuild() if hit == 'rebuild' else update.start()
+          touch_log.record('action', sync=True, hit=hit, accepted=accepted, state=update.state[0])
+        elif hit == 'error':
           page = (page + 1) % len(pages)
       time.sleep(.001)
   finally:
