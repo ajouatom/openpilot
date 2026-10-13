@@ -2,6 +2,23 @@
 
 [한국어](../ko/radar.md)
 
+## RAV4 2022 radar-info mode 3
+
+On the standard Konik driving screen in versions with the ARS receiver, `ShowRadarInfo=3`
+uses a separate display-only object list. The control-oriented fused list excludes some
+adjacent-lane objects beyond 15 m, which previously also removed their display markers.
+Only the display list omits this path gate; control leads and cut-in decisions remain unchanged.
+
+Moving objects retain the existing speed marker, while slow or stationary objects retain
+the star marker. A visible object is not necessarily a braking target. CRC, object age,
+speed validity, the original non-ACC exclusion beyond 60 m and projection limits still apply.
+Stale, invalid or empty display input clears the markers. Modes 1/2 and other receivers
+keep their existing policy. This does not add Toyota side-corner radar support.
+
+This feature targets the standard device driving screen. Web and mici screens keep their
+existing display path. Update the receiver, screen and message schema together, build
+successfully and start fresh processes; copying a single file is insufficient.
+
 > [!NOTE]
 > This is the canonical English user guide maintained with the `carrot-wip` code. When user-visible behavior changes, update this document together with the related code and tests.
 
@@ -22,7 +39,7 @@ A radar fitted to the vehicle does not guarantee that carrotpilot can read the r
 | `0` | Always use SCC range and relative speed; use vision if SCC is absent | Default; same SCC-only policy as `-1` |
 | `1` | Match raw front-radar tracks to vision without SCC; use vision if matching fails | Requires vehicle-specific message support; activation has the Bosch exception below |
 | `2` | Match front-radar tracks and low-speed SCC to vision; use vision if matching fails | Test only on an identical validated configuration |
-| `3` | Match front radar to vision first; if it fails, always use SCC, then vision if SCC is absent | Experimental; false detections are possible |
+| `3` | Match front radar to vision first; if it fails, use SCC (not when front/corner radar place that body beside the path), then vision if SCC is absent | Experimental; false detections are possible |
 
 On non-CAN FD Hyundai/Kia vehicles, a positive value normally attempts to enable radar tracks during startup and stores the result in `EnableRadarTracksResult`. The Bosch receive path below is an exception; for other configurations requiring activation, confirm both the activation result and actual incoming tracks.
 
@@ -68,7 +85,7 @@ Corner-radar objects are created only when the vehicle code recognizes a support
 | `0` | Keep the existing `radard` lead and cut-in processing (default) |
 | `1` | Run the independent dPath RadarD, calculate front-first radar/vision leadOne first, then use only physical dPath CUT-INs as leadTwo |
 
-SCC is used only when `EnableRadarTracks` allows it. Mode `-2` is vision-only; modes `-1` and `0` always use a valid SCC object, then vision if SCC is absent. Mode `1` matches front radar to vision; mode `2` also permits SCC with `vLead < 5.0 m/s`, using only range and speed for SCC association. Mode `3` always uses SCC if front matching fails. The final vision fallback in modes `1`, `2`, and `3` requires probability at least `0.40` and `|dPath| <= 1.0 m`. SCC-only modes `-1` and `0` use the same probability threshold without the additional lateral/path gate.
+SCC is used only when `EnableRadarTracks` allows it. Mode `-2` is vision-only; modes `-1` and `0` always use a valid SCC object, then vision if SCC is absent. Mode `1` matches front radar to vision; mode `2` also permits SCC with `vLead < 5.0 m/s`, using only range and speed for SCC association. Mode `3` uses SCC if front matching fails, except when the front and corner tracks matching its range and speed all sit beside the path (path and raw lateral at least 2.0 m, one at least 2.5 m from the path): that adjacent-lane body is refused, with a 1 s hold. Same-range central vision, an in-path track, or a body below 18 km/h during a lane change keeps SCC. The final vision fallback in modes `1`, `2`, and `3` requires probability at least `0.40` and `|dPath| <= 1.0 m`. SCC-only modes `-1` and `0` use the same probability threshold without the additional lateral/path gate.
 
 For an already selected moving front vehicle, the range guard uses the model’s distance uncertainty instead of discarding radar solely because it is more than 8 m farther away. Both radar and vision must indicate motion above 4 m/s and remain central to the model path. The same front must stay measured and physically continuous, with no gap longer than 0.15 seconds. Its allowed farther-than-vision difference is `max(8 m, min(15 m, 15% of vision distance, 1.5 × xStd))`. Fresh IDs, missing matches, invalid paths, position or speed jumps, and precise nearer vision do not inherit that allowance. This adds no confirmation delay and does not prevent a better matching nearer front vehicle from becoming L1. A retained lead uses radar distance and speed; it does not average them with the visual estimates.
 

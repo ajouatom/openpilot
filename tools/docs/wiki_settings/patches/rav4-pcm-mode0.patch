@@ -1,0 +1,16 @@
+--- a/KO-PCM차량속도제어.md
++++ b/KO-PCM차량속도제어.md
+@@ -30 +30 @@
+-<!-- CARROT:REVIEW reviewed-for="826f2d40ddf5f91d56d0f427bee488abab5c3cb4e0d0c3487843d985b45560cc" reviewed-at="2026-10-09T18:00:00+09:00" -->
++<!-- CARROT:REVIEW reviewed-for="826f2d40ddf5f91d56d0f427bee488abab5c3cb4e0d0c3487843d985b45560cc" reviewed-at="2026-10-14T00:00:00+09:00" -->
+@@ -40,0 +41,2 @@
++
++`0`의 예외로, `TOYOTA_RAV4_TSS2_2022`의 PCM·openpilot 직접 가감속 구성에서는 유효한 CAN으로 관측한 순정 설정속도 변경이나 크루즈 비활성→활성 전이를 기본 목표에 반영합니다. 처음부터 활성인 표본은 기준만 저장하고 같은 주기의 로컬 버튼·블루투스 속도 변경이 우선하며, 낮은 앞차·커브·지도 감속 목표를 유지하고 RES/SET CAN 송신을 추가하지 않습니다.
+--- a/EN-Speed-from-PCM(StockSCC).md
++++ b/EN-Speed-from-PCM(StockSCC).md
+@@ -30 +30 @@
+-<!-- CARROT:REVIEW reviewed-for="826f2d40ddf5f91d56d0f427bee488abab5c3cb4e0d0c3487843d985b45560cc" reviewed-at="2026-10-09T18:00:00+09:00" -->
++<!-- CARROT:REVIEW reviewed-for="826f2d40ddf5f91d56d0f427bee488abab5c3cb4e0d0c3487843d985b45560cc" reviewed-at="2026-10-14T00:00:00+09:00" -->
+@@ -40,0 +41,2 @@
++
++Mode `0` has one exception: on `TOYOTA_RAV4_TSS2_2022` with PCM and openpilot direct longitudinal control, stock set-speed changes or disabled-to-enabled cruise transitions observed through valid CAN update the base target. An initially enabled sample only establishes a reference; local button or Bluetooth speed changes take priority in the same cycle, lower lead/curve/map targets remain effective, and no RES/SET CAN transmission is added.

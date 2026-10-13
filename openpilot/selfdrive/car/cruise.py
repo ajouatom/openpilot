@@ -6,6 +6,7 @@ from openpilot.common.constants import CV
 from openpilot.selfdrive.carrot.carrot_man_input import get_carrot_man
 from openpilot.selfdrive.carrot.cruise_gap import cruise_gap_levels, next_gap_personality, supported_gap_levels
 from openpilot.selfdrive.carrot.bluetooth.model import BLUETOOTH_CANCEL, CommandReader, REMOTE_BUTTONS
+from openpilot.selfdrive.car.toyota_pcm_speed import ToyotaPcmSetSpeedSync
 
 from opendbc.car import structs
 GearShifter = structs.CarState.GearShifter
@@ -167,6 +168,7 @@ class VCruiseCarrot:
     self.v_cruise_cluster_kph = 20 #V_CRUISE_UNSET
     self.v_cruise_kph_last = 20
     self._cruise_speed_initialized = False
+    self.toyota_pcm_speed_sync = ToyotaPcmSetSpeedSync(V_CRUISE_MAX)
 
     self.enabled_last = False
 
@@ -192,6 +194,7 @@ class VCruiseCarrot:
     self._gas_pressed_value = 0
     self._gas_tok_timer = int(0.4 / 0.01) # 0.4 sec
     self._gas_tok = False
+    self.speedcam_gas_tok_consumed = False  # set by card when carstate spent this tap on a camera skip
     self._brake_pressed_count = 0
     self._soft_hold_count = 0
     self._soft_hold_active = 0
@@ -318,6 +321,7 @@ class VCruiseCarrot:
       self.carrot_arg = ""
 
   def update_v_cruise(self, CS, sm, is_metric):
+    prior_cruise_kph = self.v_cruise_kph
     self._add_log("")
     self.update_params(is_metric)
     self.frame += 1
@@ -367,6 +371,10 @@ class VCruiseCarrot:
     if CC.enabled:
       self._cruise_ready = False
     v_cruise_kph = self._update_cruise_buttons(CS, CC, self.v_cruise_kph)
+    pcm_speed = self.toyota_pcm_speed_sync.update(
+      self.CP, self.speed_from_pcm, CS,
+      local_changed=abs(v_cruise_kph - prior_cruise_kph) > 1e-3,
+    )
 
     if self._activate_cruise > 0:
       #self.events.append(EventName.buttonEnable)
@@ -390,8 +398,12 @@ class VCruiseCarrot:
           self.v_cruise_kph = CS.cruiseState.speed * CV.MS_TO_KPH
           self.v_cruise_cluster_kph = CS.cruiseState.speedCluster * CV.MS_TO_KPH
         else:
+          if pcm_speed is not None:
+            v_cruise_kph = pcm_speed[0]
           self.v_cruise_kph = np.clip(v_cruise_kph, 30, self._cruise_speed_max)
-          self.v_cruise_cluster_kph = self.v_cruise_kph
+          self.v_cruise_cluster_kph = (
+            self.v_cruise_kph if pcm_speed is None else np.clip(pcm_speed[1], 30, self._cruise_speed_max)
+          )
     else:
       self.v_cruise_kph = np.clip(v_cruise_kph, self._cruise_speed_min, self._cruise_speed_max) #max(20, self.v_ego_kph_set) #V_CRUISE_UNSET
       self.v_cruise_cluster_kph = self.v_cruise_kph #V_CRUISE_UNSET
@@ -963,7 +975,7 @@ class VCruiseCarrot:
         self.carrot_cruise_active = False
         self._cruise_control(-1, 0, "Cruise off (gas pressed)")
     else:
-      self._gas_tok = True if 0 < self._gas_pressed_count < self._gas_tok_timer else False
+      self._gas_tok = True if 0 < self._gas_pressed_count < self._gas_tok_timer and not self.speedcam_gas_tok_consumed else False
       self._gas_pressed_count = min(-1, self._gas_pressed_count - 1)
       if self._gas_pressed_count < -1:
         self._gas_pressed_count_last = 0

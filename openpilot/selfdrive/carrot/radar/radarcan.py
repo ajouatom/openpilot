@@ -24,6 +24,16 @@ def _set_bosch_context(radar, sm, now_ns):
   )
 
 
+def _rebuild_radar_interface(radar_interface, CP, previous=None):
+  """기본 생성은 그대로 두고 명시한 native 복구 API만 호출한다."""
+  radar = radar_interface(CP)
+  recovery_api = getattr(radar, 'ARS510_INPUT_RECOVERY_API', None)
+  recover = getattr(radar, 'recover_from_input_fault', None)
+  if previous is not None and type(recovery_api) is int and recovery_api == 1 and callable(recover):
+    recover(previous)
+  return radar
+
+
 def main():
   # Share core4/FIFO51 with planner. Card/radard use core5; short control/state
   # work shares core6 with camera; model/DM remain on core7.
@@ -34,7 +44,7 @@ def main():
   pm = messaging.PubMaster(['liveTracks'])
   CP = messaging.log_from_bytes(Params().get('CarParams', block=True), car.CarParams)
   radar_interface = interfaces[CP.carFingerprint].RadarInterface
-  radar = radar_interface(CP)
+  radar = _rebuild_radar_interface(radar_interface, CP)
   bosch_context_sm = messaging.SubMaster(['livePose', 'modelV2']) if getattr(radar, 'bosch', None) is not None else None
   # Latch once per onroad start; never change a track's side during a drive.
   radar_track_flip = Params().get_bool('RadarTrackFlip')
@@ -60,6 +70,8 @@ def main():
       msg = messaging.new_message('liveTracks')
       msg.valid = False
       msg.liveTracks.errors.canError = True
+      # 호스트 오류도 표시 스트림 지원을 유지해 이전 선행차 목록으로 돌아가지 않는다.
+      msg.liveTracks.hasDisplayData = getattr(radar, 'DISPLAY_POINTS_SUPPORTED', False) is True
       msg.liveTracks.radarTrackFlipped = radar_track_flip
       pm.send('liveTracks', msg)
       last_error_publish_ns = now_ns
@@ -94,7 +106,7 @@ def main():
         continue
       if needs_reset:
         # Never bridge missing CAN with stale object IDs or filter histories.
-        radar = radar_interface(CP)
+        radar = _rebuild_radar_interface(radar_interface, CP, radar)
         needs_reset = False
       last_input_ns = ego.receive_ns
       max_input_age_ms = max(max_input_age_ms, (now_ns - ego.receive_ns) / 1e6)
