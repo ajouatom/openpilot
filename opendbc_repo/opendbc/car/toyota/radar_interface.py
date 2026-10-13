@@ -4,6 +4,7 @@ from opendbc.car import Bus
 from opendbc.car.structs import RadarData
 from opendbc.car.toyota.values import DBC, TSS2_CAR
 from opendbc.car.interfaces import RadarInterfaceBase
+from opendbc.car.toyota.ars510_carrot import is_supported_ars510
 
 
 def _create_radar_can_parser(car_fingerprint):
@@ -21,6 +22,17 @@ def _create_radar_can_parser(car_fingerprint):
   return CANParser(DBC[car_fingerprint][Bus.radar], messages, 1)
 
 class RadarInterface(RadarInterfaceBase):
+  ARS510_CARROT_API = 1
+  ARS510_CARROT_PROFILE = "fused"
+  supports_ars510 = staticmethod(is_supported_ars510)
+
+  def __new__(cls, CP):
+    from opendbc.car.toyota.ars510_carrot import Ars510RadarInterface
+    if cls is RadarInterface and cls.supports_ars510(CP):
+      # 다른 Toyota는 기존 파서와 객체 생성을 그대로 사용한다.
+      return Ars510RadarInterface(CP)
+    return super().__new__(cls)
+
   def __init__(self, CP):
     super().__init__(CP)
     self.track_id = 0

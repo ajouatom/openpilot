@@ -1,0 +1,20 @@
+--- a/KO-레이더감지정보(0).md
++++ b/KO-레이더감지정보(0).md
+@@ -30 +30 @@
+-<!-- CARROT:REVIEW reviewed-for="fb6304349c3a0b1cfa84b4b40b7437938cd0f850a9949f10e2c90253a72c5c3d" reviewed-at="2026-07-24T16:44:29+09:00" -->
++<!-- CARROT:REVIEW reviewed-for="fb6304349c3a0b1cfa84b4b40b7437938cd0f850a9949f10e2c90253a72c5c3d" reviewed-at="2026-10-14T00:00:00+09:00" -->
+@@ -39,0 +40,4 @@
++
++ARS 표시 스트림을 지원하는 RAV4 2022의 장치 기본 주행 화면에서는 `3`이 제어용 앞차 목록과 분리한 옆 차선 객체도 표시합니다. 움직이는 객체는 속도, 느린 객체·정지 물체는 별표로 표시하며, 표시된 객체가 제동 대상으로 선택됐다는 뜻은 아닙니다.
++
++CRC·객체 나이·속도 유효성과 거리 조건은 유지하고, 만료·오류·빈 입력에서는 표시를 지웁니다. `1`과 `2`, 다른 수신기, 웹·mici 화면은 기존 경로를 사용하며 Toyota 측면 코너레이더 지원은 추가하지 않습니다.
+--- a/EN-Show-Radar-Info.md
++++ b/EN-Show-Radar-Info.md
+@@ -30 +30 @@
+-<!-- CARROT:REVIEW reviewed-for="fb6304349c3a0b1cfa84b4b40b7437938cd0f850a9949f10e2c90253a72c5c3d" reviewed-at="2026-07-24T16:44:29+09:00" -->
++<!-- CARROT:REVIEW reviewed-for="fb6304349c3a0b1cfa84b4b40b7437938cd0f850a9949f10e2c90253a72c5c3d" reviewed-at="2026-10-14T00:00:00+09:00" -->
+@@ -39,0 +40,4 @@
++
++On the standard device driving screen for RAV4 2022 with the ARS display stream, `3` also displays adjacent-lane objects separately from control leads. Moving objects show speed, and slow or stationary objects show a star; a visible object is not necessarily a braking target.
++
++CRC, object-age, speed-validity and range conditions remain. Stale, invalid or empty input clears the display. Modes `1` and `2`, other receivers, and web/mici screens keep their existing path. This does not add Toyota side-corner radar support.

@@ -366,6 +366,36 @@ def test_vehicle_navi_school_zone_control_is_opt_in(settings, params):
   assert '{"VehicleNaviSchoolZoneControl", {PERSISTENT, BOOL, "0"}}' in params_keys
 
 
+def test_speedcam_decel_cancel_and_section_average_settings_are_opt_in(settings, params):
+  by_name = {p["name"]: p for p in params}
+  master, children = "VehicleNaviDecelCancel", ("VehicleNaviDecelCancelBox", "VehicleNaviDecelCancelMobileZone",
+                                                 "VehicleNaviDecelCancelBump")
+  defaults = {master: 0, "VehicleNaviSectionAvgControl": 0, **{name: 1 for name in children},
+              "VehicleNaviDecelCancelUnknown": 0,  # experimental: kind unknown, opt-in
+              "VehicleNaviDecelCancelEarlyWarning": 0}  # experimental: wider lead window, opt-in
+  for name, default in defaults.items():
+    control = by_name[name]
+    assert (control["min"], control["max"], control["default"]) == (0, 1, default)
+    assert control["control"] == "toggle"
+    assert control["risk"] == "high"
+  # Per-kind toggles live in the master's detail screen; only the master is opt-in.
+  assert not by_name[master].get("detail_parent")
+  assert all(by_name[name]["detail_parent"] == master and by_name[name]["group"] == by_name[master]["group"]
+             for name in (*children, "VehicleNaviDecelCancelUnknown",
+                          "VehicleNaviDecelCancelEarlyWarning"))
+
+  driving = next(category for category in settings["menu"] if category["id"] == "DRIVING")
+  speed = next(group for group in driving["groups"] if group["id"] == "SPEED")
+  camera = next(group for group in speed["groups"] if group["id"] == "SPEED_CAMERA")
+  params_keys = PARAMS_KEYS_PATH.read_text(encoding="utf-8")
+  for name, default in defaults.items():
+    assert name in camera["params"]
+    assert f'{{"{name}", {{PERSISTENT, BOOL, "{default}"}}}}' in params_keys
+  for removed in ("VehicleNaviSkipBoxCamera", "VehicleNaviSkipMobileZone", "VehicleNaviSectionAvgMargin"):
+    assert removed not in by_name
+    assert removed not in params_keys
+
+
 def test_vehicle_navi_curve_control_settings_are_removed(settings):
   driving = next(category for category in settings["menu"] if category["id"] == "DRIVING")
   speed = next(group for group in driving["groups"] if group["id"] == "SPEED")

@@ -56,4 +56,5 @@ jobs:
           openpilot/selfdrive/carrot/tests/test_radar_motion_predictor.py
           openpilot/selfdrive/carrot/tests/test_radar_cutout_fast_path.py
           openpilot/selfdrive/carrot/tests/test_scc_lead_policy.py
+          openpilot/selfdrive/carrot/tests/test_radar_forced_scc_gate.py
           openpilot/selfdrive/carrot/tests/test_radard_dpath.py

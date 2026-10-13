@@ -51,7 +51,7 @@ Record the value currently shown on the device before changing anything.
 <a id="speed-camera"></a>
 ## 1. Speed cameras
 
-The related settings are `AutoNaviSpeedCtrlMode`, `AutoNaviSpeedCtrlEnd`, `AutoNaviRearCameraHoldDistance`, `AutoNaviSpeedDecelRate`, `AutoNaviSpeedSafetyFactor`, `AutoNaviCountDownMode`, `VehicleNaviCanControl`, `VehicleNaviSchoolZoneControl`, `VehicleSpeedCameraControlMode`, and `VehicleSpeedCameraDistanceTime`.
+The related settings are `AutoNaviSpeedCtrlMode`, `AutoNaviSpeedCtrlEnd`, `AutoNaviRearCameraHoldDistance`, `AutoNaviSpeedDecelRate`, `AutoNaviSpeedSafetyFactor`, `AutoNaviCountDownMode`, `VehicleNaviCanControl`, `VehicleNaviSchoolZoneControl`, `VehicleNaviDecelCancel`(`VehicleNaviDecelCancelBox`, `VehicleNaviDecelCancelMobileZone`, `VehicleNaviDecelCancelBump`, `VehicleNaviDecelCancelUnknown`, `VehicleNaviDecelCancelEarlyWarning`), `VehicleNaviSectionAvgControl`, `VehicleSpeedCameraControlMode`, and `VehicleSpeedCameraDistanceTime`.
 
 ### `AutoNaviSpeedCtrlMode`
 
@@ -86,6 +86,40 @@ The Kia PV5 also holds a section speed cap after a section alert. A currently ac
 PV5 section control does not calculate average speed or remaining distance. Restarting, losing signals, or re-enabling the setting requires a new section alert, so the cap may not resume immediately within a zone. Recorded driving validates entry, retention within the zone, and early exit; passage through the actual enforcement endpoint remains to be validated. `VehicleNaviSchoolZoneControl` remains unsupported on the PV5.
 
 This experimental control is off by default. First verify that the displayed event type, limit, and remaining distance match the road, and disable it immediately if they do not.
+
+### Stock-navigation camera kinds
+
+The current stock warning (0x4A3) carries no camera kind. The kind of the preview received about 2 km ahead (0x4BE) is attached to the warning with the same limit at the same position. A warning starts about 6.1 m per km/h of the limit before its camera (about 366 m at 60 km/h), so only previews at that position match. A warning of unknown kind still decelerates as before.
+
+| Preview kind | Navigation icon | Handling |
+|---|---|---|
+| Fixed speed camera | Red square | Always decelerates; no skip |
+| Signal-and-speed | Traffic-light icon | Always decelerates; no skip |
+| Rear speed, rear signal-and-speed | — | Always decelerates; no skip (identified by the preview's rear flag) |
+| Mobile enforcement zone | Blue circle | Decelerates when `AutoNaviSpeedCtrlMode` is `3`; ignored at `2` or lower |
+| Mobile-camera box | — | Decelerates; can be cancelled with the deceleration cancel request |
+
+A warning that also carries a fixed, signal, or rear camera always decelerates, even inside a mobile zone.
+
+### `VehicleNaviDecelCancel` (deceleration cancel request)
+
+When enabled, while engaged and one of the kinds enabled in its details is decelerating, one press of cruise `+` or a gas tap (accelerator pressed for under 0.4 s) cancels that deceleration. The input does not raise the set speed (neither `+1` nor the gas-tap `+10`), and the cancel applies to that one camera or bump; the next one decelerates again. While disengaged, below about 18 km/h, or when that kind is not actually decelerating, `+` and the gas tap keep their normal resume/engage/set-speed roles. Fixed, signal and rear cameras, warnings without a preview and section enforcement cannot be cancelled. Off by default.
+
+Per-kind toggles (in the setting's detail screen, on by default so turning on the master enables all):
+
+| Key | Applies to |
+|---|---|
+| `VehicleNaviDecelCancelBox` | Mobile-camera box |
+| `VehicleNaviDecelCancelMobileZone` | Mobile enforcement zone; matters only when `AutoNaviSpeedCtrlMode` is `3`, so zones decelerate |
+| `VehicleNaviDecelCancelUnknown` | **[Experimental]** Warnings whose camera kind preview was not received or not understood. It can include signal or speed cameras that send no preview, so **off by default** and must be turned on separately from the master. Not applied at 30 km/h or below (school and senior zones) or inside a section; if a signal, rear or fixed preview is matched after the cancel, that rule applies |
+| `VehicleNaviDecelCancelEarlyWarning` | **[Experimental]** For roads/cars where the warning starts earlier than 6.1 m x the limit. Grows the far end of the matching window up to 1.35x so box, fixed and mobile-zone previews are found. **Risk**: a mobile-zone preview attached to the wrong warning can, with low probability, skip a real enforcement camera when the mobile-zone cancel is on or `AutoNaviSpeedCtrlMode` is 2 or lower; always verify. Off by default |
+| `VehicleNaviDecelCancelBump` | Stock-navigation speed bump. The input is used only while the bump target (from the speed-bump settings) is below the set speed, i.e. actually decelerating, and cancels the nearest bump only |
+
+### `VehicleNaviSectionAvgControl`
+
+When enabled, a stock-navigation section (vehicle average-speed signal present) still stays capped at the section limit × `AutoNaviSpeedSafetyFactor` (for example 117 in a 110 section at 107%). While engaged and with the cruise set speed above that cap, one press of cruise `+` or a gas tap unlocks the section. Up to the set speed is then allowed only while the average since entering the section stays at or below the section limit. Only time banked by driving slower (for example in congestion) can be spent; without it, or once it is spent, the cap applies. The bank uses the vehicle-speed (vEgo) odometer scaled to true distance (×1.015; vEgo reads about 0.6 % below GPS), and the allowance is passed back through the safety factor and the cluster/actual speed ratio so the car actually drives at it. Without banked time the cap is the same section limit × `AutoNaviSpeedSafetyFactor` as when locked, so if that is above the limit in true speed (for example 107 %), the average can exceed the limit by that much. The unlocking input does not raise the set speed (neither `+1` nor the gas-tap `+10`). A long press of cruise `-` locks the section again without changing the set speed (while unlocked, a long `-` does not do its −10 step; a short press still lowers the set speed as usual). Leaving the section resets it.
+
+Once unlocked, no virtual camera distance is used inside the section, and the end camera decelerates to the spot limit after its preview about 2 km ahead. The average uses the vehicle odometer (`vEgo`) with no margin. In a recorded drive the navigation-displayed average was 2–3 km/h higher than this calculation, so adjust the cruise set speed yourself if needed. The section start is taken when the average-speed signal appears; experimental.
 
 ### `VehicleSpeedCameraControlMode`
 
@@ -212,7 +246,7 @@ For `-1`, a non-negative offset selects limit + offset; a negative offset select
 <a id="speed-bump"></a>
 ## 3. Speed bumps
 
-Speed-bump control uses `AutoNaviSpeedBumpTime`, `AutoNaviSpeedBumpSpeed`, and `AutoNaviSpeedBumpEndDistance`. It requires `AutoNaviSpeedCtrlMode >= 2`, a bump event and distance, and a road category that the code does not treat as highway. A stock-navigation CAN bump must also satisfy the route condition selected by `VehicleNaviCanControl`.
+Speed-bump control uses `AutoNaviSpeedBumpTime`, `AutoNaviSpeedBumpSpeed`, and `AutoNaviSpeedBumpEndDistance`. It requires `AutoNaviSpeedCtrlMode >= 2`, a bump event and distance, and a road category that the code does not treat as highway. A stock-navigation CAN bump must also satisfy the route condition selected by `VehicleNaviCanControl`. With the deceleration cancel request on (`VehicleNaviDecelCancel` + `VehicleNaviDecelCancelBump`), `+` or a gas tap during a bump deceleration cancels the nearest bump.
 
 ### `AutoNaviSpeedBumpSpeed`
 
