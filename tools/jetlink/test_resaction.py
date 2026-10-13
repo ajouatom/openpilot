@@ -235,3 +235,29 @@ def test_image_patch_refuses_unproven_integer_arithmetic_without_mutation():
   with pytest.raises(ValueError, match='Unsupported image queue operation'):
     patch_uint8_inputs(model)
   assert model.SerializeToString() == serialized
+
+
+def test_half_finite_check_matches_every_binary16_pattern():
+  q = StatefulQueues(SPEC, inputs())
+  all_bits = np.arange(65536, dtype=np.uint16).view(np.float16)
+  assert not q._all_finite(all_bits)
+  np.testing.assert_array_equal(q._finite_bad[:65536], ~np.isfinite(all_bits))
+  finite = all_bits[np.isfinite(all_bits)]
+  assert q._all_finite(finite)
+  # Reused scratch, both infinities and non-canonical positive/negative NaNs.
+  for bits in (0x7c00, 0xfc00, 0x7c01, 0x7fff, 0xfc01, 0xffff):
+    value = np.array([0, bits, 0x8000], np.uint16).view(np.float16)
+    assert not q._all_finite(value)
+    assert q._all_finite(np.array([0., -0., 65504., -65504.], np.float16))
+
+
+@pytest.mark.parametrize('bits', [0x7c00, 0xfc00, 0x7c01, 0xffff])
+def test_half_nonfinite_feedback_still_resets_every_state(bits):
+  dest = inputs()
+  q = StatefulQueues(SPEC, dest)
+  q.feedback(advanced(dest, 2))
+  result = advanced(dest, 3)
+  result['next_state_img_q'].view(np.uint16).flat[-1] = bits
+  with pytest.raises(FloatingPointError):
+    q.feedback(result)
+  assert all(not np.any(v) for v in q.state.values())

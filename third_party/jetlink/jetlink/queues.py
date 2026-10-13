@@ -195,11 +195,18 @@ class StatefulQueues:
   """Keep graph-owned history on the host; only images/scalars cross USB.
 
   State uses the engine's actual dtype (the TRT image queue is promoted to
-  fp16). All next-state tensors are checked before any feedback is committed.
+  fp16). All outputs are checked before another inference can use the state;
+  an invalid result clears every state buffer, including shared TRT staging.
   """
   def __init__(self, spec: ModelSpec, inputs: dict[str, np.ndarray]):
     self.spec = spec
     self.state = {name: inputs[name] for name in spec.state_pairs}
+    # NumPy's aarch64 float16 isfinite path is scalar. IEEE binary16 is
+    # non-finite exactly when all five exponent bits are set, for BOTH signs
+    # and every NaN payload. Reuse bounded scratch space across all outputs.
+    largest = max(int(np.prod(shape)) for shape in spec.output_shapes.values())
+    self._finite_bits = np.empty(largest, dtype=np.uint16)
+    self._finite_bad = np.empty(largest, dtype=np.bool_)
     if not self.state or set(spec.input_shapes) != set(self.state) | {'new_img', *spec.packed_shapes}:
       raise ValueError('Unsupported stateful graph inputs')
     if set(spec.output_shapes) != {'outputs', *spec.state_pairs.values()}:
@@ -219,18 +226,31 @@ class StatefulQueues:
     if not np.isfinite(packed).all():
       self.reset()
       raise ValueError('Non-finite stateful scalar input')
-    dest['new_img'][...] = warped
+    image = dest['new_img']
+    if image.dtype == np.float16:
+      np.take(_U8_TO_F16_BITS, warped.reshape(-1), out=image.reshape(-1).view(np.uint16), mode='clip')
+    else:
+      image[...] = warped
     offset = 0
     for name, size in zip(self.spec.packed_shapes, self.spec.packed_sizes, strict=True):
       dest[name][...] = packed[offset:offset + size].reshape(dest[name].shape)
       offset += size
+
+  def _all_finite(self, value):
+    if value.dtype != np.float16:
+      return np.isfinite(value).all()
+    bits = self._finite_bits[:value.size].reshape(value.shape)
+    bad = self._finite_bad[:value.size].reshape(value.shape)
+    np.bitwise_and(value.view(np.uint16), 0x7c00, out=bits)
+    np.equal(bits, 0x7c00, out=bad)
+    return not bad.any()
 
   def feedback(self, outputs):
     try:
       for name, shape in self.spec.output_shapes.items():
         if name not in outputs or outputs[name].shape != shape:
           raise ValueError(f'Invalid stateful output shape: {name}')
-        if not np.isfinite(outputs[name]).all():
+        if not self._all_finite(outputs[name]):
           raise FloatingPointError(f'Non-finite stateful output: {name}')
       for name, output in self.spec.state_pairs.items():
         if outputs[output].dtype != self.state[name].dtype:

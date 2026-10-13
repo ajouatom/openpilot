@@ -101,6 +101,7 @@ class JetlinkClient:
     self._infer_frame_id: int | None = None
     self._infer_flags = 0
     self._stateful_v2 = False
+    self._nav_u8 = False
 
   # -- construction ---------------------------------------------------------
 
@@ -214,6 +215,7 @@ class JetlinkClient:
     so this is also how a new owner of the gadget takes over one the server
     never saw end; see Session._greet."""
     self._stateful_v2 = False
+    self._nav_u8 = False
     seq = self._next_seq()
     version = self._protocol_version()
     client = {'nonce': self.nonce, 'name': self.name}
@@ -235,6 +237,8 @@ class JetlinkClient:
     if selected != version:
       raise LinkError(f"server selected protocol {selected!r}, transport speaks protocol {version}")
     self._stateful_v2 = selected == 2 and response.get('stateful_v2') is True
+    from jetlink.packed_codec import CAPABILITY
+    self._nav_u8 = self._stateful_v2 and response.get(CAPABILITY) is True
     return response
 
   def state(self, timeout: float = 2.0) -> dict:
@@ -395,6 +399,11 @@ class JetlinkClient:
     try:
       self._infer_started = time.monotonic()
       self._infer_frame_id = frame_id
+      if version == 2 and self._nav_u8 and 'nav_map' in self.spec.packed_shapes:
+        from jetlink.packed_codec import encode, FLAG
+        packed, compressed = encode(packed, self.spec)
+        if compressed:
+          flags |= FLAG
       self._infer_flags = flags
       self.t.send(P.Msg.INFER_REQ, seq, (P.pack_infer_req(frame_id, flags), warped, packed),
                   timeout=self.deadline if deadline is None else deadline)

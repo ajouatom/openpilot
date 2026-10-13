@@ -95,6 +95,7 @@ class TrtEngine:
     self.outputs = {n: b for n, b in self.bindings.items() if not b.is_input}
     self.last_gpu_us = 0
     self.graph_exec = None
+    self._state_host_sources = {}
 
   # -- introspection --------------------------------------------------------
 
@@ -108,7 +109,13 @@ class TrtEngine:
 
   def host_input(self, name: str) -> np.ndarray:
     """Pinned array for an input. Write into it, then call run()."""
-    return self.inputs[name].host
+    return self._state_host_sources.get(name, self.inputs[name]).host
+
+  def configure_state_feedback(self, pairs):
+    if self.graph_exec is not None:
+      raise RuntimeError('State staging must be configured before CUDA graph capture')
+    from jetlink.server.backends.trt.state_buffers import feedback_sources
+    self._state_host_sources = feedback_sources(self.inputs, self.outputs, pairs)
 
   # -- execution ------------------------------------------------------------
 
@@ -118,7 +125,11 @@ class TrtEngine:
 
   def _enqueue(self) -> None:
     for b in self.inputs.values():
-      cudart.memcpy_h2d_async(b.device_ptr, b.host_ptr, b.nbytes, self.stream)
+      # All H2D copies complete in this stream before execution, and D2H
+      # overwrites the host outputs only afterwards. Reuse the previous state
+      # output's pinned staging memory; keep distinct GPU input/output buffers.
+      source = self._state_host_sources.get(b.name, b)
+      cudart.memcpy_h2d_async(b.device_ptr, source.host_ptr, b.nbytes, self.stream)
     if not self.context.execute_async_v3(self.stream):
       raise RuntimeError("execute_async_v3 failed")
     for b in self.outputs.values():

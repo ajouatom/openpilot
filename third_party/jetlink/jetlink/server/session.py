@@ -456,6 +456,8 @@ class EngineHost:
     _check_shapes(engine, spec)
     # Warm runs on zeros, so the first real frame pays for nothing lazy: CUDA
     # state and the graph capture for TensorRT, a first replay for the others.
+    if spec.stateful and hasattr(engine, 'configure_state_feedback'):
+      engine.configure_state_feedback(spec.state_pairs)
     host_inputs = {n: engine.host_input(n) for n in engine.inputs}
     queues = make_queues(spec, host_inputs)
     warped = np.zeros(spec.warped_shape, np.uint8)
@@ -661,6 +663,7 @@ class Session:
       # This host implements graph-owned queues with the original v2 framing.
       # Legacy v2 hosts must not be assumed to support stateful input contracts.
       'stateful_v2': True,
+      'carrot_nav_u8_v1': True,
       **info,   # backend, runtime_version, device
       'engine_state': self.host.status(*self._wanted())['state'],
       'loaded': self.host.loaded_sha(),
@@ -736,21 +739,28 @@ class Session:
   def _infer(self, loaded: Loaded, msg: Message) -> None:
     t0 = time.perf_counter()
     spec = loaded.spec
-    if msg.payload.nbytes != spec.infer_req_nbytes:
-      # The offsets below come from the spec, not the wire: a client on another
-      # model would have its scalars read out of the image, and the result would
-      # look perfectly finite.
+    from jetlink.packed_codec import decode, FLAG
+    off = P.INFER_REQ_SIZE + spec.warped_nbytes
+    try:
+      if msg.payload.nbytes < off:
+        raise ValueError('Incomplete frame')
+      frame_id, flags = P.unpack_infer_req(msg.payload)
+      if flags & FLAG:
+        if not spec.stateful or 'nav_map' not in spec.packed_shapes or self.t.protocol_version != 2:
+          raise ValueError('Compact context unsupported for this contract')
+        context = decode(msg.payload[off:], spec)
+      else:
+        if msg.payload.nbytes != spec.infer_req_nbytes:
+          raise ValueError('Invalid frame size')
+        context = msg.payload[off:]
+    except ValueError:
       self._send(P.Msg.INFER_RESP, msg.seq,
                  (P.pack_infer_resp(0, P.Status.BAD_SHAPE, 0, 0, 0),))
       return
-    frame_id, flags = P.unpack_infer_req(msg.payload)
     if flags & P.Flag.RESET_QUEUES:
       loaded.queues.reset()
-
-    off = P.INFER_REQ_SIZE
-    warped = np.frombuffer(msg.payload, np.uint8, spec.warped_nbytes, off).reshape(spec.warped_shape)
-    off += spec.warped_nbytes
-    packed = np.frombuffer(msg.payload, np.float32, spec.packed_nelem, off)
+    warped = np.frombuffer(msg.payload, np.uint8, spec.warped_nbytes, P.INFER_REQ_SIZE).reshape(spec.warped_shape)
+    packed = np.frombuffer(context, np.float32, spec.packed_nelem)
 
     # Gathers land straight in TensorRT's pinned input buffers: between the
     # wire and the GPU there is exactly one copy.
