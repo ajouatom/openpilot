@@ -143,6 +143,7 @@ class Client:
       self.sock.connect(path)
       hello = json.loads(receive(self.sock, time.monotonic() + timeout))
       self.spec = validate_model_spec(ModelSpec.from_dict(hello['spec']))
+      self.peer = hello.get('peer') if isinstance(hello.get('peer'), dict) else {}
     except Exception:
       self.sock.close()
       raise

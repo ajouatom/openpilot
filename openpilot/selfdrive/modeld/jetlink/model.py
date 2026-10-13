@@ -82,7 +82,7 @@ class Warp:
       if actual.shape != expected.shape or actual.dtype != expected.dtype or not np.array_equal(actual, expected):
         raise ValueError('prepared Jetlink warp serialization changed pixels')
 
-  def __call__(self, bufs, transforms):
+  def __call__(self, bufs, transforms, *, prepare=None):
     from tinygrad import Tensor
     started = time.monotonic()
     frames = {}
@@ -101,8 +101,22 @@ class Warp:
     prepared = time.monotonic()
     result = self.run_warp(**self.inputs, **frames)
     submitted = time.monotonic()
-    output = result.numpy()
-    self.timings = (prepared - started, submitted - prepared, time.monotonic() - submitted)
+    # QCOM submission is asynchronous. Only independent CPU context preparation
+    # may overlap it: no second camera frame, GPU call or buffer replacement.
+    # Even if preparation fails, drain this submission before local fallback
+    # touches the shared QCOM device. Never suppress the preparation exception.
+    try:
+      if prepare is not None:
+        prepare()
+    finally:
+      inputs_ready = time.monotonic()
+      output = result.numpy()
+      finished = time.monotonic()
+      self.timings = (prepared - started, submitted - prepared, finished - submitted)
+      self.stage_timings = {'warp_prepare_ms': (prepared - started) * 1000,
+                            'warp_submit_ms': (submitted - prepared) * 1000,
+                            'input_prepare_ms': (inputs_ready - submitted) * 1000,
+                            'warp_read_ms': (finished - inputs_ready) * 1000}
     return output
 
 
@@ -138,6 +152,7 @@ class JoiningModel:
     self.error = ''
     self.small_runs = 0
     self.last_slow_log = 0.
+    self.diagnostics = None
 
   def update(self, sm, metadata):
     self.source_sof = metadata.timestamp_sof if self.phase_enabled else 0
@@ -213,10 +228,15 @@ class JoiningModel:
         self.next_join = time.monotonic() + 5
     if self.client is not None:
       try:
-        fill_inputs(self.views, inputs, self.prev_desire)
+        overlap = getattr(self.client, 'peer', {}).get('carrot_host') == 'jetson'
+        if not overlap:
+          fill_inputs(self.views, inputs, self.prev_desire)
         self.frame = (self.frame + 1) & 0xFFFFFFFF
         started = time.monotonic()
-        images = self.warp(bufs, transforms)
+        if overlap:
+          images = self.warp(bufs, transforms, prepare=lambda: fill_inputs(self.views, inputs, self.prev_desire))
+        else:
+          images = self.warp(bufs, transforms)
         warped = time.monotonic()
         result = self.client.infer(images, self.packed, self.frame, self.reset, source_sof=self.source_sof)
         replied = time.monotonic()
@@ -234,6 +254,13 @@ class JoiningModel:
         if os.getenv('SEND_RAW_PRED'):
           parsed['raw_pred'] = result.copy()
         finished = time.monotonic()
+        if overlap:
+          if self.diagnostics is None:
+            from openpilot.common.runtime_diagnostics import RuntimeDiagnostics
+            self.diagnostics = RuntimeDiagnostics('jetlink_prepare', cloudlog.event)
+          self.diagnostics.record(**self.warp.stage_timings, roundtrip_ms=(replied - warped) * 1000,
+                                  parse_ms=(finished - replied) * 1000,
+                                  context={'frame_id': self.frame, 'overlap': True})
         if finished - started > .05 and finished - self.last_slow_log >= 1:
           self.last_slow_log = finished
           cloudlog.warning('Jetlink slow frame %d: warp %.2f (prepare/submit/read %.2f/%.2f/%.2f), '

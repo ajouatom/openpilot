@@ -39,6 +39,7 @@ def main():
   sys.path.insert(0, str(runtime))
   os.environ.update(DEV='USB+AMD:LLVM', GMMU='0', JIT_BATCH_SIZE='0')
   import numpy as np
+  from output_validation import validate_compiled_output
   generic = manifest['format'] == 'comma-generic-onnx'
   if generic:
     os.environ.update(FLOAT16='1', TC_OPT='2', TC_MIN_GLOBALS='32')
@@ -127,8 +128,7 @@ def main():
           dispatched = time.monotonic()
           progress.mark('output_read')
           result = outs.numpy().reshape(-1)
-        if result.size != count or not np.isfinite(result).all():
-          raise ValueError('invalid precompiled model output')
+        validate_compiled_output(result, count)
         progress.mark('publish')
         output[:] = result
         finished, cpu_finished = time.monotonic(), time.thread_time()
