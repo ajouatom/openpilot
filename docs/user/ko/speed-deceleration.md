@@ -53,7 +53,7 @@ Carrot Web 기본값 복원에 쓰이는 `carrot_settings.json`과 Params 최초
 <a id="speed-camera"></a>
 ## 1. 과속카메라
 
-관련 설정은 `AutoNaviSpeedCtrlMode`, `AutoNaviSpeedCtrlEnd`, `AutoNaviRearCameraHoldDistance`, `AutoNaviSpeedDecelRate`, `AutoNaviSpeedSafetyFactor`, `AutoNaviCountDownMode`, `VehicleNaviCanControl`, `VehicleNaviSchoolZoneControl`, `VehicleSpeedCameraControlMode`, `VehicleSpeedCameraDistanceTime`입니다.
+관련 설정은 `AutoNaviSpeedCtrlMode`, `AutoNaviSpeedCtrlEnd`, `AutoNaviRearCameraHoldDistance`, `AutoNaviSpeedDecelRate`, `AutoNaviSpeedSafetyFactor`, `AutoNaviCountDownMode`, `VehicleNaviCanControl`, `VehicleNaviSchoolZoneControl`, `VehicleNaviDecelCancel`(`VehicleNaviDecelCancelBox`, `VehicleNaviDecelCancelMobileZone`, `VehicleNaviDecelCancelBump`, `VehicleNaviDecelCancelUnknown`, `VehicleNaviDecelCancelEarlyWarning`), `VehicleNaviSectionAvgControl`, `VehicleSpeedCameraControlMode`, `VehicleSpeedCameraDistanceTime`입니다.
 
 ### `AutoNaviSpeedCtrlMode`
 
@@ -88,6 +88,40 @@ Kia PV5는 구간단속 알림을 받으면 제한속도 상한도 유지합니�
 PV5 구간단속은 평균속도나 남은거리를 계산하지 않습니다. 재시작·신호 유실·설정 재활성화 후에는 새로운 구간 알림이 필요하므로 구간 중간에서 즉시 복원되지 않을 수 있습니다. 현재 주행 로그로는 진입·구간 중 유지·중간 이탈을 검증했으며 실제 단속 종점 통과는 추가 검증 대상입니다. `VehicleNaviSchoolZoneControl`은 PV5에서 계속 미지원입니다.
 
 이 기능은 기본값이 꺼진 실험 기능입니다. 화면의 이벤트 종류, 제한속도와 남은 거리가 실제 도로와 일치하는지 먼저 확인하고, 일치하지 않으면 즉시 끄세요.
+
+### 순정 내비 카메라 종류별 처리
+
+순정 내비 CAN의 현재 경고(0x4A3)에는 카메라 종류가 없습니다. 약 2km 앞에서 오는 예고(0x4BE)의 종류를 같은 제한속도·같은 위치의 경고에 붙여 처리합니다. 경고는 제한속도 1km/h당 약 6.1m 앞(60km/h면 약 366m)에서 시작하므로 그 위치의 예고만 연결합니다. 종류를 알 수 없는 경고는 지금처럼 감속합니다.
+
+| 예고 종류 | 내비 표시 | 처리 |
+|---|---|---|
+| 고정식 과속 | 빨간 사각 | 항상 감속, 건너뛰기 없음 |
+| 신호·과속 | 신호등 아이콘 | 항상 감속, 건너뛰기 없음 |
+| 후면 과속, 후면 신호·과속 | — | 항상 감속, 건너뛰기 없음 (예고의 후면 표시로 구분) |
+| 이동식 단속 구간 | 파란 원 | `AutoNaviSpeedCtrlMode`가 `3`이면 감속, `2` 이하면 무시 |
+| 이동식 박스 | — | 감속, 감속 중지 요청으로 중지 가능 |
+
+같은 경고에 고정식·신호·후면 카메라가 함께 있으면 이동식 구간이어도 항상 감속합니다.
+
+### `VehicleNaviDecelCancel` (감속 중지 요청)
+
+켜면 openpilot 작동 중 아래 세부 항목에서 켠 종류로 감속하는 동안 크루즈 `+` 버튼을 한 번 누르거나 악셀톡(가속 페달을 0.4초 미만으로 밟았다 뗌)을 해서 그 지점의 감속을 중지합니다. 이 입력은 설정 속도를 올리지 않고(`+1`, 악셀톡 `+10` 모두 반영 안 함), 중지는 그 카메라·방지턱 하나에만 적용되어 다음 것은 다시 감속합니다. 미작동 상태이거나 약 18km/h 미만, 또는 해당 종류가 실제로 감속 중이 아닐 때는 `+`와 악셀톡이 원래 역할(재개·작동·속도 설정)을 합니다. 고정식·신호·후면 카메라, 예고가 없는 경고, 구간단속은 중지할 수 없습니다. 기본값은 꺼짐입니다.
+
+세부 항목(설정 상세 화면, 기본값 켜짐 — 상위 항목을 켜면 모두 동작):
+
+| 키 | 대상 |
+|---|---|
+| `VehicleNaviDecelCancelBox` | 이동식 박스 카메라 |
+| `VehicleNaviDecelCancelMobileZone` | 이동식 단속 구간. `AutoNaviSpeedCtrlMode`가 `3`이라 감속할 때만 의미 |
+| `VehicleNaviDecelCancelUnknown` | **[실험]** 카메라 종류 예고를 받지 못했거나 해석하지 못한 경고(CAN 미수신·미처리). 예고 없이 오는 신호·과속 카메라도 포함될 수 있어 **기본값 꺼짐**, 상위와 별도로 켜야 동작. 30km/h 이하(어린이·노인보호구역)와 구간단속 중에는 적용하지 않고, 중지 뒤 신호·후면·고정식 예고가 확인되면 그 규칙을 따름 |
+| `VehicleNaviDecelCancelEarlyWarning` | **[실험]** 경고가 평소(카메라 앞 6.1m×제한속도)보다 일찍 켜지는 지역·차량용. 짝 찾기 범위의 앞쪽 끝을 최대 1.35배로 넓혀 박스형·고정식·이동식 구간을 찾음. **위험**: 이동식 구간 예고가 엉뚱한 경고에 붙으면, 이동식 구간 감속 중지가 켜져 있거나 `AutoNaviSpeedCtrlMode` 2 이하일 때 낮은 확률로 실제 단속 카메라 감속을 건너뛸 수 있으니 반드시 확인. 기본값 꺼짐 |
+| `VehicleNaviDecelCancelBump` | 순정 내비 과속방지턱. 방지턱 감속 목표(방지턱 설정으로 계산)가 설정 속도보다 낮아 실제로 감속 중일 때만 입력을 쓰고, 가장 가까운 방지턱 하나만 중지 |
+
+### `VehicleNaviSectionAvgControl`
+
+켜면 순정 내비 구간단속(차량 평균속도 신호가 켜진 구간) 중에도 평소에는 구간 제한속도 × `AutoNaviSpeedSafetyFactor`로 고정합니다(예: 110 구간, 107% → 117). openpilot 작동 중이고 크루즈 설정 속도가 이 값보다 높을 때 크루즈 `+`를 한 번 누르거나 악셀톡을 하면 그 구간의 고정을 풉니다. 그 뒤로는 구간 진입 후 평균속도가 구간 제한속도 이하로 유지되는 범위에서만 설정 속도까지 허용합니다. 정체 등으로 늦게 간 시간만 쓸 수 있고, 적립이 없거나 다 쓰면 고정값과 같습니다. 적립은 차량 속도(vEgo)로 잰 거리를 실제 거리로 보정(×1.015, 실측 GPS 대비 vEgo가 약 0.6% 낮음)해 계산하고, 허용속도는 안전계수와 계기/실제 속도 비를 되돌려 실제 주행 속도가 허용속도가 되게 넘깁니다. 적립이 없을 때의 상한은 잠금 상태와 같은 구간 제한속도 × `AutoNaviSpeedSafetyFactor`라서, 이 값이 실제 속도로 제한보다 높으면(예: 107%) 그만큼 평균이 제한을 넘을 수 있습니다. 해제에 쓴 입력은 설정 속도를 올리지 않습니다(`+1`, 악셀톡 `+10` 모두 반영 안 함). 크루즈 `-`를 길게 누르면 설정 속도는 그대로 두고 다시 고정합니다(해제된 동안의 `-` 길게는 −10 동작을 하지 않으며, 짧게 누르면 평소처럼 설정 속도를 내립니다). 구간이 끝나면 초기화됩니다.
+
+해제 후에는 구간 안에서 가상거리 감속을 쓰지 않고, 종점 카메라는 약 2km 전 예고를 받은 뒤 지점 감속합니다. 평균은 차량 주행거리(`vEgo`)로 계산하며 여유를 두지 않습니다. 기록 주행에서 내비가 표시한 평균이 이 계산보다 2~3km/h 높았으므로 필요하면 크루즈 설정 속도로 직접 조절하세요. 구간 시작은 평균속도 신호가 켜진 시점으로 잡는 실험 기능입니다.
 
 ### `VehicleSpeedCameraControlMode`
 
@@ -254,7 +288,7 @@ Kia PV5는 순정 내비의 같은 단속 상태·제한속도가 계속 수신�
 <a id="speed-bump"></a>
 ## 3. 과속방지턱
 
-관련 설정은 `AutoNaviSpeedBumpTime`, `AutoNaviSpeedBumpSpeed`, `AutoNaviSpeedBumpEndDistance`입니다. 방지턱 감속은 `AutoNaviSpeedCtrlMode >= 2`이고, 내비가 방지턱 종류와 거리를 제공하며, 코드가 고속도로가 아닌 도로 범주로 판단할 때 사용합니다. 차량 순정 내비 CAN 방지턱은 `VehicleNaviCanControl`의 경로 조건도 만족해야 합니다.
+관련 설정은 `AutoNaviSpeedBumpTime`, `AutoNaviSpeedBumpSpeed`, `AutoNaviSpeedBumpEndDistance`입니다. 방지턱 감속은 `AutoNaviSpeedCtrlMode >= 2`이고, 내비가 방지턱 종류와 거리를 제공하며, 코드가 고속도로가 아닌 도로 범주로 판단할 때 사용합니다. 차량 순정 내비 CAN 방지턱은 `VehicleNaviCanControl`의 경로 조건도 만족해야 합니다. 감속 중지 요청(`VehicleNaviDecelCancel` + `VehicleNaviDecelCancelBump`)을 켜면 방지턱으로 감속하는 동안 `+`나 악셀톡으로 가장 가까운 방지턱의 감속을 중지할 수 있습니다.
 
 ### `AutoNaviSpeedBumpSpeed`
 

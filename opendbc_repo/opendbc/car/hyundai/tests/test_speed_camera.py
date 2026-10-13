@@ -1,16 +1,22 @@
 import math
+from collections import deque
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 
 from opendbc.can import CANParser
-from opendbc.car import Bus
+from opendbc.car import Bus, DT_CTRL, structs
 from opendbc.car.hyundai.carstate import (
   CANFD_HDA_INFO_MSG, CANFD_NAVI_PROFILE_MSG, CANFD_NAVI_STATUS_MSG, CarState,
   VEHICLE_NAVI_POSITION_TIMEOUT_NS, VEHICLE_NAVI_ROUTE_TIMEOUT_NS, VEHICLE_NAVI_SCHOOL_ZONE_MAX_DISTANCE,
   VEHICLE_SPEED_CAMERA_PARAM_UPDATE_FRAMES, is_canfd_navi_camera_active,
 )
-from opendbc.car.hyundai.values import CAR, HyundaiFlags
+from opendbc.car.hyundai.navi_speedcam import SpeedcamPolicy
+from opendbc.car.hyundai.section_average import SectionAverage
+from opendbc.car.hyundai.values import CAR, Buttons, HyundaiFlags
+
+ButtonType = structs.CarState.ButtonEvent.Type
 
 
 class FakeParams:
@@ -26,9 +32,24 @@ class FakeParams:
       return self.value
     if key == "VehicleNaviCanControl":
       return int(self.vehicle_navi)
+    if key == "AutoNaviSpeedCtrlMode":
+      return 2
+    if key == "AutoNaviSpeedSafetyFactor":
+      return 107
+    if key == "CruiseButtonLongDelay":
+      return 40
+    if key in ("AutoNaviSpeedBumpSpeed", "AutoNaviSpeedBumpTime", "AutoNaviSpeedBumpEndDistance", "AutoNaviSpeedDecelRate"):
+      return {"AutoNaviSpeedBumpSpeed": 35, "AutoNaviSpeedBumpTime": 1,
+              "AutoNaviSpeedBumpEndDistance": 200, "AutoNaviSpeedDecelRate": 120}[key]
     raise KeyError(key)
 
   def get_bool(self, key):
+    if key in ("VehicleNaviDecelCancel", "VehicleNaviSectionAvgControl"):
+      return False
+    if key in ("VehicleNaviDecelCancelBox", "VehicleNaviDecelCancelMobileZone", "VehicleNaviDecelCancelBump",
+               "VehicleNaviDecelCancelUnknown",
+               "VehicleNaviDecelCancelEarlyWarning"):
+      return True
     assert key == "VehicleNaviSchoolZoneControl"
     return self.school_zone
 
@@ -69,6 +90,19 @@ def _car_state(distance_time_tenths=60):
   state.navi_position_4b4 = None
   state.navi_profile_4be = None
   state.hda_info_4a3 = None
+  state.speedcam_policy = SpeedcamPolicy()
+  state.speedcam_accel_swallow = False
+  state.speedcam_engaged = False
+  state.speedcam_gas_count = 0
+  state.speedcam_gas_tok_consumed = False
+  state.speedcam_input_consumed = False
+  state.speedcam_v_cruise = 0.0
+  state.speedcam_decel_count = 0
+  state.speedcam_decel_hold = False
+  state.speedcam_decel_long_fired = False
+  state.speedcam_time = 0.0
+  state.section_average = SectionAverage()
+  state._read_speedcam_params()
   return state
 
 
@@ -1211,3 +1245,371 @@ def test_vehicle_navi_section_end_camera_uses_logged_1997_meter_offset():
   speed_ret = SimpleNamespace(vEgo=10.0, speedLimit=ret.speedLimit, gasPressed=False)
   state.update_speed_limit(speed_ret, speed_limit_cam=True)
   assert speed_ret.speedLimitDistance == pytest.approx(1997.0 - 10.0 * 0.01)
+
+
+def _speedcam_state():
+  state = _car_state()
+  state.vehicleNaviCanControl = 1
+  state.speedcam_engaged = True
+  return state
+
+
+def test_speedcam_gas_tap_matches_cruise_timer():
+  state = _speedcam_state()
+  assert not any(state._update_speedcam_gas_tok(True) for _ in range(39))
+  assert state._update_speedcam_gas_tok(False)              # 39 pressed frames: a tap
+  assert not any(state._update_speedcam_gas_tok(True) for _ in range(40))
+  assert not state._update_speedcam_gas_tok(False)          # 40 frames: a hold
+  assert not state._update_speedcam_gas_tok(False)
+
+
+def test_gas_tap_skips_box_and_is_withheld_from_cruise():
+  state = _speedcam_state()
+  state.speedcamSkipBox = True
+  state.speedcam_policy.add_preview(0xD2, 366, 0.0)
+  ret = SimpleNamespace(vEgo=16.0, speedLimit=60.0, gasPressed=False)
+  assert not state._apply_speedcam_policy(ret, True, True, 60.0, False, True)
+  assert state.speedcam_gas_tok_consumed and not state.speedcam_accel_swallow
+  assert not state._apply_speedcam_policy(ret, True, True, 60.0, False, False)
+  assert not state.speedcam_gas_tok_consumed                # only the tap frame is reported
+
+
+def test_skip_inputs_keep_their_roles_while_disengaged():
+  state = _speedcam_state()
+  state.speedcam_engaged = False
+  state.speedcamSkipBox = True
+  state.speedcam_policy.add_preview(0xD2, 366, 0.0)
+  ret = SimpleNamespace(vEgo=16.0, speedLimit=60.0, gasPressed=False)
+  assert state._apply_speedcam_policy(ret, True, True, 60.0, True, True)
+  assert not state.speedcam_accel_swallow and not state.speedcam_gas_tok_consumed
+
+
+def test_stock_mobile_zone_warning_is_ignored_below_navi_mode_three():
+  state = _speedcam_state()
+  state.speedcam_policy.add_preview(0xD3, 361, 0.0)        # kind 3 mobile zone at the 60 km/h lead
+  ret = SimpleNamespace(vEgo=16.0, speedLimit=60.0, gasPressed=False)
+
+  speed_limit_cam = state._apply_speedcam_policy(ret, True, True, 60.0, False)
+  state.update_speed_limit(ret, speed_limit_cam)
+  assert not speed_limit_cam
+  assert ret.speedLimitDistance == 0.0
+
+  state.speedcamMobileZoneDecel = True                      # AutoNaviSpeedCtrlMode 3
+  assert state._apply_speedcam_policy(ret, True, True, 60.0, False)
+
+
+def test_box_camera_skip_consumes_one_accel_press():
+  state = _speedcam_state()
+  state.speedcamSkipBox = True
+  state.speedcam_policy.add_preview(0xD2, 366, 0.0)        # kind 2 box at the 60 km/h lead
+  ret = SimpleNamespace(vEgo=16.0, speedLimit=60.0, gasPressed=False)
+
+  assert state._apply_speedcam_policy(ret, True, True, 60.0, False)
+  assert not state._apply_speedcam_policy(ret, True, True, 60.0, True)
+  assert state.speedcam_accel_swallow
+
+  press = [SimpleNamespace(type=ButtonType.accelCruise, pressed=True), SimpleNamespace(type=ButtonType.gapAdjustCruise, pressed=True)]
+  assert [event.type for event in state._swallow_speedcam_accel(press)] == [ButtonType.gapAdjustCruise]
+  release = [SimpleNamespace(type=ButtonType.accelCruise, pressed=False)]
+  assert state._swallow_speedcam_accel(release) == []
+  assert not state.speedcam_accel_swallow
+  assert state._swallow_speedcam_accel(press) == press
+
+
+def test_speedcam_button_filter_keeps_capnp_button_events_intact():
+  # Regression: `ret.buttonEvents = f(ret.buttonEvents)` on a capnp builder clears the
+  # source list first, so every button became unknown/released on the car.
+  state = _speedcam_state()
+  ret = structs.CarState()
+  ret.buttonEvents = state._swallow_speedcam_accel([
+    structs.CarState.ButtonEvent(type=ButtonType.accelCruise, pressed=True),
+    structs.CarState.ButtonEvent(type=ButtonType.paddleLeft, pressed=False)])
+  assert [(str(b.type), b.pressed) for b in ret.buttonEvents] == [("accelCruise", True), ("paddleLeft", False)]
+
+  source = (Path(__file__).resolve().parents[1] / "carstate.py").read_text(encoding="utf-8")
+  assert "_swallow_speedcam_accel(ret.buttonEvents)" not in source
+
+
+def test_speedcam_skip_needs_driving_speed_and_leaves_fixed_cameras():
+  state = _speedcam_state()
+  state.speedcamSkipBox = True
+  state.speedcam_policy.add_preview(0xD2, 366, 0.0)
+  slow = SimpleNamespace(vEgo=2.0, speedLimit=60.0, gasPressed=False)
+  assert state._apply_speedcam_policy(slow, True, True, 60.0, True)
+  assert not state.speedcam_accel_swallow
+
+  fixed = _speedcam_state()
+  fixed.speedcamSkipBox = fixed.speedcamSkipMobileZone = True
+  fixed.speedcam_policy.add_preview(0xD0, 366, 0.0)        # kind 0 fixed camera
+  ret = SimpleNamespace(vEgo=16.0, speedLimit=60.0, gasPressed=False)
+  assert fixed._apply_speedcam_policy(ret, True, True, 60.0, True)
+  assert not fixed.speedcam_accel_swallow
+
+
+def test_speedcam_policy_leaves_pv5_and_disabled_navi_untouched():
+  state = _speedcam_state()
+  state.canfd_wrapped_navi = True
+  state.speedcam_policy.add_preview(0xD3, 361, 0.0)
+  ret = SimpleNamespace(vEgo=16.0, speedLimit=60.0, gasPressed=False)
+  assert state._apply_speedcam_policy(ret, True, True, 60.0, False)
+
+  state = _car_state()                                      # VehicleNaviCanControl 0
+  state.speedcam_policy.add_preview(0xD3, 361, 0.0)
+  assert state._apply_speedcam_policy(ret, True, True, 60.0, False)
+
+
+def _section_state():
+  state = _speedcam_state()
+  state.speedcamSectionAvgControl = True
+  state.speedcam_v_cruise = 130.0
+  state.cruise_buttons = deque([0])
+  return state
+
+
+CLU_RATIO = 0.968  # vEgo / cluster speed on this car (1/1.033)
+TRUE_OVER_VEGO = 1.0074  # GPS / vEgo, largest drive median (2026-09-30)
+
+
+def _section_ret(v_ego=16.0):
+  return SimpleNamespace(vEgo=v_ego, vehicleNaviSectionActive=True, vehicleNaviSpeed=80.0, speedLimitDistance=1.0,
+                         vCluRatio=CLU_RATIO)
+
+
+def test_section_stays_capped_until_unlocked():
+  state = _section_state()
+  ret = _section_ret()
+  state._apply_section_average(ret, False, False, False)
+  assert not state.section_average.unlocked
+  assert (ret.vehicleNaviSpeed, ret.speedLimitDistance) == (80.0, 1.0)   # existing cap and virtual distance
+
+  state.speedcam_v_cruise = 85.0                            # set speed not above 80 x 1.07
+  state._apply_section_average(ret, True, False, False)
+  assert not state.section_average.unlocked and not state.speedcam_accel_swallow
+
+
+def test_section_unlock_by_plus_or_gas_tap_spends_banked_time():
+  state = _section_state()
+  state.vehicleNaviEvents = [{"type": "camera", "speed": 80, "kind": 0, "target": 900.0},
+                             {"type": "camera", "speed": 80, "kind": 0, "target": 2500.0}]
+  state.totalDistance = 1000.0
+  ret = _section_ret()
+  state._apply_section_average(ret, True, False, False)
+  assert state.section_average.unlocked and state.speedcam_accel_swallow
+  assert ret.vehicleNaviSpeed == 80.0                       # no banked time yet
+  assert ret.speedLimitDistance == pytest.approx(1500.0)    # only the end camera ahead, no virtual distance
+
+  state.speedcam_time += 60.0                               # a slow minute: banked time
+  ret = _section_ret()
+  state._apply_section_average(ret, False, False, False)
+  assert ret.vehicleNaviSpeed > 80.0
+
+  gas = _section_state()
+  gas._apply_section_average(_section_ret(), False, True, False)
+  assert gas.section_average.unlocked and gas.speedcam_gas_tok_consumed
+
+
+def test_section_long_minus_locks_again_and_camera_skip_wins_the_input():
+  state = _section_state()
+  state._apply_section_average(_section_ret(), True, False, False)
+  assert state.section_average.unlocked
+  state.speedcamLongPressFrames = 40
+  state.cruise_buttons = deque([Buttons.SET_DECEL])
+  assert not any(state._update_speedcam_decel_long_press() for _ in range(40))
+  assert state._update_speedcam_decel_long_press()          # 41st held frame = cruise.py long press
+  ret = _section_ret()
+  state._apply_section_average(ret, False, False, True)
+  assert not state.section_average.unlocked
+  assert (ret.vehicleNaviSpeed, ret.speedLimitDistance) == (80.0, 1.0)
+
+  skipped = _section_state()
+  skipped.speedcam_input_consumed = True                    # this press already skipped a camera
+  skipped._apply_section_average(_section_ret(), True, False, False)
+  assert not skipped.section_average.unlocked
+
+
+def _decel(pressed):
+  return structs.CarState.ButtonEvent(type=ButtonType.decelCruise, pressed=pressed)
+
+
+def _decel_types(events):
+  return [(str(event.type), event.pressed) for event in events if event.type == ButtonType.decelCruise]
+
+
+def test_section_long_minus_relock_never_reaches_cruise():
+  # A long cruise - that relocks an unlocked section must not also step the set speed down by 10.
+  state = _section_state()
+  state._apply_section_average(_section_ret(), True, False, False)
+  assert state.section_average.unlocked
+  state.speedcamLongPressFrames = 40
+  state.cruise_buttons = deque([Buttons.SET_DECEL])
+  paddle = structs.CarState.ButtonEvent(type=ButtonType.paddleLeft, pressed=True)
+
+  assert _decel_types(state._hold_speedcam_decel([_decel(True), paddle], False)) == []
+  forwarded = []
+  for _ in range(80):                                       # hold past the long press and one repeat
+    long_press = state._update_speedcam_decel_long_press()
+    state._apply_section_average(_section_ret(), False, False, long_press)
+    forwarded += state._hold_speedcam_decel([], long_press)
+  assert not state.section_average.unlocked                 # relocked
+  assert forwarded == []
+  assert state._hold_speedcam_decel([_decel(False)], False) == []   # release swallowed too
+  assert not state.speedcam_decel_hold
+
+
+def test_section_short_minus_is_handed_to_cruise_at_release():
+  state = _section_state()
+  state._apply_section_average(_section_ret(), True, False, False)
+  state.speedcamLongPressFrames = 40
+  state.cruise_buttons = deque([Buttons.SET_DECEL])
+
+  assert state._hold_speedcam_decel([_decel(True)], False) == []
+  for _ in range(10):
+    assert state._hold_speedcam_decel([], state._update_speedcam_decel_long_press()) == []
+  ret = structs.CarState()
+  ret.buttonEvents = state._hold_speedcam_decel([_decel(False)], False)
+  # cruise.py handles a same-frame press + release as one short press (as for remote buttons)
+  assert _decel_types(ret.buttonEvents) == [("decelCruise", True), ("decelCruise", False)]
+  assert state.section_average.unlocked and not state.speedcam_decel_hold
+
+
+def test_minus_passes_through_while_section_locked():
+  state = _section_state()
+  assert not state.section_average.unlocked
+  press, release = [_decel(True)], [_decel(False)]
+  assert state._hold_speedcam_decel(press, False) == press
+  assert state._hold_speedcam_decel([], True) == []
+  assert state._hold_speedcam_decel(release, False) == release
+
+
+def test_section_allowance_is_inverted_through_factor_and_cluster_ratio():
+  state = _section_state()
+  state._apply_section_average(_section_ret(), True, False, False)       # unlock
+  state.speedcam_time += 60.0                                            # bank a minute
+  ret = _section_ret()
+  state._apply_section_average(ret, False, False, False)
+  allowance = state.section_average.allowance_kph(state.speedcam_time, state.totalDistance)
+  assert ret.vehicleNaviSpeed == pytest.approx(allowance / 1.015 / CLU_RATIO / 1.07)
+  # What the car then drives (carrot_serv x factor, planner x vCluRatio) is the allowance in vEgo units.
+  assert ret.vehicleNaviSpeed * 1.07 * CLU_RATIO == pytest.approx(allowance / 1.015)
+
+
+def test_section_true_average_stays_at_or_below_the_limit_end_to_end():
+  # Congestion banks time; the driver unlocks with the set speed at 130 and the car follows the
+  # section target the way carrot_serv (x factor, cluster speed) and the planner (x vCluRatio) do.
+  # Its true speed is vEgo x TRUE_OVER_VEGO. While banked time is being spent the true running
+  # average must stay at or below the limit.
+  state = _section_state()
+  state.speedcam_v_cruise = 130.0
+  dt = DT_CTRL * 10
+  true_distance = 0.0
+
+  def step(v_ego, unlock=False):
+    nonlocal true_distance
+    ret = _section_ret(v_ego)
+    state.speedcam_time += dt - DT_CTRL                    # _apply_section_average adds DT_CTRL itself
+    state._apply_section_average(ret, unlock, False, False)
+    state.totalDistance += v_ego * dt
+    true_distance += v_ego * TRUE_OVER_VEGO * dt
+    return ret
+
+  for _ in range(int(120 / dt)):
+    step(40 / 3.6 / TRUE_OVER_VEGO)                        # two minutes at a true 40 km/h
+  ret = step(40 / 3.6 / TRUE_OVER_VEGO, unlock=True)
+  assert state.section_average.unlocked
+
+  spent_steps = 0
+  while state.section_average.allowance_kph(state.speedcam_time, state.totalDistance) > 0.0:
+    v_ego = min(130.0, ret.vehicleNaviSpeed * 1.07) * CLU_RATIO / 3.6
+    ret = step(v_ego)
+    elapsed = state.speedcam_time - state.section_average.start_time
+    assert true_distance / elapsed * 3.6 <= 80.0 + 0.1
+    spent_steps += 1
+    assert spent_steps < int(1200 / dt)
+  assert spent_steps * dt > 30                             # the bank was actually used above the limit
+
+
+def _bump_state(cancel=True):
+  state = _speedcam_state()
+  state.speedcamCancelBump = cancel
+  state.speedcam_v_cruise = 60.0
+  state.vehicleNaviEvents = [{"type": "bump", "speed": 0, "kind": 6, "target": 80.0},
+                             {"type": "bump", "speed": 0, "kind": 6, "target": 300.0}]
+  return state
+
+
+def _bump_ret():
+  return SimpleNamespace(vEgo=16.0, speedBumpDistance=80.0)
+
+
+def test_bump_decel_cancel_releases_only_the_decelerating_bump():
+  state = _bump_state()
+  assert state._speedcam_bump_target_kph(80.0) < 60.0        # 35 km/h bump 80 m ahead: slowing below the set 60
+  ret = _bump_ret()
+  state._apply_speedcam_bump_cancel(ret, True, False)
+  assert ret.speedBumpDistance == pytest.approx(300.0)      # the next bump still decelerates
+  assert state.speedcam_input_consumed and state.speedcam_accel_swallow
+  assert state.vehicleNaviEvents[0]["cancelled"]
+
+  ret = _bump_ret()                                         # following frames keep the cancel
+  state.speedcam_input_consumed = state.speedcam_accel_swallow = False
+  state._apply_speedcam_bump_cancel(ret, False, False)
+  assert ret.speedBumpDistance == pytest.approx(300.0)
+
+
+def test_bump_cancel_needs_actual_deceleration_and_its_toggles():
+  far = _bump_state()
+  far.vehicleNaviEvents = [{"type": "bump", "speed": 0, "kind": 6, "target": 400.0}]
+  assert far._speedcam_bump_target_kph(400.0) > 60.0        # not slowing yet
+  ret = SimpleNamespace(vEgo=16.0, speedBumpDistance=400.0)
+  far._apply_speedcam_bump_cancel(ret, True, False)
+  assert ret.speedBumpDistance == pytest.approx(400.0) and not far.speedcam_input_consumed
+
+  off = _bump_state(cancel=False)                           # master or bump toggle off
+  ret = _bump_ret()
+  off._apply_speedcam_bump_cancel(ret, True, True)
+  assert ret.speedBumpDistance == pytest.approx(80.0) and not off.speedcam_input_consumed
+
+  disengaged = _bump_state()
+  disengaged.speedcam_engaged = False
+  ret = _bump_ret()
+  disengaged._apply_speedcam_bump_cancel(ret, False, True)
+  assert ret.speedBumpDistance == pytest.approx(80.0) and not disengaged.speedcam_gas_tok_consumed
+
+
+def test_bump_gas_tap_cancel_and_camera_skip_win_the_input():
+  state = _bump_state()
+  ret = _bump_ret()
+  state._apply_speedcam_bump_cancel(ret, False, True)
+  assert ret.speedBumpDistance == pytest.approx(300.0) and state.speedcam_gas_tok_consumed
+
+  taken = _bump_state()
+  taken.speedcam_input_consumed = True                      # this press already skipped a camera
+  ret = _bump_ret()
+  taken._apply_speedcam_bump_cancel(ret, True, False)
+  assert ret.speedBumpDistance == pytest.approx(80.0)
+
+
+def test_bump_cancel_survives_a_repeated_announcement():
+  state = _bump_state()
+  state._apply_speedcam_bump_cancel(_bump_ret(), True, False)
+  state._add_vehicle_navi_event("bump", 0, 6, 85.0)         # same bump announced again, 5 m further
+  assert len(state.vehicleNaviEvents) == 2 and state.vehicleNaviEvents[0]["cancelled"]
+
+
+def test_decel_cancel_master_gates_every_kind():
+  state = _car_state()
+  assert not (state.speedcamSkipBox or state.speedcamSkipMobileZone or state.speedcamCancelBump
+              or state.speedcamSkipUnknown)
+  state.op_params.get_bool = lambda key: True
+  state._read_speedcam_params()
+  assert state.speedcamSkipBox and state.speedcamSkipMobileZone and state.speedcamCancelBump
+  assert state.speedcamSkipUnknown and state.speedcam_policy.early_lead
+
+
+def test_fixed_camera_always_decelerates():
+  state = _speedcam_state()
+  state.speedcamSkipBox = state.speedcamSkipMobileZone = state.speedcamSkipUnknown = True
+  state.speedcam_policy.add_preview(0xD0, 366, 0.0)        # kind 0 fixed @60
+  ret = SimpleNamespace(vEgo=16.0, speedLimit=60.0, gasPressed=False, vehicleNaviSectionActive=False)
+  assert state._apply_speedcam_policy(ret, True, True, 60.0, True)
+  assert not state.speedcam_accel_swallow                 # + keeps raising the set speed

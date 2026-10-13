@@ -103,10 +103,68 @@ CROSS_SENSOR_CLOSE_CUTIN_MIN_DREL_M = 2.0
 CROSS_SENSOR_CLOSE_CUTIN_MAX_DREL_M = 12.0
 CROSS_SENSOR_CLOSE_CUTIN_MAX_ABS_DPATH_M = 3.0
 CROSS_SENSOR_CLOSE_CUTIN_MIN_VLEAD_MPS = 0.5
+# EnableRadarTracks 3 adopts the OEM SCC object with its lateral position zeroed. When the
+# front/corner radar tracks of that same body put it clearly beside the path, it is an
+# adjacent-lane car (2026-09-24 queue, 2026-10-06 lane change phantoms): do not adopt it.
+# Close-range radar lateral can read 1.3-2.0 m for a car straight ahead, so "near" is 2.0 m.
+FORCED_SCC_NEAR_PATH_M = 2.0
+FORCED_SCC_BESIDE_PATH_M = 2.5
+FORCED_SCC_VISION_MIN_PROB = 0.5
+# During a lane change the old lane can still hold a stopped car the path has already left.
+FORCED_SCC_LANE_CHANGE_KEEP_VLEAD_MPS = 5.0
+FORCED_SCC_REJECT_HOLD_S = 1.0
+LANE_CHANGE_ACTIVE_STATES = frozenset(("preLaneChange", "laneChangeStarting", "laneChangeFinishing"))
 
 
 def _is_corner(point: RadarPointSnapshot) -> bool:
   return point.source.startswith("corner")
+
+
+def _lane_change_active(model: Any) -> bool:
+  meta = getattr(model, "meta", None)
+  return str(getattr(meta, "laneChangeState", "off")) in LANE_CHANGE_ACTIVE_STATES
+
+
+def _forced_scc_lateral_evidence(
+  scc: RadarPointSnapshot,
+  points: tuple[RadarPointSnapshot, ...],
+  path: tuple[tuple[float, float], ...],
+  vision: VisionLead | None,
+  model: Any,
+) -> tuple[bool, bool]:
+  """(beside_path, in_lane) for the SCC body that mode 3 would adopt unconditionally."""
+  if _lane_change_active(model) and scc.v_lead < FORCED_SCC_LANE_CHANGE_KEEP_VLEAD_MPS:
+    return False, True
+  if (
+    vision is not None
+    and vision.probability >= FORCED_SCC_VISION_MIN_PROB
+    and abs(vision.d_rel - scc.d_rel) <= max(
+      SCC_PHYSICAL_MATCH_MIN_DREL_M, scc.d_rel * SCC_PHYSICAL_MATCH_DREL_FRACTION,
+    )
+    and abs(vision.y_rel) <= FORCED_SCC_NEAR_PATH_M
+  ):
+    return False, True
+  supports = [
+    support for support in (
+      _scc_physical_support(
+        scc, (point for point in points if point.source == "frontRadar"), path, require_path=False,
+      ),
+      _scc_physical_support(
+        scc, (point for point in points if _is_corner(point)), path, require_path=False,
+      ),
+    )
+    if support is not None
+  ]
+  if not supports:
+    return False, False  # no physical match: SCC may be the only sensor on this car
+  d_paths = [abs(project_to_model_path(path, point.d_rel, point.y_rel).d_path) for point in supports]
+  # A noisy model path alone must not push a car out: the raw lateral has to agree.
+  if min(d_paths) < FORCED_SCC_NEAR_PATH_M or min(abs(point.y_rel) for point in supports) < FORCED_SCC_NEAR_PATH_M:
+    return False, True
+  # Front and corner on different bodies: reject only if both are clearly beside the path.
+  agree = len(supports) < 2 or abs(supports[0].y_rel - supports[1].y_rel) <= SCC_CORNER_MATCH_MAX_YREL_DELTA_M
+  beside = max(d_paths) >= FORCED_SCC_BESIDE_PATH_M and (agree or min(d_paths) >= FORCED_SCC_BESIDE_PATH_M)
+  return beside, False
 
 
 def _model_path(model: Any) -> tuple[tuple[float, float], ...]:
@@ -467,6 +525,8 @@ class DPathRadarController:
   ) -> None:
     self.primary_matcher = VisionRadarMatcher()
     self.scc_primary_fallback_matcher = VisionRadarMatcher()
+    self.forced_scc_rejected_s: float | None = None  # last frame mode 3 refused a beside-path SCC body
+    self._forced_scc_previous: tuple[float, RadarPointSnapshot] | None = None
     self.enable_radar_tracks = int(enable_radar_tracks)
     self.front_radar_measurement_delay_s = max(
       0.0, float(front_radar_measurement_delay_s),
@@ -644,6 +704,44 @@ class DPathRadarController:
       >= CORROBORATED_STATIONARY_VISION_RANGE_MISMATCH_HOLD_S
     )
 
+  def _reject_forced_scc(
+    self,
+    scc: RadarPointSnapshot,
+    points: tuple[RadarPointSnapshot, ...],
+    path: tuple[tuple[float, float], ...],
+    vision: VisionLead | None,
+    model: Any,
+    time_s: float,
+  ) -> bool:
+    """Mode 3: refuse a beside-path SCC body; hold the refusal briefly through support dropouts."""
+    # SCC commonly reuses track ID 0 for different cars. A distance/speed jump
+    # must not transfer a previous adjacent car's refusal to the new lead.
+    previous = self._forced_scc_previous
+    continuous = False
+    if previous is not None:
+      previous_s, point = previous
+      dt = time_s - previous_s
+      continuous = (
+        0.0 <= dt <= FORCED_SCC_REJECT_HOLD_S
+        and (scc.source, scc.track_id) == (point.source, point.track_id)
+        and abs(scc.d_rel - (point.d_rel + point.v_rel * dt)) <= 2.0
+        and abs(scc.v_rel - point.v_rel) <= 3.0
+      )
+    if not continuous:
+      self.forced_scc_rejected_s = None
+    self._forced_scc_previous = (time_s, scc)
+    beside, in_lane = _forced_scc_lateral_evidence(scc, points, path, vision, model)
+    if in_lane:
+      self.forced_scc_rejected_s = None
+      return False
+    if beside:
+      self.forced_scc_rejected_s = time_s
+      return True
+    return (
+      self.forced_scc_rejected_s is not None
+      and 0.0 <= time_s - self.forced_scc_rejected_s <= FORCED_SCC_REJECT_HOLD_S
+    )
+
   def _points_at_model_time(
     self,
     radar_points: Any,
@@ -813,6 +911,8 @@ class DPathRadarController:
   ) -> DPathRadarOutput:
     path = _model_path(model)
     if len(path) < 2:
+      self.forced_scc_rejected_s = None
+      self._forced_scc_previous = None
       self.primary_matcher.reset()
       self.scc_primary_fallback_matcher.reset()
       self.lead_two_tracker.reset()
@@ -865,10 +965,17 @@ class DPathRadarController:
       # A farther permissive match must not hide a strongly visible nearer car.
       primary_match = None
     if primary_match is None and self.enable_radar_tracks == 3:
-      # 3 uses front-radar/vision matching first, then always trusts the SCC
-      # longitudinal object if matching fails. Vision is the final fallback
-      # only when no SCC object exists.
+      # Mode 3 tries front-radar/vision first, then SCC unless physical lateral
+      # evidence identifies an adjacent car. Vision remains the final fallback.
       primary_match = unconditional_scc_match(points)
+      if primary_match is not None and self._reject_forced_scc(primary_match.point, points, path, vision, model, time_s):
+        primary_match = None
+      elif primary_match is None:
+        self.forced_scc_rejected_s = None
+        self._forced_scc_previous = None
+    else:
+      self.forced_scc_rejected_s = None
+      self._forced_scc_previous = None
     if primary_match is not None:
       self.scc_primary_fallback_matcher.reset()
     elif self.enable_radar_tracks == 2:

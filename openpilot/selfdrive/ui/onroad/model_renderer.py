@@ -12,6 +12,7 @@ from openpilot.common.filter_simple import FirstOrderFilter
 from openpilot.common.params import Params
 from openpilot.selfdrive.locationd.calibrationd import HEIGHT_INIT
 from openpilot.selfdrive.ui.ui_state import ui_state
+from openpilot.selfdrive.ui.radar_display import select_radar_display_points
 from openpilot.selfdrive.ui.vision_status import blindspot_source_packet, blindspot_sources
 from openpilot.selfdrive.ui.road_markings import (
   LANE_DASH_LENGTH_M as LANE_DASH_LENGTH_M, LANE_DASH_GAP_M as LANE_DASH_GAP_M,
@@ -1091,7 +1092,11 @@ class ModelRenderer(Widget):
     lane_x = np.array(lane_line.x, dtype=np.float32)
     lane_z = np.array(lane_line.z, dtype=np.float32)
 
-    for lead_group in (radar_state.leadsLeft, radar_state.leadsRight, radar_state.leadsCenter):
+    display_points = select_radar_display_points(sm, self._carrot_show_radar_info, started_frame=ui_state.started_frame)
+    # 표시전용 배열은 제어 그룹을 대체한다. 오류/빈 상태에서는 예전 점을 남기지 않는다.
+    lead_groups = ((display_points,) if display_points is not None else
+                   (radar_state.leadsLeft, radar_state.leadsRight, radar_state.leadsCenter))
+    for lead_group in lead_groups:
       for lead in lead_group:
         d_rel = float(lead.dRel)
         if d_rel <= 2.5:

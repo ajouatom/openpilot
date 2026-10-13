@@ -98,6 +98,14 @@ The BSD classifier preserves the annotated area's aspect ratio by padding it to 
 
 The camera or vehicle can misclassify markings, and value `2` does not make crossing a solid line safe or legal. The driver must verify road markings and applicable traffic rules.
 
+### Turn-signal lever (Hyundai CAN-FD)
+
+Hyundai CAN-FD cars also read the lever itself (`0x3C1`), separate from the lamp: every press is counted and the lever position (released, one-touch, latched) is known, so a press made while the lamp is already flashing is seen.
+
+- A press after the car centre has crossed the line during a lane change (from the model lane lines) asks for the next change; a press before the crossing is ignored, so it never crosses two lanes at once. Without a detected crossing only a press in the finishing phase counts. The queued request keeps the turn signal on until the next change starts, which needs no steering torque but still passes the existing lane-line and BSD checks; if it stays blocked it is dropped after 5 flashes (about 4 s).
+- `BlinkerLatchedTurn` (km/h, `0` = off): at or below the set speed a one-touch press, then latching the lever after the lamp has lit, gone dark and lit again (about 0.8 s), is a left/right turn; a plain latch or a one-touch press is a lane change (a latch can hold the signal for the next lane); no lane change starts while the lever is still in the one-touch position (a latch passes through it for about 0.1 s). Above the set speed a latched lever is a lane change only. While the turn model is active, however it was started (lever or automatic turn), the cluster background flashes red, the same display as a held paddle.
+- `LaneChangeLeverWait` (default off): when a one-touch lane change is not approved at once (BSD, side vehicle, lane lines: the existing checks), the turn signal is held and the request waits for 5 flashes (about 4 s) from the press. If it clears in time the change starts; otherwise the request is dropped and the remaining flashes do not start it. A latched lever keeps waiting as before.
+
 ## What these settings do not change
 
 - `LaneChangeDelay` delays **entry**; it does not make an active lane change slower.
