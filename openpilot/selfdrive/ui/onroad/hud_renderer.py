@@ -640,6 +640,10 @@ class HudRenderer(Widget):
     return False
 
   def _draw_carrot_traffic_light(self, bx: int, by: int):
+    from openpilot.selfdrive.ui.signal_status import signal_detection_paused, draw_signal_pause
+    if signal_detection_paused(ui_state.sm):
+      draw_signal_pause(bx, by + 270, 32)
+      return
     traffic_state = self._get_traffic_state()
     traffic_state_carrot = self._get_traffic_state_carrot()
 

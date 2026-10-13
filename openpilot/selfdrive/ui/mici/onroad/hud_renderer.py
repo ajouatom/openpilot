@@ -960,6 +960,9 @@ class HudRenderer(Widget):
 
 
   def _get_traffic_light_info(self):
+    from openpilot.selfdrive.ui.signal_status import signal_detection_paused
+    if signal_detection_paused(ui_state.sm):
+      return {"lamp": "paused", "remain": 0}
     # debug demo
     if self._debug_traffic_light:
       demo_list = [
@@ -1030,6 +1033,11 @@ class HudRenderer(Widget):
     info = self._traffic_light_info
     if not info:
       return False
+
+    if info["lamp"] == "paused":
+      from openpilot.selfdrive.ui.signal_status import draw_signal_pause
+      draw_signal_pause(pos_x + 24, pos_y, 24)
+      return True
 
     lamp = info["lamp"]
     remain = str(info["remain"])

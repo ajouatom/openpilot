@@ -1251,6 +1251,7 @@ struct LongitudinalPlan @0xe00b5b3eba12876c {
   # Optional overspeed brake relief. Zero target/percent preserves legacy control.
   cruiseCoastingTarget @62 :Float32;  # fixed physical m/s reference; 0 when ineligible
   cruiseCoastingPercent @63 :UInt8;
+  signalDetectionSuspended @64 :Bool; # fresh vNavi motorway/urban expressway classification
 
   solverExecutionTime @35 :Float32;
 

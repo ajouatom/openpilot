@@ -21,6 +21,7 @@ class OverlayState:
       ss.enabled, ss.experimentalMode, cs.vCruiseCluster, cs.gearShifter.raw,
       cs.brakePressed, cs.gasPressed, cs.brakeHoldActive, cs.softHoldActive, cs.carrotCruise,
       lp.xState, lp.trafficState, lp.allowThrottle, cm.trafficState,
+      getattr(lp, 'signalDetectionSuspended', False),
       radar.leadOne.status, radar.leadOne.radarTrackId, radar.leadTwo.status,
       sm.recv_frame['liveCalibration'],
       sm.valid['modelV2'], sm.alive['modelV2'], sm.valid['carState'], sm.alive['carState'],
