@@ -21,7 +21,30 @@ The shared stable manifest and other maintained branches are untouched.
 
 The contributor's CPU evidence is retained with provenance in
 `tools/jetlink/validation/nav_rl_pc.json`; it is not a local Orin result.
-Integration verification results are recorded below after package validation.
+Independent integration verification:
+
+- Original and adapted ONNX passed full graph checks. ONNX Runtime 1.31.0 on
+  Windows CPU compared 140 continuous frames plus 8 reset/replay frames through
+  the actual client/session/state feedback and Carrot parser. All 18580 driving
+  values and all five next states were exactly equal (maximum absolute error 0).
+  An injected non-finite map state was rejected and all history cleared. Only
+  socket writing was adapted in the private harness because Windows lacks
+  `sendmsg`; production framing and state code were unchanged.
+- Focused desktop checks: 121 passed, 14 skipped for Linux/root-only facilities.
+  Initial broader Windows failures due to absent Unix socket APIs are covered by
+  Linux CI, not counted as desktop passes. Two obsolete expectations that Jetson
+  still requests Cinque were corrected; explicit new-model tests cover that path.
+- Runtime bundle source `955a6f2d39a8cff5a46214113689e6cfba79533e` was built from
+  committed sources, signed with the existing release authority and published to
+  its immutable NAS directory. HTTPS bundle length/SHA256, manifest signature,
+  original ONNX download length and both bootstrap pin filenames were verified.
+  The private signing key is not in the bundle. Shared stable was not modified.
+- Linux Jetson integration CI now also runs on `carrot-nav` and installs ONNX for
+  the new graph/contract tests. Its run result is reported with the publication.
+
+Private reproducible evidence: `.analysis/scratch/2026-10-13-jetson-nav/`,
+including `cpu/full-cpu-report.json` and `publication.json`. CPU timing here is
+not TensorRT or physical USB timing.
 
 No vehicle installation, Jetson build or road validation has been performed.
 The user deferred physical Jetson work until it is connected. Host recurrent

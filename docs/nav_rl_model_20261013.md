@@ -4,6 +4,10 @@ The user requested the new nav model and its ONNX for later Jetson work, explici
 
 ## Artifact identity
 
+Later user request: Jetson selection is now updated separately by the
+[Jetson navigation integration](jetson_nav_integration_20261013.md). The
+eGPU-only scope above describes the original artifact update.
+
 Source: comma [a03bb1d4e80050cae0007780ecb8eb7cf06d0cb9](https://github.com/commaai/openpilot/commit/a03bb1d4e80050cae0007780ecb8eb7cf06d0cb9), with subject `rl nav driving model (80eedcdd/12864)`. Both official LFS pointers are in this commit. The complete embedded checkpoint is identical in PKL and ONNX:
 
 `cf8f6120-49ee-48f8-b2d7-d663a4708271/56320/80eedcdd-f97b-46d0-9b94-780685292acf/12864`
