@@ -500,6 +500,7 @@ class LongitudinalPlanner:
 
     longitudinalPlan.xState = carrot.xState.value
     longitudinalPlan.trafficState = carrot.trafficState.value
+    longitudinalPlan.signalDetectionSuspended = carrot.signal_detection_suspended
     longitudinalPlan.cruiseTarget = self.v_cruise_kph
     longitudinalPlan.cruiseCoastingTarget = self.coasting_target
     longitudinalPlan.cruiseCoastingPercent = self.coasting_percent

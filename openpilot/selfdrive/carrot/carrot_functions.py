@@ -78,6 +78,7 @@ class CarrotPlanner:
     self.stop_prepare = stop_prepare if stop_prepare is not None else self._prepare_runtime.prepare
     self.prepare_decision = None
     self.prepare_control_active = False
+    self.signal_detection_suspended = False
     self.params = Params()
     self.params_count = 0
     self.frame = 0
@@ -388,18 +389,19 @@ class CarrotPlanner:
     atc_active = False
     carrot_man = get_carrot_man(sm)
     if carrot_man is not None:
+      traffic_state = 0 if self.signal_detection_suspended else carrot_man.trafficState
       atc_turn_left = carrot_man.atcType in ["turn left", "atc left"]
       trigger_start = self.carrot_stay_stop = False
       if atc_turn_left or sm['carState'].leftBlinker:
-        if self.trafficState_carrot == 1 and carrot_man.trafficState == 3: # red -> left triggered
+        if self.trafficState_carrot == 1 and traffic_state == 3: # red -> left triggered
           trigger_start = True
-        elif carrot_man.trafficState in [1, 2]:
+        elif traffic_state in [1, 2]:
           self.carrot_stay_stop = True
-      elif self.trafficState_carrot == 1 and carrot_man.trafficState == 2:  # red -> green triggered
+      elif self.trafficState_carrot == 1 and traffic_state == 2:  # red -> green triggered
         trigger_start = True
       else:
         trigger_start = False
-      self.trafficState_carrot = carrot_man.trafficState
+      self.trafficState_carrot = traffic_state
 
       if trigger_start:
         if self.soft_hold_active > 0:
@@ -459,6 +461,17 @@ class CarrotPlanner:
 
   def update(self, sm, v_cruise_kph, mode, *, signal_observation=None, signal_context=None,
              start_observation=None, start_context=None, prepare_observation=None, prepare_context=None):
+    from openpilot.selfdrive.carrot.signal_road_policy import signal_detection_suspended
+    suspended = signal_detection_suspended(sm)
+    if suspended != self.signal_detection_suspended:
+      self.vFilter = MyMovingAverage(10)
+      self.stopSignCount = self.startSignCount = 0
+    self.signal_detection_suspended = suspended
+    if suspended and sm['carState'].softHoldActive == 0 and self.user_stop_distance < 0:
+      if self.xState in (XState.e2eStop, XState.e2eStopped, XState.e2ePrepare, XState.e2eStopPrepare):
+        self.xState = XState.e2eCruise
+        self.actual_stop_distance = 0.0
+        self.stopping_count = 0
     self._params_update()
     self._update_driving_mode(sm)
     self.leadAccelResponse = get_mode_lead_response(get_lead_response_for_gap(
@@ -525,7 +538,11 @@ class CarrotPlanner:
 
     trafficState_last = self.trafficState
     #self.check_model_stopping(v, v_ego, self.xStop, y)
-    self.check_model_stopping(v_cruise, v, v_ego, a_ego, x[-1], y, radarstate.leadOne.dRel if lead_detected else 1000)
+    if suspended:
+      self.trafficState = TrafficState.off
+      self.stopSignCount = self.startSignCount = 0
+    else:
+      self.check_model_stopping(v_cruise, v, v_ego, a_ego, x[-1], y, radarstate.leadOne.dRel if lead_detected else 1000)
 
     if self.myDrivingMode == DrivingMode.High or self.trafficLightDetectMode == 0:
       self.trafficState = TrafficState.off
@@ -537,7 +554,7 @@ class CarrotPlanner:
       context = start_context or {'now': time.monotonic(), 'enabled': False, 'valid': False, 'drive': False}
       self.start_decision = self.start_guard.update(
         context['now'], start_observation,
-        enabled=context['enabled'], valid=context['valid'],
+        enabled=context['enabled'] and not suspended, valid=context['valid'],
         drive=context['drive'], gas=carstate.gasPressed, speed=v_ego,
         departure=self.trafficState == TrafficState.green or lead_detected or
                   self.xState not in (XState.e2eStop, XState.e2eStopped))
@@ -555,7 +572,7 @@ class CarrotPlanner:
       context = signal_context or {'now': time.monotonic(), 'enabled': False, 'valid': False, 'drive': False}
       self.signal_decision = self.signal_assist.update(
         context['now'], signal_observation,
-        enabled=context['enabled'] and self.myDrivingMode != DrivingMode.High and self.trafficLightDetectMode != 0,
+        enabled=context['enabled'] and not suspended and self.myDrivingMode != DrivingMode.High and self.trafficLightDetectMode != 0,
         valid=context['valid'], drive=context['drive'],
         gas=carstate.gasPressed, speed=v_ego, model_distance=stop_model_x_rl,
         model_y=y[-1], comfort_brake=mode_comfort_brake, lead=lead_detected,
@@ -628,7 +645,7 @@ class CarrotPlanner:
       elif self.atc_active:
         if carstate.gasPressed:
           self.xState = XState.e2eCruise
-      elif v_ego_kph < 5.0 and self.trafficState != TrafficState.green:
+      elif v_ego_kph < 5.0 and self.trafficState != TrafficState.green and not suspended:
         self.xState = XState.e2eStop
         self.actual_stop_distance = 5.0 #2.0
       elif v_ego_kph > 5.0: # and stop_model_x > 30.0:
@@ -648,6 +665,8 @@ class CarrotPlanner:
       stop_model_x = 1000.0
 
     if self.user_stop_distance >= 0 and not start_hold:
+      if suspended:
+        stop_model_x = 0.0  # highway policy must not cancel an explicit user stop
       self.user_stop_distance = max(0, self.user_stop_distance - v_ego * DT_MDL)
       self.actual_stop_distance = self.user_stop_distance
       self.xState = XState.e2eStop if self.user_stop_distance > 0 else XState.e2eStopped
@@ -715,7 +734,7 @@ class CarrotPlanner:
       context = prepare_context or {'now': time.monotonic(), 'enabled': False, 'valid': False, 'drive': False}
       self.prepare_decision = self.stop_prepare.update(
         context['now'], prepare_observation,
-        enabled=context['enabled'] and self.myDrivingMode != DrivingMode.High and self.trafficLightDetectMode != 0,
+        enabled=context['enabled'] and not suspended and self.myDrivingMode != DrivingMode.High and self.trafficLightDetectMode != 0,
         valid=context['valid'], drive=context['drive'],
         speed=v_ego, gas=carstate.gasPressed, brake=carstate.brakePressed,
         lead=lead_detected or radarstate.leadTwo.status,

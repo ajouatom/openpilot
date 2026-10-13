@@ -5,6 +5,7 @@ from openpilot.selfdrive.ui.ui_state import ui_state
 from openpilot.system.ui.widgets import Widget
 from openpilot.common.filter_simple import FirstOrderFilter
 from openpilot.selfdrive.ui.mici.onroad.confidence_ball import draw_circle_gradient
+from openpilot.selfdrive.ui.signal_status import signal_detection_paused, draw_signal_pause
 
 
 class TrafficLight(Widget):
@@ -25,6 +26,13 @@ class TrafficLight(Widget):
   # --------------------------------------------------
 
   def _update_state(self):
+    if signal_detection_paused(ui_state.sm):
+      self._current_state = 3
+      self._green_start_time = None
+      self._alpha_filter.x = 1.0
+      return
+    if self._current_state == 3:
+      self._alpha_filter.x = 0.0
     state = ui_state.sm["longitudinalPlan"].trafficState
 
     visible = False
@@ -71,6 +79,10 @@ class TrafficLight(Widget):
 
     center_x = content_rect.x + content_rect.width - self._radius
     center_y = self.rect.y + self._radius
+
+    if self._current_state == 3:
+      draw_signal_pause(center_x, center_y, self._radius)
+      return
 
     # 
     if self._current_state == 1:
