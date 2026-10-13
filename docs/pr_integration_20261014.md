@@ -57,5 +57,36 @@ not a measured calibration for every car or proof of camera-average compliance.
 - KO/EN guides and setting-level Wiki descriptions cover the new behavior. New
   MANUAL text is generated/validated with the current catalog.
 
-Linux CI, publication and the automatic NAS replay verification are recorded after
-completion. Synthetic and recorded-input tests are not closed-loop road validation.
+The nav port also passes 750 focused desktop tests. Its pre-existing absence of
+the wip Bosch context adapter is preserved. The first built Linux integration run
+found one test-only logging incompatibility: carlog emitted the startup warning
+without propagating it to pytest's root capture. Check the logger call directly;
+do not alter the receiver or logging policy to satisfy the test.
+
+Native x86 and ARM each pass 207 kernel/CAN tests, 586 subtests and 794 radar
+regressions. The NAS workflow passes its 291 + 40 + 254 + 1,087 receiver/replay
+checks. Wiki commit `e4f2435` publishes 26 Korean/English manual descriptions;
+the generator validation and subsequent Wiki workflow pass.
+
+Feature commits are wip `f513c8f8bb` and nav `57fc2df0b4`; test portability and
+Wiki-publication notes are wip `504a902155` and nav `099b4681d8`. All are
+single-parent commits. Existing uncommitted edits were preserved, including the
+independent local NNFF catalog addition and its rebased count tests.
+
+The [wip full Linux run](https://github.com/ajouatom/openpilot/actions/runs/38486400559)
+passes native compilation, 598 new integration checks (including actual radarcan
+IPC/recovery), 726 Bosch checks, 116 UI checks and 1,035 model/monitoring/Bluetooth
+checks. The separate startup, DM cadence, speed and update-lifecycle jobs pass.
+
+The [nav full Linux run](https://github.com/ajouatom/openpilot/actions/runs/38486410678)
+also passes: native compilation, 597 new integration checks, 116 UI checks and
+1,040 model/monitoring/Bluetooth checks, plus the separate lifecycle jobs. The
+one-test integration-count difference is wip's existing Bosch context test.
+
+The automatic NAS updater reports `504a902155e47f6921b1c67e90f22cd8f61efa2b`.
+Public health and an existing upload-result page respond successfully; its actual
+recalculated payload has 1,199 frames and source version `ef933ee9237806ede338`,
+matching the updater's verified replay. Retain the private route and response hash
+in `.analysis/archive/2026-10-14-pr-integration/`, never in the public guide.
+
+Synthetic and recorded-input tests are not closed-loop road validation.
