@@ -11,8 +11,8 @@ manual regions from public Wiki commit `fbe96d08c066844a60dc909500c1e2d9393bca5d
 It describes observed SET/RES speed synchronization for the exact 2022 RAV4
 platform with PCM and direct longitudinal control, local-input priority, and
 the preserved lower deceleration targets. It does not enable corner hardware
-or add button transmission. This patch is for review with the code PR; the live
-Wiki has not been changed.
+or add button transmission. The reviewed text was published to the live Wiki on
+October 14 in commit `e4f2435`; the patch remains as the original review artifact.
 
 ```sh
 git apply --check --unidiff-zero /absolute/path/to/rav4-pcm-mode0.patch
@@ -28,7 +28,7 @@ before publishing. Reconcile later manual edits if the check fails.
 regions from Wiki commit `fbe96d08c066844a60dc909500c1e2d9393bca5d`. It describes
 the separate ARS display stream on the standard device screen in mode 3,
 unchanged control targets, freshness checks, and the web/mici limitation.
-The live Wiki has not been changed.
+The reviewed text was published to the live Wiki on October 14 in commit `e4f2435`.
 
 ```sh
 git apply --check --unidiff-zero /absolute/path/to/rav4-radar-display.patch
