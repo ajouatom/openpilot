@@ -19,6 +19,7 @@ from openpilot.system.ui.lib.multilang import tr
 from openpilot.system.ui.lib.text_measure import measure_text_cached
 from openpilot.system.ui.lib.text_draw import draw_text_ui_style
 from openpilot.system.ui.widgets import Widget
+from openpilot.system.ui.lib.overlay_cache import OverlayLayer
 from openpilot.common.filter_simple import FirstOrderFilter
 from openpilot.cereal import log
 from openpilot.common.params import Params
@@ -175,6 +176,10 @@ class TurnIntent(Widget):
 class HudRenderer(Widget):
   def __init__(self):
     super().__init__()
+    self._overlay = OverlayLayer(1)
+    self._overlay_state = None
+    self._traffic_light_info = None
+    self._cruise_speed_animation_started = 0.0
     """Initialize the HUD renderer."""
     self._debug_speed_panel = False
     self.is_cruise_set: bool = False
@@ -234,6 +239,10 @@ class HudRenderer(Widget):
 
   def _update_state(self) -> None:
     """Update HUD state based on car state and controls state."""
+    # Expiry/colour changes are evaluated on every UI frame, including reuse.
+    self._traffic_light_info = self._get_traffic_light_info()
+    self._wheel_alpha_filter.update(255 * 0.95)
+    self._wheel_y_filter.update(0)
     sm = ui_state.sm
     if sm.recv_frame["carState"] < ui_state.started_frame:
       self.is_cruise_set = False
@@ -291,6 +300,13 @@ class HudRenderer(Widget):
 
   def _render(self, rect: rl.Rectangle) -> None:
     """Render HUD elements to the screen."""
+    state = self._overlay_state
+    key = (state.key if state else None, self._traffic_light_info, self._can_draw_top_icons, self._show_wheel_critical)
+    self._overlay.draw(rect, self._paint, key, enabled=state is not None and state.enabled,
+                       urgent=state is not None and state.urgent)
+    self._draw_cruise_speed_animation(rect)
+
+  def _paint(self, rect: rl.Rectangle) -> None:
 
     # self._torque_bar.render(rect) # 아이콘에 토크 적용: 토크바 미사용
 
@@ -301,7 +317,6 @@ class HudRenderer(Widget):
 
     self._draw_egpu_badge(rect)
 
-    self._draw_cruise_speed_animation(rect)
 
   def _draw_egpu_badge(self, rect: rl.Rectangle) -> None:
     # Keep runtime state visible while the shared USB hub re-enumerates; a
@@ -360,12 +375,16 @@ class HudRenderer(Widget):
 
     self._cruise_speed_animation_text = cruise_text
     self._cruise_speed_animation_time = CRUISE_SPEED_ANIMATION_START
+    self._cruise_speed_animation_started = time.monotonic()
 
   def _draw_cruise_speed_animation(self, rect: rl.Rectangle) -> None:
     if self._cruise_speed_animation_time <= 0 or not self._cruise_speed_animation_text:
       return
 
-    self._cruise_speed_animation_time -= CRUISE_SPEED_ANIMATION_STEP
+    elapsed = time.monotonic() - self._cruise_speed_animation_started
+    self._cruise_speed_animation_time = max(0.0, CRUISE_SPEED_ANIMATION_START - CRUISE_SPEED_ANIMATION_STEP * (1.0 + elapsed * 20.0))
+    if elapsed >= 0.5:
+      return
     animation_time = self._cruise_speed_animation_time
     interpolation_time = min(animation_time, CRUISE_SPEED_ANIMATION_MAX)
 
@@ -408,8 +427,6 @@ class HudRenderer(Widget):
     wheel_txt = self._txt_wheel_critical if self._show_wheel_critical else self._txt_wheel
 
     # Always visible (no hide). We keep filters but drive them to stable values.
-    self._wheel_alpha_filter.update(255 * 0.95)
-    self._wheel_y_filter.update(0)
 
     # pos (TOP-left)
     margin_x = 18
@@ -1010,7 +1027,7 @@ class HudRenderer(Widget):
     draw_text_ui_style(txt, cx, cy, font_size, color, font=self._font_display, border_width=1.0, shadow_offset=8.0, align="center", y_offset=0.0)
 
   def _draw_traffic_light_info(self, pos_x: int, pos_y: int) -> bool:
-    info = self._get_traffic_light_info()
+    info = self._traffic_light_info
     if not info:
       return False
 
