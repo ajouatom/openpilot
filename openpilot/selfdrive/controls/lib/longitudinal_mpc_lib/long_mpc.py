@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 import os
 import time
+import math
+import struct
 import numpy as np
 from openpilot.cereal import log
 from opendbc.car.interfaces import ACCEL_MIN
@@ -61,6 +63,7 @@ T_IDXS = np.array(T_IDXS_LST)
 FCW_IDXS = T_IDXS < 5.0
 PRED_DANGER_IDXS = (T_IDXS > 0.2) & (T_IDXS < 3.0)
 T_DIFFS = np.diff(T_IDXS, prepend=[0.])
+A_CHANGE_FACTORS = tuple(np.interp(t, [0.0, 1.0, 2.0], [1.0, 1.0, 0.0]) for t in T_IDXS[:N])
 COMFORT_BRAKE = 2.5
 STOP_DISTANCE = 6.0
 
@@ -265,6 +268,8 @@ class LongitudinalMpc:
 
 
   def reset(self):
+    self._cost_key = None
+    self._cost_solver = None
     # self.solver = AcadosOcpSolverCython(MODEL_NAME, ACADOS_SOLVER_TYPE, N)
     self.solver.reset()
     # self.solver.options_set('print_level', 2)
@@ -301,11 +306,18 @@ class LongitudinalMpc:
     self.set_weights()
 
   def set_cost_weights(self, cost_weights, constraint_cost_weights):
+    # Compare the actual double values (including signed zero), not a rounded
+    # tuning key. Reset and solver replacement must always resend the costs.
+    values = (*cost_weights, *constraint_cost_weights)
+    key = (self.mode, struct.pack('10d', *values)) if all(map(math.isfinite, values)) else None
+    if key is not None and key == self._cost_key and self.solver is self._cost_solver:
+      return
+    self._cost_key = None
     W = np.asfortranarray(np.diag(cost_weights))
     for i in range(N):
       # TODO don't hardcode A_CHANGE_COST idx
       # reduce the cost on (a-a_prev) later in the horizon.
-      W[4,4] = cost_weights[4] * np.interp(T_IDXS[i], [0.0, 1.0, 2.0], [1.0, 1.0, 0.0])
+      W[4,4] = cost_weights[4] * A_CHANGE_FACTORS[i]
       self.solver.cost_set(i, 'W', W)
     # Setting the slice without the copy make the array not contiguous,
     # causing issues with the C interface.
@@ -315,6 +327,8 @@ class LongitudinalMpc:
     Zl = np.array(constraint_cost_weights)
     for i in range(N):
       self.solver.cost_set(i, 'Zl', Zl)
+    self._cost_key = key
+    self._cost_solver = self.solver
 
   def set_weights(self, prev_accel_constraint=True,
                   personality=log.LongitudinalPersonality.standard,
@@ -547,7 +561,8 @@ class LongitudinalMpc:
     # base TF, cruise/map targets or braking constraints. Level 5 bypasses the
     # opening-gap memory; braking-distance memory applies to every level.
     gap_v = np.maximum(0.0, self.x_sol[:,1] + v_ego - self.x_sol[0,1])
-    gap_x = np.cumsum(np.diff(T_IDXS, prepend=0.0) * np.concatenate(([gap_v[0]], (gap_v[1:] + gap_v[:-1]) * 0.5)))
+    gap_x = np.cumsum(T_DIFFS * np.concatenate(([gap_v[0]], (gap_v[1:] + gap_v[:-1]) * 0.5)))
+    gap_safe_distance = get_safe_obstacle_distance(gap_v, t_follow, comfort_brake, stop_distance)
     self.lead_gap_margins[:] = 0.0
     comfort_reliefs = np.zeros_like(self.lead_gap_margins)
     for lead_index, (lead, lead_xv) in enumerate(((radarstate.leadOne, lead_xv_0), (radarstate.leadTwo, lead_xv_1))):
@@ -558,14 +573,15 @@ class LongitudinalMpc:
         and lead.status and lead.radar
       )
       state = self.lead_gap_states[lead_index]
+      physical_gaps = lead_xv[:,0] - gap_x
+      desired_distances = desired_follow_distance(gap_v, lead_xv[:,1], comfort_brake, stop_distance, t_follow)
       state.update(level=carrot.leadAccelResponse, track_id=lead.radarTrackId, enabled=eligible, dt=self.dt,
                    ego_speed=v_ego, lead_speed=lead.vLead if eligible else 0.0, relative_speed=lead.vRel if eligible else 0.0,
                    distance=lead.dRel if eligible else 0.0, desired_distance=self.base_desired_distances[lead_index],
                    base_tf=t_follow, stop_distance=stop_distance)
       self.lead_gap_margins[:,lead_index] = state.margins(
         level=carrot.leadAccelResponse, times=T_IDXS, ego_speeds=gap_v, lead_speeds=lead_xv[:,1], base_tf=t_follow,
-        lead_distances=lead_xv[:,0] - gap_x,
-        desired_distances=desired_follow_distance(gap_v, lead_xv[:,1], comfort_brake, stop_distance, t_follow), stop_distance=stop_distance)
+        lead_distances=physical_gaps, desired_distances=desired_distances, stop_distance=stop_distance)
       braking = self.braking_gap_states[lead_index]
       braking.update(enabled=eligible, track_id=lead.radarTrackId, dt=self.dt,
                      distance=lead.dRel if eligible else 0.0, ego_speed=v_ego, ego_accel=measured_a_ego,
@@ -573,15 +589,14 @@ class LongitudinalMpc:
                      relative_speed=lead.vRel if eligible else 0.0, base_tf=t_follow, stop_distance=stop_distance,
                      desired_distance=self.base_desired_distances[lead_index])
       braking_margins = braking.margins(T_IDXS, gap_v, lead_xv[:,1],
-                                        desired_follow_distance(gap_v, lead_xv[:,1], comfort_brake, stop_distance, t_follow),
+                                        desired_distances,
                                         t_follow, stop_distance)
       # Both memories describe comfort space; never add the same distance twice.
       self.lead_gap_margins[:,lead_index] = np.maximum(self.lead_gap_margins[:,lead_index], braking_margins)
-      danger = lead_xv[:,0] + get_stopped_equivalence_factor(lead_xv[:,1]) - gap_x - self.params[0,5] * get_safe_obstacle_distance(
-        gap_v, t_follow, comfort_brake, stop_distance)
+      danger = lead_xv[:,0] + get_stopped_equivalence_factor(lead_xv[:,1]) - gap_x - self.params[0,5] * gap_safe_distance
       relief = braking.comfort_relief(dt=self.dt, enabled=eligible and self.lead_gap_margins[0,lead_index] <= 0.01,
                                      base_tf=t_follow, ego_speeds=gap_v, lead_speeds=lead_xv[:,1],
-                                     lead_accel=lead.aLeadK if eligible else 0.0, physical_gaps=lead_xv[:,0] - gap_x,
+                                     lead_accel=lead.aLeadK if eligible else 0.0, physical_gaps=physical_gaps,
                                      danger_margins=danger, times=T_IDXS, stop_distance=stop_distance)
       self.lead_gap_margins[:,lead_index] -= relief
       comfort_reliefs[:,lead_index] = relief

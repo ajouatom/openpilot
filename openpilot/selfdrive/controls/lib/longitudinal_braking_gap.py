@@ -63,6 +63,9 @@ class BrakingGapState:
       self.floor = None
 
   def margins(self, times, ego_speeds, lead_speeds, desired_distances, base_tf, stop_distance):
+    if self.floor is None:
+      # An expired floor can still retain a small margin. Preserve that value.
+      return np.full_like(times, self.margin)
     predicted = copy(self)
     result = np.zeros_like(times)
     previous = 0.0

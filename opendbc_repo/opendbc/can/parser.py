@@ -150,6 +150,7 @@ class CANParser:
     self.message_states: dict[int, MessageState] = {}
     self.seen_addresses: set[int] = set()
     self.controls_ready = False
+    self._updated_lists: list[list[float]] = []
 
     for name_or_addr, freq in messages:
       if isinstance(name_or_addr, numbers.Number):
@@ -233,9 +234,11 @@ class CANParser:
     if strings and not isinstance(strings[0], list | tuple):
       strings = [strings]
 
-    for addr in self.addresses:
-      for k in self.vl_all[addr]:
-        self.vl_all[addr][k].clear()
+    # Only lists populated by the previous update need clearing. Retain their
+    # identity: vl_all aliases and consumers holding a list see the same clear.
+    for values in self._updated_lists:
+      values.clear()
+    self._updated_lists.clear()
 
     updated_addrs: set[int] = set()
     for entry in strings:
@@ -252,6 +255,8 @@ class CANParser:
         if state is None or len(dat) > 64:
           continue
         if state.parse(t, dat):
+          if address not in updated_addrs:
+            self._updated_lists.extend(state.all_vals)
           updated_addrs.add(address)
           self.dat[address] = bytes(dat)
 

@@ -1,4 +1,6 @@
 import ast
+import math
+import struct
 from copy import copy
 from pathlib import Path
 from types import SimpleNamespace
@@ -26,7 +28,7 @@ def load_mpc_update(path):
     def cost_set(self, i, key, value): self.weights[i, key] = np.copy(value)
     def constraints_set(self, *args): pass
 
-  ns = {'np': np, 'log': SimpleNamespace(LongitudinalPersonality=SimpleNamespace(standard=1, aggressive=0)),
+  ns = {'np': np, 'math': math, 'struct': struct, 'log': SimpleNamespace(LongitudinalPersonality=SimpleNamespace(standard=1, aggressive=0)),
             'DT_MDL': .05, 'N': 12, 'COMFORT_BRAKE': 2.5, 'STOP_DISTANCE': 6., 'ACCEL_MIN': -3.5, 'LEAD_ACCEL_TAU': 1.5,
             'MODEL_NAME': 'long', 'ACADOS_SOLVER_TYPE': 'SQP_RTI', 'COST_DIM': 6, 'COST_E_DIM': 5, 'X_DIM': 3, 'PARAM_DIM': 8,
             'A_CHANGE_COST': 200., 'A_CHANGE_COST_STARTING': 10., 'LEAD_DANGER_FACTOR': .8, 'LIMIT_COST': 1e6,
@@ -42,6 +44,7 @@ def load_mpc_update(path):
             'LaneChangeGapPlan': LaneChangeGapPlan, 'cutout_obstacle_relief': cutout_obstacle_relief}
   ns['T_IDXS'] = 10*(np.arange(13)/12)**2
   ns['T_DIFFS'] = np.diff(ns['T_IDXS'], prepend=0.)
+  ns['A_CHANGE_FACTORS'] = tuple(np.interp(t, [0., 1., 2.], [1., 1., 0.]) for t in ns['T_IDXS'][:12])
   ns['FCW_IDXS'] = ns['T_IDXS'] < 5
   ns['PRED_DANGER_IDXS'] = (ns['T_IDXS'] > .2) & (ns['T_IDXS'] < 3.)
   tree = ast.parse(path.read_text(encoding='utf-8'))
