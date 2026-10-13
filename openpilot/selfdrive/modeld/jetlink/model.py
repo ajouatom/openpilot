@@ -101,6 +101,10 @@ class Warp:
     prepared = time.monotonic()
     result = self.run_warp(**self.inputs, **frames)
     submitted = time.monotonic()
+    if prepare is None:
+      output = result.numpy()
+      self.timings = (prepared - started, submitted - prepared, time.monotonic() - submitted)
+      return output
     # QCOM submission is asynchronous. Only independent CPU context preparation
     # may overlap it: no second camera frame, GPU call or buffer replacement.
     # Even if preparation fails, drain this submission before local fallback
@@ -152,7 +156,6 @@ class JoiningModel:
     self.error = ''
     self.small_runs = 0
     self.last_slow_log = 0.
-    self.diagnostics = None
 
   def update(self, sm, metadata):
     self.source_sof = metadata.timestamp_sof if self.phase_enabled else 0
@@ -228,15 +231,10 @@ class JoiningModel:
         self.next_join = time.monotonic() + 5
     if self.client is not None:
       try:
-        overlap = getattr(self.client, 'peer', {}).get('carrot_host') == 'jetson'
-        if not overlap:
-          fill_inputs(self.views, inputs, self.prev_desire)
+        fill_inputs(self.views, inputs, self.prev_desire)
         self.frame = (self.frame + 1) & 0xFFFFFFFF
         started = time.monotonic()
-        if overlap:
-          images = self.warp(bufs, transforms, prepare=lambda: fill_inputs(self.views, inputs, self.prev_desire))
-        else:
-          images = self.warp(bufs, transforms)
+        images = self.warp(bufs, transforms)
         warped = time.monotonic()
         result = self.client.infer(images, self.packed, self.frame, self.reset, source_sof=self.source_sof)
         replied = time.monotonic()
@@ -254,13 +252,6 @@ class JoiningModel:
         if os.getenv('SEND_RAW_PRED'):
           parsed['raw_pred'] = result.copy()
         finished = time.monotonic()
-        if overlap:
-          if self.diagnostics is None:
-            from openpilot.common.runtime_diagnostics import RuntimeDiagnostics
-            self.diagnostics = RuntimeDiagnostics('jetlink_prepare', cloudlog.event)
-          self.diagnostics.record(**self.warp.stage_timings, roundtrip_ms=(replied - warped) * 1000,
-                                  parse_ms=(finished - replied) * 1000,
-                                  context={'frame_id': self.frame, 'overlap': True})
         if finished - started > .05 and finished - self.last_slow_log >= 1:
           self.last_slow_log = finished
           cloudlog.warning('Jetlink slow frame %d: warp %.2f (prepare/submit/read %.2f/%.2f/%.2f), '

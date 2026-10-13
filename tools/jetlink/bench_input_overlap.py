@@ -80,7 +80,10 @@ def main():
         image = warp(bufs, transforms)
       elapsed = time.perf_counter() - started
       observed.append(hashlib.sha256(image.tobytes() + packed.tobytes() + previous.tobytes()).hexdigest())
-      rows.append([elapsed * 1000, *warp.stage_timings.values()])
+      stages = (warp.stage_timings if overlap else
+                dict(zip(('warp_prepare_ms', 'warp_submit_ms', 'input_prepare_ms', 'warp_read_ms'),
+                         (warp.timings[0] * 1000, warp.timings[1] * 1000, 0., warp.timings[2] * 1000), strict=True)))
+      rows.append([elapsed * 1000, *stages.values()])
       time.sleep(max(0, .05 - (time.perf_counter() - started)))
     if hashes and observed != hashes:
       raise RuntimeError('Image/context/desire parity failed')
