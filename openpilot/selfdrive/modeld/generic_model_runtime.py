@@ -127,6 +127,30 @@ class GenericModelRuntime:
     self.transforms = input_view(self.device_buffer, (2, 3, 3), dtypes.float32)
     self.frames = input_view(self.device_buffer, (2, self.frame_size), dtypes.uint8, self.frames_offset)
 
+  def init_recovery_state(self):
+    from tinygrad import Tensor
+    # Separate allocations, preserving the compiled graph's required aliases.
+    self.recovery_state = {
+      name: Tensor(np.zeros(shape, dtype=dtype), device=device).realize()
+      for name, (shape, dtype, device) in self.specs.items() if name in self.state_pairs
+    }
+
+  def save_recovery_state(self):
+    from tinygrad import Device
+    for name, backup in self.recovery_state.items():
+      backup._buffer().copy_from(self.queues[name]._buffer())
+    Device[self.device].synchronize()
+
+  def restore_recovery_state(self):
+    from tinygrad import Device
+    # Download/check only on failure. Never restore non-finite hidden state.
+    for backup in self.recovery_state.values():
+      if not np.isfinite(backup.numpy()).all():
+        raise ValueError('invalid eGPU recovery state')
+    for name, backup in self.recovery_state.items():
+      self.queues[name]._buffer().copy_from(backup._buffer())
+    Device[self.device].synchronize()
+
   def run(self):
     progress = getattr(self, 'progress', lambda stage: None)
     started, cpu_started = time.monotonic(), time.thread_time()

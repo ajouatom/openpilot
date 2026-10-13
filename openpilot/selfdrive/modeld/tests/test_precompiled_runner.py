@@ -226,3 +226,51 @@ def test_fused_graph_publishes_completed_policy_after_camera_drop(monkeypatch):
     assert model.process.stdin.getvalue() == b'r'
   finally:
     model.process = None
+
+
+@pytest.mark.parametrize('responses,age,success', [([b'1\n', b'0\n', b'1\n'], .05, True),
+                                                ([b'1\n', b'0\n', b'0\n'], .05, False),
+                                                ([b'0\n'], .05, False),
+                                                ([b'1\n', b'0\n'], .101, False)])
+def test_hold_protocol_keeps_old_timestamp_and_desire_without_parsing(monkeypatch, responses, age, success):
+  model = object.__new__(runner.PrecompiledModelState)
+  model.process = SimpleNamespace(stdin=io.BytesIO())
+  model.first_run, model.frame_size = True, 16
+  model.last_good_time, model.held_output = None, False
+  model.prev_desire = np.zeros(8, np.float32)
+  model.views = {name: np.zeros(shape, np.float32) for name, shape in
+                 {'img': 16, 'big_img': 16, 'desire': 8, 'traffic_convention': 2, 'action_t': 2,
+                  'tfm': (3, 3), 'big_tfm': (3, 3)}.items()}
+  model.output, model.output_slices = np.array([1., 2.]), {'action': slice(0, 2)}
+  parsed = []
+  model.parser = SimpleNamespace(parse_outputs=lambda value: parsed.append(value) or value)
+  replies = iter(responses)
+  model._receive = lambda _: next(replies)
+  clock = SimpleNamespace(now=0.)
+  monkeypatch.setattr(runner.time, 'monotonic', lambda: clock.now)
+  monkeypatch.setattr(model, 'close', lambda: None)
+  from openpilot.selfdrive.modeld import precompiled_model
+  monkeypatch.setattr(precompiled_model, 'record_failure', lambda *a: None)
+  model.pkl_path = Path('unused.pkl')
+  frames = {name: SimpleNamespace(data=np.zeros(16, np.uint8)) for name in ('img', 'big_img')}
+  transforms = {name: np.eye(3, dtype=np.float32) for name in frames}
+  inputs = {'desire_pulse': np.zeros(8, np.float32), 'traffic_convention': np.zeros(2), 'action_t': np.zeros(2)}
+  try:
+    for index, response in enumerate(responses):
+      clock.now = age * index
+      if index == 1:
+        inputs['desire_pulse'][1] = 1
+      if not success and index == len(responses) - 1:
+        with pytest.raises(RuntimeError, match='invalid model worker response'):
+          model.run(frames, transforms, inputs, False)
+      else:
+        previous_time, previous_desire = model.last_good_time, model.prev_desire.copy()
+        output = model.run(frames, transforms, inputs, False)
+        if response == b'0\n':
+          assert output is None and model.last_good_time == previous_time
+          np.testing.assert_array_equal(model.prev_desire, previous_desire)
+    assert len(parsed) == responses.count(b'1\n')
+    if success:
+      assert model.views['desire'][1] == 1  # replay the rolled-back pulse once
+  finally:
+    model.process = None

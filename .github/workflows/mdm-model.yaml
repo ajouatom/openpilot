@@ -29,6 +29,8 @@ jobs:
           openpilot/selfdrive/modeld/tests/test_big_model.py
           openpilot/selfdrive/modeld/tests/test_precompiled_model.py
           openpilot/selfdrive/modeld/tests/test_precompiled_runner.py
+          openpilot/selfdrive/modeld/tests/test_egpu_output_recovery.py
+          tools/jetlink/test_output_validation.py
           openpilot/selfdrive/modeld/tests/test_egpu_startup_retry.py
           openpilot/selfdrive/modeld/tests/test_generic_model_runtime.py
           openpilot/selfdrive/modeld/tests/test_local_gpu_warp.py
