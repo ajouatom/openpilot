@@ -110,3 +110,27 @@ libraries never negotiate it, and decoding requires exact bounded output size
 before inference/reset. Compression can compose with integer-map packing.
 Add request byte counts to existing timing diagnostics to measure actual
 benefit; sustained live performance must be retested after deployment.
+
+
+## Departure checkpoint
+
+Signed follow-up `f1838e2c54` was published, verified and installed through the
+same reboot gate; current host source and both running services were confirmed.
+The cached engine was reused. Vehicle client/block codec/diagnostic byte count/
+manifest overlays were backed up separately; previous manifest comparison
+normalizes CRLF only, without changing signed content. Linux CI passed 736
+integration tests, 119 navigation/cluster tests and 11 protected-storage tests;
+eGPU compatibility and Windows installer checks also passed.
+
+The user needed to depart immediately, so prolonged parked validation stopped.
+A 10-second check still yielded 198 valid model outputs, 199 valid DM outputs,
+200 camera messages and two skipped camera frames. Model interval averaged
+50.56 ms, inference 46.17 ms; LZ4 capability was negotiated, but these data do
+not prove transfer reduction or sustained 20 Hz. Both services had zero
+restarts and thermal health was OK at about 69.4 C. **20 Hz remains unresolved.**
+
+After another fresh Park/inactive guard, stopped Jetson inference for this boot
+to restore the internal model. The new release remains installed; this is not
+a persistent disable, and reboot can start it again. Do not call this release
+20 Hz validated or road validated. Follow-up performance work should resume
+while parked; no driving-time restart or further model swap was requested.
