@@ -1,5 +1,31 @@
 # Following deceleration and moving-front range disagreement
 
+## October 13 correction: remove braking-onset distance memory
+
+The user reported enlarged following gaps at gap 1 with Urgent follow and
+stopping too far from the lead, then explicitly requested removing distance
+memory instead of making its recovery response-dependent. The October 11
+distance-memory mechanism described below is historical and is now removed.
+There is no captured distance floor, margin ramp, stopped-pair hold, or forecast
+of that memory at any response level. Current and future references use the
+existing opening-gap TF policy and bounded comfort relief. The qualified radar
+matching change and physical obstacle/acceleration/stop constraints remain.
+
+Regression coverage runs the production MPC update with fixed shared-braking
+inputs through standstill for both lead slots and all six response levels.
+Starting without opening-gap headroom, the current and forecast margins stay
+zero and the final reference returns to the configured 6 m stop distance.
+This is reference/wiring verification, not native MPC or vehicle-response
+validation. The reported physical stopping outcome still requires road logs.
+
+Validation: 332 desktop tests pass across braking comfort, gap recovery, CPU
+cost caching, cutout/MPC integration, acceleration preview and Wiki tooling.
+The new 12-case regression fails against the parent implementation and passes
+after removal. Changed Python files parse, the user-doc mapping check passes,
+and generated Wiki pages have no structural validation errors. Native ACADOS
+and vehicle tests were not run; broader native-dependent test collection is
+unavailable in this Windows environment (missing capnp/setproctitle).
+
 ## Evidence and recent-change audit
 
 The user requested corrections for a bus approach, shrinking following clearance
