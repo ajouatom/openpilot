@@ -574,8 +574,6 @@ struct CarControl {
       radarCutin @35;
       radarStationaryLead @36;
       systemReady @37;
-      turnModel @38;   # carrot: the turn model (turn desire) takes over
-      turnModelEnd @39;  # carrot: the turn desire ended, straight driving again
     }
   }
 
