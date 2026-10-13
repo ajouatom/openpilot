@@ -277,6 +277,9 @@ class MouseState:
 
 class GuiApplication:
   def __init__(self, width: int | None = None, height: int | None = None):
+    # The frame-start target also covers recording started/stopped by a widget.
+    # rlGetActiveFramebuffer returns 0 on the device's OpenGL ES 2 build.
+    self.render_framebuffer = 0
     self._set_log_callback()
 
     self._fonts: dict[FontWeight, rl.Font] = {}
@@ -873,6 +876,7 @@ class GuiApplication:
         # Start/stop can happen during widget rendering. Pair begin/end with the
         # target selected at frame start, never a newly allocated recording one.
         render_texture = self._render_texture
+        self.render_framebuffer = render_texture.id if render_texture else 0
         if render_texture:
           rl.begin_texture_mode(render_texture)
           rl.clear_background(rl.BLACK)
