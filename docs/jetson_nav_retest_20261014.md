@@ -132,3 +132,51 @@ The eGPU is absent from today's USB inventory, so no live eGPU reproduction
 was possible. Its rejection marker remains intact. A future reproduction should
 record bounded output shape/nonfinite counts and input/state diagnostics while
 preserving fallback and rejection checks.
+
+## Follow-up with external navigation connected
+
+The user connected external navigation and requested another measurement.
+This follow-up was read-only: no process restart, code/settings change or
+relaxation of GPS freshness. The same vehicle boot/client and signed host ran.
+
+A 120.000-second parked sample produced 2,399 valid model outputs and 2,400
+valid camera and DM messages: 19.99 Hz with one skipped camera frame (2,397
+unit frame-ID steps and one step of two). NAV inference remained active/ready
+in all 120 status samples. Mean publication interval was 50.016 ms, p99
+56.380 ms, maximum 70.273 ms. Model execution mean was 45.170 ms, p99
+49.511 ms, maximum 66.252 ms. Thus this run is approximately 20 Hz with an
+observed drop, not the earlier no-drop result.
+
+Separate 20-second runtime-timing sample:
+
+| Stage | Mean ms | Maximum ms |
+| --- | ---: | ---: |
+| Jetson GPU execution including memory copies | 25.498 | 27.431 |
+| Jetson total request processing | 28.840 | 30.889 |
+| Comma model inference including transport | 45.143 | 52.839 |
+| Full model loop including camera wait/postprocessing | 49.931 | 56.951 |
+
+These are nested scopes, not values to add together. Requests stayed at
+458,996 bytes. Concurrent aggregate CPU was 76.4% on comma (busiest core
+89.5%) and 11.9% on Jetson (busiest core 25.2%).
+
+The display path received 960x540 external map images: the host counter rose
+from 385 to 2,441, with zero decode drops, stalled=false and a final image age
+of 92 ms. This verifies transport/decoder state, not physical panel appearance.
+The model's separate map renderer had a 144-point route, but its sampled
+reason was `ready` only four times and `position` 116 times. Timing also
+captured a briefly valid render followed by invalid-position intervals.
+
+Read-only position diagnostics explain the distinction. External vehicle
+metadata remained at sequence 9 throughout a 20-second probe; its original
+receipt age grew from 73.3 to 92.0 seconds despite a live/valid carrotNavi
+heartbeat. The stored external coordinates were nonzero, but the fused output
+expired to zero. gpsLocationExternal messages were arriving without hasFix;
+the other GPS stream was unavailable. The exact upstream reason for stopped
+position updates (sender, GPS acquisition or transport) is not established.
+Repeated heartbeats must not renew an old position fix. This result does not
+validate continuous model-map rendering load or routed driving; new actual
+position updates are needed for that remaining measurement.
+
+All raw route/position diagnostics remain private. Only this summary is
+published to carrot-nav.
