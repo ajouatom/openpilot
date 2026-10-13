@@ -147,3 +147,9 @@ Validation: initial repair 25 desktop tests passed / 4 Linux-only skips;
 lock repair 22 passed / 2 skips; camera/lock/export subset 12 passed / 3 skips.
 Jetson/eGPU CI passed for `c161d1a00d` and `4300033190`. Private samples and scripts
 remain under the scratch directory above, without publishing recordings or keys.
+
+Pending-approval device disposition: inference remains active. The repeatedly
+crashing HUD service was stopped for this boot and the boot diagnostic screen
+restored; neither service was disabled. Final camera-adapter commit `1c164b66bb`
+passed both Jetson integration and eGPU compatibility CI. Deployment remains
+pending the follow-up publication approval, not a model build.
