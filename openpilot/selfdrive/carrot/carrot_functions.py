@@ -576,6 +576,11 @@ class CarrotPlanner:
           and self.trafficLightDetectMode == 2 and self.myDrivingMode != DrivingMode.High):
         self.trafficState = TrafficState.green
         self.signal_green_active = True
+        if (self.start_decision.released and self.xState == XState.e2eStopped
+            and getattr(carstate, 'standstill', False) and abs(v_ego) < .1):
+          # The stopped red guard already confirmed >=700ms of fresh green.
+          # Do not add its repeatedly rearmed 0.5s stop timer after release.
+          self.stopping_count = 0
       if self.start_decision.warn:
         # Bypass unrelated navigation-event cooldown. refuse.wav plays once.
         self.events.add(EventName.audioRefuse)
