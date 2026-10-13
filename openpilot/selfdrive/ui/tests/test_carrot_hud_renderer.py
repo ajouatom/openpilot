@@ -338,16 +338,13 @@ def test_speed_panel_reuses_one_snapshot(hud_module, monkeypatch):
   assert calls == ["snapshot", "background", "traffic", "speed", "status", "limit", "device", "navigation"]
   assert snapshots[0] is speed_limit_info
   assert snapshots[1] is speed_limit_info
-  # Painting must not advance animation time; a reused layer skips this method.
-  assert renderer._blink_timer == 15
-  assert renderer._disp_timer == 63
+  assert renderer._blink_timer == 0
+  assert renderer._disp_timer == 0
 
 
 def test_device_info_updates_only_on_first_frame_or_new_service_frame(hud_module, monkeypatch):
   module, fake_ui_state = hud_module
   renderer = object.__new__(module.HudRenderer)
-  renderer._display_clock = SimpleNamespace(tick=lambda: 1.0)
-  renderer._blink_phase = 0.0
   renderer._device_info_loaded = False
   renderer._device_info_recv_frames = (-1, -1)
   renderer.is_cruise_set = True
@@ -383,8 +380,6 @@ def test_device_info_updates_only_on_first_frame_or_new_service_frame(hud_module
 def test_device_display_cache_follows_service_receive_frames(hud_module):
   module, fake_ui_state = hud_module
   renderer = object.__new__(module.HudRenderer)
-  renderer._display_clock = SimpleNamespace(tick=lambda: 1.0)
-  renderer._blink_phase = 0.0
   renderer._device_info_loaded = False
   renderer._device_info_recv_frames = (-1, -1)
   renderer.is_cruise_set = True
@@ -591,22 +586,17 @@ def test_date_text_formats_only_when_minute_key_changes(hud_module, monkeypatch)
   assert len(draw_calls) == 8
 
 
-@pytest.mark.parametrize("reuse", (False, True))
-def test_render_keeps_sampling_and_interactions_live(hud_module, monkeypatch, reuse):
+def test_render_draws_each_hud_section_in_order(hud_module, monkeypatch):
   module, _ = hud_module
   renderer = object.__new__(module.HudRenderer)
   renderer.is_cruise_available = False
   renderer._show_plot_mode = 6
   renderer._font_display = object()
-  renderer._overlay_state = None
-  renderer._blink_timer = renderer._disp_timer = 0
-  renderer._overlay = SimpleNamespace(draw=lambda rect, callback, key, **kwargs: None if reuse else callback(rect))
   calls = []
 
   renderer._exp_button = SimpleNamespace(render=lambda rect: calls.append("button"))
   renderer._plot_renderer = SimpleNamespace(
-    update=lambda mode: calls.append(("sample", mode)),
-    paint=lambda rect, font: calls.append("plot"),
+    draw=lambda rect, font, mode: calls.append(("plot", mode)),
   )
   monkeypatch.setattr(renderer, "_refresh_hud_params", lambda now: calls.append(("params", now)))
   monkeypatch.setattr(renderer, "_draw_date_time", lambda rect: calls.append("date"))
@@ -618,13 +608,16 @@ def test_render_keeps_sampling_and_interactions_live(hud_module, monkeypatch, re
 
   renderer._render(module.rl.Rectangle(0, 0, 1000, 600))
 
-  assert calls == [("params", 12.5), ("sample", 6)] + ([] if reuse else [
+  assert calls == [
+    ("params", 12.5),
     "header",
-    "plot",
+    "button",
+    ("plot", 6),
     "date",
     "tpms",
     "egpu",
-  ]) + ["button", "animation"]
+    "animation",
+  ]
 
 
 def test_vehicle_navigation_profile_does_not_force_speed_with_cruise_off(hud_module):
