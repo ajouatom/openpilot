@@ -8,6 +8,7 @@ from openpilot.cereal import messaging, car, log
 from openpilot.common.filter_simple import FirstOrderFilter
 from openpilot.common.params import Params
 from openpilot.common.swaglog import cloudlog
+from openpilot.common.egpu_recovery_status import read_status as read_egpu_recovery, recovery_badge
 from openpilot.selfdrive.modeld.helpers import active_usbgpu_compiled_path, usbgpu_compile_pending
 from openpilot.selfdrive.modeld.big_model import model_cache_dir
 from openpilot.selfdrive.modeld.big_model_status import delivery_badge, read_big_model_status
@@ -44,6 +45,7 @@ class UIState:
         "onroadEvents",
         "liveCalibration",
         "radarState",
+        "liveTracks",
         "deviceState",
         "pandaStates",
         "carParams",
@@ -114,6 +116,7 @@ class UIState:
     self.usbgpu_compiled: bool = False
     self.usbgpu_compile_pending: bool = False
     self.usbgpu_delivery_badge = None
+    self.usbgpu_recovery_badge = None
     self.usbgpu_loading: bool = False
     self.usbgpu_active: bool = False
     self.usbgpu_startup_failed: bool = False
@@ -235,6 +238,7 @@ class UIState:
     self.usbgpu_loading = self.params.get_bool("UsbGpuLoading")
     self.usbgpu_active = self.params.get_bool("UsbGpuActive")
     self.usbgpu_startup_failed = self.params.get_bool("UsbGpuStartupFailed")
+    self.usbgpu_recovery_badge = recovery_badge(read_egpu_recovery())
     from openpilot.common.jetlink_status import badge
     self.jetlink_badge = badge()
 

@@ -33,7 +33,7 @@ def build(destination: Path, ref: str):
   commit = subprocess.check_output(["git", "rev-parse", "--verify", ref + "^{commit}"], cwd=ROOT, text=True).strip()
   files = subprocess.check_output(["git", "ls-tree", "-r", "--name-only", commit, "--", *SOURCES], cwd=ROOT, text=True).splitlines()
   for name in files:
-    if Path(name).suffix not in {".py", ".pyx", ".capnp", ".dbc"}:
+    if Path(name).suffix not in {".py", ".pyx", ".capnp", ".dbc"} and Path(name).name != "LICENSE":
       continue
     target = destination / name
     target.parent.mkdir(parents=True, exist_ok=True)

@@ -117,6 +117,34 @@ def test_refusal_holds_through_support_dropout_then_expires() -> None:
   assert is_forced_scc(expired.lead_one)
 
 
+@pytest.mark.parametrize("distance,speed", ((8.0, -1.3), (16.4, -7.0)))
+def test_reused_scc_id_does_not_transfer_refusal(distance, speed) -> None:
+  controller = DPathRadarController(enable_radar_tracks=3)
+  far_vision = model(60.0, 0.1, 9.0, probability=0.15)
+  controller.update(time_s=1.0, v_ego=8.6, radar_points=body(16.5, -2.4, -2.9, v_rel=-1.3), model=far_vision)
+  output = controller.update(time_s=1.1, v_ego=8.6, radar_points=body(distance, None, None, v_rel=speed), model=far_vision)
+  assert is_forced_scc(output.lead_one)
+
+
+@pytest.mark.parametrize("interruption", ("missing_scc", "missing_path", "other_mode", "reversed_time"))
+def test_refusal_resets_across_interruption(interruption) -> None:
+  controller = DPathRadarController(enable_radar_tracks=3)
+  far_vision = model(60.0, 0.1, 9.0, probability=0.15)
+  controller.update(time_s=1.0, v_ego=8.6, radar_points=body(16.5, -2.4, -2.9, v_rel=-1.3), model=far_vision)
+  points = body(16.4, None, None, v_rel=-1.3)
+  if interruption == "missing_scc":
+    controller.update(time_s=1.05, v_ego=8.6, radar_points=(), model=far_vision)
+  elif interruption == "missing_path":
+    controller.update(time_s=1.05, v_ego=8.6, radar_points=points, model=SimpleNamespace())
+  elif interruption == "other_mode":
+    controller.enable_radar_tracks = 0
+    controller.update(time_s=1.05, v_ego=8.6, radar_points=points, model=far_vision)
+    controller.enable_radar_tracks = 3
+  output = controller.update(time_s=0.9 if interruption == "reversed_time" else 1.1,
+                             v_ego=8.6, radar_points=points, model=far_vision)
+  assert is_forced_scc(output.lead_one)
+
+
 @pytest.mark.parametrize("mode", (1, 2))
 def test_other_modes_never_take_the_unconditional_path(mode: int) -> None:
   controller = DPathRadarController(enable_radar_tracks=mode)

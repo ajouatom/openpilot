@@ -339,6 +339,8 @@ class HudRenderer(Widget):
       text, state = ui_state.usbgpu_delivery_badge
     if getattr(ui_state, 'jetlink_badge', None) and not ui_state.usbgpu_active:
       text, state = ui_state.jetlink_badge
+    if getattr(ui_state, 'usbgpu_recovery_badge', None) and not ui_state.usbgpu_active:
+      text, state = ui_state.usbgpu_recovery_badge
     color = {
       "active": COLORS.GREEN_210,
       "loading": COLORS.YELLOW_210,
@@ -640,7 +642,7 @@ class HudRenderer(Widget):
     return False
 
   def _draw_carrot_traffic_light(self, bx: int, by: int):
-    from openpilot.selfdrive.ui.signal_status import signal_detection_paused, draw_signal_pause
+    from openpilot.selfdrive.ui.signal_status import signal_detection_paused, draw_signal_pause, draw_signal_assist
     if signal_detection_paused(ui_state.sm):
       draw_signal_pause(bx, by + 270, 32)
       return
@@ -668,6 +670,7 @@ class HudRenderer(Widget):
       self._draw_texture_rect(self._traffic_red_icon, x - icon_red / 2, y - icon_red / 2, icon_red, icon_red)
     elif green_light:
       self._draw_texture_rect(self._traffic_green_icon, x - icon_green / 2, y - icon_green / 2, icon_green, icon_green)
+    draw_signal_assist(ui_state.sm, x, y, max(icon_red, icon_green) / 2)
 
   def _draw_carrot_speed_panel(self, bx: int, by: int):
     sm = ui_state.sm

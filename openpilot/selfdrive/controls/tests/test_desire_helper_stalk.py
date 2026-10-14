@@ -1,4 +1,5 @@
 from types import SimpleNamespace
+from unittest.mock import patch
 
 from openpilot.cereal import log
 from openpilot.common.realtime import DT_MDL
@@ -14,7 +15,11 @@ class TestDesireHelperStalkRequest:
   """Turn-signal lever presses (carState.*BlinkerStalkCount) as explicit next-lane-change requests."""
 
   def setup_method(self):
-    self.helper = DesireHelper()
+    # These FSM tests must not read workstation/device settings or Bluetooth IO.
+    with patch('openpilot.selfdrive.controls.lib.desire_helper.Params'), \
+         patch('openpilot.selfdrive.controls.lib.desire_helper.CommandReader') as reader:
+      reader.return_value.read.return_value = None
+      self.helper = DesireHelper()
     self.helper._update_params_periodic = lambda: None
     self.helper._process_sides = lambda car, model, radar: None
     self.helper._check_desire_state = lambda model, car, maneuver: None

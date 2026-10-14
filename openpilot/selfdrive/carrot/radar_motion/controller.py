@@ -526,6 +526,7 @@ class DPathRadarController:
     self.primary_matcher = VisionRadarMatcher()
     self.scc_primary_fallback_matcher = VisionRadarMatcher()
     self.forced_scc_rejected_s: float | None = None  # last frame mode 3 refused a beside-path SCC body
+    self._forced_scc_previous: tuple[float, RadarPointSnapshot] | None = None
     self.enable_radar_tracks = int(enable_radar_tracks)
     self.front_radar_measurement_delay_s = max(
       0.0, float(front_radar_measurement_delay_s),
@@ -713,6 +714,22 @@ class DPathRadarController:
     time_s: float,
   ) -> bool:
     """Mode 3: refuse a beside-path SCC body; hold the refusal briefly through support dropouts."""
+    # SCC commonly reuses track ID 0 for different cars. A distance/speed jump
+    # must not transfer a previous adjacent car's refusal to the new lead.
+    previous = self._forced_scc_previous
+    continuous = False
+    if previous is not None:
+      previous_s, point = previous
+      dt = time_s - previous_s
+      continuous = (
+        0.0 <= dt <= FORCED_SCC_REJECT_HOLD_S
+        and (scc.source, scc.track_id) == (point.source, point.track_id)
+        and abs(scc.d_rel - (point.d_rel + point.v_rel * dt)) <= 2.0
+        and abs(scc.v_rel - point.v_rel) <= 3.0
+      )
+    if not continuous:
+      self.forced_scc_rejected_s = None
+    self._forced_scc_previous = (time_s, scc)
     beside, in_lane = _forced_scc_lateral_evidence(scc, points, path, vision, model)
     if in_lane:
       self.forced_scc_rejected_s = None
@@ -894,6 +911,8 @@ class DPathRadarController:
   ) -> DPathRadarOutput:
     path = _model_path(model)
     if len(path) < 2:
+      self.forced_scc_rejected_s = None
+      self._forced_scc_previous = None
       self.primary_matcher.reset()
       self.scc_primary_fallback_matcher.reset()
       self.lead_two_tracker.reset()
@@ -946,14 +965,17 @@ class DPathRadarController:
       # A farther permissive match must not hide a strongly visible nearer car.
       primary_match = None
     if primary_match is None and self.enable_radar_tracks == 3:
-      # 3 uses front-radar/vision matching first, then always trusts the SCC
-      # longitudinal object if matching fails. Vision is the final fallback
-      # only when no SCC object exists.
+      # Mode 3 tries front-radar/vision first, then SCC unless physical lateral
+      # evidence identifies an adjacent car. Vision remains the final fallback.
       primary_match = unconditional_scc_match(points)
       if primary_match is not None and self._reject_forced_scc(primary_match.point, points, path, vision, model, time_s):
         primary_match = None
       elif primary_match is None:
         self.forced_scc_rejected_s = None
+        self._forced_scc_previous = None
+    else:
+      self.forced_scc_rejected_s = None
+      self._forced_scc_previous = None
     if primary_match is not None:
       self.scc_primary_fallback_matcher.reset()
     elif self.enable_radar_tracks == 2:

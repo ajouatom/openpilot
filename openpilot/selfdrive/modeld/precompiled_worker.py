@@ -27,6 +27,7 @@ def main():
   control = sys.stdout.buffer
   sys.stdout = sys.stderr  # tinygrad diagnostics must not enter the control protocol
   pkl, shared_path, width, height = Path(sys.argv[1]), Path(sys.argv[2]), int(sys.argv[3]), int(sys.argv[4])
+  background_recovery = sys.argv[5:] == ['--recovery']
   # This entry point is executed by filename; keep early diagnostics stdlib-only.
   from egpu_worker_progress import WorkerProgress
   progress = WorkerProgress(Path(str(shared_path) + '.progress'))
@@ -40,6 +41,8 @@ def main():
   os.environ.update(DEV='USB+AMD:LLVM', GMMU='0', JIT_BATCH_SIZE='0')
   import numpy as np
   generic = manifest['format'] == 'comma-generic-onnx'
+  if background_recovery and not generic:
+    raise ValueError('background recovery requires generic AMD model')
   if generic:
     os.environ.update(FLOAT16='1', TC_OPT='2', TC_MIN_GLOBALS='32')
     if manifest.get('serialization') == 'persistent-buffer-v1':
@@ -64,7 +67,8 @@ def main():
     if checkpoint != manifest['model_checkpoint']:
       raise ValueError('precompiled checkpoint mismatch')
     adapter_args = (jits, width, height, runtime, get_nv12_info(width, height))
-    adapter = create_runtime(adapter_args, vehicle_device_type(), cloudlog.exception)
+    # Concurrent recovery must not compile or execute on the internal QCOM GPU.
+    adapter = create_runtime(adapter_args, '' if background_recovery else vehicle_device_type(), cloudlog.exception)
     metadata = {'model_checkpoint': adapter.checkpoint, 'input_shapes': adapter.input_shapes, 'output_slices': adapter.output_slices}
     device = adapter.device
   else:
@@ -114,6 +118,11 @@ def main():
       while command := sys.stdin.buffer.read(1):
         if command == b'q':
           break
+        if command == b'z' and background_recovery:
+          adapter.reset_state()
+          control.write(b'Z\n')
+          control.flush()
+          continue
         if command != b'r':
           raise ValueError('invalid model worker command')
         progress.frame += 1

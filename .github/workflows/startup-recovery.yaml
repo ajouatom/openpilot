@@ -10,6 +10,11 @@ on:
       - 'openpilot/common/*cache*lock*'
       - 'openpilot/common/startup*'
       - 'openpilot/system/manager/build.py'
+      - 'openpilot/system/manager/process.py'
+      - 'openpilot/system/manager/process_config.py'
+      - 'openpilot/system/manager/process_crash.py'
+      - 'openpilot/system/tombstoned.py'
+      - 'openpilot/system/manager/test/*process*'
       - 'openpilot/system/ui/startup_recovery.py'
       - 'openpilot/system/tests/**'
       - '.github/workflows/startup-recovery.yaml'
@@ -25,13 +30,16 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
-      - run: python -m pip install pytest==8.3.5 aiohttp numpy raylib==5.5.0.4
+      - run: python -m pip install pytest==8.3.5 aiohttp requests numpy raylib==5.5.0.4
+      - run: sudo apt-get update && sudo apt-get install -y tmux
       - name: Recovery and real process-lock regression checks
         env:
           PYTHONPATH: .:opendbc_repo
         run: |
           bash -n launch_chffrplus.sh scripts/ensure_params_build.sh
           python -m pytest --noconftest -o addopts= -q \
+            openpilot/system/manager/test/test_python_process_spawn.py \
+            openpilot/system/manager/test/test_process_crash.py \
             openpilot/system/tests/test_build_cache.py \
             openpilot/system/tests/test_rebuild_cleanup.py \
             openpilot/system/tests/test_startup_recovery.py \

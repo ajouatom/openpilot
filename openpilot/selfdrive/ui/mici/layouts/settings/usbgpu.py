@@ -29,6 +29,9 @@ class UsbGpuInfoLayout(Widget):
     self._status_value.set_text(usbgpu_status(ui_state.usbgpu_compiled, ui_state.usbgpu_loading, ui_state.usbgpu_active,
                                               ui_state.usbgpu_startup_failed,
                                               compile_pending=ui_state.usbgpu_compile_pending))
+    recovery = getattr(ui_state, 'usbgpu_recovery_badge', None)
+    if recovery and not ui_state.usbgpu_active:
+      self._status_value.set_text(recovery[0])
     device = get_usbgpu_device()
     if device is None:
       value = "not connected"

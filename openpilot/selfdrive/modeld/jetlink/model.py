@@ -10,6 +10,7 @@ import numpy as np
 from openpilot.selfdrive.modeld.jetlink.link import ClientConnection, SPEC, FAULT, state
 from openpilot.selfdrive.modeld.jetlink.prepare import WarpPreparation
 from openpilot.selfdrive.modeld.jetlink.contracts import model_name, parse_outputs
+from openpilot.selfdrive.modeld.model_join import may_join
 
 MODEL_STATUS = Path('/dev/shm/carrot-jetlink-model.json')
 
@@ -18,16 +19,6 @@ def make_warp_inputs():
   from tinygrad import Tensor
   transforms = {k: np.eye(3, dtype=np.float32) for k in ('tfm', 'big_tfm')}
   return transforms, {k: Tensor(v, device='NPY').realize() for k, v in transforms.items()}
-
-
-def may_join(now, messages, valid, received):
-  required = ('carState', 'selfdriveState', 'carControl')
-  if not all(valid.get(k, False) and 0 <= now - received.get(k, -1e6) < .25 for k in required):
-    return False
-  cs = messages['carState']
-  # User-authorized transition opportunities: stopped or a fresh physical
-  # steering override. Keep all freshness/validity gates and output checks.
-  return (cs.standstill and abs(cs.vEgo) < .01) or cs.steeringPressed
 
 
 class Warp:

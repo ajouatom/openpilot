@@ -158,6 +158,54 @@ corroborate a release but is not driver consent or an instruction to restore
 full authority. No revised thresholds, recovery policy or vehicle fix is
 validated or installed by this investigation.
 
+## Follow-up: did the model command crossing the lane at 45 seconds?
+
+The recorded outputs do not show an outward lane-crossing command at 45 s.
+At model time 44.990 s, the inner lane probabilities are approximately
+0.94/0.97, lane-change state is off, and lateralPlan.useLaneLines is false.
+Controlsd therefore uses the model action's desired curvature (with its existing
+smoothing/limiting), not the displayed position trajectory or a lane-line MPC
+path. Model action curvature is -0.0011169/m and commanded curvature is
+-0.0011401/m: a leftward command in model coordinates. Target wheel angle is
+4.87 degrees; actual is approximately 3.7 degrees.
+
+At that same model timestamp, the right inner lane line is at y=+0.532 m near
+the model origin. The position path gradually moves left and increases its
+clearance from that line:
+
+| Forward x | Left line y | Model position y | Right line y |
+| --- | --- | --- | --- |
+| 20 m | -2.652 m | -0.146 m | +0.610 m |
+| 40 m | -2.849 m | -0.577 m | +0.383 m |
+| 60 m | -3.340 m | -1.278 m | -0.107 m |
+
+These are inferred model geometry in the forward/right/down coordinate frame,
+not calibrated measurements of tire-to-line distance. In every model frame
+from 44–46 s, the position path remains between the model's two inner lines
+over sampled forward distances 5–60 m. This supports interpreting the 45 s
+command as leftward recovery while near the right boundary, rather than an
+instruction to enter the right-hand lane. It does not prove that its recovery
+timing or magnitude is optimal.
+
+The preceding interval is less clear. In 42–44 s, inner lane probabilities
+fall as low as about 0.076. Six position paths cross their inferred right
+boundary at distant samples beyond 40 m (up to 0.119 m within 60 m); all remain
+inside through 40 m. Their inner probabilities are only about 0.10–0.24.
+Crucially, position and action are different model outputs: a frozen-curvature
+arc of the simultaneously issued action stays between those inferred lines
+through 60 m in these six frames. That arc is only a geometric illustration,
+not a simulation of vehicle response. The uncertain position/lane comparison
+does not establish that the steering command instructed a lane departure.
+
+Wheel target/actual pairs are approximately 4.4/1.4 degrees at 42 s,
+6.3/2.5 at 43 s, 6.4/9.2 at 44 s, and 4.9/3.7 at 45 s. Actual steering first
+falls short of the leftward target, then exceeds it during renewed force,
+then falls short again. Touch confirms reported contact in 43.79–46.19 s;
+contact alone does not determine which path the driver intended.
+
+Follow-up geometry and scripts are retained in the private archive's
+`model-path-followup/` directory. This follow-up changes no control code.
+
 Reproduction scripts, numeric extracts and synchronized frame/plot evidence
 are retained privately under
 `.analysis/archive/2026-10-02/ioniq5-5d7-steering/`. Raw route/video remain on

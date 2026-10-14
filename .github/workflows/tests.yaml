@@ -108,6 +108,25 @@ jobs:
             opendbc_repo/opendbc/car/hyundai/tests/test_bosch_road_edge.py
       - name: Check passive camera SOF diagnostics
         run: openpilot/system/camerad/test/test_camera_event_timing
+      - name: Check Hyundai navigation and lever features and RAV4 ARS integration
+        run: >-
+          python -m pytest -o addopts='' -q
+          opendbc_repo/opendbc/car/hyundai/tests/test_navi_speedcam.py
+          opendbc_repo/opendbc/car/hyundai/tests/test_section_average.py
+          opendbc_repo/opendbc/car/hyundai/tests/test_speed_camera.py
+          opendbc_repo/opendbc/car/hyundai/tests/test_blink_hold.py
+          opendbc_repo/opendbc/car/hyundai/tests/test_blinker_stalks.py
+          opendbc_repo/opendbc/car/hyundai/tests/test_ccnc_cluster.py
+          opendbc_repo/opendbc/car/toyota/tests/test_ars510_carrot.py
+          opendbc_repo/opendbc/car/toyota/tests/test_ars510_display.py
+          openpilot/selfdrive/car/tests/test_toyota_pcm_mode0.py
+          openpilot/selfdrive/carrot/tests/test_radar_forced_scc_gate.py
+          openpilot/selfdrive/carrot/tests/test_radar_display_flip.py
+          openpilot/selfdrive/carrot/tests/test_radarcan_process.py
+          openpilot/selfdrive/carrot/tests/test_rav4_radar_slowdown.py
+          openpilot/selfdrive/controls/tests/test_desire_helper_stalk.py
+          openpilot/selfdrive/controls/tests/test_lever_forced_turn.py
+          openpilot/selfdrive/ui/tests/test_radar_display.py
       - name: Check coherent OS04C10 exposure updates
         run: openpilot/system/camerad/test/test_os04c10_exposure
       - name: Check UI geometry and rendering regressions

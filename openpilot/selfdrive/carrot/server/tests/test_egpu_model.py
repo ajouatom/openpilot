@@ -25,6 +25,23 @@ def payload(feature, engaged=False):
   return feature.build_status_payload(SimpleNamespace(get_bool=lambda key: key == "UsbGpuHardwareSeen" or (key == "IsEngaged" and engaged)))
 
 
+@pytest.mark.parametrize('state,expected', [('waiting', 'recovering'), ('recovering', 'recovering'),
+                                         ('ready', 'recovery_ready'), ('stopped', 'recovery_stopped')])
+def test_live_recovery_status_overrides_old_failure_without_offering_reboot(feature, monkeypatch, state, expected):
+  monkeypatch.setattr(feature, 'read_egpu_recovery', lambda: {'state': state, 'attempts': 1})
+  params = SimpleNamespace(get_bool=lambda key: key in ('UsbGpuHardwareSeen', 'UsbGpuStartupFailed'))
+  result = feature.build_status_payload(params)
+  assert result['state'] == expected and result['error_code'] is None
+  assert not result['can_restart'] and not result['active']
+
+
+def test_active_gpu_wins_over_recovery_status(feature, monkeypatch):
+  monkeypatch.setattr(feature, 'read_egpu_recovery', lambda: {'state': 'ready'})
+  params = SimpleNamespace(get_bool=lambda key: key in ('UsbGpuHardwareSeen', 'UsbGpuActive'))
+  result = feature.build_status_payload(params)
+  assert result['active'] and result['recovery'] == {}
+
+
 @pytest.mark.parametrize("state", ["checking", "downloading", "verifying", "compiling", "error"])
 @pytest.mark.parametrize("sha", ["a" * 64, "b" * 64])
 def test_update_phase_is_not_hidden_by_compiled_model(feature, tmp_path, state, sha):

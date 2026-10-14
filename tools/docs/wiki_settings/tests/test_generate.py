@@ -85,7 +85,8 @@ class WikiSettingsGeneratorTest(unittest.TestCase):
       catalog_commit=COMMIT,
       generated_at=STAMP,
     )
-    self.assertEqual(len(result.generated_settings), 185)
+    self.assertEqual(len(result.generated_settings), 195)
+    self.assertIn("NNFF", result.index["settings"])
     self.assertNotIn("SteerHandoverMode", result.index["settings"])
     self.assertIn("SignalAssistMode", result.index["settings"])
     self.assertIn("CruiseCoastingPercent", result.index["settings"])
@@ -97,15 +98,15 @@ class WikiSettingsGeneratorTest(unittest.TestCase):
     for retired in ("ClusterHudPriority", "ClusterHudCoreMode", "ClusterHudLiveFps", "CanfdStopRetry", "DisableDM",
                     "CarrotYouTubeLive", "CarrotYouTubeQuality", "CarrotYouTubeTimestamp"):
       self.assertNotIn(retired, result.index["settings"])
-    self.assertEqual(result.index["review"], {"current": 0, "needs_review": 185})
+    self.assertEqual(result.index["review"], {"current": 0, "needs_review": 195})
     self.assertEqual(result.index["locales"], ["ko", "en", "zh"])
-    self.assertEqual(len(result.pages), (185 * 3) + 2)
+    self.assertEqual(len(result.pages), (195 * 3) + 2)
     setting_pages = {
       name: text
       for name, text in result.pages.items()
       if GENERATOR.GENERATED_PAGE_RE.fullmatch(name)
     }
-    self.assertEqual(len(setting_pages), 185 * 3)
+    self.assertEqual(len(setting_pages), 195 * 3)
     self.assertTrue(all(text.count("<!-- CARROT:SETTING:BEGIN ") == 1 for text in setting_pages.values()))
     for name, text in result.pages.items():
       if name.endswith(".md"):

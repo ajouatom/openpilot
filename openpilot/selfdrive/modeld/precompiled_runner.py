@@ -7,6 +7,7 @@ import selectors
 import subprocess
 import sys
 import tempfile
+import time
 
 import numpy as np
 
@@ -16,7 +17,7 @@ from openpilot.selfdrive.modeld.egpu_worker_progress import worker_snapshot
 
 
 class PrecompiledModelState:
-  def __init__(self, cam_w: int, cam_h: int, pkl_path: Path):
+  def __init__(self, cam_w: int, cam_h: int, pkl_path: Path, *, recovery_cancel=None):
     self.pkl_path = pkl_path
     self.process = None
     self.shared = None
@@ -24,13 +25,17 @@ class PrecompiledModelState:
     self.output = None
     self.usbgpu = True
     self.first_run = True
+    self.recovery_cancel = recovery_cancel
     self.parser = Parser()
     self.prev_desire = np.zeros(ModelConstants.DESIRE_LEN, dtype=np.float32)
     # A named temporary file permits independently opened mmap in the worker.
     self.file = tempfile.NamedTemporaryFile(prefix='carrot-model-', delete=False)
     try:
       worker = Path(__file__).with_name('precompiled_worker.py')
-      self.process = subprocess.Popen([sys.executable, str(worker), str(pkl_path), self.file.name, str(cam_w), str(cam_h)],
+      arguments = [sys.executable, str(worker), str(pkl_path), self.file.name, str(cam_w), str(cam_h)]
+      if recovery_cancel is not None:
+        arguments.append('--recovery')
+      self.process = subprocess.Popen(arguments,
                                       stdin=subprocess.PIPE, stdout=subprocess.PIPE, bufsize=0)
       info = json.loads(self._receive(110))
       self.shared = mmap.mmap(self.file.fileno(), info['size'])
@@ -44,7 +49,7 @@ class PrecompiledModelState:
       self.checkpoint = info['checkpoint']
     except BaseException as exc:
       self.close()
-      if isinstance(exc, Exception):
+      if isinstance(exc, Exception) and not (self.recovery_cancel is not None and self.recovery_cancel.is_set()):
         from openpilot.selfdrive.modeld.precompiled_model import record_failure
         record_failure(self.pkl_path, exc, 'load')
       raise
@@ -52,16 +57,38 @@ class PrecompiledModelState:
   def _receive(self, timeout: float) -> bytes:
     with selectors.DefaultSelector() as selector:
       selector.register(self.process.stdout, selectors.EVENT_READ)
-      if not selector.select(timeout):
+      if self.recovery_cancel is None:
+        ready = selector.select(timeout)
+      else:
+        deadline, ready, value = time.monotonic() + timeout, False, b''
+        while not ready and time.monotonic() < deadline:
+          if self.recovery_cancel.is_set():
+            raise InterruptedError('eGPU recovery cancelled')
+          if selector.select(min(.05, max(0, deadline - time.monotonic()))):
+            chunk = os.read(self.process.stdout.fileno(), 65536)
+            if not chunk:
+              raise RuntimeError(f'precompiled eGPU worker exited ({self.process.poll()})')
+            value += chunk
+            if len(value) > 128 * 1024:
+              raise RuntimeError('oversized eGPU recovery response')
+            ready = value.endswith(b'\n')
+      if not ready:
         error = TimeoutError('precompiled eGPU worker timed out')
         error.worker_diagnostics = worker_snapshot(Path(self.file.name + '.progress'), self.process.pid)
         raise error
-    value = self.process.stdout.readline()
+    if self.recovery_cancel is None:
+      value = self.process.stdout.readline()
     if not value:
       raise RuntimeError(f'precompiled eGPU worker exited ({self.process.poll()})')
     if value.startswith(b'ERROR '):
       raise RuntimeError(json.loads(value[6:]))
     return value
+
+  def reset_after_probe(self):
+    self.process.stdin.write(b'z')
+    if self._receive(1) != b'Z\n':
+      raise RuntimeError('invalid eGPU recovery reset response')
+    self.prev_desire[:] = 0
 
   def run(self, bufs, transforms, inputs, prepare_only):
     for name in ('img', 'big_img'):
@@ -86,7 +113,8 @@ class PrecompiledModelState:
       self.close()
       # The manager sends SIGINT when ignition turns off. KeyboardInterrupt and
       # SystemExit release the worker but must not blacklist a healthy artifact.
-      if isinstance(exc, Exception):
+      cancel = getattr(self, 'recovery_cancel', None)
+      if isinstance(exc, Exception) and not (cancel is not None and cancel.is_set()):
         from openpilot.selfdrive.modeld.precompiled_model import record_failure
         record_failure(self.pkl_path, exc, 'inference')
       raise

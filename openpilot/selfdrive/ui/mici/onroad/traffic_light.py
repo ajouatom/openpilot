@@ -5,7 +5,7 @@ from openpilot.selfdrive.ui.ui_state import ui_state
 from openpilot.system.ui.widgets import Widget
 from openpilot.common.filter_simple import FirstOrderFilter
 from openpilot.selfdrive.ui.mici.onroad.confidence_ball import draw_circle_gradient
-from openpilot.selfdrive.ui.signal_status import signal_detection_paused, draw_signal_pause
+from openpilot.selfdrive.ui.signal_status import signal_detection_paused, draw_signal_pause, signal_assist_status, draw_signal_assist
 
 
 class TrafficLight(Widget):
@@ -21,7 +21,7 @@ class TrafficLight(Widget):
   # --------------------------------------------------
 
   def is_visible(self):
-    return self._alpha_filter.x > 0.05
+    return self._alpha_filter.x > 0.05 or any(signal_assist_status(ui_state.sm))
 
   # --------------------------------------------------
 
@@ -67,7 +67,7 @@ class TrafficLight(Widget):
 
   def _render(self, _):
     alpha = max(0.0, min(1.0, self._alpha_filter.x))
-    if alpha <= 0.01:
+    if alpha <= 0.01 and not any(signal_assist_status(ui_state.sm)):
       return
 
     content_rect = rl.Rectangle(
@@ -93,3 +93,4 @@ class TrafficLight(Widget):
       bottom = rl.Color(0, 255, 0, int(255 * alpha))
 
     draw_circle_gradient(center_x, center_y, self._radius, top, bottom)
+    draw_signal_assist(ui_state.sm, center_x, center_y, self._radius)

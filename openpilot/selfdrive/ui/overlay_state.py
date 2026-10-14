@@ -22,10 +22,12 @@ class OverlayState:
       cs.brakePressed, cs.gasPressed, cs.brakeHoldActive, cs.softHoldActive, cs.carrotCruise,
       lp.xState, lp.trafficState, lp.allowThrottle, cm.trafficState,
       getattr(lp, 'signalDetectionSuspended', False),
+      getattr(lp, 'signalObservationColor', 0), getattr(lp, 'signalAssistAction', 0),
       radar.leadOne.status, radar.leadOne.radarTrackId, radar.leadTwo.status,
       sm.recv_frame['liveCalibration'],
       sm.valid['modelV2'], sm.alive['modelV2'], sm.valid['carState'], sm.alive['carState'],
       sm.valid['radarState'], sm.alive['radarState'], sm.valid['longitudinalPlan'], sm.alive['longitudinalPlan'],
       sm.valid['carrotMan'], sm.alive['carrotMan'],
       ui.usbgpu_active, ui.usbgpu_loading, ui.usbgpu_startup_failed,
+      getattr(ui, 'usbgpu_recovery_badge', None),
     )
