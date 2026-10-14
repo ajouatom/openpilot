@@ -69,3 +69,20 @@ def test_pinned_warp_capture_reload_and_persistent_arena(tmp_path, monkeypatch):
   run = prepare_jit(loaded['run'])
   np.testing.assert_array_equal(benchmark(run, **inputs), expected)
   assert Path(os.environ['MDM_RUNTIME_ROOT']) in Path(sys.modules['tinygrad'].__file__).parents
+
+
+def test_pinned_state_reset_preserves_aliases(monkeypatch):
+  monkeypatch.syspath_prepend(os.environ['MDM_RUNTIME_ROOT'])
+  monkeypatch.setenv('DEV', 'CPU')
+  from tinygrad import Tensor
+  from openpilot.selfdrive.modeld.generic_model_runtime import GenericModelRuntime, input_view
+  runtime = object.__new__(GenericModelRuntime)
+  runtime.device = 'CPU'
+  runtime.state_pairs = {'state': 'next_state'}
+  runtime.specs = {'state': ((2, 3), 'float32', 'CPU')}
+  state = Tensor(np.ones((2, 3), np.float32), device='CPU').realize()
+  runtime.queues = {'state': state}
+  alias = input_view(state._buffer(), state.shape, state.dtype)
+  runtime.reset_state()
+  np.testing.assert_array_equal(alias.numpy(), np.zeros((2, 3)))
+  assert runtime.queues['state'] is state

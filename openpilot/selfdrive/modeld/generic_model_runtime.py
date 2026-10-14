@@ -111,6 +111,16 @@ class GenericModelRuntime:
     self.transforms = input_view(self.device_buffer, (2, 3, 3), dtypes.float32)
     self.frames = input_view(self.device_buffer, (2, self.frame_size), dtypes.uint8, self.frames_offset)
 
+  def reset_state(self):
+    from tinygrad import Device, Tensor
+    # Same initial zero state and buffer identities as construction; captured
+    # recurrent outputs must continue to alias their original inputs.
+    for name in self.state_pairs:
+      tensor = self.queues[name]
+      zeros = Tensor(np.zeros(tensor.shape, dtype=self.specs[name][1]), device='NPY')
+      tensor._buffer().copy_from(zeros._buffer())
+    Device[self.device].synchronize()
+
   def run(self):
     progress = getattr(self, 'progress', lambda stage: None)
     started, cpu_started = time.monotonic(), time.thread_time()

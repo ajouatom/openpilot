@@ -11,6 +11,54 @@ import pytest
 from openpilot.selfdrive.modeld import precompiled_runner as runner
 
 
+@pytest.mark.parametrize('cancel_mid_line', [False, True])
+def test_recovery_receive_handles_fragmented_lines_without_an_uncancellable_readline(monkeypatch, cancel_mid_line):
+  import threading
+  model = object.__new__(runner.PrecompiledModelState)
+  model.recovery_cancel = threading.Event()
+  model.process = SimpleNamespace(stdout=SimpleNamespace(fileno=lambda: 9), poll=lambda: None)
+  class Selector:
+    def __enter__(self):
+      return self
+    def __exit__(self, *args):
+      pass
+    def register(self, *args):
+      pass
+    def select(self, timeout):
+      assert timeout <= .05
+      return [True]
+  monkeypatch.setattr(runner.selectors, 'DefaultSelector', Selector)
+  chunks = iter([b'he', b'llo\n'])
+  def read(fd, size):
+    if cancel_mid_line:
+      model.recovery_cancel.set()
+    return next(chunks)
+  monkeypatch.setattr(runner.os, 'read', read)
+  try:
+    if cancel_mid_line:
+      with pytest.raises(InterruptedError):
+        model._receive(1)
+    else:
+      assert model._receive(1) == b'hello\n'
+  finally:
+    model.process = None
+
+
+def test_cancelled_recovery_does_not_blacklist_the_artifact(tmp_path, monkeypatch):
+  import threading
+  cancel = threading.Event()
+  cancel.set()
+  process = SimpleNamespace(stdin=io.BytesIO(), stdout=io.BytesIO(), poll=lambda: 0)
+  monkeypatch.setattr(runner.subprocess, 'Popen', lambda *a, **kw: process)
+  def receive(self, timeout):
+    raise InterruptedError('eGPU recovery cancelled')
+  monkeypatch.setattr(runner.PrecompiledModelState, '_receive', receive)
+  with pytest.raises(InterruptedError):
+    runner.PrecompiledModelState(1344, 760, tmp_path / 'model.pkl', recovery_cancel=cancel)
+  assert not (tmp_path / 'last_failure.json').exists()
+  assert not (tmp_path / 'rejected').exists()
+
+
 def test_precompiled_state_exposes_camera_inputs_required_by_modeld(tmp_path, monkeypatch):
   info = {'size': 48, 'input_bytes': 32, 'output_count': 4,
           'layout': {'img': {'offset': 0, 'shape': [16], 'dtype': 'uint8'},

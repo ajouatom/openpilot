@@ -29,4 +29,5 @@ class OverlayState:
       sm.valid['radarState'], sm.alive['radarState'], sm.valid['longitudinalPlan'], sm.alive['longitudinalPlan'],
       sm.valid['carrotMan'], sm.alive['carrotMan'],
       ui.usbgpu_active, ui.usbgpu_loading, ui.usbgpu_startup_failed,
+      getattr(ui, 'usbgpu_recovery_badge', None),
     )

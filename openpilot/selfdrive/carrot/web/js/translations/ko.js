@@ -5,6 +5,12 @@ window.CarrotTranslations.register("ko", {
   nativeName: "한국어",
   shortName: "KO",
   strings: {
+    egpu_model_recovering: "eGPU 재연결 시도 중",
+    egpu_model_recovering_detail: "내부 모델을 계속 사용하면서 eGPU 복구를 최대 3회 시도합니다.",
+    egpu_model_recovery_ready: "eGPU READY · 전환 대기",
+    egpu_model_recovery_ready_detail: "시험 계산을 통과했습니다. 내부 모델을 계속 사용하며, 정차하거나 운전자가 조향에 개입하면 전환합니다.",
+    egpu_model_recovery_stopped: "eGPU 복구 시도 중단",
+    egpu_model_recovery_stopped_detail: "내부 모델을 계속 사용합니다. 검사 실패 또는 재시도 횟수 제한으로 복구를 중단했습니다. 주차 후 콤마를 재부팅해 주세요.",
     egpu_model_recovery_restart: "주차 후 아래 ‘기기 관리’를 열고 ‘재부팅’을 한 번 눌러 주세요. 다시 발생하면 이 화면을 보내 주세요.",
     egpu_model_runtime_error: "eGPU 사용 중단",
     egpu_model_host_ok: "연결됨",
