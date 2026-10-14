@@ -18,7 +18,7 @@ from openpilot.selfdrive.navd.helpers import (Coordinate, coordinate_from_param,
                                     minimum_distance,
                                     parse_banner_instructions)
 from openpilot.common.swaglog import cloudlog
-from openpilot.selfdrive.navigation.helpers import navigation_position
+from openpilot.selfdrive.navigation.helpers import ParkedPosition
 
 
 REROUTE_DISTANCE = 25
@@ -60,6 +60,7 @@ class RouteEngine:
 
     self.gps_ok = False
     self.localizer_valid = False
+    self.position = ParkedPosition()
 
     self.nav_destination = None
     self.step_idx = None
@@ -129,7 +130,7 @@ class RouteEngine:
       cloudlog.exception("navd.failed_to_compute")
 
   def update_location(self):
-    gps = navigation_position(self.sm)
+    gps = self.position.update(self.sm, max_poll_gap=1.5)
     self.localizer_valid = self.gps_ok = gps is not None
     if gps is not None:
       self.last_position = Coordinate(gps.latitude, gps.longitude)
@@ -422,7 +423,7 @@ class RouteEngine:
 
 def main():
   pm = messaging.PubMaster(['navInstruction', 'navRouteNavd'])
-  sm = messaging.SubMaster(['managerState', 'carrotMan', 'gpsLocation', 'gpsLocationExternal'])
+  sm = messaging.SubMaster(['managerState', 'carrotMan', 'gpsLocation', 'gpsLocationExternal', 'carState'])
 
   rk = Ratekeeper(1.0)
   route_engine = RouteEngine(sm, pm)

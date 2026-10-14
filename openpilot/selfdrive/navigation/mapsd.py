@@ -5,7 +5,7 @@ import time
 
 import numpy as np
 
-from openpilot.selfdrive.navigation.helpers import navigation_position
+from openpilot.selfdrive.navigation.helpers import ParkedPosition
 from openpilot.selfdrive.navigation.jetlink_demand import jetlink_map_demand
 from openpilot.selfdrive.navigation.pmtiles import PMTiles
 from openpilot.selfdrive.navigation.preview import write_preview, preview_fresh, WEB_DEMAND_PATH
@@ -37,7 +37,8 @@ def main():
     if allowed:
       os.sched_setaffinity(0, allowed)
     os.nice(15)
-  sm = messaging.SubMaster(['carrotMan', 'gpsLocation', 'gpsLocationExternal', 'navRoute', 'navInstructionCarrot'])
+  sm = messaging.SubMaster(['carrotMan', 'gpsLocation', 'gpsLocationExternal', 'navRoute', 'navInstructionCarrot', 'carState'])
+  position = ParkedPosition()
   server = VisionIpcServer('mapsd')
   server.create_buffers_with_sizes(VisionStreamType.VISION_STREAM_MAP, 4, SIZE, SIZE, SIZE * SIZE, SIZE, SIZE * SIZE)
   server.start_listener()
@@ -61,7 +62,7 @@ def main():
         route = route_coordinates(sm['navRoute']) if sm.valid['navRoute'] else np.empty((0, 2))
         tracker = RouteTracker(route) if route_id and 2 <= len(route) <= 4096 and np.isfinite(route).all() else None
         next_render = 0.
-      gps = navigation_position(sm)
+      gps = position.update(sm)
       fresh_tbt = sm.valid['navInstructionCarrot'] and 0 <= now - sm.recv_time['navInstructionCarrot'] < 2.
       # Navigation without usable position/instruction immediately publishes black.
       if now >= demand_checked:
@@ -118,7 +119,8 @@ def main():
           write_preview(image, reason=reason)
           next_preview = finished + .5
         diagnostics.record(render_ms=(finished - started) * 1000, cpu_ms=cpu * 1000,
-                           context={'map_valid': valid, 'route_points': len(route), 'interval': render_interval(cpu)})
+                           context={'map_valid': valid, 'route_points': len(route), 'interval': render_interval(cpu),
+                                    'parked_position_hold': position.held})
       was_ready = ready
       rk.keep_time()
   finally:

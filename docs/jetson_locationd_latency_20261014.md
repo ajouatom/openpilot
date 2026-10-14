@@ -182,3 +182,37 @@ and interrupt placement before changing scheduling. An asynchronous sender
 would also require bounded ownership and completion synchronization; an early
 return must never permit reuse of a buffer still owned by USB. These findings
 do not establish 40 ms execution or road stability.
+
+## Parked position continuity and scoped Jetson placement
+
+Navigation now retains an in-process position anchor only after at least one
+second of continuously observed Park, standstill and speed below 0.01 m/s,
+with a fresh position observed during that parked period and position speed
+below 0.1 m/s. Fresh carState receipt/validity/liveness remains mandatory.
+Leaving Park, rolling, missing carState, a polling gap or process restart
+clears the anchor. Old startup coordinates are never revived. The anchor
+retains its original position timestamp and uses zero extrapolation speed;
+no GPS timestamp is renewed. mapsd and Mapbox navd use the same rule, so
+Mapbox instructions do not disappear solely because a parked fix expires.
+Route/instruction/renderer validity rules and moving GPS freshness stay intact.
+This supports parked map continuity; it does not repair the phone GPS provider
+or introduce unbounded moving dead reckoning. Position tests include a
+20-minute synthetic parked outage, motion, stale state, restart and reacquisition.
+
+A reversible 45-second IRQ-placement comparison did not remove completion
+worker delay: moving only USB IRQ 994 to core4 gives request-write p99 7.382 ms
+versus 8.913 ms in the preceding baseline, but worker wait still reaches
+8.013 ms and model mean is 44.463 versus 44.596 ms. Neither window has invalid
+model/pose/DM output or skipped frame. Short runs do not establish a reliable
+improvement; IRQ affinity was restored and is not changed in production.
+The AGNOS driver queues completion onto an ordered high-priority workqueue;
+changing interrupt affinity does not pin that worker. See the upstream
+[gadget handler](https://github.com/commaai/agnos-kernel-sdm845/blob/master/drivers/usb/dwc3/gadget.c)
+and [queue allocation](https://github.com/commaai/agnos-kernel-sdm845/blob/master/drivers/usb/dwc3/core.c).
+
+The next measured candidate moves only jetlinkd's userspace framing/IPC/reader
+threads to core4 during an established onroad Jetson session. Priority remains
+FIFO1 for the existing realtime threads and normal for the watchdog. Discovery,
+offroad and other peer types retain cores0--3; camera6/model/DM7 and shared
+kernel workers are untouched. This requires native measurement before a
+performance improvement can be claimed.
