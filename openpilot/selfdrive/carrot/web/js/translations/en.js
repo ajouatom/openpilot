@@ -5,6 +5,12 @@ window.CarrotTranslations.register("en", {
   nativeName: "English",
   shortName: "EN",
   strings: {
+    egpu_model_recovering: "eGPU reconnecting",
+    egpu_model_recovering_detail: "The internal model remains in use while eGPU recovery is attempted, up to three times.",
+    egpu_model_recovery_ready: "eGPU READY",
+    egpu_model_recovery_ready_detail: "Test calculations passed. The internal model remains in use until the vehicle stops or you intervene with steering.",
+    egpu_model_recovery_stopped: "eGPU recovery stopped",
+    egpu_model_recovery_stopped_detail: "The internal model remains in use. Once parked, restart the comma. Recovery stopped because a check failed or the retry limit was reached.",
     egpu_model_recovery_restart: "Once parked, open User / System below and press Reboot once. If this happens again, send a screenshot of this card for support.",
     egpu_model_runtime_error: "eGPU unavailable",
     egpu_model_host_ok: "Connected",

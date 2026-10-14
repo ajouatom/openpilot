@@ -42,6 +42,15 @@ test("delivery failures explain automatic recovery and installed files do not im
   CarrotEgpuModel.render({ available: true, state: "compiled", compiled: true, active: true });
   assert.equal(elements.get("egpuModelRecovery").hidden, true);
   assert.equal(elements.get("egpuModelRecovery").textContent, "");
+  CarrotEgpuModel.render({ available: true, state: "recovering", compiled: true, active: false });
+  assert.match(elements.get("egpuModelState").textContent, /reconnecting/);
+  assert.match(elements.get("egpuModelDetail").textContent, /internal model.*three times/);
+  assert.equal(elements.get("btnEgpuCompileRestart").hidden, true);
+  CarrotEgpuModel.render({ available: true, state: "recovery_ready", compiled: true, active: false });
+  assert.equal(elements.get("egpuModelState").textContent, "eGPU READY");
+  assert.match(elements.get("egpuModelDetail").textContent, /Test calculations passed.*internal model/);
+  CarrotEgpuModel.render({ available: true, state: "recovery_stopped", compiled: true, active: false });
+  assert.match(elements.get("egpuModelDetail").textContent, /internal model.*parked/);
   CarrotEgpuModel.render({ available: true, state: "error", error_code: "future_code", detail: "internal stack trace" });
   assert.match(elements.get("egpuModelDetail").textContent, /screenshot/);
   assert.doesNotMatch(elements.get("egpuModelDetail").textContent, /future_code|stack trace/);
