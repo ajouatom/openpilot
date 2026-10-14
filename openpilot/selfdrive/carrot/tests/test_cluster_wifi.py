@@ -1,4 +1,5 @@
 import importlib.util
+import ast
 import json
 from pathlib import Path
 import socket
@@ -144,6 +145,39 @@ def test_default_usb_and_registered_wifi_factory(tmp_path, monkeypatch):
   path.write_text('{}')
   with pytest.raises(RuntimeError):
     create_display()
+
+
+def test_wifi_geometry_is_available_before_opening_idle_timed_connection(monkeypatch):
+  monkeypatch.setattr('cluster_wifi_display.Connection', lambda *a: pytest.fail('connected before renderer ready'))
+  display = S3WifiDisplay(CONFIG)
+  display.set_orientation(1)
+  assert (display.landscape_width, display.landscape_height) == (1920, 462)
+  assert display.connection is None and display.dev is None
+  assert display.open_after_renderer
+  assert not getattr(TuringUsbDisplay(), 'open_after_renderer', False)
+
+
+@pytest.mark.parametrize('allowed', [True, False])
+def test_registration_wakes_usb_wait_without_device_event(tmp_path, monkeypatch, allowed):
+  path = tmp_path / 'pair.json'
+  monkeypatch.setenv('CARROT_S3_CONFIG', str(path))
+  source = CLUSTER.parent / 'cluster_autorun.py'
+  tree = ast.parse(source.read_text(encoding='utf8'))
+  node = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == '_wait_for_supported_usb_device')
+  clock, closed = [0.0], []
+  def wait(*args):
+    protocol.save_config(CONFIG, path)
+    clock[0] += 1
+    return False
+  scope = dict(Params=object, time=SimpleNamespace(monotonic=lambda: clock[0]),
+               _read_hud_mode=lambda params: 1, _hud_output_allowed=lambda params: allowed or clock[0] == 0,
+               _open_usb_uevent_socket=lambda: SimpleNamespace(close=lambda: closed.append(True)),
+               _wait_for_usb_uevent=wait, USB_FALLBACK_SCAN_INTERVAL_S=30, HUD_CHECK_INTERVAL_S=1,
+               HUD_PARAM='ClusterHud', HUD_DEBUG_PARAM='ClusterHudDebug', IS_ONROAD_PARAM='IsOnroad')
+  exec(compile(ast.Module(body=[node], type_ignores=[]), str(source), 'exec'), scope)
+  monkeypatch.setattr('cluster_usb_display.find_supported_usb_product', lambda *a: pytest.fail('unnecessary USB scan'))
+  assert scope['_wait_for_supported_usb_device'](object(), 0x0092, 'test') is None
+  assert clock[0] == 1 and closed == [True]
 
 
 @pytest.mark.parametrize('data', [[], None, {**CONFIG, 'fps': 1.5}, {**CONFIG, 'quality': True}])
