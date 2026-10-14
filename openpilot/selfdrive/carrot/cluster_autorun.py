@@ -344,6 +344,7 @@ def _wait_for_usb_uevent(sock: socket.socket | None, timeout_s: float, expected_
 
 def _wait_for_supported_usb_device(params: Params, expected_product_id: int, reason: str) -> int | None:
     from cluster_usb_display import find_supported_usb_product, product_id_for_hud_mode, product_label
+    from cluster_wifi_protocol import load_config as load_wifi_config
 
     print(
         f"[cluster_autorun] {product_label(expected_product_id)} {reason}; "
@@ -383,6 +384,9 @@ def _wait_for_supported_usb_device(params: Params, expected_product_id: int, rea
                 if current_product_id != expected_product_id:
                     expected_product_id = current_product_id
                     next_fallback_scan = now
+                if load_wifi_config() is not None:
+                    print("[cluster_autorun] S3 Wi-Fi registration detected; rechecking output", flush=True)
+                    return None
                 next_hud_check = now + HUD_CHECK_INTERVAL_S
 
             now = time.monotonic()
