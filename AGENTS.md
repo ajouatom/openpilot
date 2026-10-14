@@ -1,5 +1,15 @@
 # Repository memory
 
+- On 2026-10-14, the user requested recovering uncommitted completed work and
+  an explanation before publication. The pending October 3 changes are NNFF
+  startup-notice retry, a default-OFF search-only NNFF setting, and a common
+  120 ms temporary-steering warning presentation delay. Publish separately to
+  carrot-nav and carrot-wip with single-parent commits after current checks.
+  The user explicitly requested deleting the failed parked-blinker experiment:
+  remove its uncommitted safety hooks, helper and tests; retain only historical
+  findings. Do not reinstall or revive that experiment. See
+  docs/uncommitted_work_recovery_20261014.md. No vehicle deployment is included.
+
 - On 2026-10-12, 10a5 on nav ac1da01591/mode2 reproduces a real green held by
   a tiny sole red anchor and zero moving preparation after small night lamps
   repeatedly lose IDs. Add a two-housing red-to-green release: each anchor needs
@@ -468,6 +478,15 @@
   Closed-loop comfort and clearance remain unvalidated. Keep incident data local.
   See docs/longitudinal_gap_hold_band_20261005.md.
 
+- On 2026-10-03, the user explicitly approved adding core7 to C3/C3X main UI
+  onroad affinity: cores0,1,2,3,6,7 with SCHED_OTHER/nice19 for all UI threads.
+  This supersedes the earlier core7 exclusion for this UI. C4 stays core6;
+  offroad returns to cores0..3. Check each big core independently; preserve
+  model/DM, control/camera, IRQ and USB cluster policies. An allowed mask is
+  not a CPU quota or parallel rendering and may concentrate UI work on core7.
+  Device affinity/FPS and model/DM impact remain unvalidated. See
+  docs/camera_core5_trial.md.
+
 - On 2026-10-03, the user requested a manual compatibility option for intermittent
   cluster warnings: HyundaiCanfdClusterDirectTx defaults OFF on every vehicle,
   including EV6. In CAN-FD CAMERA_SCC only, enabling it at startup selects the
@@ -479,15 +498,6 @@
   are required. 543 focused/settings/Wiki/firmware-identity tests and F4/H7
   builds pass; actual warning resolution and physical timing remain unvalidated.
   See docs/canfd_cluster_rx_forwarding.md. Keep incident data local.
-
-- On 2026-10-03, the user explicitly approved adding core7 to C3/C3X main UI
-  onroad affinity: cores0,1,2,3,6,7 with SCHED_OTHER/nice19 for all UI threads.
-  This supersedes the earlier core7 exclusion for this UI. C4 stays core6;
-  offroad returns to cores0..3. Check each big core independently; preserve
-  model/DM, control/camera, IRQ and USB cluster policies. An allowed mask is
-  not a CPU quota or parallel rendering and may concentrate UI work on core7.
-  Device affinity/FPS and model/DM impact remain unvalidated. See
-  docs/camera_core5_trial.md.
 
 - On 2026-10-03, Tucson `0000030c--adf522a321--4` showed unnecessary left
   steering while passing a transporter. Actual speed stayed near 104 km/h
@@ -515,6 +525,24 @@
   pass on desktop with Windows Params storage substituted. This promotion is
   not a new retry fix or vehicle-response validation. See
   docs/steering_handover_20260930.md.
+
+- On 2026-10-01, Ioniq 5 PE `000005d3--54fb087f33--21` on eb58e6d7
+  confirmed live handover mode 3. The reporter clarified first-curve inside
+  positioning and insufficient turning at the street end after 35 s; this
+  supersedes interpreting the complaint as vibration/catching. First-curve
+  authority is full and angle tracking close; path/target and unwind timing
+  need investigation, without declaring the driving model at fault. First
+  0–10 s also has roughly 10 Hz original-MDPS
+  column-torque oscillation with ceiling 250 and no pressed detection. In the
+  tight left turn after 35 s, command reaches the existing 175-degree limit,
+  then repeated torque-based override drops authority to 25; at 39.125 s actual
+  wheel 51.7 versus target/command 147.1 gives 95.4 degrees error. Mode 3 stays
+  waiting during those drops. Exit capture/recover then hits the raw-force veto;
+  Panda TX echoes confirm 44-to-25 in 7.1 ms, followed by bounded return until
+  42.79 s. No CAN/steering/model fault or decoded warning-vibration request.
+  Torque/contact signals do not prove driver intent; the source of full-authority
+  oscillation and physical remedy remain unresolved. Analysis only; do not infer
+  that faster handover alone fixes it. See docs/ioniq5_5d3_steering_20261001.md.
 
 - On 2026-10-02, after the native CPU experiment and Ioniq 5 PE before/after
   logs, the user explicitly approved promotion to `carrot-wip` and deletion of
@@ -1197,6 +1225,12 @@
   `docs/user/` or link it from the public Wiki.
 
 # Settings Wiki authoring
+
+- On 2026-10-08, the user explicitly gave standing approval to commit and push
+  task-related Wiki updates to `https://github.com/ajouatom/openpilot.wiki.git`,
+  including its default `master` branch. Do not ask for separate Wiki-push
+  confirmation again for requested work. Continue following the authoring and
+  validation rules below and preserve unrelated Wiki content.
 
 - Before editing generated settings Wiki content or its generator, read
   `tools/docs/wiki_settings/AUTHORING_GUIDE.md` completely.
