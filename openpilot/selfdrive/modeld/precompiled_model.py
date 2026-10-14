@@ -130,6 +130,10 @@ def gpu_bootloader_timeout(detail: str, phase: str) -> bool:
                     detail.rstrip(), re.MULTILINE) is not None)
 
 
+def gpu_worker_busy(detail: str) -> bool:
+  return re.search(r'^(?:RuntimeError: )?previous eGPU worker is still exiting\Z', detail.rstrip(), re.MULTILINE) is not None
+
+
 def gpu_transport_failure(detail: str) -> bool:
   """Recognize terminal USB transport errors, never a model-file I/O error.
 
@@ -251,6 +255,7 @@ def record_failure(path: Path, error: BaseException | str, phase: str) -> bool:
   detail = str(error)
   value = json.loads((path.parent / 'installed.json').read_text())
   transient = (usbgpu_pcie_not_ready(error) or isinstance(error, (TimeoutError, BrokenPipeError)) or
+               gpu_worker_busy(detail) or
                gpu_transport_failure(detail) or
                gpu_usb_link_failure(detail, value) or
                gpu_bootloader_timeout(detail, phase) or

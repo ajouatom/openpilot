@@ -1,5 +1,6 @@
 """Run a pinned compiled model in its own tinygrad interpreter and shared input buffer."""
 import hashlib
+import faulthandler
 import json
 import mmap
 import os
@@ -9,12 +10,36 @@ import threading
 import time
 import traceback
 
+_gpu_owner = None
 
-def watch_parent(parent):
+
+def claim_gpu_owner():
+  # Keep the lock for the process lifetime, including teardown/native USB waits.
+  # A modeld restart must not open the device while its old worker is exiting.
+  global _gpu_owner
+  if sys.platform == 'linux':
+    import fcntl
+    _gpu_owner = open('/tmp/carrot-precompiled-gpu.lock', 'a')
+    try:
+      fcntl.flock(_gpu_owner, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError as exc:
+      raise RuntimeError('previous eGPU worker is still exiting') from exc
+
+
+def watch_parent(parent, progress):
   # PR_SET_PDEATHSIG follows the creating *thread*. modeld's loading thread exits
   # after startup, so monitor the parent process instead of killing a healthy worker.
+  reported = set()
   while os.getppid() == parent:
-    time.sleep(.2)
+    stage, frame, started = progress.current
+    age = time.monotonic() - started
+    if (frame > 0 and stage in ('input_upload', 'warp', 'model_call', 'output_read') and age > .075
+        and frame not in reported and len(reported) < 3):
+      reported.add(frame)
+      print(json.dumps({'precompiledWorkerStall': {'stage': stage, 'frame': frame, 'age_ms': round(age * 1000)}}),
+            file=sys.stderr, flush=True)
+      faulthandler.dump_traceback(file=sys.stderr, all_threads=True)
+    time.sleep(.05)
   os._exit(1)
 
 
@@ -23,7 +48,6 @@ def main():
   parent = os.getppid()
   if parent == 1:
     return
-  threading.Thread(target=watch_parent, args=(parent,), daemon=True).start()
   control = sys.stdout.buffer
   sys.stdout = sys.stderr  # tinygrad diagnostics must not enter the control protocol
   pkl, shared_path, width, height = Path(sys.argv[1]), Path(sys.argv[2]), int(sys.argv[3]), int(sys.argv[4])
@@ -31,11 +55,13 @@ def main():
   # This entry point is executed by filename; keep early diagnostics stdlib-only.
   from egpu_worker_progress import WorkerProgress
   progress = WorkerProgress(Path(str(shared_path) + '.progress'))
+  threading.Thread(target=watch_parent, args=(parent, progress), daemon=True).start()
   manifest = json.loads((pkl.parent / 'installed.json').read_text())
   progress.mark('verify_model')
   with pkl.open('rb') as f:
     if hashlib.file_digest(f, 'sha256').hexdigest() != manifest['pickle']['sha256']:
       raise ValueError('precompiled PKL checksum mismatch')
+  claim_gpu_owner()
   runtime = pkl.parent / ('runtime-' + manifest['runtime']['sha256'][:16])
   sys.path.insert(0, str(runtime))
   os.environ.update(DEV='USB+AMD:LLVM', GMMU='0', JIT_BATCH_SIZE='0')
@@ -50,6 +76,8 @@ def main():
   if not generic:
     import model_runtime
   from tinygrad import Device, Tensor
+  from openpilot.selfdrive.modeld.egpu_usb_wait import configure_usb_wait
+  configure_usb_wait(manifest)
   from openpilot.selfdrive.modeld.precompiled_artifact import load_artifact
   from openpilot.common.runtime_diagnostics import RuntimeDiagnostics
   from openpilot.common.swaglog import cloudlog

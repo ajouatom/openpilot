@@ -122,6 +122,7 @@ def test_inference_shutdown_releases_worker_without_rejecting_artifact(monkeypat
 
 
 @pytest.mark.parametrize('message,rejected', [('RuntimeError: PCIe link not up (LTSSM=0x00)', False),
+                                             ('RuntimeError: previous eGPU worker is still exiting', False),
                                              ('RuntimeError: bulk OUT 0x02 failed: Input/Output Error', False),
                                              ('RuntimeError: libusb_control_transfer: No such device (it may have been disconnected)', False),
                                              ('Traceback (most recent call last):\n  worker startup\n' +
@@ -147,6 +148,9 @@ def test_worker_error_protocol_preserves_cause_and_artifact_decision(tmp_path, m
     def select(self, timeout):
       return [True]
   monkeypatch.setattr(runner.selectors, 'DefaultSelector', ReadySelector)
+  process.stdout = SimpleNamespace(fileno=lambda: 9, closed=False)
+  process.stdout.close = lambda: setattr(process.stdout, 'closed', True)
+  monkeypatch.setattr(runner.os, 'read', lambda *args: payload)
   with pytest.raises(RuntimeError) as raised:
     runner.PrecompiledModelState(1928, 1208, tmp_path / 'model.pkl')
   assert str(raised.value) == message
@@ -173,6 +177,7 @@ def test_timeout_saves_worker_stage_before_cleanup(tmp_path, monkeypatch):
   from openpilot.selfdrive.modeld.egpu_worker_progress import WorkerProgress
   (tmp_path / 'installed.json').write_text(json.dumps({'pickle': {'sha256': 'a' * 64}}))
   paths = []
+  clock = [0.]
   def start(command, **kwargs):
     path = Path(command[3] + '.progress')
     progress = WorkerProgress(path)
@@ -189,9 +194,11 @@ def test_timeout_saves_worker_stage_before_cleanup(tmp_path, monkeypatch):
     def register(self, *args):
       pass
     def select(self, timeout):
+      clock[0] += timeout
       return []
   monkeypatch.setattr(runner.subprocess, 'Popen', start)
   monkeypatch.setattr(runner.selectors, 'DefaultSelector', TimeoutSelector)
+  monkeypatch.setattr(runner.time, 'monotonic', lambda: clock[0])
   with pytest.raises(TimeoutError, match='timed out'):
     runner.PrecompiledModelState(1928, 1208, tmp_path / 'model.pkl')
   failure = json.loads((tmp_path / 'last_failure.json').read_text())
@@ -211,7 +218,8 @@ def test_generic_runner_advances_dropped_frames_without_external_feature_queue(m
   model.output = np.array([1., 2.], np.float32)
   model.output_slices = {'action': slice(0, 2)}
   model.parser = SimpleNamespace(parse_outputs=lambda outputs: outputs)
-  monkeypatch.setattr(model, '_receive', lambda timeout: b'1\n')
+  deadlines = []
+  monkeypatch.setattr(model, '_receive', lambda timeout: deadlines.append(timeout) or b'1\n')
   frames = {name: SimpleNamespace(data=np.zeros(16, np.uint8)) for name in ('img', 'big_img')}
   transforms = {name: np.eye(3, dtype=np.float32) for name in frames}
   inputs = {'desire_pulse': np.eye(8, dtype=np.float32)[1], 'traffic_convention': np.array([1, 0]), 'action_t': np.array([.2, .3])}
@@ -222,6 +230,7 @@ def test_generic_runner_advances_dropped_frames_without_external_feature_queue(m
     assert model.process.stdin.getvalue() == b'rr'
     assert model.views['desire'][1] == 0
     np.testing.assert_array_equal(output['action'], [[1, 2]])
+    assert deadlines == [20, .15]
   finally:
     model.process = None
 

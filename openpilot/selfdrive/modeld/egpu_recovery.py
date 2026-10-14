@@ -13,7 +13,7 @@ from types import SimpleNamespace
 
 from openpilot.common.egpu_recovery_status import BUDGET, STATUS, write_status
 from openpilot.selfdrive.modeld.model_join import may_join
-from openpilot.selfdrive.modeld.precompiled_model import gpu_bootloader_timeout, gpu_transport_failure, gpu_usb_link_failure
+from openpilot.selfdrive.modeld.precompiled_model import gpu_bootloader_timeout, gpu_transport_failure, gpu_usb_link_failure, gpu_worker_busy
 
 DELAYS = (10., 30., 60.)
 HEALTH_SECONDS = 3.
@@ -43,6 +43,7 @@ def retryable(error, manifest):
 
 def retryable_preparation(error, manifest):
   return (retryable(error, manifest) or isinstance(error, ReadyExpired) or
+          gpu_worker_busy(str(error)) or
           gpu_bootloader_timeout(str(error), 'load') or
           re.search(r'^(?:RuntimeError: )?PCIe link not up \(LTSSM=0x[0-9a-f]+\)\Z', str(error).rstrip(), re.MULTILINE) is not None)
 

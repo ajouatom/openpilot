@@ -14,6 +14,7 @@ RECORD = struct.Struct('<QQQddQ')  # generation, stage, frame, monotonic, CPU, t
 class WorkerProgress:
   def __init__(self, path: Path):
     self.frame = self.generation = 0
+    self.current = ('starting', 0, time.monotonic())
     self.memory = None
     try:
       with path.open('w+b') as f:
@@ -24,12 +25,13 @@ class WorkerProgress:
       pass  # optional diagnostics must not prevent inference
 
   def mark(self, stage: str):
+    self.current = (stage, self.frame, time.monotonic())
     if self.memory is None:
       return
     self.generation += 2
     struct.pack_into('<Q', self.memory, 0, self.generation - 1)
     RECORD.pack_into(self.memory, 0, self.generation - 1, STAGES.index(stage), self.frame,
-                     time.monotonic(), time.thread_time(), threading.get_native_id())
+                     self.current[2], time.thread_time(), threading.get_native_id())
     struct.pack_into('<Q', self.memory, 0, self.generation)
 
   def close(self):
