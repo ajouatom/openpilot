@@ -54,12 +54,18 @@ class ET:
 # get event name from enum
 EVENT_NAME = {v: k for k, v in EventName.schema.enumerants.items()}
 
+TEMP_STEER_EVENTS = (EventName.steerTempUnavailable, EventName.steerTempUnavailableSilent)
+TEMP_STEER_WARNING_DELAY_FRAMES = round(0.12 / DT_CTRL)
+TEMP_STEER_WARNING_RESET_FRAMES = round(1.0 / DT_CTRL)
+
 
 class Events:
   def __init__(self):
     self.events: list[int] = []
     self.static_events: list[int] = []
     self.event_counters = dict.fromkeys(EVENTS.keys(), 0)
+    self._steer_warning_fault_frames = 0
+    self._steer_warning_clear_frames = 0
 
   @property
   def names(self) -> list[int]:
@@ -74,6 +80,15 @@ class Events:
     bisect.insort(self.events, event_name)
 
   def clear(self) -> None:
+    # Count completed cycles, sharing history across audible/silent variants.
+    # Short healthy gaps must not hide repeated interruptions indefinitely.
+    if any(e in self.events for e in TEMP_STEER_EVENTS):
+      self._steer_warning_fault_frames = min(self._steer_warning_fault_frames + 1, TEMP_STEER_WARNING_DELAY_FRAMES)
+      self._steer_warning_clear_frames = 0
+    else:
+      self._steer_warning_clear_frames = min(self._steer_warning_clear_frames + 1, TEMP_STEER_WARNING_RESET_FRAMES)
+      if self._steer_warning_clear_frames >= TEMP_STEER_WARNING_RESET_FRAMES:
+        self._steer_warning_fault_frames = 0
     self.event_counters = {k: (v + 1 if k in self.events else 0) for k, v in self.event_counters.items()}
     self.events = self.static_events.copy()
 
@@ -92,6 +107,13 @@ class Events:
           alert = EVENTS[e][et]
           if not isinstance(alert, Alert):
             alert = alert(*callback_args)
+
+          # Presentation only: keep fault events, no-entry and the state-machine
+          # deadline immediate. Critical takeover alerts always bypass the delay.
+          if (e in TEMP_STEER_EVENTS and et in (ET.SOFT_DISABLE, ET.WARNING) and
+              alert.alert_status != AlertStatus.critical and
+              self._steer_warning_fault_frames < TEMP_STEER_WARNING_DELAY_FRAMES):
+            continue
 
           # Static alerts are shared objects in EVENTS. Translate a copy so the
           # canonical English text remains available when the language changes.
