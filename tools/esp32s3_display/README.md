@@ -63,10 +63,14 @@ the command below. Never commit or share a registration file.
    prompt if shown. No app or Internet connection is required. If the phone routes
    this page over mobile data, select “stay connected without Internet” or briefly
    turn mobile data off. Use another phone if yours cannot run its hotspot while joining Wi-Fi.
-3. Enter the target 2.4 GHz Wi-Fi name/password and save. The page downloads
-   `carrot-s3.json`, containing the device ID/pairing key, not the hotspot password.
-   Setup closes 15 seconds after saving. Re-enable the target hotspot afterwards.
-4. Transfer the downloaded registration file to C4 and import it once:
+3. Enter the target 2.4 GHz Wi-Fi name/password and select **Wi-Fi 저장**. Saving
+   does not require a file download. For an already registered C4, keep its existing
+   registration and simply re-enable the target hotspot. Setup closes 15 seconds later.
+4. For the first C4 registration, select **처음 C4 연결: 등록 파일 받기** after saving.
+   This downloads `carrot-s3-<timestamp>.json` with the device ID/pairing key, not the
+   hotspot password. Every click uses a new filename so existing downloads need not
+   be overwritten; the downloaded blob remains available after setup closes.
+5. Transfer the downloaded registration file to C4 and import it once:
 
 ```sh
 python tools/esp32s3_display/provision.py --import-pairing /path/to/carrot-s3.json
@@ -138,6 +142,10 @@ not a C4 installation, native C4 performance measurement, or vehicle-camera test
 Host transport/display/rate checks passed 38 tests; existing autorun/performance
 checks passed another 38 with one Linux-only skip under desktop Params/hardware
 stubs. ESP-IDF 5.4.0 built the installed 873472-byte application successfully.
+The subsequent setup-page correction separates Wi-Fi save from optional download
+and assigns a timestamp filename on each download click. Its 873584-byte firmware
+was built, flashed and checked for preserved pairing; repeat-download phone UI
+confirmation is separate from the earlier phone save/download check.
 
 The earlier hardware bench achieved about 15 FPS at JPEG quality 75 and 20 FPS at
 quality 50 with a simple synthetic HUD. Detailed synthetic content reached about
