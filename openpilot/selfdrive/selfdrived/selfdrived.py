@@ -23,6 +23,8 @@ from openpilot.selfdrive.selfdrived.events import Events, ET, EmptyAlert
 from openpilot.selfdrive.selfdrived.helpers import ExcessiveActuationCheck
 from openpilot.selfdrive.selfdrived.state import StateMachine
 from openpilot.selfdrive.selfdrived.impact_detector import ImpactDetector
+from openpilot.selfdrive.controls.lib.radar_only_warning import RadarOnlyWarning
+from openpilot.selfdrive.carrot.radar_motion.timing import front_radar_distance_delay_s
 from openpilot.selfdrive.selfdrived.alertmanager import AlertManager, set_offroad_alert
 from openpilot.selfdrive.controls.lib.cutin_alert import (
   CutinAlertCandidate,
@@ -87,7 +89,8 @@ class SelfdriveD:
     # TODO: de-couple selfdrived with card/conflate on carState without introducing controls mismatches
     self.car_state_sock = messaging.sub_sock('carState', timeout=20)
 
-    ignore = self.sensor_packets + self.gps_packets + ['alertDebug']
+    # Optional advisory input must not become a controls-readiness dependency.
+    ignore = self.sensor_packets + self.gps_packets + ['alertDebug', 'liveTracks']
     if SIMULATION:
       ignore += ['driverCameraState', 'managerState']
     if self.CP.notCar or SIMULATION:
@@ -100,7 +103,7 @@ class SelfdriveD:
         ignore += ['wideRoadCameraState']
     self.sm = messaging.SubMaster(['deviceState', 'pandaStates', 'peripheralState', 'modelV2', 'liveCalibration',
                                    'carOutput', 'driverMonitoringState', 'longitudinalPlan', 'livePose', # 'liveDelay',
-                                   'managerState', 'liveParameters', 'radarState', 'liveTorqueParameters',
+                                   'managerState', 'liveParameters', 'radarState', 'liveTracks', 'liveTorqueParameters',
                                    'carrotMan',
                                    'controlsState', 'carControl', 'driverAssistance', 'alertDebug', 'userBookmark', 'audioFeedback'] + \
                                    self.camera_packets + self.sensor_packets + self.gps_packets,
@@ -141,6 +144,8 @@ class SelfdriveD:
     self.recalibrating_seen = False
     self.dm_lockout_set = self.params.get_bool("DriverTooDistracted")
     self.cutin_audio_tracker = CutinAlertTracker()
+    self.radar_only_warning = RadarOnlyWarning(front_radar_distance_delay_s(self.CP))
+    self.car_state_time_s = 0.0
     self.dm_uncertain_alerted = False
     self.dm_disabled_prev = False
     self.update_reboot_alerted = False
@@ -252,6 +257,12 @@ class SelfdriveD:
     cutin_alert = self.cutin_audio_tracker.update(promoted_cutins, cutin_enabled)
     if cutin_alert:
       self.events.add(EventName.radarCutin)
+
+    if self.radar_only_warning.update_live(
+      self.car_state_time_s if REPLAY else time.monotonic(), CS, self.sm,
+      self.enabled and self.CP.openpilotLongitudinalControl,
+    ):
+      self.events.add(EventName.radarStationaryLead)
 
     # Block resume if cruise never previously enabled
     resume_pressed = any(be.type in (ButtonType.accelCruise, ButtonType.resumeCruise) for be in CS.buttonEvents)
@@ -581,6 +592,8 @@ class SelfdriveD:
   def data_sample(self):
     car_state = messaging.recv_one(self.car_state_sock)
     CS = car_state.carState if car_state else self.CS_prev
+    if car_state is not None:
+      self.car_state_time_s = car_state.logMonoTime * 1e-9
 
     self.sm.update(0)
 

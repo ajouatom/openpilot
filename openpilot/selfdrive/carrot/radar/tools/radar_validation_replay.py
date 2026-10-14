@@ -304,6 +304,9 @@ class RadarFrame:
   lane_change_model_path: tuple[tuple[float, float], ...] = ()
   lane_change_device_yaw: float | None = None
   recorded_radar_track_mode: int | None = None
+  model_velocity: tuple[float, ...] = ()
+  model_lane_change_state: str = "unknown"
+  stopping_lane_geometry_valid: bool = False
 
 
 @dataclass(frozen=True)
@@ -991,8 +994,14 @@ def _controller_model(frame: RadarFrame) -> Any:
       )
       for lead in frame.model_leads
     ),
-    velocity=SimpleNamespace(x=(frame.v_ego,)),
+    velocity=SimpleNamespace(x=frame.model_velocity or (frame.v_ego,)),
+    meta=SimpleNamespace(laneChangeState=frame.model_lane_change_state),
+    laneLines=tuple(
+      SimpleNamespace(x=tuple(p[0] for p in line), y=tuple(p[1] for p in line))
+      for line in frame.lane_lines
+    ) if frame.stopping_lane_geometry_valid else (),
     laneLineProbs=frame.lane_probs,
+    laneLineStds=frame.lane_stds,
   )
 
 
@@ -3287,6 +3296,19 @@ def load_frames(log_path: Path, *, radar_track_flip: bool | None = None) -> list
         video_time_s=aligned_video_time_s(qcamera_start_eof_ns, latest_model_eof_ns),
         path_y_stds=latest_path_y_stds,
         lane_stds=latest_lane_stds,
+        model_velocity=tuple(float(v) for v in event.modelV2.velocity.x),
+        model_lane_change_state=str(event.modelV2.meta.laneChangeState),
+        # _copy_model sanitizes display coordinates. Never let its substituted
+        # zeros turn invalid raw geometry into control corroboration.
+        stopping_lane_geometry_valid=all(
+          math.isfinite(float(value))
+          for values in (
+            event.modelV2.position.x, event.modelV2.position.y,
+            event.modelV2.laneLineProbs, event.modelV2.laneLineStds,
+            *(line.x for line in event.modelV2.laneLines),
+            *(line.y for line in event.modelV2.laneLines),
+          ) for value in values
+        ),
         steering_angle_deg=latest_steering_angle_deg,
         steering_rate_deg_s=latest_steering_rate_deg_s,
         yaw_rate_rad_s=yaw_rate,

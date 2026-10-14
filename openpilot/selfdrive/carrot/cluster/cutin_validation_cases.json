@@ -2,6 +2,34 @@
   "sensitivity": 50,
   "cases": [
     {
+      "id": "carnival-222-1-stopping-tail-corner-1193",
+      "vehicle_folder": "KIA_CARNIVAL_4TH_GEN c4dcf95545dafe68",
+      "log": "00000222--e22b2b29cf--1/rlog.zst",
+      "source": "front+corner",
+      "window": [53.54, 54.05],
+      "expected": "detect",
+      "validation_stage": "lead_two",
+      "target_track_ids": [1193],
+      "required_lead_two_ids": [1193],
+      "forbidden_lead_one_ids": [1193],
+      "latest_detection_s": 53.56,
+      "lead_two_continuous_window": [53.54, 54.05],
+      "scene": "Carnival stopped-car approach on 0245e76f. Before the relevant front 57 appears, measured corner 1193 agrees with the visual car and both confident inner lane lines. The stopping model tail turns away before the car and rejects ordinary path matching. Require the independently confirmed corner as L2 for all 11 samples, without making corner-only L1 or widening ordinary path gates. Video is about 0.09978 s after replay time; L2 first range is 74.32 m. Earlier lead selection is not closed-loop braking or guaranteed stopping."
+    },
+    {
+      "id": "carnival-222-1-unconfirmed-corner-no-promotion",
+      "vehicle_folder": "KIA_CARNIVAL_4TH_GEN c4dcf95545dafe68",
+      "log": "00000222--e22b2b29cf--1/rlog.zst",
+      "source": "front+corner",
+      "window": [49.0, 53.4],
+      "expected": "clear",
+      "validation_stage": "lead_two",
+      "target_track_ids": [1187, 1193],
+      "forbidden_lead_one_ids": [1187, 1193],
+      "forbidden_lead_two_ids": [1187, 1193],
+      "scene": "Same stopped-car encounter before current visual and measured lane corroboration confirms. Preserve abstention from corner-only control; a visible car in the video does not supply missing model confidence or a front measurement."
+    },
+    {
       "id": "ev9-97-35-tentative-front-phantom-35",
       "vehicle_folder": "KIA_EV9 a6444e342fe1700f",
       "log": "00000097--e22228b4eb--35/rlog.zst",
