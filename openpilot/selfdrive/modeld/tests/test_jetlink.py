@@ -16,14 +16,17 @@ from openpilot.selfdrive.modeld.jetlink import warp as warp_module
 from jetlink.spec import ModelSpec
 
 
-@pytest.mark.parametrize('device', ['tici', 'tizi', 'pc', ''])
-def test_fused_warp_leaves_unvalidated_devices_on_original_path(device):
+@pytest.mark.parametrize('device', ['pc', ''])
+def test_fused_warp_leaves_unsupported_devices_on_original_path(device):
   reference = object()
   assert validated_warp(reference, None, None, None, 4, device) is reference
 
 
 @pytest.mark.parametrize('failure', [None, 'pixel', 'shape', 'dtype', 'build'])
-def test_fused_warp_requires_exact_parity_and_restores_transforms(monkeypatch, failure):
+@pytest.mark.parametrize('device,width,height', [('tici', 1928, 1208), ('tizi', 1928, 1208), ('mici', 1344, 760)])
+def test_fused_warp_requires_exact_parity_and_restores_transforms(monkeypatch, failure, device, width, height):
+  from openpilot.system.camerad.cameras.nv12_info import get_nv12_info
+  nv12 = NS(width=width, height=height, size=get_nv12_info(width, height)[3])
   expected = np.arange(32, dtype=np.uint8).reshape(2, 4, 4)
   actual = expected.copy()
   if failure == 'pixel':
@@ -33,7 +36,8 @@ def test_fused_warp_requires_exact_parity_and_restores_transforms(monkeypatch, f
   elif failure == 'dtype':
     actual = actual.astype(np.int16)
   class FakeTensor:
-    def __init__(self, *args, **kwargs): pass
+    def __init__(self, value, device):
+      assert value.shape == (nv12.size,) and value.dtype == np.uint8 and device == 'QCOM'
     def realize(self): return self
   def candidate(**kwargs):
     if failure == 'build':
@@ -45,10 +49,12 @@ def test_fused_warp_requires_exact_parity_and_restores_transforms(monkeypatch, f
   monkeypatch.setitem(sys.modules, 'tinygrad', NS(Tensor=FakeTensor, TinyJit=lambda _: candidate))
   monkeypatch.setitem(sys.modules, 'openpilot.common.swaglog',
                       NS(cloudlog=NS(warning=lambda *args: None, exception=lambda *args: failures.append(args))))
-  monkeypatch.setattr(warp_module, 'make_warp', lambda *args: None)
+  def make_warp(layout, model_width, model_height, frame_skip):
+    assert layout is nv12 and (model_width, model_height, frame_skip) == (512, 256, 4)
+  monkeypatch.setattr(warp_module, 'make_warp', make_warp)
   monkeypatch.setattr(warp_module, 'validation_matrices', lambda: [np.ones((3, 3))])
   transforms = {key: np.eye(3, dtype=np.float32) for key in ('tfm', 'big_tfm')}
-  selected = validated_warp(reference, NS(size=64), transforms, {}, 4, 'mici')
+  selected = validated_warp(reference, nv12, transforms, {}, 4, device)
   assert selected is (candidate if failure is None else reference)
   assert bool(failures) == (failure is not None)
   assert all(np.array_equal(matrix, np.eye(3)) for matrix in transforms.values())
