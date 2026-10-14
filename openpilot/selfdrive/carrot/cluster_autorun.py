@@ -535,6 +535,7 @@ def main() -> None:
     _configure_autorun_locale()
     _ensure_cluster_paths()
     from cluster_usb_display import find_supported_usb_product, product_id_for_hud_mode, product_label
+    from cluster_wifi_protocol import load_config as load_wifi_config
 
     scheduler = DisplayScheduler(4, enabled=TICI)
     scheduler.update(False, force=True)
@@ -558,7 +559,9 @@ def main() -> None:
 
         _wait_for_usbgpu_startup(params)
 
-        if find_supported_usb_product(expected_product_id) is None:
+        if load_wifi_config() is not None:
+            print("[cluster_autorun] discovering registered S3 Wi-Fi HUD", flush=True)
+        elif find_supported_usb_product(expected_product_id) is None:
             if not TICI:
                 print(
                     f"[cluster_autorun] {product_label(expected_product_id)} not found on PC; "
