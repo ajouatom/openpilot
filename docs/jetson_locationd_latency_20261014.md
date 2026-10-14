@@ -118,3 +118,67 @@ Code and signed release are published only on carrot-nav. No road-response
 validation, guaranteed error elimination, GPS transport repair, or physical
 eGPU USB repair is implied. Remaining work would need to target measured warp/
 roundtrip spikes and external position continuity without weakening validity.
+
+## Follow-up: sender identity, phone positioning and USB completion
+
+The PC-connected USB phone was positively matched to the active navigation
+sender by reading its wlan0 address through ADB after reconnection. The phone's
+TMap version also matches the receiver's app-version field. Device identifiers,
+addresses, coordinates, Android dumps and raw kernel traces remain private.
+The receiver has one navigation control connection. This was not observation
+of a different phone.
+
+Independent navigation streams explain why the displayed map can remain live
+while model-map position expires. During a 30-second sample, vehicle sequences
+318--321 arrive without sequence gaps at roughly eight-second intervals while
+map video continues near 10 Hz. Later the vehicle sequence stays at 329 while
+video and other navigation items continue. Bringing the map foreground changes
+app_status and app_foreground on that same session, but does not restore vehicle
+updates in the subsequent 30-second sample (position age reaches 498 seconds).
+Source timestamps also stop advancing, so this is upstream of vehicle receiver
+processing, not simply delayed consumption of a fresh packet stream. Phone and
+vehicle clocks are not synchronized; their timestamp difference is not a
+measured one-way network latency.
+
+Direct Android inspection finds TMap requesting GPS at one-second intervals
+with fine-location permission granted. In the final snapshot the GPS provider's
+last fix is 1,177.8 seconds old, with reported horizontal accuracy 43.6 m and
+three satellites in that fix. Network and fused locations are much newer
+(9.2 and 6.3 seconds). The navigation vehicle item is 434.9 seconds old although
+map video remains fresh. This confirms stale phone GPS alongside stopped
+position publication; it does not yet prove which phone location callback the
+navigation bridge consumes, or distinguish callback filtering from deliberate
+unchanged-position suppression. Foreground status alone is not the cause.
+Fresh vehicle GNSS now supplies the existing model-map fallback; no stale
+phone timestamp was renewed and no validity/freshness gate was relaxed.
+
+USB traces separate transfer from completion processing. A first 45-second
+comma trace has 901 inference writes of 475,136 bytes: syscall mean 3.413 ms,
+p99 7.448 ms, maximum 15.697 ms. Most of the maximum is between gadget queue
+and giveback, which must not be described as physical wire time alone.
+A second simultaneous host/comma capture finds 900 host request groups:
+1,024-byte header, 262,144-byte block and 211,968-byte tail. Header-complete to
+full payload averages 2.246 ms, p99 2.551 ms, maximum 2.905 ms; host read
+resubmission gaps average about 0.2 ms. Approximate cross-clock sequence
+alignment suggests delayed comma completion after host reception, but lacks
+shared-clock or explicit packet-ID proof.
+
+A separate comma-only trace establishes this delay without cross-clock
+assumptions. Of 887 fully retained requests, write time averages 3.409 ms,
+p99 7.521 ms, maximum 13.724 ms. In the worst request, dwc3_bh_work is queued
+2.912 ms after syscall entry, waits 10.685 ms before starting, gives back the
+request 0.015 ms later, and writev returns another 0.112 ms later. This directly
+locates a large spike in scheduling of the USB completion worker, rather than
+Jetson inference or payload read speed. It does not establish why that worker
+waits, nor imply every spike has the same cause. The initial CPU0 trace buffer
+wrapped by 648 entries; analysis excludes that prefix and uses the common
+retained interval only. The worst request lies within the retained interval.
+
+All captures used separate trace instances with continuous Park/inactive
+checks and removed those instances afterward. No production process restart,
+USB reset, kernel scheduling/affinity change, model change or deployment was
+performed. Further optimization should measure worker wakeup/run-queue delay
+and interrupt placement before changing scheduling. An asynchronous sender
+would also require bounded ownership and completion synchronization; an early
+return must never permit reuse of a buffer still owned by USB. These findings
+do not establish 40 ms execution or road stability.
