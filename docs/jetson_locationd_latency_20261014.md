@@ -263,3 +263,55 @@ The volatile /dev/shm/carrot-jetlink-aio-test diagnostic flag additionally
 requires fresh Park/inactive state before activation. Native FunctionFS
 performance, cancellation and reconnect validation are required before this
 candidate can become a default. It is not yet a claimed latency improvement.
+
+## Native AIO comparison and final installed state
+
+Vehicle c437f7454b includes the parked-position and transactional route-progress
+fixes. Installation fast-forwarded only carrot-nav after fresh Park/inactive
+checks, preserving both locally generated radar DBC modifications and all
+untracked build products. Jetson remains on signed host 989386eb85 and the
+same RL Nav 80eedcdd engine; no engine rebuild or new host package was needed.
+
+The volatile AIO flag was enabled only while parked. The live reader mapped
+the compiled AIO library and completed warmup before joining. Two separate
+120-second measurements, first AIO and then restored serial reads, gave:
+
+| Reader | Model mean ms | p99 ms | Maximum ms | Valid model results | Frame skips |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Four queued 16 KB AIO reads | 42.131 | 46.894 | 63.042 | 2,400 | 0 |
+| Existing serial reads | 44.071 | 48.188 | 57.589 | 2,400 | 0 |
+
+Both windows have valid odometry and DM outputs, healthy livePose flags, no
+dashboard alerts and no unexpected modeld/locationd/jetlinkd restart. Model
+publication averages 50.005 / 50.002 ms respectively, but maximum intervals
+are 74.754 / 61.829 ms. Mean USB response scope decreases with AIO, while
+Jetson engine and request-processing means remain around 25.4 / 27.9 ms.
+Response scope includes server inference and is not pure USB transfer time.
+
+An intentional SIGINT of jetlinkd while parked exercised AIO shutdown and
+USB re-enumeration. The old process exited, a fresh serial reader connected,
+and the external model rejoined automatically. No cleanup failure was
+reported. This is one native teardown/reconnect check, not exhaustive cable-
+fault or kernel cancellation validation.
+
+The AIO run uses 71.8% aggregate comma CPU (busiest core 83.9%); serial uses
+72.6% (busiest 84.2%). A separate ten-second Jetson sample is 10.9% aggregate,
+busiest core 26.1%. Existing little-core affinity is retained. These short
+sequential runs do not isolate every scheduling/thermal effect.
+
+**Do not enable AIO by default yet.** It improves the measured average by
+about 1.94 ms, but does not achieve 40 ms or eliminate outliers, and no route
+was received during either window. The phone is no longer visible to ADB and
+the restarted receiver has no vehicle/route snapshot. Thus this comparison
+does not cover active navigation rendering or routed driving. The diagnostic
+flag was removed and the final vehicle is on its original serial USB path,
+with the accepted navigation fixes installed. AIO remains a default-OFF
+candidate for a connected-navigation and broader disconnect/fault test.
+
+Linux CI for c437f7454b passes 801 integration tests (11 skipped), 119
+navigation/cluster checks and 11 protected-storage checks, including actual
+Linux AIO regular-file order/ownership/partial-read/cleanup tests. eGPU model
+compatibility and Windows installer checks pass. Regular-file tests do not
+substitute for FunctionFS fault tests. Neither this work nor the parked map
+hold repairs absent phone GPS fixes, accepts a real 99.5 m route mismatch,
+or establishes road stability. Raw timings and sender diagnostics stay private.
