@@ -142,12 +142,13 @@ class GenericModelRuntime:
     Device[self.device].synchronize()
 
   def reset_state(self):
-    from tinygrad import Device
+    from tinygrad import Device, Tensor
     # Same initial zero state and buffer identities as construction; captured
     # recurrent outputs must continue to alias their original inputs.
     for name in self.state_pairs:
       tensor = self.queues[name]
-      tensor._buffer().copyin(memoryview(bytearray(tensor.numel() * tensor.dtype.itemsize)))
+      zeros = Tensor(np.zeros(tensor.shape, dtype=self.specs[name][1]), device='NPY')
+      tensor._buffer().copy_from(zeros._buffer())
     Device[self.device].synchronize()
 
   def restore_recovery_state(self):
