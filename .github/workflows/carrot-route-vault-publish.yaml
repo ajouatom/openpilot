@@ -65,6 +65,8 @@ jobs:
             openpilot/selfdrive/carrot/tests/test_radar_motion_predictor.py \
             openpilot/selfdrive/carrot/tests/test_radar_corroboration.py \
             openpilot/selfdrive/carrot/tests/test_stationary_front_evidence.py \
+            openpilot/selfdrive/carrot/tests/test_stopping_lane_corner.py \
+            openpilot/selfdrive/carrot/tests/test_radar_only_warning.py \
             openpilot/selfdrive/carrot/tests/test_scc_lead_policy.py \
             openpilot/selfdrive/carrot/tests/test_radar_lead_simulator.py \
             openpilot/selfdrive/carrot/tests/test_radard_dpath.py
