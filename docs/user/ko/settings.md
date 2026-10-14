@@ -105,7 +105,7 @@ Carrot Web 설정 화면에서는 다음 기능을 사용할 수 있습니다.
 
 ## 전체 설정 지도
 
-현재 `carrot-wip`의 `carrot_settings.json`에는 **187개 파라미터**가 있습니다. 운전자 감시 예외 설정 1개는 검색으로만 표시되며, 나머지는 아래 메뉴에 표시됩니다.
+현재 `carrot-wip`의 `carrot_settings.json`에는 **188개 파라미터**가 있습니다. 운전자 감시 예외 설정과 `NNFF` 2개는 검색으로만 표시되며, 나머지는 아래 메뉴에 표시됩니다.
 
 | 대분류 | 항목 수 | 중분류 |
 |---|---:|---|
@@ -148,7 +148,7 @@ Carrot Web 설정 화면에서는 다음 기능을 사용할 수 있습니다.
 폭스바겐의 별도 `SET`은 현재 속도 설정, `RES`는 이전 설정속도 복원에 사용하고, `+`·`-`는 버튼 모드·속도 단위·길게 누르기 설정을 따릅니다. 오픈파일럿 종방향 제어의 수동 인게이지 버튼은 기존 물리 `SET`·`RES`로 유지됩니다.
 
 <a id="vehicle-steering"></a>
-### 차량 조향 — 상위 37개 + ONNX 상세 5개
+### 차량 조향 — 상위 37개 + ONNX 상세 5개 + 검색 전용 1개
 
 | 세부 구역 | 파라미터 | 용도 |
 |---|---|---|
@@ -158,6 +158,7 @@ Carrot Web 설정 화면에서는 다음 기능을 사용할 수 있습니다.
 | [차로 변경](lane-change.md)·자동 턴 | `LaneChangeNeedTorque`, `LaneChangeDelay`, `LaneChangeBsd`, `LaneLineCheck`, `BlinkerLatchedTurn`, `LaneChangeLeverWait`, `AutoTurnControl`, `AutoTurnControlSpeedTurn`, `AutoTurnControlTurnEnd`, `AutoTurnMapChange` | 차로 변경 진입 조건과 ATC 동작 |
 | 레인모드 | `LatMpcPathCost`, `LatMpcMotionCost`, `LatMpcAccelCost`, `LatMpcJerkCost`, `LatMpcSteeringRateCost`, `LatMpcInputOffset`, `UseLaneLineSpeed`, `UseLaneLineCurveSpeed`, `AdjustLaneOffset` | 레인모드 MPC 가중치와 차선 사용 조건 |
 | 고급 토크·토크 계수 | `LateralTorqueCustom`, `LateralTorqueAccelFactor`, `LateralTorqueFriction`, `LateralTorqueKpV`, `LateralTorqueKiV`, `LateralTorqueKf`, `LateralTorqueKd` | 커스텀 토크 제어 계수 |
+| 고급 토크·검색 전용 | `NNFF` | 토크 조향의 신경망 피드포워드 옵션 |
 | 고급 토크·조향 제한 | `CustomSteerMax`, `CustomSteerDeltaUp`, `CustomSteerDeltaDown`, `CustomSteerDeltaUpLC`, `CustomSteerDeltaDownLC` | 최대 조향 토크와 토크 변화율 제한 |
 
 `ONNX 차선·BSD 인식`(`ShareData`)은 장치에서 실선·점선과 카메라 BSD를 계산하는 설정입니다. BSD는 모델이 추정한 차로 폭이 2m 이상인 설정된 좌우 영역을 번갈아 검사하며 속도나 차로 변경 방향을 실행 조건으로 사용하지 않습니다. 3개 클래스는 사각지대 위협, 근접 차량 없음, 멀거나 뒤쪽에 있는 차량을 구분합니다. 상세 화면은 기능 토글을 맨 위에 유지하고, 바로 아래의 분리된 카드에 BSD 감지영역 편집기를 표시합니다. 좌우 선택, 영상 갱신, 점 되돌리기, 점 초기화와 영역 저장만 기본 화면에 두며, 영상 왼쪽 위의 사각형 점 목록은 `1(좌)`, `1(우)` 형식으로 표시됩니다. 선택된 점이 없을 때 빈 화면을 누르면 별도 모드 없이 점이 추가되고, 확대·화면 이동·영역 전체 이동 없이 선택된 점만 이동합니다. 4개 편집 버튼 바로 아래의 좌우 2열 버튼으로 도로·와이드 카메라 영상을 팝업에서 확인합니다. 실행 상태·좌우 신뢰도·처리 성능과 5개 세부값은 우측 아래의 **고급 설정 펼치기/접기** 텍스트로 봅니다. 편집기는 마지막 카메라 영상 한 장을 보관하고, 영상이 없으면 흐린 기본 주행 예시 화면을 표시합니다. 영역 저장은 현재 세션에서 실제 카메라 영상을 받은 뒤에만 가능합니다. 기본값은 꺼짐이며 저장한 세부값은 서비스 재시작 후에도 유지됩니다. 필요한 OpenCV는 업데이트에 포함되어 정상 시작 시 자동 준비됩니다. 켜져 있어도 onroad 초기화와 모델·CAN·Panda 준비가 완료되어 주행 준비 상태가 0.5초 유지된 뒤 시작합니다. 실제 크루즈 활성화는 필요하지 않습니다. Offroad에서는 종료하고 다음 onroad에서도 다시 기다립니다. [동작 조건과 세부값](lane-change.md#sharedata--onnx-차선bsd-인식)을 참고하세요.
@@ -173,6 +174,12 @@ VW MEB(ID.4 포함)에도 수동 조향비와 학습 비율이 적용됩니다. 
 이전에 ID.4에서 무시되던 저장값도 이제 적용됩니다. 예를 들어 `CustomSR=0`에서 저장된 비율이 `30%`이면 학습값의 `0.3배`가 사용되므로, 학습값 그대로 사용하려면 비율을 `100%`로 설정하세요.
 
 `LateralTorqueCustom`과 `CustomSteer*` 계열은 차량의 기본 조향 튜닝과 안전 제한에 영향을 줄 수 있는 고급 항목입니다. 차종별 검증값과 복구 방법이 없으면 변경하지 마세요.
+
+#### NNFF 토크 제어
+
+`NNFF`는 기본값이 꺼짐인 신경망 피드포워드 옵션입니다. 켜면 조향각 제어가 아닌 차량에 토크 제어 튜닝을 사용하며, 대응 모델이 있으면 NNFF를 적용합니다. comma 자체 NNFF 지원 차종은 기존 자체 경로가 우선하고, 조향각 제어 차량에는 적용되지 않습니다.
+
+끄면 이 NNFF 옵션을 사용하지 않으며 별도 `NNFFLite` 값은 바꾸지 않습니다. 변경은 다음 주행 시작 또는 기기 재부팅 후 적용되며, 주행 중 즉시 바뀌지 않습니다. 시작 안내 문구가 보이지 않는 것만으로 적용 여부를 판단하지 마세요.
 
 #### 운전자 개입 후 조향 복구
 

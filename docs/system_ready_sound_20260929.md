@@ -27,3 +27,36 @@ existing DM volume protection and navigation audio. Ruff and diff checks passed.
 The Windows runner adapts native IPC/Params/hardware imports; the native IPC
 timeout test is excluded. Actual vehicle timing and speaker loudness remain
 unvalidated. Local runner: `.analysis/archive/2026-09-29/system-ready/`.
+
+## NNFF notification follow-up (2026-10-03)
+
+The NNFF notice previously fired only at selfdrived frame 550. If initialization
+was still pending at that frame, update_events returned before creating the
+notice; the six-second initialization timeout could therefore make it disappear
+for the entire onroad session even with NNFFModelName present.
+
+The notice now retries every 0.5 seconds after the original 5.5-second minimum.
+Require initialized, non-passive, onroad operation, healthy CAN and SubMaster
+checks, and no NO_ENTRY event. Select the current frame's ordinary alerts and
+systemReady first, then wait for an empty AlertManager before issuing torqueNNLoad
+once per selfdrived lifetime. A late NNFFModelName write is retried too. Preserve
+the existing text, sound, duration and priority; later warnings still preempt it.
+This does not change NNFF selection, models, steering control or saved settings.
+The NNFF/NNFFLite Params registrations remain default-off. A subsequent user
+request exposes NNFF only through Carrot Web search; NNFFLite remains internal.
+The new catalog entry preserves saved values and next-onroad application.
+Its localized catalog description feeds the generated Wiki pages; the Korean
+and English settings guides describe the same scope and application timing.
+Catalog validation (45 tests), Wiki tests (25), generated Markdown validation
+and the user-docs check pass. Executing the existing catalog normalization and
+derived-view JavaScript against backend-produced NNFF and sibling entries in
+V8 confirms normal-menu/favorite/profile hiding and case-insensitive NNFF search
+in Korean, English and Chinese. This is a data/view check, not a browser render.
+
+Validation: 96 desktop tests passed for NNFF notification, readiness, update
+notices, model startup and impact handling, plus the AlertManager duration test
+in a separate process (97 total). That existing randomized duration test mutates
+shared event definitions, so it must be isolated from fixed-duration assertions.
+Ruff and diff checks passed. Windows adapters replace native IPC/Params/hardware
+imports; these checks do not validate vehicle display or physical audio timing.
+Runner and reproduction notes: `.analysis/archive/2026-10-03/nnff-alert/`.
