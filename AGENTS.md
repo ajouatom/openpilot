@@ -22,7 +22,7 @@
   range<=120m, active longitudinal only, 500ms confirmation and encounter/cooldown
   suppression. Existing100 logs/497 labels are identical in modes1/2/3; existing
   failures11/10/13 and208 unverified remain. All119,689 prior mode1 outputs match;
-  no advisory fires, so real positive performance is unproven.1175 tests pass;
+  no advisory fires, so real positive performance is unproven.1176 wip tests pass;
   two new Carnival cases pass all modes. Publish both maintained branches and
   verify automatic NAS replay deployment; no vehicle action. See
   docs/carnival_stopped_car_20261014.md; recordings stay private.

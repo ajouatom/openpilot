@@ -160,7 +160,9 @@ class StoppingLaneCornerTracker:
         and abs(point.v_lead - vision.velocity) <= 8.0
       )
       if supports:
-        matching_points += int(point.d_rel <= MAX_DISTANCE_M)
+        # An equally plausible return just outside the output range still
+        # makes association ambiguous; the 80 m cap cannot resolve identity.
+        matching_points += 1
         strong = vision.probability >= MIN_VISION_PROB
         if (continuous and old.last_strong_s is not None
             and time_s - old.last_strong_s <= MAX_GAP_S):
