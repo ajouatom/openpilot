@@ -44,7 +44,7 @@ jobs:
           openpilot/system/tests/test_model_build_cache.py
       - name: Download the pinned isolated runtime
         run: |
-          curl --fail --retry 3 -o /tmp/mdm-runtime.tar.gz https://upload.shind0.synology.me/models/comma4-big-nav-rl-80eedcdd/precompiled-runtime.tar.gz
+          curl --fail --retry 3 -o /tmp/mdm-runtime.tar.gz https://upload.shind0.synology.me/models/comma4-big-nav-n16-96244b1f/precompiled-runtime.tar.gz
           echo '90970e01f2ba70d553294c0f9d5c6fe1678827f750705cab679a7b19b7bcb0b2  /tmp/mdm-runtime.tar.gz' | sha256sum -c -
           mkdir /tmp/mdm-runtime
           tar -xzf /tmp/mdm-runtime.tar.gz -C /tmp/mdm-runtime
