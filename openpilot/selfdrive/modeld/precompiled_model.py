@@ -145,8 +145,19 @@ def gpu_transport_failure(detail: str) -> bool:
     detail.rstrip(), re.MULTILINE | re.IGNORECASE) is not None
 
 
+def gpu_usb_link_failure(detail: str, manifest: dict) -> bool:
+  """Decode the verified USB runtime's latched link error, not arbitrary AMD faults."""
+  # This runtime binds AMD.error_state to the USB link's error word. -1 is
+  # libusb I/O failure or a short transfer, not an invalid model prediction.
+  # Other runtime versions/codes need their own source verification first.
+  runtime = manifest.get('runtime')
+  return (isinstance(runtime, dict) and runtime.get('sha256') ==
+          '90970e01f2ba70d553294c0f9d5c6fe1678827f750705cab679a7b19b7bcb0b2' and
+          re.search(r'^(?:RuntimeError: )?AMD(?::[0-9]+)? failed with -1\Z', detail.rstrip(), re.MULTILINE) is not None)
+
+
 def retry_usb_rejection(root: Path, pickle_sha256: str) -> bool:
-  """Migrate old USB-I/O/PSP startup misclassification after a device reboot.
+  """Migrate old USB-I/O/PSP misclassification after a device reboot.
 
   This grants another verified load attempt, never a validation receipt.
   Missing/mismatched diagnostics and actual model errors remain rejected.
@@ -155,14 +166,19 @@ def retry_usb_rejection(root: Path, pickle_sha256: str) -> bool:
   try:
     failure = json.loads((root / 'last_failure.json').read_text())
     current_boot = boot_identity()
-    return (isinstance(failure, dict) and failure.get('rejected') is True and
+    if not (isinstance(failure, dict) and failure.get('rejected') is True and
             failure.get('pickle_sha256') == pickle_sha256 and
-            failure.get('phase') in ('load', 'boot_validation') and
+            failure.get('phase') in ('load', 'boot_validation', 'inference') and
             isinstance(failure.get('boot_id'), str) and bool(failure['boot_id']) and
             bool(current_boot) and failure['boot_id'] != current_boot and
-            isinstance(failure.get('error'), str) and
-            (gpu_transport_failure(failure['error']) or
-             gpu_bootloader_timeout(failure['error'], failure['phase'])))
+            isinstance(failure.get('error'), str)):
+      return False
+    if gpu_transport_failure(failure['error']) or gpu_bootloader_timeout(failure['error'], failure['phase']):
+      return True
+    manifest = json.loads((root / 'installed.json').read_text())
+    return (isinstance(manifest, dict) and isinstance(manifest.get('pickle'), dict) and
+            manifest['pickle'].get('sha256') == pickle_sha256 and
+            gpu_usb_link_failure(failure['error'], manifest))
   except (OSError, ValueError, TypeError):
     return False
 
@@ -233,11 +249,12 @@ def record_failure(path: Path, error: BaseException | str, phase: str) -> bool:
   (path.parent / 'boot_validation.json').unlink(missing_ok=True)
   from openpilot.selfdrive.modeld.helpers import usbgpu_pcie_not_ready
   detail = str(error)
+  value = json.loads((path.parent / 'installed.json').read_text())
   transient = (usbgpu_pcie_not_ready(error) or isinstance(error, (TimeoutError, BrokenPipeError)) or
                gpu_transport_failure(detail) or
+               gpu_usb_link_failure(detail, value) or
                gpu_bootloader_timeout(detail, phase) or
                'precompiled eGPU worker timed out' in detail or 'precompiled eGPU worker exited' in detail)
-  value = json.loads((path.parent / 'installed.json').read_text())
   from openpilot.selfdrive.modeld.egpu_worker_progress import boot_identity
   failure = {'time': time.time(), 'phase': phase, 'rejected': not transient,  # noqa: TID251 - correlate persisted failures with boot logs
              'pickle_sha256': value['pickle']['sha256'], 'error': detail[-16384:], 'boot_id': boot_identity()}
