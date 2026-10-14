@@ -6,7 +6,7 @@ import os
 from enum import IntEnum
 from collections.abc import Callable
 
-from opendbc.car.hyundai.values import HyundaiFlags
+from opendbc.car.hyundai.values import CAR, HyundaiFlags
 
 from openpilot.cereal import log, car
 import openpilot.cereal.messaging as messaging
@@ -92,6 +92,17 @@ class Events:
           alert = EVENTS[e][et]
           if not isinstance(alert, Alert):
             alert = alert(*callback_args)
+
+          # Delay only the displayed temporary-steering warning, not the fault
+          # event, engagement block, torque cut or soft-disable timer.
+          if (callback_args and e in (EventName.steerTempUnavailable, EventName.steerTempUnavailableSilent) and
+              et in (ET.SOFT_DISABLE, ET.WARNING) and alert.alert_status != AlertStatus.critical):
+            CP = callback_args[0]
+            if (CP.brand == "hyundai" and CP.carFingerprint == CAR.HYUNDAI_ELANTRA and
+                CP.steerControlType == car.CarParams.SteerControlType.torque and CP.flags & HyundaiFlags.LEGACY and
+                not CP.flags & (HyundaiFlags.CANFD | HyundaiFlags.ANGLE_CONTROL) and
+                self.event_counters[e] * DT_CTRL < 0.12):
+              continue
 
           # Static alerts are shared objects in EVENTS. Translate a copy so the
           # canonical English text remains available when the language changes.

@@ -1,0 +1,50 @@
+name: Steering warning regression
+
+on:
+  pull_request:
+    branches: [carrot-wip]
+    paths:
+      - 'openpilot/selfdrive/selfdrived/events.py'
+      - 'openpilot/selfdrive/selfdrived/tests/test_alerts.py'
+      - '.github/workflows/steering-warning.yaml'
+      - 'pyproject.toml'
+      - 'uv.lock'
+  push:
+    branches: [carrot-wip, heatagain/elantra-steering-warning-delay]
+    paths:
+      - 'openpilot/selfdrive/selfdrived/events.py'
+      - 'openpilot/selfdrive/selfdrived/tests/test_alerts.py'
+      - '.github/workflows/steering-warning.yaml'
+      - 'pyproject.toml'
+      - 'uv.lock'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: steering-warning-${{ github.event_name }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  steering-warning:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      PYTHONPATH: .:opendbc_repo
+      PYTEST_DISABLE_PLUGIN_AUTOLOAD: '1'
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install the repository's Linux dependencies
+        run: ./tools/op.sh setup
+      - name: Build native test dependencies
+        run: >-
+          scons --minimal -j2
+          msgq_repo/msgq/ipc_pyx.so
+          msgq_repo/msgq/visionipc/visionipc_pyx.so
+          openpilot/common/params_pyx.so
+          opendbc_repo/opendbc/can/_can_native.so
+      - name: Run the five Elantra warning regression tests
+        run: >-
+          python -m pytest -o addopts='' -q
+          openpilot/selfdrive/selfdrived/tests/test_alerts.py::TestElantraSteeringWarningDelay
