@@ -97,3 +97,83 @@ seconds on the frame thread, protects DM scheduling, and reacquires a fresh
 camera frame before publishing internal fallback. Neither merely extending
 the timeout nor re-publishing the old prediction solves the recorded gap.
 These are follow-up changes, not fixes deployed by this read-only analysis.
+
+## Authorized reboot and warm initialization follow-up
+
+The user then requested an actual reboot and initialization test. With fresh
+Park, standstill, disabled controls and Panda controlsAllowed=false guards,
+the comma was rebooted without changing code, model artifacts or settings.
+Boot ID changed to 0547df25-747c-4c93-8cdd-2cf9876253f9. The eGPU initialized
+successfully with the same NAV RL artifact. New modeld runtimeTiming context
+(`backend=PrecompiledModelState`, `usbgpu=true`) confirms that the current
+modeld module, not only the separately executed worker, is now loaded.
+
+Two steady-state parked windows were verified against full rlogs; all ten
+downloaded completed segment files matched remote SHA256 values. Initial
+live-monitor misses were observer losses, not missing model publications.
+
+| Test | Full-log model results | Inference mean / p99 / max | Maximum publication gap |
+| --- | --- | --- | --- |
+| 300.02 s after reboot | 6,002, consecutive and valid | 44.563 / 45.833 / 46.880 ms | 58.547 ms |
+| 120.00 s after modeld-only restart | 2,399, consecutive and valid | 44.480 / 45.650 / 46.386 ms | 58.935 ms |
+
+Camera, odometry, pose and driver-model messages remained valid in both
+windows; all recorded pose input/sensor/posenet flags were true and no alert
+was recorded. Startup/restart gaps are excluded from these steady-state
+windows. A separate 120 s, 20 ms polling watcher saw no worker stage over
+150 ms; this sampling cannot exclude every shorter stall.
+
+Reboot restored operation but did not clean the physical link: the root-port
+counter increased 2,550 -> 2,654 during the first window and 2,702 -> 2,737
+during the second, with the same USB address and 5 Gbit/s enumeration. These
+are root-port PORTLI errors, not per-eGPU inference-error counts. Available
+memory remained below the background recovery guard. Successful ordinary
+initialization does not demonstrate fault recovery or road reliability.
+
+## External navigation correlation
+
+Full logs around the original failure (boot 4915--4925 s) contain 191
+carrotMan and 191 navInstructionCarrot messages, all valid. The navigation
+instruction stream's largest gap is 199.525 ms. The route stays at the same
+ID with 143 coordinates and two maneuvers; positions are nonzero and change.
+Reported position-fix age spans 0.040--2.699 s. This local publication stream
+does not prove phone packets or original GPS fixes arrive at 20 Hz.
+
+The preceding minute includes navigation inactive/zero-position periods and
+subsequent activation. Thus navigation was present near the failure and cannot
+be categorically excluded by correlation alone. MapInput uses nonblocking
+VisionIPC receive and accepts a bounded 256x256 image with route/freshness
+checks. The recorded failure occurred later in worker output read, not in a
+blocking wait for the navigation image. No per-frame map-input trace or
+controlled navigation ON/OFF comparison establishes causality here.
+
+## User cable reseat comparison in progress
+
+The user physically reseated the cables while retaining the hub/display
+configuration. Kernel logs show hub/display/eGPU disconnect at boot 935.284--
+935.309 s and re-enumeration at 951--953 s. The corresponding inference error
+at approximately 935.452 s is `AMD failed with -1` in state checkpoint. This
+is a user-induced disconnect test, not another unexplained spontaneous stall.
+The background recovery status was now emitted (`stopped`, `probe_failed`,
+one attempt), proving that this code path is loaded; that status alone does
+not identify the preparation exception or demonstrate successful recovery.
+
+After reseating, the eGPU was present but inactive. A guarded modeld restart
+retained UsbGpuStartupFailed and therefore skipped eGPU initialization; it
+must not be described as a new GPU-load failure. A subsequent 19.996 s
+read-only sample with no eGPU inference increased the root-port counter
+36,463 -> 43,770 (7,307 errors, about 365/s), with the same USB address.
+This is not a matched-load inference performance comparison. It shows a severe
+link problem even without eGPU model execution, so map inference alone cannot
+explain the post-reseat link condition.
+
+The user then disconnected only the display. USB inventory confirms that
+the display disappeared while Genesys 05e3:0625 and the eGPU remained at the
+same addresses. With eGPU still inactive, the first 20.001 s sample increased
+62,557 -> 62,684 (127 errors, 6.35/s). A further 59.998 s sample increased
+62,781 -> 63,096 (315 errors, 5.25/s). All adjacent sample intervals retained
+the same address and nondecreasing counter. Thus the reduction persisted, but
+link errors remained. Without a reconnect/reversal trial this does not prove
+the display itself is defective; shared power, cable positioning and hub/link
+state remain possible confounders. The user next offered to bypass the hub;
+direct-connection results are still pending.
