@@ -3,6 +3,7 @@ import os
 import signal
 import time
 import subprocess
+import traceback
 from collections.abc import Callable, ValuesView
 from abc import ABC, abstractmethod
 from multiprocessing import Process, get_context
@@ -15,9 +16,11 @@ import openpilot.system.sentry as sentry
 from openpilot.common.basedir import BASEDIR
 from openpilot.common.params import Params
 from openpilot.common.swaglog import cloudlog
+from openpilot.system.manager.process_crash import enable_fault_handler, flush_crash_reports, report_process_exit
 
 
 def launcher(proc: str, name: str) -> None:
+  enable_fault_handler()
   try:
     # import the process
     mod = importlib.import_module(proc)
@@ -37,6 +40,8 @@ def launcher(proc: str, name: str) -> None:
   except KeyboardInterrupt:
     cloudlog.warning(f"child {proc} got SIGINT")
   except Exception:
+    # Print before Sentry/Params/network handling, which can itself wait or fail.
+    traceback.print_exc()
     # can't install the crash handler because sys.excepthook doesn't play nice
     # with threads, so catch it here.
     sentry.capture_exception()
@@ -105,6 +110,8 @@ class ManagerProcess(ABC):
         self.proc.join()
 
     ret = self.proc.exitcode
+    if ret not in (None, 0) and not self.shutting_down:
+      report_process_exit(self.name, self.proc.pid, ret)
     cloudlog.info(f"{self.name} is dead with {ret}")
 
     if self.proc.exitcode is not None:
@@ -252,6 +259,7 @@ class DaemonProcess(ManagerProcess):
 
 def ensure_running(procs: ValuesView[ManagerProcess], started: bool, params=None, CP: car.CarParams=None,
                    not_run: list[str] | None=None) -> list[ManagerProcess]:
+  flush_crash_reports()
   if not_run is None:
     not_run = []
 

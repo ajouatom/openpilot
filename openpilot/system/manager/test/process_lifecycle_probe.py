@@ -36,7 +36,9 @@ def main(directory, legacy_fork):
   tree = ast.parse(path.read_text(encoding='utf-8'))
   names = {'ManagerProcess', 'PythonProcess', 'ensure_running', 'join_process'}
   definitions = [n for n in tree.body if isinstance(n, (ast.ClassDef, ast.FunctionDef)) and n.name in names]
+  reports = []
   namespace = {'__name__': __name__, 'launcher': worker, 'Params': object,
+               'report_process_exit': lambda *args: reports.append(args), 'flush_crash_reports': lambda: None,
                'cloudlog': SimpleNamespace(info=lambda *_: None, error=lambda *_: None),
                'car': SimpleNamespace(CarParams=object),
                'log': SimpleNamespace(ManagerState=SimpleNamespace(ProcessState=SimpleNamespace(new_message=SimpleNamespace)))}
@@ -102,6 +104,7 @@ def main(directory, legacy_fork):
     second.join(3)
     supervise(not_run=['carrot_man'])
     assert process.proc is None
+    assert reports == [('carrot_man', first.pid, first.exitcode)], reports
     result = {'pids': [first.pid, second.pid], 'crash_exitcode': first.exitcode,
               'max_supervision_s': max(calls), 'fork_callbacks': len(forks),
               'inherited_parent_state': [json.loads(Path(directory, f'{p.pid}.json').read_text()) for p in children],
