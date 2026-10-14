@@ -98,6 +98,11 @@ turns the backlight off after two seconds without a successful image. A stalled
 USB transaction can add its bounded timeout to that interval. USB reconnect is
 handled by re-enumeration. Reopening setup temporarily replaces the driving display.
 
+C4 also detects registration saved while it is waiting for a USB display. The
+Wi-Fi connection starts after graphics initialization so that startup does not
+exceed the bridge's two-second idle timeout. These host fixes require updated C4
+code, not a new S3 firmware.
+
 The Wi-Fi path uses JPEG quality 50 and 15 FPS by default, independently of
 `ClusterHudEncoder`. Optional integer `fps` (1–20) and `quality` (20–90) fields in
 the registration JSON change that policy on the next HUD start. The existing
@@ -127,6 +132,14 @@ the firmware does not enable flash encryption and physical flash access can expo
 stored credentials. The phone registration file authorizes access to that display.
 
 ## Validation
+
+The October 15 native C4 test corrected a missing registration, an AP channel
+latency problem, and the graphics-startup idle disconnect. The existing camera HUD
+then rendered at typically 9–13 Hz, with model and driver monitoring at 20 Hz in
+the initial parked check. This is renderer cadence, not an optical panel FPS
+measurement or road validation. See the
+[field investigation](../../docs/s3_wifi_egpu_investigation_20261015.md) for evidence
+and remaining C4 network latency. The following numbers are the earlier PC bench.
 
 The final authenticated bridge was exercised on the physical S3, powered hub and
 panel. Phone setup/save/download, importing that file, UART credential replacement

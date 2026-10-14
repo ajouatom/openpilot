@@ -6,11 +6,16 @@ from cluster_wifi_protocol import Connection, load_config
 
 
 class S3WifiDisplay(TuringUsbDisplay):
+    # The bridge expires idle TCP clients after two seconds. Graphics/font
+    # initialization can exceed that, so connect only once the renderer is ready.
+    open_after_renderer = True
+
     def __init__(self, config: dict, **kwargs):
         super().__init__(**kwargs)
         self.config = config
         self.connection = None
         self.pending = deque()
+        self.landscape_width, self.landscape_height = 1920, 462
 
     def open(self) -> None:
         if self.expected_product_id not in (None, 0x0092):

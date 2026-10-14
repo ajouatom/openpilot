@@ -747,18 +747,16 @@ def run_demo(
         # mandatory sync transaction immediately after USB initialization.
         usb_display.set_orientation(active_orientation)
         usb_display.set_profile_enabled(profile_render)
-        profile_stage = time.perf_counter()
-        try:
-            usb_display.open()
-        except Exception:
-            usb_display.close()
-            raise
-        profile.add_elapsed("usb.open", profile_stage)
-        profile.add_samples(usb_display.profile_samples())
-        usb_display.clear_profile_samples()
-        if usb_async and usb_codec == "jpeg":
-            usb_pipeline = AsyncJpegUsbPipeline(usb_display)
-            usb_pipeline.start()
+        if not getattr(usb_display, "open_after_renderer", False):
+            profile_stage = time.perf_counter()
+            try:
+                usb_display.open()
+            except Exception:
+                usb_display.close()
+                raise
+            profile.add_elapsed("usb.open", profile_stage)
+            profile.add_samples(usb_display.profile_samples())
+            usb_display.clear_profile_samples()
 
     frame_width = width or (usb_display.landscape_width if usb_display is not None else DESIGN_WIDTH)
     frame_height = height or (usb_display.landscape_height if usb_display is not None else DESIGN_HEIGHT)
@@ -1037,6 +1035,16 @@ def run_demo(
         renderer.open(hidden=output_mode == "usb")
         profile.add_samples(renderer.profile_samples())
         renderer.clear_profile_samples()
+        if usb_display is not None:
+            if getattr(usb_display, "open_after_renderer", False):
+                profile_stage = time.perf_counter()
+                usb_display.open()
+                profile.add_elapsed("usb.open", profile_stage)
+                profile.add_samples(usb_display.profile_samples())
+                usb_display.clear_profile_samples()
+            if usb_async and usb_codec == "jpeg":
+                usb_pipeline = AsyncJpegUsbPipeline(usb_display)
+                usb_pipeline.start()
         if usb_display is not None and usb_codec == "h264":
             h264_encoder_fps = resolved_h264_encoder_fps(target_fps, usb_h264_fps)
             h264_pipeline = H264UsbPipeline(
