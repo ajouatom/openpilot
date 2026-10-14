@@ -1,5 +1,17 @@
 # Repository memory
 
+- On 2026-10-14, the upper/lower signal-group trial fixes supplied qualified
+  observations but not actual departure: 43,090 historical planner inputs at
+  nominal/+20ms and 20 recent segments show no output changes; Santa Fe encoded
+  165-frame replay still has zero releases. Keep UpperSignalGroupTrial OFFLINE;
+  production guard/tracker remain unchanged. Fresh neural comparison gives
+  68/73 box-eligible images versus rules47, tiles70; tiny green cores10/37 or
+  tiles19/37 remain weak. Neural also fails identity/release at recorded timing.
+  No retraining or vehicle change. Next target is learned whole-housing/lamp
+  recognition with encounter-separated labels, not another live rule relaxation.
+  Publish offline tools/tests/findings to both maintained branches, single-parent.
+  See docs/signal_upper_group_trial_20261014.md; raw evidence stays private.
+
 - On 2026-10-14, Elantra route311 segments3/10 confirms86->88% memory use.
   DPathRadarD's lifetime Cap'n Proto builder leaks replaced list/error storage:
   restore a fresh builder each update, preserving controller history and fields.
