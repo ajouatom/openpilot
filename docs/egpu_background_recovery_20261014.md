@@ -50,8 +50,13 @@ in-place recurrent reset using the pinned tinygrad runtime on CPU.
 
 Windows focused recovery/model/API validation passes 267 tests; Jetlink's local
 contract suite passes 25 with five platform skips. Web display tests pass 13;
-the production bundles were regenerated. Native Linux CI results are recorded
-after publication.
+the production bundles were regenerated. Native Linux eGPU compatibility and
+Jetson integration CI both pass on nav `5205878af4` and wip `0a25c684bb`. The
+wip desktop port passes 245 focused tests with five platform skips. The wip
+user-doc mapping job flagged the localized status labels; no settings catalog
+or defaults changed, and user guides were not requested. A concrete docs
+exception is recorded in the follow-up commit rather than rewriting published
+history.
 
 These checks do not measure physical USB bus interference, memory pressure,
 eGPU timing or road behavior. The health policy reacts to a delay; it cannot
@@ -74,3 +79,10 @@ down 3.6%, with core5 mean 77.66% to 70.86% across different drive segments.
 That is neither a Rust benchmark nor a prediction for a full rewrite. A whole
 device percentage requires per-process Python/native profiling and matched
 workload measurements; GPU/USB elapsed time is not CPU occupancy.
+
+## Subsequent parked investigation
+
+See [the USB root-link investigation](egpu_root_link_20261014.md). The vehicle
+continues to run the pre-recovery commit with its internal model. Repeated USB
+link failure without an inference worker prevents a meaningful recovery test;
+the new recovery implementation has not been installed or hardware-validated.
