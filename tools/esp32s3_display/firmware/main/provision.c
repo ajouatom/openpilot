@@ -139,12 +139,13 @@ static esp_err_t setup_page(httpd_req_t *req) {
     "<h1>Carrot S3 HUD</h1><p>2.4GHz 핫스팟 또는 공유기 정보를 입력하세요.</p>"
     "<form id=f><label>Wi-Fi 이름<input id=s required maxlength=32 autocomplete=off></label>"
     "<label>Wi-Fi 비밀번호<input id=p type=password required minlength=8 maxlength=63 autocomplete=new-password></label>"
-    "<button>저장하고 C4 등록 파일 받기</button></form><p id=m></p><a id=a hidden>등록 파일 다시 받기</a>"
-    "<p>받은 파일을 C4에서 한 번 등록하면 다음부터 자동 연결됩니다. 등록 파일은 다른 사람에게 공유하지 마세요.</p>"
+    "<button>Wi-Fi 저장</button></form><p id=m></p><a id=a hidden>처음 C4 연결: 등록 파일 받기</a>"
+    "<p>이미 연결한 C4는 Wi-Fi만 저장하면 됩니다. 처음 연결할 때만 아래 파일을 받아 C4에 등록하세요. 파일은 다른 사람에게 공유하지 마세요.</p>"
     "<script>f.onsubmit=async e=>{e.preventDefault();try{let r=await fetch('/configure',{method:'POST',"
     "headers:{'Content-Type':'application/json','X-Setup-Token':'%s'},body:JSON.stringify({ssid:s.value,password:p.value})});"
-    "if(!r.ok)throw Error();let b=await r.blob();a.href=URL.createObjectURL(b);a.download='carrot-s3.json';a.hidden=false;a.click();"
-    "p.value='';m.textContent='저장했습니다. 폰을 핫스팟으로 되돌리세요. 설정 Wi-Fi는 15초 후 닫힙니다.';}"
+    "if(!r.ok)throw Error();let b=await r.blob();a.href=URL.createObjectURL(b);"
+    "a.onclick=()=>{a.download='carrot-s3-'+Date.now()+'.json'};a.hidden=false;"
+    "p.value='';m.textContent='Wi-Fi를 저장했습니다. 기존 C4 등록 파일은 그대로 쓰세요. 폰을 핫스팟으로 되돌리면 연결됩니다. 설정 Wi-Fi는 15초 후 닫힙니다.';}"
     "catch(e){m.textContent='저장하지 못했습니다. 입력값과 연결을 확인하세요.'}}</script></html>", csrf);
   httpd_resp_set_type(req, "text/html; charset=utf-8");
   httpd_resp_set_hdr(req, "Cache-Control", "no-store");
