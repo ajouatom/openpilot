@@ -1,5 +1,15 @@
 # Repository memory
 
+- On 2026-10-14, Elantra route311 segments3/10 confirms86->88% memory use.
+  DPathRadarD's lifetime Cap'n Proto builder leaks replaced list/error storage:
+  restore a fresh builder each update, preserving controller history and fields.
+  532 tests pass;2,399 recorded-input frames serialize identically.72,000 real-
+  payload updates grow old RSS23.02MiB, fixed0.086MiB then flat (accelerated PC,
+  not an hour of vehicle operation). Actual radar RSS grows3.31MiB across~8min;
+  loggerd grows36.86MiB and remains unexplained. Do not claim the overall88%
+  issue solved. Publish both maintained branches, single-parent; no vehicle action.
+  See docs/elantra_memory_20261014.md; recordings remain private.
+
 - On 2026-10-14, the user requested recovering uncommitted completed work and
   an explanation before publication. The pending October 3 changes are NNFF
   startup-notice retry, a default-OFF search-only NNFF setting, and a common
