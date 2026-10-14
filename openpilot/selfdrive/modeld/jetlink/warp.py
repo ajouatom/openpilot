@@ -1,4 +1,4 @@
-"""C4 Jetlink warp with direct NV12 sampling in the model's six-channel layout."""
+"""Jetlink warp with direct NV12 sampling in the model's six-channel layout."""
 
 
 def make_warp(nv12, model_w, model_h, frame_skip):
@@ -49,8 +49,8 @@ def validation_matrices():
 
 
 def validated_warp(reference, nv12, transforms, inputs, frame_skip, device_type):
-  """Keep C3 unchanged; on C4 accept the candidate only after exact GPU parity."""
-  if device_type != 'mici':
+  """Use the same candidate on C3/C3X/C4 after exact device-local GPU parity."""
+  if device_type not in ('tici', 'tizi', 'mici'):
     return reference
   import numpy as np
   from tinygrad import Tensor, TinyJit
@@ -71,7 +71,8 @@ def validated_warp(reference, nv12, transforms, inputs, frame_skip, device_type)
       actual = candidate(**inputs, **frames).numpy()
       if actual.shape != expected.shape or actual.dtype != expected.dtype or not np.array_equal(actual, expected):
         raise ValueError(f'fused camera warp pixel validation failed at probe {index}')
-    cloudlog.warning('Jetlink fused C4 warp verified: %d probes, %d pixels each', len(probes), actual.size)
+    cloudlog.warning('Jetlink fused warp verified on %s (%dx%d): %d probes, %d pixels each',
+                     device_type, nv12.width, nv12.height, len(probes), actual.size)
     return candidate
   except Exception:
     cloudlog.exception('Jetlink fused warp unavailable; retaining original camera warp')
