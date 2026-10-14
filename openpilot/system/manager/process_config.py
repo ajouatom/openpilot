@@ -176,7 +176,9 @@ procs = [
   PythonProcess("webjoystick", "openpilot.tools.bodyteleop.web", notcar, enabled=BODYTELEOP_AVAILABLE),
   PythonProcess("joystick", "openpilot.tools.joystick.joystick_control", and_(joystick, iscar)),
 
-  PythonProcess("carrot_man", "openpilot.selfdrive.carrot.carrot_man", always_run, restart_if_crash=True),#, enabled=not PC),
+  # Recovery happens after manager's IPC threads are running. Do not fork that
+  # live interpreter: a blocked restart also stops managerState publication.
+  PythonProcess("carrot_man", "openpilot.selfdrive.carrot.carrot_man", always_run, restart_if_crash=True, spawn=True),
   # carrot_navi permanently owns TCP 7714 and publishes navigation data over cereal.
   PythonProcess("carrot_navi", "openpilot.selfdrive.carrot.carrot_navi", always_run, restart_if_crash=True),
 
