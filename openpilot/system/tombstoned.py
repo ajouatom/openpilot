@@ -141,6 +141,10 @@ def report_tombstone_apport(fn):
 
 
 def main() -> NoReturn:
+  # Independent of carrot_man and Sentry's upstream-only reporting policy.
+  # Capture and HTTP run in separate diagnostic threads, never in manager.
+  from openpilot.system.manager.process_crash import start_crash_reporting
+  start_crash_reporting()
   should_report = sentry.init(sentry.SentryProject.SELFDRIVE_NATIVE)
 
   # Clear apport folder on start, otherwise duplicate crashes won't register
