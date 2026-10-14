@@ -232,3 +232,15 @@ actual mapsd logs also report parked_position_hold=true while generating maps
 near 5 Hz, with mean CPU time around 7 ms per render. A strengthened regression
 also requires the ORIGINAL fix to have occurred after parking began; a freshly
 extrapolated coordinate cannot seed a parked anchor from a pre-parking fix.
+
+Route-distance rejection also now rolls back the tentative route progress.
+Previously mapsd called the monotonic RouteTracker.project before checking
+the existing 50 m distance gate: an off-route GPS jump could advance progress,
+then be rejected for rendering, yet prevent a later correct fix from recovering.
+RouteTracker.update_pose commits only an accepted projected/extrapolated pose;
+normal accepted projections remain identical. Regression tests cover invalid
+first fixes, a far-off forward jump followed by recovery, and extrapolation
+rejection. The 50 m threshold is unchanged. This fixes a state-poisoning path,
+not real GPS error: a live independent fresh tracker also measured a 99.5 m
+separation from the current sender position to the current route's start, which
+must remain rejected even without poisoned progress.

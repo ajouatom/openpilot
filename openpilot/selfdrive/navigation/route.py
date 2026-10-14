@@ -57,3 +57,18 @@ class RouteTracker:
 
   def snap(self, longitude: float, latitude: float) -> tuple[float, float, float]:
     return self.pose(self.project(longitude, latitude))
+
+  def update_pose(self, longitude: float, latitude: float, advance: float = 0., max_distance: float = 50.) -> tuple[float, float, float] | None:
+    """Commit progress only when the resulting map pose passes the distance gate."""
+    previous = self.progress
+    try:
+      pose = self.pose(self.project(longitude, latitude) + advance)
+      lon, lat, _ = pose
+      distance = np.hypot((lon - longitude) * 111320 * np.cos(np.radians(lat)), (lat - latitude) * 110540)
+      if not np.isfinite(distance) or distance > max_distance:
+        self.progress = previous
+        return None
+      return pose
+    except Exception:
+      self.progress = previous
+      raise

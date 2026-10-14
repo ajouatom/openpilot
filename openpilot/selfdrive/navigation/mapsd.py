@@ -90,13 +90,13 @@ def main():
               archive = MapboxTiles(mapbox_token) if mapbox_token else PMTiles(RemoteTiles())
               archive_created = now
               renderer = MapRenderer(archive)
-            progress = tracker.project(gps.longitude, gps.latitude)
-            lon, lat, bearing = tracker.pose(progress + gps.speed * (now - gps.time))
+            pose = tracker.update_pose(gps.longitude, gps.latitude, gps.speed * (now - gps.time))
             # Fetch only the current view; do not prefetch a whole country/route.
-            distance = np.hypot((lon - gps.longitude) * 111320 * np.cos(np.radians(lat)), (lat - gps.latitude) * 110540)
-            result = renderer.render(Position(lat, lon, bearing), route) if distance <= 50 else None
+            if pose is not None:
+              lon, lat, bearing = pose
+            result = renderer.render(Position(lat, lon, bearing), route) if pose is not None else None
             valid = result is not None and result.valid
-            reason = 'ready' if valid else 'route_position' if distance > 50 else 'tiles'
+            reason = 'ready' if valid else 'route_position' if pose is None else 'tiles'
             if valid:
               image = result.image
         except (OSError, ValueError, RuntimeError):

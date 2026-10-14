@@ -53,6 +53,7 @@ jobs:
           openpilot/selfdrive/navigation/tests/test_rendering.py
           openpilot/selfdrive/navigation/tests/test_inputs.py
           openpilot/selfdrive/navigation/tests/test_position.py
+          openpilot/selfdrive/navigation/tests/test_route_position.py
           openpilot/selfdrive/navigation/tests/test_mapbox_tiles.py
           openpilot/selfdrive/navigation/tests/test_native_rasterizer.py
       - name: Execute pinned native CPU warp and persistent-buffer roundtrip
