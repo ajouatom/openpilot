@@ -122,6 +122,38 @@ def publish(status, spec=None, **extra):
 
 
 class CarrotTransport(FfsTransport):
+  def enable_read_pipeline(self):
+    from openpilot.cereal import messaging
+    sm = messaging.SubMaster(['carState', 'carControl', 'selfdriveState'])
+    end = time.monotonic() + 1.
+    while time.monotonic() < end:
+      sm.update(100)
+    if not (all(sm.valid.values()) and all(sm.alive.values()) and sm['carState'].standstill
+            and str(sm['carState'].gearShifter) == 'park' and sm['carState'].vEgo == 0
+            and not sm['carControl'].enabled and not sm['selfdriveState'].active):
+      raise ValueError('AIO diagnostic requires fresh Park/inactive state')
+    from openpilot.selfdrive.modeld.jetlink.aio import load_library
+    library = load_library()
+    if library is not None:
+      self._aio_library = library
+      log.info('Jetson diagnostic: four 16KB AIO reads enabled')
+
+  def _read_packet(self, buf):
+    library = getattr(self, '_aio_library', None)
+    if library is None:
+      return super()._read_packet(buf)
+    reader = getattr(self, '_aio_reader', None)
+    if reader is None:
+      from openpilot.selfdrive.modeld.jetlink.aio import Reader
+      self._aio_reader = reader = Reader(self.ep_out, library)
+    return reader.read_into(buf)
+
+  def _finish_reads(self):
+    reader = getattr(self, '_aio_reader', None)
+    if reader is not None:
+      reader.close()
+      self._aio_reader = None
+
   def _configured(self):
     deadline = getattr(self, '_probe_deadline', None)
     if deadline is not None and time.monotonic() >= deadline:
@@ -158,6 +190,8 @@ class CarrotTransport(FfsTransport):
     watchdog = getattr(getattr(self, '_write_guard', None), 'thread', None)
     gadget = getattr(self, 'gadget', None)
     super().close()
+    if getattr(getattr(self, '_aio_reader', None), 'context', None) is not None:
+      raise UnsafeCleanupError('FunctionFS AIO cleanup incomplete; refusing to rebind')
     if any(thread is not None and thread.is_alive() for thread in (reader, watchdog)):
       raise UnsafeCleanupError('FunctionFS cleanup left an active reader/watchdog; refusing to rebind')
     if gadget is not None:
@@ -494,6 +528,11 @@ def main():
         spec = client.spec
         if spec is None:
           raise ValueError('Jetlink preparation completed without a model spec')
+        # Volatile parked diagnostic only until native cancellation/latency is
+        # verified. Other peers and all ordinary boots retain serial reads.
+        if (peer.get('carrot_host') == 'jetson' and transport is owner
+            and Path('/dev/shm/carrot-jetlink-aio-test').is_file()):
+          owner.enable_read_pipeline()
         # Warm independently of camera/modeld; every real session resets state.
         for frame in range(10):
           client.infer(np.zeros(spec.warped_shape, np.uint8), np.zeros(spec.packed_nelem, np.float32), frame, reset=True)

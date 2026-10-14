@@ -244,3 +244,22 @@ rejection. The 50 m threshold is unchanged. This fixes a state-poisoning path,
 not real GPS error: a live independent fresh tracker also measured a 99.5 m
 separation from the current sender position to the current route's start, which
 must remain rejected even without poisoned progress.
+
+The live, reversible userspace-placement A/B/A also rejects core5: 40 seconds
+on cores0--3 average 44.504 ms without skips; core5 averages 51.722 ms with 89
+skips; returning to cores0--3 averages 44.267 ms with no skips (two initial pose
+inputsOK=false samples carry over from the transition). Original affinities
+are restored. No big-core userspace pin is retained.
+
+A default-OFF diagnostic candidate instead pipelines four 16 KB FunctionFS
+reads with Linux AIO. This preserves the small per-read kernel allocation and
+wire framing while letting the controller receive several response pieces
+without waiting for a new userspace read after each completion. C-owned buffers
+are copied only after their matching completion and remain allocated through
+io_destroy; sequence/order checks fail closed. Partial submission or cleanup
+failure cannot switch to serial reads while old requests are pending. Ordinary
+boots, other peers, internal models and eGPU paths remain serial/unaffected.
+The volatile /dev/shm/carrot-jetlink-aio-test diagnostic flag additionally
+requires fresh Park/inactive state before activation. Native FunctionFS
+performance, cancellation and reconnect validation are required before this
+candidate can become a default. It is not yet a claimed latency improvement.

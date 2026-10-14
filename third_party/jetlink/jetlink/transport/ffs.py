@@ -505,6 +505,18 @@ class FfsTransport(StreamTransport):
       pass
 
   def _read_loop(self) -> None:
+    try:
+      self._read_loop_body()
+    finally:
+      self._finish_reads()
+
+  def _read_packet(self, buf) -> int:
+    return os.readv(self.ep_out, [buf])
+
+  def _finish_reads(self) -> None:
+    pass
+
+  def _read_loop_body(self) -> None:
     # As in _write: an interrupted read drops the packets it already took. This
     # thread handles no signals, so mask them for its whole life.
     signal.pthread_sigmask(signal.SIG_BLOCK, _IO_SIGNALS)
@@ -541,7 +553,7 @@ class FfsTransport(StreamTransport):
       try:
         # Multiples of the packet size only: the OUT endpoint rejects anything
         # else, and _read_size is only ever halved from one.
-        got = os.readv(self.ep_out, [buf])
+        got = self._read_packet(buf)
       except OSError as e:
         if self._closing:
           return
