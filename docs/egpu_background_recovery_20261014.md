@@ -86,3 +86,11 @@ See [the USB root-link investigation](egpu_root_link_20261014.md). The vehicle
 continues to run the pre-recovery commit with its internal model. Repeated USB
 link failure without an inference worker prevents a meaningful recovery test;
 the new recovery implementation has not been installed or hardware-validated.
+
+## Installation status after the checkpoint correction
+
+The later guarded vehicle fast-forward to f1db63441d includes this background
+recovery code. Normal eGPU startup/inference now passes parked 20 Hz checks;
+fault retry, READY waiting and rejoin remain untested on hardware. See
+[the checkpoint correction](egpu_checkpoint_latency_20261014.md). Earlier
+not-installed statements describe the initial investigation, not this later state.

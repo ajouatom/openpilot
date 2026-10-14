@@ -83,3 +83,11 @@ below the recovery candidate's conservative memory guard; that guard was not
 weakened to force a test. Neither physical-root-cause repair nor recovered-eGPU
 road validation is claimed. Vehicle code/settings were not updated. Raw logs,
 USB ownership snapshots and probe samples remain in the private analysis tree.
+
+## Follow-up after the user power-cycled the comma
+
+The eGPU resumed operation with greatly reduced link errors and no observed
+re-enumeration, but a separate checkpoint overhead regression limited inference
+to 16 Hz. See [the correction and parked retest](egpu_checkpoint_latency_20261014.md):
+20 Hz was restored without another power cycle. The earlier investigation
+above describes the pre-cycle state; it does not establish a faulty cable.
