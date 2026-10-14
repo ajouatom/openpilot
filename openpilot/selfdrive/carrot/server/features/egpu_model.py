@@ -4,6 +4,7 @@ from typing import Any
 
 from aiohttp import web
 from openpilot.common.jetlink_status import diagnostics as jetlink_diagnostics
+from openpilot.common.egpu_recovery_status import read_status as read_egpu_recovery
 
 from openpilot.selfdrive.modeld.big_model import active_manifest, active_model_compiled, active_model_path, model_cache_dir
 from openpilot.selfdrive.modeld.big_model_status import read_big_model_status, write_big_model_status
@@ -58,6 +59,13 @@ def build_status_payload(params: Any | None = None) -> dict[str, Any]:
     stage = worker.get('stage')
     detail = f'Last worker stage: {stage}' if isinstance(stage, str) else None
 
+  recovery = read_egpu_recovery() if not active else {}
+  if recovery and recovery['state'] in ('waiting', 'recovering', 'ready'):
+    state = 'recovery_ready' if recovery['state'] == 'ready' else 'recovering'
+    error_code, detail = None, None
+  elif recovery.get('state') == 'stopped':
+    state, error_code, detail = 'recovery_stopped', None, None
+
   return {
     "ok": True,
     "available": True,
@@ -72,11 +80,12 @@ def build_status_payload(params: Any | None = None) -> dict[str, Any]:
     "retry_count": status.get("retry_count", 0),
     "retry_in_seconds": status.get("retry_in_seconds", 0),
     "active": active,
+    "recovery": recovery,
     "started_at": status.get("started_at"),
     "updated_at": status.get("updated_at"),
     "compiled": compiled,
     "engaged": engaged,
-    "can_restart": same_model and not compiled and not engaged and state not in {
+    "can_restart": not recovery and same_model and not compiled and not engaged and state not in {
       "checking", "downloading", "verifying", "compiling", "waiting_for_network", "installing",
     },
   }

@@ -97,3 +97,8 @@ def test_pinned_state_checkpoint_restores_in_place_aliases(monkeypatch):
   backup._buffer().copy_from(Tensor(np.full_like(originals['state_a'], np.inf), device='NPY')._buffer())
   with pytest.raises(ValueError, match='invalid eGPU recovery state'):
     runtime.restore_recovery_state()
+  # Recovery warmup must not leave synthetic history in captured live buffers.
+  runtime.reset_state()
+  for name, alias in aliases.items():
+    np.testing.assert_array_equal(alias.numpy(), np.zeros_like(originals[name]))
+    np.testing.assert_array_equal(runtime.queues[name].numpy(), np.zeros_like(originals[name]))

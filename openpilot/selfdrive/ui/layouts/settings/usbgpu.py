@@ -24,6 +24,9 @@ class UsbGpuLayout(Widget):
 
   @staticmethod
   def _status() -> str:
+    recovery = getattr(ui_state, 'usbgpu_recovery_badge', None)
+    if recovery and not ui_state.usbgpu_active:
+      return recovery[0]
     return usbgpu_status(ui_state.usbgpu_compiled, ui_state.usbgpu_loading, ui_state.usbgpu_active,
                          ui_state.usbgpu_startup_failed, compile_pending=ui_state.usbgpu_compile_pending)
 

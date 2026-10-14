@@ -6,6 +6,12 @@ let lastStatus = null;
 let restartPending = false;
 
 const FALLBACK_STRINGS = {
+  recovering: "eGPU reconnecting",
+  recovering_detail: "The internal model remains in use while eGPU recovery is attempted, up to three times.",
+  recovery_ready: "eGPU READY",
+  recovery_ready_detail: "Test calculations passed. The internal model remains in use until the vehicle stops or you intervene with steering.",
+  recovery_stopped: "eGPU recovery stopped",
+  recovery_stopped_detail: "The internal model remains in use. Once parked, restart the comma. Recovery stopped because a check failed or the retry limit was reached.",
   title: "eGPU big model",
   checking: "Checking model",
   downloading: "Downloading",

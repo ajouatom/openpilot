@@ -141,6 +141,15 @@ class GenericModelRuntime:
       backup._buffer().copy_from(self.queues[name]._buffer())
     Device[self.device].synchronize()
 
+  def reset_state(self):
+    from tinygrad import Device
+    # Same initial zero state and buffer identities as construction; captured
+    # recurrent outputs must continue to alias their original inputs.
+    for name in self.state_pairs:
+      tensor = self.queues[name]
+      tensor._buffer().copyin(memoryview(bytearray(tensor.numel() * tensor.dtype.itemsize)))
+    Device[self.device].synchronize()
+
   def restore_recovery_state(self):
     from tinygrad import Device
     # Download/check only on failure. Never restore non-finite hidden state.

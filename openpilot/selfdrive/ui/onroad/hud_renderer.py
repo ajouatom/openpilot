@@ -339,6 +339,8 @@ class HudRenderer(Widget):
       text, state = ui_state.usbgpu_delivery_badge
     if getattr(ui_state, 'jetlink_badge', None) and not ui_state.usbgpu_active:
       text, state = ui_state.jetlink_badge
+    if getattr(ui_state, 'usbgpu_recovery_badge', None) and not ui_state.usbgpu_active:
+      text, state = ui_state.usbgpu_recovery_badge
     color = {
       "active": COLORS.GREEN_210,
       "loading": COLORS.YELLOW_210,
