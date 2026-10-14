@@ -105,3 +105,81 @@ was changed or restarted for this investigation.
 
 Raw routes, device identities, captures, network details and keys remain in the
 private `.analysis/scratch/2026-10-15-egpu-s3/` evidence directory, not in this document.
+
+## Follow-up: direct-connection faults and CPU consumption
+
+The user requested deeper investigation because the eGPU was already directly
+connected. All three fault reports, captured 1.07–1.53 seconds after their failure
+timestamps, identify USB **4-1 at 5000 Mbps**, runtime power state **active** and
+power control **on**. Thus these are direct-connection failures, not a continuation
+of the old hub test; runtime USB autosuspend was disabled in those snapshots.
+
+The existing progress record stores main-thread CPU time at entry to `output_read`.
+Subtracting it from that same thread's recorded `/proc/.../schedstat` CPU runtime
+gives the following approximate CPU consumption during the outstanding call:
+
+| Incident | Stage wall time | Thread CPU time since stage entry | Approximate CPU / wall |
+| --- | ---: | ---: | ---: |
+| Oct 14 22:47 | 1158.841 ms | 1144.649 ms | 98.8% |
+| Oct 14 22:52 | 1147.465 ms | 1133.468 ms | 98.8% |
+| Oct 15 06:57 | 1191.727 ms | 1128.851 ms | 94.7% |
+
+The two readings are taken sequentially, so these are estimates rather than
+cycle-exact profiling. The result strongly disfavors spending the entire stall
+asleep in one blocking USB read. It supports CPU-intensive completion polling,
+without yet identifying which polling loop or why completion first stopped.
+
+ProcLog places the eGPU worker on CPU 7 with FIFO priority 54, and DM on the same
+core at priority 5. Around the first and third failures, DM CPU consumption falls
+from about 0.32 seconds in the preceding two-second interval to only 0.05/0.03
+seconds in the interval spanning failure. CPU 7 has no additional idle time in
+those intervals. Together with the 1.4–1.5 second DM publication gaps, this is
+strong evidence of failure-path scheduling interference, not proof of the original
+GPU/bridge fault. Available memory just before failure is about 763–972 MiB;
+host thermal status is green. Neither establishes external-GPU temperature.
+
+The **actual installed, hash-pinned 90970e01 runtime source** was read without
+importing or executing the GPU backend. Its newer `Compiled._wait_signal` loops
+until a completion value/error/timeout, calls `on_sleep` after 200 ms, and its
+`USBIface.sleep` is a no-op. Another generated USB loop calls
+`libusb_handle_events_timeout` with zero timeout. The repository's older
+`AMDSignal._sleep` yield tests exercise a different API; they do not demonstrate
+that the pinned runtime yields. No pinned runtime was modified in this investigation.
+
+The parent additionally calls `terminate` then waits up to two seconds before a
+forced kill in `PrecompiledModelState.close`, on the inference exception path.
+This can amplify an initial one-second timeout into a multi-second publication
+gap, consistent with the observed total gap. The existing logs lack timestamps
+around each cleanup step, so the precise time split remains unmeasured. Retaining
+the old camera frame through cleanup explains why a new publication can still be
+roughly three seconds old; increasing the timeout is not a remedy.
+
+A bounded parked watcher is prepared privately: sample the existing progress
+record on non-model cores, capture per-thread syscall/kernel-stack/scheduler and
+USB link state after an existing >150 ms stall, then attach strace for at most
+300 ms. State is captured before attachment; traced timing is explicitly perturbed.
+It stops when Park/inactive/freshness guards fail. No eGPU restart or new inference
+was performed in this follow-up: the device currently uses the healthy internal
+model, and permission to interrupt it for a parked reinitialization test is pending.
+
+Primary references: [Linux scheduler statistics](https://www.kernel.org/doc/html/latest/scheduler/sched-stats.html)
+defines the CPU-runtime field; [Linux real-time scheduling](https://www.kernel.org/doc/html/latest/scheduler/sched-rt-group.html)
+describes starvation of lower-priority tasks by higher-priority loops. These support
+interpretation of measured counters, not identification of the physical fault.
+
+## Follow-up: S3 automatic reconnection checked
+
+A fresh Park/zero-speed/inactive-controls guard preceded terminating only the
+established C4-to-S3 TCP socket with `ss -K`, filtered by destination and port 3333.
+No AP settings, SSH session, eGPU connection or service process was changed.
+`ClusterHudConnected` changed to 0 and returned to 1 at **9.217 seconds**, with a
+different local TCP port and the same HUD PID. Model/DM retained their PIDs and
+produced 601/600 valid updates over thirty seconds, maximum gaps 65/74 ms.
+This verifies recovery from a broken TCP session; it is not a physical S3 power-
+cycle or hotspot reassociation test.
+
+Registration plus a common, client-reachable network allows late startup/retry;
+the physical startup order is not fixed. Wi-Fi association and HUD output are
+different: S3 can join Wi-Fi offroad, but C4's normal HUD session/output is gated
+offroad unless `ClusterHudDebug` is enabled. Reconnection is automatic but not
+instantaneous, and the measured 9.2 seconds is not an upper-bound guarantee.
