@@ -1,0 +1,91 @@
+"""C4 renders the existing HUD; S3 forwards the resulting TURZX USB packets."""
+from collections import deque
+
+from cluster_usb_display import TuringUsbDisplay, _set_cluster_hud_connected
+from cluster_wifi_protocol import Connection, load_config
+
+
+class S3WifiDisplay(TuringUsbDisplay):
+    def __init__(self, config: dict, **kwargs):
+        super().__init__(**kwargs)
+        self.config = config
+        self.connection = None
+        self.pending = deque()
+
+    def open(self) -> None:
+        if self.expected_product_id not in (None, 0x0092):
+            raise RuntimeError('S3 bridge currently supports the TURZX 9.2-inch display')
+        self._load_protocol_helpers()
+        try:
+            self.connection = Connection(self.config)
+            self.dev = self.connection
+            self.dev_pid = 0x0092
+            self.landscape_width, self.landscape_height = 1920, 462
+            self._disconnected = False
+            self._send_command(10, 'sync')
+            self._send_command(14, 'brightness', {8: int(self.brightness / 100 * 102)}, expect_response=False, log=False)
+            _set_cluster_hud_connected(True)
+        except Exception as exc:
+            self.close()
+            raise RuntimeError('S3 display connection failed; waiting for rediscovery') from exc
+
+    def _result(self) -> bytes:
+        expected = self.pending.popleft()
+        seq, response, _ = self.connection.result()
+        if seq != expected:
+            raise ConnectionError('S3 acknowledgement sequence mismatch')
+        return response
+
+    def _transaction(self, payload: bytes, *, frame: bool = False, expect_reply: bool = True) -> bytes:
+        with self._usb_lock:
+            try:
+                if self.connection is None:
+                    raise ConnectionError('S3 display is closed')
+                if frame:
+                    # Three complete frames maximum; upstream keeps only the latest unsent image.
+                    while len(self.pending) >= 3:
+                        self._result()
+                else:
+                    while self.pending:
+                        self._result()
+                self.pending.append(self.connection.send(payload, expect_reply=expect_reply))
+                return b'' if frame else self._result()
+            except (OSError, ValueError) as exc:
+                self._disconnected = True
+                _set_cluster_hud_connected(False)
+                if self.connection is not None:
+                    self.connection.close()
+                    self.connection = None
+                raise RuntimeError('S3 display disconnected; reconnect required') from exc
+
+    def send_jpeg(self, jpeg_data: bytes) -> None:
+        self._transaction(self._build_frame_payload(self._cmd_upload_jpeg, jpeg_data), frame=True)
+
+    def _write_payload_checked(self, payload: bytes, error_message: str, timeout_ms: int) -> bytes:
+        return self._transaction(payload)
+
+    def _write_payload_no_ack(self, payload: bytes, error_message: str, timeout_ms: int) -> None:
+        self._transaction(payload, expect_reply=False)
+
+    def _drain_input(self, **kwargs) -> None:
+        pass  # Responses are sequence checked by the transport; never discard TCP bytes.
+
+    def close(self) -> None:
+        _set_cluster_hud_connected(False)
+        if self.connection is not None:
+            try:
+                if not self._disconnected:
+                    self._send_command(14, 'brightness-off', {8: 0}, expect_response=False, log=False)
+            except (RuntimeError, OSError):
+                pass
+            finally:
+                if self.connection is not None:
+                    self.connection.close()
+                self.connection = None
+        self.pending.clear()
+        self.dev = self.dev_pid = None
+
+
+def create_display(**kwargs) -> TuringUsbDisplay:
+    config = load_config()
+    return TuringUsbDisplay(**kwargs) if config is None else S3WifiDisplay(config, **kwargs)
