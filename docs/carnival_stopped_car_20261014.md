@@ -28,7 +28,9 @@ A separate fallback supplies measured corner **L2 only while L1 is absent**:
   An already confirmed target may continue at p>=0.35 only within 150 ms of
   its last strong sample. Missing evidence, gaps, ambiguity and ID changes
   withdraw the fallback; unconfirmed radar-only observations never activate it.
-- Output range is <=80 m, modes 1/2/3 only. A nearer existing L2 wins.
+- Output range is <=80 m, modes 1/2/3 only. A second equally plausible return
+  beyond 80 m still rejects association; the output cap cannot resolve identity.
+  A nearer existing L2 wins.
   Ordinary L1, front/SCC selection and cut-in geometry are unchanged.
 
 Exact recorded-input replay changes 11 consecutive L2 samples, first at 74.32 m,
@@ -72,9 +74,10 @@ Requiring both sensors cannot provide an earlier warning without those inputs.
 
 ## Validation
 
-- 1,175 focused radar, trajectory, replay, corner fallback and advisory tests
+- 1,176 focused radar, trajectory, replay, corner fallback and advisory tests
   pass on Windows Python. This includes freshness, duplicate samples, lane
   aliases, re-ID, missing sensors, speed-dependent timing and repeat suppression.
+  The corresponding nav suite passes 1,157 tests; branch-specific test sets differ.
 - Route-vault tests: 36 pass, 4 Windows symlink-permission skips. Native Linux
   CI is required before accepting the replay image.
 - Existing 100 logs / 497 maintained labels: corrected-context baseline and

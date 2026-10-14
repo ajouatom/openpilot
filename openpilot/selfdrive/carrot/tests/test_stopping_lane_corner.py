@@ -126,6 +126,18 @@ def test_weak_vision_can_only_briefly_continue_an_already_confirmed_car():
     assert (out is not None) == (t <= .7)
 
 
+def test_second_matching_return_beyond_output_range_is_still_ambiguous():
+  tracker = StoppingLaneCornerTracker()
+  for i in range(11):
+    t = -.5 + i*.05
+    model, point = sample(t)
+    out = update(tracker, t, model, [point])
+  assert out is not None
+  model, point = sample(.05)
+  other = replace(point, track_id=1200, d_rel=81.)
+  assert update(tracker, .05, model, [point, other]) is None
+
+
 @pytest.mark.parametrize('mode', (-2, -1, 0, 1, 2, 3))
 @pytest.mark.parametrize('corner', (False, True))
 def test_controller_keeps_primary_policy_and_requires_corner_input(mode, corner):
