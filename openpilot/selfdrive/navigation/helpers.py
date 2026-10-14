@@ -55,6 +55,7 @@ class NavigationPosition:
   bearing: float
   speed: float
   time: float
+  fix_time: float
 
 
 def navigation_position(sm) -> NavigationPosition | None:
@@ -67,12 +68,12 @@ def navigation_position(sm) -> NavigationPosition | None:
       and all(math.isfinite(v) for v in (carrot.xPosLat, carrot.xPosLon, carrot.xPosAngle, carrot.xPosSpeed))
       and abs(carrot.xPosLat) <= 85.05112878 and abs(carrot.xPosLon) <= 180):
     return NavigationPosition(carrot.xPosLat, carrot.xPosLon, carrot.xPosAngle, max(0., carrot.xPosSpeed / 3.6),
-                              carrot.positionMonoTime / 1e9)
+                              carrot.positionMonoTime / 1e9, carrot.positionFixMonoTime / 1e9)
   source = latest_gps_source(sm)
   if source is None:
     return None
   gps = sm[source]
-  return NavigationPosition(gps.latitude, gps.longitude, gps.bearingDeg, max(0., gps.speed), sm.recv_time[source])
+  return NavigationPosition(gps.latitude, gps.longitude, gps.bearingDeg, max(0., gps.speed), sm.recv_time[source], sm.recv_time[source])
 
 
 class ParkedPosition:
@@ -104,8 +105,8 @@ class ParkedPosition:
     self.held = False
     if position is not None:
       if (parked and self.parked_since is not None and now - self.parked_since >= 1.
-          and position.time >= self.parked_since and position.speed < .1):
-        self.anchor = NavigationPosition(position.latitude, position.longitude, position.bearing, 0., position.time)
+          and position.fix_time >= self.parked_since and position.speed < .1):
+        self.anchor = NavigationPosition(position.latitude, position.longitude, position.bearing, 0., position.time, position.fix_time)
       else:
         self.anchor = None
       return position

@@ -130,3 +130,13 @@ def test_moving_gps_never_seeds_parked_anchor(parked):
   tick(11.2)
   assert position.anchor is None
   assert tick(11.3, fresh=False) is None
+
+
+def test_extrapolated_position_cannot_seed_from_fix_before_parking(parked):
+  sm, position, _, clock = parked
+  position.anchor = None
+  sm['carrotMan'].positionFixMonoTime = 9_900_000_000
+  sm['carrotMan'].positionMonoTime = 11_200_000_000
+  sm.recv_time['carrotMan'] = sm.recv_time['carState'] = clock[0] = 11.2
+  assert position.update(sm) is not None
+  assert position.anchor is None

@@ -32,7 +32,6 @@ TRANSPORT_MODE = 'usb'
 SESSION_MODE = 'usb'
 ACTIVE_UDC = None
 SESSION_DETACHED = False
-JETSON_SESSION = False
 log = logging.getLogger('carrot.jetlink')
 sys.path.insert(0, str(VENDOR.parents[1] / 'tools/jetlink'))
 from hud_protocol import Publisher, HUD_CAPABILITY, HUD_MESSAGE
@@ -48,11 +47,11 @@ class UnsafeCleanupError(LinkError):
 def update_affinity():
   from openpilot.common.params import Params
   onroad = Params().get_bool('IsOnroad') and Path('/sys/devices/system/cpu/cpu7/online').read_text().strip() == '1'
-  # Jetson's USB framing/copies and reader share the available big core4,
-  # below the existing realtime controls. Never use camera6 or model/DM7.
-  # Discovery, phone/Mac sessions and offroad keep the little-core placement.
-  # This does not change shared kernel workers or the display child policy.
-  cores = {4} if onroad and JETSON_SESSION else set(range(4))
+  # Keep USB completion and IPC work off modeld/DM's core7. Pinning the
+  # reader there delayed runnable reads behind DM and blocked the host's
+  # response write. Include the normal-priority watchdog in this placement.
+  # Model/DM policies and the display children's separate policy are unchanged.
+  cores = set(range(4))
   os.sched_setscheduler(0, os.SCHED_FIFO if onroad else os.SCHED_OTHER, os.sched_param(1 if onroad else 0))
   for thread in Path('/proc/self/task').iterdir():
     try:
@@ -180,14 +179,11 @@ class CarrotTransport(FfsTransport):
 
 
 def serve_local(listener, client, peer, wifi=None):
-  global JETSON_SESSION
   publisher = Publisher(navi=bool(peer.get(NAVI_CAPABILITY))) if peer.get(HUD_CAPABILITY) else None
   phase = PhasePublisher()
   try:
-    JETSON_SESSION = peer.get('carrot_host') == 'jetson'
     _serve_local(listener, client, peer, publisher, phase, wifi)
   finally:
-    JETSON_SESSION = False
     phase.close()
     if publisher is not None:
       publisher.close()

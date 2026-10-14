@@ -216,3 +216,19 @@ FIFO1 for the existing realtime threads and normal for the watchdog. Discovery,
 offroad and other peer types retain cores0--3; camera6/model/DM7 and shared
 kernel workers are untouched. This requires native measurement before a
 performance improvement can be claimed.
+
+The core4-only userspace candidate **failed** native validation and is reverted:
+120 seconds produce mean 46.649 ms / p99 53.080 / maximum 56.811 ms, with 52
+skipped camera frames, 52 invalid cameraOdometry samples and 127 livePose
+inputsOK=false samples. DM stays valid, no process restarts or dashboard alert
+occur. jetlinkd CPU work decreases, but scheduler runqueue wait reaches
+108.1 ms/s. Overall comma CPU is 76.3%; little cores are 81.7--88.9% busy.
+Jetson is 10.8% overall, busiest core 24.8%. Do not retain core4 pinning or call
+this an improvement. Keep the established cores0--3 policy and retest.
+
+The parked-position change works independently: a native read-only shadow
+test preserves the original anchor timestamp through a simulated outage, and
+actual mapsd logs also report parked_position_hold=true while generating maps
+near 5 Hz, with mean CPU time around 7 ms per render. A strengthened regression
+also requires the ORIGINAL fix to have occurred after parking began; a freshly
+extrapolated coordinate cannot seed a parked anchor from a pre-parking fix.
