@@ -239,6 +239,9 @@ def test_image_patch_refuses_unproven_integer_arithmetic_without_mutation():
 
 def test_half_finite_check_matches_every_binary16_pattern():
   q = StatefulQueues(SPEC, inputs())
+  # Exercise the NumPy fallback's scratch mask explicitly. The native path
+  # returns only a boolean and has its own exhaustive per-pattern test.
+  q._native_finite = None
   all_bits = np.arange(65536, dtype=np.uint16).view(np.float16)
   assert not q._all_finite(all_bits)
   np.testing.assert_array_equal(q._finite_bad[:65536], ~np.isfinite(all_bits))
