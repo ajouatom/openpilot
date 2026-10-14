@@ -1,5 +1,19 @@
 # Repository memory
 
+- On 2026-10-15, the user required normal model output at20Hz and requested
+  upstream NAV n16 afbf2e547e / AMD52205044 (checkpoint96244b1f/12800). It changes
+  only the PKL; runtime d3f09c9/90970e01 and old Jetson ONNX are unchanged. Pin
+  the separate NAS n16 package on carrot-nav; preserve wip's model selection.
+  Shared eGPU fixes yield200us after1ms in this exact runtime's previously no-op
+  USB sleep, retaining FIFO54/core7 after lower-priority/core trials failed20Hz.
+  Full-response deadline150ms, bounded failed-worker kill/reaping plus ownership
+  lock, fresh-frame fallback and startup-only internal inference warmup/reset
+  replace the ~3s stale fallback. Stopped-worker probe reaches internal output
+  in718ms with106ms capture age; this is not fault-time20Hz or root-cause proof.
+  Initial native60s has1200/1200 consecutive valid model/DM frames;298 focused
+  tests pass. User authorized parked restarts/install. See
+  docs/egpu_n16_stability_20261015.md for final validation and remaining limits.
+
 - On 2026-10-15, deeper direct-eGPU analysis confirms all three fault snapshots
   were USB4-1/5Gbps, active with autosuspend off. Outstanding output_read used
   ~95–99% main-thread CPU; worker FIFO54 and DM FIFO5 share CPU7, with DM CPU
