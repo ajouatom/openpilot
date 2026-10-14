@@ -128,18 +128,36 @@ class GenericModelRuntime:
     self.frames = input_view(self.device_buffer, (2, self.frame_size), dtypes.uint8, self.frames_offset)
 
   def init_recovery_state(self):
-    from tinygrad import Tensor
+    from tinygrad import Tensor, TinyJit, Device
     # Separate allocations, preserving the compiled graph's required aliases.
     self.recovery_state = {
       name: Tensor(np.zeros(shape, dtype=dtype), device=device).realize()
       for name, (shape, dtype, device) in self.specs.items() if name in self.state_pairs
     }
+    # Capture the copies once. Buffer.copy_from dispatches each copy through
+    # Python on every frame; on USB AMD this adds substantial host overhead.
+    # Explicit tensor inputs retain current storage and the output aliases.
+    backups = tuple(self.recovery_state.values())
+
+    @TinyJit
+    def save(*states):
+      Tensor.realize(*(backup.assign(state) for backup, state in zip(backups, states, strict=True)))
+
+    self._save_recovery_state = save
+    states = tuple(self.queues[name] for name in self.recovery_state)
+    # Compile/capture during initialization, never during a live frame.
+    for _ in range(3):
+      save(*states)
+    Device[self.device].synchronize()
 
   def save_recovery_state(self):
     from tinygrad import Device
-    for name, backup in self.recovery_state.items():
-      backup._buffer().copy_from(self.queues[name]._buffer())
+    started, cpu_started = time.monotonic(), time.thread_time()
+    self._save_recovery_state(*(self.queues[name] for name in self.recovery_state))
     Device[self.device].synchronize()
+    self.last_timings = getattr(self, 'last_timings', {})
+    self.last_timings.update(state_checkpoint_ms=(time.monotonic() - started) * 1000,
+                             state_checkpoint_cpu_ms=(time.thread_time() - cpu_started) * 1000)
 
   def reset_state(self):
     from tinygrad import Device, Tensor
