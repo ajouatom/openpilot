@@ -151,6 +151,15 @@ class ModelState:
     parsed_model_outputs = {k: model_outputs[np.newaxis, v] for k,v in output_slices.items()}
     return parsed_model_outputs
 
+  def reset(self):
+    # Returning from a recovered external model must not reuse old local history.
+    self.prev_desire[:] = 0
+    for array in self.npy.values():
+      array[:] = 0
+    for name, tensor in self.input_queues.items():
+      if name.endswith('_q'):
+        tensor._buffer().copyin(memoryview(bytearray(tensor.numel() * tensor.dtype.itemsize)))
+
   def run(self, bufs: dict[str, VisionBuf], transforms: dict[str, np.ndarray],
           inputs: dict[str, np.ndarray], prepare_only: bool) -> dict[str, np.ndarray] | None:
     for key in bufs.keys():
@@ -348,6 +357,14 @@ def main(demo=False):
   # after the PKL has loaded; clearing this here causes a false commIssue while
   # modelV2 and its downstream services are still waiting for their first data.
   usbgpu_startup_pending = usbgpu_model_loaded
+  egpu_recovery = None
+  internal_needs_reset = False
+  if usbgpu_model_loaded and precompiled:
+    from openpilot.selfdrive.modeld.egpu_recovery import EgpuRecovery
+    try:
+      egpu_recovery = EgpuRecovery(usbgpu_pkl_path, vipc_client_main.width, vipc_client_main.height)
+    except Exception:
+      cloudlog.exception('eGPU background recovery unavailable')
   if not usbgpu_startup_pending:
     params.put_bool("UsbGpuLoading", False)
   cloudlog.warning(f"models loaded in {time.monotonic() - st:.1f}s, modeld starting")
@@ -478,7 +495,7 @@ def main(demo=False):
     inference_cpu_start = time.thread_time()
     try:
       model_output = model.run(bufs, transforms, inputs, prepare_only)
-    except Exception:
+    except Exception as exc:
       if not params.get_bool("UsbGpuActive") or small_model is None:
         raise
       cloudlog.exception("eGPU model failed, falling back to internal GPU")
@@ -488,6 +505,15 @@ def main(demo=False):
       params.put_bool("UsbGpuLoading", False)
       usbgpu_startup_pending = False
       model = small_model
+      if internal_needs_reset:
+        model.reset()
+        internal_needs_reset = False
+      if egpu_recovery is not None:
+        try:
+          egpu_recovery.failed(exc)
+        except Exception:
+          cloudlog.exception('eGPU recovery could not be armed')
+          egpu_recovery = None
       run_count = 0
       # Run the already-loaded internal model for this same camera frame. A
       # missing modelV2 frame during fallback can otherwise cascade into a
@@ -496,6 +522,7 @@ def main(demo=False):
     mt2 = time.perf_counter()
     inference_cpu_ms = (time.thread_time() - inference_cpu_start) * 1000
     model_execution_time = mt2 - mt1
+    inference_backend, inference_usbgpu = type(model).__name__, model.usbgpu
 
     if model_output is not None:
       shadow_payload = model_output.pop('_signal_shadow', None)
@@ -562,8 +589,31 @@ def main(demo=False):
         usbgpu_startup_pending = False
         cloudlog.warning("eGPU first model output published; startup complete")
     last_vipc_frame_id = meta_main.frame_id
+    if egpu_recovery is not None and model is small_model:
+      try:
+        # Observe actual publication and full post-camera work, not just a
+        # successful GPU call. Recovery never supplies a substitute prediction.
+        now = time.monotonic()
+        healthy_output = (model_output is not None and modelv2_send.valid and
+                          0 <= now - meta_main.timestamp_eof * 1e-9 < .15)
+        egpu_recovery.observe(healthy_output, now - camera_ready, vipc_dropped_frames)
+        recovered = egpu_recovery.tick(sm, params.get_bool('UsbGpuPresent'))
+        if recovered is not None:
+          model = recovered
+          internal_needs_reset = True
+          params.put_bool('UsbGpuStartupFailed', False)
+          params.put_bool('UsbGpuActive', True)
+          params.put_bool('UsbGpuLoading', True)
+          usbgpu_startup_pending = True
+          run_count = 0
+          cloudlog.warning('eGPU recovered; selected at the Jetlink transition gate')
+      except Exception:
+        cloudlog.exception('eGPU recovery disabled; retaining internal model')
+        if egpu_recovery.task is not None:
+          egpu_recovery.task.cancel.set()
+        egpu_recovery = None
     diagnostics.record(
-      context={'backend': type(model).__name__, 'usbgpu': model.usbgpu, 'frame_id': meta_main.frame_id},
+      context={'backend': inference_backend, 'usbgpu': inference_usbgpu, 'frame_id': meta_main.frame_id},
       camera_wait_ms=(camera_ready - loop_start) * 1000,
       camera_age_at_run_ms=camera_age_at_run_ms,
       inference_ms=model_execution_time * 1000, inference_thread_cpu_ms=inference_cpu_ms,
