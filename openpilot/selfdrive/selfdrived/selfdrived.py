@@ -146,6 +146,7 @@ class SelfdriveD:
     self.update_reboot_alerted = False
     self.system_ready_alerted = False
     self.system_ready_since = None
+    self.nnff_alerted = False
     self.big_model_loading = False
     self.big_model_active = False
     self.big_model_ready_t = 0.0
@@ -548,8 +549,6 @@ class SelfdriveD:
 
       if self.sm['modelV2'].frameDropPerc > 20:
         self.events.add(EventName.modeldLagging)
-    if self.sm.frame == 550 and Params().get("NNFFModelName") is not None:
-      self.events.add(EventName.torqueNNLoad)
     # decrement personality on distance button press
     #if self.CP.openpilotLongitudinalControl:
     #  if any(not be.pressed and be.type == ButtonType.gapAdjustCruise for be in CS.buttonEvents):
@@ -645,6 +644,23 @@ class SelfdriveD:
     self.events.add(EventName.systemReady)
     self.update_alerts(CS)
     self.system_ready_alerted = True
+
+  def update_nnff_alert(self, CS):
+    # Retry after startup instead of losing the notice when initialization takes
+    # longer than 5.5 seconds. Poll at 2 Hz, including a late model-name write.
+    if self.nnff_alerted or self.sm.frame < 550 or self.sm.frame % 50:
+      return
+    if (not self.initialized or self.CP.passive or not self.sm['deviceState'].started
+        or not CS.canValid or CS.canTimeout or not self.sm.all_checks()
+        or self.events.contains(ET.NO_ENTRY) or self.AM.current_alert is not EmptyAlert):
+      return
+    if self.params.get("NNFFModelName") is None:
+      return
+    # Called after this frame's alert selection and readiness chime, so neither
+    # an existing warning nor a new warning can consume the one-shot notice.
+    self.events.add(EventName.torqueNNLoad)
+    self.update_alerts(CS)
+    self.nnff_alerted = True
 
   def update_impact_dashcam(self, CS):
     if REPLAY or SIMULATION or self.CP.notCar:
@@ -747,6 +763,7 @@ class SelfdriveD:
     self.update_alerts(CS)
 
     self.update_system_ready_alert(CS)
+    self.update_nnff_alert(CS)
 
     self.publish_selfdriveState(CS)
 

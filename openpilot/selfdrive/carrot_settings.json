@@ -185,6 +185,7 @@
                   "en": "Torque Coefficients",
                   "zh": "扭矩系数",
                   "params": [
+                    "NNFF",
                     "LateralTorqueCustom",
                     "LateralTorqueAccelFactor",
                     "LateralTorqueFriction",
@@ -669,6 +670,25 @@
       "max": 200,
       "default": 0,
       "unit": 1
+    },
+    {
+      "group": "조향토크",
+      "name": "NNFF",
+      "title": "NNFF 토크 제어",
+      "descr": "토크 조향의 신경망 피드포워드 옵션입니다. 켜면 조향각 제어가 아닌 차량에 토크 제어 튜닝을 사용하며, 대응 모델이 있으면 NNFF를 적용합니다. comma 자체 NNFF 지원 차종은 기존 자체 경로가 우선합니다. 끄면 이 NNFF 옵션을 사용하지 않으며 NNFFLite 설정은 바꾸지 않습니다. 기본값은 꺼짐이고 Carrot Web 검색에서만 표시됩니다. 변경은 다음 주행 시작 또는 기기 재부팅 후 적용됩니다. 조향각 제어 차량에는 적용되지 않습니다.",
+      "egroup": "LAT_TQ",
+      "etitle": "NNFF Torque Control",
+      "edescr": "Neural-network feedforward for torque steering. Enabling selects torque-controller tuning on vehicles without angle control and uses NNFF when a matching model is available. Vehicles supported by comma's own NNFF retain that path's precedence. Disabling turns off this NNFF option without changing NNFFLite. Defaults to off and appears only in Carrot Web search. Changes apply at the next onroad start or after a device reboot. Does not apply to angle-control vehicles.",
+      "cgroup": "转向",
+      "ctitle": "NNFF 扭矩控制",
+      "cdescr": "用于扭矩转向的神经网络前馈选项。开启后，非转角控制车辆使用扭矩控制调校，并在有匹配模型时应用 NNFF。支持 comma 自有 NNFF 的车型仍优先使用原有路径。关闭仅停用此 NNFF 选项，不改变 NNFFLite。默认关闭，仅在 Carrot Web 搜索中显示。更改在下次进入行车模式或设备重启后生效。不适用于转角控制车辆。",
+      "min": 0,
+      "max": 1,
+      "default": 0,
+      "unit": 1,
+      "control": "toggle",
+      "risk": "high",
+      "search_only": true
     },
     {
       "group": "조향토크",
