@@ -12,6 +12,21 @@
   Publish offline tools/tests/findings to both maintained branches, single-parent.
   See docs/signal_upper_group_trial_20261014.md; raw evidence stays private.
 
+- On 2026-10-14, Carnival 222-1 on 0245e76f shows late front arrival and a
+  stopping-path tail rejecting visible stationary corner 1193. Add missing-L1
+  measured L2 only with confident actual inner lanes, stopping context, stable
+  corner history and current visual agreement. Do not relax ordinary path/L1
+  gates. Replay selects 11 frames at 74.32m, about0.57s earlier, not closed-loop
+  stopping validation. User also requested screen + one short sound for an
+  unselected, vision-missing, stable front/corner stationary pair: TTC<=4.8s,
+  range<=120m, active longitudinal only, 500ms confirmation and encounter/cooldown
+  suppression. Existing100 logs/497 labels are identical in modes1/2/3; existing
+  failures11/10/13 and208 unverified remain. All119,689 prior mode1 outputs match;
+  no advisory fires, so real positive performance is unproven.1175 tests pass;
+  two new Carnival cases pass all modes. Publish both maintained branches and
+  verify automatic NAS replay deployment; no vehicle action. See
+  docs/carnival_stopped_car_20261014.md; recordings stay private.
+
 - On 2026-10-14, Elantra route311 segments3/10 confirms86->88% memory use.
   DPathRadarD's lifetime Cap'n Proto builder leaks replaced list/error storage:
   restore a fresh builder each update, preserving controller history and fields.
