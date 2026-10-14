@@ -50,3 +50,13 @@ def test_missing_params_uses_ten_fps(monkeypatch):
   reader = scope['ClusterUsbFpsReader']()
   reader._params = None
   assert reader.read() == 10
+
+
+def test_wifi_rate_retains_live_egpu_cap(monkeypatch):
+  scope, state = load_policy(monkeypatch)
+  reader = scope['ClusterUsbFpsReader'](15)
+  assert reader.read() == 15
+  state['active'] = True
+  assert reader.read() == 5
+  state['active'] = False
+  assert reader.read() == 15
