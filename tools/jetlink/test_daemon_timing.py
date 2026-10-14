@@ -67,7 +67,8 @@ def test_timing_records_usb_and_display_tail_after_unchanged_reply(monkeypatch, 
   monkeypatch.setattr(daemon, 'publish_hud', lambda *a: step('hud', .004))
   monkeypatch.setattr(daemon, 'send_ready_after_reply', lambda *a, **kw: step('tail', .006))
   monkeypatch.setattr(daemon, 'send_ready_during_inference', lambda *a, **kw: step('early_media', .006))
-  client = NS(spec=link.SPEC, last_state=None, last_timings=(20000, 1000, 22000), infer_begin=begin, infer_end=end)
+  client = NS(spec=link.SPEC, last_state=None, last_timings=(20000, 1000, 22000), infer_begin=begin, infer_end=end,
+              t=NS(last_receive={'prepare': .002, 'read_wait': .025, 'handoff': .009}))
   peer = {'carrot_host': 'jetson', daemon.NAVI_CAPABILITY: navigation, daemon.PUMP_CAPABILITY: fast_receiver}
   daemon._serve_local(NS(accept=lambda: (connection, None)), client, peer, NS(),
                       NS(sent=lambda sof: step('phase', .001)), NS(send=lambda _: step('wifi', .007)))
@@ -81,6 +82,56 @@ def test_timing_records_usb_and_display_tail_after_unchanged_reply(monkeypatch, 
   metrics = events[0]['metrics']
   for key, value in {'ipc_receive_ms': 1000., 'usb_send_ms': 3., 'usb_response_ms': 80.,
                      'ipc_reply_ms': 2., 'hud_ms': (10. if fast_receiver else 4.) if navigation else 0.,
+                     'usb_exchange_ms': 84. + ((10. if fast_receiver else 4.) if navigation else 0.),
+                     'submit_to_response_ms': 81. + ((10. if fast_receiver else 4.) if navigation else 0.),
+                     'display_early_media_ms': 6. if navigation and fast_receiver else 0.,
+                     'response_reader_prepare_max_ms': 2., 'response_reader_read_wait_max_ms': 25.,
+                     'response_reader_handoff_max_ms': 9.,
                      'display_tail_ms': (0. if fast_receiver else 6.) if navigation else 4., 'wifi_tail_ms': 7.,
                      'server_total_ms': 22.}.items():
     assert metrics[key]['max'] == pytest.approx(value)
+
+
+@pytest.mark.parametrize('have_hud,have_media', [(True, True), (True, False), (False, True), (False, False)])
+def test_display_metrics_separate_snapshot_and_usb_writes(monkeypatch, have_hud, have_media):
+  if sys.platform == 'win32':
+    monkeypatch.setitem(sys.modules, 'fcntl', NS())
+  from openpilot.selfdrive.modeld.jetlink import daemon
+  now = [0.]
+  calls = []
+  def packet():
+    calls.append('snapshot')
+    now[0] += .002
+    return b'hud' if have_hud else None
+  def media():
+    calls.append('media')
+    now[0] += .001
+    return b'video' if have_media else None
+  def send(kind, seq, parts):
+    calls.append((kind, seq, parts))
+    now[0] += .003 if kind == daemon.HUD_MESSAGE else .007
+  sequence = iter([10, 11])
+  client = NS(t=NS(send=send), _next_seq=lambda: next(sequence))
+  monkeypatch.setattr(daemon.time, 'monotonic', lambda: now[0])
+  metrics = daemon.publish_hud(client, NS(packet=packet, media_packet=media))
+  assert metrics == pytest.approx(dict(display_snapshot_read_ms=2., display_hud_send_ms=3. if have_hud else 0.,
+                                      display_media_read_ms=1., display_media_send_ms=7. if have_media else 0.,
+                                      display_hud_bytes=3 if have_hud else 0, display_media_bytes=5 if have_media else 0))
+  expected = ['snapshot']
+  if have_hud: expected.append((daemon.HUD_MESSAGE, 10, [b'hud']))
+  expected.append('media')
+  if have_media: expected.append((daemon.NAVI_MESSAGE, 11 if have_hud else 10, [b'video']))
+  assert calls == expected
+  assert not any(daemon.publish_hud(client, None).values())
+
+
+def test_display_usb_failure_still_abandons_send_before_media(monkeypatch):
+  if sys.platform == 'win32':
+    monkeypatch.setitem(sys.modules, 'fcntl', NS())
+  from openpilot.selfdrive.modeld.jetlink import daemon
+  def fail(*args):
+    raise ConnectionError('USB write failed')
+  def unexpected():
+    pytest.fail('must not consume the next media fragment after a failed USB write')
+  with pytest.raises(ConnectionError, match='USB write failed'):
+    daemon.publish_hud(NS(t=NS(send=fail), _next_seq=lambda: 1), NS(packet=lambda: b'hud', media_packet=unexpected))

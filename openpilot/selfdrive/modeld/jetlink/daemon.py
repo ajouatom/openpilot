@@ -61,19 +61,34 @@ def update_affinity():
 
 
 def publish_hud(client, publisher):
+  # Packet construction/Cap'n Proto encoding is in the publisher child. These
+  # scopes measure only snapshot access and synchronous writes on the USB owner.
+  metrics = dict(display_snapshot_read_ms=0., display_hud_send_ms=0., display_media_read_ms=0.,
+                 display_media_send_ms=0., display_hud_bytes=0, display_media_bytes=0)
   if publisher is not None:
+    started = time.monotonic()
     try:
       packet = publisher.packet()
     except Exception:
       log.exception('display snapshot unavailable')
-      return
+      return metrics
+    ready = time.monotonic()
+    metrics['display_snapshot_read_ms'] = (ready - started) * 1000
     if packet:
       client.t.send(HUD_MESSAGE, client._next_seq(), [packet])
+      metrics['display_hud_bytes'] = len(packet)
+    sent = time.monotonic()
+    metrics['display_hud_send_ms'] = (sent - ready) * 1000
     # At most one small fragment per inference window. No video
     # decoding or unbounded stream draining occurs on the USB owner's thread.
     media = publisher.media_packet()
+    ready = time.monotonic()
+    metrics['display_media_read_ms'] = (ready - sent) * 1000
     if media:
       client.t.send(NAVI_MESSAGE, client._next_seq(), [media])
+      metrics['display_media_bytes'] = len(media)
+    metrics['display_media_send_ms'] = (time.monotonic() - ready) * 1000
+  return metrics
 
 
 def host_attached():
@@ -310,13 +325,20 @@ def _serve_local(listener, client, peer, publisher, phase, wifi=None):
           if peer.get('carrot_host') == 'jetson':
             phase.sent(source_sof)
           phase_done = time.monotonic()
+          display_metrics = {}
+          early_media_ms = 0.
           if peer.get(NAVI_CAPABILITY):
-            publish_hud(client, publisher)
+            display_metrics = publish_hud(client, publisher) or {}
             if peer.get('carrot_host') == 'jetson' and peer.get(PUMP_CAPABILITY) is True:
+              early_started = time.monotonic()
               send_ready_during_inference(client, publisher, sent)
+              early_media_ms = (time.monotonic() - early_started) * 1000
           hud_done = time.monotonic()
           previous_state = client.last_state
           output = client.infer_end(seq)
+          receive = getattr(getattr(client, 't', None), 'last_receive', None) or {}
+          receive_metrics = {f'response_reader_{key}_max_ms': receive[key] * 1000
+                             for key in ('prepare', 'read_wait', 'handoff') if key in receive}
           check_loaded(client, client.last_state)
           if client.last_state is not previous_state:
             telemetry_updated = time.monotonic()
@@ -331,7 +353,7 @@ def _serve_local(listener, client, peer, publisher, phase, wifi=None):
                           (sent-started)*1000, (completed-sent)*1000, (time.monotonic()-completed)*1000)
           replied = time.monotonic()
           if not peer.get(NAVI_CAPABILITY):
-            publish_hud(client, publisher)
+            display_metrics = publish_hud(client, publisher) or {}
           elif not (peer.get('carrot_host') == 'jetson' and peer.get(PUMP_CAPABILITY) is True):
             # modeld already has its reply. Drain only a bounded ready tail;
             # never add these fragments before infer_end or delay its reply.
@@ -352,6 +374,11 @@ def _serve_local(listener, client, peer, publisher, phase, wifi=None):
             phase_ms=(phase_done-sent)*1000,
             hud_ms=(hud_done-phase_done)*1000,
             usb_response_ms=(completed-hud_done)*1000,
+            # Same-frame totals: HUD overlaps server execution, so separate
+            # aggregate maxima must never be added to estimate response latency.
+            usb_exchange_ms=(completed-started)*1000,
+            submit_to_response_ms=(completed-sent)*1000,
+            display_early_media_ms=early_media_ms,
             ipc_reply_ms=(replied-completed)*1000,
             display_tail_ms=(tail_done-replied)*1000,
             wifi_tail_ms=(finished-tail_done)*1000,
@@ -360,6 +387,8 @@ def _serve_local(listener, client, peer, publisher, phase, wifi=None):
             server_total_ms=client.last_timings[2]/1000,
             loop_ms=(finished-loop_started)*1000,
             thread_cpu_ms=(time.thread_time()-cpu_started)*1000,
+            **display_metrics,
+            **receive_metrics,
           )
       except (ConnectionError, BrokenPipeError, ValueError) as exc:
         log.info('local client ended: %s', exc)
