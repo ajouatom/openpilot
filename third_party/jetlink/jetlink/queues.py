@@ -199,6 +199,8 @@ class StatefulQueues:
   an invalid result clears every state buffer, including shared TRT staging.
   """
   def __init__(self, spec: ModelSpec, inputs: dict[str, np.ndarray]):
+    from jetlink.finite import native_checker
+    self._native_finite = native_checker()
     self.spec = spec
     self.state = {name: inputs[name] for name in spec.state_pairs}
     # NumPy's aarch64 float16 isfinite path is scalar. IEEE binary16 is
@@ -237,6 +239,8 @@ class StatefulQueues:
       offset += size
 
   def _all_finite(self, value):
+    if self._native_finite is not None:
+      return self._native_finite(value)
     if value.dtype != np.float16:
       return np.isfinite(value).all()
     bits = self._finite_bits[:value.size].reshape(value.shape)

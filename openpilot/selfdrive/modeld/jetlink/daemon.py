@@ -36,7 +36,7 @@ log = logging.getLogger('carrot.jetlink')
 sys.path.insert(0, str(VENDOR.parents[1] / 'tools/jetlink'))
 from hud_protocol import Publisher, HUD_CAPABILITY, HUD_MESSAGE
 from hud_navi import CAPABILITY as NAVI_CAPABILITY, MESSAGE as NAVI_MESSAGE
-from hud_navi import send_ready_after_reply, PUMP_CAPABILITY
+from hud_navi import send_ready_after_reply, send_ready_during_inference, PUMP_CAPABILITY
 from wifi_protocol import CAPABILITY as WIFI_CAPABILITY, Publisher as WifiPublisher
 
 
@@ -198,6 +198,7 @@ def _serve_local(listener, client, peer, publisher, phase, wifi=None):
   last_status = 0.
   last_ping = time.monotonic()
   telemetry_updated = 0.
+  hud_connected = None
   spec = client.spec
   requested = True
   follows_app = peer.get('protocol') == 3 and may_provision(peer, session_mode())
@@ -240,7 +241,10 @@ def _serve_local(listener, client, peer, publisher, phase, wifi=None):
           if time.monotonic() - last_status >= 1:
             update_affinity()
             if publisher is not None:
-              params.put_bool_nonblocking('ClusterHudConnected', bool((client.last_state or {}).get('carrot_hud_connected')))
+              connected = bool((client.last_state or {}).get('carrot_hud_connected'))
+              if connected != hud_connected:
+                params.put_bool_nonblocking('ClusterHudConnected', connected)
+                hud_connected = connected
             publish('ready', spec=spec, peer=peer, timings=list(client.last_timings),
                     telemetry=client.last_state, telemetry_updated=telemetry_updated,
                     navigation_tail=getattr(publisher, 'tail_stats', {}))
@@ -274,6 +278,8 @@ def _serve_local(listener, client, peer, publisher, phase, wifi=None):
           phase_done = time.monotonic()
           if peer.get(NAVI_CAPABILITY):
             publish_hud(client, publisher)
+            if peer.get('carrot_host') == 'jetson' and peer.get(PUMP_CAPABILITY) is True:
+              send_ready_during_inference(client, publisher, sent)
           hud_done = time.monotonic()
           previous_state = client.last_state
           output = client.infer_end(seq)
@@ -292,7 +298,7 @@ def _serve_local(listener, client, peer, publisher, phase, wifi=None):
           replied = time.monotonic()
           if not peer.get(NAVI_CAPABILITY):
             publish_hud(client, publisher)
-          else:
+          elif not (peer.get('carrot_host') == 'jetson' and peer.get(PUMP_CAPABILITY) is True):
             # modeld already has its reply. Drain only a bounded ready tail;
             # never add these fragments before infer_end or delay its reply.
             send_ready_after_reply(client, publisher, fast_receiver=peer.get(PUMP_CAPABILITY) is True)

@@ -6,7 +6,8 @@ import pytest
 
 
 @pytest.mark.parametrize('navigation', [False, True])
-def test_timing_records_usb_and_display_tail_after_unchanged_reply(monkeypatch, navigation):
+@pytest.mark.parametrize('fast_receiver', [False, True])
+def test_timing_records_usb_and_display_tail_after_unchanged_reply(monkeypatch, navigation, fast_receiver):
   if sys.platform == 'win32':
     monkeypatch.setitem(sys.modules, 'fcntl', NS())
   from openpilot.selfdrive.modeld.jetlink import daemon, link
@@ -65,19 +66,21 @@ def test_timing_records_usb_and_display_tail_after_unchanged_reply(monkeypatch, 
   monkeypatch.setattr(daemon, 'send_parts', reply)
   monkeypatch.setattr(daemon, 'publish_hud', lambda *a: step('hud', .004))
   monkeypatch.setattr(daemon, 'send_ready_after_reply', lambda *a, **kw: step('tail', .006))
+  monkeypatch.setattr(daemon, 'send_ready_during_inference', lambda *a, **kw: step('early_media', .006))
   client = NS(spec=link.SPEC, last_state=None, last_timings=(20000, 1000, 22000), infer_begin=begin, infer_end=end)
-  peer = {'carrot_host': 'jetson', daemon.NAVI_CAPABILITY: navigation}
+  peer = {'carrot_host': 'jetson', daemon.NAVI_CAPABILITY: navigation, daemon.PUMP_CAPABILITY: fast_receiver}
   daemon._serve_local(NS(accept=lambda: (connection, None)), client, peer, NS(),
                       NS(sent=lambda sof: step('phase', .001)), NS(send=lambda _: step('wifi', .007)))
 
   assert replies == [(42, 20000, 1000, 22000)]
-  assert calls == (['receive', 'usb_send', 'phase', 'hud', 'usb_response', 'reply', 'tail', 'wifi'] if navigation else
-                   ['receive', 'usb_send', 'phase', 'usb_response', 'reply', 'hud', 'wifi'])
+  expected = (['receive', 'usb_send', 'phase', 'hud', 'early_media', 'usb_response', 'reply', 'wifi'] if fast_receiver else
+              ['receive', 'usb_send', 'phase', 'hud', 'usb_response', 'reply', 'tail', 'wifi'])
+  assert calls == (expected if navigation else ['receive', 'usb_send', 'phase', 'usb_response', 'reply', 'hud', 'wifi'])
   assert len(events) == 1 and events[0]['component'] == 'jetlinkd'
   assert events[0]['frame_id'] == 42 and events[0]['usb_seq'] == 99
   metrics = events[0]['metrics']
   for key, value in {'ipc_receive_ms': 1000., 'usb_send_ms': 3., 'usb_response_ms': 80.,
-                     'ipc_reply_ms': 2., 'hud_ms': 4. if navigation else 0.,
-                     'display_tail_ms': 6. if navigation else 4., 'wifi_tail_ms': 7.,
+                     'ipc_reply_ms': 2., 'hud_ms': (10. if fast_receiver else 4.) if navigation else 0.,
+                     'display_tail_ms': (0. if fast_receiver else 6.) if navigation else 4., 'wifi_tail_ms': 7.,
                      'server_total_ms': 22.}.items():
     assert metrics[key]['max'] == pytest.approx(value)
