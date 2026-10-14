@@ -10,6 +10,9 @@ on:
       - 'openpilot/common/*cache*lock*'
       - 'openpilot/common/startup*'
       - 'openpilot/system/manager/build.py'
+      - 'openpilot/system/manager/process.py'
+      - 'openpilot/system/manager/process_config.py'
+      - 'openpilot/system/manager/test/*process*'
       - 'openpilot/system/ui/startup_recovery.py'
       - 'openpilot/system/tests/**'
       - '.github/workflows/startup-recovery.yaml'
@@ -32,6 +35,7 @@ jobs:
         run: |
           bash -n launch_chffrplus.sh scripts/ensure_params_build.sh
           python -m pytest --noconftest -o addopts= -q \
+            openpilot/system/manager/test/test_python_process_spawn.py \
             openpilot/system/tests/test_build_cache.py \
             openpilot/system/tests/test_rebuild_cleanup.py \
             openpilot/system/tests/test_startup_recovery.py \
