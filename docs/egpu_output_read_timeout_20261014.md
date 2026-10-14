@@ -144,7 +144,10 @@ subsequent activation. Thus navigation was present near the failure and cannot
 be categorically excluded by correlation alone. MapInput uses nonblocking
 VisionIPC receive and accepts a bounded 256x256 image with route/freshness
 checks. The recorded failure occurred later in worker output read, not in a
-blocking wait for the navigation image. No per-frame map-input trace or
+blocking wait for the navigation image. The last mapsd timing summary before
+the stall reports map_valid=true, 143 route points, mean render 25.220 ms and
+maximum 307.276 ms across 23 renders over 5.054 s. This includes a slow render
+but does not explain a worker output-read stall by itself. No per-frame map-input trace or
 controlled navigation ON/OFF comparison establishes causality here.
 
 ## User cable reseat comparison in progress
@@ -175,5 +178,47 @@ same addresses. With eGPU still inactive, the first 20.001 s sample increased
 the same address and nondecreasing counter. Thus the reduction persisted, but
 link errors remained. Without a reconnect/reversal trial this does not prove
 the display itself is defective; shared power, cable positioning and hub/link
-state remain possible confounders. The user next offered to bypass the hub;
-direct-connection results are still pending.
+state remain possible confounders. The user next offered to bypass the hub.
+
+The direct connection was subsequently confirmed in sysfs: eGPU 3801:0001
+at 4-1, 5 Gbit/s, with no intervening hub and no USB display. A 20.000 s
+sample with eGPU inactive kept the link counter at 3 throughout, zero
+additional errors. This narrows the practical comparison to the bypassed
+hub/cable/contact configuration, without identifying an individual defective
+part. A guarded reboot was then performed to clear the startup failure via
+the normal startup procedure.
+
+## Direct connection with inference and navigation
+
+On new boot de694892-8c07-4280-a81d-f61e90ae1a33, normal boot validation and
+eGPU initialization succeeded with the same code/model. A 120.001 s parked
+window produced 2,399 consecutive valid model results; full rlogs match the
+live observations. Inference mean/p99/max was 43.172/44.445/45.301 ms, maximum
+publication gap 59.061 ms. Camera, odometry, pose and DM each had 2,399 valid
+messages, with no alerts and all pose health flags true. USB stayed at bus 4
+address 2, 5 Gbit/s, and the link counter stayed zero in all 120 samples.
+
+Navigation initially lacked a fresh position, then recovered. An additional
+60.001 s parked test recorded map preview reason=ready in all 60 samples and
+12 mapsd timing summaries with map_valid=true. Nine summaries used stationary
+position hold and three did not; this is not moving-GPS/route-steering testing.
+Map render weighted mean/max was 17.111/61.132 ms. The live monitor recorded
+1,200 consecutive valid model results, inference mean/p99/max
+43.276/45.473/46.665 ms, maximum publication gap 59.227 ms. Camera, odometry,
+pose and DM also each had 1,200 valid messages; no alerts, PID changes or link
+error increments occurred. Thus a rendered navigation map and eGPU inference
+coexisted without reproducing the failure in this bounded parked test.
+Full rlogs reproduce the additional window's counts and timing, and all five
+downloaded direct-test rlogs match remote SHA256 values. The final read-only
+check at boot 473.353 s still shows Park/zero speed, controls inactive,
+eGPU active, map ready and root-port counter zero.
+
+The direct configuration improves the observed link behavior and achieves
+20 Hz here, but does not meet the requested <=40 ms inference margin. These
+tests do not prove which hub, connector, cable, PHY/power or link-state
+interaction caused the original road stall. They do not certify road
+reliability. The USB display remains physically disconnected for this test;
+keeping it requires validating a suitable hub/cable configuration under the
+same display-plus-eGPU load. No firmware, safety gate, memory guard or model
+selection was changed to obtain this result. Vehicle code remains f1db63441d;
+only investigation documentation is committed/pushed on carrot-nav.
