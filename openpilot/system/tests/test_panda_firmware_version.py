@@ -15,7 +15,7 @@ firmware_source_version = runpy.run_path(str(version_script))['firmware_source_v
 def source_tree(tmp_path):
   files = ('panda/SConscript', 'panda/SConstruct', 'panda/firmware_version.py', 'panda/certs/debug.pub', 'panda/certs/release.pub',
            'panda/board/main.c', 'panda/board/bootstub.c', 'panda/board/stm32h7/flash.ld', 'panda/crypto/sign.py',
-           'opendbc/safety/safety.h', 'opendbc/safety/safety/safety_hyundai.h')
+           'opendbc/safety/safety.h', 'opendbc/safety/safety/safety_hyundai.h', 'opendbc/safety/safety/safety_tesla.h')
   for name in files:
     path = tmp_path / name
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -38,7 +38,8 @@ def test_unrelated_changes_do_not_change_firmware(source_tree, name):
 
 
 @pytest.mark.parametrize('name', ['panda/board/main.c', 'panda/board/stm32h7/flash.ld', 'panda/SConscript', 'panda/crypto/sign.py',
-                                'panda/certs/debug.pub', 'opendbc/safety/safety/safety_hyundai.h'])
+                                'panda/certs/debug.pub', 'opendbc/safety/safety/safety_hyundai.h',
+                                'opendbc/safety/safety/safety_tesla.h'])
 def test_actual_firmware_inputs_change_version_without_git_commit(source_tree, name):
   before = source_version(source_tree)
   (source_tree / name).write_text('changed input')
