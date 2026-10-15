@@ -1,7 +1,7 @@
 import json
 import pytest
 
-from openpilot.selfdrive.carrot.signal_display import DisplayContinuity, SignalDisplayReader, publish_display, visible_tracks, project_box
+from openpilot.selfdrive.carrot.signal_display import DisplayContinuity, SignalDisplayReader, SignalStatusReader, publish_display, visible_tracks, project_box
 
 
 def record():
@@ -10,6 +10,44 @@ def record():
 
 
 CAMERA = (22, 10.1, 1344, 760, False)
+
+
+def test_summary_color_memory_is_bounded_and_new_red_replaces_old_green(monkeypatch, tmp_path):
+  from openpilot.selfdrive.carrot import signal_display as display
+  monkeypatch.setattr(display, 'display_requested', lambda: True)
+  path=tmp_path/'display'; reader=SignalStatusReader(path)
+  r=record(); r['tracks'][0]['raw']='green'; path.write_text(json.dumps(r))
+  assert reader.read(10.1)==(2,False,True)
+  assert reader.read(10.6)==(2,True,True)
+  r.update(frame_id=24,timestamp=10.7);r['tracks'][0]['raw']='unknown';path.write_text(json.dumps(r))
+  assert reader.read(10.8)==(2,True,True)
+  # Repeating unknown does not renew the earlier green, even with live packets.
+  r.update(frame_id=44,timestamp=12.);path.write_text(json.dumps(r))
+  assert reader.read(12.1)==(0,False,True)
+  r.update(frame_id=46,timestamp=12.2);r['tracks'][0]['raw']='red';path.write_text(json.dumps(r))
+  assert reader.read(12.3)==(1,False,True)
+  assert reader.read(14.3)==(0,False,False)
+
+
+def test_mode_zero_never_reads_display_file_and_clears_memory(monkeypatch, tmp_path):
+  from openpilot.selfdrive.carrot import signal_display as display
+  monkeypatch.setattr(display, 'display_requested', lambda: True)
+  path=tmp_path/'display';reader=SignalStatusReader(path);path.write_text(json.dumps(record()))
+  assert reader.read(10.1)[0]==1
+  monkeypatch.setattr(display, 'display_requested', lambda: False)
+  class NoRead:
+    def open(self, *args):raise AssertionError('mode 0 read an observation')
+  reader.path=NoRead()
+  assert reader.read(10.2)==(0,False,False)
+
+
+def test_summary_worker_restart_drops_previous_color(monkeypatch, tmp_path):
+  from openpilot.selfdrive.carrot import signal_display as display
+  monkeypatch.setattr(display, 'display_requested', lambda: True)
+  path=tmp_path/'display';reader=SignalStatusReader(path);r=record();path.write_text(json.dumps(r))
+  assert reader.read(10.1)[0]==1
+  r.update(session='new',timestamp=10.2);r['tracks']=[];path.write_text(json.dumps(r))
+  assert reader.read(10.3)==(0,False,True)
 
 
 def test_red_green_unknown_are_observations_not_permissions():

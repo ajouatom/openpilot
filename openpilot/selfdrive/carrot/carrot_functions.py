@@ -751,6 +751,7 @@ class CarrotPlanner:
     self.stop_dist = stop_dist
     self.mode = mode
     if self.stop_prepare is not None:
+      from openpilot.selfdrive.carrot.signal_stop_prepare import prepare_lead_blocked
       if prepare_context is None and self._prepare_runtime is not None:
         prepare_observation, prepare_context = self._prepare_runtime.read(sm)
       context = prepare_context or {'now': time.monotonic(), 'enabled': False, 'valid': False, 'drive': False}
@@ -759,10 +760,10 @@ class CarrotPlanner:
         enabled=context['enabled'] and not suspended and self.myDrivingMode != DrivingMode.High and self.trafficLightDetectMode != 0,
         valid=context['valid'], drive=context['drive'],
         speed=v_ego, gas=carstate.gasPressed, brake=carstate.brakePressed,
-        lead=lead_detected or radarstate.leadTwo.status,
+        lead=prepare_lead_blocked(radarstate),
         turning=bool(context.get('turning', True)) or carstate.leftBlinker or carstate.rightBlinker,
         model_stopping=self.xState in (XState.e2eStop, XState.e2eStopped, XState.e2ePrepare),
-        entry_allowed=self.traffic_starting_count == 0 and self.user_stop_distance < 0 and mode == 'acc',
+        entry_allowed=self.traffic_starting_count == 0 and self.user_stop_distance < 0 and mode == 'acc' and self.soft_hold_active == 0,
         geometry=context.get('geometry', lambda box: None), alignment=context.get('alignment'),
         night_geometry=context.get('night_geometry'))
       self.prepare_control_active = self.prepare_decision.active and context.get('actuate', True)
