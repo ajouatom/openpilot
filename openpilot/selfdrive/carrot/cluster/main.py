@@ -81,6 +81,8 @@ from cluster_simulator import ClusterSimulator, RandomInputSource
 from cluster_system_monitor import ClusterProcessCoreUsageSampler, NetworkAddressProvider
 from cluster_usb_display import TuringUsbDisplay, find_supported_usb_product, product_id_for_hud_mode, _set_cluster_hud_connected
 from cluster_usb_pipeline import AsyncJpegUsbPipeline
+from cluster_wifi_display import create_display
+from cluster_wifi_protocol import load_config as load_wifi_config
 from openpilot.common.display_scheduling import DisplayScheduler
 from openpilot.selfdrive.controls.lib.cutin_alert import CutinAlertCandidate, CutinAlertTracker
 
@@ -287,7 +289,9 @@ class ClusterClockVisibilityParamReader:
 
 
 class ClusterUsbFpsReader:
-    def __init__(self) -> None:
+    def __init__(self, normal_fps: float = 10.0, *, egpu_max_fps: float = 5.0) -> None:
+        self.normal_fps = normal_fps
+        self.egpu_max_fps = egpu_max_fps
         self._params = None
         try:
             from openpilot.common.params import Params
@@ -298,11 +302,11 @@ class ClusterUsbFpsReader:
 
     def read(self) -> float:
         if self._params is None:
-            return 10.0
+            return self.normal_fps
         try:
-            return 5.0 if self._params.get_bool("UsbGpuActive") else 10.0
+            return min(self.egpu_max_fps, self.normal_fps) if self._params.get_bool("UsbGpuActive") else self.normal_fps
         except Exception:
-            return 10.0
+            return self.normal_fps
 
 
 class ClusterHudBrightnessParamReader:
@@ -725,7 +729,7 @@ def run_demo(
         auto_enabled=usb_brightness_auto_enabled,
     )
     if output_mode in ("usb", "both"):
-        usb_display = TuringUsbDisplay(
+        usb_display = create_display(
             brightness=initial_usb_brightness,
             display_fps=usb_display_fps,
             jpeg_quality=usb_jpeg_quality,
@@ -744,18 +748,16 @@ def run_demo(
         # mandatory sync transaction immediately after USB initialization.
         usb_display.set_orientation(active_orientation)
         usb_display.set_profile_enabled(profile_render)
-        profile_stage = time.perf_counter()
-        try:
-            usb_display.open()
-        except Exception:
-            usb_display.close()
-            raise
-        profile.add_elapsed("usb.open", profile_stage)
-        profile.add_samples(usb_display.profile_samples())
-        usb_display.clear_profile_samples()
-        if usb_async and usb_codec == "jpeg":
-            usb_pipeline = AsyncJpegUsbPipeline(usb_display)
-            usb_pipeline.start()
+        if not getattr(usb_display, "open_after_renderer", False):
+            profile_stage = time.perf_counter()
+            try:
+                usb_display.open()
+            except Exception:
+                usb_display.close()
+                raise
+            profile.add_elapsed("usb.open", profile_stage)
+            profile.add_samples(usb_display.profile_samples())
+            usb_display.clear_profile_samples()
 
     frame_width = width or (usb_display.landscape_width if usb_display is not None else DESIGN_WIDTH)
     frame_height = height or (usb_display.landscape_height if usb_display is not None else DESIGN_HEIGHT)
@@ -1034,6 +1036,16 @@ def run_demo(
         renderer.open(hidden=output_mode == "usb")
         profile.add_samples(renderer.profile_samples())
         renderer.clear_profile_samples()
+        if usb_display is not None:
+            if getattr(usb_display, "open_after_renderer", False):
+                profile_stage = time.perf_counter()
+                usb_display.open()
+                profile.add_elapsed("usb.open", profile_stage)
+                profile.add_samples(usb_display.profile_samples())
+                usb_display.clear_profile_samples()
+            if usb_async and usb_codec == "jpeg":
+                usb_pipeline = AsyncJpegUsbPipeline(usb_display)
+                usb_pipeline.start()
         if usb_display is not None and usb_codec == "h264":
             h264_encoder_fps = resolved_h264_encoder_fps(target_fps, usb_h264_fps)
             h264_pipeline = H264UsbPipeline(
@@ -2506,7 +2518,8 @@ def resolve_usb_output_rate(args: argparse.Namespace):
 
 def main(*, exit_on_error: bool = True) -> None:
     args = parse_args()
-    if args.output in ("usb", "both") and not TICI:
+    wifi_config = load_wifi_config() if args.output in ("usb", "both") else None
+    if args.output in ("usb", "both") and not TICI and wifi_config is None:
         expected_product_id = product_id_for_hud_mode(args.cluster_hud_mode) if args.cluster_hud_mode is not None else None
         if find_supported_usb_product(expected_product_id) is None:
             print(
@@ -2515,9 +2528,23 @@ def main(*, exit_on_error: bool = True) -> None:
             )
             args.output = "window"
     encoder_source = apply_cluster_encoder_param(args)
+    if wifi_config is not None:
+        args.usb_codec = "jpeg"
+        args.usb_jpeg_quality = int(wifi_config.get("quality", 50))
+        args.usb_async = True
+        encoder_source = "S3 Wi-Fi JPEG"
     if args.usb_async and args.usb_codec != "jpeg":
         raise SystemExit("--usb-async only supports --usb-codec jpeg")
     target_fps, fps_source, usb_fps_reader, usb_display_fps, usb_display_fps_auto = resolve_usb_output_rate(args)
+    if wifi_config is not None:
+        target_fps = float(wifi_config.get("fps", 15))
+        fps_source = "S3 Wi-Fi"
+        # S3 sends over Wi-Fi rather than sharing C4's USB link with the eGPU.
+        usb_fps_reader = ClusterUsbFpsReader(target_fps, egpu_max_fps=10.0) if TICI and args.input == "live" else None
+        if usb_fps_reader is not None:
+            target_fps = usb_fps_reader.read()
+        usb_display_fps = int(target_fps)
+        usb_display_fps_auto = usb_fps_reader is not None
     usb_h264_bitrate = resolved_usb_h264_bitrate(args.usb_h264_bitrate, target_fps, args.usb_h264_fps)
     usb_h264_bitrate_auto = args.usb_h264_bitrate.strip().lower() == "auto"
     brightness_param_reader = None

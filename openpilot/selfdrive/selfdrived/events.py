@@ -1140,6 +1140,12 @@ EVENTS: dict[int, dict[str, Alert | AlertCallbackType]] = {
   EventName.radarCutin: {
      ET.WARNING: EngagementAlert(AudibleAlert.radarCutin),
   },
+  EventName.radarStationaryLead: {
+    ET.WARNING: Alert(
+      "전방 물체 주의", "전방을 확인하고 감속을 준비하세요",
+      AlertStatus.normal, AlertSize.mid,
+      Priority.HIGH, VisualAlert.none, AudibleAlert.prompt, 2.),
+  },
   EventName.audioRefuse: {
      ET.WARNING: EngagementAlert(AudibleAlert.refuse),
   },

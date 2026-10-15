@@ -14,6 +14,7 @@ RECORD = struct.Struct('<QQQddQ')  # generation, stage, frame, monotonic, CPU, t
 class WorkerProgress:
   def __init__(self, path: Path):
     self.frame = self.generation = 0
+    self.current = ('starting', 0, time.monotonic())
     self.memory = None
     try:
       with path.open('w+b') as f:
@@ -24,12 +25,13 @@ class WorkerProgress:
       pass  # optional diagnostics must not prevent inference
 
   def mark(self, stage: str):
+    self.current = (stage, self.frame, time.monotonic())
     if self.memory is None:
       return
     self.generation += 2
     struct.pack_into('<Q', self.memory, 0, self.generation - 1)
     RECORD.pack_into(self.memory, 0, self.generation - 1, STAGES.index(stage), self.frame,
-                     time.monotonic(), time.thread_time(), threading.get_native_id())
+                     self.current[2], time.thread_time(), threading.get_native_id())
     struct.pack_into('<Q', self.memory, 0, self.generation)
 
   def close(self):
@@ -99,5 +101,22 @@ def current_failure(cache: Path, sha: str) -> dict:
     worker = value.get('worker')
     return {'error_code': runtime_failure_code(str(value.get('error', ''))),
             'worker': worker if isinstance(worker, dict) else {}, 'phase': value.get('phase')}
+  except (OSError, ValueError, TypeError, AttributeError, KeyError):
+    return {}
+
+
+def saved_failure(cache: Path, sha: str) -> dict:
+  """Export matching historical failure evidence, without unrelated device data."""
+  if len(sha) != 64 or any(c not in '0123456789abcdef' for c in sha):
+    return {}
+  try:
+    root = cache / 'precompiled' / sha
+    with (root / 'last_failure.json').open() as f:
+      value = json.loads(f.read(32768))
+    with (root / 'installed.json').open() as f:
+      installed = json.loads(f.read(32768))
+    if value.get('pickle_sha256') != installed['pickle']['sha256'] or not isinstance(value.get('error'), str):
+      return {}
+    return {key: value[key] for key in ('time', 'phase', 'rejected', 'pickle_sha256', 'error', 'boot_id', 'worker') if key in value}
   except (OSError, ValueError, TypeError, AttributeError, KeyError):
     return {}

@@ -50,3 +50,14 @@ def test_missing_params_uses_ten_fps(monkeypatch):
   reader = scope['ClusterUsbFpsReader']()
   reader._params = None
   assert reader.read() == 10
+
+
+@pytest.mark.parametrize('configured,limited', [(15, 10), (10, 10), (4, 4)])
+def test_wifi_rate_allows_ten_fps_with_live_egpu_cap(monkeypatch, configured, limited):
+  scope, state = load_policy(monkeypatch)
+  reader = scope['ClusterUsbFpsReader'](configured, egpu_max_fps=10)
+  assert reader.read() == configured
+  state['active'] = True
+  assert reader.read() == limited
+  state['active'] = False
+  assert reader.read() == configured

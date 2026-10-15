@@ -295,7 +295,7 @@ class TuringUsbDisplay:
         if self.profile_enabled:
             self._profile_samples.append((name, (time.perf_counter() - start_time) * 1000.0))
 
-    def open(self) -> None:
+    def _load_protocol_helpers(self) -> None:
         if not VENDOR_LIBRARY.exists():
             raise RuntimeError(f"TURZX vendor library not found: {VENDOR_LIBRARY}")
         self._add_libusb_search_path()
@@ -329,6 +329,9 @@ class TuringUsbDisplay:
         self._cmd_play_h264_chunk = CMD_PLAY_H264_CHUNK
         self._cmd_get_stream_status = CMD_GET_STREAM_STATUS
         self._cmd_stop_stream = CMD_STOP_STREAM
+
+    def open(self) -> None:
+        self._load_protocol_helpers()
         self._connect_device()
         try:
             self._initialize_device()

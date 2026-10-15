@@ -54,6 +54,12 @@ test("delivery failures explain automatic recovery and installed files do not im
   CarrotEgpuModel.render({ available: true, state: "error", error_code: "future_code", detail: "internal stack trace" });
   assert.match(elements.get("egpuModelDetail").textContent, /screenshot/);
   assert.doesNotMatch(elements.get("egpuModelDetail").textContent, /future_code|stack trace/);
+  CarrotEgpuModel.render({ available: true, state: "error", error_code: "rejected", compiled: false, can_restart: false });
+  assert.equal(elements.get("btnEgpuCompileRestart").hidden, true);
+  assert.equal(elements.get("egpuModelDiagnostics").hidden, false);
+  assert.match(elements.get("egpuModelDetail").textContent, /download the diagnostics/);
+  CarrotEgpuModel.render({ available: true, state: "compiled", compiled: true, active: true });
+  assert.equal(elements.get("egpuModelDiagnostics").hidden, true);
 });
 
 test("Korean timeout guidance names the actual reboot menu without exposing worker details", (t) => {

@@ -130,6 +130,10 @@ def gpu_bootloader_timeout(detail: str, phase: str) -> bool:
                     detail.rstrip(), re.MULTILINE) is not None)
 
 
+def gpu_worker_busy(detail: str) -> bool:
+  return re.search(r'^(?:RuntimeError: )?previous eGPU worker is still exiting\Z', detail.rstrip(), re.MULTILINE) is not None
+
+
 def gpu_transport_failure(detail: str) -> bool:
   """Recognize terminal USB transport errors, never a model-file I/O error.
 
@@ -183,6 +187,27 @@ def retry_usb_rejection(root: Path, pickle_sha256: str) -> bool:
     return False
 
 
+def retry_output_rejection(root: Path, pickle_sha256: str) -> bool:
+  """Allow a verified fresh boot attempt; retain the original failure evidence."""
+  from openpilot.selfdrive.modeld.egpu_worker_progress import boot_identity
+  try:
+    failure = json.loads((root / 'last_failure.json').read_text())
+    current_boot = boot_identity()
+    if not (isinstance(failure, dict) and failure.get('rejected') is True and
+            failure.get('pickle_sha256') == pickle_sha256 and failure.get('phase') == 'inference' and
+            isinstance(failure.get('boot_id'), str) and failure['boot_id'] and current_boot and
+            failure['boot_id'] != current_boot and isinstance(failure.get('error'), str)):
+      return False
+    # Match terminal errors only. The legacy combined error is included to
+    # recover existing affected devices, with full hash and boot smoke checks.
+    return re.search(r'^(?:(?:[a-zA-Z_][\w]*\.)*(?:NonFiniteModelOutput|RepeatedInvalidModelOutput): [^\n]+|' +
+                     r'ValueError: invalid precompiled model output|' +
+                     r'(?:ValueError: )?non-finite model output)\Z',
+                     failure['error'].rstrip(), re.MULTILINE) is not None
+  except (OSError, ValueError, TypeError):
+    return False
+
+
 def ensure_precompiled(model=None, cache_dir: Path | None = None, progress=None) -> Path | None:
   model = model or active_manifest()
   if model is None:
@@ -199,12 +224,13 @@ def ensure_precompiled(model=None, cache_dir: Path | None = None, progress=None)
   if len(data) > MAX_CATALOG:
     raise ValueError('precompiled catalog too large')
   value = validate_catalog(json.loads(data), model.sha256, catalog_url)
-  # A runtime rejected on this device must use the local compiler until the artifact changes.
+  # Runtime numerical errors block this boot, not every future ignition cycle.
+  # Artifact integrity/contract errors still require a different valid artifact.
   if (root / 'rejected').exists() and (root / 'rejected').read_text() == value['pickle']['sha256']:
-    if not retry_usb_rejection(root, value['pickle']['sha256']):
+    if not (retry_usb_rejection(root, value['pickle']['sha256']) or retry_output_rejection(root, value['pickle']['sha256'])):
       return None
     (root / 'boot_validation.json').unlink(missing_ok=True)
-    print('Retrying model rejected by an earlier-boot GPU initialization failure; revalidating artifacts.')
+    print('Retrying model after an earlier-boot recoverable GPU failure; revalidating artifacts.')
   root.mkdir(parents=True, exist_ok=True)
   target = root / 'model.pkl'
   if value['format'] == 'comma-generic-onnx' and not target.exists():
@@ -251,6 +277,7 @@ def record_failure(path: Path, error: BaseException | str, phase: str) -> bool:
   detail = str(error)
   value = json.loads((path.parent / 'installed.json').read_text())
   transient = (usbgpu_pcie_not_ready(error) or isinstance(error, (TimeoutError, BrokenPipeError)) or
+               gpu_worker_busy(detail) or
                gpu_transport_failure(detail) or
                gpu_usb_link_failure(detail, value) or
                gpu_bootloader_timeout(detail, phase) or
