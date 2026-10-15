@@ -62,7 +62,7 @@ C4 웹 터미널 또는 SSH 터미널에서 실행합니다. 시동을 꺼도 �
 
 ```sh
 cd /data/openpilot
-python tools/esp32s3_display/provision.py --auto
+python3 tools/esp32s3_display/provision.py --auto
 ```
 
 현재 Wi-Fi 이름과 암호를 S3에 저장하고 C4 등록까지 마칩니다. 지원 UART가 한 개일
@@ -87,7 +87,7 @@ Wi-Fi 암호를 읽을 권한이 없으면 `sudo -E`로 실행하거나 `--ssid`
 
 ```sh
 cd /data/openpilot
-python tools/esp32s3_display/provision.py --import-pairing /data/carrot-s3.json
+python3 tools/esp32s3_display/provision.py --import-pairing /data/carrot-s3.json
 ```
 
 등록 파일은 해당 화면에 접근할 수 있는 키입니다. 공개하거나 다른 사람에게 보내지

@@ -40,7 +40,7 @@ Connect C4 to the intended **2.4 GHz** hotspot first, then connect S3's UART USB
 connector to C4. Run from the openpilot repository:
 
 ```sh
-python tools/esp32s3_display/provision.py --auto
+python3 tools/esp32s3_display/provision.py --auto
 ```
 
 The utility reads the active NetworkManager Wi-Fi profile and password, verifies
@@ -56,7 +56,7 @@ run the command again after changing C4's active Wi-Fi to copy the new credentia
 For manual setup on a PC or a C4 without readable NetworkManager credentials:
 
 ```sh
-python tools/esp32s3_display/provision.py --port COM14 --ssid "My hotspot" --output carrot-s3.json
+python3 tools/esp32s3_display/provision.py --port COM14 --ssid "My hotspot" --output carrot-s3.json
 ```
 
 The password is prompted without echo. Import that registration file on C4 with
@@ -82,7 +82,7 @@ the command below. Never commit or share a registration file.
 5. Transfer the downloaded registration file to C4 and import it once:
 
 ```sh
-python tools/esp32s3_display/provision.py --import-pairing /path/to/carrot-s3.json
+python3 tools/esp32s3_display/provision.py --import-pairing /path/to/carrot-s3.json
 ```
 
 Both registration methods preserve the existing pairing key when changing SSID.
