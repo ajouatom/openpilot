@@ -6,7 +6,8 @@
   ONNX, internal/DM and Jetson remain unchanged. Preserve retry/fallback policies;
   source-verified new runtime retains USB no-op sleep and +/-1 link-error meanings,
   so extend only the exact hash allowlist.411 focused tests/13 Web tests pass,
-  8 Windows skips; native Linux runtime CI and HTTPS delivery verify separately.
+  8 Windows skips; Linux CI403 plus3 native-runtime tests and HTTPS empty-cache
+  install/offline reuse pass on8864280c9c.
   No vehicle install or native20Hz/driving claim. See docs/md_v3_20261015.md.
 
 - On 2026-10-15, user requested explicit tmux error/retry visibility after
