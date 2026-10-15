@@ -1,5 +1,17 @@
 # Repository memory
 
+- On 2026-10-15, user requested review/integration of Tesla PR551 c61d998ff8.
+  Reproduced inactive phase-lead CAN/feedback and saturation defects; Tesla's
+  encoded zero375 also regranted controls through the shared accel helper.
+  Port the nine PR files unchanged: measured inactive angle, final feedback,
+  cooperative torque blending only above25km/h with normal low-speed steering,
+  output-limit-aware saturation and Tesla-specific longitudinal permission.
+  Both maintained branches:199 focused tests/128 subtests pass. Three inherited
+  generic disabled-angle safety cases still fail identically before/after;
+  do not claim full safety suite success. Native C uses a desktop packet/forward
+  ABI bridge, not MCU/vehicle validation. Publish single-parent on both branches;
+  no vehicle installation. See docs/tesla_pr551_review_20261015.md.
+
 - On 2026-10-15, user requested historical attribution of memory >80%. Read925
   retained local logs (916 own-device with memory) plus on-device qlogs. Earliest
   observed >80% is Oct10/108e, but Oct11/1095 stays73--77% with HUD+signals;
