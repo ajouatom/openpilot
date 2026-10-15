@@ -3,6 +3,7 @@ import json
 from contextlib import asynccontextmanager
 from types import SimpleNamespace as NS
 
+import pytest
 from aiohttp import web
 from aiohttp.test_utils import TestClient, TestServer
 
@@ -40,6 +41,30 @@ def test_navigation_page_is_served():
       assert response.status == 200
       assert 'navigation_map.js' in await response.text()
   asyncio.run(run())
+
+
+@pytest.mark.parametrize('fresh,reason,ready', [
+  (True, 'route', False), (True, 'position', False), (True, 'ready', True), (False, 'ready', False),
+])
+def test_destination_requires_usable_preview(monkeypatch, fresh, reason, ready):
+  monkeypatch.setattr(navigation, 'get_param_value', lambda key, default: default)
+  monkeypatch.setattr(navigation, 'preview_fresh', lambda: fresh)
+  monkeypatch.setattr(navigation, 'preview_reason', lambda: reason)
+  response = asyncio.run(navigation.get_destination(None))
+  assert json.loads(response.text)['map_ready'] is ready
+
+
+@pytest.mark.parametrize('onroad,reason', [(False, 'offroad'), (True, 'waiting')])
+def test_missing_preview_explains_service_state(monkeypatch, tmp_path, onroad, reason):
+  demand = tmp_path / 'demand'
+  monkeypatch.setattr(navigation, 'WEB_DEMAND_PATH', demand)
+  monkeypatch.setattr(navigation, 'preview_fresh', lambda: False)
+  monkeypatch.setattr(navigation, 'get_param_value', lambda key, default: onroad if key == 'IsOnroad' else default)
+  response = asyncio.run(navigation.preview(None))
+  assert response.status == 204
+  assert response.headers['X-Nav-Map-Status'] == reason
+  assert response.headers['Cache-Control'] == 'no-store'
+  assert demand.exists()
 
 
 def test_search_reads_fragmented_response_and_keeps_token_server_side(monkeypatch):

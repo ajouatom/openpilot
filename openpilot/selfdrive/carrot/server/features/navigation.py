@@ -78,7 +78,7 @@ async def get_destination(request):
     current = destination(json.loads(value)) if value else None
   except (ValueError, KeyError, TypeError):
     current = None
-  return web.json_response({'destination': current, 'map_ready': preview_fresh(),
+  return web.json_response({'destination': current, 'map_ready': preview_fresh() and preview_reason() == 'ready',
                             'key_configured': bool(get_param_value('MapboxPublicKey', ''))})
 
 
@@ -104,7 +104,8 @@ async def preview(request):
   except OSError:
     pass
   if not preview_fresh():
-    return web.Response(status=204, headers={'Cache-Control': 'no-store'})
+    reason = 'waiting' if get_param_value('IsOnroad', False) else 'offroad'
+    return web.Response(status=204, headers={'Cache-Control': 'no-store', 'X-Nav-Map-Status': reason})
   return web.FileResponse(PREVIEW_PATH, headers={'Cache-Control': 'no-store', 'X-Nav-Map-Status': preview_reason()})
 
 
