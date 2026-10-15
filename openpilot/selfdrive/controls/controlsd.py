@@ -220,7 +220,10 @@ class Controls:
         curvature = get_lag_adjusted_curvature(self.CP, CS.vEgo, lat_plan.psis, lat_plan.curvatures, steer_actuator_delay + lat_smooth_seconds, lat_plan.distances)
         new_desired_curvature = smooth_value(curvature, self.desired_curvature, lat_smooth_seconds)
     else:      
-      new_desired_curvature = smooth_value(model_v2.action.desiredCurvature, self.desired_curvature, 0.1)
+      # Damp short left-right model curvature jitter in slow traffic (up to 25 km/h); return to
+      # 0.1 s above 35 km/h so highway response is unchanged.
+      laneless_tau = float(np.interp(CS.vEgo * 3.6, [25., 35.], [0.3, 0.1]))
+      new_desired_curvature = smooth_value(model_v2.action.desiredCurvature, self.desired_curvature, laneless_tau)
 
     self.desired_curvature, curvature_limited = clip_curvature(CS.vEgo, self.desired_curvature, new_desired_curvature, lp.roll)
 
