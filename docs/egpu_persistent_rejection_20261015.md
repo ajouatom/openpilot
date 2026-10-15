@@ -91,3 +91,29 @@ bounded background recovery. The exact privately saved traceback also passes a
 matching-runtime/later-boot migration probe, rejects a same-boot attempt and
 preserves the original failure record. This proves recovery eligibility, not
 physical USB stability or successful driving. No NAS raw logs are committed.
+
+## Tmux recovery lifecycle visibility
+
+The user requested explicit error and retry output so future analysis does not
+need to infer the recovery path from a generic card. All added events go to
+stderr with `[eGPU]`, process ID and monotonic time; they never enter the worker
+stdout control protocol. Failures include phase, model/runtime identity,
+terminal error, saved diagnostic path and persistent/transient classification.
+The full earlier traceback remains in the existing diagnostic report.
+
+Recovery prints fallback, scheduled delay and attempt/limit, actual attempt
+start, failure/cancellation, probe READY, handover, and terminal stop reason.
+Waiting explains absent USB, internal health or backoff. Unchanged waits are
+not repeated; changed waiting reasons are limited to one per five seconds.
+The modeld first-output publication path separately prints live_output_resumed:
+a successful synthetic probe or handover is not claimed as a live result.
+Boot-time artifact rejection/migration also prints the retained cause and next
+step. Startup without a recovery manager explicitly reports no retry.
+
+No retry limits, validation gates, inference timeouts, model selection or USB
+runtime are changed. A closed diagnostic stream is swallowed, not propagated
+into inference.179 focused tests pass on nav before publication; final wip uses
+the same tests. Tests check three-attempt exhaustion, delayed handover, absent
+USB log volume, old-block cause output and failure of the logging stream.
+Syntax checks pass. Targeted lint passes; modeld's existing ISC002/E501/F841
+findings are outside these changes. No physical vehicle/reboot test or install.

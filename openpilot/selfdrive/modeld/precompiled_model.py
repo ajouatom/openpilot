@@ -16,6 +16,7 @@ from urllib.request import Request, urlopen
 
 from openpilot.selfdrive.modeld.big_model import active_manifest, model_cache_dir, model_path
 from openpilot.selfdrive.modeld.precompiled_artifact import SERIALIZATIONS
+from openpilot.selfdrive.modeld.egpu_events import error_summary, log_event
 
 PROTOCOL = 1
 MAX_CATALOG = 64 * 1024
@@ -229,9 +230,16 @@ def ensure_precompiled(model=None, cache_dir: Path | None = None, progress=None)
   # Artifact integrity/contract errors still require a different valid artifact.
   if (root / 'rejected').exists() and (root / 'rejected').read_text() == value['pickle']['sha256']:
     if not (retry_usb_rejection(root, value['pickle']['sha256']) or retry_output_rejection(root, value['pickle']['sha256'])):
+      from openpilot.selfdrive.modeld.egpu_worker_progress import saved_failure
+      failure = saved_failure(cache_dir or model_cache_dir(), model.sha256)
+      log_event('artifact_blocked', model=model.sha256, retry=False,
+                reason='no eligible previous-boot failure; inspect saved diagnostics',
+                error=error_summary(failure.get('error', 'diagnostics unavailable')),
+                diagnostic=str(root / 'last_failure.json'))
       return None
     (root / 'boot_validation.json').unlink(missing_ok=True)
-    print('Retrying model after an earlier-boot recoverable GPU failure; revalidating artifacts.')
+    log_event('artifact_retry', model=model.sha256, reason='recoverable previous-boot failure',
+              next='verify files and require a new startup smoke test')
   root.mkdir(parents=True, exist_ok=True)
   target = root / 'model.pkl'
   if value['format'] == 'comma-generic-onnx' and not target.exists():
@@ -294,4 +302,9 @@ def record_failure(path: Path, error: BaseException | str, phase: str) -> bool:
   os.replace(temporary, target)
   if not transient:
     reject(path)
+  log_event('failure', model=value['pickle']['sha256'],
+            runtime=value['runtime'].get('sha256') if isinstance(value.get('runtime'), dict) else None,
+            boot_id=failure['boot_id'], phase=phase, error=error_summary(error),
+            classification='transient_device' if transient else 'artifact_blocked',
+            diagnostic=str(target))
   return not transient
