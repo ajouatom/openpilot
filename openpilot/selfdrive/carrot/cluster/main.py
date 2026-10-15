@@ -68,7 +68,7 @@ from cluster_h264_pipeline import (
 from cluster_live import OpenpilotLiveSource
 from cluster_models import RouteOverlay, SimulatorInput
 from cluster_navi_overlay import merge_navi_overlay_state
-from cluster_profile import GcProfileHook, ProfileReporter, freeze_gc_after_init, restore_gc_after_run
+from cluster_profile import GcProfileHook, ProfileReporter, freeze_gc_after_init
 from cluster_renderer import ClusterUiRenderer
 from cluster_route_replay import (
     ROUTE_CORNER_SOURCE_CHOICES,
@@ -1020,7 +1020,6 @@ def run_demo(
         )
         return True
 
-    previous_gc_thresholds = None
     try:
         if hud_output_gate_param_reader is not None and not hud_output_gate_param_reader.allowed():
             print(
@@ -1131,7 +1130,7 @@ def run_demo(
                     flush=True,
                 )
         if gc_freeze_init:
-            previous_gc_thresholds = freeze_gc_after_init(profile)
+            freeze_gc_after_init(profile)
         while True:
             if stop_requested:
                 break
@@ -1910,8 +1909,6 @@ def run_demo(
                 report_frames = 0
                 last_report_time = now
     finally:
-        # Restore even if a later native-resource close raises an exception.
-        restore_gc_after_run(previous_gc_thresholds)
         if usb_display is not None:
             _set_cluster_hud_connected(False)
         scheduler.update(False, force=True, child_pid=h264_pipeline.encoder_pid if h264_pipeline is not None else None)

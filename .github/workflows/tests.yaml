@@ -40,8 +40,6 @@ jobs:
             openpilot/selfdrive/modeld/tests/test_precompiled_model.py \
             openpilot/selfdrive/modeld/tests/test_precompiled_rejection_retry.py \
             openpilot/selfdrive/modeld/tests/test_egpu_worker_progress.py \
-            openpilot/selfdrive/modeld/tests/test_egpu_events.py \
-            openpilot/selfdrive/modeld/tests/test_egpu_recovery.py \
             openpilot/selfdrive/modeld/tests/test_helpers.py::test_usbgpu_compiled_path_waits_for_selected_model_instead_of_previous \
             openpilot/system/tests/test_model_build_cache.py \
             openpilot/system/tests/test_launch_order.py

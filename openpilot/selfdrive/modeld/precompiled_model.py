@@ -16,8 +16,6 @@ from urllib.request import Request, urlopen
 
 from openpilot.selfdrive.modeld.big_model import active_manifest, model_cache_dir, model_path
 from openpilot.selfdrive.modeld.precompiled_artifact import SERIALIZATIONS
-from openpilot.selfdrive.modeld.egpu_events import error_summary, log_event
-from openpilot.selfdrive.modeld.egpu_usb_wait import VERIFIED_USB_RUNTIMES
 
 PROTOCOL = 1
 MAX_CATALOG = 64 * 1024
@@ -153,13 +151,13 @@ def gpu_transport_failure(detail: str) -> bool:
 
 def gpu_usb_link_failure(detail: str, manifest: dict) -> bool:
   """Decode the verified USB runtime's latched link error, not arbitrary AMD faults."""
-  # Both verified d3f09c9/02e69816 runtimes bind AMD.error_state to the USB link's error word. -1 is
-  # libusb I/O failure or a short transfer; +1 is LIBUSB_TRANSFER_ERROR from
-  # usb_reap copying the asynchronous transfer status, not a model prediction.
+  # This runtime binds AMD.error_state to the USB link's error word. -1 is
+  # libusb I/O failure or a short transfer, not an invalid model prediction.
   # Other runtime versions/codes need their own source verification first.
   runtime = manifest.get('runtime')
-  return (isinstance(runtime, dict) and runtime.get('sha256') in VERIFIED_USB_RUNTIMES and
-          re.search(r'^(?:RuntimeError: )?AMD(?::[0-9]+)? failed with -?1\Z', detail.rstrip(), re.MULTILINE) is not None)
+  return (isinstance(runtime, dict) and runtime.get('sha256') ==
+          '90970e01f2ba70d553294c0f9d5c6fe1678827f750705cab679a7b19b7bcb0b2' and
+          re.search(r'^(?:RuntimeError: )?AMD(?::[0-9]+)? failed with -1\Z', detail.rstrip(), re.MULTILINE) is not None)
 
 
 def retry_usb_rejection(root: Path, pickle_sha256: str) -> bool:
@@ -230,16 +228,9 @@ def ensure_precompiled(model=None, cache_dir: Path | None = None, progress=None)
   # Artifact integrity/contract errors still require a different valid artifact.
   if (root / 'rejected').exists() and (root / 'rejected').read_text() == value['pickle']['sha256']:
     if not (retry_usb_rejection(root, value['pickle']['sha256']) or retry_output_rejection(root, value['pickle']['sha256'])):
-      from openpilot.selfdrive.modeld.egpu_worker_progress import saved_failure
-      failure = saved_failure(cache_dir or model_cache_dir(), model.sha256)
-      log_event('artifact_blocked', model=model.sha256, retry=False,
-                reason='no eligible previous-boot failure; inspect saved diagnostics',
-                error=error_summary(failure.get('error', 'diagnostics unavailable')),
-                diagnostic=str(root / 'last_failure.json'))
       return None
     (root / 'boot_validation.json').unlink(missing_ok=True)
-    log_event('artifact_retry', model=model.sha256, reason='recoverable previous-boot failure',
-              next='verify files and require a new startup smoke test')
+    print('Retrying model after an earlier-boot recoverable GPU failure; revalidating artifacts.')
   root.mkdir(parents=True, exist_ok=True)
   target = root / 'model.pkl'
   if value['format'] == 'comma-generic-onnx' and not target.exists():
@@ -302,9 +293,4 @@ def record_failure(path: Path, error: BaseException | str, phase: str) -> bool:
   os.replace(temporary, target)
   if not transient:
     reject(path)
-  log_event('failure', model=value['pickle']['sha256'],
-            runtime=value['runtime'].get('sha256') if isinstance(value.get('runtime'), dict) else None,
-            boot_id=failure['boot_id'], phase=phase, error=error_summary(error),
-            classification='transient_device' if transient else 'artifact_blocked',
-            diagnostic=str(target))
   return not transient

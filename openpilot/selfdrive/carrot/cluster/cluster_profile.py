@@ -205,12 +205,11 @@ class GcProfileHook:
             self.profile.add(f"gc.gen{generation}", (time.perf_counter() - start_time) * 1000.0)
 
 
-def freeze_gc_after_init(profile: ProfileReporter) -> tuple[int, int, int] | None:
+def freeze_gc_after_init(profile: ProfileReporter) -> None:
     freeze = getattr(gc, "freeze", None)
     if freeze is None:
         return
 
-    previous_thresholds = gc.get_threshold()
     profile_stage = time.perf_counter()
     gc.collect(2)
     profile.add_elapsed("gc.freeze_init.collect", profile_stage)
@@ -219,14 +218,3 @@ def freeze_gc_after_init(profile: ProfileReporter) -> tuple[int, int, int] | Non
     freeze()
     profile.add_elapsed("gc.freeze_init.freeze", profile_stage)
     gc.set_threshold(*_post_freeze_gc_thresholds())
-    return previous_thresholds
-
-
-def restore_gc_after_run(previous_thresholds: tuple[int, int, int] | None) -> None:
-    if previous_thresholds is None:
-        return
-    # A failed JPEG worker keeps a traceback cycle through its frozen pipeline.
-    # Autorun retries in this process: let the next init collection reclaim the
-    # previous session, while preserving freeze during the active frame loop.
-    gc.unfreeze()
-    gc.set_threshold(*previous_thresholds)

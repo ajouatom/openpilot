@@ -20,7 +20,6 @@ class CarController(CarControllerBase):
   def __init__(self, dbc_names, CP):
     super().__init__(dbc_names, CP)
     self.apply_angle_last = 0
-    self.apply_angle_out = 0
     self.packer = CANPacker(dbc_names[Bus.party])
     self.tesla_can = TeslaCAN(CP, self.packer)
     self.coop_steering = True
@@ -47,12 +46,10 @@ class CarController(CarControllerBase):
 
       if self.coop_steering:
         coop_result = self.coop_steer.update(self.apply_angle_last, lat_active, CS, self.VM)
-        self.apply_angle_out = coop_result.steeringAngleDeg
-        can_sends.append(self.tesla_can.create_steering_control(self.apply_angle_out, coop_result.lat_active,
+        can_sends.append(self.tesla_can.create_steering_control(coop_result.steeringAngleDeg, coop_result.lat_active,
                                                                  (self.frame // CarControllerParams.STEER_STEP) % 16))
       else:
-        self.apply_angle_out = self.apply_angle_last
-        can_sends.append(self.tesla_can.create_steering_control(self.apply_angle_out, lat_active,
+        can_sends.append(self.tesla_can.create_steering_control(self.apply_angle_last, lat_active,
                                                                  (self.frame // CarControllerParams.STEER_STEP) % 16))
 
     if self.frame % 10 == 0:
@@ -77,7 +74,7 @@ class CarController(CarControllerBase):
 
     # TODO: HUD control
     new_actuators = actuators.as_builder()
-    new_actuators.steeringAngleDeg = self.apply_angle_out
+    new_actuators.steeringAngleDeg = self.apply_angle_last
 
     self.frame += 1
     return new_actuators, can_sends
