@@ -1,5 +1,13 @@
 # Repository memory
 
+- On 2026-10-15, user requested explicit tmux error/retry visibility after
+  repeated eGPU investigations. Add bounded stderr [eGPU] lifecycle events with
+  PID/monotonic time, saved failure cause/classification, attempt/limit/backoff,
+  waiting reason, probe-ready/handover, actual first live publication and stop
+  reason. Preserve all retry/validation/model policies; never write diagnostic
+  text to the worker stdout protocol.179 focused tests pass; no vehicle action.
+  See docs/egpu_persistent_rejection_20261015.md.
+
 - On 2026-10-15, identified the persistent Ioniq 5 PE block from actual NAS
   diagnostics: pinned90970e01 reports AMD failed with +1 during input upload.
   Its usb_reap latches LIBUSB_TRANSFER_ERROR=1; old classifier recognized only-1.
