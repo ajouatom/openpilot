@@ -7,6 +7,8 @@ CPU while the external GPU is working, without slowing modeld's dispatch.
 import time
 
 RUNTIME_SHA = '90970e01f2ba70d553294c0f9d5c6fe1678827f750705cab679a7b19b7bcb0b2'
+MD_V3_RUNTIME_SHA = 'c7c58622652231359ecea1a4253b63e157d002242bf596ede1b853f941f937ac'
+VERIFIED_USB_RUNTIMES = frozenset((RUNTIME_SHA, MD_V3_RUNTIME_SHA))
 SPIN_MS = 1
 SLEEP_SECONDS = .0002
 
@@ -16,7 +18,7 @@ def usb_sleep(self, timeout):
 
 
 def configure_usb_wait(manifest):
-  if manifest.get('runtime', {}).get('sha256') != RUNTIME_SHA:
+  if manifest.get('runtime', {}).get('sha256') not in VERIFIED_USB_RUNTIMES:
     return False
   from tinygrad.runtime.ops_amd import AMDDevice, USBIface
   # This interpreter explicitly selects USB+AMD. Do not modify an installed
