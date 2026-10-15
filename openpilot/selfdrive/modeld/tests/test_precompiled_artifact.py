@@ -14,7 +14,8 @@ from openpilot.selfdrive.modeld.parse_model_outputs import Parser
 
 
 @pytest.mark.parametrize('fixture,checkpoint_id', [('mdm2_metadata.json', '870a4823-d2ec-4b9a-8015-b947e9901fc7'),
-                                                  ('mdm_retrained_metadata.json', '8d736683-fed4-4e48-96fd-eae5d9d5bc56')])
+                                                  ('mdm_retrained_metadata.json', '8d736683-fed4-4e48-96fd-eae5d9d5bc56'),
+                                                  ('md_v3_metadata.json', '1365126a-e71e-4778-be00-8ab92dc82c09')])
 @pytest.mark.parametrize('previous_fixture', ['cinque_v3_metadata.json', 'mdm_v1_metadata.json'])
 def test_mdm_contract_matches_parser_and_preserves_history(previous_fixture, fixture, checkpoint_id):
   fixtures = Path(__file__).parent / 'fixtures'

@@ -1,7 +1,7 @@
 name: eGPU model compatibility
 on:
   push:
-    branches: [carrot-wip, carrot-signal-shadow]
+    branches: [carrot-wip]
   workflow_dispatch:
 permissions:
   contents: read
@@ -33,8 +33,8 @@ jobs:
           openpilot/system/tests/test_model_build_cache.py
       - name: Download the pinned isolated runtime
         run: |
-          curl --fail --retry 3 -o /tmp/mdm-runtime.tar.gz https://upload.shind0.synology.me/models/comma4-big-mdm-8d736683/precompiled-runtime.tar.gz
-          echo '90970e01f2ba70d553294c0f9d5c6fe1678827f750705cab679a7b19b7bcb0b2  /tmp/mdm-runtime.tar.gz' | sha256sum -c -
+          curl --fail --retry 3 -o /tmp/mdm-runtime.tar.gz https://upload.shind0.synology.me/models/comma4-big-md-v3-1365126a/precompiled-runtime.tar.gz
+          echo 'c7c58622652231359ecea1a4253b63e157d002242bf596ede1b853f941f937ac  /tmp/mdm-runtime.tar.gz' | sha256sum -c -
           mkdir /tmp/mdm-runtime
           tar -xzf /tmp/mdm-runtime.tar.gz -C /tmp/mdm-runtime
       - name: Execute pinned native CPU warp and persistent-buffer roundtrip

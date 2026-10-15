@@ -1,5 +1,14 @@
 # Repository memory
 
+- On 2026-10-15, user requested MD v3 PR39087 on carrot-wip ONLY unless already
+  installed. Prior selection was8d736683; new checkpoint1365126a/12864, AMDd4c7a3fc,
+  pinned tinygrad02e69816/runtimec7c58622. PR changes only the big PKL; no matching
+  ONNX, internal/DM and Jetson remain unchanged. Preserve retry/fallback policies;
+  source-verified new runtime retains USB no-op sleep and +/-1 link-error meanings,
+  so extend only the exact hash allowlist.411 focused tests/13 Web tests pass,
+  8 Windows skips; native Linux runtime CI and HTTPS delivery verify separately.
+  No vehicle install or native20Hz/driving claim. See docs/md_v3_20261015.md.
+
 - On 2026-10-15, user requested explicit tmux error/retry visibility after
   repeated eGPU investigations. Add bounded stderr [eGPU] lifecycle events with
   PID/monotonic time, saved failure cause/classification, attempt/limit/backoff,
