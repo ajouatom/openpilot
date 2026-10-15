@@ -14,6 +14,13 @@ the tested board. This is USB data forwarding, not DisplayPort/USB-C video outpu
 
 ## One-time firmware installation
 
+For ordinary users, use the [NAS browser installer and Korean setup guide](https://upload.shind0.synology.me/models/carrot-s3/index.html).
+It includes the N16R8 board checklist, wiring diagram, initial setup and a firmware
+ZIP download. Chrome/Edge on a PC can install without Python or ESP-IDF. The update
+option validates the existing partition table, writes only the app, and verifies
+that NVS is unchanged. Version 1.1.0 fixes confirmed-off/retry handling.
+See also [INSTALL_KO.md](INSTALL_KO.md). The commands below are for source builds.
+
 Use ESP-IDF **5.4.0**, target esp32s3, from `firmware/`:
 
 ```sh
@@ -33,21 +40,23 @@ Connect C4 to the intended **2.4 GHz** hotspot first, then connect S3's UART USB
 connector to C4. Run from the openpilot repository:
 
 ```sh
-python tools/esp32s3_display/provision.py --port /dev/ttyUSB0
+python3 tools/esp32s3_display/provision.py --auto
 ```
 
 The utility reads the active NetworkManager Wi-Fi profile and password, verifies
 the UART bridge identity, writes credentials to S3 NVS, and saves the device ID and
 pairing key in `/data/carrot/cluster_wifi.json`. It does not save the Wi-Fi password
 in that file or print it. Reading the active profile's secrets may require root.
-Select the actual UART port; the utility never probes or resets other serial devices.
+Auto selects only when exactly one supported USB UART is present, then verifies
+the S3 identity before writing. Otherwise select the actual UART with `--port`;
+the utility never probes or resets other serial devices.
 This works while C4 is offroad. Plugging in the cable alone does not run registration:
 run the command again after changing C4's active Wi-Fi to copy the new credentials.
 
 For manual setup on a PC or a C4 without readable NetworkManager credentials:
 
 ```sh
-python tools/esp32s3_display/provision.py --port COM14 --ssid "My hotspot" --output carrot-s3.json
+python3 tools/esp32s3_display/provision.py --port COM14 --ssid "My hotspot" --output carrot-s3.json
 ```
 
 The password is prompted without echo. Import that registration file on C4 with
@@ -73,7 +82,7 @@ the command below. Never commit or share a registration file.
 5. Transfer the downloaded registration file to C4 and import it once:
 
 ```sh
-python tools/esp32s3_display/provision.py --import-pairing /path/to/carrot-s3.json
+python3 tools/esp32s3_display/provision.py --import-pairing /path/to/carrot-s3.json
 ```
 
 Both registration methods preserve the existing pairing key when changing SSID.
@@ -106,7 +115,8 @@ code, not a new S3 firmware.
 The Wi-Fi path uses JPEG quality 50 and 15 FPS by default, independently of
 `ClusterHudEncoder`. Optional integer `fps` (1–20) and `quality` (20–90) fields in
 the registration JSON change that policy on the next HUD start. The existing
-5 FPS eGPU activity cap remains in force. Brightness, layout, camera, mirror and
+Wi-Fi eGPU activity cap is 10 FPS; the wired USB cap remains 5 FPS. Lower configured
+rates still apply. Brightness, layout, camera, mirror and
 orientation settings still apply through the existing renderer. H.264 is not
 enabled or validated for this bridge, although the transport carries opaque packets.
 Remove the registration file and restart HUD to return to direct USB behavior.
@@ -132,6 +142,13 @@ the firmware does not enable flash encryption and physical flash access can expo
 stored credentials. The phone registration file authorizes access to that display.
 
 ## Validation
+
+Version 1.1.0 initializes the panel before local shutdown, waits 200 ms, and only
+marks it dark after the brightness command succeeds. Failed local shutdowns retry
+after 1/2/4/8/16 seconds; idle panels are reasserted off every 30 seconds to recover
+a powered-panel reboot. This is backlight off, not removal of USB power. Setup
+screens remain visible. C4 also includes registered S3 displays in offroad dimming
+and confirms shutdown on connection close. First image wakes the panel again.
 
 The October 15 native C4 test corrected a missing registration, an AP channel
 latency problem, and the graphics-startup idle disconnect. The existing camera HUD

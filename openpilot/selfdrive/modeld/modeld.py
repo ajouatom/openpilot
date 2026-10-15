@@ -11,6 +11,7 @@ from openpilot.cereal.messaging import PubMaster, SubMaster
 from msgq.visionipc import VisionIpcClient, VisionStreamType, VisionBuf
 from opendbc.car.car_helpers import get_demo_car_params
 from openpilot.common.swaglog import cloudlog
+from openpilot.selfdrive.modeld.egpu_events import log_event
 from openpilot.common.runtime_diagnostics import RuntimeDiagnostics
 from openpilot.common.params import Params
 from openpilot.common.stopping_params import get_stopping_speed
@@ -517,6 +518,8 @@ def main(demo=False):
         except Exception:
           cloudlog.exception('eGPU recovery could not be armed')
           egpu_recovery = None
+      else:
+        log_event('retry_stopped', reason='background recovery unavailable', retry=False, active_model='internal')
       run_count = 0
       # The failed USB wait can outlive this camera buffer by a second. Receive
       # a fresh synchronized pair before running/publishing the internal model.
@@ -593,6 +596,7 @@ def main(demo=False):
         params.put_bool("UsbGpuLoading", False)
         usbgpu_startup_pending = False
         cloudlog.warning("eGPU first model output published; startup complete")
+        log_event('live_output_resumed', frame_id=meta_main.frame_id, active_model='eGPU')
     last_vipc_frame_id = meta_main.frame_id
     if egpu_recovery is not None and model is small_model:
       try:

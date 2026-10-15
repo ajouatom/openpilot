@@ -12,6 +12,7 @@ import time
 from types import SimpleNamespace
 
 from openpilot.common.egpu_recovery_status import BUDGET, STATUS, write_status
+from openpilot.selfdrive.modeld.egpu_events import error_summary, log_event
 from openpilot.selfdrive.modeld.model_join import may_join
 from openpilot.selfdrive.modeld.precompiled_model import gpu_bootloader_timeout, gpu_transport_failure, gpu_usb_link_failure, gpu_worker_busy
 
@@ -164,6 +165,7 @@ class EgpuRecovery:
     self.next_status = 0.
     self.attempts = 0
     self.exhausted = False
+    self.last_wait_reason, self.next_wait_log = None, 0.
     try:
       value = json.loads(budget_path.read_text())
       self.attempts, self.exhausted = int(value['attempts']), bool(value['stopped'])
@@ -177,7 +179,18 @@ class EgpuRecovery:
   def _save_budget(self):
     write_status({'attempts': self.attempts, 'stopped': self.exhausted}, self.budget_path)
 
+  def _event(self, event, **fields):
+    log_event(event, model=self.path.parent.name, **{'attempt': self.attempts, 'limit': len(DELAYS), **fields})
+
+  def _scheduled(self):
+    self._event('retry_scheduled', attempt=self.attempts + 1,
+                delay_s=DELAYS[self.attempts], requires='USB present and healthy internal output for 3s',
+                active_model='internal')
+
   def failed(self, error):
+    self._event('fallback', error=error_summary(error), active_model='internal',
+                retryable=retryable(error, self.manifest),
+                artifact_blocked=(self.path.parent / 'rejected').exists())
     self.healthy_since = self.last_publication = None
     if self.exhausted or self.attempts >= len(DELAYS) or not retryable(error, self.manifest):
       self.stop('not_retryable' if not retryable(error, self.manifest) else 'attempts_exhausted')
@@ -186,6 +199,7 @@ class EgpuRecovery:
     else:
       self.state, self.reason = 'waiting', ''
       self.next_attempt = self.clock() + DELAYS[self.attempts]
+      self._scheduled()
 
   def stop(self, reason):
     if self.state == 'stopped':
@@ -194,6 +208,7 @@ class EgpuRecovery:
     if self.task is not None:
       self.task.cancel.set()
     self._save_budget()
+    self._event('retry_stopped', reason=reason, active_model='internal', retry=False)
 
   def healthy(self):
     return self.last_publication is not None and 0 <= self.clock() - self.last_publication <= MAX_PUBLICATION_GAP
@@ -215,25 +230,32 @@ class EgpuRecovery:
     if self.task is not None:
       if now - self.task.started_at >= TASK_SECONDS:
         self.stop('cleanup_timeout')
-      if not present:
+      if not present and not self.task.cancel.is_set():
+        self._event('retry_cancelled', reason='USB absent', active_model='internal')
         self.task.cancel.set()
       if self.task.done.is_set():
         error, self.task = self.task.error, None
+        self._event('retry_failed', error=error_summary(error) if error is not None else 'worker ended without handover',
+                    active_model='internal')
         if self.state != 'stopped':
           if self.attempts >= len(DELAYS) or (error is not None and not retryable_preparation(error, self.manifest)):
             self.stop('attempts_exhausted' if self.attempts >= len(DELAYS) else 'probe_failed')
           else:
             self.state = 'waiting'
             self.next_attempt = now + DELAYS[self.attempts]
+            self._scheduled()
       elif self.task.cancel.is_set():
         self.state = 'stopped' if self.exhausted else 'recovering'
       elif self.task.ready_at is not None:
+        if self.state != 'ready':
+          self._event('retry_ready', result='probe passed; waiting for handover permission', active_model='internal')
         self.state = 'ready'
         valid = {k: sm.valid[k] and sm.alive[k] for k in ('carState', 'selfdriveState', 'carControl')}
         if present and may_join(now, sm, valid, sm.recv_time):
           model = self.task.take()
           if model is not None:
             self.task, self.state = None, 'idle'
+            self._event('retry_selected', result='prepared worker handed to modeld')
             self.publish(force=True)
             return model
     if (self.state == 'waiting' and self.task is None and present and self.healthy() and
@@ -242,8 +264,16 @@ class EgpuRecovery:
       self.attempts += 1
       self._save_budget()
       self.state = 'recovering'
+      self._event('retry_started', active_model='internal')
       self.task = self.task_factory(self.prepare, self.healthy)
       self.task.started_at = now
+    if self.state == 'waiting':
+      reason = ('USB absent' if not present else 'internal output not yet healthy for 3s'
+                if not self.healthy() or self.healthy_since is None or now - self.healthy_since < HEALTH_SECONDS
+                else 'backoff delay')
+      if reason != self.last_wait_reason and now >= self.next_wait_log:
+        self._event('retry_waiting', reason=reason, retry_in_s=max(0, round(self.next_attempt - now)))
+        self.last_wait_reason, self.next_wait_log = reason, now + 5.
     self.publish()
     return None
 

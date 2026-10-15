@@ -84,14 +84,16 @@ def test_fallback_handler_discards_failed_camera_before_internal_inference():
   internal = SimpleNamespace(reset=lambda: reset.append(True), run=lambda *a: pytest.fail('stale frame inference'))
   params = SimpleNamespace(get_bool=lambda _: True, put_bool=lambda *a: None)
   scope = {'params': params, 'small_model': internal, 'cloudlog': SimpleNamespace(exception=lambda *a: None),
-           'queue_usbgpu_error_tmux': lambda *a: None, 'internal_needs_reset': True,
+           'queue_usbgpu_error_tmux': lambda *a: None, 'log_event': lambda *a, **kw: None, 'internal_needs_reset': True,
            'egpu_recovery': None, 'meta_main': SimpleNamespace(frame_id=41), 'published': []}
   exec(compile(module, '<modeld actual fallback>', 'exec'), scope)
   assert scope['published'] == [2] and scope['last_vipc_frame_id'] == 41
   assert scope['model'] is internal and reset == [True]
 
 
-def test_usb_wait_only_adapts_verified_runtime_and_yields(monkeypatch):
+@pytest.mark.parametrize('runtime_sha', ['90970e01f2ba70d553294c0f9d5c6fe1678827f750705cab679a7b19b7bcb0b2',
+                                         'c7c58622652231359ecea1a4253b63e157d002242bf596ede1b853f941f937ac'])
+def test_usb_wait_only_adapts_verified_runtime_and_yields(monkeypatch, runtime_sha):
   import sys
   from openpilot.selfdrive.modeld import egpu_usb_wait as wait
   class AMD:
@@ -105,7 +107,7 @@ def test_usb_wait_only_adapts_verified_runtime_and_yields(monkeypatch):
   assert USB.sleep is old_sleep and AMD.sleep_timeout_ms == 200
   sleeps = []
   monkeypatch.setattr(wait.time, 'sleep', sleeps.append)
-  assert wait.configure_usb_wait({'runtime': {'sha256': wait.RUNTIME_SHA}})
+  assert wait.configure_usb_wait({'runtime': {'sha256': runtime_sha}})
   USB().sleep(AMD.sleep_timeout_ms)
   assert sleeps == [.0002] and AMD.sleep_timeout_ms == 1
   assert AMD.wait_timeout_ms == 30000

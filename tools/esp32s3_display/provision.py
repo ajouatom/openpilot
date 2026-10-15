@@ -9,6 +9,8 @@ import sys
 import time
 
 ROOT = Path(__file__).resolve().parents[2]
+if (ROOT / 'pydeps').is_dir():
+  sys.path.insert(0, str(ROOT / 'pydeps'))
 sys.path.insert(0, str(ROOT / 'openpilot/selfdrive/carrot/cluster'))
 from cluster_wifi_protocol import load_config, save_config
 
@@ -75,10 +77,21 @@ def register(port_name: str, ssid: str, password: str) -> dict:
     port.close()
 
 
+def automatic_port() -> str:
+  from serial.tools import list_ports
+  # Enumerate USB metadata only; never open/reset an unrelated port to probe it.
+  ports = [p.device for p in list_ports.comports() if p.vid in (0x10c4, 0x1a86, 0x0403)]
+  if len(ports) != 1:
+    found = ', '.join(ports) if ports else 'none'
+    raise RuntimeError(f'Connect one S3 UART port, or use --port explicitly. UART candidates: {found}')
+  return ports[0]
+
+
 def main() -> None:
   parser = argparse.ArgumentParser(description=__doc__)
   source = parser.add_mutually_exclusive_group(required=True)
   source.add_argument('--port', help='UART USB port, e.g. /dev/ttyUSB0 or COM14')
+  source.add_argument('--auto', action='store_true', help='Select the only CP210x/CH34x/FTDI UART; verify S3 identity before writing')
   source.add_argument('--import-pairing', type=Path, help='Registration JSON downloaded from the phone setup page')
   parser.add_argument('--ssid', help='Manual Wi-Fi name; password is prompted without echo')
   parser.add_argument('--output', type=Path, help='Default: /data/carrot/cluster_wifi.json')
@@ -89,7 +102,7 @@ def main() -> None:
       parser.error('Registration file does not exist')
   else:
     ssid, password = (args.ssid, getpass.getpass('Wi-Fi password: ')) if args.ssid else current_wifi()
-    config = register(args.port, ssid, password)
+    config = register(automatic_port() if args.auto else args.port, ssid, password)
   save_config(config, args.output)
   print('S3 registered. Enable the 9.2-inch external HUD; C4 and S3 must use the same 2.4 GHz network.')
 

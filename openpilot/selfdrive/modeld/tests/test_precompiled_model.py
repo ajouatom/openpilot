@@ -228,33 +228,38 @@ USB_LINK_FAILURE = 'Traceback (most recent call last):\n  input_upload\nRuntimeE
 
 
 @pytest.mark.parametrize('phase', ['load', 'boot_validation', 'inference'])
-def test_pinned_usb_link_error_preserves_failure_without_blacklisting(tmp_path, phase):
+@pytest.mark.parametrize('code', [-1, 1])
+def test_pinned_usb_link_error_preserves_failure_without_blacklisting(tmp_path, phase, code):
+  error = USB_LINK_FAILURE.replace("with -1", f"with {code}")
   path = tmp_path / 'model.pkl'
   manifest = {'pickle': {'sha256': 'a' * 64}, 'runtime': {'sha256': USB_RUNTIME_SHA}}
   (tmp_path / 'installed.json').write_text(json.dumps(manifest))
   (tmp_path / 'boot_validation.json').write_text('{"key":"old"}')
-  assert not pm.record_failure(path, RuntimeError(USB_LINK_FAILURE), phase)
+  assert not pm.record_failure(path, RuntimeError(error), phase)
   assert not (tmp_path / 'rejected').exists()
   assert not (tmp_path / 'boot_validation.json').exists()
   failure = json.loads((tmp_path / 'last_failure.json').read_text())
-  assert failure['error'] == USB_LINK_FAILURE and not failure['rejected'] and failure['phase'] == phase
+  assert failure['error'] == error and not failure['rejected'] and failure['phase'] == phase
 
 
 @pytest.mark.parametrize('error', ['AMD failed with -1', 'RuntimeError: AMD failed with -1',
-                                 'RuntimeError: AMD:0 failed with -1', USB_LINK_FAILURE])
-def test_usb_link_error_matches_only_verified_runtime(error):
-  assert pm.gpu_usb_link_failure(error, {'runtime': {'sha256': USB_RUNTIME_SHA}})
+                                 'RuntimeError: AMD:0 failed with -1', 'RuntimeError: AMD failed with 1',
+                                 'RuntimeError: AMD:0 failed with 1', USB_LINK_FAILURE])
+@pytest.mark.parametrize('runtime_sha', [USB_RUNTIME_SHA, 'c7c58622652231359ecea1a4253b63e157d002242bf596ede1b853f941f937ac'])
+def test_usb_link_error_matches_only_verified_runtime(error, runtime_sha):
+  assert pm.gpu_usb_link_failure(error, {'runtime': {'sha256': runtime_sha}})
   for manifest in ({}, {'runtime': None}, {'runtime': []}, {'runtime': {'sha256': 'b' * 64}}):
     assert not pm.gpu_usb_link_failure(error, manifest)
 
 
-@pytest.mark.parametrize('error', ['RuntimeError: AMD failed with -2', 'RuntimeError: AMD failed with 1',
+@pytest.mark.parametrize('error', ['RuntimeError: AMD failed with -2', 'RuntimeError: AMD failed with 2',
                                  'ValueError: AMD failed with -1', 'RuntimeError: AMD failed with -10',
                                  'RuntimeError: AMD failed with -1\nValueError: checksum mismatch',
                                  'RuntimeError: quoted AMD failed with -1', 'RuntimeError: NV failed with -1'])
-def test_ambiguous_or_other_gpu_errors_still_reject(tmp_path, error):
+@pytest.mark.parametrize('runtime_sha', [USB_RUNTIME_SHA, 'c7c58622652231359ecea1a4253b63e157d002242bf596ede1b853f941f937ac'])
+def test_ambiguous_or_other_gpu_errors_still_reject(tmp_path, error, runtime_sha):
   (tmp_path / 'installed.json').write_text(json.dumps(
-    {'pickle': {'sha256': 'a' * 64}, 'runtime': {'sha256': USB_RUNTIME_SHA}}))
+    {'pickle': {'sha256': 'a' * 64}, 'runtime': {'sha256': runtime_sha}}))
   assert pm.record_failure(tmp_path / 'model.pkl', RuntimeError(error), 'inference')
   assert (tmp_path / 'rejected').exists()
 
@@ -263,13 +268,16 @@ def test_ambiguous_or_other_gpu_errors_still_reject(tmp_path, error):
                                           ({'boot_id': ''}, False), ({'phase': 'unknown'}, False),
                                           ({'pickle_sha256': 'b' * 64}, False), ({'rejected': False}, False)])
 @pytest.mark.parametrize('phase', ['load', 'boot_validation', 'inference'])
-def test_old_usb_link_block_needs_new_boot_and_matching_artifact(tmp_path, monkeypatch, change, allowed, phase):
+@pytest.mark.parametrize('code', [-1, 1])
+@pytest.mark.parametrize('runtime_sha', [USB_RUNTIME_SHA, 'c7c58622652231359ecea1a4253b63e157d002242bf596ede1b853f941f937ac'])
+def test_old_usb_link_block_needs_new_boot_and_matching_artifact(tmp_path, monkeypatch, change, allowed, phase, code, runtime_sha):
+  error = USB_LINK_FAILURE.replace("with -1", f"with {code}")
   from openpilot.selfdrive.modeld import egpu_worker_progress
   monkeypatch.setattr(egpu_worker_progress, 'boot_identity', lambda: 'this-boot')
   (tmp_path / 'installed.json').write_text(json.dumps(
-    {'pickle': {'sha256': 'a' * 64}, 'runtime': {'sha256': USB_RUNTIME_SHA}}))
+    {'pickle': {'sha256': 'a' * 64}, 'runtime': {'sha256': runtime_sha}}))
   failure = {'rejected': True, 'pickle_sha256': 'a' * 64, 'phase': phase,
-             'boot_id': 'previous-boot', 'error': USB_LINK_FAILURE} | change
+             'boot_id': 'previous-boot', 'error': error} | change
   (tmp_path / 'last_failure.json').write_text(json.dumps(failure))
   assert pm.retry_usb_rejection(tmp_path, 'a' * 64) == allowed
   assert json.loads((tmp_path / 'last_failure.json').read_text()) == failure
@@ -279,7 +287,9 @@ def test_old_usb_link_block_needs_new_boot_and_matching_artifact(tmp_path, monke
     assert not pm.retry_usb_rejection(tmp_path, 'a' * 64)
 
 
-def test_previous_usb_link_block_revalidates_files_and_smoke_receipt(tmp_path, monkeypatch):
+@pytest.mark.parametrize('code', [-1, 1])
+def test_previous_usb_link_block_revalidates_files_and_smoke_receipt(tmp_path, monkeypatch, code):
+  error = USB_LINK_FAILURE.replace("with -1", f"with {code}")
   from openpilot.selfdrive.modeld import egpu_worker_progress
   value, data = catalog()
   model = SimpleNamespace(sha256='a' * 64, url='https://nas.example/models/v2/model.onnx')
@@ -290,7 +300,7 @@ def test_previous_usb_link_block_revalidates_files_and_smoke_receipt(tmp_path, m
   monkeypatch.setattr(egpu_worker_progress, 'boot_identity', lambda: 'this-boot')
   path = pm.ensure_precompiled(model, tmp_path)
   failure = {'rejected': True, 'pickle_sha256': value['pickle']['sha256'], 'phase': 'inference',
-             'boot_id': 'previous-boot', 'error': USB_LINK_FAILURE}
+             'boot_id': 'previous-boot', 'error': error}
   (path.parent / 'last_failure.json').write_text(json.dumps(failure))
   # The recorded old manifest supplies the verified runtime identity; the test
   # catalog then delivers a tiny replacement rather than a real GPU runtime.
