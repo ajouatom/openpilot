@@ -2,6 +2,76 @@
   "sensitivity": 50,
   "cases": [
     {
+      "id": "carnival-225-28-in-lane-braking-corner-3776",
+      "vehicle_folder": "KIA_CARNIVAL_4TH_GEN c4dcf95545dafe68",
+      "log": "00000225--74da14534f--28/rlog.zst",
+      "source": "front+corner",
+      "window": [
+        15.45,
+        17.85
+      ],
+      "expected": "detect",
+      "validation_stage": "lead_two",
+      "target_track_ids": [
+        3776
+      ],
+      "required_lead_two_ids": [
+        3776
+      ],
+      "forbidden_lead_one_ids": [
+        3776
+      ],
+      "latest_detection_s": 16.55,
+      "scene": "User-reported delayed response to the slowing queue on 0e647cd2. Corner 3776 is born inside the ego lane; a CUT-IN requirement cannot establish it as an auxiliary lead. Require independently confirmed in-lane braking corroboration before front acquisition at about 17.85 s. Video is about 0.05004 s after replay time. The qualified radar/vision interval is brief; this is lead selection validation, not a continuous-handover, metric ground-truth, braking or stopping guarantee."
+    },
+    {
+      "id": "carnival-225-28-unconfirmed-and-front-handover",
+      "vehicle_folder": "KIA_CARNIVAL_4TH_GEN c4dcf95545dafe68",
+      "log": "00000225--74da14534f--28/rlog.zst",
+      "source": "front+corner",
+      "window": [
+        14.0,
+        15.6
+      ],
+      "expected": "clear",
+      "validation_stage": "lead_two",
+      "target_track_ids": [
+        3776
+      ],
+      "forbidden_lead_one_ids": [
+        3776
+      ],
+      "forbidden_lead_two_ids": [
+        3776
+      ],
+      "scene": "Do not promote a newly acquired corner before continuous measured braking, confident lane occupancy and current visual agreement."
+    },
+    {
+      "id": "carnival-225-28-front-primary-preserved",
+      "vehicle_folder": "KIA_CARNIVAL_4TH_GEN c4dcf95545dafe68",
+      "log": "00000225--74da14534f--28/rlog.zst",
+      "source": "front",
+      "window": [
+        18.1,
+        19.5
+      ],
+      "expected": "detect",
+      "validation_stage": "lead_one",
+      "target_track_ids": [
+        41,
+        36
+      ],
+      "required_lead_one_ids": [
+        41,
+        36
+      ],
+      "lead_one_continuous_window": [
+        18.1,
+        19.5
+      ],
+      "scene": "Preserve front 41/36 as primary after acquisition. The new corner backup must not replace L1. Existing auxiliary handoff and cross-sensor aliases remain permitted: forbidding corner 3776 aliases here would incorrectly forbid the same front primary."
+    },
+    {
       "id": "carnival-222-1-stopping-tail-corner-1193",
       "vehicle_folder": "KIA_CARNIVAL_4TH_GEN c4dcf95545dafe68",
       "log": "00000222--e22b2b29cf--1/rlog.zst",
