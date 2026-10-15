@@ -58,6 +58,7 @@ from openpilot.selfdrive.carrot.radar_motion.trajectory_cutin import (
 )
 from openpilot.selfdrive.carrot.radar_motion.trajectory_cutout import TrajectoryCutOutTracker
 from openpilot.selfdrive.carrot.radar_motion.stationary_lane import StoppingLaneCornerTracker
+from openpilot.selfdrive.carrot.radar_motion.in_lane import InLaneCornerTracker
 
 
 # modelV2 is polled at 20 Hz while liveTracks may arrive just before or after
@@ -545,6 +546,7 @@ class DPathRadarController:
     self.lead_two_tracker = DPathLeadTwoTracker()
     self.stationary_shadow_tracker = DPathStationaryShadowTracker()
     self.stopping_lane_corner_tracker = StoppingLaneCornerTracker()
+    self.in_lane_corner_tracker = InLaneCornerTracker()
     self.stationary_primary_handoff_tracker = (
       DPathStationaryPrimaryHandoffTracker()
     )
@@ -807,6 +809,7 @@ class DPathRadarController:
       self.lead_two_tracker.reset()
       self.stationary_shadow_tracker.reset()
       self.stopping_lane_corner_tracker.reset()
+      self.in_lane_corner_tracker.reset()
       self.stationary_primary_handoff_tracker.reset()
       self.scc_lead_two_tracker.reset()
     if self.motion_sensor == "corner":
@@ -915,6 +918,7 @@ class DPathRadarController:
     path = _model_path(model)
     if len(path) < 2:
       self.stopping_lane_corner_tracker.reset()
+      self.in_lane_corner_tracker.reset()
       self.forced_scc_rejected_s = None
       self._forced_scc_previous = None
       self.primary_matcher.reset()
@@ -1032,6 +1036,14 @@ class DPathRadarController:
     else:
       self.stopping_lane_corner_tracker.reset()
       stopping_corner = None
+    if self.enable_radar_tracks > 0 and self.motion_sensor == "corner":
+      in_lane_corner = self.in_lane_corner_tracker.update(
+        time_s, v_ego, model, points, vision_lead_from_model(model),
+        measurement_time_s=time_s - radar_to_model_time_s,
+      )
+    else:
+      self.in_lane_corner_tracker.reset()
+      in_lane_corner = None
     cutout_point = primary_match.point if primary_match is not None and self.enable_radar_tracks > 0 else None
     paired_corners = tuple(
       point for point in points
@@ -1391,6 +1403,14 @@ class DPathRadarController:
       if not _scc_lead_two_can_compete(scc_lead_two, lead_one):
         scc_lead_two = None
     lead_two = selection.lead_two
+    # A visual lead can be corroborated by a corner born inside the lane;
+    # it need not invent a CUT-IN to supply measured longitudinal kinematics.
+    if in_lane_corner is not None and (lead_one is None or not lead_one.get("radar", False)):
+      point, lane_offset = in_lane_corner
+      if lead_two is None or point.d_rel < float(lead_two["dRel"]):
+        lead_two = self._lead_from_radar_point(
+          point, lane_offset, vision_lead_from_model(model).probability, 1.0,
+        )
     if stopping_corner is not None:
       point, lane_offset = stopping_corner
       if lead_two is None or point.d_rel < float(lead_two["dRel"]):
