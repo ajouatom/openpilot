@@ -143,3 +143,21 @@ valid model and 1,200 DM frames, 20.004/20.000 Hz respectively, unchanged model/
 PIDs and eGPU active. S3 is disconnected in that final snapshot. Model timing
 is currently healthy; retained native buffers and repeated S3 failure mean the
 overall state is **not** certified normal or restored to its former memory level.
+
+### Final activation check
+
+After preserving the preceding evidence, Web job `4732670e92a9` installed
+`cfbc50fb9a`. Another 554 fresh parked/inactive checks preceded an authorized
+reboot. The fresh manager now emits the actual expected-failure line
+`S3 Wi-Fi disconnected (TimeoutError: timed out); retrying in 5s`, without the
+three chained tracebacks. Both maintained branches contain the reporter fix;
+its 35 focused checks passed on each branch.
+
+At uptime 253 seconds, memory was 81%, MemAvailable 701,008 KiB (684.6 MiB).
+The old PID's retained allocations disappeared across reboot, but the new HUD
+PID already had 24 orphan-labelled objects / 6,635,520 bytes after four failed
+sessions. This confirms recurrence; reboot is recovery, not a native-leak fix.
+The postboot 60-second model/DM observation had 1,199 consecutive valid frames
+each, 19.974 Hz, with no missing frame IDs or eGPU fallback. Report that measured
+rate exactly rather than claiming a strictly >=20 Hz postboot pass. S3 still
+times out, so healthy end-to-end display operation is not established.

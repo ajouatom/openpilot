@@ -7,9 +7,12 @@
   match earlier runs. GC retry fix reduces Python retention, but native HUD ION
   buffers persist after process death (89.6MB), and new PID accumulates again.
   Do not call memory normal/fixed or recommend process cycling as its fix.
-  Expected S3 transport log cleanup published both branches; manager caches
-  imported autorun, so HUD-only restart does not activate it. Both model/DM
- 1200 valid consecutive frames/60s at20Hz; S3 remains disconnected. See
+  Expected S3 transport log cleanup published both branches; fresh-manager
+  reboot verifies concise timeout lines (HUD-only restart kept cached code).
+  Reboot clears old native buffers but four retries retain6.6MB again; current
+  81%/685MiB available is not leak clearance. Preboot model/DM1200 frames/60s,
+  postboot1199 valid consecutive each at19.974Hz, no missing IDs/fallback;
+  do not claim a strict >=20Hz postboot pass. S3 still times out. See
   docs/hud_retry_memory_20261015.md; raw evidence private.
 
 - On 2026-10-15, user's C4 Git Pull was blocked by two untracked manually
