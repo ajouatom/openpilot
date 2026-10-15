@@ -1,5 +1,17 @@
 # Repository memory
 
+- On 2026-10-16, stop Wi-Fi HUD under fresh Park/inactive guard for memory/link
+  diagnosis; ClusterHud stays0, networking stays on. Available memory recovers
+  to501MiB, but510 orphan HUD ION objects/141004800bytes persist; not fixed.
+  Isolated raylib headless init segfaults: never enable as workaround. Small USB
+  commands and PC auth fail without rendering; channel6 temporarily refuses S3,
+  channel1 attaches at-72dBm. After approved reset/app flash channel6 at-38dBm
+  passes24 commands and150 JPEG frames/three10fps phases. AP changed too: no
+  root-cause or long-duration fix claim. S3 firmware1.1.1 adds dim GPIO48 RGB
+  states and secret-free S3STATUS UART diagnostics; GPIO38 revisions configurable.
+  Pairing preserved, C policy tests/build pass; actual LED visual check pending.
+  No C4 model/control install. See docs/s3_wifi_memory_20261016.md.
+
 - On 2026-10-16, user clarified mode2 is moving gentle deceleration with no/remote
   lead; after stopping it uses mode1 exactly. Near means fixed distance, with50m
   used provisionally. Check both leads at entry/final cap; retain MPC leads and

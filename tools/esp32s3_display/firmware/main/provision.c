@@ -20,6 +20,10 @@
 #include "driver/gpio.h"
 #include "lwip/sockets.h"
 #include "cJSON.h"
+#include "status_led.h"
+#include "esp_system.h"
+#include "esp_heap_caps.h"
+#include <inttypes.h>
 
 uint8_t pairing_key[32], device_id[6];
 char device_hex[13];
@@ -36,18 +40,53 @@ static bool apply_pending, setup_requested;
 static int64_t setup_until;
 static int64_t apply_after;
 static char ap_name[32], csrf[33];
+static unsigned disconnect_count;
+static unsigned last_disconnect_reason;
+static esp_netif_t *sta_netif;
 
 static void hex(const uint8_t *data, size_t length, char *out) {
   for (size_t i=0; i<length; i++) sprintf(out + 2*i, "%02x", data[i]);
 }
 
 static void wifi_event(void *arg, esp_event_base_t base, int32_t id, void *data) {
-  if (base == WIFI_EVENT && id == WIFI_EVENT_STA_DISCONNECTED) xEventGroupClearBits(wifi_events, 1);
+  if (base == WIFI_EVENT && id == WIFI_EVENT_STA_DISCONNECTED) {
+    wifi_event_sta_disconnected_t *event = data;
+    xEventGroupClearBits(wifi_events, 1);
+    status_led_wifi(false, true);
+    xSemaphoreTake(config_lock, portMAX_DELAY);
+    last_disconnect_reason = event->reason;
+    unsigned count = ++disconnect_count;
+    xSemaphoreGive(config_lock);
+    ESP_LOGW("S3", "WIFI_DISCONNECTED reason=%u rssi=%d count=%u", event->reason, event->rssi, count);
+  }
+  if (base == IP_EVENT && id == IP_EVENT_STA_LOST_IP) {
+    xEventGroupClearBits(wifi_events, 1);
+    status_led_wifi(false, true);
+    ESP_LOGW("S3", "WIFI_IP_LOST");
+  }
   if (base == IP_EVENT && id == IP_EVENT_STA_GOT_IP) {
     ip_event_got_ip_t *event = data;
     xEventGroupSetBits(wifi_events, 1);
+    status_led_wifi(true, false);
     ESP_LOGI("S3", "WIFI_IP=" IPSTR, IP2STR(&event->ip_info.ip));
   }
+}
+
+static void uart_status(void) {
+  wifi_ap_record_t ap = {0};
+  esp_netif_ip_info_t ip = {0};
+  bool associated = esp_wifi_sta_get_ap_info(&ap) == ESP_OK;
+  if (sta_netif) esp_netif_get_ip_info(sta_netif, &ip);
+  xSemaphoreTake(config_lock, portMAX_DELAY);
+  unsigned count = disconnect_count, reason = last_disconnect_reason;
+  xSemaphoreGive(config_lock);
+  printf("S3JSON {\"status\":true,\"uptime_ms\":%" PRId64 ",\"reset_reason\":%d,"
+         "\"associated\":%s,\"ip_ready\":%s,\"ip\":\"" IPSTR "\",\"rssi\":%d,\"channel\":%u,"
+         "\"disconnect_count\":%u,\"last_disconnect_reason\":%u,\"free_internal\":%u,\"min_internal\":%u}\n",
+         esp_timer_get_time()/1000, (int)esp_reset_reason(), associated ? "true" : "false",
+         xEventGroupGetBits(wifi_events)&1 ? "true" : "false", IP2STR(&ip.ip), ap.rssi, ap.primary,
+         count, reason, (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
+         (unsigned)heap_caps_get_minimum_free_size(MALLOC_CAP_INTERNAL));
 }
 
 static bool store_wifi(cJSON *json) {
@@ -193,6 +232,7 @@ static void uart_task(void *arg) {
     }
     line[used] = 0;
     if (!overflow && !strcmp(line, "S3HELLO")) printf("S3JSON {\"version\":1,\"device\":\"%s\"}\n", device_hex);
+    else if (!overflow && !strcmp(line, "S3STATUS")) uart_status();
     else if (!overflow && !strncmp(line, "S3CONFIG ", 9)) {
       cJSON *json = cJSON_Parse(line + 9);
       bool ok = json && store_wifi(json);
@@ -233,6 +273,7 @@ static void manager_task(void *arg) {
     if (setup != ap_active) {
       ESP_ERROR_CHECK(esp_wifi_set_mode(setup ? WIFI_MODE_APSTA : WIFI_MODE_STA));
       ap_active=setup;
+      status_led_setup(setup);
       ESP_LOGI("S3", "Phone setup %s", setup ? "opened for 10 minutes" : "closed");
     }
     if (apply) {
@@ -276,14 +317,14 @@ void provision_start(void) {
   strcpy(registration.ap_password, "12345678");
   uint8_t random[16]; esp_fill_random(random, 16); hex(random, 16, csrf);
   ESP_ERROR_CHECK(esp_netif_init()); ESP_ERROR_CHECK(esp_event_loop_create_default());
-  esp_netif_create_default_wifi_sta();
+  sta_netif=esp_netif_create_default_wifi_sta();
   esp_netif_t *ap_netif=esp_netif_create_default_wifi_ap();
   esp_netif_dns_info_t dns={.ip.type=ESP_IPADDR_TYPE_V4,.ip.u_addr.ip4.addr=inet_addr("192.168.4.1")};
   ESP_ERROR_CHECK(esp_netif_set_dns_info(ap_netif,ESP_NETIF_DNS_MAIN,&dns));
   wifi_init_config_t init=WIFI_INIT_CONFIG_DEFAULT();
   ESP_ERROR_CHECK(esp_wifi_init(&init)); ESP_ERROR_CHECK(esp_wifi_set_storage(WIFI_STORAGE_RAM));
   ESP_ERROR_CHECK(esp_event_handler_register(WIFI_EVENT, ESP_EVENT_ANY_ID, wifi_event, NULL));
-  ESP_ERROR_CHECK(esp_event_handler_register(IP_EVENT, IP_EVENT_STA_GOT_IP, wifi_event, NULL));
+  ESP_ERROR_CHECK(esp_event_handler_register(IP_EVENT, ESP_EVENT_ANY_ID, wifi_event, NULL));
   ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_APSTA));
   wifi_config_t ap={0};
   strcpy((char *)ap.ap.ssid, ap_name); strcpy((char *)ap.ap.password, registration.ap_password);
