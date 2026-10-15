@@ -1,5 +1,83 @@
 # Repository memory
 
+- On 2026-10-15, user requested review/integration of Tesla PR551 c61d998ff8.
+  Reproduced inactive phase-lead CAN/feedback and saturation defects; Tesla's
+  encoded zero375 also regranted controls through the shared accel helper.
+  Port the nine PR files unchanged: measured inactive angle, final feedback,
+  cooperative torque blending only above25km/h with normal low-speed steering,
+  output-limit-aware saturation and Tesla-specific longitudinal permission.
+  Both maintained branches:199 focused tests/128 subtests pass. Three inherited
+  generic disabled-angle safety cases still fail identically before/after;
+  do not claim full safety suite success. Native C uses a desktop packet/forward
+  ABI bridge, not MCU/vehicle validation. Publish single-parent on both branches;
+  no vehicle installation. See docs/tesla_pr551_review_20261015.md.
+
+- On 2026-10-15, user requested historical attribution of memory >80%. Read925
+  retained local logs (916 own-device with memory) plus on-device qlogs. Earliest
+  observed >80% is Oct10/108e, but Oct11/1095 stays73--77% with HUD+signals;
+  not one proven regression date. Current DM warmup/plateau and logger sawtooth
+  match earlier runs. GC retry fix reduces Python retention, but native HUD ION
+  buffers persist after process death (89.6MB), and new PID accumulates again.
+  Do not call memory normal/fixed or recommend process cycling as its fix.
+  Expected S3 transport log cleanup published both branches; fresh-manager
+  reboot verifies concise timeout lines (HUD-only restart kept cached code).
+  Reboot clears old native buffers but four retries retain6.6MB again; current
+  81%/685MiB available is not leak clearance. Preboot model/DM1200 frames/60s,
+  postboot1199 valid consecutive each at19.974Hz, no missing IDs/fallback;
+  do not claim a strict >=20Hz postboot pass. S3 still times out. See
+  docs/hud_retry_memory_20261015.md; raw evidence private.
+
+- On 2026-10-15, user's C4 Git Pull was blocked by two untracked manually
+  installed eGPU helpers identical to incoming blobs; back up only those files,
+  preserve unrelated build/model artifacts. Old93160a93 HUD repeatedly lost S3
+  before renderer ready. Prior qlogs reach99%; same HUD PID grows168.62->528.55
+  MiB RSS, +181.89MiB PSS across segments5->27. Actual failed JPEG pipelines
+  remain frozen after close/collect; unfreeze releases them. Pair HUD session
+  freeze with finally unfreeze/threshold restore, retaining active-frame policy.
+  27 focused tests and native isolated12-cycle reclamation pass. This fixes a
+  demonstrated retention path, not every system/native allocation or reboot
+  cause. User authorizes parked system stop/update; verify fresh P/zero/inactive.
+  Publish both maintained branches, single-parent. See docs/hud_retry_memory_20261015.md.
+
+- On 2026-10-15, user requested public S3 firmware/install guide after confirming
+  the panel wakes and turns off. S3 1.1.0 confirms sync/brightness-off, retries
+  failed shutdown and reasserts idle-off; C4 offroad dimming includes registered
+  S3. N16R8 / powered hub / TURZX 1cbe:0092 only. Browser installer and NAS ZIP
+  preserve NVS; never distribute device flash backups or pairing keys. UART
+  --auto requires a unique bridge and verifies identity. Native three-phase
+  150-frame final test passes with preserved pairing; browser-native flashing
+  is distinct from UART validation. Publish both maintained branches, single-parent.
+  See docs/s3_release_20261015.md and tools/esp32s3_display/INSTALL_KO.md.
+
+- On 2026-10-15, user requested MD v3 PR39087 on carrot-wip ONLY unless already
+  installed. Prior selection was8d736683; new checkpoint1365126a/12864, AMDd4c7a3fc,
+  pinned tinygrad02e69816/runtimec7c58622. PR changes only the big PKL; no matching
+  ONNX, internal/DM and Jetson remain unchanged. Preserve retry/fallback policies;
+  source-verified new runtime retains USB no-op sleep and +/-1 link-error meanings,
+  so extend only the exact hash allowlist.411 focused tests/13 Web tests pass,
+  8 Windows skips; Linux CI403 plus3 native-runtime tests and HTTPS empty-cache
+  install/offline reuse pass on8864280c9c.
+  No vehicle install or native20Hz/driving claim. See docs/md_v3_20261015.md.
+
+- On 2026-10-15, user requested explicit tmux error/retry visibility after
+  repeated eGPU investigations. Add bounded stderr [eGPU] lifecycle events with
+  PID/monotonic time, saved failure cause/classification, attempt/limit/backoff,
+  waiting reason, probe-ready/handover, actual first live publication and stop
+  reason. Preserve all retry/validation/model policies; never write diagnostic
+  text to the worker stdout protocol.179 focused tests pass; no vehicle action.
+  See docs/egpu_persistent_rejection_20261015.md.
+
+- On 2026-10-15, identified the persistent Ioniq 5 PE block from actual NAS
+  diagnostics: pinned90970e01 reports AMD failed with +1 during input upload.
+  Its usb_reap latches LIBUSB_TRANSFER_ERROR=1; old classifier recognized only-1.
+  Both branches now classify exactly +/-1 only for that verified runtime, with
+  previous-boot/hash/artifact/smoke validation for old rejections.175 tests and
+  the exact recorded traceback probe pass. The failing734634 predates Oct15
+  timing changes. Device wall clock was stale; do not assert recorded21:05 as
+  incident time. Physical USB root cause remains unknown; no vehicle install.
+  This supersedes the earlier unknown reporter cause below; numerical migration
+  is a separate correction. See docs/egpu_persistent_rejection_20261015.md.
+
 - On 2026-10-15, a Mountain Dew report remained rejected after reboot. Current
   wip lacked nav's previous-boot numerical-rejection migration; four positive
   replay cases fail before the port and pass afterward. Port only that migration,

@@ -19,7 +19,7 @@ from openpilot.selfdrive.modeld.tests.test_precompiled_model import Response, ca
   ('ValueError: checkpoint mismatch', 'inference', True, False),
   ('NonFiniteModelOutput: invalid\nValueError: checksum mismatch', 'inference', True, False),
 ])
-def test_reboot_retry_rehashes_artifacts_and_requires_new_smoke_test(tmp_path, monkeypatch, error, phase, old_boot, allowed):
+def test_reboot_retry_rehashes_artifacts_and_requires_new_smoke_test(tmp_path, monkeypatch, capsys, error, phase, old_boot, allowed):
   value, data = catalog()
   model = SimpleNamespace(sha256='a' * 64, url='https://nas.example/models/v2/model.onnx')
   def fetch(request, **kwargs):
@@ -37,6 +37,10 @@ def test_reboot_retry_rehashes_artifacts_and_requires_new_smoke_test(tmp_path, m
   path.write_bytes(b'corrupt')
   (path.parent / 'runtime.tar.gz').write_bytes(b'corrupt')
   result = pm.ensure_precompiled(model, tmp_path)
+  events = [json.loads(line.removeprefix('[eGPU] ')) for line in capsys.readouterr().err.splitlines()]
+  assert events[-1]['event'] == ('artifact_retry' if allowed else 'artifact_blocked')
+  if not allowed:
+    assert events[-1]['retry'] is False and events[-1]['error'] == error.splitlines()[-1]
   assert (result == path) == allowed
   assert (path.parent / 'rejected').exists() == (not allowed)
   assert json.loads((path.parent / 'last_failure.json').read_text()) == failure

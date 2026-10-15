@@ -118,7 +118,7 @@ def test_ready_rejects_bad_vehicle_state_even_when_stopped(manager, bad):
   assert value.tick(messages, True) is None
 
 
-def test_exactly_three_attempts_cleanup_serialized_and_budget_survives_modeld_restart(manager):
+def test_exactly_three_attempts_cleanup_serialized_and_budget_survives_modeld_restart(manager, capsys):
   value, clock = manager
   value.failed(USB_ERROR)
   for attempt in range(1, 4):
@@ -131,10 +131,43 @@ def test_exactly_three_attempts_cleanup_serialized_and_budget_survives_modeld_re
     task.done.set()
     value.tick(Messages(clock.now), True)
   assert value.state == 'stopped'
+  events = [json.loads(line.removeprefix('[eGPU] ')) for line in capsys.readouterr().err.splitlines()]
+  assert [e['attempt'] for e in events if e['event'] == 'retry_started'] == [1, 2, 3]
+  assert [e['delay_s'] for e in events if e['event'] == 'retry_scheduled'] == list(recovery.DELAYS)
+  assert sum(e['event'] == 'retry_failed' for e in events) == 3
+  assert events[-1]['event'] == 'retry_stopped' and events[-1]['reason'] == 'attempts_exhausted'
+  assert not any(e['event'] == 'retry_selected' for e in events)
   restarted = recovery.EgpuRecovery(value.path, 1344, 760, clock=clock,
                                     status_path=value.status_path, budget_path=value.budget_path)
   restarted.failed(USB_ERROR)
   assert restarted.exhausted and restarted.attempts == 3
+
+
+def test_retry_logs_distinguish_probe_ready_handover_and_actual_live_output(manager, capsys):
+  value, clock = manager
+  value.failed(USB_ERROR)
+  advance(manager, 11)
+  value.task.ready_at = clock.now
+  for _ in range(20):
+    value.tick(Messages(clock.now), True)
+  assert value.tick(Messages(clock.now, moving=False), True) is not None
+  captured = capsys.readouterr()
+  events = [json.loads(line.removeprefix('[eGPU] ')) for line in captured.err.splitlines()]
+  assert not captured.out
+  assert events[0]['error'] == str(USB_ERROR) and events[0]['active_model'] == 'internal'
+  assert sum(e['event'] == 'retry_ready' for e in events) == 1
+  assert events[-1]['event'] == 'retry_selected'
+  assert not any(e['event'] == 'live_output_resumed' for e in events)
+
+
+def test_usb_absence_explained_once_without_frame_rate_log_spam(manager, capsys):
+  value, _ = manager
+  value.failed(USB_ERROR)
+  advance(manager, 60, present=False)
+  events = [json.loads(line.removeprefix('[eGPU] ')) for line in capsys.readouterr().err.splitlines()]
+  waits = [e for e in events if e['event'] == 'retry_waiting']
+  assert len(waits) == 1 and waits[0]['reason'] == 'USB absent'
+  assert not any(e['event'] == 'retry_started' for e in events)
 
 
 @pytest.mark.parametrize('error', [ValueError('non-finite model output'), ValueError('precompiled PKL checksum mismatch'),
@@ -147,8 +180,9 @@ def test_numerical_integrity_and_unknown_failures_are_not_retried(manager, error
   assert value.exhausted and value.attempts == 0
 
 
-def test_usb_runtime_identity_required_and_worker_timeout_is_supported():
-  error = RuntimeError('AMD failed with -1')
+@pytest.mark.parametrize('code', [-1, 1])
+def test_usb_runtime_identity_required_and_worker_timeout_is_supported(code):
+  error = RuntimeError(f'AMD failed with {code}')
   assert not recovery.retryable(error, {})
   manifest = {'runtime': {'sha256': '90970e01f2ba70d553294c0f9d5c6fe1678827f750705cab679a7b19b7bcb0b2'}}
   assert recovery.retryable(error, manifest)

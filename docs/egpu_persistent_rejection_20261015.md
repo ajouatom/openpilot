@@ -2,10 +2,32 @@
 
 ## Findings
 
-The supplied Mountain Dew card explicitly reports `rejected`, not a fresh USB
-or timeout diagnosis. The reporter says it worked yesterday and restarting or
-rebooting did not help. Their device identity, exact commit and saved failure
-have not been supplied, so the first failure cause remains unknown.
+The reported Ioniq 5 PE's private NAS evidence now establishes the cause of the
+persistent block. Ten diagnostics were copied and SHA256-verified. October 14
+22:09/22:12 captures show eGPU active. October 15 09:42 captures show an inference
+failure from code 734634c983; subsequent 09:48/09:51/10:05 captures on 5a33dc40ed
+retain the identical rejected failure, with no successful new load.
+
+The terminal error is `RuntimeError: AMD failed with 1` during input upload in
+`GenericModelRuntime.run`. The selected runtime directory is 90970e01f2ba70d5.
+Inspection of the SHA256-verified runtime archive
+90970e01f2ba70d553294c0f9d5c6fe1678827f750705cab679a7b19b7bcb0b2
+shows `tinygrad/runtime/support/usb.py:457` maps AMD.error_state to the USB link
+error word; `usb_reap` at lines 312-317 latches the asynchronous transfer status.
+The same archive's `autogen/libusb.py:204` defines status 1 as
+LIBUSB_TRANSFER_ERROR. The existing classifier accepted only -1, so this verified
+USB error was incorrectly treated as an artifact failure and persisted forever.
+The exact recorded traceback fails the old classifier and passes the correction.
+
+The initial captured device wall clock was stale: the October 15 09:42 log has
+an embedded October 14 21:05 clock. Do not use that stored time as the actual
+incident time. Within that snapshot, the error precedes the later logged USB
+unplug; the unplug is not proof of the initial cause. Cable, power, bridge and
+host causes are not distinguished by this evidence. The failing code predates
+the October 15 response-deadline/wait-yield changes.
+
+The numerical-rejection issue below was found independently during the initial
+code review; it is not the cause of this reporter's USB +1 block.
 
 Comparison of current remote branches found a concrete recovery gap:
 `carrot-wip` 5a33dc40ed lacks `retry_output_rejection`, which carrot-nav already
@@ -20,12 +42,17 @@ only writes a waiting status and requests a reboot; it neither repairs the
 failure nor clears the marker. This can repeatedly show the same card.
 
 The October 15 response-deadline change classifies its TimeoutError as transient;
-that path does not itself write a persistent rejection. This does not rule out
-other recent changes or identify this user's original failure. The prior web
+that path does not itself write a persistent rejection. This does not establish which physical or runtime condition caused USB status 1. The prior web
 map-preview change does not modify the eGPU loader or failure policy.
 
 ## Changes and limits
 
+- Both branches now recognize exactly -1 and +1 for the verified runtime hash.
+  Other runtimes/codes and quoted/nonterminal errors remain rejected. The existing
+  new-boot migration revalidates old +1 rejections. New +1 faults stop the failed
+  worker without permanently rejecting the artifact; existing bounded recovery,
+  internal-model fallback and handover checks remain in force. No runtime binary,
+  inference deadline, GPU model or USB error suppression is changed.
 - Port only nav's numerical-rejection migration into wip. Keep the separate
   branch models, runtimes and per-frame output policies; do not port nav's
   single-frame rollback implementation with this repair.
@@ -56,3 +83,37 @@ road validation. No user's vehicle was restarted, installed or unblocked.
 After updating wip, a recognized earlier-boot numerical rejection can be retried
 on boot. A remaining block needs the downloaded diagnostic report; repeatedly
 rebooting or deleting every rejected marker is not a diagnosis or repair.
+
+## Reporter-specific follow-up verification
+
+175 focused tests pass for USB rejection classification, file revalidation and
+bounded background recovery. The exact privately saved traceback also passes a
+matching-runtime/later-boot migration probe, rejects a same-boot attempt and
+preserves the original failure record. This proves recovery eligibility, not
+physical USB stability or successful driving. No NAS raw logs are committed.
+
+## Tmux recovery lifecycle visibility
+
+The user requested explicit error and retry output so future analysis does not
+need to infer the recovery path from a generic card. All added events go to
+stderr with `[eGPU]`, process ID and monotonic time; they never enter the worker
+stdout control protocol. Failures include phase, model/runtime identity,
+terminal error, saved diagnostic path and persistent/transient classification.
+The full earlier traceback remains in the existing diagnostic report.
+
+Recovery prints fallback, scheduled delay and attempt/limit, actual attempt
+start, failure/cancellation, probe READY, handover, and terminal stop reason.
+Waiting explains absent USB, internal health or backoff. Unchanged waits are
+not repeated; changed waiting reasons are limited to one per five seconds.
+The modeld first-output publication path separately prints live_output_resumed:
+a successful synthetic probe or handover is not claimed as a live result.
+Boot-time artifact rejection/migration also prints the retained cause and next
+step. Startup without a recovery manager explicitly reports no retry.
+
+No retry limits, validation gates, inference timeouts, model selection or USB
+runtime are changed. A closed diagnostic stream is swallowed, not propagated
+into inference.179 focused tests pass on nav before publication; final wip uses
+the same tests. Tests check three-attempt exhaustion, delayed handover, absent
+USB log volume, old-block cause output and failure of the logging stream.
+Syntax checks pass. Targeted lint passes; modeld's existing ISC002/E501/F841
+findings are outside these changes. No physical vehicle/reboot test or install.
