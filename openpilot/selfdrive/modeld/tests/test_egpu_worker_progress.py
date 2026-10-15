@@ -82,3 +82,14 @@ def test_bad_json_is_ignored(tmp_path, monkeypatch):
   (folder / 'last_failure.json').write_text('[')
   assert progress.current_failure(tmp_path, 'a' * 64) == {}
   assert progress.current_failure(tmp_path, '../bad') == {}
+
+
+@pytest.mark.parametrize('contents', ['[]', '{', '{}', '{"error":"' + 'x' * 40000 + '"}'],
+                         ids=['list', 'invalid', 'missing', 'oversized'])
+def test_saved_failure_is_bounded_and_ignores_malformed_evidence(tmp_path, contents):
+  folder = tmp_path / 'precompiled' / ('a' * 64)
+  folder.mkdir(parents=True)
+  (folder / 'last_failure.json').write_text(contents)
+  (folder / 'installed.json').write_text('{}')
+  assert progress.saved_failure(tmp_path, 'a' * 64) == {}
+  assert progress.saved_failure(tmp_path, '../bad') == {}

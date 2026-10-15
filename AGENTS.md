@@ -1,5 +1,15 @@
 # Repository memory
 
+- On 2026-10-15, a Mountain Dew report remained rejected after reboot. Current
+  wip lacked nav's previous-boot numerical-rejection migration; four positive
+  replay cases fail before the port and pass afterward. Port only that migration,
+  preserving branch model/runtime and per-frame policies. Keep identity, fresh
+  boot, artifact verification and new smoke checks; unknown/integrity failures
+  remain blocked. Both web branches deny ineffective compile-restart on rejection
+  and offer a bounded matching historical failure download. Original reporter
+  failure/commit is still unknown; no vehicle action or USB root-cause claim.
+  See docs/egpu_persistent_rejection_20261015.md.
+
 - On 2026-10-15, Carnival225-28 on0e647cd2 has a visible moving-to-stop corner
   born in-lane, excluded from L1 and outside-history/45m CUT-IN L2. Prior Oct14
   fallback is inactive, not a demonstrated regression. Add measured braking L2
