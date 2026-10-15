@@ -21,6 +21,8 @@ static usb_host_client_handle_t client;
 static usb_device_handle_t opened[128];
 static int64_t last_frame;
 static bool dark = true;
+static int64_t next_off;
+static unsigned off_failures;
 static bool setup_shown;
 static uint8_t brightness = 80;
 static uint8_t response_data[512];
@@ -110,20 +112,39 @@ static bool send_payload(const uint8_t *data, size_t size) {
   return true;
 }
 
-static void local_brightness(uint8_t value) {
-  uint8_t packet[512]; display_command(packet, 14, value);
-  if (send_payload(packet, sizeof(packet))) {
-    transfer_timeout_ms=50; read_response(claimed_device); transfer_timeout_ms=1000;
+static bool command_response(uint8_t command) {
+  for (int i=0; i<4; i++) {
+    if (!read_response(claimed_device)) return false;
+    if (response_command==command) return true;
   }
+  return false;
+}
+
+static bool local_brightness(uint8_t value) {
+  uint8_t packet[512]; display_command(packet, 14, value);
+  return send_payload(packet, sizeof(packet)) && command_response(14);
+}
+
+static void turn_off(void) {
+  uint8_t sync[512]; display_command(sync, 10, 0);
+  bool ok=send_payload(sync, sizeof(sync)) && command_response(10);
+  // The panel needs time after initialization, including its factory splash.
+  if (ok) vTaskDelay(pdMS_TO_TICKS(200));
+  ok=ok && local_brightness(0);
+  dark=ok;
+  if (ok) off_failures=0;
+  else if (off_failures<5) off_failures++;
+  unsigned delay_s=ok ? 30 : (1U << (off_failures-1));
+  next_off=esp_timer_get_time()+delay_s*1000000LL;
+  ESP_LOGI(TAG, "DISPLAY_OFF confirmed=%d failures=%u retry_s=%u", ok, off_failures, delay_s);
 }
 
 static void claim_display(usb_device_handle_t dev) {
   if (claimed_device) return;
   if (usb_host_interface_claim(client, dev, 0, 0) != ESP_OK) return;
-  claimed_device=dev; setup_shown=false; dark=true; last_frame=0;
-  uint8_t sync[512]; display_command(sync, 10, 0);
-  if (send_payload(sync, sizeof(sync))) read_response(dev);
-  local_brightness(0);
+  claimed_device=dev; setup_shown=false; dark=false; last_frame=0;
+  next_off=0; off_failures=0;
+  turn_off();
 }
 
 static void event_cb(const usb_host_client_event_msg_t *event, void *arg) {
@@ -184,7 +205,7 @@ static void describe_device(uint8_t address) {
 }
 
 static void usb_task(void *arg) {
-  ESP_LOGI(TAG, "Carrot S3 display bridge v1; no OTA; external powered USB hub required");
+  ESP_LOGI(TAG, "Carrot S3 display bridge 1.1.0; no OTA; external powered USB hub required");
   ESP_LOGI(TAG, "External hub support=%d", CONFIG_USB_HOST_HUBS_SUPPORTED);
   event_queue = xQueueCreate(16, sizeof(usb_host_client_event_msg_t));
   assert(event_queue);
@@ -231,39 +252,42 @@ static void usb_task(void *arg) {
       }
     }
     if (!setup && setup_shown) {
-      if (claimed_device) local_brightness(0);
-      setup_shown=false; dark=true;
+      setup_shown=false; dark=false; last_frame=0; next_off=0;
     }
     int slot;
     if (xQueueReceive(network_ready, &slot, 0) == pdTRUE) {
       network_frame_t *frame=&network_frames[slot];
       streaming=true;
       int64_t start=esp_timer_get_time();
-      bool ok=claimed_device && network_current(frame) && !setup;
+      bool current=claimed_device && network_current(frame) && !setup;
+      bool ok=current;
       uint8_t plain[504]; display_decode(frame->data, plain);
       uint8_t command=plain[0];
       uint32_t stamp; memcpy(&stamp, plain+4, 4);
       bool image=command==101 || command==102;
       response_length=0;
-      if (ok && image && dark) local_brightness(brightness);
+      if (ok && image && (dark || esp_timer_get_time()-last_frame>2000000)) ok=local_brightness(brightness);
       if (ok) ok=send_payload(frame->data, frame->length);
       if (ok) {
-        transfer_timeout_ms=frame->expect_reply ? 1000 : 50;
+        bool require_reply=frame->expect_reply || (command==14 && plain[8]==0);
+        transfer_timeout_ms=require_reply ? 1000 : 50;
         bool received=read_response(claimed_device);
         transfer_timeout_ms=1000;
         // Discard late optional command replies, never mistake them for a frame ACK.
         for (int i=0; received && response_command!=command && i<3; i++) received=read_response(claimed_device);
-        if (frame->expect_reply) ok=received && response_command==command && (!image || response_stamp==stamp);
+        if (require_reply) ok=received && response_command==command && (!image || response_stamp==stamp);
         if (!received) response_length=0;
       }
-      if (ok && image) { last_frame=esp_timer_get_time(); dark=false; }
-      if (ok && command==14) { brightness=plain[8]; dark=brightness==0; }
+      if (ok && image) { last_frame=esp_timer_get_time(); dark=false; next_off=0; off_failures=0; }
+      if (current && command==14 && plain[8]==0) {
+        dark=ok; last_frame=0; next_off=ok ? esp_timer_get_time()+30000000 : 0;
+      } else if (ok && command==14) { brightness=plain[8]; dark=false; }
       if (ok) good_frames++; else bad_frames++;
       network_complete(slot, ok ? 0 : 1, esp_timer_get_time()-start, response_data, response_length);
       streaming=false;
     }
-    if (claimed_device && !dark && !setup && esp_timer_get_time()-last_frame>2000000) {
-      local_brightness(0); dark=true;
+    if (claimed_device && !setup && esp_timer_get_time()-last_frame>2000000 && esp_timer_get_time()>=next_off) {
+      turn_off();
     }
     int64_t now = esp_timer_get_time();
     if (now >= report_at) {

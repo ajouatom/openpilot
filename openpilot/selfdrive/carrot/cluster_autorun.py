@@ -410,11 +410,19 @@ def _turn_off_supported_usb_device(expected_product_id: int, reason: str) -> boo
     _configure_autorun_locale()
 
     from cluster_usb_display import TuringUsbDisplay, find_supported_usb_product, product_label
+    from cluster_wifi_display import S3WifiDisplay
+    from cluster_wifi_protocol import load_config
 
-    if find_supported_usb_product(expected_product_id) is None:
+    try:
+        config = load_config() if expected_product_id == 0x0092 else None
+    except (ValueError, RuntimeError, OSError):
         return False
-
-    display = TuringUsbDisplay(brightness=0, display_fps=0, expected_product_id=expected_product_id)
+    if config is not None:
+        display = S3WifiDisplay(config, brightness=0, display_fps=0, expected_product_id=expected_product_id)
+    else:
+        if find_supported_usb_product(expected_product_id) is None:
+            return False
+        display = TuringUsbDisplay(brightness=0, display_fps=0, expected_product_id=expected_product_id)
     try:
         display.open()
         print(

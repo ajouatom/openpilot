@@ -100,6 +100,48 @@ def test_jetson_images_download_head_resume_and_file_allowlist(tmp_path):
   asyncio.run(run())
 
 
+def test_s3_installer_serves_only_release_files_and_supports_resume(tmp_path):
+  async def run():
+    root = tmp_path / 'uploads/models/carrot-s3'
+    for name in [*viewer_module.S3_DOWNLOAD_TYPES, 'private.json', 'nvs.bin', 'vendor/secret.txt']:
+      path = root/name
+      path.parent.mkdir(parents=True, exist_ok=True)
+      path.write_bytes(b'0123456789')
+    async with TestClient(TestServer(create_app(viewer_config(tmp_path), start_cleanup=False))) as client:
+      for name, content_type in viewer_module.S3_DOWNLOAD_TYPES.items():
+        response = await client.get('/models/carrot-s3/'+name)
+        assert response.status == 200 and await response.read() == b'0123456789'
+        assert response.headers['Content-Type'] == content_type
+        assert response.headers['X-Content-Type-Options'] == 'nosniff'
+      for name in ['private.json', 'nvs.bin', 'vendor/secret.txt', '', '../private.json']:
+        assert (await client.get('/models/carrot-s3/'+name)).status == 404
+      response = await client.get('/models/carrot-s3/carrot-s3.bin', headers={'Range':'bytes=4-'})
+      assert response.status == 206 and await response.read() == b'456789'
+      assert (await client.head('/models/carrot-s3/carrot-s3.bin')).headers['Content-Length'] == '10'
+  asyncio.run(run())
+
+
+@pytest.mark.parametrize('component', ['models', 'carrot-s3', 'vendor', 'esptool-js-bundle.js'])
+def test_s3_installer_rejects_symlinks(tmp_path, component):
+  async def run():
+    root = tmp_path/'uploads'
+    parts = ['models', 'carrot-s3', 'vendor', 'esptool-js-bundle.js']
+    index = parts.index(component)
+    parent = root.joinpath(*parts[:index])
+    parent.mkdir(parents=True)
+    outside = tmp_path/'private'
+    target = outside.joinpath(*parts[index+1:])
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_bytes(b'private')
+    try:
+      (parent/component).symlink_to(outside, target_is_directory=index != 3)
+    except OSError:
+      pytest.skip('Creating symlinks requires Windows permission')
+    async with TestClient(TestServer(create_app(viewer_config(tmp_path), start_cleanup=False))) as client:
+      assert (await client.get('/models/carrot-s3/vendor/esptool-js-bundle.js')).status == 404
+  asyncio.run(run())
+
+
 @pytest.mark.parametrize('component', ['downloads', 'jetson', 'v0.2.0-preview', 'carrot-jetson.img.zst'])
 def test_jetson_download_rejects_symlink_at_each_component(tmp_path, component):
   async def run():
