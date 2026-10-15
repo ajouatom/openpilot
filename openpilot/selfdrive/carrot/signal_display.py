@@ -212,3 +212,57 @@ class SignalDisplayReader:
     tracks = self.continuity.update(self.record, now, camera_frame)
     self.held_count = sum(t['held'] for t in tracks)
     return tracks
+
+
+class SignalStatusReader:
+  """Camera-independent summary for HUDs, including cruise-inactive display.
+
+  Previous color is UI memory for at most two seconds from capture. It is never
+  published to the planner and a repeated packet cannot refresh that lifetime.
+  """
+  def __init__(self, path=DISPLAY_PATH):
+    self.path = Path(path)
+    self.next_read = 0.
+    self.key = None
+    self.color = 0
+    self.color_time = -math.inf
+    self.capture_time = -math.inf
+
+  def read(self, now=None):
+    now = time.monotonic() if now is None else now
+    if not display_requested():
+      self.key, self.color, self.color_time, self.capture_time = None, 0, -math.inf, -math.inf
+      return 0, False, False
+    if now >= self.next_read:
+      self.next_read = now + .05
+      try:
+        with self.path.open('rb') as f:
+          raw = f.read(MAX_BYTES+1)
+        if len(raw) > MAX_BYTES:
+          raise ValueError('oversize')
+        record = json.loads(raw)
+        stamp = record['timestamp']
+        camera = (record['frame_id'], now, *SIZE, False)
+        if not valid_record(record, now, camera, hold=True):
+          raise ValueError('invalid display packet')
+        key = (record['session'], stamp, record['frame_id'])
+        if self.key and (key[0] != self.key[0] or key[1] < self.key[1] or key[2] < self.key[2]):
+          self.color, self.color_time = 0, -math.inf
+        if key != self.key:
+          colors = {t['state'] for t in visible_tracks(record, now, camera, hold=True)}
+          color = int('red' in colors) + 2*int('green' in colors)
+          if color:
+            self.color, self.color_time = color, stamp
+          self.key, self.capture_time = key, stamp
+      except (OSError, ValueError, TypeError, KeyError, OverflowError):
+        self.key, self.color, self.color_time, self.capture_time = None, 0, -math.inf, -math.inf
+    color = self.color if 0 <= now-self.color_time <= DISPLAY_HOLD else 0
+    held = bool(color and (now-self.color_time > MAX_AGE or self.color_time != self.capture_time))
+    return color, held, 0 <= now-self.capture_time <= DISPLAY_HOLD
+
+
+_status_reader = SignalStatusReader()
+
+
+def signal_display_status():
+  return _status_reader.read()

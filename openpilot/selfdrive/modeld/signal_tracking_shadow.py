@@ -125,10 +125,7 @@ def run(directory=DIRECTORY, duration=None, comparison_override=None):
                    single_tracker=single, verified_lamps=single)
     previous_id = None
     last_file = 0.
-    from openpilot.selfdrive.carrot.signal_mode import signal_mode
-    selected_mode = signal_mode() if directory == DIRECTORY else None
     while (requested(directory) and tracking_requested(directory) and comparison_requested(directory) == comparison_selection
-           and (selected_mode is None or signal_mode() == selected_mode)
            and (single or revalidated_requested(directory) == revalidated)
            and (duration is None or time.monotonic() - start < duration)):
       if not client.is_connected() and not client.connect(False):

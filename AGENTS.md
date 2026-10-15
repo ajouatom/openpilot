@@ -1,5 +1,18 @@
 # Repository memory
 
+- On 2026-10-16, user clarified mode2 is moving gentle deceleration with no/remote
+  lead; after stopping it uses mode1 exactly. Near means fixed distance, with50m
+  used provisionally. Check both leads at entry/final cap; retain MPC leads and
+  reject low speed/soft hold. User explicitly corrected display scope: mode0
+  does NO auxiliary recognition/display/control; modes1/2 show raw recognition
+  even with ACC inactive. Separate HUD ring from planner action, dim previous
+  result at most2s from capture, gray unknown; never feed display memory to
+  control. Do not restart the CPU tracker solely for1<->2. Collected144qlogs,
+  20full segments/10,020 observer records. Evening green/lead departure is still
+  held by existing guard; no blanket lead release or solved-recognition claim.
+  Publish both maintained branches single-parent; no vehicle deployment. See
+  docs/signal_modes_display_20261016.md for checks and limits.
+
 - On 2026-10-15, user requested review/integration of Tesla PR551 c61d998ff8.
   Reproduced inactive phase-lead CAN/feedback and saturation defects; Tesla's
   encoded zero375 also regranted controls through the shared accel helper.
