@@ -220,8 +220,11 @@ static bool tesla_tx_hook(const CANPacket_t *to_send) {
       }
 
       // Don't allow any acceleration limits above the safety limits
-      violation |= longitudinal_accel_checks(raw_accel_max, TESLA_LONG_LIMITS);
-      violation |= longitudinal_accel_checks(raw_accel_min, TESLA_LONG_LIMITS);
+      violation |= (raw_accel_max > TESLA_LONG_LIMITS.max_accel) || (raw_accel_max < TESLA_LONG_LIMITS.min_accel);
+      violation |= (raw_accel_min > TESLA_LONG_LIMITS.max_accel) || (raw_accel_min < TESLA_LONG_LIMITS.min_accel);
+      // Tesla's zero acceleration is encoded as 375, not 0. TX must never grant controls.
+      violation |= !get_longitudinal_allowed() && ((raw_accel_max != TESLA_LONG_LIMITS.inactive_accel) ||
+                                                  (raw_accel_min != TESLA_LONG_LIMITS.inactive_accel));
     } else {
       // does allowing cancel here disrupt stock AEB? TODO: find out and add safety or remove comment
       // Can only send cancel longitudinal messages when not controlling longitudinal
