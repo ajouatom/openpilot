@@ -1,5 +1,17 @@
 # Repository memory
 
+- On 2026-10-15, user requested historical attribution of memory >80%. Read925
+  retained local logs (916 own-device with memory) plus on-device qlogs. Earliest
+  observed >80% is Oct10/108e, but Oct11/1095 stays73--77% with HUD+signals;
+  not one proven regression date. Current DM warmup/plateau and logger sawtooth
+  match earlier runs. GC retry fix reduces Python retention, but native HUD ION
+  buffers persist after process death (89.6MB), and new PID accumulates again.
+  Do not call memory normal/fixed or recommend process cycling as its fix.
+  Expected S3 transport log cleanup published both branches; manager caches
+  imported autorun, so HUD-only restart does not activate it. Both model/DM
+ 1200 valid consecutive frames/60s at20Hz; S3 remains disconnected. See
+  docs/hud_retry_memory_20261015.md; raw evidence private.
+
 - On 2026-10-15, user's C4 Git Pull was blocked by two untracked manually
   installed eGPU helpers identical to incoming blobs; back up only those files,
   preserve unrelated build/model artifacts. Old93160a93 HUD repeatedly lost S3
