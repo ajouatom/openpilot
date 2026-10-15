@@ -110,12 +110,34 @@ containment, **not** seamless fault-time 20 Hz or guaranteed continued engagemen
 No stale eGPU result is republished as current, and normal validity/control
 checks remain responsible for disengagement during missing output.
 
-Desktop verification: 298 focused tests pass, including the actual fallback
+Desktop verification: 298 focused carrot-nav tests and 257 carrot-wip tests pass, including the actual fallback
 handler, fragmented response deadlines, delayed worker reaping/ownership,
 synthetic-history reset, bounded camera warmup, output recovery and model pins.
 Lint passes for the changed helpers/runtime tests/package builder.
 
-Final continuous post-fault validation is recorded below when complete.
+Final continuous post-fault validation, with all final sources active:
+
+| 300.001 s window | Model | Driver monitoring |
+| --- | ---: | ---: |
+| Received valid frames | 6000 | 6000 |
+| Producer rate | 20.0002 Hz | 20.0002 Hz |
+| Missing/nonconsecutive frame IDs | 0 | 0 |
+| Mean modelExecutionTime | 43.551 ms | 31.927 ms |
+| p99 modelExecutionTime | 45.313 ms | 38.978 ms |
+| Maximum producer publication gap | 59.927 ms | 72.270 ms |
+
+No invalid output or fallback occurred in that window. The active worker used
+the n16 `52205044` artifact with FIFO54/core7; eGPU remained active and S3 remained
+connected. The model's observed capture age p99/max was 98.5/121.6 ms. Observer
+arrival gaps were up to 96.0/91.3 ms; the table uses producer timestamps instead.
+An additional 20 s check received 400/400 valid results over direct 5Gbps USB.
+Its link_error_count stayed **1 -> 1**, not zero: the time/cause of that cumulative
+error is not established. Do not claim the physical USB link is proven fault-free.
+
+This establishes normal 20 Hz in the parked test, not continuous 20 Hz through a
+GPU failure or a guarantee against recurrence during driving. The initial physical
+stall remains unresolved; the new stack snapshots support diagnosing recurrence.
+
 Raw logs, frame timing, diagnostic snapshots and deployment records stay in
 private `.analysis/scratch/2026-10-15-egpu-s3/`; model packaging evidence is in
 private `.analysis/scratch/2026-10-15-nav-n16/`. No drive captures or credentials
