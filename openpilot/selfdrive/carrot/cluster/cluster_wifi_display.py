@@ -1,5 +1,6 @@
 """C4 renders the existing HUD; S3 forwards the resulting TURZX USB packets."""
 from collections import deque
+import time
 
 from cluster_usb_display import TuringUsbDisplay, _set_cluster_hud_connected
 from cluster_wifi_protocol import Connection, load_config
@@ -28,7 +29,9 @@ class S3WifiDisplay(TuringUsbDisplay):
             self.landscape_width, self.landscape_height = 1920, 462
             self._disconnected = False
             self._send_command(10, 'sync')
-            self._send_command(14, 'brightness', {8: int(self.brightness / 100 * 102)}, expect_response=False, log=False)
+            time.sleep(0.2)
+            self._send_command(14, 'brightness', {8: int(self.brightness / 100 * 102)},
+                               expect_response=self.brightness == 0, log=False)
             _set_cluster_hud_connected(True)
         except Exception as exc:
             self.close()
@@ -80,7 +83,9 @@ class S3WifiDisplay(TuringUsbDisplay):
         if self.connection is not None:
             try:
                 if not self._disconnected:
-                    self._send_command(14, 'brightness-off', {8: 0}, expect_response=False, log=False)
+                    self._send_command(10, 'sync-off', log=False)
+                    time.sleep(0.2)
+                    self._send_command(14, 'brightness-off', {8: 0}, log=False)
             except (RuntimeError, OSError):
                 pass
             finally:
