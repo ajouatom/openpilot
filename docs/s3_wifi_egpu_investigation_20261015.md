@@ -1,5 +1,31 @@
 # S3 HUD connection and eGPU incident investigation — 2026-10-15
 
+## Follow-up: S3 Wi-Fi at 10 FPS with eGPU
+
+The user observed 5 FPS and requested allowing 10 FPS. The Wi-Fi path reused
+`ClusterUsbFpsReader`, whose live `UsbGpuActive` check capped it at 5 FPS even
+after Wi-Fi's configured rate replaced the autorun arguments. Give that reader
+an explicit 10 FPS eGPU ceiling for S3 only. Lower configured rates remain lower;
+eGPU off restores the configured Wi-Fi rate. Direct USB retains its 5 FPS eGPU
+ceiling and existing 10 FPS normal rate. Firmware and pairing are unchanged.
+
+Installed the single HUD source file after fresh Park/standstill/inactive-control
+and Panda controlsAllowed checks, then restarted only `carrot_cluster`. Its startup
+log selected S3 Wi-Fi JPEG at 10.0 Hz; recent refresh reports were 9.8-10.0 Hz.
+During the 60.001 s native check, model and driver monitoring each delivered
+1,200 valid, consecutive frame IDs, with no missing frames. Model mean/p99 work
+was 43.624/44.888 ms. Both model process IDs and the n16 eGPU worker were unchanged;
+eGPU stayed active, startup failure stayed false, and S3 stayed connected.
+This verifies nominal model/DM 20 Hz alongside host refresh near 10 Hz while
+parked; it is not an optical panel frame measurement or road validation.
+
+The 32 focused rate-policy and Wi-Fi transport tests pass on both maintained
+branches, covering eGPU activation/deactivation and lower configured rates.
+The changed test passes lint; main.py has no added lint findings (66 pre-existing).
+Private installation and timing evidence is retained under
+`.analysis/scratch/2026-10-15-egpu-s3/` (`install_wifi10.py.json`,
+`measure_wifi10.py.json`). The earlier 5 FPS observations below are historical.
+
 ## Results
 
 Three independent issues were found on the user's C4/S3 installation:

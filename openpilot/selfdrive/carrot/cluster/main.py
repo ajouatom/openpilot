@@ -289,8 +289,9 @@ class ClusterClockVisibilityParamReader:
 
 
 class ClusterUsbFpsReader:
-    def __init__(self, normal_fps: float = 10.0) -> None:
+    def __init__(self, normal_fps: float = 10.0, *, egpu_max_fps: float = 5.0) -> None:
         self.normal_fps = normal_fps
+        self.egpu_max_fps = egpu_max_fps
         self._params = None
         try:
             from openpilot.common.params import Params
@@ -303,7 +304,7 @@ class ClusterUsbFpsReader:
         if self._params is None:
             return self.normal_fps
         try:
-            return min(5.0, self.normal_fps) if self._params.get_bool("UsbGpuActive") else self.normal_fps
+            return min(self.egpu_max_fps, self.normal_fps) if self._params.get_bool("UsbGpuActive") else self.normal_fps
         except Exception:
             return self.normal_fps
 
@@ -2538,7 +2539,8 @@ def main(*, exit_on_error: bool = True) -> None:
     if wifi_config is not None:
         target_fps = float(wifi_config.get("fps", 15))
         fps_source = "S3 Wi-Fi"
-        usb_fps_reader = ClusterUsbFpsReader(target_fps) if TICI and args.input == "live" else None
+        # S3 sends over Wi-Fi rather than sharing C4's USB link with the eGPU.
+        usb_fps_reader = ClusterUsbFpsReader(target_fps, egpu_max_fps=10.0) if TICI and args.input == "live" else None
         if usb_fps_reader is not None:
             target_fps = usb_fps_reader.read()
         usb_display_fps = int(target_fps)
