@@ -1,5 +1,13 @@
 # Repository memory
 
+- On 2026-10-15, the user requested allowing S3 Wi-Fi HUD up to10fps while eGPU
+  is active. Its live rate reader inherited the wired USB5fps cap. Give only the
+  Wi-Fi reader a10fps cap, preserve lower configured rates and direct USB policy.
+  Parked HUD-only restart reports9.8-10.0Hz; model/DM each1200 consecutive valid
+  frames in60s, no process restart or fallback.32 focused tests pass on both
+  branches. This is host refresh, not optical panel FPS. See
+  docs/s3_wifi_egpu_investigation_20261015.md.
+
 - On 2026-10-15, the user required normal model output at20Hz and requested
   upstream NAV n16 afbf2e547e / AMD52205044 (checkpoint96244b1f/12800). It changes
   only the PKL; runtime d3f09c9/90970e01 and old Jetson ONNX are unchanged. Pin
