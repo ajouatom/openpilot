@@ -1,5 +1,15 @@
 # Repository memory
 
+- On 2026-10-15, user requested public S3 firmware/install guide after confirming
+  the panel wakes and turns off. S3 1.1.0 confirms sync/brightness-off, retries
+  failed shutdown and reasserts idle-off; C4 offroad dimming includes registered
+  S3. N16R8 / powered hub / TURZX 1cbe:0092 only. Browser installer and NAS ZIP
+  preserve NVS; never distribute device flash backups or pairing keys. UART
+  --auto requires a unique bridge and verifies identity. Native three-phase
+  150-frame final test passes with preserved pairing; browser-native flashing
+  is distinct from UART validation. Publish both maintained branches, single-parent.
+  See docs/s3_release_20261015.md and tools/esp32s3_display/INSTALL_KO.md.
+
 - On 2026-10-15, user requested MD v3 PR39087 on carrot-wip ONLY unless already
   installed. Prior selection was8d736683; new checkpoint1365126a/12864, AMDd4c7a3fc,
   pinned tinygrad02e69816/runtimec7c58622. PR changes only the big PKL; no matching
