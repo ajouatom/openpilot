@@ -14,6 +14,7 @@
 #include "esp_system.h"
 #include <stdlib.h>
 #include "network.h"
+#include "status_led.h"
 
 static const char *TAG = "S3_USB";
 static QueueHandle_t event_queue;
@@ -132,6 +133,7 @@ static void turn_off(void) {
   if (ok) vTaskDelay(pdMS_TO_TICKS(200));
   ok=ok && local_brightness(0);
   dark=ok;
+  status_led_usb(true, !ok);
   if (ok) off_failures=0;
   else if (off_failures<5) off_failures++;
   unsigned delay_s=ok ? 30 : (1U << (off_failures-1));
@@ -143,6 +145,7 @@ static void claim_display(usb_device_handle_t dev) {
   if (claimed_device) return;
   if (usb_host_interface_claim(client, dev, 0, 0) != ESP_OK) return;
   claimed_device=dev; setup_shown=false; dark=false; last_frame=0;
+  status_led_usb(true, false);
   next_off=0; off_failures=0;
   turn_off();
 }
@@ -205,8 +208,9 @@ static void describe_device(uint8_t address) {
 }
 
 static void usb_task(void *arg) {
-  ESP_LOGI(TAG, "Carrot S3 display bridge 1.1.0; no OTA; external powered USB hub required");
+  ESP_LOGI(TAG, "Carrot S3 display bridge 1.1.1; no OTA; external powered USB hub required");
   ESP_LOGI(TAG, "External hub support=%d", CONFIG_USB_HOST_HUBS_SUPPORTED);
+  status_led_start();
   event_queue = xQueueCreate(16, sizeof(usb_host_client_event_msg_t));
   assert(event_queue);
   const usb_host_config_t host_cfg = {.skip_phy_setup = false, .intr_flags = ESP_INTR_FLAG_LEVEL1};
@@ -233,6 +237,7 @@ static void usb_task(void *arg) {
             if (claimed_device == opened[i]) {
               usb_host_interface_release(client, claimed_device, 0);
               claimed_device = NULL; setup_shown=false; dark=true;
+              status_led_usb(false, false);
             }
             usb_host_device_close(client, opened[i]);
             opened[i] = NULL;
@@ -279,6 +284,8 @@ static void usb_task(void *arg) {
         if (!received) response_length=0;
       }
       if (ok && image) { last_frame=esp_timer_get_time(); dark=false; next_off=0; off_failures=0; }
+      if (current) status_led_usb(true, !ok);
+      if (ok && image) status_led_frame();
       if (current && command==14 && plain[8]==0) {
         dark=ok; last_frame=0; next_off=ok ? esp_timer_get_time()+30000000 : 0;
       } else if (ok && command==14) { brightness=plain[8]; dark=false; }

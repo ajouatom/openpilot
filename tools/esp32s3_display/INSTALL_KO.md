@@ -2,7 +2,7 @@
 
 **일반 사용자는 [NAS 설치 페이지](https://upload.shind0.synology.me/models/carrot-s3/index.html)를 여세요.**
 PC Chrome/Edge에서 보드를 선택하고 설치할 수 있습니다. 개발 환경은 필요 없습니다.
-[펌웨어·설명서 ZIP](https://upload.shind0.synology.me/models/carrot-s3/carrot-s3-1.1.0.zip) ·
+[펌웨어·설명서 ZIP](https://upload.shind0.synology.me/models/carrot-s3/carrot-s3-1.1.1.zip) ·
 [검증값](https://upload.shind0.synology.me/models/carrot-s3/SHA256SUMS.txt)
 
 ## 준비물과 지원 범위
@@ -105,6 +105,24 @@ python3 tools/esp32s3_display/provision.py --import-pairing /data/carrot-s3.json
 밝기·방향·미러·카메라는 기존 HUD 설정을 사용합니다. Wi-Fi는 기본 최대 15fps,
 eGPU 사용 중 최대 10fps입니다. 실제 속도는 화면 내용과 무선 환경에 따라 달라지며
 광학 패널 FPS 보장이 아닙니다. 직접 USB 연결의 기존 5fps 정책은 별도입니다.
+
+## 보드 LED로 상태 확인 (펌웨어 1.1.1 이상)
+
+전원 LED와 별도로 보드 가운데 RGB LED를 약하게 켭니다.
+
+| RGB LED | 상태 |
+| --- | --- |
+| 파란색 점멸 | 처음 Wi-Fi에 연결하는 중 |
+| 빨간색 점멸 | Wi-Fi 연결 또는 IP를 잃어 재연결 대기 중 |
+| 초록색 계속 켜짐 | Wi-Fi에서 IP를 받았고 USB 화면 연결이 확인됨 |
+| 초록색이 짧게 꺼졌다 켜짐 | 최근 2초 안에 화면 데이터를 USB로 정상 전송함 |
+| 빨간색 두 번씩 점멸 | Wi-Fi IP는 있지만 USB 화면이 없거나 USB 통신 오류 |
+| 보라색 점멸 | 폰 설정 모드가 열려 있음 |
+
+초록색만으로 C4 연결이나 인터넷 통신까지 보장하지는 않습니다. 설정 모드가 열려
+있으면 보라색 표시가 우선합니다. 시동 OFF로 화면이 꺼져도 S3 전원이 있으면 LED는
+상태를 계속 표시합니다. RGB LED 핀이 GPIO38인 일부 보드에서는 기본 GPIO48 빌드의
+LED가 켜지지 않을 수 있습니다. 이 경우 아래 README의 빌드 설정을 확인하세요.
 
 ## 다음에 바꿀 때
 

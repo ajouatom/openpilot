@@ -122,6 +122,34 @@ enabled or validated for this bridge, although the transport carries opaque pack
 Remove the registration file and restart HUD to return to direct USB behavior.
 `CARROT_S3_CONFIG` can select an isolated file for desktop tests.
 
+## Board status LED and UART diagnostics (1.1.1)
+
+The addressable RGB LED uses a low brightness of 3/255 per channel. Blue blinks
+while initially connecting, red blinks after Wi-Fi/IP loss, and green stays on
+after receiving an IP with a USB display present. Recent successful image
+transactions add a short dark pulse to green once per second. With Wi-Fi ready,
+missing/failed USB uses a red double blink. Phone setup overrides these states
+with purple blinking. Green means IP readiness, not proven C4/Internet reachability;
+image activity means USB transfer success, not optical panel verification.
+
+`CONFIG_S3_STATUS_LED_GPIO` defaults to GPIO48; some DevKitC-style revisions use
+GPIO38. Select the actual board's RGB LED pin through `idf.py menuconfig` before
+building. The separate power LED is not controlled. LED driver initialization or
+transmission failure logs a warning and stops only the LED task.
+
+On the UART port at 115200 baud, send `S3STATUS` followed by LF. The `S3JSON` reply
+contains uptime, reset reason, association/IP state, RSSI/channel, disconnect
+count/reason, and current/minimum internal heap. It contains no Wi-Fi password or
+pairing key. Disconnect/IP-loss events also appear in the normal UART log. These
+are diagnostics, not a new network recovery policy.
+
+The pure LED policy can be checked without ESP-IDF:
+
+```sh
+cc -std=c11 -Wall -Wextra -Werror tools/esp32s3_display/tests/test_status_led.c -o /tmp/test_status_led
+/tmp/test_status_led
+```
+
 ## Protocol and boundaries
 
 - Device ID: six-byte Wi-Fi MAC. Pairing key: random 32 bytes in S3 NVS and the C4
