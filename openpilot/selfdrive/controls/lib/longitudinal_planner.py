@@ -374,6 +374,7 @@ class LongitudinalPlanner:
     self.apply_signal_start_guard(carrot)
 
   def apply_signal_stop_prepare(self, sm, carrot, reset_state, now=None):
+    from openpilot.selfdrive.carrot.signal_stop_prepare import prepare_lead_blocked
     now = time.monotonic() if now is None else now
     elapsed = now-(now-self.dt) if self._signal_prepare_time is None else now-self._signal_prepare_time
     self._signal_prepare_time = now
@@ -381,9 +382,10 @@ class LongitudinalPlanner:
     active = (carrot.prepare_decision is not None and carrot.prepare_decision.active
               and carrot.prepare_control_active
               and not reset_state and not cs.gasPressed and not cs.brakePressed
+              and 5/3.6 < cs.vEgo < 82/3.6 and cs.softHoldActive == 0
               and 0 < elapsed <= .2
               and not self.output_should_stop and self.mpc.mode == 'acc'
-              and not sm['radarState'].leadOne.status and not sm['radarState'].leadTwo.status)
+              and not prepare_lead_blocked(sm['radarState']))
     previous = cs.aEgo if self._signal_prepare_previous is None else self._signal_prepare_previous
     uncapped = self.output_a_target
     self.output_a_target = self._signal_prepare_accel.apply(self.output_a_target, previous, elapsed, active)

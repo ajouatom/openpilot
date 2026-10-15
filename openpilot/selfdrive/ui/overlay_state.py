@@ -1,5 +1,6 @@
 """One shared, cheap invalidation snapshot for both onroad display layers."""
 from openpilot.system.ui.lib.application import gui_app
+from openpilot.selfdrive.carrot.signal_display import signal_display_status
 
 
 class OverlayState:
@@ -23,6 +24,7 @@ class OverlayState:
       lp.xState, lp.trafficState, lp.allowThrottle, cm.trafficState,
       getattr(lp, 'signalDetectionSuspended', False),
       getattr(lp, 'signalObservationColor', 0), getattr(lp, 'signalAssistAction', 0),
+      signal_display_status(),
       radar.leadOne.status, radar.leadOne.radarTrackId, radar.leadTwo.status,
       sm.recv_frame['liveCalibration'],
       sm.valid['modelV2'], sm.alive['modelV2'], sm.valid['carState'], sm.alive['carState'],

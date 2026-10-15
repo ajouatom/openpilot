@@ -339,7 +339,7 @@ def test_final_output_cap_after_coasting(reset,lead,gas,brake):
   p=NS(output_a_target=1.,output_v_target_now=20.,output_j_target_now=1.,output_should_stop=False,mpc=NS(mode='acc'),dt=.05,a_desired=1.,coasting_target=70.)
   p._signal_prepare_accel = PrepareAccel()
   p._signal_prepare_time = p._signal_prepare_previous = None
-  sm={'carState':NS(gasPressed=gas,brakePressed=brake,aEgo=0.,vEgo=15.),'radarState':NS(leadOne=NS(status=lead),leadTwo=NS(status=False))}
+  sm={'carState':NS(gasPressed=gas,brakePressed=brake,aEgo=0.,vEgo=15.,softHoldActive=0),'radarState':NS(leadOne=NS(status=lead,dRel=10.),leadTwo=NS(status=False))}
   ns['apply_signal_stop_prepare'](p,sm,NS(prepare_decision=NS(active=True),prepare_control_active=True),reset)
   if not (reset or lead or gas or brake):
     assert p.output_a_target==pytest.approx(-.0125) and p.coasting_target==0
