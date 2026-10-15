@@ -4,11 +4,14 @@ from collections import namedtuple
 from dataclasses import replace
 
 from opendbc.car import structs, rate_limit, DT_CTRL, apply_steer_angle_limits_vm
+from opendbc.car.common.conversions import Conversions as CV
 from opendbc.car.vehicle_model import VehicleModel
 from opendbc.car.tesla.values import CarControllerParams
 
 
 DT_LAT_CTRL = DT_CTRL * CarControllerParams.STEER_STEP
+# Match CarState's Float32 speed representation so exactly 25 km/h remains disabled.
+COOP_STEERING_MIN_SPEED = float(np.float32(25.0 * CV.KPH_TO_MS))
 
 
 class CoopSteeringCarControllerParams(CarControllerParams):
@@ -75,6 +78,7 @@ class SteerRateLimiter:
 class CoopSteeringCarController:
   def __init__(self):
     self.apply_angle_last = 0
+    self.apply_angle_out_last = 0
     self.coop_apply_angle_sat_last = 0
     self.angle_override = 0
     self.resume_rate_limiter_delta = SteerRateLimiter()
@@ -126,6 +130,16 @@ class CoopSteeringCarController:
     return apply_angle_lim
 
   def update(self, apply_angle, lat_active, CS: structs.CarState, VM: VehicleModel) -> CoopSteeringData:
+    if lat_active and not CS.out.vEgo > COOP_STEERING_MIN_SPEED:
+      # Keep normal steering limits referenced to the last final request when leaving cooperative control.
+      apply_angle = apply_steer_angle_limits_vm(apply_angle, self.apply_angle_out_last, CS.out.vEgoRaw,
+                                               CS.out.steeringAngleDeg, lat_active, CarControllerParams, VM)
+      self.reset_override_state(apply_angle)
+      self.resume_rate_limiter_delta.reset(0.0)
+      self.resume_rate_limiter.reset(apply_angle)
+      self.apply_angle_out_last = apply_angle
+      return CoopSteeringData(apply_angle, lat_active, 1)
+
     # estimate real steering angle by adding rate to the tesla filtered angle
     steeringAngleDegPhaseLead = CS.out.steeringAngleDeg + CS.out.steeringRateDeg / STEERING_DEG_PHASE_LEAD_COEFF
 
@@ -134,7 +148,10 @@ class CoopSteeringCarController:
 
     if not lat_active:
       self.reset_override_state(apply_angle)
-      return CoopSteeringData(apply_angle, lat_active, 1)
+      # Inactive CAN must follow the EPS measurement, not the phase-lead estimate.
+      inactive_angle = apply_bounds(CS.out.steeringAngleDeg, CarControllerParams.ANGLE_LIMITS.STEER_ANGLE_MAX)
+      self.apply_angle_out_last = inactive_angle
+      return CoopSteeringData(inactive_angle, lat_active, 1)
 
     apply_angle_step = apply_angle - self.apply_angle_last
     self.apply_angle_last = apply_angle
@@ -146,4 +163,5 @@ class CoopSteeringCarController:
     self.coop_apply_angle_sat_last = apply_steer_angle_limits_vm(apply_angle, self.coop_apply_angle_sat_last, CS.out.vEgoRaw,
                                                                    CS.out.steeringAngleDeg, lat_active, CoopSteeringCarControllerParams, VM)
     self.angle_override = self.unwind_on_saturation(self.angle_override, apply_angle - self.coop_apply_angle_sat_last)
+    self.apply_angle_out_last = self.coop_apply_angle_sat_last
     return CoopSteeringData(self.coop_apply_angle_sat_last, lat_active, 1)
