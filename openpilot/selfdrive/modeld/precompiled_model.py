@@ -152,12 +152,13 @@ def gpu_transport_failure(detail: str) -> bool:
 def gpu_usb_link_failure(detail: str, manifest: dict) -> bool:
   """Decode the verified USB runtime's latched link error, not arbitrary AMD faults."""
   # This runtime binds AMD.error_state to the USB link's error word. -1 is
-  # libusb I/O failure or a short transfer, not an invalid model prediction.
+  # libusb I/O failure or a short transfer; +1 is LIBUSB_TRANSFER_ERROR from
+  # usb_reap copying the asynchronous transfer status, not a model prediction.
   # Other runtime versions/codes need their own source verification first.
   runtime = manifest.get('runtime')
   return (isinstance(runtime, dict) and runtime.get('sha256') ==
           '90970e01f2ba70d553294c0f9d5c6fe1678827f750705cab679a7b19b7bcb0b2' and
-          re.search(r'^(?:RuntimeError: )?AMD(?::[0-9]+)? failed with -1\Z', detail.rstrip(), re.MULTILINE) is not None)
+          re.search(r'^(?:RuntimeError: )?AMD(?::[0-9]+)? failed with -?1\Z', detail.rstrip(), re.MULTILINE) is not None)
 
 
 def retry_usb_rejection(root: Path, pickle_sha256: str) -> bool:

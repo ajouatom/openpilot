@@ -147,8 +147,9 @@ def test_numerical_integrity_and_unknown_failures_are_not_retried(manager, error
   assert value.exhausted and value.attempts == 0
 
 
-def test_usb_runtime_identity_required_and_worker_timeout_is_supported():
-  error = RuntimeError('AMD failed with -1')
+@pytest.mark.parametrize('code', [-1, 1])
+def test_usb_runtime_identity_required_and_worker_timeout_is_supported(code):
+  error = RuntimeError(f'AMD failed with {code}')
   assert not recovery.retryable(error, {})
   manifest = {'runtime': {'sha256': '90970e01f2ba70d553294c0f9d5c6fe1678827f750705cab679a7b19b7bcb0b2'}}
   assert recovery.retryable(error, manifest)
