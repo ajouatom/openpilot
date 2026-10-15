@@ -9,6 +9,8 @@ import sys
 import time
 
 ROOT = Path(__file__).resolve().parents[2]
+if (ROOT / 'pydeps').is_dir():
+  sys.path.insert(0, str(ROOT / 'pydeps'))
 sys.path.insert(0, str(ROOT / 'openpilot/selfdrive/carrot/cluster'))
 from cluster_wifi_protocol import load_config, save_config
 
