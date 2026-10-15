@@ -103,3 +103,20 @@ def current_failure(cache: Path, sha: str) -> dict:
             'worker': worker if isinstance(worker, dict) else {}, 'phase': value.get('phase')}
   except (OSError, ValueError, TypeError, AttributeError, KeyError):
     return {}
+
+
+def saved_failure(cache: Path, sha: str) -> dict:
+  """Export matching historical failure evidence, without unrelated device data."""
+  if len(sha) != 64 or any(c not in '0123456789abcdef' for c in sha):
+    return {}
+  try:
+    root = cache / 'precompiled' / sha
+    with (root / 'last_failure.json').open() as f:
+      value = json.loads(f.read(32768))
+    with (root / 'installed.json').open() as f:
+      installed = json.loads(f.read(32768))
+    if value.get('pickle_sha256') != installed['pickle']['sha256'] or not isinstance(value.get('error'), str):
+      return {}
+    return {key: value[key] for key in ('time', 'phase', 'rejected', 'pickle_sha256', 'error', 'boot_id', 'worker') if key in value}
+  except (OSError, ValueError, TypeError, AttributeError, KeyError):
+    return {}
