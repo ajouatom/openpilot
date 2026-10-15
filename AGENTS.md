@@ -10,8 +10,9 @@
   lock, fresh-frame fallback and startup-only internal inference warmup/reset
   replace the ~3s stale fallback. Stopped-worker probe reaches internal output
   in718ms with106ms capture age; this is not fault-time20Hz or root-cause proof.
-  Initial native60s has1200/1200 consecutive valid model/DM frames;298 focused
-  tests pass. User authorized parked restarts/install. See
+  Final native300s has6000/6000 consecutive valid model/DM frames at20.0002Hz;
+  no fallback, S3 connected. Later USB link counter remains1->1, not zero.
+  Nav298/wip257 focused tests pass. User authorized parked restarts/install. See
   docs/egpu_n16_stability_20261015.md for final validation and remaining limits.
 
 - On 2026-10-15, deeper direct-eGPU analysis confirms all three fault snapshots
