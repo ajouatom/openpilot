@@ -81,6 +81,39 @@ def _is_usb_disconnect_error(exc: BaseException) -> bool:
     return False
 
 
+def _s3_transport_failure_reason(exc: BaseException) -> str | None:
+    """Only shorten a transport failure inside the known S3 wrappers."""
+    current: BaseException | None = exc
+    seen: set[int] = set()
+    s3_failure = False
+    transport_error: OSError | None = None
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        if str(current) in (
+            "S3 display disconnected; reconnect required",
+            "S3 display connection failed; waiting for rediscovery",
+        ):
+            s3_failure = True
+        if isinstance(current, OSError):
+            transport_error = current
+        current = current.__cause__ or current.__context__
+    if not s3_failure or transport_error is None:
+        return None
+    detail = " ".join(str(transport_error).split())[:160]
+    return f"{type(transport_error).__name__}: {detail}"
+
+
+def _report_cluster_failure(exc: BaseException) -> None:
+    reason = _s3_transport_failure_reason(exc)
+    if reason is not None:
+        print(f"[cluster_autorun] S3 Wi-Fi disconnected ({reason}); retrying in {RETRY_INTERVAL_S:.0f}s", flush=True)
+    elif _is_usb_disconnect_error(exc):
+        print(f"[cluster_autorun] USB display disconnected; retrying in {RETRY_INTERVAL_S:.0f}s", flush=True)
+    else:
+        print(f"[cluster_autorun] cluster HUD failed: {exc}; retrying in {RETRY_INTERVAL_S:.0f}s", flush=True)
+        traceback.print_exc()
+
+
 def _read_hud_mode(params: Params) -> int:
     try:
         return int(params.get_int(HUD_PARAM))
@@ -630,17 +663,7 @@ def main() -> None:
                 flush=True,
             )
         except Exception as exc:
-            if _is_usb_disconnect_error(exc):
-                print(
-                    f"[cluster_autorun] USB display disconnected; retrying in {RETRY_INTERVAL_S:.0f}s",
-                    flush=True,
-                )
-            else:
-                print(
-                    f"[cluster_autorun] cluster HUD failed: {exc}; retrying in {RETRY_INTERVAL_S:.0f}s",
-                    flush=True,
-                )
-                traceback.print_exc()
+            _report_cluster_failure(exc)
         time.sleep(RETRY_INTERVAL_S)
 
 
