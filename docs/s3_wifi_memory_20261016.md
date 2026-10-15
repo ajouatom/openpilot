@@ -37,6 +37,15 @@ Validation:
   an optical panel FPS measurement or C4 rendering test.
 - Actual LED color/pin confirmation from the user remains pending at publication.
 
+The subsequent continuous PC test acknowledged all 1,200 JPEG frames in 120.029
+seconds (9.998 Hz). Fourteen UART snapshots remained associated on channel 6 at
+-40 to -43 dBm with zero disconnects. Internal free heap varied with traffic
+(lowest sampled 112,496 bytes; lifetime minimum 106,236), then returned to exactly
+182,104 bytes after close, matching the earlier idle snapshot. No Wi-Fi-loss,
+USB-timeout, LED-driver-stop or panic line appeared. This is a two-minute synthetic
+bench check under the improved association, not long-duration/vehicle validation
+or proof that the earlier Wi-Fi failure is fixed.
+
 ## Memory findings
 
 With fresh valid Park/standstill/inactive samples, `ClusterHud` was changed from

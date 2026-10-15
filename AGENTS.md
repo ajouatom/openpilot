@@ -6,7 +6,8 @@
   Isolated raylib headless init segfaults: never enable as workaround. Small USB
   commands and PC auth fail without rendering; channel6 temporarily refuses S3,
   channel1 attaches at-72dBm. After approved reset/app flash channel6 at-38dBm
-  passes24 commands and150 JPEG frames/three10fps phases. AP changed too: no
+  passes24 commands and150 JPEG frames/three10fps phases; later1200 frames in
+  120.029s with0 disconnects and idle internal heap restored182104bytes. AP changed: no
   root-cause or long-duration fix claim. S3 firmware1.1.1 adds dim GPIO48 RGB
   states and secret-free S3STATUS UART diagnostics; GPIO38 revisions configurable.
   Pairing preserved, C policy tests/build pass; actual LED visual check pending.
