@@ -1,5 +1,18 @@
 # Repository memory
 
+- On 2026-10-17, user explicitly requested reusing the existing stop-to-lead
+  condition to bypass auxiliary red departure vetoes. Share finite positive
+  leadOne range and dRel - filtered model stop distance <2m with both stopped
+  handovers; 2m is relative to model stopping, not ego-to-lead spacing. Effective
+  start/legacy decisions suppress hold/warning/red injection while eligible,
+  including final longitudinal veto, without reporting green or granting accel.
+  Preserve red memory for immediate reapplication on lead loss/range exit and
+  preserve soft hold/user stop/MPC leads. Moving mode2 preparation is unchanged.
+  715 desktop tests pass with native Params lookup doubled. Publish both maintained
+  branches single-parent; no vehicle install or closed-loop road claim. See
+  docs/signal_lead_handover_20261017.md. This supersedes prior blanket red-veto
+  priority over an eligible lead, not signal recognition/green confirmation.
+
 - On 2026-10-16, user reported repeated blank S3 H.264 output after initial pass.
   250ms queue-full shutdown magnified short stalls: retain three ordered slots,
   apply HUD-encoder backpressure with close/error checks and a3s dead-sender cap.
