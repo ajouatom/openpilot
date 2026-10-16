@@ -17,7 +17,8 @@ from openpilot.selfdrive.ui.lib.prime_state import PrimeState
 from openpilot.system.ui.lib.application import gui_app
 from openpilot.system.hardware import HARDWARE, PC
 
-BACKLIGHT_OFFROAD = 65 if HARDWARE.get_device_type() == "mici" else 50
+IS_MICI = HARDWARE.get_device_type() == "mici"
+BACKLIGHT_OFFROAD = 65 if IS_MICI else 50
 
 
 class UIStatus(Enum):
@@ -109,6 +110,7 @@ class UIState:
 
     # Brightness and UI options
     self.show_brightness_ratio: float = 1.0
+    self.screen_off: bool = False
     self.show_model_view: int = 0
     self.share_data: bool = False
     self.show_camera_with_cluster: bool = False
@@ -225,6 +227,7 @@ class UIState:
     self.show_date_time = self.params.get_int("ShowDateTime")
     self.show_radar_info = self.params.get_int("ShowRadarInfo")
     self.show_brightness_ratio: float = self.params.get_int("ShowCustomBrightness") / 100.0
+    self.screen_off = IS_MICI and self.params.get("ScreenOn", return_default=True) is False  # unset key keeps the screen on
     self.show_model_view = self.params.get_int("ShowModelView")
     self.share_data = self.params.get_bool("ShareData")
     self.show_camera_with_cluster = self.params.get_int("ShowCameraWithCluster") == 1
@@ -350,7 +353,7 @@ class Device:
         callback()
     self._prev_timed_out = interaction_timeout
 
-    self._set_awake(ui_state.ignition or not interaction_timeout or PC)
+    self._set_awake((ui_state.ignition or not interaction_timeout or PC) and not ui_state.screen_off)
 
   def _set_awake(self, on: bool):
     if on != self._awake:
