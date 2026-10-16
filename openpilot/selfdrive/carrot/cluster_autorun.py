@@ -219,6 +219,8 @@ def _run_cluster_once(
     usbgpu_active: bool = False,
 ) -> None:
     from selfdrive.carrot import cluster_run
+    # Install before renderer/encoder dependencies can bind graphics symbols.
+    cluster_run.configure_cluster_graphics()
     from cluster_h264_pipeline import H264PipelineInitializationError
 
     def run_cluster_entry() -> None:
@@ -579,6 +581,8 @@ def main() -> None:
     drop_realtime()
     _configure_autorun_locale()
     _ensure_cluster_paths()
+    from cluster_graphics_cleanup import ensure_clean_autorun_process
+    ensure_clean_autorun_process()
     from cluster_usb_display import find_supported_usb_product, product_id_for_hud_mode, product_label
     from cluster_wifi_protocol import load_config as load_wifi_config
 

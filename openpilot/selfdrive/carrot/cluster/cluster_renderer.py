@@ -1208,6 +1208,10 @@ class ClusterUiRenderer:
             rl.set_config_flags(flags)
         profile_stage = self._profile_start()
         rl.init_window(self.width, self.height, self.title)
+        # Own the context before font/model setup can fail or be interrupted.
+        self._window_open = rl.is_window_ready()
+        if not self._window_open:
+            raise RuntimeError("HUD graphics window initialization failed")
         self._profile_add("renderer.open.init_window", profile_stage)
         if self.target_fps > 0:
             profile_stage = self._profile_start()
@@ -1230,6 +1234,16 @@ class ClusterUiRenderer:
         self._profile_add("renderer.open.total", profile_total)
 
     def close(self) -> None:
+        try:
+            self._close_resources()
+        finally:
+            if self._window_open:
+                try:
+                    rl.close_window()
+                finally:
+                    self._window_open = False
+
+    def _close_resources(self) -> None:
         if self._nav_model_texture is not None:
             rl.unload_texture(self._nav_model_texture)
             self._nav_model_texture = None
@@ -1349,8 +1363,6 @@ class ClusterUiRenderer:
         self._camera_overlay_strip_pair_visibility = bytearray()
         self._route_video_size = None
         self._route_video_frame_id = None
-        rl.close_window()
-        self._window_open = False
 
     def should_close(self) -> bool:
         return bool(self._window_open and rl.window_should_close())

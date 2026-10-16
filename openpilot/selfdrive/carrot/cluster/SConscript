@@ -1,0 +1,4 @@
+Import('env', 'arch')
+
+if arch == 'larch64':
+  env.SharedLibrary('carrot_gbm_cleanup', 'gbm_cleanup.c', LIBS=['dl', 'pthread'])
