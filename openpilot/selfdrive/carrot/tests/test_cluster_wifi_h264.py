@@ -5,6 +5,7 @@ import socket
 import struct
 import sys
 import threading
+import time
 from types import SimpleNamespace
 
 import pytest
@@ -105,25 +106,63 @@ def test_h264_shutdown_stops_decoder_before_sync_and_off():
   assert events == ['stop', 10, 14, 'close'] and not display._h264_active
 
 
-def test_wifi_native_queue_never_discards_reference_frames():
+def wifi_queue_fixture():
   source = CLUSTER / 'cluster_h264_pipeline.py'
   tree = ast.parse(source.read_text())
   cls = next(n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == 'H264UsbPipeline')
   node = next(n for n in cls.body if isinstance(n, ast.FunctionDef) and n.name == '_enqueue_native_access_unit')
-  scope = {'queue': queue, '_NativeAccessUnit': lambda chunks, codec_config, keyframe: (chunks, codec_config, keyframe)}
+  scope = {'queue': queue, 'time': time, '_NativeAccessUnit': lambda chunks, codec_config, keyframe: (chunks, codec_config, keyframe)}
   exec(compile(ast.Module(body=[node], type_ignores=[]), str(source), 'exec'), scope)
   pending = queue.Queue(3)
   obj = SimpleNamespace(
-    _closing=False, _packet_queue=pending, usb_display=SimpleNamespace(h264_preserve_reference_frames=True), _record_h264_queue_depth=lambda depth: None
+    _closing=False, _packet_queue=pending, usb_display=SimpleNamespace(h264_preserve_reference_frames=True),
+    _record_h264_queue_depth=lambda depth: None, check_error=lambda: None,
   )
   send = scope['_enqueue_native_access_unit']
   for i in range(3):
     send(obj, [bytes([i])], codec_config=i == 0, keyframe=i == 1)
+  return obj, pending, send
+
+
+def test_wifi_native_queue_preserves_references_across_short_network_stall():
+  obj, pending, send = wifi_queue_fixture()
+  output = []
+  def consume():
+    time.sleep(0.6)  # Beyond the old 250ms restart threshold.
+    output.append(pending.get_nowait()[0][0])
+  thread = threading.Thread(target=consume)
+  thread.start()
+  send(obj, [b'fourth'], codec_config=False, keyframe=False)
+  thread.join(2)
+  assert not thread.is_alive()
+  output.extend(pending.get_nowait()[0][0] for _ in range(3))
+  assert output == [b'\0', b'\1', b'\2', b'fourth']
+
+
+def test_wifi_native_queue_remains_bounded_on_dead_sender():
+  obj, pending, send = wifi_queue_fixture()
   with pytest.raises(RuntimeError, match='reconnect required') as caught:
     send(obj, [b'fourth'], codec_config=False, keyframe=False)
   assert isinstance(caught.value.__cause__, ConnectionError)
-  assert 'reference queue stalled' in str(caught.value.__cause__)
+  assert 'reference queue stalled for 3s' in str(caught.value.__cause__)
   assert [pending.get_nowait()[0][0] for _ in range(3)] == [b'\0', b'\1', b'\2']
+
+
+def test_wifi_native_queue_wait_stops_on_close_or_transport_error():
+  for closing in (True, False):
+    obj, pending, send = wifi_queue_fixture()
+    def cancel(closing=closing, obj=obj):
+      if closing:
+        obj._closing = True
+      else:
+        raise ConnectionError('sender failed')
+    obj.check_error = cancel
+    if closing:
+      send(obj, [b'fourth'], codec_config=False, keyframe=False)
+    else:
+      with pytest.raises(ConnectionError, match='sender failed'):
+        send(obj, [b'fourth'], codec_config=False, keyframe=False)
+    assert pending.qsize() == 3
 
 
 def test_native_sender_exits_when_closed_without_queue_sentinel():

@@ -82,9 +82,11 @@ static void uart_status(void) {
   xSemaphoreGive(config_lock);
   printf("S3JSON {\"status\":true,\"uptime_ms\":%" PRId64 ",\"reset_reason\":%d,"
          "\"associated\":%s,\"ip_ready\":%s,\"ip\":\"" IPSTR "\",\"rssi\":%d,\"channel\":%u,"
+         "\"bssid\":\"%02x:%02x:%02x:%02x:%02x:%02x\","
          "\"disconnect_count\":%u,\"last_disconnect_reason\":%u,\"free_internal\":%u,\"min_internal\":%u}\n",
          esp_timer_get_time()/1000, (int)esp_reset_reason(), associated ? "true" : "false",
          xEventGroupGetBits(wifi_events)&1 ? "true" : "false", IP2STR(&ip.ip), ap.rssi, ap.primary,
+         ap.bssid[0], ap.bssid[1], ap.bssid[2], ap.bssid[3], ap.bssid[4], ap.bssid[5],
          count, reason, (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
          (unsigned)heap_caps_get_minimum_free_size(MALLOC_CAP_INTERNAL));
 }
@@ -282,6 +284,10 @@ static void manager_task(void *arg) {
       wifi_config_t config={0};
       memcpy(config.sta.ssid, current.ssid, strlen(current.ssid));
       memcpy(config.sta.password, current.password, strlen(current.password));
+      // Several APs can share the registered SSID. Fast scan stops at the
+      // first match, which can select a weak AP before reaching a nearer one.
+      config.sta.scan_method=WIFI_ALL_CHANNEL_SCAN;
+      config.sta.sort_method=WIFI_CONNECT_AP_BY_SIGNAL;
       config.sta.threshold.authmode=WIFI_AUTH_WPA2_PSK;
       config.sta.pmf_cfg.capable=true;
       ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &config));
