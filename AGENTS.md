@@ -1,5 +1,21 @@
 # Repository memory
 
+- On 2026-10-16, user reported live low-memory warning after keeping ignition on.
+  Captured93.29%/241.89MiB available on the same14.5h boot; guarded HUD stop
+  recovers88.68%/408.40MiB and reclaims its current6 buffers, but old510 remain.
+  Comparable HUD-off snapshots2h44m apart lose24.29MiB, with no hundreds-of-MiB
+  growth in surviving process PSS. Save evidence, verify selective HUD hashes,
+  auto-pull off and no staged overlay, then authorized parked C4 reboot clears
+  historical buffers:74.75%/910.88MiB at173s, same e9b33329e4/eGPU active.
+  Recovery exceeds known GBM bytes; do not attribute all recovered memory to it.
+  Initial postboot1199/1200 valid consecutive model/DM frames at19.9836/19.9852Hz
+  is not a strict20Hz pass. Restore HUD with headroom guard:180s ends~82.3%/
+  639.38MiB, same PID/six current buffers, S3 connected at all40–180s samples.
+  HUD PSS188.00->191.19MiB is not a proven long plateau. Concurrent final60s
+  model/DM1202/1202 valid consecutive at20.0340/20.0323Hz, eGPU active. HUD stays1.
+  See docs/hud_low_memory_reboot_20261016.md for bounded
+  HUD-restoration observation and remaining long-duration/Wi-Fi limits.
+
 - On 2026-10-16, reproduced the remaining HUD native leak without S3: each
   post98 raylib window close retains6 ION objects/1658880bytes plus DRM/socket
   handles. Installed binary omits GBM surface/owned-FD and handoff-socket cleanup.
