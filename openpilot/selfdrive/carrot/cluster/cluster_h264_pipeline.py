@@ -2067,14 +2067,21 @@ class H264UsbPipeline:
 
         incoming = _NativeAccessUnit(tuple(chunks), codec_config, keyframe)
         if getattr(self.usb_display, "h264_preserve_reference_frames", False):
-            # A P-frame depends on preceding frames. Bound buffering and restart
-            # the session on a sustained stall rather than emit a broken chain.
-            try:
-                packet_queue.put(incoming, timeout=0.25)
-            except queue.Full:
-                raise RuntimeError("S3 display disconnected; reconnect required") from ConnectionError(
-                    "H264 reference queue stalled; restart stream")
-            self._record_h264_queue_depth(packet_queue.qsize())
+            # Backpressure the HUD encoder while TCP catches up. A 250ms queue
+            # wait is not evidence of a disconnected link; restarting here turns
+            # a short network stall into a complete display shutdown. Keep the
+            # same three slots and reference order, bounded by the TCP timeout.
+            deadline = time.monotonic() + 3.0
+            while not self._closing:
+                self.check_error()
+                try:
+                    packet_queue.put(incoming, timeout=0.05)
+                    self._record_h264_queue_depth(packet_queue.qsize())
+                    return
+                except queue.Full:
+                    if time.monotonic() >= deadline:
+                        raise RuntimeError("S3 display disconnected; reconnect required") from ConnectionError(
+                            "H264 reference queue stalled for 3s; restart stream")
             return
         dropped: list[_NativeAccessUnit] = []
         with self._packet_queue_lock:

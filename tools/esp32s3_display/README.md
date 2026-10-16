@@ -12,6 +12,11 @@ native **USB** connector beside RESET. The **UART** connector beside BOOT is for
 power/initial registration. A bare C-to-C connection does not supply host VBUS on
 the tested board. This is USB data forwarding, not DisplayPort/USB-C video output.
 
+When several access points advertise the registered SSID, firmware 1.2.0 scans
+all channels and selects by signal strength when connecting. It does not pin an
+AP or continuously roam after association. UART `S3STATUS` includes the connected
+BSSID, channel and RSSI for diagnosis.
+
 ## One-time firmware installation
 
 For ordinary users, use the [NAS browser installer and Korean setup guide](https://upload.shind0.synology.me/models/carrot-s3/index.html).
