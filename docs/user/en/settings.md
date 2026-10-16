@@ -420,3 +420,16 @@ See the Wiki [Tuning introduction](https://github.com/ajouatom/openpilot/wiki/Gu
 Open **Tools ? Nav Map / ?? ??** in Carrot Web to view the map, search/select a destination, or clear it. Register a Public key under **Settings ? Network ? Mapbox** first; this feature does not need a Secret key. Destinations survive restart. A connected external navigator owns both TBT and route; a missing external route is never replaced with saved Mapbox geometry.
 
 The map is generated onroad with usable position and guidance. USB screen mode `ClusterHudScreenMode=7` displays the same image beside the driving view, on the right. Model navigation inputs are used by this branch's matching eGPU model; internal, DM, and Jetson models remain unchanged. Mapbox search, directions and tiles require network access and a suitable account/key. Search requests use Permanent Geocoding so selected destinations can be saved. See [design and validation limits](../../nav_model_integration_20261012.md).
+# Lead brake lamp observation (trial)
+
+**Lead Brake Lamp Observation** (`LeadBrakeLights`) in Traffic Light settings
+defaults OFF. ON displays/logs a central brake-lamp candidate on the immediate
+radar/vision-matched lead in signal assistance modes 1/2. The USB/HUD road-camera
+view shows `BRAKE?` for a candidate and `BRK ?` for unknown; unknown never means
+verified brake-off. Mode 0 disables this processing too. Turns, uncertain or
+missing leads, and busy signal iterations are skipped.
+
+This is display/logging only, with no braking, stop or departure command.
+The new Params key requires the normal build after updating. The current road
+camera supplies 20fps. Reduced processing overhead does not establish sustained
+20Hz detection; this change does not promise 20Hz or 50Hz detection.

@@ -142,6 +142,8 @@ def run(directory=DIRECTORY, duration=None, backend_override=None):
     from openpilot.selfdrive.carrot.signal_display import display_requested, publish_display
     from openpilot.selfdrive.carrot.signal_start_guard import publish_start_observation
     from openpilot.selfdrive.carrot.signal_assist_runtime import requested as flag_requested
+    from openpilot.selfdrive.carrot.lead_brake_lights import BrakeRuntime
+    brake_observer = BrakeRuntime()
     cv2.setNumThreads(1)
     cv2.ocl.setUseOpenCL(False)
     backend = backend_override or selection
@@ -206,4 +208,8 @@ def run(directory=DIRECTORY, duration=None, backend_override=None):
         tmp = directory / 'neural_latest.tmp'
         tmp.write_text(json.dumps(record, allow_nan=False)); tmp.replace(directory / 'neural_latest.json')
         last_file = time.monotonic()
+      try:
+        brake_observer.update(rgb, fid, eof/1e9, session, begin, cloudlog.event)
+      except Exception:
+        cloudlog.exception('leadBrakeLightsFailed')
       time.sleep(next_delay(time.monotonic()-begin, time.process_time()-cpu))
