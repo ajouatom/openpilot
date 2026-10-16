@@ -15,6 +15,8 @@
   stays enabled at configured10fps (actual Wi-Fi refresh varies). Historical510 orphan objects/134.47MiB remain
   until a clean restart; no total-memory clearance or original Wi-Fi-cause claim.
   Recent S3 retries expose an older cleanup defect; introduction date unproven.
+  Final model/DM60s1200/1200 consecutive valid frames at20.000010/20.000090Hz;
+  S3 flag false at interval end, so Wi-Fi stability remains unresolved.
   See docs/hud_native_cleanup_20261016.md for actual-cycle verification and limits.
 
 - On 2026-10-16, stop Wi-Fi HUD under fresh Park/inactive guard for memory/link

@@ -114,6 +114,12 @@ During the earlier managed-cycle measurement, model/DM produced 1200/1201
 consecutive valid frames in 60 seconds, with no missing IDs. Arrival-derived
 rates were 19.993/19.996Hz; this is not a strict >=20Hz arrival-rate pass.
 
+The final 60-second measurement after the successful three-cycle sequence has
+1200/1200 consecutive valid model/DM frames, no missing IDs, and arrival-derived
+rates 20.000010/20.000090Hz. Model and DM PIDs are unchanged. The S3 connected
+flag is false at the end of that measurement, so this does not establish an
+uninterrupted S3 connection throughout the interval.
+
 Existing orphaned buffers are not reclaimed by installing this fix; they require
 a separate C4 reboot, which was not performed. Repeated process
 cycling alone is not a memory fix. This correction establishes reclamation of
