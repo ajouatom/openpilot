@@ -1202,6 +1202,10 @@ class ClusterUiRenderer:
             rl.set_config_flags(flags)
         profile_stage = self._profile_start()
         rl.init_window(self.width, self.height, self.title)
+        # Own the context before font/model setup can fail or be interrupted.
+        self._window_open = rl.is_window_ready()
+        if not self._window_open:
+            raise RuntimeError("HUD graphics window initialization failed")
         self._profile_add("renderer.open.init_window", profile_stage)
         if self.target_fps > 0:
             profile_stage = self._profile_start()
@@ -1224,6 +1228,16 @@ class ClusterUiRenderer:
         self._profile_add("renderer.open.total", profile_total)
 
     def close(self) -> None:
+        try:
+            self._close_resources()
+        finally:
+            if self._window_open:
+                try:
+                    rl.close_window()
+                finally:
+                    self._window_open = False
+
+    def _close_resources(self) -> None:
         self._system_stats.close()
         if not self._window_open:
             return
@@ -1340,8 +1354,6 @@ class ClusterUiRenderer:
         self._camera_overlay_strip_pair_visibility = bytearray()
         self._route_video_size = None
         self._route_video_frame_id = None
-        rl.close_window()
-        self._window_open = False
 
     def should_close(self) -> bool:
         return bool(self._window_open and rl.window_should_close())
@@ -1687,6 +1699,11 @@ class ClusterUiRenderer:
             caption += " · ~ 이전 판독" if self.language == CLUSTER_LANGUAGE_KO else ' · ~ PREVIOUS'
         if live_camera.is_wide:
             caption = "신호 관찰: 일반 카메라에서 표시" if self.language == CLUSTER_LANGUAGE_KO else 'SIGNAL VIEW: ROAD CAMERA ONLY'
+        from openpilot.selfdrive.carrot.signal_display import signal_display_status
+        color, held, online = signal_display_status()
+        result = ('?', 'R', 'G', 'R+G')[color]
+        status = ('이전 판독' if held else '판독 중' if online else '입력 대기') if self.language == CLUSTER_LANGUAGE_KO else ('PREVIOUS' if held else 'LIVE' if online else 'WAITING')
+        caption += f' | {result} {status}'
         self._draw_text_with_stroke(caption, dest.x+12, dest.y+font_size, font_size,
                                     (230, 230, 230), (0, 0, 0), 2)
         reader.record_draw(live_camera.display_frame, visible)
@@ -7214,6 +7231,15 @@ class ClusterUiRenderer:
         )
 
     def _draw_model_traffic_state(self, traffic_state: int) -> None:
+        from openpilot.selfdrive.carrot.signal_display import signal_display_status, display_requested
+        if display_requested():
+            color, held, _ = signal_display_status()
+            rgb = ((160, 165, 170), (255, 75, 75), (60, 255, 120), (255, 185, 40))[color]
+            if held:
+                rgb = tuple(int(c*.55) for c in rgb)
+            for offset in (2, 3, 4):
+                rl.draw_circle_lines(int(SPEED_MODEL_TRAFFIC_CENTER_X), int(SPEED_MODEL_TRAFFIC_CENTER_Y),
+                                     SPEED_MODEL_TRAFFIC_ICON_SIZE*.5+offset, rl_color(rgb))
         if traffic_state not in (1, 2):
             return
         red_light = traffic_state == 1

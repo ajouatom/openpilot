@@ -28,6 +28,8 @@ def display(monkeypatch):
     alive = {'longitudinalPlan': True}
 
   sm = SM(longitudinalPlan=NS(signalDetectionSuspended=True, trafficState=1))
+  module.signal_display_status = Mock(return_value=(0, False, False))
+  module.display_requested = lambda: True
   return module, rl, NS(sm=sm)
 
 
@@ -97,12 +99,14 @@ def test_ring_reports_evidence_dot_reports_action(display, color, action, expect
   plan = ui.sm['longitudinalPlan']
   plan.signalDetectionSuspended = False
   plan.signalObservationColor, plan.signalAssistAction = color, action
+  module.signal_display_status.return_value = (color, False, True)
   assert module.draw_signal_assist(ui.sm, 100, 200, 32)
   assert rl.draw_circle_lines.call_count == 3
   assert all(c.args[-1] == expected for c in rl.draw_circle_lines.call_args_list)
   assert rl.draw_circle.call_count == (2 if action else 0)
   ui.sm.alive = {'longitudinalPlan': False}
-  assert module.signal_assist_status(ui.sm) == (0,0)
+  assert module.signal_assist_status(ui.sm) == (color,0)
+  module.signal_display_status.return_value = (0, False, False)
   assert not module.draw_signal_assist(ui.sm, 100, 200, 32)
 
 
@@ -121,6 +125,7 @@ def test_c4_helper_survives_native_green_fade_but_not_stale_plan(display):
   ui.sm['longitudinalPlan'] = NS(signalDetectionSuspended=False, signalObservationColor=0, signalAssistAction=1)
   ns = methods(ROOT/'mici/onroad/traffic_light.py', {'is_visible', '_render'},
                dict(ui_state=ui, rl=rl, SIDE_PANEL_WIDTH=80, signal_assist_status=module.signal_assist_status,
+                    signal_display_visible=module.signal_display_visible,
                     draw_signal_assist=module.draw_signal_assist, draw_signal_pause=module.draw_signal_pause,
                     draw_circle_gradient=Mock()))
   renderer = NS(_current_state=0, _alpha_filter=NS(x=0.), _radius=24, rect=NS(x=0,y=0,width=540,height=960))
@@ -129,3 +134,24 @@ def test_c4_helper_survives_native_green_fade_but_not_stale_plan(display):
   assert rl.draw_circle_lines.call_count == 3
   ui.sm.valid = {'longitudinalPlan': False}
   assert not ns['is_visible'](renderer)
+
+
+def test_display_survives_inactive_control_and_unknown_stays_visible(display):
+  module, rl, ui = display
+  ui.sm['longitudinalPlan'] = NS(signalDetectionSuspended=False, signalObservationColor=0, signalAssistAction=0)
+  module.signal_display_status.return_value = (2, True, True)
+  assert module.signal_assist_status(ui.sm) == (2, 0)
+  assert module.draw_signal_assist(ui.sm, 100, 200, 32)
+  assert rl.draw_circle_lines.call_args.args[-1] == (33, 140, 66, 255)
+  module.signal_display_status.return_value = (0, False, False)
+  assert module.draw_signal_assist(ui.sm, 100, 200, 32)
+  assert rl.draw_circle_lines.call_args.args[-1] == (160, 165, 170, 255)
+
+
+def test_mode_zero_hides_auxiliary_even_with_old_packet(display):
+  module, rl, ui = display
+  module.display_requested = lambda: False
+  module.signal_display_status.return_value = (2, False, True)
+  assert not module.signal_display_visible(ui.sm)
+  assert not module.draw_signal_assist(ui.sm, 100, 200, 32)
+  rl.draw_circle_lines.assert_not_called()

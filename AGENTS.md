@@ -1,5 +1,66 @@
 # Repository memory
 
+- On 2026-10-16, user reported live low-memory warning after keeping ignition on.
+  Captured93.29%/241.89MiB available on the same14.5h boot; guarded HUD stop
+  recovers88.68%/408.40MiB and reclaims its current6 buffers, but old510 remain.
+  Comparable HUD-off snapshots2h44m apart lose24.29MiB, with no hundreds-of-MiB
+  growth in surviving process PSS. Save evidence, verify selective HUD hashes,
+  auto-pull off and no staged overlay, then authorized parked C4 reboot clears
+  historical buffers:74.75%/910.88MiB at173s, same e9b33329e4/eGPU active.
+  Recovery exceeds known GBM bytes; do not attribute all recovered memory to it.
+  Initial postboot1199/1200 valid consecutive model/DM frames at19.9836/19.9852Hz
+  is not a strict20Hz pass. Restore HUD with headroom guard:180s ends~82.3%/
+  639.38MiB, same PID/six current buffers, S3 connected at all40–180s samples.
+  HUD PSS188.00->191.19MiB is not a proven long plateau. Concurrent final60s
+  model/DM1202/1202 valid consecutive at20.0340/20.0323Hz, eGPU active. HUD stays1.
+  See docs/hud_low_memory_reboot_20261016.md for bounded
+  HUD-restoration observation and remaining long-duration/Wi-Fi limits.
+
+- On 2026-10-16, reproduced the remaining HUD native leak without S3: each
+  post98 raylib window close retains6 ION objects/1658880bytes plus DRM/socket
+  handles. Installed binary omits GBM surface/owned-FD and handoff-socket cleanup.
+  Add HUD-only hash-pinned adapter for post98/post103; preserve borrowed DRM_FD.
+  Native12-cycle minimal, actual renderer, post103 overlay and borrowed-FD tests
+  each reclaim all test-owned buffers with stable handles. Manager preimports
+  raylib: discard inherited graphics once by exec of only the HUD child before
+  binding the adapter. Actual managed stop exposed another cleanup gap: mark
+  context owned before asset loading and guarantee native close in finally,
+  before blocking display close.54 focused tests pass; unknown binaries fail before render.
+  Selective HUD-only install on vehicle e9b33329e4; no model/control/full pull.
+  Final3 actual managed HUD stops each reclaim all6 objects; S3 reconnects and
+  stays enabled at configured10fps (actual Wi-Fi refresh varies). Historical510 orphan objects/134.47MiB remain
+  until a clean restart; no total-memory clearance or original Wi-Fi-cause claim.
+  Recent S3 retries expose an older cleanup defect; introduction date unproven.
+  Final model/DM60s1200/1200 consecutive valid frames at20.000010/20.000090Hz;
+  S3 flag false at interval end, so Wi-Fi stability remains unresolved.
+  See docs/hud_native_cleanup_20261016.md for actual-cycle verification and limits.
+
+- On 2026-10-16, stop Wi-Fi HUD under fresh Park/inactive guard for memory/link
+  diagnosis; ClusterHud stays0, networking stays on. Available memory recovers
+  to501MiB, but510 orphan HUD ION objects/141004800bytes persist; not fixed.
+  Isolated raylib headless init segfaults: never enable as workaround. Small USB
+  commands and PC auth fail without rendering; channel6 temporarily refuses S3,
+  channel1 attaches at-72dBm. After approved reset/app flash channel6 at-38dBm
+  passes24 commands and150 JPEG frames/three10fps phases; later1200 frames in
+  120.029s with0 disconnects and idle internal heap restored182104bytes. AP changed: no
+  root-cause or long-duration fix claim. S3 firmware1.1.1 adds dim GPIO48 RGB
+  states and secret-free S3STATUS UART diagnostics; GPIO38 revisions configurable.
+  Pairing preserved, C policy tests/build pass; actual LED visual check pending.
+  No C4 model/control install. See docs/s3_wifi_memory_20261016.md.
+
+- On 2026-10-16, user clarified mode2 is moving gentle deceleration with no/remote
+  lead; after stopping it uses mode1 exactly. Near means fixed distance, with50m
+  used provisionally. Check both leads at entry/final cap; retain MPC leads and
+  reject low speed/soft hold. User explicitly corrected display scope: mode0
+  does NO auxiliary recognition/display/control; modes1/2 show raw recognition
+  even with ACC inactive. Separate HUD ring from planner action, dim previous
+  result at most2s from capture, gray unknown; never feed display memory to
+  control. Do not restart the CPU tracker solely for1<->2. Collected144qlogs,
+  20full segments/10,020 observer records. Evening green/lead departure is still
+  held by existing guard; no blanket lead release or solved-recognition claim.
+  Publish both maintained branches single-parent; no vehicle deployment. See
+  docs/signal_modes_display_20261016.md for checks and limits.
+
 - On 2026-10-15, user requested review/integration of Tesla PR551 c61d998ff8.
   Reproduced inactive phase-lead CAN/feedback and saturation defects; Tesla's
   encoded zero375 also regranted controls through the shared accel helper.

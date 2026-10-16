@@ -239,6 +239,20 @@ class PrepareDecision:
   support_interval: tuple | None = None
 
 
+PREPARE_LEAD_DISTANCE = 50.0  # metres; fixed near-lead exclusion, not a stop-line estimate
+
+
+def prepare_lead_blocked(radar_state):
+  """Both MPC leads remain obstacles; only nearby leads suppress extra preparation."""
+  try:
+    for lead in (radar_state.leadOne, radar_state.leadTwo):
+      if lead.status and (not math.isfinite(lead.dRel) or lead.dRel <= PREPARE_LEAD_DISTANCE):
+        return True
+    return False
+  except (AttributeError, TypeError, ValueError):
+    return True
+
+
 class SignalStopPrepare:
   MAX_AGE = .2
   MAX_GAP = .25

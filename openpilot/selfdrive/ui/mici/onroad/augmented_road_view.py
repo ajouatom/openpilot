@@ -39,6 +39,8 @@ class BookmarkState(IntEnum):
   DRAGGING = 1
   TRIGGERED = 2
 
+WIDE_CAM_MAX_SPEED = 5.0  # m/s (10 mph)
+ROAD_CAM_MIN_SPEED = 10  # m/s (25 mph)
 
 CAM_Y_OFFSET = 20
 
@@ -350,8 +352,17 @@ class AugmentedRoadView(CameraView):
     return max(0, min(ui_state.show_model_view, 3))
 
   def _switch_stream_if_needed(self, sm):
-    # joongyu01: C4 always shows the wide camera; overlays (lead box, path) follow via the wide calibration transform.
-    target = WIDE_CAM if WIDE_CAM in self.available_streams else ROAD_CAM
+    if sm['selfdriveState'].experimentalMode and WIDE_CAM in self.available_streams:
+      v_ego = sm['carState'].vEgo
+      if v_ego < WIDE_CAM_MAX_SPEED:
+        target = WIDE_CAM
+      elif v_ego > ROAD_CAM_MIN_SPEED:
+        target = ROAD_CAM
+      else:
+        # Hysteresis zone - keep current stream
+        target = self.stream_type
+    else:
+      target = ROAD_CAM
 
     if self.stream_type != target:
       self.switch_stream(target)
