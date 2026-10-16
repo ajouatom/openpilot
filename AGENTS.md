@@ -1,5 +1,20 @@
 # Repository memory
 
+- On 2026-10-16, user reported repeated blank S3 H.264 output after initial pass.
+  250ms queue-full shutdown magnified short stalls: retain three ordered slots,
+  apply HUD-encoder backpressure with close/error checks and a3s dead-sender cap.
+  This alone did NOT fix it: actual TCP timeouts and confirmed S3 idle-off remain.
+  C4->S3 loses14/30 packets, PC11/15; router0/30. PC cannot connect even with HUD
+  stopped. UART shows no association loss/reset/USB failures. Earlier successful
+  boot selected channel6/-48dBm; failing boot another AP channel1/-68dBm. Replace
+  first-match fast scan with all-channel RSSI-ranked connection; add BSSID status.
+  App-only flash preserves pairing and selects channel6/-50dBm; PC detailed601
+  frames/60.076s passes and user confirms restored actual C4 HUD stays normal.
+  No router changes, AP lock, ongoing-roaming or general radio root-cause claim.
+  Final180s UART has no close/off/USB failure;300s model/DM6000 consecutive valid
+  each at19.9999977/19.9998398Hz (approximately20, not strict>=20).115 tests pass,
+  one skip. See docs/s3_h264_release_20261016.md for observation/distribution.
+
 - On 2026-10-16, user requested implementing and deploying H.264 for S3 Wi-Fi.
   Firmware1.2.0 authenticates capability discovery and keeps video chunks awake;
   C4 targets1Mbps/GOP10, preserves reference order in bounded queues, and retains
