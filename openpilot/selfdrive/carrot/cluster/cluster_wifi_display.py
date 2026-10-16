@@ -10,12 +10,15 @@ class S3WifiDisplay(TuringUsbDisplay):
     # The bridge expires idle TCP clients after two seconds. Graphics/font
     # initialization can exceed that, so connect only once the renderer is ready.
     open_after_renderer = True
+    h264_preserve_reference_frames = True
+    uses_host_usb = False
 
     def __init__(self, config: dict, **kwargs):
         super().__init__(**kwargs)
         self.config = config
         self.connection = None
         self.pending = deque()
+        self._h264_active = False
         self.landscape_width, self.landscape_height = 1920, 462
 
     def open(self) -> None:
@@ -50,7 +53,7 @@ class S3WifiDisplay(TuringUsbDisplay):
                 if self.connection is None:
                     raise ConnectionError('S3 display is closed')
                 if frame:
-                    # Three complete frames maximum; upstream keeps only the latest unsent image.
+                    # Bound outstanding packets; H264 reference packets must stay ordered.
                     while len(self.pending) >= 3:
                         self._result()
                 else:
@@ -69,6 +72,32 @@ class S3WifiDisplay(TuringUsbDisplay):
     def send_jpeg(self, jpeg_data: bytes) -> None:
         self._transaction(self._build_frame_payload(self._cmd_upload_jpeg, jpeg_data), frame=True)
 
+    def _send_frame_no_ack(self, command_id: int, frame: bytes, *, drain_input: bool) -> None:
+        self._transaction(self._build_frame_payload(command_id, frame), expect_reply=False)
+
+    def _h264_chunk_size(self, requested_chunk_size: int) -> int:
+        # Wi-Fi forwarding does not share C4's USB bus with the eGPU.
+        return max(512, min(requested_chunk_size or 65536, 65536))
+
+    def start_h264_stream(self, requested_chunk_size: int = 0) -> int:
+        self._h264_active = True
+        super().start_h264_stream(requested_chunk_size)
+        self._h264_chunk_gap_s = 0.0
+        return self._h264_chunk_size(requested_chunk_size)
+
+    def send_h264_chunk(self, chunk: bytes, *, is_last: bool = False,
+                        wait_for_ack: bool = False, require_ack_response: bool = True) -> None:
+        if chunk:
+            self._transaction(self._build_h264_chunk_payload(chunk, is_last=is_last),
+                              frame=not wait_for_ack, expect_reply=wait_for_ack and require_ack_response)
+
+    def stop_h264_stream(self) -> None:
+        if self._h264_active:
+            try:
+                super().stop_h264_stream()
+            finally:
+                self._h264_active = False
+
     def _write_payload_checked(self, payload: bytes, error_message: str, timeout_ms: int) -> bytes:
         return self._transaction(payload)
 
@@ -83,6 +112,8 @@ class S3WifiDisplay(TuringUsbDisplay):
         if self.connection is not None:
             try:
                 if not self._disconnected:
+                    if self._h264_active:
+                        self.stop_h264_stream()
                     self._send_command(10, 'sync-off', log=False)
                     time.sleep(0.2)
                     self._send_command(14, 'brightness-off', {8: 0}, log=False)
@@ -93,6 +124,7 @@ class S3WifiDisplay(TuringUsbDisplay):
                     self.connection.close()
                 self.connection = None
         self.pending.clear()
+        self._h264_active = False
         self.dev = self.dev_pid = None
 
 

@@ -19,6 +19,9 @@ ACK = 0x53334131
 DISCOVER = b'S3D1'
 FOUND = b'S3R1'
 HELLO = b'S3H1'
+CAP_QUERY = b'S3C1'
+CAP_REPLY = b'S3C2'
+CAP_H264 = 1
 DEFAULT_CONFIG = '/data/carrot/cluster_wifi.json'
 
 
@@ -39,6 +42,8 @@ def load_config(path: Path | None = None) -> dict | None:
     fps, quality = data.get('fps', 15), data.get('quality', 50)
     if type(fps) is not int or type(quality) is not int or not 1 <= fps <= 20 or not 20 <= quality <= 90:
       raise ValueError()
+    if data.get('codec', 'auto') not in ('auto', 'jpeg', 'h264'):
+      raise ValueError()
     return data
   except (ValueError, KeyError, TypeError) as exc:
     raise RuntimeError('Invalid S3 registration file; register the display again') from exc
@@ -48,7 +53,7 @@ def save_config(data: dict, path: Path | None = None) -> None:
   path = path or config_path()
   # Whitelist fields: never persist the hotspot password on the display sender.
   clean = {k: data[k] for k in ('version', 'device', 'key')}
-  for k in ('fps', 'quality'):
+  for k in ('fps', 'quality', 'codec'):
     if k in data:
       clean[k] = data[k]
   path.parent.mkdir(parents=True, exist_ok=True)
@@ -98,6 +103,39 @@ def discover(config: dict, timeout: float = 2.0, targets: tuple[str, ...] = ('25
       if len(reply) == 58 and reply[:26] == FOUND + device + nonce and hmac.compare_digest(reply[26:], mac(key, reply[:26])):
         return address[0]
   raise TimeoutError('Registered S3 display not found on this Wi-Fi')
+
+
+def capabilities(config: dict, timeout: float = 1.0, targets: tuple[str, ...] = ('255.255.255.255',)) -> int:
+  """Authenticated feature query. Older firmware safely remains JPEG-only."""
+  key, device = bytes.fromhex(config['key']), bytes.fromhex(config['device'])
+  nonce = secrets.token_bytes(16)
+  request = CAP_QUERY + device + nonce
+  request += mac(key, request)
+  deadline = time.monotonic() + timeout
+  with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+    for target in targets:
+      sock.sendto(request, (target, PORT))
+    while time.monotonic() < deadline:
+      sock.settimeout(max(.01, deadline - time.monotonic()))
+      try:
+        reply, _ = sock.recvfrom(128)
+      except TimeoutError:
+        break
+      if len(reply) == 62 and reply[:26] == CAP_REPLY + device + nonce and hmac.compare_digest(reply[30:], mac(key, reply[:30])):
+        return struct.unpack('!I', reply[26:30])[0]
+  return 0
+
+
+def select_codec(config: dict, *, jpeg_fallback: bool = False) -> str:
+  requested = config.get('codec', 'auto')
+  if requested == 'jpeg' or (requested == 'auto' and jpeg_fallback):
+    return 'jpeg'
+  if capabilities(config) & CAP_H264:
+    return 'h264'
+  if requested == 'h264':
+    raise RuntimeError('S3 H.264 support not confirmed; update firmware to 1.2.0 or check Wi-Fi')
+  return 'jpeg'
 
 
 class Connection:

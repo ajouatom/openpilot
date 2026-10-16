@@ -83,6 +83,7 @@ S3_DOWNLOAD_TYPES = {
   "carrot-s3.bin": "application/octet-stream",
   "carrot-s3-1.1.0.zip": "application/zip",
   "carrot-s3-1.1.1.zip": "application/zip",
+  "carrot-s3-1.2.0.zip": "application/zip",
   "vendor/esptool-js-bundle.js": "text/javascript",
   "vendor/esptool-js-LICENSE.txt": "text/plain",
   "vendor/pako-LICENSE.txt": "text/plain",

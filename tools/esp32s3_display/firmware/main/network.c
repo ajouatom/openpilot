@@ -94,12 +94,20 @@ static void discovery_task(void *arg) {
     struct sockaddr_in peer;
     socklen_t size = sizeof(peer);
     int n = recvfrom(sock, packet, sizeof(packet), 0, (struct sockaddr *)&peer, &size);
-    if (n != 58 || memcmp(packet, "S3D1", 4) || memcmp(packet + 4, device_id, 6)) continue;
+    if (n != 58 || (memcmp(packet, "S3D1", 4) && memcmp(packet, "S3C1", 4)) || memcmp(packet + 4, device_id, 6)) continue;
     digest(pairing_key, packet, 26, NULL, 0, signature);
     if (!secure_equal(signature, packet + 26, 32)) continue;
-    memcpy(packet, "S3R1", 4);
-    digest(pairing_key, packet, 26, NULL, 0, packet + 26);
-    sendto(sock, packet, 58, 0, (struct sockaddr *)&peer, size);
+    if (!memcmp(packet, "S3C1", 4)) {
+      memcpy(packet, "S3C2", 4);
+      uint32_t capabilities = htonl(1); // H.264 forwarding with video idle/off lifecycle.
+      memcpy(packet + 26, &capabilities, 4);
+      digest(pairing_key, packet, 30, NULL, 0, packet + 30);
+      sendto(sock, packet, 62, 0, (struct sockaddr *)&peer, size);
+    } else {
+      memcpy(packet, "S3R1", 4);
+      digest(pairing_key, packet, 26, NULL, 0, packet + 26);
+      sendto(sock, packet, 58, 0, (struct sockaddr *)&peer, size);
+    }
   }
 }
 
