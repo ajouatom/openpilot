@@ -723,7 +723,7 @@ class TuringUsbDisplay:
 
         chunk_size = self._h264_chunk_size(requested_chunk_size)
         self._h264_chunk_gap_s = 0.0
-        if _usbgpu_transfer_active():
+        if getattr(self, "uses_host_usb", True) and _usbgpu_transfer_active():
             negotiated_chunk_size = chunk_size
             chunk_size = min(chunk_size, USBGPU_H264_MAX_CHUNK_SIZE)
             self._h264_chunk_gap_s = USBGPU_H264_CHUNK_GAP_S

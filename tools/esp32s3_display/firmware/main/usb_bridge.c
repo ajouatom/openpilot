@@ -208,7 +208,7 @@ static void describe_device(uint8_t address) {
 }
 
 static void usb_task(void *arg) {
-  ESP_LOGI(TAG, "Carrot S3 display bridge 1.1.1; no OTA; external powered USB hub required");
+  ESP_LOGI(TAG, "Carrot S3 display bridge 1.2.0; no OTA; external powered USB hub required");
   ESP_LOGI(TAG, "External hub support=%d", CONFIG_USB_HOST_HUBS_SUPPORTED);
   status_led_start();
   event_queue = xQueueCreate(16, sizeof(usb_host_client_event_msg_t));
@@ -270,8 +270,10 @@ static void usb_task(void *arg) {
       uint8_t command=plain[0];
       uint32_t stamp; memcpy(&stamp, plain+4, 4);
       bool image=command==101 || command==102;
+      bool video=command==121;
+      bool visual=image || video;
       response_length=0;
-      if (ok && image && (dark || esp_timer_get_time()-last_frame>2000000)) ok=local_brightness(brightness);
+      if (ok && visual && (dark || esp_timer_get_time()-last_frame>2000000)) ok=local_brightness(brightness);
       if (ok) ok=send_payload(frame->data, frame->length);
       if (ok) {
         bool require_reply=frame->expect_reply || (command==14 && plain[8]==0);
@@ -283,9 +285,9 @@ static void usb_task(void *arg) {
         if (require_reply) ok=received && response_command==command && (!image || response_stamp==stamp);
         if (!received) response_length=0;
       }
-      if (ok && image) { last_frame=esp_timer_get_time(); dark=false; next_off=0; off_failures=0; }
+      if (ok && visual) { last_frame=esp_timer_get_time(); dark=false; next_off=0; off_failures=0; }
       if (current) status_led_usb(true, !ok);
-      if (ok && image) status_led_frame();
+      if (ok && visual) status_led_frame();
       if (current && command==14 && plain[8]==0) {
         dark=ok; last_frame=0; next_off=ok ? esp_timer_get_time()+30000000 : 0;
       } else if (ok && command==14) { brightness=plain[8]; dark=false; }

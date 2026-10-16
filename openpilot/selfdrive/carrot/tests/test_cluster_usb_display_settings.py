@@ -27,15 +27,18 @@ def test_connection_clears_before_encoder_teardown_can_fail():
     calls.append('encoder.close')
     raise RuntimeError('encoder failure')
   noop = SimpleNamespace(close=lambda: None)
-  scope = dict(usb_display=object(), _set_cluster_hud_connected=lambda value: calls.append(value),
+  scope = dict(usb_display=SimpleNamespace(close=lambda: calls.append('display.close')),
+               _set_cluster_hud_connected=lambda value: calls.append(value),
+               restore_gc_after_run=lambda _: None, previous_gc_thresholds=None,
                scheduler=SimpleNamespace(update=lambda *a, **kw: None),
                h264_pipeline=SimpleNamespace(encoder_pid=None, close=encoder_close),
                signal_installed=False, gc_hook=None, network_address_provider=noop,
                cluster_core_usage_sampler=None,
-               renderer=SimpleNamespace(release_nv12_dmabuf_output=lambda: None))
+               renderer=SimpleNamespace(release_nv12_dmabuf_output=lambda: None,
+                                        close=lambda: calls.append('renderer.close')))
   with pytest.raises(RuntimeError, match='encoder failure'):
     exec(compile(ast.Module(body=cleanup, type_ignores=[]), '<HUD cleanup>', 'exec'), scope)
-  assert calls == [False, 'encoder.close']
+  assert calls == [False, 'encoder.close', 'renderer.close', 'display.close']
 
 
 def successful_response(command_id: int) -> bytes:
