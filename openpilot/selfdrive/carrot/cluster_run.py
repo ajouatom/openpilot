@@ -38,6 +38,11 @@ def configure_cluster_scheduling() -> None:
     DisplayScheduler(4, enabled=TICI).update(False, force=True)
 
 
+def configure_cluster_graphics() -> None:
+    from cluster_graphics_cleanup import install_graphics_cleanup
+    install_graphics_cleanup()
+
+
 def main(*, exit_on_error: bool = True) -> None:
     configure_cluster_locale()
     args = sys.argv[1:]
@@ -46,6 +51,7 @@ def main(*, exit_on_error: bool = True) -> None:
     sys.argv = [sys.argv[0], *args]
 
     configure_cluster_scheduling()
+    configure_cluster_graphics()
     from main import main as cluster_main
 
     cluster_main(exit_on_error=exit_on_error)
