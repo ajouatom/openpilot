@@ -72,4 +72,8 @@ def test_stopped_modes_have_identical_red_unknown_green_and_departure(lead):
       trace.append((p.xState,p.start_decision,p.stop_dist,p.v_cruise))
     traces.append(trace)
   assert traces[0] == traces[1]
-  assert any(row[1].hold for row in traces[0]) and any(row[1].released for row in traces[0])
+  if lead:
+    assert not any(row[1].hold for row in traces[0])
+    assert all(row[0].name == 'lead' for row in traces[0])
+  else:
+    assert any(row[1].hold for row in traces[0]) and any(row[1].released for row in traces[0])

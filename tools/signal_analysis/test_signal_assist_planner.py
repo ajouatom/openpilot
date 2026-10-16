@@ -26,8 +26,9 @@ def planner():
   return cls(SignalAssist())
 
 
-def test_red_hold_wins_over_model_go_and_lead_handover():
+def test_red_hold_wins_over_model_go_outside_lead_handover_range():
   p = planner(); sm = inputs(lead=True)
+  sm['radarState'].leadOne.dRel = 102.
   run(p, sm, 'red')
   assert p.xState.name == 'e2eStopped' and p.stop_dist == 0 and p.v_cruise == 0
   run(p, sm, 'unknown', 1.)

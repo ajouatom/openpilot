@@ -537,6 +537,11 @@ class CarrotPlanner:
 
     stop_model_x = self._stop_x_rl
     stop_model_x_rl = self._stop_x_rl
+    # Share the existing stop-to-lead boundary with auxiliary departure vetoes.
+    # This is lead following, not evidence that the traffic light turned green.
+    lead_in_stop_range = (lead_detected and np.isfinite(radarstate.leadOne.dRel)
+                          and radarstate.leadOne.dRel > 0 and np.isfinite(stop_model_x_raw)
+                          and (radarstate.leadOne.dRel - stop_model_x_raw) < 2.0)
 
     trafficState_last = self.trafficState
     #self.check_model_stopping(v, v_ego, self.xStop, y)
@@ -566,6 +571,13 @@ class CarrotPlanner:
         drive=context['drive'], gas=carstate.gasPressed, speed=v_ego,
         departure=self.trafficState == TrafficState.green or lead_detected or
                   self.xState not in (XState.e2eStop, XState.e2eStopped))
+      if lead_in_stop_range and self.start_decision.hold:
+        from dataclasses import replace
+        self.start_guard.warned = False  # no refusal was emitted while following
+        # Preserve the guard's red memory if the lead disappears. Publish the
+        # effective decision so the final longitudinal veto agrees this cycle.
+        self.start_decision = replace(self.start_decision, hold=False, warn=False,
+                                      released=False, green_confirmed=False, reason='lead_follow')
       start_hold = self.start_decision.hold
       # A fresh transition from the same previously red signal supplies the
       # normal green input. It does not set acceleration or bypass driver holds.
@@ -600,6 +612,10 @@ class CarrotPlanner:
         model_y=y[-1], comfort_brake=mode_comfort_brake, lead=lead_detected,
         entry_allowed=is_traffic_stop_entry_allowed(carstate.steeringAngleDeg) and self.traffic_starting_count == 0,
         turning=carstate.leftBlinker or carstate.rightBlinker)
+      if lead_in_stop_range:
+        from dataclasses import replace
+        self.signal_decision = replace(self.signal_decision, hold=False, red_sign=False,
+                                       released=False, reason='lead_follow')
       signal_hold = self.signal_decision.hold
       if self.signal_decision.red_sign:
         self.trafficState = TrafficState.red
@@ -611,8 +627,8 @@ class CarrotPlanner:
       self.user_stop_distance = -1
 
     if signal_hold or start_hold:
-      # Keep the stop even if a lead appears/moves. Radar obstacles remain in MPC.
-      # Unknown retains this override; only a confirmed transition can remove it.
+      # Outside the existing lead-follow boundary, unknown retains the veto.
+      # Radar obstacles remain in MPC, including during the lead exception.
       self.xState = XState.e2eStopped
       self.actual_stop_distance = 0.0
       stop_model_x = 0.0
@@ -627,7 +643,7 @@ class CarrotPlanner:
     elif self.xState == XState.e2eStopped:
       if carstate.gasPressed:
         self.xState = XState.e2eCruise #XState.e2ePrepare
-      elif lead_detected and (radarstate.leadOne.dRel - stop_model_x_raw) < 2.0:
+      elif lead_in_stop_range:
         self.xState = XState.lead
       elif self.stopping_count == 0:
         if self.trafficState == TrafficState.green and not self.carrot_stay_stop and not carstate.leftBlinker and self.trafficLightDetectMode != 1:
@@ -642,7 +658,7 @@ class CarrotPlanner:
         #self.xState = XState.e2ePrepare
         self.xState = XState.e2eCruise
         self.traffic_starting_count = 10.0 / DT_MDL
-      elif lead_detected and (radarstate.leadOne.dRel - stop_model_x_raw) < 2.0:
+      elif lead_in_stop_range:
         self.xState = XState.lead
       else:
         if self.trafficState == TrafficState.green:
