@@ -415,3 +415,17 @@ Preparation releases when red evidence disappears or conflicts with green. The e
 7. Restore the previous value or baseline profile immediately if the result is worse or unclear.
 
 See the Wiki [Tuning introduction](https://github.com/ajouatom/openpilot/wiki/Guide-Tuning) for the recommended steering and longitudinal adjustment order.
+
+# Lead brake lamp observation (trial)
+
+**Lead Brake Lamp Observation** (`LeadBrakeLights`) in Traffic Light settings
+defaults OFF. ON displays/logs a central brake-lamp candidate on the immediate
+radar/vision-matched lead in signal assistance modes 1/2. The USB/HUD road-camera
+view shows `BRAKE?` for a candidate and `BRK ?` for unknown; unknown never means
+verified brake-off. Mode 0 disables this processing too. Turns, uncertain or
+missing leads, and busy signal iterations are skipped.
+
+This is display/logging only, with no braking, stop or departure command.
+The new Params key requires the normal build after updating. The current road
+camera supplies 20fps. Reduced processing overhead does not establish sustained
+20Hz detection; this change does not promise 20Hz or 50Hz detection.

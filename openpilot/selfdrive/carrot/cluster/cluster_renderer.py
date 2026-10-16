@@ -18,6 +18,7 @@ from openpilot.common.transformations.camera import DEVICE_CAMERAS, view_frame_f
 from openpilot.common.transformations.orientation import rot_from_euler
 from openpilot.selfdrive.carrot.deceleration_source import navigation_status_presentation
 from openpilot.selfdrive.carrot.signal_display import SignalDisplayReader, project_box
+from openpilot.selfdrive.carrot.lead_brake_lights import BrakeDisplayReader
 
 from cluster_gles_dmabuf import DirectNv12DmabufError, create_tici_nv12_dmabuf_pool
 from cluster_gles_readback import DirectNv12ReadbackError, create_tici_direct_readback
@@ -976,6 +977,7 @@ class ClusterUiRenderer:
         self._live_road_camera = None
         self._live_road_camera_failed = False
         self._signal_display_reader = SignalDisplayReader()
+        self._brake_display_reader = BrakeDisplayReader()
         self._camera_overlay_wide = False
         self._left_turn_signal_started_at: float | None = None
         self._right_turn_signal_started_at: float | None = None
@@ -1667,6 +1669,16 @@ class ClusterUiRenderer:
             rl.end_scissor_mode()
 
     def _draw_signal_detections(self, projection, live_camera) -> None:
+        brake = self._brake_display_reader.read(live_camera.display_frame)
+        if brake is not None:
+            video = projection.video_dest
+            if brake.get('box') is not None:
+                x, y, w, h = project_box(brake['box'], (video.x, video.y, video.width, video.height))
+                color = (255, 100, 40) if brake['state'] == 'candidate' else (180, 180, 180)
+                rl.draw_rectangle_lines_ex(rl.Rectangle(x-2, y-2, w+4, h+4), 2., rl_color(color))
+                label = 'BRAKE?' if brake['state'] == 'candidate' else 'BRK?'
+                self._draw_text_with_stroke(label, x, max(projection.dest.y+20, y-15),
+                                            max(14., self.height / DESIGN_HEIGHT * 17.), color, (0, 0, 0), 2)
         reader = self._signal_display_reader
         tracks = reader.read(live_camera.display_frame)
         if not reader.enabled:
@@ -1704,6 +1716,8 @@ class ClusterUiRenderer:
         result = ('?', 'R', 'G', 'R+G')[color]
         status = ('이전 판독' if held else '판독 중' if online else '입력 대기') if self.language == CLUSTER_LANGUAGE_KO else ('PREVIOUS' if held else 'LIVE' if online else 'WAITING')
         caption += f' | {result} {status}'
+        if brake is not None:
+            caption += ' | BRAKE?' if brake['state'] == 'candidate' else ' | BRK ?'
         self._draw_text_with_stroke(caption, dest.x+12, dest.y+font_size, font_size,
                                     (230, 230, 230), (0, 0, 0), 2)
         reader.record_draw(live_camera.display_frame, visible)
