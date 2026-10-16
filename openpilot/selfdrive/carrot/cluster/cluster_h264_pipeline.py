@@ -2062,7 +2062,20 @@ class H264UsbPipeline:
         if packet_queue is None or not chunks:
             return
 
+        if self._closing:
+            return
+
         incoming = _NativeAccessUnit(tuple(chunks), codec_config, keyframe)
+        if getattr(self.usb_display, "h264_preserve_reference_frames", False):
+            # A P-frame depends on preceding frames. Bound buffering and restart
+            # the session on a sustained stall rather than emit a broken chain.
+            try:
+                packet_queue.put(incoming, timeout=0.25)
+            except queue.Full:
+                raise RuntimeError("S3 display disconnected; reconnect required") from ConnectionError(
+                    "H264 reference queue stalled; restart stream")
+            self._record_h264_queue_depth(packet_queue.qsize())
+            return
         dropped: list[_NativeAccessUnit] = []
         with self._packet_queue_lock:
             pending: list[_NativeAccessUnit] = []
@@ -2223,10 +2236,17 @@ class H264UsbPipeline:
         try:
             chunk_size = max(1, self.chunk_size)
             while True:
-                item = packet_queue.get()
+                if self._closing:
+                    return
+                try:
+                    item = packet_queue.get(timeout=0.25)
+                except queue.Empty:
+                    continue
                 if item is None:
                     return
                 for chunk in item.chunks:
+                    if self._closing:
+                        return
                     self._send_h264_chunk(chunk, chunk_size, source="native")
         except BaseException as exc:
             with self._condition:

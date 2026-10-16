@@ -1,5 +1,19 @@
 # Repository memory
 
+- On 2026-10-16, user requested implementing and deploying H.264 for S3 Wi-Fi.
+  Firmware1.2.0 authenticates capability discovery and keeps video chunks awake;
+  C4 targets1Mbps/GOP10, preserves reference order in bounded queues, and retains
+  legacy/auto-initialization JPEG fallback. PC physical simple601/60.06s and
+  detailed589/60.11s pass; user confirms smooth test and normal native C4 HUD.
+  AP channel/RSSI changed, so do not attribute every gain to codec. Two native
+  HUD stops reclaim all six owned buffers; TCP loss reconnects in20.205s.
+  Initial model/DM60s each1200 valid consecutive at20.007/20.008Hz. A separate
+  300s memory watch stays connected, same PID/104FDs, PSS184.95->185.66MiB;
+  synchronous smaps reads lose observer frames at exact30s boundaries and are
+  not a model-rate pass. See docs/s3_h264_release_20261016.md for final clean
+  frame observation, release checks and remaining Wi-Fi/long-duration limits.
+  Preserve pairing; public firmware never includes NVS. Both branches single-parent.
+
 - On 2026-10-16, user requested faster signals (20–50Hz target) and brake-lamp
   ON/OFF. Camera is20fps; no sustained20Hz signal pass. Remove packed NV12 copy
   with exact two-plane conversion; native conversion CPU drops~11–12%, wall
