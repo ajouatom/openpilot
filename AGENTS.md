@@ -1,5 +1,19 @@
 # Repository memory
 
+- On 2026-10-16, user requested faster signals (20–50Hz target) and brake-lamp
+  ON/OFF. Camera is20fps; no sustained20Hz signal pass. Remove packed NV12 copy
+  with exact two-plane conversion; native conversion CPU drops~11–12%, wall
+  varies. Count preemption/I/O in50% CPU-duty sleep, preserving unique-frame,
+  freshness, detector/control and DM policies. Reject slower color prefilter
+  and core-reassignment trial. Add default-OFF LeadBrakeLights, mode0 dominates:
+  lazy context, bounded central lead crop, radar/vision match, turn rejection,
+  display/log only, candidate/unknown (never confirmed OFF or go). Signal-first
+  admission and overrun backoff; not a hard real-time deadline. Selected spatial
+  screen8/10 ON and0/16 OFF proposals is development evidence, not accuracy or
+  temporal validation.693 desktop tests with Params double pass. Native /tmp
+  diagnostics only; no vehicle installation. Publish both maintained branches,
+  single-parent. See docs/signal_speed_brake_lamps_20261016.md.
+
 - On 2026-10-16, user reported live low-memory warning after keeping ignition on.
   Captured93.29%/241.89MiB available on the same14.5h boot; guarded HUD stop
   recovers88.68%/408.40MiB and reclaims its current6 buffers, but old510 remain.

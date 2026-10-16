@@ -286,6 +286,7 @@
               "params": [
                 "TrafficLightDetectMode",
                 "SignalAssistMode",
+                "LeadBrakeLights",
                 "TrafficStopDistanceAdjust"
               ]
             }
@@ -3397,6 +3398,22 @@
       "cdescr": "0:手动，1:普通↔安全，2:节能↔安全。接近停止前车时迅速进入安全模式，持续低速跟车也会进入。不满足停车接近条件时，前车加速度超过1.0m/s²并持续约0.5秒即可返回。否则需确认交通持续恢复3秒或行驶中前方持续无车。不会自动选择高速模式。",
       "min": 0,
       "max": 2,
+      "default": 0,
+      "unit": 1
+    },
+    {
+      "group": "감속제어",
+      "name": "LeadBrakeLights",
+      "title": "앞차 브레이크등 관찰 (실험)",
+      "descr": "0: 끔. 1: 신호보조 모드 1/2에서 바로 앞차의 중앙 제동등 후보를 카메라 화면에 표시하고 기록합니다. 기본 OFF. BRAKE?는 제동등 후보이며 확정된 제동 상태가 아닙니다. 미검출은 꺼짐이 아닌 미확인입니다. 감속·정지·출발 제어에는 사용하지 않습니다. 신호 처리에 여유가 없거나 회전·앞차 연결이 불확실하면 검사를 건너뜁니다. 신호보조 모드 0에서는 작동하지 않습니다.",
+      "egroup": "SPEED",
+      "etitle": "Lead Brake Lamp Observation (Trial)",
+      "edescr": "0: Off (default). 1: Display/log a central brake-lamp candidate on the immediate radar/vision-matched lead in signal modes 1/2. BRAKE? is a candidate, not verified braking; missing evidence is unknown, not off. No braking or departure control. Skips busy signal iterations, turns and uncertain lead association. Signal mode 0 disables all auxiliary work.",
+      "cgroup": "速度控制",
+      "ctitle": "前车制动灯观察（试验）",
+      "cdescr": "默认关闭。开启后仅在信号辅助模式1/2中显示并记录前车中央制动灯候选，不参与减速或起步控制。未检测到不代表灯已关闭。模式0关闭所有辅助处理。",
+      "min": 0,
+      "max": 1,
       "default": 0,
       "unit": 1
     },

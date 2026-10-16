@@ -287,6 +287,7 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"MyDrivingModeAuto", {PERSISTENT, INT, "0"}},
     {"TrafficLightDetectMode", {PERSISTENT, INT, "2"}},
     {"SignalAssistMode", {PERSISTENT, INT, "0"}},
+    {"LeadBrakeLights", {PERSISTENT, BOOL, "0"}},
 
     {"SteerActuatorDelay", {PERSISTENT, INT, "0"}},
     {"LatSmoothSec", {PERSISTENT, INT, "13"}},
