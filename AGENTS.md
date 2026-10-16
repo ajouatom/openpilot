@@ -1,5 +1,22 @@
 # Repository memory
 
+- On 2026-10-16, reproduced the remaining HUD native leak without S3: each
+  post98 raylib window close retains6 ION objects/1658880bytes plus DRM/socket
+  handles. Installed binary omits GBM surface/owned-FD and handoff-socket cleanup.
+  Add HUD-only hash-pinned adapter for post98/post103; preserve borrowed DRM_FD.
+  Native12-cycle minimal, actual renderer, post103 overlay and borrowed-FD tests
+  each reclaim all test-owned buffers with stable handles. Manager preimports
+  raylib: discard inherited graphics once by exec of only the HUD child before
+  binding the adapter. Actual managed stop exposed another cleanup gap: mark
+  context owned before asset loading and guarantee native close in finally,
+  before blocking display close.54 focused tests pass; unknown binaries fail before render.
+  Selective HUD-only install on vehicle e9b33329e4; no model/control/full pull.
+  Final3 actual managed HUD stops each reclaim all6 objects; S3 reconnects and
+  stays enabled at configured10fps (actual Wi-Fi refresh varies). Historical510 orphan objects/134.47MiB remain
+  until a clean restart; no total-memory clearance or original Wi-Fi-cause claim.
+  Recent S3 retries expose an older cleanup defect; introduction date unproven.
+  See docs/hud_native_cleanup_20261016.md for actual-cycle verification and limits.
+
 - On 2026-10-16, stop Wi-Fi HUD under fresh Park/inactive guard for memory/link
   diagnosis; ClusterHud stays0, networking stays on. Available memory recovers
   to501MiB, but510 orphan HUD ION objects/141004800bytes persist; not fixed.
