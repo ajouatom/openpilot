@@ -1,5 +1,20 @@
 # Repository memory
 
+- On 2026-10-17, user reported >92% memory and clarified HUD power was cycled
+  before the observed88%; user authorizes vehicle-log transfer for diagnosis,
+  raw evidence stays private. Three routes/11,046 memory samples reach91%.
+  Old510 graphics leaks are absent; current4.75MiB orphans do not explain it.
+  Reproduce failed JPEG/H264 traceback retention until post-handler collection;
+  gc alone barely returns RSS, glibc trim returns~25-33MiB after close and~9-10MiB
+  after init. Collect/trim only at lifecycle boundaries, preflight authenticated
+  S3 discovery before graphics, preserve TCP-after-init and concise retries.
+  Twelve native injected failures reclaim all test-owned ION/weakrefs, but small
+  PSS growth remains; no long plateau/full-warning fix claim. Selective two-HUD-
+  file install on C4 2ef833b2, no model/control/reboot. Final model/DM60s1200/1201
+  valid consecutive at20.0049/20.0025Hz; S3 still disconnected. 114 desktop tests,
+  one skip. Both maintained branches single-parent. See
+  docs/hud_memory_retry_20261017.md for remaining limits and measurements.
+
 - On 2026-10-17, user requested muting signal notices with a lead and analysis
   of today's creeping/stopping. Gate all planner signal notices on current
   leadOne.status, any range, before navigation processing; preserve raw display,
