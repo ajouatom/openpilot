@@ -1,5 +1,21 @@
 # Repository memory
 
+- On 2026-10-18, user reported worse signals and requested evening/morning review.
+  Read-only/hash-verified213 files; actual drives10ea/10eb run087f862d81 with
+  unchanged918654b8 tracker. Upper/central selectors remain OFFLINE, not the cause.
+  Morning08:17:02 visible green is read, but box/ID mismatch repeatedly resets
+  guard confirmation; right arrow+round green15x8 fails1.7 aspect gate. Actual
+  hold persists until driver gas04.390, despite model stop distance rising~49m.
+  Evening twilight near-red miss is proposal failure, not highest-row selection;
+  later green confirms in~1.24–1.49s but lead bypass already removed veto.
+  Measured evening9.29–12.87Hz, morning7.70–12.07Hz. New20-segment/12,492-observer
+  central replay removes7 greens, changes0/20,955 nominal and0/20,951 +20ms guard
+  updates, one release each; no solution or closed-loop claim. User proposes
+  remembering central red housings and accepting strong same-housing transitions.
+  Target whole-housing continuity/arrow separation, not brightness-only release.
+  No vehicle/code/model change; publish records both branches, single-parent.
+  See docs/signal_drive_review_20261018.md; raw evidence remains private.
+
 - On 2026-10-17, user requested locationd CPU optimization, then rejected the
   small benefit and explicitly requested stopping, original code and records
   only. Trial native-result/noise-allocation optimization preserves32,625 replay
