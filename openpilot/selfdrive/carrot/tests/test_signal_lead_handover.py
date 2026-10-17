@@ -68,7 +68,7 @@ def test_lead_exception_is_continuous_and_unknown_red_hold_returns_on_loss(loss)
     sm['radarState'].leadOne.dRel = 12.
   update(p, sm, 2., 'unknown')
   assert p.start_decision.hold and p.xState.name == 'e2eStopped' and p.v_cruise == 0
-  assert 'audioRefuse' in p.events.events
+  assert ('audioRefuse' in p.events.events) is (loss == 'missing')
 
 
 @pytest.mark.parametrize('inhibit', ['soft_hold', 'user_stop'])
