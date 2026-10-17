@@ -1,5 +1,19 @@
 # Repository memory
 
+- On 2026-10-17, user requested locationd CPU optimization, then rejected the
+  small benefit and explicitly requested stopping, original code and records
+  only. Trial native-result/noise-allocation optimization preserves32,625 replay
+  inputs exactly and saves9.23% replay CPU; live38.63->35.24% of one core is
+  only3.38 percentage points (~0.85 points averaged over cores0--3). Do NOT
+  publish/reinstall the withdrawn implementation/tests. Restore all four C4
+  source/native files to verified original hashes on same boot/base2ef833b2;
+  guarded manager restart recreates the exited tmux session with original env.
+  Original native mapping verified in locationd/paramsd. Final60s model1201/DM1200
+  valid consecutive at20.000005/20.003386Hz; pose1200 healthy at20.001242Hz,
+  same PIDs and eGPU active at both ends. No model/settings/reboot changes or
+  road/memory/hard-deadline claim. Publish records only to both maintained
+  branches, single-parent. See docs/locationd_cpu_20261017.md.
+
 - On 2026-10-17, user requested central-priority signal improvement and historical
   validation. Offline 122 segments/56,612 observations: any-colour peripheral
   rejection removes1,035 reds; do not activate it. Preserve every red/red-history
