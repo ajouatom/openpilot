@@ -54,7 +54,9 @@ def publish_control_observation(result, frame_id, timestamp, session, *, compari
 
 def next_delay(wall, cpu):
   # At most 20 Hz and a target <=50% of one CPU, without catching up.
-  return max(0., .05 - wall, cpu)
+  # Preemption / I/O already leaves the CPU idle. Count that time instead of
+  # sleeping for a second full CPU duration after the thread resumes.
+  return max(0., .05 - wall, 2 * cpu - wall)
 
 
 def copy_nv12_rgb(frame):
@@ -67,10 +69,12 @@ def copy_nv12_rgb(frame):
   end = offset + stride * (height // 2)
   if raw.size < end:
     raise ValueError('truncated tracking camera buffer')
-  packed = np.empty((height * 3 // 2, width), np.uint8)
-  packed[:height] = raw[:height * stride].reshape(height, stride)[:, :width]
-  packed[height:] = raw[offset:end].reshape(height // 2, stride)[:, :width]
-  return cv2.cvtColor(packed, cv2.COLOR_YUV2RGB_NV12)
+  # OpenCV accepts padded planes directly. The returned RGB owns its storage;
+  # retain the caller's post-conversion frame-ID check against IPC buffer reuse.
+  y = np.ndarray((height, width), np.uint8, buffer=raw, strides=(stride, 1))
+  uv = np.ndarray((height // 2, width // 2, 2), np.uint8, buffer=raw,
+                  offset=offset, strides=(stride, 2, 1))
+  return cv2.cvtColorTwoPlane(y, uv, cv2.COLOR_YUV2RGB_NV12)
 
 
 def result_fields(result, age_ms):
@@ -105,6 +109,8 @@ def run(directory=DIRECTORY, duration=None, comparison_override=None):
     from openpilot.selfdrive.carrot.signal_display import display_requested, publish_display
     from openpilot.selfdrive.carrot.signal_start_guard import publish_start_observation
     from openpilot.selfdrive.carrot.signal_stop_prepare_runtime import publish_prepare_observation
+    from openpilot.selfdrive.carrot.lead_brake_lights import BrakeRuntime
+    brake_observer = BrakeRuntime()
     comparison_selection = comparison_requested(directory)
     comparison = comparison_selection if comparison_override is None else comparison_override
     revalidated = revalidated_requested(directory)
@@ -215,6 +221,12 @@ def run(directory=DIRECTORY, duration=None, comparison_override=None):
           temp.write_text(json.dumps(comparison_record))
           temp.replace(directory / 'daytime_comparison_latest.json')
         last_file = time.monotonic()
+      # Independent display/log experiment, after all signal publication. OFF
+      # imports no detector and subscribes to no additional messages.
+      try:
+        brake_observer.update(rgb, frame_id, eof / 1e9, session_id, work_start, cloudlog.event)
+      except Exception:
+        cloudlog.exception('leadBrakeLightsFailed')
       # A late result is unusable by the consumer's unchanged 200 ms age gate.
       # Do not erase object identity merely because computation ran late: the
       # next camera timestamp still has to pass the tracker's bounded gap and

@@ -2,7 +2,7 @@
 
 **일반 사용자는 [NAS 설치 페이지](https://upload.shind0.synology.me/models/carrot-s3/index.html)를 여세요.**
 PC Chrome/Edge에서 보드를 선택하고 설치할 수 있습니다. 개발 환경은 필요 없습니다.
-[펌웨어·설명서 ZIP](https://upload.shind0.synology.me/models/carrot-s3/carrot-s3-1.1.1.zip) ·
+[펌웨어·설명서 ZIP](https://upload.shind0.synology.me/models/carrot-s3/carrot-s3-1.2.0.zip) ·
 [검증값](https://upload.shind0.synology.me/models/carrot-s3/SHA256SUMS.txt)
 
 ## 준비물과 지원 범위
@@ -105,6 +105,17 @@ python3 tools/esp32s3_display/provision.py --import-pairing /data/carrot-s3.json
 밝기·방향·미러·카메라는 기존 HUD 설정을 사용합니다. Wi-Fi는 기본 최대 15fps,
 eGPU 사용 중 최대 10fps입니다. 실제 속도는 화면 내용과 무선 환경에 따라 달라지며
 광학 패널 FPS 보장이 아닙니다. 직접 USB 연결의 기존 5fps 정책은 별도입니다.
+
+## H.264 영상 전송으로 업데이트 (1.2.0)
+
+최신 C4와 S3 **1.2.0**을 함께 사용하면 H.264 영상 전송을 자동 선택합니다.
+C4가 영상을 압축하고 USB 화면이 재생하며, S3는 데이터를 전달합니다.
+기존 보드는 NAS 설치 페이지의 **기존 CARROT S3 업데이트**를 한 번 실행하세요.
+Wi-Fi와 C4 등록은 보존되어 JSON을 다시 받을 필요가 없습니다.
+이전 S3 펌웨어 또는 기능 확인 응답이 없는 경우에는 JPEG로 연결합니다.
+H.264에는 기존 JPEG 품질 숫자가 적용되지 않습니다. 무선 신호 불량 자체를 해결하는 기능은 아닙니다.
+같은 Wi-Fi 이름을 여러 AP가 사용하면, 연결할 때 전체 채널을 검색해 신호가 강한 AP를
+선택합니다. 이미 연결된 뒤 더 좋은 AP로 계속 옮겨 다니는 기능은 아닙니다.
 
 ## 보드 LED로 상태 확인 (펌웨어 1.1.1 이상)
 

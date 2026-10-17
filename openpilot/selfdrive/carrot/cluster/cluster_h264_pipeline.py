@@ -2062,7 +2062,27 @@ class H264UsbPipeline:
         if packet_queue is None or not chunks:
             return
 
+        if self._closing:
+            return
+
         incoming = _NativeAccessUnit(tuple(chunks), codec_config, keyframe)
+        if getattr(self.usb_display, "h264_preserve_reference_frames", False):
+            # Backpressure the HUD encoder while TCP catches up. A 250ms queue
+            # wait is not evidence of a disconnected link; restarting here turns
+            # a short network stall into a complete display shutdown. Keep the
+            # same three slots and reference order, bounded by the TCP timeout.
+            deadline = time.monotonic() + 3.0
+            while not self._closing:
+                self.check_error()
+                try:
+                    packet_queue.put(incoming, timeout=0.05)
+                    self._record_h264_queue_depth(packet_queue.qsize())
+                    return
+                except queue.Full:
+                    if time.monotonic() >= deadline:
+                        raise RuntimeError("S3 display disconnected; reconnect required") from ConnectionError(
+                            "H264 reference queue stalled for 3s; restart stream")
+            return
         dropped: list[_NativeAccessUnit] = []
         with self._packet_queue_lock:
             pending: list[_NativeAccessUnit] = []
@@ -2223,10 +2243,17 @@ class H264UsbPipeline:
         try:
             chunk_size = max(1, self.chunk_size)
             while True:
-                item = packet_queue.get()
+                if self._closing:
+                    return
+                try:
+                    item = packet_queue.get(timeout=0.25)
+                except queue.Empty:
+                    continue
                 if item is None:
                     return
                 for chunk in item.chunks:
+                    if self._closing:
+                        return
                     self._send_h264_chunk(chunk, chunk_size, source="native")
         except BaseException as exc:
             with self._condition:

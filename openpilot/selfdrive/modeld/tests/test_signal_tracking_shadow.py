@@ -69,7 +69,30 @@ def test_stale_output_cannot_be_green(age):
 def test_cpu_and_rate_budget(wall, cpu):
   delay = next_delay(wall, cpu)
   assert wall + delay >= .05
-  assert cpu / (cpu + delay) <= .5
+  assert cpu / (wall + delay) <= .5
+
+
+def test_preemption_counts_towards_cpu_rest_without_catchup():
+  assert next_delay(.08, .03) == 0
+  assert next_delay(.04, .03) == pytest.approx(.02)
+  assert next_delay(.01, .01) == pytest.approx(.04)
+  assert next_delay(.5, .1) == 0
+
+
+def test_two_plane_matches_packed_conversion_with_random_padding():
+  import cv2
+  rng = np.random.default_rng(16)
+  w, h, stride = 1344, 760, 1408
+  offset = stride*h+128
+  raw = rng.integers(0, 256, offset+stride*h//2, dtype=np.uint8)
+  packed = np.concatenate((raw[:stride*h].reshape(h, stride)[:, :w],
+                           raw[offset:].reshape(h//2, stride)[:, :w]), axis=0)
+  expected = cv2.cvtColor(packed, cv2.COLOR_YUV2RGB_NV12)
+  frame = SimpleNamespace(width=w, height=h, stride=stride, uv_offset=offset, data=raw)
+  result = copy_nv12_rgb(frame)
+  np.testing.assert_array_equal(result, expected)
+  raw[:] = 0
+  np.testing.assert_array_equal(result, expected)
 
 
 def test_nv12_padding_and_no_input_mutation():

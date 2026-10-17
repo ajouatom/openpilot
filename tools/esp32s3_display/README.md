@@ -1,7 +1,7 @@
 # ESP32-S3 Wi-Fi HUD bridge
 
 The C4 renders the existing complete HUD, including camera/map overlays, and sends
-JPEG/TURZX command packets over Wi-Fi. The S3 only authenticates and forwards USB
+H.264/JPEG TURZX command packets over Wi-Fi. The S3 only authenticates and forwards USB
 transactions. UI changes do not require a new S3 firmware. There is no OTA updater.
 Future bridge bug fixes can still require a UART flash; this is not a promise that
 firmware will never need maintenance.
@@ -11,6 +11,11 @@ and TURZX **9.2-inch 1cbe:0092**, 1920×462 landscape. Connect the hub upstream 
 native **USB** connector beside RESET. The **UART** connector beside BOOT is for
 power/initial registration. A bare C-to-C connection does not supply host VBUS on
 the tested board. This is USB data forwarding, not DisplayPort/USB-C video output.
+
+When several access points advertise the registered SSID, firmware 1.2.0 scans
+all channels and selects by signal strength when connecting. It does not pin an
+AP or continuously roam after association. UART `S3STATUS` includes the connected
+BSSID, channel and RSSI for diagnosis.
 
 ## One-time firmware installation
 
@@ -112,13 +117,24 @@ Wi-Fi connection starts after graphics initialization so that startup does not
 exceed the bridge's two-second idle timeout. These host fixes require updated C4
 code, not a new S3 firmware.
 
-The Wi-Fi path uses JPEG quality 50 and 15 FPS by default, independently of
-`ClusterHudEncoder`. Optional integer `fps` (1–20) and `quality` (20–90) fields in
-the registration JSON change that policy on the next HUD start. The existing
-Wi-Fi eGPU activity cap is 10 FPS; the wired USB cap remains 5 FPS. Lower configured
-rates still apply. Brightness, layout, camera, mirror and
-orientation settings still apply through the existing renderer. H.264 is not
-enabled or validated for this bridge, although the transport carries opaque packets.
+Updated C4 code automatically uses H.264 when the paired S3 authenticates its
+firmware 1.2.0 capability. C4 encodes the video; the TURZX display decodes it.
+S3 does not decode or re-encode video. The default H.264 target is 1 Mbps with
+a keyframe every 10 frames. Missing capability replies or older firmware retain
+JPEG (default quality 50). A lost capability query can therefore select JPEG
+until the next HUD session. `ClusterHudEncoder` selects the H.264 hardware/software
+backend; it does not override the Wi-Fi codec selection.
+Auto encoder initialization fallback can still reach JPEG when neither H.264
+backend starts; an explicitly selected `codec: h264` does not allow that fallback.
+
+The registration JSON optionally accepts `codec`: `auto` (default), `jpeg`, or
+`h264`. Explicit H.264 requires a verified capability reply. Integer `fps` (1–20)
+and JPEG-only `quality` (20–90) apply on the next HUD start. The default target
+is 15 FPS, capped at 10 FPS with eGPU active; direct USB retains its 5 FPS cap.
+Lower configured rates still apply. Brightness, layout, camera, mirror and
+orientation use the existing renderer. H.264 reference frames stay ordered in
+bounded queues; sustained congestion restarts the stream instead of dropping
+dependent frames. Logs summarize H.264 bitrate and send delays every 10 seconds.
 Remove the registration file and restart HUD to return to direct USB behavior.
 `CARROT_S3_CONFIG` can select an isolated file for desktop tests.
 

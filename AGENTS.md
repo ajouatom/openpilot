@@ -1,5 +1,137 @@
 # Repository memory
 
+- On 2026-10-17, user requested locationd CPU optimization, then rejected the
+  small benefit and explicitly requested stopping, original code and records
+  only. Trial native-result/noise-allocation optimization preserves32,625 replay
+  inputs exactly and saves9.23% replay CPU; live38.63->35.24% of one core is
+  only3.38 percentage points (~0.85 points averaged over cores0--3). Do NOT
+  publish/reinstall the withdrawn implementation/tests. Restore all four C4
+  source/native files to verified original hashes on same boot/base2ef833b2;
+  guarded manager restart recreates the exited tmux session with original env.
+  Original native mapping verified in locationd/paramsd. Final60s model1201/DM1200
+  valid consecutive at20.000005/20.003386Hz; pose1200 healthy at20.001242Hz,
+  same PIDs and eGPU active at both ends. No model/settings/reboot changes or
+  road/memory/hard-deadline claim. Publish records only to both maintained
+  branches, single-parent. See docs/locationd_cpu_20261017.md.
+
+- On 2026-10-17, user requested central-priority signal improvement and historical
+  validation. Offline 122 segments/56,612 observations: any-colour peripheral
+  rejection removes1,035 reds; do not activate it. Preserve every red/red-history
+  track and same-row green pairs: revised selector excludes503 green boxes,
+  not503 labelled false positives. Development48-frame review removes33/34 clear
+  backgrounds and retains7/7 visible overhead greens; seven exclusions remain
+  ambiguous. These examples informed the rule, not independent accuracy tests.
+  Road-only selection barely acts at low-confidence intersections; explicit
+  image fallback is only a screen-position hypothesis. Paired stopped guards
+  have0 changes over115,920 nominal and115,898 +20ms updates,18 releases each;
+  cold per segment, not MPC/moving/closed-loop validation. Existing18.802s red
+  colour gap remains.750 desktop tests pass with native Params lookup doubled.
+  Keep CentralSignalSelector OFFLINE: no observer/display/control/vehicle change.
+  Publish both maintained branches single-parent. See
+  docs/signal_central_selection_20261017.md; raw evidence remains private.
+
+- On 2026-10-17, user requested another live memory-leak investigation while
+  ignition stays on. Same boot/base2ef833b2/selective HUD fixes: untouched580s
+  retry observation returns HUD PSS75.55--75.74MiB, old ION4.75MiB unchanged.
+  Then guarded HUD-only isolation runs real live renderer/native H264 into a
+  packet sink (not S3) for~10min/5985 diagnostic units. Last5min PSS183.81--184.98
+  MiB; bounded text cache resets, GPU240 objects/151.49MiB unchanged across140s.
+  Normal close/collect drops to83.66MiB, display weakref gone, owned ION empty.
+  No additional production leak reproduced or speculative code change. Earlier
+  92% event remains incompletely attributed; no hours/road/S3 stability claim.
+  Restore HUD1; final453.42MiB available/87.43%, S3 disconnected. Independent60s
+  model/DM1200 valid consecutive each at20.0012/20.0069Hz, original PIDs/eGPU.
+  Publish findings both branches single-parent. See docs/hud_memory_followup_20261017.md.
+
+- On 2026-10-17, user reported >92% memory and clarified HUD power was cycled
+  before the observed88%; user authorizes vehicle-log transfer for diagnosis,
+  raw evidence stays private. Three routes/11,046 memory samples reach91%.
+  Old510 graphics leaks are absent; current4.75MiB orphans do not explain it.
+  Reproduce failed JPEG/H264 traceback retention until post-handler collection;
+  gc alone barely returns RSS, glibc trim returns~25-33MiB after close and~9-10MiB
+  after init. Collect/trim only at lifecycle boundaries, preflight authenticated
+  S3 discovery before graphics, preserve TCP-after-init and concise retries.
+  Twelve native injected failures reclaim all test-owned ION/weakrefs, but small
+  PSS growth remains; no long plateau/full-warning fix claim. Selective two-HUD-
+  file install on C4 2ef833b2, no model/control/reboot. Final model/DM60s1200/1201
+  valid consecutive at20.0049/20.0025Hz; S3 still disconnected. 114 desktop tests,
+  one skip. Both maintained branches single-parent. See
+  docs/hud_memory_retry_20261017.md for remaining limits and measurements.
+
+- On 2026-10-17, user requested muting signal notices with a lead and analysis
+  of today's creeping/stopping. Gate all planner signal notices on current
+  leadOne.status, any range, before navigation processing; preserve raw display,
+  control, unrelated warnings and unconsumed notice cooldown. 724 tests pass;
+  paired recorded-input replay20,384 updates changes no control outputs and
+  removes42 notices (default context, not native/MPC replay). Read-only vehicle
+  already runs2ef833b2/mode2. Collected/hash-verified99qlogs,17rlogs,3videos.
+  11:05:20 red stop: transient vision lead32.6m opens the new2m exception for
+  ~449ms; no pedal, peak0.627m/s and ~1.53m speed-integrated travel. Crossing
+  traffic is visible; exact object identity unproven. This is a remaining
+  regression in immediate lead bypass, NOT fixed by notice muting. 12:01 lead
+  fixed4.15m but filtered stop crosses2.15m:16 hold/exception transitions.
+  13:47 small0.141m/s/~0.20m movement follows actual gap opening with guard
+  continuously bypassed. Do not call all creeping signal flicker or relax red
+  further. Require separate validation of lead continuity/assignment and range
+  stability. Publish both branches single-parent; no vehicle install. See
+  docs/signal_drive_review_20261017.md; recordings remain private.
+
+- On 2026-10-17, user explicitly requested reusing the existing stop-to-lead
+  condition to bypass auxiliary red departure vetoes. Share finite positive
+  leadOne range and dRel - filtered model stop distance <2m with both stopped
+  handovers; 2m is relative to model stopping, not ego-to-lead spacing. Effective
+  start/legacy decisions suppress hold/warning/red injection while eligible,
+  including final longitudinal veto, without reporting green or granting accel.
+  Preserve red memory for immediate reapplication on lead loss/range exit and
+  preserve soft hold/user stop/MPC leads. Moving mode2 preparation is unchanged.
+  715 desktop tests pass with native Params lookup doubled. Publish both maintained
+  branches single-parent; no vehicle install or closed-loop road claim. See
+  docs/signal_lead_handover_20261017.md. This supersedes prior blanket red-veto
+  priority over an eligible lead, not signal recognition/green confirmation.
+
+- On 2026-10-16, user reported repeated blank S3 H.264 output after initial pass.
+  250ms queue-full shutdown magnified short stalls: retain three ordered slots,
+  apply HUD-encoder backpressure with close/error checks and a3s dead-sender cap.
+  This alone did NOT fix it: actual TCP timeouts and confirmed S3 idle-off remain.
+  C4->S3 loses14/30 packets, PC11/15; router0/30. PC cannot connect even with HUD
+  stopped. UART shows no association loss/reset/USB failures. Earlier successful
+  boot selected channel6/-48dBm; failing boot another AP channel1/-68dBm. Replace
+  first-match fast scan with all-channel RSSI-ranked connection; add BSSID status.
+  App-only flash preserves pairing and selects channel6/-50dBm; PC detailed601
+  frames/60.076s passes and user confirms restored actual C4 HUD stays normal.
+  No router changes, AP lock, ongoing-roaming or general radio root-cause claim.
+  Final180s UART has no close/off/USB failure;300s model/DM6000 consecutive valid
+  each at19.9999977/19.9998398Hz (approximately20, not strict>=20).115 tests pass,
+  one skip. See docs/s3_h264_release_20261016.md for observation/distribution.
+
+- On 2026-10-16, user requested implementing and deploying H.264 for S3 Wi-Fi.
+  Firmware1.2.0 authenticates capability discovery and keeps video chunks awake;
+  C4 targets1Mbps/GOP10, preserves reference order in bounded queues, and retains
+  legacy/auto-initialization JPEG fallback. PC physical simple601/60.06s and
+  detailed589/60.11s pass; user confirms smooth test and normal native C4 HUD.
+  AP channel/RSSI changed, so do not attribute every gain to codec. Two native
+  HUD stops reclaim all six owned buffers; TCP loss reconnects in20.205s.
+  Initial model/DM60s each1200 valid consecutive at20.007/20.008Hz. A separate
+  300s memory watch stays connected, same PID/104FDs, PSS184.95->185.66MiB;
+  synchronous smaps reads lose observer frames at exact30s boundaries and are
+  not a model-rate pass. See docs/s3_h264_release_20261016.md for final clean
+  frame observation, release checks and remaining Wi-Fi/long-duration limits.
+  Preserve pairing; public firmware never includes NVS. Both branches single-parent.
+
+- On 2026-10-16, user requested faster signals (20–50Hz target) and brake-lamp
+  ON/OFF. Camera is20fps; no sustained20Hz signal pass. Remove packed NV12 copy
+  with exact two-plane conversion; native conversion CPU drops~11–12%, wall
+  varies. Count preemption/I/O in50% CPU-duty sleep, preserving unique-frame,
+  freshness, detector/control and DM policies. Reject slower color prefilter
+  and core-reassignment trial. Add default-OFF LeadBrakeLights, mode0 dominates:
+  lazy context, bounded central lead crop, radar/vision match, turn rejection,
+  display/log only, candidate/unknown (never confirmed OFF or go). Signal-first
+  admission and overrun backoff; not a hard real-time deadline. Selected spatial
+  screen8/10 ON and0/16 OFF proposals is development evidence, not accuracy or
+  temporal validation.693 desktop tests with Params double pass. Native /tmp
+  diagnostics only; no vehicle installation. Publish both maintained branches,
+  single-parent. See docs/signal_speed_brake_lamps_20261016.md.
+
 - On 2026-10-16, user reported live low-memory warning after keeping ignition on.
   Captured93.29%/241.89MiB available on the same14.5h boot; guarded HUD stop
   recovers88.68%/408.40MiB and reclaims its current6 buffers, but old510 remain.
