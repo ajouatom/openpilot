@@ -84,8 +84,18 @@ Non-Linux/non-glibc environments keep ordinary collection without native trim.
 S3 discovery/TCP failures continued during this investigation. A 600-second
 observation included HUD pauses for isolation and had no connected sample, so it
 must not be presented as ten minutes of successful video or stable active-HUD
-memory. Final available memory was about 448.66 MiB with S3 disconnected and
+memory. The initial final snapshot had about 448.66 MiB available with S3 disconnected and
 HUD RSS about 80.35 MiB. The fixes reclaim demonstrated retained memory and
 avoid needless startup allocations, but **the user's overall 92% issue and
 long-duration connected-HUD behavior are not fully cleared**. Keep investigating
 if memory pressure returns; do not tell the user that every leak is solved.
+
+A subsequent 120-second check of the final installed code captured actual S3
+retries in the same HUD PID. RSS repeatedly reached about 194 MiB during startup
+and returned to about 87 MiB after failure. The observed post-cleanup values were
+89,268--89,328 KiB rather than accumulating another session each time. Available
+memory ranged from 377.61 to 459.56 MiB and ended at 455.84 MiB (device display
+87%). Only one of 24 samples reported S3 connected; the latest state was
+disconnected. This supports actual retry reclamation, not sustained streaming
+stability or a long-duration leak clearance. Both maintained branches received
+the fix with single-parent commits; the vehicle retains the selective HUD install.
