@@ -1,5 +1,18 @@
 # Repository memory
 
+- On 2026-10-17, user requested another live memory-leak investigation while
+  ignition stays on. Same boot/base2ef833b2/selective HUD fixes: untouched580s
+  retry observation returns HUD PSS75.55--75.74MiB, old ION4.75MiB unchanged.
+  Then guarded HUD-only isolation runs real live renderer/native H264 into a
+  packet sink (not S3) for~10min/5985 diagnostic units. Last5min PSS183.81--184.98
+  MiB; bounded text cache resets, GPU240 objects/151.49MiB unchanged across140s.
+  Normal close/collect drops to83.66MiB, display weakref gone, owned ION empty.
+  No additional production leak reproduced or speculative code change. Earlier
+  92% event remains incompletely attributed; no hours/road/S3 stability claim.
+  Restore HUD1; final453.42MiB available/87.43%, S3 disconnected. Independent60s
+  model/DM1200 valid consecutive each at20.0012/20.0069Hz, original PIDs/eGPU.
+  Publish findings both branches single-parent. See docs/hud_memory_followup_20261017.md.
+
 - On 2026-10-17, user reported >92% memory and clarified HUD power was cycled
   before the observed88%; user authorizes vehicle-log transfer for diagnosis,
   raw evidence stays private. Three routes/11,046 memory samples reach91%.
