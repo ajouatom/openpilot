@@ -162,7 +162,7 @@ def test_actual_planner_red_wins_model_go_outside_lead_range_and_user_stop(lead,
     if i >= 3:
       assert p.start_decision.hold and p.v_cruise == 0 and p.stop_dist == 0 and p.xState.name == 'e2eStopped'
       assert p.mode == 'acc'
-  assert warnings.count('audioRefuse') == 1
+  assert warnings.count('audioRefuse') == (0 if lead else 1)
   sm['carState'].gasPressed = True
   p.update(sm, 80., 'acc', start_observation=observation(2),
            start_context=dict(now=2, enabled=True, valid=True, drive=True))
