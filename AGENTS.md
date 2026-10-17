@@ -1,5 +1,23 @@
 # Repository memory
 
+- On 2026-10-17, user requested muting signal notices with a lead and analysis
+  of today's creeping/stopping. Gate all planner signal notices on current
+  leadOne.status, any range, before navigation processing; preserve raw display,
+  control, unrelated warnings and unconsumed notice cooldown. 724 tests pass;
+  paired recorded-input replay20,384 updates changes no control outputs and
+  removes42 notices (default context, not native/MPC replay). Read-only vehicle
+  already runs2ef833b2/mode2. Collected/hash-verified99qlogs,17rlogs,3videos.
+  11:05:20 red stop: transient vision lead32.6m opens the new2m exception for
+  ~449ms; no pedal, peak0.627m/s and ~1.53m speed-integrated travel. Crossing
+  traffic is visible; exact object identity unproven. This is a remaining
+  regression in immediate lead bypass, NOT fixed by notice muting. 12:01 lead
+  fixed4.15m but filtered stop crosses2.15m:16 hold/exception transitions.
+  13:47 small0.141m/s/~0.20m movement follows actual gap opening with guard
+  continuously bypassed. Do not call all creeping signal flicker or relax red
+  further. Require separate validation of lead continuity/assignment and range
+  stability. Publish both branches single-parent; no vehicle install. See
+  docs/signal_drive_review_20261017.md; recordings remain private.
+
 - On 2026-10-17, user explicitly requested reusing the existing stop-to-lead
   condition to bypass auxiliary red departure vetoes. Share finite positive
   leadOne range and dRel - filtered model stop distance <2m with both stopped

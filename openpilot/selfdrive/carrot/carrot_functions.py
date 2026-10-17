@@ -81,6 +81,7 @@ class CarrotPlanner:
     self.signal_detection_suspended = False
     self.signal_observation_color = 0
     self.signal_green_active = False
+    self.signal_lead_present = False
     self.params = Params()
     self.params_count = 0
     self.frame = 0
@@ -407,7 +408,7 @@ class CarrotPlanner:
 
       if trigger_start:
         if self.soft_hold_active > 0:
-          self.add_event(EventName.trafficSignChanged)
+          self.add_signal_event(EventName.trafficSignChanged)
         elif self.xState in [XState.e2eStop, XState.e2eStopped]:
           self.xState = XState.e2eCruise
           self.traffic_starting_count = 10.0 / DT_MDL
@@ -454,6 +455,15 @@ class CarrotPlanner:
       self.events.add(event_name)
       self.last_event_time = now
 
+  def add_signal_event(self, event_name, *, immediate=False):
+    # A lead at any distance mutes signal notices, independently of control.
+    if self.signal_lead_present:
+      return
+    if immediate:
+      self.events.add(event_name)
+    else:
+      self.add_event(event_name)
+
   def _update_driving_mode(self, sm):
     self.drivingModeDetector.update_data(
       sm['carState'], sm['radarState'].leadOne, valid=sm.all_checks(['carState', 'radarState']),
@@ -486,6 +496,7 @@ class CarrotPlanner:
     vCluRatio = carstate.vCluRatio
     #controlsState = sm['controlsState']
     radarstate = sm['radarState']
+    self.signal_lead_present = bool(radarstate.leadOne.status)
     model = sm['modelV2']
 
     #self.soft_hold_active = sm['carControl'].hudControl.softHoldActive # carrot 1
@@ -595,7 +606,7 @@ class CarrotPlanner:
           self.stopping_count = 0
       if self.start_decision.warn:
         # Bypass unrelated navigation-event cooldown. refuse.wav plays once.
-        self.events.add(EventName.audioRefuse)
+        self.add_signal_event(EventName.audioRefuse, immediate=True)
       if self._start_runtime is not None:
         self._start_runtime.record(self.start_decision, v_ego, stop_model_x_rl)
 
@@ -639,7 +650,7 @@ class CarrotPlanner:
     elif self.soft_hold_active > 0:
       self.xState = XState.e2eStopped
       if trafficState_last in [TrafficState.off, TrafficState.red] and self.trafficState == TrafficState.green:
-        self.add_event(EventName.trafficSignChanged)
+        self.add_signal_event(EventName.trafficSignChanged)
     elif self.xState == XState.e2eStopped:
       if carstate.gasPressed:
         self.xState = XState.e2eCruise #XState.e2ePrepare
@@ -649,7 +660,7 @@ class CarrotPlanner:
         if self.trafficState == TrafficState.green and not self.carrot_stay_stop and not carstate.leftBlinker and self.trafficLightDetectMode != 1:
           #self.xState = XState.e2ePrepare
           self.xState = XState.e2eCruise  # 실험모드를 거치지 않고 바로 출발.
-          self.add_event(EventName.trafficSignGreen)
+          self.add_signal_event(EventName.trafficSignGreen)
       self.stopping_count = max(0, self.stopping_count - 1)
       v_cruise = 0
     elif self.xState == XState.e2eStop:
@@ -662,7 +673,7 @@ class CarrotPlanner:
         self.xState = XState.lead
       else:
         if self.trafficState == TrafficState.green:
-          self.add_event(EventName.trafficSignGreen)
+          self.add_signal_event(EventName.trafficSignGreen)
           self.xState = XState.e2eCruise
         else:
           self.comfort_brake = min(mode_comfort_brake, self.comfortBrake * 0.9)
@@ -693,7 +704,7 @@ class CarrotPlanner:
       if lead_detected:
         self.xState = XState.lead
       elif self.trafficState == TrafficState.red and is_traffic_stop_entry_allowed(carstate.steeringAngleDeg) and self.traffic_starting_count == 0:
-        self.add_event(EventName.trafficStopping)
+        self.add_signal_event(EventName.trafficStopping)
         self.xState = XState.e2eStop
         self.actual_stop_distance = stop_model_x_rl
       else:
@@ -786,7 +797,7 @@ class CarrotPlanner:
       if self.prepare_control_active:
         self.xState = XState.e2eStopPrepare
       if self.prepare_decision.entered:
-        self.events.add(EventName.trafficSignChanged)
+        self.add_signal_event(EventName.trafficSignChanged, immediate=True)
       if self._prepare_runtime is not None:
         self._prepare_runtime.record_prepare(self.prepare_decision)
     #return v_cruise, stop_dist, mode
