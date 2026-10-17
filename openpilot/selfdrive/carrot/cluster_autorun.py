@@ -516,7 +516,7 @@ def _usbgpu_startup_expected() -> bool:
         return False
 
 
-def _wait_for_usbgpu_startup(params: Params) -> None:
+def _wait_for_usbgpu_startup(params: Params, *, shared_usb: bool = True) -> None:
     """Keep the shared USB display idle until initial eGPU transfers finish."""
     remembered = params.get_bool(USBGPU_HARDWARE_SEEN_PARAM)
     expected = _usbgpu_startup_expected()
@@ -542,6 +542,11 @@ def _wait_for_usbgpu_startup(params: Params) -> None:
         active = params.get_bool(USBGPU_ACTIVE_PARAM)
         failed = params.get_bool(USBGPU_STARTUP_FAILED_PARAM)
         if not loading and active:
+            # Wi-Fi HUD packets go through S3's USB host, not C4's shared bus.
+            # Still wait for model startup above, but do not add the wired USB
+            # settling delay to every network reconnect.
+            if not shared_usb:
+                return
             print(
                 f"[cluster_autorun] eGPU startup complete; keeping USB display idle for "
                 f"{USBGPU_DISPLAY_STABILIZE_S:.0f}s",
@@ -625,7 +630,7 @@ def main() -> None:
                 time.sleep(RETRY_INTERVAL_S)
                 continue
 
-        _wait_for_usbgpu_startup(params)
+        _wait_for_usbgpu_startup(params, shared_usb=wifi_config is None)
 
         if wifi_config is not None:
             pass
