@@ -1,5 +1,21 @@
 # Repository memory
 
+- On 2026-10-17, user requested central-priority signal improvement and historical
+  validation. Offline 122 segments/56,612 observations: any-colour peripheral
+  rejection removes1,035 reds; do not activate it. Preserve every red/red-history
+  track and same-row green pairs: revised selector excludes503 green boxes,
+  not503 labelled false positives. Development48-frame review removes33/34 clear
+  backgrounds and retains7/7 visible overhead greens; seven exclusions remain
+  ambiguous. These examples informed the rule, not independent accuracy tests.
+  Road-only selection barely acts at low-confidence intersections; explicit
+  image fallback is only a screen-position hypothesis. Paired stopped guards
+  have0 changes over115,920 nominal and115,898 +20ms updates,18 releases each;
+  cold per segment, not MPC/moving/closed-loop validation. Existing18.802s red
+  colour gap remains.750 desktop tests pass with native Params lookup doubled.
+  Keep CentralSignalSelector OFFLINE: no observer/display/control/vehicle change.
+  Publish both maintained branches single-parent. See
+  docs/signal_central_selection_20261017.md; raw evidence remains private.
+
 - On 2026-10-17, user requested another live memory-leak investigation while
   ignition stays on. Same boot/base2ef833b2/selective HUD fixes: untouched580s
   retry observation returns HUD PSS75.55--75.74MiB, old ION4.75MiB unchanged.
