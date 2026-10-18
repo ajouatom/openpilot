@@ -1,5 +1,17 @@
 # Repository memory
 
+- On 2026-10-19, user requested applying Jetlink491cf1e USB-current protection
+  after PV5 UVLO review. Port USB_ICL zero vote into Carrot's own daemon/helper,
+  all transport modes, only after1.5s observed empty port and helper rechecks.
+  Preserve across retries/exit; reboot clears. Omit upstream's attached-iOS
+  exception because transport selection is not proof of independent power.
+  Attached/unknown startup defers; missing/conflicting voter and failed helper
+  are bounded/reported. No VM/role/model/deadline changes or vehicle action.
+  Desktop fake-sysfs and daemon regression pass; Linux real-socket validation
+  remains CI-only. UVLO+Jetson is a plausible mechanism, not confirmed PV5 cure;
+  available900mA is not measured draw. Both maintained branches single-parent.
+  See docs/jetlink_usb_power_20261019.md for activation and validation limits.
+
 - On 2026-10-18, user again reports90% versus~80% after reboot. Completed2h
   capture has1412 samples/118 inventories: available421.45->375.51MiB,
   minimum326.65. Proclogd PSS14.64->52.81MiB; at10:21 private dirty rises38.62MiB

@@ -68,6 +68,8 @@ def test_phone_checks_data_role_not_power_role(tmp_path, monkeypatch, mode):
 ])
 def test_daemon_wires_mode_protocol_and_separate_ios_owner(tmp_path, monkeypatch, mode, scenario):
   calls = []
+  power_steps = []
+  monkeypatch.setattr(daemon, 'UsbInputPower', lambda: SimpleNamespace(step=lambda: power_steps.append(len(calls))))
   attached = [True]
   reports = []
   udcs = tmp_path / 'udc'
@@ -193,6 +195,7 @@ def test_daemon_wires_mode_protocol_and_separate_ios_owner(tmp_path, monkeypatch
   monkeypatch.setattr(daemon, 'serve_local', serve)
   with pytest.raises(KeyboardInterrupt):
     daemon.main()
+  assert power_steps and power_steps[0] == 0  # Before gadget setup in every configured mode.
   assert calls[0] == ('setup', mode)
   if scenario == 'constructor-unsafe':
     assert calls.count(('setup', mode)) == 1
