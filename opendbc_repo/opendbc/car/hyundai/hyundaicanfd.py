@@ -891,9 +891,32 @@ CLUSTER_TEST_BITS = {7: tuple(range(53, 64)), 8: tuple(range(159, 163)), 9: tupl
                      11: (87, 111, 135, 212)}
 
 
+CLUSTER_TEST_SWEEP = 9999  # field * 10000 + 9999: step the field every 0.5 s and show the step in the set speed number
+
+
 def _cluster_test():
   value = Params().get_int("ClusterLaneTest")
   return divmod(value, 10000) if value > 0 else (0, 0)
+
+
+def _cluster_sweep(packer, field, frame):
+  # returns (value to send, number to show); bit groups step one bit at a time and show the bit number
+  state = create_ccnc_messages.__dict__.setdefault('_sweep', {})
+  if state.get('field') != field:
+    state.update(field=field, start=frame)
+  step = (frame - state['start']) // 50
+  if field in CLUSTER_TEST_BITS:
+    bits = CLUSTER_TEST_BITS[field]
+    i = step % (len(bits) + 1)
+    return (0, 0) if i == 0 else (1 << (i - 1), bits[i - 1])
+  if field in CLUSTER_TEST_FIELDS:
+    sig = packer.dbc.name_to_msg['CCNC_0x162'].sigs[CLUSTER_TEST_FIELDS[field]]
+  elif field in CLUSTER_TEST_FIELDS_161:
+    sig = packer.dbc.name_to_msg['ADRV_0x161'].sigs[CLUSTER_TEST_FIELDS_161[field]]
+  else:
+    return 0, None
+  value = step % (1 << sig.size)
+  return value, value
 
 
 def _set_raw_bits(msg, bits, value):
@@ -1065,6 +1088,11 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
     if frame % 5 == 0:
       lat_active = CC.latActive
       test_field, test_value = _cluster_test()
+      sweep_display = None
+      if test_value == CLUSTER_TEST_SWEEP:
+        test_value, sweep_display = _cluster_sweep(packer, test_field, frame)
+      else:
+        create_ccnc_messages.__dict__.pop('_sweep', None)
 
       if CS.adrv_0x161 is not None:
         main_enabled = CS.out.cruiseState.available
@@ -1194,6 +1222,8 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
         _apply_driver_monitoring_alert(values, hud_control, CS.adrv_0x161)
         if test_field in CLUSTER_TEST_FIELDS_161:
           values[CLUSTER_TEST_FIELDS_161[test_field]] = test_value
+        if sweep_display is not None:
+          values["vSetDis"] = min(sweep_display, 255)
         ret.append(packer.make_can_msg("ADRV_0x161", CAN.ECAN, values, rx_counter = rx_counter))
 
       if CS.adrv_0x200 is not None:
