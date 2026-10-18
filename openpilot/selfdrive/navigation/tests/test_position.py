@@ -27,6 +27,16 @@ def test_fused_external_position_keeps_original_prediction_time(sm):
   assert (position.latitude, position.speed, position.time) == (37., 10., 9.9)
 
 
+def test_new_position_without_heading_cannot_orient_model_map(sm):
+  sm['carrotMan'].positionSource = 'vehicle'
+  sm['carrotMan'].positionHeadingValid = False
+  assert helpers.navigation_position(sm).latitude == 38.
+  sm['gpsLocation'].hasFix = False
+  assert helpers.navigation_position(sm) is None
+  sm['carrotMan'].positionHeadingValid = True
+  assert helpers.navigation_position(sm).latitude == 37.
+
+
 @pytest.mark.parametrize('field,value', [('positionFixMonoTime', 8_000_000_000), ('positionMonoTime', 9_000_000_000),
                                        ('positionFixMonoTime', 11_000_000_000), ('xPosLat', float('nan'))])
 def test_rebroadcast_cannot_renew_stale_or_invalid_fused_position(sm, field, value):

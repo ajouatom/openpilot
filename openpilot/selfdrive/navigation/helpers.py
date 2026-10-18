@@ -63,6 +63,7 @@ def navigation_position(sm) -> NavigationPosition | None:
   now = time.monotonic()
   carrot = sm['carrotMan']
   if (sm.valid['carrotMan'] and 0 <= now - sm.recv_time['carrotMan'] < .5
+      and (not getattr(carrot, 'positionSource', '') or carrot.positionHeadingValid)
       and carrot.positionFixMonoTime > 0 and 0 <= now - carrot.positionFixMonoTime / 1e9 < 2
       and 0 <= now - carrot.positionMonoTime / 1e9 < .5
       and all(math.isfinite(v) for v in (carrot.xPosLat, carrot.xPosLon, carrot.xPosAngle, carrot.xPosSpeed))

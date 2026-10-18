@@ -1,5 +1,19 @@
 # Repository memory
 
+- On 2026-10-18, user requested external-nav > phone > vehicle > device GPS.
+  Ioniq5PE bus0/0x374 contains positive LE32 lat/lon*1e-6: 20 segments/1195
+  original samples near1Hz. No OEM heading/fix-quality decoded; restrict profile
+  to this model/validated hemisphere. Optional receive-only monitor requires
+  three plausible samples, original timestamps, motion/freeze/freshness checks;
+  derived >=5m course is separately valid, disabled in reverse, never north by
+  default. Independent sources prevent lower-priority overwrite. Raw replay
+  119551 CAN events accepts1166 fixes, rejects6 acquisition/23 moving repeats;
+  829 have course. Nav188 tests pass/9 native-render skips, desktop OS doubles.
+  No vehicle install/native CPU/closed-loop claim. Publish both maintained
+  branches single-parent, preserving model architecture; wip also needs existing
+  nav receipt/sequence handling. See docs/vehicle_can_gps_20261018.md. Raw private.
+
+
 - On 2026-10-18, user reported worse signals and requested evening/morning review.
   Read-only/hash-verified213 files; actual drives10ea/10eb run087f862d81 with
   unchanged918654b8 tracker. Upper/central selectors remain OFFLINE, not the cause.
