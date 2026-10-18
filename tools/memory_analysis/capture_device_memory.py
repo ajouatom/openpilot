@@ -84,7 +84,16 @@ def detail():
       gpu[pid] = gpu_inventory(debug_read("/sys/kernel/debug/kgsl/proc/" + pid + "/mem"))
   ion = debug_read("/sys/kernel/debug/ion/heaps/system")
   totals = {key: int(value) for key, value in re.findall(r"^\s*(total orphaned|total|deferred free)\s+(\d+)\s*$", ion, re.M)}
-  return {"processes": processes, "gpu": gpu, "ion_bytes": totals}
+  # These filesystems are RAM-backed on the devices. Their growth is not all
+  # charged to a process's PSS, so retain allocation totals alongside smaps.
+  # Fixed roots only: no file contents, credentials, or unbounded output.
+  tmpfs_roots = ("/dev/shm", "/run/log/journal", "/var/log", "/tmp")
+  tmpfs_kib = {}
+  for line in debug_command(["du", "-x", "-s", "-k", *tmpfs_roots]).splitlines():
+    fields = line.split(maxsplit=1)
+    if len(fields) == 2 and fields[0].isdigit() and fields[1] in tmpfs_roots:
+      tmpfs_kib[fields[1]] = int(fields[0])
+  return {"processes": processes, "gpu": gpu, "ion_bytes": totals, "tmpfs_kib": tmpfs_kib}
 
 
 def main():
@@ -120,7 +129,9 @@ def main():
         now = time.monotonic()
         mem = memory_fields(read("/proc/meminfo"))
         row = {"mono": now, "wall": time.time(), "boot": read("/proc/sys/kernel/random/boot_id").strip(), "mem_kib": mem}
-        row["flags"] = {key: read(Path("/data/params/d") / key).strip() for key in ("IsOnroad", "ClusterHud", "ClusterHudConnected", "UsbGpuActive")}
+        row["flags"] = {key: read(Path("/data/params/d") / key).strip() for key in
+                        ("IsOnroad", "ClusterHud", "ClusterHudConnected", "UsbGpuActive", "SignalAssistMode")}
+        row["flags"]["SignalShadowComparison"] = read("/data/signal-model-shadow/enabled").strip()
         interval = 15 if mem.get("MemAvailable", 0) < mem.get("MemTotal", 0) * .09 else 60
         if now - last_detail >= interval:
           row["detail"] = detail()
