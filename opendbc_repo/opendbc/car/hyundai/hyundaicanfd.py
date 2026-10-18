@@ -1038,7 +1038,7 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
         set_speed_in_units = hud_control.setSpeed * (CV.MS_TO_KPH if CS.is_metric else CV.MS_TO_MPH)
         values["vSetDis"] = int(set_speed_in_units + 0.5)
 
-        values["DISTANCE"] = 4 if hdp_active else hud_control.leadDistanceBars
+        values["DISTANCE"] = hud_control.leadDistanceBars  # real gap bars under the HDP colors too
         values["DISTANCE_LEAD"] = 2 if cruise_enabled and lead_visible else 1 if main_enabled and lead_visible else 0
         values["DISTANCE_CAR"] = 3 if hdp_active else 2 if cruise_enabled else 1 if main_enabled else 0
         values["DISTANCE_SPACING"] = 5 if hdp_active else 1 if cruise_enabled else 0
@@ -1070,6 +1070,14 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
         if values["ALERTS_3"] in [3, 4, 11, 12, 13, 14, 17, 19, 20, 26, 27, 28, 7, 8, 9, 10]: # hide gap distance msg.(11,12,13,14), lanechange(19,20,27, 28)
           values["ALERTS_3"] = 0
           values["SOUNDS_3"] = 0
+
+        # carrot: with HDP on, a gap change shows the stock "distance N" popup (ALERTS_3 7~10) for 2 s
+        gap_bars = hud_control.leadDistanceBars
+        if hdp_active and gap_bars != getattr(create_ccnc_messages, '_gap_bars', gap_bars):
+          create_ccnc_messages._gap_popup_until = frame + 200
+        create_ccnc_messages._gap_bars = gap_bars
+        if frame < getattr(create_ccnc_messages, '_gap_popup_until', 0) and values["ALERTS_3"] == 0 and 1 <= gap_bars <= 4:
+          values["ALERTS_3"] = 6 + gap_bars
 
         if values["ALERTS_5"] in [1, 2, 3, 4, 5]:
           values["ALERTS_5"] = 0
