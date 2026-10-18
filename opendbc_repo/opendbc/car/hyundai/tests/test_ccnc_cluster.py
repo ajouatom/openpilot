@@ -190,3 +190,11 @@ def test_engaged_standstill_keeps_steering_and_lane_change_icons(monkeypatch, st
     control.hudControl, 0, False, False, 0, False, 0, 0)[0]
   values = {key: get_raw_value(msg[1], sig) for key, sig in definition.sigs.items()}
   assert (values['LKA_ICON'], values['LFA_ICON'] > 1, values['LCA_LEFT_ICON'], values['LCA_RIGHT_ICON']) == (lka, standstill, lca, lca)
+
+
+@pytest.mark.parametrize(('color', 'lane_line', 'expected'), (
+  (6, 10, 10), (2, 10, 8), (6, 15, 10),  # white dashed / DLM inner dashed -> green or white dashed
+  (2, 11, 2), (4, 10, 4), (6, 0, 6),     # solid line, orange warning, no lane info stay as they were
+))
+def test_dashed_lane_line_codes(color, lane_line, expected):
+  assert hyundaicanfd._dashed_lane_line(color, lane_line) == expected
