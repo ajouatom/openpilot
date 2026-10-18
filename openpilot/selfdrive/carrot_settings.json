@@ -418,7 +418,8 @@
             "CanfdHDA2",
             "HyundaiCanfdClusterDirectTx",
             "CanfdDebug",
-            "HDPuse"
+            "HDPuse",
+            "ClusterLaneTest"
           ]
         },
         {
@@ -1854,6 +1855,22 @@
       "cdescr": "1: 使用 APN 时, 2: 始终",
       "min": 0,
       "max": 2,
+      "default": 0,
+      "unit": 1
+    },
+    {
+      "group": "시작",
+      "name": "ClusterLaneTest",
+      "title": "계기판 표시 테스트(CCNC)",
+      "descr": "테스트용. 0: 끔. 값 = 칸×10000 + 보낼 값. 재부팅하면 0.\n1 속도제한 숫자(0~255) · 2 제한표시 색/깜빡임(0~15) · 3 표지판 종류(0~255) · 4 날씨 보조(0~15) · 5 국가(0~15) · 6 SLA 아이콘(0~15)\n7 0x162 비트53~63(0~2047) · 8 비트159~162(0~15) · 9 비트183~191(0~511) · 10 비트252~255(0~15) · 11 비트87/111/135/212(0~15)\n예: 10080 = 제한속도 80, 30008 = 표지판 8(STOP). 표시만 바뀌고 제어 영향 없음.",
+      "egroup": "START",
+      "etitle": "Cluster Display Test (CCNC)",
+      "edescr": "Test only. 0: off. Value = field x 10000 + raw value. Resets to 0 on reboot.\n1 speed limit (0-255) · 2 limit color/flash (0-15) · 3 sign type (0-255) · 4 weather (0-15) · 5 country (0-15) · 6 SLA icon (0-15)\n7 0x162 bits 53-63 (0-2047) · 8 bits 159-162 (0-15) · 9 bits 183-191 (0-511) · 10 bits 252-255 (0-15) · 11 bits 87/111/135/212 (0-15)\nExample: 10080 = limit 80, 30008 = sign 8 (STOP). Display only; no effect on control.",
+      "cgroup": "启动设置",
+      "ctitle": "仪表显示测试 (CCNC)",
+      "cdescr": "仅用于测试。0: 关闭。值 = 字段×10000 + 发送值。重启后恢复为 0。\n1 限速数字(0~255) · 2 限速显示颜色/闪烁(0~15) · 3 标志类型(0~255) · 4 天气(0~15) · 5 国家(0~15) · 6 SLA 图标(0~15)\n7 0x162 位53~63(0~2047) · 8 位159~162(0~15) · 9 位183~191(0~511) · 10 位252~255(0~15) · 11 位87/111/135/212(0~15)\n例: 10080 = 限速 80, 30008 = 标志 8(STOP)。仅改变显示，不影响控制。",
+      "min": 0,
+      "max": 110015,
       "default": 0,
       "unit": 1
     },

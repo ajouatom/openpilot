@@ -882,6 +882,26 @@ def _lane_unseen(state, side, prob, frame):
   return hidden
 
 
+# ClusterLaneTest = field * 10000 + raw value (test only): DBC fields, or 0x162 bits the DBC does not name
+CLUSTER_TEST_FIELDS = {1: "SPEEDLIMIT", 2: "SPEEDLIMIT_FLASH", 3: "SIGNS", 4: "SPEEDLIMIT_WEATHER", 5: "COUNTRY", 6: "SLA_ICON"}
+CLUSTER_TEST_BITS = {7: tuple(range(53, 64)), 8: tuple(range(159, 163)), 9: tuple(range(183, 192)), 10: tuple(range(252, 256)),
+                     11: (87, 111, 135, 212)}
+
+
+def _cluster_test():
+  value = Params().get_int("ClusterLaneTest")
+  return divmod(value, 10000) if value > 0 else (0, 0)
+
+
+def _set_raw_bits(msg, bits, value):
+  addr, dat, bus = msg
+  d = bytearray(dat)
+  for i, b in enumerate(bits):
+    d[b // 8] = (d[b // 8] & ~(1 << (b % 8))) | (((value >> i) & 1) << (b % 8))
+  d[0:2] = hkg_can_fd_checksum(addr, None, d).to_bytes(2, 'little')
+  return addr, bytes(d), bus
+
+
 def _dashed_lane_line(color, lane_line):
   # 0x161 dashed codes seen on the Ioniq 5 PE cluster: 8 white, 10 green (no orange dashed)
   if lane_line // 10 > 0 and lane_line % 10 in (0, 5):  # camera: dashed / DLM inner dashed (color 0 = no lane info)
@@ -1017,10 +1037,14 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
         if  HDA_LFA_SymSta == 0 and 0 < frame % 200 < 12:
           values["LFA_BTN"] = 1
 
+        # The cluster's side objects, lead car and target come from stock SCC MAIN; keep it on while driving.
+        # openpilot's own MAIN still follows the driver's button (manual_main_off_latched).
+        if not CS.MainMode_ACC and not interlock_active and 10 < frame % 200 <= 16 and CS.out.vEgo > 3.:
+          values["ADAPTIVE_CRUISE_MAIN_BTN"] = 1
+
         if CC.enabled and not interlock_active:
           if not CS.MainMode_ACC:
-            if 10 < frame % 200 <= 16 and CS.out.vEgo > 3.:
-              values["ADAPTIVE_CRUISE_MAIN_BTN"] = 1
+            pass  # pressed above
           elif CS.ACCMode in [0, 4]:
             if 10 < frame % 200 <= 16 and CS.out.vEgo > 3.:
               values["CRUISE_BUTTONS"] = 2
@@ -1037,6 +1061,7 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
     # --- 0x161/0x200/0x1ea/0x162 (frame%5) ---
     if frame % 5 == 0:
       lat_active = CC.latActive
+      test_field, test_value = _cluster_test()
 
       if CS.adrv_0x161 is not None:
         main_enabled = CS.out.cruiseState.available
@@ -1066,11 +1091,11 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
         values["vSetDis"] = int(set_speed_in_units + 0.5)
 
         values["DISTANCE"] = hud_control.leadDistanceBars  # real gap bars under the HDP colors too
-        values["DISTANCE_LEAD"] = 2 if cruise_enabled and lead_visible else 1 if main_enabled and lead_visible else 0
+        values["DISTANCE_LEAD"] = (2 if cruise_enabled else 1) if lead_visible else 0
         values["DISTANCE_CAR"] = 3 if hdp_active else 2 if cruise_enabled else 1 if main_enabled else 0
         values["DISTANCE_SPACING"] = 5 if hdp_active else 1 if cruise_enabled else 0
 
-        values["TARGET"] = 1 if lead_visible and cruise_enabled else 0
+        values["TARGET"] = (1 if cruise_enabled else 3) if lead_visible else 0  # blue when engaged, white otherwise
         values["TARGET_DISTANCE"] = lead_distance
 
         values["BACKGROUND"] = _select_cluster_background(
@@ -1164,6 +1189,8 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
         values["LANE_RIGHT"] = 0 if trailer_lane_change_blocked else 1 if desire in (2, 4) else 0
 
         _apply_driver_monitoring_alert(values, hud_control, CS.adrv_0x161)
+        if test_field == 6:
+          values["SLA_ICON"] = test_value
         ret.append(packer.make_can_msg("ADRV_0x161", CAN.ECAN, values, rx_counter = rx_counter))
 
       if CS.adrv_0x200 is not None:
@@ -1204,7 +1231,10 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
           values["FAULT_LSS"] = 0
           values["FAULT_DAS"] = 0
 
-        ret.append(packer.make_can_msg("CCNC_0x162", CAN.ECAN, values, rx_counter=rx_counter))
+        if test_field in (1, 2, 3, 4, 5):
+          values[CLUSTER_TEST_FIELDS[test_field]] = test_value
+        msg = packer.make_can_msg("CCNC_0x162", CAN.ECAN, values, rx_counter=rx_counter)
+        ret.append(_set_raw_bits(msg, CLUSTER_TEST_BITS[test_field], test_value) if test_field in CLUSTER_TEST_BITS else msg)
 
     # --- NEW_MSG_4B9 (corner radar keep-alive?) ---
     if enable_corner_radar > 0:

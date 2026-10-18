@@ -226,3 +226,34 @@ def test_lane_unseen_hysteresis():
   assert not hyundaicanfd._lane_unseen(state, 'L', 0.10, 200)  # a dip that does not last 1 s resets
   assert not hyundaicanfd._lane_unseen(state, 'L', 0.05, 205)
   assert not hyundaicanfd._lane_unseen(state, 'R', 0.02, 205)  # sides are independent
+
+
+@pytest.mark.parametrize(('main_on', 'v_ego', 'pressed'), ((False, 5.0, 1), (True, 5.0, 0), (False, 1.0, 0)))
+def test_stock_main_kept_on_without_engagement(monkeypatch, main_on, v_ego, pressed):
+  from openpilot.cereal import log
+  monkeypatch.setattr(hyundaicanfd, 'Params', lambda: SimpleNamespace(get_int=lambda key: 0, get=lambda key: '0'))
+  packer = CANPacker('hyundai_canfd_generated')
+  buttons = packer.dbc.name_to_msg['CRUISE_BUTTONS']
+  state = SimpleNamespace(
+    adrv_0x161=None, out=structs.CarState(vEgo=v_ego), modelV2=log.ModelDataV2.new_message(), lfahda_cluster=None,
+    cruise_buttons_msg={key: 0 for key in buttons.sigs}, cruise_btns_msg_canfd='CRUISE_BUTTONS', MainMode_ACC=main_on,
+    ACCMode=0, scc_control=None, adrv_0x200=None, adrv_0x1ea=None, ccnc_0x162=None, is_metric=True,
+    paddle_button_prev=0, softHoldActive=0, trailer_connected=False,
+  )
+  control = structs.CarControl(enabled=False)  # not engaged: stock MAIN is still kept on for the cluster
+  msgs = hyundaicanfd.create_ccnc_messages(
+    SimpleNamespace(flags=HyundaiFlags.CAMERA_SCC), packer, SimpleNamespace(ECAN=0, CAM=2), 12, control, state,
+    control.hudControl, 0, False, False, 0, False, 0, 0)
+  msg = next(m for m in msgs if m[0] == buttons.address)
+  assert get_raw_value(msg[1], buttons.sigs['ADAPTIVE_CRUISE_MAIN_BTN']) == pressed
+
+
+def test_cluster_test_raw_bits_keep_a_valid_checksum():
+  packer = CANPacker('hyundai_canfd_generated')
+  definition = packer.dbc.name_to_msg['CCNC_0x162']
+  msg = packer.make_can_msg('CCNC_0x162', 0, {'SPEEDLIMIT': 80})
+  addr, dat, _ = hyundaicanfd._set_raw_bits(msg, hyundaicanfd.CLUSTER_TEST_BITS[7], 0b101)
+  value = int.from_bytes(dat, 'little')
+  assert [(value >> b) & 1 for b in range(53, 64)] == [1, 0, 1] + [0] * 8
+  assert get_raw_value(dat, definition.sigs['SPEEDLIMIT']) == 80  # named fields untouched
+  assert get_raw_value(dat, definition.sigs['CHECKSUM']) == hyundaicanfd.hkg_can_fd_checksum(addr, None, bytearray(dat))
