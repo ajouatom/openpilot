@@ -891,7 +891,7 @@ CLUSTER_TEST_BITS = {7: tuple(range(53, 64)), 8: tuple(range(159, 163)), 9: tupl
                      11: (87, 111, 135, 212)}
 
 
-CLUSTER_TEST_SWEEP = 9999  # field * 10000 + 9999: step the field every 0.5 s and show the step in the set speed number
+CLUSTER_TEST_SWEEP = 9999  # field * 10000 + 9999: step the field every 1 s and show the step in the set speed number
 
 
 def _cluster_test():
@@ -904,7 +904,7 @@ def _cluster_sweep(packer, field, frame):
   state = create_ccnc_messages.__dict__.setdefault('_sweep', {})
   if state.get('field') != field:
     state.update(field=field, start=frame)
-  step = (frame - state['start']) // 50
+  step = (frame - state['start']) // 100
   if field in CLUSTER_TEST_BITS:
     bits = CLUSTER_TEST_BITS[field]
     i = step % (len(bits) + 1)

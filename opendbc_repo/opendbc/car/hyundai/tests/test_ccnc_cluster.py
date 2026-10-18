@@ -279,11 +279,11 @@ def test_cluster_test_overrides_0x161_fields_last(monkeypatch, setting, field, v
   assert get_raw_value(msg[1], definition.sigs[field]) == value
 
 
-def test_cluster_sweep_steps_every_half_second(monkeypatch):
+def test_cluster_sweep_steps_every_second(monkeypatch):
   monkeypatch.delattr(hyundaicanfd.create_ccnc_messages, '_sweep', raising=False)
   packer = CANPacker('hyundai_canfd_generated')
-  assert [hyundaicanfd._cluster_sweep(packer, 3, f) for f in (1000, 1045, 1050, 1100)] == [(0, 0), (0, 0), (1, 1), (2, 2)]
-  assert hyundaicanfd._cluster_sweep(packer, 3, 1000 + 256 * 50) == (0, 0)  # SIGNS is 8 bits: wraps after 255
+  assert [hyundaicanfd._cluster_sweep(packer, 3, f) for f in (1000, 1095, 1100, 1200)] == [(0, 0), (0, 0), (1, 1), (2, 2)]
+  assert hyundaicanfd._cluster_sweep(packer, 3, 1000 + 256 * 100) == (0, 0)  # SIGNS is 8 bits: wraps after 255
   assert hyundaicanfd._cluster_sweep(packer, 7, 2000) == (0, 0)             # new field restarts at 0
-  assert hyundaicanfd._cluster_sweep(packer, 7, 2050) == (1, 53)            # first unnamed bit, shown as its bit number
-  assert hyundaicanfd._cluster_sweep(packer, 7, 2000 + 11 * 50) == (1 << 10, 63)
+  assert hyundaicanfd._cluster_sweep(packer, 7, 2100) == (1, 53)            # first unnamed bit, shown as its bit number
+  assert hyundaicanfd._cluster_sweep(packer, 7, 2000 + 11 * 100) == (1 << 10, 63)
