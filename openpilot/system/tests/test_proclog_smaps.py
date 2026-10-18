@@ -203,6 +203,8 @@ def proclog_module(monkeypatch):
   spec = importlib.util.spec_from_file_location('_test_proclogd', Path(__file__).parents[1] / 'proclogd.py')
   module = importlib.util.module_from_spec(spec)
   spec.loader.exec_module(module)
+  # main() must never freeze the test runner's heap.
+  monkeypatch.setattr(module, 'gc', SimpleNamespace(freeze=lambda: None))
   return module
 
 
@@ -277,3 +279,142 @@ def test_main_keeps_lightweight_cadence_and_never_replays_missed_slots(tmp_path,
     module.main()
   assert published == pytest.approx([10, 12, 17, 19, 21])
   assert sampler.file is None
+
+
+def test_metadata_cache_releases_exited_processes(proclog_module, monkeypatch):
+  import io
+  module = proclog_module
+  monkeypatch.setattr(module.os, 'readlink', lambda path: '/bin/helper')
+  monkeypatch.setattr('builtins.open', lambda *_a, **_kw: io.BytesIO(b'helper\0argument\0'))
+  persistent = module._get_proc_extra(1, 'helper', 100)
+  for generation in range(500):
+    pid = generation + 2
+    module._prune_proc_cache({1: 100, pid: generation + 200})
+    module._get_proc_extra(pid, 'helper', generation + 200)
+    assert len(module._proc_cache) == 2
+    assert module._proc_cache[1] is persistent
+  module._prune_proc_cache({1: 100})
+  assert module._proc_cache == {1: persistent}
+
+
+def test_main_freezes_inherited_heap_before_runtime_resources(proclog_module, monkeypatch):
+  module = proclog_module
+  events = []
+
+  class Finished(Exception):
+    pass
+
+  def pubmaster(*_):
+    events.append('pubmaster')
+    raise Finished
+
+  monkeypatch.setattr(module, 'gc', SimpleNamespace(freeze=lambda: events.append('freeze')))
+  monkeypatch.setattr(module, 'messaging', SimpleNamespace(PubMaster=pubmaster))
+  monkeypatch.setattr(module, 'SmapsSampler', lambda: pytest.fail('unexpected sampler creation'))
+  with pytest.raises(Finished):
+    module.main()
+  assert events == ['freeze', 'pubmaster']
+
+
+def test_metadata_pid_reuse_with_same_name_refreshes_command(proclog_module, monkeypatch):
+  import io
+  module = proclog_module
+  command = [b'helper\0old\0']
+  monkeypatch.setattr(module.os, 'readlink', lambda path: '/bin/helper')
+  monkeypatch.setattr('builtins.open', lambda *_a, **_kw: io.BytesIO(command[0]))
+  old = module._get_proc_extra(10, 'helper', 100)
+  command[0] = b'helper\0new\0'
+  new = module._get_proc_extra(10, 'helper', 200)
+  assert old['cmdline'] == ['helper', 'old']
+  assert new['cmdline'] == ['helper', 'new']
+  module._prune_proc_cache({10: 300})
+  assert not module._proc_cache
+
+
+def test_publication_prunes_metadata_and_refreshes_reused_pid(proclog_module, monkeypatch):
+  import io
+  module = proclog_module
+  stat = {'pid': 1, 'name': 'helper', 'state': 'S', 'ppid': 0, 'utime': 100, 'stime': 200, 'cutime': 0, 'cstime': 0,
+          'priority': 20, 'nice': 0, 'num_threads': 1, 'starttime': 123, 'vms': 10000000, 'rss': 2000, 'processor': 4}
+  current = [stat]
+  command = [b'helper\0old\0']
+  monkeypatch.setattr(module, '_procs', lambda: current)
+  monkeypatch.setattr(module.os, 'readlink', lambda _: '/bin/helper')
+  monkeypatch.setattr('builtins.open', lambda *_a, **_kw: io.BytesIO(command[0]))
+  monkeypatch.setattr(module, '_cpu_times', list)
+  monkeypatch.setattr(module, '_mem_info', lambda: dict.fromkeys(
+    ['MemTotal:', 'MemFree:', 'MemAvailable:', 'Buffers:', 'Cached:', 'Active:', 'Inactive:', 'Shmem:'], 0))
+  sampler = SimpleNamespace(update=lambda _: None, get=lambda *_: smaps.SmapsSample())
+
+  def publish():
+    event = log.Event.new_message(procLog={})
+    module.build_proc_log_message(event, sampler)
+    return event
+
+  assert list(publish().procLog.procs[0].cmdline) == ['helper', 'old']
+  stat['starttime'] += 1
+  command[0] = b'helper\0new\0'
+  assert list(publish().procLog.procs[0].cmdline) == ['helper', 'new']
+  for pid in range(2, 102):
+    current[:] = [stat, {**stat, 'pid': pid}]
+    event = publish()
+    assert [p.pid for p in event.procLog.procs] == [1, pid]
+    assert len(module._proc_cache) == 2
+  current.clear()
+  assert len(publish().procLog.procs) == 0
+  assert not module._proc_cache
+
+
+@pytest.mark.skipif(sys.platform != 'linux', reason='requires fork without freezing the test runner')
+def test_main_keeps_new_cycles_collectible(proclog_module):
+  import gc
+  import json
+  import os
+  import select
+  import signal
+  import weakref
+
+  parent_frozen = gc.get_freeze_count()
+  parent_enabled = gc.isenabled()
+  read_fd, write_fd = os.pipe()
+  pid = os.fork()
+  if pid == 0:
+    os.close(read_fd)
+    signal.alarm(10)
+    try:
+      module = proclog_module
+      module.gc = gc
+
+      class Finished(Exception):
+        pass
+
+      def verify(*_):
+        class Node:
+          pass
+        node = Node()
+        node.cycle = node
+        ref = weakref.ref(node)
+        del node
+        gc.collect()
+        result = [gc.get_freeze_count() > parent_frozen, ref() is None, gc.isenabled() == parent_enabled]
+        os.write(write_fd, json.dumps(result).encode())
+        raise Finished
+
+      module.messaging = SimpleNamespace(PubMaster=verify)
+      try:
+        module.main()
+      except Finished:
+        pass
+      os._exit(0)
+    except BaseException:
+      os._exit(1)
+  os.close(write_fd)
+  try:
+    assert select.select([read_fd], [], [], 15)[0], 'child did not complete'
+    assert json.loads(os.read(read_fd, 4096)) == [True, True, True]
+  finally:
+    os.close(read_fd)
+    _, status = os.waitpid(pid, 0)
+  assert os.waitstatus_to_exitcode(status) == 0
+  assert gc.get_freeze_count() == parent_frozen
+  assert gc.isenabled() == parent_enabled
