@@ -12,6 +12,7 @@ from opendbc.car.hyundai.hyundaicanfd import CanBus
 from opendbc.car.hyundai.navi_speedcam import SpeedcamPolicy
 from opendbc.car.hyundai.section_average import DISTANCE_SCALE as SECTION_DISTANCE_SCALE, SectionAverage
 from opendbc.car.hyundai.steering_touch import HyundaiSteeringTouch
+from opendbc.car.hyundai.vehicle_gps import VehicleGPS, MESSAGE as VEHICLE_GPS_MESSAGE
 from opendbc.car.hyundai.values import HyundaiFlags, CAR, DBC, Buttons, CarControllerParams, CAMERA_SCC_CAR, HyundaiExtFlags, \
                                        EV_MODE_ACTIVE_VALUES, EV_MODE_STATUS_ADDR, EV_MODE_STATUS_DLC, EV_MODE_STATUS_MSG, \
                                        EV_MODE_STATUS_SIGNAL
@@ -212,6 +213,7 @@ class CarState(CarStateBase):
     self.mdps = None
     self.steer_touch_2af = None
     self.steering_touch = HyundaiSteeringTouch()
+    self.vehicle_gps = VehicleGPS()
     self.cruise_buttons_msg = None
     self.cam_0x362 = None
     self.cam_0x2a4 = None
@@ -1351,6 +1353,8 @@ class CarState(CarStateBase):
     )
     ret.vEgoRaw = (ret.wheelSpeeds.fl + ret.wheelSpeeds.fr + ret.wheelSpeeds.rl + ret.wheelSpeeds.rr) / 4.
     ret.vEgo, ret.aEgo = self.update_speed_kf(ret.vEgoRaw)
+    if self.CP.carFingerprint == CAR.HYUNDAI_IONIQ_5_PE:
+      ret.vehicleGps = self.vehicle_gps.update(cp, ret.vEgoRaw, ret.gearShifter == GearShifter.reverse)
     ret.standstill = ret.wheelSpeeds.fl <= STANDSTILL_THRESHOLD and ret.wheelSpeeds.rr <= STANDSTILL_THRESHOLD
 
     ret.brakeLights = ret.brakePressed or cp.vl["TCS"]["BrakeLight"] == 1 or ret.aEgo < -0.5
@@ -1619,6 +1623,8 @@ class CarState(CarStateBase):
     wrapped_navi = CP.carFingerprint == CAR.KIA_PV5
     msgs = ([(CANFD_HDA_INFO_MSG, math.nan), (CANFD_NAVI_PROFILE_MSG, math.nan)] if wrapped_navi else
             [("NEW_MSG_4B4", math.nan), ("NEW_MSG_4B9", math.nan), ("NEW_MSG_4BE", math.nan)])
+    if CP.carFingerprint == CAR.HYUNDAI_IONIQ_5_PE:
+      msgs.append((VEHICLE_GPS_MESSAGE, math.nan))
     alt_msgs = [(CANFD_NAVI_STATUS_MSG, math.nan)] if wrapped_navi else []
     if not (CP.flags & HyundaiFlags.CANFD_ALT_BUTTONS):
       # TODO: this can be removed once we add dynamic support to vl_all
