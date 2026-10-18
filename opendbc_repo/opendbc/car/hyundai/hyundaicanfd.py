@@ -864,6 +864,24 @@ def _hide_replaced_adas_service_warning(values):
     values["FAULT_DAS"] = 0
 
 
+LANE_LINE_UNSEEN = 14  # draws nothing on the Ioniq 5 PE cluster; undocumented on purpose, so a cluster update that changes it is noticed
+# model laneLineProbs at low speed (10-18 rlogs, night): parking lots 0.01~0.04, city stops 0.13~0.22, highway ~1.0
+LANE_HIDE_PROB, LANE_SHOW_PROB, LANE_HIDE_FRAMES = 0.08, 0.12, 100  # hide after 1 s below 0.08, show again from 0.12
+
+
+def _lane_unseen(state, side, prob, frame):
+  hidden, low_since = state.get(side, (False, None))
+  if prob >= LANE_SHOW_PROB:
+    hidden, low_since = False, None
+  elif prob < LANE_HIDE_PROB:
+    low_since = frame if low_since is None else low_since
+    hidden = hidden or frame - low_since >= LANE_HIDE_FRAMES
+  else:
+    low_since = None  # in between: keep the current state
+  state[side] = (hidden, low_since)
+  return hidden
+
+
 def _dashed_lane_line(color, lane_line):
   # 0x161 dashed codes seen on the Ioniq 5 PE cluster: 8 white, 10 green (no orange dashed)
   if lane_line // 10 > 0 and lane_line % 10 in (0, 5):  # camera: dashed / DLM inner dashed (color 0 = no lane info)
@@ -1102,6 +1120,10 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
         values["LANELINE_CURVATURE_DIRECTION"] = 1 if curvature < 0 and lat_active else 0
 
         trailer_lane_change_blocked = CS.trailer_connected
+        lane_probs = md.laneLineProbs if md is not None and len(md.laneLineProbs) >= 3 else None
+        unseen = create_ccnc_messages.__dict__.setdefault('_lane_unseen', {})
+        left_seen = hud_control.leftLaneVisible and not (lane_probs is not None and _lane_unseen(unseen, 'L', lane_probs[1], frame))
+        right_seen = hud_control.rightLaneVisible and not (lane_probs is not None and _lane_unseen(unseen, 'R', lane_probs[2], frame))
         if trailer_lane_change_blocked:
           values["LANELINE_LEFT"] = 2 if hud_control.leftLaneVisible else 0
           values["LANELINE_RIGHT"] = 2 if hud_control.rightLaneVisible else 0
@@ -1115,7 +1137,7 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
           if hud_control.leftLaneDepart:
             values["LANELINE_LEFT"] = 4 if (frame // 50) % 2 == 0 else 1
           else:
-            values["LANELINE_LEFT"] = _dashed_lane_line(lane_color, CS.out.leftLaneLine) if hud_control.leftLaneVisible else 0
+            values["LANELINE_LEFT"] = _dashed_lane_line(lane_color, CS.out.leftLaneLine) if left_seen else LANE_LINE_UNSEEN
 
           lane_color = 6 if md is not None and md.meta.laneChangeAvailableRight else 2
           if lane_line_check >= 1:
@@ -1126,7 +1148,7 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
           if hud_control.rightLaneDepart:
             values["LANELINE_RIGHT"] = 4 if (frame // 50) % 2 == 0 else 1
           else:
-            values["LANELINE_RIGHT"] = _dashed_lane_line(lane_color, CS.out.rightLaneLine) if hud_control.rightLaneVisible else 0
+            values["LANELINE_RIGHT"] = _dashed_lane_line(lane_color, CS.out.rightLaneLine) if right_seen else LANE_LINE_UNSEEN
 
         # carrot test: ClusterLaneTest 1~15 sends that raw value to both lane lines (look for dashed-line codes)
         lane_test = Params().get_int("ClusterLaneTest")

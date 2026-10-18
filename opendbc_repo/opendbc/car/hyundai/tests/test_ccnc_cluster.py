@@ -198,3 +198,35 @@ def test_engaged_standstill_keeps_steering_and_lane_change_icons(monkeypatch, st
 ))
 def test_dashed_lane_line_codes(color, lane_line, expected):
   assert hyundaicanfd._dashed_lane_line(color, lane_line) == expected
+
+
+def test_unseen_lane_lines_send_14(monkeypatch):
+  from openpilot.cereal import log
+  monkeypatch.setattr(hyundaicanfd, 'Params', lambda: SimpleNamespace(get_int=lambda key: 0, get=lambda key: '0'))
+  packer = CANPacker('hyundai_canfd_generated')
+  definition = packer.dbc.name_to_msg['ADRV_0x161']
+  state = SimpleNamespace(
+    adrv_0x161={key: 0 for key in definition.sigs}, out=structs.CarState(), modelV2=log.ModelDataV2.new_message(),
+    lfahda_cluster=None, cruise_buttons_msg=None, adrv_0x200=None, adrv_0x1ea=None, ccnc_0x162=None,
+    is_metric=True, paddle_button_prev=0, softHoldActive=0, trailer_connected=False,
+  )
+  control = structs.CarControl(latActive=True, enabled=True)
+  control.hudControl.rightLaneVisible = True
+  msg = hyundaicanfd.create_ccnc_messages(
+    SimpleNamespace(flags=HyundaiFlags.CAMERA_SCC), packer, SimpleNamespace(ECAN=0, CAM=2), 5, control, state,
+    control.hudControl, 0, False, False, 0, False, 0, 0)[0]
+  values = {key: get_raw_value(msg[1], sig) for key, sig in definition.sigs.items()}
+  assert (values['LANELINE_LEFT'], values['LANELINE_RIGHT']) == (14, 2)
+
+
+def test_lane_unseen_hysteresis():
+  state = {}
+  assert not hyundaicanfd._lane_unseen(state, 'L', 0.02, 0)
+  assert not hyundaicanfd._lane_unseen(state, 'L', 0.02, 95)   # parking lot, under 1 s
+  assert hyundaicanfd._lane_unseen(state, 'L', 0.02, 100)      # hidden after 1 s
+  assert hyundaicanfd._lane_unseen(state, 'L', 0.10, 120)      # between thresholds keeps it hidden
+  assert not hyundaicanfd._lane_unseen(state, 'L', 0.13, 125)  # city stop level shows it again
+  assert not hyundaicanfd._lane_unseen(state, 'L', 0.05, 130)
+  assert not hyundaicanfd._lane_unseen(state, 'L', 0.10, 200)  # a dip that does not last 1 s resets
+  assert not hyundaicanfd._lane_unseen(state, 'L', 0.05, 205)
+  assert not hyundaicanfd._lane_unseen(state, 'R', 0.02, 205)  # sides are independent
