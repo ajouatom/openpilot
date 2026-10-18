@@ -30,6 +30,7 @@ class NaviVehicleControl:
   heading_deg: float = 0.0
   speed_kph: float = 0.0
   road_name: str = ""
+  received_mono_time_ns: int = 0
 
 
 @dataclass(frozen=True)
@@ -166,6 +167,7 @@ def _vehicle(data: Any) -> NaviVehicleControl:
     heading_deg=_float(item, "headingDeg") % 360.0 if present else 0.0,
     speed_kph=max(0.0, _float(item, "speedKph")) if present else 0.0,
     road_name=_text(item, "roadName") if present else "",
+    received_mono_time_ns=max(0, _int(_get(item, "meta"), "receivedMonoTimeNanos")),
   )
 
 
