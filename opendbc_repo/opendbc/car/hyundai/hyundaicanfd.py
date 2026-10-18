@@ -1150,11 +1150,6 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
           else:
             values["LANELINE_RIGHT"] = _dashed_lane_line(lane_color, CS.out.rightLaneLine) if right_seen else LANE_LINE_UNSEEN
 
-        # carrot test: ClusterLaneTest 1~15 sends that raw value to both lane lines (look for dashed-line codes)
-        lane_test = Params().get_int("ClusterLaneTest")
-        if lane_test > 0:
-          values["LANELINE_LEFT"] = values["LANELINE_RIGHT"] = lane_test
-
         values["LCA_LEFT_ARROW"] = 2 if CS.out.leftBlinker else 0
         values["LCA_RIGHT_ARROW"] = 2 if CS.out.rightBlinker else 0
 

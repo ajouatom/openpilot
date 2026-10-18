@@ -138,12 +138,10 @@ def test_cluster_objects_restore_corner_state_without_blinking_or_distance_clamp
     assert source == original
 
 
-def test_hdp_gap_bars_popup_and_lane_test(monkeypatch):
+def test_hdp_gap_bars_and_popup(monkeypatch):
   from openpilot.cereal import log
-  lane_test = {'v': 0}
   monkeypatch.setattr(hyundaicanfd, 'Params', lambda: SimpleNamespace(
-    get_int=lambda key: lane_test['v'] if key == 'ClusterLaneTest' else 0,
-    get=lambda key: '2' if key == 'HDPuse' else '0'))
+    get_int=lambda key: 0, get=lambda key: '2' if key == 'HDPuse' else '0'))
   for attr in ('_gap_bars', '_gap_popup_until'):
     monkeypatch.delattr(hyundaicanfd.create_ccnc_messages, attr, raising=False)
   packer = CANPacker('hyundai_canfd_generated')
@@ -167,9 +165,6 @@ def test_hdp_gap_bars_popup_and_lane_test(monkeypatch):
   assert send(10, 3)['ALERTS_3'] == 9  # DISTANCE_3 popup after a change
   assert send(205, 3)['ALERTS_3'] == 9
   assert send(215, 3)['ALERTS_3'] == 0  # gone after 2 s
-  lane_test['v'] = 7
-  lanes = send(220, 3)
-  assert (lanes['LANELINE_LEFT'], lanes['LANELINE_RIGHT']) == (7, 7)
 
 
 @pytest.mark.parametrize(('standstill', 'lka', 'lca'), ((True, 4, 2), (False, 3, 0)))
