@@ -883,7 +883,10 @@ def _lane_unseen(state, side, prob, frame):
 
 
 # ClusterLaneTest = field * 10000 + raw value (test only): DBC fields, or 0x162 bits the DBC does not name
-CLUSTER_TEST_FIELDS = {1: "SPEEDLIMIT", 2: "SPEEDLIMIT_FLASH", 3: "SIGNS", 4: "SPEEDLIMIT_WEATHER", 5: "COUNTRY", 6: "SLA_ICON"}
+CLUSTER_TEST_FIELDS = {1: "SPEEDLIMIT", 2: "SPEEDLIMIT_FLASH", 3: "SIGNS", 4: "SPEEDLIMIT_WEATHER", 5: "COUNTRY"}  # 0x162
+CLUSTER_TEST_FIELDS_161 = {6: "SLA_ICON", 12: "HDA_ICON", 13: "LFA_ICON", 14: "SETSPEED", 15: "SETSPEED_HUD", 16: "CAR_CIRCLE",
+                           17: "DISTANCE", 18: "DISTANCE_CAR", 19: "DISTANCE_SPACING", 20: "DISTANCE_LEAD",
+                           21: "ALERTS_4", 22: "ALERTS_5", 23: "BACKGROUND", 24: "LANE_HIGHLIGHT", 25: "LANE_ZOOM", 26: "CENTERLINE"}
 CLUSTER_TEST_BITS = {7: tuple(range(53, 64)), 8: tuple(range(159, 163)), 9: tuple(range(183, 192)), 10: tuple(range(252, 256)),
                      11: (87, 111, 135, 212)}
 
@@ -1189,8 +1192,8 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
         values["LANE_RIGHT"] = 0 if trailer_lane_change_blocked else 1 if desire in (2, 4) else 0
 
         _apply_driver_monitoring_alert(values, hud_control, CS.adrv_0x161)
-        if test_field == 6:
-          values["SLA_ICON"] = test_value
+        if test_field in CLUSTER_TEST_FIELDS_161:
+          values[CLUSTER_TEST_FIELDS_161[test_field]] = test_value
         ret.append(packer.make_can_msg("ADRV_0x161", CAN.ECAN, values, rx_counter = rx_counter))
 
       if CS.adrv_0x200 is not None:
@@ -1231,7 +1234,7 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
           values["FAULT_LSS"] = 0
           values["FAULT_DAS"] = 0
 
-        if test_field in (1, 2, 3, 4, 5):
+        if test_field in CLUSTER_TEST_FIELDS:
           values[CLUSTER_TEST_FIELDS[test_field]] = test_value
         msg = packer.make_can_msg("CCNC_0x162", CAN.ECAN, values, rx_counter=rx_counter)
         ret.append(_set_raw_bits(msg, CLUSTER_TEST_BITS[test_field], test_value) if test_field in CLUSTER_TEST_BITS else msg)

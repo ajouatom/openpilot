@@ -257,3 +257,23 @@ def test_cluster_test_raw_bits_keep_a_valid_checksum():
   assert [(value >> b) & 1 for b in range(53, 64)] == [1, 0, 1] + [0] * 8
   assert get_raw_value(dat, definition.sigs['SPEEDLIMIT']) == 80  # named fields untouched
   assert get_raw_value(dat, definition.sigs['CHECKSUM']) == hyundaicanfd.hkg_can_fd_checksum(addr, None, bytearray(dat))
+
+
+@pytest.mark.parametrize(('setting', 'field', 'value'), ((210040, 'ALERTS_4', 40), (170002, 'DISTANCE', 2), (120007, 'HDA_ICON', 7)))
+def test_cluster_test_overrides_0x161_fields_last(monkeypatch, setting, field, value):
+  from openpilot.cereal import log
+  monkeypatch.setattr(hyundaicanfd, 'Params', lambda: SimpleNamespace(
+    get_int=lambda key: setting if key == 'ClusterLaneTest' else 0, get=lambda key: '2' if key == 'HDPuse' else '0'))
+  packer = CANPacker('hyundai_canfd_generated')
+  definition = packer.dbc.name_to_msg['ADRV_0x161']
+  state = SimpleNamespace(
+    adrv_0x161={key: 0 for key in definition.sigs}, out=structs.CarState(), modelV2=log.ModelDataV2.new_message(),
+    lfahda_cluster=None, cruise_buttons_msg=None, adrv_0x200=None, adrv_0x1ea=None, ccnc_0x162=None,
+    is_metric=True, paddle_button_prev=0, softHoldActive=0, trailer_connected=False,
+  )
+  control = structs.CarControl(latActive=True, enabled=True)
+  control.hudControl.leadDistanceBars = 3
+  msg = hyundaicanfd.create_ccnc_messages(
+    SimpleNamespace(flags=HyundaiFlags.CAMERA_SCC), packer, SimpleNamespace(ECAN=0, CAM=2), 5, control, state,
+    control.hudControl, 0, False, False, 0, False, 0, 0)[0]
+  assert get_raw_value(msg[1], definition.sigs[field]) == value
