@@ -882,7 +882,7 @@ def _lane_unseen(state, side, prob, frame):
   return hidden
 
 
-# ClusterLaneTest = field * 10000 + raw value (test only): DBC fields, or 0x162 bits the DBC does not name
+# ClusterLaneTest = field, ClusterLaneTestValue = raw value (test only): DBC fields, or 0x162 bits the DBC does not name
 CLUSTER_TEST_FIELDS = {1: "SPEEDLIMIT", 2: "SPEEDLIMIT_FLASH", 3: "SIGNS", 4: "SPEEDLIMIT_WEATHER", 5: "COUNTRY"}  # 0x162
 CLUSTER_TEST_FIELDS_161 = {6: "SLA_ICON", 12: "HDA_ICON", 13: "LFA_ICON", 14: "SETSPEED", 15: "SETSPEED_HUD", 16: "CAR_CIRCLE",
                            17: "DISTANCE", 18: "DISTANCE_CAR", 19: "DISTANCE_SPACING", 20: "DISTANCE_LEAD",
@@ -891,12 +891,13 @@ CLUSTER_TEST_BITS = {7: tuple(range(53, 64)), 8: tuple(range(159, 163)), 9: tupl
                      11: (87, 111, 135, 212)}
 
 
-CLUSTER_TEST_SWEEP = 9999  # field * 10000 + 9999: step the field every 1 s and show the step in the set speed number
+CLUSTER_TEST_SWEEP = -1  # ClusterLaneTestValue -1: step the field every 1 s and show the step in the set speed number
 
 
 def _cluster_test():
-  value = Params().get_int("ClusterLaneTest")
-  return divmod(value, 10000) if value > 0 else (0, 0)
+  params = Params()
+  field = params.get_int("ClusterLaneTest")
+  return (field, params.get_int("ClusterLaneTestValue")) if field > 0 else (0, 0)
 
 
 def _cluster_sweep(packer, field, frame):

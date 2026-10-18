@@ -259,11 +259,12 @@ def test_cluster_test_raw_bits_keep_a_valid_checksum():
   assert get_raw_value(dat, definition.sigs['CHECKSUM']) == hyundaicanfd.hkg_can_fd_checksum(addr, None, bytearray(dat))
 
 
-@pytest.mark.parametrize(('setting', 'field', 'value'), ((210040, 'ALERTS_4', 40), (170002, 'DISTANCE', 2), (120007, 'HDA_ICON', 7)))
-def test_cluster_test_overrides_0x161_fields_last(monkeypatch, setting, field, value):
+@pytest.mark.parametrize(('slot', 'field', 'value'), ((21, 'ALERTS_4', 40), (17, 'DISTANCE', 2), (12, 'HDA_ICON', 7)))
+def test_cluster_test_overrides_0x161_fields_last(monkeypatch, slot, field, value):
   from openpilot.cereal import log
   monkeypatch.setattr(hyundaicanfd, 'Params', lambda: SimpleNamespace(
-    get_int=lambda key: setting if key == 'ClusterLaneTest' else 0, get=lambda key: '2' if key == 'HDPuse' else '0'))
+    get_int=lambda key: {'ClusterLaneTest': slot, 'ClusterLaneTestValue': value}.get(key, 0),
+    get=lambda key: '2' if key == 'HDPuse' else '0'))
   packer = CANPacker('hyundai_canfd_generated')
   definition = packer.dbc.name_to_msg['ADRV_0x161']
   state = SimpleNamespace(

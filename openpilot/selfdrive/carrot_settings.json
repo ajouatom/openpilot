@@ -419,7 +419,8 @@
             "HyundaiCanfdClusterDirectTx",
             "CanfdDebug",
             "HDPuse",
-            "ClusterLaneTest"
+            "ClusterLaneTest",
+            "ClusterLaneTestValue"
           ]
         },
         {
@@ -1861,16 +1862,32 @@
     {
       "group": "시작",
       "name": "ClusterLaneTest",
-      "title": "계기판 표시 테스트(CCNC)",
-      "descr": "테스트용. 0: 끔. 값 = 칸×10000 + 보낼 값. 재부팅하면 0.\n1 속도제한 숫자(0~255) · 2 제한표시 색/깜빡임(0~15) · 3 표지판 종류(0~255) · 4 날씨 보조(0~15) · 5 국가(0~15) · 6 SLA 아이콘(0~15)\n7 0x162 비트53~63(0~2047) · 8 비트159~162(0~15) · 9 비트183~191(0~511) · 10 비트252~255(0~15) · 11 비트87/111/135/212(0~15)\nHDP·0x161: 12 HDA아이콘(0~7) · 13 LFA아이콘(0~7) · 14 설정속도 색(0~15) · 15 설정속도HUD(0~7) · 16 차 원(0~7) · 17 차간 DISTANCE(0~15) · 18 차간 차(0~7) · 19 차간 간격(0~15) · 20 앞차(0~31) · 21 ALERTS_4 문구(0~255) · 22 ALERTS_5 문구(0~31) · 23 배경(0~15) · 24 차로강조(0~15) · 25 차로줌(0~3) · 26 중앙선(0~3)\n자동 순환: 칸×10000+9999 → 1초마다 값을 0부터 끝까지 올리고 현재 값을 설정속도 숫자에 표시(7~11 비트 칸은 한 비트씩, 비트 번호 표시)\n예: 10080 = 제한속도 80, 30008 = 표지판 8(STOP). 표시만 바뀌고 제어 영향 없음.",
+      "title": "계기판 표시 테스트: 칸(CCNC)",
+      "descr": "테스트용. 0: 끔. 바꿀 칸 번호를 고르고, 보낼 값은 「계기판 표시 테스트: 값」에서 정합니다. 재부팅하면 0.\n1 속도제한 숫자 · 2 제한표시 색/깜빡임 · 3 표지판 종류 · 4 날씨 보조 · 5 국가 · 6 SLA 아이콘 · 7~11 0x162 이름 없는 비트(7: 53~63, 8: 159~162, 9: 183~191, 10: 252~255, 11: 87/111/135/212) · 12 HDA아이콘 · 13 LFA아이콘 · 14 설정속도 색 · 15 설정속도HUD · 16 차 원 · 17 차간 DISTANCE · 18 차간 차 · 19 차간 간격 · 20 앞차 · 21 ALERTS_4 문구 · 22 ALERTS_5 문구 · 23 배경 · 24 차로강조 · 25 차로줌 · 26 중앙선\n표시만 바뀌고 제어 영향 없음.",
       "egroup": "START",
-      "etitle": "Cluster Display Test (CCNC)",
-      "edescr": "Test only. 0: off. Value = field x 10000 + raw value. Resets to 0 on reboot.\n1 speed limit (0-255) · 2 limit color/flash (0-15) · 3 sign type (0-255) · 4 weather (0-15) · 5 country (0-15) · 6 SLA icon (0-15)\n7 0x162 bits 53-63 (0-2047) · 8 bits 159-162 (0-15) · 9 bits 183-191 (0-511) · 10 bits 252-255 (0-15) · 11 bits 87/111/135/212 (0-15)\nHDP/0x161: 12 HDA icon (0-7) · 13 LFA icon (0-7) · 14 set speed color (0-15) · 15 set speed HUD (0-7) · 16 car circle (0-7) · 17 gap DISTANCE (0-15) · 18 gap car (0-7) · 19 gap spacing (0-15) · 20 lead (0-31) · 21 ALERTS_4 text (0-255) · 22 ALERTS_5 text (0-31) · 23 background (0-15) · 24 lane highlight (0-15) · 25 lane zoom (0-3) · 26 center line (0-3)\nSweep: field x 10000 + 9999 steps the value from 0 to its max every 1 s and shows it in the set speed number (bit groups 7-11 step one bit at a time and show the bit number)\nExample: 10080 = limit 80, 30008 = sign 8 (STOP). Display only; no effect on control.",
+      "etitle": "Cluster Display Test: Field (CCNC)",
+      "edescr": "Test only. 0: off. Pick the field; the value comes from \"Cluster Display Test: Value\". Resets to 0 on reboot.\n1 speed limit · 2 limit color/flash · 3 sign type · 4 weather · 5 country · 6 SLA icon · 7-11 unnamed 0x162 bits (7: 53-63, 8: 159-162, 9: 183-191, 10: 252-255, 11: 87/111/135/212) · 12 HDA icon · 13 LFA icon · 14 set speed color · 15 set speed HUD · 16 car circle · 17 gap DISTANCE · 18 gap car · 19 gap spacing · 20 lead · 21 ALERTS_4 text · 22 ALERTS_5 text · 23 background · 24 lane highlight · 25 lane zoom · 26 center line\nDisplay only; no effect on control.",
       "cgroup": "启动设置",
-      "ctitle": "仪表显示测试 (CCNC)",
-      "cdescr": "仅用于测试。0: 关闭。值 = 字段×10000 + 发送值。重启后恢复为 0。\n1 限速数字(0~255) · 2 限速显示颜色/闪烁(0~15) · 3 标志类型(0~255) · 4 天气(0~15) · 5 国家(0~15) · 6 SLA 图标(0~15)\n7 0x162 位53~63(0~2047) · 8 位159~162(0~15) · 9 位183~191(0~511) · 10 位252~255(0~15) · 11 位87/111/135/212(0~15)\nHDP/0x161: 12 HDA图标(0~7) · 13 LFA图标(0~7) · 14 设定速度颜色(0~15) · 15 设定速度HUD(0~7) · 16 车圈(0~7) · 17 车距DISTANCE(0~15) · 18 车距车(0~7) · 19 车距间隔(0~15) · 20 前车(0~31) · 21 ALERTS_4 文字(0~255) · 22 ALERTS_5 文字(0~31) · 23 背景(0~15) · 24 车道高亮(0~15) · 25 车道缩放(0~3) · 26 中心线(0~3)\n自动循环: 字段×10000+9999 → 每 1 秒从 0 递增到最大值，并在设定速度数字处显示当前值（7~11 位字段逐位切换并显示位号）\n例: 10080 = 限速 80, 30008 = 标志 8(STOP)。仅改变显示，不影响控制。",
+      "ctitle": "仪表显示测试: 字段 (CCNC)",
+      "cdescr": "仅用于测试。0: 关闭。选择字段，发送值在「仪表显示测试: 值」中设定。重启后恢复为 0。\n1 限速数字 · 2 限速显示颜色/闪烁 · 3 标志类型 · 4 天气 · 5 国家 · 6 SLA 图标 · 7~11 0x162 未命名位(7: 53~63, 8: 159~162, 9: 183~191, 10: 252~255, 11: 87/111/135/212) · 12 HDA图标 · 13 LFA图标 · 14 设定速度颜色 · 15 设定速度HUD · 16 车圈 · 17 车距DISTANCE · 18 车距车 · 19 车距间隔 · 20 前车 · 21 ALERTS_4 文字 · 22 ALERTS_5 文字 · 23 背景 · 24 车道高亮 · 25 车道缩放 · 26 中心线\n仅改变显示，不影响控制。",
       "min": 0,
-      "max": 269999,
+      "max": 26,
+      "default": 0,
+      "unit": 1
+    },
+    {
+      "group": "시작",
+      "name": "ClusterLaneTestValue",
+      "title": "계기판 표시 테스트: 값(CCNC)",
+      "descr": "「계기판 표시 테스트: 칸」에 보낼 값. 칸의 비트 수를 넘는 부분은 잘립니다(표지판 0~255, 4비트 칸 0~15 등).\n-1: 자동 순환 — 1초마다 0부터 끝까지 올리고 현재 값을 계기판 설정속도 숫자에 표시(7~11 비트 칸은 한 비트씩, 비트 번호 표시). 재부팅하면 0.",
+      "egroup": "START",
+      "etitle": "Cluster Display Test: Value (CCNC)",
+      "edescr": "Value sent to the field chosen in \"Cluster Display Test: Field\". Bits beyond the field width are dropped (sign 0-255, 4-bit fields 0-15, etc.).\n-1: sweep, stepping from 0 to the field's max every 1 s and showing it in the set speed number (bit fields 7-11 step one bit at a time and show the bit number). Resets to 0 on reboot.",
+      "cgroup": "启动设置",
+      "ctitle": "仪表显示测试: 值 (CCNC)",
+      "cdescr": "发送到「仪表显示测试: 字段」的值。超出字段位数的部分被截断（标志 0~255，4 位字段 0~15 等）。\n-1: 自动循环 — 每 1 秒从 0 递增到最大值，并在设定速度数字处显示当前值（7~11 位字段逐位切换并显示位号）。重启后恢复为 0。",
+      "min": -1,
+      "max": 2047,
       "default": 0,
       "unit": 1
     },
