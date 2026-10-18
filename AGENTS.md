@@ -1,5 +1,24 @@
 # Repository memory
 
+- On 2026-10-18, repeated S3 TCP failures persist after background downloads end;
+  Omada has both clients associated, C4 5GHz/-67dBm and S3 2.4GHz/-71dBm.
+  Remove only the Wi-Fi path's repeated10s shared-USB settling delay, preserving
+  loading wait and wired policy.45 focused tests pass; selective guarded HUD
+  install, no model/router/firmware change. Publish nav0adebf127c/wip2c479eaedf,
+  single-parent. This improves recovery delay, not the original disconnect cause.
+  User redirects C3/eGPU memory comparison to own C4:129qlogs show warmed evening
+  82-83% versus morning88-89%; overall increase remains incompletely attributed.
+  Native preimport comparison creates no sockets/threads; disabled HUD does not
+  start a Wi-Fi sender. Same-boot600s live retry observation ends with unchanged
+  ~393MiB available, HUD inactivePSS83.75-84.01MiB, active~182-186, stable oldION;
+  model/eGPU PSS changes~0.1MiB, GPU inventories unchanged. No new leak reproduced
+  or memory fix claimed. Some older95% samples include withdrawn diagnostic
+  compilation; do not use this to dismiss earlier92%. Read-only low-priority
+  observer PID273288 runs at most2h/32MiB under /data/carrot/diagnostics; result
+  pending, do not claim completed stability. Concurrent60s model/DM1200/1199
+  valid consecutive at19.99856/19.99491Hz, not strict>=20. See
+  docs/s3_disconnect_followup_20261018.md and docs/memory_scope_followup_20261018.md.
+
 - On 2026-10-18, user requested external-nav > phone > vehicle > device GPS.
   Ioniq5PE bus0/0x374 contains positive LE32 lat/lon*1e-6: 20 segments/1195
   original samples near1Hz. No OEM heading/fix-quality decoded; restrict profile
