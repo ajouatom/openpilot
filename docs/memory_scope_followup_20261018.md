@@ -125,7 +125,9 @@ launcher initially checked the file before the first detailed record finished;
 it reported an assertion failure. A follow-up verified the **existing single
 observer**, its growing records and empty error file; no duplicate was started.
 
-The two-hour observation is pending, not a completed stability pass. Raw logs
+Update: the two-hour observation completed normally. The measured growth and
+subsequent fixes are recorded in [the process logger follow-up](proclog_memory_20261018.md).
+Completion is not a stability pass. Raw logs
 and observer output remain private. The initial NAS sample did not identify the
 specific C3/eGPU reporter, and cannot establish fleet-wide causation.
 

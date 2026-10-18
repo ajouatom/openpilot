@@ -1,5 +1,21 @@
 # Repository memory
 
+- On 2026-10-18, user again reports90% versus~80% after reboot. Completed2h
+  capture has1412 samples/118 inventories: available421.45->375.51MiB,
+  minimum326.65. Proclogd PSS14.64->52.81MiB; at10:21 private dirty rises38.62MiB
+  with RSS only+0.36MiB, then plateaus. GC-induced shared-page copying reproduced
+  in native isolated forks; exact live GC trigger remains inferred. Fix daemon-
+  entry GC freeze before runtime resources, keeping new cycles collectible and
+  parent unchanged. Separately prune exited metadata and validatePID/starttime:
+  2000 native byte-identical publications retain2 entries versus old2001; PID
+  reuse now refreshes metadata. Exact-main native GC private-dirty delta13.28->
+  1.66MiB; desktop20pass/2Linuxskips. Nativepytest unavailable, standalone native
+  assertions pass. No vehicle install/restart; old manager preimports module.
+  Model/DM/UI GPU inventories unchanged, HUD lifecycle median+0.59MiB, S3 often
+  disconnected. Does NOT explain all80->90%, prove Wi-Fi/eGPU cause, or establish
+  long stability. Publish both branches single-parent; raw evidence private.
+  See docs/proclog_memory_20261018.md. Supersedes pending2h status below.
+
 - On 2026-10-18, user explicitly removed the Ioniq5PE-only CAN GPS restriction.
   Use actual DBC profile eligibility across Hyundai/Kia/Genesis: named0x374,
   eight bytes, two unsigned LE32 coordinates at0/32, scale1e-6/offset0. Optional

@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import gc
 import os
 import time
 from typing import NoReturn, TypedDict
@@ -118,6 +119,7 @@ def _parse_proc_stat(stat: str) -> ProcStat | None:
 
 class ProcExtra(TypedDict):
   pid: int
+  starttime: int
   name: str
   exe: str
   cmdline: list[str]
@@ -126,9 +128,9 @@ class ProcExtra(TypedDict):
 _proc_cache: dict[int, ProcExtra] = {}
 
 
-def _get_proc_extra(pid: int, name: str) -> ProcExtra:
+def _get_proc_extra(pid: int, name: str, starttime: int) -> ProcExtra:
   cache: ProcExtra | None = _proc_cache.get(pid)
-  if cache is None or cache.get('name') != name:
+  if cache is None or cache['starttime'] != starttime or cache['name'] != name:
     exe = ''
     cmdline: list[str] = []
     try:
@@ -140,9 +142,17 @@ def _get_proc_extra(pid: int, name: str) -> ProcExtra:
         cmdline = [c.decode('utf-8', errors='replace') for c in f.read().split(b'\0') if c]
     except OSError:
       pass
-    cache = {'pid': pid, 'name': name, 'exe': exe, 'cmdline': cmdline}
+    cache = {'pid': pid, 'starttime': starttime, 'name': name, 'exe': exe, 'cmdline': cmdline}
     _proc_cache[pid] = cache
   return cache
+
+
+def _prune_proc_cache(identities: dict[int, int]) -> None:
+  # Short-lived helpers otherwise remain for the lifetime of this daemon.
+  # PID alone (even with the same process name) is not a process identity.
+  for pid, extra in list(_proc_cache.items()):
+    if identities.get(pid) != extra['starttime']:
+      del _proc_cache[pid]
 
 
 def _procs() -> list[ProcStat]:
@@ -165,6 +175,7 @@ def build_proc_log_message(msg, sampler: SmapsSampler) -> None:
   pl = msg.procLog
 
   procs = _procs()
+  _prune_proc_cache({r['pid']: r['starttime'] for r in procs})
   sampler.update({r['pid']: r['starttime'] for r in procs if r['rss'] * PAGE_SIZE > MIN_RSS_BYTES})
   now = time.monotonic()
   l = pl.init('procs', len(procs))
@@ -186,7 +197,7 @@ def build_proc_log_message(msg, sampler: SmapsSampler) -> None:
     proc.processor = r['processor']
     proc.name = r['name']
 
-    extra = _get_proc_extra(r['pid'], r['name'])
+    extra = _get_proc_extra(r['pid'], r['name'], r['starttime'])
     proc.exe = extra['exe']
     cmdline = proc.init('cmdline', len(extra['cmdline']))
     for j, arg in enumerate(extra['cmdline']):
@@ -223,6 +234,10 @@ def build_proc_log_message(msg, sampler: SmapsSampler) -> None:
   pl.mem.shared = mem_info["Shmem:"]
 
 def main() -> NoReturn:
+  # The manager preimports modules before forking. Keep GC from copying that
+  # inherited heap merely by visiting it; freeze before any daemon resources
+  # or runtime cycles exist. New objects still receive normal collection.
+  gc.freeze()
   pm = messaging.PubMaster(['procLog'])
   sampler = SmapsSampler()
   next_publish = 0.0
