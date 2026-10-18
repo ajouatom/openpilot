@@ -81,14 +81,17 @@ def test_fallback_handler_discards_failed_camera_before_internal_inference():
   body.body[0].body = handler.body
   module = ast.fix_missing_locations(ast.Module(body=[body], type_ignores=[]))
   reset = []
+  events = []
   internal = SimpleNamespace(reset=lambda: reset.append(True), run=lambda *a: pytest.fail('stale frame inference'))
   params = SimpleNamespace(get_bool=lambda _: True, put_bool=lambda *a: None)
   scope = {'params': params, 'small_model': internal, 'cloudlog': SimpleNamespace(exception=lambda *a: None),
+           'log_event': lambda event, **fields: events.append((event, fields)),
            'queue_usbgpu_error_tmux': lambda *a: None, 'internal_needs_reset': True,
            'egpu_recovery': None, 'meta_main': SimpleNamespace(frame_id=41), 'published': []}
   exec(compile(module, '<modeld actual fallback>', 'exec'), scope)
   assert scope['published'] == [2] and scope['last_vipc_frame_id'] == 41
   assert scope['model'] is internal and reset == [True]
+  assert events == [('retry_stopped', {'reason': 'background recovery unavailable', 'retry': False, 'active_model': 'internal'})]
 
 
 def test_usb_wait_only_adapts_verified_runtime_and_yields(monkeypatch):
