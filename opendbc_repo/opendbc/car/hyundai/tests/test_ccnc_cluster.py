@@ -228,7 +228,7 @@ def test_lane_unseen_hysteresis():
   assert not hyundaicanfd._lane_unseen(state, 'R', 0.02, 205)  # sides are independent
 
 
-@pytest.mark.parametrize(('main_on', 'v_ego', 'pressed'), ((False, 5.0, 1), (True, 5.0, 0), (False, 1.0, 0)))
+@pytest.mark.parametrize(('main_on', 'v_ego', 'pressed'), ((False, 5.0, 1), (True, 5.0, 0), (False, 0.0, 1)))
 def test_stock_main_kept_on_without_engagement(monkeypatch, main_on, v_ego, pressed):
   from openpilot.cereal import log
   monkeypatch.setattr(hyundaicanfd, 'Params', lambda: SimpleNamespace(get_int=lambda key: 0, get=lambda key: '0'))
