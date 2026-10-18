@@ -1,5 +1,83 @@
 # Repository memory
 
+- On 2026-10-18, user again reports90% versus~80% after reboot. Completed2h
+  capture has1412 samples/118 inventories: available421.45->375.51MiB,
+  minimum326.65. Proclogd PSS14.64->52.81MiB; at10:21 private dirty rises38.62MiB
+  with RSS only+0.36MiB, then plateaus. GC-induced shared-page copying reproduced
+  in native isolated forks; exact live GC trigger remains inferred. Fix daemon-
+  entry GC freeze before runtime resources, keeping new cycles collectible and
+  parent unchanged. Separately prune exited metadata and validatePID/starttime:
+  2000 native byte-identical publications retain2 entries versus old2001; PID
+  reuse now refreshes metadata. Exact-main native GC private-dirty delta13.28->
+  1.66MiB; desktop20pass/2Linuxskips. Nativepytest unavailable, standalone native
+  assertions pass. No vehicle install/restart; old manager preimports module.
+  Model/DM/UI GPU inventories unchanged, HUD lifecycle median+0.59MiB, S3 often
+  disconnected. Does NOT explain all80->90%, prove Wi-Fi/eGPU cause, or establish
+  long stability. Publish both branches single-parent; raw evidence private.
+  See docs/proclog_memory_20261018.md. Supersedes pending2h status below.
+
+- On 2026-10-18, user explicitly removed the Ioniq5PE-only CAN GPS restriction.
+  Use actual DBC profile eligibility across Hyundai/Kia/Genesis: named0x374,
+  eight bytes, two unsigned LE32 coordinates at0/32, scale1e-6/offset0. Optional
+  registration covers CANFD and legacy parser paths; current legacy DBC lacks
+  the profile. All CANFD configurations pass synthetic reception on configured
+  bus, including late arrival; absent/incompatible profiles stay inactive.
+  Preserve priority, original timestamps, motion/freeze/course checks. Nav155/
+  wip134 focused tests pass with desktop OS doubles. Real driving evidence is
+  still Ioniq5PE only; no vehicle install or new CPU claim. This supersedes the
+  model-name restriction below. Both maintained branches, single-parent. See
+  docs/vehicle_can_gps_20261018.md.
+
+
+- On 2026-10-18, repeated S3 TCP failures persist after background downloads end;
+  Omada has both clients associated, C4 5GHz/-67dBm and S3 2.4GHz/-71dBm.
+  Remove only the Wi-Fi path's repeated10s shared-USB settling delay, preserving
+  loading wait and wired policy.45 focused tests pass; selective guarded HUD
+  install, no model/router/firmware change. Publish nav0adebf127c/wip2c479eaedf,
+  single-parent. This improves recovery delay, not the original disconnect cause.
+  User redirects C3/eGPU memory comparison to own C4:129qlogs show warmed evening
+  82-83% versus morning88-89%; overall increase remains incompletely attributed.
+  Native preimport comparison creates no sockets/threads; disabled HUD does not
+  start a Wi-Fi sender. Same-boot600s live retry observation ends with unchanged
+  ~393MiB available, HUD inactivePSS83.75-84.01MiB, active~182-186, stable oldION;
+  model/eGPU PSS changes~0.1MiB, GPU inventories unchanged. No new leak reproduced
+  or memory fix claimed. Some older95% samples include withdrawn diagnostic
+  compilation; do not use this to dismiss earlier92%. Read-only low-priority
+  observer PID273288 runs at most2h/32MiB under /data/carrot/diagnostics; result
+  pending, do not claim completed stability. Concurrent60s model/DM1200/1199
+  valid consecutive at19.99856/19.99491Hz, not strict>=20. See
+  docs/s3_disconnect_followup_20261018.md and docs/memory_scope_followup_20261018.md.
+
+- On 2026-10-18, user requested external-nav > phone > vehicle > device GPS.
+  Ioniq5PE bus0/0x374 contains positive LE32 lat/lon*1e-6: 20 segments/1195
+  original samples near1Hz. No OEM heading/fix-quality decoded; restrict profile
+  to this model/validated hemisphere. Optional receive-only monitor requires
+  three plausible samples, original timestamps, motion/freeze/freshness checks;
+  derived >=5m course is separately valid, disabled in reverse, never north by
+  default. Independent sources prevent lower-priority overwrite. Raw replay
+  119551 CAN events accepts1166 fixes, rejects6 acquisition/23 moving repeats;
+  829 have course. Nav188 tests pass/9 native-render skips, desktop OS doubles.
+  No vehicle install/native CPU/closed-loop claim. Publish both maintained
+  branches single-parent, preserving model architecture; wip also needs existing
+  nav receipt/sequence handling. See docs/vehicle_can_gps_20261018.md. Raw private.
+
+
+- On 2026-10-18, user reported worse signals and requested evening/morning review.
+  Read-only/hash-verified213 files; actual drives10ea/10eb run087f862d81 with
+  unchanged918654b8 tracker. Upper/central selectors remain OFFLINE, not the cause.
+  Morning08:17:02 visible green is read, but box/ID mismatch repeatedly resets
+  guard confirmation; right arrow+round green15x8 fails1.7 aspect gate. Actual
+  hold persists until driver gas04.390, despite model stop distance rising~49m.
+  Evening twilight near-red miss is proposal failure, not highest-row selection;
+  later green confirms in~1.24–1.49s but lead bypass already removed veto.
+  Measured evening9.29–12.87Hz, morning7.70–12.07Hz. New20-segment/12,492-observer
+  central replay removes7 greens, changes0/20,955 nominal and0/20,951 +20ms guard
+  updates, one release each; no solution or closed-loop claim. User proposes
+  remembering central red housings and accepting strong same-housing transitions.
+  Target whole-housing continuity/arrow separation, not brightness-only release.
+  No vehicle/code/model change; publish records both branches, single-parent.
+  See docs/signal_drive_review_20261018.md; raw evidence remains private.
+
 - On 2026-10-17, user requested locationd CPU optimization, then rejected the
   small benefit and explicitly requested stopping, original code and records
   only. Trial native-result/noise-allocation optimization preserves32,625 replay

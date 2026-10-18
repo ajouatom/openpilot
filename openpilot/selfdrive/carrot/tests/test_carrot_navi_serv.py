@@ -264,7 +264,7 @@ def test_applies_7714_vehicle_route_traffic_and_secondary_sdi():
 
   first_gps_update = serv.last_update_gps_time_navi
   assert serv._update_carrot_navi(sm)
-  assert serv.last_update_gps_time_navi >= first_gps_update
+  assert serv.last_update_gps_time_navi == first_gps_update
   assert len(serv.params_memory.writes) == 2
 
   data["connected"] = False
@@ -273,6 +273,52 @@ def test_applies_7714_vehicle_route_traffic_and_secondary_sdi():
   assert serv.szPosRoadName == ""
   assert (serv.nGoPosDist, serv.nGoPosTime) == (0, 0)
   assert serv.params_memory.removed[-1] == "TrafficLight"
+
+
+@pytest.mark.parametrize("receipt_ns", (0, 9_800_000_000))
+def test_vehicle_heartbeat_does_not_restart_dead_reckoning(monkeypatch, receipt_ns):
+  from openpilot.selfdrive.carrot import carrot_serv
+
+  serv = _serv()
+  data = _message()
+  data["vehicle"] = {"meta": {**_meta(1), "receivedMonoTimeNanos": receipt_ns},
+                     "latitude": 37.5, "longitude": 127.1, "headingDeg": 0.0, "speedKph": 36.0}
+  sm = _SubMaster(data)
+  monkeypatch.setattr(carrot_serv.time, "monotonic", lambda: 10.)
+  serv._update_carrot_navi(sm)
+  first_fix = serv.last_calculate_gps_time
+  assert first_fix == (9.8 if receipt_ns else 10.)
+
+  # At 10 m/s a repeated item must not rewind the extrapolation by five meters.
+  for now in (10.5, 11., 13.):
+    monkeypatch.setattr(carrot_serv.time, "monotonic", lambda now=now: now)
+    serv._update_carrot_navi(sm)
+    assert serv.last_calculate_gps_time == serv.last_update_gps_time_navi == first_fix
+    predicted, _ = serv.estimate_position(37.5, 127.1, 10., 0., now - serv.last_calculate_gps_time)
+    expected, _ = serv.estimate_position(37.5, 127.1, 10., 0., now - first_fix)
+    assert predicted == expected
+  assert 13. - serv.last_calculate_gps_time >= 3.  # heartbeats cannot grant map freshness
+
+  # A genuinely new fix can have identical coordinates (stationary/quantized).
+  data["vehicle"]["meta"] = {**_meta(2), "receivedMonoTimeNanos": 12_900_000_000}
+  serv._update_carrot_navi(sm)
+  assert serv.last_calculate_gps_time == 12.9
+  data["sessionId"] = "reconnected"
+  data["vehicle"]["meta"] = {**_meta(1), "receivedMonoTimeNanos": 12_950_000_000}
+  serv._update_carrot_navi(sm)
+  assert serv.last_calculate_gps_time == 12.95
+
+
+def test_future_vehicle_receipt_cannot_create_a_fix(monkeypatch):
+  from openpilot.selfdrive.carrot import carrot_serv
+
+  serv = _serv()
+  data = _message()
+  data["vehicle"] = {"meta": {**_meta(1), "receivedMonoTimeNanos": 11_000_000_000},
+                     "latitude": 37.5, "longitude": 127.1}
+  monkeypatch.setattr(carrot_serv.time, "monotonic", lambda: 10.)
+  serv._update_carrot_navi(_SubMaster(data))
+  assert serv.last_calculate_gps_time == 0.
 
 
 def test_legacy_7713_navigation_update_path_remains_operational():
