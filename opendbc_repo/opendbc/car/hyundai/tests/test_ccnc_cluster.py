@@ -195,13 +195,14 @@ def test_dashed_lane_line_codes(color, lane_line, expected):
   assert hyundaicanfd._dashed_lane_line(color, lane_line) == expected
 
 
-def test_unseen_lane_lines_send_14(monkeypatch):
+@pytest.mark.parametrize(('blindspot', 'left'), ((False, 14), (True, 4)))  # orange (BSD) stays even when unseen
+def test_unseen_lane_lines_send_14(monkeypatch, blindspot, left):
   from openpilot.cereal import log
   monkeypatch.setattr(hyundaicanfd, 'Params', lambda: SimpleNamespace(get_int=lambda key: 0, get=lambda key: '0'))
   packer = CANPacker('hyundai_canfd_generated')
   definition = packer.dbc.name_to_msg['ADRV_0x161']
   state = SimpleNamespace(
-    adrv_0x161={key: 0 for key in definition.sigs}, out=structs.CarState(), modelV2=log.ModelDataV2.new_message(),
+    adrv_0x161={key: 0 for key in definition.sigs}, out=structs.CarState(leftBlindspot=blindspot), modelV2=log.ModelDataV2.new_message(),
     lfahda_cluster=None, cruise_buttons_msg=None, adrv_0x200=None, adrv_0x1ea=None, ccnc_0x162=None,
     is_metric=True, paddle_button_prev=0, softHoldActive=0, trailer_connected=False,
   )
@@ -211,7 +212,7 @@ def test_unseen_lane_lines_send_14(monkeypatch):
     SimpleNamespace(flags=HyundaiFlags.CAMERA_SCC), packer, SimpleNamespace(ECAN=0, CAM=2), 5, control, state,
     control.hudControl, 0, False, False, 0, False, 0, 0)[0]
   values = {key: get_raw_value(msg[1], sig) for key, sig in definition.sigs.items()}
-  assert (values['LANELINE_LEFT'], values['LANELINE_RIGHT']) == (14, 2)
+  assert (values['LANELINE_LEFT'], values['LANELINE_RIGHT']) == (left, 2)
 
 
 def test_lane_unseen_hysteresis():
