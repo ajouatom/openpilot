@@ -4,7 +4,8 @@ import pytest
 
 from opendbc.can import CANParser
 from opendbc.car import structs
-from opendbc.car.hyundai.vehicle_gps import MESSAGE, VehicleGPS
+from opendbc.car.hyundai.values import CANFD_CAR, CAR
+from opendbc.car.hyundai.vehicle_gps import MESSAGE, VehicleGPS, register_vehicle_gps
 
 
 def frame(lat=37., lon=127.):
@@ -96,23 +97,47 @@ def test_highway_travel_between_one_hz_fixes_is_not_a_frozen_coordinate():
         assert gps.update(cp, 35)['valid']
 
 
-@pytest.mark.parametrize('platform,supported', [('HYUNDAI_IONIQ_5_PE', True), ('KIA_EV6', False)])
-def test_only_verified_platform_registers_optional_profile(monkeypatch, platform, supported):
+@pytest.mark.parametrize('candidate', sorted(CANFD_CAR) + [CAR.HYUNDAI_SONATA])
+def test_dbc_profile_registers_across_platforms_without_car_name_gate(monkeypatch, candidate):
   from unittest.mock import Mock
   from opendbc.car import Bus
   from opendbc.car.hyundai import carstate, hyundaicanfd
-  from opendbc.car.hyundai.values import CAR
   params = Mock()
   params.get_int.return_value = 0
   params.get_bool.return_value = False
   params.get.return_value = '{0: {}, 1: {}, 2: {}}'
   monkeypatch.setattr(carstate, 'Params', lambda: params)
   monkeypatch.setattr(hyundaicanfd, 'Params', lambda: params)
-  candidate = getattr(CAR, platform)
   config = structs.CarParams(carFingerprint=candidate, flags=int(candidate.config.flags), safetyConfigs=[{}])
   state = carstate.CarState(config)
-  parser = state.get_can_parsers_canfd(config)[Bus.pt]
+  parser = state.get_can_parsers(config)[Bus.pt]
+  supported = candidate in CANFD_CAR
   assert (0x374 in parser.addresses) == supported
   if supported:
-    assert parser.bus == 0
     assert parser.message_states[0x374].ignore_alive
+    parser.controls_ready = True  # late GPS arrival after startup is supported
+    for t in (1, 2, 3):
+      result = tick(parser, state.vehicle_gps, t, frame(), bus=parser.bus)
+    assert result['valid']
+  else:
+    assert state.vehicle_gps.update(parser, 0.) == {}
+
+
+@pytest.mark.parametrize('field,value', [('address', 0x375), ('size', 16), ('missing', None),
+                                        ('start_bit', 1), ('size_signal', 16), ('is_little_endian', False),
+                                        ('is_signed', True), ('factor', 1e-7), ('offset', -180.)])
+def test_same_id_or_name_with_incompatible_dbc_does_not_enable(field, value):
+  from copy import deepcopy
+  from types import SimpleNamespace
+  cp = CANParser('hyundai_canfd_generated', [], 0)
+  message = deepcopy(cp.dbc.name_to_msg[MESSAGE])
+  if field in ('address', 'size'):
+    setattr(message, field, value)
+  elif field == 'missing':
+    del message.sigs['LONGITUDE']
+  else:
+    setattr(message.sigs['LATITUDE'], 'size' if field == 'size_signal' else field, value)
+  cp.dbc = SimpleNamespace(name_to_msg={MESSAGE: message})
+  register_vehicle_gps(cp)
+  assert 0x374 not in cp.addresses
+  assert VehicleGPS().update(cp, 0.) == {}

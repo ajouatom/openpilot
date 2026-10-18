@@ -33,9 +33,17 @@ Hyundai 0x570 GPS definition is not applicable to the observed 32-byte message.
 
 ## Implementation
 
-- Only HYUNDAI_IONIQ_5_PE registers this optional position profile. It receives on
-  the existing ECAN parser, which is bus 0 in the validated configuration. No CAN
-  transmission, Panda safety, locationd, vehicle control or model changes.
+- Following the user's scope correction, eligibility is based on the actual DBC,
+  not a car-name allowlist. All Hyundai/Kia/Genesis platforms using the matching
+  definition register the optional profile on their existing powertrain/ECAN
+  parser. Both CAN-FD and legacy parser paths check the DBC; the current legacy
+  DBC lacks this profile and stays inactive. Require the named message, address
+  0x374, length 8, and both unsigned little-endian 32-bit coordinates at bits
+  0/32 with scale 1e-6 and zero offset. An unrelated numeric ID is insufficient.
+  Missing traffic never creates a mandatory CAN fault. No CAN transmission,
+  Panda safety, locationd, vehicle control or model changes. Real driving
+  evidence remains Ioniq 5 PE only; shared DBC eligibility does not prove every
+  vehicle actually transmits valid coordinates.
 - Require three consecutive plausible samples, 0.5–2.5 seconds apart, valid
   8-byte positive-coordinate layout, and motion consistent with integrated wheel
   speed. Step distance must not exceed either 90 m/s or 15 m + twice integrated
@@ -81,3 +89,15 @@ excluding parser, serialization and IPC. This does not establish vehicle CPU
 load or 20 Hz inference stability. Vehicle installation/restart and native
 performance tests were not performed in this task. Raw logs and coordinates
 remain in the private analysis archive.
+
+## DBC eligibility follow-up
+
+The user explicitly removed the Ioniq-only restriction. The source-priority,
+coordinate/heading validity and freshness policies above remain unchanged.
+All current CAN-FD platform parser configurations acquire the profile with
+synthetic receive traffic on their configured bus, including arrival after
+startup. Legacy DBC absence and nine incompatible-layout cases remain inactive.
+Follow-up desktop checks: nav 155 passed; wip 134 passed (same focused source/
+parser suite, without nav-only position consumer tests). Ruff and diff checks
+pass. Existing 20-segment evidence is unchanged; no additional vehicle install,
+other-model drive validation or native CPU measurement was performed.

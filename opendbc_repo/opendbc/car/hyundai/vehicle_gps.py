@@ -1,8 +1,26 @@
-"""Empirical Ioniq 5 PE receive-only position profile, not an OEM GNSS fix flag."""
+"""DBC-selected receive-only position profile, not an OEM GNSS fix flag."""
 import math
 
 MESSAGE = 'VEHICLE_POSITION_374'
 TIMEOUT = 2.5
+
+
+def supports_vehicle_gps(cp):
+  message = cp.dbc.name_to_msg.get(MESSAGE)
+  if message is None or message.address != 0x374 or message.size != 8:
+    return False
+  for name, bit in (('LATITUDE', 0), ('LONGITUDE', 32)):
+    signal = message.sigs.get(name)
+    if (signal is None or signal.start_bit != bit or signal.size != 32 or
+        not signal.is_little_endian or signal.is_signed or signal.factor != 1e-6 or signal.offset != 0):
+      return False
+  return True
+
+
+def register_vehicle_gps(cp):
+  if supports_vehicle_gps(cp):
+    cp._add_message(MESSAGE, math.nan)
+  return cp
 
 
 def displacement(a, b):
@@ -22,6 +40,8 @@ class VehicleGPS:
     self.frozen = False
 
   def update(self, cp, speed, reverse=False):
+    if not supports_vehicle_gps(cp):
+      return {}
     now = cp._last_update_nanos
     dt = (now - self.tick) / 1e9 if self.tick else 0.
     self.tick = now

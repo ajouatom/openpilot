@@ -1,5 +1,18 @@
 # Repository memory
 
+- On 2026-10-18, user explicitly removed the Ioniq5PE-only CAN GPS restriction.
+  Use actual DBC profile eligibility across Hyundai/Kia/Genesis: named0x374,
+  eight bytes, two unsigned LE32 coordinates at0/32, scale1e-6/offset0. Optional
+  registration covers CANFD and legacy parser paths; current legacy DBC lacks
+  the profile. All CANFD configurations pass synthetic reception on configured
+  bus, including late arrival; absent/incompatible profiles stay inactive.
+  Preserve priority, original timestamps, motion/freeze/course checks. Nav155/
+  wip134 focused tests pass with desktop OS doubles. Real driving evidence is
+  still Ioniq5PE only; no vehicle install or new CPU claim. This supersedes the
+  model-name restriction below. Both maintained branches, single-parent. See
+  docs/vehicle_can_gps_20261018.md.
+
+
 - On 2026-10-18, repeated S3 TCP failures persist after background downloads end;
   Omada has both clients associated, C4 5GHz/-67dBm and S3 2.4GHz/-71dBm.
   Remove only the Wi-Fi path's repeated10s shared-USB settling delay, preserving
