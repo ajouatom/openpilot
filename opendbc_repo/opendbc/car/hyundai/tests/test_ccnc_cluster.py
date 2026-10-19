@@ -288,3 +288,10 @@ def test_cluster_sweep_steps_every_second(monkeypatch):
   assert hyundaicanfd._cluster_sweep(packer, 7, 2000) == (0, 0)             # new field restarts at 0
   assert hyundaicanfd._cluster_sweep(packer, 7, 2100) == (1, 53)            # first unnamed bit, shown as its bit number
   assert hyundaicanfd._cluster_sweep(packer, 7, 2000 + 11 * 100) == (1 << 10, 63)
+
+
+@pytest.mark.parametrize("traffic_state, expected", [(0, 1), (1, 5), (2, 8)])
+def test_traffic_light_background(traffic_state, expected):
+  # turning (6) is overridden too while a light is detected
+  assert _select_cluster_background(True, True, False, 0, traffic_state=traffic_state) == expected
+  assert _select_cluster_background(True, True, False, 0, turning=True, traffic_state=traffic_state) == (6 if traffic_state == 0 else expected)

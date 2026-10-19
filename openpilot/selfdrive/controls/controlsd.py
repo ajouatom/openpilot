@@ -369,6 +369,7 @@ class Controls:
     hudControl.leadDistanceBars = self.sm['selfdriveState'].personality.raw + 1
     hudControl.visualAlert = self.sm['selfdriveState'].alertHudVisual
     hudControl.driverMonitoringAlert = driver_monitoring_hud_alert(self.sm)
+    hudControl.trafficState = self.sm['longitudinalPlan'].trafficState
 
     radarState = self.sm['radarState']
     leadOne = radarState.leadOne
