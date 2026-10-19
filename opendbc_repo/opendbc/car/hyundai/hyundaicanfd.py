@@ -992,10 +992,14 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
         if  HDA_LFA_SymSta == 0 and 0 < frame % 200 < 12:
           values["LFA_BTN"] = 1
 
+        # The cluster's side objects, lead car and target come from stock SCC MAIN; keep it on from ignition.
+        # openpilot's own MAIN still follows the driver's button (manual_main_off_latched).
+        if not CS.MainMode_ACC and not interlock_active and 10 < frame % 200 <= 16:
+          values["ADAPTIVE_CRUISE_MAIN_BTN"] = 1
+
         if CC.enabled and not interlock_active:
           if not CS.MainMode_ACC:
-            if 10 < frame % 200 <= 16 and CS.out.vEgo > 3.:
-              values["ADAPTIVE_CRUISE_MAIN_BTN"] = 1
+            pass  # pressed above
           elif CS.ACCMode in [0, 4]:
             if 10 < frame % 200 <= 16 and CS.out.vEgo > 3.:
               values["CRUISE_BUTTONS"] = 2
@@ -1039,11 +1043,11 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
         values["vSetDis"] = int(set_speed_in_units + 0.5)
 
         values["DISTANCE"] = 4 if hdp_active else hud_control.leadDistanceBars
-        values["DISTANCE_LEAD"] = 2 if cruise_enabled and lead_visible else 1 if main_enabled and lead_visible else 0
+        values["DISTANCE_LEAD"] = (2 if cruise_enabled else 1) if lead_visible else 0
         values["DISTANCE_CAR"] = 3 if hdp_active else 2 if cruise_enabled else 1 if main_enabled else 0
         values["DISTANCE_SPACING"] = 5 if hdp_active else 1 if cruise_enabled else 0
 
-        values["TARGET"] = 1 if lead_visible and cruise_enabled else 0
+        values["TARGET"] = (1 if cruise_enabled else 3) if lead_visible else 0  # blue when engaged, white otherwise
         values["TARGET_DISTANCE"] = lead_distance
 
         values["BACKGROUND"] = _select_cluster_background(
