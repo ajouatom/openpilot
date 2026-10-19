@@ -10,7 +10,7 @@ import subprocess
 import zipfile
 
 HERE = Path(__file__).resolve().parent
-VERSION = '1.2.0'
+VERSION = '1.2.1'
 VENDOR_HASHES = {
   'esptool-js-bundle.js': '475e0e98fd051dc11bf34d8f83410764da11f3a0c40ecd33fd9647dc46b098b8',
   'esptool-js-LICENSE.txt': '1c25f29242785d63e9adb0be7fdc137551dfbbc0756b622fcd26d9cd7de3a4f3',

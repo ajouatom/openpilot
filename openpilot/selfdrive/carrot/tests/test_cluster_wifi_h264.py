@@ -115,7 +115,7 @@ def wifi_queue_fixture():
   exec(compile(ast.Module(body=[node], type_ignores=[]), str(source), 'exec'), scope)
   pending = queue.Queue(3)
   obj = SimpleNamespace(
-    _closing=False, _packet_queue=pending, usb_display=SimpleNamespace(h264_preserve_reference_frames=True),
+    _closing=False, _chunks_completed=0, _packet_queue=pending, usb_display=SimpleNamespace(h264_preserve_reference_frames=True),
     _record_h264_queue_depth=lambda depth: None, check_error=lambda: None,
   )
   send = scope['_enqueue_native_access_unit']
@@ -192,3 +192,97 @@ def test_h264_stop_is_not_repeated_on_close(monkeypatch):
   display.stop_h264_stream()
   display.close()
   assert events == ['stop', 10, 14, 'close']
+
+
+def test_wifi_queue_accepts_large_frame_while_chunks_keep_progressing():
+  obj, pending, send = wifi_queue_fixture()
+  now = [0.0]
+  attempts = []
+  send.__globals__['time'] = SimpleNamespace(monotonic=lambda: now[0])
+
+  def put(item, timeout):
+    attempts.append(item)
+    now[0] += 0.75
+    obj._chunks_completed += 1
+    if len(attempts) < 9:
+      raise queue.Full()
+
+  obj._packet_queue = SimpleNamespace(put=put, qsize=lambda: 3)
+  send(obj, [b'next-reference'], codec_config=False, keyframe=False)
+  assert now[0] > 6 and len(attempts) == 9
+  assert pending.qsize() == 3
+
+
+def test_wifi_chunk_pacing_bounds_bursts_without_idle_credit(monkeypatch):
+  import cluster_wifi_display as wifi
+  now = [10.0]
+  sent = []
+  monkeypatch.setattr(wifi.time, 'monotonic', lambda: now[0])
+  monkeypatch.setattr(wifi.time, 'sleep', lambda delay: now.__setitem__(0, now[0] + delay))
+  display = S3WifiDisplay(CONFIG)
+  display._build_h264_chunk_payload = lambda chunk, **kw: chunk
+  display._transaction = lambda data, **kw: sent.append(now[0])
+  assert display._h264_chunk_size(65536) == 16384
+  for _ in range(3):
+    display.send_h264_chunk(bytes(16384))
+  interval = (16384 + 512) / display.h264_bytes_per_second
+  assert sent == pytest.approx([10, 10 + interval, 10 + 2 * interval])
+  now[0] += 10
+  display.send_h264_chunk(bytes(16384))
+  display.send_h264_chunk(bytes(16384))
+  assert sent[-1] - sent[-2] == pytest.approx(interval)
+
+
+def test_capability_query_retries_lost_datagram_within_same_deadline(monkeypatch):
+  server = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+  server.bind(('127.0.0.1', 0))
+  server.settimeout(2)
+  monkeypatch.setattr(protocol, 'PORT', server.getsockname()[1])
+  requests = []
+  errors = []
+
+  def serve():
+    try:
+      requests.append(server.recvfrom(128)[0])  # Simulate lost first reply.
+      request, peer = server.recvfrom(128)
+      requests.append(request)
+      reply = protocol.CAP_REPLY + request[4:26] + struct.pack('!I', protocol.CAP_H264)
+      server.sendto(reply + protocol.mac(bytes.fromhex(CONFIG['key']), reply), peer)
+    except BaseException as exc:
+      errors.append(exc)
+    finally:
+      server.close()
+
+  thread = threading.Thread(target=serve)
+  thread.start()
+  assert protocol.capabilities(CONFIG, targets=('127.0.0.1',)) == protocol.CAP_H264
+  thread.join(2)
+  assert not errors and requests[0] == requests[1] and not thread.is_alive()
+
+
+def test_discovery_recovers_lost_broadcast_without_another_hud_restart(monkeypatch):
+  server = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+  server.bind(('127.0.0.1', 0))
+  server.settimeout(2)
+  monkeypatch.setattr(protocol, 'PORT', server.getsockname()[1])
+  requests, errors = [], []
+
+  def serve():
+    try:
+      requests.append(server.recvfrom(128)[0])
+      request, peer = server.recvfrom(128)
+      requests.append(request)
+      reply = protocol.FOUND + request[4:26]
+      # A discovery response still needs the pairing signature.
+      server.sendto(reply + bytes(32), peer)
+      server.sendto(reply + protocol.mac(bytes.fromhex(CONFIG['key']), reply), peer)
+    except BaseException as exc:
+      errors.append(exc)
+    finally:
+      server.close()
+
+  thread = threading.Thread(target=serve)
+  thread.start()
+  assert protocol.discover(CONFIG, timeout=1, targets=('127.0.0.1',)) == '127.0.0.1'
+  thread.join(2)
+  assert not errors and requests[0] == requests[1] and not thread.is_alive()

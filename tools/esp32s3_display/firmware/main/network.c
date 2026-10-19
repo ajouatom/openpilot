@@ -1,4 +1,5 @@
 #include <assert.h>
+#include <errno.h>
 #include <string.h>
 #include <unistd.h>
 #include "network.h"
@@ -41,7 +42,10 @@ static bool receive_all(int sock, void *buffer, size_t count) {
   uint8_t *p = buffer;
   while (count) {
     int n = recv(sock, p, count, 0);
-    if (n <= 0) return false;
+    if (n <= 0) {
+      ESP_LOGW("S3_NET", "RX_STOP n=%d errno=%d remaining=%u", n, n < 0 ? errno : 0, (unsigned)count);
+      return false;
+    }
     p += n; count -= n;
   }
   return true;
@@ -51,7 +55,10 @@ static bool send_all(int sock, const void *buffer, size_t count) {
   const uint8_t *p = buffer;
   while (count) {
     int n = send(sock, p, count, 0);
-    if (n <= 0) return false;
+    if (n <= 0) {
+      ESP_LOGW("S3_NET", "TX_STOP n=%d errno=%d remaining=%u", n, n < 0 ? errno : 0, (unsigned)count);
+      return false;
+    }
     p += n; count -= n;
   }
   return true;
@@ -62,6 +69,18 @@ bool network_current(const network_frame_t *frame) {
   bool current = active_socket >= 0 && frame->session == session_id;
   xSemaphoreGive(socket_lock);
   return current && esp_timer_get_time() - frame->received < 500000;
+}
+
+void network_reset_display(void) {
+  xSemaphoreTake(socket_lock, portMAX_DELAY);
+  if (active_socket >= 0) {
+    // Local sync/off resets the panel's H.264 decoder. Old reference packets
+    // must not be acknowledged as a live stream after that reset.
+    ESP_LOGW("S3_NET", "DISPLAY_RESET session=%u", (unsigned)session_id);
+    shutdown(active_socket, SHUT_RDWR);
+    ++session_id;
+  }
+  xSemaphoreGive(socket_lock);
 }
 
 void network_complete(int slot, uint32_t status, uint32_t usb_us, const uint8_t *response, size_t length) {
@@ -168,6 +187,7 @@ static void server_task(void *arg) {
       previous_sequence = sequence;
       xQueueSend(network_ready, &slot, portMAX_DELAY);
     }
+    ESP_LOGI("S3_NET", "CLOSE session=%u last_seq=%u", (unsigned)session, (unsigned)previous_sequence);
     xSemaphoreTake(socket_lock, portMAX_DELAY);
     active_socket = -1;
     memset(active_key, 0, sizeof(active_key));

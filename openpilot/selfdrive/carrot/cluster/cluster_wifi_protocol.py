@@ -95,11 +95,17 @@ def discover(config: dict, timeout: float = 2.0, targets: tuple[str, ...] = ('25
     for target in targets:
       sock.sendto(request, (target, PORT))
     while time.monotonic() < deadline:
-      sock.settimeout(max(.01, deadline - time.monotonic()))
+      # Broadcasts can be lost during AP/DHCP transitions. Retry within the
+      # existing deadline instead of making the entire HUD restart wait for
+      # another lifecycle retry after just one missing discovery packet.
+      sock.settimeout(max(.01, min(.25, deadline - time.monotonic())))
       try:
         reply, address = sock.recvfrom(128)
       except TimeoutError:
-        break
+        if time.monotonic() < deadline:
+          for target in targets:
+            sock.sendto(request, (target, PORT))
+        continue
       if len(reply) == 58 and reply[:26] == FOUND + device + nonce and hmac.compare_digest(reply[26:], mac(key, reply[:26])):
         return address[0]
   raise TimeoutError('Registered S3 display not found on this Wi-Fi')
@@ -117,11 +123,14 @@ def capabilities(config: dict, timeout: float = 1.0, targets: tuple[str, ...] = 
     for target in targets:
       sock.sendto(request, (target, PORT))
     while time.monotonic() < deadline:
-      sock.settimeout(max(.01, deadline - time.monotonic()))
+      sock.settimeout(max(.01, min(.25, deadline - time.monotonic())))
       try:
         reply, _ = sock.recvfrom(128)
       except TimeoutError:
-        break
+        if time.monotonic() < deadline:
+          for target in targets:
+            sock.sendto(request, (target, PORT))
+        continue
       if len(reply) == 62 and reply[:26] == CAP_REPLY + device + nonce and hmac.compare_digest(reply[30:], mac(key, reply[:30])):
         return struct.unpack('!I', reply[26:30])[0]
   return 0

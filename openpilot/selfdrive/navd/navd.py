@@ -277,7 +277,8 @@ class RouteEngine:
       instruction = parse_banner_instructions(step_i['bannerInstructions'], distance_to_maneuver)
       if instruction is None:
         continue
-      maneuver = {'distance': distance_to_maneuver}
+      # cereal's list-of-struct conversion rejects NumPy scalar distances.
+      maneuver = {'distance': float(distance_to_maneuver)}
       if 'maneuverType' in instruction:
         maneuver['type'] = instruction['maneuverType']
       if 'maneuverModifier' in instruction:

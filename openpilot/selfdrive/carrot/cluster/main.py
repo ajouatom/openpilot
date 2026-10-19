@@ -2428,6 +2428,7 @@ def parse_args() -> argparse.Namespace:
     args.fps_from_cli = args.fps is not None
     args.usb_codec_from_cli = option_present(raw_args, "--usb-codec")
     args.usb_h264_backend_from_cli = option_present(raw_args, "--usb-h264-backend")
+    args.usb_h264_rate_control_from_cli = option_present(raw_args, "--usb-h264-rate-control")
     args.usb_h264_ffmpeg_encoder_from_cli = option_present(raw_args, "--usb-h264-ffmpeg-encoder")
     if args.fps is None:
         args.fps = DEFAULT_FPS
@@ -2547,6 +2548,8 @@ def main(*, exit_on_error: bool = True) -> None:
         if args.usb_codec == "h264":
             if args.usb_h264_bitrate == "auto":
                 args.usb_h264_bitrate = "1M"
+            if not args.usb_h264_rate_control_from_cli:
+                args.usb_h264_rate_control = "cbr-cfr"
             args.usb_h264_gop = 10
             args.usb_h264_wait_ack = False
             args.usb_h264_soft_ack = False

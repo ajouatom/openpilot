@@ -1,52 +1,54 @@
-"""Passive onroad camera inset. Never enters driver-preview/demo mode."""
+"""Passive pearl-eye DM character shared by C3 and C4. No camera consumer."""
 import time
 
 import pyray as rl
-from msgq.visionipc import VisionIpcClient, VisionStreamType
 
-from openpilot.selfdrive.ui.dm_preview import face_crop, preview_rect, preview_state, sample_fresh
-from openpilot.selfdrive.ui.onroad.cameraview import CameraView
+from openpilot.selfdrive.ui.dm_preview import PREVIEW_MAX_AGE, eye_expression, preview_rect, preview_state, sample_fresh, smooth_expression
 from openpilot.selfdrive.ui.ui_state import ui_state
-from openpilot.system.hardware import TICI
 from openpilot.system.ui.lib.application import FontWeight, gui_app
+from openpilot.system.ui.lib.text_measure import measure_text_cached
+from openpilot.system.ui.widgets import Widget
 
 
-class DriverPreview(CameraView):
+PEARL = rl.Color(244, 237, 223, 255)
+PUPIL = rl.Color(58, 53, 48, 255)
+SHADOW = rl.Color(15, 17, 22, 210)
+UNKNOWN = rl.Color(145, 145, 153, 220)
+WARNING = rl.Color(255, 151, 105, 255)
+HANDS = rl.Color(160, 204, 229, 255)
+
+
+class DriverPreview(Widget):
   def __init__(self, compact: bool = False):
-    self._closed = False
-    super().__init__('camerad', VisionStreamType.VISION_STREAM_DRIVER)
+    super().__init__()
     self.compact = compact
     self.set_enabled(False)  # Display only; touches keep their normal onroad meaning.
     self._font = gui_app.font(FontWeight.BOLD)
-    self._frame_time = 0.0
-    self._next_poll = 0.0
-    self._was_visible = False
+    self._closed = False
+    self._reset_expression()
+
+  def _reset_expression(self):
+    self._started_frame = ui_state.started_frame
+    self._expression = None
+    self._driver_side = None
+    self._draw_time = 0.0
+    self._model_frame = None
+    self._model_progress = 0.0
 
   def close(self):
-    if not self._closed:
-      self._closed = True
-      super().close()
-
-  def _offroad_transition(self):
-    if not self._closed:
-      self._reset_stream()
-
-  def _reset_stream(self):
-    self.frame = None
-    self._frame_time = 0.0
-    self._next_poll = 0.0
-    self._clear_textures()
-    self.client = VisionIpcClient(self._name, self._stream_type, conflate=True)
+    self._closed = True
+    self._reset_expression()
 
   def draw_onroad(self, parent: rl.Rectangle, alert_visible: bool) -> bool:
     sm = ui_state.sm
-    visible = ui_state.started and (sm['selfdriveState'].enabled or ui_state.always_on_dm) and not alert_visible
+    # Parent views may not call us at all while offroad.
+    if self._started_frame != ui_state.started_frame:
+      self._reset_expression()
+    visible = (not self._closed and ui_state.started and
+               (sm['selfdriveState'].enabled or ui_state.always_on_dm) and not alert_visible)
     if not visible:
-      if self._was_visible:
-        self._reset_stream()
-      self._was_visible = False
+      self._reset_expression()
       return False
-    self._was_visible = True
     self.render(rl.Rectangle(*preview_rect(parent.x, parent.y, parent.width, parent.height, self.compact)))
     return True
 
@@ -59,60 +61,66 @@ class DriverPreview(CameraView):
   def _render(self, rect):
     now = time.monotonic()
     sm = ui_state.sm
-    dm = sm['driverMonitoringState']
+    dm, model = sm['driverMonitoringState'], sm['driverStateV2']
     monitoring_fresh = self._fresh('driverMonitoringState', now)
     driver_fresh = self._fresh('driverStateV2', now)
-    camera_allowed = monitoring_fresh and not dm.cameraUnavailable and driver_fresh
-
-    # Consume only the existing camera stream, at most 10 Hz, without waiting.
-    if camera_allowed and now >= self._next_poll:
-      self._next_poll = now + 0.1
-      if self._ensure_connection():
-        buffer = self.client.recv(timeout_ms=0)
-        if buffer is not None:
-          self.frame = buffer
-          self._frame_time = self.client.timestamp_sof / 1e9
-          self._texture_needs_update = True
-    frame_fresh = camera_allowed and self.frame is not None and sample_fresh(now, self._frame_time)
-    if not frame_fresh:
-      self.frame = None
-
+    if driver_fresh and model.frameId != self._model_frame:
+      self._model_frame, self._model_progress = model.frameId, now
+    driver_fresh = driver_fresh and now - self._model_progress < PREVIEW_MAX_AGE
     vision = dm.visionPolicyState
     state = preview_state(monitoring_fresh=monitoring_fresh, camera_unavailable=dm.cameraUnavailable,
-                          driver_fresh=driver_fresh, frame_fresh=frame_fresh, face_detected=vision.faceDetected,
+                          driver_fresh=driver_fresh, face_detected=vision.faceDetected,
                           distracted=vision.isDistracted, lockout=dm.lockout or dm.alwaysOnLockout,
                           wheel_policy=str(dm.activePolicy) == 'wheeltouch')
-    color = {'tracking': rl.Color(70, 220, 140, 255), 'wheel': rl.Color(110, 190, 255, 255),
-             'warning': rl.Color(255, 90, 60, 255)}.get(state.kind, rl.Color(255, 195, 70, 255))
-    rl.draw_rectangle_rec(rect, rl.Color(12, 18, 24, 245))
-    label_h = 14 if self.compact else 32
-    viewport = rl.Rectangle(rect.x + 2, rect.y + 2, rect.width - 4, rect.height - label_h - 4)
-    if frame_fresh:
-      driver = sm['driverStateV2'].rightDriverData if dm.isRHD else sm['driverStateV2'].leftDriverData
-      crop = face_crop(self.frame.width, self.frame.height, driver.facePosition, viewport.width / viewport.height) \
-        if vision.faceDetected else None
-      if crop is None:
-        crop = (0, 0, self.frame.width, self.frame.height)
-      sx, sy, sw, sh = crop
-      scale = min(viewport.width / sw, viewport.height / sh)
-      target = rl.Rectangle(viewport.x + (viewport.width - sw * scale) / 2,
-                            viewport.y + (viewport.height - sh * scale) / 2, sw * scale, sh * scale)
-      source = rl.Rectangle(sx, sy, -sw, sh)
-      # Base renderer rebinds the external texture every draw, including repeated frames.
-      if TICI:
-        self._render_egl(source, target)
-      else:
-        self._render_textures(source, target)
-    elif state.kind == 'wheel':
-      cx, cy = viewport.x + viewport.width / 2, viewport.y + viewport.height / 2
-      radius = min(viewport.width, viewport.height) * 0.32
+    animate = (monitoring_fresh and driver_fresh and not dm.cameraUnavailable and vision.faceDetected and
+               state.kind in ('tracking', 'warning'))
+    if animate:
+      if self._driver_side != dm.isRHD or now - self._draw_time >= PREVIEW_MAX_AGE:
+        self._expression = None
+      self._driver_side = dm.isRHD
+      driver = model.rightDriverData if dm.isRHD else model.leftDriverData
+      self._expression = smooth_expression(self._expression, eye_expression(driver), now - self._draw_time)
+    else:
+      self._expression = None  # Never retain a reassuring pose after lost/stale data.
+    self._draw_time = now
+
+    color = {'tracking': PEARL, 'warning': WARNING, 'wheel': HANDS}.get(state.kind, UNKNOWN)
+    label_h, font_size = (16, 11) if self.compact else (32, 21)
+    scale = min(rect.width / 154, (rect.height - label_h - 8) / 90)
+    cx, cy = rect.x + rect.width / 2, rect.y + (rect.height - label_h) * 0.47
+    if state.kind == 'wheel':
+      radius = 24 * scale
       rl.draw_circle_lines(int(cx), int(cy), radius, color)
       for dx, dy in ((-0.9, -0.2), (0.9, -0.2), (0, 0.9)):
-        rl.draw_line_ex(rl.Vector2(cx, cy), rl.Vector2(cx + dx * radius, cy + dy * radius), 2, color)
+        rl.draw_line_ex(rl.Vector2(cx, cy), rl.Vector2(cx + dx * radius, cy + dy * radius), max(1, 2 * scale), color)
     else:
-      size = 20 if self.compact else 48
-      rl.draw_text_ex(self._font, 'DM', rl.Vector2(viewport.x + 8, viewport.y + viewport.height / 2 - size / 2),
-                      size, 0, color)
-    rl.draw_rectangle_lines_ex(rect, 1 if self.compact else 2, color)
-    size = 11 if self.compact else 21
-    rl.draw_text_ex(self._font, state.label, rl.Vector2(rect.x + 3, rect.y + rect.height - label_h + 1), size, 0, color)
+      expression = self._expression
+      for left in (True, False):
+        ex = cx + (-29 if left else 29) * scale
+        known = expression is not None and (expression.left_known if left else expression.right_known)
+        openness = (expression.left_open if left else expression.right_open) if known else 0.08
+        self._draw_eye(ex, cy, scale, openness, known, expression, color)
+        if state.kind == 'warning':
+          direction = 1 if left else -1
+          rl.draw_line_ex(rl.Vector2(ex - 14 * scale, cy - (35 + direction * 3) * scale),
+                          rl.Vector2(ex + 14 * scale, cy - (35 - direction * 3) * scale), max(2, 3 * scale), color)
+
+    label = 'DM EYES?' if state.kind == 'tracking' and not (self._expression.left_known or self._expression.right_known) else state.label
+    width = measure_text_cached(self._font, label, font_size).x
+    pos = rl.Vector2(rect.x + (rect.width - width) / 2, rect.y + rect.height - label_h)
+    rl.draw_text_ex(self._font, label, rl.Vector2(pos.x + 1, pos.y + 1), font_size, 0, SHADOW)
+    rl.draw_text_ex(self._font, label, pos, font_size, 0, color)
+
+  @staticmethod
+  def _draw_eye(cx, cy, scale, openness, known, expression, color):
+    width, height = 42 * scale, max(4, 54 * openness) * scale
+    eye_color = color if known or color == WARNING else UNKNOWN
+    # Only the eyes get a narrow dark silhouette; there is no camera/card box.
+    rl.draw_rectangle_rounded(rl.Rectangle(cx - width / 2 - scale, cy - height / 2 - scale,
+                                           width + 2 * scale, height + 2 * scale), 1, 12, SHADOW)
+    rl.draw_rectangle_rounded(rl.Rectangle(cx - width / 2, cy - height / 2, width, height), 1, 12, eye_color)
+    if known and openness > 0.22:
+      pw, ph = width * 0.43, height * 0.48
+      px, py = cx + expression.x * width * 0.16, cy + expression.y * height * 0.12
+      rl.draw_rectangle_rounded(rl.Rectangle(px - pw / 2, py - ph / 2, pw, ph), 1, 10, PUPIL)
+      rl.draw_circle_v(rl.Vector2(px + pw * 0.16, py - ph * 0.2), min(pw, ph) * 0.14, PEARL)

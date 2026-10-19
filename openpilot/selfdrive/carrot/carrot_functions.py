@@ -82,6 +82,7 @@ class CarrotPlanner:
     self.signal_observation_color = 0
     self.signal_green_active = False
     self.signal_lead_present = False
+    self._signal_stop_owned = False
     self.params = Params()
     self.params_count = 0
     self.frame = 0
@@ -474,6 +475,7 @@ class CarrotPlanner:
   def update(self, sm, v_cruise_kph, mode, *, signal_observation=None, signal_context=None,
              start_observation=None, start_context=None, prepare_observation=None, prepare_context=None):
     from openpilot.selfdrive.carrot.signal_road_policy import signal_detection_suspended
+    from openpilot.selfdrive.carrot.signal_assist import departed_signal_stop
     suspended = signal_detection_suspended(sm)
     if suspended != self.signal_detection_suspended:
       self.vFilter = MyMovingAverage(10)
@@ -510,6 +512,22 @@ class CarrotPlanner:
     v_ego_kph = v_ego * CV.MS_TO_KPH
     v_ego_cluster = carstate.vEgoCluster
     v_ego_cluster_kph = v_ego_cluster * CV.MS_TO_KPH
+
+    # Both auxiliary guards may have injected e2eStopped on the previous cycle.
+    # Retiring their latch must retire that injected state too, before the normal
+    # model/lead state machine runs again. Explicit driver holds retain ownership.
+    if self.xState != XState.e2eStopped:
+      self._signal_stop_owned = False
+    departed_hold = departed_signal_stop(v_ego) and (
+      self._signal_stop_owned
+      or (self.start_guard is not None and self.start_guard.hold)
+      or (self.signal_assist is not None and self.signal_assist.hold))
+    if (departed_hold and self.xState == XState.e2eStopped
+        and self.soft_hold_active == 0 and self.user_stop_distance < 0 and not self.carrot_stay_stop):
+      self.xState = XState.e2eCruise
+      self.actual_stop_distance = 0.0
+      self.stopping_count = 0
+      self._signal_stop_owned = False
 
     self.mySafeFactor, self.myTFollowFactor = get_driving_mode_factors(
       self.myDrivingMode, self.myEcoModeFactor, self.mySafeModeFactor,
@@ -585,8 +603,8 @@ class CarrotPlanner:
       if lead_in_stop_range and self.start_decision.hold:
         from dataclasses import replace
         self.start_guard.warned = False  # no refusal was emitted while following
-        # Preserve the guard's red memory if the lead disappears. Publish the
-        # effective decision so the final longitudinal veto agrees this cycle.
+        # Preserve red memory during stop/creep only. The guard retires it above
+        # that scope, so lead loss after departure cannot resurrect this stop.
         self.start_decision = replace(self.start_decision, hold=False, warn=False,
                                       released=False, green_confirmed=False, reason='lead_follow')
       start_hold = self.start_decision.hold
@@ -638,6 +656,7 @@ class CarrotPlanner:
       self.user_stop_distance = -1
 
     if signal_hold or start_hold:
+      self._signal_stop_owned = True
       # Outside the existing lead-follow boundary, unknown retains the veto.
       # Radar obstacles remain in MPC, including during the lead exception.
       self.xState = XState.e2eStopped
@@ -648,6 +667,7 @@ class CarrotPlanner:
       if start_hold:
         self.trafficState = TrafficState.red
     elif self.soft_hold_active > 0:
+      self._signal_stop_owned = False
       self.xState = XState.e2eStopped
       if trafficState_last in [TrafficState.off, TrafficState.red] and self.trafficState == TrafficState.green:
         self.add_signal_event(EventName.trafficSignChanged)
@@ -714,6 +734,7 @@ class CarrotPlanner:
       stop_model_x = 1000.0
 
     if self.user_stop_distance >= 0 and not start_hold:
+      self._signal_stop_owned = False
       if suspended:
         stop_model_x = 0.0  # highway policy must not cancel an explicit user stop
       self.user_stop_distance = max(0, self.user_stop_distance - v_ego * DT_MDL)

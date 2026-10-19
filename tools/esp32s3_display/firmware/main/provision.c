@@ -21,6 +21,7 @@
 #include "lwip/sockets.h"
 #include "cJSON.h"
 #include "status_led.h"
+#include "wifi_recovery_policy.h"
 #include "esp_system.h"
 #include "esp_heap_caps.h"
 #include <inttypes.h>
@@ -43,15 +44,23 @@ static char ap_name[32], csrf[33];
 static unsigned disconnect_count;
 static unsigned last_disconnect_reason;
 static esp_netif_t *sta_netif;
+#define WIFI_IP_READY 1
+#define WIFI_ASSOCIATED 2
+#define WIFI_JOINING 4
+static unsigned wifi_recoveries;
 
 static void hex(const uint8_t *data, size_t length, char *out) {
   for (size_t i=0; i<length; i++) sprintf(out + 2*i, "%02x", data[i]);
 }
 
 static void wifi_event(void *arg, esp_event_base_t base, int32_t id, void *data) {
+  if (base == WIFI_EVENT && id == WIFI_EVENT_STA_CONNECTED) {
+    xEventGroupSetBits(wifi_events, WIFI_ASSOCIATED);
+    xEventGroupClearBits(wifi_events, WIFI_JOINING);
+  }
   if (base == WIFI_EVENT && id == WIFI_EVENT_STA_DISCONNECTED) {
     wifi_event_sta_disconnected_t *event = data;
-    xEventGroupClearBits(wifi_events, 1);
+    xEventGroupClearBits(wifi_events, WIFI_IP_READY | WIFI_ASSOCIATED | WIFI_JOINING);
     status_led_wifi(false, true);
     xSemaphoreTake(config_lock, portMAX_DELAY);
     last_disconnect_reason = event->reason;
@@ -78,16 +87,16 @@ static void uart_status(void) {
   bool associated = esp_wifi_sta_get_ap_info(&ap) == ESP_OK;
   if (sta_netif) esp_netif_get_ip_info(sta_netif, &ip);
   xSemaphoreTake(config_lock, portMAX_DELAY);
-  unsigned count = disconnect_count, reason = last_disconnect_reason;
+  unsigned count = disconnect_count, reason = last_disconnect_reason, recoveries = wifi_recoveries;
   xSemaphoreGive(config_lock);
   printf("S3JSON {\"status\":true,\"uptime_ms\":%" PRId64 ",\"reset_reason\":%d,"
          "\"associated\":%s,\"ip_ready\":%s,\"ip\":\"" IPSTR "\",\"rssi\":%d,\"channel\":%u,"
          "\"bssid\":\"%02x:%02x:%02x:%02x:%02x:%02x\","
-         "\"disconnect_count\":%u,\"last_disconnect_reason\":%u,\"free_internal\":%u,\"min_internal\":%u}\n",
+         "\"disconnect_count\":%u,\"last_disconnect_reason\":%u,\"wifi_recoveries\":%u,\"free_internal\":%u,\"min_internal\":%u}\n",
          esp_timer_get_time()/1000, (int)esp_reset_reason(), associated ? "true" : "false",
          xEventGroupGetBits(wifi_events)&1 ? "true" : "false", IP2STR(&ip.ip), ap.rssi, ap.primary,
          ap.bssid[0], ap.bssid[1], ap.bssid[2], ap.bssid[3], ap.bssid[4], ap.bssid[5],
-         count, reason, (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
+         count, reason, recoveries, (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
          (unsigned)heap_caps_get_minimum_free_size(MALLOC_CAP_INTERNAL));
 }
 
@@ -235,6 +244,14 @@ static void uart_task(void *arg) {
     line[used] = 0;
     if (!overflow && !strcmp(line, "S3HELLO")) printf("S3JSON {\"version\":1,\"device\":\"%s\"}\n", device_hex);
     else if (!overflow && !strcmp(line, "S3STATUS")) uart_status();
+    else if (!overflow && !strcmp(line, "S3RECONNECT")) {
+      // Local UART diagnostics only: reuse saved credentials without writing NVS.
+      xSemaphoreTake(config_lock, portMAX_DELAY);
+      bool configured=registration.ssid[0]!=0;
+      if (configured) { apply_pending=true; apply_after=0; }
+      xSemaphoreGive(config_lock);
+      printf("S3JSON {\"reconnecting\":%s}\n", configured ? "true" : "false");
+    }
     else if (!overflow && !strncmp(line, "S3CONFIG ", 9)) {
       cJSON *json = cJSON_Parse(line + 9);
       bool ok = json && store_wifi(json);
@@ -253,9 +270,9 @@ static void uart_task(void *arg) {
 }
 
 static void manager_task(void *arg) {
-  int64_t button_since=0, next_connect=0;
+  int64_t button_since=0;
   bool button_handled=false, ap_active=false;
-  unsigned backoff=1;
+  wifi_recovery_t recovery={0};
   while (1) {
     int64_t now = esp_timer_get_time();
     if (!gpio_get_level(GPIO_NUM_0)) {
@@ -280,7 +297,7 @@ static void manager_task(void *arg) {
     }
     if (apply) {
       esp_wifi_disconnect();
-      xEventGroupClearBits(wifi_events, 1);
+      xEventGroupClearBits(wifi_events, WIFI_IP_READY | WIFI_ASSOCIATED | WIFI_JOINING);
       wifi_config_t config={0};
       memcpy(config.sta.ssid, current.ssid, strlen(current.ssid));
       memcpy(config.sta.password, current.password, strlen(current.password));
@@ -291,12 +308,26 @@ static void manager_task(void *arg) {
       config.sta.threshold.authmode=WIFI_AUTH_WPA2_PSK;
       config.sta.pmf_cfg.capable=true;
       ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &config));
-      memset(&config, 0, sizeof(config)); next_connect=now; backoff=1;
+      memset(&config, 0, sizeof(config)); recovery=(wifi_recovery_t){.next_attempt=now+250000};
     }
-    if (current.ssid[0] && !(xEventGroupGetBits(wifi_events)&1) && now>=next_connect) {
-      esp_wifi_connect(); next_connect=now+backoff*1000000LL;
-      if (backoff<30) backoff=backoff*2>30 ? 30 : backoff*2;
-    } else if (xEventGroupGetBits(wifi_events)&1) { backoff=1; next_connect=now+1000000; }
+    if (current.ssid[0]) {
+      EventBits_t bits=xEventGroupGetBits(wifi_events);
+      wifi_action_t action=wifi_recovery_poll(&recovery, now, bits&WIFI_IP_READY,
+                                              bits&WIFI_ASSOCIATED, bits&WIFI_JOINING);
+      if (action==WIFI_REJOIN) {
+        ESP_LOGW("S3", "WIFI_RECOVER phase=%s", bits&WIFI_ASSOCIATED ? "ip" : "association");
+        xSemaphoreTake(config_lock, portMAX_DELAY); wifi_recoveries++; xSemaphoreGive(config_lock);
+        esp_wifi_disconnect();
+        xEventGroupClearBits(wifi_events, WIFI_IP_READY | WIFI_ASSOCIATED | WIFI_JOINING);
+      } else if (action==WIFI_CONNECT) {
+        xEventGroupSetBits(wifi_events, WIFI_JOINING);
+        esp_err_t result=esp_wifi_connect();
+        if (result!=ESP_OK) {
+          xEventGroupClearBits(wifi_events, WIFI_JOINING);
+          ESP_LOGW("S3", "WIFI_CONNECT error=%s", esp_err_to_name(result));
+        }
+      }
+    }
     memset(&current, 0, sizeof(current));
     vTaskDelay(pdMS_TO_TICKS(250));
   }

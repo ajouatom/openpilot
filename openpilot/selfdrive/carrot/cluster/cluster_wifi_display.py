@@ -12,6 +12,8 @@ class S3WifiDisplay(TuringUsbDisplay):
     open_after_renderer = True
     h264_preserve_reference_frames = True
     uses_host_usb = False
+    h264_qp_range = (28, 51)
+    h264_bytes_per_second = 125000
 
     def __init__(self, config: dict, **kwargs):
         super().__init__(**kwargs)
@@ -19,6 +21,7 @@ class S3WifiDisplay(TuringUsbDisplay):
         self.connection = None
         self.pending = deque()
         self._h264_active = False
+        self._h264_next_send = 0.0
         self.landscape_width, self.landscape_height = 1920, 462
 
     def open(self) -> None:
@@ -77,10 +80,11 @@ class S3WifiDisplay(TuringUsbDisplay):
 
     def _h264_chunk_size(self, requested_chunk_size: int) -> int:
         # Wi-Fi forwarding does not share C4's USB bus with the eGPU.
-        return max(512, min(requested_chunk_size or 65536, 65536))
+        return max(512, min(requested_chunk_size or 16384, 16384))
 
     def start_h264_stream(self, requested_chunk_size: int = 0) -> int:
         self._h264_active = True
+        self._h264_next_send = 0.0
         super().start_h264_stream(requested_chunk_size)
         self._h264_chunk_gap_s = 0.0
         return self._h264_chunk_size(requested_chunk_size)
@@ -88,6 +92,10 @@ class S3WifiDisplay(TuringUsbDisplay):
     def send_h264_chunk(self, chunk: bytes, *, is_last: bool = False,
                         wait_for_ack: bool = False, require_ack_response: bool = True) -> None:
         if chunk:
+            # Encoder target bitrate is not a peak limit. Pace bounded chunks
+            # without accumulating burst credit while the renderer is idle.
+            time.sleep(max(0.0, self._h264_next_send - time.monotonic()))
+            self._h264_next_send = time.monotonic() + (len(chunk) + 512) / self.h264_bytes_per_second
             self._transaction(self._build_h264_chunk_payload(chunk, is_last=is_last),
                               frame=not wait_for_ack, expect_reply=wait_for_ack and require_ack_response)
 

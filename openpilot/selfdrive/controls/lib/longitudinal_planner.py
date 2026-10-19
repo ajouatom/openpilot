@@ -371,7 +371,7 @@ class LongitudinalPlanner:
     self.update_coasting(sm, carrot, v_cruise_kph, v_cruise, reset_state,
                          force_slow_decel, coasting_turn_blocked, cutin_predecel_limit)
     self.apply_signal_stop_prepare(sm, carrot, reset_state)
-    self.apply_signal_start_guard(carrot)
+    self.apply_signal_start_guard(carrot, v_ego)
 
   def apply_signal_stop_prepare(self, sm, carrot, reset_state, now=None):
     from openpilot.selfdrive.carrot.signal_stop_prepare import prepare_lead_blocked
@@ -399,8 +399,10 @@ class LongitudinalPlanner:
         self.output_j_target_now = min(self.output_j_target_now, (self.output_a_target-previous)/elapsed)
       # No shouldStop or go request: the existing model owns stopping/handover.
 
-  def apply_signal_start_guard(self, carrot):
-    if carrot.start_decision is not None and carrot.start_decision.hold:
+  def apply_signal_start_guard(self, carrot, v_ego):
+    from openpilot.selfdrive.carrot.signal_assist import departed_signal_stop
+    if (not departed_signal_stop(v_ego)
+        and carrot.start_decision is not None and carrot.start_decision.hold):
       # Explicit departure veto, including the first constrained MPC cycle.
       # Preserve any stronger braking and normal longitudinal/Panda gating.
       self.output_should_stop = True
