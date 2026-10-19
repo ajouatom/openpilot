@@ -1,5 +1,24 @@
 # Repository memory
 
+- On 2026-10-19, user confirms company/hotspot share SSID and explicitly requests
+  disconnect/reconnect testing without waiting for another hotspot. App-only S3
+  1.2.1 preserves pairing: separate association/IP states,30s/20s watchdogs,
+  max5s failed-attempt backoff; no repeated connect during active association.
+  Diagnostic suppressed-IP notification recovers in20s plus rejoin: the stack
+  still had IP, so this is a state-machine fault test, not DHCP/root-cause proof.
+  Sender sync protects setup from an observed local idle-off collision; local
+  decoder reset invalidates TCP/reference queue. Keep2s visual idle-off.
+  Production has UART S3RECONNECT, no private AP/fault hooks. Exact893088-byte app
+  67c8222e passes5 forced reconnects without MCU reboot/USB errors: IP3.88-3.94s,
+  authentication13.52-14.02s, forwarded stream verified17.34-20s. Host discovery
+  retries within same deadline; restore1Mbps/QP28..51 while retaining bounded
+  pacing/queues/CBR. Both branches60 tests+1skip; native C recovery policy and
+  installer5 tests pass; download test1pass/4Windows skips. Initial100s complex
+  test passes, worst full-colour~2fps then other phases~10: no universal10fps,
+  hotspot/road or overnight-memory clearance. Preserve C4 model/DM processes.
+  Both maintained branches single-parent; private backups/logs excluded.
+  See docs/s3_reconnect_20261019.md for final observation/release status.
+
 - On 2026-10-19, user rejects ending S3 work at parser-only correction. Native
   driver QP S_CTRL succeeds without applying ranges; pre-stream S_EXT_CTRLS
   with all-layer255/all six I/P/B limits works. S3 defaults500kbps CBR-CFR,

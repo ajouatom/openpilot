@@ -69,7 +69,7 @@ def test_s3_passes_full_qp_range_and_propagates_driver_failure():
   obj = SimpleNamespace(usb_display=S3WifiDisplay({}), _native_error_text=lambda message: message)
   lib = SimpleNamespace(cluster_h264_encoder_bridge_set_qp_range=setter)
   H264UsbPipeline._set_native_qp_range(obj, lib, 123)
-  assert calls == [(123, 44, 51)]
+  assert calls == [(123, 28, 51)]
   result[0] = -1
   with pytest.raises(RuntimeError, match='QP range setup failed'):
     H264UsbPipeline._set_native_qp_range(obj, lib, 123)
@@ -85,7 +85,7 @@ def test_wifi_h264_defaults_preserve_explicit_rate_and_bitrate():
   h264 = next(n for n in wifi.body if isinstance(n, ast.If) and ast.unparse(n.test) == "args.usb_codec == 'h264'")
   code = compile(ast.Module(body=h264.body, type_ignores=[]), str(path), 'exec')
   for explicit, bitrate, want_bitrate, want_rc in [
-      (False, 'auto', '500k', 'cbr-cfr'), (True, '750k', '750k', 'vbr-cfr')]:
+      (False, 'auto', '1M', 'cbr-cfr'), (True, '750k', '750k', 'vbr-cfr')]:
     args = SimpleNamespace(usb_h264_bitrate=bitrate, usb_h264_rate_control='vbr-cfr',
                            usb_h264_rate_control_from_cli=explicit, usb_h264_diagnose_interval=0)
     exec(code, {'args': args})

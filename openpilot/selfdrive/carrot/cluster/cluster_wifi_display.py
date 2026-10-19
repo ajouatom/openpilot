@@ -12,7 +12,7 @@ class S3WifiDisplay(TuringUsbDisplay):
     open_after_renderer = True
     h264_preserve_reference_frames = True
     uses_host_usb = False
-    h264_qp_range = (44, 51)
+    h264_qp_range = (28, 51)
     h264_bytes_per_second = 125000
 
     def __init__(self, config: dict, **kwargs):
