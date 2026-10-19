@@ -92,3 +92,31 @@ and blocks201/20.027s, with no transport exception. UART retains the same
 association/disconnect count and reports0 failed USB transactions. HUD is restored.
 The combined stress observer misses one model ID, so a separate independent
 final observation is required for model-rate reporting.
+
+## Final vehicle observation and deployment
+
+The guarded Git reconciliation fast-forwards C4 to9af82818a6 and preserves
+modeld163840 / dmonitoringmodeld163845. The three installed HUD source files now
+match their committed blobs; only pre-existing generated DBC changes remain.
+The180s observer spans this planned HUD restart:32/36 connected samples,
+model3601 consecutive valid frames, DM3599 with2 observed ID gaps. It is not a
+clean uninterrupted model/DM or HUD pass. A subsequent untouched60s interval has
+1202/1201 consecutive valid model/DM frames at20.005802/20.000011Hz and12/12 HUD
+connected samples, same active eGPU. Available memory564.70->562.82MiB is only a
+short observation, not overnight leak clearance. Final independent120s UART has
+no extra Wi-Fi disconnection, TCP close, decoder reset or USB error; its stream
+counter continues increasing. Actual dashboard typically9.9-10fps/~626kbps.
+
+Code is published to nav9af82818a6 / wip e93d46674e; firmware source manifest
+points to the nav code commit. The package verifies17 firmware source hashes,
+app size/hash, ZIP CRC, dependency hashes and absence of private registration.
+GitHub Carrot Routes image run39197291072 passes its native replay/service tests.
+The Korean Wiki installation page is updated separately, preserving pre-existing
+local Wiki edits. Browser installer tests are distinct from physical UART flashing.
+
+NAS automatic deployment confirms code e93d46674e. An independent public endpoint
+check verifies health, the actual upload-result page and1196 replay frames against
+the image-local expected hash. Public index/release.json/app/ZIP/SHA256SUMS/guide
+bytes match the verified local1.2.1 package. The app SHA matches the board build.
+The final optical picture-quality question has no reply yet; UART/transport
+success is not an additional user visual confirmation.

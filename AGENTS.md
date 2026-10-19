@@ -16,6 +16,10 @@
   installer5 tests pass; download test1pass/4Windows skips. Initial100s complex
   test passes, worst full-colour~2fps then other phases~10: no universal10fps,
   hotspot/road or overnight-memory clearance. Preserve C4 model/DM processes.
+  Exact final100s complex sequence passes too. Guarded C4 Git reconciliation
+  retains model163840/DM163845; mixed180s includes two observed DM gaps, then
+  untouched60s model1202/DM1201 consecutive valid at20.005802/20.000011Hz,
+  HUD12/12 connected. Final120s UART has no disconnect/close/USB error.
   Both maintained branches single-parent; private backups/logs excluded.
   See docs/s3_reconnect_20261019.md for final observation/release status.
 
