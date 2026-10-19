@@ -229,11 +229,11 @@ def test_production_output_veto_after_mpc_and_coasting(hold, accel):
   ns = {}
   exec(compile(ast.Module([method], type_ignores=[]), str(path), 'exec'), ns)
   p = NS(output_should_stop=False, output_v_target_now=2., output_a_target=accel)
-  p.apply_signal_start_guard = lambda carrot: ns['apply_signal_start_guard'](p, carrot)
+  p.apply_signal_start_guard = lambda carrot, speed: ns['apply_signal_start_guard'](p, carrot, speed)
   # Execute the real last output operations, including the preceding coast call.
   p.update_coasting = lambda *a: setattr(p, 'output_a_target', accel)
   p.apply_signal_stop_prepare = lambda *a: None
-  ns.update(self=p, carrot=NS(start_decision=NS(hold=hold)), sm={}, v_cruise_kph=80.,
+  ns.update(self=p, carrot=NS(start_decision=NS(hold=hold)), sm={}, v_cruise_kph=80., v_ego=0.,
             v_cruise=20., reset_state=False, force_slow_decel=False, coasting_turn_blocked=False, cutin_predecel_limit=None)
   exec(compile(ast.Module(update.body[-3:], type_ignores=[]), str(path), 'exec'), ns)
   assert p.output_should_stop == hold

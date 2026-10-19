@@ -399,6 +399,8 @@ Experimental DM switches to standard monitoring for 20 seconds only when moving 
 
 `SignalAssistMode` defaults to `0`. Mode `0` disables auxiliary signals; `1` enables recognition, display, alerts and the stopped-red departure veto; `2` also enables moving-red preparation.
 
+The stopped-red departure veto is limited to stopping and creeping at up to 5km/h. Above 5km/h, its previous stop memory is cleared so losing a lead after departure cannot reactivate that stop. This does not confirm green or authorize acceleration; normal model and lead control and explicit driver holds remain active.
+
 Mode `2` gradually requests acceleration toward approximately −0.5m/s² after qualifying red evidence, with no lead, pedal input or turn and a speed above 5km/h and below 82km/h. At night, at least two persistent red lamps must have compatible placement and road-direction support; inferred housing size is not used as a stopping distance.
 
 Preparation releases when red evidence disappears or conflicts with green. The existing driving model still controls stopping toward the stop line; this trial does not guarantee deceleration or stopping at every red signal.

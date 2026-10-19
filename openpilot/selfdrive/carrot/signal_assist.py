@@ -8,6 +8,15 @@ from dataclasses import dataclass
 import math
 
 
+def departed_signal_stop(speed):
+  """A stopped-car veto owns only the stop/creep phase, up to 5 km/h.
+
+  Leaving this scope retires old stop memory; it does not confirm green or
+  cancel a separate moving-red approach, model obstacle, or driver hold.
+  """
+  return math.isfinite(speed) and abs(speed) > 5 / 3.6
+
+
 @dataclass(frozen=True)
 class SignalDecision:
   hold: bool = False
@@ -152,6 +161,9 @@ class SignalAssist:
       return SignalDecision(reason='driver_gas_override')
     if now < self.suppressed_until:
       return SignalDecision(reason='driver_override_cooldown')
+    if self.hold and departed_signal_stop(speed):
+      self.reset()
+      return SignalDecision(reason='departed_stop')
     reason = self._observe(now, observation)
     fresh = 0 <= now - self.last_timestamp <= self.MAX_AGE + 1e-9
     evidence = self.confirmed if fresh else 'unknown'
