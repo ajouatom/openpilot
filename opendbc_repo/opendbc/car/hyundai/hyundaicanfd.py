@@ -1142,6 +1142,8 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
         values["DISTANCE_LEAD"] = (2 if cruise_enabled else 1) if lead_visible else 0
         values["DISTANCE_CAR"] = 3 if hdp_active else 2 if cruise_enabled else 1 if main_enabled else 0
         values["DISTANCE_SPACING"] = 5 if hdp_active else 1 if cruise_enabled else 0
+        if hdp_active and hud_control.leadDistanceBars != 4:
+          values["DISTANCE_SPACING"] = 3  # HDP spacing style for gaps 1-3 (cluster test 19-3, 10-20)
 
         values["TARGET"] = (1 if cruise_enabled else 3) if lead_visible else 0  # blue when engaged, white otherwise
         values["TARGET_DISTANCE"] = lead_distance

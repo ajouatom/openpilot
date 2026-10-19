@@ -165,6 +165,7 @@ def test_hdp_gap_bars_and_popup(monkeypatch):
   assert send(10, 3)['ALERTS_3'] == 9  # DISTANCE_3 popup after a change
   assert send(205, 3)['ALERTS_3'] == 9
   assert send(215, 3)['ALERTS_3'] == 0  # gone after 2 s
+  assert first['DISTANCE_SPACING'] == 3 and send(300, 4)['DISTANCE_SPACING'] == 5  # 19-3 for gaps 1-3 only
 
 
 @pytest.mark.parametrize(('standstill', 'lka', 'lca'), ((True, 4, 2), (False, 3, 0)))
