@@ -252,6 +252,7 @@ class SignalStartGuard:
       return 'malformed'
 
   def update(self, now, observation, *, enabled, valid, drive, gas, speed, departure):
+    from openpilot.selfdrive.carrot.signal_assist import departed_signal_stop
     if not enabled or not drive:
       self.reset()
       self.last_now = now if math.isfinite(now) else -math.inf
@@ -261,6 +262,13 @@ class SignalStartGuard:
       self.last_now = now if math.isfinite(now) else -math.inf
       self.cooldown = now+10. if math.isfinite(now) else math.inf
       return StartDecision(reason='driver_gas')
+    # Lead following can bypass the effective veto while retaining this latch.
+    # Retire it once outside stop/creep scope, even with missing observations,
+    # invalid context or a clock rollback. None of these grants green rights.
+    if departed_signal_stop(speed):
+      self.reset()
+      self.last_now = now if math.isfinite(now) else -math.inf
+      return StartDecision(reason='departed_stop')
     if not math.isfinite(now) or now < self.last_now:
       # Clock discontinuity cannot turn a held red into permission to go.
       self.pending, self.count, self.box, self.session = None, 0, None, None
