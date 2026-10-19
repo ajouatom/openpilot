@@ -177,3 +177,32 @@ def test_lane_unseen_hysteresis():
   assert not hyundaicanfd._lane_unseen(state, 'L', 0.10, 200)  # a dip that does not last 1 s resets
   assert not hyundaicanfd._lane_unseen(state, 'L', 0.05, 205)
   assert not hyundaicanfd._lane_unseen(state, 'R', 0.02, 205)  # sides are independent
+
+
+def test_hdp_gap_bars_and_popup(monkeypatch):
+  from openpilot.cereal import log
+  monkeypatch.setattr(hyundaicanfd, 'Params', lambda: SimpleNamespace(
+    get_int=lambda key: 0, get=lambda key: '2' if key == 'HDPuse' else '0'))
+  for attr in ('_gap_bars', '_gap_popup_until'):
+    monkeypatch.delattr(hyundaicanfd.create_ccnc_messages, attr, raising=False)
+  packer = CANPacker('hyundai_canfd_generated')
+  definition = packer.dbc.name_to_msg['ADRV_0x161']
+  state = SimpleNamespace(
+    adrv_0x161={key: 0 for key in definition.sigs}, out=structs.CarState(), modelV2=log.ModelDataV2.new_message(),
+    lfahda_cluster=None, cruise_buttons_msg=None, adrv_0x200=None, adrv_0x1ea=None, ccnc_0x162=None,
+    is_metric=True, paddle_button_prev=0, softHoldActive=0, trailer_connected=False,
+  )
+  control = structs.CarControl(latActive=True, enabled=True)
+
+  def send(frame, bars):
+    control.hudControl.leadDistanceBars = bars
+    msg = hyundaicanfd.create_ccnc_messages(
+      SimpleNamespace(flags=HyundaiFlags.CAMERA_SCC), packer, SimpleNamespace(ECAN=0, CAM=2), frame, control, state,
+      control.hudControl, 0, False, False, 0, False, 0, 0)[0]
+    return {key: get_raw_value(msg[1], sig) for key, sig in definition.sigs.items()}
+
+  first = send(5, 2)
+  assert (first['DISTANCE'], first['ALERTS_3'], first['HDA_ICON']) == (2, 0, 5)  # HDP colors keep the real bars
+  assert send(10, 3)['ALERTS_3'] == 9  # DISTANCE_3 popup after a change
+  assert send(205, 3)['ALERTS_3'] == 9
+  assert send(215, 3)['ALERTS_3'] == 0  # gone after 2 s
