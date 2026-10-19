@@ -98,6 +98,22 @@ int cluster_h264_encoder_bridge_set_rate_control(ClusterH264EncoderBridge *bridg
   return 0;
 }
 
+int cluster_h264_encoder_bridge_set_qp_range(ClusterH264EncoderBridge *bridge, int min_qp, int max_qp) {
+  if (bridge == nullptr) return -1;
+  if (bridge->encoder != nullptr) {
+    bridge->last_error = "cannot change QP range after encoder open";
+    return -1;
+  }
+  if (min_qp < 0 || max_qp > 51 || min_qp > max_qp) {
+    bridge->last_error = "QP range must satisfy 0 <= min <= max <= 51";
+    return -1;
+  }
+  bridge->config.min_qp = min_qp;
+  bridge->config.max_qp = max_qp;
+  bridge->last_error.clear();
+  return 0;
+}
+
 int cluster_h264_encoder_bridge_set_realtime_priority(ClusterH264EncoderBridge *bridge, int realtime_priority) {
   if (bridge == nullptr) return -1;
   if (bridge->encoder != nullptr) {

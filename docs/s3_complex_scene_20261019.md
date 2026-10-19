@@ -105,3 +105,112 @@ maximum one and zero dropped units. TCP is established at the end. Available
 memory is 692.37 -> 689.74 MiB (minimum 659.99), around 81% in the restored HUD
 state. This bounded parked result is not proof of long-term leak clearance or
 stable operation under the failing full-resolution random scene.
+
+
+## Follow-up: apply bounded C4 transmission, not CBR alone
+
+The user explicitly rejected stopping at the parser-only correction. Subsequent
+native tests establish why the earlier QP calls had no effect: the pinned MSM
+VIDC driver accepts individual per-frame QP S_CTRL calls without applying their
+range. Its S_EXT_CTRLS path requires the layer selector and all six I/P/B limits.
+See the [comma kernel implementation](https://github.com/commaai/agnos-kernel-sdm845/blob/master/drivers/media/platform/msm/vidc/msm_venc.c).
+Pre-stream extended controls with all-layer ID 255 work on the actual device;
+the standard generic H.264 minimum-QP control and the old packed control return
+EINVAL. These experiments use isolated per-process diagnostic shims, never
+installed globally. Production uses a new native bridge setter before open,
+and aborts initialization on a missing API or failed control instead of silently
+ignoring the limit. Wired displays do not request this setting.
+
+S3 native defaults are now CBR-CFR, 500 kbps target, QP range 44..51, GOP 10.
+Explicit bitrate/rate-control CLI choices remain respected. QP is a quality
+constraint, NOT a strict frame-size bound: luma-only transitions shrink from
+831472 bytes to about 28 KB, but independently random luma and chroma still
+reach 176980 bytes. A fixed QP 51 trial does not eliminate that worst case.
+CBR+QP alone passes a 110-second luma sequence, then fails three full-colour
+trials. Smaller 16 KB chunks alone also fail. These failures are retained in
+the private evidence; they must not be reported as successful releases.
+
+The retained S3 sender additionally paces chunks of at most 16384 bytes at
+125000 bytes/s, counting the 512-byte display header (not TCP/IP/MAC overhead).
+It accrues no idle burst credit. The three ordered access-unit slots still
+backpressure only the HUD encoder. Its three-second dead-sender timer now
+resets on completed chunk transmission, rather than declaring a progressing
+large frame disconnected simply because the access-unit queue stays full.
+The old timer demonstrably fired during paced output despite ACK waits of
+less than 5 ms. No dependent H.264 reference units are discarded.
+
+An authenticated capability query now retries lost UDP queries every 250 ms
+within the existing one-second deadline. Old firmware still falls back to JPEG;
+forged/replayed replies remain rejected. A lost first reply no longer forces
+JPEG if a subsequent valid response arrives within that deadline.
+
+The exact new native library and Python paths were tested on the actual S3.
+The first final-profile run still loses the connection early in colour noise,
+and its next initialization fails before video. A subsequent full run passes:
+
+| Input phase | Duration | Encoded units | Largest unit | Encoded kbps |
+|---|---:|---:|---:|---:|
+| Static | 5.01 s | 50 | 5392 B | 380 |
+| Independent full-colour noise | 30.01 s | 90 | 176980 B | 982 |
+| Static recovery (includes queued noise) | 5.03 s | 33 | 176372 B | 545 |
+| Scrolling random luma | 20.01 s | 201 | 26516 B | 351 |
+| Independent random luma | 20.03 s | 201 | 26564 B | 621 |
+| Changing 16-pixel blocks | 20.01 s | 201 | 9872 B | 746 |
+
+This is graceful throughput reduction to about 3 FPS for deliberately
+incompressible colour noise, not a 10 FPS worst-case claim. Subsequent luma and
+block phases recover about 10 FPS with no transport exception. Full-colour
+reference backlog briefly delays static recovery. Neither encoder target nor
+QP is misrepresented as a hard network limit. The passing run's monitor records
+2201 valid consecutive model and DM updates each, at 20.000639 / 20.000625 Hz.
+
+Header-only captures also identify independent link loss: even a 568-byte sync
+command can be retransmitted without acknowledgement until the S3 sends FIN
+around its two-second receive timeout. C4 transmit evidence cannot identify
+whether the loss is at its radio, AP, or S3 receive path. Current S3 UART is not
+available, so no firmware-internal cause or universal hotspot fix is claimed.
+No router or firmware changes accompany this correction.
+
+Guarded selective installation backs up six source files and the native library,
+atomically replaces the library, and restarts only HUD. Native library SHA256:
+`7305711dd3a9aa3abd96c6615412a405a173101327dea7712dd98d3f0a1c685b`.
+Modeld 49147 and DM 49149 remain unchanged, eGPU active. Early actual-HUD windows
+report 100 units per 10.1 seconds, approximately 279-280 kbps and 8.4 KB maximum
+units, compared with earlier approximately 1 Mbps windows. The scenes/time
+are not identical; this is observed current output, not a matched codec ratio.
+Physical legibility and optical frame rate require user confirmation.
+
+This correction addresses reproduced content-dependent encoder silence,
+uncontrolled host bursts and a false queue timeout. Independent packet loss
+and the historical overnight memory increase are still unresolved; short
+synthetic memory observations do not establish leak clearance.
+
+
+The first installed-HUD 180.111-second observation does NOT pass connection
+stability: only 16/36 five-second samples are connected (an approximately
+70-second continuous interval followed by renewed failures), with no TCP
+connection at the final sample. Model/DM remain consecutive and valid:
+3601/3600 updates at 19.999995 / 20.000150 Hz, respectively. The first is
+approximately 20, not a strict >=20 measurement. Available memory is
+637.78 -> 703.92 MiB, minimum 615.68, across changing HUD active/retry states.
+Do not infer a memory plateau from that. The authenticated UDP retry change
+is installed in a second guarded HUD-only restart after this observation.
+
+Both branches' focused regression suite covers exact prefix semantics, explicit
+rate settings, missing/failed QP API, ordered backpressure, dead sender, sender
+progress beyond three seconds, shutdown, bounded pacing with no idle credit,
+and an actually lost first UDP capability response. Final result: 59 pass,
+one Linux-only skip on Windows. The native library is built and loaded on the
+vehicle; the Windows tests are not a replacement for this native check.
+
+
+After the second HUD restart, a separate 60.028-second read-only capture has
+1201 valid consecutive model and DM frames each at 20.002008 / 20.003827 Hz,
+no missing IDs, eGPU active at every sample. S3 reconnects only near the end:
+3/12 samples connected and an established socket at completion. This is
+reconnection evidence, emphatically not a stability pass. Final available
+memory is 632.89 MiB (82.45% used) with HUD active, not a long-term memory claim.
+No physical readability response had arrived when the code checks finished.
+The remaining task is to diagnose actual S3 receive/close events together with
+packet loss; UART access is required for firmware-internal logs on the current
+board. The current remote path has no firmware-update facility.
