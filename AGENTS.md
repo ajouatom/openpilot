@@ -1,5 +1,25 @@
 # Repository memory
 
+- On 2026-10-19, user requests deliberately complex S3 traffic after motion-only
+  dropouts on company Wi-Fi and hotspot. New boot/base68e7785c8b at~78% reproduces
+  native1Mbps VBR-CFR silence:751 motion inputs/75s yield one residual unit,
+  601 noise inputs/60s yield zero; raw no-network callbacks reproduce and recover
+  on static. CBR gradual90s actual S3 passes~10fps, but abrupt noise produces
+  831472-byte units and another fast-parser trial hits3s ordered-queue timeout.
+  Withdraw CBR default candidate; no rate/firmware/router change. Post-open
+  QP28/36/44 controls return success but identical output, not a validated cap.
+  Retain byte-equivalent Annex-B bytes.find search: native100KB394-487ms ->
+  0.212-0.228ms;831KB2.986-3.407s ->1.745-3.635ms, synthetic low-priority timings.
+  Both branches52 tests/one Linux skip; guarded one-file C4 install restoresHUD1,
+  model49147/DM49149 unchanged. Final180s model/DM3601 valid consecutive each
+  at20.000236/20.000119Hz; first25s reconnect then31/36 connected samples,
+  actual H264~10fps/~1Mbps; available692.37->689.74MiB. Bounded parked only,
+  not a full disconnect/encoder/memory fix.
+  Small-command/discovery failures also precede video; auto can fall back toJPEG
+  after lost capability response. Old pending memory watch ended at reboot after
+  322samples/1639.90s, not2h; mixed HUD states do not prove a plateau. See
+  docs/s3_complex_scene_20261019.md. Raw evidence private; single-parent branches.
+
 - On 2026-10-19, user requests HUD isolation and broad recent/native/signal
   memory review. Same C4 boot/base2d71d318: normal HUD stop90.22->84.12%; stop
   mode2 recognition and separate legacy policy observer reaches79.12%, without

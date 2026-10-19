@@ -165,7 +165,7 @@ def test_cluster_autorun_restarts_without_delay_after_orientation_change(monkeyp
   realtime_module.drop_realtime = lambda: None
   monkeypatch.setitem(sys.modules, "openpilot.common.realtime", realtime_module)
   monkeypatch.setattr(cluster_autorun, "_hud_output_allowed", lambda _params: True)
-  monkeypatch.setattr(cluster_autorun, "_wait_for_usbgpu_startup", lambda _params: None)
+  monkeypatch.setattr(cluster_autorun, "_wait_for_usbgpu_startup", lambda _params, **_kwargs: None)
   monkeypatch.setattr(cluster_autorun, "_run_cluster_once", run_cluster_once)
   monkeypatch.setattr(
     usb_display_module,
