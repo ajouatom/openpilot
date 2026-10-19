@@ -286,6 +286,10 @@ static void usb_task(void *arg) {
         if (!received) response_length=0;
       }
       if (ok && visual) { last_frame=esp_timer_get_time(); dark=false; next_off=0; off_failures=0; }
+      // A newly authenticated sender starts with sync before video setup.
+      // Without this bounded grace, an expired idle timer can issue a second
+      // local sync/off in the middle of setup, resetting the decoder silently.
+      if (ok && command==10) last_frame=esp_timer_get_time();
       if (current) status_led_usb(true, !ok);
       if (ok && visual) status_led_frame();
       if (current && command==14 && plain[8]==0) {
@@ -296,6 +300,7 @@ static void usb_task(void *arg) {
       streaming=false;
     }
     if (claimed_device && !setup && esp_timer_get_time()-last_frame>2000000 && esp_timer_get_time()>=next_off) {
+      if (!dark) network_reset_display();
       turn_off();
     }
     int64_t now = esp_timer_get_time();

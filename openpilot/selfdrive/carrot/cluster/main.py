@@ -2547,7 +2547,7 @@ def main(*, exit_on_error: bool = True) -> None:
         encoder_source = f"S3 Wi-Fi {args.usb_codec.upper()}"
         if args.usb_codec == "h264":
             if args.usb_h264_bitrate == "auto":
-                args.usb_h264_bitrate = "500k"
+                args.usb_h264_bitrate = "1M"
             if not args.usb_h264_rate_control_from_cli:
                 args.usb_h264_rate_control = "cbr-cfr"
             args.usb_h264_gop = 10

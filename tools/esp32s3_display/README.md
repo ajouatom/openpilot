@@ -17,6 +17,16 @@ all channels and selects by signal strength when connecting. It does not pin an
 AP or continuously roam after association. UART `S3STATUS` includes the connected
 BSSID, channel and RSSI for diagnosis.
 
+Firmware 1.2.1 bounds association attempts to 30 seconds and IP acquisition to
+20 seconds before rejoining, with up to five seconds between failed attempts.
+These are phase deadlines, not an end-to-end reconnection guarantee. It also
+protects the initial sync/setup window from idle-off and invalidates the TCP
+stream when idle-off resets the panel decoder. The two-second visual idle/off
+policy is retained. `S3STATUS` reports `wifi_recoveries`; UART logs distinguish
+RX/TX termination, Wi-Fi recovery, and local decoder reset without credentials.
+Local UART `S3RECONNECT` retries the saved network without rebooting or rewriting
+credentials. It interrupts the display briefly; it is not a network command.
+
 ## One-time firmware installation
 
 For ordinary users, use the [NAS browser installer and Korean setup guide](https://upload.shind0.synology.me/models/carrot-s3/index.html).
