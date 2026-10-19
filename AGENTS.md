@@ -1,5 +1,19 @@
 # Repository memory
 
+- On 2026-10-19, offroad Mapbox review finds real navd allManeuvers failure:
+  np.cumsum yields numpy.float64, rejected by device Capnp struct-list setter.
+  Convert distance to Python float at serialization only. Six real-cereal cases
+  fail before/pass after on nav; wip old sums already pass, same boundary guard
+  ported without model/route changes. Nav93 pass/9 native-render skips; wip22 pass.
+  Exact corrected source in isolated C4 /tmp trial:44 synthetic route positions,
+  actual Mapbox tiles/Carrot bridge/native VisionIPC/MapInput pixels match;
+  warm10.109-20.089ms, IPC+checks0.913-1.623ms. Host-shaped buffers only, no
+  driving-model inference/20Hz/steering claim. Cold537ms (earlier885ms) still
+  exceeds500ms gate; not fixed. Operational code/Params/processes unchanged,
+  no vehicle installation. Both maintained branches single-parent. See
+  docs/mapbox_instruction_serialization_20261019.md; tokens/evidence private.
+
+
 - On 2026-10-19, Ioniq9 route417/19 on5032afca77 reproduces retained stopped-red
   memory after lead-follow departure: target-4.497/output-4/measured-3.616m/s2
   at road speed, no new signal tracks, gas intervention at6.395s. Retire both
