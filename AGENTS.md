@@ -1,5 +1,17 @@
 # Repository memory
 
+- On 2026-10-19, user selects pearl cartoon DM eyes for both C3/C4. Replace
+  shared onroad camera inset with plain Widget: no video client/shader/textures
+  or box. Bounded mirrored head pose is illustrative, not ocular gaze; eyelids
+  use actual per-eye blink/confidence, no decorative random blinking. Preserve
+  freshness/session gates plus 500ms repeated-frame guard; gray unknown eyes,
+  warning/lockout and wheel fallback, alert hiding/AlwaysOnDM and RHD selection.
+  No monitoring/model/control/settings/sound changes. 75 focused and 180 wider
+  UI/sound tests pass (one Windows native-IPC exclusion); desktop actual-renderer
+  captures cover both sizes with synthetic inputs/schematic HUD. No physical
+  vehicle installation, readability or CPU/road validation. Both maintained
+  branches single-parent. See docs/dm_pearl_eyes_20261019.md.
+
 - On 2026-10-19, user confirms company/hotspot share SSID and explicitly requests
   disconnect/reconnect testing without waiting for another hotspot. App-only S3
   1.2.1 preserves pairing: separate association/IP states,30s/20s watchdogs,
