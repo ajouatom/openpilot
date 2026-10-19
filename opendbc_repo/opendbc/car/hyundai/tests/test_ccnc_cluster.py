@@ -206,3 +206,23 @@ def test_hdp_gap_bars_and_popup(monkeypatch):
   assert send(10, 3)['ALERTS_3'] == 9  # DISTANCE_3 popup after a change
   assert send(205, 3)['ALERTS_3'] == 9
   assert send(215, 3)['ALERTS_3'] == 0  # gone after 2 s
+
+
+@pytest.mark.parametrize(('main_on', 'v_ego', 'pressed'), ((False, 5.0, 1), (True, 5.0, 0), (False, 0.0, 1)))
+def test_stock_main_kept_on_without_engagement(monkeypatch, main_on, v_ego, pressed):
+  from openpilot.cereal import log
+  monkeypatch.setattr(hyundaicanfd, 'Params', lambda: SimpleNamespace(get_int=lambda key: 0, get=lambda key: '0'))
+  packer = CANPacker('hyundai_canfd_generated')
+  buttons = packer.dbc.name_to_msg['CRUISE_BUTTONS']
+  state = SimpleNamespace(
+    adrv_0x161=None, out=structs.CarState(vEgo=v_ego), modelV2=log.ModelDataV2.new_message(), lfahda_cluster=None,
+    cruise_buttons_msg={key: 0 for key in buttons.sigs}, cruise_btns_msg_canfd='CRUISE_BUTTONS', MainMode_ACC=main_on,
+    ACCMode=0, scc_control=None, adrv_0x200=None, adrv_0x1ea=None, ccnc_0x162=None, is_metric=True,
+    paddle_button_prev=0, softHoldActive=0, trailer_connected=False,
+  )
+  control = structs.CarControl(enabled=False)  # not engaged: stock MAIN is still kept on for the cluster
+  msgs = hyundaicanfd.create_ccnc_messages(
+    SimpleNamespace(flags=HyundaiFlags.CAMERA_SCC), packer, SimpleNamespace(ECAN=0, CAM=2), 12, control, state,
+    control.hudControl, 0, False, False, 0, False, 0, 0)
+  msg = next(m for m in msgs if m[0] == buttons.address)
+  assert get_raw_value(msg[1], buttons.sigs['ADAPTIVE_CRUISE_MAIN_BTN']) == pressed
