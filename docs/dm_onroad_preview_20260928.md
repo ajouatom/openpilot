@@ -1,5 +1,10 @@
 # Passive onroad driver-monitoring inset
 
+The onroad camera inset described below was replaced by pearl cartoon eyes on
+October 19. See [DM pearl eyes](dm_pearl_eyes_20261019.md) for the current
+presentation and validation. This document retains the original implementation
+and the separate September 29 sound/layout history.
+
 The September 28 request adds an automatically visible DM inset to both main
 device UIs. It replaces the old onroad face-state icon, without changing the
 offroad driver-camera dialog, monitoring policy, Params, model, camera process,

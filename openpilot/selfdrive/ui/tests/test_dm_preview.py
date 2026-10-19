@@ -1,28 +1,31 @@
 import importlib.util
+import math
 import sys
 from pathlib import Path
 from types import ModuleType, SimpleNamespace as NS
 
 import pytest
 
-from openpilot.selfdrive.ui.dm_preview import face_crop, preview_rect, preview_state, sample_fresh
+from openpilot.selfdrive.ui.dm_preview import eye_expression, preview_rect, preview_state, sample_fresh, smooth_expression
 
 
-def state(**changes):
-  values = {'monitoring_fresh': True, 'camera_unavailable': False, 'driver_fresh': True,
-                'frame_fresh': True, 'face_detected': True, 'distracted': False, 'lockout': False}
-  return preview_state(**(values | changes))
+def driver(**changes):
+  return NS(**({'faceOrientation': [0.0, 0.0, 0.0], 'faceOrientationStd': [0.1, 0.1, 0.1],
+               'leftEyeProb': 1.0, 'rightEyeProb': 1.0, 'leftBlinkProb': 0.0, 'rightBlinkProb': 0.0,
+               'sunglassesProb': 0.0} | changes))
 
 
 @pytest.mark.parametrize(('changes', 'kind'), [
   ({}, 'tracking'), ({'monitoring_fresh': False, 'camera_unavailable': True}, 'waiting'),
-  ({'camera_unavailable': True, 'driver_fresh': False}, 'wheel'),
-  ({'frame_fresh': False}, 'waiting'), ({'driver_fresh': False}, 'waiting'),
+  ({'camera_unavailable': True, 'driver_fresh': False}, 'wheel'), ({'driver_fresh': False}, 'waiting'),
   ({'face_detected': False}, 'searching'), ({'distracted': True}, 'warning'),
   ({'lockout': True, 'camera_unavailable': True}, 'warning'), ({'wheel_policy': True}, 'wheel'),
+  ({'distracted': True, 'wheel_policy': True}, 'warning'),
 ])
 def test_status_does_not_claim_valid_camera_or_attention(changes, kind):
-  assert state(**changes).kind == kind
+  values = {'monitoring_fresh': True, 'camera_unavailable': False, 'driver_fresh': True,
+            'face_detected': True, 'distracted': False, 'lockout': False}
+  assert preview_state(**(values | changes)).kind == kind
 
 
 @pytest.mark.parametrize(('stamp', 'fresh'), [(10, True), (9.51, True), (9.5, False), (0, False), (11, False), (float('nan'), False)])
@@ -30,92 +33,108 @@ def test_freshness_boundaries(stamp, fresh):
   assert sample_fresh(10, stamp) == fresh
 
 
-@pytest.mark.parametrize(('width', 'height'), [(1928, 1208), (1344, 760)])
-@pytest.mark.parametrize('face', [(-0.45, 0), (0.45, 0), (0, 0.4), (0, -0.1)])
-@pytest.mark.parametrize('aspect', [256 / 144, 52 / 46])
-def test_face_crop_fits_both_camera_sizes_and_driving_sides(width, height, face, aspect):
-  x, y, w, h = face_crop(width, height, face, aspect)
-  assert 0 <= x <= width - w and 0 <= y <= height - h
-  assert w / h == pytest.approx(aspect)
-  mirror = face_crop(width, height, (-face[0], face[1]), aspect)
-  assert x + mirror[0] + w == pytest.approx(width)
-
-
-@pytest.mark.parametrize('face', [[], [0], [float('nan'), 0], [0, float('inf')], [10, 10]])
-def test_invalid_face_position_uses_full_image(face):
-  assert face_crop(1928, 1208, face, 1) is None
-
-
 def test_layout_respects_existing_panels_and_parent_offsets():
-  # C3 time ends at y+190, plot starts at x+350, speed panel occupies the bottom.
   x, y, w, h = preview_rect(300, 30, 1830, 1020, False)
   assert x + w < 300 + 350 and y > 30 + 190 and y + h < 30 + 600
-  # C4 sits right of D (ending at x+373), before the side strip (starting x+476).
   x, y, w, h = preview_rect(536, 0, 536, 240, True)
   assert (w, h) == (84, 84)
   assert x - (536 + 373) == 9 and (536 + 476) - (x + w) == 10
   assert y == 144 and y + h == 228
 
 
-@pytest.fixture
-def preview(monkeypatch):
+def test_pose_is_bounded_mirrored_head_direction_and_blinks_are_independent():
+  pose = eye_expression(driver(faceOrientation=[1.0, 1.0, 0.0], leftBlinkProb=1.0))
+  assert (pose.x, pose.y) == (-1.0, 1.0)
+  assert pose.left_open == 0.08 and pose.right_open == 1.0
+  assert pose.left_known and pose.right_known
+  pose = eye_expression(driver(faceOrientation=[-1.0, -1.0, 0.0], rightBlinkProb=1.0))
+  assert (pose.x, pose.y) == (1.0, -1.0)
+  assert pose.left_open == 1.0 and pose.right_open == 0.08
+
+
+def test_expression_accepts_real_cereal_list_readers():
+  from openpilot.cereal import log
+  model = log.DriverStateV2.new_message()
+  model.leftDriverData.faceOrientation = [0.1, -0.2, 0.0]
+  model.leftDriverData.faceOrientationStd = [0.1, 0.1, 0.1]
+  model.leftDriverData.leftEyeProb = model.leftDriverData.rightEyeProb = 1.0
+  pose = eye_expression(model.as_reader().leftDriverData)
+  assert pose.x == pytest.approx(1 / 3) and pose.y == pytest.approx(0.2)
+  assert pose.left_known and pose.right_known
+
+
+@pytest.mark.parametrize('changes', [
+  {'faceOrientation': []}, {'faceOrientation': [0.0]}, {'faceOrientation': [math.nan, 0, 0]},
+  {'faceOrientation': [0, math.inf, 0]}, {'faceOrientationStd': []}, {'faceOrientationStd': [0.3, 0.1, 0.1]},
+  {'faceOrientationStd': [-0.1, 0.1, 0.1]}, {'faceOrientationStd': [0.1, math.nan, 0.1]},
+])
+def test_uncertain_pose_cannot_move_pupils(changes):
+  pose = eye_expression(driver(**changes))
+  assert pose.x == pose.y == 0.0
+
+
+@pytest.mark.parametrize('changes', [
+  {'leftEyeProb': 0.65}, {'leftEyeProb': math.nan}, {'leftEyeProb': 1.1},
+  {'leftBlinkProb': math.nan}, {'leftBlinkProb': -0.1}, {'leftBlinkProb': 1.1},
+  {'sunglassesProb': 0.9}, {'sunglassesProb': math.nan}, {'sunglassesProb': -0.1},
+])
+def test_unreliable_eyes_do_not_invent_a_blink(changes):
+  pose = eye_expression(driver(**changes))
+  assert not pose.left_known
+  assert pose.left_open == 1.0
+
+
+def test_smoothing_keeps_real_blinks_and_immediately_invalidates_unknown_eyes():
+  opened = eye_expression(driver())
+  closed = eye_expression(driver(leftBlinkProb=1.0, rightBlinkProb=1.0))
+  blink = smooth_expression(opened, closed, 0.05)
+  assert blink.left_open < 0.15 and blink.right_open < 0.15
+  reopening = smooth_expression(blink, opened, 0.05)
+  assert blink.left_open < reopening.left_open < 1.0
+  unknown = smooth_expression(opened, eye_expression(driver(leftEyeProb=0)), 0.001)
+  assert not unknown.left_known and unknown.right_known
+  assert smooth_expression(None, closed, 0) == closed
+  assert smooth_expression(opened, opened, 100) == opened  # No decorative blinks.
+
+
+@pytest.fixture(params=[False, True], ids=['c3', 'c4'])
+def preview(monkeypatch, request):
   import pyray as rl
-  for name in ('draw_rectangle_rec', 'draw_rectangle_lines_ex', 'draw_text_ex', 'draw_circle_lines', 'draw_line_ex'):
-    monkeypatch.setattr(rl, name, lambda *a: None)
-  labels, rendered, polls = [], [], []
+  labels, shapes = [], []
+  for name in ('draw_rectangle_rounded', 'draw_circle_v', 'draw_circle_lines', 'draw_line_ex'):
+    monkeypatch.setattr(rl, name, lambda *a, name=name: shapes.append((name, a)))
   monkeypatch.setattr(rl, 'draw_text_ex', lambda font, text, *a: labels.append(text))
+  for name in ('draw_rectangle_rec', 'draw_rectangle_lines_ex'):
+    monkeypatch.setattr(rl, name, lambda *a: pytest.fail('Camera/card box must not be drawn'))
   now = [10.0]
-  frame = NS(width=1928, height=1208)
-  clients = []
 
-  class Client:
-    timestamp_sof = 10_000_000_000
-    def __init__(self, *a, **kw):
-      self.pending = frame
-      clients.append(self)
-    def recv(self, timeout_ms):
-      polls.append(timeout_ms)
-      pending, self.pending = self.pending, None
-      return pending
-
-  class Camera:
-    def __init__(self, name, stream):
-      self._name, self._stream_type = name, stream
-      self.client = Client()
-      self.frame = None
-      self.closed = 0
-    def close(self):
-      self.closed += 1
+  class Widget:
     def set_enabled(self, enabled):
       assert not enabled
-    def _clear_textures(self):
-      pass
-    def _ensure_connection(self):
-      return True
     def render(self, rect):
       self._render(rect)
-    def _render_textures(self, source, target):
-      rendered.append((source, target))
-    _render_egl = _render_textures
 
   dm = NS(cameraUnavailable=False, isRHD=False, lockout=False, alwaysOnLockout=False, activePolicy='vision',
           visionPolicyState=NS(faceDetected=True, isDistracted=False))
-  driver = NS(leftDriverData=NS(facePosition=[-0.35, 0]), rightDriverData=NS(facePosition=[0.35, 0]))
+  model = NS(frameId=100, leftDriverData=driver(faceOrientation=[0, -0.3, 0]),
+             rightDriverData=driver(faceOrientation=[0, 0.3, 0]))
 
   class SM(dict):
-    valid = {'driverMonitoringState': True, 'driverStateV2': True}
-    alive = valid.copy()
-    recv_frame = {'driverMonitoringState': 11, 'driverStateV2': 11}
-    logMonoTime = {'driverMonitoringState': 10_000_000_000, 'driverStateV2': 10_000_000_000}
+    def __init__(self, **values):
+      super().__init__(**values)
+      self.valid = {'driverMonitoringState': True, 'driverStateV2': True}
+      self.alive = self.valid.copy()
+      self.recv_frame = {'driverMonitoringState': 11, 'driverStateV2': 11}
+      self.logMonoTime = {'driverMonitoringState': 10_000_000_000, 'driverStateV2': 10_000_000_000}
 
-  sm = SM(driverMonitoringState=dm, driverStateV2=driver, selfdriveState=NS(enabled=True))
+  sm = SM(driverMonitoringState=dm, driverStateV2=model, selfdriveState=NS(enabled=True))
   ui = NS(sm=sm, started=True, started_frame=1, always_on_dm=False)  # No writable Params API.
   for name, attrs in {
-    'msgq.visionipc': {'VisionIpcClient': Client, 'VisionStreamType': NS(VISION_STREAM_DRIVER=1)},
-    'openpilot.selfdrive.ui.onroad.cameraview': {'CameraView': Camera},
+    'msgq.visionipc': {}, 'openpilot.selfdrive.ui.onroad.cameraview': {},  # Camera imports would fail.
     'openpilot.selfdrive.ui.ui_state': {'ui_state': ui},
-    'openpilot.system.hardware': {'TICI': False},
+    'openpilot.system.ui.widgets': {'Widget': Widget},
     'openpilot.system.ui.lib.application': {'FontWeight': NS(BOLD=1), 'gui_app': NS(font=lambda _: None)},
+    'openpilot.system.ui.lib.text_measure': {'measure_text_cached': lambda font, text, size: NS(x=len(text) * size * 0.6)},
   }.items():
     module = ModuleType(name)
     module.__dict__.update(attrs)
@@ -124,87 +143,119 @@ def preview(monkeypatch):
   module = importlib.util.module_from_spec(spec)
   spec.loader.exec_module(module)
   monkeypatch.setattr(module.time, 'monotonic', lambda: now[0])
-  inset = module.DriverPreview()
-  return NS(inset=inset, ui=ui, sm=sm, dm=dm, frame=frame, now=now, labels=labels, rendered=rendered,
-            polls=polls, clients=clients, rect=rl.Rectangle(0, 0, 2160, 1080))
+  inset = module.DriverPreview(compact=request.param)
+  return NS(inset=inset, ui=ui, sm=sm, dm=dm, model=model, now=now, labels=labels, shapes=shapes,
+            module=module, rect=rl.Rectangle(0, 0, 536, 240) if request.param else rl.Rectangle(0, 0, 2160, 1080))
 
 
-def test_live_preview_is_passive_and_nonblocking(preview):
+def test_pearl_eyes_are_passive_without_camera_resources_or_box(preview):
   p = preview
   assert p.inset.draw_onroad(p.rect, False)
-  assert p.polls == [0] and len(p.rendered) == 1 and p.labels[-1] == 'DM FACE'
-  assert p.rendered[0][0].width < 0  # A single mirrored crop.
-  p.inset.draw_onroad(p.rect, False)
-  assert p.polls == [0]  # No polling twice inside the 100 ms budget.
+  assert p.labels[-1] == 'DM FACE' and p.inset._expression.left_known
+  assert not hasattr(p.inset, 'client') and not hasattr(p.inset, 'shader')
+  rounded = [args for name, args in p.shapes if name == 'draw_rectangle_rounded']
+  assert len(rounded) == 6  # two silhouettes, two eyes, two pupils
+  color = rounded[1][-1]
+  assert (color.r, color.g, color.b, color.a) == (244, 237, 223, 255)
+  x, y, w, h = preview_rect(p.rect.x, p.rect.y, p.rect.width, p.rect.height, p.inset.compact)
+  for rect, *_ in rounded:
+    assert x <= rect.x < rect.x + rect.width <= x + w
+    assert y <= rect.y < rect.y + rect.height <= y + h
 
 
-def test_camera_stall_drops_cached_face_even_with_fresh_dm(preview):
+def test_stalled_model_frame_drops_pose_even_with_fresh_publications(preview):
   p = preview
   p.inset.draw_onroad(p.rect, False)
-  p.now[0] = 10.6
-  p.sm.logMonoTime = {'driverMonitoringState': 10_600_000_000, 'driverStateV2': 10_600_000_000}
+  p.now[0] += 0.5
+  p.sm.logMonoTime = dict.fromkeys(p.sm.logMonoTime, int(p.now[0] * 1e9))
   p.inset.draw_onroad(p.rect, False)
-  assert len(p.rendered) == 1 and p.inset.frame is None and p.labels[-1] == 'DM CHECK'
+  assert p.inset._expression is None and p.labels[-1] == 'DM CHECK'
+  p.model.frameId += 1
+  p.inset.draw_onroad(p.rect, False)
+  assert p.inset._expression is not None and p.labels[-1] == 'DM FACE'
 
 
-def test_camera_failure_and_recovery(preview):
+def test_camera_failure_wheel_policy_and_recovery(preview):
   p = preview
   p.dm.cameraUnavailable = True
   p.inset.draw_onroad(p.rect, False)
-  assert p.polls == [] and p.labels[-1] == 'DM HANDS'
+  assert p.inset._expression is None and p.labels[-1] == 'DM HANDS'
   p.dm.cameraUnavailable = False
+  p.dm.activePolicy = 'wheeltouch'
   p.inset.draw_onroad(p.rect, False)
-  assert len(p.rendered) == 1 and p.labels[-1] == 'DM FACE'
+  assert p.inset._expression is None and p.labels[-1] == 'DM HANDS'
+  p.dm.activePolicy = 'vision'
+  p.inset.draw_onroad(p.rect, False)
+  assert p.inset._expression is not None and p.labels[-1] == 'DM FACE'
 
 
-def test_rhd_selection_and_lost_face_fall_back_to_full_view(preview):
+def test_rhd_selection_lost_face_and_eye_confidence(preview):
   p = preview
   p.inset.draw_onroad(p.rect, False)
-  left_x = p.rendered[-1][0].x
+  assert p.inset._expression.x > 0
   p.dm.isRHD = True
   p.inset.draw_onroad(p.rect, False)
-  assert p.rendered[-1][0].x > left_x
+  assert p.inset._expression.x < 0
   p.dm.visionPolicyState.faceDetected = False
   p.inset.draw_onroad(p.rect, False)
-  assert p.rendered[-1][0].x == 0 and p.rendered[-1][0].width == -p.frame.width
-  assert p.labels[-1] == 'DM FACE?'
-
-
-@pytest.mark.parametrize('timestamp', [0, 9_000_000_000, 11_000_000_000])
-def test_received_but_old_or_future_frame_is_not_displayed(preview, timestamp):
-  p = preview
-  p.inset.client.timestamp_sof = timestamp
+  assert p.inset._expression is None and p.labels[-1] == 'DM FACE?'
+  p.dm.visionPolicyState.faceDetected = True
+  p.model.rightDriverData.sunglassesProb = 1.0
   p.inset.draw_onroad(p.rect, False)
-  assert not p.rendered and p.labels[-1] == 'DM CHECK'
+  assert not p.inset._expression.left_known and p.labels[-1] == 'DM EYES?'
 
 
-def test_offroad_transition_reconnects_and_discards_old_buffers(preview):
+@pytest.mark.parametrize('service', ['driverMonitoringState', 'driverStateV2'])
+@pytest.mark.parametrize(('field', 'value'), [('valid', False), ('alive', False), ('recv_frame', 1),
+                                           ('logMonoTime', 0), ('logMonoTime', 9_500_000_000), ('logMonoTime', 11_000_000_000)])
+def test_bad_data_never_retains_live_eyes(preview, service, field, value):
   p = preview
   p.inset.draw_onroad(p.rect, False)
-  old = p.inset.client
-  p.inset._offroad_transition()
-  assert p.inset.client is not old and p.inset.frame is None
-
-
-@pytest.mark.parametrize('invalid', ['valid', 'alive', 'recv_frame', 'logMonoTime'])
-def test_bad_dm_never_shows_face_or_claims_touch_fallback(preview, invalid):
-  p = preview
-  getattr(p.sm, invalid)['driverMonitoringState'] = 0
+  getattr(p.sm, field)[service] = value
   p.inset.draw_onroad(p.rect, False)
-  assert not p.rendered and not p.polls and p.labels[-1] == 'DM CHECK'
+  assert p.inset._expression is None and p.labels[-1] == 'DM CHECK'
 
 
-def test_alert_offroad_and_disengagement_hide_and_drop_frame(preview):
+def test_warning_and_lockout_take_precedence(preview):
+  p = preview
+  p.dm.visionPolicyState.isDistracted = True
+  p.inset.draw_onroad(p.rect, False)
+  assert p.labels[-1] == 'DM ALERT'
+  p.dm.alwaysOnLockout = True
+  p.dm.cameraUnavailable = True
+  p.inset.draw_onroad(p.rect, False)
+  assert p.labels[-1] == 'DM LIMIT' and p.inset._expression is None
+
+
+def test_alert_offroad_disengagement_and_close_discard_expression(preview):
   p = preview
   p.inset.draw_onroad(p.rect, False)
   assert not p.inset.draw_onroad(p.rect, True)
-  assert p.inset.frame is None
+  assert p.inset._expression is None
   p.sm['selfdriveState'].enabled = False
   assert not p.inset.draw_onroad(p.rect, False)
   p.ui.always_on_dm = True
   assert p.inset.draw_onroad(p.rect, False)
   p.ui.started = False
   assert not p.inset.draw_onroad(p.rect, False)
+  assert p.inset._expression is None
   p.inset.close()
   p.inset.close()
-  assert p.inset.closed == 1
+  p.ui.started = True
+  assert not p.inset.draw_onroad(p.rect, False)
+
+
+def test_new_session_resets_pose_without_an_offroad_draw(preview):
+  p = preview
+  p.inset.draw_onroad(p.rect, False)
+  assert p.inset._expression.x > 0
+  p.ui.started_frame = 5
+  p.model.leftDriverData.faceOrientation = [0, 0.3, 0]
+  p.inset.draw_onroad(p.rect, False)
+  assert p.inset._expression.x < 0  # No blend with the previous session.
+
+
+def test_c3_and_c4_use_the_same_renderer():
+  root = Path(__file__).parents[1]
+  assert 'DriverPreview()' in (root / 'onroad/augmented_road_view.py').read_text(encoding='utf-8')
+  assert 'DriverPreview(compact=True)' in (root / 'mici/onroad/augmented_road_view.py').read_text(encoding='utf-8')
