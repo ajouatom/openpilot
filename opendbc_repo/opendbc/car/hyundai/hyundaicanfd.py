@@ -1017,6 +1017,8 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
         main_enabled = CS.out.cruiseState.available
         cruise_enabled = CC.enabled
         lat_enabled = CS.out.latEnabled
+        # steering pauses at standstill; keep the cluster's steering/lane-change icons as if it were active
+        lat_icon = lat_active or (cruise_enabled and lat_enabled and CS.out.standstill)
         nav_active = hud_control.activeCarrot > 1
         vehicle_navi_available = CS.out.vehicleNaviAvailable
         nav_icon_available = nav_active or vehicle_navi_available
@@ -1054,8 +1056,8 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
 
         values["NAV_ICON"] = 2 if nav_icon_available and cruise_enabled else 1 if main_enabled and nav_icon_available else 0
         values["HDA_ICON"] = 5 if hdp_active else 2 if cruise_enabled else 1 if main_enabled else 0
-        values["LFA_ICON"] = 5 if hdp_active else 2 if lat_active else 1 if lat_enabled else 0
-        values["LKA_ICON"] = 4 if lat_active else 3 if lat_enabled else 0
+        values["LFA_ICON"] = 5 if hdp_active else 2 if lat_icon else 1 if lat_enabled else 0
+        values["LKA_ICON"] = 4 if lat_icon else 3 if lat_enabled else 0
         values["FCA_ALT_ICON"] = 0
 
         if values["ALERTS_2"] in [1, 2, 5, 6, 10, 21, 22]:
@@ -1115,11 +1117,11 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
         values["LCA_RIGHT_ARROW"] = 2 if CS.out.rightBlinker else 0
 
         if trailer_lane_change_blocked:
-          values["LCA_LEFT_ICON"] = 1 if lat_active else 0
-          values["LCA_RIGHT_ICON"] = 1 if lat_active else 0
+          values["LCA_LEFT_ICON"] = 1 if lat_icon else 0
+          values["LCA_RIGHT_ICON"] = 1 if lat_icon else 0
         else:
-          values["LCA_LEFT_ICON"] = (1 if CS.out.leftBlindspot else 2) if lat_active else 0
-          values["LCA_RIGHT_ICON"] = (1 if CS.out.rightBlindspot else 2) if lat_active else 0
+          values["LCA_LEFT_ICON"] = (1 if CS.out.leftBlindspot else 2) if lat_icon else 0
+          values["LCA_RIGHT_ICON"] = (1 if CS.out.rightBlindspot else 2) if lat_icon else 0
 
         values["LANE_LEFT"] = 0 if trailer_lane_change_blocked else 1 if desire in (1, 3) else 0
         values["LANE_RIGHT"] = 0 if trailer_lane_change_blocked else 1 if desire in (2, 4) else 0

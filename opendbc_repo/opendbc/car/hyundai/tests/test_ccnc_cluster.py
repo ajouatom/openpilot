@@ -136,3 +136,23 @@ def test_cluster_objects_restore_corner_state_without_blinking_or_distance_clamp
     else:
       assert decoded["LANELINE_CURVATURE"] == 2
     assert source == original
+
+
+@pytest.mark.parametrize(('standstill', 'lka', 'lca'), ((True, 4, 2), (False, 3, 0)))
+def test_engaged_standstill_keeps_steering_and_lane_change_icons(monkeypatch, standstill, lka, lca):
+  from openpilot.cereal import log
+  monkeypatch.setattr(hyundaicanfd, 'Params', lambda: SimpleNamespace(get_int=lambda key: 0, get=lambda key: '0'))
+  packer = CANPacker('hyundai_canfd_generated')
+  definition = packer.dbc.name_to_msg['ADRV_0x161']
+  out = structs.CarState(standstill=standstill, latEnabled=True)
+  state = SimpleNamespace(
+    adrv_0x161={key: 0 for key in definition.sigs}, out=out, modelV2=log.ModelDataV2.new_message(),
+    lfahda_cluster=None, cruise_buttons_msg=None, adrv_0x200=None, adrv_0x1ea=None, ccnc_0x162=None,
+    is_metric=True, paddle_button_prev=0, softHoldActive=0, trailer_connected=False,
+  )
+  control = structs.CarControl(latActive=False, enabled=True)  # controlsd turns steering off at standstill
+  msg = hyundaicanfd.create_ccnc_messages(
+    SimpleNamespace(flags=HyundaiFlags.CAMERA_SCC), packer, SimpleNamespace(ECAN=0, CAM=2), 5, control, state,
+    control.hudControl, 0, False, False, 0, False, 0, 0)[0]
+  values = {key: get_raw_value(msg[1], sig) for key, sig in definition.sigs.items()}
+  assert (values['LKA_ICON'], values['LFA_ICON'] > 1, values['LCA_LEFT_ICON'], values['LCA_RIGHT_ICON']) == (lka, standstill, lca, lca)
