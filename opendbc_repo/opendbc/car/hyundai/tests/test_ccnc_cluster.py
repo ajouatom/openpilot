@@ -7,7 +7,7 @@ from opendbc.can import CANDefine, CANPacker
 from opendbc.can.parser import get_raw_value
 from opendbc.car import structs
 from opendbc.car.hyundai import hyundaicanfd
-from opendbc.car.hyundai.hyundaicanfd import _select_cluster_background
+from opendbc.car.hyundai.hyundaicanfd import _select_cluster_background, _traffic_display_state
 from opendbc.car.hyundai.values import HyundaiFlags
 
 
@@ -295,3 +295,14 @@ def test_traffic_light_background(traffic_state, expected):
   # turning (6) is overridden too while a light is detected
   assert _select_cluster_background(True, True, False, 0, traffic_state=traffic_state) == expected
   assert _select_cluster_background(True, True, False, 0, turning=True, traffic_state=traffic_state) == (6 if traffic_state == 0 else expected)
+
+
+def test_traffic_green_shown_only_two_seconds():
+  _traffic_display_state.last, _traffic_display_state.green_until = 0, 0
+  assert _traffic_display_state(1, 0) == 1      # red stays
+  assert _traffic_display_state(1, 500) == 1
+  assert _traffic_display_state(2, 1000) == 2   # turned green
+  assert _traffic_display_state(2, 1199) == 2
+  assert _traffic_display_state(2, 1200) == 0   # 2 s later: back to normal
+  assert _traffic_display_state(0, 1300) == 0
+  assert _traffic_display_state(2, 1400) == 2   # a new green shows again

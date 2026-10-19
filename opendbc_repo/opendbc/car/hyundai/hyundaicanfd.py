@@ -939,6 +939,16 @@ def _dashed_lane_line(color, lane_line):
 TRAFFIC_BACKGROUND = {1: 5, 2: 8}  # red light -> steady red, green light -> steady green (Ioniq 5 PE, 10-20)
 
 
+def _traffic_display_state(traffic_state, frame):
+  # Like the C4 traffic light ball: red while red, green only for 2 s after it turns green
+  # (model-based green is on for most normal driving).
+  if traffic_state == 2 and _traffic_display_state.last != 2:
+    _traffic_display_state.green_until = frame + 200
+  _traffic_display_state.last = traffic_state
+  return 0 if traffic_state == 2 and frame >= _traffic_display_state.green_until else traffic_state
+_traffic_display_state.last, _traffic_display_state.green_until = 0, 0
+
+
 def _select_cluster_background(cruise_enabled, lat_active, paddle_pressed, paddle_mode, turning=False, traffic_state=0):
   # A detected traffic light takes over the background until detection ends.
   if traffic_state in TRAFFIC_BACKGROUND:
@@ -1138,7 +1148,7 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
 
         values["BACKGROUND"] = _select_cluster_background(
           cruise_enabled, lat_active, CS.paddle_button_prev > 0, paddle_mode, turning=desire in (1, 2),
-          traffic_state=getattr(hud_control, "trafficState", 0),
+          traffic_state=_traffic_display_state(getattr(hud_control, "trafficState", 0), frame),
         )
         values["CENTERLINE"] = 1 if HDA_CntrlModSta > 0 else 0
         values["CAR_CIRCLE"] = 2 if hdp_active else 1 if cruise_enabled else 0
