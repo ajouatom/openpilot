@@ -258,3 +258,31 @@ def test_capability_query_retries_lost_datagram_within_same_deadline(monkeypatch
   assert protocol.capabilities(CONFIG, targets=('127.0.0.1',)) == protocol.CAP_H264
   thread.join(2)
   assert not errors and requests[0] == requests[1] and not thread.is_alive()
+
+
+def test_discovery_recovers_lost_broadcast_without_another_hud_restart(monkeypatch):
+  server = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+  server.bind(('127.0.0.1', 0))
+  server.settimeout(2)
+  monkeypatch.setattr(protocol, 'PORT', server.getsockname()[1])
+  requests, errors = [], []
+
+  def serve():
+    try:
+      requests.append(server.recvfrom(128)[0])
+      request, peer = server.recvfrom(128)
+      requests.append(request)
+      reply = protocol.FOUND + request[4:26]
+      # A discovery response still needs the pairing signature.
+      server.sendto(reply + bytes(32), peer)
+      server.sendto(reply + protocol.mac(bytes.fromhex(CONFIG['key']), reply), peer)
+    except BaseException as exc:
+      errors.append(exc)
+    finally:
+      server.close()
+
+  thread = threading.Thread(target=serve)
+  thread.start()
+  assert protocol.discover(CONFIG, timeout=1, targets=('127.0.0.1',)) == '127.0.0.1'
+  thread.join(2)
+  assert not errors and requests[0] == requests[1] and not thread.is_alive()
