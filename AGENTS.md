@@ -1,5 +1,17 @@
 # Repository memory
 
+- On 2026-10-19, Ioniq9 route417/19 on5032afca77 reproduces retained stopped-red
+  memory after lead-follow departure: target-4.497/output-4/measured-3.616m/s2
+  at road speed, no new signal tracks, gas intervention at6.395s. Retire both
+  start/legacy stopped latches above5km/h; preserve low-speed hold and fresh
+  moving-red approach. Track auxiliary ownership to clear orphan e2eStopped
+  after mode/invalid reset; preserve user/soft/stay stops. Gate final output by
+  speed too. Seeded recorded-input127-pair replay: logged56/old55/new0 holds;
+  no native MPC or closed-loop claim. Prior segment/latch origin unavailable.
+  Both branches704 focused tests pass including61 new cases. Raw private; no
+  vehicle install. See docs/signal_departure_hold_20261019.md.
+
+
 - On 2026-10-19, user selects pearl cartoon DM eyes for both C3/C4. Replace
   shared onroad camera inset with plain Widget: no video client/shader/textures
   or box. Bounded mirrored head pose is illustrative, not ocular gaze; eyelids

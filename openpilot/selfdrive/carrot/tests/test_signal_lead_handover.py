@@ -50,7 +50,7 @@ def test_exact_existing_boundary_controls_both_auxiliary_vetoes(distance, allowe
     method = next(n for n in cls.body if isinstance(n, ast.FunctionDef) and n.name=='apply_signal_start_guard')
     ns = {}; exec(compile(ast.Module([method], type_ignores=[]), str(path), 'exec'), ns)
     output = NS(output_should_stop=False, output_v_target_now=1., output_a_target=.2)
-    ns['apply_signal_start_guard'](output, p)
+    ns['apply_signal_start_guard'](output, p, sm['carState'].vEgo)
     assert not output.output_should_stop and output.output_v_target_now == 1.
 
 
