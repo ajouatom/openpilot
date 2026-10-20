@@ -301,7 +301,7 @@ Display contains 34 settings. External-HUD settings control the layout and outpu
 
 `ClusterHud` (External HUD Display) switches a **direct USB HUD** on or off. A HUD connected to Jetson starts automatically even when this value is `0`, and normally turns its display off with ignition. Use the existing always-on `ClusterHudDebug` modes to keep it visible offroad. Brightness and layout settings also apply to the Jetson HUD.
 
-ESP32-S3 Wi-Fi display support has been removed. Connect the USB display to Jetson. Comma sends HUD and navigation data over the dedicated Wi-Fi connection, without falling back to USB display transport. The comma-to-Jetson USB link carries model inference and connection provisioning. Both ends require the updated software.
+ESP32-S3 Wi-Fi display support has been removed. Connect the USB display to Jetson. On carrot-nav, comma sends HUD and navigation data over the dedicated Wi-Fi connection, without falling back to USB display transport. The comma-to-Jetson USB link carries model inference and connection provisioning. Both ends require the updated software.
 
 The [NAS installer and setup guide](https://upload.shind0.synology.me/models/carrot-s3/index.html) provides the N16R8 board checklist, wiring, browser firmware installation, phone/C4 registration and firmware ZIP. Update an existing S3 once to 1.2.0 through the installer to enable H.264. Wi-Fi/C4 registration, shutdown retries and LED status are preserved.
 
