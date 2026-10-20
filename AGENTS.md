@@ -1,5 +1,16 @@
 # Repository memory
 
+- From 2026-10-20, user requires all normal delivery through comma Git Pull
+  and restart/reboot. Design and package changes for that path; per-device
+  SSH copies, Params edits, service manipulation and cache seeding are not
+  normal user installation steps. Use Jetson USB patch/install only when
+  the installed bootstrap cannot recover through the ordinary updater.
+  Current boot-gated runtime selection requires Jetson reboot too; keep
+  actual offroad and Internet throughout preparation. Do not claim a
+  comma-only restart activates a new already-running Jetson release.
+  See docs/jetson_update_policy_20261020.md for the delivery contract,
+  AP Internet-sharing correction and outstanding end-to-end validation.
+
 - On 2026-10-20, user supersedes earlier model deferral and requests contributor
   Jetson N16 port (reviewed cf036fa578/a1d723a6b4). Official ONNX01effc67,
   814591107B, shares eGPU N16 checkpoint96244b1f/12800 export family; embedded

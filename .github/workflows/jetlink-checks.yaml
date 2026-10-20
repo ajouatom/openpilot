@@ -53,3 +53,8 @@ jobs:
           sudo --preserve-env=PATH unshare --mount --propagation private env CARROT_STORAGE_MOUNTS=1 \
             "$(which python)" -m pytest -c /dev/null --rootdir=. --confcutdir=tools/jetlink -q \
             tools/jetlink/test_protected_storage.py
+      - name: Private Wi-Fi Internet sharing with real isolated packets
+        run: |
+          sudo --preserve-env=PATH unshare --mount --net --propagation private env CARROT_WIFI_NAT_NAMESPACE=1 \
+            "$(which python)" -m pytest -c /dev/null --rootdir=. --confcutdir=tools/jetlink -q \
+            tools/jetlink/test_wifi_direct_forward.py

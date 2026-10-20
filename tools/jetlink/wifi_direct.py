@@ -20,6 +20,7 @@ import time
 
 from persistent_state import durable_write
 from wifi_direct_netlink import INTERFACE, Wireless, profile_id
+from wifi_direct_forward import Sharing
 
 STATUS = Path('/dev/shm/carrot-jetlink-direct-wifi.json')
 PRIVATE = Path('/data/carrot-jetlink-direct-wifi')
@@ -98,6 +99,8 @@ class AccessPoint:
     self.index = self.value = None
     self.previous_power_save = None
     self.stage = 'idle'
+    self.sharing = Sharing()
+    self.sharing_state = 'idle'
 
   def start(self):
     if not offroad():
@@ -134,8 +137,20 @@ class AccessPoint:
     self.stage = 'power_save'
     self.previous_power_save = self.wireless.power_save(self.index)
     self.awake()
+    self.share_internet()
     self.stage = 'active'
     return True
+
+  def share_internet(self):
+    if self.value is None or not offroad():
+      return
+    try:
+      self.sharing.ensure(self.value['subnet'])
+      self.sharing_state = 'configured'
+    except (OSError, ValueError, RuntimeError, subprocess.SubprocessError):
+      # Keep the local display connected when Internet sharing is unavailable.
+      # Retry offroad; this status describes rules, not Internet reachability.
+      self.sharing_state = 'unavailable'
 
   def awake(self):
     # Only the AP we created. Never change wlan0's Internet profile or power
@@ -149,6 +164,11 @@ class AccessPoint:
     return self.value is not None and self.value['uuid'] in self.command('-t', '-f', 'UUID', 'connection', 'show', '--active').splitlines()
 
   def close(self):
+    try:
+      self.sharing.close()
+      self.sharing_state = 'idle'
+    except (OSError, RuntimeError, subprocess.SubprocessError):
+      self.sharing_state = 'cleanup_failed'
     previous, self.previous_power_save = self.previous_power_save, None
     if self.index is not None and previous is not None:
       try:
@@ -227,12 +247,14 @@ def serve(trial=0):
               state = 'waiting_offroad'
           else:
             ap.awake()
+            ap.share_internet()
             state = 'active'
         except (OSError, ValueError, RuntimeError, StopIteration, KeyError, subprocess.SubprocessError):
           ap.close()
           state, retry = 'unavailable', now + 30.
       # No SSID, password, peer identity or vehicle payload in diagnostics.
       durable_write(STATUS, json.dumps({'state': state, 'stage': ap.stage, 'interface': INTERFACE,
+                                      'internet_sharing': ap.sharing_state,
                                       'power_save': 0 if ap.previous_power_save is not None else None,
                                       'updated': now}).encode(), 0o644)
       stop.wait(2.)
