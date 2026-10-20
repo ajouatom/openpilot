@@ -48,18 +48,24 @@ is reported separately and leaves the local display AP running. The
 `internet_sharing=configured` diagnostic describes rule setup, not proof of
 Internet availability.
 
-This is comma-side code delivered by Git Pull. The existing signed N16 host
+This correction applies to carrot-nav's direct AP; carrot-wip retains its
+separate runtime. This is comma-side code delivered by Git Pull. The existing signed N16 host
 release, Jetson bootstrap and image do not need replacing for this correction.
 The immutable Jetson Wi-Fi worker is unchanged.
 
 ## Validation and remaining limits
 
-The initial desktop selection passed 49 tests covering Wi-Fi transport,
+The final desktop selection passed 70 tests, with four native/platform skips,
+covering boot/update behavior, Wi-Fi transport,
 provisioning, backend fallback, idempotence, ownership-preserving cleanup,
 failed inspections and the offroad boundary. A Linux CI test additionally
 creates isolated client/gateway/server namespaces and checks actual packets
 before/after NAT installation and removal, preserving an unrelated rule.
-Its result must be recorded after execution.
+[CI39369739310](https://github.com/ajouatom/openpilot/actions/runs/39369739310)
+on `756a853307` passed: 94 root updater cases, 855 broad cases (56 skips),
+119 navigation/cluster cases, 11 protected-storage cases and 11 NAT cases
+including the actual isolated packet test. Counts overlap. Windows installer
+checks passed too.
 
 The previous N16 hardware installation used a manual verified WLAN cache
 transfer and an offroad daemon restart; it is not evidence that an uncached

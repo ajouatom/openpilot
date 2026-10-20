@@ -11,6 +11,16 @@
   See docs/jetson_update_policy_20261020.md for the delivery contract,
   AP Internet-sharing correction and outstanding end-to-end validation.
 
+- On 2026-10-20, read-only owner checks reproduce Jetson NAS timeout while
+  comma HTTPS works: AP/DNS/forwarding active, no NAT, default nft backend
+  unsupported, legacy backend operational. Nav AP now owns one scoped
+  masquerade rule with backend probing, offroad-only setup/retry and exact
+  cleanup; Internet failure preserves local HUD Wi-Fi. No USB/OS/model change
+  or live installation. Desktop70pass/4skip; CI39369739310 passes94 root,
+  855 broad/56skip,119 nav,11 storage,11 NAT including real isolated packets.
+  Do not claim an uncached physical Git Pull/reboot update has been validated.
+  Wip receives delivery policy/docs only, preserving its runtime.
+
 - On 2026-10-20, user supersedes earlier model deferral and requests contributor
   Jetson N16 port (reviewed cf036fa578/a1d723a6b4). Official ONNX01effc67,
   814591107B, shares eGPU N16 checkpoint96244b1f/12800 export family; embedded
