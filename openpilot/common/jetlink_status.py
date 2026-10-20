@@ -144,8 +144,10 @@ def badge():
   state = link.get('state')
   if state == 'ready':
     return f'{label} READY', 'ready'
-  if state in ('connecting', 'loading'):
-    return f'{label} WAIT', 'loading'
+  if state == 'connecting':
+    return f'{label} 연결 대기', 'loading'
+  if state == 'loading':
+    return f'{label} 모델 준비 중', 'loading'
   if state == 'retrying':
     return f'{label} RETRY', 'error'
   return None
