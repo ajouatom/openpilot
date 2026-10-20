@@ -1,5 +1,22 @@
 # Repository memory
 
+- On 2026-10-20, user requests comma-to-Jetson HUD/navigation over Wi-Fi,
+  no USB fallback, and complete ESP32-S3 display retirement. S3 code, firmware,
+  pairing tools and installer routes removed both branches; shared renderer
+  opens USB directly, preserving Jetson panel hotplug. Nav-only Wi-Fi integrates
+  tjdgus200 b09e20a1 with both-end USB display rejection and no Jetson display
+  pumps in inference. Dedicated AP starts offroad; model/provisioning USB stays.
+  Signed nav runtime b7b463a20b published and pinned, old80eedcdd ONNX unchanged;
+  latest n16 Jetson model remains deferred. Owner SD patched6144 APP bytes with
+  verbatim original setup retained; verified FAT payload/runtime pre-cache,
+  independent ext4/GPT readback; DATA journal/model/key not written. Next boot
+  performs one-time receiver enrollment/cache, then ordinary boot gate probes
+  and activates selected runtime. SD prepared, NOT boot/hardware tested.
+  Desktop52 integration and41 retirement tests/4Windows skips; Linux94 root,
+  845 broad/55skips,119 nav,11 real-storage pass; eGPU and installer CI pass.
+  No physical RF/display-rate/20Hz/road claim. Wip retains its separate runtime.
+  Private backups excluded; single-parent. See docs/jetson_wifi_usb_panel_20261020.md.
+
 - On 2026-10-20, user reviews tjdgus200 USB update release52a8ffee, then
   explicitly defers latest Jetson model/device work. Import optional SHA256 USB
   delivery on carrot-nav only (wip lacks prerequisite catalog/pin runtime).
