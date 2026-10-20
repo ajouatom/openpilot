@@ -300,7 +300,22 @@ def test_vision_payload_never_reports_unevaluated_blindspot_as_valid(vision_serv
 
 @pytest.fixture
 def vision_service(message_transport):
-  service = VASMService(v_asm_server.DEFAULT_MODEL_PATH)
+  class FakeParams:
+    def __init__(self):
+      self.values = {
+        "OnnxBsdEnabled": 1,
+        "OnnxBsdThreshold": 94,
+        "OnnxBsdSmoothingMs": 200,
+        "OnnxBsdIntervalMs": 250,
+        "OnnxLaneThreshold": 25,
+        "OnnxLaneIntervalMs": 400,
+      }
+
+    def get(self, name):
+      value = self.values.get(name)
+      return None if value is None else str(value).encode()
+
+  service = VASMService(v_asm_server.DEFAULT_MODEL_PATH, params=FakeParams())
   assert service.inference.valid, service.inference.error
   assert service.lane_inference.valid, service.lane_inference.error
   message_transport.publish("carState", vEgo=20.0)
@@ -313,6 +328,7 @@ def test_runtime_settings_load_from_and_persist_to_params(vision_service):
   class FakeParams:
     def __init__(self):
       self.values = {
+        "OnnxBsdEnabled": 1,
         "OnnxBsdThreshold": 96,
         "OnnxBsdSmoothingMs": 300,
         "OnnxBsdIntervalMs": 350,
@@ -336,6 +352,8 @@ def test_runtime_settings_load_from_and_persist_to_params(vision_service):
   assert vision_service.lane_threshold == 0.40
   assert vision_service.lane_interval_seconds == 0.55
 
+  assert vision_service.bsd_enabled
+
   vision_service.set_settings({
     "threshold": 0.9,
     "smoothingSeconds": 0.2,
@@ -344,12 +362,67 @@ def test_runtime_settings_load_from_and_persist_to_params(vision_service):
     "laneIntervalSeconds": 0.45,
   })
   assert params.values == {
+    "OnnxBsdEnabled": 1,
     "OnnxBsdThreshold": 90,
     "OnnxBsdSmoothingMs": 200,
     "OnnxBsdIntervalMs": 150,
     "OnnxLaneThreshold": 30,
     "OnnxLaneIntervalMs": 450,
   }
+
+
+def test_bsd_setting_defaults_off_without_affecting_lane_inference(vision_service):
+  vision_service.params.values["OnnxBsdEnabled"] = 0
+  vision_service._refresh_settings_from_params(force=True)
+  now = time.monotonic()
+  now_nanos = time.monotonic_ns()
+  vision_service.last_frame_at = now
+  vision_service.camera_error = ""
+  vision_service.last_road_frame_at = now
+  vision_service.lane_camera_error = ""
+  vision_service.vasm_gate.update({"active": True, "eligibleSides": ["left"]})
+  vision_service.lane_result.update({
+    "leftLine": 1,
+    "rightLine": 0,
+    "valid": True,
+    "updatedMonoTimeNanos": now_nanos,
+  })
+  vision_service.vasm_result["left"] = True
+  vision_service.vasm_result["updatedMonoTimeNanosBySide"]["left"] = now_nanos
+
+  status = vision_service.status()
+
+  assert not status["bsdEnabled"]
+  assert not status["gate"]["active"]
+  assert status["gate"]["reason"] == "visual BSD is disabled"
+  assert status["lane"]["resultFresh"]
+  assert not status["vehicleSide"]["left"]["valid"]
+  assert not status["vehicleSide"]["left"]["active"]
+  assert not vision_service.inference.valid
+  assert vision_service.inference.net is None
+
+  vision_service.params.values["OnnxBsdEnabled"] = 1
+  vision_service._refresh_settings_from_params(force=True)
+  assert vision_service.inference.valid
+  assert vision_service.inference.net is not None
+
+
+def test_bsd_parameter_defaults_to_zero():
+  assert v_asm_server.PARAM_SETTING_DEFAULTS["OnnxBsdEnabled"] == 0
+
+
+def test_bsd_model_is_not_loaded_when_disabled_at_startup(monkeypatch, message_transport):
+  class FakeParams:
+    def get(self, _name):
+      return b"0"
+
+  monkeypatch.setattr(v_asm_server.VASMInference, "load", lambda _self: pytest.fail("BSD ONNX must stay unloaded"))
+  service = VASMService(v_asm_server.DEFAULT_MODEL_PATH, params=FakeParams())
+
+  assert not service.bsd_enabled
+  assert not service.inference.valid
+  assert service.inference.net is None
+  assert service.lane_inference.valid
 
 
 def test_legacy_bsd_threshold_accepts_zero_to_hundred_percent(vision_service):
@@ -550,6 +623,85 @@ def test_idle_camera_yields_and_resumes_without_reconnecting(monkeypatch, vision
   assert connections == [False]
 
 
+def test_wide_camera_skips_bsd_inference_when_disabled(monkeypatch, vision_service, padded_camera_frame):
+  service = vision_service
+  service.params.values["OnnxBsdEnabled"] = 0
+  service._refresh_settings_from_params(force=True)
+  service.running = True
+  published = []
+  monkeypatch.setattr(service, "publish_vision_result", lambda: published.append(True))
+  monkeypatch.setattr(service, "_update_vasm_gate", lambda: pytest.fail("BSD gate must not run while disabled"))
+  monkeypatch.setattr(service.inference, "update", lambda *_args: pytest.fail("BSD ONNX must not run while disabled"))
+
+  class FakeClient:
+    def __init__(self, *_args):
+      pass
+
+    def is_connected(self):
+      return True
+
+    def connect(self, _blocking):
+      return True
+
+    def recv(self, timeout_ms):
+      assert timeout_ms == 0
+      service.running = False
+      return padded_camera_frame
+
+  visionipc = ModuleType("msgq.visionipc")
+  visionipc.VisionIpcClient = FakeClient
+  visionipc.VisionStreamType = SimpleNamespace(VISION_STREAM_ROAD=0, VISION_STREAM_WIDE_ROAD=1)
+  monkeypatch.setitem(sys.modules, "msgq.visionipc", visionipc)
+
+  service.vasm_result["left"] = True
+  service.vasm_result["updatedMonoTimeNanosBySide"]["left"] = time.monotonic_ns()
+  service.run_camera()
+
+  assert service.inference_count == 0
+  assert service.vasm_result["left"] is False
+  assert service.vasm_result["updatedMonoTimeNanosBySide"]["left"] == 0
+  assert published == [True]
+
+
+def test_road_camera_lane_inference_continues_when_bsd_disabled(monkeypatch, vision_service, padded_camera_frame):
+  service = vision_service
+  service.params.values["OnnxBsdEnabled"] = 0
+  service._refresh_settings_from_params(force=True)
+  service.running = True
+
+  class FakeClient:
+    delivered = False
+
+    def __init__(self, *_args):
+      pass
+
+    def is_connected(self):
+      return True
+
+    def connect(self, _blocking):
+      return True
+
+    def recv(self, timeout_ms):
+      assert timeout_ms == 0
+      if self.delivered:
+        service.running = False
+        return None
+      self.delivered = True
+      return padded_camera_frame
+
+  visionipc = ModuleType("msgq.visionipc")
+  visionipc.VisionIpcClient = FakeClient
+  visionipc.VisionStreamType = SimpleNamespace(VISION_STREAM_ROAD=0, VISION_STREAM_WIDE_ROAD=1)
+  monkeypatch.setitem(sys.modules, "msgq.visionipc", visionipc)
+  monkeypatch.setattr(v_asm_server.time, "sleep", lambda _seconds: None)
+
+  service.run_road_camera()
+
+  assert service.lane_inference_count == 1
+  assert service.lane_result["valid"]
+  assert service.inference_count == 0
+
+
 def test_initial_status_does_not_report_clear_blindspots(vision_service):
   status = vision_service.status()
   assert not status["camera"]["available"]
@@ -597,3 +749,86 @@ def test_status_invalidates_results_after_camera_or_inference_stops(monkeypatch,
   if failure in ("camera_error", "camera_stale"):
     assert not status["camera"]["available"]
     assert not status["lane"]["cameraAvailable"]
+
+
+def test_bsd_refresh_serializes_reads_and_model_lifecycle(vision_service):
+  service = vision_service
+  first_read = threading.Event()
+  release_read = threading.Event()
+  second_started = threading.Event()
+  second_read = threading.Event()
+  original_get = service.params.get
+
+  def get(name):
+    value = original_get(name)
+    if name == "OnnxBsdEnabled":
+      if not first_read.is_set():
+        first_read.set()
+        assert release_read.wait(5)
+      else:
+        second_read.set()
+    return value
+
+  service.params.get = get
+  def refresh_disabled():
+    second_started.set()
+    service._refresh_settings_from_params(force=True)
+
+  with ThreadPoolExecutor(max_workers=2) as pool:
+    first = pool.submit(service._refresh_settings_from_params, True)
+    try:
+      assert first_read.wait(5)
+      service.params.values["OnnxBsdEnabled"] = 0
+      second = pool.submit(refresh_disabled)
+      assert second_started.wait(5)
+      assert not second_read.wait(0.1), "concurrent refresh read stale settings"
+    finally:
+      release_read.set()
+    first.result(timeout=5)
+    second.result(timeout=5)
+  assert not service.bsd_enabled
+  assert service.inference.net is None
+  assert not service.inference.valid
+
+
+def test_bsd_toggle_clears_results_before_any_new_camera_frame(vision_service):
+  service = vision_service
+  now = time.monotonic_ns()
+  service.last_frame_at = time.monotonic()
+  service.camera_error = ""
+  service.vasm_gate.update(active=True, eligibleSides=["left"])
+  service.vasm_result.update(left=True, side="left", updatedMonoTimeNanos=now,
+                             updatedMonoTimeNanosBySide={"left": now, "right": 0})
+  service.followup_until["left"] = time.monotonic() + 1
+  for enabled in (0, 1):
+    service.params.values["OnnxBsdEnabled"] = enabled
+    service._refresh_settings_from_params(force=True)
+    assert not service.status()["vehicleSide"]["left"]["valid"]
+    assert not service.vasm_result["left"]
+    assert service.vasm_result["updatedMonoTimeNanosBySide"]["left"] == 0
+    assert service.followup_until["left"] == 0
+    assert service.lane_inference.valid
+
+
+def test_bsd_drops_camera_work_from_before_a_toggle(monkeypatch, vision_service, padded_camera_frame):
+  service = vision_service
+  service.running = True
+  monkeypatch.setattr(service.inference, "update", lambda *_args: pytest.fail("old-generation frame must be discarded"))
+
+  def toggle_during_gate():
+    for enabled in (0, 1):
+      service.params.values["OnnxBsdEnabled"] = enabled
+      service._refresh_settings_from_params(force=True)
+    service.running = False
+    return ["left"]
+
+  monkeypatch.setattr(service, "_update_vasm_gate", toggle_during_gate)
+  client = SimpleNamespace(is_connected=lambda: True, connect=lambda _blocking: True,
+                           recv=lambda timeout_ms: padded_camera_frame)
+  visionipc = ModuleType("msgq.visionipc")
+  visionipc.VisionIpcClient = lambda *_args: client
+  visionipc.VisionStreamType = SimpleNamespace(VISION_STREAM_WIDE_ROAD=1)
+  monkeypatch.setitem(sys.modules, "msgq.visionipc", visionipc)
+  service.run_camera()
+  assert service.inference_count == 0
+  assert service.vasm_result["updatedMonoTimeNanos"] == 0
