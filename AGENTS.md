@@ -1,5 +1,25 @@
 # Repository memory
 
+- On 2026-10-20, user supersedes earlier model deferral and requests contributor
+  Jetson N16 port (reviewed cf036fa578/a1d723a6b4). Official ONNX01effc67,
+  814591107B, shares eGPU N16 checkpoint96244b1f/12800 export family; embedded
+  ONNX checkpoint omits step suffix. PKL/TRT equivalence is not established.
+  Port identity/label only to nav; keep existing recurrence, USB inference,
+  signed NAS trust and Wi-Fi/local-USB HUD. Wip model/runtime unchanged.
+  Independent full ONNX checks and148 CPU raw/patched frames exactly equal;
+  desktop91pass/1skip, Linux94root+845broad/55skip+119nav+11storage pass.
+  Signed runtime abac23f644 and comma5a0e8158 applied under fresh P/inactive
+  guards. NAS fetch timeout uses hash-verified WLAN cache transfer; normal
+  boot probe builds45.3s new TRT10.3 plan and passes actual finite inference.
+  Manager restart retains env/affinity; final offroad setup and daemon restart
+  recover an existing disappearing-DHCP-PID cleanup race (not fixed here).
+  Restore both temporary holds/onroad. Final300s model/DM each
+  6000/6000 valid consecutive at19.99947/19.99927Hz,
+  sender61/61 and receiver60/60 connected, USB renderer~10Hz.
+  Approx20Hz only; no actual-map, road, PKL/TRT or long-stability claim.
+  Raw private. See docs/jetson_n16_integration_20261020.md.
+
+
 - On 2026-10-20, owner reports default-only Jetson panel with ignition/P and
   authorizes agent-controlled offroad. SD enrollment/cache succeeded, but prior
   boot gate still approved989386eb; comma a4e57bad rejects legacy USB HUD and
