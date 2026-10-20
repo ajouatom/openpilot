@@ -1,8 +1,9 @@
 # Jetson health and application updates
 
-> 현재 콤마 배포 기준은 `carrot-wip`입니다. 아래는 당시 실험 기록이며,
-> 최신 안내는 [한글 통합 기록](jetson_wip_integration_20260927.md)과
-> [초보자 설치 안내](INSTALL-WINDOWS-KO.md)를 보세요.
+> 일반 업데이트는 **Git Pull → 콤마·Jetson 재부팅**이 기본입니다.
+> [2026-10-20 업데이트 원칙과 조건](jetson_update_policy_20261020.md)을 먼저 보세요.
+> 아래 타이머·관리자 수동 명령은 초기 구현 기록이며 기본 사용자 절차가 아닙니다.
+> 새 저장장치 설치는 [초보자 설치 안내](INSTALL-WINDOWS-KO.md)를 보세요.
 
 Scope: `carrot-jetlink`, Jetson Orin Nano Super, L4T 36.4.7 / TensorRT
 10.3.0. Initial installation still uses the sanitized SD image. Routine source
