@@ -12,6 +12,8 @@
   <=1Hz on gaps only, no validity/model change. Native fake-input overhead
   ~11us/pair; not real camera timing or a locationd fix. Comma Git Pull/reboot;
   existing signed NAV host pin retained. No live install. Raw private.
+  Nav CI39389864670:94root/923broad(56skip)/119nav/11storage/11NAT pass;
+  wip CI39389916455:735broad(2skip)/119nav/11storage pass; both Windows pass.
   See docs/jetson_startup_badge_20261020.md.
 
 - On 2026-10-20, owner clarifies missing map is Jetson USB screen mode7.
