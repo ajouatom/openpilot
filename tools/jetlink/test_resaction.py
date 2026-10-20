@@ -37,8 +37,8 @@ def advanced(dest, value=1):
 
 
 def test_exact_export_identity_and_unchanged_driving_parser_contract():
-  assert SPEC.sha256 == '1d18c42ea4cd95c8bffab4635844b78b8e2d4e25b9de44a9c5ac2e0961371a2e'
-  assert SPEC.nbytes == 814591106 and SPEC.frame_skip == 4 and SPEC.packed_nbytes == (12 + 65536 + 47) * 4
+  assert SPEC.sha256 == '01effc679eb46d6036ce0302673a87fe2dcfcc95a679daeeb929679e53c3647a'
+  assert SPEC.nbytes == 814591107 and SPEC.frame_skip == 4 and SPEC.packed_nbytes == (12 + 65536 + 47) * 4
   for name, at in contracts.DEFAULT_SPEC.output_slices.items():
     if name != 'pad':
       assert SPEC.output_slices[name] == at

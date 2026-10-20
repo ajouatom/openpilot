@@ -91,7 +91,7 @@ def validate_model_spec(spec):
 
 def model_name(spec):
   if spec.sha256 == JETSON_SPEC.sha256:
-    return 'RL Nav (80eedcdd)'
+    return 'N16 Nav (96244b1f)'
   return 'Cinque v2' if spec.sha256 == DEFAULT_SPEC.sha256 else f'App model {spec.sha256[:12]}'
 
 

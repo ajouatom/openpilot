@@ -35,17 +35,20 @@ def frame_inputs():
           'navigation': np.arange(47, dtype=np.float32)}
 
 
-def test_nav_pin_matches_upstream_fixture_and_keeps_parser_shapes():
+def test_n16_pin_keeps_nav_parser_shapes_and_matching_signed_release():
   fixture = json.loads((ROOT / 'openpilot/selfdrive/modeld/tests/fixtures/nav_rl_metadata.json').read_text())
   assert SPEC.input_shapes == {k: tuple(v[0]) for k, v in fixture['input_specs'].items()}
   assert SPEC.output_shapes == {k: tuple(v[0]) for k, v in fixture['output_specs'].items()}
   assert fixture['input_specs']['nav_map'][1] == fixture['input_specs']['navigation'][1] == 'float32'
-  assert SPEC.checkpoint == fixture['metadata']['metadata']['model_checkpoint']
+  # The older fixture establishes the unchanged tensor/parser ABI, not model identity.
+  assert SPEC.checkpoint == '2931d3d9-7c90-4988-a6af-654ed71e0af5/56320/96244b1f-6c4e-4adc-848d-eccd0b44b182'
+  assert SPEC.sha256 == '01effc679eb46d6036ce0302673a87fe2dcfcc95a679daeeb929679e53c3647a'
+  assert SPEC.nbytes == 814591107
   assert len(SPEC.state_pairs) == 5 and SPEC.output_nelem == 18580
   assert SPEC.packed_nelem == 65595 and SPEC.packed_nbytes == 262380
   selection = selected_release(ROOT / 'openpilot/selfdrive/modeld/jetlink/host_release.json')
   assert selection['model'] == {
-    'url': 'https://upload.shind0.synology.me/models/comma4-big-nav-rl-80eedcdd/big_driving_supercombo.onnx',
+    'url': 'https://upload.shind0.synology.me/models/comma4-big-nav-n16-96244b1f/big_driving_supercombo.onnx',
     'sha256': SPEC.sha256, 'size': SPEC.nbytes}
   assert 'signature' in selection and selection.get('delivery') != 'local'
   parsed = parse_outputs(Parser(), SPEC, np.zeros(SPEC.output_nelem, np.float32))

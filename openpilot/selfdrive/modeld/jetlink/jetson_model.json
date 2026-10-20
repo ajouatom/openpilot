@@ -1,8 +1,8 @@
 {
-  "sha256": "1d18c42ea4cd95c8bffab4635844b78b8e2d4e25b9de44a9c5ac2e0961371a2e",
-  "nbytes": 814591106,
+  "sha256": "01effc679eb46d6036ce0302673a87fe2dcfcc95a679daeeb929679e53c3647a",
+  "nbytes": 814591107,
   "frame_skip": 4,
-  "checkpoint": "cf8f6120-49ee-48f8-b2d7-d663a4708271/56320/80eedcdd-f97b-46d0-9b94-780685292acf/12864",
+  "checkpoint": "2931d3d9-7c90-4988-a6af-654ed71e0af5/56320/96244b1f-6c4e-4adc-848d-eccd0b44b182",
   "input_shapes": {
     "new_img": [
       2,
