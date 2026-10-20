@@ -69,27 +69,6 @@ MODEL_CONTENT_TYPES = {
   "precompiled-runtime.tar.gz": "application/gzip",
 }
 
-# Only the public S3 release artifacts; never expose arbitrary model/NVS files.
-S3_DOWNLOAD_TYPES = {
-  "index.html": "text/html; charset=utf-8",
-  "installer.js": "text/javascript",
-  "manifest.mjs": "text/javascript",
-  "release.json": "application/json",
-  "SHA256SUMS.txt": "text/plain",
-  "INSTALL_KO.md": "text/plain; charset=utf-8",
-  "README.md": "text/plain; charset=utf-8",
-  "bootloader.bin": "application/octet-stream",
-  "partition-table.bin": "application/octet-stream",
-  "carrot-s3.bin": "application/octet-stream",
-  "carrot-s3-1.1.0.zip": "application/zip",
-  "carrot-s3-1.1.1.zip": "application/zip",
-  "carrot-s3-1.2.0.zip": "application/zip",
-  "carrot-s3-1.2.1.zip": "application/zip",
-  "vendor/esptool-js-bundle.js": "text/javascript",
-  "vendor/esptool-js-LICENSE.txt": "text/plain",
-  "vendor/pako-LICENSE.txt": "text/plain",
-}
-
 JETSON_RELEASE_RE = re.compile(r"^v[0-9]+\.[0-9]+\.[0-9]+(?:-[A-Za-z0-9][A-Za-z0-9.-]{0,63})?$")
 JETSON_DOWNLOAD_TYPES = {
   "carrot-jetson.img.zst": "application/zstd",
@@ -899,27 +878,6 @@ class RouteViewer:
     )
     return web.FileResponse(path, headers={"Content-Type": MODEL_CONTENT_TYPES[filename]})
 
-  async def s3_download(self, request: web.Request) -> web.StreamResponse:
-    name = request.match_info.get("path", "")
-    if name not in S3_DOWNLOAD_TYPES:
-      raise web.HTTPNotFound(text="S3 release file not found")
-    root = self.storage_root.resolve()
-    path = root
-    try:
-      for part in ("models", "carrot-s3", *name.split("/")):
-        path = path / part
-        if path.is_symlink():
-          raise web.HTTPNotFound(text="S3 release file not found")
-      if not path.is_file() or root not in path.resolve().parents:
-        raise web.HTTPNotFound(text="S3 release file not found")
-    except OSError as exc:
-      raise web.HTTPNotFound(text="S3 release file not found") from exc
-    headers = {"Content-Type": S3_DOWNLOAD_TYPES[name], "Cache-Control": "no-cache",
-               "X-Content-Type-Options": "nosniff", "Permissions-Policy": "serial=(self)"}
-    if name.endswith((".zip", ".bin")):
-      headers["Content-Disposition"] = f'attachment; filename="{name}"'
-    return web.FileResponse(path, headers=headers)
-
   async def jetson_download(self, request: web.Request) -> web.StreamResponse:
     filename = request.match_info.get("filename", "")
     path = await asyncio.to_thread(self._jetson_download_path, request.match_info.get("release"), filename)
@@ -1219,7 +1177,6 @@ class RouteViewer:
       app.router.add_get(f"{prefix}/devices/{{device}}/routes_segments", self.api_share_device_routes)
       app.router.add_get(f"{prefix}/devices/{{device}}/routes/preserved", self.api_share_device_routes)
 
-    app.router.add_get("/models/carrot-s3/{path:.*}", self.s3_download)
     app.router.add_get("/models/{family}/{filename}", self.model_file)
     app.router.add_get("/downloads/jetson/{release}/{filename}", self.jetson_download)
     app.router.add_get("/routes/{directory}/{selection}", self.public_page)
