@@ -1,6 +1,0 @@
-menu "Carrot S3 display"
-config S3_STATUS_LED_GPIO
-    int "Onboard WS2812 RGB LED GPIO (48 on DevKitC-1, 38 on some revisions)"
-    range 0 48
-    default 48
-endmenu
