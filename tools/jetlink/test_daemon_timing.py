@@ -74,20 +74,18 @@ def test_timing_records_usb_and_display_tail_after_unchanged_reply(monkeypatch, 
                       NS(sent=lambda sof: step('phase', .001)), NS(send=lambda _: step('wifi', .007)))
 
   assert replies == [(42, 20000, 1000, 22000)]
-  expected = (['receive', 'usb_send', 'phase', 'hud', 'early_media', 'usb_response', 'reply', 'wifi'] if fast_receiver else
-              ['receive', 'usb_send', 'phase', 'hud', 'usb_response', 'reply', 'tail', 'wifi'])
-  assert calls == (expected if navigation else ['receive', 'usb_send', 'phase', 'usb_response', 'reply', 'hud', 'wifi'])
+  assert calls == ['receive', 'usb_send', 'phase', 'usb_response', 'reply', 'wifi']
   assert len(events) == 1 and events[0]['component'] == 'jetlinkd'
   assert events[0]['frame_id'] == 42 and events[0]['usb_seq'] == 99
   metrics = events[0]['metrics']
   for key, value in {'ipc_receive_ms': 1000., 'usb_send_ms': 3., 'usb_response_ms': 80.,
-                     'ipc_reply_ms': 2., 'hud_ms': (10. if fast_receiver else 4.) if navigation else 0.,
-                     'usb_exchange_ms': 84. + ((10. if fast_receiver else 4.) if navigation else 0.),
-                     'submit_to_response_ms': 81. + ((10. if fast_receiver else 4.) if navigation else 0.),
-                     'display_early_media_ms': 6. if navigation and fast_receiver else 0.,
+                     'ipc_reply_ms': 2., 'hud_ms': 0.,
+                     'usb_exchange_ms': 84.,
+                     'submit_to_response_ms': 81.,
+                     'display_early_media_ms': 0.,
                      'response_reader_prepare_max_ms': 2., 'response_reader_read_wait_max_ms': 25.,
                      'response_reader_handoff_max_ms': 9.,
-                     'display_tail_ms': (0. if fast_receiver else 6.) if navigation else 4., 'wifi_tail_ms': 7.,
+                     'display_tail_ms': 0., 'wifi_tail_ms': 7.,
                      'server_total_ms': 22.}.items():
     assert metrics[key]['max'] == pytest.approx(value)
 

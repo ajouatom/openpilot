@@ -1,4 +1,4 @@
-"""Run the existing Carrot renderer using read-only, USB-forwarded cereal data."""
+"""Run the existing Carrot renderer using read-only, Wi-Fi-forwarded cereal data."""
 import base64
 import json
 import os

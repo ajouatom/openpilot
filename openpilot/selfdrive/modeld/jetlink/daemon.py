@@ -35,7 +35,8 @@ ACTIVE_UDC = None
 SESSION_DETACHED = False
 log = logging.getLogger('carrot.jetlink')
 sys.path.insert(0, str(VENDOR.parents[1] / 'tools/jetlink'))
-from hud_protocol import Publisher, HUD_CAPABILITY, HUD_MESSAGE
+from hud_protocol import Publisher, HUD_MESSAGE
+from hud_wifi import publisher as display_publisher
 from hud_navi import CAPABILITY as NAVI_CAPABILITY, MESSAGE as NAVI_MESSAGE
 from hud_navi import send_ready_after_reply, send_ready_during_inference, PUMP_CAPABILITY
 from wifi_protocol import CAPABILITY as WIFI_CAPABILITY, Publisher as WifiPublisher
@@ -229,7 +230,7 @@ class CarrotTransport(FfsTransport):
 
 
 def serve_local(listener, client, peer, wifi=None):
-  publisher = Publisher(navi=bool(peer.get(NAVI_CAPABILITY))) if peer.get(HUD_CAPABILITY) else None
+  publisher = display_publisher(client, peer, Publisher)
   phase = PhasePublisher()
   try:
     _serve_local(listener, client, peer, publisher, phase, wifi)
@@ -250,6 +251,7 @@ def _serve_local(listener, client, peer, publisher, phase, wifi=None):
   telemetry_updated = 0.
   hud_connected = None
   spec = client.spec
+  usb_display = publisher is not None and peer.get("carrot_host") != "jetson"
   requested = True
   follows_app = peer.get('protocol') == 3 and may_provision(peer, session_mode())
   while host_attached():
@@ -268,7 +270,8 @@ def _serve_local(listener, client, peer, publisher, phase, wifi=None):
     except TimeoutError:
       if wifi is not None:
         wifi.send(client)
-      publish_hud(client, publisher)
+      if usb_display:
+        publish_hud(client, publisher)
       if time.monotonic() - last_ping > 2:
         client.last_state = client.state()
         check_loaded(client, client.last_state)
@@ -305,7 +308,8 @@ def _serve_local(listener, client, peer, publisher, phase, wifi=None):
           except TimeoutError:
             if wifi is not None:
               wifi.send(client)
-            publish_hud(client, publisher)
+            if usb_display:
+              publish_hud(client, publisher)
             client.last_state = client.state()
             check_loaded(client, client.last_state)
             telemetry_updated = time.monotonic()
@@ -328,7 +332,7 @@ def _serve_local(listener, client, peer, publisher, phase, wifi=None):
           phase_done = time.monotonic()
           display_metrics = {}
           early_media_ms = 0.
-          if peer.get(NAVI_CAPABILITY):
+          if usb_display and peer.get(NAVI_CAPABILITY):
             display_metrics = publish_hud(client, publisher) or {}
             if peer.get('carrot_host') == 'jetson' and peer.get(PUMP_CAPABILITY) is True:
               early_started = time.monotonic()
@@ -353,9 +357,9 @@ def _serve_local(listener, client, peer, publisher, phase, wifi=None):
               log.warning('USB frame %d: send %.1f response %.1f IPC %.1f ms', frame,
                           (sent-started)*1000, (completed-sent)*1000, (time.monotonic()-completed)*1000)
           replied = time.monotonic()
-          if not peer.get(NAVI_CAPABILITY):
+          if usb_display and not peer.get(NAVI_CAPABILITY):
             display_metrics = publish_hud(client, publisher) or {}
-          elif not (peer.get('carrot_host') == 'jetson' and peer.get(PUMP_CAPABILITY) is True):
+          elif usb_display and not (peer.get('carrot_host') == 'jetson' and peer.get(PUMP_CAPABILITY) is True):
             # modeld already has its reply. Drain only a bounded ready tail;
             # never add these fragments before infer_end or delay its reply.
             send_ready_after_reply(client, publisher, fast_receiver=peer.get(PUMP_CAPABILITY) is True)
