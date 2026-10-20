@@ -50,7 +50,8 @@ from openpilot.selfdrive.controls.lib.desire_helper import DesireHelper
 from openpilot.selfdrive.controls.lib.drive_helpers import get_accel_from_plan, smooth_value, get_curvature_from_plan
 from openpilot.selfdrive.modeld.fill_model_msg import fill_model_msg, fill_pose_msg, fill_driving_model_data, PublishState
 from openpilot.selfdrive.modeld.helpers import select_vision_streams
-from openpilot.selfdrive.modeld.camera_sync import FrameMeta, receive_camera_pair
+from openpilot.selfdrive.modeld.camera_sync import FrameMeta
+from openpilot.selfdrive.modeld.camera_gap import CameraGapTrace
 from openpilot.common.file_chunker import read_file_chunked
 from openpilot.selfdrive.modeld.constants import ModelConstants, Plan
 
@@ -504,6 +505,7 @@ def main(demo=False):
   vEgoStopping = get_stopping_speed(params)
   camera_yaw_trim_deg = params.get_float("CameraYawTrimDeg") * 0.01
   diagnostics = RuntimeDiagnostics('modeld', cloudlog.event)
+  camera_gap = CameraGapTrace(cloudlog.event)
   while True:
     loop_start, cpu_start = time.monotonic(), time.thread_time()
     frame += 1
@@ -519,7 +521,7 @@ def main(demo=False):
     else:
       lat_delay = sm["liveDelay"].lateralDelay + lat_smooth_seconds
 
-    frames = receive_camera_pair(vipc_client_main, vipc_client_extra if use_extra_client else None)
+    frames = camera_gap.receive(vipc_client_main, vipc_client_extra if use_extra_client else None)
     if frames is None:
       cloudlog.debug("camera pair unavailable or out of sync")
       continue
@@ -582,8 +584,9 @@ def main(demo=False):
       'prev_action': np.array([prev_action.desiredCurvature * max(1.0, v_ego)**2, prev_action.desiredAcceleration], dtype=np.float32),
     }
 
+    inference_started = time.monotonic()
     mt1 = time.perf_counter()
-    camera_age_at_run_ms = (time.monotonic() - meta_main.timestamp_eof * 1e-9) * 1000
+    camera_age_at_run_ms = (inference_started - meta_main.timestamp_eof * 1e-9) * 1000
     inference_cpu_start = time.thread_time()
     model_output = model.run(bufs, transforms, inputs, prepare_only)
     mt2 = time.perf_counter()
@@ -633,6 +636,13 @@ def main(demo=False):
       pm.send('drivingModelData', drivingdata_send)
       pm.send('cameraOdometry', posenet_send)
     last_vipc_frame_id = meta_main.frame_id
+    # timings kwargs are rounded as numbers, so the engine discriminator rides in backend
+    camera_gap.record(meta_main.frame_id, vipc_dropped_frames, 'carrot_legacy',
+                      camera_wait=(camera_ready - loop_start) * 1000,
+                      before_inference=(inference_started - camera_ready) * 1000,
+                      inference=model_execution_time * 1000,
+                      postprocess=(time.perf_counter() - mt2) * 1000,
+                      loop=(time.monotonic() - loop_start) * 1000)
     diagnostics.record(
       context={'backend': type(model).__name__, 'usbgpu': USBGPU, 'engine': 'carrot_legacy',
                'frame_id': meta_main.frame_id},
