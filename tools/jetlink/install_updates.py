@@ -55,8 +55,13 @@ def bootstrap(root, source, defer_this_boot=False):
   target = root / 'opt/carrot-jetlink/updater'
   target.mkdir(parents=True, exist_ok=True)
   # Dependencies first, entry point last; enable only after every file is durable.
-  for name in ('finalize_sd_image.py', 'hud_protocol.py', 'release-signing-public.pem',
-               'wifi_protocol.py', 'local_release.py', 'boot_update.py', 'update_host.py'):
+  names = ['finalize_sd_image.py', 'hud_protocol.py', 'release-signing-public.pem',
+           'wifi_protocol.py', 'local_release.py', 'boot_update.py', 'update_host.py']
+  # Older offline patch payloads do not include the optional USB receiver.
+  # Copying its code never enables the locally selected USB policy.
+  if (source / 'usb_release.py').is_file():
+    names.insert(-2, 'usb_release.py')
+  for name in names:
     temporary = target / (name + '.new')
     with temporary.open('wb') as stream:
       stream.write((source / name).read_bytes())

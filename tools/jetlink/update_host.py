@@ -152,6 +152,15 @@ def check_bundle(candidate, manifest):
 
 
 def selected_commit(selection):
+  if selection.get('delivery') == 'usb':
+    from usb_release import trusted, registered
+    trusted(ROOT, selection)
+    validate_storage_compatibility(selection)
+    # The boot client repeats its pin every 500 ms. Hash large files during
+    # registration/staging/activation, not on this identity-only heartbeat.
+    if not registered(ROOT, selection, verify_files=False):
+      raise ValueError('Transfer the verified USB package before selecting it')
+    return selection['source_commit']
   if selection.get('delivery') == 'local':
     from local_release import resolve
     record = resolve(ROOT, selection)
@@ -164,6 +173,12 @@ def selected_commit(selection):
 
 
 def stage_manifest(manifest, progress=None):
+  if manifest.get('delivery') == 'usb':
+    from usb_release import selection
+    selected_commit(manifest)
+    from local_release import stage as stage_local
+    stage_local(ROOT, selection(manifest), progress)
+    return
   if manifest.get('delivery') == 'local':
     from local_release import stage as stage_local
     stage_local(ROOT, manifest, progress)

@@ -14,7 +14,34 @@ def wait_for_boot_update(client, peer, wifi, connected, publish, sleep=time.slee
   manifest = selected_release(RELEASE, required=True)
   if manifest.get('delivery') == 'local' and peer.get('carrot_local_release_v1') is not True:
     raise ValueError('Install the PC-prepared package for this Jetson model on Jetson first')
+  usb_change = False
+  if manifest.get('delivery') == 'usb':
+    from tools.jetlink.usb_release import SHA256_CAPABILITY, CHECK_CAPABILITY  # noqa: TID251 -- shared standalone updater
+    from tools.jetlink.usb_release_client import available, upload  # noqa: TID251
+    if peer.get(SHA256_CAPABILITY) is not True:
+      raise ValueError('Install and locally enable the SHA-256 USB receiver on Jetson once')
+    usb_change = peer.get('usb_source_commit') != manifest['source_commit']
+    if not usb_change:
+      # A server installed through NAS can have the same commit but no USB
+      # catalog. Query without writes; legacy SHA receivers check offroad.
+      usb_change = peer.get(CHECK_CAPABILITY) is not True or not available(client, manifest, connected)
+    if usb_change:
+      from openpilot.common.params import Params
+      params = Params()
+      def allowed():
+        return connected() and params.get_bool('IsOffroad') and not params.get_bool('IsOnroad')
+      while connected() and not allowed():
+        publish('updating', peer=peer, host_update={'state': 'waiting_offroad', 'fraction': None, 'integrity': 'sha256'})
+        if wifi is not None:
+          wifi.send(client)
+        client.state()
+        sleep(.5)
+      upload(client, manifest, Path('/data/jetson-usb-cache'), allowed,
+             lambda state, fraction: publish('updating', peer=peer,
+                                            host_update={'state': state, 'fraction': fraction, 'integrity': 'sha256'}))
   while connected():
+    if usb_change and not allowed():
+      raise ConnectionError('USB activation requires offroad and USB connection')
     # The release selection is independent of NetworkManager profile reads.
     # Network provisioning stays on its private channel and out of status/logs.
     client.t.send_json(MESSAGE, client._next_seq(), manifest)

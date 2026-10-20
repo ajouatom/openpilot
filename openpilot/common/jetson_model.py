@@ -38,6 +38,15 @@ def matching_release(path, required=False):
 
 
 def selected_release(path, required=False):
+  usb = Path(path).with_name('usb_host_sha256_release.json')
+  if usb.is_file():
+    from tools.jetlink.usb_release import validate, identity  # noqa: TID251 -- shared standalone updater
+    value, spec = validate(json.loads(usb.read_text())), read_spec()
+    if identity(value['model']) != {'sha256': spec['sha256'], 'size': spec['nbytes']}:
+      raise ValueError('USB Jetson selection does not match this branch model')
+    if Path(path).with_name('local_host_release.json').exists():
+      raise ValueError('Choose one local or USB Jetson delivery method')
+    return value
   local = Path(path).with_name('local_host_release.json')
   if not local.is_file():
     return matching_release(path, required)

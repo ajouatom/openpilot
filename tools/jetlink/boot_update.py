@@ -84,7 +84,7 @@ class Gate:
 
   def _install(self, manifest):
     try:
-      stage = 'verifying' if manifest.get('delivery') == 'local' else 'downloading'
+      stage = 'verifying' if manifest.get('delivery') in ('local', 'usb') else 'downloading'
       self.report(stage, 0.)
       update.stage_manifest(manifest, progress=lambda fraction: self.report(stage, fraction))
       self.report('verifying')
@@ -127,21 +127,68 @@ class BootstrapSession:
   def __init__(self, transport, gate):
     self.transport, self.gate = transport, gate
     self.last_seq = -1
+    self.usb_receiver = None
+
+  def close(self):
+    if self.usb_receiver is not None:
+      self.usb_receiver.close()
+      self.usb_receiver = None
 
   def handle(self, msg):
     from jetlink import protocol as p
     from wifi_protocol import CAPABILITY as wifi_capability, MESSAGE as wifi_message
     if msg.msg_type == p.Msg.HELLO_REQ:
       self.last_seq = msg.seq
+      # Optional dependency for older offline bootstrap payloads.
+      try:
+        import usb_release as usb
+      except ImportError:
+        usb = None
+      sha256_usb = usb is not None and usb.sha256_enabled(update.ROOT)
+      try:
+        current = (update.ROOT / 'current/SOURCE_COMMIT').read_text().strip()
+      except OSError:
+        current = None
       self.transport.send_json(p.Msg.HELLO_RESP, msg.seq, {
         'protocol': p.VERSION, 'carrot_host': 'jetson', CAPABILITY: True, LOCAL_CAPABILITY: True,
         wifi_capability: True, 'engine_state': 'none', 'loaded': None, 'sleep_after': 0,
+        'carrot_usb_sha256_v1': sha256_usb, 'carrot_usb_sha256_check_v1': sha256_usb,
+        'usb_source_commit': current,
       })
       return
     if msg.seq <= self.last_seq:
       return
     self.last_seq = msg.seq
-    if msg.msg_type == wifi_message:
+    if msg.msg_type in (0x4010, 0x4011, 0x4012, 0x4014):
+      try:
+        import usb_release as usb
+        if self.gate.done or (self.gate.worker is not None and self.gate.worker.is_alive()):
+          raise ValueError('Boot activation is already running')
+        if update.PROTECTED_MARKER.exists() and json.loads(Path('/run/carrot-storage.json').read_text()).get('state') != 'protected':
+          raise ValueError('Protected storage unavailable')
+        self.gate.selected = None
+        if self.usb_receiver is None:
+          self.usb_receiver = usb.Receiver(update.ROOT)
+        if msg.msg_type in (usb.BEGIN, usb.CHECK):
+          if not 0 < len(msg.payload) <= 65536:
+            raise ValueError('USB manifest size invalid')
+          value = json.loads(bytes(msg.payload))
+          if msg.msg_type == usb.CHECK:
+            usb.trusted(update.ROOT, value)
+            result = {'complete': usb.registered(update.ROOT, value)}
+          else:
+            result = self.usb_receiver.begin(value)
+        elif msg.msg_type == usb.CHUNK:
+          result = self.usb_receiver.chunk(msg.payload)
+        else:
+          if bytes(msg.payload) != b'{}':
+            raise ValueError('Invalid USB finish')
+          result = self.usb_receiver.finish()
+        self.transport.send_json(usb.ACK, msg.seq, dict(ok=True, **result))
+      except Exception:
+        self.close()
+        self.transport.send_json(0x4013, msg.seq, {'ok': False, 'error': 'USB package rejected; current release retained'})
+    elif msg.msg_type == wifi_message:
       receive_wifi(msg.payload)
     elif msg.msg_type == MESSAGE:
       try:
@@ -189,6 +236,8 @@ def boot():
       gate.tick()
       update.atomic_json(STATUS, dict(gate.telemetry(), updated=time.monotonic()))
     except Exception:
+      if session is not None:
+        session.close()
       if transport is not None:
         transport.close()
       transport = session = None
@@ -197,4 +246,6 @@ def boot():
       time.sleep(1)
   if transport is not None:
     transport.close()
+  if session is not None:
+    session.close()
   subprocess.run(['systemctl', 'start', 'carrot-jetlink', 'carrot-jetlink-hud'], check=True, timeout=45)
