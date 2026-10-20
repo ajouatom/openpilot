@@ -381,3 +381,53 @@ def test_enrollment_retains_only_immediately_previous_helpers(installed):
   enroll.install(installed.root)
   assert (updater / 'before-usb-experiments/boot_update.py').read_bytes() == before
   assert not (updater / 'before-usb-experiments/before-usb-experiments').exists()
+
+
+def test_disconnect_removes_partial_transfer_without_registering(installed):
+  wire = Wire()
+  sender.exchange(wire.client, usb.BEGIN, installed.value, lambda: True)
+  sender.exchange(wire.client, usb.CHUNK, usb.HEADER.pack(0, 0) + b'x', lambda: True, raw=True)
+  incoming = wire.session.usb_receiver.directory
+  assert incoming.is_dir()
+  wire.session.close()
+  wire.session.close()
+  assert not incoming.exists()
+  assert not usb.registered(installed.root, installed.value)
+  assert (installed.root / 'current').resolve() == installed.previous
+  assert not (installed.root / 'updates/pending.json').exists()
+
+
+def test_revoked_local_policy_prevents_completed_transfer_registration(installed):
+  wire = Wire()
+  sender.exchange(wire.client, usb.BEGIN, installed.value, lambda: True)
+  for index, name in enumerate(usb.NAMES):
+    sender.exchange(wire.client, usb.CHUNK,
+                    usb.HEADER.pack(index, 0) + (installed.package / name).read_bytes(), lambda: True, raw=True)
+  incoming = wire.session.usb_receiver.directory
+  (installed.root / 'updater' / usb.SHA256_POLICY).unlink()
+  with pytest.raises(ValueError, match='rejected USB update'):
+    sender.exchange(wire.client, usb.FINISH, {}, lambda: True)
+  assert not incoming.exists()
+  assert not usb.registered(installed.root, installed.value)
+  assert (installed.root / 'current').resolve() == installed.previous
+
+
+def test_onroad_transition_after_upload_does_not_request_activation(installed, monkeypatch):
+  monkeypatch.setattr(startup, 'selected_release', lambda *a, **k: installed.value)
+  values = {'IsOffroad': True, 'IsOnroad': False}
+  monkeypatch.setitem(sys.modules, 'openpilot.common.params', NS(Params=lambda: NS(get_bool=values.get)))
+  original = sender.upload
+  def transition(client, value, cache, allowed, progress):
+    original(client, value, cache_assets(installed), allowed, progress)
+    values.update(IsOffroad=False, IsOnroad=True)
+  monkeypatch.setattr(sender, 'upload', transition)
+  wire = Wire()
+  peer = {'carrot_host': 'jetson', startup.CAPABILITY: True, usb.SHA256_CAPABILITY: True,
+          'usb_source_commit': 'a' * 40}
+  with pytest.raises(ConnectionError, match='activation requires offroad'):
+    startup.wait_for_boot_update(wire.client, peer, None, lambda: True, lambda *a, **k: None)
+  assert usb.registered(installed.root, installed.value)
+  assert wire.session.gate.selected is None
+  assert not (installed.root / 'updates/pending.json').exists()
+  assert (installed.root / 'current').resolve() == installed.previous
+  wire.session.close()

@@ -29,6 +29,13 @@ jobs:
         with:
           python-version: '3.12'
       - run: python -m pip install pytest==8.3.5 pytest-asyncio numpy onnx pillow pycapnp pycryptodome aiohttp raylib==5.5.0.4
+      - name: USB receiver ownership, interrupted transfer and rollback checks
+        run: |
+          sudo env PYTHONPATH=.:tools/jetlink:third_party/jetlink "$(which python)" -m pytest \
+            -c /dev/null --rootdir=. --confcutdir=tools/jetlink -q \
+            tools/jetlink/test_usb_sha256.py tools/jetlink/test_update_host.py \
+            tools/jetlink/test_local_experiment.py tools/jetlink/test_boot_update.py \
+            tools/jetlink/test_offline_boot_patch.py
       - name: USB, fallback, navigation, Wi-Fi, signed updates and image checks
         env:
           PYTHONPATH: .:opendbc_repo:tools/jetlink
