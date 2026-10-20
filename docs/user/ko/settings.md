@@ -299,7 +299,7 @@ Bosch MRRevo14F 수신을 지원하는 버전에서 Bosch MRRevo14F 후보 차�
 
 `ClusterHud`(외부 HUD 활성화)는 **본체 USB에 직접 연결한 HUD**를 켜고 끄는 설정입니다. Jetson에 연결한 HUD는 이 값이 `0`이어도 자동 실행되며, 기본적으로 시동 OFF 시 화면을 끕니다. 시동 OFF에도 표시하려면 기존 `ClusterHudDebug`의 항상 켜기를 사용합니다. 밝기·화면 구성 설정은 Jetson HUD에도 적용됩니다.
 
-ESP32-S3 Wi-Fi 디스플레이 지원은 제거되었습니다. USB 디스플레이를 Jetson에 연결하세요. 콤마는 전용 Wi-Fi로 HUD·지도 데이터를 보내며, Wi-Fi가 끊겨도 USB HUD 전송으로 전환하지 않습니다. 콤마와 Jetson의 USB 연결은 모델 추론과 연결 협상에 사용합니다. 양쪽 모두 새 버전이 필요합니다.
+ESP32-S3 Wi-Fi 디스플레이 지원은 제거되었습니다. USB 디스플레이를 Jetson에 연결하세요. carrot-nav에서는 콤마가 전용 Wi-Fi로 HUD·지도 데이터를 보내며, Wi-Fi가 끊겨도 USB HUD 전송으로 전환하지 않습니다. 콤마와 Jetson의 USB 연결은 모델 추론과 연결 협상에 사용합니다. 양쪽 모두 새 버전이 필요합니다.
 
 S3 N16R8 보드 선택·배선·펌웨어 설치·폰/C4 등록은 [NAS 설치 설명서](https://upload.shind0.synology.me/models/carrot-s3/index.html)에서 진행할 수 있습니다. 펌웨어 ZIP도 같은 페이지에서 제공합니다. 기존 S3는 설치 페이지에서 1.2.0으로 한 번 업데이트하면 H.264를 사용할 수 있습니다. Wi-Fi·C4 등록과 기존 소등·LED 기능을 유지합니다.
 
