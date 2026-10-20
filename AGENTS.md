@@ -1,5 +1,16 @@
 # Repository memory
 
+- On 2026-10-20, PR559 review accepts independent default-off OnnxBsdEnabled:
+  unload BSD network while lane recognition/snapshots continue; vehicle BSD stays.
+  Existing ShareData users must opt into camera BSD. General TCP7711 telemetry
+  removed, fresh Tesla DAS_road fields retained. Correct concurrent refresh order,
+  clear results on transitions and reject old-generation camera work/results;
+  Web lane-only readiness/OFF state and settings grouping fixed. Three new
+  regressions fail original PR/pass corrected; 142 desktop Python tests with
+  platform doubles, 261 web tests and25 Wiki tests pass. Both maintained branches,
+  single-parent; Git Pull/reboot delivery, no vehicle install or measured-RSS claim.
+  See docs/pr559_visual_bsd_20261020.md.
+
 - On 2026-10-20, owner clarifies initial red errors are comma upper-right
   Jetson badge. Distinguish normal boot-runtime handoff; first-handshake
   timeout/explicit no-reader wait stays connecting for<=120s before first ready.

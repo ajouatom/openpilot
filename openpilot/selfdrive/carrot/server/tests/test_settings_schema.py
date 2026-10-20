@@ -103,6 +103,7 @@ def test_onnx_vision_toggle_uses_existing_runtime_flag_and_first_steering_sectio
   lane_change = next(group for group in steering["groups"] if group["id"] == "STEER_LANECHANGE")
   assert onnx["id"] == "STEER_ONNX"
   detail_names = [
+    "OnnxBsdEnabled",
     "OnnxLaneThreshold", "OnnxLaneIntervalMs", "OnnxBsdThreshold",
     "OnnxBsdSmoothingMs", "OnnxBsdIntervalMs",
   ]
@@ -112,6 +113,8 @@ def test_onnx_vision_toggle_uses_existing_runtime_flag_and_first_steering_sectio
     assert by_name[name]["detail_parent"] == "ShareData"
     assert by_name[name]["detail_section"] in ("lane", "bsd")
     assert f'{{"{name}", {{PERSISTENT, INT,' in PARAMS_KEYS_PATH.read_text(encoding="utf-8")
+  bsd_enabled = by_name["OnnxBsdEnabled"]
+  assert (bsd_enabled["control"], bsd_enabled["min"], bsd_enabled["max"], bsd_enabled["default"]) == ("toggle", 0, 1, 0)
   for title in ("title", "etitle", "ctitle"):
     assert "ONNX" in vision[title]
 

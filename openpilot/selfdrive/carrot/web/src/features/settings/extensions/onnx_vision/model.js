@@ -94,6 +94,8 @@ export function normalizeOnnxVisionStatus(payload, options = {}) {
     : [];
   const laneFresh = lanePayload.resultFresh === true;
   const laneModelReady = lanePayload.loaded === true;
+  // Older services have no independent BSD switch.
+  const bsdEnabled = status.bsdEnabled !== false;
   const bsdModelReady = model.loaded === true;
   const laneCameraReady = lanePayload.cameraAvailable === true;
   const bsdCameraReady = camera.available === true;
@@ -120,24 +122,25 @@ export function normalizeOnnxVisionStatus(payload, options = {}) {
   });
 
   const bsd = Object.freeze({
+    enabled: bsdEnabled,
     cameraReady: bsdCameraReady,
     cameraError: String(camera.error || ""),
     cameraAgeSeconds: number(camera.lastFrameAgeSeconds),
-    active: gate.active === true,
+    active: bsdEnabled && gate.active === true,
     side: gate.side === "left" || gate.side === "right" ? gate.side : "",
     configured: configuredSides.length > 0,
     configuredSides: Object.freeze(configuredSides),
     gateReason: String(gate.reason || ""),
     laneWidth: number(gate.laneWidth),
     left: Object.freeze({
-      valid: leftBsd.valid === true,
-      active: leftBsd.active === true,
-      confidence: confidence(leftBsd.confidence),
+      valid: bsdEnabled && leftBsd.valid === true,
+      active: bsdEnabled && leftBsd.active === true,
+      confidence: bsdEnabled ? confidence(leftBsd.confidence) : 0,
     }),
     right: Object.freeze({
-      valid: rightBsd.valid === true,
-      active: rightBsd.active === true,
-      confidence: confidence(rightBsd.confidence),
+      valid: bsdEnabled && rightBsd.valid === true,
+      active: bsdEnabled && rightBsd.active === true,
+      confidence: bsdEnabled ? confidence(rightBsd.confidence) : 0,
     }),
     fps: number(bsdInference.fps),
     latencyMs: number(bsdInference.latencyMs),
@@ -146,9 +149,10 @@ export function normalizeOnnxVisionStatus(payload, options = {}) {
     lastAgeSeconds: number(bsdInference.lastAgeSeconds),
   });
 
-  const state = !(bsdModelReady && laneModelReady)
+  const modelsReady = laneModelReady && (!bsdEnabled || bsdModelReady);
+  const state = !modelsReady
     ? ONNX_VISION_STATE.ATTENTION
-    : !(bsdCameraReady && laneCameraReady)
+    : !(laneCameraReady && (!bsdEnabled || bsdCameraReady))
       ? ONNX_VISION_STATE.WAITING
       : ONNX_VISION_STATE.READY;
 
@@ -157,6 +161,7 @@ export function normalizeOnnxVisionStatus(payload, options = {}) {
     error: "",
     raw: status,
     service: Object.freeze({
+      modelsReady,
       bsdModelReady,
       laneModelReady,
       bsdModelPath: String(model.path || ""),
