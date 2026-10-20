@@ -12,6 +12,8 @@
   camera frame gap18030->18032, invalid odometry, pose inputs false57.7ms,
   alert1.985s; sensors/posenet healthy, no locationd exit. Model loop max83.801ms
   is window evidence, not a unique delay cause. No alert/validity/model changes.
+  CI39386479268 passes94root/868broad(56skip)/119nav/11storage/11NAT.
+  Signed hostc8a95308b0 published, full HTTPS size/hash verified; N16 unchanged.
   Nav runtime only; wip record only. Raw private.
   See docs/jetson_nav_preview_drive_20261020.md.
 

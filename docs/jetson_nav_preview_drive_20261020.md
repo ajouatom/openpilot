@@ -39,6 +39,19 @@ No operational vehicle files, settings, services or model caches were changed
 during this diagnosis. Physical activation and appearance remain to be checked
 after the ordinary update.
 
+The published host source is `c8a95308b0e6ec98e2da0a8f60f34043d8c64f5d`.
+[CI 39386479268](https://github.com/ajouatom/openpilot/actions/runs/39386479268)
+passed 94 root updater tests, 868 broad tests (56 skips), 119 navigation/cluster
+tests, 11 real protected-storage tests and 11 NAT tests including isolated
+packets; Windows installer checks passed too. Counts overlap.
+The 64,675,738-byte runtime bundle has SHA-256
+`1781c3830bac3d0d006263812ab39d9c2afc48b0c7a7d9f5e45f27a0d9896beb`.
+Its signature and all 1084 bundled files were checked against the public source
+export, including the existing legacy model-pin filename mapping. The bundle
+and manifest were published on the existing signed NAS path and the full bundle
+was fetched again over HTTPS to verify size/hash. The N16 model hash is unchanged.
+This verifies distribution contents, not physical Git Pull/reboot activation.
+
 ## Actual DATA capacity
 
 The owner's original R2 write record and current partition table agree: the
