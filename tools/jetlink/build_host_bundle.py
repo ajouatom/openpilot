@@ -12,6 +12,7 @@ PATHS = ['LICENSE', 'opendbc_repo/LICENSE', 'openpilot/__init__.py', 'openpilot/
          'openpilot/selfdrive/carrot/cluster', 'openpilot/selfdrive/carrot/carrot_navi.py',
          'openpilot/selfdrive/carrot/carrot_navi_cereal.py', 'openpilot/selfdrive/carrot/deceleration_source.py',
          'openpilot/selfdrive/carrot/signal_display.py', 'openpilot/selfdrive/carrot/signal_mode.py',
+         'openpilot/selfdrive/carrot/lead_brake_lights.py',
          'openpilot/selfdrive/navigation/preview.py',
          'openpilot/selfdrive/controls/lib', 'openpilot/selfdrive/modeld/constants.py',
          'openpilot/selfdrive/modeld/jetlink/cinque_v2.json', 'openpilot/selfdrive/modeld/jetlink/jetson_model.json', 'openpilot/selfdrive/assets',
