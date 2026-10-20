@@ -1,5 +1,22 @@
 # Repository memory
 
+- On 2026-10-20, user reviews tjdgus200 USB update release52a8ffee, then
+  explicitly defers latest Jetson model/device work. Import optional SHA256 USB
+  delivery on carrot-nav only (wip lacks prerequisite catalog/pin runtime).
+  No USB manifest selected or receiver enrollment: existing NAS signed path,
+  Jetson80eedcdd and eGPU n16 pins unchanged. Existing Jetson needs one local
+  receiver install only to use USB delivery; signed NAS updates need no such
+  enrollment. ZIP hash verified;11 source/key/doc blobs match original commit.
+  Add interruption/policy-revocation/offroad-transition tests and root CI.
+  Fix pre-existing host bundle missing lead_brake_lights and stale HUD test
+  fixtures; production display policy unchanged. Final Linux94 root,835 broad
+  (55skips),119 nav/HUD,11 real-storage tests pass; Windows installer and eGPU
+  CI pass. Counts overlap. Code a863f4b763, all commits single-parent.
+  Official HF now lists96244b1f/12800 ONNX814591107B/01effc67; this is availability,
+  not TensorRT/equivalence validation. No model replacement, package publication,
+  device connection/install or20Hz claim. See docs/jetson_usb_update_review_20261020.md.
+
+
 - On 2026-10-19, offroad Mapbox review finds real navd allManeuvers failure:
   np.cumsum yields numpy.float64, rejected by device Capnp struct-list setter.
   Convert distance to Python float at serialization only. Six real-cereal cases
