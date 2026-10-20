@@ -1,5 +1,20 @@
 # Repository memory
 
+- On 2026-10-20, owner reports default-only Jetson panel with ignition/P and
+  authorizes agent-controlled offroad. SD enrollment/cache succeeded, but prior
+  boot gate still approved989386eb; comma a4e57bad rejects legacy USB HUD and
+  dedicated AP waits for offroad. Fresh P/zero/standstill/inactive/panda guard,
+  existing snapshot startup hold plus onroad cycle and30min restoration watchdog
+  produce real offroad. AP starts; normal Jetson reboot/probe activates signed
+  b7b463a20b and autojoins WLAN. Restore original absent snapshot hold/onroad.
+  Physical USB H264 renderer reports10Hz/26 live services;12 receiver samples
+  and13 sender samples connected over60s, final HUD connected. Native model/DM
+  each1200 valid consecutive at19.99812/19.99857Hz (~20, not strict>=20).
+  Old80eedcdd model unchanged. No map bytes, independent visual confirmation,
+  road/RF recovery/long stability or new full-image claim. Nav hardware only;
+  wip runtime unchanged. Raw private. See docs/jetson_wifi_usb_panel_20261020.md.
+
+
 - On 2026-10-20, user requests comma-to-Jetson HUD/navigation over Wi-Fi,
   no USB fallback, and complete ESP32-S3 display retirement. S3 code, firmware,
   pairing tools and installer routes removed both branches; shared renderer
