@@ -51,12 +51,12 @@ and caches the signed runtime, and installs the previously requested USB-update
 receiver. The hook preserves the current runtime/model/key; only the existing
 boot gate activates the comma-selected signed release after its native probe.
 No USB-delivered release is selected. A root-owned completion marker prevents
-re-enrollment on subsequent boots. This is **prepared on SD, not yet boot-tested**.
+re-enrollment on subsequent boots. At this preparation stage it was not yet boot-tested; see the hardware follow-up below.
 
 Use the updated carrot-nav on comma, safely remove/reinsert the card, connect the
 panel to Jetson's USB host port and keep comma's model USB connection. Boot while
 offroad so the dedicated AP can start. First-boot caching/validation may take time.
-Physical display, RF recovery, sustained rate and road inference remain untested.
+At preparation, physical display, RF recovery, sustained rate and road inference were untested.
 
 ## Validation
 
@@ -72,4 +72,45 @@ Physical display, RF recovery, sustained rate and road inference remain untested
   and trust root, stable original backup and verified cache. POSIX ownership and
   symlink operations are doubled; native receiver ownership checks run in CI.
 
-No physical Jetson boot, new model equivalence, 20 Hz or driving claim is made.
+The above preparation checks alone make no physical boot, new-model equivalence,
+20 Hz or driving claim. The later bounded hardware observation is recorded below.
+
+## Owner hardware follow-up
+
+The owner subsequently connected the Jetson and reported a default-only display
+with ignition on in Park. Read-only inspection found the SD enrollment/cache
+completed correctly, but the current runtime was still 989386eb8571. Its earlier
+boot gate had approved that release before the current comma boot. The updated
+comma correctly refused legacy USB HUD, and its new dedicated AP was waiting for
+an actual offroad state; Park alone does not satisfy that condition.
+
+The owner explicitly authorized a temporary offroad transition. Fresh valid/live
+vehicle messages confirmed Park, standstill, zero speed, disabled/inactive
+selfdrive and carControl, and all pandas disallowing controls. The existing
+IsTakingSnapshot startup hold plus OnroadCycleRequested produced a real
+hardwared/manager offroad transition. A separate 30-minute restoration watchdog
+was armed; IsOnroad/IsOffroad were never forged. The dedicated AP then started.
+After verifying fresh offroad provisioning and the signed cached bundle hash,
+Jetson was rebooted through its normal boot updater. Candidate native inference
+passed, the selected b7b463a20b runtime was activated, protected storage remained
+read-only, and Jetson joined the dedicated WLAN automatically. The temporary
+hold was removed and ordinary onroad operation resumed; IsTakingSnapshot was
+restored to its original absent state, with ClusterHud still 1.
+
+On the owner's physical devices, USB/H.264 renderer logs report 10.0 Hz, actual
+Park/vehicle values and 26/26 live subscriptions. The renderer's "no-can" label
+means no raw CAN subscription, not missing carState. All 12 Jetson samples over
+a 60-second observation had connected snapshot/media sockets and fresh USB-send
+status; all 13 concurrent comma samples showed the AP active and Wi-Fi HUD
+connected. Final ClusterHudConnected was true. Navigation media had zero bytes
+and no map frame, so this observation does not validate map rendering. Physical
+panel appearance was not independently photographed or confirmed by the owner.
+
+Concurrent 60.001 seconds yielded 1,200 valid consecutive modelV2 frames at
+19.9981199 Hz and 1,200 valid consecutive driverStateV2 frames at 19.9985720 Hz.
+This is approximately 20 Hz, not a strict >=20 Hz pass. The original 80eedcdd
+Jetson ONNX remained active throughout that final interval; no latest-model
+replacement, road test, RF recovery or long-duration stability claim is made.
+Raw device/connection evidence remains private. This hardware follow-up applies
+to carrot-nav; wip still retains its separate runtime selection. No new complete
+SD image or Windows package was built by this device operation.
