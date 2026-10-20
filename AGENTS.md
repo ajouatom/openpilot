@@ -1,5 +1,19 @@
 # Repository memory
 
+- On 2026-10-20, owner clarifies initial red errors are comma upper-right
+  Jetson badge. Distinguish normal boot-runtime handoff; first-handshake
+  timeout/explicit no-reader wait stays connecting for<=120s before first ready.
+  Preserve model/protocol/signature/cleanup/runtime failures, deadlines,
+  transport retry and actual control alerts. Korean waiting/preparing badges.
+  Nav122/wip120 focused tests; actual C4 draw method desktop render checked.
+  Further drive review finds missing model frame18031 present in both cameras,
+  SOF skew11.302us; recorded metadata passes existing pairing. Exact reader
+  delay remains unknown. Add bounded previous/current-cycle camera gap trace,
+  <=1Hz on gaps only, no validity/model change. Native fake-input overhead
+  ~11us/pair; not real camera timing or a locationd fix. Comma Git Pull/reboot;
+  existing signed NAV host pin retained. No live install. Raw private.
+  See docs/jetson_startup_badge_20261020.md.
+
 - On 2026-10-20, owner clarifies missing map is Jetson USB screen mode7.
   C4 NAV256 preview is fresh but absent from host snapshot/files; received
   phone960x540 video is a different map. Forward bounded PNG only through
