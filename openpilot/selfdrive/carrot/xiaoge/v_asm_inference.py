@@ -33,6 +33,10 @@ class VASMInference:
     self.reset()
 
   def load(self) -> bool:
+    if self.valid and self.net is not None:
+      return True
+    self.net = None
+    self.valid = False
     if not self.model_path.is_file():
       self.error = f"model missing: {self.model_path}"
       return False
@@ -46,6 +50,12 @@ class VASMInference:
     self.valid = True
     self.error = ""
     return True
+
+  def unload(self) -> None:
+    self.net = None
+    self.valid = False
+    self.error = "disabled by OnnxBsdEnabled"
+    self.reset()
 
   def reset(self) -> None:
     self.scores = {"left": 0.0, "right": 0.0}

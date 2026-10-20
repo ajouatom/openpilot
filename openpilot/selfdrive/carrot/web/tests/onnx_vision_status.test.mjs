@@ -74,3 +74,31 @@ test("ONNX status preserves confidence, gate, camera, and diagnostic values", ()
   assert.equal(status.bsd.gateReason, "target lane width below 3.0 m");
   assert.equal(status.service.bsdModelPath, "/model.onnx");
 });
+
+
+test("lane-only operation ignores disabled BSD model and camera but preserves lane failures", () => {
+  const payload = {
+    bsdEnabled: false,
+    model: { loaded: false, error: "disabled by OnnxBsdEnabled" },
+    camera: { available: false },
+    gate: { active: true },
+    vehicleSide: { left: { valid: true, active: true, confidence: 0.9 } },
+    lane: { loaded: true, cameraAvailable: true },
+  };
+  const status = normalizeOnnxVisionStatus(payload, { enabled: true });
+  assert.equal(status.state, ONNX_VISION_STATE.READY);
+  assert.equal(status.service.modelsReady, true);
+  assert.equal(status.service.bsdModelReady, false);
+  assert.equal(status.bsd.enabled, false);
+  assert.equal(status.bsd.active, false);
+  assert.equal(status.bsd.left.valid, false);
+  assert.equal(status.bsd.left.active, false);
+  assert.equal(status.bsd.left.confidence, 0);
+  payload.lane.cameraAvailable = false;
+  assert.equal(normalizeOnnxVisionStatus(payload, { enabled: true }).state, ONNX_VISION_STATE.WAITING);
+  payload.lane.loaded = false;
+  assert.equal(normalizeOnnxVisionStatus(payload, { enabled: true }).state, ONNX_VISION_STATE.ATTENTION);
+  payload.lane = { loaded: true, cameraAvailable: true };
+  payload.bsdEnabled = true;
+  assert.equal(normalizeOnnxVisionStatus(payload, { enabled: true }).state, ONNX_VISION_STATE.ATTENTION);
+});

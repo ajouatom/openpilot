@@ -187,6 +187,7 @@ window.CarrotTranslations.register("zh", {
     onnx_vision_summary_starting: "正在等待 ONNX 服务启动。",
     onnx_vision_summary_unavailable: "ONNX 服务没有响应。",
     onnx_vision_summary_waiting: "模型已就绪，正在等待道路摄像头。",
+    onnx_vision_summary_lane_only: "车道识别已就绪；摄像头盲点识别已关闭。",
     onnx_vision_summary_ready: "车道与盲点识别服务已就绪。",
     onnx_vision_summary_attention: "请检查 ONNX 模型或配置。",
     onnx_vision_open_diagnostics: "打开诊断",
