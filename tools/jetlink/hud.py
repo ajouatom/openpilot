@@ -164,6 +164,10 @@ def main():
   cluster_system_monitor.NetworkAddressProvider = VehicleNetworkAddress
   import cluster_navi_source
   display_metrics = {}
+  from openpilot.selfdrive.navigation import preview as nav_preview
+  from hud_nav_map import RemoteNavPreview
+  remote_nav_preview = RemoteNavPreview(read_snapshot, nav_preview.PREVIEW_PATH)
+  nav_preview.preview_fresh = remote_nav_preview.fresh
   BaseNaviSource = cluster_navi_source.NaviIpcMediaSource
   class RemoteNaviSource:
     def __init__(self, *args, **kwargs):
@@ -206,6 +210,8 @@ def main():
         path = Path('/dev/shm/carrot-jetlink-hud-status.json')
         tmp = path.with_suffix('.tmp')
         stats = vehicle_stats.sample()
+        remote_nav_preview.fresh()
+        display_metrics['nav_model_map'] = remote_nav_preview.status
         tmp.write_text(json.dumps({'updated': now, **display_metrics,
                                   'vehicle_network_address': VehicleNetworkAddress().address(),
                                   'vehicle_cpu': stats.cpu_core_percents,

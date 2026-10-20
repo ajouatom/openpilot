@@ -141,7 +141,7 @@ class Runtime:
   def run(self):
     if self.role == 'send':
       from hud_protocol import Publisher
-      self.publisher = Publisher(navi=True)
+      self.publisher = Publisher(navi=True, nav_map=True)
       for channel in LIMITS:
         self.start_thread(self.sender, channel)
     else:
