@@ -22,7 +22,7 @@ from cluster_usb_pipeline import AsyncJpegUsbPipeline
 class DisconnectedDisplay:
   def clear_profile_samples(self): pass
   def encode_jpeg(self, rgba, width, height): return b"jpeg"
-  def send_jpeg(self, jpeg): raise ConnectionError("S3 display is closed")
+  def send_jpeg(self, jpeg): raise ConnectionError("USB display is closed")
   def profile_samples(self): return ()
 
 original = gc.get_threshold()
@@ -59,8 +59,7 @@ assert gc.get_threshold() == original
 
 
 @pytest.mark.parametrize('failed', [True, False])
-@pytest.mark.parametrize('discovery_misses', [0, 2])
-def test_autorun_reclaims_finished_session_before_retry(failed, discovery_misses):
+def test_autorun_reclaims_finished_session_before_retry(failed):
   # Execute the real retry loop in isolation; native/device setup is replaced,
   # but the actual JPEG worker, error traceback and GC policy are exercised.
   code = r'''
@@ -71,19 +70,11 @@ sys.path.insert(0, str(Path.cwd() / 'openpilot/selfdrive/carrot/cluster'))
 from cluster_profile import ProfileReporter, freeze_gc_after_init, restore_gc_after_run
 from cluster_usb_pipeline import AsyncJpegUsbPipeline
 failed = FAILED
-discovery_misses = DISCOVERY_MISSES
-discovery_attempts = 0
-def discover(config):
-  global discovery_attempts
-  discovery_attempts += 1
-  if discovery_attempts <= discovery_misses:
-    raise TimeoutError('Registered S3 display not found on this Wi-Fi')
-  return '192.0.2.1'
 for name, attrs in {
   'openpilot.common.realtime': {'drop_realtime': lambda: None},
   'openpilot.common.display_scheduling': {'DisplayScheduler': lambda *a, **k: Mock()},
   'cluster_graphics_cleanup': {'ensure_clean_autorun_process': lambda: None},
-  'cluster_wifi_protocol': {'load_config': lambda: {'configured': True}, 'discover': discover},
+  'cluster_usb_display': {'find_supported_usb_product': lambda _: 0x0092, 'product_id_for_hud_mode': lambda mode: 0x0092 if mode else None, 'product_label': lambda _: 'USB'},
 }.items():
   module = types.ModuleType(name)
   module.__dict__.update(attrs)
@@ -93,7 +84,7 @@ class Display:
   def clear_profile_samples(self): pass
   def encode_jpeg(self, *args): return b'jpeg'
   def send_jpeg(self, data):
-    if failed: raise ConnectionError('S3 display is closed')
+    if failed: raise ConnectionError('USB display is closed')
   def profile_samples(self): return ()
 def run(*args, **kwargs):
   pipeline = AsyncJpegUsbPipeline(Display())
@@ -111,9 +102,6 @@ def run(*args, **kwargs):
     restore_gc_after_run(previous)
     pipeline.close()
 def retry_sleep(seconds):
-  if discovery_attempts <= discovery_misses:
-    assert not refs, 'missing display still initialized renderer/pipeline'
-    return
   assert refs and all(r() is None for r in refs), 'completed HUD remains alive during retry wait'
 mode_reads_after_run = 0
 def hud_mode(params):
@@ -138,8 +126,7 @@ gc.disable()
 exec(compile(ast.Module(body=[main], type_ignores=[]), str(source), 'exec'), scope)
 scope['main']()
 assert refs and all(r() is None for r in refs)
-assert discovery_attempts == discovery_misses + 1
-'''.replace('FAILED', repr(failed)).replace('DISCOVERY_MISSES', repr(discovery_misses))
+'''.replace('FAILED', repr(failed))
   result = subprocess.run([sys.executable, '-c', code], cwd=ROOT, capture_output=True, text=True, timeout=30)
   assert result.returncode == 0, result.stdout + result.stderr
 

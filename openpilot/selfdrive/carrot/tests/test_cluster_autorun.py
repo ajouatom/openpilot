@@ -1,24 +1,6 @@
 from openpilot.selfdrive.carrot import cluster_autorun
 
 
-def test_wifi_recovery_skips_only_shared_usb_settling_delay(monkeypatch):
-  clock = [0.0]
-  class FakeParams:
-    def get_bool(self, key):
-      if key == cluster_autorun.USBGPU_LOADING_PARAM:
-        return clock[0] < 1.0
-      if key == cluster_autorun.USBGPU_ACTIVE_PARAM:
-        return clock[0] >= 1.0
-      return False
-
-  monkeypatch.setattr(cluster_autorun, '_usbgpu_startup_expected', lambda: True)
-  monkeypatch.setattr(cluster_autorun.time, 'monotonic', lambda: clock[0])
-  monkeypatch.setattr(cluster_autorun.time, 'sleep', lambda seconds: clock.__setitem__(0, clock[0] + seconds))
-  cluster_autorun._wait_for_usbgpu_startup(FakeParams(), shared_usb=False)
-  assert 1.0 <= clock[0] < 1.2  # Model loading is still respected.
-  clock[0] = 0.0
-  cluster_autorun._wait_for_usbgpu_startup(FakeParams())
-  assert 11.0 <= clock[0] < 11.2  # Wired USB protection is unchanged.
 
 
 def test_device_cluster_uses_standalone_carrot_navi_ipc():
