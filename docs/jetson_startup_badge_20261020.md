@@ -76,3 +76,16 @@ verification. In a separate low-priority native C4 process, 10,000 fake camera
 pairs cost 4.11 us/pair without tracing versus 15.14 us/pair including trace
 and cycle retention. This measures helper CPU overhead only, not real camera,
 GPU/USB latency or road performance. Raw drive/device evidence stays private.
+
+
+Completed integration checks on the published source:
+
+- [Nav CI 39389864670](https://github.com/ajouatom/openpilot/actions/runs/39389864670)
+  on `b85a5f1101`: 94 root updater cases, 923 broad cases (56 skips),
+  119 navigation/cluster cases, 11 real storage and 11 NAT cases passed.
+- [Wip CI 39389916455](https://github.com/ajouatom/openpilot/actions/runs/39389916455)
+  on `10d48e66a4`: 735 broad cases (2 skips), 119 navigation/cluster and
+  11 real storage cases passed. Both Windows installer jobs passed.
+
+Counts overlap. Physical initial-connect appearance and the next camera-gap
+trace remain unverified until the user's normal Git Pull/restart activation.
