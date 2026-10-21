@@ -8,9 +8,15 @@
   (observer88.65ms gap), no causal camera-regression claim; priority restored.
   Coalesce watchdog wakes against earliest pending timer; preserve earlier-arm,
   close, expiry/cancel and outside-lock abort semantics. Old1000-write test
-  fails2002notifications; new passes.73 desktop checks pass, POSIX cases CI.
+  fails2002notifications; new passes.73NAV/62Wip desktop checks and both CIs pass.
   GPU signed default activation9cfe verified via normal boot updater, no overlay.
-  Delivery/live validation: docs/jetlink_watchdog_latency_20261021.md; raw private.
+  Normal Git Pull/reboot installs cd986d7e9d; two120s windows4800 calls,
+  mean42.443/max48.327ms/zero>50. First observer omission recovered valid in
+  original rlog; buffered repeat2400 consecutive valid model/DM/both cameras,
+  pose healthy. NAV/HUD/preview240/240 ready/fresh. Watchdog~0.77 switches/s
+  vs prior short trace106.9/s; original OTHER policy. No hard deadline/road or
+  all-locationd cure claim. Wip source2ea4415ac2; no host update for this fix.
+  See docs/jetlink_watchdog_latency_20261021.md; raw private.
 
 
 - On 2026-10-21, user requests enabling GPU recurrence if beneficial, then
