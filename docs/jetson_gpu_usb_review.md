@@ -95,3 +95,25 @@ it does not activate this optional GPU path. Publishing and selecting a new
 signed host runtime, plus deliberate opt-in and full-link validation, are
 separate activation work. No SD-card reflash or manual USB patch is required
 for the common change. Private logs and diagnostic scripts are not published.
+
+After restoration, the original N16 connection reported ready, the C4 DWC3
+worker retained FIFO2, and Park/zero speed/inactive plus all observed service
+valid/alive flags were confirmed. A subsequent 60-second read-only capture
+received 1,200 valid consecutive frames each from model, DM, road/wide cameras
+and camera odometry. Rates were respectively 20.001716, 20.000842, 20.000292,
+20.000272 and 20.001718 Hz. All 1,200 livePose records were valid with inputsOK
+and posenetOK true (20.004022 Hz). This confirms bounded restoration health,
+not GPU-on live driving or long-term stability. The first observer script
+mistakenly compared poller wrapper identities and counted zero messages; its
+corrected version drained the subscribed sockets and produced these results.
+
+Both source commits passed the Jetson integration workflow, including the
+Windows installer check. NAV [run 39584970894](https://github.com/ajouatom/openpilot/actions/runs/39584970894)
+on `a51dcb02d5` passed the Linux privileged receiver/rollback stage (94 cases),
+main integration stage (987 passed, 56 skipped), navigation/scene stage (119),
+real loop-filesystem stage (11), and isolated Wi-Fi forwarding stage (11).
+Wip [run 39584970899](https://github.com/ajouatom/openpilot/actions/runs/39584970899)
+on `e925a3cce4` passed its main integration stage (780 passed, 2 skipped),
+navigation/scene stage (119), and loop-filesystem stage (11). Stage counts can
+overlap and are not a count of unique tests. The final follow-up commits only
+record restoration and these completed checks; runtime sources are unchanged.
