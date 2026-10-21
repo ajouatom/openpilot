@@ -1,5 +1,42 @@
 # Repository memory
 
+- On 2026-10-21, owner requests restoring comma-to-Jetson USB display traffic.
+  Nav-only new receiver capability selects bounded snapshot plus at most two
+  32KiB media fragments during GPU execution; old receivers retain Wi-Fi until
+  updated. Preserve N16 and FIFO2 helper, no ESP32 return. Parked120s Wi-Fi/USB
+  each2400 consecutive valid model frames, healthy pose; mean44.256/44.226ms,
+  max63.704/63.361ms,3/2 above50. USB adds~0.644MB/s,7% of9.18MB/s model input;
+  main-threadCPU+1.63ms/frame, wholeCPU78.38->77.13% is not causal attribution.
+  Phone960x540 video and mode7 preview fresh120/120 USB samples. NAV validity
+  route_position throughout USB: no valid-route driving or full deadline claim.
+  Wi-Fi return60s1200 consecutive valid each,mean44.381/max52.838,two>50.
+  Signed host691566f0fa published/HTTPS verified, N16 unchanged. Ordinary
+  Git Pull/comma reboot682ceeb484 and normal Jetson boot update verified; no
+  manual cache/SD patch. Final120s NAV ready120/120,2400 consecutive valid
+  model/DM/both cameras,pose healthy;mean44.174/max57.566ms,two>50. HUD/preview
+  fresh120/120,phone video no decode drops. Display~0.707MB/s(7.70%). USB stays
+  applied; temporary offroad/overrides cleared. Wip alreadyUSB: models unchanged,
+  Cinquev2 Jetson and MDv3 eGPU. See docs/jetson_usb_hud_restore_20261021.md.
+
+- On 2026-10-21, owner rejects ending Jetson latency trials with diagnostics
+  restored only. Retain FIFO2 USB completion scheduling through a session root
+  helper on tested mici/aarch64 Linux4.9.103. Discover actual dwc3_bh_work
+  workers in isolated filtered trace, not hard-coded u17; validate kernel task
+  and starttime, bound leases, restore at owner EOF/signals, journal for next
+  startup after SIGKILL. Shared workers remain a limitation. Preserve serial
+  reads, user CPU placement, N16/other branch models,150ms IPC and validity.
+  Manual normal-NAV120s/2400 calls max49.81ms with no>50; full logs consecutive.
+  Automatic helper60s mean44.51/max50.94ms,one>50/1201 observed consecutive;
+  ten-second reactivation/EOF cleanup pass, NAV route_position invalid. No hard
+  deadline, complete locationd cure or road stability claim. Common Git Pull/
+  comma reboot delivery; no Jetson image/bootstrap update. Raw evidence private.
+  See docs/jetlink_usb_completion_priority_20261021.md.
+  Published nav040f000e1b/wipc5a5876b68; both Linux/installer CI pass. Actual
+  guarded comma Git Pull/reboot installs040f000e1b, N16 sameSHA active; automatic
+  new-worker FIFO2 retained. Final60s model/DM1201 valid consecutive each,
+  ~20.011Hz; model mean44.07/max48.57ms,no>50,pose healthy. NAV position invalid,
+  so no full-NAV/road claim. No Jetson update or manual priority script needed.
+
 - On 2026-10-20, PR559 review accepts independent default-off OnnxBsdEnabled:
   unload BSD network while lane recognition/snapshots continue; vehicle BSD stays.
   Existing ShareData users must opt into camera BSD. General TCP7711 telemetry
