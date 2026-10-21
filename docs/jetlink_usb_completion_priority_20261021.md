@@ -79,3 +79,28 @@ The original N16 model, serial transport, userspace CPU placement, 150 ms IPC
 deadline, validity gates and locationd are preserved. Recurring locationd
 warnings and all sporadic delays are not claimed solved. Raw device logs,
 trace data and vehicle identifiers remain private.
+
+## Publication and normal installation
+
+Published code: carrot-nav `040f000e1b`, carrot-wip `c5a5876b68`, both
+single-parent. Desktop selected suite: 105 passed, three Linux-only skips.
+Linux CI [nav](https://github.com/ajouatom/openpilot/actions/runs/39538243779)
+passed 94 root-update, 943 broad (56 skips), 119 navigation, 11 real-storage
+and 11 isolated NAT tests. [Wip](https://github.com/ajouatom/openpilot/actions/runs/39538243852)
+passed 755 broad (two skips), 119 navigation and 11 storage tests. Counts
+overlap; both Windows installer jobs passed too.
+
+With fresh Park/zero/inactive/panda guards and no tracked vehicle edits,
+normal comma `git pull --ff-only` installed `040f000e1b`; a comma reboot
+activated it. Untracked models/build artifacts were preserved. The helper
+started automatically from jetlinkd and discovered new postboot worker PIDs,
+both verified FIFO2. No manual priority script remains running. N16 returned
+active/ready with the original ONNX SHA; the initial inactive status used the
+default Cinque-v2 label before N16 activation, not a changed selected model.
+
+Final uninterrupted 60-second read-only observation: model and DM each 1201
+valid consecutive frames, about 20.011 Hz; both cameras also consecutive,
+no invalid odometry/pose flags. Model-call mean 44.07 ms, p99 46.77 ms,
+maximum 48.57 ms, zero calls above 50 ms. The automatic improvement remains
+enabled after this observation. NAV input reported `position` throughout;
+this does not establish valid route-image delivery or road/long-term stability.
