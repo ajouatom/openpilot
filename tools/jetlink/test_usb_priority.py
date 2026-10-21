@@ -181,3 +181,25 @@ def test_failed_restoration_blocks_session_reuse():
   helper.process = SimpleNamespace(stdin=SimpleNamespace(close=lambda: None), wait=lambda **kw: 2)
   with pytest.raises(RuntimeError, match='restoration failed'):
     helper.close()
+
+
+@pytest.mark.parametrize('board,allowed', [
+  (b'comma tici\0', True), (b'comma tizi\0\n', True), (b'comma mici', True),
+  (b'other tici', False), (b'comma tici-extra', False), (b'', False),
+])
+@pytest.mark.parametrize('release,machine,eligible', [
+  ('4.9.103', 'aarch64', True), ('4.9.103-custom', 'aarch64', False),
+  ('4.9.104', 'aarch64', False), ('4.9.103', 'x86_64', False),
+])
+def test_board_and_exact_kernel_gate(monkeypatch, board, allowed, release, machine, eligible):
+  monkeypatch.setattr(os, 'uname', lambda: SimpleNamespace(release=release, machine=machine), raising=False)
+  monkeypatch.setattr(priority.Path, 'read_bytes', lambda _: board)
+  assert priority.supported() is (allowed and eligible)
+
+
+def test_unreadable_board_is_ineligible(monkeypatch):
+  monkeypatch.setattr(os, 'uname', lambda: SimpleNamespace(release='4.9.103', machine='aarch64'), raising=False)
+  def denied(_):
+    raise PermissionError('device tree unavailable')
+  monkeypatch.setattr(priority.Path, 'read_bytes', denied)
+  assert not priority.supported()
