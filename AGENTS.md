@@ -1,5 +1,19 @@
 # Repository memory
 
+- On 2026-10-21, owner rejects ending Jetson latency trials with diagnostics
+  restored only. Retain FIFO2 USB completion scheduling through a session root
+  helper on tested mici/aarch64 Linux4.9.103. Discover actual dwc3_bh_work
+  workers in isolated filtered trace, not hard-coded u17; validate kernel task
+  and starttime, bound leases, restore at owner EOF/signals, journal for next
+  startup after SIGKILL. Shared workers remain a limitation. Preserve serial
+  reads, user CPU placement, N16/other branch models,150ms IPC and validity.
+  Manual normal-NAV120s/2400 calls max49.81ms with no>50; full logs consecutive.
+  Automatic helper60s mean44.51/max50.94ms,one>50/1201 observed consecutive;
+  ten-second reactivation/EOF cleanup pass, NAV route_position invalid. No hard
+  deadline, complete locationd cure or road stability claim. Common Git Pull/
+  comma reboot delivery; no Jetson image/bootstrap update. Raw evidence private.
+  See docs/jetlink_usb_completion_priority_20261021.md.
+
 - On 2026-10-20, PR559 review accepts independent default-off OnnxBsdEnabled:
   unload BSD network while lane recognition/snapshots continue; vehicle BSD stays.
   Existing ShareData users must opt into camera BSD. General TCP7711 telemetry
