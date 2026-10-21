@@ -1,5 +1,18 @@
 # Repository memory
 
+- On 2026-10-21, user requests enabling GPU recurrence if beneficial, then
+  tracing/fixing remaining >50ms calls. NAV defaults stateful TRT recurrence ON;
+  explicit env0 retains diagnostic host path, Wip backend/model untouched.
+  Same N16/live NAV/USB HUD/FIFO2 OFF/ON/ON/OFF120s: means44.294/42.414/42.439/
+  44.314ms, no frame-ID gaps or invalid model/DM/pose; ON2 counts2399 not strict
+  >=20Hz. Mean gain1.877ms/4.24%; both modes2>50ms in240s, tail NOT fixed.
+  ON worst60.985ms has same-frame server27.89/roundtrip55.32ms; investigate
+  outside-server path rather than call it GPU inference. HUD480/480 fresh,
+  NAV preview479/480; NAV ready471/480 with position/route-position exceptions.
+  67 focused desktop regressions pass. Signed runtime deployment/trace follow-up
+  recorded in docs/jetson_gpu_state_activation_20261021.md. Raw private.
+
+
 - On 2026-10-21, user requests review/integration of tjdgus200 7cbedfe/8f0cd37.
   NAV gains default-OFF GPU recurrent state with all-state finite scan, reply
   event and same-stream trailing feedback/reset; no async USB/model/deadline
