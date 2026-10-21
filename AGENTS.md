@@ -1,5 +1,22 @@
 # Repository memory
 
+- On 2026-10-21, user requests review/integration of tjdgus200 7cbedfe/8f0cd37.
+  NAV gains default-OFF GPU recurrent state with all-state finite scan, reply
+  event and same-stream trailing feedback/reset; no async USB/model/deadline
+  changes. Wip lacks N16 stateful infrastructure: common C3/C3X eligibility and
+  record only, preserving model choices. Exact tici/tizi/mici + aarch644.9.103,
+  dynamic owned DWC3 workers, FIFO2 lease/restoration unchanged; C3 unmeasured.
+  Actual guarded offroad Orin N16 OFF/ON/ON/OFF,250frames each incl3 resets:
+  all outputs exactly equal; means26.828/24.633/24.631/26.743ms (~2.153ms gain).
+  Actual CUDA checks all65536 fp16 patterns plus signed fp32 finite/Inf/NaNs.
+  Initial diagnostic child missing video/render groups failed before inference;
+  corrected account groups pass; existing runtime691566 restored automatically.
+  Original offroad parameter restored. Native timings exclude USB/DM/live NAV,
+  not a full-system/road/locationd fix.112 focused desktop tests pass; Linux
+  socket/fcntl checks use CI. Signed runtime pin and live GPU opt-in unchanged.
+  See docs/jetson_gpu_usb_review.md; private diagnostic scripts/logs excluded.
+
+
 - On 2026-10-21, owner requests restoring comma-to-Jetson USB display traffic.
   Nav-only new receiver capability selects bounded snapshot plus at most two
   32KiB media fragments during GPU execution; old receivers retain Wi-Fi until

@@ -15,3 +15,13 @@ default protocol remain v2; these changes do not publish a new Jetson release.
 the production daemon now uses the extended `JetlinkClient`.
 Carrot's adapter, device-role policy, process placement and deployment tools are
 outside this directory. Updating the protocol requires testing both peers.
+
+This review adds optional GPU-resident recurrent state, adapted from the
+tjdgus200/openpilot 7cbedfe03757c52482d9088dda49d89a94263ca4 and
+zoompilot/jetlink d26001b4161f33bab28d806de6a99b96325a429b
+(`JetlinkKit/Sources/JetlinkTRT/TrtEngine.swift`), under its MIT license.
+CARROT_TRT_DEVICE_STATE defaults OFF. The GPU scans every float16/float32 state
+element before its reply event; the original CPU driving-output validation,
+reset, protocol and failure rules remain. This patch does not add asynchronous
+USB writes, retained-frame output, a model change or automatic deployment.
+See docs/jetson_gpu_usb_review.md for scope, validation and limitations.

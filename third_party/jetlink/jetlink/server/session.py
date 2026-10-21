@@ -459,7 +459,7 @@ class EngineHost:
     if spec.stateful and hasattr(engine, 'configure_state_feedback'):
       engine.configure_state_feedback(spec.state_pairs)
     host_inputs = {n: engine.host_input(n) for n in engine.inputs}
-    queues = make_queues(spec, host_inputs)
+    queues = make_queues(spec, host_inputs, getattr(engine, 'device_state', None))
     warped = np.zeros(spec.warped_shape, np.uint8)
     packed = np.zeros(spec.packed_nelem, np.float32)
     queues.step_into(warped, packed, host_inputs)

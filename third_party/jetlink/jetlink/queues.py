@@ -266,5 +266,40 @@ class StatefulQueues:
       raise
 
 
-def make_queues(spec, host_inputs):
+class DeviceStateQueues(StatefulQueues):
+  """Same scalar/image preparation; validated recurrence belongs to the GPU.
+
+  Bindings/shapes/dtypes are validated at load. The engine checks every state
+  element on device before its reply event; driving outputs remain CPU checked.
+  Host state buffers are retained for the existing binding lifetime contract,
+  but are neither uploaded nor downloaded per frame.
+  """
+  def __init__(self, spec, host_inputs, device_state):
+    self.device_state = device_state
+    if set(spec.state_pairs) != device_state.input_names or set(spec.state_pairs.values()) != device_state.output_names:
+      raise ValueError('Device state pairs differ from model contract')
+    super().__init__(spec, host_inputs)
+
+  def reset(self):
+    super().reset()
+    self.device_state.reset()
+
+  def feedback(self, outputs):
+    try:
+      if set(outputs) != {'outputs'} or outputs['outputs'].shape != self.spec.output_shapes['outputs']:
+        raise ValueError('Invalid device-state driving output shape')
+      if not self._all_finite(outputs['outputs']):
+        raise FloatingPointError('Non-finite driving output')
+      self.device_state.validate()
+    except (ValueError, FloatingPointError):
+      self.reset()
+      raise
+
+
+
+def make_queues(spec, host_inputs, device_state=None):
+  if device_state is not None:
+    if not spec.stateful:
+      raise ValueError('Device recurrence requires a stateful model')
+    return DeviceStateQueues(spec, host_inputs, device_state)
   return StatefulQueues(spec, host_inputs) if spec.stateful else PolicyQueues(spec)

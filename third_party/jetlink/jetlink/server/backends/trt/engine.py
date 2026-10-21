@@ -14,6 +14,7 @@ hands out, which saves a copy on the way to the GPU.
 from __future__ import annotations
 
 import ctypes
+import os
 import time
 from dataclasses import dataclass
 
@@ -81,8 +82,7 @@ class TrtEngine:
       is_input = self.engine.get_tensor_mode(name) == trt.TensorIOMode.INPUT
       shape = tuple(self.engine.get_tensor_shape(name))
       if any(d < 0 for d in shape):
-        raise RuntimeError(f"tensor {name} has a dynamic shape {shape}; "
-                           "jetlink builds fixed-shape engines")
+        raise RuntimeError(f"tensor {name} has a dynamic shape {shape}; jetlink builds fixed-shape engines")
       dtype = np.dtype(TRT_TO_NP[self.engine.get_tensor_dtype(name)])
       nbytes = int(np.prod(shape)) * dtype.itemsize
       dev = cudart.malloc(nbytes)
@@ -96,6 +96,7 @@ class TrtEngine:
     self.last_gpu_us = 0
     self.graph_exec = None
     self._state_host_sources = {}
+    self.device_state = None
 
   # -- introspection --------------------------------------------------------
 
@@ -116,15 +117,24 @@ class TrtEngine:
       raise RuntimeError('State staging must be configured before CUDA graph capture')
     from jetlink.server.backends.trt.state_buffers import feedback_sources
     self._state_host_sources = feedback_sources(self.inputs, self.outputs, pairs)
+    if os.getenv('CARROT_TRT_DEVICE_STATE', '0') == '1':
+      if self.device_state is not None:
+        raise RuntimeError('Device state already configured')
+      from jetlink.server.backends.trt.device_state import DeviceState
+      self.device_state = DeviceState(self.inputs, self.outputs, pairs, self.stream)
 
   # -- execution ------------------------------------------------------------
 
   def load_inputs(self, values: dict[str, np.ndarray]) -> None:
+    if self.device_state is not None:
+      raise RuntimeError('Device recurrence requires queue-managed inputs; explicit state upload is unsupported')
     from jetlink.server.backends.base import load_inputs
     load_inputs(self, values)
 
-  def _enqueue(self) -> None:
+  def _enqueue(self, *, capturing=False) -> None:
     for b in self.inputs.values():
+      if self.device_state is not None and b.name in self.device_state.input_names:
+        continue
       # All H2D copies complete in this stream before execution, and D2H
       # overwrites the host outputs only afterwards. Reuse the previous state
       # output's pinned staging memory; keep distinct GPU input/output buffers.
@@ -133,7 +143,13 @@ class TrtEngine:
     if not self.context.execute_async_v3(self.stream):
       raise RuntimeError("execute_async_v3 failed")
     for b in self.outputs.values():
+      if self.device_state is not None and b.name in self.device_state.output_names:
+        continue
       cudart.memcpy_d2h_async(b.host_ptr, b.device_ptr, b.nbytes, self.stream)
+    if self.device_state is not None:
+      self.device_state.enqueue_check()
+      cudart.event_record(self.device_state.reply, self.stream, external=capturing)
+      self.device_state.enqueue_feedback()
 
   def capture_graph(self) -> bool:
     """Capture the per-frame sequence into a CUDA graph.
@@ -144,37 +160,63 @@ class TrtEngine:
     """
     if self.graph_exec is not None:
       return True
+    capturing = False
+    graph = None
     try:
       cudart.stream_begin_capture(self.stream)
-      self._enqueue()
+      capturing = True
+      self._enqueue(capturing=True)
+      capturing = False  # EndCapture also terminates an invalidated capture.
       graph = cudart.stream_end_capture(self.stream)
       self.graph_exec = cudart.graph_instantiate(graph)
-      cudart.graph_destroy(graph)
       return True
     except Exception:
+      if capturing:
+        try:
+          graph = cudart.stream_end_capture(self.stream)
+        except Exception:
+          pass
       # Not fatal: fall back to enqueueing each frame.
       self.graph_exec = None
+      if self.device_state is not None:
+        # An opt-in with a CUDA failure must not silently appear validated.
+        raise
       return False
+    finally:
+      if graph is not None:
+        cudart.graph_destroy(graph)
 
   def warm(self) -> str:
     """One plain run so lazy CUDA state is paid for, then the graph, then one
     replay so the steady state is never the first thing a frame does."""
     self.run()
+    if self.device_state is not None:
+      self.device_state.validate()
+      cudart.stream_sync(self.stream)  # trailing feedback before capture
     if self.capture_graph():
       self.run()
-      return 'cuda graph captured'
+      if self.device_state is not None:
+        self.device_state.validate()
+      return ('cuda graph captured; device state, finite scan and reply event enabled'
+              if self.device_state is not None else 'cuda graph captured')
     return 'cuda graph unavailable, enqueueing per frame'
 
   def run(self) -> dict[str, np.ndarray]:
     """Run one frame. Returns views over pinned output memory, valid until the next run."""
     t0 = time.perf_counter()
+    if self.device_state is not None:
+      self.device_state.before_run()
     if self.graph_exec is not None:
       cudart.graph_launch(self.graph_exec, self.stream)
     else:
       self._enqueue()
-    cudart.stream_sync(self.stream)
+    if self.device_state is not None:
+      cudart.event_sync(self.device_state.reply)
+    else:
+      cudart.stream_sync(self.stream)
     self.last_gpu_us = int((time.perf_counter() - t0) * 1e6)
-    return {n: b.host for n, b in self.outputs.items()}
+    return {n: b.host for n, b in self.outputs.items()
+            if self.device_state is None or n not in self.device_state.output_names}
 
   def infer(self, values: dict[str, np.ndarray]) -> dict[str, np.ndarray]:
     self.load_inputs(values)
@@ -184,6 +226,15 @@ class TrtEngine:
   # reference back here, so a GC-driven close would free pages someone is still
   # writing into. Whoever swaps an engine out closes it.
   def close(self) -> None:
+    # A reply event can finish before the trailing GPU feedback copy.
+    if self.device_state is not None:
+      cudart.stream_sync(self.stream)
+    if self.graph_exec is not None:
+      cudart.graph_exec_destroy(self.graph_exec)
+      self.graph_exec = None
+    if self.device_state is not None:
+      self.device_state.close()
+      self.device_state = None
     for b in self.bindings.values():
       try:
         cudart.free(b.device_ptr)
@@ -191,9 +242,6 @@ class TrtEngine:
       except Exception:
         pass
     self.bindings.clear()
-    if self.graph_exec is not None:
-      cudart.graph_exec_destroy(self.graph_exec)
-      self.graph_exec = None
     try:
       cudart.stream_destroy(self.stream)
     except Exception:
