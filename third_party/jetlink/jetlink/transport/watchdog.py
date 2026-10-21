@@ -23,6 +23,7 @@ class WriteWatchdog:
     self._abort = abort
     self._cv = threading.Condition()
     self._deadline = None
+    self._waiting_until = None
     self._expired = False
     self._closed = False
     self.thread = threading.Thread(target=self._run, name='jetlink-write-guard', daemon=True)
@@ -35,13 +36,18 @@ class WriteWatchdog:
       if self._deadline is not None:
         raise RuntimeError('concurrent writes on one link')
       self._deadline = time.monotonic() + budget
-      self._cv.notify()
+      # An existing, earlier wake will recheck the current deadline. Waking
+      # this background Python thread on every USB write can leave it holding
+      # the GIL while descheduled, blocking the realtime reply reader.
+      if self._waiting_until is None or self._deadline < self._waiting_until:
+        self._cv.notify()
       return True
 
   def disarm(self) -> bool:
     with self._cv:
       self._deadline = None
-      self._cv.notify()
+      # Let the already scheduled wake inspect the cancelled/rearmed state.
+      # close() and an earlier arm still wake it immediately.
       return not self._expired and not self._closed
 
   def close(self) -> None:
@@ -57,10 +63,12 @@ class WriteWatchdog:
     with self._cv:
       while not self._closed:
         if self._deadline is None:
+          self._waiting_until = None
           self._cv.wait()
           continue
         remaining = self._deadline - time.monotonic()
         if remaining > 0:
+          self._waiting_until = self._deadline
           self._cv.wait(remaining)
           continue
         self._expired = True

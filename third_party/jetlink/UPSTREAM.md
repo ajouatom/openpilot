@@ -29,3 +29,9 @@ USB writes, retained-frame output or a model change. Activation uses the
 normal signed host-runtime pin and boot updater.
 See docs/jetson_gpu_usb_review.md for the initial review and
 docs/jetson_gpu_state_activation_20261021.md for activation evidence and limits.
+
+Carrot coalesces `transport/watchdog.py` notifications: a pending earlier wake
+rechecks a cancelled or later-rearmed write; an earlier deadline and close still
+wake immediately. Expiry/cancellation locking, abort callback, time budgets and
+thread scheduling stay unchanged. This removes per-write background Python
+wakeups from the comma FunctionFS path. See docs/jetlink_watchdog_latency_20261021.md.
