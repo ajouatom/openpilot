@@ -15,3 +15,9 @@ default protocol remain v2; these changes do not publish a new Jetson release.
 the production daemon now uses the extended `JetlinkClient`.
 Carrot's adapter, device-role policy, process placement and deployment tools are
 outside this directory. Updating the protocol requires testing both peers.
+
+Carrot coalesces `transport/watchdog.py` notifications: a pending earlier wake
+rechecks a cancelled or later-rearmed write; an earlier deadline and close still
+wake immediately. Expiry/cancellation locking, abort callback, time budgets and
+thread scheduling stay unchanged. This removes per-write background Python
+wakeups from the comma FunctionFS path. See docs/jetlink_watchdog_latency_20261021.md.

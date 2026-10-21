@@ -105,5 +105,22 @@ legacy selected-model alias); no task diagnostics or signing private key are
 included. The existing NAS HTTPS download was verified against this hash.
 The NAV host pin now selects this release and keeps the same N16 ONNX hash.
 21 local signature/update/device-state tests pass; four platform-specific
-cases are deferred to Linux CI. Actual automatic installation is recorded below
-once completed; publication alone is not claimed as live activation.
+cases are deferred to Linux CI. Pin commit `9ea56e1ddc` also passed
+[Linux/Windows integration CI](https://github.com/ajouatom/openpilot/actions/runs/39589340276).
+
+## Automatic installation verified
+
+Under fresh Park/zero/inactive guards, normal comma Git Pull installed the pin.
+The owner-authorized actual offroad hold and ordinary Jetson reboot let the boot
+updater download, verify, probe and activate source `9cfe86696ea7`. The candidate
+probe passed with the unchanged N16 SHA. At approximately 93 seconds after boot,
+the new release was active; its normal service logged GPU device state, finite
+scan and reply event enabled. No GPU environment override or temporary service
+override remained. Normal onroad state was restored and N16 became ready.
+This is permanent default activation through the normal updater, not just a
+published bundle or a diagnostic overlay. The owner also explicitly reaffirmed
+upload authorization after the initial automated-review rejection was resolved.
+
+The subsequent comma-only watchdog investigation is recorded in
+[USB watchdog wakeups](jetlink_watchdog_latency_20261021.md). It requires no
+additional Jetson runtime, model replacement or SD/USB patch.
