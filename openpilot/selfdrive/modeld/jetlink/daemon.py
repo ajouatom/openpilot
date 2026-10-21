@@ -19,6 +19,7 @@ from openpilot.selfdrive.modeld.jetlink.mac import prepare, PreparationDeferred
 from openpilot.selfdrive.modeld.jetlink.compat import ProtocolChoice
 from openpilot.selfdrive.modeld.jetlink.mobile import transport_mode, setup_gadget, MobileCable, AutoTransport, MobileLinkError
 from openpilot.selfdrive.modeld.jetlink.power import UsbInputPower
+from openpilot.selfdrive.modeld.jetlink.scheduling import UsbCompletionPriority
 from openpilot.selfdrive.modeld.jetlink.contracts import model_name
 from openpilot.selfdrive.modeld.jetlink.selection import ModelChanged, check_loaded
 from openpilot.selfdrive.modeld.jetlink.startup import (CAPABILITY as BOOT_UPDATE_CAPABILITY, wait_for_boot_update,
@@ -400,6 +401,7 @@ def main():
       client = None
       wifi = None
       transport = None
+      usb_priority = UsbCompletionPriority()
       preparing = False
       if initial_connect_started is None:
         initial_connect_started = time.monotonic()
@@ -500,6 +502,7 @@ def main():
         if spec is None:
           raise ValueError('Jetlink preparation completed without a model spec')
         # Warm independently of camera/modeld; every real session resets state.
+        usb_priority.start(peer, bulk_usb=transport is owner)
         for frame in range(10):
           client.infer(np.zeros(spec.warped_shape, np.uint8), np.zeros(spec.packed_nelem, np.float32), frame, reset=True)
         log.info('Jetlink ready: %s', peer)
@@ -538,7 +541,7 @@ def main():
             Params().put_bool_nonblocking('ClusterHudConnected', False)
           except Exception:
             log.exception('Jetlink HUD cleanup failed')
-        cleanup_error = close_resources(wifi, client) or cleanup_error
+        cleanup_error = close_resources(usb_priority, wifi, client) or cleanup_error
         if client is None and transport is not owner:
           cleanup_error = close_resources(transport) or cleanup_error
         if TRANSPORT_MODE not in ('auto', 'ios'):
