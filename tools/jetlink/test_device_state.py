@@ -229,11 +229,12 @@ def test_capture_failure_ends_capture_and_refuses_device_mode(runtime, monkeypat
   e.close()
 
 
-def test_disabled_by_default_and_bad_contract_refused(runtime, monkeypatch):
+def test_enabled_by_default_explicit_disable_and_bad_contract_refused(runtime, monkeypatch):
   e, q, host = make_engine(runtime, False, monkeypatch)
+  assert e.device_state is None
   monkeypatch.delenv('CARROT_TRT_DEVICE_STATE')
   e.configure_state_feedback(q.spec.state_pairs)
-  assert e.device_state is None
+  assert e.device_state is not None
   with pytest.raises(ValueError, match='nonempty'):
     runtime.state(e.inputs, e.outputs, {}, e.stream, kernel_factory=runtime.kernel)
   e.close()

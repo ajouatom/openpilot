@@ -117,7 +117,9 @@ class TrtEngine:
       raise RuntimeError('State staging must be configured before CUDA graph capture')
     from jetlink.server.backends.trt.state_buffers import feedback_sources
     self._state_host_sources = feedback_sources(self.inputs, self.outputs, pairs)
-    if os.getenv('CARROT_TRT_DEVICE_STATE', '0') == '1':
+    # Stateful NAV keeps recurrence on the GPU by default. Explicit 0 retains
+    # host staging for diagnosis; queued models never configure this path.
+    if os.getenv('CARROT_TRT_DEVICE_STATE', '1') == '1':
       if self.device_state is not None:
         raise RuntimeError('Device state already configured')
       from jetlink.server.backends.trt.device_state import DeviceState
@@ -179,7 +181,7 @@ class TrtEngine:
       # Not fatal: fall back to enqueueing each frame.
       self.graph_exec = None
       if self.device_state is not None:
-        # An opt-in with a CUDA failure must not silently appear validated.
+        # A device-state CUDA failure must not silently appear validated.
         raise
       return False
     finally:

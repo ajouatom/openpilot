@@ -1,8 +1,8 @@
-"""Opt-in device recurrence, adapted from zoompilot/jetlink d26001b TrtEngine.
+"""Device recurrence, adapted from zoompilot/jetlink d26001b TrtEngine.
 
 Keep Carrot's all-state finite checks: scan IEEE exponent bits on the GPU and
 copy one status word before the reply event. Never infer validity from just the
-driving output. NVRTC/driver errors refuse this opt-in, not validation.
+driving output. NVRTC/driver errors refuse activation instead of bypassing validation.
 """
 import ctypes
 
