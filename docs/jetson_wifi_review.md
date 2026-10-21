@@ -1,5 +1,9 @@
 # Integration status: 2026-10-20
 
+The Wi-Fi-only display policy below is superseded by the October 21
+[bounded USB restoration](jetson_usb_hud_restore_20261021.md). ESP32-S3 remains
+retired; this page preserves the earlier investigation.
+
 The source below is the contributor's review record, not a hardware validation
 of this integration. The owner requests Wi-Fi-only comma-to-Jetson display
 transport and removal of ESP32-S3 display support. Jetson keeps its local USB
