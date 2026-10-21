@@ -1,4 +1,4 @@
-# N16 GPU recurrence activation and latency investigation ? 2026-10-21
+# N16 GPU recurrence activation and latency investigation - 2026-10-21
 
 The owner asked to enable the reviewed GPU optimization if its real-link
 performance and stability are satisfactory, and to investigate remaining calls
@@ -93,3 +93,17 @@ is no claim of GPU-memory reduction.
 The repeatable mean improvement, output parity and healthy bounded live
 windows justify default enablement for the maintained NAV stateful TensorRT
 runtime. Rare USB/scheduling delays remain a separate issue under investigation.
+
+## Signed release
+
+GPU-default source `9cfe86696ea728ac56097d7788bfb8a77aa3ac6a` passed
+[Linux/Windows integration CI](https://github.com/ajouatom/openpilot/actions/runs/39589009089).
+The immutable signed bundle is 64,688,054 bytes, SHA256
+`1e87ea9af93d625531b21dba47aa46ef66ed4f24cded034e290f9765c7c21cb2`.
+All 1,088 payload files match the published source (including the documented
+legacy selected-model alias); no task diagnostics or signing private key are
+included. The existing NAS HTTPS download was verified against this hash.
+The NAV host pin now selects this release and keeps the same N16 ONNX hash.
+21 local signature/update/device-state tests pass; four platform-specific
+cases are deferred to Linux CI. Actual automatic installation is recorded below
+once completed; publication alone is not claimed as live activation.

@@ -1,5 +1,8 @@
 # Jetson device-state and C3 USB priority review — 2026-10-21
 
+This records the initial default-OFF review. The owner subsequently requested
+activation and real-link validation; see [the follow-up](jetson_gpu_state_activation_20261021.md).
+
 Reviewed and integrated the relevant source from
 [7cbedfe](https://github.com/tjdgus200/openpilot/commit/7cbedfe03757c52482d9088dda49d89a94263ca4)
 and [8f0cd37](https://github.com/tjdgus200/openpilot/commit/8f0cd3706604f95b35188f85899fc64a3d2bb39b).
