@@ -13,6 +13,11 @@
   deadline, complete locationd cure or road stability claim. Common Git Pull/
   comma reboot delivery; no Jetson image/bootstrap update. Raw evidence private.
   See docs/jetlink_usb_completion_priority_20261021.md.
+  Published nav040f000e1b/wipc5a5876b68; both Linux/installer CI pass. Actual
+  guarded comma Git Pull/reboot installs040f000e1b, N16 sameSHA active; automatic
+  new-worker FIFO2 retained. Final60s model/DM1201 valid consecutive each,
+  ~20.011Hz; model mean44.07/max48.57ms,no>50,pose healthy. NAV position invalid,
+  so no full-NAV/road claim. No Jetson update or manual priority script needed.
 
 - On 2026-10-20, PR559 review accepts independent default-off OnnxBsdEnabled:
   unload BSD network while lane recognition/snapshots continue; vehicle BSD stays.
