@@ -100,5 +100,41 @@ passed for the source commit.
 Routine activation is comma Git Pull and reboot/restart, followed by Jetson
 reboot with actual offroad state and Internet available while the signed boot
 updater prepares the release. No SD reimage or USB patch is required for the
-owner's installed bootstrap. Physical ordinary-update acceptance is recorded
-separately after activation; temporary trial success alone does not establish it.
+owner's installed bootstrap.
+
+The owner's comma completed ordinary Git Pull to `682ceeb484` and reboot. With
+actual offroad held during preparation, Jetson rebooted and its installed boot
+updater selected, verified and applied `691566f0fa` without manual cache staging
+or an SD/USB installer. The protected DATA filesystem remains active with
+9,910,919,168 bytes free (41% used). Installed server/publisher hashes match the
+published source, standard service commands use `/opt/carrot-jetlink/current`,
+and no diagnostic systemd override remains. The temporary offroad hold was
+restored and N16 became active with its original hash and automatic FIFO2 helper.
+
+Release-pin [Jetson CI](https://github.com/ajouatom/openpilot/actions/runs/39546242778)
+and eGPU compatibility checks pass. The wip record-only publication also passes
+[its checks](https://github.com/ajouatom/openpilot/actions/runs/39546340850), user
+docs and eGPU compatibility. A boot handoff logs one late bootstrap
+`unknown_message: type 16387` and a reconnect before stable startup; this record
+does not claim the whole startup is error-free.
+
+
+## Final installed-state validation
+
+After ordinary activation and warmup, a further 120.010-second Park/inactive
+window has **2400 consecutive valid model, DM, road and wide-camera frames each**,
+with zero invalid odometry/pose messages or unhealthy pose flags. All 120 NAV
+samples are `ready`; this resolves the earlier trial's invalid-NAV coverage
+limitation for this stationary window, not for road behavior. Model mean is
+44.174 ms, p99 47.821 ms, maximum 57.566 ms, with two above 50 ms. DM mean is
+17.033 ms, maximum 27.005 ms. USB exchange mean is 37.121 ms, GPU mean 25.445 ms.
+Whole-comma CPU is 77.12%, Jetlink main-thread CPU 6.360 ms/frame.
+
+Display payload is approximately **0.707 MB/s**, 7.70% of the 9.180 MB/s model
+request payload. Actual display admission/send maximum reaches 26.059 ms in one
+aggregate window, so GPU overlap must not be presented as a guaranteed display
+write budget. The 120 host samples all show fresh HUD and NAV preview, advancing
+960 x 540 phone video, zero decoder drops and no Wi-Fi display worker. Mode 7
+and original N16 weights remain selected. USB stays enabled after the test;
+no further source patch, temporary service override or user installation step
+is needed on these devices. Raw final records remain private.

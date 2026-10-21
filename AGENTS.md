@@ -11,7 +11,11 @@
   route_position throughout USB: no valid-route driving or full deadline claim.
   Wi-Fi return60s1200 consecutive valid each,mean44.381/max52.838,two>50.
   Signed host691566f0fa published/HTTPS verified, N16 unchanged. Ordinary
-  Git Pull/reboot activation pending. Wip alreadyUSB: model/runtime unchanged,
+  Git Pull/comma reboot682ceeb484 and normal Jetson boot update verified; no
+  manual cache/SD patch. Final120s NAV ready120/120,2400 consecutive valid
+  model/DM/both cameras,pose healthy;mean44.174/max57.566ms,two>50. HUD/preview
+  fresh120/120,phone video no decode drops. Display~0.707MB/s(7.70%). USB stays
+  applied; temporary offroad/overrides cleared. Wip alreadyUSB: models unchanged,
   Cinquev2 Jetson and MDv3 eGPU. See docs/jetson_usb_hud_restore_20261021.md.
 
 - On 2026-10-21, owner rejects ending Jetson latency trials with diagnostics
