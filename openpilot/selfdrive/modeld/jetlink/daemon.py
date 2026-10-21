@@ -38,7 +38,7 @@ SESSION_DETACHED = False
 log = logging.getLogger('carrot.jetlink')
 sys.path.insert(0, str(VENDOR.parents[1] / 'tools/jetlink'))
 from hud_protocol import Publisher, HUD_MESSAGE
-from hud_wifi import publisher as display_publisher
+from hud_wifi import publisher as display_publisher, USB_CAPABILITY as HUD_USB_CAPABILITY
 from hud_navi import CAPABILITY as NAVI_CAPABILITY, MESSAGE as NAVI_MESSAGE
 from hud_navi import send_ready_after_reply, send_ready_during_inference, PUMP_CAPABILITY
 from wifi_protocol import CAPABILITY as WIFI_CAPABILITY, Publisher as WifiPublisher
@@ -253,7 +253,7 @@ def _serve_local(listener, client, peer, publisher, phase, wifi=None):
   telemetry_updated = 0.
   hud_connected = None
   spec = client.spec
-  usb_display = publisher is not None and peer.get("carrot_host") != "jetson"
+  usb_display = publisher is not None and (peer.get('carrot_host') != 'jetson' or peer.get(HUD_USB_CAPABILITY) is True)
   requested = True
   follows_app = peer.get('protocol') == 3 and may_provision(peer, session_mode())
   while host_attached():
@@ -334,11 +334,12 @@ def _serve_local(listener, client, peer, publisher, phase, wifi=None):
           phase_done = time.monotonic()
           display_metrics = {}
           early_media_ms = 0.
+          early_media_bytes = 0
           if usb_display and peer.get(NAVI_CAPABILITY):
             display_metrics = publish_hud(client, publisher) or {}
             if peer.get('carrot_host') == 'jetson' and peer.get(PUMP_CAPABILITY) is True:
               early_started = time.monotonic()
-              send_ready_during_inference(client, publisher, sent)
+              early_media_bytes = send_ready_during_inference(client, publisher, sent)
               early_media_ms = (time.monotonic() - early_started) * 1000
           hud_done = time.monotonic()
           previous_state = client.last_state
@@ -386,6 +387,7 @@ def _serve_local(listener, client, peer, publisher, phase, wifi=None):
             usb_exchange_ms=(completed-started)*1000,
             submit_to_response_ms=(completed-sent)*1000,
             display_early_media_ms=early_media_ms,
+            display_early_media_bytes=early_media_bytes,
             ipc_reply_ms=(replied-completed)*1000,
             display_tail_ms=(tail_done-replied)*1000,
             wifi_tail_ms=(finished-tail_done)*1000,

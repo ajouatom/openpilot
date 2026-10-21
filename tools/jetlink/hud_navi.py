@@ -72,10 +72,12 @@ def send_ready_during_inference(client, publisher, sent_at, *, clock=time.monoto
   Keep the existing transport watchdog: this is admission, not a write timeout.
   """
   if publisher is None or clock() - sent_at >= .004:
-    return
+    return 0
   packet = publisher.media_packet()
   if packet:
     client.t.send(MESSAGE, client._next_seq(), [packet])
+    return len(packet)
+  return 0
 
 
 def send_ready_after_reply(client, publisher, *, fast_receiver=False, clock=time.monotonic):

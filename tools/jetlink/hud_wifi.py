@@ -8,6 +8,7 @@ import subprocess
 import sys
 
 CAPABILITY = 'carrot_hud_wifi_v1'
+USB_CAPABILITY = 'carrot_hud_usb_v2'
 REQUEST, RESPONSE = 0x4020, 0x4021
 PORT = 7716
 
@@ -70,6 +71,12 @@ class WifiPublisher:
 def publisher(client, peer, legacy):
   if peer.get('carrot_host') != 'jetson':
     return legacy(navi=bool(peer.get('carrot_navi_v1'))) if peer.get('carrot_hud_v1') else None
+  if peer.get(USB_CAPABILITY) is True:
+    # Explicit new receiver contract; older Wi-Fi-only hosts must never be
+    # sent USB display traffic just because their Wi-Fi connection failed.
+    if not all(peer.get(key) is True for key in ('carrot_hud_v1', 'carrot_navi_v1', 'carrot_navi_pump_v1')):
+      return None
+    return legacy(navi=True, nav_map=True)
   if peer.get(CAPABILITY) is not True:
     return None  # Old Jetson runtimes must be updated; never send display over USB.
   try:

@@ -18,7 +18,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from hud_protocol import HUD_CAPABILITY, HUD_MESSAGE, MAX_HUD_BYTES, HUD_PACKET, HEADER
 from hud_navi import CAPABILITY as NAVI_CAPABILITY, MESSAGE as NAVI_MESSAGE, HostForwarder
 from hud_navi import PUMP_CAPABILITY
-from hud_wifi import CAPABILITY as HUD_WIFI_CAPABILITY, REQUEST as HUD_WIFI_REQUEST, RESPONSE as HUD_WIFI_RESPONSE, Worker, supported
+from hud_wifi import CAPABILITY as HUD_WIFI_CAPABILITY, USB_CAPABILITY as HUD_USB_CAPABILITY
+from hud_wifi import REQUEST as HUD_WIFI_REQUEST, RESPONSE as HUD_WIFI_RESPONSE, Worker
 from host_reader import ReadAheadTransport
 from host_health import health_worker
 from wifi_protocol import CAPABILITY as WIFI_CAPABILITY, MESSAGE as WIFI_MESSAGE, receive as receive_wifi
@@ -58,9 +59,10 @@ class CarrotSession(Session):
 
   def __init__(self, *args, **kwargs):
     super().__init__(*args, **kwargs)
-    from jetlink.transport.usbbulk import UsbBulkTransport
-    self.usb_display = not supported()
-    self.hud_wifi_supported = not self.usb_display and isinstance(self.t, UsbBulkTransport)
+    # Restore the bounded USB display receiver. The new capability is separate
+    # from old HUD support so a Wi-Fi-only comma never starts USB accidentally.
+    self.usb_display = True
+    self.hud_wifi_supported = False
     if sys.platform == 'linux':
       self.t = ReadAheadTransport(self.t)
     self.telemetry = DisplayTelemetry(self.telemetry)
@@ -76,7 +78,8 @@ class CarrotSession(Session):
       legacy_display = sys.platform == 'linux' and self.usb_display
       obj = {**obj, HUD_CAPABILITY: legacy_display, NAVI_CAPABILITY: legacy_display,
              PUMP_CAPABILITY: legacy_display, WIFI_CAPABILITY: host == 'jetson', 'carrot_host': host,
-             HUD_WIFI_CAPABILITY: self.hud_wifi_supported}
+             HUD_WIFI_CAPABILITY: self.hud_wifi_supported,
+             HUD_USB_CAPABILITY: host == 'jetson' and legacy_display}
       if host == 'jetson':
         obj['carrot_source_commit'] = (ROOT / 'SOURCE_COMMIT').read_text().strip()
         obj['carrot_boot_update_installed'] = Path('/opt/carrot-jetlink/boot-update-required').is_file()

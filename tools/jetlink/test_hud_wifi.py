@@ -29,6 +29,24 @@ def test_other_hosts_keep_their_existing_display(monkeypatch):
   legacy.assert_called_once_with(navi=False)
 
 
+def test_explicit_usb_receiver_uses_navigation_and_model_preview(monkeypatch):
+  legacy = Mock(return_value='usb')
+  monkeypatch.setattr(policy, 'WifiPublisher', Mock(side_effect=AssertionError('Wi-Fi started')))
+  peer = {'carrot_host': 'jetson', policy.USB_CAPABILITY: True, 'carrot_hud_v1': True,
+          'carrot_navi_v1': True, 'carrot_navi_pump_v1': True}
+  assert policy.publisher(None, peer, legacy) == 'usb'
+  legacy.assert_called_once_with(navi=True, nav_map=True)
+
+
+@pytest.mark.parametrize('missing', ['carrot_hud_v1', 'carrot_navi_v1', 'carrot_navi_pump_v1'])
+def test_incomplete_usb_receiver_does_not_send_display(missing):
+  legacy = Mock(side_effect=AssertionError('incomplete USB receiver'))
+  peer = {'carrot_host': 'jetson', policy.USB_CAPABILITY: True, 'carrot_hud_v1': True,
+          'carrot_navi_v1': True, 'carrot_navi_pump_v1': True}
+  del peer[missing]
+  assert policy.publisher(None, peer, legacy) is None
+
+
 @pytest.mark.parametrize('negotiated', [False, True])
 def test_jetson_rejects_both_usb_display_messages(tmp_path, monkeypatch, negotiated):
   import server
