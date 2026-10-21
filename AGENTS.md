@@ -11,9 +11,12 @@
   Actual CUDA checks all65536 fp16 patterns plus signed fp32 finite/Inf/NaNs.
   Initial diagnostic child missing video/render groups failed before inference;
   corrected account groups pass; existing runtime691566 restored automatically.
-  Original offroad parameter restored. Native timings exclude USB/DM/live NAV,
+  Original offroad parameter restored; final60s model/DM/cameras/odometry each
+  1200 valid consecutive at20Hz, livePose1200 healthy; FIFO2/N16 ready.
+  Native timings exclude USB/DM/live NAV,
   not a full-system/road/locationd fix.112 focused desktop tests pass; Linux
   socket/fcntl checks use CI. Signed runtime pin and live GPU opt-in unchanged.
+  NAV a51dcb02d5/wip e925a3cce4 Linux integration and Windows installer CI pass.
   See docs/jetson_gpu_usb_review.md; private diagnostic scripts/logs excluded.
 
 
