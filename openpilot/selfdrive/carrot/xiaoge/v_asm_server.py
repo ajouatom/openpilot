@@ -56,6 +56,7 @@ CAMERA_POLL_INTERVAL_SECONDS = 0.005
 PARAM_REFRESH_SECONDS = 1.0
 
 PARAM_SETTING_DEFAULTS = {
+  "OnnxBsdEnabled": 0,
   "OnnxBsdThreshold": 94,
   "OnnxBsdSmoothingMs": 200,
   "OnnxBsdIntervalMs": 250,
@@ -145,15 +146,19 @@ class VASMService:
     self.snapshot_requests = {"wide": 0, "road": 0}
     self.snapshot_responses = {"wide": 0, "road": 0}
     self.vasm_inference_lock = threading.Lock()
+    self.settings_refresh_lock = threading.Lock()
     self.publish_lock = threading.Lock()
     self.inference = VASMInference(model_path)
-    self.inference.load()
+    self.inference.unload()
     self.config = self._read_config()
     if self.config:
       self.inference.load_config(self.config)
     self.threshold = 0.94
     self.smoothing_seconds = 0.2
     self.base_interval_seconds = BASE_INTERVAL_SECONDS
+    self.bsd_enabled = False
+    self.bsd_generation = 0
+    self.last_bsd_generation = -1
     self.running = True
     self.last_jpeg: bytes | None = None
     self.last_frame_at = 0.0
@@ -216,6 +221,12 @@ class VASMService:
     self._refresh_settings_from_params(force=True)
 
   def _refresh_settings_from_params(self, force: bool = False) -> None:
+    # HTTP and both camera threads refresh settings. Serialize the read as well
+    # as the model transition so an older read cannot restore a disabled model.
+    with self.settings_refresh_lock:
+      self._refresh_settings_locked(force)
+
+  def _refresh_settings_locked(self, force: bool) -> None:
     now = time.monotonic()
     with self.lock:
       if not force and now - self.last_param_refresh_at < PARAM_REFRESH_SECONDS:
@@ -227,11 +238,29 @@ class VASMService:
       for name, default in PARAM_SETTING_DEFAULTS.items()
     }
     with self.lock:
+      bsd_enabled = values["OnnxBsdEnabled"] == 1
+      bsd_enabled_changed = bsd_enabled != self.bsd_enabled
+      if bsd_enabled_changed:
+        self.bsd_generation += 1
+        self.vasm_result.update(left=False, right=False, side="", updatedMonoTimeNanos=0,
+                                updatedMonoTimeNanosBySide={"left": 0, "right": 0})
+        self.last_side_at = {"left": 0.0, "right": 0.0}
+        self.followup_until = {"left": 0.0, "right": 0.0}
+        self.last_inference_at = 0.0
+      self.bsd_enabled = bsd_enabled
       self.threshold = min(max(values["OnnxBsdThreshold"], 0), 100) / 100.0
       self.smoothing_seconds = min(max(values["OnnxBsdSmoothingMs"], 100), 500) / 1000.0
       self.base_interval_seconds = min(max(values["OnnxBsdIntervalMs"], 50), 1000) / 1000.0
       self.lane_threshold = min(max(values["OnnxLaneThreshold"], 0), 100) / 100.0
       self.lane_interval_seconds = min(max(values["OnnxLaneIntervalMs"], 50), 2000) / 1000.0
+    if bsd_enabled_changed:
+      with self.vasm_inference_lock:
+        if bsd_enabled:
+          self.inference.load()
+          if self.inference.valid and self.config:
+            self.inference.load_config(self.config)
+        else:
+          self.inference.unload()
 
   def _persist_settings(self, values: dict[str, int]) -> None:
     if self.params is None:
@@ -323,7 +352,7 @@ class VASMService:
       for side in ("left", "right"):
         side_timestamp = self.vasm_result["updatedMonoTimeNanosBySide"][side]
         side_fresh = side_timestamp > 0 and 0 <= now_nanos - side_timestamp <= XIAOGE_BLINDSPOT_TIMEOUT_NS
-        valid = bool(camera_available and self.inference.valid and self.vasm_gate["active"] and side_fresh and
+        valid = bool(self.bsd_enabled and camera_available and self.inference.valid and self.vasm_gate["active"] and side_fresh and
                      side in self.vasm_gate["eligibleSides"])
         vehicle_sides[side] = {
           "valid": valid,
@@ -334,7 +363,16 @@ class VASMService:
       lane_timestamp = self.lane_result["updatedMonoTimeNanos"]
       lane_fresh = bool(road_camera_available and self.lane_inference.valid and self.lane_result["valid"] and
                         lane_timestamp > 0 and 0 <= now_nanos - lane_timestamp <= XIAOGE_LANE_TIMEOUT_NS)
+      gate = self.vasm_gate if self.bsd_enabled else {
+        "active": False,
+        "side": "",
+        "eligibleSides": [],
+        "reason": "visual BSD is disabled",
+        "laneWidth": 0.0,
+        "laneWidths": {"left": 0.0, "right": 0.0},
+      }
       return {
+        "bsdEnabled": self.bsd_enabled,
         "standalone": False,
         "integrated": True,
         "model": {
@@ -344,7 +382,7 @@ class VASMService:
         },
         "configured": bool(self.config),
         "configuredSides": list(self.inference.configured_sides),
-        "gate": self.vasm_gate,
+        "gate": gate,
         "threshold": self.threshold,
         "smoothingSeconds": self.smoothing_seconds,
         "baseIntervalSeconds": self.base_interval_seconds,
@@ -497,15 +535,40 @@ class VASMService:
           continue
         now = time.monotonic()
         self._refresh_settings_from_params()
-        eligible_sides = self._update_vasm_gate()
         publish_clear = False
         with self.lock:
+          bsd_enabled = self.bsd_enabled
+          bsd_generation = self.bsd_generation
+          bsd_settings_changed = bsd_generation != self.last_bsd_generation
+          self.last_bsd_generation = bsd_generation
           self.last_frame_at = now
           self.camera_error = ""
           if self.snapshot_responses["wide"] < self.snapshot_requests["wide"]:
             self.last_jpeg = self._jpeg_from_nv12(buffer.data, buffer.width, buffer.height, buffer.stride, buffer.uv_offset)
             self.snapshot_responses["wide"] = self.snapshot_requests["wide"]
             self.snapshot_condition.notify_all()
+          if not bsd_enabled:
+            publish_clear = bsd_settings_changed or self.vasm_result["left"] or self.vasm_result["right"]
+            self.vasm_result["left"] = self.vasm_result["right"] = False
+            self.vasm_result["side"] = ""
+            self.vasm_result["updatedMonoTimeNanos"] = 0
+            self.vasm_result["updatedMonoTimeNanosBySide"] = {"left": 0, "right": 0}
+          elif bsd_settings_changed:
+            publish_clear = True
+            self.vasm_result["left"] = self.vasm_result["right"] = False
+            self.vasm_result["side"] = ""
+            self.vasm_result["updatedMonoTimeNanos"] = 0
+            self.vasm_result["updatedMonoTimeNanosBySide"] = {"left": 0, "right": 0}
+        if bsd_settings_changed:
+          with self.vasm_inference_lock:
+            self.inference.reset()
+        if not bsd_enabled:
+          if publish_clear:
+            self.publish_vision_result()
+          continue
+
+        eligible_sides = self._update_vasm_gate()
+        with self.lock:
           for candidate in ("left", "right"):
             if candidate not in eligible_sides:
               publish_clear = publish_clear or self.vasm_result[candidate]
@@ -526,6 +589,9 @@ class VASMService:
             self.publish_vision_result()
           continue
         with self.vasm_inference_lock:
+          with self.lock:
+            if not self.bsd_enabled or bsd_generation != self.bsd_generation:
+              continue
           configured_sides = self.inference.configured_sides
           if side not in configured_sides or not self.inference.valid:
             continue
@@ -538,6 +604,9 @@ class VASMService:
           thread_cpu_ms = (time.thread_time() - cpu0) * 1000.0
           active = self.inference.active[side]
         with self.lock:
+          # Disabling/re-enabling may have raced the completed inference.
+          if not self.bsd_enabled or bsd_generation != self.bsd_generation:
+            continue
           self.last_inference_ms = (t1 - t0) * 1000.0
           self.last_inference_thread_cpu_ms = thread_cpu_ms
           self.inference_count += 1
@@ -550,7 +619,7 @@ class VASMService:
           if active:
             self.followup_until[side] = now + FOLLOWUP_WINDOW_SECONDS
           updated_nanos = time.monotonic_ns()
-          self.vasm_result[side] = self.inference.active[side]
+          self.vasm_result[side] = active
           self.vasm_result["side"] = side
           self.vasm_result["updatedMonoTimeNanos"] = updated_nanos
           self.vasm_result["updatedMonoTimeNanosBySide"][side] = updated_nanos

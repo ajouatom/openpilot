@@ -21,7 +21,8 @@ from openpilot.selfdrive.modeld.jetlink.mobile import transport_mode, setup_gadg
 from openpilot.selfdrive.modeld.jetlink.power import UsbInputPower
 from openpilot.selfdrive.modeld.jetlink.contracts import model_name
 from openpilot.selfdrive.modeld.jetlink.selection import ModelChanged, check_loaded
-from openpilot.selfdrive.modeld.jetlink.startup import CAPABILITY as BOOT_UPDATE_CAPABILITY, wait_for_boot_update
+from openpilot.selfdrive.modeld.jetlink.startup import (CAPABILITY as BOOT_UPDATE_CAPABILITY, wait_for_boot_update,
+                                                       RuntimeHandoff, initial_connection_wait)
 from jetlink.client import JetlinkClient
 from jetlink.transport.base import LinkError, LinkTimeout
 from jetlink.transport.ffs import FfsTransport
@@ -362,6 +363,8 @@ def main():
   usb_mode = None
   tcp_seen = False
   mobile_unavailable = False
+  initial_connect_started = None
+  ready_once = False
   usb_power = UsbInputPower()
   try:
     while True:
@@ -372,6 +375,8 @@ def main():
         time.sleep(1)
         continue
       if SESSION_DETACHED or not host_attached():
+        if not ready_once:
+          initial_connect_started = None
         if owner is not None or cable is not None:
           cleanup_error = close_resources(cable, owner)
           owner = cable = None
@@ -395,6 +400,9 @@ def main():
       client = None
       wifi = None
       transport = None
+      preparing = False
+      if initial_connect_started is None:
+        initial_connect_started = time.monotonic()
       try:
         publish('connecting', peer=peer, protocol=protocol.version)
         gc.collect()
@@ -455,6 +463,7 @@ def main():
           peer = probe_usb(client, wire_protocol)
         else:
           peer = greet(client, wire_protocol)
+        preparing = True
         if TRANSPORT_MODE == 'auto':
           selected = classify_auto_peer(peer, 'tcp' if transport is not owner else 'usb')
           if selected is None and transport is owner and legacy_usb_peer(peer):
@@ -494,7 +503,11 @@ def main():
         for frame in range(10):
           client.infer(np.zeros(spec.warped_shape, np.uint8), np.zeros(spec.packed_nelem, np.float32), frame, reset=True)
         log.info('Jetlink ready: %s', peer)
+        ready_once = True
         serve_local(listener, client, peer, wifi)
+      except RuntimeHandoff as exc:
+        log.info('%s', exc)
+        publish('connecting', peer=peer, preparation={'stage': 'runtime-handoff'})
       except PreparationDeferred as exc:
         log.info('%s', exc)
         publish('loading', peer=peer, preparation={'stage': 'waiting', 'message': str(exc)})
@@ -510,8 +523,13 @@ def main():
         else:
           publish('retrying', peer=None, error=str(exc)[:300])
       except Exception as exc:
-        log.exception('Jetlink connection failed')
-        publish('retrying', peer=peer, error=str(exc)[:300])
+        if initial_connection_wait(exc, elapsed=time.monotonic() - initial_connect_started,
+                                   ready_once=ready_once, preparing=preparing):
+          log.info('Waiting for initial Jetlink handshake: %s', exc)
+          publish('connecting', peer=peer, error=str(exc)[:300], preparation={'stage': 'waiting-host'})
+        else:
+          log.exception('Jetlink connection failed')
+          publish('retrying', peer=peer, error=str(exc)[:300])
       finally:
         ACTIVE_UDC = None
         if client is not None and client.last_state is not None and 'carrot_hud_connected' in client.last_state:

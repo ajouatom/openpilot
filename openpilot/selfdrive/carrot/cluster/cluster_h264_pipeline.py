@@ -1964,7 +1964,7 @@ class H264UsbPipeline:
         try:
             setter = lib.cluster_h264_encoder_bridge_set_qp_range
         except AttributeError as exc:
-            raise RuntimeError("S3 H264 QP limits require rebuilding the native HUD encoder") from exc
+            raise RuntimeError("Display H264 QP limits require rebuilding the native HUD encoder") from exc
         setter.argtypes = [ctypes.c_void_p, ctypes.c_int, ctypes.c_int]
         setter.restype = ctypes.c_int
         if setter(handle, *limits) != 0:
@@ -2102,7 +2102,7 @@ class H264UsbPipeline:
                         completed = self._chunks_completed
                         deadline = time.monotonic() + 3.0
                     if time.monotonic() >= deadline:
-                        raise RuntimeError("S3 display disconnected; reconnect required") from ConnectionError(
+                        raise RuntimeError("Display disconnected; reconnect required") from ConnectionError(
                             "H264 reference queue stalled for 3s; restart stream")
             return
         dropped: list[_NativeAccessUnit] = []

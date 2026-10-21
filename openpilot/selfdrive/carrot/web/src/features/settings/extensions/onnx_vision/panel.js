@@ -5,7 +5,7 @@ import { ONNX_VISION_STATE, normalizeOnnxVisionStatus } from "./model.js";
 
 const POLL_INTERVAL_MS = 1000;
 const LANE_SETTING_NAMES = Object.freeze(["OnnxLaneThreshold", "OnnxLaneIntervalMs"]);
-const BSD_SETTING_NAMES = Object.freeze(["OnnxBsdThreshold", "OnnxBsdSmoothingMs", "OnnxBsdIntervalMs"]);
+const BSD_SETTING_NAMES = Object.freeze(["OnnxBsdEnabled", "OnnxBsdThreshold", "OnnxBsdSmoothingMs", "OnnxBsdIntervalMs"]);
 
 function text(key, fallback, vars) {
   if (typeof globalThis.getUIText === "function") return globalThis.getUIText(key, fallback, vars);
@@ -40,6 +40,9 @@ function stateText(state) {
 }
 
 function summaryText(status) {
+  if (status.state === ONNX_VISION_STATE.READY && status.bsd.enabled === false) {
+    return text("onnx_vision_summary_lane_only", "Lane detection is ready; vision BSD is off.");
+  }
   const summaries = {
     [ONNX_VISION_STATE.DISABLED]: ["onnx_vision_summary_disabled", "Turn on ONNX lane and BSD detection to see live status."],
     [ONNX_VISION_STATE.STARTING]: ["onnx_vision_summary_starting", "Waiting for the ONNX service to start."],
@@ -251,13 +254,13 @@ function renderRuntime(view, status) {
       ? "warning"
       : status.state === ONNX_VISION_STATE.DISABLED ? "" : "info";
   setChip(card.querySelector('[data-role="state"]'), stateText(status.state), tone);
-  const modelsReady = status.service?.bsdModelReady && status.service?.laneModelReady;
+  const modelsReady = status.service?.modelsReady;
   card.querySelector('[data-role="models"]').textContent = status.state === ONNX_VISION_STATE.DISABLED
     ? "—"
     : modelsReady ? text("onnx_vision_models_ready", "Ready") : text("onnx_vision_models_check", "Check needed");
   const cameras = status.state === ONNX_VISION_STATE.DISABLED
     ? "—"
-    : `${text("onnx_vision_camera_road_short", "Road")} ${status.lane.cameraReady ? text("ready", "Ready") : text("onnx_vision_camera_wait", "Waiting")} · ${text("onnx_vision_camera_wide_short", "Wide")} ${status.bsd.cameraReady ? text("ready", "Ready") : text("onnx_vision_camera_wait", "Waiting")}`;
+    : `${text("onnx_vision_camera_road_short", "Road")} ${status.lane.cameraReady ? text("ready", "Ready") : text("onnx_vision_camera_wait", "Waiting")} · ${text("onnx_vision_camera_wide_short", "Wide")} ${status.bsd.enabled === false ? stateText(ONNX_VISION_STATE.DISABLED) : status.bsd.cameraReady ? text("ready", "Ready") : text("onnx_vision_camera_wait", "Waiting")}`;
   card.querySelector('[data-role="cameras"]').textContent = cameras;
   card.querySelector('[data-role="diagnostics"]').textContent = text("onnx_vision_open_diagnostics", "Open diagnostics");
 }
@@ -303,9 +306,10 @@ function bsdSideLabel(result, configured) {
 }
 
 function renderBsd(view, status) {
-  if ([ONNX_VISION_STATE.DISABLED, ONNX_VISION_STATE.STARTING, ONNX_VISION_STATE.UNAVAILABLE].includes(status.state)) {
-    setChip(view.state, stateText(status.state), status.state === ONNX_VISION_STATE.UNAVAILABLE ? "warning" : "info");
-    view.summary.textContent = status.error || summaryText(status);
+  if (status.bsd.enabled === false || [ONNX_VISION_STATE.DISABLED, ONNX_VISION_STATE.STARTING, ONNX_VISION_STATE.UNAVAILABLE].includes(status.state)) {
+    const bsdState = status.bsd.enabled === false ? ONNX_VISION_STATE.DISABLED : status.state;
+    setChip(view.state, stateText(bsdState), bsdState === ONNX_VISION_STATE.UNAVAILABLE ? "warning" : "info");
+    view.summary.textContent = status.bsd.enabled === false ? stateText(bsdState) : status.error || summaryText(status);
     for (const sideView of [view.left, view.right]) {
       setChip(sideView.state, text("onnx_vision_bsd_standby", "Standby"), "");
       sideView.meter.update({

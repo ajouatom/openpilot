@@ -633,7 +633,9 @@ def test_ev_mode_indicator_draws_green_only_when_valid_and_active(valid, active,
     assert kwargs == {"anchor": "center", "cache": True}
 
 
-def test_ev_mode_indicator_fits_between_three_digit_speeds() -> None:
+def test_ev_mode_indicator_fits_between_three_digit_speeds(monkeypatch) -> None:
+  # Layout test: select the model indicator without consulting device Params.
+  monkeypatch.setattr("openpilot.selfdrive.carrot.signal_display.display_requested", lambda: False)
   renderer = object.__new__(ClusterUiRenderer)
   renderer._current_theme = lambda: LIGHT_CLUSTER_THEME
   renderer._speed_bg_texture = None
@@ -733,6 +735,7 @@ def test_driving_mode_indicator_hides_unknown_values(mode) -> None:
 
 @pytest.mark.parametrize("traffic_state", (1, 2))
 def test_traffic_states_share_the_slot_beside_driving_mode(monkeypatch, traffic_state) -> None:
+  monkeypatch.setattr("openpilot.selfdrive.carrot.signal_display.display_requested", lambda: False)
   renderer = object.__new__(ClusterUiRenderer)
   renderer._traffic_red_texture = SimpleNamespace(width=56, height=56)
   renderer._traffic_green_texture = SimpleNamespace(width=56, height=56)

@@ -2,6 +2,14 @@
 
 *Carrot Jetson · Installation guide*
 
+**기존 사용자 업데이트(2026-10-20):** 부트 업데이터가 설치된 Jetson은
+**오프로드에서 콤마 Git Pull → 콤마·Jetson 재부팅 → 자동 다운로드·모델 준비**
+순서가 기본입니다. 준비가 끝날 때까지 인터넷과 두 장치의 전원을 유지하고
+시동은 꺼 두세요. 콤마만 재시작하면 Jetson의 새 버전 확인이 다음 Jetson
+부팅까지 미뤄질 수 있습니다. USB 패치·별도 설치는 기존 업데이터로 처리할
+수 없는 경우에만 사용합니다. [업데이트 조건과 검증 범위](jetson_update_policy_20261020.md).
+아래 01·02 절차는 새 저장장치를 처음 설치할 때 사용합니다.
+
 **파일을 받고, 01 → 02 순서로 실행하세요. 나머지는 배치 파일이 알아서 합니다.**
 
 > Download, extract, then run 01 followed by 02. The scripts handle the rest.

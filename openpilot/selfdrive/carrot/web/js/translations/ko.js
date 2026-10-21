@@ -226,6 +226,7 @@ window.CarrotTranslations.register("ko", {
     onnx_vision_summary_starting: "ONNX 서비스가 시작되기를 기다리고 있습니다.",
     onnx_vision_summary_unavailable: "ONNX 서비스가 응답하지 않습니다.",
     onnx_vision_summary_waiting: "모델은 준비됐으며 도로 카메라를 기다리고 있습니다.",
+    onnx_vision_summary_lane_only: "차선 인식 준비 완료 · 영상 BSD 꺼짐",
     onnx_vision_summary_ready: "차선과 BSD 인식 서비스가 준비되었습니다.",
     onnx_vision_summary_attention: "ONNX 모델 또는 설정을 확인하세요.",
     onnx_vision_open_diagnostics: "진단 열기",
