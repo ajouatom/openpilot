@@ -13,6 +13,7 @@ import sys
 import time
 
 PRIORITY = 2
+SUPPORTED_MODELS = frozenset((b'comma tici', b'comma tizi', b'comma mici'))
 LEASE_SECONDS = 3.
 MAX_WORKERS = 16
 INSTANCE = 'carrot-jetlink-usb-priority'
@@ -27,7 +28,7 @@ class RestorationError(RuntimeError):
 def supported():
   try:
     return (os.uname().release == '4.9.103' and os.uname().machine == 'aarch64'
-            and Path('/proc/device-tree/model').read_bytes().rstrip(b'\0\n') == b'comma mici')
+            and Path('/proc/device-tree/model').read_bytes().rstrip(b'\0\n') in SUPPORTED_MODELS)
   except (OSError, AttributeError):
     return False
 
