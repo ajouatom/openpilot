@@ -4,7 +4,8 @@
   Rearm bounded HELLO grace only after confirmed offroad host absence; retain
   onroad/unknown-state failures and stop detach from extending grace forever.
   Connecting-only status lease8s covers3/5s HELLO+2s retry; other/model/health
-  freshness3s unchanged.71 desktop checks pass; native Linux CI pending.
+  freshness3s unchanged.71 desktop checks pass on each branch; both Linux CIs
+  pass (NAV1008/56skips, Wip801/2skips broad, plus update/nav/storage/network).
   Ten hash-verified rlogs: latest12:09-12:13 N16 active only final66.223s,
   1326 valid consecutive outputs, mean42.369/p9946.531/max78.483ms,5>50,
   no fallback or pose input failure. Prior132.230s2645 outputs,6>50 and one

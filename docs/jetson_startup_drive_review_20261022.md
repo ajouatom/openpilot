@@ -87,9 +87,16 @@ simultaneous phone-map video load or prove absence of model NAV input.
 
 ## Checks and delivery
 
-71 focused desktop status/startup/health checks pass. Native daemon tests need
-Linux (`fcntl` is unavailable on this Windows host); full Linux integration
-results are recorded after publication. The correction goes to both maintained
+71 focused desktop status/startup/health checks pass on each branch. Native
+daemon tests need Linux (`fcntl` is unavailable on this Windows host).
+[NAV CI](https://github.com/ajouatom/openpilot/actions/runs/39729244111) passes:
+94 updater tests, 1,008 broad tests (56 skips), 119 navigation/HUD tests,
+11 real-filesystem storage tests and 11 network-namespace tests.
+[Wip CI](https://github.com/ajouatom/openpilot/actions/runs/39729244377) passes:
+801 broad tests (2 skips), 119 navigation/HUD and 11 storage tests. Both Windows
+installer checks pass. Implementation commits are NAV `d7505b1cde` and
+Wip `1b0bac6384`, both published with single-parent history.
+The correction goes to both maintained
 branches, preserving their distinct model architectures. Normal comma Git Pull
 and restart/reboot applies it; no Jetson USB patch, new runtime bundle or model
 installation is needed. Vehicle collection this turn was read-only; no live
