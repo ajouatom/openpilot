@@ -27,6 +27,47 @@ def test_real_failures_are_not_initial_waits(error):
   assert not startup.initial_connection_wait(error, elapsed=1, ready_once=False, preparing=False)
 
 
+def test_next_cold_start_after_offroad_absence_gets_new_grace():
+  cycle = startup.ConnectionStartup()
+  cycle.begin(10)
+  cycle.ready_once = True
+  cycle.absent(offroad=True, onroad=False)
+  cycle.begin(60000)
+  assert cycle.waiting(LinkTimeout('HELLO'), now=60003, preparing=False)
+  assert not cycle.waiting(LinkTimeout('HELLO'), now=60120, preparing=False)
+  cycle.ready_once = True
+  assert not cycle.waiting(LinkTimeout('lost session'), now=60010, preparing=False)
+
+
+@pytest.mark.parametrize('offroad,onroad', [(False, True), (False, False), (True, True)])
+def test_dropout_never_rearms_grace_without_confirmed_offroad(offroad, onroad):
+  cycle = startup.ConnectionStartup()
+  cycle.begin(10)
+  cycle.ready_once = True
+  cycle.absent(offroad=offroad, onroad=onroad)
+  cycle.begin(20)
+  assert not cycle.waiting(LinkTimeout('HELLO'), now=21, preparing=False)
+  assert cycle.started == 10
+
+
+def test_initial_onroad_detaches_cannot_extend_the_timeout_forever():
+  cycle = startup.ConnectionStartup()
+  cycle.begin(10)
+  for now in (30, 90, 130):
+    cycle.absent(offroad=False, onroad=True)
+    cycle.begin(now)
+  assert not cycle.waiting(LinkTimeout('HELLO'), now=130, preparing=False)
+
+
+def test_new_cycle_still_reports_real_preparation_and_usb_errors():
+  cycle = startup.ConnectionStartup()
+  assert not cycle.waiting(LinkTimeout('HELLO'), now=1, preparing=False)
+  cycle.absent(offroad=True, onroad=False)
+  cycle.begin(1)
+  assert not cycle.waiting(LinkTimeout('engine timeout'), now=2, preparing=True)
+  assert not cycle.waiting(OSError('USB failure'), now=2, preparing=False)
+
+
 def test_actual_boot_gate_handoff_is_expected_but_disconnect_is_not(monkeypatch, tmp_path):
   release = tmp_path / 'release.json'
   release.write_text(json.dumps({'source_commit': 'test'}))
@@ -62,6 +103,33 @@ def test_wait_and_model_preparation_are_progress_not_red(reports):
   assert status.badge() == ('jetSON 연결 대기', 'loading')
   reports('loading')
   assert status.badge() == ('jetSON 모델 준비 중', 'loading')
+
+
+@pytest.mark.parametrize('age', [3., 5., 7.9])
+def test_bounded_blocking_hello_does_not_expire_as_an_error(reports, monkeypatch, age):
+  reports('connecting')
+  monkeypatch.setattr(status.time, 'monotonic', lambda: 20. + age)
+  assert status.badge() == ('jetSON 연결 대기', 'loading')
+
+
+def test_stalled_handshake_eventually_becomes_an_error(reports, monkeypatch):
+  reports('connecting')
+  monkeypatch.setattr(status.time, 'monotonic', lambda: 28.)
+  assert status.badge() == ('jetSON ERROR', 'error')
+
+
+@pytest.mark.parametrize('state', ['ready', 'loading', 'retrying', 'blocked'])
+def test_other_link_states_keep_the_three_second_expiry(reports, monkeypatch, state):
+  reports(state)
+  monkeypatch.setattr(status.time, 'monotonic', lambda: 23.)
+  assert status.badge() == ('jetSON ERROR', 'error')
+
+
+def test_fresh_model_failure_overrides_extended_handshake_lease(reports, monkeypatch):
+  reports('connecting')
+  monkeypatch.setattr(status.time, 'monotonic', lambda: 25.)
+  status.MODEL_STATUS.write_text(json.dumps({'updated': 25., 'active': False, 'error': 'inference timeout'}))
+  assert status.badge() == ('jetSON ERROR', 'error')
 
 
 @pytest.mark.parametrize('state,model_error', [
