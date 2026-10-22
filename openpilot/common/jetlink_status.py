@@ -56,10 +56,14 @@ def host_label(peer, mode='usb'):
   return 'Jetlink'
 
 
-def _fresh(path, now):
+def _fresh(path, now, *, handshake=False):
   try:
     value = _read(path)
-    if isinstance(value, dict) and 0 <= now - value['updated'] < 3:
+    # HELLO blocks for 3s in auto probing, or 5s in the normal path. A 3s
+    # display lease falsely declares a dead daemon during that bounded wait.
+    # Cover HELLO + the 2s reconnect pause; all other reports still expire at 3s.
+    limit = 8 if handshake and value.get('state') == 'connecting' else 3
+    if isinstance(value, dict) and 0 <= now - value['updated'] < limit:
       return value
   except (OSError, ValueError, KeyError, TypeError):
     pass
@@ -70,7 +74,7 @@ def diagnostics():
   """Only current telemetry can report health or an address; HELLO is identity."""
   now = time.monotonic()
   saved = _read(LINK_STATUS)
-  link = _fresh(LINK_STATUS, now)
+  link = _fresh(LINK_STATUS, now, handshake=True)
   model = _fresh(MODEL_STATUS, now)
   if not saved.get('peer') and saved.get('state') not in ('connecting', 'loading', 'retrying', 'blocked') and not model.get('active'):
     return None
@@ -123,7 +127,7 @@ def diagnostics():
 
 def badge():
   now = time.monotonic()
-  link = _fresh(LINK_STATUS, now)
+  link = _fresh(LINK_STATUS, now, handshake=True)
   model = _fresh(MODEL_STATUS, now)
   label = host_label(link.get('peer'), link.get('transport', 'usb'))
   if link.get('state') == 'updating' and label == 'jetSON':
