@@ -566,6 +566,12 @@ def create_acc_control_scc2(packer, CAN, enabled, accel_value_last, accel, stopp
   values["ZEROS_7"] = 0 if stop_controller is not None else 1
   apply_canfd_stopping(values, CS, stop_controller, accel, previous_value, jerk_u, jerk_l)
 
+  # Trial for no-lead stops: OEM SCC_ObjSta is named HUD_LEAD_INFO in this DBC.
+  # Change only the state after the final StopReq/interlocks; do not fabricate
+  # object distance/speed or latch it into RX. This is not a confirmed ESC gate.
+  if stop_controller is not None and values["ACCMode"] == 1 and values["StopReq"] == 1 and values["HUD_LEAD_INFO"] == 0:
+    values["HUD_LEAD_INFO"] = 2
+
   return packer.make_can_msg("SCC_CONTROL", CAN.ECAN, values), values["aReqValue"]
 
 def create_acc_control(packer, CAN, enabled, accel_last, accel, stopping, gas_override, set_speed, hud_control, jerk_u, jerk_l, CS,

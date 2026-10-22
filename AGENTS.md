@@ -1,5 +1,20 @@
 # Repository memory
 
+- On 2026-10-23, owner requests forcing SCC object state during no-lead stops.
+  Camera-SCC CANFD builder trials HUD_LEAD_INFO/OEM SCC_ObjSta 0->2 only after
+  final ACCMode1/StopReq1 and the existing stop controller/interlocks. Real
+  lead states/distances/speeds remain intact; no RX or radar/planner mutation,
+  no latch after departure. Non-camera builder stays unchanged because its
+  object payload differs. No new setting, aReq/jerk/band/retry change, or live
+  vehicle install. Owner reports rollback concentrated on a backward slope;
+  recent no-lead approaches support further study, not a proven object gate.
+  Prior selected stock26 all contain object state2; prior9 failures do too.
+  Desktop231 focused checks pass with Params I/O blocked; three new cases
+  fail original/pass revised. Recorded-input1074-packet open-loop comparison:
+  840 change only state bit109 plus CRC,234 identical. This does not establish
+  ESC acceptance, physical stopping or a road-safe cure. Evidence stays private
+  under .analysis/archive/2026-10-23/stop-1116; normal Git Pull/reboot delivery.
+
 - On 2026-10-22, user reports red Jetson startup and requests latest-drive review.
   Rearm bounded HELLO grace only after confirmed offroad host absence; retain
   onroad/unknown-state failures and stop detach from extending grace forever.
