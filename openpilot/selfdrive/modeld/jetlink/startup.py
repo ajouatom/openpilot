@@ -12,6 +12,30 @@ class RuntimeHandoff(ConnectionError):
   """The boot gate deliberately handed its transport to the selected runtime."""
 
 
+class ConnectionStartup:
+  """Bounded handshake grace for an attachment after confirmed offroad absence."""
+  def __init__(self):
+    self.started = None
+    self.ready_once = False
+
+  def absent(self, *, offroad, onroad):
+    # jetlinkd survives ignition cycles. A previous drive's successful session
+    # must not turn the next cold boot's unanswered HELLO into a red fault.
+    # A dropout onroad (or contradictory/unknown road state) never rearms this.
+    if offroad and not onroad:
+      self.started = None
+      self.ready_once = False
+
+  def begin(self, now):
+    if self.started is None:
+      self.started = now
+
+  def waiting(self, error, *, now, preparing):
+    return (self.started is not None and
+            initial_connection_wait(error, elapsed=now - self.started,
+                                    ready_once=self.ready_once, preparing=preparing))
+
+
 def initial_connection_wait(error, *, elapsed, ready_once, preparing):
   # Only an unanswered first handshake is ordinary startup. Engine/model
   # errors, unsafe cleanup and failures after a working session remain errors.
