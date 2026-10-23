@@ -88,12 +88,16 @@ udcs=("/sys/class/udc"/*)
 shopt -u nullglob
 [[ ${#udcs[@]} -gt 0 ]] || fail "no USB device controller in /sys/class/udc; this device cannot act as a USB gadget"
 
-# refuse to fight another gadget for the controller rather than unbinding it
+# 기본은 다른 gadget을 보존한다. 명시적으로 허용한 기본 ADB만 별도 검사를 거쳐 인계한다.
 for other in "$CONFIGFS"/usb_gadget/*/UDC; do
   if [[ -e "$other" ]]; then
     owner=$(basename "$(dirname "$other")")
     bound=$(cat "$other" 2>/dev/null || true)
     if [[ "$owner" != "jetlink" && -n "$bound" ]]; then
+      if [[ "$owner" == "g1" && -f /data/jetlink-adb-handoff && ! -L /data/jetlink-adb-handoff ]] &&
+         python3 -I -S -B "$(dirname -- "${BASH_SOURCE[0]}")/adb_handoff.py" --udc "$bound"; then
+        continue
+      fi
       fail "USB gadget '$owner' already holds the device controller ($bound); tear it down first"
     fi
   fi
