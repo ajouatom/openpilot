@@ -892,9 +892,11 @@ def _lane_unseen(state, side, prob, frame):
 CLUSTER_TEST_FIELDS = {1: "SPEEDLIMIT", 2: "SPEEDLIMIT_FLASH", 3: "SIGNS", 4: "SPEEDLIMIT_WEATHER", 5: "COUNTRY"}  # 0x162
 CLUSTER_TEST_FIELDS_161 = {6: "SLA_ICON", 12: "HDA_ICON", 13: "LFA_ICON", 14: "SETSPEED", 15: "SETSPEED_HUD", 16: "CAR_CIRCLE",
                            17: "DISTANCE", 18: "DISTANCE_CAR", 19: "DISTANCE_SPACING", 20: "DISTANCE_LEAD",
-                           21: "ALERTS_4", 22: "ALERTS_5", 23: "BACKGROUND", 24: "LANE_HIGHLIGHT", 25: "LANE_ZOOM", 26: "CENTERLINE"}
+                           21: "ALERTS_4", 22: "ALERTS_5", 23: "BACKGROUND", 24: "LANE_HIGHLIGHT", 25: "LANE_ZOOM", 26: "CENTERLINE",
+                           27: "ALERTS_1", 28: "ALERTS_2", 29: "ALERTS_3"}
 CLUSTER_TEST_BITS = {7: tuple(range(53, 64)), 8: tuple(range(159, 163)), 9: tuple(range(183, 192)), 10: tuple(range(252, 256)),
-                     11: (87, 111, 135, 212)}
+                     11: (87, 111, 135, 212)}  # 0x162
+CLUSTER_TEST_BITS_161 = {30: tuple(range(36, 42)), 31: tuple(range(45, 51)), 32: tuple(range(175, 181)), 33: tuple(range(246, 256))}
 
 
 CLUSTER_TEST_SWEEP = -1  # ClusterLaneTestValue -1: step the field every 1 s and show the step in the set speed number
@@ -912,8 +914,8 @@ def _cluster_sweep(packer, field, frame):
   if state.get('field') != field:
     state.update(field=field, start=frame)
   step = (frame - state['start']) // 100
-  if field in CLUSTER_TEST_BITS:
-    bits = CLUSTER_TEST_BITS[field]
+  bits = CLUSTER_TEST_BITS.get(field) or CLUSTER_TEST_BITS_161.get(field)
+  if bits:
     i = step % (len(bits) + 1)
     return (0, 0) if i == 0 else (1 << (i - 1), bits[i - 1])
   if field in CLUSTER_TEST_FIELDS:
@@ -1250,7 +1252,8 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
           values[CLUSTER_TEST_FIELDS_161[test_field]] = test_value
         if sweep_display is not None:
           values["vSetDis"] = min(sweep_display, 255)
-        ret.append(packer.make_can_msg("ADRV_0x161", CAN.ECAN, values, rx_counter = rx_counter))
+        msg = packer.make_can_msg("ADRV_0x161", CAN.ECAN, values, rx_counter = rx_counter)
+        ret.append(_set_raw_bits(msg, CLUSTER_TEST_BITS_161[test_field], test_value) if test_field in CLUSTER_TEST_BITS_161 else msg)
 
       if CS.adrv_0x200 is not None:
         values = copy.copy(CS.adrv_0x200)
