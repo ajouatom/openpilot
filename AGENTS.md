@@ -1,5 +1,49 @@
 # Repository memory
 
+- On 2026-10-23, owner requests contributor fc02df9/e812f68 integration.
+  Include prerequisite936ea57 native image conversion and os initialization fix.
+  Exact N16 model/spec defaults direct compact-map scatter and exact C uint8/FP16
+  lookup ON; explicit env0 retains original paths, other models unchanged.
+  Native compile/load/self-test failure falls back to NumPy; no per-frame build.
+  Preserve scalar/state validation, expiry/raw maps, projection and USB deadlines.
+  Windows94pass/34native-POSIX skips; combined real-C/session/state checks use
+  Linux CI1117/56skip+94update/119nav/11storage/11network and Windows pass.
+  Source e4779e059a signed64702473B/f17dd14a runtime HTTPS/hash verified;
+  1097 committed payload files,26 pin/bundle checks pass/1skip.
+  No local Orin/USB/road benchmark or additive timing/tail cure claim.
+  Vehicle off, publish signed runtime for Git Pull/BOTH reboot; wip record only.
+  See docs/jetson_n16_staging_integration_20261023.md for validation and release.
+
+- On 2026-10-23, owner requests contributor136119c/2e971ad review, then explicitly
+  requests publication without vehicle tests (Jetson off). NAV accepts exact
+  N16/spec-negotiated2066/18580-float replies, saving66056B/frame, preserving
+  full host/device-state validation, raw/old/v3 fallback and reset semantics.
+  Overlap same-frame CPU fill with existing draining warp hook; no asynchronous
+  USB, model/priority/deadline/control change.119 desktop checks/1POSIXskip;
+  added GPU-state reset/omitted-NaN,10 malformed IPC and actual stream tests.
+  Contributor38.898ms is prototype bench evidence, not our hardware result.
+  Source e7ff007ddc LinuxCI1062/56skip+94update/119nav/11storage/11network and
+  Windows installer pass. Signed64695651B bundle e72bab4b HTTPS/hash verified,
+  all1091 files committed;26 pin/bundle tests pass/1skip. Publish bundle+pin
+  for normal Git Pull/BOTH reboot; wip record
+  only (different model/state runtime). Vehicle read-only, raw private. See
+  docs/jetson_n16_projection_integration_20261023.md for final release/CI.
+
+- On 2026-10-23, owner requests forcing SCC object state during no-lead stops.
+  Camera-SCC CANFD builder trials HUD_LEAD_INFO/OEM SCC_ObjSta 0->2 only after
+  final ACCMode1/StopReq1 and the existing stop controller/interlocks. Real
+  lead states/distances/speeds remain intact; no RX or radar/planner mutation,
+  no latch after departure. Non-camera builder stays unchanged because its
+  object payload differs. No new setting, aReq/jerk/band/retry change, or live
+  vehicle install. Owner reports rollback concentrated on a backward slope;
+  recent no-lead approaches support further study, not a proven object gate.
+  Prior selected stock26 all contain object state2; prior9 failures do too.
+  Desktop231 focused checks pass with Params I/O blocked; three new cases
+  fail original/pass revised. Recorded-input1074-packet open-loop comparison:
+  840 change only state bit109 plus CRC,234 identical. This does not establish
+  ESC acceptance, physical stopping or a road-safe cure. Evidence stays private
+  under .analysis/archive/2026-10-23/stop-1116; normal Git Pull/reboot delivery.
+
 - On 2026-10-22, user reports red Jetson startup and requests latest-drive review.
   Rearm bounded HELLO grace only after confirmed offroad host absence; retain
   onroad/unknown-state failures and stop detach from extending grace forever.
