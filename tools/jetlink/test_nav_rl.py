@@ -120,13 +120,13 @@ def test_real_joining_adapter_transmits_nav_then_clears_it_and_falls_back(monkey
     if len(received) == 3:
       raise ConnectionError('lost USB')
     return np.zeros(SPEC.output_nelem, np.float32)
-  client = NS(spec=SPEC, infer=infer, timings=(0, 0, 0), close=lambda: None)
+  client = NS(spec=SPEC, image_buffer=lambda: None, infer=infer, timings=(0, 0, 0), close=lambda: None)
   future = Future()
   future.set_result(client)
   m.connection = NS(future=future)
   class Warp:
     timings = (0, 0, 0)
-    def __call__(self, *args, prepare=None):
+    def __call__(self, *args, prepare=None, output_buffer=None):
       if prepare is not None: prepare()
       return np.zeros(SPEC.warped_shape, np.uint8)
   m.warp = Warp()

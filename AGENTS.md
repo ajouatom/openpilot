@@ -1,5 +1,16 @@
 # Repository memory
 
+- On 2026-10-23, owner requests contributor6914f6ce/fbe9a887 and live validation.
+  NAV negotiates connection-owned size-sealed memfd,60B framed input token,
+  synchronous USB and legacy fallback; nonce/generation/age/reply gates remain.
+  Fix invalid warp destination to drain submitted GPU before fallback; add
+  IPC bytes/shared-use scalars to existing timing aggregates. Common DHCP stop
+  waits<=5s for exact owned process; no forced kill/rebind/ownership bypass.
+  Wip DHCP only; existing signed host54e706fa05/N16 stays. Normal comma Git Pull
+  and reboot, no host bundle required. Read-only P baseline120s/2401valid,
+  mean38.852/p9942.717/max45.374ms,zero>50; NAV absent. Native validation and
+  deployment details: docs/jetson_shared_input_integration_20261023.md.
+
 - On 2026-10-23, owner requests existing signal observations on Jetson USB HUD.
   NAV forwards bounded allowlisted4KiB/20-track metadata in existing10Hz HUD,
   drops optional signal field first at96KiB budget; no extra image/message.

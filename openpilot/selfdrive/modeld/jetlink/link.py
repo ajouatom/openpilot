@@ -10,6 +10,7 @@ import threading
 
 import numpy as np
 
+from openpilot.selfdrive.modeld.jetlink import shared_input
 from openpilot.selfdrive.modeld.jetlink import VENDOR  # noqa: F401
 from openpilot.common.jetlink_status import badge  # noqa: F401
 from jetlink.spec import ModelSpec
@@ -138,6 +139,7 @@ def fault_active():
 class Client:
   def __init__(self, path=SOCKET, timeout=.15):
     self.timeout = timeout
+    self.shared = None
     self.sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     self.sock.settimeout(timeout)
     try:
@@ -146,13 +148,28 @@ class Client:
       self.spec = validate_model_spec(ModelSpec.from_dict(hello['spec']))
       self.project_output = (not os.getenv('SEND_RAW_PRED') and projection.eligible(self.spec) and
                              projection.matches(hello.get(projection.IPC_CAPABILITY)))
+      if os.getenv('JETLINK_RAM_INPUT', '1') == '1' and shared_input.supported() and hello.get(shared_input.CAPABILITY) is True:
+        deadline = time.monotonic() + timeout
+        send_parts(self.sock, shared_input.SETUP, deadline=deadline)
+        self.shared = shared_input.Writer.receive(self.sock, self.spec, receive, deadline)
     except Exception:
       self.sock.close()
       raise
     self.timings = (0, 0, 0)
     self.reader = PacketReader(REPLY.size + self.spec.output_nbytes)
 
+  def image_buffer(self):
+    return self.shared.begin() if self.shared is not None else None
+
   def infer(self, image, packed, frame, reset=False, source_sof=0):
+    try:
+      return self._infer(image, packed, frame, reset, source_sof)
+    except Exception:
+      # Neither late replies nor late USB readers may outlive a reused slot.
+      self.close()
+      raise
+
+  def _infer(self, image, packed, frame, reset=False, source_sof=0):
     if image.dtype != np.uint8 or image.shape != self.spec.warped_shape or not image.flags.c_contiguous:
       raise ValueError('invalid warped image')
     if packed.dtype != np.float32 or packed.size != self.spec.packed_nelem or not packed.flags.c_contiguous or not np.all(np.isfinite(packed)):
@@ -160,7 +177,12 @@ class Client:
     deadline = time.monotonic() + self.timeout
     self.sock.settimeout(self.timeout)
     request_flags = int(reset) | (projection.IPC_FLAG if self.project_output else 0)
-    send_parts(self.sock, REQUEST.pack(frame, request_flags, source_sof), image, packed, deadline=deadline)
+    shared_request = self.shared is not None and self.shared.busy
+    if shared_request:
+      token = self.shared.token(image, packed, frame, request_flags, source_sof)
+      send_parts(self.sock, token, deadline=deadline)
+    else:
+      send_parts(self.sock, REQUEST.pack(frame, request_flags, source_sof), image, packed, deadline=deadline)
     reply = self.reader.receive(self.sock, deadline)
     count = projection.COUNT if self.project_output else self.spec.output_nelem
     if len(reply) != REPLY.size + count * 4:
@@ -171,10 +193,14 @@ class Client:
     output = np.frombuffer(reply, np.float32, count, REPLY.size).copy()
     if not np.all(np.isfinite(output)):
       raise ValueError('nonfinite inference reply')
+    if shared_request:
+      self.shared.complete()
     return output
 
   def close(self):
     self.sock.close()
+    if self.shared is not None:
+      self.shared.close()
 
 
 class ClientConnection:

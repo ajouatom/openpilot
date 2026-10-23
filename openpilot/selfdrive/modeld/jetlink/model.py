@@ -73,7 +73,22 @@ class Warp:
       if actual.shape != expected.shape or actual.dtype != expected.dtype or not np.array_equal(actual, expected):
         raise ValueError('prepared Jetlink warp serialization changed pixels')
 
-  def __call__(self, bufs, transforms, *, prepare=None):
+  @staticmethod
+  def read_result(result, output_buffer=None):
+    if output_buffer is None:
+      return result.numpy()
+    if (output_buffer.dtype != np.uint8 or output_buffer.shape != tuple(result.shape)
+        or not output_buffer.flags.c_contiguous or not output_buffer.flags.writeable):
+      # The GPU submission already exists. Preserve its completion fence even
+      # when a bad destination prevents copying into the connection-owned slot.
+      result.numpy()
+      raise ValueError('invalid warp destination')
+    # _buffer preserves tinygrad realization/JIT guards; copyout retains the
+    # QCOM completion fence. The only removed step is the subsequent IPC copy.
+    result._buffer().copyout(memoryview(output_buffer).cast('B'))
+    return output_buffer
+
+  def __call__(self, bufs, transforms, *, prepare=None, output_buffer=None):
     from tinygrad import Tensor
     started = time.monotonic()
     frames = {}
@@ -93,7 +108,7 @@ class Warp:
     result = self.run_warp(**self.inputs, **frames)
     submitted = time.monotonic()
     if prepare is None:
-      output = result.numpy()
+      output = self.read_result(result, output_buffer)
       self.timings = (prepared - started, submitted - prepared, time.monotonic() - submitted)
       return output
     # QCOM submission is asynchronous. Only independent CPU context preparation
@@ -105,7 +120,7 @@ class Warp:
         prepare()
     finally:
       inputs_ready = time.monotonic()
-      output = result.numpy()
+      output = self.read_result(result, output_buffer)
       finished = time.monotonic()
       self.timings = (prepared - started, submitted - prepared, finished - submitted)
       self.stage_timings = {'warp_prepare_ms': (prepared - started) * 1000,
@@ -226,7 +241,8 @@ class JoiningModel:
         started = time.monotonic()
         # Same-frame CPU context only; Warp drains this submission even if
         # preparation fails, before the existing local-model fallback runs.
-        images = self.warp(bufs, transforms, prepare=lambda: fill_inputs(self.views, inputs, self.prev_desire))
+        images = self.warp(bufs, transforms, prepare=lambda: fill_inputs(self.views, inputs, self.prev_desire),
+                           output_buffer=self.client.image_buffer())
         warped = time.monotonic()
         result = self.client.infer(images, self.packed, self.frame, self.reset, source_sof=self.source_sof)
         replied = time.monotonic()

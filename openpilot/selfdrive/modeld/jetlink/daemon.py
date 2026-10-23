@@ -283,6 +283,9 @@ def _serve_local(listener, client, peer, publisher, phase, wifi=None):
     with connection:
       connection.settimeout(.5)
       reader = PacketReader(REQUEST.size + spec.warped_nbytes + spec.packed_nbytes)
+      from openpilot.selfdrive.modeld.jetlink import shared_input
+      shared = None
+      first_request = True
       try:
         if not requested:
           check_loaded(client, client.state())
@@ -292,7 +295,7 @@ def _serve_local(listener, client, peer, publisher, phase, wifi=None):
           requested = True
         from jetlink import output_projection as projection
         compact_reply = client.output_projection_available
-        hello = {'spec': spec.to_dict(), 'peer': peer}
+        hello = {'spec': spec.to_dict(), 'peer': peer, shared_input.CAPABILITY: shared_input.supported()}
         if compact_reply:
           hello[projection.IPC_CAPABILITY] = projection.descriptor()
         send(connection, json.dumps(hello).encode())
@@ -322,14 +325,24 @@ def _serve_local(listener, client, peer, publisher, phase, wifi=None):
             telemetry_updated = time.monotonic()
             continue
           received = time.monotonic()
-          if len(request) != REQUEST.size + spec.warped_nbytes + spec.packed_nbytes:
-            raise ValueError('invalid local inference request')
-          frame, reset, source_sof = REQUEST.unpack_from(request)
+          if first_request and bytes(request) == shared_input.SETUP:
+            first_request = False
+            shared = shared_input.Reader.offer(connection, spec)
+            send(connection, shared.nonce)
+            continue
+          first_request = False
+          shared_request = shared is not None and len(request) == shared_input.TOKEN.size
+          if shared_request:
+            frame, reset, source_sof, images, packed = shared.read(request)
+          else:
+            if len(request) != REQUEST.size + spec.warped_nbytes + spec.packed_nbytes:
+              raise ValueError('invalid local inference request')
+            frame, reset, source_sof = REQUEST.unpack_from(request)
+            images = np.frombuffer(request, np.uint8, spec.warped_nbytes, REQUEST.size).reshape(spec.warped_shape)
+            packed = np.frombuffer(request, np.float32, spec.packed_nelem, REQUEST.size + spec.warped_nbytes)
           if reset not in (0, 1, 2, 3) or (reset & projection.IPC_FLAG and not compact_reply):
             raise ValueError('invalid reset flag')
           client.project_output = bool(reset & projection.IPC_FLAG)
-          images = np.frombuffer(request, np.uint8, spec.warped_nbytes, REQUEST.size).reshape(spec.warped_shape)
-          packed = np.frombuffer(request, np.float32, spec.packed_nelem, REQUEST.size + spec.warped_nbytes)
           if not np.all(np.isfinite(packed)):
             raise ValueError('invalid local model context')
           started = time.monotonic()
@@ -382,6 +395,8 @@ def _serve_local(listener, client, peer, publisher, phase, wifi=None):
             context={'frame_id': frame, 'usb_seq': seq},
             housekeeping_ms=(receive_started-loop_started)*1000,
             ipc_receive_ms=(received-receive_started)*1000,
+            ipc_request_bytes=4 + len(request),
+            ipc_shared_input=int(shared_request),
             request_parse_ms=(started-received)*1000,
             usb_send_ms=(sent-started)*1000,
             request_bytes=getattr(client, 'last_request_bytes', spec.infer_req_nbytes),
@@ -407,6 +422,9 @@ def _serve_local(listener, client, peer, publisher, phase, wifi=None):
           )
       except (ConnectionError, BrokenPipeError, ValueError) as exc:
         log.info('local client ended: %s', exc)
+      finally:
+        if shared is not None:
+          shared.close()
     last_ping = time.monotonic()
 
 
