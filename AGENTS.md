@@ -10,6 +10,18 @@
   and reboot, no host bundle required. Read-only P baseline120s/2401valid,
   mean38.852/p9942.717/max45.374ms,zero>50; NAV absent. Native validation and
   deployment details: docs/jetson_shared_input_integration_20261023.md.
+  Published NAV819ce67c7d/Wipa7658f4b6a; Linux CI passes(NAV1202/56skip,
+  Wip820/2skip broad, other update/nav/storage/NAT checks). Actual offroad QCOM
+  copyout/numpy+receiver64hashes match,4sessions isolated. First root observer
+  prematurely created two msgq files: agent-caused permission/restart window,
+  exact ownership restored, observers drop user; normal second reboot restores
+  HUD too. Final120s2400validconsecutive,mean37.845/p9941.556/max43.692ms,0>50;
+  pose healthy,HUD119/120. Repeat60s1200consecutive,mean37.834/max44.101,0>50,
+  HUD/signal60/60 on both devices. IPC2402calls exactly60B/shared1. No ABBA,
+  road/deadline claim. Naver sender connected but route/TBT absent expired;
+  supplied1.28APK still advertisesnm127,JSONworker2s age gate remains, fallback
+  off_route=true is not proof of physical route deviation. Valid NAV pending;
+  no expiry bypass or APK modification. Raw private; no Jetson update.
 
 - On 2026-10-23, owner requests existing signal observations on Jetson USB HUD.
   NAV forwards bounded allowlisted4KiB/20-track metadata in existing10Hz HUD,
