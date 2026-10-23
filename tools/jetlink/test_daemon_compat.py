@@ -65,11 +65,13 @@ def test_phone_checks_data_role_not_power_role(tmp_path, monkeypatch, mode):
   ('auto', 'usb-v2'), ('auto', 'usb-exhausted'), ('auto', 'usb-pinned'),
   ('auto', 'usb-unsafe'), ('auto', 'brief-detach'),
   ('auto', 'usb-late'), ('auto', 'ncm-cleanup-unsafe'),
+  ('auto', 'power-fail'), ('usb', 'power-fail'),
 ])
 def test_daemon_wires_mode_protocol_and_separate_ios_owner(tmp_path, monkeypatch, mode, scenario):
   calls = []
   power_steps = []
-  monkeypatch.setattr(daemon, 'UsbInputPower', lambda: SimpleNamespace(step=lambda: power_steps.append(len(calls))))
+  monkeypatch.setattr(daemon, 'UsbInputPower', lambda: SimpleNamespace(
+    step=lambda: power_steps.append(len(calls)), protected=scenario != 'power-fail', error='USB input cut failed'))
   attached = [True]
   reports = []
   udcs = tmp_path / 'udc'
@@ -196,6 +198,10 @@ def test_daemon_wires_mode_protocol_and_separate_ios_owner(tmp_path, monkeypatch
   with pytest.raises(KeyboardInterrupt):
     daemon.main()
   assert power_steps and power_steps[0] == 0  # Before gadget setup in every configured mode.
+  if scenario == 'power-fail':
+    assert calls == ['listener.close']  # Only local IPC cleanup, no USB operations.
+    assert ('blocked', {'peer': None, 'error': 'USB input cut failed'}) in reports
+    return
   assert calls[0] == ('setup', mode)
   if scenario == 'constructor-unsafe':
     assert calls.count(('setup', mode)) == 1

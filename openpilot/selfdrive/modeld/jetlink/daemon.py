@@ -469,6 +469,12 @@ def main():
   try:
     while True:
       usb_power.step()
+      if not usb_power.protected:
+        # A failed current cut must not silently continue drawing from the host.
+        # Keep only Jetlink unavailable; modeld retains its native local fallback.
+        publish('blocked', peer=None, error=usb_power.error)
+        time.sleep(1)
+        continue
       update_affinity()
       if cleanup_error:
         publish('blocked', peer=None, error=cleanup_error)

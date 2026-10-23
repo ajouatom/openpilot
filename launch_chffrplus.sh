@@ -20,6 +20,19 @@ function disable_automatic_git_maintenance {
 
 disable_automatic_git_maintenance
 
+function protect_jetlink_usb_input {
+  # This installation always uses the separate vehicle/OBD-C power input.
+  # Apply before build/manager at every boot, even with Jetson already attached.
+  # Only USB_ICL changes: no USB detach, PD/data-role swap or VBUS disable.
+  if timeout 5s sudo -n python3 "$DIR/tools/jetlink/usb_power.py"; then
+    echo "Jetlink auxiliary USB input blocked; independent main power required."
+  else
+    # The daemon independently verifies the cut and blocks only Jetlink on error.
+    # A missing PMIC interface must not prevent the native driving stack starting.
+    echo "Jetlink USB input protection unavailable; Jetlink will verify before connecting."
+  fi
+}
+
 function cleanup_stale_git_lfs_hooks {
   # Some deployed checkouts still contain hooks installed by git-lfs even
   # though the executable is no longer part of the device image. Those hooks
@@ -546,6 +559,10 @@ function show_startup_failure {
 }
 
 function launch {
+  # Apply before a repository lock/update can delay normal initialization.
+  if [ -f /AGNOS ]; then
+    protect_jetlink_usb_input
+  fi
   # Protect the checkout throughout bootstrap, SCons and manager initialization.
   # The manager releases this inherited flock after init; background web/recovery
   # servers must not inherit it. Never delete the lock file itself.
