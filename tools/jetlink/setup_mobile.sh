@@ -42,6 +42,34 @@ import signal
 import sys
 import time
 
+# dnsmasq defers its queued SIGTERM while checking a DHCP address with ICMP.
+# Its three-second probe can outlive a two-second shutdown deadline. Allow
+# that normal path to finish; never remove ownership/rebind while it is alive.
+STOP_TIMEOUT = 5.0
+
+
+def wait_for_exit(proc, start, fd):
+  if fd is not None:
+    poll = select.poll()
+    poll.register(fd, select.POLLIN)
+    if poll.poll(int(STOP_TIMEOUT * 1000)):
+      return
+  else:
+    deadline = time.monotonic() + STOP_TIMEOUT
+    while True:
+      try:
+        fields = (proc / 'stat').read_text().rsplit(') ', 1)[1].split()
+      except FileNotFoundError:
+        return
+      if fields[19] != start or fields[0] == 'Z':
+        return
+      remaining = deadline - time.monotonic()
+      if remaining <= 0:
+        break
+      time.sleep(min(.02, remaining))
+  raise ValueError('helper dnsmasq did not stop within five seconds')
+
+
 state, action = Path(sys.argv[1]), sys.argv[2]
 lease_dir = Path(sys.argv[3])
 pidfile, record = state / 'dnsmasq.pid', state / 'dnsmasq.owner'
@@ -79,25 +107,19 @@ try:
       if saved != {'pid': pid, 'start': start}:
         raise ValueError('PID was reused or is not helper-owned')
     if action == 'stop':
-      if fd is not None and hasattr(signal, 'pidfd_send_signal'):
-        signal.pidfd_send_signal(fd, signal.SIGTERM)
-        poll = select.poll()
-        poll.register(fd, select.POLLIN)
-        if not poll.poll(2000):
-          raise ValueError('helper dnsmasq did not stop within two seconds')
-      else:
-        latest = (proc / 'stat').read_text().rsplit(') ', 1)[1].split()[19]
-        if latest != start or (proc / 'cmdline').read_bytes().split(b'\0') != args:
-          raise ValueError('PID changed before signaling')
-        os.kill(pid, signal.SIGTERM)
-        deadline = time.monotonic() + 2
-        while proc.exists():
-          fields = (proc / 'stat').read_text().rsplit(') ', 1)[1].split()
-          if fields[19] != start or fields[0] == 'Z':
-            break
-          if time.monotonic() >= deadline:
-            raise ValueError('helper dnsmasq did not stop within two seconds')
-          time.sleep(.02)
+      try:
+        if fd is not None and hasattr(signal, 'pidfd_send_signal'):
+          signal.pidfd_send_signal(fd, signal.SIGTERM)
+          wait_for_exit(proc, start, fd)
+        else:
+          latest = (proc / 'stat').read_text().rsplit(') ', 1)[1].split()[19]
+          if latest != start or (proc / 'cmdline').read_bytes().split(b'\0') != args:
+            raise ValueError('PID changed before signaling')
+          os.kill(pid, signal.SIGTERM)
+          wait_for_exit(proc, start, None)
+      except (FileNotFoundError, ProcessLookupError):
+        # This exact, already validated process can exit before the signal.
+        pass
       pidfile.unlink(missing_ok=True)
       record.unlink(missing_ok=True)
   finally:
