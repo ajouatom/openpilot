@@ -1,5 +1,18 @@
 # Repository memory
 
+- On 2026-10-23, owner requests review/application of PR560/561/562.
+  560 staging/os fix already in e4779e059a; retain newer N16 defaults. Add
+  missing full2066-output precedence; actual parser regression fails old/passes
+  corrected.561 adds exact-state absent-/proc DHCP cleanup to existing5s wait;
+  default-OFF g1 ADB handoff also requires privileged-owner/nonwritable marker.
+  No marker enabled; PC ADB impact/sysfs race and physical Konik limits retained.
+  562 unconditional attached-boot cutoff/nonzero override/link-block rejected;
+  adapt callback reassertion only under original empty-port/conflict gates.
+  Common helpers both branches, parser NAV only.126desktop pass/31POSIX skips;
+  Linux CI pending in docs/jetlink_pr560_562_review_20261023.md. No live install,
+  host bundle or model change; Git Pull/comma reboot. PRs not merged unchanged.
+
+
 - On 2026-10-23, owner requests contributor6914f6ce/fbe9a887 and live validation.
   NAV negotiates connection-owned size-sealed memfd,60B framed input token,
   synchronous USB and legacy fallback; nonce/generation/age/reply gates remain.

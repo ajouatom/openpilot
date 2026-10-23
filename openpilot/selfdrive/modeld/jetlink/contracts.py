@@ -97,7 +97,8 @@ def model_name(spec):
 
 
 def parse_outputs(parser, spec, result):
-  if result.size == projection.COUNT:
+  # Full outputs take precedence even when another model has the N16 prefix length.
+  if result.size != spec.output_nelem and result.size == projection.COUNT:
     # Only the negotiated exact N16 prefix may omit graph-owned features.
     # Do not fabricate zero hidden/map/navigation outputs for old consumers.
     if not projection.eligible(spec) or result.shape != (projection.COUNT,):
