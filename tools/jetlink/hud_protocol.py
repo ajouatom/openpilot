@@ -167,6 +167,8 @@ class SnapshotBuilder:
               'external_compute_label': device_badge[0] if device_badge and device_badge[1] == 'active' else '',
               'received': self.sm.recv_time, 'mono': self.sm.logMonoTime,
               'valid': self.sm.valid, 'alive': self.sm.alive, 'cameras': self.camera_previews()}
+    from hud_signal import signal_packet
+    record['signal_display'] = signal_packet(now)
     if self.nav_map is not None:
       preview = self.nav_map.packet(self.settings.get('ClusterHudScreenMode') == 'Nw==')
       if preview is not None:
@@ -176,6 +178,10 @@ class SnapshotBuilder:
 
 def encode_snapshot(record):
   data = json.dumps(record, separators=(',', ':')).encode()
+  if len(data) > 96 * 1024:
+    # Optional signal metadata must not evict an existing camera or NAV image.
+    record.pop('signal_display', None)
+    data = json.dumps(record, separators=(',', ':')).encode()
   if len(data) > 96 * 1024:
     record['cameras'] = {}
     data = json.dumps(record, separators=(',', ':')).encode()

@@ -154,6 +154,8 @@ def main():
       return reader.as_builder()
   messaging.log_from_bytes = from_bytes
   sys.modules[messaging.__name__] = messaging
+  from hud_signal import install as install_signal_display
+  remote_signals = install_signal_display(read_snapshot)
   import cluster_live_camera
   from hud_camera import RemoteRoadCamera
   cluster_live_camera.LiveRoadCamera = RemoteRoadCamera
@@ -212,6 +214,9 @@ def main():
         stats = vehicle_stats.sample()
         remote_nav_preview.fresh()
         display_metrics['nav_model_map'] = remote_nav_preview.status
+        signal_color, signal_held, signal_online = remote_signals.status()
+        display_metrics['signal_display'] = dict(enabled=remote_signals.enabled, color=signal_color,
+                                                held=signal_held, online=signal_online)
         tmp.write_text(json.dumps({'updated': now, **display_metrics,
                                   'vehicle_network_address': VehicleNetworkAddress().address(),
                                   'vehicle_cpu': stats.cpu_core_percents,
