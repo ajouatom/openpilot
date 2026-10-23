@@ -327,3 +327,41 @@ def test_traffic_green_shown_only_two_seconds():
   assert _traffic_display_state(2, 1200) == 0   # 2 s later: back to normal
   assert _traffic_display_state(0, 1300) == 0
   assert _traffic_display_state(2, 1400) == 2   # a new green shows again
+
+
+@pytest.mark.parametrize(('slot', 'name', 'sig', 'value'), (
+  (55, 'ADRV_0x161', 'SOUNDS_1', 3), (66, 'CCNC_0x162', 'FF_DISTANCE', 300), (89, 'CCNC_0x162', 'FAULT_SCC', 2),
+  (121, 'ADRV_0x1ea', 'AUTOLANECHANGE_MSG', 5), (139, 'ADRV_0x200', 'TauGapSet', 2), (145, 'ADRV_0x200', None, 0b101)))
+def test_cluster_test_every_message(monkeypatch, slot, name, sig, value):
+  # raw value lands as-is in the packed message (scaled signals included), raw bit groups too
+  from openpilot.cereal import log
+  monkeypatch.setattr(hyundaicanfd, 'Params', lambda: SimpleNamespace(
+    get_int=lambda key: {'ClusterLaneTest': slot, 'ClusterLaneTestValue': value}.get(key, 0), get=lambda key: '0'))
+  packer = CANPacker('hyundai_canfd_generated')
+  zeros = lambda msg: {key: 0 for key in packer.dbc.name_to_msg[msg].sigs if key not in ('CHECKSUM', 'COUNTER')}
+  state = SimpleNamespace(
+    adrv_0x161=zeros('ADRV_0x161'), adrv_0x200=zeros('ADRV_0x200'), adrv_0x1ea=zeros('ADRV_0x1ea'), ccnc_0x162=zeros('CCNC_0x162'),
+    out=structs.CarState(), modelV2=log.ModelDataV2.new_message(), lfahda_cluster=None, cruise_buttons_msg=None,
+    is_metric=True, paddle_button_prev=0, softHoldActive=0, trailer_connected=False,
+  )
+  control = structs.CarControl(latActive=True, enabled=True)
+  msgs = hyundaicanfd.create_ccnc_messages(
+    SimpleNamespace(flags=HyundaiFlags.CAMERA_SCC), packer, SimpleNamespace(ECAN=0, CAM=2), 5, control, state,
+    control.hudControl, 0, False, False, 0, False, 0, 0)
+  definition = packer.dbc.name_to_msg[name]
+  addr, dat, _ = next(m for m in msgs if m[0] == definition.address)
+  if sig is None:
+    bits = hyundaicanfd.CLUSTER_TEST_BITS_200[slot]
+    raw = int.from_bytes(dat, 'little')
+    assert [(raw >> b) & 1 for b in bits] == [1, 0, 1] + [0] * (len(bits) - 3)
+  else:
+    assert get_raw_value(dat, definition.sigs[sig]) == value
+  assert get_raw_value(dat, definition.sigs['CHECKSUM']) == hyundaicanfd.hkg_can_fd_checksum(addr, None, bytearray(dat))
+
+
+def test_cluster_test_slots_are_unique_and_named():
+  packer = CANPacker('hyundai_canfd_generated')
+  slots = [s for fields, bits in hyundaicanfd.CLUSTER_TEST_MSGS.values() for s in (*fields, *bits)]
+  assert len(slots) == len(set(slots)) and sorted(slots) == list(range(1, 146))
+  for name, (fields, _) in hyundaicanfd.CLUSTER_TEST_MSGS.items():
+    assert set(fields.values()) <= set(packer.dbc.name_to_msg[name].sigs)

@@ -889,14 +889,52 @@ def _lane_unseen(state, side, prob, frame):
 
 
 # ClusterLaneTest = field, ClusterLaneTestValue = raw value (test only): DBC fields, or 0x162 bits the DBC does not name
-CLUSTER_TEST_FIELDS = {1: "SPEEDLIMIT", 2: "SPEEDLIMIT_FLASH", 3: "SIGNS", 4: "SPEEDLIMIT_WEATHER", 5: "COUNTRY"}  # 0x162
-CLUSTER_TEST_FIELDS_161 = {6: "SLA_ICON", 12: "HDA_ICON", 13: "LFA_ICON", 14: "SETSPEED", 15: "SETSPEED_HUD", 16: "CAR_CIRCLE",
-                           17: "DISTANCE", 18: "DISTANCE_CAR", 19: "DISTANCE_SPACING", 20: "DISTANCE_LEAD",
-                           21: "ALERTS_4", 22: "ALERTS_5", 23: "BACKGROUND", 24: "LANE_HIGHLIGHT", 25: "LANE_ZOOM", 26: "CENTERLINE",
-                           27: "ALERTS_1", 28: "ALERTS_2", 29: "ALERTS_3"}
-CLUSTER_TEST_BITS = {7: tuple(range(53, 64)), 8: tuple(range(159, 163)), 9: tuple(range(183, 192)), 10: tuple(range(252, 256)),
-                     11: (87, 111, 135, 212)}  # 0x162
-CLUSTER_TEST_BITS_161 = {30: tuple(range(36, 42)), 31: tuple(range(45, 51)), 32: tuple(range(175, 181)), 33: tuple(range(246, 256))}
+CLUSTER_TEST_FIELDS = {1: "SPEEDLIMIT", 2: "SPEEDLIMIT_FLASH", 3: "SIGNS", 4: "SPEEDLIMIT_WEATHER", 5: "COUNTRY",
+                       64: "VIBRATE", 65: "FF_DETECT", 66: "FF_DISTANCE", 67: "FF_LATERAL", 68: "FF_DETECT_ALT",
+                       69: "FF_DISTANCE_ALT", 70: "FF_LATERAL_ALT", 71: "LF_DETECT", 72: "LF_DETECT_DISTANCE",
+                       73: "LF_DETECT_LATERAL", 74: "RF_DETECT", 75: "RF_DETECT_DISTANCE", 76: "RF_DETECT_LATERAL",
+                       77: "LR_DETECT", 78: "LR_DETECT_DISTANCE", 79: "LR_DETECT_LATERAL", 80: "RR_DETECT",
+                       81: "RR_DETECT_DISTANCE", 82: "RR_DETECT_LATERAL", 83: "FAULT_FSS", 84: "FAULT_FCA", 85: "FAULT_LSS",
+                       86: "FAULT_SLA", 87: "FAULT_DAW", 88: "FAULT_HBA", 89: "FAULT_SCC", 90: "FAULT_LFA", 91: "FAULT_HDA",
+                       92: "FAULT_LCA", 93: "FAULT_HDP", 94: "FAULT_DAS", 95: "FAULT_ESS"}  # 0x162
+CLUSTER_TEST_FIELDS_161 = {6: "SLA_ICON", 12: "HDA_ICON", 13: "LFA_ICON", 14: "SETSPEED", 15: "SETSPEED_HUD",
+                           16: "CAR_CIRCLE", 17: "DISTANCE", 18: "DISTANCE_CAR", 19: "DISTANCE_SPACING", 20: "DISTANCE_LEAD",
+                           21: "ALERTS_4", 22: "ALERTS_5", 23: "BACKGROUND", 24: "LANE_HIGHLIGHT", 25: "LANE_ZOOM",
+                           26: "CENTERLINE", 27: "ALERTS_1", 28: "ALERTS_2", 29: "ALERTS_3", 34: "FCA_ICON",
+                           35: "FCA_ALT_ICON", 36: "LKA_ICON", 37: "HBA_ICON", 38: "FCA_IMAGE", 39: "BCA_LEFT",
+                           40: "BCA_RIGHT", 41: "LCA_LEFT_ARROW", 42: "LCA_RIGHT_ARROW", 43: "TARGET", 44: "TARGET_DISTANCE",
+                           45: "LANELINE_LEFT", 46: "LANELINE_LEFT_POSITION", 47: "LANELINE_RIGHT",
+                           48: "LANELINE_RIGHT_POSITION", 49: "LANELINE_CURVATURE", 50: "LANELINE_CURVATURE_DIRECTION",
+                           51: "LANE_HIGHLIGHT_DISTANCE", 52: "LANE_LEFT", 53: "LANE_RIGHT", 54: "MUTE", 55: "SOUNDS_1",
+                           56: "SOUNDS_2", 57: "SOUNDS_3", 58: "SOUNDS_4", 59: "NAV_ICON", 60: "LCA_LEFT_ICON",
+                           61: "LCA_RIGHT_ICON", 62: "DAW_ICON"}  # 0x161
+CLUSTER_TEST_FIELDS_1EA = {96: "NEW_SIGNAL_4", 97: "NEW_SIGNAL_3", 98: "NEW_SIGNAL_2", 99: "NEW_SIGNAL_1",
+                           100: "LEFT_BLINK_HOLD", 101: "RIGHT_BLINK_HOLD", 102: "NEW_SIGNAL_5", 103: "HDA_MODE2",
+                           104: "LANE_LEFT", 105: "NEW_SIGNAL_6", 106: "LANE_RIGHT", 107: "LANE_CHANGING",
+                           108: "LF_DETECT_DISTANCE", 109: "LF_DETECT_LATERAL", 110: "LF_DETECT", 111: "RF_DETECT_DISTANCE",
+                           112: "RF_DETECT_LATERAL", 113: "RF_DETECT", 114: "SET_ME_FF", 115: "LR_DETECT_DISTANCE",
+                           116: "LR_DETECT_LATERAL", 117: "LR_DETECT", 118: "RR_DETECT_DISTANCE", 119: "RR_DETECT_LATERAL",
+                           120: "RR_DETECT", 121: "AUTOLANECHANGE_MSG", 122: "LANELINE_CURVATURE",
+                           123: "LANELINE_CURVATURE_DIRECTION", 124: "LANELINE_LEFT_POSITION", 125: "LANELINE_RIGHT_POSITION",
+                           126: "NEW_SIGNAL_7"}  # 0x1ea
+CLUSTER_TEST_FIELDS_200 = {138: "SET_ME_E1", 139: "TauGapSet", 140: "NEW_SIGNAL_2", 141: "NEW_SIGNAL_1", 142: "TauGapSet_",
+                           143: "NEW_SIGNAL_3"}  # 0x200
+CLUSTER_TEST_BITS = {7: (53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63), 8: (159, 160, 161, 162),
+                     9: (183, 184, 185, 186, 187, 188, 189, 190, 191), 10: (252, 253, 254, 255), 11: (87, 111, 135, 212)}  # 0x162 bits the DBC does not name
+CLUSTER_TEST_BITS_161 = {30: (36, 37, 38, 39, 40, 41), 31: (45, 46, 47, 48, 49, 50), 32: (175, 176, 177, 178, 179, 180),
+                         33: (246, 247, 248, 249, 250, 251, 252, 253, 254, 255), 63: (63, 215, 223, 227, 231, 235)}  # 0x161
+CLUSTER_TEST_BITS_1EA = {127: (42, 71, 86, 87, 95), 128: (57, 58, 59, 60, 61, 62, 63),
+                         129: (99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109),
+                         130: (110, 111, 112, 113, 114, 115, 116, 117, 118, 119),
+                         131: (128, 129, 130, 131, 132, 133, 134, 135, 136, 137, 138),
+                         132: (147, 148, 149, 150, 151, 158, 159, 171),
+                         133: (178, 179, 180, 181, 182, 183, 187, 188, 189, 190, 191),
+                         134: (192, 193, 194, 195, 196, 197, 198, 199, 200, 201, 202, 203),
+                         135: (213, 214, 215, 216, 217, 218, 219, 220, 221, 222),
+                         136: (223, 224, 225, 226, 227, 228, 229, 230, 231), 137: (249, 250, 251, 252, 253, 254, 255)}  # 0x1ea
+CLUSTER_TEST_BITS_200 = {144: (48, 49, 50, 51, 52, 53, 54, 55), 145: (56, 57, 58, 59, 60, 61, 62, 63)}  # 0x200
+CLUSTER_TEST_MSGS = {'CCNC_0x162': (CLUSTER_TEST_FIELDS, CLUSTER_TEST_BITS), 'ADRV_0x161': (CLUSTER_TEST_FIELDS_161, CLUSTER_TEST_BITS_161),
+                     'ADRV_0x1ea': (CLUSTER_TEST_FIELDS_1EA, CLUSTER_TEST_BITS_1EA), 'ADRV_0x200': (CLUSTER_TEST_FIELDS_200, CLUSTER_TEST_BITS_200)}
 
 
 CLUSTER_TEST_SWEEP = -1  # ClusterLaneTestValue -1: step the field every 1 s and show the step in the set speed number
@@ -914,18 +952,25 @@ def _cluster_sweep(packer, field, frame):
   if state.get('field') != field:
     state.update(field=field, start=frame)
   step = (frame - state['start']) // 100
-  bits = CLUSTER_TEST_BITS.get(field) or CLUSTER_TEST_BITS_161.get(field)
-  if bits:
-    i = step % (len(bits) + 1)
-    return (0, 0) if i == 0 else (1 << (i - 1), bits[i - 1])
-  if field in CLUSTER_TEST_FIELDS:
-    sig = packer.dbc.name_to_msg['CCNC_0x162'].sigs[CLUSTER_TEST_FIELDS[field]]
-  elif field in CLUSTER_TEST_FIELDS_161:
-    sig = packer.dbc.name_to_msg['ADRV_0x161'].sigs[CLUSTER_TEST_FIELDS_161[field]]
-  else:
-    return 0, None
-  value = step % (1 << sig.size)
-  return value, value
+  for name, (fields, bit_groups) in CLUSTER_TEST_MSGS.items():
+    if field in bit_groups:
+      bits = bit_groups[field]
+      i = step % (len(bits) + 1)
+      return (0, 0) if i == 0 else (1 << (i - 1), bits[i - 1])
+    if field in fields:
+      value = step % (1 << packer.dbc.name_to_msg[name].sigs[fields[field]].size)
+      return value, value
+  return 0, None
+
+
+def _cluster_test_msg(packer, name, bus, values, rx_counter, field, value):
+  # pack a cluster message with the test field (raw value) or raw bits applied last
+  fields, bit_groups = CLUSTER_TEST_MSGS[name]
+  if field in fields:
+    sig = packer.dbc.name_to_msg[name].sigs[fields[field]]
+    values[fields[field]] = value * sig.factor + sig.offset
+  msg = packer.make_can_msg(name, bus, values, rx_counter=rx_counter)
+  return _set_raw_bits(msg, bit_groups[field], value) if field in bit_groups else msg
 
 
 def _set_raw_bits(msg, bits, value):
@@ -1248,18 +1293,15 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
         values["LANE_RIGHT"] = 0 if trailer_lane_change_blocked else 1 if desire in (2, 4) else 0
 
         _apply_driver_monitoring_alert(values, hud_control, CS.adrv_0x161)
-        if test_field in CLUSTER_TEST_FIELDS_161:
-          values[CLUSTER_TEST_FIELDS_161[test_field]] = test_value
         if sweep_display is not None:
           values["vSetDis"] = min(sweep_display, 255)
-        msg = packer.make_can_msg("ADRV_0x161", CAN.ECAN, values, rx_counter = rx_counter)
-        ret.append(_set_raw_bits(msg, CLUSTER_TEST_BITS_161[test_field], test_value) if test_field in CLUSTER_TEST_BITS_161 else msg)
+        ret.append(_cluster_test_msg(packer, "ADRV_0x161", CAN.ECAN, values, rx_counter, test_field, test_value))
 
       if CS.adrv_0x200 is not None:
         values = copy.copy(CS.adrv_0x200)
         rx_counter = values.pop("COUNTER", None)
         values["TauGapSet"] = hud_control.leadDistanceBars
-        ret.append(packer.make_can_msg("ADRV_0x200", CAN.ECAN, values, rx_counter = rx_counter))
+        ret.append(_cluster_test_msg(packer, "ADRV_0x200", CAN.ECAN, values, rx_counter, test_field, test_value))
 
       if CS.adrv_0x1ea is not None:
         values = copy.copy(CS.adrv_0x1ea)
@@ -1272,7 +1314,7 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
         _apply_cluster_lane_lines(values, CS, lat_active, desire)
         _normalize_cluster_corner_objects(values)
 
-        ret.append(packer.make_can_msg("ADRV_0x1ea", CAN.ECAN, values, rx_counter = rx_counter))
+        ret.append(_cluster_test_msg(packer, "ADRV_0x1ea", CAN.ECAN, values, rx_counter, test_field, test_value))
 
       if CS.ccnc_0x162 is not None:
         values = copy.copy(CS.ccnc_0x162)
@@ -1293,10 +1335,7 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
           values["FAULT_LSS"] = 0
           values["FAULT_DAS"] = 0
 
-        if test_field in CLUSTER_TEST_FIELDS:
-          values[CLUSTER_TEST_FIELDS[test_field]] = test_value
-        msg = packer.make_can_msg("CCNC_0x162", CAN.ECAN, values, rx_counter=rx_counter)
-        ret.append(_set_raw_bits(msg, CLUSTER_TEST_BITS[test_field], test_value) if test_field in CLUSTER_TEST_BITS else msg)
+        ret.append(_cluster_test_msg(packer, "CCNC_0x162", CAN.ECAN, values, rx_counter, test_field, test_value))
 
     # --- NEW_MSG_4B9 (corner radar keep-alive?) ---
     if enable_corner_radar > 0:
