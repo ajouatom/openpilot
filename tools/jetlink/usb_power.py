@@ -24,11 +24,9 @@ def cut_input(role=POWER_ROLE, voter=VOTER):
     return 'deferred'
   active, value = voter / 'force_active', voter / 'force_val'
   forced = active.read_text().strip()
-  if forced == '1':
-    if value.read_text().strip() == '0':
-      return 'applied'  # A previous daemon already installed this boot's guard.
+  if forced == '1' and value.read_text().strip() != '0':
     raise RuntimeError('USB_ICL has an existing nonzero forced vote')
-  if forced != '0':
+  if forced not in ('0', '1'):
     raise RuntimeError('unknown USB_ICL force_active value')
   # Missing nodes must not be created, even in a malformed/test filesystem.
   if not value.is_file():
@@ -37,7 +35,9 @@ def cut_input(role=POWER_ROLE, voter=VOTER):
     return 'deferred'
   value.write_text('0\n')
   if role.read_text().strip() != 'none':
-    return 'deferred'  # force_val alone is inactive; do not enable it now.
+    return 'deferred'  # Never reassert the callback after attachment.
+  # A previous failed callback can leave software values at 1/0. Reassert
+  # only after the same empty-port checks, and preserve foreign nonzero votes.
   active.write_text('1\n')
   if active.read_text().strip() != '1' or value.read_text().strip() != '0':
     raise RuntimeError('USB_ICL zero-current vote did not read back')

@@ -39,15 +39,100 @@ import os
 from pathlib import Path
 import select
 import signal
+import stat
 import sys
 import time
+
+# dnsmasq defers its queued SIGTERM while checking a DHCP address with ICMP.
+# Its three-second probe can outlive a two-second shutdown deadline. Allow
+# that normal path to finish; never remove ownership/rebind while it is alive.
+STOP_TIMEOUT = 5.0
+
+
+def wait_for_exit(proc, start, fd):
+  if fd is not None:
+    poll = select.poll()
+    poll.register(fd, select.POLLIN)
+    if poll.poll(int(STOP_TIMEOUT * 1000)):
+      return
+  else:
+    deadline = time.monotonic() + STOP_TIMEOUT
+    while True:
+      try:
+        fields = (proc / 'stat').read_text().rsplit(') ', 1)[1].split()
+      except FileNotFoundError:
+        return
+      if fields[19] != start or fields[0] == 'Z':
+        return
+      remaining = deadline - time.monotonic()
+      if remaining <= 0:
+        break
+      time.sleep(min(.02, remaining))
+  raise ValueError('helper dnsmasq did not stop within five seconds')
+
 
 state, action = Path(sys.argv[1]), sys.argv[2]
 lease_dir = Path(sys.argv[3])
 pidfile, record = state / 'dnsmasq.pid', state / 'dnsmasq.owner'
 if not pidfile.exists() and not record.exists():
   sys.exit(1 if action == 'alive' else 0)
+
+def state_snapshot(path):
+  # 종료 경합에서 다른 상태 파일을 지우지 않도록 내용과 파일 식별자를 함께 보존한다.
+  try:
+    fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+  except FileNotFoundError:
+    return None
+  def identity(info):
+    return (info.st_dev, info.st_ino, info.st_mode, info.st_uid, info.st_gid,
+            info.st_nlink, info.st_size, info.st_mtime_ns, info.st_ctime_ns)
+  try:
+    before = os.fstat(fd)
+    if not stat.S_ISREG(before.st_mode):
+      raise ValueError('DHCP state is not a regular file')
+    data = os.read(fd, 65537)
+    after = os.fstat(fd)
+  finally:
+    os.close(fd)
+  if len(data) > 65536 or len(data) != before.st_size or identity(before) != identity(after) or identity(after) != identity(path.lstat()):
+    raise ValueError('DHCP state changed while being read')
+  return identity(after), data
+
+def stop_after_exit(exc):
+  # stop의 /proc 읽기 ENOENT만 허용한다. 살아 있는 PID나 소유권 오류는 우회하지 않는다.
+  if action != 'stop' or not isinstance(exc, FileNotFoundError) or proc is None or snapshots is None:
+    return False
+  if not isinstance(exc.filename, str) or not exc.filename.startswith(str(proc) + '/'):
+    return False
+  saved_owner = json.loads(snapshots[record][1]) if snapshots[record] is not None else None
+  if (not isinstance(saved_owner, dict) or set(saved_owner) != {'pid', 'start'} or
+      type(saved_owner['pid']) is not int or saved_owner['pid'] != pid or
+      not isinstance(saved_owner['start'], str) or not saved_owner['start'].isdigit()):
+    raise ValueError('PID was reused or is not helper-owned')
+  try:
+    proc.lstat()
+  except FileNotFoundError:
+    pass
+  else:
+    return False
+  if any(state_snapshot(path) != saved for path, saved in snapshots.items()):
+    raise ValueError('DHCP state changed after process exit')
+  # 상태를 확인하는 동안 같은 PID가 다시 생겼다면 기존 거절 경로를 유지한다.
+  try:
+    proc.lstat()
+  except FileNotFoundError:
+    pass
+  else:
+    return False
+  for path, saved in snapshots.items():
+    if saved is not None:
+      path.unlink()
+  return True
+
+proc = snapshots = None
 try:
+  if action == 'stop':
+    snapshots = {path: state_snapshot(path) for path in (pidfile, record)}
   pid = int(pidfile.read_text().strip()) if pidfile.exists() else int(json.loads(record.read_text())['pid'])
   if pid <= 1:
     raise ValueError('invalid PID')
@@ -79,31 +164,30 @@ try:
       if saved != {'pid': pid, 'start': start}:
         raise ValueError('PID was reused or is not helper-owned')
     if action == 'stop':
-      if fd is not None and hasattr(signal, 'pidfd_send_signal'):
-        signal.pidfd_send_signal(fd, signal.SIGTERM)
-        poll = select.poll()
-        poll.register(fd, select.POLLIN)
-        if not poll.poll(2000):
-          raise ValueError('helper dnsmasq did not stop within two seconds')
-      else:
-        latest = (proc / 'stat').read_text().rsplit(') ', 1)[1].split()[19]
-        if latest != start or (proc / 'cmdline').read_bytes().split(b'\0') != args:
-          raise ValueError('PID changed before signaling')
-        os.kill(pid, signal.SIGTERM)
-        deadline = time.monotonic() + 2
-        while proc.exists():
-          fields = (proc / 'stat').read_text().rsplit(') ', 1)[1].split()
-          if fields[19] != start or fields[0] == 'Z':
-            break
-          if time.monotonic() >= deadline:
-            raise ValueError('helper dnsmasq did not stop within two seconds')
-          time.sleep(.02)
+      try:
+        if fd is not None and hasattr(signal, 'pidfd_send_signal'):
+          signal.pidfd_send_signal(fd, signal.SIGTERM)
+          wait_for_exit(proc, start, fd)
+        else:
+          latest = (proc / 'stat').read_text().rsplit(') ', 1)[1].split()[19]
+          if latest != start or (proc / 'cmdline').read_bytes().split(b'\0') != args:
+            raise ValueError('PID changed before signaling')
+          os.kill(pid, signal.SIGTERM)
+          wait_for_exit(proc, start, None)
+      except (FileNotFoundError, ProcessLookupError):
+        # This exact, already validated process can exit before the signal.
+        pass
       pidfile.unlink(missing_ok=True)
       record.unlink(missing_ok=True)
   finally:
     if fd is not None:
       os.close(fd)
 except (OSError, ValueError, KeyError, AttributeError) as exc:
+  try:
+    if stop_after_exit(exc):
+      sys.exit(0)
+  except (OSError, ValueError, KeyError, AttributeError) as cleanup_exc:
+    exc = cleanup_exc
   raise SystemExit(f'jetlink mobile: refusing DHCP ownership/operation: {exc}')
 PY
 }
