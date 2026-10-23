@@ -299,3 +299,19 @@ def test_full_compact_switches_use_real_stream_framing():
     thread.join(timeout=5)
   assert not thread.is_alive()
   assert not errors
+
+
+def test_future_full_2066_model_keeps_the_original_parser_contract():
+  # 개수가 같아도 다른 정상 모델의 전체 출력을 N16 축소 응답으로 오인하면 안 된다.
+  from openpilot.selfdrive.modeld.jetlink.contracts import validate_model_spec
+  future = replace(SPEC, sha256='3' * 64,
+                   output_shapes={**SPEC.output_shapes, 'outputs': (1, C.COUNT)},
+                   output_slices={name: at for name, at in SPEC.output_slices.items() if name not in C.OMITTED})
+  assert validate_model_spec(future) is future and not C.eligible(future)
+  full = np.linspace(-1, 1, C.COUNT, dtype=np.float32)
+  expected = Parser().parse_outputs({name: full[None, at] for name, at in future.output_slices.items()})
+  actual = parse_outputs(Parser(), future, full)
+  assert actual.keys() == expected.keys()
+  for name in actual:
+    assert actual[name].shape == expected[name].shape
+    assert actual[name].tobytes() == expected[name].tobytes(), name
