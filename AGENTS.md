@@ -7,7 +7,10 @@
   Native compile/load/self-test failure falls back to NumPy; no per-frame build.
   Preserve scalar/state validation, expiry/raw maps, projection and USB deadlines.
   Windows94pass/34native-POSIX skips; combined real-C/session/state checks use
-  Linux CI. No local Orin/USB/road benchmark or additive timing/tail cure claim.
+  Linux CI1117/56skip+94update/119nav/11storage/11network and Windows pass.
+  Source e4779e059a signed64702473B/f17dd14a runtime HTTPS/hash verified;
+  1097 committed payload files,26 pin/bundle checks pass/1skip.
+  No local Orin/USB/road benchmark or additive timing/tail cure claim.
   Vehicle off, publish signed runtime for Git Pull/BOTH reboot; wip record only.
   See docs/jetson_n16_staging_integration_20261023.md for validation and release.
 

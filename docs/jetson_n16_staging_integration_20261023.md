@@ -1,4 +1,4 @@
-﻿# N16 map and native image staging integration - 2026-10-23
+# N16 map and native image staging integration - 2026-10-23
 
 ## Review
 
@@ -60,7 +60,12 @@ match. This is not a TensorRT, camera or physical USB experiment. Separate
 native tests check all byte values, tail lengths, destination guard regions,
 source preservation, malformed buffers, actual initialization and fallback.
 
-Linux CI and final release results are recorded below after completion.
+[Source Linux CI](https://github.com/ajouatom/openpilot/actions/runs/39912647388)
+passed: 1,117 broad checks with 56 existing skips, including the actual native
+converter and four combined FP16/FP32 and CPU/device-state cases. Also passed:
+94 updater, 119 navigation/HUD, 11 real-storage and 11 network-namespace checks,
+plus the Windows installer. The final local signed-pin/bundle/NAV checks passed
+26 with one Windows skip.
 
 ## Delivery and limits
 
@@ -78,3 +83,18 @@ improved USB tails, a 50 ms deadline or a locationd cure is established here.
 Imported original records: [map](jetlink_direct_map_20261023.md) and
 [image](jetlink_native_image_20261023.md). This document governs our defaults
 and publication status, superseding their default-off/no-package statements.
+
+## Published release
+
+Source: `e4779e059a5642d4a8efe989937a84a58210d220`.
+[Signed release manifest](https://upload.shind0.synology.me/models/jetlink-host-e4779e059a5642d4a8efe989937a84a58210d220/manifest.json).
+Bundle: 64702473 bytes; SHA-256 `f17dd14ab93204d18f0f341904de46ad0d8e5dad22d9cca7e7d7b5da93fdffaa`.
+All 1,097 regular payload files match committed source (the existing selected
+model alias for older bootstraps is preserved). No private task files or signing
+key are included. Full anonymous HTTPS download matches size/hash and the
+existing trusted public key verifies the signature. The carrot-nav selection
+pins this release and preserves model SHA `01effc67...`.
+
+The rollout selection and review record are pushed on carrot-nav; carrot-wip
+receives documentation only. No device installation or local hardware speedup
+is claimed. A normal reboot updater, not a per-device overlay, activates it.
