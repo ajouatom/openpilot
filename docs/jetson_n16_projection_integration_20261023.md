@@ -49,7 +49,10 @@ replies. Mock IPC tests are portable on Windows; the added real socket test
 uses actual stream framing, full/compact switches and telemetry on Linux.
 Earlier attempts to run native socket/daemon suites on Windows failed because
 fcntl, AF_UNIX and sendmsg are unavailable; they are not counted as passes.
-Linux integration results are recorded below after publication.
+[Linux integration CI](https://github.com/ajouatom/openpilot/actions/runs/39888833740)
+passes 1,062 broad checks (56 skips), including the added actual-stream test,
+94 updater checks, 119 navigation/HUD checks, 11 real-storage and 11 network
+namespace checks. The Windows installer job also passes.
 
 The contributor's 41.480 -> 38.898 ms bench comparison was an earlier prototype
 with real cameras and simulated navigation/cruise inputs. Their final negotiated
@@ -72,3 +75,16 @@ The imported contributor notes describe their original commits and experiments:
 [projection](jetlink_n16_response_projection.md) and
 [input overlap](jetlink_input_warp_overlap.md). The release status here supersedes
 their original statement that no selected host package was changed.
+
+Published host source: `e7ff007ddc5c539ec34ea83d7b9ac7de1df1a6ae`.
+The signed [release manifest](https://upload.shind0.synology.me/models/jetlink-host-e7ff007ddc5c539ec34ea83d7b9ac7de1df1a6ae/manifest.json)
+selects a 64,695,651-byte bundle, SHA-256
+`e72bab4b064bffa62d44531ed269688c41782e0c5b5074333d360f6f4310b7ff`.
+All 1,091 payload files match committed source, including the existing selected
+model alias for older bootstraps. No private signing key or task evidence is
+included. The unauthenticated HTTPS bundle download matches the complete byte
+count/hash; the existing trusted public key verifies the signature. The NAV
+host selection now points to this release and preserves ONNX `01effc67...`.
+An additional 26 local signature/bundle/NAV checks pass (one Windows skip).
+Publication is complete; installation and speedup on the owner's powered-off
+Jetson are not claimed.

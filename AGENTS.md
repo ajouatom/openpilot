@@ -8,7 +8,10 @@
   USB, model/priority/deadline/control change.119 desktop checks/1POSIXskip;
   added GPU-state reset/omitted-NaN,10 malformed IPC and actual stream tests.
   Contributor38.898ms is prototype bench evidence, not our hardware result.
-  Publish signed host bundle+pin for normal Git Pull/BOTH reboot; wip record
+  Source e7ff007ddc LinuxCI1062/56skip+94update/119nav/11storage/11network and
+  Windows installer pass. Signed64695651B bundle e72bab4b HTTPS/hash verified,
+  all1091 files committed;26 pin/bundle tests pass/1skip. Publish bundle+pin
+  for normal Git Pull/BOTH reboot; wip record
   only (different model/state runtime). Vehicle read-only, raw private. See
   docs/jetson_n16_projection_integration_20261023.md for final release/CI.
 
