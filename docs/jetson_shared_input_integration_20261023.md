@@ -187,3 +187,37 @@ P9941.4014,max44.1009 ms,zero >50. Link/N16/HUD/signal are fresh60/60; the
 independent simultaneous Jetson renderer observer also has60/60 fresh online
 signal-display states. The earlier one-sample HUD lapse remains recorded; this
 is bounded recovery evidence, not proof that display freshness never lapses.
+
+
+## Follow-up: Naver guidance arrives without another code change
+
+The owner then reported Naver content appearing. The same sender session now
+publishes mode=guidance, guidance_active=true, off_route=false, route_present=true,
+17 route coordinates (1.2km lookahead), valid vehicle fixes and fresh current/
+next TBT. The current maneuver is a left turn1,064m ahead. These supersede the
+earlier absent-input observation; the exact action/environment that restored
+sender updates remains unknown. Neither receiver nor APK was changed.
+
+In30 sampled seconds, mapsd reason=ready30/30 and N16 active30/30. Fresh
+navInstructionCarrot contains one maneuver30/30. The observer initially had
+not received the periodic navRoute publication, then sees17points29/29.
+Actual modeld/jetlinkd shared input views have matching finite nav_map and
+navigation hashes30/30; each double read agrees. nav_map has5,955 nonzero
+pixels (range0..255), navigation has2nonzero values, including distance10.64
+in the existing100m encoding. This demonstrates populated production model
+input and daemon input, not an independently captured GPU engine input trace
+or a road maneuver outcome.
+
+The actual Jetson screen receiver advances960x540 map sequences592->1157,
+with age81->30ms and no stalled flag. Cumulative decoder drops remain11 in
+both snapshots; do not describe the entire stream as lossless. The separate
+nav_model_map preview reports false because the user has screen mode0; its
+receiver explicitly gates that preview on mode7. This is not evidence of an
+empty model input. Signal/HUD snapshots and both camera previews remain fresh.
+
+
+The subsequent60.030s active-NAV/video window has1,200 valid consecutive model,
+DM, both cameras, odometry and healthy pose messages. Model mean37.8972,
+P9942.0846,max43.4481 ms; zero >50. Link/N16/HUD/signal60/60 fresh. This is
+bounded parked active-NAV evidence, not a causal timing comparison or road
+validation. No additional code or device changes were required for arrival.
