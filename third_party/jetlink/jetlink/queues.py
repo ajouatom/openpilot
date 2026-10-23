@@ -202,6 +202,7 @@ class StatefulQueues:
     from jetlink.finite import native_checker
     self._native_finite = native_checker()
     self.spec = spec
+    self.direct_map = None
     self.state = {name: inputs[name] for name in spec.state_pairs}
     # NumPy's aarch64 float16 isfinite path is scalar. IEEE binary16 is
     # non-finite exactly when all five exponent bits are set, for BOTH signs
@@ -228,15 +229,31 @@ class StatefulQueues:
     if not np.isfinite(packed).all():
       self.reset()
       raise ValueError('Non-finite stateful scalar input')
+    self._copy_image(warped, dest)
+    offset = 0
+    for name, size in zip(self.spec.packed_shapes, self.spec.packed_sizes, strict=True):
+      dest[name][...] = packed[offset:offset + size].reshape(dest[name].shape)
+      offset += size
+
+  def _copy_image(self, warped, dest):
     image = dest['new_img']
     if image.dtype == np.float16:
       np.take(_U8_TO_F16_BITS, warped.reshape(-1), out=image.reshape(-1).view(np.uint16), mode='clip')
     else:
       image[...] = warped
-    offset = 0
-    for name, size in zip(self.spec.packed_shapes, self.spec.packed_sizes, strict=True):
-      dest[name][...] = packed[offset:offset + size].reshape(dest[name].shape)
-      offset += size
+
+  def step_compact_into(self, warped, compact, dest):
+    if self.direct_map is None:
+      raise RuntimeError('Direct-map input staging is disabled')
+    if warped.shape != self.spec.warped_shape or warped.dtype != np.uint8:
+      raise ValueError('Invalid stateful frame shape/type')
+    try:
+      fields = self.direct_map.fields(compact, dest)
+    except ValueError:
+      self.reset()
+      raise
+    self._copy_image(warped, dest)
+    self.direct_map.copy(fields)
 
   def _all_finite(self, value):
     if self._native_finite is not None:
@@ -297,9 +314,14 @@ class DeviceStateQueues(StatefulQueues):
 
 
 
-def make_queues(spec, host_inputs, device_state=None):
+def make_queues(spec, host_inputs, device_state=None, *, direct_map=False):
   if device_state is not None:
     if not spec.stateful:
       raise ValueError('Device recurrence requires a stateful model')
-    return DeviceStateQueues(spec, host_inputs, device_state)
-  return StatefulQueues(spec, host_inputs) if spec.stateful else PolicyQueues(spec)
+    queues = DeviceStateQueues(spec, host_inputs, device_state)
+  else:
+    queues = StatefulQueues(spec, host_inputs) if spec.stateful else PolicyQueues(spec)
+  if direct_map:
+    from jetlink.direct_map import DirectMap
+    queues.direct_map = DirectMap(spec, host_inputs)
+  return queues

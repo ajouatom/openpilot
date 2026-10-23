@@ -97,7 +97,8 @@ def model_name(spec):
 
 
 def parse_outputs(parser, spec, result):
-  if result.size == projection.COUNT:
+  # 정상 전체 출력이 우선이다. 다른 모델의 전체 길이가 2066이어도 기존 경로를 유지한다.
+  if result.size != spec.output_nelem and result.size == projection.COUNT:
     # Only the negotiated exact N16 prefix may omit graph-owned features.
     # Do not fabricate zero hidden/map/navigation outputs for old consumers.
     if not projection.eligible(spec) or result.shape != (projection.COUNT,):
