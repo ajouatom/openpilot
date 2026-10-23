@@ -22,6 +22,12 @@
   supplied1.28APK still advertisesnm127,JSONworker2s age gate remains, fallback
   off_route=true is not proof of physical route deviation. Valid NAV pending;
   no expiry bypass or APK modification. Raw private; no Jetson update.
+  Follow-up sender guidance resumes without code change:17route points,TBT
+  left1064m,fresh external position.30/30 maps ready+matching nonzero shared
+  nav_map/navigation hashes; actual screen960x540 advancing,decode drops11
+  unchanged. Mode0 excludesmode7preview,not model input. ActiveNAV60s1200valid
+  consecutive model/DM/cameras/odom/pose,mean37.897/p9942.085/max43.448ms,0>50,
+  HUD/signal60/60. Restoration trigger unknown; no road/engine-hash claim.
 
 - On 2026-10-23, owner requests existing signal observations on Jetson USB HUD.
   NAV forwards bounded allowlisted4KiB/20-track metadata in existing10Hz HUD,
