@@ -56,9 +56,20 @@ launcher remain unchanged. This is not electrical or UVLO validation.
 ## Validation and delivery
 
 Windows focused regression: 126 passed, 31 skipped for Linux/POSIX requirements.
-The parser regression was also observed failing before the correction. Linux CI
-results will be recorded after publication; desktop skips do not validate configfs,
-/proc or locking behavior. No live vehicle installation or power test was performed.
+The parser regression was also observed failing before the correction.
+
+Linux CI passed for both published single-parent code commits:
+
+- NAV `5d2437da6c`: [run 39960230006](https://github.com/ajouatom/openpilot/actions/runs/39960230006),
+  94 updater/ownership checks, 1244 broad checks (56 skipped), 119 navigation checks,
+  11 real storage checks and 11 isolated NAT checks.
+- Wip `190f96241c`: [run 39960260867](https://github.com/ajouatom/openpilot/actions/runs/39960260867),
+  861 broad checks (2 skipped), 119 navigation checks and 11 real storage checks.
+- Both Windows installer CI jobs passed. Counts across suites can overlap.
+
+New handoff and DHCP race tests execute on Linux using temporary filesystem/proc
+fixtures and real file locking; these do not establish physical configfs/device
+behavior. No live vehicle installation or power test was performed.
 
 Common helpers are integrated on both maintained branches; the parser change is
 NAV-only. Normal delivery is comma Git Pull and restart/reboot. No Jetson runtime
