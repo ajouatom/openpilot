@@ -200,3 +200,40 @@ def test_helper_status_is_not_silently_treated_as_success(monkeypatch, code, std
   else:
     with pytest.raises(RuntimeError):
       power.cut_input()
+
+
+def test_zero_vote_reasserts_callback_after_previous_failure(nodes, monkeypatch):
+  role, voter = nodes
+  active = voter / 'force_active'
+  (voter / 'force_val').write_text('0')
+  active.write_text('1')
+  original = Path.write_text
+  attempts = []
+  def write(path, value, *args, **kwargs):
+    if path == active:
+      attempts.append(value)
+      if len(attempts) == 1:
+        raise OSError('previous callback failure persists')
+    return original(path, value, *args, **kwargs)
+  monkeypatch.setattr(Path, 'write_text', write)
+  with pytest.raises(OSError, match='callback failure'):
+    usb_power.cut_input(role, voter)
+  assert usb_power.cut_input(role, voter) == 'applied'
+  assert attempts == ['1\n', '1\n']
+
+
+@pytest.mark.parametrize('attach_read', [1, 2, 3])
+def test_zero_vote_retry_never_reasserts_after_attachment(nodes, monkeypatch, attach_read):
+  _, voter = nodes
+  (voter / 'force_val').write_text('0')
+  (voter / 'force_active').write_text('1')
+  states = iter(['none'] * (attach_read - 1) + ['sink'])
+  role = SimpleNamespace(read_text=lambda: next(states))
+  original = Path.write_text
+  calls = []
+  def write(path, value, *args, **kwargs):
+    if path.name == 'force_active': calls.append(value)
+    return original(path, value, *args, **kwargs)
+  monkeypatch.setattr(Path, 'write_text', write)
+  assert usb_power.cut_input(role, voter) == 'deferred'
+  assert not calls
