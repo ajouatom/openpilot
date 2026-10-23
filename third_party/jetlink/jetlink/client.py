@@ -28,6 +28,7 @@ from pathlib import Path
 import numpy as np
 
 from jetlink import protocol as P
+from jetlink import output_projection as projection
 from jetlink.spec import CHUNK, DEFAULT_FRAME_SKIP, ModelSpec
 from jetlink.transport.base import LinkError, LinkTimeout, Message, Transport
 
@@ -81,7 +82,8 @@ def _transport_layers(transport):
 
 class JetlinkClient:
   def __init__(self, transport: Transport, deadline: float = FRAME_TIMEOUT,
-               name: str | None = None, *, allow_block_compression: bool = False):
+               name: str | None = None, *, allow_block_compression: bool = False,
+               allow_output_projection: bool = False):
     self.t = transport
     self.deadline = deadline
     # Who the server logs this connection as. The nonce is per client object,
@@ -107,6 +109,20 @@ class JetlinkClient:
     self._allow_block_compression = allow_block_compression
     self._lz4 = False
     self.last_request_bytes = 0
+    self._allow_output_projection = allow_output_projection
+    self._projection_negotiated = False
+    self._projection_spec = None
+    self._projection_spec_ok = False
+    # The IPC consumer opts in separately for each request. Raw/old consumers
+    # keep the original full response even on a projection-capable connection.
+    self.project_output = False
+
+  @property
+  def output_projection_available(self) -> bool:
+    if self.spec is not self._projection_spec:
+      self._projection_spec = self.spec
+      self._projection_spec_ok = projection.eligible(self.spec)
+    return self._projection_negotiated and self._projection_spec_ok
 
   # -- construction ---------------------------------------------------------
 
@@ -222,9 +238,15 @@ class JetlinkClient:
     self._stateful_v2 = False
     self._nav_u8 = False
     self._lz4 = False
+    self._projection_negotiated = False
+    self._projection_spec = None
+    self._projection_spec_ok = False
+    self.project_output = False
     seq = self._next_seq()
     version = self._protocol_version()
     client = {'nonce': self.nonce, 'name': self.name}
+    if version == 2 and self._allow_output_projection:
+      client[projection.CAPABILITY] = projection.descriptor()
     if version == 3:
       link = self._link_info()
       if link:
@@ -243,6 +265,8 @@ class JetlinkClient:
     if selected != version:
       raise LinkError(f"server selected protocol {selected!r}, transport speaks protocol {version}")
     self._stateful_v2 = selected == 2 and response.get('stateful_v2') is True
+    self._projection_negotiated = (self._allow_output_projection and self._stateful_v2 and
+                                  projection.matches(response.get(projection.CAPABILITY)))
     from jetlink.packed_codec import CAPABILITY
     self._nav_u8 = self._stateful_v2 and response.get(CAPABILITY) is True
     from jetlink.block_codec import CAPABILITY as LZ4_CAPABILITY, library
@@ -403,6 +427,10 @@ class JetlinkClient:
       packed = _protocol3_packed(self.spec, packed)
     seq = self._next_seq()
     flags = (P.Flag.RESET_QUEUES if reset else 0) | (P.Flag.WANT_STATE if want_state else 0)
+    if self.project_output:
+      if version != 2 or not self.output_projection_available:
+        raise LinkError('driving-output projection was not negotiated for this model')
+      flags |= projection.FLAG
     if version == 3:
       flags |= P.Flag.WANT_HIDDEN
     try:
@@ -458,7 +486,15 @@ class JetlinkClient:
     if fid != self._infer_frame_id:
       self.dead = True
       raise LinkError(f'inference response frame {fid}, expected {self._infer_frame_id}')
-    end = P.INFER_RESP_SIZE + self.spec.output_nbytes
+    projected = bool(self._infer_flags & projection.FLAG)
+    if bool(msg.flags & projection.FLAG) != projected:
+      self.dead = True
+      raise LinkError('inference response projection marker mismatch')
+    if projected and msg.flags & ~(projection.FLAG | int(P.Flag.PADDED)):
+      self.dead = True
+      raise LinkError('invalid projected response flags')
+    count = projection.COUNT if projected else self.spec.output_nelem
+    end = P.INFER_RESP_SIZE + count * 4
     if msg.payload.nbytes < end:
       self.dead = True
       raise LinkError('inference response is missing model outputs')
@@ -482,7 +518,7 @@ class JetlinkClient:
                   receive['prepare'] * 1e3, receive['read_wait'] * 1e3, receive['handoff'] * 1e3,
                   gpu_us / 1e3, queue_us / 1e3, total_us / 1e3)
     # copy: the payload is a view into the transport's reusable receive buffer.
-    output = np.frombuffer(msg.payload, np.float32, self.spec.output_nelem, P.INFER_RESP_SIZE).copy()
+    output = np.frombuffer(msg.payload, np.float32, count, P.INFER_RESP_SIZE).copy()
     if not np.all(np.isfinite(output)):
       self.dead = True
       raise LinkError('inference response contains non-finite model outputs')

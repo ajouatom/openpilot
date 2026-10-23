@@ -8,7 +8,8 @@ import pytest
 @pytest.mark.parametrize('navigation', [False, True])
 @pytest.mark.parametrize('fast_receiver', [False, True])
 @pytest.mark.parametrize('usb', [False, True])
-def test_timing_records_usb_and_display_tail_after_unchanged_reply(monkeypatch, navigation, fast_receiver, usb):
+@pytest.mark.parametrize('projection_request', [False, True])
+def test_timing_records_usb_and_display_tail_after_unchanged_reply(monkeypatch, navigation, fast_receiver, usb, projection_request):
   if sys.platform == 'win32':
     monkeypatch.setitem(sys.modules, 'fcntl', NS())
   from openpilot.selfdrive.modeld.jetlink import daemon, link
@@ -32,7 +33,7 @@ def test_timing_records_usb_and_display_tail_after_unchanged_reply(monkeypatch, 
   monkeypatch.setattr(daemon, 'publish', lambda *a, **kw: None)
   monkeypatch.setattr(daemon, 'send', lambda *a: None)
 
-  request = (daemon.REQUEST.pack(42, 1, 123) + bytes(link.SPEC.warped_nbytes) + bytes(link.SPEC.packed_nbytes))
+  request = (daemon.REQUEST.pack(42, 3 if projection_request else 1, 123) + bytes(link.SPEC.warped_nbytes) + bytes(link.SPEC.packed_nbytes))
 
   def receive(connection):
     step('receive', 1.)  # Normal idle time must stay separate from USB work.
@@ -50,6 +51,7 @@ def test_timing_records_usb_and_display_tail_after_unchanged_reply(monkeypatch, 
 
   def begin(images, packed, frame, reset, want_state):
     assert frame == 42 and reset and not want_state
+    assert client.project_output == projection_request
     assert images.shape == link.SPEC.warped_shape and packed.size == link.SPEC.packed_nelem
     step('usb_send', .003)
     return 99
@@ -68,7 +70,7 @@ def test_timing_records_usb_and_display_tail_after_unchanged_reply(monkeypatch, 
   monkeypatch.setattr(daemon, 'publish_hud', lambda *a: step('hud', .004))
   monkeypatch.setattr(daemon, 'send_ready_after_reply', lambda *a, **kw: step('tail', .006))
   monkeypatch.setattr(daemon, 'send_ready_during_inference', lambda *a, **kw: step('early_media', .006) or 123)
-  client = NS(spec=link.SPEC, last_state=None, last_timings=(20000, 1000, 22000), infer_begin=begin, infer_end=end,
+  client = NS(spec=link.SPEC, output_projection_available=projection_request, last_state=None, last_timings=(20000, 1000, 22000), infer_begin=begin, infer_end=end,
               t=NS(last_receive={'prepare': .002, 'read_wait': .025, 'handoff': .009}))
   peer = {'carrot_host': 'jetson', daemon.NAVI_CAPABILITY: navigation, daemon.PUMP_CAPABILITY: fast_receiver,
           daemon.HUD_USB_CAPABILITY: usb}

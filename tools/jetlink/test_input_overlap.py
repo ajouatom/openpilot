@@ -8,6 +8,8 @@ import pytest
 from openpilot.selfdrive.modeld.jetlink import model
 from openpilot.selfdrive.modeld.jetlink.inputs import fill_inputs
 from test_nav_rl import buffers, frame_inputs
+from test_nav_rl import SPEC
+from test_hotplug_resources import joining_model
 
 
 def fake_warp(monkeypatch, calls, read_error=False):
@@ -73,3 +75,62 @@ def test_gpu_read_failure_is_not_replaced_with_a_previous_image(monkeypatch):
   with pytest.raises(RuntimeError, match='GPU read failed'):
     warp(bufs, transforms, prepare=lambda: calls.append('prepare'))
   assert calls == ['submit', 'prepare', 'read']
+
+
+def test_joining_adapter_prepares_same_frame_before_usb(monkeypatch):
+  m = joining_model(monkeypatch)
+  calls = []
+  m.warp, bufs, transforms = fake_warp(monkeypatch, calls)
+  m.spec = SPEC
+  m.packed, m.views = buffers()
+  m.source_sof = 123456
+  inputs = frame_inputs()
+  expected, views = buffers()
+  desire = np.zeros(8, np.float32)
+  original_fill = model.fill_inputs
+  def fill(*args):
+    calls.append('prepare')
+    original_fill(*args)
+  monkeypatch.setattr(model, 'fill_inputs', fill)
+  def infer(image, packed, frame, reset, source_sof):
+    calls.append('usb')
+    assert calls == ['submit', 'prepare', 'read', 'usb']
+    assert frame == m.frame and reset == (frame == 1) and source_sof == 123456
+    assert image.tobytes() == np.arange(16, dtype=np.uint8).tobytes()
+    assert packed.tobytes() == expected.tobytes()
+    assert m.prev_desire.tobytes() == desire.tobytes()
+    return np.zeros(SPEC.output_nelem, np.float32)
+  m.client = NS(infer=infer, timings=(0, 0, 0), close=lambda: pytest.fail('unexpected fallback'))
+  for frame in range(1, 33):
+    inputs['desire_pulse'][:] = np.eye(8, dtype=np.float32)[frame % 8]
+    if frame == 16:
+      del inputs['nav_map'], inputs['navigation']
+    original_fill(views, inputs, desire)
+    calls.clear()
+    assert m.run(bufs, transforms, inputs, False) == 'external'
+
+
+@pytest.mark.parametrize('failure', ['context', 'gpu', 'usb'])
+def test_joining_adapter_drains_before_fault_and_local_fallback(monkeypatch, tmp_path, failure):
+  m = joining_model(monkeypatch)
+  calls = []
+  m.warp, bufs, transforms = fake_warp(monkeypatch, calls, read_error=failure == 'gpu')
+  m.spec = SPEC
+  m.packed, m.views = buffers()
+  m.active = True
+  inputs = frame_inputs()
+  if failure == 'context': inputs['navigation'][3] = np.nan
+  def infer(*a, **kw):
+    calls.append('usb')
+    assert failure == 'usb'
+    raise ConnectionError('bounded USB timeout')
+  m.client = NS(infer=infer, close=lambda: calls.append('close'))
+  m.small.reset = lambda: calls.append('reset')
+  def fallback(*a):
+    calls.append('local')
+    return 'local'
+  m.small.run = fallback
+  monkeypatch.setattr(model, 'FAULT', tmp_path / 'fault')
+  assert m.run(bufs, transforms, inputs, False) == 'local'
+  assert calls == ['submit', 'read', *(['usb'] if failure == 'usb' else []), 'close', 'reset', 'local']
+  assert (tmp_path / 'fault').exists() and not m.active and m.client is None

@@ -59,7 +59,7 @@ def joining_model(monkeypatch):
     link.SPEC.packed_shapes.items(), np.split(m.packed, np.cumsum(link.SPEC.packed_sizes[:-1])), strict=True)}
   m.frame = m.source_sof = 0
   m.last_slow_log = 0
-  m.warp = lambda *a: None
+  m.warp = lambda *a, prepare=None: prepare() if prepare is not None else None
   m.parser = NS(parse_outputs=lambda _: 'external')
   monkeypatch.setattr(model, 'parse_outputs', lambda parser, spec, result: parser.parse_outputs(result))
   return m

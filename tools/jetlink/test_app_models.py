@@ -275,7 +275,9 @@ def test_joining_model_uses_selected_buffers_parser_and_recurrence(tmp_path, mon
   class Warp:
     timings = (0., 0., 0.)
     def __init__(self, *a, **kw): pass
-    def __call__(self, *a): return np.zeros(spec.warped_shape, np.uint8)
+    def __call__(self, *a, prepare=None):
+      if prepare is not None: prepare()
+      return np.zeros(spec.warped_shape, np.uint8)
   monkeypatch.setattr(model, 'Warp', Warp)
   # The current destination prepares tiny NPY inputs before the model joins.
   # This test substitutes camera/GPU work; keep that preparation substituted too.

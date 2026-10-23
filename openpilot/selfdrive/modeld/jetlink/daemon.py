@@ -290,7 +290,12 @@ def _serve_local(listener, client, peer, publisher, phase, wifi=None):
           if result.to_dict() != spec.to_dict():
             raise ModelChanged('Jetlink model contract changed before local inference')
           requested = True
-        send(connection, json.dumps({'spec': spec.to_dict(), 'peer': peer}).encode())
+        from jetlink import output_projection as projection
+        compact_reply = client.output_projection_available
+        hello = {'spec': spec.to_dict(), 'peer': peer}
+        if compact_reply:
+          hello[projection.IPC_CAPABILITY] = projection.descriptor()
+        send(connection, json.dumps(hello).encode())
         while host_attached():
           loop_started, cpu_started = time.monotonic(), time.thread_time()
           if time.monotonic() - last_status >= 1:
@@ -320,14 +325,15 @@ def _serve_local(listener, client, peer, publisher, phase, wifi=None):
           if len(request) != REQUEST.size + spec.warped_nbytes + spec.packed_nbytes:
             raise ValueError('invalid local inference request')
           frame, reset, source_sof = REQUEST.unpack_from(request)
-          if reset not in (0, 1):
+          if reset not in (0, 1, 2, 3) or (reset & projection.IPC_FLAG and not compact_reply):
             raise ValueError('invalid reset flag')
+          client.project_output = bool(reset & projection.IPC_FLAG)
           images = np.frombuffer(request, np.uint8, spec.warped_nbytes, REQUEST.size).reshape(spec.warped_shape)
           packed = np.frombuffer(request, np.float32, spec.packed_nelem, REQUEST.size + spec.warped_nbytes)
           if not np.all(np.isfinite(packed)):
             raise ValueError('invalid local model context')
           started = time.monotonic()
-          seq = client.infer_begin(images, packed, frame, reset=bool(reset), want_state=(frame % 20 == 0))
+          seq = client.infer_begin(images, packed, frame, reset=bool(reset & 1), want_state=(frame % 20 == 0))
           sent = time.monotonic()
           if peer.get('carrot_host') == 'jetson':
             phase.sent(source_sof)
@@ -532,7 +538,7 @@ def main():
             raise ValueError('Selected iOS cable requires protocol 3')
           wire_protocol = ProtocolChoice('3')
         transport.protocol_version = wire_protocol.version
-        client = JetlinkClient(transport, name='carrot-jetlink')
+        client = JetlinkClient(transport, name='carrot-jetlink', allow_output_projection=True)
         if TRANSPORT_MODE == 'auto' and transport is owner and usb_mode is None and not mobile_unavailable:
           usb_probes += 1
           publish('connecting', peer=None, preparation={'stage': 'usb-probe',

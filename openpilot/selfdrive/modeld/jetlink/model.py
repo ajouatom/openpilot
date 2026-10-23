@@ -222,10 +222,11 @@ class JoiningModel:
         self.next_join = time.monotonic() + 5
     if self.client is not None:
       try:
-        fill_inputs(self.views, inputs, self.prev_desire)
         self.frame = (self.frame + 1) & 0xFFFFFFFF
         started = time.monotonic()
-        images = self.warp(bufs, transforms)
+        # Same-frame CPU context only; Warp drains this submission even if
+        # preparation fails, before the existing local-model fallback runs.
+        images = self.warp(bufs, transforms, prepare=lambda: fill_inputs(self.views, inputs, self.prev_desire))
         warped = time.monotonic()
         result = self.client.infer(images, self.packed, self.frame, self.reset, source_sof=self.source_sof)
         replied = time.monotonic()

@@ -126,7 +126,8 @@ def test_real_joining_adapter_transmits_nav_then_clears_it_and_falls_back(monkey
   m.connection = NS(future=future)
   class Warp:
     timings = (0, 0, 0)
-    def __call__(self, *args):
+    def __call__(self, *args, prepare=None):
+      if prepare is not None: prepare()
       return np.zeros(SPEC.warped_shape, np.uint8)
   m.warp = Warp()
   m.small.reset = lambda: None

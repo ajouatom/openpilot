@@ -13,6 +13,7 @@ import numpy as np
 from openpilot.selfdrive.modeld.jetlink import VENDOR  # noqa: F401
 from openpilot.common.jetlink_status import badge  # noqa: F401
 from jetlink.spec import ModelSpec
+from jetlink import output_projection as projection
 from openpilot.selfdrive.modeld.jetlink.contracts import DEFAULT_SPEC, validate_model_spec
 
 SPEC = DEFAULT_SPEC
@@ -143,6 +144,8 @@ class Client:
       self.sock.connect(path)
       hello = json.loads(receive(self.sock, time.monotonic() + timeout))
       self.spec = validate_model_spec(ModelSpec.from_dict(hello['spec']))
+      self.project_output = (not os.getenv('SEND_RAW_PRED') and projection.eligible(self.spec) and
+                             projection.matches(hello.get(projection.IPC_CAPABILITY)))
     except Exception:
       self.sock.close()
       raise
@@ -156,14 +159,16 @@ class Client:
       raise ValueError('invalid recurrent input')
     deadline = time.monotonic() + self.timeout
     self.sock.settimeout(self.timeout)
-    send_parts(self.sock, REQUEST.pack(frame, int(reset), source_sof), image, packed, deadline=deadline)
+    request_flags = int(reset) | (projection.IPC_FLAG if self.project_output else 0)
+    send_parts(self.sock, REQUEST.pack(frame, request_flags, source_sof), image, packed, deadline=deadline)
     reply = self.reader.receive(self.sock, deadline)
-    if len(reply) != REPLY.size + self.spec.output_nbytes:
+    count = projection.COUNT if self.project_output else self.spec.output_nelem
+    if len(reply) != REPLY.size + count * 4:
       raise ValueError('invalid inference reply size')
     fid, *self.timings = REPLY.unpack_from(reply)
     if fid != frame:
       raise ValueError('stale inference reply')
-    output = np.frombuffer(reply, np.float32, self.spec.output_nelem, REPLY.size).copy()
+    output = np.frombuffer(reply, np.float32, count, REPLY.size).copy()
     if not np.all(np.isfinite(output)):
       raise ValueError('nonfinite inference reply')
     return output

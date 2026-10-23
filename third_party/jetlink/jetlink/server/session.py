@@ -28,6 +28,7 @@ from pathlib import Path
 import numpy as np
 
 from jetlink import protocol as P
+from jetlink import output_projection as projection
 from jetlink.server.backends.base import ArtifactInvalid
 from jetlink.server.cache import CacheEntry, EngineCache
 from jetlink.server.telemetry import CachedTelemetry, NoTelemetry
@@ -550,6 +551,9 @@ class Session:
     self.last_seq = seq
     self.request: Request | None = None
     self.frames = 0
+    self._projection_negotiated = False
+    self._projection_spec = None
+    self._projection_spec_ok = False
 
   # -- plumbing -------------------------------------------------------------
 
@@ -645,8 +649,10 @@ class Session:
   def _greet(self, msg: Message) -> None:
     """Start the session over for whoever just said hello."""
     who = ''
+    offered_projection = None
     try:
       d = json.loads(bytes(msg.payload) or b'{}').get('client') or {}
+      offered_projection = d.get(projection.CAPABILITY)
       who = f"{d.get('name') or 'client'}/{d.get('nonce') or '?'}"
     except (ValueError, AttributeError):
       pass
@@ -654,6 +660,7 @@ class Session:
       log.info("session handed from %s to %s", self.client, who or 'an unnamed client')
     self.client = who
     self._reset(msg.seq)
+    self._projection_negotiated = (self.t.protocol_version == 2 and projection.matches(offered_projection))
     log.info("hello from %s (seq %d)", who or 'an unnamed client', msg.seq)
 
   def on_hello(self, msg: Message) -> None:
@@ -680,6 +687,8 @@ class Session:
       # What the comma logged before there were backends. Kept for one
       # release, and only where it is true.
       resp['trt_version'] = info['runtime_version']
+    if self._projection_negotiated:
+      resp[projection.CAPABILITY] = projection.descriptor()
     self._send_json(P.Msg.HELLO_RESP, msg.seq, resp)
 
   def on_engine_req(self, msg: Message) -> None:
@@ -751,6 +760,13 @@ class Session:
       if msg.payload.nbytes < P.INFER_REQ_SIZE:
         raise ValueError('Incomplete frame')
       frame_id, flags = P.unpack_infer_req(msg.payload)
+      projected = bool(flags & projection.FLAG)
+      if projected:
+        if spec is not self._projection_spec:
+          self._projection_spec = spec
+          self._projection_spec_ok = projection.eligible(spec)
+        if not (self._projection_negotiated and self.t.protocol_version == 2 and self._projection_spec_ok):
+          raise ValueError('Unnegotiated driving-output projection')
       frame = msg.payload[P.INFER_REQ_SIZE:]
       if flags & (FLAG | LZ4_FLAG) and (not spec.stateful or self.t.protocol_version != 2):
         raise ValueError('Compact frame unsupported for this contract')
@@ -790,6 +806,9 @@ class Session:
     # openpilot drops to the small model on a non-finite output either way, so
     # checking here saves the comma rescanning 18452 floats to find out.
     out32 = np.asarray(out, dtype=np.float32)
+    if projected and out32.size != spec.output_nelem:
+      loaded.queues.reset()
+      raise ValueError('Full output size changed before projection')
     status = P.Status.OK if np.all(np.isfinite(out32)) else P.Status.NOT_FINITE
     try:
       if status == P.Status.OK:
@@ -800,12 +819,18 @@ class Session:
       status = P.Status.NOT_FINITE
 
     total_us = int((time.perf_counter() - t0) * 1e6)
+    # Do not trim before full output validation and queues.feedback above.
+    # Omitted features and next_state tensors remain checked on the host.
+    projected = projected and status == P.Status.OK
     parts = [P.pack_infer_resp(frame_id, status, loaded.engine.last_gpu_us, queue_us, total_us),
-             out32]
+             out32[:projection.COUNT] if projected else out32]
     if flags & P.Flag.WANT_STATE:
       parts.append(json.dumps(self.telemetry.read()).encode())
     send_started = time.perf_counter()
-    self._send(P.Msg.INFER_RESP, msg.seq, parts)
+    if projected:
+      self._send(P.Msg.INFER_RESP, msg.seq, parts, flags=projection.FLAG)
+    else:
+      self._send(P.Msg.INFER_RESP, msg.seq, parts)
     send_us = int((time.perf_counter() - send_started) * 1e6)
     self.frames += 1
     if total_us > SLOW_FRAME_US or send_us > 10_000:
