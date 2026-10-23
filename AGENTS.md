@@ -6,7 +6,9 @@
   Original camera dimensions/EOF accompany JPEG; renderer-only adapters reuse
   status ring and road boxes, clock/duplicate/frame-reuse/expiry/session gates.
   No vehicle writes, model/control/deadline/priority change.98desktop checks
-  pass/2native skips including actual renderer/draw doubles; Linux CI follows.
+  pass/2native skips including actual renderer/draw doubles. Linux1142/56skip,
+  94update/119nav/11storage/11network and Windows installer pass;26pin checks/1skip.
+  Signed host54e706fa05/64707580B/42c2951e full HTTPS/hash verified,1099files.
   Synthetic1-track232B/sample; no actual vehicle latency/screen/road claim.
   Signed runtime for Git Pull/BOTH reboot; wip records only. See
   docs/jetson_usb_signal_display_20261023.md for final release validation.

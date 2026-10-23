@@ -1,4 +1,4 @@
-﻿# Jetson USB display signal observations - 2026-10-23
+# Jetson USB display signal observations - 2026-10-23
 
 The owner requested displaying the existing traffic-signal processing results
 on the USB panel attached to Jetson, using the HUD transfer during inference.
@@ -73,4 +73,20 @@ followed by BOTH comma and Jetson reboot with offroad Internet for the normal
 updater. Updating only comma is backwards compatible but an old host will not
 render the new signal metadata. No SD rewrite or USB bootstrap patch is needed.
 
-Final source CI and release verification are recorded below after publication.
+[Source integration CI](https://github.com/ajouatom/openpilot/actions/runs/39924677333)
+passed: 1,142 broad checks with 56 existing skips, 94 updater checks, 119 NAV/HUD
+checks, 11 real-storage and 11 network-namespace checks; the Windows installer
+also passed. Local signed selection/bundle/NAV checks passed 26 with one Windows
+skip. Counts cover overlapping suites and are not a count of independent tests.
+
+Published source: `54e706fa0573e91dc3b4a0d4f625b9d81a6b68cc`.
+[Signed release manifest](https://upload.shind0.synology.me/models/jetlink-host-54e706fa0573e91dc3b4a0d4f625b9d81a6b68cc/manifest.json).
+Bundle: 64707580 bytes; SHA-256 `42c2951e92bd47029ff22fb058f577a0a3d334eeca62c92aa7b6ef479227787c`.
+All 1,099 regular payload files match committed source (including the existing
+selected-model alias for older bootstraps), with no private task evidence or
+signing key. Full anonymous HTTPS download matches byte count/hash; the existing
+trusted key verifies its signature. The selected N16 ONNX stays `01effc67...`.
+
+The new host selection and source are published on carrot-nav. Carrot-wip
+receives this record without changing its separate model/runtime. Installation,
+physical USB-screen appearance and actual vehicle latency remain unmeasured.
