@@ -9,8 +9,11 @@
   562 unconditional attached-boot cutoff/nonzero override/link-block rejected;
   adapt callback reassertion only under original empty-port/conflict gates.
   Common helpers both branches, parser NAV only.126desktop pass/31POSIX skips;
-  Linux CI pending in docs/jetlink_pr560_562_review_20261023.md. No live install,
-  host bundle or model change; Git Pull/comma reboot. PRs not merged unchanged.
+  Linux CI passes NAV1244/56skips,Wip861/2skips plus nav/storage/update/NAT
+  suites as applicable; both Windows installers pass. Code NAV5d2437da6c and
+  Wip190f96241c published single-parent. No live install, host bundle or model
+  change; Git Pull/comma reboot. PRs not merged unchanged. See
+  docs/jetlink_pr560_562_review_20261023.md.
 
 
 - On 2026-10-23, owner requests contributor6914f6ce/fbe9a887 and live validation.
