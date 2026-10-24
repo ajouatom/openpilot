@@ -18,6 +18,7 @@ Bring-up (scripts/setup_gadget.sh does all of this):
 """
 from __future__ import annotations
 
+import _signal
 import errno
 import logging
 import os
@@ -466,7 +467,9 @@ class FfsTransport(StreamTransport):
     self._ensure_epfiles()
     self._write_budget = self._write_timeout(WRITE_TIMEOUT)
     # See _IO_SIGNALS: a signal here duplicates data on the wire.
-    was = signal.pthread_sigmask(signal.SIG_BLOCK, _IO_SIGNALS)
+    # The public wrapper converts every returned number to an enum in Python.
+    # Use its identical C primitive and preserve the raw mask for restoration.
+    was = _signal.pthread_sigmask(signal.SIG_BLOCK, _IO_SIGNALS)
     try:
       if not self._write_guard.arm(self._write_budget):
         raise LinkError('gadget write watchdog already expired or closed')
@@ -493,7 +496,7 @@ class FfsTransport(StreamTransport):
           raise LinkError(f"gadget write failed: {e}{self._udc_note()}") from e
     finally:
       completed = self._write_guard.disarm()
-      signal.pthread_sigmask(signal.SIG_SETMASK, was)
+      _signal.pthread_sigmask(signal.SIG_SETMASK, was)
       if not completed:
         raise LinkError('gadget write had no reader before deadline; link abandoned')
 

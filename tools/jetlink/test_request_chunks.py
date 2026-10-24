@@ -157,3 +157,51 @@ def test_hello_negotiates_and_resets_per_connection(capability, host, allowed, e
   client._expect = expect
   client.hello()
   assert transport.request_chunks_enabled is expected
+
+@pytest.mark.skipif(sys.platform != 'linux', reason='FunctionFS writev path requires Linux')
+def test_real_ffs_writev_retry_stalls_old_request_but_not_bounded_envelopes(monkeypatch):
+  from jetlink.transport.ffs import FfsTransport
+  import jetlink.transport.ffs as ffs
+  now = [0.]
+  monkeypatch.setattr(C.time, 'monotonic', lambda: now[0])
+  class NativeWritePath(FfsTransport):
+    def __init__(self, enabled):
+      StreamTransport.__init__(self)
+      self.request_chunks_enabled = enabled
+      self.ep_in = -1
+      self._write_aborted = False
+      self._write_guard = NS(arm=lambda budget: True, disarm=lambda: True)
+    def _ensure_epfiles(self): pass
+    def close(self): pass
+  import _signal, signal
+  before = _signal.pthread_sigmask(signal.SIG_BLOCK, ())
+  monkeypatch.setattr(signal, 'pthread_sigmask', lambda *args: pytest.fail('per-write enum conversion'))
+  attempts = []
+  def writev(fd, parts):
+    assert int(signal.SIGUSR1) in _signal.pthread_sigmask(signal.SIG_BLOCK, ())
+    size = sum(len(p) for p in parts); attempts.append(size)
+    if size > C.WIRE_BYTES:
+      now[0] += .08  # controlled simulated reclaim stall, not wall-clock sleep
+      raise OSError(errno.ENOMEM, 'synthetic high-order allocation failure')
+    now[0] += .0001
+    return size
+  monkeypatch.setattr(ffs.os, 'writev', writev)
+  raw = b'x' * 458996
+  NativeWritePath(False).send(P.Msg.INFER_REQ, 1, (raw,), timeout=.5)
+  assert max(attempts) > 400000 and now[0] >= .32
+  attempts.clear(); now[0] = 0.
+  NativeWritePath(True).send(P.Msg.INFER_REQ, 1, (raw,), timeout=.5)
+  assert len(attempts) == 15 and max(attempts) == C.WIRE_BYTES
+  assert now[0] < .002
+  # A small allocation failure must not shrink a framed envelope into raw bytes.
+  attempts.clear()
+  def fail_small(fd, parts):
+    attempts.append(sum(len(p) for p in parts))
+    raise OSError(errno.ENOMEM, 'synthetic small allocation failure')
+  monkeypatch.setattr(ffs.os, 'writev', fail_small)
+  tx = NativeWritePath(True)
+  with pytest.raises(LinkError, match='small framed USB request allocation failed'):
+    tx.send(P.Msg.INFER_REQ, 2, (raw,), timeout=.5)
+  assert attempts == [C.WIRE_BYTES]
+  assert tx._bounded_envelope is False
+  assert _signal.pthread_sigmask(signal.SIG_BLOCK, ()) == before
