@@ -1299,6 +1299,7 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
         lat_hud = getattr(hud_control, "latHudState", 0)
         if lat_hud in LANE_HIGHLIGHT_BY_LAT:
           values["LANE_HIGHLIGHT"] = LANE_HIGHLIGHT_BY_LAT[lat_hud]
+          values["LANE_HIGHLIGHT_DISTANCE"] = 150.0  # stock sends 150 m; at 0 only the patch around the car is drawn
         if sweep_display is not None:
           values["vSetDis"] = min(sweep_display, 255)
         ret.append(_cluster_test_msg(packer, "ADRV_0x161", CAN.ECAN, values, rx_counter, test_field, test_value))

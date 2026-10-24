@@ -384,3 +384,4 @@ def test_lane_highlight_follows_lateral_state(monkeypatch, lat_hud, color):
     SimpleNamespace(flags=HyundaiFlags.CAMERA_SCC), packer, SimpleNamespace(ECAN=0, CAM=2), 5, control, state,
     control.hudControl, 0, False, False, 0, False, 0, 0)[0]
   assert get_raw_value(msg[1], definition.sigs['LANE_HIGHLIGHT']) == color  # 0: stock value kept
+  assert get_raw_value(msg[1], definition.sigs['LANE_HIGHLIGHT_DISTANCE']) == (1500 if color else 0)
