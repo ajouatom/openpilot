@@ -3,6 +3,8 @@ on:
   push:
     branches: [carrot-wip, carrot-nav]
     paths:
+      - "openpilot/common/runtime_diagnostics.py"
+      - "openpilot/common/tests/test_runtime_diagnostics.py"
       - 'tools/jetlink/**'
       - 'third_party/jetlink/**'
       - 'openpilot/common/jetlink_status.py'

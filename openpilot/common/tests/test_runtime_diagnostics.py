@@ -42,6 +42,28 @@ def test_missing_schedstat_and_logging_failure_do_not_stop_inference(monkeypatch
   assert timing.samples == {}
 
 
+def test_peak_keeps_one_actual_frame_not_unrelated_phase_maxima(monkeypatch):
+  now = [0.]
+  monkeypatch.setattr(diagnostics.time, 'monotonic', lambda: now[0])
+  events = []
+  timing = diagnostics.RuntimeDiagnostics('jetlinkd', lambda *a, **kw: events.append(kw), peak_metric='exchange')
+  context = {'frame_id': 1}
+  timing.record(context, exchange=45., send=5., server=25.)
+  context['frame_id'] = 2
+  timing.record(context, exchange=40., send=10., server=28.)
+  timing.record({'frame_id': 3}, exchange=float('nan'), send=99.)
+  now[0] = 1.
+  timing.record({'frame_id': 4}, exchange=39., send=6., server=26.)
+  peak = events[0]['peak_sample']
+  assert peak == {'mono_time': 0., 'context': {'frame_id': 1},
+                  'metrics': {'exchange': 45., 'send': 5., 'server': 25.}}
+  assert events[0]['metrics']['send']['max'] == 99.
+  assert timing.peak_sample is None
+  now[0] = 2.
+  timing.record({'frame_id': 5}, exchange=30., send=4., server=24.)
+  assert events[1]['peak_sample']['context']['frame_id'] == 5
+
+
 def test_communication_snapshot_distinguishes_ignored_service_and_real_low_rate(monkeypatch):
   monkeypatch.setattr(diagnostics.time, 'monotonic', lambda: 10.0)
   average = MovingAverage(20)
