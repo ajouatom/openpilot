@@ -1,4 +1,4 @@
-﻿"""Bounded host read-ahead so USB display input overlaps synchronous GPU inference."""
+"""Bounded host read-ahead so USB display input overlaps synchronous GPU inference."""
 import queue
 import threading
 
@@ -20,6 +20,10 @@ class ReadAheadTransport:
     self.thread = threading.Thread(target=self._read, name='jetlink-usb-read', daemon=True)
     self.thread.start()
 
+  @property
+  def protocol_version(self):
+    return self.transport.protocol_version
+
   def _put(self, item):
     while not self.stopped.is_set():
       try:
@@ -35,6 +39,8 @@ class ReadAheadTransport:
           msg = self.transport.recv(timeout=None if self.bulk_input is not None else .1)
         except LinkTimeout:
           continue
+        if self.bulk_input is not None:
+          self.bulk_input.note_message(msg)
         # The upstream receive view is valid only until its next recv. Own
         # queued data before reading again while the GPU uses the current input.
         self._put(Message(msg.msg_type, msg.seq, msg.flags, memoryview(bytes(msg.payload))))
