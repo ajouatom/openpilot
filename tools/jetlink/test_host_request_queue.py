@@ -11,12 +11,19 @@ from jetlink.transport.base import Message, LinkError, LinkTimeout
 
 class Input:
   protocol_version = 2
-  def __init__(self, messages):
+  def __init__(self, messages, target=None):
+    self.target = len(messages) if target is None else target
+    self.received = 0
     self.messages = queue.Queue()
     for msg in messages: self.messages.put(msg)
     self.drained = threading.Event()
+    self.received_all = threading.Event()
   def recv(self, timeout):
-    try: return self.messages.get(timeout=.02)
+    try:
+      msg = self.messages.get(timeout=.02)
+      self.received += 1
+      if self.received >= self.target: self.received_all.set()
+      return msg
     except queue.Empty:
       self.drained.set()
       raise LinkTimeout('idle')
@@ -28,18 +35,26 @@ def envelopes(kind, seq, raw):
   return out
 
 @pytest.mark.parametrize('replay', [False, True])
-def test_gpu_busy_reader_queues_two_complete_requests_not_fragments(replay):
+@pytest.mark.parametrize('count', [2, 3])
+def test_gpu_busy_reader_queues_two_complete_requests_not_fragments(replay, count):
   first = b'a' * 96000
   second = b'b' * 32792
   msgs = envelopes(0x4000, 8, first) + envelopes(0x4001, 9, second)
+  if count == 3: msgs += envelopes(0x4001, 10, b'c' * 32792)
   if replay: msgs = [m for msg in msgs for m in (msg, msg)]
-  source = Input(msgs); reader = ReadAheadTransport(source)
+  source = Input(msgs, len(msgs) - int(count == 3 and replay)); reader = ReadAheadTransport(source)
   try:
-    assert source.drained.wait(.5), 'fragment queue blocked while GPU consumer is busy'
+    gate = source.drained if count == 2 else source.received_all
+    # The third complete input may be reader-owned with two slots full;
+    # its final duplicate can be drained after the GPU releases the consumer.
+    assert gate.wait(.5), 'fragment queue blocked while GPU consumer is busy'
     assert reader.queue.maxsize == 2 and reader.queue.qsize() == 2
     a, b = reader.recv(.1), reader.recv(.1)
     assert (a.msg_type, a.seq, bytes(a.payload)) == (0x4000, 8, first)
     assert (b.msg_type, b.seq, bytes(b.payload)) == (0x4001, 9, second)
+    if count == 3:
+      c = reader.recv(.5)
+      assert (c.msg_type, c.seq, bytes(c.payload)) == (0x4001, 10, b'c' * 32792)
   finally: reader.close()
 
 def test_corrupt_request_never_reaches_inference_queue():
