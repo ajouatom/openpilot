@@ -152,7 +152,7 @@ def test_all_vehicle_displays_follow_nearest_valid_lead(monkeypatch, first, seco
     assert scc["ACC_ObjDist"] == pytest.approx(lead.dRel)
     assert scc["ACC_ObjLatPos"] == pytest.approx(-lead.yRel)
     assert scc["ACC_ObjRelSpd"] == pytest.approx(lead.vRel)
-    assert cc["FF_DISTANCE"] == target["TARGET_DISTANCE"] == pytest.approx(lead.dRel)
+    assert cc["FF_DISTANCE"] == pytest.approx(lead.dRel)  # TARGET_DISTANCE marks the target gap, not the lead
     assert cc["FF_LATERAL"] == pytest.approx((-lead.yRel) % 12.8)
     assert target["TARGET"] == 1 and target["DISTANCE_LEAD"] == 2
   else:

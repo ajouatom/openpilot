@@ -1202,7 +1202,11 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
           values["DISTANCE_SPACING"] = 3  # HDP spacing style for gaps 1-3 (cluster test 19-3, 10-20)
 
         values["TARGET"] = (1 if cruise_enabled else 3) if lead_visible else 0  # blue when engaged, white otherwise
-        values["TARGET_DISTANCE"] = lead_distance
+        # The ring marks the target gap like stock (10-24 rlog: stock sends ~1.0/1.3/1.4/2.1 s x v by gap step, not the
+        # lead distance). Engaged: the gap openpilot keeps; otherwise the stock value stays.
+        desired_distance = getattr(hud_control, "desiredDistance", 0.)
+        if cruise_enabled and desired_distance > 0:
+          values["TARGET_DISTANCE"] = clip_float(desired_distance, 0.1, 204.5)
 
         values["BACKGROUND"] = _select_cluster_background(
           cruise_enabled, lat_active, CS.paddle_button_prev > 0, paddle_mode, turning=desire in (1, 2),

@@ -384,6 +384,7 @@ class Controls:
     hudControl.driverMonitoringAlert = driver_monitoring_hud_alert(self.sm)
     hudControl.trafficState = self.sm['longitudinalPlan'].trafficState
     hudControl.latHudState = self.lat_hud_state(CC.latActive, lac_log)
+    hudControl.desiredDistance = self.sm['longitudinalPlan'].desiredDistance
 
     radarState = self.sm['radarState']
     leadOne = radarState.leadOne

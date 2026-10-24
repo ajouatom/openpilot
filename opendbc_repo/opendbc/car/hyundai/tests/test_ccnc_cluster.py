@@ -389,3 +389,25 @@ def test_lane_highlight_follows_lateral_state(monkeypatch, lat_hud, desire, colo
     control.hudControl, 0, False, False, 0, False, 0, 0)[0]
   assert get_raw_value(msg[1], definition.sigs['LANE_HIGHLIGHT']) == color  # 0: stock value kept
   assert get_raw_value(msg[1], definition.sigs['LANE_HIGHLIGHT_DISTANCE']) == 0
+
+
+@pytest.mark.parametrize(('enabled', 'desired', 'expected'), ((True, 40.0, 400), (True, 0.0, 573), (False, 40.0, 573)))
+def test_target_ring_marks_the_target_gap(monkeypatch, enabled, desired, expected):
+  # engaged: openpilot's desired distance; otherwise (or without one) the stock target gap stays
+  from openpilot.cereal import log
+  monkeypatch.setattr(hyundaicanfd, 'Params', lambda: SimpleNamespace(get_int=lambda key: 0, get=lambda key: '0'))
+  packer = CANPacker('hyundai_canfd_generated')
+  definition = packer.dbc.name_to_msg['ADRV_0x161']
+  stock = {key: 0 for key in definition.sigs}
+  stock['TARGET_DISTANCE'] = 57.3
+  state = SimpleNamespace(
+    adrv_0x161=stock, out=structs.CarState(), modelV2=log.ModelDataV2.new_message(),
+    lfahda_cluster=None, cruise_buttons_msg=None, adrv_0x200=None, adrv_0x1ea=None, ccnc_0x162=None,
+    is_metric=True, paddle_button_prev=0, softHoldActive=0, trailer_connected=False,
+  )
+  control = structs.CarControl(latActive=True, enabled=enabled)
+  control.hudControl.desiredDistance = desired
+  msg = hyundaicanfd.create_ccnc_messages(
+    SimpleNamespace(flags=HyundaiFlags.CAMERA_SCC), packer, SimpleNamespace(ECAN=0, CAM=2), 5, control, state,
+    control.hudControl, 0, False, False, 0, False, 0, 0)[0]
+  assert get_raw_value(msg[1], definition.sigs['TARGET_DISTANCE']) == expected
