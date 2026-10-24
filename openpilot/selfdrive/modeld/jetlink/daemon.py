@@ -197,7 +197,7 @@ def _serve_local(listener, client, peer, publisher, phase, wifi=None):
   from openpilot.common.runtime_diagnostics import RuntimeDiagnostics
   from openpilot.common.swaglog import cloudlog
   params = Params()
-  diagnostics = RuntimeDiagnostics('jetlinkd', cloudlog.event)
+  diagnostics = RuntimeDiagnostics('jetlinkd', cloudlog.event, peak_metric='usb_exchange_ms')
   last_status = 0.
   last_ping = time.monotonic()
   telemetry_updated = 0.
@@ -311,6 +311,7 @@ def _serve_local(listener, client, peer, publisher, phase, wifi=None):
             ipc_receive_ms=(received-receive_started)*1000,
             request_parse_ms=(started-received)*1000,
             usb_send_ms=(sent-started)*1000,
+            usb_exchange_ms=(completed-started)*1000,
             phase_ms=(phase_done-sent)*1000,
             hud_ms=(hud_done-phase_done)*1000,
             usb_response_ms=(completed-hud_done)*1000,

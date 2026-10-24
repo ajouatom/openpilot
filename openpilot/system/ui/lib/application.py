@@ -504,10 +504,13 @@ class GuiApplication:
 
   def init_window(self, title: str, fps: int = _DEFAULT_FPS, font_weights: Iterable[FontWeight] | None = None):
     with self._startup_profile_context():
+      self._closing = False
       def _close(sig, frame):
         self.close()
         sys.exit(0)
-      signal.signal(signal.SIGINT, _close)
+      for stop_signal in (signal.SIGINT, signal.SIGTERM, getattr(signal, 'SIGHUP', None)):
+        if stop_signal is not None:
+          signal.signal(stop_signal, _close)
       atexit.register(self.close)
 
       flags = rl.ConfigFlags.FLAG_MSAA_4X_HINT
@@ -826,8 +829,14 @@ class GuiApplication:
           pass
 
   def close(self):
-    if not rl.is_window_ready():
+    if getattr(self, '_closing', False) or not rl.is_window_ready():
       return
+    self._closing = True
+
+    # EGL imports are not owned by the window's GL context. Widget reference
+    # cycles can keep their destructors from running before CloseWindow.
+    from openpilot.system.ui.lib.egl import destroy_all_egl_images
+    destroy_all_egl_images()
 
     for texture in self._textures.values():
       rl.unload_texture(texture)

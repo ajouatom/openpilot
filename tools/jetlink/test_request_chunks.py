@@ -243,3 +243,51 @@ def test_native_packet_builder_is_byte_exact_with_actual_stream_serializer(size,
   parts = (memoryview(source)[:3], memoryview(source)[3:])
   wire = Wire(); C.send(wire.send, kind, 987654, parts)
   assert C.packets(kind, 987654, parts) == wire.packets
+
+
+@pytest.mark.skipif(sys.platform != 'linux', reason='FunctionFS completion integration')
+def test_late_completion_failure_is_checked_before_send_and_after_receive(monkeypatch):
+  from jetlink.transport.ffs import FfsTransport
+  tx = object.__new__(FfsTransport)
+  calls = []
+  def failed():
+    calls.append('poll')
+    raise OSError(errno.ESHUTDOWN, 'late completion')
+  tx._request_writer = NS(deferred=True, poll=failed)
+  with pytest.raises(LinkError, match='completion failed'):
+    tx.send(P.Msg.INFER_REQ, 1, (b'input',))
+  assert calls == ['poll']
+  calls.clear()
+  def second_poll_fails():
+    calls.append('poll')
+    if len(calls) == 3: raise OSError(errno.ESHUTDOWN, 'late completion')
+  def receive(self, timeout):
+    calls.append('receive')
+    return object()
+  tx._request_writer.poll = second_poll_fails
+  monkeypatch.setattr(StreamTransport, 'recv', receive)
+  with pytest.raises(LinkError, match='completion failed'):
+    tx.recv(.05)
+  assert calls == ['poll', 'receive', 'poll']
+
+
+@pytest.mark.skipif(sys.platform != 'linux', reason='FunctionFS cleanup integration')
+def test_endpoint_release_closes_writer_before_rebind_and_blocks_on_failure():
+  from jetlink.transport.ffs import FfsTransport
+  import threading
+  tx = object.__new__(FfsTransport)
+  tx.gadget='/test'; tx._closing=False; tx.ep_out=12; tx.bound_udc='test'; tx._reader=None
+  calls=[]
+  tx.unbind=lambda: calls.append('unbind')
+  tx._close_fds=lambda names, reader: calls.append('fds')
+  tx.bind=lambda udc: calls.append('bind')
+  def fail_close():
+    calls.append('writer')
+    raise OSError(errno.ETIMEDOUT, 'pending kernel buffer')
+  writer=NS(close=fail_close)
+  tx._request_writer=writer
+  with pytest.raises(OSError): tx.release_endpoints()
+  assert calls==['unbind','writer','fds'] and tx._request_writer is writer
+  writer.close=lambda: calls.append('recovered')
+  tx._close_request_writer()
+  assert tx._request_writer is None

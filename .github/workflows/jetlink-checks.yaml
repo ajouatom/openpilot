@@ -3,6 +3,11 @@ on:
   push:
     branches: [carrot-wip]
     paths:
+      - "openpilot/common/runtime_diagnostics.py"
+      - "openpilot/common/tests/test_runtime_diagnostics.py"
+      - "openpilot/system/ui/lib/egl.py"
+      - "openpilot/system/ui/lib/application.py"
+      - "openpilot/selfdrive/ui/tests/test_egl_shutdown.py"
       - 'tools/jetlink/**'
       - 'third_party/jetlink/**'
       - 'openpilot/common/jetlink_status.py'
@@ -28,7 +33,7 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
-      - run: python -m pip install pytest==8.3.5 pytest-asyncio numpy pillow pycapnp pycryptodome aiohttp raylib==5.5.0.4
+      - run: python -m pip install pytest==8.3.5 pytest-asyncio zstandard numpy pillow pycapnp pycryptodome aiohttp raylib==5.5.0.4
       - name: USB, fallback, navigation, Wi-Fi, signed updates and image checks
         env:
           PYTHONPATH: .:opendbc_repo:tools/jetlink
@@ -36,6 +41,8 @@ jobs:
           python -m compileall -q tools/jetlink openpilot/selfdrive/modeld/jetlink
           python -m pytest -c /dev/null --rootdir=. --confcutdir=tools/jetlink -q \
             tools/jetlink openpilot/selfdrive/modeld/tests/test_jetlink.py \
+            openpilot/common/tests/test_runtime_diagnostics.py \
+            openpilot/selfdrive/ui/tests/test_egl_shutdown.py \
             openpilot/selfdrive/modeld/tests/test_camera_sync.py \
             openpilot/selfdrive/modeld/tests/test_camera_gap.py \
             openpilot/selfdrive/modeld/tests/test_jetlink_phase.py \
