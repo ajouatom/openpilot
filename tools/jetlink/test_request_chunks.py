@@ -227,3 +227,19 @@ def test_same_frame_writer_receives_complete_replay_safe_envelopes():
     if result is not None:results.append(bytes(result.payload));last=result.seq
   assert results==[raw] and tx._had_host
   assert tx._collect_envelopes is None and tx._bounded_envelope is False
+
+
+@pytest.mark.parametrize('size', [1, 32720, 32721, 65440, 458996, 655608, 1048576])
+@pytest.mark.parametrize('kind', sorted(C.KINDS))
+def test_native_packet_builder_is_byte_exact_with_actual_stream_serializer(size, kind):
+  class Wire(StreamTransport):
+    tx_align = P.GADGET_TX_ALIGN
+    def __init__(self): super().__init__(); self.packets = []
+    def _write(self, parts):
+      packet = b''.join(parts); self.packets.append(packet); return len(packet)
+    def _read_into(self, *args): raise AssertionError
+    def close(self): pass
+  source = bytes(i % 251 for i in range(size))
+  parts = (memoryview(source)[:3], memoryview(source)[3:])
+  wire = Wire(); C.send(wire.send, kind, 987654, parts)
+  assert C.packets(kind, 987654, parts) == wire.packets

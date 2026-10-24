@@ -45,6 +45,23 @@ def send(send_message, kind, seq, parts, flags=0, timeout=None):
                                view[offset:offset + DATA_BYTES]), timeout=remaining)
 
 
+def packets(kind, seq, parts, flags=0):
+  """Exact protocol-2 gadget frames for the native same-request queue."""
+  raw = b''.join(memoryview(p).cast('B') for p in parts)
+  if kind not in KINDS or not 0 < len(raw) <= MAX_BYTES or flags != 0:
+    raise LinkError('unsupported chunked request')
+  checksum = zlib.crc32(raw)
+  view = memoryview(raw)
+  result = []
+  for offset in range(0, len(raw), DATA_BYTES):
+    body = view[offset:offset + DATA_BYTES]
+    length = HEADER.size + len(body)
+    pad = -(P.HEADER_SIZE + length) % P.GADGET_TX_ALIGN
+    result.append(b''.join((P.pack_header(MESSAGE, seq, length, version=2),
+                           HEADER.pack(kind, flags, len(raw), offset, checksum), body, bytes(pad))))
+  return result
+
+
 class Receiver:
   def __init__(self):
     self.clear()
