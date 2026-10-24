@@ -147,6 +147,7 @@ def test_hello_negotiates_and_resets_per_connection(capability, host, allowed, e
     protocol_version = 2
     request_chunks_enabled = True
     def _send_bounded_request(self): pass
+    def _prepare_bounded_requests(self): return True
     def send_json(self, *args): pass
   transport = FakeTransport(); client = JetlinkClient(transport, allow_request_chunks=allowed)
   response = dict(protocol=2, carrot_host=host, stateful_v2=True)
@@ -205,3 +206,24 @@ def test_real_ffs_writev_retry_stalls_old_request_but_not_bounded_envelopes(monk
   assert attempts == [C.WIRE_BYTES]
   assert tx._bounded_envelope is False
   assert _signal.pthread_sigmask(signal.SIG_BLOCK, ()) == before
+
+@pytest.mark.skipif(sys.platform != 'linux', reason='FunctionFS sender integration')
+def test_same_frame_writer_receives_complete_replay_safe_envelopes():
+  from jetlink.transport.ffs import FfsTransport
+  tx = object.__new__(FfsTransport)
+  StreamTransport.__init__(tx)
+  tx.request_chunks_enabled = True
+  arms = []
+  tx._write_guard = NS(arm=lambda budget: arms.append(budget) or True, disarm=lambda: True)
+  captured = []
+  tx._request_writer = NS(send=lambda packets, budget: captured.extend(packets))
+  raw = b'input' * 91799
+  tx.send(P.Msg.INFER_REQ, 42, (raw,), timeout=.15)
+  assert len(arms) == 1 and 0 < arms[0] <= .15
+  assert len(captured) == 15 and max(map(len, captured)) == C.WIRE_BYTES
+  reader=WireReader(b''.join(packet * 2 for packet in captured));receiver=C.Receiver();results=[];last=0
+  for _ in range(len(captured)*2):
+    result=receiver.accept(reader.recv(.5),last)
+    if result is not None:results.append(bytes(result.payload));last=result.seq
+  assert results==[raw] and tx._had_host
+  assert tx._collect_envelopes is None and tx._bounded_envelope is False
