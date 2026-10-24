@@ -1,4 +1,4 @@
-﻿"""Native bounded request writer completion, ownership, and exact-byte checks."""
+"""Native bounded request writer completion, ownership, and exact-byte checks."""
 import ctypes
 import errno
 import os
@@ -81,6 +81,8 @@ long fake_syscall(long number, ...) {
     if (mode==4) events[i].res--;
     if (mode==5) events[i].data+=100;
     if (mode==6) events[i].res=-ESHUTDOWN;
+    if (mode==8) events[i].res2=events[i].res;
+    if (mode==9) events[i].res2=events[i].res+1;
    }
    pending_count=0;
   }
@@ -103,11 +105,11 @@ long fake_syscall(long number, ...) {
   return lib
 
 
-@pytest.mark.parametrize('mode', range(7))
+@pytest.mark.parametrize('mode', [0,1,2,3,4,5,6,8,9])
 def test_completion_reordering_and_faults_keep_context_until_close(fault_library, mode):
   lib=fault_library; lib.configure(mode)
   writer=Writer(1,lib)
-  if mode==0:
+  if mode in (0,8):
     writer.send([b'x'*32768]*15,.5)  # completions deliberately reversed
   else:
     with pytest.raises(OSError): writer.send([b'x'*32768]*15,.5)

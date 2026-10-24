@@ -65,7 +65,8 @@ int jetlink_writer_send(void *pointer, const unsigned char *data, size_t size,
       for (int i=0;i<DEPTH;i++) if (e->obj==(uintptr_t)&w->slots[i].cb) s=&w->slots[i];
       if (!s || !s->pending || e->data!=s->sequence) return w->failed=-EPROTO;
       s->pending=0;
-      if (e->res!=(int64_t)s->cb.aio_nbytes || e->res2) return w->failed=e->res<0 ? (int)e->res : -EIO;
+      // FunctionFS 4.9 completes with (ret, ret); regular files use (ret, 0).
+      if (e->res!=(int64_t)s->cb.aio_nbytes || (e->res2 && e->res2!=e->res)) return w->failed=e->res<0 ? (int)e->res : -EIO;
       completed++;
     }
   }
