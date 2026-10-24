@@ -1297,6 +1297,8 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
 
         _apply_driver_monitoring_alert(values, hud_control, CS.adrv_0x161)
         lat_hud = getattr(hud_control, "latHudState", 0)
+        if lat_hud and desire in (3, 4):
+          lat_hud = 1  # lane change first: stock lights the lane green only while changing lanes (10-24 logs)
         if lat_hud in LANE_HIGHLIGHT_BY_LAT:
           values["LANE_HIGHLIGHT"] = LANE_HIGHLIGHT_BY_LAT[lat_hud]
           values["LANE_HIGHLIGHT_DISTANCE"] = 150.0  # stock sends 150 m; at 0 only the patch around the car is drawn

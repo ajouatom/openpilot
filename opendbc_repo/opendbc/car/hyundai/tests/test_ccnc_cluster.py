@@ -367,8 +367,8 @@ def test_cluster_test_slots_are_unique_and_named():
     assert set(fields.values()) <= set(packer.dbc.name_to_msg[name].sigs)
 
 
-@pytest.mark.parametrize(('lat_hud', 'color'), ((0, 0), (1, 1), (2, 3), (3, 4), (4, 5)))
-def test_lane_highlight_follows_lateral_state(monkeypatch, lat_hud, color):
+@pytest.mark.parametrize(('lat_hud', 'desire', 'color'), ((0, 0, 0), (1, 0, 1), (2, 0, 3), (3, 0, 4), (4, 0, 5), (4, 3, 1), (2, 4, 1), (0, 3, 0)))
+def test_lane_highlight_follows_lateral_state(monkeypatch, lat_hud, desire, color):
   from openpilot.cereal import log
   monkeypatch.setattr(hyundaicanfd, 'Params', lambda: SimpleNamespace(get_int=lambda key: 0, get=lambda key: '0'))
   packer = CANPacker('hyundai_canfd_generated')
@@ -380,6 +380,7 @@ def test_lane_highlight_follows_lateral_state(monkeypatch, lat_hud, color):
   )
   control = structs.CarControl(latActive=lat_hud > 0, enabled=True)
   control.hudControl.latHudState = lat_hud
+  state.modelV2.meta.desire = desire  # lane change takes priority
   msg = hyundaicanfd.create_ccnc_messages(
     SimpleNamespace(flags=HyundaiFlags.CAMERA_SCC), packer, SimpleNamespace(ECAN=0, CAM=2), 5, control, state,
     control.hudControl, 0, False, False, 0, False, 0, 0)[0]
