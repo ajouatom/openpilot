@@ -23,7 +23,7 @@ def test_native_regular_file_exact_order_and_repeated_requests(tmp_path):
     writer = Writer(f.fileno(), lib, regular=True)
     expected = bytearray()
     try:
-      for count in (1, 2, 4, 15, 33, 15):
+      for count in (1, 2, 4, 15, 16, 17, 33, 15):
         packets = [bytes([i % 251]) * (32768 if i % 2 else 16384) for i in range(count)]
         writer.send(packets, .5)
         expected.extend(b''.join(packets))
@@ -58,7 +58,7 @@ long fake_syscall(long number, ...);
 #define syscall fake_syscall
 #include "request_writer.c"
 #undef syscall
-static struct iocb *pending[4];
+static struct iocb *pending[DEPTH];
 static int pending_count, mode, destroyed;
 void configure(int m) { mode=m; pending_count=0; destroyed=0; }
 int destroy_count(void) { return destroyed; }
@@ -110,9 +110,9 @@ def test_completion_reordering_and_faults_keep_context_until_close(fault_library
   lib=fault_library; lib.configure(mode)
   writer=Writer(1,lib)
   if mode in (0,8):
-    writer.send([b'x'*32768]*15,.5)  # completions deliberately reversed
+    writer.send([b'x'*32768]*33,.5)  # completions deliberately reversed
   else:
-    with pytest.raises(OSError): writer.send([b'x'*32768]*15,.5)
+    with pytest.raises(OSError): writer.send([b'x'*32768]*33,.5)
     with pytest.raises(OSError): writer.send([b'x'],.5)
   assert writer.context is not None and lib.destroy_count()==0
   writer.close()
