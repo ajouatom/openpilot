@@ -1,4 +1,4 @@
-# Earlier braking when already inside the follow distance and closing on a lead (LeadCloseBrake, default off).
+# Earlier braking when already inside the follow distance and closing on a lead (StopGoAssist >= 1).
 # Logs 10-24: at 0.5 s gap the MPC let the gap shrink 10 -> 4 m while the lead slowed gently, then braked hard.
 # Replays of 35 lead braking events (02_logs/measurements.md §25): min gap +0.5~0.8 m, never smaller, accel unchanged.
 import numpy as np

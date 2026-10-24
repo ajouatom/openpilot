@@ -167,7 +167,6 @@ class CarrotPlanner:
 
     self.aChangeCostStarting = 10.0
     self.stopGoAssist = 0
-    self.leadCloseBrake = 0
 
     self.trafficLightDetectMode = 2 # 0: None, 1:Stop, 2:Stop&Go
     self.trafficState_carrot = 0
@@ -220,7 +219,6 @@ class CarrotPlanner:
       self.dynamicTFollowLC = self.params.get_float("DynamicTFollowLC") / 100.
       self.speedTFFactor = int(np.clip(self.params.get_int("SpeedTFFactor"), 10, 30))
       self.tFollowDecelBoost = self.params.get_float("TFollowDecelBoost") / 100.
-      self.leadCloseBrake = self.params.get_int("LeadCloseBrake")
     elif self.params_count == 30:
       self.cruiseMaxVals0 = self.params.get_float("CruiseMaxVals0") / 100.
       self.cruiseMaxVals1 = self.params.get_float("CruiseMaxVals1") / 100.

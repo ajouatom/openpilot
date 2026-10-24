@@ -425,7 +425,7 @@ class LongitudinalMpc:
     a_ego = self.x0[2]
     self.status = radarstate.leadOne.status or radarstate.leadTwo.status
     t_follow = carrot.get_T_FOLLOW(personality, v_ego, a_ego)
-    close_brake = self.mode == 'acc' and getattr(carrot, 'leadCloseBrake', 0) > 0
+    close_brake = self.mode == 'acc' and getattr(carrot, 'stopGoAssist', 0) >= 1
     if not close_brake:
       self.close_extra = 0.0
     t_follow += self.close_extra
