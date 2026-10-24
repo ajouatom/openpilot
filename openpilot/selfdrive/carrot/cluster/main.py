@@ -688,6 +688,7 @@ def run_demo(
     hud_encoder_watch: int | None,
     language: str | None,
     is_metric: bool | None,
+    usb_h264_ffmpeg_threads: int = 0,
 ) -> None:
     scheduler = DisplayScheduler(4, enabled=TICI)
     scheduler.update(False, force=True)
@@ -1070,6 +1071,7 @@ def run_demo(
                 usb_h264_dump,
                 usb_h264_debug,
                 usb_h264_diagnose_interval_s,
+                ffmpeg_threads=usb_h264_ffmpeg_threads,
             )
             profile_stage = time.perf_counter()
             h264_pipeline.start()
@@ -2114,6 +2116,13 @@ def parse_args() -> argparse.Namespace:
         ),
     )
     parser.add_argument(
+        "--usb-h264-ffmpeg-threads",
+        type=int,
+        choices=range(17),
+        default=0,
+        help="libx264 encoder and conversion threads (0: automatic; 1: minimum CPU concurrency).",
+    )
+    parser.add_argument(
         "--usb-h264-device",
         default=DEFAULT_H264_DEVICE,
         help=f"V4L2 hardware encoder device path. Default: {DEFAULT_H264_DEVICE}.",
@@ -2658,6 +2667,7 @@ def main(*, exit_on_error: bool = True) -> None:
             args.cluster_hud_encoder,
             args.language,
             args.is_metric,
+            usb_h264_ffmpeg_threads=args.usb_h264_ffmpeg_threads,
         )
     except KeyboardInterrupt:
         print("\nStopped.")
