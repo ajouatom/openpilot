@@ -81,9 +81,10 @@ def _transport_layers(transport):
 
 class JetlinkClient:
   def __init__(self, transport: Transport, deadline: float = FRAME_TIMEOUT,
-               name: str | None = None):
+               name: str | None = None, *, allow_request_chunks: bool = True):
     self.t = transport
     self.deadline = deadline
+    self._allow_request_chunks = allow_request_chunks
     # Who the server logs this connection as. The nonce is per client object,
     # so two processes taking turns on one gadget, or one process reopening
     # the link, are separable in a journal whose clock is wrong anyway.
@@ -212,6 +213,9 @@ class JetlinkClient:
     """Introduce this client. The server starts its session over on a hello,
     so this is also how a new owner of the gadget takes over one the server
     never saw end; see Session._greet."""
+    for layer in _transport_layers(self.t):
+      if hasattr(type(layer), '_send_bounded_request'):
+        layer.request_chunks_enabled = False
     seq = self._next_seq()
     version = self._protocol_version()
     client = {'nonce': self.nonce, 'name': self.name}
@@ -232,6 +236,13 @@ class JetlinkClient:
       raise LinkError(str(e)) from e
     if selected != version:
       raise LinkError(f"server selected protocol {selected!r}, transport speaks protocol {version}")
+    from jetlink import request_chunks
+    enabled = (self._allow_request_chunks and selected == 2 and response.get('carrot_host') == 'jetson' and
+               request_chunks.supported(response.get(request_chunks.CAPABILITY)))
+    for layer in _transport_layers(self.t):
+      if hasattr(type(layer), '_send_bounded_request'):
+        layer.request_chunks_enabled = enabled and layer._prepare_bounded_requests()
+    response['carrot_request_chunks_active'] = any(getattr(layer, 'request_chunks_enabled', False) for layer in _transport_layers(self.t))
     return response
 
   def state(self, timeout: float = 2.0) -> dict:
