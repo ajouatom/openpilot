@@ -375,7 +375,8 @@
                 "LeadAccelResponseTF4",
                 "DynamicTFollowLC",
                 "SpeedTFFactor",
-                "TFollowDecelBoost"
+                "TFollowDecelBoost",
+                "LeadCloseBrake"
               ]
             },
             {
@@ -3408,6 +3409,22 @@
       "default": 0,
       "unit": 10,
       "display_unit": "percent"
+    },
+    {
+      "group": "차량간격",
+      "name": "LeadCloseBrake",
+      "title": "앞차 접근 시 조기 감속",
+      "descr": "0:끔, 1:켬\n목표 차간보다 가까운데 앞차보다 0.3m/s 이상 빠르게 다가가면 차간을 최대 +0.3초 늘리고 거리 유지를 더 중시해 일찍 감속합니다. 앞차가 감속 중이면 감속 반응도 빠르게 합니다. 45km/h 이하에서 전부, 65km/h까지 선형으로 줄고 그 위에서는 동작하지 않습니다. 앞차가 가속 중일 때는 동작하지 않아 출발·가속은 그대로입니다.",
+      "egroup": "FDIST",
+      "etitle": "Early Braking When Closing In",
+      "edescr": "0:Off, 1:On\nInside the follow distance and closing on the lead by more than 0.3 m/s, adds up to +0.3 s of gap and weighs keeping distance more, so braking starts earlier; reacts faster while the lead brakes. Full strength up to 45 km/h, fading linearly to none at 65 km/h. Inactive while the lead accelerates, so starts and acceleration are unchanged.",
+      "cgroup": "跟车距离",
+      "ctitle": "接近前车时提前减速",
+      "cdescr": "0:关闭, 1:开启\n比目标车距更近且以超过0.3m/s的速度接近前车时, 车距最多增加0.3秒并更重视保持距离, 以便提前减速; 前车减速时反应更快。45km/h以下全额, 到65km/h线性减弱, 以上不工作。前车加速时不工作, 起步和加速不变。",
+      "min": 0,
+      "max": 1,
+      "default": 0,
+      "unit": 1
     },
     {
       "group": "감속제어",
