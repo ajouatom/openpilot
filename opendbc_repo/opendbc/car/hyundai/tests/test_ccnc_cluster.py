@@ -216,6 +216,31 @@ def test_unseen_lane_lines_send_14(monkeypatch, blindspot, left):
   assert (values['LANELINE_LEFT'], values['LANELINE_RIGHT']) == (left, 2)
 
 
+@pytest.mark.parametrize(('lane_change', 'camera', 'expected'), (('off', 10, 14), ('laneChangeStarting', 10, 8), ('laneChangeStarting', 0, 14)))
+def test_lane_change_uses_camera_lanes(monkeypatch, lane_change, camera, expected):
+  # model probs collapse mid lane change: the camera decides there, the model elsewhere
+  from openpilot.cereal import log
+  monkeypatch.setattr(hyundaicanfd, 'Params', lambda: SimpleNamespace(get_int=lambda key: 0, get=lambda key: '0'))
+  monkeypatch.setitem(hyundaicanfd.create_ccnc_messages.__dict__, '_lane_unseen', {'L': (True, 0), 'R': (True, 0)})
+  packer = CANPacker('hyundai_canfd_generated')
+  definition = packer.dbc.name_to_msg['ADRV_0x161']
+  md = log.ModelDataV2.new_message()
+  md.laneLineProbs = [0.01] * 4
+  md.meta.laneChangeState = lane_change
+  state = SimpleNamespace(
+    adrv_0x161={key: 0 for key in definition.sigs}, out=structs.CarState(leftLaneLine=camera, rightLaneLine=camera), modelV2=md,
+    lfahda_cluster=None, cruise_buttons_msg=None, adrv_0x200=None, adrv_0x1ea=None, ccnc_0x162=None,
+    is_metric=True, paddle_button_prev=0, softHoldActive=0, trailer_connected=False,
+  )
+  control = structs.CarControl(latActive=True, enabled=True)
+  control.hudControl.leftLaneVisible = control.hudControl.rightLaneVisible = True
+  msg = hyundaicanfd.create_ccnc_messages(
+    SimpleNamespace(flags=HyundaiFlags.CAMERA_SCC), packer, SimpleNamespace(ECAN=0, CAM=2), 5, control, state,
+    control.hudControl, 0, False, False, 0, False, 0, 0)[0]
+  assert get_raw_value(msg[1], definition.sigs['LANELINE_LEFT']) == expected
+  assert get_raw_value(msg[1], definition.sigs['LANELINE_RIGHT']) == expected
+
+
 def test_lane_unseen_hysteresis():
   state = {}
   assert not hyundaicanfd._lane_unseen(state, 'L', 0.02, 0)
