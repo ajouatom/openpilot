@@ -45,6 +45,14 @@ def health_banner(health, language):
 
 class HealthRenderer(ClusterUiRenderer):
   def render(self, state, signal_lights=None):
+    from hud_protocol import read_snapshot
+    from hud_bsd import warning_sides
+    snapshot = read_snapshot()
+    now = time.monotonic()
+    self._bsd_warning = warning_sides(state, snapshot, now)
+    previous = getattr(self, '_bsd_started', (None, None))
+    self._bsd_started = tuple((stamp if stamp is not None else now) if active else None
+                              for active, stamp in zip(self._bsd_warning, previous, strict=True))
     self.host_health = _fresh(STATUS, time.monotonic())
     self.host_badge_drawn = False
     super().render(state, signal_lights)
@@ -63,9 +71,35 @@ class HealthRenderer(ClusterUiRenderer):
     self._temperature_badge(EGPU_STATUS_CENTER_X + 20, TOP_STATUS_CENTER_Y)
 
   def _draw_alert_overlay(self, alert):
+    left, right = getattr(self, '_bsd_warning', (False, False))
+    if left or right:
+      # Finish the existing HUD batch before the gradient's native quad changes
+      # drawing state; otherwise preceding panel text can be clipped. No GPU wait.
+      rl.rl_draw_render_batch_active()
     rl.rl_push_matrix()
     rl.rl_scalef(self.width / DESIGN_WIDTH, self.height / DESIGN_HEIGHT, 1.)
     try:
+      # Fixed geometry reuses the current frame; no new detector, CAN poll or
+      # process. Existing vehicle alerts are still drawn last over this cue.
+      from hud_bsd import edge_alpha, GRADIENT_ALPHA
+      now = time.monotonic()
+      starts = getattr(self, '_bsd_started', (now, now))
+      # Physical screen sides stay left/right even when the panels are swapped.
+      for side, active in enumerate((left, right)):
+        if active:
+          # One constant, translucent native quad per side. No image buffers,
+          # shader, thread or timer; reuses the 10 Hz renderer. The center third
+          # remains untinted, and the broad background never flashes.
+          shade, clear = rl_color((255, 30, 30), GRADIENT_ALPHA), rl_color((255, 30, 30), 0)
+          width = int(DESIGN_WIDTH / 3)
+          rl.draw_rectangle_gradient_h(0 if side == 0 else int(DESIGN_WIDTH) - width,
+                                       0, width, int(DESIGN_HEIGHT),
+                                       shade if side == 0 else clear, clear if side == 0 else shade)
+          alpha = edge_alpha(now, starts[side])
+          # Flush, full-height edges; the halo extends only into the display.
+          for edge_width, opacity in ((48, int(alpha * .3)), (24, alpha)):
+            x = 0 if side == 0 else int(DESIGN_WIDTH) - edge_width
+            rl.draw_rectangle(x, 0, edge_width, int(DESIGN_HEIGHT), rl_color((255, 30, 30), opacity))
       if not self.host_badge_drawn:
         # Full navigation/graph modes omit the driving status row.
         self._temperature_badge(DESIGN_WIDTH - 66, TOP_STATUS_CENTER_Y)

@@ -173,6 +173,10 @@ class SnapshotBuilder:
       preview = self.nav_map.packet(self.settings.get('ClusterHudScreenMode') == 'Nw==')
       if preview is not None:
         record['nav_map_preview'] = preview
+    # SubMaster stamps arrivals inside update(), after the cadence timestamp
+    # above. Seal the completed snapshot so fresh services never look future-
+    # dated and optional processing time still counts toward their age.
+    record['sent'] = time.monotonic()
     return encode_snapshot(record)
 
 
