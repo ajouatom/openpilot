@@ -227,9 +227,12 @@ def main():
   cluster.TuringUsbDisplay = Display
   # Jetson has no video encoder block. Keep inference CPU/GPU headroom and
   # use the existing software encoder at the normal 10 FPS cluster rate.
+  # Bound conversion/encoding concurrency; an explicit trailing CLI value of
+  # zero restores FFmpeg's automatic thread pools for comparisons.
   sys.argv = [__file__, '--input', 'live', '--output', 'usb', '--fps', '10',
               '--usb-codec', 'h264', '--usb-h264-backend', 'ffmpeg',
-              '--usb-h264-ffmpeg-encoder', 'libx264', '--cluster-hud-mode', '1', *sys.argv[1:]]
+              '--usb-h264-ffmpeg-encoder', 'libx264', '--usb-h264-ffmpeg-threads', '1',
+              '--cluster-hud-mode', '1', *sys.argv[1:]]
   if '--help' in sys.argv:
     cluster.main()
   else:

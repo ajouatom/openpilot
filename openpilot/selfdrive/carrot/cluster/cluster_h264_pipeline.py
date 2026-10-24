@@ -754,6 +754,7 @@ class H264UsbPipeline:
         dump_path: str,
         debug: bool,
         diagnose_interval_s: float = 0.0,
+        ffmpeg_threads: int = 0,
     ) -> None:
         self.usb_display = usb_display
         self.width = int(width)
@@ -770,6 +771,9 @@ class H264UsbPipeline:
         self.ffmpeg_path = ffmpeg_path
         self.ffmpeg_encoder_request = ffmpeg_encoder
         self.ffmpeg_encoder_name = ffmpeg_encoder
+        self.ffmpeg_threads = int(ffmpeg_threads)
+        if not 0 <= self.ffmpeg_threads <= 16:
+            raise ValueError("ffmpeg_threads must be between 0 (automatic) and 16")
         self.ffmpeg_muxer_name = ""
         self.device_path = device_path
         self.input_format = input_format
@@ -971,6 +975,7 @@ class H264UsbPipeline:
             "Starting H264 USB ffmpeg encoder: "
             f"{self.ffmpeg_encoder_name} {self.encoder_width}x{self.encoder_height}@{self.fps} "
             f"bitrate={self.bitrate} gop={self.gop} muxer={self.ffmpeg_muxer_name} "
+            f"threads={self.ffmpeg_threads or 'auto'} "
             "packetize=access-unit "
             f"chunk_ack={'soft' if self.wait_for_ack and self.soft_ack else ('on' if self.wait_for_ack else 'off')}"
             f"{self._diagnose_text()}",
@@ -1764,6 +1769,12 @@ class H264UsbPipeline:
             "+low_delay",
         ]
         if encoder == "libx264":
+            # Bound both the RGBA conversion pool and the encoder pool. Limiting
+            # only x264 leaves FFmpeg's automatically sized filter pool active.
+            # Other encoders and the default automatic setting retain their policy.
+            if self.ffmpeg_threads:
+                command[1:1] = ["-filter_threads", str(self.ffmpeg_threads)]
+                command.extend(["-threads:v", str(self.ffmpeg_threads)])
             command.extend(
                 [
                     "-preset",
