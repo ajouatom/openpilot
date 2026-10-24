@@ -22,6 +22,7 @@ from hud_wifi import CAPABILITY as HUD_WIFI_CAPABILITY, USB_CAPABILITY as HUD_US
 from hud_wifi import REQUEST as HUD_WIFI_REQUEST, RESPONSE as HUD_WIFI_RESPONSE, Worker
 from host_reader import ReadAheadTransport
 from host_health import health_worker
+from host_lpm import SessionLease
 from wifi_protocol import CAPABILITY as WIFI_CAPABILITY, MESSAGE as WIFI_MESSAGE, receive as receive_wifi
 from jetlink import protocol as P
 from jetlink import request_chunks
@@ -70,6 +71,7 @@ class CarrotSession(Session):
     self.telemetry = DisplayTelemetry(self.telemetry)
     self.navi = HostForwarder() if sys.platform == 'linux' and self.usb_display else None
     self.hud_wifi = None
+    self.power_lease = SessionLease(self.t.transport if isinstance(self.t, ReadAheadTransport) else self.t)
 
   def _send_json(self, msg_type, seq, obj, flags=0):
     if msg_type == P.Msg.ENGINE_RESP and obj.get('state') == 'failed' and self.telemetry.health is not None:
@@ -89,6 +91,8 @@ class CarrotSession(Session):
     return super()._send_json(msg_type, seq, obj, flags)
 
   def handle(self, msg):
+    if getattr(self, 'power_lease', None) is not None:
+      self.power_lease.touch()
     if msg.msg_type == P.Msg.HELLO_REQ:
       self.request_chunks.clear()
     elif msg.msg_type == request_chunks.MESSAGE:
@@ -153,14 +157,18 @@ class CarrotSession(Session):
       pass  # An unavailable display does not stop inference.
 
   def close(self):
-    if self.hud_wifi is not None:
-      self.hud_wifi.close()
-      self.hud_wifi = None
-    if self.navi is not None:
-      self.navi.close()
-    if isinstance(self.t, ReadAheadTransport):
-      self.t.close()
-    super().close()
+    try:
+      if self.hud_wifi is not None:
+        self.hud_wifi.close()
+        self.hud_wifi = None
+      if self.navi is not None:
+        self.navi.close()
+      if isinstance(self.t, ReadAheadTransport):
+        self.t.close()
+      super().close()
+    finally:
+      if getattr(self, 'power_lease', None) is not None:
+        self.power_lease.close()
 
 
 if __name__ == '__main__':
