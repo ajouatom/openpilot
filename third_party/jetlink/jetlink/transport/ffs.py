@@ -452,18 +452,67 @@ class FfsTransport(StreamTransport):
       return self._send_bounded_request(*args, **kwargs)
     super().send(*args, **kwargs)
 
+  def _prepare_bounded_requests(self):
+    # Prepare once during HELLO, before any model request/deadline exists.
+    from jetlink.transport.request_writer import library, Writer
+    if getattr(self, '_request_writer', None) is not None:
+      return True
+    lib = library()
+    if lib is None:
+      return False
+    try:
+      self._ensure_epfiles()
+      self._request_writer = Writer(self.ep_in, lib)
+      return True
+    except OSError:
+      return False
+
   def _send_bounded_request(self, msg_type, seq, parts=(), flags=0, timeout=None):
     from jetlink import request_chunks
     parts = tuple(parts)
+    writer = getattr(self, '_request_writer', None)
+    deadline = time.monotonic() + min(request_chunks.MAX_AGE, timeout if timeout is not None else request_chunks.MAX_AGE)
     self._bounded_envelope = True
     try:
       if sum(memoryview(p).nbytes for p in parts) <= request_chunks.DATA_BYTES:
         return super().send(msg_type, seq, parts, flags, timeout)
-      return request_chunks.send(super().send, msg_type, seq, parts, flags, timeout)
+      if writer is None:
+        return request_chunks.send(super().send, msg_type, seq, parts, flags, timeout)
+      self._collect_envelopes = []
+      try:
+        request_chunks.send(super().send, msg_type, seq, parts, flags, timeout)
+        packets = self._collect_envelopes
+      finally:
+        self._collect_envelopes = None
+      budget = deadline - time.monotonic()
+      if budget <= 0:
+        raise LinkTimeout('bounded request preparation deadline exceeded')
+      self._write_budget = budget
+      was = _signal.pthread_sigmask(signal.SIG_BLOCK, _IO_SIGNALS)
+      try:
+        if not self._write_guard.arm(budget):
+          raise LinkError('gadget write watchdog already expired or closed')
+        try:
+          writer.send(packets, budget)
+          self._had_host = True
+        except OSError as exc:
+          raise LinkError('bounded USB request failed; abandoning this session') from exc
+      finally:
+        completed = self._write_guard.disarm()
+        _signal.pthread_sigmask(signal.SIG_SETMASK, was)
+        if not completed:
+          raise LinkError('bounded request watchdog expired; link abandoned')
     finally:
       self._bounded_envelope = False
 
   def _write(self, bufs: list[memoryview]) -> int:
+    packets = getattr(self, '_collect_envelopes', None)
+    if packets is not None:
+      packet = b''.join(bufs)
+      if not 0 < len(packet) <= 32768 or len(packets) >= 34:
+        raise LinkError('invalid bounded USB envelope')
+      packets.append(packet)
+      return len(packet)
     self._ensure_epfiles()
     self._write_budget = self._write_timeout(WRITE_TIMEOUT)
     # See _IO_SIGNALS: a signal here duplicates data on the wire.
@@ -689,6 +738,10 @@ class FfsTransport(StreamTransport):
       reader.join(READER_JOIN_TIMEOUT)
     with self._cv:
       self._cv.notify_all()
+    writer = getattr(self, '_request_writer', None)
+    if writer is not None:
+      writer.close()  # unbound first; retain buffers/context on cleanup failure
+      self._request_writer = None
     self._close_fds(('_state_fd', 'ep_in', 'ep_out', 'ep0'), reader)
 
   def _close_fds(self, names, reader: threading.Thread | None) -> None:
