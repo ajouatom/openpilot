@@ -165,7 +165,7 @@ def test_strict_negotiation(bad):assert not D.matches(bad)
 
 @pytest.mark.parametrize('enabled', [None,'0','1'])
 @pytest.mark.parametrize('capable', [False,True])
-def test_local_metadata_only_for_explicit_opt_in_and_peer(monkeypatch,enabled,capable):
+def test_local_metadata_requires_peer_and_retains_explicit_off(monkeypatch,enabled,capable):
   from openpilot.selfdrive.modeld.jetlink import link
   if enabled is None:monkeypatch.delenv('JETLINK_DEFER_NAV',raising=False)
   else:monkeypatch.setenv('JETLINK_DEFER_NAV',enabled)
@@ -174,7 +174,7 @@ def test_local_metadata_only_for_explicit_opt_in_and_peer(monkeypatch,enabled,ca
   monkeypatch.setattr(link.socket,'AF_UNIX',1,raising=False)
   monkeypatch.setattr(link.socket,'socket',lambda *a:NS(settimeout=lambda *a:None,connect=lambda *a:None,close=lambda:None))
   monkeypatch.setattr(link,'receive',lambda *a:json.dumps(hello).encode())
-  client=link.Client();assert client.deferred_nav==(enabled=='1' and capable)
+  client=link.Client();assert client.deferred_nav==(enabled!='0' and capable)
   requests=[]
   monkeypatch.setattr(link,'send_parts',lambda sock,*parts,**kw:requests.append(b''.join(memoryview(x).cast('B') for x in parts)))
   client.reader=NS(receive=lambda *a:memoryview(link.REPLY.pack(7,24,1,25)+bytes(SPEC.output_nelem*4)))
