@@ -439,6 +439,7 @@ class FfsTransport(StreamTransport):
     self.unbind(self._owner_gadget)
 
   def send(self, *args, **kwargs) -> None:
+    self._poll_bounded_requests()
     # Reset the quantum at each message: a latched shrink would split every
     # later request across two writes and re-arm the dwc3 replay (see
     # write_chunk). The pressure that forced it is usually gone by the next
@@ -462,10 +463,18 @@ class FfsTransport(StreamTransport):
       return False
     try:
       self._ensure_epfiles()
-      self._request_writer = Writer(self.ep_in, lib)
+      self._request_writer = Writer(self.ep_in, lib, deferred=os.getenv('JETLINK_DEFER_COMPLETIONS') == '1')
       return True
     except OSError:
       return False
+
+  def _poll_bounded_requests(self):
+    writer = getattr(self, '_request_writer', None)
+    if getattr(writer, 'deferred', False):
+      try:
+        writer.poll()
+      except OSError as exc:
+        raise LinkError('bounded USB completion failed; abandoning this session') from exc
 
   def _send_bounded_request(self, msg_type, seq, parts=(), flags=0, timeout=None):
     from jetlink import request_chunks
@@ -646,7 +655,10 @@ class FfsTransport(StreamTransport):
     # Per-message maxima, in seconds. read_wait covers the peer and kernel IO,
     # handoff the consumer's wake; neither is a pure scheduler measurement.
     self.last_receive = {'prepare': 0.0, 'read_wait': 0.0, 'handoff': 0.0}
-    return super().recv(timeout)
+    self._poll_bounded_requests()
+    message = super().recv(timeout)
+    self._poll_bounded_requests()
+    return message
 
   def _read_into(self, dest: memoryview, timeout: float | None) -> int:
     self._ensure_epfiles()
@@ -731,8 +743,12 @@ class FfsTransport(StreamTransport):
       self._cv.notify_all()
     writer = getattr(self, '_request_writer', None)
     if writer is not None:
-      writer.close()  # unbound first; retain buffers/context on cleanup failure
-      self._request_writer = None
+      try:
+        writer.close()  # unbound first; retain native buffers/context on failure
+      except OSError:
+        log.exception('bounded writer cleanup incomplete; native buffers retained')
+      else:
+        self._request_writer = None
     self._close_fds(('_state_fd', 'ep_in', 'ep_out', 'ep0'), reader)
 
   def _close_fds(self, names, reader: threading.Thread | None) -> None:
