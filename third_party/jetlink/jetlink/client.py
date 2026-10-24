@@ -83,7 +83,7 @@ def _transport_layers(transport):
 class JetlinkClient:
   def __init__(self, transport: Transport, deadline: float = FRAME_TIMEOUT,
                name: str | None = None, *, allow_block_compression: bool = False,
-               allow_output_projection: bool = False):
+               allow_output_projection: bool = False, allow_request_chunks: bool = True):
     self.t = transport
     self.deadline = deadline
     # Who the server logs this connection as. The nonce is per client object,
@@ -109,6 +109,7 @@ class JetlinkClient:
     self._allow_block_compression = allow_block_compression
     self._lz4 = False
     self.last_request_bytes = 0
+    self._allow_request_chunks = allow_request_chunks
     self._allow_output_projection = allow_output_projection
     self._projection_negotiated = False
     self._projection_spec = None
@@ -238,6 +239,9 @@ class JetlinkClient:
     self._stateful_v2 = False
     self._nav_u8 = False
     self._lz4 = False
+    for layer in _transport_layers(self.t):
+      if hasattr(type(layer), '_send_bounded_request'):
+        layer.request_chunks_enabled = False
     self._projection_negotiated = False
     self._projection_spec = None
     self._projection_spec_ok = False
@@ -272,6 +276,12 @@ class JetlinkClient:
     from jetlink.block_codec import CAPABILITY as LZ4_CAPABILITY, library
     self._lz4 = (self._allow_block_compression and self._stateful_v2 and
                  response.get(LZ4_CAPABILITY) is True and library() is not None)
+    from jetlink import request_chunks
+    enabled = (self._allow_request_chunks and selected == 2 and response.get('carrot_host') == 'jetson' and
+               request_chunks.supported(response.get(request_chunks.CAPABILITY)))
+    for layer in _transport_layers(self.t):
+      if hasattr(type(layer), '_send_bounded_request'):
+        layer.request_chunks_enabled = enabled
     return response
 
   def state(self, timeout: float = 2.0) -> dict:
