@@ -41,6 +41,9 @@ MID_SPEED_ANGLE_RATE_LIMIT_SPEED = 40.0 * CV.KPH_TO_MS
 LARGE_ANGLE_UNWIND_RATE = 1.5  # deg/tick: allow a quicker return from the EPS fault-angle region
 CANFD_JERK_UPPER_MIN = 1.0
 CANFD_JERK_LIMIT_MAX = 5.0
+CANFD_DEPART_JERK_UPPER = 3.0  # StopGoAssist departure: no-lead departures already send 2.8-3.3 (02_logs §22)
+CANFD_DEPART_TIME = 3.0
+CANFD_DEPART_SPEED = 3.0
 CANFD_JERK_ERROR_DELAY = 0.5
 CANFD_JERK_ERROR_FILTER_TIME = 0.4
 CANFD_JERK_ERROR_DEADBAND = 0.25
@@ -200,6 +203,8 @@ class CarController(CarControllerBase):
     self.blinking_signal = False # 1Hz
     self.blinking_frame = int(1.0 / DT_CTRL)
     self.soft_hold_mode = 2
+    self.depart_jerk = False
+    self.standstill_frame = -1e6
 
     self.activateCruise = 0
     self.button_wait = 12
@@ -288,6 +293,7 @@ class CarController(CarControllerBase):
         self.steerDeltaDownLC = self.steerDeltaDown
 
       self.soft_hold_mode = 1 if params.get_int("AutoCruiseControl") > 1 else 2
+      self.depart_jerk = params.get_int("StopGoAssist") in (2, 3)
       self.hapticFeedbackWhenSpeedCamera = int(params.get_int("HapticFeedbackWhenSpeedCamera"))
 
       self.button_spam1 = params.get_int("CruiseButtonTest1")
@@ -577,6 +583,11 @@ class CarController(CarControllerBase):
       if self.CP.openpilotLongitudinalControl:
         hud_lateral = self.display_lead_lateral.update(getattr(CS, "radarState", None), getattr(CS, "modelV2", None))
         self.hyundai_jerk.make_jerk(self.CP, CS, accel, actuators, hud_control)
+        if CS.out.standstill:
+          self.standstill_frame = self.frame
+        if (self.depart_jerk and accel > 0.0 and CS.out.vEgo < CANFD_DEPART_SPEED
+            and (self.frame - self.standstill_frame) * DT_CTRL < CANFD_DEPART_TIME):
+          self.hyundai_jerk.jerk_u = max(self.hyundai_jerk.jerk_u, CANFD_DEPART_JERK_UPPER)
         self.hyundai_jerk.check_carrot_cruise(CC, CS, hud_control, stopping, accel, actuators.aTarget)
 
         if True: #not camera_scc:

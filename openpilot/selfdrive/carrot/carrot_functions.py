@@ -166,6 +166,7 @@ class CarrotPlanner:
     self.cruiseMaxVals6 = 0.6
 
     self.aChangeCostStarting = 10.0
+    self.stopGoAssist = 0
 
     self.trafficLightDetectMode = 2 # 0: None, 1:Stop, 2:Stop&Go
     self.trafficState_carrot = 0
@@ -231,6 +232,7 @@ class CarrotPlanner:
       self.eco_over_speed = self.params.get_int("CruiseEcoControl")
       self.autoNaviSpeedDecelRate = float(self.params.get_int("AutoNaviSpeedDecelRate")) * 0.01
       self.aChangeCostStarting = self.params.get_float("AChangeCostStarting")
+      self.stopGoAssist = self.params.get_int("StopGoAssist")
       self.trafficStopDistanceAdjust = self.params.get_float("TrafficStopDistanceAdjust") / 100.
     elif self.params_count >= 100:
 

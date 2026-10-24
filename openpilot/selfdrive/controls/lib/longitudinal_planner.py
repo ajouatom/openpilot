@@ -17,11 +17,13 @@ from openpilot.selfdrive.controls.lib.cutin_predecel import (
   get_cutin_predecel_accel_limit,
 )
 from openpilot.selfdrive.controls.lib.longitudinal_preview import (
+  LEAD_ACCEL_MIN_TRACK_FRAMES,
   apply_preview_target,
   clip_preview_offset,
   get_lead_preview_request,
   rate_limit_preview,
 )
+from openpilot.selfdrive.controls.lib.stop_go_assist import departure_boost, stop_guard
 from openpilot.selfdrive.controls.lib.turn_accel import get_future_curvature, limit_accel_in_turns
 from openpilot.selfdrive.car.cruise import V_CRUISE_MAX, V_CRUISE_UNSET
 from openpilot.common.swaglog import cloudlog
@@ -75,6 +77,7 @@ class LongitudinalPlanner:
     self.lead_preview_accel = 0.0
     self.lead_track_ids = [-1, -1]
     self.lead_track_frames = [0, 0]
+    self.since_standstill = 1e3
 
     self.v_desired_trajectory = np.zeros(CONTROL_N)
     self.a_desired_trajectory = np.zeros(CONTROL_N)
@@ -370,8 +373,36 @@ class LongitudinalPlanner:
 
     self.update_coasting(sm, carrot, v_cruise_kph, v_cruise, reset_state,
                          force_slow_decel, coasting_turn_blocked, cutin_predecel_limit)
+    self.apply_stop_go_assist(sm, carrot, reset_state, accel_limits_turns[1], lead_track_frames)
     self.apply_signal_stop_prepare(sm, carrot, reset_state)
     self.apply_signal_start_guard(carrot, v_ego)
+
+  def apply_stop_go_assist(self, sm, carrot, reset_state, accel_max, lead_track_frames):
+    cs = sm['carState']
+    self.since_standstill = 0.0 if cs.standstill else self.since_standstill + self.dt
+    mode = carrot.stopGoAssist
+    if (mode <= 0 or reset_state or self.mpc.mode != 'acc' or cs.gasPressed or cs.brakePressed
+        or carrot.soft_hold_active or carrot.lane_change_active):
+      return
+    lead = sm['radarState'].leadOne
+    a_target = self.output_a_target
+    if mode in (1, 3):
+      a_target = stop_guard(a_target, cs.vEgo, lead, carrot.stop_distance)
+    # No boost toward a red light / signal stop, or when the planner itself is stopping.
+    if (mode in (2, 3) and not self.output_should_stop and carrot.v_cruise > 0
+        and carrot.xState.name not in ('e2eStop', 'e2eStopped') and carrot.trafficState.name != 'red'):
+      a_target = departure_boost(a_target, cs.vEgo, lead, carrot.stop_distance, self.since_standstill, accel_max,
+                                 lead_track_frames[0] >= LEAD_ACCEL_MIN_TRACK_FRAMES)
+    if a_target != self.output_a_target:
+      # Keep the PID speed term and the next MPC start from undoing the correction (as in signal stop prepare).
+      v_next = max(0., cs.vEgo + a_target * self.dt)
+      if a_target < self.output_a_target:
+        self.output_v_target_now = min(self.output_v_target_now, v_next)
+        self.a_desired = min(self.a_desired, a_target)
+      else:
+        self.output_v_target_now = max(self.output_v_target_now, v_next)
+        self.a_desired = max(self.a_desired, a_target)
+      self.output_a_target = a_target
 
   def apply_signal_stop_prepare(self, sm, carrot, reset_state, now=None):
     from openpilot.selfdrive.carrot.signal_stop_prepare import prepare_lead_blocked
