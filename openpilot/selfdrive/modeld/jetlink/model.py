@@ -241,7 +241,11 @@ class JoiningModel:
         started = time.monotonic()
         # Same-frame CPU context only; Warp drains this submission even if
         # preparation fails, before the existing local-model fallback runs.
-        images = self.warp(bufs, transforms, prepare=lambda: fill_inputs(self.views, inputs, self.prev_desire),
+        prepare = lambda: fill_inputs(self.views, inputs, self.prev_desire)
+        if os.getenv('JETLINK_CPU_OVERLAP', '1') == '0':
+          prepare()
+          prepare = None
+        images = self.warp(bufs, transforms, prepare=prepare,
                            output_buffer=self.client.image_buffer())
         warped = time.monotonic()
         result = self.client.infer(images, self.packed, self.frame, self.reset, source_sof=self.source_sof)

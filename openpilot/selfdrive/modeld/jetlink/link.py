@@ -146,7 +146,8 @@ class Client:
       self.sock.connect(path)
       hello = json.loads(receive(self.sock, time.monotonic() + timeout))
       self.spec = validate_model_spec(ModelSpec.from_dict(hello['spec']))
-      self.project_output = (not os.getenv('SEND_RAW_PRED') and projection.eligible(self.spec) and
+      self.project_output = (os.getenv('JETLINK_COMPACT_REPLY', '1') != '0' and
+                             not os.getenv('SEND_RAW_PRED') and projection.eligible(self.spec) and
                              projection.matches(hello.get(projection.IPC_CAPABILITY)))
       if os.getenv('JETLINK_RAM_INPUT', '1') == '1' and shared_input.supported() and hello.get(shared_input.CAPABILITY) is True:
         deadline = time.monotonic() + timeout

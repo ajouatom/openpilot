@@ -177,7 +177,10 @@ def test_compact_receiver_rejects_corrupt_responses(fault):
 
 
 @pytest.mark.parametrize('capable,raw', [(False, False), (True, False), (True, True)])
-def test_local_ipc_negotiates_without_changing_legacy_requests(monkeypatch, capable, raw):
+@pytest.mark.parametrize("enabled", [None, "0", "1"])
+def test_local_ipc_negotiates_without_changing_legacy_requests(monkeypatch, capable, raw, enabled):
+  if enabled is None: monkeypatch.delenv("JETLINK_COMPACT_REPLY", raising=False)
+  else: monkeypatch.setenv("JETLINK_COMPACT_REPLY", enabled)
   if raw: monkeypatch.setenv('SEND_RAW_PRED', '1')
   else: monkeypatch.delenv('SEND_RAW_PRED', raising=False)
   hello = {'spec': SPEC.to_dict()}
@@ -188,7 +191,7 @@ def test_local_ipc_negotiates_without_changing_legacy_requests(monkeypatch, capa
   monkeypatch.setattr(link.socket, 'socket', lambda *a: sock)
   monkeypatch.setattr(link, 'receive', lambda *a: json.dumps(hello).encode())
   client = link.Client()
-  compact = capable and not raw
+  compact = capable and not raw and enabled != "0"
   assert client.project_output == compact
   count = C.COUNT if compact else C.FULL_COUNT
   payload = bytearray(link.REPLY.pack(7, 24, 1, 25) + np.arange(count, dtype=np.float32).tobytes())

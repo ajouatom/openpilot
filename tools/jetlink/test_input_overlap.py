@@ -79,7 +79,9 @@ def test_gpu_read_failure_is_not_replaced_with_a_previous_image(monkeypatch):
   assert calls == ['submit', 'prepare', 'read']
 
 
-def test_joining_adapter_prepares_same_frame_before_usb(monkeypatch):
+@pytest.mark.parametrize("overlap", [True, False])
+def test_joining_adapter_prepares_same_frame_before_usb(monkeypatch, overlap):
+  monkeypatch.setenv("JETLINK_CPU_OVERLAP", str(int(overlap)))
   m = joining_model(monkeypatch)
   calls = []
   m.warp, bufs, transforms = fake_warp(monkeypatch, calls)
@@ -96,7 +98,7 @@ def test_joining_adapter_prepares_same_frame_before_usb(monkeypatch):
   monkeypatch.setattr(model, 'fill_inputs', fill)
   def infer(image, packed, frame, reset, source_sof):
     calls.append('usb')
-    assert calls == ['submit', 'prepare', 'read', 'usb']
+    assert calls == (['submit', 'prepare', 'read', 'usb'] if overlap else ['prepare', 'submit', 'read', 'usb'])
     assert frame == m.frame and reset == (frame == 1) and source_sof == 123456
     assert image.tobytes() == np.arange(16, dtype=np.uint8).tobytes()
     assert packed.tobytes() == expected.tobytes()

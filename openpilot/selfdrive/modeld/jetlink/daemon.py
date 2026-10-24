@@ -556,7 +556,8 @@ def main():
             raise ValueError('Selected iOS cable requires protocol 3')
           wire_protocol = ProtocolChoice('3')
         transport.protocol_version = wire_protocol.version
-        client = JetlinkClient(transport, name='carrot-jetlink', allow_output_projection=True)
+        client = JetlinkClient(transport, name='carrot-jetlink', allow_output_projection=True,
+                               allow_request_chunks=os.getenv('JETLINK_REQUEST_CHUNKS', '1') != '0')
         if TRANSPORT_MODE == 'auto' and transport is owner and usb_mode is None and not mobile_unavailable:
           usb_probes += 1
           publish('connecting', peer=None, preparation={'stage': 'usb-probe',
