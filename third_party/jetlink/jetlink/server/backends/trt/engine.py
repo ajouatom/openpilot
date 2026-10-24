@@ -14,8 +14,10 @@ hands out, which saves a copy on the way to the GPU.
 from __future__ import annotations
 
 import ctypes
+import logging
 import os
 import time
+from contextlib import ExitStack
 from dataclasses import dataclass
 
 import numpy as np
@@ -58,6 +60,14 @@ def _np_from_ptr(ptr: int, shape, dtype) -> np.ndarray:
   return np.frombuffer(buf, dtype=dtype).reshape(shape)
 
 
+def _release_resource(release, resource) -> None:
+  # 생성 실패의 원래 예외를 보존하면서 이미 확보한 나머지 자원도 계속 회수한다.
+  try:
+    release(resource)
+  except Exception as error:  # 생성 실패의 원예외를 보존하고 나머지 회수를 계속한다.
+    logging.getLogger('jetlink.trt').warning('CUDA cleanup failed (%s)', type(error).__name__)
+
+
 class TrtEngine:
   def __init__(self, plan_path: str, log_severity=trt.Logger.WARNING, device: int | None = None):
     self.logger = trt.Logger(log_severity)
@@ -74,29 +84,36 @@ class TrtEngine:
     if self.engine is None:
       raise RuntimeError(f"failed to deserialize engine {plan_path}")
     self.context = self.engine.create_execution_context()
-    self.stream = cudart.stream_create()
+    # 외부로 엔진을 넘기기 전까지 획득 직후 회수 책임을 등록한다.
+    with ExitStack() as cleanup:
+      self.stream = cudart.stream_create()
+      cleanup.callback(_release_resource, cudart.stream_destroy, self.stream)
 
-    self.bindings: dict[str, Binding] = {}
-    for i in range(self.engine.num_io_tensors):
-      name = self.engine.get_tensor_name(i)
-      is_input = self.engine.get_tensor_mode(name) == trt.TensorIOMode.INPUT
-      shape = tuple(self.engine.get_tensor_shape(name))
-      if any(d < 0 for d in shape):
-        raise RuntimeError(f"tensor {name} has a dynamic shape {shape}; jetlink builds fixed-shape engines")
-      dtype = np.dtype(TRT_TO_NP[self.engine.get_tensor_dtype(name)])
-      nbytes = int(np.prod(shape)) * dtype.itemsize
-      dev = cudart.malloc(nbytes)
-      host = cudart.host_alloc(nbytes)
-      self.bindings[name] = Binding(name, shape, dtype, nbytes, int(dev), int(host),
-                                    _np_from_ptr(int(host), shape, dtype), is_input)
-      self.context.set_tensor_address(name, int(dev))
+      self.bindings: dict[str, Binding] = {}
+      for i in range(self.engine.num_io_tensors):
+        name = self.engine.get_tensor_name(i)
+        is_input = self.engine.get_tensor_mode(name) == trt.TensorIOMode.INPUT
+        shape = tuple(self.engine.get_tensor_shape(name))
+        if any(d < 0 for d in shape):
+          raise RuntimeError(f"tensor {name} has a dynamic shape {shape}; jetlink builds fixed-shape engines")
+        dtype = np.dtype(TRT_TO_NP[self.engine.get_tensor_dtype(name)])
+        nbytes = int(np.prod(shape)) * dtype.itemsize
+        dev = cudart.malloc(nbytes)
+        cleanup.callback(_release_resource, cudart.free, dev)
+        host = cudart.host_alloc(nbytes)
+        cleanup.callback(_release_resource, cudart.host_free, host)
+        self.bindings[name] = Binding(name, shape, dtype, nbytes, int(dev), int(host),
+                                      _np_from_ptr(int(host), shape, dtype), is_input)
+        self.context.set_tensor_address(name, int(dev))
 
-    self.inputs = {n: b for n, b in self.bindings.items() if b.is_input}
-    self.outputs = {n: b for n, b in self.bindings.items() if not b.is_input}
-    self.last_gpu_us = 0
-    self.graph_exec = None
-    self._state_host_sources = {}
-    self.device_state = None
+      self.inputs = {n: b for n, b in self.bindings.items() if b.is_input}
+      self.outputs = {n: b for n, b in self.bindings.items() if not b.is_input}
+      self.last_gpu_us = 0
+      self.graph_exec = None
+      self._state_host_sources = {}
+      self.device_state = None
+      # 정상 반환 뒤의 소유권과 close 계약은 원형 그대로다.
+      cleanup.pop_all()
 
   # -- introspection --------------------------------------------------------
 
