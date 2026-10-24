@@ -172,7 +172,10 @@ class JoiningModel:
       self.ready = state().get('state') == 'ready'
       record = {'active': self.active, 'ready': self.ready, 'model': model_name(self.spec), 'sha256': self.spec.sha256,
                 'nav_model': 'nav_map' in self.spec.input_shapes,
-                'error': self.error, 'updated': now}
+                'error': self.error, 'updated': now,
+                'execution': {'cpu_overlap': os.getenv('JETLINK_CPU_OVERLAP', '1') != '0',
+                              'shared_input': getattr(self.client, 'shared', None) is not None,
+                              'compact_reply': bool(getattr(self.client, 'project_output', False))}}
       tmp = MODEL_STATUS.with_suffix('.tmp')
       tmp.write_text(json.dumps(record))
       os.replace(tmp, MODEL_STATUS)
