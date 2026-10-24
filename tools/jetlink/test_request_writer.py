@@ -15,13 +15,13 @@ from jetlink.transport.request_writer import Writer, library
 pytestmark = pytest.mark.skipif(sys.platform != 'linux', reason='Linux native AIO')
 
 
-@pytest.mark.parametrize('deferred', [False, True])
-def test_native_regular_file_exact_order_and_repeated_requests(tmp_path, deferred):
+@pytest.mark.parametrize('deferred,quantum', [(False,32768), (True,32768), (True,8192)])
+def test_native_regular_file_exact_order_and_repeated_requests(tmp_path, deferred, quantum):
   lib = library()
   assert lib is not None
   path = tmp_path / 'output'
   with path.open('w+b') as f:
-    writer = Writer(f.fileno(), lib, regular=True, deferred=deferred)
+    writer = Writer(f.fileno(), lib, regular=True, deferred=deferred, quantum=quantum)
     expected = bytearray()
     try:
       for count in (1, 2, 4, 15, 16, 17, 33, 15):
@@ -177,3 +177,19 @@ def test_deferred_close_does_not_destroy_pending_kernel_buffers(fault_library):
   assert lib.queued_byte(0,32767)==ord('a')
   lib.set_mode(0); writer.close()
   assert writer.context is None and lib.destroy_count()==1
+
+
+def test_small_physical_writes_preserve_framed_bytes_and_bounded_ownership(fault_library):
+  from jetlink import request_chunks as chunks, protocol
+  lib=fault_library; lib.configure(3)
+  writer=Writer(1,lib,deferred=True,quantum=8192)
+  raw=bytes(range(251))*1828
+  packets=chunks.packets(protocol.Msg.INFER_REQ,19,(raw,))
+  expected=b''.join(packets)
+  writer.send(packets,.1)
+  assert lib.queued_count()==len(expected)//8192
+  for i in range(lib.queued_count()):
+    for offset in (0,31,32,4095,8191):
+      assert lib.queued_byte(i,offset)==expected[i*8192+offset]
+    assert lib.queued_byte(i,8192)==-1
+  lib.set_mode(0); writer.close()

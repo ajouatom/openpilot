@@ -7,23 +7,26 @@
 #include <sys/syscall.h>
 #include <time.h>
 #include <unistd.h>
-#define DEPTH 32
+#define DEPTH 128
 #define CHUNK 32768
-#define MAX_FRAMES 34
-struct slot { struct iocb cb; unsigned char data[CHUNK]; uint64_t sequence; int pending; };
+#define MAX_FRAMES 136
+struct slot { struct iocb cb; unsigned char *data; uint64_t sequence; int pending; };
 struct writer {
   aio_context_t context;
-  int fd, failed, regular, deferred, depth, pending;
+  int fd, failed, regular, deferred, depth, pending, quantum;
   uint64_t file_offset, sequence;
   struct slot slots[];
 };
 static double now(void) { struct timespec t; clock_gettime(CLOCK_MONOTONIC, &t); return t.tv_sec + t.tv_nsec * 1e-9; }
-void *jetlink_writer_create(int fd, int regular, int deferred) {
-  int depth = deferred ? DEPTH : 16;
-  struct writer *w = calloc(1, sizeof(*w) + (size_t)depth * sizeof(struct slot));
+void *jetlink_writer_create(int fd, int regular, int deferred, int quantum) {
+  if ((quantum!=8192 && quantum!=CHUNK) || (!deferred && quantum!=CHUNK)) { errno=EINVAL; return NULL; }
+  int depth = deferred ? (1<<20)/quantum : 16;
+  struct writer *w = calloc(1, sizeof(*w) + (size_t)depth * (sizeof(struct slot)+quantum));
   if (!w) return NULL;
   w->fd = fd; w->regular = regular; w->deferred = !!deferred;
-  w->depth = depth;
+  w->depth = depth; w->quantum = quantum;
+  unsigned char *buffers=(unsigned char *)(w->slots+depth);
+  for (int i=0;i<depth;i++) w->slots[i].data=buffers+(size_t)i*quantum;
   if (syscall(__NR_io_setup, w->depth, &w->context) < 0) { int e=errno; free(w); errno=e; return NULL; }
   return w;
 }
@@ -61,7 +64,7 @@ int jetlink_writer_send(void *pointer, const unsigned char *data, size_t size,
   if (!w || !data || !lengths || !count || count>MAX_FRAMES || !(budget>0 && budget<=.5)) return -EINVAL;
   if (w->failed) return w->failed;
   size_t total=0;
-  for (unsigned i=0;i<count;i++) { if (!lengths[i] || lengths[i]>CHUNK) return -EINVAL; total+=lengths[i]; }
+  for (unsigned i=0;i<count;i++) { if (!lengths[i] || lengths[i]>(unsigned)w->quantum) return -EINVAL; total+=lengths[i]; }
   if (total!=size) return -EINVAL;
   if (jetlink_writer_poll(w)<0) return w->failed;
   if (!w->deferred && w->pending) return fail(w,-EBUSY);
