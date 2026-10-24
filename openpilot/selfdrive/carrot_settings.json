@@ -511,6 +511,7 @@
           "zh": "亮度与视图",
           "params": [
             "ShowCustomBrightness",
+            "ScreenOn",
             "ShowModelView",
             "ShowCameraWithCluster"
           ]
@@ -3933,6 +3934,23 @@
       "default": 100,
       "unit": 5,
       "display_unit": "percent"
+    },
+    {
+      "group": "화면",
+      "name": "ScreenOn",
+      "title": "화면 켜기(C4)",
+      "descr": "기본 켜짐. 끄면 C4 화면과 백라이트를 끕니다(오프로드·주행 모두). 화면을 터치하면 5초간 켜지고, 주행 중 경고가 뜨면 경고가 떠 있는 동안 켜집니다. 경고음과 주행 기능은 그대로 동작합니다.\n다시 켜면 약 5초 안에 화면이 켜집니다. C3/C3X는 영향 없음.",
+      "egroup": "DISPLAY",
+      "etitle": "Screen On (C4)",
+      "edescr": "On by default. Turning it off switches the C4 screen and backlight off (offroad and onroad). A touch wakes the screen for 5 seconds, and it stays on while an onroad alert is shown. Alert sounds and driving functions keep working.\nTurning it back on brings the screen back within about 5 seconds. No effect on C3/C3X.",
+      "cgroup": "显示",
+      "ctitle": "开启屏幕(C4)",
+      "cdescr": "默认开启。关闭后关闭 C4 屏幕和背光（停车和行车时均如此）。触摸屏幕会点亮 5 秒，行车中出现警报时在警报显示期间点亮。提示音和驾驶功能照常工作。\n重新开启后约 5 秒内屏幕点亮。对 C3/C3X 无影响。",
+      "min": 0,
+      "max": 1,
+      "default": 1,
+      "unit": 1,
+      "control": "toggle"
     },
     {
       "group": "화면",

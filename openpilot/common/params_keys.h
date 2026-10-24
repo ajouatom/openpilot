@@ -192,6 +192,7 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"TimezoneSource", {PERSISTENT, STRING, ""}},              // 타임존 출처 우선순위 추적 ("app" > "wifi" > "gps")
     {"CarrotTireTrajectory", {PERSISTENT, INT, "0"}},
     {"ShowCustomBrightness", {PERSISTENT, INT, "100"}},
+    {"ScreenOn", {PERSISTENT, BOOL, "1"}},
     {"ShowModelView", {PERSISTENT, INT, "0"}},
     {"ShowCameraWithCluster", {PERSISTENT, INT, "0"}},
     {"ClusterHud", {PERSISTENT, INT, "0"}},

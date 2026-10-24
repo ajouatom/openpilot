@@ -296,7 +296,7 @@ In modes `EnableRadarTracks=1`–`3`, a confirmed departing front lead can recei
 <a id="display"></a>
 ## Display
 
-Display contains 34 settings. External-HUD settings control the layout and output of separate display hardware.
+Display contains 35 settings. External-HUD settings control the layout and output of separate display hardware.
 
 `ClusterHud` (External HUD Display) switches a **direct USB HUD** on or off. A HUD connected to Jetson starts automatically even when this value is `0`, and normally turns its display off with ignition. Use the existing always-on `ClusterHudDebug` modes to keep it visible offroad. Brightness and layout settings also apply to the Jetson HUD.
 
@@ -313,7 +313,7 @@ With `CarrotVisionEnabled` on, the external HUD and web camera view can be used 
 |---|---|---|
 | Information | `ShowDebugUI`, `ShowTpms`, `ShowDateTime`, `ShowPathEnd`, `ShowDeviceState`, `ShowLaneInfo`, `ShowRadarInfo`, `ShowRouteInfo`, `ShowPlotMode` | Debug, tire, time, lane, radar, and route information |
 | Path | `ShowPathMode`, `ShowPathColor`, `ShowPathColorCruiseOff`, `ShowPathModeLane`, `ShowPathColorLane` | Path shape and color by driving state |
-| Brightness/on-road view | `ShowCustomBrightness`, `ShowModelView`, `ShowCameraWithCluster` | Brightness, camera/model composition, and the on-device camera while the external HUD is connected |
+| Brightness/on-road view | `ShowCustomBrightness`, `ScreenOn`, `ShowModelView`, `ShowCameraWithCluster` | Brightness, C4 screen on/off, camera/model composition, and the on-device camera while the external HUD is connected |
 | External HUD | `ClusterHud`, `ClusterHudBrightness`, `ClusterHudOrientation`, and related `ClusterHud*` settings | Supported TURZX HUD layout, live brightness, screen rotation, camera, radar, and encoder options |
 
 For RAV4 2022 with the ARS display stream, `ShowRadarInfo=3` on the standard device

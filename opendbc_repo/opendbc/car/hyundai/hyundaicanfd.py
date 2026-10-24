@@ -870,6 +870,31 @@ def _hide_replaced_adas_service_warning(values):
     values["FAULT_DAS"] = 0
 
 
+LANE_LINE_UNSEEN = 14  # draws nothing on the Ioniq 5 PE cluster; undocumented on purpose, so a cluster update that changes it is noticed
+# model laneLineProbs at low speed (10-18 rlogs, night): parking lots 0.01~0.04, city stops 0.13~0.22, highway ~1.0
+LANE_HIDE_PROB, LANE_SHOW_PROB, LANE_HIDE_FRAMES = 0.08, 0.12, 100  # hide after 1 s below 0.08, show again from 0.12
+
+
+def _lane_unseen(state, side, prob, frame):
+  hidden, low_since = state.get(side, (False, None))
+  if prob >= LANE_SHOW_PROB:
+    hidden, low_since = False, None
+  elif prob < LANE_HIDE_PROB:
+    low_since = frame if low_since is None else low_since
+    hidden = hidden or frame - low_since >= LANE_HIDE_FRAMES
+  else:
+    low_since = None  # in between: keep the current state
+  state[side] = (hidden, low_since)
+  return hidden
+
+
+def _dashed_lane_line(color, lane_line):
+  # 0x161 dashed codes seen on the Ioniq 5 PE cluster: 8 white, 10 green (no orange dashed)
+  if lane_line // 10 > 0 and lane_line % 10 in (0, 5):  # camera: dashed / DLM inner dashed (color 0 = no lane info)
+    return {2: 8, 6: 10}.get(color, color)
+  return color
+
+
 def _select_cluster_background(cruise_enabled, lat_active, paddle_pressed, paddle_mode, turning=False):
   # Reuse the existing flashing-red background to identify an active model turn.
   if (lat_active and turning) or (paddle_mode > 0 and paddle_pressed):
@@ -998,10 +1023,14 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
         if  HDA_LFA_SymSta == 0 and 0 < frame % 200 < 12:
           values["LFA_BTN"] = 1
 
+        # The cluster's side objects, lead car and target come from stock SCC MAIN; keep it on from ignition.
+        # openpilot's own MAIN still follows the driver's button (manual_main_off_latched).
+        if not CS.MainMode_ACC and not interlock_active and 10 < frame % 200 <= 16:
+          values["ADAPTIVE_CRUISE_MAIN_BTN"] = 1
+
         if CC.enabled and not interlock_active:
           if not CS.MainMode_ACC:
-            if 10 < frame % 200 <= 16 and CS.out.vEgo > 3.:
-              values["ADAPTIVE_CRUISE_MAIN_BTN"] = 1
+            pass  # pressed above
           elif CS.ACCMode in [0, 4]:
             if 10 < frame % 200 <= 16 and CS.out.vEgo > 3.:
               values["CRUISE_BUTTONS"] = 2
@@ -1023,6 +1052,8 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
         main_enabled = CS.out.cruiseState.available
         cruise_enabled = CC.enabled
         lat_enabled = CS.out.latEnabled
+        # steering pauses at standstill; keep the cluster's steering/lane-change icons as if it were active
+        lat_icon = lat_active or (cruise_enabled and lat_enabled and CS.out.standstill)
         nav_active = hud_control.activeCarrot > 1
         vehicle_navi_available = CS.out.vehicleNaviAvailable
         nav_icon_available = nav_active or vehicle_navi_available
@@ -1044,12 +1075,12 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
         set_speed_in_units = hud_control.setSpeed * (CV.MS_TO_KPH if CS.is_metric else CV.MS_TO_MPH)
         values["vSetDis"] = int(set_speed_in_units + 0.5)
 
-        values["DISTANCE"] = 4 if hdp_active else hud_control.leadDistanceBars
-        values["DISTANCE_LEAD"] = 2 if cruise_enabled and lead_visible else 1 if main_enabled and lead_visible else 0
+        values["DISTANCE"] = hud_control.leadDistanceBars  # real gap under the HDP colors too (bars stay 4; lead icon position follows)
+        values["DISTANCE_LEAD"] = (2 if cruise_enabled else 1) if lead_visible else 0
         values["DISTANCE_CAR"] = 3 if hdp_active else 2 if cruise_enabled else 1 if main_enabled else 0
         values["DISTANCE_SPACING"] = 5 if hdp_active else 1 if cruise_enabled else 0
 
-        values["TARGET"] = 1 if lead_visible and cruise_enabled else 0
+        values["TARGET"] = (1 if cruise_enabled else 3) if lead_visible else 0  # blue when engaged, white otherwise
         values["TARGET_DISTANCE"] = lead_distance
 
         values["BACKGROUND"] = _select_cluster_background(
@@ -1060,8 +1091,8 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
 
         values["NAV_ICON"] = 2 if nav_icon_available and cruise_enabled else 1 if main_enabled and nav_icon_available else 0
         values["HDA_ICON"] = 5 if hdp_active else 2 if cruise_enabled else 1 if main_enabled else 0
-        values["LFA_ICON"] = 5 if hdp_active else 2 if lat_active else 1 if lat_enabled else 0
-        values["LKA_ICON"] = 4 if lat_active else 3 if lat_enabled else 0
+        values["LFA_ICON"] = 5 if hdp_active else 2 if lat_icon else 1 if lat_enabled else 0
+        values["LKA_ICON"] = 4 if lat_icon else 3 if lat_enabled else 0
         values["FCA_ALT_ICON"] = 0
 
         if values["ALERTS_2"] in [1, 2, 5, 6, 10, 21, 22]:
@@ -1077,6 +1108,14 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
           values["ALERTS_3"] = 0
           values["SOUNDS_3"] = 0
 
+        # carrot: with HDP on, a gap change shows the stock "distance N" popup (ALERTS_3 7~10) for 2 s
+        gap_bars = hud_control.leadDistanceBars
+        if hdp_active and gap_bars != getattr(create_ccnc_messages, '_gap_bars', gap_bars):
+          create_ccnc_messages._gap_popup_until = frame + 200
+        create_ccnc_messages._gap_bars = gap_bars
+        if frame < getattr(create_ccnc_messages, '_gap_popup_until', 0) and values["ALERTS_3"] == 0 and 1 <= gap_bars <= 4:
+          values["ALERTS_3"] = 6 + gap_bars
+
         if values["ALERTS_5"] in [1, 2, 3, 4, 5]:
           values["ALERTS_5"] = 0
 
@@ -1091,6 +1130,10 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
         values["LANELINE_CURVATURE_DIRECTION"] = 1 if curvature < 0 and lat_active else 0
 
         trailer_lane_change_blocked = CS.trailer_connected
+        lane_probs = md.laneLineProbs if md is not None and len(md.laneLineProbs) >= 3 else None
+        unseen = create_ccnc_messages.__dict__.setdefault('_lane_unseen', {})
+        left_seen = hud_control.leftLaneVisible and not (lane_probs is not None and _lane_unseen(unseen, 'L', lane_probs[1], frame))
+        right_seen = hud_control.rightLaneVisible and not (lane_probs is not None and _lane_unseen(unseen, 'R', lane_probs[2], frame))
         if trailer_lane_change_blocked:
           values["LANELINE_LEFT"] = 2 if hud_control.leftLaneVisible else 0
           values["LANELINE_RIGHT"] = 2 if hud_control.rightLaneVisible else 0
@@ -1104,7 +1147,7 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
           if hud_control.leftLaneDepart:
             values["LANELINE_LEFT"] = 4 if (frame // 50) % 2 == 0 else 1
           else:
-            values["LANELINE_LEFT"] = lane_color if hud_control.leftLaneVisible else 0
+            values["LANELINE_LEFT"] = _dashed_lane_line(lane_color, CS.out.leftLaneLine) if left_seen or lane_color == 4 else LANE_LINE_UNSEEN  # orange stays
 
           lane_color = 6 if md is not None and md.meta.laneChangeAvailableRight else 2
           if lane_line_check >= 1:
@@ -1115,17 +1158,17 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
           if hud_control.rightLaneDepart:
             values["LANELINE_RIGHT"] = 4 if (frame // 50) % 2 == 0 else 1
           else:
-            values["LANELINE_RIGHT"] = lane_color if hud_control.rightLaneVisible else 0
+            values["LANELINE_RIGHT"] = _dashed_lane_line(lane_color, CS.out.rightLaneLine) if right_seen or lane_color == 4 else LANE_LINE_UNSEEN
 
         values["LCA_LEFT_ARROW"] = 2 if CS.out.leftBlinker else 0
         values["LCA_RIGHT_ARROW"] = 2 if CS.out.rightBlinker else 0
 
         if trailer_lane_change_blocked:
-          values["LCA_LEFT_ICON"] = 1 if lat_active else 0
-          values["LCA_RIGHT_ICON"] = 1 if lat_active else 0
+          values["LCA_LEFT_ICON"] = 1 if lat_icon else 0
+          values["LCA_RIGHT_ICON"] = 1 if lat_icon else 0
         else:
-          values["LCA_LEFT_ICON"] = (1 if CS.out.leftBlindspot else 2) if lat_active else 0
-          values["LCA_RIGHT_ICON"] = (1 if CS.out.rightBlindspot else 2) if lat_active else 0
+          values["LCA_LEFT_ICON"] = (1 if CS.out.leftBlindspot else 2) if lat_icon else 0
+          values["LCA_RIGHT_ICON"] = (1 if CS.out.rightBlindspot else 2) if lat_icon else 0
 
         values["LANE_LEFT"] = 0 if trailer_lane_change_blocked else 1 if desire in (1, 3) else 0
         values["LANE_RIGHT"] = 0 if trailer_lane_change_blocked else 1 if desire in (2, 4) else 0

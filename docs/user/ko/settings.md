@@ -295,7 +295,7 @@ Bosch MRRevo14F 수신을 지원하는 버전에서 Bosch MRRevo14F 후보 차�
 <a id="display"></a>
 ## 화면 표시
 
-화면 표시에는 34개 항목이 있습니다. 외부 HUD 항목은 별도 하드웨어의 화면 구성과 출력 방식을 조정합니다.
+화면 표시에는 35개 항목이 있습니다. 외부 HUD 항목은 별도 하드웨어의 화면 구성과 출력 방식을 조정합니다.
 
 `ClusterHud`(외부 HUD 활성화)는 **본체 USB에 직접 연결한 HUD**를 켜고 끄는 설정입니다. Jetson에 연결한 HUD는 이 값이 `0`이어도 자동 실행되며, 기본적으로 시동 OFF 시 화면을 끕니다. 시동 OFF에도 표시하려면 기존 `ClusterHudDebug`의 항상 켜기를 사용합니다. 밝기·화면 구성 설정은 Jetson HUD에도 적용됩니다.
 
@@ -312,7 +312,7 @@ Jetson HUD에는 `jetSON` 아래에 Jetson 내부 센서의 최고 온도가 표
 |---|---|---|
 | 정보 표시 | `ShowDebugUI`, `ShowTpms`, `ShowDateTime`, `ShowPathEnd`, `ShowDeviceState`, `ShowLaneInfo`, `ShowRadarInfo`, `ShowRouteInfo`, `ShowPlotMode` | 주행 화면의 디버그, 타이어, 시간, 차선, 레이더와 경로 정보 |
 | 경로 표시 | `ShowPathMode`, `ShowPathColor`, `ShowPathColorCruiseOff`, `ShowPathModeLane`, `ShowPathColorLane` | 레인리스·레인모드·크루즈 OFF 상태의 경로 모양과 색상 |
-| 밝기·주행화면 | `ShowCustomBrightness`, `ShowModelView`, `ShowCameraWithCluster` | 주행 중 밝기, 카메라·모델 표시 조합과 외부 HUD 연결 중 본체 카메라 표시 |
+| 밝기·주행화면 | `ShowCustomBrightness`, `ScreenOn`, `ShowModelView`, `ShowCameraWithCluster` | 주행 중 밝기, C4 화면 켜기·끄기, 카메라·모델 표시 조합과 외부 HUD 연결 중 본체 카메라 표시 |
 | 외부 HUD·기본 | `ClusterHud`, `ClusterHudBrightness`, `ClusterHudOrientation`, `ClusterHudMirror`, `ClusterHudTheme`, `ClusterNaviMapTheme`, `ClusterNaviMapType`, `ClusterNaviMapFps` | TURZX 외부 HUD, 밝기, 화면 회전, 미러링과 지도 테마 |
 | 외부 HUD·화면·카메라 | `ClusterHudEncoder`, `ClusterHudScreenMode`, `ClusterHudPanelLayout`, `ClusterHudCameraViewMode` | 인코더와 화면·카메라·좌우 패널 구성 |
 | 외부 HUD·레이더 표시 | `ClusterHudRadarInfo`, `ClusterHudRadarDisplay`, `ClusterHudRadarSourceColor` | 외부 HUD의 레이더 정보와 색상 |

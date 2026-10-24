@@ -136,3 +136,113 @@ def test_cluster_objects_restore_corner_state_without_blinking_or_distance_clamp
     else:
       assert decoded["LANELINE_CURVATURE"] == 2
     assert source == original
+
+
+@pytest.mark.parametrize(('color', 'lane_line', 'expected'), (
+  (6, 10, 10), (2, 10, 8), (6, 15, 10),  # white dashed / DLM inner dashed -> green or white dashed
+  (2, 11, 2), (4, 10, 4), (6, 0, 6),     # solid line, orange warning, no lane info stay as they were
+))
+def test_dashed_lane_line_codes(color, lane_line, expected):
+  assert hyundaicanfd._dashed_lane_line(color, lane_line) == expected
+
+
+@pytest.mark.parametrize(('blindspot', 'left'), ((False, 14), (True, 4)))  # orange (BSD) stays even when unseen
+def test_unseen_lane_lines_send_14(monkeypatch, blindspot, left):
+  from openpilot.cereal import log
+  monkeypatch.setattr(hyundaicanfd, 'Params', lambda: SimpleNamespace(get_int=lambda key: 0, get=lambda key: '0'))
+  packer = CANPacker('hyundai_canfd_generated')
+  definition = packer.dbc.name_to_msg['ADRV_0x161']
+  state = SimpleNamespace(
+    adrv_0x161={key: 0 for key in definition.sigs}, out=structs.CarState(leftBlindspot=blindspot), modelV2=log.ModelDataV2.new_message(),
+    lfahda_cluster=None, cruise_buttons_msg=None, adrv_0x200=None, adrv_0x1ea=None, ccnc_0x162=None,
+    is_metric=True, paddle_button_prev=0, softHoldActive=0, trailer_connected=False,
+  )
+  control = structs.CarControl(latActive=True, enabled=True)
+  control.hudControl.rightLaneVisible = True
+  msg = hyundaicanfd.create_ccnc_messages(
+    SimpleNamespace(flags=HyundaiFlags.CAMERA_SCC), packer, SimpleNamespace(ECAN=0, CAM=2), 5, control, state,
+    control.hudControl, 0, False, False, 0, False, 0, 0)[0]
+  values = {key: get_raw_value(msg[1], sig) for key, sig in definition.sigs.items()}
+  assert (values['LANELINE_LEFT'], values['LANELINE_RIGHT']) == (left, 2)
+
+
+def test_lane_unseen_hysteresis():
+  state = {}
+  assert not hyundaicanfd._lane_unseen(state, 'L', 0.02, 0)
+  assert not hyundaicanfd._lane_unseen(state, 'L', 0.02, 95)   # parking lot, under 1 s
+  assert hyundaicanfd._lane_unseen(state, 'L', 0.02, 100)      # hidden after 1 s
+  assert hyundaicanfd._lane_unseen(state, 'L', 0.10, 120)      # between thresholds keeps it hidden
+  assert not hyundaicanfd._lane_unseen(state, 'L', 0.13, 125)  # city stop level shows it again
+  assert not hyundaicanfd._lane_unseen(state, 'L', 0.05, 130)
+  assert not hyundaicanfd._lane_unseen(state, 'L', 0.10, 200)  # a dip that does not last 1 s resets
+  assert not hyundaicanfd._lane_unseen(state, 'L', 0.05, 205)
+  assert not hyundaicanfd._lane_unseen(state, 'R', 0.02, 205)  # sides are independent
+
+
+def test_hdp_gap_bars_and_popup(monkeypatch):
+  from openpilot.cereal import log
+  monkeypatch.setattr(hyundaicanfd, 'Params', lambda: SimpleNamespace(
+    get_int=lambda key: 0, get=lambda key: '2' if key == 'HDPuse' else '0'))
+  for attr in ('_gap_bars', '_gap_popup_until'):
+    monkeypatch.delattr(hyundaicanfd.create_ccnc_messages, attr, raising=False)
+  packer = CANPacker('hyundai_canfd_generated')
+  definition = packer.dbc.name_to_msg['ADRV_0x161']
+  state = SimpleNamespace(
+    adrv_0x161={key: 0 for key in definition.sigs}, out=structs.CarState(), modelV2=log.ModelDataV2.new_message(),
+    lfahda_cluster=None, cruise_buttons_msg=None, adrv_0x200=None, adrv_0x1ea=None, ccnc_0x162=None,
+    is_metric=True, paddle_button_prev=0, softHoldActive=0, trailer_connected=False,
+  )
+  control = structs.CarControl(latActive=True, enabled=True)
+
+  def send(frame, bars):
+    control.hudControl.leadDistanceBars = bars
+    msg = hyundaicanfd.create_ccnc_messages(
+      SimpleNamespace(flags=HyundaiFlags.CAMERA_SCC), packer, SimpleNamespace(ECAN=0, CAM=2), frame, control, state,
+      control.hudControl, 0, False, False, 0, False, 0, 0)[0]
+    return {key: get_raw_value(msg[1], sig) for key, sig in definition.sigs.items()}
+
+  first = send(5, 2)
+  assert (first['DISTANCE'], first['ALERTS_3'], first['HDA_ICON']) == (2, 0, 5)  # HDP colors keep the real bars
+  assert send(10, 3)['ALERTS_3'] == 9  # DISTANCE_3 popup after a change
+  assert send(205, 3)['ALERTS_3'] == 9
+  assert send(215, 3)['ALERTS_3'] == 0  # gone after 2 s
+
+
+@pytest.mark.parametrize(('main_on', 'v_ego', 'pressed'), ((False, 5.0, 1), (True, 5.0, 0), (False, 0.0, 1)))
+def test_stock_main_kept_on_without_engagement(monkeypatch, main_on, v_ego, pressed):
+  from openpilot.cereal import log
+  monkeypatch.setattr(hyundaicanfd, 'Params', lambda: SimpleNamespace(get_int=lambda key: 0, get=lambda key: '0'))
+  packer = CANPacker('hyundai_canfd_generated')
+  buttons = packer.dbc.name_to_msg['CRUISE_BUTTONS']
+  state = SimpleNamespace(
+    adrv_0x161=None, out=structs.CarState(vEgo=v_ego), modelV2=log.ModelDataV2.new_message(), lfahda_cluster=None,
+    cruise_buttons_msg={key: 0 for key in buttons.sigs}, cruise_btns_msg_canfd='CRUISE_BUTTONS', MainMode_ACC=main_on,
+    ACCMode=0, scc_control=None, adrv_0x200=None, adrv_0x1ea=None, ccnc_0x162=None, is_metric=True,
+    paddle_button_prev=0, softHoldActive=0, trailer_connected=False,
+  )
+  control = structs.CarControl(enabled=False)  # not engaged: stock MAIN is still kept on for the cluster
+  msgs = hyundaicanfd.create_ccnc_messages(
+    SimpleNamespace(flags=HyundaiFlags.CAMERA_SCC), packer, SimpleNamespace(ECAN=0, CAM=2), 12, control, state,
+    control.hudControl, 0, False, False, 0, False, 0, 0)
+  msg = next(m for m in msgs if m[0] == buttons.address)
+  assert get_raw_value(msg[1], buttons.sigs['ADAPTIVE_CRUISE_MAIN_BTN']) == pressed
+
+
+@pytest.mark.parametrize(('standstill', 'lka', 'lca'), ((True, 4, 2), (False, 3, 0)))
+def test_engaged_standstill_keeps_steering_and_lane_change_icons(monkeypatch, standstill, lka, lca):
+  from openpilot.cereal import log
+  monkeypatch.setattr(hyundaicanfd, 'Params', lambda: SimpleNamespace(get_int=lambda key: 0, get=lambda key: '0'))
+  packer = CANPacker('hyundai_canfd_generated')
+  definition = packer.dbc.name_to_msg['ADRV_0x161']
+  out = structs.CarState(standstill=standstill, latEnabled=True)
+  state = SimpleNamespace(
+    adrv_0x161={key: 0 for key in definition.sigs}, out=out, modelV2=log.ModelDataV2.new_message(),
+    lfahda_cluster=None, cruise_buttons_msg=None, adrv_0x200=None, adrv_0x1ea=None, ccnc_0x162=None,
+    is_metric=True, paddle_button_prev=0, softHoldActive=0, trailer_connected=False,
+  )
+  control = structs.CarControl(latActive=False, enabled=True)  # controlsd turns steering off at standstill
+  msg = hyundaicanfd.create_ccnc_messages(
+    SimpleNamespace(flags=HyundaiFlags.CAMERA_SCC), packer, SimpleNamespace(ECAN=0, CAM=2), 5, control, state,
+    control.hudControl, 0, False, False, 0, False, 0, 0)[0]
+  values = {key: get_raw_value(msg[1], sig) for key, sig in definition.sigs.items()}
+  assert (values['LKA_ICON'], values['LFA_ICON'] > 1, values['LCA_LEFT_ICON'], values['LCA_RIGHT_ICON']) == (lka, standstill, lca, lca)

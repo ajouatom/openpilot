@@ -17,7 +17,9 @@ from openpilot.selfdrive.ui.lib.prime_state import PrimeState
 from openpilot.system.ui.lib.application import gui_app
 from openpilot.system.hardware import HARDWARE, PC
 
-BACKLIGHT_OFFROAD = 65 if HARDWARE.get_device_type() == "mici" else 50
+IS_MICI = HARDWARE.get_device_type() == "mici"
+BACKLIGHT_OFFROAD = 65 if IS_MICI else 50
+SCREEN_OFF_TOUCH_WAKE_S = 5.0
 
 
 class UIStatus(Enum):
@@ -109,6 +111,7 @@ class UIState:
 
     # Brightness and UI options
     self.show_brightness_ratio: float = 1.0
+    self.screen_off: bool = False
     self.show_model_view: int = 0
     self.share_data: bool = False
     self.show_camera_with_cluster: bool = False
@@ -225,6 +228,7 @@ class UIState:
     self.show_date_time = self.params.get_int("ShowDateTime")
     self.show_radar_info = self.params.get_int("ShowRadarInfo")
     self.show_brightness_ratio: float = self.params.get_int("ShowCustomBrightness") / 100.0
+    self.screen_off = IS_MICI and self.params.get("ScreenOn", return_default=True) is False  # unset key keeps the screen on
     self.show_model_view = self.params.get_int("ShowModelView")
     self.share_data = self.params.get_bool("ShareData")
     self.show_camera_with_cluster = self.params.get_int("ShowCameraWithCluster") == 1
@@ -259,6 +263,7 @@ class Device:
     self._brightness_filter = FirstOrderFilter(BACKLIGHT_OFFROAD, 2.00, 1 / gui_app.target_fps)
     self._brightness_thread: threading.Thread | None = None
     self._brightness_timer: int = 20
+    self._screen_off_wake_until: float = 0.0
 
   @property
   def awake(self) -> bool:
@@ -340,7 +345,8 @@ class Device:
     ignition_just_turned_off = not ui_state.ignition and self._ignition
     self._ignition = ui_state.ignition
 
-    if ignition_just_turned_off or any(ev.left_down for ev in gui_app.mouse_events):
+    touched = any(ev.left_down for ev in gui_app.mouse_events)
+    if ignition_just_turned_off or touched:
       self._reset_interactive_timeout()
       self._brightness_timer = 20
 
@@ -350,7 +356,18 @@ class Device:
         callback()
     self._prev_timed_out = interaction_timeout
 
-    self._set_awake(ui_state.ignition or not interaction_timeout or PC)
+    if touched:
+      self._screen_off_wake_until = time.monotonic() + SCREEN_OFF_TOUCH_WAKE_S
+    screen_off = ui_state.screen_off and time.monotonic() > self._screen_off_wake_until and not self._alert_visible()
+    self._set_awake((ui_state.ignition or not interaction_timeout or PC) and not screen_off)
+
+  @staticmethod
+  def _alert_visible() -> bool:
+    if not ui_state.started:
+      return False
+    sm = ui_state.sm
+    # a stale selfdriveState is drawn as a critical alert too
+    return time.monotonic() - sm.recv_time['selfdriveState'] > 1.0 or sm['selfdriveState'].alertSize != 0
 
   def _set_awake(self, on: bool):
     if on != self._awake:
