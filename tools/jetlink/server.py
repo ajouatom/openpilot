@@ -22,6 +22,7 @@ from host_reader import ReadAheadTransport
 from host_health import health_worker
 from wifi_protocol import CAPABILITY as WIFI_CAPABILITY, MESSAGE as WIFI_MESSAGE, receive as receive_wifi
 from jetlink import protocol as P
+from jetlink import request_chunks
 from jetlink.server.session import Session
 from jetlink.server import main as server
 
@@ -57,6 +58,7 @@ class CarrotSession(Session):
 
   def __init__(self, *args, **kwargs):
     super().__init__(*args, **kwargs)
+    self.request_chunks = request_chunks.Receiver()
     if sys.platform == 'linux':
       self.t = ReadAheadTransport(self.t)
     self.telemetry = DisplayTelemetry(self.telemetry)
@@ -71,11 +73,25 @@ class CarrotSession(Session):
       obj = {**obj, HUD_CAPABILITY: sys.platform == 'linux', NAVI_CAPABILITY: sys.platform == 'linux',
              PUMP_CAPABILITY: sys.platform == 'linux', WIFI_CAPABILITY: host == 'jetson', 'carrot_host': host}
       if host == 'jetson':
+        obj[request_chunks.CAPABILITY] = request_chunks.descriptor()
         obj['carrot_source_commit'] = (ROOT / 'SOURCE_COMMIT').read_text().strip()
         obj['carrot_boot_update_installed'] = Path('/opt/carrot-jetlink/boot-update-required').is_file()
     return super()._send_json(msg_type, seq, obj, flags)
 
   def handle(self, msg):
+    if msg.msg_type == P.Msg.HELLO_REQ:
+      self.request_chunks.clear()
+    elif msg.msg_type == request_chunks.MESSAGE:
+      if self.t.protocol_version != 2:
+        raise request_chunks.LinkError('chunked requests require protocol 2')
+      msg = self.request_chunks.accept(msg, self.last_seq)
+      if msg is None:
+        return
+    elif getattr(self, 'request_chunks', None) is not None and self.request_chunks.key is not None:
+      if msg.seq <= self.last_seq:
+        return
+      self.request_chunks.clear()
+      raise request_chunks.LinkError('interrupted chunked request')
     if msg.msg_type == WIFI_MESSAGE:
       if msg.seq > self.last_seq:
         self.last_seq = msg.seq

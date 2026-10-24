@@ -443,7 +443,24 @@ class FfsTransport(StreamTransport):
     # write_chunk). The pressure that forced it is usually gone by the next
     # frame.
     self.write_chunk = type(self).write_chunk
+    from jetlink import request_chunks
+    kind = args[0] if args else kwargs.get('msg_type')
+    if getattr(self, 'request_chunks_enabled', False) and kind in request_chunks.KINDS:
+      # Preserve a full framed message per write, including on DWC3 replay.
+      # Splitting the raw stream would corrupt its framing when a TRB repeats.
+      return self._send_bounded_request(*args, **kwargs)
     super().send(*args, **kwargs)
+
+  def _send_bounded_request(self, msg_type, seq, parts=(), flags=0, timeout=None):
+    from jetlink import request_chunks
+    parts = tuple(parts)
+    self._bounded_envelope = True
+    try:
+      if sum(memoryview(p).nbytes for p in parts) <= request_chunks.DATA_BYTES:
+        return super().send(msg_type, seq, parts, flags, timeout)
+      return request_chunks.send(super().send, msg_type, seq, parts, flags, timeout)
+    finally:
+      self._bounded_envelope = False
 
   def _write(self, bufs: list[memoryview]) -> int:
     self._ensure_epfiles()
@@ -467,6 +484,8 @@ class FfsTransport(StreamTransport):
           # nothing on the wire and is safe to retry.
           if e.errno in _NOT_READY and self._wait_for_host_ready():
             continue
+          if e.errno == errno.ENOMEM and getattr(self, '_bounded_envelope', False):
+            raise LinkError('small framed USB request allocation failed') from e
           if e.errno == errno.ENOMEM and self._shrink_write():
             # A short write is fine: send() loops until the message is out.
             bufs = take(bufs, self.write_chunk)
