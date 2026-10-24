@@ -1035,6 +1035,8 @@ def _normalize_cluster_corner_objects(values, *, ccnc=False):
     key = f"{side}_DETECT"
     if values[f"{side}_DETECT_DISTANCE"] != 0 and (ccnc or values[key] >= 4):
       values[key] = 3 if ccnc else 1
+    elif ccnc and values[key] in (1, 2):  # 10-24 rlogs: stock flicks a box with distance 0 between car frames
+      values[key] = 3
 
 
 def _convert_ccnc_front_box_to_car(values):

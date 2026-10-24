@@ -126,7 +126,8 @@ def test_cluster_objects_restore_corner_state_without_blinking_or_distance_clamp
     for side in ("LF", "RF", "LR", "RR"):
       assert decoded[f"{side}_DETECT_DISTANCE"] == pytest.approx(distance)
       assert decoded[f"{side}_DETECT_LATERAL"] == pytest.approx(2.9)
-      assert decoded[f"{side}_DETECT"] == (expected_corner if distance != 0 else detect)
+      box_at_zero = message == "CCNC_0x162" and detect in (1, 2)  # boxes become a gray car even without distance
+      assert decoded[f"{side}_DETECT"] == (expected_corner if distance != 0 else 3 if box_at_zero else detect)
       if message == "CCNC_0x162" and distance != 0:
         assert display_types[f"{side}_DETECT"][decoded[f"{side}_DETECT"]] == "GRAY_CAR"
     if message == "CCNC_0x162":
