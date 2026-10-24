@@ -12,6 +12,36 @@ class BulkInput:
     self.stopped = stopped
     self.transfer = transport.handle.getTransfer()
     self.completed = threading.Event()
+    self.raw_read_limit = getattr(transport, '_read_limit', None)
+    self.prefetch_remaining = 0
+    self.prefetch_seq = None
+    if self.raw_read_limit is not None:
+      transport._read_limit = self._read_limit
+
+  def _read_limit(self, missing):
+    # Only bytes promised by the current checked envelope header. Never ask
+    # beyond its logical request, where an idle sender would deadlock this read.
+    return max(self.raw_read_limit(missing), min(self.prefetch_remaining, self.transport.read_chunk))
+
+  def note_message(self, msg):
+    from jetlink import request_chunks as C, protocol as P
+    if msg.msg_type == P.Msg.HELLO_REQ:
+      self.prefetch_seq, self.prefetch_remaining = None, 0
+      return
+    if (msg.msg_type != C.MESSAGE or msg.flags or len(msg.payload) < C.HEADER.size or
+        (self.prefetch_seq is not None and msg.seq <= self.prefetch_seq)):
+      return
+    kind, flags, total, offset, checksum = C.HEADER.unpack_from(msg.payload)
+    body = len(msg.payload) - C.HEADER.size
+    if (kind not in C.KINDS or flags or offset or not 0 < total <= C.MAX_BYTES or
+        body != min(C.DATA_BYTES, total)):
+      return
+    remaining = total - body
+    whole, tail = divmod(remaining, C.DATA_BYTES)
+    wire = whole * C.WIRE_BYTES
+    if tail:
+      wire += -(-(P.HEADER_SIZE + C.HEADER.size + tail) // P.GADGET_TX_ALIGN) * P.GADGET_TX_ALIGN
+    self.prefetch_seq, self.prefetch_remaining = msg.seq, wire
 
   def read(self, dest, timeout):
     # The consumer's queue and C4 model IPC enforce their own deadlines. An
@@ -45,9 +75,12 @@ class BulkInput:
     count = self.transfer.getActualLength()
     if not 0 <= count <= n:
       raise LinkError(f'USB IN returned invalid length {count}/{n}')
+    self.prefetch_remaining = max(0, self.prefetch_remaining - count)
     return count
 
   def close(self):
     if self.transfer.isSubmitted():
       raise LinkError('USB IN still submitted; refusing buffer/handle teardown')
     self.transfer.close()
+    if self.raw_read_limit is not None:
+      self.transport._read_limit = self.raw_read_limit

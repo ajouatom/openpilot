@@ -39,6 +39,8 @@ class ReadAheadTransport:
           msg = self.transport.recv(timeout=None if self.bulk_input is not None else .1)
         except LinkTimeout:
           continue
+        if self.bulk_input is not None:
+          self.bulk_input.note_message(msg)
         # The upstream receive view is valid only until its next recv. Own
         # queued data before reading again while the GPU uses the current input.
         self._put(Message(msg.msg_type, msg.seq, msg.flags, memoryview(bytes(msg.payload))))
