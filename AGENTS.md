@@ -1,5 +1,28 @@
 # Repository memory
 
+- On 2026-10-24, owner requests one-at-a-time Jetson regression review and
+  zoompilot hints. NAV a559fcd971 is installed via guarded normal Git Pull;
+  host69c4642789/N16 unchanged. Shared-input/full-reply/CPU-overlap/native-image/
+  direct-map trials are restored. Legacy large writes average38.121ms versus
+  bounded requests40.846ms, but recorded325-367ms allocation stalls forbid
+  claiming the legacy path fixed. Camera EGL shutdown cleanup reduces restart
+  orphan growth44.93->3.164MiB, not zero graphics leak. Correlated trace finds
+  FunctionFS completion worker queued30.891ms; matching send35.402ms overlaps
+  server26.683ms, responsewait0.357ms. Trace81.743s/max47.378 has no>50 event,
+  so not proof of all-tail cause. Tracing disabled; inactive instance EBUSY.
+  Final defaults120s/2402validconsecutive model,mean40.866/max49.483,0>50;
+  NAV invalid120/120, pose healthy. Earlier default runs still exceed50.
+  zoompilot5b87a72 pins jetlinkb1d70418: enqueue without draining completions,
+  bounded1MiB backlog,8KiB AIO and LPM-off are candidates, NOT installed here.
+  Actual Jetson USB5000Mb/s U1/U2 enabled; comma extra_free_kbytes0 and FFS
+  log_disable0. Read-only comparison only, no new sysctl/LPM/priority change.
+  Model map-after-GPU/HUD-next-frame proposal remains unimplemented/untested;
+  DIRECT_MAP=0 is conversion-only. Keep this distinction and unresolved50ms
+  requirement. Wip30d2fd68ac fixes obsolete idle-session diagnostic fixture;
+  Linux/Windows integration40075577257 passes. Reports:
+  docs/jetson_regression_isolation_20261024.md and
+  docs/jetson_usb_request_allocation_20261024.md. Raw evidence private.
+
 - On 2026-10-23, owner requests review/application of PR560/561/562.
   560 staging/os fix already in e4779e059a; retain newer N16 defaults. Add
   missing full2066-output precedence; actual parser regression fails old/passes
