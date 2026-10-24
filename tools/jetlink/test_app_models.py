@@ -251,7 +251,7 @@ def test_idle_session_releases_old_request_offroad_and_detects_app_switch(monkey
   monkeypatch.setattr(daemon.time, 'monotonic', monotonic)
   monkeypatch.setitem(sys.modules, 'openpilot.common.params', SimpleNamespace(
     Params=lambda: SimpleNamespace(get_bool=lambda key: offroad if key == 'IsOffroad' else not offroad)))
-  monkeypatch.setitem(sys.modules, 'openpilot.common.runtime_diagnostics', SimpleNamespace(RuntimeDiagnostics=lambda *a: None))
+  monkeypatch.setitem(sys.modules, 'openpilot.common.runtime_diagnostics', SimpleNamespace(RuntimeDiagnostics=lambda *a, **kw: None))
   monkeypatch.setitem(sys.modules, 'openpilot.common.swaglog', SimpleNamespace(cloudlog=SimpleNamespace(event=lambda *a: None)))
   calls = []
   def hello():
