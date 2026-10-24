@@ -67,6 +67,7 @@ class Controls:
                                    'carrotMan', 'lateralPlan', 'radarState',
                                    'driverMonitoringState', 'onroadEvents', 'driverAssistance'], poll='selfdriveState')
     self.pm = messaging.PubMaster(['carControl', 'controlsState'])
+    self.lat_err_frames = 0
 
     self.steer_limited_by_safety = False
     self.curvature = 0.0
@@ -275,6 +276,18 @@ class Controls:
 
     return CC, lac_log
 
+  def lat_hud_state(self, lat_active, lac_log):
+    # cluster lane highlight: laneless / lane mode, angle error over the saturation threshold for 0.3 s, saturated
+    err = abs(getattr(lac_log, 'steeringAngleDesiredDeg', 0.) - getattr(lac_log, 'steeringAngleDeg', 0.))
+    self.lat_err_frames = self.lat_err_frames + 1 if lat_active and err > STEER_ANGLE_SATURATION_THRESHOLD else 0
+    if not lat_active:
+      return 0
+    if lac_log.saturated:
+      return 4
+    if self.lat_err_frames >= int(0.3 / DT_CTRL):
+      return 3
+    return 2 if self.lanefull_mode_enabled else 1
+
   def publish(self, CC, lac_log):
     CS = self.sm['carState']
 
@@ -370,6 +383,7 @@ class Controls:
     hudControl.visualAlert = self.sm['selfdriveState'].alertHudVisual
     hudControl.driverMonitoringAlert = driver_monitoring_hud_alert(self.sm)
     hudControl.trafficState = self.sm['longitudinalPlan'].trafficState
+    hudControl.latHudState = self.lat_hud_state(CC.latActive, lac_log)
 
     radarState = self.sm['radarState']
     leadOne = radarState.leadOne

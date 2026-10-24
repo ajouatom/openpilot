@@ -1002,6 +1002,9 @@ def _traffic_display_state(traffic_state, frame):
 _traffic_display_state.last, _traffic_display_state.green_until = 0, 0
 
 
+LANE_HIGHLIGHT_BY_LAT = {1: 1, 2: 3, 3: 4, 4: 5}  # laneless green, lane mode sky blue, steer warn yellow, saturated red (cluster test 24, 10-24)
+
+
 def _select_cluster_background(cruise_enabled, lat_active, paddle_pressed, paddle_mode, turning=False, traffic_state=0):
   # A detected traffic light takes over the background until detection ends.
   if traffic_state in TRAFFIC_BACKGROUND:
@@ -1293,6 +1296,9 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
         values["LANE_RIGHT"] = 0 if trailer_lane_change_blocked else 1 if desire in (2, 4) else 0
 
         _apply_driver_monitoring_alert(values, hud_control, CS.adrv_0x161)
+        lat_hud = getattr(hud_control, "latHudState", 0)
+        if lat_hud in LANE_HIGHLIGHT_BY_LAT:
+          values["LANE_HIGHLIGHT"] = LANE_HIGHLIGHT_BY_LAT[lat_hud]
         if sweep_display is not None:
           values["vSetDis"] = min(sweep_display, 255)
         ret.append(_cluster_test_msg(packer, "ADRV_0x161", CAN.ECAN, values, rx_counter, test_field, test_value))

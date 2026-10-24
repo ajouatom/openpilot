@@ -528,6 +528,7 @@ struct CarControl {
 
     driverMonitoringAlert @22: UInt8;  # 0=none, 1=initial, 2=audible, 3=terminal; fresh enabled DM only
     trafficState @23: Int16;  # longitudinalPlan.trafficState: 0=off, 1=red, 2=green
+    latHudState @24: UInt8;  # 0=lat off, 1=laneless, 2=lane mode, 3=angle error > 3 deg for 0.3 s, 4=saturated
 
     # not used with the dash, TODO: separate structs for dash UI and device UI
     audibleAlert @5: AudibleAlert;

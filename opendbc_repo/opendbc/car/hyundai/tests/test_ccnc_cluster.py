@@ -365,3 +365,22 @@ def test_cluster_test_slots_are_unique_and_named():
   assert len(slots) == len(set(slots)) and sorted(slots) == list(range(1, 146))
   for name, (fields, _) in hyundaicanfd.CLUSTER_TEST_MSGS.items():
     assert set(fields.values()) <= set(packer.dbc.name_to_msg[name].sigs)
+
+
+@pytest.mark.parametrize(('lat_hud', 'color'), ((0, 0), (1, 1), (2, 3), (3, 4), (4, 5)))
+def test_lane_highlight_follows_lateral_state(monkeypatch, lat_hud, color):
+  from openpilot.cereal import log
+  monkeypatch.setattr(hyundaicanfd, 'Params', lambda: SimpleNamespace(get_int=lambda key: 0, get=lambda key: '0'))
+  packer = CANPacker('hyundai_canfd_generated')
+  definition = packer.dbc.name_to_msg['ADRV_0x161']
+  state = SimpleNamespace(
+    adrv_0x161={key: 0 for key in definition.sigs}, out=structs.CarState(), modelV2=log.ModelDataV2.new_message(),
+    lfahda_cluster=None, cruise_buttons_msg=None, adrv_0x200=None, adrv_0x1ea=None, ccnc_0x162=None,
+    is_metric=True, paddle_button_prev=0, softHoldActive=0, trailer_connected=False,
+  )
+  control = structs.CarControl(latActive=lat_hud > 0, enabled=True)
+  control.hudControl.latHudState = lat_hud
+  msg = hyundaicanfd.create_ccnc_messages(
+    SimpleNamespace(flags=HyundaiFlags.CAMERA_SCC), packer, SimpleNamespace(ECAN=0, CAM=2), 5, control, state,
+    control.hudControl, 0, False, False, 0, False, 0, 0)[0]
+  assert get_raw_value(msg[1], definition.sigs['LANE_HIGHLIGHT']) == color  # 0: stock value kept
