@@ -1260,11 +1260,11 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
         trailer_lane_change_blocked = CS.trailer_connected
         lane_probs = md.laneLineProbs if md is not None and len(md.laneLineProbs) >= 3 else None
         unseen = create_ccnc_messages.__dict__.setdefault('_lane_unseen', {})
-        left_seen = hud_control.leftLaneVisible and not (lane_probs is not None and _lane_unseen(unseen, 'L', lane_probs[1], frame))
-        right_seen = hud_control.rightLaneVisible and not (lane_probs is not None and _lane_unseen(unseen, 'R', lane_probs[2], frame))
-        if md is not None and md.meta.laneChangeState.raw in (2, 3):
-          # 10-24 rlogs: mid lane change all four laneLineProbs drop to ~0.01 for 2~3 s while the camera still reports the lines
-          left_seen, right_seen = CS.out.leftLaneLine // 10 > 0, CS.out.rightLaneLine // 10 > 0
+        # hide only when both miss (10-24 rlogs): the model drops all lines for 2~3 s mid lane change, the camera drops them in 26% of stops
+        left_seen = hud_control.leftLaneVisible and (
+          not (lane_probs is not None and _lane_unseen(unseen, 'L', lane_probs[1], frame)) or CS.out.leftLaneLine // 10 > 0)
+        right_seen = hud_control.rightLaneVisible and (
+          not (lane_probs is not None and _lane_unseen(unseen, 'R', lane_probs[2], frame)) or CS.out.rightLaneLine // 10 > 0)
         if trailer_lane_change_blocked:
           values["LANELINE_LEFT"] = 2 if hud_control.leftLaneVisible else 0
           values["LANELINE_RIGHT"] = 2 if hud_control.rightLaneVisible else 0

@@ -217,9 +217,9 @@ def test_unseen_lane_lines_send_14(monkeypatch, blindspot, left):
   assert (values['LANELINE_LEFT'], values['LANELINE_RIGHT']) == (left, 2)
 
 
-@pytest.mark.parametrize(('lane_change', 'camera', 'expected'), (('off', 10, 14), ('laneChangeStarting', 10, 8), ('laneChangeStarting', 0, 14)))
-def test_lane_change_uses_camera_lanes(monkeypatch, lane_change, camera, expected):
-  # model probs collapse mid lane change: the camera decides there, the model elsewhere
+@pytest.mark.parametrize(('lane_change', 'camera', 'expected'), (('off', 10, 8), ('laneChangeStarting', 10, 8), ('off', 0, 14)))
+def test_lane_hidden_only_when_model_and_camera_miss(monkeypatch, lane_change, camera, expected):
+  # the model has already hidden the line (probs 0.01 for 1 s); a camera lane keeps it shown
   from openpilot.cereal import log
   monkeypatch.setattr(hyundaicanfd, 'Params', lambda: SimpleNamespace(get_int=lambda key: 0, get=lambda key: '0'))
   monkeypatch.setitem(hyundaicanfd.create_ccnc_messages.__dict__, '_lane_unseen', {'L': (True, 0), 'R': (True, 0)})
