@@ -478,12 +478,10 @@ class FfsTransport(StreamTransport):
         return super().send(msg_type, seq, parts, flags, timeout)
       if writer is None:
         return request_chunks.send(super().send, msg_type, seq, parts, flags, timeout)
-      self._collect_envelopes = []
-      try:
-        request_chunks.send(super().send, msg_type, seq, parts, flags, timeout)
-        packets = self._collect_envelopes
-      finally:
-        self._collect_envelopes = None
+      if self.protocol_version != 2 or self.tx_align != request_chunks.P.GADGET_TX_ALIGN:
+        raise LinkError('bounded native requests require protocol-2 gadget framing')
+      self._lock_protocol_version()
+      packets = request_chunks.packets(msg_type, seq, parts, flags)
       budget = deadline - time.monotonic()
       if budget <= 0:
         raise LinkTimeout('bounded request preparation deadline exceeded')
@@ -506,13 +504,6 @@ class FfsTransport(StreamTransport):
       self._bounded_envelope = False
 
   def _write(self, bufs: list[memoryview]) -> int:
-    packets = getattr(self, '_collect_envelopes', None)
-    if packets is not None:
-      packet = b''.join(bufs)
-      if not 0 < len(packet) <= 32768 or len(packets) >= 34:
-        raise LinkError('invalid bounded USB envelope')
-      packets.append(packet)
-      return len(packet)
     self._ensure_epfiles()
     self._write_budget = self._write_timeout(WRITE_TIMEOUT)
     # See _IO_SIGNALS: a signal here duplicates data on the wire.

@@ -7,7 +7,7 @@
 #include <sys/syscall.h>
 #include <time.h>
 #include <unistd.h>
-#define DEPTH 4
+#define DEPTH 16
 #define CHUNK 32768
 #define MAX_FRAMES 34
 struct slot { struct iocb cb; unsigned char data[CHUNK]; uint64_t sequence; int pending; };
