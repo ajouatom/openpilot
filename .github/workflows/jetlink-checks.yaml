@@ -3,6 +3,8 @@ on:
   push:
     branches: [carrot-wip]
     paths:
+      - "openpilot/common/runtime_diagnostics.py"
+      - "openpilot/common/tests/test_runtime_diagnostics.py"
       - "openpilot/system/ui/lib/egl.py"
       - "openpilot/system/ui/lib/application.py"
       - "openpilot/selfdrive/ui/tests/test_egl_shutdown.py"
@@ -39,6 +41,7 @@ jobs:
           python -m compileall -q tools/jetlink openpilot/selfdrive/modeld/jetlink
           python -m pytest -c /dev/null --rootdir=. --confcutdir=tools/jetlink -q \
             tools/jetlink openpilot/selfdrive/modeld/tests/test_jetlink.py \
+            openpilot/common/tests/test_runtime_diagnostics.py \
             openpilot/selfdrive/ui/tests/test_egl_shutdown.py \
             openpilot/selfdrive/modeld/tests/test_camera_sync.py \
             openpilot/selfdrive/modeld/tests/test_camera_gap.py \

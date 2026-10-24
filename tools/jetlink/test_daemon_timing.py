@@ -76,6 +76,10 @@ def test_timing_records_usb_and_display_tail_after_unchanged_reply(monkeypatch, 
   assert len(events) == 1 and events[0]['component'] == 'jetlinkd'
   assert events[0]['frame_id'] == 42 and events[0]['usb_seq'] == 99
   metrics = events[0]['metrics']
+  peak = events[0]['peak_sample']
+  assert peak['context'] == {'frame_id': 42, 'usb_seq': 99}
+  assert peak['metrics']['usb_send_ms'] == pytest.approx(3.)
+  assert peak['metrics']['server_total_ms'] == pytest.approx(22.)
   for key, value in {'ipc_receive_ms': 1000., 'usb_send_ms': 3., 'usb_response_ms': 80.,
                      'ipc_reply_ms': 2., 'hud_ms': 4. if navigation else 0.,
                      'display_tail_ms': 6. if navigation else 4., 'wifi_tail_ms': 7.,
