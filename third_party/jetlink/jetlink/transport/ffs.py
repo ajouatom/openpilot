@@ -451,8 +451,9 @@ class FfsTransport(StreamTransport):
     from jetlink import request_chunks
     kind = args[0] if args else kwargs.get('msg_type')
     if getattr(self, 'request_chunks_enabled', False) and kind in request_chunks.KINDS:
-      # Preserve a full framed message per write, including on DWC3 replay.
-      # Splitting the raw stream would corrupt its framing when a TRB repeats.
+      # Preserve checked logical envelopes across physical write boundaries.
+      # Sub-envelope replay fails CRC/framing and closes the session; it must
+      # never become unchecked model input.
       return self._send_bounded_request(*args, **kwargs)
     super().send(*args, **kwargs)
 
@@ -466,8 +467,8 @@ class FfsTransport(StreamTransport):
       return False
     try:
       self._ensure_epfiles()
-      deferred = os.getenv('JETLINK_DEFER_COMPLETIONS') == '1'
-      quantum = 8192 if deferred and os.getenv('JETLINK_AIO_WRITE_BYTES') == '8192' else 32768
+      deferred = os.getenv('JETLINK_DEFER_COMPLETIONS', '1') == '1'
+      quantum = 8192 if deferred and os.getenv('JETLINK_AIO_WRITE_BYTES', '8192') == '8192' else 32768
       self._request_writer = Writer(self.ep_in, lib, deferred=deferred, quantum=quantum)
       return True
     except OSError:

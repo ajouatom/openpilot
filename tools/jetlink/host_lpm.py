@@ -168,7 +168,7 @@ class SessionLease:
     self.process = None
     self.next_touch = 0.
     self.failed = False
-    if (sys.platform != 'linux' or os.environ.get('CARROT_USB_LPM_OFF') != '1'
+    if (sys.platform != 'linux' or os.environ.get('CARROT_USB_LPM_OFF', '1') != '1'
         or not Path('/etc/nv_tegra_release').is_file()):
       return
     from jetlink.transport.usbbulk import UsbBulkTransport

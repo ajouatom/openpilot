@@ -137,8 +137,8 @@ def test_find_requires_exact_claim_and_usb3(bus, monkeypatch):
     (bus.device/filename).write_text(original)
 
 
-def test_default_off_does_not_start_privileged_child(monkeypatch):
-  monkeypatch.delenv('CARROT_USB_LPM_OFF', raising=False)
+def test_explicit_off_does_not_start_privileged_child(monkeypatch):
+  monkeypatch.setenv('CARROT_USB_LPM_OFF', '0')
   monkeypatch.setattr(p.subprocess, 'Popen', lambda *_a, **_k: pytest.fail('unexpected root helper'))
   lease = p.SessionLease(object()); lease.touch(); lease.close()
   assert lease.process is None
@@ -219,3 +219,25 @@ def test_session_leases_claimed_transport_before_read_ahead_wrapper(monkeypatch)
   monkeypatch.setattr(server, 'SessionLease', lambda transport:seen.append(transport))
   session = server.CarrotSession(raw)
   assert seen == [raw] and session.t.transport is raw
+
+
+def test_default_jetson_claim_starts_owned_helper_and_throttles_heartbeats(monkeypatch):
+  from jetlink.transport.usbbulk import UsbBulkTransport
+  monkeypatch.setattr(p.sys,'platform','linux')
+  monkeypatch.delenv('CARROT_USB_LPM_OFF',raising=False)
+  original=Path.is_file
+  monkeypatch.setattr(Path,'is_file',lambda path:True if path==Path('/etc/nv_tegra_release') else original(path))
+  monkeypatch.setattr(p.os,'geteuid',lambda:1000,raising=False)
+  monkeypatch.setattr(p.os,'set_blocking',lambda *_:None)
+  raw=object.__new__(UsbBulkTransport)
+  raw.handle=SimpleNamespace(getDevice=lambda:SimpleNamespace(getBusNumber=lambda:2,getDeviceAddress=lambda:7))
+  calls=[]; closed=[]; sent=[]
+  child=SimpleNamespace(stdin=SimpleNamespace(fileno=lambda:9,close=lambda:closed.append(True)),wait=lambda **_:0)
+  def spawn(command,**kwargs):
+    calls.append((command,kwargs));return child
+  monkeypatch.setattr(p.subprocess,'Popen',spawn)
+  monkeypatch.setattr(p.os,'write',lambda fd,data:sent.append((fd,data)))
+  monkeypatch.setattr(p.time,'monotonic',lambda:10.)
+  lease=p.SessionLease(raw);lease.touch();lease.touch();lease.close()
+  assert len(calls)==1 and calls[0][0][:2]==['sudo','-n'] and calls[0][0][-2:]==['2','7']
+  assert calls[0][1]['stdin']==p.subprocess.PIPE and sent==[(9,b'1')] and closed==[True]
