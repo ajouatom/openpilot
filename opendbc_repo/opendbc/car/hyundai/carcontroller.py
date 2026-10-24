@@ -293,7 +293,7 @@ class CarController(CarControllerBase):
         self.steerDeltaDownLC = self.steerDeltaDown
 
       self.soft_hold_mode = 1 if params.get_int("AutoCruiseControl") > 1 else 2
-      self.depart_jerk = params.get_int("StopGoAssist") in (2, 3)
+      self.depart_jerk = params.get_int("StopGoAssist") >= 2
       self.hapticFeedbackWhenSpeedCamera = int(params.get_int("HapticFeedbackWhenSpeedCamera"))
 
       self.button_spam1 = params.get_int("CruiseButtonTest1")

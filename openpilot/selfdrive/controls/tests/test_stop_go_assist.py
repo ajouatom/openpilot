@@ -80,7 +80,7 @@ def test_hook_departure_boost_and_pid_target():
 
 
 @pytest.mark.parametrize('kw', (
-  dict(mode=0), dict(mode=1), dict(mode=2, traffic='red'), dict(mode=3, xstate='e2eStopped'), dict(mode=3, xstate='e2eStop'),
+  dict(mode=0), dict(mode=1), dict(mode=2, traffic='red'), dict(mode=2, xstate='e2eStopped'), dict(mode=2, xstate='e2eStop'),
   dict(mode=2, should_stop=True),
 ))
 def test_hook_departure_gates(kw):
@@ -96,3 +96,7 @@ def test_hook_stop_guard_lowers_pid_target():
 def test_hook_tracks_time_since_standstill():
   p = run_hook(2, standstill=True)
   assert p.since_standstill == 0.0
+
+
+def test_hook_boost_mode_also_guards():
+  assert run_hook(2, v=0.9, a=-0.3, lead_=lead(STOP + 0.58)).output_a_target == pytest.approx(-0.81 / 1.16)

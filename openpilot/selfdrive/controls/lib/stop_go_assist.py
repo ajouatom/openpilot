@@ -1,4 +1,4 @@
-# Low-speed stop & go corrections on the planner's output accel (StopGoAssist: 1 stop guard, 2 departure boost, 3 both).
+# Low-speed stop & go corrections on the planner's output accel (StopGoAssist: 1 stop guard, 2 stop guard + departure boost).
 # Replays of 17 stops / 25 departures behind a lead (02_logs/measurements.md §22-23): the MPC overshoots the stop
 # distance by ~0.9 m (too weak braking below 3 m/s) and trails an accelerating lead after standstill.
 

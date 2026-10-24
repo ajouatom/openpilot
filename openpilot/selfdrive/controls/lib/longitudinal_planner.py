@@ -386,10 +386,12 @@ class LongitudinalPlanner:
       return
     lead = sm['radarState'].leadOne
     a_target = self.output_a_target
-    if mode in (1, 3):
+    if mode >= 1:
       a_target = stop_guard(a_target, cs.vEgo, lead, carrot.stop_distance)
     # No boost toward a red light / signal stop, or when the planner itself is stopping.
-    if (mode in (2, 3) and not self.output_should_stop and carrot.v_cruise > 0
+    # Boost only together with the stop guard: replays with the lead braking hard after a boosted start stay at the
+    # baseline minimum gap only when the guard is on (02_logs §24).
+    if (mode >= 2 and not self.output_should_stop and carrot.v_cruise > 0
         and carrot.xState.name not in ('e2eStop', 'e2eStopped') and carrot.trafficState.name != 'red'):
       a_target = departure_boost(a_target, cs.vEgo, lead, carrot.stop_distance, self.since_standstill, accel_max,
                                  lead_track_frames[0] >= LEAD_ACCEL_MIN_TRACK_FRAMES)
