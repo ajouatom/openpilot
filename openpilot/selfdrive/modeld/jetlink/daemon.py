@@ -282,7 +282,8 @@ def _serve_local(listener, client, peer, publisher, phase, wifi=None):
       continue
     with connection:
       connection.settimeout(.5)
-      reader = PacketReader(REQUEST.size + spec.warped_nbytes + spec.packed_nbytes)
+      from jetlink import deferred_map
+      reader = PacketReader(REQUEST.size + spec.warped_nbytes + spec.packed_nbytes + deferred_map.META.size)
       from openpilot.selfdrive.modeld.jetlink import shared_input
       shared = None
       first_request = True
@@ -295,9 +296,12 @@ def _serve_local(listener, client, peer, publisher, phase, wifi=None):
           requested = True
         from jetlink import output_projection as projection
         compact_reply = client.output_projection_available
+        deferred_available = bool(getattr(client, 'deferred_map_available', False))
         hello = {'spec': spec.to_dict(), 'peer': peer, shared_input.CAPABILITY: shared_input.supported()}
         if compact_reply:
           hello[projection.IPC_CAPABILITY] = projection.descriptor()
+        if deferred_available:
+          hello[deferred_map.IPC_CAPABILITY] = deferred_map.descriptor()
         send(connection, json.dumps(hello).encode())
         while host_attached():
           loop_started, cpu_started = time.monotonic(), time.thread_time()
@@ -331,6 +335,16 @@ def _serve_local(listener, client, peer, publisher, phase, wifi=None):
             send(connection, shared.nonce)
             continue
           first_request = False
+          wire_request_bytes = 4 + len(request)
+          nav_meta = None
+          base_sizes = [REQUEST.size + spec.warped_nbytes + spec.packed_nbytes]
+          if shared is not None:
+            base_sizes.append(shared_input.TOKEN.size)
+          for base_size in base_sizes:
+            if len(request) == base_size + deferred_map.META.size:
+              nav_meta = deferred_map.META.unpack_from(request, base_size)
+              request = request[:base_size]
+              break
           shared_request = shared is not None and len(request) == shared_input.TOKEN.size
           if shared_request:
             frame, reset, source_sof, images, packed = shared.read(request)
@@ -340,23 +354,28 @@ def _serve_local(listener, client, peer, publisher, phase, wifi=None):
             frame, reset, source_sof = REQUEST.unpack_from(request)
             images = np.frombuffer(request, np.uint8, spec.warped_nbytes, REQUEST.size).reshape(spec.warped_shape)
             packed = np.frombuffer(request, np.float32, spec.packed_nelem, REQUEST.size + spec.warped_nbytes)
-          if reset not in (0, 1, 2, 3) or (reset & projection.IPC_FLAG and not compact_reply):
+          if (reset not in range(8) or (reset & projection.IPC_FLAG and not compact_reply) or
+              bool(reset & deferred_map.IPC_FLAG) != (nav_meta is not None) or
+              (nav_meta is not None and not deferred_available)):
             raise ValueError('invalid reset flag')
           client.project_output = bool(reset & projection.IPC_FLAG)
           if not np.all(np.isfinite(packed)):
             raise ValueError('invalid local model context')
           started = time.monotonic()
-          seq = client.infer_begin(images, packed, frame, reset=bool(reset & 1), want_state=(frame % 20 == 0))
+          map_options = {'nav_metadata': nav_meta} if nav_meta is not None else {}
+          seq = client.infer_begin(images, packed, frame, reset=bool(reset & 1), want_state=(frame % 20 == 0), **map_options)
           sent = time.monotonic()
           if peer.get('carrot_host') == 'jetson':
             phase.sent(source_sof)
           phase_done = time.monotonic()
+          map_bytes = client.flush_map() if nav_meta is not None else 0
+          map_done = time.monotonic()
           display_metrics = {}
           early_media_ms = 0.
           early_media_bytes = 0
           if usb_display and peer.get(NAVI_CAPABILITY):
             display_metrics = publish_hud(client, publisher) or {}
-            if peer.get('carrot_host') == 'jetson' and peer.get(PUMP_CAPABILITY) is True:
+            if peer.get('carrot_host') == 'jetson' and peer.get(PUMP_CAPABILITY) is True and not map_bytes:
               early_started = time.monotonic()
               early_media_bytes = send_ready_during_inference(client, publisher, sent)
               early_media_ms = (time.monotonic() - early_started) * 1000
@@ -395,12 +414,15 @@ def _serve_local(listener, client, peer, publisher, phase, wifi=None):
             context={'frame_id': frame, 'usb_seq': seq},
             housekeeping_ms=(receive_started-loop_started)*1000,
             ipc_receive_ms=(received-receive_started)*1000,
-            ipc_request_bytes=4 + len(request),
+            ipc_request_bytes=wire_request_bytes,
             ipc_shared_input=int(shared_request),
             request_parse_ms=(started-received)*1000,
             usb_send_ms=(sent-started)*1000,
             request_bytes=getattr(client, 'last_request_bytes', spec.infer_req_nbytes),
             phase_ms=(phase_done-sent)*1000,
+            map_stage_ms=(map_done-phase_done)*1000,
+            map_stage_bytes=map_bytes,
+            map_deferred_used=int(nav_meta is not None and getattr(client, 'last_map_used', False)),
             hud_ms=(hud_done-phase_done)*1000,
             usb_response_ms=(completed-hud_done)*1000,
             # Same-frame totals: HUD overlaps server execution, so separate

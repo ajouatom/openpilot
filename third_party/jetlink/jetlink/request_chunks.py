@@ -18,7 +18,7 @@ HEADER = struct.Struct('<HHIII')  # original kind, flags, total, offset, crc32
 DATA_BYTES = WIRE_BYTES - P.HEADER_SIZE - HEADER.size
 MAX_BYTES = 1 << 20
 MAX_AGE = .5
-KINDS = frozenset((int(P.Msg.INFER_REQ), 0x4000, 0x4001, 0x4002))
+KINDS = frozenset((int(P.Msg.INFER_REQ), 0x4000, 0x4001, 0x4002, 0x4021))
 
 
 def descriptor():

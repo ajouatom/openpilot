@@ -25,7 +25,8 @@ from host_health import health_worker
 from host_lpm import SessionLease
 from wifi_protocol import CAPABILITY as WIFI_CAPABILITY, MESSAGE as WIFI_MESSAGE, receive as receive_wifi
 from jetlink import protocol as P
-from jetlink import request_chunks
+from jetlink import request_chunks, deferred_map, packed_codec, output_projection
+from jetlink.transport.base import Message, LinkError
 from jetlink.server.session import Session
 from jetlink.server import main as server
 
@@ -62,6 +63,8 @@ class CarrotSession(Session):
   def __init__(self, *args, **kwargs):
     super().__init__(*args, **kwargs)
     self.request_chunks = request_chunks.Receiver()
+    self.deferred_maps = deferred_map.Receiver()
+    self.deferred_negotiated = False
     # Restore the bounded USB display receiver. The new capability is separate
     # from old HUD support so a Wi-Fi-only comma never starts USB accidentally.
     self.usb_display = True
@@ -84,6 +87,8 @@ class CarrotSession(Session):
              PUMP_CAPABILITY: legacy_display, WIFI_CAPABILITY: host == 'jetson', 'carrot_host': host,
              HUD_WIFI_CAPABILITY: self.hud_wifi_supported,
              HUD_USB_CAPABILITY: host == 'jetson' and legacy_display}
+      if self.deferred_negotiated:
+        obj[deferred_map.CAPABILITY] = deferred_map.descriptor()
       if host == 'jetson':
         obj[request_chunks.CAPABILITY] = request_chunks.descriptor()
         obj['carrot_source_commit'] = (ROOT / 'SOURCE_COMMIT').read_text().strip()
@@ -95,6 +100,13 @@ class CarrotSession(Session):
       self.power_lease.touch()
     if msg.msg_type == P.Msg.HELLO_REQ:
       self.request_chunks.clear()
+      self.deferred_maps.clear()
+      self.deferred_negotiated = False
+      try:
+        offer = json.loads(bytes(msg.payload)).get('client') or {}
+        self.deferred_negotiated = self.t.protocol_version == 2 and deferred_map.matches(offer.get(deferred_map.CAPABILITY))
+      except (ValueError, AttributeError):
+        pass
     elif msg.msg_type == request_chunks.MESSAGE:
       if self.t.protocol_version != 2:
         raise request_chunks.LinkError('chunked requests require protocol 2')
@@ -106,6 +118,22 @@ class CarrotSession(Session):
         return
       self.request_chunks.clear()
       raise request_chunks.LinkError('interrupted chunked request')
+    if msg.msg_type == P.Msg.ENGINE_REQ:
+      self.deferred_maps.clear()
+    if msg.msg_type == deferred_map.MESSAGE:
+      if msg.seq <= self.last_seq:
+        return
+      try:
+        with self.host.lock:
+          if (not self.deferred_negotiated or self.t.protocol_version != 2 or
+              self.host.loaded is None or not output_projection.eligible(self.host.loaded.spec)):
+            raise ValueError('unnegotiated map staging')
+          self.deferred_maps.accept(msg.seq, msg.payload)
+        self.last_seq = msg.seq
+      except ValueError as exc:
+        self.deferred_maps.clear()
+        raise LinkError(str(exc)) from exc
+      return
     if msg.msg_type == HUD_WIFI_REQUEST:
       if msg.seq <= self.last_seq:
         return
@@ -155,6 +183,30 @@ class CarrotSession(Session):
       os.replace(temporary, HUD_PACKET)
     except OSError:
       pass  # An unavailable display does not stop inference.
+
+  def _infer(self, loaded, msg):
+    try:
+      if msg.payload.nbytes < P.INFER_REQ_SIZE:
+        raise ValueError('incomplete frame')
+      frame, flags = P.unpack_infer_req(msg.payload)
+      if flags & deferred_map.FLAG:
+        from jetlink.block_codec import FLAG as LZ4_FLAG
+        if (not self.deferred_negotiated or self.t.protocol_version != 2 or
+            not flags & packed_codec.FLAG or flags & (LZ4_FLAG | P.Flag.RESET_QUEUES)):
+          raise ValueError('unnegotiated map reference')
+        offset = P.INFER_REQ_SIZE + loaded.spec.warped_nbytes
+        packed = self.deferred_maps.expand(msg.payload[offset:], loaded.spec)
+        payload = (P.pack_infer_req(frame, flags & ~deferred_map.FLAG) +
+                   bytes(msg.payload[P.INFER_REQ_SIZE:offset]) + packed)
+        msg = Message(msg.msg_type, msg.seq, msg.flags, memoryview(payload))
+      else:
+        # Every inline request supersedes the old image, including cancellation.
+        self.deferred_maps.clear()
+    except ValueError:
+      self.deferred_maps.clear()
+      self._send(P.Msg.INFER_RESP, msg.seq, (P.pack_infer_resp(0, P.Status.BAD_SHAPE, 0, 0, 0),))
+      return
+    return super()._infer(loaded, msg)
 
   def close(self):
     try:

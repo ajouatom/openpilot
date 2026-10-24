@@ -239,6 +239,8 @@ class JetlinkClient:
     self._stateful_v2 = False
     self._nav_u8 = False
     self._lz4 = False
+    self._deferred_map = False
+    self.map_sender = None
     for layer in _transport_layers(self.t):
       if hasattr(type(layer), '_send_bounded_request'):
         layer.request_chunks_enabled = False
@@ -249,6 +251,9 @@ class JetlinkClient:
     seq = self._next_seq()
     version = self._protocol_version()
     client = {'nonce': self.nonce, 'name': self.name}
+    from jetlink import deferred_map
+    if version == 2:
+      client[deferred_map.CAPABILITY] = deferred_map.descriptor()
     if version == 2 and self._allow_output_projection:
       client[projection.CAPABILITY] = projection.descriptor()
     if version == 3:
@@ -273,6 +278,7 @@ class JetlinkClient:
                                   projection.matches(response.get(projection.CAPABILITY)))
     from jetlink.packed_codec import CAPABILITY
     self._nav_u8 = self._stateful_v2 and response.get(CAPABILITY) is True
+    self._deferred_map = self._nav_u8 and deferred_map.matches(response.get(deferred_map.CAPABILITY))
     from jetlink.block_codec import CAPABILITY as LZ4_CAPABILITY, library
     self._lz4 = (self._allow_block_compression and self._stateful_v2 and
                  response.get(LZ4_CAPABILITY) is True and library() is not None)
@@ -420,10 +426,28 @@ class JetlinkClient:
       except LinkTimeout:
         continue
 
+  @property
+  def deferred_map_available(self):
+    return bool(getattr(self, '_deferred_map', False) and projection.eligible(self.spec))
+
+  def flush_map(self):
+    sender = getattr(self, 'map_sender', None)
+    if sender is None:
+      return 0
+    remaining = self.deadline - (time.monotonic() - self._infer_started)
+    if remaining <= 0:
+      raise LinkTimeout('frame deadline elapsed before map staging')
+    try:
+      return sender.flush(self._next_seq, self.t.send, remaining)
+    except (ValueError, LinkError) as exc:
+      self.dead = True
+      raise LinkError('map staging failed; link abandoned') from exc
+
   # -- inference ------------------------------------------------------------
 
   def infer_begin(self, warped: np.ndarray, packed: np.ndarray, frame_id: int = 0,
-                  reset: bool = False, want_state: bool = False, deadline: float | None = None) -> int:
+                  reset: bool = False, want_state: bool = False, deadline: float | None = None,
+                  nav_metadata=None) -> int:
     """Send a frame and return immediately with its sequence number.
 
     Split from infer_end so the caller can work while the Jetson is busy;
@@ -451,13 +475,25 @@ class JetlinkClient:
     try:
       self._infer_started = time.monotonic()
       self._infer_frame_id = frame_id
-      if version == 2 and self._nav_u8 and 'nav_map' in self.spec.packed_shapes:
+      self.last_map_used = False
+      if nav_metadata is not None:
+        from jetlink.deferred_map import Sender
+        if not self.deferred_map_available or version != 2:
+          raise LinkError('deferred map was not negotiated')
+        if getattr(self, 'map_sender', None) is None:
+          self.map_sender = Sender(self.spec)
+        packed, map_flags = self.map_sender.prepare(packed, frame_id, reset, nav_metadata)
+        flags |= map_flags
+        self.last_map_used = self.map_sender.used
+      else:
+        self.map_sender = None
+      if nav_metadata is None and version == 2 and self._nav_u8 and 'nav_map' in self.spec.packed_shapes:
         from jetlink.packed_codec import encode, FLAG
         packed, compressed = encode(packed, self.spec)
         if compressed:
           flags |= FLAG
       parts = (warped, packed)
-      if version == 2 and self.spec.stateful and self._lz4:
+      if version == 2 and self.spec.stateful and self._lz4 and not flags & 64:
         from jetlink.block_codec import encode as encode_block, FLAG as LZ4_FLAG
         block = encode_block(parts)
         if block is not None:

@@ -181,6 +181,9 @@ class JoiningModel:
       os.replace(tmp, MODEL_STATUS)
       self.next_status = now + 1
 
+  def set_nav_metadata(self, value):
+    self.nav_metadata = value
+
   def _reset_small(self):
     if hasattr(self.small, 'reset'):
       self.small.reset()
@@ -251,7 +254,8 @@ class JoiningModel:
         images = self.warp(bufs, transforms, prepare=prepare,
                            output_buffer=self.client.image_buffer())
         warped = time.monotonic()
-        result = self.client.infer(images, self.packed, self.frame, self.reset, source_sof=self.source_sof)
+        map_options = {'nav_metadata': getattr(self, 'nav_metadata', None)} if getattr(self.client, 'deferred_nav', False) else {}
+        result = self.client.infer(images, self.packed, self.frame, self.reset, source_sof=self.source_sof, **map_options)
         replied = time.monotonic()
         self.reset = False
         if 'prev_feat' in self.views:

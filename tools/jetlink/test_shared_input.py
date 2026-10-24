@@ -260,15 +260,17 @@ def test_invalid_context_closes_reserved_slot_without_a_request():
       client.close()
 
 
+@pytest.mark.parametrize('deferred', [False, True])
 @pytest.mark.parametrize('shared_enabled', [False, True])
 @pytest.mark.parametrize('projected', [False, True])
-def test_actual_daemon_consumes_exact_inputs_before_matching_reply(tmp_path, monkeypatch, shared_enabled, projected):
+def test_actual_daemon_consumes_exact_inputs_before_matching_reply(tmp_path, monkeypatch, shared_enabled, projected, deferred):
   import hashlib
   import sys
   from types import SimpleNamespace as NS
   from openpilot.selfdrive.modeld.jetlink import daemon
   from jetlink import output_projection as projection
   monkeypatch.setenv('JETLINK_RAM_INPUT', str(int(shared_enabled)))
+  monkeypatch.setenv('JETLINK_DEFER_NAV', str(int(deferred)))
   monkeypatch.setitem(sys.modules, 'openpilot.common.params', NS(Params=lambda: NS(put_bool_nonblocking=lambda *a: None)))
   monkeypatch.setitem(sys.modules, 'openpilot.common.swaglog', NS(cloudlog=NS(event=lambda *a, **kw: None)))
   monkeypatch.setattr(daemon, 'publish', lambda *a, **kw: None)
@@ -279,12 +281,15 @@ def test_actual_daemon_consumes_exact_inputs_before_matching_reply(tmp_path, mon
   captured, failures = [], []
   class USB:
     spec = SPEC
+    deferred_map_available = True
+    flush_map = lambda self: 0
     output_projection_available = projected
     project_output = False
     last_state = None
     last_timings = (24000, 600, 25000)
     t = NS(last_receive={})
-    def infer_begin(self, image, packed, frame, reset, want_state):
+    def infer_begin(self, image, packed, frame, reset, want_state, **options):
+      assert options == ({'nav_metadata': (0, 0, 0)} if deferred else {})
       captured.append((hashlib.sha256(image.tobytes() + packed.tobytes()).digest(), frame, reset))
       # Actual daemon must send the matching reply before a slot is reusable.
       return frame
