@@ -226,7 +226,7 @@ def test_same_frame_writer_receives_complete_replay_safe_envelopes():
     result=receiver.accept(reader.recv(.5),last)
     if result is not None:results.append(bytes(result.payload));last=result.seq
   assert results==[raw] and tx._had_host
-  assert tx._collect_envelopes is None and tx._bounded_envelope is False
+  assert not hasattr(tx, '_collect_envelopes') and tx._bounded_envelope is False
 
 
 @pytest.mark.parametrize('size', [1, 32720, 32721, 65440, 458996, 655608, 1048576])
