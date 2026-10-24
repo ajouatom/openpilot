@@ -243,6 +243,8 @@ class JetlinkClient:
       if hasattr(type(layer), '_send_bounded_request'):
         layer.request_chunks_enabled = enabled and layer._prepare_bounded_requests()
     response['carrot_request_chunks_active'] = any(getattr(layer, 'request_chunks_enabled', False) for layer in _transport_layers(self.t))
+    response['carrot_tx_completion_deferred'] = any(
+      getattr(getattr(layer, '_request_writer', None), 'deferred', False) for layer in _transport_layers(self.t))
     return response
 
   def state(self, timeout: float = 2.0) -> dict:
