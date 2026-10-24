@@ -21,9 +21,8 @@ fp16 end to end, so the engine is the same and only the calls differ.
 """
 from __future__ import annotations
 
-import json
 import logging
-import shutil
+import os
 import tempfile
 import time
 from pathlib import Path
@@ -238,8 +237,17 @@ def build_engine(onnx_path: str | Path, out_path: str | Path,
     staged = Path(tmp) / 'engine.plan'
     with open(staged, 'wb') as f:
       f.write(plan)
+      f.flush()
+      os.fsync(f.fileno())
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    shutil.move(str(staged), str(out_path))
+    # rename 실패 시 기존 엔진으로 복사하는 fallback을 사용하지 않는다.
+    os.replace(staged, out_path)
+    if os.name == 'posix':
+      directory = os.open(out_path.parent, os.O_RDONLY | os.O_DIRECTORY)
+      try:
+        os.fsync(directory)
+      finally:
+        os.close(directory)
 
   meta = {
     'backend': 'trt',
@@ -253,6 +261,7 @@ def build_engine(onnx_path: str | Path, out_path: str | Path,
     'built_at': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),
     **(meta_extra or {}),
   }
-  out_path.with_suffix('.json').write_text(json.dumps(meta, indent=2))
+  from jetlink.server.cache import CacheEntry
+  CacheEntry(out_path, out_path.with_suffix('.json')).write_meta(meta)
   report('build', 1.0, f"done in {meta['build_seconds']}s")
   return out_path

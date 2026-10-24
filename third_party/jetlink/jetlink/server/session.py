@@ -290,7 +290,13 @@ class EngineHost:
     if not entry.exists:
       return None
     try:
-      return entry.meta().get('spec') or None
+      meta = entry.meta()
+      if not isinstance(meta, dict):
+        raise ValueError('Invalid sidecar object')
+      spec = meta.get('spec')
+      if spec is not None and not isinstance(spec, dict):
+        raise ValueError('Invalid sidecar spec object')
+      return spec or None
     except (OSError, ValueError, KeyError):
       log.warning("unreadable sidecar for %s", entry.path.name)
       return None
@@ -321,10 +327,24 @@ class EngineHost:
     if d is None:
       return
     entry = self.cache.entry(sha256)
-    spec = ModelSpec.from_dict({**d, 'frame_skip': frame_skip})
+    spec = self._decode_cached_spec(d, sha256, frame_skip)
+    if spec is None:
+      return
     log.info("preloading the engine loaded last: %s", entry.path.name)
     self._start(Job(sha256, load_only=True), Request(sha256, 0, frame_skip),
                 entry, self.cache.model_path(sha256), spec)
+
+  @staticmethod
+  def _decode_cached_spec(value, sha256, frame_skip):
+    # 손상된 캐시 기록은 보존하고, 정상 요청의 원래 재검증 경로로 돌린다.
+    try:
+      spec = ModelSpec.from_dict({**value, 'frame_skip': frame_skip})
+      if spec.sha256 != sha256 or type(spec.nbytes) is not int or spec.nbytes <= 0:
+        raise ValueError('Invalid cached model identity')
+      return spec
+    except (AttributeError, KeyError, TypeError, ValueError):
+      log.warning('unreadable cached model spec')
+      return None
 
   def _spec_on_disk(self, entry: CacheEntry, model_path: Path, req: Request) -> ModelSpec | None:
     """The spec for a cached plan, from its sidecar or failing that the ONNX.
@@ -340,7 +360,9 @@ class EngineHost:
     """
     d = self._cached_spec(entry)
     if d is not None:
-      return ModelSpec.from_dict({**d, 'frame_skip': req.frame_skip})
+      spec = self._decode_cached_spec(d, req.sha256, req.frame_skip)
+      if spec is not None and (req.nbytes == 0 or spec.nbytes == req.nbytes):
+        return spec
     if _model_complete(model_path, req.nbytes):
       try:
         return self._derive_spec(model_path, req.frame_skip)
