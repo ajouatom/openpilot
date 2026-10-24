@@ -8,6 +8,9 @@ on:
       - 'openpilot/common/jetlink_status.py'
       - 'openpilot/common/jetlink_peer.py'
       - 'openpilot/selfdrive/modeld/**'
+      - 'openpilot/system/ui/lib/egl.py'
+      - 'openpilot/system/ui/lib/application.py'
+      - 'openpilot/selfdrive/ui/tests/test_egl_shutdown.py'
       - 'openpilot/selfdrive/carrot/carrot_navi.py'
       - '.github/workflows/jetlink-checks.yaml'
   workflow_dispatch:
@@ -42,7 +45,7 @@ jobs:
         run: |
           python -m compileall -q tools/jetlink openpilot/selfdrive/modeld/jetlink
           python -m pytest -c /dev/null --rootdir=. --confcutdir=tools/jetlink -q \
-            tools/jetlink openpilot/selfdrive/modeld/tests/test_jetlink.py \
+            tools/jetlink openpilot/selfdrive/modeld/tests/test_jetlink.py openpilot/selfdrive/ui/tests/test_egl_shutdown.py \
             openpilot/selfdrive/modeld/tests/test_camera_sync.py \
             openpilot/selfdrive/modeld/tests/test_camera_gap.py \
             openpilot/selfdrive/modeld/tests/test_jetlink_phase.py \
