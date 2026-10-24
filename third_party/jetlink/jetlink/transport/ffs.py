@@ -317,7 +317,10 @@ class FfsTransport(StreamTransport):
     reader, self._reader = self._reader, None
     if reader is not None and reader is not threading.current_thread():
       reader.join(READER_JOIN_TIMEOUT)
-    self._close_fds(('ep_in', 'ep_out'), reader)
+    try:
+      self._close_request_writer()
+    finally:
+      self._close_fds(('ep_in', 'ep_out'), reader)
     # Whatever the last exchange left behind goes with the endpoints: half a
     # message would frame the next one's first reply as garbage.
     with self._cv:
@@ -729,15 +732,18 @@ class FfsTransport(StreamTransport):
       reader.join(READER_JOIN_TIMEOUT)
     with self._cv:
       self._cv.notify_all()
+    try:
+      self._close_request_writer()
+    finally:
+      self._close_fds(('_state_fd', 'ep_in', 'ep_out', 'ep0'), reader)
+
+  def _close_request_writer(self):
     writer = getattr(self, '_request_writer', None)
     if writer is not None:
-      try:
-        writer.close()  # unbound first; retain native buffers/context on failure
-      except OSError:
-        log.exception('bounded writer cleanup incomplete; native buffers retained')
-      else:
-        self._request_writer = None
-    self._close_fds(('_state_fd', 'ep_in', 'ep_out', 'ep0'), reader)
+      # Propagate failure to the daemon's existing unsafe-cleanup gate. Do not
+      # create another session while an old native context still owns buffers.
+      writer.close()
+      self._request_writer = None
 
   def _close_fds(self, names, reader: threading.Thread | None) -> None:
     """Close these descriptors, clearing each as it goes.

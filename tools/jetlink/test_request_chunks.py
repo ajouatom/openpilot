@@ -269,3 +269,25 @@ def test_late_completion_failure_is_checked_before_send_and_after_receive(monkey
   with pytest.raises(LinkError, match='completion failed'):
     tx.recv(.05)
   assert calls == ['poll', 'receive', 'poll']
+
+
+@pytest.mark.skipif(sys.platform != 'linux', reason='FunctionFS cleanup integration')
+def test_endpoint_release_closes_writer_before_rebind_and_blocks_on_failure():
+  from jetlink.transport.ffs import FfsTransport
+  import threading
+  tx = object.__new__(FfsTransport)
+  tx.gadget='/test'; tx._closing=False; tx.ep_out=12; tx.bound_udc='test'; tx._reader=None
+  calls=[]
+  tx.unbind=lambda: calls.append('unbind')
+  tx._close_fds=lambda names, reader: calls.append('fds')
+  tx.bind=lambda udc: calls.append('bind')
+  def fail_close():
+    calls.append('writer')
+    raise OSError(errno.ETIMEDOUT, 'pending kernel buffer')
+  writer=NS(close=fail_close)
+  tx._request_writer=writer
+  with pytest.raises(OSError): tx.release_endpoints()
+  assert calls==['unbind','writer','fds'] and tx._request_writer is writer
+  writer.close=lambda: calls.append('recovered')
+  tx._close_request_writer()
+  assert tx._request_writer is None
