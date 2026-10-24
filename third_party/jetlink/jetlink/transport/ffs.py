@@ -466,7 +466,9 @@ class FfsTransport(StreamTransport):
       return False
     try:
       self._ensure_epfiles()
-      self._request_writer = Writer(self.ep_in, lib, deferred=os.getenv('JETLINK_DEFER_COMPLETIONS') == '1')
+      deferred = os.getenv('JETLINK_DEFER_COMPLETIONS') == '1'
+      quantum = 8192 if deferred and os.getenv('JETLINK_AIO_WRITE_BYTES') == '8192' else 32768
+      self._request_writer = Writer(self.ep_in, lib, deferred=deferred, quantum=quantum)
       return True
     except OSError:
       return False
