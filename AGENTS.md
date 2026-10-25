@@ -1,5 +1,30 @@
 # Repository memory
 
+- On 2026-10-25, owner extends trial indicators: AutoBlinkerControl0 default,
+  1 low-speed Bluetooth hold/same-button cancel/turn completion plus ATC turns;
+  2 adds actual ATC lane-change start/finish, excluding waiting. Explicit Ioniq5PE
+  only. One-shot B1 starts lamps; acknowledged actual illumination enables a
+  fresh350ms lease through existing 0x1EA indicator hold bits. No B1 held frames.
+  Manual <=5km/h entry, steering30deg then within10deg0.4s moving completion,
+  max300s; unconfirmed starts expire4s. Driver/session/stale gates retained.
+  Rapid opposite input waits OEM completion, latest request expires3.2s. Parked
+  13-frame trial left then right0.8s later gives CAN-feedback L3/R3/off, no CCTV.
+  45-frame full-lever prototype failed/reverted; not acceptance. Mode2 origin
+  metadata does not change steering/admission. 67 focused,28 native desire,
+  8 native packer,25 Wiki checks; final Linux1535/56skip plus62/94/119/11/11
+  and Windows pass CI40176869863/40176926962/40177214703. Counts overlap.
+  Signed605e7e2d7c/64801709B HTTPS/hash verified, normal Jetson updater installed;
+  comma b1f5fe4fe2 normal Git Pull/restart, N16 unchanged. Only carrot-nav-blink
+  published, based carrot-nav24c1ba5e4b. Web mode0..2 present/current0.
+  Final60.002s1200 valid consecutive model/DM/both cameras/odom/pose, mean40.188/
+  max49.603ms, P/inactive guards all good; N16/blinker/health60/60, HUD59/60.
+  Both snapshot holds/watchdogs restored/exited. can1 500k LISTEN-ONLY, postboot
+  TX0/errors0, RXdrops82 unchanged. S2 disconnected; actual BT hold/cancel and
+  ATC turn/lane-change physical acceptance pending, no road/deadline claim.
+  Public Wiki remains wip-owned; trial KO/EN patch staged. Raw evidence private.
+  Details: docs/jetson_bluetooth_blinker_20261025.md.
+
+
 - On 2026-10-25, owner authorizes only carrot-nav-blink publication and normal
   installation, based on carrot-nav24c1ba5e4b; maintained branches unchanged.
   Physical Bluetooth blinkerLeft/Right are separate from lane-change actions;

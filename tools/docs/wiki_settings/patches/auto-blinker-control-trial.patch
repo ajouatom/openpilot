@@ -54,7 +54,7 @@
 +
 +블루투스 회전 완료는 해당 방향 조향각 30도 이상을 확인한 뒤 주행 중 10도 이내로 0.4초 돌아온 상태로 판단합니다. 출발만으로 해제하지 않으며, 최대 유지 시간은 5분입니다.
 +
-+USB-CAN은 최초 점멸만 요청하고 기존 차량 깜박이 유지 기능을 사용합니다. 입력·차량 상태·통신이 끊기면 유지 요청은 만료됩니다. 반대 방향을 빠르게 누르면 현재 순정 점멸이 끝난 뒤 가장 최근 요청을 실행하며, 대기는 최대 3.2초입니다. 유지 취소 후에도 순정 잔여 점멸이 끝날 수 있습니다. 실제 램프 입력에 기존 차로변경 설정이 반응할 수 있습니다.
++USB-CAN은 최초 점멸만 요청하고 기존 차량 깜박이 유지 기능을 사용합니다. 입력·차량 상태·통신이 끊기면 유지 요청은 만료됩니다. 최초 점등을 4초 안에 확인하지 못하면 유지 요청을 취소합니다. 반대 방향을 빠르게 누르면 현재 순정 점멸이 끝난 뒤 가장 최근 요청을 실행하며, 대기는 최대 3.2초입니다. 유지 취소 후에도 순정 잔여 점멸이 끝날 수 있습니다. 실제 램프 입력에 기존 차로변경 설정이 반응할 수 있습니다.
 +<!-- CARROT:SECTION:END REFERENCE -->
 +
 +<!-- CARROT:MANUAL:END AutoBlinkerControl -->
@@ -116,7 +116,7 @@
 +
 +Bluetooth turn completion requires steering at least 30 degrees toward the selected turn, then returning within 10 degrees for 0.4 seconds while moving. Departure alone does not cancel; the maximum hold is five minutes.
 +
-+USB-CAN requests the initial blink; the existing vehicle indicator-hold function maintains it. Input, vehicle-state or communication loss expires the hold request. A rapid opposite input waits for the current OEM sequence to end, keeping only the latest request for at most 3.2 seconds. Cancelling a hold may still allow the remaining OEM flashes to finish. Existing lane-change settings may react to the actual lamp input.
++USB-CAN requests the initial blink; the existing vehicle indicator-hold function maintains it. Input, vehicle-state or communication loss expires the hold request. A hold request is cancelled if initial illumination is not confirmed within four seconds. A rapid opposite input waits for the current OEM sequence to end, keeping only the latest request for at most 3.2 seconds. Cancelling a hold may still allow the remaining OEM flashes to finish. Existing lane-change settings may react to the actual lamp input.
 +<!-- CARROT:SECTION:END REFERENCE -->
 +
 +<!-- CARROT:MANUAL:END AutoBlinkerControl -->

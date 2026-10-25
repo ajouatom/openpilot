@@ -178,3 +178,47 @@ The source/reader are limited to the explicit Ioniq5PE profile. Capability v2 pr
 Korean/English guides and localized help are updated. Generated setting explanations are staged in `tools/docs/wiki_settings/patches/auto-blinker-control-trial.patch`; public Wiki generation is owned by carrot-wip, which lacks this trial-only setting, so its catalog is not replaced.
 
 Validation before publication: 119 indicator/daemon desktop tests (including 66 indicator tests), 28 exact-source DesireHelper checks on native comma, and 8 native Hyundai hold/packet checks. Native checks use isolated modules, mocked Params and no physical CAN sends. Normal installation, native hold acceptance and queued-reversal acceptance are recorded separately below when completed. No road behavior claim.
+
+
+## Automatic-control release and final checks
+
+A second guarded queued-reversal trial used conservative receiver-clock samples
+without widening freshness gates. It sent 13 frames: left at 1.004 seconds and
+right intent at 1.801 seconds. CAN feedback shows three left flashes (onsets
+1.127, 1.929 and 2.727 seconds), followed by three right flashes (3.635, 4.416 and
+5.221 seconds), then both off. This establishes queued reversal on this stationary
+vehicle; it is not CCTV confirmation or immediate reversal while left is active.
+The temporary sender restored the interface after the bounded eight-second trial.
+
+Only carrot-nav-blink was published. Source 605e7e2d7c and signed runtime
+64,801,709 bytes were fully HTTPS/hash verified; the normal Jetson boot updater
+installed this runtime. Normal comma Git Pull/restart installed b1f5fe4fe2,
+including the comma-only correction that discards a hold with no confirmed
+initial activation after four seconds. A fresh stock override also clears it.
+The signed host pin is 7648333636; N16 SHA01effc67 is unchanged. No second host
+bundle is necessary for the comma-only policy correction.
+
+CI40176869863, CI40176926962 and CI40177214703 pass Linux integration and Windows
+installer checks. Final Linux broad coverage is 1,535 passed/56 skipped, alongside
+62 codec, 94 updater, 119 navigation, 11 storage and 11 NAT checks. The last
+correction passes 67 focused indicator checks. The two staged Wiki pages validate
+and all 25 Wiki tests pass; counts overlap earlier checks.
+
+After normal restart, the actual web API exposes AutoBlinkerControl with values
+0 through 2 and current value 0. Both new cereal fields are present. Native model,
+indicator protocol v2 and host health return ready/active/ok. A final 60.002-second
+stationary observation records 1,200 valid consecutive model outputs and 1,200
+valid samples each for DM, main/wide cameras, odometry and pose. No model gap,
+unhealthy pose input or parked/inactive guard failure occurs. Model execution
+mean 40.188 ms, maximum 49.603 ms. N16, indicator readiness and health are good
+60/60 samples; USB HUD is connected 59/60. These measurements do not establish
+latency improvement, a hard deadline or road acceptance.
+
+Both temporary installation holds are released/restored and their watchdogs have
+exited. IsTakingSnapshot is false, IsOnroad true. Actual PEAK can1 is 500 kbit/s
+LISTEN-ONLY, TX packets zero since reboot, RX/TX errors zero. RX drops remain 82
+across the two final reads. S2 remains disconnected with no captured buttons.
+Automatic-control mode stays 0. Physical Bluetooth hold/cancel, steering-based
+completion, ATC turns and actual lane-change indication therefore still need
+owner-observed acceptance; no successful physical hold or road claim is made.
+Raw CAN, device, timing and installation evidence stays private.
