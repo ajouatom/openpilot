@@ -1,7 +1,7 @@
 name: Jetson integration checks
 on:
   push:
-    branches: [carrot-wip, carrot-nav]
+    branches: [carrot-wip, carrot-nav, carrot-nav-blink]
     paths:
       - "openpilot/common/runtime_diagnostics.py"
       - "openpilot/common/tests/test_runtime_diagnostics.py"

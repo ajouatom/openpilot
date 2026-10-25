@@ -1,6 +1,17 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { mappingButtons, gestureToken, splitGesture, learnEvents, BUTTON_ACTIONS, REMOTE_ACTIONS } from "../src/features/tools/bluetooth_mapping.js";
+import { mappingButtons, gestureToken, splitGesture, learnEvents, BUTTON_ACTIONS, REMOTE_ACTIONS, gestureOptions } from "../src/features/tools/bluetooth_mapping.js";
+
+test("physical indicators and optional gestures preserve independent mappings", () => {
+  assert.ok(REMOTE_ACTIONS.includes("blinkerLeft"));
+  assert.ok(REMOTE_ACTIONS.includes("blinkerRight"));
+  assert.ok(REMOTE_ACTIONS.includes("laneLeft"));
+  const mapping = { left: "blinkerLeft", "left@long": "blinkerRight" };
+  assert.deepEqual(gestureOptions({ mapping }), { double: false, long: true });
+  assert.deepEqual(gestureOptions({ mapping, gestures: { double: false, long: false } }), { double: false, long: false });
+  assert.equal(mapping["left@long"], "blinkerRight");
+  assert.deepEqual(gestureOptions({ mapping: {} }), { double: false, long: false });
+});
 
 test("every native button has a separately selectable one-shot long action", () => {
   for (const button of BUTTON_ACTIONS) {

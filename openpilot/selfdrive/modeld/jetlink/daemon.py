@@ -232,17 +232,22 @@ class CarrotTransport(FfsTransport):
 
 
 def serve_local(listener, client, peer, wifi=None):
+  from blink_protocol import Sender as BlinkerSender
   publisher = display_publisher(client, peer, Publisher)
   phase = PhasePublisher()
+  blinker = None
   try:
-    _serve_local(listener, client, peer, publisher, phase, wifi)
+    blinker = BlinkerSender(client, peer)
+    _serve_local(listener, client, peer, publisher, phase, wifi, blinker if blinker.worker is not None else None)
   finally:
+    if blinker is not None:
+      blinker.close()
     phase.close()
     if publisher is not None:
       publisher.close()
 
 
-def _serve_local(listener, client, peer, publisher, phase, wifi=None):
+def _serve_local(listener, client, peer, publisher, phase, wifi=None, blinker=None):
   from openpilot.common.params import Params
   from openpilot.common.runtime_diagnostics import RuntimeDiagnostics
   from openpilot.common.swaglog import cloudlog
@@ -270,6 +275,8 @@ def _serve_local(listener, client, peer, publisher, phase, wifi=None):
     try:
       connection, _ = listener.accept()
     except TimeoutError:
+      if blinker is not None:
+        blinker.send(client)
       if wifi is not None:
         wifi.send(client)
       if usb_display:
@@ -320,6 +327,8 @@ def _serve_local(listener, client, peer, publisher, phase, wifi=None):
           try:
             request = reader.receive(connection)
           except TimeoutError:
+            if blinker is not None:
+              blinker.send(client)
             if wifi is not None:
               wifi.send(client)
             if usb_display:
@@ -398,6 +407,8 @@ def _serve_local(listener, client, peer, publisher, phase, wifi=None):
               log.warning('USB frame %d: send %.1f response %.1f IPC %.1f ms', frame,
                           (sent-started)*1000, (completed-sent)*1000, (time.monotonic()-completed)*1000)
           replied = time.monotonic()
+          if blinker is not None:
+            blinker.send(client)
           if usb_display and not peer.get(NAVI_CAPABILITY):
             display_metrics = publish_hud(client, publisher) or {}
           elif usb_display and not (peer.get('carrot_host') == 'jetson' and peer.get(PUMP_CAPABILITY) is True):

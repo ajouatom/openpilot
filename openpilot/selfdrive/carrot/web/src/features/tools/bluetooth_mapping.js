@@ -23,4 +23,9 @@ export function learnEvents(mapping, events) {
 }
 export const BUTTON_ACTIONS = ["accelCruise", "decelCruise", "gapAdjustCruise", "lfaButton", "cancel"];
 export const REMOTE_ACTIONS = ["none", ...BUTTON_ACTIONS, ...BUTTON_ACTIONS.map(button => `${button}Long`),
-  "laneLeft", "laneRight", "paddleDecel", "carrotCruise"];
+  "laneLeft", "laneRight", "blinkerLeft", "blinkerRight", "paddleDecel", "carrotCruise"];
+
+export function gestureOptions(device) {
+  return device.gestures || Object.fromEntries(["double", "long"].map(kind =>
+    [kind, Object.entries(device.mapping || {}).some(([key, action]) => key.endsWith(`@${kind}`) && action !== "none")]));
+}

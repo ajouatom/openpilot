@@ -10,6 +10,8 @@ sys.path[:0] = [str(ROOT), str(ROOT / 'third_party/jetlink')]
 
 
 def main():
+  from blink_driver import prepare_optional
+  prepare_optional()
   import numpy as np
   import server  # noqa: F401 -- verify the application entry point's imports
   # Importing hud alone misses the renderer imports inside main(). Exercise

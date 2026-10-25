@@ -1,4 +1,4 @@
-"""Pinned upstream server with an optional, read-only Carrot HUD extension."""
+"""Pinned upstream server with negotiated Carrot extensions; CAN output is opt-in."""
 import os
 import json
 from pathlib import Path
@@ -23,6 +23,7 @@ from hud_wifi import REQUEST as HUD_WIFI_REQUEST, RESPONSE as HUD_WIFI_RESPONSE,
 from host_reader import ReadAheadTransport
 from host_health import health_worker
 from host_lpm import SessionLease
+from blink_protocol import Host as BlinkerHost, CAPABILITY as BLINKER_CAPABILITY, BEGIN as BLINKER_BEGIN, ACK as BLINKER_ACK, DATA as BLINKER_DATA
 from wifi_protocol import CAPABILITY as WIFI_CAPABILITY, MESSAGE as WIFI_MESSAGE, receive as receive_wifi
 from jetlink import protocol as P
 from jetlink import request_chunks, deferred_map, packed_codec, output_projection
@@ -34,6 +35,7 @@ from jetlink.server import main as server
 class DisplayTelemetry:
   def __init__(self, original):
     self.original = original
+    self.blinker = None
     self.health = health_worker() if Path('/etc/nv_tegra_release').is_file() else None
 
   def read(self):
@@ -44,6 +46,7 @@ class DisplayTelemetry:
     except (OSError, ValueError, KeyError, TypeError):
       pass
     return {**self.original.read(), 'carrot_hud_connected': connected,
+            **({'carrot_blinker': self.blinker.telemetry()} if self.blinker is not None and self.blinker.worker is not None else {}),
             **({'carrot_health': self.health.read()} if self.health else {})}
 
 
@@ -72,6 +75,8 @@ class CarrotSession(Session):
     if sys.platform == 'linux':
       self.t = ReadAheadTransport(self.t)
     self.telemetry = DisplayTelemetry(self.telemetry)
+    self.blinker = BlinkerHost()
+    self.telemetry.blinker = self.blinker
     self.navi = HostForwarder() if sys.platform == 'linux' and self.usb_display else None
     self.hud_wifi = None
     self.power_lease = SessionLease(self.t.transport if isinstance(self.t, ReadAheadTransport) else self.t)
@@ -87,6 +92,8 @@ class CarrotSession(Session):
              PUMP_CAPABILITY: legacy_display, WIFI_CAPABILITY: host == 'jetson', 'carrot_host': host,
              HUD_WIFI_CAPABILITY: self.hud_wifi_supported,
              HUD_USB_CAPABILITY: host == 'jetson' and legacy_display}
+      if host == 'jetson' and self.blinker.supported():
+        obj[BLINKER_CAPABILITY] = True
       if self.deferred_negotiated:
         obj[deferred_map.CAPABILITY] = deferred_map.descriptor()
       if host == 'jetson':
@@ -99,6 +106,10 @@ class CarrotSession(Session):
     if getattr(self, 'power_lease', None) is not None:
       self.power_lease.touch()
     if msg.msg_type == P.Msg.HELLO_REQ:
+      if getattr(self, 'blinker', None) is not None:
+        self.blinker.close()
+        self.blinker = BlinkerHost()
+        self.telemetry.blinker = self.blinker
       self.request_chunks.clear()
       self.deferred_maps.clear()
       self.deferred_negotiated = False
@@ -133,6 +144,22 @@ class CarrotSession(Session):
       except ValueError as exc:
         self.deferred_maps.clear()
         raise LinkError(str(exc)) from exc
+      return
+    if msg.msg_type in (BLINKER_BEGIN, BLINKER_DATA):
+      if msg.seq <= self.last_seq:
+        return
+      self.last_seq = msg.seq
+      blinker = getattr(self, 'blinker', None)
+      if msg.msg_type == BLINKER_BEGIN:
+        result = {'ready': False}
+        try:
+          if blinker is not None and len(msg.payload) < 64 and json.loads(bytes(msg.payload)) == {'version': 1}:
+            result = blinker.begin()
+        except (OSError, ValueError, RuntimeError):
+          pass
+        self._send_json(BLINKER_ACK, msg.seq, result)
+      elif blinker is not None:
+        blinker.send(msg.payload)
       return
     if msg.msg_type == HUD_WIFI_REQUEST:
       if msg.seq <= self.last_seq:
@@ -210,6 +237,8 @@ class CarrotSession(Session):
 
   def close(self):
     try:
+      if getattr(self, 'blinker', None) is not None:
+        self.blinker.close()
       if self.hud_wifi is not None:
         self.hud_wifi.close()
         self.hud_wifi = None
@@ -225,6 +254,8 @@ class CarrotSession(Session):
 
 if __name__ == '__main__':
   if Path('/etc/nv_tegra_release').is_file():
+    from blink_driver import prepare_optional
+    prepare_optional()
     health_worker()
   server.Session = CarrotSession
   raise SystemExit(server.main())

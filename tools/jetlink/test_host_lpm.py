@@ -209,7 +209,7 @@ def test_session_leases_claimed_transport_before_read_ahead_wrapper(monkeypatch)
   class Reader:
     def __init__(self, transport): self.transport = transport
   def initialize(session, transport):
-    session.t, session.telemetry = transport, object()
+    session.t, session.telemetry = transport, SimpleNamespace()
   seen = []
   monkeypatch.setattr(server.Session, '__init__', initialize)
   monkeypatch.setattr(server, 'DisplayTelemetry', lambda original:original)
