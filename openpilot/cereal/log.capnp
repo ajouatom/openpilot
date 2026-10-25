@@ -825,6 +825,10 @@ struct SelfdriveState {
   personality @11 :LongitudinalPersonality;
   distanceTraveled @13 :Float32;
 
+  # Latched cue from the audioTurn event, not the priority-selected alert sound.
+  atcTurnStartMonoTime @14 :UInt64;
+  atcTurnDirection @15 :LaneChangeDirection;
+
   enum OpenpilotState @0xdbe58b96d2d1ac61 {
     disabled @0;
     preEnabled @1;

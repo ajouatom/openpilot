@@ -445,7 +445,7 @@ camera supplies 20fps. Reduced processing overhead does not establish sustained
 Controls physical lamps on supported Jetson USB-CAN/B1 vehicles. Operating the stock lever ends the owned request.
 
 - **0:** Disables automatic control; Bluetooth one-touch remains available.
-- **1:** Holds signals started by Bluetooth at or below 5 km/h until turn completion, and indicates during ATC turn desire.
+- **1:** Holds signals started by Bluetooth at or below 5 km/h until turn completion, and indicates from the ATC audioTurn cue until turn desire ends.
 - **2:** Also indicates from actual ATC lane-change start through completion. Waiting does not activate the lamps.
 
 ### Usage

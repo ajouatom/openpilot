@@ -222,3 +222,27 @@ Automatic-control mode stays 0. Physical Bluetooth hold/cancel, steering-based
 completion, ATC turns and actual lane-change indication therefore still need
 owner-observed acceptance; no successful physical hold or road claim is made.
 Raw CAN, device, timing and installation evidence stays private.
+
+
+## October 26 audioTurn timing correction
+
+The owner requests ATC turn indication at audioTurn, before turn desire if needed.
+SelfdriveD now records a monotonic timestamp and direction in additive
+SelfdriveState fields at the exact existing audioTurn event. The event conditions
+and audible-alert priority are unchanged; a higher-priority sound does not lose
+the cue. Persisting the timestamp avoids losing a one-cycle event at the 20 Hz
+indicator source. No onroadEvents polling or stale alert replay is used.
+
+The comma source consumes each fresh cue once, maintains the request while
+waiting for turn desire, then releases at the end of the matching turn desire.
+Navigation cancellation before entry, opposite turn desire, stale inputs,
+disengagement, manual cancellation and existing hold expiry release it. Startup,
+reconnect and setting changes do not join old cues. Actual lane-change origin and
+mode 2 admission remain unchanged. The common low-speed Bluetooth behavior stays.
+
+Desktop checks: 83 focused protocol/CAN/policy/source tests pass, including actual
+SelfdriveD event-method execution, actual source-loop injection, Capnp roundtrip,
+pre-turn hold, turn completion, stale/replay suppression and mode-2 regression.
+Python lint passes. KO/EN guides, catalog and staged Wiki patch explain the timing.
+The installed host605e7e2d7c protocol is unchanged; this correction runs on comma
+and does not need a new Jetson runtime or model. Physical acceptance remains pending.

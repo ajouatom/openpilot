@@ -8,7 +8,7 @@ import time
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from blink_protocol import PACKAGE_CONFIG, LIMIT, encode, finite, fresh
-from blink_policy import Policy
+from blink_policy import Policy, AutomaticSignals
 
 
 def vehicle_ready(sm, now, fingerprint):
@@ -54,9 +54,10 @@ def main(fd):
     return
   sock = socket.socket(fileno=fd)
   sock.setblocking(False)
-  sm = messaging.SubMaster(['carState', 'carControl', 'selfdriveState', 'pandaStates', 'modelV2'])
+  sm = messaging.SubMaster(['carState', 'carControl', 'selfdriveState', 'pandaStates', 'modelV2', 'carrotMan'])
   events = Events(time.monotonic())
   policy, params = Policy(), Params()
+  automatic = AutomaticSignals()
   feedback, activated_id = {}, None
   release_until = 0.
   while True:
@@ -88,17 +89,21 @@ def main(fd):
                 action in device.get('mapping', {}).values() and policy.hold['time'] > cancelled.get(mac, 0) and
                 not (learning.get('address') == mac and learning.get('until', 0) > now))
     cs = sm['carState']
-    auto = None
-    model_fresh = ('modelV2' in sm.services and sm.valid['modelV2'] and sm.alive['modelV2'] and fresh(sm.recv_time['modelV2'], now, .35))
-    if model_fresh and sm['carControl'].latActive and str(cs.gearShifter) == 'drive':
-      meta = sm['modelV2'].meta
-      direction = str(meta.autoTurnSignal)
-      if direction in ('left', 'right'):
-        auto = ('lane' if meta.autoTurnSignalLaneChange else 'turn', direction)
     mode = params.get_int('AutoBlinkerControl')
     mode = mode if mode in (0, 1, 2) else 0
+    auto_fresh = all(k in sm.services and sm.valid[k] and sm.alive[k] and fresh(sm.recv_time[k], now, .35)
+                     for k in ('modelV2', 'carrotMan'))
+    auto_valid = auto_fresh and ok and sm['carControl'].latActive and str(cs.gearShifter) == 'drive'
+    auto = None
+    if auto_fresh:
+      meta, ss = sm['modelV2'].meta, sm['selfdriveState']
+      auto = automatic.update(now, mode, auto_valid,
+                              ss.atcTurnStartMonoTime / 1e9, str(ss.atcTurnDirection), sm['carrotMan'].atcType,
+                              str(meta.desire), str(meta.autoTurnSignal) if meta.autoTurnSignalLaneChange else None)
+    else:
+      automatic.update(now, mode, False, 0., 'none', '', 'none')
     commands, hold = policy.update(now, mode, ok, commands, cs.vEgo, cs.steeringAngleDeg,
-                                  str(cs.gearShifter), remote, auto, model_fresh)
+                                  str(cs.gearShifter), remote, auto, auto_valid)
     hold = policy.acknowledged(now, activated_id, fresh(feedback.get('stamp'), now, .35) and feedback.get('state') == 'driver_override')
     acknowledged = (hold and fresh(feedback.get('stamp'), now, .35) and feedback.get('accepted_id') == hold['id'] and
                     feedback.get('state') in ('ready', 'waiting', 'waiting_previous_signal'))

@@ -16,10 +16,10 @@
 +
 +`AutoBlinkerControl`
 +
-+0: 끄기(블루투스 원터치 유지). 1: 5km/h 이하 블루투스 입력을 회전 완료까지 유지하고 ATC 턴 desire 동안 자동 점멸. 2: 1번 + ATC 차선변경이 실제 시작될 때부터 완료까지 점멸(대기 중 제외). 같은 방향 버튼으로 유지 취소, 반대 버튼으로 전환. 순정 레버 우선. 지원하는 젯슨 USB-CAN/B1 차량 전용.
++0: 끄기(블루투스 원터치 유지). 1: 5km/h 이하 블루투스 입력을 회전 완료까지 유지하고 ATC audioTurn 알림 시점부터 턴 desire가 끝날 때까지 자동 점멸. 2: 1번 + ATC 차선변경이 실제 시작될 때부터 완료까지 점멸(대기 중 제외). 같은 방향 버튼으로 유지 취소, 반대 버튼으로 전환. 순정 레버 우선. 지원하는 젯슨 USB-CAN/B1 차량 전용.
 +
 +<!-- CARROT:AUTO:BEGIN AutoBlinkerControl -->
-+<!-- CARROT:AUTO:SOURCE facts="f2f89c61ae35d8a3ea72dcab1ebe90d23129cf3ce6bbab88f34abba7ee60c9e9" semantic="7cb085315fd409202b8c9475aa542ddb7224b172be0a13ec155cc02988c13491" review="needs_review" -->
++<!-- CARROT:AUTO:SOURCE facts="1af6c7b32512657fd09784a5588a6d1c489318d624b0633516d7ea23e4b14488" semantic="77adaaf68f20d161145a88a9210dfc2c04aa66e0724cebb3a54bac23063fcbd4" review="needs_review" -->
 +<!-- CARROT:SECTION:BEGIN OVERVIEW -->
 +- **종류:** 구간 선택
 +- **기본값:** `0`
@@ -30,14 +30,14 @@
 +<!-- CARROT:AUTO:END AutoBlinkerControl -->
 +
 +<!-- CARROT:MANUAL:BEGIN AutoBlinkerControl -->
-+<!-- CARROT:REVIEW reviewed-for="7cb085315fd409202b8c9475aa542ddb7224b172be0a13ec155cc02988c13491" reviewed-at="2026-10-25T00:00:00Z" -->
++<!-- CARROT:REVIEW reviewed-for="77adaaf68f20d161145a88a9210dfc2c04aa66e0724cebb3a54bac23063fcbd4" reviewed-at="2026-10-26T00:00:00Z" -->
 +<!-- CARROT:SECTION:BEGIN BEHAVIOR -->
 +### 동작
 +
 +지원하는 젯슨 USB-CAN/B1 차량에서 실제 램프를 제어합니다. 순정 레버를 조작하면 해당 요청을 중단합니다.
 +
 +- **0:** 자동제어를 끄고 블루투스 원터치는 유지합니다.
-+- **1:** 5km/h 이하에서 블루투스로 켠 신호를 회전 완료까지 유지하고, ATC 턴 desire 동안 자동 점멸합니다.
++- **1:** 5km/h 이하에서 블루투스로 켠 신호를 회전 완료까지 유지하고, ATC audioTurn 알림 시점부터 턴 desire가 끝날 때까지 자동 점멸합니다.
 +- **2:** 1번에 더해 ATC 차선변경이 실제 시작된 뒤 완료될 때까지 점멸합니다. 대기 중에는 켜지 않습니다.
 +<!-- CARROT:SECTION:END BEHAVIOR -->
 +
@@ -78,10 +78,10 @@
 +
 +`AutoBlinkerControl`
 +
-+0: Off (Bluetooth one-touch remains). 1: Hold Bluetooth signals started at or below 5 km/h until the turn completes; indicate during ATC turn desire. 2: Also indicate during actual ATC lane changes, excluding waiting. Same direction cancels a hold; opposite direction switches. Stock lever has priority. Requires a supported Jetson USB-CAN/B1 vehicle.
++0: Off (Bluetooth one-touch remains). 1: Hold Bluetooth signals started at or below 5 km/h until the turn completes; indicate from the ATC audioTurn cue until turn desire ends. 2: Also indicate during actual ATC lane changes, excluding waiting. Same direction cancels a hold; opposite direction switches. Stock lever has priority. Requires a supported Jetson USB-CAN/B1 vehicle.
 +
 +<!-- CARROT:AUTO:BEGIN AutoBlinkerControl -->
-+<!-- CARROT:AUTO:SOURCE facts="8e99892bde249cf8e21f666650a7d868b3e69b782eb04a185a85a06bdffecad8" semantic="7cb085315fd409202b8c9475aa542ddb7224b172be0a13ec155cc02988c13491" review="needs_review" -->
++<!-- CARROT:AUTO:SOURCE facts="73eacbd6d52283f0bc1e927a02aafdd8f675417912f83189f06043a23b892684" semantic="77adaaf68f20d161145a88a9210dfc2c04aa66e0724cebb3a54bac23063fcbd4" review="needs_review" -->
 +<!-- CARROT:SECTION:BEGIN OVERVIEW -->
 +- **Type:** Segmented choice
 +- **Default:** `0`
@@ -92,14 +92,14 @@
 +<!-- CARROT:AUTO:END AutoBlinkerControl -->
 +
 +<!-- CARROT:MANUAL:BEGIN AutoBlinkerControl -->
-+<!-- CARROT:REVIEW reviewed-for="7cb085315fd409202b8c9475aa542ddb7224b172be0a13ec155cc02988c13491" reviewed-at="2026-10-25T00:00:00Z" -->
++<!-- CARROT:REVIEW reviewed-for="77adaaf68f20d161145a88a9210dfc2c04aa66e0724cebb3a54bac23063fcbd4" reviewed-at="2026-10-26T00:00:00Z" -->
 +<!-- CARROT:SECTION:BEGIN BEHAVIOR -->
 +### Behavior
 +
 +Controls physical lamps on supported Jetson USB-CAN/B1 vehicles. Operating the stock lever ends the owned request.
 +
 +- **0:** Disables automatic control; Bluetooth one-touch remains available.
-+- **1:** Holds signals started by Bluetooth at or below 5 km/h until turn completion, and indicates during ATC turn desire.
++- **1:** Holds signals started by Bluetooth at or below 5 km/h until turn completion, and indicates from the ATC audioTurn cue until turn desire ends.
 +- **2:** Also indicates from actual ATC lane-change start through completion. Waiting does not activate the lamps.
 +<!-- CARROT:SECTION:END BEHAVIOR -->
 +
