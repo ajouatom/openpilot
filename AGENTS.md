@@ -1,5 +1,22 @@
 # Repository memory
 
+- On 2026-10-26, owner requests physical turn indication at audioTurn rather
+  than waiting for turn desire. SelfdriveD latches exact existing event timestamp/
+  direction in additive SelfdriveState fields; sound priorities/conditions stay.
+  Comma source starts once from fresh cue, holds before turn desire, releases at
+  matching desire end; stale/manual/navigation cancel and no-replay gates remain.
+  Mode2 actual lane-change timing and Bluetooth behavior unchanged. 83 focused
+  checks incl actual event method/source loop and Capnp,25 Wiki pass. Linux
+  CI40239177298 broad1551/56skip plus62/94/119/11/11 and Windows pass.
+  Only carrot-nav-blink published; normal vehicle Git Pull/restart ab4fc46f2a,
+  ordinary native build and manager startup complete. Fresh offroad/panda
+  ignition/control flags false before/after; no snapshot hold or CAN injection.
+  Web timing text and schema verified; owner's mode2 preserved. Host605e7e2d7c
+  and N16 unchanged, no Jetson update/reboot. Real ATC lamp acceptance pending;
+  no onroad/model-health claim. KO/EN guides and trial Wiki patch synchronized.
+  Details: docs/jetson_bluetooth_blinker_20261025.md; raw evidence private.
+
+
 - On 2026-10-25, owner extends trial indicators: AutoBlinkerControl0 default,
   1 low-speed Bluetooth hold/same-button cancel/turn completion plus ATC turns;
   2 adds actual ATC lane-change start/finish, excluding waiting. Explicit Ioniq5PE

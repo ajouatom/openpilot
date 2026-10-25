@@ -246,3 +246,21 @@ pre-turn hold, turn completion, stale/replay suppression and mode-2 regression.
 Python lint passes. KO/EN guides, catalog and staged Wiki patch explain the timing.
 The installed host605e7e2d7c protocol is unchanged; this correction runs on comma
 and does not need a new Jetson runtime or model. Physical acceptance remains pending.
+
+
+CI40239177298 passes Linux integration (1,551 passed/56 skipped broad coverage,
+plus 62 codec, 94 updater, 119 navigation, 11 storage and 11 NAT) and Windows
+installer checks. The two staged Wiki pages and 25 Wiki tests pass; the user-docs
+validator passes with the explicit unchanged-driver-monitoring exception.
+Counts overlap the focused tests.
+
+Normal Git Pull installed ab4fc46f2a on the existing carrot-nav-blink vehicle.
+Fresh panda samples confirmed ignitionLine/ignitionCan/controlsAllowed all false,
+IsOffroad true and IsOnroad false before pull/restart and after completion. Normal
+restart retained the boot account/environment and RT limits. The ordinary native
+build completed and manager, UI, panda and Carrot services started. Actual web API
+shows the new audioTurn description, and both additive cue schema fields exist.
+The owner's current mode 2 was preserved; the agent did not change settings.
+IsTakingSnapshot remains absent/false, with no temporary hold used. Jetson pin and
+model are unchanged; no Jetson reboot, CAN injection, onroad transition or live
+turn was performed. The next real ATC turn still needs lamp acceptance.
