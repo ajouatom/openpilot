@@ -271,3 +271,33 @@ def test_bundled_driver_sources_match_pinned_manifest():
   for name, entry in manifest.items():
     assert hashlib.sha256((source/name).read_bytes()).hexdigest() == entry['sha256']
     assert entry['url'].startswith('https://raw.githubusercontent.com/gregkh/linux/v5.15.148/')
+
+
+def test_source_uses_time_after_receiving_vehicle_messages(monkeypatch):
+  import blink_source as source
+  import types
+  from contextlib import nullcontext
+  from openpilot.selfdrive.carrot.bluetooth import model
+  clock, sent = [10.], []
+  sm = Vehicle()
+  def update(_):
+    clock[0] += .001
+    sm.recv_time = dict.fromkeys(sm.services, clock[0])
+  sm.update = update
+  fake_params = types.ModuleType('openpilot.common.params')
+  fake_params.Params = lambda: SimpleNamespace(get=lambda _:b'car-params')
+  fake_cereal = types.ModuleType('openpilot.cereal')
+  fake_cereal.messaging = SimpleNamespace(SubMaster=lambda _:sm)
+  fake_cereal.car = SimpleNamespace(CarParams=SimpleNamespace(from_bytes=lambda _:nullcontext(SimpleNamespace(carFingerprint='HYUNDAI_IONIQ_5_PE'))))
+  monkeypatch.setitem(sys.modules, 'openpilot.common.params', fake_params)
+  monkeypatch.setitem(sys.modules, 'openpilot.cereal', fake_cereal)
+  sock = SimpleNamespace(setblocking=lambda _:None, recv=lambda _:b'', send=lambda raw:sent.append(json.loads(raw)))
+  monkeypatch.setattr(source.socket, 'socket', lambda **kw:sock)
+  monkeypatch.setattr(source.select, 'select', lambda *a:([sock] if sent else [],[],[]))
+  monkeypatch.setattr(source.time, 'monotonic', lambda:clock[0])
+  monkeypatch.setattr(source.time, 'sleep', lambda _:None)
+  monkeypatch.setattr(model, 'read_json', lambda *a:{})
+  monkeypatch.setattr(model, 'config', dict)
+  source.main(0)
+  assert len(sent) == 1 and sent[0]['ok'] is True
+  assert sent[0]['stamp'] == clock[0]

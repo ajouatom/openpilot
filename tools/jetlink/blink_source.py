@@ -59,6 +59,7 @@ def main(fd):
     if select.select([sock], [], [], 0)[0] and not sock.recv(1):
       return
     sm.update(0)
+    now = time.monotonic()  # SubMaster assigns receive timestamps during update.
     ok = vehicle_ready(sm, now, fingerprint)
     commands = events.read(read_json(RUNTIME/'blinker.json', {}), config(), read_json(RUNTIME/'status.json', {}),
                            read_json(RUNTIME/'learn.json', {}), read_json(RUNTIME/'cancelled.json', {}), now)

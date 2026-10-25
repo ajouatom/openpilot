@@ -107,3 +107,12 @@ rejection of stale/future/invalid CAN, unknown gear, nonfinite speed, missing pa
 state and other fingerprints. The packaged upstream driver source hashes match.
 The first end-to-end remote-to-lamp acceptance remains a stationary test; enabling
 moving operation does not establish measured road safety or successful road use.
+
+
+The first live installation exposed a source-loop timestamp-ordering defect:
+`SubMaster.update()` stamps newly received messages after the pre-update clock,
+so the future-time guard rejected them. Sample the clock again after reception;
+retain the future/expiry checks. The regression exercises the actual source loop.
+An isolated native source then accepts 40/41 actual vehicle samples (initial
+subscription sample is not ready), with no CAN path attached. This correction
+runs on comma only; the signed Jetson receiver and N16 pin remain unchanged.
