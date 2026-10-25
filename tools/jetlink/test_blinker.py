@@ -56,11 +56,11 @@ def test_bounded_transaction_no_repeat_and_counter_persistence(tmp_path, directi
   assert len(bus.sent) == count and bus.modes == [True, False]
   assert all(crc(b[1:]) == b[0] for b in bus.sent)
   assert json.loads(c.state_path.read_text())['counter'] == 5
-  c.accept(packet(ident='busy', now=clock[0]))
+  c.accept(command)
   assert c.pending is None
-  clock[0] += 6
-  c.accept(packet(ident='busy', now=clock[0]))
-  assert c.pending is None  # No delayed replay of a dropped busy request.
+  c.accept(packet('right', ident='next', now=clock[0]))
+  c.tick()
+  assert c.pending is not None  # No five-second cooldown after idle feedback.
 
 
 def test_recorded_vectors_and_counter_wrap_preserve_unrelated_bytes():
@@ -111,8 +111,8 @@ def test_mid_transaction_failure_stops_without_catching_up(tmp_path, failure):
     bus.latest[0x3C1] = (11.0, bytes(8))
   if failure == 'late':
     clock[0] += 0.12
-  with pytest.raises(ValueError):
-    c.tick()
+  c.tick()
+  assert c.pending is None and c.status['accepted_id'] is None
   assert len(bus.sent) == 1
 
 
@@ -160,7 +160,7 @@ def test_sender_uses_separate_bounded_message_and_expires_clock_anchor(monkeypat
   clock, sent = [1.], []
   monkeypatch.setattr(protocol.time, 'monotonic', lambda: clock[0])
   value = {'stamp':1., 'ok':True, 'events':[{'id':'one','time':.95,'direction':'left'}]}
-  monkeypatch.setattr(protocol, 'Process', lambda *a: SimpleNamespace(latest=lambda:value, close=lambda:None))
+  monkeypatch.setattr(protocol, 'Process', lambda *a: SimpleNamespace(latest=lambda:value, close=lambda:None, send=lambda _:True))
   client = SimpleNamespace(last_state={}, _next_seq=lambda:1,
                            _expect=lambda *a:SimpleNamespace(payload=protocol.encode({'ready':True,'token':'t','clock':100.})),
                            t=SimpleNamespace(send_json=lambda *a:None, send=lambda *a:sent.append(a)))
@@ -209,7 +209,7 @@ def test_real_bus_setup_requires_one_shot_readback_before_opening_socket(monkeyp
 
 class Vehicle(dict):
   def __init__(self, gear='drive', speed=25., engaged=True):
-    super().__init__(carState=SimpleNamespace(gearShifter=gear, vEgo=speed, canValid=True),
+    super().__init__(carState=SimpleNamespace(gearShifter=gear, vEgo=speed, canValid=True, steeringAngleDeg=0., leftBlinker=False, rightBlinker=False),
                      carControl=SimpleNamespace(enabled=engaged, latActive=engaged, longActive=engaged),
                      selfdriveState=SimpleNamespace(enabled=engaged, active=engaged),
                      pandaStates=[SimpleNamespace(controlsAllowed=engaged)])
@@ -285,7 +285,7 @@ def test_source_uses_time_after_receiving_vehicle_messages(monkeypatch):
     sm.recv_time = dict.fromkeys(sm.services, clock[0])
   sm.update = update
   fake_params = types.ModuleType('openpilot.common.params')
-  fake_params.Params = lambda: SimpleNamespace(get=lambda _:b'car-params')
+  fake_params.Params = lambda: SimpleNamespace(get=lambda _:b'car-params', get_int=lambda _:0)
   fake_cereal = types.ModuleType('openpilot.cereal')
   fake_cereal.messaging = SimpleNamespace(SubMaster=lambda _:sm)
   fake_cereal.car = SimpleNamespace(CarParams=SimpleNamespace(from_bytes=lambda _:nullcontext(SimpleNamespace(carFingerprint='HYUNDAI_IONIQ_5_PE'))))

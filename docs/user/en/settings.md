@@ -435,3 +435,27 @@ This is display/logging only, with no braking, stop or departure command.
 The new Params key requires the normal build after updating. The current road
 camera supplies 20fps. Reduced processing overhead does not establish sustained
 20Hz detection; this change does not promise 20Hz or 50Hz detection.
+
+## Automatic turn signals (experimental branch)
+
+`AutoBlinkerControl` — Settings > Driving > Steering > Lane Change (Auto Turn). Default: 0. Currently limited to the Ioniq 5 PE, Jetson and PEAK USB-CAN/B1 profile on carrot-nav-blink.
+
+### Behavior
+
+Controls physical lamps on supported Jetson USB-CAN/B1 vehicles. Operating the stock lever ends the owned request.
+
+- **0:** Disables automatic control; Bluetooth one-touch remains available.
+- **1:** Holds signals started by Bluetooth at or below 5 km/h until turn completion, and indicates during ATC turn desire.
+- **2:** Also indicates from actual ATC lane-change start through completion. Waiting does not activate the lamps.
+
+### Usage
+
+Map remote buttons to Turn on left/right indicator. During a hold, the same button cancels and the opposite button switches direction.
+
+Check illumination and cancellation while parked first. Basic one-touch remains available while driving; this setting does not change steering or lane-change admission.
+
+### Reference
+
+Bluetooth turn completion requires steering at least 30 degrees toward the selected turn, then returning within 10 degrees for 0.4 seconds while moving. Departure alone does not cancel; the maximum hold is five minutes.
+
+USB-CAN requests the initial blink; the existing vehicle indicator-hold function maintains it. Input, vehicle-state or communication loss expires the hold request. A rapid opposite input waits for the current OEM sequence to end, keeping only the latest request for at most 3.2 seconds. Cancelling a hold may still allow the remaining OEM flashes to finish. Existing lane-change settings may react to the actual lamp input.

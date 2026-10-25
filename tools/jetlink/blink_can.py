@@ -163,10 +163,15 @@ class Controller:
     from collections import deque
     self.bus, self.token, self.state_path, self.clock = bus, token, state_path, clock
     self.seen = deque(maxlen=256)
-    self.pending = None
+    self.pending = self.queued = self.owned = None
     self.guard_deadline = self.ready_after = 0.
     self.started = clock()
-    self.status = {'ready': False, 'state': 'waiting', 'sent': 0}
+    self.status = {'ready': False, 'state': 'waiting', 'sent': 0, 'accepted_id':None}
+
+  def unchanged(self, now):
+    current = self.bus.latest.get(0x3c1)
+    return (self.owned is not None and now < self.owned['until'] and current is not None and
+            0 <= now-current[0] < .4 and current[1] == self.owned['original'])
 
   def accept(self, value):
     now = self.clock()
@@ -174,61 +179,94 @@ class Controller:
       return
     deadline = value.get('guard_deadline')
     self.guard_deadline = deadline if value.get('ok') is True and finite(deadline) and 0 < deadline-now <= .35 else 0.
-    for event in value.get('events', [])[:4]:
+    connected = value.get('devices', [])
+    if self.queued and self.queued.get('device') and self.queued['device'] not in connected:
+      self.queued = None
+    hold = value.get('hold')
+    if self.queued and self.queued.get('hold') and (not isinstance(hold, dict) or hold.get('id') != self.queued['id']):
+      self.queued = None
+    events = list(value.get('events', [])[:4])
+    if isinstance(hold, dict):
+      events.append({**hold, 'hold':True})
+    for event in events:
       if not isinstance(event, dict) or not isinstance(event.get('id'), str) or event['id'] in self.seen:
         continue
-      self.seen.append(event['id'])  # Busy/disallowed commands are consumed, never queued.
+      self.seen.append(event['id'])
       expires = event.get('deadline')
-      if (self.pending or now < self.ready_after or now-self.started < .6 or self.guard_deadline <= now or
-          not finite(expires) or not 0 < expires-now <= .4 or event.get('direction') not in TIMINGS):
+      if (now-self.started < .6 or self.guard_deadline <= now or not finite(expires) or
+          not 0 < expires-now <= .4 or event.get('direction') not in TIMINGS):
         continue
-      original = self.bus.neutral(now)
-      if original is None:
-        continue
-      counter = original[1] >> 4
-      try:
-        saved = json.loads(self.state_path.read_text())
-        if saved.get('neutral') == original.hex():
-          counter = saved['counter']
-      except (OSError, ValueError, KeyError):
-        pass
-      schedule = frames(original, event['direction'], counter)
-      # Reserve the counter before any write, including interrupted transactions.
-      temporary = self.state_path.with_suffix('.tmp')
-      temporary.write_text(json.dumps({'neutral':original.hex(), 'counter':schedule[-1][1][1] >> 4}))
-      os.replace(temporary, self.state_path)
-      self.bus.mode(True)
-      start = self.clock()
-      if start >= min(expires, self.guard_deadline):
-        self.bus.mode(False)
-        continue
-      self.pending = {'schedule':schedule, 'original':original, 'start':start, 'index':0, 'direction':event['direction']}
-      self.status.update(state='sending', direction=event['direction'])
+      if self.pending or self.unchanged(now):
+        # Keep only the newest fresh intention while our previous one-touch ends.
+        # Driver input, disconnect or stale vehicle state revokes this local wait.
+        self.queued = {**event, 'until':now+3.2}
+        self.status['state'] = 'waiting_previous_signal'
+      elif self.bus.neutral(now) is not None:
+        self.begin(event, now)
+
+  def begin(self, event, now):
+    original = self.bus.neutral(now)
+    if original is None:
+      return
+    counter = original[1] >> 4
+    try:
+      saved = json.loads(self.state_path.read_text())
+      if saved.get('neutral') == original.hex():
+        counter = saved['counter']
+    except (OSError, ValueError, KeyError):
+      pass
+    schedule = frames(original, event['direction'], counter)
+    temporary = self.state_path.with_suffix('.tmp')
+    temporary.write_text(json.dumps({'neutral':original.hex(), 'counter':schedule[-1][1][1] >> 4}))
+    os.replace(temporary, self.state_path)
+    self.bus.mode(True)
+    start = self.clock()
+    if start >= min(event.get('until',event['deadline']), self.guard_deadline):
+      self.bus.mode(False)
+      return
+    self.pending = {'schedule':schedule, 'original':original, 'start':start, 'index':0,
+                    'direction':event['direction'], 'id':event['id']}
+    self.owned = {'original':original, 'until':start+300}
+    self.status.update(state='sending', direction=event['direction'], accepted_id=None)
+
+  def abort(self, reason):
+    if self.pending:
+      self.bus.mode(False)
+    self.pending = self.queued = self.owned = None
+    self.status.update(state=reason, ready=False, accepted_id=None)
 
   def tick(self):
     now = self.clock()
+    if now >= self.guard_deadline:
+      self.abort('guard_expired')
+      return
+    if self.owned and not self.unchanged(now):
+      self.abort('driver_override')
+      return
     p = self.pending
     if p is not None:
-      if now >= self.guard_deadline:
-        raise ValueError('vehicle/input guard expired during transmission')
-      original = self.bus.latest.get(0x3c1)
-      if original is None or now-original[0] >= .4 or original[1] not in (p['original'], p['schedule'][0][1], p['schedule'][-1][1]):
-        raise ValueError('driver lever/light state changed')
       offset, data = p['schedule'][p['index']]
       if now >= p['start']+offset:
         if now-(p['start']+offset) >= .05:
-          raise ValueError('late CAN schedule; no backlog replay')
+          self.abort('late_request')
+          return
         self.bus.send(data)
         self.status['sent'] += 1
         p['index'] += 1
         if p['index'] == len(p['schedule']):
           self.pending = None
-          self.ready_after = now+5
           self.bus.mode(False)
-          self.status['state'] = 'cooldown'
-    self.status['ready'] = self.pending is None and now >= self.ready_after and now < self.guard_deadline and self.bus.neutral(now) is not None
+          self.status.update(state='waiting', accepted_id=p['id'])
+    if self.queued and (now >= self.queued['until'] or not self.unchanged(now)):
+      self.queued = None
+    if self.pending is None and self.queued and self.bus.neutral(now) is not None:
+      event, self.queued = self.queued, None
+      self.begin(event, now)
+    self.status['ready'] = self.pending is None and self.bus.neutral(now) is not None
     if self.status['ready']:
       self.status['state'] = 'ready'
+    elif self.queued:
+      self.status['state'] = 'waiting_previous_signal'
 
 
 def main(fd, token):

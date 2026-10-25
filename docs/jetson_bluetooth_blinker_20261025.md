@@ -160,3 +160,21 @@ shows no HID capture/event and zero physical CAN TX packets. Thus there is no
 unseen successful trial to infer. PEAK RX continues, TX/RX errors are zero; 51 RX
 drops remain unchanged between the two final observations. No physical failure
 or success is attributed without an actual connected-remote request.
+
+## Automatic-control extension
+
+The owner reports rapid left/right requests sometimes failing. The original code imposed a five-second cooldown and an all-lamps-off gate, and permanently stopped the worker on an OEM lever/light change. Live telemetry also reported `driver lever/light state changed`.
+
+A parked, continuously guarded 45-frame prototype showed why simply removing the cooldown was insufficient: a right request 0.8 seconds after left did not produce a right lamp transition. Repeated full-lever frames also left residual blinking after cancellation. That implementation was discarded, including its independent neutral-transmission watchdog. A later queued-reversal trial stopped on a stale remote guard before any CAN write. These are failed/partial experiments, not acceptance results.
+
+The final host sends only the previously tested one-touch sequences. A fresh input while its own signal is active replaces the pending intention, waits for actual neutral lamp feedback, and expires after at most 3.2 seconds. The driver's OEM neutral fingerprint, source session, vehicle freshness, device connection and hold cancellation revoke the pending intention. There is no five-second cooldown. Driver changes cancel only the request and return the worker to passive reception.
+
+`AutoBlinkerControl` defaults to 0. Mode 1 adds Bluetooth hold initiated at <=5 km/h and ATC turn-desire indication. Mode 2 also follows ATC laneChangeStarting/Finishing, excluding preLaneChange. DesireHelper publishes maneuver origin without changing admission. The source does not join an episode already active at startup or after stale state/setting changes. Bluetooth completion uses selected-direction steering >=30 degrees, then <=10 degrees for 0.4 seconds while moving >=1 km/h; departure alone does not cancel. Maximum hold: 300 seconds.
+
+USB-CAN starts the signal once. Only a matching host transmission acknowledgement plus observed lamp activation enables the 350 ms local hold lease. `controlsd` forwards this lease in the indicator-only HUD field; the existing Hyundai `ADRV_0x1EA` LEFT_BLINK_HOLD/RIGHT_BLINK_HOLD path supplies maintenance. The isolated native CAN-packer comparison verifies only these fields and their checksum differ. Legacy holds remain outside an owned lease. Same-button cancellation, opposite input, driver override and stale/disabled input release ownership; OEM residual flashes can remain. No repeated B1 held-lever transmission is used.
+
+The source/reader are limited to the explicit Ioniq5PE profile. Capability v2 prevents old hosts accepting the new workflow. Delivery remains the experimental branch, signed host bundle, normal Git Pull and both device restarts; N16 and maintained branches remain unchanged.
+
+Korean/English guides and localized help are updated. Generated setting explanations are staged in `tools/docs/wiki_settings/patches/auto-blinker-control-trial.patch`; public Wiki generation is owned by carrot-wip, which lacks this trial-only setting, so its catalog is not replaced.
+
+Validation before publication: 119 indicator/daemon desktop tests (including 66 indicator tests), 28 exact-source DesireHelper checks on native comma, and 8 native Hyundai hold/packet checks. Native checks use isolated modules, mocked Params and no physical CAN sends. Normal installation, native hold acceptance and queued-reversal acceptance are recorded separately below when completed. No road behavior claim.

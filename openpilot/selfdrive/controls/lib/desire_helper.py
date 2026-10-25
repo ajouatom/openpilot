@@ -65,6 +65,8 @@ class DesireHelper:
     self.lever_wait = LeverRequestWait()
     self.lever_forced_turn = LeverForcedTurn()
     self.crossing = LaneCrossing()
+    self.auto_turn_signal = LaneChangeDirection.none
+    self.auto_turn_signal_lane_change = False
     self.blinker_hold_direction = LaneChangeDirection.none  # modelV2.meta.laneChangeBlinkerHold
     self.lever_turn = False  # modelV2.meta.leverTurn: the turn desire comes from a latched lever
 
@@ -576,4 +578,18 @@ class DesireHelper:
       elif self.desire in (log.Desire.keepLeft, log.Desire.keepRight):
         self.desire = log.Desire.none
 
+    # Origin is latched before injected lamps can look like driver input.
+    # preLaneChange is deliberately excluded: indicate only actual lane changes.
+    turning = self.desire in (log.Desire.turnLeft, log.Desire.turnRight)
+    changing = self.lane_change_state in (LaneChangeState.laneChangeStarting, LaneChangeState.laneChangeFinishing)
+    continuing = changing if self.auto_turn_signal_lane_change else turning
+    if not continuing or self.lane_change_direction != self.auto_turn_signal:
+      self.auto_turn_signal = LaneChangeDirection.none
+    if self.auto_turn_signal == LaneChangeDirection.none and atc_enabled and not driver_enabled and self.atc_active == 1:
+      if turning and self.atc_type in ("turn left", "turn right"):
+        self.auto_turn_signal = self.lane_change_direction
+        self.auto_turn_signal_lane_change = False
+      elif self.lane_change_state == LaneChangeState.laneChangeStarting and atc_lane_change_only:
+        self.auto_turn_signal = self.lane_change_direction
+        self.auto_turn_signal_lane_change = True
     return self.desire

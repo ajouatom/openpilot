@@ -153,7 +153,7 @@ class CarrotSession(Session):
       if msg.msg_type == BLINKER_BEGIN:
         result = {'ready': False}
         try:
-          if blinker is not None and len(msg.payload) < 64 and json.loads(bytes(msg.payload)) == {'version': 1}:
+          if blinker is not None and len(msg.payload) < 64 and json.loads(bytes(msg.payload)) == {'version': 2}:
             result = blinker.begin()
         except (OSError, ValueError, RuntimeError):
           pass

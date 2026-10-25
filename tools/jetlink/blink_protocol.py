@@ -8,7 +8,7 @@ import subprocess
 import sys
 import time
 
-CAPABILITY = 'carrot_blinker_manual_v1'
+CAPABILITY = 'carrot_blinker_control_v2'
 BEGIN, ACK, DATA = 0x4030, 0x4031, 0x4032
 LIMIT = 2048
 CONFIG = Path.home() / '.config/carrot-jetlink/blinker.json'
@@ -153,9 +153,20 @@ def wire_record(value, token, offset, now):
   for event in value.get('events', [])[:4]:
     if (isinstance(event, dict) and isinstance(event.get('id'), str) and len(event['id']) <= 100 and
         event.get('direction') in ('left', 'right') and fresh(event.get('time'), now)):
-      events.append({'id': event['id'], 'direction': event['direction'], 'deadline': event['time']+offset+.4})
+      events.append({'id': event['id'], 'direction': event['direction'], 'deadline': event['time']+offset+.4,
+                     'device':event.get('device')})
+  hold = value.get('hold')
+  if (isinstance(hold, dict) and isinstance(hold.get('id'), str) and len(hold['id']) <= 100 and
+      hold.get('direction') in ('left', 'right') and hold.get('source') in ('bluetooth', 'turn', 'lane') and
+      finite(hold.get('time')) and 0 <= now-hold['time'] < 300):
+    hold = {**hold, 'deadline':hold['time']+offset+.4}
+    hold.pop('time')
+
+  else:
+    hold = None
   return {'token': token, 'ok': value.get('ok') is True,
-          'guard_deadline': value['stamp']+offset+.35, 'events': events}
+          'guard_deadline': value['stamp']+offset+.35, 'events': events, 'hold':hold,
+          'devices':[d for d in value.get('devices', [])[:16] if isinstance(d,str) and len(d)<=32]}
 
 
 class Sender:
@@ -166,7 +177,7 @@ class Sender:
     if peer.get('carrot_host') != 'jetson' or peer.get(CAPABILITY) is not True:
       return
     seq = client._next_seq()
-    client.t.send_json(BEGIN, seq, {'version': 1})
+    client.t.send_json(BEGIN, seq, {'version': 2})
     response = json.loads(bytes(client._expect(ACK, seq, 1.).payload))
     if response.get('ready') is not True or not finite(response.get('clock')):
       return
@@ -189,6 +200,8 @@ class Sender:
       self.clock_received = now
     if now-self.clock_received > 3:
       return  # Do not extrapolate a clock anchor through a stalled session.
+    self.worker.send({'stamp':now, 'accepted_id':state.get('accepted_id'),
+                      'state':state.get('state'), 'token':self.token})
     value = wire_record(self.worker.latest(), self.token, self.offset, now)
     if value is not None:
       client.t.send(DATA, client._next_seq(), [encode(value)])

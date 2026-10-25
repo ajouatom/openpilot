@@ -527,6 +527,7 @@ struct CarControl {
     leadLimiting @21: Bool;     # VW MEB cluster: 앞차가 속도를 제한 중(xState lead) -> 앞차 하이라이트 우선
 
     driverMonitoringAlert @22: UInt8;  # 0=none, 1=initial, 2=audible, 3=terminal; fresh enabled DM only
+    physicalBlinkerHold @23: UInt8;  # 0=legacy, 1=release, 2=left hold, 3=right hold; fresh USB-CAN lease
 
     # not used with the dash, TODO: separate structs for dash UI and device UI
     audibleAlert @5: AudibleAlert;
