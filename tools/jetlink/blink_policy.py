@@ -26,6 +26,13 @@ class Policy:
     self.hold = {'id': f'{self.session}:{self.serial}', 'direction': direction, 'source': source, 'time': now}
     self.turned, self.centered = False, None
 
+  def acknowledged(self, now, activated_id, driver_override=False):
+    # A rejected/unsuccessful start must not become an invisible five-minute
+    # toggle: the next physical button press should be a new request.
+    if self.hold and (driver_override or now-self.hold['time'] > 4 and activated_id != self.hold['id']):
+      self.hold = None
+    return self.hold
+
   def update(self, now, mode, ok, commands, speed, angle, gear, remote, automatic=None, auto_valid=True):
     # Changing the setting or reconnecting never joins an already-running maneuver.
     if mode != self.mode or not ok:

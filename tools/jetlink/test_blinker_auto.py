@@ -157,3 +157,14 @@ def test_native_hold_reader_clears_stale_and_preserves_unrelated_vehicles(tmp_pa
 def test_invalid_native_hold_lease_never_sets_hold(value):
   from openpilot.selfdrive.carrot.bluetooth.physical import lease_value
   assert lease_value(value,10.1)==0
+
+
+def test_unaccepted_start_expires_without_becoming_invisible_toggle():
+  p=Policy()
+  update(p,commands=[event()])
+  assert p.acknowledged(13.9,None)
+  assert p.acknowledged(14.01,None) is None
+  assert update(p,t=15,commands=[event(15,'left','next')])[1]
+  held=p.hold
+  assert p.acknowledged(20,held['id'])
+  assert p.acknowledged(20,held['id'],driver_override=True) is None

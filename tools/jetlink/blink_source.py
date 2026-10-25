@@ -99,6 +99,7 @@ def main(fd):
     mode = mode if mode in (0, 1, 2) else 0
     commands, hold = policy.update(now, mode, ok, commands, cs.vEgo, cs.steeringAngleDeg,
                                   str(cs.gearShifter), remote, auto, model_fresh)
+    hold = policy.acknowledged(now, activated_id, fresh(feedback.get('stamp'), now, .35) and feedback.get('state') == 'driver_override')
     acknowledged = (hold and fresh(feedback.get('stamp'), now, .35) and feedback.get('accepted_id') == hold['id'] and
                     feedback.get('state') in ('ready', 'waiting', 'waiting_previous_signal'))
     if not acknowledged:
