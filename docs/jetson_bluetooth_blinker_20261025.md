@@ -116,3 +116,47 @@ retain the future/expiry checks. The regression exercises the actual source loop
 An isolated native source then accepts 40/41 actual vehicle samples (initial
 subscription sample is not ready), with no CAN path attached. This correction
 runs on comma only; the signed Jetson receiver and N16 pin remain unchanged.
+
+
+## Installed trial and final stationary observation
+
+Only the experimental branch was published. Signed runtime `277fd6c9a7`
+(64,796,760 bytes) was downloaded and hash-verified over its immutable NAS HTTPS
+URL. The normal Jetson boot updater installed it after reboot. The bundled
+PEAK source built/loaded successfully for the actual kernel; `can1` is owned in
+listen-only mode between requests. No source overlay, seeded runtime cache,
+new service or permanent modules-load change was used. The original N16 SHA
+`01effc67` is unchanged.
+
+Comma installed `39ded79393` through normal Git Pull/restart. Carrot Web's running
+API advertises both physical actions and normalized gesture options. The existing
+S2 mapping has left/right physical indicators and double/long disabled, saved
+through the ordinary guarded web API. Other mapped actions remain as configured.
+The temporary offroad holds were restored and their restoration monitors exited.
+
+Final 60.001-second stationary observation: 1,200 valid consecutive model outputs,
+1,200 DM/odometry/pose samples, 1,201 main-camera and 1,200 wide-camera samples,
+all valid; no model frame gap or unhealthy pose input. External N16, USB HUD and
+indicator ready status each hold for all 60 samples. Model execution mean
+40.506 ms / maximum 47.645 ms. This is a parked installation check, not an A/B
+latency improvement, deadline guarantee or road validation.
+
+CI40173150535 and final correction CI40173798398 pass Linux integration and the
+Windows installer check. The initial broad suite passes 1,502/56 skips, plus
+62 codec, 94 updater, 119 navigation, 11 storage and 11 NAT checks. The correction
+adds the source-loop regression (35 focused indicator tests). Pin CI40173247912
+also passes. Counts overlap. Earlier 72 native Bluetooth and 829 web tests remain
+applicable; the current web mapping tests/build pass.
+
+The integrated path has not yet transmitted: the S2 is paired but disconnected.
+One normal web reconnect attempt timed out. The owner has been asked to wake it,
+cycle the stock stalk once to synchronize the prior manual-test counter, and test
+left/right while parked. Actual remote-to-lamp acceptance and latency remain
+pending; no successful driving/physical-blinker claim is made here.
+
+
+The owner replied that the flashes were not observed. Subsequent readback still
+shows no HID capture/event and zero physical CAN TX packets. Thus there is no
+unseen successful trial to infer. PEAK RX continues, TX/RX errors are zero; 51 RX
+drops remain unchanged between the two final observations. No physical failure
+or success is attributed without an actual connected-remote request.

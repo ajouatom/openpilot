@@ -1,5 +1,26 @@
 # Repository memory
 
+- On 2026-10-25, owner authorizes only carrot-nav-blink publication and normal
+  installation, based on carrot-nav24c1ba5e4b; maintained branches unchanged.
+  Physical Bluetooth blinkerLeft/Right are separate from lane-change actions;
+  per-remote double/long options permit fast press. Explicit trial profile only
+  Ioniq5PE + PEAK0c72:000c/B1-3c1; manual requests allowed while driving/engaged,
+  preserving fresh CAN, stale/repeat/session/driver priority gates. No hold/ATC/
+  hazards. Signed277fd6c9a7/64796760B HTTPS verified and normal boot updater
+  installed; upstream GPL PEAK source built/loaded automatically for5.15.148-tegra.
+  N16 unchanged. Comma39ded79393 normal Git Pull/restart fixes source clock sampled
+  before SubMaster reception (future-age false rejection); actual isolated source
+  40/41allowed, no CAN. CI40173150535/40173247912/40173798398 pass Linux/Windows;
+  35focused indicator,72priornative BT,829priorweb; counts overlap.
+  Final60s1200validconsecutive model, DM/cameras/odom/pose healthy; N16/HUD/blinker
+  ready60/60,mean40.506/max47.645ms, P/inactive; no road/deadline claim.
+  S2 left/right physical mappings and gesturesOFF saved through guarded web API.
+  S2 disconnected; reconnect timed out, no integrated CAN TX/physical validation.
+  Owner asked to wake remote, stock stalk cycle then parked L/R acceptance.
+  Snapshot holds restored; raw evidence private. Details:
+  docs/jetson_bluetooth_blinker_20261025.md.
+
+
 - On 2026-10-24, owner requests further measured Jetson latency improvement.
   NAV HUD libx264 encoder/conversion pools default one worker each; actual
   FFmpeg16->2threads,462x1920/10FPS/all-I/bitrate/priorities unchanged.
