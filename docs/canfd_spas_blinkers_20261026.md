@@ -365,3 +365,44 @@ retains exact payload/CRC/counter/rate limits, revokes on motion/stale/manual in
 or watchdog/absolute expiry and permits exact021001 recovery. Normal driving still
 uses the existing acknowledged path. This is not unrestricted original-patch road
 installation. No physical result is claimed until the actual test completes.
+
+
+## Actual supplied-sequence test on the owner's vehicle
+
+5a3889e6bd was installed by normal Git Pull/reboot; the active Panda signature
+matched newly built panda_h7.bin.signed. CI40329253439 passed1241/40skip/362subtests.
+No Jetson runtime/model change. Fresh P/zero/inactive and six-second stable CAN
+preflight preceded test15. Actual Panda queued-TX records (observer-relative time):
+
+| Time (s) | Record |
+| --- | --- |
+| 1.085304 | 0x7B1 `0210030000000000` |
+| 1.143987 | 0x7B1 `0328830100000000` |
+| 1.163565 | SPAS1 counter0; SPAS2 exact supplied left vector `db65...60...` |
+| 1.339635 | SPAS1/SPAS2 counter9 |
+| 1.353963 | Source reports patch_sequence_ended, then trial0 |
+| 1.361339 | 0x7B1 `0210010000000000` |
+
+Each SPAS address queued10 packets with counters0..9, mean interval19.563ms;
+maximum observed SPAS2 interval35.269ms. These are aggregated Panda RX/TX-echo
+records, not independent wire-level timestamps or proof every queued frame was
+successfully transmitted. There were zero safety TX rejections. Logical0 stock
+SPAS1/2 remained present after03288301 (10/9 frames before restore). No0x7B9
+response was observed on the captured logical0 stream. Physical controller2
+(logicalECAN0 with flipped harness) totalErrorCnt rose0->22 with bit1Error;
+source and observer cancelled. No lamp-on feedback was captured. No right/repeat
+trial followed. The planned ten-second hold did not complete; this does not prove
+what an unrestricted error-ignoring run would do or disprove another vehicle's
+reported result. It does establish that this guarded original-sequence run on the
+owner's car developed CAN errors, rather than being blocked for lack of ACK.
+Default-session recovery was queued; actual APRK acceptance was not acknowledged.
+
+
+Post-cancel passive60.033s: error counts physical0/1/2 remain1/0/22,
+pre-existing physical0 RXlost1 unchanged; all transmit/receive error counters0,
+no warning/passive/busoff or safety rejection. N16/link/HUD/signal60/60 active;
+model1200 valid, mean40.742/max46.878ms, zero>50. One observed model/odom frame
+3616->3618 gap and wide3617->3619 gap remain noted; road/DM/pose consecutive,
+pose healthy. Do not claim all streams consecutive or a road/latency cure.
+Test0, owner AutoBlinkerControl2, P/zero/inactive, snapshotfalse/onroad restored.
+No additional active/right test or Jetson update was performed.

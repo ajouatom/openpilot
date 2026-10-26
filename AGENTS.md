@@ -1,5 +1,28 @@
 # Repository memory
 
+- On 2026-10-26, owner explicitly demands supplied patch fidelity. Added parked
+  tests15/16: actual CarController.frame/native create_spas_messages,021003,
+  fiveframes later03288301,frame%2 SPAS/100tester,021001cancel; noACK/quiet gate.
+  Independent f8448120+04dd4119 method/nativepackers match all packets over six
+  1100frame left/right/start-offset/cancel/restart comparisons.127desktop;
+  CI40329253439 native1241/40skip/362subtests. Outside-wire P/zero/inactive/
+  driver/CAN guards,10s bound/30s cooldown; Panda exact suppressedcommand only
+  under parked lease, payload/CRC/counter/rate preserved, defaultrestore onabort.
+  Normal driving ACK path unchanged; original parked mode PE only. Normal
+  Git Pull/reboot5a3889e6bd and newPandaH7 signature verified, N16 unchanged.
+  Actualtest15 after6s stablepreflight:1003at1.0853,288301at1.1440,10SPASpairs
+  counters0..9 at1.1636..1.3396,mean19.563ms,firstleftdb65...60 exact supplied.
+  Stocklogical0continues10/9frames afterdisable. NoPandaTXblock, noobserved7b9.
+  Physical2(logicalECAN0) errors0->22/bit1Error, source/observercancel,1001at1.3613.
+  No lampfeedback; 10s NOT reached, no right/repeat. This time actual original
+  packet sequence was exercised until guard abort; do not call it ACK-blocked,
+  successful wireTX, sustainedhold success or proof contributor report false.
+  Passive60s errors1/0/22stable/counters0/no warning or rejection; N16/link/HUD
+  60/60,mean40.742/max46.878ms. Observed one model/odom/wide framegap, notall
+  consecutive; posehealthy. Test0/mode2/P/inactive/snapshotfalse restored.
+  Details: docs/canfd_spas_blinkers_20261026.md. Raw private.
+
+
 - On 2026-10-26, owner requests SPAS-only holding if existing0x1EA hold fails.
   Fresh-stock200ms start/hold sends hold9.856s but onlyoneflash; overlap-capable
   500ms cap ends before lamp acknowledgement, so actual overlap NOT achieved.
