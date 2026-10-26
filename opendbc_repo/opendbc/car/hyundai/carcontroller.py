@@ -310,10 +310,11 @@ class CarController(CarControllerBase):
     if desire in (3, 4) and desire != self.blinker_desire:
       self.blinker_pulse_end = self.frame + BLINKER_PULSE_FRAMES
     self.blinker_desire = desire
-    pulse = self.frame < self.blinker_pulse_end
+    pulse = self.frame < self.blinker_pulse_end and desire in (3, 4)
     drive = CS.out.gearShifter == structs.CarState.GearShifter.drive
     fast = CS.out.vEgo * CV.MS_TO_KPH > (APRK_OFF_KPH if self.aprk_state else APRK_ON_KPH)
-    want = self.blinker_test in (1, 2) or (self.blinker_control and drive and fast)  # menu test: any speed or gear
+    # the parking ECU is paused only around a kick and restored right after it (menu test: any speed or gear)
+    want = self.blinker_test in (1, 2) or (self.blinker_control and drive and fast and pulse)
     if not want:
       if self.aprk_state:
         ret.append(CanData(APRK_ADDR, APRK_DEFAULT_SESSION, self.CAN.ECAN))
