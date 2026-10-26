@@ -7,7 +7,11 @@ ROOT = Path(__file__).resolve().parents[2]
 MODEL_DIR = Path('openpilot/selfdrive/modeld/jetlink')
 
 
-def read_spec(root=ROOT):
+def read_spec(root=None):
+  if root is None and Path('/TICI').is_file():
+    from openpilot.common.big_model_catalog import effective_id, model_spec
+    return model_spec(effective_id())
+  root = ROOT if root is None else root
   directory = Path(root) / MODEL_DIR
   pin = directory / 'jetson_model.json'
   # Older signed bundles predate the separate Jetson pin.
@@ -38,6 +42,10 @@ def matching_release(path, required=False):
 
 
 def selected_release(path, required=False):
+  if Path('/TICI').is_file() and not any(Path(path).with_name(name).exists() for name in
+      ('usb_host_sha256_release.json', 'local_host_release.json')):
+    from openpilot.common.big_model_catalog import DIRECTORY, selected
+    path = DIRECTORY / selected()['jetson_release']
   usb = Path(path).with_name('usb_host_sha256_release.json')
   if usb.is_file():
     from tools.jetlink.usb_release import validate, identity  # noqa: TID251 -- shared standalone updater

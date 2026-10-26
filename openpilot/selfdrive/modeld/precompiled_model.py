@@ -16,6 +16,7 @@ from urllib.request import Request, urlopen
 
 from openpilot.selfdrive.modeld.big_model import active_manifest, model_cache_dir, model_path
 from openpilot.selfdrive.modeld.precompiled_artifact import SERIALIZATIONS
+from openpilot.selfdrive.modeld.egpu_usb_wait import VERIFIED_USB_RUNTIMES
 from openpilot.selfdrive.modeld.egpu_events import error_summary, log_event
 
 PROTOCOL = 1
@@ -157,8 +158,7 @@ def gpu_usb_link_failure(detail: str, manifest: dict) -> bool:
   # usb_reap copying the asynchronous transfer status, not a model prediction.
   # Other runtime versions/codes need their own source verification first.
   runtime = manifest.get('runtime')
-  return (isinstance(runtime, dict) and runtime.get('sha256') ==
-          '90970e01f2ba70d553294c0f9d5c6fe1678827f750705cab679a7b19b7bcb0b2' and
+  return (isinstance(runtime, dict) and runtime.get('sha256') in VERIFIED_USB_RUNTIMES and
           re.search(r'^(?:RuntimeError: )?AMD(?::[0-9]+)? failed with -?1\Z', detail.rstrip(), re.MULTILINE) is not None)
 
 

@@ -253,6 +253,8 @@ def _serve_local(listener, client, peer, publisher, phase, wifi=None, blinker=No
   from openpilot.common.swaglog import cloudlog
   params = Params()
   diagnostics = RuntimeDiagnostics('jetlinkd', cloudlog.event, peak_metric='usb_exchange_ms')
+  from tools.jetlink.model_library import Client as ModelLibrary  # noqa: TID251 -- shared standalone host protocol
+  library = ModelLibrary(peer)
   last_status = 0.
   last_ping = time.monotonic()
   telemetry_updated = 0.
@@ -275,6 +277,7 @@ def _serve_local(listener, client, peer, publisher, phase, wifi=None, blinker=No
     try:
       connection, _ = listener.accept()
     except TimeoutError:
+      library.idle(client, params)
       if blinker is not None:
         blinker.send(client)
       if wifi is not None:

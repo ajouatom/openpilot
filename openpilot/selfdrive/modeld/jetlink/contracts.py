@@ -91,8 +91,10 @@ def validate_model_spec(spec):
 
 
 def model_name(spec):
-  if spec.sha256 == JETSON_SPEC.sha256:
-    return 'N16 Nav (96244b1f)'
+  from openpilot.common.big_model_catalog import catalog, model_spec
+  for key, entry in catalog().items():
+    if spec.sha256 == model_spec(key)['sha256']:
+      return 'N16 Nav (96244b1f)' if key == 'n16' else entry['name'] + ' (1365126a)'
   return 'Cinque v2' if spec.sha256 == DEFAULT_SPEC.sha256 else f'App model {spec.sha256[:12]}'
 
 

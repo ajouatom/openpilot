@@ -25,6 +25,7 @@ from host_health import health_worker
 from host_lpm import SessionLease
 from blink_protocol import Host as BlinkerHost, CAPABILITY as BLINKER_CAPABILITY, BEGIN as BLINKER_BEGIN, ACK as BLINKER_ACK, DATA as BLINKER_DATA
 from wifi_protocol import CAPABILITY as WIFI_CAPABILITY, MESSAGE as WIFI_MESSAGE, receive as receive_wifi
+from model_library import CAPABILITY as LIBRARY_CAPABILITY, REQUEST as LIBRARY_REQUEST, RESPONSE as LIBRARY_RESPONSE, host_request as library_request
 from jetlink import protocol as P
 from jetlink import request_chunks, deferred_map, packed_codec, output_projection
 from jetlink.transport.base import Message, LinkError
@@ -91,7 +92,7 @@ class CarrotSession(Session):
       obj = {**obj, HUD_CAPABILITY: legacy_display, NAVI_CAPABILITY: legacy_display,
              PUMP_CAPABILITY: legacy_display, WIFI_CAPABILITY: host == 'jetson', 'carrot_host': host,
              HUD_WIFI_CAPABILITY: self.hud_wifi_supported,
-             HUD_USB_CAPABILITY: host == 'jetson' and legacy_display}
+             HUD_USB_CAPABILITY: host == 'jetson' and legacy_display, LIBRARY_CAPABILITY: host == 'jetson'}
       if host == 'jetson' and self.blinker.supported():
         obj[BLINKER_CAPABILITY] = True
       if self.deferred_negotiated:
@@ -103,6 +104,18 @@ class CarrotSession(Session):
     return super()._send_json(msg_type, seq, obj, flags)
 
   def handle(self, msg):
+    if msg.msg_type == LIBRARY_REQUEST:
+      if msg.seq <= self.last_seq:
+        return
+      self.last_seq = msg.seq
+      try:
+        if len(msg.payload) > 1024:
+          raise ValueError('oversized library request')
+        result = library_request(self.host, json.loads(bytes(msg.payload)), ROOT)
+      except (OSError, ValueError, TypeError) as exc:
+        result = {'error': str(exc)[:160]}
+      self._send_json(LIBRARY_RESPONSE, msg.seq, result)
+      return
     if getattr(self, 'power_lease', None) is not None:
       self.power_lease.touch()
     if msg.msg_type == P.Msg.HELLO_REQ:

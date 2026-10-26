@@ -197,3 +197,23 @@ def test_diagnostic_download_preserves_original_failure_after_reboot(feature, tm
   assert json.loads(response.text)['failure'] == failure
   (folder / 'installed.json').write_text(json.dumps({'pickle': {'sha256': 'c' * 64}}))
   assert asyncio.run(feature.api_diagnostics(None)).status == 404
+
+def test_library_select_is_pending_and_delete_requires_offroad(feature, monkeypatch, tmp_path):
+  from openpilot.common import big_model_catalog as C
+  monkeypatch.setenv('CARROT_BIG_MODEL_DIR', str(tmp_path))
+  monkeypatch.setattr(C, 'boot_id', lambda: 'same-boot')
+  C.freeze_boot()
+  monkeypatch.setattr(feature, 'HAS_PARAMS', True)
+  monkeypatch.setattr(feature, 'Params', lambda: SimpleNamespace(get_bool=lambda key: key == 'IsOnroad'))
+  class Request:
+    def __init__(self, action, model): self.body = {'action': action, 'model': model}
+    async def json(self): return self.body
+  response = asyncio.run(feature.api_library(Request('select', 'flip-flop')))
+  assert response.status == 200
+  value = json.loads(response.body)['library']
+  assert value['selected'] == 'flip-flop' and value['effective'] == 'n16' and value['reboot_required']
+  assert asyncio.run(feature.api_library(Request('delete', 'md-v3'))).status == 409
+  monkeypatch.setattr(feature, 'Params', lambda: SimpleNamespace(get_bool=lambda key: key == 'IsOffroad'))
+  assert asyncio.run(feature.api_library(Request('delete', 'n16'))).status == 409
+  assert asyncio.run(feature.api_library(Request('delete', 'md-v3'))).status == 200
+  assert asyncio.run(feature.api_library(Request('select', '../../anything'))).status == 409

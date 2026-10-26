@@ -30,9 +30,10 @@ from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 from openpilot.selfdrive.modeld.big_model_status import BigModelStatusReporter
+from openpilot.common import big_model_catalog
 
 
-DEFAULT_MANIFEST_URL = "https://upload.shind0.synology.me/models/comma4-big-nav-n16-96244b1f/manifest.json"
+DEFAULT_MANIFEST_URL = big_model_catalog.selected()['manifest_url']
 NAV_MODEL = {
   "model_id": "comma-nav-n16-afbf2e54-52205044",
   "filename": "big_driving_tinygrad.pkl",
@@ -148,12 +149,10 @@ def _write_state(active: BigModelManifest, previous: BigModelManifest | None, ca
 
 
 def fetch_manifest(manifest_url: str = DEFAULT_MANIFEST_URL, timeout: float = 15.0) -> BigModelManifest:
-  # Pin the navigation model from nav-model-integration at afbf2e54.
-  # This upstream update changes only the PKL; keep Jetson's ONNX selection separate.
-  # Keep the environment/CLI override path below so a different manifest can
-  # still be tested explicitly without changing this branch.
-  if manifest_url == DEFAULT_MANIFEST_URL:
-    return BigModelManifest.from_dict(NAV_MODEL, manifest_url)
+  # Reviewed catalog pins are resolved without network and stay fixed this boot.
+  for entry in big_model_catalog.catalog().values():
+    if manifest_url == entry['manifest_url']:
+      return BigModelManifest.from_dict(entry['egpu'], manifest_url)
 
   req = Request(manifest_url, headers={"Accept": "application/json", "User-Agent": "carrot-modeld/1"})
   with urlopen(req, timeout=timeout) as response:
