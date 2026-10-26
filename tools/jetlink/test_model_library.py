@@ -67,7 +67,7 @@ def test_delete_protects_boot_pending_and_active_but_removes_unused(store):
   C.select('flip-flop')
   for key in ('n16', 'flip-flop'):
     with pytest.raises(ValueError):
-      library.remove(key)
+      library._remove_cache(key)
   files = library.paths('md-v3')
   for path in files[:2]:
     path.write_bytes(b'model')
@@ -75,16 +75,15 @@ def test_delete_protects_boot_pending_and_active_but_removes_unused(store):
   (files[2] / 'model.pkl').write_bytes(b'copy')
   other = store / 'keep'
   other.write_text('keep')
-  library.remove('md-v3')
+  library._remove_cache('md-v3')
   assert not any(path.exists() for path in files)
   assert other.read_text() == 'keep'
-  assert 'md-v3' in C.preferences()['hidden']
+  assert 'hidden' not in C.preferences()
   assert C.read_json(store / 'jetson-delete.json')['models'] == ['md-v3']
-  library.restore('md-v3')
-  assert 'md-v3' not in C.preferences()['hidden']
+  assert 'md-v3' in C.available()
   C.atomic_json(store / 'state.json', {'active': C.catalog()['md-v3']['egpu']})
   with pytest.raises(ValueError):
-    library.remove('md-v3')
+    library._remove_cache('md-v3')
 
 
 def test_cache_inventory_counts_hardlink_once(store):
@@ -147,7 +146,7 @@ def test_bad_preferences_never_select_unreviewed_model(store, value):
 def test_alias_delete_keeps_shared_selected_jetson_model(store):
   C.freeze_boot()
   C.select('flip-flop')
-  library.remove('md-v3')
+  library._remove_cache('md-v3')
   sent = []
   client = SimpleNamespace(
     _next_seq=lambda: 1,
@@ -188,3 +187,70 @@ assert read_spec() == C.model_spec('flip-flop')
 assert C.effective_id() == 'flip-flop'
 '''
   subprocess.run([sys.executable, '-P', '-c', code], env=dict(os.environ, PYTHONPATH=str(C.ROOT)), check=True)
+
+
+def retire(monkeypatch, *keys):
+  models = C.catalog()
+  for key in keys:
+    models[key]['retired'] = True
+  monkeypatch.setattr(C, 'catalog', lambda: models)
+
+
+def test_retirement_preserves_running_boot_and_falls_back_next_boot(store, monkeypatch):
+  C.select('md-v3')
+  C.freeze_boot()
+  retire(monkeypatch, 'md-v3')
+  assert C.effective_id() == C.freeze_boot() == 'md-v3'
+  assert C.preferences()['selected'] == 'n16'
+  assert 'md-v3' not in C.available()
+  with pytest.raises(ValueError):
+    C.select('md-v3')
+  offroad = SimpleNamespace(get_bool=lambda key: key == 'IsOffroad')
+  assert library.reconcile_retired(offroad) == []
+  monkeypatch.setattr(C, 'boot_id', lambda: 'next-boot')
+  assert C.freeze_boot() == 'n16'
+  assert library.reconcile_retired(offroad) == ['md-v3']
+
+
+def test_curated_retirement_only_deletes_offroad_after_active_transition(store, monkeypatch):
+  C.freeze_boot()
+  retire(monkeypatch, 'md-v3')
+  target = library.paths('md-v3')[0]
+  target.write_bytes(b'old')
+  keep = store / 'keep.txt'
+  keep.write_text('keep')
+  onroad = SimpleNamespace(get_bool=lambda key: key == 'IsOnroad')
+  offroad = SimpleNamespace(get_bool=lambda key: key == 'IsOffroad')
+  assert library.reconcile_retired(onroad) == [] and target.exists()
+  C.atomic_json(store / 'state.json', {'active': C.catalog()['md-v3']['egpu']})
+  assert library.reconcile_retired(offroad) == [] and target.exists()
+  C.atomic_json(store / 'state.json', {'active': C.catalog()['n16']['egpu']})
+  assert library.reconcile_retired(offroad) == ['md-v3']
+  assert not target.exists() and keep.read_text() == 'keep'
+  assert C.read_json(store / 'jetson-delete.json')['models'] == ['md-v3']
+  assert 'md-v3' not in {m['id'] for m in library.status()['models']}
+
+
+def test_hidden_preferences_migrate_to_full_curated_list(store):
+  C.atomic_json(store / 'selection.json', {'selected': 'n16', 'hidden': ['md-v3', 'flip-flop']})
+  assert {m['id'] for m in library.status()['models']} == set(C.available())
+
+
+def test_retired_shared_jetson_identity_waits_until_unprotected(store, monkeypatch):
+  C.freeze_boot()
+  C.select('flip-flop')
+  retire(monkeypatch, 'md-v3')
+  library._remove_cache('md-v3')
+  sent = []
+  sha = C.model_spec('md-v3')['sha256']
+  reply = {'models': {}, 'deleted': []}
+  client = SimpleNamespace(_next_seq=lambda: 1, t=SimpleNamespace(send_json=lambda *args: sent.append(args)),
+                           _expect=lambda *args: SimpleNamespace(payload=json.dumps(reply).encode()))
+  wire.Client({wire.CAPABILITY: True})._exchange(client)
+  assert sent[-1][2] == {'delete': []}
+  assert C.read_json(store / 'jetson-delete.json')['models'] == ['md-v3']
+  C.select('n16')
+  reply['deleted'] = [sha]
+  wire.Client({wire.CAPABILITY: True})._exchange(client)
+  assert sent[-1][2] == {'delete': [sha]}
+  assert C.read_json(store / 'jetson-delete.json')['models'] == []

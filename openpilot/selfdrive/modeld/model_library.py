@@ -48,10 +48,12 @@ def unique_bytes(items):
 
 
 @C.synchronized
-def remove(key):
+def _remove_cache(key, offroad=None):
   if key not in C.catalog():
     raise ValueError('unknown model')
   with delivery_lock():
+    if offroad is not None and not offroad():
+      raise ValueError('offroad state changed')
     if key in protected_ids():
       raise ValueError('running, installed active or selected model is protected')
     root = C.storage().resolve()
@@ -64,22 +66,30 @@ def remove(key):
       else:
         path.unlink(missing_ok=True)
     _SIZES.pop(key, None)
-    value = C.preferences()
-    value['hidden'] = sorted(set(value['hidden']) | {key})
-    C.atomic_json(C.storage() / 'selection.json', value)
     queue = C.read_json(C.storage() / 'jetson-delete.json')
     keys = set(queue.get('models', [])) | {key}
     C.atomic_json(C.storage() / 'jetson-delete.json', {'models': sorted(keys)})
 
 
-@C.synchronized
-def restore(key):
-  if key not in C.catalog():
-    raise ValueError('unknown model')
-  with delivery_lock():
-    value = C.preferences()
-    value['hidden'] = [item for item in value['hidden'] if item != key]
-    C.atomic_json(C.storage() / 'selection.json', value)
+def reconcile_retired(params):
+  """Apply reviewed catalog retirements only while actually offroad."""
+  def offroad():
+    return params.get_bool('IsOffroad') and not params.get_bool('IsOnroad')
+  if not offroad():
+    return []
+  removed = []
+  for key, entry in C.catalog().items():
+    if entry.get('retired') is not True:
+      continue
+    if not offroad():
+      break
+    try:
+      _remove_cache(key, offroad)
+      removed.append(key)
+    except (ValueError, OSError):
+      # Running/selected/active or delivery busy: retry after transition.
+      continue
+  return removed
 
 
 _SIZES = {}
@@ -101,13 +111,14 @@ def status():
   host_fresh = host.get('boot') == C.boot_id() and 0 <= time.monotonic() - host.get('updated', 0) < 30
   queue = C.read_json(C.storage() / 'jetson-delete.json').get('models', [])
   rows = []
-  for key, entry in C.catalog().items():
+  for key, entry in C.available().items():
     sha = C.model_spec(key)['sha256']
-    rows.append({'id': key, 'name': entry['name'], 'noo': C.noo(key), 'hidden': key in prefs['hidden'],
+    rows.append({'id': key, 'name': entry['name'], 'noo': C.noo(key),
                  'protected': key in protected, 'egpu_bytes': cached_bytes(key),
                  'download_bytes': entry['egpu']['size'], 'jetson_sha256': sha,
                  'jetson_bytes': host.get('models', {}).get(sha) if host_fresh else None,
                  'delete_pending': key in queue})
   return {'models': rows, 'effective': C.effective_id(), 'selected': prefs['selected'],
           'reboot_required': C.effective_id() != prefs['selected'], 'internal': 'CD210',
+          'effective_name': C.catalog()[C.effective_id()]['name'], 'effective_noo': C.noo(C.effective_id()),
           'jetson_inventory_fresh': host_fresh}

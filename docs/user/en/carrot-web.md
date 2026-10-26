@@ -231,7 +231,7 @@ If only video is missing, check whether another browser owns the stream, whether
 
 ### External driving model selection (`carrot-nav-blink` trial)
 
-In Tools, choose N16 Nav, MD v3, or Flip Flop under **External driving model** and save.
+In Tools, choose N16 Nav, MD v3, or Flip Flop under **External driving model**. The choice saves automatically.
 The choice applies to both eGPU and Jetson; the internal model stays fixed at CD210.
 Saving does not switch a running model. With ignition off and internet available, reboot
 both comma and Jetson to download, verify, and apply the choice. A new Jetson model also
@@ -244,9 +244,10 @@ route validity or driving performance. Flip Flop and MD v3 have different eGPU P
 the same official ONNX checkpoint on Jetson, so switching between them does not change the
 Jetson model.
 
-With ignition off, unused model files can be deleted and hidden from the selection list.
-Running, installed active, and next-boot models are protected. Jetson cleanup waits for an
-offroad connection and retains an ONNX shared by another protected selection. Hidden models
-can be shown and selected again, downloading missing files again. New compatible models
-arrive in the reviewed catalog through Git Pull. Multiple models may be stored on disk;
-only the selected model is loaded into GPU memory.
+Choose a model in the dropdown to save it for the next reboot. The list is maintained by
+the developers; user hide, delete and restore controls are not available. Catalog updates
+arrive through Git Pull. Retired choices disappear from the list and their unused files
+are cleaned up automatically while offroad. A running retired model remains protected
+until the next boot selects the default and delivery switches the installed active model.
+Jetson cleanup waits for an offroad connection and preserves an ONNX shared by a protected
+model. Only the selected model is loaded into GPU memory.

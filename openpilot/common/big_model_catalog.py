@@ -42,6 +42,14 @@ def catalog():
   return json.loads((DIRECTORY / 'catalog.json').read_text(encoding='utf-8'))
 
 
+def available():
+  """Curator-owned choices; retired metadata stays for safe cache cleanup."""
+  models = {key: entry for key, entry in catalog().items() if entry.get('retired') is not True}
+  if DEFAULT not in models:
+    raise ValueError('catalog must retain an available default model')
+  return models
+
+
 def storage():
   override = os.getenv('CARROT_BIG_MODEL_DIR')
   return Path(override) if override else Path('/data/media/0/carrot/models') if Path('/TICI').is_file() else Path.home() / '.comma/models'
@@ -79,9 +87,8 @@ def boot_id():
 
 def preferences():
   value = read_json(storage() / 'selection.json')
-  models = catalog()
-  return {'selected': value.get('selected') if isinstance(value.get('selected'), str) and value['selected'] in models else DEFAULT,
-          'hidden': [key for key in value.get('hidden', []) if isinstance(key, str) and key in models] if isinstance(value.get('hidden', []), list) else []}
+  models = available()
+  return {'selected': value.get('selected') if isinstance(value.get('selected'), str) and value['selected'] in models else DEFAULT}
 
 
 def effective_id():
@@ -107,11 +114,10 @@ def selected():
 
 @synchronized
 def select(key):
-  if key not in catalog():
-    raise ValueError('unknown model')
+  if key not in available():
+    raise ValueError('model is not available')
   value = preferences()
   value['selected'] = key
-  value['hidden'] = [item for item in value['hidden'] if item != key]
   atomic_json(storage() / 'selection.json', value)
 
 

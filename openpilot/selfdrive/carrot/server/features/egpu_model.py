@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from contextlib import suppress
 from typing import Any
 
 from aiohttp import web
@@ -149,20 +150,40 @@ async def api_library(request: web.Request) -> web.Response:
     if not isinstance(body, dict) or set(body) != {'action', 'model'}:
       raise ValueError('invalid model action')
     action, key = body['action'], body['model']
-    if action not in ('select', 'delete', 'restore') or not isinstance(key, str) or key not in catalog.catalog():
+    if action != 'select' or not isinstance(key, str) or key not in catalog.available():
       raise ValueError('unknown model action')
-    if action == 'delete':
-      params = Params() if HAS_PARAMS and Params is not None else None
-      if params is None or not params.get_bool('IsOffroad') or params.get_bool('IsOnroad'):
-        return web.json_response({'ok': False, 'error': 'Turn ignition off before deleting cached models.'}, status=409)
-    operation = {'select': catalog.select, 'delete': library.remove, 'restore': library.restore}[action]
-    await asyncio.to_thread(operation, key)
+    await asyncio.to_thread(catalog.select, key)
     return web.json_response({'ok': True, 'library': await asyncio.to_thread(library.status)})
   except (ValueError, OSError) as exc:
     return web.json_response({'ok': False, 'error': str(exc)}, status=409)
 
 
+def maintain_library_once():
+  from openpilot.selfdrive.modeld.model_library import reconcile_retired
+  if HAS_PARAMS and Params is not None:
+    return reconcile_retired(Params())
+  return []
+
+
+async def library_maintenance(app):
+  async def run():
+    while True:
+      try:
+        await asyncio.to_thread(maintain_library_once)
+      except (OSError, ValueError):
+        pass  # retry on the next offroad pass
+      await asyncio.sleep(30)
+  task = asyncio.create_task(run())
+  try:
+    yield
+  finally:
+    task.cancel()
+    with suppress(asyncio.CancelledError):
+      await task
+
+
 def register(app: web.Application) -> None:
+  app.cleanup_ctx.append(library_maintenance)
   app.router.add_get("/api/egpu/model", api_status)
   app.router.add_post("/api/egpu/model/library", api_library)
   app.router.add_get("/api/egpu/model/diagnostics", api_diagnostics)

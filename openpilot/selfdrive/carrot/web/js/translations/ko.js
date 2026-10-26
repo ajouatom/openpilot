@@ -7,7 +7,7 @@ window.CarrotTranslations.register("ko", {
   strings: {
     model_library_title: "외부 주행 모델",
     model_library_internal: "내부 모델: CD210 고정",
-    model_library_help: "eGPU와 Jetson이 하나의 선택을 공유합니다. 저장 후 시동을 끄고 인터넷을 연결한 상태에서 콤마와 Jetson을 재부팅하세요. 최초 사용 시 파일을 다운로드하며, Jetson은 추론 엔진도 준비합니다.",
+    model_library_help: "eGPU와 Jetson이 하나의 선택을 공유합니다. 선택하면 다음 재부팅용으로 저장됩니다. 시동을 끄고 인터넷을 연결한 상태에서 콤마와 Jetson을 재부팅하세요. 최초 사용 시 파일을 다운로드하며, Jetson은 추론 엔진도 준비합니다.",
     model_library_current: "이번 부팅에 선택된 모델",
     model_library_next: "다음 부팅 모델",
     model_library_save: "다음 재부팅용으로 저장",

@@ -94,3 +94,32 @@ invalid. The owner confirmed the navigation device was indoors. Valid NAV image
 application remains unverified in this window; no location/freshness gate was
 relaxed. N16 was left selected and running, with the temporary offroad snapshot
 hold restored. eGPU hardware inference and road behavior were not tested.
+
+
+## Curated choices and automatic retirement (owner revision)
+
+The owner's final UI has one dropdown: changing it saves the next-boot selection.
+There are no user hide, delete, restore or separate save buttons. The server accepts
+only `select`; legacy hidden preferences no longer remove reviewed choices. Failed
+selection restores the displayed saved value. N16, MD v3 and Flip Flop remain
+available; this revision does not retire any real model.
+
+To retire a model, maintainers set `retired: true` on its catalog entry and retain
+its exact artifact metadata. Do not delete its metadata/spec/release files: those
+identities are needed to protect an already-running boot and to remove only known
+cache paths. The default must remain available. A retired selection falls back to
+the default next boot; the currently frozen boot is unchanged.
+
+A background maintenance pass checks actual offroad state every 30 seconds, then
+uses the existing library/delivery locks and active/boot/pending protections before
+removing the retired eGPU pickle, partial download and compiled cache. The exact
+Jetson identity is queued for the existing offroad USB cache protocol; shared
+protected identities stay queued. The host retains its pinned/loaded/building
+protections. Jetson deletion covers the ONNX and current-backend engine/metadata
+known to that host, not arbitrary files or historical backend variants.
+
+These client/UI changes need normal comma Git Pull/reboot. The existing signed
+Jetson host already implements this cache request; its runtime and N16 are unchanged.
+Temporary-cache tests cover retirement, boot fallback, active protection, actual
+file removal and delayed shared-identity deletion. No installed model was deleted
+as part of this revision's validation.
