@@ -423,3 +423,32 @@ and thirty-second start cooldown. Ending stops replay as upstream does; actual
 lamp cancellation and ten-second holding require physical observation.
 Local 135 focused checks pass before native CI and installation. No physical
 success is claimed here.
+
+
+### Physical counter-aware lever result
+
+Native CI40332262548 passes 1275 checks, 40 skips, 362 subtests. Normal
+Git Pull/reboot installed 0071e533a4; actual Panda signature matches built H7.
+Under fresh P/zero/inactive guards, test17 ran the ten-second left request.
+178 queued 0x3C1 frames, all `85c0004000000000`, span 9.973850s. The host
+50ms minimum schedule quantized to about 17.75Hz in this run, not an exact
+reproduction of upstream frame%5/20Hz cadence. No APRK or SPAS test TX.
+Panda rejection stays zero; physical CAN error totals 0/2/0 unchanged;
+no warning/passive/bus-off. Both carState and raw 0x413 show no lamp-on
+feedback. This is NOT a successful lamp/hold result, nor proof upstream
+cannot work on another bus/vehicle. No right/repeated trial was attempted.
+Owner requests immediate existing USB2CAN restoration on failure. Test0,
+CanfdBlinkerControl0, AutoBlinkerControl2 retained; normal reboot requested.
+Restoration verification is recorded below once the existing session returns.
+
+
+Restoration completed through the normal settings/reboot path: SPAS flag absent,
+Panda hyundaiCanfd param157 instead of4253, trial0/mode2, snapshotfalse/onroad.
+Fresh P/zero/inactive feedback; Panda physical CAN totals0/0/0, TX/RX errors0,
+no warning/passive/bus-off/rejection. Comma blink_source runs without spas;
+Jetson's existing blink_can worker restarts on unchanged runtime0d4947499931,
+PEAK can1 UP at500k LISTEN-ONLY while idle, TX/RX errors0, drops48 unchanged.
+N16 active/ready with original01effc67 SHA. No further lamp injection or road
+validation was done after restoration; worker/session restoration is not a new
+physical acceptance claim. Both rebooted temporary hold watchdogs have exited;
+startup snapshot state is restored. Raw observations remain private.

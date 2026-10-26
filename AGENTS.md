@@ -1,5 +1,22 @@
 # Repository memory
 
+- On 2026-10-26, owner requests urgent joongyu01 lever test, then immediate
+  USB2CAN restoration if failure/errors. Pin712cef9a adds0x3C1 counter+1/CRC,
+  not originalSPAS; do not import competing100HzSPAS. Parked17/18 source and
+  Panda exact-payload/CRC/freshP/driver-change/gap/10s/cooldown guards published
+  0071e533a4;135desktop,CI40332262548 native1275/40skip/362subtests. Normal
+  GitPull/reboot and actualH7signature verified. Left17 queues178identical
+  85c0004000000000 frames over9.974s, noUDS/SPAS; timerquantization gives17.75Hz,
+  NOT exact upstreamframe%5/20Hz. Error totals0/2/0 unchanged,TXblocked0,
+  no carState/raw413 lamp-on. No right/repeat or success claim. User-requested
+  fallback DONE: CanfdBlinkerControl0/trial0,mode2 preserved, normalreboot;
+  CP/Panda SPASflagabsent,param157, snapshotfalse/onroad/P/inactive. Comma
+  nonspas blink_source and Jetson blink_can restored; can1 UP500k LISTEN-ONLY
+  idle,TX/RXerrors0,drops48unchanged. Panda totals0/0/0,no warning/rejection.
+  N16sameSHA01effc67 active/ready,host0d4947499931 unchanged. No postrestore
+  physical lamp test/road claim. Details:docs/canfd_spas_blinkers_20261026.md.
+
+
 - On 2026-10-26, owner explicitly demands supplied patch fidelity. Added parked
   tests15/16: actual CarController.frame/native create_spas_messages,021003,
   fiveframes later03288301,frame%2 SPAS/100tester,021001cancel; noACK/quiet gate.
