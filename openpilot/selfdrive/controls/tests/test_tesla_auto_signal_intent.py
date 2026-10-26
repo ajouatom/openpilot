@@ -104,6 +104,65 @@ def app_request(f, direction):
   f.carrot_man.carrotArg = "LEFT" if direction == 1 else "RIGHT"
 
 
+@pytest.mark.parametrize("enabled", [False, True])
+@pytest.mark.parametrize("direction", [1, 2])
+@pytest.mark.parametrize("valid", [False, True])
+@pytest.mark.parametrize("press", [False, True])
+def test_hazards_preserve_manual_interlock_and_consume_stalk_presses(setup, enabled, direction, valid, press):
+  setup.helper.tesla_auto_signals = enabled
+  setup.carrot_man.atcType = ""
+  h = step(setup)
+  counts = {"leftBlinkerStalkCount": int(press and direction == 1),
+            "rightBlinkerStalkCount": int(press and direction == 2)}
+  for _ in range(3):
+    step(setup, driver=direction, turnSignalDriverValid=valid, leftBlinker=True, rightBlinker=True,
+         autoTurnSignalReadyRequestId=0, **counts)
+    assert h.driver_blinker_state == 3
+    assert h.lane_change_state == log.LaneChangeState.off
+    assert not h.auto_signal_request_id
+    if enabled:
+      assert not h._manual_signal_direction
+      assert not h._manual_signal_grace
+  for _ in range(3):
+    step(setup, autoTurnSignalReadyRequestId=0, **counts)
+    assert h.lane_change_state == log.LaneChangeState.off
+    assert not h.auto_signal_request_id
+  if enabled:
+    assert not h._update_stalk(NS(turnSignalDriverValid=True, turnSignalDriverDirection=0,
+                                 leftBlinker=False, rightBlinker=False, **counts))
+
+
+@pytest.mark.parametrize("direction", [1, 2])
+def test_hazard_stalk_press_is_consumed_without_confirmation_or_replay(setup, direction):
+  h = setup.helper
+  cs = NS(leftBlinker=False, rightBlinker=False, turnSignalDriverValid=True, turnSignalDriverDirection=0,
+          leftBlinkerStalkCount=0, rightBlinkerStalkCount=0)
+  assert not h._update_stalk(cs)
+  cs.leftBlinker = cs.rightBlinker = True
+  cs.leftBlinkerStalkCount = int(direction == 1)
+  cs.rightBlinkerStalkCount = int(direction == 2)
+  assert not h._update_stalk(cs)
+  cs.leftBlinker = cs.rightBlinker = False
+  assert not h._update_stalk(cs)
+  if direction == 1:
+    cs.leftBlinkerStalkCount += 1
+  else:
+    cs.rightBlinkerStalkCount += 1
+  assert h._update_stalk(cs) == direction
+
+
+@pytest.mark.parametrize("direction", [1, 2])
+def test_hazards_clear_existing_manual_signal_latch(setup, direction):
+  setup.carrot_man.atcType = ""
+  step(setup, driver=direction)
+  assert setup.helper._manual_signal_direction == direction
+  h = step(setup, driver=direction, leftBlinker=True, rightBlinker=True)
+  assert h.driver_blinker_state == 3
+  assert not h._manual_signal_direction
+  assert not h._manual_signal_grace
+  assert h.lane_change_state == log.LaneChangeState.off
+
+
 @pytest.mark.parametrize("direction", [1, 2])
 @pytest.mark.parametrize("ready", [0, 99])
 def test_automatic_lane_change_cannot_start_without_matching_lamp_confirmation(setup, direction, ready):

@@ -146,7 +146,10 @@ class DesireHelper:
       last, self._driver_signal_counts = self._driver_signal_counts, counts
       left_press, right_press = (counts[0] != last[0], counts[1] != last[1]) if last else (False, False)
       press = (BLINKER_LEFT if left_press else BLINKER_RIGHT) if left_press != right_press else BLINKER_NONE
-      if not driver_valid:
+      if st == 3:
+        self._manual_signal_direction = BLINKER_NONE
+        self._manual_signal_grace = 0.0
+      elif not driver_valid:
         self._manual_signal_direction = BLINKER_NONE
         self._manual_signal_grace = 0.0
         st = BLINKER_NONE
@@ -185,7 +188,8 @@ class DesireHelper:
       return BLINKER_NONE
     if self.tesla_auto_signals:
       left_press, right_press = counts[0] != last[0], counts[1] != last[1]
-      if not getattr(carstate, "turnSignalDriverValid", False) or left_press == right_press:
+      if (carstate.leftBlinker and carstate.rightBlinker) or \
+         not getattr(carstate, "turnSignalDriverValid", False) or left_press == right_press:
         return BLINKER_NONE
       direction = BLINKER_LEFT if left_press else BLINKER_RIGHT
       driver = getattr(carstate, "turnSignalDriverDirection", 0)
