@@ -49,6 +49,15 @@ APRK_EXT_SESSION = bytes([0x02, 0x10, 0x03, 0, 0, 0, 0, 0])
 APRK_COM_DISABLE = bytes([0x03, 0x28, 0x83, 0x01, 0, 0, 0, 0])
 APRK_DEFAULT_SESSION = bytes([0x02, 0x10, 0x01, 0, 0, 0, 0, 0])
 APRK_ON_KPH, APRK_OFF_KPH = 30., 20.
+
+# CanfdBlinkerStalk: APRK 를 끄지 못할 때의 우회로. 조향칼럼 스위치가 쏘는
+# BLINKER_STALKS(0x3C1) 를 그대로 재생한다. BCM 이 스토크를 보고 깜빡이를 만들기 때문에
+# (09-18 로그: 스토크 ON 구간에 0x413 ALT 램프가 0.4초 주기로 점멸) ECU 침묵이 필요 없다.
+# byte0 은 CHECKSUM_MAYBE 인데 CRC8 로 역산되지 않아, 실차에서 실제로 유효했던 프레임을 그대로 쓴다.
+STALK_ADDR = 0x3C1
+STALK_OFF      = bytes.fromhex("8f30300000000000")
+STALK_LEFT_ON  = bytes.fromhex("de90304000000000")
+STALK_RIGHT_ON = bytes.fromhex("a350300001000000")
 CANFD_DEPART_TIME = 3.0
 CANFD_DEPART_SPEED = 3.0
 CANFD_JERK_ERROR_DELAY = 0.5
@@ -213,6 +222,7 @@ class CarController(CarControllerBase):
     self.depart_jerk = False
     self.blinker_control = False
     self.blinker_test = 0  # CanfdBlinkerTest: 1 left, 2 right (menu test, any speed/gear)
+    self.blinker_stalk = 0  # CanfdBlinkerStalk: 1 left, 2 right (0x3C1 replay)
     self.aprk_state, self.aprk_frame = 0, 0  # 0 normal, 1 extended session asked, 2 silenced
     self.standstill_frame = -1e6
 
@@ -258,6 +268,18 @@ class CarController(CarControllerBase):
 
     self.steerDeltaUpOrg = self.steerDeltaUp = self.steerDeltaUpLC = self.params.STEER_DELTA_UP
     self.steerDeltaDownOrg = self.steerDeltaDown = self.steerDeltaDownLC = self.params.STEER_DELTA_DOWN
+
+  def stalk_blinkers(self):
+    # 0x3C1 replay: the real sender is 5 Hz, we push 20 Hz to win the slots.
+    if self.frame % 5 != 0:
+      return []
+    if self.blinker_stalk == 1:
+      dat = STALK_LEFT_ON
+    elif self.blinker_stalk == 2:
+      dat = STALK_RIGHT_ON
+    else:
+      dat = STALK_OFF
+    return [CanData(STALK_ADDR, dat, self.CAN.ECAN)]
 
   def aprk_blinkers(self, CC, CS):
     # shortcut: replies are not checked; if APRK ignores the requests it keeps sending SPAS2 and the cluster sees both
@@ -331,6 +353,7 @@ class CarController(CarControllerBase):
       self.depart_jerk = params.get_int("StopGoAssist") >= 2
       self.blinker_control = params.get_bool("CanfdBlinkerControl")
       self.blinker_test = params.get_int("CanfdBlinkerTest")
+      self.blinker_stalk = params.get_int("CanfdBlinkerStalk")
       self.hapticFeedbackWhenSpeedCamera = int(params.get_int("HapticFeedbackWhenSpeedCamera"))
 
       self.button_spam1 = params.get_int("CruiseButtonTest1")
@@ -612,6 +635,8 @@ class CarController(CarControllerBase):
           can_sends.extend(hyundaicanfd.create_lfa_icon_non_camera_scc(self.packer, CS, self.CAN, CC))
 
       # blinkers
+      if self.blinker_stalk in (1, 2):
+        can_sends.extend(self.stalk_blinkers())
       if hda2 and self.CP.flags & HyundaiFlags.ENABLE_BLINKERS:
         can_sends.extend(hyundaicanfd.create_spas_messages(self.packer, self.CAN, self.frame, CC.leftBlinker, CC.rightBlinker))
       elif self.blinker_control or self.blinker_test or self.aprk_state:
