@@ -1,0 +1,60 @@
+VERSION ""
+
+NS_ : NS_DESC_ CM_ BA_DEF_ BA_ VAL_ BA_DEF_DEF_
+
+BS_:
+
+BU_: VCU ADAS BCM ICC GW TITA_SENDER
+
+BO_ 273 VC_Control: 8 VCU
+ SG_ VC_Active : 0|1@1+ (1,0) [0|1] "" TITA_SENDER
+
+BO_ 306 BatteryInfo_1: 4 VCU
+ SG_ Batt_Voltage : 8|16@1+ (0.1,0) [0|6553.5] "V" TITA_SENDER
+ SG_ Batt_Current : 24|16@1- (0.1,0) [-3276.8|3276.7] "A" TITA_SENDER
+
+BO_ 325 Gear_DriveMode: 8 VCU
+ SG_ Gear_Position : 0|2@1+ (1,0) [0|3] "" TITA_SENDER
+ SG_ Drive_Mode : 2|2@1+ (1,0) [0|3] "" TITA_SENDER
+
+VAL_ 325 Gear_Position 0 "P" 1 "R" 2 "N" 3 "D" ;
+VAL_ 325 Drive_Mode 0 "Normal" 1 "ECO" 2 "Sport" 3 "Comfort" ;
+
+BO_ 605 SteeringAngle: 8 VCU
+ SG_ SteerAngle_Value : 0|16@1- (0.1,0) [-3276.8|3276.7] "deg" TITA_SENDER
+
+BO_ 697 WheelSpeed: 8 VCU
+ SG_ WheelPulse_FL : 0|16@1+ (1,0) [0|65535] "" TITA_SENDER
+
+BO_ 789 BatteryInfo_2: 8 VCU
+ SG_ Batt_SOC : 0|3@1+ (1,0) [0|7] "" TITA_SENDER
+ SG_ Batt_Health : 16|8@1+ (1,0) [0|255] "" TITA_SENDER
+ SG_ Batt_Temp : 24|8@1+ (1,-40) [-40|215] "degC" TITA_SENDER
+
+BO_ 826 ADAS_Sensor_2: 8 ADAS
+ SG_ ADAS2_Field0 : 0|7@1+ (1,0) [0|127] "" TITA_SENDER
+ SG_ ADAS2_Field10 : 10|10@1+ (0.1,0) [0|102.3] "" TITA_SENDER
+
+BO_ 905 VehicleSpeed: 8 VCU
+ SG_ Vehicle_Speed : 0|10@1+ (1,0) [0|1023] "km/h" TITA_SENDER
+
+BO_ 921 TrafficLight: 8 ADAS
+ SG_ TL_PhaseID : 0|4@1+ (1,0) [0|15] "" TITA_SENDER
+ SG_ TL_Dir : 4|2@1+ (1,0) [0|3] "" TITA_SENDER
+ SG_ TL_StatusFlags : 6|2@1+ (1,0) [0|3] "" TITA_SENDER
+ SG_ TL_Countdown : 8|5@1+ (1,0) [0|31] "s" TITA_SENDER
+ SG_ TL_Valid : 24|1@1+ (1,0) [0|1] "" TITA_SENDER
+ SG_ TL_State : 42|4@1+ (1,0) [0|15] "" TITA_SENDER
+
+VAL_ 921 TL_State 0 "Unknown" 1 "Red" 2 "Yellow_F" 3 "Yellow" 4 "Red_F" 7 "Green" ;
+
+BO_ 925 StopLine: 8 ADAS
+ SG_ SLD_Status : 16|2@1+ (1,0) [0|3] "" TITA_SENDER
+ SG_ SLD_Distance : 21|12@1+ (0.1,0) [0|409.5] "m" TITA_SENDER
+
+BO_ 978 GPS_Position: 8 ICC
+ SG_ Latitude : 0|32@1+ (1e-7,0) [-90|90] "deg" TITA_SENDER
+ SG_ Longitude : 32|32@1+ (1e-7,0) [-180|180] "deg" TITA_SENDER
+
+BO_ 1097 IntersectionInfo: 8 ADAS
+ SG_ Intersection_Reachable : 3|1@1+ (1,0) [0|1] "" TITA_SENDER

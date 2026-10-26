@@ -75,7 +75,8 @@ class TeslaSpeedLimitController:
 
   def update(self, CC, CS, now_nanos: int) -> list[CanData]:
     manual_changed, resume_changed = self._sync_manual_counters(CS)
-    target_is_fresh = now_nanos - CS.tesla_speed_limit_target_nanos <= SPEED_LIMIT_MAX_AGE_NS
+    target_is_fresh = (CS.tesla_speed_limit_target_nanos > 0 and
+                       0 <= now_nanos - CS.tesla_speed_limit_target_nanos <= SPEED_LIMIT_MAX_AGE_NS)
     if not self.configured or not CC.enabled or CC.cruiseControl.cancel or not CS.out.cruiseState.enabled:
       self._reset(clear_manual_override=True)
       return []
@@ -91,7 +92,8 @@ class TeslaSpeedLimitController:
       self._reset(clear_manual_override=False)
       return []
 
-    if CS.out.brakePressed or not CS.tesla_speed_limit_target_valid or not target_is_fresh:
+    if (CS.out.brakePressed or not CS.out.canValid or CS.out.vehicleSensorsInvalid or
+        not CS.tesla_speed_limit_target_valid or not target_is_fresh):
       self._reset(clear_manual_override=False)
       return []
 
@@ -136,7 +138,8 @@ class TeslaSpeedLimitController:
       return []
 
     template = CS.tesla_speed_button_template
-    if template is None or now_nanos - CS.tesla_speed_button_template_nanos > TEMPLATE_MAX_AGE_NS:
+    if (template is None or CS.tesla_speed_button_template_nanos <= 0 or
+        not 0 <= now_nanos - CS.tesla_speed_button_template_nanos <= TEMPLATE_MAX_AGE_NS):
       return []
 
     direction = 1 if remaining_steps > 0 else -1

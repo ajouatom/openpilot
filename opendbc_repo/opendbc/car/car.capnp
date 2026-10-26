@@ -284,6 +284,11 @@ struct CarState {
   blinkerLamp @103 :UInt8;            # turn-signal lamp right now (no hold): 0 dark, 1 left lit, 2 right lit
 
   vehicleGps @104 :VehicleGps;
+  autoTurnSignalDirection @105 :UInt8; # automatic ownership, including an unconfirmed cancellation tail
+  autoTurnSignalStatus @106 :Text;
+  turnSignalDriverValid @107 :Bool;
+  turnSignalDriverDirection @108 :UInt8; # actual stalk: 0 released, 1 left, 2 right
+  autoTurnSignalReadyRequestId @109 :UInt64; # TX echoed and lamps confirmed for this automatic maneuver; zero otherwise
   struct VehicleGps {
     available @0 :Bool;
     valid @1 :Bool; # receive/continuity checks, not a decoded satellite fix flag

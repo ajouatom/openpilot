@@ -1100,6 +1100,8 @@ struct ModelDataV2 {
     laneChangeAvailableRight @19 :Bool;
     laneChangeBlinkerHold @20 :LaneChangeDirection;  # carrot: hold this turn signal while a lever-requested change waits or is queued
     leverTurn @21 :Bool;  # carrot: the turn desire comes from a latched lever (BlinkerLatchedTurn)
+    autoTurnSignalDirection @22 :LaneChangeDirection;
+    autoTurnSignalRequestId @23 :UInt64;
 
     deprecated :group {
       brakeDisengageProb @2 :Float32;

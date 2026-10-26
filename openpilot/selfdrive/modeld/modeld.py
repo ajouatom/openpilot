@@ -411,7 +411,8 @@ def main(demo=False):
   long_delay = CP.longitudinalActuatorDelay + LONG_SMOOTH_SECONDS
   prev_action = log.ModelDataV2.Action()
 
-  DH = DesireHelper()
+  from opendbc.car.tesla.values import TeslaFlags
+  DH = DesireHelper(tesla_auto_signals=CP.brand == "tesla" and bool(CP.flags & TeslaFlags.AUTO_TURN_SIGNALS))
 
   frame = 0
   custom_lat_delay = 0.0
@@ -573,6 +574,8 @@ def main(demo=False):
       modelv2_send.modelV2.meta.desireLog = DH.desireLog #carrot
       modelv2_send.modelV2.meta.laneChangeBlinkerHold = DH.blinker_hold_direction
       modelv2_send.modelV2.meta.leverTurn = DH.lever_turn
+      modelv2_send.modelV2.meta.autoTurnSignalDirection = DH.auto_signal_direction
+      modelv2_send.modelV2.meta.autoTurnSignalRequestId = DH.auto_signal_request_id
       drivingdata_send.drivingModelData.meta.laneChangeState = DH.lane_change_state
       drivingdata_send.drivingModelData.meta.laneChangeDirection = DH.lane_change_direction
 
