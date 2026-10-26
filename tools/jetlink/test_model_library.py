@@ -157,3 +157,34 @@ def test_alias_delete_keeps_shared_selected_jetson_model(store):
   wire.Client({wire.CAPABILITY: True})._exchange(client)
   assert sent[0][2] == {'delete': []}
   assert C.read_json(store / 'jetson-delete.json')['models'] == []
+
+
+def test_catalog_releases_are_signed_and_match_exact_onnx_contracts():
+  from update_host import validate_manifest, verify_signature
+  for key, entry in C.catalog().items():
+    release = json.loads((C.DIRECTORY / entry['jetson_release']).read_text())
+    validate_manifest(release)
+    verify_signature(release)
+    assert release['model']['sha256'] == C.model_spec(key)['sha256']
+    assert release['model']['size'] == C.model_spec(key)['nbytes']
+
+
+def test_fresh_runtime_import_uses_same_model_for_both_backends(store):
+  import os
+  import subprocess
+  code = '''
+from pathlib import Path
+from openpilot.common import big_model_catalog as C
+C.select('flip-flop'); C.freeze_boot()
+original = Path.is_file
+Path.is_file = lambda path: str(path) == '/TICI' or original(path)
+from openpilot.common.jetson_model import read_spec, selected_release
+from openpilot.selfdrive.modeld.big_model import DEFAULT_MANIFEST_URL, fetch_manifest
+assert fetch_manifest(DEFAULT_MANIFEST_URL).sha256 == C.catalog()['flip-flop']['egpu']['sha256']
+assert read_spec() == C.model_spec('flip-flop')
+assert selected_release(C.DIRECTORY / '../jetlink/host_release.json', required=True)['model']['sha256'] == read_spec()['sha256']
+C.select('n16')
+assert read_spec() == C.model_spec('flip-flop')
+assert C.effective_id() == 'flip-flop'
+'''
+  subprocess.run([sys.executable, '-P', '-c', code], env=dict(os.environ, PYTHONPATH=str(C.ROOT)), check=True)
