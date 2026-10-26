@@ -1,0 +1,17 @@
+extend = "../../../pyproject.toml"
+
+# 실기에서 검증된 세 원문의 SHA를 보존한다. 설치기·선택 게이트에는 예외를 적용하지 않는다.
+# 이식한 독립 unittest 회귀도 같은 검사 본문을 유지하며 스타일 진단만 한정한다.
+[lint.per-file-ignores]
+"boot.py" = ["E501", "F401", "ISC002"]
+"host_client.py" = ["C401", "E731", "ISC002"]
+"sharing.py" = ["C408", "E731"]
+"tests/test_bound_https_stdlib.py" = ["E701", "E702", "TID251"]
+"tests/test_dns_scope_reconcile.py" = ["E701", "E702", "TID251"]
+"tests/test_host_usb_client.py" = ["ISC002", "TID251"]
+"tests/test_link_dns_runtime.py" = ["E701", "E702", "TID251"]
+"tests/test_owned_install_recovery.py" = ["E701", "E702", "TID251"]
+"tests/test_route_settling.py" = ["E701", "E702", "TID251"]
+"tests/test_sharing.py" = ["C408", "PIE810"]
+# 이 게이트 검사는 추가 의존성 없이 unittest로도 독립 실행한다.
+"tests/test_profile_install.py" = ["TID251"]

@@ -1,0 +1,29 @@
+[Unit]
+Description=Scoped Internet sharing for the existing Carrot USB NCM link
+After=network.target
+Wants=network.target
+StartLimitIntervalSec=120
+StartLimitBurst=3
+
+[Service]
+Type=notify
+NotifyAccess=main
+User=root
+Group=root
+ExecStart=/usr/local/venv/bin/python -I -B /usr/local/libexec/carrot-usb-internet.py
+RuntimeDirectory=carrot-usb-internet
+RuntimeDirectoryMode=0700
+RuntimeDirectoryPreserve=yes
+UMask=0077
+TimeoutStartSec=60
+TimeoutStopSec=20
+KillMode=control-group
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=yes
+ProtectHome=yes
+ProtectSystem=full
+PrivateTmp=yes
+
+[Install]
+WantedBy=multi-user.target

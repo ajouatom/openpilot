@@ -5,6 +5,7 @@ import json
 import logging
 import os
 from pathlib import Path
+import signal
 import socket
 import sys
 import time
@@ -22,6 +23,7 @@ from openpilot.selfdrive.modeld.jetlink.power import UsbInputPower
 from openpilot.selfdrive.modeld.jetlink.scheduling import UsbCompletionPriority
 from openpilot.selfdrive.modeld.jetlink.contracts import model_name
 from openpilot.selfdrive.modeld.jetlink.selection import ModelChanged, check_loaded
+from openpilot.selfdrive.modeld.jetlink.konik_usb_profile import enabled as konik_usb_internet_enabled
 from openpilot.selfdrive.modeld.jetlink.startup import (CAPABILITY as BOOT_UPDATE_CAPABILITY, wait_for_boot_update,
                                                        RuntimeHandoff, ConnectionStartup)
 from jetlink.client import JetlinkClient
@@ -461,8 +463,15 @@ def _serve_local(listener, client, peer, publisher, phase, wifi=None, blinker=No
     last_ping = time.monotonic()
 
 
+def _handle_sigterm(_signum, _frame):
+  # 선택한 Konik의 spawn 자식도 기존 finally로 본인 USB 자원을 정리한다.
+  raise SystemExit(1)
+
+
 def main():
   global TRANSPORT_MODE, SESSION_MODE, ACTIVE_UDC, SESSION_DETACHED
+  if konik_usb_internet_enabled():
+    signal.signal(signal.SIGTERM, _handle_sigterm)
   logging.basicConfig(level=logging.INFO)
   TRANSPORT_MODE = transport_mode()
   SESSION_MODE = TRANSPORT_MODE

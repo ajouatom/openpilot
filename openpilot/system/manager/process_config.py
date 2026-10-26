@@ -6,6 +6,7 @@ from openpilot.cereal import car
 from openpilot.common.params import Params
 from openpilot.system.hardware import PC, TICI
 from openpilot.system.manager.process import PythonProcess, NativeProcess, DaemonProcess
+from openpilot.selfdrive.modeld.jetlink.konik_usb_profile import enabled as konik_usb_internet_enabled
 
 try:
   BODYTELEOP_AVAILABLE = importlib.util.find_spec("openpilot.tools.bodyteleop.web") is not None
@@ -134,7 +135,8 @@ procs = [
 
   PythonProcess("modeld", "openpilot.selfdrive.modeld.modeld", only_onroad),
   PythonProcess("signalcolord", "openpilot.selfdrive.modeld.signal_color_shadow", signal_color_observer, spawn=True),
-  PythonProcess("jetlinkd", "openpilot.selfdrive.modeld.jetlink.daemon", always_run, enabled=TICI, restart_if_crash=True),
+  PythonProcess("jetlinkd", "openpilot.selfdrive.modeld.jetlink.daemon", always_run, enabled=TICI, restart_if_crash=True,
+                spawn=konik_usb_internet_enabled()),
   PythonProcess("dmonitoringmodeld", "openpilot.selfdrive.modeld.dmonitoringmodeld", enable_dm_model, enabled=(WEBCAM or not PC)),
   PythonProcess("sensord", "openpilot.system.sensord.sensord", only_onroad, enabled=not PC),
   PythonProcess("ui", "openpilot.selfdrive.ui.ui", always_run, restart_if_crash=True),

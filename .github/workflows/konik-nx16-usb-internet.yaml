@@ -1,0 +1,28 @@
+name: Konik A1M NX16 USB Internet
+on:
+  pull_request:
+    paths:
+      - 'tools/jetlink/konik_nx16_usb/**'
+      - 'openpilot/selfdrive/modeld/jetlink/konik_usb_profile.py'
+      - 'openpilot/selfdrive/modeld/jetlink/daemon.py'
+      - 'openpilot/system/manager/process_config.py'
+      - '.github/workflows/konik-nx16-usb-internet.yaml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  isolated-network-and-installer:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - run: python -m pip install pytest==8.3.5
+      - name: Test isolated files and mocked networking without hardware
+        run: |
+          sudo env PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. "$(which python)" -m pytest \
+            -p no:cacheprovider -c tools/jetlink/konik_nx16_usb/pytest.ini \
+            --rootdir=tools/jetlink/konik_nx16_usb --noconftest \
+            tools/jetlink/konik_nx16_usb/tests -q
