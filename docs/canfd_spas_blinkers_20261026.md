@@ -288,3 +288,23 @@ No UDS. Follow-up11/12 permits bounded start/hold overlap: stop the phased start
 100ms after first lamp confirmation, absolute500ms/25packets per address maximum.
 No extra start frames after that, no restart or deadline extension by feedback.
 This tests the transition ordering; physical acceptance remains pending.
+
+
+## Ten-second SPAS-only hold comparison
+
+The fresh-stock phased start/existing-hold test completed without increasing CAN
+errors, but did not sustain lamp feedback. The first 200 ms variant queued five
+SPAS2 packets and transmitted the existing left hold for about 9.856 seconds;
+lamp feedback showed one flash. The overlap variant queued 14 SPAS2 packets,
+overlapping the existing hold after confirmation; it also did not maintain lamps
+for ten seconds. Both are completed failed hold comparisons, not guard aborts.
+Queued Panda TX echoes are not independent evidence of successful wire delivery.
+
+At the owner's request, parked tests 13/14 repeat only SPAS left/right for at most
+ten seconds. They send at most one packet per fresh stock receipt (age <=5 ms),
+retain the 15 ms minimum interval, independent sequential counters, 500-packet
+per-address cap, P/zero/inactive/fresh-driver/stock guards and 30-second cooldown.
+No existing 0x1EA hold or UDS command is sent by these test modes. Panda's parked
+absolute bound is ten seconds; ordinary source tests 5/6 remain three seconds.
+This is a bounded parked experiment, not a driving-mode fallback. Actual ten-second
+lamp acceptance is pending; offline tests cover expiry and counter wraparound.

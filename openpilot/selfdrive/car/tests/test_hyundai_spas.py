@@ -355,3 +355,34 @@ def test_phased_pulse_uses_new_receipt_once_and_retains_counter_rate(monkeypatch
   assert len(frames) == 50
   for address in (0x165, 0x16A):
     assert [m.dat[2] for m in frames if m.address == address] == list(range(11, 36))
+
+
+@pytest.mark.parametrize('setting', [13, 14])
+def test_phased_continuous_ten_seconds_without_existing_hold(monkeypatch, setting):
+  s, p, cs, sm = setup(monkeypatch)
+  warm(s)
+  s.update(cs, sm, 10., True)
+  p.value = setting
+  s.settings_at = 0
+  assert s.update(cs, sm, 10.01, True) == []
+  assert not s.test_pulse and not s.test_hold
+  assert s.test_until == pytest.approx(20.01)
+  setattr(cs, ('left' if setting == 13 else 'right')+'Blinker', True)
+  packets = []
+  for i in range(510):
+    now = 10.02+i*.02
+    stock = [(a, frame(a, (10+i)%256, None, 0).dat, 0) for a in (0x165, 0x16A)]
+    s.observe([(round(now*1e9), stock)], now+.001)
+    s.driver_at = now
+    sm.recv_time = dict.fromkeys(sm, now)
+    sent = s.update(cs, sm, now+.002, True)
+    assert bool(sent) == (i < 500)
+    packets.extend(sent)
+    assert s.hold_value == 1
+    assert s.update(cs, sm, now+.003, True) == []
+  for address in (0x165, 0x16A):
+    selected = [m for m in packets if m.address == address]
+    assert [m.dat[2] for m in selected] == [(11+i)%256 for i in range(500)]
+    if address == 0x16A:
+      assert all(m.dat[16] == (0x60 if setting == 13 else 0x80) for m in selected)
+  assert s.test_request is None

@@ -95,7 +95,7 @@ class SpasSignals:
       self.driver_override = False
     if now >= self.settings_at:
       setting = self.params.get_int('CanfdBlinkerTest')
-      if setting != self.test_setting and setting in range(1, 13):
+      if setting != self.test_setting and setting in range(1, 15):
         # Consume the edge even when the parked guard fails; never run later.
         cc, ss = sm['carControl'], sm['selfdriveState']
         parked = (healthy and str(cs.gearShifter) == 'park' and cs.standstill and abs(cs.vEgo) < .01 and
@@ -110,7 +110,7 @@ class SpasSignals:
           self.test_request = f'park:{self.test_serial}'
           # The extended comparison sends only the initial 0.2 s SPAS pulse;
           # the existing lamp-confirmed hold supplies the remaining time.
-          self.test_until = now+(10. if setting in (7, 8, 11, 12) else 3.)
+          self.test_until = now+(10. if setting in (7, 8, 11, 12, 13, 14) else 3.)
           self.test_direction = 'left' if setting % 2 else 'right'
           self.test_pulse = setting in (3, 4, 7, 8, 9, 10, 11, 12)
           self.test_direct = direct
@@ -165,13 +165,14 @@ class SpasSignals:
       self.test_until = min(self.test_until, now)  # no resumption after guard loss
     pulse_active = now < self.phase_until if self.test_setting in (11, 12) else now-self.direct_started < .2
     if direct_active and now >= self.direct_next and (not self.test_pulse or pulse_active):
-      if self.test_setting in (11, 12):
+      if self.test_setting in (11, 12, 13, 14):
         # At most one packet per new stock RX until confirmed hold overlaps for 0.1 s, at most 0.5 s.
         # This is a bounded parked phase trial, not a wire-time guarantee.
         for address in SPAS:
           received = self.stock_received.get(address, -math.inf)
           previous_rx, previous_tx, count = self.phase_sent.get(address, (-math.inf, -math.inf, 0))
-          if (count < 25 and max(self.direct_started, previous_rx) < received <= now and
+          limit = 500 if self.test_setting in (13, 14) else 25
+          if (count < limit and max(self.direct_started, previous_rx) < received <= now and
               now-received <= .005 and now-previous_tx >= .015 and (address == 0x165 or 0x165 in self.phase_sent)):
             counter = (self.session.stock[address].counter+1) % 256 if count == 0 else self.direct_counter[address]
             sends.append(frame(address, counter, direction, self.session.bus))

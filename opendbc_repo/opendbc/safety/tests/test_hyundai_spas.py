@@ -166,19 +166,19 @@ def parked(d, **kwargs):
 
 
 @pytest.mark.parametrize('flags', [4096, 4253])
-def test_parked_comparison_no_uds_three_seconds_and_cooldown(flags):
+def test_parked_comparison_no_uds_ten_seconds_and_cooldown(flags):
   d = Device(flags)
   parked(d)
-  for count in range(30, 180):
-    assert d.tx(0x165, frame(0x165, count, None, 0).dat)
-    assert d.tx(0x16A, frame(0x16A, count, 'left', 0).dat)
+  for count in range(30, 530):
+    assert d.tx(0x165, frame(0x165, count % 256, None, 0).dat)
+    assert d.tx(0x16A, frame(0x16A, count % 256, 'left', 0).dat)
     assert not d.tx(APRK, EXTENDED)
     assert not d.tx(APRK, DISABLE)
     assert not d.tx(APRK, PRESENT)
     d.advance(20000)
     park_inputs(d, count)
-  assert not d.tx(0x165, frame(0x165, 180, None, 0).dat)
-  assert not d.tx(0x16A, frame(0x16A, 180, 'left', 0).dat)
+  assert not d.tx(0x165, frame(0x165, 530 % 256, None, 0).dat)
+  assert not d.tx(0x16A, frame(0x16A, 530 % 256, 'left', 0).dat)
   parked(d)
   assert not d.tx(0x165, frame(0x165, 30, None, 0).dat)
   d.advance(30000000)

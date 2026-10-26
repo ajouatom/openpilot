@@ -9,7 +9,7 @@ static uint32_t hyundai_spas_rx_at[2], hyundai_spas_tx_at[2];
 static uint8_t hyundai_spas_rx_counter[2], hyundai_spas_rx_count[2], hyundai_spas_tx_counter[2];
 static bool hyundai_spas_tx_seen[2];
 static CanMsg hyundai_spas_tx_list[128];
-// Separate three-second parked comparison. Normal driving still needs the
+// Separate ten-second parked comparison. Normal driving still needs the
 // acknowledged ECU handoff. This path never authorizes diagnostic commands.
 static uint32_t hyundai_spas_park_at[3], hyundai_spas_trial_at;
 static uint8_t hyundai_spas_park_counter[2], hyundai_spas_park_count[3], hyundai_spas_trial_direction;
@@ -139,7 +139,7 @@ static void hyundai_spas_rx(const CANPacket_t *pkt, uint32_t now) {
         }
       }
     }
-    if ((hyundai_spas_phase == 6U) && (!hyundai_spas_park_ready(now) || (get_ts_elapsed(now, hyundai_spas_trial_at) >= 3000000U))) {
+    if ((hyundai_spas_phase == 6U) && (!hyundai_spas_park_ready(now) || (get_ts_elapsed(now, hyundai_spas_trial_at) >= 10000000U))) {
       hyundai_spas_phase = 7U;  // revoked, cooldown cannot be refreshed by TX
     }
     if ((hyundai_spas_phase == 7U) && (get_ts_elapsed(now, hyundai_spas_trial_at) >= 30000000U)) {
@@ -205,7 +205,7 @@ static bool hyundai_spas_tx(const CANPacket_t *pkt, uint32_t now) {
       }
     }
     bool trial = hyundai_spas_phase == 6U;
-    if (trial && (!hyundai_spas_park_ready(now) || (get_ts_elapsed(now, hyundai_spas_trial_at) >= 3000000U))) {
+    if (trial && (!hyundai_spas_park_ready(now) || (get_ts_elapsed(now, hyundai_spas_trial_at) >= 10000000U))) {
       hyundai_spas_phase = 7U;
       return false;
     }
