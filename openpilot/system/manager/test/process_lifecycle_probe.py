@@ -29,7 +29,7 @@ def worker(directory, name):
     time.sleep(0.01)
 
 
-def main(directory, legacy_fork):
+def main(directory, legacy_fork, service='carrot_man'):
   global PARENT_ONLY
   PARENT_ONLY = True
   path = Path(__file__).parents[1] / 'process.py'
@@ -47,8 +47,10 @@ def main(directory, legacy_fork):
   exec(compile(ast.Module(body=definitions, type_ignores=[]), str(path), 'exec'), namespace)
   config = ast.parse(path.with_name('process_config.py').read_text(encoding='utf-8'))
   call = next(n for n in ast.walk(config) if isinstance(n, ast.Call) and isinstance(n.func, ast.Name)
-              and n.func.id == 'PythonProcess' and n.args[0].value == 'carrot_man')
+              and n.func.id == 'PythonProcess' and n.args[0].value == service)
   namespace['always_run'] = lambda *_: True
+  namespace['qcomgps'] = lambda *_: True
+  namespace['TICI'] = True
   process = eval(compile(ast.Expression(call), 'process_config.py', 'eval'), namespace)
   process.module = directory
   if legacy_fork:
@@ -100,11 +102,11 @@ def main(directory, legacy_fork):
     supervise()
     second = ready()
     assert second.pid != first.pid
-    supervise(not_run=['carrot_man'])
+    supervise(not_run=[service])
     second.join(3)
-    supervise(not_run=['carrot_man'])
+    supervise(not_run=[service])
     assert process.proc is None
-    assert reports == [('carrot_man', first.pid, first.exitcode)], reports
+    assert reports == [(service, first.pid, first.exitcode)], reports
     result = {'pids': [first.pid, second.pid], 'crash_exitcode': first.exitcode,
               'max_supervision_s': max(calls), 'fork_callbacks': len(forks),
               'inherited_parent_state': [json.loads(Path(directory, f'{p.pid}.json').read_text()) for p in children],
@@ -121,4 +123,4 @@ def main(directory, legacy_fork):
 
 
 if __name__ == '__main__':
-  main(sys.argv[1], bool(int(sys.argv[2])))
+  main(sys.argv[1], bool(int(sys.argv[2])), sys.argv[3] if len(sys.argv) > 3 else 'carrot_man')
