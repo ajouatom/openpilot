@@ -37,7 +37,9 @@ def test_only_reviewed_models_selectable(store, key):
   assert not (store / 'selection.json').exists()
 
 
-def test_official_inputs_and_shared_jetson_checkpoint():
+def test_official_inputs_and_retired_legacy_alias():
+  assert set(C.available()) == {'n16', 'flip-flop'}
+  assert C.catalog()['md-v3']['retired']
   assert C.noo('n16')
   assert not C.noo('md-v3') and not C.noo('flip-flop')
   assert C.model_spec('md-v3') == C.model_spec('flip-flop')
@@ -49,7 +51,7 @@ def test_official_inputs_and_shared_jetson_checkpoint():
   for key in C.catalog():
     spec = ModelSpec.from_dict(C.model_spec(key))
     assert validate_model_spec(spec) is spec
-    assert model_name(spec)
+    assert model_name(spec) == ('N16 Nav (96244b1f)' if key == 'n16' else 'Flip Flop (1365126a)')
   from openpilot.selfdrive.modeld.generic_model_runtime import model_metadata
 
   for key, fixture in [('md-v3', 'md_v3_metadata.json'), ('flip-flop', 'flip_flop_metadata.json')]:
@@ -80,7 +82,7 @@ def test_delete_protects_boot_pending_and_active_but_removes_unused(store):
   assert other.read_text() == 'keep'
   assert 'hidden' not in C.preferences()
   assert C.read_json(store / 'jetson-delete.json')['models'] == ['md-v3']
-  assert 'md-v3' in C.available()
+  assert 'md-v3' not in C.available()
   C.atomic_json(store / 'state.json', {'active': C.catalog()['md-v3']['egpu']})
   with pytest.raises(ValueError):
     library._remove_cache('md-v3')
@@ -197,8 +199,8 @@ def retire(monkeypatch, *keys):
 
 
 def test_retirement_preserves_running_boot_and_falls_back_next_boot(store, monkeypatch):
-  C.select('md-v3')
-  C.freeze_boot()
+  C.atomic_json(store / 'selection.json', {'selected': 'md-v3'})
+  C.atomic_json(store / 'boot-selection.json', {'selected': 'md-v3', 'boot': C.boot_id()})
   retire(monkeypatch, 'md-v3')
   assert C.effective_id() == C.freeze_boot() == 'md-v3'
   assert C.preferences()['selected'] == 'n16'
@@ -236,21 +238,20 @@ def test_hidden_preferences_migrate_to_full_curated_list(store):
   assert {m['id'] for m in library.status()['models']} == set(C.available())
 
 
-def test_retired_shared_jetson_identity_waits_until_unprotected(store, monkeypatch):
+def test_retired_alias_never_deletes_available_flip_onnx(store, monkeypatch):
   C.freeze_boot()
   C.select('flip-flop')
   retire(monkeypatch, 'md-v3')
   library._remove_cache('md-v3')
   sent = []
-  sha = C.model_spec('md-v3')['sha256']
   reply = {'models': {}, 'deleted': []}
   client = SimpleNamespace(_next_seq=lambda: 1, t=SimpleNamespace(send_json=lambda *args: sent.append(args)),
                            _expect=lambda *args: SimpleNamespace(payload=json.dumps(reply).encode()))
   wire.Client({wire.CAPABILITY: True})._exchange(client)
   assert sent[-1][2] == {'delete': []}
-  assert C.read_json(store / 'jetson-delete.json')['models'] == ['md-v3']
+  assert C.read_json(store / 'jetson-delete.json')['models'] == []
   C.select('n16')
-  reply['deleted'] = [sha]
+  reply['deleted'] = []
   wire.Client({wire.CAPABILITY: True})._exchange(client)
-  assert sent[-1][2] == {'delete': [sha]}
+  assert sent[-1][2] == {'delete': []}
   assert C.read_json(store / 'jetson-delete.json')['models'] == []

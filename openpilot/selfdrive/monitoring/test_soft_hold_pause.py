@@ -54,7 +54,8 @@ def test_pause_does_not_survive_release_motion_or_missing_evidence(fault):
 @pytest.mark.parametrize('experimental', [False, True])
 @pytest.mark.parametrize('camera', [False, True])
 @pytest.mark.parametrize('always_on', [False, True])
-def test_dispatcher_freezes_assessment_and_resumes_next_frame(monkeypatch, experimental, camera, always_on):
+@pytest.mark.parametrize('reason', ['soft_hold', 'signal', 'lead'])
+def test_dispatcher_freezes_assessment_and_resumes_next_frame(monkeypatch, experimental, camera, always_on, reason):
   sm = Messages(); clock = [100.]; packets = []; snapshots = []
   dm = DriverMonitoring2(experimental=experimental, always_on=always_on)
   dm.awareness = dm.last_vision_awareness = dm.last_wheeltouch_awareness = .7
@@ -71,6 +72,14 @@ def test_dispatcher_freezes_assessment_and_resumes_next_frame(monkeypatch, exper
   sm.update(modelV2=model.as_reader(), radarState=log.RadarState.new_message(),
             driverStateV2=make_msg(True, distracted=True),
             liveCalibration=log.LiveCalibrationData.new_message(rpyCalib=[0., 0., 0.]))
+  if reason != 'soft_hold':
+    sm['carState'].softHoldActive = 0
+    sm['carControl'] = car.CarControl.new_message(longActive=True)
+    sm['carControl'].actuators.longControlState = 'stopping'
+    sm['longitudinalPlan'] = log.LongitudinalPlan.new_message(xState=5 if reason == 'signal' else 0,
+                                                           trafficState=1, hasLead=True, vTargetNow=0.)
+    sm['radarState'].leadOne.status = True
+    sm['radarState'].leadOne.dRel = 8.
   sm.updated = {'carParams': False, 'radarState': True, 'driverStateV2': True}
 
   def update(_):
@@ -78,8 +87,13 @@ def test_dispatcher_freezes_assessment_and_resumes_next_frame(monkeypatch, exper
     sm.logMonoTime = dict.fromkeys(sm, int(clock[0] * 1e9))
     if len(packets) >= 120:
       sm['carState'].softHoldActive = 0
-      sm['carState'].standstill = False
-      sm['carState'].vEgo = sm['carState'].vEgoRaw = 20.
+      if reason == 'signal':
+        sm['longitudinalPlan'].trafficState = 2
+      elif reason == 'lead':
+        sm['radarState'].leadOne.vLead = 1.
+      else:
+        sm['carState'].standstill = False
+        sm['carState'].vEgo = sm['carState'].vEgoRaw = 20.
 
   def send(_, packet):
     packets.append(packet.to_dict())
@@ -124,3 +138,83 @@ def test_dispatcher_freezes_assessment_and_resumes_next_frame(monkeypatch, exper
   assert fallback_step.call_count == (0 if camera else 2)
   params.put_bool.assert_not_called()
   params.put_bool_nonblocking.assert_not_called()
+
+
+def automatic_stop(reason):
+  sm = Messages()
+  sm['carState'].softHoldActive = 0
+  sm['carControl'] = car.CarControl.new_message(longActive=True)
+  sm['carControl'].actuators.longControlState = 'stopping'
+  sm['longitudinalPlan'] = log.LongitudinalPlan.new_message(xState=5 if reason == 'signal' else 0,
+                                                         trafficState=1, hasLead=True, vTargetNow=0.)
+  sm['radarState'] = log.RadarState.new_message()
+  sm['radarState'].leadOne.status = True
+  sm['radarState'].leadOne.dRel = 8.
+  sm.logMonoTime = dict.fromkeys(sm, int(100e9))
+  return sm
+
+
+@pytest.mark.parametrize('reason', ['signal', 'lead'])
+@pytest.mark.parametrize('fault', ['none', 'motion', 'raw_motion', 'gas', 'reverse', 'disengaged', 'long_off',
+                                  'starting', 'target_departure', 'nan_target', 'can', 'stale_plan',
+                                  'stale_control', 'stale_state', 'future_plan', 'unhealthy', 'demo'])
+def test_confirmed_stop_resumes_on_departure_or_lost_evidence(reason, fault):
+  sm = automatic_stop(reason)
+  if fault == 'motion':
+    sm['carState'].vEgo = .1
+  elif fault == 'raw_motion':
+    sm['carState'].vEgoRaw = .1
+  elif fault == 'gas':
+    sm['carState'].gasPressed = True
+  elif fault == 'reverse':
+    sm['carState'].gearShifter = 'reverse'
+  elif fault == 'disengaged':
+    sm['selfdriveState'].active = False
+  elif fault == 'long_off':
+    sm['carControl'].longActive = False
+  elif fault == 'starting':
+    sm['carControl'].actuators.longControlState = 'starting'
+  elif fault == 'target_departure':
+    sm['longitudinalPlan'].vTargetNow = .1
+  elif fault == 'nan_target':
+    sm['longitudinalPlan'].vTargetNow = float('nan')
+  elif fault == 'can':
+    sm['carState'].canValid = False
+  elif fault in ('stale_plan', 'stale_control', 'stale_state'):
+    service = {'stale_plan':'longitudinalPlan', 'stale_control':'carControl', 'stale_state':'selfdriveState'}[fault]
+    sm.logMonoTime[service] = int(99e9)
+  elif fault == 'future_plan':
+    sm.logMonoTime['longitudinalPlan'] = int(101e9)
+  elif fault == 'unhealthy':
+    sm.healthy = False
+  assert dm2d.stationary_pause_eligible(sm, 100., demo=fault == 'demo') == (fault == 'none')
+
+
+@pytest.mark.parametrize('fault', ['moving', 'missing', 'far', 'nan', 'radar_error', 'stale', 'plan_no_lead'])
+def test_lead_pause_needs_fresh_stationary_near_lead(fault):
+  sm = automatic_stop('lead')
+  lead = sm['radarState'].leadOne
+  if fault == 'moving':
+    lead.vLead = .2
+  elif fault == 'missing':
+    lead.status = False
+  elif fault == 'far':
+    lead.dRel = 100.
+  elif fault == 'nan':
+    lead.vLead = float('nan')
+  elif fault == 'radar_error':
+    sm['radarState'].radarErrors.canError = True
+  elif fault == 'stale':
+    sm.logMonoTime['radarState'] = int(99e9)
+  else:
+    sm['longitudinalPlan'].hasLead = False
+  assert not dm2d.stationary_pause_eligible(sm, 100.)
+
+
+def test_green_or_released_signal_restores_before_motion():
+  sm = automatic_stop('signal')
+  sm['longitudinalPlan'].trafficState = 2
+  assert not dm2d.stationary_pause_eligible(sm, 100.)
+  sm['longitudinalPlan'].trafficState = 1
+  sm['longitudinalPlan'].xState = 2
+  assert not dm2d.stationary_pause_eligible(sm, 100.)

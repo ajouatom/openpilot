@@ -11,7 +11,6 @@ class Element {
 }
 const data = { effective: 'n16', selected: 'flip-flop', reboot_required: true, models: [
   { id: 'n16', name: 'N16 Nav', noo: true, hidden: false, protected: true, egpu_bytes: 100, jetson_bytes: null },
-  { id: 'md-v3', name: 'MD v3', noo: false, hidden: true, protected: false, egpu_bytes: 0, jetson_bytes: 0, delete_pending: true },
   { id: 'flip-flop', name: 'Flip Flop', noo: false, hidden: false, protected: true, egpu_bytes: 200, jetson_bytes: 300 },
 ] };
 test('model choice distinguishes current/pending/NOO and preserves in-flight choice across polls', t => {
@@ -22,7 +21,7 @@ test('model choice distinguishes current/pending/NOO and preserves in-flight cho
   renderLibrary(data);
   const select = root.querySelector('select');
   assert.equal(select.value, 'flip-flop');
-  assert.deepEqual(select.children.map(x => x.value), ['n16', 'md-v3', 'flip-flop']);
+  assert.deepEqual(select.children.map(x => x.value), ['n16', 'flip-flop']);
   assert.match(select.children[0].textContent, /NOO supported/);
   assert.match(select.children[1].textContent, /NOO not supported/);
   assert.match(root.children.find(x => x.textContent?.startsWith('This boot')).textContent, /N16/);
@@ -45,11 +44,11 @@ test('selection alone saves next boot and exposes no deletion action', async t =
   globalThis.postJson = async (url, body) => { calls.push({url, body}); return {library: {...data, selected: body.model}}; };
   renderLibrary(data, true);
   const select = root.querySelector('select');
-  select.value = 'md-v3';
+  select.value = 'n16';
   await select.events.change();
-  assert.deepEqual(calls, [{url: '/api/egpu/model/library', body: {action:'select',model:'md-v3'}}]);
+  assert.deepEqual(calls, [{url: '/api/egpu/model/library', body: {action:'select',model:'n16'}}]);
   assert.equal(root.querySelector('button'), undefined);
-  assert.equal(root.querySelector('select').value, 'md-v3');
+  assert.equal(root.querySelector('select').value, 'n16');
 });
 
 test('failed selection restores the saved choice', async t => {
@@ -60,7 +59,7 @@ test('failed selection restores the saved choice', async t => {
   globalThis.postJson = async () => { throw new Error('offline'); };
   renderLibrary(data, true);
   const select = root.querySelector('select');
-  select.value = 'md-v3';
+  select.value = 'n16';
   await select.events.change();
   assert.equal(root.querySelector('select').value, 'flip-flop');
   assert.ok(!root.querySelector('select').disabled);

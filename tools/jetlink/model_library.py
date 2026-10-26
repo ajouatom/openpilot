@@ -58,8 +58,9 @@ class Client:
     queue_path = C.storage() / 'jetson-delete.json'
     queue = C.read_json(queue_path).get('models', [])
     protected = {C.model_spec(key)['sha256'] for key in protected_ids()}
+    retained = {C.model_spec(key)['sha256'] for key in C.available()}
     retired = {key for key, entry in C.catalog().items() if entry.get('retired') is True}
-    requested = {C.model_spec(key)['sha256'] for key in queue if key in retired} - protected
+    requested = {C.model_spec(key)['sha256'] for key in queue if key in retired} - protected - retained
     seq = client._next_seq()
     client.t.send_json(REQUEST, seq, {'delete': sorted(requested)})
     result = json.loads(bytes(client._expect(RESPONSE, seq, 3.).payload))
@@ -69,6 +70,6 @@ class Client:
     # Re-read so requests submitted while the transaction ran are not lost.
     current = C.read_json(queue_path).get('models', [])
     done = set(result.get('deleted', []))
-    remaining = [key for key in current if key in retired and C.model_spec(key)['sha256'] not in done]
+    remaining = [key for key in current if key in retired and C.model_spec(key)['sha256'] not in done | retained]
     if remaining != current:
       C.atomic_json(queue_path, {'models': remaining})

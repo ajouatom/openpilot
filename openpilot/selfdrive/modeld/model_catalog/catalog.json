@@ -14,6 +14,7 @@
   },
   "md-v3": {
     "name": "MD v3",
+    "retired": true,
     "manifest_url": "https://upload.shind0.synology.me/models/comma4-big-md-v3-1365126a/manifest.json",
     "egpu": {
       "model_id": "comma-pr39087-md-v3-e86b58dc-d4c7a3fc",

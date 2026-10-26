@@ -1,5 +1,19 @@
 ﻿# External model catalog — carrot-nav-blink trial, 2026-10-26
 
+## Correction and retirement, 2026-10-27
+
+MD v3 is retired. The selectable list is N16 Nav and Flip Flop. Its metadata
+remains only for old-boot compatibility and exact unused PKL cleanup. A retained
+Flip Flop ONNX is never deleted through the retired alias, even when N16 is selected.
+Earlier statements below about an identical official MD/Flip ONNX were incorrect:
+the same Hugging Face path was overwritten on 2026-10-24. The 2026-10-16 file was
+792542056 bytes/SHA256 1cfd2c45353d876b5b257b24d77537de58ab90a44ae595f15b1f64b6ea3fd770;
+the replacement is 768750198 bytes/SHA256 35976b11be3904eb78e32f7dc55a6abf8e9433ac5aa391a1998f1e9ce001b199.
+Our old MD selection referenced the replacement, not the historical file. The
+same checkpoint label does not establish weight/graph or inference equivalence.
+The remaining sections describe the historical integration and trials.
+
+
 The internal CD210 model/artifacts remain unchanged. A boot-frozen selection shared by
 AMD eGPU and Jetson adds N16 Nav, MD v3 and Flip Flop. Saving changes only the next-boot
 preference; worker recovery and manager restarts keep the current boot selection.
