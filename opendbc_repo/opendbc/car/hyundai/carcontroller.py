@@ -50,14 +50,18 @@ APRK_COM_DISABLE = bytes([0x03, 0x28, 0x83, 0x01, 0, 0, 0, 0])
 APRK_DEFAULT_SESSION = bytes([0x02, 0x10, 0x01, 0, 0, 0, 0, 0])
 APRK_ON_KPH, APRK_OFF_KPH = 30., 20.
 
-# CanfdBlinkerStalk: APRK 를 끄지 못할 때의 우회로. 조향칼럼 스위치가 쏘는
-# BLINKER_STALKS(0x3C1) 를 그대로 재생한다. BCM 이 스토크를 보고 깜빡이를 만들기 때문에
-# (09-18 로그: 스토크 ON 구간에 0x413 ALT 램프가 0.4초 주기로 점멸) ECU 침묵이 필요 없다.
-# byte0 은 CHECKSUM_MAYBE 인데 CRC8 로 역산되지 않아, 실차에서 실제로 유효했던 프레임을 그대로 쓴다.
-STALK_ADDR = 0x3C1
-STALK_OFF      = bytes.fromhex("8f30300000000000")
-STALK_LEFT_ON  = bytes.fromhex("de90304000000000")
-STALK_RIGHT_ON = bytes.fromhex("a350300001000000")
+# CanfdBlinkerStalk: when APRK can't be silenced, imitate the steering column lever (BLINKER_STALKS, 0x3C1); the BCM
+# blinks from it (09-18 log: 0x413 ALT lamp at 0.4 s while the lever is on). 10-26 logs: COUNTER_ALT goes +1 on every
+# lever change and stays put otherwise; CHECKSUM_MAYBE = CRC8 (poly 0x1D, init 0, xorout 0x65) of bytes 1..7.
+
+
+def stalk_checksum(body):
+  crc = 0
+  for b in body:
+    crc ^= b
+    for _ in range(8):
+      crc = ((crc << 1) ^ 0x1D) & 0xFF if crc & 0x80 else (crc << 1) & 0xFF
+  return crc ^ 0x65
 CANFD_DEPART_TIME = 3.0
 CANFD_DEPART_SPEED = 3.0
 CANFD_JERK_ERROR_DELAY = 0.5
@@ -269,17 +273,17 @@ class CarController(CarControllerBase):
     self.steerDeltaUpOrg = self.steerDeltaUp = self.steerDeltaUpLC = self.params.STEER_DELTA_UP
     self.steerDeltaDownOrg = self.steerDeltaDown = self.steerDeltaDownLC = self.params.STEER_DELTA_DOWN
 
-  def stalk_blinkers(self):
-    # 0x3C1 replay: the real sender is 5 Hz, we push 20 Hz to win the slots.
-    if self.frame % 5 != 0:
+  def stalk_blinkers(self, CS):
+    # 0x3C1 lever frame at 20 Hz (the real sender is 5 Hz): the real frame with only the blinker bits changed and the
+    # counter one ahead, as a lever change would send it. Other bits (light knob, high beam) follow the real lever.
+    # shortcut: if the driver moves the lever meanwhile, both senders use the same counter; not handled
+    if self.frame % 5 != 0 or CS.blinker_stalks is None:
       return []
-    if self.blinker_stalk == 1:
-      dat = STALK_LEFT_ON
-    elif self.blinker_stalk == 2:
-      dat = STALK_RIGHT_ON
-    else:
-      dat = STALK_OFF
-    return [CanData(STALK_ADDR, dat, self.CAN.ECAN)]
+    values = dict(CS.blinker_stalks)
+    values.update(LEFT_BLINKER=int(self.blinker_stalk == 1), RIGHT_BLINKER=int(self.blinker_stalk == 2),
+                  LEFT_BLINKER_TAP=0, RIGHT_BLINKER_TAP=0, COUNTER_ALT=(int(values["COUNTER_ALT"]) + 1) % 16, CHECKSUM_MAYBE=0)
+    addr, dat, bus = self.packer.make_can_msg("BLINKER_STALKS", self.CAN.ECAN, values)
+    return [CanData(addr, bytes([stalk_checksum(dat[1:])]) + bytes(dat[1:]), bus)]
 
   def aprk_blinkers(self, CC, CS):
     # shortcut: replies are not checked; if APRK ignores the requests it keeps sending SPAS2 and the cluster sees both
@@ -636,7 +640,7 @@ class CarController(CarControllerBase):
 
       # blinkers
       if self.blinker_stalk in (1, 2):
-        can_sends.extend(self.stalk_blinkers())
+        can_sends.extend(self.stalk_blinkers(CS))
       if hda2 and self.CP.flags & HyundaiFlags.ENABLE_BLINKERS:
         can_sends.extend(hyundaicanfd.create_spas_messages(self.packer, self.CAN, self.frame, CC.leftBlinker, CC.rightBlinker))
       elif self.blinker_control or self.blinker_test or self.aprk_state:
