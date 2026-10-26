@@ -46,3 +46,19 @@ def test_exported_hud_entrypoint_has_all_dependencies(tmp_path):
                           cwd=tmp_path, env=env, capture_output=True, text=True, timeout=30)
   assert result.returncode == 0, result.stderr
   assert '--usb-codec' in result.stdout
+
+
+@pytest.mark.skipif(sys.platform != 'linux', reason='Host server uses Linux dependencies')
+def test_exported_server_starts_without_checkout_pythonpath(tmp_path):
+  archive = subprocess.check_output(['git', '-C', str(ROOT), 'archive', 'HEAD', *PATHS])
+  release = tmp_path / 'release'
+  release.mkdir()
+  with tarfile.open(fileobj=io.BytesIO(archive)) as source:
+    source.extractall(release, filter='data')
+  env = dict(os.environ)
+  env.pop('PYTHONPATH', None)
+  env.pop('PYTHONSAFEPATH', None)
+  result = subprocess.run([sys.executable, str(release / 'tools/jetlink/server.py'), '--check-imports'],
+                          cwd=tmp_path, env=env, capture_output=True, text=True, timeout=30)
+  assert result.returncode == 0, result.stderr
+  assert 'SERVER_IMPORTS_OK' in result.stdout

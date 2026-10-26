@@ -2,6 +2,7 @@
 from pathlib import Path
 from model_pin import read_spec
 import sys
+import os
 import subprocess
 import time
 
@@ -13,7 +14,12 @@ def main():
   from blink_driver import prepare_optional
   prepare_optional()
   import numpy as np
-  import server  # noqa: F401 -- verify the application entry point's imports
+  # Match the standalone systemd entry point: no inherited checkout path.
+  env = dict(os.environ)
+  env.pop('PYTHONPATH', None)
+  env.pop('PYTHONSAFEPATH', None)
+  subprocess.run([sys.executable, str(ROOT / 'tools/jetlink/server.py'), '--check-imports'],
+                 cwd='/', env=env, check=True, timeout=30, stdout=subprocess.DEVNULL)
   # Importing hud alone misses the renderer imports inside main(). Exercise
   # the real entry point without opening a panel or waiting for vehicle data.
   subprocess.run([sys.executable, str(ROOT / 'tools/jetlink/hud.py'), '--help'],

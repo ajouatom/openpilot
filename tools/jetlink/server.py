@@ -5,7 +5,9 @@ from pathlib import Path
 import sys
 import time
 
-if __name__ == '__main__':
+CHECK_IMPORTS = '--check-imports' in sys.argv
+
+if __name__ == '__main__' and not CHECK_IMPORTS:
   if Path('/etc/nv_tegra_release').is_file():
     from install_updates import migrate_running_release
     migrate_running_release()
@@ -13,6 +15,7 @@ if __name__ == '__main__':
   wait_for_runtime()
 
 ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / 'third_party/jetlink'))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from hud_protocol import HUD_CAPABILITY, HUD_MESSAGE, MAX_HUD_BYTES, HUD_PACKET, HEADER
@@ -266,6 +269,9 @@ class CarrotSession(Session):
 
 
 if __name__ == '__main__':
+  if CHECK_IMPORTS:
+    print('SERVER_IMPORTS_OK')
+    raise SystemExit(0)
   if Path('/etc/nv_tegra_release').is_file():
     from blink_driver import prepare_optional
     prepare_optional()
