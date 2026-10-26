@@ -54,6 +54,17 @@ static bool hyundai_spas_park_ready(uint32_t now) {
     ready = ready && hyundai_spas_park_value[i] && (hyundai_spas_park_count[i] >= ((i == 2) ? 3U : 10U)) &&
             (get_ts_elapsed(now, hyundai_spas_park_at[i]) < ((i == 2) ? 500000U : 100000U));
   }
+  // Corrupt checked frames never reach the vehicle RX hook. Consult the
+  // common validator as well, instead of retaining the previous good sample.
+  for (int i = 0; i < current_safety_config.rx_checks_len; i++) {
+    const RxCheck *check = &current_safety_config.rx_checks[i];
+    const CanMsgCheck *msg = &check->msg[check->status.index];
+    if ((msg->bus == hyundai_spas_bus) && ((msg->addr == 0x35) || (msg->addr == 0xA0))) {
+      ready = ready && check->status.msg_seen && check->status.valid_checksum && check->status.valid_quality_flag &&
+              (check->status.wrong_counters < MAX_WRONG_COUNTERS) && !check->status.lagging &&
+              (get_ts_elapsed(now, check->status.last_timestamp) < 100000U);
+    }
+  }
   return ready;
 }
 

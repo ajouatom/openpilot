@@ -220,7 +220,8 @@ def test_direct_trial_stops_on_stall_or_panda_rejection(monkeypatch, cause):
   sm.recv_time = dict.fromkeys(sm, now)
   s.driver_at = now
   cs.leftBlinker = True
-  if cause == 'panda_rejection': sm['pandaStates'][0].safetyTxBlocked = 1
+  if cause == 'panda_rejection':
+    sm['pandaStates'][0].safetyTxBlocked = 1
   assert s.update(cs, sm, now, True) == []
   assert s.hold_value == 1
 
@@ -232,14 +233,22 @@ def test_direct_trial_rejects_guard_or_contract_failure(monkeypatch, bad):
   s.update(cs, sm, 10., True)
   p.value = 7
   s.settings_at = 0
-  if bad == 'moving': cs.vEgo = .1
-  if bad == 'gear': cs.gearShifter = 'drive'
-  if bad == 'driver': cs.blinkerLever = 1
-  if bad == 'stock': s.session.stock_direction = 3
-  if bad == 'stale': sm.recv_time['carControl'] = 0
-  if bad == 'panda': sm['pandaStates'][0].controlsAllowed = True
-  if bad == 'lamp': cs.leftBlinker = True
-  if bad == 'unsupported': s.hold_supported = False
+  if bad == 'moving':
+    cs.vEgo = .1
+  if bad == 'gear':
+    cs.gearShifter = 'drive'
+  if bad == 'driver':
+    cs.blinkerLever = 1
+  if bad == 'stock':
+    s.session.stock_direction = 3
+  if bad == 'stale':
+    sm.recv_time['carControl'] = 0
+  if bad == 'panda':
+    sm['pandaStates'][0].controlsAllowed = True
+  if bad == 'lamp':
+    cs.leftBlinker = True
+  if bad == 'unsupported':
+    s.hold_supported = False
   assert s.update(cs, sm, 10.01, True) == []
   assert s.hold_value == 1
 
