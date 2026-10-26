@@ -49,6 +49,7 @@ const CanMsg HYUNDAI_CANFD_HDA2_LONG_TX_MSGS[] = {
   {0x7B1, 0, 8},  // parking ECU (APRK) session / disable / tester present, CanfdBlinkerControl
   {0x165, 0, 24}, // SPAS1, sent while APRK is silenced
   {0x16A, 0, 32}, // SPAS2 BLINKER_CONTROL, sent while APRK is silenced
+  {0x3C1, 0, 8},  // BLINKER_STALKS replay (CanfdBlinkerStalk)
   {0x12A, 1, 16}, // LFA
   {0x160, 1, 16}, // ADRV_0x160
   {0x1E0, 1, 16}, // LFAHDA_CLUSTER
@@ -102,6 +103,7 @@ const CanMsg HYUNDAI_CANFD_HDA1_TX_MSGS[] = {
   {0x1E0, 0, 16}, // LFAHDA_CLUSTER
   {0x160, 0, 16}, // ADRV_0x160
   {0x7D0, 0, 8},  // tester present for radar ECU disable
+  {0x3C1, 0, 8},  // BLINKER_STALKS replay (CanfdBlinkerStalk)
   {0x1AA, 2, 16}, // CRUISE_ALT_BUTTONS , carrot
   {203, 0, 24}, // CB
   {373, 2, 24}, // TCS(0x175)
@@ -690,6 +692,17 @@ static bool hyundai_canfd_tx_hook(const CANPacket_t *to_send_const) {
       if ((b != 0U) && !blinker) {
         tx = false;
       }
+    }
+  }
+
+  // BLINKER_STALKS(0x3C1) replay: only left/right/off shapes (byte2=0x30, byte3=0x00|0x40, byte4<=1, tail 0)
+  if (addr == 0x3C1) {
+    bool shape_ok = (GET_BYTE(to_send, 2) == 0x30U) &&
+                    ((GET_BYTE(to_send, 3) == 0x00U) || (GET_BYTE(to_send, 3) == 0x40U)) &&
+                    (GET_BYTE(to_send, 4) <= 0x01U) &&
+                    (GET_BYTE(to_send, 5) == 0U) && (GET_BYTE(to_send, 6) == 0U) && (GET_BYTE(to_send, 7) == 0U);
+    if (!shape_ok) {
+      tx = false;
     }
   }
 
