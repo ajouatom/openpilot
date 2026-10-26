@@ -328,6 +328,7 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"CanfdBlinkerControl", {PERSISTENT, BOOL, "0"}},
     {"CanfdBlinkerTest", {CLEAR_ON_MANAGER_START, INT, "0"}},
     {"CanfdBlinkerStalk", {CLEAR_ON_MANAGER_START, INT, "0"}},
+    {"PalisadeBlinkerTest", {CLEAR_ON_MANAGER_START, INT, "0"}},
     {"FingerPrints", {PERSISTENT | CLEAR_ON_MANAGER_START, STRING}},
     {"IsLdwsCar", {PERSISTENT, INT, "0"}},
     {"CanfdHDA2", {PERSISTENT, INT, "0"}},

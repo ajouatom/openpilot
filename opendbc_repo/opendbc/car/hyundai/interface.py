@@ -184,6 +184,9 @@ class CarInterface(CarInterfaceBase):
         ret.safetyConfigs[0].safetyParam |= HyundaiSafetyFlags.CAMERA_SCC.value
         print("$$$CAMERA_SCC")
 
+      if candidate == CAR.HYUNDAI_PALISADE:
+        ret.safetyConfigs[0].safetyParam |= HyundaiSafetyFlags.PALISADE_CGW_TEST.value
+
     # Common lateral control setup
 
     ret.centerToFront = ret.wheelbase * 0.4

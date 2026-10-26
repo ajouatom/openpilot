@@ -408,6 +408,7 @@
           "params": [
             "HyundaiCameraSCC",
             "IsLdwsCar",
+            "PalisadeBlinkerTest",
             "HapticFeedbackWhenSpeedCamera"
           ]
         },
@@ -2856,6 +2857,22 @@
       "cgroup": "启动设置",
       "ctitle": "转向灯指令测试",
       "cdescr": "0: 关闭, 1: 左, 2: 右。\n不论车速和挡位，暂停泊车 ECU 并持续发送该方向转向灯指令（即使「变道自动转向灯」关闭也有效）。改回 0 恢复泊车 ECU。行驶中也有效，请两人一组测试。重启后恢复为 0。",
+      "min": 0,
+      "max": 2,
+      "default": 0,
+      "unit": 1
+    },
+    {
+      "group": "시작",
+      "name": "PalisadeBlinkerTest",
+      "title": "팰리세이드 깜빡이 상태 시험",
+      "descr": "팰리세이드 전용. 0: 끔, 1: 왼쪽, 2: 오른쪽. P단·정차·제어 해제 상태에서 CGW1(0x541)의 깜빡이 상태만 20Hz로 최대 3초 송신합니다. 다시 시험하려면 0으로 바꾼 뒤 선택하세요. 실제 램프 작동은 미검증입니다. 재시작하면 0.",
+      "egroup": "START",
+      "etitle": "Palisade Blinker Status Test",
+      "edescr": "Palisade only. 0: Off, 1: Left, 2: Right. Sends CGW1 (0x541) blinker status at 20 Hz for up to 3 seconds, only stationary in P with controls disengaged. Select Off before retrying. Lamp actuation is unverified. Resets on restart.",
+      "cgroup": "启动设置",
+      "ctitle": "Palisade 转向灯状态测试",
+      "cdescr": "仅限 Palisade。0: 关闭，1: 左，2: 右。仅在 P 挡、静止且控制关闭时，以 20Hz 发送 CGW1 转向灯状态，最长 3 秒。重新测试前先选 0。实际灯光响应尚未验证。重启归零。",
       "min": 0,
       "max": 2,
       "default": 0,

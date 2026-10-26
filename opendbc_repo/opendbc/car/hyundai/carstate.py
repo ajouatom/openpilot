@@ -505,6 +505,11 @@ class CarState(CarStateBase):
     if self.CP.flags & HyundaiFlags.CANFD:
       return self.update_canfd(can_parsers)
 
+    if self.CP.carFingerprint == CAR.HYUNDAI_PALISADE:
+      self.cgw_test_raw = cp.dat.get(0x541, b"")
+      self.cgw_test_timestamps = tuple(max(cp.ts_nanos.get(name, {}).values(), default=0)
+                                       for name in ("CGW1", "LVR12", "WHL_SPD11"))
+
     ret = structs.CarState()
     cp_cruise = cp_cam if self.CP.flags & HyundaiFlags.CAMERA_SCC else cp
     self.is_metric = cp.vl["CLU11"]["CF_Clu_SPEED_UNIT"] == 0

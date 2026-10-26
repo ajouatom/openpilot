@@ -8,6 +8,7 @@ from opendbc.car.common.conversions import Conversions as CV
 from opendbc.car.hyundai import hyundaicanfd, hyundaican
 from opendbc.car.hyundai.carstate import CarState
 from opendbc.car.hyundai.stopping import CanfdStopping
+from opendbc.car.hyundai.palisade_cgw_test import PalisadeCgwTest
 from opendbc.car.hyundai.steering_handover import SteeringHandover
 from opendbc.car.carlog import carlog
 from opendbc.car.hyundai.hyundaicanfd import CanBus
@@ -230,6 +231,8 @@ class CarController(CarControllerBase):
     self.blinker_control = False
     self.blinker_test = 0  # CanfdBlinkerTest: 1 left, 2 right (menu test, any speed/gear)
     self.blinker_stalk = 0  # CanfdBlinkerStalk: 1 left, 2 right (0x3C1 replay)
+    self.palisade_cgw_test = PalisadeCgwTest()
+    self.palisade_blinker_test = 0
     self.stalk_counter = None
     self.stalk_source_counter = None
     self.stalk_values = None
@@ -383,6 +386,7 @@ class CarController(CarControllerBase):
       self.blinker_control = params.get_bool("CanfdBlinkerControl")
       self.blinker_test = params.get_int("CanfdBlinkerTest")
       self.blinker_stalk = params.get_int("CanfdBlinkerStalk")
+      self.palisade_blinker_test = params.get_int("PalisadeBlinkerTest")
       self.hapticFeedbackWhenSpeedCamera = int(params.get_int("HapticFeedbackWhenSpeedCamera"))
 
       self.button_spam1 = params.get_int("CruiseButtonTest1")
@@ -719,6 +723,14 @@ class CarController(CarControllerBase):
         else:
           can_sends.extend(self.create_button_messages(CC, CS, use_clu11=False))
     else:
+      if self.CP.carFingerprint == CAR.HYUNDAI_PALISADE:
+        wheels = CS.out.wheelSpeeds
+        parked = (CS.out.gearShifter == structs.CarState.GearShifter.park
+                  and all(speed == 0 for speed in (wheels.fl, wheels.fr, wheels.rl, wheels.rr)))
+        can_sends.extend(self.palisade_cgw_test.update(
+          self.palisade_blinker_test, now_nanos, CS.cgw_test_raw, CS.cgw_test_timestamps,
+          parked, not (CC.enabled or CC.latActive or CC.longActive),
+        ))
       if CS.lkas11 is not None:
         if self.lkas11_active:
           can_sends.append(hyundaican.create_lkas11(self.packer, self.frame, self.CP, apply_torque, apply_steer_req,

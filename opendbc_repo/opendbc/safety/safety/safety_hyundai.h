@@ -56,6 +56,62 @@ static const CanMsg HYUNDAI_TX_MSGS[] = {
 static bool hyundai_legacy = false;
 static bool hyundai_cruise_buttons_alt = false;
 
+// Dedicated classic-CAN parked test; never shared with CAN-FD flags/state.
+static struct {
+  bool enabled, template_valid, wheels_valid, gear_valid, stationary, park;
+  bool attempted, sent, trial_active, cutoff;
+  uint8_t template[8];
+  uint32_t template_ts, wheels_ts, gear_ts, attempt_ts, sent_ts, trial_ts;
+} hyundai_cgw_test;
+
+static void hyundai_cgw_test_init(uint16_t param) {
+  memset(&hyundai_cgw_test, 0, sizeof(hyundai_cgw_test));
+  hyundai_cgw_test.enabled = (param & 4096U) != 0U;
+}
+
+static bool hyundai_cgw_test_tx(const CANPacket_t *msg) {
+  uint32_t now = microsecond_timer_get();
+  // Count rejected requests as activity too, so a running sender cannot rearm itself.
+  if (hyundai_cgw_test.attempted && (get_ts_elapsed(now, hyundai_cgw_test.attempt_ts) >= 1000000U)) {
+    hyundai_cgw_test.trial_active = false;
+    hyundai_cgw_test.cutoff = false;
+  }
+  hyundai_cgw_test.attempted = true;
+  hyundai_cgw_test.attempt_ts = now;
+  if (hyundai_cgw_test.trial_active && (get_ts_elapsed(now, hyundai_cgw_test.trial_ts) >= 3000000U)) {
+    hyundai_cgw_test.cutoff = true;
+  }
+  bool allowed = hyundai_cgw_test.enabled && !controls_allowed && !relay_malfunction &&
+                 (GET_BUS(msg) == 0) && (GET_LEN(msg) == 8) && !msg->extended && !msg->fd &&
+                 hyundai_cgw_test.template_valid && hyundai_cgw_test.wheels_valid && hyundai_cgw_test.gear_valid &&
+                 hyundai_cgw_test.stationary && hyundai_cgw_test.park && !hyundai_cgw_test.cutoff &&
+                 (get_ts_elapsed(now, hyundai_cgw_test.template_ts) <= 250000U) &&
+                 (get_ts_elapsed(now, hyundai_cgw_test.wheels_ts) <= 250000U) &&
+                 (get_ts_elapsed(now, hyundai_cgw_test.gear_ts) <= 250000U) &&
+                 (!hyundai_cgw_test.sent || (get_ts_elapsed(now, hyundai_cgw_test.sent_ts) >= 50000U));
+  unsigned int left = (GET_BYTE(msg, 2) >> 3) & 3U;
+  unsigned int right = GET_BYTE(msg, 7) >> 6;
+  allowed &= ((left == 1U) && (right == 0U)) || ((left == 0U) && (right == 1U));
+  allowed &= ((hyundai_cgw_test.template[2] & 0x18U) == 0U) &&
+             ((hyundai_cgw_test.template[7] & 0xC0U) == 0U) &&
+             ((hyundai_cgw_test.template[4] & 0x06U) == 0U) &&
+             ((hyundai_cgw_test.template[5] & 0x06U) == 0U);
+  for (int i = 0; i < 8; i++) {
+    uint8_t mask = (i == 2) ? 0xE7U : ((i == 7) ? 0x3FU : 0xFFU);
+    allowed &= (GET_BYTE(msg, i) & mask) == (hyundai_cgw_test.template[i] & mask);
+  }
+  if (allowed) {
+    if (!hyundai_cgw_test.trial_active) {
+      hyundai_cgw_test.trial_active = true;
+      hyundai_cgw_test.trial_ts = now;
+    }
+    hyundai_cgw_test.sent = true;
+    hyundai_cgw_test.sent_ts = now;
+  }
+  return allowed;
+}
+
+
 static uint8_t hyundai_get_counter(const CANPacket_t *to_push) {
   int addr = GET_ADDR(to_push);
 
@@ -131,6 +187,31 @@ static uint32_t hyundai_compute_checksum(const CANPacket_t *to_push) {
 static void hyundai_rx_hook(const CANPacket_t *to_push) {
   int bus = GET_BUS(to_push);
   int addr = GET_ADDR(to_push);
+
+  if (hyundai_cgw_test.enabled && (bus == 0)) {
+    bool valid = (GET_LEN(to_push) == 8) && !to_push->extended && !to_push->fd;
+    uint32_t now = microsecond_timer_get();
+    if (addr == 0x541) {
+      hyundai_cgw_test.template_valid = valid;
+      if (valid) {
+        memcpy(hyundai_cgw_test.template, to_push->data, 8);
+        hyundai_cgw_test.template_ts = now;
+      }
+    } else if (addr == 0x367) {
+      // hyundai_kia_generic.dbc: LVR12 CF_Lvr_Gear bits 32..35, P = 0.
+      hyundai_cgw_test.gear_valid = valid;
+      hyundai_cgw_test.park = (GET_BYTE(to_push, 4) & 0xFU) == 0U;
+      hyundai_cgw_test.gear_ts = now;
+    } else if (addr == 0x386) {
+      // All four 14-bit wheel speeds must be exactly zero, not the driving standstill threshold.
+      hyundai_cgw_test.wheels_valid = valid;
+      hyundai_cgw_test.stationary = true;
+      for (int i = 0; i < 8; i += 2) {
+        hyundai_cgw_test.stationary &= (GET_BYTES(to_push, i, 2) & 0x3FFFU) == 0U;
+      }
+      hyundai_cgw_test.wheels_ts = now;
+    }
+  }
 
   // SCC12 is on bus 2 for camera-based SCC cars, bus 0 on all others
   if (addr == 0x421) {
@@ -210,6 +291,10 @@ static bool hyundai_tx_hook(const CANPacket_t *to_send) {
 
   bool tx = true;
   int addr = GET_ADDR(to_send);
+
+  if (addr == 0x541) {
+    return hyundai_cgw_test_tx(to_send);
+  }
 
   // FCA11: Block any potential actuation
   if (false && addr == 0x38D) {
@@ -438,6 +523,15 @@ static safety_config hyundai_init_carrot(bool legacy_car) {
         if(legacy_car) ret = BUILD_SAFETY_CFG(hyundai_rx_checks_legacy, HYUNDAI_TX_MSGS);
         else ret = BUILD_SAFETY_CFG(hyundai_rx_checks, HYUNDAI_TX_MSGS);
     }
+    if (hyundai_cgw_test.enabled) {
+      static CanMsg test_tx_msgs[(sizeof(HYUNDAI_TX_MSGS) / sizeof(HYUNDAI_TX_MSGS[0])) + 1U];
+      for (int i = 0; i < ret.tx_msgs_len; i++) {
+        test_tx_msgs[i] = ret.tx_msgs[i];
+      }
+      test_tx_msgs[ret.tx_msgs_len] = (CanMsg){0x541, 0, 8};
+      ret.tx_msgs = test_tx_msgs;
+      ret.tx_msgs_len++;
+    }
     return ret;
 }
 
@@ -464,6 +558,7 @@ static safety_config hyundai_init(uint16_t param) {
   };
 
   hyundai_common_init(param);
+  hyundai_cgw_test_init(param);
   hyundai_legacy = false;
   return hyundai_init_carrot(hyundai_legacy);
 
@@ -502,6 +597,7 @@ static safety_config hyundai_legacy_init(uint16_t param) {
   };
 
   hyundai_common_init(param);
+  hyundai_cgw_test_init(param);
   hyundai_legacy = true;
 
   return hyundai_init_carrot(hyundai_legacy);
