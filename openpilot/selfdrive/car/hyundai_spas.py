@@ -47,8 +47,10 @@ class SpasSignals:
                 crc = ((crc << 1) ^ (0x1d if crc & 0x80 else 0)) & 255
             if len(data) == 8 and data[0] == crc ^ 0x65:
               count = data[1] >> 4
-              advancing = 0 <= now-self.driver_at < .5 and count == (self.driver_counter+1) % 15
-              self.driver_count = min(10, self.driver_count+1) if advancing else 1
+              # The event counter stays constant while idle. Repeated valid
+              # 5 Hz CAN reception is fresh; this is not a SPAS cycle counter.
+              continuous = 0 <= now-self.driver_at < .5
+              self.driver_count = min(10, self.driver_count+1) if continuous else 1
               self.driver_at, self.driver_counter = now, count
               self.driver_active = bool(data[3] & 0x40 or data[4] & 0x51)
               self.driver_override |= self.driver_active

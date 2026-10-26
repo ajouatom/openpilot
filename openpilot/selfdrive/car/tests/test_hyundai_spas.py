@@ -150,3 +150,23 @@ def test_driver_override_restores_instead_of_retaining_pulse_hold(monkeypatch):
   sent = s.update(cs, sm, 10.0, True)
   assert s.session.state == 'restore_enable' and s.hold_value == 1
   assert all(m.address == 0x7B1 for m in sent)
+
+
+def test_actual_idle_stalk_event_counter_is_not_a_cycle_counter(monkeypatch):
+  s, _, _, _ = setup(monkeypatch)
+  s.driver_count = 0
+  s.driver_at = -100.
+  data = bytes.fromhex('12b0000000000000')
+  for i in range(4):
+    s.observe([(1, [(0x3c1, data, 0)])], 10.+i*.2)
+  assert s.driver_count == 4 and not s.driver_active
+  s.observe([(1, [(0x3c1, bytes([data[0] ^ 1])+data[1:], 0)])], 10.8)
+  assert s.driver_count == 0
+
+
+def test_unrelated_same_address_on_other_bus_cannot_arm_driver_input(monkeypatch):
+  s, _, _, _ = setup(monkeypatch)
+  s.driver_count = 0
+  for i in range(4):
+    s.observe([(1, [(0x3c1, bytes.fromhex('12b0000000000000'), 1)])], 10.+i*.2)
+  assert s.driver_count == 0
