@@ -123,3 +123,10 @@ Jetson host already implements this cache request; its runtime and N16 are uncha
 Temporary-cache tests cover retirement, boot fallback, active protection, actual
 file removal and delayed shared-identity deletion. No installed model was deleted
 as part of this revision's validation.
+
+
+Revision validation: 56 focused catalog/API checks, 34 web model/settings checks,
+25 Wiki checks, web production build and lint pass. Jetson integration CI
+40325554976 passes Linux 1634 broad/56 skips, 62 codec, 94 updater, 119 NAV,
+11 storage and 11 NAT checks, plus Windows installer checks. Counts overlap.
+Published source is 49512be286 on carrot-nav-blink only.

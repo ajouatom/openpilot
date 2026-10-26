@@ -1,5 +1,30 @@
 # Repository memory
 
+- On 2026-10-26, owner requests SPAS-only holding if existing0x1EA hold fails.
+  Fresh-stock200ms start/hold sends hold9.856s but onlyoneflash; overlap-capable
+  500ms cap ends before lamp acknowledgement, so actual overlap NOT achieved.
+  SPAS-only10s test13 on normal49512be286/PandaH7 verified:14queuedpairs then
+  physical2 error0->13/data bit1Error/TX99 warning; observer cancels at1.680s,
+  ~0.68s afterrequest. Lamp feedback brieflyon, nohold/noUDS/noTXrejection.
+  No right/repeat trial; sustained10s FAILED to complete. Passive60s errors13
+  stable/counters0/no warnings,1200validconsecutive model/DM/road/odom/pose,
+  wide1201,mean40.805/max47.500ms,link/HUD60/60,NAVabsent. Test0 restored.
+  Physical health indices differ from logical CAN: harnessflipped means
+  canState2 is logicalECAN0; earlier bus2-vsbus0 inference is RETRACTED.
+  Owner challenges patch attribution: original021003->03288301after50ms,
+  noACK,frame%2/50Hz,packer counter0; our ACK/quiet path and UDS-free direct
+  tests DIFFER. Original faithful vehicle validation is still NOT DONE;
+  do not claim contributor patch failed or momentary light is sustained success.
+  Added local source CAN-health abort tests113pass, publication/activation below.
+  Curated model UI49512be286 published/installed, combo autosaves only;
+  delete/restore API409, N16 selected/effective, MD/Flip available. Future
+  retired:true metadata retained for protected offroad cleanup, noactualretirement.
+  CI40325554976 Linux1634/56skip+62/94/119/11/11, Windows pass; model/API56,
+  web34,Wiki25 overlap. No Jetson runtime/model change. Raw private.
+  Details: docs/canfd_spas_blinkers_20261026.md and
+  docs/external_model_catalog_20261026.md.
+
+
 - On 2026-10-26, owner requests visible repeat then0.2s-start/existing-hold10s.
   Continuous3s repeat114SPAS2/2.971s gives4lamp cycles, errors142stable. Only
   test7/8 total duration extended10s; Panda directional limit3s and all guards

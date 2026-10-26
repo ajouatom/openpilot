@@ -31,6 +31,7 @@ class SpasSignals:
     self.stock_received = {}
     self.last_update = None
     self.test_blocked = ()
+    self.test_can_health = None
     self.test_serial = 0
     self.stalks = None
     self.driver_override = False
@@ -44,6 +45,25 @@ class SpasSignals:
     self.driver_count = 0
     self.driver_active = False
     self.status = 'disabled' if not self.enabled else 'waiting_stock'
+
+  @staticmethod
+  def can_health(pandas):
+    counts = []
+    if not pandas:
+      return None
+    for panda in pandas:
+      # These indices are physical controllers, not CanData logical buses.
+      # Watch all controllers rather than guessing the harness orientation.
+      for i in range(3):
+        health = getattr(panda, f'canState{i}', None)
+        if health is None or any(getattr(health, key, True) for key in ('busOff', 'errorWarning', 'errorPassive')):
+          return None
+        for key in ('totalErrorCnt', 'busOffCnt', 'totalTxLostCnt', 'totalRxLostCnt'):
+          value = getattr(health, key, None)
+          if not isinstance(value, int) or value < 0:
+            return None
+          counts.append(value)
+    return tuple(counts)
 
   def observe(self, can_list, now):
     if self.enabled:
@@ -103,13 +123,12 @@ class SpasSignals:
                   sm.valid['pandaStates'] and sm.alive['pandaStates'] and 0 <= now-sm.recv_time['pandaStates'] < .75 and
                   len(sm['pandaStates']) > 0 and not any(p.controlsAllowed for p in sm['pandaStates']))
         direct = setting >= 5
-        direct_ready = (not direct or (now >= self.direct_cooldown and self.session.stock_ready(now) and
+        direct_ready = (not direct or (now >= self.direct_cooldown and self.can_health(sm['pandaStates']) is not None and self.session.stock_ready(now) and
                         self.session.stock_direction == 0 and not (cs.leftBlinker or cs.rightBlinker)))
         if parked and (setting <= 2 or self.hold_supported) and self.session.state == 'idle' and direct_ready:
           self.test_serial += 1
           self.test_request = f'park:{self.test_serial}'
-          # The extended comparison sends only the initial 0.2 s SPAS pulse;
-          # the existing lamp-confirmed hold supplies the remaining time.
+          # Pulse/hold and SPAS-only comparisons have independent bounded modes.
           self.test_until = now+(10. if setting in (7, 8, 11, 12, 13, 14) else 3.)
           self.test_direction = 'left' if setting % 2 else 'right'
           self.test_pulse = setting in (3, 4, 7, 8, 9, 10, 11, 12)
@@ -117,6 +136,7 @@ class SpasSignals:
           self.test_hold = setting in (3, 4, 7, 8, 11, 12)
           self.test_blocked = tuple(getattr(p, 'safetyTxBlocked', 0) for p in sm['pandaStates'])
           if direct:
+            self.test_can_health = self.can_health(sm['pandaStates'])
             self.direct_started = self.direct_next = now
             self.phase_sent.clear()
             self.phase_until = now+.5
@@ -159,6 +179,7 @@ class SpasSignals:
                                 duration=3. if self.test_request is not None else 300., driver_override=self.driver_override)
     self.hold_value = 1  # suppress the old USB2CAN/automatic-lane hold while selected
     direct_active = (direct and request == self.test_request and healthy and not self.driver_override and
+                     self.test_can_health is not None and self.can_health(sm['pandaStates']) == self.test_can_health and
                      continuous and self.test_blocked == tuple(getattr(p, 'safetyTxBlocked', 0) for p in sm['pandaStates']) and
                      self.session.stock_ready(now) and self.session.stock_direction == 0)
     if direct and not direct_active:
@@ -166,7 +187,7 @@ class SpasSignals:
     pulse_active = now < self.phase_until if self.test_setting in (11, 12) else now-self.direct_started < .2
     if direct_active and now >= self.direct_next and (not self.test_pulse or pulse_active):
       if self.test_setting in (11, 12, 13, 14):
-        # At most one packet per new stock RX until confirmed hold overlaps for 0.1 s, at most 0.5 s.
+        # At most one packet per new stock RX, bounded by the selected test duration.
         # This is a bounded parked phase trial, not a wire-time guarantee.
         for address in SPAS:
           received = self.stock_received.get(address, -math.inf)

@@ -295,9 +295,10 @@ This tests the transition ordering; physical acceptance remains pending.
 The fresh-stock phased start/existing-hold test completed without increasing CAN
 errors, but did not sustain lamp feedback. The first 200 ms variant queued five
 SPAS2 packets and transmitted the existing left hold for about 9.856 seconds;
-lamp feedback showed one flash. The overlap variant queued 14 SPAS2 packets,
-overlapping the existing hold after confirmation; it also did not maintain lamps
-for ten seconds. Both are completed failed hold comparisons, not guard aborts.
+lamp feedback showed one flash. The overlap-capable variant queued 14 SPAS2 packets (last at 1.615s);
+first lamp feedback arrived at 1.648s and the existing hold began at 1.715s,
+after the 0.5s pulse cap. Therefore actual overlap was not achieved in that
+window. Existing hold continued to 11.128s but lamp feedback ended at 2.045s. Both are completed failed hold comparisons, not guard aborts.
 Queued Panda TX echoes are not independent evidence of successful wire delivery.
 
 At the owner's request, parked tests 13/14 repeat only SPAS left/right for at most
@@ -308,3 +309,37 @@ No existing 0x1EA hold or UDS command is sent by these test modes. Panda's parke
 absolute bound is ten seconds; ordinary source tests 5/6 remain three seconds.
 This is a bounded parked experiment, not a driving-mode fallback. Actual ten-second
 lamp acceptance is pending; offline tests cover expiry and counter wraparound.
+
+
+## SPAS-only comparison outcome and patch attribution correction
+
+Normal Git Pull/reboot installed 49512be286, including 5e0a2572e0. Actual Panda
+signature matched the newly built panda_h7.bin.signed. After fresh parked/inactive
+and six-second stable CAN preflight, test13 queued 14 packets per SPAS address.
+First lamp feedback was at t=1.560834s. The observer cancelled test0 at t=1.679513s
+on physical-controller2 error count 0->13, data bit1Error and transmit error count
+99/warning. There were no safety TX rejections, no UDS requests and no 0x1EA hold
+bits. Ten-second holding was NOT reached. No right/repeat test followed.
+
+Passive recovery60s kept total errors13 unchanged, transmit/receive error counters0,
+no warning/passive/busoff/loss increase. Model/DM/road/odom/pose each1200 valid
+consecutive, wide1201; pose healthy, model mean40.805/P9945.298/max47.500ms,
+zero above50; link/model/HUD/signal60/60. NAV absent. This is parked observation,
+not a road or hard deadline guarantee.
+
+The owner correctly challenged attribution of this failure to the contributor.
+The supplied original sends 021003, then 03288301 after five100Hz controller
+frames, then SPAS on frame%2 with packer counters starting0, plus 023e80 each
+100frames and 021001 on cancel. It does not wait for positive responses. Our
+normal Session instead requests acknowledged03280301 and requires ACK/quiet;
+the recent direct tests omit ALL UDS, seed counters from stock and use different
+scheduling. Therefore these actual tests are NOT faithful original-patch vehicle
+validation. The original contributor's report is neither disproven nor independently
+confirmed. Retract any statement implying that the original patch failed or that
+momentary illumination established successful sustained operation.
+
+The direct trial source now independently watches all three physical-controller
+health records: missing health, warning/passive/busoff, or changed error/loss counts
+stop and latch the current trial off. It no longer relies solely on the external
+observer to cancel on these conditions. This is a stop-condition improvement,
+not a fix for coexistence contention, and does not authorize a driving fallback.

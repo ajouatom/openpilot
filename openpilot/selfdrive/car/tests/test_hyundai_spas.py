@@ -28,6 +28,9 @@ def setup(monkeypatch):
     rightBlinkerStalkCount=0,
   )
   sm = Messages(carControl=NS(latActive=False, longActive=False), selfdriveState=NS(active=False, enabled=False), pandaStates=[NS(controlsAllowed=False)])
+  for i in range(3):
+    setattr(sm['pandaStates'][0], f'canState{i}', NS(busOff=False, errorWarning=False, errorPassive=False,
+            totalErrorCnt=0, busOffCnt=0, totalTxLostCnt=0, totalRxLostCnt=0))
   sm.valid = sm.alive = dict.fromkeys(sm, True)
   sm.recv_time = dict.fromkeys(sm, 10.0)
   sig.driver_at = 10.0
@@ -385,4 +388,37 @@ def test_phased_continuous_ten_seconds_without_existing_hold(monkeypatch, settin
     assert [m.dat[2] for m in selected] == [(11+i)%256 for i in range(500)]
     if address == 0x16A:
       assert all(m.dat[16] == (0x60 if setting == 13 else 0x80) for m in selected)
+  assert s.test_request is None
+
+
+@pytest.mark.parametrize('field', ['totalErrorCnt', 'busOffCnt', 'totalTxLostCnt', 'totalRxLostCnt', 'errorWarning', 'errorPassive', 'busOff'])
+@pytest.mark.parametrize('controller', [0, 1, 2])
+def test_direct_trial_stops_on_any_physical_can_health_change(monkeypatch, field, controller):
+  s, p, cs, sm = setup(monkeypatch)
+  warm(s)
+  s.update(cs, sm, 10., True)
+  p.value = 5
+  s.settings_at = 0
+  assert len(s.update(cs, sm, 10.01, True)) == 2
+  health = getattr(sm['pandaStates'][0], f'canState{controller}')
+  old = getattr(health, field)
+  setattr(health, field, True if isinstance(old, bool) else old+1)
+  assert s.update(cs, sm, 10.04, True) == []
+  assert s.hold_value == 1
+  setattr(health, field, old)
+  assert s.update(cs, sm, 10.05, True) == []  # no replay after recovery
+
+
+@pytest.mark.parametrize('fault', ['warning', 'missing'])
+def test_direct_trial_never_starts_with_unhealthy_or_missing_can_health(monkeypatch, fault):
+  s, p, cs, sm = setup(monkeypatch)
+  warm(s)
+  s.update(cs, sm, 10., True)
+  if fault == 'warning':
+    sm['pandaStates'][0].canState2.errorWarning = True
+  else:
+    del sm['pandaStates'][0].canState2
+  p.value = 13
+  s.settings_at = 0
+  assert s.update(cs, sm, 10.01, True) == []
   assert s.test_request is None
