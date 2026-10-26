@@ -695,9 +695,10 @@ static bool hyundai_canfd_tx_hook(const CANPacket_t *to_send_const) {
     }
   }
 
-  // BLINKER_STALKS(0x3C1) replay: only left/right/off shapes (byte2=0x30, byte3=0x00|0x40, byte4<=1, tail 0)
+  // BLINKER_STALKS(0x3C1) replay: only left/right/off shapes (byte3=0x00|0x40, byte4<=1, tail 0); byte2 carries the
+  // driver's light knob / high beam bits (mask 0x34; logs: 0x00 0x10 0x20 0x24 0x30 0x34), copied from the real lever
   if (addr == 0x3C1) {
-    bool shape_ok = (GET_BYTE(to_send, 2) == 0x30U) &&
+    bool shape_ok = ((GET_BYTE(to_send, 2) & ~0x34U) == 0U) &&
                     ((GET_BYTE(to_send, 3) == 0x00U) || (GET_BYTE(to_send, 3) == 0x40U)) &&
                     (GET_BYTE(to_send, 4) <= 0x01U) &&
                     (GET_BYTE(to_send, 5) == 0U) && (GET_BYTE(to_send, 6) == 0U) && (GET_BYTE(to_send, 7) == 0U);
