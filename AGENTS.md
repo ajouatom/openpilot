@@ -11,7 +11,8 @@
   bundle64813444B/1136files verified; exportedpaths identical toCI source.
   Owner explicitly approves signing-key-path lookup/sign/publication after
   initial automatic-review block. Signed032cde486b published/HTTPS fullhash
-  verified and selected; N16 unchanged. No live install or latency claim;
+  verified and selected; N16 unchanged. Finalpin ed6723245b CI40294246490
+  Linux/Windows pass;24local model-pin checks pass. No live install/latency claim;
   normal Git Pull/BOTH restarts. PR567 e2fac438 is optional exact Konik
   A1M/NX16 J4012-kernel manual installer, not needed for563/current hardware:
   not integrated/enabled. Details: docs/jetlink_konik_nx16_recovery_20261024.md.

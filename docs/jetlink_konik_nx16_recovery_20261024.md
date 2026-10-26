@@ -108,8 +108,10 @@ expected size and SHA-256. The branch now selects signed host `032cde486b`.
 N16 remains unchanged; no stable/global release alias was promoted.
 
 Local bundle/failure checks pass 36 / 2 platform skips. Source CI above covers
-the identical exported runtime, and the pin change triggers another normal
-integration run. No live vehicle mutation, installation, GPU benchmark or
+the identical exported runtime. Final pin commit `ed6723245b` also passes
+[Linux and Windows CI 40294246490](https://github.com/ajouatom/openpilot/actions/runs/40294246490).
+The 24 model-pin/NAV checks pass locally, and the public HTTPS manifest matches
+the selected pin with a verified signature. No live vehicle mutation, installation, GPU benchmark or
 restart was performed for this review. Users apply through normal comma Git
 Pull and both comma/Jetson restarts, with offroad power and Internet available
 for the updater. A comma-only restart cannot switch an already-running host.
