@@ -28,7 +28,7 @@ def test_aprk_silenced_only_in_d_above_30_and_restored():
   assert uds == [carcontroller.APRK_EXT_SESSION, carcontroller.APRK_COM_DISABLE] and cc.aprk_state == 2
   spas2 = [m for m in step(cc, 10, D, 25, left=True) if m[0] == 0x16A]  # 25 km/h: hysteresis keeps it silenced
   sig = packer.dbc.name_to_msg['SPAS2'].sigs['BLINKER_CONTROL']
-  assert len(spas2) == 5 and all(get_raw_value(m[1], sig) == 3 for m in spas2)
+  assert len(spas2) == 10 and all(get_raw_value(m[1], sig) == 3 for m in spas2)
   assert [m[1] for m in step(cc, 1, D, 15)] == [carcontroller.APRK_DEFAULT_SESSION] and cc.aprk_state == 0  # below 20: restored
   step(cc, 10, D, 35)
   assert [m[1] for m in step(cc, 1, P, 35)] == [carcontroller.APRK_DEFAULT_SESSION]  # out of D: restored

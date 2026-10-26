@@ -279,9 +279,9 @@ class CarController(CarControllerBase):
     else:
       if self.frame % 100 == 0:
         ret.append(make_tester_present_msg(APRK_ADDR, self.CAN.ECAN, suppress_response=True))
-      if self.frame % 2 == 0:  # APRK's own SPAS rate, 50 Hz
-        left, right = CC.leftBlinker or self.blinker_test == 1, CC.rightBlinker or self.blinker_test == 2
-        ret.extend(hyundaicanfd.create_spas_messages(self.packer, self.CAN, self.frame, left, right))
+      # every frame (100 Hz), twice APRK's 50 Hz: 10-26 APRK stayed on, so its BLINKER_CONTROL 0 frames interleave with ours
+      left, right = CC.leftBlinker or self.blinker_test == 1, CC.rightBlinker or self.blinker_test == 2
+      ret.extend(hyundaicanfd.create_spas_messages(self.packer, self.CAN, self.frame, left, right))
     return ret
 
   def update(self, CC, CS, now_nanos):
