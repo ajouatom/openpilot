@@ -306,3 +306,46 @@ def test_original_patch_parked_revocation_always_allows_default_restore(fault):
   assert not d.tx(0x16A, frame(0x16A, 1, 'right', 0).dat)
   assert d.tx(APRK, DEFAULT)
   assert not d.tx(APRK, PATCH_DISABLE)
+
+
+@pytest.mark.parametrize('flags', [4096, 4253])
+@pytest.mark.parametrize('fault', ['none', 'driver', 'moving', 'gear', 'stale', 'crc', 'knob', 'rate', 'direction', 'counter', 'gap', 'duration'])
+def test_stalk_replay_native_guards(flags, fault):
+  from opendbc.car.hyundai.stalk_trial import replay, crc
+  d = Device(flags)
+  parked(d)
+  original = bytes.fromhex('12b0000000000000')
+  packet = replay(original, 'left').dat
+  assert d.tx(0x3C1, packet)
+  assert not d.tx(APRK, EXTENDED)
+  assert not d.tx(0x165, frame(0x165, 30, None, 0).dat)
+  d.advance(10000 if fault == 'rate' else 160000 if fault == 'gap' else 50000)
+  park_inputs(d, 30, driver=fault == 'driver', wheel=1 if fault == 'moving' else 0, gear=5 if fault == 'gear' else 0)
+  if fault == 'stale':
+    d.advance(600000)
+  if fault == 'crc':
+    packet = bytes([packet[0] ^ 1]) + packet[1:]
+  if fault in ('knob', 'counter'):
+    data = bytearray(packet)
+    data[2 if fault == 'knob' else 1] ^= 0x10
+    data[0] = crc(data[1:])
+    packet = bytes(data)
+  if fault == 'direction':
+    packet = replay(original, 'right').dat
+  if fault == 'duration':
+    for tick in range(1, 200):
+      assert d.tx(0x3C1, packet)
+      d.advance(50000)
+      park_inputs(d, 30+tick)
+  assert d.tx(0x3C1, packet) == (fault == 'none')
+
+
+def test_stalk_requires_opt_in_and_parked_freshness():
+  from opendbc.car.hyundai.stalk_trial import replay
+  packet = replay(bytes.fromhex('12b0000000000000'), 'right').dat
+  for flags in (0, 4096):
+    d = Device(flags)
+    assert not d.tx(0x3C1, packet)
+    if not flags:
+      parked(d)
+      assert not d.tx(0x3C1, packet)

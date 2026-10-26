@@ -406,3 +406,20 @@ model1200 valid, mean40.742/max46.878ms, zero>50. One observed model/odom frame
 pose healthy. Do not claim all streams consecutive or a road/latency cure.
 Test0, owner AutoBlinkerControl2, P/zero/inactive, snapshotfalse/onroad restored.
 No additional active/right test or Jetson update was performed.
+
+
+## Counter-aware lever comparison (prepared, physical result pending)
+
+Review pins joongyu01/carrot-wip-dev at 712cef9a72d8fb7e2f478bce63adeea3084fa303.
+Modes 17/18 reproduce c931db45 neutral-lever payload: same unrelated bytes,
+COUNTER_ALT +1 modulo16, CRC8 poly1D/init0/xor65, left/right latch bits, 20Hz.
+Existing USB2CAN tap/release uses the same CRC but a different sequence.
+No 100Hz competing SPAS, APRK command, USB2CAN activation, or automatic driving
+integration is included. The vehicle source restricts the comparison to Ioniq5PE,
+fresh P/zero/inactive and unchanged CAN health; any OEM lever/light/counter change
+ends the trial. Panda independently checks fresh parked inputs, exact unrelated
+bytes/CRC/counter/direction, 40ms minimum interval/150ms gap, a ten-second lease
+and thirty-second start cooldown. Ending stops replay as upstream does; actual
+lamp cancellation and ten-second holding require physical observation.
+Local 135 focused checks pass before native CI and installation. No physical
+success is claimed here.

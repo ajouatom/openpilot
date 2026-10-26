@@ -452,3 +452,36 @@ def test_patch_mode_uses_original_uds_and_continues_without_stock_then_restores(
   assert sum(m[0] == APRK and m[1] == DEFAULT for m in sent) == 1
   assert any(m[0] == 0x16A and m[1][16] == (0x60 if setting == 15 else 0x80) for m in sent)
   assert s.patch.state == 0 and s.test_request is None
+
+
+@pytest.mark.parametrize('fault', ['none', 'cancel', 'driver', 'stale', 'error', 'knob', 'timeout'])
+def test_stalk_trial_isolated_and_revoked(monkeypatch, fault):
+  s, p, cs, sm = setup(monkeypatch)
+  warm(s)
+  s.driver_data = bytes.fromhex('f880300000000000')
+  s.update(cs, sm, 10., True)
+  p.value = 17
+  s.settings_at = 0
+  sent = s.update(cs, sm, 10.01, True)
+  assert len(sent) == 1 and sent[0].address == 0x3C1
+  assert sent[0].dat.hex() == 'de90304000000000'
+  assert s.hold_value == 1 and s.session.state == 'idle'
+  assert s.update(cs, sm, 10.02, True) == []
+  if fault == 'cancel':
+    p.value = 0
+    s.settings_at = 0
+  elif fault == 'driver':
+    cs.blinkerLever = 2
+  elif fault == 'stale':
+    s.driver_at = 0
+  elif fault == 'error':
+    sm['pandaStates'][0].canState2.totalErrorCnt = 1
+  elif fault == 'knob':
+    s.driver_data = bytes(8)
+  elif fault == 'timeout':
+    s.test_until = 10.05
+  sent = s.update(cs, sm, 10.07, True)
+  assert bool(sent) == (fault == 'none')
+  if fault != 'none':
+    assert s.test_request is None
+    assert s.update(cs, sm, 10.13, True) == []

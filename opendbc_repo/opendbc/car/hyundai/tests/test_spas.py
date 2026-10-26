@@ -186,3 +186,18 @@ def test_supplied_patch_wire_sequence_matches_all_native_packets(offset, directi
     want = i < 1000 or 1030 <= i < 1080
     reference.blinker_test = (1 if direction == 'left' else 2) if want else 0
     assert candidate.step(reference.frame, want, direction) == aprk_blinkers(reference, cc, cs)
+
+
+def test_stalk_replay_matches_contributor_and_preserves_knob():
+  from opendbc.car.hyundai.stalk_trial import replay, crc
+  original = bytes.fromhex('f880300000000000')
+  assert replay(original, 'left').dat.hex() == 'de90304000000000'
+  for knob in (0, 0x10, 0x20, 0x24, 0x30, 0x34):
+    for counter in range(16):
+      data = bytearray(original)
+      data[1], data[2] = counter << 4, knob
+      data[0] = crc(data[1:])
+      for direction in ('left', 'right'):
+        out = replay(data, direction).dat
+        assert out[2] == knob and out[1] >> 4 == (counter+1) % 16
+        assert out[0] == crc(out[1:])

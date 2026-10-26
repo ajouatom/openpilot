@@ -613,6 +613,7 @@ static bool hyundai_canfd_tx_hook(const CANPacket_t *to_send_const) {
   int addr = GET_ADDR(to_send);
   bool violation = false;
 
+  if (addr == 0x3C1) { return hyundai_stalk_tx(to_send, microsecond_timer_get()); }
   if ((addr == 0x7B1) || (addr == 0x165) || (addr == 0x16A)) {
     return hyundai_spas_tx(to_send, microsecond_timer_get());
   }
@@ -934,11 +935,12 @@ static safety_config hyundai_canfd_init(uint16_t param) {
     }
   }
 
-  if (hyundai_spas_enabled && (ret.tx_msgs_len + 3 <= 128)) {
+  if (hyundai_spas_enabled && (ret.tx_msgs_len + 4 <= 128)) {
     int count = ret.tx_msgs_len;
     for (int i = 0; i < count; i++) {
       hyundai_spas_tx_list[i] = ret.tx_msgs[i];
     }
+    hyundai_spas_tx_list[count++] = (CanMsg){0x3C1, hyundai_spas_bus, 8};
     hyundai_spas_tx_list[count++] = (CanMsg){0x7B1, hyundai_spas_bus, 8};
     hyundai_spas_tx_list[count++] = (CanMsg){0x165, hyundai_spas_bus, 24};
     hyundai_spas_tx_list[count++] = (CanMsg){0x16A, hyundai_spas_bus, 32};

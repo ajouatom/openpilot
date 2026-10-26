@@ -15,6 +15,8 @@ static uint32_t hyundai_spas_park_at[3], hyundai_spas_trial_at;
 static uint8_t hyundai_spas_park_counter[2], hyundai_spas_park_count[3], hyundai_spas_trial_direction;
 static bool hyundai_spas_park_value[3], hyundai_spas_trial_used, hyundai_spas_stock_idle;
 static bool hyundai_spas_patch_candidate, hyundai_spas_patch_present;
+static uint8_t hyundai_stalk_latest[8], hyundai_stalk_original[8];
+static uint32_t hyundai_stalk_tx_at;
 
 static void hyundai_spas_init(bool enabled, int bus) {
   hyundai_spas_enabled = enabled;
@@ -108,6 +110,7 @@ static void hyundai_spas_rx(const CANPacket_t *pkt, uint32_t now) {
       if ((GET_LEN(pkt) == 8) && (GET_BYTE(pkt, 0) == (crc ^ 0x65U))) {
         hyundai_spas_park_count[2] = (get_ts_elapsed(now, hyundai_spas_park_at[2]) < 500000U) ? MIN(hyundai_spas_park_count[2] + 1U, 10U) : 1U;
         hyundai_spas_park_at[2] = now;
+        for (int i = 0; i < 8; i++) { hyundai_stalk_latest[i] = GET_BYTE(pkt, i); }
         hyundai_spas_park_value[2] = ((GET_BYTE(pkt, 3) & 0x40U) == 0U) && ((GET_BYTE(pkt, 4) & 0x51U) == 0U);
       } else {
         hyundai_spas_park_count[2] = 0U;
@@ -155,6 +158,51 @@ static void hyundai_spas_rx(const CANPacket_t *pkt, uint32_t now) {
       hyundai_spas_phase = 0U;
     }
   }
+}
+
+// Parked 0x3C1 comparison only. No APRK/SPAS or longitudinal commands.
+static bool hyundai_stalk_tx(const CANPacket_t *pkt, uint32_t now) {
+  bool ready = hyundai_spas_enabled && !relay_malfunction && (GET_BUS(pkt) == 0) &&
+               (GET_LEN(pkt) == 8) && hyundai_spas_park_guard(now);
+  if (hyundai_spas_phase == 9U) {
+    for (int i = 0; i < 8; i++) { ready = ready && (hyundai_stalk_latest[i] == hyundai_stalk_original[i]); }
+    ready = ready && (get_ts_elapsed(now, hyundai_spas_trial_at) < 10000000U) &&
+            (get_ts_elapsed(now, hyundai_stalk_tx_at) < 150000U);
+    if (!ready) { hyundai_spas_phase = 7U; return false; }
+  } else {
+    ready = ready && ((hyundai_spas_phase == 0U) || (hyundai_spas_phase == 7U)) &&
+            (!hyundai_spas_trial_used || (get_ts_elapsed(now, hyundai_spas_trial_at) >= 30000000U));
+  }
+  if (!ready) { return false; }
+  bool left = (GET_BYTE(pkt, 3) & 0x40U) != 0U;
+  bool right = (GET_BYTE(pkt, 4) & 1U) != 0U;
+  bool ok = left != right;
+  uint8_t crc = 0U;
+  for (int i = 1; i < 8; i++) {
+    uint8_t expected = hyundai_stalk_latest[i];
+    if (i == 1) { expected = ((((expected >> 4) + 1U) & 15U) << 4) | (expected & 15U); }
+    if (i == 3) { expected = (expected & ~0x40U) | (left ? 0x40U : 0U); }
+    if (i == 4) { expected = (expected & ~0x51U) | (right ? 1U : 0U); }
+    ok = ok && (GET_BYTE(pkt, i) == expected);
+    crc ^= GET_BYTE(pkt, i);
+    for (int b = 0; b < 8; b++) { crc = (crc << 1) ^ (((crc & 0x80U) != 0U) ? 0x1DU : 0U); }
+  }
+  ok = ok && (GET_BYTE(pkt, 0) == (crc ^ 0x65U));
+  if (hyundai_spas_phase == 9U) {
+    ok = ok && (get_ts_elapsed(now, hyundai_stalk_tx_at) >= 40000U) &&
+         (hyundai_spas_trial_direction == (left ? 1U : 2U));
+  }
+  if (ok) {
+    if (hyundai_spas_phase != 9U) {
+      for (int i = 0; i < 8; i++) { hyundai_stalk_original[i] = hyundai_stalk_latest[i]; }
+      hyundai_spas_phase = 9U;
+      hyundai_spas_trial_at = now;
+      hyundai_spas_trial_used = true;
+      hyundai_spas_trial_direction = left ? 1U : 2U;
+    }
+    hyundai_stalk_tx_at = now;
+  }
+  return ok;
 }
 
 static bool hyundai_spas_tx(const CANPacket_t *pkt, uint32_t now) {

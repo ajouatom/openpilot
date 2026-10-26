@@ -3,6 +3,7 @@ import math
 
 from opendbc.car.hyundai.spas import Session, PatchSequence, frame, SPAS
 from opendbc.car.hyundai.values import HyundaiFlags
+from opendbc.car.hyundai.stalk_trial import replay
 from opendbc.car.hyundai.hyundaicanfd import CanBus, create_spas_messages
 from opendbc.can import CANPacker
 from types import SimpleNamespace
@@ -44,6 +45,8 @@ class SpasSignals:
     self.pulse_started = None
     self.lamp_confirmed = False
     self.intent = None
+    self.driver_data = None
+    self.trial_stalk = None
     self.driver_at = -math.inf
     self.driver_counter = -1
     self.driver_count = 0
@@ -90,6 +93,7 @@ class SpasSignals:
               # 5 Hz CAN reception is fresh; this is not a SPAS cycle counter.
               continuous = 0 <= now-self.driver_at < .5
               self.driver_count = min(10, self.driver_count+1) if continuous else 1
+              self.driver_data = bytes(data)
               self.driver_at, self.driver_counter = now, count
               self.driver_active = bool(data[3] & 0x40 or data[4] & 0x51)
               self.driver_override |= self.driver_active
@@ -122,7 +126,7 @@ class SpasSignals:
       self.driver_override = False
     if now >= self.settings_at:
       setting = self.params.get_int('CanfdBlinkerTest')
-      if setting != self.test_setting and setting in range(1, 17):
+      if setting != self.test_setting and setting in range(1, 19):
         # Consume the edge even when the parked guard fails; never run later.
         cc, ss = sm['carControl'], sm['selfdriveState']
         parked = (healthy and str(cs.gearShifter) == 'park' and cs.standstill and abs(cs.vEgo) < .01 and
@@ -136,7 +140,8 @@ class SpasSignals:
           self.test_serial += 1
           self.test_request = f'park:{self.test_serial}'
           # Pulse/hold and SPAS-only comparisons have independent bounded modes.
-          self.test_until = now+(10. if setting in (7, 8, 11, 12, 13, 14, 15, 16) else 3.)
+          self.test_until = now+(10. if setting in (7, 8, 11, 12, 13, 14, 15, 16, 17, 18) else 3.)
+          self.trial_stalk = self.driver_data if setting in (17, 18) else None
           self.test_direction = 'left' if setting % 2 else 'right'
           self.test_pulse = setting in (3, 4, 7, 8, 9, 10, 11, 12)
           self.test_direct = direct
@@ -183,6 +188,22 @@ class SpasSignals:
         request, direction = self.test_request, self.test_direction
       else:
         request = direction = None
+    if self.test_setting in (17, 18) or self.trial_stalk is not None:
+      allowed = (self.test_setting in (17, 18) and self.test_request is not None and request == self.test_request and
+                 healthy and continuous and not self.driver_override and self.trial_stalk is not None and
+                 self.driver_data == self.trial_stalk and self.test_can_health is not None and
+                 self.can_health(sm['pandaStates']) == self.test_can_health and
+                 self.test_blocked == tuple(getattr(p, 'safetyTxBlocked', 0) for p in sm['pandaStates']))
+      self.hold_value = 1
+      self.status = 'stalk_trial' if allowed else 'stalk_trial_ended'
+      if not allowed:
+        self.test_until = min(self.test_until, now)
+        self.test_request = None
+        self.trial_stalk = None
+      elif now >= self.direct_next:
+        self.direct_next = now+.05
+        return [replay(self.trial_stalk, direction, self.session.bus)]
+      return []
     if self.patch is not None and (self.patch.state or self.test_setting in (15, 16)):
       allowed = (self.test_setting in (15, 16) and self.test_request is not None and request == self.test_request and
                  healthy and continuous and not self.driver_override and
