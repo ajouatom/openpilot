@@ -203,3 +203,39 @@ seconds, Panda's independent directional trial limit remains three seconds,
 and the 30-second cooldown from start and all previous guards remain intact.
 Offline tests exercise both directions with/without confirmation through
 expiry and unchanged-selection no-restart. Live ten-second acceptance pending.
+
+
+## Ten-second pulse/hold attempt: start-stage bus error, hold not reached
+
+Published and normally installed 9cd699d29c after Linux CI40319488152 passed
+1177 tests/40 skips/362 subtests (81 local focused and25 Wiki checks overlap).
+Comma reboot restored onroad with snapshot false, P/zero/inactive and N16 active;
+Jetson runtime and Panda safety source unchanged. Reboot reset error counters;
+do not compare pre-reboot142 to post-reboot0 as a recovery measurement.
+
+Six-second passive preflight had stable counters. Setting7 then emitted only
+two SPAS1/SPAS2 pairs (TX echoes at1.126669/1.157340s after observation start).
+Stock SPAS2 skipped EB (EA then EC), ending the direct trial at~1.187s; the
+observer saw bus2 totalErrorCnt0->200 and cancelled to0 at~1.282s. TX error
+counter177/error-passive were present; busOffCnt remained0, Panda blocked0.
+No lamp feedback, no UDS and no 0x1EA directional hold bits were sent. Therefore
+the requested ten-second hold was NOT reached or validated; this is a start
+stage failure, not evidence that the existing hold fails.
+
+The injected EA/EB counters are independently incremented after seeding from
+stock+1. Stock EA also arrived with different payload. These guards validate
+each stream, not exclusive ownership, counter uniqueness across senders or
+wire-time separation. Direct tests keep the OEM transmitter and stock forwarding
+active. Injection is on bus0 but the observed controller errors are on bus2;
+the record does not identify the exact failed physical frame or prove a loop.
+The saved data-phase Bit1Error means transmitted recessive monitored dominant
+outside arbitration, per Bosch M_CAN manual3.3.1. Same-ID simultaneous differing
+payloads are a candidate, not a demonstrated root cause from these echoes.
+
+After cancellation the count settled at201. Passive60.025s:201->201, TX/RX error
+counters0, warning/passive/bus-off false, all losses unchanged. Both lamps off,
+test0, owner mode2 unchanged, no manual reset or extra active trial. N16 model,
+DM, both cameras and odometry each1200 valid consecutive; pose1199 all healthy.
+Model mean40.658/P9944.794/max47.417ms,0>50; link/HUD/signal60/60, NAV absent.
+Raw evidence is private. No full ten-second physical, road or error-root-cause
+acceptance claim.

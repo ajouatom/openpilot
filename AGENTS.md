@@ -1,5 +1,20 @@
 # Repository memory
 
+- On 2026-10-26, owner requests visible repeat then0.2s-start/existing-hold10s.
+  Continuous3s repeat114SPAS2/2.971s gives4lamp cycles, errors142stable. Only
+  test7/8 total duration extended10s; Panda directional limit3s and all guards
+  unchanged.9cd699d29c normal Git Pull/reboot, CI40319488152 passes1177/40skip/
+  362subtests; local81+Wiki25 overlap. After6s stable preflight, pulse/hold
+  attempt emits2pairs then stockEA->EC gap abort; bus2error0->200/TXerror177/
+  error-passive, observer cancels0. No lamp/nohold/noUDS; ten-second hold NOT
+  reached. Injectionbus0, errorbus2, exact failedframe/rootcause unknown. Both
+  streams shareEA with differentpayload; counter checks do not prevent wire
+  contention. Further passive60s201stable/errorcounts0/no warning or busoff,
+  lamps off/test0/mode2, snapshotfalse/onroad/P/inactive restored. N16/DM/
+  cameras/odom1200validconsecutive,pose1199healthy,mean40.658/max47.417ms,
+  link/HUD/signal60/60,NAVabsent. No further active trial, no Jetson update.
+  Details: docs/canfd_spas_blinkers_20261026.md; raw private.
+
 - On 2026-10-26, owner challenges SPAS patch fidelity. Re-read both supplied
   f8448120/04dd4119 and execute combined original method offline with real packer,
   Params blocked: no replies still gives147SPAS2/300ticks, first0.06s then20ms,
