@@ -684,12 +684,26 @@ static bool hyundai_canfd_tx_hook(const CANPacket_t *to_send_const) {
   }
 
   // SPAS1/SPAS2: zero apart from checksum/counter and BLINKER_CONTROL (byte 16 bits 5..7: 0 off, 3 left, 4 right)
+  // Exception (GV80 echo): the car's own frame carries constant fields the BCM may validate, so those exact
+  // values are allowed through. Nothing else may be non-zero.
   if ((addr == 0x165) || (addr == 0x16A)) {
     for (uint8_t i = 3U; i < GET_LEN(to_send); i++) {
       uint8_t b = GET_BYTE(to_send, i);
       uint8_t blink = b >> 5;
       bool blinker = (addr == 0x16A) && (i == 16U) && ((b & 0x1FU) == 0U) && ((blink == 0U) || (blink == 3U) || (blink == 4U));
-      if ((b != 0U) && !blinker) {
+      bool stock_field = false;
+      if (addr == 0x16A) {
+        if ((i == 3U) || (i == 4U)) {
+          stock_field = (b == 0x01U);   // both cars: 01 01
+        } else if ((i >= 10U) && (i <= 13U)) {
+          stock_field = (b == 0x80U);   // GV80: 80 80 80 80
+        } else if ((i == 14U) || (i == 15U)) {
+          stock_field = (b == 0x03U);   // Ioniq 5 b14, both cars b15
+        } else if (i == 20U) {
+          stock_field = (b == 0x10U);   // GV80 b20
+        }
+      }
+      if ((b != 0U) && !blinker && !stock_field) {
         tx = false;
       }
     }

@@ -211,6 +211,9 @@ class CarState(CarStateBase):
     self.pv5_completed_camera_speed = 0
     self.tcs = None
     self.mdps = None
+    # GV80 only: the car's own SPAS frames, echoed back with just BLINKER_CONTROL changed
+    self.spas1 = None
+    self.spas2 = None
     self.steer_touch_2af = None
     self.steering_touch = HyundaiSteeringTouch()
     self.vehicle_gps = VehicleGPS()
@@ -1313,6 +1316,9 @@ class CarState(CarStateBase):
 
   def update_canfd(self, can_parsers) -> structs.CarState:
     cp = can_parsers[Bus.pt]
+    if self.CP.carFingerprint == CAR.GENESIS_GV80:
+      self.spas1 = dict(cp.vl["SPAS1"]) if "SPAS1" in cp.vl else None
+      self.spas2 = dict(cp.vl["SPAS2"]) if "SPAS2" in cp.vl else None
     cp_cam = can_parsers[Bus.cam]
     cp_alt = can_parsers[Bus.alt] if Bus.alt in can_parsers else None
 
@@ -1629,6 +1635,8 @@ class CarState(CarStateBase):
     msgs = ([(CANFD_HDA_INFO_MSG, math.nan), (CANFD_NAVI_PROFILE_MSG, math.nan)] if wrapped_navi else
             [("NEW_MSG_4B4", math.nan), ("NEW_MSG_4B9", math.nan), ("NEW_MSG_4BE", math.nan)])
     alt_msgs = [(CANFD_NAVI_STATUS_MSG, math.nan)] if wrapped_navi else []
+    if CP.carFingerprint == CAR.GENESIS_GV80:
+      msgs += [("SPAS1", math.nan), ("SPAS2", math.nan)]
     if not (CP.flags & HyundaiFlags.CANFD_ALT_BUTTONS):
       # TODO: this can be removed once we add dynamic support to vl_all
       msgs += [
