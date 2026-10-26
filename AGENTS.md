@@ -1,5 +1,27 @@
 # Repository memory
 
+- On 2026-10-26, owner reports audioTurn lamps extinguishing at intersection stop.
+  Latest drive sourceab4fc46: leftcue195.697s,on195.919,latActivefalse197.882
+  at1.05km/h,desire none197.932,stop198.177,lamps off198.409; navigation stays
+  left during~62sstop. Five full-schema closed logs66893681B/hash verified.
+  Old gate tied hold to steering output and desire loss. Held ATC turn now
+  follows fresh lateral permission(active or AlwaysLateral,latEnabled,no fault,
+  drive),new cues/lane still requirelatActive. Physical completion requires
+  moving>=1km/h,selectedsteer>=30deg,healthy fresh livePose heading change>=20deg,
+  thencenter<=10deg0.4s. Heading wraps/stopped drift handled. Before-entry nav
+  cancel/manual/stale/session/4s-unconfirmed/300smax gates stay; BT unchanged.
+  Unshipped angle-only prototype ended early after49.5deg departure correction;
+  rejected. Recorded-input replay old right/leftend149.936/197.907s,new153.188/
+  270.410s,1054/1054 selected stop samples held. Replay omits live CAN feedback/
+  driver ownership,not physical lamp acceptance.109focused/25Wiki pass; native
+  LinuxCI40264474584 broad1577/56skip+62/94/119/11/11 and Windows pass;prod lint/
+  docs validator pass. KO/EN/catalog/trialWiki patch synchronized,publicWiki stays
+  wip-owned. Only carrot-nav-blink published and normal Git Pull/restart installs
+  b757f3923c; fresh offroad/panda ignition/controlfalse and installedhashes match.
+  Mode2/AlwaysLateral1 retained,no snapshot hold/onroad transition/CAN injection.
+  Host605e7e2d7c/N16 unchanged,noJetson update. Physical road acceptance pending.
+  Details: docs/jetson_bluetooth_blinker_20261025.md; raw evidence private.
+
 - On 2026-10-26, owner requests physical turn indication at audioTurn rather
   than waiting for turn desire. SelfdriveD latches exact existing event timestamp/
   direction in additive SelfdriveState fields; sound priorities/conditions stay.
