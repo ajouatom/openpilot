@@ -40,4 +40,6 @@ The requested implementation must select compatible SPAS buses/contracts rather
 than an Ioniq-only fingerprint, remain opt-in, prevent simultaneous Jetson USB2CAN
 operation, and validate bounded parked trials including ECU restoration. These
 requirements are not a claim that all vehicles with matching CAN IDs accept it.
-At this checkpoint no SPAS implementation or vehicle transmission has occurred.
+That was the initial review checkpoint. Implementation and subsequent guarded
+vehicle trials are recorded in [the SPAS trial report](canfd_spas_blinkers_20261026.md);
+they have not established reliable illumination or holding.

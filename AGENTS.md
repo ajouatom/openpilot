@@ -1,5 +1,46 @@
 # Repository memory
 
+- On 2026-10-26, owner requests generic CAN-FD SPAS indicators and comparison of
+  continuous versus short-start/existing-hold. Trial-only a45792a0e2 uses exact
+  ECAN SPAS1/24+SPAS2/32, fresh driver input and acknowledged/quiet ECU handoff;
+  no Ioniq-only restriction on the normal SPAS path. Startup IntFlag/Capnp bug
+  fixed f8dd37ca28 with actual-schema regressions and normal Git Pull/reboot.
+  Actual 0x7B1 extended request gets no0x7B9 reply; stock50Hz never stopped,
+  no disable/directional command in acknowledged trial, bounded recovery locks.
+  Contributor reports same no-ACK/stock-zero conflict. Separate max3s P-only
+  coexistence tests have independent Panda P/zero/pedal/stalk/stock/CRC/counter/
+  rate guards and30s cooldown, noUDS; pulse/hold layout Ioniq5PE only. First
+  start2frames blocked/cause unproven; repeat14directional frames lights left
+  then stops~0.36s on stockcounter3c->3e.0.2s pulse-only8frames nofeedback;
+  pulse+hold8frames lights~0.4s,holdbit~0.147s then stockgap abort: sustained
+  holding UNVERIFIED. Bus2errors120->142 during latter, stable142 in subsequent
+  passive60s; prior busOff95/TXlost1 unchanged, bus0/1errors0. Further active
+  trials stopped, no right/visual/road or reliable automatic replacement claim.
+  NativeCI40315922993 passes1173/40skip/362subtests;189desktop+25Wiki overlap.
+  Panda H7 installed signature verified. Test0, AutoBlinker2 preserved, snapshot
+  absent/onroad restored; old Jetson USB2CAN workers absent/can1down-listen/TX0.
+  Final60s N16:1201validconsecutive model/odom,1200DM/cameras/healthy pose,
+  mean40.675/P9944.904/max47.820ms,0>50,link/HUD/signal60/60; NAV absent.
+  Only carrot-nav-blink; no Jetson runtime change. Details:
+  docs/canfd_spas_blinkers_20261026.md. Raw evidence private.
+
+- On 2026-10-26, owner requests web reboot-selected shared eGPU/Jetson big models,
+  internal CD210 fixed; N16 NAV/NOO, MDv3 and Flip Flop selectable with download,
+  protected cache deletion/hide/restore. Official MD/Flip ONNX share35976b11,
+  PKLs differ; no PKL/TRT equivalence or eGPU hardware inference claim. Signed
+  N16 host0d4947499931/64822535B and MD/Flip559e560e8529/64822428B verified.
+  Fix standalone host import ROOT before normal server probe; normal boot updater
+  and actual parked Flip->N16 selection tested. Flip60s1200validconsecutive,
+  mean36.841/max43.009ms; N16restore1200validconsecutive model,mean40.255/max45.968;
+  one DM observer gap not proven producer drop. Models/HUD healthy, no>50 in
+  these windows, no AB/harddeadline/road claim.143routepoints/2maneuvers arrive
+  but GPSno-fix/heading invalid; owner says navigation phone indoors, validNAV
+  pending. DATA~6.6GB free. PR568 Tesla additivefields24/25 preserveIoniq22/23,
+  nativeCI40302082309 passes1054/40skip/362subtests; noTesla hardware acceptance.
+  All work only carrot-nav-blink; wip merge deferred. Details:
+  docs/external_model_catalog_20261026.md and docs/pr568_trial_integration_20261026.md.
+
+
 - On 2026-10-26, owner requests PR567 and PR563 review/application.
   PR563 sourcec14c2cab03 on carrot-nav-blink adds reverse CUDA constructor
   cleanup, atomic individual plan/sidecar publication and malformed-cache

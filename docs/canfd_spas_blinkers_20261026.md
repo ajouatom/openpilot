@@ -95,3 +95,51 @@ SPAS를 선택하면 기존 Jetson USB2CAN 깜박이 경로는 중지됩니다.
 시작 신호+유지를 따로 비교하며, 후자는 아직 아이오닉5PE 유지 신호만 대상으로
 합니다. 설정 이름이나 CAN 수신 확인만으로 점등 성공 또는 다른 차종의 정상
 작동을 주장하지 않습니다. 실제 점등·취소·주차 ECU 복귀 결과를 확인해야 합니다.
+
+## Actual coexistence results
+
+Native signal CI 40315922993 at a45792a0e2 passes 1173 checks, 40 skips and
+362 subtests. Local focused checks pass 189 (one Linux-only case excluded);
+Wiki checks pass 25. Counts overlap. The first native run caught a corrupt input
+being discarded before the vehicle RX hook: parked admission now consults the
+common checksum/counter/quality status as well. Ordinary Git Pull/reboot installed
+a45792a0e2; stored Panda signature matches the newly built panda_h7 image. N16
+rejoined with shared input/compact reply; the pre-join Cinque label was inactive,
+not evidence that a different external model was running.
+
+- First continuous request: two initial frames rejected by Panda, no lamps; the
+  observer cancelled immediately. Initial rejection cause is not established.
+- Instrumented continuous repeat: 14 SPAS1 and 14 directional SPAS2 TX echoes,
+  left lamp feedback observed, then cancellation after about 0.36 seconds.
+  Recorded stock SPAS2 counter jumps 0x3c to 0x3e at the cancellation. No new
+  Panda rejection. This is not a completed three-second continuous comparison.
+- Pulse-only control: eight directional frames over 0.175 seconds, no lamp
+  feedback in the 12-second observation, no new Panda rejection.
+- Pulse-plus-hold: eight directional frames over 0.181 seconds; raw left lamp
+  feedback is on approximately 1.070 to 1.470 seconds after observation start.
+  Existing 0x1EA left-hold bit is seen from 1.135 to 1.282 seconds, but a stock
+  counter discontinuity cancels the test at about 1.263 seconds. Holding for the
+  intended three seconds was therefore NOT tested to completion.
+
+The pulse-plus-hold observation also records bus-2 totalErrorCnt 120 -> 142.
+Bus-off count remains 95, TX-lost remains 1, RX-lost remains 0; bus 0/1 error
+counts remain zero. The pre-existing bus-2 counts must not be attributed to this
+trial. This delta is being compared with passive observation, not assumed to be
+proof of the SPAS wire-error mechanism. Further active trials were stopped.
+No ECU diagnostic command was sent by any coexistence trial. No right-side or
+physical visual acceptance is claimed. Test setting is reset to zero in each
+observer's finally block. The short-start/hold idea remains unverified; this
+experiment must not be described as a reliable automatic indicator replacement.
+
+Passive follow-up: 60.030 seconds with test=0, all P/inactive guards maintained.
+Bus-2 totalErrorCnt stays 142, busOffCnt 95, TX-lost 1, RX-lost 0; bus 0/1 errors
+stay zero. This strengthens the association with coexistence trials but does not
+identify the exact controller/arbitration/forwarding mechanism. Final N16 model
+1201 valid consecutive outputs, mean 40.675 ms, P99 44.904 ms, max 47.820 ms,
+zero >50 ms; DM/both cameras/livePose 1200 valid consecutive, odometry 1201;
+pose healthy and link/model/HUD/signal 60/60. NAV route is absent after reboot,
+so no valid-NAV load, hard-deadline or driving claim. Snapshot hold is absent,
+normal onroad state restored, AutoBlinkerControl2 preserved. Jetson host remains
+0d4947499931; USB2CAN workers absent, CAN1 down/listen-only, TX=0. The initial
+two Panda rejections remain in the cumulative counter (2), with no later increase.
+Raw evidence remains private. Only carrot-nav-blink is published; no wip merge.
