@@ -1,5 +1,21 @@
 # Repository memory
 
+- On 2026-10-26, owner requests PR567 and PR563 review/application.
+  PR563 sourcec14c2cab03 on carrot-nav-blink adds reverse CUDA constructor
+  cleanup, atomic individual plan/sidecar publication and malformed-cache
+  fallback; N16/inference/USB/vehicle logic unchanged. Independent Windows
+  new tests26fail/8pass/1skip before,34pass/1skip after; expanded47pass/1skip
+  and9Linux-sendmsg-only failures. CI40293651197 passes1612/56skip+62codec/
+  94update/119nav/11storage/11network andWindows. Contributor hardware timings
+  remain attributed, no local GPU OOM/latency/road claim. Prepared032cde486b
+  bundle64813444B/1136files verified; exportedpaths identical toCI source.
+  Owner explicitly approves signing-key-path lookup/sign/publication after
+  initial automatic-review block. Signed032cde486b published/HTTPS fullhash
+  verified and selected; N16 unchanged. No live install or latency claim;
+  normal Git Pull/BOTH restarts. PR567 e2fac438 is optional exact Konik
+  A1M/NX16 J4012-kernel manual installer, not needed for563/current hardware:
+  not integrated/enabled. Details: docs/jetlink_konik_nx16_recovery_20261024.md.
+
 - On 2026-10-26, owner requests PR564/562 review and necessary integration.
   PR564 9d2a435ed332 selects existing spawn=True only for qcomgpsd; preserve
   TICI/onroad/external-GPS conditions and control checks. Import actual-process

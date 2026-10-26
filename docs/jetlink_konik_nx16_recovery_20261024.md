@@ -69,8 +69,9 @@ Independent Windows regression run: before the patch, 26 failed / 8 passed /
 1 POSIX-mode skip; after it, 34 passed / 1 POSIX-mode skip. CUDA allocation and
 TRT computation are test doubles; these are failure-path software checks, not
 physical GPU OOM, latency or road acceptance. The original PR's hardware timings
-are not a measured gain for this vehicle. Linux CI and signed delivery results
-will be recorded below after completion.
+are not a measured gain for this vehicle. The expanded local run passes 47 with one POSIX-mode skip; nine socket tests
+require Linux sendmsg and cannot run on Windows. Linux validation below covers
+those tests without changing their implementation.
 
 Also reviewed PR 567 at `e2fac438b8eb148beb70ce863851f1e825991f67`.
 It provides an optional root-owned USB Internet installer for operator-confirmed
@@ -81,3 +82,34 @@ has no reported physical installation acceptance. Our existing Jetson deployment
 uses a different kernel profile and signed boot updater. Do not install or enable
 this profile here; no files or networking behavior from PR 567 were integrated.
 The ordinary Git Pull/restart delivery contract remains in force.
+
+### Independent integration and delivery status
+
+Source `c14c2cab0311d1d5316802416b07b2c6429ae721` is published on
+`carrot-nav-blink`. [CI 40293651197](https://github.com/ajouatom/openpilot/actions/runs/40293651197)
+passes: Linux broad 1,612 / 56 skips, codec 62, updater 94, navigation 119,
+real-storage 11, isolated-network 11; Windows installer also passes.
+These include the 35 new failure regressions; counts are not additive unique
+coverage claims. Production engine and new-test Ruff checks pass.
+
+Prepared bundle source `032cde486b3b95887dd41b5c70b1c42c7cd5d011` differs from
+the tested commit only in repository memory and unrelated review documentation;
+all exported source paths are identical. All 1,136 archive files match committed
+bytes, including the bootstrap-compatible selected-model alias. Bundle size is
+64,813,444 bytes, SHA-256
+`9ddfbc429b016f2585b98f88a36f2627732162a1db4e155e06ba6efa5e180bcb`.
+N16 hash/size are unchanged; no PR 567 installer or private evidence is included.
+
+Owner explicitly approved looking up the existing signing-key path and signing/
+publishing this exact package after the automatic-review block. The existing
+trust-root-matching key signed it; no key content was printed. The immutable
+NAS release was published and the complete HTTPS bundle download matched the
+expected size and SHA-256. The branch now selects signed host `032cde486b`.
+N16 remains unchanged; no stable/global release alias was promoted.
+
+Local bundle/failure checks pass 36 / 2 platform skips. Source CI above covers
+the identical exported runtime, and the pin change triggers another normal
+integration run. No live vehicle mutation, installation, GPU benchmark or
+restart was performed for this review. Users apply through normal comma Git
+Pull and both comma/Jetson restarts, with offroad power and Internet available
+for the updater. A comma-only restart cannot switch an already-running host.
