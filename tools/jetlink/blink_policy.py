@@ -93,34 +93,58 @@ class Policy:
 
 
 class AutomaticSignals:
-  """Start turns at the audioTurn cue; retain them through actual turn desire."""
+  """Start once at audioTurn; finish on physical turn completion, not desire loss."""
   def __init__(self):
     self.cue = None
     self.direction = None
-    self.turn_started = False
+    self.turned = False
+    self.centered = None
     self.mode = None
+    self.heading = None
+    self.rotation = 0.
 
-  def update(self, now, mode, valid, cue, direction, atc_type, desire, lane=None):
+  def update(self, now, mode, valid, cue, direction, atc_type, desire, lane=None, *, speed=0., angle=0., heading=0.):
     previous, self.cue = self.cue, cue
     changed_mode, self.mode = mode != self.mode, mode
     if not valid or not mode or changed_mode:
       self.direction = None
-      self.turn_started = False
+      self.turned, self.centered = False, None
+      self.heading, self.rotation = None, 0.
       if not valid:
         self.cue = None
       return ('lane', lane) if valid and lane in ('left', 'right') else None
     # Consume cues even while invalid/disabled. Never join a cue already present
     # on startup, reconnect or setting changes, or replay a consumed cue.
-    if (previous is not None and cue != previous and math.isfinite(cue) and
+    if (self.direction is None and previous is not None and cue != previous and math.isfinite(cue) and
         0 <= now-cue < .35 and direction in ('left', 'right') and atc_type == 'turn '+direction):
       self.direction = direction
-      self.turn_started = False
+      self.turned, self.centered = False, None
+      self.heading, self.rotation = heading, 0.
     if self.direction:
       expected = 'turnLeft' if self.direction == 'left' else 'turnRight'
-      if desire == expected:
-        self.turn_started = True
-      elif self.turn_started or desire in ('turnLeft', 'turnRight') or atc_type != 'turn '+self.direction:
+      # Turn desire can disappear at a stop or while steering through the corner.
+      # A departure steering correction is not a turn. Also require 20 degrees
+      # of measured heading change in the selected direction, while moving.
+      if heading is None or not all(math.isfinite(v) for v in (speed, angle, heading)):
         self.direction = None
+      else:
+        if self.heading is not None and speed >= 1 / 3.6:
+          delta = heading-self.heading
+          self.rotation += math.atan2(math.sin(delta), math.cos(delta)) * (-1 if self.direction == 'left' else 1)
+        self.heading = heading
+        signed_angle = angle * (1 if self.direction == 'left' else -1)
+        self.turned |= signed_angle >= 30 and speed >= 1 / 3.6 and self.rotation >= math.radians(20)
+        if self.turned and abs(angle) <= 10 and speed >= 1 / 3.6:
+          self.centered = now if self.centered is None else self.centered
+          if now-self.centered >= .4:
+            self.direction = None
+        else:
+          self.centered = None
+        # Before physically entering, navigation cancellation still cancels the
+        # request. During the turn navigation may already announce the next item.
+        if ((desire in ('turnLeft', 'turnRight') and desire != expected) or
+            (not self.turned and atc_type != 'turn '+self.direction)):
+          self.direction = None
       if self.direction:
         return ('turn', self.direction)
     return ('lane', lane) if lane in ('left', 'right') else None

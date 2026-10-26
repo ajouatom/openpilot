@@ -20,6 +20,25 @@ def vehicle_ready(sm, now, fingerprint):
           len(sm['pandaStates']) > 0)
 
 
+def automatic_control_allowed(cs, cc, ss, always_lateral, holding_turn):
+  # latActive is an actuator-output gate: it drops at a stop and during steering
+  # suspension. Neither completes an already-owned physical turn indication.
+  # New cues and lane changes still require actual lateral activation.
+  if str(cs.gearShifter) != 'drive':
+    return False
+  return cc.latActive or (holding_turn and (ss.active or always_lateral) and cs.latEnabled and
+                         not cs.steerFaultTemporary and not cs.steerFaultPermanent)
+
+
+def turn_heading(sm, now):
+  if ('livePose' not in sm.services or not sm.valid['livePose'] or not sm.alive['livePose'] or
+      not fresh(sm.recv_time['livePose'], now, .35)):
+    return None
+  pose = sm['livePose']
+  return pose.orientationNED.z if (pose.inputsOK and pose.sensorsOK and pose.posenetOK and
+                                  pose.orientationNED.valid and finite(pose.orientationNED.z)) else None
+
+
 class Events:
   def __init__(self, started):
     self.started = started
@@ -54,7 +73,7 @@ def main(fd):
     return
   sock = socket.socket(fileno=fd)
   sock.setblocking(False)
-  sm = messaging.SubMaster(['carState', 'carControl', 'selfdriveState', 'pandaStates', 'modelV2', 'carrotMan'])
+  sm = messaging.SubMaster(['carState', 'carControl', 'selfdriveState', 'pandaStates', 'modelV2', 'carrotMan', 'livePose'])
   events = Events(time.monotonic())
   policy, params = Policy(), Params()
   automatic = AutomaticSignals()
@@ -93,13 +112,15 @@ def main(fd):
     mode = mode if mode in (0, 1, 2) else 0
     auto_fresh = all(k in sm.services and sm.valid[k] and sm.alive[k] and fresh(sm.recv_time[k], now, .35)
                      for k in ('modelV2', 'carrotMan'))
-    auto_valid = auto_fresh and ok and sm['carControl'].latActive and str(cs.gearShifter) == 'drive'
+    auto_valid = auto_fresh and ok and automatic_control_allowed(
+      cs, sm['carControl'], sm['selfdriveState'], params.get_bool('AlwaysLateral'), automatic.direction is not None)
     auto = None
     if auto_fresh:
       meta, ss = sm['modelV2'].meta, sm['selfdriveState']
       auto = automatic.update(now, mode, auto_valid,
                               ss.atcTurnStartMonoTime / 1e9, str(ss.atcTurnDirection), sm['carrotMan'].atcType,
-                              str(meta.desire), str(meta.autoTurnSignal) if meta.autoTurnSignalLaneChange else None)
+                              str(meta.desire), str(meta.autoTurnSignal) if meta.autoTurnSignalLaneChange and sm['carControl'].latActive else None,
+                              speed=cs.vEgo, angle=cs.steeringAngleDeg, heading=turn_heading(sm, now))
     else:
       automatic.update(now, mode, False, 0., 'none', '', 'none')
     commands, hold = policy.update(now, mode, ok, commands, cs.vEgo, cs.steeringAngleDeg,

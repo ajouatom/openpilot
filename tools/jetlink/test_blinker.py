@@ -209,7 +209,8 @@ def test_real_bus_setup_requires_one_shot_readback_before_opening_socket(monkeyp
 
 class Vehicle(dict):
   def __init__(self, gear='drive', speed=25., engaged=True):
-    super().__init__(carState=SimpleNamespace(gearShifter=gear, vEgo=speed, canValid=True, steeringAngleDeg=0., leftBlinker=False, rightBlinker=False),
+    super().__init__(carState=SimpleNamespace(gearShifter=gear, vEgo=speed, canValid=True, steeringAngleDeg=0., leftBlinker=False, rightBlinker=False,
+                                            latEnabled=True, steerFaultTemporary=False, steerFaultPermanent=False),
                      carControl=SimpleNamespace(enabled=engaged, latActive=engaged, longActive=engaged),
                      selfdriveState=SimpleNamespace(enabled=engaged, active=engaged),
                      pandaStates=[SimpleNamespace(controlsAllowed=engaged)])

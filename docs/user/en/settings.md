@@ -445,7 +445,7 @@ camera supplies 20fps. Reduced processing overhead does not establish sustained
 Controls physical lamps on supported Jetson USB-CAN/B1 vehicles. Operating the stock lever ends the owned request.
 
 - **0:** Disables automatic control; Bluetooth one-touch remains available.
-- **1:** Holds signals started by Bluetooth at or below 5 km/h until turn completion, and indicates from the ATC audioTurn cue until turn desire ends.
+- **1:** Holds signals started by Bluetooth at or below 5 km/h until turn completion, and indicates from the ATC audioTurn cue through intersection stops until the vehicle turns and the steering returns near center.
 - **2:** Also indicates from actual ATC lane-change start through completion. Waiting does not activate the lamps.
 
 ### Usage
@@ -456,7 +456,7 @@ Check illumination and cancellation while parked first. Basic one-touch remains 
 
 ### Reference
 
-Bluetooth turn completion requires steering at least 30 degrees toward the selected turn, then returning within 10 degrees for 0.4 seconds while moving. Departure alone does not cancel; the maximum hold is five minutes.
+Bluetooth turn completion requires steering at least 30 degrees toward the selected turn, then returning within 10 degrees for 0.4 seconds while moving. Departure alone does not cancel; the maximum hold is five minutes. ATC turns also require at least 20 degrees of measured heading change toward the turn while moving. Stopping or losing turn desire alone does not cancel. Waiting requires continued lateral permission; driver cancellation, navigation cancellation before physical entry, and stale inputs still release the request.
 
 USB-CAN requests the initial blink; the existing vehicle indicator-hold function maintains it. Input, vehicle-state or communication loss expires the hold request. A rapid opposite input waits for the current OEM sequence to end, keeping only the latest request for at most 3.2 seconds. Cancelling a hold may still allow the remaining OEM flashes to finish. Existing lane-change settings may react to the actual lamp input.
 
