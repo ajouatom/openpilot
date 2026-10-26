@@ -11,12 +11,12 @@ from blink_protocol import PACKAGE_CONFIG, LIMIT, encode, finite, fresh
 from blink_policy import Policy, AutomaticSignals
 
 
-def vehicle_ready(sm, now, fingerprint):
+def vehicle_ready(sm, now, fingerprint, spas=False):
   """Manual indicators work while driving/engaged; unknown or stale CAN never does."""
   valid = all(sm.valid[k] and sm.alive[k] and
               0 <= now-sm.recv_time[k] < (.75 if k == 'pandaStates' else .35) for k in ('carState', 'carControl', 'selfdriveState', 'pandaStates'))
   c = sm['carState']
-  return (fingerprint == 'HYUNDAI_IONIQ_5_PE' and valid and c.canValid and finite(c.vEgo) and str(c.gearShifter) != 'unknown' and
+  return ((spas or fingerprint == 'HYUNDAI_IONIQ_5_PE') and valid and c.canValid and finite(c.vEgo) and str(c.gearShifter) != 'unknown' and
           len(sm['pandaStates']) > 0)
 
 
@@ -61,7 +61,14 @@ class Events:
     return result[-4:]
 
 
-def main(fd):
+def main(fd, spas=False):
+  if spas:
+    import os
+    try:
+      os.sched_setaffinity(0, {0, 1, 2, 3})
+      os.nice(10)
+    except OSError:
+      pass
   from openpilot.cereal import messaging
   from openpilot.selfdrive.carrot.bluetooth.model import RUNTIME, config, read_json, atomic_json
   from openpilot.selfdrive.carrot.bluetooth.physical import HOLD_PATH
@@ -69,7 +76,11 @@ def main(fd):
   from openpilot.cereal import car
   with car.CarParams.from_bytes(Params().get('CarParams')) as cp:
     fingerprint = cp.carFingerprint
-  if json.loads(PACKAGE_CONFIG.read_text()).get('fingerprint') != fingerprint:
+    if spas:
+      from opendbc.car.hyundai.values import HyundaiFlags
+      if cp.brand != 'hyundai' or not cp.flags & HyundaiFlags.CANFD_SPAS_BLINKERS or cp.passive:
+        return
+  if not spas and json.loads(PACKAGE_CONFIG.read_text()).get('fingerprint') != fingerprint:
     return
   sock = socket.socket(fileno=fd)
   sock.setblocking(False)
@@ -95,7 +106,7 @@ def main(fd):
         feedback = {}
     sm.update(0)
     now = time.monotonic()  # SubMaster assigns receive timestamps during update.
-    ok = vehicle_ready(sm, now, fingerprint)
+    ok = vehicle_ready(sm, now, fingerprint, spas)
     status = read_json(RUNTIME/'status.json', {})
     settings, learning, cancelled = config(), read_json(RUNTIME/'learn.json', {}), read_json(RUNTIME/'cancelled.json', {})
     commands = events.read(read_json(RUNTIME/'blinker.json', {}), settings, status, learning, cancelled, now)
@@ -137,7 +148,7 @@ def main(fd):
       activated_id = hold['id']
     if feedback.get('state') == 'driver_override':
       release_until = 0.
-    if mode:
+    if mode and not spas:
       atomic_json(HOLD_PATH, {'stamp':now, 'mode':mode, 'fingerprint':fingerprint,
                              'direction':hold['direction'] if hold and activated_id == hold['id'] else None,
                              'override':activated_id is not None or now < release_until or (policy.suppressed and release_until > 0)})
@@ -152,4 +163,4 @@ def main(fd):
 
 
 if __name__ == '__main__':
-  main(int(sys.argv[1]))
+  main(int(sys.argv[1]), len(sys.argv) > 2 and sys.argv[2] == 'spas')

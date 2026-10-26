@@ -52,5 +52,45 @@ All source, releases and tests belong only to carrot-nav-blink; no carrot-wip me
 Full official artifact and HTTPS mirror checks pass. Initial desktop regressions: 199
 passed; follow-up selection/API/corruption/alias and USB-wait checks: 54 passed (overlap).
 Existing web status/name checks: 13 passed; new real-render/action structure check: 1.
-Linux CI, signed bundles and physical switching results are recorded below when completed.
+Final Linux/Windows CI 40304926502 passes: 1630 broad checks/56 skips, 62 codec,
+94 updater, 119 NAV, 11 storage and 11 NAT checks. The counts overlap earlier runs.
 No road-performance or 50 ms hard-deadline claim follows from metadata or desktop tests.
+
+## Signed delivery and parked switching
+
+Normal Git Pull and both-device reboots installed comma `1e80fbe2f8`. The final
+signed MD/Flip runtime is `559e560e8529956c4029f53592f00832d735155b`
+(64822428 bytes); N16 is `0d4947499931f42b94157129a847706fd2f5b637`
+(64822535 bytes). Both complete HTTPS payloads and signatures were verified.
+
+An initial non-NAV release passed its engine probe but failed standalone service
+startup because its new model-library import lacked the repository search path.
+The corrected server establishes that path. The release probe now launches the
+actual server's import check from outside the checkout with PYTHONPATH removed;
+the bundle regression tests exercise this too. Recovery used the normal signed
+updater, with no source overlay or manually seeded model cache.
+
+The real web API deferred selection until reboot, downloaded the official Flip
+PKL, rejected deletion of running/pending entries, hid and restored the MD alias,
+and retained the shared protected MD/Flip engine. All three choices were restored.
+Jetson DATA had approximately 6.6 GB free; no partition resize was required.
+
+Physical parked observations, with fresh P/zero/inactive-control guards:
+
+| Selected model | Model frames | Mean | P99 | Maximum | >50 ms |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Flip Flop (shared MD/Flip ONNX) | 1200 valid, consecutive | 36.841 ms | 41.110 ms | 43.009 ms | 0 |
+| Restored N16 | 1200 valid, consecutive | 40.255 ms | 44.562 ms | 45.968 ms | 0 |
+
+These are separate roughly 60-second windows, not an A/B comparison of equivalent
+models. Both cameras and camera odometry were valid and consecutive; pose stayed
+healthy. N16's DM observer collected 1199 valid messages with one frame-ID gap;
+this observation alone does not distinguish a missed observer sample from a
+producer gap. N16 link/model/HUD were ready in all 60 one-second samples.
+
+During N16 validation, 143 route coordinates and two maneuvers arrived, but every
+map sample reported `position`: vehicle GPS had no fix and fused heading was
+invalid. The owner confirmed the navigation device was indoors. Valid NAV image
+application remains unverified in this window; no location/freshness gate was
+relaxed. N16 was left selected and running, with the temporary offroad snapshot
+hold restored. eGPU hardware inference and road behavior were not tested.

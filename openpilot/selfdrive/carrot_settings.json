@@ -420,6 +420,8 @@
           "params": [
             "CanfdHDA2",
             "HyundaiCanfdClusterDirectTx",
+            "CanfdBlinkerControl",
+            "CanfdBlinkerTest",
             "CanfdDebug",
             "HDPuse"
           ]
@@ -1845,6 +1847,40 @@
     },
     {
       "group": "시작",
+      "name": "CanfdBlinkerTest",
+      "title": "정차 SPAS 깜박이 시험",
+      "descr": "SPAS 사용 설정 후 재부팅해야 합니다. 0 취소, 1 좌측 연속, 2 우측 연속, 3 좌측 짧은 신호+기존 유지, 4 우측 짧은 신호+기존 유지입니다. P·정지·제어 비활성에서 선택당 최대 3초 시험하며, 재시험 전 0을 선택합니다. 짧은 신호+유지는 현재 아이오닉5PE의 확인된 유지 신호에만 적용합니다. 시작 시 0으로 초기화합니다.",
+      "egroup": "START",
+      "etitle": "Parked SPAS indicator test",
+      "edescr": "With SPAS enabled after reboot: 0 cancel, 1 continuous left, 2 continuous right, 3 short left plus existing hold, 4 short right plus existing hold. Each selection is one 3-second test, only in P at zero speed with controls inactive. Select 0 before repeating. Short-plus-hold is currently limited to the validated Ioniq5PE hold layout. Resets at manager startup.",
+      "cgroup": "启动设置",
+      "ctitle": "Parked SPAS indicator test",
+      "cdescr": "With SPAS enabled after reboot: 0 cancel, 1 continuous left, 2 continuous right, 3 short left plus existing hold, 4 short right plus existing hold. Each selection is one 3-second test, only in P at zero speed with controls inactive. Select 0 before repeating. Short-plus-hold is currently limited to the validated Ioniq5PE hold layout. Resets at manager startup.",
+      "min": 0,
+      "max": 4,
+      "default": 0,
+      "unit": 1,
+      "risk": "high"
+    },
+    {
+      "group": "시작",
+      "name": "CanfdBlinkerControl",
+      "title": "CAN-FD SPAS 깜박이 사용(시험)",
+      "descr": "ECAN의 SPAS1/2 규격과 운전자 입력이 확인되는 현대·기아·제네시스 CAN-FD 차량에서 콤마로 깜박이를 제어합니다. 기본 꺼짐이며 변경 후 재부팅해야 합니다. 선택하면 Jetson USB2CAN 깜박이 경로는 중지됩니다. 깜박이 요청 중 주차 ECU를 잠시 정지하고 종료 후 복구합니다. 기존 자동 깜박이 제어 단계가 적용되며 차종별 실차 확인이 필요합니다.",
+      "egroup": "START",
+      "etitle": "CAN-FD SPAS indicators (trial)",
+      "edescr": "Use comma SPAS indicators on Hyundai/Kia/Genesis CAN-FD vehicles with matching ECAN SPAS1/2 and valid driver input. Default OFF; reboot required. Disables the Jetson USB2CAN blinker path. The parking ECU is temporarily paused only during a requested signal and restored afterwards. Existing AutoBlinkerControl modes apply. Vehicle acceptance is required.",
+      "cgroup": "启动设置",
+      "ctitle": "CAN-FD SPAS indicators (trial)",
+      "cdescr": "Use comma SPAS indicators on Hyundai/Kia/Genesis CAN-FD vehicles with matching ECAN SPAS1/2 and valid driver input. Default OFF; reboot required. Disables the Jetson USB2CAN blinker path. The parking ECU is temporarily paused only during a requested signal and restored afterwards. Existing AutoBlinkerControl modes apply. Vehicle acceptance is required.",
+      "min": 0,
+      "max": 1,
+      "default": 0,
+      "unit": 1,
+      "risk": "high"
+    },
+    {
+      "group": "시작",
       "name": "RecordRoadCam",
       "title": "RoadCam녹화",
       "descr": "저장소에 비디오 녹화\n0:녹화안함,1:일반카메라\n2:일반카메라+광각카메라",
@@ -2856,9 +2892,18 @@
       "unit": 1,
       "control": "select",
       "options": {
-        "ko": ["정상", "좌우 반전"],
-        "en": ["Normal", "Invert left/right"],
-        "zh": ["正常", "左右反转"]
+        "ko": [
+          "정상",
+          "좌우 반전"
+        ],
+        "en": [
+          "Normal",
+          "Invert left/right"
+        ],
+        "zh": [
+          "正常",
+          "左右反转"
+        ]
       },
       "risk": "high"
     },
@@ -2975,9 +3020,21 @@
       "unit": 1,
       "control": "select",
       "options": {
-        "ko": ["2단계", "3단계", "4단계"],
-        "en": ["2 levels", "3 levels", "4 levels"],
-        "zh": ["2级", "3级", "4级"]
+        "ko": [
+          "2단계",
+          "3단계",
+          "4단계"
+        ],
+        "en": [
+          "2 levels",
+          "3 levels",
+          "4 levels"
+        ],
+        "zh": [
+          "2级",
+          "3级",
+          "4级"
+        ]
       }
     },
     {

@@ -176,6 +176,10 @@ class Sender:
     self.anchor = None
     if peer.get('carrot_host') != 'jetson' or peer.get(CAPABILITY) is not True:
       return
+    if Path('/TICI').is_file():
+      from openpilot.common.params import Params
+      if Params().get_bool('CanfdBlinkerControl'):
+        return  # Reboot selection excludes USB2CAN before host BEGIN.
     seq = client._next_seq()
     client.t.send_json(BEGIN, seq, {'version': 2})
     response = json.loads(bytes(client._expect(ACK, seq, 1.).payload))

@@ -27,6 +27,7 @@ from openpilot.selfdrive.car.cruise import VCruiseCarrot
 from openpilot.selfdrive.car.car_specific import MockCarState
 from openpilot.selfdrive.car.openpilot_toggle import CruiseMainOpenpilotToggle
 from openpilot.selfdrive.car.tesla_turn_signals import TeslaTurnSignals
+from openpilot.selfdrive.car.hyundai_spas import SpasSignals
 from openpilot.selfdrive.controls.lib.lateral_readiness import LateralStartupGate
 from openpilot.selfdrive.carrot.xiaoge.xiaoge_vision import (
   XiaogeVisionResult,
@@ -138,6 +139,9 @@ class Car:
     self.tesla_signals = TeslaTurnSignals.from_car_params(self.CP, enabled=self.params.get_bool("TeslaAutoTurnSignals"))
     self.tesla_signal_status = None if self.CP.brand == "tesla" else self.tesla_signals.status
     self.tesla_signal_log_ns = 0
+    self.spas_signals = SpasSignals(self.CP, self.params)
+    self.spas_signal_status = None
+    self.spas_signal_log_at = 0.
 
     if self.CP.secOcRequired:
       # Copy user key if available
@@ -232,6 +236,7 @@ class Car:
     self.CI.CS.speedcam_engaged = self.sm['carControl'].enabled
     self.CI.CS.speedcam_v_cruise = self.v_cruise_helper.v_cruise_kph
     CS = self.CI.update(can_list)
+    self.spas_signals.observe(can_list, time.monotonic())
     if self.CP.brand == 'mock':
       CS = self.mock_carstate.update(CS)
     ci_done_ns = time.monotonic_ns()
@@ -371,6 +376,23 @@ class Car:
 
   def controls_update(self, CS: car.CarState, CC: car.CarControl):
     """control update loop, driven by carControl"""
+
+    if self.spas_signals.enabled:
+      spas_sends = self.spas_signals.update(CS, self.sm, time.monotonic(), self.initialized_prev)
+      if spas_sends:
+        self.pm.send('sendcan', can_list_to_can_capnp(spas_sends, msgtype='sendcan', valid=CS.canValid))
+      CC = CC.as_builder()
+      CC.hudControl.physicalBlinkerHold = self.spas_signals.hold_value
+      CC = CC.as_reader()
+      signal = self.spas_signals
+      if signal.status != self.spas_signal_status or (signal.session.state != 'idle' and time.monotonic() >= self.spas_signal_log_at):
+        cloudlog.event('hyundai_spas', state=signal.session.state, reason=signal.session.reason,
+                       request=signal.session.request, direction=signal.session.direction,
+                       left=CS.leftBlinker, right=CS.rightBlinker, hold=signal.hold_value,
+                       restored_ack=signal.session.restore_ack, stock_resumed=signal.session.stock_resumed)
+        self.spas_signal_status = signal.status
+        self.spas_signal_log_at = time.monotonic()+1.
+
 
     if not self.initialized_prev:
       # Initialize CarInterface, once controls are ready

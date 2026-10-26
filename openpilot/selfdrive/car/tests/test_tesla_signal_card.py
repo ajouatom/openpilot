@@ -112,7 +112,7 @@ def test_final_card_boundary_uses_gated_control_and_fresh_intent(gate, suspend_n
 
   controller = NS(apply=apply)
   stages = ("apply", "sendcan", "total")
-  card = NS(initialized_prev=True, params=params, sm=sm, CI=controller,
+  card = NS(spas_signals=NS(enabled=False), initialized_prev=True, params=params, sm=sm, CI=controller,
             pm=NS(send=lambda *args: sent.append(args)), tesla_signals=signals,
             lateral_startup=LateralStartupGate(ready=gate != "startup"), card_diag_recv_ns=N - suspend_ns,
             card_diag_stage_names=stages, card_diag_stage_current=dict.fromkeys(stages, 0),
