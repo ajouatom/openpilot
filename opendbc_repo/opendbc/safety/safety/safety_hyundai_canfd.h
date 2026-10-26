@@ -46,6 +46,9 @@ const CanMsg HYUNDAI_CANFD_HDA2_LONG_TX_MSGS[] = {
   {0x2A4, 0, 24}, // CAM_0x2A4
   {0x51, 0, 32},  // ADRV_0x51
   {0x730, 1, 8},  // tester present for ADAS ECU disable
+  {0x7B1, 0, 8},  // parking ECU (APRK) session / disable / tester present, CanfdBlinkerControl
+  {0x165, 0, 24}, // SPAS1, sent while APRK is silenced
+  {0x16A, 0, 32}, // SPAS2 BLINKER_CONTROL, sent while APRK is silenced
   {0x12A, 1, 16}, // LFA
   {0x160, 1, 16}, // ADRV_0x160
   {0x1E0, 1, 16}, // LFAHDA_CLUSTER
@@ -666,6 +669,27 @@ static bool hyundai_canfd_tx_hook(const CANPacket_t *to_send_const) {
   if ((addr == 0x730) && hyundai_canfd_hda2) {
     if ((GET_BYTES(to_send, 0, 4) != 0x00803E02U) || (GET_BYTES(to_send, 4, 4) != 0x0U)) {
       tx = false;
+    }
+  }
+
+  // CanfdBlinkerControl UDS on the parking ECU: extended session, disable rx/tx, default session, tester present only
+  if (addr == 0x7B1) {
+    uint32_t uds = GET_BYTES(to_send, 0, 4);
+    bool uds_ok = (uds == 0x00031002U) || (uds == 0x01832803U) || (uds == 0x00011002U) || (uds == 0x00803E02U);
+    if (!uds_ok || (GET_BYTES(to_send, 4, 4) != 0x0U)) {
+      tx = false;
+    }
+  }
+
+  // SPAS1/SPAS2: zero apart from checksum/counter and BLINKER_CONTROL (byte 16 bits 5..7: 0 off, 3 left, 4 right)
+  if ((addr == 0x165) || (addr == 0x16A)) {
+    for (uint8_t i = 3U; i < GET_LEN(to_send); i++) {
+      uint8_t b = GET_BYTE(to_send, i);
+      uint8_t blink = b >> 5;
+      bool blinker = (addr == 0x16A) && (i == 16U) && ((b & 0x1FU) == 0U) && ((blink == 0U) || (blink == 3U) || (blink == 4U));
+      if ((b != 0U) && !blinker) {
+        tx = false;
+      }
     }
   }
 

@@ -3,7 +3,7 @@ from collections import deque
 import numpy as np
 from opendbc.car.hyundai.scalar import clip_float
 from opendbc.can import CANPacker
-from opendbc.car import Bus, DT_CTRL, apply_driver_steer_torque_limits, common_fault_avoidance, make_tester_present_msg, structs, apply_std_steer_angle_limits
+from opendbc.car import Bus, CanData, DT_CTRL, apply_driver_steer_torque_limits, common_fault_avoidance, make_tester_present_msg, structs, apply_std_steer_angle_limits
 from opendbc.car.common.conversions import Conversions as CV
 from opendbc.car.hyundai import hyundaicanfd, hyundaican
 from opendbc.car.hyundai.carstate import CarState
@@ -42,6 +42,13 @@ LARGE_ANGLE_UNWIND_RATE = 1.5  # deg/tick: allow a quicker return from the EPS f
 CANFD_JERK_UPPER_MIN = 1.0
 CANFD_JERK_LIMIT_MAX = 5.0
 CANFD_DEPART_JERK_UPPER = 3.0  # StopGoAssist departure: no-lead departures already send 2.8-3.3 (02_logs §22)
+# CanfdBlinkerControl: in D above 30 km/h the parking ECU (APRK, 0x7B1) is silenced and SPAS2 BLINKER_CONTROL is sent in
+# its place; below 20 km/h or out of D its default session returns, so parking assists work again while parking
+APRK_ADDR = 0x7B1
+APRK_EXT_SESSION = bytes([0x02, 0x10, 0x03, 0, 0, 0, 0, 0])
+APRK_COM_DISABLE = bytes([0x03, 0x28, 0x83, 0x01, 0, 0, 0, 0])
+APRK_DEFAULT_SESSION = bytes([0x02, 0x10, 0x01, 0, 0, 0, 0, 0])
+APRK_ON_KPH, APRK_OFF_KPH = 30., 20.
 CANFD_DEPART_TIME = 3.0
 CANFD_DEPART_SPEED = 3.0
 CANFD_JERK_ERROR_DELAY = 0.5
@@ -204,6 +211,8 @@ class CarController(CarControllerBase):
     self.blinking_frame = int(1.0 / DT_CTRL)
     self.soft_hold_mode = 2
     self.depart_jerk = False
+    self.blinker_control = False
+    self.aprk_state, self.aprk_frame = 0, 0  # 0 normal, 1 extended session asked, 2 silenced
     self.standstill_frame = -1e6
 
     self.activateCruise = 0
@@ -248,6 +257,29 @@ class CarController(CarControllerBase):
 
     self.steerDeltaUpOrg = self.steerDeltaUp = self.steerDeltaUpLC = self.params.STEER_DELTA_UP
     self.steerDeltaDownOrg = self.steerDeltaDown = self.steerDeltaDownLC = self.params.STEER_DELTA_DOWN
+
+  def aprk_blinkers(self, CC, CS):
+    # shortcut: replies are not checked; if APRK ignores the requests it keeps sending SPAS2 and the cluster sees both
+    ret = []
+    drive = CS.out.gearShifter == structs.CarState.GearShifter.drive
+    want = self.blinker_control and drive and CS.out.vEgo * CV.MS_TO_KPH > (APRK_OFF_KPH if self.aprk_state else APRK_ON_KPH)
+    if not want:
+      if self.aprk_state:
+        ret.append(CanData(APRK_ADDR, APRK_DEFAULT_SESSION, self.CAN.ECAN))
+      self.aprk_state = 0
+    elif self.aprk_state == 0:
+      ret.append(CanData(APRK_ADDR, APRK_EXT_SESSION, self.CAN.ECAN))
+      self.aprk_state, self.aprk_frame = 1, self.frame
+    elif self.aprk_state == 1:
+      if self.frame - self.aprk_frame >= 5:  # 50 ms for the session change
+        ret.append(CanData(APRK_ADDR, APRK_COM_DISABLE, self.CAN.ECAN))
+        self.aprk_state = 2
+    else:
+      if self.frame % 100 == 0:
+        ret.append(make_tester_present_msg(APRK_ADDR, self.CAN.ECAN, suppress_response=True))
+      if self.frame % 2 == 0:  # APRK's own SPAS rate, 50 Hz
+        ret.extend(hyundaicanfd.create_spas_messages(self.packer, self.CAN, self.frame, CC.leftBlinker, CC.rightBlinker))
+    return ret
 
   def update(self, CC, CS, now_nanos):
 
@@ -294,6 +326,7 @@ class CarController(CarControllerBase):
 
       self.soft_hold_mode = 1 if params.get_int("AutoCruiseControl") > 1 else 2
       self.depart_jerk = params.get_int("StopGoAssist") >= 2
+      self.blinker_control = params.get_bool("CanfdBlinkerControl")
       self.hapticFeedbackWhenSpeedCamera = int(params.get_int("HapticFeedbackWhenSpeedCamera"))
 
       self.button_spam1 = params.get_int("CruiseButtonTest1")
@@ -577,6 +610,8 @@ class CarController(CarControllerBase):
       # blinkers
       if hda2 and self.CP.flags & HyundaiFlags.ENABLE_BLINKERS:
         can_sends.extend(hyundaicanfd.create_spas_messages(self.packer, self.CAN, self.frame, CC.leftBlinker, CC.rightBlinker))
+      elif self.blinker_control or self.aprk_state:
+        can_sends.extend(self.aprk_blinkers(CC, CS))
 
       if self.camera_scc_params in [2, 3]:
         self.canfd_toggle_adas(CC, CS)
