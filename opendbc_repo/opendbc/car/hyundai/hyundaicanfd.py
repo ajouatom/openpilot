@@ -622,29 +622,19 @@ def create_acc_control(packer, CAN, enabled, accel_last, accel, stopping, gas_ov
   return packer.make_can_msg("SCC_CONTROL", CAN.ECAN, values), values["aReqValue"]
 
 
-def _spas_template(template):
-  """Copy the car's own SPAS frame, dropping CHECKSUM/COUNTER so the packer rebuilds them.
-
-  Zero-filling the rest of the frame matches the Ioniq 5 (its bytes 10..13 are 0) but not the
-  GV80, whose frame carries 80 80 80 80 / 14=00 / 20=10. Rebuilding from the car's own values
-  keeps those fields intact so the BCM sees a frame that looks like its own.
-  """
-  if not template:
-    return {}
-  return {k: v for k, v in template.items() if k not in ("CHECKSUM", "COUNTER")}
-
-
-def create_spas_messages(packer, CAN, frame, left_blink, right_blink, spas1_template=None, spas2_template=None):
+def create_spas_messages(packer, CAN, frame, left_blink, right_blink, spas2_template=None):
   ret = []
 
-  ret.append(packer.make_can_msg("SPAS1", CAN.ECAN, _spas_template(spas1_template)))
+  ret.append(packer.make_can_msg("SPAS1", CAN.ECAN, {}))
 
   blink = 0
   if left_blink:
     blink = 3
   elif right_blink:
     blink = 4
-  values = _spas_template(spas2_template)
+  # GV80: the car's own SPAS2 (bytes 3/4=01, 10..13=80, 15=03, 20=10 via the BYTEn signals, 10-26 rlog 00000331);
+  # other cars keep the zero-filled frame that lit the lamp on the Ioniq 5 and EV4
+  values = {k: v for k, v in (spas2_template or {}).items() if k not in ("CHECKSUM", "COUNTER")}
   values["BLINKER_CONTROL"] = blink
   ret.append(packer.make_can_msg("SPAS2", CAN.ECAN, values))
 

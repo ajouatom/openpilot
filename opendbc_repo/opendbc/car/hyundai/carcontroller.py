@@ -335,11 +335,7 @@ class CarController(CarControllerBase):
       # every frame (100 Hz), twice APRK's 50 Hz: 10-26 APRK stayed on, so its BLINKER_CONTROL 0 frames interleave with ours
       left = (pulse and desire == 3) or self.blinker_test == 1
       right = (pulse and desire == 4) or self.blinker_test == 2
-      gv80 = self.CP.carFingerprint == CAR.GENESIS_GV80
-      ret.extend(hyundaicanfd.create_spas_messages(
-        self.packer, self.CAN, self.frame, left, right,
-        getattr(CS, "spas1", None) if gv80 else None,
-        getattr(CS, "spas2", None) if gv80 else None))
+      ret.extend(hyundaicanfd.create_spas_messages(self.packer, self.CAN, self.frame, left, right, getattr(CS, "spas2", None)))
     return ret
 
   def update(self, CC, CS, now_nanos):
@@ -675,11 +671,8 @@ class CarController(CarControllerBase):
       if self.blinker_stalk in (1, 2) or self.stalk_counter is not None:
         can_sends.extend(self.stalk_blinkers(CS))
       if hda2 and self.CP.flags & HyundaiFlags.ENABLE_BLINKERS:
-        gv80 = self.CP.carFingerprint == CAR.GENESIS_GV80
-        can_sends.extend(hyundaicanfd.create_spas_messages(
-          self.packer, self.CAN, self.frame, CC.leftBlinker, CC.rightBlinker,
-          getattr(CS, "spas1", None) if gv80 else None,
-          getattr(CS, "spas2", None) if gv80 else None))
+        can_sends.extend(hyundaicanfd.create_spas_messages(self.packer, self.CAN, self.frame, CC.leftBlinker, CC.rightBlinker,
+                                                           getattr(CS, "spas2", None)))
       elif self.blinker_control or self.blinker_test or self.aprk_state:
         can_sends.extend(self.aprk_blinkers(CC, CS))
 
