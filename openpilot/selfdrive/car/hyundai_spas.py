@@ -25,7 +25,7 @@ class SpasSignals:
     self.direct_next = self.direct_started = 0.
     self.direct_cooldown = 0.
     self.direct_counter = {}
-    self.single_sent = set()
+    self.phase_sent = {}
     self.stock_received = {}
     self.last_update = None
     self.test_blocked = ()
@@ -116,7 +116,7 @@ class SpasSignals:
           self.test_blocked = tuple(getattr(p, 'safetyTxBlocked', 0) for p in sm['pandaStates'])
           if direct:
             self.direct_started = self.direct_next = now
-            self.single_sent.clear()
+            self.phase_sent.clear()
             self.direct_cooldown = now+30.
             self.direct_counter = {a: (s.counter+1) % 256 for a, s in self.session.stock.items()}
           self.pulse_started = None
@@ -161,14 +161,17 @@ class SpasSignals:
       self.test_until = min(self.test_until, now)  # no resumption after guard loss
     if direct_active and now >= self.direct_next and (not self.test_pulse or now-self.direct_started < .2):
       if self.test_setting in (11, 12):
-        # One packet per address, just after a newly received stock packet.
+        # At most one packet per new stock RX during the initial 0.2 s.
         # This is a bounded parked phase trial, not a wire-time guarantee.
         for address in SPAS:
           received = self.stock_received.get(address, -math.inf)
-          if (address not in self.single_sent and self.direct_started < received <= now and
-              now-received <= .005 and (address == 0x165 or 0x165 in self.single_sent)):
-            sends.append(frame(address, (self.session.stock[address].counter+1) % 256, direction, self.session.bus))
-            self.single_sent.add(address)
+          previous_rx, previous_tx, count = self.phase_sent.get(address, (-math.inf, -math.inf, 0))
+          if (count < 10 and max(self.direct_started, previous_rx) < received <= now and
+              now-received <= .005 and now-previous_tx >= .015 and (address == 0x165 or 0x165 in self.phase_sent)):
+            counter = (self.session.stock[address].counter+1) % 256 if count == 0 else self.direct_counter[address]
+            sends.append(frame(address, counter, direction, self.session.bus))
+            self.direct_counter[address] = (counter+1) % 256
+            self.phase_sent[address] = (received, now, count+1)
       else:
         sends.extend(frame(a, self.direct_counter[a], direction, self.session.bus) for a in SPAS)
         self.direct_counter = {a: (c+1) % 256 for a, c in self.direct_counter.items()}

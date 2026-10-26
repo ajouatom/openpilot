@@ -263,3 +263,18 @@ CRC/counter/stalk/freshness/rejection guards and Panda3s/30s limits stay. This
 reduces repeated transmission and tries an earlier phase; userspace timing is
 NOT a guarantee of physical wire separation. It is not the contributor's UDS
 sequence, not a production automatic replacement, and not yet physically proven.
+
+
+Single-packet setting11 actual trial: one queued packet per address, no lamp
+feedback and no hold; all error/loss/rejection counts unchanged across16s.
+The owner's ten-second hold was not reached. db85fa466a was normally installed;
+CI40321469953 passed1182/40skip/362subtests. Postboot pre-existing physical0/1
+error counts1/1 and physical2 zero stayed unchanged (no reset to hide results).
+
+Follow-up changes only11/12 to a fresh-receipt phased pulse: at most one packet
+per new stock source receipt, <=5ms age, >=15ms per-address separation, <=10
+packets/address and only during the first200ms. First counter from fresh stock,
+then independent consecutive TX counters. Existing hold still requires lamp
+confirmation; other guards, modes and Panda remain unchanged. This retains the
+previous no-error timing experiment while testing whether a short pulse train
+rather than one packet starts illumination. Physical acceptance pending.

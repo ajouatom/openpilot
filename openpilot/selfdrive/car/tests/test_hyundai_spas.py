@@ -294,7 +294,7 @@ def test_ten_second_hold_sends_only_start_pulse_and_expires(monkeypatch, setting
 
 
 @pytest.mark.parametrize('setting', [11, 12])
-def test_single_start_is_fresh_one_per_address_then_existing_hold(monkeypatch, setting):
+def test_phased_start_is_fresh_bounded_then_existing_hold(monkeypatch, setting):
   s, p, cs, sm = setup(monkeypatch)
   warm(s)
   s.update(cs, sm, 10., True)
@@ -316,12 +316,13 @@ def test_single_start_is_fresh_one_per_address_then_existing_hold(monkeypatch, s
     s.stock_received = dict.fromkeys((0x165, 0x16A), now)
     s.driver_at = now
     sm.recv_time = dict.fromkeys(sm, now)
-    assert s.update(cs, sm, now, True) == []
+    sent = s.update(cs, sm, now, True)
+    assert bool(sent) == (now-10.01 < .2)
     assert s.hold_value == ((2 if setting == 11 else 3) if now < 20.01 else 1)
 
 
 @pytest.mark.parametrize('age', [-.001, .006, .020])
-def test_single_start_does_not_send_on_future_or_delayed_stock(monkeypatch, age):
+def test_phased_start_does_not_send_on_future_or_delayed_stock(monkeypatch, age):
   s, p, cs, sm = setup(monkeypatch)
   warm(s)
   s.update(cs, sm, 10., True)
@@ -331,3 +332,26 @@ def test_single_start_does_not_send_on_future_or_delayed_stock(monkeypatch, age)
   warm(s, 10.05)
   s.stock_received = dict.fromkeys((0x165, 0x16A), 10.05-age)
   assert s.update(cs, sm, 10.05, True) == []
+
+
+@pytest.mark.parametrize('setting', [11, 12])
+def test_phased_pulse_uses_new_receipt_once_and_retains_counter_rate(monkeypatch, setting):
+  s, p, cs, sm = setup(monkeypatch)
+  warm(s)
+  s.update(cs, sm, 10., True)
+  p.value = setting
+  s.settings_at = 0
+  s.update(cs, sm, 10.01, True)
+  frames = []
+  for i in range(20):
+    now = 10.02+i*.02
+    packets = [(a, frame(a, 10+i, None, 0).dat, 0) for a in (0x165, 0x16A)]
+    s.observe([(round(now*1e9), packets)], now+.001)
+    s.driver_at = now
+    sm.recv_time = dict.fromkeys(sm, now)
+    sent = s.update(cs, sm, now+.002, True)
+    frames.extend(sent)
+    assert s.update(cs, sm, now+.003, True) == []  # same RX cannot retrigger
+  assert len(frames) == 20
+  for address in (0x165, 0x16A):
+    assert [m.dat[2] for m in frames if m.address == address] == list(range(11, 21))
