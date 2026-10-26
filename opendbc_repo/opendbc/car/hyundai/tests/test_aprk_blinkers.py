@@ -9,9 +9,10 @@ from opendbc.car.hyundai.carcontroller import CarController
 D, P = structs.CarState.GearShifter.drive, structs.CarState.GearShifter.park
 
 
-def step(cc, frames, gear, kph, left=False):
-  CS = SimpleNamespace(out=SimpleNamespace(gearShifter=gear, vEgo=kph / 3.6))
-  CC = SimpleNamespace(leftBlinker=left, rightBlinker=False)
+def step(cc, frames, gear, kph, desire=0):
+  md = SimpleNamespace(meta=SimpleNamespace(desire=SimpleNamespace(raw=desire), desireState=[]))
+  CS = SimpleNamespace(out=SimpleNamespace(gearShifter=gear, vEgo=kph / 3.6), modelV2=md)
+  CC = SimpleNamespace(leftBlinker=desire == 3, rightBlinker=desire == 4)
   sent = []
   for _ in range(frames):
     sent += CarController.aprk_blinkers(cc, CC, CS)
@@ -21,12 +22,12 @@ def step(cc, frames, gear, kph, left=False):
 
 def test_aprk_silenced_only_in_d_above_30_and_restored():
   packer = CANPacker('hyundai_canfd_generated')
-  cc = SimpleNamespace(blinker_control=True, blinker_test=0, aprk_state=0, aprk_frame=0, frame=0, CAN=SimpleNamespace(ECAN=0), packer=packer)
+  cc = SimpleNamespace(blinker_control=True, blinker_test=0, aprk_state=0, aprk_frame=0, blinker_desire=0, blinker_pulse_end=0, frame=0, CAN=SimpleNamespace(ECAN=0), packer=packer)
   assert step(cc, 50, D, 25) == [] and cc.aprk_state == 0  # below 30 km/h: parking ECU untouched
   sent = step(cc, 10, D, 35)
   uds = [m[1] for m in sent if m[0] == carcontroller.APRK_ADDR]
   assert uds == [carcontroller.APRK_EXT_SESSION, carcontroller.APRK_COM_DISABLE] and cc.aprk_state == 2
-  spas2 = [m for m in step(cc, 10, D, 25, left=True) if m[0] == 0x16A]  # 25 km/h: hysteresis keeps it silenced
+  spas2 = [m for m in step(cc, 10, D, 25, desire=3) if m[0] == 0x16A]  # 25 km/h: hysteresis keeps it silenced
   sig = packer.dbc.name_to_msg['SPAS2'].sigs['BLINKER_CONTROL']
   assert len(spas2) == 10 and all(get_raw_value(m[1], sig) == 3 for m in spas2)
   assert [m[1] for m in step(cc, 1, D, 15)] == [carcontroller.APRK_DEFAULT_SESSION] and cc.aprk_state == 0  # below 20: restored
@@ -38,9 +39,24 @@ def test_aprk_silenced_only_in_d_above_30_and_restored():
 
 def test_menu_test_blinks_at_standstill_in_p():
   packer = CANPacker('hyundai_canfd_generated')
-  cc = SimpleNamespace(blinker_control=False, blinker_test=2, aprk_state=0, aprk_frame=0, frame=0, CAN=SimpleNamespace(ECAN=0), packer=packer)
+  cc = SimpleNamespace(blinker_control=False, blinker_test=2, aprk_state=0, aprk_frame=0, blinker_desire=0, blinker_pulse_end=0, frame=0, CAN=SimpleNamespace(ECAN=0), packer=packer)
   sig = packer.dbc.name_to_msg['SPAS2'].sigs['BLINKER_CONTROL']
   spas2 = [m for m in step(cc, 20, P, 0) if m[0] == 0x16A]
   assert cc.aprk_state == 2 and spas2 and all(get_raw_value(m[1], sig) == 4 for m in spas2)
   cc.blinker_test = 0
   assert [m[1] for m in step(cc, 1, P, 0)] == [carcontroller.APRK_DEFAULT_SESSION] and cc.aprk_state == 0
+
+
+def test_lane_change_kicks_once_then_stops():
+  # the whole-change hold read back as the driver's blinker and never let the lamp go off (EV4 10-26)
+  packer = CANPacker('hyundai_canfd_generated')
+  cc = SimpleNamespace(blinker_control=True, blinker_test=0, aprk_state=0, aprk_frame=0, blinker_desire=0, blinker_pulse_end=0,
+                       frame=0, CAN=SimpleNamespace(ECAN=0), packer=packer)
+  sig = packer.dbc.name_to_msg['SPAS2'].sigs['BLINKER_CONTROL']
+  step(cc, 10, D, 60)
+  values = lambda sent: [get_raw_value(m[1], sig) for m in sent if m[0] == 0x16A]
+  kick = values(step(cc, carcontroller.BLINKER_PULSE_FRAMES, D, 60, desire=4))
+  assert kick and set(kick) == {4}
+  assert set(values(step(cc, 300, D, 60, desire=4))) == {0}  # same change: no second kick
+  step(cc, 10, D, 60)
+  assert values(step(cc, 1, D, 60, desire=3)) == [3]  # next change kicks again

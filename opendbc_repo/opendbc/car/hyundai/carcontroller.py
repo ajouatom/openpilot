@@ -49,6 +49,9 @@ APRK_EXT_SESSION = bytes([0x02, 0x10, 0x03, 0, 0, 0, 0, 0])
 APRK_COM_DISABLE = bytes([0x03, 0x28, 0x83, 0x01, 0, 0, 0, 0])
 APRK_DEFAULT_SESSION = bytes([0x02, 0x10, 0x01, 0, 0, 0, 0, 0])
 APRK_ON_KPH, APRK_OFF_KPH = 30., 20.
+# lane change kick: ~2 flashes at the start of the confirmed change, then ADRV_0x1ea BLINK_HOLD keeps the lamp.
+# shortcut: flash count at 1.0 s is not measured (BCM ran on ~1.2 s after the command stopped, EV4 10-26), tune after a drive
+BLINKER_PULSE_FRAMES = int(1.0 / DT_CTRL)
 
 # CanfdBlinkerStalk: when APRK can't be silenced, imitate the steering column lever (BLINKER_STALKS, 0x3C1); the BCM
 # blinks from it (09-18 log: 0x413 ALT lamp at 0.4 s while the lever is on). 10-26 logs: COUNTER_ALT goes +1 on every
@@ -231,6 +234,7 @@ class CarController(CarControllerBase):
     self.stalk_source_counter = None
     self.stalk_values = None
     self.aprk_state, self.aprk_frame = 0, 0  # 0 normal, 1 extended session asked, 2 silenced
+    self.blinker_desire, self.blinker_pulse_end = 0, 0
     self.standstill_frame = -1e6
 
     self.activateCruise = 0
@@ -300,6 +304,13 @@ class CarController(CarControllerBase):
   def aprk_blinkers(self, CC, CS):
     # shortcut: replies are not checked; if APRK ignores the requests it keeps sending SPAS2 and the cluster sees both
     ret = []
+    # Holding SPAS2 for the whole lane change lit the lamp, the lamp read back as the driver's blinker and DesireHelper
+    # went from laneChangeFinishing straight back to preLaneChange, so the lamp never went off (EV4 report 10-26).
+    desire, _ = hyundaicanfd._get_desire_and_lane_changing(getattr(CS, "modelV2", None))
+    if desire in (3, 4) and desire != self.blinker_desire:
+      self.blinker_pulse_end = self.frame + BLINKER_PULSE_FRAMES
+    self.blinker_desire = desire
+    pulse = self.frame < self.blinker_pulse_end
     drive = CS.out.gearShifter == structs.CarState.GearShifter.drive
     fast = CS.out.vEgo * CV.MS_TO_KPH > (APRK_OFF_KPH if self.aprk_state else APRK_ON_KPH)
     want = self.blinker_test in (1, 2) or (self.blinker_control and drive and fast)  # menu test: any speed or gear
@@ -318,7 +329,8 @@ class CarController(CarControllerBase):
       if self.frame % 100 == 0:
         ret.append(make_tester_present_msg(APRK_ADDR, self.CAN.ECAN, suppress_response=True))
       # every frame (100 Hz), twice APRK's 50 Hz: 10-26 APRK stayed on, so its BLINKER_CONTROL 0 frames interleave with ours
-      left, right = CC.leftBlinker or self.blinker_test == 1, CC.rightBlinker or self.blinker_test == 2
+      left = (pulse and desire == 3) or self.blinker_test == 1
+      right = (pulse and desire == 4) or self.blinker_test == 2
       ret.extend(hyundaicanfd.create_spas_messages(self.packer, self.CAN, self.frame, left, right))
     return ret
 
