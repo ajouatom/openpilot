@@ -177,7 +177,7 @@ from pathlib import Path
 from openpilot.common import big_model_catalog as C
 C.select('flip-flop'); C.freeze_boot()
 original = Path.is_file
-Path.is_file = lambda path: str(path) == '/TICI' or original(path)
+Path.is_file = lambda path: path.as_posix() == '/TICI' or original(path)
 from openpilot.common.jetson_model import read_spec, selected_release
 from openpilot.selfdrive.modeld.big_model import DEFAULT_MANIFEST_URL, fetch_manifest
 assert fetch_manifest(DEFAULT_MANIFEST_URL).sha256 == C.catalog()['flip-flop']['egpu']['sha256']
