@@ -1106,6 +1106,9 @@ struct ModelDataV2 {
     leverTurn @21 :Bool;  # carrot: the turn desire comes from a latched lever (BlinkerLatchedTurn)
     autoTurnSignal @22 :LaneChangeDirection;  # ATC-originated maneuver only; no steering request
     autoTurnSignalLaneChange @23 :Bool;
+    autoTurnSignalDirection @24 :LaneChangeDirection;
+    autoTurnSignalRequestId @25 :UInt64;
+
 
     deprecated :group {
       brakeDisengageProb @2 :Float32;

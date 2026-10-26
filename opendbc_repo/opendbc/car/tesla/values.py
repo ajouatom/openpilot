@@ -141,6 +141,7 @@ class TeslaSafetyFlags(IntFlag):
   LONG_CONTROL = 1
   FSD_14 = 2
   AUTO_SPEED_LIMIT = 4
+  AUTO_TURN_SIGNALS = 8
 
 
 class TeslaFlags(IntFlag):
@@ -149,6 +150,7 @@ class TeslaFlags(IntFlag):
   MISSING_DAS_SETTINGS = 4
   HAS_VEHICLE_BUS = 8
   AUTO_SPEED_LIMIT = 16
+  AUTO_TURN_SIGNALS = 32
 
 
 DBC = CAR.create_dbc_map()
