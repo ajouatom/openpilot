@@ -422,3 +422,33 @@ def test_direct_trial_never_starts_with_unhealthy_or_missing_can_health(monkeypa
   s.settings_at = 0
   assert s.update(cs, sm, 10.01, True) == []
   assert s.test_request is None
+
+
+@pytest.mark.parametrize('setting', [15, 16])
+@pytest.mark.parametrize('stop', ['expiry', 'can_error', 'moving', 'cancel'])
+def test_patch_mode_uses_original_uds_and_continues_without_stock_then_restores(monkeypatch, setting, stop):
+  from opendbc.car.hyundai.spas import APRK, PATCH_DISABLE, DEFAULT
+  s, p, cs, sm = setup(monkeypatch)
+  warm(s)
+  s.update(cs, sm, 10., True, 90)
+  p.value = setting
+  s.settings_at = 0
+  assert s.update(cs, sm, 10.01, True, 91)[0].dat == EXTENDED
+  assert s.update(cs, sm, 10.06, True, 96)[0].dat == PATCH_DISABLE
+  # No ACK and no fresh stock after arm: original protocol still transmits.
+  sent = []
+  for i in range(97, 1093):
+    now = 10.01+(i-91)*.01
+    sm.recv_time = dict.fromkeys(sm, now)
+    s.driver_at = now
+    if stop != 'expiry' and i == 130:
+      if stop == 'can_error': sm['pandaStates'][0].canState2.totalErrorCnt += 1
+      if stop == 'moving': cs.vEgo = .1
+      if stop == 'cancel': p.value = 0; s.settings_at = 0
+    batch = s.update(cs, sm, now, True, i)
+    sent.extend(batch)
+    assert s.hold_value == 1
+  assert sent[-1].address == APRK and sent[-1].dat == DEFAULT
+  assert sum(m[0] == APRK and m[1] == DEFAULT for m in sent) == 1
+  assert any(m[0] == 0x16A and m[1][16] == (0x60 if setting == 15 else 0x80) for m in sent)
+  assert s.patch.state == 0 and s.test_request is None

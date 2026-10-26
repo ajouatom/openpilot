@@ -14,6 +14,7 @@ static CanMsg hyundai_spas_tx_list[128];
 static uint32_t hyundai_spas_park_at[3], hyundai_spas_trial_at;
 static uint8_t hyundai_spas_park_counter[2], hyundai_spas_park_count[3], hyundai_spas_trial_direction;
 static bool hyundai_spas_park_value[3], hyundai_spas_trial_used, hyundai_spas_stock_idle;
+static bool hyundai_spas_patch_candidate, hyundai_spas_patch_present;
 
 static void hyundai_spas_init(bool enabled, int bus) {
   hyundai_spas_enabled = enabled;
@@ -23,6 +24,7 @@ static void hyundai_spas_init(bool enabled, int bus) {
   hyundai_spas_trial_at = 0U;
   hyundai_spas_trial_used = hyundai_spas_stock_idle = false;
   hyundai_spas_trial_direction = 0U;
+  hyundai_spas_patch_candidate = hyundai_spas_patch_present = false;
   for (int i = 0; i < 3; i++) {
     hyundai_spas_park_at[i] = hyundai_spas_park_count[i] = 0U;
     hyundai_spas_park_value[i] = false;
@@ -47,9 +49,8 @@ static bool hyundai_spas_stock_ready(uint32_t now) {
   return ready;
 }
 
-static bool hyundai_spas_park_ready(uint32_t now) {
-  bool ready = !controls_allowed && !vehicle_moving && !gas_pressed &&
-               (hyundai_spas_bus == 0) && hyundai_spas_stock_idle && hyundai_spas_stock_ready(now);
+static bool hyundai_spas_park_guard(uint32_t now) {
+  bool ready = !controls_allowed && !vehicle_moving && !gas_pressed && (hyundai_spas_bus == 0);
   for (int i = 0; i < 3; i++) {
     ready = ready && hyundai_spas_park_value[i] && (hyundai_spas_park_count[i] >= ((i == 2) ? 3U : 10U)) &&
             (get_ts_elapsed(now, hyundai_spas_park_at[i]) < ((i == 2) ? 500000U : 100000U));
@@ -66,6 +67,10 @@ static bool hyundai_spas_park_ready(uint32_t now) {
     }
   }
   return ready;
+}
+
+static bool hyundai_spas_park_ready(uint32_t now) {
+  return hyundai_spas_park_guard(now) && hyundai_spas_stock_idle && hyundai_spas_stock_ready(now);
 }
 
 static void hyundai_spas_rx(const CANPacket_t *pkt, uint32_t now) {
@@ -127,7 +132,7 @@ static void hyundai_spas_rx(const CANPacket_t *pkt, uint32_t now) {
         hyundai_spas_phase = 0U;
       }
     } else if ((addr == 0x7B9) && (GET_LEN(pkt) == 8) && (GET_BYTE(pkt, 0) >= 2U) && (GET_BYTE(pkt, 0) <= 7U)) {
-      if (get_ts_elapsed(now, hyundai_spas_phase_at) < 400000U) {
+      if ((hyundai_spas_phase <= 5U) && (get_ts_elapsed(now, hyundai_spas_phase_at) < 400000U)) {
         if ((hyundai_spas_phase == 1U) && (GET_BYTE(pkt, 1) == 0x50U) && (GET_BYTE(pkt, 2) == 3U)) {
           hyundai_spas_phase = 2U;
         } else if ((hyundai_spas_phase == 3U) && (GET_BYTE(pkt, 1) == 0x68U) && (GET_BYTE(pkt, 2) == 3U)) {
@@ -142,6 +147,10 @@ static void hyundai_spas_rx(const CANPacket_t *pkt, uint32_t now) {
     if ((hyundai_spas_phase == 6U) && (!hyundai_spas_park_ready(now) || (get_ts_elapsed(now, hyundai_spas_trial_at) >= 10000000U))) {
       hyundai_spas_phase = 7U;  // revoked, cooldown cannot be refreshed by TX
     }
+    if ((hyundai_spas_phase == 8U) && (!hyundai_spas_park_guard(now) ||
+        (get_ts_elapsed(now, hyundai_spas_trial_at) >= 10000000U) || (get_ts_elapsed(now, hyundai_spas_alive) >= 1500000U))) {
+      hyundai_spas_phase = 7U;
+    }
     if ((hyundai_spas_phase == 7U) && (get_ts_elapsed(now, hyundai_spas_trial_at) >= 30000000U)) {
       hyundai_spas_phase = 0U;
     }
@@ -152,22 +161,39 @@ static bool hyundai_spas_tx(const CANPacket_t *pkt, uint32_t now) {
   bool ok = hyundai_spas_enabled && (GET_BUS(pkt) == hyundai_spas_bus) && !relay_malfunction;
   int addr = GET_ADDR(pkt);
   if ((addr == 0x7B1) && ok) {
-    if ((hyundai_spas_phase == 6U) || (hyundai_spas_phase == 7U)) {
-      return false;
-    }
     ok = (GET_LEN(pkt) == 8) && (GET_BYTES(pkt, 4, 4) == 0U);
     uint32_t cmd = GET_BYTES(pkt, 0, 4);
+    if (((hyundai_spas_phase == 6U) || (hyundai_spas_phase == 7U)) && !(ok && (cmd == 0x00011002U))) {
+      return false;
+    }
     if (ok && ((cmd == 0x01002803U) || (cmd == 0x00011002U))) {
-      // Recovery remains possible after a lost lease or ECU rejection.
-      hyundai_spas_phase = 0U;
+      // Exact default-session recovery remains possible after parked revocation.
+      hyundai_spas_phase = (hyundai_spas_phase >= 6U) ? 7U : 0U;
+      hyundai_spas_patch_candidate = false;
     } else if (ok && (cmd == 0x00031002U)) {
       ok = (hyundai_spas_phase == 0U) && hyundai_spas_stock_ready(now);
       if (ok) {
         hyundai_spas_phase = 1U;
         hyundai_spas_phase_at = hyundai_spas_started = hyundai_spas_alive = now;
+        hyundai_spas_patch_candidate = hyundai_spas_park_ready(now) &&
+          (!hyundai_spas_trial_used || (get_ts_elapsed(now, hyundai_spas_trial_at) >= 30000000U));
         for (int i = 0; i < 2; i++) {
           hyundai_spas_tx_seen[i] = false;
         }
+      }
+    } else if (ok && (cmd == 0x01832803U)) {
+      // Supplied patch's response-suppressed command is confined to a parked
+      // ten-second lease. It does not relax the normal acknowledged handoff.
+      ok = (hyundai_spas_phase <= 2U) && hyundai_spas_patch_candidate && hyundai_spas_park_ready(now) &&
+           (get_ts_elapsed(now, hyundai_spas_started) >= 40000U) &&
+           (get_ts_elapsed(now, hyundai_spas_started) < 400000U);
+      if (ok) {
+        hyundai_spas_phase = 8U;
+        hyundai_spas_trial_at = hyundai_spas_started;
+        hyundai_spas_trial_used = true;
+        hyundai_spas_trial_direction = 0U;
+        hyundai_spas_patch_candidate = hyundai_spas_patch_present = false;
+        hyundai_spas_tx_seen[0] = hyundai_spas_tx_seen[1] = false;
       }
     } else if (ok && (cmd == 0x01032803U)) {
       ok = (hyundai_spas_phase == 2U) && (get_ts_elapsed(now, hyundai_spas_phase_at) < 400000U);
@@ -176,11 +202,16 @@ static bool hyundai_spas_tx(const CANPacket_t *pkt, uint32_t now) {
         hyundai_spas_phase_at = now;
       }
     } else if (ok && (cmd == 0x00803E02U)) {
-      ok = (hyundai_spas_phase == 5U) && (get_ts_elapsed(now, hyundai_spas_alive) < 1500000U) &&
+      bool patch = hyundai_spas_phase == 8U;
+      ok = patch ? (hyundai_spas_park_guard(now) && (get_ts_elapsed(now, hyundai_spas_trial_at) < 10000000U) &&
+           (get_ts_elapsed(now, hyundai_spas_alive) < 1500000U) &&
+           (!hyundai_spas_patch_present || (get_ts_elapsed(now, hyundai_spas_alive) >= 500000U))) :
+           ((hyundai_spas_phase == 5U) && (get_ts_elapsed(now, hyundai_spas_alive) < 1500000U) &&
            (get_ts_elapsed(now, hyundai_spas_started) < 300000000U) &&
-           (get_ts_elapsed(now, hyundai_spas_alive) >= 500000U);
+           (get_ts_elapsed(now, hyundai_spas_alive) >= 500000U));
       if (ok) {
         hyundai_spas_alive = now;
+        hyundai_spas_patch_present = patch;
       }
     } else {
       ok = false;
@@ -204,8 +235,10 @@ static bool hyundai_spas_tx(const CANPacket_t *pkt, uint32_t now) {
         hyundai_spas_tx_seen[0] = hyundai_spas_tx_seen[1] = false;
       }
     }
-    bool trial = hyundai_spas_phase == 6U;
-    if (trial && (!hyundai_spas_park_ready(now) || (get_ts_elapsed(now, hyundai_spas_trial_at) >= 10000000U))) {
+    bool patch = hyundai_spas_phase == 8U;
+    bool trial = (hyundai_spas_phase == 6U) || patch;
+    bool park_ready = patch ? (hyundai_spas_park_guard(now) && (get_ts_elapsed(now, hyundai_spas_alive) < 1500000U)) : hyundai_spas_park_ready(now);
+    if (trial && (!park_ready || (get_ts_elapsed(now, hyundai_spas_trial_at) >= 10000000U))) {
       hyundai_spas_phase = 7U;
       return false;
     }

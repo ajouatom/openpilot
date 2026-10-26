@@ -163,3 +163,26 @@ def test_fifty_hz_no_burst_after_delayed_update():
     out += [(t + i * 0.01, m) for m in msgs if m.address == 0x16A]
   assert all(b[0] - a[0] >= 0.019999 for a, b in zip(out, out[1:], strict=False))
   assert all(b[1].dat[2] == (a[1].dat[2] + 1) % 256 for a, b in zip(out, out[1:], strict=False))
+
+
+@pytest.mark.parametrize('offset', [0, 91, 99])
+@pytest.mark.parametrize('direction', ['left', 'right'])
+def test_supplied_patch_wire_sequence_matches_all_native_packets(offset, direction):
+  from types import SimpleNamespace as NS
+  from opendbc.car import structs
+  from opendbc.can import CANPacker
+  from opendbc.car.hyundai import hyundaicanfd
+  from opendbc.car.hyundai.spas import PatchSequence
+  from opendbc.car.hyundai.tests.spas_patch_reference import aprk_blinkers
+  bus = NS(ECAN=0)
+  reference = NS(blinker_control=False, blinker_test=1 if direction == 'left' else 2,
+                 aprk_state=0, aprk_frame=0, frame=offset, CAN=bus, packer=CANPacker('hyundai_canfd_generated'))
+  packer = CANPacker('hyundai_canfd_generated')
+  candidate = PatchSequence(0, lambda tick, side: hyundaicanfd.create_spas_messages(packer, bus, tick, side == 'left', side == 'right'))
+  cc = NS(leftBlinker=False, rightBlinker=False)
+  cs = NS(out=NS(gearShifter=structs.CarState.GearShifter.park, vEgo=0.))
+  for i in range(1100):
+    reference.frame = offset+i
+    want = i < 1000 or 1030 <= i < 1080
+    reference.blinker_test = (1 if direction == 'left' else 2) if want else 0
+    assert candidate.step(reference.frame, want, direction) == aprk_blinkers(reference, cc, cs)

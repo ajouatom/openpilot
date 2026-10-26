@@ -135,7 +135,7 @@ def test_disallow_arbitrary_diagnostics_and_suppressed_ack_disable():
     assert not d.tx(APRK, data)
 
 
-def park_inputs(d, count, *, gear=0, wheel=0, driver=False, stock_direction=None):
+def park_inputs(d, count, *, gear=0, wheel=0, driver=False, stock_direction=None, include_stock=True):
   for addr, size in ((0x35, 32), (0xA0, 24)):
     data = bytearray(size)
     data[2] = count % 256
@@ -145,8 +145,9 @@ def park_inputs(d, count, *, gear=0, wheel=0, driver=False, stock_direction=None
       data[8] = wheel
     data[:2] = checksum(addr, data).to_bytes(2, 'little')
     d.rx(addr, data)
-  for addr in SPAS:
-    d.rx(addr, frame(addr, count % 256, stock_direction, d.bus).dat)
+  if include_stock:
+    for addr in SPAS:
+      d.rx(addr, frame(addr, count % 256, stock_direction, d.bus).dat)
   data = bytearray.fromhex('12b0000000000000')
   if driver:
     data[4] = 1
@@ -239,3 +240,69 @@ def test_parked_comparison_preserves_payload_crc_rate_direction_counter_checks()
   bad[:2] = checksum(0x16A, bad).to_bytes(2, 'little')
   assert not d.tx(0x16A, bad)
   assert d.tx(0x16A, frame(0x16A, 31, 'left', 0).dat)
+
+
+@pytest.mark.parametrize('flags', [4096, 4253])
+@pytest.mark.parametrize('keep_stock', [False, True])
+@pytest.mark.parametrize('reply', [None, b'\x50\x03', b'\x7f\x10\x22'])
+def test_original_patch_parked_sequence_no_ack_required_and_ten_second_bound(flags, keep_stock, reply):
+  from opendbc.car.hyundai.spas import PATCH_DISABLE
+  d = Device(flags)
+  parked(d)
+  start = d.t
+  assert d.tx(APRK, EXTENDED)
+  if reply is not None:
+    d.reply(reply)
+  for i in range(1, 6):
+    d.advance(10000)
+    park_inputs(d, 29+i)
+  assert d.tx(APRK, PATCH_DISABLE)
+  count = 0
+  for tick in range(6, 1000):
+    d.advance(10000)
+    park_inputs(d, 29+tick, include_stock=keep_stock)
+    if tick % 100 == 0:
+      assert d.tx(APRK, PRESENT)
+    if tick % 2 == 0:
+      for addr in SPAS:
+        assert d.tx(addr, frame(addr, count % 256, 'left', 0).dat)
+      count += 1
+  d.advance(10000)
+  park_inputs(d, 1029, include_stock=keep_stock)
+  assert d.t-start == 10000000
+  assert not d.tx(0x16A, frame(0x16A, count % 256, 'left', 0).dat)
+  assert not d.tx(APRK, PRESENT)
+  assert d.tx(APRK, DEFAULT)
+  assert not d.tx(0x16A, frame(0x16A, count % 256, 'left', 0).dat)
+
+
+@pytest.mark.parametrize('fault', ['moving', 'gear', 'driver', 'controls', 'stale', 'watchdog'])
+def test_original_patch_parked_revocation_always_allows_default_restore(fault):
+  from opendbc.car.hyundai.spas import PATCH_DISABLE
+  d = Device()
+  parked(d)
+  assert d.tx(APRK, EXTENDED)
+  assert not d.tx(APRK, PATCH_DISABLE)  # cannot skip session delay
+  for i in range(1, 6):
+    d.advance(10000)
+    park_inputs(d, 29+i)
+  assert d.tx(APRK, PATCH_DISABLE)
+  d.advance(10000)
+  park_inputs(d, 35)
+  assert d.tx(0x165, frame(0x165, 0, 'right', 0).dat)
+  assert d.tx(0x16A, frame(0x16A, 0, 'right', 0).dat)
+  if fault == 'watchdog':
+    for i in range(76):
+      d.advance(20000)
+      park_inputs(d, 36+i, include_stock=False)
+  elif fault == 'stale':
+    d.advance(500000)
+  else:
+    d.advance(20000)
+    park_inputs(d, 36, wheel=1 if fault == 'moving' else 0,
+                gear=5 if fault == 'gear' else 0, driver=fault == 'driver')
+    if fault == 'controls':
+      d.s.set_controls_allowed(True)
+  assert not d.tx(0x16A, frame(0x16A, 1, 'right', 0).dat)
+  assert d.tx(APRK, DEFAULT)
+  assert not d.tx(APRK, PATCH_DISABLE)

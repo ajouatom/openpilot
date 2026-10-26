@@ -12,6 +12,7 @@ from opendbc.car.crc import CRC16_XMODEM
 SPAS = {0x165: 24, 0x16A: 32}
 APRK, RESPONSE = 0x7B1, 0x7B9
 EXTENDED = bytes.fromhex('0210030000000000')
+PATCH_DISABLE = bytes.fromhex('0328830100000000')
 DISABLE = bytes.fromhex('0328030100000000')  # request positive acknowledgement
 ENABLE = bytes.fromhex('0328000100000000')
 DEFAULT = bytes.fromhex('0210010000000000')
@@ -184,3 +185,32 @@ class Session:
         self.next_send = now+.02
       return sends
     return []
+
+
+class PatchSequence:
+  """Contributor f8448120/04dd4119 wire sequence; caller owns parked guards.
+
+  Uses the actual controller frame and native create_spas_messages callback.
+  No response/stock-silence condition is added to this sequence.
+  """
+  def __init__(self, bus, make_spas):
+    self.bus, self.make_spas = bus, make_spas
+    self.state, self.started_frame = 0, 0
+
+  def step(self, controller_frame, want, direction):
+    if not want:
+      sends = [CanData(APRK, DEFAULT, self.bus)] if self.state else []
+      self.state = 0
+      return sends
+    if self.state == 0:
+      self.state, self.started_frame = 1, controller_frame
+      return [CanData(APRK, EXTENDED, self.bus)]
+    if self.state == 1:
+      if controller_frame-self.started_frame >= 5:
+        self.state = 2
+        return [CanData(APRK, PATCH_DISABLE, self.bus)]
+      return []
+    sends = [CanData(APRK, PRESENT, self.bus)] if controller_frame % 100 == 0 else []
+    if controller_frame % 2 == 0:
+      sends.extend(self.make_spas(controller_frame, direction))
+    return sends

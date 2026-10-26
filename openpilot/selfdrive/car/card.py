@@ -378,7 +378,7 @@ class Car:
     """control update loop, driven by carControl"""
 
     if self.spas_signals.enabled:
-      spas_sends = self.spas_signals.update(CS, self.sm, time.monotonic(), self.initialized_prev)
+      spas_sends = self.spas_signals.update(CS, self.sm, time.monotonic(), self.initialized_prev, self.CI.CC.frame)
       if spas_sends:
         self.pm.send('sendcan', can_list_to_can_capnp(spas_sends, msgtype='sendcan', valid=CS.canValid))
       CC = CC.as_builder()

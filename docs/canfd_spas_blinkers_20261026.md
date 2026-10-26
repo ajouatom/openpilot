@@ -343,3 +343,25 @@ health records: missing health, warning/passive/busoff, or changed error/loss co
 stop and latch the current trial off. It no longer relies solely on the external
 observer to cancel on these conditions. This is a stop-condition improvement,
 not a fix for coexistence contention, and does not authorize a driving fallback.
+
+
+## Owner-requested supplied-patch sequence reproduction
+
+After the owner's explicit request to run the supplied patch, tests15/16 reproduce
+its wire sequence using actual CarController.frame and native CANPacker with the
+existing create_spas_messages helper: 021003, five controller frames later03288301,
+then frame%2 SPAS1/SPAS2 and frame%100023e80, with021001 on cancellation. The native
+packer is retained across trials, matching the original counter ownership. Neither
+positive ACK nor stock silence gates this sequence. An independent reference keeps
+the supplied f8448120 method plus04dd4119 menu override for byte/tick comparison.
+Six1100-frame left/right/start-offset comparisons match every original packet,
+including cancellation and restart. Desktop focused127 checks pass.
+
+The test wrapper, explicitly separate from the original packet algorithm, requires
+fresh actual P/zero/standstill/inactive/manual-input/CAN-health before arm and keeps
+those guards during the trial; maximum10s and30s cooldown. Panda admits suppressed
+03288301 only after the prior extended-session command under these parked inputs,
+retains exact payload/CRC/counter/rate limits, revokes on motion/stale/manual inputs
+or watchdog/absolute expiry and permits exact021001 recovery. Normal driving still
+uses the existing acknowledged path. This is not unrestricted original-patch road
+installation. No physical result is claimed until the actual test completes.

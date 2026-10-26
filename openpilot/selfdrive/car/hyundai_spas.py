@@ -1,9 +1,11 @@
 """Comma SPAS transport for the existing physical-indicator intent policy."""
 import math
 
-from opendbc.car.hyundai.spas import Session, frame, SPAS
+from opendbc.car.hyundai.spas import Session, PatchSequence, frame, SPAS
 from opendbc.car.hyundai.values import HyundaiFlags
-from opendbc.car.hyundai.hyundaicanfd import CanBus
+from opendbc.car.hyundai.hyundaicanfd import CanBus, create_spas_messages
+from opendbc.can import CANPacker
+from types import SimpleNamespace
 from tools.jetlink.blink_protocol import Process, fresh  # noqa: TID251 -- shared standalone indicator worker
 
 
@@ -29,6 +31,8 @@ class SpasSignals:
     self.phase_until = 0.
     self.phase_confirmed = False
     self.stock_received = {}
+    self.patch = None
+    self.controller_frame = 0
     self.last_update = None
     self.test_blocked = ()
     self.test_can_health = None
@@ -92,9 +96,12 @@ class SpasSignals:
             else:
               self.driver_count = 0
 
-  def update(self, cs, sm, now, initialized):
+  def update(self, cs, sm, now, initialized, controller_frame=None):
     if not self.enabled:
       return []
+    if controller_frame is None:
+      controller_frame = self.controller_frame
+    self.controller_frame = controller_frame+1
     continuous = self.last_update is not None and 0 <= now-self.last_update < .2
     self.last_update = now
     if self.worker is None and initialized and now >= self.worker_retry:
@@ -115,7 +122,7 @@ class SpasSignals:
       self.driver_override = False
     if now >= self.settings_at:
       setting = self.params.get_int('CanfdBlinkerTest')
-      if setting != self.test_setting and setting in range(1, 15):
+      if setting != self.test_setting and setting in range(1, 17):
         # Consume the edge even when the parked guard fails; never run later.
         cc, ss = sm['carControl'], sm['selfdriveState']
         parked = (healthy and str(cs.gearShifter) == 'park' and cs.standstill and abs(cs.vEgo) < .01 and
@@ -129,12 +136,17 @@ class SpasSignals:
           self.test_serial += 1
           self.test_request = f'park:{self.test_serial}'
           # Pulse/hold and SPAS-only comparisons have independent bounded modes.
-          self.test_until = now+(10. if setting in (7, 8, 11, 12, 13, 14) else 3.)
+          self.test_until = now+(10. if setting in (7, 8, 11, 12, 13, 14, 15, 16) else 3.)
           self.test_direction = 'left' if setting % 2 else 'right'
           self.test_pulse = setting in (3, 4, 7, 8, 9, 10, 11, 12)
           self.test_direct = direct
           self.test_hold = setting in (3, 4, 7, 8, 11, 12)
           self.test_blocked = tuple(getattr(p, 'safetyTxBlocked', 0) for p in sm['pandaStates'])
+          if setting in (15, 16) and self.patch is None:
+            packer = CANPacker('hyundai_canfd_generated')
+            bus = SimpleNamespace(ECAN=self.session.bus)
+            self.patch = PatchSequence(self.session.bus, lambda tick, direction: create_spas_messages(
+              packer, bus, tick, direction == 'left', direction == 'right'))
           if direct:
             self.test_can_health = self.can_health(sm['pandaStates'])
             self.direct_started = self.direct_next = now
@@ -171,6 +183,18 @@ class SpasSignals:
         request, direction = self.test_request, self.test_direction
       else:
         request = direction = None
+    if self.patch is not None and (self.patch.state or self.test_setting in (15, 16)):
+      allowed = (self.test_setting in (15, 16) and self.test_request is not None and request == self.test_request and
+                 healthy and continuous and not self.driver_override and
+                 self.test_can_health is not None and self.can_health(sm['pandaStates']) == self.test_can_health and
+                 self.test_blocked == tuple(getattr(p, 'safetyTxBlocked', 0) for p in sm['pandaStates']))
+      sends = self.patch.step(controller_frame, allowed, direction)
+      self.hold_value = 1
+      self.status = 'patch_sequence' if allowed else 'patch_sequence_ended'
+      if not allowed:
+        self.test_until = min(self.test_until, now)
+        self.test_request = None
+      return sends
     direct = self.test_request is not None and self.test_direct
     # A selected parked direct test never falls through to automatic/UDS intent.
     parked_selected = direct or self.test_setting >= 5 or now < self.direct_cooldown
