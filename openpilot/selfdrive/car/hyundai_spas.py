@@ -100,7 +100,9 @@ class SpasSignals:
         if parked and (setting <= 2 or self.hold_supported) and self.session.state == 'idle' and direct_ready:
           self.test_serial += 1
           self.test_request = f'park:{self.test_serial}'
-          self.test_until = now+3.
+          # The extended comparison sends only the initial 0.2 s SPAS pulse;
+          # the existing lamp-confirmed hold supplies the remaining time.
+          self.test_until = now+(10. if setting in (7, 8) else 3.)
           self.test_direction = 'left' if setting % 2 else 'right'
           self.test_pulse = setting in (3, 4, 7, 8, 9, 10)
           self.test_direct = direct

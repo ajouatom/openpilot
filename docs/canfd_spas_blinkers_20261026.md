@@ -184,3 +184,22 @@ it is not erased by this correction and its exact cause is not established.
 No actuation safeguards or runtime code were relaxed in this re-review. The
 correct status is: lamp feedback confirmed, faithful original-method reproduction
 and sustained hold acceptance still incomplete.
+
+
+## Repeat observation and ten-second pulse/hold request
+
+Owner-visible continuous repeat completed its three-second command window:
+114 SPAS2 TX echoes over 2.971 seconds, with four left-lamp on/off cycles in
+0x413 feedback. No UDS or 0x1EA hold was used. CAN bus2 totalErrorCnt stayed
+142, busOffCnt 95 and TX-lost 1 unchanged; Panda blocked stayed 2. Test reset
+to zero, P/zero/inactive remained confirmed. This does not reproduce the
+contributor's original 50 Hz cadence or establish the prior error's cause.
+
+The owner then explicitly requests a short start followed by the existing
+hold for ten seconds. Only settings 7/8 now allow a ten-second total window.
+Directional SPAS remains limited to the first 0.2 seconds; matching lamp
+feedback is required for the existing 0x1EA hold. Other tests remain three
+seconds, Panda's independent directional trial limit remains three seconds,
+and the 30-second cooldown from start and all previous guards remain intact.
+Offline tests exercise both directions with/without confirmation through
+expiry and unchanged-selection no-restart. Live ten-second acceptance pending.

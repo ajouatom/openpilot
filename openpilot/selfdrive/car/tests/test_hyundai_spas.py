@@ -266,3 +266,28 @@ def test_direct_trial_guard_loss_cannot_resume(monkeypatch):
   warm(s)
   assert s.update(cs, sm, 10.05, True) == []
   assert s.hold_value == 1
+
+
+@pytest.mark.parametrize('setting', [7, 8])
+@pytest.mark.parametrize('confirmed', [False, True])
+def test_ten_second_hold_sends_only_start_pulse_and_expires(monkeypatch, setting, confirmed):
+  s, p, cs, sm = setup(monkeypatch)
+  warm(s)
+  s.update(cs, sm, 10., True)
+  p.value = setting
+  s.settings_at = 0
+  start = 10.01
+  assert len(s.update(cs, sm, start, True)) == 2
+  assert s.test_until == start+10.
+  direction = 'left' if setting == 7 else 'right'
+  setattr(cs, direction+'Blinker', confirmed)
+  for tick in range(1, 102):
+    now = start+tick*.1
+    warm(s, now)
+    s.driver_at = now
+    sm.recv_time = dict.fromkeys(sm, now)
+    sent = s.update(cs, sm, now, True)
+    if tick >= 3:
+      assert sent == []  # no repeated SPAS throughout the hold or after expiry
+    assert s.hold_value == ((2 if setting == 7 else 3) if confirmed and tick < 100 else 1)
+  assert s.test_request is None  # unchanged selection must not restart
