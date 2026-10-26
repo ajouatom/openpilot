@@ -1,5 +1,27 @@
 # Repository memory
 
+- On 2026-10-27, owner retires MD v3 and requests DM pause for SoftHold,
+  signal stop and stopped lead, plus vehicle install/reboot. Only N16 Nav and
+  Flip Flop selectable; retired metadata retained for exact unused PKL cleanup.
+  Available Flip ONNX protected even if N16 selected; retired alias queue cleared.
+  CORRECTION: official MD ONNX at same1365126a/12864 path was overwritten:
+  Oct16 792542056B/SHA1cfd2c45 vs Oct24 768750198B/SHA35976b11. Prior identical
+  ONNX claim was wrong; our old MD alias pointed to replacement. No weights/
+  graph equivalence proved. User removed MD rather than restoring historical ONNX.
+  Existing SoftHold pause extended to fresh active long stopping/target<0.1,
+  full standstill/raw+filtered<0.1,D/low,no gas: red e2eStopped or valid near
+  primary lead abs(vLead)<0.1,dRel<=40.250ms freshness; departure/green/lead
+  movement/stale resumes next cycle. Camera stays running, policy/lockout state
+  frozen, no Params reset.253desktop overlapping,3web;CI40412207582 monitoring232,
+  broad1634/56skip plus62/94/119/11/11,Windows passes. Normal GitPull/reboot
+  cd80fae432 physically installed, bootIDchanged, actual web2choices and MD409.
+  Fresh offroad/device startedfalse/Panda ignitionfalse/noOutput; N16 selection
+  unchanged,DMenabled/sessiondisablefalse,snapshotfalse,SPASfalse/test0/mode2.
+  MD PKL already absent,Flip cache retained; no Jetson runtime/model change.
+  No live signal/lead-stop or road acceptance claim. Details:
+  docs/dm_soft_hold_pause_20261013.md; docs/external_model_catalog_20261026.md.
+
+
 - On 2026-10-26, owner requests urgent joongyu01 lever test, then immediate
   USB2CAN restoration if failure/errors. Pin712cef9a adds0x3C1 counter+1/CRC,
   not originalSPAS; do not import competing100HzSPAS. Parked17/18 source and
