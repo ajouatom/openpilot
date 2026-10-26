@@ -26,6 +26,8 @@ class SpasSignals:
     self.direct_cooldown = 0.
     self.direct_counter = {}
     self.phase_sent = {}
+    self.phase_until = 0.
+    self.phase_confirmed = False
     self.stock_received = {}
     self.last_update = None
     self.test_blocked = ()
@@ -117,6 +119,8 @@ class SpasSignals:
           if direct:
             self.direct_started = self.direct_next = now
             self.phase_sent.clear()
+            self.phase_until = now+.5
+            self.phase_confirmed = False
             self.direct_cooldown = now+30.
             self.direct_counter = {a: (s.counter+1) % 256 for a, s in self.session.stock.items()}
           self.pulse_started = None
@@ -159,14 +163,15 @@ class SpasSignals:
                      self.session.stock_ready(now) and self.session.stock_direction == 0)
     if direct and not direct_active:
       self.test_until = min(self.test_until, now)  # no resumption after guard loss
-    if direct_active and now >= self.direct_next and (not self.test_pulse or now-self.direct_started < .2):
+    pulse_active = now < self.phase_until if self.test_setting in (11, 12) else now-self.direct_started < .2
+    if direct_active and now >= self.direct_next and (not self.test_pulse or pulse_active):
       if self.test_setting in (11, 12):
-        # At most one packet per new stock RX during the initial 0.2 s.
+        # At most one packet per new stock RX until confirmed hold overlaps for 0.1 s, at most 0.5 s.
         # This is a bounded parked phase trial, not a wire-time guarantee.
         for address in SPAS:
           received = self.stock_received.get(address, -math.inf)
           previous_rx, previous_tx, count = self.phase_sent.get(address, (-math.inf, -math.inf, 0))
-          if (count < 10 and max(self.direct_started, previous_rx) < received <= now and
+          if (count < 25 and max(self.direct_started, previous_rx) < received <= now and
               now-received <= .005 and now-previous_tx >= .015 and (address == 0x165 or 0x165 in self.phase_sent)):
             counter = (self.session.stock[address].counter+1) % 256 if count == 0 else self.direct_counter[address]
             sends.append(frame(address, counter, direction, self.session.bus))
@@ -183,6 +188,9 @@ class SpasSignals:
                               (direction == 'right' and cs.rightBlinker and not cs.leftBlinker))
       if self.lamp_confirmed and self.test_hold:
         self.hold_value = 2 if direction == 'left' else 3
+        if self.test_setting in (11, 12) and not self.phase_confirmed:
+          self.phase_until = min(self.phase_until, now+.1)
+          self.phase_confirmed = True
       if not direct and now-self.pulse_started >= .2:
         # Keep the SPAS session alive at its normal cadence, but remove the
         # directional command. Only the existing confirmed 0x1EA hold remains.

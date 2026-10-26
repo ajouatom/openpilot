@@ -278,3 +278,13 @@ then independent consecutive TX counters. Existing hold still requires lamp
 confirmation; other guards, modes and Panda remain unchanged. This retains the
 previous no-error timing experiment while testing whether a short pulse train
 rather than one packet starts illumination. Physical acceptance pending.
+
+
+Phased200ms actual setting11:6 SPAS1 and5 SPAS2 queued, no CAN error/loss/rejection
+increase. Raw left lamp on1.2274s/off1.6354s; existing left hold bit on1.3146s
+through11.1707s (9.856s). Last SPAS2 queued1.2969s. This is an actual completed
+hold-command trial without sustained illumination, not an aborted hold test.
+No UDS. Follow-up11/12 permits bounded start/hold overlap: stop the phased start
+100ms after first lamp confirmation, absolute500ms/25packets per address maximum.
+No extra start frames after that, no restart or deadline extension by feedback.
+This tests the transition ordering; physical acceptance remains pending.

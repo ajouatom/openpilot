@@ -317,7 +317,7 @@ def test_phased_start_is_fresh_bounded_then_existing_hold(monkeypatch, setting):
     s.driver_at = now
     sm.recv_time = dict.fromkeys(sm, now)
     sent = s.update(cs, sm, now, True)
-    assert bool(sent) == (now-10.01 < .2)
+    assert bool(sent) == (i == 1)
     assert s.hold_value == ((2 if setting == 11 else 3) if now < 20.01 else 1)
 
 
@@ -343,7 +343,7 @@ def test_phased_pulse_uses_new_receipt_once_and_retains_counter_rate(monkeypatch
   s.settings_at = 0
   s.update(cs, sm, 10.01, True)
   frames = []
-  for i in range(20):
+  for i in range(30):
     now = 10.02+i*.02
     packets = [(a, frame(a, 10+i, None, 0).dat, 0) for a in (0x165, 0x16A)]
     s.observe([(round(now*1e9), packets)], now+.001)
@@ -352,6 +352,6 @@ def test_phased_pulse_uses_new_receipt_once_and_retains_counter_rate(monkeypatch
     sent = s.update(cs, sm, now+.002, True)
     frames.extend(sent)
     assert s.update(cs, sm, now+.003, True) == []  # same RX cannot retrigger
-  assert len(frames) == 20
+  assert len(frames) == 50
   for address in (0x165, 0x16A):
-    assert [m.dat[2] for m in frames if m.address == address] == list(range(11, 21))
+    assert [m.dat[2] for m in frames if m.address == address] == list(range(11, 36))
