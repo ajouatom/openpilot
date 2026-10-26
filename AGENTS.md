@@ -1,5 +1,19 @@
 # Repository memory
 
+- On 2026-10-26, owner requests PR564/562 review and necessary integration.
+  PR564 9d2a435ed332 selects existing spawn=True only for qcomgpsd; preserve
+  TICI/onroad/external-GPS conditions and control checks. Import actual-process
+  crash/restart/duplicate/stop/fork-state regressions. New selection check fails
+  old Windows code; revised49pass/4POSIXskip per branch. Linux startup-recovery
+  164pass each: NAV40293232812/Wip40293233388/Blink40293263275; both maintained
+  eGPU compatibility checks pass, lint/docs validator pass. Code NAV4ad26a8d2a,
+  Wip2fe2caf608,Blink753f15b545 published single-parent. PR562 remains52e05c01:
+  callback reassertion already integrated; retain empty-port/conflict guards,
+  reject unconditional attached-boot cut/nonzero override/global link block.
+  No new physical GPS, current, road or all-stall cure claim; no live install.
+  Comma Git Pull/restart delivery, no Jetson update/model change. Review:
+  docs/pr564_562_review_20261026.md. Unrelated concurrent Jetlink work preserved.
+
 - On 2026-10-26, owner reports audioTurn lamps extinguishing at intersection stop.
   Latest drive sourceab4fc46: leftcue195.697s,on195.919,latActivefalse197.882
   at1.05km/h,desire none197.932,stop198.177,lamps off198.409; navigation stays
