@@ -227,6 +227,7 @@ class CarController(CarControllerBase):
     self.blinker_control = False
     self.blinker_test = 0  # CanfdBlinkerTest: 1 left, 2 right (menu test, any speed/gear)
     self.blinker_stalk = 0  # CanfdBlinkerStalk: 1 left, 2 right (0x3C1 replay)
+    self.stalk_counter = None  # 0x3C1 replay: our own advancing counter
     self.aprk_state, self.aprk_frame = 0, 0  # 0 normal, 1 extended session asked, 2 silenced
     self.standstill_frame = -1e6
 
@@ -274,14 +275,17 @@ class CarController(CarControllerBase):
     self.steerDeltaDownOrg = self.steerDeltaDown = self.steerDeltaDownLC = self.params.STEER_DELTA_DOWN
 
   def stalk_blinkers(self, CS):
-    # 0x3C1 lever frame at 20 Hz (the real sender is 5 Hz): the real frame with only the blinker bits changed and the
-    # counter one ahead, as a lever change would send it. Other bits (light knob, high beam) follow the real lever.
-    # shortcut: if the driver moves the lever meanwhile, both senders use the same counter; not handled
+    # 0x3C1 lever frame at 20 Hz (the real sender is 5 Hz): the real frame with only the blinker bits changed.
+    # The car repeats its own counter while the lever stands still, so a fixed "car + 1" makes the bus alternate
+    # 6,7,6,7 and the receiver sees the counter going backwards. Advance our own counter every frame instead, so the
+    # car's stale repeats always look older than ours. Other bits (light knob, high beam) still follow the real lever.
     if self.frame % 5 != 0 or CS.blinker_stalks is None:
       return []
+    prev = getattr(self, "stalk_counter", None)
+    self.stalk_counter = (int(CS.blinker_stalks["COUNTER_ALT"]) + 1) % 16 if prev is None else (prev + 1) % 16
     values = dict(CS.blinker_stalks)
     values.update(LEFT_BLINKER=int(self.blinker_stalk == 1), RIGHT_BLINKER=int(self.blinker_stalk == 2),
-                  LEFT_BLINKER_TAP=0, RIGHT_BLINKER_TAP=0, COUNTER_ALT=(int(values["COUNTER_ALT"]) + 1) % 16, CHECKSUM_MAYBE=0)
+                  LEFT_BLINKER_TAP=0, RIGHT_BLINKER_TAP=0, COUNTER_ALT=self.stalk_counter, CHECKSUM_MAYBE=0)
     addr, dat, bus = self.packer.make_can_msg("BLINKER_STALKS", self.CAN.ECAN, values)
     return [CanData(addr, bytes([stalk_checksum(dat[1:])]) + bytes(dat[1:]), bus)]
 
