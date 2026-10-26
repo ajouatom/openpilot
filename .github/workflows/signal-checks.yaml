@@ -40,6 +40,7 @@ jobs:
             opendbc_repo/opendbc/car/hyundai/tests/test_spas.py \
             opendbc_repo/opendbc/safety/tests/test_hyundai_spas.py \
             openpilot/selfdrive/car/tests/test_hyundai_spas.py \
+            openpilot/selfdrive/car/tests/test_spas_interface.py \
             opendbc_repo/opendbc/car/tesla/tests \
             opendbc_repo/opendbc/safety/tests/test_tesla.py \
             opendbc_repo/opendbc/safety/tests/test_tesla_turn_signals.py \

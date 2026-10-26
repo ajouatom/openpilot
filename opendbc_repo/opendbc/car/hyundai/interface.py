@@ -139,8 +139,8 @@ class CarInterface(CarInterfaceBase):
       ret.safetyConfigs = cfgs
       from opendbc.car.hyundai.spas import compatible
       if params.get_bool("CanfdBlinkerControl") and compatible(fingerprint, CAN.ECAN) and not ret.flags & HyundaiFlags.ENABLE_BLINKERS:
-        ret.flags |= HyundaiFlags.CANFD_SPAS_BLINKERS
-        ret.safetyConfigs[-1].safetyParam |= HyundaiSafetyFlags.CANFD_SPAS_BLINKERS
+        ret.flags |= HyundaiFlags.CANFD_SPAS_BLINKERS.value
+        ret.safetyConfigs[-1].safetyParam |= HyundaiSafetyFlags.CANFD_SPAS_BLINKERS.value
 
 
       if ret.flags & HyundaiFlags.CANFD_HDA2:
