@@ -133,3 +133,108 @@ def test_disallow_arbitrary_diagnostics_and_suppressed_ack_disable():
   d.stock()
   for data in (bytes.fromhex("0328830100000000"), bytes.fromhex("023e000000000000"), bytes.fromhex("0211030000000000"), EXTENDED[:-1] + b"\x01"):
     assert not d.tx(APRK, data)
+
+
+def park_inputs(d, count, *, gear=0, wheel=0, driver=False, stock_direction=None):
+  for addr, size in ((0x35, 32), (0xA0, 24)):
+    data = bytearray(size)
+    data[2] = count % 256
+    if addr == 0x35:
+      data[24] = gear
+    else:
+      data[8] = wheel
+    data[:2] = checksum(addr, data).to_bytes(2, 'little')
+    d.rx(addr, data)
+  for addr in SPAS:
+    d.rx(addr, frame(addr, count % 256, stock_direction, d.bus).dat)
+  data = bytearray.fromhex('12b0000000000000')
+  if driver:
+    data[4] = 1
+    crc = 0
+    for byte in data[1:]:
+      crc ^= byte
+      for _ in range(8):
+        crc = ((crc << 1) ^ (0x1d if crc & 128 else 0)) & 255
+    data[0] = crc ^ 0x65
+  d.rx(0x3C1, data)
+
+
+def parked(d, **kwargs):
+  for i in range(30):
+    d.advance(20000)
+    park_inputs(d, i, **kwargs)
+
+
+def test_parked_comparison_no_uds_three_seconds_and_cooldown():
+  d = Device()
+  parked(d)
+  for count in range(30, 180):
+    assert d.tx(0x165, frame(0x165, count, None, 0).dat)
+    assert d.tx(0x16A, frame(0x16A, count, 'left', 0).dat)
+    assert not d.tx(APRK, EXTENDED)
+    assert not d.tx(APRK, DISABLE)
+    assert not d.tx(APRK, PRESENT)
+    d.advance(20000)
+    park_inputs(d, count)
+  assert not d.tx(0x165, frame(0x165, 180, None, 0).dat)
+  assert not d.tx(0x16A, frame(0x16A, 180, 'left', 0).dat)
+  parked(d)
+  assert not d.tx(0x165, frame(0x165, 30, None, 0).dat)
+  d.advance(30000000)
+  parked(d)
+  assert d.tx(0x165, frame(0x165, 30, None, 0).dat)
+
+
+@pytest.mark.parametrize('bad', ['moving', 'gear', 'driver', 'controls', 'stock', 'stale', 'bus', 'disabled', 'bad_crc'])
+def test_parked_comparison_rejects_missing_or_unsafe_inputs(bad):
+  d = Device(flags=0 if bad == 'disabled' else 4096 | (16 if bad == 'bus' else 0), bus=1 if bad == 'bus' else 0)
+  parked(d, wheel=1 if bad == 'moving' else 0, gear=5 if bad == 'gear' else 0,
+         driver=bad == 'driver', stock_direction='right' if bad == 'stock' else None)
+  if bad == 'controls':
+    d.s.set_controls_allowed(True)
+  if bad == 'stale':
+    d.advance(100000)
+  if bad == 'bad_crc':
+    d.rx(0x35, bytes(32))
+  assert not d.tx(0x165, frame(0x165, 30, None, d.bus).dat)
+  assert not d.tx(0x16A, frame(0x16A, 30, 'left', d.bus).dat)
+
+
+@pytest.mark.parametrize('bad', ['moving', 'gear', 'driver', 'stock', 'controls', 'stale'])
+def test_parked_comparison_revokes_without_resuming(bad):
+  d = Device()
+  parked(d)
+  assert d.tx(0x165, frame(0x165, 30, None, 0).dat)
+  assert d.tx(0x16A, frame(0x16A, 30, 'left', 0).dat)
+  d.advance(20000)
+  park_inputs(d, 30, wheel=1 if bad == 'moving' else 0, gear=5 if bad == 'gear' else 0,
+              driver=bad == 'driver', stock_direction='right' if bad == 'stock' else None)
+  if bad == 'controls':
+    d.s.set_controls_allowed(True)
+  if bad == 'stale':
+    d.advance(500000)
+  assert not d.tx(0x16A, frame(0x16A, 31, 'left', 0).dat)
+  d.s.set_controls_allowed(False)
+  parked(d)
+  assert not d.tx(0x165, frame(0x165, 30, None, 0).dat)
+
+
+def test_parked_comparison_preserves_payload_crc_rate_direction_counter_checks():
+  d = Device()
+  parked(d)
+  bad = bytearray(frame(0x165, 30, None, 0).dat)
+  bad[4] = 1
+  bad[:2] = checksum(0x165, bad).to_bytes(2, 'little')
+  assert not d.tx(0x165, bad)
+  assert d.tx(0x165, frame(0x165, 30, None, 0).dat)
+  assert d.tx(0x16A, frame(0x16A, 30, 'left', 0).dat)
+  assert not d.tx(0x16A, frame(0x16A, 31, 'left', 0).dat)
+  d.advance(20000)
+  park_inputs(d, 30)
+  assert not d.tx(0x16A, frame(0x16A, 31, 'right', 0).dat)
+  assert not d.tx(0x16A, frame(0x16A, 30, 'left', 0).dat)
+  bad = bytearray(frame(0x16A, 31, 'left', 0).dat)
+  bad[3] = 1
+  bad[:2] = checksum(0x16A, bad).to_bytes(2, 'little')
+  assert not d.tx(0x16A, bad)
+  assert d.tx(0x16A, frame(0x16A, 31, 'left', 0).dat)

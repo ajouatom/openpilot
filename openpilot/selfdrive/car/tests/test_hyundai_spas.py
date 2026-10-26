@@ -35,11 +35,11 @@ def setup(monkeypatch):
   return sig, params, cs, sm
 
 
-def warm(sig):
+def warm(sig, end=10.):
   for i in range(10):
     for addr in (0x165, 0x16A):
       m = frame(addr, i, None, 0)
-      sig.session.observe(addr, 0, m.dat, 9.82 + i * 0.02)
+      sig.session.observe(addr, 0, m.dat, end-.18 + i * .02)
 
 
 @pytest.mark.parametrize('setting', [1, 2, 3, 4])
@@ -106,6 +106,7 @@ def test_pulse_removes_spas_direction_and_uses_only_confirmed_hold(monkeypatch, 
   s.test_until = 13.0
   s.test_direction = 'left'
   s.test_pulse = True
+  s.test_hold = True
   s.session.state = 'active'
   s.session.request = 'park:1'
   s.session.direction = 'left'
@@ -137,6 +138,7 @@ def test_driver_override_restores_instead_of_retaining_pulse_hold(monkeypatch):
   s.test_until = 13.0
   s.test_direction = 'left'
   s.test_pulse = True
+  s.test_hold = True
   s.session.state = 'active'
   s.session.request = 'park:1'
   s.session.direction = 'left'
@@ -170,3 +172,88 @@ def test_unrelated_same_address_on_other_bus_cannot_arm_driver_input(monkeypatch
   for i in range(4):
     s.observe([(1, [(0x3c1, bytes.fromhex('12b0000000000000'), 1)])], 10.+i*.2)
   assert s.driver_count == 0
+
+
+@pytest.mark.parametrize('setting', range(5, 11))
+def test_direct_comparison_has_no_uds_and_distinguishes_pulse_hold(monkeypatch, setting):
+  s, p, cs, sm = setup(monkeypatch)
+  warm(s)
+  s.update(cs, sm, 10., True)
+  p.value = setting
+  s.settings_at = 0
+  sent = s.update(cs, sm, 10.01, True)
+  assert {m.address for m in sent} == {0x165, 0x16A}
+  assert s.session.state == 'idle'
+  assert s.direct_cooldown == 40.01
+  assert s.hold_value == 1
+  direction = 'left' if setting % 2 else 'right'
+  setattr(cs, direction+'Blinker', True)
+  warm(s, 10.11)
+  s.update(cs, sm, 10.11, True)
+  warm(s, 10.22)
+  s.driver_at = 10.22
+  sm.recv_time = dict.fromkeys(sm, 10.22)
+  sent = s.update(cs, sm, 10.23, True)
+  assert bool(sent) == (setting <= 6)
+  assert s.hold_value == ((2 if direction == 'left' else 3) if setting in (7, 8) else 1)
+  assert all(m.address in (0x165, 0x16A) for m in sent)
+  p.value = 0
+  s.settings_at = 0
+  assert s.update(cs, sm, 10.24, True) == []
+  assert s.hold_value == 1
+  p.value = setting
+  s.settings_at = 0
+  setattr(cs, direction+'Blinker', False)
+  assert s.update(cs, sm, 10.25, True) == []  # cooldown
+
+
+@pytest.mark.parametrize('cause', ['loop_gap', 'panda_rejection'])
+def test_direct_trial_stops_on_stall_or_panda_rejection(monkeypatch, cause):
+  s, p, cs, sm = setup(monkeypatch)
+  warm(s)
+  s.update(cs, sm, 10., True)
+  p.value = 7
+  s.settings_at = 0
+  assert len(s.update(cs, sm, 10.01, True)) == 2
+  now = 10.24 if cause == 'loop_gap' else 10.04
+  warm(s, now)
+  sm.recv_time = dict.fromkeys(sm, now)
+  s.driver_at = now
+  cs.leftBlinker = True
+  if cause == 'panda_rejection': sm['pandaStates'][0].safetyTxBlocked = 1
+  assert s.update(cs, sm, now, True) == []
+  assert s.hold_value == 1
+
+
+@pytest.mark.parametrize('bad', ['moving', 'gear', 'driver', 'stock', 'stale', 'panda', 'lamp', 'unsupported'])
+def test_direct_trial_rejects_guard_or_contract_failure(monkeypatch, bad):
+  s, p, cs, sm = setup(monkeypatch)
+  warm(s)
+  s.update(cs, sm, 10., True)
+  p.value = 7
+  s.settings_at = 0
+  if bad == 'moving': cs.vEgo = .1
+  if bad == 'gear': cs.gearShifter = 'drive'
+  if bad == 'driver': cs.blinkerLever = 1
+  if bad == 'stock': s.session.stock_direction = 3
+  if bad == 'stale': sm.recv_time['carControl'] = 0
+  if bad == 'panda': sm['pandaStates'][0].controlsAllowed = True
+  if bad == 'lamp': cs.leftBlinker = True
+  if bad == 'unsupported': s.hold_supported = False
+  assert s.update(cs, sm, 10.01, True) == []
+  assert s.hold_value == 1
+
+
+def test_direct_trial_guard_loss_cannot_resume(monkeypatch):
+  s, p, cs, sm = setup(monkeypatch)
+  warm(s)
+  s.update(cs, sm, 10., True)
+  p.value = 5
+  s.settings_at = 0
+  assert len(s.update(cs, sm, 10.01, True)) == 2
+  cs.vEgo = .1
+  assert s.update(cs, sm, 10.04, True) == []
+  cs.vEgo = 0.
+  warm(s)
+  assert s.update(cs, sm, 10.05, True) == []
+  assert s.hold_value == 1

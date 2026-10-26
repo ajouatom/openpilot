@@ -51,6 +51,38 @@ Local offline tests: 25 session/contract checks; combined intent/card/old-indica
 suite 165 passes including those 25; Wiki checks 25 passes. Native Panda CI and
 physical continuous/pulse comparisons remain pending at this checkpoint.
 
+## Follow-up: no APRK response and parked coexistence comparison
+
+The first actual acknowledged trial on the owner's Ioniq5PE received no 0x7B9
+response to 0x7B1 extended-session requests. No communication-disable request or
+directional SPAS frame was emitted. Stock SPAS continued at about 50 Hz; lamp
+feedback remained off, Panda blocked count remained zero. Bounded enable/default
+recovery attempts also received no ACK, so the session locked further requests.
+The contributor subsequently reported the same missing response and irregular
+illumination when stock zero-direction and injected direction frames coexist.
+This is supporting evidence for a command conflict, not proof of ECU location.
+The bus-130 echoes are forwarding to bus 2; they do not establish that modifying
+that forwarded copy would reach the body controller.
+
+Additional settings 5/6 compare left/right continuous coexistence, 7/8 compare a
+0.2-second start plus existing confirmed hold, and 9/10 supply the pulse-only
+control. These tests do not send UDS or disable stock traffic. They are limited
+to the known Ioniq5PE layout in the Python integration; generic acknowledged
+SPAS eligibility is unchanged. Each lasts at most three seconds with a 30-second
+cooldown. Panda independently requires fresh CRC/counter-checked zero wheel
+speeds and EV P/zero pedal input on ECAN0, fresh valid idle stalk, idle stock
+SPAS, inactive controls, exact payload/CRC/counter/rate and a fixed direction.
+Movement, manual input, stale input or expiry revokes the trial. Python also
+cancels on a loop gap or increased Panda rejection count; no deferred restart.
+Only actual lamp feedback can enable the existing hold. Physical comparison is
+pending until the new native safety tests and ordinary Git Pull/reboot finish.
+
+Initial enable exposed an IntFlag-to-Capnp assignment error; the selected option
+was disabled to recover startup, then both assignments were fixed to integers.
+Actual schema regressions and normal Git Pull/reboot verified the corrected
+f8dd37ca28, CP flag and Panda safety parameter. N16 and the Jetson runtime stayed
+unchanged. The old USB2CAN worker is stopped and CAN1 is down/listen-only, TX zero.
+
 ## 사용 방법과 확인 범위
 
 캐럿웹에서 `CAN-FD SPAS 깜박이 사용(시험)`을 선택하고 재부팅합니다. 일반 설치는

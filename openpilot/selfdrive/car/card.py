@@ -385,10 +385,11 @@ class Car:
       CC.hudControl.physicalBlinkerHold = self.spas_signals.hold_value
       CC = CC.as_reader()
       signal = self.spas_signals
-      if signal.status != self.spas_signal_status or (signal.session.state != 'idle' and time.monotonic() >= self.spas_signal_log_at):
+      if signal.status != self.spas_signal_status or ((signal.session.state != 'idle' or signal.test_direct and signal.test_request is not None) and time.monotonic() >= self.spas_signal_log_at):
         cloudlog.event('hyundai_spas', state=signal.session.state, reason=signal.session.reason,
                        request=signal.session.request, direction=signal.session.direction,
                        left=CS.leftBlinker, right=CS.rightBlinker, hold=signal.hold_value,
+                       trial=signal.test_setting, trial_status=signal.status,
                        restored_ack=signal.session.restore_ack, stock_resumed=signal.session.stock_resumed)
         self.spas_signal_status = signal.status
         self.spas_signal_log_at = time.monotonic()+1.

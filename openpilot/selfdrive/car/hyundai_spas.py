@@ -1,7 +1,7 @@
 """Comma SPAS transport for the existing physical-indicator intent policy."""
 import math
 
-from opendbc.car.hyundai.spas import Session
+from opendbc.car.hyundai.spas import Session, frame, SPAS
 from opendbc.car.hyundai.values import HyundaiFlags
 from opendbc.car.hyundai.hyundaicanfd import CanBus
 from tools.jetlink.blink_protocol import Process, fresh  # noqa: TID251 -- shared standalone indicator worker
@@ -20,6 +20,13 @@ class SpasSignals:
     self.test_until = 0.
     self.test_direction = None
     self.test_pulse = False
+    self.test_direct = False
+    self.test_hold = False
+    self.direct_next = self.direct_started = 0.
+    self.direct_cooldown = 0.
+    self.direct_counter = {}
+    self.last_update = None
+    self.test_blocked = ()
     self.test_serial = 0
     self.stalks = None
     self.driver_override = False
@@ -60,6 +67,8 @@ class SpasSignals:
   def update(self, cs, sm, now, initialized):
     if not self.enabled:
       return []
+    continuous = self.last_update is not None and 0 <= now-self.last_update < .2
+    self.last_update = now
     if self.worker is None and initialized and now >= self.worker_retry:
       try:
         self.worker = Process('blink_source.py', 'spas')
@@ -78,19 +87,29 @@ class SpasSignals:
       self.driver_override = False
     if now >= self.settings_at:
       setting = self.params.get_int('CanfdBlinkerTest')
-      if setting != self.test_setting and setting in (1, 2, 3, 4):
+      if setting != self.test_setting and setting in range(1, 11):
         # Consume the edge even when the parked guard fails; never run later.
         cc, ss = sm['carControl'], sm['selfdriveState']
         parked = (healthy and str(cs.gearShifter) == 'park' and cs.standstill and abs(cs.vEgo) < .01 and
                   not (cc.latActive or cc.longActive or ss.active or ss.enabled) and
                   sm.valid['pandaStates'] and sm.alive['pandaStates'] and 0 <= now-sm.recv_time['pandaStates'] < .75 and
                   len(sm['pandaStates']) > 0 and not any(p.controlsAllowed for p in sm['pandaStates']))
-        if parked and (setting <= 2 or self.hold_supported) and self.session.state == 'idle':
+        direct = setting >= 5
+        direct_ready = (not direct or (now >= self.direct_cooldown and self.session.stock_ready(now) and
+                        self.session.stock_direction == 0 and not (cs.leftBlinker or cs.rightBlinker)))
+        if parked and (setting <= 2 or self.hold_supported) and self.session.state == 'idle' and direct_ready:
           self.test_serial += 1
           self.test_request = f'park:{self.test_serial}'
           self.test_until = now+3.
-          self.test_direction = 'left' if setting in (1, 3) else 'right'
-          self.test_pulse = setting >= 3
+          self.test_direction = 'left' if setting % 2 else 'right'
+          self.test_pulse = setting in (3, 4, 7, 8, 9, 10)
+          self.test_direct = direct
+          self.test_hold = setting in (3, 4, 7, 8)
+          self.test_blocked = tuple(getattr(p, 'safetyTxBlocked', 0) for p in sm['pandaStates'])
+          if direct:
+            self.direct_started = self.direct_next = now
+            self.direct_cooldown = now+30.
+            self.direct_counter = {a: (s.counter+1) % 256 for a, s in self.session.stock.items()}
           self.pulse_started = None
           self.lamp_confirmed = False
       self.test_setting = setting
@@ -119,22 +138,34 @@ class SpasSignals:
         request, direction = self.test_request, self.test_direction
       else:
         request = direction = None
-    sends = self.session.update(now, healthy=healthy, request=request, direction=direction,
+    direct = self.test_request is not None and self.test_direct
+    # A selected parked direct test never falls through to automatic/UDS intent.
+    parked_selected = direct or self.test_setting >= 5 or now < self.direct_cooldown
+    sends = self.session.update(now, healthy=healthy, request=None if parked_selected else request,
+                                direction=None if parked_selected else direction,
                                 duration=3. if self.test_request is not None else 300., driver_override=self.driver_override)
     self.hold_value = 1  # suppress the old USB2CAN/automatic-lane hold while selected
-    if self.session.state == 'active' and self.test_request is not None and self.test_pulse:
+    direct_active = (direct and request == self.test_request and healthy and not self.driver_override and
+                     continuous and self.test_blocked == tuple(getattr(p, 'safetyTxBlocked', 0) for p in sm['pandaStates']) and
+                     self.session.stock_ready(now) and self.session.stock_direction == 0)
+    if direct and not direct_active:
+      self.test_until = min(self.test_until, now)  # no resumption after guard loss
+    if direct_active and now >= self.direct_next and (not self.test_pulse or now-self.direct_started < .2):
+      sends.extend(frame(a, self.direct_counter[a], direction, self.session.bus) for a in SPAS)
+      self.direct_counter = {a: (c+1) % 256 for a, c in self.direct_counter.items()}
+      self.direct_next = now+.02
+    if (direct_active or self.session.state == 'active') and self.test_request is not None and self.test_pulse:
       if self.pulse_started is None:
         self.pulse_started = now
       self.lamp_confirmed |= ((direction == 'left' and cs.leftBlinker and not cs.rightBlinker) or
                               (direction == 'right' and cs.rightBlinker and not cs.leftBlinker))
-      if self.lamp_confirmed:
+      if self.lamp_confirmed and self.test_hold:
         self.hold_value = 2 if direction == 'left' else 3
-      if now-self.pulse_started >= .2:
+      if not direct and now-self.pulse_started >= .2:
         # Keep the SPAS session alive at its normal cadence, but remove the
         # directional command. Only the existing confirmed 0x1EA hold remains.
-        from opendbc.car.hyundai.spas import frame
         sends = [frame(m.address, m.dat[2], None, m.src) if m.address == 0x16A else m for m in sends]
-    self.status = self.session.reason or self.session.state
+    self.status = ('parked_direct' if direct_active else 'parked_direct_ended') if direct else self.session.reason or self.session.state
     if self.worker is not None and now >= self.feedback_at:
       self.worker.send({'stamp': now, 'accepted_id': self.session.request if self.session.state == 'active' else None,
                         'state': 'driver_override' if self.driver_override else 'ready' if self.session.state == 'active' else 'waiting'})

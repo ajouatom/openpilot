@@ -9,12 +9,25 @@ static uint32_t hyundai_spas_rx_at[2], hyundai_spas_tx_at[2];
 static uint8_t hyundai_spas_rx_counter[2], hyundai_spas_rx_count[2], hyundai_spas_tx_counter[2];
 static bool hyundai_spas_tx_seen[2];
 static CanMsg hyundai_spas_tx_list[128];
+// Separate three-second parked comparison. Normal driving still needs the
+// acknowledged ECU handoff. This path never authorizes diagnostic commands.
+static uint32_t hyundai_spas_park_at[3], hyundai_spas_trial_at;
+static uint8_t hyundai_spas_park_counter[2], hyundai_spas_park_count[3], hyundai_spas_trial_direction;
+static bool hyundai_spas_park_value[3], hyundai_spas_trial_used, hyundai_spas_stock_idle;
 
 static void hyundai_spas_init(bool enabled, int bus) {
   hyundai_spas_enabled = enabled;
   hyundai_spas_bus = bus;
   hyundai_spas_phase = 0U;
   hyundai_spas_phase_at = hyundai_spas_started = hyundai_spas_alive = 0U;
+  hyundai_spas_trial_at = 0U;
+  hyundai_spas_trial_used = hyundai_spas_stock_idle = false;
+  hyundai_spas_trial_direction = 0U;
+  for (int i = 0; i < 3; i++) {
+    hyundai_spas_park_at[i] = hyundai_spas_park_count[i] = 0U;
+    hyundai_spas_park_value[i] = false;
+  }
+  hyundai_spas_park_counter[0] = hyundai_spas_park_counter[1] = 0U;
   for (int i = 0; i < 2; i++) {
     hyundai_spas_rx_at[i] = hyundai_spas_tx_at[i] = 0U;
     hyundai_spas_rx_counter[i] = hyundai_spas_rx_count[i] = hyundai_spas_tx_counter[i] = 0U;
@@ -34,9 +47,56 @@ static bool hyundai_spas_stock_ready(uint32_t now) {
   return ready;
 }
 
+static bool hyundai_spas_park_ready(uint32_t now) {
+  bool ready = !controls_allowed && !vehicle_moving && !gas_pressed &&
+               (hyundai_spas_bus == 0) && hyundai_spas_stock_idle && hyundai_spas_stock_ready(now);
+  for (int i = 0; i < 3; i++) {
+    ready = ready && hyundai_spas_park_value[i] && (hyundai_spas_park_count[i] >= ((i == 2) ? 3U : 10U)) &&
+            (get_ts_elapsed(now, hyundai_spas_park_at[i]) < ((i == 2) ? 500000U : 100000U));
+  }
+  return ready;
+}
+
 static void hyundai_spas_rx(const CANPacket_t *pkt, uint32_t now) {
   if (hyundai_spas_enabled && (GET_BUS(pkt) == hyundai_spas_bus)) {
     int addr = GET_ADDR(pkt);
+    if ((addr == 0xA0) || (addr == 0x35)) {
+      int idx = (addr == 0xA0) ? 0 : 1;
+      bool valid = (GET_LEN(pkt) == ((idx == 0) ? 24 : 32)) && hyundai_spas_crc(pkt);
+      if (valid) {
+        uint8_t count = GET_BYTE(pkt, 2);
+        bool advancing = (get_ts_elapsed(now, hyundai_spas_park_at[idx]) < 100000U) &&
+                         (count == ((hyundai_spas_park_counter[idx] + 1U) & 0xFFU));
+        hyundai_spas_park_count[idx] = advancing ? MIN(hyundai_spas_park_count[idx] + 1U, 20U) : 1U;
+        hyundai_spas_park_at[idx] = now;
+        hyundai_spas_park_counter[idx] = count;
+        if (idx == 0) {
+          hyundai_spas_park_value[idx] = (GET_BYTES(pkt, 8, 2) & 0x3FFFU) == 0U &&
+            (GET_BYTES(pkt, 10, 2) & 0x3FFFU) == 0U && (GET_BYTES(pkt, 12, 2) & 0x3FFFU) == 0U &&
+            (GET_BYTES(pkt, 14, 2) & 0x3FFFU) == 0U;
+        } else {
+          // Known EV ACCELERATOR layout: P=0, pedal=0. Other layouts do not arm.
+          hyundai_spas_park_value[idx] = ((GET_BYTE(pkt, 24) & 7U) == 0U) && (GET_BYTE(pkt, 5) == 0U);
+        }
+      } else {
+        hyundai_spas_park_count[idx] = 0U;
+      }
+    } else if (addr == 0x3C1) {
+      uint8_t crc = 0U;
+      for (int i = 1; i < GET_LEN(pkt); i++) {
+        crc ^= GET_BYTE(pkt, i);
+        for (int b = 0; b < 8; b++) {
+          crc = (crc << 1) ^ (((crc & 0x80U) != 0U) ? 0x1DU : 0U);
+        }
+      }
+      if ((GET_LEN(pkt) == 8) && (GET_BYTE(pkt, 0) == (crc ^ 0x65U))) {
+        hyundai_spas_park_count[2] = (get_ts_elapsed(now, hyundai_spas_park_at[2]) < 500000U) ? MIN(hyundai_spas_park_count[2] + 1U, 10U) : 1U;
+        hyundai_spas_park_at[2] = now;
+        hyundai_spas_park_value[2] = ((GET_BYTE(pkt, 3) & 0x40U) == 0U) && ((GET_BYTE(pkt, 4) & 0x51U) == 0U);
+      } else {
+        hyundai_spas_park_count[2] = 0U;
+      }
+    }
     if ((addr == 0x165) || (addr == 0x16A)) {
       int idx = (addr == 0x165) ? 0 : 1;
       if ((GET_LEN(pkt) == ((idx == 0) ? 24 : 32)) && hyundai_spas_crc(pkt)) {
@@ -48,6 +108,9 @@ static void hyundai_spas_rx(const CANPacket_t *pkt, uint32_t now) {
         hyundai_spas_rx_counter[idx] = count;
       } else {
         hyundai_spas_rx_count[idx] = 0U;
+      }
+      if (idx == 1) {
+        hyundai_spas_stock_idle = (GET_LEN(pkt) == 32) && hyundai_spas_crc(pkt) && ((GET_BYTE(pkt, 16) & 0xE0U) == 0U);
       }
       if (hyundai_spas_phase == 5U) {
         hyundai_spas_phase = 0U;
@@ -65,6 +128,12 @@ static void hyundai_spas_rx(const CANPacket_t *pkt, uint32_t now) {
         }
       }
     }
+    if ((hyundai_spas_phase == 6U) && (!hyundai_spas_park_ready(now) || (get_ts_elapsed(now, hyundai_spas_trial_at) >= 3000000U))) {
+      hyundai_spas_phase = 7U;  // revoked, cooldown cannot be refreshed by TX
+    }
+    if ((hyundai_spas_phase == 7U) && (get_ts_elapsed(now, hyundai_spas_trial_at) >= 30000000U)) {
+      hyundai_spas_phase = 0U;
+    }
   }
 }
 
@@ -72,6 +141,9 @@ static bool hyundai_spas_tx(const CANPacket_t *pkt, uint32_t now) {
   bool ok = hyundai_spas_enabled && (GET_BUS(pkt) == hyundai_spas_bus) && !relay_malfunction;
   int addr = GET_ADDR(pkt);
   if ((addr == 0x7B1) && ok) {
+    if ((hyundai_spas_phase == 6U) || (hyundai_spas_phase == 7U)) {
+      return false;
+    }
     ok = (GET_LEN(pkt) == 8) && (GET_BYTES(pkt, 4, 4) == 0U);
     uint32_t cmd = GET_BYTES(pkt, 0, 4);
     if (ok && ((cmd == 0x01002803U) || (cmd == 0x00011002U))) {
@@ -104,15 +176,37 @@ static bool hyundai_spas_tx(const CANPacket_t *pkt, uint32_t now) {
     }
   } else if (ok && ((addr == 0x165) || (addr == 0x16A))) {
     int idx = (addr == 0x165) ? 0 : 1;
+    bool cooldown = !hyundai_spas_trial_used || (get_ts_elapsed(now, hyundai_spas_trial_at) >= 30000000U);
+    if (((hyundai_spas_phase == 0U) || (hyundai_spas_phase == 7U)) && cooldown &&
+        (idx == 0) && hyundai_spas_park_ready(now)) {
+      // Do not let a malformed arm packet consume or start the trial.
+      bool arm = (GET_LEN(pkt) == 24) && hyundai_spas_crc(pkt) &&
+                 (GET_BYTE(pkt, 2) == ((hyundai_spas_rx_counter[0] + 1U) & 0xFFU));
+      for (int i = 3; i < GET_LEN(pkt); i++) {
+        arm = arm && (GET_BYTE(pkt, i) == 0U);
+      }
+      if (arm) {
+        hyundai_spas_phase = 6U;
+        hyundai_spas_trial_at = now;
+        hyundai_spas_trial_used = true;
+        hyundai_spas_trial_direction = 0U;
+        hyundai_spas_tx_seen[0] = hyundai_spas_tx_seen[1] = false;
+      }
+    }
+    bool trial = hyundai_spas_phase == 6U;
+    if (trial && (!hyundai_spas_park_ready(now) || (get_ts_elapsed(now, hyundai_spas_trial_at) >= 3000000U))) {
+      hyundai_spas_phase = 7U;
+      return false;
+    }
     bool quiet = (get_ts_elapsed(now, hyundai_spas_rx_at[0]) >= 100000U) &&
                  (get_ts_elapsed(now, hyundai_spas_rx_at[1]) >= 100000U);
     if ((hyundai_spas_phase == 4U) && quiet && (get_ts_elapsed(now, hyundai_spas_phase_at) >= 100000U) &&
         (get_ts_elapsed(now, hyundai_spas_phase_at) < 500000U)) {
       hyundai_spas_phase = 5U;
     }
-    ok = (hyundai_spas_phase == 5U) && quiet && (GET_LEN(pkt) == ((idx == 0) ? 24 : 32)) &&
+    ok = (trial || ((hyundai_spas_phase == 5U) && quiet &&
          (get_ts_elapsed(now, hyundai_spas_started) < 300000000U) &&
-         (get_ts_elapsed(now, hyundai_spas_alive) < 1500000U);
+         (get_ts_elapsed(now, hyundai_spas_alive) < 1500000U))) && (GET_LEN(pkt) == ((idx == 0) ? 24 : 32));
     if (ok) {
       ok = hyundai_spas_crc(pkt);
       for (int i = 3; i < GET_LEN(pkt); i++) {
@@ -124,6 +218,13 @@ static bool hyundai_spas_tx(const CANPacket_t *pkt, uint32_t now) {
         ok = ok && (get_ts_elapsed(now, hyundai_spas_tx_at[idx]) >= 15000U) &&
              (get_ts_elapsed(now, hyundai_spas_tx_at[idx]) < 200000U) &&
              (GET_BYTE(pkt, 2) == ((hyundai_spas_tx_counter[idx] + 1U) & 0xFFU));
+      }
+      if (trial && (idx == 1)) {
+        uint8_t direction = GET_BYTE(pkt, 16);
+        ok = ok && ((direction == 0U) || (hyundai_spas_trial_direction == 0U) || (direction == hyundai_spas_trial_direction));
+        if (ok && (direction != 0U)) {
+          hyundai_spas_trial_direction = direction;
+        }
       }
       if (ok) {
         hyundai_spas_tx_seen[idx] = true;

@@ -61,6 +61,7 @@ class Session:
     self.restore_attempts = 0
     self.restore_ack = False
     self.stock_resumed = False
+    self.stock_direction = None
 
   def observe(self, address, bus, data, now):
     if bus != self.bus:
@@ -68,12 +69,16 @@ class Session:
     if address in SPAS:
       st = self.stock[address]
       if len(data) != SPAS[address] or int.from_bytes(data[:2], 'little') != checksum(address, data):
+        if address == 0x16A:
+          self.stock_direction = None
         st.consecutive = 0
         if self.state not in ('idle', 'failed', 'restore_enable', 'restore_default', 'restore_stock'):
           self.reason = 'stock_contract'
         return
       st.consecutive = min(20, st.consecutive+1) if 0 <= now-st.stamp < .1 and data[2] == (st.counter+1) % 256 else 1
       st.stamp, st.counter = now, data[2]
+      if address == 0x16A:
+        self.stock_direction = data[16] >> 5
       if self.state == 'active':
         self.reason = 'stock_conflict'
     elif address == RESPONSE and len(data) == 8:
