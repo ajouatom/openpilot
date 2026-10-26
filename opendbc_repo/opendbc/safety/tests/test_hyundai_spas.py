@@ -349,3 +349,16 @@ def test_stalk_requires_opt_in_and_parked_freshness():
     if not flags:
       parked(d)
       assert not d.tx(0x3C1, packet)
+
+
+def test_stalk_driver_change_latches_off_even_before_next_transmit():
+  from opendbc.car.hyundai.stalk_trial import replay
+  d = Device(4253)
+  parked(d)
+  packet = replay(bytes.fromhex('12b0000000000000'), 'left').dat
+  assert d.tx(0x3C1, packet)
+  d.advance(20000)
+  park_inputs(d, 30, driver=True)
+  d.advance(30000)
+  park_inputs(d, 31)
+  assert not d.tx(0x3C1, packet)

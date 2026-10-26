@@ -154,6 +154,15 @@ static void hyundai_spas_rx(const CANPacket_t *pkt, uint32_t now) {
         (get_ts_elapsed(now, hyundai_spas_trial_at) >= 10000000U) || (get_ts_elapsed(now, hyundai_spas_alive) >= 1500000U))) {
       hyundai_spas_phase = 7U;
     }
+    if (hyundai_spas_phase == 9U) {
+      bool unchanged = true;
+      for (int i = 0; i < 8; i++) { unchanged = unchanged && (hyundai_stalk_latest[i] == hyundai_stalk_original[i]); }
+      if (!unchanged || !hyundai_spas_park_guard(now) ||
+          (get_ts_elapsed(now, hyundai_spas_trial_at) >= 10000000U) ||
+          (get_ts_elapsed(now, hyundai_stalk_tx_at) >= 150000U)) {
+        hyundai_spas_phase = 7U;
+      }
+    }
     if ((hyundai_spas_phase == 7U) && (get_ts_elapsed(now, hyundai_spas_trial_at) >= 30000000U)) {
       hyundai_spas_phase = 0U;
     }
