@@ -1,5 +1,20 @@
 # Repository memory
 
+- On 2026-10-26, owner challenges SPAS patch fidelity. Re-read both supplied
+  f8448120/04dd4119 and execute combined original method offline with real packer,
+  Params blocked: no replies still gives147SPAS2/300ticks, first0.06s then20ms,
+  counter0db65, UDSextended0s/288301at50ms/keepalive1,2s/canceldefault. Adapted
+  acknowledged Session gives0SPAS2 with noACK. Our parked coexistence tests also
+  used stock-counter abort, stock-seeded counters, max3s and actual25-26ms mean
+  TX-echo intervals, unlike original frame%2 cadence. Retract claim APRK silence
+  is prerequisite to lighting and any claim original method failed. Both owner
+  report and our lamp feedback show stock-active illumination. Hold was cancelled
+  by our guard, so sustained-hold failure is not established. Bus2error+22 remains
+  real, cause unresolved. No runtime/guard relaxation in this re-review; faithful
+  reproduction and sustained hold acceptance remain incomplete. See correction
+  in docs/canfd_spas_blinkers_20261026.md; offline raw result private.
+
+
 - On 2026-10-26, owner requests generic CAN-FD SPAS indicators and comparison of
   continuous versus short-start/existing-hold. Trial-only a45792a0e2 uses exact
   ECAN SPAS1/24+SPAS2/32, fresh driver input and acknowledged/quiet ECU handoff;

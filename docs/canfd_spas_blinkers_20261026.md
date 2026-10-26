@@ -143,3 +143,44 @@ normal onroad state restored, AutoBlinkerControl2 preserved. Jetson host remains
 0d4947499931; USB2CAN workers absent, CAN1 down/listen-only, TX=0. The initial
 two Panda rejections remain in the cumulative counter (2), with no later increase.
 Raw evidence remains private. Only carrot-nav-blink is published; no wip merge.
+
+## Correction after the owner's patch-fidelity challenge
+
+The previous conclusion that APRK shutdown must be solved before SPAS can light
+an indicator was too strong. Both the contributor report and our left-lamp CAN
+feedback demonstrate illumination while the stock sender continues. The existing
+trials do not establish sustained holding, and do not reproduce the supplied
+patch closely enough to declare its method unsuccessful.
+
+Re-read both supplied patches f8448120 and 04dd4119 and execute their combined
+`aprk_blinkers` method offline, with the real existing CANPacker/SPAS builder and
+Params access blocked. With P/zero speed, menu test=left and no diagnostic replies,
+300 controller ticks generate extended-session at 0.00s, `28 83 01` at 0.05s,
+SPAS2 from 0.06s every 0.02s (147 frames through 2.98s), tester-present at 1/2s,
+and default-session after cancelling. First SPAS2 is the supplied db65 counter-0
+vector. The current acknowledged Session with fresh stock and no reply emits zero
+SPAS2 commands. This is a sequence/packet comparison, not a new physical test.
+
+Important differences introduced by our adaptation:
+
+| Item | Supplied patch | Current adaptation / trials |
+| --- | --- | --- |
+| Diagnostic replies | Not checked; fixed 50ms delay | Positive replies and quiet stock required in normal path |
+| Disable payload | `28 83 01` | `28 03 01`, requesting positive response |
+| Stock stream | Can coexist; no counter-gap stop | Consecutive stock counter gate stops parked comparison |
+| Cadence | Controller `frame % 2 == 0` | `next = now + .02`; actual observed mean TX-echo intervals about25-26ms |
+| Initial counter | Packer's independent counter starts0 | Seeded from observed stock counter+1 |
+| Test duration | Continues until menu0 | Maximum3s; actual comparisons ended earlier on guards |
+
+Measured echo intervals: continuous14frames/0.3353s =25.793ms mean interval;
+pulse-plus-hold8frames/0.18145s =25.921ms; pulse-only8frames/0.17497s =24.996ms.
+These include host observation timing and are not exact hardware wire timestamps,
+but do not support a claim of an equivalent 50Hz reproduction. Our guard-driven
+cancellation also removed the hold bit, so subsequent extinction does not prove
+that the existing hold mechanism cannot sustain a SPAS-started indication.
+
+The CAN error increase remains an actual observation requiring investigation;
+it is not erased by this correction and its exact cause is not established.
+No actuation safeguards or runtime code were relaxed in this re-review. The
+correct status is: lamp feedback confirmed, faithful original-method reproduction
+and sustained hold acceptance still incomplete.
