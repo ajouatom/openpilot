@@ -20,6 +20,7 @@
               "zh": "起步动作",
               "params": [
                 "AlwaysLateral",
+                "TeslaAutoTurnSignals",
                 "AutoEngage",
                 "DisableMinSteerSpeed"
               ]
@@ -1820,6 +1821,22 @@
       "cgroup": "启动设置",
       "ctitle": "全时横向控制",
       "cdescr": "即使巡航未激活，也允许横向控制。\n系统启动后，首次确认所需输入就绪前不执行转向。一旦通过，此启动检查不再阻断；现有行驶中安全处理保持不变。\nTesla 在实际静止时可以转向；低速移动时仍遵守最低转向速度限制。\n0: 关闭, 1: 开启",
+      "min": 0,
+      "max": 1,
+      "default": 0,
+      "unit": 1
+    },
+    {
+      "group": "시작",
+      "name": "TeslaAutoTurnSignals",
+      "title": "Tesla 자동 방향지시등",
+      "descr": "차량 CAN 버스와 유효한 실제 스토크 입력이 있는 Model 3/Y에서 기존 ATC 회전·차로변경 요청에 따라 방향지시등을 제어합니다. 운전자 조작을 우선하며 조향·출발 권한은 변경하지 않습니다. 기본 꺼짐, 변경 후 재부팅이 필요합니다. 실차 검증 전 일반 도로에서 사용하지 마세요.",
+      "egroup": "START",
+      "etitle": "Tesla Automatic Turn Signals",
+      "edescr": "Control Model 3/Y turn signals for existing ATC turns and lane changes when vehicle CAN and valid physical stalk input are available. Driver input takes priority; steering and departure permissions are unchanged. Default OFF; reboot after changes. Closed-course validation is required before road use.",
+      "cgroup": "启动设置",
+      "ctitle": "特斯拉自动转向灯",
+      "cdescr": "仅适用于车辆 CAN 总线及真实拨杆输入有效的 Model 3/Y，按现有 ATC 转弯、变道请求控制转向灯。驾驶员优先，不增加转向或起步权限。默认关闭，修改后需重启。未经封闭场地实车验证，不应用于公共道路。",
       "min": 0,
       "max": 1,
       "default": 0,
