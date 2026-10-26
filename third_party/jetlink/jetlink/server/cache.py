@@ -56,7 +56,28 @@ class CacheEntry:
     return json.loads(self.meta_path.read_text())
 
   def write_meta(self, meta: dict) -> None:
-    self.meta_path.write_text(json.dumps(meta, indent=2))
+    # 이전 정상 메타데이터를 유지한 채 같은 디렉터리에서 완성 후 교체한다.
+    temporary = None
+    mode = self.meta_path.stat().st_mode & 0o777 if self.meta_path.exists() else None
+    try:
+      with tempfile.NamedTemporaryFile(mode='w', encoding='utf-8', dir=self.meta_path.parent,
+                                       prefix='.' + self.meta_path.name + '-', delete=False) as output:
+        temporary = Path(output.name)
+        if mode is not None:
+          temporary.chmod(mode)
+        json.dump(meta, output, indent=2)
+        output.flush()
+        os.fsync(output.fileno())
+      os.replace(temporary, self.meta_path)
+      if os.name == 'posix':
+        directory = os.open(self.meta_path.parent, os.O_RDONLY | os.O_DIRECTORY)
+        try:
+          os.fsync(directory)
+        finally:
+          os.close(directory)
+    finally:
+      if temporary is not None:
+        temporary.unlink(missing_ok=True)
 
   def remove(self) -> None:
     """Both halves, whichever exist. A directory artifact goes whole."""
@@ -156,7 +177,9 @@ class EngineCache:
   def last_loaded(self) -> tuple[str, int] | None:
     try:
       d = json.loads((self.root / LAST_LOADED).read_text())
-      sha, skip = d['sha256'], int(d['frame_skip'])
+      sha, skip = d['sha256'], d['frame_skip']
+      if type(sha) is not str or type(skip) is not int or skip <= 0:
+        return None
     except (OSError, ValueError, KeyError, TypeError):
       return None
     return (sha, skip) if _SHA256.fullmatch(sha) else None
