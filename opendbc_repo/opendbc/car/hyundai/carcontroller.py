@@ -7,6 +7,7 @@ from opendbc.car import Bus, CanData, DT_CTRL, apply_driver_steer_torque_limits,
 from opendbc.car.common.conversions import Conversions as CV
 from opendbc.car.hyundai import hyundaicanfd, hyundaican
 from opendbc.car.hyundai.carstate import CarState
+from opendbc.car.hyundai.lane_crossing import LaneCrossing
 from opendbc.car.hyundai.stopping import CanfdStopping
 from opendbc.car.hyundai.palisade_cgw_test import PalisadeCgwTest
 from opendbc.car.hyundai.steering_handover import SteeringHandover
@@ -50,7 +51,7 @@ APRK_EXT_SESSION = bytes([0x02, 0x10, 0x03, 0, 0, 0, 0, 0])
 APRK_COM_DISABLE = bytes([0x03, 0x28, 0x83, 0x01, 0, 0, 0, 0])
 APRK_DEFAULT_SESSION = bytes([0x02, 0x10, 0x01, 0, 0, 0, 0, 0])
 APRK_ON_KPH, APRK_OFF_KPH = 30., 20.
-# lane change kick: ~2 flashes at the start of the confirmed change, then ADRV_0x1ea BLINK_HOLD keeps the lamp.
+# kick: ~2 flashes when the driver starts crossing a lane line without the blinker (lane_crossing.py).
 # shortcut: flash count at 1.0 s is not measured (BCM ran on ~1.2 s after the command stopped, EV4 10-26), tune after a drive
 BLINKER_PULSE_FRAMES = int(1.0 / DT_CTRL)
 
@@ -237,7 +238,7 @@ class CarController(CarControllerBase):
     self.stalk_source_counter = None
     self.stalk_values = None
     self.aprk_state, self.aprk_frame = 0, 0  # 0 normal, 1 extended session asked, 2 silenced
-    self.blinker_desire, self.blinker_pulse_end = 0, 0
+    self.lane_crossing, self.blinker_side, self.blinker_pulse_end = LaneCrossing(), 0, 0
     self.standstill_frame = -1e6
 
     self.activateCruise = 0
@@ -307,15 +308,16 @@ class CarController(CarControllerBase):
   def aprk_blinkers(self, CC, CS):
     # shortcut: replies are not checked; if APRK ignores the requests it keeps sending SPAS2 and the cluster sees both
     ret = []
-    # Holding SPAS2 for the whole lane change lit the lamp, the lamp read back as the driver's blinker and DesireHelper
-    # went from laneChangeFinishing straight back to preLaneChange, so the lamp never went off (EV4 report 10-26).
-    desire, _ = hyundaicanfd._get_desire_and_lane_changing(getattr(CS, "modelV2", None))
-    if desire in (3, 4) and desire != self.blinker_desire:
-      self.blinker_pulse_end = self.frame + BLINKER_PULSE_FRAMES
-    self.blinker_desire = desire
-    pulse = self.frame < self.blinker_pulse_end and desire in (3, 4)
     drive = CS.out.gearShifter == structs.CarState.GearShifter.drive
     fast = CS.out.vEgo * CV.MS_TO_KPH > (APRK_OFF_KPH if self.aprk_state else APRK_ON_KPH)
+    # The driver crossing a line with the lamp off, engaged or not (modelV2 runs either way). Not the model's own lane
+    # change: holding SPAS2 through it read back as the driver's blinker and the lamp never went off (EV4 10-26).
+    lamp = CS.out.leftBlinker or CS.out.rightBlinker
+    side = self.lane_crossing.update(getattr(CS, "modelV2", None), self.frame * DT_CTRL,
+                                     self.blinker_control and drive and fast and not lamp)
+    if side:
+      self.blinker_side, self.blinker_pulse_end = side, self.frame + BLINKER_PULSE_FRAMES
+    pulse = self.frame < self.blinker_pulse_end
     # the parking ECU is paused only around a kick and restored right after it (menu test: any speed or gear)
     want = self.blinker_test in (1, 2) or (self.blinker_control and drive and fast and pulse)
     if not want:
@@ -333,8 +335,8 @@ class CarController(CarControllerBase):
       if self.frame % 100 == 0:
         ret.append(make_tester_present_msg(APRK_ADDR, self.CAN.ECAN, suppress_response=True))
       # every frame (100 Hz), twice APRK's 50 Hz: 10-26 APRK stayed on, so its BLINKER_CONTROL 0 frames interleave with ours
-      left = (pulse and desire == 3) or self.blinker_test == 1
-      right = (pulse and desire == 4) or self.blinker_test == 2
+      left = (pulse and self.blinker_side == 3) or self.blinker_test == 1
+      right = (pulse and self.blinker_side == 4) or self.blinker_test == 2
       ret.extend(hyundaicanfd.create_spas_messages(self.packer, self.CAN, self.frame, left, right, getattr(CS, "spas2", None)))
     return ret
 
