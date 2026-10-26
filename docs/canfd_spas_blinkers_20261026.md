@@ -239,3 +239,27 @@ DM, both cameras and odometry each1200 valid consecutive; pose1199 all healthy.
 Model mean40.658/P9944.794/max47.417ms,0>50; link/HUD/signal60/60, NAV absent.
 Raw evidence is private. No full ten-second physical, road or error-root-cause
 acceptance claim.
+
+
+## Harness mapping correction and one-packet phase comparison
+
+Live Panda reports harnessStatus=flipped. The health array is indexed by physical
+CAN controller, whereas CAN message sources use logical buses. can_set_orientation
+maps physical2 to logical0 when flipped. Thus the reported canState2 errors are
+on the same logical ECAN0 as the injection, not evidence of a bus0-to-bus2 fault.
+Earlier references to "bus2" health must be read as physical controller2 here.
+Also TX echoes are emitted when queued into the controller FIFO, not proof that
+a frame was successfully transmitted on the wire (fdcan process_can).
+
+Passive8s capture with test0 sees400 stock SPAS1/24 and400 SPAS2/32 on logical0,
+and their400+400 returned echoes on logical130 (forwarded logical2); no SPAS
+origin on logical2. No new errors during capture. No forwarding change justified.
+
+New parked-only settings11/12 send each SPAS address once after a NEW stock RX
+with source receipt age <=5ms, within an initial200ms opportunity. SPAS1 must
+precede SPAS2; counters seed from each freshly observed stock value. Matching
+lamp feedback then permits the existing hold, at most10s total. Existing P,
+CRC/counter/stalk/freshness/rejection guards and Panda3s/30s limits stay. This
+reduces repeated transmission and tries an earlier phase; userspace timing is
+NOT a guarantee of physical wire separation. It is not the contributor's UDS
+sequence, not a production automatic replacement, and not yet physically proven.

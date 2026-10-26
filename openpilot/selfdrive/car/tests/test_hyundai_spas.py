@@ -291,3 +291,43 @@ def test_ten_second_hold_sends_only_start_pulse_and_expires(monkeypatch, setting
       assert sent == []  # no repeated SPAS throughout the hold or after expiry
     assert s.hold_value == ((2 if setting == 7 else 3) if confirmed and tick < 100 else 1)
   assert s.test_request is None  # unchanged selection must not restart
+
+
+@pytest.mark.parametrize('setting', [11, 12])
+def test_single_start_is_fresh_one_per_address_then_existing_hold(monkeypatch, setting):
+  s, p, cs, sm = setup(monkeypatch)
+  warm(s)
+  s.update(cs, sm, 10., True)
+  p.value = setting
+  s.settings_at = 0
+  assert s.update(cs, sm, 10.01, True) == []  # cannot send against old stock
+  assert s.test_until == pytest.approx(20.01)
+  packets = [(a, frame(a, 10, None, 0).dat, 0) for a in (0x165, 0x16A)]
+  s.observe([(10_020_000_000, packets)], 10.021)
+  sent = s.update(cs, sm, 10.022, True)
+  assert [m.address for m in sent] == [0x165, 0x16A]
+  assert all(m.dat[2] == 11 for m in sent)
+  assert sent[1].dat[16] == (0x60 if setting == 11 else 0x80)
+  assert s.hold_value == 1  # no lamp acknowledgement yet
+  setattr(cs, ('left' if setting == 11 else 'right')+'Blinker', True)
+  for i in range(1, 101):
+    now = 10.022+i*.1
+    warm(s, now)
+    s.stock_received = dict.fromkeys((0x165, 0x16A), now)
+    s.driver_at = now
+    sm.recv_time = dict.fromkeys(sm, now)
+    assert s.update(cs, sm, now, True) == []
+    assert s.hold_value == ((2 if setting == 11 else 3) if now < 20.01 else 1)
+
+
+@pytest.mark.parametrize('age', [-.001, .006, .020])
+def test_single_start_does_not_send_on_future_or_delayed_stock(monkeypatch, age):
+  s, p, cs, sm = setup(monkeypatch)
+  warm(s)
+  s.update(cs, sm, 10., True)
+  p.value = 11
+  s.settings_at = 0
+  assert s.update(cs, sm, 10.01, True) == []
+  warm(s, 10.05)
+  s.stock_received = dict.fromkeys((0x165, 0x16A), 10.05-age)
+  assert s.update(cs, sm, 10.05, True) == []

@@ -25,6 +25,8 @@ class SpasSignals:
     self.direct_next = self.direct_started = 0.
     self.direct_cooldown = 0.
     self.direct_counter = {}
+    self.single_sent = set()
+    self.stock_received = {}
     self.last_update = None
     self.test_blocked = ()
     self.test_serial = 0
@@ -43,9 +45,13 @@ class SpasSignals:
 
   def observe(self, can_list, now):
     if self.enabled:
-      for _, packets in can_list:
+      for stamp, packets in can_list:
         for address, data, bus in packets:
           self.session.observe(address, bus, data, now)
+          if address in SPAS and bus == self.session.bus:
+            received = stamp / 1e9
+            if 0 <= now-received < .1:
+              self.stock_received[address] = received
           if address == 0x3C1 and bus == self.session.bus:
             crc = 0
             for byte in data[1:]:
@@ -87,7 +93,7 @@ class SpasSignals:
       self.driver_override = False
     if now >= self.settings_at:
       setting = self.params.get_int('CanfdBlinkerTest')
-      if setting != self.test_setting and setting in range(1, 11):
+      if setting != self.test_setting and setting in range(1, 13):
         # Consume the edge even when the parked guard fails; never run later.
         cc, ss = sm['carControl'], sm['selfdriveState']
         parked = (healthy and str(cs.gearShifter) == 'park' and cs.standstill and abs(cs.vEgo) < .01 and
@@ -102,14 +108,15 @@ class SpasSignals:
           self.test_request = f'park:{self.test_serial}'
           # The extended comparison sends only the initial 0.2 s SPAS pulse;
           # the existing lamp-confirmed hold supplies the remaining time.
-          self.test_until = now+(10. if setting in (7, 8) else 3.)
+          self.test_until = now+(10. if setting in (7, 8, 11, 12) else 3.)
           self.test_direction = 'left' if setting % 2 else 'right'
-          self.test_pulse = setting in (3, 4, 7, 8, 9, 10)
+          self.test_pulse = setting in (3, 4, 7, 8, 9, 10, 11, 12)
           self.test_direct = direct
-          self.test_hold = setting in (3, 4, 7, 8)
+          self.test_hold = setting in (3, 4, 7, 8, 11, 12)
           self.test_blocked = tuple(getattr(p, 'safetyTxBlocked', 0) for p in sm['pandaStates'])
           if direct:
             self.direct_started = self.direct_next = now
+            self.single_sent.clear()
             self.direct_cooldown = now+30.
             self.direct_counter = {a: (s.counter+1) % 256 for a, s in self.session.stock.items()}
           self.pulse_started = None
@@ -153,9 +160,19 @@ class SpasSignals:
     if direct and not direct_active:
       self.test_until = min(self.test_until, now)  # no resumption after guard loss
     if direct_active and now >= self.direct_next and (not self.test_pulse or now-self.direct_started < .2):
-      sends.extend(frame(a, self.direct_counter[a], direction, self.session.bus) for a in SPAS)
-      self.direct_counter = {a: (c+1) % 256 for a, c in self.direct_counter.items()}
-      self.direct_next = now+.02
+      if self.test_setting in (11, 12):
+        # One packet per address, just after a newly received stock packet.
+        # This is a bounded parked phase trial, not a wire-time guarantee.
+        for address in SPAS:
+          received = self.stock_received.get(address, -math.inf)
+          if (address not in self.single_sent and self.direct_started < received <= now and
+              now-received <= .005 and (address == 0x165 or 0x165 in self.single_sent)):
+            sends.append(frame(address, (self.session.stock[address].counter+1) % 256, direction, self.session.bus))
+            self.single_sent.add(address)
+      else:
+        sends.extend(frame(a, self.direct_counter[a], direction, self.session.bus) for a in SPAS)
+        self.direct_counter = {a: (c+1) % 256 for a, c in self.direct_counter.items()}
+        self.direct_next = now+.02
     if (direct_active or self.session.state == 'active') and self.test_request is not None and self.test_pulse:
       if self.pulse_started is None:
         self.pulse_started = now
