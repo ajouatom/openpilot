@@ -227,7 +227,9 @@ class CarController(CarControllerBase):
     self.blinker_control = False
     self.blinker_test = 0  # CanfdBlinkerTest: 1 left, 2 right (menu test, any speed/gear)
     self.blinker_stalk = 0  # CanfdBlinkerStalk: 1 left, 2 right (0x3C1 replay)
-    self.stalk_counter = None  # 0x3C1 replay: our own advancing counter
+    self.stalk_counter = None
+    self.stalk_source_counter = None
+    self.stalk_values = None
     self.aprk_state, self.aprk_frame = 0, 0  # 0 normal, 1 extended session asked, 2 silenced
     self.standstill_frame = -1e6
 
@@ -275,17 +277,23 @@ class CarController(CarControllerBase):
     self.steerDeltaDownOrg = self.steerDeltaDown = self.steerDeltaDownLC = self.params.STEER_DELTA_DOWN
 
   def stalk_blinkers(self, CS):
-    # 0x3C1 lever frame at 20 Hz (the real sender is 5 Hz): the real frame with only the blinker bits changed.
-    # The car repeats its own counter while the lever stands still, so a fixed "car + 1" makes the bus alternate
-    # 6,7,6,7 and the receiver sees the counter going backwards. Advance our own counter every frame instead, so the
-    # car's stale repeats always look older than ours. Other bits (light knob, high beam) still follow the real lever.
+    if self.blinker_stalk not in (1, 2):
+      self.stalk_counter = self.stalk_source_counter = self.stalk_values = None
+      return []
     if self.frame % 5 != 0 or CS.blinker_stalks is None:
       return []
-    prev = getattr(self, "stalk_counter", None)
-    self.stalk_counter = (int(CS.blinker_stalks["COUNTER_ALT"]) + 1) % 16 if prev is None else (prev + 1) % 16
     values = dict(CS.blinker_stalks)
+    source_counter = int(values.pop("COUNTER_ALT"))
+    values.pop("CHECKSUM_MAYBE", None)
     values.update(LEFT_BLINKER=int(self.blinker_stalk == 1), RIGHT_BLINKER=int(self.blinker_stalk == 2),
-                  LEFT_BLINKER_TAP=0, RIGHT_BLINKER_TAP=0, COUNTER_ALT=self.stalk_counter, CHECKSUM_MAYBE=0)
+                  LEFT_BLINKER_TAP=0, RIGHT_BLINKER_TAP=0)
+    # Stock captures repeat a counter until the lever state changes; BCM acceptance remains unverified.
+    if getattr(self, "stalk_counter", None) is None or source_counter != getattr(self, "stalk_source_counter", None):
+      self.stalk_counter = (source_counter + 1) % 16
+    elif values != self.stalk_values:
+      self.stalk_counter = (self.stalk_counter + 1) % 16
+    self.stalk_source_counter, self.stalk_values = source_counter, values.copy()
+    values.update(COUNTER_ALT=self.stalk_counter, CHECKSUM_MAYBE=0)
     addr, dat, bus = self.packer.make_can_msg("BLINKER_STALKS", self.CAN.ECAN, values)
     return [CanData(addr, bytes([stalk_checksum(dat[1:])]) + bytes(dat[1:]), bus)]
 
@@ -643,7 +651,7 @@ class CarController(CarControllerBase):
           can_sends.extend(hyundaicanfd.create_lfa_icon_non_camera_scc(self.packer, CS, self.CAN, CC))
 
       # blinkers
-      if self.blinker_stalk in (1, 2):
+      if self.blinker_stalk in (1, 2) or self.stalk_counter is not None:
         can_sends.extend(self.stalk_blinkers(CS))
       if hda2 and self.CP.flags & HyundaiFlags.ENABLE_BLINKERS:
         can_sends.extend(hyundaicanfd.create_spas_messages(self.packer, self.CAN, self.frame, CC.leftBlinker, CC.rightBlinker))
