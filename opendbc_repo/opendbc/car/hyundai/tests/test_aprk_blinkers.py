@@ -21,7 +21,7 @@ def step(cc, frames, gear, kph, left=False):
 
 def test_aprk_silenced_only_in_d_above_30_and_restored():
   packer = CANPacker('hyundai_canfd_generated')
-  cc = SimpleNamespace(blinker_control=True, aprk_state=0, aprk_frame=0, frame=0, CAN=SimpleNamespace(ECAN=0), packer=packer)
+  cc = SimpleNamespace(blinker_control=True, blinker_test=0, aprk_state=0, aprk_frame=0, frame=0, CAN=SimpleNamespace(ECAN=0), packer=packer)
   assert step(cc, 50, D, 25) == [] and cc.aprk_state == 0  # below 30 km/h: parking ECU untouched
   sent = step(cc, 10, D, 35)
   uds = [m[1] for m in sent if m[0] == carcontroller.APRK_ADDR]
@@ -34,3 +34,13 @@ def test_aprk_silenced_only_in_d_above_30_and_restored():
   assert [m[1] for m in step(cc, 1, P, 35)] == [carcontroller.APRK_DEFAULT_SESSION]  # out of D: restored
   cc.blinker_control = False
   assert step(cc, 10, D, 50) == []
+
+
+def test_menu_test_blinks_at_standstill_in_p():
+  packer = CANPacker('hyundai_canfd_generated')
+  cc = SimpleNamespace(blinker_control=False, blinker_test=2, aprk_state=0, aprk_frame=0, frame=0, CAN=SimpleNamespace(ECAN=0), packer=packer)
+  sig = packer.dbc.name_to_msg['SPAS2'].sigs['BLINKER_CONTROL']
+  spas2 = [m for m in step(cc, 20, P, 0) if m[0] == 0x16A]
+  assert cc.aprk_state == 2 and spas2 and all(get_raw_value(m[1], sig) == 4 for m in spas2)
+  cc.blinker_test = 0
+  assert [m[1] for m in step(cc, 1, P, 0)] == [carcontroller.APRK_DEFAULT_SESSION] and cc.aprk_state == 0

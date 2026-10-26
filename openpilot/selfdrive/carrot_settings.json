@@ -420,6 +420,7 @@
             "CanfdHDA2",
             "HyundaiCanfdClusterDirectTx",
             "CanfdBlinkerControl",
+            "CanfdBlinkerTest",
             "CanfdDebug",
             "HDPuse",
             "ClusterLaneTest",
@@ -2842,6 +2843,22 @@
       "unit": 1,
       "control": "toggle",
       "risk": "high"
+    },
+    {
+      "group": "시작",
+      "name": "CanfdBlinkerTest",
+      "title": "깜빡이 명령 테스트",
+      "descr": "0: 끔, 1: 왼쪽, 2: 오른쪽.\n속도·기어와 상관없이 자동주차 ECU를 멈추고 그 방향 깜빡이 명령을 계속 보냅니다(「차로변경 깜빡이 자동」 꺼져 있어도 동작). 0으로 돌리면 자동주차 ECU를 다시 켭니다. 주행 중에도 동작하니 2인 1조로 시험하세요. 재부팅하면 0.",
+      "egroup": "START",
+      "etitle": "Blinker Command Test",
+      "edescr": "0: Off, 1: Left, 2: Right.\nAt any speed or gear, pauses the parking ECU and keeps sending that blinker command (works even with Lane Change Auto Blinker off). Back to 0 restores the parking ECU. Works while driving; test with a second person. Resets to 0 on reboot.",
+      "cgroup": "启动设置",
+      "ctitle": "转向灯指令测试",
+      "cdescr": "0: 关闭, 1: 左, 2: 右。\n不论车速和挡位，暂停泊车 ECU 并持续发送该方向转向灯指令（即使「变道自动转向灯」关闭也有效）。改回 0 恢复泊车 ECU。行驶中也有效，请两人一组测试。重启后恢复为 0。",
+      "min": 0,
+      "max": 2,
+      "default": 0,
+      "unit": 1
     },
     {
       "group": "시작",

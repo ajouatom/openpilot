@@ -212,6 +212,7 @@ class CarController(CarControllerBase):
     self.soft_hold_mode = 2
     self.depart_jerk = False
     self.blinker_control = False
+    self.blinker_test = 0  # CanfdBlinkerTest: 1 left, 2 right (menu test, any speed/gear)
     self.aprk_state, self.aprk_frame = 0, 0  # 0 normal, 1 extended session asked, 2 silenced
     self.standstill_frame = -1e6
 
@@ -262,7 +263,8 @@ class CarController(CarControllerBase):
     # shortcut: replies are not checked; if APRK ignores the requests it keeps sending SPAS2 and the cluster sees both
     ret = []
     drive = CS.out.gearShifter == structs.CarState.GearShifter.drive
-    want = self.blinker_control and drive and CS.out.vEgo * CV.MS_TO_KPH > (APRK_OFF_KPH if self.aprk_state else APRK_ON_KPH)
+    fast = CS.out.vEgo * CV.MS_TO_KPH > (APRK_OFF_KPH if self.aprk_state else APRK_ON_KPH)
+    want = self.blinker_test in (1, 2) or (self.blinker_control and drive and fast)  # menu test: any speed or gear
     if not want:
       if self.aprk_state:
         ret.append(CanData(APRK_ADDR, APRK_DEFAULT_SESSION, self.CAN.ECAN))
@@ -278,7 +280,8 @@ class CarController(CarControllerBase):
       if self.frame % 100 == 0:
         ret.append(make_tester_present_msg(APRK_ADDR, self.CAN.ECAN, suppress_response=True))
       if self.frame % 2 == 0:  # APRK's own SPAS rate, 50 Hz
-        ret.extend(hyundaicanfd.create_spas_messages(self.packer, self.CAN, self.frame, CC.leftBlinker, CC.rightBlinker))
+        left, right = CC.leftBlinker or self.blinker_test == 1, CC.rightBlinker or self.blinker_test == 2
+        ret.extend(hyundaicanfd.create_spas_messages(self.packer, self.CAN, self.frame, left, right))
     return ret
 
   def update(self, CC, CS, now_nanos):
@@ -327,6 +330,7 @@ class CarController(CarControllerBase):
       self.soft_hold_mode = 1 if params.get_int("AutoCruiseControl") > 1 else 2
       self.depart_jerk = params.get_int("StopGoAssist") >= 2
       self.blinker_control = params.get_bool("CanfdBlinkerControl")
+      self.blinker_test = params.get_int("CanfdBlinkerTest")
       self.hapticFeedbackWhenSpeedCamera = int(params.get_int("HapticFeedbackWhenSpeedCamera"))
 
       self.button_spam1 = params.get_int("CruiseButtonTest1")
@@ -610,7 +614,7 @@ class CarController(CarControllerBase):
       # blinkers
       if hda2 and self.CP.flags & HyundaiFlags.ENABLE_BLINKERS:
         can_sends.extend(hyundaicanfd.create_spas_messages(self.packer, self.CAN, self.frame, CC.leftBlinker, CC.rightBlinker))
-      elif self.blinker_control or self.aprk_state:
+      elif self.blinker_control or self.blinker_test or self.aprk_state:
         can_sends.extend(self.aprk_blinkers(CC, CS))
 
       if self.camera_scc_params in [2, 3]:
