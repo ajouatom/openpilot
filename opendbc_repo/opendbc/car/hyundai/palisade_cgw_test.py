@@ -1,3 +1,9 @@
+# Stock CGW1 (10-26 rlog 00000e40): 10 Hz, lamp bit 0.35 s on / 0.35 s off, byte 5 bits 1..2 = lever side (2 left, 1 right).
+# We send at 20 Hz so ours outnumber the BCM's own 0 frames; 7 frames = one 0.35 s half period.
+TX_PERIOD_NS = 50_000_000
+FLASH_HALF_NS = 350_000_000
+
+
 class PalisadeCgwTest:
   """Parked, one-shot CGW1 status experiment; lamp actuation is unverified."""
 
@@ -25,11 +31,13 @@ class PalisadeCgwTest:
     if (selection != self.direction or not fresh or not neutral or not parked or not inactive
         or not 0 <= now - self.started < 3_000_000_000):
       self.direction = 0
-    if not self.direction or self.last_tx and now - self.last_tx < 50_000_000:
+    if not self.direction or self.last_tx and now - self.last_tx < TX_PERIOD_NS:
       return []
 
+    lamp = (now - self.started) // FLASH_HALF_NS % 2 == 0
     data = bytearray(raw)
-    data[2] |= 0x08 if self.direction == 1 else 0
-    data[7] |= 0x40 if self.direction == 2 else 0
+    data[2] |= 0x08 if self.direction == 1 and lamp else 0
+    data[7] |= 0x40 if self.direction == 2 and lamp else 0
+    data[5] |= 0x04 if self.direction == 1 else 0x02
     self.last_tx = now
     return [(0x541, bytes(data), 0)]

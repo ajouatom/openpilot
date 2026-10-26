@@ -17,13 +17,25 @@ class TestPalisadeCgwTest(unittest.TestCase):
     return self.sender.update(**args)
 
   def test_only_selected_bit_changes(self):
-    for direction, index, mask in ((1, 2, 8), (2, 7, 64)):
+    for direction, index, mask, lever in ((1, 2, 8, 4), (2, 7, 64, 2)):
       self.call(0)
       addr, data, bus = self.call(direction)[0]
       self.assertEqual((addr, bus), (0x541, 0))
       expected = bytearray(self.raw)
       expected[index] |= mask
+      expected[5] |= lever
       self.assertEqual(data, bytes(expected))
+
+  def test_lamp_flashes_like_stock(self):
+    # stock 10-26 00000e40: 0.35 s on / 0.35 s off, lever bits held throughout
+    self.call(0)
+    frames = []
+    for tick in range(28):
+      self.now = 1_000_000_000 + tick * 50_000_000
+      frames += self.call(1)
+    lamps = [(data[2] >> 3) & 3 for _, data, _ in frames]
+    self.assertEqual(lamps, ([1] * 7 + [0] * 7) * 2)
+    self.assertTrue(all((data[5] >> 1) & 3 == 2 for _, data, _ in frames))
 
   def test_rate_duration_and_off_rearm(self):
     sent = 0

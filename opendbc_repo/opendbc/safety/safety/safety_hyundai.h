@@ -65,7 +65,7 @@ static struct {
 } hyundai_cgw_test;
 
 static void hyundai_cgw_test_init(uint16_t param) {
-  memset(&hyundai_cgw_test, 0, sizeof(hyundai_cgw_test));
+  hyundai_cgw_test = (__typeof__(hyundai_cgw_test)){0};  // no libc here (host libsafety build has no memset)
   hyundai_cgw_test.enabled = (param & 4096U) != 0U;
 }
 
@@ -89,15 +89,18 @@ static bool hyundai_cgw_test_tx(const CANPacket_t *msg) {
                  (get_ts_elapsed(now, hyundai_cgw_test.wheels_ts) <= 250000U) &&
                  (get_ts_elapsed(now, hyundai_cgw_test.gear_ts) <= 250000U) &&
                  (!hyundai_cgw_test.sent || (get_ts_elapsed(now, hyundai_cgw_test.sent_ts) >= 50000U));
+  // Stock (10-26 rlog 00000e40): the lamp bit flashes 0.35 s on / 0.35 s off while byte 5 bits 1..2 hold the
+  // lever side (2 left, 1 right), so a frame is the lever side plus that side's lamp on or off.
   unsigned int left = (GET_BYTE(msg, 2) >> 3) & 3U;
   unsigned int right = GET_BYTE(msg, 7) >> 6;
-  allowed &= ((left == 1U) && (right == 0U)) || ((left == 0U) && (right == 1U));
+  unsigned int lever = (GET_BYTE(msg, 5) >> 1) & 3U;
+  allowed &= ((lever == 2U) && (left <= 1U) && (right == 0U)) || ((lever == 1U) && (left == 0U) && (right <= 1U));
   allowed &= ((hyundai_cgw_test.template[2] & 0x18U) == 0U) &&
              ((hyundai_cgw_test.template[7] & 0xC0U) == 0U) &&
              ((hyundai_cgw_test.template[4] & 0x06U) == 0U) &&
              ((hyundai_cgw_test.template[5] & 0x06U) == 0U);
   for (int i = 0; i < 8; i++) {
-    uint8_t mask = (i == 2) ? 0xE7U : ((i == 7) ? 0x3FU : 0xFFU);
+    uint8_t mask = (i == 2) ? 0xE7U : ((i == 7) ? 0x3FU : ((i == 5) ? 0xF9U : 0xFFU));
     allowed &= (GET_BYTE(msg, i) & mask) == (hyundai_cgw_test.template[i] & mask);
   }
   if (allowed) {
@@ -194,7 +197,9 @@ static void hyundai_rx_hook(const CANPacket_t *to_push) {
     if (addr == 0x541) {
       hyundai_cgw_test.template_valid = valid;
       if (valid) {
-        memcpy(hyundai_cgw_test.template, to_push->data, 8);
+        for (int i = 0; i < 8; i++) {
+          hyundai_cgw_test.template[i] = to_push->data[i];
+        }
         hyundai_cgw_test.template_ts = now;
       }
     } else if (addr == 0x367) {

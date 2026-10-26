@@ -57,8 +57,9 @@ static bool tx(uint32_t now, uint64_t data) {
 }
 
 int main(void) {
-  const uint64_t left = 1ULL << 19, right = 1ULL << 62;
-  const uint64_t mask = (3ULL << 19) | (3ULL << 62);
+  // lamp bit + lever side in byte 5 (2 left, 1 right), as the stock CGW1 sends while flashing
+  const uint64_t left = (1ULL << 19) | (2ULL << 41), right = (1ULL << 62) | (1ULL << 41);
+  const uint64_t mask = (3ULL << 19) | (3ULL << 62) | (3ULL << 41);
   const uint64_t stock = 0x123456789ABCDEF0ULL & ~(mask | (3ULL << 33) | (3ULL << 41));
   // Flag, all classic config variants, first-frame at timestamp zero, and both directions.
   for (int param = 0; param < 16; param++) {
@@ -66,10 +67,11 @@ int main(void) {
     init(param | 4096); ready(0, stock, 0); CHECK(tx(0, stock | left));
     CHECK(!tx(49999, stock | right)); CHECK(tx(50000, stock | right));
   }
-  for (int l = 0; l < 4; l++) for (int r = 0; r < 4; r++) {
+  // the off half of a flash (lever only, lamp 0) is allowed; the other side's lamp or a lamp without lever is not
+  for (int l = 0; l < 4; l++) for (int r = 0; r < 4; r++) for (int s = 0; s < 4; s++) {
     init(4096); ready(0, stock, 0);
-    CHECK(tx(0, stock | ((uint64_t)l << 19) | ((uint64_t)r << 62)) ==
-          (((l == 1) && (r == 0)) || ((l == 0) && (r == 1))));
+    CHECK(tx(0, stock | ((uint64_t)l << 19) | ((uint64_t)r << 62) | ((uint64_t)s << 41)) ==
+          (((s == 2) && (l <= 1) && (r == 0)) || ((s == 1) && (l == 0) && (r <= 1))));
   }
   // Every unrelated bit must match, including fields currently zero and currently one.
   for (int bit = 0; bit < 64; bit++) if (!(mask & (1ULL << bit))) {
