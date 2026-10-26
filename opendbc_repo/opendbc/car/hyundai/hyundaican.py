@@ -170,6 +170,16 @@ def create_lfahda_mfc(packer, CC, blinking_signal):
   }
   return packer.make_can_msg("LFAHDA_MFC", 0, values)
 
+def create_ray_lfahda_mfc(packer, lat_active, lfa_icon):
+  values = {
+    "HDA_USM": 2,
+    "HDA_Icon_State": 2 if lfa_icon else 0,
+    "HDA_VSetReq": 0,
+    "HDA_Icon_Wheel": int(lat_active),
+    "LFA_Icon_State": lfa_icon,
+  }
+  return packer.make_can_msg("LFAHDA_MFC", 0, values)
+
 def create_acc_commands_scc(packer, enabled, accel, jerk, idx, hud_control, set_speed, stopping, long_override, suppress_casper_ev_fca, CS, soft_hold_mode):
   from opendbc.car.hyundai.carcontroller import HyundaiJerk
   cruise_available = CS.out.cruiseState.available

@@ -239,6 +239,8 @@ class CarState(CarStateBase):
     self.camera_scc_hint_enabled = self.op_params.get_int("HyundaiCameraSCC") == 0 and not (CP.flags & HyundaiFlags.CAMERA_SCC)
     self.camera_scc_hint = False
     self.op_params.put_bool("HyundaiCameraSccHint", False)
+    self.ray_pedal_state = 5
+    self.ray_pedal_valid = False
 
     self.main_enabled = True if self.op_params.get_int("AutoEngage") == 2 else False
     self.manual_main_off_latched = False
@@ -503,6 +505,7 @@ class CarState(CarStateBase):
     cp = can_parsers[Bus.pt]
     cp_cam = can_parsers[Bus.cam]
     cp_alt = can_parsers[Bus.alt] if Bus.alt in can_parsers else None
+    cp_pedal = can_parsers.get(Bus.party)
 
     if self.CP.flags & HyundaiFlags.CANFD:
       return self.update_canfd(can_parsers)
@@ -560,7 +563,7 @@ class CarState(CarStateBase):
       ret.cruiseState.enabled = cp.vl["TCS13"]["ACC_REQ"] == 1
       ret.cruiseState.standstill = False
       ret.cruiseState.nonAdaptive = False
-    elif not self.CP.flags & HyundaiFlags.CC_ONLY_CAR:
+    elif not self.CP.flags & HyundaiFlags.CC_ONLY_CAR or self.CP.enableGasInterceptorDEPRECATED:
       self.main_enabled = ret.cruiseState.available = cp_cruise.vl["SCC11"]["MainMode_ACC"] == 1
       ret.cruiseState.enabled = cp_cruise.vl["SCC12"]["ACCMode"] != 0
       ret.cruiseState.standstill = cp_cruise.vl["SCC11"]["SCCInfoDisplay"] == 4.
@@ -571,7 +574,7 @@ class CarState(CarStateBase):
 
     # TODO: Find brake pressure
     ret.brake = 0
-    if not self.CP.flags & HyundaiFlags.CC_ONLY_CAR:
+    if not self.CP.flags & HyundaiFlags.CC_ONLY_CAR or self.CP.enableGasInterceptorDEPRECATED:
       ret.brakePressed = cp.vl["TCS13"]["DriverOverride"] == 2  # 2 includes regen braking by user on HEV/EV
       ret.brakeHoldActive = cp.vl["TCS15"]["AVH_LAMP"] == 2  # 0 OFF, 1 ERROR, 2 ACTIVE, 3 READY
       ret.parkingBrake = cp.vl["TCS13"]["PBRAKE_ACT"] == 1
@@ -579,6 +582,12 @@ class CarState(CarStateBase):
       ret.espActive = cp.vl["TCS11"]["ABS_ACT"] == 1
       ret.accFaulted = cp.vl["TCS13"]["ACCEnable"] != 0  # 0 ACC CONTROL ENABLED, 1-3 ACC CONTROL DISABLED
       ret.brakeLights = bool(cp.vl["TCS13"]["BrakeLight"] or ret.brakePressed)
+
+    if self.CP.carFingerprint == CAR.KIA_RAY_EV and self.CP.enableGasInterceptorDEPRECATED:
+      self.ray_pedal_valid = bool(cp_pedal is not None and cp_pedal.can_valid and
+                                  cp_pedal.ts_nanos["GAS_SENSOR"]["STATE"] > 0)
+      self.ray_pedal_state = int(cp_pedal.vl["GAS_SENSOR"]["STATE"]) if cp_pedal is not None else 5
+      ret.accFaulted = not self.ray_pedal_valid or self.ray_pedal_state != 0
 
     if self.CP.flags & (HyundaiFlags.HYBRID | HyundaiFlags.EV | HyundaiFlags.FCEV):
       if self.CP.flags & HyundaiFlags.FCEV:
@@ -591,6 +600,12 @@ class CarState(CarStateBase):
     else:
       ret.gas = cp.vl["EMS12"]["PV_AV_CAN"] / 100.
       ret.gasPressed = bool(cp.vl["EMS16"]["CF_Ems_AclAct"])
+
+    if self.CP.carFingerprint == CAR.KIA_RAY_EV and self.CP.enableGasInterceptorDEPRECATED and self.ray_pedal_valid:
+      driver_pedal = cp_pedal.vl_raw["GAS_SENSOR"]
+      track1 = int.from_bytes(driver_pedal[:2], "big")
+      track2 = int.from_bytes(driver_pedal[2:4], "big")
+      ret.gasPressed = track1 > 272 or track2 > 513
 
     # Gear Selection via Cluster - For those Kia/Hyundai which are not fully discovered, we can use the Cluster Indicator for Gear Selection,
     # as this seems to be standard over all cars, but is not the preferred method.
@@ -633,7 +648,7 @@ class CarState(CarStateBase):
 
       ret.gearShifter = self.gear_shifter
 
-    if not self.CP.flags & HyundaiFlags.CC_ONLY_CAR and (not self.CP.openpilotLongitudinalControl or self.CP.flags & HyundaiFlags.CAMERA_SCC):
+    if (not self.CP.flags & HyundaiFlags.CC_ONLY_CAR) and (not self.CP.openpilotLongitudinalControl or self.CP.flags & HyundaiFlags.CAMERA_SCC):
       aeb_src = "FCA11" if self.CP.flags & HyundaiFlags.USE_FCA.value else "SCC12"
       aeb_sig = "FCA_CmdAct" if self.CP.flags & HyundaiFlags.USE_FCA.value else "AEB_CmdAct"
       aeb_warning = cp_cruise.vl[aeb_src]["CF_VSM_Warn"] != 0
@@ -1655,9 +1670,12 @@ class CarState(CarStateBase):
     if CP.flags & HyundaiFlags.CANFD:
       return self.get_can_parsers_canfd(CP)
 
-    return {
+    parsers = {
       # EMS21 carries SCR_UREA_LEVEL on diesel platforms. NaN frequency makes
       # it optional, so gasoline/EV platforms do not fail CAN validity.
       Bus.pt: register_vehicle_gps(CANParser(DBC[CP.carFingerprint][Bus.pt], [("EMS21", math.nan)], 0)),
       Bus.cam: CANParser(DBC[CP.carFingerprint][Bus.pt], [], 2),
     }
+    if CP.carFingerprint == CAR.KIA_RAY_EV and CP.enableGasInterceptorDEPRECATED:
+      parsers[Bus.party] = CANParser("hyundai_kia_ray_pedal", [("GAS_SENSOR", 50)], 0)
+    return parsers

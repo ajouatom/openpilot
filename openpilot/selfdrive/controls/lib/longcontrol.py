@@ -24,6 +24,7 @@ LongCtrlState = car.CarControl.Actuators.LongControlState
 
 def long_control_state_trans(CP, active, long_control_state, v_ego,
                              should_stop, brake_pressed, cruise_standstill, a_ego, stopping_accel, radarState):
+  cruise_standstill = cruise_standstill and not CP.enableGasInterceptorDEPRECATED
   stopping_condition = should_stop
   stopping_accel = stopping_accel if stopping_accel < 0.0 else -0.5
   starting_condition = (not should_stop and

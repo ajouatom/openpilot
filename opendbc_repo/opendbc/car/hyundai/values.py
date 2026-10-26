@@ -85,6 +85,10 @@ class HyundaiSafetyFlags(IntFlag):
   ALT_LIMITS_2 = 512
   CANFD_CLUSTER_DIRECT_TX = 2048
   CANFD_SPAS_BLINKERS = 4096
+  # Ray EV pedal mode signature bits, matching StarPilot safety configuration.
+  HAS_LDA_BUTTON = 1024
+  NON_SCC = CANFD_SPAS_BLINKERS  # Legacy Ray pedal signature; the blinker flag is CAN FD-only.
+  CAN_REFRESH_MSGS = 32768
 
 
 class HyundaiFlags(IntFlag):
@@ -1083,6 +1087,7 @@ def bosch_mrrevo14f_bus(candidate, flags: int, fingerprint: dict, buses) -> int 
 
 
 DBC = CAR.create_dbc_map()
+DBC[CAR.KIA_RAY_EV][Bus.party] = "hyundai_kia_ray_pedal"
 
 if __name__ == "__main__":
   cars = []

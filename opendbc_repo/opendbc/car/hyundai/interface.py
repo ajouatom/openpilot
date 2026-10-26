@@ -21,6 +21,7 @@ Ecu = structs.CarParams.Ecu
 ENABLE_BUTTONS = (ButtonType.accelCruise, ButtonType.decelCruise, ButtonType.cancel, ButtonType.mainCruise)
 
 SteerControlType = structs.CarParams.SteerControlType
+RAY_PEDAL_SENSOR_ADDR = 0x201
 
 
 class CarInterface(CarInterfaceBase):
@@ -259,6 +260,25 @@ class CarInterface(CarInterfaceBase):
       ret.safetyConfigs[-1].safetyParam |= HyundaiSafetyFlags.EV_GAS.value
     elif ret.flags & HyundaiFlags.FCEV:
       ret.safetyConfigs[-1].safetyParam |= HyundaiSafetyFlags.FCEV_GAS.value
+
+    # Match StarPilot's Ray pedal prerequisites before enabling the specialized path.
+    has_ray_lda_button = any(addr in fingerprint[bus] for bus, addr in ((0, 0x391), (0, 0x50C), (1, 0x50C)))
+    if (candidate == CAR.KIA_RAY_EV and fingerprint[0].get(RAY_PEDAL_SENSOR_ADDR) == 6 and
+        fingerprint[2].get(0x485) == 8 and has_ray_lda_button):
+      ret.enableGasInterceptorDEPRECATED = True
+      ret.alphaLongitudinalAvailable = True
+      ret.openpilotLongitudinalControl = True
+      ret.pcmCruise = False
+      ret.radarUnavailable = True
+      ret.autoResumeSng = False
+      ret.minEnableSpeed = -1.0
+      ret.safetyConfigs[-1].safetyParam |= (HyundaiSafetyFlags.LONG | HyundaiSafetyFlags.NON_SCC |
+                                             HyundaiSafetyFlags.HAS_LDA_BUTTON |
+                                             HyundaiSafetyFlags.CAN_REFRESH_MSGS).value
+      ret.longitudinalTuning.kpBP = [0.0, 5.0, 15.0, 35.0]
+      ret.longitudinalTuning.kpV = [0.095, 0.085, 0.065, 0.050]
+      ret.longitudinalTuning.kiBP = [0.0, 3.0, 6.0, 35.0]
+      ret.longitudinalTuning.kiV = [0.07, 0.10, 0.15, 0.24]
 
     # Car specific configuration overrides
 
