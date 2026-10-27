@@ -59,6 +59,9 @@ BLINKER_PULSE_FRAMES = int(1.0 / DT_CTRL)
 # replaying only the steady form (TAP 0) did nothing on either car. GV80's lever is momentary and releases itself.
 STALK_TAP_FRAMES = int(0.20 / DT_CTRL)
 STALK_TAP_MOMENTARY_FRAMES = int(0.35 / DT_CTRL)
+# The stock column module sends 0x3C1 at 5 Hz (200 ms). Sending the same ID faster raises the chance of a
+# same-ID collision with it, which is what took the Azera bus down, so the momentary mode sticks to 5 Hz.
+STALK_MOMENTARY_HZ_DIV = 20
 
 # CanfdBlinkerStalk: when APRK can't be silenced, imitate the steering column lever (BLINKER_STALKS, 0x3C1); the BCM
 # blinks from it (09-18 log: 0x413 ALT lamp at 0.4 s while the lever is on). 10-26 logs: COUNTER_ALT goes +1 on every
@@ -300,11 +303,12 @@ class CarController(CarControllerBase):
     momentary = self.blinker_stalk in (3, 4)
     side = 1 if self.blinker_stalk in (1, 3) else 2
     if side != self.stalk_press_side:            # rising edge: one press starts here
-      self.stalk_press_side, self.stalk_press_frame, self.stalk_counter = side, self.frame, None
+      self.stalk_press_side, self.stalk_press_frame = side, self.frame
     pressed_for = self.frame - self.stalk_press_frame
     if momentary and pressed_for >= STALK_TAP_MOMENTARY_FRAMES:
       return []                                  # GV80's lever springs back, so stop after the tap
-    if self.frame % (2 if momentary else 5) != 0 or CS.blinker_stalks is None:
+    # Match the stock rate: the column module sends 0x3C1 at 5 Hz. Modes 1/2 keep the old 20 Hz.
+    if pressed_for % (STALK_MOMENTARY_HZ_DIV if momentary else 5) != 0 or CS.blinker_stalks is None:
       return []
     # GV80 holds the tap form for the whole press and then releases; the hold cars switch to the steady form after 0.2 s
     tap = pressed_for < (STALK_TAP_MOMENTARY_FRAMES if momentary else STALK_TAP_FRAMES)
