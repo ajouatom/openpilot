@@ -10,9 +10,11 @@ import threading
 
 import numpy as np
 
+from openpilot.selfdrive.modeld.jetlink import shared_input
 from openpilot.selfdrive.modeld.jetlink import VENDOR  # noqa: F401
 from openpilot.common.jetlink_status import badge  # noqa: F401
 from jetlink.spec import ModelSpec
+from jetlink import output_projection as projection, deferred_map
 from openpilot.selfdrive.modeld.jetlink.contracts import DEFAULT_SPEC, validate_model_spec
 
 SPEC = DEFAULT_SPEC
@@ -121,8 +123,9 @@ def state():
   return {'state': 'unavailable'}
 
 
-def validate_spec(spec):
-  if spec.to_dict() != SPEC.to_dict():
+def validate_spec(spec, expected=None):
+  expected = SPEC if expected is None else expected
+  if spec.to_dict() != expected.to_dict():
     raise ValueError('Jetlink model identity or input/output contract mismatch')
 
 
@@ -136,39 +139,75 @@ def fault_active():
 class Client:
   def __init__(self, path=SOCKET, timeout=.15):
     self.timeout = timeout
+    self.shared = None
     self.sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     self.sock.settimeout(timeout)
     try:
       self.sock.connect(path)
       hello = json.loads(receive(self.sock, time.monotonic() + timeout))
       self.spec = validate_model_spec(ModelSpec.from_dict(hello['spec']))
+      self.project_output = (os.getenv('JETLINK_COMPACT_REPLY', '1') != '0' and
+                             not os.getenv('SEND_RAW_PRED') and projection.eligible(self.spec) and
+                             projection.matches(hello.get(projection.IPC_CAPABILITY)))
+      self.deferred_nav = (os.getenv('JETLINK_DEFER_NAV', '1') == '1' and projection.eligible(self.spec) and
+                           deferred_map.matches(hello.get(deferred_map.IPC_CAPABILITY)))
+      if os.getenv('JETLINK_RAM_INPUT', '1') == '1' and shared_input.supported() and hello.get(shared_input.CAPABILITY) is True:
+        deadline = time.monotonic() + timeout
+        send_parts(self.sock, shared_input.SETUP, deadline=deadline)
+        self.shared = shared_input.Writer.receive(self.sock, self.spec, receive, deadline)
     except Exception:
       self.sock.close()
       raise
     self.timings = (0, 0, 0)
     self.reader = PacketReader(REPLY.size + self.spec.output_nbytes)
 
-  def infer(self, image, packed, frame, reset=False, source_sof=0):
+  def image_buffer(self):
+    return self.shared.begin() if self.shared is not None else None
+
+  def infer(self, image, packed, frame, reset=False, source_sof=0, nav_metadata=None):
+    try:
+      return self._infer(image, packed, frame, reset, source_sof, nav_metadata)
+    except Exception:
+      # Neither late replies nor late USB readers may outlive a reused slot.
+      self.close()
+      raise
+
+  def _infer(self, image, packed, frame, reset=False, source_sof=0, nav_metadata=None):
     if image.dtype != np.uint8 or image.shape != self.spec.warped_shape or not image.flags.c_contiguous:
       raise ValueError('invalid warped image')
     if packed.dtype != np.float32 or packed.size != self.spec.packed_nelem or not packed.flags.c_contiguous or not np.all(np.isfinite(packed)):
       raise ValueError('invalid recurrent input')
     deadline = time.monotonic() + self.timeout
     self.sock.settimeout(self.timeout)
-    send_parts(self.sock, REQUEST.pack(frame, int(reset), source_sof), image, packed, deadline=deadline)
+    request_flags = int(reset) | (projection.IPC_FLAG if self.project_output else 0)
+    map_parts = ()
+    if getattr(self, 'deferred_nav', False):
+      request_flags |= deferred_map.IPC_FLAG
+      map_parts = (deferred_map.META.pack(*deferred_map.metadata(nav_metadata)),)
+    shared_request = self.shared is not None and self.shared.busy
+    if shared_request:
+      token = self.shared.token(image, packed, frame, request_flags, source_sof)
+      send_parts(self.sock, token, *map_parts, deadline=deadline)
+    else:
+      send_parts(self.sock, REQUEST.pack(frame, request_flags, source_sof), image, packed, *map_parts, deadline=deadline)
     reply = self.reader.receive(self.sock, deadline)
-    if len(reply) != REPLY.size + self.spec.output_nbytes:
+    count = projection.COUNT if self.project_output else self.spec.output_nelem
+    if len(reply) != REPLY.size + count * 4:
       raise ValueError('invalid inference reply size')
     fid, *self.timings = REPLY.unpack_from(reply)
     if fid != frame:
       raise ValueError('stale inference reply')
-    output = np.frombuffer(reply, np.float32, self.spec.output_nelem, REPLY.size).copy()
+    output = np.frombuffer(reply, np.float32, count, REPLY.size).copy()
     if not np.all(np.isfinite(output)):
       raise ValueError('nonfinite inference reply')
+    if shared_request:
+      self.shared.complete()
     return output
 
   def close(self):
     self.sock.close()
+    if self.shared is not None:
+      self.shared.close()
 
 
 class ClientConnection:

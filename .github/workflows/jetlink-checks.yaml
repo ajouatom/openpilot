@@ -1,18 +1,40 @@
 name: Jetson integration checks
 on:
+  pull_request:
+    branches: [carrot-wip]
+    paths:
+      - "openpilot/common/runtime_diagnostics.py"
+      - "openpilot/common/tests/test_runtime_diagnostics.py"
+      - 'tools/jetlink/**'
+      - 'openpilot/selfdrive/monitoring/**'
+      - 'tools/monitoring_validation/**'
+      - 'third_party/jetlink/**'
+      - 'openpilot/common/jetlink_status.py'
+      - 'openpilot/common/jetlink_peer.py'
+      - 'openpilot/selfdrive/modeld/**'
+      - 'openpilot/system/ui/lib/egl.py'
+      - 'openpilot/system/ui/lib/application.py'
+      - 'openpilot/selfdrive/ui/tests/test_egl_shutdown.py'
+      - 'openpilot/selfdrive/carrot/carrot_navi.py'
+      - 'openpilot/selfdrive/carrot/cluster/cluster_h264_pipeline.py'
+      - 'openpilot/selfdrive/carrot/cluster/main.py'
+      - 'openpilot/selfdrive/carrot/tests/test_cluster_ffmpeg_threads.py'
+      - '.github/workflows/jetlink-checks.yaml'
   push:
     branches: [carrot-wip]
     paths:
       - "openpilot/common/runtime_diagnostics.py"
       - "openpilot/common/tests/test_runtime_diagnostics.py"
-      - "openpilot/system/ui/lib/egl.py"
-      - "openpilot/system/ui/lib/application.py"
-      - "openpilot/selfdrive/ui/tests/test_egl_shutdown.py"
       - 'tools/jetlink/**'
+      - 'openpilot/selfdrive/monitoring/**'
+      - 'tools/monitoring_validation/**'
       - 'third_party/jetlink/**'
       - 'openpilot/common/jetlink_status.py'
       - 'openpilot/common/jetlink_peer.py'
       - 'openpilot/selfdrive/modeld/**'
+      - 'openpilot/system/ui/lib/egl.py'
+      - 'openpilot/system/ui/lib/application.py'
+      - 'openpilot/selfdrive/ui/tests/test_egl_shutdown.py'
       - 'openpilot/selfdrive/carrot/carrot_navi.py'
       - 'openpilot/selfdrive/carrot/cluster/cluster_h264_pipeline.py'
       - 'openpilot/selfdrive/carrot/cluster/main.py'
@@ -36,7 +58,16 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
-      - run: python -m pip install pytest==8.3.5 pytest-asyncio zstandard numpy pillow pycapnp pycryptodome aiohttp raylib==5.5.0.4 setproctitle requests pyserial
+      - run: python -m pip install pytest==8.3.5 pytest-asyncio zstandard numpy onnx pillow pycapnp pycryptodome aiohttp raylib==5.5.0.4 setproctitle requests pyserial
+      - name: Stationary monitoring pause and immediate resumption
+        env:
+          PYTHONPATH: .:opendbc_repo:tools/jetlink
+        run: |
+          python tools/monitoring_validation/run.py \
+            openpilot/selfdrive/monitoring/test_soft_hold_pause.py \
+            openpilot/selfdrive/monitoring/test_dm2d.py \
+            openpilot/selfdrive/monitoring/test_dm2.py \
+            openpilot/selfdrive/monitoring/test_parked_reset.py
       - name: Software HUD encoder frame and geometry checks
         env:
           PYTHONPATH: .:opendbc_repo:tools/jetlink
@@ -50,15 +81,22 @@ jobs:
             openpilot/selfdrive/carrot/tests/test_cluster_h264_complexity.py \
             openpilot/selfdrive/carrot/tests/test_cluster_performance_safeguards.py \
             openpilot/selfdrive/carrot/tests/test_cluster_usb_rate.py
+      - name: USB receiver ownership, interrupted transfer and rollback checks
+        run: |
+          sudo env PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=.:tools/jetlink:third_party/jetlink "$(which python)" -m pytest \
+            -p no:cacheprovider -c /dev/null --rootdir=. --confcutdir=tools/jetlink -q \
+            tools/jetlink/test_usb_sha256.py tools/jetlink/test_update_host.py \
+            tools/jetlink/test_local_experiment.py tools/jetlink/test_boot_update.py \
+            tools/jetlink/test_offline_boot_patch.py
       - name: USB, fallback, navigation, Wi-Fi, signed updates and image checks
         env:
           PYTHONPATH: .:opendbc_repo:tools/jetlink
         run: |
           python -m compileall -q tools/jetlink openpilot/selfdrive/modeld/jetlink
           python -m pytest -c /dev/null --rootdir=. --confcutdir=tools/jetlink -q \
-            tools/jetlink openpilot/selfdrive/modeld/tests/test_jetlink.py \
+            tools/jetlink opendbc_repo/opendbc/car/hyundai/tests/test_rear_gap.py \
+            openpilot/selfdrive/modeld/tests/test_jetlink.py openpilot/selfdrive/ui/tests/test_egl_shutdown.py \
             openpilot/common/tests/test_runtime_diagnostics.py \
-            openpilot/selfdrive/ui/tests/test_egl_shutdown.py \
             openpilot/selfdrive/modeld/tests/test_camera_sync.py \
             openpilot/selfdrive/modeld/tests/test_camera_gap.py \
             openpilot/selfdrive/modeld/tests/test_jetlink_phase.py \
@@ -71,3 +109,8 @@ jobs:
           sudo --preserve-env=PATH unshare --mount --propagation private env CARROT_STORAGE_MOUNTS=1 \
             "$(which python)" -m pytest -c /dev/null --rootdir=. --confcutdir=tools/jetlink -q \
             tools/jetlink/test_protected_storage.py
+      - name: Private Wi-Fi Internet sharing with real isolated packets
+        run: |
+          sudo --preserve-env=PATH unshare --mount --net --propagation private env CARROT_WIFI_NAT_NAMESPACE=1 \
+            "$(which python)" -m pytest -c /dev/null --rootdir=. --confcutdir=tools/jetlink -q \
+            tools/jetlink/test_wifi_direct_forward.py

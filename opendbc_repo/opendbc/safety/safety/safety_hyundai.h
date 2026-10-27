@@ -66,7 +66,7 @@ static struct {
 
 static void hyundai_cgw_test_init(uint16_t param) {
   hyundai_cgw_test = (__typeof__(hyundai_cgw_test)){0};  // no libc here (host libsafety build has no memset)
-  hyundai_cgw_test.enabled = (param & 4096U) != 0U;
+  hyundai_cgw_test.enabled = (param & 8192U) != 0U;
 }
 
 static bool hyundai_cgw_test_tx(const CANPacket_t *msg) {

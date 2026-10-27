@@ -228,3 +228,25 @@ If only video is missing, check whether another browser owns the stream, whether
 - [Speed and Deceleration](speed-deceleration.md)
 - [Cruise and Following Gap](cruise-gap.md)
 - [Radar Tracks and Corner Radar](radar.md)
+
+### External driving model selection (`carrot-nav-blink` trial)
+
+In Tools, choose N16 Nav or Flip Flop under **External driving model**. The choice saves automatically.
+The choice applies to both eGPU and Jetson; the internal model stays fixed at CD210.
+Saving does not switch a running model. With ignition off and internet available, reboot
+both comma and Jetson to download, verify, and apply the choice. A new Jetson model also
+needs engine preparation. The eGPU downloads the official precompiled PKL without
+recompiling the driving model itself.
+
+`NOO supported` identifies models accepting route images and navigation inputs. Currently
+N16 supports these inputs; Flip Flop does not. This label does not establish current
+route validity or driving performance. MD v3 has been retired from the list. Flip Flop uses
+the official ONNX replaced on 2026-10-24; its hash differs from the historical MD v3 ONNX.
+
+Choose a model in the dropdown to save it for the next reboot. The list is maintained by
+the developers; user hide, delete and restore controls are not available. Catalog updates
+arrive through Git Pull. Retired choices disappear from the list and their unused files
+are cleaned up automatically while offroad. A running retired model remains protected
+until the next boot selects the default and delivery switches the installed active model.
+Jetson cleanup waits for an offroad connection and preserves an ONNX used by any available
+model. Only the selected model is loaded into GPU memory.

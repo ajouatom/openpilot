@@ -10,6 +10,7 @@ import numpy as np
 from openpilot.selfdrive.modeld.jetlink.link import ClientConnection, SPEC, FAULT, state
 from openpilot.selfdrive.modeld.jetlink.prepare import WarpPreparation
 from openpilot.selfdrive.modeld.jetlink.contracts import model_name, parse_outputs
+from openpilot.selfdrive.modeld.jetlink.inputs import fill_inputs
 from openpilot.selfdrive.modeld.model_join import may_join
 
 MODEL_STATUS = Path('/dev/shm/carrot-jetlink-model.json')
@@ -72,7 +73,22 @@ class Warp:
       if actual.shape != expected.shape or actual.dtype != expected.dtype or not np.array_equal(actual, expected):
         raise ValueError('prepared Jetlink warp serialization changed pixels')
 
-  def __call__(self, bufs, transforms):
+  @staticmethod
+  def read_result(result, output_buffer=None):
+    if output_buffer is None:
+      return result.numpy()
+    if (output_buffer.dtype != np.uint8 or output_buffer.shape != tuple(result.shape)
+        or not output_buffer.flags.c_contiguous or not output_buffer.flags.writeable):
+      # The GPU submission already exists. Preserve its completion fence even
+      # when a bad destination prevents copying into the connection-owned slot.
+      result.numpy()
+      raise ValueError('invalid warp destination')
+    # _buffer preserves tinygrad realization/JIT guards; copyout retains the
+    # QCOM completion fence. The only removed step is the subsequent IPC copy.
+    result._buffer().copyout(memoryview(output_buffer).cast('B'))
+    return output_buffer
+
+  def __call__(self, bufs, transforms, *, prepare=None, output_buffer=None):
     from tinygrad import Tensor
     started = time.monotonic()
     frames = {}
@@ -91,8 +107,26 @@ class Warp:
     prepared = time.monotonic()
     result = self.run_warp(**self.inputs, **frames)
     submitted = time.monotonic()
-    output = result.numpy()
-    self.timings = (prepared - started, submitted - prepared, time.monotonic() - submitted)
+    if prepare is None:
+      output = self.read_result(result, output_buffer)
+      self.timings = (prepared - started, submitted - prepared, time.monotonic() - submitted)
+      return output
+    # QCOM submission is asynchronous. Only independent CPU context preparation
+    # may overlap it: no second camera frame, GPU call or buffer replacement.
+    # Even if preparation fails, drain this submission before local fallback
+    # touches the shared QCOM device. Never suppress the preparation exception.
+    try:
+      if prepare is not None:
+        prepare()
+    finally:
+      inputs_ready = time.monotonic()
+      output = self.read_result(result, output_buffer)
+      finished = time.monotonic()
+      self.timings = (prepared - started, submitted - prepared, finished - submitted)
+      self.stage_timings = {'warp_prepare_ms': (prepared - started) * 1000,
+                            'warp_submit_ms': (submitted - prepared) * 1000,
+                            'input_prepare_ms': (inputs_ready - submitted) * 1000,
+                            'warp_read_ms': (finished - inputs_ready) * 1000}
     return output
 
 
@@ -137,11 +171,18 @@ class JoiningModel:
     if now >= self.next_status:
       self.ready = state().get('state') == 'ready'
       record = {'active': self.active, 'ready': self.ready, 'model': model_name(self.spec), 'sha256': self.spec.sha256,
-                'error': self.error, 'updated': now}
+                'nav_model': 'nav_map' in self.spec.input_shapes,
+                'error': self.error, 'updated': now,
+                'execution': {'cpu_overlap': os.getenv('JETLINK_CPU_OVERLAP', '1') != '0',
+                              'shared_input': getattr(self.client, 'shared', None) is not None,
+                              'compact_reply': bool(getattr(self.client, 'project_output', False))}}
       tmp = MODEL_STATUS.with_suffix('.tmp')
       tmp.write_text(json.dumps(record))
       os.replace(tmp, MODEL_STATUS)
       self.next_status = now + 1
+
+  def set_nav_metadata(self, value):
+    self.nav_metadata = value
 
   def _reset_small(self):
     if hasattr(self.small, 'reset'):
@@ -202,17 +243,19 @@ class JoiningModel:
         self.next_join = time.monotonic() + 5
     if self.client is not None:
       try:
-        desire = inputs['desire_pulse'].copy()
-        desire[0] = 0
-        self.views['desire'][:] = np.where(desire - self.prev_desire > .99, desire, 0)
-        self.prev_desire[:] = desire
-        for name in ('traffic_convention', 'action_t'):
-          self.views[name][:] = inputs[name]
         self.frame = (self.frame + 1) & 0xFFFFFFFF
         started = time.monotonic()
-        images = self.warp(bufs, transforms)
+        # Same-frame CPU context only; Warp drains this submission even if
+        # preparation fails, before the existing local-model fallback runs.
+        prepare = lambda: fill_inputs(self.views, inputs, self.prev_desire)
+        if os.getenv('JETLINK_CPU_OVERLAP', '1') == '0':
+          prepare()
+          prepare = None
+        images = self.warp(bufs, transforms, prepare=prepare,
+                           output_buffer=self.client.image_buffer())
         warped = time.monotonic()
-        result = self.client.infer(images, self.packed, self.frame, self.reset, source_sof=self.source_sof)
+        map_options = {'nav_metadata': getattr(self, 'nav_metadata', None)} if getattr(self.client, 'deferred_nav', False) else {}
+        result = self.client.infer(images, self.packed, self.frame, self.reset, source_sof=self.source_sof, **map_options)
         replied = time.monotonic()
         self.reset = False
         if 'prev_feat' in self.views:

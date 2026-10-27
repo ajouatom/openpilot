@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 import unittest
 
+import numpy as np
+
 from opendbc.car.structs import CarParams
 from opendbc.car.tesla.values import TeslaSafetyFlags
 from opendbc.can import CANDefine
@@ -104,13 +106,53 @@ class TestTeslaSafetyBase(common.PandaCarSafetyTest, common.AngleSteeringSafetyT
                                   self.safety.get_vehicle_speed_min, self.safety.get_vehicle_speed_max)
 
   def test_inactive_angle_requires_clamped_measurement(self):
+    for controls_allowed in (True, False):
+      self.safety.set_controls_allowed(controls_allowed)
+      for measured in (-420.0, -360.0, -12.3, 12.3, 360.0, 420.0):
+        with self.subTest(controls_allowed=controls_allowed, measured=measured):
+          self._reset_angle_measurement(measured)
+          inactive = max(-self.STEER_ANGLE_MAX, min(self.STEER_ANGLE_MAX, measured))
+          self.assertTrue(self._tx(self._angle_cmd_msg(inactive, False)))
+          for offset in (-1.0, 1.0):
+            self.assertFalse(self._tx(self._angle_cmd_msg(inactive + offset, False)))
+
+  def test_angle_cmd_when_disabled(self):
+    # Carrot permits lateral control independently of stock cruise. NONE still must follow the measured angle.
+    for controls_allowed in (True, False):
+      for steer_control_enabled in (True, False):
+        for angle_meas in range(-90, 91, 10):
+          self._reset_angle_measurement(angle_meas)
+          for angle_cmd in range(-90, 91, 10):
+            self.safety.set_controls_allowed(controls_allowed)
+            self._set_prev_desired_angle(angle_cmd)
+            should_tx = steer_control_enabled or angle_cmd == angle_meas
+            self.assertEqual(should_tx, self._tx(self._angle_cmd_msg(angle_cmd, steer_control_enabled)),
+                             f"{controls_allowed=}, {steer_control_enabled=}, {angle_meas=}, {angle_cmd=}")
+            self.assertEqual(self.safety.get_controls_allowed(), controls_allowed)
+
+  def test_angle_rate_limits_without_cruise_permission(self):
+    for speed in (0., 1., 5., 10., 25., 50.):
+      self._reset_speed_measurement(speed)
+      up = np.interp(speed, self.ANGLE_RATE_BP, self.ANGLE_RATE_UP)
+      down = np.interp(speed, self.ANGLE_RATE_BP, self.ANGLE_RATE_DOWN)
+      for angle in (-90., 0., 90.):
+        self._reset_angle_measurement(angle)
+        sign = -1 if angle < 0 else 1
+        for delta, allowed in ((sign * up, True), (-sign * down, True),
+                               (max(up, down) + 1.1, False), (-max(up, down) - 1.1, False)):
+          with self.subTest(speed=speed, angle=angle, delta=delta):
+            self.safety.set_controls_allowed(False)
+            self._set_prev_desired_angle(angle)
+            self.assertEqual(self._tx(self._angle_cmd_msg(angle + delta, True)), allowed)
+            self.assertFalse(self.safety.get_controls_allowed())
+
+  def test_lateral_without_cruise_never_grants_longitudinal_permission(self):
     self.safety.set_controls_allowed(False)
-    for measured in (-420.0, -360.0, -12.3, 12.3, 360.0, 420.0):
-      with self.subTest(measured=measured):
-        self._reset_angle_measurement(measured)
-        inactive = max(-self.STEER_ANGLE_MAX, min(self.STEER_ANGLE_MAX, measured))
-        self.assertTrue(self._tx(self._angle_cmd_msg(inactive, False)))
-        self.assertFalse(self._tx(self._angle_cmd_msg(inactive + 1.0, False)))
+    self._reset_angle_measurement(0.)
+    self._set_prev_desired_angle(0.)
+    self.assertTrue(self._tx(self._angle_cmd_msg(0., True)))
+    self.assertFalse(self._tx(self._accel_msg(1.0)))
+    self.assertFalse(self.safety.get_controls_allowed())
 
 
 class TestTeslaStockSafety(TestTeslaSafetyBase):

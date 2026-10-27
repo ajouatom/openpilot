@@ -1,0 +1,42 @@
+{
+  "n16": {
+    "name": "N16 Nav",
+    "manifest_url": "https://upload.shind0.synology.me/models/comma4-big-nav-n16-96244b1f/manifest.json",
+    "egpu": {
+      "model_id": "comma-nav-n16-afbf2e54-52205044",
+      "filename": "big_driving_tinygrad.pkl",
+      "size": 822465506,
+      "sha256": "52205044e136efb64a6a841c9b016cf35b1db81186dd0f941b62eee5ebdcde24",
+      "url": "https://upload.shind0.synology.me/models/comma4-big-nav-n16-96244b1f/big_driving_tinygrad.pkl"
+    },
+    "jetson_spec": "n16.json",
+    "jetson_release": "../jetlink/host_release.json"
+  },
+  "md-v3": {
+    "name": "MD v3",
+    "retired": true,
+    "manifest_url": "https://upload.shind0.synology.me/models/comma4-big-md-v3-1365126a/manifest.json",
+    "egpu": {
+      "model_id": "comma-pr39087-md-v3-e86b58dc-d4c7a3fc",
+      "filename": "big_driving_tinygrad.pkl",
+      "size": 799941965,
+      "sha256": "d4c7a3fcfc95813826ca871a80bea18df833aacb2eb6f5333e25a01e65b1a422",
+      "url": "https://upload.shind0.synology.me/models/comma4-big-md-v3-1365126a/big_driving_tinygrad.pkl"
+    },
+    "jetson_spec": "md-v3.json",
+    "jetson_release": "md-v3-release.json"
+  },
+  "flip-flop": {
+    "name": "Flip Flop",
+    "manifest_url": "https://upload.shind0.synology.me/models/comma4-big-flip-flop-f0667cf6/manifest.json",
+    "egpu": {
+      "model_id": "comma-flip-flop-85476c4b-f0667cf6",
+      "filename": "big_driving_tinygrad.pkl",
+      "size": 775663355,
+      "sha256": "f0667cf6cf7827db467f7a5212620b876477cfea172257dcd97e26132344a3a4",
+      "url": "https://upload.shind0.synology.me/models/comma4-big-flip-flop-f0667cf6/big_driving_tinygrad.pkl"
+    },
+    "jetson_spec": "md-v3.json",
+    "jetson_release": "md-v3-release.json"
+  }
+}

@@ -11,12 +11,19 @@ from openpilot.selfdrive.carrot.bluetooth.model import CommandReader, CommandWri
 
 @pytest.mark.parametrize('learning', [False, True])
 @pytest.mark.parametrize('double', [False, True])
-def test_daemon_multiplexes_two_remotes_and_only_suppresses_device_under_test(tmp_path, monkeypatch, learning, double):
+@pytest.mark.parametrize('fast', [False, True])
+@pytest.mark.parametrize('physical', [False, True])
+def test_daemon_multiplexes_two_remotes_and_only_suppresses_device_under_test(tmp_path, monkeypatch, learning, double, fast, physical):
   first, second = '00:11:22:33:44:55', '66:77:88:99:AA:BB'
+  first_action, second_action = ('blinkerLeft', 'blinkerRight') if physical else ('accelCruise', 'carrotCruise')
   settings = {'devices': {
-    first: {'profile': 'generic', 'enabled': True, 'mapping': {'key:115': 'accelCruise'}},
-    second: {'profile': 'generic', 'enabled': True, 'mapping': {'key:115': 'carrotCruise'}},
+    first: {'profile': 'generic', 'enabled': True, 'mapping': {'key:115': first_action}},
+    second: {'profile': 'generic', 'enabled': True, 'mapping': {'key:115': second_action}},
   }}
+  if fast:
+    for device in settings['devices'].values():
+      device['gestures'] = {'double': False, 'long': False}
+    monkeypatch.setattr(daemon, 'initial_buttons', lambda _: set())
   if double:
     for device in settings['devices'].values():
       device['mapping']['key:115@double'] = 'gapAdjustCruise'
@@ -55,7 +62,7 @@ def test_daemon_multiplexes_two_remotes_and_only_suppresses_device_under_test(tm
 
   def select(fds, *_):
     calls[0] += 1
-    if double and calls[0] == 2:
+    if double and not fast and calls[0] == 2:
       clock[0] = 10.36
       return [], [], []
     if calls[0] > 1:
@@ -65,11 +72,13 @@ def test_daemon_multiplexes_two_remotes_and_only_suppresses_device_under_test(tm
   monkeypatch.setattr(daemon.select, 'select', select)
   with pytest.raises(Done):
     daemon.main()
-  reader = CommandReader('cruise', tmp_path)
+  reader = CommandReader('blinker' if physical else 'cruise', tmp_path)
   reader.started = 9
-  stamp = 10.4 if double else 10.1
+  stamp = 10.4 if double and not fast else 10.1
+  if physical and (fast or not double):
+    assert all(e['time'] == 10.001 for e in real_read_json(reader.path)['events'])
   actions = [reader.read(now=stamp), reader.read(now=stamp + .03), reader.read(now=stamp + .06)]
-  assert actions == (['carrotCruise', None, None] if learning else ['accelCruise', 'carrotCruise', None])
+  assert actions == ([second_action, None, None] if learning else [first_action, second_action, None])
 
 
 @pytest.mark.parametrize('stop', ['release', 'disconnect', 'brake', 'gas', 'gear', 'physical', 'disable', 'can', 'offroad', 'stale'])

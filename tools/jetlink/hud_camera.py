@@ -91,7 +91,9 @@ class CameraPublisher:
           frame = client.recv(timeout_ms=0)
           if frame is not None:
             result[name] = {'width': WIDTH, 'height': HEIGHT, 'frame': client.frame_id,
-                            'time': time.monotonic(), 'jpeg': base64.b64encode(jpeg_preview(preview_nv12(frame))).decode()}
+                            'time': time.monotonic(),
+                            'source_width': int(frame.width), 'source_height': int(frame.height),
+                            'capture_time': client.timestamp_eof / 1e9, 'jpeg': base64.b64encode(jpeg_preview(preview_nv12(frame))).decode()}
         except Exception:
           continue  # Missing previews never affect inference or vehicle state.
       temporary = path.with_suffix('.tmp')
@@ -115,8 +117,16 @@ class RemoteRoadCamera:
     self.is_wide = False
     self.texture = None
     self.last_frame = None
+    self._display_frame = None
+    self._capture_key = self._capture_stamp = None
+
+  @property
+  def display_frame(self):
+    return self._display_frame
 
   def select_stream(self, prefer_wide):
+    if self.is_wide != prefer_wide:
+      self._display_frame = None
     self.is_wide = prefer_wide
     return self.is_wide
 
@@ -124,15 +134,16 @@ class RemoteRoadCamera:
     from hud_protocol import read_snapshot
     import pyray as rl
     from PIL import Image
+    self._display_frame = None
     snapshot = read_snapshot()
     if snapshot is None:
       return False
-    _, packet = snapshot
+    received, packet = snapshot
     name = 'wide' if self.is_wide else 'road'
     frame = packet.get('cameras', {}).get(name)
     if frame is None or not 0 <= packet['sent'] - frame['time'] < .3:
       return False
-    key = (name, frame['frame'])
+    key = (name, frame['frame'], frame.get('capture_time', frame['time']))
     if key != self.last_frame:
       if (frame['width'], frame['height']) != (WIDTH, HEIGHT):
         return False
@@ -150,10 +161,36 @@ class RemoteRoadCamera:
       else:
         rl.update_texture(self.texture, pointer)
       self.last_frame = key
+    self._set_display_frame(frame, packet['sent'], received)
     rl.draw_texture_pro(self.texture, rl.Rectangle(0, 0, WIDTH, HEIGHT), destination, rl.Vector2(0, 0), 0, rl.WHITE)
     return True
 
+  def _set_display_frame(self, frame, sent, received):
+    import math
+    self._display_frame = None
+    try:
+      fid, captured = frame['frame'], frame['capture_time']
+      width, height = frame['source_width'], frame['source_height']
+      now = time.monotonic()
+      if (type(fid) is not int or not 0 <= fid < 2**32 or
+          type(width) is not int or type(height) is not int or
+          not 0 < width <= 4096 or not 0 < height <= 4096 or
+          not math.isfinite(captured) or not 0 <= sent - captured <= .35 or
+          not 0 <= now - received < .5):
+        return
+      key = (self.is_wide, fid, captured)
+      stamp = received - (sent - captured)
+      if key == self._capture_key:
+        stamp = min(stamp, self._capture_stamp)
+      self._capture_key, self._capture_stamp = key, stamp
+      if 0 <= now - stamp <= .35:
+        self._display_frame = (fid, stamp, width, height, self.is_wide)
+    except (KeyError, ValueError, TypeError, OverflowError):
+      pass  # Legacy hosts/previews have no verified capture metadata.
+
   def close(self):
+    self._display_frame = None
+    self.last_frame = None
     import pyray as rl
     if self.texture is not None:
       rl.unload_texture(self.texture)

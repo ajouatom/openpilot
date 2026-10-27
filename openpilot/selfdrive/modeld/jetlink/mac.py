@@ -9,8 +9,9 @@ import time
 import urllib.request
 
 from openpilot.common.jetlink_peer import may_provision
+from openpilot.common.jetson_model import is_jetson
 from openpilot.selfdrive.modeld.jetlink.link import SPEC, validate_spec
-from openpilot.selfdrive.modeld.jetlink.contracts import validate_model_spec
+from openpilot.selfdrive.modeld.jetlink.contracts import JETSON_SPEC, validate_model_spec
 from openpilot.selfdrive.modeld.jetlink.selection import ModelChanged, approved_spec, remember_spec
 from jetlink.client import EngineMissing
 from jetlink.transport.base import LinkTimeout
@@ -114,6 +115,27 @@ class PreparationTransport:
 
 def prepare(client, peer, offroad, connected, progress, cache=CACHE, mode='usb'):
   """Retain the legacy Jetson path; phones require their explicit cable mode."""
+  if is_jetson(peer):
+    if mode not in ('usb', 'auto'):
+      raise ValueError('Jetson requires USB mode')
+    # Model provisioning belongs to the signed Jetson updater, never the
+    # Mac/phone downloader. A pending load/build must stay offroad.
+    def stopped():
+      require_setup(offroad, connected)
+      return False
+
+    if not connected():
+      raise PreparationDeferred('Jetson disconnected')
+    if peer.get('loaded') != JETSON_SPEC.sha256:
+      require_setup(offroad, connected)
+    try:
+      result = client.ensure_engine(JETSON_SPEC.sha256, JETSON_SPEC.nbytes,
+                                    frame_skip=JETSON_SPEC.frame_skip, build_timeout=30, should_stop=stopped)
+    finally:
+      client.progress_cb = None
+      client._should_stop = lambda: False
+    validate_spec(result, JETSON_SPEC)
+    return result
   protocol = peer.get('protocol') if isinstance(peer, dict) else None
   app_capable = protocol == 3 and may_provision(peer, mode)
   legacy_v3 = protocol == 3 and isinstance(peer, dict) and 'loaded' in peer and not app_capable

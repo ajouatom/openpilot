@@ -84,7 +84,8 @@ class HyundaiSafetyFlags(IntFlag):
   FCEV_GAS = 256
   ALT_LIMITS_2 = 512
   CANFD_CLUSTER_DIRECT_TX = 2048
-  PALISADE_CGW_TEST = 4096
+  CANFD_SPAS_BLINKERS = 4096
+  PALISADE_CGW_TEST = 8192
 
 
 class HyundaiFlags(IntFlag):
@@ -140,6 +141,8 @@ class HyundaiFlags(IntFlag):
 
   ALT_LIMITS_2 = 2 ** 26
   CANFD_CLUSTER_DIRECT_TX = 2 ** 27
+
+  CANFD_SPAS_BLINKERS = 2 ** 28
 
   CC_ONLY_CAR = 2 ** 31
 

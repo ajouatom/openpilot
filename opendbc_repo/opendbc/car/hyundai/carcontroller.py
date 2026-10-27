@@ -44,7 +44,7 @@ LARGE_ANGLE_UNWIND_RATE = 1.5  # deg/tick: allow a quicker return from the EPS f
 CANFD_JERK_UPPER_MIN = 1.0
 CANFD_JERK_LIMIT_MAX = 5.0
 CANFD_DEPART_JERK_UPPER = 3.0  # StopGoAssist departure: no-lead departures already send 2.8-3.3 (02_logs §22)
-# CanfdBlinkerControl: in D above 30 km/h the parking ECU (APRK, 0x7B1) is silenced and SPAS2 BLINKER_CONTROL is sent in
+# CanfdBlinkerKick: in D above 30 km/h the parking ECU (APRK, 0x7B1) is silenced and SPAS2 BLINKER_CONTROL is sent in
 # its place; below 20 km/h or out of D its default session returns, so parking assists work again while parking
 APRK_ADDR = 0x7B1
 APRK_EXT_SESSION = bytes([0x02, 0x10, 0x03, 0, 0, 0, 0, 0])
@@ -238,7 +238,7 @@ class CarController(CarControllerBase):
     self.soft_hold_mode = 2
     self.depart_jerk = False
     self.blinker_control = False
-    self.blinker_test = 0  # CanfdBlinkerTest: 1 left, 2 right (menu test, any speed/gear)
+    self.blinker_test = 0  # CanfdBlinkerMenuTest: 1 left, 2 right (menu test, any speed/gear)
     self.blinker_stalk = 0  # CanfdBlinkerStalk: 1 left, 2 right (0x3C1 replay)
     # CanfdBvmView: 0 off, 1 left, 2 right, 3 both. Spoofs the cluster camera view status (0x400 byte4) so the
     # blind-spot camera is shown without the turn signal. Display-only message, nothing else uses it.
@@ -419,8 +419,8 @@ class CarController(CarControllerBase):
 
       self.soft_hold_mode = 1 if params.get_int("AutoCruiseControl") > 1 else 2
       self.depart_jerk = params.get_int("StopGoAssist") >= 2
-      self.blinker_control = params.get_bool("CanfdBlinkerControl")
-      self.blinker_test = params.get_int("CanfdBlinkerTest")
+      self.blinker_control = params.get_bool("CanfdBlinkerKick")
+      self.blinker_test = params.get_int("CanfdBlinkerMenuTest")
       self.blinker_stalk = params.get_int("CanfdBlinkerStalk")
       self.bvm_view = params.get_int("CanfdBvmView")
       self.palisade_blinker_test = params.get_int("PalisadeBlinkerTest")
@@ -714,7 +714,8 @@ class CarController(CarControllerBase):
       if hda2 and self.CP.flags & HyundaiFlags.ENABLE_BLINKERS:
         can_sends.extend(hyundaicanfd.create_spas_messages(self.packer, self.CAN, self.frame, CC.leftBlinker, CC.rightBlinker,
                                                            getattr(CS, "spas2", None)))
-      elif self.blinker_control or self.blinker_test or self.aprk_state:
+      # carrot-wip's own SPAS path (CanfdBlinkerControl -> CANFD_SPAS_BLINKERS, card.py) owns APRK/SPAS when it is on
+      elif not self.CP.flags & HyundaiFlags.CANFD_SPAS_BLINKERS and (self.blinker_control or self.blinker_test or self.aprk_state):
         can_sends.extend(self.aprk_blinkers(CC, CS))
 
       if self.camera_scc_params in [2, 3]:

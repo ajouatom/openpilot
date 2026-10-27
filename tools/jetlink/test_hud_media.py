@@ -41,6 +41,40 @@ def test_media_receiver_keeps_draining_while_display_is_idle():
   assert closed == ['decoder', 'socket']
 
 
+def test_early_navigation_admission_is_bounded_and_preserves_fragments():
+  from collections import deque
+  from hud_navi import send_ready_during_inference, MESSAGE
+  packets = deque(fragments(b'x' * (CHUNK * 4), 23, 17))
+  received = []
+  now = [0.]
+  class Client:
+    def __init__(self):
+      self.t = self
+      self.seq = 0
+    def _next_seq(self):
+      self.seq += 1
+      return self.seq
+    def send(self, message, seq, parts):
+      assert message == MESSAGE
+      received.append(parts[0])
+      now[0] += .02  # One slow write cannot cause another admission.
+  publisher = SimpleNamespace(media_packet=lambda: packets.popleft() if packets else None)
+  client = Client()
+  send_ready_during_inference(client, publisher, 0., clock=lambda: now[0])
+  assert len(received) == 1 and len(packets) == 3
+  send_ready_during_inference(client, publisher, 0., clock=lambda: now[0])
+  assert len(received) == 1 and len(packets) == 3
+  while packets:
+    send_ready_during_inference(client, publisher, now[0], clock=lambda: now[0])
+  assembler = Assembler()
+  complete = [assembler.feed(packet, 1.) for packet in received]
+  assert complete[-1] == (23, 17, b'x' * (CHUNK * 4))
+  assert all(value is None for value in complete[:-1])
+  send_ready_during_inference(client, publisher, now[0], clock=lambda: now[0])
+  send_ready_during_inference(client, None, now[0], clock=lambda: now[0])
+  assert client.seq == 4
+
+
 def test_post_reply_navigation_tail_preserves_order_and_stops_on_slow_write():
   from collections import deque
   from hud_navi import send_ready_after_reply, MESSAGE

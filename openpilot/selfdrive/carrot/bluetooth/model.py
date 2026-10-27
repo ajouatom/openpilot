@@ -11,7 +11,7 @@ CONFIG_PATH = Path('/data/carrot/bluetooth.json')
 RUNTIME = Path('/dev/shm/carrot-bluetooth')
 REMOTE_BUTTONS = ('accelCruise', 'decelCruise', 'gapAdjustCruise', 'lfaButton', 'cancel')
 ACTIONS = ('none', *REMOTE_BUTTONS, *(button + 'Long' for button in REMOTE_BUTTONS),
-           'laneLeft', 'laneRight', 'paddleDecel', 'carrotCruise')
+           'laneLeft', 'laneRight', 'blinkerLeft', 'blinkerRight', 'paddleDecel', 'carrotCruise')
 DOUBLE_SECONDS = 0.35
 LONG_SECONDS = 0.7
 REPEAT_SECONDS = 0.5
@@ -73,8 +73,12 @@ def validate_config(data):
         raise ValueError('invalid Linux key code')
     if type(device.get('enabled', False)) is not bool:
       raise ValueError('enabled must be boolean')
+    gestures = device.get('gestures', {kind: any(k.endswith('@' + kind) and v != 'none' for k, v in mapping.items())
+                                       for kind in ('double', 'long')})
+    if not isinstance(gestures, dict) or set(gestures) != {'double', 'long'} or any(type(v) is not bool for v in gestures.values()):
+      raise ValueError('gesture options must be double/long booleans')
     result['devices'][mac] = {'name': str(device.get('name', mac))[:80], 'profile': device['profile'],
-                              'enabled': device.get('enabled', False), 'mapping': dict(mapping)}
+                              'enabled': device.get('enabled', False), 'mapping': dict(mapping), 'gestures': dict(gestures)}
   return result
 
 
@@ -87,13 +91,15 @@ def config(path=CONFIG_PATH):
 
 class Clicks:
   """Release-triggered gestures. Single clicks wait only when double is assigned."""
-  def __init__(self, mapping=None, learning=False):
+  def __init__(self, mapping=None, learning=False, gestures=None):
     self.mapping = mapping or {}
     self.learning = learning
+    self.gestures = gestures
     self.pending = {}
 
   def assigned(self, token, gesture):
-    return self.learning or self.mapping.get(token + '@' + gesture, 'none') != 'none'
+    return self.learning or ((self.gestures is None or self.gestures.get(gesture, False)) and
+                             self.mapping.get(token + '@' + gesture, 'none') != 'none')
 
   def flush(self, now):
     result = []
@@ -125,7 +131,7 @@ class Clicks:
 
 class Decoder:
   """Decode complete SYN_REPORT frames; dropped/incomplete gestures never fire."""
-  def __init__(self, profile='generic', mapping=None, learning=False):
+  def __init__(self, profile='generic', mapping=None, learning=False, gestures=None):
     self.profile = profile
     self.x = self.y = 0
     self.touch = False
@@ -135,7 +141,8 @@ class Decoder:
     self.down = {}
     self.pending_keys = []
     self.dropped = False
-    self.clicks = Clicks(mapping, learning)
+    self.clicks = Clicks(mapping, learning, gestures)
+    self.fast = gestures is not None and not learning
     self.holds = {}
     self.frame_open = False
     self.repeated = set()
@@ -151,7 +158,7 @@ class Decoder:
   def hold(self, source, token, started):
     previous = self.holds.get(source)
     if previous and previous['token'] != token:
-      if previous['fired'] or previous['expired']:
+      if previous['fired'] or previous['expired'] or previous.get('short_fired'):
         previous['expired'] = True  # Changing direction cannot resume a cancelled or already fired hold.
         return
       self.holds.pop(source, None)
@@ -161,6 +168,15 @@ class Decoder:
 
   def key_token(self, key):
     return '1' if self.profile == 'yiser-j6' and key == 115 else f'key:{key}'
+
+  def immediate(self, token):
+    return self.fast and not any(self.clicks.assigned(token, kind) for kind in ('double', 'long'))
+
+  def synchronize_pressed(self, keys, now):
+    """A held key at connect/config reload must be released before fast input."""
+    self.down = {key: now for key in keys if key < 256 or key >= 352}
+    self.touch = 330 in keys
+    self.dropped = bool(self.down or self.touch)
 
   def touch_token(self):
     dx, dy = self.last[0] - self.start[0], self.last[1] - self.start[1]
@@ -231,29 +247,39 @@ class Decoder:
       if not self.touch and not self.down:
         self.dropped = False
       return []
-    releases = []
+    releases, tokens = [], []
     for key, duration in self.pending_keys:
       hold = self.holds.pop(key, {})
-      if not hold.get('fired') and not hold.get('expired'):
+      if not hold.get('fired') and not hold.get('expired') and not hold.get('short_fired'):
         releases.append((self.key_token(key), duration))
     self.pending_keys.clear()
     for key, started in self.down.items():
       self.hold(key, self.key_token(key), started)
+      hold = self.holds[key]
+      if self.immediate(hold['token']) and not hold.get('short_fired') and not hold['expired']:
+        tokens.append(hold['token'])
+        hold['short_fired'] = True
     if self.touch:
       if self.start is None:
         self.start = (self.x, self.y)
         self.started = now
       self.last = (self.x, self.y)
       self.hold('touch', self.touch_token(), now)
+      hold = self.holds.get('touch', {})
+      # A touch may begin over a tap target before becoming a swipe. Only a
+      # confirmed direction can fire early; taps still complete on release.
+      moving = max(abs(self.last[i] - self.start[i]) for i in (0, 1)) >= 120
+      if moving and hold and self.immediate(hold['token']) and not hold.get('short_fired') and not hold['expired']:
+        tokens.append(hold['token'])
+        hold['short_fired'] = True
     elif self.start is not None:
       token = self.touch_token()
       hold = self.holds.pop('touch', {})
       self.start = self.last = None
       duration = now - self.started
-      if token and not hold.get('fired') and not hold.get('expired') and 0 <= duration <= MAX_HOLD_SECONDS:
+      if token and not hold.get('fired') and not hold.get('expired') and not hold.get('short_fired') and 0 <= duration <= MAX_HOLD_SECONDS:
         if duration <= 1.5 or self.clicks.assigned(token, 'long'):
           releases.append((token, duration))
-    tokens = []
     for token, duration in releases:
       tokens.extend(self.clicks.release(token, duration, now))
     return tokens
@@ -263,7 +289,7 @@ class CommandWriter:
   """One writer, bounded per-channel event journals; devices never overwrite peers."""
   def __init__(self, root=RUNTIME):
     self.root = root
-    self.events = {'cruise': [], 'lane': [], 'attention': []}
+    self.events = {'cruise': [], 'lane': [], 'attention': [], 'blinker': []}
     self.session = uuid.uuid4().hex
     self.sequence = 0
 
@@ -279,7 +305,7 @@ class CommandWriter:
         self.publish(channel)
 
   def send(self, mac, action, now, hold=None, repeat=False):
-    channel = 'lane' if action in ('laneLeft', 'laneRight') else 'cruise'
+    channel = 'blinker' if action in ('blinkerLeft', 'blinkerRight') else 'lane' if action in ('laneLeft', 'laneRight') else 'cruise'
     self._append(channel, mac, action, now, hold, repeat)
 
   def attention(self, mac, action, now):

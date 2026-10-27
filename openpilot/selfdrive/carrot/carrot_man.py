@@ -30,6 +30,7 @@ from openpilot.common.realtime import Ratekeeper, set_core_affinity
 from openpilot.common.params import Params, ParamKeyType
 from openpilot.system.hardware import PC, TICI
 from openpilot.selfdrive.navd.helpers import Coordinate
+from openpilot.selfdrive.navigation.source import RouteSource, coordinates as route_coordinates
 from openpilot.common.constants import CV
 
 from openpilot.selfdrive.carrot.carrot_serv import CarrotServ
@@ -333,9 +334,9 @@ class CarrotMan:
     self.navi_points_start_index = 0
     self.navi_points_active = False
     self.navd_active = False
-    self.carrot_navi_route_session_id = ""
-    self.carrot_navi_route_sequence = -1
-    self.carrot_navi_route_owned = False
+    self.route_source = RouteSource()
+    self.nav_route_id = 0
+    self.nav_route_next = 0.
 
     self.active_carrot_last = False
 
@@ -401,16 +402,11 @@ class CarrotMan:
     while self.is_running:
       try:
         self.sm.update(0)
-        navd_route_updated = self.sm.updated['navRouteNavd']
-        if navd_route_updated:
-          self.send_routes(self.sm['navRouteNavd'].coordinates, True)
+        if self.sm.updated['navRouteNavd']:
+          self.route_source.mapbox = route_coordinates(self.sm['navRouteNavd'].coordinates) if self.sm.valid['navRouteNavd'] else ()
         carrot_navi_service_active = self.sm.alive['carrotNavi'] and self.sm.valid['carrotNavi']
-        if (
-          self.sm.updated['carrotNavi'] or navd_route_updated
-          or (self.carrot_navi_route_session_id and not carrot_navi_service_active)
-        ):
-          carrot_navi = parse_carrot_navi_control(self.sm['carrotNavi']) if carrot_navi_service_active else None
-          self._update_carrot_navi_route(carrot_navi, force=navd_route_updated)
+        carrot_navi = parse_carrot_navi_control(self.sm['carrotNavi']) if carrot_navi_service_active else None
+        self._select_navigation_route(carrot_navi)
         remote_addr = self.remote_addr
         remote_ip = remote_addr[0] if remote_addr is not None else ""
         vturn_speed = self.carrot_curve_speed(self.sm)
@@ -489,67 +485,27 @@ class CarrotMan:
         time.sleep(1)
 
 
-  def _update_carrot_navi_route(self, navi: CarrotNaviControl | None, force: bool = False):
-    previous_session = self.carrot_navi_route_session_id
-    route_owned = self.carrot_navi_route_owned
-    if navi is None:
-      if not previous_session:
-        return
-      self.carrot_navi_route_session_id = ""
-      self.carrot_navi_route_sequence = -1
-      if force:
-        self.carrot_navi_route_owned = False
-        return
-      if not route_owned:
-        return
-      points = ()
-    else:
-      new_session = navi.session_id != previous_session
-      route = navi.route
-      if not force and not new_session and route.sequence == self.carrot_navi_route_sequence:
-        route_available = route.present and bool(route.polyline)
-        if not route_available or self.navi_points_active or not self.params.get_bool("IsOnroad"):
-          return
-      self.carrot_navi_route_session_id = navi.session_id
-      self.carrot_navi_route_sequence = route.sequence
-      points = route.polyline if route.present else ()
-      if not points and force:
-        self.carrot_navi_route_owned = False
-        return
-      if not points and not route_owned:
-        return
-
-    coords = [
-      {"latitude": latitude, "longitude": longitude}
-      for latitude, longitude in points
-    ]
-    self.navi_points = [(point["longitude"], point["latitude"]) for point in coords]
-    self.navi_points_start_index = 0
-    self.navi_points_active = bool(self.navi_points)
-    self.carrot_navi_route_owned = self.navi_points_active
-    # Keep the existing route consumer alive without asking navd to calculate a
-    # different route from the app's destination.
-    self.navd_active = self.navi_points_active
-    self.send_routes(coords)
+  def _select_navigation_route(self, carrot_navi):
+    selected = self.route_source.select(self.carrot_serv._external_navigation_connected(), carrot_navi)
+    if selected is not None:
+      self.navi_points = [(c['longitude'], c['latitude']) for c in selected]
+      self.navi_points_start_index = 0
+      self.navi_points_active = bool(selected)
+      self.navd_active = bool(selected)
+      self.nav_route_id = time.monotonic_ns()
+      self.nav_route_next = time.monotonic() + 2.
+      self.send_routes(selected, selected=True)
+    elif time.monotonic() >= getattr(self, 'nav_route_next', 0.):
+      self.nav_route_next = time.monotonic() + 2.
+      # Late-starting/restarted model, maps and UI clients receive the current route.
+      self.send_routes([{'latitude': lat, 'longitude': lon} for lat, lon in self.route_source.selected[1]], selected=True)
 
   def carrot_navi_route(self):
 
-    if self.carrot_serv.active_carrot > 1:
-      if False and self.navd_active:  # mabox always active
-        self.navd_active = False
-        self.params.remove("NavDestination")
     is_onroad = self.params.get_bool("IsOnroad")
     if not is_onroad or not self.navi_points_active or not SHAPELY_AVAILABLE or (self.carrot_serv.active_carrot <= 1 and not self.navd_active):
-      #print(f"navi_points_active: {self.navi_points_active}, active_carrot: {self.carrot_serv.active_carrot}")
-      if self.navi_points_active:
-        print("navi_points_active: ", self.navi_points_active, "active_carrot: ", self.carrot_serv.active_carrot, "navd_active: ", self.navd_active)
-        #haversine_cache.clear()
-        #curvature_cache.clear()
-        self.navi_points = []
-        self.navi_points_active = False
-        if self.active_carrot_last > 1:
-          #self.params.remove("NavDestination")
-          pass
+      # RouteSource owns geometry lifetime. Pausing computation offroad must not
+      # consume a route received before the car starts.
       self.active_carrot_last = self.carrot_serv.active_carrot
       return [],[],300
 
@@ -1317,37 +1273,18 @@ class CarrotMan:
     return struct.unpack('!f', float_data)[0]
 
 
-  def send_routes(self, coords, from_navd=False):
-    original_count = len(coords)
+  def send_routes(self, coords, from_navd=False, selected=False):
     coords = limit_route_points(coords, NAVI_ROUTE_MAX_POINTS)
-    if original_count > len(coords):
-      print(f"Route points limited: {original_count} -> {len(coords)}")
-
-    if from_navd:
-      if len(coords) > 0:
-        self.navi_points = [(c.longitude, c.latitude) for c in coords]
-        self.navi_points_start_index = 0
-        self.navi_points_active = True
-        print("Received points from navd:", len(self.navi_points))
-        self.navd_active = True
-
-        # 경로수신 -> carrotman active되고 약간의 시간지연이 발생함..
-        if not from_navd:
-          self.carrot_serv.active_count = 80
-          self.carrot_serv.active_sdi_count = self.carrot_serv.active_sdi_count_max
-          self.carrot_serv.active_carrot = 2
-
-        coords = [{"latitude": c.latitude, "longitude": c.longitude} for c in coords]
-        #print("navdNaviPoints=", self.navi_points)
+    if not selected:
+      route = route_coordinates(coords)
+      if from_navd:
+        self.route_source.mapbox = route
       else:
-        print("Received points from navd: 0")
-        self.navi_points = []
-        self.navi_points_start_index = 0
-        self.navi_points_active = False
-        self.navd_active = False
-
+        self.route_source.legacy = route
+      return
     msg = messaging.new_message('navRoute', valid=True)
     msg.navRoute.coordinates = coords
+    msg.navRoute.carrotRouteId = self.nav_route_id
     self.pm.send('navRoute', msg)
 
   def carrot_route(self):
@@ -1373,53 +1310,21 @@ class CarrotMan:
               continue
             try:
               total_size = struct.unpack('!I', total_size_bytes)[0]
+              if total_size > NAVI_ROUTE_MAX_POINTS * 8 or total_size % 8:
+                raise ValueError('invalid legacy route size')
               # 전체 데이터를 한 번에 수신
               all_data = self.recvall(conn, total_size)
               if all_data is None:
                   print("Connection closed or incomplete data received")
                   continue
 
-              self.navi_points = []
-              points = []
+              if total_size > NAVI_ROUTE_MAX_POINTS * 8 or total_size % 8:
+                raise ValueError("invalid legacy route size")
+              coords = []
               for i in range(0, len(all_data), 8):
-                x, y = struct.unpack('!ff', all_data[i:i+8])
-                self.navi_points.append((x, y))
-                coord = Coordinate.from_mapbox_tuple((x, y))
-                points.append(coord)
-              coords = [c.as_dict() for c in points]
-              self.navi_points_start_index = 0
-              self.navi_points_active = len(coords) > 0
-              print("Received points:", len(self.navi_points))
-              #print("Received points:", self.navi_points)
-
+                lon, lat = struct.unpack('!ff', all_data[i:i+8])
+                coords.append({'longitude': lon, 'latitude': lat})
               self.send_routes(coords)
-              """
-              try:
-                module_name = "route_engine"
-                class_name = "RouteEngine"
-                moduel = importlib.import_module(module_name)
-                cls = getattr(moduel, class_name)
-                route_engine_instance = cls(name="Loaded at Runtime")
-
-                route_engine_instance.send_route_coords(coords, True)
-              except Exception as e:
-                print(f"route_engine error: {e}")
-
-              #msg = messaging.new_message('navRoute', valid=True)
-              #msg.navRoute.coordinates = coords
-              #self.pm.send('navRoute', msg)
-              """
-
-              if len(coords):
-                dest = coords[-1]
-                dest['place_name'] = "External Navi"
-                self.params.put("NavDestination", json.dumps(dest))
-              else:
-                self.navi_points = []
-                self.navi_points_start_index = 0
-                self.navd_active = False
-                self.params.remove("NavDestination")
-
             except Exception as e:
               print(e)
     except Exception as e:
@@ -1562,60 +1467,9 @@ class CarrotMan:
   def handle_route(self, payload: Any):
     points = self._extract_route_points(payload)
     if points is None:
-      print(f"Received route: unsupported payload type={type(payload).__name__}")
       return
     points = self._limited_route_points(points)
-
-    arr = [{"x": lon, "y": lat, "valid": True} for lon, lat in points]
-    if not arr:
-      print("Received route: 0")
-      # navd route가 비어오면 비활성 처리
-      self.navi_points = []
-      self.navi_points_start_index = 0
-      self.navi_points_active = False
-      self.navd_active = False
-      return
-
-    # valid만 필터 (필요 없으면 제거)
-    valid_pts = [p for p in arr if isinstance(p, dict) and p.get("valid", True)]
-    if not valid_pts:
-      print("Received route: 0 valid")
-      self.navi_points = []
-      self.navi_points_start_index = 0
-      self.navi_points_active = False
-      self.navd_active = False
-      return
-
-    # x=lon, y=lat
-    coords = []
-    navi_points = []
-
-    for p in valid_pts:
-      try:
-        lon = float(p.get("x"))
-        lat = float(p.get("y"))
-      except Exception:
-        continue
-
-      navi_points.append((lon, lat))
-      coords.append({"latitude": lat, "longitude": lon})
-
-    self.navi_points = navi_points
-    self.navi_points_start_index = 0
-    self.navi_points_active = True
-    self.navd_active = True
-
-    print("Received points:", len(self.navi_points))
-
-    self.send_routes(coords)
-
-    if coords:
-      dest = dict(coords[-1])
-      dest["place_name"] = "External Navi"
-      try:
-        self.params.put("NavDestination", json.dumps(dest))
-      except Exception as e:
-        print("NavDestination put error:", e)
+    self.send_routes([{'latitude': lat, 'longitude': lon} for lon, lat in points])
 
   def _put_traffic_light(self, lamp: str, remain: Any, distance: Any = 0, lat: Any = None, lon: Any = None):
     try:

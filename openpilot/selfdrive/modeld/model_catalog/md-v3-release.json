@@ -1,0 +1,21 @@
+{
+  "format": 1,
+  "source_commit": "559e560e8529956c4029f53592f00832d735155b",
+  "runtime": {
+    "arch": "aarch64",
+    "l4t": "36.4.7",
+    "tensorrt": "10.3.0"
+  },
+  "bundle": {
+    "url": "https://upload.shind0.synology.me/models/jetlink-host-559e560e8529956c4029f53592f00832d735155b/precompiled-runtime.tar.gz",
+    "sha256": "81b13012165153e9b011ae643028b98ccf33c30766635b9022b155ea6e79c080",
+    "size": 64822428
+  },
+  "model": {
+    "url": "https://upload.shind0.synology.me/models/comma4-big-md-v3-1365126a/big_driving_supercombo.onnx",
+    "sha256": "35976b11be3904eb78e32f7dc55a6abf8e9433ac5aa391a1998f1e9ce001b199",
+    "size": 768750198
+  },
+  "storage_format": 1,
+  "signature": "Qxg3BWzo/rm1hDDC3SURhfkw98b+APp6mA93z/Fd2UoA+b/vUL8hNmyyzMMYbE3meGKmWHID15C5+vg/kBNDDQ=="
+}

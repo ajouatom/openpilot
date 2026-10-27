@@ -1,4 +1,4 @@
-"""Run the existing Carrot renderer using read-only, USB-forwarded cereal data."""
+"""Run the existing Carrot renderer using read-only, Wi-Fi-forwarded cereal data."""
 import base64
 import json
 import os
@@ -154,6 +154,8 @@ def main():
       return reader.as_builder()
   messaging.log_from_bytes = from_bytes
   sys.modules[messaging.__name__] = messaging
+  from hud_signal import install as install_signal_display
+  remote_signals = install_signal_display(read_snapshot)
   import cluster_live_camera
   from hud_camera import RemoteRoadCamera
   cluster_live_camera.LiveRoadCamera = RemoteRoadCamera
@@ -164,6 +166,10 @@ def main():
   cluster_system_monitor.NetworkAddressProvider = VehicleNetworkAddress
   import cluster_navi_source
   display_metrics = {}
+  from openpilot.selfdrive.navigation import preview as nav_preview
+  from hud_nav_map import RemoteNavPreview
+  remote_nav_preview = RemoteNavPreview(read_snapshot, nav_preview.PREVIEW_PATH)
+  nav_preview.preview_fresh = remote_nav_preview.fresh
   BaseNaviSource = cluster_navi_source.NaviIpcMediaSource
   class RemoteNaviSource:
     def __init__(self, *args, **kwargs):
@@ -206,6 +212,11 @@ def main():
         path = Path('/dev/shm/carrot-jetlink-hud-status.json')
         tmp = path.with_suffix('.tmp')
         stats = vehicle_stats.sample()
+        remote_nav_preview.fresh()
+        display_metrics['nav_model_map'] = remote_nav_preview.status
+        signal_color, signal_held, signal_online = remote_signals.status()
+        display_metrics['signal_display'] = dict(enabled=remote_signals.enabled, color=signal_color,
+                                                held=signal_held, online=signal_online)
         tmp.write_text(json.dumps({'updated': now, **display_metrics,
                                   'vehicle_network_address': VehicleNetworkAddress().address(),
                                   'vehicle_cpu': stats.cpu_core_percents,
@@ -216,9 +227,12 @@ def main():
   cluster.TuringUsbDisplay = Display
   # Jetson has no video encoder block. Keep inference CPU/GPU headroom and
   # use the existing software encoder at the normal 10 FPS cluster rate.
+  # Bound conversion/encoding concurrency; an explicit trailing CLI value of
+  # zero restores FFmpeg's automatic thread pools for comparisons.
   sys.argv = [__file__, '--input', 'live', '--output', 'usb', '--fps', '10',
               '--usb-codec', 'h264', '--usb-h264-backend', 'ffmpeg',
-              '--usb-h264-ffmpeg-encoder', 'libx264', '--cluster-hud-mode', '1', *sys.argv[1:]]
+              '--usb-h264-ffmpeg-encoder', 'libx264', '--usb-h264-ffmpeg-threads', '1',
+              '--cluster-hud-mode', '1', *sys.argv[1:]]
   if '--help' in sys.argv:
     cluster.main()
   else:

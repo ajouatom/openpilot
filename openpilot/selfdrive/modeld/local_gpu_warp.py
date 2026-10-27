@@ -142,7 +142,7 @@ class LocalWarpRuntime(GenericModelRuntime):
     self.device_buffer = Tensor(np.zeros_like(self.compact), device=self.device)._buffer()
     for name, value in self.views.items():
       if name not in ('img', 'big_img', 'tfm', 'big_tfm'):
-        self.queues[name] = input_view(self.device_buffer, value.shape, dtypes.float32,
+        self.queues[name] = input_view(self.device_buffer, value.shape, getattr(dtypes, str(value.dtype)),
                                        value.ctypes.data - self.packed.ctypes.data)
     self.queues['new_img'] = input_view(self.device_buffer, tuple(self.specs['new_img'][0]), dtypes.uint8, self.frames_offset)
     self.validate_warp()

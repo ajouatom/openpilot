@@ -1,0 +1,124 @@
+--- /dev/null
++++ b/KO-깜박이-자동제어.md
+@@ -0,0 +1,59 @@
++<!-- CARROT:GENERATED schema="1" locale="ko" group="STEER_LANECHANGE" param="AutoBlinkerControl" -->
++<!-- CARROT:AUTHORING guide="https://github.com/ajouatom/openpilot/blob/carrot-wip/tools/docs/wiki_settings/AUTHORING_GUIDE.md" editable="CARROT:MANUAL only" -->
++# 깜박이 자동제어
++
++**메뉴:** 주행 제어 \> 차량 조향 \> 차로 변경 (자동 턴)
++
++---
++
++<!-- CARROT:SETTING:BEGIN AutoBlinkerControl -->
++<a id="AutoBlinkerControl"></a>
++
++## 깜박이 자동제어
++
++`AutoBlinkerControl`
++
++0: 끄기(블루투스 원터치 유지). 1: 5km/h 이하 블루투스 입력을 회전 완료까지 유지하고 ATC audioTurn 알림 시점부터 교차로 정차 중에도 유지하며 실제 회전 후 핸들이 중앙으로 돌아오면 자동 해제. 2: 1번 + ATC 차선변경이 실제 시작될 때부터 완료까지 점멸(대기 중 제외). 같은 방향 버튼으로 유지 취소, 반대 버튼으로 전환. 순정 레버 우선. 지원하는 젯슨 USB-CAN/B1 차량 전용.
++
++<!-- CARROT:AUTO:BEGIN AutoBlinkerControl -->
++<!-- CARROT:AUTO:SOURCE facts="3b0e09899cfae670351432b6677d028fc2fa914b0290dc8ad3eaf61552b6f13d" semantic="aabe60b4f8fc45b8ca7b6c6373d85b1b03f56f273efd022229e24f8b3e8334cb" review="needs_review" -->
++<!-- CARROT:SECTION:BEGIN OVERVIEW -->
++- **종류:** 구간 선택
++- **기본값:** `0`
++- **범위:** `0` ~ `2`
++- **변경 단위:** `1`
++- **메뉴:** 주행 제어 \> 차량 조향 \> 차로 변경 (자동 턴)
++<!-- CARROT:SECTION:END OVERVIEW -->
++<!-- CARROT:AUTO:END AutoBlinkerControl -->
++
++<!-- CARROT:MANUAL:BEGIN AutoBlinkerControl -->
++<!-- CARROT:REVIEW reviewed-for="aabe60b4f8fc45b8ca7b6c6373d85b1b03f56f273efd022229e24f8b3e8334cb" reviewed-at="2026-10-26T00:00:00Z" -->
++<!-- CARROT:SECTION:BEGIN BEHAVIOR -->
++### 동작
++
++지원하는 젯슨 USB-CAN/B1 차량에서 실제 램프를 제어합니다. 순정 레버를 조작하면 해당 요청을 중단합니다.
++
++- **0:** 자동제어를 끄고 블루투스 원터치는 유지합니다.
++- **1:** 5km/h 이하에서 블루투스로 켠 신호를 회전 완료까지 유지하고, ATC audioTurn 알림 시점부터 교차로 정차 중에도 유지하며 실제 회전 후 핸들이 중앙으로 돌아오면 자동 해제합니다.
++- **2:** 1번에 더해 ATC 차선변경이 실제 시작된 뒤 완료될 때까지 점멸합니다. 대기 중에는 켜지 않습니다.
++<!-- CARROT:SECTION:END BEHAVIOR -->
++
++<!-- CARROT:SECTION:BEGIN USAGE -->
++### 사용
++
++블루투스 버튼을 왼쪽/오른쪽 방향지시등 켜기로 매핑합니다. 유지 중 같은 버튼은 취소, 반대 버튼은 방향 전환입니다.
++
++정차 상태에서 점등과 취소를 먼저 확인합니다. 기본 원터치는 주행 중에도 사용할 수 있으며, 이 설정은 조향이나 차선변경 승인 조건을 바꾸지 않습니다.
++<!-- CARROT:SECTION:END USAGE -->
++
++<!-- CARROT:SECTION:BEGIN REFERENCE -->
++### 참고
++
++블루투스 회전 완료는 해당 방향 조향각 30도 이상을 확인한 뒤 주행 중 10도 이내로 0.4초 돌아온 상태로 판단합니다. 출발만으로 해제하지 않으며, 최대 유지 시간은 5분입니다. ATC 턴은 주행 중 해당 방향으로 차체 방향이 20도 이상 변한 것도 확인합니다. 정차나 턴 desire 종료만으로는 해제하지 않습니다. 조향 허용이 유지되는 동안만 기다리며, 운전자 취소·내비 취소(회전 진입 전)·입력 만료는 계속 반영합니다.
++
++USB-CAN은 최초 점멸만 요청하고 기존 차량 깜박이 유지 기능을 사용합니다. 입력·차량 상태·통신이 끊기면 유지 요청은 만료됩니다. 최초 점등을 4초 안에 확인하지 못하면 유지 요청을 취소합니다. 반대 방향을 빠르게 누르면 현재 순정 점멸이 끝난 뒤 가장 최근 요청을 실행하며, 대기는 최대 3.2초입니다. 유지 취소 후에도 순정 잔여 점멸이 끝날 수 있습니다. 실제 램프 입력에 기존 차로변경 설정이 반응할 수 있습니다.
++<!-- CARROT:SECTION:END REFERENCE -->
++
++<!-- CARROT:MANUAL:END AutoBlinkerControl -->
++
++<!-- CARROT:SETTING:END AutoBlinkerControl -->
+--- /dev/null
++++ b/EN-Automatic-turn-signals.md
+@@ -0,0 +1,59 @@
++<!-- CARROT:GENERATED schema="1" locale="en" group="STEER_LANECHANGE" param="AutoBlinkerControl" -->
++<!-- CARROT:AUTHORING guide="https://github.com/ajouatom/openpilot/blob/carrot-wip/tools/docs/wiki_settings/AUTHORING_GUIDE.md" editable="CARROT:MANUAL only" -->
++# Automatic turn signals
++
++**Menu:** Driving \> Steering \> Lane Change (Auto Turn)
++
++---
++
++<!-- CARROT:SETTING:BEGIN AutoBlinkerControl -->
++<a id="AutoBlinkerControl"></a>
++
++## Automatic turn signals
++
++`AutoBlinkerControl`
++
++0: Off (Bluetooth one-touch remains). 1: Hold Bluetooth signals started at or below 5 km/h until the turn completes; indicate from the ATC audioTurn cue through intersection stops until the vehicle turns and the steering returns near center. 2: Also indicate during actual ATC lane changes, excluding waiting. Same direction cancels a hold; opposite direction switches. Stock lever has priority. Requires a supported Jetson USB-CAN/B1 vehicle.
++
++<!-- CARROT:AUTO:BEGIN AutoBlinkerControl -->
++<!-- CARROT:AUTO:SOURCE facts="e2fd36790dd18b470e8e3f99b5b0d1dc01dcc82a1b8ed40d272aefcbb35a8d6c" semantic="aabe60b4f8fc45b8ca7b6c6373d85b1b03f56f273efd022229e24f8b3e8334cb" review="needs_review" -->
++<!-- CARROT:SECTION:BEGIN OVERVIEW -->
++- **Type:** Segmented choice
++- **Default:** `0`
++- **Range:** `0` ~ `2`
++- **Step:** `1`
++- **Menu:** Driving \> Steering \> Lane Change (Auto Turn)
++<!-- CARROT:SECTION:END OVERVIEW -->
++<!-- CARROT:AUTO:END AutoBlinkerControl -->
++
++<!-- CARROT:MANUAL:BEGIN AutoBlinkerControl -->
++<!-- CARROT:REVIEW reviewed-for="aabe60b4f8fc45b8ca7b6c6373d85b1b03f56f273efd022229e24f8b3e8334cb" reviewed-at="2026-10-26T00:00:00Z" -->
++<!-- CARROT:SECTION:BEGIN BEHAVIOR -->
++### Behavior
++
++Controls physical lamps on supported Jetson USB-CAN/B1 vehicles. Operating the stock lever ends the owned request.
++
++- **0:** Disables automatic control; Bluetooth one-touch remains available.
++- **1:** Holds signals started by Bluetooth at or below 5 km/h until turn completion, and indicates from the ATC audioTurn cue through intersection stops until the vehicle turns and the steering returns near center.
++- **2:** Also indicates from actual ATC lane-change start through completion. Waiting does not activate the lamps.
++<!-- CARROT:SECTION:END BEHAVIOR -->
++
++<!-- CARROT:SECTION:BEGIN USAGE -->
++### Usage
++
++Map remote buttons to Turn on left/right indicator. During a hold, the same button cancels and the opposite button switches direction.
++
++Check illumination and cancellation while parked first. Basic one-touch remains available while driving; this setting does not change steering or lane-change admission.
++<!-- CARROT:SECTION:END USAGE -->
++
++<!-- CARROT:SECTION:BEGIN REFERENCE -->
++### Reference
++
++Bluetooth turn completion requires steering at least 30 degrees toward the selected turn, then returning within 10 degrees for 0.4 seconds while moving. Departure alone does not cancel; the maximum hold is five minutes. ATC turns also require at least 20 degrees of measured heading change toward the turn while moving. Stopping or losing turn desire alone does not cancel. Waiting requires continued lateral permission; driver cancellation, navigation cancellation before physical entry, and stale inputs still release the request.
++
++USB-CAN requests the initial blink; the existing vehicle indicator-hold function maintains it. Input, vehicle-state or communication loss expires the hold request. A hold request is cancelled if initial illumination is not confirmed within four seconds. A rapid opposite input waits for the current OEM sequence to end, keeping only the latest request for at most 3.2 seconds. Cancelling a hold may still allow the remaining OEM flashes to finish. Existing lane-change settings may react to the actual lamp input.
++<!-- CARROT:SECTION:END REFERENCE -->
++
++<!-- CARROT:MANUAL:END AutoBlinkerControl -->
++
++<!-- CARROT:SETTING:END AutoBlinkerControl -->

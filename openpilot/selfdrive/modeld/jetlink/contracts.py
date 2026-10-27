@@ -5,8 +5,11 @@ from pathlib import Path
 import re
 
 from jetlink.spec import ModelSpec
+from jetlink import output_projection as projection
+from openpilot.common.jetson_model import read_spec
 
 DEFAULT_SPEC = ModelSpec.from_dict(json.loads(Path(__file__).with_name('cinque_v2.json').read_text()))
+JETSON_SPEC = ModelSpec.from_dict(read_spec())
 
 # Widths consumed by Carrot's parser, message publisher and action calculation.
 OUTPUT_WIDTHS = {
@@ -45,6 +48,12 @@ def validate_model_spec(spec):
     if spec.input_shapes.get('new_img') != (2, 6, 128, 256) or math.prod(spec.input_shapes.get('desire', ())) != 8:
       raise ValueError('Unsupported Jetlink stateful camera/desire contract')
     scalar_names = {'new_img', 'desire', 'traffic_convention', 'action_t'}
+    nav = set(spec.input_shapes) & {'nav_map', 'navigation'}
+    if nav:
+      if (nav != {'nav_map', 'navigation'} or spec.input_shapes['nav_map'] != (1, 1, 256, 256) or
+          spec.input_shapes['navigation'] != (1, 47)):
+        raise ValueError('Unsupported Jetlink navigation contract')
+      scalar_names |= nav
     states = set(spec.input_shapes) - scalar_names
     if not states or any(not name.startswith('state_') or
                          spec.output_shapes.get('next_' + name) != spec.input_shapes[name] for name in states):
@@ -75,16 +84,29 @@ def validate_model_spec(spec):
   action = spec.output_slices.get('action')
   if action is not None and slice_range(spec, action)[1] - slice_range(spec, action)[0] not in (2, 4):
     raise ValueError('Unsupported Jetlink action output')
-  if spec.sha256 == DEFAULT_SPEC.sha256 and spec.to_dict() != DEFAULT_SPEC.to_dict():
-    raise ValueError('Jetlink model identity or input/output contract mismatch')
+  for pinned in (DEFAULT_SPEC, JETSON_SPEC):
+    if spec.sha256 == pinned.sha256 and spec.to_dict() != pinned.to_dict():
+      raise ValueError('Jetlink model identity or input/output contract mismatch')
   return spec
 
 
 def model_name(spec):
+  from openpilot.common.big_model_catalog import available, model_spec
+  for key, entry in available().items():
+    if spec.sha256 == model_spec(key)['sha256']:
+      return 'N16 Nav (96244b1f)' if key == 'n16' else entry['name'] + ' (1365126a)'
   return 'Cinque v2' if spec.sha256 == DEFAULT_SPEC.sha256 else f'App model {spec.sha256[:12]}'
 
 
 def parse_outputs(parser, spec, result):
+  # Full outputs take precedence even when another model has the N16 prefix length.
+  if result.size != spec.output_nelem and result.size == projection.COUNT:
+    # Only the negotiated exact N16 prefix may omit graph-owned features.
+    # Do not fabricate zero hidden/map/navigation outputs for old consumers.
+    if not projection.eligible(spec) or result.shape != (projection.COUNT,):
+      raise ValueError('Invalid projected Jetlink output contract')
+    return parser.parse_outputs({name: result[None, at] for name, at in spec.output_slices.items()
+                                 if name not in projection.OMITTED})
   outputs = {name: result[None, at] for name, at in spec.output_slices.items()}
   # Older queued exports use five plan hypotheses; publishing still consumes
   # the selected 33 x 15 plan, as it does for the direct-plan exports.

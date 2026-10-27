@@ -137,7 +137,10 @@ def test_boot_usb_handles_version_wifi_status_but_never_inference(env, monkeypat
 def test_vehicle_pumps_updates_before_engine_and_ignores_non_gate_peers(tmp_path, monkeypatch):
   from openpilot.selfdrive.modeld.jetlink import startup
   release = tmp_path / 'release'
-  release.write_text(json.dumps(manifest()))
+  from openpilot.common.jetson_model import read_spec
+  value, spec = manifest(), read_spec()
+  value['model'].update(sha256=spec['sha256'], size=spec['nbytes'])
+  release.write_text(json.dumps(value))
   monkeypatch.setattr(startup, 'RELEASE', release)
   calls = []
   states = iter(['waiting_internet', 'downloading', 'verifying', 'ready'])
@@ -195,3 +198,16 @@ def test_existing_apply_service_launches_gate_without_old_start_timeout(env, mon
   assert command[0] == 'systemd-run' and command[-1] == 'boot'
   assert '--property=Restart=on-failure' in command
   assert not any('reboot' in part for part in command)
+
+
+@pytest.mark.parametrize('reply', [{'engine_state': 'none'}, {'carrot_update': None}])
+def test_vehicle_reconnects_if_gate_hands_usb_to_runtime_before_ready(monkeypatch, reply):
+  from openpilot.selfdrive.modeld.jetlink import startup
+  monkeypatch.setattr(startup, 'selected_release', lambda *a, **k: manifest())
+  sent = []
+  client = NS(t=NS(send_json=lambda *a: sent.append(a)), _next_seq=lambda: 1, state=lambda: reply)
+  with pytest.raises(ConnectionError, match='reconnecting'):
+    startup.wait_for_boot_update(client, {'carrot_host': 'jetson', startup.CAPABILITY: True}, None,
+                                lambda: True, lambda *a, **k: pytest.fail('not an update response'),
+                                sleep=lambda _: pytest.fail('must reconnect immediately'))
+  assert len(sent) == 1

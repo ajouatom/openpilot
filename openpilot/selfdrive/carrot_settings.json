@@ -20,6 +20,7 @@
               "zh": "起步动作",
               "params": [
                 "AlwaysLateral",
+                "TeslaAutoTurnSignals",
                 "AutoEngage",
                 "DisableMinSteerSpeed"
               ]
@@ -149,6 +150,7 @@
                 "LaneChangeDelay",
                 "LaneChangeBsd",
                 "LaneLineCheck",
+                "AutoBlinkerControl",
                 "BlinkerLatchedTurn",
                 "LaneChangeLeverWait",
                 "AutoTurnControl",
@@ -408,7 +410,6 @@
           "params": [
             "HyundaiCameraSCC",
             "IsLdwsCar",
-            "PalisadeBlinkerTest",
             "HapticFeedbackWhenSpeedCamera"
           ]
         },
@@ -421,11 +422,22 @@
             "CanfdHDA2",
             "HyundaiCanfdClusterDirectTx",
             "CanfdBlinkerControl",
+            "CanfdBlinkerKick",
+            "CanfdDebug",
+            "HDPuse"
+          ]
+        },
+        {
+          "id": "VEH_TEST",
+          "ko": "시험 전용",
+          "en": "Test Only",
+          "zh": "仅测试",
+          "params": [
             "CanfdBlinkerTest",
+            "CanfdBlinkerMenuTest",
             "CanfdBlinkerStalk",
             "CanfdBvmView",
-            "CanfdDebug",
-            "HDPuse",
+            "PalisadeBlinkerTest",
             "ClusterLaneTest",
             "ClusterLaneTestValue"
           ]
@@ -1444,15 +1456,15 @@
       "group": "조향일반",
       "name": "AutoTurnControl",
       "title": "ATC: AutoTurnControl(0)",
-      "descr": "0:사용안함\n1:차선변경\n2:차선변경+속도\n3:속도",
+      "descr": "0:사용안함\n1:차선변경\n2:차선변경+속도\n3:속도\n4:TBT 우회전 깜박이 트리거. 차선변경 가능 속도이면서 우회전까지 250m 이내인 경우, 실제 턴 시작 전까지 확인합니다. AutoBlinkerControl=2, 토크 확인 없음 필요. BSD·코너 후방 20m 및 우측 차선 확인 후 점등하며 기존 차선변경 코드를 사용합니다.",
       "egroup": "LATSET",
       "etitle": "ATC: AutoTurnControl",
-      "edescr": "(APN)0: not use, 1:laneChange, 2:laneChange+speed, 3:speed",
+      "edescr": "0: off, 1: lane change, 2: lane change + speed, 3: speed, 4: TBT right indicator trigger at an eligible lane-change speed AND within 250 metres, until the turn starts. Requires AutoBlinkerControl=2 and no torque confirmation. Checks BSD, rear corner gap >=20m and a right lane; existing lane-change logic handles lamp feedback.",
       "cgroup": "转向设置",
       "ctitle": "ATC: 自动转向控制",
-      "cdescr": "(APN) 0: 不使用, 1: 变道, 2: 变道+速度, 3: 速度",
+      "cdescr": "0: 不使用, 1: 变道, 2: 变道+速度, 3: 速度, 4: TBT右转指示灯触发。满足变道速度条件且距离右转250米以内，在开始转弯前检查。需要AutoBlinkerControl=2且无需扭矩确认，检查BSD、后方20米间距和右侧车道，沿用现有变道逻辑。",
       "min": 0,
-      "max": 3,
+      "max": 4,
       "default": 0,
       "unit": 1
     },
@@ -1852,6 +1864,56 @@
     },
     {
       "group": "시작",
+      "name": "TeslaAutoTurnSignals",
+      "title": "Tesla 자동 방향지시등",
+      "descr": "차량 CAN 버스와 유효한 실제 스토크 입력이 있는 Model 3/Y에서 기존 ATC 회전·차로변경 요청에 따라 방향지시등을 제어합니다. 운전자 조작을 우선하며 조향·출발 권한은 변경하지 않습니다. 기본 꺼짐, 변경 후 재부팅이 필요합니다. 실차 검증 전 일반 도로에서 사용하지 마세요.",
+      "egroup": "START",
+      "etitle": "Tesla Automatic Turn Signals",
+      "edescr": "Control Model 3/Y turn signals for existing ATC turns and lane changes when vehicle CAN and valid physical stalk input are available. Driver input takes priority; steering and departure permissions are unchanged. Default OFF; reboot after changes. Closed-course validation is required before road use.",
+      "cgroup": "启动设置",
+      "ctitle": "特斯拉自动转向灯",
+      "cdescr": "仅适用于车辆 CAN 总线及真实拨杆输入有效的 Model 3/Y，按现有 ATC 转弯、变道请求控制转向灯。驾驶员优先，不增加转向或起步权限。默认关闭，修改后需重启。未经封闭场地实车验证，不应用于公共道路。",
+      "min": 0,
+      "max": 1,
+      "default": 0,
+      "unit": 1
+    },
+    {
+      "group": "시험 전용",
+      "name": "CanfdBlinkerTest",
+      "title": "정차 SPAS 깜박이 시험",
+      "descr": "SPAS 사용 설정 후 재부팅해야 합니다. 0 취소, 1/2 ECU 응답 확인 후 좌/우 연속, 3/4 응답 확인 후 짧은 신호+유지. 아이오닉5PE 정차 비교: 5/6 연속 3초, 7/8 0.2초 송신+기존 유지(총 10초), 9/10 0.2초만 송신. 11/12 순정 수신 직후 시작 신호를 수신당 한 번씩 점등 확인 후 0.1초까지(최대 0.5초) 보내고 기존 유지(총 10초). 13/14 순정 수신 직후 SPAS만 반복해 최대 10초 유지(기존 유지 신호 없음). 동시 송신 시험은 ECU 정지 명령을 보내지 않습니다. P·속도 0·제어 비활성을 계속 확인하며 시작 후 30초 대기합니다. 취소 또는 재시도는 0을 선택하세요. 시작 시 0으로 초기화합니다. 15/16: 첨부 원본 패치 순서(APRK 1003→5프레임 뒤 288301, 응답 대기 없이 SPAS 50Hz) 좌/우 정차 시험. 실제 제어 프레임과 원본 패커 사용, 최대 10초 후 1001 복구. CAN 오류·차량 상태 변화 시 중단. 17/18: parked left/right 0x3C1 lever replay at 20Hz, max 10s; no APRK/SPAS, cancel on driver/input/CAN change.",
+      "egroup": "Test Only",
+      "etitle": "Parked SPAS indicator test",
+      "edescr": "With SPAS enabled after reboot: 1/2 acknowledged continuous left/right, 3/4 acknowledged short-plus-hold. Parked coexistence comparisons on Ioniq5PE only: 5/6 continuous, 7/8 0.2-second pulse plus existing hold, 9/10 pulse only. 11/12 one packet per new stock receipt, ending 0.1s after lamp confirmation and at most 0.5s, then existing confirmed hold for a 10-second total. 13/14 repeat only SPAS after fresh stock reception for up to 10 seconds, without the existing hold. Coexistence tests send no ECU diagnostics. P, zero speed and inactive controls required throughout; 7/8/11/12/13/14 last 10 seconds total, others at most 3 seconds; coexistence cooldown is 30 seconds from start. Select 0 to cancel or before repeating. Resets at startup. 15/16: supplied-patch left/right parked comparison: APRK 1003, then 288301 after five controller frames, SPAS on even frames without waiting for replies. Uses actual controller frame/native packer, at most 10 seconds, 1001 restore on end or CAN/vehicle guard failure. 17/18: parked left/right 0x3C1 lever replay at 20Hz, max 10s; no APRK/SPAS, cancel on driver/input/CAN change.",
+      "cgroup": "仅测试",
+      "ctitle": "Parked SPAS indicator test",
+      "cdescr": "With SPAS enabled after reboot: 1/2 acknowledged continuous left/right, 3/4 acknowledged short-plus-hold. Parked coexistence comparisons on Ioniq5PE only: 5/6 continuous, 7/8 0.2-second pulse plus existing hold, 9/10 pulse only. 11/12 one packet per new stock receipt, ending 0.1s after lamp confirmation and at most 0.5s, then existing confirmed hold for a 10-second total. 13/14 repeat only SPAS after fresh stock reception for up to 10 seconds, without the existing hold. Coexistence tests send no ECU diagnostics. P, zero speed and inactive controls required throughout; 7/8/11/12/13/14 last 10 seconds total, others at most 3 seconds; coexistence cooldown is 30 seconds from start. Select 0 to cancel or before repeating. Resets at startup. 15/16: supplied-patch left/right parked comparison: APRK 1003, then 288301 after five controller frames, SPAS on even frames without waiting for replies. Uses actual controller frame/native packer, at most 10 seconds, 1001 restore on end or CAN/vehicle guard failure. 17/18: parked left/right 0x3C1 lever replay at 20Hz, max 10s; no APRK/SPAS, cancel on driver/input/CAN change.",
+      "min": 0,
+      "max": 18,
+      "default": 0,
+      "unit": 1,
+      "risk": "high"
+    },
+    {
+      "group": "시작",
+      "name": "CanfdBlinkerControl",
+      "title": "CAN-FD SPAS 깜박이 사용(시험)",
+      "descr": "ECAN의 SPAS1/2 규격과 운전자 입력이 확인되는 현대·기아·제네시스 CAN-FD 차량에서 콤마로 깜박이를 제어합니다. 기본 꺼짐이며 변경 후 재부팅해야 합니다. 선택하면 Jetson USB2CAN 깜박이 경로는 중지됩니다. 깜박이 요청 중 주차 ECU를 잠시 정지하고 종료 후 복구합니다. 기존 자동 깜박이 제어 단계가 적용되며 차종별 실차 확인이 필요합니다.",
+      "egroup": "START",
+      "etitle": "CAN-FD SPAS indicators (trial)",
+      "edescr": "Use comma SPAS indicators on Hyundai/Kia/Genesis CAN-FD vehicles with matching ECAN SPAS1/2 and valid driver input. Default OFF; reboot required. Disables the Jetson USB2CAN blinker path. The parking ECU is temporarily paused only during a requested signal and restored afterwards. Existing AutoBlinkerControl modes apply. Vehicle acceptance is required.",
+      "cgroup": "启动设置",
+      "ctitle": "CAN-FD SPAS indicators (trial)",
+      "cdescr": "Use comma SPAS indicators on Hyundai/Kia/Genesis CAN-FD vehicles with matching ECAN SPAS1/2 and valid driver input. Default OFF; reboot required. Disables the Jetson USB2CAN blinker path. The parking ECU is temporarily paused only during a requested signal and restored afterwards. Existing AutoBlinkerControl modes apply. Vehicle acceptance is required.",
+      "min": 0,
+      "max": 1,
+      "default": 0,
+      "unit": 1,
+      "risk": "high"
+    },
+    {
+      "group": "시작",
       "name": "RecordRoadCam",
       "title": "RoadCam녹화",
       "descr": "저장소에 비디오 녹화\n0:녹화안함,1:일반카메라\n2:일반카메라+광각카메라",
@@ -1883,14 +1945,14 @@
       "unit": 1
     },
     {
-      "group": "시작",
+      "group": "시험 전용",
       "name": "ClusterLaneTest",
       "title": "계기판 표시 테스트: 칸(CCNC)",
       "descr": "테스트용. 0: 끔. 바꿀 칸 번호를 고르고, 보낼 값은 「계기판 표시 테스트: 값」에서 정합니다. 재부팅하면 0.\n1 속도제한 숫자 · 2 제한표시 색/깜빡임 · 3 표지판 종류 · 4 날씨 보조 · 5 국가 · 6 SLA 아이콘 · 7~11 0x162 이름 없는 비트(7: 53~63, 8: 159~162, 9: 183~191, 10: 252~255, 11: 87/111/135/212) · 12 HDA아이콘 · 13 LFA아이콘 · 14 설정속도 색 · 15 설정속도HUD · 16 차 원 · 17 차간 DISTANCE · 18 차간 차 · 19 차간 간격 · 20 앞차 · 21 ALERTS_4 문구 · 22 ALERTS_5 문구 · 23 배경 · 24 차로강조 · 25 차로줌 · 26 중앙선 · 27~29 ALERTS_1~3 문구 · 30~33 0x161 이름 없는 비트(30: 36~41, 31: 45~50, 32: 175~180, 33: 246~255) · 34~62 0x161 나머지 신호(경고 아이콘·후측방·경고음 등) · 63 0x161 이름 없는 비트 · 64~95 0x162 나머지(진동·앞/옆차 물체·고장 표시) · 96~126 0x1ea 신호 · 127~137 0x1ea 이름 없는 비트 · 138~143 0x200 신호 · 144~145 0x200 이름 없는 비트. 번호별 이름은 사용설명서\n표시만 바뀌고 제어 영향 없음.",
-      "egroup": "START",
+      "egroup": "Test Only",
       "etitle": "Cluster Display Test: Field (CCNC)",
       "edescr": "Test only. 0: off. Pick the field; the value comes from \"Cluster Display Test: Value\". Resets to 0 on reboot.\n1 speed limit · 2 limit color/flash · 3 sign type · 4 weather · 5 country · 6 SLA icon · 7-11 unnamed 0x162 bits (7: 53-63, 8: 159-162, 9: 183-191, 10: 252-255, 11: 87/111/135/212) · 12 HDA icon · 13 LFA icon · 14 set speed color · 15 set speed HUD · 16 car circle · 17 gap DISTANCE · 18 gap car · 19 gap spacing · 20 lead · 21 ALERTS_4 text · 22 ALERTS_5 text · 23 background · 24 lane highlight · 25 lane zoom · 26 center line · 27-29 ALERTS_1-3 text · 30-33 unnamed 0x161 bits (30: 36-41, 31: 45-50, 32: 175-180, 33: 246-255) · 34-62 other 0x161 signals (warning icons, blind spot, chimes) · 63 unnamed 0x161 bits · 64-95 other 0x162 (vibration, front/side objects, fault icons) · 96-126 0x1ea signals · 127-137 unnamed 0x1ea bits · 138-143 0x200 signals · 144-145 unnamed 0x200 bits. See the manual for each number\nDisplay only; no effect on control.",
-      "cgroup": "启动设置",
+      "cgroup": "仅测试",
       "ctitle": "仪表显示测试: 字段 (CCNC)",
       "cdescr": "仅用于测试。0: 关闭。选择字段，发送值在「仪表显示测试: 值」中设定。重启后恢复为 0。\n1 限速数字 · 2 限速显示颜色/闪烁 · 3 标志类型 · 4 天气 · 5 国家 · 6 SLA 图标 · 7~11 0x162 未命名位(7: 53~63, 8: 159~162, 9: 183~191, 10: 252~255, 11: 87/111/135/212) · 12 HDA图标 · 13 LFA图标 · 14 设定速度颜色 · 15 设定速度HUD · 16 车圈 · 17 车距DISTANCE · 18 车距车 · 19 车距间隔 · 20 前车 · 21 ALERTS_4 文字 · 22 ALERTS_5 文字 · 23 背景 · 24 车道高亮 · 25 车道缩放 · 26 中心线 · 27~29 ALERTS_1~3 文字 · 30~33 0x161 未命名位(30: 36~41, 31: 45~50, 32: 175~180, 33: 246~255) · 34~62 0x161 其余信号 · 63 0x161 未命名位 · 64~95 0x162 其余 · 96~126 0x1ea 信号 · 127~137 0x1ea 未命名位 · 138~143 0x200 信号 · 144~145 0x200 未命名位\n仅改变显示，不影响控制。",
       "min": 0,
@@ -1899,14 +1961,14 @@
       "unit": 1
     },
     {
-      "group": "시작",
+      "group": "시험 전용",
       "name": "ClusterLaneTestValue",
       "title": "계기판 표시 테스트: 값(CCNC)",
       "descr": "「계기판 표시 테스트: 칸」에 보낼 값. 칸의 비트 수를 넘는 부분은 잘립니다(표지판 0~255, 4비트 칸 0~15 등).\n-1: 자동 순환 — 1초마다 0부터 끝까지 올리고 현재 값을 계기판 설정속도 숫자에 표시(7~11 비트 칸은 한 비트씩, 비트 번호 표시). 재부팅하면 0.",
-      "egroup": "START",
+      "egroup": "Test Only",
       "etitle": "Cluster Display Test: Value (CCNC)",
       "edescr": "Value sent to the field chosen in \"Cluster Display Test: Field\". Bits beyond the field width are dropped (sign 0-255, 4-bit fields 0-15, etc.).\n-1: sweep, stepping from 0 to the field's max every 1 s and showing it in the set speed number (bit fields 7-11 step one bit at a time and show the bit number). Resets to 0 on reboot.",
-      "cgroup": "启动设置",
+      "cgroup": "仅测试",
       "ctitle": "仪表显示测试: 值 (CCNC)",
       "cdescr": "发送到「仪表显示测试: 字段」的值。超出字段位数的部分被截断（标志 0~255，4 位字段 0~15 等）。\n-1: 自动循环 — 每 1 秒从 0 递增到最大值，并在设定速度数字处显示当前值（7~11 位字段逐位切换并显示位号）。重启后恢复为 0。",
       "min": -1,
@@ -2494,6 +2556,23 @@
     },
     {
       "group": "조향일반",
+      "name": "AutoBlinkerControl",
+      "title": "깜박이 자동제어",
+      "descr": "0: 끄기(블루투스 원터치 유지). 1: 5km/h 이하 블루투스 입력을 회전 완료까지 유지하고 ATC audioTurn 알림 시점부터 교차로 정차 중에도 유지하며 실제 회전 후 핸들이 중앙으로 돌아오면 자동 해제. 2: 1번 + ATC 차선변경이 실제 시작될 때부터 완료까지 점멸(대기 중 제외). 같은 방향 버튼으로 유지 취소, 반대 버튼으로 전환. 순정 레버 우선. 지원하는 젯슨 USB-CAN/B1 차량 전용.",
+      "egroup": "LAT",
+      "etitle": "Automatic turn signals",
+      "edescr": "0: Off (Bluetooth one-touch remains). 1: Hold Bluetooth signals started at or below 5 km/h until the turn completes; indicate from the ATC audioTurn cue through intersection stops until the vehicle turns and the steering returns near center. 2: Also indicate during actual ATC lane changes, excluding waiting. Same direction cancels a hold; opposite direction switches. Stock lever has priority. Requires a supported Jetson USB-CAN/B1 vehicle.",
+      "cgroup": "转向",
+      "ctitle": "自动转向灯",
+      "cdescr": "0：关闭（保留蓝牙轻触）。1：低于5km/h蓝牙保持至转弯结束，从ATC audioTurn提示开始保持，路口停车时不熄灭，实际转弯后方向盘回正时解除。2：另含实际开始的ATC变道，等待时不亮。同方向取消保持，反方向切换。原车拨杆优先。需要支持的Jetson USB-CAN/B1车辆。",
+      "min": 0,
+      "max": 2,
+      "default": 0,
+      "unit": 1,
+      "risk": "high"
+    },
+    {
+      "group": "조향일반",
       "name": "BlinkerLatchedTurn",
       "title": "깜빡이 레버로 회전/차선변경 구분 (km/h, 0=끔)",
       "descr": "현대 CAN-FD(0x3C1 레버 신호) 전용. 0이면 끔. 설정 속도 이하에서는 반만 밀어(원터치) 깜빡이가 켜짐-꺼짐-켜짐을 본 뒤 끝까지 걸면(고정) 좌/우회전, 그냥 고정하거나 원터치만 하면 차선변경으로 정하고, 레버가 원터치 위치에 있는 동안은 차선변경을 시작하지 않습니다(고정도 걸리기 전 약 0.1초 그 위치를 지나감). 설정 속도를 넘으면 레버를 고정해도 차선변경만 합니다.",
@@ -2831,15 +2910,15 @@
     },
     {
       "group": "시작",
-      "name": "CanfdBlinkerControl",
+      "name": "CanfdBlinkerKick",
       "title": "차로변경 깜빡이 자동",
-      "descr": "CAN-FD 카메라 SCC 차량에서 운전자가 깜빡이 없이 차선을 넘어가기 시작하면(모델 차선 기준, 인게이지 무관) 그 방향 깜빡이를 약 1초 켭니다. D단 30km/h 이상에서만, 그때만 자동주차 ECU를 잠시 멈췄다가 바로 다시 켭니다. panda 펌웨어가 바뀝니다. 기본 꺼짐.",
+      "descr": "CAN-FD 카메라 SCC 차량에서 운전자가 깜빡이 없이 차선을 넘어가기 시작하면(모델 차선 기준, 인게이지 무관) 그 방향 깜빡이를 약 1초 켭니다. D단 30km/h 이상에서만, 그때만 자동주차 ECU를 잠시 멈췄다가 바로 다시 켭니다. panda 펌웨어가 바뀝니다. 기본 꺼짐. 「CAN-FD SPAS 깜박이 사용」(CanfdBlinkerControl)이 켜져 있으면 보내지 않습니다.",
       "egroup": "START",
       "etitle": "Lane Change Auto Blinker",
-      "edescr": "On CAN-FD camera SCC vehicles, flashes the blinker for about 1 s when the driver starts crossing a lane line without signalling (model lane lines, engaged or not). Only in D above 30 km/h; the parking ECU is paused just for that and restored right away. Changes the panda firmware. Off by default.",
+      "edescr": "On CAN-FD camera SCC vehicles, flashes the blinker for about 1 s when the driver starts crossing a lane line without signalling (model lane lines, engaged or not). Only in D above 30 km/h; the parking ECU is paused just for that and restored right away. Changes the panda firmware. Off by default. Not sent while CAN-FD SPAS Blinkers (CanfdBlinkerControl) is on.",
       "cgroup": "启动设置",
       "ctitle": "变道自动转向灯",
-      "cdescr": "CAN-FD 摄像头 SCC 车辆在驾驶员未打转向灯开始越过车道线时（按模型车道线，无论是否接管）打开对应方向转向灯约 1 秒。仅在 D 挡 30km/h 以上，期间短暂暂停泊车 ECU 后立即恢复。会更改 panda 固件。默认关闭。",
+      "cdescr": "CAN-FD 摄像头 SCC 车辆在驾驶员未打转向灯开始越过车道线时（按模型车道线，无论是否接管）打开对应方向转向灯约 1 秒。仅在 D 挡 30km/h 以上，期间短暂暂停泊车 ECU 后立即恢复。会更改 panda 固件。默认关闭。开启 CanfdBlinkerControl 时不发送。",
       "min": 0,
       "max": 1,
       "default": 0,
@@ -2848,14 +2927,14 @@
       "risk": "high"
     },
     {
-      "group": "시작",
-      "name": "CanfdBlinkerTest",
+      "group": "시험 전용",
+      "name": "CanfdBlinkerMenuTest",
       "title": "깜빡이 명령 테스트",
       "descr": "0: 끔, 1: 왼쪽, 2: 오른쪽.\n속도·기어와 상관없이 자동주차 ECU를 멈추고 그 방향 깜빡이 명령을 계속 보냅니다(「차로변경 깜빡이 자동」 꺼져 있어도 동작). 0으로 돌리면 자동주차 ECU를 다시 켭니다. 주행 중에도 동작하니 2인 1조로 시험하세요. 재부팅하면 0.",
-      "egroup": "START",
+      "egroup": "Test Only",
       "etitle": "Blinker Command Test",
       "edescr": "0: Off, 1: Left, 2: Right.\nAt any speed or gear, pauses the parking ECU and keeps sending that blinker command (works even with Lane Change Auto Blinker off). Back to 0 restores the parking ECU. Works while driving; test with a second person. Resets to 0 on reboot.",
-      "cgroup": "启动设置",
+      "cgroup": "仅测试",
       "ctitle": "转向灯指令测试",
       "cdescr": "0: 关闭, 1: 左, 2: 右。\n不论车速和挡位，暂停泊车 ECU 并持续发送该方向转向灯指令（即使「变道自动转向灯」关闭也有效）。改回 0 恢复泊车 ECU。行驶中也有效，请两人一组测试。重启后恢复为 0。",
       "min": 0,
@@ -2864,14 +2943,14 @@
       "unit": 1
     },
     {
-      "group": "시작",
+      "group": "시험 전용",
       "name": "PalisadeBlinkerTest",
       "title": "팰리세이드 깜빡이 상태 시험",
       "descr": "팰리세이드 전용. 0: 끔, 1: 왼쪽, 2: 오른쪽. P단·정차·제어 해제 상태에서 CGW1(0x541)의 깜빡이 상태(레버 방향 + 순정처럼 0.35초 점멸)만 20Hz로 최대 3초 송신합니다. 다시 시험하려면 0으로 바꾼 뒤 선택하세요. 실제 램프 작동은 미검증입니다. 재시작하면 0.",
-      "egroup": "START",
+      "egroup": "Test Only",
       "etitle": "Palisade Blinker Status Test",
       "edescr": "Palisade only. 0: Off, 1: Left, 2: Right. Sends CGW1 (0x541) blinker status (lever side + lamp flashing 0.35 s like stock) at 20 Hz for up to 3 seconds, only stationary in P with controls disengaged. Select Off before retrying. Lamp actuation is unverified. Resets on restart.",
-      "cgroup": "启动设置",
+      "cgroup": "仅测试",
       "ctitle": "Palisade 转向灯状态测试",
       "cdescr": "仅限 Palisade。0: 关闭，1: 左，2: 右。仅在 P 挡、静止且控制关闭时，以 20Hz 发送 CGW1 转向灯状态（拨杆方向 + 与原厂相同的 0.35 秒闪烁），最长 3 秒。重新测试前先选 0。实际灯光响应尚未验证。重启归零。",
       "min": 0,
@@ -2880,14 +2959,14 @@
       "unit": 1
     },
     {
-      "group": "시작",
+      "group": "시험 전용",
       "name": "CanfdBlinkerStalk",
       "title": "깜빡이 레버 재생 테스트",
       "descr": "0: 끔, 1: 왼쪽(유지), 2: 오른쪽(유지), 3: 왼쪽 탭, 4: 오른쪽 탭. 조향칼럼 레버 메시지(0x3C1)를 재생해 BCM이 깜빡이를 켜게 합니다. 1·2는 20Hz로 계속, 3·4는 순정과 같은 5Hz로 0.35초 탭만 보냅니다(GV80 방식). 자동주차 ECU를 끄지 않습니다. 주행 중에도 동작하니 2인 1조로 시험하세요. 재부팅하면 0.",
-      "egroup": "START",
+      "egroup": "Test Only",
       "etitle": "Blinker Stalk Replay Test",
       "edescr": "0: Off, 1: Left (hold), 2: Right (hold), 3: Left tap, 4: Right tap. Replays the steering column lever message (0x3C1) so the BCM turns the blinker on. 1/2 send at 20 Hz continuously; 3/4 send a 0.35 s tap at the stock 5 Hz (GV80 style). Does not pause the parking ECU. Works while driving; test with a second person. Resets to 0 on reboot.",
-      "cgroup": "启动设置",
+      "cgroup": "仅测试",
       "ctitle": "转向灯拨杆重放测试",
       "cdescr": "0: 关闭, 1: 左(保持), 2: 右(保持), 3: 左轻点, 4: 右轻点。重放转向柱拨杆消息(0x3C1)，让 BCM 打开转向灯。1/2 以 20Hz 持续发送；3/4 以原厂 5Hz 发送 0.35 秒轻点(GV80 方式)。不暂停泊车 ECU。行驶中也有效，请两人一组测试。重启后恢复为 0。",
       "min": 0,
@@ -2896,14 +2975,14 @@
       "unit": 1
     },
     {
-      "group": "시작",
+      "group": "시험 전용",
       "name": "CanfdBvmView",
       "title": "계기판 사각지대 카메라 보기",
       "descr": "0: 끔, 1: 왼쪽, 2: 오른쪽, 3: 양쪽(미검증). 깜빡이를 켜지 않고 계기판 사각지대 카메라 화면만 띄웁니다. 뷰 상태 메시지(0x400 byte4)를 순정과 같은 5Hz로 대신 보냅니다. 화면 표시 전용이며 조향·제동과 무관합니다. 3은 차량이 만드는 값이 아니라 동작하지 않을 수 있습니다. 재부팅하면 0.",
-      "egroup": "START",
+      "egroup": "Test Only",
       "etitle": "Cluster Blind-Spot Camera View",
       "edescr": "0: Off, 1: Left, 2: Right, 3: Both (untested). Shows the cluster blind-spot camera without turning the blinker on by sending the view status message (0x400 byte 4) at the stock 5 Hz. Display only, unrelated to steering or braking. 3 is not a value the car produces, so it may do nothing. Resets to 0 on reboot.",
-      "cgroup": "启动设置",
+      "cgroup": "仅测试",
       "ctitle": "仪表盘盲区摄像头画面",
       "cdescr": "0: 关闭, 1: 左, 2: 右, 3: 两侧(未验证)。不打开转向灯，只显示仪表盘盲区摄像头画面，方法是以原厂同样的 5Hz 代发画面状态消息(0x400 第4字节)。仅用于显示，与转向、制动无关。3 不是车辆本身产生的值，可能无效。重启后恢复为 0。",
       "min": 0,
@@ -2960,9 +3039,18 @@
       "unit": 1,
       "control": "select",
       "options": {
-        "ko": ["정상", "좌우 반전"],
-        "en": ["Normal", "Invert left/right"],
-        "zh": ["正常", "左右反转"]
+        "ko": [
+          "정상",
+          "좌우 반전"
+        ],
+        "en": [
+          "Normal",
+          "Invert left/right"
+        ],
+        "zh": [
+          "正常",
+          "左右反转"
+        ]
       },
       "risk": "high"
     },
@@ -3079,9 +3167,21 @@
       "unit": 1,
       "control": "select",
       "options": {
-        "ko": ["2단계", "3단계", "4단계"],
-        "en": ["2 levels", "3 levels", "4 levels"],
-        "zh": ["2级", "3级", "4级"]
+        "ko": [
+          "2단계",
+          "3단계",
+          "4단계"
+        ],
+        "en": [
+          "2 levels",
+          "3 levels",
+          "4 levels"
+        ],
+        "zh": [
+          "2级",
+          "3级",
+          "4级"
+        ]
       }
     },
     {
@@ -4147,13 +4247,13 @@
       "group": "외부 HUD",
       "name": "ClusterHud",
       "title": "외부 HUD 활성화(0)",
-      "descr": "0: 끄기\n1: TURZX 9.2인치\n본체 USB에 연결한 HUD에 적용됩니다. Jetson USB에 연결한 HUD는 이 설정과 무관하게 자동 실행됩니다. 시동 OFF 시 화면을 끄며, 항상 켜기는 HUD 디버그 설정을 따릅니다.\ncarrot-nav의 Jetson은 콤마에서 전용 Wi-Fi로 HUD·지도 데이터를 받습니다. USB HUD 전송으로 되돌아가지 않습니다. 본체 출력은 10 FPS, eGPU 활성 시 5 FPS이며 Jetson 목표 출력은 10 FPS입니다.",
+      "descr": "0: 끄기\n1: TURZX 9.2인치\n본체 USB에 연결한 HUD에 적용됩니다. Jetson USB에 연결한 HUD는 이 설정과 무관하게 자동 실행됩니다. 시동 OFF 시 화면을 끄며, 항상 켜기는 HUD 디버그 설정을 따릅니다.\nJetson은 지원 런타임에서 추론 중 USB로 HUD·지도·신호등 정보를 받습니다. 구형 수신기는 업데이트 전까지 기존 Wi-Fi 경로를 사용합니다. 본체 출력은 10 FPS, eGPU 활성 시 5 FPS이며 Jetson 목표 출력은 10 FPS입니다.",
       "egroup": "CLUSTER HUD",
       "etitle": "External HUD Display(0)",
-      "edescr": "0: Off\n1: TURZX 9.2 inch\nApplies to a USB HUD connected to this device. A USB HUD connected to Jetson starts automatically regardless of this setting. The display turns off with ignition; HUD Debug controls always-on output.\nOn carrot-nav, Jetson receives HUD and navigation data from comma over dedicated Wi-Fi, without USB display fallback. Device output is 10 FPS, or 5 FPS with an active eGPU. Jetson targets 10 FPS.",
+      "edescr": "0: Off\n1: TURZX 9.2 inch\nApplies to a USB HUD connected to this device. A USB HUD connected to Jetson starts automatically regardless of this setting. The display turns off with ignition; HUD Debug controls always-on output.\nSupported Jetson runtimes receive HUD, navigation and signal information over USB during inference. Older receivers retain their Wi-Fi path until updated. Device output is 10 FPS, or 5 FPS with an active eGPU. Jetson targets 10 FPS.",
       "cgroup": "外部 HUD",
       "ctitle": "外部 HUD 显示(0)",
-      "cdescr": "0: 关闭\n1: TURZX 9.2 英寸\n适用于直接连接本机的 USB HUD。连接到 Jetson USB 的 HUD 自动运行，不受此设置影响。熄火后关闭屏幕；HUD 调试设置控制常亮。在 carrot-nav 上，Jetson 通过专用 Wi-Fi 接收 HUD 和导航数据，不回退到 USB 传输。Jetson 目标输出为 10 FPS。",
+      "cdescr": "0: 关闭\n1: TURZX 9.2 英寸\n适用于直接连接本机的 USB HUD。连接到 Jetson USB 的 HUD 自动运行，不受此设置影响。熄火后关闭屏幕；HUD 调试设置控制常亮。支持的 Jetson 运行时在推理期间通过 USB 接收 HUD、导航和信号灯信息；旧接收器更新前保留 Wi-Fi。Jetson 目标输出为 10 FPS。",
       "min": 0,
       "max": 1,
       "default": 0,
@@ -4382,15 +4482,15 @@
       "group": "외부 HUD",
       "name": "ClusterHudScreenMode",
       "title": "외부 HUD 화면 모드(0)",
-      "descr": "-1: 3D 전체화면\n0: 기본(내비/주행 리포트)\n1: 디버그\n2: 디버그(시스템)\n3: 디버그(그래프1)\n4: 디버그(그래프2)\n5: 주행 리포트",
+      "descr": "-1: 3D 전체화면\n0: 기본(내비/주행 리포트)\n1: 디버그\n2: 디버그(시스템)\n3: 디버그(그래프1)\n4: 디버그(그래프2)\n5: 주행 리포트\n6: 외부 내비 전체화면\n7: 주행화면 + 오른쪽 Nav 지도",
       "egroup": "CLUSTER HUD",
       "etitle": "External HUD Screen Mode(0)",
-      "edescr": "-1: 3D fullscreen\n0: Default (navigation/driving report)\n1: Debug\n2: Debug (system)\n3: Debug (graph1)\n4: Debug (graph2)\n5: Driving Report",
+      "edescr": "-1: 3D fullscreen\n0: Default (navigation/driving report)\n1: Debug\n2: Debug (system)\n3: Debug (graph1)\n4: Debug (graph2)\n5: Driving Report\n6: External navigation fullscreen\n7: Driving view + Nav map on right",
       "cgroup": "外部 HUD",
       "ctitle": "外部 HUD 画面模式(0)",
-      "cdescr": "-1: 3D全屏\n0: 默认(导航/驾驶报告)\n1: 调试\n2: 调试(系统)\n3: 调试(图表1)\n4: 调试(图表2)\n5: 驾驶报告",
+      "cdescr": "-1: 3D全屏\n0: 默认(导航/驾驶报告)\n1: 调试\n2: 调试(系统)\n3: 调试(图表1)\n4: 调试(图表2)\n5: 驾驶报告\n6: 外部导航全屏\n7: 驾驶画面 + 右侧Nav地图",
       "min": -1,
-      "max": 5,
+      "max": 7,
       "default": 0,
       "unit": 1,
       "control": "select"

@@ -189,3 +189,7 @@ bump ...` 구조라서, 적용 가능한 primary camera 또는 section이 있으
 - 두 브랜치 모두 receiver가 advertised stale timeout만으로 control item을 자동 expire하지는 않는다.
   연결과 item presence가 유지되면 2 Hz cereal heartbeat가 계속되고, SDI/TBT 거리는 차량 이동량만큼
   로컬 차감된다.
+
+## 2026-10-12 carrot-nav 지도 모델 연동
+
+`carrot-nav`에서 기존 7713/7714 TBT·route를 콤마의 새 eGPU Nav 모델 입력에 연결했습니다. 연결된 외부 네비가 지도 경로와 안내를 모두 소유하며, 경로가 없거나 이탈 상태이면 저장된 Mapbox 경로를 섞지 않습니다. 외부 경로 수신은 Mapbox 목적지를 덮어쓰지 않고, 연결 종료 후 Mapbox가 재계산합니다. 기존 과속카메라·구간·회전 감속 계산과 순정 네비 우선순위 규칙은 유지합니다. [통합 설계와 검증 범위](nav_model_integration_20261012.md)를 참고하세요. 이 변경은 carrot-nav 전용이며 다른 브랜치의 동작을 변경한 것으로 해석하지 않습니다.

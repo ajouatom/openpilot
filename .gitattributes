@@ -19,3 +19,6 @@ openpilot/system/hardware/tici/updater -diff -merge -text
 *.ttf -filter -diff -merge -text
 *.otf -filter -diff -merge -text
 *.wav -filter -diff -merge -text
+
+# Pinned PEAK source hashes must be identical on Windows and Linux.
+tools/jetlink/peak_usb/* text eol=lf

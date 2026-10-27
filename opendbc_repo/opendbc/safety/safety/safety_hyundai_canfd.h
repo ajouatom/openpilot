@@ -2,6 +2,7 @@
 
 #include "safety_declarations.h"
 #include "safety_hyundai_common.h"
+#include "safety_hyundai_spas.h"
 
 const TorqueSteeringLimits HYUNDAI_CANFD_STEERING_LIMITS = {
   .max_steer = 512, //270,
@@ -46,7 +47,7 @@ const CanMsg HYUNDAI_CANFD_HDA2_LONG_TX_MSGS[] = {
   {0x2A4, 0, 24}, // CAM_0x2A4
   {0x51, 0, 32},  // ADRV_0x51
   {0x730, 1, 8},  // tester present for ADAS ECU disable
-  {0x7B1, 0, 8},  // parking ECU (APRK) session / disable / tester present, CanfdBlinkerControl
+  {0x7B1, 0, 8},  // parking ECU (APRK) session / disable / tester present, CanfdBlinkerKick
   {0x165, 0, 24}, // SPAS1, sent while APRK is silenced
   {0x16A, 0, 32}, // SPAS2 BLINKER_CONTROL, sent while APRK is silenced
   {0x3C1, 0, 8},  // BLINKER_STALKS replay (CanfdBlinkerStalk)
@@ -511,6 +512,7 @@ static bool canfd_bfwd_reuse_last(CanfdBufferedFwd* st, CANPacket_t* pkt) {
 
 
 static void hyundai_canfd_rx_hook(const CANPacket_t *to_push) {
+  hyundai_spas_rx(to_push, microsecond_timer_get());
   int bus = GET_BUS(to_push);
   int addr = GET_ADDR(to_push);
 
@@ -618,6 +620,15 @@ static bool hyundai_canfd_tx_hook(const CANPacket_t *to_send_const) {
   int addr = GET_ADDR(to_send);
   bool violation = false;
 
+  // carrot-wip SPAS path (CANFD_SPAS_BLINKERS) owns these ids only when enabled; otherwise our checks below apply
+  // (CanfdBlinkerKick/MenuTest 0x7B1/0x165/0x16A, CanfdBlinkerStalk 0x3C1)
+  if (hyundai_spas_enabled) {
+    if (addr == 0x3C1) { return hyundai_stalk_tx(to_send, microsecond_timer_get()); }
+    if ((addr == 0x7B1) || (addr == 0x165) || (addr == 0x16A)) {
+      return hyundai_spas_tx(to_send, microsecond_timer_get());
+    }
+  }
+
   if (addr == 0x10B) {
     bool accepted = hyundai_alt2_set_request(to_send, microsecond_timer_get());
     if (accepted) {
@@ -676,7 +687,7 @@ static bool hyundai_canfd_tx_hook(const CANPacket_t *to_send_const) {
     }
   }
 
-  // CanfdBlinkerControl UDS on the parking ECU: extended session, disable rx/tx, default session, tester present only
+  // CanfdBlinkerKick UDS on the parking ECU: extended session, disable rx/tx, default session, tester present only
   if (addr == 0x7B1) {
     uint32_t uds = GET_BYTES(to_send, 0, 4);
     bool uds_ok = (uds == 0x00031002U) || (uds == 0x01832803U) || (uds == 0x00011002U) || (uds == 0x00803E02U);
@@ -903,6 +914,7 @@ static safety_config hyundai_canfd_init(uint16_t param) {
   }
 
   hyundai_common_init(param);
+  hyundai_spas_init(GET_FLAG(param, 4096), (hyundai_canfd_hda2 && !hyundai_camera_scc) ? 1 : 0);
 
   gen_crc_lookup_table_16(0x1021, hyundai_canfd_crc_lut);
   hyundai_canfd_alt_buttons = GET_FLAG(param, HYUNDAI_PARAM_CANFD_ALT_BUTTONS);
@@ -996,6 +1008,18 @@ static safety_config hyundai_canfd_init(uint16_t param) {
     }
   }
 
+  if (hyundai_spas_enabled && (ret.tx_msgs_len + 4 <= 128)) {
+    int count = ret.tx_msgs_len;
+    for (int i = 0; i < count; i++) {
+      hyundai_spas_tx_list[i] = ret.tx_msgs[i];
+    }
+    hyundai_spas_tx_list[count++] = (CanMsg){0x3C1, hyundai_spas_bus, 8};
+    hyundai_spas_tx_list[count++] = (CanMsg){0x7B1, hyundai_spas_bus, 8};
+    hyundai_spas_tx_list[count++] = (CanMsg){0x165, hyundai_spas_bus, 24};
+    hyundai_spas_tx_list[count++] = (CanMsg){0x16A, hyundai_spas_bus, 32};
+    ret.tx_msgs = hyundai_spas_tx_list;
+    ret.tx_msgs_len = count;
+  }
   return ret;
 }
 

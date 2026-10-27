@@ -155,3 +155,13 @@
     animation: none;
   }
 }
+
+.model-library { margin-bottom: 16px; padding: 18px; border: 1px solid var(--md-outline-var); border-radius: 18px; background: var(--md-surface-container); }
+.model-library[hidden] { display: none; }
+.model-library h3 { margin: 0 0 8px; }
+.model-library p { font-size: 13px; line-height: 1.55; opacity: .85; }
+.model-library label { display: grid; gap: 6px; margin-bottom: 10px; }
+.model-library select { width: 100%; padding: 12px; border-radius: 10px; background: var(--md-surface); color: var(--md-on-surface); }
+.model-library__row { display: grid; gap: 7px; padding: 12px 0; border-top: 1px solid var(--md-outline-var); margin-top: 12px; }
+.model-library__row span, .model-library__row small { font-size: 12px; opacity: .8; }
+.model-library__row .btn { justify-self: start; }

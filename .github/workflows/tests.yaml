@@ -146,9 +146,16 @@ jobs:
           openpilot/common/tests/test_display_scheduling.py
           openpilot/system/tests/test_camera_cpu_placement.py
           openpilot/selfdrive/ui/tests/test_carrot_ui_sched.py
+      # Keep forked replay workers separate from threaded model artifact tests.
+      - name: Check radar replay worker integration
+        timeout-minutes: 4
+        run: >-
+          python -m pytest -o addopts='' -o faulthandler_timeout=60 -vv -s
+          openpilot/selfdrive/controls/tests/test_leads.py
       - name: Check model, monitoring and Bluetooth integration
+        timeout-minutes: 4
         run: |
-          python -m pytest -o addopts='' -q \
+          python -m pytest -o addopts='' -o faulthandler_timeout=60 -vv \
             openpilot/common/tests/test_egpu_diagnostics.py \
             openpilot/selfdrive/monitoring/test_monitoring.py \
             openpilot/selfdrive/monitoring/test_dm2.py \
@@ -176,7 +183,6 @@ jobs:
             openpilot/selfdrive/carrot/tests/test_radar_cutout_fast_path.py \
             openpilot/selfdrive/carrot/tests/test_cluster_performance_safeguards.py \
             openpilot/selfdrive/carrot/tests/test_cluster_autorun.py \
-            openpilot/selfdrive/controls/tests/test_leads.py \
             openpilot/selfdrive/carrot/bluetooth/tests \
             openpilot/selfdrive/car/tests/test_carrot_cruise_buttons.py \
             opendbc_repo/opendbc/car/volkswagen/tests/test_carstate_buttons.py \

@@ -157,7 +157,7 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"TrafficLight", {CLEAR_ON_MANAGER_START, STRING} },
 
     {"ApiCache_NavDestinations", {PERSISTENT, STRING}},
-    {"NavDestination", {CLEAR_ON_MANAGER_START | CLEAR_ON_OFFROAD_TRANSITION, STRING}},
+    {"NavDestination", {PERSISTENT, STRING}},
     {"NavDestinationWaypoints", {CLEAR_ON_MANAGER_START | CLEAR_ON_OFFROAD_TRANSITION, STRING}},
     {"NavPastDestinations", {PERSISTENT, STRING}},
     {"NavSettingLeftSide", {PERSISTENT, BOOL}},
@@ -325,14 +325,16 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
 
     {"HyundaiCameraSCC", {PERSISTENT, INT, "0"}},
     {"HyundaiCanfdClusterDirectTx", {PERSISTENT, BOOL, "0"}},
-    {"CanfdBlinkerControl", {PERSISTENT, BOOL, "0"}},
-    {"CanfdBlinkerTest", {CLEAR_ON_MANAGER_START, INT, "0"}},
+    {"CanfdBlinkerKick", {PERSISTENT, BOOL, "0"}},
+    {"CanfdBlinkerMenuTest", {CLEAR_ON_MANAGER_START, INT, "0"}},
     {"CanfdBlinkerStalk", {CLEAR_ON_MANAGER_START, INT, "0"}},
     {"CanfdBvmView", {CLEAR_ON_MANAGER_START, INT, "0"}},
     {"PalisadeBlinkerTest", {CLEAR_ON_MANAGER_START, INT, "0"}},
     {"FingerPrints", {PERSISTENT | CLEAR_ON_MANAGER_START, STRING}},
     {"IsLdwsCar", {PERSISTENT, INT, "0"}},
     {"CanfdHDA2", {PERSISTENT, INT, "0"}},
+    {"CanfdBlinkerControl", {PERSISTENT, BOOL, "0"}},
+    {"CanfdBlinkerTest", {CLEAR_ON_MANAGER_START, INT, "0"}},
     {"CanfdDebug", {PERSISTENT, INT, "0"}},
 
     {"SoundVolumeAdjust", {PERSISTENT, INT, "100"}},
@@ -366,6 +368,7 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"LaneChangeDelay", {PERSISTENT, INT, "0"}},
     {"LaneChangeBsd", {PERSISTENT, INT, "0"}},
     {"LaneLineCheck", {PERSISTENT, INT, "0"}},
+    {"AutoBlinkerControl", {PERSISTENT, INT, "0"}},
     {"BlinkerLatchedTurn", {PERSISTENT, INT, "0"}},
     {"LaneChangeLeverWait", {PERSISTENT, BOOL, "0"}},
     {"MaxAngleFrames", {PERSISTENT, INT, "89"}},
@@ -397,6 +400,7 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"SpeedFromPCM", {PERSISTENT, INT, "2"}},
     {"MaxTimeOffroadMin", {PERSISTENT, INT, "60"}},
     {"TeslaWakeOnCAN", {PERSISTENT, BOOL, "1"}},
+    {"TeslaAutoTurnSignals", {PERSISTENT, BOOL, "0"}},
 
     {"DisableDM", {PERSISTENT, INT, "0"}},  // retired; read only for one-time streaming migration
     {"DriverMonitoringEnabled", {PERSISTENT, BOOL, "1"}},

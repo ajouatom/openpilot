@@ -13,14 +13,25 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
-      - run: python -m pip install numpy pytest requests psutil scons
+      - run: python -m pip install numpy pytest requests psutil scons cython setuptools
+      - name: Build deterministic native map rasterizer
+        env:
+          CFLAGS: -O3 -fno-fast-math -ffp-contract=off
+        run: |
+          raster_build=$(mktemp -d)
+          cp openpilot/selfdrive/navigation/_rasterizer.pyx "$raster_build/"
+          cd "$raster_build"
+          cythonize -i _rasterizer.pyx
+          cp _rasterizer*.so "$GITHUB_WORKSPACE/openpilot/selfdrive/navigation/"
       - name: Check model contract, delivery and existing warp policy
         run: >-
           python -m pytest -c /dev/null --rootdir=. --confcutdir=openpilot/selfdrive/modeld/tests -q
           openpilot/selfdrive/modeld/tests/test_big_model.py
           openpilot/selfdrive/modeld/tests/test_precompiled_model.py
           openpilot/selfdrive/modeld/tests/test_precompiled_runner.py
+          openpilot/selfdrive/modeld/tests/test_egpu_output_recovery.py
           openpilot/selfdrive/modeld/tests/test_egpu_recovery.py
+          tools/jetlink/test_output_validation.py
           openpilot/selfdrive/modeld/tests/test_egpu_startup_retry.py
           openpilot/selfdrive/modeld/tests/test_generic_model_runtime.py
           openpilot/selfdrive/modeld/tests/test_local_gpu_warp.py
@@ -33,10 +44,19 @@ jobs:
           openpilot/system/tests/test_model_build_cache.py
       - name: Download the pinned isolated runtime
         run: |
-          curl --fail --retry 3 -o /tmp/mdm-runtime.tar.gz https://upload.shind0.synology.me/models/comma4-big-md-v3-1365126a/precompiled-runtime.tar.gz
-          echo 'c7c58622652231359ecea1a4253b63e157d002242bf596ede1b853f941f937ac  /tmp/mdm-runtime.tar.gz' | sha256sum -c -
+          curl --fail --retry 3 -o /tmp/mdm-runtime.tar.gz https://upload.shind0.synology.me/models/comma4-big-nav-n16-96244b1f/precompiled-runtime.tar.gz
+          echo '90970e01f2ba70d553294c0f9d5c6fe1678827f750705cab679a7b19b7bcb0b2  /tmp/mdm-runtime.tar.gz' | sha256sum -c -
           mkdir /tmp/mdm-runtime
           tar -xzf /tmp/mdm-runtime.tar.gz -C /tmp/mdm-runtime
+      - name: Check navigation renderer, arbitration, input layout and position freshness
+        run: >-
+          python -m pytest -c /dev/null --noconftest -q
+          openpilot/selfdrive/navigation/tests/test_rendering.py
+          openpilot/selfdrive/navigation/tests/test_inputs.py
+          openpilot/selfdrive/navigation/tests/test_position.py
+          openpilot/selfdrive/navigation/tests/test_route_position.py
+          openpilot/selfdrive/navigation/tests/test_mapbox_tiles.py
+          openpilot/selfdrive/navigation/tests/test_native_rasterizer.py
       - name: Execute pinned native CPU warp and persistent-buffer roundtrip
         env:
           MDM_RUNTIME_ROOT: /tmp/mdm-runtime

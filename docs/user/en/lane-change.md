@@ -17,6 +17,10 @@ These gates are aids, not a replacement for the driver's safety judgment. openpi
 
 ## Who decides what?
 
+Trial `AutoTurnControl=4` is a TBT right-indicator trigger for the Ioniq 5 PE USB2CAN setup. It checks **eligible lane-change speed AND at most 250 metres to the right turn**, until the turn desire starts. The distance is fixed, not added to speed. It requires `AutoBlinkerControl=2`, `LaneChangeNeedTorque=0`, active lateral control, the existing lane-change minimum speed (currently 30 km/h), a detected right lane and the existing right-side availability check. Fresh OEM BSD/corner inputs must permit the trigger; a detected rear vehicle must have a valid gap of at least 20 m. Saturated 24.9 m, special 25.0 m, hidden and stale values do not qualify. No detection is not proof of safe rear traffic.
+
+After one second of qualifying conditions, the existing physical-indicator path lights the right lamp. Its feedback enters the unchanged ordinary lane-change logic; no separate lane-change command is sent. A repeat requires observed completion, lamps off, two seconds of waiting and a fresh condition check. Steering/manual intervention, lost inputs or a failed start cancels repetition in the current TBT window. Manual/remote admission is unchanged. Mode 4 does not enable mode-2 ATC speed control; defaults and modes 0–3 remain unchanged. Desktop tests are not physical lamp or road acceptance.
+
 | Participant | Responsibility | Not responsible for |
 |---|---|---|
 | Driver | Check mirrors, blind spot, and closing traffic; select a safe gap; signal; cancel or intervene when needed | Delegating the safety decision to the system |

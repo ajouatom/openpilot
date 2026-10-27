@@ -1,5 +1,237 @@
 # Repository memory
 
+- On 2026-10-27, complete NAV/blink history merged into Wip (2f94a4e0c9,
+  3c025cb4f5; docs29fd046a4b), preserving Wip Bosch source/replay byte-for-byte.
+  Resolve duplicate auto-merged helper/diagnostic blocks; pin PEAK source LF bytes.
+  Normal vehicle branch switch/Git Pull/reboot installs29fd046a4b; native build
+  and fresh UI/manager/Panda confirm real offroad/noOutput, ignition/controls false.
+  N16 and AutoTurn1/AutoBlinker2/torque0/SPAS0/test0 preserved; no mode4 activation,
+  CAN actuation, Jetson runtime change or road acceptance. Both retired remote
+  branches carrot-nav and carrot-nav-blink deleted with exact-tip leases after
+  ancestor and vehicle checks. Do not recreate them. Local historic worktrees remain.
+  CI40466713725 passes1728/56skip+232/62/94/119/11/11 and Windows; signal
+  40466713799 passes1275/40skip/362subtests; eGPU/native/startup checks pass.
+  NAS automatic updater SOURCE3c025cb4f5 and actual1196-frame served replay hash
+  verified; Wiki068c7f6 published manual regions, auto-sync40467192717 passes.
+  Details:docs/carrot_wip_consolidation_20261027.md. Raw evidence private.
+
+- On 2026-10-27, owner authorizes full carrot-nav/carrot-nav-blink integration
+  into carrot-wip, vehicle migration, and deletion of BOTH retired remote branches
+  after preservation. This supersedes earlier branch-only publication restrictions.
+  Preserve Wip Bosch receiver/replay integration; adopt curated N16/Flip Flop
+  catalog, fixed CD210, NAV/Jetson optimizations and indicator/DM changes.
+  TBT mode4 remains opt-in; no automatic setting activation or live CAN test.
+  Consolidation report: docs/carrot_wip_consolidation_20261027.md.
+
+- On 2026-10-27, owner narrows proposed TBT right-lane automation to a physical
+  right-indicator trigger only. Do NOT change manual/BT lane-change admission or
+  emit a separate LANECHANGE command. Speed condition AND fixed250m before right
+  TBT, until turn desire starts; NOT speed+250m. Earlier shared SideState/DesireHelper
+  modifications were restored to HEAD. Working-tree trial AutoTurnControl4 uses
+  blink_tbt through existing USB2CAN indicator policy (AutoBlinkerControl2 and
+  LaneChangeNeedTorque0), existing minimum speed, actual right lane/BSD plus fresh
+  corner20m gate. Saturated24.9/special25/hidden/stale block; no detection is not
+  free-space proof. Additive CarState TBT-only observations; old controls unchanged.
+  Complete/lamps-off/2s/1s reconfirm before repeat; steering/input failure cancels.
+  Unpublished/uninstalled; no physical CAN, road acceptance or safety claim.
+
+- On 2026-10-27, owner requests previous evening/morning blinker drive review,
+  relighting and joongyu01 forced-crossing review.29 hash-matched rlogs360947687B,
+  actual drives0071e533a4/mode2/AlwaysLateral1/SPAS0. Evening stop held normally.
+  Morning~06:55:18 lamp off follows premature physical completion while same
+  left turn17m ahead; outgoing1EA clears first. Ordered replay end391.456->404.702s
+  with same cue. Add nav-distance completion gate. Separate~06:57:28 right lamp
+  extinguishes before standstill; no acknowledged external/1EAhold, exact receiver
+  abort unlogged/unresolved. USB2CAN-only one relight after1.5s continuous both-off,
+  only confirmed owned ATC turn/freshack/no cancel; original300s expiry, newID/newACK,
+  no initial-start/manual/lane retries. Comma sampled state diagnostics<=5Hz,
+  tokens excluded/no extra USB fields.123desktop,lint/docs pass;CI40430803117
+  Linux1648/56skip+232/62/94/119/11/11 and Windows pass. Publish9779819859 only
+  carrot-nav-blink; vehicle remainscd80fae432, no install/restart/actuation. Normal
+  comma GitPull/restart; host/model unchanged. Jetson journal LAN timed out.
+  Upstream40aa6abd50 D>30km/h lamp-off crossing geometry trigger independent of
+  engagement/torque, contributor false positives7+3; retains unacknowledged APRK
+  pause/100Hz competingSPAS. Not imported. Panda symptom counters stable; large
+  existing canState0 total10004410 already at route start, not a new blinker fault.
+  Details:docs/blinker_drive_review_20261027.md; raw logs private. Physical lamp
+  recovery and unconfirmed-start failure remain unproven; do not claim full cure.
+
+
+- On 2026-10-27, owner retires MD v3 and requests DM pause for SoftHold,
+  signal stop and stopped lead, plus vehicle install/reboot. Only N16 Nav and
+  Flip Flop selectable; retired metadata retained for exact unused PKL cleanup.
+  Available Flip ONNX protected even if N16 selected; retired alias queue cleared.
+  CORRECTION: official MD ONNX at same1365126a/12864 path was overwritten:
+  Oct16 792542056B/SHA1cfd2c45 vs Oct24 768750198B/SHA35976b11. Prior identical
+  ONNX claim was wrong; our old MD alias pointed to replacement. No weights/
+  graph equivalence proved. User removed MD rather than restoring historical ONNX.
+  Existing SoftHold pause extended to fresh active long stopping/target<0.1,
+  full standstill/raw+filtered<0.1,D/low,no gas: red e2eStopped or valid near
+  primary lead abs(vLead)<0.1,dRel<=40.250ms freshness; departure/green/lead
+  movement/stale resumes next cycle. Camera stays running, policy/lockout state
+  frozen, no Params reset.253desktop overlapping,3web;CI40412207582 monitoring232,
+  broad1634/56skip plus62/94/119/11/11,Windows passes. Normal GitPull/reboot
+  cd80fae432 physically installed, bootIDchanged, actual web2choices and MD409.
+  Fresh offroad/device startedfalse/Panda ignitionfalse/noOutput; N16 selection
+  unchanged,DMenabled/sessiondisablefalse,snapshotfalse,SPASfalse/test0/mode2.
+  MD PKL already absent,Flip cache retained; no Jetson runtime/model change.
+  No live signal/lead-stop or road acceptance claim. Details:
+  docs/dm_soft_hold_pause_20261013.md; docs/external_model_catalog_20261026.md.
+
+
+- On 2026-10-26, owner requests urgent joongyu01 lever test, then immediate
+  USB2CAN restoration if failure/errors. Pin712cef9a adds0x3C1 counter+1/CRC,
+  not originalSPAS; do not import competing100HzSPAS. Parked17/18 source and
+  Panda exact-payload/CRC/freshP/driver-change/gap/10s/cooldown guards published
+  0071e533a4;135desktop,CI40332262548 native1275/40skip/362subtests. Normal
+  GitPull/reboot and actualH7signature verified. Left17 queues178identical
+  85c0004000000000 frames over9.974s, noUDS/SPAS; timerquantization gives17.75Hz,
+  NOT exact upstreamframe%5/20Hz. Error totals0/2/0 unchanged,TXblocked0,
+  no carState/raw413 lamp-on. No right/repeat or success claim. User-requested
+  fallback DONE: CanfdBlinkerControl0/trial0,mode2 preserved, normalreboot;
+  CP/Panda SPASflagabsent,param157, snapshotfalse/onroad/P/inactive. Comma
+  nonspas blink_source and Jetson blink_can restored; can1 UP500k LISTEN-ONLY
+  idle,TX/RXerrors0,drops48unchanged. Panda totals0/0/0,no warning/rejection.
+  N16sameSHA01effc67 active/ready,host0d4947499931 unchanged. No postrestore
+  physical lamp test/road claim. Details:docs/canfd_spas_blinkers_20261026.md.
+
+
+- On 2026-10-26, owner explicitly demands supplied patch fidelity. Added parked
+  tests15/16: actual CarController.frame/native create_spas_messages,021003,
+  fiveframes later03288301,frame%2 SPAS/100tester,021001cancel; noACK/quiet gate.
+  Independent f8448120+04dd4119 method/nativepackers match all packets over six
+  1100frame left/right/start-offset/cancel/restart comparisons.127desktop;
+  CI40329253439 native1241/40skip/362subtests. Outside-wire P/zero/inactive/
+  driver/CAN guards,10s bound/30s cooldown; Panda exact suppressedcommand only
+  under parked lease, payload/CRC/counter/rate preserved, defaultrestore onabort.
+  Normal driving ACK path unchanged; original parked mode PE only. Normal
+  Git Pull/reboot5a3889e6bd and newPandaH7 signature verified, N16 unchanged.
+  Actualtest15 after6s stablepreflight:1003at1.0853,288301at1.1440,10SPASpairs
+  counters0..9 at1.1636..1.3396,mean19.563ms,firstleftdb65...60 exact supplied.
+  Stocklogical0continues10/9frames afterdisable. NoPandaTXblock, noobserved7b9.
+  Physical2(logicalECAN0) errors0->22/bit1Error, source/observercancel,1001at1.3613.
+  No lampfeedback; 10s NOT reached, no right/repeat. This time actual original
+  packet sequence was exercised until guard abort; do not call it ACK-blocked,
+  successful wireTX, sustainedhold success or proof contributor report false.
+  Passive60s errors1/0/22stable/counters0/no warning or rejection; N16/link/HUD
+  60/60,mean40.742/max46.878ms. Observed one model/odom/wide framegap, notall
+  consecutive; posehealthy. Test0/mode2/P/inactive/snapshotfalse restored.
+  Details: docs/canfd_spas_blinkers_20261026.md. Raw private.
+
+
+- On 2026-10-26, owner requests SPAS-only holding if existing0x1EA hold fails.
+  Fresh-stock200ms start/hold sends hold9.856s but onlyoneflash; overlap-capable
+  500ms cap ends before lamp acknowledgement, so actual overlap NOT achieved.
+  SPAS-only10s test13 on normal49512be286/PandaH7 verified:14queuedpairs then
+  physical2 error0->13/data bit1Error/TX99 warning; observer cancels at1.680s,
+  ~0.68s afterrequest. Lamp feedback brieflyon, nohold/noUDS/noTXrejection.
+  No right/repeat trial; sustained10s FAILED to complete. Passive60s errors13
+  stable/counters0/no warnings,1200validconsecutive model/DM/road/odom/pose,
+  wide1201,mean40.805/max47.500ms,link/HUD60/60,NAVabsent. Test0 restored.
+  Physical health indices differ from logical CAN: harnessflipped means
+  canState2 is logicalECAN0; earlier bus2-vsbus0 inference is RETRACTED.
+  Owner challenges patch attribution: original021003->03288301after50ms,
+  noACK,frame%2/50Hz,packer counter0; our ACK/quiet path and UDS-free direct
+  tests DIFFER. Original faithful vehicle validation is still NOT DONE;
+  do not claim contributor patch failed or momentary light is sustained success.
+  Added local source CAN-health abort tests113pass, publication/activation below.
+  Curated model UI49512be286 published/installed, combo autosaves only;
+  delete/restore API409, N16 selected/effective, MD/Flip available. Future
+  retired:true metadata retained for protected offroad cleanup, noactualretirement.
+  CI40325554976 Linux1634/56skip+62/94/119/11/11, Windows pass; model/API56,
+  web34,Wiki25 overlap. No Jetson runtime/model change. Raw private.
+  Details: docs/canfd_spas_blinkers_20261026.md and
+  docs/external_model_catalog_20261026.md.
+
+
+- On 2026-10-26, owner requests visible repeat then0.2s-start/existing-hold10s.
+  Continuous3s repeat114SPAS2/2.971s gives4lamp cycles, errors142stable. Only
+  test7/8 total duration extended10s; Panda directional limit3s and all guards
+  unchanged.9cd699d29c normal Git Pull/reboot, CI40319488152 passes1177/40skip/
+  362subtests; local81+Wiki25 overlap. After6s stable preflight, pulse/hold
+  attempt emits2pairs then stockEA->EC gap abort; bus2error0->200/TXerror177/
+  error-passive, observer cancels0. No lamp/nohold/noUDS; ten-second hold NOT
+  reached. Injectionbus0, errorbus2, exact failedframe/rootcause unknown. Both
+  streams shareEA with differentpayload; counter checks do not prevent wire
+  contention. Further passive60s201stable/errorcounts0/no warning or busoff,
+  lamps off/test0/mode2, snapshotfalse/onroad/P/inactive restored. N16/DM/
+  cameras/odom1200validconsecutive,pose1199healthy,mean40.658/max47.417ms,
+  link/HUD/signal60/60,NAVabsent. No further active trial, no Jetson update.
+  Details: docs/canfd_spas_blinkers_20261026.md; raw private.
+
+- On 2026-10-26, owner challenges SPAS patch fidelity. Re-read both supplied
+  f8448120/04dd4119 and execute combined original method offline with real packer,
+  Params blocked: no replies still gives147SPAS2/300ticks, first0.06s then20ms,
+  counter0db65, UDSextended0s/288301at50ms/keepalive1,2s/canceldefault. Adapted
+  acknowledged Session gives0SPAS2 with noACK. Our parked coexistence tests also
+  used stock-counter abort, stock-seeded counters, max3s and actual25-26ms mean
+  TX-echo intervals, unlike original frame%2 cadence. Retract claim APRK silence
+  is prerequisite to lighting and any claim original method failed. Both owner
+  report and our lamp feedback show stock-active illumination. Hold was cancelled
+  by our guard, so sustained-hold failure is not established. Bus2error+22 remains
+  real, cause unresolved. No runtime/guard relaxation in this re-review; faithful
+  reproduction and sustained hold acceptance remain incomplete. See correction
+  in docs/canfd_spas_blinkers_20261026.md; offline raw result private.
+
+
+- On 2026-10-26, owner requests generic CAN-FD SPAS indicators and comparison of
+  continuous versus short-start/existing-hold. Trial-only a45792a0e2 uses exact
+  ECAN SPAS1/24+SPAS2/32, fresh driver input and acknowledged/quiet ECU handoff;
+  no Ioniq-only restriction on the normal SPAS path. Startup IntFlag/Capnp bug
+  fixed f8dd37ca28 with actual-schema regressions and normal Git Pull/reboot.
+  Actual 0x7B1 extended request gets no0x7B9 reply; stock50Hz never stopped,
+  no disable/directional command in acknowledged trial, bounded recovery locks.
+  Contributor reports same no-ACK/stock-zero conflict. Separate max3s P-only
+  coexistence tests have independent Panda P/zero/pedal/stalk/stock/CRC/counter/
+  rate guards and30s cooldown, noUDS; pulse/hold layout Ioniq5PE only. First
+  start2frames blocked/cause unproven; repeat14directional frames lights left
+  then stops~0.36s on stockcounter3c->3e.0.2s pulse-only8frames nofeedback;
+  pulse+hold8frames lights~0.4s,holdbit~0.147s then stockgap abort: sustained
+  holding UNVERIFIED. Bus2errors120->142 during latter, stable142 in subsequent
+  passive60s; prior busOff95/TXlost1 unchanged, bus0/1errors0. Further active
+  trials stopped, no right/visual/road or reliable automatic replacement claim.
+  NativeCI40315922993 passes1173/40skip/362subtests;189desktop+25Wiki overlap.
+  Panda H7 installed signature verified. Test0, AutoBlinker2 preserved, snapshot
+  absent/onroad restored; old Jetson USB2CAN workers absent/can1down-listen/TX0.
+  Final60s N16:1201validconsecutive model/odom,1200DM/cameras/healthy pose,
+  mean40.675/P9944.904/max47.820ms,0>50,link/HUD/signal60/60; NAV absent.
+  Only carrot-nav-blink; no Jetson runtime change. Details:
+  docs/canfd_spas_blinkers_20261026.md. Raw evidence private.
+
+- On 2026-10-26, owner requests web reboot-selected shared eGPU/Jetson big models,
+  internal CD210 fixed; N16 NAV/NOO, MDv3 and Flip Flop selectable with download,
+  protected cache deletion/hide/restore. Official MD/Flip ONNX share35976b11,
+  PKLs differ; no PKL/TRT equivalence or eGPU hardware inference claim. Signed
+  N16 host0d4947499931/64822535B and MD/Flip559e560e8529/64822428B verified.
+  Fix standalone host import ROOT before normal server probe; normal boot updater
+  and actual parked Flip->N16 selection tested. Flip60s1200validconsecutive,
+  mean36.841/max43.009ms; N16restore1200validconsecutive model,mean40.255/max45.968;
+  one DM observer gap not proven producer drop. Models/HUD healthy, no>50 in
+  these windows, no AB/harddeadline/road claim.143routepoints/2maneuvers arrive
+  but GPSno-fix/heading invalid; owner says navigation phone indoors, validNAV
+  pending. DATA~6.6GB free. PR568 Tesla additivefields24/25 preserveIoniq22/23,
+  nativeCI40302082309 passes1054/40skip/362subtests; noTesla hardware acceptance.
+  All work only carrot-nav-blink; wip merge deferred. Details:
+  docs/external_model_catalog_20261026.md and docs/pr568_trial_integration_20261026.md.
+
+
+- On 2026-10-26, owner requests PR567 and PR563 review/application.
+  PR563 sourcec14c2cab03 on carrot-nav-blink adds reverse CUDA constructor
+  cleanup, atomic individual plan/sidecar publication and malformed-cache
+  fallback; N16/inference/USB/vehicle logic unchanged. Independent Windows
+  new tests26fail/8pass/1skip before,34pass/1skip after; expanded47pass/1skip
+  and9Linux-sendmsg-only failures. CI40293651197 passes1612/56skip+62codec/
+  94update/119nav/11storage/11network andWindows. Contributor hardware timings
+  remain attributed, no local GPU OOM/latency/road claim. Prepared032cde486b
+  bundle64813444B/1136files verified; exportedpaths identical toCI source.
+  Owner explicitly approves signing-key-path lookup/sign/publication after
+  initial automatic-review block. Signed032cde486b published/HTTPS fullhash
+  verified and selected; N16 unchanged. Finalpin ed6723245b CI40294246490
+  Linux/Windows pass;24local model-pin checks pass. No live install/latency claim;
+  normal Git Pull/BOTH restarts. PR567 e2fac438 is optional exact Konik
+  A1M/NX16 J4012-kernel manual installer, not needed for563/current hardware:
+  not integrated/enabled. Details: docs/jetlink_konik_nx16_recovery_20261024.md.
+
 - On 2026-10-26, owner requests PR564/562 review and necessary integration.
   PR564 9d2a435ed332 selects existing spawn=True only for qcomgpsd; preserve
   TICI/onroad/external-GPS conditions and control checks. Import actual-process
@@ -13,6 +245,91 @@
   No new physical GPS, current, road or all-stall cure claim; no live install.
   Comma Git Pull/restart delivery, no Jetson update/model change. Review:
   docs/pr564_562_review_20261026.md. Unrelated concurrent Jetlink work preserved.
+
+- On 2026-10-26, owner reports audioTurn lamps extinguishing at intersection stop.
+  Latest drive sourceab4fc46: leftcue195.697s,on195.919,latActivefalse197.882
+  at1.05km/h,desire none197.932,stop198.177,lamps off198.409; navigation stays
+  left during~62sstop. Five full-schema closed logs66893681B/hash verified.
+  Old gate tied hold to steering output and desire loss. Held ATC turn now
+  follows fresh lateral permission(active or AlwaysLateral,latEnabled,no fault,
+  drive),new cues/lane still requirelatActive. Physical completion requires
+  moving>=1km/h,selectedsteer>=30deg,healthy fresh livePose heading change>=20deg,
+  thencenter<=10deg0.4s. Heading wraps/stopped drift handled. Before-entry nav
+  cancel/manual/stale/session/4s-unconfirmed/300smax gates stay; BT unchanged.
+  Unshipped angle-only prototype ended early after49.5deg departure correction;
+  rejected. Recorded-input replay old right/leftend149.936/197.907s,new153.188/
+  270.410s,1054/1054 selected stop samples held. Replay omits live CAN feedback/
+  driver ownership,not physical lamp acceptance.109focused/25Wiki pass; native
+  LinuxCI40264474584 broad1577/56skip+62/94/119/11/11 and Windows pass;prod lint/
+  docs validator pass. KO/EN/catalog/trialWiki patch synchronized,publicWiki stays
+  wip-owned. Only carrot-nav-blink published and normal Git Pull/restart installs
+  b757f3923c; fresh offroad/panda ignition/controlfalse and installedhashes match.
+  Mode2/AlwaysLateral1 retained,no snapshot hold/onroad transition/CAN injection.
+  Host605e7e2d7c/N16 unchanged,noJetson update. Physical road acceptance pending.
+  Details: docs/jetson_bluetooth_blinker_20261025.md; raw evidence private.
+
+- On 2026-10-26, owner requests physical turn indication at audioTurn rather
+  than waiting for turn desire. SelfdriveD latches exact existing event timestamp/
+  direction in additive SelfdriveState fields; sound priorities/conditions stay.
+  Comma source starts once from fresh cue, holds before turn desire, releases at
+  matching desire end; stale/manual/navigation cancel and no-replay gates remain.
+  Mode2 actual lane-change timing and Bluetooth behavior unchanged. 83 focused
+  checks incl actual event method/source loop and Capnp,25 Wiki pass. Linux
+  CI40239177298 broad1551/56skip plus62/94/119/11/11 and Windows pass.
+  Only carrot-nav-blink published; normal vehicle Git Pull/restart ab4fc46f2a,
+  ordinary native build and manager startup complete. Fresh offroad/panda
+  ignition/control flags false before/after; no snapshot hold or CAN injection.
+  Web timing text and schema verified; owner's mode2 preserved. Host605e7e2d7c
+  and N16 unchanged, no Jetson update/reboot. Real ATC lamp acceptance pending;
+  no onroad/model-health claim. KO/EN guides and trial Wiki patch synchronized.
+  Details: docs/jetson_bluetooth_blinker_20261025.md; raw evidence private.
+
+
+- On 2026-10-25, owner extends trial indicators: AutoBlinkerControl0 default,
+  1 low-speed Bluetooth hold/same-button cancel/turn completion plus ATC turns;
+  2 adds actual ATC lane-change start/finish, excluding waiting. Explicit Ioniq5PE
+  only. One-shot B1 starts lamps; acknowledged actual illumination enables a
+  fresh350ms lease through existing 0x1EA indicator hold bits. No B1 held frames.
+  Manual <=5km/h entry, steering30deg then within10deg0.4s moving completion,
+  max300s; unconfirmed starts expire4s. Driver/session/stale gates retained.
+  Rapid opposite input waits OEM completion, latest request expires3.2s. Parked
+  13-frame trial left then right0.8s later gives CAN-feedback L3/R3/off, no CCTV.
+  45-frame full-lever prototype failed/reverted; not acceptance. Mode2 origin
+  metadata does not change steering/admission. 67 focused,28 native desire,
+  8 native packer,25 Wiki checks; final Linux1535/56skip plus62/94/119/11/11
+  and Windows pass CI40176869863/40176926962/40177214703. Counts overlap.
+  Signed605e7e2d7c/64801709B HTTPS/hash verified, normal Jetson updater installed;
+  comma b1f5fe4fe2 normal Git Pull/restart, N16 unchanged. Only carrot-nav-blink
+  published, based carrot-nav24c1ba5e4b. Web mode0..2 present/current0.
+  Final60.002s1200 valid consecutive model/DM/both cameras/odom/pose, mean40.188/
+  max49.603ms, P/inactive guards all good; N16/blinker/health60/60, HUD59/60.
+  Both snapshot holds/watchdogs restored/exited. can1 500k LISTEN-ONLY, postboot
+  TX0/errors0, RXdrops82 unchanged. S2 disconnected; actual BT hold/cancel and
+  ATC turn/lane-change physical acceptance pending, no road/deadline claim.
+  Public Wiki remains wip-owned; trial KO/EN patch staged. Raw evidence private.
+  Details: docs/jetson_bluetooth_blinker_20261025.md.
+
+
+- On 2026-10-25, owner authorizes only carrot-nav-blink publication and normal
+  installation, based on carrot-nav24c1ba5e4b; maintained branches unchanged.
+  Physical Bluetooth blinkerLeft/Right are separate from lane-change actions;
+  per-remote double/long options permit fast press. Explicit trial profile only
+  Ioniq5PE + PEAK0c72:000c/B1-3c1; manual requests allowed while driving/engaged,
+  preserving fresh CAN, stale/repeat/session/driver priority gates. No hold/ATC/
+  hazards. Signed277fd6c9a7/64796760B HTTPS verified and normal boot updater
+  installed; upstream GPL PEAK source built/loaded automatically for5.15.148-tegra.
+  N16 unchanged. Comma39ded79393 normal Git Pull/restart fixes source clock sampled
+  before SubMaster reception (future-age false rejection); actual isolated source
+  40/41allowed, no CAN. CI40173150535/40173247912/40173798398 pass Linux/Windows;
+  35focused indicator,72priornative BT,829priorweb; counts overlap.
+  Final60s1200validconsecutive model, DM/cameras/odom/pose healthy; N16/HUD/blinker
+  ready60/60,mean40.506/max47.645ms, P/inactive; no road/deadline claim.
+  S2 left/right physical mappings and gesturesOFF saved through guarded web API.
+  S2 disconnected; reconnect timed out, no integrated CAN TX/physical validation.
+  Owner asked to wake remote, stock stalk cycle then parked L/R acceptance.
+  Snapshot holds restored; raw evidence private. Details:
+  docs/jetson_bluetooth_blinker_20261025.md.
+
 
 - On 2026-10-24, owner requests further measured Jetson latency improvement.
   NAV HUD libx264 encoder/conversion pools default one worker each; actual
@@ -71,6 +388,29 @@
   private root0600 boot-env profile deleted. Normal production LPM lease stays.
   Details: docs/jetson_regression_isolation_20261024.md.
   Raw logs/private restart environment excluded from publication.
+
+- On 2026-10-24, owner requests one-at-a-time Jetson regression review and
+  zoompilot hints. NAV a559fcd971 is installed via guarded normal Git Pull;
+  host69c4642789/N16 unchanged. Shared-input/full-reply/CPU-overlap/native-image/
+  direct-map trials are restored. Legacy large writes average38.121ms versus
+  bounded requests40.846ms, but recorded325-367ms allocation stalls forbid
+  claiming the legacy path fixed. Camera EGL shutdown cleanup reduces restart
+  orphan growth44.93->3.164MiB, not zero graphics leak. Correlated trace finds
+  FunctionFS completion worker queued30.891ms; matching send35.402ms overlaps
+  server26.683ms, responsewait0.357ms. Trace81.743s/max47.378 has no>50 event,
+  so not proof of all-tail cause. Tracing disabled; inactive instance EBUSY.
+  Final defaults120s/2402validconsecutive model,mean40.866/max49.483,0>50;
+  NAV invalid120/120, pose healthy. Earlier default runs still exceed50.
+  zoompilot5b87a72 pins jetlinkb1d70418: enqueue without draining completions,
+  bounded1MiB backlog,8KiB AIO and LPM-off are candidates, NOT installed here.
+  Actual Jetson USB5000Mb/s U1/U2 enabled; comma extra_free_kbytes0 and FFS
+  log_disable0. Read-only comparison only, no new sysctl/LPM/priority change.
+  Model map-after-GPU/HUD-next-frame proposal remains unimplemented/untested;
+  DIRECT_MAP=0 is conversion-only. Keep this distinction and unresolved50ms
+  requirement. Wip30d2fd68ac fixes obsolete idle-session diagnostic fixture;
+  Linux/Windows integration40075577257 passes. Reports:
+  docs/jetson_regression_isolation_20261024.md and
+  docs/jetson_usb_request_allocation_20261024.md. Raw evidence private.
 
 - On 2026-10-23, owner requests review/application of PR560/561/562.
   560 staging/os fix already in e4779e059a; retain newer N16 defaults. Add
@@ -396,6 +736,23 @@
   845 broad/55skips,119 nav,11 real-storage pass; eGPU and installer CI pass.
   No physical RF/display-rate/20Hz/road claim. Wip retains its separate runtime.
   Private backups excluded; single-parent. See docs/jetson_wifi_usb_panel_20261020.md.
+
+- On 2026-10-20, user reviews tjdgus200 USB update release52a8ffee, then
+  explicitly defers latest Jetson model/device work. Import optional SHA256 USB
+  delivery on carrot-nav only (wip lacks prerequisite catalog/pin runtime).
+  No USB manifest selected or receiver enrollment: existing NAS signed path,
+  Jetson80eedcdd and eGPU n16 pins unchanged. Existing Jetson needs one local
+  receiver install only to use USB delivery; signed NAS updates need no such
+  enrollment. ZIP hash verified;11 source/key/doc blobs match original commit.
+  Add interruption/policy-revocation/offroad-transition tests and root CI.
+  Fix pre-existing host bundle missing lead_brake_lights and stale HUD test
+  fixtures; production display policy unchanged. Final Linux94 root,835 broad
+  (55skips),119 nav/HUD,11 real-storage tests pass; Windows installer and eGPU
+  CI pass. Counts overlap. Code a863f4b763, all commits single-parent.
+  Official HF now lists96244b1f/12800 ONNX814591107B/01effc67; this is availability,
+  not TensorRT/equivalence validation. No model replacement, package publication,
+  device connection/install or20Hz claim. See docs/jetson_usb_update_review_20261020.md.
+
 
 - On 2026-10-19, offroad Mapbox review finds real navd allManeuvers failure:
   np.cumsum yields numpy.float64, rejected by device Capnp struct-list setter.

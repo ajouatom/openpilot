@@ -15,6 +15,7 @@ import numpy as np
 from openpilot.selfdrive.modeld.constants import ModelConstants
 from openpilot.selfdrive.modeld.parse_model_outputs import Parser
 from openpilot.selfdrive.modeld.egpu_worker_progress import worker_snapshot
+from openpilot.selfdrive.modeld.egpu_output_recovery import MAX_HOLD_SECONDS
 
 INFERENCE_TIMEOUT = .15  # three 20 Hz periods; first-use initialization has its own budget
 
@@ -42,6 +43,8 @@ class PrecompiledModelState:
     self.output = None
     self.usbgpu = True
     self.first_run = True
+    self.last_good_time = None
+    self.held_output = False
     self.recovery_cancel = recovery_cancel
     self.parser = Parser()
     self.prev_desire = np.zeros(ModelConstants.DESIRE_LEN, dtype=np.float32)
@@ -102,26 +105,42 @@ class PrecompiledModelState:
     if self._receive(1) != b'Z\n':
       raise RuntimeError('invalid eGPU recovery reset response')
     self.prev_desire[:] = 0
+    self.last_good_time = None
+    self.held_output = False
 
   def run(self, bufs, transforms, inputs, prepare_only):
     for name in ('img', 'big_img'):
       data = np.frombuffer(bufs[name].data, dtype=np.uint8, count=self.frame_size)
       np.copyto(self.views[name], data)
     inputs['desire_pulse'][0] = 0
+    previous_desire = self.prev_desire.copy()
     self.views['desire'][:] = np.where(inputs['desire_pulse'] - self.prev_desire > .99, inputs['desire_pulse'], 0)
     self.prev_desire[:] = inputs['desire_pulse']
     for name in ('traffic_convention', 'action_t'):
       self.views[name][:] = inputs[name]
+    for name in ('nav_map', 'navigation'):
+      if name in self.views:
+        self.views[name][:] = inputs.get(name, 0)
     self.views['tfm'][:] = transforms['img']
     self.views['big_tfm'][:] = transforms['big_img']
     try:
       self.process.stdin.write(b'r')
-      if self._receive(20 if self.first_run else INFERENCE_TIMEOUT) != b'1\n':
+      response = self._receive(20 if self.first_run else INFERENCE_TIMEOUT)
+      if (response == b'0\n' and not self.first_run and not self.held_output and self.last_good_time is not None
+          and 0 <= time.monotonic() - self.last_good_time <= MAX_HOLD_SECONDS):
+        # Worker restored recurrent history. Preserve the matching pulse history
+        # and let consumers retain their last timestamped result for this cycle.
+        self.prev_desire[:] = previous_desire
+        self.held_output = True
+        return None
+      if response != b'1\n':
         raise RuntimeError('invalid model worker response')
       self.first_run = False
       result = self.output.copy()
       if not np.isfinite(result).all():
         raise ValueError('non-finite model output')
+      self.last_good_time = time.monotonic()
+      self.held_output = False
     except BaseException as exc:
       self.failed = True
       self.close()
@@ -196,7 +215,8 @@ def smoke_test(path: Path, camera_sizes=((1928, 1208), (1344, 760)), runs=5):
       timings = []
       for _ in range(runs):
         started = time.monotonic()
-        model.run(frames, transforms, inputs, False)
+        if model.run(frames, transforms, inputs, False) is None:
+          raise ValueError('invalid output during precompiled smoke test')
         timings.append(time.monotonic() - started)
       results.append({'camera': [width, height], 'checkpoint': model.checkpoint,
                       'load_seconds': load_seconds, 'inference_seconds': timings})

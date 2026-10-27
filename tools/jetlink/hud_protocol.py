@@ -28,7 +28,7 @@ PARAMS = ('ClusterHud', 'ClusterHudDebug', 'ClusterHudBrightness', 'ClusterHudOr
 
 class Publisher:
   """Keep cereal decoding, JSON and preview work outside the USB owner's GIL."""
-  def __init__(self, navi=False):
+  def __init__(self, navi=False, nav_map=False):
     import os
     self.media_socket = self.media_process = None
     if navi:
@@ -43,7 +43,8 @@ class Publisher:
     self.path = Path(f'/dev/shm/carrot-jetlink-display-{os.getpid()}.packet')
     self.last_sent = 0.
     self.process = subprocess.Popen(['chrt', '--other', '0', sys.executable,
-                                    str(Path(__file__).with_name('hud_publisher.py')), str(self.path)],
+                                    str(Path(__file__).with_name('hud_publisher.py')), str(self.path),
+                                    *(['--nav-map'] if nav_map else [])],
                                     stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
 
   def media_packet(self):
@@ -89,7 +90,7 @@ class Publisher:
 
 
 class SnapshotBuilder:
-  def __init__(self):
+  def __init__(self, nav_map=False):
     from openpilot.cereal import messaging
     from openpilot.common.params import Params
     self.sm = messaging.SubMaster(list(SERVICES))
@@ -99,9 +100,11 @@ class SnapshotBuilder:
     self.next_params = self.next_send = 0.
     self.host_release = None
     release_file = Path(__file__).resolve().parents[2] / 'openpilot/selfdrive/modeld/jetlink/host_release.json'
-    if release_file.is_file():
-      self.host_release = json.loads(release_file.read_text())
+    from openpilot.common.jetson_model import selected_release
+    self.host_release = selected_release(release_file)
     self.camera = None
+    from hud_nav_map import NavPreviewPublisher
+    self.nav_map = NavPreviewPublisher() if nav_map else None
     from openpilot.selfdrive.carrot.cluster.cluster_system_monitor import NetworkAddressProvider
     self.network = NetworkAddressProvider()
 
@@ -164,16 +167,33 @@ class SnapshotBuilder:
               'external_compute_label': device_badge[0] if device_badge and device_badge[1] == 'active' else '',
               'received': self.sm.recv_time, 'mono': self.sm.logMonoTime,
               'valid': self.sm.valid, 'alive': self.sm.alive, 'cameras': self.camera_previews()}
+    from hud_signal import signal_packet
+    record['signal_display'] = signal_packet(now)
+    if self.nav_map is not None:
+      preview = self.nav_map.packet(self.settings.get('ClusterHudScreenMode') == 'Nw==')
+      if preview is not None:
+        record['nav_map_preview'] = preview
+    return encode_snapshot(record)
+
+
+def encode_snapshot(record):
+  data = json.dumps(record, separators=(',', ':')).encode()
+  if len(data) > 96 * 1024:
+    # Optional signal metadata must not evict an existing camera or NAV image.
+    record.pop('signal_display', None)
     data = json.dumps(record, separators=(',', ':')).encode()
-    if len(data) > 96 * 1024:
-      record['cameras'] = {}
-      data = json.dumps(record, separators=(',', ':')).encode()
-    if len(data) > 96 * 1024:
-      record['events'] = {k:v for k,v in self.cached.items() if k != 'navRoute'}
-      data = json.dumps(record, separators=(',', ':')).encode()
-    if len(data) > 96 * 1024:
-      raise ValueError('HUD snapshot exceeds bounded USB allocation')
-    return data
+  if len(data) > 96 * 1024:
+    record['cameras'] = {}
+    data = json.dumps(record, separators=(',', ':')).encode()
+  if len(data) > 96 * 1024:
+    record.pop('nav_map_preview', None)
+    data = json.dumps(record, separators=(',', ':')).encode()
+  if len(data) > 96 * 1024:
+    record['events'] = {k:v for k,v in record['events'].items() if k != 'navRoute'}
+    data = json.dumps(record, separators=(',', ':')).encode()
+  if len(data) > 96 * 1024:
+    raise ValueError('HUD snapshot exceeds bounded display allocation')
+  return data
 
 
 _cached_snapshot = None

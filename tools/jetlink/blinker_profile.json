@@ -1,0 +1,7 @@
+{
+  "enabled": true,
+  "profile": "hyundai-b1-3c1",
+  "interface": "auto",
+  "fingerprint": "HYUNDAI_IONIQ_5_PE",
+  "driver_kernel": "5.15.148-tegra"
+}
