@@ -1,5 +1,17 @@
 # Repository memory
 
+- On 2026-10-27, owner narrows proposed TBT right-lane automation to a physical
+  right-indicator trigger only. Do NOT change manual/BT lane-change admission or
+  emit a separate LANECHANGE command. Speed condition AND fixed250m before right
+  TBT, until turn desire starts; NOT speed+250m. Earlier shared SideState/DesireHelper
+  modifications were restored to HEAD. Working-tree trial AutoTurnControl4 uses
+  blink_tbt through existing USB2CAN indicator policy (AutoBlinkerControl2 and
+  LaneChangeNeedTorque0), existing minimum speed, actual right lane/BSD plus fresh
+  corner20m gate. Saturated24.9/special25/hidden/stale block; no detection is not
+  free-space proof. Additive CarState TBT-only observations; old controls unchanged.
+  Complete/lamps-off/2s/1s reconfirm before repeat; steering/input failure cancels.
+  Unpublished/uninstalled; no physical CAN, road acceptance or safety claim.
+
 - On 2026-10-27, owner requests previous evening/morning blinker drive review,
   relighting and joongyu01 forced-crossing review.29 hash-matched rlogs360947687B,
   actual drives0071e533a4/mode2/AlwaysLateral1/SPAS0. Evening stop held normally.

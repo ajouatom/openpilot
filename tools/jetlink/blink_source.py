@@ -9,6 +9,7 @@ import time
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from blink_protocol import PACKAGE_CONFIG, LIMIT, encode, finite, fresh
 from blink_policy import Policy, AutomaticSignals
+from blink_tbt import TbtBlinker
 
 
 def vehicle_ready(sm, now, fingerprint, spas=False):
@@ -88,6 +89,7 @@ def main(fd, spas=False):
   events = Events(time.monotonic())
   policy, params = Policy(), Params()
   automatic = AutomaticSignals()
+  tbt = TbtBlinker()
   feedback, activated_id = {}, None
   release_until = 0.
   while True:
@@ -135,6 +137,15 @@ def main(fd, spas=False):
                               distance=sm['carrotMan'].xDistToTurn)
     else:
       automatic.update(now, mode, False, 0., 'none', '', 'none')
+    # Mode 4 lights the real right indicator. Its CAN feedback goes through the
+    # unchanged driver-blinker lane-change path; no LANECHANGE command is sent.
+    tbt_auto = tbt.update(now, enabled=(not spas and mode == 2 and params.get_int('AutoTurnControl') == 4),
+                          valid=(auto_valid and sm['carControl'].latActive and params.get_int('LaneChangeNeedTorque') == 0),
+                          cs=cs, model=sm['modelV2'] if auto_fresh else None, nav=sm['carrotMan'] if auto_fresh else None,
+                          manual=bool(commands) or (fresh(feedback.get('stamp'), now, .35) and feedback.get('state') == 'driver_override'),
+                          busy=auto is not None or (policy.hold is not None and tbt.phase not in ('waiting', 'changing', 'finishing')))
+    if tbt_auto is not None:
+      auto = tbt_auto
     commands, hold = policy.update(now, mode, ok, commands, cs.vEgo, cs.steeringAngleDeg,
                                   str(cs.gearShifter), remote, auto, auto_valid)
     hold = policy.acknowledged(now, activated_id, fresh(feedback.get('stamp'), now, .35) and feedback.get('state') == 'driver_override')
