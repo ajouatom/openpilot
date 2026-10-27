@@ -54,6 +54,11 @@ APRK_ON_KPH, APRK_OFF_KPH = 30., 20.
 # kick: ~2 flashes when the driver starts crossing a lane line without the blinker (lane_crossing.py).
 # shortcut: flash count at 1.0 s is not measured (BCM ran on ~1.2 s after the command stopped, EV4 10-26), tune after a drive
 BLINKER_PULSE_FRAMES = int(1.0 / DT_CTRL)
+# Every stock lever press starts with one BLINKER + BLINKER_TAP frame before the steady frame (Ioniq 5 3372.9 s:
+# 4280304010000000 tap -> de90304000000000 hold; GV80 82.96 s: 5a10304010000000 tap). The BCM needs that edge -
+# replaying only the steady form (TAP 0) did nothing on either car. GV80's lever is momentary and releases itself.
+STALK_TAP_FRAMES = int(0.20 / DT_CTRL)
+STALK_TAP_MOMENTARY_FRAMES = int(0.35 / DT_CTRL)
 
 # CanfdBlinkerStalk: when APRK can't be silenced, imitate the steering column lever (BLINKER_STALKS, 0x3C1); the BCM
 # blinks from it (09-18 log: 0x413 ALT lamp at 0.4 s while the lever is on). 10-26 logs: COUNTER_ALT goes +1 on every
@@ -237,6 +242,8 @@ class CarController(CarControllerBase):
     self.stalk_counter = None
     self.stalk_source_counter = None
     self.stalk_values = None
+    self.stalk_press_side = 0   # 1/2 while the lever is being held/tapped
+    self.stalk_press_frame = 0
     self.aprk_state, self.aprk_frame = 0, 0  # 0 normal, 1 extended session asked, 2 silenced
     self.lane_crossing, self.blinker_side, self.blinker_pulse_end = LaneCrossing(), 0, 0
     self.standstill_frame = -1e6
@@ -285,16 +292,27 @@ class CarController(CarControllerBase):
     self.steerDeltaDownOrg = self.steerDeltaDown = self.steerDeltaDownLC = self.params.STEER_DELTA_DOWN
 
   def stalk_blinkers(self, CS):
-    if self.blinker_stalk not in (1, 2):
+    # CanfdBlinkerStalk 1/2 hold the lever, 3/4 replay GV80's momentary tap. Both start with the BLINKER_TAP edge.
+    if self.blinker_stalk not in (1, 2, 3, 4):
       self.stalk_counter = self.stalk_source_counter = self.stalk_values = None
+      self.stalk_press_side = 0
       return []
-    if self.frame % 5 != 0 or CS.blinker_stalks is None:
+    momentary = self.blinker_stalk in (3, 4)
+    side = 1 if self.blinker_stalk in (1, 3) else 2
+    if side != self.stalk_press_side:            # rising edge: one press starts here
+      self.stalk_press_side, self.stalk_press_frame, self.stalk_counter = side, self.frame, None
+    pressed_for = self.frame - self.stalk_press_frame
+    if momentary and pressed_for >= STALK_TAP_MOMENTARY_FRAMES:
+      return []                                  # GV80's lever springs back, so stop after the tap
+    if self.frame % (2 if momentary else 5) != 0 or CS.blinker_stalks is None:
       return []
+    # GV80 holds the tap form for the whole press and then releases; the hold cars switch to the steady form after 0.2 s
+    tap = pressed_for < (STALK_TAP_MOMENTARY_FRAMES if momentary else STALK_TAP_FRAMES)
     values = dict(CS.blinker_stalks)
     source_counter = int(values.pop("COUNTER_ALT"))
     values.pop("CHECKSUM_MAYBE", None)
-    values.update(LEFT_BLINKER=int(self.blinker_stalk == 1), RIGHT_BLINKER=int(self.blinker_stalk == 2),
-                  LEFT_BLINKER_TAP=0, RIGHT_BLINKER_TAP=0)
+    values.update(LEFT_BLINKER=int(side == 1), RIGHT_BLINKER=int(side == 2),
+                  LEFT_BLINKER_TAP=int(tap and side == 1), RIGHT_BLINKER_TAP=int(tap and side == 2))
     # Stock captures repeat a counter until the lever state changes; BCM acceptance remains unverified.
     if getattr(self, "stalk_counter", None) is None or source_counter != getattr(self, "stalk_source_counter", None):
       self.stalk_counter = (source_counter + 1) % 16
@@ -670,7 +688,7 @@ class CarController(CarControllerBase):
           can_sends.extend(hyundaicanfd.create_lfa_icon_non_camera_scc(self.packer, CS, self.CAN, CC))
 
       # blinkers
-      if self.blinker_stalk in (1, 2) or self.stalk_counter is not None:
+      if self.blinker_stalk in (1, 2, 3, 4) or self.stalk_counter is not None:
         can_sends.extend(self.stalk_blinkers(CS))
       if hda2 and self.CP.flags & HyundaiFlags.ENABLE_BLINKERS:
         can_sends.extend(hyundaicanfd.create_spas_messages(self.packer, self.CAN, self.frame, CC.leftBlinker, CC.rightBlinker,
