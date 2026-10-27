@@ -2992,14 +2992,14 @@
       "unit": 1
     },
     {
-      "group": "시작",
+      "group": "시험 전용",
       "name": "CanfdBvmRaw",
       "title": "사각지대 카메라 뷰 값 직접 지정",
       "descr": "0: 끔, 1~255: 0x400 byte4 에 그 값을 그대로 실어 보냅니다. 차량이 쓰는 값은 좌 1~3, 우 4~6 이고 7 이상은 관측된 적이 없습니다. 위의 '계기판 사각지대 카메라 보기' 보다 우선합니다. 화면 표시 전용. 재부팅하면 0.",
-      "egroup": "START",
+      "egroup": "Test Only",
       "etitle": "Blind-Spot Camera Raw View Id",
       "edescr": "0: Off, 1..255: send that value as byte 4 of 0x400. The car uses 1..3 for left and 4..6 for right; nothing above 6 has ever been observed. Takes priority over the camera view entry above. Display only. Resets to 0 on reboot.",
-      "cgroup": "启动设置",
+      "cgroup": "仅测试",
       "ctitle": "盲区摄像头画面值直接指定",
       "cdescr": "0: 关闭, 1~255: 将该值原样写入 0x400 第4字节。车辆实际使用 1~3(左)、4~6(右)，从未观测到 7 以上。优先于上方的摄像头画面选项。仅用于显示。重启后恢复为 0.",
       "min": 0,
