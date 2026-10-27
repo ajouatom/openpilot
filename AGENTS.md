@@ -1,5 +1,20 @@
 # Repository memory
 
+- On 2026-10-27, complete NAV/blink history merged into Wip (2f94a4e0c9,
+  3c025cb4f5; docs29fd046a4b), preserving Wip Bosch source/replay byte-for-byte.
+  Resolve duplicate auto-merged helper/diagnostic blocks; pin PEAK source LF bytes.
+  Normal vehicle branch switch/Git Pull/reboot installs29fd046a4b; native build
+  and fresh UI/manager/Panda confirm real offroad/noOutput, ignition/controls false.
+  N16 and AutoTurn1/AutoBlinker2/torque0/SPAS0/test0 preserved; no mode4 activation,
+  CAN actuation, Jetson runtime change or road acceptance. Both retired remote
+  branches carrot-nav and carrot-nav-blink deleted with exact-tip leases after
+  ancestor and vehicle checks. Do not recreate them. Local historic worktrees remain.
+  CI40466713725 passes1728/56skip+232/62/94/119/11/11 and Windows; signal
+  40466713799 passes1275/40skip/362subtests; eGPU/native/startup checks pass.
+  NAS automatic updater SOURCE3c025cb4f5 and actual1196-frame served replay hash
+  verified; Wiki068c7f6 published manual regions, auto-sync40467192717 passes.
+  Details:docs/carrot_wip_consolidation_20261027.md. Raw evidence private.
+
 - On 2026-10-27, owner authorizes full carrot-nav/carrot-nav-blink integration
   into carrot-wip, vehicle migration, and deletion of BOTH retired remote branches
   after preservation. This supersedes earlier branch-only publication restrictions.

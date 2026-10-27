@@ -1,6 +1,6 @@
 # carrot-wip 통합 변경 안내
 
-carrot-nav와 carrot-nav-blink의 누적 변경을 carrot-wip로 통합합니다. 기존 carrot-wip의 Bosch 레이더 지원도 유지합니다.
+carrot-nav와 carrot-nav-blink의 누적 변경을 carrot-wip로 통합했습니다. 기존 carrot-wip의 Bosch 레이더 지원도 유지합니다.
 
 - 모델 선택: Carrot Web에서 N16 Nav 또는 Flip Flop을 선택하고 재부팅하면 eGPU·Jetson에 함께 적용됩니다. 내부 모델은 CD210으로 고정합니다.
 - NOO 표시: 내비 경로를 사용하는 N16 Nav에 지원 여부를 표시합니다. Flip Flop은 내비 입력을 사용하지 않습니다. MD v3는 선택 목록에서 제거했습니다.
@@ -16,4 +16,14 @@ carrot-nav와 carrot-nav-blink의 누적 변경을 carrot-wip로 통합합니다
 
 기존 선택값이 없는 carrot-wip 사용자는 외부 모델이 N16 Nav로 초기화됩니다. 저장된 모델 선택은 유지하며 내부 CD210은 바뀌지 않습니다. 일반 설치는 Git Pull 후 재부팅입니다. Jetson 런타임이 바뀌는 장치는 Jetson도 재부팅해야 합니다.
 
-새 ATC 기능의 로컬 검증은 실제 도로 주행 검증을 뜻하지 않습니다. 차량 적용 결과와 통합 CI 결과는 완료 후 기록합니다.
+## 적용 및 검증
+
+- carrot-nav 및 carrot-nav-blink 전체 이력을 carrot-wip에 병합한 뒤 두 원격 브랜치를 삭제했습니다. 기존 두 브랜치 사용자는 carrot-wip를 선택하고 Git Pull·재부팅하면 됩니다.
+- 소유자 차량은 29fd046a4b를 정상 Git 전환·풀로 설치하고 재부팅했습니다. 네이티브 빌드 완료, 새 부팅, UI·Panda·관리자 실행과 실제 오프로드/noOutput을 확인했습니다.
+- 차량의 N16 선택, ATC 1번, 깜박이 자동제어 2번, 토크 확인 0을 유지했습니다. SPAS 및 정차 시험은 0입니다. 새 ATC 4번은 자동으로 활성화하지 않았습니다.
+- 소유자 차량의 Jetson 서명 런타임·모델 핀은 이전 설치와 같아 이번에는 Jetson 패키지 교체나 재부팅이 필요하지 않았습니다.
+- [Jetson CI](https://github.com/ajouatom/openpilot/actions/runs/40466713725): Linux 통합 1,728개 통과/56개 제외, 감시 232개, HUD 62개, 업데이트 94개, 내비 119개, 저장소·네트워크 각 11개 및 Windows 설치 검사 통과. [신호/CAN CI](https://github.com/ajouatom/openpilot/actions/runs/40466713799): 1,275개 통과/40개 제외, 하위 검사 362개 통과. 검사 수는 서로 중복될 수 있습니다.
+- eGPU 호환성·네이티브 CPU·시작 복구 검사, 로컬 집중 검사 221개와 Wiki 검사 25개도 통과했습니다. 한국어·영어 안내와 공개 Wiki를 갱신했습니다.
+- NAS 로그 재생 서비스가 통합 코드 3c025cb4f5로 자동 갱신됐습니다. 실제 결과 페이지와 1,196프레임 재계산 결과의 해시가 배포 검증 결과와 일치했습니다.
+
+차량 검증은 오프로드 기동 확인입니다. 새로운 ATC 4번의 실제 주행·차선변경 또는 깜박이 복구 성공을 검증한 것은 아닙니다. USB 지연의 절대 50ms 상한도 보장하지 않습니다.
