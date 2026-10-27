@@ -1,5 +1,27 @@
 # Repository memory
 
+- On 2026-10-27, owner requests previous evening/morning blinker drive review,
+  relighting and joongyu01 forced-crossing review.29 hash-matched rlogs360947687B,
+  actual drives0071e533a4/mode2/AlwaysLateral1/SPAS0. Evening stop held normally.
+  Morning~06:55:18 lamp off follows premature physical completion while same
+  left turn17m ahead; outgoing1EA clears first. Ordered replay end391.456->404.702s
+  with same cue. Add nav-distance completion gate. Separate~06:57:28 right lamp
+  extinguishes before standstill; no acknowledged external/1EAhold, exact receiver
+  abort unlogged/unresolved. USB2CAN-only one relight after1.5s continuous both-off,
+  only confirmed owned ATC turn/freshack/no cancel; original300s expiry, newID/newACK,
+  no initial-start/manual/lane retries. Comma sampled state diagnostics<=5Hz,
+  tokens excluded/no extra USB fields.123desktop,lint/docs pass;CI40430803117
+  Linux1648/56skip+232/62/94/119/11/11 and Windows pass. Publish9779819859 only
+  carrot-nav-blink; vehicle remainscd80fae432, no install/restart/actuation. Normal
+  comma GitPull/restart; host/model unchanged. Jetson journal LAN timed out.
+  Upstream40aa6abd50 D>30km/h lamp-off crossing geometry trigger independent of
+  engagement/torque, contributor false positives7+3; retains unacknowledged APRK
+  pause/100Hz competingSPAS. Not imported. Panda symptom counters stable; large
+  existing canState0 total10004410 already at route start, not a new blinker fault.
+  Details:docs/blinker_drive_review_20261027.md; raw logs private. Physical lamp
+  recovery and unconfirmed-start failure remain unproven; do not claim full cure.
+
+
 - On 2026-10-27, owner retires MD v3 and requests DM pause for SoftHold,
   signal stop and stopped lead, plus vehicle install/reboot. Only N16 Nav and
   Flip Flop selectable; retired metadata retained for exact unused PKL cleanup.

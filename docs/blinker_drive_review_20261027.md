@@ -1,4 +1,4 @@
-﻿# October 27 turn-indicator drive review
+# October 27 turn-indicator drive review
 
 Only carrot-nav-blink. Reviewed joongyu01/carrot-wip-dev at 40aa6abd50f7d6fefa8481d28838596ddad083a8; no upstream CAN changes imported.
 
@@ -29,3 +29,11 @@ Desktop focused checks:121 passed before the two additional integration cases, t
 The new lane_crossing.py observes model lane geometry, not driver steering torque. With CanfdBlinkerControl enabled, D gear, speed above30km/h (20km/h hysteresis while an APRK transaction is active), and both lamps off, a near line within0.9m and filtered approach rate above0.4m/s plus the opposite line receding above0.4m/s can trigger. Line probability need only have exceeded0.5 within3s; a greater-than0.4m one-frame relabel suppresses detection2s, with5s cooldown. Engaged/latActive/steeringPressed are not required, so this cannot distinguish deliberate manual lane changes from drift or some geometry errors. The contributor reports35/38 detections with7 false triggers in the main drive, and2/2 with3 false in a holdout; these are contributor results, not independent acceptance.
 
 Output still requests APRK extended session, waits five100Hz controller frames, sends communication-disable without checking ECU replies, and injects SPAS1/2 at100Hz for the roughly1s pulse. A default-session request follows; restored OEM behavior is not acknowledged. Source explicitly notes OEM50Hz SPAS may remain and interleave. Stock SPAS2 fields are copied for GV80 support; this does not eliminate arbitration/counter conflict or establish Ioniq5PE acceptance. No model freshness/validity or complete right-line/probability array checks exist in the new detector. Adopt neither the actuation nor unconditional crossing trigger. A future suggestion-only detector could be studied separately using this vehicle's logs and fresh finite geometry, without modifying steering or injecting SPAS.
+
+## Publication result
+
+Source9779819859 is published only on carrot-nav-blink. CI40430803117 passes Windows installer and Linux:232 monitoring,62 codec,94 updater,1,648 broad/56skips,119 navigation,11 storage and11 network checks. Final123 focused desktop tests, lint and mapped user-doc validation pass; counts overlap CI. The recovery receiver integration uses the real Controller policy with simulated time/CAN, not a physical CAN device.
+
+Vehicle installation/restart was not requested or performed in this review; current vehicle remains cd80fae432. Normal Git Pull and comma restart activates this comma-side change; no new Jetson bundle, Jetson reboot or model download is needed. A read-only attempt to retrieve Jetson journal over its LAN address timed out. The receiver abort cause remains unresolved and physical recovery still needs acceptance.
+
+Panda summary logs show no error-counter increase at either morning symptom. A large pre-existing canState0 total10004410/TXlost1 is already present at route start and remains constant; it must not be attributed to these blinker events. canState1 gains one error at route shutdown. The Jetson USB2CAN adapter's own historical counters were not available, so this is not an all-buses-error-free claim.
