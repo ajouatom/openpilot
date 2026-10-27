@@ -50,6 +50,7 @@ const CanMsg HYUNDAI_CANFD_HDA2_LONG_TX_MSGS[] = {
   {0x165, 0, 24}, // SPAS1, sent while APRK is silenced
   {0x16A, 0, 32}, // SPAS2 BLINKER_CONTROL, sent while APRK is silenced
   {0x3C1, 0, 8},  // BLINKER_STALKS replay (CanfdBlinkerStalk)
+  {0x400, 0, 8},  // SVM_STATUS_400 BVM_VIEW spoof (CanfdBvmView)
   {0x12A, 1, 16}, // LFA
   {0x160, 1, 16}, // ADRV_0x160
   {0x1E0, 1, 16}, // LFAHDA_CLUSTER
@@ -104,6 +105,7 @@ const CanMsg HYUNDAI_CANFD_HDA1_TX_MSGS[] = {
   {0x160, 0, 16}, // ADRV_0x160
   {0x7D0, 0, 8},  // tester present for radar ECU disable
   {0x3C1, 0, 8},  // BLINKER_STALKS replay (CanfdBlinkerStalk)
+  {0x400, 0, 8},  // SVM_STATUS_400 BVM_VIEW spoof (CanfdBvmView)
   {0x1AA, 2, 16}, // CRUISE_ALT_BUTTONS , carrot
   {203, 0, 24}, // CB
   {373, 2, 24}, // TCS(0x175)
@@ -706,6 +708,17 @@ static bool hyundai_canfd_tx_hook(const CANPacket_t *to_send_const) {
       if ((b != 0U) && !blinker && !stock_field) {
         tx = false;
       }
+    }
+  }
+
+  // SVM_STATUS_400(0x400) spoof: a cluster display status, nothing but byte 4 may be set and only view ids 0..7
+  if (addr == 0x400) {
+    bool shape_ok = (GET_BYTE(to_send, 0) == 0U) && (GET_BYTE(to_send, 1) == 0U) &&
+                    (GET_BYTE(to_send, 2) == 0U) && (GET_BYTE(to_send, 3) == 0U) &&
+                    (GET_BYTE(to_send, 4) <= 7U) &&
+                    (GET_BYTE(to_send, 5) == 0U) && (GET_BYTE(to_send, 6) == 0U) && (GET_BYTE(to_send, 7) == 0U);
+    if (!shape_ok) {
+      tx = false;
     }
   }
 

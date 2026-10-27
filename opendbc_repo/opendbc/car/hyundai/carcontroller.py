@@ -240,6 +240,9 @@ class CarController(CarControllerBase):
     self.blinker_control = False
     self.blinker_test = 0  # CanfdBlinkerTest: 1 left, 2 right (menu test, any speed/gear)
     self.blinker_stalk = 0  # CanfdBlinkerStalk: 1 left, 2 right (0x3C1 replay)
+    # CanfdBvmView: 0 off, 1 left, 2 right, 3 both. Spoofs the cluster camera view status (0x400 byte4) so the
+    # blind-spot camera is shown without the turn signal. Display-only message, nothing else uses it.
+    self.bvm_view = 0
     self.palisade_cgw_test = PalisadeCgwTest()
     self.palisade_blinker_test = 0
     self.stalk_counter = None
@@ -327,6 +330,14 @@ class CarController(CarControllerBase):
     addr, dat, bus = self.packer.make_can_msg("BLINKER_STALKS", self.CAN.ECAN, values)
     return [CanData(addr, bytes([stalk_checksum(dat[1:])]) + bytes(dat[1:]), bus)]
 
+  def bvm_view_msg(self):
+    # 0x400 BVM_VIEW (byte 4) is what the car broadcasts at 5 Hz while a blind-spot camera is on:
+    # 1..3 left, 4..6 right, 0 off (09-12 and 10-26 logs). Send the settled value at 20 Hz to win the slots.
+    val = {1: 3, 2: 6, 3: 7}.get(self.bvm_view, 0)
+    if self.frame % 5 != 0:
+      return []
+    return [CanData(0x400, bytes([0, 0, 0, 0, val, 0, 0, 0]), self.CAN.ECAN)]
+
   def aprk_blinkers(self, CC, CS):
     # shortcut: replies are not checked; if APRK ignores the requests it keeps sending SPAS2 and the cluster sees both
     ret = []
@@ -410,6 +421,7 @@ class CarController(CarControllerBase):
       self.blinker_control = params.get_bool("CanfdBlinkerControl")
       self.blinker_test = params.get_int("CanfdBlinkerTest")
       self.blinker_stalk = params.get_int("CanfdBlinkerStalk")
+      self.bvm_view = params.get_int("CanfdBvmView")
       self.palisade_blinker_test = params.get_int("PalisadeBlinkerTest")
       self.hapticFeedbackWhenSpeedCamera = int(params.get_int("HapticFeedbackWhenSpeedCamera"))
 
@@ -690,6 +702,10 @@ class CarController(CarControllerBase):
         ))
         if not camera_scc:
           can_sends.extend(hyundaicanfd.create_lfa_icon_non_camera_scc(self.packer, CS, self.CAN, CC))
+
+      # blind-spot camera view (no turn signal needed)
+      if self.bvm_view:
+        can_sends.extend(self.bvm_view_msg())
 
       # blinkers
       if self.blinker_stalk in (1, 2, 3, 4) or self.stalk_counter is not None:
