@@ -441,6 +441,8 @@ camera supplies 20fps. Reduced processing overhead does not establish sustained
 
 `AutoBlinkerControl` — Settings > Driving > Steering > Lane Change (Auto Turn). Default: 0. Currently limited to the Ioniq 5 PE, Jetson and PEAK USB-CAN/B1 profile on carrot-nav-blink.
 
+An acknowledged ATC turn is not completed by an approach bend while navigation still places the same turn ahead. With the original hold still valid and no driver cancellation or communication failure, both lamps remaining off for 1.5 seconds allows one recovery attempt for that turn. Unconfirmed initial starts, manual/Bluetooth cancellation, opposite indicators and navigation cancellation do not trigger recovery. Physical lamp recovery still needs vehicle acceptance.
+
 ### Behavior
 
 Controls physical lamps on supported Jetson USB-CAN/B1 vehicles. Operating the stock lever ends the owned request.

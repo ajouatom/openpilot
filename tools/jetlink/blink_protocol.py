@@ -174,6 +174,9 @@ class Sender:
     self.worker = None
     self.next_send = 0.
     self.anchor = None
+    self.report = None
+    self.last_report = None
+    self.report_after = 0.
     if peer.get('carrot_host') != 'jetson' or peer.get(CAPABILITY) is not True:
       return
     if Path('/TICI').is_file():
@@ -189,6 +192,9 @@ class Sender:
     self.clock_received = time.monotonic()
     self.offset = response['clock'] - self.clock_received
     self.worker = Process('blink_source.py')
+    if Path('/TICI').is_file():
+      from openpilot.common.swaglog import cloudlog
+      self.report = cloudlog.event
 
   def send(self, client):
     now = time.monotonic()
@@ -206,7 +212,19 @@ class Sender:
       return  # Do not extrapolate a clock anchor through a stalled session.
     self.worker.send({'stamp':now, 'accepted_id':state.get('accepted_id'),
                       'state':state.get('state'), 'token':self.token})
-    value = wire_record(self.worker.latest(), self.token, self.offset, now)
+    source = self.worker.latest()
+    if self.report is not None and isinstance(source, dict) and now >= self.report_after:
+      hold = source.get('hold') or {}
+      detail = {'source':hold.get('source'), 'direction':hold.get('direction'),
+                'activated':source.get('activated') is True,
+                'peer_state':str(state.get('state', 'missing'))[:32],
+                'accepted':bool(hold.get('id') and state.get('accepted_id') == hold['id']),
+                'peer_owned':state.get('token') == self.token,
+                'relights':source.get('relights', 0)}
+      if detail != self.last_report:
+        self.report('physicalBlinkerState', **detail)
+        self.last_report, self.report_after = detail, now+.2
+    value = wire_record(source, self.token, self.offset, now)
     if value is not None:
       client.t.send(DATA, client._next_seq(), [encode(value)])
 

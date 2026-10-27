@@ -292,7 +292,7 @@ def test_actual_source_loop_starts_from_audio_cue_before_model_turn(monkeypatch)
   clock,sent=[10.],[]
   sm=Vehicle()
   sm['modelV2']=NS(meta=NS(desire='none',autoTurnSignal='none',autoTurnSignalLaneChange=False))
-  sm['carrotMan']=NS(atcType='none')
+  sm['carrotMan']=NS(atcType='none',xDistToTurn=0)
   sm['livePose']=NS(inputsOK=True,sensorsOK=True,posenetOK=True,orientationNED=NS(valid=True,z=0.))
   sm.services=list(sm);sm.valid=dict.fromkeys(sm,True);sm.alive=dict.fromkeys(sm,True)
   def tick(_):

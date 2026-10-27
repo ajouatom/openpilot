@@ -131,7 +131,8 @@ def main(fd, spas=False):
       auto = automatic.update(now, mode, auto_valid,
                               ss.atcTurnStartMonoTime / 1e9, str(ss.atcTurnDirection), sm['carrotMan'].atcType,
                               str(meta.desire), str(meta.autoTurnSignal) if meta.autoTurnSignalLaneChange and sm['carControl'].latActive else None,
-                              speed=cs.vEgo, angle=cs.steeringAngleDeg, heading=turn_heading(sm, now))
+                              speed=cs.vEgo, angle=cs.steeringAngleDeg, heading=turn_heading(sm, now),
+                              distance=sm['carrotMan'].xDistToTurn)
     else:
       automatic.update(now, mode, False, 0., 'none', '', 'none')
     commands, hold = policy.update(now, mode, ok, commands, cs.vEgo, cs.steeringAngleDeg,
@@ -148,6 +149,8 @@ def main(fd, spas=False):
       activated_id = hold['id']
     if feedback.get('state') == 'driver_override':
       release_until = 0.
+    if not spas and policy.relight(now, activated_id, acknowledged, cs.leftBlinker, cs.rightBlinker):
+      hold, activated_id = policy.hold, None
     if mode and not spas:
       atomic_json(HOLD_PATH, {'stamp':now, 'mode':mode, 'fingerprint':fingerprint,
                              'direction':hold['direction'] if hold and activated_id == hold['id'] else None,
@@ -156,7 +159,8 @@ def main(fd, spas=False):
                settings.get('devices', {}).get(mac, {}).get('enabled') is True and
                not (learning.get('address') == mac and learning.get('until', 0) > now)]
     try:
-      sock.send(encode({'stamp': now, 'ok': bool(ok), 'events': commands, 'hold': hold, 'devices':devices}))
+      sock.send(encode({'stamp': now, 'ok': bool(ok), 'events': commands, 'hold': hold, 'devices':devices,
+                        'activated':activated_id is not None, 'relights':policy.relights}))
     except BlockingIOError:
       pass  # Never buffer commands for delivery after congestion.
     time.sleep(max(0, now+.05-time.monotonic()))

@@ -20,11 +20,32 @@ class Policy:
     self.mode = 0
     self.turned = False
     self.centered = None
+    self.started = 0.
+    self.off_since = None
+    self.relights = 0
 
   def start(self, direction, source, now):
     self.serial += 1
     self.hold = {'id': f'{self.session}:{self.serial}', 'direction': direction, 'source': source, 'time': now}
     self.turned, self.centered = False, None
+    self.started, self.off_since, self.relights = now, None, 0
+
+  def relight(self, now, activated_id, acknowledged, left, right):
+    """One recovery tap for an owned turn, never an unconfirmed start/cancel."""
+    h = self.hold
+    if (not h or h['source'] != 'turn' or activated_id != h['id'] or not acknowledged or
+        self.relights or left or right):
+      self.off_since = None
+      return False
+    self.off_since = now if self.off_since is None else self.off_since
+    # Require sustained absence, not a normal dark half-cycle of the lamps.
+    if now-self.off_since < 1.5 or now-self.started >= MAX_HOLD:
+      return False
+    self.serial += 1
+    self.hold = {**h, 'id': f'{self.session}:{self.serial}', 'time': now}
+    self.relights += 1
+    self.off_since = None
+    return True
 
   def acknowledged(self, now, activated_id, driver_override=False):
     # A rejected/unsuccessful start must not become an invisible five-minute
@@ -53,7 +74,7 @@ class Policy:
       self.suppressed = False
     if self.hold:
       h = self.hold
-      if (mode == 0 or now-h['time'] >= MAX_HOLD or gear not in ('park', 'neutral', 'drive') or
+      if (mode == 0 or now-self.started >= MAX_HOLD or gear not in ('park', 'neutral', 'drive') or
           (h['source'] == 'bluetooth' and not remote) or
           (h['source'] == 'bluetooth' and not math.isfinite(angle)) or
           (h['source'] != 'bluetooth' and (not auto_valid or eligible != (h['source'], h['direction'])))):
@@ -103,7 +124,7 @@ class AutomaticSignals:
     self.heading = None
     self.rotation = 0.
 
-  def update(self, now, mode, valid, cue, direction, atc_type, desire, lane=None, *, speed=0., angle=0., heading=0.):
+  def update(self, now, mode, valid, cue, direction, atc_type, desire, lane=None, *, speed=0., angle=0., heading=0., distance=None):
     previous, self.cue = self.cue, cue
     changed_mode, self.mode = mode != self.mode, mode
     if not valid or not mode or changed_mode:
@@ -134,7 +155,11 @@ class AutomaticSignals:
         self.heading = heading
         signed_angle = angle * (1 if self.direction == 'left' else -1)
         self.turned |= signed_angle >= 30 and speed >= 1 / 3.6 and self.rotation >= math.radians(20)
-        if self.turned and abs(angle) <= 10 and speed >= 1 / 3.6:
+        # An approach can itself contain a sharp bend (or adjacent turns). Do
+        # not finish while navigation still places this same turn ahead.
+        passed = distance is None or (math.isfinite(distance) and
+                                      (distance <= 0 or atc_type != 'turn '+self.direction))
+        if self.turned and passed and abs(angle) <= 10 and speed >= 1 / 3.6:
           self.centered = now if self.centered is None else self.centered
           if now-self.centered >= .4:
             self.direction = None
