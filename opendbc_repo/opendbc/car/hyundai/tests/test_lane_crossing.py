@@ -3,10 +3,10 @@ from types import SimpleNamespace
 from opendbc.car.hyundai.lane_crossing import LaneCrossing
 
 
-def md(frame, left, right, prob=1.0):
+def md(frame, left, right, prob=1.0, rprob=None):
   line = lambda y: SimpleNamespace(y=[y])
   return SimpleNamespace(frameId=frame, laneLines=[line(-5.), line(-left), line(right), line(5.)],
-                         laneLineProbs=[0., prob, prob, 0.])
+                         laneLineProbs=[0., prob, prob if rprob is None else rprob, 0.])
 
 
 def run(track, allowed=True):
@@ -52,3 +52,11 @@ def test_road_narrowing_on_one_side_only():
   # left line closes in but the right line does not move away (lane narrowing, merge): no lateral motion of the car
   track = [(1.7, 1.7, 1.0)] * 40 + [(1.7 - 0.04 * k, 1.7, 1.0) for k in range(40)]
   assert not any(run(track))
+
+
+def test_azera_alley_stays_quiet():
+  # 10-27 Azera alley: left line wobbling 0.3-0.9 m, right line never seen (prob <= 0.15) -> kicked every 5 s before
+  close = [(0.35 + 0.25 * ((i // 8) % 2), 2.2 - 0.25 * ((i // 8) % 2), 0.7, 0.1) for i in range(300)]
+  assert not any(run(close))
+  # same wobble with a seen right line: the near line never came from inside the lane (>= 1.2 m), still quiet
+  assert not any(run([(l, r, 0.9) for l, r, _, _ in close]))

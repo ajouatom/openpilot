@@ -3,16 +3,20 @@
 # lamp-free crossings above 30 km/h, median 1.05 s before the centre crossed, 7 false; 10-24 holdout 2/2, 3 false.
 NEAR_M = 0.9          # near line this close to the car centre: the tyre is on it
 RATE_MPS = 0.4        # moving toward it, while the far line moves away at least as fast
-SEEN_S = 3.0          # line probs fall to ~0.01 while crossing, so the line only has to have been seen (>0.5) lately
+SEEN_S = 3.0          # line probs fall to ~0.01 while crossing, so both lines only have to have been seen (>0.5) lately;
+                      # a real lane has both (highway: 0.95-1.0 3 s before), the Azera alley's right line never passed 0.15
 RELABEL_M = 0.4       # a bigger one-frame jump is the model relabelling lines after a crossing, not motion
 RELABEL_HOLD_S = 2.0  # the relabelled line shows up close and "approaching" right after a crossing
 COOLDOWN_S = 5.0
+FROM_M = 1.2          # the near line was this far within FROM_S: a real approach from inside the lane, not a line
+FROM_S = 2.0          # that just stays close (Azera 10-27 alley: left line 0.3-0.5 m for 15 s, kicked every 5 s)
 
 
 class LaneCrossing:
   def __init__(self):
     self.frame_id = None
     self.prev = {}
+    self.hist = {1: [], 2: []}
     self.rate = {1: 0., 2: 0.}
     self.seen = {1: -99., 2: -99.}
     self.hold = self.last = -99.
@@ -31,12 +35,15 @@ class LaneCrossing:
         else:
           self.rate[i] = 0.5 * self.rate[i] + 0.5 * (py - y[i]) / max(t - pt, 1e-3)
       self.prev[i] = (y[i], t)
+      self.hist[i] = [(ht, hy) for ht, hy in self.hist[i] if t - ht < FROM_S] + [(t, y[i])]
       if md.laneLineProbs[i] > 0.5:
         self.seen[i] = t
     if not allowed or t - self.hold < RELABEL_HOLD_S or t - self.last < COOLDOWN_S:
       return 0
+    if t - min(self.seen.values()) >= SEEN_S:
+      return 0
     for i in (1, 2):
-      if t - self.seen[i] < SEEN_S and y[i] < NEAR_M and self.rate[i] > RATE_MPS and -self.rate[3 - i] > RATE_MPS:
+      if y[i] < NEAR_M and self.rate[i] > RATE_MPS and -self.rate[3 - i] > RATE_MPS and max(hy for _, hy in self.hist[i]) >= FROM_M:
         self.last = t
         return 3 if i == 1 else 4
     return 0
