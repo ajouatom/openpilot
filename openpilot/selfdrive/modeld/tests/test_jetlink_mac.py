@@ -118,9 +118,8 @@ def test_bad_or_interrupted_download_never_installs(tmp_path, monkeypatch, model
   assert not list(tmp_path.iterdir())
 
 
-@pytest.mark.parametrize('peer', [{'carrot_host': 'jetson', 'backend': 'trt', 'device': 'Orin'},
-                                 {'backend': 'trt', 'device': 'Orin'}, {'backend': 'ort', 'device': 'cuda-RTX'}])
-def test_jetson_and_other_peers_keep_legacy_call_without_mac_side_effects(peer, monkeypatch):
+@pytest.mark.parametrize('peer', [{'backend': 'ort', 'device': 'cuda-RTX'}])
+def test_other_peers_keep_legacy_call_without_mac_side_effects(peer, monkeypatch):
   calls = []
   def ensure(*a, **kw):
     calls.append((a, kw))

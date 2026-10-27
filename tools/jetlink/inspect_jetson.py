@@ -5,6 +5,7 @@ import importlib.metadata
 import importlib.util
 import json
 from pathlib import Path
+from model_pin import read_spec
 import platform
 import re
 import shutil
@@ -32,7 +33,7 @@ def command(*args):
 
 def inspect(runtime, verify_model=False):
   errors = []
-  spec = json.loads((ROOT / 'openpilot/selfdrive/modeld/jetlink/cinque_v2.json').read_text())
+  spec = read_spec(ROOT)
   release = read(Path('/etc/nv_tegra_release'))
   board = read(Path('/proc/device-tree/model'))
   if platform.system() != 'Linux' or platform.machine() != 'aarch64' or not release:

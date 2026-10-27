@@ -29,6 +29,7 @@ from openpilot.common.file_chunker import open_file_chunked
 from openpilot.selfdrive.modeld.camera_sync import FrameMeta
 from openpilot.selfdrive.modeld.camera_gap import CameraGapTrace
 from openpilot.selfdrive.modeld.constants import ModelConstants, Plan
+from openpilot.selfdrive.navigation.map_client import MapInput
 from openpilot.selfdrive.modeld.signal_shadow import ShadowClient
 from openpilot.selfdrive.modeld.helpers import (get_tg_input_devices, load_oob, modeld_pkl_path,
                                                 refresh_usbgpu_device_cache, select_vision_streams, usbgpu_compiled_path,
@@ -380,7 +381,7 @@ def main(demo=False):
 
   # messaging
   pm = PubMaster(["modelV2", "drivingModelData", "cameraOdometry"])
-  sm = SubMaster(["deviceState", "carState", "roadCameraState", "liveCalibration", "driverMonitoringState", "carControl", "selfdriveState", "liveDelay", "carrotMan", "radarState"])
+  sm = SubMaster(["deviceState", "carState", "roadCameraState", "liveCalibration", "driverMonitoringState", "carControl", "selfdriveState", "liveDelay", "carrotMan", "radarState", "navInstructionCarrot", "navRoute"])
 
   publish_state = PublishState()
   params = Params()
@@ -411,7 +412,10 @@ def main(demo=False):
   long_delay = CP.longitudinalActuatorDelay + LONG_SMOOTH_SECONDS
   prev_action = log.ModelDataV2.Action()
 
-  DH = DesireHelper()
+  from opendbc.car.tesla.values import TeslaFlags
+  DH = DesireHelper(tesla_auto_signals=CP.brand == "tesla" and bool(CP.flags & TeslaFlags.AUTO_TURN_SIGNALS))
+  nav_input = MapInput()
+
 
   frame = 0
   custom_lat_delay = 0.0
@@ -500,6 +504,8 @@ def main(demo=False):
       'action_t': np.array([lat_action_t, long_action_t], dtype=np.float32),
     }
 
+    inputs.update(nav_input.update(model, sm, v_ego))
+
     inference_started = time.monotonic()
     mt1 = time.perf_counter()
     camera_age_at_run_ms = (inference_started - meta_main.timestamp_eof * 1e-9) * 1000
@@ -573,6 +579,11 @@ def main(demo=False):
       modelv2_send.modelV2.meta.desireLog = DH.desireLog #carrot
       modelv2_send.modelV2.meta.laneChangeBlinkerHold = DH.blinker_hold_direction
       modelv2_send.modelV2.meta.leverTurn = DH.lever_turn
+      modelv2_send.modelV2.meta.autoTurnSignal = DH.auto_turn_signal
+      modelv2_send.modelV2.meta.autoTurnSignalLaneChange = DH.auto_turn_signal_lane_change
+      modelv2_send.modelV2.meta.autoTurnSignalDirection = DH.auto_signal_direction
+      modelv2_send.modelV2.meta.autoTurnSignalRequestId = DH.auto_signal_request_id
+
       drivingdata_send.drivingModelData.meta.laneChangeState = DH.lane_change_state
       drivingdata_send.drivingModelData.meta.laneChangeDirection = DH.lane_change_direction
 

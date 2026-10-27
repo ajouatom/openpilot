@@ -70,3 +70,30 @@ def test_turn_model_flashes_the_cluster_red_like_a_held_paddle():
   assert _select_cluster_background(True, True, False, 2) == 1                     # cruise: blue
   assert _select_cluster_background(False, True, False, 0) == 3                    # lateral only: orange
   assert _select_cluster_background(False, False, False, 0) == 7                   # gray
+
+
+def test_external_hold_changes_only_existing_1ea_fields():
+  from unittest.mock import patch
+  from opendbc.can import CANPacker
+  from opendbc.can.parser import get_raw_value
+  from opendbc.car import structs
+  from opendbc.car.hyundai import hyundaicanfd as h
+  from opendbc.car.hyundai.values import HyundaiFlags
+  packer=CANPacker('hyundai_canfd_generated')
+  definition=packer.dbc.name_to_msg['ADRV_0x1ea']
+  stock={key:0 for key in definition.sigs}
+  stock['COUNTER']=17
+  state=NS(adrv_0x1ea=stock,adrv_0x161=None,adrv_0x200=None,ccnc_0x162=None,
+           out=structs.CarState(),modelV2=None,lfahda_cluster=None,cruise_buttons_msg=None)
+  def message(value):
+    with patch.object(h,'Params',lambda:NS(get_int=lambda _:0)):
+      result=h.create_ccnc_messages(NS(flags=HyundaiFlags.CAMERA_SCC),CANPacker('hyundai_canfd_generated'),
+               NS(ECAN=0,CAM=2),5,structs.CarControl(),state,NS(physicalBlinkerHold=value),0,False,False,0,False,0,0)
+    assert len(result)==1 and result[0][0]==0x1ea
+    return {key:get_raw_value(result[0][1],sig) for key,sig in definition.sigs.items()}
+  baseline=message(0)
+  for value,left,right in ((1,0,0),(2,1,0),(3,0,1)):
+    actual=message(value)
+    assert (actual['LEFT_BLINK_HOLD'],actual['RIGHT_BLINK_HOLD'])==(left,right)
+    assert {k:v for k,v in actual.items() if k not in ('LEFT_BLINK_HOLD','RIGHT_BLINK_HOLD','CHECKSUM')} == {
+      k:v for k,v in baseline.items() if k not in ('LEFT_BLINK_HOLD','RIGHT_BLINK_HOLD','CHECKSUM')}

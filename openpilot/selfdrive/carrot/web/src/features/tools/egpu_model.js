@@ -1,4 +1,5 @@
 "use strict";
+import { renderLibrary } from "./model_library.js";
 
 const POLL_INTERVAL_MS = 2000;
 let pollTimer = null;
@@ -88,7 +89,10 @@ function modelDisplayName(status) {
   if (explicitName) return explicitName;
 
   const modelId = String(status?.model_id || "").toLowerCase();
-  if (modelId.includes("pr39087-md-v3")) return "Mountain Dew v3";
+  if (modelId.includes("flip-flop")) return "Flip Flop";
+  if (modelId.includes("md-v3")) return "MD v3";
+  if (modelId.includes("nav-n16")) return "N16 Nav (NOO)";
+  if (modelId.includes("comma-nav-")) return "Nav Model (cf8f6120)";
   if (modelId.includes("pr39047") || modelId.includes("mdm-v1") || modelId.includes("6f4c0faf-256f2178") || modelId.includes("4bfb5340-e20cde17")) return "Mountain Dew";
   if (modelId.includes("pr38932") || modelId.includes("cinque-v3")) return "Cinque v3";
   if (modelId.includes("pr38823") || modelId.includes("cinque-v2")) return "Cinque v2";
@@ -108,6 +112,7 @@ function render(status = lastStatus) {
   const card = document.getElementById("egpuModelCard");
   if (!card) return;
   lastStatus = status;
+  renderLibrary(status?.library);
   if (!status?.available && !status?.jetlink) {
     card.hidden = true;
     return;
@@ -155,7 +160,7 @@ function render(status = lastStatus) {
     card.hidden = false;
     card.dataset.state = host.severity === "error" ? "error" : "compiled";
     card.classList.remove("is-running");
-    document.getElementById("egpuModelTitle").textContent = `${host.label} · Cinque v2`;
+    document.getElementById("egpuModelTitle").textContent = `${host.label} · ${status.library?.models?.find(m => m.id === status.library.effective)?.name || "Jetson"}`;
     stateEl.textContent = t(`host_${host.severity || "unknown"}`);
     detailEl.textContent = "";
     progressEl.hidden = true;

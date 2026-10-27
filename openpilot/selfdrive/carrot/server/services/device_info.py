@@ -267,9 +267,13 @@ def _split_nmcli_line(line: str) -> List[str]:
 
 def get_wifi_networks() -> List[Dict[str, Any]]:
   """Read visible Wi-Fi networks without connecting, forgetting, or editing."""
+  from openpilot.common.wifi_coexistence import direct_ap_active
+  # This is a read-only background viewer, not an explicit request to scan.
+  # Query only the station cache while the other interface serves Jetson.
+  discovery = ["ifname", "wlan0", "--rescan", "no"] if direct_ap_active() else ["--rescan", "auto"]
   try:
     proc = subprocess.run(
-      ["nmcli", "-t", "-f", "ACTIVE,SSID,SECURITY,SIGNAL", "dev", "wifi", "list", "--rescan", "auto"],
+      ["nmcli", "-t", "-f", "ACTIVE,SSID,SECURITY,SIGNAL", "dev", "wifi", "list", *discovery],
       check=False,
       capture_output=True,
       encoding="utf-8",

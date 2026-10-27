@@ -1,21 +1,21 @@
 {
   "format": 1,
-  "source_commit": "84087a5b78118acc40234bfd8ef64235421f1aab",
+  "source_commit": "0d4947499931f42b94157129a847706fd2f5b637",
   "runtime": {
     "arch": "aarch64",
     "l4t": "36.4.7",
     "tensorrt": "10.3.0"
   },
   "bundle": {
-    "url": "https://upload.shind0.synology.me/models/jetlink-host-84087a5b78118acc40234bfd8ef64235421f1aab/precompiled-runtime.tar.gz",
-    "sha256": "6e9706ab60008695f9cb28d3ef792be8465c9f1eb2e961f1c43726e3f9e56d91",
-    "size": 64518963
+    "url": "https://upload.shind0.synology.me/models/jetlink-host-0d4947499931f42b94157129a847706fd2f5b637/precompiled-runtime.tar.gz",
+    "sha256": "a9cbc29723ea74046cfbd042116ef3f07b40c33d4f09aabe3256baf7d96a1f28",
+    "size": 64822535
   },
   "model": {
-    "url": "https://upload.shind0.synology.me/models/carrot-jetlink-cinque-v2/big_driving_supercombo.onnx",
-    "sha256": "09d080f36965bb2a0790500452bd328aa03c484d0222aa79d1ad9f021a522aec",
-    "size": 766040736
+    "url": "https://upload.shind0.synology.me/models/comma4-big-nav-n16-96244b1f/big_driving_supercombo.onnx",
+    "sha256": "01effc679eb46d6036ce0302673a87fe2dcfcc95a679daeeb929679e53c3647a",
+    "size": 814591107
   },
   "storage_format": 1,
-  "signature": "Rl3ZHgNElsd0bx+e1PGNP23NgP5s0vHmSORNVtM4zGU532qxfpX8rYcxD/np/vKB4TJLKdCs7MjF06ZQzSALCQ=="
+  "signature": "AZ41fKdTTkm8DtUNYkdIh9b2CdRU8i8C/IF6Z4NLq5JQKyVuU1YpjnTVmn51Z/zqm+eQMpymTh/2WwQcFMtNDQ=="
 }

@@ -11,10 +11,11 @@ import download_model as d
 
 
 @pytest.mark.parametrize('mode', ['valid', 'bad_manifest', 'bad_model', 'existing'])
-def test_provision_verifies_identity_and_preserves_existing_files(tmp_path, monkeypatch, mode):
+@pytest.mark.parametrize('pin', ['cinque_v2.json', 'jetson_model.json'])
+def test_provision_verifies_identity_and_preserves_existing_files(tmp_path, monkeypatch, mode, pin):
   content = b'verified test model'
   digest = hashlib.sha256(content).hexdigest()
-  spec = tmp_path / 'openpilot/selfdrive/modeld/jetlink/cinque_v2.json'
+  spec = tmp_path / 'openpilot/selfdrive/modeld/jetlink' / pin
   spec.parent.mkdir(parents=True)
   spec.write_text(json.dumps({'sha256': digest, 'nbytes': len(content)}))
   monkeypatch.setattr(d, 'ROOT', tmp_path)
@@ -26,14 +27,15 @@ def test_provision_verifies_identity_and_preserves_existing_files(tmp_path, monk
                       (b'wrong model' if mode == 'bad_model' else content))
   monkeypatch.setattr(d.urllib.request, 'urlopen', get)
   output = tmp_path / 'model.onnx'
+  url = d.MANIFEST_URL if pin == 'jetson_model.json' else None
   if mode == 'existing':
     output.write_bytes(b'existing user model')
   if mode == 'valid':
-    d.provision(output)
+    d.provision(output, url)
     assert output.read_bytes() == content
   else:
     with pytest.raises(ValueError):
-      d.provision(output)
+      d.provision(output, url)
     if mode == 'existing':
       assert output.read_bytes() == b'existing user model'
     else:

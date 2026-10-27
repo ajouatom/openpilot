@@ -1,0 +1,92 @@
+{
+  "status": "passed",
+  "model_sha256": "1d18c42ea4cd95c8bffab4635844b78b8e2d4e25b9de44a9c5ac2e0961371a2e",
+  "model_bytes": 814591106,
+  "source_commit": "57dbf77e4a6ef0b8abb548767c7476ecb4a3c71c",
+  "source_patch_sha256": "51a2459823fa4e21d2896de4068ae2a3ab329ebc4c0dc884df268bea922e4dfa",
+  "validator_sha256": "b6320cb383bbf1020056e85f5eccbb88f234e30c4e59597cb6bc83607842dfff",
+  "graph_checks": {
+    "sha256_verified": true,
+    "onnx_full_check": true,
+    "input_output_pin_matches": true,
+    "layout_hints_removed": 1,
+    "original_input_types": {
+      "new_img": "uint8",
+      "desire": "float32",
+      "traffic_convention": "float32",
+      "action_t": "float32",
+      "nav_map": "float32",
+      "navigation": "float32",
+      "state_img_q": "uint8",
+      "state_desire_q": "float32",
+      "state_feat_q": "float32",
+      "state_map_features_q": "float32",
+      "state_navigation_features_q": "float32"
+    }
+  },
+  "provider": "CPUExecutionProvider",
+  "onnxruntime": "1.31.0",
+  "numpy": "2.5.4",
+  "frames_compared": 148,
+  "continuous_frames": 140,
+  "reset_replay_frames": 8,
+  "max_absolute_error": {
+    "outputs": 0.0,
+    "next_state_img_q": 0.0,
+    "next_state_desire_q": 0.0,
+    "next_state_feat_q": 0.0,
+    "next_state_map_features_q": 0.0,
+    "next_state_navigation_features_q": 0.0
+  },
+  "all_outputs_and_states_exact_equal": true,
+  "parsed_outputs_finite_and_equal": true,
+  "nonfinite_map_state_rejected": true,
+  "protocol": 2,
+  "stateful_v2_negotiated": true,
+  "cpu_loopback_ms": {
+    "median": 187.2289000020828,
+    "p99": 200.57758800379816,
+    "max": 205.09149999998044
+  },
+  "not_validated": [
+    "TensorRT/Orin",
+    "USB hardware",
+    "native camera warp",
+    "road replay",
+    "closed-loop driving"
+  ],
+  "scope": "Synthetic PC CPU equivalence; no TensorRT, physical USB or vehicle execution",
+  "linux_tests": {
+    "tests": 672,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 11,
+    "passed": 661,
+    "excluded_files": {
+      "tools/jetlink/test_hud_health.py": "pyray unavailable",
+      "openpilot/selfdrive/navigation/tests/test_route_engine.py": "native Params/messaging build unavailable"
+    }
+  },
+  "tested_source_sha256_lf": {
+    "third_party/jetlink/jetlink/spec.py": "ec844ccaf13ffc1d7c03ad683b0e3f2ce6a1d78f4088067739aaa419af422170",
+    "third_party/jetlink/jetlink/onnx_patch.py": "742fa6080ee81d8c5f61c9ee3d4616d6d28fee7f99e691463561e71121bf9c1c",
+    "third_party/jetlink/jetlink/queues.py": "f64c2a1296a4b0ce846f18a36d2413fd9bd8582b5c20d4e05f2d160045e72684",
+    "third_party/jetlink/jetlink/server/session.py": "a09b49404e401441030ba2cd16a2d426bcdf76370def47bd40374edd95b394f8",
+    "third_party/jetlink/jetlink/client.py": "6281ea6683485e5fd7093f5d848f76bdfb2623784d4c99cf95eb9402a04839ea",
+    "openpilot/selfdrive/modeld/jetlink/inputs.py": "c737e30ff8c1b170ebc2179394ee0ce63180e257ddb64ce0967aae7161398f8e",
+    "openpilot/selfdrive/modeld/jetlink/contracts.py": "82dd72c90a9081b6e852567fb95f930555ac6ed2258082e7f1e156c5301bfd23",
+    "openpilot/selfdrive/modeld/jetlink/compat.py": "c0b8932b5f0209139ab4f634f8a14987fc71bbec5fec33a1a277f4bf3b493ecc",
+    "openpilot/selfdrive/modeld/jetlink/jetson_model.json": "0cf867dafa0b3ade666a10e6e3c77af08867ec3021eedf74b6af840f894df3cd",
+    "openpilot/selfdrive/modeld/jetlink/model.py": "25ac65ab64026a16f974fdd61493055b21a83750a154d4e0340763b8206d762a",
+    "openpilot/selfdrive/modeld/parse_model_outputs.py": "45b38da9f929bd59ca28ff9e19f64e8718286ae3ccbeccddb7868ffbcd88fc85",
+    "openpilot/selfdrive/navigation/map_client.py": "8e4eb26560c33f7565761617915cda3145dd8753816225fb0e7e631b64551bff",
+    "openpilot/selfdrive/navigation/helpers.py": "ce1ea59c071c4b350011401fb9783b1e1b52778ac965fe4ecff41a47af02ddb8",
+    "openpilot/selfdrive/navigation/jetlink_demand.py": "c727157748450927ba6e6c849cc9b0cf87fea37cb6e7f93d5d27c7077ce72616",
+    "openpilot/selfdrive/navigation/mapsd.py": "d6ba9381a485cf251ac8c2d29fc4ff538da0e18651c3ceece3a3eea3c79a74b5",
+    "tools/jetlink/local_release.py": "fc92e7491d0c5c7f306f97b7a1e8f11ddd5d86c865a82227da6ee0b57a6fff1b",
+    "tools/jetlink/update_host.py": "19ce3c3736e4feddb61b955c425db935f2978ac8321ef9e204235f9ddcb95f02",
+    "tools/jetlink/boot_update.py": "32bd6371c187e9c93238f08b1cfcafd27b159e56d4da0d55a668311211b940e3",
+    "tools/jetlink/install_local_experiment.py": "6a5e3c305fa1d85ea858e2d45ce6bc7f546aea00e2bb5805d96ec2ddfa5d506b"
+  },
+  "full_frame_report_sha256": "e57bb65ce0513d73aa8845a080951ead0314ce69ca26d92e592b1c12e1193f76"
+}

@@ -26,6 +26,8 @@ from openpilot.selfdrive.car.card_diagnostics import should_log_card_diagnostics
 from openpilot.selfdrive.car.cruise import VCruiseCarrot
 from openpilot.selfdrive.car.car_specific import MockCarState
 from openpilot.selfdrive.car.openpilot_toggle import CruiseMainOpenpilotToggle
+from openpilot.selfdrive.car.tesla_turn_signals import TeslaTurnSignals
+from openpilot.selfdrive.car.hyundai_spas import SpasSignals
 from openpilot.selfdrive.controls.lib.lateral_readiness import LateralStartupGate
 from openpilot.selfdrive.carrot.xiaoge.xiaoge_vision import (
   XiaogeVisionResult,
@@ -134,6 +136,12 @@ class Car:
       safety_config = structs.CarParams.SafetyConfig()
       safety_config.safetyModel = structs.CarParams.SafetyModel.noOutput
       self.CP.safetyConfigs = [safety_config]
+    self.tesla_signals = TeslaTurnSignals.from_car_params(self.CP, enabled=self.params.get_bool("TeslaAutoTurnSignals"))
+    self.tesla_signal_status = None if self.CP.brand == "tesla" else self.tesla_signals.status
+    self.tesla_signal_log_ns = 0
+    self.spas_signals = SpasSignals(self.CP, self.params)
+    self.spas_signal_status = None
+    self.spas_signal_log_at = 0.
 
     if self.CP.secOcRequired:
       # Copy user key if available
@@ -198,6 +206,16 @@ class Car:
     self.card_diag_stage_max_us = dict.fromkeys(self.card_diag_stage_names, 0)
     self.runtime_diagnostics = RuntimeDiagnostics('card', cloudlog.event)
 
+  def _log_tesla_signals(self, CS, now: int) -> None:
+    changed = self.tesla_signals.status != self.tesla_signal_status
+    if not changed and (self.tesla_signals.session is None or now - self.tesla_signal_log_ns < 1_000_000_000):
+      return
+    cloudlog.event("tesla_auto_turn_signal", **self.tesla_signals.diagnostics(now),
+                   driver_valid=CS.turnSignalDriverValid, driver_direction=CS.turnSignalDriverDirection,
+                   stalk_counts=(CS.leftBlinkerStalkCount, CS.rightBlinkerStalkCount))
+    self.tesla_signal_status = self.tesla_signals.status
+    self.tesla_signal_log_ns = now
+
   def state_update(self) -> car.CarState:
     """carState update loop, driven by can"""
 
@@ -218,12 +236,24 @@ class Car:
     self.CI.CS.speedcam_engaged = self.sm['carControl'].enabled
     self.CI.CS.speedcam_v_cruise = self.v_cruise_helper.v_cruise_kph
     CS = self.CI.update(can_list)
+    self.spas_signals.observe(can_list, time.monotonic())
     if self.CP.brand == 'mock':
       CS = self.mock_carstate.update(CS)
     ci_done_ns = time.monotonic_ns()
 
     self.sm.update(0)
     sm_done_ns = time.monotonic_ns()
+    if self.CP.brand == "tesla":
+      signal_now = can_list[-1][0] if REPLAY and can_list else time.clock_gettime_ns(getattr(time, "CLOCK_BOOTTIME", time.CLOCK_MONOTONIC))
+      self.tesla_signals.observe_driver(CS, signal_now)
+      self.tesla_signals.observe(can_list, signal_now)
+      urgent_sends = self.tesla_signals.take_sends(signal_now, cancel_only=True)
+      if urgent_sends:
+        self.can_callbacks[1](urgent_sends)
+      CS.autoTurnSignalDirection = self.tesla_signals.owned_direction
+      CS.autoTurnSignalReadyRequestId = self.tesla_signals.ready_request_id(signal_now)
+      CS.autoTurnSignalStatus = self.tesla_signals.status if self.CP.brand == "tesla" else ""
+      self._log_tesla_signals(CS, signal_now)
     if self.sm.updated['customReservedRawData0']:
       try:
         self.xiaoge_vision_result = parse_xiaoge_vision_payload(bytes(self.sm['customReservedRawData0']))
@@ -347,6 +377,24 @@ class Car:
   def controls_update(self, CS: car.CarState, CC: car.CarControl):
     """control update loop, driven by carControl"""
 
+    if self.spas_signals.enabled:
+      spas_sends = self.spas_signals.update(CS, self.sm, time.monotonic(), self.initialized_prev, self.CI.CC.frame)
+      if spas_sends:
+        self.pm.send('sendcan', can_list_to_can_capnp(spas_sends, msgtype='sendcan', valid=CS.canValid))
+      CC = CC.as_builder()
+      CC.hudControl.physicalBlinkerHold = self.spas_signals.hold_value
+      CC = CC.as_reader()
+      signal = self.spas_signals
+      if signal.status != self.spas_signal_status or ((signal.session.state != 'idle' or signal.test_direct and signal.test_request is not None) and time.monotonic() >= self.spas_signal_log_at):
+        cloudlog.event('hyundai_spas', state=signal.session.state, reason=signal.session.reason,
+                       request=signal.session.request, direction=signal.session.direction,
+                       left=CS.leftBlinker, right=CS.rightBlinker, hold=signal.hold_value,
+                       trial=signal.test_setting, trial_status=signal.status,
+                       restored_ack=signal.session.restore_ack, stock_resumed=signal.session.stock_resumed)
+        self.spas_signal_status = signal.status
+        self.spas_signal_log_at = time.monotonic()+1.
+
+
     if not self.initialized_prev:
       # Initialize CarInterface, once controls are ready
       # TODO: this can make us miss at least a few cycles when doing an ECU knockout
@@ -379,6 +427,11 @@ class Car:
       model_v2 = self.sm['modelV2'] if self.sm.valid['modelV2'] and self.sm.alive['modelV2'] else None
       radar_state = self.sm['radarState'] if self.sm.valid['radarState'] and self.sm.alive['radarState'] else None
       self.last_actuators_output, can_sends = self.CI.apply(CC, now_nanos, model_v2, radar_state)
+      if self.tesla_signals.configured:
+        fresh = all(self.sm.seen[s] and self.sm.alive[s] and self.sm.valid[s] and
+                    0 <= time.monotonic() - self.sm.recv_time[s] <= 0.2 for s in ('carControl', 'modelV2'))
+        signal_now = now_nanos if REPLAY else time.clock_gettime_ns(getattr(time, "CLOCK_BOOTTIME", time.CLOCK_MONOTONIC))
+        can_sends.extend(self.tesla_signals.update(CS, CC, self.sm['modelV2'].meta, fresh, signal_now))
       apply_done_ns = time.monotonic_ns()
       self.pm.send('sendcan', can_list_to_can_capnp(can_sends, msgtype='sendcan', valid=CS.canValid))
       sendcan_done_ns = time.monotonic_ns()

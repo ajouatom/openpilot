@@ -9,7 +9,7 @@ import time
 from hud_protocol import SnapshotBuilder, HEADER
 
 
-def main(path):
+def main(path, nav_map=False):
   from openpilot.common.display_scheduling import DisplayScheduler
   from openpilot.common.params import Params
   ctypes.CDLL(None).prctl(1, signal.SIGTERM, 0, 0, 0)
@@ -20,7 +20,7 @@ def main(path):
   signal.signal(signal.SIGTERM, stop)
   scheduler = DisplayScheduler(7, enabled=True)
   params = Params()
-  builder = SnapshotBuilder()
+  builder = SnapshotBuilder(nav_map=nav_map)
   next_warning = 0.
   try:
     while True:
@@ -46,4 +46,4 @@ def main(path):
 
 
 if __name__ == '__main__':
-  main(Path(sys.argv[1]))
+  main(Path(sys.argv[1]), nav_map='--nav-map' in sys.argv[2:])

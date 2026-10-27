@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Carrot · Navigation</title>
+<style>
+:root{color-scheme:dark;font:16px/1.5 system-ui,sans-serif;background:#10151c;color:#ecf0f5}*{box-sizing:border-box}
+body{margin:0}main{max-width:1000px;margin:auto;padding:24px}header{display:flex;align-items:center;justify-content:space-between}
+h1{font-size:24px}a{color:#ffb36b}section{padding:22px;border:1px solid #33404f;border-radius:16px;background:#18212c}
+.layout{display:grid;grid-template-columns:1fr 1fr;gap:20px}form{display:flex;gap:8px}input{min-width:0;width:100%}
+input,button{font:inherit;border-radius:8px;padding:12px;border:1px solid #516072;background:#10151c;color:inherit}
+button{cursor:pointer;white-space:nowrap;flex-shrink:0}button:hover{border-color:#ffa25b}button:disabled{opacity:.5;cursor:wait}li{list-style:none;margin:10px 0}li button{width:100%;text-align:left;white-space:normal}
+ul{padding:0}.map-frame{position:relative;aspect-ratio:1;background:#10151c}#map{display:block;width:100%;height:100%;image-rendering:auto}#map[hidden]{display:none}small,.note{color:#aab7c6}
+#mapStatus{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;margin:0;padding:24px;text-align:center}#mapStatus[hidden]{display:none}
+#status{min-height:3em}#clear{margin-top:12px} @media(max-width:700px){.layout{grid-template-columns:1fr}main{padding:14px}}
+</style></head><body><main><header><h1 id="title">Carrot 내비게이션</h1><a href="/">Carrot Web ↗</a></header>
+<div class="layout"><section><div class="map-frame"><img id="map" alt="Navigation route map" hidden><p id="mapStatus" role="status">Waiting for route map…</p></div>
+<small>© <a href="https://www.mapbox.com/about/maps/">Mapbox</a> · © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> · <a href="https://protomaps.com/">Protomaps</a> · <a href="https://apps.mapbox.com/feedback/">Improve this map</a></small></section>
+<section><h2 id="searchTitle">목적지 검색</h2><form id="form"><input id="query" maxlength="200" minlength="2" required aria-label="Destination"><button id="search" type="submit">검색</button></form>
+<ul id="results"></ul><p id="status" role="status"></p><p id="current"></p><button id="clear">Mapbox 목적지 취소</button>
+<p class="note" id="note">외부 내비의 TBT·경로가 우선입니다. Mapbox 목적지는 외부 내비 연결이 끝나면 사용합니다. 키는 Carrot Web 설정 → 네트워크에서 등록하세요.</p>
+</section></div></main><script src="/js/pages/navigation_map.js" defer></script></body></html>

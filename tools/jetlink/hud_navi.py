@@ -63,6 +63,23 @@ class MediaPump:
     self.source._socket.close()
 
 
+def send_ready_during_inference(client, publisher, sent_at, *, clock=time.monotonic):
+  """Admit one extra fragment early in the GPU window, never after its reply.
+
+  The host's two queued messages plus one reader-owned message can hold the
+  HUD snapshot, normal media fragment and this extra fragment during inference.
+  More writes could block behind the GPU, so do not drain an arbitrary burst.
+  Keep the existing transport watchdog: this is admission, not a write timeout.
+  """
+  if publisher is None or clock() - sent_at >= .004:
+    return 0
+  packet = publisher.media_packet()
+  if packet:
+    client.t.send(MESSAGE, client._next_seq(), [packet])
+    return len(packet)
+  return 0
+
+
 def send_ready_after_reply(client, publisher, *, fast_receiver=False, clock=time.monotonic):
   """Use the idle tail only after modeld has its inference result.
 

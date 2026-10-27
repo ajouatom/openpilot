@@ -87,6 +87,38 @@ def soft_hold_pause_eligible(sm, now, demo=False):
           abs(cs.vEgo) < 0.1 and abs(cs.vEgoRaw) < 0.1)
 
 
+def stationary_pause_eligible(sm, now, demo=False):
+  """Pause assessment during a confirmed hold; resume on departure or stale data."""
+  if soft_hold_pause_eligible(sm, now, demo):
+    return True
+  services = ['carState', 'selfdriveState', 'carControl', 'longitudinalPlan']
+  if demo or not all(input_packet_fresh(now, sm.logMonoTime.get(k, 0) / 1e9) for k in services):
+    return False
+  if not sm.all_checks(services):
+    return False
+  cs, state, cc, plan = (sm[k] for k in services)
+  stopped = (cs.canValid and cs.standstill and not cs.gasPressed and
+             cs.gearShifter in (car.CarState.GearShifter.drive, car.CarState.GearShifter.low) and
+             math.isfinite(cs.vEgo) and math.isfinite(cs.vEgoRaw) and
+             abs(cs.vEgo) < .1 and abs(cs.vEgoRaw) < .1)
+  if not (stopped and state.enabled and state.active and cc.longActive and
+          cc.actuators.longControlState == car.CarControl.Actuators.LongControlState.stopping and
+          math.isfinite(plan.vTargetNow) and 0 <= plan.vTargetNow < .1):
+    return False
+  # Existing planner states: e2eStopped=5/red=1; lead=0.
+  if plan.xState == 5 and plan.trafficState == 1:
+    return True
+  if plan.xState != 0 or not plan.hasLead:
+    return False
+  if not input_packet_fresh(now, sm.logMonoTime.get('radarState', 0) / 1e9) or not sm.all_checks(['radarState']):
+    return False
+  radar = sm['radarState']
+  lead = radar.leadOne
+  return (not any(radar.radarErrors.to_dict().values()) and lead.status and
+          math.isfinite(lead.dRel) and 0 < lead.dRel <= 40 and
+          math.isfinite(lead.vLead) and abs(lead.vLead) < .1)
+
+
 def new_driver_monitor(params, experimental):
   return DriverMonitoring2(rhd_saved=params.get_bool("IsRhdDetected"), always_on=params.get_bool("AlwaysOnDM"),
                            experimental=experimental)
@@ -169,7 +201,8 @@ def run_dm2(params, experimental, initial_car_params=None):
   # Read after process launch: process replay sets the environment before this
   # worker starts, while Python's module cache can predate that environment.
   replay = "REPLAY" in os.environ
-  services = ['carState', 'selfdriveState', 'modelV2', 'radarState', 'liveCalibration', 'carParams', 'driverStateV2']
+  services = ['carState', 'selfdriveState', 'modelV2', 'radarState', 'liveCalibration', 'carParams', 'driverStateV2',
+              'carControl', 'longitudinalPlan']
   # Preserve driver-camera cadence on device. Replay uses modelV2 because a
   # disabled route intentionally has no driverStateV2 messages.
   sm = messaging.SubMaster(services, poll='modelV2' if replay else 'driverStateV2')
@@ -298,7 +331,7 @@ def run_dm2(params, experimental, initial_car_params=None):
                                                              camera_unavailable=demo_mode and not camera_ok))
       rk.keep_time()
       continue
-    if soft_hold_pause_eligible(sm, now, demo_mode):
+    if stationary_pause_eligible(sm, now, demo_mode):
       # Publish at normal cadence so health/consumer checks keep working. The
       # existing disabled output suppresses DM alerts/HUD/forced deceleration;
       # the monitor itself is retained, with awareness and lockout counts frozen.

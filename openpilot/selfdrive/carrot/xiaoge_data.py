@@ -10,6 +10,7 @@ import traceback
 
 import openpilot.cereal.messaging as messaging
 from opendbc.can import CANParser
+from opendbc.car.carlog import carlog
 
 from openpilot.cereal import car
 from openpilot.common.params import Params
@@ -18,7 +19,7 @@ from openpilot.common.realtime import Ratekeeper
 
 TESLA_DAS_ROAD_ADDRESS = 605
 TESLA_AUTOPILOT_PARTY_BUS = 2
-TESLA_DAS_ROAD_TIMEOUT_S = 1.0
+TESLA_DAS_ROAD_TIMEOUT_NS = 1_000_000_000
 
 
 class XiaogeDataBroadcaster:
@@ -38,7 +39,8 @@ class XiaogeDataBroadcaster:
     self.is_tesla = False
     self.tesla_can_sock = None
     self.tesla_can_parser = None
-    self.tesla_das_road_updated_at = 0.0
+    self.tesla_das_road_updated_at = 0
+    self.tesla_traffic_status: str | None = None
 
   @staticmethod
   def get_ip_address() -> str:
@@ -149,24 +151,52 @@ class XiaogeDataBroadcaster:
     self.is_tesla = CP.brand == "tesla"
     if not self.is_tesla:
       return
-    self.tesla_can_parser = CANParser("tesla_model3_party", [("DAS_road", float("nan"))], TESLA_AUTOPILOT_PARTY_BUS)
+    self.tesla_can_parser = CANParser("tesla_modely_hw4_perception", [("APP_trafficControl", float("nan"))], TESLA_AUTOPILOT_PARTY_BUS)
     self.tesla_can_sock = messaging.sub_sock("can")
+
+  def _set_tesla_traffic_status(self, status: str) -> None:
+    if status != self.tesla_traffic_status:
+      if status == "valid":
+        carlog.info("Tesla traffic data available")
+      else:
+        carlog.warning(f"Tesla traffic data unavailable: {status}")
+      self.tesla_traffic_status = status
 
   def collect_tesla_das_road(self) -> dict[str, float | int] | None:
     self.initialize_tesla_can()
     if self.tesla_can_parser is None or self.tesla_can_sock is None:
       return None
+    now = time.clock_gettime_ns(getattr(time, "CLOCK_BOOTTIME", time.CLOCK_MONOTONIC))
     for can_event in messaging.drain_sock(self.tesla_can_sock):
-      frames = [(frame.address, bytes(frame.dat), frame.src) for frame in can_event.can
-                if frame.address == TESLA_DAS_ROAD_ADDRESS and frame.src == TESLA_AUTOPILOT_PARTY_BUS]
-      if frames and TESLA_DAS_ROAD_ADDRESS in self.tesla_can_parser.update([can_event.logMonoTime, frames]):
-        self.tesla_das_road_updated_at = time.monotonic()
-    if time.monotonic() - self.tesla_das_road_updated_at > TESLA_DAS_ROAD_TIMEOUT_S:
+      timestamp = can_event.logMonoTime
+      if timestamp <= 0 or not 0 <= now - timestamp <= TESLA_DAS_ROAD_TIMEOUT_NS:
+        continue
+      if timestamp < self.tesla_das_road_updated_at:
+        continue
+      for frame in can_event.can:
+        if frame.address != TESLA_DAS_ROAD_ADDRESS or frame.src != TESLA_AUTOPILOT_PARTY_BUS:
+          continue
+        self.tesla_das_road_updated_at = timestamp
+        data = bytes(frame.dat)
+        if not 6 <= len(data) <= 8:
+          self._set_tesla_traffic_status("invalid_dlc")
+          continue
+        if TESLA_DAS_ROAD_ADDRESS not in self.tesla_can_parser.update([(timestamp, [(frame.address, data, frame.src)])]):
+          self._set_tesla_traffic_status("decode_failed")
+          continue
+        values = self.tesla_can_parser.vl["APP_trafficControl"]
+        valid = (values["APP_tcControlType"] == 3 and values["APP_tcControlLightState"] in (0, 1, 2, 3) and
+                 0 <= values["APP_tcControlDistance"] <= 200)
+        self._set_tesla_traffic_status("valid" if valid else "invalid_traffic_observation")
+    if not self.tesla_das_road_updated_at or not 0 <= now - self.tesla_das_road_updated_at <= TESLA_DAS_ROAD_TIMEOUT_NS:
+      self._set_tesla_traffic_status("stale")
       return None
-    das_road = self.tesla_can_parser.vl["DAS_road"]
+    if self.tesla_traffic_status != "valid":
+      return None
+    traffic = self.tesla_can_parser.vl["APP_trafficControl"]
     return {
-      "stopLineDist": float(das_road["DAS_stopLineDist"]),
-      "trafficLightColor": int(das_road["DAS_trafficLightColor"]),
+      "stopLineDist": float(traffic["APP_tcControlDistance"]),
+      "trafficLightColor": int(traffic["APP_tcControlLightState"]),
     }
 
   def collect_broadcast_data(self) -> dict[str, dict[str, float | int]] | None:

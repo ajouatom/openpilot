@@ -12,8 +12,9 @@ import time
 import numpy as np
 
 from openpilot.selfdrive.modeld.jetlink.link import SPEC, validate_spec
+from openpilot.selfdrive.modeld.jetlink.contracts import JETSON_SPEC
 from jetlink import protocol as V2, protocol_v3 as V3
-from jetlink.client import JetlinkClient, _as_bytes
+from jetlink.client import JetlinkClient, _as_bytes, _protocol3_packed
 from jetlink.transport.base import LinkError
 
 
@@ -54,14 +55,12 @@ class V3Client(JetlinkClient):
       raise LinkError('ensure_engine() first')
     if self.dead:
       raise LinkError('link previously failed')
-    # This adapter only bridges the existing, exact Cinque v2 model contract.
-    # Protocol v3 does not imply a promotion to the Cinque v3 driving model.
-    validate_spec(self.spec)
-    images = _as_bytes(warped, SPEC.warped_nbytes, 'warped')
-    context = _as_bytes(packed, SPEC.packed_nbytes, 'packed')
-    # The pinned packed layout is desire[8], traffic[2], action_t[2], prev_feat.
-    # The server owns prev_feat in v3, including resets and finite-only feedback.
-    scalars = context[:48]
+    validate_spec(self.spec, JETSON_SPEC if self.spec.sha256 == JETSON_SPEC.sha256 else SPEC)
+    images = _as_bytes(warped, self.spec.warped_nbytes, 'warped')
+    context = _as_bytes(packed, self.spec.packed_nbytes, 'packed')
+    # Only legacy prev_feat is omitted. Stateful models also send their current
+    # map/instruction inputs; their temporal history already lives on the host.
+    scalars = _protocol3_packed(self.spec, context)
     if not np.isfinite(np.frombuffer(scalars, dtype=np.float32)).all():
       raise LinkError('non-finite v3 scalar input')
     flags = V3.Flag.WANT_HIDDEN | (V3.Flag.RESET_QUEUES if reset else 0) | (V3.Flag.WANT_STATE if want_state else 0)
@@ -88,7 +87,7 @@ class V3Client(JetlinkClient):
       frame, status, gpu_us, queue_us, total_us = V3.unpack_infer_resp(msg.payload)
       if frame != self._infer_frame_id or status != V3.Status.OK:
         raise LinkError(f'invalid v3 inference response: frame={frame}, status={status}')
-      end = V3.INFER_RESP_SIZE + SPEC.output_nbytes
+      end = V3.INFER_RESP_SIZE + self.spec.output_nbytes
       if msg.payload.nbytes < end:
         raise LinkError('v3 response is missing the requested full model outputs')
       telemetry = None
@@ -98,7 +97,7 @@ class V3Client(JetlinkClient):
         telemetry = json.loads(bytes(msg.payload[end:]))
         if not isinstance(telemetry, dict):
           raise LinkError('invalid v3 telemetry')
-      output = np.frombuffer(msg.payload, np.float32, SPEC.output_nelem, V3.INFER_RESP_SIZE).copy()
+      output = np.frombuffer(msg.payload, np.float32, self.spec.output_nelem, V3.INFER_RESP_SIZE).copy()
       if not np.isfinite(output).all():
         raise LinkError('non-finite v3 model output')
       self.last_timings = gpu_us, queue_us, total_us

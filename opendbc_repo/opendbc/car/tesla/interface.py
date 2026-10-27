@@ -4,6 +4,7 @@ from opendbc.car.tesla.carcontroller import CarController
 from opendbc.car.tesla.carstate import CarState
 from opendbc.car.tesla.values import TeslaSafetyFlags, TeslaFlags, CANBUS, CAR, DBC, FSD_14_FW, Ecu
 from opendbc.car.tesla.radar_interface import RadarInterface, RADAR_START_ADDR
+from openpilot.common.params import Params
 
 
 class CarInterface(CarInterfaceBase):
@@ -18,6 +19,8 @@ class CarInterface(CarInterfaceBase):
       for address, data, source in frames:
         if address == 0x3C2 and source == CANBUS.vehicle:
           self.CS.observe_speed_wheel_frame(data, mono_time)
+        elif address == 0x249:
+          self.CS.observe_turn_stalk_frame(data, source, mono_time)
     return super().update(can_packets)
 
   @staticmethod
@@ -43,12 +46,14 @@ class CarInterface(CarInterfaceBase):
     # - Radar CAN lines must be tapped and connected to CAN bus 1 (normally not used for tesla vehicles)
     ret.radarUnavailable = RADAR_START_ADDR not in fingerprint[1] or Bus.radar not in DBC[candidate]
 
-    # Vehicle-bus availability gates both infotainment gestures and the
-    # automatic cruise-speed wheel. The latter is always enabled with Tesla
-    # openpilot longitudinal control when the required bus is available.
+    # The same extension-bus detection gates gestures, the speed wheel and automatic turn signals.
+    # Speed-wheel control additionally requires Tesla openpilot longitudinal control.
     has_vehicle_bus = 0x3DF in fingerprint[CANBUS.vehicle]
     if has_vehicle_bus:
       ret.flags |= TeslaFlags.HAS_VEHICLE_BUS.value
+      if candidate in (CAR.TESLA_MODEL_3, CAR.TESLA_MODEL_Y) and Params().get_bool("TeslaAutoTurnSignals"):
+        ret.flags |= TeslaFlags.AUTO_TURN_SIGNALS.value
+        ret.safetyConfigs[0].safetyParam |= TeslaSafetyFlags.AUTO_TURN_SIGNALS.value
 
     ret.alphaLongitudinalAvailable = True
     if alpha_long:

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+from contextlib import suppress
 from typing import Any
 
 from aiohttp import web
@@ -67,9 +69,13 @@ def build_status_payload(params: Any | None = None) -> dict[str, Any]:
   elif recovery.get('state') == 'stopped':
     state, error_code, detail = 'recovery_stopped', None, None
 
+  from openpilot.common.big_model_catalog import catalog
+  displayed_sha = status.get('sha256') if status else (manifest.sha256 if manifest is not None else None)
+  entry = next((row for row in catalog().values() if row['egpu']['sha256'] == displayed_sha), None)
   return {
     "ok": True,
     "available": True,
+    "display_name": entry['name'] if entry else None,
     "state": state,
     "model_id": status.get("model_id") if status else (manifest.model_id if manifest is not None else None),
     "sha256": status.get("sha256") if status else (manifest.sha256 if manifest is not None else None),
@@ -93,7 +99,9 @@ def build_status_payload(params: Any | None = None) -> dict[str, Any]:
 
 
 async def api_status(_request: web.Request) -> web.Response:
-  return web.json_response({**build_status_payload(), 'jetlink': jetlink_diagnostics()})
+  from openpilot.selfdrive.modeld.model_library import status
+  return web.json_response({**build_status_payload(), 'jetlink': jetlink_diagnostics(),
+                            'library': await asyncio.to_thread(status)})
 
 
 async def api_diagnostics(_request: web.Request) -> web.Response:
@@ -134,7 +142,49 @@ async def api_compile_restart(_request: web.Request) -> web.Response:
   return web.json_response({"ok": True, "reboot_requested": True})
 
 
+async def api_library(request: web.Request) -> web.Response:
+  from openpilot.common import big_model_catalog as catalog
+  from openpilot.selfdrive.modeld import model_library as library
+  try:
+    body = await request.json()
+    if not isinstance(body, dict) or set(body) != {'action', 'model'}:
+      raise ValueError('invalid model action')
+    action, key = body['action'], body['model']
+    if action != 'select' or not isinstance(key, str) or key not in catalog.available():
+      raise ValueError('unknown model action')
+    await asyncio.to_thread(catalog.select, key)
+    return web.json_response({'ok': True, 'library': await asyncio.to_thread(library.status)})
+  except (ValueError, OSError) as exc:
+    return web.json_response({'ok': False, 'error': str(exc)}, status=409)
+
+
+def maintain_library_once():
+  from openpilot.selfdrive.modeld.model_library import reconcile_retired
+  if HAS_PARAMS and Params is not None:
+    return reconcile_retired(Params())
+  return []
+
+
+async def library_maintenance(app):
+  async def run():
+    while True:
+      try:
+        await asyncio.to_thread(maintain_library_once)
+      except (OSError, ValueError):
+        pass  # retry on the next offroad pass
+      await asyncio.sleep(30)
+  task = asyncio.create_task(run())
+  try:
+    yield
+  finally:
+    task.cancel()
+    with suppress(asyncio.CancelledError):
+      await task
+
+
 def register(app: web.Application) -> None:
+  app.cleanup_ctx.append(library_maintenance)
   app.router.add_get("/api/egpu/model", api_status)
+  app.router.add_post("/api/egpu/model/library", api_library)
   app.router.add_get("/api/egpu/model/diagnostics", api_diagnostics)
   app.router.add_post("/api/egpu/model/compile-restart", api_compile_restart)

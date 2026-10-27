@@ -284,6 +284,13 @@ struct CarState {
   blinkerLamp @103 :UInt8;            # turn-signal lamp right now (no hold): 0 dark, 1 left lit, 2 right lit
 
   vehicleGps @104 :VehicleGps;
+  autoTurnSignalDirection @105 :UInt8; # automatic ownership, including an unconfirmed cancellation tail
+  autoTurnSignalStatus @106 :Text;
+  turnSignalDriverValid @107 :Bool;
+  turnSignalDriverDirection @108 :UInt8; # actual stalk: 0 released, 1 left, 2 right
+  autoTurnSignalReadyRequestId @109 :UInt64; # TX echoed and lamps confirmed for this automatic maneuver; zero otherwise
+  tbtRearInputsAvailable @110 :Bool; # optional observed CANFD BSD/corner inputs, for the TBT physical-indicator trigger only
+  tbtRightRearBlocked @111 :Bool = true; # unknown/stale/saturated or <20m; does not alter manual lane-change admission
   struct VehicleGps {
     available @0 :Bool;
     valid @1 :Bool; # receive/continuity checks, not a decoded satellite fix flag
@@ -527,6 +534,7 @@ struct CarControl {
     leadLimiting @21: Bool;     # VW MEB cluster: 앞차가 속도를 제한 중(xState lead) -> 앞차 하이라이트 우선
 
     driverMonitoringAlert @22: UInt8;  # 0=none, 1=initial, 2=audible, 3=terminal; fresh enabled DM only
+    physicalBlinkerHold @23: UInt8;  # 0=legacy, 1=release, 2=left hold, 3=right hold; fresh USB-CAN lease
 
     # not used with the dash, TODO: separate structs for dash UI and device UI
     audibleAlert @5: AudibleAlert;

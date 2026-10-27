@@ -33,7 +33,17 @@ def model_metadata(jits):
   if tuple(specs['new_img'][0]) != (2, 6, 128, 256) or np.dtype(specs['new_img'][1]) != np.uint8:
     raise ValueError('unsupported generic model image input')
   state_pairs = {name: f'next_{name}' for name in specs if f'next_{name}' in outputs}
-  if set(specs) != {'new_img', 'desire', 'traffic_convention', 'action_t'} | set(state_pairs):
+  nav = set(specs) & {'nav_map', 'navigation'}
+  if nav:
+    if nav != {'nav_map', 'navigation'}:
+      raise ValueError('unsupported navigation input contract')
+    # Original nav uses byte maps/flat commands; RL nav exports float maps and
+    # batched commands. Both take 0..255 pixels (normalization is in the model).
+    contract = (np.dtype(specs['nav_map'][1]), tuple(specs['navigation'][0]))
+    if (tuple(specs['nav_map'][0]) != (1, 1, 256, 256) or np.dtype(specs['navigation'][1]) != np.float32
+        or contract not in ((np.dtype(np.uint8), (47,)), (np.dtype(np.float32), (1, 47)))):
+      raise ValueError('unsupported navigation input contract')
+  if set(specs) != {'new_img', 'desire', 'traffic_convention', 'action_t'} | set(state_pairs) | nav:
     raise ValueError('unsupported generic model inputs')
   for name, next_name in state_pairs.items():
     shape, dtype, device = specs[name]
@@ -47,6 +57,24 @@ def model_metadata(jits):
   if any(s.start < 0 or s.stop > count or s.step not in (None, 1) for s in slices.values()):
     raise ValueError('invalid generic model output slices')
   return metadata['metadata']['model_checkpoint'], slices, state_pairs, count
+
+
+def host_input_layout(specs, frame_size, state_pairs):
+  """Pack maps and commands at declared widths, aligned to 128 bytes."""
+  shapes = {name: tuple(spec[0]) for name, spec in specs.items() if name not in state_pairs and name != 'new_img'}
+  sizes = {name: (math.prod(shape) * np.dtype(specs[name][1]).itemsize + 127) // 128 * 128 for name, shape in shapes.items()}
+  packed = np.zeros(128 + sum(sizes.values()) + 2 * frame_size, np.uint8)
+  views = {'tfm': np.ndarray((3, 3), np.float32, buffer=packed, offset=0),
+                'big_tfm': np.ndarray((3, 3), np.float32, buffer=packed, offset=36)}
+  offset = 128
+  for name, shape in shapes.items():
+    views[name] = np.ndarray(shape, np.dtype(specs[name][1]), buffer=packed, offset=offset)
+    offset += sizes[name]
+  frames_offset = offset
+  for name in ('img', 'big_img'):
+    views[name] = np.ndarray((frame_size,), np.uint8, buffer=packed, offset=offset)
+    offset += frame_size
+  return packed, views, frames_offset
 
 
 class GenericModelRuntime:
@@ -65,19 +93,7 @@ class GenericModelRuntime:
     stride, y_height, uv_height = frame_info[:3]
     self.frame_size = stride * (y_height + uv_height)
     self.input_shapes = {'img': [self.frame_size], 'big_img': [self.frame_size]}
-    shapes = {name: tuple(spec[0]) for name, spec in self.specs.items() if name not in self.state_pairs and name != 'new_img'}
-    sizes = {name: (math.prod(shape) * 4 + 127) // 128 * 128 for name, shape in shapes.items()}
-    self.packed = np.zeros(128 + sum(sizes.values()) + 2 * self.frame_size, np.uint8)
-    self.views = {'tfm': np.ndarray((3, 3), np.float32, buffer=self.packed, offset=0),
-                  'big_tfm': np.ndarray((3, 3), np.float32, buffer=self.packed, offset=36)}
-    offset = 128
-    for name, shape in shapes.items():
-      self.views[name] = np.ndarray(shape, np.float32, buffer=self.packed, offset=offset)
-      offset += sizes[name]
-    self.frames_offset = offset
-    for name in ('img', 'big_img'):
-      self.views[name] = np.ndarray((self.frame_size,), np.uint8, buffer=self.packed, offset=offset)
-      offset += self.frame_size
+    self.packed, self.views, self.frames_offset = host_input_layout(self.specs, self.frame_size, self.state_pairs)
     self.queues = {name: Tensor(np.zeros(shape, dtype=dtype), device=device).realize()
                    for name, (shape, dtype, device) in self.specs.items() if name in self.state_pairs}
     self.outputs = {name: Tensor(np.zeros(shape, dtype=dtype), device=device).realize()
@@ -107,9 +123,41 @@ class GenericModelRuntime:
 
     for name, value in self.views.items():
       if name not in ('img', 'big_img', 'tfm', 'big_tfm'):
-        self.queues[name] = input_view(self.device_buffer, value.shape, dtypes.float32, value.ctypes.data - self.packed.ctypes.data)
+        self.queues[name] = input_view(self.device_buffer, value.shape, getattr(dtypes, str(value.dtype)), value.ctypes.data - self.packed.ctypes.data)
     self.transforms = input_view(self.device_buffer, (2, 3, 3), dtypes.float32)
     self.frames = input_view(self.device_buffer, (2, self.frame_size), dtypes.uint8, self.frames_offset)
+
+  def init_recovery_state(self):
+    from tinygrad import Tensor, TinyJit, Device
+    # Separate allocations, preserving the compiled graph's required aliases.
+    self.recovery_state = {
+      name: Tensor(np.zeros(shape, dtype=dtype), device=device).realize()
+      for name, (shape, dtype, device) in self.specs.items() if name in self.state_pairs
+    }
+    # Capture the copies once. Buffer.copy_from dispatches each copy through
+    # Python on every frame; on USB AMD this adds substantial host overhead.
+    # Explicit tensor inputs retain current storage and the output aliases.
+    backups = tuple(self.recovery_state.values())
+
+    @TinyJit
+    def save(*states):
+      Tensor.realize(*(backup.assign(state) for backup, state in zip(backups, states, strict=True)))
+
+    self._save_recovery_state = save
+    states = tuple(self.queues[name] for name in self.recovery_state)
+    # Compile/capture during initialization, never during a live frame.
+    for _ in range(3):
+      save(*states)
+    Device[self.device].synchronize()
+
+  def save_recovery_state(self):
+    from tinygrad import Device
+    started, cpu_started = time.monotonic(), time.thread_time()
+    self._save_recovery_state(*(self.queues[name] for name in self.recovery_state))
+    Device[self.device].synchronize()
+    self.last_timings = getattr(self, 'last_timings', {})
+    self.last_timings.update(state_checkpoint_ms=(time.monotonic() - started) * 1000,
+                             state_checkpoint_cpu_ms=(time.thread_time() - cpu_started) * 1000)
 
   def reset_state(self):
     from tinygrad import Device, Tensor
@@ -119,6 +167,16 @@ class GenericModelRuntime:
       tensor = self.queues[name]
       zeros = Tensor(np.zeros(tensor.shape, dtype=self.specs[name][1]), device='NPY')
       tensor._buffer().copy_from(zeros._buffer())
+    Device[self.device].synchronize()
+
+  def restore_recovery_state(self):
+    from tinygrad import Device
+    # Download/check only on failure. Never restore non-finite hidden state.
+    for backup in self.recovery_state.values():
+      if not np.isfinite(backup.numpy()).all():
+        raise ValueError('invalid eGPU recovery state')
+    for name, backup in self.recovery_state.items():
+      self.queues[name]._buffer().copy_from(backup._buffer())
     Device[self.device].synchronize()
 
   def run(self):

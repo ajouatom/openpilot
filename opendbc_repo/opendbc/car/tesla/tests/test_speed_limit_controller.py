@@ -11,7 +11,8 @@ IDLE_TEMPLATE = bytes.fromhex("2955000000000080")
 
 def fake_state(current_speed=20.0, target_speed=25.0, template_time=2_000_000_000):
   return SimpleNamespace(
-    out=SimpleNamespace(cruiseState=SimpleNamespace(enabled=True, speedCluster=current_speed), brakePressed=False),
+    out=SimpleNamespace(cruiseState=SimpleNamespace(enabled=True, speedCluster=current_speed), brakePressed=False,
+                        vehicleSensorsInvalid=False, canValid=True),
     tesla_speed_limit_target=target_speed,
     tesla_speed_limit_target_nanos=template_time,
     tesla_speed_limit_target_valid=True,
@@ -79,6 +80,44 @@ def test_controller_waits_while_carrot_speed_control_is_active(active_carrot):
   assert len(controller.update(fake_control(1), state, 3_600_000_000)) == 1
 
 
+def test_navigation_clears_pending_feedback_and_requires_a_stable_target_on_return():
+  controller = TeslaSpeedLimitController(SimpleNamespace(flags=TeslaFlags.AUTO_SPEED_LIMIT))
+  state = fake_state()
+  assert controller.update(fake_control(), state, 2_000_000_000) == []
+  assert len(controller.update(fake_control(), state, 2_500_000_000)) == 1
+  assert controller.pending_direction == 1
+
+  state.tesla_speed_limit_target_nanos = 2_600_000_000
+  assert controller.update(fake_control(3), state, 2_600_000_000) == []
+  assert controller.pending_direction == 0
+
+  state.tesla_speed_limit_target_nanos = 2_700_000_000
+  assert controller.update(fake_control(), state, 2_700_000_000) == []
+  state.tesla_speed_limit_target_nanos = 3_199_999_999
+  assert len(controller.update(fake_control(), state, 3_199_999_999)) == 0
+  assert len(controller.update(fake_control(), state, 3_200_000_000)) == 1
+
+
+@pytest.mark.parametrize("gate", ["sensors", "can", "future_target", "zero_target", "future_template", "zero_template"])
+def test_invalid_measurements_and_untrusted_timestamps_never_produce_speed_ticks(gate):
+  controller = TeslaSpeedLimitController(SimpleNamespace(flags=TeslaFlags.AUTO_SPEED_LIMIT))
+  state = fake_state()
+  assert controller.update(fake_control(), state, 2_000_000_000) == []
+  state.tesla_speed_limit_target_nanos = 2_500_000_000
+  state.out.vehicleSensorsInvalid = gate == "sensors"
+  state.out.canValid = gate != "can"
+  if gate == "future_target":
+    state.tesla_speed_limit_target_nanos += 1
+  elif gate == "zero_target":
+    state.tesla_speed_limit_target_nanos = 0
+  elif gate == "future_template":
+    state.tesla_speed_button_template_nanos = 2_500_000_001
+  elif gate == "zero_template":
+    state.tesla_speed_button_template_nanos = 0
+  assert controller.update(fake_control(), state, 2_500_000_000) == []
+  assert controller.pending_direction == 0
+
+
 def test_manual_adjustment_pauses_until_opposite_direction_gesture():
   controller = TeslaSpeedLimitController(SimpleNamespace(flags=TeslaFlags.AUTO_SPEED_LIMIT))
   state = fake_state(current_speed=25.0, target_speed=25.0)
@@ -120,7 +159,7 @@ def test_controller_quantizes_in_vehicle_display_units():
   assert len(controller.update(fake_control(), state, 3_100_000_000)) == 1
 
 
-@pytest.mark.parametrize("unavailable", ["invalid", "stale", "brake"])
+@pytest.mark.parametrize("unavailable", ["invalid", "stale", "brake", "navigation"])
 def test_manual_adjustment_is_remembered_while_automatic_control_waits(unavailable):
   controller = TeslaSpeedLimitController(SimpleNamespace(flags=TeslaFlags.AUTO_SPEED_LIMIT))
   state = fake_state()
@@ -130,7 +169,7 @@ def test_manual_adjustment_is_remembered_while_automatic_control_waits(unavailab
   state.tesla_speed_limit_target_valid = unavailable != "invalid"
   state.tesla_speed_limit_target_nanos = 0 if unavailable == "stale" else 2_100_000_000
   state.out.brakePressed = unavailable == "brake"
-  assert controller.update(fake_control(), state, 2_100_000_000) == []
+  assert controller.update(fake_control(3 if unavailable == "navigation" else 0), state, 2_100_000_000) == []
 
   state.tesla_speed_limit_target_valid = True
   state.out.brakePressed = False
@@ -140,7 +179,8 @@ def test_manual_adjustment_is_remembered_while_automatic_control_waits(unavailab
   assert controller.manual_override_active
 
 
-def test_resume_gesture_is_remembered_while_speed_limit_is_unavailable():
+@pytest.mark.parametrize("unavailable", ["invalid", "navigation"])
+def test_resume_gesture_is_remembered_while_speed_limit_is_unavailable(unavailable):
   controller = TeslaSpeedLimitController(SimpleNamespace(flags=TeslaFlags.AUTO_SPEED_LIMIT))
   state = fake_state()
   assert controller.update(fake_control(), state, 2_000_000_000) == []
@@ -148,10 +188,10 @@ def test_resume_gesture_is_remembered_while_speed_limit_is_unavailable():
   assert controller.update(fake_control(), state, 2_100_000_000) == []
   assert controller.manual_override_active
 
-  state.tesla_speed_limit_target_valid = False
+  state.tesla_speed_limit_target_valid = unavailable != "invalid"
   state.tesla_manual_speed_adjustment_counter = 2
   state.tesla_speed_auto_resume_gesture_counter = 1
-  assert controller.update(fake_control(), state, 2_200_000_000) == []
+  assert controller.update(fake_control(3 if unavailable == "navigation" else 0), state, 2_200_000_000) == []
 
   state.tesla_speed_limit_target_valid = True
   state.tesla_speed_limit_target_nanos = 2_300_000_000

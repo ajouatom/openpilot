@@ -26,6 +26,26 @@ from cluster_renderer import ClusterUiRenderer
 from main import ClusterClockVisibilityParamReader, ClusterDisplayPreferencesParamReader
 
 
+def test_nav_map_mode_retains_driving_view_and_hud_on_left(monkeypatch):
+  renderer = ClusterUiRenderer(screen_mode=7, panel_layout=1)
+  state = SimpleNamespace(camera_view_mode=0)
+  assert not renderer._panel_swap_active()
+  assert renderer._driving_panel_offset_design_x() == 0
+  assert renderer._world_view_shift_x(state) == cluster_renderer.NAVI_WORLD_VIEW_SHIFT_X
+  assert renderer._world_view_shift_x(SimpleNamespace(camera_view_mode=2)) == 0
+  calls = []
+  for name in ('rl_push_matrix', 'rl_pop_matrix', 'rl_scalef'):
+    monkeypatch.setattr(cluster_renderer.rl, name, lambda *args: None)
+  monkeypatch.setattr(renderer, '_render_world', lambda *args: calls.append('driving view'))
+  monkeypatch.setattr(renderer, '_clear_world', lambda: calls.append('clear'))
+  monkeypatch.setattr(renderer, '_draw_driving_hud_content', lambda *args: calls.append('driving HUD'))
+  monkeypatch.setattr(renderer, '_draw_nav_model_map', lambda: calls.append('right map'))
+  monkeypatch.setattr(renderer, '_draw_status_footer', lambda *args: calls.append('footer'))
+  monkeypatch.setattr(renderer, '_draw_alert_overlay', lambda *args: calls.append('alerts'))
+  renderer.render(state, (False, False))
+  assert calls == ['driving view', 'driving HUD', 'right map', 'footer', 'alerts']
+
+
 @pytest.mark.parametrize(
   ("value", "expected"),
   (

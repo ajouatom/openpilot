@@ -68,10 +68,8 @@ def test_new_cycle_still_reports_real_preparation_and_usb_errors():
   assert not cycle.waiting(OSError('USB failure'), now=2, preparing=False)
 
 
-def test_actual_boot_gate_handoff_is_expected_but_disconnect_is_not(monkeypatch, tmp_path):
-  release = tmp_path / 'release.json'
-  release.write_text(json.dumps({'source_commit': 'test'}))
-  monkeypatch.setattr(startup, 'RELEASE', release)
+def test_actual_boot_gate_handoff_is_expected_but_disconnect_is_not(monkeypatch):
+  monkeypatch.setattr(startup, 'selected_release', lambda *a, **kw: {'source_commit': 'test'})
   peer = {'carrot_host': 'jetson', startup.CAPABILITY: True}
   calls = []
   client = NS(t=NS(send_json=lambda *args: calls.append(args)), _next_seq=lambda: 1,

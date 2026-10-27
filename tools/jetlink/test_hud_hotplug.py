@@ -37,3 +37,20 @@ def test_unplug_between_scan_and_open_retries_instead_of_window_mode():
   with pytest.raises(RuntimeError, match='disappeared'):
     require_usb_display(lambda expected: None, 0x0092)
   assert require_usb_display(lambda expected: expected, 0x0092) == 0x0092
+
+
+def test_remote_camera_supports_renderer_signal_interface_without_fabricated_evidence(tmp_path):
+  from hud_camera import RemoteRoadCamera
+  from cluster_renderer import ClusterUiRenderer
+  from openpilot.selfdrive.carrot.signal_display import SignalDisplayReader, valid_record
+  from openpilot.selfdrive.carrot.lead_brake_lights import BrakeDisplayReader
+  camera = RemoteRoadCamera()
+  camera.last_frame = ('road', 42)  # A JPEG preview is still not a full signal frame.
+  assert camera.display_frame is None
+  assert not valid_record({}, 10., camera.display_frame)
+  renderer = object.__new__(ClusterUiRenderer)
+  renderer._signal_display_reader = SignalDisplayReader(flag=tmp_path / 'disabled')
+  renderer._brake_display_reader = BrakeDisplayReader(path=tmp_path / 'no-brake-observation')
+  assert renderer._brake_display_reader.read(camera.display_frame) is None
+  # Exercise the exact render path that previously raised AttributeError.
+  renderer._draw_signal_detections(None, camera)

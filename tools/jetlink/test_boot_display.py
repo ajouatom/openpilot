@@ -128,3 +128,23 @@ with panel_owner(hud=True, directory=Path(sys.argv[1])) as acquired:
     if child and child.poll() is None:
       child.kill()
       child.wait(timeout=5)
+
+
+def test_runtime_display_override_preserves_immutable_recovery(tmp_path, monkeypatch):
+  import install_updates
+  target = tmp_path / 'run/systemd/system/carrot-jetlink-boot-display.service.d/runtime.conf'
+  monkeypatch.setattr(install_updates, 'BOOT_DISPLAY_DROPIN', target)
+  calls = []
+  monkeypatch.setattr(install_updates.subprocess, 'run', lambda command, **kwargs: calls.append(command))
+  install_updates.configure_runtime_boot_display()
+  assert target.read_text() == install_updates.BOOT_DISPLAY_OVERRIDE
+  assert not (tmp_path / 'etc').exists()
+  assert calls == [['systemctl', 'daemon-reload'], ['systemctl', 'try-restart', 'carrot-jetlink-boot-display']]
+  calls.clear()
+  install_updates.migrate_boot_display(tmp_path)
+  assert calls == []  # Never restart a healthy panel at every server reconnect.
+
+
+def test_panel_lock_is_outside_login_managed_shared_memory():
+  from display_owner import DIRECTORY
+  assert DIRECTORY.parent in (Path('/run'), Path('/tmp'))

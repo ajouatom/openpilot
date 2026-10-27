@@ -1255,6 +1255,8 @@ class CarrotServ:
     return atc_desired, atc_type, atc_speed, atc_dist
 
   def update_nav_instruction(self, sm):
+    if self._external_navigation_connected():
+      return
     if sm.alive['navInstruction'] and sm.valid['navInstruction']:
       msg_nav = sm['navInstruction']
 
@@ -1561,7 +1563,7 @@ class CarrotServ:
     msg.carrotMan.leftSec = int(self.carrot_left_sec)
     pm.send('carrotMan', msg)
 
-    inst = messaging.new_message('navInstructionCarrot')
+    inst = messaging.new_message('navInstructionCarrot', valid=False)
     if self.active_carrot > 1 and self.active_kisa_count <= 0:
       inst.valid = True
 
@@ -1601,7 +1603,8 @@ class CarrotServ:
           maneuvers.append(maneuver)
 
       instruction.allManeuvers = maneuvers
-    elif sm.alive['navInstruction'] and sm.valid['navInstruction']:
+    elif not self._external_navigation_connected() and sm.alive['navInstruction'] and sm.valid['navInstruction']:
+      inst.valid = True
       inst.navInstructionCarrot = sm['navInstruction']
 
     pm.send('navInstructionCarrot', inst)

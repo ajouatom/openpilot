@@ -1,0 +1,34 @@
+{
+  "Makefile": {
+    "url": "https://raw.githubusercontent.com/gregkh/linux/v5.15.148/drivers/net/can/usb/peak_usb/Makefile",
+    "sha256": "9b91755ed2f7b616dac5876fc045de73cca9b03e0a4f65cd39e37fcb73e93dc7"
+  },
+  "pcan_usb_core.c": {
+    "url": "https://raw.githubusercontent.com/gregkh/linux/v5.15.148/drivers/net/can/usb/peak_usb/pcan_usb_core.c",
+    "sha256": "b41d33b77cf92b066e54258bf13e74c861da3934cb7543ff7c60b99e63a34dde"
+  },
+  "pcan_usb_core.h": {
+    "url": "https://raw.githubusercontent.com/gregkh/linux/v5.15.148/drivers/net/can/usb/peak_usb/pcan_usb_core.h",
+    "sha256": "347d6b7a6e077efbb0ac486311c71787373815fedd870ede67c437ed9e56e953"
+  },
+  "pcan_usb.c": {
+    "url": "https://raw.githubusercontent.com/gregkh/linux/v5.15.148/drivers/net/can/usb/peak_usb/pcan_usb.c",
+    "sha256": "368fc377a3a8f81caa3c253783c873c8bdb0a16161a450146b8be0265531606f"
+  },
+  "pcan_usb_pro.c": {
+    "url": "https://raw.githubusercontent.com/gregkh/linux/v5.15.148/drivers/net/can/usb/peak_usb/pcan_usb_pro.c",
+    "sha256": "82ebd73c89c4ad51d4af3c7e84c8f2c55e4ad786fd0446cef70b43550af80228"
+  },
+  "pcan_usb_pro.h": {
+    "url": "https://raw.githubusercontent.com/gregkh/linux/v5.15.148/drivers/net/can/usb/peak_usb/pcan_usb_pro.h",
+    "sha256": "cd9cfe9fc0b8db396e617a10da35c640e13758b1be3ede1856375666dd3b4b4a"
+  },
+  "pcan_usb_fd.c": {
+    "url": "https://raw.githubusercontent.com/gregkh/linux/v5.15.148/drivers/net/can/usb/peak_usb/pcan_usb_fd.c",
+    "sha256": "dd347d53becafbcb04479547da9147ecd8c887f24dc3ad939ca57decfb9d4a97"
+  },
+  "GPL-2.0": {
+    "url": "https://raw.githubusercontent.com/gregkh/linux/v5.15.148/LICENSES/preferred/GPL-2.0",
+    "sha256": "f6b78c087c3ebdf0f3c13415070dd480a3f35d8fc76f3d02180a407c1c812f79"
+  }
+}

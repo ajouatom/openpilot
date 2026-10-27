@@ -68,7 +68,7 @@ def test_refresh_selects_committed_release_and_repairs_hud(base, tmp_path, monke
     member.size = len(data)
     t.addfile(member, io.BytesIO(data))
     for name in ('update_host.py', 'finalize_sd_image.py', 'hud_protocol.py', 'release-signing-public.pem',
-                 'wifi_protocol.py', 'boot_update.py'):
+                 'wifi_protocol.py', 'local_release.py', 'boot_update.py'):
       t.add(Path(__file__).with_name(name), arcname='tools/jetlink/' + name)
   import install_boot_display
   diagnostic_calls = []

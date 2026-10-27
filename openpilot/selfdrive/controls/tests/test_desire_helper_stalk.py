@@ -340,3 +340,48 @@ class TestLaneChangeLeverWait:
     self.press()
     assert self.wait(LEVER_REQUEST_WAIT_S + 1.0) == LCS.preLaneChange
     assert self.helper.blinker_hold_direction == LCD.none
+
+
+class TestAtcPhysicalIndicator:
+  setup_method = TestDesireHelperStalkRequest.setup_method
+  update = TestDesireHelperStalkRequest.update
+  start_and_cross = TestDesireHelperStalkRequest.start_and_cross
+  def test_turn_origin_persists_through_lamp_feedback_and_ends_with_desire(self):
+    self.carrot_man.atcType = "turn left"
+    self.helper.left.dist_to_edge_far = 8.0
+    self.update(left_blinker=False, v_kph=10)
+    self.update(left_blinker=False, v_kph=10)
+    assert self.helper.desire == log.Desire.turnLeft
+    assert self.helper.auto_turn_signal == LCD.left
+    assert not self.helper.auto_turn_signal_lane_change
+    self.update(left_blinker=True, v_kph=10)
+    assert self.helper.auto_turn_signal == LCD.left
+    self.helper.turn_disable_count = 20
+    self.update(left_blinker=True, v_kph=10)
+    assert self.helper.desire != log.Desire.turnLeft
+    assert self.helper.auto_turn_signal == LCD.none
+
+  def test_driver_lane_change_does_not_become_atc_indicator(self):
+    self.start_and_cross()
+    assert self.helper.auto_turn_signal == LCD.none
+
+  def test_atc_waits_until_actual_start_and_holds_through_finishing(self):
+    self.carrot_man.atcType = "atc right"
+    self.update(left_blinker=False)
+    self.update(left_blinker=False)
+    assert self.helper.lane_change_state == LCS.preLaneChange
+    for _ in range(5):
+      self.update(left_blinker=False)
+      assert self.helper.auto_turn_signal == LCD.none
+    self.helper.right.lane_line_info_edge_detect = True
+    self.update(left_blinker=False)
+    assert self.helper.lane_change_state == LCS.laneChangeStarting
+    assert self.helper.auto_turn_signal == LCD.right
+    assert self.helper.auto_turn_signal_lane_change
+    for _ in range(12):
+      self.update(left_blinker=False,lane_change_prob=0.)
+    assert self.helper.lane_change_state == LCS.laneChangeFinishing
+    assert self.helper.auto_turn_signal == LCD.right
+    for _ in range(24):
+      self.update(left_blinker=False,lane_change_prob=0.)
+    assert self.helper.auto_turn_signal == LCD.none

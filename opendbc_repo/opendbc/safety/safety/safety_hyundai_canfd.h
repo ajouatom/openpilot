@@ -2,6 +2,7 @@
 
 #include "safety_declarations.h"
 #include "safety_hyundai_common.h"
+#include "safety_hyundai_spas.h"
 
 const TorqueSteeringLimits HYUNDAI_CANFD_STEERING_LIMITS = {
   .max_steer = 512, //270,
@@ -504,6 +505,7 @@ static bool canfd_bfwd_reuse_last(CanfdBufferedFwd* st, CANPacket_t* pkt) {
 
 
 static void hyundai_canfd_rx_hook(const CANPacket_t *to_push) {
+  hyundai_spas_rx(to_push, microsecond_timer_get());
   int bus = GET_BUS(to_push);
   int addr = GET_ADDR(to_push);
 
@@ -610,6 +612,11 @@ static bool hyundai_canfd_tx_hook(const CANPacket_t *to_send_const) {
   bool tx = true;
   int addr = GET_ADDR(to_send);
   bool violation = false;
+
+  if (addr == 0x3C1) { return hyundai_stalk_tx(to_send, microsecond_timer_get()); }
+  if ((addr == 0x7B1) || (addr == 0x165) || (addr == 0x16A)) {
+    return hyundai_spas_tx(to_send, microsecond_timer_get());
+  }
 
   if (addr == 0x10B) {
     bool accepted = hyundai_alt2_set_request(to_send, microsecond_timer_get());
@@ -834,6 +841,7 @@ static safety_config hyundai_canfd_init(uint16_t param) {
   }
 
   hyundai_common_init(param);
+  hyundai_spas_init(GET_FLAG(param, 4096), (hyundai_canfd_hda2 && !hyundai_camera_scc) ? 1 : 0);
 
   gen_crc_lookup_table_16(0x1021, hyundai_canfd_crc_lut);
   hyundai_canfd_alt_buttons = GET_FLAG(param, HYUNDAI_PARAM_CANFD_ALT_BUTTONS);
@@ -927,6 +935,18 @@ static safety_config hyundai_canfd_init(uint16_t param) {
     }
   }
 
+  if (hyundai_spas_enabled && (ret.tx_msgs_len + 4 <= 128)) {
+    int count = ret.tx_msgs_len;
+    for (int i = 0; i < count; i++) {
+      hyundai_spas_tx_list[i] = ret.tx_msgs[i];
+    }
+    hyundai_spas_tx_list[count++] = (CanMsg){0x3C1, hyundai_spas_bus, 8};
+    hyundai_spas_tx_list[count++] = (CanMsg){0x7B1, hyundai_spas_bus, 8};
+    hyundai_spas_tx_list[count++] = (CanMsg){0x165, hyundai_spas_bus, 24};
+    hyundai_spas_tx_list[count++] = (CanMsg){0x16A, hyundai_spas_bus, 32};
+    ret.tx_msgs = hyundai_spas_tx_list;
+    ret.tx_msgs_len = count;
+  }
   return ret;
 }
 

@@ -66,6 +66,7 @@ def main():
   sys.path.insert(0, str(runtime))
   os.environ.update(DEV='USB+AMD:LLVM', GMMU='0', JIT_BATCH_SIZE='0')
   import numpy as np
+  from openpilot.selfdrive.modeld.output_validation import validate_compiled_output
   generic = manifest['format'] == 'comma-generic-onnx'
   if background_recovery and not generic:
     raise ValueError('background recovery requires generic AMD model')
@@ -133,6 +134,8 @@ def main():
         adapter.progress = progress.mark
         cloudlog.event('precompiledWarp', backend='qcom' if isinstance(adapter, LocalWarpRuntime) else 'amd',
                        input_bytes=input_bytes, usb_input_bytes=getattr(adapter, 'upload_bytes', input_bytes))
+        from openpilot.selfdrive.modeld.egpu_output_recovery import OutputRecovery
+        recovery = OutputRecovery(adapter, count, cloudlog.event)
       else:
         queues['packed_npy_inputs'] = Tensor(packed_shared, device='NPY').realize()
       info = {'size': total, 'input_bytes': input_bytes, 'output_count': count, 'layout': layout,
@@ -148,6 +151,7 @@ def main():
           break
         if command == b'z' and background_recovery:
           adapter.reset_state()
+          recovery.last_good, recovery.failures = None, 0
           control.write(b'Z\n')
           control.flush()
           continue
@@ -156,16 +160,21 @@ def main():
         progress.frame += 1
         started, cpu_started = time.monotonic(), time.thread_time()
         if generic:
-          result = adapter.run()
+          result = recovery.run()
           dispatched = time.monotonic()
+          if result is None:
+            # Shared output and original publication timestamps remain untouched.
+            control.write(b'0\n')
+            control.flush()
+            progress.mark('idle')
+            continue
         else:
           progress.mark('model_call')
           outs, = run_model(**{k: queues[k] for k in model_runtime.MODELD_INPUTS})
           dispatched = time.monotonic()
           progress.mark('output_read')
           result = outs.numpy().reshape(-1)
-        if result.size != count or not np.isfinite(result).all():
-          raise ValueError('invalid precompiled model output')
+        validate_compiled_output(result, count)
         progress.mark('publish')
         output[:] = result
         finished, cpu_finished = time.monotonic(), time.thread_time()

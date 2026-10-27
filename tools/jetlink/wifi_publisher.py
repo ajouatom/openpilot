@@ -8,8 +8,11 @@ import socket
 import subprocess
 import sys
 import time
+import uuid
 
 from wifi_protocol import HEADER, LIMIT, validate
+from wifi_direct_netlink import INTERFACE as DIRECT_INTERFACE, profile_id as direct_profile_id
+from openpilot.common.jetson_model import selected_release
 
 
 def nm(*args):
@@ -20,12 +23,27 @@ def nm(*args):
   return result.stdout.rstrip('\n')
 
 
+def direct_client_id(uid):
+  # Legacy protected Jetson workers do not reconsider their preferred profile
+  # after roaming to a fallback. A new AP instance is a new client connection
+  # identity, so their existing transactional importer retries it exactly once.
+  # Phone association changes leave both inputs unchanged; no periodic churn.
+  boot = str(uuid.UUID(Path('/proc/sys/kernel/random/boot_id').read_text().strip()))
+  index = int((Path('/sys/class/net') / DIRECT_INTERFACE / 'ifindex').read_text())
+  return str(uuid.uuid5(uuid.UUID(uid), f'client:{boot}:{index}'))
+
+
 def collect():
   active = nm('-t', '-f', 'UUID', 'connection', 'show', '--active').splitlines()
   rows = nm('-t', '-f', 'UUID,TYPE', 'connection', 'show').splitlines()
   ids = [row.split(':')[0] for row in rows if row.endswith(':802-11-wireless')]
   ids.sort(key=lambda uid: uid not in active)
   profiles = []
+  direct = None
+  try:
+    direct_id = direct_profile_id()
+  except OSError:
+    direct_id = None
   for uid in ids[:8]:
     if not re.fullmatch('[0-9a-f-]{36}', uid):
       continue
@@ -37,17 +55,30 @@ def collect():
     if len(fields) != 5:
       continue
     ssid, mode, hidden, security, password = fields
-    if mode not in ('infrastructure', ''):
-      continue  # Never import comma's access-point/tethering profile as a client.
+    is_direct = mode == 'ap' and uid == direct_id and uid in active
+    if mode not in ('infrastructure', '') and not is_direct:
+      continue  # Only the explicitly owned, active Jetson AP is importable.
+    if is_direct and nm('-g', 'connection.interface-name', 'connection', 'show', 'uuid', uid) != DIRECT_INTERFACE:
+      continue
     if security in ('wpa-psk', 'sae') and not password:
       raise RuntimeError('Saved Wi-Fi secret unavailable')
-    profile = dict(id=uid, ssid=ssid, hidden=hidden in ('yes', 'true'), active=uid in active,
+    profile = dict(id=direct_client_id(uid) if is_direct else uid, ssid=ssid, hidden=hidden in ('yes', 'true'), active=uid in active,
                    security=security or 'open', password=password)
     try:
       validate(dict(version=1, owner='0' * 64, profiles=[profile]))
     except ValueError:
       continue
-    profiles.append(profile)
+    if is_direct:
+      direct = profile
+    else:
+      profiles.append(profile)
+  if direct is not None:
+    # Stable order/active selection prevents phone disconnect/rejoin from
+    # reconnecting Jetson or changing its HUD path. Keep ordinary fallbacks.
+    profiles.sort(key=lambda p: p['id'])
+    for p in profiles:
+      p['active'] = False
+    profiles = [direct, *profiles[:7]]
   return profiles
 
 
@@ -67,13 +98,21 @@ def main(fd):
   params = Params()
   owner = hashlib.sha256(Path('/etc/machine-id').read_bytes()).hexdigest()
   release = Path(__file__).resolve().parents[2] / 'openpilot/selfdrive/modeld/jetlink/host_release.json'
-  manifest = json.loads(release.read_text()) if release.is_file() else None
+  manifest = selected_release(release)
   channel = socket.socket(fileno=fd)
   channel.setblocking(False)
   profiles = None
   refresh = 0
+  next_ap = 0
   while True:
     now = time.monotonic()
+    if now >= next_ap:
+      try:
+        from wifi_direct import ensure
+        ensure()
+      except Exception:
+        pass  # Failure of this display side channel must not block USB.
+      next_ap = now + 30
     if now >= refresh:
       try:
         profiles = collect()

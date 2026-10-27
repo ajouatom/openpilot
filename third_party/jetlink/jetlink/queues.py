@@ -135,6 +135,9 @@ class PolicyQueues:
     for q in (self.img_q, self.big_img_q, self.feat_q, self.desire_q):
       q.reset()
 
+  def feedback(self, outputs: dict[str, np.ndarray]) -> None:
+    """Queued graphs receive their previous features from the client."""
+
   def _unpack(self, packed: np.ndarray):
     # slice views, not np.split: the offsets never change and split allocates
     return tuple(packed[a:b].reshape(shape) for a, b, shape in self._packed_layout)
@@ -186,3 +189,146 @@ class PolicyQueues:
     dest['traffic_convention'][...] = traffic_convention.reshape(
       dest['traffic_convention'].shape)
     dest['action_t'][...] = action_t.reshape(dest['action_t'].shape)
+
+
+class StatefulQueues:
+  """Keep graph-owned history on the host; only images/scalars cross USB.
+
+  State uses the engine's actual dtype (the TRT image queue is promoted to
+  fp16). All outputs are checked before another inference can use the state;
+  an invalid result clears every state buffer, including shared TRT staging.
+  """
+  def __init__(self, spec: ModelSpec, inputs: dict[str, np.ndarray]):
+    from jetlink.finite import native_checker
+    self._native_finite = native_checker()
+    self.spec = spec
+    self.direct_map = None
+    self.input_cast = None
+    self.state = {name: inputs[name] for name in spec.state_pairs}
+    # NumPy's aarch64 float16 isfinite path is scalar. IEEE binary16 is
+    # non-finite exactly when all five exponent bits are set, for BOTH signs
+    # and every NaN payload. Reuse bounded scratch space across all outputs.
+    largest = max(int(np.prod(shape)) for shape in spec.output_shapes.values())
+    self._finite_bits = np.empty(largest, dtype=np.uint16)
+    self._finite_bad = np.empty(largest, dtype=np.bool_)
+    if not self.state or set(spec.input_shapes) != set(self.state) | {'new_img', *spec.packed_shapes}:
+      raise ValueError('Unsupported stateful graph inputs')
+    if set(spec.output_shapes) != {'outputs', *spec.state_pairs.values()}:
+      raise ValueError('Unsupported stateful graph outputs')
+    for name, output in spec.state_pairs.items():
+      if inputs[name].shape != spec.input_shapes[name] or spec.output_shapes[output] != spec.input_shapes[name]:
+        raise ValueError(f'State shape mismatch: {name}')
+    self.reset()
+
+  def reset(self) -> None:
+    for value in self.state.values():
+      value.fill(0)
+
+  def step_into(self, warped, packed, dest):
+    if warped.shape != self.spec.warped_shape or warped.dtype != np.uint8 or packed.size != self.spec.packed_nelem:
+      raise ValueError('Invalid stateful frame shape/type')
+    if not np.isfinite(packed).all():
+      self.reset()
+      raise ValueError('Non-finite stateful scalar input')
+    self._copy_image(warped, dest)
+    offset = 0
+    for name, size in zip(self.spec.packed_shapes, self.spec.packed_sizes, strict=True):
+      dest[name][...] = packed[offset:offset + size].reshape(dest[name].shape)
+      offset += size
+
+  def _copy_image(self, warped, dest):
+    image = dest['new_img']
+    if image.dtype == np.float16:
+      if self.input_cast is not None:
+        self.input_cast(warped, image)
+      else:
+        np.take(_U8_TO_F16_BITS, warped.reshape(-1), out=image.reshape(-1).view(np.uint16), mode='clip')
+    else:
+      image[...] = warped
+
+  def step_compact_into(self, warped, compact, dest):
+    if self.direct_map is None:
+      raise RuntimeError('Direct-map input staging is disabled')
+    if warped.shape != self.spec.warped_shape or warped.dtype != np.uint8:
+      raise ValueError('Invalid stateful frame shape/type')
+    try:
+      fields = self.direct_map.fields(compact, dest)
+    except ValueError:
+      self.reset()
+      raise
+    self._copy_image(warped, dest)
+    self.direct_map.copy(fields)
+
+  def _all_finite(self, value):
+    if self._native_finite is not None:
+      return self._native_finite(value)
+    if value.dtype != np.float16:
+      return np.isfinite(value).all()
+    bits = self._finite_bits[:value.size].reshape(value.shape)
+    bad = self._finite_bad[:value.size].reshape(value.shape)
+    np.bitwise_and(value.view(np.uint16), 0x7c00, out=bits)
+    np.equal(bits, 0x7c00, out=bad)
+    return not bad.any()
+
+  def feedback(self, outputs):
+    try:
+      for name, shape in self.spec.output_shapes.items():
+        if name not in outputs or outputs[name].shape != shape:
+          raise ValueError(f'Invalid stateful output shape: {name}')
+        if not self._all_finite(outputs[name]):
+          raise FloatingPointError(f'Non-finite stateful output: {name}')
+      for name, output in self.spec.state_pairs.items():
+        if outputs[output].dtype != self.state[name].dtype:
+          raise ValueError(f'State feedback dtype mismatch: {name}')
+      for name, output in self.spec.state_pairs.items():
+        np.copyto(self.state[name], outputs[output], casting='no')
+    except (ValueError, FloatingPointError):
+      self.reset()
+      raise
+
+
+class DeviceStateQueues(StatefulQueues):
+  """Same scalar/image preparation; validated recurrence belongs to the GPU.
+
+  Bindings/shapes/dtypes are validated at load. The engine checks every state
+  element on device before its reply event; driving outputs remain CPU checked.
+  Host state buffers are retained for the existing binding lifetime contract,
+  but are neither uploaded nor downloaded per frame.
+  """
+  def __init__(self, spec, host_inputs, device_state):
+    self.device_state = device_state
+    if set(spec.state_pairs) != device_state.input_names or set(spec.state_pairs.values()) != device_state.output_names:
+      raise ValueError('Device state pairs differ from model contract')
+    super().__init__(spec, host_inputs)
+
+  def reset(self):
+    super().reset()
+    self.device_state.reset()
+
+  def feedback(self, outputs):
+    try:
+      if set(outputs) != {'outputs'} or outputs['outputs'].shape != self.spec.output_shapes['outputs']:
+        raise ValueError('Invalid device-state driving output shape')
+      if not self._all_finite(outputs['outputs']):
+        raise FloatingPointError('Non-finite driving output')
+      self.device_state.validate()
+    except (ValueError, FloatingPointError):
+      self.reset()
+      raise
+
+
+
+def make_queues(spec, host_inputs, device_state=None, *, direct_map=False, native_image=False):
+  if device_state is not None:
+    if not spec.stateful:
+      raise ValueError('Device recurrence requires a stateful model')
+    queues = DeviceStateQueues(spec, host_inputs, device_state)
+  else:
+    queues = StatefulQueues(spec, host_inputs) if spec.stateful else PolicyQueues(spec)
+  if direct_map:
+    from jetlink.direct_map import DirectMap
+    queues.direct_map = DirectMap(spec, host_inputs)
+  if native_image and spec.stateful:
+    from jetlink.input_cast import native_u8_to_f16
+    queues.input_cast = native_u8_to_f16()
+  return queues
