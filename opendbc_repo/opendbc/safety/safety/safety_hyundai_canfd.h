@@ -722,11 +722,11 @@ static bool hyundai_canfd_tx_hook(const CANPacket_t *to_send_const) {
     }
   }
 
-  // SVM_STATUS_400(0x400) spoof: a cluster display status, nothing but byte 4 may be set and only view ids 0..7
+  // SVM_STATUS_400(0x400) spoof: a cluster display status. Byte 4 is the view id and is free (0..255) so the
+  // remaining ids can be probed; every other byte must stay 0, exactly as the car sends it.
   if (addr == 0x400) {
     bool shape_ok = (GET_BYTE(to_send, 0) == 0U) && (GET_BYTE(to_send, 1) == 0U) &&
                     (GET_BYTE(to_send, 2) == 0U) && (GET_BYTE(to_send, 3) == 0U) &&
-                    (GET_BYTE(to_send, 4) <= 7U) &&
                     (GET_BYTE(to_send, 5) == 0U) && (GET_BYTE(to_send, 6) == 0U) && (GET_BYTE(to_send, 7) == 0U);
     if (!shape_ok) {
       tx = false;

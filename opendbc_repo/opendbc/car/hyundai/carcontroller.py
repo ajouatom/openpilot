@@ -44,13 +44,12 @@ LARGE_ANGLE_UNWIND_RATE = 1.5  # deg/tick: allow a quicker return from the EPS f
 CANFD_JERK_UPPER_MIN = 1.0
 CANFD_JERK_LIMIT_MAX = 5.0
 CANFD_DEPART_JERK_UPPER = 3.0  # StopGoAssist departure: no-lead departures already send 2.8-3.3 (02_logs §22)
-# CanfdBlinkerKick: in D above 30 km/h the parking ECU (APRK, 0x7B1) is silenced and SPAS2 BLINKER_CONTROL is sent in
-# its place; below 20 km/h or out of D its default session returns, so parking assists work again while parking
+# CanfdBlinkerKick: in D at any speed (user 10-27: city lane changes are slow) the parking ECU (APRK, 0x7B1) is silenced
+# around a kick and SPAS2 BLINKER_CONTROL is sent in its place; out of D its default session returns
 APRK_ADDR = 0x7B1
 APRK_EXT_SESSION = bytes([0x02, 0x10, 0x03, 0, 0, 0, 0, 0])
 APRK_COM_DISABLE = bytes([0x03, 0x28, 0x83, 0x01, 0, 0, 0, 0])
 APRK_DEFAULT_SESSION = bytes([0x02, 0x10, 0x01, 0, 0, 0, 0, 0])
-APRK_ON_KPH, APRK_OFF_KPH = 30., 20.
 # kick: ~2 flashes when the driver starts crossing a lane line without the blinker (lane_crossing.py).
 # shortcut: flash count at 1.0 s is not measured (BCM ran on ~1.2 s after the command stopped, EV4 10-26), tune after a drive
 BLINKER_PULSE_FRAMES = int(1.0 / DT_CTRL)
@@ -243,6 +242,7 @@ class CarController(CarControllerBase):
     # CanfdBvmView: 0 off, 1 left, 2 right, 3 both. Spoofs the cluster camera view status (0x400 byte4) so the
     # blind-spot camera is shown without the turn signal. Display-only message, nothing else uses it.
     self.bvm_view = 0
+    self.bvm_raw = 0   # CanfdBvmRaw: 1..255 = byte4 value sent as-is, overrides bvm_view
     self.palisade_cgw_test = PalisadeCgwTest()
     self.palisade_blinker_test = 0
     self.stalk_counter = None
@@ -334,7 +334,7 @@ class CarController(CarControllerBase):
     # 0x400 BVM_VIEW (byte 4) is what the car broadcasts at 5 Hz while a blind-spot camera is on:
     # 1..3 left, 4..6 right, 0 off (09-12 and 10-26 logs). Stock rate (5 Hz) only: a faster same-ID copy is the
     # collision that took the Azera bus down (STALK_MOMENTARY_HZ_DIV).
-    val = {1: 3, 2: 6, 3: 7}.get(self.bvm_view, 0)
+    val = self.bvm_raw if self.bvm_raw else {1: 3, 2: 6, 3: 7}.get(self.bvm_view, 0)
     if self.frame % 20 != 0:
       return []
     return [CanData(0x400, bytes([0, 0, 0, 0, val, 0, 0, 0]), self.CAN.ECAN)]
@@ -343,17 +343,16 @@ class CarController(CarControllerBase):
     # shortcut: replies are not checked; if APRK ignores the requests it keeps sending SPAS2 and the cluster sees both
     ret = []
     drive = CS.out.gearShifter == structs.CarState.GearShifter.drive
-    fast = CS.out.vEgo * CV.MS_TO_KPH > (APRK_OFF_KPH if self.aprk_state else APRK_ON_KPH)
     # The driver crossing a line with the lamp off, engaged or not (modelV2 runs either way). Not the model's own lane
     # change: holding SPAS2 through it read back as the driver's blinker and the lamp never went off (EV4 10-26).
     lamp = CS.out.leftBlinker or CS.out.rightBlinker
     side = self.lane_crossing.update(getattr(CS, "modelV2", None), self.frame * DT_CTRL,
-                                     self.blinker_control and drive and fast and not lamp)
+                                     self.blinker_control and drive and not lamp)
     if side:
       self.blinker_side, self.blinker_pulse_end = side, self.frame + BLINKER_PULSE_FRAMES
     pulse = self.frame < self.blinker_pulse_end
     # the parking ECU is paused only around a kick and restored right after it (menu test: any speed or gear)
-    want = self.blinker_test in (1, 2) or (self.blinker_control and drive and fast and pulse)
+    want = self.blinker_test in (1, 2) or (self.blinker_control and drive and pulse)
     if not want:
       if self.aprk_state:
         ret.append(CanData(APRK_ADDR, APRK_DEFAULT_SESSION, self.CAN.ECAN))
@@ -423,6 +422,7 @@ class CarController(CarControllerBase):
       self.blinker_test = params.get_int("CanfdBlinkerMenuTest")
       self.blinker_stalk = params.get_int("CanfdBlinkerStalk")
       self.bvm_view = params.get_int("CanfdBvmView")
+      self.bvm_raw = params.get_int("CanfdBvmRaw")
       self.palisade_blinker_test = params.get_int("PalisadeBlinkerTest")
       self.hapticFeedbackWhenSpeedCamera = int(params.get_int("HapticFeedbackWhenSpeedCamera"))
 
@@ -705,7 +705,7 @@ class CarController(CarControllerBase):
           can_sends.extend(hyundaicanfd.create_lfa_icon_non_camera_scc(self.packer, CS, self.CAN, CC))
 
       # blind-spot camera view (no turn signal needed)
-      if self.bvm_view:
+      if self.bvm_view or self.bvm_raw:
         can_sends.extend(self.bvm_view_msg())
 
       # blinkers
