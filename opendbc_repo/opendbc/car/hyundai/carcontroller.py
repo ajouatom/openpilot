@@ -243,6 +243,7 @@ class CarController(CarControllerBase):
     # blind-spot camera is shown without the turn signal. Display-only message, nothing else uses it.
     self.bvm_view = 0
     self.bvm_raw = 0   # CanfdBvmRaw: 1..255 = byte4 value sent as-is, overrides bvm_view
+    self.bvm_alt_phase = 0
     self.palisade_cgw_test = PalisadeCgwTest()
     self.palisade_blinker_test = 0
     self.stalk_counter = None
@@ -334,7 +335,13 @@ class CarController(CarControllerBase):
     # 0x400 BVM_VIEW (byte 4) is what the car broadcasts at 5 Hz while a blind-spot camera is on:
     # 1..3 left, 4..6 right, 0 off (09-12 and 10-26 logs). Stock rate (5 Hz) only: a faster same-ID copy is the
     # collision that took the Azera bus down (STALK_MOMENTARY_HZ_DIV).
-    val = self.bvm_raw if self.bvm_raw else {1: 3, 2: 6, 3: 7}.get(self.bvm_view, 0)
+    if self.bvm_view == 4:
+      # The cluster only has one camera window (byte 4 is a 3-bit single-window state), so both sides cannot be
+      # shown at once. Alternate them so both are visible in turn: 1 s left, 1 s right.
+      self.bvm_alt_phase = (self.frame // 100) % 2
+      val = 3 if self.bvm_alt_phase == 0 else 6
+    else:
+      val = self.bvm_raw if self.bvm_raw else {1: 3, 2: 6, 3: 7}.get(self.bvm_view, 0)
     if self.frame % 20 != 0:
       return []
     return [CanData(0x400, bytes([0, 0, 0, 0, val, 0, 0, 0]), self.CAN.ECAN)]
