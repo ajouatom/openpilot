@@ -43,12 +43,10 @@ def spas2(cc, sent):
 def test_aprk_paused_only_around_a_crossing_kick():
   cc = make_cc()
   assert step(cc, 50, D, 60) == [] and cc.aprk_state == 0  # on but nobody crossing: parking ECU untouched
-  assert step(cc, 10, D, 25, cross=3) == []  # below 30 km/h: held back
-  cc.lane_crossing.side = 0
-  sent = step(cc, 10, D, 60, cross=3)
+  sent = step(cc, 10, D, 5, cross=3)  # any speed in D
   uds = [m[1] for m in sent if m[0] == carcontroller.APRK_ADDR]
   assert uds == [carcontroller.APRK_EXT_SESSION, carcontroller.APRK_COM_DISABLE] and cc.aprk_state == 2
-  assert set(spas2(cc, step(cc, 10, D, 25))) == {3}  # 25 km/h: hysteresis keeps the kick going
+  assert set(spas2(cc, step(cc, 10, D, 0))) == {3}
   sent = step(cc, carcontroller.BLINKER_PULSE_FRAMES, D, 60)
   assert [m[1] for m in sent if m[0] == carcontroller.APRK_ADDR][-1:] == [carcontroller.APRK_DEFAULT_SESSION]
   assert cc.aprk_state == 0 and step(cc, 100, D, 60) == []  # restored after the kick
