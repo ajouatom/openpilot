@@ -96,3 +96,9 @@ The inset appears while engaged or with Always On DM enabled, and hides during d
 Warnings progress from a silent visual notice to the first audible warning and then the final audible warning. **The first sound has a 70% minimum gain; the final sound always uses 100%.** General/engagement volume settings and ambient-noise attenuation cannot reduce these levels.
 
 This sound policy applies to modes 0 and 1 with camera or interaction monitoring. Navigation and other events sharing the same sound assets retain their existing volume; percentages describe software output gain, not measured speaker sound pressure.
+
+## Confirmed stationary holds
+
+SoftHold pauses driver assessment. The same pause applies during a fresh, confirmed signal stop or stop behind a stationary lead with active longitudinal control, standstill, raw and filtered speed below 0.1 m/s, and no accelerator input. A lead stop additionally requires a valid stationary lead within 40 m.
+
+The camera continues running; accumulated warnings and lockout are not cleared. Departure, a green signal, lead movement, or stale/invalid inputs resumes assessment on the next update. Stopping alone does not qualify.
