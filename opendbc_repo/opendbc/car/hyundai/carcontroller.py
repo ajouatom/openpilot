@@ -332,9 +332,10 @@ class CarController(CarControllerBase):
 
   def bvm_view_msg(self):
     # 0x400 BVM_VIEW (byte 4) is what the car broadcasts at 5 Hz while a blind-spot camera is on:
-    # 1..3 left, 4..6 right, 0 off (09-12 and 10-26 logs). Send the settled value at 20 Hz to win the slots.
+    # 1..3 left, 4..6 right, 0 off (09-12 and 10-26 logs). Stock rate (5 Hz) only: a faster same-ID copy is the
+    # collision that took the Azera bus down (STALK_MOMENTARY_HZ_DIV).
     val = {1: 3, 2: 6, 3: 7}.get(self.bvm_view, 0)
-    if self.frame % 5 != 0:
+    if self.frame % 20 != 0:
       return []
     return [CanData(0x400, bytes([0, 0, 0, 0, val, 0, 0, 0]), self.CAN.ECAN)]
 
