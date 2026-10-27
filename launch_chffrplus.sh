@@ -668,6 +668,8 @@ function launch {
   FORCE_REBUILD=0
   # A reset before the Params build must still force the full build below.
   [ "$BUILD_STATE_RESET" = "1" ] && FORCE_REBUILD=1
+  # Accept the pending external model once per real boot, before either backend.
+  flock /tmp/big_model_selection.lock python3 -m openpilot.common.big_model_catalog || exit 1
   prepare_big_model_if_needed
   invalidate_modeld_build_if_needed
   invalidate_native_build_if_needed

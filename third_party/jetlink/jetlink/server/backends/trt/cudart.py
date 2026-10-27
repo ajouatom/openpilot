@@ -33,7 +33,7 @@ def check(result):
   if err != cudaSuccess:
     _, name = _rt.cudaGetErrorName(err)
     _, msg = _rt.cudaGetErrorString(err)
-    raise CudaError(f"{name.decode() if isinstance(name, bytes) else name}: "
+    raise CudaError(f"{name.decode() if isinstance(name, bytes) else name}: " +
                     f"{msg.decode() if isinstance(msg, bytes) else msg}")
   if not values:
     return None
@@ -76,6 +76,33 @@ def memcpy_d2h_async(dst: int, src: int, nbytes: int, stream: int) -> None:
   check(_rt.cudaMemcpyAsync(dst, src, nbytes, cudaMemcpyDeviceToHost, stream))
 
 
+def memcpy_d2d_async(dst: int, src: int, nbytes: int, stream: int) -> None:
+  check(_rt.cudaMemcpyAsync(dst, src, nbytes, _rt.cudaMemcpyKind.cudaMemcpyDeviceToDevice, stream))
+
+
+def memset_async(ptr: int, nbytes: int, stream: int) -> None:
+  check(_rt.cudaMemsetAsync(ptr, 0, nbytes, stream))
+
+
+def event_create():
+  # BlockingSync | DisableTiming: do not spin a CPU while TensorRT runs.
+  return check(_rt.cudaEventCreateWithFlags(1 | 2))
+
+
+def event_record(event, stream: int, *, external=False) -> None:
+  # External records a graph node during capture. It is invalid in a plain
+  # warm/enqueue run on Orin; use the default event flag outside capture.
+  check(_rt.cudaEventRecordWithFlags(event, stream, 1 if external else 0))
+
+
+def event_sync(event) -> None:
+  check(_rt.cudaEventSynchronize(event))
+
+
+def event_destroy(event) -> None:
+  check(_rt.cudaEventDestroy(event))
+
+
 def set_device(device: int) -> None:
   """Which GPU this thread's context is. A laptop has one; a desktop may not."""
   check(_rt.cudaSetDevice(device))
@@ -93,7 +120,7 @@ def device_name(device: int = 0) -> tuple[str, int, int]:
 # per-launch CPU work, which is both latency and jitter. Safe only because every
 # buffer is preallocated and never moves.
 
-cudaStreamCaptureModeThreadLocal = 1
+cudaStreamCaptureModeThreadLocal = _rt.cudaStreamCaptureMode.cudaStreamCaptureModeThreadLocal
 
 
 def stream_begin_capture(stream: int) -> None:

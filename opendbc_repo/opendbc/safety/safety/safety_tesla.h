@@ -1,6 +1,7 @@
 #pragma once
 
 #include "safety_declarations.h"
+#include "safety_tesla_turn_signals.h"
 
 static bool tesla_longitudinal = false;
 static bool tesla_stock_aeb = false;
@@ -36,6 +37,7 @@ static int tesla_get_steer_ctrl_type(const int ctrl_type) {
 }
 
 static void tesla_rx_hook(const CANPacket_t *to_push) {
+  tesla_turn_rx(to_push);
   int bus = GET_BUS(to_push);
   int addr = GET_ADDR(to_push);
 
@@ -166,6 +168,12 @@ static bool tesla_tx_hook(const CANPacket_t *to_send) {
   // Don't send any messages when Summon is active
   if (tesla_summon) {
     violation = true;
+  }
+
+  if (addr == 0x3E9) {
+    if (violation || !tesla_turn_tx(to_send)) {
+      violation = true;
+    }
   }
 
   // Steering control: (0.1 * val) - 1638.35 in deg.
@@ -314,18 +322,28 @@ static safety_config tesla_init(uint16_t param) {
     {0x488, 0, 4},  // DAS_steeringControl
     {0x2b9, 0, 8},  // DAS_control
     {0x27D, 0, 3},  // APS_eacMonitor
+    {0x3E9, 1, 8},  // DAS_bodyControls, separately gated by AUTO_TURN_SIGNALS
   };
   static const CanMsg TESLA_M3_Y_AUTO_SPEED_TX_MSGS[] = {
     {0x488, 0, 4},  // DAS_steeringControl
     {0x2b9, 0, 8},  // DAS_control
     {0x27D, 0, 3},  // APS_eacMonitor
     {0x3C2, 1, 8},  // VCLEFT_switchStatus
+    {0x3E9, 1, 8},  // DAS_bodyControls, separately gated by AUTO_TURN_SIGNALS
   };
 
   const uint16_t TESLA_FLAG_FSD_14 = 2;
   const uint16_t TESLA_FLAG_AUTO_SPEED_LIMIT = 4;
   tesla_fsd_14 = GET_FLAG(param, TESLA_FLAG_FSD_14);
   tesla_auto_speed_limit = GET_FLAG(param, TESLA_FLAG_AUTO_SPEED_LIMIT);
+  tesla_auto_turn_signals = GET_FLAG(param, 8U);
+  tesla_turn_template_valid = false;
+  tesla_turn_direction = 0U;
+  tesla_turn_count = 0U;
+  tesla_turn_template_ts = 0U;
+  tesla_turn_started = 0U;
+  tesla_turn_cancel_count = 0U;
+  tesla_turn_cancel_started = 0U;
 
 #ifdef ALLOW_DEBUG
   const int TESLA_FLAG_LONGITUDINAL_CONTROL = 1;

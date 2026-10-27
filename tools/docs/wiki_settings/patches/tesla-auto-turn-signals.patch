@@ -1,0 +1,54 @@
+--- a/EN-Tesla-Automatic-Turn-Signals.md
++++ b/EN-Tesla-Automatic-Turn-Signals.md
+@@ -28,3 +28,15 @@
+ <!-- CARROT:MANUAL:BEGIN TeslaAutoTurnSignals -->
+ <!-- CARROT:REVIEW reviewed-for="" -->
++
++<!-- CARROT:SECTION:BEGIN BEHAVIOR -->
++Requests lamps through the existing maneuver; turns require started-turn and stable straightening evidence independently of the steering desire. Each repeat needs a new idle template and TX echo; missing templates or lost feedback ends the automatic session. Unknown/automatic lamps are not driver confirmation. Stalk input, hazards or an unexpected opposite lamp stops automatic output; cleanup cancellation waits for fresh idle stalk and stable actual OFF. Unconfirmed cancellation stops further automatic output for this onroad cycle.
++<!-- CARROT:SECTION:END BEHAVIOR -->
++
++<!-- CARROT:SECTION:BEGIN USAGE -->
++Default OFF; reboot after changing. Requires supported Model 3/Y, CAN1 extension detection shared with the speed wheel (`0x3DF`), fresh physical stalk input and matching Panda firmware. CAN1 stalk input is preferred once observed; stale or conflicting input blocks output. Lamp-specific templates and UI/physical feedback are still required. App requests last through the existing maneuver. `blocked:*` and `waiting:*` diagnostics identify blockers; they are not new on-screen alerts. It does not grant steering or departure permission. Validate both directions and failure/manual takeover on the exact vehicle in a closed course before road use. CAN or device power loss cannot guarantee lamp cancellation.
++<!-- CARROT:SECTION:END USAGE -->
++
++<!-- CARROT:SECTION:BEGIN REFERENCE -->
++Execution: `openpilot/selfdrive/car/tesla_turn_signals.py`. Intent: `openpilot/selfdrive/controls/lib/desire_helper.py`. Safety: `opendbc_repo/opendbc/safety/safety/safety_tesla_turn_signals.h`. See the Tesla user guide for diagnostics and limitations.
++<!-- CARROT:SECTION:END REFERENCE -->
+ <!-- CARROT:MANUAL:END TeslaAutoTurnSignals -->
+--- a/KO-Tesla-자동-방향지시등.md
++++ b/KO-Tesla-자동-방향지시등.md
+@@ -28,3 +28,15 @@
+ <!-- CARROT:MANUAL:BEGIN TeslaAutoTurnSignals -->
+ <!-- CARROT:REVIEW reviewed-for="" -->
++
++<!-- CARROT:SECTION:BEGIN BEHAVIOR -->
++기존 동작 동안 램프를 요청하며 회전은 조향 판단과 별개로 회전 시작과 안정된 직진 복귀를 확인합니다. 반복마다 새 유휴 템플릿과 TX 에코가 필요하며 템플릿·피드백 상실 시 자동 세션을 종료합니다. 출처 불명·자동 램프는 운전자 확인이 아닙니다. 스토크·비상등·예상 밖 반대 램프 감지 시 자동 출력을 멈추고 신선한 스토크 중립과 안정된 실제 OFF 이후 취소합니다. 취소 미확인 시 해당 주행의 추가 자동 출력을 중지합니다.
++<!-- CARROT:SECTION:END BEHAVIOR -->
++
++<!-- CARROT:SECTION:BEGIN USAGE -->
++기본 꺼짐이며 변경 후 재부팅합니다. 지원 Model 3/Y, 속도 휠과 공유하는 CAN1 확장선 감지(`0x3DF`), 신선한 실제 스토크 입력과 일치하는 Panda 펌웨어가 필요합니다. 수신된 CAN1 스토크를 우선하고 시간 초과·충돌 시 출력을 차단합니다. 램프 템플릿과 UI·실제 램프 피드백은 별도로 필요하며 App 요청도 기존 동작 완료까지 유지합니다. `blocked:*`, `waiting:*`는 화면 경고가 아닌 기록용 진단입니다. 조향·출발 권한은 늘리지 않습니다. 일반 도로 사용 전 해당 차량의 폐쇄 시험장에서 좌우 동작·고장·운전자 개입을 확인하세요. CAN 단절이나 장치 전원 상실 시 소등은 보장할 수 없습니다.
++<!-- CARROT:SECTION:END USAGE -->
++
++<!-- CARROT:SECTION:BEGIN REFERENCE -->
++실행: `openpilot/selfdrive/car/tesla_turn_signals.py`. 의도: `openpilot/selfdrive/controls/lib/desire_helper.py`. 안전: `opendbc_repo/opendbc/safety/safety/safety_tesla_turn_signals.h`. 진단과 제한은 Tesla 사용자 가이드를 참고하세요.
++<!-- CARROT:SECTION:END REFERENCE -->
+ <!-- CARROT:MANUAL:END TeslaAutoTurnSignals -->
+--- a/ZH-特斯拉自动转向灯.md
++++ b/ZH-特斯拉自动转向灯.md
+@@ -28,3 +28,15 @@
+ <!-- CARROT:MANUAL:BEGIN TeslaAutoTurnSignals -->
+ <!-- CARROT:REVIEW reviewed-for="" -->
++
++<!-- CARROT:SECTION:BEGIN BEHAVIOR -->
++沿用现有动作请求灯光；转弯另需实际开始和稳定回正证据，不跟随转向欲望提前结束。每次重复须有新 idle 模板和 TX 回报；模板或灯反馈丢失时结束自动会话。未知来源或自动灯不作为驾驶员确认。拨杆、双闪或意外对侧灯优先，立即停止自动输出；清理取消延后至新鲜拨杆中立且双侧稳定真关闭，未确认取消则本次运行不再自动输出。
++<!-- CARROT:SECTION:END BEHAVIOR -->
++
++<!-- CARROT:SECTION:BEGIN USAGE -->
++默认关闭，修改后需重启。要求受支持的 Model 3/Y、与自动巡航滚轮共用的 CAN1 拓展线检测（`0x3DF`）、有效且新鲜的真实拨杆输入及匹配的 Panda 固件。收到 CAN1 拨杆后优先使用该来源；输入陈旧或冲突时禁止自动输出。仍需独立的灯控模板及 UI/物理灯反馈；App 请求保持至既有动作完成。`blocked:*`、`waiting:*` 用于记录具体阻断原因，不是新增屏幕告警。不增加转向或起步权限。公共道路使用前必须在目标车辆的封闭场地验证左右灯、故障和人工接管；CAN 断线或设备断电时无法保证物理熄灯。
++<!-- CARROT:SECTION:END USAGE -->
++
++<!-- CARROT:SECTION:BEGIN REFERENCE -->
++执行：`openpilot/selfdrive/car/tesla_turn_signals.py`。意图：`openpilot/selfdrive/controls/lib/desire_helper.py`。安全层：`opendbc_repo/opendbc/safety/safety/safety_tesla_turn_signals.h`。诊断与限制见 Tesla 用户指南。
++<!-- CARROT:SECTION:END REFERENCE -->
+ <!-- CARROT:MANUAL:END TeslaAutoTurnSignals -->

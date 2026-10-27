@@ -306,6 +306,7 @@ SConscript([
   'openpilot/selfdrive/carrot/realtime/SConscript',
   'openpilot/selfdrive/carrot/cluster/SConscript',
   'openpilot/selfdrive/carrot/radar_motion/SConscript',
+  'openpilot/selfdrive/navigation/SConscript',
   'opendbc_repo/opendbc/can/SConscript',
 ])
 

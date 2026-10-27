@@ -127,7 +127,7 @@ def test_disconnected_or_wrong_schema_is_rejected():
 def test_parses_vehicle_route_traffic_and_secondary_sdi():
   control = parse_carrot_navi_control(_message(
     vehicle={
-      "meta": _meta(10),
+      "meta": {**_meta(10), "receivedMonoTimeNanos": 123_456_789_012},
       "latitude": 37.5,
       "longitude": 127.1,
       "headingDeg": 361.0,
@@ -174,6 +174,7 @@ def test_parses_vehicle_route_traffic_and_secondary_sdi():
   assert control.vehicle.present
   assert (control.vehicle.latitude, control.vehicle.longitude, control.vehicle.heading_deg) == (37.5, 127.1, 1.0)
   assert control.vehicle.road_name == "Test road"
+  assert control.vehicle.received_mono_time_ns == 123_456_789_012
   assert control.speed.sdi_block_distance_m == 390
   assert control.speed.secondary_sdi_present
   assert (control.speed.secondary_sdi_type, control.speed.secondary_sdi_distance_m) == (22, 93)

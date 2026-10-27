@@ -55,6 +55,12 @@ def open_input(path):
     raise
 
 
+def initial_buttons(fd):
+  bitmap = bytearray(96)  # Linux KEY_MAX=0x2ff, including BTN_TOUCH.
+  fcntl.ioctl(fd, 0x80604518, bitmap, True)  # EVIOCGKEY(96)
+  return {key for key in range(768) if bitmap[key // 8] & (1 << (key % 8))}
+
+
 def main():
   RUNTIME.mkdir(parents=True, exist_ok=True)
   lock = (RUNTIME / 'reader.lock').open('w')
@@ -74,7 +80,7 @@ def main():
   for channel in writer.events:
     writer.publish(channel)
 
-  def emit(path, mac, decoder, tokens, now):
+  def emit(path, mac, decoder, tokens, now, input_time=None):
     nonlocal last_event
     device = settings['devices'][mac]
     testing = learning.get('address') == mac
@@ -89,7 +95,8 @@ def main():
         if token not in decoder.repeated:
           writer.attention(mac, action, now)
         if action != 'none':
-          writer.send(mac, action, now, hold=f'{path}:{token}' if token in held else None, repeat=token in decoder.repeated)
+          created = input_time if input_time is not None and action in ('blinkerLeft', 'blinkerRight') else now
+          writer.send(mac, action, created, hold=f'{path}:{token}' if token in held else None, repeat=token in decoder.repeated)
           last_fire[mac, token] = now
           emitted, reason = True, 'sent'
       last_event = {'id': uuid.uuid4().hex, 'time': now, 'address': mac, 'button': token,
@@ -134,7 +141,15 @@ def main():
           if path in opened or not device or not (device['enabled'] or learning.get('address') == mac):
             continue
           try:
-            opened[path] = (open_input(path), mac, Decoder(device['profile'], device['mapping'], learning.get('address') == mac))
+            fd = open_input(path)
+            try:
+              decoder = Decoder(device['profile'], device['mapping'], learning.get('address') == mac, gestures=device.get('gestures'))
+              if device.get('gestures') is not None:
+                decoder.synchronize_pressed(initial_buttons(fd), time.monotonic())
+              opened[path] = (fd, mac, decoder)
+            except BaseException:
+              os.close(fd)
+              raise
           except (OSError, subprocess.SubprocessError) as exc:
             errors[mac] = str(exc)
       ready, _, _ = select.select([entry[0] for entry in opened.values()], [], [], 0.01)
@@ -158,7 +173,7 @@ def main():
           if not 0 <= now - stamp < 0.4:
             decoder.feed(0, 3, 0, now)
             continue
-          emit(path, mac, decoder, decoder.feed(kind, code, value, stamp), now)
+          emit(path, mac, decoder, decoder.feed(kind, code, value, stamp), now, input_time=stamp)
         emit(path, mac, decoder, decoder.flush(now), now)
       now = time.monotonic()
       writer.prune({mac for _, mac, _ in opened.values()

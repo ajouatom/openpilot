@@ -71,18 +71,49 @@ def test_pinned_warp_capture_reload_and_persistent_arena(tmp_path, monkeypatch):
   assert Path(os.environ['MDM_RUNTIME_ROOT']) in Path(sys.modules['tinygrad'].__file__).parents
 
 
-def test_pinned_state_reset_preserves_aliases(monkeypatch):
+def test_pinned_state_checkpoint_restores_in_place_aliases(monkeypatch):
   monkeypatch.syspath_prepend(os.environ['MDM_RUNTIME_ROOT'])
   monkeypatch.setenv('DEV', 'CPU')
   from tinygrad import Tensor
   from openpilot.selfdrive.modeld.generic_model_runtime import GenericModelRuntime, input_view
+
   runtime = object.__new__(GenericModelRuntime)
   runtime.device = 'CPU'
-  runtime.state_pairs = {'state': 'next_state'}
-  runtime.specs = {'state': ((2, 3), 'float32', 'CPU')}
-  state = Tensor(np.ones((2, 3), np.float32), device='CPU').realize()
-  runtime.queues = {'state': state}
-  alias = input_view(state._buffer(), state.shape, state.dtype)
+  runtime.state_pairs = {'state_a': 'next_state_a', 'state_b': 'next_state_b'}
+  runtime.specs = {'state_a': ((2, 3), 'float32', 'CPU'), 'state_b': ((4,), 'float16', 'CPU')}
+  runtime.queues = {name: Tensor(np.arange(np.prod(shape), dtype=dtype).reshape(shape), device=device).realize()
+                    for name, (shape, dtype, device) in runtime.specs.items()}
+  aliases = {name: input_view(state._buffer(), state.shape, state.dtype) for name, state in runtime.queues.items()}
+  originals = {name: state.numpy().copy() for name, state in runtime.queues.items()}
+  runtime.init_recovery_state()
+  runtime.save_recovery_state()
+  for name, alias in aliases.items():
+    alias._buffer().copy_from(Tensor(np.full_like(originals[name], np.nan), device='NPY')._buffer())
+  runtime.restore_recovery_state()
+  for name, alias in aliases.items():
+    np.testing.assert_array_equal(alias.numpy(), originals[name])
+    np.testing.assert_array_equal(runtime.queues[name].numpy(), originals[name])
+  # Exercise cached replay with changing external writes, not just the first
+  # capture's data. State/output aliases and backup allocations must survive.
+  identities = {name: state._buffer() for name, state in runtime.queues.items()}
+  saved = {name: state._buffer() for name, state in runtime.recovery_state.items()}
+  for frame in range(1, 6):
+    for name, alias in aliases.items():
+      alias._buffer().copy_from(Tensor(originals[name] + frame, device='NPY')._buffer())
+    runtime.save_recovery_state()
+    for name, alias in aliases.items():
+      alias._buffer().copy_from(Tensor(np.full_like(originals[name], np.nan), device='NPY')._buffer())
+    runtime.restore_recovery_state()
+    for name, alias in aliases.items():
+      np.testing.assert_array_equal(alias.numpy(), originals[name] + frame)
+      assert runtime.queues[name]._buffer() is identities[name]
+      assert runtime.recovery_state[name]._buffer() is saved[name]
+  backup = runtime.recovery_state['state_a']
+  backup._buffer().copy_from(Tensor(np.full_like(originals['state_a'], np.inf), device='NPY')._buffer())
+  with pytest.raises(ValueError, match='invalid eGPU recovery state'):
+    runtime.restore_recovery_state()
+  # Recovery warmup must not leave synthetic history in captured live buffers.
   runtime.reset_state()
-  np.testing.assert_array_equal(alias.numpy(), np.zeros((2, 3)))
-  assert runtime.queues['state'] is state
+  for name, alias in aliases.items():
+    np.testing.assert_array_equal(alias.numpy(), np.zeros_like(originals[name]))
+    np.testing.assert_array_equal(runtime.queues[name].numpy(), np.zeros_like(originals[name]))

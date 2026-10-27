@@ -1,6 +1,8 @@
 import re
+import time
 import unittest
 
+from opendbc.can import CANPacker
 from opendbc.car import Bus, gen_empty_fingerprint, structs
 from opendbc.car.common.conversions import Conversions as CV
 from opendbc.car.selected_car import get_selected_car_platform
@@ -231,19 +233,19 @@ class TestTeslaFingerprint(unittest.TestCase):
     assert not (CP.flags & TeslaFlags.AUTO_SPEED_LIMIT)
     assert not (CP.safetyConfigs[0].safetyParam & TeslaSafetyFlags.AUTO_SPEED_LIMIT)
 
-  def test_speed_limit_normalizes_display_units(self):
+  def test_speed_limit_is_kph_independent_of_display_units(self):
     CP = CarInterface.get_params(CAR.TESLA_MODEL_3, gen_empty_fingerprint(), [], False, False, False)
     car_state = CarState(CP)
     can_parsers = CarState.get_can_parsers(CP)
-    for units, speed_limit, unit_to_ms in ((1, 100, CV.KPH_TO_MS), (0, 65, CV.MPH_TO_MS)):
+    for units, speed_limit in ((1, 100), (0, 65)):
       with self.subTest(units=units):
         can_parsers[Bus.party].vl["DI_state"]["DI_speedUnits"] = units
         can_parsers[Bus.ap_party].vl["DAS_status"]["DAS_fusedSpeedLimit"] = speed_limit
         can_parsers[Bus.ap_party].ts_nanos["DAS_status"]["DAS_fusedSpeedLimit"] = 2_000_000_000
 
         ret = car_state.update(can_parsers)
-        self.assertAlmostEqual(ret.speedLimit, speed_limit * unit_to_ms * CV.MS_TO_KPH, places=5)
-        self.assertAlmostEqual(car_state.tesla_speed_limit_target, speed_limit * unit_to_ms)
+        self.assertAlmostEqual(ret.speedLimit, speed_limit, places=5)
+        self.assertAlmostEqual(car_state.tesla_speed_limit_target, speed_limit * CV.KPH_TO_MS)
         self.assertTrue(car_state.tesla_speed_limit_target_valid)
 
     for speed_limit, timestamp in ((0, 2_000_000_000), (155, 2_000_000_000), (65, 0)):
@@ -260,12 +262,12 @@ class TestTeslaFingerprint(unittest.TestCase):
     car_state = CarState(CP)
     can_parsers = CarState.get_can_parsers(CP)
 
-    self.assertIn(0x25A, can_parsers[Bus.adas].addresses)
-    tpms = can_parsers[Bus.adas].vl["VCSEC_TPMSDisplay"]
-    tpms["VCSEC_TPMSDisplayPressureFL"] = 2.575
-    tpms["VCSEC_TPMSDisplayPressureFR"] = 2.725
-    tpms["VCSEC_TPMSDisplayPressureRL"] = 2.625
-    tpms["VCSEC_TPMSDisplayPressureRR"] = 2.650
+    self.assertIn(0x25A, can_parsers[Bus.body].addresses)
+    tpms = {"VCSEC_TPMSDisplayPressureFL": 2.575, "VCSEC_TPMSDisplayPressureFR": 2.725,
+            "VCSEC_TPMSDisplayPressureRL": 2.625, "VCSEC_TPMSDisplayPressureRR": 2.650}
+    packer = CANPacker("tesla_modely_hw4_perception")
+    now = time.clock_gettime_ns(getattr(time, "CLOCK_BOOTTIME", time.CLOCK_MONOTONIC))
+    can_parsers[Bus.body].update([(now, [packer.make_can_msg("VCSEC_TPMSDisplay", CANBUS.vehicle, tpms)])])
 
     ret = car_state.update(can_parsers)
     self.assertAlmostEqual(ret.tpms.fl, 37.3, places=1)
@@ -274,4 +276,5 @@ class TestTeslaFingerprint(unittest.TestCase):
     self.assertAlmostEqual(ret.tpms.rr, 38.4, places=1)
 
     tpms["VCSEC_TPMSDisplayPressureFR"] = 6.375
+    can_parsers[Bus.body].update([(now, [packer.make_can_msg("VCSEC_TPMSDisplay", CANBUS.vehicle, tpms)])])
     self.assertEqual(car_state.update(can_parsers).tpms.fr, 0.0)

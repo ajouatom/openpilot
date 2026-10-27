@@ -137,7 +137,8 @@ def main():
         'import numpy,onnx,usb1,tensorrt,pyray,PIL,usb,capnp,zstandard,serial,Crypto,aiohttp,imageio_ffmpeg,av; '
         'import server; from openpilot.cereal import log; print("ALL_RUNTIME_IMPORTS_OK")')
     run('chroot', root, '/usr/sbin/visudo', '-cf', '/etc/sudoers')
-    spec = json.loads((root/'opt/carrot-jetlink/current/openpilot/selfdrive/modeld/jetlink/cinque_v2.json').read_text())
+    from model_pin import read_spec
+    spec = read_spec(root / 'opt/carrot-jetlink/current')
     model = root/'opt/carrot-jetlink/cache/models'/(spec['sha256'][:16] + '.onnx')
     if digest(model) != spec['sha256'] or model.stat().st_size != spec['nbytes']:
       raise ValueError('Pinned model changed')

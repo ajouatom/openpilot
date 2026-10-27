@@ -1,5 +1,10 @@
 # Jetson updates through Git Pull and reboot
 
+October 27 consolidation: carrot-wip now includes the NAV/model catalog runtime.
+N16 Nav and Flip Flop are selected in Carrot Web and activated at reboot for both
+eGPU and Jetson; internal CD210 remains fixed. Earlier branch-specific statements
+below describe historical deployments, not the consolidated branch.
+
 The owner's delivery requirement, effective 2026-10-20, is that routine work
 must reach users through comma Git Pull and restart/reboot. A per-device SSH
 copy, parameter edit, service restart, or manually prefilled cache is not an
@@ -23,9 +28,11 @@ N16 selection is specific to carrot-nav; carrot-wip keeps its own model/runtime.
 The eGPU PKL, Jetson ONNX and TensorRT engine are distinct artifacts. This
 procedure does not promise automatic model equivalence or a road validation.
 
-No USB display-data fallback is introduced: comma sends HUD/navigation over
-Wi-Fi; Jetson drives its attached USB panel. Existing inference/provisioning
-USB remains. A normal Internet outage is first handled by restoring comma's
+As of October 21, the owner requested restoring bounded USB HUD/navigation
+transport on carrot-nav. The updated receiver explicitly negotiates USB;
+older Wi-Fi-only receivers retain Wi-Fi until updated. Jetson still drives its
+attached USB panel. See [the physical comparison and release](jetson_usb_hud_restore_20261021.md).
+A normal Internet outage is first handled by restoring comma's
 Internet access and allowing the updater to retry, not by switching to a
 different USB release or repeatedly reinstalling the SD card.
 

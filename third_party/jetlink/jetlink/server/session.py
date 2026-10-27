@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import threading
 import time
 from collections import deque
@@ -28,6 +29,7 @@ from pathlib import Path
 import numpy as np
 
 from jetlink import protocol as P
+from jetlink import output_projection as projection
 from jetlink.server.backends.base import ArtifactInvalid
 from jetlink.server.cache import CacheEntry, EngineCache
 from jetlink.server.telemetry import CachedTelemetry, NoTelemetry
@@ -288,7 +290,13 @@ class EngineHost:
     if not entry.exists:
       return None
     try:
-      return entry.meta().get('spec') or None
+      meta = entry.meta()
+      if not isinstance(meta, dict):
+        raise ValueError('Invalid sidecar object')
+      spec = meta.get('spec')
+      if spec is not None and not isinstance(spec, dict):
+        raise ValueError('Invalid sidecar spec object')
+      return spec or None
     except (OSError, ValueError, KeyError):
       log.warning("unreadable sidecar for %s", entry.path.name)
       return None
@@ -319,10 +327,24 @@ class EngineHost:
     if d is None:
       return
     entry = self.cache.entry(sha256)
-    spec = ModelSpec.from_dict({**d, 'frame_skip': frame_skip})
+    spec = self._decode_cached_spec(d, sha256, frame_skip)
+    if spec is None:
+      return
     log.info("preloading the engine loaded last: %s", entry.path.name)
     self._start(Job(sha256, load_only=True), Request(sha256, 0, frame_skip),
                 entry, self.cache.model_path(sha256), spec)
+
+  @staticmethod
+  def _decode_cached_spec(value, sha256, frame_skip):
+    # 손상된 캐시 기록은 보존하고, 정상 요청의 원래 재검증 경로로 돌린다.
+    try:
+      spec = ModelSpec.from_dict({**value, 'frame_skip': frame_skip})
+      if spec.sha256 != sha256 or type(spec.nbytes) is not int or spec.nbytes <= 0:
+        raise ValueError('Invalid cached model identity')
+      return spec
+    except (AttributeError, KeyError, TypeError, ValueError):
+      log.warning('unreadable cached model spec')
+      return None
 
   def _spec_on_disk(self, entry: CacheEntry, model_path: Path, req: Request) -> ModelSpec | None:
     """The spec for a cached plan, from its sidecar or failing that the ONNX.
@@ -338,7 +360,9 @@ class EngineHost:
     """
     d = self._cached_spec(entry)
     if d is not None:
-      return ModelSpec.from_dict({**d, 'frame_skip': req.frame_skip})
+      spec = self._decode_cached_spec(d, req.sha256, req.frame_skip)
+      if spec is not None and (req.nbytes == 0 or spec.nbytes == req.nbytes):
+        return spec
     if _model_complete(model_path, req.nbytes):
       try:
         return self._derive_spec(model_path, req.frame_skip)
@@ -452,12 +476,21 @@ class EngineHost:
       entry.write_meta({**meta, 'spec': spec.to_dict()})
 
   def _warm(self, engine, spec: ModelSpec) -> Loaded:
-    from jetlink.queues import PolicyQueues
-    queues = PolicyQueues(spec)
+    from jetlink.queues import make_queues
     _check_shapes(engine, spec)
     # Warm runs on zeros, so the first real frame pays for nothing lazy: CUDA
     # state and the graph capture for TensorRT, a first replay for the others.
+    if spec.stateful and hasattr(engine, 'configure_state_feedback'):
+      engine.configure_state_feedback(spec.state_pairs)
     host_inputs = {n: engine.host_input(n) for n in engine.inputs}
+    # Only the reviewed N16 model AND full tensor contract default to the new
+    # staging paths. Explicit 0 retains the original diagnostic path.
+    from jetlink.output_projection import eligible
+    staging_default = '1' if eligible(spec) else '0'
+    queues = make_queues(spec, host_inputs, getattr(engine, 'device_state', None),
+                         direct_map=os.getenv('CARROT_TRT_DIRECT_MAP', staging_default) == '1'
+                         and spec.stateful and 'nav_map' in spec.packed_shapes,
+                         native_image=os.getenv('CARROT_TRT_NATIVE_IMAGE', staging_default) == '1' and spec.stateful)
     warped = np.zeros(spec.warped_shape, np.uint8)
     packed = np.zeros(spec.packed_nelem, np.float32)
     queues.step_into(warped, packed, host_inputs)
@@ -524,9 +557,11 @@ def _check_shapes(engine, spec: ModelSpec) -> None:
   missing = set(spec.input_shapes) - set(engine.inputs)
   if missing:
     raise ValueError(f"engine has no input(s) {sorted(missing)} the model spec declares")
-  out = next(iter(engine.outputs.values())).shape
-  if int(np.prod(out)) != spec.output_nelem:
-    raise ValueError(f"output: engine {tuple(out)} vs spec {spec.output_nelem}")
+  if set(engine.outputs) != set(spec.output_shapes):
+    raise ValueError('Engine output names do not match the model spec')
+  for name, shape in spec.output_shapes.items():
+    if tuple(engine.outputs[name].shape) != shape:
+      raise ValueError(f'output {name}: engine {tuple(engine.outputs[name].shape)} vs spec {shape}')
 
 
 class Session:
@@ -546,6 +581,9 @@ class Session:
     self.last_seq = seq
     self.request: Request | None = None
     self.frames = 0
+    self._projection_negotiated = False
+    self._projection_spec = None
+    self._projection_spec_ok = False
 
   # -- plumbing -------------------------------------------------------------
 
@@ -641,8 +679,10 @@ class Session:
   def _greet(self, msg: Message) -> None:
     """Start the session over for whoever just said hello."""
     who = ''
+    offered_projection = None
     try:
       d = json.loads(bytes(msg.payload) or b'{}').get('client') or {}
+      offered_projection = d.get(projection.CAPABILITY)
       who = f"{d.get('name') or 'client'}/{d.get('nonce') or '?'}"
     except (ValueError, AttributeError):
       pass
@@ -650,12 +690,18 @@ class Session:
       log.info("session handed from %s to %s", self.client, who or 'an unnamed client')
     self.client = who
     self._reset(msg.seq)
+    self._projection_negotiated = (self.t.protocol_version == 2 and projection.matches(offered_projection))
     log.info("hello from %s (seq %d)", who or 'an unnamed client', msg.seq)
 
   def on_hello(self, msg: Message) -> None:
     info = self.host.backend.describe()
     resp = {
       'protocol': P.VERSION,
+      # This host implements graph-owned queues with the original v2 framing.
+      # Legacy v2 hosts must not be assumed to support stateful input contracts.
+      'stateful_v2': True,
+      'carrot_nav_u8_v1': True,
+      'carrot_lz4_v1': self._block_codec_available(),
       **info,   # backend, runtime_version, device
       'engine_state': self.host.status(*self._wanted())['state'],
       'loaded': self.host.loaded_sha(),
@@ -671,6 +717,8 @@ class Session:
       # What the comma logged before there were backends. Kept for one
       # release, and only where it is true.
       resp['trt_version'] = info['runtime_version']
+    if self._projection_negotiated:
+      resp[projection.CAPABILITY] = projection.descriptor()
     self._send_json(P.Msg.HELLO_RESP, msg.seq, resp)
 
   def on_engine_req(self, msg: Message) -> None:
@@ -728,47 +776,95 @@ class Session:
         return
       self._infer(loaded, msg)
 
+  @staticmethod
+  def _block_codec_available():
+    from jetlink.block_codec import library
+    return library() is not None
+
   def _infer(self, loaded: Loaded, msg: Message) -> None:
     t0 = time.perf_counter()
     spec = loaded.spec
-    if msg.payload.nbytes != spec.infer_req_nbytes:
-      # The offsets below come from the spec, not the wire: a client on another
-      # model would have its scalars read out of the image, and the result would
-      # look perfectly finite.
+    from jetlink.packed_codec import decode, FLAG
+    from jetlink.block_codec import decode as decode_block, FLAG as LZ4_FLAG
+    try:
+      if msg.payload.nbytes < P.INFER_REQ_SIZE:
+        raise ValueError('Incomplete frame')
+      frame_id, flags = P.unpack_infer_req(msg.payload)
+      projected = bool(flags & projection.FLAG)
+      if projected:
+        if spec is not self._projection_spec:
+          self._projection_spec = spec
+          self._projection_spec_ok = projection.eligible(spec)
+        if not (self._projection_negotiated and self.t.protocol_version == 2 and self._projection_spec_ok):
+          raise ValueError('Unnegotiated driving-output projection')
+      frame = msg.payload[P.INFER_REQ_SIZE:]
+      if flags & (FLAG | LZ4_FLAG) and (not spec.stateful or self.t.protocol_version != 2):
+        raise ValueError('Compact frame unsupported for this contract')
+      if flags & FLAG and 'nav_map' not in spec.packed_shapes:
+        raise ValueError('Missing compact map contract')
+      if flags & LZ4_FLAG:
+        expected = spec.warped_nbytes + spec.packed_nbytes - (3 * 65536 if flags & FLAG else 0)
+        frame = memoryview(decode_block(frame, expected))
+      off = spec.warped_nbytes
+      if len(frame) < off:
+        raise ValueError('Incomplete image')
+      direct_map = getattr(loaded.queues, 'direct_map', None) if flags & FLAG else None
+      if flags & FLAG:
+        context = direct_map.validate_size(frame[off:]) if direct_map is not None else decode(frame[off:], spec)
+      else:
+        if len(frame) != spec.warped_nbytes + spec.packed_nbytes:
+          raise ValueError('Invalid frame size')
+        context = frame[off:]
+    except ValueError:
       self._send(P.Msg.INFER_RESP, msg.seq,
                  (P.pack_infer_resp(0, P.Status.BAD_SHAPE, 0, 0, 0),))
       return
-    frame_id, flags = P.unpack_infer_req(msg.payload)
     if flags & P.Flag.RESET_QUEUES:
       loaded.queues.reset()
+    warped = np.frombuffer(frame, np.uint8, spec.warped_nbytes).reshape(spec.warped_shape)
 
-    off = P.INFER_REQ_SIZE
-    warped = np.frombuffer(msg.payload, np.uint8, spec.warped_nbytes, off).reshape(spec.warped_shape)
-    off += spec.warped_nbytes
-    packed = np.frombuffer(msg.payload, np.float32, spec.packed_nelem, off)
-
-    # Gathers land straight in TensorRT's pinned input buffers: between the
-    # wire and the GPU there is exactly one copy.
-    loaded.queues.step_into(warped, packed, loaded.host_inputs)
+    # Stage into the engine-owned input buffers. The optional compact path
+    # avoids expanding the map into a temporary float32 packed context.
+    if direct_map is not None:
+      loaded.queues.step_compact_into(warped, context, loaded.host_inputs)
+    else:
+      packed = np.frombuffer(context, np.float32, spec.packed_nelem)
+      loaded.queues.step_into(warped, packed, loaded.host_inputs)
     queue_us = int((time.perf_counter() - t0) * 1e6)
 
     outputs = loaded.engine.run()
-    out = next(iter(outputs.values())).reshape(-1)
+    out = outputs['outputs'].reshape(-1)
 
     # asarray, not astype: a no-op when the engine already outputs float32.
     # isfinite is ~7x faster on float32 and the non-finites map across exactly.
     # openpilot drops to the small model on a non-finite output either way, so
     # checking here saves the comma rescanning 18452 floats to find out.
     out32 = np.asarray(out, dtype=np.float32)
+    if projected and out32.size != spec.output_nelem:
+      loaded.queues.reset()
+      raise ValueError('Full output size changed before projection')
     status = P.Status.OK if np.all(np.isfinite(out32)) else P.Status.NOT_FINITE
+    try:
+      if status == P.Status.OK:
+        loaded.queues.feedback(outputs)
+      else:
+        loaded.queues.reset()
+    except FloatingPointError:
+      status = P.Status.NOT_FINITE
 
     total_us = int((time.perf_counter() - t0) * 1e6)
+    # Do not trim before full output validation and queues.feedback above.
+    # Omitted features and next_state tensors remain checked on the host.
+    projected = projected and status == P.Status.OK
     parts = [P.pack_infer_resp(frame_id, status, loaded.engine.last_gpu_us, queue_us, total_us),
-             out32]
+             out32[:projection.COUNT] if projected else out32]
     if flags & P.Flag.WANT_STATE:
       parts.append(json.dumps(self.telemetry.read()).encode())
     send_started = time.perf_counter()
-    self._send(P.Msg.INFER_RESP, msg.seq, parts)
+    if projected:
+      self._send(P.Msg.INFER_RESP, msg.seq, parts, flags=projection.FLAG)
+    else:
+      self._send(P.Msg.INFER_RESP, msg.seq, parts)
     send_us = int((time.perf_counter() - send_started) * 1e6)
     self.frames += 1
     if total_us > SLOW_FRAME_US or send_us > 10_000:

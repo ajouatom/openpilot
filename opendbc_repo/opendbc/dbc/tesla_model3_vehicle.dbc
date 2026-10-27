@@ -82,19 +82,13 @@ BO_ 259 VCRIGHT_doorStatus: 8 VEH
  SG_ VCRIGHT_rearHandlePWM : 21|7@1+ (1,0) [0|100] "%" X
  SG_ VCRIGHT_rearIntSwitchPressed : 32|1@1+ (1,0) [0|1] "" aps
 
-BO_ 585 SCCM_leftStalk: 3 VEH
+BO_ 585 SCCM_leftStalk: 4 VEH
  SG_ SCCM_leftStalkCounter : 8|4@1+ (1,0) [0|15] "" X
  SG_ SCCM_washWipeButtonStatus : 14|2@1+ (1,0) [0|3] "" das
- SG_ SCCM_turnIndicatorStalkStatus : 16|3@1+ (1,0) [0|5] "" das
+ SG_ SCCM_turnIndicatorStalkStatus : 16|4@1+ (1,0) [0|9] "" das
  SG_ SCCM_leftStalkCrc : 0|8@1+ (1,0) [0|255] "" X
- SG_ SCCM_leftStalkReserved1 : 19|5@1+ (1,0) [0|31] "" X
+ SG_ SCCM_leftStalkReserved1 : 24|5@1+ (1,0) [0|31] "" X
  SG_ SCCM_highBeamStalkStatus : 12|2@1+ (1,0) [0|3] "" das
-
-BO_ 602 VCSEC_TPMSDisplay: 6 VEH
- SG_ VCSEC_TPMSDisplayPressureFL : 0|8@1+ (0.025,0) [0|6.35] "bar" VEH
- SG_ VCSEC_TPMSDisplayPressureFR : 8|8@1+ (0.025,0) [0|6.35] "bar" VEH
- SG_ VCSEC_TPMSDisplayPressureRL : 16|8@1+ (0.025,0) [0|6.35] "bar" VEH
- SG_ VCSEC_TPMSDisplayPressureRR : 24|8@1+ (0.025,0) [0|6.35] "bar" VEH
 
 BO_ 280 DI_systemStatus: 8 VEH
  SG_ DI_epbRequest : 44|2@1+ (1,0) [0|2] "" epbl
@@ -199,10 +193,6 @@ BO_ 568 STW_ACTN_RQ: 8 STW
  SG_ MC_STW_ACTN_RQ : 52|4@1+ (1,0) [0|15] "" NEO
  SG_ CRC_STW_ACTN_RQ : 56|8@1+ (1,0) [0|0] "" NEO
 
-BO_ 605 DAS_road: 6 XXX
- SG_ DAS_stopLineDist : 16|8@1+ (0.5,0) [0|127.5] "m" XXX
- SG_ DAS_trafficLightColor : 26|3@0+ (1,0) [0|7] "" XXX
-
 BO_ 1001 DAS_bodyControls: 8 VEH
  SG_ DAS_headlightRequest : 0|2@1+ (1,0) [0|3] "" aps
  SG_ DAS_hazardLightRequest : 2|2@1+ (1,0) [0|3] "" aps
@@ -288,6 +278,165 @@ BO_ 991 UI_status2: 8 VehicleBus
  SG_ UI_linkState : 32|2@1+ (1,0) [0|3] ""  VehicleBus
  SG_ UI_sentryModeState : 34|3@1+ (1,0) [0|7] ""  VehicleBus
 
+CM_ SG_ 962 VCLEFT_btnWindowSwPackUpLF "Status of Left Front Window Up Switch (First Detent)";
+CM_ SG_ 962 VCLEFT_frontSeatTrackBack "signals when track back button is pressed for driver seat";
+CM_ SG_ 962 VCLEFT_btnWindowSwPackAutoDownLF "Status of Left Front Window Auto-Down Switch (Second Detent)";
+CM_ SG_ 962 VCLEFT_btnWindowSwPackDownRR "Status of Right Rear Window Down Switch (First Detent)";
+CM_ SG_ 962 VCLEFT_btnWindowSwPackAutoUpRR "Status of Right Rear Window Auto-Up Switch (Second Detent)";
+CM_ SG_ 962 VCLEFT_btnWindowSwPackAutoDownRR "Status of Right Rear Window Auto-Down Switch (Second Detent)";
+CM_ SG_ 962 VCLEFT_btnWindowSwPackUpRR "Status of Right Rear Window Up Switch (First Detent)";
+CM_ SG_ 962 VCLEFT_frontOccupancySwitch "Front left seat occupancy status";
+CM_ SG_ 962 VCLEFT_swcRightTiltLeft "Status of right steering wheel switch left tilt";
+CM_ SG_ 962 VCLEFT_rearRightOccupancySwitch "Status of rear right seat occupancy sensor";
+CM_ SG_ 962 VCLEFT_btnWindowSwPackDownLF "Status of Left Front Window Down Switch (First Detent)";
+CM_ SG_ 962 VCLEFT_btnWindowSwPackAutoUpLF "Status of Left Front Window Auto-Up Switch (Second Detent)";
+CM_ SG_ 962 VCLEFT_swcLeftTiltRight "Status of left steering wheel switch right tilt";
+CM_ SG_ 962 VCLEFT_frontSeatBackrestForward "signals when button to move backrest forward is active";
+CM_ SG_ 962 VCLEFT_swcRightTiltRight "Status of right steering wheel switch right tilt";
+CM_ SG_ 962 VCLEFT_swcLeftScrollTicks "Encoder value for left steering wheel switch scroll";
+CM_ SG_ 962 VCLEFT_btnWindowUpLR "Status of Left Rear Window Up Switch (First Detent)";
+CM_ SG_ 962 VCLEFT_btnWindowAutoDownLR "Status of Left Rear Window Auto-Down Switch (Second Detent)";
+CM_ SG_ 962 VCLEFT_btnWindowSwPackDownRF "Status of Right Front Window Down Switch (First Detent)";
+CM_ SG_ 962 VCLEFT_btnWindowSwPackAutoUpRF "Status of Right Front Window Auto-Up Switch (Second Detent)";
+CM_ SG_ 962 VCLEFT_frontSeatLumbarIn "signals when lumbar in button is pressed for driver seat";
+CM_ SG_ 962 VCLEFT_frontSeatLiftUp "signals when button to move seat up is active";
+CM_ SG_ 962 VCLEFT_btnWindowSwPackDownLR "Status of Left Rear Window Down Switch (First Detent)";
+CM_ SG_ 962 VCLEFT_btnWindowSwPackAutoUpLR "Status of Left Rear Window Auto-Up Switch (Second Detent)";
+CM_ SG_ 962 VCLEFT_frontSeatLumbarDown "signals when lumbar down button is pressed for driver seat";
+CM_ SG_ 962 VCLEFT_frontSeatTiltDown "signals when tilt down button is pressed for driver seat";
+CM_ SG_ 962 VCLEFT_frontSeatTrackForward "signals when track forward button is pressed for driver seat";
+CM_ SG_ 962 VCLEFT_rearLeftBuckleSwitch "Status of front left seatbelt buckle";
+CM_ SG_ 962 VCLEFT_hazardButtonPressed "Status of hazard button";
+CM_ SG_ 962 VCLEFT_swcRightScrollTicks "Encoder value for right steering wheel switch scroll";
+CM_ SG_ 962 VCLEFT_swcRightPressed "Status of right steering wheel switch button press";
+CM_ SG_ 962 VCLEFT_frontSeatLumbarOut "signals when lumbar out button is pressed for driver seat";
+CM_ SG_ 962 VCLEFT_brakePressed "Status of the brake pedal";
+CM_ SG_ 962 VCLEFT_swcLeftTiltLeft "Status of left steering wheel switch left tilt";
+CM_ SG_ 962 VCLEFT_swcLeftPressed "Status of left steering wheel switch button press";
+CM_ SG_ 962 VCLEFT_btnWindowSwPackUpLR "Status of Left Rear Window Up Switch (First Detent)";
+CM_ SG_ 962 VCLEFT_frontSeatTiltUp "signals when tilt up button is pressed for driver seat";
+CM_ SG_ 962 VCLEFT_rearLeftOccupancySwitch "Status of rear left seat occupancy sensor";
+CM_ SG_ 962 VCLEFT_frontSeatBackrestBack "signals when button to move backrest back is active";
+CM_ SG_ 962 VCLEFT_btnWindowSwPackAutoDownLR "Status of Left Rear Window Auto-Down Switch (Second Detent)";
+CM_ SG_ 962 VCLEFT_rearCenterOccupancySwitch "Rear center seat occupancy status";
+CM_ SG_ 962 VCLEFT_frontSeatLumbarUp "signals when lumbar up button is pressed for driver seat";
+CM_ SG_ 962 VCLEFT_frontSeatLiftDown "signals when button to move seat down is active";
+CM_ SG_ 962 VCLEFT_hornSwitchPressed "Status of horn switch";
+CM_ SG_ 962 VCLEFT_btnWindowSwPackUpRF "Status of Right Front Window Up Switch (First Detent)";
+CM_ SG_ 962 VCLEFT_btnWindowAutoUpLR "Status of Left Rear Window Auto-Up Switch (Second Detent)";
+CM_ SG_ 962 VCLEFT_btnWindowSwPackAutoDownRF "Status of Right Front Window Auto-Down Switch (Second Detent)";
+CM_ SG_ 962 VCLEFT_btnWindowDownLR "Status of Left Rear Window Down Switch (First Detent)";
+CM_ SG_ 259 VCRIGHT_trunkLatchStatus "State of the trunk latch";
+CM_ SG_ 259 VCRIGHT_mirrorFoldState "Fold state for the right side view mirror";
+CM_ SG_ 259 VCRIGHT_rearLatchStatus "Status of rear right door latch";
+CM_ SG_ 259 VCRIGHT_mirrorTiltYPosition "Value representing right side view mirror tilt vertical position";
+CM_ SG_ 259 VCRIGHT_frontRelActuatorSwitch "State of front left door latch switch representing latch arm/unarmed. Disarms while door handle is pulled";
+CM_ SG_ 259 VCRIGHT_mirrorRecallState "State of Mirror Recall";
+CM_ SG_ 259 VCRIGHT_frontIntSwitchPressed "Status of the front left interior door handle switch";
+CM_ SG_ 259 VCRIGHT_mirrorState "State of the right side view mirror";
+CM_ SG_ 259 VCRIGHT_rearRelActuatorSwitch "State of rear right door latch switch representing latch arm/unarmed. Disarms while door handle is pulled";
+CM_ SG_ 259 VCRIGHT_mirrorTiltXPosition "Value representing right side view mirror tilt horizontal position";
+CM_ SG_ 259 VCRIGHT_mirrorDipped "Reports if the side view mirrors in are in the dipped position.";
+CM_ SG_ 259 VCRIGHT_frontHandlePulled "Status of front right exterior door handle pull";
+CM_ SG_ 259 VCRIGHT_frontLatchStatus "Status of right front door latch";
+CM_ SG_ 259 VCRIGHT_rearHandlePulled "Status of rear right exterior door handle pull";
+CM_ SG_ 259 VCRIGHT_frontLatchSwitch "State of front left door latch switch representing door open/closed. 0 is open and 1 is closed";
+CM_ SG_ 259 VCRIGHT_rearLatchSwitch "State of rear right door latch switch representing door open/closed. 0 is open and 1 is closed";
+CM_ SG_ 259 VCRIGHT_rearIntSwitchPressed "Status of the rear right interior door handle switch";
+CM_ SG_ 585 SCCM_washWipeButtonStatus "Active state of wash/wipe button on the turn signal stalk";
+CM_ SG_ 585 SCCM_turnIndicatorStalkStatus "Active state of turn indicator stalk position";
+CM_ SG_ 585 SCCM_highBeamStalkStatus "Active state of high beam push/pull stalk position";
+CM_ SG_ 280 DI_epbRequest "Reports Electronic Parking Brake (EPB) requests.";
+CM_ SG_ 280 DI_proximity "TRUE if the proximity hardware input signal is active.";
+CM_ SG_ 280 DI_accelPedalPos "Drive Inverter measured accelerator pedal position.";
+CM_ SG_ 280 DI_gear "Detects the current operating gear reported by the drive inverter.";
+CM_ SG_ 280 DI_tractionControlMode "Active traction control mode as requested by the driver.";
+CM_ SG_ 280 DI_trackModeState "Indicates state of Track mode";
+CM_ SG_ 280 DI_systemState "DI system state machine state.";
+CM_ SG_ 280 DI_immobilizerState "Detects state of the Drive Inverter (DI) immobilizer.";
+CM_ SG_ 280 DI_brakePedalState "Brake pedal switch signal sensed at the drive inverter.";
+CM_ SG_ 835 VCRIGHT_5AVoltage "Internal 5V rail voltage";
+CM_ SG_ 835 VCRIGHT_rearDefrostState "State of rear defrost grid";
+CM_ SG_ 835 VCRIGHT_vbatProt "Input voltage monitor to controller";
+CM_ SG_ 835 VCRIGHT_vehiclePowerStateDBG "Internal power state of controller";
+CM_ SG_ 553 SCCM_parkButtonStatus "Active state of park button on the drive stalk";
+CM_ SG_ 553 SCCM_rightStalkStatus "Active state of drive stalk position, does not indicate active drive gear";
+CM_ SG_ 297 SCCM_steeringAngleValidity "Transitions to VALID when rotation of over 4 deg has occurred";
+CM_ SG_ 297 SCCM_steeringAngleSensorStatus "Reports steering angle sensor status and validity based on bootup checks";
+CM_ SG_ 297 SCCM_steeringAngleSpeed "Speed of steering angle rotation";
+CM_ SG_ 297 SCCM_steeringAngle "Measured ASAS sensor angle";
+CM_ SG_ 258 VCLEFT_mirrorDipped "Reports if the side view mirrors in are in the dipped position.";
+CM_ SG_ 258 VCLEFT_mirrorRecallState "State of Mirror Recall";
+CM_ SG_ 258 VCLEFT_rearIntSwitchPressed "Status of the rear left interior door handle switch";
+CM_ SG_ 258 VCLEFT_rearLatchSwitch "State of rear left door latch switch representing door open/closed. 0 is open and 1 is closed";
+CM_ SG_ 258 VCLEFT_frontLatchSwitch "State of front left door latch switch representing door open/closed. 0 is open and 1 is closed";
+CM_ SG_ 258 VCLEFT_rearHandlePulled "Status of rear left exterior door handle pull";
+CM_ SG_ 258 VCLEFT_rearLatchStatus "Status of rear left door latch";
+CM_ SG_ 258 VCLEFT_frontHandlePulled "Status of front left exterior door handle pull";
+CM_ SG_ 258 VCLEFT_mirrorTiltXPosition "Value representing left side view mirror tilt horizontal position";
+CM_ SG_ 258 VCLEFT_mirrorState "State of the left side view mirror";
+CM_ SG_ 258 VCLEFT_frontIntSwitchPressed "Status of the front left interior door handle switch";
+CM_ SG_ 258 VCLEFT_rearRelActuatorSwitch "State of rear left door latch switch representing latch arm/unarmed. Disarms while door handle is pulled";
+CM_ SG_ 258 VCLEFT_frontRelActuatorSwitch "State of front left door latch switch representing latch arm/unarmed. Disarms while door handle is pulled";
+CM_ SG_ 258 VCLEFT_mirrorTiltYPosition "Value representing left side view mirror tilt vertical position";
+CM_ SG_ 258 VCLEFT_frontLatchStatus "Status of left front door latch";
+CM_ SG_ 258 VCLEFT_mirrorFoldState "Fold state for the left side view mirror";
+CM_ SG_ 1001 DAS_headlightRequest "The DAS request to the body controls ecu to turn on headlights.";
+CM_ SG_ 1001 DAS_hazardLightRequest "The command from DAS to body controls to turn on the hazard lights.";
+CM_ SG_ 1001 DAS_wiperSpeed "The auto wiper algorithm speed request to the body controller.";
+CM_ SG_ 1001 DAS_turnIndicatorRequest "Reports Driver Assistance System (DAS) request to body controls to turn on/off the left or right turn indicator.";
+CM_ SG_ 1001 DAS_highLowBeamDecision "The output of the automatic high beam algorithm, to turn the highbeams on or off.";
+CM_ SG_ 1001 DAS_heaterRequest "The DAS request to the body controller to turn on the front glass heater in front of the triple camera.";
+CM_ SG_ 1001 DAS_turnIndicatorRequestReason "Reports the reason that Driver Assistance System (DAS) is requesting a change to the turn indicator state from body controls.";
+CM_ SG_ 1013 VCFRONT_lowBeamsOnForDRL "Shows if the low beam light source is being used to fulfil the daytime running light function (for Canada)";
+CM_ SG_ 1013 VCFRONT_parkRightStatus "State of the right position/park light source";
+CM_ SG_ 1013 VCFRONT_parkLeftStatus "State of the left position/park light source";
+CM_ SG_ 1013 VCFRONT_turnSignalRightStatus "State of the right front turn signal light source";
+CM_ SG_ 1013 VCFRONT_turnSignalLeftStatus "State of the left front turn signal light source";
+CM_ SG_ 1013 VCFRONT_sideRepeaterRightStatus "State of the right side repeater light source";
+CM_ SG_ 1013 VCFRONT_sideRepeaterLeftStatus "State of the left side repeater light source";
+CM_ SG_ 1013 VCFRONT_sideMarkersStatus "State of the side marker / auxiliary park light sources (left and right are on a shared HSD)";
+CM_ SG_ 1013 VCFRONT_fogRightStatus "State of the right front fog light source";
+CM_ SG_ 1013 VCFRONT_fogLeftStatus "State of the left front fog light source";
+CM_ SG_ 1013 VCFRONT_DRLRightStatus "Status of the right daytime running light source";
+CM_ SG_ 1013 VCFRONT_DRLLeftStatus "Status of the left daytime running light source";
+CM_ SG_ 1013 VCFRONT_highBeamRightStatus "State of the right headlamp high beam light source";
+CM_ SG_ 1013 VCFRONT_highBeamLeftStatus "State of the left headlamp high beam light source";
+CM_ SG_ 1013 VCFRONT_lowBeamRightStatus "State of the right headlamp low beam light source";
+CM_ SG_ 1013 VCFRONT_lowBeamLeftStatus "State of the left headlamp low beam light source";
+CM_ SG_ 1013 VCFRONT_courtesyLightingRequest "Flag to request courtesy lighting";
+CM_ SG_ 1013 VCFRONT_hazardLightRequest "Indication of the hazard light request";
+CM_ SG_ 1013 VCFRONT_indicatorRightRequest "State of the right turn indicator";
+CM_ SG_ 1013 VCFRONT_indicatorLeftRequest "State of the left turn indicator";
+CM_ SG_ 851 UI_touchActive "No touchscreen errors";
+CM_ SG_ 851 UI_audioActive "Audio system is ready.";
+CM_ SG_ 851 UI_cellActive "Cell is powered";
+CM_ SG_ 851 UI_displayReady "UI is ready (GUI_allReady) and display is ok (GUI_displayHardwareOK)";
+CM_ SG_ 851 UI_displayOn "UI display on/off status";
+CM_ SG_ 851 UI_wifiActive "WiFi active.";
+CM_ SG_ 851 UI_wifiConnected "WiFi Connected.";
+CM_ SG_ 851 UI_readyForDrive "Ready for drive (UI ready or self park request)";
+CM_ SG_ 851 UI_cellConnected "Detects if the cell is connected to a network.";
+CM_ SG_ 851 UI_vpnActive "VPN connected.";
+CM_ SG_ 851 UI_factoryReset "UI request for factory reset";
+CM_ SG_ 851 UI_gpsActive "GPS has valid fix";
+CM_ SG_ 851 UI_cellNetworkTechnology "Describes the type of cellular network to which the car computer is connected: GPRS_2G(114Kbps) < EGDE_2G(368Kbps) < 3G(3Mbps) < HSDPA_3G(14Mbps) < HSPAplus_4Gg(168Mbps) < 4G_LTE(299Mbps)";
+CM_ SG_ 851 UI_falseTouchCounter "Count false touches after display is off.";
+CM_ SG_ 851 UI_cellSignalBars "Number of cellular signal bars displayed on the UI, derived from cellSignalStrength";
+CM_ SG_ 851 UI_trailerModeTelltale "Color of the trailer mode telltale";
+CM_ SG_ 851 UI_pcbTemperature "PCB digital temp sensor reading in DegC";
+CM_ SG_ 851 UI_cpuTemperature "Apollo Lake SOC temperature in DegC";
+CM_ SG_ 991 UI_userActivity "Indicates user interaction with the center display";
+CM_ SG_ 991 UI_activeTouchPoints "Quantity of active touch points on the Center Display";
+CM_ SG_ 991 UI_linkState "Connectivity link state";
+
+VAL_ 851 UI_factoryReset 0 "NONE_SNA" 1 "DEVELOPER" 2 "DIAGNOSTIC" 3 "CUSTOMER" ;
+VAL_ 851 UI_cellNetworkTechnology 0 "CELL_NETWORK_NONE" 1 "CELL_NETWORK_GPRS" 2 "CELL_NETWORK_EDGE" 3 "CELL_NETWORK_UMTS" 4 "CELL_NETWORK_HSDPA" 5 "CELL_NETWORK_HSUPA" 6 "CELL_NETWORK_HSPA" 7 "CELL_NETWORK_LTE" 8 "CELL_NETWORK_GSM" 9 "CELL_NETWORK_CDMA" 10 "CELL_NETWORK_WCDMA" 15 "CELL_NETWORK_SNA" ;
+VAL_ 851 UI_cellSignalBars 0 "ZERO" 1 "ONE" 2 "TWO" 3 "THREE" 4 "FOUR" 5 "FIVE" 7 "SNA" ;
+VAL_ 851 UI_trailerModeTelltale 0 "TRAILER_MODE_TELLTALE_OFF" 1 "TRAILER_MODE_TELLTALE_BLUE" 2 "TRAILER_MODE_TELLTALE_YELLOW" 3 "TRAILER_MODE_TELLTALE_RED" ;
+VAL_ 991 UI_userActivity 0 "USER_IDLE" 1 "USER_ACTIVE" ;
+VAL_ 991 UI_linkState 0 "LINK_STATE_NONE" 1 "LINK_STATE_CELL" 2 "LINK_STATE_WIFI" ;
+
 VAL_ 568 SpdCtrlLvr_Stat 32 "DN_1ST" 16 "UP_1ST" 8 "DN_2ND" 4 "UP_2ND" 2 "RWD" 1 "FWD" 0 "IDLE" ;
 VAL_ 568 DTR_Dist_Rq 255 "SNA" 200 "ACC_DIST_7" 166 "ACC_DIST_6" 133 "ACC_DIST_5" 100 "ACC_DIST_4" 66 "ACC_DIST_3" 33 "ACC_DIST_2" 0 "ACC_DIST_1" ;
 VAL_ 568 TurnIndLvr_Stat 3 "SNA" 2 "RIGHT" 1 "LEFT" 0 "IDLE" ;
@@ -304,7 +453,7 @@ VAL_ 568 StW_Sw04_Psd 1 "PRESSED" 0 "NOT_PRESSED_SNA" ;
 VAL_ 568 WprSw6Posn 7 "SNA" 6 "STAGE2" 5 "STAGE1" 4 "INTERVAL4" 3 "INTERVAL3" 2 "INTERVAL2" 1 "INTERVAL1" 0 "OFF" ;
 
 VAL_ 1001 DAS_headlightRequest 3 "DAS_HEADLIGHT_REQUEST_INVALID" 1 "DAS_HEADLIGHT_REQUEST_ON" 0 "DAS_HEADLIGHT_REQUEST_OFF";
-VAL_ 1001 DAS_hazardLightRequest 3 "DAS_REQUEST_HAZARDS_SNA" 2 "DAS_REQUEST_HAZARDS_UNUSED" 0 "DAS_REQUEST_HAZARDS_OFF" 1 "DAS_REQUEST_HAZARDS_ON";
+VAL_ 1001 DAS_hazardLightRequest 3 "DAS_REQUEST_HAZARDS_SNA" 2 "DAS_REQUEST_HAZARDS_ON_FAST" 0 "DAS_REQUEST_HAZARDS_OFF" 1 "DAS_REQUEST_HAZARDS_ON";
 VAL_ 1001 DAS_wiperSpeed 3 "DAS_WIPER_SPEED_3" 12 "DAS_WIPER_SPEED_12" 8 "DAS_WIPER_SPEED_8" 14 "DAS_WIPER_SPEED_14" 5 "DAS_WIPER_SPEED_5" 13 "DAS_WIPER_SPEED_13" 2 "DAS_WIPER_SPEED_2" 0 "DAS_WIPER_SPEED_OFF" 4 "DAS_WIPER_SPEED_4" 1 "DAS_WIPER_SPEED_1" 15 "DAS_WIPER_SPEED_INVALID" 10 "DAS_WIPER_SPEED_10" 11 "DAS_WIPER_SPEED_11" 7 "DAS_WIPER_SPEED_7" 9 "DAS_WIPER_SPEED_9" 6 "DAS_WIPER_SPEED_6";
 VAL_ 1001 DAS_turnIndicatorRequest 0 "DAS_TURN_INDICATOR_NONE" 2 "DAS_TURN_INDICATOR_RIGHT" 3 "DAS_TURN_INDICATOR_CANCEL" 1 "DAS_TURN_INDICATOR_LEFT";
 VAL_ 1001 DAS_highLowBeamDecision 2 "DAS_HIGH_BEAM_ON" 1 "DAS_HIGH_BEAM_OFF" 3 "DAS_HIGH_BEAM_SNA" 0 "DAS_HIGH_BEAM_UNDECIDED";
@@ -365,13 +514,8 @@ VAL_ 259 VCRIGHT_mirrorRecallState 5 "MIRROR_RECALL_STATE_RECALLING_STOPPED" 2 "
 VAL_ 259 VCRIGHT_mirrorState 3 "MIRROR_STATE_FOLD_UNFOLD" 1 "MIRROR_STATE_TILT_X" 0 "MIRROR_STATE_IDLE" 2 "MIRROR_STATE_TILT_Y" 4 "MIRROR_STATE_RECALL";
 VAL_ 259 VCRIGHT_frontLatchStatus 8 "LATCH_FAULT" 2 "LATCH_CLOSED" 1 "LATCH_OPENED" 3 "LATCH_CLOSING" 7 "LATCH_DEFAULT" 4 "LATCH_OPENING" 5 "LATCH_AJAR" 6 "LATCH_TIMEOUT" 0 "LATCH_SNA";
 VAL_ 585 SCCM_washWipeButtonStatus 3 "SNA" 0 "NOT_PRESSED" 2 "2ND_DETENT" 1 "1ST_DETENT";
-VAL_ 585 SCCM_turnIndicatorStalkStatus 3 "DOWN_1" 5 "SNA" 0 "IDLE" 1 "UP_1" 4 "DOWN_2" 2 "UP_2";
+VAL_ 585 SCCM_turnIndicatorStalkStatus 0 "IDLE" 1 "UP_0_5" 2 "UP_1" 3 "UP_1_5" 4 "UP_2" 5 "DOWN_0_5" 6 "DOWN_1" 7 "DOWN_1_5" 8 "DOWN_2" 9 "SNA";
 VAL_ 585 SCCM_highBeamStalkStatus 3 "SNA" 0 "IDLE" 1 "PULL" 2 "PUSH";
-VAL_ 602 VCSEC_TPMSDisplayPressureFL 255 "SNA";
-VAL_ 602 VCSEC_TPMSDisplayPressureFR 255 "SNA";
-VAL_ 602 VCSEC_TPMSDisplayPressureRL 255 "SNA";
-VAL_ 602 VCSEC_TPMSDisplayPressureRR 255 "SNA";
-VAL_ 605 DAS_trafficLightColor 0 "NONE" 1 "RED" 2 "GREEN" 3 "YELLOW";
 VAL_ 280 DI_epbRequest 0 "DI_EPBREQUEST_NO_REQUEST" 1 "DI_EPBREQUEST_PARK" 2 "DI_EPBREQUEST_UNPARK";
 VAL_ 280 DI_keepAliveRequest 1 "KEEP_ALIVE" 0 "NO_REQUEST";
 VAL_ 280 DI_accelPedalPos 255 "SNA";
@@ -386,6 +530,7 @@ VAL_ 835 VCRIGHT_vehiclePowerStateDBG 3 "VEHICLE_POWER_STATE_DRIVE" 1 "VEHICLE_P
 VAL_ 835 VCRIGHT_mirrorHeatState 2 "HEATER_STATE_OFF" 4 "HEATER_STATE_FAULT" 1 "HEATER_STATE_ON" 0 "HEATER_STATE_SNA" 3 "HEATER_STATE_OFF_UNAVAILABLE";
 VAL_ 553 SCCM_parkButtonStatus 3 "SNA" 0 "NOT_PRESSED" 2 "INIT" 1 "PRESSED";
 VAL_ 553 SCCM_rightStalkStatus 3 "DOWN_1" 6 "SNA" 0 "IDLE" 5 "INIT" 1 "UP_1" 4 "DOWN_2" 2 "UP_2";
+VAL_ 297 SCCM_steeringAngle 16383 "SNA" ;
 VAL_ 297 SCCM_steeringAngleValidity 3 "SNA" 2 "INIT" 0 "INVALID" 1 "VALID";
 VAL_ 297 SCCM_steeringAngleSensorStatus 0 "OK" 1 "INIT" 2 "ERROR" 3 "ERROR_INIT";
 VAL_ 258 VCLEFT_mirrorRecallState 5 "MIRROR_RECALL_STATE_RECALLING_STOPPED" 2 "MIRROR_RECALL_STATE_RECALLING_AXIS_2" 0 "MIRROR_RECALL_STATE_INIT" 3 "MIRROR_RECALL_STATE_RECALLING_COMPLETE" 4 "MIRROR_RECALL_STATE_RECALLING_FAILED" 1 "MIRROR_RECALL_STATE_RECALLING_AXIS_1";

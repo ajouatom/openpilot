@@ -16,6 +16,7 @@ from jeepney.low_level import MessageType
 from jeepney.wrappers import Properties
 
 from openpilot.common.swaglog import cloudlog
+from openpilot.common.wifi_coexistence import direct_ap_active
 from openpilot.system.ui.lib.networkmanager import (NM, NM_WIRELESS_IFACE, NM_802_11_AP_SEC_PAIR_WEP40,
                                                     NM_802_11_AP_SEC_PAIR_WEP104, NM_802_11_AP_SEC_GROUP_WEP40,
                                                     NM_802_11_AP_SEC_GROUP_WEP104, NM_802_11_AP_SEC_KEY_MGMT_PSK,
@@ -497,7 +498,10 @@ class WifiManager:
   def _network_scanner(self):
     while not self._exit:
       connected = self._wifi_state.status == ConnectStatus.CONNECTED
-      if self._active or not connected:
+      # Explicit network-page scans remain available. A disconnected optional
+      # uplink must not request full-band scans every five seconds on the same
+      # radio that is currently serving the independent Jetson HUD AP.
+      if self._active or (not connected and not direct_ap_active()):
         scan_period = SCAN_PERIOD_SECONDS if self._active else BACKGROUND_SCAN_PERIOD_SECONDS
         if time.monotonic() - self._last_network_scan > scan_period:
           self._request_scan()
@@ -513,17 +517,24 @@ class WifiManager:
       time.sleep(1)
 
   def _get_adapter(self, adapter_type: int) -> str | None:
-    # Return the first NetworkManager device path matching adapter_type
+    # Keep the UI on the Internet station when a private Jetson AP is also
+    # present. Choosing that AP could let a normal connect action replace it.
+    fallback = None
     try:
       device_paths = self._router_main.send_and_get_reply(new_method_call(self._nm, 'GetDevices')).body[0]
       for device_path in device_paths:
         dev_addr = DBusAddress(device_path, bus_name=NM, interface=NM_DEVICE_IFACE)
         dev_type = self._router_main.send_and_get_reply(Properties(dev_addr).get('DeviceType')).body[0][1]
         if dev_type == adapter_type:
-          return str(device_path)
+          if adapter_type != NM_DEVICE_TYPE_WIFI:
+            return str(device_path)
+          fallback = fallback or str(device_path)
+          interface = self._router_main.send_and_get_reply(Properties(dev_addr).get('Interface')).body[0][1]
+          if interface == 'wlan0':
+            return str(device_path)
     except Exception as e:
       cloudlog.exception(f"Error getting adapter type {adapter_type}: {e}")
-    return None
+    return fallback
 
   def _init_connections(self) -> None:
     settings_addr = DBusAddress(NM_SETTINGS_PATH, bus_name=NM, interface=NM_SETTINGS_IFACE)

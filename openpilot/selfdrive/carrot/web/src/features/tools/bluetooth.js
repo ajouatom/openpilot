@@ -1,7 +1,12 @@
-import { mappingButtons, gestureToken, splitGesture, learnEvents, REMOTE_ACTIONS } from "./bluetooth_mapping.js";
+import { mappingButtons, gestureToken, splitGesture, learnEvents, REMOTE_ACTIONS, gestureOptions } from "./bluetooth_mapping.js";
 
 const WORDS = {
   ko: {
+    blinkerLeft: "왼쪽 방향지시등 켜기", blinkerRight: "오른쪽 방향지시등 켜기",
+    blinkRequested: "방향지시등 요청 전달",
+    doubleEnabled: "더블클릭 사용", longEnabled: "길게 누르기 사용",
+    fastHelp: "두 옵션을 끄면 키 버튼은 누르는 즉시 한 번 실행합니다. 터치 방향은 판별되는 즉시 실행하며, 터치 탭은 뗄 때 실행합니다. 꺼둔 동작의 매핑은 보존됩니다.",
+    blinkHelp: "지원하는 젯슨 USB-CAN/B1 차량에서 실제 방향지시등을 조작합니다. 반대 방향을 빠르게 누르면 현재 점멸 종료 후 가장 최근 요청을 실행합니다(대기 최대 3.2초). 깜박이 자동제어 1·2에서는 5km/h 이하에서 켠 신호를 회전 완료까지 유지하며 같은 버튼으로 취소합니다. 순정 레버가 우선합니다. 실제 깜박이 입력에 기존 차로변경 설정이 반응할 수 있습니다.",
     title: "블루투스 리모컨", close: "닫기", scan: "장치 검색 (30초)", on: "블루투스 켜기", off: "블루투스 끄기",
     help: "정차하고 크루즈를 해제한 상태에서 설정하세요. 매핑을 켜면 해당 장치의 원래 터치·키보드·볼륨 입력을 차단합니다. 차로변경은 기존 속도·측후방·조향 조건을 따릅니다. 휴대폰도 페어링할 수 있지만 통화·오디오·네트워크 기능은 제공하지 않습니다.",
     empty: "장치를 페어링 모드로 놓고 검색하세요. 기존 휴대폰에 연결되어 있다면 그 연결을 해제하세요.",
@@ -28,6 +33,11 @@ const WORDS = {
     buttonHelp: "크루즈 +/−는 크루즈가 꺼져 있으면 기존 활성화 조건을 거쳐 켜기를 요청합니다. 버튼의 ‘길게’ 동작도 기능 목록에서 선택할 수 있습니다. 예: 리모컨 짧게 누르기 → 크루즈 + 길게. 이 경우 추가로 기다리지 않고 핸들 버튼의 롱 동작을 한 번 실행합니다. LFA와 갭의 동작은 기존 설정을 따릅니다.",
   },
   en: {
+    blinkerLeft: "Turn on left indicator", blinkerRight: "Turn on right indicator",
+    blinkRequested: "Indicator request forwarded",
+    doubleEnabled: "Enable double click", longEnabled: "Enable long press",
+    fastHelp: "With both options off, keys fire once on press. Touch directions fire when identified; touch taps fire on release. Disabled gesture mappings are preserved.",
+    blinkHelp: "Controls physical indicators on supported Jetson USB-CAN/B1 vehicles. Rapid opposite inputs keep the latest request until the current sequence ends (up to 3.2 seconds). Automatic turn signals mode 1/2 holds signals started at or below 5 km/h until turn completion; the same button cancels. The stock lever has priority. Existing lane-change settings may react to the actual indicators.",
     title: "Bluetooth remotes", close: "Close", scan: "Scan devices (30s)", on: "Enable Bluetooth", off: "Disable Bluetooth",
     help: "Configure while stationary with cruise disengaged. Enabling a mapping captures this device's original touch, keyboard and volume input. Lane changes retain existing speed, blind-spot and steering conditions. Phones can pair; calls, audio and networking are not provided.",
     empty: "Put your device in pairing mode and scan. Disconnect it from its previous phone if needed.",
@@ -83,14 +93,15 @@ async function run(action) {
   finally { busy = false; lock(); }
 }
 function lock() {
-  dialog?.querySelectorAll('[data-mutation="true"]').forEach(e => { e.disabled = busy || !state?.runtime?.stationary; });
+  dialog?.querySelectorAll('[data-mutation="true"]').forEach(e => { e.disabled = busy || !state?.runtime?.stationary || e.dataset.gestureDisabled === "true"; });
 }
 function selectDevice(device) {
   if (dirty) { part("error").textContent = t("unsaved"); return; }
   selected = device.address;
   const stored = state.config.devices[selected];
-  draft = stored ? structuredClone(stored) : { name: device.name, profile: /yiser-j6/i.test(device.name) ? "yiser-j6" : "generic", enabled: false, mapping: {} };
+  draft = stored ? structuredClone(stored) : { name: device.name, profile: /yiser-j6/i.test(device.name) ? "yiser-j6" : "generic", enabled: false, mapping: {}, gestures: { double: false, long: false } };
   if (!stored && draft.profile === "yiser-j6") draft.mapping = { ...DEFAULTS };
+  draft.gestures = { ...gestureOptions(draft) };
   dirty = false;
   seenEvents = new Set((state.runtime.recent_events || []).map(e => e.id)); renderEditor();
 }
@@ -104,6 +115,13 @@ function renderEditor() {
   label.append(select); editor.append(label);
   const enabledLabel = element("label"), enabled = element("input"); enabled.type = "checkbox"; enabled.checked = draft.enabled; enabled.dataset.mutation = "true";
   enabled.onchange = () => { draft.enabled = enabled.checked; dirty = true; }; enabledLabel.append(enabled, document.createTextNode(t("enabled"))); editor.append(enabledLabel);
+  for (const kind of ["double", "long"]) {
+    const label = element("label"), toggle = element("input");
+    toggle.type = "checkbox"; toggle.checked = draft.gestures[kind]; toggle.dataset.mutation = "true";
+    toggle.onchange = () => { draft.gestures[kind] = toggle.checked; dirty = true; renderMappings(); };
+    label.append(toggle, document.createTextNode(t(`${kind}Enabled`))); editor.append(label);
+  }
+  editor.append(element("p", t("fastHelp")), element("p", t("blinkHelp")));
   const rows = region("mapping"); editor.append(rows); renderMappings();
   const actions = element("div", null, "bt-actions");
   actions.append(button("save", async () => {
@@ -122,6 +140,7 @@ function renderMappings() {
     const row = element("fieldset", null, "bt-mapping-row"); row.append(element("legend", t(base)));
     for (const gesture of ["single", "double", "long"]) {
       const token = gestureToken(base, gesture), label = element("label", t(gesture)), select = element("select"); select.dataset.mutation = "true";
+      select.dataset.gestureDisabled = String(gesture !== "single" && !draft.gestures[gesture]);
       select.setAttribute("aria-label", tokenLabel(token));
       for (const value of ACTIONS) { const option = element("option", actionLabel(value)); option.value = value; select.append(option); }
       select.value = draft.mapping[token] || "none"; select.onchange = () => { draft.mapping[token] = select.value; dirty = true; };
@@ -183,7 +202,8 @@ async function refresh() {
     const fresh = events.filter(e => e.address === selected && !seenEvents.has(e.id));
     for (const event of fresh) {
       seenEvents.add(event.id);
-      part("event").textContent = `${tokenLabel(event.button)} → ${actionLabel(event.action)} · ${t(event.reason === "test" ? "testEvent" : event.emitted ? "sent" : "ignored")}`;
+      const sentLabel = ["blinkerLeft", "blinkerRight"].includes(event.action) ? "blinkRequested" : "sent";
+      part("event").textContent = `${tokenLabel(event.button)} → ${actionLabel(event.action)} · ${t(event.reason === "test" ? "testEvent" : event.emitted ? sentLabel : "ignored")}`;
     }
     if (learning?.address === selected && learnEvents(draft.mapping, fresh)) { dirty = true; renderMappings(); }
     if (seenEvents.size > 256) seenEvents = new Set(events.map(e => e.id));
@@ -205,7 +225,7 @@ function open() {
   const poll = async () => {
     try { await refresh(); if (pollFailed) part("error").textContent = ""; pollFailed = false; }
     catch (error) { pollFailed = true; part("error").textContent = error.message; }
-    finally { if (dialog.open) timer = setTimeout(poll, 1000); }
+    finally { if (dialog.open) timer = setTimeout(poll, 250); }
   }; poll();
 }
 globalThis.CarrotBluetooth = { init() { const button = document.getElementById("btnToolsBluetooth"); if (button) { button.textContent = t("title"); button.onclick = open; } } };

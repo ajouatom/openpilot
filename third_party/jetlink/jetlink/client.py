@@ -28,6 +28,7 @@ from pathlib import Path
 import numpy as np
 
 from jetlink import protocol as P
+from jetlink import output_projection as projection
 from jetlink.spec import CHUNK, DEFAULT_FRAME_SKIP, ModelSpec
 from jetlink.transport.base import LinkError, LinkTimeout, Message, Transport
 
@@ -81,10 +82,10 @@ def _transport_layers(transport):
 
 class JetlinkClient:
   def __init__(self, transport: Transport, deadline: float = FRAME_TIMEOUT,
-               name: str | None = None, *, allow_request_chunks: bool = True):
+               name: str | None = None, *, allow_block_compression: bool = False,
+               allow_output_projection: bool = False, allow_request_chunks: bool = True):
     self.t = transport
     self.deadline = deadline
-    self._allow_request_chunks = allow_request_chunks
     # Who the server logs this connection as. The nonce is per client object,
     # so two processes taking turns on one gadget, or one process reopening
     # the link, are separable in a journal whose clock is wrong anyway.
@@ -101,6 +102,28 @@ class JetlinkClient:
     self._infer_started = 0.0
     self._infer_frame_id: int | None = None
     self._infer_flags = 0
+    self._stateful_v2 = False
+    self._nav_u8 = False
+    # Native comma measurements show LZ4 encoding costs more than USB savings.
+    # Keep exact map packing; full-block compression requires an explicit trial.
+    self._allow_block_compression = allow_block_compression
+    self._lz4 = False
+    self.last_request_bytes = 0
+    self._allow_request_chunks = allow_request_chunks
+    self._allow_output_projection = allow_output_projection
+    self._projection_negotiated = False
+    self._projection_spec = None
+    self._projection_spec_ok = False
+    # The IPC consumer opts in separately for each request. Raw/old consumers
+    # keep the original full response even on a projection-capable connection.
+    self.project_output = False
+
+  @property
+  def output_projection_available(self) -> bool:
+    if self.spec is not self._projection_spec:
+      self._projection_spec = self.spec
+      self._projection_spec_ok = projection.eligible(self.spec)
+    return self._projection_negotiated and self._projection_spec_ok
 
   # -- construction ---------------------------------------------------------
 
@@ -213,12 +236,26 @@ class JetlinkClient:
     """Introduce this client. The server starts its session over on a hello,
     so this is also how a new owner of the gadget takes over one the server
     never saw end; see Session._greet."""
+    self._stateful_v2 = False
+    self._nav_u8 = False
+    self._lz4 = False
+    self._deferred_map = False
+    self.map_sender = None
     for layer in _transport_layers(self.t):
       if hasattr(type(layer), '_send_bounded_request'):
         layer.request_chunks_enabled = False
+    self._projection_negotiated = False
+    self._projection_spec = None
+    self._projection_spec_ok = False
+    self.project_output = False
     seq = self._next_seq()
     version = self._protocol_version()
     client = {'nonce': self.nonce, 'name': self.name}
+    from jetlink import deferred_map
+    if version == 2:
+      client[deferred_map.CAPABILITY] = deferred_map.descriptor()
+    if version == 2 and self._allow_output_projection:
+      client[projection.CAPABILITY] = projection.descriptor()
     if version == 3:
       link = self._link_info()
       if link:
@@ -236,6 +273,15 @@ class JetlinkClient:
       raise LinkError(str(e)) from e
     if selected != version:
       raise LinkError(f"server selected protocol {selected!r}, transport speaks protocol {version}")
+    self._stateful_v2 = selected == 2 and response.get('stateful_v2') is True
+    self._projection_negotiated = (self._allow_output_projection and self._stateful_v2 and
+                                  projection.matches(response.get(projection.CAPABILITY)))
+    from jetlink.packed_codec import CAPABILITY
+    self._nav_u8 = self._stateful_v2 and response.get(CAPABILITY) is True
+    self._deferred_map = self._nav_u8 and deferred_map.matches(response.get(deferred_map.CAPABILITY))
+    from jetlink.block_codec import CAPABILITY as LZ4_CAPABILITY, library
+    self._lz4 = (self._allow_block_compression and self._stateful_v2 and
+                 response.get(LZ4_CAPABILITY) is True and library() is not None)
     from jetlink import request_chunks
     enabled = (self._allow_request_chunks and selected == 2 and response.get('carrot_host') == 'jetson' and
                request_chunks.supported(response.get(request_chunks.CAPABILITY)))
@@ -380,10 +426,28 @@ class JetlinkClient:
       except LinkTimeout:
         continue
 
+  @property
+  def deferred_map_available(self):
+    return bool(getattr(self, '_deferred_map', False) and projection.eligible(self.spec))
+
+  def flush_map(self):
+    sender = getattr(self, 'map_sender', None)
+    if sender is None:
+      return 0
+    remaining = self.deadline - (time.monotonic() - self._infer_started)
+    if remaining <= 0:
+      raise LinkTimeout('frame deadline elapsed before map staging')
+    try:
+      return sender.flush(self._next_seq, self.t.send, remaining)
+    except (ValueError, LinkError) as exc:
+      self.dead = True
+      raise LinkError('map staging failed; link abandoned') from exc
+
   # -- inference ------------------------------------------------------------
 
   def infer_begin(self, warped: np.ndarray, packed: np.ndarray, frame_id: int = 0,
-                  reset: bool = False, want_state: bool = False, deadline: float | None = None) -> int:
+                  reset: bool = False, want_state: bool = False, deadline: float | None = None,
+                  nav_metadata=None) -> int:
     """Send a frame and return immediately with its sequence number.
 
     Split from infer_end so the caller can work while the Jetson is busy;
@@ -394,21 +458,50 @@ class JetlinkClient:
     if self.dead:
       raise LinkError("link previously failed")
     version = self._protocol_version()
-    if self.spec.stateful and version == 2:
-      raise LinkError("stateful models require protocol 3")
+    if self.spec.stateful and version == 2 and not self._stateful_v2:
+      raise LinkError("stateful models require protocol 3 or explicit stateful_v2 host support")
     warped = _as_bytes(warped, self.spec.warped_nbytes, 'warped')
     packed = _as_bytes(packed, self.spec.packed_nbytes, 'packed')
     if version == 3:
       packed = _protocol3_packed(self.spec, packed)
     seq = self._next_seq()
     flags = (P.Flag.RESET_QUEUES if reset else 0) | (P.Flag.WANT_STATE if want_state else 0)
+    if self.project_output:
+      if version != 2 or not self.output_projection_available:
+        raise LinkError('driving-output projection was not negotiated for this model')
+      flags |= projection.FLAG
     if version == 3:
       flags |= P.Flag.WANT_HIDDEN
     try:
       self._infer_started = time.monotonic()
       self._infer_frame_id = frame_id
+      self.last_map_used = False
+      if nav_metadata is not None:
+        from jetlink.deferred_map import Sender
+        if not self.deferred_map_available or version != 2:
+          raise LinkError('deferred map was not negotiated')
+        if getattr(self, 'map_sender', None) is None:
+          self.map_sender = Sender(self.spec)
+        packed, map_flags = self.map_sender.prepare(packed, frame_id, reset, nav_metadata)
+        flags |= map_flags
+        self.last_map_used = self.map_sender.used
+      else:
+        self.map_sender = None
+      if nav_metadata is None and version == 2 and self._nav_u8 and 'nav_map' in self.spec.packed_shapes:
+        from jetlink.packed_codec import encode, FLAG
+        packed, compressed = encode(packed, self.spec)
+        if compressed:
+          flags |= FLAG
+      parts = (warped, packed)
+      if version == 2 and self.spec.stateful and self._lz4 and not flags & 64:
+        from jetlink.block_codec import encode as encode_block, FLAG as LZ4_FLAG
+        block = encode_block(parts)
+        if block is not None:
+          flags |= LZ4_FLAG
+          parts = (block,)
       self._infer_flags = flags
-      self.t.send(P.Msg.INFER_REQ, seq, (P.pack_infer_req(frame_id, flags), warped, packed),
+      self.last_request_bytes = P.INFER_REQ_SIZE + sum(memoryview(p).nbytes for p in parts)
+      self.t.send(P.Msg.INFER_REQ, seq, (P.pack_infer_req(frame_id, flags), *parts),
                   timeout=self.deadline if deadline is None else deadline)
     except LinkError:
       self.dead = True
@@ -444,7 +537,15 @@ class JetlinkClient:
     if fid != self._infer_frame_id:
       self.dead = True
       raise LinkError(f'inference response frame {fid}, expected {self._infer_frame_id}')
-    end = P.INFER_RESP_SIZE + self.spec.output_nbytes
+    projected = bool(self._infer_flags & projection.FLAG)
+    if bool(msg.flags & projection.FLAG) != projected:
+      self.dead = True
+      raise LinkError('inference response projection marker mismatch')
+    if projected and msg.flags & ~(projection.FLAG | int(P.Flag.PADDED)):
+      self.dead = True
+      raise LinkError('invalid projected response flags')
+    count = projection.COUNT if projected else self.spec.output_nelem
+    end = P.INFER_RESP_SIZE + count * 4
     if msg.payload.nbytes < end:
       self.dead = True
       raise LinkError('inference response is missing model outputs')
@@ -468,7 +569,7 @@ class JetlinkClient:
                   receive['prepare'] * 1e3, receive['read_wait'] * 1e3, receive['handoff'] * 1e3,
                   gpu_us / 1e3, queue_us / 1e3, total_us / 1e3)
     # copy: the payload is a view into the transport's reusable receive buffer.
-    output = np.frombuffer(msg.payload, np.float32, self.spec.output_nelem, P.INFER_RESP_SIZE).copy()
+    output = np.frombuffer(msg.payload, np.float32, count, P.INFER_RESP_SIZE).copy()
     if not np.all(np.isfinite(output)):
       self.dead = True
       raise LinkError('inference response contains non-finite model outputs')

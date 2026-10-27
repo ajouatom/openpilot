@@ -291,3 +291,23 @@ def test_endpoint_release_closes_writer_before_rebind_and_blocks_on_failure():
   writer.close=lambda: calls.append('recovered')
   tx._close_request_writer()
   assert tx._request_writer is None
+
+
+@pytest.mark.skipif(sys.platform != 'linux', reason='FunctionFS native preparation')
+@pytest.mark.parametrize('defer,quantum,expected', [(None,None,(True,8192)), ('0',None,(False,32768)),
+  ('1','32768',(True,32768)), ('0','8192',(False,32768)), ('bad','8192',(False,32768))])
+def test_default_small_deferred_requests_and_explicit_diagnostic_fallback(monkeypatch, defer, quantum, expected):
+  from jetlink.transport.ffs import FfsTransport
+  from jetlink.transport import request_writer
+  for key, value in [('JETLINK_DEFER_COMPLETIONS',defer), ('JETLINK_AIO_WRITE_BYTES',quantum)]:
+    if value is None: monkeypatch.delenv(key,raising=False)
+    else: monkeypatch.setenv(key,value)
+  calls=[]
+  monkeypatch.setattr(request_writer,'library',lambda:object())
+  def create(fd,lib,**kw):
+    calls.append((kw['deferred'],kw['quantum']))
+    return NS(**kw)
+  monkeypatch.setattr(request_writer,'Writer',create)
+  tx=object.__new__(FfsTransport);tx.ep_in=7;tx._ensure_epfiles=lambda:None
+  assert tx._prepare_bounded_requests() and tx._prepare_bounded_requests()
+  assert calls==[expected]

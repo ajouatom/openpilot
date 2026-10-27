@@ -18,7 +18,7 @@ import numpy as np
 import onnx
 from onnx import TensorProto, helper, numpy_helper
 
-IMG_INPUTS = ('img', 'big_img')
+IMG_INPUTS = ('img', 'big_img', 'new_img', 'state_img_q')
 
 # tinygrad's exporter leaves layout hints in its own domain, and TensorRT rejects
 # any op in a domain it does not know. Contiguous is about tinygrad's buffers,
@@ -232,6 +232,8 @@ def _static_info(model: onnx.ModelProto, wanted: set[str]) -> tuple[dict[str, tu
 def patch_uint8_inputs(model: onnx.ModelProto) -> onnx.ModelProto:
   """Retype the uint8 image inputs to fp16 and drop the head Cast. In place."""
   g = model.graph
+  if any(vi.name == 'new_img' for vi in g.input):
+    return patch_stateful_images(model)
 
   img_inputs = [vi for vi in g.input if vi.name in IMG_INPUTS]
   if not img_inputs:
@@ -273,6 +275,50 @@ def patch_uint8_inputs(model: onnx.ModelProto) -> onnx.ModelProto:
     if vi.name in retyped:
       vi.type.tensor_type.elem_type = TensorProto.FLOAT16
 
+  return model
+
+
+def patch_stateful_images(model: onnx.ModelProto) -> onnx.ModelProto:
+  """Promote only ResAction's byte-preserving image queue to FP16.
+
+  Slice/Concat/Gather/Reshape move bytes without arithmetic, so integer pixels
+  0..255 and zero initialization remain exact in FP16. Keep the final vision
+  Cast and all floating-point state/weights unchanged. Refuse unknown byte
+  operations instead of changing their integer arithmetic semantics.
+  """
+  g = model.graph
+  inputs = {vi.name: vi for vi in g.input}
+  promoted = {'new_img', 'state_img_q'}
+  if any(name not in inputs or inputs[name].type.tensor_type.elem_type != TensorProto.UINT8 for name in promoted):
+    raise ValueError('Expected UINT8 new_img and state_img_q')
+  for node in g.node:
+    affected = [name for name in node.input if name in promoted]
+    if not affected:
+      continue
+    if node.domain:
+      raise ValueError(f'Unknown image queue domain: {node.domain}')
+    if node.op_type == 'Cast':
+      to = next((helper.get_attribute_value(a) for a in node.attribute if a.name == 'to'), None)
+      if to not in (TensorProto.FLOAT16, TensorProto.FLOAT):
+        raise ValueError('Image queue Cast must target floating point')
+      continue
+    if node.op_type == 'Concat':
+      valid = all(name in promoted for name in node.input)
+    else:
+      valid = (node.op_type in ('Slice', 'Unsqueeze', 'Squeeze', 'Gather', 'Reshape', 'Transpose', 'Identity') and
+               node.input[0] in promoted and len(affected) == 1)
+    if not valid:
+      raise ValueError(f'Unsupported image queue operation: {node.op_type}')
+    promoted.update(node.output)
+  if 'next_state_img_q' not in promoted:
+    raise ValueError('Image queue output is not derived from image inputs')
+  for vi in [*g.input, *g.value_info, *g.output]:
+    if vi.name in promoted:
+      if vi.type.tensor_type.elem_type != TensorProto.UINT8:
+        raise ValueError(f'Image queue tensor is not UINT8: {vi.name}')
+  for vi in [*g.input, *g.value_info, *g.output]:
+    if vi.name in promoted:
+      vi.type.tensor_type.elem_type = TensorProto.FLOAT16
   return model
 
 

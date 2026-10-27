@@ -1,5 +1,9 @@
 # Jetson USB panel over Wi-Fi; ESP32-S3 retirement (2026-10-20)
 
+The Wi-Fi-only display policy below is superseded by the October 21
+[bounded USB restoration](jetson_usb_hud_restore_20261021.md). ESP32-S3 remains
+retired; this page preserves the earlier investigation.
+
 The owner explicitly requests removing ESP32-S3 display support and using a USB
 panel attached to Jetson. The requested topology is:
 

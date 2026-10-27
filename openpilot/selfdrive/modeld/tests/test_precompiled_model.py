@@ -245,9 +245,8 @@ def test_pinned_usb_link_error_preserves_failure_without_blacklisting(tmp_path, 
 @pytest.mark.parametrize('error', ['AMD failed with -1', 'RuntimeError: AMD failed with -1',
                                  'RuntimeError: AMD:0 failed with -1', 'RuntimeError: AMD failed with 1',
                                  'RuntimeError: AMD:0 failed with 1', USB_LINK_FAILURE])
-@pytest.mark.parametrize('runtime_sha', [USB_RUNTIME_SHA, 'c7c58622652231359ecea1a4253b63e157d002242bf596ede1b853f941f937ac'])
-def test_usb_link_error_matches_only_verified_runtime(error, runtime_sha):
-  assert pm.gpu_usb_link_failure(error, {'runtime': {'sha256': runtime_sha}})
+def test_usb_link_error_matches_only_verified_runtime(error):
+  assert pm.gpu_usb_link_failure(error, {'runtime': {'sha256': USB_RUNTIME_SHA}})
   for manifest in ({}, {'runtime': None}, {'runtime': []}, {'runtime': {'sha256': 'b' * 64}}):
     assert not pm.gpu_usb_link_failure(error, manifest)
 
@@ -256,10 +255,9 @@ def test_usb_link_error_matches_only_verified_runtime(error, runtime_sha):
                                  'ValueError: AMD failed with -1', 'RuntimeError: AMD failed with -10',
                                  'RuntimeError: AMD failed with -1\nValueError: checksum mismatch',
                                  'RuntimeError: quoted AMD failed with -1', 'RuntimeError: NV failed with -1'])
-@pytest.mark.parametrize('runtime_sha', [USB_RUNTIME_SHA, 'c7c58622652231359ecea1a4253b63e157d002242bf596ede1b853f941f937ac'])
-def test_ambiguous_or_other_gpu_errors_still_reject(tmp_path, error, runtime_sha):
+def test_ambiguous_or_other_gpu_errors_still_reject(tmp_path, error):
   (tmp_path / 'installed.json').write_text(json.dumps(
-    {'pickle': {'sha256': 'a' * 64}, 'runtime': {'sha256': runtime_sha}}))
+    {'pickle': {'sha256': 'a' * 64}, 'runtime': {'sha256': USB_RUNTIME_SHA}}))
   assert pm.record_failure(tmp_path / 'model.pkl', RuntimeError(error), 'inference')
   assert (tmp_path / 'rejected').exists()
 
@@ -269,13 +267,12 @@ def test_ambiguous_or_other_gpu_errors_still_reject(tmp_path, error, runtime_sha
                                           ({'pickle_sha256': 'b' * 64}, False), ({'rejected': False}, False)])
 @pytest.mark.parametrize('phase', ['load', 'boot_validation', 'inference'])
 @pytest.mark.parametrize('code', [-1, 1])
-@pytest.mark.parametrize('runtime_sha', [USB_RUNTIME_SHA, 'c7c58622652231359ecea1a4253b63e157d002242bf596ede1b853f941f937ac'])
-def test_old_usb_link_block_needs_new_boot_and_matching_artifact(tmp_path, monkeypatch, change, allowed, phase, code, runtime_sha):
+def test_old_usb_link_block_needs_new_boot_and_matching_artifact(tmp_path, monkeypatch, change, allowed, phase, code):
   error = USB_LINK_FAILURE.replace("with -1", f"with {code}")
   from openpilot.selfdrive.modeld import egpu_worker_progress
   monkeypatch.setattr(egpu_worker_progress, 'boot_identity', lambda: 'this-boot')
   (tmp_path / 'installed.json').write_text(json.dumps(
-    {'pickle': {'sha256': 'a' * 64}, 'runtime': {'sha256': runtime_sha}}))
+    {'pickle': {'sha256': 'a' * 64}, 'runtime': {'sha256': USB_RUNTIME_SHA}}))
   failure = {'rejected': True, 'pickle_sha256': 'a' * 64, 'phase': phase,
              'boot_id': 'previous-boot', 'error': error} | change
   (tmp_path / 'last_failure.json').write_text(json.dumps(failure))

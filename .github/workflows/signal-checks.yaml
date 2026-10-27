@@ -1,0 +1,54 @@
+name: Signal integration checks
+on:
+  push:
+    branches: [carrot-wip]
+    paths:
+      - 'opendbc_repo/**'
+      - 'openpilot/cereal/log.capnp'
+      - 'openpilot/selfdrive/car/**'
+      - 'openpilot/selfdrive/controls/**'
+      - 'openpilot/selfdrive/modeld/modeld.py'
+      - 'openpilot/selfdrive/carrot/xiaoge_data.py'
+      - 'openpilot/selfdrive/carrot/tests/test_xiaoge_data.py'
+      - 'tools/signal_validation/**'
+      - '.github/workflows/signal-checks.yaml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  native:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      PYTHONPATH: .:opendbc_repo:tools/jetlink
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - run: pip install Cython==3.2.9 setuptools scons pytest pytest-subtests numpy pycapnp cffi setproctitle requests pycryptodome zstandard pyserial parameterized
+      - name: Build production CAN kernels and safety hooks
+        run: |
+          scons -f tools/native_cpu/SConstruct -j2
+          python opendbc_repo/opendbc/dbc/generator/generator.py
+          cd opendbc_repo/opendbc/safety
+          gcc -shared -fPIC -Wall -Werror -nostdlib -fno-builtin -std=gnu11 -Wfatal-errors -Wno-pointer-to-int-cast \
+            -I. -Iboard tests/libsafety/safety.c -o tests/libsafety/libsafety.so
+      - name: Tesla intent, card, feedback, native safety and existing Ioniq indicators
+        run: |
+          python tools/signal_validation/run.py \
+            opendbc_repo/opendbc/car/hyundai/tests/test_spas.py \
+            opendbc_repo/opendbc/safety/tests/test_hyundai_spas.py \
+            openpilot/selfdrive/car/tests/test_hyundai_spas.py \
+            openpilot/selfdrive/car/tests/test_spas_interface.py \
+            opendbc_repo/opendbc/car/tesla/tests \
+            opendbc_repo/opendbc/safety/tests/test_tesla.py \
+            opendbc_repo/opendbc/safety/tests/test_tesla_turn_signals.py \
+            openpilot/selfdrive/car/tests/test_tesla_turn_signals.py \
+            openpilot/selfdrive/car/tests/test_tesla_signal_card.py \
+            openpilot/selfdrive/controls/tests/test_tesla_auto_signal_intent.py \
+            openpilot/selfdrive/controls/tests/test_desire_helper_stalk.py \
+            openpilot/selfdrive/controls/tests/test_lever_forced_turn.py \
+            openpilot/selfdrive/carrot/tests/test_xiaoge_data.py \
+            tools/signal_validation/test_trial_integration.py \
+            tools/jetlink/test_blinker.py tools/jetlink/test_blinker_auto.py

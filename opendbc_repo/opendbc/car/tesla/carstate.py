@@ -1,8 +1,12 @@
 import copy
+import math
+import time
+from dataclasses import dataclass, field
 from opendbc.can import CANDefine, CANParser
 from opendbc.car import Bus, create_button_events, structs
 from opendbc.car.carlog import carlog
 from opendbc.car.common.conversions import Conversions as CV
+from opendbc.car.crc import CRC8H2F, mk_crc8_fun
 from opendbc.car.interfaces import CarStateBase
 from opendbc.car.tesla.values import DBC, CANBUS, GEAR_MAP, STEER_THRESHOLD, TeslaFlags
 
@@ -12,10 +16,14 @@ TESLA_GAS_PRESS_ON = 0.8
 TESLA_GAS_PRESS_OFF = 0.4
 TESLA_TPMS_PRESSURE_SNA = 255 * 0.025
 TESLA_TPMS_BAR_TO_PSI = 14.5037738
+TESLA_TPMS_MAX_AGE_NS = 10_000_000_000
 SPEED_AUTO_RESUME_GESTURE_NS = 1_000_000_000
 STOCK_ACC_CANCEL_STATES = (0, 1, 2, 12, 13, 14, 15)
 STOCK_ACC_CANCEL_PULSE_FRAMES = 4
 TESLA_EAC_NON_FAULT_INHIBITS = ("EAC_ERROR_IDLE", "EAC_ERROR_MIN_SPEED")
+TESLA_STALK_CRC = mk_crc8_fun(CRC8H2F)
+TESLA_STALK_MAGIC = (0x9B, 0xE8, 0x2A, 0xD3, 0xD3, 0x83, 0x4C, 0x5E,
+                     0x3F, 0x5E, 0xE2, 0x28, 0x3A, 0x13, 0xAF, 0xCE)
 
 
 def update_tesla_gas_pressed(previous: bool, pedal_position: float) -> bool:
@@ -25,6 +33,23 @@ def update_tesla_gas_pressed(previous: bool, pedal_position: float) -> bool:
 
 def get_tesla_tpms_pressure(pressure_bar: float) -> float:
   return round(pressure_bar * TESLA_TPMS_BAR_TO_PSI, 1) if pressure_bar < TESLA_TPMS_PRESSURE_SNA else 0.0
+
+
+def decode_tesla_stalk(data: bytes) -> int | None:
+  if len(data) == 4:
+    payload = bytes((data[1] & 0xF0, data[2], data[3], 0))
+    checksum = TESLA_STALK_CRC(payload) ^ TESLA_STALK_MAGIC[data[1] & 15]
+    position = data[2] & 15
+    if data[0] == checksum and position < 9:
+      return 1 if position >= 5 else 2 if position else 0
+  return None
+
+
+@dataclass
+class TeslaStalkInput:
+  timestamp: int = 0
+  direction: int | None = None
+  samples: list[tuple[int, int]] = field(default_factory=list)
 
 
 class CarState(CarStateBase):
@@ -52,6 +77,7 @@ class CarState(CarStateBase):
     self.cruise_override = False
     self.coop_steering = True
     self.infotainment_3_finger_press = 0
+    self._tpms_available = False
     self.tesla_speed_button_template = None
     self.tesla_speed_button_template_nanos = 0
     self.tesla_speed_limit_target = 0.0
@@ -63,6 +89,34 @@ class CarState(CarStateBase):
     self._tesla_speed_resume_up_nanos = 0
     self._tesla_speed_resume_down_nanos = 0
     self._tesla_speed_resume_wait_idle = False
+    self._turn_stalk_direction = 0
+    self._turn_stalk_counts = [0, 0]
+    self._turn_stalk_inputs: dict[int, TeslaStalkInput] = {}
+    self._invalid_measurements: tuple[str, ...] = ()
+
+  def _measurement_valid(self, parser: CANParser, message: str, signal: str) -> bool:
+    value = parser.vl[message][signal]
+    msg = parser.dbc.name_to_msg[message]
+    data = parser.dat.get(msg.address)
+    if not math.isfinite(value) or (data is not None and len(data) != msg.size):
+      return False
+    definition = msg.sigs[signal]
+    raw = round((value - definition.offset) / definition.factor)
+    minimum = -(1 << (definition.size - 1)) if definition.is_signed else 0
+    maximum = (1 << (definition.size - int(definition.is_signed))) - 1
+    label = self.can_define.dv.get(message, {}).get(signal, {}).get(raw, "")
+    return minimum <= raw <= maximum and not label.endswith("SNA")
+
+  def observe_turn_stalk_frame(self, data: bytes, source: int, monotonic_nanos: int) -> None:
+    if not self.CP.flags & TeslaFlags.AUTO_TURN_SIGNALS or source not in (CANBUS.party, CANBUS.vehicle):
+      return
+    stalk = self._turn_stalk_inputs.setdefault(source, TeslaStalkInput())
+    stalk.timestamp = monotonic_nanos
+    stalk.direction = decode_tesla_stalk(data)
+    if stalk.direction is None:
+      stalk.samples.clear()
+    else:
+      stalk.samples.append((monotonic_nanos, stalk.direction))
 
   def observe_speed_wheel_frame(self, data: bytes, monotonic_nanos: int) -> None:
     if len(data) != 8 or (data[0] & 0x03) != 1:
@@ -108,44 +162,51 @@ class CarState(CarStateBase):
     cp_ap_party = can_parsers[Bus.ap_party]
     ret = structs.CarState()
     length = 0.11
+    now = time.clock_gettime_ns(getattr(time, "CLOCK_BOOTTIME", time.CLOCK_MONOTONIC))
+    invalid_measurements = []
 
     # Vehicle speed
-    ret.vEgoRaw = cp_party.vl["DI_speed"]["DI_vehicleSpeed"] * CV.KPH_TO_MS
-    ret.vEgo, ret.aEgo = self.update_speed_kf(ret.vEgoRaw)
+    if self._measurement_valid(cp_party, "DI_speed", "DI_vehicleSpeed"):
+      ret.vEgoRaw = cp_party.vl["DI_speed"]["DI_vehicleSpeed"] * CV.KPH_TO_MS
+      ret.vEgo, ret.aEgo = self.update_speed_kf(ret.vEgoRaw)
+    else:
+      invalid_measurements.append("DI_speed.DI_vehicleSpeed")
+      ret.vEgoRaw, ret.vEgo = self.out.vEgoRaw, self.out.vEgo
 
     # Wheel speeds (km/h -> m/s)
     ws = cp_party.vl["ESP_wheelSpeeds"]
-    ret.wheelSpeeds.fl = ws["ESP_wheelSpeedFrL"] * CV.KPH_TO_MS
-    ret.wheelSpeeds.fr = ws["ESP_wheelSpeedFrR"] * CV.KPH_TO_MS
-    ret.wheelSpeeds.rl = ws["ESP_wheelSpeedReL"] * CV.KPH_TO_MS
-    ret.wheelSpeeds.rr = ws["ESP_wheelSpeedReR"] * CV.KPH_TO_MS
+    for wheel, signal in (("fl", "ESP_wheelSpeedFrL"), ("fr", "ESP_wheelSpeedFrR"),
+                          ("rl", "ESP_wheelSpeedReL"), ("rr", "ESP_wheelSpeedReR")):
+      if self._measurement_valid(cp_party, "ESP_wheelSpeeds", signal):
+        setattr(ret.wheelSpeeds, wheel, ws[signal] * CV.KPH_TO_MS)
+      else:
+        invalid_measurements.append(f"ESP_wheelSpeeds.{signal}")
+        setattr(ret.wheelSpeeds, wheel, getattr(self.out.wheelSpeeds, wheel))
 
     # Displayed speed
-    ui_speed_units_raw = int(cp_party.vl["DI_speed"]["DI_uiSpeedUnits"])
-    ui_speed_units = self.can_define.dv.get("DI_speed", {}).get("DI_uiSpeedUnits", {}).get(ui_speed_units_raw, ui_speed_units_raw)
-    ui_speed = cp_party.vl["DI_speed"]["DI_uiSpeed"]
-
-    # Infer display unit from consistency with wheel speed first, then fall back to CAN enum/raw bit.
-    ui_is_kph = False
-    if ret.vEgoRaw > 2.0 and ui_speed > 2.0:
-      ui_speed_kph_ms = ui_speed * CV.KPH_TO_MS
-      ui_speed_mph_ms = ui_speed * CV.MPH_TO_MS
-      ui_is_kph = abs(ui_speed_kph_ms - ret.vEgoRaw) <= abs(ui_speed_mph_ms - ret.vEgoRaw)
-    elif ui_speed_units in ("DI_SPEED_KPH", "KPH"):
-      ui_is_kph = True
-    elif ui_speed_units in ("DI_SPEED_MPH", "MPH"):
-      ui_is_kph = False
+    ui_speed_units_raw = cp_party.vl["DI_speed"]["DI_uiSpeedUnits"]
+    if ui_speed_units_raw not in (0, 1):
+      invalid_measurements.append("DI_speed.DI_uiSpeedUnits")
+    if self._measurement_valid(cp_party, "DI_speed", "DI_uiSpeed") and ui_speed_units_raw in (0, 1):
+      ret.vEgoCluster = cp_party.vl["DI_speed"]["DI_uiSpeed"] * (CV.KPH_TO_MS if ui_speed_units_raw == 1 else CV.MPH_TO_MS)
     else:
-      ui_is_kph = ui_speed_units_raw == 1
-
-    ret.vEgoCluster = ui_speed * (CV.KPH_TO_MS if ui_is_kph else CV.MPH_TO_MS)
+      invalid_measurements.append("DI_speed.DI_uiSpeed")
+      ret.vEgoCluster = self.out.vEgoCluster
 
     # Gas pedal. Hysteresis (0.8% on / 0.4% off) so DI_accelPedalPos noise
     # above 0 does not spuriously trigger gasPressed.
     pedal_status = cp_party.vl["DI_systemStatus"]["DI_accelPedalPos"]
-    ret.gas = pedal_status / 100.0
-    self.gas_pressed = update_tesla_gas_pressed(self.gas_pressed, pedal_status)
-    ret.gasPressed = self.gas_pressed
+    if self._measurement_valid(cp_party, "DI_systemStatus", "DI_accelPedalPos"):
+      ret.gas = pedal_status / 100.0
+      self.gas_pressed = update_tesla_gas_pressed(self.gas_pressed, pedal_status)
+    else:
+      invalid_measurements.append("DI_systemStatus.DI_accelPedalPos")
+      ret.gas = self.out.gas
+      self.gas_pressed = True
+    pedal_time = cp_party.ts_nanos["DI_speed"]["DI_accelPedalPressed"]
+    digital_pedal_pressed = (0 < pedal_time <= now and now - pedal_time <= 500_000_000 and
+                             cp_party.vl["DI_speed"]["DI_accelPedalPressed"] == 1)
+    ret.gasPressed = self.gas_pressed or digital_pedal_pressed
 
     # Motor speed (EV: motor RPM from inverter)
     ret.engineRpm = cp_party.vl["DI_torque"]["DI_axleSpeed"]
@@ -186,8 +247,7 @@ class CarState(CarStateBase):
 
     # Cruise state
     cruise_state = self.can_define.dv["DI_state"]["DI_cruiseState"].get(int(cp_party.vl["DI_state"]["DI_cruiseState"]), None)
-    speed_units_raw = int(cp_party.vl["DI_state"]["DI_speedUnits"])
-    speed_units = self.can_define.dv["DI_state"]["DI_speedUnits"].get(speed_units_raw, speed_units_raw)
+    speed_units_raw = cp_party.vl["DI_state"]["DI_speedUnits"]
     acc_state = cp_ap_party.vl["DAS_control"]["DAS_accState"]
     # DAS_accState=0 is the steady idle value when stock ACC is unavailable.
     # Only forward a cancellation after the stock controller was actively on;
@@ -206,16 +266,15 @@ class CarState(CarStateBase):
 
     # Match panda safety cruise engaged logic
     ret.cruiseState.enabled = cruise_enabled and not self.summon
-    if speed_units in ("KPH", "DI_SPEED_KPH"):
-      cruise_is_kph = True
-    elif speed_units in ("MPH", "DI_SPEED_MPH"):
-      cruise_is_kph = False
-    else:
-      # Keep cruise unit consistent with displayed speed when enum/raw bit are unreliable.
-      cruise_is_kph = ui_is_kph
-
+    cruise_is_kph = speed_units_raw == 1
+    if speed_units_raw not in (0, 1):
+      invalid_measurements.append("DI_state.DI_speedUnits")
     self.tesla_speed_units = "KPH" if cruise_is_kph else "MPH"
-    ret.cruiseState.speedCluster = cp_party.vl["DI_state"]["DI_digitalSpeed"] * (CV.KPH_TO_MS if cruise_is_kph else CV.MPH_TO_MS)
+    if self._measurement_valid(cp_party, "DI_state", "DI_digitalSpeed") and speed_units_raw in (0, 1):
+      ret.cruiseState.speedCluster = cp_party.vl["DI_state"]["DI_digitalSpeed"] * (CV.KPH_TO_MS if cruise_is_kph else CV.MPH_TO_MS)
+    else:
+      invalid_measurements.append("DI_state.DI_digitalSpeed")
+      ret.cruiseState.speedCluster = self.out.cruiseState.speedCluster
     ret.cruiseState.speed = max(ret.cruiseState.speedCluster, 1e-3)
     ret.cruiseState.available = cruise_state == "STANDBY" or ret.cruiseState.enabled
     ret.cruiseState.standstill = False  # This needs to be false, since we can resume from stop without sending anything special
@@ -229,11 +288,11 @@ class CarState(CarStateBase):
     ret.buttonEvents = [*create_button_events(acc_cancel, self.acc_cancel_last, {1: ButtonType.cancel})]
     self.acc_cancel_last = acc_cancel
 
-    # DAS_fusedSpeedLimit uses the instrument's selected speed unit.
+    # The HW4 fused limit is km/h, independent of the selected cruise display unit.
     speed_limit = cp_ap_party.vl["DAS_status"]["DAS_fusedSpeedLimit"]
     speed_limit_time = cp_ap_party.ts_nanos["DAS_status"]["DAS_fusedSpeedLimit"]
     if 0 < speed_limit <= 150 and speed_limit_time > 0:
-      self.tesla_speed_limit_target = speed_limit * (CV.KPH_TO_MS if cruise_is_kph else CV.MPH_TO_MS)
+      self.tesla_speed_limit_target = speed_limit * CV.KPH_TO_MS
       # The shared speed-limit display expects km/h even on MPH vehicles.
       ret.speedLimit = self.tesla_speed_limit_target * CV.MS_TO_KPH
       self.tesla_speed_limit_target_nanos = speed_limit_time
@@ -257,6 +316,32 @@ class CarState(CarStateBase):
     # Blinkers
     ret.leftBlinker = cp_party.vl["UI_warning"]["leftBlinkerBlinking"] in (1, 2)
     ret.rightBlinker = cp_party.vl["UI_warning"]["rightBlinkerBlinking"] in (1, 2)
+    if self.CP.flags & TeslaFlags.AUTO_TURN_SIGNALS:
+      # Retain raw frame validation and batch ordering for the four-byte stalk.
+      vehicle = self._turn_stalk_inputs.get(CANBUS.vehicle)
+      party = self._turn_stalk_inputs.get(CANBUS.party)
+      source = vehicle if vehicle is not None else party
+      samples = {bus: [direction for timestamp, direction in stalk.samples if 0 <= now - timestamp <= 1_000_000_000]
+                 for bus, stalk in self._turn_stalk_inputs.items()}
+      source_samples = samples.get(CANBUS.vehicle if vehicle is not None else CANBUS.party, [])
+      ret.turnSignalDriverValid = (source is not None and source.timestamp > 0 and
+                                   0 <= now - source.timestamp <= 1_000_000_000 and source.direction is not None)
+      if source is vehicle and party is not None and party.timestamp > 0:
+        if 0 <= now - party.timestamp <= 1_000_000_000:
+          ret.turnSignalDriverValid &= party.direction is not None and party.direction == source.direction
+          party_presses = {d for d in samples.get(CANBUS.party, []) if d}
+          source_presses = {d for d in source_samples if d}
+          if party_presses and party_presses != source_presses:
+            ret.turnSignalDriverValid = False
+      if ret.turnSignalDriverValid:
+        for direction in source_samples or [source.direction]:
+          if direction and direction != self._turn_stalk_direction:
+            self._turn_stalk_counts[direction - 1] = (self._turn_stalk_counts[direction - 1] + 1) % 256
+          self._turn_stalk_direction = direction
+        ret.turnSignalDriverDirection = self._turn_stalk_direction
+      ret.leftBlinkerStalkCount, ret.rightBlinkerStalkCount = self._turn_stalk_counts
+      for stalk in self._turn_stalk_inputs.values():
+        stalk.samples.clear()
 
     # High beam stalk used as generic toggle (openpilot convention)
     ret.genericToggle = cp_party.vl["UI_warning"]["highBeam"] == 1
@@ -317,11 +402,22 @@ class CarState(CarStateBase):
     # 3-finger infotainment press detection (vehicle bus)
     if Bus.adas in can_parsers:
       cp_adas = can_parsers[Bus.adas]
-      tpms = cp_adas.vl["VCSEC_TPMSDisplay"]
-      ret.tpms.fl = get_tesla_tpms_pressure(tpms["VCSEC_TPMSDisplayPressureFL"])
-      ret.tpms.fr = get_tesla_tpms_pressure(tpms["VCSEC_TPMSDisplayPressureFR"])
-      ret.tpms.rl = get_tesla_tpms_pressure(tpms["VCSEC_TPMSDisplayPressureRL"])
-      ret.tpms.rr = get_tesla_tpms_pressure(tpms["VCSEC_TPMSDisplayPressureRR"])
+      cp_body = can_parsers[Bus.body]
+      tpms = cp_body.vl["VCSEC_TPMSDisplay"]
+      tpms_time = cp_body.ts_nanos["VCSEC_TPMSDisplay"]["VCSEC_TPMSDisplayPressureFL"]
+      tpms_available = (len(cp_body.dat.get(0x25A, b"")) == 8 and 0 < tpms_time <= now and
+                        now - tpms_time <= TESLA_TPMS_MAX_AGE_NS)
+      if tpms_available:
+        ret.tpms.fl = get_tesla_tpms_pressure(tpms["VCSEC_TPMSDisplayPressureFL"])
+        ret.tpms.fr = get_tesla_tpms_pressure(tpms["VCSEC_TPMSDisplayPressureFR"])
+        ret.tpms.rl = get_tesla_tpms_pressure(tpms["VCSEC_TPMSDisplayPressureRL"])
+        ret.tpms.rr = get_tesla_tpms_pressure(tpms["VCSEC_TPMSDisplayPressureRR"])
+      if tpms_available != self._tpms_available:
+        if tpms_available:
+          carlog.info("Tesla TPMS data available")
+        else:
+          carlog.warning("Tesla TPMS data unavailable (stale or invalid frame)")
+        self._tpms_available = tpms_available
 
       prev_infotainment = self.infotainment_3_finger_press
       self.infotainment_3_finger_press = int(cp_adas.vl["UI_status2"]["UI_activeTouchPoints"])
@@ -329,6 +425,14 @@ class CarState(CarStateBase):
         self.infotainment_3_finger_press, prev_infotainment,
         {3: ButtonType.lkas})]
 
+    ret.vehicleSensorsInvalid = bool(invalid_measurements)
+    invalid = tuple(invalid_measurements)
+    if invalid != self._invalid_measurements:
+      if invalid:
+        carlog.error(f"Tesla invalid measurements (holding last valid values): {', '.join(invalid)}")
+      else:
+        carlog.info("Tesla measurements recovered")
+      self._invalid_measurements = invalid
     return ret
 
   @staticmethod
@@ -338,5 +442,7 @@ class CarState(CarStateBase):
       Bus.ap_party: CANParser(DBC[CP.carFingerprint][Bus.party], [], CANBUS.autopilot_party),
     }
     if CP.flags & TeslaFlags.HAS_VEHICLE_BUS:
-      parsers[Bus.adas] = CANParser("tesla_model3_vehicle", [("UI_status2", 2), ("VCSEC_TPMSDisplay", 1)], CANBUS.vehicle)
+      parsers[Bus.adas] = CANParser("tesla_model3_vehicle", [("UI_status2", 2)], CANBUS.vehicle)
+      # Low-rate display telemetry must not create a second bus-off watchdog.
+      parsers[Bus.body] = CANParser("tesla_modely_hw4_perception", [("VCSEC_TPMSDisplay", float("nan"))], CANBUS.vehicle)
     return parsers

@@ -94,6 +94,7 @@ class ModelSpec:
         'desire': (math.prod(self.input_shapes['desire']),),
         'traffic_convention': tuple(self.input_shapes['traffic_convention']),
         'action_t': tuple(self.input_shapes['action_t']),
+        **{name: tuple(self.input_shapes[name]) for name in ('nav_map', 'navigation') if name in self.input_shapes},
       }
     dp = self.input_shapes['desire_pulse']
     tc = self.input_shapes['traffic_convention']

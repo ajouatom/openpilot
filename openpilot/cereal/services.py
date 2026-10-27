@@ -91,7 +91,6 @@ _services: dict[str, tuple] = {
   "navRoute": (True, 0.),
   "navRouteNavd": (True, 0.),
   "navThumbnail": (True, 0.),
-  "navModel": (True, 2., 4.),
   "mapRenderState": (True, 2., 1.),
   "qRoadEncodeIdx": (False, 20.),
   "userBookmark": (True, 0., 1),

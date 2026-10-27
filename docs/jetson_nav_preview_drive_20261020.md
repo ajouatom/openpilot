@@ -1,5 +1,9 @@
 # Jetson USB NAV preview and first N16 drive review
 
+The Wi-Fi-only display policy below is superseded by the October 21
+[bounded USB restoration](jetson_usb_hud_restore_20261021.md). ESP32-S3 remains
+retired; this page preserves the earlier investigation.
+
 The owner clarified that the missing map is on the USB display attached to
 Jetson. Read-only inspection found screen mode 7, the **NAV model preview**.
 This is different from the phone navigation video.
