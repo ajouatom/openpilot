@@ -243,7 +243,7 @@ class CarController(CarControllerBase):
     # blind-spot camera is shown without the turn signal. Display-only message, nothing else uses it.
     self.bvm_view = 0
     self.bvm_raw = 0   # CanfdBvmRaw: 1..255 = byte4 value sent as-is, overrides bvm_view
-    self.bvm_alt_sec = 1  # CanfdBvmAltSec: seconds per side in CanfdBvmView 4
+    self.bvm_alt_time = 10  # CanfdBvmAltTime: 0.1 s per side in CanfdBvmView 4
     self.palisade_cgw_test = PalisadeCgwTest()
     self.palisade_blinker_test = 0
     self.stalk_counter = None
@@ -337,8 +337,10 @@ class CarController(CarControllerBase):
     # collision that took the Azera bus down (STALK_MOMENTARY_HZ_DIV).
     if self.bvm_view == 4:
       # The cluster only has one camera window (byte 4 is a 3-bit single-window state), so both sides cannot be
-      # shown at once. Alternate them so both are visible in turn, CanfdBvmAltSec per side.
-      val = 3 if (self.frame // int(max(1, self.bvm_alt_sec) / DT_CTRL)) % 2 == 0 else 6
+      # shown at once. Alternate them so both are visible in turn, CanfdBvmAltTime per side.
+      # Floor 0.2 s = one 5 Hz frame per side: switching faster needs a faster same-ID copy than stock (collision risk)
+      period = max(20, int(self.bvm_alt_time * 0.1 / DT_CTRL))
+      val = 3 if (self.frame // period) % 2 == 0 else 6
     else:
       val = self.bvm_raw if self.bvm_raw else {1: 3, 2: 6, 3: 7}.get(self.bvm_view, 0)
     if self.frame % 20 != 0:
@@ -429,7 +431,7 @@ class CarController(CarControllerBase):
       self.blinker_stalk = params.get_int("CanfdBlinkerStalk")
       self.bvm_view = params.get_int("CanfdBvmView")
       self.bvm_raw = params.get_int("CanfdBvmRaw")
-      self.bvm_alt_sec = params.get_int("CanfdBvmAltSec")
+      self.bvm_alt_time = params.get_int("CanfdBvmAltTime")
       self.palisade_blinker_test = params.get_int("PalisadeBlinkerTest")
       self.hapticFeedbackWhenSpeedCamera = int(params.get_int("HapticFeedbackWhenSpeedCamera"))
 
