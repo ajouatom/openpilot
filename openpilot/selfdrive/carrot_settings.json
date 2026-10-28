@@ -471,6 +471,7 @@
           "en": "Device Hardware",
           "zh": "设备硬件",
           "params": [
+            "CommaPedalEnabled",
             "HardwareC3xLite"
           ]
         }
@@ -2892,6 +2893,24 @@
       "max": 1,
       "default": 0,
       "unit": 1
+    },
+    {
+      "group": "시작",
+      "name": "CommaPedalEnabled",
+      "title": "Comma Pedal사용",
+      "descr": "ACC 미 장착 차량에서 Comma Pedal 장치를 통한 종방향 제어를 허용합니다.",
+      "egroup": "START",
+      "etitle": "Comma Pedal longitudinal control",
+      "edescr": "Allows longitudinal control through a Comma Pedal device in vehicles without ACC.",
+      "cgroup": "启动设置",
+      "ctitle": "Comma Pedal纵向控制",
+      "cdescr": "允许在未配备ACC的车辆上通过Comma Pedal设备进行纵向控制。",
+      "min": 0,
+      "max": 1,
+      "default": 0,
+      "unit": 1,
+      "control": "toggle",
+      "risk": "high"
     },
     {
       "group": "시작",

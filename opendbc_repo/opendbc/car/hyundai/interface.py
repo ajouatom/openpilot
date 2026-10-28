@@ -263,8 +263,9 @@ class CarInterface(CarInterfaceBase):
 
     # Match StarPilot's Ray pedal prerequisites before enabling the specialized path.
     has_ray_lda_button = any(addr in fingerprint[bus] for bus, addr in ((0, 0x391), (0, 0x50C), (1, 0x50C)))
-    if (candidate == CAR.KIA_RAY_EV and fingerprint[0].get(RAY_PEDAL_SENSOR_ADDR) == 6 and
-        fingerprint[2].get(0x485) == 8 and has_ray_lda_button):
+    if (candidate == CAR.KIA_RAY_EV and params.get_bool("CommaPedalEnabled") and
+        fingerprint[0].get(RAY_PEDAL_SENSOR_ADDR) == 6 and fingerprint[2].get(0x485) == 8 and
+        has_ray_lda_button):
       ret.enableGasInterceptorDEPRECATED = True
       ret.alphaLongitudinalAvailable = True
       ret.openpilotLongitudinalControl = True

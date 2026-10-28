@@ -1,3 +1,6 @@
+from types import SimpleNamespace
+from unittest.mock import patch
+
 from opendbc.can import CANParser
 from opendbc.car import Bus, gen_empty_fingerprint
 from opendbc.car.hyundai.carcontroller import get_pedal_interceptor_target
@@ -6,7 +9,6 @@ from opendbc.car.hyundai.interface import CarInterface
 from opendbc.car.hyundai.values import CAR, HyundaiSafetyFlags
 from opendbc.car.structs import CarControl
 from openpilot.selfdrive.controls.lib.longcontrol import long_control_state_trans
-from types import SimpleNamespace
 
 
 def ray_fingerprint(sensor_length=6):
@@ -17,8 +19,20 @@ def ray_fingerprint(sensor_length=6):
   return fingerprint
 
 
+def hyundai_car_params(candidate, fingerprint, pedal_enabled):
+  class FakeParams:
+    def get_bool(self, key):
+      return pedal_enabled if key == "CommaPedalEnabled" else False
+
+    def get_int(self, key):
+      return 0
+
+  with patch("opendbc.car.hyundai.interface.Params", FakeParams):
+    return CarInterface.get_params(candidate, fingerprint, [], False, False, False)
+
+
 def test_ray_pedal_requires_the_vehicle_markers_and_sets_only_ray_params():
-  CP = CarInterface.get_params(CAR.KIA_RAY_EV, ray_fingerprint(), [], False, False, False)
+  CP = hyundai_car_params(CAR.KIA_RAY_EV, ray_fingerprint(), True)
   assert CP.enableGasInterceptorDEPRECATED
   assert CP.openpilotLongitudinalControl
   assert not CP.pcmCruise
@@ -27,18 +41,30 @@ def test_ray_pedal_requires_the_vehicle_markers_and_sets_only_ray_params():
   assert CP.safetyConfigs[-1].safetyParam == 0x9405
 
   fingerprint = ray_fingerprint(sensor_length=8)
-  CP = CarInterface.get_params(CAR.KIA_RAY_EV, fingerprint, [], False, False, False)
+  CP = hyundai_car_params(CAR.KIA_RAY_EV, fingerprint, True)
   assert not CP.enableGasInterceptorDEPRECATED
   assert not (CP.safetyConfigs[-1].safetyParam & HyundaiSafetyFlags.CAN_REFRESH_MSGS)
 
 
+def test_ray_pedal_is_off_until_the_web_toggle_is_enabled():
+  CP = hyundai_car_params(CAR.KIA_RAY_EV, ray_fingerprint(), False)
+  assert not CP.enableGasInterceptorDEPRECATED
+  assert Bus.party not in CarState(CP).get_can_parsers(CP)
+
+
+def test_pedal_toggle_does_not_enable_other_hyundai_vehicles():
+  CP = hyundai_car_params(CAR.HYUNDAI_ELANTRA, ray_fingerprint(), True)
+  assert not CP.enableGasInterceptorDEPRECATED
+  assert Bus.party not in CarState(CP).get_can_parsers(CP)
+
+
 def test_ray_pedal_parser_is_added_only_for_enabled_pedal():
-  CP = CarInterface.get_params(CAR.KIA_RAY_EV, ray_fingerprint(), [], False, False, False)
+  CP = hyundai_car_params(CAR.KIA_RAY_EV, ray_fingerprint(), True)
   parsers = CarState(CP).get_can_parsers(CP)
   assert Bus.party in parsers
   assert parsers[Bus.party].dbc_name == "hyundai_kia_ray_pedal"
 
-  CP = CarInterface.get_params(CAR.KIA_RAY_EV, ray_fingerprint(sensor_length=8), [], False, False, False)
+  CP = hyundai_car_params(CAR.KIA_RAY_EV, ray_fingerprint(sensor_length=8), True)
   assert Bus.party not in CarState(CP).get_can_parsers(CP)
 
 
@@ -55,7 +81,7 @@ def test_ray_pedal_sensor_frames_validate_with_route_crc():
 
 
 def test_ray_pedal_does_not_hold_long_control_stopped_on_cruise_standstill():
-  CP = CarInterface.get_params(CAR.KIA_RAY_EV, ray_fingerprint(), [], False, False, False)
+  CP = hyundai_car_params(CAR.KIA_RAY_EV, ray_fingerprint(), True)
   state = CarControl.Actuators.LongControlState
   radar_state = SimpleNamespace()
   result = long_control_state_trans(CP, True, state.off, 0.0, False, False, True, 0.0, -0.5, radar_state)

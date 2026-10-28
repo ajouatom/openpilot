@@ -1,4 +1,3 @@
 include opendbc/car/car.capnp
 include opendbc/car/include/c++.capnp
-include opendbc/dbc/hyundai_kia_ray_pedal.dbc
 recursive-include opendbc/safety *.h
