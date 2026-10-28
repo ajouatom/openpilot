@@ -137,9 +137,10 @@ def main(fd, spas=False):
                               distance=sm['carrotMan'].xDistToTurn)
     else:
       automatic.update(now, mode, False, 0., 'none', '', 'none')
-    # Mode 4 lights the real right indicator. Its CAN feedback goes through the
+    # The ATC add-on lights the real right indicator. Its CAN feedback goes through the
     # unchanged driver-blinker lane-change path; no LANECHANGE command is sent.
-    tbt_auto = tbt.update(now, enabled=(not spas and mode == 2 and params.get_int('AutoTurnControl') == 4),
+    tbt_auto = tbt.update(now, enabled=(not spas and mode == 2 and params.get_int('AutoTurnControl') in (1, 2)
+                                      and params.get_bool('AutoTurnControlRightLaneChange')),
                           valid=(auto_valid and sm['carControl'].latActive and params.get_int('LaneChangeNeedTorque') == 0),
                           cs=cs, model=sm['modelV2'] if auto_fresh else None, nav=sm['carrotMan'] if auto_fresh else None,
                           manual=bool(commands) or (fresh(feedback.get('stamp'), now, .35) and feedback.get('state') == 'driver_override'),
