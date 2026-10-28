@@ -2358,6 +2358,7 @@ struct LiveParametersData {
   angleOffsetAverageValid @18 :Bool = true;
   steerRatioValid @19 :Bool = true;
   stiffnessFactorValid @20 :Bool = true;
+  centerToFrontRatio @21 :Float32;  # Applied geometry; 0 in legacy messages.
 
 
   struct FilterState {

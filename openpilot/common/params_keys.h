@@ -291,8 +291,8 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"LeadBrakeLights", {PERSISTENT, BOOL, "0"}},
 
     {"SteerActuatorDelay", {PERSISTENT, INT, "0"}},
-    {"CenterToFrontRatioEnabled", {PERSISTENT, BOOL, "0"}},
-    {"CenterToFrontRatio", {PERSISTENT, INT, "40"}},
+    {"CenterToFrontRatioEnabled", {PERSISTENT, BOOL}},  // Retired: migration only
+    {"CenterToFrontRatio", {PERSISTENT, INT, "0"}},
     {"LatSmoothSec", {PERSISTENT, INT, "13"}},
     {"LatSuspendAngleDeg", {PERSISTENT, INT, "300"}},
     {"CruiseOnDist", {PERSISTENT, INT, "400"}},

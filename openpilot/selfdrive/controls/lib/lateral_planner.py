@@ -1,5 +1,6 @@
 import time
 import numpy as np
+from opendbc.car.lateral_geometry import LateralGeometry
 from openpilot.common.realtime import DT_MDL
 from openpilot.common.swaglog import cloudlog
 from openpilot.selfdrive.controls.lib.lateral_mpc_lib.lat_mpc import LateralMpc
@@ -34,6 +35,8 @@ class LateralPlanner:
   def __init__(self, CP, debug=False):
     #self.DH = DesireHelper()
 
+    self.geometry = LateralGeometry(CP)
+    self.mass = CP.mass
     # Vehicle model parameters used to calculate lateral movement of car
     self.factor1 = CP.wheelbase - CP.centerToFront
     self.factor2 = (CP.centerToFront * CP.mass) / (CP.wheelbase * CP.tireStiffnessRear)
@@ -83,6 +86,9 @@ class LateralPlanner:
 
   def update(self, sm, carrot):
     global LATERAL_ACCEL_COST, LATERAL_JERK_COST, STEERING_RATE_COST
+    if self.geometry.update(getattr(sm['liveParameters'], 'centerToFrontRatio', 0.0)):
+      self.factor1 = self.geometry.wheelbase - self.geometry.center_to_front
+      self.factor2 = self.geometry.center_to_front * self.mass / (self.geometry.wheelbase * self.geometry.stiffness_rear)
     self.readParams -= 1
     if self.readParams <= 0:
       self.readParams = 10

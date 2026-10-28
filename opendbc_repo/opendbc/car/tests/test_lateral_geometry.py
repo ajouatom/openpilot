@@ -14,6 +14,8 @@ from opendbc.car.hyundai import interface, hyundaicanfd
 from opendbc.car.values import PLATFORMS
 from opendbc.car.hyundai.values import CAR
 from opendbc.car.vehicle_model import VehicleModel
+from opendbc.car.lateral_geometry import LateralGeometry, requested_center_to_front_ratio
+from openpilot.common.lateral_geometry_params import migrate_lateral_geometry_params
 from openpilot.cereal import car, log
 
 
@@ -46,47 +48,51 @@ def make_cp():
 @pytest.mark.parametrize('stored', [None, '', 'bad', 0, -1, 30, 70, 100, float('inf')])
 def test_invalid_geometry_keeps_original_default(geometry_params, stored):
   values, _ = geometry_params
-  values['CenterToFrontRatioEnabled'] = True
   if stored is not None:
     values['CenterToFrontRatio'] = stored
   cp = make_cp()
-  assert cp.centerToFront == pytest.approx(cp.wheelbase * 0.4)
+  assert requested_center_to_front_ratio(geometry_params[1], cp) == pytest.approx(0.4)
 
 
 @pytest.mark.parametrize('percent', [31, 40, 50, 60, 69])
-def test_real_car_params_recompute_axle_stiffness_and_preserve_other_tuning(geometry_params, percent):
-  values, _ = geometry_params
+def test_live_geometry_recomputes_stiffness_without_mutating_vehicle_baseline(geometry_params, percent):
+  values, params = geometry_params
   baseline = make_cp()
-  values['CenterToFrontRatioEnabled'] = True
   values['CenterToFrontRatio'] = percent
-  cp = make_cp()
-  assert cp.centerToFront == pytest.approx(cp.wheelbase * percent / 100)
-  front, rear = scale_tire_stiffness(cp.mass, cp.wheelbase, cp.centerToFront, cp.tireStiffnessFactor)
-  assert cp.tireStiffnessFront == pytest.approx(front)
-  assert cp.tireStiffnessRear == pytest.approx(rear)
-  expected = baseline.to_dict()
-  actual = cp.to_dict()
-  for key in ('centerToFront', 'tireStiffnessFront', 'tireStiffnessRear'):
-    expected.pop(key)
-    actual.pop(key)
-  assert actual == expected
-  # Existing objects keep one coherent geometry until CarParams is rebuilt.
-  assert baseline.centerToFront == pytest.approx(baseline.wheelbase * 0.4)
-  before, after = VehicleModel(baseline), VehicleModel(cp)
+  assert make_cp().to_dict() == baseline.to_dict()
+  geometry = LateralGeometry(baseline)
+  geometry.update(requested_center_to_front_ratio(params, baseline))
+  assert geometry.center_to_front == pytest.approx(baseline.wheelbase * percent / 100)
+  front, rear = scale_tire_stiffness(baseline.mass, baseline.wheelbase, geometry.center_to_front, baseline.tireStiffnessFactor)
+  assert geometry.stiffness_front == pytest.approx(front)
+  assert geometry.stiffness_rear == pytest.approx(rear)
+  before, after = VehicleModel(baseline), VehicleModel(baseline)
+  before.update_params(0.8, 17.0)
+  after.update_params(0.8, 17.0)
+  after.update_geometry(geometry.ratio)
+  assert after.aF == pytest.approx(geometry.center_to_front)
+  assert after.cF == pytest.approx(front * 0.8)
+  assert after.sR == 17.0
   for speed in (3., 10., 20., 30.):
     assert after.get_steer_from_curvature(0.002, speed, 0.02) == pytest.approx(
       before.get_steer_from_curvature(0.002, speed, 0.02), rel=1e-5)
-  assert cp.wheelbase - cp.centerToFront == pytest.approx(cp.wheelbase * (1 - percent / 100))
+  values['CenterToFrontRatio'] = 0
+  after.update_geometry(requested_center_to_front_ratio(params, baseline))
+  assert after.aF == pytest.approx(baseline.centerToFront)
+  assert after.cF_orig == pytest.approx(baseline.tireStiffnessFront)
 
 
-@pytest.mark.parametrize('previous_ratio,current_ratio,previous_wheelbase,reused', [
-  (0.4, 0.4, 2.895, True),
-  (0.6, 0.6, 2.895, True),
-  (0.4, 0.6, 2.895, False),
-  (0.6, 0.4, 2.895, False),
-  (0.4, 0.4, 2.7, False),
+@pytest.mark.parametrize('previous_ratio,current_ratio,previous_wheelbase,reused,cached_ratio,target_ratio', [
+  (0.4, 0.4, 2.895, True, 0, None),
+  (0.6, 0.6, 2.895, True, 0, None),
+  (0.4, 0.6, 2.895, False, 0, None),
+  (0.6, 0.4, 2.895, False, 0, None),
+  (0.4, 0.4, 2.7, False, 0, None),
+  (0.4, 0.4, 2.895, True, 0.6, 0.6),
+  (0.4, 0.4, 2.895, False, 0.5, 0.6),
+  (0.4, 0.4, 2.895, False, 0.6, None),
 ])
-def test_parameter_learner_reuses_cache_only_for_same_geometry(previous_ratio, current_ratio, previous_wheelbase, reused):
+def test_parameter_learner_reuses_cache_only_for_same_geometry(previous_ratio, current_ratio, previous_wheelbase, reused, cached_ratio, target_ratio):
   # Run the complete production cache loader with real serialized schema;
   # native Kalman/IPC construction is not needed to check restart behavior.
   root = Path(__file__).resolve().parents[4]
@@ -102,11 +108,12 @@ def test_parameter_learner_reuses_cache_only_for_same_geometry(previous_ratio, c
                                       wheelbase=previous_wheelbase, centerToFront=previous_wheelbase * previous_ratio)
   event = log.Event.new_message()
   lp = event.init('liveParameters')
+  lp.centerToFrontRatio = cached_ratio
   lp.steerRatio, lp.stiffnessFactor, lp.angleOffsetAverageDeg = 17.0, 1.2, 0.75
   stored = {'LiveParametersV2': event.to_bytes(), 'CarParamsPrevRoute': previous.to_bytes()}
   removed = []
   params = SimpleNamespace(get=stored.get, remove=removed.append)
-  sr, stiffness, offset, _ = namespace['retrieve_initial_vehicle_params'](params, cp, False, False)
+  sr, stiffness, offset, _ = namespace['retrieve_initial_vehicle_params'](params, cp, False, False, target_ratio)
   assert sr == pytest.approx(17.0 if reused else cp.steerRatio)
   assert offset == pytest.approx(0.75 if reused else 0.0)
   assert stiffness == 1.0
@@ -133,20 +140,43 @@ def test_shared_override_applies_after_each_brand_setup_and_restores_defaults(mo
     return module.CarInterface.get_params(candidate, gen_empty_fingerprint(), [], False, False, False)
   original = build()
   values['CenterToFrontRatio'] = 60
-  assert build().to_dict() == original.to_dict()  # Disabled ignores a stored value.
-  values['CenterToFrontRatioEnabled'] = True
-  changed = build()
-  assert changed.centerToFront == pytest.approx(changed.wheelbase * 0.6)
-  front, rear = scale_tire_stiffness(changed.mass, changed.wheelbase, changed.centerToFront, changed.tireStiffnessFactor)
-  assert changed.tireStiffnessFront == pytest.approx(front)
-  assert changed.tireStiffnessRear == pytest.approx(rear)
-  original_dict, changed_dict = original.to_dict(), changed.to_dict()
-  for key in ('centerToFront', 'tireStiffnessFront', 'tireStiffnessRear'):
-    original_dict.pop(key)
-    changed_dict.pop(key)
-  assert changed_dict == original_dict
-  values['CenterToFrontRatio'] = 100
-  assert build().to_dict() == original.to_dict()  # Invalid input restores each brand's value, not 0.4.
-  values['CenterToFrontRatio'] = 60
-  values['CenterToFrontRatioEnabled'] = False
-  assert build().to_dict() == original.to_dict()
+  assert build().to_dict() == original.to_dict()  # CP preserves each brand's immutable baseline.
+  geometry = LateralGeometry(original)
+  geometry.update(requested_center_to_front_ratio(params, original))
+  assert geometry.ratio == pytest.approx(0.6)
+  front, rear = scale_tire_stiffness(original.mass, original.wheelbase, geometry.center_to_front, original.tireStiffnessFactor)
+  assert geometry.stiffness_front == pytest.approx(front)
+  assert geometry.stiffness_rear == pytest.approx(rear)
+  for value in (100, 0):
+    values['CenterToFrontRatio'] = value
+    geometry.update(requested_center_to_front_ratio(params, original))
+    assert geometry.center_to_front == pytest.approx(original.centerToFront)
+    assert geometry.stiffness_front == pytest.approx(original.tireStiffnessFront)
+
+
+@pytest.mark.parametrize('invalid', [0, -1, 0.1, 0.9, float('nan'), float('inf')])
+def test_legacy_and_invalid_live_messages_hold_last_geometry(geometry_params, invalid):
+  vm = VehicleModel(make_cp())
+  vm.update_geometry(0.6)
+  vm.update_geometry(invalid)
+  assert vm.geometry.ratio == pytest.approx(0.6)
+
+
+@pytest.mark.parametrize('old_enable,stored,expected', [(None, 55, 55), (0, 60, 0), (1, 60, 60), (0, 40, 0)])
+def test_retired_switch_migration_is_idempotent(old_enable, stored, expected):
+  values = {'CenterToFrontRatio': stored}
+  if old_enable is not None:
+    values['CenterToFrontRatioEnabled'] = old_enable
+  params = SimpleNamespace(get=values.get, get_bool=lambda k: bool(values.get(k)),
+                           put_int=lambda k, v: values.update({k: v}), remove=lambda k: values.pop(k, None))
+  migrate_lateral_geometry_params(params)
+  assert values == {'CenterToFrontRatio': expected}
+  values['CenterToFrontRatio'] = 57
+  migrate_lateral_geometry_params(params)
+  assert values['CenterToFrontRatio'] == 57
+
+
+def test_retired_switch_migrates_before_manager_defaults():
+  source = Path(__file__).resolve().parents[4] / 'openpilot/system/manager/manager.py'
+  text = source.read_text(encoding='utf-8')
+  assert text.index('  migrate_lateral_geometry_params(params)') < text.index('  # set unset params to their default value')
