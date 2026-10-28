@@ -1,7 +1,9 @@
-# Low-speed stop & go corrections on the planner's output accel (StopGoAssist: 1 stop guard, 2 stop guard + departure boost;
-# both levels also enable lead_close_brake in the MPC).
+# Low-speed stop & go corrections on the planner's output accel (StopGoAssist: 1 stop guard + soft stop, 2 also departure
+# go; both levels also enable lead_close_brake in the MPC).
 # Replays of 17 stops / 25 departures behind a lead (02_logs/measurements.md §22-23): the MPC overshoots the stop
 # distance by ~0.9 m (too weak braking below 3 m/s) and trails an accelerating lead after standstill.
+# 10-28 drive (§28): the car keeps the decel it has when StopReq starts (-1.2 -> a jolt), and a creeping lead (aLeadK 0.2)
+# left us waiting 1 s at standstill because the gap was under the stop distance.
 
 LOW_SPEED = 3.0  # m/s
 
@@ -9,25 +11,49 @@ STOP_GUARD_LEAD_SPEED = 0.3  # lead treated as stopped
 STOP_GUARD_MIN_ACCEL = -1.5
 STOP_GUARD_MIN_GAP = 0.2
 
+# Soft stop: below SOFT_SPEED the decel eases linearly to SOFT_END_ACCEL at SOFT_END_SPEED (StopReq starts at <=0.7 m/s),
+# like the stock stop. The tail from 2 m/s is ~0.75 m longer than a constant -1.5, so the guard aims SOFT_EXTRA earlier,
+# and the taper never eases below what still stops at the stop distance - a lead that stops hard (10-28 346 s, already
+# inside the stop distance) keeps full braking. Toy closed loop (test): ends -0.15..+0.6 m vs -0.01..+1.0 before, decel
+# when StopReq starts -0.63 with room (-1.5 before).
+SOFT_SPEED = 2.0
+SOFT_END_SPEED = 0.5
+SOFT_END_ACCEL = -0.5
+SOFT_EXTRA = 0.75
+
 DEPART_WINDOW = 3.0  # s after standstill
 DEPART_ACCEL = 1.2
 DEPART_LEAD_DV = 0.3  # lead faster than ego
-DEPART_LEAD_ACCEL = 0.5  # lead still accelerating: skips leads that creep and stop again
-DEPART_GAP_MARGIN = 0.8  # below stop distance
+DEPART_LEAD_ACCEL = 0.1  # lead accelerating at all (0.5 left a creeping lead waiting 1 s, 10-28 405 s)
+DEPART_MIN_GAP = 2.5  # m; the lead is pulling away, so the stop distance target is not waited for
+
+
+def _stopped_lead(a_target, v_ego, lead, top_speed):
+  return 0.1 < v_ego < top_speed and a_target <= 0.0 and lead.status and abs(lead.vLead) < STOP_GUARD_LEAD_SPEED
+
+
+def _stop_accel(v_ego, lead, stop_distance):
+  return -v_ego ** 2 / (2.0 * max(lead.dRel - stop_distance, STOP_GUARD_MIN_GAP))
 
 
 def stop_guard(a_target, v_ego, lead, stop_distance):
-  # Only strengthens braking the planner already wants: brake at least as hard as a constant decel stop at stop_distance.
-  if not (0.1 < v_ego < LOW_SPEED) or a_target > 0.0 or not lead.status or abs(lead.vLead) >= STOP_GUARD_LEAD_SPEED:
+  # Only strengthens braking the planner already wants: brake at least as hard as a constant decel stop SOFT_EXTRA
+  # before stop_distance (soft_stop spends that margin).
+  if not _stopped_lead(a_target, v_ego, lead, LOW_SPEED):
     return a_target
-  a_req = -v_ego ** 2 / (2.0 * max(lead.dRel - stop_distance, STOP_GUARD_MIN_GAP))
-  return min(a_target, max(STOP_GUARD_MIN_ACCEL, a_req))
+  return min(a_target, max(STOP_GUARD_MIN_ACCEL, _stop_accel(v_ego, lead, stop_distance + SOFT_EXTRA)))
 
 
-def departure_boost(a_target, v_ego, lead, stop_distance, since_standstill, accel_max, track_stable):
-  # Only raises acceleration the planner already wants, toward a stable radar lead that is pulling away.
-  if (since_standstill > DEPART_WINDOW or v_ego >= LOW_SPEED or a_target <= 0.0 or not track_stable
-      or not (lead.status and lead.radar) or lead.vLead - v_ego <= DEPART_LEAD_DV or lead.aLeadK <= DEPART_LEAD_ACCEL
-      or lead.dRel <= stop_distance - DEPART_GAP_MARGIN):
+def soft_stop(a_target, v_ego, lead, stop_distance):
+  if not _stopped_lead(a_target, v_ego, lead, SOFT_SPEED) or lead.dRel - stop_distance <= STOP_GUARD_MIN_GAP:
     return a_target
-  return max(a_target, min(DEPART_ACCEL, accel_max))
+  floor = SOFT_END_ACCEL + (STOP_GUARD_MIN_ACCEL - SOFT_END_ACCEL) * \
+    min(max((v_ego - SOFT_END_SPEED) / (SOFT_SPEED - SOFT_END_SPEED), 0.0), 1.0)
+  # Only eases off, never past what still stops at stop_distance (strengthening is the guard's job)
+  return max(a_target, min(floor, _stop_accel(v_ego, lead, stop_distance)))
+
+
+def departure_go(v_ego, lead, since_standstill, track_stable):
+  # A stable radar lead pulling away right after standstill: go even inside the stop distance.
+  return (since_standstill <= DEPART_WINDOW and v_ego < LOW_SPEED and track_stable and lead.status and lead.radar
+          and lead.vLead - v_ego > DEPART_LEAD_DV and lead.aLeadK > DEPART_LEAD_ACCEL and lead.dRel > DEPART_MIN_GAP)

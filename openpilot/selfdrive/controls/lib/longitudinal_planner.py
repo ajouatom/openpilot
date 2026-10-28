@@ -23,7 +23,7 @@ from openpilot.selfdrive.controls.lib.longitudinal_preview import (
   get_lead_preview_request,
   rate_limit_preview,
 )
-from openpilot.selfdrive.controls.lib.stop_go_assist import departure_boost, stop_guard
+from openpilot.selfdrive.controls.lib.stop_go_assist import DEPART_ACCEL, departure_go, soft_stop, stop_guard
 from openpilot.selfdrive.controls.lib.turn_accel import get_future_curvature, limit_accel_in_turns
 from openpilot.selfdrive.car.cruise import V_CRUISE_MAX, V_CRUISE_UNSET
 from openpilot.common.swaglog import cloudlog
@@ -387,14 +387,15 @@ class LongitudinalPlanner:
     lead = sm['radarState'].leadOne
     a_target = self.output_a_target
     if mode >= 1:
-      a_target = stop_guard(a_target, cs.vEgo, lead, carrot.stop_distance)
-    # No boost toward a red light / signal stop, or when the planner itself is stopping.
-    # Boost only together with the stop guard: replays with the lead braking hard after a boosted start stay at the
-    # baseline minimum gap only when the guard is on (02_logs §24).
-    if (mode >= 2 and not self.output_should_stop and carrot.v_cruise > 0
-        and carrot.xState.name not in ('e2eStop', 'e2eStopped') and carrot.trafficState.name != 'red'):
-      a_target = departure_boost(a_target, cs.vEgo, lead, carrot.stop_distance, self.since_standstill, accel_max,
-                                 lead_track_frames[0] >= LEAD_ACCEL_MIN_TRACK_FRAMES)
+      a_target = soft_stop(stop_guard(a_target, cs.vEgo, lead, carrot.stop_distance), cs.vEgo, lead, carrot.stop_distance)
+    # No go toward a red light / signal stop. A lead pulling away overrides the MPC's own shouldStop (it holds us while
+    # the gap is under the stop distance, 10-28 §28). Only together with the stop guard: replays with the lead braking
+    # hard after a boosted start stay at the baseline minimum gap only when the guard is on (02_logs §24).
+    if (mode >= 2 and carrot.v_cruise > 0
+        and carrot.xState.name not in ('e2eStop', 'e2eStopped') and carrot.trafficState.name != 'red'
+        and departure_go(cs.vEgo, lead, self.since_standstill, lead_track_frames[0] >= LEAD_ACCEL_MIN_TRACK_FRAMES)):
+      self.output_should_stop = False
+      a_target = max(a_target, min(DEPART_ACCEL, accel_max))
     if a_target != self.output_a_target:
       # Keep the PID speed term and the next MPC start from undoing the correction (as in signal stop prepare).
       v_next = max(0., cs.vEgo + a_target * self.dt)
