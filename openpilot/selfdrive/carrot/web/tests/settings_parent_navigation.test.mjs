@@ -113,3 +113,20 @@ test("split layout keeps the items flow for a search detail header", async () =>
   assert.equal(view.calls.some((call) => call.join() === "inlineSearchSurface"), false);
   assert.ok(view.calls.some((call) => call.join() === "transition,backward"));
 });
+
+
+test("ATC add-on lives in the original mode selector's details", async () => {
+  const { createSettingsDerivedModel } = await import("../src/features/settings/derived_model.js");
+  const catalog = JSON.parse(readFileSync(new URL("../../carrot_settings.json", root), "utf8"));
+  const parent = catalog.params.find((item) => item.name === "AutoTurnControl");
+  const child = catalog.params.find((item) => item.name === "AutoTurnControlRightLaneChange");
+  const model = createSettingsDerivedModel({
+    catalog: { groups: [], categories: [], items_by_group: { ATC: [parent, child] } },
+    language: "ko", favorites: [], profiles: [],
+  });
+  assert.equal(parent.max, 3);
+  assert.equal(child.default, 0);
+  assert.equal(child.control, "toggle");
+  assert.deepEqual(model.getItemEntriesForGroup("ATC").map((e) => e.item.name), [parent.name]);
+  assert.deepEqual(model.getDetailEntries("ATC", parent.name).map((e) => e.item.name), [parent.name, child.name]);
+});

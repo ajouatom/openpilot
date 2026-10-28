@@ -64,6 +64,8 @@ class TbtBlinker:
       return self.cancel('route_jump')
     if manual or cs.steeringPressed or cs.leftBlinker:
       return self.cancel('driver')
+    if busy and self.phase in ('waiting', 'changing', 'finishing'):
+      return self.cancel('atc')  # Existing ATC turn/lane requests take precedence.
     if self.phase == 'cancelled':
       return None  # Same TBT must not restart after driver cancellation/timeout.
     state, direction = str(model.meta.laneChangeState), str(model.meta.laneChangeDirection)

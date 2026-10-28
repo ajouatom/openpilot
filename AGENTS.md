@@ -1,5 +1,16 @@
 # Repository memory
 
+- On 2026-10-29, owner separates fixed250m TBT right-indicator helper from
+  AutoTurnControl4 into default-OFF AutoTurnControlRightLaneChange under ATC
+  details. Add-on only with base ATC1/2; existing ATC0..3 meanings retained.
+  Manager startup migrates retired4 to1 plus add-on ON (preserve an explicit
+  add-on value), before defaults; no newly enabled speed control. Existing
+  ATC turn/lane cues preempt an owned TBT indication. USB2CAN profile, rear/BSD,
+  manual/torque/freshness gates and maneuver controller remain unchanged.
+  Desktop187 indicator/migration and47 catalog checks,25 Wiki checks pass;
+  no live vehicle installation, CAN transmission or road acceptance in this task.
+  Normal comma Git Pull/restart delivery; Jetson runtime/model unchanged.
+
 - On 2026-10-27, complete NAV/blink history merged into Wip (2f94a4e0c9,
   3c025cb4f5; docs29fd046a4b), preserving Wip Bosch source/replay byte-for-byte.
   Resolve duplicate auto-merged helper/diagnostic blocks; pin PEAK source LF bytes.
