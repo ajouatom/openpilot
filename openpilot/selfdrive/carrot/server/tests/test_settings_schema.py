@@ -601,3 +601,26 @@ def test_declared_numeric_bounds_stay_intact(params):
   assert (by_name["ApplyModelSpeed"]["min"], by_name["ApplyModelSpeed"]["max"]) == (-120, 120)
   assert by_name["ApplyModelSpeed"]["default"] == 0
   assert by_name["TFollowDecelBoost"]["unit"] == 10
+
+
+def test_geometry_override_preserves_vehicle_defaults_and_exposes_ratio_in_details(settings, params):
+  by_name = {p['name']: p for p in params}
+  toggle = by_name['CenterToFrontRatioEnabled']
+  ratio = by_name['CenterToFrontRatio']
+  assert (toggle['default'], toggle['control']) == (0, 'toggle')
+  assert (ratio['min'], ratio['max'], ratio['default'], ratio['unit']) == (31, 69, 40, 1)
+  assert ratio['display_unit'] == 'percent'
+  assert ratio['detail_parent'] == toggle['name']
+  assert toggle['risk'] == ratio['risk'] == 'high'
+  assert not toggle.get('hidden_brands') and not ratio.get('hidden_brands')
+  keys = PARAMS_KEYS_PATH.read_text(encoding='utf-8')
+  assert '{"CenterToFrontRatioEnabled", {PERSISTENT, BOOL, "0"}}' in keys
+  assert '{"CenterToFrontRatio", {PERSISTENT, INT, "40"}}' in keys
+  categories = build_menu_categories(settings, by_name)
+  section = next(section for category in categories for group in category['groups'] for section in group['sections']
+                 if 'SteerActuatorDelay' in section['items'])
+  assert section['items'].index(toggle['name']) == section['items'].index('SteerActuatorDelay') + 1
+  assert ratio['name'] in section['items']
+  assert '재시작' in ratio['descr']
+  assert 'Restart' in ratio['edescr']
+  assert '重启' in ratio['cdescr']
