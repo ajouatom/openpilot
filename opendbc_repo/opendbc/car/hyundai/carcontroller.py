@@ -236,7 +236,6 @@ class CarController(CarControllerBase):
     self._ray_lfa_8byte = CP.carFingerprint == CAR.KIA_RAY_EV and bool(
       CP.safetyConfigs[-1].safetyParam & HyundaiSafetyFlags.CAN_REFRESH_MSGS
     )
-    self._ray_lfa_packer = CANPacker("hyundai_kia_ray_lfa") if self._ray_lfa_8byte else None
     self._dash_lat_disengage_blink_frame = 0
     self._dash_lat_disengage_init = False
     self._dash_prev_lat_active = False
@@ -700,7 +699,7 @@ class CarController(CarControllerBase):
       # 20 Hz LFA MFA message
       if self.frame % 5 == 0 and (self.CP.flags & HyundaiFlags.SEND_LFA.value or self._ray_lfa_8byte):
         if self._ray_lfa_8byte:
-          can_sends.append(hyundaican.create_ray_lfahda_mfc(self._ray_lfa_packer, CC.latActive, lfa_icon))
+          can_sends.append(hyundaican.create_ray_lfahda_mfc(self.packer, CC.latActive, lfa_icon))
         else:
           can_sends.append(hyundaican.create_lfahda_mfc(self.packer, CC, self.blinking_signal))
 
