@@ -239,8 +239,8 @@ class CarState(CarStateBase):
     self.camera_scc_hint_enabled = self.op_params.get_int("HyundaiCameraSCC") == 0 and not (CP.flags & HyundaiFlags.CAMERA_SCC)
     self.camera_scc_hint = False
     self.op_params.put_bool("HyundaiCameraSccHint", False)
-    self.ray_pedal_state = 5
-    self.ray_pedal_valid = False
+    self.pedal_interceptor_state = 5
+    self.pedal_interceptor_valid = False
 
     self.main_enabled = True if self.op_params.get_int("AutoEngage") == 2 else False
     self.manual_main_off_latched = False
@@ -584,10 +584,10 @@ class CarState(CarStateBase):
       ret.brakeLights = bool(cp.vl["TCS13"]["BrakeLight"] or ret.brakePressed)
 
     if self.CP.carFingerprint == CAR.KIA_RAY_EV and self.CP.enableGasInterceptorDEPRECATED:
-      self.ray_pedal_valid = bool(cp_pedal is not None and cp_pedal.can_valid and
+      self.pedal_interceptor_valid = bool(cp_pedal is not None and cp_pedal.can_valid and
                                   cp_pedal.ts_nanos["GAS_SENSOR"]["STATE"] > 0)
-      self.ray_pedal_state = int(cp_pedal.vl["GAS_SENSOR"]["STATE"]) if cp_pedal is not None else 5
-      ret.accFaulted = not self.ray_pedal_valid or self.ray_pedal_state != 0
+      self.pedal_interceptor_state = int(cp_pedal.vl["GAS_SENSOR"]["STATE"]) if cp_pedal is not None else 5
+      ret.accFaulted = not self.pedal_interceptor_valid or self.pedal_interceptor_state != 0
 
     if self.CP.flags & (HyundaiFlags.HYBRID | HyundaiFlags.EV | HyundaiFlags.FCEV):
       if self.CP.flags & HyundaiFlags.FCEV:
@@ -601,7 +601,7 @@ class CarState(CarStateBase):
       ret.gas = cp.vl["EMS12"]["PV_AV_CAN"] / 100.
       ret.gasPressed = bool(cp.vl["EMS16"]["CF_Ems_AclAct"])
 
-    if self.CP.carFingerprint == CAR.KIA_RAY_EV and self.CP.enableGasInterceptorDEPRECATED and self.ray_pedal_valid:
+    if self.CP.carFingerprint == CAR.KIA_RAY_EV and self.CP.enableGasInterceptorDEPRECATED and self.pedal_interceptor_valid:
       driver_pedal = cp_pedal.vl_raw["GAS_SENSOR"]
       track1 = int.from_bytes(driver_pedal[:2], "big")
       track2 = int.from_bytes(driver_pedal[2:4], "big")
@@ -1677,5 +1677,5 @@ class CarState(CarStateBase):
       Bus.cam: CANParser(DBC[CP.carFingerprint][Bus.pt], [], 2),
     }
     if CP.carFingerprint == CAR.KIA_RAY_EV and CP.enableGasInterceptorDEPRECATED:
-      parsers[Bus.party] = CANParser("hyundai_kia_ray_pedal", [("GAS_SENSOR", 50)], 0)
+      parsers[Bus.party] = CANParser(DBC[CP.carFingerprint][Bus.party], [("GAS_SENSOR", 50)], 0)
     return parsers

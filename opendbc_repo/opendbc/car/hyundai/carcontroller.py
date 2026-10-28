@@ -119,6 +119,11 @@ def get_ray_pedal_target(accel: float, v_ego: float, set_speed: float) -> float:
   return target
 
 
+def get_pedal_interceptor_target(car_fingerprint, accel: float, v_ego: float, set_speed: float) -> float:
+  if car_fingerprint == CAR.KIA_RAY_EV:
+    return get_ray_pedal_target(accel, v_ego, set_speed)
+  return 0.0
+
 def rate_limit(x, x_last, lo, hi):
   return clip_float(x, x_last + lo, x_last + hi)
 
@@ -225,9 +230,9 @@ class CarController(CarControllerBase):
                            if CP.flags & HyundaiFlags.CANFD and CP.openpilotLongitudinalControl else None)
     self.apply_torque_last = 0
     self.car_fingerprint = CP.carFingerprint
-    self._ray_pedal = CP.carFingerprint == CAR.KIA_RAY_EV and CP.enableGasInterceptorDEPRECATED
-    self._ray_pedal_packer = CANPacker("hyundai_kia_ray_pedal") if self._ray_pedal else None
-    self._ray_pedal_gas_last = 0.0
+    self.pedal_interceptor_enabled = CP.carFingerprint == CAR.KIA_RAY_EV and CP.enableGasInterceptorDEPRECATED
+    self.pedal_interceptor_packer = CANPacker(dbc_names[Bus.party]) if self.pedal_interceptor_enabled else None
+    self.pedal_interceptor_gas_last = 0.0
     self._ray_lfa_8byte = CP.carFingerprint == CAR.KIA_RAY_EV and bool(
       CP.safetyConfigs[-1].safetyParam & HyundaiSafetyFlags.CAN_REFRESH_MSGS
     )
@@ -575,7 +580,7 @@ class CarController(CarControllerBase):
 
     # tester present - w/ no response (keeps relevant ECU disabled)
     if (self.frame % 100 == 0 and not (self.CP.flags & HyundaiFlags.CANFD_CAMERA_SCC) and
-        self.CP.openpilotLongitudinalControl and not self._ray_pedal):
+        self.CP.openpilotLongitudinalControl and not self.pedal_interceptor_enabled):
       # for longitudinal control, either radar or ADAS driving ECU
       addr, bus = 0x7d0, self.CAN.ECAN if self.CP.flags & HyundaiFlags.CANFD else 0
       if self.CP.flags & HyundaiFlags.CANFD_HDA2.value:
@@ -676,7 +681,7 @@ class CarController(CarControllerBase):
         can_sends.append(hyundaican.create_mdps12(self.packer, self.frame, CS.mdps12))
 
       casper_ev = self.CP.carFingerprint == CAR.HYUNDAI_CASPER_EV
-      if self.frame % 2 == 0 and self.CP.openpilotLongitudinalControl and not self._ray_pedal:
+      if self.frame % 2 == 0 and self.CP.openpilotLongitudinalControl and not self.pedal_interceptor_enabled:
         self.hyundai_jerk.make_jerk(self.CP, CS, accel, actuators, hud_control)
         self.hyundai_jerk.check_carrot_cruise(CC, CS, hud_control, stopping, accel, actuators.aTarget)
         #jerk = 3.0 if actuators.longControlState == LongCtrlState.pid else 1.0
@@ -700,7 +705,7 @@ class CarController(CarControllerBase):
           can_sends.append(hyundaican.create_lfahda_mfc(self.packer, CC, self.blinking_signal))
 
       # 5 Hz ACC options
-      if self.frame % 20 == 0 and self.CP.openpilotLongitudinalControl and not self._ray_pedal:
+      if self.frame % 20 == 0 and self.CP.openpilotLongitudinalControl and not self.pedal_interceptor_enabled:
         if camera_scc:
           if CS.scc13 is not None:
             if casper_ev:
@@ -711,28 +716,28 @@ class CarController(CarControllerBase):
           can_sends.extend(hyundaican.create_acc_opt(self.packer, self.CP))
 
       # 2 Hz front radar options
-      if self.frame % 50 == 0 and self.CP.openpilotLongitudinalControl and not camera_scc and not self._ray_pedal:
+      if self.frame % 50 == 0 and self.CP.openpilotLongitudinalControl and not camera_scc and not self.pedal_interceptor_enabled:
         can_sends.append(hyundaican.create_frt_radar_opt(self.packer))
 
-    if self._ray_pedal:
+    if self.pedal_interceptor_enabled:
       if CC.enabled and CS.out.cruiseState.enabled and (self.frame - self.last_button_frame) * DT_CTRL > 0.04:
         can_sends.append(hyundaican.create_clu11(self.packer, self.frame, CS.clu11, Buttons.CANCEL, self.CP))
         self.last_button_frame = self.frame
       if self.frame % 4 == 0:
-        pedal_ready = CS.ray_pedal_valid and CS.ray_pedal_state == 0
+        pedal_ready = CS.pedal_interceptor_valid and CS.pedal_interceptor_state == 0
         pedal_active = (CC.longActive and pedal_ready and not CC.cruiseControl.override and
                         not CS.out.gasPressed and not CS.out.brakePressed)
         if pedal_active:
-          target = get_ray_pedal_target(accel, CS.out.vEgo, hud_control.setSpeed)
+          target = get_pedal_interceptor_target(self.CP.carFingerprint, accel, CS.out.vEgo, hud_control.setSpeed)
           if target <= 0.001:
-            self._ray_pedal_gas_last = 0.0
+            self.pedal_interceptor_gas_last = 0.0
           else:
-            next_gas = rate_limit(target, self._ray_pedal_gas_last, -RAY_PEDAL_RATE_DOWN, RAY_PEDAL_RATE_UP)
-            self._ray_pedal_gas_last = min(next_gas, target)
+            next_gas = rate_limit(target, self.pedal_interceptor_gas_last, -RAY_PEDAL_RATE_DOWN, RAY_PEDAL_RATE_UP)
+            self.pedal_interceptor_gas_last = min(next_gas, target)
         else:
-          self._ray_pedal_gas_last = 0.0
+          self.pedal_interceptor_gas_last = 0.0
         can_sends.append(create_gas_interceptor_command(
-          self._ray_pedal_packer, self._ray_pedal_gas_last, (self.frame // 4) & 0xF))
+          self.pedal_interceptor_packer, self.pedal_interceptor_gas_last, (self.frame // 4) & 0xF))
 
     new_actuators = actuators.as_builder()
     new_actuators.torque = apply_torque / self.params.STEER_MAX

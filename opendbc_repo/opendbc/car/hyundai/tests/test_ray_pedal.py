@@ -1,5 +1,6 @@
 from opendbc.can import CANParser
 from opendbc.car import Bus, gen_empty_fingerprint
+from opendbc.car.hyundai.carcontroller import get_pedal_interceptor_target
 from opendbc.car.hyundai.carstate import CarState
 from opendbc.car.hyundai.interface import CarInterface
 from opendbc.car.hyundai.values import CAR, HyundaiSafetyFlags
@@ -63,3 +64,10 @@ def test_ray_pedal_does_not_hold_long_control_stopped_on_cruise_standstill():
   CP.enableGasInterceptorDEPRECATED = False
   result = long_control_state_trans(CP, True, state.off, 0.0, False, False, True, 0.0, -0.5, radar_state)
   assert result == state.stopping
+
+
+def test_pedal_interceptor_dispatch_does_not_apply_ray_tune_to_other_cars():
+  ray_target = get_pedal_interceptor_target(CAR.KIA_RAY_EV, 0.0, 10.0, 20.0)
+  other_target = get_pedal_interceptor_target(CAR.HYUNDAI_ELANTRA, 0.0, 10.0, 20.0)
+  assert ray_target > 0.0
+  assert other_target == 0.0

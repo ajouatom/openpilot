@@ -55,9 +55,9 @@ static const CanMsg HYUNDAI_TX_MSGS[] = {
 
 static bool hyundai_legacy = false;
 static bool hyundai_cruise_buttons_alt = false;
-static bool hyundai_ray_pedal = false;
+static bool hyundai_pedal_interceptor = false;
 
-#define HYUNDAI_RAY_PEDAL_ADDR_CHECK \
+#define HYUNDAI_PEDAL_INTERCEPTOR_ADDR_CHECK \
   {.msg = {{0x201, 0, 6, .max_counter = 15U, .frequency = 50U}, { 0 }, { 0 }}}
 #define HYUNDAI_RAY_LDA_ADDR_CHECK \
   {.msg = {{0x391, 0, 8, .ignore_checksum = true, .ignore_counter = true, .frequency = 100U}, \
@@ -78,7 +78,7 @@ static uint8_t hyundai_get_counter(const CANPacket_t *to_push) {
     cnt = GET_BYTE(to_push, 7) & 0xFU;
   } else if (addr == 0x4F1) {
     cnt = (GET_BYTE(to_push, 3) >> 4) & 0xFU;
-  } else if (hyundai_ray_pedal && (addr == 0x201)) {
+  } else if (hyundai_pedal_interceptor && (addr == 0x201)) {
     cnt = GET_BYTE(to_push, 4) & 0xFU;
   } else {
   }
@@ -97,14 +97,14 @@ static uint32_t hyundai_get_checksum(const CANPacket_t *to_push) {
     chksum = GET_BYTE(to_push, 6) & 0xFU;
   } else if (addr == 0x421) {
     chksum = GET_BYTE(to_push, 7) >> 4;
-  } else if (hyundai_ray_pedal && (addr == 0x201)) {
+  } else if (hyundai_pedal_interceptor && (addr == 0x201)) {
     chksum = GET_BYTE(to_push, 5);
   } else {
   }
   return chksum;
 }
 
-static uint8_t hyundai_ray_pedal_checksum(const CANPacket_t *msg) {
+static uint8_t hyundai_pedal_interceptor_checksum(const CANPacket_t *msg) {
   uint8_t crc = 0xFFU;
   for (int i = 4; i >= 0; i--) {
     crc ^= GET_BYTE(msg, i);
@@ -116,8 +116,8 @@ static uint8_t hyundai_ray_pedal_checksum(const CANPacket_t *msg) {
 }
 
 static uint32_t hyundai_compute_checksum(const CANPacket_t *to_push) {
-  if (hyundai_ray_pedal && (GET_ADDR(to_push) == 0x201)) {
-    return hyundai_ray_pedal_checksum(to_push);
+  if (hyundai_pedal_interceptor && (GET_ADDR(to_push) == 0x201)) {
+    return hyundai_pedal_interceptor_checksum(to_push);
   }
   int addr = GET_ADDR(to_push);
 
@@ -188,11 +188,11 @@ static void hyundai_rx_hook(const CANPacket_t *to_push) {
     }
 
     // Ray pedal physical input replaces the native EV accelerator for driver override.
-    if ((addr == 0x201) && hyundai_ray_pedal) {
+    if ((addr == 0x201) && hyundai_pedal_interceptor) {
       const uint16_t track1 = ((uint16_t)GET_BYTE(to_push, 0) << 8U) | GET_BYTE(to_push, 1);
       const uint16_t track2 = ((uint16_t)GET_BYTE(to_push, 2) << 8U) | GET_BYTE(to_push, 3);
       gas_pressed = (track1 > 272U) || (track2 > 513U);
-    } else if ((addr == 0x371) && hyundai_ev_gas_signal && !hyundai_ray_pedal) {
+    } else if ((addr == 0x371) && hyundai_ev_gas_signal && !hyundai_pedal_interceptor) {
       gas_pressed = (((GET_BYTE(to_push, 4) & 0x7FU) << 1) | GET_BYTE(to_push, 3) >> 7) != 0U;
     } else if ((addr == 0x371) && hyundai_hybrid_gas_signal) {
       gas_pressed = GET_BYTE(to_push, 7) != 0U;
@@ -253,13 +253,13 @@ static bool hyundai_tx_hook(const CANPacket_t *to_send) {
   }
 
   // Ray pedal command safety checks from StarPilot's Hyundai safety mode.
-  if (hyundai_ray_pedal && addr == 0x200) {
+  if (hyundai_pedal_interceptor && addr == 0x200) {
     const uint16_t track1 = ((uint16_t)GET_BYTE(to_send, 0) << 8U) | GET_BYTE(to_send, 1);
     const uint16_t track2 = ((uint16_t)GET_BYTE(to_send, 2) << 8U) | GET_BYTE(to_send, 3);
     const bool enabled = (GET_BYTE(to_send, 4) & 0x80U) != 0U;
     const int expected_track2 = 497 + (2 * ((int)track1 - 264));
     if ((GET_BYTE(to_send, 4) & 0x70U) != 0U ||
-        (GET_BYTE(to_send, 5) != hyundai_ray_pedal_checksum(to_send)) ||
+        (GET_BYTE(to_send, 5) != hyundai_pedal_interceptor_checksum(to_send)) ||
         (enabled && (track1 < 264U || track1 > 530U || track2 < 497U || track2 > 1035U ||
                      (((int)track2 - expected_track2 > 40) || ((int)track2 - expected_track2 < -40)))) ||
         (!enabled && (track1 != 0U || track2 != 0U)) ||
@@ -511,22 +511,22 @@ static safety_config hyundai_init(uint16_t param) {
 
   hyundai_common_init(param);
   hyundai_legacy = false;
-  hyundai_ray_pedal = (param & (uint16_t)~(32U | 128U | 2048U)) == 0x9405U;
-  if (hyundai_ray_pedal) {
-    static RxCheck hyundai_ray_pedal_rx_checks[] = {
+  hyundai_pedal_interceptor = (param & (uint16_t)~(32U | 128U | 2048U)) == 0x9405U;
+  if (hyundai_pedal_interceptor) {
+    static RxCheck hyundai_pedal_interceptor_rx_checks[] = {
       HYUNDAI_COMMON_RX_CHECKS(false)
       {.msg = {{0x592U, 0, 8, .ignore_checksum = true, .ignore_counter = true, .frequency = 10U}, { 0 }, { 0 }}},
       HYUNDAI_RAY_LDA_ADDR_CHECK,
-      HYUNDAI_RAY_PEDAL_ADDR_CHECK,
+      HYUNDAI_PEDAL_INTERCEPTOR_ADDR_CHECK,
     };
     static const CanMsg HYUNDAI_RAY_PEDAL_TX_MSGS[] = {
       {0x340, 0, 8}, {0x4F1, 0, 4}, {0x485, 0, 8}, {0x53E, 0, 6},
       {0x200, 0, 6},
     };
     hyundai_longitudinal = true;
-    return BUILD_SAFETY_CFG(hyundai_ray_pedal_rx_checks, HYUNDAI_RAY_PEDAL_TX_MSGS);
+    return BUILD_SAFETY_CFG(hyundai_pedal_interceptor_rx_checks, HYUNDAI_RAY_PEDAL_TX_MSGS);
   }
-  hyundai_ray_pedal = false;
+  hyundai_pedal_interceptor = false;
   return hyundai_init_carrot(hyundai_legacy);
 
   safety_config ret;
@@ -565,7 +565,7 @@ static safety_config hyundai_legacy_init(uint16_t param) {
 
   hyundai_common_init(param);
   hyundai_legacy = true;
-  hyundai_ray_pedal = false;
+  hyundai_pedal_interceptor = false;
 
   return hyundai_init_carrot(hyundai_legacy);
 
