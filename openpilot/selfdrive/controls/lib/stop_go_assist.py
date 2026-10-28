@@ -1,5 +1,5 @@
-# Low-speed stop & go corrections on the planner's output accel (StopGoAssist: 1 stop guard + soft stop, 2 also departure
-# go; both levels also enable lead_close_brake in the MPC).
+# Low-speed stop & go corrections on the planner's output accel (StopGoAssist: 1 stop guard, 2 also departure go, 3 also
+# soft stop; every level also enables lead_close_brake in the MPC).
 # Replays of 17 stops / 25 departures behind a lead (02_logs/measurements.md §22-23): the MPC overshoots the stop
 # distance by ~0.9 m (too weak braking below 3 m/s) and trails an accelerating lead after standstill.
 # 10-28 drive (§28): the car keeps the decel it has when StopReq starts (-1.2 -> a jolt), and a creeping lead (aLeadK 0.2)

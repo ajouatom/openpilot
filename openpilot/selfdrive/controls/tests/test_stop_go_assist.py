@@ -134,9 +134,10 @@ def test_hook_stop_guard_lowers_pid_target():
   assert p.a_desired == p.output_a_target and p.output_v_target_now <= 0.9
 
 
-def test_hook_soft_stop_raises_pid_target():
-  p = run_hook(1, v=0.5, a=-1.2, lead_=lead(STOP + 1.0))
-  assert p.output_a_target == pytest.approx(-0.5) and p.a_desired == pytest.approx(-0.5)
+@pytest.mark.parametrize(('mode', 'expected'), ((1, -1.2), (2, -1.2), (3, -0.5)))
+def test_hook_soft_stop_only_at_level_3(mode, expected):
+  p = run_hook(mode, v=0.5, a=-1.2, lead_=lead(STOP + 1.0))
+  assert p.output_a_target == pytest.approx(expected) and p.a_desired == pytest.approx(expected)
 
 
 def test_hook_tracks_time_since_standstill():
