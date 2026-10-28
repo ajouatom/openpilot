@@ -7,6 +7,7 @@ from types import SimpleNamespace
 import numpy as np
 
 from openpilot.selfdrive.controls.lib.lane_model_speed import LaneModelSpeedGuard
+from opendbc.car.lateral_geometry import LateralGeometry
 
 
 class StubMpc:
@@ -21,6 +22,7 @@ class StubMpc:
 
   def run(self, x0, p, y, heading, yaw_rate):
     self.input_speed = p[:, 0].copy()
+    self.input_geometry = p[:, 1].copy()
 
 
 class StubLanePlanner:
@@ -34,7 +36,7 @@ class StubLanePlanner:
     return path, self.lanefull_mode
 
 
-def make_planner():
+def make_planner(cp=None):
   # Compile the complete, unchanged production class. Only the numerical MPC,
   # lane geometry, Params and IPC imports are substituted for routing tests.
   source = Path(__file__).parents[1] / 'lib/lateral_planner.py'
@@ -50,6 +52,7 @@ def make_planner():
     'LateralMpc': StubMpc,
     'LanePlanner': StubLanePlanner,
     'LaneModelSpeedGuard': LaneModelSpeedGuard,
+    'LateralGeometry': LateralGeometry,
     'time': SimpleNamespace(monotonic=lambda: 0),
     'log': SimpleNamespace(Desire=SimpleNamespace(none=0)),
     'yaw_from_path_no_scipy': lambda *a, **k: (np.zeros(33), np.zeros(33)),
@@ -58,7 +61,7 @@ def make_planner():
     compile(ast.Module(body=[n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == 'LateralPlanner'], type_ignores=[]), str(source), 'exec'),
     namespace,
   )
-  cp = SimpleNamespace(wheelbase=2.7, centerToFront=1.1, mass=1800, tireStiffnessRear=100000)
+  cp = cp or SimpleNamespace(wheelbase=2.7, centerToFront=1.1, mass=1800, tireStiffnessFront=110000, tireStiffnessRear=100000)
   return namespace['LateralPlanner'](cp)
 
 
@@ -75,6 +78,7 @@ def inputs(speed=30.0, start=30.0, end=30.0, lane_speed=1):
     'modelV2': model,
     'carState': SimpleNamespace(vEgo=speed, useLaneLineSpeed=lane_speed),
     'controlsState': SimpleNamespace(curvature=0.0),
+    'liveParameters': SimpleNamespace(centerToFrontRatio=0.0),
     'carrotMan': SimpleNamespace(vTurnSpeed=200),
   }
 
