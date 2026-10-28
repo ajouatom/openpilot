@@ -603,6 +603,7 @@ class RouteReplayFrame:
     memory_used_percent: float | None = None
     disk_used_percent: float | None = None
     alert: ClusterAlert | None = None
+    car_fingerprint: str = ""
 
 
 @dataclass
@@ -1608,6 +1609,7 @@ class RouteLogParser:
         self.adrv_lane_changing_t = -999.0
         self.corner_radar_supported = False
         self.car_brand = ""
+        self.car_fingerprint = ""
         self.corner_radar_tracks_seen = False
         self.raw_corner_tracker = StableCornerObjectTracker()
         self.raw_corner_objects: dict[tuple[str, int], RawCornerObject] = {}
@@ -1761,6 +1763,7 @@ class RouteLogParser:
         )
 
         return RouteReplayFrame(
+            car_fingerprint=self.car_fingerprint,
             t=event_t,
             speed_kph=speed_kph,
             accel_mps2=accel_mps2,
@@ -2214,6 +2217,7 @@ class RouteLogParser:
 
     def _update_car_params(self, car_params: Any) -> None:
         self.car_brand = str(safe_get(car_params, "brand", "") or "").lower()
+        self.car_fingerprint = str(safe_get(car_params, "carFingerprint", "") or "")
         wheelbase_m = safe_optional_float(car_params, "wheelbase")
         if wheelbase_m is not None and 1.5 <= wheelbase_m <= 5.0:
             self.wheelbase_m = wheelbase_m
@@ -3740,6 +3744,7 @@ def frame_to_state(frame: RouteReplayFrame) -> ClusterUiState:
     )
 
     return ClusterUiState(
+        car_fingerprint=frame.car_fingerprint,
         speed_kph=frame.speed_kph,
         accel_mps2=frame.accel_mps2,
         steering=frame.steering,
@@ -3945,6 +3950,7 @@ def blend_frames(left: RouteReplayFrame, right: RouteReplayFrame, amount: float)
     else:
         lane_change_progress = discrete.lane_change_progress
     return RouteReplayFrame(
+        car_fingerprint=discrete.car_fingerprint,
         t=lerp(left.t, right.t),
         speed_kph=lerp(left.speed_kph, right.speed_kph),
         display_speed_kph=lerp_optional(left.display_speed_kph, right.display_speed_kph),

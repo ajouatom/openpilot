@@ -1,5 +1,8 @@
 import ast
 from pathlib import Path
+from types import SimpleNamespace
+
+import pytest
 
 
 UI_DIR = Path(__file__).parents[1]
@@ -148,3 +151,69 @@ def test_external_hud_skips_camera_and_model_but_retains_device_hud():
       retained_renderers.append(callback.value.attr)
 
   assert {"_hud_renderer", "alert_renderer", "driver_state_renderer"} <= set(retained_renderers)
+
+
+@pytest.fixture
+def hud_device(tmp_path):
+  clock = SimpleNamespace(now=100.0)
+
+  class Messages(dict):
+    alive = {"selfdriveState": True}
+    valid = {"selfdriveState": True}
+
+  state = SimpleNamespace(ignition=True, started=True, show_camera_with_cluster=False, connected=True,
+                          sm=Messages(selfdriveState=SimpleNamespace(alertSize=0)))
+  state.params = SimpleNamespace(get_bool=lambda _: state.connected)
+  app = SimpleNamespace(mouse_events=[])
+  flag = tmp_path / "screen_on"
+  scope = {"ui_state": state, "gui_app": app, "time": SimpleNamespace(monotonic=lambda: clock.now),
+           "PC": False, "DEVICE_SCREEN_ON_FLAG": str(flag),
+           "log": SimpleNamespace(SelfdriveState=SimpleNamespace(AlertSize=SimpleNamespace(mid=2, full=3)))}
+  methods = [_method(UI_STATE_PATH, "Device", name) for name in ("_update_wakefulness", "_hud_screen_off")]
+  exec(compile(ast.Module(body=methods, type_ignores=[]), str(UI_STATE_PATH), "exec"), scope)
+  cls = type("DeviceProbe", (), {name: scope[name] for name in ("_update_wakefulness", "_hud_screen_off")})
+  device = cls()
+  device._ignition = True
+  device._interaction_time = 0.0
+  device._prev_timed_out = False
+  device._interactive_timeout_callbacks = []
+  device._hud_screen_off_check_t = 0.0
+  device._hud_screen_off_allowed = False
+  device._set_awake = lambda value: setattr(device, "awake", value)
+  device._reset_interactive_timeout = lambda: setattr(device, "_interaction_time", clock.now + 30.0)
+  return device, state, app, clock, flag
+
+
+def test_external_hud_sleeps_device_and_touch_temporarily_wakes_it(hud_device):
+  device, _, app, clock, _ = hud_device
+  device._update_wakefulness()
+  assert not device.awake
+  app.mouse_events = [SimpleNamespace(left_down=True)]
+  device._update_wakefulness()
+  assert device.awake
+  app.mouse_events = []
+  clock.now += 31.0
+  device._update_wakefulness()
+  assert not device.awake
+
+
+@pytest.mark.parametrize("reason", ["disconnect", "camera", "mid", "full", "stale", "invalid", "flag"])
+def test_external_hud_sleep_wakes_for_alerts_unavailable_status_and_user_preference(hud_device, reason):
+  device, state, _, clock, flag = hud_device
+  device._update_wakefulness()
+  assert not device.awake
+  if reason == "disconnect":
+    state.connected = False
+  elif reason == "camera":
+    state.show_camera_with_cluster = True
+  elif reason in ("mid", "full"):
+    state.sm["selfdriveState"].alertSize = 2 if reason == "mid" else 3
+  elif reason == "stale":
+    state.sm.alive["selfdriveState"] = False
+  elif reason == "invalid":
+    state.sm.valid["selfdriveState"] = False
+  else:
+    flag.touch()
+  clock.now += 1.1
+  device._update_wakefulness()
+  assert device.awake

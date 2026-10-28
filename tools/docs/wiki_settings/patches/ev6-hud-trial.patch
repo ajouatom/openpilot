@@ -1,0 +1,64 @@
+diff --git a/EN-External-HUD-Radar-Info(4).md b/EN-External-HUD-Radar-Info(4).md
+index 1d8aabb..c670dd9 100644
+--- a/EN-External-HUD-Radar-Info(4).md
++++ b/EN-External-HUD-Radar-Info(4).md
+@@ -30 +30 @@
+-<!-- CARROT:REVIEW reviewed-for="05cc3268420daab3de56e5bbd791d233fe6c5cccda542fd4688e6a5bd63dfa2a" reviewed-at="2026-07-24T16:44:29+09:00" -->
++<!-- CARROT:REVIEW reviewed-for="" -->
+@@ -40,0 +41 @@ The selected value changes behavior as follows.
++The clean 3D HUD labels the lead and cut-in vehicles and hides individual radar points. Road-camera overlays retain the existing display options.
+diff --git a/EN-External-HUD-Screen-Mode(0).md b/EN-External-HUD-Screen-Mode(0).md
+index eb03e3f..87877eb 100644
+--- a/EN-External-HUD-Screen-Mode(0).md
++++ b/EN-External-HUD-Screen-Mode(0).md
+@@ -30 +30 @@
+-<!-- CARROT:REVIEW reviewed-for="627a973ecafa1b31a96e570c3d02499497c8b6d45ab1e2366aa65ab21435fe93" reviewed-at="2026-07-31T23:37:31+09:00" -->
++<!-- CARROT:REVIEW reviewed-for="" -->
+@@ -40,0 +41,5 @@
++This branch's clean HUD rearranges speed, set speed, slowdown reasons and enforcement information, with a two-rail path and 3D surrounding cars. The 3D view labels the lead and cut-in vehicles while hiding individual radar points and the lower system-status line. Surrounding car shapes are selected by track ID, not by recognizing their actual make or model.
++
++The ego car uses the detected Ioniq 5, EV9, fourth-generation Carnival, Staria or Tucson, or fifth-generation Sportage model. Missing or failed models fall back to the EV6. While onroad, P prioritizes the selected car, clock, tyre pressures, trip statistics and available vehicle-decoded battery level. R prioritizes the same car with a steering-based path and blind-spot warnings. The reverse guide is an illustrative EV6-geometry reference. Other gears restore the selected HUD mode.
++
++Parking weather queries Open-Meteo using the last GPS position rounded to approximately 1 km, with a cache age of up to one hour. Create `/data/ev6_weather_off` to disable fetching. `/data/ev6_hud_classic` disables the clean layout and P/R screens; `/data/ev6_device_screen_on` disables automatic device-screen sleep. Vehicle model selection is independent of these files.
+diff --git a/EN-On-device-Camera-with-External-HUD(0).md b/EN-On-device-Camera-with-External-HUD(0).md
+index 5b19636..7d03884 100644
+--- a/EN-On-device-Camera-with-External-HUD(0).md
++++ b/EN-On-device-Camera-with-External-HUD(0).md
+@@ -29,0 +30,5 @@
++<!-- CARROT:SECTION:BEGIN BEHAVIOR -->
++### Behavior
++
++While the external HUD is connected, `ShowCameraWithCluster=0` skips the on-device camera/path rendering and turns off the device display after the interaction timeout. A tap wakes it temporarily; medium/full alerts, unavailable alert status, or HUD disconnection wake it again. `1` keeps the device camera and display visible. Camera capture and model input continue with `0`.
++<!-- CARROT:SECTION:END BEHAVIOR -->
+diff --git "a/KO-\354\231\270\353\266\200-HUD-\353\240\210\354\235\264\353\215\224-\354\240\225\353\263\264-\355\221\234\354\213\234(4).md" "b/KO-\354\231\270\353\266\200-HUD-\353\240\210\354\235\264\353\215\224-\354\240\225\353\263\264-\355\221\234\354\213\234(4).md"
+index f3c1f2e..ea09ba4 100644
+--- "a/KO-\354\231\270\353\266\200-HUD-\353\240\210\354\235\264\353\215\224-\354\240\225\353\263\264-\355\221\234\354\213\234(4).md"
++++ "b/KO-\354\231\270\353\266\200-HUD-\353\240\210\354\235\264\353\215\224-\354\240\225\353\263\264-\355\221\234\354\213\234(4).md"
+@@ -30 +30 @@
+-<!-- CARROT:REVIEW reviewed-for="05cc3268420daab3de56e5bbd791d233fe6c5cccda542fd4688e6a5bd63dfa2a" reviewed-at="2026-07-24T16:44:29+09:00" -->
++<!-- CARROT:REVIEW reviewed-for="" -->
+@@ -40,0 +41 @@
++간결한 3D HUD에서는 앞차·끼어들기 차량의 라벨만 표시하고 개별 레이더 점은 숨깁니다. 로드카메라 오버레이는 기존 표시 옵션을 따릅니다.
+diff --git "a/KO-\354\231\270\353\266\200-HUD-\354\227\260\352\262\260-\354\213\234-\353\263\270\354\262\264-\354\271\264\353\251\224\353\235\274(0).md" "b/KO-\354\231\270\353\266\200-HUD-\354\227\260\352\262\260-\354\213\234-\353\263\270\354\262\264-\354\271\264\353\251\224\353\235\274(0).md"
+index 96bf42b..d05a659 100644
+--- "a/KO-\354\231\270\353\266\200-HUD-\354\227\260\352\262\260-\354\213\234-\353\263\270\354\262\264-\354\271\264\353\251\224\353\235\274(0).md"
++++ "b/KO-\354\231\270\353\266\200-HUD-\354\227\260\352\262\260-\354\213\234-\353\263\270\354\262\264-\354\271\264\353\251\224\353\235\274(0).md"
+@@ -29,0 +30,5 @@
++<!-- CARROT:SECTION:BEGIN BEHAVIOR -->
++### 동작
++
++외부 HUD가 연결된 동안 `ShowCameraWithCluster=0`이면 본체 카메라·경로 렌더링을 생략하고 터치 대기 시간이 끝나면 본체 화면을 끕니다. 터치하면 잠시 켜지고, 중간·전체 화면 경고나 경고 상태 수신 오류, HUD 연결 해제 시 다시 켜집니다. `1`이면 본체 카메라 영상과 화면을 계속 표시합니다. `0`에서도 카메라 촬영과 모델 입력은 계속 동작합니다.
++<!-- CARROT:SECTION:END BEHAVIOR -->
+diff --git "a/KO-\354\231\270\353\266\200-HUD-\355\231\224\353\251\264-\353\252\250\353\223\234(0).md" "b/KO-\354\231\270\353\266\200-HUD-\355\231\224\353\251\264-\353\252\250\353\223\234(0).md"
+index 3afcae8..84e684a 100644
+--- "a/KO-\354\231\270\353\266\200-HUD-\355\231\224\353\251\264-\353\252\250\353\223\234(0).md"
++++ "b/KO-\354\231\270\353\266\200-HUD-\355\231\224\353\251\264-\353\252\250\353\223\234(0).md"
+@@ -30 +30 @@
+-<!-- CARROT:REVIEW reviewed-for="627a973ecafa1b31a96e570c3d02499497c8b6d45ab1e2366aa65ab21435fe93" reviewed-at="2026-07-31T23:37:31+09:00" -->
++<!-- CARROT:REVIEW reviewed-for="" -->
+@@ -40,0 +41,5 @@
++이 브랜치의 간결한 HUD는 속도·설정속도·감속 사유·단속 정보를 재배치하고 두 줄 경로와 3D 주변차를 표시합니다. 3D 화면에서는 앞차·끼어들기 차량의 라벨만 남기고 개별 레이더 점과 하단 시스템 상태 줄을 숨깁니다. 주변차의 차종 그림은 트랙 ID에 따른 표시용 선택이며 실제 차종 인식 결과가 아닙니다.
++
++자차는 인식된 아이오닉5, EV9, 4세대 카니발·스타리아·투싼, 5세대 스포티지에 맞는 모델을 사용합니다. 일치하는 모델이 없거나 로딩에 실패하면 EV6를 사용합니다. 시동이 켜진 P에서는 선택된 자차·시계·공기압·주행 통계와 제공되는 배터리 값을, R에서는 같은 자차의 조향각 기반 예상 경로와 후측방 경고를 우선 표시합니다. 후진 가이드는 EV6 제원을 기준으로 한 참고 그림입니다. 다른 기어에서는 선택한 HUD 모드로 돌아갑니다.
++
++주차 화면의 날씨는 마지막 GPS 위치를 약 1km 단위로 반올림해 Open-Meteo에 조회하며 최장 1시간 동안 캐시합니다. `/data/ev6_weather_off` 파일로 조회를 끌 수 있습니다. `/data/ev6_hud_classic`은 간결한 레이아웃과 P/R 화면을 끄고, `/data/ev6_device_screen_on`은 본체 화면 자동 꺼짐을 해제합니다. 차량 모델 선택은 이 파일들과 별개입니다.

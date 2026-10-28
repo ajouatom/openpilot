@@ -39,6 +39,13 @@ from cluster_scene import (
 )
 
 
+@pytest.fixture
+def classic_hud(monkeypatch):
+  """Legacy-layout assertions select the supported opt-out explicitly."""
+  monkeypatch.setenv("EV6_HUD_CLEAN", "0")
+  monkeypatch.setattr(cluster_scene, "_clean_ui_cache", [-10.0, False])
+
+
 def test_road_camera_radar_point_uses_simple_source_colored_square(monkeypatch):
   renderer = object.__new__(ClusterUiRenderer)
   squares = []
@@ -449,7 +456,7 @@ def _max_scene_forward_m(strips) -> float:
 
 
 @pytest.fixture
-def metric_renderer(monkeypatch):
+def metric_renderer(monkeypatch, classic_hud):
   renderer = object.__new__(ClusterUiRenderer)
   renderer.width = cluster_renderer.DESIGN_WIDTH
   renderer.height = cluster_renderer.DESIGN_HEIGHT
@@ -633,6 +640,7 @@ def test_ev_mode_indicator_draws_green_only_when_valid_and_active(valid, active,
     assert kwargs == {"anchor": "center", "cache": True}
 
 
+@pytest.mark.usefixtures("classic_hud")
 def test_ev_mode_indicator_fits_between_three_digit_speeds(monkeypatch) -> None:
   # Layout test: select the model indicator without consulting device Params.
   monkeypatch.setattr("openpilot.selfdrive.carrot.signal_display.display_requested", lambda: False)
@@ -790,6 +798,7 @@ def test_speed_gear_badge_has_transparent_interior() -> None:
   assert boxes[0][0][5] == (0, 0, 0, 0)
 
 
+@pytest.mark.usefixtures("classic_hud")
 def test_speed_block_draws_driving_mode_before_traffic_state() -> None:
   renderer = object.__new__(ClusterUiRenderer)
   renderer._current_theme = lambda: LIGHT_CLUSTER_THEME

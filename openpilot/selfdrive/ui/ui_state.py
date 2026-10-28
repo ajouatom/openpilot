@@ -18,6 +18,7 @@ from openpilot.system.ui.lib.application import gui_app
 from openpilot.system.hardware import HARDWARE, PC
 
 BACKLIGHT_OFFROAD = 65 if HARDWARE.get_device_type() == "mici" else 50
+DEVICE_SCREEN_ON_FLAG = "/data/ev6_device_screen_on"  # EV6 HUD patch v9: keep the device screen on with the HUD
 
 
 class UIStatus(Enum):
@@ -259,6 +260,8 @@ class Device:
     self._brightness_filter = FirstOrderFilter(BACKLIGHT_OFFROAD, 2.00, 1 / gui_app.target_fps)
     self._brightness_thread: threading.Thread | None = None
     self._brightness_timer: int = 20
+    self._hud_screen_off_check_t = 0.0  # EV6 HUD patch v9
+    self._hud_screen_off_allowed = False
 
   @property
   def awake(self) -> bool:
@@ -350,7 +353,31 @@ class Device:
         callback()
     self._prev_timed_out = interaction_timeout
 
-    self._set_awake(ui_state.ignition or not interaction_timeout or PC)
+    hud_off = self._hud_screen_off()  # EV6 HUD patch v9
+    self._set_awake((ui_state.ignition and not hud_off) or not interaction_timeout or PC)
+
+  def _hud_screen_off(self) -> bool:
+    # EV6 HUD patch v9: while driving with the external HUD connected and the camera hidden for it,
+    # turn the device display off. A tap wakes it for the normal interactive timeout; mid / full
+    # alerts and a lost HUD connection wake it too.
+    now = time.monotonic()
+    if now >= self._hud_screen_off_check_t:
+      self._hud_screen_off_check_t = now + 1.0
+      try:
+        import os
+        self._hud_screen_off_allowed = (ui_state.params.get_bool("ClusterHudConnected")
+                                        and not os.path.exists(DEVICE_SCREEN_ON_FLAG))
+      except Exception:
+        self._hud_screen_off_allowed = False
+    if not (ui_state.started and self._hud_screen_off_allowed) or ui_state.show_camera_with_cluster:
+      return False
+    try:
+      if not (ui_state.sm.alive["selfdriveState"] and ui_state.sm.valid["selfdriveState"]):
+        return False
+      alert_size = ui_state.sm["selfdriveState"].alertSize
+    except Exception:
+      return False
+    return alert_size not in (log.SelfdriveState.AlertSize.mid, log.SelfdriveState.AlertSize.full)
 
   def _set_awake(self, on: bool):
     if on != self._awake:

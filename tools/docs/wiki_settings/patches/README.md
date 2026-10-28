@@ -81,3 +81,15 @@ git apply --unidiff-zero /absolute/path/to/rav4-radar-display.patch
 
 Only the matching manual regions are edited. Validate both pages and regenerate
 the catalog before publishing, following the authoring guide.
+
+## Selected EV6 HUD integration
+
+`ev6-hud-trial.patch` updates only the Korean and English manual regions for
+`ShowCameraWithCluster`, `ClusterHudScreenMode` and `ClusterHudRadarInfo`.
+It is based on Wiki commit `353862d982eab661a2e2f550d444617ac6bd0ab8` and describes
+the selected HUD changes on `thftgr/carrot-wip`, including P/R screens, vehicle
+model fallback, weather fetching and device-screen sleep. It is staged for
+review with this branch; the public Wiki remains tied to `carrot-wip`.
+Apply to a matching Wiki checkout with `git apply --unidiff-zero`, regenerate using this
+branch's catalog, and validate before publication. Reconcile later manual
+edits if the patch no longer applies. Review markers remain unset.

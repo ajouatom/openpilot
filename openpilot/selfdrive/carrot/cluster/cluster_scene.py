@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import math
+import os
 import time
 from collections import OrderedDict
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, replace
 from statistics import median
+
+from cluster_vehicle_models import ego_model_name
 
 from cluster_config import (
     AMBER,
@@ -240,6 +243,8 @@ class VehicleBox:
     cut_in: bool = False
     primary: bool = False
     annotate: bool = False
+    model_key: int = -1  # Radar track id (stable surrounding model choice)
+    model_name: str = "ev6"
 
 
 @dataclass(frozen=True, slots=True)
@@ -1565,6 +1570,8 @@ def planned_path_strips(
     theme: ClusterTheme = LIGHT_CLUSTER_THEME,
     profile_add: ProfileAdd | None = None,
 ) -> tuple[MeshStrip, ...]:
+    if clean_ui_enabled():
+        return clean_planned_path_strips(state, lane_width_m, blockers, theme)  # EV6 HUD patch v8
     profile_stage = profile_scene_start(profile_add)
     points = model_path_centerline(state, lane_width_m, blockers)
     model_driven = bool(points)
@@ -2641,10 +2648,11 @@ def radar_point_vehicle_heading(
     lateral_speed_offset_mps: float = 0.0,
 ) -> tuple[float, float, float, float]:
     longitudinal_speed_kph = radar_point_absolute_speed_kph(point, state)
+    oncoming = longitudinal_speed_kph is not None and longitudinal_speed_kph <= -RADAR_MOVING_VEHICLE_MIN_SPEED_KPH
     return vehicle_heading_from_velocity(
         longitudinal_speed_kph,
         radar_point_heading_lateral_speed_mps(point, state, lateral_speed_offset_mps),
-        (1.0, 0.0, 0.0, 1.0),
+        (-1.0, 0.0, 0.0, -1.0) if oncoming else (1.0, 0.0, 0.0, 1.0),  # EV6 HUD patch v5
         min_speed_kph=1.0 if point.source == "cornerRadar" else RADAR_MOVING_VEHICLE_MIN_SPEED_KPH,
         min_component_mps=CORNER_RADAR_HEADING_COMPONENT_MIN_MPS if point.source == "cornerRadar" else 0.0,
     )
@@ -2846,6 +2854,7 @@ def vehicle_box(
     x_offset_m: float = 0.0,
     center_x_m_override: float | None = None,
     center_z_m_offset: float = 0.0,
+    model_key: int = -1,
 ) -> VehicleBox:
     confidence = clamp(confidence, 0.0, 1.0)
     alpha = int(92 + 163 * confidence)
@@ -2901,6 +2910,7 @@ def vehicle_box(
         cut_in=cut_in,
         primary=primary,
         annotate=annotate,
+        model_key=model_key,
     )
 
 
@@ -3006,6 +3016,8 @@ def translate_vehicle_box_x(vehicle: VehicleBox, shift_x_m: float) -> VehicleBox
         cut_in=vehicle.cut_in,
         primary=vehicle.primary,
         annotate=vehicle.annotate,
+        model_key=vehicle.model_key,
+        model_name=vehicle.model_name,
     )
 
 
@@ -3066,10 +3078,127 @@ def road_edge_color(
     return base[0], base[1], base[2], int(clamp(alpha, 120, 245))
 
 
+CLEAN_UI_CLASSIC_FLAG = "/data/ev6_hud_classic"  # EV6 HUD patch v6
+_clean_ui_cache = [-10.0, True]
+
+
+# EV6 HUD patch v14: Kia EV6 body 4.68 x 1.88 x 1.55 m. The ego model (ev6_cluster.obj) is normalised to a unit
+# box whose width includes the mirrors (body 0.878, mirrors 0.959) and whose height is 1.065, so scale to match.
+EV6_EGO_LENGTH_M = 4.68
+EV6_EGO_WIDTH_M = 1.88 / 0.878
+EV6_EGO_HEIGHT_M = 1.55 / 1.065
+
+
+def ev6_ego_vehicle_box(box: VehicleBox) -> VehicleBox:
+    # keep the front bumper where it was (the path, lead distance and radar overlay are measured from it)
+    back = (EV6_EGO_LENGTH_M - box.length_m) * 0.5
+    center = Vec3(box.center.x - box.forward_x * back, box.center.y - box.forward_y * back,
+                  box.center.z + (EV6_EGO_HEIGHT_M - box.height_m) * 0.5)
+    return replace(box, center=center, width_m=EV6_EGO_WIDTH_M, length_m=EV6_EGO_LENGTH_M, height_m=EV6_EGO_HEIGHT_M)
+
+
+def clean_ui_enabled() -> bool:
+    now = time.monotonic()
+    if now - _clean_ui_cache[0] > 2.0:
+        _clean_ui_cache[0] = now
+        env = os.environ.get("EV6_HUD_CLEAN")
+        _clean_ui_cache[1] = env == "1" if env in ("0", "1") else not os.path.exists(CLEAN_UI_CLASSIC_FLAG)
+    return _clean_ui_cache[1]
+
+
+CLEAN_PATH_RAIL_GAP_M = 1.6  # EV6 HUD patch v8: distance between the two rails
+CLEAN_PATH_RAIL_WIDTH_M = 0.14
+CLEAN_PATH_SOLID_M = 15.0  # fully opaque up to here, then fades out towards PATH_END_M
+CLEAN_PATH_FADE_STEP_M = 5.0
+CLEAN_PATH_BRAKE_MPS2 = -1.5  # whole path turns amber when the plan brakes this hard
+
+
+def _clean_path_pieces(points: tuple[Vec3, ...]) -> list[tuple[tuple[Vec3, ...], float]]:
+    # split a polyline at CLEAN_PATH_SOLID_M and every CLEAN_PATH_FADE_STEP_M after it -> (piece, opacity)
+    cuts = [CLEAN_PATH_SOLID_M]
+    while cuts[-1] < PATH_END_M:
+        cuts.append(cuts[-1] + CLEAN_PATH_FADE_STEP_M)
+    pieces: list[tuple[tuple[Vec3, ...], float]] = []
+    current = [points[0]]
+    cut_index = 0
+    for prev, point in zip(points, points[1:], strict=False):
+        while cut_index < len(cuts) and prev.y < cuts[cut_index] <= point.y:
+            t = (cuts[cut_index] - prev.y) / max(1e-6, point.y - prev.y)
+            split = Vec3(prev.x + (point.x - prev.x) * t, cuts[cut_index], prev.z + (point.z - prev.z) * t)
+            current.append(split)
+            pieces.append((tuple(current), 0.0))
+            current = [split]
+            cut_index += 1
+        current.append(point)
+    pieces.append((tuple(current), 0.0))
+    span = max(1.0, PATH_END_M - CLEAN_PATH_SOLID_M)
+    result = []
+    for piece, _ in pieces:
+        if len(piece) < 2:
+            continue
+        mid_y = (piece[0].y + piece[-1].y) * 0.5
+        opacity = 1.0 if mid_y <= CLEAN_PATH_SOLID_M else clamp(1.0 - (mid_y - CLEAN_PATH_SOLID_M) / span, 0.0, 1.0)
+        if opacity > 0.02:
+            result.append((piece, opacity))
+    return result
+
+
+def clean_planned_path_strips(
+    state: ClusterUiState,
+    lane_width_m: float,
+    blockers: tuple[PathBlocker, ...],
+    theme: ClusterTheme = LIGHT_CLUSTER_THEME,
+) -> tuple[MeshStrip, ...]:
+    points = model_path_centerline(state, lane_width_m, blockers)
+    if not points:
+        end_m = planned_path_end_m(state, blockers)
+        steps = max(4, int(PLANNED_PATH_FALLBACK_STEPS * (end_m - PATH_START_M) / (PATH_END_M - PATH_START_M)))
+        points = tuple(
+            Vec3(road_world_x(planned_path_lane_offset(state, forward_m), forward_m, state.steering, lane_width_m),
+                 forward_m, PATH_HEIGHT_M)
+            for forward_m in sample_range(PATH_START_M, end_m, steps)
+        )
+    if len(points) < 2:
+        return ()
+    end_m = model_path_end_m(state, lane_width_m, blockers)
+    last, before = points[-1], points[-2]
+    if end_m is not None and last.y < end_m - 0.05 and last.y - before.y > 1e-3:
+        # model points are sparse: run the last segment on to the stop point (lead car's rear bumper)
+        t = (end_m - last.y) / (last.y - before.y)
+        points = (*points, Vec3(last.x + (last.x - before.x) * t, end_m, last.z))
+    accels = [point.accel_mps2 for point in state.model_path[:8] if point.accel_mps2 is not None]
+    if accels and min(accels) <= CLEAN_PATH_BRAKE_MPS2:
+        rgb = AMBER[:3]
+    else:
+        rgb = (90, 160, 255) if theme.is_dark else (40, 120, 235)
+    floor_alpha = 70 if theme.is_dark else 45
+    outline = strip_from_centerline(points, CLEAN_PATH_RAIL_GAP_M, (0, 0, 0, 0))
+    strips: list[MeshStrip] = []
+    layers = (
+        (points, CLEAN_PATH_RAIL_GAP_M, floor_alpha, PATH_SHADOW_LAYER_M),
+        (outline.left, CLEAN_PATH_RAIL_WIDTH_M, 240, PATH_BODY_LAYER_M),
+        (outline.right, CLEAN_PATH_RAIL_WIDTH_M, 240, PATH_BODY_LAYER_M),
+    )
+    for line, width_m, alpha, height_m in layers:
+        line = tuple(Vec3(point.x, point.y, height_m) for point in line)
+        for piece, opacity in _clean_path_pieces(line):
+            strips.append(strip_from_centerline(piece, width_m, (rgb[0], rgb[1], rgb[2], int(alpha * opacity))))
+    marker_points = model_path_centerline(state, lane_width_m, ()) if blockers else points
+    strips.extend(follow_distance_marker_strips(state, marker_points or points, lane_width_m))
+    return tuple(strips)
+
+
 def road_edge_3d_layers(
     color: Color,
     theme: ClusterTheme = LIGHT_CLUSTER_THEME,
 ) -> tuple[RoadEdgeLayer, ...]:
+    if clean_ui_enabled():
+        # v6: one slim line; amber/red still mean "close to the road edge"
+        if tuple(color[:3]) == tuple(theme.road_edge[:3]):
+            line = (176, 184, 194, 150) if theme.is_dark else (120, 128, 138, 170)
+        else:
+            line = (color[0], color[1], color[2], 225)
+        return ((5, line, ROAD_EDGE_HEIGHT_M, 0.0),)
     base_rgb = color[:3]
     alpha = color[3]
     shadow_alpha = max(theme.road_edge_backing[3], int(alpha * 0.58))
@@ -3463,6 +3592,7 @@ def data_geometry_mode_for_state(state: ClusterUiState) -> bool:
 
 
 SCENE_STATE_FIELDS = (
+    "car_fingerprint",
     "speed_kph",
     "steering",
     "vision_yaw_rate_rps",
@@ -3683,6 +3813,10 @@ def build_cluster_scene(
         camera_active,
         target_offset,
     )
+    model_name = ego_model_name(state.car_fingerprint)
+    if clean_ui_enabled() and model_name == "ev6":
+        ego_vehicle = ev6_ego_vehicle_box(ego_vehicle)
+    ego_vehicle = replace(ego_vehicle, model_name=model_name)
     show_ego_vehicle = not cluster_camera_view_is_road_camera(state.camera_view_mode)
     merged_radar_labels = frozenset[str]()
     if route_mode:
@@ -3732,6 +3866,7 @@ def build_cluster_scene(
                 annotate=vehicle_badge_has_special_info(detected),
                 center_x_m_override=detected.lateral_m + relative_scene_x_offset_m,
                 center_z_m_offset=DETECTED_VEHICLE_DISPLAY_HEIGHT_OFFSET_M,
+                model_key=detected.radar_track_id if detected.radar_track_id is not None else -1,
             )
             for detected in render_detected_vehicles
         )
@@ -3741,7 +3876,8 @@ def build_cluster_scene(
         detected_blockers = tuple(
             PathBlocker(
                 clamp(detected.lateral_m / lane_width_m, -2.2, 2.2),
-                render_scene_forward_m(detected.longitudinal_m, state),
+                render_scene_forward_m(detected.longitudinal_m, state)
+                + (VEHICLE_LENGTH_M * 0.5 if clean_ui_enabled() and detected.longitudinal_m > 0.0 else 0.0),  # EV6 HUD patch v8
                 VEHICLE_LENGTH_M,
             )
             for detected in blocking_detected_vehicles
