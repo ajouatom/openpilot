@@ -6,16 +6,16 @@ from openpilot.selfdrive.controls.lib import stop_go_assist as sga
 from openpilot.selfdrive.controls.lib.stop_go_assist import DEPART_ACCEL, departure_go, soft_stop, stop_guard
 
 STOP = 4.3
-EXTRA = sga.SOFT_EXTRA
+MIN = sga.SOFT_MIN_GAP
 
 
 def lead(dRel, vLead=0.0, aLeadK=0.0, status=True, radar=True):
   return SimpleNamespace(dRel=dRel, vLead=vLead, aLeadK=aLeadK, status=status, radar=radar)
 
 
-def test_stop_guard_brakes_to_stop_distance_plus_soft_margin():
-  # 0.9 m/s with 0.58 m left beyond the soft margin needs -0.7; the MPC only asked for -0.3 (02_logs §23)
-  assert stop_guard(-0.3, 0.9, lead(STOP + EXTRA + 0.58), STOP) == pytest.approx(-0.9 ** 2 / (2 * 0.58))
+def test_stop_guard_brakes_to_stop_distance():
+  # 0.9 m/s with 0.58 m left needs -0.7; the MPC only asked for -0.3 (02_logs §23)
+  assert stop_guard(-0.3, 0.9, lead(STOP + 0.58), STOP) == pytest.approx(-0.9 ** 2 / (2 * 0.58))
 
 
 @pytest.mark.parametrize(('a_target', 'v_ego', 'lead_', 'expected'), (
@@ -33,37 +33,38 @@ def test_stop_guard_conditions(a_target, v_ego, lead_, expected):
 
 def test_soft_stop_eases_the_last_metre_when_there_is_room():
   # 10-28 521 s: -1.2 at StopReq -> jolt. With room, the decel eases to -0.5 at 0.5 m/s and -1.0 at 1.25 m/s.
-  assert soft_stop(-1.2, 0.5, lead(STOP + 1.0), STOP) == pytest.approx(-0.5)
-  assert soft_stop(-1.4, 1.25, lead(STOP + 2.0), STOP) == pytest.approx(-1.0)
+  assert soft_stop(-1.2, 0.5, lead(STOP + 1.0)) == pytest.approx(-0.5)
+  assert soft_stop(-1.4, 1.25, lead(STOP + 2.0)) == pytest.approx(-1.0)
+  # 10-28 346 s at 0.74 m/s, 2.93 m from the stopped lead (inside the 4.0 m stop distance): -1.43 -> eased, stops ~2.5 m
+  assert soft_stop(-1.43, 0.74, lead(2.93)) == pytest.approx(-0.5 - 0.24 / 1.5)
 
 
 @pytest.mark.parametrize(('a_target', 'v_ego', 'lead_', 'expected'), (
-  (-1.5, 1.0, lead(STOP - 0.5), -1.5),                 # 10-28 346 s: lead stopped hard, inside the stop distance -> full braking
-  (-1.5, 1.0, lead(STOP + 0.1), -1.5),                 # no room left to ease
-  (-1.5, 1.0, lead(STOP + 0.4), -1.0 / (2 * 0.4)),     # little room: eases only to what still stops at the stop distance
-  (-0.3, 1.0, lead(STOP + 0.4), -0.3),                 # never strengthens (the guard does)
+  (-1.5, 1.0, lead(MIN + 0.1), -1.5),                  # no room left before the minimum gap: full braking
+  (-1.5, 1.0, lead(MIN + 0.4), -1.0 / (2 * 0.4)),      # little room: eases only to what still stops at the minimum gap
+  (-0.3, 1.0, lead(MIN + 0.4), -0.3),                  # never strengthens (the guard does)
   (-0.4, 0.5, lead(STOP + 1.0), -0.4),                 # already gentle
   (-1.2, 2.5, lead(STOP + 3.0), -1.2),                 # above the soft range: guard's job
   (-1.2, 0.5, lead(STOP + 1.0, vLead=0.5), -1.2),      # lead still moving
   (-1.2, 0.5, lead(STOP + 1.0, status=False), -1.2),   # no lead (red light): untouched
 ))
 def test_soft_stop_conditions(a_target, v_ego, lead_, expected):
-  assert soft_stop(a_target, v_ego, lead_, STOP) == pytest.approx(expected)
+  assert soft_stop(a_target, v_ego, lead_) == pytest.approx(expected)
 
 
 @pytest.mark.parametrize('planner', ('late', 'steady'))
-@pytest.mark.parametrize('gap', (3.5, 4.5, 6.0))
-def test_soft_stop_closed_loop_keeps_the_stop_distance(planner, gap):
+@pytest.mark.parametrize('gap', (2.0, 3.0, 4.5, 6.0))
+def test_soft_stop_closed_loop_keeps_the_minimum_gap(planner, gap):
   # Stopped lead from 3 m/s with guard + soft stop: a planner that brakes -1.5 only in the last 2 m, or -0.8 throughout.
   v, d, dt, at_stop_req = 3.0, STOP + gap, 0.01, None
   while v > 0.05:
     a_plan = (-1.5 if d - STOP < 2.0 else -0.5) if planner == 'late' else -0.8
-    a = soft_stop(stop_guard(a_plan, v, lead(d), STOP), v, lead(d), STOP)
+    a = soft_stop(stop_guard(a_plan, v, lead(d), STOP), v, lead(d))
     if v < 0.7 and at_stop_req is None:
       at_stop_req = a  # decel when StopReq starts: the car carries it into the stop
     v, d = max(0.0, v + a * dt), d - v * dt
-  assert d > STOP - 0.1
-  assert at_stop_req >= -0.95
+  assert d > MIN - 0.1
+  assert at_stop_req >= -0.7
 
 
 def test_departure_go_toward_a_lead_pulling_away():
@@ -128,7 +129,7 @@ def test_hook_departure_gates(kw):
 
 
 def test_hook_stop_guard_lowers_pid_target():
-  p = run_hook(1, v=0.9, a=-0.3, lead_=lead(STOP + EXTRA + 0.58))
+  p = run_hook(1, v=0.9, a=-0.3, lead_=lead(STOP + 0.58))
   assert p.output_a_target == pytest.approx(-0.81 / 1.16)
   assert p.a_desired == p.output_a_target and p.output_v_target_now <= 0.9
 
@@ -144,4 +145,4 @@ def test_hook_tracks_time_since_standstill():
 
 
 def test_hook_boost_mode_also_guards():
-  assert run_hook(2, v=0.9, a=-0.3, lead_=lead(STOP + EXTRA + 0.58)).output_a_target == pytest.approx(-0.81 / 1.16)
+  assert run_hook(2, v=0.9, a=-0.3, lead_=lead(STOP + 0.58)).output_a_target == pytest.approx(-0.81 / 1.16)

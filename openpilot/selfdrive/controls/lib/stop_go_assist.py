@@ -12,14 +12,12 @@ STOP_GUARD_MIN_ACCEL = -1.5
 STOP_GUARD_MIN_GAP = 0.2
 
 # Soft stop: below SOFT_SPEED the decel eases linearly to SOFT_END_ACCEL at SOFT_END_SPEED (StopReq starts at <=0.7 m/s),
-# like the stock stop. The tail from 2 m/s is ~0.75 m longer than a constant -1.5, so the guard aims SOFT_EXTRA earlier,
-# and the taper never eases below what still stops at the stop distance - a lead that stops hard (10-28 346 s, already
-# inside the stop distance) keeps full braking. Toy closed loop (test): ends -0.15..+0.6 m vs -0.01..+1.0 before, decel
-# when StopReq starts -0.63 with room (-1.5 before).
+# like the stock stop. Behind a stopped lead it may roll past the stop distance (user 10-28: stopping closer is fine, the
+# lead is not moving), but never eases below what still stops SOFT_MIN_GAP from the lead.
 SOFT_SPEED = 2.0
 SOFT_END_SPEED = 0.5
 SOFT_END_ACCEL = -0.5
-SOFT_EXTRA = 0.75
+SOFT_MIN_GAP = 2.5  # m from the lead
 
 DEPART_WINDOW = 3.0  # s after standstill
 DEPART_ACCEL = 1.2
@@ -37,20 +35,19 @@ def _stop_accel(v_ego, lead, stop_distance):
 
 
 def stop_guard(a_target, v_ego, lead, stop_distance):
-  # Only strengthens braking the planner already wants: brake at least as hard as a constant decel stop SOFT_EXTRA
-  # before stop_distance (soft_stop spends that margin).
+  # Only strengthens braking the planner already wants: brake at least as hard as a constant decel stop at stop_distance.
   if not _stopped_lead(a_target, v_ego, lead, LOW_SPEED):
     return a_target
-  return min(a_target, max(STOP_GUARD_MIN_ACCEL, _stop_accel(v_ego, lead, stop_distance + SOFT_EXTRA)))
+  return min(a_target, max(STOP_GUARD_MIN_ACCEL, _stop_accel(v_ego, lead, stop_distance)))
 
 
-def soft_stop(a_target, v_ego, lead, stop_distance):
-  if not _stopped_lead(a_target, v_ego, lead, SOFT_SPEED) or lead.dRel - stop_distance <= STOP_GUARD_MIN_GAP:
+def soft_stop(a_target, v_ego, lead):
+  if not _stopped_lead(a_target, v_ego, lead, SOFT_SPEED) or lead.dRel - SOFT_MIN_GAP <= STOP_GUARD_MIN_GAP:
     return a_target
   floor = SOFT_END_ACCEL + (STOP_GUARD_MIN_ACCEL - SOFT_END_ACCEL) * \
     min(max((v_ego - SOFT_END_SPEED) / (SOFT_SPEED - SOFT_END_SPEED), 0.0), 1.0)
-  # Only eases off, never past what still stops at stop_distance (strengthening is the guard's job)
-  return max(a_target, min(floor, _stop_accel(v_ego, lead, stop_distance)))
+  # Only eases off, never past what still stops SOFT_MIN_GAP from the lead (strengthening is the guard's job)
+  return max(a_target, min(floor, _stop_accel(v_ego, lead, SOFT_MIN_GAP)))
 
 
 def departure_go(v_ego, lead, since_standstill, track_stable):

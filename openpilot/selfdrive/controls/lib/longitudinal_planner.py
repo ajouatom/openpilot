@@ -387,7 +387,7 @@ class LongitudinalPlanner:
     lead = sm['radarState'].leadOne
     a_target = self.output_a_target
     if mode >= 1:
-      a_target = soft_stop(stop_guard(a_target, cs.vEgo, lead, carrot.stop_distance), cs.vEgo, lead, carrot.stop_distance)
+      a_target = soft_stop(stop_guard(a_target, cs.vEgo, lead, carrot.stop_distance), cs.vEgo, lead)
     # No go toward a red light / signal stop. A lead pulling away overrides the MPC's own shouldStop (it holds us while
     # the gap is under the stop distance, 10-28 §28). Only together with the stop guard: replays with the lead braking
     # hard after a boosted start stay at the baseline minimum gap only when the guard is on (02_logs §24).
