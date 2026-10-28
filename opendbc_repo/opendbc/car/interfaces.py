@@ -19,6 +19,7 @@ from opendbc.car.common.basedir import BASEDIR
 from opendbc.car.common.conversions import Conversions as CV
 from opendbc.car.common.simple_kalman import KF1D, get_kalman_gain
 from opendbc.car.values import PLATFORMS
+from opendbc.car.lateral_geometry import apply_lateral_geometry
 from opendbc.car.radar_tracks import MyTrack as MyTrack, estimate_radar_jerk as estimate_radar_jerk
 from opendbc.can import CANParser
 
@@ -379,6 +380,8 @@ class CarInterfaceBase(ABC):
     # Vehicle mass is published curb weight plus assumed payload such as a human driver; notCars have no assumed payload
     if not ret.notCar:
       ret.mass = ret.mass + STD_CARGO_KG
+
+    apply_lateral_geometry(ret, Params())
 
     # Set params dependent on values set by the car interface
     ret.rotationalInertia = scale_rot_inertia(ret.mass, ret.wheelbase)

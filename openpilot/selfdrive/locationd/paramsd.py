@@ -238,6 +238,9 @@ def retrieve_initial_vehicle_params(params: Params, CP: car.CarParams, replay: b
         # Check if car model matches
         if last_CP.carFingerprint != CP.carFingerprint:
           raise Exception("Car model mismatch")
+        if any(not math.isclose(getattr(last_CP, key), getattr(CP, key), rel_tol=1e-6)
+               for key in ("wheelbase", "centerToFront")):
+          raise Exception("Vehicle geometry changed")
 
         # Check if starting values are sane
         min_sr, max_sr = 0.5 * CP.steerRatio, 2.0 * CP.steerRatio

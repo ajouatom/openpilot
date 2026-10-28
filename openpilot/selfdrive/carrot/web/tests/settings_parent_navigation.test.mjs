@@ -130,3 +130,21 @@ test("ATC add-on lives in the original mode selector's details", async () => {
   assert.deepEqual(model.getItemEntriesForGroup("ATC").map((e) => e.item.name), [parent.name]);
   assert.deepEqual(model.getDetailEntries("ATC", parent.name).map((e) => e.item.name), [parent.name, child.name]);
 });
+
+
+test("geometry override defaults off with the ratio in its details", async () => {
+  const { createSettingsDerivedModel } = await import("../src/features/settings/derived_model.js");
+  const catalog = JSON.parse(readFileSync(new URL("../../carrot_settings.json", root), "utf8"));
+  const parent = catalog.params.find((item) => item.name === "CenterToFrontRatioEnabled");
+  const child = catalog.params.find((item) => item.name === "CenterToFrontRatio");
+  const model = createSettingsDerivedModel({
+    catalog: { groups: [], categories: [], items_by_group: { STEER: [parent, child] } },
+    language: "ko", favorites: [], profiles: [],
+  });
+  assert.equal(parent.default, 0);
+  assert.equal(parent.control, "toggle");
+  assert.equal(child.default, 40);
+  assert.equal(child.display_unit, "percent");
+  assert.deepEqual(model.getItemEntriesForGroup("STEER").map((e) => e.item.name), [parent.name]);
+  assert.deepEqual(model.getDetailEntries("STEER", parent.name).map((e) => e.item.name), [parent.name, child.name]);
+});
