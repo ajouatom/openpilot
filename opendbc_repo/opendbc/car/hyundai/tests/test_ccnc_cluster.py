@@ -472,3 +472,28 @@ def test_hdp_icon_while_engaged(monkeypatch, car, enabled, lat_active, test_fiel
                                                             0, False, False, 0, False, 0, 0)
   assert (data[hyundaicanfd.HDP_ICON_BIT // 8] >> (hyundaicanfd.HDP_ICON_BIT % 8)) & 1 == expected
   assert get_raw_value(data, definition.sigs['CHECKSUM']) == hyundaicanfd.hkg_can_fd_checksum(address, None, bytearray(data))
+
+
+def test_engage_and_disengage_popups(monkeypatch):
+  from openpilot.cereal import log
+  monkeypatch.setattr(hyundaicanfd, 'Params', lambda: SimpleNamespace(get_int=lambda key: 0, get=lambda key: '0'))
+  for attr in ('_was_enabled', '_engage_popup'):
+    monkeypatch.delattr(hyundaicanfd.create_ccnc_messages, attr, raising=False)
+  packer = CANPacker('hyundai_canfd_generated')
+  definition = packer.dbc.name_to_msg['ADRV_0x161']
+  state = SimpleNamespace(
+    adrv_0x161={key: 0 for key in definition.sigs}, out=structs.CarState(latEnabled=True), modelV2=log.ModelDataV2.new_message(),
+    lfahda_cluster=None, cruise_buttons_msg=None, adrv_0x200=None, adrv_0x1ea=None, ccnc_0x162=None,
+    is_metric=True, paddle_button_prev=0, softHoldActive=0, trailer_connected=False,
+  )
+  cp = SimpleNamespace(flags=HyundaiFlags.CAMERA_SCC, carFingerprint=hyundaicanfd.CAR.HYUNDAI_IONIQ_5_PE)
+
+  def alerts_5(frame, enabled):
+    control = structs.CarControl(latActive=enabled, enabled=enabled)
+    msg = hyundaicanfd.create_ccnc_messages(cp, packer, SimpleNamespace(ECAN=0, CAM=2), frame, control, state,
+                                            control.hudControl, 0, False, False, 0, False, 0, 0)[0]
+    return get_raw_value(msg[1], definition.sigs['ALERTS_5'])
+
+  assert alerts_5(0, False) == 0
+  assert [alerts_5(f, True) for f in (100, 295, 300)] == [19, 19, 0]     # engage: 2 s
+  assert [alerts_5(f, False) for f in (500, 695, 700)] == [21, 21, 0]    # disengage: 2 s

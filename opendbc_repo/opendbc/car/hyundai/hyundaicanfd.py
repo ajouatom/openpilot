@@ -938,6 +938,9 @@ CLUSTER_TEST_MSGS = {'CCNC_0x162': (CLUSTER_TEST_FIELDS, CLUSTER_TEST_BITS), 'AD
 
 # 0x162 bit 188 (no DBC name; cluster test 9 at 188, 10-29): the HDP icon. Stock never sets it.
 HDP_ICON_BIT = 188
+# 0x161 ALERTS_5 popups on engage / disengage (cluster test 22, 10-29): 19 "always be ready to drive", 21 "HDP released"
+ENGAGE_POPUP, DISENGAGE_POPUP = 19, 21
+ENGAGE_POPUP_FRAMES = int(2.0 / DT_CTRL)
 
 # ClusterLaneTestValue -1..-4: step the field every 1 / 0.5 / 0.25 / 0.1 s (frames) and show the step in the set speed number
 CLUSTER_TEST_SWEEP_FRAMES = {-1: 100, -2: 50, -3: 25, -4: 10}
@@ -1252,6 +1255,14 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
 
         if values["ALERTS_5"] in [11] and CS.softHoldActive == 0:
           values["ALERTS_5"] = 0
+
+        # Ioniq 5 PE only: other clusters' ALERTS_5 table is unchecked (IONIQ 9 uses 6 for trailer mode)
+        if cruise_enabled != getattr(create_ccnc_messages, '_was_enabled', cruise_enabled):
+          create_ccnc_messages._engage_popup = (ENGAGE_POPUP if cruise_enabled else DISENGAGE_POPUP, frame + ENGAGE_POPUP_FRAMES)
+        create_ccnc_messages._was_enabled = cruise_enabled
+        popup, popup_until = getattr(create_ccnc_messages, '_engage_popup', (0, 0))
+        if getattr(CP, "carFingerprint", None) == CAR.HYUNDAI_IONIQ_5_PE and frame < popup_until and values["ALERTS_5"] == 0:
+          values["ALERTS_5"] = popup
 
         # curvature 표시(0x161쪽 기존 로직 유지)
         _suppress_trailer_mode_warning(values, CS)
