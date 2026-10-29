@@ -10,6 +10,12 @@ RELABEL_HOLD_S = 2.0  # the relabelled line shows up close and "approaching" rig
 COOLDOWN_S = 5.0
 FROM_M = 1.2          # the near line was this far within FROM_S: a real approach from inside the lane, not a line
 FROM_S = 2.0          # that just stays close (Azera 10-27 alley: left line 0.3-0.5 m for 15 s, kicked every 5 s)
+# No lane beyond the near line: the road edge is right behind it (10-29 IC ramp exit, driver drifting onto the right line:
+# edge 1.3 m past it). 13 drives 10-24..29 (log_analyze/reports/kick_edge_20261029/kick_sim.py): 108 kicks -> 96, drops
+# 5 of 74 real crossings (IC ramp, lanes still opening) and 8 of 34 that never crossed (1 other now fires 1.3 s later).
+EDGE_ROOM_M = 2.0       # edge this close past the line: never a lane there
+EDGE_ROOM_UNSEEN_M = 3.0  # ...or this close while the line beyond has not been seen (>0.3) for OUTER_UNSEEN_S
+OUTER_UNSEEN_S = 5.0
 
 
 class LaneCrossing:
@@ -19,6 +25,7 @@ class LaneCrossing:
     self.hist = {1: [], 2: []}
     self.rate = {1: 0., 2: 0.}
     self.seen = {1: -99., 2: -99.}
+    self.outer_seen = {1: -99., 2: -99.}  # laneLines[0] beyond the left line, [3] beyond the right
     self.hold = self.last = -99.
 
   def update(self, md, t, allowed):
@@ -38,12 +45,22 @@ class LaneCrossing:
       self.hist[i] = [(ht, hy) for ht, hy in self.hist[i] if t - ht < FROM_S] + [(t, y[i])]
       if md.laneLineProbs[i] > 0.5:
         self.seen[i] = t
+      if len(md.laneLineProbs) > 3 and md.laneLineProbs[3 * (i - 1)] > 0.3:
+        self.outer_seen[i] = t
     if not allowed or t - self.hold < RELABEL_HOLD_S or t - self.last < COOLDOWN_S:
       return 0
     if t - min(self.seen.values()) >= SEEN_S:
       return 0
     for i in (1, 2):
-      if y[i] < NEAR_M and self.rate[i] > RATE_MPS and -self.rate[3 - i] > RATE_MPS and max(hy for _, hy in self.hist[i]) >= FROM_M:
+      if y[i] < NEAR_M and self.rate[i] > RATE_MPS and -self.rate[3 - i] > RATE_MPS and max(hy for _, hy in self.hist[i]) >= FROM_M \
+         and not self._no_lane_beyond(md, i, y[i], t):
         self.last = t
         return 3 if i == 1 else 4
     return 0
+
+  def _no_lane_beyond(self, md, i, y, t):
+    edges = getattr(md, "roadEdges", None)
+    if edges is None or len(edges) < 2 or not len(edges[i - 1].y):
+      return False
+    room = abs(edges[i - 1].y[0]) - y
+    return room < EDGE_ROOM_M or (room < EDGE_ROOM_UNSEEN_M and t - self.outer_seen[i] >= OUTER_UNSEEN_S)

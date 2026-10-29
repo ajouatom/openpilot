@@ -3,16 +3,19 @@ from types import SimpleNamespace
 from opendbc.car.hyundai.lane_crossing import LaneCrossing
 
 
-def md(frame, left, right, prob=1.0, rprob=None):
+def md(frame, left, right, prob=1.0, rprob=None, edges=None, outer=0.):
   line = lambda y: SimpleNamespace(y=[y])
-  return SimpleNamespace(frameId=frame, laneLines=[line(-5.), line(-left), line(right), line(5.)],
-                         laneLineProbs=[0., prob, prob if rprob is None else rprob, 0.])
+  m = SimpleNamespace(frameId=frame, laneLines=[line(-5.), line(-left), line(right), line(5.)],
+                      laneLineProbs=[outer, prob, prob if rprob is None else rprob, outer])
+  if edges is not None:  # (left, right) road edge this far past each line
+    m.roadEdges = [line(-left - edges[0]), line(right + edges[1])]
+  return m
 
 
-def run(track, allowed=True):
+def run(track, allowed=True, **kw):
   """track: (left, right, prob) per 20 Hz model frame -> side reported on each frame."""
   lc = LaneCrossing()
-  return [lc.update(md(i, *f), i * 0.05, allowed) for i, f in enumerate(track)]
+  return [lc.update(md(i, *f, **kw), i * 0.05, allowed) for i, f in enumerate(track)]
 
 
 def lane_change_left(prob_drop_at=1.4):
@@ -60,3 +63,13 @@ def test_azera_alley_stays_quiet():
   assert not any(run(close))
   # same wobble with a seen right line: the near line never came from inside the lane (>= 1.2 m), still quiet
   assert not any(run([(l, r, 0.9) for l, r, _, _ in close]))
+
+
+def test_no_kick_toward_a_road_edge():
+  # 10-29 IC ramp exit: drifting onto the line with the road edge 1.3 m past it - no lane to change into
+  assert not any(run(lane_change_left(), edges=(1.3, 9.)))
+  # edge 2.5 m past the line: a lane only if the line beyond it has been seen lately
+  assert not any(run(lane_change_left(), edges=(2.5, 9.)))
+  assert run(lane_change_left(), edges=(2.5, 9.), outer=1.).count(3) == 1
+  # a normal lane beyond (edge 3.5 m+ past the line)
+  assert run(lane_change_left(), edges=(3.5, 9.)).count(3) == 1
