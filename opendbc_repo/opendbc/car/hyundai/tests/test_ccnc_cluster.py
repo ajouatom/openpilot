@@ -447,3 +447,28 @@ def test_target_ring_marks_the_target_gap(monkeypatch, enabled, desired, expecte
     SimpleNamespace(flags=HyundaiFlags.CAMERA_SCC), packer, SimpleNamespace(ECAN=0, CAM=2), 5, control, state,
     control.hudControl, 0, False, False, 0, False, 0, 0)[0]
   assert get_raw_value(msg[1], definition.sigs['TARGET_DISTANCE']) == expected
+
+
+@pytest.mark.parametrize(("car", "enabled", "lat_active", "test_field", "expected"), (
+  ("HYUNDAI_IONIQ_5_PE", True, False, 0, 1),   # cruise engaged
+  ("HYUNDAI_IONIQ_5_PE", False, True, 0, 1),   # steering only
+  ("HYUNDAI_IONIQ_5_PE", False, False, 0, 0),
+  ("HYUNDAI_IONIQ_5_PE", True, True, 9, 0),    # cluster test on its bit group wins
+  ("KIA_EV9", True, True, 0, 0),               # other clusters unchecked
+))
+def test_hdp_icon_while_engaged(monkeypatch, car, enabled, lat_active, test_field, expected):
+  monkeypatch.setattr(hyundaicanfd, "Params", lambda: SimpleNamespace(get_int=lambda key: {'ClusterLaneTest': test_field}.get(key, 0)))
+  packer = CANPacker("hyundai_canfd_generated")
+  definition = packer.dbc.name_to_msg["CCNC_0x162"]
+  state = SimpleNamespace(
+    out=SimpleNamespace(brakeHoldActive=False, parkingBrake=False, steeringAngleDeg=0.0, leftBlinker=False, rightBlinker=False),
+    modelV2=None, lfahda_cluster=None, cruise_buttons_msg=None, adrv_0x161=None, adrv_0x200=None, adrv_0x1ea=None,
+    ccnc_0x162={key: 0 for key in definition.sigs}, radarState=None,
+  )
+  cp = SimpleNamespace(flags=HyundaiFlags.CAMERA_SCC.value, carFingerprint=getattr(hyundaicanfd.CAR, car))
+  control = SimpleNamespace(latActive=lat_active, enabled=enabled)
+  hud = SimpleNamespace(leadDistance=0, leadRadar=0, leadRelSpeed=0)
+  (address, data, bus), = hyundaicanfd.create_ccnc_messages(cp, packer, SimpleNamespace(ECAN=0, CAM=2), 0, control, state, hud,
+                                                            0, False, False, 0, False, 0, 0)
+  assert (data[hyundaicanfd.HDP_ICON_BIT // 8] >> (hyundaicanfd.HDP_ICON_BIT % 8)) & 1 == expected
+  assert get_raw_value(data, definition.sigs['CHECKSUM']) == hyundaicanfd.hkg_can_fd_checksum(address, None, bytearray(data))

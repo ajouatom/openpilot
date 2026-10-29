@@ -5,7 +5,7 @@ from opendbc.car.hyundai.scalar import clip_float
 from opendbc.car import CanBusBase, DT_CTRL
 from opendbc.car.carlog import carlog
 from opendbc.car.crc import CRC16_XMODEM
-from opendbc.car.hyundai.values import HyundaiFlags, HyundaiExtFlags
+from opendbc.car.hyundai.values import CAR, HyundaiFlags, HyundaiExtFlags
 from opendbc.car.hyundai.stopping import MOVING_SPEED, STOP_LOWER_BAND
 from openpilot.common.params import Params
 from openpilot.common.filter_simple import FirstOrderFilter
@@ -936,6 +936,9 @@ CLUSTER_TEST_MSGS = {'CCNC_0x162': (CLUSTER_TEST_FIELDS, CLUSTER_TEST_BITS), 'AD
                      'ADRV_0x1ea': (CLUSTER_TEST_FIELDS_1EA, CLUSTER_TEST_BITS_1EA), 'ADRV_0x200': (CLUSTER_TEST_FIELDS_200, CLUSTER_TEST_BITS_200)}
 
 
+# 0x162 bit 188 (no DBC name; cluster test 9 at 188, 10-29): the HDP icon. Stock never sets it.
+HDP_ICON_BIT = 188
+
 # ClusterLaneTestValue -1..-4: step the field every 1 / 0.5 / 0.25 / 0.1 s (frames) and show the step in the set speed number
 CLUSTER_TEST_SWEEP_FRAMES = {-1: 100, -2: 50, -3: 25, -4: 10}
 
@@ -1358,7 +1361,12 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
           values["FAULT_LSS"] = 0
           values["FAULT_DAS"] = 0
 
-        ret.append(_cluster_test_msg(packer, "CCNC_0x162", CAN.ECAN, values, rx_counter, test_field, test_value))
+        msg = _cluster_test_msg(packer, "CCNC_0x162", CAN.ECAN, values, rx_counter, test_field, test_value)
+        # HDP icon while cruise or steering is engaged; Ioniq 5 PE only - other clusters' bit 188 is unchecked
+        if (getattr(CP, "carFingerprint", None) == CAR.HYUNDAI_IONIQ_5_PE and (CC.enabled or lat_active) and
+            HDP_ICON_BIT not in CLUSTER_TEST_BITS.get(test_field, ())):
+          msg = _set_raw_bits(msg, (HDP_ICON_BIT,), 1)
+        ret.append(msg)
 
     # --- NEW_MSG_4B9 (corner radar keep-alive?) ---
     if enable_corner_radar > 0:
