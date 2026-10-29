@@ -2,6 +2,7 @@
 
 #include "safety_declarations.h"
 #include "safety_hyundai_common.h"
+#include "safety_pedal_interceptor.h"
 
 #define HYUNDAI_LIMITS(steer, rate_up, rate_down) { \
   .max_steer = (steer), \
@@ -56,13 +57,16 @@ static const CanMsg HYUNDAI_TX_MSGS[] = {
 static bool hyundai_legacy = false;
 static bool hyundai_cruise_buttons_alt = false;
 static bool hyundai_pedal_interceptor = false;
+static bool hyundai_pedal_interceptor_healthy = false;
+static uint32_t hyundai_pedal_interceptor_last_rx = 0U;
+static RxCheck *hyundai_pedal_interceptor_rx = NULL;
 
-#define HYUNDAI_PEDAL_INTERCEPTOR_ADDR_CHECK \
-  {.msg = {{0x201, 0, 6, .max_counter = 15U, .frequency = 50U}, { 0 }, { 0 }}}
-#define HYUNDAI_RAY_LDA_ADDR_CHECK \
-  {.msg = {{0x391, 0, 8, .ignore_checksum = true, .ignore_counter = true, .frequency = 100U}, \
-           {0x50C, 0, 8, .ignore_checksum = true, .ignore_counter = true, .frequency = 50U}, \
-           {0x50C, 1, 8, .ignore_checksum = true, .ignore_counter = true, .frequency = 50U}}}
+// This profile belongs to Ray EV. No other vehicle inherits these limits.
+static const PedalInterceptorLimits HYUNDAI_RAY_PEDAL_INTERCEPTOR_LIMITS = {
+  .min_track1 = 264U, .max_track1 = 530U, .min_track2 = 497U, .max_track2 = 1035U,
+  .track2_ratio = 2, .track2_tolerance = 40,
+  .driver_threshold1 = 272U, .driver_threshold2 = 513U,
+};
 
 static uint8_t hyundai_get_counter(const CANPacket_t *to_push) {
   int addr = GET_ADDR(to_push);
@@ -104,20 +108,9 @@ static uint32_t hyundai_get_checksum(const CANPacket_t *to_push) {
   return chksum;
 }
 
-static uint8_t hyundai_pedal_interceptor_checksum(const CANPacket_t *msg) {
-  uint8_t crc = 0xFFU;
-  for (int i = 4; i >= 0; i--) {
-    crc ^= GET_BYTE(msg, i);
-    for (int j = 0; j < 8; j++) {
-      crc = (crc & 0x80U) ? (uint8_t)((crc << 1U) ^ 0xD5U) : (uint8_t)(crc << 1U);
-    }
-  }
-  return crc;
-}
-
 static uint32_t hyundai_compute_checksum(const CANPacket_t *to_push) {
   if (hyundai_pedal_interceptor && (GET_ADDR(to_push) == 0x201)) {
-    return hyundai_pedal_interceptor_checksum(to_push);
+    return pedal_interceptor_checksum(to_push);
   }
   int addr = GET_ADDR(to_push);
 
@@ -187,12 +180,16 @@ static void hyundai_rx_hook(const CANPacket_t *to_push) {
       hyundai_common_cruise_buttons_check(cruise_button, main_button);
     }
 
-    // Ray pedal physical input replaces the native EV accelerator for driver override.
-    if ((addr == 0x201) && hyundai_pedal_interceptor) {
-      const uint16_t track1 = ((uint16_t)GET_BYTE(to_push, 0) << 8U) | GET_BYTE(to_push, 1);
-      const uint16_t track2 = ((uint16_t)GET_BYTE(to_push, 2) << 8U) | GET_BYTE(to_push, 3);
-      gas_pressed = (track1 > 272U) || (track2 > 513U);
-    } else if ((addr == 0x371) && hyundai_ev_gas_signal && !hyundai_pedal_interceptor) {
+    // gas press, different for EV, hybrid, and ICE models
+    if (hyundai_pedal_interceptor) {
+      if ((addr == 0x201) && (GET_LEN(to_push) == 6)) {
+        const PedalInterceptorLimits limits = HYUNDAI_RAY_PEDAL_INTERCEPTOR_LIMITS;
+        gas_pressed = (pedal_interceptor_track(to_push, 0) > limits.driver_threshold1) ||
+                      (pedal_interceptor_track(to_push, 2) > limits.driver_threshold2);
+        hyundai_pedal_interceptor_healthy = (GET_BYTE(to_push, 4) >> 4) == 0U;
+        hyundai_pedal_interceptor_last_rx = microsecond_timer_get();
+      }
+    } else if ((addr == 0x371) && hyundai_ev_gas_signal) {
       gas_pressed = (((GET_BYTE(to_push, 4) & 0x7FU) << 1) | GET_BYTE(to_push, 3) >> 7) != 0U;
     } else if ((addr == 0x371) && hyundai_hybrid_gas_signal) {
       gas_pressed = GET_BYTE(to_push, 7) != 0U;
@@ -241,6 +238,26 @@ static bool hyundai_tx_hook(const CANPacket_t *to_send) {
   bool tx = true;
   int addr = GET_ADDR(to_send);
 
+  if (hyundai_pedal_interceptor) {
+    // Reject before the existing SCC hook can change controls_allowed, even
+    // when the outer TX allowlist would also reject the packet.
+    if ((addr != 0x340) && (addr != 0x4F1) && (addr != 0x485) && (addr != 0x200)) {
+      return false;
+    }
+    if (addr == 0x200) {
+      if ((GET_BUS(to_send) != 0) || (GET_LEN(to_send) != 6)) {
+        return false;
+      }
+      const bool enabled = GET_BIT(to_send, 39U);
+      const bool sensor_valid = hyundai_pedal_interceptor_healthy && (hyundai_pedal_interceptor_rx != NULL) &&
+        hyundai_pedal_interceptor_rx->status.msg_seen && hyundai_pedal_interceptor_rx->status.valid_checksum &&
+        (hyundai_pedal_interceptor_rx->status.wrong_counters < MAX_WRONG_COUNTERS) &&
+        (get_ts_elapsed(microsecond_timer_get(), hyundai_pedal_interceptor_last_rx) <= 200000U);
+      return !pedal_interceptor_command_checks(to_send, HYUNDAI_RAY_PEDAL_INTERCEPTOR_LIMITS) &&
+             (!enabled || (sensor_valid && get_longitudinal_allowed() && !brake_pressed_prev));
+    }
+  }
+
   // FCA11: Block any potential actuation
   if (false && addr == 0x38D) {
     int CR_VSM_DecCmd = GET_BYTE(to_send, 1);
@@ -248,22 +265,6 @@ static bool hyundai_tx_hook(const CANPacket_t *to_send) {
     bool CF_VSM_DecCmdAct = GET_BIT(to_send, 31U);
 
     if ((CR_VSM_DecCmd != 0) || FCA_CmdAct || CF_VSM_DecCmdAct) {
-      tx = false;
-    }
-  }
-
-  // Ray pedal command safety checks from StarPilot's Hyundai safety mode.
-  if (hyundai_pedal_interceptor && addr == 0x200) {
-    const uint16_t track1 = ((uint16_t)GET_BYTE(to_send, 0) << 8U) | GET_BYTE(to_send, 1);
-    const uint16_t track2 = ((uint16_t)GET_BYTE(to_send, 2) << 8U) | GET_BYTE(to_send, 3);
-    const bool enabled = (GET_BYTE(to_send, 4) & 0x80U) != 0U;
-    const int expected_track2 = 497 + (2 * ((int)track1 - 264));
-    if ((GET_BYTE(to_send, 4) & 0x70U) != 0U ||
-        (GET_BYTE(to_send, 5) != hyundai_pedal_interceptor_checksum(to_send)) ||
-        (enabled && (track1 < 264U || track1 > 530U || track2 < 497U || track2 > 1035U ||
-                     (((int)track2 - expected_track2 > 40) || ((int)track2 - expected_track2 < -40)))) ||
-        (!enabled && (track1 != 0U || track2 != 0U)) ||
-        longitudinal_interceptor_checks(to_send) || (enabled && brake_pressed_prev)) {
       tx = false;
     }
   }
@@ -511,22 +512,30 @@ static safety_config hyundai_init(uint16_t param) {
 
   hyundai_common_init(param);
   hyundai_legacy = false;
-  hyundai_pedal_interceptor = (param & (uint16_t)~(32U | 128U | 2048U)) == 0x9405U;
-  if (hyundai_pedal_interceptor) {
+  hyundai_pedal_interceptor = false;
+  hyundai_pedal_interceptor_healthy = false;
+  hyundai_pedal_interceptor_rx = NULL;
+  hyundai_pedal_interceptor_last_rx = 0U;
+  if (GET_FLAG(param, 8192U)) {  // HyundaiSafetyFlags.PEDAL_INTERCEPTOR
+    // Respect Carrot's existing LONG/ALLOW_DEBUG policy. The Ray profile is
+    // explicit and cannot be selected by ordinary EV/LONG or CAN-FD flags.
+    if (!hyundai_longitudinal || (param != (8192U | 16384U | 4U | 1U))) {
+      return (safety_config){0};
+    }
     static RxCheck hyundai_pedal_interceptor_rx_checks[] = {
       HYUNDAI_COMMON_RX_CHECKS(false)
-      {.msg = {{0x592U, 0, 8, .ignore_checksum = true, .ignore_counter = true, .frequency = 10U}, { 0 }, { 0 }}},
-      HYUNDAI_RAY_LDA_ADDR_CHECK,
-      HYUNDAI_PEDAL_INTERCEPTOR_ADDR_CHECK,
+      {.msg = {{0x4F1, 0, 4, .ignore_checksum = true, .max_counter = 15U, .frequency = 50U}, { 0 }, { 0 }}},
+      {.msg = {{0x592, 0, 8, .ignore_checksum = true, .ignore_counter = true, .frequency = 10U}, { 0 }, { 0 }}},
+      {.msg = {{0x201, 0, 6, .max_counter = 15U, .frequency = 50U}, { 0 }, { 0 }}},
     };
-    static const CanMsg HYUNDAI_RAY_PEDAL_TX_MSGS[] = {
-      {0x340, 0, 8}, {0x4F1, 0, 4}, {0x485, 0, 8}, {0x53E, 0, 6},
-      {0x200, 0, 6},
+    static const CanMsg HYUNDAI_PEDAL_INTERCEPTOR_TX_MSGS[] = {
+      {0x340, 0, 8}, {0x4F1, 0, 4}, {0x485, 0, 8}, {0x200, 0, 6},
     };
-    hyundai_longitudinal = true;
-    return BUILD_SAFETY_CFG(hyundai_pedal_interceptor_rx_checks, HYUNDAI_RAY_PEDAL_TX_MSGS);
+    hyundai_pedal_interceptor = true;
+    hyundai_pedal_interceptor_rx = &hyundai_pedal_interceptor_rx_checks[
+      sizeof(hyundai_pedal_interceptor_rx_checks) / sizeof(hyundai_pedal_interceptor_rx_checks[0]) - 1U];
+    return BUILD_SAFETY_CFG(hyundai_pedal_interceptor_rx_checks, HYUNDAI_PEDAL_INTERCEPTOR_TX_MSGS);
   }
-  hyundai_pedal_interceptor = false;
   return hyundai_init_carrot(hyundai_legacy);
 
   safety_config ret;
@@ -566,6 +575,7 @@ static safety_config hyundai_legacy_init(uint16_t param) {
   hyundai_common_init(param);
   hyundai_legacy = true;
   hyundai_pedal_interceptor = false;
+  hyundai_pedal_interceptor_rx = NULL;
 
   return hyundai_init_carrot(hyundai_legacy);
 

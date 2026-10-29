@@ -19,6 +19,9 @@ from opendbc.car.hyundai.values import HyundaiFlags, CAR, DBC, Buttons, CarContr
                                        EV_MODE_ACTIVE_VALUES, EV_MODE_STATUS_ADDR, EV_MODE_STATUS_DLC, EV_MODE_STATUS_MSG, \
                                        EV_MODE_STATUS_SIGNAL
 from opendbc.car.interfaces import CarStateBase
+from opendbc.car.hyundai.values import get_pedal_interceptor_params
+from opendbc.car.pedal_interceptor import (PEDAL_INTERCEPTOR_DBC, PEDAL_INTERCEPTOR_BUS,
+                                         PEDAL_INTERCEPTOR_RX_FREQUENCY, PedalInterceptorState)
 
 from openpilot.common.params import Params
 
@@ -239,10 +242,10 @@ class CarState(CarStateBase):
     self.camera_scc_hint_enabled = self.op_params.get_int("HyundaiCameraSCC") == 0 and not (CP.flags & HyundaiFlags.CAMERA_SCC)
     self.camera_scc_hint = False
     self.op_params.put_bool("HyundaiCameraSccHint", False)
-    self.pedal_interceptor_state = 5
-    self.pedal_interceptor_valid = False
 
     self.main_enabled = True if self.op_params.get_int("AutoEngage") == 2 else False
+    self.pedal_interceptor_params = get_pedal_interceptor_params(CP)
+    self.pedal_interceptor_state = PedalInterceptorState() if self.pedal_interceptor_params is not None else None
     self.manual_main_off_latched = False
     self.gear_shifter = GearShifter.drive # Gear_init for Nexo ?? unknown 21.02.23.LSW
 
@@ -505,7 +508,6 @@ class CarState(CarStateBase):
     cp = can_parsers[Bus.pt]
     cp_cam = can_parsers[Bus.cam]
     cp_alt = can_parsers[Bus.alt] if Bus.alt in can_parsers else None
-    cp_pedal = can_parsers.get(Bus.party)
 
     if self.CP.flags & HyundaiFlags.CANFD:
       return self.update_canfd(can_parsers)
@@ -563,7 +565,7 @@ class CarState(CarStateBase):
       ret.cruiseState.enabled = cp.vl["TCS13"]["ACC_REQ"] == 1
       ret.cruiseState.standstill = False
       ret.cruiseState.nonAdaptive = False
-    elif not self.CP.flags & HyundaiFlags.CC_ONLY_CAR or self.CP.enableGasInterceptorDEPRECATED:
+    elif not self.CP.flags & HyundaiFlags.CC_ONLY_CAR:
       self.main_enabled = ret.cruiseState.available = cp_cruise.vl["SCC11"]["MainMode_ACC"] == 1
       ret.cruiseState.enabled = cp_cruise.vl["SCC12"]["ACCMode"] != 0
       ret.cruiseState.standstill = cp_cruise.vl["SCC11"]["SCCInfoDisplay"] == 4.
@@ -572,9 +574,22 @@ class CarState(CarStateBase):
 
       ret.pcmCruiseGap = cp_cruise.vl["SCC11"]["TauGapSet"]
 
+    if self.pedal_interceptor_params is not None:
+      pedal_interceptor_params = self.pedal_interceptor_params
+      self.pedal_interceptor_state.update(can_parsers[Bus.party], pedal_interceptor_params)
+      message, signal = pedal_interceptor_params.cruise_available
+      # Keep Carrot's main switch and READY gate; observe the separate OEM CC
+      # state only for cancellation. No shared Hyundai DBC change is necessary.
+      ret.cruiseState.available = ret.cruiseState.available and bool(cp.vl[message][signal])
+      address, bit = pedal_interceptor_params.cruise_enabled_bit
+      payload = cp.dat.get(address, b"")
+      ret.cruiseState.enabled = len(payload) == 8 and bool(int.from_bytes(payload, "little") & (1 << bit))
+      message, signal = pedal_interceptor_params.cruise_speed
+      ret.cruiseState.speed = cp.vl[message][signal] * speed_conv
+
     # TODO: Find brake pressure
     ret.brake = 0
-    if not self.CP.flags & HyundaiFlags.CC_ONLY_CAR or self.CP.enableGasInterceptorDEPRECATED:
+    if not self.CP.flags & HyundaiFlags.CC_ONLY_CAR or self.pedal_interceptor_params is not None:
       ret.brakePressed = cp.vl["TCS13"]["DriverOverride"] == 2  # 2 includes regen braking by user on HEV/EV
       ret.brakeHoldActive = cp.vl["TCS15"]["AVH_LAMP"] == 2  # 0 OFF, 1 ERROR, 2 ACTIVE, 3 READY
       ret.parkingBrake = cp.vl["TCS13"]["PBRAKE_ACT"] == 1
@@ -583,11 +598,10 @@ class CarState(CarStateBase):
       ret.accFaulted = cp.vl["TCS13"]["ACCEnable"] != 0  # 0 ACC CONTROL ENABLED, 1-3 ACC CONTROL DISABLED
       ret.brakeLights = bool(cp.vl["TCS13"]["BrakeLight"] or ret.brakePressed)
 
-    if self.CP.carFingerprint == CAR.KIA_RAY_EV and self.CP.enableGasInterceptorDEPRECATED:
-      self.pedal_interceptor_valid = bool(cp_pedal is not None and cp_pedal.can_valid and
-                                  cp_pedal.ts_nanos["GAS_SENSOR"]["STATE"] > 0)
-      self.pedal_interceptor_state = int(cp_pedal.vl["GAS_SENSOR"]["STATE"]) if cp_pedal is not None else 5
-      ret.accFaulted = not self.pedal_interceptor_valid or self.pedal_interceptor_state != 0
+    if self.pedal_interceptor_state is not None:
+      # ACCEnable describes a nonexistent SCC in this adapter. Brake/hold,
+      # parking, ESP, main/READY and CAN health continue through Carrot's paths.
+      ret.accFaulted = self.pedal_interceptor_state.faulted
 
     if self.CP.flags & (HyundaiFlags.HYBRID | HyundaiFlags.EV | HyundaiFlags.FCEV):
       if self.CP.flags & HyundaiFlags.FCEV:
@@ -601,11 +615,8 @@ class CarState(CarStateBase):
       ret.gas = cp.vl["EMS12"]["PV_AV_CAN"] / 100.
       ret.gasPressed = bool(cp.vl["EMS16"]["CF_Ems_AclAct"])
 
-    if self.CP.carFingerprint == CAR.KIA_RAY_EV and self.CP.enableGasInterceptorDEPRECATED and self.pedal_interceptor_valid:
-      driver_pedal = cp_pedal.vl_raw["GAS_SENSOR"]
-      track1 = int.from_bytes(driver_pedal[:2], "big")
-      track2 = int.from_bytes(driver_pedal[2:4], "big")
-      ret.gasPressed = track1 > 272 or track2 > 513
+    if self.pedal_interceptor_state is not None and self.pedal_interceptor_state.valid:
+      ret.gasPressed = self.pedal_interceptor_state.gas_pressed
 
     # Gear Selection via Cluster - For those Kia/Hyundai which are not fully discovered, we can use the Cluster Indicator for Gear Selection,
     # as this seems to be standard over all cars, but is not the preferred method.
@@ -648,7 +659,7 @@ class CarState(CarStateBase):
 
       ret.gearShifter = self.gear_shifter
 
-    if (not self.CP.flags & HyundaiFlags.CC_ONLY_CAR) and (not self.CP.openpilotLongitudinalControl or self.CP.flags & HyundaiFlags.CAMERA_SCC):
+    if not self.CP.flags & HyundaiFlags.CC_ONLY_CAR and (not self.CP.openpilotLongitudinalControl or self.CP.flags & HyundaiFlags.CAMERA_SCC):
       aeb_src = "FCA11" if self.CP.flags & HyundaiFlags.USE_FCA.value else "SCC12"
       aeb_sig = "FCA_CmdAct" if self.CP.flags & HyundaiFlags.USE_FCA.value else "AEB_CmdAct"
       aeb_warning = cp_cruise.vl[aeb_src]["CF_VSM_Warn"] != 0
@@ -1676,6 +1687,10 @@ class CarState(CarStateBase):
       Bus.pt: register_vehicle_gps(CANParser(DBC[CP.carFingerprint][Bus.pt], [("EMS21", math.nan)], 0)),
       Bus.cam: CANParser(DBC[CP.carFingerprint][Bus.pt], [], 2),
     }
-    if CP.carFingerprint == CAR.KIA_RAY_EV and CP.enableGasInterceptorDEPRECATED:
-      parsers[Bus.party] = CANParser(DBC[CP.carFingerprint][Bus.party], [("GAS_SENSOR", 50)], 0)
+    pedal_interceptor_params = get_pedal_interceptor_params(CP)
+    if pedal_interceptor_params is not None:
+      parsers[Bus.party] = CANParser(PEDAL_INTERCEPTOR_DBC, [("GAS_SENSOR", PEDAL_INTERCEPTOR_RX_FREQUENCY)],
+                                    PEDAL_INTERCEPTOR_BUS)
+      # Register the configured OEM CC input at its actual receive rate.
+      parsers[Bus.pt]._add_message(pedal_interceptor_params.cruise_available[0], 10)
     return parsers

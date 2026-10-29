@@ -3,8 +3,7 @@ from collections import deque
 import numpy as np
 from opendbc.car.hyundai.scalar import clip_float
 from opendbc.can import CANPacker
-from opendbc.car import (Bus, DT_CTRL, create_gas_interceptor_command, apply_driver_steer_torque_limits,
-                         common_fault_avoidance, make_tester_present_msg, structs, apply_std_steer_angle_limits)
+from opendbc.car import Bus, DT_CTRL, apply_driver_steer_torque_limits, common_fault_avoidance, make_tester_present_msg, structs, apply_std_steer_angle_limits
 from opendbc.car.common.conversions import Conversions as CV
 from opendbc.car.hyundai import hyundaicanfd, hyundaican
 from opendbc.car.hyundai.carstate import CarState
@@ -12,10 +11,11 @@ from opendbc.car.hyundai.stopping import CanfdStopping
 from opendbc.car.hyundai.steering_handover import SteeringHandover
 from opendbc.car.carlog import carlog
 from opendbc.car.hyundai.hyundaicanfd import CanBus
-from opendbc.car.hyundai.values import HyundaiFlags, HyundaiSafetyFlags, Buttons, CarControllerParams, CAR, \
-                                        CAN_GEARS, HyundaiExtFlags
+from opendbc.car.hyundai.values import HyundaiFlags, Buttons, CarControllerParams, CAR, CAN_GEARS, HyundaiExtFlags
 from opendbc.car.interfaces import CarControllerBase
 from opendbc.car.vehicle_model import VehicleModel
+from opendbc.car.hyundai.values import get_pedal_interceptor_params
+from opendbc.car.pedal_interceptor import PedalInterceptor
 from openpilot.common.filter_simple import MyMovingAverage
 
 VisualAlert = structs.CarControl.HUDControl.VisualAlert
@@ -86,43 +86,6 @@ def process_hud_alert(enabled, fingerprint, hud_control):
     right_lane_warning = 1 if fingerprint in (CAR.GENESIS_G90, CAR.GENESIS_G80) else 2
 
   return sys_warning, sys_state, left_lane_warning, right_lane_warning
-
-RAY_PEDAL_COMMAND_CAP = 0.70
-RAY_PEDAL_CAP_SPEED_BP = [0.0, 12.0, 20.0, 25.0]
-RAY_PEDAL_CAP_V = [0.55, 0.55, 0.65, RAY_PEDAL_COMMAND_CAP]
-RAY_PEDAL_OFFSET_SPEED_BP = [0.0, 2.0, 4.0, 8.0, 12.0, 16.0, 20.0, 25.0]
-RAY_PEDAL_OFFSET_V = [0.08, 0.13, 0.20, 0.32, 0.42, 0.51, 0.565, 0.60]
-RAY_PEDAL_ACCEL_GAIN = 0.22
-RAY_PEDAL_DECEL_GAIN = 0.55
-RAY_PEDAL_RATE_UP = 0.02
-RAY_PEDAL_RATE_DOWN = 0.06
-RAY_PEDAL_OVERSPEED_CUTOFF = 0.5
-RAY_PEDAL_TAPER_BELOW_TARGET = 0.75
-
-
-def get_ray_pedal_target(accel: float, v_ego: float, set_speed: float) -> float:
-  if not all(np.isfinite(x) for x in (accel, v_ego, set_speed)) or set_speed < 1.0:
-    return 0.0
-
-  speed_error = set_speed - v_ego
-  if speed_error <= -RAY_PEDAL_OVERSPEED_CUTOFF:
-    return 0.0
-
-  pedal_offset = float(np.interp(v_ego, RAY_PEDAL_OFFSET_SPEED_BP, RAY_PEDAL_OFFSET_V))
-  pedal_cap = float(np.interp(v_ego, RAY_PEDAL_CAP_SPEED_BP, RAY_PEDAL_CAP_V))
-  pedal_gain = RAY_PEDAL_DECEL_GAIN if accel < 0.0 else RAY_PEDAL_ACCEL_GAIN
-  target = float(np.clip(pedal_offset + accel * pedal_gain, 0.0, pedal_cap))
-  if speed_error < 0.0:
-    target *= float(np.clip(0.65 * (1.0 + speed_error / RAY_PEDAL_OVERSPEED_CUTOFF), 0.0, 1.0))
-  elif speed_error < RAY_PEDAL_TAPER_BELOW_TARGET:
-    target *= 0.65 + 0.35 * speed_error / RAY_PEDAL_TAPER_BELOW_TARGET
-  return target
-
-
-def get_pedal_interceptor_target(car_fingerprint, accel: float, v_ego: float, set_speed: float) -> float:
-  if car_fingerprint == CAR.KIA_RAY_EV:
-    return get_ray_pedal_target(accel, v_ego, set_speed)
-  return 0.0
 
 def rate_limit(x, x_last, lo, hi):
   return clip_float(x, x_last + lo, x_last + hi)
@@ -230,15 +193,9 @@ class CarController(CarControllerBase):
                            if CP.flags & HyundaiFlags.CANFD and CP.openpilotLongitudinalControl else None)
     self.apply_torque_last = 0
     self.car_fingerprint = CP.carFingerprint
-    self.pedal_interceptor_enabled = CP.carFingerprint == CAR.KIA_RAY_EV and CP.enableGasInterceptorDEPRECATED
-    self.pedal_interceptor_packer = CANPacker(dbc_names[Bus.party]) if self.pedal_interceptor_enabled else None
-    self.pedal_interceptor_gas_last = 0.0
-    self._ray_lfa_8byte = CP.carFingerprint == CAR.KIA_RAY_EV and bool(
-      CP.safetyConfigs[-1].safetyParam & HyundaiSafetyFlags.CAN_REFRESH_MSGS
-    )
-    self._dash_lat_disengage_blink_frame = 0
-    self._dash_lat_disengage_init = False
-    self._dash_prev_lat_active = False
+    pedal_interceptor_params = get_pedal_interceptor_params(CP)
+    self.pedal_interceptor = (PedalInterceptor(CANPacker(dbc_names[Bus.party]), pedal_interceptor_params)
+                              if pedal_interceptor_params is not None else None)
     self.last_button_frame = 0
 
     self.hyundai_jerk = HyundaiJerk()
@@ -350,7 +307,6 @@ class CarController(CarControllerBase):
 
     actuators = CC.actuators
     hud_control = CC.hudControl
-    lfa_icon = self._update_dash_icon_state(CC)[1] if self._ray_lfa_8byte else 0
 
     if hud_control.modelDesire in [3,4]:
       self.params.STEER_DELTA_UP = self.steerDeltaUpLC
@@ -579,7 +535,7 @@ class CarController(CarControllerBase):
 
     # tester present - w/ no response (keeps relevant ECU disabled)
     if (self.frame % 100 == 0 and not (self.CP.flags & HyundaiFlags.CANFD_CAMERA_SCC) and
-        self.CP.openpilotLongitudinalControl and not self.pedal_interceptor_enabled):
+        self.CP.openpilotLongitudinalControl and self.pedal_interceptor is None):
       # for longitudinal control, either radar or ADAS driving ECU
       addr, bus = 0x7d0, self.CAN.ECAN if self.CP.flags & HyundaiFlags.CANFD else 0
       if self.CP.flags & HyundaiFlags.CANFD_HDA2.value:
@@ -680,7 +636,7 @@ class CarController(CarControllerBase):
         can_sends.append(hyundaican.create_mdps12(self.packer, self.frame, CS.mdps12))
 
       casper_ev = self.CP.carFingerprint == CAR.HYUNDAI_CASPER_EV
-      if self.frame % 2 == 0 and self.CP.openpilotLongitudinalControl and not self.pedal_interceptor_enabled:
+      if self.frame % 2 == 0 and self.CP.openpilotLongitudinalControl and self.pedal_interceptor is None:
         self.hyundai_jerk.make_jerk(self.CP, CS, accel, actuators, hud_control)
         self.hyundai_jerk.check_carrot_cruise(CC, CS, hud_control, stopping, accel, actuators.aTarget)
         #jerk = 3.0 if actuators.longControlState == LongCtrlState.pid else 1.0
@@ -697,14 +653,11 @@ class CarController(CarControllerBase):
 
 
       # 20 Hz LFA MFA message
-      if self.frame % 5 == 0 and (self.CP.flags & HyundaiFlags.SEND_LFA.value or self._ray_lfa_8byte):
-        if self._ray_lfa_8byte:
-          can_sends.append(hyundaican.create_ray_lfahda_mfc(self.packer, CC.latActive, lfa_icon))
-        else:
-          can_sends.append(hyundaican.create_lfahda_mfc(self.packer, CC, self.blinking_signal))
+      if self.frame % 5 == 0 and self.CP.flags & HyundaiFlags.SEND_LFA.value:
+        can_sends.append(hyundaican.create_lfahda_mfc(self.packer, CC, self.blinking_signal))
 
       # 5 Hz ACC options
-      if self.frame % 20 == 0 and self.CP.openpilotLongitudinalControl and not self.pedal_interceptor_enabled:
+      if self.frame % 20 == 0 and self.CP.openpilotLongitudinalControl and self.pedal_interceptor is None:
         if camera_scc:
           if CS.scc13 is not None:
             if casper_ev:
@@ -715,28 +668,19 @@ class CarController(CarControllerBase):
           can_sends.extend(hyundaican.create_acc_opt(self.packer, self.CP))
 
       # 2 Hz front radar options
-      if self.frame % 50 == 0 and self.CP.openpilotLongitudinalControl and not camera_scc and not self.pedal_interceptor_enabled:
+      if self.frame % 50 == 0 and self.CP.openpilotLongitudinalControl and not camera_scc and self.pedal_interceptor is None:
         can_sends.append(hyundaican.create_frt_radar_opt(self.packer))
 
-    if self.pedal_interceptor_enabled:
-      if CC.enabled and CS.out.cruiseState.enabled and (self.frame - self.last_button_frame) * DT_CTRL > 0.04:
+    if self.pedal_interceptor is not None:
+      if (CC.enabled and CS.out.cruiseState.enabled and CS.clu11 is not None and
+          (self.frame - self.last_button_frame) * DT_CTRL > 0.04):
         can_sends.append(hyundaican.create_clu11(self.packer, self.frame, CS.clu11, Buttons.CANCEL, self.CP))
         self.last_button_frame = self.frame
-      if self.frame % 4 == 0:
-        pedal_ready = CS.pedal_interceptor_valid and CS.pedal_interceptor_state == 0
-        pedal_active = (CC.longActive and pedal_ready and not CC.cruiseControl.override and
-                        not CS.out.gasPressed and not CS.out.brakePressed)
-        if pedal_active:
-          target = get_pedal_interceptor_target(self.CP.carFingerprint, accel, CS.out.vEgo, hud_control.setSpeed)
-          if target <= 0.001:
-            self.pedal_interceptor_gas_last = 0.0
-          else:
-            next_gas = rate_limit(target, self.pedal_interceptor_gas_last, -RAY_PEDAL_RATE_DOWN, RAY_PEDAL_RATE_UP)
-            self.pedal_interceptor_gas_last = min(next_gas, target)
-        else:
-          self.pedal_interceptor_gas_last = 0.0
-        can_sends.append(create_gas_interceptor_command(
-          self.pedal_interceptor_packer, self.pedal_interceptor_gas_last, (self.frame // 4) & 0xF))
+      pedal_active = (CC.longActive and not CS.pedal_interceptor_state.faulted and
+                      not CC.cruiseControl.override and not CS.out.gasPressed and not CS.out.brakePressed)
+      pedal_message = self.pedal_interceptor.update(self.frame, pedal_active, accel, CS.out.vEgo, hud_control.setSpeed)
+      if pedal_message is not None:
+        can_sends.append(pedal_message)
 
     new_actuators = actuators.as_builder()
     new_actuators.torque = apply_torque / self.params.STEER_MAX
@@ -750,22 +694,6 @@ class CarController(CarControllerBase):
     self.frame += 1
     return new_actuators, can_sends
 
-
-  def _update_dash_icon_state(self, CC):
-    if CC.latActive:
-      self._dash_lat_disengage_init = False
-    elif self._dash_prev_lat_active:
-      self._dash_lat_disengage_init = True
-
-    if not self._dash_lat_disengage_init:
-      self._dash_lat_disengage_blink_frame = self.frame
-
-    disengaging = self._dash_lat_disengage_init and \
-                  (self.frame - self._dash_lat_disengage_blink_frame) * DT_CTRL < 1.0
-    self._dash_prev_lat_active = CC.latActive
-    lat_or_enabled = CC.enabled or CC.latActive
-    return (2 if lat_or_enabled else 3 if disengaging else 1,
-            2 if lat_or_enabled else 3 if disengaging else 0)
 
   def create_button_messages(self, CC: structs.CarControl, CS: CarState, use_clu11: bool):
     can_sends = []
