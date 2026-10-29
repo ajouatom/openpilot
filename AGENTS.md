@@ -1,5 +1,19 @@
 # Repository memory
 
+- Later again on 2026-10-30, owner clarifies manual driver-lane indication is
+  independent of ATC and explicitly requests restoring it. Restore default-OFF
+  ManualLaneChangeIndicator only; keep 3be19f6332 ATC audio/TBT unchanged.
+  Ioniq5PE+JetsonUSB2CAN/AutoBlinker1/2; no ATC/TBT/distance prerequisite,
+  driver-directed boundary approach only, no steering desire. Own-lamp journal/
+  12s+extinction isolation retained. Startup without owned journal now only
+  delays detections, never masks ordinary lamps. Desktop482/26native excluded,
+  Wiki25; enabled-feature morning replay14558frames matches pre-merge Wip on
+  all LC/desire/arming/ATC fields. Physical detection/lamps unvalidated; no
+  vehicle writes/reboot/CAN/model bundle. See
+  docs/manual_lane_indicator_restore_20261030.md. Do not remove this option
+  when changing/restoring ATC or the separate250m add-on.
+
+
 - Later on 2026-10-30, owner requires restoring existing ATC and retaining only
   the separate250m physical-right-indicator add-on. This supersedes bd1ea4eb00's
   manual-boundary trial/audio expansion: remove option/executing paths, restore

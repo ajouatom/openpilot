@@ -1,5 +1,7 @@
 # Restore existing ATC and retain only the 250 m indicator add-on
 
+> Follow-up: the owner clarified that the manual indicator is a separate requested feature. It is [restored separately](manual_lane_indicator_restore_20261030.md); the ATC audio restoration remains in force.
+
 The owner explicitly requested the existing ATC behavior back, retaining the independent 250 m right-indicator addition. This supersedes the manual-boundary indicator and audio expansion in `bd1ea4eb00`.
 
 ## Restoration
