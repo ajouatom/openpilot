@@ -541,6 +541,10 @@ class DesireHelper:
             atc_driver_confirm = atc_lane_change_requested and driver_enabled
             atc_geometry_release = atc_lane_change_only and auto_lane_change_trigger
             atc_line_release = (atc_driver_confirm or atc_geometry_release) and side_clear_without_line
+            # In a tunnel (lane changes banned) nothing starts without the driver's own steering torque
+            in_tunnel = bool(getattr(carstate, "naviTunnel", False))
+            if in_tunnel:
+              atc_line_release = False
 
             # Arm automatic ATC only after this side has actually become the last lane.
             # Keep it latched so a newly appearing lane can start the maneuver later.
@@ -575,7 +579,7 @@ class DesireHelper:
                 elif bsd_active:
                   if torque_applied and (not block_lanechange_bsd):
                     self.lane_change_state = LaneChangeState.laneChangeStarting
-                elif self.laneChangeNeedTorque > 0 or self.next_lane_change:
+                elif self.laneChangeNeedTorque > 0 or self.next_lane_change or in_tunnel:
                   if torque_applied:
                     self.lane_change_state = LaneChangeState.laneChangeStarting
                 elif driver_enabled:

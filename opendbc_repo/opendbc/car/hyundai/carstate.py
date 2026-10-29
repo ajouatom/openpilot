@@ -1105,6 +1105,8 @@ class CarState(CarStateBase):
     profile_timestamp = self._vehicle_navi_message_timestamp(cp, self.navi_profile_msg)
     self.vehicleNaviAvailable = self.vehicleNaviAvailable or profile_timestamp > 0 or self.vehicleNaviSpeedZoneActive
     ret.vehicleNaviAvailable = self.vehicleNaviAvailable
+    # 10-29: every rise seen was a tunnel entry, shown on the cluster as "no lane change"
+    ret.naviTunnel = self.hda_info_4a3 is not None and self.hda_info_4a3.get("TunnelExist", 0) > 0
     self.vehicleNaviCameraTarget = None
 
     # Track the current warning independently of future 0x4BE previews. A new

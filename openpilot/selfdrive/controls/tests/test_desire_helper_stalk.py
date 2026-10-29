@@ -43,11 +43,13 @@ class TestDesireHelperStalkRequest:
     self.carrot_man = SimpleNamespace(atcType="", carrotCmdIndex=0, carrotCmd="", carrotArg="")
     self.left_count = 0
 
-  def update(self, left_blinker=True, lane_change_prob=0.5, press=False, counters=True, lever=0, v_kph=90.0, lines=None):
+  def update(self, left_blinker=True, lane_change_prob=0.5, press=False, counters=True, lever=0, v_kph=90.0, lines=None,
+             tunnel=False, torque=0.0):
     if press:
       self.left_count = (self.left_count + 1) % 256
     car = SimpleNamespace(canValid=True, leftBlinker=left_blinker, rightBlinker=False, vEgo=v_kph / 3.6, aEgo=0.0,
-                          trailerConnected=False, steeringTorque=0.0, steeringPressed=False, blinkerLever=lever)
+                          trailerConnected=False, steeringTorque=torque, steeringPressed=torque != 0.0, blinkerLever=lever,
+                          naviTunnel=tunnel)
     if counters:
       car.leftBlinkerStalkCount, car.rightBlinkerStalkCount = self.left_count, 0
     model = SimpleNamespace(laneLines=[SimpleNamespace(y=[y]) for y in (-5.0, *lines, 5.0)]) if lines else SimpleNamespace()
@@ -74,6 +76,13 @@ class TestDesireHelperStalkRequest:
       self.update(lane_change_prob=0.0, press=press, counters=counters)
       t += DT_MDL
     return self.helper.lane_change_state
+
+  def test_tunnel_needs_driver_torque(self):
+    # 0x4A3 TunnelExist: lane changes are banned, so a lever request waits for the driver's own torque toward the side
+    self.update(left_blinker=False, tunnel=True)
+    assert self.update(press=True, tunnel=True) == LCS.preLaneChange
+    assert self.update(tunnel=True) == LCS.preLaneChange
+    assert self.update(tunnel=True, torque=300.0) == LCS.laneChangeStarting
 
   def test_blinker_held_through_the_change_still_needs_torque(self):
     self.start_and_cross()
