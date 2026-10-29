@@ -443,7 +443,8 @@
             "CanfdBvmAltTime",
             "PalisadeBlinkerTest",
             "ClusterLaneTest",
-            "ClusterLaneTestValue"
+            "ClusterLaneTestValue",
+            "CanfdHazardTest"
           ]
         },
         {
@@ -2020,6 +2021,22 @@
       "cdescr": "发送到「仪表显示测试: 字段」的值。超出字段位数的部分被截断（标志 0~255，4 位字段 0~15 等）。\n-1~-4: 自动循环 — 每 1 秒(-1)·0.5 秒(-2)·0.25 秒(-3)·0.1 秒(-4)从 0 递增到最大值，并在设定速度数字处显示当前值（7~11 位字段逐位切换并显示位号）。重启后恢复为 0。",
       "min": -4,
       "max": 4095,
+      "default": 0,
+      "unit": 1
+    },
+    {
+      "group": "시험 전용",
+      "name": "CanfdHazardTest",
+      "title": "비상등 CAN 테스트",
+      "descr": "테스트용. 1: 계기판 메시지 0x1ea bit 104를 보내 차 밖 비상등을 켭니다(Ioniq 5 PE 10-29 확인, 약 0.1초 뒤 점등). 0: 끔(바로 꺼짐). 「계기판 표시 테스트」 칸 129를 쓰는 동안은 그 값이 우선. 재부팅하면 0.",
+      "egroup": "Test Only",
+      "etitle": "Hazard Lights CAN Test",
+      "edescr": "Test only. 1: sends cluster message 0x1ea bit 104, which turns on the exterior hazard lights (confirmed on Ioniq 5 PE 10-29, about 0.1 s later). 0: off (lights stop right away). Cluster Display Test field 129 overrides it while in use. Resets to 0 on reboot.",
+      "cgroup": "仅测试",
+      "ctitle": "危险警示灯 CAN 测试",
+      "cdescr": "仅用于测试。1: 发送仪表消息 0x1ea bit 104，点亮车外危险警示灯（Ioniq 5 PE 10-29 已确认，约 0.1 秒后点亮）。0: 关闭（立即熄灭）。使用「仪表显示测试」字段 129 时以其为准。重启后恢复为 0。",
+      "min": 0,
+      "max": 1,
       "default": 0,
       "unit": 1
     },

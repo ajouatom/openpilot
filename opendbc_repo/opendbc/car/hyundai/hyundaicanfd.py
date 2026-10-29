@@ -938,6 +938,8 @@ CLUSTER_TEST_MSGS = {'CCNC_0x162': (CLUSTER_TEST_FIELDS, CLUSTER_TEST_BITS), 'AD
 
 # 0x162 bit 188 (no DBC name; cluster test 9 at 188, 10-29): the HDP icon. Stock never sets it.
 HDP_ICON_BIT = 188
+# 0x1ea bit 104 (no DBC name; cluster test 129, 10-29): exterior hazard lights, ~0.1 s later. Stock never sets it.
+HAZARD_REQUEST_BIT = 104
 # 0x161 ALERTS_5 popups on engage / disengage (cluster test 22, 10-29): 19 "always be ready to drive", 21 "HDP released"
 ENGAGE_POPUP, DISENGAGE_POPUP = 19, 21
 ENGAGE_POPUP_FRAMES = int(2.0 / DT_CTRL)
@@ -950,6 +952,10 @@ def _cluster_test():
   params = Params()
   field = params.get_int("ClusterLaneTest")
   return (field, params.get_int("ClusterLaneTestValue")) if field > 0 else (0, 0)
+
+
+def _hazard_test():
+  return Params().get_int("CanfdHazardTest") == 1
 
 
 def _cluster_sweep(packer, field, frame, period=100):
@@ -1351,7 +1357,10 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
         _apply_cluster_lane_lines(values, CS, lat_active, desire)
         _normalize_cluster_corner_objects(values)
 
-        ret.append(_cluster_test_msg(packer, "ADRV_0x1ea", CAN.ECAN, values, rx_counter, test_field, test_value))
+        msg = _cluster_test_msg(packer, "ADRV_0x1ea", CAN.ECAN, values, rx_counter, test_field, test_value)
+        if HAZARD_REQUEST_BIT not in CLUSTER_TEST_BITS_1EA.get(test_field, ()) and _hazard_test():
+          msg = _set_raw_bits(msg, (HAZARD_REQUEST_BIT,), 1)
+        ret.append(msg)
 
       if CS.ccnc_0x162 is not None:
         values = copy.copy(CS.ccnc_0x162)

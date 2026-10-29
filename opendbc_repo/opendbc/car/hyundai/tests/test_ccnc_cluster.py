@@ -497,3 +497,27 @@ def test_engage_and_disengage_popups(monkeypatch):
   assert alerts_5(0, False) == 0
   assert [alerts_5(f, True) for f in (100, 295, 300)] == [19, 19, 0]     # engage: 2 s
   assert [alerts_5(f, False) for f in (500, 695, 700)] == [21, 21, 0]    # disengage: 2 s
+
+
+@pytest.mark.parametrize(("hazard", "test_field", "test_value", "expected"), (
+  (1, 0, 0, 1), (0, 0, 0, 0),
+  (1, 129, 0, 0),    # cluster test on bits 99-109 owns bit 104
+  (0, 129, 32, 1),   # ...and can set it itself
+))
+def test_hazard_test_sets_0x1ea_bit_104(monkeypatch, hazard, test_field, test_value, expected):
+  params = {'CanfdHazardTest': hazard, 'ClusterLaneTest': test_field, 'ClusterLaneTestValue': test_value}
+  monkeypatch.setattr(hyundaicanfd, "Params", lambda: SimpleNamespace(get_int=lambda key: params.get(key, 0)))
+  packer = CANPacker("hyundai_canfd_generated")
+  definition = packer.dbc.name_to_msg["ADRV_0x1ea"]
+  state = SimpleNamespace(
+    out=SimpleNamespace(brakeHoldActive=False, parkingBrake=False, steeringAngleDeg=0.0, leftBlinker=False, rightBlinker=False),
+    modelV2=None, lfahda_cluster=None, cruise_buttons_msg=None, adrv_0x161=None, adrv_0x200=None, ccnc_0x162=None,
+    adrv_0x1ea={key: 0 for key in definition.sigs}, radarState=None,
+  )
+  control = SimpleNamespace(latActive=False, enabled=False)
+  hud = SimpleNamespace(leadDistance=0, leadRadar=0, leadRelSpeed=0)
+  (address, data, bus), = hyundaicanfd.create_ccnc_messages(SimpleNamespace(flags=HyundaiFlags.CAMERA_SCC.value), packer,
+                                                            SimpleNamespace(ECAN=0, CAM=2), 0, control, state, hud,
+                                                            0, False, False, 0, False, 0, 0)
+  assert (data[13] >> 0) & 1 == expected  # bit 104 = byte 13 bit 0
+  assert get_raw_value(data, definition.sigs['CHECKSUM']) == hyundaicanfd.hkg_can_fd_checksum(address, None, bytearray(data))
