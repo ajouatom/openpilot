@@ -151,7 +151,8 @@ class CanBus(CanBusBase):
 
 
 
-def create_steering_messages_camera_scc(frame, packer, CP, CAN, CC, lat_active, apply_steer, CS, apply_angle, max_torque, angle_control):
+def create_steering_messages_camera_scc(frame, packer, CP, CAN, CC, lat_active, apply_steer, CS, apply_angle, max_torque, angle_control,
+                                        lat_override=False):
 
   emergency_steering = False
   if CS.adrv_0x161 is not None:
@@ -196,9 +197,10 @@ def create_steering_messages_camera_scc(frame, packer, CP, CAN, CC, lat_active, 
         pass
       else:
         #values = {} #CS.lfa_alt
-        values["LKAS_ANGLE_ACTIVE"] = 2 if CC.latActive else 1
+        steering = CC.latActive or lat_override  # lat_override: SteerAngleTest
+        values["LKAS_ANGLE_ACTIVE"] = 2 if steering else 1
         values["LKAS_ANGLE_CMD"] = -apply_angle
-        values["LKAS_ANGLE_MAX_TORQUE"] = max_torque if CC.latActive else 0
+        values["LKAS_ANGLE_MAX_TORQUE"] = max_torque if steering else 0
       ret.append(packer.make_can_msg("LFA_ALT", CAN.ECAN, values, rx_counter = rx_counter))
 
     if CS.lfa is not None:

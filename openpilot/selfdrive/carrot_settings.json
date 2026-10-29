@@ -446,7 +446,8 @@
             "ClusterLaneTestValue",
             "ClusterLaneTestFrom",
             "ClusterLaneTestTo",
-            "CanfdHazardTest"
+            "CanfdHazardTest",
+            "SteerAngleTest"
           ]
         },
         {
@@ -2073,6 +2074,22 @@
       "max": 1,
       "default": 0,
       "unit": 1
+    },
+    {
+      "group": "시험 전용",
+      "name": "SteerAngleTest",
+      "title": "핸들 각도 직접 요청",
+      "descr": "테스트용. 0: 끔. 정차 중(손 뗀 상태)에만 핸들을 이 각도로 돌립니다. + 왼쪽, - 오른쪽, 최대 450도, 초당 100도. 인게이지 불필요. 핸들을 잡으면 멈춤, 자동주차 중에는 동작 안 함. 재부팅하면 0.",
+      "egroup": "Test Only",
+      "etitle": "Steering Angle Request",
+      "edescr": "Test only. 0: off. While stopped and hands off, turns the wheel to this angle: + left, - right, up to 450 deg at 100 deg/s. No engagement needed. Stops while the wheel is held and during the stock parking assist. Resets to 0 on reboot.",
+      "cgroup": "仅测试",
+      "ctitle": "方向盘角度直接请求",
+      "cdescr": "仅用于测试。0: 关闭。仅在停车且松手时把方向盘转到该角度：+ 左，- 右，最大 450 度，每秒 100 度。无需启用。握住方向盘时停止，原厂自动泊车时不工作。重启后恢复为 0。",
+      "min": -450,
+      "max": 450,
+      "default": 0,
+      "unit": 10
     },
     {
       "group": "시작",

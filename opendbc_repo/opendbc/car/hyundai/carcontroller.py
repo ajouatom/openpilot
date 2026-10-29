@@ -44,6 +44,11 @@ MID_SPEED_ANGLE_RATE_LIMIT_SPEED = 40.0 * CV.KPH_TO_MS
 # parking speeds to see whether the EPS follows beyond the 176.7 deg LFA limit, back to 175 by 30 km/h
 LOW_SPEED_ANGLE_MAX = 450.  # deg
 LOW_SPEED_ANGLE_MAX_KPH = (20., 30.)
+# Stock parking assist steering: the camera's LFA turns VALUE63 to 15 when it starts (10-29, two auto parks). openpilot's
+# steering-only mode came on during both and pulled against it; at parking speeds, stand aside (no panda blocking)
+PARK_ASSIST_VALUE63 = 15
+PARK_ASSIST_MAX_KPH = 10.
+STEER_ANGLE_TEST_RATE = 1.0  # deg/tick toward SteerAngleTest
 LARGE_ANGLE_UNWIND_RATE = 1.5  # deg/tick: allow a quicker return from the EPS fault-angle region
 CANFD_JERK_UPPER_MIN = 1.0
 CANFD_JERK_LIMIT_MAX = 5.0
@@ -215,6 +220,11 @@ def apply_steer_angle_limits_physics(desired_sw_deg: float,
   cmd_sw = cmd_rw * steer_ratio
   return clip_float(cmd_sw, -steer_sw_max_deg, steer_sw_max_deg)
 
+def park_assist_active(CS):
+  lfa = getattr(CS, "lfa", None)
+  return lfa is not None and lfa.get("VALUE63", 0) == PARK_ASSIST_VALUE63 and CS.out.vEgoRaw * CV.MS_TO_KPH < PARK_ASSIST_MAX_KPH
+
+
 class CarController(CarControllerBase):
   def steer_angle_max(self, v_ego_raw):
     angle_max = self.params.ANGLE_LIMITS.STEER_ANGLE_MAX
@@ -242,6 +252,7 @@ class CarController(CarControllerBase):
     self.speedCameraHapticEndFrame = 0
     self.hapticFeedbackWhenSpeedCamera = 0
     self.max_angle_frames = MAX_ANGLE_FRAMES
+    self.steer_angle_test = 0
     self.blinking_signal = False # 1Hz
     self.blinking_frame = int(1.0 / DT_CTRL)
     self.soft_hold_mode = 2
@@ -407,9 +418,15 @@ class CarController(CarControllerBase):
         CC.latActive = False
         CC = CC.as_reader()
 
+    if CC.latActive and park_assist_active(CS):
+      CC = CC.as_builder()
+      CC.latActive = False
+      CC = CC.as_reader()
+
     if self.frame % 50 == 0:
       params = Params()
       self.max_angle_frames = params.get_int("MaxAngleFrames")
+      self.steer_angle_test = params.get_int("SteerAngleTest")
       steerMax = params.get_int("CustomSteerMax")
       steerDeltaUp = params.get_int("CustomSteerDeltaUp")
       steerDeltaDown = params.get_int("CustomSteerDeltaDown")
@@ -641,6 +658,14 @@ class CarController(CarControllerBase):
                     self.steer_handover.state, self.steer_handover.effort or 0.0,
                     self.steer_handover.error, self.lkas_max_torque, steering_authority)
 
+    # SteerAngleTest: turn the wheel to that angle while stopped, hands off, without engaging (test only)
+    steer_test = (angle_control and self.steer_angle_test != 0 and CS.out.standstill and not CS.out.steeringPressed and
+                  not park_assist_active(CS))
+    if steer_test:
+      target = clip_float(self.steer_angle_test, -LOW_SPEED_ANGLE_MAX, LOW_SPEED_ANGLE_MAX)
+      apply_angle = rate_limit(target, self.apply_angle_last, -STEER_ANGLE_TEST_RATE, STEER_ANGLE_TEST_RATE)
+      steering_authority = self.angle_max_torque
+
     self.apply_angle_last = apply_angle
 
     # Hold torque with induced temporary fault when cutting the actuation bit
@@ -705,7 +730,8 @@ class CarController(CarControllerBase):
       hda2_long = hda2 and self.CP.openpilotLongitudinalControl
       # steering control
       if camera_scc:
-        can_sends.extend(hyundaicanfd.create_steering_messages_camera_scc(self.frame, self.packer, self.CP, self.CAN, CC, apply_steer_req, apply_torque, CS, apply_angle, steering_authority, angle_control))
+        can_sends.extend(hyundaicanfd.create_steering_messages_camera_scc(self.frame, self.packer, self.CP, self.CAN, CC, apply_steer_req, apply_torque, CS, apply_angle, steering_authority, angle_control,
+                                                                              lat_override=steer_test))
       else:
         can_sends.extend(hyundaicanfd.create_steering_messages(self.packer, self.CP, self.CAN, CC.enabled, apply_steer_req, apply_torque, apply_angle, steering_authority, angle_control))
 
