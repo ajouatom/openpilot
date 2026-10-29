@@ -1,7 +1,7 @@
 """Ray EV calibration from StarPilot 98f84431; never a default for other vehicles."""
 import numpy as np
 
-from opendbc.car.pedal_interceptor import PedalInterceptorParams
+from opendbc.car.pedal_interceptor import PEDAL_INTERCEPTOR_DBC, PedalInterceptorParams
 
 
 RAY_PEDAL_COMMAND_CAP = 0.70
@@ -38,9 +38,9 @@ def get_ray_pedal_target(accel: float, v_ego: float, set_speed: float) -> float:
 
 RAY_PEDAL_INTERCEPTOR_PARAMS = PedalInterceptorParams(
   target=get_ray_pedal_target,
-  command_factors=(0.672, 0.332), command_offsets=(-177.408, -165.004),
+  dbc_name=PEDAL_INTERCEPTOR_DBC,
   driver_thresholds=(272, 513), rate_up=RAY_PEDAL_RATE_UP, rate_down=RAY_PEDAL_RATE_DOWN,
   safety_profile=16384,  # HyundaiSafetyFlags.PEDAL_INTERCEPTOR_RAY
-  cruise_available=("LABEL11", "CC_React"), cruise_enabled_bit=(0x592, 35),
+  cruise_ready=("LABEL11", "CC_React"), cruise_enabled_bit=(0x592, 35),
   cruise_speed=("E_EMS11", "Cruise_Limit_Target"), min_enable_speed=-1.0,
 )

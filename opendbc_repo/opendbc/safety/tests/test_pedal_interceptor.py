@@ -1,7 +1,6 @@
 import pytest
 
 from opendbc.can import CANPacker
-from opendbc.car.hyundai.pedal_interceptor import RAY_PEDAL_INTERCEPTOR_PARAMS
 from opendbc.car.pedal_interceptor import PEDAL_INTERCEPTOR_DBC, create_pedal_interceptor_command
 from opendbc.car.structs import CarParams
 from opendbc.safety.tests.libsafety import libsafety_py
@@ -25,19 +24,48 @@ def packet(message):
 
 
 def command(amount=0.1, counter=0):
-  return create_pedal_interceptor_command(CANPacker(PEDAL_INTERCEPTOR_DBC), amount, counter,
-                                          RAY_PEDAL_INTERCEPTOR_PARAMS)
+  return create_pedal_interceptor_command(CANPacker(PEDAL_INTERCEPTOR_DBC), amount, counter)
 
 
 def sensor(state=0, track1=264, track2=497, counter=1):
   return CANPacker(PEDAL_INTERCEPTOR_DBC).make_can_msg("GAS_SENSOR", 0, {
-    "INTERCEPTOR_GAS": track1, "INTERCEPTOR_GAS2": track2, "STATE": state, "COUNTER_PEDAL": counter,
+    "INTERCEPTOR_GAS": track1 * 0.672 - 177.408, "INTERCEPTOR_GAS2": track2 * 0.332 - 165.004,
+    "STATE": state, "COUNTER_PEDAL": counter,
   })
 
 
 def ready(safety):
   assert safety.safety_rx_hook(packet(sensor()))
+  assert safety.safety_rx_hook(packet((0x592, bytes(8), 0)))
   safety.set_controls_allowed(True)
+
+
+@pytest.mark.parametrize("bits", [0x04, 0x08, 0x0C])
+def test_oem_cruise_ready_or_engaged_blocks_pedal_without_canceling_oem(safety, bits):
+  ready(safety)
+  assert safety.safety_tx_hook(packet(command()))
+  data = bytes([0, 0, 0, 0, bits, 0, 0, 0])
+  assert safety.safety_rx_hook(packet((0x592, data, 0)))
+  safety.set_controls_allowed(True)
+  assert not safety.safety_tx_hook(packet(command()))
+  assert safety.safety_tx_hook(packet(command(0.0)))
+  assert safety.safety_rx_hook(packet((0x592, bytes(8), 0)))
+  assert safety.safety_tx_hook(packet(command()))
+
+
+def test_missing_and_stale_cruise_state_blocks_pedal(safety):
+  assert safety.safety_rx_hook(packet(sensor()))
+  safety.set_controls_allowed(True)
+  assert not safety.safety_tx_hook(packet(command()))
+  # A frame on another bus must not establish permission.
+  assert safety.safety_rx_hook(packet((0x592, bytes(8), 2)))
+  assert not safety.safety_tx_hook(packet(command()))
+  ready(safety)
+  safety.set_timer(1000001)
+  assert safety.safety_rx_hook(packet(sensor(counter=2)))
+  safety.set_controls_allowed(True)
+  assert not safety.safety_tx_hook(packet(command()))
+  assert safety.safety_tx_hook(packet(command(0.0)))
 
 
 def test_missing_sensor_and_disengagement_allow_only_disabled_heartbeat(safety):
@@ -138,8 +166,9 @@ def test_malformed_checksum_and_disabled_nonzero_tracks(safety):
   address, data, bus = command()
   assert not safety.safety_tx_hook(packet((address, data[:-1] + bytes([data[-1] ^ 1]), bus)))
   disabled_nonzero = CANPacker(PEDAL_INTERCEPTOR_DBC).make_can_msg("GAS_COMMAND", 0, {
-    "ENABLE": 0, "GAS_COMMAND": 264, "GAS_COMMAND2": 497, "COUNTER_PEDAL": 1,
+    "ENABLE": 0, "GAS_COMMAND": 0, "GAS_COMMAND2": 0, "COUNTER_PEDAL": 1,
   })
+  assert disabled_nonzero[1][:4] != bytes(4)
   assert not safety.safety_tx_hook(packet(disabled_nonzero))
 
 

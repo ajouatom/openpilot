@@ -20,7 +20,7 @@ from opendbc.car.hyundai.values import HyundaiFlags, CAR, DBC, Buttons, CarContr
                                        EV_MODE_STATUS_SIGNAL
 from opendbc.car.interfaces import CarStateBase
 from opendbc.car.hyundai.values import get_pedal_interceptor_params
-from opendbc.car.pedal_interceptor import (PEDAL_INTERCEPTOR_DBC, PEDAL_INTERCEPTOR_BUS,
+from opendbc.car.pedal_interceptor import (PEDAL_INTERCEPTOR_BUS,
                                          PEDAL_INTERCEPTOR_RX_FREQUENCY, PedalInterceptorState)
 
 from openpilot.common.params import Params
@@ -246,6 +246,7 @@ class CarState(CarStateBase):
     self.main_enabled = True if self.op_params.get_int("AutoEngage") == 2 else False
     self.pedal_interceptor_params = get_pedal_interceptor_params(CP)
     self.pedal_interceptor_state = PedalInterceptorState() if self.pedal_interceptor_params is not None else None
+    self.pedal_interceptor_cruise_blocked = True
     self.manual_main_off_latched = False
     self.gear_shifter = GearShifter.drive # Gear_init for Nexo ?? unknown 21.02.23.LSW
 
@@ -577,13 +578,16 @@ class CarState(CarStateBase):
     if self.pedal_interceptor_params is not None:
       pedal_interceptor_params = self.pedal_interceptor_params
       self.pedal_interceptor_state.update(can_parsers[Bus.party], pedal_interceptor_params)
-      message, signal = pedal_interceptor_params.cruise_available
-      # Keep Carrot's main switch and READY gate; observe the separate OEM CC
-      # state only for cancellation. No shared Hyundai DBC change is necessary.
-      ret.cruiseState.available = ret.cruiseState.available and bool(cp.vl[message][signal])
+      message, signal = pedal_interceptor_params.cruise_ready
       address, bit = pedal_interceptor_params.cruise_enabled_bit
       payload = cp.dat.get(address, b"")
       ret.cruiseState.enabled = len(payload) == 8 and bool(int.from_bytes(payload, "little") & (1 << bit))
+      cruise_valid = (cp.ts_nanos[message][signal] > 0 and len(payload) == 8 and
+                      cp.message_states[address].valid(cp._last_update_nanos, False))
+      self.pedal_interceptor_cruise_blocked = (not cruise_valid or bool(cp.vl[message][signal]) or ret.cruiseState.enabled)
+      # OEM Cruise ready/engaged takes priority. Keep Carrot's independent
+      # main-switch/controls-initialization gate as well.
+      ret.cruiseState.available = ret.cruiseState.available and not self.pedal_interceptor_cruise_blocked
       message, signal = pedal_interceptor_params.cruise_speed
       ret.cruiseState.speed = cp.vl[message][signal] * speed_conv
 
@@ -1689,8 +1693,8 @@ class CarState(CarStateBase):
     }
     pedal_interceptor_params = get_pedal_interceptor_params(CP)
     if pedal_interceptor_params is not None:
-      parsers[Bus.party] = CANParser(PEDAL_INTERCEPTOR_DBC, [("GAS_SENSOR", PEDAL_INTERCEPTOR_RX_FREQUENCY)],
+      parsers[Bus.party] = CANParser(pedal_interceptor_params.dbc_name, [("GAS_SENSOR", PEDAL_INTERCEPTOR_RX_FREQUENCY)],
                                     PEDAL_INTERCEPTOR_BUS)
       # Register the configured OEM CC input at its actual receive rate.
-      parsers[Bus.pt]._add_message(pedal_interceptor_params.cruise_available[0], 10)
+      parsers[Bus.pt]._add_message(pedal_interceptor_params.cruise_ready[0], 10)
     return parsers

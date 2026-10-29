@@ -1098,7 +1098,8 @@ PEDAL_INTERCEPTOR_PARAMS: dict[str, PedalInterceptorParams] = {
 
 
 def get_pedal_interceptor_params(CP) -> PedalInterceptorParams | None:
-  return PEDAL_INTERCEPTOR_PARAMS.get(CP.carFingerprint) if CP.flags & HyundaiFlags.PEDAL_INTERCEPTOR else None
+  required_flags = HyundaiFlags.CC_ONLY_CAR | HyundaiFlags.PEDAL_INTERCEPTOR
+  return PEDAL_INTERCEPTOR_PARAMS.get(CP.carFingerprint) if CP.flags & required_flags == required_flags else None
 
 if __name__ == "__main__":
   cars = []

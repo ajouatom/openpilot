@@ -60,6 +60,8 @@ static bool hyundai_pedal_interceptor = false;
 static bool hyundai_pedal_interceptor_healthy = false;
 static uint32_t hyundai_pedal_interceptor_last_rx = 0U;
 static RxCheck *hyundai_pedal_interceptor_rx = NULL;
+static RxCheck *hyundai_pedal_interceptor_cruise_rx = NULL;
+static bool hyundai_pedal_interceptor_cruise_blocked = true;
 
 // This profile belongs to Ray EV. No other vehicle inherits these limits.
 static const PedalInterceptorLimits HYUNDAI_RAY_PEDAL_INTERCEPTOR_LIMITS = {
@@ -161,6 +163,9 @@ static void hyundai_rx_hook(const CANPacket_t *to_push) {
   }
 
   if (bus == 0) {
+    if (hyundai_pedal_interceptor && (addr == 0x592) && (GET_LEN(to_push) == 8)) {
+      hyundai_pedal_interceptor_cruise_blocked = GET_BIT(to_push, 34U) || GET_BIT(to_push, 35U);
+    }
     if (addr == 0x251) {
       int torque_driver_new = (GET_BYTES(to_push, 0, 2) & 0x7ffU) - 1024U;
       // update array of samples
@@ -253,8 +258,12 @@ static bool hyundai_tx_hook(const CANPacket_t *to_send) {
         hyundai_pedal_interceptor_rx->status.msg_seen && hyundai_pedal_interceptor_rx->status.valid_checksum &&
         (hyundai_pedal_interceptor_rx->status.wrong_counters < MAX_WRONG_COUNTERS) &&
         (get_ts_elapsed(microsecond_timer_get(), hyundai_pedal_interceptor_last_rx) <= 200000U);
+      // LABEL11 is 10 Hz; retain Carrot's existing ten-missed-message/1 s policy.
+      const bool cruise_valid = !hyundai_pedal_interceptor_cruise_blocked && (hyundai_pedal_interceptor_cruise_rx != NULL) &&
+        hyundai_pedal_interceptor_cruise_rx->status.msg_seen &&
+        (get_ts_elapsed(microsecond_timer_get(), hyundai_pedal_interceptor_cruise_rx->status.last_timestamp) <= 1000000U);
       return !pedal_interceptor_command_checks(to_send, HYUNDAI_RAY_PEDAL_INTERCEPTOR_LIMITS) &&
-             (!enabled || (sensor_valid && get_longitudinal_allowed() && !brake_pressed_prev));
+             (!enabled || (sensor_valid && cruise_valid && get_longitudinal_allowed() && !brake_pressed_prev));
     }
   }
 
@@ -515,6 +524,8 @@ static safety_config hyundai_init(uint16_t param) {
   hyundai_pedal_interceptor = false;
   hyundai_pedal_interceptor_healthy = false;
   hyundai_pedal_interceptor_rx = NULL;
+  hyundai_pedal_interceptor_cruise_rx = NULL;
+  hyundai_pedal_interceptor_cruise_blocked = true;
   hyundai_pedal_interceptor_last_rx = 0U;
   if (GET_FLAG(param, 8192U)) {  // HyundaiSafetyFlags.PEDAL_INTERCEPTOR
     // Respect Carrot's existing LONG/ALLOW_DEBUG policy. The Ray profile is
@@ -534,6 +545,7 @@ static safety_config hyundai_init(uint16_t param) {
     hyundai_pedal_interceptor = true;
     hyundai_pedal_interceptor_rx = &hyundai_pedal_interceptor_rx_checks[
       sizeof(hyundai_pedal_interceptor_rx_checks) / sizeof(hyundai_pedal_interceptor_rx_checks[0]) - 1U];
+    hyundai_pedal_interceptor_cruise_rx = hyundai_pedal_interceptor_rx - 1;
     return BUILD_SAFETY_CFG(hyundai_pedal_interceptor_rx_checks, HYUNDAI_PEDAL_INTERCEPTOR_TX_MSGS);
   }
   return hyundai_init_carrot(hyundai_legacy);

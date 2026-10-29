@@ -14,13 +14,12 @@ PEDAL_INTERCEPTOR_MAX_RX_AGE_NS = 200_000_000
 @dataclass(frozen=True)
 class PedalInterceptorParams:
   target: Callable[[float, float, float], float]
-  command_factors: tuple[float, float]
-  command_offsets: tuple[float, float]
+  dbc_name: str
   driver_thresholds: tuple[int, int]
   rate_up: float
   rate_down: float
   safety_profile: int
-  cruise_available: tuple[str, str]
+  cruise_ready: tuple[str, str]
   cruise_enabled_bit: tuple[int, int]
   cruise_speed: tuple[str, str]
   min_enable_speed: float
@@ -49,16 +48,14 @@ class PedalInterceptorState:
     return not self.valid or self.state != 0
 
 
-def create_pedal_interceptor_command(packer, amount: float, counter: int, params: PedalInterceptorParams):
-  # The raw DBC keeps vehicle-specific scale/offset out of the shared wire protocol.
-  # CANPacker's integer conversion performs the same rounding as the reference DBC.
+def create_pedal_interceptor_command(packer, amount: float, counter: int):
   enabled = amount > 0.001
-  tracks = [(amount * 255.0 - offset) / factor if enabled else 0
-            for factor, offset in zip(params.command_factors, params.command_offsets, strict=True)]
-  return packer.make_can_msg("GAS_COMMAND", PEDAL_INTERCEPTOR_BUS, {
-    "GAS_COMMAND": tracks[0], "GAS_COMMAND2": tracks[1],
-    "ENABLE": enabled, "COUNTER_PEDAL": counter & 0xF,
-  })
+  values = {"ENABLE": enabled, "COUNTER_PEDAL": counter & 0xF}
+  if enabled:
+    values["GAS_COMMAND"] = values["GAS_COMMAND2"] = amount * 255.0
+  # Leave disabled tracks unset so CANPacker emits raw zero, as in StarPilot.
+  # Physical zero would instead encode the DBC offsets into nonzero raw tracks.
+  return packer.make_can_msg("GAS_COMMAND", PEDAL_INTERCEPTOR_BUS, values)
 
 
 class PedalInterceptor:
@@ -80,4 +77,4 @@ class PedalInterceptor:
     else:
       self.gas_last = 0.0
     return create_pedal_interceptor_command(self.packer, self.gas_last,
-                                          frame // PEDAL_INTERCEPTOR_TX_INTERVAL, self.params)
+                                          frame // PEDAL_INTERCEPTOR_TX_INTERVAL)

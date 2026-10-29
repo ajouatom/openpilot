@@ -672,11 +672,8 @@ class CarController(CarControllerBase):
         can_sends.append(hyundaican.create_frt_radar_opt(self.packer))
 
     if self.pedal_interceptor is not None:
-      if (CC.enabled and CS.out.cruiseState.enabled and CS.clu11 is not None and
-          (self.frame - self.last_button_frame) * DT_CTRL > 0.04):
-        can_sends.append(hyundaican.create_clu11(self.packer, self.frame, CS.clu11, Buttons.CANCEL, self.CP))
-        self.last_button_frame = self.frame
-      pedal_active = (CC.longActive and not CS.pedal_interceptor_state.faulted and
+      pedal_active = (CC.longActive and not CS.pedal_interceptor_cruise_blocked and
+                      not CS.pedal_interceptor_state.faulted and
                       not CC.cruiseControl.override and not CS.out.gasPressed and not CS.out.brakePressed)
       pedal_message = self.pedal_interceptor.update(self.frame, pedal_active, accel, CS.out.vEgo, hud_control.setSpeed)
       if pedal_message is not None:
