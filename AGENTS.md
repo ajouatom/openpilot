@@ -1,5 +1,18 @@
 # Repository memory
 
+- Later on 2026-10-30, owner requires restoring existing ATC and retaining only
+  the separate250m physical-right-indicator add-on. This supersedes bd1ea4eb00's
+  manual-boundary trial/audio expansion: remove option/executing paths, restore
+  helper/modeld/source/audio to f5e4f8b8a1. Helper/audio match8f17e43d77^ exactly.
+  Keep unused schema ordinals reserved, existing ATC gates and independent250m
+  helper with matching-right-preparation coexistence. Pre-merge f29102fa83 vs
+  current disabled-trial replay14558frames gives0 differences in LCstate/direction/
+  desire/arming/ATCstate. Older code also fails to start the reported windows;
+  code restoration is NOT proof of road cure or audio-only failure. No vehicle
+  write/reboot/CAN/model/runtime change. Desktop450pass/26native excluded, Wiki25.
+  See docs/atc_restore_20261030.md; previous review is historical/superseded.
+
+
 - On 2026-10-30, owner separates existing ATC preparation/announcement from the
   250m right-indicator add-on and requests driver-boundary indication without
   automatic steering. Morning full-rlog replay14558frames finds fork audio/ready

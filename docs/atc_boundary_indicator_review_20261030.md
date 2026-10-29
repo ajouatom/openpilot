@@ -1,5 +1,7 @@
 # ATC preparation and manual indicator review — 2026-10-30
 
+> Superseded later on 2026-10-30 at the owner’s request. The boundary-indicator option and audio change were removed. See [ATC restoration](atc_restore_20261030.md) for the current implementation.
+
 ## Findings
 
 Thirteen hash-verified closed rlogs from the owner's morning drive (06:43–06:55 KST) were decoded with the full cereal schema. ATC was mode 1 and the independent 250 m right-indicator add-on was enabled.

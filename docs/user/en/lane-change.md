@@ -1,20 +1,11 @@
 # Understanding Lane Changes
 
-
 [한국어](../ko/lane-change.md)
 
 [View the Wiki guide](https://github.com/ajouatom/openpilot/wiki/Guide-Lane-Change)
 
 > [!IMPORTANT]
 > A turn signal tells other road users what you intend to do, but it is also a **lane-change request** to openpilot. Check the mirrors and blind spot and select a safe gap before signaling. If you signal first and check later, the maneuver may begin immediately depending on your settings.
-
-## Manual lane-change indicator (trial)
-
-`ManualLaneChangeIndicator` is a separate option in the Lane Change menu and defaults to OFF. It supports the Ioniq 5 PE with Jetson USB2CAN and AutoBlinkerControl 1 or 2. At 30 km/h or above, sustained driver steering toward a reliably detected lane boundary can request one touch of the existing indicator output. It does not use TBT or the 250 m condition.
-
-This feature's lamp feedback does not request an automatic lane change or turn. The driver steers the maneuver; an existing ATC or lane-change maneuver blocks new requests. Missing lane recognition, boundary jumps and opposing steering block new requests. Another request requires at least 12 seconds and confirmed lamp extinction. Matching lamp feedback and lever counts cannot initiate lane-change assistance during that interval.
-
-Switching OFF may leave an already requested OEM one-touch sequence flashing; its steering-request exclusion remains until extinction is confirmed. Physical lamps and real manual-crossing detection rates have not yet been validated. This option does not assess lane-change safety or replace use of the turn-signal lever.
 
 ## The key point
 
@@ -30,7 +21,7 @@ The default-off `AutoTurnControlRightLaneChange` option under ATC details adds t
 
 After one second of qualifying conditions, the existing physical-indicator path lights the right lamp. Its feedback enters the unchanged ordinary lane-change logic; no separate lane-change command is sent. A repeat requires observed completion, lamps off, two seconds of waiting and a fresh condition check. Steering/manual intervention, lost inputs or a failed start cancels repetition in the current TBT window. Manual/remote admission is unchanged. Existing ATC turns/lane changes remain available. The add-on is inactive in mode 0 (off) and 3 (speed only). On restart, the retired mode 4 migrates to mode 1 with the add-on enabled, without newly enabling speed control. Desktop tests are not physical lamp or road acceptance.
 
-Existing ATC lane-change preparation and its announcement are independent of this add-on. Leaving a turn-preparation cue for `atc left/right` also announces lane-change preparation, just as a fork cue does. Preparation does not guarantee immediate steering: the existing road-edge, lane and side-object admission checks still apply. The 250 m add-on may request its right indicator during matching ATC right-lane preparation; it cannot join an already started lane change.
+The 250 m option only supplies a physical right-indicator request. Existing ATC preparation, audio and DesireHelper lane-change decisions retain the implementation from before this add-on. The add-on may request its lamp during matching ATC right-lane preparation when its conditions pass; it does not rewrite navigation commands, lane-change desires or existing ATC entry gates.
 
 | Participant | Responsibility | Not responsible for |
 |---|---|---|

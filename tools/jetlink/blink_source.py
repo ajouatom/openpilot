@@ -10,7 +10,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from blink_protocol import PACKAGE_CONFIG, LIMIT, encode, finite, fresh
 from blink_policy import Policy, AutomaticSignals
 from blink_tbt import TbtBlinker
-from blink_boundary import BoundaryEvents, vehicle_allowed as boundary_vehicle_allowed
 
 
 def vehicle_ready(sm, now, fingerprint, spas=False):
@@ -91,7 +90,6 @@ def main(fd, spas=False):
   policy, params = Policy(), Params()
   automatic = AutomaticSignals()
   tbt = TbtBlinker()
-  boundary = BoundaryEvents()
   feedback, activated_id = {}, None
   release_until = 0.
   while True:
@@ -165,18 +163,6 @@ def main(fd, spas=False):
       release_until = 0.
     if not spas and policy.relight(now, activated_id, acknowledged, cs.leftBlinker, cs.rightBlinker):
       hold, activated_id = policy.hold, None
-    meta = sm['modelV2'].meta if auto_fresh else None
-    boundary_direction = {'left':1, 'right':2}.get(str(getattr(meta, 'manualLaneIndicator', 'none')), 0)
-    boundary_commands = boundary.read(now, boundary_direction,
-      getattr(meta, 'manualLaneIndicatorMonoTime', 0)/1e9,
-      allowed=(not spas and mode in (1, 2) and params.get_bool('ManualLaneChangeIndicator') and
-               ok and auto_fresh and not commands and not hold and auto is None and
-               boundary_vehicle_allowed(cs, boundary_direction) and
-               str(meta.laneChangeState) == 'off' and
-               sm['carrotMan'].atcType not in ('atc left', 'atc right', 'fork left', 'fork right', 'turn left', 'turn right') and
-               fresh(feedback.get('stamp'), now, .35) and feedback.get('state') == 'ready'),
-      record=lambda value: atomic_json(RUNTIME/'boundary-indicator.json', value))
-    commands = commands + boundary_commands
     if mode and not spas:
       atomic_json(HOLD_PATH, {'stamp':now, 'mode':mode, 'fingerprint':fingerprint,
                              'direction':hold['direction'] if hold and activated_id == hold['id'] else None,
