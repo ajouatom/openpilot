@@ -943,6 +943,8 @@ HAZARD_REQUEST_BIT = 104
 # 0x161 ALERTS_5 popups on engage / disengage (cluster test 22, 10-29): 19 "always be ready to drive", 21 "HDP released"
 ENGAGE_POPUP, DISENGAGE_POPUP = 19, 21
 ENGAGE_POPUP_FRAMES = int(2.0 / DT_CTRL)
+# A lane change asked for in a tunnel waits for driver torque (desire_helper): say why on the cluster, at least 2 s
+TUNNEL_REFUSAL_TEXT = ("ALERTS_4", 215)  # "this tunnel is not operable" (cluster test 21, 10-29)
 # openpilot alert -> cluster text (0x161 ALERTS_4 = cluster test 21, ALERTS_5 = 22; 10-29 videos). Keyed by event name, or by
 # "name/type" when only one alert type fits (reverse: only when it disengages, not while parked in R).
 CLUSTER_ALERT_TEXTS = {
@@ -1290,6 +1292,14 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
         text = _cluster_alert_text(getattr(hud_control, "alertType", "") or "") if is_ioniq5pe else None
         if text and (values[text[0]] == 0 or (text[0] == "ALERTS_5" and values["ALERTS_5"] == popup and frame < popup_until)):
           values[text[0]] = text[1]
+        hda_info = getattr(CS, "hda_info_4a3", None)
+        tunnel = hda_info is not None and hda_info.get("TunnelExist", 0) > 0
+        if desire in (3, 4):  # the change started (driver torque): nothing refused any more
+          create_ccnc_messages._tunnel_refusal_until = 0
+        elif tunnel and lat_active and CS.out.leftBlinker != CS.out.rightBlinker:  # one side (not hazards)
+          create_ccnc_messages._tunnel_refusal_until = frame + ENGAGE_POPUP_FRAMES
+        if is_ioniq5pe and frame < getattr(create_ccnc_messages, '_tunnel_refusal_until', 0) and values[TUNNEL_REFUSAL_TEXT[0]] == 0:
+          values[TUNNEL_REFUSAL_TEXT[0]] = TUNNEL_REFUSAL_TEXT[1]
 
         # curvature 표시(0x161쪽 기존 로직 유지)
         _suppress_trailer_mode_warning(values, CS)

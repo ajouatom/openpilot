@@ -550,3 +550,34 @@ def test_openpilot_alerts_map_to_cluster_texts(monkeypatch, alert_type, enabled,
     msg = hyundaicanfd.create_ccnc_messages(cp, packer, SimpleNamespace(ECAN=0, CAM=2), frame, control, state,
                                             control.hudControl, 0, False, False, 0, False, 0, 0)[0]
   assert get_raw_value(msg[1], definition.sigs[field]) == expected
+
+
+def test_tunnel_lane_change_refusal_text(monkeypatch):
+  from openpilot.cereal import log
+  monkeypatch.setattr(hyundaicanfd, 'Params', lambda: SimpleNamespace(get_int=lambda key: 0, get=lambda key: '0'))
+  for attr in ('_was_enabled', '_engage_popup', '_tunnel_refusal_until'):
+    monkeypatch.delattr(hyundaicanfd.create_ccnc_messages, attr, raising=False)
+  packer = CANPacker('hyundai_canfd_generated')
+  definition = packer.dbc.name_to_msg['ADRV_0x161']
+  cp = SimpleNamespace(flags=HyundaiFlags.CAMERA_SCC, carFingerprint=hyundaicanfd.CAR.HYUNDAI_IONIQ_5_PE)
+
+  def alerts_4(frame, blinker, tunnel=1, desire=0):
+    md = log.ModelDataV2.new_message()
+    md.meta.desire = desire
+    state = SimpleNamespace(
+      adrv_0x161={key: 0 for key in definition.sigs}, out=structs.CarState(latEnabled=True, leftBlinker=blinker), modelV2=md,
+      lfahda_cluster=None, cruise_buttons_msg=None, adrv_0x200=None, adrv_0x1ea=None, ccnc_0x162=None, is_metric=True,
+      paddle_button_prev=0, softHoldActive=0, trailer_connected=False, hda_info_4a3={'TunnelExist': tunnel},
+    )
+    control = structs.CarControl(latActive=True, enabled=True)
+    msg = hyundaicanfd.create_ccnc_messages(cp, packer, SimpleNamespace(ECAN=0, CAM=2), frame, control, state,
+                                            control.hudControl, 0, False, False, 0, False, 0, 0)[0]
+    return get_raw_value(msg[1], definition.sigs['ALERTS_4'])
+
+  assert alerts_4(0, False) == 0
+  assert alerts_4(100, True) == 215                 # lever in a tunnel: waiting, say why
+  assert alerts_4(295, False) == 215                # kept 2 s after the lamp stops
+  assert alerts_4(300, False) == 0
+  assert alerts_4(400, True, tunnel=0) == 0         # outside a tunnel
+  assert alerts_4(500, True) == 215
+  assert alerts_4(505, True, desire=3) == 0         # driver torque started the change
