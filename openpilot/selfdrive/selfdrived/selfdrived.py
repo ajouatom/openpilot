@@ -728,7 +728,7 @@ class SelfdriveD:
       atc_type = self.sm['carrotMan'].atcType
       if atc_type != self.atc_type_last:
         if "prepare" not in atc_type and "prepare" in self.atc_type_last: # fork left/right prepare -> fork left/right
-          if "fork" in atc_type:
+          if atc_type in ("fork left", "fork right", "atc left", "atc right"):
             self.events.add(EventName.audioLaneChange)
         elif "prepare" in atc_type:
           pass

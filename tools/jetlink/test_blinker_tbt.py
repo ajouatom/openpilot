@@ -245,3 +245,50 @@ def test_actual_source_loop_only_emits_physical_indicator(monkeypatch, atc, addo
     # The add-on may already own a right indicator; existing ATC must replace it.
     later = [row['hold'] for row in sent[24:]]
     assert all(h and h['source'] == ordinary and h['direction'] == 'left' for h in later)
+
+
+def test_existing_right_atc_preparation_does_not_block_250m_indicator():
+  s = scene()
+  s['model'].meta.laneChangeState = 'preLaneChange'
+  s['model'].meta.laneChangeDirection = 'right'
+  s['nav'].atcType = 'atc right'
+  assert arm(TbtBlinker(), s) == ('lane', 'right')
+  assert s['nav'].carrotCmd == ''
+
+
+@pytest.mark.parametrize(
+  'state,direction,atc',
+  [
+    ('laneChangeStarting', 'right', 'atc right'),
+    ('laneChangeFinishing', 'right', 'atc right'),
+    ('preLaneChange', 'left', 'atc right'),
+    ('preLaneChange', 'right', 'atc left'),
+    ('preLaneChange', 'right', 'none'),
+    ('preLaneChange', 'right', 'turn right'),
+  ],
+)
+def test_250m_never_joins_other_preparations_or_active_maneuvers(state, direction, atc):
+  s = scene()
+  s['model'].meta.laneChangeState = state
+  s['model'].meta.laneChangeDirection = direction
+  s['nav'].atcType = atc
+  assert arm(TbtBlinker(), s) is None
+
+
+@pytest.mark.parametrize('block', ['rear', 'bsd', 'torque', 'busy', 'lane'])
+def test_existing_preparation_keeps_all_250m_interlocks(block):
+  s = scene()
+  s['model'].meta.laneChangeState = 'preLaneChange'
+  s['model'].meta.laneChangeDirection = 'right'
+  s['nav'].atcType = 'atc right'
+  if block == 'rear':
+    s['cs'].tbtRightRearBlocked = True
+  if block == 'bsd':
+    s['cs'].rightBlindspot = True
+  if block == 'torque':
+    s['cs'].steeringPressed = True
+  if block == 'busy':
+    s['busy'] = True
+  if block == 'lane':
+    s['model'].meta.laneChangeAvailableRight = False
+  assert arm(TbtBlinker(), s) is None

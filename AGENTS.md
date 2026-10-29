@@ -1,5 +1,21 @@
 # Repository memory
 
+- On 2026-10-30, owner separates existing ATC preparation/announcement from the
+  250m right-indicator add-on and requests driver-boundary indication without
+  automatic steering. Morning full-rlog replay14558frames finds fork audio/ready
+  at06:46:53/06:49:04, but ATC-right preparation06:53:12 lacks audio. Add exact
+  ATC-left/right prepare transitions; preserve actual lane/edge/side-object gates.
+  Permit250m trigger during matching ATC-right preparation only; old/new recorded
+  replay both0requests, so no road cure claim. Separate ManualLaneChangeIndicator
+  defaultOFF/Ioniq5PE+JetsonUSB2CAN only: sustained driver torque/current reliable
+  boundaries, no activeATC, one existing tap. Own-lamp/stalk feedback isolated
+  before publication, minimum12s plus extinction; journal-before-send/restart
+  recovery, no stale replay/hold/SPAS. Actual lamps/detection unvalidated.
+  Desktop480pass/26native excluded, Wiki25pass; native CI tracked in review doc.
+  No live device writes/CAN/reboot; normal Wip Git Pull/comma restart, no host
+  bundle/model change. See docs/atc_boundary_indicator_review_20261030.md.
+
+
 - On 2026-10-29, owner separates fixed250m TBT right-indicator helper from
   AutoTurnControl4 into default-OFF AutoTurnControlRightLaneChange under ATC
   details. Add-on only with base ATC1/2; existing ATC0..3 meanings retained.
