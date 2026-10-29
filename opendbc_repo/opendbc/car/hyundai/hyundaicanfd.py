@@ -2,7 +2,7 @@ import copy
 import math
 import numpy as np
 from opendbc.car.hyundai.scalar import clip_float
-from opendbc.car import CanBusBase, DT_CTRL
+from opendbc.car import CanBusBase, DT_CTRL, structs
 from opendbc.car.carlog import carlog
 from opendbc.car.crc import CRC16_XMODEM
 from opendbc.car.hyundai.values import CAR, HyundaiFlags, HyundaiExtFlags
@@ -932,8 +932,20 @@ CLUSTER_TEST_BITS_1EA = {127: (42, 71, 86, 87, 95), 128: (57, 58, 59, 60, 61, 62
                          135: (213, 214, 215, 216, 217, 218, 219, 220, 221, 222),
                          136: (223, 224, 225, 226, 227, 228, 229, 230, 231), 137: (249, 250, 251, 252, 253, 254, 255)}  # 0x1ea
 CLUSTER_TEST_BITS_200 = {144: (48, 49, 50, 51, 52, 53, 54, 55), 145: (56, 57, 58, 59, 60, 61, 62, 63)}  # 0x200
+# SCC_CONTROL / LFA carry the accel / steering commands: only their display-type fields, and only while parked
+CLUSTER_TEST_FIELDS_SCC = {146: "InfoDisplay", 147: "DriverAlert", 148: "ObjDistLevel", 149: "DISTANCE_SETTING",
+                           150: "HUD_LEAD_INFO", 151: "NSCCOper", 152: "NSCCOnOff", 153: "DriveMode", 154: "TakeOverReq",
+                           155: "CRUSE_INFO_SET_2", 156: "TARGET_DISTANCE", 157: "ACC_ObjDist", 158: "ACC_ObjRelSpd",
+                           159: "ACC_ObjLatPos", 160: "VSetDis"}  # 0x1a0
+CLUSTER_TEST_FIELDS_LFA = {161: "LKA_MODE", 162: "LKA_WARNING", 163: "LKA_ICON", 164: "FCA_SYSWARN", 165: "LFA_BUTTON",
+                           166: "HAS_LANE_SAFETY", 167: "NEW_SIGNAL_1", 168: "VALUE63", 169: "VALUE64", 170: "VALUE231",
+                           171: "VALUE239", 172: "VALUE247", 173: "VALUE255"}  # 0x12a
+CLUSTER_TEST_PARKED_ONLY = ("SCC_CONTROL", "LFA")
 CLUSTER_TEST_MSGS = {'CCNC_0x162': (CLUSTER_TEST_FIELDS, CLUSTER_TEST_BITS), 'ADRV_0x161': (CLUSTER_TEST_FIELDS_161, CLUSTER_TEST_BITS_161),
-                     'ADRV_0x1ea': (CLUSTER_TEST_FIELDS_1EA, CLUSTER_TEST_BITS_1EA), 'ADRV_0x200': (CLUSTER_TEST_FIELDS_200, CLUSTER_TEST_BITS_200)}
+                     'ADRV_0x1ea': (CLUSTER_TEST_FIELDS_1EA, CLUSTER_TEST_BITS_1EA), 'ADRV_0x200': (CLUSTER_TEST_FIELDS_200, CLUSTER_TEST_BITS_200),
+                     'SCC_CONTROL': (CLUSTER_TEST_FIELDS_SCC, {}), 'LFA': (CLUSTER_TEST_FIELDS_LFA, {})}
+CLUSTER_TEST_SLOTS = sorted({slot for fields, bits in CLUSTER_TEST_MSGS.values() for slot in (*fields, *bits)})
+CLUSTER_TEST_AUTO_SLOT = -1  # ClusterLaneTest -1: step through ClusterLaneTestFrom..To, one value sweep per field
 
 
 # 0x162 bit 188 (no DBC name; cluster test 9 at 188, 10-29): the HDP icon. Stock never sets it.
@@ -969,7 +981,58 @@ CLUSTER_TEST_SWEEP_FRAMES = {-1: 100, -2: 50, -3: 25, -4: 10}
 def _cluster_test():
   params = Params()
   field = params.get_int("ClusterLaneTest")
-  return (field, params.get_int("ClusterLaneTestValue")) if field > 0 else (0, 0)
+  return (field, params.get_int("ClusterLaneTestValue")) if field != 0 else (0, 0)
+
+
+def _cluster_steps(packer, slot):
+  # one sweep of the slot: bit groups one bit at a time, fields 0..max (the set speed number only shows up to 255)
+  for name, (fields, bit_groups) in CLUSTER_TEST_MSGS.items():
+    if slot in bit_groups:
+      return len(bit_groups[slot]) + 1
+    if slot in fields:
+      return min(1 << packer.dbc.name_to_msg[name].sigs[fields[slot]].size, 256)
+  return 1
+
+
+def _cluster_auto_slot(packer, frame, value):
+  # ClusterLaneTest -1: the slot under test, moving on after one value sweep (a fixed value: 1 s per slot)
+  params = Params()
+  lo = params.get_int("ClusterLaneTestFrom") or CLUSTER_TEST_SLOTS[0]
+  hi = params.get_int("ClusterLaneTestTo") or CLUSTER_TEST_SLOTS[-1]
+  slots = [s for s in CLUSTER_TEST_SLOTS if lo <= s <= hi]
+  if not slots:
+    return 0
+  period = CLUSTER_TEST_SWEEP_FRAMES.get(value, 100)
+  state = create_ccnc_messages.__dict__.setdefault('_auto_slot', {})
+  if state.get('key') != (lo, hi, period):
+    state.update(key=(lo, hi, period), i=0, start=frame)
+  steps = _cluster_steps(packer, slots[state['i'] % len(slots)]) if value in CLUSTER_TEST_SWEEP_FRAMES else 1
+  if frame - state['start'] >= steps * period:
+    state.update(i=state['i'] + 1, start=frame)
+  return slots[state['i'] % len(slots)]
+
+
+def apply_cluster_test_control_msgs(packer, can_sends, CS):
+  """Cluster test slots 146+ on SCC_CONTROL / LFA: the raw value into that display field of the frames going out, parked only."""
+  field, value = getattr(create_ccnc_messages, '_active_test', (0, 0))
+  for name in CLUSTER_TEST_PARKED_ONLY:
+    fields = CLUSTER_TEST_MSGS[name][0]
+    if field not in fields:
+      continue
+    if not (CS.out.standstill and CS.out.gearShifter == structs.CarState.GearShifter.park):
+      return can_sends
+    from opendbc.can.packer import set_value  # opendbc.can.dbc imports this module for the checksum
+    definition = packer.dbc.name_to_msg[name]
+    out = []
+    for addr, dat, bus in can_sends:
+      if addr == definition.address:
+        d = bytearray(dat)
+        set_value(d, definition.sigs[fields[field]], value)
+        d[0:2] = hkg_can_fd_checksum(addr, None, d).to_bytes(2, 'little')
+        dat = bytes(d)
+      out.append((addr, dat, bus))
+    return out
+  return can_sends
 
 
 def _hazard_test():
@@ -1193,11 +1256,17 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
     if frame % 5 == 0:
       lat_active = CC.latActive
       test_field, test_value = _cluster_test()
+      slot_display = None
+      if test_field == CLUSTER_TEST_AUTO_SLOT:
+        test_field = slot_display = _cluster_auto_slot(packer, frame, test_value)
+      else:
+        create_ccnc_messages.__dict__.pop('_auto_slot', None)
       sweep_display = None
       if test_value in CLUSTER_TEST_SWEEP_FRAMES:
         test_value, sweep_display = _cluster_sweep(packer, test_field, frame, CLUSTER_TEST_SWEEP_FRAMES[test_value])
       else:
         create_ccnc_messages.__dict__.pop('_sweep', None)
+      create_ccnc_messages._active_test = (test_field, test_value)
 
       if CS.adrv_0x161 is not None:
         main_enabled = CS.out.cruiseState.available
@@ -1402,6 +1471,9 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
         _normalize_cluster_corner_objects(values, ccnc=True)
         _convert_ccnc_front_box_to_car(values)
         _apply_ccnc_lead(values, getattr(CS, "radarState", None), CC.enabled, getattr(CS, "modelV2", None), hud_lateral)
+        # auto slot sweep: the slot number on the speed-limit sign (the set speed number shows the value)
+        if slot_display and not CLUSTER_TEST_FIELDS.get(test_field, "").startswith("SPEEDLIMIT"):
+          values["SPEEDLIMIT"] = slot_display
 
         if (left_lane_warning and not CS.out.leftBlinker) or (right_lane_warning and not CS.out.rightBlinker):
           values["VIBRATE"] = 1

@@ -398,7 +398,7 @@ def test_cluster_test_every_message(monkeypatch, slot, name, sig, value):
 def test_cluster_test_slots_are_unique_and_named():
   packer = CANPacker('hyundai_canfd_generated')
   slots = [s for fields, bits in hyundaicanfd.CLUSTER_TEST_MSGS.values() for s in (*fields, *bits)]
-  assert len(slots) == len(set(slots)) and sorted(slots) == list(range(1, 146))
+  assert len(slots) == len(set(slots)) and sorted(slots) == list(range(1, 174))
   for name, (fields, _) in hyundaicanfd.CLUSTER_TEST_MSGS.items():
     assert set(fields.values()) <= set(packer.dbc.name_to_msg[name].sigs)
 
@@ -581,3 +581,37 @@ def test_tunnel_lane_change_refusal_text(monkeypatch):
   assert alerts_4(400, True, tunnel=0) == 0         # outside a tunnel
   assert alerts_4(500, True) == 215
   assert alerts_4(505, True, desire=3) == 0         # driver torque started the change
+
+
+def test_auto_slot_sweep_walks_the_range(monkeypatch):
+  # ClusterLaneTest -1: From..To, one value sweep per slot (bit group 9 = 9 bits + 0 -> 10 steps; SIGNS 3 = 256 steps)
+  params = {'ClusterLaneTestFrom': 3, 'ClusterLaneTestTo': 9}
+  monkeypatch.setattr(hyundaicanfd, 'Params', lambda: SimpleNamespace(get_int=lambda key: params.get(key, 0)))
+  monkeypatch.delattr(hyundaicanfd.create_ccnc_messages, '_auto_slot', raising=False)
+  packer = CANPacker('hyundai_canfd_generated')
+  slot = lambda f: hyundaicanfd._cluster_auto_slot(packer, f, -4)   # 0.1 s steps = 10 frames
+  assert slot(0) == 3
+  assert slot(2550) == 3 and slot(2560) == 4                         # 256 steps * 10 frames on SIGNS
+  params['ClusterLaneTestFrom'] = 9
+  assert slot(3000) == 9 and slot(3090) == 9 and slot(3100) == 9    # range changed: restart; one slot wraps onto itself
+  assert hyundaicanfd._cluster_steps(packer, 9) == 10
+
+
+@pytest.mark.parametrize(("gear", "standstill", "expected"), (
+  (structs.CarState.GearShifter.park, True, 5),
+  (structs.CarState.GearShifter.drive, True, 0),    # not parked: control frames untouched
+  (structs.CarState.GearShifter.park, False, 0),
+))
+def test_cluster_test_on_scc_control_only_parked(monkeypatch, gear, standstill, expected):
+  monkeypatch.setattr(hyundaicanfd.create_ccnc_messages, '_active_test', (146, 5), raising=False)  # InfoDisplay
+  packer = CANPacker('hyundai_canfd_generated')
+  definition = packer.dbc.name_to_msg['SCC_CONTROL']
+  scc = packer.make_can_msg('SCC_CONTROL', 0, {'aReqValue': -1.0})
+  other = packer.make_can_msg('ADRV_0x161', 0, {})
+  CS = SimpleNamespace(out=SimpleNamespace(standstill=standstill, gearShifter=gear))
+  out = hyundaicanfd.apply_cluster_test_control_msgs(packer, [scc, other], CS)
+  address, data, _ = out[0]
+  assert get_raw_value(data, definition.sigs['InfoDisplay']) == expected
+  assert get_raw_value(data, definition.sigs['aReqValue']) == get_raw_value(scc[1], definition.sigs['aReqValue'])
+  assert get_raw_value(data, definition.sigs['CHECKSUM']) == hyundaicanfd.hkg_can_fd_checksum(address, None, bytearray(data))
+  assert out[1][1] == other[1]

@@ -836,6 +836,9 @@ class CarController(CarControllerBase):
       if self.frame % 50 == 0 and self.CP.openpilotLongitudinalControl and not camera_scc:
         can_sends.append(hyundaican.create_frt_radar_opt(self.packer))
 
+    if self.CP.flags & HyundaiFlags.CANFD:
+      can_sends = hyundaicanfd.apply_cluster_test_control_msgs(self.packer, can_sends, CS)
+
     new_actuators = actuators.as_builder()
     new_actuators.torque = apply_torque / self.params.STEER_MAX
     # torqueOutputCan reflects the steering authority value actually sent over CAN.
