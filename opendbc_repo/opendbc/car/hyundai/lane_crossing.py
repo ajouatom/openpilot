@@ -16,6 +16,10 @@ FROM_S = 2.0          # that just stays close (Azera 10-27 alley: left line 0.3-
 EDGE_ROOM_M = 2.0       # edge this close past the line: never a lane there
 EDGE_ROOM_UNSEEN_M = 3.0  # ...or this close while the line beyond has not been seen (>0.3) for OUTER_UNSEEN_S
 OUTER_UNSEEN_S = 5.0
+# Only when the driver is steering there: torque toward the crossed line within the last TORQUE_S (angle control -
+# this is the driver's own push on the wheel). 13 drives: keeps 65 of 69 real crossings, drops 8 of 27 non-crossings.
+TORQUE_MIN = 250  # CAN-FD steeringPressed threshold
+TORQUE_S = 1.0
 
 
 class LaneCrossing:
@@ -27,9 +31,13 @@ class LaneCrossing:
     self.seen = {1: -99., 2: -99.}
     self.outer_seen = {1: -99., 2: -99.}  # laneLines[0] beyond the left line, [3] beyond the right
     self.hold = self.last = -99.
+    self.torque = []  # (t, driver torque, + = left)
 
-  def update(self, md, t, allowed):
-    """3 (left) or 4 (right) on the model frame a crossing starts while allowed, else 0. laneLines[1] left, [2] right."""
+  def update(self, md, t, allowed, torque=None):
+    """3 (left) or 4 (right) on the model frame a crossing starts while allowed, else 0. laneLines[1] left, [2] right.
+    torque: carState.steeringTorque; given, a crossing also needs the driver pushing toward it."""
+    if torque is not None:
+      self.torque = [(ht, hq) for ht, hq in self.torque if t - ht < TORQUE_S] + [(t, torque)]
     if md is None or len(md.laneLines) < 3 or not len(md.laneLines[1].y) or md.frameId == self.frame_id:
       return 0
     self.frame_id = md.frameId
@@ -53,10 +61,14 @@ class LaneCrossing:
       return 0
     for i in (1, 2):
       if y[i] < NEAR_M and self.rate[i] > RATE_MPS and -self.rate[3 - i] > RATE_MPS and max(hy for _, hy in self.hist[i]) >= FROM_M \
-         and not self._no_lane_beyond(md, i, y[i], t):
+         and not self._no_lane_beyond(md, i, y[i], t) and self._pushed(i, torque is not None):
         self.last = t
         return 3 if i == 1 else 4
     return 0
+
+  def _pushed(self, i, gated):
+    sign = 1 if i == 1 else -1
+    return not gated or any(sign * q >= TORQUE_MIN for _, q in self.torque)
 
   def _no_lane_beyond(self, md, i, y, t):
     edges = getattr(md, "roadEdges", None)

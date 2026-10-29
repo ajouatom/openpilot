@@ -73,3 +73,12 @@ def test_no_kick_toward_a_road_edge():
   assert run(lane_change_left(), edges=(2.5, 9.), outer=1.).count(3) == 1
   # a normal lane beyond (edge 3.5 m+ past the line)
   assert run(lane_change_left(), edges=(3.5, 9.)).count(3) == 1
+
+
+def test_kick_needs_driver_torque_toward_the_line():
+  def run_tq(track, tq):
+    lc = LaneCrossing()
+    return [lc.update(md(i, *f), i * 0.05, True, tq) for i, f in enumerate(track)]
+  assert run_tq(lane_change_left(), 300).count(3) == 1    # pushing left
+  assert not any(run_tq(lane_change_left(), 100))         # below the steeringPressed threshold
+  assert not any(run_tq(lane_change_left(), -300))        # pushing the other way (10-29 IC ramp)

@@ -14,7 +14,7 @@ class Crossing:
   def __init__(self):
     self.side = 0
 
-  def update(self, md, t, allowed):
+  def update(self, md, t, allowed, torque=None):
     side, self.side = (self.side, 0) if allowed else (0, self.side)
     return side
 
@@ -25,9 +25,10 @@ def make_cc(control=True, test=0):
                          packer=CANPacker('hyundai_canfd_generated'))
 
 
-def step(cc, frames, gear, kph, cross=0, lamp=False):
+def step(cc, frames, gear, kph, cross=0, lamp=False, tunnel=0):
   cc.lane_crossing.side = cross or cc.lane_crossing.side
-  CS = SimpleNamespace(out=SimpleNamespace(gearShifter=gear, vEgo=kph / 3.6, leftBlinker=lamp, rightBlinker=False))
+  CS = SimpleNamespace(out=SimpleNamespace(gearShifter=gear, vEgo=kph / 3.6, leftBlinker=lamp, rightBlinker=False, steeringTorque=0),
+                       hda_info_4a3={'TunnelExist': tunnel})
   sent = []
   for _ in range(frames):
     sent += CarController.aprk_blinkers(cc, None, CS)
@@ -75,3 +76,10 @@ def test_menu_test_blinks_at_standstill_in_p():
   assert cc.aprk_state == 2 and set(spas2(cc, sent)) == {4}
   cc.blinker_test = 0
   assert [m[1] for m in step(cc, 1, P, 0)] == [carcontroller.APRK_DEFAULT_SESSION] and cc.aprk_state == 0
+
+
+def test_no_kick_in_a_tunnel():
+  # 0x4A3 TunnelExist: lane changes are banned there; the crossing stays pending until out of the tunnel
+  cc = make_cc()
+  assert 3 not in spas2(cc, step(cc, 50, D, 80, cross=3, tunnel=1))
+  assert 3 in spas2(cc, step(cc, 50, D, 80, tunnel=0))
