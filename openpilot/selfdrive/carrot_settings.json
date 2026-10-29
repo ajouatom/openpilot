@@ -152,6 +152,7 @@
                 "LaneChangeBsd",
                 "LaneLineCheck",
                 "AutoBlinkerControl",
+                "ManualLaneChangeIndicator",
                 "BlinkerLatchedTurn",
                 "LaneChangeLeverWait",
                 "AutoTurnControl",
@@ -1460,6 +1461,24 @@
       "max": 3,
       "default": 0,
       "unit": 1
+    },
+    {
+      "group": "조향일반",
+      "name": "ManualLaneChangeIndicator",
+      "title": "수동 차선변경 깜박이(시험)",
+      "descr": "운전자가 직접 조향하며 차선 경계에 접근하면 깜박이만 한 번 요청합니다. 이 신호는 자동 차선변경 요청에서 제외됩니다. 30km/h 이상, 같은 방향의 조향 입력과 양쪽 차선 인식이 필요하며 ATC 동작 중에는 시작하지 않습니다. 기본 꺼짐. 아이오닉5 PE·Jetson USB2CAN, 자동 깜박이 제어 1·2번에서 지원합니다. 실차 점등 검증은 아직 완료되지 않았습니다.",
+      "egroup": "LATSET",
+      "etitle": "Manual lane-change indicator (trial)",
+      "edescr": "Requests a one-touch indicator when the driver steers toward a lane boundary. Its feedback is excluded from automatic lane-change requests. Requires at least 30km/h, same-direction steering input and both lane boundaries; does not start during an ATC maneuver. Default OFF. Ioniq 5 PE with Jetson USB2CAN and AutoBlinkerControl 1 or 2 only. Physical lamp validation is pending.",
+      "cgroup": "转向设置",
+      "ctitle": "手动变道转向灯（试验）",
+      "cdescr": "驾驶员转向并接近车道边界时请求一次转向灯；该信号不会触发自动变道。需要至少30km/h、同方向转向输入及两侧车道线。ATC操作期间不启动。默认关闭，仅支持Ioniq 5 PE、Jetson USB2CAN及AutoBlinkerControl 1或2。实车验证尚未完成。",
+      "min": 0,
+      "max": 1,
+      "default": 0,
+      "unit": 1,
+      "control": "toggle",
+      "risk": "high"
     },
     {
       "group": "조향일반",

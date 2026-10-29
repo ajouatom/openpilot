@@ -87,7 +87,11 @@ class TbtBlinker:
       return ('lane', 'right')  # Existing physical-indicator policy/transport only.
     if self.phase == 'cooldown' and now-self.completed < REPEAT_DELAY_SEC:
       return None
-    if state != 'off' or cs.leftBlinker or cs.rightBlinker or busy or not candidate(cs, model, nav):
+    # Existing ATC preparation is not a competing maneuver. The add-on may light
+    # the lamp while that same right-turn preparation waits; admission still uses
+    # every ordinary lane/rear/driver gate above. Never join an active change.
+    preparing_right = (state == 'preLaneChange' and direction == 'right' and nav.atcType == 'atc right')
+    if (state != 'off' and not preparing_right) or cs.leftBlinker or cs.rightBlinker or busy or not candidate(cs, model, nav):
       self.ready_since = None
       self.reason = 'waiting_conditions'
       return None
