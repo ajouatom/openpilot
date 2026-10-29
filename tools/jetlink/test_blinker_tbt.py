@@ -181,9 +181,14 @@ def test_real_lamp_feedback_uses_unchanged_desire_path(monkeypatch):
   assert h.desire == log.Desire.laneChangeRight
 
 
-@pytest.mark.parametrize('atc,torque,blocked,expected', [(4, 0, False, True), (2, 0, False, False),
-                                                       (4, 1, False, False), (4, 0, True, False)])
-def test_actual_source_loop_only_emits_physical_indicator(monkeypatch, atc, torque, blocked, expected):
+@pytest.mark.parametrize('ordinary', ['none', 'turn', 'lane'])
+@pytest.mark.parametrize('atc,addon,torque,blocked,expected', [
+  (1, True, 0, False, True), (2, True, 0, False, True),
+  (1, False, 0, False, False), (2, False, 0, False, False),
+  (0, True, 0, False, False), (3, True, 0, False, False), (4, True, 0, False, False),
+  (1, True, 1, False, False), (2, True, 0, True, False),
+])
+def test_actual_source_loop_only_emits_physical_indicator(monkeypatch, atc, addon, torque, blocked, expected, ordinary):
   import json
   import sys
   from contextlib import nullcontext
@@ -200,16 +205,25 @@ def test_actual_source_loop_only_emits_physical_indicator(monkeypatch, atc, torq
   sm['modelV2'].meta.autoTurnSignalLaneChange = False
   sm['selfdriveState'].atcTurnStartMonoTime = 0
   sm['selfdriveState'].atcTurnDirection = 'none'
+  sm['livePose'] = NS(inputsOK=True, sensorsOK=True, posenetOK=True, orientationNED=NS(valid=True, z=0.))
   sm.services = list(sm)
   sm.valid = dict.fromkeys(sm, True)
   sm.alive = dict.fromkeys(sm, True)
   def tick(_):
     clock[0] = 10. + len(sent) * .05
     sm.recv_time = dict.fromkeys(sm, clock[0])
+    if len(sent) >= 24 and ordinary == 'turn':
+      sm['selfdriveState'].atcTurnStartMonoTime = 11200000000
+      sm['selfdriveState'].atcTurnDirection = 'left'
+      sm['carrotMan'].atcType = 'turn left'
+    if len(sent) >= 24 and ordinary == 'lane':
+      sm['modelV2'].meta.autoTurnSignal = 'left'
+      sm['modelV2'].meta.autoTurnSignalLaneChange = True
   sm.update = tick
-  values = {'AutoBlinkerControl': 2, 'AutoTurnControl': atc, 'LaneChangeNeedTorque': torque}
+  values = {'AutoBlinkerControl': 2, 'AutoTurnControl': atc, 'LaneChangeNeedTorque': torque,
+            'AutoTurnControlRightLaneChange': addon}
   monkeypatch.setitem(sys.modules, 'openpilot.common.params', NS(Params=lambda: NS(
-    get=lambda _: b'cp', get_int=lambda key: values.get(key, 0), get_bool=lambda _: False)))
+    get=lambda _: b'cp', get_int=lambda key: values.get(key, 0), get_bool=lambda key: bool(values.get(key, False)))))
   monkeypatch.setitem(sys.modules, 'openpilot.cereal', NS(messaging=NS(SubMaster=lambda _: sm),
     car=NS(CarParams=NS(from_bytes=lambda _: nullcontext(NS(carFingerprint='HYUNDAI_IONIQ_5_PE'))))))
   sock = NS(setblocking=lambda _: None, recv=lambda _: b'', send=lambda raw: sent.append(json.loads(raw)))
@@ -221,8 +235,13 @@ def test_actual_source_loop_only_emits_physical_indicator(monkeypatch, atc, torq
   monkeypatch.setattr(bluetooth, 'config', dict)
   monkeypatch.setattr(bluetooth, 'atomic_json', lambda *args: None)
   source.main(0)
-  holds = [row['hold'] for row in sent if row['hold']]
+  holds = [row['hold'] for row in sent[:24] if row['hold']]
   assert bool(holds) == expected
   assert all(not row['events'] for row in sent)
   assert all(h['source'] == 'lane' and h['direction'] == 'right' for h in holds)
   assert s['nav'].carrotCmd == '' and s['nav'].carrotCmdIndex == 0
+
+  if ordinary != 'none':
+    # The add-on may already own a right indicator; existing ATC must replace it.
+    later = [row['hold'] for row in sent[24:]]
+    assert all(h and h['source'] == ordinary and h['direction'] == 'left' for h in later)

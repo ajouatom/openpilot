@@ -113,3 +113,61 @@ test("split layout keeps the items flow for a search detail header", async () =>
   assert.equal(view.calls.some((call) => call.join() === "inlineSearchSurface"), false);
   assert.ok(view.calls.some((call) => call.join() === "transition,backward"));
 });
+
+
+test("ATC add-on lives in the original mode selector's details", async () => {
+  const { createSettingsDerivedModel } = await import("../src/features/settings/derived_model.js");
+  const catalog = JSON.parse(readFileSync(new URL("../../carrot_settings.json", root), "utf8"));
+  const parent = catalog.params.find((item) => item.name === "AutoTurnControl");
+  const child = catalog.params.find((item) => item.name === "AutoTurnControlRightLaneChange");
+  const model = createSettingsDerivedModel({
+    catalog: { groups: [], categories: [], items_by_group: { ATC: [parent, child] } },
+    language: "ko", favorites: [], profiles: [],
+  });
+  assert.equal(parent.max, 3);
+  assert.equal(child.default, 0);
+  assert.equal(child.control, "toggle");
+  assert.deepEqual(model.getItemEntriesForGroup("ATC").map((e) => e.item.name), [parent.name]);
+  assert.deepEqual(model.getDetailEntries("ATC", parent.name).map((e) => e.item.name), [parent.name, child.name]);
+});
+
+
+test("live geometry is one directly adjustable setting with zero as vehicle default", async () => {
+  const { createSettingsDerivedModel } = await import("../src/features/settings/derived_model.js");
+  const catalog = JSON.parse(readFileSync(new URL("../../carrot_settings.json", root), "utf8"));
+  assert.equal(catalog.params.some((item) => item.name === "CenterToFrontRatioEnabled"), false);
+  const ratio = catalog.params.find((item) => item.name === "CenterToFrontRatio");
+  const model = createSettingsDerivedModel({
+    catalog: { groups: [], categories: [], items_by_group: { STEER: [ratio] } },
+    language: "ko", favorites: [], profiles: [],
+  });
+  assert.equal(ratio.default, 0);
+  assert.equal(ratio.display_unit, "percent");
+  assert.equal(ratio.detail_parent, undefined);
+  assert.deepEqual(model.getItemEntriesForGroup("STEER").map((e) => e.item.name), [ratio.name]);
+});
+
+test("geometry numeric entry and step buttons skip the unsupported gap in both directions", () => {
+  const context = vm.createContext({});
+  vm.runInContext(functionSource(settings, "normalizeSettingNumericValue"), context);
+  const normalize = context.normalizeSettingNumericValue;
+  const p = { min: 0, max: 69, nonzero_min: 31 };
+  assert.equal(normalize(1, p, 0), 31);
+  assert.equal(normalize(30, p, 31), 0);
+  assert.equal(normalize(30, p), 31);
+  assert.equal(normalize(0, p), 0);
+  assert.equal(normalize(60, p), 60);
+  assert.equal(normalize(100, p), 69);
+  assert.equal(normalize(-10, p), 0);
+  assert.equal(normalize("bad", p), null);
+  assert.equal(normalize("", p), null);
+  assert.equal(normalize(1, { min: 0, max: 300 }), 1);
+});
+
+test("geometry zero label shows vehicle default without a misleading percent suffix", () => {
+  const context = vm.createContext({ LANG: "ko", getDeclaredSettingOptionLabel: () => null, getSettingDisplayUnit: () => "%" });
+  vm.runInContext(functionSource(settings, "formatSettingDisplayValue"), context);
+  const p = { name: "CenterToFrontRatio", zero_label: { ko: "0 · 차량 기본", en: "0 · Vehicle default" } };
+  assert.equal(context.formatSettingDisplayValue(p, 0), "0 · 차량 기본");
+  assert.equal(context.formatSettingDisplayValue(p, 60), "60%");
+});

@@ -156,7 +156,7 @@ Carrot Web 설정 화면에서는 다음 기능을 사용할 수 있습니다.
 | ONNX 차선·BSD | `ShareData`, `OnnxBsdEnabled`, `OnnxLaneThreshold`, `OnnxLaneIntervalMs`, `OnnxBsdThreshold`, `OnnxBsdSmoothingMs`, `OnnxBsdIntervalMs` | 차선 종류 인식과 별도 카메라 BSD 실행 및 세부 조정 |
 | 중앙 보정 | `PathOffset`, `CameraYawTrimDeg` | 레인모드 경로의 좌우 위치와 카메라 YAW 미세 보정 |
 | 조향감 | `SteerActuatorDelay`, `LatSmoothSec`, `LatSuspendAngleDeg`, `CustomSR`, `SteerRatioRate` | 조향 시점, 평활화, 일시중지 각도와 조향비 |
-| [차로 변경](lane-change.md)·자동 턴 | `LaneChangeNeedTorque`, `LaneChangeDelay`, `LaneChangeBsd`, `LaneLineCheck`, `BlinkerLatchedTurn`, `LaneChangeLeverWait`, `AutoTurnControl`, `AutoTurnControlSpeedTurn`, `AutoTurnControlTurnEnd`, `AutoTurnMapChange` | 차로 변경 진입 조건과 ATC 동작 |
+| [차로 변경](lane-change.md)·자동 턴 | `LaneChangeNeedTorque`, `LaneChangeDelay`, `LaneChangeBsd`, `LaneLineCheck`, `BlinkerLatchedTurn`, `LaneChangeLeverWait`, `AutoTurnControl`, `AutoTurnControlRightLaneChange`, `AutoTurnControlSpeedTurn`, `AutoTurnControlTurnEnd`, `AutoTurnMapChange` | 차로 변경 진입 조건과 ATC 동작 |
 | 레인모드 | `LatMpcPathCost`, `LatMpcMotionCost`, `LatMpcAccelCost`, `LatMpcJerkCost`, `LatMpcSteeringRateCost`, `LatMpcInputOffset`, `UseLaneLineSpeed`, `UseLaneLineCurveSpeed`, `AdjustLaneOffset` | 레인모드 MPC 가중치와 차선 사용 조건 |
 | 고급 토크·토크 계수 | `LateralTorqueCustom`, `LateralTorqueAccelFactor`, `LateralTorqueFriction`, `LateralTorqueKpV`, `LateralTorqueKiV`, `LateralTorqueKf`, `LateralTorqueKd` | 커스텀 토크 제어 계수 |
 | 고급 토크·검색 전용 | `NNFF` | 토크 조향의 신경망 피드포워드 옵션 |
@@ -167,6 +167,8 @@ Carrot Web 설정 화면에서는 다음 기능을 사용할 수 있습니다.
 `UseLaneLineSpeed`로 레인모드를 사용하더라도 모델 속도 궤적의 시작값이 실제 차속의 70% 미만이거나 끝값이 시작값의 70% 미만이면 일시적으로 레인리스로 전환합니다. 속도 조건이 약 1초간 연속으로 정상이고 기존 차선·속도 조건도 충족해야 레인모드로 복귀합니다.
 
 `SteerActuatorDelay`는 높을수록 더 일찍 조향하도록 보상하고, `LatSmoothSec`는 높을수록 부드러워지는 대신 반응이 늦어질 수 있습니다. 두 값을 동시에 바꾸면 원인을 구분하기 어렵습니다.
+
+`CenterToFrontRatio`는 전 차종 공통 **무게중심 비율**입니다. `0`은 차종별 기본값, `31~69%`는 지정한 비율이며 저장하면 재시작 없이 부드럽게 반영됩니다. 기본값은 현대·기아·제네시스 `40%`, 토요타·렉서스 `44%`, 마쓰다 `41%`, 폭스바겐 `45%`이며 혼다는 차종별로 다릅니다. 진입이 늦으면 소폭 증가, 초입에 파고들면 소폭 감소를 비교하되 효과는 차선 모드·차량에 따라 다릅니다. SAD·SR은 유지하고 하나씩 조절하세요. 악화되면 이전 값이나 `0`으로 복원하세요. 실제 휠베이스는 바뀌지 않으며 범위는 주행 검증 범위를 뜻하지 않습니다.
 
 `SteerRatioRate`의 기본값 `100%`는 학습된 조향비를 그대로 적용합니다. `CustomSR=0`일 때 사용되며, 저장된 비율이 허용 범위(`30~200%`)를 벗어나면 안전하게 `100%`로 대체됩니다.
 
