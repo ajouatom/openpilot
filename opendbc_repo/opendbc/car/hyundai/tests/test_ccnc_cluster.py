@@ -337,6 +337,16 @@ def test_cluster_sweep_steps_every_second(monkeypatch):
   assert hyundaicanfd._cluster_sweep(packer, 7, 2000 + 11 * 100) == (1 << 10, 63)
 
 
+def test_cluster_sweep_faster_steps(monkeypatch):
+  # ClusterLaneTestValue -2/-3/-4: 0.5 / 0.25 / 0.1 s per step; changing the speed restarts the sweep at 0
+  monkeypatch.delattr(hyundaicanfd.create_ccnc_messages, '_sweep', raising=False)
+  packer = CANPacker('hyundai_canfd_generated')
+  assert hyundaicanfd.CLUSTER_TEST_SWEEP_FRAMES == {-1: 100, -2: 50, -3: 25, -4: 10}
+  assert [hyundaicanfd._cluster_sweep(packer, 3, f, 10) for f in (1000, 1005, 1010, 1030)] == [(0, 0), (0, 0), (1, 1), (3, 3)]
+  assert hyundaicanfd._cluster_sweep(packer, 3, 1030, 25) == (0, 0)
+  assert hyundaicanfd._cluster_sweep(packer, 3, 1055, 25) == (1, 1)
+
+
 @pytest.mark.parametrize("traffic_state, expected", [(0, 1), (1, 5), (2, 8)])
 def test_traffic_light_background(traffic_state, expected):
   # turning (6) is overridden too while a light is detected

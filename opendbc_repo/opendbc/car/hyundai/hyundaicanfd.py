@@ -936,7 +936,8 @@ CLUSTER_TEST_MSGS = {'CCNC_0x162': (CLUSTER_TEST_FIELDS, CLUSTER_TEST_BITS), 'AD
                      'ADRV_0x1ea': (CLUSTER_TEST_FIELDS_1EA, CLUSTER_TEST_BITS_1EA), 'ADRV_0x200': (CLUSTER_TEST_FIELDS_200, CLUSTER_TEST_BITS_200)}
 
 
-CLUSTER_TEST_SWEEP = -1  # ClusterLaneTestValue -1: step the field every 1 s and show the step in the set speed number
+# ClusterLaneTestValue -1..-4: step the field every 1 / 0.5 / 0.25 / 0.1 s (frames) and show the step in the set speed number
+CLUSTER_TEST_SWEEP_FRAMES = {-1: 100, -2: 50, -3: 25, -4: 10}
 
 
 def _cluster_test():
@@ -945,12 +946,12 @@ def _cluster_test():
   return (field, params.get_int("ClusterLaneTestValue")) if field > 0 else (0, 0)
 
 
-def _cluster_sweep(packer, field, frame):
+def _cluster_sweep(packer, field, frame, period=100):
   # returns (value to send, number to show); bit groups step one bit at a time and show the bit number
   state = create_ccnc_messages.__dict__.setdefault('_sweep', {})
-  if state.get('field') != field:
-    state.update(field=field, start=frame)
-  step = (frame - state['start']) // 100
+  if state.get('field') != (field, period):
+    state.update(field=(field, period), start=frame)
+  step = (frame - state['start']) // period
   for name, (fields, bit_groups) in CLUSTER_TEST_MSGS.items():
     if field in bit_groups:
       bits = bit_groups[field]
@@ -1163,8 +1164,8 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
       lat_active = CC.latActive
       test_field, test_value = _cluster_test()
       sweep_display = None
-      if test_value == CLUSTER_TEST_SWEEP:
-        test_value, sweep_display = _cluster_sweep(packer, test_field, frame)
+      if test_value in CLUSTER_TEST_SWEEP_FRAMES:
+        test_value, sweep_display = _cluster_sweep(packer, test_field, frame, CLUSTER_TEST_SWEEP_FRAMES[test_value])
       else:
         create_ccnc_messages.__dict__.pop('_sweep', None)
 
