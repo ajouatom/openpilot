@@ -1108,8 +1108,8 @@ struct ModelDataV2 {
     autoTurnSignalLaneChange @23 :Bool;
     autoTurnSignalDirection @24 :LaneChangeDirection;
     autoTurnSignalRequestId @25 :UInt64;
-    manualLaneIndicator @26 :LaneChangeDirection;  # Retired trial; retain ordinal, no longer published.
-    manualLaneIndicatorMonoTime @27 :UInt64;  # Retired trial.
+    manualLaneIndicator @26 :LaneChangeDirection;  # Lamp only; its feedback is excluded from driver lane requests.
+    manualLaneIndicatorMonoTime @27 :UInt64;
 
 
     deprecated :group {
