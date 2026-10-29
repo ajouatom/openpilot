@@ -40,6 +40,10 @@ PRE_OVERRIDE_CONFIRM_FRAMES = 2
 PRE_OVERRIDE_MAX_TORQUE_DELTA = -10.0
 LOW_SPEED_ANGLE_RATE_RAMP_SPEED = 15.0 * CV.KPH_TO_MS
 MID_SPEED_ANGLE_RATE_LIMIT_SPEED = 40.0 * CV.KPH_TO_MS
+# 10-29 experiment (Ioniq 5 PE): the stock parking assist turns the wheel to 460 deg; let the LKAS angle go past 175 at
+# parking speeds to see whether the EPS follows beyond the 176.7 deg LFA limit, back to 175 by 30 km/h
+LOW_SPEED_ANGLE_MAX = 450.  # deg
+LOW_SPEED_ANGLE_MAX_KPH = (20., 30.)
 LARGE_ANGLE_UNWIND_RATE = 1.5  # deg/tick: allow a quicker return from the EPS fault-angle region
 CANFD_JERK_UPPER_MIN = 1.0
 CANFD_JERK_LIMIT_MAX = 5.0
@@ -212,6 +216,12 @@ def apply_steer_angle_limits_physics(desired_sw_deg: float,
   return clip_float(cmd_sw, -steer_sw_max_deg, steer_sw_max_deg)
 
 class CarController(CarControllerBase):
+  def steer_angle_max(self, v_ego_raw):
+    angle_max = self.params.ANGLE_LIMITS.STEER_ANGLE_MAX
+    if self.CP.carFingerprint != CAR.HYUNDAI_IONIQ_5_PE:
+      return angle_max
+    return float(np.interp(v_ego_raw * CV.MS_TO_KPH, LOW_SPEED_ANGLE_MAX_KPH, [LOW_SPEED_ANGLE_MAX, angle_max]))
+
   def __init__(self, dbc_names, CP):
     super().__init__(dbc_names, CP)
     self.CAN = CanBus(CP)
@@ -480,7 +490,7 @@ class CarController(CarControllerBase):
       CC.latActive,
       self.CP.wheelbase,
       self.CP.steerRatio,
-      self.params.ANGLE_LIMITS.STEER_ANGLE_MAX,
+      self.steer_angle_max(CS.out.vEgoRaw),
       CS.modelV2,
     )
 
