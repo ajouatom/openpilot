@@ -943,6 +943,22 @@ HAZARD_REQUEST_BIT = 104
 # 0x161 ALERTS_5 popups on engage / disengage (cluster test 22, 10-29): 19 "always be ready to drive", 21 "HDP released"
 ENGAGE_POPUP, DISENGAGE_POPUP = 19, 21
 ENGAGE_POPUP_FRAMES = int(2.0 / DT_CTRL)
+# openpilot alert -> cluster text (0x161 ALERTS_4 = cluster test 21, ALERTS_5 = 22; 10-29 videos). Keyed by event name, or by
+# "name/type" when only one alert type fits (reverse: only when it disengages, not while parked in R).
+CLUSTER_ALERT_TEXTS = {
+  "speedTooHigh": ("ALERTS_4", 83),                # driving speed is high
+  "steerUnavailable": ("ALERTS_5", 9),             # lane keeping assist: not in operating conditions
+  "accFaulted": ("ALERTS_5", 4),                   # smart cruise control: not in operating conditions
+  "cruiseDisabled": ("ALERTS_5", 3),               # smart cruise control released
+  "reverseGear/userDisable": ("ALERTS_4", 129),    # gear shift detected
+  **dict.fromkeys(("controlsMismatch", "canError", "canBusMissing", "vehicleSensorsInvalid", "relayMalfunction",
+                   "locationdPermanentError", "paramsdPermanentError"), ("ALERTS_4", 147)),  # abnormal operation detected
+}
+
+
+def _cluster_alert_text(alert_type):
+  name = alert_type.split("/")[0]
+  return CLUSTER_ALERT_TEXTS.get(alert_type if name == "reverseGear" else name)
 
 # ClusterLaneTestValue -1..-4: step the field every 1 / 0.5 / 0.25 / 0.1 s (frames) and show the step in the set speed number
 CLUSTER_TEST_SWEEP_FRAMES = {-1: 100, -2: 50, -3: 25, -4: 10}
@@ -1267,8 +1283,13 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
           create_ccnc_messages._engage_popup = (ENGAGE_POPUP if cruise_enabled else DISENGAGE_POPUP, frame + ENGAGE_POPUP_FRAMES)
         create_ccnc_messages._was_enabled = cruise_enabled
         popup, popup_until = getattr(create_ccnc_messages, '_engage_popup', (0, 0))
-        if getattr(CP, "carFingerprint", None) == CAR.HYUNDAI_IONIQ_5_PE and frame < popup_until and values["ALERTS_5"] == 0:
+        is_ioniq5pe = getattr(CP, "carFingerprint", None) == CAR.HYUNDAI_IONIQ_5_PE
+        if is_ioniq5pe and frame < popup_until and values["ALERTS_5"] == 0:
           values["ALERTS_5"] = popup
+        # the alert's own text beats the generic disengage popup; a stock text still wins
+        text = _cluster_alert_text(getattr(hud_control, "alertType", "") or "") if is_ioniq5pe else None
+        if text and (values[text[0]] == 0 or (text[0] == "ALERTS_5" and values["ALERTS_5"] == popup and frame < popup_until)):
+          values[text[0]] = text[1]
 
         # curvature 표시(0x161쪽 기존 로직 유지)
         _suppress_trailer_mode_warning(values, CS)

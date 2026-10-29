@@ -521,3 +521,32 @@ def test_hazard_test_sets_0x1ea_bit_104(monkeypatch, hazard, test_field, test_va
                                                             0, False, False, 0, False, 0, 0)
   assert (data[13] >> 0) & 1 == expected  # bit 104 = byte 13 bit 0
   assert get_raw_value(data, definition.sigs['CHECKSUM']) == hyundaicanfd.hkg_can_fd_checksum(address, None, bytearray(data))
+
+
+@pytest.mark.parametrize(("alert_type", "enabled", "field", "expected"), (
+  ("speedTooHigh/warning", True, "ALERTS_4", 83),
+  ("steerUnavailable/immediateDisable", False, "ALERTS_5", 9),   # beats the disengage popup (21)
+  ("canError/immediateDisable", False, "ALERTS_4", 147),
+  ("reverseGear/userDisable", False, "ALERTS_4", 129),
+  ("reverseGear/permanent", False, "ALERTS_4", 0),               # just parked in R
+  ("driverDistracted3/permanent", True, "ALERTS_4", 0),          # DM is left alone
+))
+def test_openpilot_alerts_map_to_cluster_texts(monkeypatch, alert_type, enabled, field, expected):
+  from openpilot.cereal import log
+  monkeypatch.setattr(hyundaicanfd, 'Params', lambda: SimpleNamespace(get_int=lambda key: 0, get=lambda key: '0'))
+  for attr in ('_was_enabled', '_engage_popup'):
+    monkeypatch.delattr(hyundaicanfd.create_ccnc_messages, attr, raising=False)
+  packer = CANPacker('hyundai_canfd_generated')
+  definition = packer.dbc.name_to_msg['ADRV_0x161']
+  state = SimpleNamespace(
+    adrv_0x161={key: 0 for key in definition.sigs}, out=structs.CarState(latEnabled=True), modelV2=log.ModelDataV2.new_message(),
+    lfahda_cluster=None, cruise_buttons_msg=None, adrv_0x200=None, adrv_0x1ea=None, ccnc_0x162=None,
+    is_metric=True, paddle_button_prev=0, softHoldActive=0, trailer_connected=False,
+  )
+  cp = SimpleNamespace(flags=HyundaiFlags.CAMERA_SCC, carFingerprint=hyundaicanfd.CAR.HYUNDAI_IONIQ_5_PE)
+  for frame, en, alert in ((0, True, ""), (100, enabled, alert_type)):  # second frame: disengaged here if not enabled
+    control = structs.CarControl(latActive=en, enabled=en)
+    control.hudControl.alertType = alert
+    msg = hyundaicanfd.create_ccnc_messages(cp, packer, SimpleNamespace(ECAN=0, CAM=2), frame, control, state,
+                                            control.hudControl, 0, False, False, 0, False, 0, 0)[0]
+  assert get_raw_value(msg[1], definition.sigs[field]) == expected

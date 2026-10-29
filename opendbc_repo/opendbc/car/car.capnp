@@ -538,6 +538,7 @@ struct CarControl {
     trafficState @24: Int16;  # longitudinalPlan.trafficState: 0=off, 1=red, 2=green
     latHudState @25: UInt8;  # 0=lat off, 1=laneless, 2=lane mode, 3=angle error > 3 deg for 0.3 s, 4=saturated
     desiredDistance @26: Float32;  # longitudinalPlan.desiredDistance (m): the gap openpilot keeps, cluster target ring
+    alertType @27: Text;  # selfdriveState.alertType ("eventName/eventType"): cluster text popups
 
     # not used with the dash, TODO: separate structs for dash UI and device UI
     audibleAlert @5: AudibleAlert;
