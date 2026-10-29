@@ -68,7 +68,7 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
-      - run: python -m pip install pytest numpy
+      - run: python -m pip install pytest numpy pycapnp
       - name: Check speed mismatch, original deceleration and planner routing
         run: >-
           python -m pytest -c /dev/null --rootdir=. --confcutdir=openpilot/selfdrive/controls/tests -q

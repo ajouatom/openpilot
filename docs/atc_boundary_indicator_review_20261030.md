@@ -23,3 +23,14 @@ A model-owned edge requests one existing physical-indicator tap. Own lamp feedba
 Desktop: 480 checks pass with 26 Linux-native safety cases excluded; 25 Wiki generator checks pass. Desktop regression tests cover the actual event method and source loop, preparation coexistence, negative rear/BSD/driver gates, detector expiry/restart, own-lamp isolation in DesireHelper and existing indicator/driver-intent behavior. Windows tests use explicit platform doubles; native safety checks require Linux CI. Raw routes and device identifiers remain private. No live vehicle writes, settings changes, restart or CAN trial were performed.
 
 Delivery is ordinary carrot-wip Git Pull and comma restart/reboot. The existing USB2CAN tap protocol and Jetson runtime/model are unchanged; no new Jetson bundle is needed.
+
+### Published source validation
+
+Source commit `bd1ea4eb006b9e6ca8059a0a64fa01c37ae7dee7` passed:
+
+- [Signal integration](https://github.com/ajouatom/openpilot/actions/runs/40968732540): 1,277 passed, 40 skipped, 362 subtests; native CAN kernels/safety compiled.
+- [Jetson integration](https://github.com/ajouatom/openpilot/actions/runs/40968732767): broad suite 1,810 passed/56 skipped, plus monitoring 232, HUD 62, update 94, navigation 119, storage 11 and NAT 11; Windows installer passed. Counts overlap with desktop checks.
+- [eGPU compatibility](https://github.com/ajouatom/openpilot/actions/runs/40968732464) and [user docs](https://github.com/ajouatom/openpilot/actions/runs/40968732502) passed.
+- Wiki manual regions published as `a25d12c`; [follow-up synchronization](https://github.com/ajouatom/openpilot/actions/runs/40968894527) passed.
+
+The common `Lane-mode model speed fallback` CI job failed during collection because its environment did not install `pycapnp`; the preceding source commit had the same failing job. Add that test dependency only. Its two suites pass 26 local checks with the dependency installed. No planner implementation changes accompany this CI repair.
