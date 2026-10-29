@@ -40,10 +40,9 @@ PRE_OVERRIDE_CONFIRM_FRAMES = 2
 PRE_OVERRIDE_MAX_TORQUE_DELTA = -10.0
 LOW_SPEED_ANGLE_RATE_RAMP_SPEED = 15.0 * CV.KPH_TO_MS
 MID_SPEED_ANGLE_RATE_LIMIT_SPEED = 40.0 * CV.KPH_TO_MS
-# 10-29 experiment (Ioniq 5 PE): the stock parking assist turns the wheel to 460 deg; let the LKAS angle go past 175 at
-# parking speeds to see whether the EPS follows beyond the 176.7 deg LFA limit, back to 175 by 30 km/h
-LOW_SPEED_ANGLE_MAX = 450.  # deg
-LOW_SPEED_ANGLE_MAX_KPH = (20., 30.)
+# SteerAngleTest range. The LKAS angle itself stays at STEER_ANGLE_MAX: 10-29 test (20261029_2056) the EPS stopped at
+# ~180 deg and raised steerFaultTemporary whenever asked for more
+STEER_ANGLE_TEST_MAX = 450.  # deg
 # Stock parking assist steering: the camera's LFA turns VALUE63 to 15 when it starts (10-29, two auto parks). openpilot's
 # steering-only mode came on during both and pulled against it; at parking speeds, stand aside (no panda blocking)
 PARK_ASSIST_VALUE63 = 15
@@ -226,12 +225,6 @@ def park_assist_active(CS):
 
 
 class CarController(CarControllerBase):
-  def steer_angle_max(self, v_ego_raw):
-    angle_max = self.params.ANGLE_LIMITS.STEER_ANGLE_MAX
-    if self.CP.carFingerprint != CAR.HYUNDAI_IONIQ_5_PE:
-      return angle_max
-    return float(np.interp(v_ego_raw * CV.MS_TO_KPH, LOW_SPEED_ANGLE_MAX_KPH, [LOW_SPEED_ANGLE_MAX, angle_max]))
-
   def __init__(self, dbc_names, CP):
     super().__init__(dbc_names, CP)
     self.CAN = CanBus(CP)
@@ -507,7 +500,7 @@ class CarController(CarControllerBase):
       CC.latActive,
       self.CP.wheelbase,
       self.CP.steerRatio,
-      self.steer_angle_max(CS.out.vEgoRaw),
+      self.params.ANGLE_LIMITS.STEER_ANGLE_MAX,
       CS.modelV2,
     )
 
@@ -662,7 +655,7 @@ class CarController(CarControllerBase):
     steer_test = (angle_control and self.steer_angle_test != 0 and CS.out.standstill and not CS.out.steeringPressed and
                   not park_assist_active(CS))
     if steer_test:
-      target = clip_float(self.steer_angle_test, -LOW_SPEED_ANGLE_MAX, LOW_SPEED_ANGLE_MAX)
+      target = clip_float(self.steer_angle_test, -STEER_ANGLE_TEST_MAX, STEER_ANGLE_TEST_MAX)
       apply_angle = rate_limit(target, self.apply_angle_last, -STEER_ANGLE_TEST_RATE, STEER_ANGLE_TEST_RATE)
       steering_authority = self.angle_max_torque
 
