@@ -11,7 +11,9 @@
   boundaries, no activeATC, one existing tap. Own-lamp/stalk feedback isolated
   before publication, minimum12s plus extinction; journal-before-send/restart
   recovery, no stale replay/hold/SPAS. Actual lamps/detection unvalidated.
-  Desktop480pass/26native excluded, Wiki25pass; native CI tracked in review doc.
+  Desktop480pass/26native excluded, Wiki25pass; LinuxSignal40968732540
+  1277pass/40skip and Jetson40968732767 1810pass/56skip plus supporting suites
+  and Windows pass. Sourcebd1ea4eb00 published; Wiki a25d12c synchronized.
   No live device writes/CAN/reboot; normal Wip Git Pull/comma restart, no host
   bundle/model change. See docs/atc_boundary_indicator_review_20261030.md.
 
