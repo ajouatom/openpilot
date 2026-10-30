@@ -292,7 +292,7 @@ struct CarState {
   tbtRearInputsAvailable @110 :Bool; # optional observed CANFD BSD/corner inputs, for the TBT physical-indicator trigger only
   tbtRightRearBlocked @111 :Bool = true; # unknown/stale/saturated or <20m; does not alter manual lane-change admission
   naviTunnel @112 :Bool; # stock navigation 0x4A3 TunnelExist: in a tunnel, where lane changes are banned
-  naviRoundabout @113 :Bool; # stock cluster 0x162 SIGNS=24 rose in the last 20 s and below 60 km/h: no Kick or auto lane change
+  naviRoundabout @113 :Bool; # stock cluster 0x162 SIGNS=24 rose in the last 20 s and below 60 km/h (RoundaboutLaneChangeHold): no Kick or auto lane change
   struct VehicleGps {
     available @0 :Bool;
     valid @1 :Bool; # receive/continuity checks, not a decoded satellite fix flag

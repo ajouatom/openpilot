@@ -50,6 +50,8 @@ class FakeParams:
                "VehicleNaviDecelCancelUnknown",
                "VehicleNaviDecelCancelEarlyWarning"):
       return True
+    if key == "RoundaboutLaneChangeHold":
+      return True
     assert key == "VehicleNaviSchoolZoneControl"
     return self.school_zone
 
@@ -90,7 +92,7 @@ def _car_state(distance_time_tenths=60):
   state.navi_position_4b4 = None
   state.navi_profile_4be = None
   state.hda_info_4a3 = None
-  state.ccnc_0x162, state.ccnc_signs_prev, state.roundabout_frames = None, 0, 0
+  state.ccnc_0x162, state.ccnc_signs_prev, state.roundabout_frames, state.roundabout_hold_enabled = None, 0, 0, True
   state.speedcam_policy = SpeedcamPolicy()
   state.speedcam_accel_swallow = False
   state.speedcam_engaged = False

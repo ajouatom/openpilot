@@ -38,7 +38,7 @@ def test_model_turn_background_requires_active_steering(cruise_enabled, lat_acti
 
 def test_roundabout_hold_20s_below_60kph():
   from opendbc.car.hyundai.carstate import CarState, ROUNDABOUT_HOLD_FRAMES
-  cs = SimpleNamespace(ccnc_0x162={'SIGNS': 0}, ccnc_signs_prev=0, roundabout_frames=0)
+  cs = SimpleNamespace(ccnc_0x162={'SIGNS': 0}, ccnc_signs_prev=0, roundabout_frames=0, roundabout_hold_enabled=True)
   ret = SimpleNamespace(vEgo=0.)
   def run(n, signs=0, kph=30):
     cs.ccnc_0x162['SIGNS'], ret.vEgo = signs, kph / 3.6
@@ -53,6 +53,8 @@ def test_roundabout_hold_20s_below_60kph():
   assert not any(run(10))
   run(1, signs=24)
   assert not any(run(10, signs=24, kph=80))        # highway pre-notice
+  cs.roundabout_hold_enabled = False              # RoundaboutLaneChangeHold off
+  assert not any(run(10, kph=30))
 
 
 @pytest.mark.parametrize('desire', range(5))

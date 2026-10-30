@@ -256,6 +256,7 @@ class CarState(CarStateBase):
     self.vehicleSpeedCameraDistanceTime = self._vehicle_speed_camera_distance_time(distance_time_tenths)
     self.vehicleNaviCanControl = self._vehicle_navi_can_control_mode(self.op_params.get_int("VehicleNaviCanControl"))
     self.vehicleNaviSchoolZoneControl = self.op_params.get_bool("VehicleNaviSchoolZoneControl")
+    self.roundabout_hold_enabled = self.op_params.get_bool("RoundaboutLaneChangeHold")
     self.vehicleSpeedCameraParamsCounter = 0
     self.vehicleNaviEvents = []
     # joongyu01/speedcam: stock-navigation camera-kind policy (mobile zones, +-button skip, section average)
@@ -740,6 +741,7 @@ class CarState(CarStateBase):
       self.vehicleNaviSchoolZoneControl = vehicle_navi_school_zone_control
       if not vehicle_navi_school_zone_control:
         self._clear_vehicle_navi_school_zone()
+    self.roundabout_hold_enabled = self.op_params.get_bool("RoundaboutLaneChangeHold")
     self._read_speedcam_params()
     return changed
 
@@ -1105,7 +1107,7 @@ class CarState(CarStateBase):
       self.roundabout_frames = ROUNDABOUT_HOLD_FRAMES
     self.ccnc_signs_prev = signs
     self.roundabout_frames = max(self.roundabout_frames - 1, 0)
-    ret.naviRoundabout = self.roundabout_frames > 0 and ret.vEgo < ROUNDABOUT_MAX_SPEED
+    ret.naviRoundabout = self.roundabout_hold_enabled and self.roundabout_frames > 0 and ret.vEgo < ROUNDABOUT_MAX_SPEED
 
   def _update_vehicle_navi_events(self, cp, ret, speed_limit_cam, cp_alt=None):
     ret.speedBumpDistance = 0.0
