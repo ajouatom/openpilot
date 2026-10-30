@@ -62,6 +62,16 @@ jobs:
           MDM_RUNTIME_ROOT: /tmp/mdm-runtime
           PYTHONPATH: .
         run: python -m pytest -c /dev/null --rootdir=. --confcutdir=tools/modeld -q tools/modeld/test_mdm_runtime.py
+      - name: Execute Light speed pinned runtime compatibility
+        env:
+          MDM_RUNTIME_ROOT: /tmp/light-speed-runtime
+          PYTHONPATH: .
+        run: |
+          curl --fail --retry 3 -o /tmp/light-speed-runtime.tar.gz https://upload.shind0.synology.me/models/comma4-big-light-speed-f22b8b34/precompiled-runtime.tar.gz
+          echo 'cb9bf2cfa14746485f75b1dd89d8b7ab65011c10c8fc6c4aea4d41b45a47dc51  /tmp/light-speed-runtime.tar.gz' | sha256sum -c -
+          mkdir /tmp/light-speed-runtime
+          tar -xzf /tmp/light-speed-runtime.tar.gz -C /tmp/light-speed-runtime
+          python -m pytest -c /dev/null --rootdir=. --confcutdir=tools/modeld -q tools/modeld/test_mdm_runtime.py
       - uses: actions/setup-node@v6
         with:
           node-version: '22'

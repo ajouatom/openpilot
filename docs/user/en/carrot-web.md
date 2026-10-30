@@ -229,9 +229,9 @@ If only video is missing, check whether another browser owns the stream, whether
 - [Cruise and Following Gap](cruise-gap.md)
 - [Radar Tracks and Corner Radar](radar.md)
 
-### External driving model selection (`carrot-nav-blink` trial)
+### External driving model selection (`carrot-wip`)
 
-In Tools, choose N16 Nav or Flip Flop under **External driving model**. The choice saves automatically.
+In Tools, choose N16 Nav, Flip Flop or Light speed under **External driving model**. The choice saves automatically.
 The choice applies to both eGPU and Jetson; the internal model stays fixed at CD210.
 Saving does not switch a running model. With ignition off and internet available, reboot
 both comma and Jetson to download, verify, and apply the choice. A new Jetson model also
@@ -239,7 +239,7 @@ needs engine preparation. The eGPU downloads the official precompiled PKL withou
 recompiling the driving model itself.
 
 `NOO supported` identifies models accepting route images and navigation inputs. Currently
-N16 supports these inputs; Flip Flop does not. This label does not establish current
+N16 supports these inputs; Flip Flop and Light speed do not. This label does not establish current
 route validity or driving performance. MD v3 has been retired from the list. Flip Flop uses
 the official ONNX replaced on 2026-10-24; its hash differs from the historical MD v3 ONNX.
 
