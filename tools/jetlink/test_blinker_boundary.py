@@ -334,3 +334,72 @@ def test_desire_helper_observes_manual_motion_during_navigation_preparation(monk
   t.helper.lane_change_state = log.LaneChangeState.preLaneChange
   t.helper.update(cs, md, False, .1, t.carrot_man, N(), indicator_valid=True)
   assert seen == [{'enabled':True, 'valid':True, 'busy':False}]
+
+
+@pytest.mark.parametrize('direction', [1, 2])
+def test_retry_after_three_seconds_preserves_twelve_second_feedback_mask(direction):
+  b = BoundaryIndicator({'time': 10.0, 'direction': 1})
+  cs, md = scene(direction)
+  requests = []
+  for i in range(100):
+    now = 10.0 + i * 0.05
+    y = max(0.3, 1.5 - max(0, i - 50) * 0.04)
+    md.frameId = i
+    md.laneLines[1].y = [-y if direction == 1 else -(3.6 - y)]
+    md.laneLines[2].y = [3.6 - y if direction == 1 else y]
+    b.update(now, cs, md, enabled=True, valid=True, busy=False)
+    assert b.filter_lamp(1) == 0
+    if b.request_direction:
+      requests.append(b.request_time)
+  assert len(set(requests)) == 1
+  assert 13.0 <= requests[0] < 14.0
+  assert b.filter_lamp(direction) == 0
+  assert b.blocked == (1 | direction)
+  assert b.isolate_until == requests[0] + 12.0
+
+
+@pytest.mark.parametrize('invalid', [False, True])
+def test_retry_still_requires_one_second_of_valid_darkness(invalid):
+  b = BoundaryIndicator({'time': 10.0, 'direction': 1})
+  cs, md = scene()
+  for i in range(100):
+    now = 10 + i * 0.05
+    cs.leftBlinker = not invalid and i % 16 < 8
+    b.update(now, cs, md, enabled=True, valid=not invalid, busy=False)
+    assert not b.request_direction
+    assert b.previous is None
+  cs.leftBlinker = False
+  for i in range(19):
+    b.update(15 + i * 0.05, cs, md, enabled=True, valid=True, busy=False)
+    assert b.previous is None
+  b.update(16.05, cs, md, enabled=True, valid=True, busy=False)
+  assert b.previous is not None
+  assert b.filter_lamp(1) == 0
+
+
+def test_opposite_origin_journal_survives_source_and_model_restart():
+  prior = {'time': 10.0, 'direction': 1}
+  source = BoundaryEvents(prior)
+  saved = []
+  assert not source.read(13.0, 0, 0.0, allowed=True, record=saved.append)
+  assert source.read(13.1, 2, 13.05, allowed=True, record=saved.append)
+  assert saved == [{'time': 13.05, 'direction': 2, 'mask': 3}]
+  b = BoundaryIndicator(saved[0])
+  cs, md = scene()
+  b.update(13.2, cs, md, enabled=True, valid=True, busy=False)
+  assert b.filter_lamp(1) == b.filter_lamp(2) == 0
+  assert not b.request_direction
+  restarted = BoundaryEvents(saved[0])
+  assert not restarted.read(13.2, 2, 13.05, allowed=True, record=saved.append)
+
+
+def test_failed_combined_origin_write_does_not_advance_journal():
+  prior = {'time': 10.0, 'direction': 1}
+  source = BoundaryEvents(prior)
+  source.read(13.0, 0, 0.0, allowed=True, record=lambda _: None)
+
+  def fail(_):
+    raise OSError('read-only')
+
+  assert not source.read(13.1, 2, 13.05, allowed=True, record=fail)
+  assert source.journal == prior

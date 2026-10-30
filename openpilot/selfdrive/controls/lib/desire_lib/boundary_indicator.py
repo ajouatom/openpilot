@@ -7,7 +7,8 @@ import math
 
 
 TRACK_SEC = 1.0  # Brief confidence loss during a continuous driver crossing.
-QUIET_SEC = 12.0  # Covers receiver queue, one-touch schedule and OEM flashing.
+QUIET_SEC = 3.0  # Earliest new request; extinction is required independently.
+ISOLATE_SEC = 12.0  # Keep delayed lamp feedback out of automatic steering.
 
 
 class BoundaryIndicator:
@@ -22,6 +23,7 @@ class BoundaryIndicator:
     self.relabel_until = 0.0
     self.blocked = 0
     self.block_until = 0.0
+    self.isolate_until = 0.0
     self.dark_since = None
     self.request_direction = 0
     self.request_time = 0.0
@@ -38,24 +40,27 @@ class BoundaryIndicator:
       self.initialized = True
       stamp, direction = self.journal.get('time'), self.journal.get('direction')
       if type(stamp) in (int, float) and math.isfinite(stamp) and 0 <= now - stamp < 20 and direction in (1, 2):
-        self.blocked, self.block_until = direction, max(now + 1.0, stamp + QUIET_SEC)
+        mask = self.journal.get('mask', direction)
+        self.blocked = mask if type(mask) is int and mask in (1, 2, 3) and mask & direction else direction
+        self.block_until = max(now + 1.0, stamp + QUIET_SEC)
+        self.isolate_until = max(now + 1.0, stamp + ISOLATE_SEC)
       elif enabled:
         # Suppress only new detections at startup. Without an owned journal,
         # ordinary driver/ATC lamps must retain their original interpretation.
         self.relabel_until = now + 1.0
-    if self.blocked:
-      if lamps & self.blocked or not valid:
-        self.dark_since = None
-      else:
-        self.dark_since = now if self.dark_since is None else self.dark_since
-        if now >= self.block_until and now - self.dark_since >= 1.0:
-          self.blocked = 0
-      self._reset_geometry()
+    if lamps or not valid:
+      self.dark_since = None
+    else:
+      self.dark_since = now if self.dark_since is None else self.dark_since
+    dark = self.dark_since is not None and now - self.dark_since >= 1.0
+    if self.blocked and now >= self.isolate_until and dark:
+      self.blocked = 0
     if not enabled or not valid or busy:
       self.request_direction = 0
       self._reset_geometry()
       return
-    if self.blocked:
+    if now < self.block_until or (self.blocked and not dark):
+      self._reset_geometry()
       # A request is a fresh edge, never a persistent retry or indicator hold.
       signed_torque = cs.steeringTorque * (1 if self.request_direction == 1 else -1)
       if not 0 <= now - self.request_time < 0.2 or not cs.steeringPressed or not math.isfinite(signed_torque) or signed_torque <= 0:
@@ -114,7 +119,8 @@ class BoundaryIndicator:
       # Both boundaries must move consistently; widening forks are not crossings.
       if y[i] < 0.9 and self.rates[i] > 0.4 and self.rates[1 - i] < -0.4 and abs(sum(self.rates)) < 0.35:
         self.request_direction, self.request_time = direction, now
-        self.blocked, self.block_until, self.dark_since = direction, now + QUIET_SEC, None
+        self.blocked |= direction
+        self.block_until, self.isolate_until, self.dark_since = now + QUIET_SEC, now + ISOLATE_SEC, None
     except (AttributeError, IndexError, TypeError, ValueError):
       self._reset_geometry()
 

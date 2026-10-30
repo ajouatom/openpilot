@@ -104,3 +104,19 @@ reported segment 10 confirms at 19.559 s (250 m) and emits a right request at
 20.603 s (228 m). Front object: 32.212 m, vRel +2.2 m/s, projected 38.812 m.
 Recorded driver intervention at 21.554 s cancels it. This open-loop result does
 not predict the vehicle trajectory or prove actual lamp acceptance.
+
+## Manual indicator retry interval follow-up
+
+The owner requested a three-second retry interval. Separate the detection cooldown
+(3 seconds) from owned-lamp feedback isolation (12 seconds). A new request also
+requires one continuous second of valid all-dark feedback and fresh driver torque
+and boundary approach; elapsed time never replays the previous edge. Existing
+vehicle, output ownership and executing-lane-change gates remain.
+
+Quick opposite requests preserve both direction masks, including through source
+and model restarts using the existing origin journal. A failed journal write
+continues to forbid output. No USB2CAN packet, receiver or steering policy changes.
+Six new regressions cover rearm timing, valid darkness, retained feedback masks,
+restart and journal-write failure. Desktop suite: 685 passed, 26 native excluded.
+No live vehicle writes or physical lamp validation in this follow-up. Delivery:
+normal Git Pull and comma restart; no new Jetson runtime bundle.
