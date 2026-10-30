@@ -1084,10 +1084,13 @@ def _set_raw_bits(msg, bits, value):
   return addr, bytes(d), bus
 
 
+# Clusters that draw no line for the dashed codes (owner reports 10-28~30) keep the solid colour
+NO_DASHED_LANE_CARS = (CAR.HYUNDAI_IONIQ_9, CAR.KIA_EV9)
+
+
 def _dashed_lane_line(color, lane_line, car=None):
-  # 0x161 dashed codes seen on the Ioniq 5 PE cluster: 8 white, 10 green (no orange dashed).
-  # The Ioniq 9 cluster draws no line for them (user report 10-30), so it keeps the solid colour
-  if car != CAR.HYUNDAI_IONIQ_9 and lane_line // 10 > 0 and lane_line % 10 in (0, 5):  # camera: dashed / DLM inner dashed (color 0 = no lane info)
+  # 0x161 dashed codes seen on the Ioniq 5 PE cluster: 8 white, 10 green (no orange dashed)
+  if car not in NO_DASHED_LANE_CARS and lane_line // 10 > 0 and lane_line % 10 in (0, 5):  # camera: dashed / DLM inner dashed (color 0 = no lane info)
     return {2: 8, 6: 10}.get(color, color)
   return color
 

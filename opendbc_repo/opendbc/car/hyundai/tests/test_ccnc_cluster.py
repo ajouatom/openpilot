@@ -195,7 +195,8 @@ def test_engaged_standstill_keeps_steering_and_lane_change_icons(monkeypatch, st
 ))
 def test_dashed_lane_line_codes(color, lane_line, expected):
   assert hyundaicanfd._dashed_lane_line(color, lane_line) == expected
-  assert hyundaicanfd._dashed_lane_line(color, lane_line, hyundaicanfd.CAR.HYUNDAI_IONIQ_9) == color  # no dashed on Ioniq 9
+  for car in hyundaicanfd.NO_DASHED_LANE_CARS:  # Ioniq 9 / EV9 clusters draw nothing for dashed codes
+    assert hyundaicanfd._dashed_lane_line(color, lane_line, car) == color
 
 
 @pytest.mark.parametrize(('blindspot', 'left'), ((False, 14), (True, 4)))  # orange (BSD) stays even when unseen
