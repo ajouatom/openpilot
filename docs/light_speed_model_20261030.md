@@ -1,4 +1,4 @@
-﻿# Light speed external model integration, 2026-10-30
+# Light speed external model integration, 2026-10-30
 
 The selectable external catalog adds Light speed to N16 Nav and Flip Flop.
 Selection remains frozen for the entire comma boot and is shared by eGPU and
@@ -13,8 +13,9 @@ navigation inputs, so it is labelled NOO not supported.
   Its current base is `0152aab4a4db0971494847406bd875f938aee598`.
 - [0152aab4](https://github.com/commaai/openpilot/commit/0152aab4a4db0971494847406bd875f938aee598)
   updates tinygrad to `d39227beebd0c3a340dc42b2cdc1e3db1c36aed9` and recompiles
-  the existing Chestnut driving PKL plus two camera warp PKLs. It does not
-  change model weights or vehicle control logic in its source diff.
+  the existing Chestnut driving PKL plus two camera warp PKLs. Its diff changes
+  artifact pointers and the runtime submodule, with no vehicle-control source
+  changes. A shared checkpoint label alone does not prove numerical equivalence.
 - Apply that runtime only to the new Light speed package. Existing N16 and
   Flip Flop PKLs keep their matched runtimes. Do not replace the repository-wide
   tinygrad or internal/DM artifacts merely to add this external model.
@@ -80,3 +81,17 @@ and nine Windows `sendmsg` failures in Linux-only protocol tests. These protocol
 checks and `fcntl`-dependent app tests are covered by Jetson Linux CI, not claimed
 as desktop passes. Web model/status/selection tests: 17 pass; production build,
 focused lint and Korean/English user-doc validation pass. Counts overlap.
+
+
+Final focused desktop run: 260 passed, two Linux-only host-entrypoint skips.
+The prior 54-test run overlaps this coverage. GitHub Actions on published
+`7e03c7637f4307c9f4e541e9a653a977892575a9`:
+
+- [eGPU compatibility 40996730817](https://github.com/ajouatom/openpilot/actions/runs/40996730817)
+  passes: 401 contract/recovery checks, 57 navigation checks, three native CPU
+  runtime checks each for N16 and Light speed, and web tests/build.
+- [Jetson integration 40996730849](https://github.com/ajouatom/openpilot/actions/runs/40996730849)
+  passes: 2028 broad checks/56 skips, supporting suites 232/62/94/119/11/11,
+  and the Windows installer check. Counts overlap earlier focused tests.
+- [User docs 40996730666](https://github.com/ajouatom/openpilot/actions/runs/40996730666)
+  passes. No physical eGPU or Jetson inference was run.

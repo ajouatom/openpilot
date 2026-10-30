@@ -1,5 +1,20 @@
 # Repository memory
 
+- On 2026-10-30, owner requests Light speed PR39173 as an eGPU/Jetson
+  choice and review of0152aab4. Add catalog light-speed, exact c7cbe5de PKL
+  SHA33ba0928/790445184B and official ONNX6274eb4a/792305602B, checkpoint
+  f22b8b34/16384, noNOO. Apply0152's d39227be tinygrad only to this isolated
+  runtime; keep N16 default, Flip/retiredMD identities and internalCD210/DM.
+  FinalPR retains aliased state feedback; no intermediate ping-pong import.
+  Signed hostd66d445b05/64838820B,1152committed payloads and all HTTPS hashes
+  verified. Normal commaGitPull/selection/BOTHreboots; firstJetson engine build.
+  Desktop260pass/2Linuxskip, focused54overlap,Web17; LinuxeGPU40996730817
+  native old/new runtime3each pass; Jetson40996730849 broad2028/56skip plus
+  supporting232/62/94/119/11/11 andWindows pass. No vehicle write, selection,
+  restart,CAN or physical inference/road validation. Jetson power needed only
+  for actual download/build/load/inference. See docs/light_speed_model_20261030.md.
+
+
 - Later on 2026-10-30, manual boundary indicator retry becomes3s plus1s valid
   continuous lamp extinction and fresh driver/geometry admission. This supersedes
   the former12s retry, NOT the12s owned-lamp automatic-steering isolation. Quick
