@@ -24,7 +24,7 @@ def arm(tbt, s, start=10.):
 
 
 @pytest.mark.parametrize('obj,field,value', [
-  ('nav','xTurnInfo',1), ('nav','xTurnInfo',4), ('nav','xDistToTurn',323.),
+  ('nav','xTurnInfo',1), ('nav','xTurnInfo',3), ('nav','xDistToTurn',323.),
   ('nav','xDistToTurn',0.), ('nav','xDistToTurn',float('nan')),
   ('cs','vEgo',8.), ('cs','gearShifter','park'), ('cs','canValid',False),
   ('cs','trailerConnected',True), ('cs','steeringPressed',True),
@@ -247,11 +247,13 @@ def test_actual_source_loop_only_emits_physical_indicator(monkeypatch, atc, addo
     assert all(h and h['source'] == ordinary and h['direction'] == 'left' for h in later)
 
 
-def test_existing_right_atc_preparation_does_not_block_250m_indicator():
+@pytest.mark.parametrize("turn,atc", [(2, "atc right"), (4, "fork right")])
+def test_existing_right_atc_preparation_does_not_block_250m_indicator(turn, atc):
   s = scene()
   s['model'].meta.laneChangeState = 'preLaneChange'
   s['model'].meta.laneChangeDirection = 'right'
-  s['nav'].atcType = 'atc right'
+  s['nav'].atcType = atc
+  s['nav'].xTurnInfo = turn
   assert arm(TbtBlinker(), s) == ('lane', 'right')
   assert s['nav'].carrotCmd == ''
 
@@ -291,4 +293,29 @@ def test_existing_preparation_keeps_all_250m_interlocks(block):
     s['busy'] = True
   if block == 'lane':
     s['model'].meta.laneChangeAvailableRight = False
+  assert arm(TbtBlinker(), s) is None
+
+
+@pytest.mark.parametrize('turn', [2, 4])
+def test_driver_correction_before_any_request_resets_confirmation_not_whole_route(turn):
+  t, s = TbtBlinker(), scene()
+  s['nav'].xTurnInfo = turn
+  assert t.update(10., **s) is None
+  s['cs'].steeringPressed = True
+  assert t.update(10.2, **s) is None
+  assert t.phase == 'idle'
+  s['cs'].steeringPressed = False
+  for i in range(20):
+    assert t.update(10.25+i*.05, **s) is None
+  assert t.update(11.3, **s) == ('lane', 'right')
+
+
+@pytest.mark.parametrize('turn', [2, 4])
+def test_fork_support_does_not_bypass_rear_or_distance_gate(turn):
+  s = scene()
+  s['nav'].xTurnInfo = turn
+  s['nav'].xDistToTurn = 284.
+  assert arm(TbtBlinker(), s) is None
+  s['nav'].xDistToTurn = 240.
+  s['cs'].tbtRightRearBlocked = True
   assert arm(TbtBlinker(), s) is None
