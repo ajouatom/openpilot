@@ -67,3 +67,16 @@ the real pinned warp, persistent-arena and recurrent recovery checks.
 This is a web-only catalog addition, not a new Params setting. Korean/English
 Carrot Web guides and localized help are updated; no generated setting Wiki page
 is introduced.
+
+Release prepared from source `d66d445b05c99ab27b4a96aa1f904cc3dfe2834c`:
+64,838,820-byte signed host bundle. All 1,152 payload files match the committed
+source, with only the two explicit bootstrap model-pin substitutions. Signature,
+model pairing, NAS copy and full HTTPS bundle hash pass. Both large model files
+and the isolated tinygrad runtime also pass full HTTPS hash/size verification.
+
+Desktop checks: 54 focused catalog/contract/bundle/artifact/retry tests pass, two
+Linux host-entrypoint tests skipped; the expanded pass found 259 successful tests
+and nine Windows `sendmsg` failures in Linux-only protocol tests. These protocol
+checks and `fcntl`-dependent app tests are covered by Jetson Linux CI, not claimed
+as desktop passes. Web model/status/selection tests: 17 pass; production build,
+focused lint and Korean/English user-doc validation pass. Counts overlap.
