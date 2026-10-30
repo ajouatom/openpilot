@@ -1,5 +1,13 @@
 # Repository memory
 
+- Later on 2026-10-30, manual boundary indicator retry becomes3s plus1s valid
+  continuous lamp extinction and fresh driver/geometry admission. This supersedes
+  the former12s retry, NOT the12s owned-lamp automatic-steering isolation. Quick
+  opposite requests retain both origin masks and persist them across restarts.
+  No timer replay, CAN/receiver change or live writes. Desktop685 pass/26native
+  excluded. Git Pull/comma restart; no Jetson bundle. See
+  docs/indicator_drive_review_20261030.md.
+
 - Later on 2026-10-30, owner explicitly changes the 250m add-on rear gate to
   OEM BSD only. This supersedes the corner-distance20m/24.9/25.0 veto for that
   add-on. Keep BSD freshness/validity and all ordinary lane/driver admission.

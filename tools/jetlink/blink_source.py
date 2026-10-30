@@ -92,7 +92,7 @@ def main(fd, spas=False):
   policy, params = Policy(), Params()
   automatic = AutomaticSignals()
   tbt = TbtBlinker()
-  boundary = BoundaryEvents()
+  boundary = BoundaryEvents(read_json(RUNTIME/'boundary-indicator.json', {}))
   feedback, activated_id = {}, None
   release_until = 0.
   while True:
