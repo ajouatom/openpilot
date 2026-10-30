@@ -487,7 +487,6 @@ def test_cluster_camera_preference_is_in_brightness_and_view(settings, params):
   brightness = next(group for group in display["groups"] if group["id"] == "DISP_BRIGHT")
   assert brightness["params"] == [
     "ShowCustomBrightness",
-    "ScreenOn",
     "ShowModelView",
     "ShowCameraWithCluster",
   ]

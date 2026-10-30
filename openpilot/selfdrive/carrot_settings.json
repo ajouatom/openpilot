@@ -256,7 +256,6 @@
               "zh": "限速",
               "params": [
                 "AutoRoadSpeedLimitOffset",
-                "AutoRoadSpeedOnEngage",
                 "AutoRoadSpeedAdjust",
                 "AutoSpeedUptoRoadSpeedLimit"
               ]
@@ -347,8 +346,7 @@
                 "StopDistanceCarrot",
                 "StoppingAccel",
                 "VEgoStopping",
-                "AChangeCostStarting",
-                "StopGoAssist"
+                "AChangeCostStarting"
               ]
             },
             {
@@ -426,7 +424,6 @@
             "CanfdHDA2",
             "HyundaiCanfdClusterDirectTx",
             "CanfdBlinkerControl",
-            "CanfdBlinkerKick",
             "CanfdDebug",
             "HDPuse"
           ]
@@ -451,7 +448,11 @@
             "CanfdHazardTest",
             "SteerAngleTest",
             "SpasSteerTest",
-            "RoundaboutLaneChangeHold"
+            "RoundaboutLaneChangeHold",
+            "ScreenOn",
+            "StopGoAssist",
+            "AutoRoadSpeedOnEngage",
+            "CanfdBlinkerKick"
           ]
         },
         {
@@ -543,7 +544,6 @@
           "zh": "亮度与视图",
           "params": [
             "ShowCustomBrightness",
-            "ScreenOn",
             "ShowModelView",
             "ShowCameraWithCluster"
           ]
@@ -1347,14 +1347,14 @@
       "unit": 10
     },
     {
-      "group": "주행튜닝",
+      "group": "Joongyu Lab",
       "name": "StopGoAssist",
       "title": "저속 감속·정지·출발 보정",
       "descr": "0:끔, 1:감속+정지 보정, 2:감속+정지+출발 보정, 3:2+부드러운 정지\n감속 보정: 목표 차간보다 가까운데 앞차보다 0.3m/s 이상 빠르게 다가가면 차간을 최대 +0.3초 늘리고 거리 유지를 더 중시해 일찍 감속, 앞차 감속 중 반응도 빠르게(45km/h 이하 전부, 65km/h까지 선형 감소, 그 위 미동작, 앞차 가속 중 미동작).\n정지 보정: 3m/s 미만에서 앞차가 서 있으면 정지거리에 맞춰 서도록 감속을 보강(최대 -1.5)하고, (3일 때) 2m/s 아래에서는 감속을 줄여 0.5m/s에서 -0.5가 되게 해 부드럽게 섭니다. 이때 정지거리보다 가까이 설 수 있지만 앞차와 2.5m 안쪽으로는 들어가지 않는 만큼만 줄입니다.\n출발 보정: 정지 후 3초 안, 3m/s 미만에서 앞차가 0.3m/s 빠르고 조금이라도 가속 중(0.1m/s² 이상)이며 2.5m보다 멀면, 정지거리보다 가까워도 바로 출발해 가속 1.2까지 보강(신호 정지·적색 신호 중 제외).",
-      "egroup": "LONG",
+      "egroup": "Joongyu Lab",
       "etitle": "Low-speed Slowing, Stop & Go Assist",
       "edescr": "0:Off, 1:Slowing+Stop, 2:Slowing+Stop+Departure, 3:2+Soft stop\nSlowing: inside the follow distance and closing on the lead by over 0.3 m/s, adds up to +0.3 s of gap and weighs keeping distance more so braking starts earlier, and reacts faster while the lead brakes (full up to 45 km/h, fading to none at 65 km/h, inactive while the lead accelerates).\nStop: below 3 m/s behind a stopped lead, brakes enough to stop at the stop distance (max -1.5), then (level 3) below 2 m/s eases the decel to -0.5 at 0.5 m/s for a soft stop. It may stop closer than the stop distance, but eases only as far as it still stops 2.5 m from the lead.\nDeparture: within 3 s of standstill below 3 m/s, while the lead is 0.3 m/s faster, accelerating at all (over 0.1 m/s²) and farther than 2.5 m, goes right away even inside the stop distance and raises accel up to 1.2 (not during signal stops or red lights).",
-      "cgroup": "纵向控制",
+      "cgroup": "Joongyu Lab",
       "ctitle": "低速减速/停车/起步辅助",
       "cdescr": "0:关闭, 1:减速+停车, 2:减速+停车+起步, 3:2+平顺停车\n减速: 比目标车距更近且以超过0.3m/s接近前车时, 车距最多增加0.3秒并更重视保持距离以提前减速, 前车减速时反应更快(45km/h以下全额, 到65km/h线性减弱, 以上及前车加速时不工作)。\n停车: 3m/s以下前车停止时, 加强减速以停在停车距离(最大-1.5), (3时)2m/s以下逐渐减小减速, 0.5m/s时为-0.5以平顺停车。可能比停车距离停得更近, 但只减到仍能停在距前车2.5m处为止。\n起步: 停车后3秒内且3m/s以下, 前车快0.3m/s、稍有加速(超过0.1m/s²)且距离超过2.5m时, 即使比停车距离近也立即起步, 加速提高到1.2(信号停车/红灯时除外)。",
       "min": 0,
@@ -3079,14 +3079,14 @@
       "risk": "high"
     },
     {
-      "group": "시작",
+      "group": "Joongyu Lab",
       "name": "CanfdBlinkerKick",
       "title": "차로변경 깜빡이 자동",
       "descr": "운전자가 깜빡이를 켜지 않고 차선을 넘어가기 시작하면, 그 방향 깜빡이를 약 1초(2번 정도) 켜 드립니다.\n- 판단: 모델이 보는 차선 기준입니다. 양쪽 차선이 보이고 실제로 선 쪽으로 다가갈 때만 켭니다. 인게이지 여부와 무관하며, D단이면 속도와 상관없이 동작합니다.\n- 방식: 자동주차 ECU를 약 1초만 멈추고 SPAS2(0x16A)로 깜빡이 명령을 보낸 뒤 바로 다시 켭니다. panda 펌웨어가 바뀝니다.\n- 확인된 차량: 아이오닉5 PE에서 램프 점등을 확인했습니다. 자동주차 ECU가 멈추지 않는 차량(예: 그랜저 GN7)은 같은 메시지끼리 충돌해 CAN 오류가 날 수 있으니 사용을 권하지 않습니다.\n- 비슷한 설정과의 차이: 「CAN-FD SPAS 깜박이 사용」(CanfdBlinkerControl)은 오픈파일럿이 차로변경·회전할 때 켜 주는 별도 기능입니다. 블루투스 리모컨 깜빡이(AutoBlinkerControl)는 젯슨과 PEAK USB-CAN 장치가 필요한 기능입니다.\n- 이 설정을 켜면 다음 부팅 때 CanfdBlinkerControl이 자동으로 꺼집니다(두 기능이 같은 메시지를 써서 동시에 쓸 수 없습니다). 기본 꺼짐.",
-      "egroup": "START",
+      "egroup": "Joongyu Lab",
       "etitle": "Lane Change Auto Blinker",
       "edescr": "Flashes the blinker for about 1 s (about two flashes) toward the side the driver starts crossing a lane line without signalling.\n- Detection: model lane lines; only when both lines are seen and the car really moves toward one. Engaged or not, at any speed in D.\n- How: pauses the parking ECU for about 1 s, sends the blinker command on SPAS2 (0x16A), then restores it. Changes the panda firmware.\n- Verified: the lamp lights on the Ioniq 5 PE. On cars whose parking ECU keeps sending (e.g. Grandeur GN7) the two same-ID frames collide and can cause a CAN error, so it is not recommended there.\n- Not the same as CAN-FD SPAS Blinkers (CanfdBlinkerControl, blinks for openpilot lane changes and turns) or the Bluetooth remote blinker (AutoBlinkerControl, needs a Jetson and a PEAK USB-CAN adapter).\n- Turning this on switches CanfdBlinkerControl off at the next boot (both use the same message). Off by default.",
-      "cgroup": "启动设置",
+      "cgroup": "Joongyu Lab",
       "ctitle": "变道自动转向灯",
       "cdescr": "驾驶员未打转向灯开始越过车道线时, 向该方向打开转向灯约1秒(约闪2次)。\n- 判断: 按模型车道线, 仅在两侧车道线可见且确实向车道线靠近时。与是否接管无关, D挡任何车速均有效。\n- 方式: 暂停泊车ECU约1秒, 通过SPAS2(0x16A)发送转向灯指令后立即恢复。会更改panda固件。\n- 已确认: IONIQ 5 PE 可点亮转向灯。泊车ECU不停止的车型(如 Grandeur GN7)同ID报文会冲突并可能导致CAN错误, 不建议使用。\n- 与「CAN-FD SPAS 转向灯」(CanfdBlinkerControl, openpilot变道/转弯时点亮)和蓝牙遥控转向灯(AutoBlinkerControl, 需要Jetson和PEAK USB-CAN)不同。\n- 开启后下次启动时会自动关闭 CanfdBlinkerControl(两者使用同一报文)。默认关闭。",
       "min": 0,
@@ -4225,14 +4225,14 @@
       "display_unit": "speedKph"
     },
     {
-      "group": "감속제어",
+      "group": "Joongyu Lab",
       "name": "AutoRoadSpeedOnEngage",
       "title": "인게이지 시 도로제한속도로 시작",
       "descr": "RES(+)로 켤 때 설정속도가 도로제한속도보다 낮으면 도로제한속도로 시작합니다. 그 뒤로는 제한속도를 따라가지 않습니다. 제한속도를 모르면(0) 지금처럼 동작. 외부 내비 없이도 순정 내비 제한속도를 씁니다.",
-      "egroup": "SPEED",
+      "egroup": "Joongyu Lab",
       "etitle": "Start at road speed limit on engage",
       "edescr": "When engaging with RES/+ and the set speed would be below the road speed limit, start at the limit. The limit is not followed afterwards. With no known limit (0) nothing changes. Uses the stock navigation limit without an external navigation app.",
-      "cgroup": "速度控制",
+      "cgroup": "Joongyu Lab",
       "ctitle": "启用时以道路限速起步",
       "cdescr": "用 RES/+ 启用时，若设定速度低于道路限速则以道路限速开始，之后不跟随限速。限速未知(0)时不变。无外部导航时使用原厂导航限速。",
       "min": 0,
@@ -4393,14 +4393,14 @@
       "display_unit": "percent"
     },
     {
-      "group": "화면",
+      "group": "Joongyu Lab",
       "name": "ScreenOn",
       "title": "화면 켜기(C4)",
       "descr": "기본 켜짐. 끄면 C4 화면과 백라이트를 끕니다(오프로드·주행 모두). 화면을 터치하면 5초간 켜지고, 주행 중 경고가 뜨면 경고가 떠 있는 동안 켜집니다. 경고음과 주행 기능은 그대로 동작합니다.\n다시 켜면 약 5초 안에 화면이 켜집니다. C3/C3X는 영향 없음.",
-      "egroup": "DISPLAY",
+      "egroup": "Joongyu Lab",
       "etitle": "Screen On (C4)",
       "edescr": "On by default. Turning it off switches the C4 screen and backlight off (offroad and onroad). A touch wakes the screen for 5 seconds, and it stays on while an onroad alert is shown. Alert sounds and driving functions keep working.\nTurning it back on brings the screen back within about 5 seconds. No effect on C3/C3X.",
-      "cgroup": "显示",
+      "cgroup": "Joongyu Lab",
       "ctitle": "开启屏幕(C4)",
       "cdescr": "默认开启。关闭后关闭 C4 屏幕和背光（停车和行车时均如此）。触摸屏幕会点亮 5 秒，行车中出现警报时在警报显示期间点亮。提示音和驾驶功能照常工作。\n重新开启后约 5 秒内屏幕点亮。对 C3/C3X 无影响。",
       "min": 0,
