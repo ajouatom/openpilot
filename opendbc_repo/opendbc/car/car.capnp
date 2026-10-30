@@ -291,7 +291,7 @@ struct CarState {
   autoTurnSignalReadyRequestId @109 :UInt64; # TX echoed and lamps confirmed for this automatic maneuver; zero otherwise
   tbtRearInputsAvailable @110 :Bool; # optional observed CANFD BSD/corner inputs, for the TBT physical-indicator trigger only
   tbtRightRearBlocked @111 :Bool = true; # unknown/stale/saturated or <20m; does not alter manual lane-change admission
-  naviTunnel @112 :Bool; # stock navigation 0x4A3 TunnelExist: in a tunnel, where lane changes are banned
+  naviTunnel @112 :Bool; # 0x4A3 TunnelExist in a tunnel the stock navigation announced as no-lane-change (0x162 SIGNS 16; TunnelLaneChangeHold)
   naviRoundabout @113 :Bool; # stock cluster 0x162 SIGNS=24 rose in the last 20 s and below 60 km/h (RoundaboutLaneChangeHold): no Kick or auto lane change
   struct VehicleGps {
     available @0 :Bool;

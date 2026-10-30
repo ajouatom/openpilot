@@ -373,10 +373,8 @@ class CarController(CarControllerBase):
     # The driver crossing a line with the lamp off, engaged or not (modelV2 runs either way). Not the model's own lane
     # change: holding SPAS2 through it read back as the driver's blinker and the lamp never went off (EV4 10-26).
     lamp = CS.out.leftBlinker or CS.out.rightBlinker
-    # 0x4A3 TunnelExist: lane changes are banned in tunnels (10-29: 4/4 rises at tunnel entries, cluster "no lane change")
-    hda_info = getattr(CS, "hda_info_4a3", None)
-    tunnel = hda_info is not None and hda_info.get("TunnelExist", 0) > 0
-    tunnel = tunnel or getattr(CS.out, "naviRoundabout", False)  # same ban for 20 s after a roundabout sign (carstate)
+    # lane changes are banned in a tunnel announced as no-lane-change, and for 20 s after a roundabout sign (carstate)
+    tunnel = getattr(CS.out, "naviTunnel", False) or getattr(CS.out, "naviRoundabout", False)
     side = self.lane_crossing.update(getattr(CS, "modelV2", None), self.frame * DT_CTRL,
                                      self.blinker_control and drive and not lamp and not tunnel, CS.out.steeringTorque)
     if side:

@@ -71,6 +71,9 @@ EV_MODE_STATUS_TIMEOUT_NS = 500_000_000
 # Highway pre-notices came at 80-118 km/h with no turn, hence the speed gate (02_logs/measurements.md §33)
 ROUNDABOUT_HOLD_FRAMES = int(20.0 / DT_CTRL)
 ROUNDABOUT_MAX_SPEED = 60 * CV.KPH_TO_MS
+# Stock navigation's no-lane-change notice (0x162 SIGNS 16, always with 0x380 byte10 0x10) came 2..58 s before 72 of 83
+# tunnels in October (05_can/navi_lanechange_ban.md 10-30); the short city underpasses got none
+TUNNEL_NOTICE_FRAMES = int(60.0 / DT_CTRL)
 LEGACY_LFA_BUTTON_ADDR = 0x391
 LEGACY_CRUISE_BUTTON_ALT_ADDR = 0x3EF
 LEGACY_LFA_BUTTON_ALT_ADDR = 0x416
@@ -205,6 +208,7 @@ class CarState(CarStateBase):
     self.adrv_0x160 = None
     self.ccnc_0x162 = None
     self.ccnc_signs_prev, self.roundabout_frames = 0, 0
+    self.tunnel_notice_frames, self.tunnel_banned = 0, False
     self.canfd_wrapped_navi = CP.carFingerprint == CAR.KIA_PV5
     self.navi_profile_msg = CANFD_NAVI_PROFILE_MSG if self.canfd_wrapped_navi else "NEW_MSG_4BE"
     self.vehicleNaviZoneControlSupported = not self.canfd_wrapped_navi  # Legacy kind-7 profile zones only
@@ -257,6 +261,7 @@ class CarState(CarStateBase):
     self.vehicleNaviCanControl = self._vehicle_navi_can_control_mode(self.op_params.get_int("VehicleNaviCanControl"))
     self.vehicleNaviSchoolZoneControl = self.op_params.get_bool("VehicleNaviSchoolZoneControl")
     self.roundabout_hold_enabled = self.op_params.get_bool("RoundaboutLaneChangeHold")
+    self.tunnel_hold_enabled = self.op_params.get_bool("TunnelLaneChangeHold")
     self.vehicleSpeedCameraParamsCounter = 0
     self.vehicleNaviEvents = []
     # joongyu01/speedcam: stock-navigation camera-kind policy (mobile zones, +-button skip, section average)
@@ -742,6 +747,7 @@ class CarState(CarStateBase):
       if not vehicle_navi_school_zone_control:
         self._clear_vehicle_navi_school_zone()
     self.roundabout_hold_enabled = self.op_params.get_bool("RoundaboutLaneChangeHold")
+    self.tunnel_hold_enabled = self.op_params.get_bool("TunnelLaneChangeHold")
     self._read_speedcam_params()
     return changed
 
@@ -1109,6 +1115,17 @@ class CarState(CarStateBase):
     self.roundabout_frames = max(self.roundabout_frames - 1, 0)
     ret.naviRoundabout = self.roundabout_hold_enabled and self.roundabout_frames > 0 and ret.vEgo < ROUNDABOUT_MAX_SPEED
 
+  def _update_tunnel(self, ret):
+    # 0x4A3 TunnelExist alone is every tunnel and underpass; only one announced as no-lane-change counts
+    signs = self.ccnc_0x162.get("SIGNS", 0) if self.ccnc_0x162 is not None else 0
+    self.tunnel_notice_frames = TUNNEL_NOTICE_FRAMES if signs == 16 else max(self.tunnel_notice_frames - 1, 0)
+    tunnel = self.hda_info_4a3 is not None and self.hda_info_4a3.get("TunnelExist", 0) > 0
+    if not tunnel:
+      self.tunnel_banned = False
+    elif self.tunnel_notice_frames > 0:
+      self.tunnel_banned = True
+    ret.naviTunnel = self.tunnel_hold_enabled and self.tunnel_banned
+
   def _update_vehicle_navi_events(self, cp, ret, speed_limit_cam, cp_alt=None):
     ret.speedBumpDistance = 0.0
     ret.schoolZoneActive = False
@@ -1120,8 +1137,7 @@ class CarState(CarStateBase):
     profile_timestamp = self._vehicle_navi_message_timestamp(cp, self.navi_profile_msg)
     self.vehicleNaviAvailable = self.vehicleNaviAvailable or profile_timestamp > 0 or self.vehicleNaviSpeedZoneActive
     ret.vehicleNaviAvailable = self.vehicleNaviAvailable
-    # 10-29: every rise seen was a tunnel entry, shown on the cluster as "no lane change"
-    ret.naviTunnel = self.hda_info_4a3 is not None and self.hda_info_4a3.get("TunnelExist", 0) > 0
+    self._update_tunnel(ret)
     self._update_roundabout(ret)
     self.vehicleNaviCameraTarget = None
 

@@ -1377,8 +1377,7 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
         text = _cluster_alert_text(getattr(hud_control, "alertType", "") or "") if is_ioniq5pe else None
         if text and (values[text[0]] == 0 or (text[0] == "ALERTS_5" and values["ALERTS_5"] == popup and frame < popup_until)):
           values[text[0]] = text[1]
-        hda_info = getattr(CS, "hda_info_4a3", None)
-        tunnel = hda_info is not None and hda_info.get("TunnelExist", 0) > 0
+        tunnel = getattr(CS.out, "naviTunnel", False)
         if desire in (3, 4):  # the change started (driver torque): nothing refused any more
           create_ccnc_messages._tunnel_refusal_until = 0
         elif tunnel and lat_active and CS.out.leftBlinker != CS.out.rightBlinker:  # one side (not hazards)

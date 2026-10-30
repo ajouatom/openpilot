@@ -28,8 +28,7 @@ def make_cc(control=True, test=0, spas=0):
 def step(cc, frames, gear, kph, cross=0, lamp=False, tunnel=0, roundabout=False):
   cc.lane_crossing.side = cross or cc.lane_crossing.side
   CS = SimpleNamespace(out=SimpleNamespace(gearShifter=gear, vEgo=kph / 3.6, leftBlinker=lamp, rightBlinker=False, steeringTorque=0,
-                                           naviRoundabout=roundabout),
-                       hda_info_4a3={'TunnelExist': tunnel})
+                                           naviTunnel=bool(tunnel), naviRoundabout=roundabout))
   sent = []
   for _ in range(frames):
     sent += CarController.aprk_blinkers(cc, None, CS)
@@ -80,7 +79,7 @@ def test_menu_test_blinks_at_standstill_in_p():
 
 
 def test_no_kick_in_a_tunnel():
-  # 0x4A3 TunnelExist: lane changes are banned there; the crossing stays pending until out of the tunnel
+  # CarState.naviTunnel: lane changes are banned there; the crossing stays pending until out of the tunnel
   cc = make_cc()
   assert 3 not in spas2(cc, step(cc, 50, D, 80, cross=3, tunnel=1))
   assert 3 in spas2(cc, step(cc, 50, D, 80, tunnel=0))

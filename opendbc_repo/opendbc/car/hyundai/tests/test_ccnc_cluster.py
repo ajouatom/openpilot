@@ -57,6 +57,34 @@ def test_roundabout_hold_20s_below_60kph():
   assert not any(run(10, kph=30))
 
 
+def test_tunnel_ban_only_after_a_no_lane_change_notice():
+  from opendbc.car.hyundai.carstate import CarState, TUNNEL_NOTICE_FRAMES
+  cs = SimpleNamespace(ccnc_0x162={'SIGNS': 0}, hda_info_4a3={'TunnelExist': 0}, tunnel_notice_frames=0, tunnel_banned=False,
+                       tunnel_hold_enabled=True)
+  ret = SimpleNamespace()
+  def run(n, tunnel=0, signs=0):
+    cs.hda_info_4a3['TunnelExist'], cs.ccnc_0x162['SIGNS'] = tunnel, signs
+    out = []
+    for _ in range(n):
+      CarState._update_tunnel(cs, ret)
+      out.append(ret.naviTunnel)
+    return out
+  assert not any(run(300, tunnel=1))               # 10-30 12:58/13:14 underpasses: no notice, no ban
+  run(10)
+  run(500, signs=16)                               # notice 8 s before the 13:24 tunnel
+  run(300)
+  assert all(run(TUNNEL_NOTICE_FRAMES, tunnel=1))  # held to the exit, past the notice window
+  assert not any(run(10))
+  assert all(run(10, tunnel=1, signs=16))          # a notice inside the tunnel counts too
+  run(10)
+  run(TUNNEL_NOTICE_FRAMES + 10)
+  assert not any(run(10, tunnel=1))                # notice too long ago
+  run(10)
+  run(10, signs=16)
+  cs.tunnel_hold_enabled = False                   # TunnelLaneChangeHold off
+  assert not any(run(10, tunnel=1))
+
+
 @pytest.mark.parametrize('desire', range(5))
 @pytest.mark.parametrize('lat_active', (False, True))
 def test_turn_changes_only_background_in_existing_cluster_frame(monkeypatch, desire, lat_active):
@@ -590,9 +618,9 @@ def test_tunnel_lane_change_refusal_text(monkeypatch):
     md = log.ModelDataV2.new_message()
     md.meta.desire = desire
     state = SimpleNamespace(
-      adrv_0x161={key: 0 for key in definition.sigs}, out=structs.CarState(latEnabled=True, leftBlinker=blinker), modelV2=md,
+      adrv_0x161={key: 0 for key in definition.sigs}, out=structs.CarState(latEnabled=True, leftBlinker=blinker, naviTunnel=bool(tunnel)), modelV2=md,
       lfahda_cluster=None, cruise_buttons_msg=None, adrv_0x200=None, adrv_0x1ea=None, ccnc_0x162=None, is_metric=True,
-      paddle_button_prev=0, softHoldActive=0, trailer_connected=False, hda_info_4a3={'TunnelExist': tunnel},
+      paddle_button_prev=0, softHoldActive=0, trailer_connected=False,
     )
     control = structs.CarControl(latActive=True, enabled=True)
     msg = hyundaicanfd.create_ccnc_messages(cp, packer, SimpleNamespace(ECAN=0, CAM=2), frame, control, state,
