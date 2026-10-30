@@ -1084,9 +1084,10 @@ def _set_raw_bits(msg, bits, value):
   return addr, bytes(d), bus
 
 
-def _dashed_lane_line(color, lane_line):
-  # 0x161 dashed codes seen on the Ioniq 5 PE cluster: 8 white, 10 green (no orange dashed)
-  if lane_line // 10 > 0 and lane_line % 10 in (0, 5):  # camera: dashed / DLM inner dashed (color 0 = no lane info)
+def _dashed_lane_line(color, lane_line, car=None):
+  # 0x161 dashed codes seen on the Ioniq 5 PE cluster: 8 white, 10 green (no orange dashed).
+  # The Ioniq 9 cluster draws no line for them (user report 10-30), so it keeps the solid colour
+  if car != CAR.HYUNDAI_IONIQ_9 and lane_line // 10 > 0 and lane_line % 10 in (0, 5):  # camera: dashed / DLM inner dashed (color 0 = no lane info)
     return {2: 8, 6: 10}.get(color, color)
   return color
 
@@ -1407,7 +1408,7 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
           if hud_control.leftLaneDepart:
             values["LANELINE_LEFT"] = 4 if (frame // 50) % 2 == 0 else 1
           else:
-            values["LANELINE_LEFT"] = _dashed_lane_line(lane_color, CS.out.leftLaneLine) if left_seen or lane_color == 4 else LANE_LINE_UNSEEN  # orange stays
+            values["LANELINE_LEFT"] = _dashed_lane_line(lane_color, CS.out.leftLaneLine, getattr(CP, "carFingerprint", None)) if left_seen or lane_color == 4 else LANE_LINE_UNSEEN  # orange stays
 
           lane_color = 6 if md is not None and md.meta.laneChangeAvailableRight else 2
           if lane_line_check >= 1:
@@ -1418,7 +1419,7 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
           if hud_control.rightLaneDepart:
             values["LANELINE_RIGHT"] = 4 if (frame // 50) % 2 == 0 else 1
           else:
-            values["LANELINE_RIGHT"] = _dashed_lane_line(lane_color, CS.out.rightLaneLine) if right_seen or lane_color == 4 else LANE_LINE_UNSEEN
+            values["LANELINE_RIGHT"] = _dashed_lane_line(lane_color, CS.out.rightLaneLine, getattr(CP, "carFingerprint", None)) if right_seen or lane_color == 4 else LANE_LINE_UNSEEN
 
         values["LCA_LEFT_ARROW"] = 2 if CS.out.leftBlinker else 0
         values["LCA_RIGHT_ARROW"] = 2 if CS.out.rightBlinker else 0
