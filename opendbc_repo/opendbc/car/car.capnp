@@ -289,8 +289,8 @@ struct CarState {
   turnSignalDriverValid @107 :Bool;
   turnSignalDriverDirection @108 :UInt8; # actual stalk: 0 released, 1 left, 2 right
   autoTurnSignalReadyRequestId @109 :UInt64; # TX echoed and lamps confirmed for this automatic maneuver; zero otherwise
-  tbtRearInputsAvailable @110 :Bool; # optional observed CANFD BSD/corner inputs, for the TBT physical-indicator trigger only
-  tbtRightRearBlocked @111 :Bool = true; # unknown/stale/saturated or <20m; does not alter manual lane-change admission
+  tbtRearInputsAvailable @110 :Bool; # fresh CANFD OEM BSD input for the TBT physical-indicator trigger only (BSD-only since 2026-10-30)
+  tbtRightRearBlocked @111 :Bool = true; # OEM right BSD warning or invalid/stale BSD; no corner-distance veto; manual admission unchanged
   naviTunnel @112 :Bool; # 0x4A3 TunnelExist in a tunnel the stock navigation announced as no-lane-change (0x162 SIGNS 16; TunnelLaneChangeHold)
   naviRoundabout @113 :Bool; # stock cluster 0x162 SIGNS=24 rose in the last 20 s and below 60 km/h (RoundaboutLaneChangeHold): no Kick or auto lane change
   struct VehicleGps {

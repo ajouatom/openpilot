@@ -89,6 +89,7 @@ function modelDisplayName(status) {
   if (explicitName) return explicitName;
 
   const modelId = String(status?.model_id || "").toLowerCase();
+  if (modelId.includes("light-speed")) return "Light speed";
   if (modelId.includes("flip-flop")) return "Flip Flop";
   if (modelId.includes("md-v3")) return "MD v3";
   if (modelId.includes("nav-n16")) return "N16 Nav (NOO)";

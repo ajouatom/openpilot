@@ -1,5 +1,53 @@
 # Repository memory
 
+- On 2026-10-30, owner requests Light speed PR39173 as an eGPU/Jetson
+  choice and review of0152aab4. Add catalog light-speed, exact c7cbe5de PKL
+  SHA33ba0928/790445184B and official ONNX6274eb4a/792305602B, checkpoint
+  f22b8b34/16384, noNOO. Apply0152's d39227be tinygrad only to this isolated
+  runtime; keep N16 default, Flip/retiredMD identities and internalCD210/DM.
+  FinalPR retains aliased state feedback; no intermediate ping-pong import.
+  Signed hostd66d445b05/64838820B,1152committed payloads and all HTTPS hashes
+  verified. Normal commaGitPull/selection/BOTHreboots; firstJetson engine build.
+  Desktop260pass/2Linuxskip, focused54overlap,Web17; LinuxeGPU40996730817
+  native old/new runtime3each pass; Jetson40996730849 broad2028/56skip plus
+  supporting232/62/94/119/11/11 andWindows pass. No vehicle write, selection,
+  restart,CAN or physical inference/road validation. Jetson power needed only
+  for actual download/build/load/inference. See docs/light_speed_model_20261030.md.
+
+
+- Later on 2026-10-30, manual boundary indicator retry becomes3s plus1s valid
+  continuous lamp extinction and fresh driver/geometry admission. This supersedes
+  the former12s retry, NOT the12s owned-lamp automatic-steering isolation. Quick
+  opposite requests retain both origin masks and persist them across restarts.
+  No timer replay, CAN/receiver change or live writes. Desktop685 pass/26native
+  excluded. Git Pull/comma restart; no Jetson bundle. See
+  docs/indicator_drive_review_20261030.md.
+
+- Later on 2026-10-30, owner explicitly changes the 250m add-on rear gate to
+  OEM BSD only. This supersedes the corner-distance20m/24.9/25.0 veto for that
+  add-on. Keep BSD freshness/validity and all ordinary lane/driver admission.
+  Historical logs before this change retain the old combined TBT field semantics.
+  Owner adds front gap5m plus3s vRel projection: current/projected >=5m on
+  full right-front radar list (leadRight alone excludes<=5m). Fresh radarState,
+  hardware availability/errors enforced; no new steering request. Desktop679
+  plus53BSD/schema pass,26native excluded. Raw segment10 replay requests20.603s
+  at228m with32.212m/current38.812m/projected gap; no physical acceptance claim.
+
+- On 2026-10-30, owner reports missing 250m/manual/left indicators on the latest
+  drive. Twelve hash-verified rlogs show right-fork TBT4 excluded by TBT2-only
+  admission, then 25.0m special rear values blocking despite clear BSD. Preserve
+  that unknown-distance veto. Admit TBT2/4 and matching right preparation;
+  pre-request steering resets confirmation, owned-request cancellation stays.
+  Manual indicator now ignores ATC/navigation preparation and model desire
+  probabilities; executing lane changes/output ownership remain reserved.
+  Track crossed-boundary confidence for <=1s with continuous two-boundary
+  geometry, torque, gap/jump and own-lamp isolation gates. Recorded14262-frame
+  detector replay0->2 candidates, NOT physical acceptance. Left auto sends
+  completed but lamps unconfirmed; later stalk presses confirmed. No CAN retry
+  or inactive-control bypass, no vehicle writes/reboot. Desktop499/26native
+  excluded. See docs/indicator_drive_review_20261030.md; raw evidence private.
+
+
 - Later again on 2026-10-30, owner clarifies manual driver-lane indication is
   independent of ATC and explicitly requests restoring it. Restore default-OFF
   ManualLaneChangeIndicator only; keep 3be19f6332 ATC audio/TBT unchanged.

@@ -3,7 +3,7 @@ const EN = {
   title: "External driving model", internal: "Internal model: CD210 (fixed)",
   help: "One choice for eGPU and Jetson. Choosing saves the next-boot selection. Reboot comma and Jetson while parked with ignition off and internet available. First use downloads files; Jetson also prepares its engine.",
   current: "This boot", next: "Next boot", saved: "Saved. Reboot comma and Jetson to apply.",
-  noo: "NOO supported", no_noo: "NOO not supported", shared: "Flip Flop and MD v3 use different eGPU PKLs, but share the same Jetson ONNX checkpoint.",
+  noo: "NOO supported", no_noo: "NOO not supported", shared: "N16 supports navigation inputs. Flip Flop and Light speed do not.",
 
 };
 function t(key) { return typeof getUIText === "function" ? getUIText(`model_library_${key}`, EN[key]) : EN[key]; }

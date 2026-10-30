@@ -82,7 +82,7 @@ def test_disabled_invalid_busy_do_not_request(key):
   assert not drive(BoundaryIndicator(), cs, md, **{key: key == 'busy'})
 
 
-@pytest.mark.parametrize('probs', [[0.9, 0.01, 0.9, 0.9], [0.9, 0.9, 0.01, 0.9], [0.9, math.nan, 0.9, 0.9]])
+@pytest.mark.parametrize('probs', [[0.9, 0.01, 0.9, 0.9], [0.9, math.nan, 0.9, 0.9]])
 def test_old_visible_line_is_not_enough(probs):
   cs, md = scene()
   md.laneLineProbs = probs
@@ -180,7 +180,9 @@ def test_lamp_and_synthesized_stalk_feedback_cannot_request_steering(monkeypatch
   assert t.helper.lane_change_state == log.LaneChangeState.laneChangeStarting
 
 
-def test_actual_source_loop_emits_once_after_journal_and_never_holds(monkeypatch):
+@pytest.mark.parametrize('atc,state,nav_fresh', [('none', 'off', True), ('atc left', 'preLaneChange', True),
+                                               ('fork right', 'preLaneChange', True), ('turn left', 'off', False)])
+def test_actual_source_loop_emits_once_after_journal_and_never_holds(monkeypatch, atc, state, nav_fresh):
   import sys
   import json
   import types
@@ -197,14 +199,15 @@ def test_actual_source_loop_emits_once_after_journal_and_never_holds(monkeypatch
     setattr(cs, k, v)
   sm['modelV2'] = N(
     meta=N(
-      desire='none', autoTurnSignal='none', autoTurnSignalLaneChange=False, laneChangeState='off', manualLaneIndicator='none', manualLaneIndicatorMonoTime=0
+      desire='none', autoTurnSignal='none', autoTurnSignalLaneChange=False, laneChangeState=state, manualLaneIndicator='none', manualLaneIndicatorMonoTime=0
     )
   )
-  sm['carrotMan'] = N(atcType='none', xDistToTurn=0)
+  sm['carrotMan'] = N(atcType=atc, xDistToTurn=0)
   sm['livePose'] = N(inputsOK=True, sensorsOK=True, posenetOK=True, orientationNED=N(valid=True, z=0.0))
   sm.services = list(sm)
   sm.valid = dict.fromkeys(sm, True)
   sm.alive = dict.fromkeys(sm, True)
+  sm.valid['carrotMan'] = nav_fresh
 
   def tick(_):
     i = len(sent)
@@ -276,3 +279,127 @@ def test_startup_without_owned_request_preserves_existing_lamps(busy, direction)
   detector.update(10.0, cs, md, enabled=True, valid=True, busy=busy)
   assert detector.filter_lamp(direction) == direction
   assert detector.request_direction == 0
+
+
+@pytest.mark.parametrize('direction', [1, 2])
+@pytest.mark.parametrize('age,expected', [(0.8, True), (1.1, False)])
+def test_confidence_loss_only_tracks_a_recently_seen_crossed_boundary(direction, age, expected):
+  b = BoundaryIndicator()
+  cs, md = scene(direction)
+  # First establish stable geometry and a driver direction without approaching.
+  for i in range(40):
+    md.frameId = i
+    b.update(10+i*.05, cs, md, enabled=True, valid=True, busy=False)
+  last_confident = 11.95
+  md.laneLineProbs = [.01]*4
+  seen = []
+  # Approach continuously; the confidence timestamp must never refresh from geometry.
+  for i in range(1, int(age/.05)+2):
+    md.frameId = 40+i
+    y = 1.8 - .95 * min(i*.05/age, 1)
+    md.laneLines[1].y = [-y if direction == 1 else -(3.6-y)]
+    md.laneLines[2].y = [3.6-y if direction == 1 else y]
+    b.update(last_confident+i*.05, cs, md, enabled=True, valid=True, busy=False)
+    if b.request_direction:
+      seen.append(b.request_direction)
+  assert bool(seen) == expected
+
+
+def test_opposite_line_confidence_is_not_a_veto_but_geometry_is_required():
+  cs, md = scene()
+  md.laneLineProbs[2] = .01
+  assert drive(BoundaryIndicator(), cs, md)
+  cs, md = scene()
+  md.laneLineProbs[1] = .01
+  assert not drive(BoundaryIndicator(), cs, md)
+
+
+@pytest.mark.parametrize('atc', ['none', 'atc left', 'atc right', 'fork right', 'turn left'])
+def test_desire_helper_observes_manual_motion_during_navigation_preparation(monkeypatch, atc):
+  from openpilot.selfdrive.controls.lib import desire_helper as dh
+  from openpilot.selfdrive.controls.tests.test_desire_helper import TestDesireHelperDriverIntent
+  from openpilot.cereal import log
+  monkeypatch.setattr(dh, 'Params', lambda: N())
+  t = TestDesireHelperDriverIntent()
+  t.setup_method()
+  t.helper.boundary_indicator_supported = True
+  t.helper.boundary_indicator_enabled = True
+  t.helper._update_params_periodic = lambda: None
+  t.helper.bluetooth_commands = N(read=lambda **kw: None)
+  cs, md = scene()
+  # The real helper passes the navigation-independent admission to the detector.
+  seen = []
+  t.helper.boundary_indicator.update = lambda *a, **kw: seen.append(kw)
+  t.carrot_man.atcType = atc
+  t.helper.lane_change_state = log.LaneChangeState.preLaneChange
+  t.helper.update(cs, md, False, .1, t.carrot_man, N(), indicator_valid=True)
+  assert seen == [{'enabled':True, 'valid':True, 'busy':False}]
+
+
+@pytest.mark.parametrize('direction', [1, 2])
+def test_retry_after_three_seconds_preserves_twelve_second_feedback_mask(direction):
+  b = BoundaryIndicator({'time': 10.0, 'direction': 1})
+  cs, md = scene(direction)
+  requests = []
+  for i in range(100):
+    now = 10.0 + i * 0.05
+    y = max(0.3, 1.5 - max(0, i - 50) * 0.04)
+    md.frameId = i
+    md.laneLines[1].y = [-y if direction == 1 else -(3.6 - y)]
+    md.laneLines[2].y = [3.6 - y if direction == 1 else y]
+    b.update(now, cs, md, enabled=True, valid=True, busy=False)
+    assert b.filter_lamp(1) == 0
+    if b.request_direction:
+      requests.append(b.request_time)
+  assert len(set(requests)) == 1
+  assert 13.0 <= requests[0] < 14.0
+  assert b.filter_lamp(direction) == 0
+  assert b.blocked == (1 | direction)
+  assert b.isolate_until == requests[0] + 12.0
+
+
+@pytest.mark.parametrize('invalid', [False, True])
+def test_retry_still_requires_one_second_of_valid_darkness(invalid):
+  b = BoundaryIndicator({'time': 10.0, 'direction': 1})
+  cs, md = scene()
+  for i in range(100):
+    now = 10 + i * 0.05
+    cs.leftBlinker = not invalid and i % 16 < 8
+    b.update(now, cs, md, enabled=True, valid=not invalid, busy=False)
+    assert not b.request_direction
+    assert b.previous is None
+  cs.leftBlinker = False
+  for i in range(19):
+    b.update(15 + i * 0.05, cs, md, enabled=True, valid=True, busy=False)
+    assert b.previous is None
+  b.update(16.05, cs, md, enabled=True, valid=True, busy=False)
+  assert b.previous is not None
+  assert b.filter_lamp(1) == 0
+
+
+def test_opposite_origin_journal_survives_source_and_model_restart():
+  prior = {'time': 10.0, 'direction': 1}
+  source = BoundaryEvents(prior)
+  saved = []
+  assert not source.read(13.0, 0, 0.0, allowed=True, record=saved.append)
+  assert source.read(13.1, 2, 13.05, allowed=True, record=saved.append)
+  assert saved == [{'time': 13.05, 'direction': 2, 'mask': 3}]
+  b = BoundaryIndicator(saved[0])
+  cs, md = scene()
+  b.update(13.2, cs, md, enabled=True, valid=True, busy=False)
+  assert b.filter_lamp(1) == b.filter_lamp(2) == 0
+  assert not b.request_direction
+  restarted = BoundaryEvents(saved[0])
+  assert not restarted.read(13.2, 2, 13.05, allowed=True, record=saved.append)
+
+
+def test_failed_combined_origin_write_does_not_advance_journal():
+  prior = {'time': 10.0, 'direction': 1}
+  source = BoundaryEvents(prior)
+  source.read(13.0, 0, 0.0, allowed=True, record=lambda _: None)
+
+  def fail(_):
+    raise OSError('read-only')
+
+  assert not source.read(13.1, 2, 13.05, allowed=True, record=fail)
+  assert source.journal == prior
