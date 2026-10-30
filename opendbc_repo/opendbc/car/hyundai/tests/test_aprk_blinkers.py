@@ -25,9 +25,10 @@ def make_cc(control=True, test=0, spas=0):
                          packer=CANPacker('hyundai_canfd_generated'), spas_steer_test=spas, spas_angle=0., aprk_buses=())
 
 
-def step(cc, frames, gear, kph, cross=0, lamp=False, tunnel=0):
+def step(cc, frames, gear, kph, cross=0, lamp=False, tunnel=0, roundabout=False):
   cc.lane_crossing.side = cross or cc.lane_crossing.side
-  CS = SimpleNamespace(out=SimpleNamespace(gearShifter=gear, vEgo=kph / 3.6, leftBlinker=lamp, rightBlinker=False, steeringTorque=0),
+  CS = SimpleNamespace(out=SimpleNamespace(gearShifter=gear, vEgo=kph / 3.6, leftBlinker=lamp, rightBlinker=False, steeringTorque=0,
+                                           naviRoundabout=roundabout),
                        hda_info_4a3={'TunnelExist': tunnel})
   sent = []
   for _ in range(frames):
@@ -83,6 +84,13 @@ def test_no_kick_in_a_tunnel():
   cc = make_cc()
   assert 3 not in spas2(cc, step(cc, 50, D, 80, cross=3, tunnel=1))
   assert 3 in spas2(cc, step(cc, 50, D, 80, tunnel=0))
+
+
+def test_no_kick_after_a_roundabout_sign():
+  # CarState.naviRoundabout (0x162 SIGNS=24, 20 s, < 60 km/h): same ban as a tunnel
+  cc = make_cc()
+  assert 4 not in spas2(cc, step(cc, 50, D, 30, cross=4, roundabout=True))
+  assert 4 in spas2(cc, step(cc, 50, D, 30))
 
 
 def test_spas_steer_test_parked_only():

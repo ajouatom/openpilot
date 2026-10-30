@@ -32,6 +32,27 @@ def test_paddle_background_requires_enabled_paddle_mode(
 def test_model_turn_background_requires_active_steering(cruise_enabled, lat_active):
   normal = 1 if cruise_enabled else 7
   assert _select_cluster_background(cruise_enabled, lat_active, False, 0, turning=True) == (6 if lat_active else normal)
+  # roundabout ban (Kick and auto lane change held off) flashes red engaged or not
+  assert _select_cluster_background(cruise_enabled, lat_active, False, 0, roundabout=True) == 6
+
+
+def test_roundabout_hold_20s_below_60kph():
+  from opendbc.car.hyundai.carstate import CarState, ROUNDABOUT_HOLD_FRAMES
+  cs = SimpleNamespace(ccnc_0x162={'SIGNS': 0}, ccnc_signs_prev=0, roundabout_frames=0)
+  ret = SimpleNamespace(vEgo=0.)
+  def run(n, signs=0, kph=30):
+    cs.ccnc_0x162['SIGNS'], ret.vEgo = signs, kph / 3.6
+    out = []
+    for _ in range(n):
+      CarState._update_roundabout(cs, ret)
+      out.append(ret.naviRoundabout)
+    return out
+  assert not any(run(10))
+  assert all(run(500, signs=24))                   # the 5 s pulse
+  assert all(run(ROUNDABOUT_HOLD_FRAMES - 501))    # held to 20 s from the rise
+  assert not any(run(10))
+  run(1, signs=24)
+  assert not any(run(10, signs=24, kph=80))        # highway pre-notice
 
 
 @pytest.mark.parametrize('desire', range(5))

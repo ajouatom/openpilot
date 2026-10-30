@@ -557,8 +557,9 @@ class DesireHelper:
             atc_driver_confirm = atc_lane_change_requested and driver_enabled
             atc_geometry_release = atc_lane_change_only and auto_lane_change_trigger
             atc_line_release = (atc_driver_confirm or atc_geometry_release) and side_clear_without_line
-            # In a tunnel (lane changes banned) nothing starts without the driver's own steering torque
-            in_tunnel = bool(getattr(carstate, "naviTunnel", False))
+            # In a tunnel (lane changes banned) or just after a roundabout sign nothing starts without the driver's own
+            # steering torque
+            in_tunnel = bool(getattr(carstate, "naviTunnel", False) or getattr(carstate, "naviRoundabout", False))
             if in_tunnel:
               atc_line_release = False
 

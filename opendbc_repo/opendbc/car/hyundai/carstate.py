@@ -67,6 +67,10 @@ CANFD_CAMERA_TX_MESSAGES = (
 CANFD_CAMERA_FIRST_FRAME_MAX_AGE_NS = 150_000_000
 TRAILER_DISCONNECT_GRACE_FRAMES = int(5.0 / DT_CTRL)
 EV_MODE_STATUS_TIMEOUT_NS = 500_000_000
+# 0x162 SIGNS=24 (roundabout) is a 5 s pulse, not "inside" (17/17 rises, 10-30); turns ran -5..+17 s from the rise.
+# Highway pre-notices came at 80-118 km/h with no turn, hence the speed gate (02_logs/measurements.md §33)
+ROUNDABOUT_HOLD_FRAMES = int(20.0 / DT_CTRL)
+ROUNDABOUT_MAX_SPEED = 60 * CV.KPH_TO_MS
 LEGACY_LFA_BUTTON_ADDR = 0x391
 LEGACY_CRUISE_BUTTON_ALT_ADDR = 0x3EF
 LEGACY_LFA_BUTTON_ALT_ADDR = 0x416
@@ -200,6 +204,7 @@ class CarState(CarStateBase):
     self.adrv_0x1ea = None
     self.adrv_0x160 = None
     self.ccnc_0x162 = None
+    self.ccnc_signs_prev, self.roundabout_frames = 0, 0
     self.canfd_wrapped_navi = CP.carFingerprint == CAR.KIA_PV5
     self.navi_profile_msg = CANFD_NAVI_PROFILE_MSG if self.canfd_wrapped_navi else "NEW_MSG_4BE"
     self.vehicleNaviZoneControlSupported = not self.canfd_wrapped_navi  # Legacy kind-7 profile zones only
@@ -1094,6 +1099,14 @@ class CarState(CarStateBase):
     self.vehicleNaviEvents.sort(key=lambda event: event["target"])
     self.vehicleNaviEvents = self.vehicleNaviEvents[:VEHICLE_NAVI_MAX_EVENTS]
 
+  def _update_roundabout(self, ret):
+    signs = self.ccnc_0x162.get("SIGNS", 0) if self.ccnc_0x162 is not None else 0
+    if signs == 24 and self.ccnc_signs_prev != 24:
+      self.roundabout_frames = ROUNDABOUT_HOLD_FRAMES
+    self.ccnc_signs_prev = signs
+    self.roundabout_frames = max(self.roundabout_frames - 1, 0)
+    ret.naviRoundabout = self.roundabout_frames > 0 and ret.vEgo < ROUNDABOUT_MAX_SPEED
+
   def _update_vehicle_navi_events(self, cp, ret, speed_limit_cam, cp_alt=None):
     ret.speedBumpDistance = 0.0
     ret.schoolZoneActive = False
@@ -1107,6 +1120,7 @@ class CarState(CarStateBase):
     ret.vehicleNaviAvailable = self.vehicleNaviAvailable
     # 10-29: every rise seen was a tunnel entry, shown on the cluster as "no lane change"
     ret.naviTunnel = self.hda_info_4a3 is not None and self.hda_info_4a3.get("TunnelExist", 0) > 0
+    self._update_roundabout(ret)
     self.vehicleNaviCameraTarget = None
 
     # Track the current warning independently of future 0x4BE previews. A new

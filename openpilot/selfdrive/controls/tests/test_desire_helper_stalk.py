@@ -44,12 +44,12 @@ class TestDesireHelperStalkRequest:
     self.left_count = 0
 
   def update(self, left_blinker=True, lane_change_prob=0.5, press=False, counters=True, lever=0, v_kph=90.0, lines=None,
-             tunnel=False, torque=0.0):
+             tunnel=False, torque=0.0, roundabout=False):
     if press:
       self.left_count = (self.left_count + 1) % 256
     car = SimpleNamespace(canValid=True, leftBlinker=left_blinker, rightBlinker=False, vEgo=v_kph / 3.6, aEgo=0.0,
                           trailerConnected=False, steeringTorque=torque, steeringPressed=torque != 0.0, blinkerLever=lever,
-                          naviTunnel=tunnel)
+                          naviTunnel=tunnel, naviRoundabout=roundabout)
     if counters:
       car.leftBlinkerStalkCount, car.rightBlinkerStalkCount = self.left_count, 0
     model = SimpleNamespace(laneLines=[SimpleNamespace(y=[y]) for y in (-5.0, *lines, 5.0)]) if lines else SimpleNamespace()
@@ -83,6 +83,13 @@ class TestDesireHelperStalkRequest:
     assert self.update(press=True, tunnel=True) == LCS.preLaneChange
     assert self.update(tunnel=True) == LCS.preLaneChange
     assert self.update(tunnel=True, torque=300.0) == LCS.laneChangeStarting
+
+  def test_roundabout_needs_driver_torque(self):
+    # 20 s after a 0x162 SIGNS=24 roundabout sign below 60 km/h: same as a tunnel
+    self.update(left_blinker=False, roundabout=True, v_kph=30)
+    assert self.update(press=True, roundabout=True, v_kph=30) == LCS.preLaneChange
+    assert self.update(roundabout=True, v_kph=30) == LCS.preLaneChange
+    assert self.update(roundabout=True, v_kph=30, torque=300.0) == LCS.laneChangeStarting
 
   def test_blinker_held_through_the_change_still_needs_torque(self):
     self.start_and_cross()

@@ -376,6 +376,7 @@ class CarController(CarControllerBase):
     # 0x4A3 TunnelExist: lane changes are banned in tunnels (10-29: 4/4 rises at tunnel entries, cluster "no lane change")
     hda_info = getattr(CS, "hda_info_4a3", None)
     tunnel = hda_info is not None and hda_info.get("TunnelExist", 0) > 0
+    tunnel = tunnel or getattr(CS.out, "naviRoundabout", False)  # same ban for 20 s after a roundabout sign (carstate)
     side = self.lane_crossing.update(getattr(CS, "modelV2", None), self.frame * DT_CTRL,
                                      self.blinker_control and drive and not lamp and not tunnel, CS.out.steeringTorque)
     if side:

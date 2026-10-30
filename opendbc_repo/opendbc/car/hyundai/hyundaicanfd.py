@@ -1111,12 +1111,14 @@ _traffic_display_state.last, _traffic_display_state.green_until = 0, 0
 LANE_HIGHLIGHT_BY_LAT = {1: 1, 2: 3, 3: 4, 4: 5}  # laneless green, lane mode sky blue, steer warn yellow, saturated red (cluster test 24, 10-24)
 
 
-def _select_cluster_background(cruise_enabled, lat_active, paddle_pressed, paddle_mode, turning=False, traffic_state=0):
+def _select_cluster_background(cruise_enabled, lat_active, paddle_pressed, paddle_mode, turning=False, traffic_state=0,
+                               roundabout=False):
   # A detected traffic light takes over the background until detection ends.
   if traffic_state in TRAFFIC_BACKGROUND:
     return TRAFFIC_BACKGROUND[traffic_state]
   # Reuse the existing flashing-red background to identify an active model turn.
-  if (lat_active and turning) or (paddle_mode > 0 and paddle_pressed):
+  # Kick and automatic lane changes are held off after a roundabout sign (CarState.naviRoundabout): same flashing red
+  if (lat_active and turning) or (paddle_mode > 0 and paddle_pressed) or roundabout:
     return 6
   return 1 if cruise_enabled else 3 if lat_active else 7
 
@@ -1325,6 +1327,7 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
         values["BACKGROUND"] = _select_cluster_background(
           cruise_enabled, lat_active, CS.paddle_button_prev > 0, paddle_mode, turning=desire in (1, 2),
           traffic_state=_traffic_display_state(getattr(hud_control, "trafficState", 0), frame),
+          roundabout=getattr(CS.out, "naviRoundabout", False),
         )
         values["CENTERLINE"] = 1 if HDA_CntrlModSta > 0 else 0
         values["CAR_CIRCLE"] = 2 if hdp_active else 1 if cruise_enabled else 0
