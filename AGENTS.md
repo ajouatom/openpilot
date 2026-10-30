@@ -1,5 +1,50 @@
 # Repository memory
 
+- Later again on 2026-10-30, owner clarifies manual driver-lane indication is
+  independent of ATC and explicitly requests restoring it. Restore default-OFF
+  ManualLaneChangeIndicator only; keep 3be19f6332 ATC audio/TBT unchanged.
+  Ioniq5PE+JetsonUSB2CAN/AutoBlinker1/2; no ATC/TBT/distance prerequisite,
+  driver-directed boundary approach only, no steering desire. Own-lamp journal/
+  12s+extinction isolation retained. Startup without owned journal now only
+  delays detections, never masks ordinary lamps. Desktop482/26native excluded,
+  Wiki25; enabled-feature morning replay14558frames matches pre-merge Wip on
+  all LC/desire/arming/ATC fields. Physical detection/lamps unvalidated; no
+  vehicle writes/reboot/CAN/model bundle. See
+  docs/manual_lane_indicator_restore_20261030.md. Do not remove this option
+  when changing/restoring ATC or the separate250m add-on.
+
+
+- Later on 2026-10-30, owner requires restoring existing ATC and retaining only
+  the separate250m physical-right-indicator add-on. This supersedes bd1ea4eb00's
+  manual-boundary trial/audio expansion: remove option/executing paths, restore
+  helper/modeld/source/audio to f5e4f8b8a1. Helper/audio match8f17e43d77^ exactly.
+  Keep unused schema ordinals reserved, existing ATC gates and independent250m
+  helper with matching-right-preparation coexistence. Pre-merge f29102fa83 vs
+  current disabled-trial replay14558frames gives0 differences in LCstate/direction/
+  desire/arming/ATCstate. Older code also fails to start the reported windows;
+  code restoration is NOT proof of road cure or audio-only failure. No vehicle
+  write/reboot/CAN/model/runtime change. Desktop450pass/26native excluded, Wiki25.
+  See docs/atc_restore_20261030.md; previous review is historical/superseded.
+
+
+- On 2026-10-30, owner separates existing ATC preparation/announcement from the
+  250m right-indicator add-on and requests driver-boundary indication without
+  automatic steering. Morning full-rlog replay14558frames finds fork audio/ready
+  at06:46:53/06:49:04, but ATC-right preparation06:53:12 lacks audio. Add exact
+  ATC-left/right prepare transitions; preserve actual lane/edge/side-object gates.
+  Permit250m trigger during matching ATC-right preparation only; old/new recorded
+  replay both0requests, so no road cure claim. Separate ManualLaneChangeIndicator
+  defaultOFF/Ioniq5PE+JetsonUSB2CAN only: sustained driver torque/current reliable
+  boundaries, no activeATC, one existing tap. Own-lamp/stalk feedback isolated
+  before publication, minimum12s plus extinction; journal-before-send/restart
+  recovery, no stale replay/hold/SPAS. Actual lamps/detection unvalidated.
+  Desktop480pass/26native excluded, Wiki25pass; LinuxSignal40968732540
+  1277pass/40skip and Jetson40968732767 1810pass/56skip plus supporting suites
+  and Windows pass. Sourcebd1ea4eb00 published; Wiki a25d12c synchronized.
+  No live device writes/CAN/reboot; normal Wip Git Pull/comma restart, no host
+  bundle/model change. See docs/atc_boundary_indicator_review_20261030.md.
+
+
 - On 2026-10-29, owner separates fixed250m TBT right-indicator helper from
   AutoTurnControl4 into default-OFF AutoTurnControlRightLaneChange under ATC
   details. Add-on only with base ATC1/2; existing ATC0..3 meanings retained.
