@@ -39,6 +39,8 @@ def make_cruise_helper(button_kph, cruise_button_mode, carrot_cruise_active, cru
   helper._paddle_mode = 0
   helper.v_ego_kph_set = 70
   helper.carrot_cruise_active = carrot_cruise_active
+  helper.autoRoadSpeedOnEngage = False
+  helper.nRoadLimitSpeed = 0
 
   CS = car.CarState(cruiseState={"standstill": False})
   CC = car.CarControl(enabled=cruise_enabled)
@@ -90,6 +92,19 @@ def test_accel_restores_at_least_brake_speed_while_cruise_is_off(cruise_speed_at
 
   assert helper._update_cruise_buttons(CS, CC, 80) == expected_speed
   assert helper._v_cruise_kph_at_brake == 0
+
+
+@pytest.mark.parametrize("enabled_option, road_limit, initialized, expected", [
+  (True, 50, False, 50),    # first engage from a stop: current speed 5 -> road limit
+  (True, 50, True, 80),     # resuming a higher set speed is kept
+  (True, 0, False, 5),      # unknown limit: current speed as before
+  (False, 50, False, 5),    # option off
+])
+def test_resume_engage_starts_at_the_road_limit(enabled_option, road_limit, initialized, expected):
+  helper, CS, CC = make_cruise_helper(81, 0, carrot_cruise_active=False, cruise_enabled=False, cruise_speed_initialized=initialized)
+  helper.v_ego_kph_set = 0
+  helper.autoRoadSpeedOnEngage, helper.nRoadLimitSpeed = enabled_option, road_limit
+  assert helper._update_cruise_buttons(CS, CC, 80) == expected
 
 
 @pytest.mark.parametrize("cruise_button_mode", [0, 2])

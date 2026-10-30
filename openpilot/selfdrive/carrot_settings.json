@@ -256,6 +256,7 @@
               "zh": "限速",
               "params": [
                 "AutoRoadSpeedLimitOffset",
+                "AutoRoadSpeedOnEngage",
                 "AutoRoadSpeedAdjust",
                 "AutoSpeedUptoRoadSpeedLimit"
               ]
@@ -4187,6 +4188,23 @@
       "default": -1,
       "unit": 1,
       "display_unit": "speedKph"
+    },
+    {
+      "group": "감속제어",
+      "name": "AutoRoadSpeedOnEngage",
+      "title": "인게이지 시 도로제한속도로 시작",
+      "descr": "RES(+)로 켤 때 설정속도가 도로제한속도보다 낮으면 도로제한속도로 시작합니다. 그 뒤로는 제한속도를 따라가지 않습니다. 제한속도를 모르면(0) 지금처럼 동작. 외부 내비 없이도 순정 내비 제한속도를 씁니다.",
+      "egroup": "SPEED",
+      "etitle": "Start at road speed limit on engage",
+      "edescr": "When engaging with RES/+ and the set speed would be below the road speed limit, start at the limit. The limit is not followed afterwards. With no known limit (0) nothing changes. Uses the stock navigation limit without an external navigation app.",
+      "cgroup": "速度控制",
+      "ctitle": "启用时以道路限速起步",
+      "cdescr": "用 RES/+ 启用时，若设定速度低于道路限速则以道路限速开始，之后不跟随限速。限速未知(0)时不变。无外部导航时使用原厂导航限速。",
+      "min": 0,
+      "max": 1,
+      "default": 0,
+      "unit": 1,
+      "control": "toggle"
     },
     {
       "group": "감속제어",

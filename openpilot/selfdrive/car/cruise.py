@@ -292,6 +292,7 @@ class VCruiseCarrot:
       self._lfa_button_mode = self.params.get_int("LfaButtonMode")
       self.disengage_on_accelerator = self.params.get_bool("DisengageOnAccelerator")
       self.autoRoadSpeedLimitOffset = self.params.get_int("AutoRoadSpeedLimitOffset")
+      self.autoRoadSpeedOnEngage = self.params.get_bool("AutoRoadSpeedOnEngage")
       self.autoNaviSpeedSafetyFactor = self.params.get_float("AutoNaviSpeedSafetyFactor") * 0.01
       self.cruiseOnDist = self.params.get_float("CruiseOnDist") * 0.01
       cruiseSpeed1 = self.params.get_float("CruiseSpeed1") * unit_factor
@@ -620,10 +621,10 @@ class VCruiseCarrot:
             v_cruise_kph = self._current_speed_for_initial_resume()
             self._cruise_speed_initialized = True
             self._add_log(f"{v_cruise_kph} Cruise resume from current speed")
-          if False: #self._cruise_button_mode in [2, 3]:
-            road_limit_kph = self.nRoadLimitSpeed * self.autoSpeedUptoRoadSpeedLimit
-            if road_limit_kph > 1.0:
-              v_cruise_kph = max(v_cruise_kph, road_limit_kph)
+          # Engaging with RES/+ below the road speed limit starts at the limit; afterwards it is not followed
+          # (10-29: 14 of 31 city engages were raised by hand within ~1 s from the current speed)
+          if self.autoRoadSpeedOnEngage and not CC.enabled and self.nRoadLimitSpeed > 0:
+            v_cruise_kph = max(v_cruise_kph, self.nRoadLimitSpeed)
         else:
           # Once cruise is already active, RES/+ is a speed adjustment. Stale resume or
           # initialization state must not consume the first press without changing speed.

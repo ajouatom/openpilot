@@ -261,6 +261,7 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"VehicleSpeedCameraControlMode", {PERSISTENT, INT, "1"}},
     {"VehicleSpeedCameraDistanceTime", {PERSISTENT, INT, "60"}},
     {"AutoRoadSpeedLimitOffset", {PERSISTENT, INT, "-1"}},
+    {"AutoRoadSpeedOnEngage", {PERSISTENT, BOOL, "0"}},
     {"AutoNaviSpeedBumpTime", {PERSISTENT, INT, "1"}},
     {"AutoNaviSpeedBumpSpeed", {PERSISTENT, INT, "35"}},
     {"AutoNaviSpeedBumpEndDistance", {PERSISTENT, INT, "200"}},
