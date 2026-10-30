@@ -14,7 +14,7 @@ window.CarrotTranslations.register("ko", {
     model_library_saved: "저장됨 · 콤마와 Jetson 재부팅 후 적용",
     model_library_noo: "NOO 지원",
     model_library_no_noo: "NOO 미지원",
-    model_library_shared: "Flip Flop과 MD v3는 eGPU PKL이 다르지만, Jetson에서는 같은 ONNX 체크포인트를 사용합니다.",
+    model_library_shared: "N16은 내비 경로 입력을 지원합니다. Flip Flop과 Light speed는 지원하지 않습니다.",
     model_library_remove: "미사용 파일 삭제·목록 숨김",
     model_library_restore: "목록에 다시 표시",
     model_library_hidden: "숨김",

@@ -38,10 +38,10 @@ def test_only_reviewed_models_selectable(store, key):
 
 
 def test_official_inputs_and_retired_legacy_alias():
-  assert set(C.available()) == {'n16', 'flip-flop'}
+  assert set(C.available()) == {'n16', 'flip-flop', 'light-speed'}
   assert C.catalog()['md-v3']['retired']
   assert C.noo('n16')
-  assert not C.noo('md-v3') and not C.noo('flip-flop')
+  assert not C.noo('md-v3') and not C.noo('flip-flop') and not C.noo('light-speed')
   assert C.model_spec('md-v3') == C.model_spec('flip-flop')
   assert C.catalog()['md-v3']['egpu']['sha256'] != C.catalog()['flip-flop']['egpu']['sha256']
   sys.path.insert(0, str(C.ROOT / 'third_party/jetlink'))
@@ -51,10 +51,10 @@ def test_official_inputs_and_retired_legacy_alias():
   for key in C.catalog():
     spec = ModelSpec.from_dict(C.model_spec(key))
     assert validate_model_spec(spec) is spec
-    assert model_name(spec) == ('N16 Nav (96244b1f)' if key == 'n16' else 'Flip Flop (1365126a)')
+    assert model_name(spec) == ('N16 Nav (96244b1f)' if key == 'n16' else 'Light speed (f22b8b34)' if key == 'light-speed' else 'Flip Flop (1365126a)')
   from openpilot.selfdrive.modeld.generic_model_runtime import model_metadata
 
-  for key, fixture in [('md-v3', 'md_v3_metadata.json'), ('flip-flop', 'flip_flop_metadata.json')]:
+  for key, fixture in [('md-v3', 'md_v3_metadata.json'), ('flip-flop', 'flip_flop_metadata.json'), ('light-speed', 'light_speed_metadata.json')]:
     raw = json.loads((C.ROOT / 'openpilot/selfdrive/modeld/tests/fixtures' / fixture).read_text())
     checkpoint, slices, states, count = model_metadata(raw)
     expected = C.model_spec(key)
@@ -170,7 +170,8 @@ def test_catalog_releases_are_signed_and_match_exact_onnx_contracts():
     assert release['model']['size'] == C.model_spec(key)['nbytes']
 
 
-def test_fresh_runtime_import_uses_same_model_for_both_backends(store):
+@pytest.mark.parametrize('model', ['flip-flop', 'light-speed'])
+def test_fresh_runtime_import_uses_same_model_for_both_backends(store, model):
   import os
   import subprocess
   code = '''
@@ -188,7 +189,7 @@ C.select('n16')
 assert read_spec() == C.model_spec('flip-flop')
 assert C.effective_id() == 'flip-flop'
 '''
-  subprocess.run([sys.executable, '-P', '-c', code], env=dict(os.environ, PYTHONPATH=str(C.ROOT)), check=True)
+  subprocess.run([sys.executable, '-P', '-c', code.replace('flip-flop', model)], env=dict(os.environ, PYTHONPATH=str(C.ROOT)), check=True)
 
 
 def retire(monkeypatch, *keys):

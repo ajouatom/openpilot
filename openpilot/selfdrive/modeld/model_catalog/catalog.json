@@ -38,5 +38,18 @@
     },
     "jetson_spec": "md-v3.json",
     "jetson_release": "md-v3-release.json"
+  },
+  "light-speed": {
+    "name": "Light speed",
+    "manifest_url": "https://upload.shind0.synology.me/models/comma4-big-light-speed-f22b8b34/manifest.json",
+    "egpu": {
+      "model_id": "comma-light-speed-c7cbe5de-33ba0928",
+      "filename": "big_driving_tinygrad.pkl",
+      "size": 790445184,
+      "sha256": "33ba092837e85c20ead465050673d11fbac1dd17dbaebc6c9fd77e64186019a3",
+      "url": "https://upload.shind0.synology.me/models/comma4-big-light-speed-f22b8b34/big_driving_tinygrad.pkl"
+    },
+    "jetson_spec": "light-speed.json",
+    "jetson_release": "light-speed-release.json"
   }
 }
