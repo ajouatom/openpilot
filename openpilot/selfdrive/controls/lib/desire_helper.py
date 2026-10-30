@@ -364,9 +364,9 @@ class DesireHelper:
     if self.boundary_indicator_supported:
       self.boundary_indicator.update(time.monotonic(), carstate, modeldata,
         enabled=self.boundary_indicator_enabled, valid=indicator_valid,
-        busy=(self.lane_change_state != LaneChangeState.off or self.turn_direction != TurnDirection.none or
-              carrotMan.atcType in ('atc left', 'atc right', 'fork left', 'fork right', 'turn left', 'turn right') or
-              sum(list(modeldata.meta.desireState)[1:5]) > .1))
+        # Navigation preparation is not driver intent. Reserve only an executing
+        # lane-change maneuver; model desire probabilities also predict manual moves.
+        busy=self.lane_change_state in (LaneChangeState.laneChangeStarting, LaneChangeState.laneChangeFinishing))
 
     # counts
     self.carrot_lane_change_count = max(0, self.carrot_lane_change_count - 1)

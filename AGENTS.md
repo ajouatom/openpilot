@@ -1,5 +1,20 @@
 # Repository memory
 
+- On 2026-10-30, owner reports missing 250m/manual/left indicators on the latest
+  drive. Twelve hash-verified rlogs show right-fork TBT4 excluded by TBT2-only
+  admission, then 25.0m special rear values blocking despite clear BSD. Preserve
+  that unknown-distance veto. Admit TBT2/4 and matching right preparation;
+  pre-request steering resets confirmation, owned-request cancellation stays.
+  Manual indicator now ignores ATC/navigation preparation and model desire
+  probabilities; executing lane changes/output ownership remain reserved.
+  Track crossed-boundary confidence for <=1s with continuous two-boundary
+  geometry, torque, gap/jump and own-lamp isolation gates. Recorded14262-frame
+  detector replay0->2 candidates, NOT physical acceptance. Left auto sends
+  completed but lamps unconfirmed; later stalk presses confirmed. No CAN retry
+  or inactive-control bypass, no vehicle writes/reboot. Desktop499/26native
+  excluded. See docs/indicator_drive_review_20261030.md; raw evidence private.
+
+
 - Later again on 2026-10-30, owner clarifies manual driver-lane indication is
   independent of ATC and explicitly requests restoring it. Restore default-OFF
   ManualLaneChangeIndicator only; keep 3be19f6332 ATC audio/TBT unchanged.

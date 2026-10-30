@@ -165,15 +165,15 @@ def main(fd, spas=False):
       release_until = 0.
     if not spas and policy.relight(now, activated_id, acknowledged, cs.leftBlinker, cs.rightBlinker):
       hold, activated_id = policy.hold, None
-    meta = sm['modelV2'].meta if auto_fresh else None
+    model_fresh = ('modelV2' in sm.services and sm.valid['modelV2'] and sm.alive['modelV2'] and fresh(sm.recv_time['modelV2'], now, .35))
+    meta = sm['modelV2'].meta if model_fresh else None
     boundary_direction = {'left':1, 'right':2}.get(str(getattr(meta, 'manualLaneIndicator', 'none')), 0)
     boundary_commands = boundary.read(now, boundary_direction,
       getattr(meta, 'manualLaneIndicatorMonoTime', 0)/1e9,
       allowed=(not spas and mode in (1, 2) and params.get_bool('ManualLaneChangeIndicator') and
-               ok and auto_fresh and not commands and not hold and auto is None and
+               ok and model_fresh and not commands and not hold and
                boundary_vehicle_allowed(cs, boundary_direction) and
-               str(meta.laneChangeState) == 'off' and
-               sm['carrotMan'].atcType not in ('atc left', 'atc right', 'fork left', 'fork right', 'turn left', 'turn right') and
+               str(meta.laneChangeState) in ('off', 'preLaneChange') and
                fresh(feedback.get('stamp'), now, .35) and feedback.get('state') == 'ready'),
       record=lambda value: atomic_json(RUNTIME/'boundary-indicator.json', value))
     commands = commands + boundary_commands

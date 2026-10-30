@@ -13,7 +13,7 @@ def candidate(cs, model, nav):
   """The ordinary maneuver controller remains responsible after lamp feedback."""
   meta = model.meta
   try:
-    return (nav.xTurnInfo == 2 and math.isfinite(nav.xDistToTurn) and
+    return (nav.xTurnInfo in (2, 4) and math.isfinite(nav.xDistToTurn) and
             0 < nav.xDistToTurn <= TBT_DISTANCE_MAX_M and
             math.isfinite(cs.vEgo) and cs.vEgo >= LANE_CHANGE_SPEED_MIN and
             str(cs.gearShifter) == 'drive' and cs.canValid and not cs.trailerConnected and
@@ -53,7 +53,7 @@ class TbtBlinker:
       self.ready_since = None
       return self.cancel('inputs') if self.phase in ('waiting', 'changing', 'finishing') else None
     distance = nav.xDistToTurn
-    if nav.xTurnInfo != 2 or not math.isfinite(distance) or distance <= 0 or distance > TBT_DISTANCE_MAX_M:
+    if nav.xTurnInfo not in (2, 4) or not math.isfinite(distance) or distance <= 0 or distance > TBT_DISTANCE_MAX_M:
       self.phase, self.ready_since, self.last_distance = 'idle', None, None
       self.reason = 'route'
       return None
@@ -63,6 +63,11 @@ class TbtBlinker:
     if previous is not None and distance > previous + 30:
       return self.cancel('route_jump')
     if manual or cs.steeringPressed or cs.leftBlinker:
+      if self.phase == 'idle':
+        # No request exists to cancel yet. A steering correction must not
+        # permanently disable this TBT; require a new full confirmation instead.
+        self.ready_since, self.reason = None, 'driver'
+        return None
       return self.cancel('driver')
     if busy and self.phase in ('waiting', 'changing', 'finishing'):
       return self.cancel('atc')  # Existing ATC turn/lane requests take precedence.
@@ -90,7 +95,7 @@ class TbtBlinker:
     # Existing ATC preparation is not a competing maneuver. The add-on may light
     # the lamp while that same right-turn preparation waits; admission still uses
     # every ordinary lane/rear/driver gate above. Never join an active change.
-    preparing_right = (state == 'preLaneChange' and direction == 'right' and nav.atcType == 'atc right')
+    preparing_right = (state == 'preLaneChange' and direction == 'right' and nav.atcType in ('atc right', 'fork right'))
     if (state != 'off' and not preparing_right) or cs.leftBlinker or cs.rightBlinker or busy or not candidate(cs, model, nav):
       self.ready_since = None
       self.reason = 'waiting_conditions'

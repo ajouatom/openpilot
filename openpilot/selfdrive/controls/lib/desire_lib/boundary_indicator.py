@@ -6,6 +6,7 @@ This observes a manual maneuver; it never supplies a lane-change desire.
 import math
 
 
+TRACK_SEC = 1.0  # Brief confidence loss during a continuous driver crossing.
 QUIET_SEC = 12.0  # Covers receiver queue, one-touch schedule and OEM flashing.
 
 
@@ -14,6 +15,7 @@ class BoundaryIndicator:
     self.journal = journal if isinstance(journal, dict) else {}
     self.initialized = False
     self.previous = None
+    self.confident = [None, None]
     self.rates = [0.0, 0.0]
     self.intent = 0
     self.intent_since = 0.0
@@ -26,6 +28,7 @@ class BoundaryIndicator:
 
   def _reset_geometry(self):
     self.previous = None
+    self.confident = [None, None]
     self.rates = [0.0, 0.0]
     self.intent = 0
 
@@ -76,10 +79,13 @@ class BoundaryIndicator:
       left, right = md.laneLines[1].y[0], md.laneLines[2].y[0]
       probs = (md.laneLineProbs[1], md.laneLineProbs[2])
       if (
-        not all(math.isfinite(x) for x in (left, right, *probs, cs.steeringTorque)) or not left < 0 < right or not 2.5 < right - left < 4.8 or min(probs) <= 0.5
+        not all(math.isfinite(x) for x in (left, right, *probs, cs.steeringTorque)) or not left < 0 < right or not 2.5 < right - left < 4.8
       ):
         self._reset_geometry()
         return
+      for i, probability in enumerate(probs):
+        if probability > 0.5:
+          self.confident[i] = now
       y = (-left, right)
       old, self.previous = self.previous, (md.frameId, now, y)
       if old is None:
@@ -100,6 +106,11 @@ class BoundaryIndicator:
       if not direction or now - self.intent_since < 0.15 or now < self.relabel_until:
         return
       i = direction - 1
+      # The crossed boundary must have been observed recently. The opposite
+      # boundary supplies geometric consistency, not a second confidence veto.
+      observed = self.confident[i]
+      if observed is None or not 0 <= now - observed <= TRACK_SEC:
+        return
       # Both boundaries must move consistently; widening forks are not crossings.
       if y[i] < 0.9 and self.rates[i] > 0.4 and self.rates[1 - i] < -0.4 and abs(sum(self.rates)) < 0.35:
         self.request_direction, self.request_time = direction, now
