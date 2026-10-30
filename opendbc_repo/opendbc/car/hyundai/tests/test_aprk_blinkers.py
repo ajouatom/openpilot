@@ -19,10 +19,10 @@ class Crossing:
     return side
 
 
-def make_cc(control=True, test=0):
+def make_cc(control=True, test=0, spas=0):
   return SimpleNamespace(blinker_control=control, blinker_test=test, aprk_state=0, aprk_frame=0, lane_crossing=Crossing(),
-                         blinker_side=0, blinker_pulse_end=0, frame=0, CAN=SimpleNamespace(ECAN=0),
-                         packer=CANPacker('hyundai_canfd_generated'))
+                         blinker_side=0, blinker_pulse_end=0, frame=0, CAN=SimpleNamespace(ECAN=0, ACAN=1),
+                         packer=CANPacker('hyundai_canfd_generated'), spas_steer_test=spas, spas_angle=0., aprk_buses=())
 
 
 def step(cc, frames, gear, kph, cross=0, lamp=False, tunnel=0):
@@ -83,3 +83,30 @@ def test_no_kick_in_a_tunnel():
   cc = make_cc()
   assert 3 not in spas2(cc, step(cc, 50, D, 80, cross=3, tunnel=1))
   assert 3 in spas2(cc, step(cc, 50, D, 80, tunnel=0))
+
+
+def test_spas_steer_test_parked_only():
+  cc = make_cc(control=False, spas=90)
+  CS = lambda gear, held=False: SimpleNamespace(out=SimpleNamespace(gearShifter=gear, standstill=True, steeringPressed=held,
+                                                                     steeringAngleDeg=-10., leftBlinker=False,
+                                                                     rightBlinker=False, steeringTorque=0), hda_info_4a3=None)
+  sent = []
+  for _ in range(120):
+    sent += CarController.aprk_blinkers(cc, None, CS(P))
+    cc.frame += 1
+  # APRK asked on both buses
+  assert [(m[1], m[2]) for m in sent if m[0] == carcontroller.APRK_ADDR][:4] == [
+    (carcontroller.APRK_EXT_SESSION, 0), (carcontroller.APRK_EXT_SESSION, 1), (carcontroller.APRK_COM_DISABLE, 0),
+    (carcontroller.APRK_COM_DISABLE, 1)]
+  msg = cc.packer.dbc.name_to_msg['SPAS1']
+  spas1 = [m[1] for m in sent if m[0] == 0x165]
+  modes = [get_raw_value(d, msg.sigs['NEW_SIGNAL_2']) for d in spas1]
+  assert modes[:carcontroller.SPAS_STEER_ASK_FRAMES] == [4] * carcontroller.SPAS_STEER_ASK_FRAMES and set(modes[10:]) == {5}
+  angles = [int.from_bytes(d[12:14], 'little', signed=True) * 0.1 for d in spas1]
+  assert abs(angles[0] - -9.) < 0.11 and abs(angles[-1] - 90.) < 0.11  # ramps from the wheel at 100 deg/s
+  assert all(d[3] == 0x4b and d[11] in (0x10, 0x14) and not any(d[4:11]) and not any(d[14:]) for d in spas1)
+  # hands on the wheel: APRK back on both buses, no more SPAS1
+  sent = CarController.aprk_blinkers(cc, None, CS(P, held=True))
+  assert [(m[1], m[2]) for m in sent] == [(carcontroller.APRK_DEFAULT_SESSION, 0), (carcontroller.APRK_DEFAULT_SESSION, 1)]
+  cc.frame += 1
+  assert CarController.aprk_blinkers(cc, None, CS(D)) == []

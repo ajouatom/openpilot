@@ -58,6 +58,9 @@ APRK_ADDR = 0x7B1
 APRK_EXT_SESSION = bytes([0x02, 0x10, 0x03, 0, 0, 0, 0, 0])
 APRK_COM_DISABLE = bytes([0x03, 0x28, 0x83, 0x01, 0, 0, 0, 0])
 APRK_DEFAULT_SESSION = bytes([0x02, 0x10, 0x01, 0, 0, 0, 0, 0])
+# SpasSteerTest: stock RSPA handshake, mode 4 then 5 after 0.1 s (2019 log 226.7 -> 226.8 s), angle at 100 deg/s
+SPAS_STEER_ASK_FRAMES = 10
+SPAS_STEER_RATE = 1.0
 # kick: ~2 flashes when the driver starts crossing a lane line without the blinker (lane_crossing.py).
 # shortcut: flash count at 1.0 s is not measured (BCM ran on ~1.2 s after the command stopped, EV4 10-26), tune after a drive
 BLINKER_PULSE_FRAMES = int(1.0 / DT_CTRL)
@@ -246,6 +249,8 @@ class CarController(CarControllerBase):
     self.hapticFeedbackWhenSpeedCamera = 0
     self.max_angle_frames = MAX_ANGLE_FRAMES
     self.steer_angle_test = 0
+    self.spas_steer_test = 0  # SpasSteerTest: target angle through the parking ECU's SPAS1 request, 0 off
+    self.spas_angle, self.aprk_buses = 0., ()
     self.blinking_signal = False # 1Hz
     self.blinking_frame = int(1.0 / DT_CTRL)
     self.soft_hold_mode = 2
@@ -377,21 +382,33 @@ class CarController(CarControllerBase):
       self.blinker_side, self.blinker_pulse_end = side, self.frame + BLINKER_PULSE_FRAMES
     pulse = self.frame < self.blinker_pulse_end
     # the parking ECU is paused only around a kick and restored right after it (menu test: any speed or gear)
-    want = self.blinker_test in (1, 2) or (self.blinker_control and drive and pulse)
+    # SpasSteerTest: parked, stopped, hands off. APRK is asked on both buses - bus 0 ignored it 10-26, and a second SPAS1
+    # stream with its own counter runs on bus 1 (10-30)
+    spas = (self.spas_steer_test != 0 and CS.out.gearShifter == structs.CarState.GearShifter.park and
+            CS.out.standstill and not CS.out.steeringPressed)
+    want = self.blinker_test in (1, 2) or (self.blinker_control and drive and pulse) or spas
     if not want:
-      if self.aprk_state:
-        ret.append(CanData(APRK_ADDR, APRK_DEFAULT_SESSION, self.CAN.ECAN))
-      self.aprk_state = 0
+      for bus in self.aprk_buses:
+        ret.append(CanData(APRK_ADDR, APRK_DEFAULT_SESSION, bus))
+      self.aprk_state, self.aprk_buses = 0, ()
     elif self.aprk_state == 0:
-      ret.append(CanData(APRK_ADDR, APRK_EXT_SESSION, self.CAN.ECAN))
+      self.aprk_buses = (self.CAN.ECAN, self.CAN.ACAN) if spas else (self.CAN.ECAN,)
+      ret += [CanData(APRK_ADDR, APRK_EXT_SESSION, bus) for bus in self.aprk_buses]
       self.aprk_state, self.aprk_frame = 1, self.frame
     elif self.aprk_state == 1:
       if self.frame - self.aprk_frame >= 5:  # 50 ms for the session change
-        ret.append(CanData(APRK_ADDR, APRK_COM_DISABLE, self.CAN.ECAN))
-        self.aprk_state = 2
+        ret += [CanData(APRK_ADDR, APRK_COM_DISABLE, bus) for bus in self.aprk_buses]
+        self.aprk_state, self.aprk_frame = 2, self.frame
+        if spas:
+          self.spas_angle = CS.out.steeringAngleDeg
     else:
       if self.frame % 100 == 0:
-        ret.append(make_tester_present_msg(APRK_ADDR, self.CAN.ECAN, suppress_response=True))
+        ret += [make_tester_present_msg(APRK_ADDR, bus, suppress_response=True) for bus in self.aprk_buses]
+      if spas:
+        target = clip_float(self.spas_steer_test, -STEER_ANGLE_TEST_MAX, STEER_ANGLE_TEST_MAX)
+        self.spas_angle = rate_limit(target, self.spas_angle, -SPAS_STEER_RATE, SPAS_STEER_RATE)
+        mode = 4 if self.frame - self.aprk_frame <= SPAS_STEER_ASK_FRAMES else 5
+        return ret + hyundaicanfd.create_spas_steer(self.packer, self.CAN, mode, self.spas_angle)
       # every frame (100 Hz), twice APRK's 50 Hz: 10-26 APRK stayed on, so its BLINKER_CONTROL 0 frames interleave with ours
       left = (pulse and self.blinker_side == 3) or self.blinker_test == 1
       right = (pulse and self.blinker_side == 4) or self.blinker_test == 2
@@ -420,6 +437,7 @@ class CarController(CarControllerBase):
       params = Params()
       self.max_angle_frames = params.get_int("MaxAngleFrames")
       self.steer_angle_test = params.get_int("SteerAngleTest")
+      self.spas_steer_test = params.get_int("SpasSteerTest")
       steerMax = params.get_int("CustomSteerMax")
       steerDeltaUp = params.get_int("CustomSteerDeltaUp")
       steerDeltaDown = params.get_int("CustomSteerDeltaDown")
@@ -756,7 +774,8 @@ class CarController(CarControllerBase):
         can_sends.extend(hyundaicanfd.create_spas_messages(self.packer, self.CAN, self.frame, CC.leftBlinker, CC.rightBlinker,
                                                            getattr(CS, "spas2", None)))
       # carrot-wip's own SPAS path (CanfdBlinkerControl -> CANFD_SPAS_BLINKERS, card.py) owns APRK/SPAS when it is on
-      elif not self.CP.flags & HyundaiFlags.CANFD_SPAS_BLINKERS and (self.blinker_control or self.blinker_test or self.aprk_state):
+      elif not self.CP.flags & HyundaiFlags.CANFD_SPAS_BLINKERS and (self.blinker_control or self.blinker_test or self.aprk_state or
+                                                                    self.spas_steer_test):
         can_sends.extend(self.aprk_blinkers(CC, CS))
 
       if self.camera_scc_params in [2, 3]:

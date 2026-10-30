@@ -48,6 +48,7 @@ const CanMsg HYUNDAI_CANFD_HDA2_LONG_TX_MSGS[] = {
   {0x51, 0, 32},  // ADRV_0x51
   {0x730, 1, 8},  // tester present for ADAS ECU disable
   {0x7B1, 0, 8},  // parking ECU (APRK) session / disable / tester present, CanfdBlinkerKick
+  {0x7B1, 1, 8},  // same on bus 1, where a second SPAS1 stream runs (SpasSteerTest)
   {0x165, 0, 24}, // SPAS1, sent while APRK is silenced
   {0x16A, 0, 32}, // SPAS2 BLINKER_CONTROL, sent while APRK is silenced
   {0x3C1, 0, 8},  // BLINKER_STALKS replay (CanfdBlinkerStalk)
@@ -691,7 +692,9 @@ static bool hyundai_canfd_tx_hook(const CANPacket_t *to_send_const) {
   if (addr == 0x7B1) {
     uint32_t uds = GET_BYTES(to_send, 0, 4);
     bool uds_ok = (uds == 0x00031002U) || (uds == 0x01832803U) || (uds == 0x00011002U) || (uds == 0x00803E02U);
-    if (!uds_ok || (GET_BYTES(to_send, 4, 4) != 0x0U)) {
+    // bus 1 (SpasSteerTest) only on the camera-SCC harness, where bus 1 carries the second SPAS1 stream
+    bool bus_ok = (GET_BUS(to_send) == 0U) || hyundai_camera_scc;
+    if (!uds_ok || !bus_ok || (GET_BYTES(to_send, 4, 4) != 0x0U)) {
       tx = false;
     }
   }
@@ -716,7 +719,12 @@ static bool hyundai_canfd_tx_hook(const CANPacket_t *to_send_const) {
           stock_field = (b == 0x10U);   // GV80 b20
         }
       }
-      if ((b != 0U) && !blinker && !stock_field) {
+      // SpasSteerTest: the parking ECU's own steering request - byte 3 constant, byte 11 mode 3/4/5, bytes 12-13
+      // angle - only while stopped, so the EPS drops out of parking mode as soon as the car moves
+      bool spas_steer = (addr == 0x165) && !vehicle_moving && !gas_pressed &&
+                        ((i == 12U) || (i == 13U) || ((i == 3U) && (b == 0x4BU)) ||
+                         ((i == 11U) && ((b == 0x0CU) || (b == 0x10U) || (b == 0x14U))));
+      if ((b != 0U) && !blinker && !stock_field && !spas_steer) {
         tx = false;
       }
     }

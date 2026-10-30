@@ -219,6 +219,7 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"ClusterLaneTestValue", {CLEAR_ON_MANAGER_START, INT, "0"}},
     {"CanfdHazardTest", {CLEAR_ON_MANAGER_START, INT, "0"}},
     {"SteerAngleTest", {CLEAR_ON_MANAGER_START, INT, "0"}},
+    {"SpasSteerTest", {CLEAR_ON_MANAGER_START, INT, "0"}},
     {"ClusterLaneTestFrom", {CLEAR_ON_MANAGER_START, INT, "0"}},
     {"ClusterLaneTestTo", {CLEAR_ON_MANAGER_START, INT, "0"}},
 

@@ -449,7 +449,8 @@
             "ClusterLaneTestFrom",
             "ClusterLaneTestTo",
             "CanfdHazardTest",
-            "SteerAngleTest"
+            "SteerAngleTest",
+            "SpasSteerTest"
           ]
         },
         {
@@ -2106,6 +2107,22 @@
       "cgroup": "仅测试",
       "ctitle": "方向盘角度直接请求",
       "cdescr": "仅用于测试。0: 关闭。仅在停车且松手时把方向盘转到该角度：+ 左，- 右，最大 450 度，每秒 100 度。无需启用。握住方向盘时停止，原厂自动泊车时不工作。重启后恢复为 0。",
+      "min": -450,
+      "max": 450,
+      "default": 0,
+      "unit": 10
+    },
+    {
+      "group": "시험 전용",
+      "name": "SpasSteerTest",
+      "title": "자동주차 경로로 핸들 각도 요청",
+      "descr": "테스트용. 0: 끔. P단 정차·손 뗀 상태에서 순정 자동주차 ECU를 잠재우고(bus 0·1) 그 조향 요청(SPAS1)으로 이 각도를 요청합니다. + 왼쪽, - 오른쪽, 최대 450도, 초당 100도. 핸들을 잡거나 P를 벗어나면 멈춤. 재부팅하면 0.",
+      "egroup": "Test Only",
+      "etitle": "Steering Request via Parking Assist",
+      "edescr": "Test only. 0: off. Parked in P and hands off, silences the stock parking ECU (bus 0 and 1) and requests this angle through its steering request (SPAS1): + left, - right, up to 450 deg at 100 deg/s. Stops when the wheel is held or out of P. Resets to 0 on reboot.",
+      "cgroup": "仅测试",
+      "ctitle": "通过泊车辅助请求方向盘角度",
+      "cdescr": "仅用于测试。0: 关闭。P 挡停车且松手时，让原厂泊车 ECU 静默（bus 0 和 1），并通过其转向请求（SPAS1）请求该角度：+ 左，- 右，最大 450 度，每秒 100 度。握住方向盘或离开 P 挡时停止。重启后恢复为 0。",
       "min": -450,
       "max": 450,
       "default": 0,

@@ -361,3 +361,21 @@ def test_stalk_driver_change_latches_off_even_before_next_transmit():
   d.advance(30000)
   park_inputs(d, 31)
   assert not d.tx(0x3C1, packet)
+
+
+# SpasSteerTest (joongyu01 fork, CANFD_SPAS_BLINKERS off): SPAS1 may carry the parking ECU's steering request - byte 3
+# 0x4b, byte 11 mode 3/4/5, bytes 12-13 angle - only while the wheels stand still; APRK UDS on bus 1 only for camera SCC
+def test_spas_steer_request_only_while_stopped():
+  d = Device(16 | 8 | 4, 0)
+  request = bytearray(24)
+  request[3], request[11], request[12:14] = 0x4B, 0x14, (900).to_bytes(2, 'little', signed=True)
+  assert d.tx(0x165, bytes(request))
+  for byte, value in ((11, 0x18), (3, 0x4A), (14, 1)):
+    bad = bytearray(request)
+    bad[byte] = value
+    assert not d.tx(0x165, bytes(bad))
+  park_inputs(d, 0, wheel=200)  # 6 km/h
+  assert not d.tx(0x165, bytes(request))
+  assert d.tx(0x165, bytes(24))  # the blinker path's all-zero frame still goes
+  assert d.tx(APRK, EXTENDED, 1) and d.tx(APRK, EXTENDED, 0)
+  assert not Device(16 | 4, 1).tx(APRK, EXTENDED, 1)

@@ -624,6 +624,13 @@ def create_acc_control(packer, CAN, enabled, accel_last, accel, stopping, gas_ov
   return packer.make_can_msg("SCC_CONTROL", CAN.ECAN, values), values["aReqValue"]
 
 
+# SpasSteerTest: the stock parking ECU's steering request (05_can/rspa_steer_20261030.md). SPAS1 byte 3 is 0x4b on
+# every stock frame, NEW_SIGNAL_2 the mode (3 idle, 4 ask, 5 active; the EPS echoes it in 0xEA byte 5), NEW_SIGNAL_1 the
+# angle (+left, 0.1 deg). Only the parked form is sent: the stock frame gains bytes 5..19 only after D is selected.
+def create_spas_steer(packer, CAN, mode, angle):
+  return [packer.make_can_msg("SPAS1", CAN.ECAN, {"BYTE3": 0x4b, "NEW_SIGNAL_2": mode, "NEW_SIGNAL_1": angle})]
+
+
 def create_spas_messages(packer, CAN, frame, left_blink, right_blink, spas2_template=None):
   ret = []
 
