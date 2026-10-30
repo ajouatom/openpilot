@@ -21,14 +21,15 @@ class Crossing:
 
 def make_cc(control=True, test=0, spas=0):
   return SimpleNamespace(blinker_control=control, blinker_test=test, aprk_state=0, aprk_frame=0, lane_crossing=Crossing(),
-                         blinker_side=0, blinker_pulse_end=0, frame=0, CAN=SimpleNamespace(ECAN=0, ACAN=1),
+                         blinker_side=0, blinker_pulse_end=0, frame=0, yellow_until=[0, 0], CAN=SimpleNamespace(ECAN=0, ACAN=1),
                          packer=CANPacker('hyundai_canfd_generated'), spas_steer_test=spas, spas_angle=0., aprk_buses=())
 
 
-def step(cc, frames, gear, kph, cross=0, lamp=False, tunnel=0, roundabout=False):
+def step(cc, frames, gear, kph, cross=0, lamp=False, tunnel=0, roundabout=False, left_line=10, right_line=10):
   cc.lane_crossing.side = cross or cc.lane_crossing.side
   CS = SimpleNamespace(out=SimpleNamespace(gearShifter=gear, vEgo=kph / 3.6, leftBlinker=lamp, rightBlinker=False, steeringTorque=0,
-                                           naviTunnel=bool(tunnel), naviRoundabout=roundabout))
+                                           naviTunnel=bool(tunnel), naviRoundabout=roundabout,
+                                           leftLaneLine=left_line, rightLaneLine=right_line))
   sent = []
   for _ in range(frames):
     sent += CarController.aprk_blinkers(cc, None, CS)
@@ -85,6 +86,16 @@ def test_no_kick_in_a_tunnel():
   assert 3 in spas2(cc, step(cc, 50, D, 80, tunnel=0))
 
 
+def test_no_kick_across_a_yellow_line():
+  # 10-30 seg 1: kicked left over a yellow dashed centre line (20); the color drops to 0 while crossing
+  cc = make_cc()
+  step(cc, 50, D, 30, left_line=20)
+  assert 3 not in spas2(cc, step(cc, 50, D, 30, cross=3, left_line=0))   # yellow 0.5 s ago: no kick, crossing consumed
+  assert 4 in spas2(cc, step(cc, 50, D, 30, cross=4, left_line=20))      # the white right line still kicks
+  step(cc, 300, D, 30, left_line=0)
+  assert 3 in spas2(cc, step(cc, 50, D, 30, cross=3, left_line=0))       # yellow over 2 s ago
+
+
 def test_no_kick_after_a_roundabout_sign():
   # CarState.naviRoundabout (0x162 SIGNS=24, 20 s, < 60 km/h): same ban as a tunnel
   cc = make_cc()
@@ -96,7 +107,8 @@ def test_spas_steer_test_parked_only():
   cc = make_cc(control=False, spas=90)
   CS = lambda gear, held=False: SimpleNamespace(out=SimpleNamespace(gearShifter=gear, standstill=True, steeringPressed=held,
                                                                      steeringAngleDeg=-10., leftBlinker=False,
-                                                                     rightBlinker=False, steeringTorque=0), hda_info_4a3=None)
+                                                                     rightBlinker=False, steeringTorque=0, leftLaneLine=0,
+                                                                     rightLaneLine=0))
   sent = []
   for _ in range(120):
     sent += CarController.aprk_blinkers(cc, None, CS(P))

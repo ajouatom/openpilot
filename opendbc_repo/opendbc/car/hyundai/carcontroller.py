@@ -64,6 +64,9 @@ SPAS_STEER_RATE = 1.0
 # kick: ~2 flashes when the driver starts crossing a lane line without the blinker (lane_crossing.py).
 # shortcut: flash count at 1.0 s is not measured (BCM ran on ~1.2 s after the command stopped, EV4 10-26), tune after a drive
 BLINKER_PULSE_FRAMES = int(1.0 / DT_CTRL)
+# No kick across a yellow (centre) line. The camera color drops to 0 while the line is crossed (10-30 seg 22: 10 -> 2
+# at the kick), so a yellow seen on that side in the last 2 s counts (10-30 seg 1: kick over yellow dashed 20)
+YELLOW_HOLD_FRAMES = int(2.0 / DT_CTRL)
 # Every stock lever press starts with one BLINKER + BLINKER_TAP frame before the steady frame (Ioniq 5 3372.9 s:
 # 4280304010000000 tap -> de90304000000000 hold; GV80 82.96 s: 5a10304010000000 tap). The BCM needs that edge -
 # replaying only the steady form (TAP 0) did nothing on either car. GV80's lever is momentary and releases itself.
@@ -272,6 +275,7 @@ class CarController(CarControllerBase):
     self.stalk_press_frame = 0
     self.aprk_state, self.aprk_frame = 0, 0  # 0 normal, 1 extended session asked, 2 silenced
     self.lane_crossing, self.blinker_side, self.blinker_pulse_end = LaneCrossing(), 0, 0
+    self.yellow_until = [0, 0]  # left, right
     self.standstill_frame = -1e6
 
     self.activateCruise = 0
@@ -377,6 +381,11 @@ class CarController(CarControllerBase):
     tunnel = getattr(CS.out, "naviTunnel", False) or getattr(CS.out, "naviRoundabout", False)
     side = self.lane_crossing.update(getattr(CS, "modelV2", None), self.frame * DT_CTRL,
                                      self.blinker_control and drive and not lamp and not tunnel, CS.out.steeringTorque)
+    for i, line in enumerate((CS.out.leftLaneLine, CS.out.rightLaneLine)):
+      if line // 10 == 2:  # camera color: 0 none, 1 white, 2 yellow, 3 blue
+        self.yellow_until[i] = self.frame + YELLOW_HOLD_FRAMES
+    if side and self.frame < self.yellow_until[side - 3]:
+      side = 0
     if side:
       self.blinker_side, self.blinker_pulse_end = side, self.frame + BLINKER_PULSE_FRAMES
     pulse = self.frame < self.blinker_pulse_end
