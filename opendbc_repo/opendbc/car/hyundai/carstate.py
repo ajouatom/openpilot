@@ -12,7 +12,7 @@ from opendbc.car.hyundai.hyundaicanfd import CanBus
 from opendbc.car.hyundai.navi_speedcam import SpeedcamPolicy
 from opendbc.car.hyundai.section_average import DISTANCE_SCALE as SECTION_DISTANCE_SCALE, SectionAverage
 from opendbc.car.hyundai.steering_touch import HyundaiSteeringTouch
-from opendbc.car.hyundai.rear_gap import rear_lane_change_blocks
+from opendbc.car.hyundai.rear_gap import tbt_bsd_inputs
 from opendbc.car.hyundai.vehicle_gps import VehicleGPS, register_vehicle_gps
 from opendbc.car.hyundai.values import HyundaiFlags, CAR, DBC, Buttons, CarControllerParams, CAMERA_SCC_CAR, HyundaiExtFlags, \
                                        EV_MODE_ACTIVE_VALUES, EV_MODE_STATUS_ADDR, EV_MODE_STATUS_DLC, EV_MODE_STATUS_MSG, \
@@ -1462,6 +1462,11 @@ class CarState(CarStateBase):
       ret.cruiseState.standstill = cp_cruise_info.vl["SCC_CONTROL"]["InfoDisplay"] >= 4
       ret.cruiseState.speed = cp_cruise_info.vl["SCC_CONTROL"]["VSetDis"] * speed_factor
 
+    # The optional 250m trigger uses OEM BSD independently of corner display data.
+    if self.CP.enableBsm:
+      ret.tbtRearInputsAvailable, ret.tbtRightRearBlocked = tbt_bsd_inputs(
+        self.cp_bsm, max(cp._last_update_nanos, cp_cam._last_update_nanos))
+
     speed_limit_cam = False
     corner = False
     corner_infos = [info for info in (self.adrv_0x1ea, self.ccnc_0x162) if info is not None]
@@ -1479,12 +1484,6 @@ class CarState(CarStateBase):
       ret.rightRearLongDist = self.rr_distance
       ret.leftRearLatDist = corner_max("LR_DETECT_LATERAL")
       ret.rightRearLatDist = corner_max("RR_DETECT_LATERAL")
-      if self.CP.enableBsm:
-        rear_sources = tuple(name for name, info in (
-          ("ADRV_0x1ea", self.adrv_0x1ea), ("CCNC_0x162", self.ccnc_0x162),
-        ) if info is not None)
-        ret.tbtRearInputsAvailable = bool(rear_sources)
-        _, ret.tbtRightRearBlocked = rear_lane_change_blocks(cp_cam, self.cp_bsm, rear_sources)
       corner = True
     if corner:
       raw_corner_radar_enabled = (

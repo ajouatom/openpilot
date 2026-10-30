@@ -7,6 +7,32 @@ REPEAT_DELAY_SEC = 2.0
 START_TIMEOUT_SEC = 4.0
 MANEUVER_TIMEOUT_SEC = 15.0
 TBT_DISTANCE_MAX_M = 250.0
+FRONT_GAP_MIN_M = 5.0
+FRONT_PREDICT_SEC = 3.0
+
+
+def right_front_clear(radar):
+  """Check the full target-lane list: leadRight intentionally omits <=5m."""
+  try:
+    errors = radar.radarErrors
+    if any((errors.canError, errors.radarFault, errors.wrongConfig, errors.radarUnavailableTemporary)):
+      return False
+    for lead in (*radar.leadsRight, radar.leadRight):
+      if not lead.status:
+        continue
+      distance = lead.dRel
+      if not math.isfinite(distance):
+        return False
+      if distance < 0:
+        continue  # Rear admission is OEM BSD; do not reintroduce rear distance.
+      relative_speed = lead.vRel
+      if not math.isfinite(relative_speed):
+        return False
+      if distance < FRONT_GAP_MIN_M or distance + relative_speed * FRONT_PREDICT_SEC < FRONT_GAP_MIN_M:
+        return False
+    return True
+  except (AttributeError, TypeError, ValueError):
+    return False
 
 
 def candidate(cs, model, nav):
@@ -18,7 +44,7 @@ def candidate(cs, model, nav):
             math.isfinite(cs.vEgo) and cs.vEgo >= LANE_CHANGE_SPEED_MIN and
             str(cs.gearShifter) == 'drive' and cs.canValid and not cs.trailerConnected and
             not cs.steeringPressed and not cs.steerFaultTemporary and not cs.steerFaultPermanent and
-            cs.tbtRearInputsAvailable and not cs.tbtRightRearBlocked and not cs.rightBlindspot and
+            cs.tbtRearInputsAvailable and not cs.tbtRightRearBlocked and
             meta.laneChangeAvailableRight and 2.5 < meta.laneWidthRight < 5.0 and
             model.laneLineProbs[2] > .5 and model.laneLineProbs[3] > .5 and
             cs.rightLaneLine >= 0 and cs.rightLaneLine % 10 in (0, 5) and cs.rightLaneLine // 10 != 2 and
@@ -41,7 +67,7 @@ class TbtBlinker:
     self.phase, self.ready_since, self.reason = 'cancelled', None, reason
     return None
 
-  def update(self, now, *, enabled, valid, cs, model, nav, manual=False, busy=False):
+  def update(self, now, *, enabled, valid, cs, model, nav, manual=False, busy=False, front_clear=False):
     # Gaps reset confirmation and cancel an owned indication, never replay it.
     gap = self.last_time is not None and not 0 <= now-self.last_time <= .35
     self.last_time = now
@@ -86,7 +112,7 @@ class TbtBlinker:
         return None
       elif self.phase == 'changing':
         return self.cancel('interrupted')
-      elif now-self.started >= START_TIMEOUT_SEC or not candidate(cs, model, nav):
+      elif now-self.started >= START_TIMEOUT_SEC or not front_clear or not candidate(cs, model, nav):
         return self.cancel('start')
       self.reason = self.phase
       return ('lane', 'right')  # Existing physical-indicator policy/transport only.
@@ -96,7 +122,7 @@ class TbtBlinker:
     # the lamp while that same right-turn preparation waits; admission still uses
     # every ordinary lane/rear/driver gate above. Never join an active change.
     preparing_right = (state == 'preLaneChange' and direction == 'right' and nav.atcType in ('atc right', 'fork right'))
-    if (state != 'off' and not preparing_right) or cs.leftBlinker or cs.rightBlinker or busy or not candidate(cs, model, nav):
+    if (state != 'off' and not preparing_right) or cs.leftBlinker or cs.rightBlinker or busy or not front_clear or not candidate(cs, model, nav):
       self.ready_since = None
       self.reason = 'waiting_conditions'
       return None

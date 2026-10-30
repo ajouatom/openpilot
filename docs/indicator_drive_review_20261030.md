@@ -30,7 +30,7 @@ raw logs, extracted CAN and scripts remain private under `.analysis`.
   the navigation busy condition alone still produces no detector candidates:
   confidence drops before the boundary reaches the original threshold.
 
-## Changes
+## Initial correction (32ed45b2ec)
 
 - Allow right turn (2) and right fork (4), including matching ATC/fork right
   preparation. Keep the fixed 250 m boundary and rear/BSD checks unchanged.
@@ -67,3 +67,40 @@ Delivery is normal `carrot-wip` Git Pull and comma restart. This task made no
 vehicle writes, CAN transmissions, device setting changes or reboots. Physical
 lamp behavior and the earlier accepted-but-unlit left request require further
 vehicle evidence; no complete road cure is claimed.
+
+
+## Owner-requested BSD-only follow-up
+
+The owner subsequently requested OEM BSD alone for the 250 m add-on's rear
+check. This supersedes the earlier distance-veto policy above: corner slots,
+20 m thresholds and 24.9/25.0 m special distances no longer gate this add-on.
+The existing CarState TBT fields now publish freshness and warning state from
+OEM `BLINDSPOTS_REAR_CORNERS` directly, independently of corner availability.
+Missing/stale/short BSD messages and missing decoded warning fields still block.
+The ordinary DesireHelper side-object and maneuver checks remain unchanged.
+This is a change of admission policy, not evidence that 25.0 m was a measured gap.
+
+
+The owner then specified a 5 m front gap with a three-second relative-speed
+projection (superseding the briefly proposed 50 m). The add-on checks the full
+right-front radar list plus its representative lead, not just `leadRight`:
+that representative deliberately excludes objects at or below 5 m. Require
+both current distance >=5 m and distance + vRel*3 >=5 m for each active front
+object. Negative-distance rear objects use the BSD policy instead. Missing or
+nonfinite distance/speed, stale/invalid radarState, radar errors or a configured
+unavailable radar block initiation. The freshness/projection test applies during
+confirmation and while waiting to start, not as a new steering command during
+an executing maneuver. This is a constant-relative-speed admission check, not
+a guarantee against braking or lateral motion. Existing stronger side-object
+checks still apply. The right-side list can conservatively include farther
+right lanes; it is not a newly validated target-lane tracker.
+
+Final desktop checks: 679 indicator/desire checks passed, 26 native-safety cases
+excluded; 53 rear/BSD/schema checks passed separately. Actual source-loop tests
+cover close/closing objects, stale/invalid/faulted radar and unavailable hardware.
+The recorded owner profile has radar available and BSD enabled. Reconstructing
+fresh BSD directly from received bus-2 CAN and using recorded radarState, the
+reported segment 10 confirms at 19.559 s (250 m) and emits a right request at
+20.603 s (228 m). Front object: 32.212 m, vRel +2.2 m/s, projected 38.812 m.
+Recorded driver intervention at 21.554 s cancels it. This open-loop result does
+not predict the vehicle trajectory or prove actual lamp acceptance.

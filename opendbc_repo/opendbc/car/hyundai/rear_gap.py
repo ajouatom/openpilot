@@ -63,3 +63,16 @@ def rear_lane_change_blocks(camera, bsm, sources):
     for index, side in enumerate(("LR", "RR")):
       blocked[index] |= rear_distance_blocks(camera.vl[name], side, states)
   return tuple(blocked)
+
+
+
+def tbt_bsd_inputs(bsm, now):
+  """Fresh OEM right BSD only; corner distance/display slots have no authority."""
+  name = "BLINDSPOTS_REAR_CORNERS"
+  if not _fresh(bsm, name, 0x1BA, 24, now):
+    return False, True
+  values = bsm.vl.get(name, {})
+  fields = ("FR_INDICATOR", "INDICATOR_RIGHT_TWO", "INDICATOR_RIGHT_FOUR")
+  if any(key not in values for key in fields):
+    return False, True
+  return True, any(values[key] != 0 for key in fields)

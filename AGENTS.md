@@ -1,5 +1,15 @@
 # Repository memory
 
+- Later on 2026-10-30, owner explicitly changes the 250m add-on rear gate to
+  OEM BSD only. This supersedes the corner-distance20m/24.9/25.0 veto for that
+  add-on. Keep BSD freshness/validity and all ordinary lane/driver admission.
+  Historical logs before this change retain the old combined TBT field semantics.
+  Owner adds front gap5m plus3s vRel projection: current/projected >=5m on
+  full right-front radar list (leadRight alone excludes<=5m). Fresh radarState,
+  hardware availability/errors enforced; no new steering request. Desktop679
+  plus53BSD/schema pass,26native excluded. Raw segment10 replay requests20.603s
+  at228m with32.212m/current38.812m/projected gap; no physical acceptance claim.
+
 - On 2026-10-30, owner reports missing 250m/manual/left indicators on the latest
   drive. Twelve hash-verified rlogs show right-fork TBT4 excluded by TBT2-only
   admission, then 25.0m special rear values blocking despite clear BSD. Preserve
