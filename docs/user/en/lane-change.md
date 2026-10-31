@@ -153,3 +153,9 @@ Separate two questions:
 With immediate-entry settings, the sequence “signal first, then check behind” is especially dangerous. The system can chiefly control when entry is permitted; the driver must select the moment that is actually safe.
 
 Related: [Understanding Settings](settings.md) · [Cruise and Following Gap](cruise-gap.md)
+
+### ATC turn indication and straight-through cancellation
+
+ATC indication starts at audioTurn and persists through stops. A fresh cue can start at a full stop in Drive when lateral permission remains valid and steering is fault-free. After the receiver confirms send completion, both lamps staying off for 1.5 seconds permits one recovery attempt per turn, including an initially unlit request. Driver cancellation, communication failure or an unconfirmed send forbids retry. A fresh opposite-turn cue waits at most three seconds for physical completion of the preceding turn.
+
+When a usable TBT point and raw vehicle GPS are available, passage evidence supplements physical turn completion. Continuing straight sufficiently beyond a closely passed point cancels the indication without replaying the same audioTurn. Accuracy, continuity and direction checks disable this location-based cancellation for poor GPS, missing points or curved approaches. Fresh navigation status reporting guidance ended or off-route also releases automatic indication. Physical lamps and road behavior still need validation.
