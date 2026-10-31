@@ -8,6 +8,7 @@ from collections import deque
 from datetime import datetime
 from typing import Any
 
+from openpilot.selfdrive.carrot import drive_upload
 from openpilot.selfdrive.carrot.web_upload import (
   create_web_upload_session,
   send_web_upload_complete,
@@ -281,7 +282,7 @@ def prune() -> None:
     _jobs.pop(old["id"], None)
 
 
-def create_job(segments: list[str], *, include_all_files: bool = False) -> dict[str, Any]:
+def create_job(segments: list[str], *, include_all_files: bool = False, target: str = "web") -> dict[str, Any]:
   job_id = uuid.uuid4().hex[:12]
   now = time.time()  # noqa: TID251
   job = {
@@ -289,6 +290,7 @@ def create_job(segments: list[str], *, include_all_files: bool = False) -> dict[
     "action": "dashcam_upload",
     "segments": list(segments),
     "include_all_files": include_all_files,
+    "target": target,
     "status": "running",
     "log": "",
     "progress": 0,
@@ -335,24 +337,43 @@ def start_job(job: dict[str, Any]) -> asyncio.Task:
 
 
 async def run_upload_segments(
+  segments: list[str], job: dict[str, Any] | None = None, *, include_all_files: bool = False, target: str = "web",
+) -> dict[str, Any]:
+  if target != "drive":
+    return await _run_upload_segments(segments, job, include_all_files=include_all_files)
+  config = drive_upload.load_config()
+  if config is None:
+    raise RuntimeError("Google Drive is not configured")
+  async with drive_upload.new_session() as session:
+    return await _run_upload_segments(segments, job, include_all_files=include_all_files,
+                                      drive=drive_upload.DriveClient(session, config))
+
+
+async def _run_upload_segments(
   segments: list[str], job: dict[str, Any] | None = None, *, include_all_files: bool = False,
+  drive: drive_upload.DriveClient | None = None,
 ) -> dict[str, Any]:
   params = Params() if HAS_PARAMS else None
-  base_url, token = upload.upload_target_settings()
   meta = upload.upload_metadata(params)
   device_id = upload_device_id(meta)
-  car_selected = meta.get("carName") or "none"
-  storage_directory = f"{car_selected} {device_id}".strip()
-  if not token:
-    token = await create_web_upload_session(base_url, meta, "dashcam")
-  remote_base_path = f"{base_url}/routes/{storage_directory}/".replace("\\", "/")
+  if drive is not None:
+    base_url = token = ""
+    remote_base_path = f"Google Drive/{drive_upload.ROOT_FOLDER}/"
+  else:
+    base_url, token = upload.upload_target_settings()
+    car_selected = meta.get("carName") or "none"
+    storage_directory = f"{car_selected} {device_id}".strip()
+    if not token:
+      token = await create_web_upload_session(base_url, meta, "dashcam")
+    remote_base_path = f"{base_url}/routes/{storage_directory}/".replace("\\", "/")
+  target = "drive" if drive is not None else "web"
   total = len(segments)
   results: list[Any] = [None] * total  # filled by index so order matches input
 
   if job:
     job["upload_meta"] = meta
     job["remote_base_path"] = remote_base_path
-    job["upload_target"] = "web"
+    job["upload_target"] = target
     job["partial_results"] = []
     progress(
       job,
@@ -512,22 +533,33 @@ async def run_upload_segments(
             touch(job)
           return is_cancel_requested(job)
 
-        ok = await upload_folder_to_web(
-          segment_path,
-          device_id,
-          segment,
-          base_url,
-          token,
-          should_cancel if job else None,
-          filenames=[str(item["name"]) for item in files],
-          on_progress=on_file_progress if job else None,
-        )
+        if drive is not None:
+          ok = await drive_upload.upload_folder_to_drive(
+            drive,
+            segment_path,
+            route_name(segment),
+            segment,
+            [str(item["name"]) for item in files],
+            should_cancel if job else None,
+            on_file_progress if job else None,
+          )
+        else:
+          ok = await upload_folder_to_web(
+            segment_path,
+            device_id,
+            segment,
+            base_url,
+            token,
+            should_cancel if job else None,
+            filenames=[str(item["name"]) for item in files],
+            on_progress=on_file_progress if job else None,
+          )
         results[idx0] = {
           "segment": segment,
           "route": route_name(segment),
           "segmentIndex": segment_index(segment),
           "ok": bool(ok),
-          "remotePath": f"{remote_base_path}{segment}",
+          "remotePath": f"{remote_base_path}{route_name(segment)}/{segment}" if drive is not None else f"{remote_base_path}{segment}",
           "files": files,
         }
         if job:
@@ -572,13 +604,17 @@ async def run_upload_segments(
     "uploaded": ok_count,
     "total": len(results),
     "uploadedAt": uploaded_at,
-    "target": "web",
+    "target": target,
     "deviceId": device_id,
     "remoteBasePath": remote_base_path,
     "meta": meta,
     "results": results,
     "message": f"{ok_count}/{len(results)} uploaded",
   }
+  if drive is not None:
+    # the web server's completion record and its share links do not apply to the owner's Drive
+    response_payload["shareText"] = f"Google Drive {response_payload['message']}: {remote_base_path}"
+    return response_payload
   response_payload["shareText"] = upload.upload_share_text(response_payload)
 
   if job:
@@ -631,6 +667,7 @@ async def run_job(job: dict[str, Any]) -> None:
   try:
     result = await run_upload_segments(
       list(job.get("segments") or []), job, include_all_files=bool(job.get("include_all_files")),
+      target=job.get("target") or "web",
     )
     finish(job, ok=bool(result.get("ok")), result=result)
   except UploadCanceled as exc:

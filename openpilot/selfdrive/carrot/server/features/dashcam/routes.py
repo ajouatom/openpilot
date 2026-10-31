@@ -10,6 +10,8 @@ from aiohttp import web
 from openpilot.selfdrive.carrot.web_upload import check_web_upload_health, create_web_upload_session
 
 from ...config import DASHCAM_ROOT
+from openpilot.selfdrive.carrot import drive_upload
+
 from . import upload, upload_jobs
 from .catalog import (
   build_routes,
@@ -104,6 +106,19 @@ async def request_upload_segments(request: web.Request) -> tuple[list[str], bool
   if incomplete:
     raise web.HTTPConflict(text=f"segment is still recording or incomplete: {incomplete[0]}")
   return segments, include_all_files
+
+
+async def request_upload_target(request: web.Request) -> str:
+  try:
+    body = await request.json()
+  except Exception:
+    body = {}
+  target = body.get("target", "web") if isinstance(body, dict) else "web"
+  if target not in ("web", "drive"):
+    raise web.HTTPBadRequest(text="target must be web or drive")
+  if target == "drive" and not drive_upload.is_configured():
+    raise web.HTTPConflict(text="Google Drive is not configured")
+  return target
 
 
 def _realdata_signature() -> tuple | None:
@@ -505,6 +520,7 @@ async def api_dashcam_upload(request: web.Request) -> web.Response:
 async def api_dashcam_upload_start(request: web.Request) -> web.Response:
   try:
     segments, include_all_files = await request_upload_segments(request)
+    target = await request_upload_target(request)
     running = upload_jobs.running_job()
     if running:
       return web.json_response({
@@ -513,7 +529,7 @@ async def api_dashcam_upload_start(request: web.Request) -> web.Response:
         "job_id": running.get("id"),
         "job": upload_jobs.snapshot(running),
       }, status=409)
-    job = upload_jobs.create_job(segments, include_all_files=include_all_files)
+    job = upload_jobs.create_job(segments, include_all_files=include_all_files, target=target)
     upload_jobs.start_job(job)
     return web.json_response({"ok": True, "job_id": job["id"], "status": job["status"]})
   except web.HTTPException as e:
@@ -533,6 +549,11 @@ async def api_dashcam_upload_test(request: web.Request) -> web.Response:
     return web.json_response({"target": "web", "url": base_url, **result}, status=status)
   except Exception as e:
     return web.json_response({"ok": False, "error": str(e)}, status=500)
+
+
+async def api_dashcam_upload_drive(request: web.Request) -> web.Response:
+  # whether Google Drive is configured; the credentials themselves never leave the device
+  return web.json_response({"configured": drive_upload.is_configured()})
 
 
 async def api_dashcam_upload_job(request: web.Request) -> web.Response:
@@ -596,5 +617,6 @@ def register(app: web.Application) -> None:
   app.router.add_post("/api/dashcam/upload/test", api_dashcam_upload_test)
   app.router.add_post("/api/dashcam/upload/start", api_dashcam_upload_start)
   app.router.add_get("/api/dashcam/upload/job", api_dashcam_upload_job)
+  app.router.add_get("/api/dashcam/upload/drive", api_dashcam_upload_drive)
   app.router.add_post("/api/dashcam/upload/cancel", api_dashcam_upload_cancel)
   app.router.add_post("/api/dashcam/upload", api_dashcam_upload)

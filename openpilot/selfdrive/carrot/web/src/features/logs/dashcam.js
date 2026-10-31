@@ -1634,6 +1634,7 @@ async function uploadDashcamSegments(segments, options = {}) {
     bytes: 0,
   };
   let includeAllFiles = false;
+  let target = "web";
   if (options.confirm !== false) {
     const scope = await openAppDialog({
       mode: "choice",
@@ -1647,6 +1648,22 @@ async function uploadDashcamSegments(segments, options = {}) {
     });
     if (scope !== "default" && scope !== "all") return;
     includeAllFiles = scope === "all";
+    // Only offered when the device holds Google Drive credentials (the web learns configured yes/no only)
+    const drive = await getJson("/api/dashcam/upload/drive").catch(() => null);
+    if (drive?.configured) {
+      const destination = await openAppDialog({
+        mode: "choice",
+        title: getUIText("log_upload", "Upload Logs"),
+        message: getUIText("upload_target_help", "Choose where to send the logs."),
+        choiceLayout: "list",
+        choices: [
+          { label: getUIText("upload_target_web", "Upload server"), value: "web", current: true },
+          { label: getUIText("upload_target_drive", "My Google Drive"), value: "drive" },
+        ],
+      });
+      if (destination !== "web" && destination !== "drive") return;
+      target = destination;
+    }
     try {
       const summary = await postJson("/api/dashcam/upload/summary", { segments: targets, includeAllFiles });
       if (!Array.isArray(summary?.summaries) || summary.summaries.length !== targets.length) {
@@ -1713,7 +1730,7 @@ async function uploadDashcamSegments(segments, options = {}) {
       progress: null,
     }, targets.length);
     if (cancelRequested) throw makeDashcamUploadCanceledError();
-    const started = await postJson("/api/dashcam/upload/start", { segments: targets, includeAllFiles });
+    const started = await postJson("/api/dashcam/upload/start", { segments: targets, includeAllFiles, target });
     jobId = started.job_id;
     rememberDashcamUploadJob(jobId);
     if (cancelRequested) {

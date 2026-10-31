@@ -7,7 +7,7 @@ import { dashcamUploadStats } from "../src/features/logs/upload_summary.js";
 const source = await readFile(new URL("../src/features/logs/dashcam.js", import.meta.url), "utf8");
 const uploadFunction = source.slice(source.indexOf("async function uploadDashcamSegments("), source.indexOf("async function uploadRecentDashcamSegments("));
 
-async function runUpload(scope, confirm = true) {
+async function runUpload(scope, confirm = true, destination = null) {
   const requests = [];
   const summaries = [];
   const context = vm.createContext({
@@ -15,7 +15,15 @@ async function runUpload(scope, confirm = true) {
     getRememberedDashcamUploadJob: () => null,
     getUIText: (_key, fallback) => fallback,
     showAppToast: (message) => { throw new Error(message); },
+    getJson: async (url) => {
+      assert.equal(url, "/api/dashcam/upload/drive");
+      return { configured: destination !== null };
+    },
     openAppDialog: async (options) => {
+      if (options.choices[0].value === "web") {  // asked only when Google Drive is configured
+        assert.notEqual(destination, null);
+        return destination === "cancel" ? null : destination;
+      }
       assert.equal(options.choices[0].value, "default");
       assert.equal(options.choices[0].current, true);
       return scope;
@@ -56,6 +64,23 @@ for (const scope of ["default", "all"]) {
     assert.equal(summaries[0].bytes, scope === "all" ? 330 : 30);
   });
 }
+
+test("without Google Drive the upload goes to the web server", async () => {
+  const { requests } = await runUpload("default");
+  assert.equal(requests[1].target, "web");
+});
+
+for (const destination of ["web", "drive"]) {
+  test(`configured Google Drive offers a destination: ${destination}`, async () => {
+    const { requests } = await runUpload("default", true, destination);
+    assert.equal(requests[1].url, "/api/dashcam/upload/start");
+    assert.equal(requests[1].target, destination);
+  });
+}
+
+test("canceling the destination sends no request", async () => {
+  assert.equal((await runUpload("default", true, "cancel")).requests.length, 0);
+});
 
 test("canceling file selection sends no request", async () => {
   assert.equal((await runUpload(null)).requests.length, 0);
