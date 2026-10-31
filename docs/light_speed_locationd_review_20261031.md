@@ -132,3 +132,117 @@ Validation consists of full-schema log correlation, exact source comparisons,
 upstream diff review and read-only package-manifest inspection. Documentation
 format and user-doc mapping checks run for this report-only change; software
 unit tests cannot establish hardware latency and are not claimed as a fix.
+
+
+## EV6 follow-up: nine segments and automatic failure capture
+
+The owner supplied nine further EV6 segments (5-13) on the same incident source
+10bf0a56. All nine full rlogs were copied from their exact NAS paths and their
+source/copy SHA-256 values matched (110,415,270 compressed bytes total). The
+available carState interval spans 539.952 seconds. The full cereal schema was
+used again; per-file hashes and analysis remain in ignored private scratch data.
+
+This device is also mici, running the same Light speed 33ba0928 PKL on USB AMD
+with AMD warp. It is not Jetson. Segment 9 contains a fallback to the internal
+ModelState backend; segments 10-13 are consequently **not Light speed results**.
+The modeld and locationd PIDs remain constant across the transition.
+
+| Segment | Active path | Invalid cameraOdometry | inputsOK=false livePose |
+| --- | --- | ---: | ---: |
+| 5 | Light speed eGPU | 6 | 6 |
+| 6 | Light speed eGPU | 7 | 12 |
+| 7 | Light speed eGPU | 12 | 17 |
+| 8 | Light speed eGPU | 7 | 12 |
+| 9 | Light speed eGPU, then internal | 2 | 2 |
+| 10-13 | Internal | 0 | 0 |
+| Total | | 34 | 49 |
+
+Both cameras publish 10,800 consecutive IDs (6003-16802) without a gap, including
+segment boundaries. ModelV2 and cameraOdometry each have 10,754 publications
+(IDs 6001-16801), with 47 missing IDs: 34 isolated frame skips plus 13 IDs missing
+across the timeout/fallback transition. All 34 invalid odometry IDs match the
+ordinary modelCameraGap records. Three invalid calibration publications extend
+the corresponding livePose episodes, giving 49 bad-input samples. SensorsOK and
+posenetOK remain true in all 10,754 livePose messages; no sensor timing/sanity
+rejection messages are recorded. All 988 device samples are thermally green;
+maximum reported CPU temperature is 58.5 C. This is not an eGPU die-temperature
+measurement or proof of hardware health.
+
+Before fallback, frame-weighted completed timing windows give:
+
+| Stage | EV6 mean ms | Earlier Ioniq5 mean ms |
+| --- | ---: | ---: |
+| Entire modeld loop | 50.268 | 51.723 |
+| Inference call | 45.760 | 47.130 |
+| Postprocessing | 3.500 | 3.548 |
+| Worker input upload | 20.068 | 19.965 |
+| Worker output read | 11.679 | 13.211 |
+| Worker recurrent-state checkpoint | 3.983 | 3.950 |
+
+EV6 is closer to the 50 ms budget but still has little margin and intermittent
+frame loss. These are measurements on different devices/drives, not a controlled
+A/B. Completed-window maxima exclude a call that times out without publishing
+its timing sample. After fallback, segments 10-13 have mean inference times
+24.0-24.6 ms and roughly 21 ms waiting for the next camera frame. Their complete
+loops remain near 50 ms because they are camera-paced, not because all 50 ms
+are processing. No livePose input failure recurs after the transition.
+
+### New failure evidence
+
+The rlog records `TimeoutError: precompiled eGPU worker timed out`, followed by
+`eGPU model failed, falling back to internal GPU`, at 2026-10-31 09:11:52 KST
+(monotonic 1271.640). The runtime response deadline is 150 ms. The observed gap
+between published model messages is 667.913 ms (frame 10941 -> 10955), including
+failure handling and fallback; it must not be reported as 668 ms of GPU compute.
+The separate modelCameraGap entry reports 11 skipped camera inputs during
+fallback, whereas the publication stream misses 13 IDs. These are distinct
+counts because failed/preparation iterations need not publish an output.
+
+The matching automatic egpu_error capture at 09:11:58 was found on the NAS,
+read without contacting the vehicle, and source/copy hash matched:
+`97f282c2670baa0b3d75ed84118f4eb9bf102d772a03a5f2412f5bbeabe547de`.
+Its saved failure identifies the same model, process and incident timestamp:
+
+- Last worker progress stage: `output_read`, worker iteration 10500.
+- Stage age at the saved snapshot: 123.169 ms.
+- Main worker state: sleeping, kernel wait channel `pipe_wait`.
+- Artifact rejection is false; code classifies this timeout as transient-device.
+  This classification is a recovery policy, not a diagnosis of a physical fault.
+- USB device remains enumerated at 5000 Mbit/s, authorized, active, power control
+  on. The captured kernel USB excerpt contains no incident-time disconnect/reset
+  line. This does not rule out a transfer stall, cable/power problem or GPU fault.
+
+**Stage-label limitation:** generic runtime marks output_read before output
+readback, but does not update the stage during output validation or recurrent
+checkpoint/save/synchronization. Its next marker is publish. Therefore the saved
+output_read age cannot distinguish output download from those later operations.
+Likewise pipe_wait is a kernel wait channel, not a Python/native stack identifying
+which pipe or subsystem is responsible. Do not label this as a proven USB-read,
+GPU-compute, checkpoint or tinygrad regression based on this snapshot alone.
+
+### What would distinguish the remaining causes
+
+The evidence now identifies two observed symptoms in the Light speed eGPU path:
+insufficient sustained timing margin and a separate response-timeout episode.
+They may share a cause, but the logs do not prove that. The clean internal period
+is useful within-device evidence; it changes both model and execution backend,
+so it cannot isolate Light speed weights from tinygrad or USB transport.
+
+1. On the same parked device/eGPU, compare the existing matched Flip Flop package
+   and Light speed package with the same input/settings and multiple minutes of
+   recording. Compare whole-loop timing, tail delays, frame IDs, odometry/pose
+   validity and failures. This isolates the package path better than another
+   vehicle, but still changes both model and runtime.
+2. To isolate tinygrad, use the same model and inputs with independently compiled,
+   verified artifacts for each runtime, or matched upstream equivalents. Swapping
+   only the tinygrad version underneath the existing PKL is not a valid test.
+3. At the next timeout, separate output-read, validation, state-checkpoint dispatch
+   and synchronization progress markers. Obtain the worker/child thread stacks,
+   wait-channel/scheduler deltas and USB completion/error evidence at that instant.
+   The existing automatic failure capture is useful and has already been retrieved;
+   asking the owner to resend the same file adds no evidence.
+
+Additional historical raw logs can show recurrence and model identity, but more
+uncontrolled Light speed driving alone cannot separate these causes. No new drive
+is required merely to reproduce this already-observed warning. No code/runtime,
+vehicle setting, live device operation or CAN action was changed in this review.
