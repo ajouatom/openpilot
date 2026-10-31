@@ -1,5 +1,18 @@
 # Repository memory
 
+- On 2026-10-31, owner requests recent-intent manual indication and blocking centre
+  lines/road edges/unknown adjacent lanes. Manual-only episode retains confirmed
+  torque1.5s/4s max through release/countersteer while approaching; stop0.3s/retreat
+  0.15m/lost lane cancels. Exact OEM lane timestamp additiveCarState112; <=250ms,
+  white known type plus model outer line/2.5..4.8m width/edge clearance required.
+  Source rechecks lane, no second pressed-torque requirement. Keep3s/dark1s/mask12s;
+  ATC/250m/BT/steering/CAN/receiver unchanged. Prior three recorded manual requests
+  all OEM yellow21 and outer confidence<0.5, intentionally blocked by new policy.
+  Desktop557+50+2 pass; native publication checks included. No physical acceptance,
+  vehicle writes or host bundle. Process.latest event-loss issue remains separate.
+  See docs/manual_indicator_recent_intent_20261031.md.
+
+
 - On 2026-10-31, owner approves log-only manual boundary observation. Separate
   modeld BoundaryObserver on existing Ioniq5PE/manual-option ON; no lamp/desire/
   Params/CAN/USB writes. Recent torque intent1.5s/4s episode, geometric approach,

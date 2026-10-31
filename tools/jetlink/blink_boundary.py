@@ -5,16 +5,15 @@ import math
 
 def vehicle_allowed(cs, direction):
   try:
-    signed = cs.steeringTorque * (1 if direction == 1 else -1)
     return (
       direction in (1, 2)
       and cs.canValid
       and str(cs.gearShifter) == 'drive'
       and math.isfinite(cs.vEgo)
       and cs.vEgo >= 30 / 3.6
-      and cs.steeringPressed
-      and math.isfinite(signed)
-      and signed > 0
+      # The fresh model-owned edge already proved recent driver intent. Requiring
+      # pressed torque again here discards real crossings after torque release.
+      and math.isfinite(cs.steeringTorque)
       and not cs.trailerConnected
       and not cs.steerFaultTemporary
       and not cs.steerFaultPermanent
