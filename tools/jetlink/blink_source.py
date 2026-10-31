@@ -12,6 +12,7 @@ from blink_policy import Policy, AutomaticSignals
 from blink_tbt import TbtBlinker, right_front_clear
 from blink_turn_location import observations as turn_observations, navigation_cancelled
 from blink_boundary import BoundaryEvents, vehicle_allowed as boundary_vehicle_allowed
+from openpilot.selfdrive.controls.lib.desire_lib.boundary_lane import adjacent_lane
 
 
 def vehicle_ready(sm, now, fingerprint, spas=False):
@@ -188,6 +189,7 @@ def main(fd, spas=False):
       allowed=(not spas and mode in (1, 2) and params.get_bool('ManualLaneChangeIndicator') and
                ok and model_fresh and not commands and not hold and
                boundary_vehicle_allowed(cs, boundary_direction) and
+               adjacent_lane(cs, sm['modelV2'], boundary_direction, now) and
                str(meta.laneChangeState) in ('off', 'preLaneChange') and
                fresh(feedback.get('stamp'), now, .35) and feedback.get('state') == 'ready'),
       record=lambda value: atomic_json(RUNTIME/'boundary-indicator.json', value))

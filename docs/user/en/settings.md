@@ -473,7 +473,7 @@ A hold-start request without confirmed lamp activation expires after four second
 
 `AutoTurnControlRightLaneChange` under ATC details adds to modes 1 and 2 and triggers the physical right indicator before a TBT right turn or right fork, at an eligible lane-change speed and within 250 m, until turning starts. It requires the supported USB2CAN indicator setup, a right lane, fresh OEM BSD and right-front gaps of at least 5 m both now and after three seconds; existing manual/Bluetooth lane-change behavior is unchanged. See [lane changes](lane-change.md).
 
-`AutoTurnControlRightLaneChange` is the separate ATC-details add-on for modes 1 and 2, within 250 m of a right turn or right fork. `ManualLaneChangeIndicator` is independent of ATC and detects driver boundary approach during preparation. It can bridge at most one second of confidence loss after observing the crossed boundary. An executing automatic lane change or another indicator request takes precedence; its lamp feedback never creates a new steering request. See [lane changes](lane-change.md).
+`AutoTurnControlRightLaneChange` remains the separate 250m ATC add-on. `ManualLaneChangeIndicator` independently retains recent intent for up to 1.5s, requiring a confirmed adjacent lane beyond a white marking with road-edge clearance. Centre lines, road edges and unknown lanes block it. It never requests automatic steering. See [lane changes](lane-change.md).
 
 The manual lane-change indicator can request again after at least three seconds, one continuous second of lamp extinction and fresh steering/approach conditions. Automatic-steering feedback isolation remains at least 12 seconds.
 
