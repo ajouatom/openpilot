@@ -352,13 +352,18 @@ def test_held_turn_does_not_bypass_driver_permission_or_steering_faults(fault):
   assert not automatic_control_allowed(cs,cc,ss,always,True)
 
 
-def test_only_existing_turn_can_survive_inactive_steering_output():
+def test_stopped_audio_cue_needs_lateral_permission_and_moving_start_needs_activation():
   from blink_source import automatic_control_allowed
   from test_blinker import Vehicle
   sm=Vehicle(speed=0.,engaged=False)
-  args=(sm['carState'],sm['carControl'],sm['selfdriveState'],True)
-  assert automatic_control_allowed(*args,True)
-  assert not automatic_control_allowed(*args,False)
+  cs, cc, ss = sm['carState'], sm['carControl'], sm['selfdriveState']
+  cs.standstill = True
+  assert automatic_control_allowed(cs, cc, ss, True, True)
+  assert automatic_control_allowed(cs, cc, ss, True, False)
+  assert not automatic_control_allowed(cs, cc, ss, False, False)
+  cs.vEgo, cs.standstill = 1., False
+  assert not automatic_control_allowed(cs, cc, ss, True, False)
+  assert automatic_control_allowed(cs, cc, ss, True, True)
 
 
 @pytest.mark.parametrize('direction,angle', [('left',-60.),('right',60.)])

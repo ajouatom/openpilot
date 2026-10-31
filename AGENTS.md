@@ -1,5 +1,70 @@
 # Repository memory
 
+- Later on 2026-10-31, EV6 nine full logs/110415270B hash-matched confirm same
+  Light speed33ba/mici USB AMD. Cameras10800each consecutive; ordinary34skips/
+  odo34invalid -> pose49inputs-invalid, sensors/posenetalltrue. Segment9 at
+  09:11:52KST eGPU150ms response timeout falls back internal; published model
+  gap667.913ms/13missing IDs includes handling, not GPUcompute. Segments10-13
+  internal only/no poseerrors, NOT healthy Light speed. EGPU meanloop50.268ms,
+  infer45.760/upload20.068/checkpoint3.983. Matching NAS automaticcapture has
+  worker output_read123.169ms/pipe_wait; marker also covers validation/checkpoint
+  so exact stall stage unproven. USB5000active/no incident disconnect in excerpt.
+  No process restart/thermal/sensor rejection, no tinygrad causal A/B. Report-only;
+  same-device matched-package comparison plus finer failure stages needed.
+  See docs/light_speed_locationd_review_20261031.md; raw/private/no live writes.
+
+
+- On 2026-10-31, supplied Oct30/10bf0a56 partial rlog confirms Light speed
+  33ba0928 on mici USB AMD, NOT Jetson. Consecutive cameras549 each; model19
+  one-frame skips/odometry19invalid -> livePose44inputs-invalid, sensors/posenet
+  allhealthy; calibration5invalid envelopes extend five episodes. Alert24.691s
+  includes persistence/pre-segment onset. Mean loop51.723ms vs50ms, inference
+  47.130, upload19.965/checkpoint3.950; no process restart/thermal/sensor rejection.
+  PR39184 reverts0152 Chestnut plus tinygrad; existing Flip Flop already retains
+  f0667cf6+02e698. No global revert needed; do not mix Light33ba with old runtime.
+  No causal tinygrad A/B or proven cure; report-only, no runtime/selection/device
+  changes. JetsonONNX/TRT unaffected by revert; hardware validation needs power.
+  See docs/light_speed_locationd_review_20261031.md; raw evidence stays private.
+
+
+- On 2026-10-31, owner requests recent-intent manual indication and blocking centre
+  lines/road edges/unknown adjacent lanes. Manual-only episode retains confirmed
+  torque1.5s/4s max through release/countersteer while approaching; stop0.3s/retreat
+  0.15m/lost lane cancels. Exact OEM lane timestamp additiveCarState112; <=250ms,
+  white known type plus model outer line/2.5..4.8m width/edge clearance required.
+  Source rechecks lane, no second pressed-torque requirement. Keep3s/dark1s/mask12s;
+  ATC/250m/BT/steering/CAN/receiver unchanged. Prior three recorded manual requests
+  all OEM yellow21 and outer confidence<0.5, intentionally blocked by new policy.
+  Desktop557+50+2 pass; native publication checks included. No physical acceptance,
+  vehicle writes or host bundle. Process.latest event-loss issue remains separate.
+  See docs/manual_indicator_recent_intent_20261031.md.
+
+
+- On 2026-10-31, owner approves log-only manual boundary observation. Separate
+  modeld BoundaryObserver on existing Ioniq5PE/manual-option ON; no lamp/desire/
+  Params/CAN/USB writes. Recent torque intent1.5s/4s episode, geometric approach,
+  provisional0.9m half-width, hypothetical crossing and retreat/failure reasons;
+  bounded1Hz/8events, exceptions isolated. Existing indicator remains unchanged.
+  Desktop27 observation/integration +695 prior pass/26native excluded. Private117f
+  replay14263frames:36candidates,19confidence/17width rejects,0predictions,0legacy
+  detector state differences. NOT improved detection/intent or physical validation.
+  PC callback-only mean6.815us/P9918.5us/max224.9us, no hardware timing claim.
+  Normal GitPull/comma restart, no Jetson bundle/live writes. See
+  docs/manual_boundary_observation_20261031.md; next-drive/video evaluation pending.
+
+- On 2026-10-31, owner requests turn reliability/straight-through cancellation.
+  Comma source allows fresh stopped-D cue with lateral permission; one receiver-
+  accepted/unlit recovery, no rejected-send/cancel retry; pending opposite cue<=3s
+  starts only after physical completion. Optional current TBT point + raw vehicle
+  GPS passage supplements completion and confirms straight-pass cancellation;
+  accuracy/freshness/jump/heading guards, no snapped/phone position or cue replay.
+  Fresh explicit navigation-ended/off-route cancels. Existing CAN/receiver/steering,
+  manual boundary and radar admission unchanged. Model-path departure mandatory
+  gate rejected pending evidence. Desktop695+28 pass/26native excluded; 14262-frame
+  private117f replay0differences,0usable newGPS/TBT anchors (not road validation).
+  No live write/CAN/reboot; normal GitPull/comma restart, no Jetson bundle.
+  See docs/turn_indicator_tracking_20261031.md.
+
 - On 2026-10-30, owner requests Light speed PR39173 as an eGPU/Jetson
   choice and review of0152aab4. Add catalog light-speed, exact c7cbe5de PKL
   SHA33ba0928/790445184B and official ONNX6274eb4a/792305602B, checkpoint
