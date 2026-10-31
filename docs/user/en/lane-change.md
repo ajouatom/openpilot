@@ -154,6 +154,8 @@ With immediate-entry settings, the sequence “signal first, then check behind�
 
 Related: [Understanding Settings](settings.md) · [Cruise and Following Gap](cruise-gap.md)
 
+With this option enabled on supported vehicles, a separate observer logs `manualBoundaryObservation` at most once per second to compare manual boundary-approach detection. It briefly remembers driver steering and records approach, hypothetical indication, retreat and tracking failures; it never requests lamps or steering. Existing indication remains unchanged. Clearance uses a provisional 0.9 m half-width, not measured tire contact or confirmed lane-change intent.
+
 ### ATC turn indication and straight-through cancellation
 
 ATC indication starts at audioTurn and persists through stops. A fresh cue can start at a full stop in Drive when lateral permission remains valid and steering is fault-free. After the receiver confirms send completion, both lamps staying off for 1.5 seconds permits one recovery attempt per turn, including an initially unlit request. Driver cancellation, communication failure or an unconfirmed send forbids retry. A fresh opposite-turn cue waits at most three seconds for physical completion of the preceding turn.

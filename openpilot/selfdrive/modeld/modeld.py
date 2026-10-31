@@ -21,6 +21,7 @@ from openpilot.common.transformations.camera import DEVICE_CAMERAS
 from openpilot.system.camerad.cameras.nv12_info import get_nv12_info
 from openpilot.common.transformations.model import get_warp_matrix
 from openpilot.selfdrive.controls.lib.desire_helper import DesireHelper
+from openpilot.selfdrive.controls.lib.desire_lib.boundary_observer import BoundaryObserver
 from openpilot.selfdrive.controls.lib.drive_helpers import get_accel_from_plan, smooth_value, get_curvature_from_plan
 from openpilot.selfdrive.modeld.parse_model_outputs import Parser
 from openpilot.selfdrive.modeld.compile_modeld import make_input_queues, WARP_INPUTS, POLICY_INPUTS
@@ -415,6 +416,7 @@ def main(demo=False):
   from opendbc.car.tesla.values import TeslaFlags
   DH = DesireHelper(tesla_auto_signals=CP.brand == "tesla" and bool(CP.flags & TeslaFlags.AUTO_TURN_SIGNALS),
                     boundary_indicator_supported=CP.carFingerprint == 'HYUNDAI_IONIQ_5_PE')
+  boundary_observer = BoundaryObserver(cloudlog.event) if DH.boundary_indicator_supported else None
   nav_input = MapInput()
 
 
@@ -591,6 +593,14 @@ def main(demo=False):
       modelv2_send.modelV2.meta.autoTurnSignalRequestId = DH.auto_signal_request_id
       modelv2_send.modelV2.meta.manualLaneIndicator = DH.boundary_indicator.request_direction
       modelv2_send.modelV2.meta.manualLaneIndicatorMonoTime = int(DH.boundary_indicator.request_time * 1e9)
+      if boundary_observer is not None:
+        # Read-only experiment: independent of navigation freshness, no request/desire assignment.
+        boundary_observer.observe(indicator_now, sm['carState'], modelv2_send.modelV2,
+          enabled=DH.boundary_indicator_enabled,
+          valid=modelv2_send.valid and sm.valid['carState'] and sm.alive['carState'] and
+                0 <= indicator_now-sm.recv_time['carState'] < .35,
+          busy=DH.lane_change_state in (log.LaneChangeState.laneChangeStarting, log.LaneChangeState.laneChangeFinishing),
+          legacy_direction=DH.boundary_indicator.request_direction)
 
       drivingdata_send.drivingModelData.meta.laneChangeState = DH.lane_change_state
       drivingdata_send.drivingModelData.meta.laneChangeDirection = DH.lane_change_direction
