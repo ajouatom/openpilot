@@ -3,6 +3,8 @@ from collections import deque
 import uuid
 import math
 
+from blink_turn_location import TurnLocation, offset
+
 NEAR_STOP = 5 / 3.6
 MAX_HOLD = 300.
 
@@ -30,10 +32,10 @@ class Policy:
     self.turned, self.centered = False, None
     self.started, self.off_since, self.relights = now, None, 0
 
-  def relight(self, now, activated_id, acknowledged, left, right):
-    """One recovery tap for an owned turn, never an unconfirmed start/cancel."""
+  def relight(self, now, activated_id, acknowledged, left, right, *, retry_unlit=False):
+    """One recovery tap after a completed receiver send, never a rejected send/cancel."""
     h = self.hold
-    if (not h or h['source'] != 'turn' or activated_id != h['id'] or not acknowledged or
+    if (not h or h['source'] != 'turn' or (activated_id != h['id'] and not retry_unlit) or not acknowledged or
         self.relights or left or right):
       self.off_since = None
       return False
@@ -123,31 +125,55 @@ class AutomaticSignals:
     self.mode = None
     self.heading = None
     self.rotation = 0.
+    self.location = TurnLocation()
+    self.pending = None
+    self.reason = 'idle'
+    self.cancelled_target = None
 
-  def update(self, now, mode, valid, cue, direction, atc_type, desire, lane=None, *, speed=0., angle=0., heading=0., distance=None):
+  def update(self, now, mode, valid, cue, direction, atc_type, desire, lane=None, *, speed=0., angle=0., heading=0., distance=None, position=None, target=None):
     previous, self.cue = self.cue, cue
     changed_mode, self.mode = mode != self.mode, mode
     if not valid or not mode or changed_mode:
       self.direction = None
       self.turned, self.centered = False, None
       self.heading, self.rotation = None, 0.
+      self.pending, self.location = None, TurnLocation()
+      self.reason = 'inputs'
       if not valid:
         self.cue = None
       return ('lane', lane) if valid and lane in ('left', 'right') else None
     # Consume cues even while invalid/disabled. Never join a cue already present
     # on startup, reconnect or setting changes, or replay a consumed cue.
-    if (self.direction is None and previous is not None and cue != previous and math.isfinite(cue) and
-        0 <= now-cue < .35 and direction in ('left', 'right') and atc_type == 'turn '+direction):
-      self.direction = direction
-      self.turned, self.centered = False, None
-      self.heading, self.rotation = heading, 0.
+    fresh_cue = (previous is not None and cue != previous and math.isfinite(cue) and
+                 0 <= now-cue < .35 and direction in ('left', 'right') and atc_type == 'turn '+direction)
+    if fresh_cue and target is not None and self.cancelled_target is not None:
+      cancelled_at, cancelled_direction, cancelled_point = self.cancelled_target
+      if (0 <= now-cancelled_at <= 60 and direction == cancelled_direction and target[2] == cancelled_point[2] and
+          math.hypot(*offset(cancelled_point[:2], target[:2])) <= 20):
+        fresh_cue = False
+        self.reason = 'cancelled_target'
+    if fresh_cue:
+      if self.direction is None:
+        self.direction = direction
+        self.turned, self.centered = False, None
+        self.heading, self.rotation = heading, 0.
+        self.location = TurnLocation(position, target, heading, distance)
+        self.reason = 'approach'
+      elif direction != self.direction:
+        # Keep the fresh next cue briefly while finishing the current corner.
+        # Do not reverse a signal in the middle of the first physical turn.
+        self.pending = (cue, direction, target)
+    if target is not None and self.location.target is not None and target[2] != self.location.target[2]:
+      self.direction, self.pending, self.reason = None, None, 'navigation_session'
+    if self.pending and (now-self.pending[0] > 3 or atc_type != 'turn '+self.pending[1]):
+      self.pending = None
     if self.direction:
       expected = 'turnLeft' if self.direction == 'left' else 'turnRight'
       # Turn desire can disappear at a stop or while steering through the corner.
       # A departure steering correction is not a turn. Also require 20 degrees
       # of measured heading change in the selected direction, while moving.
       if heading is None or not all(math.isfinite(v) for v in (speed, angle, heading)):
-        self.direction = None
+        self.direction, self.pending, self.reason = None, None, 'heading'
       else:
         if self.heading is not None and speed >= 1 / 3.6:
           delta = heading-self.heading
@@ -157,19 +183,34 @@ class AutomaticSignals:
         self.turned |= signed_angle >= 30 and speed >= 1 / 3.6 and self.rotation >= math.radians(20)
         # An approach can itself contain a sharp bend (or adjacent turns). Do
         # not finish while navigation still places this same turn ahead.
+        location_passed, straight_passed = self.location.update(
+          now, position, heading=heading, speed=speed, angle=angle, turned=self.turned)
         passed = distance is None or (math.isfinite(distance) and
                                       (distance <= 0 or atc_type != 'turn '+self.direction))
+        if self.location.target is not None and position is not None:
+          passed = location_passed
+        if straight_passed:
+          self.cancelled_target = (now, self.direction, self.location.target)
+          self.direction, self.pending, self.reason = None, None, 'straight_passed'
         if self.turned and passed and abs(angle) <= 10 and speed >= 1 / 3.6:
           self.centered = now if self.centered is None else self.centered
           if now-self.centered >= .4:
-            self.direction = None
+            self.direction, self.reason = None, 'completed'
         else:
           self.centered = None
         # Before physically entering, navigation cancellation still cancels the
         # request. During the turn navigation may already announce the next item.
-        if ((desire in ('turnLeft', 'turnRight') and desire != expected) or
+        if self.direction and ((not self.pending and desire in ('turnLeft', 'turnRight') and desire != expected) or
             (not self.turned and atc_type != 'turn '+self.direction)):
-          self.direction = None
+          self.direction, self.pending, self.reason = None, None, 'navigation'
       if self.direction:
         return ('turn', self.direction)
+    if self.pending and self.reason == 'completed':
+      _, self.direction, next_target = self.pending
+      self.pending = None
+      self.turned, self.centered = False, None
+      self.heading, self.rotation = heading, 0.
+      self.location = TurnLocation(position, next_target, heading, distance)
+      self.reason = 'approach'
+      return ('turn', self.direction)
     return ('lane', lane) if lane in ('left', 'right') else None

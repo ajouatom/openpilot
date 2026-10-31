@@ -108,6 +108,7 @@ def test_diagnostic_transitions_are_bounded_and_excluded_from_wire(monkeypatch):
   clock, sent, records = [1.], [], []
   monkeypatch.setattr(protocol.time, 'monotonic', lambda:clock[0])
   source = {'stamp':1., 'ok':True, 'events':[], 'activated':True, 'relights':1,
+            'turn_phase':'approach', 'turn_position':True,
             'hold':{'id':'secret-id', 'time':1., 'source':'turn', 'direction':'left'}}
   monkeypatch.setattr(protocol, 'Process', lambda *a:NS(latest=lambda:source, close=lambda:None, send=lambda _:True))
   client = NS(last_state={'carrot_blinker':{'token':'secret', 'clock':100., 'state':'ready', 'accepted_id':'secret-id'}},
@@ -124,8 +125,62 @@ def test_diagnostic_transitions_are_bounded_and_excluded_from_wire(monkeypatch):
   for _, _, parts in sent:
     wire = json.loads(parts[0])
     assert 'activated' not in wire and 'relights' not in wire
+    assert 'turn_phase' not in wire and 'turn_position' not in wire
   clock[0] = 1.6
   source['stamp'] = 1.6
   client.last_state['carrot_blinker']['state'] = 'late_request'
   sender.send(client)
   assert records[-1][1]['peer_state'] == 'late_request'
+
+
+def test_completed_receiver_send_can_retry_initial_unlit_once():
+  p = owned_turn()
+  original = p.hold['id']
+  assert not p.relight(11.4, None, True, False, False, retry_unlit=True)
+  assert not p.relight(12.89, None, True, False, False, retry_unlit=True)
+  assert p.relight(12.91, None, True, False, False, retry_unlit=True)
+  assert p.hold['id'] != original and p.started == 11
+  assert not p.relight(15, None, True, False, False, retry_unlit=True)
+  assert p.acknowledged(16.92, None) is None
+
+
+@pytest.mark.parametrize('fault', ['rejected', 'opposite', 'cancelled', 'driver', 'stale', 'lane'])
+def test_initial_retry_never_bypasses_ownership_or_ack(fault):
+  p = owned_turn()
+  if fault == 'cancelled':
+    update(p, t=11.5, automatic=None)
+  if fault == 'driver':
+    p.acknowledged(11.5, None, True)
+  if fault == 'lane':
+    p.hold['source'] = 'lane'
+  for t in (12, 14, 16):
+    assert not p.relight(t, None, fault not in ('rejected', 'stale'), False, fault == 'opposite', retry_unlit=True)
+
+
+@pytest.mark.parametrize('sign,direction,next_direction', [(1, 'left', 'right'), (-1, 'right', 'left')])
+def test_next_turn_cue_waits_for_physical_completion(sign, direction, next_direction):
+  a, p = AutomaticSignals(), Policy()
+  a.update(10, 1, True, 0, 'none', '', 'none')
+  update(p, t=10)
+  def step(t, cue, d, angle, heading):
+    auto = a.update(t, 1, True, cue, d, 'turn '+d, 'turn'+d.title(),
+                    angle=angle*sign, heading=heading*-sign, speed=5, distance=20)
+    return update(p, t=t, automatic=auto)[1]
+  assert step(11, 11, direction, 0, 0)['direction'] == direction
+  assert step(11.5, 11, direction, 60, .6)['direction'] == direction
+  assert step(12, 12, next_direction, 50, .8)['direction'] == direction
+  assert step(12.5, 12, next_direction, 5, 1)['direction'] == direction
+  assert step(12.91, 12, next_direction, 5, 1)['direction'] == next_direction
+
+
+def test_next_turn_pending_expires_and_never_replays():
+  a = AutomaticSignals()
+  a.update(10, 1, True, 0, 'none', '', 'none')
+  a.update(11, 1, True, 11, 'left', 'turn left', 'none')
+  a.update(11.5, 1, True, 11, 'left', 'turn left', 'none', speed=5, angle=60, heading=-.6)
+  a.update(12, 1, True, 12, 'right', 'turn right', 'none', speed=5, angle=50, heading=-.8)
+  assert a.pending
+  a.update(15.1, 1, True, 12, 'right', 'turn right', 'none', speed=5, angle=5, heading=-1)
+  assert a.pending is None
+  assert a.update(15.6, 1, True, 12, 'right', 'turn right', 'none', speed=5, angle=5, heading=-1) is None
+  assert a.update(16, 1, True, 12, 'right', 'turn right', 'none') is None

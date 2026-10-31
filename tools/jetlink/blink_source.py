@@ -10,6 +10,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from blink_protocol import PACKAGE_CONFIG, LIMIT, encode, finite, fresh
 from blink_policy import Policy, AutomaticSignals
 from blink_tbt import TbtBlinker, right_front_clear
+from blink_turn_location import observations as turn_observations, navigation_cancelled
 from blink_boundary import BoundaryEvents, vehicle_allowed as boundary_vehicle_allowed
 
 
@@ -25,10 +26,12 @@ def vehicle_ready(sm, now, fingerprint, spas=False):
 def automatic_control_allowed(cs, cc, ss, always_lateral, holding_turn):
   # latActive is an actuator-output gate: it drops at a stop and during steering
   # suspension. Neither completes an already-owned physical turn indication.
-  # New cues and lane changes still require actual lateral activation.
+  # A fresh audio cue may also start while fully stopped with lateral permission.
+  # Lane-change indications still require actual lateral activation below.
   if str(cs.gearShifter) != 'drive':
     return False
-  return cc.latActive or (holding_turn and (ss.active or always_lateral) and cs.latEnabled and
+  stopped = getattr(cs, 'standstill', False) and finite(cs.vEgo) and abs(cs.vEgo) < .1
+  return cc.latActive or ((holding_turn or stopped) and (ss.active or always_lateral) and cs.latEnabled and
                          not cs.steerFaultTemporary and not cs.steerFaultPermanent)
 
 
@@ -87,7 +90,8 @@ def main(fd, spas=False):
     return
   sock = socket.socket(fileno=fd)
   sock.setblocking(False)
-  sm = messaging.SubMaster(['carState', 'carControl', 'selfdriveState', 'pandaStates', 'modelV2', 'carrotMan', 'livePose', 'radarState'])
+  sm = messaging.SubMaster(['carState', 'carControl', 'selfdriveState', 'pandaStates', 'modelV2', 'carrotMan', 'livePose', 'radarState',
+                             'gpsLocation', 'gpsLocationExternal', 'carrotNavi'])
   events = Events(time.monotonic())
   policy, params = Policy(), Params()
   automatic = AutomaticSignals()
@@ -130,14 +134,16 @@ def main(fd, spas=False):
                      for k in ('modelV2', 'carrotMan'))
     auto_valid = auto_fresh and ok and automatic_control_allowed(
       cs, sm['carControl'], sm['selfdriveState'], params.get_bool('AlwaysLateral'), automatic.direction is not None)
+    auto_valid = auto_valid and not navigation_cancelled(sm, now)
     auto = None
     if auto_fresh:
       meta, ss = sm['modelV2'].meta, sm['selfdriveState']
+      position, target = turn_observations(sm, now)
       auto = automatic.update(now, mode, auto_valid,
                               ss.atcTurnStartMonoTime / 1e9, str(ss.atcTurnDirection), sm['carrotMan'].atcType,
                               str(meta.desire), str(meta.autoTurnSignal) if meta.autoTurnSignalLaneChange and sm['carControl'].latActive else None,
                               speed=cs.vEgo, angle=cs.steeringAngleDeg, heading=turn_heading(sm, now),
-                              distance=sm['carrotMan'].xDistToTurn)
+                              distance=sm['carrotMan'].xDistToTurn, position=position, target=target)
     else:
       automatic.update(now, mode, False, 0., 'none', '', 'none')
     # The ATC add-on lights the real right indicator. Its CAN feedback goes through the
@@ -169,7 +175,10 @@ def main(fd, spas=False):
       activated_id = hold['id']
     if feedback.get('state') == 'driver_override':
       release_until = 0.
-    if not spas and policy.relight(now, activated_id, acknowledged, cs.leftBlinker, cs.rightBlinker):
+    if commands or feedback.get('state') == 'driver_override':
+      automatic.pending = None
+    if not spas and policy.relight(now, activated_id, acknowledged, cs.leftBlinker, cs.rightBlinker,
+                                  retry_unlit=auto_valid and automatic.direction is not None and feedback.get('state') == 'ready'):
       hold, activated_id = policy.hold, None
     model_fresh = ('modelV2' in sm.services and sm.valid['modelV2'] and sm.alive['modelV2'] and fresh(sm.recv_time['modelV2'], now, .35))
     meta = sm['modelV2'].meta if model_fresh else None
@@ -192,7 +201,8 @@ def main(fd, spas=False):
                not (learning.get('address') == mac and learning.get('until', 0) > now)]
     try:
       sock.send(encode({'stamp': now, 'ok': bool(ok), 'events': commands, 'hold': hold, 'devices':devices,
-                        'activated':activated_id is not None, 'relights':policy.relights}))
+                        'activated':activated_id is not None, 'relights':policy.relights,
+                        'turn_phase':automatic.reason, 'turn_position':automatic.location.target is not None}))
     except BlockingIOError:
       pass  # Never buffer commands for delivery after congestion.
     time.sleep(max(0, now+.05-time.monotonic()))

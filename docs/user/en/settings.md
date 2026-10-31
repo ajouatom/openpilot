@@ -445,7 +445,9 @@ camera supplies 20fps. Reduced processing overhead does not establish sustained
 
 `AutoBlinkerControl` — Settings > Driving > Steering > Lane Change (Auto Turn). Default: 0. Currently limited to the Ioniq 5 PE, Jetson and PEAK USB-CAN/B1 profile on carrot-wip.
 
-An acknowledged ATC turn is not completed by an approach bend while navigation still places the same turn ahead. With the original hold still valid and no driver cancellation or communication failure, both lamps remaining off for 1.5 seconds allows one recovery attempt for that turn. Unconfirmed initial starts, manual/Bluetooth cancellation, opposite indicators and navigation cancellation do not trigger recovery. Physical lamp recovery still needs vehicle acceptance.
+ATC indication starts at audioTurn and persists through stops. A fresh cue can start at a full stop in Drive when lateral permission remains valid and steering is fault-free. After the receiver confirms send completion, both lamps staying off for 1.5 seconds permits one recovery attempt per turn, including an initially unlit request. Driver cancellation, communication failure or an unconfirmed send forbids retry. A fresh opposite-turn cue waits at most three seconds for physical completion of the preceding turn.
+
+When a usable TBT point and raw vehicle GPS are available, passage evidence supplements physical turn completion. Continuing straight sufficiently beyond a closely passed point cancels the indication without replaying the same audioTurn. Accuracy, continuity and direction checks disable this location-based cancellation for poor GPS, missing points or curved approaches. Fresh navigation status reporting guidance ended or off-route also releases automatic indication. Physical lamps and road behavior still need validation.
 
 ### Behavior
 
@@ -474,3 +476,5 @@ A hold-start request without confirmed lamp activation expires after four second
 `AutoTurnControlRightLaneChange` is the separate ATC-details add-on for modes 1 and 2, within 250 m of a right turn or right fork. `ManualLaneChangeIndicator` is independent of ATC and detects driver boundary approach during preparation. It can bridge at most one second of confidence loss after observing the crossed boundary. An executing automatic lane change or another indicator request takes precedence; its lamp feedback never creates a new steering request. See [lane changes](lane-change.md).
 
 The manual lane-change indicator can request again after at least three seconds, one continuous second of lamp extinction and fresh steering/approach conditions. Automatic-steering feedback isolation remains at least 12 seconds.
+
+An ATC recovery attempt has a new four-second activation deadline. It does not extend the five-minute maximum measured from the original request.
