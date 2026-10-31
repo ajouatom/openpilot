@@ -1,5 +1,17 @@
 # Repository memory
 
+- On 2026-10-31, owner approves log-only manual boundary observation. Separate
+  modeld BoundaryObserver on existing Ioniq5PE/manual-option ON; no lamp/desire/
+  Params/CAN/USB writes. Recent torque intent1.5s/4s episode, geometric approach,
+  provisional0.9m half-width, hypothetical crossing and retreat/failure reasons;
+  bounded1Hz/8events, exceptions isolated. Existing indicator remains unchanged.
+  Desktop27 observation/integration +695 prior pass/26native excluded. Private117f
+  replay14263frames:36candidates,19confidence/17width rejects,0predictions,0legacy
+  detector state differences. NOT improved detection/intent or physical validation.
+  PC callback-only mean6.815us/P9918.5us/max224.9us, no hardware timing claim.
+  Normal GitPull/comma restart, no Jetson bundle/live writes. See
+  docs/manual_boundary_observation_20261031.md; next-drive/video evaluation pending.
+
 - On 2026-10-31, owner requests turn reliability/straight-through cancellation.
   Comma source allows fresh stopped-D cue with lateral permission; one receiver-
   accepted/unlit recovery, no rejected-send/cancel retry; pending opposite cue<=3s
