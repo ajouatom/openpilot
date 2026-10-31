@@ -1,5 +1,12 @@
 # Light speed external model integration, 2026-10-30
 
+**2026-10-31 follow-up:** the supplied Light speed eGPU recording misses the
+50 ms loop budget and repeatedly invalidates camera odometry/locationd inputs.
+See [the measured incident and upstream revert review](light_speed_locationd_review_20261031.md).
+PR39184 restores the existing Flip Flop pair already retained here; it does not
+supply a replacement Light speed runtime pair. Earlier desktop/CI compatibility
+results are not evidence of physical eGPU throughput.
+
 The selectable external catalog adds Light speed to N16 Nav and Flip Flop.
 Selection remains frozen for the entire comma boot and is shared by eGPU and
 Jetson. N16 remains the default; internal CD210, DM, navigation admission,

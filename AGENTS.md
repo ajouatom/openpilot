@@ -1,5 +1,18 @@
 # Repository memory
 
+- On 2026-10-31, supplied Oct30/10bf0a56 partial rlog confirms Light speed
+  33ba0928 on mici USB AMD, NOT Jetson. Consecutive cameras549 each; model19
+  one-frame skips/odometry19invalid -> livePose44inputs-invalid, sensors/posenet
+  allhealthy; calibration5invalid envelopes extend five episodes. Alert24.691s
+  includes persistence/pre-segment onset. Mean loop51.723ms vs50ms, inference
+  47.130, upload19.965/checkpoint3.950; no process restart/thermal/sensor rejection.
+  PR39184 reverts0152 Chestnut plus tinygrad; existing Flip Flop already retains
+  f0667cf6+02e698. No global revert needed; do not mix Light33ba with old runtime.
+  No causal tinygrad A/B or proven cure; report-only, no runtime/selection/device
+  changes. JetsonONNX/TRT unaffected by revert; hardware validation needs power.
+  See docs/light_speed_locationd_review_20261031.md; raw evidence stays private.
+
+
 - On 2026-10-31, owner requests recent-intent manual indication and blocking centre
   lines/road edges/unknown adjacent lanes. Manual-only episode retains confirmed
   torque1.5s/4s max through release/countersteer while approaching; stop0.3s/retreat
