@@ -202,7 +202,8 @@ def test_lamp_and_synthesized_stalk_feedback_cannot_request_steering(monkeypatch
 @pytest.mark.parametrize('atc,state,nav_fresh', [('none', 'off', True), ('atc left', 'preLaneChange', True),
                                                ('fork right', 'preLaneChange', True), ('turn left', 'off', False)])
 @pytest.mark.parametrize('lane_available', [True, False])
-def test_actual_source_loop_emits_once_after_journal_and_never_holds(monkeypatch, atc, state, nav_fresh, lane_available):
+@pytest.mark.parametrize('observed', [False, True])
+def test_actual_source_loop_journals_then_taps_legacy_or_holds_observation(monkeypatch, atc, state, nav_fresh, lane_available, observed):
   import sys
   import json
   import types
@@ -221,6 +222,11 @@ def test_actual_source_loop_emits_once_after_journal_and_never_holds(monkeypatch
   sm['modelV2'].meta = N(
       desire='none', autoTurnSignal='none', autoTurnSignalLaneChange=False, laneChangeState=state, manualLaneIndicator='none', manualLaneIndicatorMonoTime=0
   )
+  if observed:
+    sm['modelV2'].meta.observedIndicator = 'none'
+    sm['modelV2'].meta.observedIndicatorMonoTime = 0
+    sm['modelV2'].meta.observedIndicatorSource = 'manual'
+    sm['modelV2'].meta.indicatorIsolationMask = 0
   sm['carrotMan'] = N(atcType=atc, xDistToTurn=0)
   sm['livePose'] = N(inputsOK=True, sensorsOK=True, posenetOK=True, orientationNED=N(valid=True, z=0.0))
   sm.services = list(sm)
@@ -240,6 +246,10 @@ def test_actual_source_loop_emits_once_after_journal_and_never_holds(monkeypatch
     sm['selfdriveState'].atcTurnDirection = 'none'
     sm['modelV2'].meta.manualLaneIndicator = 'left' if 2 <= i < 5 else 'none'
     sm['modelV2'].meta.manualLaneIndicatorMonoTime = 10100000000 if i >= 2 else 0
+    if observed:
+      sm['modelV2'].meta.observedIndicator = 'left' if lane_available and 2 <= i < 5 else 'none'
+      sm['modelV2'].meta.observedIndicatorMonoTime = 10100000000 if i >= 2 else 0
+      sm['modelV2'].meta.indicatorIsolationMask = 1 if i >= 2 else 0
 
   sm.update = tick
   fake_params = types.ModuleType('openpilot.common.params')
@@ -261,7 +271,7 @@ def test_actual_source_loop_emits_once_after_journal_and_never_holds(monkeypatch
 
   def send(raw):
     value = json.loads(raw)
-    if value['events']:
+    if value['events'] or value['hold']:
       assert any(path.name == 'boundary-indicator.json' for path, _ in saved)
     sent.append(value)
 
@@ -275,9 +285,16 @@ def test_actual_source_loop_emits_once_after_journal_and_never_holds(monkeypatch
   monkeypatch.setattr(model, 'atomic_json', lambda path, value: saved.append((path, value)))
   source.main(0)
   events = [e for v in sent for e in v['events']]
-  assert len(events) == (1 if lane_available else 0)
-  assert not events or events[0]['direction'] == 'left'
-  assert all(v['hold'] is None for v in sent)
+  if observed:
+    assert not events
+    holds=[v['hold'] for v in sent if v['hold']]
+    assert bool(holds) == lane_available
+    assert not holds or len({h['id'] for h in holds}) == 1
+    assert sent[-1]['hold'] is None
+  else:
+    assert len(events) == (1 if lane_available else 0)
+    assert not events or events[0]['direction'] == 'left'
+    assert all(v['hold'] is None for v in sent)
 
 
 @pytest.mark.parametrize("direction", [1, 2])
@@ -306,8 +323,8 @@ def test_startup_without_owned_request_preserves_existing_lamps(busy, direction)
 
 
 @pytest.mark.parametrize('direction', [1, 2])
-@pytest.mark.parametrize('age,expected', [(0.8, True), (1.1, False)])
-def test_confidence_loss_only_tracks_a_recently_seen_crossed_boundary(direction, age, expected):
+@pytest.mark.parametrize('age,expected', [(0.8, True), (1.1, True)])
+def test_confidence_is_anchored_when_a_continuous_driver_episode_starts(direction, age, expected):
   b = BoundaryIndicator()
   cs, md = scene(direction)
   # First establish stable geometry and a driver direction without approaching.

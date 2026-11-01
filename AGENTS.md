@@ -1,5 +1,21 @@
 # Repository memory
 
+- On 2026-11-01, owner approves indicator reconstruction with two default-OFF
+  ModelDesireIndicator/ModelPathIndicator options, manual target-confidence10%
+  episode anchor, and TBT wheel-distance +30m holding. Path uses curved same-x
+  boundaries/relative control curvature, repeated observations and origin isolation.
+  Same-direction origins retain request ID; source journals before CAN and modeld
+  masks lamp/stalk feedback. 250m minimum10km/h; below30 starts wait for modeld
+  mask acknowledgement and remain display-only through acceleration; steering
+  minimum30 unchanged. TBT opposite cancellation requires driver torque+opposite
+  angle+measured reverse heading, NOT angle-zero crossing. Existing ATC FSM stays.
+  Four full-log replay: model right51.313s/manual right53.541s/left2.364s candidates;
+  geometry ends53.513/54.143/3.513. Consecutiveleft source33.1..53.2s maintained.
+  These are recorded-input decisions, not physical lamp/road acceptance.577desktop,
+  Wiki25 pass; nativeCI pending publication. No live writes/CAN/reboot/Jetson bundle.
+  See docs/indicator_reconstruction_20261101.md. Raw evidence private.
+
+
 - On 2026-11-01, owner requests880b40e1 review/integration plus attached Flip
   f0667cf6/c7c586 load failure. Adopt upstream captured input/output copies only
   for exact d39227 runtime cb9bf2cf (Light speed); keep N16/Flip paired artifacts,

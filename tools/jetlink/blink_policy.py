@@ -4,6 +4,7 @@ import uuid
 import math
 
 from blink_turn_location import TurnLocation, offset
+from blink_turn_journey import TurnJourney
 
 NEAR_STOP = 5 / 3.6
 MAX_HOLD = 300.
@@ -35,7 +36,7 @@ class Policy:
   def relight(self, now, activated_id, acknowledged, left, right, *, retry_unlit=False):
     """One recovery tap after a completed receiver send, never a rejected send/cancel."""
     h = self.hold
-    if (not h or h['source'] != 'turn' or (activated_id != h['id'] and not retry_unlit) or not acknowledged or
+    if (not h or h['source'] not in ('turn', 'observation', 'tbt_display') or (activated_id != h['id'] and not retry_unlit) or not acknowledged or
         self.relights or left or right):
       self.off_since = None
       return False
@@ -76,6 +77,9 @@ class Policy:
       self.suppressed = False
     if self.hold:
       h = self.hold
+      if h['source'] != 'bluetooth' and auto_valid and eligible and eligible[1] == h['direction']:
+        # Same physical maneuver gaining another explanation is not another tap.
+        h['source'] = eligible[0]
       if (mode == 0 or now-self.started >= MAX_HOLD or gear not in ('park', 'neutral', 'drive') or
           (h['source'] == 'bluetooth' and not remote) or
           (h['source'] == 'bluetooth' and not math.isfinite(angle)) or
@@ -129,8 +133,17 @@ class AutomaticSignals:
     self.pending = None
     self.reason = 'idle'
     self.cancelled_target = None
+    self.journey = TurnJourney()
 
-  def update(self, now, mode, valid, cue, direction, atc_type, desire, lane=None, *, speed=0., angle=0., heading=0., distance=None, position=None, target=None):
+  def update(self, now, mode, valid, cue, direction, atc_type, desire, lane=None, *, speed=0., angle=0., heading=0., distance=None, position=None, target=None,
+             travel=None, use_travel=False, pressed=False, torque=0.):
+    if use_travel:
+      result = self.journey.update(now, mode, valid, cue, direction, atc_type,
+        travel=travel, distance=distance, speed=speed, angle=angle, heading=heading,
+        pressed=pressed, torque=torque, target=target)
+      self.direction = self.journey.active['direction'] if self.journey.active else None
+      self.reason = self.journey.reason
+      return result or (('lane', lane) if valid and lane in ('left', 'right') else None)
     previous, self.cue = self.cue, cue
     changed_mode, self.mode = mode != self.mode, mode
     if not valid or not mode or changed_mode:

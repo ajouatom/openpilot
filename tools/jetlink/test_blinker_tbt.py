@@ -11,7 +11,7 @@ def scene():
           steeringPressed=False, steeringTorque=0., steerFaultTemporary=False, steerFaultPermanent=False,
           tbtRearInputsAvailable=True, tbtRightRearBlocked=False, rightBlindspot=False,
           rightLaneLine=10, leftBlinker=False, rightBlinker=False, aEgo=0.)
-  model = NS(laneLineProbs=[.9]*4, meta=NS(laneChangeAvailableRight=True, laneWidthRight=3.5,
+  model = NS(laneLineProbs=[.9]*4, laneLines=[NS(y=[y]*9) for y in (-5.4,-1.8,1.8,5.4)], roadEdges=[NS(y=[-8.]*9),NS(y=[8.]*9)], meta=NS(laneChangeAvailableRight=True, laneWidthRight=3.5,
              desireState=[0.]*8, laneChangeState='off', laneChangeDirection='none'))
   nav = NS(xTurnInfo=2, xDistToTurn=230., atcType='none', carrotCmdIndex=0, carrotCmd='', carrotArg='')
   return {'cs': cs, 'model': model, 'nav': nav, 'enabled': True, 'valid': True, 'front_clear': True}
@@ -26,7 +26,7 @@ def arm(tbt, s, start=10.):
 @pytest.mark.parametrize('obj,field,value', [
   ('nav','xTurnInfo',1), ('nav','xTurnInfo',3), ('nav','xDistToTurn',323.),
   ('nav','xDistToTurn',0.), ('nav','xDistToTurn',float('nan')),
-  ('cs','vEgo',8.), ('cs','gearShifter','park'), ('cs','canValid',False),
+  ('cs','vEgo',2.5), ('cs','gearShifter','park'), ('cs','canValid',False),
   ('cs','trailerConnected',True), ('cs','steeringPressed',True),
   ('cs','tbtRearInputsAvailable',False), ('cs','tbtRightRearBlocked',True),
   ('cs','rightLaneLine',11), ('cs','rightLaneLine',20),
