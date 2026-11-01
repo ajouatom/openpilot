@@ -1,5 +1,9 @@
 # Manual indicator: recent intent and adjacent-lane evidence — 2026-10-31
 
+The adjacent-lane admission below is superseded by the owner's November 1
+[directional exclusions](manual_indicator_directional_gates_20261101.md).
+The recent-intent and ownership behavior remains in effect.
+
 The owner requests preserving manual steering intent after torque release and
 blocking indications across a centre line, road edge or unconfirmed adjacent lane.
 This changes only ManualLaneChangeIndicator on the existing Ioniq5PE USB2CAN path.

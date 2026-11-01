@@ -1,5 +1,17 @@
 # Repository memory
 
+- On 2026-11-01, owner replaces manual-indicator adjacent-lane gate with left
+  centre-line classification and right road-edge distance only. Left retains
+  fresh250ms known-white OEM marking; right requires finite edge-minus-target
+  boundary>=2.5m at0/4/8, no colour/outer-line/width/std gate. Intent/target-line
+  confidence/geometry/ownership/steering isolation unchanged. Uploaded three full
+  rlogs42059119B/videos hash-verified: actual7e88/manualON has0requests; new replay
+  gives left atseg7+2.364s, rightseg6 still blocked by target-confidence1s memory.
+  Seg4 hold reset correlates carrotMan350ms gap; nextleft cue duringlatInactive
+  consumed/no restart. Turn/model-probability behavior NOT changed or cured.
+  Desktop540/Wiki25 pass; no live writes/CAN/road acceptance, no Jetson bundle.
+  See docs/manual_indicator_directional_gates_20261101.md; raw evidence private.
+
 - Later on 2026-10-31, EV6 nine full logs/110415270B hash-matched confirm same
   Light speed33ba/mici USB AMD. Cameras10800each consecutive; ordinary34skips/
   odo34invalid -> pose49inputs-invalid, sensors/posenetalltrue. Segment9 at
