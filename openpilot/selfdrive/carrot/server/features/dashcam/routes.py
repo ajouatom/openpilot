@@ -466,6 +466,8 @@ async def api_dashcam_download(request: web.Request) -> web.StreamResponse:
   segment_path = segment_dir(segment)
   allowed = {
     "qcamera": ("qcamera.ts", "qcamera.mp4"),
+    "fcamera": ("fcamera.hevc",),  # full-res road / wide road, only recorded with RecordRoadCam >= 1 / 2
+    "ecamera": ("ecamera.hevc",),
     "rlog": ("rlog.zst", "rlog.bz2", "rlog"),
     "qlog": ("qlog.zst", "qlog.bz2", "qlog"),
   }
