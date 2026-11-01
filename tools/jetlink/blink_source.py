@@ -15,6 +15,8 @@ from blink_boundary import BoundaryEvents, vehicle_allowed as boundary_vehicle_a
 from blink_observation import ObservationSignals, LowSpeedOwnership, wire_hold, allowed as observation_allowed
 from blink_turn_journey import Travel
 from blink_display import Publisher
+from blink_feedback import ObservationFeedback
+from openpilot.selfdrive.controls.lib.desire_lib.indicator_feedback import TapEcho
 from openpilot.selfdrive.controls.lib.desire_lib.boundary_lane import adjacent_lane
 
 
@@ -105,6 +107,7 @@ def main(fd, spas=False):
   low_speed_ownership, travel = LowSpeedOwnership(), Travel()
   display = Publisher()
   feedback, activated_id = {}, None
+  observation_feedback, tap_echo = ObservationFeedback(), TapEcho()
   release_until = 0.
   def record_ownership(value):
     previous = read_json(RUNTIME/'boundary-indicator.json', {})
@@ -189,9 +192,11 @@ def main(fd, spas=False):
     observation_enabled = (params.get_bool('ManualLaneChangeIndicator') if observed_source == 'manual' else
                            params.get_bool('ModelPathIndicator') if observed_source == 'model_path' else
                            params.get_bool('ModelDesireIndicator') if observed_source in ('model_desire', 'model_turn') else False)
+    own_tap = (observation.owned is not None and tap_echo.matches(
+      now, cs, observation.owned[1], observation.owned[0], observation_feedback.value))
     observe_auto = observation.update(now, meta,
       allowed=(not spas and mode in (1, 2) and observation_enabled and ok and model_fresh and
-               observation_allowed(cs, sm['carControl'], sm['modelV2'], observed_source, now, observation.owned is not None) and
+               observation_allowed(cs, sm['carControl'], sm['modelV2'], observed_source, now, observation.owned is not None, own_tap) and
                (observation.owned is not None or fresh(feedback.get('stamp'), now, .35) and feedback.get('state') == 'ready')),
       busy=bool(commands) or auto is not None or (policy.hold is not None and policy.hold['source'] != 'observation') or
            (fresh(feedback.get('stamp'), now, .35) and feedback.get('state') == 'driver_override'),
@@ -202,6 +207,7 @@ def main(fd, spas=False):
     policy_valid = (ok and model_fresh) if local_observation else auto_valid
     commands, hold = policy.update(now, mode, ok, commands, cs.vEgo, cs.steeringAngleDeg,
                                   str(cs.gearShifter), remote, auto, policy_valid)
+    observation_feedback.prepare(now, hold, meta, cs)
     hold = policy.acknowledged(now, activated_id, fresh(feedback.get('stamp'), now, .35) and feedback.get('state') == 'driver_override')
     acknowledged = (hold and fresh(feedback.get('stamp'), now, .35) and feedback.get('accepted_id') == hold['id'] and
                     feedback.get('state') in ('ready', 'waiting', 'waiting_previous_signal'))
@@ -212,6 +218,7 @@ def main(fd, spas=False):
     elif ((hold['direction'] == 'left' and cs.leftBlinker and not cs.rightBlinker) or
           (hold['direction'] == 'right' and cs.rightBlinker and not cs.leftBlinker)):
       activated_id = hold['id']
+    activated_id = observation_feedback.activation(now, hold, cs, feedback, acknowledged, activated_id, ok)
     if feedback.get('state') == 'driver_override':
       release_until = 0.
     if commands or feedback.get('state') == 'driver_override':
@@ -235,10 +242,6 @@ def main(fd, spas=False):
                fresh(feedback.get('stamp'), now, .35) and feedback.get('state') == 'ready'),
       record=record_ownership)
     commands = commands + boundary_commands
-    if mode and not spas:
-      atomic_json(HOLD_PATH, {'stamp':now, 'mode':mode, 'fingerprint':fingerprint,
-                             'direction':hold['direction'] if hold and activated_id == hold['id'] else None,
-                             'override':activated_id is not None or now < release_until or (policy.suppressed and release_until > 0)})
     display.update(now, mode=mode, ok=ok, cs=cs, meta=meta, hold=hold,
       activated=hold is not None and activated_id == hold['id'],
       peer=feedback.get('state') if fresh(feedback.get('stamp'), now, .35) else 'missing',
@@ -247,14 +250,21 @@ def main(fd, spas=False):
     devices = [mac for mac in status.get('grabbed', []) if fresh(status.get('time'), now) and
                settings.get('devices', {}).get(mac, {}).get('enabled') is True and
                not (learning.get('address') == mac and learning.get('until', 0) > now)]
+    submitted = False
     try:
       sock.send(encode({'stamp': now, 'ok': bool(ok), 'events': commands, 'hold': wire_hold(hold), 'devices':devices,
                         'activated':activated_id is not None, 'relights':policy.relights,
                         'turn_phase':automatic.reason, 'turn_position':bool(automatic.journey.active and automatic.journey.active['target'] is not None),
                         'tbt_phase':tbt.reason, 'observation_phase':observed_source,
                         'indicator_origin':hold['source'] if hold else None}))
+      submitted = True
     except BlockingIOError:
       pass  # Never buffer commands for delivery after congestion.
+    if mode and not spas:
+      atomic_json(HOLD_PATH, {'stamp':now, 'mode':mode, 'fingerprint':fingerprint,
+                             'direction':hold['direction'] if hold and activated_id == hold['id'] else None,
+                             'tap':observation_feedback.sent(now, feedback, submitted and ok),
+                             'override':activated_id is not None or now < release_until or (policy.suppressed and release_until > 0)})
     time.sleep(max(0, now+.05-time.monotonic()))
 
 

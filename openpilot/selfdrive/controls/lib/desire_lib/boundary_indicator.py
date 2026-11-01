@@ -152,7 +152,10 @@ class BoundaryIndicator:
       if observed is None:
         return  # Episode admission anchored confidence; continuous geometry bounds its four-second lifetime.
       # Both boundaries must move consistently; widening forks are not crossings.
-      if (episode['initial'] - y[i] >= .15 and y[i] < 0.9 and self.rates[i] > 0.4 and
+      # Project only 0.3 s of measured approach, with a 0.3 m advance cap.
+      # Intent, real movement and paired-boundary consistency are still required.
+      threshold = min(1.2, .9 + .3 * max(0., self.rates[i]))
+      if (episode['initial'] - y[i] >= .15 and y[i] < threshold and self.rates[i] > 0.4 and
           self.rates[1 - i] < -0.4 and abs(sum(self.rates)) < 0.35):
         self.request_direction, self.request_time = direction, now
         self.own(now, direction)

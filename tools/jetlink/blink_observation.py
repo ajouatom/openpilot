@@ -5,10 +5,10 @@ from blink_boundary import BoundaryEvents
 from openpilot.selfdrive.controls.lib.desire_lib.boundary_lane import adjacent_lane
 
 
-def allowed(cs, cc, md, source, now, holding=False):
+def allowed(cs, cc, md, source, now, holding=False, tap_echo=False):
   try:
     if (not cs.canValid or str(cs.gearShifter) != 'drive' or cs.trailerConnected or
-        cs.steerFaultTemporary or cs.steerFaultPermanent or cs.blinkerLever or
+        cs.steerFaultTemporary or cs.steerFaultPermanent or (cs.blinkerLever and not (holding and tap_echo)) or
         not math.isfinite(cs.vEgo) or cs.vEgo < 0):
       return False
     if source != 'manual' and not cc.latActive:

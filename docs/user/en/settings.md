@@ -480,3 +480,5 @@ The manual lane-change indicator can request again after at least three seconds,
 An ATC recovery attempt has a new four-second activation deadline. It does not extend the five-minute maximum measured from the original request.
 
 `ModelDesireIndicator` and `ModelPathIndicator` are separate default-off indication-only options. See [lane changes](lane-change.md) for TBT distance holding and each feature’s start/end conditions.
+
+Manual indication projects 0.3s of measured boundary approach, advancing the centre-to-boundary threshold by at most 0.3m. Existing speed, centre-line and road-edge gates remain.
