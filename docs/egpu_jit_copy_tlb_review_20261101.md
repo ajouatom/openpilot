@@ -6,7 +6,10 @@
 (PR39187) compiles input and output copy schedules once with CapturedJit and
 replays them each frame. It also reinstates the d39227 tinygrad runtime and
 898b5cfd Chestnut PKL previously reverted by PR39184, plus its two warp PKLs.
-The copy change directly addresses repeated host scheduling costs around the
+[PR39187](https://github.com/commaai/openpilot/pull/39187) explicitly reports
+non-JIT copies becoming 35% slower in the new eager tinygrad and says this change
+fixes that regression. This is an upstream measurement, not a local hardware
+result. The copy change directly addresses repeated host scheduling costs around the
 transfers measured in the preceding Light speed investigation. It does not
 establish that all transfer time disappears or resolve a GPU initialization hang.
 
@@ -84,3 +87,18 @@ package, NAS artifact or Jetson host bundle is needed. Physical eGPU latency,
 USB transfer behavior, TLB recovery and road acceptance remain unvalidated; do
 not describe the previous Light speed warning as cured without hardware results.
 Unrelated ongoing indicator changes in the worktree are excluded from this task.
+
+
+Published source: `9bdc257cd07709e47a0b04d3f62270f9fc73d291`.
+[eGPU CI41265046121](https://github.com/ajouatom/openpilot/actions/runs/41265046121)
+passes 427 contract/delivery/recovery checks, 57 navigation checks, three native
+old-runtime checks (one new-runtime-only test skipped), all four Light speed
+native checks including captured transfers, and the Web tests/build. The exact
+attached traceback also passes local classification with its original text
+preserved and no rejection marker. Focused lint and user-doc mapping checks pass;
+counts overlap the earlier desktop coverage. These are not AMD USB hardware tests.
+
+[Jetson integration CI41265046147](https://github.com/ajouatom/openpilot/actions/runs/41265046147)
+also passes: broad Linux 2137 passed/56 skipped, supporting suites
+232/62/94/119/11/11, and the Windows installer check. No Jetson inference or
+host bundle deployment is implied by these compatibility checks.
