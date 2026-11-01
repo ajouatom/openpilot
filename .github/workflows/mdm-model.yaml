@@ -28,6 +28,7 @@ jobs:
           python -m pytest -c /dev/null --rootdir=. --confcutdir=openpilot/selfdrive/modeld/tests -q
           openpilot/selfdrive/modeld/tests/test_big_model.py
           openpilot/selfdrive/modeld/tests/test_precompiled_model.py
+          openpilot/selfdrive/modeld/tests/test_precompiled_rejection_retry.py
           openpilot/selfdrive/modeld/tests/test_precompiled_runner.py
           openpilot/selfdrive/modeld/tests/test_egpu_output_recovery.py
           openpilot/selfdrive/modeld/tests/test_egpu_recovery.py
@@ -65,6 +66,7 @@ jobs:
       - name: Execute Light speed pinned runtime compatibility
         env:
           MDM_RUNTIME_ROOT: /tmp/light-speed-runtime
+          MDM_COMPILED_COPIES: '1'
           PYTHONPATH: .
         run: |
           curl --fail --retry 3 -o /tmp/light-speed-runtime.tar.gz https://upload.shind0.synology.me/models/comma4-big-light-speed-f22b8b34/precompiled-runtime.tar.gz
