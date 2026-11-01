@@ -1,5 +1,16 @@
 # Repository memory
 
+- On 2026-11-01, owner requests880b40e1 review/integration plus attached Flip
+  f0667cf6/c7c586 load failure. Adopt upstream captured input/output copies only
+  for exact d39227 runtime cb9bf2cf (Light speed); keep N16/Flip paired artifacts,
+  internalCD210/DM/TRT and recurrence/recovery. Attached serialized flush_tlb
+  10000ms ACK0!=1 fails GPU mapping before inference, not proof bad weights.
+  Fix load/boot-validation misclassification and old-boot matching-hash retry;
+  retain checks, startup smoke, bounded attempts, health/ownership and deadlines.
+  No physical cause/latency/cure claim, no live writes or Jetson bundle. Desktop
+  287pass; pinned Linux validation required. See docs/egpu_jit_copy_tlb_review_20261101.md.
+
+
 - On 2026-11-01, owner replaces manual-indicator adjacent-lane gate with left
   centre-line classification and right road-edge distance only. Left retains
   fresh250ms known-white OEM marking; right requires finite edge-minus-target

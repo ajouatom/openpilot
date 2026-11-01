@@ -90,12 +90,12 @@ def main():
     raise ValueError('wrong precompiled runtime format')
   if generic:
     progress.mark('prepare_runtime')
-    from openpilot.selfdrive.modeld.generic_model_runtime import model_metadata
+    from openpilot.selfdrive.modeld.generic_model_runtime import model_metadata, use_compiled_copies
     from openpilot.selfdrive.modeld.local_gpu_warp import LocalWarpRuntime, bind_runtime, create_runtime, vehicle_device_type
     checkpoint, _, _, _ = model_metadata(jits)
     if checkpoint != manifest['model_checkpoint']:
       raise ValueError('precompiled checkpoint mismatch')
-    adapter_args = (jits, width, height, runtime, get_nv12_info(width, height))
+    adapter_args = (jits, width, height, runtime, get_nv12_info(width, height), use_compiled_copies(manifest))
     # Concurrent recovery must not compile or execute on the internal QCOM GPU.
     adapter = create_runtime(adapter_args, '' if background_recovery else vehicle_device_type(), cloudlog.exception)
     metadata = {'model_checkpoint': adapter.checkpoint, 'input_shapes': adapter.input_shapes, 'output_slices': adapter.output_slices}
