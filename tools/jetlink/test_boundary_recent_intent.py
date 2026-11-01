@@ -25,7 +25,8 @@ def maneuver(direction=1, mode='release', gate=None):
     md.laneLines[1].y = [-distance if direction == 1 else -(3.6 - distance)] * 9
     md.laneLines[2].y = [3.6 - distance if direction == 1 else distance] * 9
     prepare_scene(cs, md, now)
-    cs.steeringPressed = frame < (40 if mode == 'expired' else 44) and mode != 'no_torque'
+    # Release early enough to expire before even the predictive boundary gate.
+    cs.steeringPressed = frame < (34 if mode == 'expired' else 44) and mode != 'no_torque'
     cs.steeringTorque = (300 if direction == 1 else -300) if cs.steeringPressed else 0
     if mode == 'countersteer' and frame >= 44:
       cs.steeringPressed = True

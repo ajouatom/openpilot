@@ -16,6 +16,11 @@ This feature's lamp feedback does not request an automatic lane change or turn. 
 Switching OFF may leave an already requested OEM one-touch sequence flashing; its steering-request exclusion remains until extinction is confirmed. Physical lamps and real manual-crossing detection rates have not yet been validated. This option does not assess lane-change safety or replace use of the turn-signal lever.
 
 
+Measured boundary approach projects 0.3 seconds ahead to request indication earlier. The centre-to-boundary distance threshold advances from 0.9m to at most 1.2m; at least 0.15m of actual approach, driver intent and consistent movement of both boundaries remain required.
+
+Manual/model indication distinguishes its short one-touch echo only with matching request time, direction and stalk counters. Opposite input, a latched lever or receiver-detected driver intervention cancels. Lamp feedback preceding the completed-send response is remembered briefly; holding still requires the matching response. Same-direction physical input during the brief transmission interval cannot be uniquely distinguished from these fields alone.
+
+
 ## Model indication (trial)
 
 `ModelDesireIndicator` and `ModelPathIndicator` are separate default-off options for Ioniq 5 PE with Jetson USB2CAN and `AutoBlinkerControl=1` or `2`. Initiation requires active lateral control. Their lamp feedback is not reused as a new automatic steering request.

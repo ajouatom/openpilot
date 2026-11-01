@@ -6,6 +6,7 @@ from openpilot.common.constants import CV
 from openpilot.common.realtime import DT_MDL
 from openpilot.common.params import Params
 from openpilot.selfdrive.carrot.bluetooth.model import CommandReader, RUNTIME, read_json
+from openpilot.selfdrive.carrot.bluetooth.physical import HOLD_PATH
 from openpilot.selfdrive.controls.lib.desire_lib.boundary_indicator import BoundaryIndicator
 from openpilot.selfdrive.controls.lib.desire_lib.indicator_observer import ModelIndicator
 
@@ -391,7 +392,8 @@ class DesireHelper:
         valid=indicator_valid, lateral_active=lateral_active,
         desire_enabled=self.model_desire_indicator_enabled, path_enabled=self.model_path_indicator_enabled,
         busy=self.lane_change_state in (LaneChangeState.laneChangeStarting, LaneChangeState.laneChangeFinishing),
-        isolation=self.boundary_indicator, manual_edge=self.boundary_indicator.request_direction, command_curvature=indicator_curvature)
+        isolation=self.boundary_indicator, manual_edge=self.boundary_indicator.request_direction, command_curvature=indicator_curvature,
+        feedback=read_json(HOLD_PATH, {}) if self.model_indicator.active else None)
 
     # counts
     self.carrot_lane_change_count = max(0, self.carrot_lane_change_count - 1)

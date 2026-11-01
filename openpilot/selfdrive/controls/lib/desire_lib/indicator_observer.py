@@ -3,6 +3,7 @@ import math
 from collections import deque
 
 from openpilot.selfdrive.controls.lib.desire_lib.boundary_lane import adjacent_lane
+from openpilot.selfdrive.controls.lib.desire_lib.indicator_feedback import TapEcho
 
 LINE_CONFIDENCE = .10
 CONFIRM_SEC = .20
@@ -113,8 +114,10 @@ class ModelIndicator:
     self.previous = None
     self.reason = 'idle'
     self.manual_seen = 0.
+    self.tap_echo = TapEcho()
 
-  def update(self, now, cs, md, *, valid, lateral_active, desire_enabled, path_enabled, busy, isolation, manual_edge=0, command_curvature=None):
+  def update(self, now, cs, md, *, valid, lateral_active, desire_enabled, path_enabled, busy, isolation, manual_edge=0, command_curvature=None,
+             feedback=None):
     self.reason = 'idle'
     if self.active is None and not manual_edge and not (desire_enabled or path_enabled):
       self.evidence.clear()
@@ -122,8 +125,9 @@ class ModelIndicator:
       self.reason = 'disabled'
       return
     try:
+      echo = self.active is not None and self.tap_echo.matches(now, cs, self.active.direction, self.request_time, feedback)
       common = (valid and cs.canValid and str(cs.gearShifter) == 'drive' and not cs.trailerConnected and
-                not cs.steerFaultTemporary and not cs.steerFaultPermanent and not cs.blinkerLever and
+                not cs.steerFaultTemporary and not cs.steerFaultPermanent and (not cs.blinkerLever or echo) and
                 math.isfinite(cs.vEgo) and math.isfinite(cs.steeringTorque))
       if self.active:
         a = self.active

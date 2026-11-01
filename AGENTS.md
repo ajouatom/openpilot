@@ -1,5 +1,22 @@
 # Repository memory
 
+- On 2026-11-01, owner approves latest-drive manual-indicator response fixes.
+  Eleven hash-matched full rlogs/147479258B/12755model frames:20manual requests,
+  15lamp-feedback starts, median0.206s request-to-lamp; detector delay dominates.
+  Add0.3s approach projection capped0.3m (threshold<=1.2m), keeping intent,
+  actual0.15m movement, paired geometry,30km/h/white-left/edge-right gates.
+  Comma-only successful-send local echo context binds ID/time/direction/counts,
+  <150ms fresh/<600ms start/<250ms pulse,3/4counter edges for interleaved stock
+  neutral; opposite/latched/receiver-driver override preserved. Same-direction
+  physical input within short echo interval remains ambiguous, not perfectly
+  attributable. Remember early lamp<750ms but require exact completed-sendACK
+  before hold. Replay20->20,14earlier median0.298s/max0.760s; context-supplied
+  cancellation replay13cancelled->geometry/return, not closed-loop road proof.
+  Desktop700pass/2skip; no receiver/CAN/Panda/ATC/TBT/BT/steering/model changes,
+  no new Jetson bundle or live writes. Normal GitPull/comma restart.
+  See docs/manual_indicator_response_20261101.md; raw evidence private.
+
+
 - On 2026-11-01, owner requests C3/C4/USB HUD automatic-indicator reasons and
   preparation. Shared read-only badge distinguishes prepare/request/activation
   history/current CAN lamp flags and two-second termination. MetaData33/34 are
