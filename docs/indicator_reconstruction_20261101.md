@@ -33,6 +33,8 @@ Five 10ms-offset source replays are retained privately. Recorded source receive 
 
 - Desktop focused detector, source-loop, policy, receiver and recovery checks: 577 passed.
 - Wiki generator checks: 25 passed; user-docs validator and production Python lint passed.
-- Windows cannot execute the complete Linux hardware/clock suite; native Signal and Jetson CI must be checked after publication.
+- Published source: `077211fe216f4539624e98ad56a0d55321162567`. Native [Signal CI](https://github.com/ajouatom/openpilot/actions/runs/41265772848) passed 1277 checks, 40 skipped and 362 subtests. Windows cannot execute the complete Linux hardware/clock suite; the native CI supplies that coverage.
+- [Jetson CI](https://github.com/ajouatom/openpilot/actions/runs/41265772883) passed 2174 broad checks, 56 skipped, plus supporting suites of 232/62/94/119/11/11 and the Windows installer checks. eGPU compatibility and user-docs CI also passed. Counts overlap; they are not a unique-test total.
+- Wiki manual commit `84d263d` and generated publication `bd3f34a` are published. All 15 affected localized pages have current review metadata and verified indexed content hashes; both Wiki workflows passed.
 - Normal carrot-wip Git Pull and comma restart deliver the source/schema/settings. No model download, selection change, Jetson bundle update or CAN patch is required.
 - New model options remain OFF until selected. No live vehicle write, restart, CAN transmission or road acceptance was performed in this task.
