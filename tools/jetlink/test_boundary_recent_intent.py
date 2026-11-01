@@ -54,37 +54,57 @@ def test_no_intent_replay_after_retreat_stop_or_expiry(mode):
   assert not maneuver(mode=mode)
 
 
-@pytest.mark.parametrize('direction', [1, 2])
 @pytest.mark.parametrize('code', [-1, 0, 1, 2, 12, 13, 16, 18, 20, 21, 24, 25, 30])
-def test_unknown_centreline_edge_and_barrier_never_indicate(direction, code):
+def test_left_unknown_centreline_edge_and_barrier_never_indicate(code):
   def gate(cs, md, now, frame):
-    setattr(cs, 'leftLaneLine' if direction == 1 else 'rightLaneLine', code)
-  assert not maneuver(direction, gate=gate)
+    cs.leftLaneLine = code
+  assert not maneuver(1, gate=gate)
+
+
+@pytest.mark.parametrize('failure', ['edge', 'edge_ahead', 'nan', 'truncated'])
+def test_right_requires_finite_road_edge_clearance(failure):
+  def gate(cs, md, now, frame):
+    if failure == 'edge':
+      md.roadEdges[1].y = [v + 1.5 for v in md.laneLines[2].y]
+    if failure == 'edge_ahead':
+      md.roadEdges[1].y[8] = md.laneLines[2].y[8] + 2
+    if failure == 'nan':
+      md.roadEdges[1].y[4] = float('nan')
+    if failure == 'truncated':
+      md.roadEdges[1].y = [5.4]
+  assert not maneuver(2, gate=gate)
+
+
+@pytest.mark.parametrize('age', [.3, -.1, 10])
+def test_left_unknown_or_stale_marking_remains_blocked(age):
+  assert not maneuver(1, gate=lambda cs, md, now, frame: setattr(cs, 'laneLineInfoMonoTime', int((now-age)*1e9) if age != 10 else 0))
 
 
 @pytest.mark.parametrize('direction', [1, 2])
-@pytest.mark.parametrize('failure', ['no_outer', 'shoulder', 'edge', 'narrow_ahead', 'edge_ahead', 'stale', 'future', 'unknown', 'nan'])
-def test_adjacent_lane_positive_evidence_required(direction, failure):
+def test_missing_outer_line_and_uncertain_edge_std_do_not_block(direction):
   def gate(cs, md, now, frame):
-    inner, outer, edge = (1, 0, 0) if direction == 1 else (2, 3, 1)
-    sign = -1 if direction == 1 else 1
-    if failure == 'no_outer':
-      md.laneLineProbs[outer] = .1
-    if failure in ('shoulder', 'edge'):
-      md.roadEdges[edge].y = [v + sign * 1.5 for v in md.laneLines[inner].y]
-    if failure == 'narrow_ahead':
-      md.laneLines[outer].y[8] = md.laneLines[inner].y[8] + sign * 2
-    if failure == 'edge_ahead':
-      md.roadEdges[edge].y[8] = md.laneLines[inner].y[8] + sign * 2
-    if failure == 'stale':
-      cs.laneLineInfoMonoTime = int((now - .3) * 1e9)
-    if failure == 'future':
-      cs.laneLineInfoMonoTime = int((now + .1) * 1e9)
-    if failure == 'unknown':
-      cs.laneLineInfoMonoTime = 0
-    if failure == 'nan':
-      md.roadEdgeStds[edge] = float('nan')
-  assert not maneuver(direction, gate=gate)
+    md.laneLineProbs[0] = md.laneLineProbs[3] = 0
+    md.laneLines[0].y = md.laneLines[3].y = []
+    md.roadEdgeStds = [float('nan'), float('nan')]
+  assert maneuver(direction, gate=gate)
+
+
+def test_left_does_not_use_road_edge_geometry():
+  assert maneuver(1, gate=lambda cs, md, now, frame: setattr(md, 'roadEdges', []))
+
+
+def test_right_does_not_use_oem_marking_or_timestamp():
+  def gate(cs, md, now, frame):
+    cs.leftLaneLine = cs.rightLaneLine = 21
+    cs.laneLineInfoMonoTime = 0
+  assert maneuver(2, gate=gate)
+
+
+@pytest.mark.parametrize('clearance,expected', [(2.499, False), (2.5, True), (3., True)])
+def test_right_clearance_is_measured_beyond_target_boundary(clearance, expected):
+  cs, md = scene(2)
+  md.roadEdges[1].y = [y+clearance for y in md.laneLines[2].y]
+  assert adjacent_lane(cs, md, 2, 10.) == expected
 
 
 def test_centreline_appearing_after_torque_cancels_remembered_intent():
@@ -95,12 +115,9 @@ def test_only_selected_side_is_restricted():
   assert maneuver(gate=lambda cs, md, now, frame: setattr(cs, 'rightLaneLine', 21))
 
 
-def test_old_schema_unknown_colour_and_truncated_geometry_fail_closed():
+def test_old_schema_unknown_left_colour_fails_closed():
   cs, md = scene()
   del cs.laneLineInfoMonoTime
-  assert not adjacent_lane(cs, md, 1, 10.)
-  prepare_scene(cs, md, 10.)
-  md.laneLines[0].y = [-5.4]
   assert not adjacent_lane(cs, md, 1, 10.)
 
 
