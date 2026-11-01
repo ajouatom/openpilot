@@ -222,6 +222,10 @@ class CarState(CarStateBase):
     self.pv5_completed_camera_speed = 0
     self.tcs = None
     self.mdps = None
+    # CanfdBlinkerKick handoff (carcontroller.aprk_blinkers): last stock SPAS1/SPAS2 frame on ECAN and last positive
+    # UDS reply (50 03) from the parking ECU on ECAN or ACAN, in CAN nanos
+    self.can_nanos = self.aprk_stock_nanos = self.aprk_ack_nanos = 0
+    self.aprk_watch = False
     # GV80 only: the car's own SPAS2, echoed back with just BLINKER_CONTROL changed (GV80 sends no stock SPAS1)
     self.spas2 = None
     self.steer_touch_2af = None
@@ -1349,12 +1353,31 @@ class CarState(CarStateBase):
       self.speedLimitDistance = self.totalDistance
       ret.speedLimitDistance = 0.0
 
+  def _update_aprk(self, cp, cp_alt):
+    if not self.aprk_watch:
+      # Optional, counter and checksum ignored: only "did a frame arrive" matters, and a missing or restarting stream
+      # must never touch CAN validity
+      for parser, names in ((cp, ("SPAS1", "SPAS2", "APRK_DIAG_RESP")), (cp_alt, ("APRK_DIAG_RESP",))):
+        for name in names if parser is not None else ():
+          msg = parser.dbc.name_to_msg.get(name)
+          if msg is not None and msg.address not in parser.message_states:  # GV80 already parses its SPAS2
+            parser._add_message(name, math.nan, ignore_counter=True)
+            parser.message_states[msg.address].ignore_checksum = True
+      self.aprk_watch = True
+    self.can_nanos = cp._last_update_nanos
+    self.aprk_stock_nanos = max((cp.ts_nanos[n]["COUNTER"] for n in ("SPAS1", "SPAS2") if n in cp.ts_nanos), default=0)
+    for parser in (cp, cp_alt):
+      replies = parser.vl_all.get("APRK_DIAG_RESP") if parser is not None else None
+      if replies and any(sid == 0x50 and sub == 0x03 for sid, sub in zip(replies["SID"], replies["SUB"])):
+        self.aprk_ack_nanos = parser._last_update_nanos
+
   def update_canfd(self, can_parsers) -> structs.CarState:
     cp = can_parsers[Bus.pt]
     if self.CP.carFingerprint == CAR.GENESIS_GV80:
       self.spas2 = dict(cp.vl["SPAS2"])
     cp_cam = can_parsers[Bus.cam]
     cp_alt = can_parsers[Bus.alt] if Bus.alt in can_parsers else None
+    self._update_aprk(cp, cp_alt)
 
     ret = structs.CarState()
     ret.steeringTouch = self.steering_touch.update(cp)

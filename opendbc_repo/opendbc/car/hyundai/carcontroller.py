@@ -58,6 +58,13 @@ APRK_ADDR = 0x7B1
 APRK_EXT_SESSION = bytes([0x02, 0x10, 0x03, 0, 0, 0, 0, 0])
 APRK_COM_DISABLE = bytes([0x03, 0x28, 0x83, 0x01, 0, 0, 0, 0])
 APRK_DEFAULT_SESSION = bytes([0x02, 0x10, 0x01, 0, 0, 0, 0, 0])
+# Handoff like the owner's spas.Session: SPAS frames go out only after the ECU answered 10 03 (50 03) and its own SPAS1/
+# SPAS2 stayed off ECAN for 0.1 s; they stop the moment a stock frame shows up again. 10-26..30 it never answered on
+# bus 0 (0 of ~140) and every kick overwrote a live stock stream - 21 bus-offs and one CAN error at 112 km/h on 10-30
+# (02_logs/measurements.md §36). The request now also goes to ACAN, where a second SPAS1 stream runs.
+APRK_IDLE, APRK_ASK, APRK_WAIT_QUIET, APRK_ACTIVE, APRK_FAILED = range(5)
+APRK_REPLY_FRAMES = int(0.4 / DT_CTRL)
+APRK_QUIET_NANOS = 100_000_000
 # SpasSteerTest: stock RSPA handshake, mode 4 then 5 after 0.1 s (2019 log 226.7 -> 226.8 s), angle at 100 deg/s
 SPAS_STEER_ASK_FRAMES = 10
 SPAS_STEER_RATE = 1.0
@@ -273,7 +280,7 @@ class CarController(CarControllerBase):
     self.stalk_values = None
     self.stalk_press_side = 0   # 1/2 while the lever is being held/tapped
     self.stalk_press_frame = 0
-    self.aprk_state, self.aprk_frame = 0, 0  # 0 normal, 1 extended session asked, 2 silenced
+    self.aprk_state, self.aprk_frame, self.aprk_nanos = APRK_IDLE, 0, 0
     self.lane_crossing, self.blinker_side, self.blinker_pulse_end = LaneCrossing(), 0, 0
     self.yellow_until = [0, 0]  # left, right
     self.standstill_frame = -1e6
@@ -371,7 +378,6 @@ class CarController(CarControllerBase):
     return [CanData(0x400, bytes([0, 0, 0, 0, val, 0, 0, 0]), self.CAN.ECAN)]
 
   def aprk_blinkers(self, CC, CS):
-    # shortcut: replies are not checked; if APRK ignores the requests it keeps sending SPAS2 and the cluster sees both
     ret = []
     drive = CS.out.gearShifter == structs.CarState.GearShifter.drive
     # The driver crossing a line with the lamp off, engaged or not (modelV2 runs either way). Not the model's own lane
@@ -395,21 +401,37 @@ class CarController(CarControllerBase):
     spas = (self.spas_steer_test != 0 and CS.out.gearShifter == structs.CarState.GearShifter.park and
             CS.out.standstill and not CS.out.steeringPressed)
     want = self.blinker_test in (1, 2) or (self.blinker_control and drive and pulse) or spas
+    now, stock, ack = getattr(CS, "can_nanos", 0), getattr(CS, "aprk_stock_nanos", 0), getattr(CS, "aprk_ack_nanos", 0)
+
+    def give_back():
+      restore = [CanData(APRK_ADDR, APRK_DEFAULT_SESSION, bus) for bus in self.aprk_buses]
+      self.aprk_state, self.aprk_buses = (APRK_FAILED if want else APRK_IDLE), ()
+      return ret + restore
+
     if not want:
-      for bus in self.aprk_buses:
-        ret.append(CanData(APRK_ADDR, APRK_DEFAULT_SESSION, bus))
-      self.aprk_state, self.aprk_buses = 0, ()
-    elif self.aprk_state == 0:
-      self.aprk_buses = (self.CAN.ECAN, self.CAN.ACAN) if spas else (self.CAN.ECAN,)
+      ret = give_back()
+    elif self.aprk_state == APRK_IDLE:
+      self.aprk_buses = (self.CAN.ECAN, self.CAN.ACAN)
       ret += [CanData(APRK_ADDR, APRK_EXT_SESSION, bus) for bus in self.aprk_buses]
-      self.aprk_state, self.aprk_frame = 1, self.frame
-    elif self.aprk_state == 1:
-      if self.frame - self.aprk_frame >= 5:  # 50 ms for the session change
+      self.aprk_state, self.aprk_frame, self.aprk_nanos = APRK_ASK, self.frame, now
+    elif self.aprk_state == APRK_ASK:
+      if ack >= self.aprk_nanos and ack > 0:
         ret += [CanData(APRK_ADDR, APRK_COM_DISABLE, bus) for bus in self.aprk_buses]
-        self.aprk_state, self.aprk_frame = 2, self.frame
+        self.aprk_state, self.aprk_frame = APRK_WAIT_QUIET, self.frame
+      elif self.frame - self.aprk_frame >= APRK_REPLY_FRAMES:
+        return give_back()  # no answer: the stock stream is still on the bus, sending would collide
+    elif self.aprk_state == APRK_WAIT_QUIET:
+      if self.frame - self.aprk_frame >= APRK_QUIET_NANOS // 10_000_000 and now - stock >= APRK_QUIET_NANOS:
+        self.aprk_state, self.aprk_frame, self.aprk_nanos = APRK_ACTIVE, self.frame, now
         if spas:
           self.spas_angle = CS.out.steeringAngleDeg
-    else:
+        elif pulse and self.blinker_test not in (1, 2):
+          self.blinker_pulse_end = self.frame + BLINKER_PULSE_FRAMES  # the handshake ate part of the pulse
+      elif self.frame - self.aprk_frame >= APRK_REPLY_FRAMES:
+        return give_back()
+    elif self.aprk_state == APRK_ACTIVE:
+      if stock > self.aprk_nanos:
+        return give_back()  # the ECU came back: stop before our frames collide with its own
       if self.frame % 100 == 0:
         ret += [make_tester_present_msg(APRK_ADDR, bus, suppress_response=True) for bus in self.aprk_buses]
       if spas:
