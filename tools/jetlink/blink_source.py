@@ -14,6 +14,7 @@ from blink_turn_location import observations as turn_observations, navigation_ca
 from blink_boundary import BoundaryEvents, vehicle_allowed as boundary_vehicle_allowed
 from blink_observation import ObservationSignals, LowSpeedOwnership, wire_hold, allowed as observation_allowed
 from blink_turn_journey import Travel
+from blink_display import Publisher
 from openpilot.selfdrive.controls.lib.desire_lib.boundary_lane import adjacent_lane
 
 
@@ -102,6 +103,7 @@ def main(fd, spas=False):
   boundary = BoundaryEvents(read_json(RUNTIME/'boundary-indicator.json', {}))
   observation = ObservationSignals(read_json(RUNTIME/'boundary-indicator.json', {}))
   low_speed_ownership, travel = LowSpeedOwnership(), Travel()
+  display = Publisher()
   feedback, activated_id = {}, None
   release_until = 0.
   def record_ownership(value):
@@ -237,6 +239,11 @@ def main(fd, spas=False):
       atomic_json(HOLD_PATH, {'stamp':now, 'mode':mode, 'fingerprint':fingerprint,
                              'direction':hold['direction'] if hold and activated_id == hold['id'] else None,
                              'override':activated_id is not None or now < release_until or (policy.suppressed and release_until > 0)})
+    display.update(now, mode=mode, ok=ok, cs=cs, meta=meta, hold=hold,
+      activated=hold is not None and activated_id == hold['id'],
+      peer=feedback.get('state') if fresh(feedback.get('stamp'), now, .35) else 'missing',
+      automatic=automatic, tbt=tbt, tbt_enabled=tbt_enabled and auto_fresh, front_clear=front_clear,
+      observed_source=observed_source, auto_valid=auto_valid, atc_type=sm['carrotMan'].atcType if auto_fresh else '')
     devices = [mac for mac in status.get('grabbed', []) if fresh(status.get('time'), now) and
                settings.get('devices', {}).get(mac, {}).get('enabled') is True and
                not (learning.get('address') == mac and learning.get('until', 0) > now)]

@@ -1115,6 +1115,8 @@ struct ModelDataV2 {
     observedIndicatorSource @30 :Text;
     indicatorIsolationMask @31 :UInt8;
     indicatorJournalMonoTime @32 :UInt64;
+    indicatorPrepareDirection @33 :LaneChangeDirection; # Display only; never an actuation request.
+    indicatorPrepareSource @34 :Text;
 
 
     deprecated :group {
