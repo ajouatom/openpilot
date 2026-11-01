@@ -327,7 +327,7 @@ def test_actual_source_loop_starts_from_audio_cue_before_model_turn(monkeypatch)
   assert sent[1]['hold']['source']=='turn' and sent[1]['hold']['direction']=='left'
   assert sent[2]['hold']['id']==sent[1]['hold']['id']
   assert all(s['hold']['id']==sent[1]['hold']['id'] for s in sent[2:11])
-  assert sent[-1]['hold'] is None
+  assert sent[-1]['hold'] is not None  # Only ~5m travelled; the TBT +30m anchor remains.
 
 
 @pytest.mark.parametrize('fault', ['disabled','lat_disabled','temporary','permanent','reverse','moving_no_intent'])
@@ -352,7 +352,7 @@ def test_held_turn_does_not_bypass_driver_permission_or_steering_faults(fault):
   assert not automatic_control_allowed(cs,cc,ss,always,True)
 
 
-def test_stopped_audio_cue_needs_lateral_permission_and_moving_start_needs_activation():
+def test_audio_cue_needs_lateral_permission_even_during_temporary_steering_suspension():
   from blink_source import automatic_control_allowed
   from test_blinker import Vehicle
   sm=Vehicle(speed=0.,engaged=False)
@@ -362,7 +362,7 @@ def test_stopped_audio_cue_needs_lateral_permission_and_moving_start_needs_activ
   assert automatic_control_allowed(cs, cc, ss, True, False)
   assert not automatic_control_allowed(cs, cc, ss, False, False)
   cs.vEgo, cs.standstill = 1., False
-  assert not automatic_control_allowed(cs, cc, ss, True, False)
+  assert automatic_control_allowed(cs, cc, ss, True, False)
   assert automatic_control_allowed(cs, cc, ss, True, True)
 
 

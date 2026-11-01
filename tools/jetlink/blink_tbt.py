@@ -9,6 +9,7 @@ MANEUVER_TIMEOUT_SEC = 15.0
 TBT_DISTANCE_MAX_M = 250.0
 FRONT_GAP_MIN_M = 5.0
 FRONT_PREDICT_SEC = 3.0
+INDICATOR_SPEED_MIN = 10 / 3.6
 
 
 def right_front_clear(radar):
@@ -41,12 +42,14 @@ def candidate(cs, model, nav):
   try:
     return (nav.xTurnInfo in (2, 4) and math.isfinite(nav.xDistToTurn) and
             0 < nav.xDistToTurn <= TBT_DISTANCE_MAX_M and
-            math.isfinite(cs.vEgo) and cs.vEgo >= LANE_CHANGE_SPEED_MIN and
+            math.isfinite(cs.vEgo) and cs.vEgo >= INDICATOR_SPEED_MIN and
             str(cs.gearShifter) == 'drive' and cs.canValid and not cs.trailerConnected and
             not cs.steeringPressed and not cs.steerFaultTemporary and not cs.steerFaultPermanent and
             cs.tbtRearInputsAvailable and not cs.tbtRightRearBlocked and
             meta.laneChangeAvailableRight and 2.5 < meta.laneWidthRight < 5.0 and
             model.laneLineProbs[2] > .5 and model.laneLineProbs[3] > .5 and
+            all(math.isfinite(model.roadEdges[1].y[i]) and
+                model.roadEdges[1].y[i] - model.laneLines[2].y[i] >= 2.5 for i in (0, 4, 8)) and
             cs.rightLaneLine >= 0 and cs.rightLaneLine % 10 in (0, 5) and cs.rightLaneLine // 10 != 2 and
             len(meta.desireState) >= 3 and meta.desireState[1] + meta.desireState[2] <= .1)
   except (AttributeError, IndexError, TypeError, ValueError):
@@ -62,6 +65,7 @@ class TbtBlinker:
     self.last_distance = None
     self.last_time = None
     self.reason = 'idle'
+    self.display_only = False
 
   def cancel(self, reason):
     self.phase, self.ready_since, self.reason = 'cancelled', None, reason
@@ -112,10 +116,10 @@ class TbtBlinker:
         return None
       elif self.phase == 'changing':
         return self.cancel('interrupted')
-      elif now-self.started >= START_TIMEOUT_SEC or not front_clear or not candidate(cs, model, nav):
+      elif (now-self.started >= START_TIMEOUT_SEC and not self.display_only) or not front_clear or not candidate(cs, model, nav):
         return self.cancel('start')
       self.reason = self.phase
-      return ('lane', 'right')  # Existing physical-indicator policy/transport only.
+      return ('tbt_display' if self.display_only else 'lane', 'right')
     if self.phase == 'cooldown' and now-self.completed < REPEAT_DELAY_SEC:
       return None
     # Existing ATC preparation is not a competing maneuver. The add-on may light
@@ -131,4 +135,5 @@ class TbtBlinker:
       self.reason = 'confirming'
       return None
     self.phase, self.started, self.reason = 'waiting', now, 'trigger'
-    return ('lane', 'right')
+    self.display_only = cs.vEgo < LANE_CHANGE_SPEED_MIN
+    return ('tbt_display' if self.display_only else 'lane', 'right')
