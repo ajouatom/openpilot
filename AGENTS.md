@@ -8,7 +8,10 @@
   Fix load/boot-validation misclassification and old-boot matching-hash retry;
   retain checks, startup smoke, bounded attempts, health/ownership and deadlines.
   No physical cause/latency/cure claim, no live writes or Jetson bundle. Desktop
-  287pass; pinned Linux validation required. See docs/egpu_jit_copy_tlb_review_20261101.md.
+  287pass; eGPU41265046121 passes427+57/oldnative3+1skip/newnative4 andWeb.
+  Jetson41265046147 broad2137/56skip and supporting suites/Windows pass.
+  UpstreamPR39187 attributes35% non-JIT slowdown; no localGPU speedup claim.
+  See docs/egpu_jit_copy_tlb_review_20261101.md.
 
 
 - On 2026-11-01, owner replaces manual-indicator adjacent-lane gate with left
