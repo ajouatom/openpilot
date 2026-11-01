@@ -1,4 +1,4 @@
-﻿# Manual indicator response and one-touch feedback — 2026-11-01
+# Manual indicator response and one-touch feedback — 2026-11-01
 
 The latest drive ran 441d71e330. Eleven closed, SHA256-matched full-schema
 rlogs (147,479,258 bytes) provided 12,755 model frames. Private route identifiers,
@@ -78,3 +78,12 @@ Normal carrot-wip Git Pull and comma restart. This is comma-side code; no new
 Jetson signed package, engine build, model selection or SD/USB patch is needed.
 No vehicle writes, live CAN actuation or reboot were performed in this task.
 Physical lamp/road acceptance remains pending.
+
+Publication: source 6054829dc83826e54b4698b07c9874d313910401 on carrot-wip.
+Signal CI41273870185 passed 1277 tests/40 skips and362 subtests. Jetson
+CI41273870206 passed2214/56skips plus232/62/94/119/11/11 supporting tests;
+Windows installer passed. eGPU41273870261 and user-docs41273870219 passed.
+Wiki manual7589726 and automatic sync c8a0cf2 published; all nine affected
+pages have current semantic review hashes and valid markup (sync41273901339).
+The separate general release-build workflow was still running at this record;
+its relevant web, lifecycle, DM cadence, lane-mode and eGPU startup jobs passed.
