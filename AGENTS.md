@@ -12,7 +12,10 @@
   Four full-log replay: model right51.313s/manual right53.541s/left2.364s candidates;
   geometry ends53.513/54.143/3.513. Consecutiveleft source33.1..53.2s maintained.
   These are recorded-input decisions, not physical lamp/road acceptance.577desktop,
-  Wiki25 pass; nativeCI pending publication. No live writes/CAN/reboot/Jetson bundle.
+  Wiki25 pass; source077211fe21 published. Signal41265772848 native1277/40skip/
+  362subtests; Jetson41265772883 broad2174/56skip plus232/62/94/119/11/11 and
+  Windows pass. eGPU/docs/Wiki CI pass; Wiki15 affected pages current/hash verified.
+  No live writes/CAN/reboot/Jetson bundle.
   See docs/indicator_reconstruction_20261101.md. Raw evidence private.
 
 
