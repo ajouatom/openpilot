@@ -114,9 +114,11 @@ def test_prepared_transfer_preserves_controls_and_recurrent_state():
     np.testing.assert_array_equal(host[512:], images.reshape(-1))
     calls.append('upload')
   runtime.device_buffer = SimpleNamespace(copy_from=upload)
+  runtime.copy_inputs = lambda: runtime.device_buffer.copy_from(runtime.host)
   state = np.zeros(1)
   runtime.queues = {'new_img': object(), 'state': state}
   runtime.outputs = {'next_state': state, 'outputs': SimpleNamespace(numpy=lambda: np.array([[1., 2.]], np.float32))}
+  runtime.copy_outputs = lambda: runtime.outputs['outputs']
   def model(output_buffers, **inputs):
     assert inputs['state'] is output_buffers['next_state']
     assert inputs['new_img'] is runtime.queues['new_img']

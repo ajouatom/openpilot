@@ -11,6 +11,23 @@ import numpy as np
 from openpilot.selfdrive.modeld.precompiled_artifact import compile_warp, load_warp, prepare_jit
 
 
+# Upstream 880b40e1's captured transfer API is verified against d39227 only.
+COMPILED_COPY_RUNTIME = 'cb9bf2cfa14746485f75b1dd89d8b7ab65011c10c8fc6c4aea4d41b45a47dc51'
+
+
+def use_compiled_copies(manifest):
+  runtime = manifest.get('runtime')
+  return isinstance(runtime, dict) and runtime.get('sha256') == COMPILED_COPY_RUNTIME
+
+
+def compile_copy(tensor):
+  # Same construction as upstream #39187. Imports use the worker's pinned runtime.
+  from tinygrad.engine.jit import CapturedJit
+  from tinygrad.engine.realize import compile_linear
+  jit = CapturedJit(tensor, compile_linear(tensor.schedule_linear()), [], [])
+  return lambda: jit([], {})
+
+
 def input_view(buffer, shape, dtype, offset=0):
   from tinygrad import Tensor
   from tinygrad.uop.ops import UOp
@@ -78,11 +95,12 @@ def host_input_layout(specs, frame_size, state_pairs):
 
 
 class GenericModelRuntime:
-  def __init__(self, jits, width, height, runtime_dir: Path, frame_info):
+  def __init__(self, jits, width, height, runtime_dir: Path, frame_info, compiled_copies=False):
     # Imports must happen after the worker selects the artifact's tinygrad.
     from tinygrad import Tensor, Device
     from examples.openpilot.compile_warp import NV12Frame
 
+    self.compiled_copies = compiled_copies
     self.checkpoint, self.output_slices, self.state_pairs, self.count = model_metadata(jits)
     self.device = jits['input_specs']['new_img'][2]
     self.gpu_arch = Device[self.device].arch
@@ -114,12 +132,27 @@ class GenericModelRuntime:
       os.replace(temporary, warp_path)
       self.run_warp = prepare_jit(warp['run'])
 
-  def bind_shared(self, packed):
+  def bind_transfers(self, packed):
     from tinygrad import Tensor
+
+    if self.compiled_copies:
+      host = Tensor(packed, device='NPY')
+      device = host.to(self.device)
+      self.copy_inputs = compile_copy(device)
+      self.copy_inputs()  # allocate once before binding views into this storage
+      self.host, self.device_buffer = host._buffer(), device._buffer()
+      self.copy_outputs = compile_copy(self.outputs['outputs'].to('CPU'))
+      self.copy_outputs().numpy()  # link/synchronize before any live inference
+    else:
+      self.host = Tensor(packed, device='NPY')._buffer()
+      self.device_buffer = Tensor(np.zeros_like(packed), device=self.device)._buffer()
+      self.copy_inputs = lambda: self.device_buffer.copy_from(self.host)
+      self.copy_outputs = lambda: self.outputs['outputs']
+
+  def bind_shared(self, packed):
     from tinygrad.dtype import dtypes
 
-    self.host = Tensor(packed, device='NPY')._buffer()
-    self.device_buffer = Tensor(np.zeros_like(packed), device=self.device)._buffer()
+    self.bind_transfers(packed)
 
     for name, value in self.views.items():
       if name not in ('img', 'big_img', 'tfm', 'big_tfm'):
@@ -183,7 +216,7 @@ class GenericModelRuntime:
     progress = getattr(self, 'progress', lambda stage: None)
     started, cpu_started = time.monotonic(), time.thread_time()
     progress('input_upload')
-    self.device_buffer.copy_from(self.host)
+    self.copy_inputs()
     uploaded, cpu_uploaded = time.monotonic(), time.thread_time()
     progress('warp')
     self.queues['new_img'] = self.run_warp(input_frame=self.frames, M_inv=self.transforms)
@@ -192,7 +225,7 @@ class GenericModelRuntime:
     self.run_model(output_buffers=self.outputs, **self.queues)
     dispatched, cpu_dispatched = time.monotonic(), time.thread_time()
     progress('output_read')
-    result = self.outputs['outputs'].numpy().reshape(-1)
+    result = self.copy_outputs().numpy().reshape(-1)
     finished, cpu_finished = time.monotonic(), time.thread_time()
     # Call boundaries only: GPU work may finish in a later call. Do not insert
     # synchronizations that change pipelining or label these as kernel timings.

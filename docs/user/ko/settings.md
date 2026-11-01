@@ -156,7 +156,7 @@ Carrot Web 설정 화면에서는 다음 기능을 사용할 수 있습니다.
 | ONNX 차선·BSD | `ShareData`, `OnnxBsdEnabled`, `OnnxLaneThreshold`, `OnnxLaneIntervalMs`, `OnnxBsdThreshold`, `OnnxBsdSmoothingMs`, `OnnxBsdIntervalMs` | 차선 종류 인식과 별도 카메라 BSD 실행 및 세부 조정 |
 | 중앙 보정 | `PathOffset`, `CameraYawTrimDeg` | 레인모드 경로의 좌우 위치와 카메라 YAW 미세 보정 |
 | 조향감 | `SteerActuatorDelay`, `LatSmoothSec`, `LatSuspendAngleDeg`, `CustomSR`, `SteerRatioRate` | 조향 시점, 평활화, 일시중지 각도와 조향비 |
-| [차로 변경](lane-change.md)·자동 턴 | `LaneChangeNeedTorque`, `LaneChangeDelay`, `LaneChangeBsd`, `LaneLineCheck`, `BlinkerLatchedTurn`, `LaneChangeLeverWait`, `AutoTurnControl`, `AutoTurnControlRightLaneChange`, `ManualLaneChangeIndicator`, `AutoTurnControlSpeedTurn`, `AutoTurnControlTurnEnd`, `AutoTurnMapChange` | 차로 변경 진입 조건과 ATC 동작 |
+| [차로 변경](lane-change.md)·자동 턴 | `LaneChangeNeedTorque`, `LaneChangeDelay`, `LaneChangeBsd`, `LaneLineCheck`, `BlinkerLatchedTurn`, `LaneChangeLeverWait`, `AutoTurnControl`, `AutoTurnControlRightLaneChange`, `ManualLaneChangeIndicator`, `ModelDesireIndicator`, `ModelPathIndicator`, `AutoTurnControlSpeedTurn`, `AutoTurnControlTurnEnd`, `AutoTurnMapChange` | 차로 변경 진입 조건과 ATC 동작 |
 | 레인모드 | `LatMpcPathCost`, `LatMpcMotionCost`, `LatMpcAccelCost`, `LatMpcJerkCost`, `LatMpcSteeringRateCost`, `LatMpcInputOffset`, `UseLaneLineSpeed`, `UseLaneLineCurveSpeed`, `AdjustLaneOffset` | 레인모드 MPC 가중치와 차선 사용 조건 |
 | 고급 토크·토크 계수 | `LateralTorqueCustom`, `LateralTorqueAccelFactor`, `LateralTorqueFriction`, `LateralTorqueKpV`, `LateralTorqueKiV`, `LateralTorqueKf`, `LateralTorqueKd` | 커스텀 토크 제어 계수 |
 | 고급 토크·검색 전용 | `NNFF` | 토크 조향의 신경망 피드포워드 옵션 |
@@ -474,7 +474,9 @@ USB/HUD 일반 카메라 화면에 `BRAKE?`로 표시하고 기록합니다. `BR
 
 `AutoBlinkerControl` — 설정 > 주행 제어 > 차량 조향 > 차로 변경 (자동 턴). 기본값은 0입니다. 현재 carrot-wip의 아이오닉 5 PE·젯슨·PEAK USB-CAN/B1 조합을 대상으로 합니다.
 
-정상 점등이 확인된 ATC 회전은 내비가 같은 회전을 아직 앞에 안내하는 동안 접근로의 굴곡만으로 완료 처리하지 않습니다. 기존 유지 요청이 유효하고 운전자 취소·통신 이상이 없는데 양쪽 램프가 1.5초 이상 계속 꺼지면, 같은 회전에서 한 번만 재점등을 시도합니다. 최초 점등 확인 실패, 수동/블루투스 취소, 반대 깜박이, 경로 취소에는 자동 재점등하지 않습니다. 실제 램프 재점등은 차량에서 확인해야 합니다.
+ATC 회전은 audioTurn에서 시작하고 정차 중에도 유지합니다. D단 완전 정지에서는 횡제어 허용·고장 없음이 확인되면 새 안내를 받을 수 있습니다. 수신기가 전송 완료를 확인했는데 양쪽 램프가 1.5초 이상 계속 꺼져 있으면 최초 미점등도 포함해 해당 회전에서 한 번만 재요청합니다. 운전자 취소·통신 이상·전송 미확인에는 재요청하지 않습니다. 앞선 회전 중 들어온 반대 방향 안내는 최대 3초 보관하며, 실제 회전 완료 후에만 넘깁니다.
+
+유효한 TBT 지점 좌표와 차량 GPS가 있으면 해당 지점을 가까이 지나 회전했는지 확인해 종료를 보완합니다. 회전하지 않고 지점을 충분히 지나 직진이 지속되면 자동 취소하며 같은 audioTurn은 재실행하지 않습니다. 위치 정확도·연속성·진행 방향을 확인하므로 GPS 불량, 좌표 미제공, 굽은 접근로에서는 이 위치 기반 취소를 사용하지 않습니다. 최신 내비가 안내 종료·경로 이탈을 알리면 자동 요청도 해제합니다. 실제 램프 및 도로 동작은 추가 확인이 필요합니다.
 
 ### 동작
 
@@ -498,8 +500,14 @@ USB-CAN은 최초 점멸만 요청하고 기존 차량 깜박이 유지 기능�
 
 점등이 확인되지 않은 유지 시작 요청은 4초 후 버리므로 다음 버튼 입력은 새 요청으로 처리합니다.
 
-ATC 세부 설정의 `AutoTurnControlRightLaneChange`는 1·2번 모드에서 차선변경 가능 속도이면서 TBT 우회전·우측 분기까지 250m 이내인 구간에서 턴 시작 전까지 우측 실물 깜박이를 켜는 선택 기능입니다. 지원 USB2CAN 깜박이 구성과 우측 차선·유효한 차량 BSD와 우측 전방의 현재 및 3초 예측 거리 5m 조건이 필요하며, 기존 수동·블루투스 차선변경 동작은 유지됩니다. 자세한 내용은 [차선변경](lane-change.md)을 참고하세요.
+ATC 세부 설정의 `AutoTurnControlRightLaneChange`는 1·2번 모드에서 10km/h 이상이면서 TBT 우회전·우측 분기까지 250m 이내인 구간에서 턴 시작 전까지 우측 실물 깜박이를 켜는 선택 기능입니다. 지원 USB2CAN 깜박이 구성과 우측 차선·유효한 차량 BSD와 우측 전방의 현재 및 3초 예측 거리 5m 조건이 필요하며, 기존 수동·블루투스 차선변경 동작은 유지됩니다. 자세한 내용은 [차선변경](lane-change.md)을 참고하세요.
 
-`ManualLaneChangeIndicator`는 ATC와 별개인 수동 차선변경 깜박이 옵션입니다. ATC 준비 중에도 운전자의 경계 접근을 감지하며, 최근 확인한 차선은 신뢰도 하락 후 최대 1초만 추적합니다. 이미 실행 중인 자동 차선변경·다른 깜박이 요청은 우선하며, 이 기능의 신호로 자동 조향을 새로 요청하지 않습니다.
+`ManualLaneChangeIndicator`는 ATC와 독립적인 수동 조향 깜박이입니다. 최근 조향 의도를 최대 1.5초 기억합니다. 왼쪽은 최신 흰 차선 분류로 중앙선을 제외하고, 오른쪽은 목표 차선부터 로드에지까지 2.5m 이상 여유를 확인합니다. 바깥 차선 인식 확률은 사용하지 않으며 자동 조향은 요청하지 않습니다. 자세한 조건은 [차로 변경](lane-change.md)을 참고하세요.
 
 수동 차선변경 깜박이는 이전 요청 후 최소 3초·연속 1초 소등과 새로운 조향/접근 조건을 확인한 뒤 재요청합니다. 자동 조향 피드백 보호는 최소 12초 유지합니다.
+
+ATC 재요청이 실행되면 새 요청부터 점등 확인 제한 4초를 다시 적용합니다. 최초 요청부터 전체 유지 상한 5분은 연장하지 않습니다.
+
+`ModelDesireIndicator`와 `ModelPathIndicator`는 표시 전용인 별도 기본 꺼짐 옵션입니다. TBT 턴의 거리 유지와 각 기능의 시작·종료 조건은 [차로 변경](lane-change.md)을 참고하세요.
+
+수동 깜박이는 차선 접근 속도로 0.3초 뒤를 예측하되, 중심에서 경계까지의 기준을 최대 0.3m만 앞당깁니다. 기존 속도·중앙선·로드에지 조건은 유지합니다.

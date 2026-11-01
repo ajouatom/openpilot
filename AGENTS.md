@@ -1,5 +1,145 @@
 # Repository memory
 
+- On 2026-11-01, owner approves latest-drive manual-indicator response fixes.
+  Eleven hash-matched full rlogs/147479258B/12755model frames:20manual requests,
+  15lamp-feedback starts, median0.206s request-to-lamp; detector delay dominates.
+  Add0.3s approach projection capped0.3m (threshold<=1.2m), keeping intent,
+  actual0.15m movement, paired geometry,30km/h/white-left/edge-right gates.
+  Comma-only successful-send local echo context binds ID/time/direction/counts,
+  <150ms fresh/<600ms start/<250ms pulse,3/4counter edges for interleaved stock
+  neutral; opposite/latched/receiver-driver override preserved. Same-direction
+  physical input within short echo interval remains ambiguous, not perfectly
+  attributable. Remember early lamp<750ms but require exact completed-sendACK
+  before hold. Replay20->20,14earlier median0.298s/max0.760s; context-supplied
+  cancellation replay13cancelled->geometry/return, not closed-loop road proof.
+  Desktop700pass/2skip; no receiver/CAN/Panda/ATC/TBT/BT/steering/model changes,
+  no new Jetson bundle or live writes. Normal GitPull/comma restart.
+  Source6054829dc8 published. Signal41273870185 1277/40skip/362subtests;
+  Jetson41273870206 2214/56skip+232/62/94/119/11/11 andWindows pass.
+  eGPU/docs pass; Wiki7589726->c8a0cf2 ninepages reviewed/current.
+  See docs/manual_indicator_response_20261101.md; raw evidence private.
+
+
+- On 2026-11-01, owner requests C3/C4/USB HUD automatic-indicator reasons and
+  preparation. Shared read-only badge distinguishes prepare/request/activation
+  history/current CAN lamp flags and two-second termination. MetaData33/34 are
+  display-only candidates; source5Hz shm, bounded existing HUD metadata, 0.6s
+  expiry and no repeated-clock renewal. No control/CAN/model policy changed.
+  Local679pass/2skip plus29 C3 HUD checks and rendered examples verified.
+  Native Signal41267728745/Jetson41267728721 and eGPU/docs pass. Signed N16
+  5fd3d09fa4/Flip18de2568b0/Lightcda6a9f2bb bundles1167files each, signatures
+  and HTTPS hashes verified. Catalog/model identities unchanged; MD remains retired. No live writes/reboot/CAN/road claim. See docs/indicator_display_20261101.md.
+
+- On 2026-11-01, owner approves indicator reconstruction with two default-OFF
+  ModelDesireIndicator/ModelPathIndicator options, manual target-confidence10%
+  episode anchor, and TBT wheel-distance +30m holding. Path uses curved same-x
+  boundaries/relative control curvature, repeated observations and origin isolation.
+  Same-direction origins retain request ID; source journals before CAN and modeld
+  masks lamp/stalk feedback. 250m minimum10km/h; below30 starts wait for modeld
+  mask acknowledgement and remain display-only through acceleration; steering
+  minimum30 unchanged. TBT opposite cancellation requires driver torque+opposite
+  angle+measured reverse heading, NOT angle-zero crossing. Existing ATC FSM stays.
+  Four full-log replay: model right51.313s/manual right53.541s/left2.364s candidates;
+  geometry ends53.513/54.143/3.513. Consecutiveleft source33.1..53.2s maintained.
+  These are recorded-input decisions, not physical lamp/road acceptance.577desktop,
+  Wiki25 pass; source077211fe21 published. Signal41265772848 native1277/40skip/
+  362subtests; Jetson41265772883 broad2174/56skip plus232/62/94/119/11/11 and
+  Windows pass. eGPU/docs/Wiki CI pass; Wiki15 affected pages current/hash verified.
+  No live writes/CAN/reboot/Jetson bundle.
+  See docs/indicator_reconstruction_20261101.md. Raw evidence private.
+
+
+- On 2026-11-01, owner requests880b40e1 review/integration plus attached Flip
+  f0667cf6/c7c586 load failure. Adopt upstream captured input/output copies only
+  for exact d39227 runtime cb9bf2cf (Light speed); keep N16/Flip paired artifacts,
+  internalCD210/DM/TRT and recurrence/recovery. Attached serialized flush_tlb
+  10000ms ACK0!=1 fails GPU mapping before inference, not proof bad weights.
+  Fix load/boot-validation misclassification and old-boot matching-hash retry;
+  retain checks, startup smoke, bounded attempts, health/ownership and deadlines.
+  No physical cause/latency/cure claim, no live writes or Jetson bundle. Desktop
+  287pass; eGPU41265046121 passes427+57/oldnative3+1skip/newnative4 andWeb.
+  Jetson41265046147 broad2137/56skip and supporting suites/Windows pass.
+  UpstreamPR39187 attributes35% non-JIT slowdown; no localGPU speedup claim.
+  See docs/egpu_jit_copy_tlb_review_20261101.md.
+
+
+- On 2026-11-01, owner replaces manual-indicator adjacent-lane gate with left
+  centre-line classification and right road-edge distance only. Left retains
+  fresh250ms known-white OEM marking; right requires finite edge-minus-target
+  boundary>=2.5m at0/4/8, no colour/outer-line/width/std gate. Intent/target-line
+  confidence/geometry/ownership/steering isolation unchanged. Uploaded three full
+  rlogs42059119B/videos hash-verified: actual7e88/manualON has0requests; new replay
+  gives left atseg7+2.364s, rightseg6 still blocked by target-confidence1s memory.
+  Seg4 hold reset correlates carrotMan350ms gap; nextleft cue duringlatInactive
+  consumed/no restart. Turn/model-probability behavior NOT changed or cured.
+  Desktop540/Wiki25 pass; no live writes/CAN/road acceptance, no Jetson bundle.
+  See docs/manual_indicator_directional_gates_20261101.md; raw evidence private.
+
+- Later on 2026-10-31, EV6 nine full logs/110415270B hash-matched confirm same
+  Light speed33ba/mici USB AMD. Cameras10800each consecutive; ordinary34skips/
+  odo34invalid -> pose49inputs-invalid, sensors/posenetalltrue. Segment9 at
+  09:11:52KST eGPU150ms response timeout falls back internal; published model
+  gap667.913ms/13missing IDs includes handling, not GPUcompute. Segments10-13
+  internal only/no poseerrors, NOT healthy Light speed. EGPU meanloop50.268ms,
+  infer45.760/upload20.068/checkpoint3.983. Matching NAS automaticcapture has
+  worker output_read123.169ms/pipe_wait; marker also covers validation/checkpoint
+  so exact stall stage unproven. USB5000active/no incident disconnect in excerpt.
+  No process restart/thermal/sensor rejection, no tinygrad causal A/B. Report-only;
+  same-device matched-package comparison plus finer failure stages needed.
+  See docs/light_speed_locationd_review_20261031.md; raw/private/no live writes.
+
+
+- On 2026-10-31, supplied Oct30/10bf0a56 partial rlog confirms Light speed
+  33ba0928 on mici USB AMD, NOT Jetson. Consecutive cameras549 each; model19
+  one-frame skips/odometry19invalid -> livePose44inputs-invalid, sensors/posenet
+  allhealthy; calibration5invalid envelopes extend five episodes. Alert24.691s
+  includes persistence/pre-segment onset. Mean loop51.723ms vs50ms, inference
+  47.130, upload19.965/checkpoint3.950; no process restart/thermal/sensor rejection.
+  PR39184 reverts0152 Chestnut plus tinygrad; existing Flip Flop already retains
+  f0667cf6+02e698. No global revert needed; do not mix Light33ba with old runtime.
+  No causal tinygrad A/B or proven cure; report-only, no runtime/selection/device
+  changes. JetsonONNX/TRT unaffected by revert; hardware validation needs power.
+  See docs/light_speed_locationd_review_20261031.md; raw evidence stays private.
+
+
+- On 2026-10-31, owner requests recent-intent manual indication and blocking centre
+  lines/road edges/unknown adjacent lanes. Manual-only episode retains confirmed
+  torque1.5s/4s max through release/countersteer while approaching; stop0.3s/retreat
+  0.15m/lost lane cancels. Exact OEM lane timestamp additiveCarState112; <=250ms,
+  white known type plus model outer line/2.5..4.8m width/edge clearance required.
+  Source rechecks lane, no second pressed-torque requirement. Keep3s/dark1s/mask12s;
+  ATC/250m/BT/steering/CAN/receiver unchanged. Prior three recorded manual requests
+  all OEM yellow21 and outer confidence<0.5, intentionally blocked by new policy.
+  Desktop557+50+2 pass; native publication checks included. No physical acceptance,
+  vehicle writes or host bundle. Process.latest event-loss issue remains separate.
+  See docs/manual_indicator_recent_intent_20261031.md.
+
+
+- On 2026-10-31, owner approves log-only manual boundary observation. Separate
+  modeld BoundaryObserver on existing Ioniq5PE/manual-option ON; no lamp/desire/
+  Params/CAN/USB writes. Recent torque intent1.5s/4s episode, geometric approach,
+  provisional0.9m half-width, hypothetical crossing and retreat/failure reasons;
+  bounded1Hz/8events, exceptions isolated. Existing indicator remains unchanged.
+  Desktop27 observation/integration +695 prior pass/26native excluded. Private117f
+  replay14263frames:36candidates,19confidence/17width rejects,0predictions,0legacy
+  detector state differences. NOT improved detection/intent or physical validation.
+  PC callback-only mean6.815us/P9918.5us/max224.9us, no hardware timing claim.
+  Normal GitPull/comma restart, no Jetson bundle/live writes. See
+  docs/manual_boundary_observation_20261031.md; next-drive/video evaluation pending.
+
+- On 2026-10-31, owner requests turn reliability/straight-through cancellation.
+  Comma source allows fresh stopped-D cue with lateral permission; one receiver-
+  accepted/unlit recovery, no rejected-send/cancel retry; pending opposite cue<=3s
+  starts only after physical completion. Optional current TBT point + raw vehicle
+  GPS passage supplements completion and confirms straight-pass cancellation;
+  accuracy/freshness/jump/heading guards, no snapped/phone position or cue replay.
+  Fresh explicit navigation-ended/off-route cancels. Existing CAN/receiver/steering,
+  manual boundary and radar admission unchanged. Model-path departure mandatory
+  gate rejected pending evidence. Desktop695+28 pass/26native excluded; 14262-frame
+  private117f replay0differences,0usable newGPS/TBT anchors (not road validation).
+  No live write/CAN/reboot; normal GitPull/comma restart, no Jetson bundle.
+  See docs/turn_indicator_tracking_20261031.md.
+
 - On 2026-10-30, owner requests Light speed PR39173 as an eGPU/Jetson
   choice and review of0152aab4. Add catalog light-speed, exact c7cbe5de PKL
   SHA33ba0928/790445184B and official ONNX6274eb4a/792305602B, checkpoint

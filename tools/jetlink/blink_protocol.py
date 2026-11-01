@@ -220,7 +220,12 @@ class Sender:
                 'peer_state':str(state.get('state', 'missing'))[:32],
                 'accepted':bool(hold.get('id') and state.get('accepted_id') == hold['id']),
                 'peer_owned':state.get('token') == self.token,
-                'relights':source.get('relights', 0)}
+                'relights':source.get('relights', 0),
+                'turn_phase':str(source.get('turn_phase', 'unknown'))[:32],
+                'turn_position':source.get('turn_position') is True,
+                'tbt_phase':str(source.get('tbt_phase', 'unknown'))[:32],
+                'observation_phase':str(source.get('observation_phase', 'unknown'))[:32],
+                'indicator_origin':str(source.get('indicator_origin', 'unknown'))[:32]}
       if detail != self.last_report:
         self.report('physicalBlinkerState', **detail)
         self.last_report, self.report_after = detail, now+.2
