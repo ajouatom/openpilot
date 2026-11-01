@@ -5,8 +5,10 @@
   history/current CAN lamp flags and two-second termination. MetaData33/34 are
   display-only candidates; source5Hz shm, bounded existing HUD metadata, 0.6s
   expiry and no repeated-clock renewal. No control/CAN/model policy changed.
-  Local679pass/2skip and rendered examples verified; native CI/host publication
-  pending. No live writes/reboot/CAN/road claim. See docs/indicator_display_20261101.md.
+  Local679pass/2skip plus29 C3 HUD checks and rendered examples verified.
+  Native Signal41267728745/Jetson41267728721 and eGPU/docs pass. Signed N16
+  5fd3d09fa4/Flip18de2568b0/Lightcda6a9f2bb bundles1167files each, signatures
+  and HTTPS hashes verified. Catalog/model identities unchanged; MD remains retired. No live writes/reboot/CAN/road claim. See docs/indicator_display_20261101.md.
 
 - On 2026-11-01, owner approves indicator reconstruction with two default-OFF
   ModelDesireIndicator/ModelPathIndicator options, manual target-confidence10%
