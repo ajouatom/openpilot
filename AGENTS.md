@@ -14,6 +14,9 @@
   cancellation replay13cancelled->geometry/return, not closed-loop road proof.
   Desktop700pass/2skip; no receiver/CAN/Panda/ATC/TBT/BT/steering/model changes,
   no new Jetson bundle or live writes. Normal GitPull/comma restart.
+  Source6054829dc8 published. Signal41273870185 1277/40skip/362subtests;
+  Jetson41273870206 2214/56skip+232/62/94/119/11/11 andWindows pass.
+  eGPU/docs pass; Wiki7589726->c8a0cf2 ninepages reviewed/current.
   See docs/manual_indicator_response_20261101.md; raw evidence private.
 
 
