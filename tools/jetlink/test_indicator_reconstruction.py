@@ -174,27 +174,28 @@ def test_turn_distance_freezes_at_stop_and_survives_desire_navigation_advance():
 def test_opposite_driver_motion_not_zero_crossing_cancels_turn():
   j,s=turn()
   assert s(12.,angle=60.,heading=-.5)
-  assert s(12.1,angle=-10.,heading=-.5)  # normal unwind/angle zero
-  assert s(12.2,angle=-20.,heading=-.3,pressed=True,torque=-100.)
-  assert s(12.45,angle=-20.,heading=-.2,pressed=True,torque=-100.) is None
+  assert s(12.1,angle=-40.,heading=-.5)  # Outside the new wheel-return band.
+  assert s(12.2,angle=-40.,heading=-.3,pressed=True,torque=-100.)
+  assert s(12.45,angle=-40.,heading=-.2,pressed=True,torque=-100.) is None
   assert j.reason=='driver_opposite'
   assert s(12.5,cue=12.5) is None
 
 
-def test_same_direction_next_turn_extends_anchor_without_extending_repeated_cue():
+def test_same_direction_next_turn_is_queued_without_extending_repeated_cue():
   j,s=turn()
   assert s(12.,cue=12.,travel=(0,5.),distance=15.)
   assert j.active['end']==50.
   assert s(13.,cue=13.,travel=(0,15.),distance=30.)
-  assert j.active['end']==75.
+  assert j.active['end']==50. and j.pending[1]==45.
   assert s(14.,travel=(0,51.))
+  assert j.active['end']==75.
 
 
 def test_next_opposite_turn_waits_for_current_turn_to_complete():
   j,s=turn()
   assert s(12.,travel=(0,18.),angle=60.,heading=-.6)==('turn','left')
   assert s(13.,cue=13.,direction='right',atc='turn right',travel=(0,20.),distance=30.,angle=45.,heading=-1.)==('turn','left')
-  assert s(13.1,travel=(0,21.),angle=0.,heading=-1.)==('turn','left')
+  assert s(13.1,travel=(0,21.),angle=0.,heading=-1.)==('turn','right')
   assert s(13.6,travel=(0,23.),angle=0.,heading=-1.)==('turn','right')
   assert j.active['end']==80.
 

@@ -326,8 +326,9 @@ def test_actual_source_loop_starts_from_audio_cue_before_model_turn(monkeypatch)
   assert sent[0]['hold'] is None
   assert sent[1]['hold']['source']=='turn' and sent[1]['hold']['direction']=='left'
   assert sent[2]['hold']['id']==sent[1]['hold']['id']
-  assert all(s['hold']['id']==sent[1]['hold']['id'] for s in sent[2:11])
-  assert sent[-1]['hold'] is not None  # Only ~5m travelled; the TBT +30m anchor remains.
+  assert all(s['hold']['id']==sent[1]['hold']['id'] for s in sent[2:7])
+  # Stopped approach survives, but measured turn + wheel return ends at i=7.
+  assert all(s['hold'] is None for s in sent[7:])
 
 
 @pytest.mark.parametrize('fault', ['disabled','lat_disabled','temporary','permanent','reverse','moving_no_intent'])
