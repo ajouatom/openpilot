@@ -16,13 +16,13 @@ def turn(direction='left'):
 
 
 @pytest.mark.parametrize('direction,sign',[('left',1),('right',-1)])
-def test_actual_turn_returns_at_thirty_without_waiting_for_post_turn_distance(direction,sign):
+def test_actual_turn_returns_at_fifteen_without_waiting_for_post_turn_distance(direction,sign):
   j,s=turn(direction)
   assert s(12.,travel=(0,30.),angle=160*sign,heading=-.5*sign)
-  assert s(13.,travel=(0,42.),angle=30.1*sign,heading=-1.5*sign)
-  assert s(13.05,travel=(0,42.25),angle=30*sign,heading=-1.5*sign) is None
+  assert s(13.,travel=(0,42.),angle=15.1*sign,heading=-1.5*sign)
+  assert s(13.05,travel=(0,42.25),angle=15*sign,heading=-1.5*sign) is None
   assert j.reason=='completed' and j.active is None
-  assert s(13.1,travel=(0,42.5),angle=29*sign,heading=-1.5*sign) is None
+  assert s(13.1,travel=(0,42.5),angle=14*sign,heading=-1.5*sign) is None
 
 
 @pytest.mark.parametrize('fault',['no_rotation','no_steer','only_thirty','stopped'])
@@ -42,9 +42,9 @@ def test_fresh_next_turn_hands_over_at_wheel_return(next_direction):
   assert s(12.,travel=(0,35.),angle=160.,heading=-.5)
   assert s(13.,cue=13.,direction=next_direction,atc='turn '+next_direction,travel=(0,40.),distance=25.,angle=80.,heading=-1.3)==('turn','left')
   assert j.active['turn']==40. and j.pending[1]==65.
-  result=s(13.1,travel=(0,41.),angle=25.,heading=-1.5)
+  result=s(13.1,travel=(0,41.),angle=15.,heading=-1.5)
   assert result==('turn',next_direction) and not j.active['entered'] and j.active['end']==95.
-  h=policy.update(13.1,2,True,[],5.,25.,'drive',False,result)[1]
+  h=policy.update(13.1,2,True,[],5.,15.,'drive',False,result)[1]
   assert h and (h['id']==original)==(next_direction=='left')
   assert s(13.2,travel=(0,41.5),angle=0.,heading=-1.5)==result
 
@@ -60,6 +60,23 @@ def test_wheel_return_removes_source_hold_immediately_without_new_tap():
   j,s=turn();p=Policy();p.update(10,2,True,[],5.,0.,'drive',False)
   p.update(11,2,True,[],5.,0.,'drive',False,('turn','left'))
   assert s(12.,angle=100.,heading=-.7)
-  output=s(13.,angle=25.,heading=-1.5,travel=(0,45.))
-  commands,hold=p.update(13,2,True,[],5.,25.,'drive',False,output)
+  output=s(13.,angle=15.,heading=-1.5,travel=(0,45.))
+  commands,hold=p.update(13,2,True,[],5.,15.,'drive',False,output)
   assert output is None and hold is None and commands==[]
+
+
+@pytest.mark.parametrize('direction,sign', [('left', 1), ('right', -1)])
+def test_driver_cancel_requires_started_steering_and_opposite_zero_crossing(direction, sign):
+  journey, step = turn(direction)
+  assert step(11.1, angle=-5*sign, pressed=True, torque=-300*sign)
+  assert step(11.2, angle=30*sign)
+  assert step(11.3, angle=0, pressed=True, torque=-300*sign)
+  assert step(11.4, angle=-.1*sign, pressed=True, torque=-300*sign) is None
+  assert journey.reason == 'driver_opposite'
+
+
+def test_opposite_angle_without_driver_input_keeps_unfinished_turn():
+  journey, step = turn()
+  assert step(11.1, angle=30)
+  assert step(11.2, angle=-1, pressed=False, torque=-100)
+  assert journey.reason == 'approach'

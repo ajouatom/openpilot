@@ -7,6 +7,7 @@ import sys
 import time
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+from openpilot.common.atc_params import right_lane_change_distance
 from blink_protocol import PACKAGE_CONFIG, LIMIT, encode, finite, fresh
 from blink_policy import Policy, AutomaticSignals
 from blink_tbt import TbtBlinker, right_front_clear
@@ -170,12 +171,13 @@ def main(fd, spas=False):
       automatic.update(now, mode, False, 0., 'none', '', 'none', use_travel=True)
     # The ATC add-on lights the real right indicator. Its CAN feedback goes through the
     # unchanged driver-blinker lane-change path; no LANECHANGE command is sent.
+    tbt_distance = right_lane_change_distance(params)
     tbt_enabled = (not spas and mode == 2 and params.get_int('AutoTurnControl') in (1, 2) and
-                   params.get_bool('AutoTurnControlRightLaneChange'))
+                   tbt_distance > 0)
     front_clear = (tbt_enabled and front_radar_available and 'radarState' in sm.services and sm.valid['radarState'] and
                    sm.alive['radarState'] and fresh(sm.recv_time['radarState'], now, .35) and
                    right_front_clear(sm['radarState']))
-    tbt_auto = tbt.update(now, enabled=tbt_enabled,
+    tbt_auto = tbt.update(now, enabled=tbt_enabled, distance_limit=tbt_distance,
                           front_clear=front_clear,
                           valid=(auto_valid and fresh(sm.recv_time['carrotMan'], now, .35) and
                                  sm['carControl'].latActive and params.get_int('LaneChangeNeedTorque') == 0),
@@ -208,9 +210,17 @@ def main(fd, spas=False):
     commands, hold = policy.update(now, mode, ok, commands, cs.vEgo, cs.steeringAngleDeg,
                                   str(cs.gearShifter), remote, auto, policy_valid)
     observation_feedback.prepare(now, hold, meta, cs)
-    hold = policy.acknowledged(now, activated_id, fresh(feedback.get('stamp'), now, .35) and feedback.get('state') == 'driver_override')
+    receiver_override = fresh(feedback.get('stamp'), now, .35) and feedback.get('state') == 'driver_override'
+    tbt_turn_hold = bool(not spas and hold and hold['source'] == 'turn' and automatic.journey.active)
+    # A confirmed TBT lamp is maintained by the comma-side lease. Receiver
+    # one-touch ownership ending must not erase the ongoing turn. This cannot
+    # activate a hold whose initial send and lamp were never acknowledged.
+    continuing_turn = (tbt_turn_hold and activated_id == hold['id'] and fresh(feedback.get('stamp'), now, .35) and
+                       feedback.get('state') in ('ready', 'waiting', 'driver_override') and
+                       feedback.get('accepted_id') in (None, hold['id']))
+    hold = policy.acknowledged(now, activated_id, receiver_override and not tbt_turn_hold)
     acknowledged = (hold and fresh(feedback.get('stamp'), now, .35) and feedback.get('accepted_id') == hold['id'] and
-                    feedback.get('state') in ('ready', 'waiting', 'waiting_previous_signal'))
+                    feedback.get('state') in ('ready', 'waiting', 'waiting_previous_signal')) or continuing_turn
     if not acknowledged:
       if activated_id is not None:
         release_until = now+.8
@@ -219,14 +229,14 @@ def main(fd, spas=False):
           (hold['direction'] == 'right' and cs.rightBlinker and not cs.leftBlinker)):
       activated_id = hold['id']
     activated_id = observation_feedback.activation(now, hold, cs, feedback, acknowledged, activated_id, ok)
-    if feedback.get('state') == 'driver_override':
+    if feedback.get('state') == 'driver_override' and not continuing_turn:
       release_until = 0.
-    if commands or feedback.get('state') == 'driver_override':
+    if commands or (spas and feedback.get('state') == 'driver_override'):
       automatic.pending = None
       automatic.journey.pending = None
       automatic.journey.active = None
       automatic.journey.cancelled_until = now+3.
-    if not spas and policy.relight(now, activated_id, acknowledged, cs.leftBlinker, cs.rightBlinker,
+    if not spas and policy.relight(now, activated_id, acknowledged and not receiver_override, cs.leftBlinker, cs.rightBlinker,
                                   retry_unlit=auto_valid and automatic.direction is not None and feedback.get('state') == 'ready'):
       hold, activated_id = policy.hold, None
     model_fresh = ('modelV2' in sm.services and sm.valid['modelV2'] and sm.alive['modelV2'] and fresh(sm.recv_time['modelV2'], now, .35))

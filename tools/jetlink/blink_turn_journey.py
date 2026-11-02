@@ -30,7 +30,7 @@ class TurnJourney:
   def start(self, now, direction, distance, travel, heading, target):
     self.active = {'direction':direction, 'start':now, 'end':travel[1]+distance+30.,
                    'turn':travel[1]+distance, 'epoch':travel[0], 'heading':heading,
-                   'rotation':0., 'peak_rotation':0., 'entered':False, 'opposite':None,
+                   'rotation':0., 'entered':False,
                    'target':target, 'centred':None, 'peak_angle':0.}
     self.reason = 'approach'
 
@@ -71,15 +71,13 @@ class TurnJourney:
     a['heading'] = heading
     if speed >= 1/3.6:
       a['rotation'] += delta
-    a['peak_rotation'] = max(a['peak_rotation'], a['rotation'])
     a['peak_angle'] = max(a['peak_angle'], angle*sign)
     a['entered'] |= angle*sign >= 30 and a['rotation'] >= math.radians(20)
-    # An active opposite driver input AND measured reverse rotation distinguish
-    # aborting from ordinary hands-off unwind through steering angle zero.
-    opposite = (pressed and torque*sign < 0 and angle*sign < -5 and speed >= 1/3.6 and
-                (a['rotation'] < -math.radians(5) or a['peak_rotation']-a['rotation'] > math.radians(8)))
-    a['opposite'] = (now if a['opposite'] is None else a['opposite']) if opposite else None
-    if a['opposite'] is not None and now-a['opposite'] >= .2:
+    # The driver can abandon a started turn by steering through centre into
+    # the opposite direction. A receiver status alone is not steering intent.
+    opposite = (a['peak_angle'] >= 30 and pressed and torque*sign < 0 and
+                angle*sign < 0 and speed >= 1/3.6)
+    if opposite:
       self.active, self.pending, self.reason = None, None, 'driver_opposite'
       self.cancelled_until = now+3.
       return None
@@ -88,8 +86,8 @@ class TurnJourney:
     complete = a['centred'] is not None and now-a['centred'] >= .4
     # Only a turn with measured rotation and selected-side steering can finish
     # on wheel return. Approach/traffic-light waits must not end at a straight
-    # wheel. No settling delay after return within 30 degrees while moving.
-    returned = a['entered'] and a['peak_angle'] > 30 and abs(angle) <= 30 and speed >= 1/3.6
+    # wheel. No settling delay after return within 15 degrees while moving.
+    returned = a['entered'] and a['peak_angle'] > 30 and abs(angle) <= 15 and speed >= 1/3.6
     expired = travel[1] >= a['end'] and (complete or travel[1] >= a['end']+30)
     if returned or expired:
       self.active, self.reason = None, 'completed'

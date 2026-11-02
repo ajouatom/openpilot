@@ -185,6 +185,7 @@ def test_real_lamp_feedback_uses_unchanged_desire_path(monkeypatch):
 @pytest.mark.parametrize('ordinary', ['none', 'turn', 'lane'])
 @pytest.mark.parametrize('atc,addon,torque,blocked,expected', [
   (1, True, 0, False, True), (2, True, 0, False, True),
+  (1, 350, 0, False, True), (1, 500, 0, False, True), (1, 501, 0, False, False),
   (1, False, 0, False, False), (2, False, 0, False, False),
   (0, True, 0, False, False), (3, True, 0, False, False), (4, True, 0, False, False),
   (1, True, 1, False, False), (2, True, 0, True, False),
@@ -384,3 +385,24 @@ def test_front_gap_must_stay_clear_during_confirmation_and_waiting():
   assert t.phase == 'cancelled'
   s['front_clear'] = True
   assert arm(t, s, 12.25) is None
+
+
+@pytest.mark.parametrize('limit,distance,expected', [(0,100,False),(250,250,True),(250,251,False),
+  (300,300,True),(300,301,False),(350,325,True),(400,399,True),(400,401,False),(500,499,True),
+  (501,100,False),(-1,100,False),(float('nan'),100,False)])
+def test_configured_distance_window(limit, distance, expected):
+  inputs = scene()
+  inputs['distance_limit'] = limit
+  inputs['nav'].xDistToTurn = distance
+  assert bool(arm(TbtBlinker(), inputs)) == expected
+
+
+def test_live_distance_disable_and_reduction_end_existing_request():
+  for limit in (0, 250):
+    inputs = scene()
+    inputs['distance_limit'] = 400
+    inputs['nav'].xDistToTurn = 350
+    controller = TbtBlinker()
+    assert arm(controller, inputs)
+    inputs['distance_limit'] = limit
+    assert controller.update(11.1, **inputs) is None
