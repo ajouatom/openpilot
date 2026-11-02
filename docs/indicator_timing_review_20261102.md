@@ -91,3 +91,15 @@ release on measured turn and wheel return, while retaining the stopped approach.
 Normal carrot-wip Git Pull and comma restart deliver this comma-side change.
 No Jetson bundle/engine build, vehicle writes, live CAN test or reboot in this task.
 Physical driving acceptance remains unverified.
+
+
+## Publication verification
+
+Source08f99d4e41 is published on carrot-wip. Exact-source Jetson integration
+run41452434830 passes2224 checks/56 skips plus232 monitoring,62 HUD,94 update,
+119 navigation,11 storage and11 network checks; Windows also passes. The first
+run41451133382 remained in the HUD step and was cancelled after this unchanged
+source rerun succeeded; no root cause is asserted for that runner delay.
+Full build/tests41451133200, eGPU compatibility41451133375 and user docs41451133407
+pass. Wiki sync41451725370 passes; all three AutoBlinkerControl language pages
+have matching reviewed semantic hashes at Wiki d06cf2d.

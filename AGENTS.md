@@ -15,6 +15,9 @@
   oneend55ms. Manual tuning stays OFFLINE/unchanged. No live writes/CAN/reboot
   or Jetson bundle; normal GitPull/comma restart. See
   docs/indicator_timing_review_20261102.md; raw evidence private.
+  Published08f99d4e41; CI41452434830 passes2224/56skip plus232/62/94/119/11/11
+  andWindows; first41451133382 stalled HUD/cancelled after same-source pass.
+  Fullbuild41451133200,eGPU/docs pass; Wiki d06cf2d three pages hash-verified.
 
 
 - On 2026-11-01, owner approves latest-drive manual-indicator response fixes.
