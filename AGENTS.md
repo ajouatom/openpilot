@@ -1,5 +1,22 @@
 # Repository memory
 
+- On 2026-11-02, owner separates prior manual-attempt replay from lunch long-turn
+  review, then requests TBT wheel-return<=30deg completion.10hash-matched lunch
+  rlogs127897928B on4a555c75b8: returnseg3 leftlamp22.512..37.002s/14.49s;
+  slow departure and old+30m/10deg-settle hold explain delay. Actual selected
+  steer>30 AND headingrotation>=20 then moving>=1km/h/wheelabs<=30 ends hold
+  immediately; approach/stop, distance fallback and300s limit preserved. Fresh
+  same-side nextcue now queues separately; completion hands over with sameID,
+  no duplicate tap.5phase source replay36.026..36.066->28.196..28.236s,7.80..7.85s
+  earlier request end, NOT measured new lamp extinction. Desktop710/2skip.
+  Prior12755frame manual replay:0.5s/cap1.4 advances6/20 by0.046..0.298s but
+  adds1candidate near parked roadside; tire-before-line notproved. Opposite
+  torque can occur while still approaching; torque+0.05mretreat trial improves
+  oneend55ms. Manual tuning stays OFFLINE/unchanged. No live writes/CAN/reboot
+  or Jetson bundle; normal GitPull/comma restart. See
+  docs/indicator_timing_review_20261102.md; raw evidence private.
+
+
 - On 2026-11-01, owner approves latest-drive manual-indicator response fixes.
   Eleven hash-matched full rlogs/147479258B/12755model frames:20manual requests,
   15lamp-feedback starts, median0.206s request-to-lamp; detector delay dominates.

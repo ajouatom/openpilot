@@ -32,9 +32,11 @@ Same-direction origins share a continuing signal. Alignment after crossing, retu
 
 ## TBT turn indication
 
-The distance recorded at audioTurn and subsequent wheel-speed integration track through 30m past the turn. Stops do not consume distance. Continued turning allows at most another 30m, with a 300-second overall limit. A nearby next turn in the same direction extends the distance anchor; an opposite turn waits for completion of the current turn.
+The distance recorded at audioTurn and subsequent wheel-speed integration track through 30m past the turn. Once selected-side steering has exceeded 30 degrees and measured heading has rotated at least 20 degrees, returning the wheel within ±30 degrees while moving at least 1km/h ends the hold immediately, regardless of remaining distance. A straight wheel during approach or a pre-turn stop does not complete a turn. Distance remains a fallback, allowing at most another 30m during continued turning and a 300-second overall limit.
 
-Sustained opposite driver torque, opposite steering angle and measured reverse heading motion cancel the turn. A natural steering return through zero alone does not. Navigation cancellation/off-route status, invalid vehicle inputs and interrupted distance tracking cancel the hold request.
+A fresh audioTurn cue for a nearby next turn is handed over when the current turn completes. Same-direction continuation keeps the existing request without another tap; an opposite turn switches after completion. Ending the hold request does not guarantee immediate extinction of the OEM lamp.
+
+Sustained opposite driver torque, opposite steering angle and measured reverse heading motion cancel the turn. Crossing steering zero before actual turn entry does not complete the turn. Navigation cancellation/off-route status, invalid vehicle inputs and interrupted distance tracking cancel the hold request.
 
 ## The key point
 

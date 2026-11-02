@@ -481,3 +481,5 @@ An ATC recovery attempt has a new four-second activation deadline. It does not e
 `ModelDesireIndicator` and `ModelPathIndicator` are separate default-off indication-only options. See [lane changes](lane-change.md) for TBT distance holding and each feature’s start/end conditions.
 
 Manual indication projects 0.3s of measured boundary approach, advancing the centre-to-boundary threshold by at most 0.3m. Existing speed, centre-line and road-edge gates remain.
+
+After confirmed turn entry, the TBT indicator ends its hold as the wheel returns within ±30 degrees while moving, without waiting for the remaining 30m. Pre-turn traffic-light waits remain held; see [lane changes](lane-change.md) for the entry conditions.
