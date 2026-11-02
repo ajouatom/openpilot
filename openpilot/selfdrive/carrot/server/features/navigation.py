@@ -51,7 +51,7 @@ async def search(request):
   async with state.lock:
     state.next_request = time.monotonic() + 1.
     try:
-      params = {'q': query, 'access_token': token, 'limit': '5', 'autocomplete': 'false', 'permanent': 'true'}
+      params = {'q': query, 'access_token': token, 'limit': '5', 'autocomplete': 'false', 'permanent': 'false'}
       async with request.app['http'].get('https://api.mapbox.com/search/geocode/v6/forward', params=params,
                                          timeout=aiohttp.ClientTimeout(total=8)) as response:
         if response.status != 200:
@@ -67,19 +67,20 @@ async def search(request):
           properties = feature.get('properties', {})
           results.append(destination({'latitude': lat, 'longitude': lon,
                                       'place_name': properties.get('full_address') or properties.get('name') or query}))
-        return web.json_response({'results': results})
+        return web.json_response({'results': results}, headers={'Cache-Control': 'no-store'})
     except (aiohttp.ClientError, TimeoutError, ValueError, KeyError, TypeError, IndexError, AttributeError):
       return web.json_response({'error': 'Mapbox search is unavailable.'}, status=502)
 
 
 async def get_destination(request):
   try:
-    value = get_param_value('NavDestination', '')
+    value = get_param_value('NavDestinationTemporary', '') or get_param_value('NavDestination', '')
     current = destination(json.loads(value)) if value else None
   except (ValueError, KeyError, TypeError):
     current = None
   return web.json_response({'destination': current, 'map_ready': preview_fresh() and preview_reason() == 'ready',
-                            'key_configured': bool(get_param_value('MapboxPublicKey', ''))})
+                            'key_configured': bool(get_param_value('MapboxPublicKey', ''))},
+                           headers={'Cache-Control': 'no-store'})
 
 
 async def set_destination(request):
@@ -87,13 +88,17 @@ async def set_destination(request):
     value = destination(await request.json())
   except (ValueError, KeyError, TypeError):
     return web.json_response({'error': 'Invalid destination.'}, status=400)
-  set_param_value('NavDestination', json.dumps(value, ensure_ascii=False))
+  # Temporary Geocoding results may only be used during this manager/onroad
+  # session, so keep the selected coordinates out of persistent NavDestination.
+  set_param_value('NavDestinationTemporary', json.dumps(value, ensure_ascii=False))
+  set_param_value('NavDestination', '')
   set_param_value('NavDestinationWaypoints', '')
   return web.json_response({'destination': value})
 
 
 async def clear_destination(request):
   set_param_value('NavDestination', '')
+  set_param_value('NavDestinationTemporary', '')
   set_param_value('NavDestinationWaypoints', '')
   return web.json_response({'destination': None})
 

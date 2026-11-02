@@ -83,6 +83,13 @@ class RouteEngine:
     self.pending_token = None
     self.resend_at = time.monotonic() + 5.
 
+  def destination_from_params(self):
+    # Geocoding API results requested with permanent=false are valid only for
+    # the current session. Prefer the session-scoped destination, while
+    # retaining persistent NavDestination for non-geocoding callers.
+    param = "NavDestinationTemporary" if self.params.get("NavDestinationTemporary") else "NavDestination"
+    return coordinate_from_param(param, self.params)
+
   def refresh_token(self):
     token = os.environ.get("MAPBOX_TOKEN") or self.params.get("MapboxPublicKey") or ""
     if isinstance(token, bytes):
@@ -140,7 +147,7 @@ class RouteEngine:
     if self.last_position is None or not self.mapbox_token:
       return
 
-    new_destination, place_name = coordinate_from_param("NavDestination", self.params)
+    new_destination, place_name = self.destination_from_params()
     if place_name == 'External Navi':
       self.params.remove('NavDestination')
       new_destination = None
@@ -216,7 +223,7 @@ class RouteEngine:
       return
     response = self.pending.result()
     self.pending = None
-    destination, _ = coordinate_from_param('NavDestination', self.params)
+    destination, _ = self.destination_from_params()
     if (destination != self.pending_destination or self.mapbox_token != self.pending_token
         or (self.params.get('NavDestinationWaypoints') or '') != self.pending_waypoints):
       return
