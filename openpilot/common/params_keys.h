@@ -160,6 +160,7 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
 
     {"ApiCache_NavDestinations", {PERSISTENT, STRING}},
     {"NavDestination", {PERSISTENT, STRING}},
+    {"NavDestinationTemporary", {CLEAR_ON_MANAGER_START | CLEAR_ON_OFFROAD_TRANSITION, STRING}},
     {"NavDestinationWaypoints", {CLEAR_ON_MANAGER_START | CLEAR_ON_OFFROAD_TRANSITION, STRING}},
     {"NavPastDestinations", {PERSISTENT, STRING}},
     {"NavSettingLeftSide", {PERSISTENT, BOOL}},
