@@ -209,7 +209,8 @@ def test_hung_cleanup_has_deadline_and_cannot_launch_another_worker(manager):
 
 
 @pytest.mark.parametrize('message', ['PCIe link not up (LTSSM=0x00)',
-                                  'TimeoutError: BL not ready. Timed out after 10000 ms, condition not met: 0 != 2147483648'])
+                                  'TimeoutError: BL not ready. Timed out after 10000 ms, condition not met: 0 != 2147483648',
+                                  'TimeoutError: flush_tlb timeout. Timed out after 10000 ms, condition not met: 0 != 1'])
 def test_temporary_initialization_failure_can_use_the_next_attempt(manager, message):
   value, clock = manager
   value.failed(USB_ERROR)

@@ -579,9 +579,9 @@ def main(demo=False):
       indicator_now = time.monotonic()
       indicator_valid = modelv2_send.valid and all(
         sm.valid[k] and sm.alive[k] and 0 <= indicator_now-sm.recv_time[k] < .35
-        for k in ('carState', 'carControl', 'carrotMan'))
+        for k in ('carState', 'carControl'))
       DH.update(sm['carState'], modelv2_send.modelV2, sm['carControl'].latActive, lane_change_prob, sm['carrotMan'], sm['radarState'],
-                indicator_valid=indicator_valid)
+                indicator_valid=indicator_valid, indicator_curvature=sm['carControl'].actuators.curvature)
       modelv2_send.modelV2.meta.laneChangeState = DH.lane_change_state
       modelv2_send.modelV2.meta.laneChangeDirection = DH.lane_change_direction
       modelv2_send.modelV2.meta.desireLog = DH.desireLog #carrot
@@ -593,6 +593,19 @@ def main(demo=False):
       modelv2_send.modelV2.meta.autoTurnSignalRequestId = DH.auto_signal_request_id
       modelv2_send.modelV2.meta.manualLaneIndicator = DH.boundary_indicator.request_direction
       modelv2_send.modelV2.meta.manualLaneIndicatorMonoTime = int(DH.boundary_indicator.request_time * 1e9)
+      observation = DH.model_indicator.active
+      modelv2_send.modelV2.meta.observedIndicator = observation.direction if observation else 0
+      modelv2_send.modelV2.meta.observedIndicatorMonoTime = int(DH.model_indicator.request_time * 1e9)
+      modelv2_send.modelV2.meta.observedIndicatorSource = DH.model_indicator.reason
+      modelv2_send.modelV2.meta.indicatorIsolationMask = DH.boundary_indicator.blocked
+      modelv2_send.modelV2.meta.indicatorJournalMonoTime = int(DH.indicator_journal_time * 1e9)
+      preparation = DH.model_indicator.candidate
+      if preparation and not (DH.model_path_indicator_enabled if preparation[1] == 'model_path' else DH.model_desire_indicator_enabled):
+        preparation = None
+      if DH.boundary_indicator_enabled and DH.boundary_indicator.episode:
+        preparation = (DH.boundary_indicator.episode['direction'], 'manual')
+      modelv2_send.modelV2.meta.indicatorPrepareDirection = preparation[0] if preparation and not observation else 0
+      modelv2_send.modelV2.meta.indicatorPrepareSource = preparation[1] if preparation and not observation else ''
       if boundary_observer is not None:
         # Read-only experiment: independent of navigation freshness, no request/desire assignment.
         boundary_observer.observe(indicator_now, sm['carState'], modelv2_send.modelV2,

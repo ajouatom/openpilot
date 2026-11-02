@@ -6,7 +6,9 @@ from openpilot.common.constants import CV
 from openpilot.common.realtime import DT_MDL
 from openpilot.common.params import Params
 from openpilot.selfdrive.carrot.bluetooth.model import CommandReader, RUNTIME, read_json
+from openpilot.selfdrive.carrot.bluetooth.physical import HOLD_PATH
 from openpilot.selfdrive.controls.lib.desire_lib.boundary_indicator import BoundaryIndicator
+from openpilot.selfdrive.controls.lib.desire_lib.indicator_observer import ModelIndicator
 
 from openpilot.selfdrive.controls.lib.desire_lib.constants import (
   LaneChangeState, LaneChangeDirection, TurnDirection,
@@ -32,6 +34,10 @@ class DesireHelper:
     self.boundary_indicator_enabled = False
     self.boundary_indicator = BoundaryIndicator(
       read_json(RUNTIME/'boundary-indicator.json', {}) if boundary_indicator_supported else None)
+    self.model_indicator = ModelIndicator()
+    self.model_desire_indicator_enabled = False
+    self.model_path_indicator_enabled = False
+    self.indicator_journal_time = 0.
     self.bluetooth_commands = CommandReader('lane')
     self.frame = 0
 
@@ -124,6 +130,18 @@ class DesireHelper:
     if self.boundary_indicator_supported and (self.frame == 1 or self.frame % 20 == 0):
       self.boundary_indicator_enabled = (self.params.get_bool("ManualLaneChangeIndicator") and
         self.params.get_int("AutoBlinkerControl") in (1, 2) and not self.params.get_bool("CanfdBlinkerControl"))
+      lamp_mode = self.params.get_int("AutoBlinkerControl") in (1, 2) and not self.params.get_bool("CanfdBlinkerControl")
+      self.model_desire_indicator_enabled = lamp_mode and self.params.get_bool("ModelDesireIndicator")
+      self.model_path_indicator_enabled = lamp_mode and self.params.get_bool("ModelPathIndicator")
+      # Low-speed TBT source waits for this ownership acknowledgement BEFORE
+      # sending a lamp-only command. Also restores masks after process restart.
+      journal = read_json(RUNTIME/'boundary-indicator.json', {})
+      stamp, direction = journal.get('time'), journal.get('mask', journal.get('direction'))
+      now = time.monotonic()
+      if (type(stamp) in (int, float) and math.isfinite(stamp) and self.indicator_journal_time < stamp <= now and
+          now-stamp < 20 and type(direction) is int and direction in (1, 2, 3)):
+        self.boundary_indicator.own(now, direction)
+        self.indicator_journal_time = stamp
     if self.frame % 100 == 0:
       self.laneChangeNeedTorque = self.params.get_int("LaneChangeNeedTorque")
       self.laneChangeBsd = self.params.get_int("LaneChangeBsd")
@@ -358,15 +376,24 @@ class DesireHelper:
   # ─────────────────────────────────────────────
   # main update
   # ─────────────────────────────────────────────
-  def update(self, carstate, modeldata, lateral_active, lane_change_prob, carrotMan, radarState, *, indicator_valid=False):
+  def update(self, carstate, modeldata, lateral_active, lane_change_prob, carrotMan, radarState, *, indicator_valid=False, indicator_curvature=None):
     self.frame += 1
     self._update_params_periodic()
     if self.boundary_indicator_supported:
-      self.boundary_indicator.update(time.monotonic(), carstate, modeldata,
+      indicator_now = time.monotonic()
+      self.boundary_indicator.update(indicator_now, carstate, modeldata,
         enabled=self.boundary_indicator_enabled, valid=indicator_valid,
         # Navigation preparation is not driver intent. Reserve only an executing
         # lane-change maneuver; model desire probabilities also predict manual moves.
         busy=self.lane_change_state in (LaneChangeState.laneChangeStarting, LaneChangeState.laneChangeFinishing))
+      if self.model_indicator.active and self.model_indicator.active.source == 'manual' and not self.boundary_indicator_enabled:
+        self.model_indicator.active = None
+      self.model_indicator.update(indicator_now, carstate, modeldata,
+        valid=indicator_valid, lateral_active=lateral_active,
+        desire_enabled=self.model_desire_indicator_enabled, path_enabled=self.model_path_indicator_enabled,
+        busy=self.lane_change_state in (LaneChangeState.laneChangeStarting, LaneChangeState.laneChangeFinishing),
+        isolation=self.boundary_indicator, manual_edge=self.boundary_indicator.request_direction, command_curvature=indicator_curvature,
+        feedback=read_json(HOLD_PATH, {}) if self.model_indicator.active else None)
 
     # counts
     self.carrot_lane_change_count = max(0, self.carrot_lane_change_count - 1)

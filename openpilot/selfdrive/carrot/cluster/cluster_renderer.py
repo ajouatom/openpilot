@@ -1519,6 +1519,8 @@ class ClusterUiRenderer:
         self._draw_hud(state, signal_lights)
         self._profile_add("render.hud", profile_stage)
         profile_stage = self._profile_start()
+        from openpilot.common.indicator_display import draw as draw_indicator
+        draw_indicator(530, 78, 460, self._korean_font or self._font, 24)
         self._draw_alert_overlay(getattr(state, "alert", None))
         self._profile_add("render.alert", profile_stage)
 

@@ -314,3 +314,28 @@ def test_previous_usb_link_block_revalidates_files_and_smoke_receipt(tmp_path, m
   assert not (path.parent / 'rejected').exists()
   assert not (path.parent / 'boot_validation.json').exists()
   assert json.loads((path.parent / 'last_failure.json').read_text()) == failure
+
+
+TLB_TIMEOUT = 'Traceback (most recent call last):\n  GPU mapping initialization\nTimeoutError: flush_tlb timeout. Timed out after 10000 ms, condition not met: 0 != 1\n'
+
+
+@pytest.mark.parametrize('phase,allowed', [('load', True), ('boot_validation', True), ('inference', False)])
+def test_serialized_mapping_timeout_does_not_blacklist_a_startup_model(tmp_path, phase, allowed):
+  path = tmp_path / 'model.pkl'
+  (tmp_path / 'installed.json').write_text(json.dumps({'pickle': {'sha256': 'a' * 64}}))
+  (tmp_path / 'boot_validation.json').write_text('{"key":"old"}')
+  assert pm.record_failure(path, RuntimeError(TLB_TIMEOUT), phase) == (not allowed)
+  assert (tmp_path / 'rejected').exists() == (not allowed)
+  assert not (tmp_path / 'boot_validation.json').exists()
+  failure = json.loads((tmp_path / 'last_failure.json').read_text())
+  assert failure['error'] == TLB_TIMEOUT and failure['rejected'] == (not allowed)
+
+
+@pytest.mark.parametrize('error', [
+  'ValueError: flush_tlb timeout. Timed out after 10000 ms, condition not met: 0 != 1',
+  'RuntimeError: quoted TimeoutError: flush_tlb timeout. Timed out after 10000 ms, condition not met: 0 != 1',
+  TLB_TIMEOUT + 'ValueError: checksum mismatch',
+  'TimeoutError: unrelated model operation',
+])
+def test_mapping_timeout_match_does_not_hide_integrity_or_unrecognized_errors(error):
+  assert not pm.gpu_mapping_timeout(error, 'load')

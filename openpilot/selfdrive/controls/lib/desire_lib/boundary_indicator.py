@@ -39,6 +39,12 @@ class BoundaryIndicator:
     self.episode = None
     self.lane_since = [None, None]
 
+  def own(self, now, direction):
+    self.blocked |= direction
+    self.block_until = max(self.block_until, now + QUIET_SEC)
+    self.isolate_until = max(self.isolate_until, now + ISOLATE_SEC)
+    self.dark_since = None
+
   def update(self, now, cs, md, *, enabled, valid, busy):
     lamps = int(cs.leftBlinker) | (int(cs.rightBlinker) << 1)
     if not self.initialized:
@@ -95,7 +101,7 @@ class BoundaryIndicator:
         self._reset_geometry()
         return
       for i, probability in enumerate(probs):
-        if probability > 0.5:
+        if probability >= 0.10:
           self.confident[i] = now
       y = (-left, right)
       old, self.previous = self.previous, (md.frameId, now, y)
@@ -119,7 +125,8 @@ class BoundaryIndicator:
       confirmed = direction if direction and now - self.intent_since >= .15 else 0
       if now < self.relabel_until:
         return
-      if self.episode is None and confirmed and self.lane_since[confirmed - 1] is not None and now - self.lane_since[confirmed - 1] >= .2:
+      if (self.episode is None and confirmed and self.lane_since[confirmed - 1] is not None and now - self.lane_since[confirmed - 1] >= .2 and
+          self.confident[confirmed - 1] is not None and 0 <= now-self.confident[confirmed - 1] <= TRACK_SEC):
         self.episode = {'direction':confirmed, 'start':now, 'intent':now, 'initial':y[confirmed - 1],
                         'minimum':y[confirmed - 1], 'approach':now}
       episode = self.episode
@@ -142,14 +149,16 @@ class BoundaryIndicator:
       # The crossed boundary must have been observed recently. The opposite
       # boundary supplies geometric consistency, not a second confidence veto.
       observed = self.confident[i]
-      if observed is None or not 0 <= now - observed <= TRACK_SEC:
-        return
+      if observed is None:
+        return  # Episode admission anchored confidence; continuous geometry bounds its four-second lifetime.
       # Both boundaries must move consistently; widening forks are not crossings.
-      if (episode['initial'] - y[i] >= .15 and y[i] < 0.9 and self.rates[i] > 0.4 and
+      # Project only 0.3 s of measured approach, with a 0.3 m advance cap.
+      # Intent, real movement and paired-boundary consistency are still required.
+      threshold = min(1.2, .9 + .3 * max(0., self.rates[i]))
+      if (episode['initial'] - y[i] >= .15 and y[i] < threshold and self.rates[i] > 0.4 and
           self.rates[1 - i] < -0.4 and abs(sum(self.rates)) < 0.35):
         self.request_direction, self.request_time = direction, now
-        self.blocked |= direction
-        self.block_until, self.isolate_until, self.dark_since = now + QUIET_SEC, now + ISOLATE_SEC, None
+        self.own(now, direction)
     except (AttributeError, IndexError, TypeError, ValueError):
       self._reset_geometry()
 
