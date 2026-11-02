@@ -19,6 +19,10 @@
   addsnothing. Unconditional0.5s adds roadside candidate. Manual timing unchanged.
   No vehicle writes/CAN/reboot/bundle. GitPull/comma restart. See
   docs/indicator_morning_review_20261103.md. Raw evidence private.
+  Source1196a59d34 published. Native41535582601 1285/40skip/362subtests;
+  Jetson41535583787 2329/56skip+232/62/94/119/11/11 andWindows pass. eGPU/docs
+  pass. Localweb52+30 pass after oldtoggle expectation update. Wiki c815bd5
+  twelve pages reviewed/hash-matched.
 
 
 - On 2026-11-02, owner separates prior manual-attempt replay from lunch long-turn

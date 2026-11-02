@@ -110,3 +110,14 @@ Normal carrot-wip Git Pull and comma restart apply it, including setting migrati
 This task performs read-only vehicle log acquisition and offline verification.
 Vehicle installation, physical lamp acceptance and the initial-send root cause
 remain pending. No new Jetson runtime bundle is required for these comma changes.
+
+
+## Publication checks
+
+Source1196a59d34 is published. Jetson CI41535583787 passes2329 checks/56 skips,
+232 monitoring,62 HUD,94 update,119 navigation and11 each storage/network checks,
+with Windows passing. Native Signal41535582601 passes1285 checks/40 skips and362
+subtests. eGPU41535583839 and user docs41535583883 pass. Local web schema/navigation
+checks pass52 tests. Wiki c815bd5 has12 reviewed pages with matching semantic hashes.
+The first web test run retained the former toggle expectation. Updating that
+expectation to the numeric slider/range/step passes the30 corresponding Node tests.
