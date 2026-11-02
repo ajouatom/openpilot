@@ -366,8 +366,11 @@ class Device:
     if not ui_state.started:
       return False
     sm = ui_state.sm
-    # a stale selfdriveState is drawn as a critical alert too
-    return time.monotonic() - sm.recv_time['selfdriveState'] > 1.0 or sm['selfdriveState'].alertSize != 0
+    # a stale selfdriveState is drawn as a critical alert too. The dashcam-mode notice is up the whole drive (11-01 route
+    # 57: 6000/6000 frames), so it must not keep ScreenOn=0 from turning the screen off
+    ss = sm['selfdriveState']
+    stale = time.monotonic() - sm.recv_time['selfdriveState'] > 1.0
+    return stale or (ss.alertSize != 0 and not ss.alertType.startswith('dashcamMode/'))
 
   def _set_awake(self, on: bool):
     if on != self._awake:
