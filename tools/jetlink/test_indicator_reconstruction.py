@@ -171,12 +171,11 @@ def test_turn_distance_freezes_at_stop_and_survives_desire_navigation_advance():
   assert j.reason=='completed'
 
 
-def test_opposite_driver_motion_not_zero_crossing_cancels_turn():
+def test_opposite_driver_zero_crossing_cancels_started_turn():
   j,s=turn()
   assert s(12.,angle=60.,heading=-.5)
   assert s(12.1,angle=-40.,heading=-.5)  # Outside the new wheel-return band.
-  assert s(12.2,angle=-40.,heading=-.3,pressed=True,torque=-100.)
-  assert s(12.45,angle=-40.,heading=-.2,pressed=True,torque=-100.) is None
+  assert s(12.2,angle=-40.,heading=-.3,pressed=True,torque=-100.) is None
   assert j.reason=='driver_opposite'
   assert s(12.5,cue=12.5) is None
 

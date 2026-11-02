@@ -470,9 +470,9 @@ USB-CAN requests the initial blink; the existing vehicle indicator-hold function
 
 A hold-start request without confirmed lamp activation expires after four seconds, allowing the next button press to start a new request.
 
-`AutoTurnControlRightLaneChange` under ATC details adds to modes 1 and 2 and triggers the physical right indicator before a TBT right turn or right fork, at 10km/h or above and within 250 m, until turning starts. It requires the supported USB2CAN indicator setup, a right lane, fresh OEM BSD and right-front gaps of at least 5 m both now and after three seconds; existing manual/Bluetooth lane-change behavior is unchanged. See [lane changes](lane-change.md).
+`AutoTurnControlRightLaneChange` under ATC details adds to modes 1 and 2 and triggers the physical right indicator before a TBT right turn or right fork, at 10km/h or above and within the configured distance, until turning starts. It requires the supported USB2CAN indicator setup, a right lane, fresh OEM BSD and right-front gaps of at least 5 m both now and after three seconds; existing manual/Bluetooth lane-change behavior is unchanged. See [lane changes](lane-change.md).
 
-`AutoTurnControlRightLaneChange` remains the separate 250m ATC add-on. `ManualLaneChangeIndicator` independently retains recent intent for up to 1.5s. The left side excludes centre lines using fresh white-line classification; the right requires at least 2.5m from the target boundary to the road edge. Outer-line probability is not required. It never requests automatic steering. See [lane changes](lane-change.md).
+`AutoTurnControlRightLaneChange` remains the separate ATC distance add-on. `ManualLaneChangeIndicator` independently retains recent intent for up to 1.5s. The left side excludes centre lines using fresh white-line classification; the right requires at least 2.5m from the target boundary to the road edge. Outer-line probability is not required. It never requests automatic steering. See [lane changes](lane-change.md).
 
 The manual lane-change indicator can request again after at least three seconds, one continuous second of lamp extinction and fresh steering/approach conditions. Automatic-steering feedback isolation remains at least 12 seconds.
 
@@ -482,4 +482,7 @@ An ATC recovery attempt has a new four-second activation deadline. It does not e
 
 Manual indication projects 0.3s of measured boundary approach, advancing the centre-to-boundary threshold by at most 0.3m. Existing speed, centre-line and road-edge gates remain.
 
-After confirmed turn entry, the TBT indicator ends its hold as the wheel returns within ±30 degrees while moving, without waiting for the remaining 30m. Pre-turn traffic-light waits remain held; see [lane changes](lane-change.md) for the entry conditions.
+After confirmed turn entry, the TBT indicator ends its hold as the wheel returns within ±15 degrees while moving, without waiting for the remaining 30m. Pre-turn traffic-light waits remain held; see [lane changes](lane-change.md) for the entry conditions.
+
+
+The ATC right lane-change distance uses 0m for off and 50m steps up to 500m. The former ON setting migrates to 250m at restart.
