@@ -299,6 +299,8 @@ In modes `EnableRadarTracks=1`–`3`, a confirmed departing front lead can recei
 
 `CommaPedalEnabled` defaults to OFF. It permits the Comma Pedal longitudinal path on vehicles without ACC carrying the `CC_ONLY_CAR` flag when explicit vehicle configuration, device CAN reception, and the existing control and safety conditions are satisfied. It works only while the vehicle's **Cruise ready is off**; when Cruise ready is on, OEM cruise control takes priority and Comma Pedal control is unavailable. The shared protocol is reusable; the supplied DBC, tuning, and safety profile are for Kia Ray EV. Other vehicles require their own configuration and never inherit the Ray values automatically.
 
+The current Ray profile doubles the command increment above the neutral reference. This does not mean doubled physical pedal position or acceleration; the expanded output is pending vehicle validation. Sensor inputs and driver-override thresholds remain unchanged.
+
 A saved change takes effect at the **next vehicle-parameter initialization**; it does not switch the running control path immediately. Comma Pedal operation on CarrotPilot has not yet been validated in a vehicle. Pedal firmware and voltage calibration are unchanged. See the [Comma Pedal diagnostic guide](../../comma_pedal.md) for the observations required at each stage.
 
 `HardwareC3xLite` must remain off on standard C3 and C3X hardware. Enable it only on a C3X Lite, then reboot the device. The setting skips the unavailable amplifier so startup is not delayed by I2C retries, uses the GPIO buzzer for alerts, disables `micd`, `soundd`, and `loggerd`, and turns off `RecordAudio`. Normal route logging is unavailable while this hardware mode is enabled.
