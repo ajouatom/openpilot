@@ -729,7 +729,7 @@ def make_paddle_stop_helper(v_ego, x_state=2, d_rel=0., v_rel=0., resume=0):
   helper, CS, CC = make_cruise_helper(30, 0, False, True)
   del helper._update_cruise_state  # the real one, not the button-test stub
   helper._paddle_decel_active = resume == 0
-  helper._paddle_resume_kph = resume
+  helper._paddle_resume_kph, helper._paddle_resume_cnt = resume, 0
   helper._brake_pressed_count = helper._gas_pressed_count = -2
   helper._gas_tok, helper._gas_tok_timer, helper.disengage_on_accelerator = False, 100, False
   helper.xState, helper.d_rel, helper.v_rel = x_state, d_rel, v_rel
@@ -756,3 +756,11 @@ def test_paddle_stop_restores_set_speed_once_stopped():
   helper, CS, CC = make_paddle_stop_helper(0.0, x_state=5, resume=30)
   assert helper._update_cruise_state(CS, CC, 5) == 30
   assert helper._paddle_resume_kph == 0
+
+
+def test_paddle_stop_restores_set_speed_when_the_light_turns_green_before_stopping():
+  helper, CS, CC = make_paddle_stop_helper(8.0, x_state=3, resume=60)
+  assert helper._update_cruise_state(CS, CC, 29) == 29  # still asked to stop: hold
+  helper.xState = 2
+  speeds = [helper._update_cruise_state(CS, CC, 29) for _ in range(101)]
+  assert speeds[:100] == [29] * 100 and speeds[100] == 60 and helper._paddle_resume_kph == 0

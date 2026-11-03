@@ -212,6 +212,7 @@ class VCruiseCarrot:
 
     self._paddle_decel_active = False
     self._paddle_resume_kph = 0
+    self._paddle_resume_cnt = 0
     self.carrot_cruise_active = False
 
     #self.events = []
@@ -944,11 +945,15 @@ class VCruiseCarrot:
           if CS.vEgo > 0.5:
             # Still rolling: hold the current speed into the stop; the set speed returns once stopped.
             self._paddle_resume_kph = v_cruise_kph
+            self._paddle_resume_cnt = 0
             v_cruise_kph = self.v_ego_kph_set
-      elif self._paddle_resume_kph > 0 and CS.vEgo < 0.1:
-        # Stopped at the light/lead: restore the set speed instead of leaving the 5 km/h floor.
-        v_cruise_kph = max(v_cruise_kph, self._paddle_resume_kph)
-        self._paddle_resume_kph = 0
+      elif self._paddle_resume_kph > 0:
+        # Give the set speed back once stopped, or when the light stops asking for a stop for 1 s
+        # (green before we stopped); otherwise the speed at hand-off (e.g. 30 of 60) would stick.
+        self._paddle_resume_cnt = self._paddle_resume_cnt + 1 if self.xState not in [3, 5] else 0
+        if CS.vEgo < 0.1 or self._paddle_resume_cnt > int(1.0 / 0.01):
+          v_cruise_kph = max(v_cruise_kph, self._paddle_resume_kph)
+          self._paddle_resume_kph = 0
           
 
     if self._gas_pressed_count > self._gas_tok_timer:
