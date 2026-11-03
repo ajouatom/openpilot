@@ -167,6 +167,7 @@ class CarrotPlanner:
 
     self.aChangeCostStarting = 10.0
     self.stopGoAssist = 0
+    self.comfort_brake_symmetric = False
 
     self.trafficLightDetectMode = 2 # 0: None, 1:Stop, 2:Stop&Go
     self.trafficState_carrot = 0
@@ -233,6 +234,7 @@ class CarrotPlanner:
       self.autoNaviSpeedDecelRate = float(self.params.get_int("AutoNaviSpeedDecelRate")) * 0.01
       self.aChangeCostStarting = self.params.get_float("AChangeCostStarting")
       self.stopGoAssist = self.params.get_int("StopGoAssist")
+      self.comfort_brake_symmetric = self.params.get_bool("ComfortBrakeSymmetric")
       self.trafficStopDistanceAdjust = self.params.get_float("TrafficStopDistanceAdjust") / 100.
     elif self.params_count >= 100:
 
@@ -506,7 +508,10 @@ class CarrotPlanner:
     #self.soft_hold_active = sm['carControl'].hudControl.softHoldActive # carrot 1
     self.soft_hold_active = sm['carState'].softHoldActive # carrot 2
 
-    mode_comfort_brake = self.comfortBrake * get_driving_mode_comfort_brake_factor(self.myDrivingMode)
+    # ComfortBrakeSymmetric: own braking assumption = the lead's (long_mpc.COMFORT_BRAKE 2.5) so that following at the
+    # same speed adds no v^2 term; 2.4 vs 2.5 left 7.5 m extra at 108 km/h (02_logs/measurements.md §38, §39)
+    comfort_brake = 2.5 if self.comfort_brake_symmetric else self.comfortBrake
+    mode_comfort_brake = comfort_brake * get_driving_mode_comfort_brake_factor(self.myDrivingMode)
     self.comfort_brake = mode_comfort_brake
 
     v_ego = carstate.vEgo
