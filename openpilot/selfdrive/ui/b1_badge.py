@@ -6,6 +6,7 @@ import time
 ENROLLED = Path('/data/carrot/b1-monitor.json')
 STATUS = Path('/dev/shm/carrot-b1-link.json')
 LABELS = {
+  'updating': ('S3 · 업데이트', (96, 218, 243)),
   'offline': ('S3 · 연결 대기', (170, 178, 188)),
   'auth': ('S3 · 인증 중', (255, 197, 89)),
   'missing': ('S3 · CAN 대기', (202, 147, 255)),

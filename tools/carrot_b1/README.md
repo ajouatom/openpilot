@@ -78,7 +78,12 @@ board that does not yet support the parked manifest.
 ## Automatic updates after Git Pull
 
 The comma checkout includes CarrotB1.bin. After the usual Git Pull and reboot,
-Carrot Web checks the authenticated, registered board when parked or offroad.
+Carrot Web checks the authenticated, registered board even while the car is
+moving. Automatic updates wait for the indicator to be idle for four seconds,
+with no queued request or hold, then recheck the board state and lamps before
+starting. During transfer the S3 automatic indicator is unavailable and the
+C3/C4 badge shows an update in progress. Only the S3 reboots after verification.
+The manual command above retains its Park guard.
 A new release installs over BLE and the running ELF build ID is read after
 reconnection. The current build is skipped, newer board releases are preserved
 and conflicting builds with the same release number are reported. Failed
