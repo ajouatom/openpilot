@@ -929,7 +929,7 @@ def _apply_ccnc_lead(values, radar_state, enabled, model_v2=None, hud_lateral=No
   values["FF_LATERAL"] = clip_float(lateral if hud_lateral is None else hud_lateral, -6.4, 6.3)
 
 
-def create_alt2_adas_button_request(packer, CAN, frame, CC, CS, stopping):
+def create_alt2_adas_button_request(packer, CAN, frame, CC, CS, stopping, *, keep_stock_scc_main=False):
   # This is a button request for Panda, not a replacement vehicle frame.
   # Panda overlays it on fresh 0x10B input, retaining all unknown fields,
   # the received counter, and the vehicle's original transmission cadence.
@@ -942,14 +942,14 @@ def create_alt2_adas_button_request(packer, CAN, frame, CC, CS, stopping):
     if lfa_off and 0 < frame % 200 < 12:
       lfa_button = 1
 
-    if CC.enabled and not longitudinal_interlock_active(CS) and not lfa_button:
+    if (CC.enabled or keep_stock_scc_main) and not longitudinal_interlock_active(CS) and not lfa_button:
       # Leave a release interval after the LFA pulse before requesting SCC.
       scc_pulse = 20 < frame % 200 <= 26 and CS.out.vEgo > 3.
       if not CS.MainMode_ACC:
         cruise_button = 8 if scc_pulse else 0
-      elif CS.ACCMode in (0, 4):
+      elif CC.enabled and CS.ACCMode in (0, 4):
         cruise_button = 2 if scc_pulse else 0
-      elif CS.scc_control is not None and CS.scc_control["InfoDisplay"] == 4 and not stopping:
+      elif CC.enabled and CS.scc_control is not None and CS.scc_control["InfoDisplay"] == 4 and not stopping:
         cruise_button = 2 if 10 < frame % 30 <= 16 else 0
       # Do not toggle MAIN merely because HDA is off: SCC is already active.
 
@@ -977,6 +977,14 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
   desire, _ = _get_desire_and_lane_changing(md)
 
   if CP.flags & HyundaiFlags.CAMERA_SCC.value:
+    # The camera's SCC output is replaced only with openpilot longitudinal control.
+    # Keep its MAIN available for OEM display objects independently of engagement.
+    keep_stock_scc_main = (
+      getattr(CP, "openpilotLongitudinalControl", False) and enable_corner_radar > 0
+      and CS.scc_control is not None and CS.lfahda_cluster is not None
+      and CS.out.canValid and CS.out.gearShifter == "drive"
+      and math.isfinite(CS.out.vEgo) and CS.out.vEgo > 3. and not CS.out.brakePressed and not interlock_active
+    )
     HDA_CntrlModSta = 0
     HDA_LFA_SymSta = 0
     if CS.lfahda_cluster is not None:
@@ -989,11 +997,19 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
       #  ret.append(packer.make_can_msg("ADRV_0x160", CAN.ECAN, values))
 
       if getattr(CS, "cruise_buttons_alt2", None) is not None:
-        ret.append(create_alt2_adas_button_request(packer, CAN, frame, CC, CS, stopping))
+        ret.append(create_alt2_adas_button_request(packer, CAN, frame, CC, CS, stopping,
+                                                  keep_stock_scc_main=keep_stock_scc_main))
       elif CS.cruise_buttons_msg is not None:
         values = copy.copy(CS.cruise_buttons_msg)
         # Keep the physical long press on ECAN for CarState, but don't forward it to CAM.
         values["NORMAL_CRUISE_MAIN_BTN"] = 0
+
+        driver_pressed = (CS.cruise_buttons_msg["LFA_BTN"] != 0 or CS.cruise_buttons_msg["CRUISE_BUTTONS"] != 0
+                          or CS.cruise_buttons_msg.get("ADAPTIVE_CRUISE_MAIN_BTN", 0) != 0
+                          or CS.cruise_buttons_msg.get("NORMAL_CRUISE_MAIN_BTN", 0) != 0)
+        if (keep_stock_scc_main and not CC.enabled and not CS.MainMode_ACC and not driver_pressed
+            and 10 < frame % 200 <= 16):
+          values["ADAPTIVE_CRUISE_MAIN_BTN"] = 1
 
         if  HDA_LFA_SymSta == 0 and 0 < frame % 200 < 12:
           values["LFA_BTN"] = 1

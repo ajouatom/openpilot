@@ -1,5 +1,18 @@
 # Repository memory
 
+- On 2026-11-03, EV5 corner-display review finds eight full logs and the earlier
+  native ALT2 fix intact. Recent38/45 Carrot disabled; AutoEngage0 alone is not
+  the cause. 38 stock LFA/SCC overlap enables HDA,45 overlap still HDA0; automatic
+  LFA emissions fail to elicit activation before physical input. Owner requests
+  isolated stock SCC MAIN while disengaged. CameraSCC+openpilotLong+cornerON,
+  stock SCC/LFA present, valid CAN, Drive, finite >3m/s and no brake/hold/park
+  permit existing ALT2/legacy MAIN pulses; physical input wins. MAIN-on stops
+  retry, SET/resume retain CC.enabled. Existing control-side SCC/Panda unchanged.
+  258 desktop packet/entry tests and25 Wiki pass; native ALT2 added to Signal CI.
+  No live CAN/install/reboot or physical cure claim. Git Pull/comma restart.
+  See docs/ev5_cluster_corner_display.md; raw evidence private.
+
+
 - On 2026-11-03, owner requests comma0c40995 low-speed curvature review/adoption.
   Port exact action-head denominator floor1.0->2.5m/s in modeld. Shared eGPU/Jetson
   N16/Flip/Light action conversion is affected below9km/h above existing0.3m/s
