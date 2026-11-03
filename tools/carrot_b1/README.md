@@ -30,7 +30,15 @@ The registration selects BLE instead of the Jetson PEAK sender. The separate
 native CAN-FD SPAS setting must be off to use the BLE actuator.
 
 Comma uses the existing remote, lane-change and turn policy. The board owns
-classic CAN encoding, one-shot transmission, counter reservation and timing.
+classic CAN encoding, one-shot transmission, counter reservation and timing. A single shot lost to arbitration can retry the
+identical first frame up to 16 times within 40 ms. After its first successful
+retry the board times the rest of the tap from that transmission. Later frames
+may retry up to eight times within 18 ms and at least 5 ms before the next slot. Other
+CAN errors stop the sequence. If a confirmed press already reached the bus,
+a fresh, matching lamp-on within the 350 ms observation window may acknowledge
+the original request after arbitration exhaustion. The board records
+lamp_confirmed_partial and the actual confirmed-frame count separately. It never
+starts the whole tap again to manufacture a completion.
 A matching car name is not required for B1. Two fresh standard 8-byte streams,
 valid 0x3C1 CRC/counter, and neutral lever/idle 0x413 lamp feedback are required
 to begin a tap. Address collisions alone cannot establish vehicle compatibility.

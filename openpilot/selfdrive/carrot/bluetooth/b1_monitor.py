@@ -115,14 +115,22 @@ class Monitor:
     self.params = None
     self.sent_sequences = deque(maxlen=6)
     self.next_badge = 0.
-    self.last_lamps = None
+    self.last_display = None
+    self.report = None
+    if Path('/TICI').is_file():
+      from openpilot.common.swaglog import cloudlog
+      self.report = cloudlog.event
     self.proven_at = -10.
     self.last_command = None
     self.next_discovery = 0.
 
   def publish_badge(self, state, now, lamps, accepted_id):
-    if lamps != self.last_lamps or now >= self.next_badge:
-      self.last_lamps = lamps
+    display = (state, lamps, accepted_id)
+    if display != self.last_display and self.report and self.last_command and 0 <= now-self.last_command['time'] < 5:
+      self.report('b1TapFeedback', request_id=self.last_command['id'], seq=self.last_command['seq'],
+                  receiver_state=state, lamps=lamps, accepted_id=accepted_id)
+    if display != self.last_display or now >= self.next_badge:
+      self.last_display = display
       self.next_badge = now + .35
       with suppress(OSError):
         atomic_json(BADGE, {'state':state, 'time':now, 'lamps':lamps, 'accepted_id':accepted_id,
@@ -224,6 +232,8 @@ class Monitor:
     self.sent_sequences.append(self.intent.seq)
     if ident:
       self.last_command = {'id':ident, 'seq':self.intent.seq, 'time':now}
+      if self.report:
+        self.report('b1TapRequest', request_id=ident, seq=self.intent.seq, direction='left' if op==1 else 'right')
       self.intent.inflight = self.intent.seq, ident, now
     self.state = f'{state} · L={lamps & 1} R={(lamps >> 1) & 1}' if authenticated else 'verifying board key'
     self.publish_badge(state if authenticated else 'auth', now, lamps, pending[1] if pending and pending[0]==ack else None)
