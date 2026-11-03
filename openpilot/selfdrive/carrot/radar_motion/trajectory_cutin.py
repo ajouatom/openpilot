@@ -771,6 +771,33 @@ class TrajectoryCutInDetector:
         and reported_inward >= MIN_INWARD_RATE_MPS
         and abs(reported_inward - inward_rate) <= 0.50
       )
+      # A close entrant can be well established by both radars before the
+      # camera switches from the original lead. Require the moving front
+      # return to independently converge beyond its lateral noise floor and
+      # both bodies to remain ahead at the corner's forecast crossing.
+      radar_pair_entry = False
+      if (
+        paired_inward_motion and point.measured and cross_sensor_point.measured
+        and point.v_rel < 0.0 and point.d_rel <= CROSS_SENSOR_SLOT_HANDOFF_MAX_DREL_M
+        and cross_sensor_point.v_lead > MIN_MOVING_VLEAD_MPS
+        and side * front_projection.d_path > 0.0
+        and time_to_overlap_s is not None and 0.0 < time_to_overlap_s <= 1.90
+        and point.d_rel + min(relative_path_speed, recent_v_rel_min) * time_to_overlap_s > 0.5
+        and cross_sensor_point.d_rel + cross_sensor_point.v_rel * time_to_overlap_s > 0.5
+        and state.front_observations[-1].time_s - state.front_observations[0].time_s >= 0.50
+      ):
+        _, front_rate, front_progress, _, front_net, front_direction, _ = _motion_metrics(state.front_observations)
+        # A shared shift of the predicted path affects both dPath histories.
+        # Check actual lateral displacement of each body return as well.
+        _, _, corner_body_progress, _, _, _, _ = _motion_metrics(state.observations, MAX_HISTORY_S, "y_rel")
+        _, _, front_body_progress, _, _, _, _ = _motion_metrics(state.front_observations, MAX_HISTORY_S, "y_rel")
+        radar_pair_entry = (
+          min(corner_body_progress, front_body_progress) >= TARGET_HALF_WIDTH_M
+          and front_progress >= front_lateral_noise_floor_m(cross_sensor_point.d_rel)
+          and front_net >= 0.65 and front_direction >= 0.85
+          and front_rate >= MIN_INWARD_RATE_MPS
+          and _reported_inward_speed(cross_sensor_point, front_projection, yaw_rate_rad_s) >= MIN_INWARD_RATE_MPS
+        )
       independent_motion_support = (
         paired_inward_motion
         and _vision_brackets_pair(point, cross_sensor_point, vision, primary_lead, path)
@@ -798,6 +825,7 @@ class TrajectoryCutInDetector:
         >= PAIRED_OUTER_BODY_RANGE_CHECK_MIN_ABS_YAW_RATE_RAD_S
         and not vision_supported
         and not paired_inward_motion_supported
+        and not radar_pair_entry
         and not current_overlap
         and abs(cross_sensor_point.y_rel) > 2.15
         and abs(point.d_rel - cross_sensor_point.d_rel)
@@ -805,7 +833,7 @@ class TrajectoryCutInDetector:
       )
       if ambiguous_outer_body_pair:
         state.outer_body_ambiguous_until_s = time_s + CROSS_SENSOR_ALIAS_HOLD_S
-      elif vision_supported or paired_inward_motion_supported or current_overlap or (
+      elif vision_supported or paired_inward_motion_supported or radar_pair_entry or current_overlap or (
         cross_sensor_point is not None
         and abs(cross_sensor_point.y_rel) <= 2.15
       ):
@@ -1352,7 +1380,7 @@ class TrajectoryCutInDetector:
         and (
         front_entry
         if point.source == "frontRadar"
-        else corner_entry or paired_close_entry or close_direct_entry or vision_bracket_supported
+        else corner_entry or paired_close_entry or close_direct_entry or vision_bracket_supported or radar_pair_entry
         )
       )
       cutin_confirmation_s = (
