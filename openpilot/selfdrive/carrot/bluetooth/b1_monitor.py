@@ -208,6 +208,8 @@ class Monitor:
       latest = self.worker.latest()
       if latest is not None:
         self.source = latest
+    # The worker can publish a newer timestamp while latest() drains its socket.
+    now = time.monotonic()
     op, ident, ttl = self.intent.choose(self.source, state, ack, now)
     self.intent.seq = (self.intent.seq + 1) % 65536 or 1
     packet = command(key, nonce, stamp, self.intent.seq, op, ttl)
