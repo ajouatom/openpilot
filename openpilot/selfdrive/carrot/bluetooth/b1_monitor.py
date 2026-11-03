@@ -54,7 +54,7 @@ class Intent:
   def choose(self, source, state, ack, now):
     if not source or not source.get('ok') or not 0 <= now-source['stamp'] < .20 or state in ('error','driver_override','missing'):
       self.inflight = self.queued = None
-      return 3, None, .10
+      return 3, None, .35
     guard = source['stamp'] + .35 - now
     hold = source.get('hold')
     devices = source.get('devices', [])
@@ -96,13 +96,15 @@ class Monitor:
     self.params = None
     self.sent_sequences = deque(maxlen=6)
     self.next_badge = 0.
+    self.last_lamps = None
     self.next_discovery = 0.
 
-  def publish_badge(self, state, now):
-    if now >= self.next_badge:
+  def publish_badge(self, state, now, lamps, accepted_id):
+    if lamps != self.last_lamps or now >= self.next_badge:
+      self.last_lamps = lamps
       self.next_badge = now + .35
       with suppress(OSError):
-        atomic_json(BADGE, {'state':state, 'time':now})
+        atomic_json(BADGE, {'state':state, 'time':now, 'lamps':lamps, 'accepted_id':accepted_id})
 
   def stop_source(self):
     if self.worker:
@@ -190,7 +192,7 @@ class Monitor:
     if ident:
       self.intent.inflight = self.intent.seq, ident, now
     self.state = f'{state} · L={lamps & 1} R={(lamps >> 1) & 1}' if authenticated else 'verifying board key'
-    self.publish_badge(state if authenticated else 'auth', now)
+    self.publish_badge(state if authenticated else 'auth', now, lamps, pending[1] if pending and pending[0]==ack else None)
 
   async def enroll(self):
     # Setup is automatic while parked. Only an explicitly selected device can
