@@ -428,6 +428,7 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"NNFFLite", {PERSISTENT, INT, "0"}},
     {"NNFFModelName", {CLEAR_ON_OFFROAD_TRANSITION, STRING}},
 
+    {"CommaPedalEnabled", {PERSISTENT, INT, "0"}},
     {"HardwareC3xLite", {PERSISTENT, INT, "0"}},
     {"ShareData", {PERSISTENT, INT, "0"}},
     {"OnnxBsdEnabled", {PERSISTENT, INT, "0"}},

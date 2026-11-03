@@ -7,6 +7,8 @@ from opendbc.car.common.conversions import Conversions as CV
 from opendbc.car.structs import CarParams
 from opendbc.car.docs_definitions import CarFootnote, CarHarness, CarDocs, CarParts, Column
 from opendbc.car.fw_query_definitions import FwQueryConfig, Request, p16
+from opendbc.car.hyundai.pedal_interceptor import RAY_PEDAL_INTERCEPTOR_PARAMS
+from opendbc.car.pedal_interceptor import PedalInterceptorParams
 
 Ecu = CarParams.Ecu
 
@@ -85,6 +87,8 @@ class HyundaiSafetyFlags(IntFlag):
   ALT_LIMITS_2 = 512
   CANFD_CLUSTER_DIRECT_TX = 2048
   CANFD_SPAS_BLINKERS = 4096
+  PEDAL_INTERCEPTOR = 8192
+  PEDAL_INTERCEPTOR_RAY = 16384
 
 
 class HyundaiFlags(IntFlag):
@@ -142,6 +146,8 @@ class HyundaiFlags(IntFlag):
   CANFD_CLUSTER_DIRECT_TX = 2 ** 27
 
   CANFD_SPAS_BLINKERS = 2 ** 28
+
+  PEDAL_INTERCEPTOR = 2 ** 29
 
   CC_ONLY_CAR = 2 ** 31
 
@@ -1083,6 +1089,17 @@ def bosch_mrrevo14f_bus(candidate, flags: int, fingerprint: dict, buses) -> int 
 
 
 DBC = CAR.create_dbc_map()
+
+# Calibration availability is separate from road-validation status. Other
+# vehicle adapters can supply their own profile without changing the protocol.
+PEDAL_INTERCEPTOR_PARAMS: dict[str, PedalInterceptorParams] = {
+  CAR.KIA_RAY_EV: RAY_PEDAL_INTERCEPTOR_PARAMS,
+}
+
+
+def get_pedal_interceptor_params(CP) -> PedalInterceptorParams | None:
+  required_flags = HyundaiFlags.CC_ONLY_CAR | HyundaiFlags.PEDAL_INTERCEPTOR
+  return PEDAL_INTERCEPTOR_PARAMS.get(CP.carFingerprint) if CP.flags & required_flags == required_flags else None
 
 if __name__ == "__main__":
   cars = []
