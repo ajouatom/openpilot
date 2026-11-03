@@ -1,11 +1,13 @@
-"""Install the B1 image bundled in this checkout when the enrolled board is parked."""
+"""Install the B1 image bundled in this checkout when the enrolled indicator controller is idle."""
 import asyncio
+from contextlib import ExitStack
+import struct
 import hashlib
 from pathlib import Path
 import re
 import time
 
-from openpilot.selfdrive.carrot.bluetooth.b1_monitor import ENROLLMENT, META, OTA_LOCK, maintenance_active, parked
+from openpilot.selfdrive.carrot.bluetooth.b1_monitor import ENROLLMENT, META, OTA_LOCK, maintenance_active
 from openpilot.selfdrive.carrot.bluetooth.model import atomic_json, read_json
 from .ble_update import OTA, install
 
@@ -47,48 +49,65 @@ def decision(report, target, record, mac, now):
 
 async def check(monitor, image, target, mac, session):
   import fcntl
-  from .comma_update import Client, ParkGuard
-  guard = ParkGuard()
-  for _ in range(12):
-    guard.sm.update(0)
-    await asyncio.sleep(.05)
+  from .comma_update import Client
 
-  def safe():
-    guard.check()
+  def check_session():
     if monitor.session != session or monitor.owned != mac:
       raise RuntimeError('board session changed')
     if read_json(ENROLLMENT, {}).get('address') != mac:
       raise RuntimeError('registration changed')
 
-  safe()
+  check_session()
   registration = read_json(ENROLLMENT, {})
   key = bytes.fromhex(registration['key'])
   attrs = dict(monitor.attrs or {})
   if not {META, OTA}.issubset(attrs):
     raise ValueError('OTA service unavailable')
   client = Client(monitor.client, attrs)
-  with OTA_LOCK.open('ab') as lock:
-    fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-    await asyncio.sleep(.75)
-    safe()
-    report = await client.read_gatt_char(TRACE) if TRACE in attrs else b''
-    previous = read_json(RECEIPT, {})
-    timestamp = time.time()  # noqa: TID251 -- retry receipts survive comma reboots
-    action = decision(report, target, previous, mac, timestamp)
-    def record(state):
-      atomic_json(RECEIPT, {'mac':mac, 'elf':target[1], 'release':target[0], 'time':timestamp, 'status':state})
-    if action == 'current':
-      if (previous.get('mac'), previous.get('elf'), previous.get('status')) != (mac, target[1], 'current'):
+  with ExitStack() as resources:
+    async with monitor.exchange_lock:
+      check_session()
+      if not idle(monitor) or maintenance_active():
+        return 'waiting for indicators'
+      report = await asyncio.wait_for(client.read_gatt_char(TRACE), .35) if TRACE in attrs else b''
+      previous = read_json(RECEIPT, {})
+      timestamp = time.time()  # noqa: TID251 -- retry receipts survive comma reboots
+      action = decision(report, target, previous, mac, timestamp)
+
+      def record(state):
+        atomic_json(RECEIPT, {'mac':mac, 'elf':target[1], 'release':target[0], 'time':timestamp, 'status':state})
+
+      if action == 'current' and (previous.get('mac'), previous.get('elf'), previous.get('status')) != (mac, target[1], 'current'):
         record('current')
-    if action != 'install':
-      return action
-    # Original boards without TRACE only understand the quiet-bus manifest.
-    # A rejection never triggers an immediate second transfer.
+      if action != 'install':
+        return action
+      # Manual updates share this file lock. An ordinary version check never
+      # suspends the control worker. The S3 independently rejects active TX.
+      lock = resources.enter_context(OTA_LOCK.open('ab'))
+      fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+      meta = await asyncio.wait_for(client.read_gatt_char(META), .35)
+      nonce, _, _, state, lamps, version, _ = struct.unpack('<IIHBBBH', bytes(meta))
+      if monitor.worker:
+        latest = monitor.worker.latest()
+        if latest is not None:
+          monitor.source = latest
+      if nonce != session or version != 2 or state not in (0, 1) or lamps or not idle(monitor):
+        return 'waiting for indicators'
+      check_session()
+    await asyncio.sleep(.75)
+    check_session()
     record('attempt')
     monitor.firmware_state = 'updating'
-    await install(client, image, key, parked_check=safe, quiet_bus=TRACE not in attrs)
+    await install(client, image, key, transfer_check=check_session, quiet_bus=TRACE not in attrs)
     record('uploaded')
     return 'waiting for reboot'
+
+
+def idle(monitor):
+  # Dark intervals in a one-touch sequence are not the end of the maneuver.
+  return (monitor.state.split(' · ', 1)[0] in ('ready', 'missing') and
+          time.monotonic()-monitor.last_signal_at >= 4 and not monitor.intent.queued and
+          not (monitor.source and (monitor.source.get('hold') or monitor.source.get('events'))))
 
 
 async def run(monitor):
@@ -97,7 +116,7 @@ async def run(monitor):
     await asyncio.sleep(5)
     session = (monitor.owned, monitor.session)
     if (not all(session) or session == checked or time.monotonic()-monitor.proven_at >= 1 or
-        not parked() or maintenance_active() or monitor.state.split(' · ', 1)[0] not in ('ready','missing')):
+        not idle(monitor) or maintenance_active()):
       continue
     try:
       if image is None:

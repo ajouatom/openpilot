@@ -33,7 +33,7 @@ IMAGE = bytes([0xe9]) + bytes(1000)
 @pytest.mark.parametrize('guard,quiet,expected', [(None,False,1), (lambda:None,True,1), (lambda:None,False,4)])
 def test_maintenance_manifest(guard, quiet, expected):
   board = Board()
-  asyncio.run(install(board, IMAGE, bytes(32), parked_check=guard, quiet_bus=quiet))
+  asyncio.run(install(board, IMAGE, bytes(32), transfer_check=guard, quiet_bus=quiet))
   assert board.ops == [expected, 2, 2, 2, 3]
   assert board.offset == len(IMAGE)
 

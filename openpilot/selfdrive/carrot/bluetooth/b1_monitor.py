@@ -101,6 +101,8 @@ class Intent:
 class Monitor:
   def __init__(self):
     self.client = Bluez()
+    self.exchange_lock = asyncio.Lock()
+    self.last_signal_at = time.monotonic()
     self.state = 'idle'
     self.firmware_state = 'waiting'
     self.owned = None
@@ -186,6 +188,7 @@ class Monitor:
       self.session, self.intent = nonce, Intent()
       self.intent.seq = last_seq
       self.sent_sequences.clear()
+      self.last_signal_at = now
       self.proven_at = -10.
       self.last_command = None
       self.next_start = now + .65
@@ -212,6 +215,9 @@ class Monitor:
     # The worker can publish a newer timestamp while latest() drains its socket.
     now = time.monotonic()
     op, ident, ttl = self.intent.choose(self.source, state, ack, now)
+    if (lamps or state not in ('ready', 'missing') or ident or self.intent.queued or
+        (self.source and (self.source.get('hold') or self.source.get('events')))):
+      self.last_signal_at = now
     self.intent.seq = (self.intent.seq + 1) % 65536 or 1
     packet = command(key, nonce, stamp, self.intent.seq, op, ttl)
     await self.client.call(self.attrs[CONTROL], GATT, 'WriteValue', 'aya{sv}', (packet, {'type':('s','request')}), reply_timeout=.35)
@@ -321,14 +327,16 @@ class Monitor:
           await asyncio.sleep(.5)
           continue
         try:
-          if self.attrs and maintenance_active():
-            self.stop_source()
-            self.intent.inflight = self.intent.queued = None
-            self.state = 'firmware update'
-            await asyncio.sleep(.15)
-          elif self.attrs:
-            await self.exchange(registration[1])
-            await asyncio.sleep(.035)
+          if self.attrs:
+            async with self.exchange_lock:
+              if maintenance_active():
+                self.stop_source()
+                self.intent.inflight = self.intent.queued = None
+                self.state = 'firmware update'
+                self.publish_badge('updating', time.monotonic(), 0, None)
+              else:
+                await self.exchange(registration[1])
+            await asyncio.sleep(.035 if self.state != 'firmware update' else .15)
           else:
             self.state = await self.discover(registration[0])
             await asyncio.sleep(.5 if self.owned else 3)
