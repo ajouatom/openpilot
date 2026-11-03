@@ -74,7 +74,7 @@ async def update(image, quiet_bus):
         attrs[char['UUID']] = path
     if not {META, OTA}.issubset(attrs):
       raise RuntimeError('The enrolled board must be connected with its OTA service resolved')
-    with OTA_LOCK.open('ab') as lock:  # noqa: ASYNC230 -- short-lived local tmpfs open
+    with OTA_LOCK.open('ab') as lock:
       fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
       await asyncio.sleep(.75)  # Drain a pending monitor exchange and expire its control lease.
       await install(Client(bus, attrs), image, key, parked_check=guard.check, quiet_bus=quiet_bus)
