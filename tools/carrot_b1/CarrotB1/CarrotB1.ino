@@ -156,7 +156,16 @@ void receiveCan() {
     } else s.set(f.data,now);
     if (owned && &s==&feedback && s.count) {
       uint8_t expected=ownedDirection==Left ? 1 : 2;
-      if ((lamps() & ~expected) || (s.data[1]&5)) { finish(false,"driver_override"); overrideAt=now; }
+      uint8_t stalkReport=s.data[1]&5;
+      uint8_t expectedStalk=ownedDirection==Left ? 1 : 4;
+      // 0x413 reports the injected one-touch as well as real lever activity.
+      // Allow only a confirmed same-side lamp/stalk pair during this tap.
+      // The independent raw 0x3C1 override check below still runs on every frame.
+      bool tapFeedback=confirmedFrames && stalkReport==expectedStalk && lamps()==expected &&
+                       micros()-startUs <= frames[frameCount-1].offsetUs+50000;
+      if ((lamps() & ~expected) || (stalkReport && !tapFeedback)) {
+        finish(false,"feedback_override"); overrideAt=now;
+      }
       else if (lamps()==expected) { sawLamp=true; darkAt=0; }
       else if (sawLamp && !darkAt) darkAt=now;
     }

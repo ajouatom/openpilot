@@ -94,7 +94,10 @@ def test_monitor_joins_source_only_after_board_authentication(monkeypatch):
     assert writes == [3] and not started
     monitor.next_start = 0
     data = source(time.monotonic())
-    worker.latest = lambda: data
+    def latest():
+      data['stamp'] = time.monotonic()
+      return data
+    worker.latest = latest
     await monitor.exchange(key)
     assert started == [('blink_source.py','ble')]
     assert writes[-1] == 1
