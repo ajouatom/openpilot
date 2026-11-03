@@ -10,7 +10,7 @@ struct Block { uint16_t size; uint8_t data[512]; };
 QueueHandle_t queue;
 BLECharacteristic *attr;
 mbedtls_sha256_context sha;
-bool busy=false, reboot=false;
+bool busy=false, reboot=false, parkedManifest=false;
 uint32_t owner, size, offset, last, lastBus;
 uint8_t digest[32];
 enum Result : uint8_t { Idle, Active, Done, Rejected };
@@ -40,16 +40,19 @@ uint32_t word(const uint8_t *p) { uint32_t n; memcpy(&n,p,4); return n; }
 void tick(uint32_t now,uint32_t sid,bool transmitting,const uint8_t *key) {
   if (!queue) return;
   if (reboot) { if (now-last>700) ESP.restart(); return; }
-  if (busy && (!sid || sid!=owner || now-last>20000 || now-lastBus<5000)) stop();
+  if (busy && (!sid || sid!=owner || now-last>20000 || (!parkedManifest && now-lastBus<5000))) stop();
   Block b;
   if (xQueueReceive(queue,&b,0)!=pdTRUE) return;
-  if (b.data[0]==1 && b.size==73 && !busy && !transmitting && sid && now-lastBus>=5000 && word(b.data+1)==sid) {
+  // Type 4 is signed only by the comma updater after checking live parked state.
+  bool parkedRequest=b.data[0]==4;
+  if ((b.data[0]==1 || parkedRequest) && b.size==73 && !busy && !transmitting && sid &&
+      (parkedRequest || now-lastBus>=5000) && word(b.data+1)==sid) {
     uint8_t mac[32], diff=0;
     if (mbedtls_md_hmac(mbedtls_md_info_from_type(MBEDTLS_MD_SHA256),key,32,b.data,41,mac)) { stop(); return; }
     for (int i=0;i<32;i++) diff|=mac[i]^b.data[41+i];
     size=word(b.data+5); offset=0;
     if (diff || size<256 || size>0x300000 || !Update.begin(size,U_FLASH)) { stop(); return; }
-    owner=sid; busy=true; memcpy(digest,b.data+9,32);
+    owner=sid; busy=true; parkedManifest=parkedRequest; memcpy(digest,b.data+9,32);
     mbedtls_sha256_init(&sha); mbedtls_sha256_starts(&sha,0);
   } else if (busy && b.size>5 && b.data[0]==2 && word(b.data+1)==offset && uint32_t(b.size-5)<=size-offset) {
     size_t n=b.size-5;

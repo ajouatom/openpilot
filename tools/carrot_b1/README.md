@@ -56,7 +56,7 @@ and bleak installed, run:
 Use the application image, not the merged flash dump. The updater prompts for
 the board key. The S3 authenticates the image manifest using HMAC-SHA256,
 verifies the SHA-256 of received bytes before selecting its inactive 3 MiB
-slot, and reboots. A quiet CAN bus, the same BLE session and sequential offsets
+slot, and reboots. For the PC updater, a quiet CAN bus, the same BLE session and sequential offsets
 are required throughout the transfer. USB can be used for recovery.
 
 C3 and C4 show an S3 badge near the upper right of the home and driving screens
@@ -64,3 +64,14 @@ for an enrolled module. A missing or stale report shows connection waiting.
 Purple means BLE connected and authenticated, waiting for matching CAN. Green
 means matching CAN is present. The onboard green LED additionally requires an
 active control lease.
+
+For an installed board running the parked-update firmware, use the enrolled
+comma as the BLE central. Run from /data/openpilot:
+
+    /usr/local/venv/bin/python -m tools.carrot_b1.comma_update /path/to/CarrotB1.ino.bin
+
+The comma checks fresh Park, standstill and disengagement throughout an onroad
+transfer, or confirms offroad. The board accepts this separately authenticated
+manifest only outside an active CAN transmission and ignores control commands
+until the update finishes or aborts. Add --quiet-bus when upgrading an earlier
+board that does not yet support the parked manifest.
