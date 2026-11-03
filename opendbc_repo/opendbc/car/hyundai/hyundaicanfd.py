@@ -1017,14 +1017,10 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
         if  HDA_LFA_SymSta == 0 and 0 < frame % 200 < 12:
           values["LFA_BTN"] = 1
 
-        # The cluster's side objects, lead car and target come from stock SCC MAIN; keep it on from ignition.
-        # openpilot's own MAIN still follows the driver's button (manual_main_off_latched).
-        if not CS.MainMode_ACC and not interlock_active and 10 < frame % 200 <= 16:
-          values["ADAPTIVE_CRUISE_MAIN_BTN"] = 1
-
         if CC.enabled and not interlock_active:
           if not CS.MainMode_ACC:
-            pass  # pressed above
+            if 10 < frame % 200 <= 16 and CS.out.vEgo > 3.:
+              values["ADAPTIVE_CRUISE_MAIN_BTN"] = 1
           elif CS.ACCMode in [0, 4]:
             if 10 < frame % 200 <= 16 and CS.out.vEgo > 3.:
               values["CRUISE_BUTTONS"] = 2
