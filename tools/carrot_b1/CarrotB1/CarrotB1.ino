@@ -2,6 +2,8 @@
 #include <Arduino.h>
 #include <BLEDevice.h>
 #include <Preferences.h>
+#include <BLESecurity.h>
+#include <mbedtls/sha256.h>
 #include <driver/twai.h>
 #include <mbedtls/md.h>
 #include <atomic>
@@ -44,7 +46,18 @@ struct Counter { uint8_t original[8], last; };
 Counter saved;
 uint8_t key[32];
 BLECharacteristic *statusValue, *metaValue;
-QueueHandle_t inbox;
+QueueHandle_t inbox, claims;
+bool claimed;
+struct Claim { uint32_t session; uint8_t seed[16]; };
+class ClaimWriter : public BLECharacteristicCallbacks {
+  void onWrite(BLECharacteristic *c) override {
+    String value=c->getValue();
+    if (value.length()!=sizeof(Claim)) return;
+    Claim candidate;
+    memcpy(&candidate,value.c_str(),sizeof(candidate));
+    xQueueSend(claims,&candidate,0);
+  }
+};
 std::atomic<uint32_t> session{0};
 uint32_t currentSession, deadline, startUs, errorAt, overrideAt;
 uint16_t lastSeq, ack, activeSeq;
@@ -154,8 +167,9 @@ class Writer : public BLECharacteristicCallbacks {
 };
 void setup() {
   Serial.begin(115200); led(22,9,0);
+  claims=xQueueCreate(1,sizeof(Claim));
   inbox=xQueueCreate(8,sizeof(Request));
-  if (!inbox || !prefs.begin("carrot-b1",false)) { led(40,0,0); while(true) delay(1000); }
+  if (!inbox || !claims || !prefs.begin("carrot-b1",false)) { led(40,0,0); while(true) delay(1000); }
   BLEDevice::init("Carrot-B1");
   BLEDevice::setMTU(517);
   if (prefs.getBytesLength("auth")!=sizeof(key)) {
@@ -164,12 +178,19 @@ void setup() {
   }
   if (prefs.getBytes("auth",key,sizeof(key))!=sizeof(key)) { led(40,0,0); while(true) delay(1000); }
   haveSaved=prefs.getBytesLength("counter")==sizeof(saved) && prefs.getBytes("counter",&saved,sizeof(saved))==sizeof(saved);
+  claimed=prefs.getBytesLength("owner-key")==sizeof(key);
+  if (claimed && prefs.getBytes("owner-key",key,sizeof(key))!=sizeof(key)) { led(40,0,0); while(true) delay(1000); }
+  BLESecurity::setCapability(ESP_IO_CAP_NONE);
+  BLESecurity::setAuthenticationMode(true,false,true);
   mode(false);
   auto *server=BLEDevice::createServer(); server->setCallbacks(new Link());
   auto *svc=server->createService(SERVICE);
   statusValue=svc->createCharacteristic(STATUS_UUID,BLECharacteristic::PROPERTY_READ);
   metaValue=svc->createCharacteristic(META,BLECharacteristic::PROPERTY_READ);
   svc->createCharacteristic(CONTROL,BLECharacteristic::PROPERTY_WRITE)->setCallbacks(new Writer());
+  auto *claim=svc->createCharacteristic("db340a95-804c-4ead-af37-8a0e6af754a1",BLECharacteristic::PROPERTY_WRITE);
+  claim->setAccessPermissions(ESP_GATT_PERM_WRITE_ENCRYPTED);
+  claim->setCallbacks(new ClaimWriter());
   ota::setup(svc);
   svc->start(); BLEDevice::getAdvertising()->addServiceUUID(SERVICE);
   BLEDevice::getAdvertising()->setScanResponse(true); BLEDevice::startAdvertising();
@@ -192,10 +213,23 @@ void loop() {
     }
   }
   ota::tick(now,sid,active,key);
+  Claim candidate;
+  if (xQueueReceive(claims,&candidate,0)==pdTRUE && !claimed && sid && candidate.session==sid &&
+      now<180000 && !active && !ota::busy) {
+    uint8_t nextKey[32];
+    if (!mbedtls_sha256(candidate.seed,sizeof(candidate.seed),nextKey,0) &&
+        prefs.putBytes("owner-key",nextKey,sizeof(nextKey))==sizeof(nextKey)) {
+      memcpy(key,nextKey,sizeof(key)); claimed=true;
+    }
+  }
   Request r;
   while (xQueueReceive(inbox,&r,0)==pdTRUE) {
     if (ota::busy || ota::reboot || !sid || r.session!=sid || int16_t(r.seq-lastSeq)<=0 || !r.ttl5ms || r.ttl5ms>70 ||
         now-r.stamp>=uint32_t(r.ttl5ms)*5 || r.op>HoldRight) continue;
+    if (!claimed) {
+      if (prefs.putBytes("owner-key",key,sizeof(key))!=sizeof(key)) continue;
+      claimed=true;
+    }
     lastSeq=r.seq;
     if (r.op==Stop) { leased=false; finish(false); continue; }
     leased=true; deadline=r.stamp+r.ttl5ms*5;

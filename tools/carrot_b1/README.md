@@ -18,10 +18,14 @@ the two common onboard RGB LED variants.
 
 ## Enroll a board
 
-On its physical UART at 115200, enter `PAIR` followed by newline to read its
-per-device enrollment key. Treat this value as a secret. With the vehicle
-stationary, open Carrot Web → Tools → Bluetooth remotes, enable Bluetooth, scan,
-select Carrot-B1 by its address and choose B1 auto-connect. Enter the UART key.
+With Bluetooth enabled on a stationary comma, power up a new board. For three
+minutes after startup an unclaimed board accepts a one-time seed over encrypted
+GATT. Comma discovers the name Carrot-B1 and the service UUID, pairs the unique
+candidate, then proves its key using an authenticated STOP before saving it.
+No address or key needs to be typed. If multiple matching units are visible,
+power just the intended unit or select it in Carrot Web. A claimed board refuses
+replacement keys. The physical UART at 115200 accepts PAIR for recovery and OTA.
+
 The registration selects BLE instead of the Jetson PEAK sender. The separate
 native CAN-FD SPAS setting must be off to use the BLE actuator.
 
@@ -54,3 +58,9 @@ the board key. The S3 authenticates the image manifest using HMAC-SHA256,
 verifies the SHA-256 of received bytes before selecting its inactive 3 MiB
 slot, and reboots. A quiet CAN bus, the same BLE session and sequential offsets
 are required throughout the transfer. USB can be used for recovery.
+
+C3 and C4 show an S3 badge near the upper right of the home and driving screens
+for an enrolled module. A missing or stale report shows connection waiting.
+Purple means BLE connected and authenticated, waiting for matching CAN. Green
+means matching CAN is present. The onboard green LED additionally requires an
+active control lease.

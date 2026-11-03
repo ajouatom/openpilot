@@ -6,25 +6,13 @@ from urllib.parse import urlsplit
 
 from aiohttp import web
 
-from openpilot.selfdrive.carrot.bluetooth.b1_monitor import ENROLLMENT, Monitor, compatible
-from openpilot.selfdrive.carrot.bluetooth.bluez import Bluez
+from openpilot.selfdrive.carrot.bluetooth.b1_monitor import ENROLLMENT, SETUP, Monitor, compatible
+from openpilot.selfdrive.carrot.bluetooth.bluez import Bluez, radio_enabled
 from openpilot.selfdrive.carrot.bluetooth.model import CONFIG_PATH, RUNTIME, ACTIONS, DEFAULT_MAPPING, address, atomic_json, config, read_json, validate_config
 
 CLIENT = web.AppKey('bluetooth', Bluez)
 B1 = web.AppKey('b1_monitor', Monitor)
 LOCK = web.AppKey('bluetooth_lock', asyncio.Lock)
-
-
-async def radio_enabled():
-  # BlueZ deliberately keeps the parent directory private because it contains bonds.
-  process = await asyncio.create_subprocess_exec('sudo', '-n', 'test', '-f', '/data/bluetooth/ENABLED',
-    stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL)
-  try:
-    return await asyncio.wait_for(process.wait(), 3) == 0
-  except TimeoutError:
-    process.kill()
-    await process.wait()
-    return False
 
 
 def runtime():
@@ -90,11 +78,11 @@ async def mutate(request):
         devices = (await client.snapshot())['devices']
         if not any(device['address'] == mac and compatible(device) for device in devices):
           raise ValueError('Scan for a Carrot-B1 service first')
-        key = body.get('key')
-        if not isinstance(key, str) or len(key) != 64 or any(c not in '0123456789abcdefABCDEF' for c in key):
-          raise ValueError('Enter the 64 hex digits from the S3 UART PAIR command')
-        atomic_json(ENROLLMENT, {'address': mac, 'name': 'Carrot-B1', 'key': key.lower()})
+        ENROLLMENT.unlink(missing_ok=True)
+        atomic_json(SETUP, {'selected': mac})
+        request.app[B1].next_discovery = 0.
       elif operation == 'b1-forget':
+        atomic_json(SETUP, {'disabled':True})
         ENROLLMENT.unlink(missing_ok=True)
       elif operation == 'scan':
         await client.scan()

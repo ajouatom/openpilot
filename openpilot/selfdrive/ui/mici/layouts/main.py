@@ -5,6 +5,7 @@ from openpilot.selfdrive.ui.mici.layouts.settings.settings import SettingsLayout
 from openpilot.selfdrive.ui.mici.layouts.offroad_alerts import MiciOffroadAlerts
 from openpilot.selfdrive.ui.mici.onroad.augmented_road_view import AugmentedRoadView
 from openpilot.selfdrive.ui.ui_state import device, ui_state
+from openpilot.selfdrive.ui.b1_badge import draw as draw_b1_badge
 from openpilot.selfdrive.ui.widgets.carrot_web_dialog import CarrotWebDialog
 from openpilot.selfdrive.ui.mici.layouts.onboarding import OnboardingWindow
 from openpilot.system.ui.widgets import Widget
@@ -139,6 +140,7 @@ class MiciMainLayout(Scroller):
 
     # Render
     super()._render(self._rect)
+    draw_b1_badge(self._rect)
 
     self._handle_carrot_record_cmd(ui_state.sm)
 
