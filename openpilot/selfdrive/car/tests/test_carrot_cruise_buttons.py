@@ -723,3 +723,36 @@ def test_gap_long_press_still_changes_driving_mode():
   helper.params = SimpleNamespace(get_int=values.__getitem__, put_int_nonblocking=values.__setitem__)
   helper._update_cruise_buttons(CS, CC, 80)
   assert values == {"MyDrivingMode": 1, "LongitudinalPersonality": 1}
+
+
+def make_paddle_stop_helper(v_ego, x_state=2, d_rel=0., v_rel=0., resume=0):
+  helper, CS, CC = make_cruise_helper(30, 0, False, True)
+  del helper._update_cruise_state  # the real one, not the button-test stub
+  helper._paddle_decel_active = resume == 0
+  helper._paddle_resume_kph = resume
+  helper._brake_pressed_count = helper._gas_pressed_count = -2
+  helper._gas_tok, helper._gas_tok_timer, helper.disengage_on_accelerator = False, 100, False
+  helper.xState, helper.d_rel, helper.v_rel = x_state, d_rel, v_rel
+  helper.v_ego_kph_set = round(v_ego * 3.6)
+  helper._auto_speed_up = lambda v_cruise_kph: v_cruise_kph
+  CS.vEgo = v_ego
+  return helper, CS, CC
+
+
+@pytest.mark.parametrize("v_ego, x_state, d_rel, v_rel, active, speed, resume", [
+  (0.3, 5, 0., 0., False, 30, 0),       # stopped at the light: keep the set speed (11-02 19:22 went to 5 km/h)
+  (0.3, 2, 8., -0.3, False, 30, 0),     # stopped behind a stopped lead
+  (0.3, 2, 0., 0., True, 30, 0),        # nothing to hand off to: stay stopped by the paddle
+  (8.0, 3, 0., 0., False, 29, 30),      # slowing for the light: hold current speed, restore once stopped
+  (8.0, 2, 30., 0., True, 30, 0),       # a moving lead does not cancel the stop request
+])
+def test_paddle_stop_hands_off_and_keeps_set_speed(v_ego, x_state, d_rel, v_rel, active, speed, resume):
+  helper, CS, CC = make_paddle_stop_helper(v_ego, x_state, d_rel, v_rel)
+  assert helper._update_cruise_state(CS, CC, 30) == speed
+  assert (helper._paddle_decel_active, helper._paddle_resume_kph) == (active, resume)
+
+
+def test_paddle_stop_restores_set_speed_once_stopped():
+  helper, CS, CC = make_paddle_stop_helper(0.0, x_state=5, resume=30)
+  assert helper._update_cruise_state(CS, CC, 5) == 30
+  assert helper._paddle_resume_kph == 0
