@@ -45,7 +45,12 @@ Preferences prefs;
 struct Counter { uint8_t original[8], last; };
 Counter saved;
 uint8_t key[32];
-BLECharacteristic *statusValue, *metaValue;
+BLECharacteristic *statusValue, *metaValue, *traceValue;
+uint16_t traceSeq;
+unsigned confirmedFrames;
+const char *traceReason="idle";
+uint32_t traceAlerts;
+
 QueueHandle_t inbox, claims;
 bool claimed;
 struct Claim { uint32_t session; uint8_t seed[16]; };
@@ -104,28 +109,35 @@ bool neutral(uint32_t now) {
 bool guard(uint32_t now) {
   return leased && currentSession && session.load()==currentSession && int32_t(deadline-now)>0;
 }
-void finish(bool success) {
+void finish(bool success, const char *reason="cancelled") {
   if (active) {
     active=inFlight=false;
-    if (!mode(false)) success=false;
+    if (!mode(false)) { success=false; reason="listen_mode_failed"; }
+    traceReason=success ? "completed" : reason;
   }
   if (success) ack=activeSeq;
   else { ack=0; owned=false; }
 }
 void startTap(const Request &req) {
   uint32_t now=millis();
-  if (active || !neutral(now) || !guard(now)) return;
+  if (active) return;
+  traceSeq=req.seq;
+  confirmedFrames=0;
+  traceAlerts=0;
+  if (!neutral(now)) { traceReason="not_neutral"; return; }
+  if (!guard(now)) { traceReason="expired_at_start"; return; }
+  traceReason="admitted";
   memcpy(original,stalk.data,8);
   unsigned counter=haveSaved && !memcmp(saved.original,original,8) ? saved.last : original[1]>>4;
   frameCount=b1::encode(original,req.op==Left?b1::Direction::Left:b1::Direction::Right,counter,frames);
-  if (!frameCount) return;
+  if (!frameCount) { traceReason="invalid_template"; return; }
   memcpy(saved.original,original,8); saved.last=frames[frameCount-1].data[1]>>4;
-  if (prefs.putBytes("counter",&saved,sizeof(saved))!=sizeof(saved)) { errorAt=now; return; }
+  if (prefs.putBytes("counter",&saved,sizeof(saved))!=sizeof(saved)) { traceReason="counter_store_failed"; errorAt=now; return; }
   haveSaved=true;
   active=true; owned=true; ownedAt=now; activeSeq=req.seq; ack=0;
   ownedDirection=Op(req.op); sawLamp=false; darkAt=0;
   nextFrame=0; inFlight=false;
-  if (!mode(true) || !guard(millis())) { finish(false); errorAt=now; return; }
+  if (!mode(true) || !guard(millis())) { finish(false,"mode_or_lease"); errorAt=now; return; }
   startUs=micros();
 }
 void receiveCan() {
@@ -140,12 +152,12 @@ void receiveCan() {
     } else s.set(f.data,now);
     if (owned && &s==&feedback && s.count) {
       uint8_t expected=ownedDirection==Left ? 1 : 2;
-      if ((lamps() & ~expected) || (s.data[1]&5)) { finish(false); overrideAt=now; }
+      if ((lamps() & ~expected) || (s.data[1]&5)) { finish(false,"driver_override"); overrideAt=now; }
       else if (lamps()==expected) { sawLamp=true; darkAt=0; }
       else if (sawLamp && !darkAt) darkAt=now;
     }
     if (owned && (!s.count || (&s==&stalk && memcmp(original,s.data,8)))) {
-      finish(false); overrideAt=now;
+      finish(false,"driver_override"); overrideAt=now;
     }
   }
 }
@@ -187,6 +199,7 @@ void setup() {
   auto *svc=server->createService(SERVICE);
   statusValue=svc->createCharacteristic(STATUS_UUID,BLECharacteristic::PROPERTY_READ);
   metaValue=svc->createCharacteristic(META,BLECharacteristic::PROPERTY_READ);
+  traceValue=svc->createCharacteristic("db340a96-804c-4ead-af37-8a0e6af754a1",BLECharacteristic::PROPERTY_READ);
   svc->createCharacteristic(CONTROL,BLECharacteristic::PROPERTY_WRITE)->setCallbacks(new Writer());
   auto *claim=svc->createCharacteristic("db340a95-804c-4ead-af37-8a0e6af754a1",BLECharacteristic::PROPERTY_WRITE);
   claim->setAccessPermissions(ESP_GATT_PERM_WRITE_ENCRYPTED);
@@ -203,11 +216,14 @@ void loop() {
     finish(false); leased=false; lastSeq=0; currentSession=sid;
   }
   receiveCan();
+  now=millis();  // receiveCan may have published newer sample timestamps.
   uint32_t alerts=0;
   if (online && twai_read_alerts(&alerts,0)==ESP_OK) {
     if (alerts & ~TWAI_ALERT_TX_SUCCESS) {
-      finish(false); stalk.count=feedback.count=0; errorAt=now;
+      if (active) traceAlerts=alerts;
+      finish(false,"twai_alert"); stalk.count=feedback.count=0; errorAt=now;
     } else if (active && inFlight && (alerts&TWAI_ALERT_TX_SUCCESS)) {
+      ++confirmedFrames;
       inFlight=false;
       if (nextFrame==frameCount) finish(true);
     }
@@ -231,7 +247,7 @@ void loop() {
       claimed=true;
     }
     lastSeq=r.seq;
-    if (r.op==Stop) { leased=false; finish(false); continue; }
+    if (r.op==Stop) { leased=false; finish(false,"stop"); continue; }
     leased=true; deadline=r.stamp+r.ttl5ms*5;
     if (r.op==Left || r.op==Right) startTap(r);
     bool maintain=(r.op==HoldLeft && ownedDirection==Left) || (r.op==HoldRight && ownedDirection==Right);
@@ -242,14 +258,19 @@ void loop() {
       startTap(repeat); ownedAt=first;
     }
   }
-  if (owned && (!guard(now) || !matched(now) || now-ownedAt>300000)) finish(false);
+  // Admission and CAN driver reinstallation can cross millisecond boundaries.
+  // Compare against a clock sampled after both operations, including on rollover.
+  now=millis();
+  if (owned && !guard(now)) finish(false,"lease_expired");
+  if (owned && !matched(now)) finish(false,"stale_can");
+  if (owned && now-ownedAt>300000) finish(false,"ownership_expired");
   if (active) {
     uint32_t elapsed=micros()-startUs;
-    if (!guard(millis()) || (inFlight && elapsed-frames[nextFrame-1].offsetUs>40000)) { finish(false); errorAt=now; }
+    if (!guard(millis()) || (inFlight && elapsed-frames[nextFrame-1].offsetUs>40000)) { finish(false,"tx_timeout_or_lease"); errorAt=now; }
     else if (!inFlight && nextFrame<frameCount && elapsed>=frames[nextFrame].offsetUs) {
       twai_message_t f={}; f.identifier=0x3c1; f.data_length_code=8; f.ss=1;
       memcpy(f.data,frames[nextFrame].data,8);
-      if (elapsed-frames[nextFrame].offsetUs>=50000 || twai_transmit(&f,0)!=ESP_OK) { finish(false); errorAt=now; }
+      if (elapsed-frames[nextFrame].offsetUs>=50000 || twai_transmit(&f,0)!=ESP_OK) { finish(false,"late_or_submit_failed"); errorAt=now; }
       else { ++nextFrame; inFlight=true; }
     }
   }
@@ -260,6 +281,9 @@ void loop() {
       !matched(now) ? Missing : active ? Sending : neutral(now) ? Ready : Waiting;
     Report report={sid,now,ack,state,lamps(),2,lastSeq};
     metaValue->setValue((uint8_t*)&report,sizeof(report));
+    char trace[84];
+    snprintf(trace,sizeof(trace),"seq=%u confirmed=%u reason=%s alerts=%lx",traceSeq,confirmedFrames,traceReason,(unsigned long)traceAlerts);
+    traceValue->setValue(trace);
     char info[24]; snprintf(info,sizeof(info),"3C1=%c 413=%c L=%c R=%c",stalk.fresh(now)?'1':'-',feedback.fresh(now)?'1':'-',
       feedback.fresh(now)?'0'+(lamps()&1):'-',feedback.fresh(now)?'0'+(lamps()>>1):'-');
     statusValue->setValue(info);
