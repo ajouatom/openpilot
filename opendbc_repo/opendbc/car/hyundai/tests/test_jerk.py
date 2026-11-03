@@ -195,6 +195,25 @@ def test_camera_scc_accel_value_keeps_ramping_from_previous_value():
   assert second_value == pytest.approx(-0.2)
 
 
+@pytest.mark.parametrize(("paddle", "hold_frames", "acc_mode"), [(0, 0, 1), (1, 30, 0), (0, 12, 0)])
+def test_held_paddle_keeps_scc_off_through_its_signal_dropouts(paddle, hold_frames, acc_mode):
+  class FakePacker:
+    @staticmethod
+    def make_can_msg(name, bus, values):
+      return name, bus, values.copy()
+
+  CS = SimpleNamespace(
+    scc_control={"ACC_ObjRelSpd": 0.0, "InfoDisplay": 0}, softHoldActive=0,
+    paddle_button_prev=paddle, paddle_hold_frames=hold_frames,
+    out=SimpleNamespace(aEgo=0.0, vEgo=0.0, brakeHoldActive=False, parkingBrake=False,
+                        cruiseState=SimpleNamespace(available=True)),
+  )
+  msg, _ = create_acc_control_scc2(FakePacker(), SimpleNamespace(ECAN=0), True, 0.0, 0.0, False, False, 30.0,
+                                   SimpleNamespace(leadDistanceBars=2, leadVisible=False),
+                                   SimpleNamespace(carrot_cruise=0, jerk_u=1.0, jerk_l=5.0), CS)
+  assert msg[2]["ACCMode"] == acc_mode
+
+
 @pytest.mark.parametrize("camera_scc", [False, True])
 @pytest.mark.parametrize(("brake_hold_active", "parking_brake"), [(True, False), (False, True)])
 def test_canfd_hold_interlock_blocks_acc_control(camera_scc, brake_hold_active, parking_brake):

@@ -502,7 +502,7 @@ def create_acc_control_scc2(packer, CAN, enabled, accel_value_last, accel, stopp
     return None, accel_value_last
   interlock_active = longitudinal_interlock_active(CS)
   soft_hold_active = CS.softHoldActive > 0 and CS.out.cruiseState.available
-  acc_control_enabled = (enabled or soft_hold_active) and CS.out.cruiseState.available and CS.paddle_button_prev == 0 and not interlock_active
+  acc_control_enabled = (enabled or soft_hold_active) and CS.out.cruiseState.available and CS.paddle_button_prev == 0 and getattr(CS, "paddle_hold_frames", 0) == 0 and not interlock_active
   enabled = acc_control_enabled
 
   acc_mode = 0 if not enabled else (2 if gas_override else 1)
