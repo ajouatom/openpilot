@@ -1,7 +1,6 @@
 """Stationary-only Bluetooth setup. HTTP can configure mappings, never fire them."""
 import asyncio
 import time
-from contextlib import suppress
 from urllib.parse import urlsplit
 
 from aiohttp import web
@@ -49,7 +48,8 @@ async def status(request):
   result = {'runtime': runtime(), 'config': config(), 'actions': ACTIONS, 'defaults': DEFAULT_MAPPING,
             'radioEnabled': await radio_enabled()}
   try:
-    result['b1'] = {'address': read_json(ENROLLMENT, {}).get('address'), 'state': request.app[B1].state}
+    result['b1'] = {'address': read_json(ENROLLMENT, {}).get('address'), 'state': request.app[B1].state,
+                    'firmware': request.app[B1].firmware_state}
     result.update(await request.app[CLIENT].snapshot())
     result['available'] = True
   except Exception as exc:
@@ -160,13 +160,14 @@ def register(app):
   app[B1] = Monitor()
 
   async def monitor_context(app):
-    task = asyncio.create_task(app[B1].run())
+    from tools.carrot_b1.auto_update import run as auto_update  # noqa: TID251 -- board release package
+    tasks = [asyncio.create_task(app[B1].run()), asyncio.create_task(auto_update(app[B1]))]
     try:
       yield
     finally:
-      task.cancel()
-      with suppress(asyncio.CancelledError):
-        await task
+      for task in tasks:
+        task.cancel()
+      await asyncio.gather(*tasks, return_exceptions=True)
 
   app.cleanup_ctx.append(monitor_context)
   app[CLIENT] = Bluez()

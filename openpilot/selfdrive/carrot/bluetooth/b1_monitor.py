@@ -102,6 +102,7 @@ class Monitor:
   def __init__(self):
     self.client = Bluez()
     self.state = 'idle'
+    self.firmware_state = 'waiting'
     self.owned = None
     self.worker = None
     self.intent = Intent()

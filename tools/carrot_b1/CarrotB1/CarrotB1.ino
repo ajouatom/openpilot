@@ -1,5 +1,6 @@
 // Carrot B1, ESP32-S3. 500 kbit/s Classic CAN; commands never contain raw CAN.
 #include <Arduino.h>
+#include <esp_app_desc.h>
 #include <BLEDevice.h>
 #include <Preferences.h>
 #include <BLESecurity.h>
@@ -190,7 +191,13 @@ class Writer : public BLECharacteristicCallbacks {
     if (!diff && r.session && r.session==session.load()) xQueueSend(inbox,&r,0);
   }
 };
+constexpr char RELEASE_TAG[]="carrot-b1-release=1";
+char buildId[65];
+
 void setup() {
+  const auto *app=esp_app_get_description();
+  for (size_t i=0; i<sizeof(app->app_elf_sha256); ++i)
+    snprintf(buildId+2*i, 3, "%02x", app->app_elf_sha256[i]);
   Serial.begin(115200); led(22,9,0);
   claims=xQueueCreate(1,sizeof(Claim));
   inbox=xQueueCreate(8,sizeof(Request));
@@ -302,8 +309,8 @@ void loop() {
       !matched(now) ? Missing : active ? Sending : neutral(now) ? Ready : Waiting;
     Report report={sid,now,ack,state,lamps(),2,lastSeq};
     metaValue->setValue((uint8_t*)&report,sizeof(report));
-    char trace[116];
-    snprintf(trace,sizeof(trace),"seq=%u confirmed=%u reason=%s alerts=%lx retries=%u frame=%d",traceSeq,confirmedFrames,traceReason,(unsigned long)traceAlerts,arbitrationRetries,retriedFrame);
+    char trace[192];
+    snprintf(trace,sizeof(trace),"seq=%u confirmed=%u reason=%s alerts=%lx retries=%u frame=%d elf=%s %s",traceSeq,confirmedFrames,traceReason,(unsigned long)traceAlerts,arbitrationRetries,retriedFrame,buildId,RELEASE_TAG);
     traceValue->setValue(trace);
     char info[24]; snprintf(info,sizeof(info),"3C1=%c 413=%c L=%c R=%c",stalk.fresh(now)?'1':'-',feedback.fresh(now)?'1':'-',
       feedback.fresh(now)?'0'+(lamps()&1):'-',feedback.fresh(now)?'0'+(lamps()>>1):'-');
