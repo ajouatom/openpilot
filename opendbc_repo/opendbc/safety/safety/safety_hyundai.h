@@ -63,9 +63,10 @@ static RxCheck *hyundai_pedal_interceptor_rx = NULL;
 static RxCheck *hyundai_pedal_interceptor_cruise_rx = NULL;
 static bool hyundai_pedal_interceptor_cruise_blocked = true;
 
-// This profile belongs to Ray EV. No other vehicle inherits these limits.
+// Ray EV only: x2 command increment from raw neutral, target cap 0.70.
+// Input/driver thresholds and track-correlation tolerance are unchanged.
 static const PedalInterceptorLimits HYUNDAI_RAY_PEDAL_INTERCEPTOR_LIMITS = {
-  .min_track1 = 264U, .max_track1 = 530U, .min_track2 = 497U, .max_track2 = 1035U,
+  .min_track1 = 264U, .max_track1 = 795U, .min_track2 = 497U, .max_track2 = 1572U,
   .track2_ratio = 2, .track2_tolerance = 40,
   .driver_threshold1 = 272U, .driver_threshold2 = 513U,
 };

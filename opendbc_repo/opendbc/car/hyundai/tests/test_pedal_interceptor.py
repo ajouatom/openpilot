@@ -86,15 +86,25 @@ def test_non_cc_only_vehicle_cannot_activate_even_with_an_explicit_profile(monke
   assert Bus.party not in CarState.__new__(CarState).get_can_parsers(enabled)
 
 
-def test_dbc_retains_installed_pedal_scaling_and_disabled_raw_zero():
+def test_dbc_expands_only_command_increment_and_keeps_input_scaling():
   packer = CANPacker(PEDAL_INTERCEPTOR_DBC)
   for message, names in (("GAS_COMMAND", ("GAS_COMMAND", "GAS_COMMAND2")),
                          ("GAS_SENSOR", ("INTERCEPTOR_GAS", "INTERCEPTOR_GAS2"))):
     signals = packer.dbc.name_to_msg[message].sigs
-    assert [(signals[name].factor, signals[name].offset) for name in names] == [(0.672, -177.408), (0.332, -165.004)]
+    expected = [(0.336, -88.704), (0.166, -82.502)] if message == "GAS_COMMAND" else [(0.672, -177.408), (0.332, -165.004)]
+    assert [(signals[name].factor, signals[name].offset) for name in names] == expected
   command = create_pedal_interceptor_command(packer, 0.1, 3)
-  assert command[1][:5] == bytes.fromhex("012e023e83")
+  assert command[1][:5] == bytes.fromhex("0154028b83")
+  maximum = create_pedal_interceptor_command(packer, 0.70, 4)
+  assert maximum[1][:4] == bytes.fromhex("031b0624")  # 795 / 1572
+  neutral = packer.make_can_msg("GAS_COMMAND", 0, {"GAS_COMMAND": 0, "GAS_COMMAND2": 0, "ENABLE": 1})
+  assert neutral[1][:4] == bytes.fromhex("010801f1")  # 264 / 497
   assert create_pedal_interceptor_command(packer, 0.0, 4)[1][:5] == bytes.fromhex("0000000004")
+
+
+def test_ray_target_caps_and_rate_parameters_revert_to_reference():
+  assert [get_ray_pedal_target(5.0, speed, speed + 10.0) for speed in (0.0, 12.0, 20.0, 25.0)] == [0.55, 0.55, 0.65, 0.70]
+  assert (RAY_PEDAL_INTERCEPTOR_PARAMS.rate_up, RAY_PEDAL_INTERCEPTOR_PARAMS.rate_down) == (0.02, 0.06)
 
 
 @pytest.mark.parametrize("bus,address", [(0, 0x420), (0, 0x421), (2, 0x420), (2, 0x421)])
@@ -164,7 +174,7 @@ def test_protocol_rejects_bad_crc_and_stalled_counter():
 def test_shared_protocol_accepts_explicit_non_ray_calibration(tmp_path):
   source = Path(__file__).resolve().parents[3] / "dbc/pedal_interceptor.dbc"
   dbc = tmp_path / "pedal_interceptor.dbc"
-  dbc.write_text(source.read_text().replace("(0.672,-177.408)", "(1,0)").replace("(0.332,-165.004)", "(2,-10)"))
+  dbc.write_text(source.read_text().replace("(0.336,-88.704)", "(1,0)").replace("(0.166,-82.502)", "(2,-10)"))
   profile = replace(RAY_PEDAL_INTERCEPTOR_PARAMS, target=lambda *args: 0.2,
                     dbc_name=str(dbc),
                     driver_thresholds=(20, 30), rate_up=0.2, rate_down=0.1)
