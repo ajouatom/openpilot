@@ -2,6 +2,7 @@ import { mappingButtons, gestureToken, splitGesture, learnEvents, REMOTE_ACTIONS
 
 const WORDS = {
   ko: {
+    fwCurrent: "펌웨어 최신", fwUpdating: "펌웨어 업데이트 중", fwVerify: "업데이트 확인 대기",
     b1Register: "B1 자동 연결 등록", b1Forget: "B1 자동 연결 해제",
     blinkerLeft: "왼쪽 방향지시등 켜기", blinkerRight: "오른쪽 방향지시등 켜기",
     blinkRequested: "방향지시등 요청 전달",
@@ -34,6 +35,7 @@ const WORDS = {
     buttonHelp: "크루즈 +/−는 크루즈가 꺼져 있으면 기존 활성화 조건을 거쳐 켜기를 요청합니다. 버튼의 ‘길게’ 동작도 기능 목록에서 선택할 수 있습니다. 예: 리모컨 짧게 누르기 → 크루즈 + 길게. 이 경우 추가로 기다리지 않고 핸들 버튼의 롱 동작을 한 번 실행합니다. LFA와 갭의 동작은 기존 설정을 따릅니다.",
   },
   en: {
+    fwCurrent: "Firmware current", fwUpdating: "Updating firmware", fwVerify: "Awaiting firmware verification",
     b1Register: "Register B1 auto-connect", b1Forget: "Remove B1 auto-connect",
     blinkerLeft: "Turn on left indicator", blinkerRight: "Turn on right indicator",
     blinkRequested: "Indicator request forwarded",
@@ -199,7 +201,8 @@ async function refresh() {
   part("status").textContent = !state.runtime.stationary ? t("blocked") : state.available ? (state.adapters.some(a => a.discovering) ? t("scanning") : t("ready")) : t("unavailable");
   part("radio").textContent = t(state.radioEnabled ? "off" : "on");
   part("service").textContent = [state.error, !state.runtime.alive && t("noService"), ...Object.values(state.runtime.errors || {}), state.pair?.error].filter(Boolean).join(" · ");
-  part("b1Status").textContent = state.b1?.address ? `Carrot-B1 · ${state.b1.address} · ${state.b1.state}` : "";
+  const firmwareLabel = { current: "fwCurrent", updating: "fwUpdating", "waiting for reboot": "fwVerify", "waiting for build identity": "fwVerify" }[state.b1?.firmware];
+  part("b1Status").textContent = state.b1?.address ? ["Carrot-B1", state.b1.address, state.b1.state, firmwareLabel && t(firmwareLabel)].filter(Boolean).join(" · ") : "";
   part("b1Forget").hidden = !state.b1?.address;
   renderDevices(); renderPrompt();
   const learning = state.runtime.learning;
