@@ -1,0 +1,108 @@
+"""Wire format and transport gates for the BLE output of the existing blinker policy."""
+import hashlib
+import hmac
+import struct
+
+from openpilot.selfdrive.carrot.bluetooth.b1_monitor import Intent, command, compatible, SERVICE
+
+
+def test_command_wire_vector_fits_default_att_payload():
+  key=bytes(range(32))
+  packet=command(key, 0x12345678, 1800, 14, 2, .35)
+  assert len(packet)==20
+  assert struct.unpack('<IIHBB', packet[:12])==(0x12345678,1800,14,2,70)
+  assert packet[12:]==hmac.new(key,packet[:12],hashlib.sha256).digest()[:8]
+  assert compatible({'name':'Carrot-B1','uuids':[SERVICE]})
+  assert not compatible({'name':'Carrot-B1','uuids':[]})
+
+
+def source(now, ident='a', direction='left', **kwargs):
+  event={'id':ident, 'time':now, 'direction':direction, 'device':'remote'}
+  return {'stamp':now, 'events':[event], 'devices':['remote'], 'ok':True, **kwargs}
+
+
+def test_one_request_once_and_exact_completion():
+  intent=Intent()
+  now=intent.started+.1
+  data=source(now)
+  assert intent.choose(data,'ready',0,now)[:2]==(1,'a')
+  intent.inflight=(7,'a',now)
+  assert intent.choose(data,'sending',0,now+.02)[0]==0
+  hold={**data['events'][0], 'source':'turn'}
+  data.update(events=[],hold=hold,b1_hold=True)
+  assert intent.choose(data,'ready',6,now+.03)[0]==0
+  assert intent.choose(data,'ready',7,now+.03)[0]==4
+  data['hold']=None
+  assert intent.choose(data,'ready',7,now+.04)[0]==0
+
+
+def test_rapid_opposite_request_and_loss_of_remote():
+  for connected in (False,True):
+    intent=Intent()
+    now=intent.started+.1
+    intent.inflight=(4,'a',now)
+    data=source(now,'b','right')
+    assert intent.choose(data,'sending',0,now)[0]==0
+    data.update(events=[],devices=['remote'] if connected else [])
+    op,ident,_=intent.choose(data,'ready',4,now+.05)
+    assert (op,ident)==((2,'b') if connected else (0,None))
+
+
+def test_stale_missing_fault_and_override_do_not_actuate():
+  for state,age,ok in [('ready',.21,True),('ready',0,False),('missing',0,True),('error',0,True),('driver_override',0,True)]:
+    intent=Intent()
+    now=intent.started+.1
+    assert intent.choose(source(now,ok=ok),state,0,now+age)[0]==3
+
+
+def test_monitor_joins_source_only_after_board_authentication(monkeypatch):
+  import asyncio
+  import sys
+  import time
+  from types import SimpleNamespace
+
+  from tools.jetlink import blink_protocol  # noqa: TID251 -- shared subprocess protocol
+  from openpilot.selfdrive.carrot.bluetooth.b1_monitor import Monitor, META, CONTROL
+
+  async def run():
+    monitor = Monitor()
+    monitor.attrs = {META: 'meta', CONTROL: 'command'}
+    monitor.params = SimpleNamespace(get_bool=lambda name: name == 'IsOnroad')
+    monkeypatch.setitem(sys.modules, 'openpilot.common.params', SimpleNamespace(Params=lambda: monitor.params))
+    started, feedback = [], []
+    worker = SimpleNamespace(process=SimpleNamespace(poll=lambda: None), send=feedback.append)
+    def factory(*args):
+      started.append(args)
+      return worker
+    monkeypatch.setattr(blink_protocol, 'Process', factory)
+    key = bytes(range(32))
+    seq, ack, writes = 0, 0, []
+
+    async def board(path, interface, method, sig, body, reply_timeout):
+      nonlocal seq, ack
+      if path == 'meta':
+        return (struct.pack('<IIHBBBH', 71, 1000, ack, 1, 0, 2, seq),)
+      payload = body[0]
+      assert payload[12:] == hmac.digest(key, payload[:12], 'sha256')[:8]
+      _, _, seq, op, _ = struct.unpack('<IIHBB', payload[:12])
+      writes.append(op)
+      if op in (1, 2):
+        ack = seq
+
+    monitor.client.call = board
+    await monitor.exchange(key)
+    assert writes == [3] and not started
+    monitor.next_start = 0
+    data = source(time.monotonic())
+    worker.latest = lambda: data
+    await monitor.exchange(key)
+    assert started == [('blink_source.py','ble')]
+    assert writes[-1] == 1
+    await monitor.exchange(key)
+    assert feedback[-1]['accepted_id'] == 'a'
+    assert writes[-1] == 0
+    data['ok'] = False
+    await monitor.exchange(key)
+    assert writes[-1] == 3
+
+  asyncio.run(run())
