@@ -273,12 +273,11 @@ def main(fd, spas=False, ble=False):
         if isinstance(trial.get('id'), str) and trial['id'].startswith('park-test:') and trial.get('direction') in ('left','right'):
           last_trial = trial['id']
           trial_until = now + 1.
-          commands = [trial]
       if now < trial_until:
         cc, ss = sm['carControl'], sm['selfdriveState']
         ok = (ok and str(cs.gearShifter)=='park' and cs.standstill and abs(cs.vEgo)<.01 and
               not (cc.enabled or cc.latActive or cc.longActive or ss.enabled or ss.active))
-        commands = [e for e in commands if e.get('id') == last_trial] if ok else []
+        commands = [trial] if ok and isinstance(trial, dict) and trial.get('id')==last_trial and fresh(trial.get('time'),now) else []
         hold = None
     submitted = False
     try:
