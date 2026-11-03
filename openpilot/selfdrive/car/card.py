@@ -28,6 +28,8 @@ from openpilot.selfdrive.car.car_specific import MockCarState
 from openpilot.selfdrive.car.openpilot_toggle import CruiseMainOpenpilotToggle
 from openpilot.selfdrive.car.tesla_turn_signals import TeslaTurnSignals
 from openpilot.selfdrive.car.hyundai_spas import SpasSignals
+from openpilot.selfdrive.car.aprk_diag import AprkDiag, RESERVED as APRK_DIAG_RESERVED
+from openpilot.system.hardware import HARDWARE
 from openpilot.selfdrive.controls.lib.lateral_readiness import LateralStartupGate
 from openpilot.selfdrive.carrot.xiaoge.xiaoge_vision import (
   XiaogeVisionResult,
@@ -142,6 +144,7 @@ class Car:
     self.spas_signals = SpasSignals(self.CP, self.params)
     self.spas_signal_status = None
     self.spas_signal_log_at = 0.
+    self.aprk_diag = AprkDiag(self.CP, self.params, HARDWARE.get_device_type(), cloudlog.event)
 
     if self.CP.secOcRequired:
       # Copy user key if available
@@ -237,6 +240,8 @@ class Car:
     self.CI.CS.speedcam_v_cruise = self.v_cruise_helper.v_cruise_kph
     CS = self.CI.update(can_list)
     self.spas_signals.observe(can_list, time.monotonic())
+    if self.aprk_diag.busy:
+      self.aprk_diag.observe(can_list, time.clock_gettime(time.CLOCK_BOOTTIME))
     if self.CP.brand == 'mock':
       CS = self.mock_carstate.update(CS)
     ci_done_ns = time.monotonic_ns()
@@ -377,7 +382,7 @@ class Car:
   def controls_update(self, CS: car.CarState, CC: car.CarControl):
     """control update loop, driven by carControl"""
 
-    if self.spas_signals.enabled:
+    if self.spas_signals.enabled and not self.aprk_diag.busy:
       spas_sends = self.spas_signals.update(CS, self.sm, time.monotonic(), self.initialized_prev, self.CI.CC.frame)
       if spas_sends:
         self.pm.send('sendcan', can_list_to_can_capnp(spas_sends, msgtype='sendcan', valid=CS.canValid))
@@ -426,7 +431,11 @@ class Car:
       now_nanos = self.can_log_mono_time if REPLAY else int(time.monotonic() * 1e9)
       model_v2 = self.sm['modelV2'] if self.sm.valid['modelV2'] and self.sm.alive['modelV2'] else None
       radar_state = self.sm['radarState'] if self.sm.valid['radarState'] and self.sm.alive['radarState'] else None
+      if self.aprk_diag.supported:
+        self.CI.CC.aprk_diag_active = self.aprk_diag.busy
       self.last_actuators_output, can_sends = self.CI.apply(CC, now_nanos, model_v2, radar_state)
+      if self.aprk_diag.busy:
+        can_sends = [m for m in can_sends if m[0] not in APRK_DIAG_RESERVED]
       if self.tesla_signals.configured:
         fresh = all(self.sm.seen[s] and self.sm.alive[s] and self.sm.valid[s] and
                     0 <= time.monotonic() - self.sm.recv_time[s] <= 0.2 for s in ('carControl', 'modelV2'))
@@ -502,6 +511,15 @@ class Car:
 
     initialized = (not any(e.name == EventName.selfdriveInitializing for e in self.sm['onroadEvents']) and
                    self.sm.seen['onroadEvents'])
+    diag_now = time.clock_gettime(time.CLOCK_BOOTTIME) if self.aprk_diag.supported else time.monotonic()
+    diag_owner_busy = any(getattr(self.CI.CC, name, 0) for name in ('aprk_state', 'steer_angle_test', 'spas_steer_test'))
+    diag_sends = self.aprk_diag.update(CS, self.sm, time.monotonic(), diag_now, initialized and self.initialized_prev,
+                                     owner_busy=diag_owner_busy)
+    if diag_sends:
+      with log.Event.from_bytes(can_list_to_can_capnp(diag_sends, msgtype='sendcan', valid=CS.canValid)) as event:
+        diag_msg = event.as_builder()
+      diag_msg.logMonoTime = int(diag_now * 1e9)  # pandad uses BOOTTIME, including time spent suspended
+      self.pm.send('sendcan', diag_msg)
     if not self.CP.passive and initialized:
       self.controls_update(CS, self.sm['carControl'])
 

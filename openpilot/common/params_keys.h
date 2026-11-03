@@ -351,6 +351,8 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"CanfdHDA2", {PERSISTENT, INT, "0"}},
     {"CanfdBlinkerControl", {PERSISTENT, BOOL, "0"}},
     {"CanfdBlinkerTest", {CLEAR_ON_MANAGER_START, INT, "0"}},
+    {"CanfdAprkDiag", {CLEAR_ON_MANAGER_START, BOOL, "0"}},
+    {"CanfdAprkDiagResult", {PERSISTENT, STRING, "{}"}},
     {"CanfdDebug", {PERSISTENT, INT, "0"}},
 
     {"SoundVolumeAdjust", {PERSISTENT, INT, "100"}},

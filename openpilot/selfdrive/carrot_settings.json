@@ -436,6 +436,7 @@
           "en": "Joongyu Lab",
           "zh": "Joongyu Lab",
           "params": [
+            "CanfdAprkDiag",
             "CanfdBlinkerTest",
             "CanfdBlinkerMenuTest",
             "CanfdBlinkerStalk",
@@ -1989,6 +1990,23 @@
       "max": 1,
       "default": 0,
       "unit": 1
+    },
+    {
+      "group": "Joongyu Lab",
+      "name": "CanfdAprkDiag",
+      "title": "APRK 진단 연결 시험",
+      "descr": "0: 취소, 1: 한 번 실행. C4 현대·기아 CAN-FD HDA2 카메라 SCC 구성에서 P·정지·제어 비활성일 때만 실행합니다. SPAS 사용·Kick·깜빡이·조향 시험은 모두 꺼야 합니다(SPAS 사용을 끈 뒤에는 재부팅). bus 0→1 순서로 0x7B1 진단 세션 연결(10 03)과 기본 세션 복귀(10 01)를 요청합니다. 통신 정지·깜빡이·조향 명령은 보내지 않습니다. 응답·송신 확인·타임아웃·복귀 결과는 CanfdAprkDiagResult와 canfd_aprk_diag 로그에 저장합니다. 취소·조건 이탈 시 복귀를 시도하고 종료하며, 시작 조건 불충족·완료 시 자동으로 0이 됩니다. 재시작 시 0으로 초기화합니다. 차량 응답은 미확인입니다.",
+      "egroup": "Joongyu Lab",
+      "etitle": "APRK diagnostic connection test",
+      "edescr": "0 cancels, 1 runs once. C4 Hyundai/Kia CAN-FD HDA2 camera-SCC only, parked and stationary with controls inactive. Turn off SPAS indicators, Kick and all indicator/steering tests; reboot after disabling SPAS indicators. Probe bus 0 then 1 with 0x7B1 extended session (10 03), followed by default session (10 01). Sends no communication-disable, indicator or steering commands. Replies, echoes, timeouts and restoration results are saved in CanfdAprkDiagResult and canfd_aprk_diag logs. Cancellation or guard failure attempts restoration and ends the test. Invalid requests and completed tests reset to 0; startup also clears it. Vehicle response is unverified.",
+      "cgroup": "Joongyu Lab",
+      "ctitle": "APRK 诊断连接测试",
+      "cdescr": "0 取消，1 单次执行。仅支持 C4 现代/起亚 CAN-FD HDA2 摄像头 SCC 配置，需 P 挡、静止且控制未激活。关闭 SPAS、Kick 及其他转向灯/转向测试；关闭 SPAS 后需重启。依次在 bus 0、1 向 0x7B1 请求扩展会话（10 03）并恢复默认会话（10 01）。不发送通信禁用、转向灯或转向命令。结果保存在 CanfdAprkDiagResult 和 canfd_aprk_diag 日志。取消或条件改变时尝试恢复并结束。条件不满足、完成及重启时归零。实车响应尚未验证。",
+      "min": 0,
+      "max": 1,
+      "default": 0,
+      "unit": 1,
+      "risk": "high"
     },
     {
       "group": "Joongyu Lab",

@@ -259,6 +259,7 @@ class CarController(CarControllerBase):
     self.hapticFeedbackWhenSpeedCamera = 0
     self.max_angle_frames = MAX_ANGLE_FRAMES
     self.steer_angle_test = 0
+    self.aprk_diag_active = False
     self.spas_steer_test = 0  # SpasSteerTest: target angle through the parking ECU's SPAS1 request, 0 off
     self.spas_angle, self.aprk_buses = 0., ()
     self.blinking_signal = False # 1Hz
@@ -700,7 +701,7 @@ class CarController(CarControllerBase):
                     self.steer_handover.error, self.lkas_max_torque, steering_authority)
 
     # SteerAngleTest: turn the wheel to that angle while stopped, hands off, without engaging (test only)
-    steer_test = (angle_control and self.steer_angle_test != 0 and CS.out.standstill and not CS.out.steeringPressed and
+    steer_test = (angle_control and not self.aprk_diag_active and self.steer_angle_test != 0 and CS.out.standstill and not CS.out.steeringPressed and
                   not park_assist_active(CS))
     if steer_test:
       target = clip_float(self.steer_angle_test, -STEER_ANGLE_TEST_MAX, STEER_ANGLE_TEST_MAX)
