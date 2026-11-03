@@ -1,12 +1,13 @@
 """Update the registered B1 through the comma's existing BlueZ connection."""
 import argparse
+import fcntl
 import asyncio
 import time
 from pathlib import Path
 
 from openpilot.cereal import messaging
 from openpilot.common.params import Params
-from openpilot.selfdrive.carrot.bluetooth.b1_monitor import ENROLLMENT, GATT, SERVICE
+from openpilot.selfdrive.carrot.bluetooth.b1_monitor import ENROLLMENT, GATT, SERVICE, OTA_LOCK
 from openpilot.selfdrive.carrot.bluetooth.bluez import Bluez, DEVICE, properties
 from openpilot.selfdrive.carrot.bluetooth.model import address, read_json
 from .ble_update import META, OTA, install
@@ -40,7 +41,8 @@ class Client:
       try:
         return await self.bus.call(self.attrs[uuid], GATT, method, signature, args, reply_timeout=6)
       except Exception as exc:
-        if 'InProgress' not in str(exc) and 'In Progress' not in str(exc):
+        retry_read = method == 'ReadValue' and 'ATT error: 0x0e' in str(exc)
+        if not retry_read and 'InProgress' not in str(exc) and 'In Progress' not in str(exc):
           raise
         await asyncio.sleep(.025)
     raise TimeoutError('BLE adapter is busy')
@@ -72,7 +74,10 @@ async def update(image, quiet_bus):
         attrs[char['UUID']] = path
     if not {META, OTA}.issubset(attrs):
       raise RuntimeError('The enrolled board must be connected with its OTA service resolved')
-    await install(Client(bus, attrs), image, key, parked_check=guard.check, quiet_bus=quiet_bus)
+    with OTA_LOCK.open('ab') as lock:  # noqa: ASYNC230 -- short-lived local tmpfs open
+      fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+      await asyncio.sleep(.75)  # Drain a pending monitor exchange and expire its control lease.
+      await install(Client(bus, attrs), image, key, parked_check=guard.check, quiet_bus=quiet_bus)
   finally:
     await bus.close()
 

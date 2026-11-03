@@ -73,6 +73,8 @@ Op ownedDirection;
 uint8_t original[8];
 b1::TapFrame frames[7];
 int frameCount, nextFrame;
+int retriedFrame=-1;
+unsigned arbitrationRetries;
 
 void led(uint8_t r,uint8_t g,uint8_t b) {
   static uint32_t last = UINT32_MAX;
@@ -123,6 +125,8 @@ void startTap(const Request &req) {
   if (active) return;
   traceSeq=req.seq;
   confirmedFrames=0;
+  arbitrationRetries=0;
+  retriedFrame=-1;
   traceAlerts=0;
   if (!neutral(now)) { traceReason="not_neutral"; return; }
   if (!guard(now)) { traceReason="expired_at_start"; return; }
@@ -219,7 +223,15 @@ void loop() {
   now=millis();  // receiveCan may have published newer sample timestamps.
   uint32_t alerts=0;
   if (online && twai_read_alerts(&alerts,0)==ESP_OK) {
-    if (alerts & ~TWAI_ALERT_TX_SUCCESS) {
+    constexpr uint32_t lostShot=TWAI_ALERT_ARB_LOST | TWAI_ALERT_TX_FAILED;
+    if (active && inFlight && alerts==lostShot && retriedFrame!=nextFrame-1) {
+      // The failed single shot lost arbitration before it could deliver data.
+      // Resubmit through the normal guard and the original frame deadline.
+      retriedFrame=--nextFrame;
+      ++arbitrationRetries;
+      traceAlerts=alerts;
+      inFlight=false;
+    } else if (alerts & ~TWAI_ALERT_TX_SUCCESS) {
       if (active) traceAlerts=alerts;
       finish(false,"twai_alert"); stalk.count=feedback.count=0; errorAt=now;
     } else if (active && inFlight && (alerts&TWAI_ALERT_TX_SUCCESS)) {
@@ -281,8 +293,8 @@ void loop() {
       !matched(now) ? Missing : active ? Sending : neutral(now) ? Ready : Waiting;
     Report report={sid,now,ack,state,lamps(),2,lastSeq};
     metaValue->setValue((uint8_t*)&report,sizeof(report));
-    char trace[84];
-    snprintf(trace,sizeof(trace),"seq=%u confirmed=%u reason=%s alerts=%lx",traceSeq,confirmedFrames,traceReason,(unsigned long)traceAlerts);
+    char trace[116];
+    snprintf(trace,sizeof(trace),"seq=%u confirmed=%u reason=%s alerts=%lx retries=%u frame=%d",traceSeq,confirmedFrames,traceReason,(unsigned long)traceAlerts,arbitrationRetries,retriedFrame);
     traceValue->setValue(trace);
     char info[24]; snprintf(info,sizeof(info),"3C1=%c 413=%c L=%c R=%c",stalk.fresh(now)?'1':'-',feedback.fresh(now)?'1':'-',
       feedback.fresh(now)?'0'+(lamps()&1):'-',feedback.fresh(now)?'0'+(lamps()>>1):'-');

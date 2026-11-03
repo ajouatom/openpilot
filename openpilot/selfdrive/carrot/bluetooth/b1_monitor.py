@@ -24,6 +24,22 @@ GATT = 'org.bluez.GattCharacteristic1'
 STATES = ('missing', 'ready', 'sending', 'waiting', 'driver_override', 'error')
 
 
+OTA_LOCK = RUNTIME / 'b1-ota.lock'
+
+
+def maintenance_active():
+  # Keep the BLE connection, but leave the ATT channel to the parked updater.
+  import fcntl
+  try:
+    with OTA_LOCK.open('rb') as lock:
+      fcntl.flock(lock, fcntl.LOCK_SH | fcntl.LOCK_NB)
+  except FileNotFoundError:
+    return False
+  except BlockingIOError:
+    return True
+  return False
+
+
 def radio_present():
   return Path('/sys/class/bluetooth/hci0').exists()
 
@@ -302,7 +318,12 @@ class Monitor:
           await asyncio.sleep(.5)
           continue
         try:
-          if self.attrs:
+          if self.attrs and maintenance_active():
+            self.stop_source()
+            self.intent.inflight = self.intent.queued = None
+            self.state = 'firmware update'
+            await asyncio.sleep(.15)
+          elif self.attrs:
             await self.exchange(registration[1])
             await asyncio.sleep(.035)
           else:
