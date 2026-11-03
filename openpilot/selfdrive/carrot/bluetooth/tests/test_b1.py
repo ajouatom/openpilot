@@ -106,3 +106,60 @@ def test_monitor_joins_source_only_after_board_authentication(monkeypatch):
     assert writes[-1] == 3
 
   asyncio.run(run())
+
+
+def test_enrollment_requires_one_named_service_and_proof(monkeypatch, tmp_path):
+  import asyncio
+  from types import SimpleNamespace
+  from openpilot.selfdrive.carrot.bluetooth import b1_monitor as b1
+
+  devices = [{'name':'Carrot-B1','address':'00:00:00:00:00:01','uuids':[SERVICE],'paired':True,'rssi':-42}]
+  for name in ('ENROLLMENT','SETUP','STAGED','BADGE'):
+    monkeypatch.setattr(b1, name, tmp_path / name)
+  monkeypatch.setattr(b1, 'parked', lambda: True)
+  monkeypatch.setattr(b1, 'radio_present', lambda: True)
+  async def enabled():
+    return True
+  monkeypatch.setattr(b1,'radio_enabled',enabled)
+  async def noop(*args):
+    pass
+  monkeypatch.setattr(b1.asyncio,'sleep',noop)
+  async def run():
+    monitor=b1.Monitor()
+    seq, key = 0, b''
+    async def call(path, interface, method, sig, body):
+      nonlocal seq, key
+      if method=='ReadValue':
+        return (struct.pack('<IIHBBBH', 42, 1000, 0, 0, 0, 2, seq),)
+      if path=='claim':
+        key=hashlib.sha256(body[0][4:]).digest()
+      else:
+        packet=body[0]
+        assert packet[10]==3 and hmac.digest(key,packet[:12],'sha256')[:8]==packet[12:]
+        seq=struct.unpack_from('<H',packet,8)[0]
+    async def snapshot():
+      return {'devices':devices}
+    async def discover(_):
+      monitor.attrs={b1.META:'meta',b1.CONTROL:'control',b1.CLAIM:'claim'}
+    monitor.client=SimpleNamespace(scan=noop,snapshot=snapshot,call=call)
+    monitor.discover=discover
+    devices.append({**devices[0],'address':'00:00:00:00:00:02'})
+    await monitor.enroll()
+    assert not b1.ENROLLMENT.exists()
+    devices.pop()
+    await monitor.enroll()
+    assert b1.read_json(b1.ENROLLMENT)['key']==key.hex()
+  asyncio.run(run())
+
+
+def test_badge_expires_and_hides_if_unregistered(tmp_path):
+  from openpilot.selfdrive.ui.b1_badge import status
+  import json
+  reg, data = tmp_path/'enrolled', tmp_path/'status'
+  assert status(10,reg,data) is None
+  reg.touch()
+  assert status(10,reg,data)=='offline'
+  for state in ('auth','missing','ready','error'):
+    data.write_text(json.dumps({'time':10,'state':state}))
+    assert status(11,reg,data)==state
+    assert status(12,reg,data)=='offline'

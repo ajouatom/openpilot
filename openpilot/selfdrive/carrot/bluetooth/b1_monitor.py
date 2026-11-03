@@ -2,24 +2,36 @@
 import asyncio
 from collections import deque
 from contextlib import suppress
+import hashlib
 import hmac
+import secrets
 from pathlib import Path
 import struct
 import time
 
-from .bluez import Bluez, DEVICE, properties
-from .model import CONFIG_PATH, address, read_json
+from .bluez import Bluez, DEVICE, properties, radio_enabled
+from .model import CONFIG_PATH, RUNTIME, address, atomic_json, read_json
 
 ENROLLMENT = CONFIG_PATH.with_name('b1-monitor.json')
 SERVICE = 'db340a90-804c-4ead-af37-8a0e6af754a1'
 META = 'db340a92-804c-4ead-af37-8a0e6af754a1'
 CONTROL = 'db340a93-804c-4ead-af37-8a0e6af754a1'
+CLAIM = 'db340a95-804c-4ead-af37-8a0e6af754a1'
+SETUP = CONFIG_PATH.with_name('b1-discovery.json')
+STAGED = CONFIG_PATH.with_name('b1-pending.json')
+BADGE = Path('/dev/shm/carrot-b1-link.json')
 GATT = 'org.bluez.GattCharacteristic1'
 STATES = ('missing', 'ready', 'sending', 'waiting', 'driver_override', 'error')
 
 
 def radio_present():
   return Path('/sys/class/bluetooth/hci0').exists()
+
+
+def parked():
+  state = read_json(RUNTIME / 'status.json', {})
+  return (state.get('stationary') is True and not state.get('stopped') and
+          0 <= time.monotonic()-state.get('time', 0) < 2)
 
 
 def compatible(device):
@@ -83,6 +95,14 @@ class Monitor:
     self.source = None
     self.params = None
     self.sent_sequences = deque(maxlen=6)
+    self.next_badge = 0.
+    self.next_discovery = 0.
+
+  def publish_badge(self, state, now):
+    if now >= self.next_badge:
+      self.next_badge = now + .35
+      with suppress(OSError):
+        atomic_json(BADGE, {'state':state, 'time':now})
 
   def stop_source(self):
     if self.worker:
@@ -106,6 +126,9 @@ class Monitor:
       if device.get('Address', '').upper() != mac or not compatible({'name':device.get('Name'), 'uuids':device.get('UUIDs', [])}):
         continue
       if not device.get('Connected'):
+        if device.get('RSSI') is None:
+          await self.client.scan()
+          return 'scanning'
         await self.client.device_action(mac, 'connect')
         self.owned = mac
         return 'connecting'
@@ -167,6 +190,72 @@ class Monitor:
     if ident:
       self.intent.inflight = self.intent.seq, ident, now
     self.state = f'{state} · L={lamps & 1} R={(lamps >> 1) & 1}' if authenticated else 'verifying board key'
+    self.publish_badge(state if authenticated else 'auth', now)
+
+  async def enroll(self):
+    # Setup is automatic while parked. Only an explicitly selected device can
+    # break a tie. Scanning never takes ownership of a HID remote.
+    setup = read_json(SETUP, {})
+    if setup.get('disabled') or not parked() or not radio_present() or not await radio_enabled():
+      return
+    await self.client.scan()
+    await asyncio.sleep(5)
+    if not parked():
+      return
+    snapshot = await self.client.snapshot()
+    selected = setup.get('selected')
+    candidates = [d for d in snapshot['devices'] if compatible(d) and (d.get('rssi') is not None or d.get('connected'))]
+    if selected:
+      candidates = [d for d in candidates if d['address']==selected]
+    if len(candidates)!=1:
+      self.state = 'multiple Carrot-B1 devices' if candidates else 'scanning for Carrot-B1'
+      return
+    device = candidates[0]
+    mac = address(device['address'])
+    if not device.get('paired'):
+      await self.client.start_pair(mac, headless=True)
+      await self.client.pair_task
+      if self.client.pair.get('state') != 'paired':
+        self.state = 'waiting for encrypted pairing'
+        return
+    if not parked():
+      return
+    for _ in range(10):
+      await self.discover(mac)
+      if self.attrs or not parked():
+        break
+      await asyncio.sleep(.5)
+    if not parked() or not self.attrs or CLAIM not in self.attrs:
+      return
+    # Save the proposed key before writing anything to the board. Retrying
+    # after power loss uses the same seed until the board proves ownership.
+    staged = read_json(STAGED, {})
+    if staged.get('address') != mac or not isinstance(staged.get('seed'),str) or len(staged['seed'])!=32:
+      staged = {'address':mac,'seed':secrets.token_hex(16)}
+      atomic_json(STAGED, staged)
+    seed = bytes.fromhex(staged['seed'])
+    key = hashlib.sha256(seed).digest()
+    async def report():
+      raw = await self.client.call(self.attrs[META], GATT, 'ReadValue', 'a{sv}', ({},))
+      return struct.unpack('<IIHBBBH',bytes(raw[0]))
+    nonce, *_ = await report()
+    if not nonce or not parked():
+      return
+    await self.client.call(self.attrs[CLAIM], GATT, 'WriteValue', 'aya{sv}',
+                           (struct.pack('<I',nonce)+seed, {'type':('s','request')}))
+    await asyncio.sleep(.12)
+    sid, stamp, _, _, _, version, seq = await report()
+    if sid != nonce or version!=2:
+      return
+    seq = (seq+1)%65536 or 1
+    await self.client.call(self.attrs[CONTROL], GATT, 'WriteValue', 'aya{sv}',
+                           (command(key, sid, stamp, seq, 3, .35), {'type':('s','request')}))
+    await asyncio.sleep(.12)
+    proof = await report()
+    if proof[0]==sid and proof[-1]==seq and parked() and read_json(SETUP,{})==setup:
+      atomic_json(ENROLLMENT, {'address':mac,'name':'Carrot-B1','key':key.hex()})
+    else:
+      self.state = 'board already enrolled or first-use window closed'
 
   async def run(self):
     registration = None
@@ -189,7 +278,16 @@ class Monitor:
         if not registration or not radio_present():
           if self.owned or self.worker:
             await self.release()
-          self.state = 'waiting for radio' if registration else 'idle'
+          if not registration and now >= self.next_discovery:
+            self.next_discovery = now + 30
+            try:
+              await self.enroll()
+            except Exception:
+              self.state = 'waiting for name discovery'
+            finally:
+              await self.release()
+          elif registration:
+            self.state = 'waiting for radio'
           await asyncio.sleep(.5)
           continue
         try:

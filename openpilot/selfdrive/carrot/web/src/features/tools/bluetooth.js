@@ -2,7 +2,7 @@ import { mappingButtons, gestureToken, splitGesture, learnEvents, REMOTE_ACTIONS
 
 const WORDS = {
   ko: {
-    b1Key: "S3의 USB UART에서 PAIR로 읽은 64자리 등록 키", b1Register: "B1 자동 연결 등록", b1Forget: "B1 자동 연결 해제",
+    b1Register: "B1 자동 연결 등록", b1Forget: "B1 자동 연결 해제",
     blinkerLeft: "왼쪽 방향지시등 켜기", blinkerRight: "오른쪽 방향지시등 켜기",
     blinkRequested: "방향지시등 요청 전달",
     doubleEnabled: "더블클릭 사용", longEnabled: "길게 누르기 사용",
@@ -34,7 +34,7 @@ const WORDS = {
     buttonHelp: "크루즈 +/−는 크루즈가 꺼져 있으면 기존 활성화 조건을 거쳐 켜기를 요청합니다. 버튼의 ‘길게’ 동작도 기능 목록에서 선택할 수 있습니다. 예: 리모컨 짧게 누르기 → 크루즈 + 길게. 이 경우 추가로 기다리지 않고 핸들 버튼의 롱 동작을 한 번 실행합니다. LFA와 갭의 동작은 기존 설정을 따릅니다.",
   },
   en: {
-    b1Key: "64-digit enrollment key from the S3 UART PAIR command", b1Register: "Register B1 auto-connect", b1Forget: "Remove B1 auto-connect",
+    b1Register: "Register B1 auto-connect", b1Forget: "Remove B1 auto-connect",
     blinkerLeft: "Turn on left indicator", blinkerRight: "Turn on right indicator",
     blinkRequested: "Indicator request forwarded",
     doubleEnabled: "Enable double click", longEnabled: "Enable long press",
@@ -167,8 +167,7 @@ function renderDevices() {
     const actions = element("div", null, "bt-actions");
     if (device.name === "Carrot-B1" && device.uuids?.includes("db340a90-804c-4ead-af37-8a0e6af754a1")) {
       if (state.b1?.address !== device.address) actions.append(button("b1Register", async () => {
-        const key = window.prompt(t("b1Key"));
-        if (key !== null) await api("b1-register", { address: device.address, key: key.trim() });
+        await api("b1-register", { address: device.address });
       }));
     } else if (!device.paired) actions.append(button("pair", () => api("pair", { address: device.address })));
     else {
