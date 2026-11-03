@@ -97,6 +97,8 @@ class Monitor:
     self.sent_sequences = deque(maxlen=6)
     self.next_badge = 0.
     self.last_lamps = None
+    self.proven_at = -10.
+    self.last_command = None
     self.next_discovery = 0.
 
   def publish_badge(self, state, now, lamps, accepted_id):
@@ -104,7 +106,9 @@ class Monitor:
       self.last_lamps = lamps
       self.next_badge = now + .35
       with suppress(OSError):
-        atomic_json(BADGE, {'state':state, 'time':now, 'lamps':lamps, 'accepted_id':accepted_id})
+        atomic_json(BADGE, {'state':state, 'time':now, 'lamps':lamps, 'accepted_id':accepted_id,
+                            'source_ready':bool(self.source and self.source.get('ok') and 0 <= now-self.source['stamp'] < .2),
+                            'last_command':self.last_command})
 
   def stop_source(self):
     if self.worker:
@@ -165,9 +169,13 @@ class Monitor:
       self.session, self.intent = nonce, Intent()
       self.intent.seq = last_seq
       self.sent_sequences.clear()
+      self.proven_at = -10.
+      self.last_command = None
       self.next_start = now + .65
     # The SPAS option owns its own output, and an offroad/stopped manager has no control lease.
-    authenticated = last_seq in self.sent_sequences
+    if last_seq in self.sent_sequences:
+      self.proven_at = now
+    authenticated = now-self.proven_at < 1.
     available = authenticated and state not in ('missing','error') and self.params.get_bool('IsOnroad') and not self.params.get_bool('CanfdBlinkerControl')
     if self.worker and (not available or self.worker.process.poll() is not None):
       self.stop_source()
@@ -190,6 +198,7 @@ class Monitor:
     await self.client.call(self.attrs[CONTROL], GATT, 'WriteValue', 'aya{sv}', (packet, {'type':('s','request')}), reply_timeout=.35)
     self.sent_sequences.append(self.intent.seq)
     if ident:
+      self.last_command = {'id':ident, 'seq':self.intent.seq, 'time':now}
       self.intent.inflight = self.intent.seq, ident, now
     self.state = f'{state} · L={lamps & 1} R={(lamps >> 1) & 1}' if authenticated else 'verifying board key'
     self.publish_badge(state if authenticated else 'auth', now, lamps, pending[1] if pending and pending[0]==ack else None)
