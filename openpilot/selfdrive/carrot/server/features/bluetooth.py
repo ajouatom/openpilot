@@ -1,14 +1,17 @@
 """Stationary-only Bluetooth setup. HTTP can configure mappings, never fire them."""
 import asyncio
 import time
+from contextlib import suppress
 from urllib.parse import urlsplit
 
 from aiohttp import web
 
+from openpilot.selfdrive.carrot.bluetooth.b1_monitor import ENROLLMENT, Monitor, compatible
 from openpilot.selfdrive.carrot.bluetooth.bluez import Bluez
 from openpilot.selfdrive.carrot.bluetooth.model import CONFIG_PATH, RUNTIME, ACTIONS, DEFAULT_MAPPING, address, atomic_json, config, read_json, validate_config
 
 CLIENT = web.AppKey('bluetooth', Bluez)
+B1 = web.AppKey('b1_monitor', Monitor)
 LOCK = web.AppKey('bluetooth_lock', asyncio.Lock)
 
 
@@ -58,6 +61,7 @@ async def status(request):
   result = {'runtime': runtime(), 'config': config(), 'actions': ACTIONS, 'defaults': DEFAULT_MAPPING,
             'radioEnabled': await radio_enabled()}
   try:
+    result['b1'] = {'address': read_json(ENROLLMENT, {}).get('address'), 'state': request.app[B1].state}
     result.update(await request.app[CLIENT].snapshot())
     result['available'] = True
   except Exception as exc:
@@ -81,7 +85,18 @@ async def mutate(request):
     operation = request.match_info['operation']
     async with request.app[LOCK]:
       guard(request)
-      if operation == 'scan':
+      if operation == 'b1-register':
+        mac = address(body.get('address'))
+        devices = (await client.snapshot())['devices']
+        if not any(device['address'] == mac and compatible(device) for device in devices):
+          raise ValueError('Scan for a Carrot-B1 service first')
+        key = body.get('key')
+        if not isinstance(key, str) or len(key) != 64 or any(c not in '0123456789abcdefABCDEF' for c in key):
+          raise ValueError('Enter the 64 hex digits from the S3 UART PAIR command')
+        atomic_json(ENROLLMENT, {'address': mac, 'name': 'Carrot-B1', 'key': key.lower()})
+      elif operation == 'b1-forget':
+        ENROLLMENT.unlink(missing_ok=True)
+      elif operation == 'scan':
         await client.scan()
       elif operation == 'pair':
         await client.start_pair(address(body.get('address')))
@@ -154,6 +169,18 @@ async def mutate(request):
 
 
 def register(app):
+  app[B1] = Monitor()
+
+  async def monitor_context(app):
+    task = asyncio.create_task(app[B1].run())
+    try:
+      yield
+    finally:
+      task.cancel()
+      with suppress(asyncio.CancelledError):
+        await task
+
+  app.cleanup_ctx.append(monitor_context)
   app[CLIENT] = Bluez()
   app[LOCK] = asyncio.Lock()
   app.router.add_get('/api/bluetooth', status)
