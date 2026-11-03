@@ -327,3 +327,37 @@ running before its installation cannot retroactively produce this new alert.
 Focused desktop tests cover real Git changes/worktrees, reverting/restarting,
 read failures, alert timing, translations, and unchanged engagement state.
 Device display/timing validation remains separate from these tests.
+
+
+## Follow-up on 2026-11-03
+
+The eight archived full logs confirm separate stock LFA, SCC and HDA states.
+In the recent segment 38, stock MAIN input precedes SCC activation at 35.511 s,
+HDA activation at 35.594 s and the return of corner display geometry. SCC turns
+off at 38.121 s and HDA at 38.202 s. Segment 45 also contains stock LFA/SCC
+simultaneous activation with HDA remaining off, so additional OEM admission
+conditions remain unresolved. Both recent segments keep Carrot enabled false.
+AutoEngage is zero, but that setting alone does not establish engagement state.
+
+The existing native ALT2 correction remains present. Automatic LFA button
+pulses reach bus 130, yet stock LFA activation follows physical input in these
+captures. Emission of an activation request does not establish ECU acceptance.
+
+The owner requests stock SCC MAIN activation while its control output is replaced.
+The Wip controller now requests MAIN independently of Carrot engagement when
+CameraSCC, openpilot longitudinal control and corner radar are enabled, stock
+SCC/LFA messages exist, CAN is valid, gear is Drive, speed is finite and above
+3 m/s, and brake, AutoHold and parking brake are released. The normal CameraSCC
+stock-longitudinal configuration fails this admission condition.
+
+Both ALT2 and legacy button paths use their existing pulse timing and transport.
+Physical button input takes precedence for the added MAIN request. Existing
+MAIN-on states end that request, including canceled SCC states. SET and
+standstill resume keep their Carrot-enabled requirement. Vehicle control-side
+SCC output, Panda forwarding and safety policy retain their existing behavior.
+
+258 focused desktop packet/entry-point tests and 25 Wiki tests pass. Native
+ALT2 forwarding tests are included in Signal integration CI. Live ADAS response
+and physical cluster rendering require follow-up verification after Git Pull
+and comma restart. This change does not establish a cure for ineffective LFA
+requests or the remaining HDA activation conditions. Raw evidence stays private.
