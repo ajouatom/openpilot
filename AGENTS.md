@@ -11,7 +11,9 @@
   retiredMD4798frames and JoiningModel without exact recorded external identity.
   Some near-straight extra limits and nonmonotonic tighter-curve gate found.
   Live curve policy unchanged; publish existing orientationRate stds for future
-  logs only. Desktop128 plus real pinned matcher regression pass; Linux required.
+  logs only. Desktop128 plus pinned matcher pass; eGPU41834213643 passes505+57,
+  native old3/2skip and Light5 plusWeb. Jetson41834213685 passes5+2330/56skip
+  and supporting suites/Windows; docs pass. Physical USB wrap untested.
   No live writes/CAN/Jetson bundle. See docs/usb_wrap_curve_comparison_20261104.md.
 
 

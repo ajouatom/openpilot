@@ -76,4 +76,3 @@ class CurveSpeed:
       release = CURVE_JERK if self.a_curve < 0.0 else RELEASE_JERK
       self.a_curve = min(a_new, self.a_curve + release * self.dt)
     return self.a_curve
-

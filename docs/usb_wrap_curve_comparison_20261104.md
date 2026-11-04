@@ -64,6 +64,13 @@ where available, settings and exclusions are retained in private outputs.
 - Each of those methods with constant hypothetical yaw-rate std of 0.01, 0.03
   or 0.05 rad/s, added to absolute yaw rate (preserving direction for Carrot).
 
+The algorithms differ beyond uncertainty: Carrot uses a 1.9 m/s2 lateral budget
+scaled by sensitivity, a configured minimum curve speed (18/35/44 km/h in these
+recordings), path arc length, a reaction/jerk distance reserve and median geometry.
+The reference uses 2.5 m/s2, forward plan x, no corresponding configurable speed
+floor, neighbouring-point support and distinct -2/-0.5 m/s2 caps. Therefore a
+change in onset cannot be attributed solely to uncertainty or one threshold.
+
 These are **open-loop evaluations of the same recorded input**, not a replay
 of changed vehicle motion or measured braking. Other planner candidates, driver
 input, actuators and road outcomes are not simulated. Each supplied segment
@@ -133,3 +140,16 @@ Native Linux compatibility and the broader integration suites are required on
 the published source. No vehicle writes, USB/GPU hardware test, CAN operation,
 restart or road acceptance were performed. Raw routes and detailed traces stay
 under ignored `.analysis/scratch/2026-11-04-usb-curve/`.
+
+
+Published source: cfd8d7b8668d6dd75098acf441a214eda362d9e4.
+[eGPU CI41834213643](https://github.com/ajouatom/openpilot/actions/runs/41834213643)
+passes 505 contract/runtime checks, 57 navigation checks, three native old-runtime
+checks/two new-runtime-only skips, all five native Light speed checks including
+the cast-zero regression, and Web tests/build. Counts overlap local coverage;
+these tests do not exercise a physical USB AMD ring wrap.
+
+[Jetson integration CI41834213685](https://github.com/ajouatom/openpilot/actions/runs/41834213685)
+passes the five publication/comparison tests, 2330 broad checks/56 skips,
+supporting suites 232/62/94/119/11/11, and Windows. User-doc CI41834213931 passes.
+These establish compatibility, not Jetson/eGPU physical timing or road behavior.
