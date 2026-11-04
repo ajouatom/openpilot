@@ -41,6 +41,15 @@ class TestParams:
     assert self.params.get("DongleId") == "bob"
     assert self.params.get("AthenadPid") == 123
 
+  @pytest.mark.parametrize("flag", [ParamKeyFlag.CLEAR_ON_MANAGER_START, ParamKeyFlag.CLEAR_ON_OFFROAD_TRANSITION])
+  def test_temporary_navigation_destination_lifecycle(self, tmp_path, flag):
+    memory = Params(str(tmp_path / 'memory'))
+    memory.put('NavDestinationTemporary', '{"latitude":37,"longitude":127}')
+    assert Params(str(tmp_path / 'memory')).get('NavDestinationTemporary')
+    assert self.params.get('NavDestinationTemporary') is None
+    memory.clear_all(flag)
+    assert memory.get('NavDestinationTemporary') is None
+
   def test_params_get_block(self):
     def _delayed_writer():
       time.sleep(0.1)

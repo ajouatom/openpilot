@@ -1,5 +1,16 @@
 # Repository memory
 
+- On 2026-11-05, owner requests review/integration of PR570/571. PR570 final
+  5f6712c422 doubles Ray command increment above neutral264/497; cap0.70 maps
+  795/1572 with matching explicit Panda bounds. Raw slew increases too.
+  Eligibility/sensor calibration retain prior definitions; contributor reports
+  Ray operation, no local physical acceleration proof. PR571980f2f9413 selects
+  temporary geocoding; supplement with RAM-only active destination, DONT_LOG,
+  manager-start/offroad cleanup and CLI replacement. Fix arrival cleanup omission
+  (original production method fails regression); local221vehicle+29nav pass.
+  Ordinary GitPull/restart includes Panda rebuild. No live writes/CAN/reboot.
+
+
 - On 2026-11-04, owner requests USB wrap correction and curve replay comparison.
   Backport tinygrad42ea17d1 cast-zero USB memset rule before loading only exact
   d39227/cb9bf2cf Light runtime; older N16/Flip ranged-store paths untouched.

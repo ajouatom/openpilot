@@ -9,6 +9,7 @@ import time
 import aiohttp
 from aiohttp import web
 
+from openpilot.common.params import Params
 from ..config import WEB_DIR
 from ..services.params import get_param_value, set_param_value
 from openpilot.selfdrive.navigation.preview import PREVIEW_PATH, WEB_DEMAND_PATH, preview_fresh, preview_reason
@@ -74,7 +75,7 @@ async def search(request):
 
 async def get_destination(request):
   try:
-    value = get_param_value('NavDestinationTemporary', '') or get_param_value('NavDestination', '')
+    value = Params('/dev/shm/params').get('NavDestinationTemporary') or get_param_value('NavDestination', '')
     current = destination(json.loads(value)) if value else None
   except (ValueError, KeyError, TypeError):
     current = None
@@ -88,17 +89,16 @@ async def set_destination(request):
     value = destination(await request.json())
   except (ValueError, KeyError, TypeError):
     return web.json_response({'error': 'Invalid destination.'}, status=400)
-  # Temporary Geocoding results may only be used during this manager/onroad
-  # session, so keep the selected coordinates out of persistent NavDestination.
-  set_param_value('NavDestinationTemporary', json.dumps(value, ensure_ascii=False))
+  # Keep the active destination in RAM. Manager clears it when the drive ends.
   set_param_value('NavDestination', '')
   set_param_value('NavDestinationWaypoints', '')
-  return web.json_response({'destination': value})
+  Params('/dev/shm/params').put('NavDestinationTemporary', json.dumps(value, ensure_ascii=False))
+  return web.json_response({'destination': value}, headers={'Cache-Control': 'no-store'})
 
 
 async def clear_destination(request):
   set_param_value('NavDestination', '')
-  set_param_value('NavDestinationTemporary', '')
+  Params('/dev/shm/params').remove('NavDestinationTemporary')
   set_param_value('NavDestinationWaypoints', '')
   return web.json_response({'destination': None})
 

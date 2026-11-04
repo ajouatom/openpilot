@@ -15,6 +15,7 @@ if __name__ == "__main__":
       "longitude": float(coords[1])
     }
     params.put("NavDestination", json.dumps(dest))
+    Params('/dev/shm/params').remove('NavDestinationTemporary')
     params.remove("NavDestinationWaypoints")
   else:
     print("Setting to Taco Bell")
@@ -23,6 +24,7 @@ if __name__ == "__main__":
       "longitude": -117.12556569985693,
     }
     params.put("NavDestination", json.dumps(dest))
+    Params('/dev/shm/params').remove('NavDestinationTemporary')
 
     waypoints = [
       (-117.16020713111648, 32.71997612490662),

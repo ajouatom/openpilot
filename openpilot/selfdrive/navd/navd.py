@@ -53,6 +53,7 @@ class RouteEngine:
     self.pm = pm
 
     self.params = Params()
+    self.params_memory = Params('/dev/shm/params')
 
     # Get last gps position from params
     self.last_position,_ = coordinate_from_param("LastGPSPosition", self.params)
@@ -87,8 +88,9 @@ class RouteEngine:
     # Geocoding API results requested with permanent=false are valid only for
     # the current session. Prefer the session-scoped destination, while
     # retaining persistent NavDestination for non-geocoding callers.
-    param = "NavDestinationTemporary" if self.params.get("NavDestinationTemporary") else "NavDestination"
-    return coordinate_from_param(param, self.params)
+    if self.params_memory.get('NavDestinationTemporary'):
+      return coordinate_from_param('NavDestinationTemporary', self.params_memory)
+    return coordinate_from_param('NavDestination', self.params)
 
   def refresh_token(self):
     token = os.environ.get("MAPBOX_TOKEN") or self.params.get("MapboxPublicKey") or ""
@@ -150,6 +152,7 @@ class RouteEngine:
     new_destination, place_name = self.destination_from_params()
     if place_name == 'External Navi':
       self.params.remove('NavDestination')
+      self.params_memory.remove('NavDestinationTemporary')
       new_destination = None
     if new_destination is None:
       self.clear_route()
@@ -369,6 +372,7 @@ class RouteEngine:
         dist = self.nav_destination.distance_to(self.last_position)
         if dist > REROUTE_DISTANCE:
           self.params.remove("NavDestination")
+          self.params_memory.remove('NavDestinationTemporary')
           self.clear_route()
 
   def send_route(self):
