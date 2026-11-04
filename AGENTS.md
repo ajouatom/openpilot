@@ -1,5 +1,20 @@
 # Repository memory
 
+- On 2026-11-04, owner requests USB wrap correction and curve replay comparison.
+  Backport tinygrad42ea17d1 cast-zero USB memset rule before loading only exact
+  d39227/cb9bf2cf Light runtime; older N16/Flip ranged-store paths untouched.
+  New Light AMD warp cache tag; validation receipts hash hooks. No model/runtime
+  replacement or claimed hardware cure. 26hash-checked rlogs346631805B give
+  30284model/30276usable/25243moving frames; ALL lack yawStd/raw predictions.
+  Current ceiling vs ssh f3bf59fd negative-cap rates6.92/7.01%; assumed sigma
+  .03rad/s gives11.29/11.87, NOT measured uncertainty or braking. Corpus includes
+  retiredMD4798frames and JoiningModel without exact recorded external identity.
+  Some near-straight extra limits and nonmonotonic tighter-curve gate found.
+  Live curve policy unchanged; publish existing orientationRate stds for future
+  logs only. Desktop128 plus real pinned matcher regression pass; Linux required.
+  No live writes/CAN/Jetson bundle. See docs/usb_wrap_curve_comparison_20261104.md.
+
+
 - On 2026-11-04, owner reports unintended steering with AutoEngage0 after the
   Nov3 isolated stock MAIN change. Confirmed source chain OEM MainMode_ACC ->
   main_enabled -> cruiseState.available rising -> VCruiseCarrot latEnabled ->
