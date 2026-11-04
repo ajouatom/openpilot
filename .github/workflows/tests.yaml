@@ -122,6 +122,8 @@ jobs:
           opendbc_repo/opendbc/car/hyundai/tests/test_blink_hold.py
           opendbc_repo/opendbc/car/hyundai/tests/test_blinker_stalks.py
           opendbc_repo/opendbc/car/hyundai/tests/test_ccnc_cluster.py
+          opendbc_repo/opendbc/car/hyundai/tests/test_carstate_buttons.py
+          openpilot/selfdrive/car/tests/test_camera_scc_steering_intent.py
           opendbc_repo/opendbc/car/toyota/tests/test_ars510_carrot.py
           opendbc_repo/opendbc/car/toyota/tests/test_ars510_display.py
           openpilot/selfdrive/car/tests/test_toyota_pcm_mode0.py
