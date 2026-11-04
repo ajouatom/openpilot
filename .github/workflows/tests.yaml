@@ -111,6 +111,13 @@ jobs:
             opendbc_repo/opendbc/car/hyundai/tests/test_bosch_mirror_birth.py \
             opendbc_repo/opendbc/car/hyundai/tests/test_bosch_mirror_m3.py \
             opendbc_repo/opendbc/car/hyundai/tests/test_bosch_road_edge.py
+      - name: Check temporary navigation destinations and native Params
+        run: >-
+          python -m pytest -o addopts='' -q
+          openpilot/common/tests/test_params.py::TestParams::test_temporary_navigation_destination_lifecycle
+          openpilot/selfdrive/navigation/tests/test_route_engine.py
+          openpilot/selfdrive/carrot/server/tests/test_navigation_map.py
+          openpilot/selfdrive/navd/tests/test_instruction_serialization.py
       - name: Check passive camera SOF diagnostics
         run: openpilot/system/camerad/test/test_camera_event_timing
       - name: Check Hyundai navigation and lever features and RAV4 ARS integration
