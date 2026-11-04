@@ -43,7 +43,7 @@ def text_draw_module(monkeypatch):
       FONT_SCALE=1.242,
       gui_app=SimpleNamespace(font=lambda weight: ("font", weight)),
       FontWeight=SimpleNamespace(DISPLAY=1),
-      font_fallback=lambda font: font,
+      font_fallback=lambda font, text=None: font,
     ),
   )
   monkeypatch.setitem(
@@ -205,8 +205,8 @@ def test_raw_draw_path_encodes_once_and_preserves_scaled_geometry(
       (font, text, id(text), SimpleNamespace(x=position.x, y=position.y), font_size, spacing, color, id(position)),
     )
 
-  def fallback(font):
-    fallback_calls.append(font)
+  def fallback(font, text):
+    fallback_calls.append((font, text))
     return "fallback-font"
 
   monkeypatch.setattr(module, "_RAW_DRAW_TEXT_EX", raw_draw_text_ex)
@@ -233,7 +233,7 @@ def test_raw_draw_path_encodes_once_and_preserves_scaled_geometry(
 
   assert wrapper_calls == []
   assert encode_calls == [("utf-8", "strict")]
-  assert fallback_calls == ["original-font"]
+  assert fallback_calls == [("original-font", text)]
   assert len(raw_calls) == 10
   assert all(call[0] == "fallback-font" for call in raw_calls)
   assert all(call[1] == text_value.encode() for call in raw_calls)
@@ -255,7 +255,7 @@ def test_raw_draw_path_encodes_once_and_preserves_scaled_geometry(
 def test_missing_raw_symbol_keeps_pyray_wrapper_path(text_draw_module, monkeypatch):
   module, draw_calls = text_draw_module
   monkeypatch.setattr(module, "_RAW_DRAW_TEXT_EX", None)
-  monkeypatch.setattr(module, "font_fallback", lambda _: pytest.fail("wrapper path owns font fallback"))
+  monkeypatch.setattr(module, "font_fallback", lambda font, text: "fallback-font")
   monkeypatch.setattr(module, "get_text_draw_pos", lambda *args, **kwargs: (10.0, 20.0, None))
 
   module.draw_text_ui_style(
@@ -270,7 +270,7 @@ def test_missing_raw_symbol_keeps_pyray_wrapper_path(text_draw_module, monkeypat
   )
 
   assert len(draw_calls) == 1
-  assert draw_calls[0][0] == "font"
+  assert draw_calls[0][0] == "fallback-font"
   assert draw_calls[0][1] == "speed"
   assert draw_calls[0][3] == 50.0
 
@@ -285,9 +285,30 @@ def test_empty_text_skips_both_draw_paths(text_draw_module, monkeypatch):
       return super().encode(encoding, errors)
 
   monkeypatch.setattr(module, "_RAW_DRAW_TEXT_EX", lambda *args: pytest.fail("empty text must not draw"))
-  monkeypatch.setattr(module, "font_fallback", lambda _: pytest.fail("empty text must not select a font"))
+  monkeypatch.setattr(module, "font_fallback", lambda *args: pytest.fail("empty text must not select a font"))
 
   module.draw_text_ui_style(EmptyTrackingText(""), 0, 0, 50, module.rl.Color(1, 2, 3, 4))
 
   assert encode_calls == []
   assert wrapper_calls == []
+
+
+@pytest.mark.parametrize("raw", [False, True])
+def test_korean_styled_text_measures_and_draws_with_same_font(text_draw_module, monkeypatch, raw):
+  module, wrapper_calls = text_draw_module
+  draws = []
+  measured = []
+  def measure(font, text, size):
+    measured.append((font, text))
+    return module.rl.Vector2(80 if font == "korean-font" else 40, size)
+  def draw(font, text, position, *args):
+    draws.append((font, position.x))
+  monkeypatch.setattr(module, "font_fallback", lambda font, text: "korean-font")
+  monkeypatch.setattr(module, "measure_text_cached", measure)
+  monkeypatch.setattr(module, "_RAW_DRAW_TEXT_EX", draw if raw else None)
+  monkeypatch.setattr(module.rl, "draw_text_ex", draw)
+  monkeypatch.setattr(module.native_text, "try_text", lambda *args: False)
+  module.draw_text_ui_style("AB 한글", 100, 100, 20, module.rl.BLACK,
+                            font="normal-font", border_width=0, shadow_offset=0)
+  assert measured == [("korean-font", "AB 한글")]
+  assert draws == [("korean-font", 60)]
