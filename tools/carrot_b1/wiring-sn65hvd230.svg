@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="414" viewBox="0 0 900 414" role="img" aria-labelledby="title desc">
+<title id="title">Carrot B1 · SN65HVD230 배선도</title>
+<desc id="desc">S3 3V3은 3.3V, G는 GND, GPIO5는 RX, GPIO4는 TX에 연결한다. 차량 CAN H와 CAN L은 각각 CANH와 CANL에 연결한다.</desc>
+<style>text{font-family:'Malgun Gothic','Noto Sans KR',sans-serif;fill:#163043}.name{font-size:20px;font-weight:bold}.pin{font-size:19px}.wire{fill:none;stroke-width:4;stroke-linecap:round}</style>
+<rect width="900" height="414" rx="14" fill="#eff4f5"/>
+<text x="30" y="43" font-size="26" font-weight="bold">Carrot B1  /  3.3 V CAN 배선</text>
+<text x="30" y="74" font-size="16">모듈 글씨가 바르게 보이고 파란 나사 단자가 오른쪽에 있는 방향</text>
+<g stroke="#b3c4c9" fill="white"><rect x="30" y="100" width="183" height="239" rx="12"/><rect x="340" y="100" width="268" height="239" rx="12"/><rect x="711" y="100" width="159" height="239" rx="12"/></g>
+<g class="name"><text x="48" y="136">ESP32-S3</text><text x="357" y="136">SN65HVD230</text><text x="729" y="136">차량 CAN</text></g>
+<g class="wire"><path d="M203 174H348" stroke="#b04442"/><path d="M203 218H348" stroke="#44535c"/><path d="M203 262H348" stroke="#236bad"/><path d="M203 306H348" stroke="#167d62"/><path d="M597 192H719" stroke="#865c24"/><path d="M597 286H719" stroke="#735696"/></g>
+<g class="pin"><text x="48" y="180">3V3</text><text x="48" y="224">G (GND)</text><text x="48" y="268">GPIO5  ←</text><text x="48" y="312">GPIO4  →</text>
+<text x="358" y="180">3.3V</text><text x="358" y="224">GND</text><text x="358" y="268">RX</text><text x="358" y="312">TX</text>
+<text x="529" y="198">CANH</text><text x="529" y="292">CANL</text><text x="730" y="198">CAN H</text><text x="730" y="292">CAN L</text></g>
+<text x="30" y="371" font-size="17">S3 쪽은 핀 이름 기준입니다. GPIO4는 송신, GPIO5는 수신이며 두 선 모두 직결합니다.</text>
+<text x="30" y="398" font-size="17">이미 종단된 차량 버스에 분기할 때는 모듈의 120 Ω 종단을 해제하세요.</text></svg>

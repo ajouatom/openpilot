@@ -1505,3 +1505,25 @@ def test_curve_pair_resolves_body_offset_only_with_physical_inward_motion(side, 
   assert estimate.confirmed_cutin == physical_motion
   assert estimate.control_eligible == physical_motion
   assert estimate.predecel_risk == physical_motion
+
+
+@pytest.mark.parametrize("side", (-1.0, 1.0))
+@pytest.mark.parametrize("front_motion", ("entering", "parallel", "rotation_only", "new_slot"))
+def test_near_curve_cutin_before_vision_switch_needs_independent_front_motion(side, front_motion):
+  detector = TrajectoryCutInDetector()
+  yaw = side * 0.03
+  estimates = []
+  for index in range(32):
+    t = index * 0.05
+    d_rel = 10.0 - 2.0 * t
+    y_rel = side * (4.70 - 1.20 * t)
+    corner = point(1200, "corner180", d_rel, y_rel, yv_rel=-side * 1.2 - yaw * d_rel)
+    front_d = d_rel + 1.8
+    front_y = side * 4.7 if front_motion == "parallel" else y_rel
+    front_speed = -side * 1.2 if front_motion in ("entering", "new_slot") else 0.0
+    front = point(40 + index if front_motion == "new_slot" else 40, "frontRadar",
+                  front_d, front_y, yv_rel=front_speed - yaw * front_d)
+    estimates.extend(detector.update(t, 10.0, (corner,), PATH, MODEL, yaw_rate_rad_s=yaw,
+                                     cross_sensor_matches={(corner.source, corner.track_id): front}))
+  assert not any(e.current_path or e.vision_supported for e in estimates)
+  assert any(e.control_eligible for e in estimates) == (front_motion == "entering")

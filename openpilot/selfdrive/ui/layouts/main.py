@@ -8,6 +8,7 @@ from openpilot.selfdrive.ui.layouts.settings.settings import SettingsLayout, Pan
 from openpilot.selfdrive.ui.onroad.augmented_road_view import AugmentedRoadView
 from openpilot.selfdrive.ui.carrot_param_cache import TimedSnapshotCache, read_screen_record
 from openpilot.selfdrive.ui.ui_state import device, ui_state
+from openpilot.selfdrive.ui.b1_badge import draw as draw_b1_badge
 from openpilot.selfdrive.ui.widgets.carrot_web_dialog import CarrotWebDialog
 from openpilot.system.ui.widgets import Widget
 from openpilot.selfdrive.ui.layouts.onboarding import OnboardingWindow
@@ -105,6 +106,8 @@ class MainLayout(Widget):
         ui_state.show_camera_with_cluster,
       )
     self._render_main_content()
+    if self._current_mode in (MainState.HOME, MainState.ONROAD):
+      draw_b1_badge(self._content_rect if self._sidebar.is_visible else self._rect)
     self._handle_carrot_record_cmd(ui_state.sm)
 
   def _setup_callbacks(self):

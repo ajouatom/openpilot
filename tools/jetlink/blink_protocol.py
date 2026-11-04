@@ -169,6 +169,9 @@ def wire_record(value, token, offset, now):
           'devices':[d for d in value.get('devices', [])[:16] if isinstance(d,str) and len(d)<=32]}
 
 
+BLE_ENROLLMENT = Path('/data/carrot/b1-monitor.json')
+
+
 class Sender:
   def __init__(self, client, peer):
     self.worker = None
@@ -181,7 +184,7 @@ class Sender:
       return
     if Path('/TICI').is_file():
       from openpilot.common.params import Params
-      if Params().get_bool('CanfdBlinkerControl'):
+      if Params().get_bool('CanfdBlinkerControl') or BLE_ENROLLMENT.exists():
         return  # Reboot selection excludes USB2CAN before host BEGIN.
     seq = client._next_seq()
     client.t.send_json(BEGIN, seq, {'version': 2})
@@ -201,6 +204,10 @@ class Sender:
     if self.worker is None or now < self.next_send:
       return
     self.next_send = now + .05
+    if BLE_ENROLLMENT.exists():
+      self.close()
+      self.worker = None
+      return
     # The host stamp is taken before we receive telemetry: this estimate can
     # shorten a deadline, never extend it by transport or inference latency.
     state = (client.last_state or {}).get('carrot_blinker', {})
