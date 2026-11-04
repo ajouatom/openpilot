@@ -153,5 +153,6 @@ def test_mici_status_card_clears_speed_and_gear(mici_modules, monkeypatch):
   card = rectangles[-1]
   # Actual HUD speed panel ends at 317; the gear box extends to 373.
   assert card.x > 373
-  assert card.x + card.width <= 476 - 14
+  # Match the approved DM/vision column at x=382 with a 10px right margin.
+  assert card.x + card.width <= 476 - 10
   assert card.y + card.height <= 240 - 18

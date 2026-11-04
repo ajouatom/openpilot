@@ -196,6 +196,7 @@ def test_blind_spot_wall_color_prefers_carstate_source_fields_over_stale_packet(
   car_state, radar_state, meta = blind_spot_messages(left_blindspot=True)
   car_state.leftBlindspotOem = True
   car_state.leftBlindspotOnnx = True
+  car_state.blindspotSplitSourcesValid = True
   stale_sources = source_payload(left_oem=False, left_vision=False)
   sm = FakeSubMaster(modelV2=SimpleNamespace(meta=meta), carState=car_state, radarState=radar_state,
                      customReservedRawData1=stale_sources)
