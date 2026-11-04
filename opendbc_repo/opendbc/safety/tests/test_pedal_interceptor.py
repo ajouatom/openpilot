@@ -182,3 +182,16 @@ def test_stalled_sensor_counter_blocks_positive_until_a_valid_frame(safety):
   assert safety.safety_rx_hook(packet(sensor(counter=2)))
   safety.set_controls_allowed(True)
   assert safety.safety_tx_hook(packet(command()))
+
+
+@pytest.mark.parametrize("model", [CarParams.SafetyModel.hyundai, CarParams.SafetyModel.hyundaiLegacy,
+                                    CarParams.SafetyModel.hyundaiCanfd])
+@pytest.mark.parametrize("param", [0, 1, 4, 5, 8, 12, 16, 24, 189])
+def test_switching_from_pedal_to_ordinary_profiles_removes_pedal_permission(safety, model, param):
+  ready(safety)
+  assert safety.safety_tx_hook(packet(command()))
+  assert safety.set_safety_hooks(model, param) == 0
+  safety.init_tests()
+  safety.set_controls_allowed(True)
+  assert not safety.safety_tx_hook(packet(command()))
+  assert not safety.safety_tx_hook(packet(command(0.0)))

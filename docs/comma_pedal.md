@@ -46,3 +46,24 @@ Use the full cereal schema when checking the presence of `can`, `sendcan`, `carP
 The repository SConstruct calls `panda/SConscript` and `panda/board/SConscript`. `panda/board/main.c` includes the safety root through the existing `opendbc` link to `opendbc_repo/opendbc`, then `safety/safety_hyundai.h`. `panda/firmware_version.py` hashes safety source content. `pandad.py` compares the selected image's signature, while `panda_safety.cc` applies CP.safetyConfigs.
 
 After an authorized installation, confirm both the built H7 signature and the actual device signature/configuration. This integration does not replace the Panda tree, bypass firmware verification or modify the pedal-device firmware.
+
+
+## Wip integration review on 2026-11-03
+
+PR 569 head `01b8bf5dda2b38a0015f78f4152f7fdb9bc23de8` was reviewed against
+current Wip `36fbbbae3afa124f6d16c7ca6fe5122434a4ebe7`. A 2,568-case parameter
+comparison covers all 107 Hyundai platform entries, toggle OFF/ON, absent/present
+pedal, SCC-present fingerprints and four CameraSCC/radar configurations. 2,566
+results match the baseline, including the same 24 existing initialization errors.
+Only the two expected Ray EV, pedal-present, toggle-ON, eligible classic-CAN cases
+select the new profile. Unsupported vehicles retain their previous CarParams.
+
+The merged Python pedal, settings and current CCNC/ALT2 tests pass 438 cases.
+Signal CI includes the production Panda pedal checks, switching from a pedal
+profile into ordinary Hyundai/legacy/CAN-FD profiles, and both CAN backends.
+The recently added isolated CameraSCC MAIN request remains covered by its tests.
+
+The contributor reports limited acceleration on their test vehicle. This review
+preserves the submitted Ray calibration and does not resolve or validate that
+vehicle symptom. No vehicle writes, settings activation, pedal transmission or
+hardware installation were performed during this integration review.
