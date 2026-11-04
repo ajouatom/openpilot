@@ -21,7 +21,8 @@ def test_destination_lifecycle_and_validation(monkeypatch):
     async with TestClient(TestServer(app)) as client:
       response = await client.post('/api/navigation/destination', json={'latitude': 37., 'longitude': 127., 'place_name': '<script>name</script>'})
       assert response.status == 200
-      assert json.loads(values['NavDestination'])['place_name'] == '<script>name</script>'
+      assert json.loads(values['NavDestinationTemporary'])['place_name'] == '<script>name</script>'
+      assert values['NavDestination'] == ''
       response = await client.get('/api/navigation/destination')
       assert (await response.json())['destination']['latitude'] == 37.
       for payload in ([], {}, {'latitude': 91, 'longitude': 127}, {'latitude': None, 'longitude': 0}):
@@ -29,6 +30,7 @@ def test_destination_lifecycle_and_validation(monkeypatch):
       assert (await client.get('/api/navigation/search?q=Seoul')).status == 409
       assert (await client.delete('/api/navigation/destination')).status == 200
       assert values['NavDestination'] == ''
+      assert values['NavDestinationTemporary'] == ''
   asyncio.run(run())
 
 
@@ -78,7 +80,7 @@ def test_search_reads_fragmented_response_and_keeps_token_server_side(monkeypatc
   async def get(url, **kwargs):
     assert url == 'https://api.mapbox.com/search/geocode/v6/forward'
     assert kwargs['params']['access_token'] == 'pk.private-test'
-    assert kwargs['params']['permanent'] == 'true'
+    assert kwargs['params']['permanent'] == 'false'
     yield NS(status=200, content=NS(iter_chunked=chunks))
   async def run():
     app = web.Application()
