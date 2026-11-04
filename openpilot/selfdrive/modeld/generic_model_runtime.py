@@ -120,7 +120,10 @@ class GenericModelRuntime:
     for name, next_name in self.state_pairs.items():
       state = self.queues[name]
       self.outputs[next_name] = input_view(state._buffer(), state.shape, state.dtype)
-    warp_path = runtime_dir / f'warp-{self.gpu_arch}-{width}x{height}.pkl'
+    # Rebuild this runtime's host dispatch after the USB lowering backport.
+    # Old immutable caches stay on disk; other runtime pairs keep their paths.
+    warp_tag = '-usb-wrap-v1' if compiled_copies else ''
+    warp_path = runtime_dir / f'warp-{self.gpu_arch}-{width}x{height}{warp_tag}.pkl'
     if warp_path.is_file():
       self.run_warp = load_warp(warp_path)
     else:

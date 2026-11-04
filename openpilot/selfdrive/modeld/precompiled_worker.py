@@ -79,6 +79,8 @@ def main():
   from tinygrad import Device, Tensor
   from openpilot.selfdrive.modeld.egpu_usb_wait import configure_usb_wait
   configure_usb_wait(manifest)
+  from openpilot.selfdrive.modeld.egpu_usb_wrap import configure_usb_wrap
+  configure_usb_wrap(manifest)
   from openpilot.selfdrive.modeld.precompiled_artifact import load_artifact
   from openpilot.common.runtime_diagnostics import RuntimeDiagnostics
   from openpilot.common.swaglog import cloudlog
