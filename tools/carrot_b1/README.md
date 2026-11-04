@@ -1,5 +1,8 @@
 # Carrot B1 BLE indicator controller
 
+[처음 만드는 분 · USB 펌웨어 설치, 사진 배선도, LED 색상표](START.ko.md)
+
+
 ESP32-S3 N16R8, Arduino-ESP32 3.3.5, one 500 kbit/s classic CAN bus.
 Build and upload from the repository root with Arduino CLI:
 
