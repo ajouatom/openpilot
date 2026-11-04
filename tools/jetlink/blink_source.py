@@ -7,6 +7,7 @@ import sys
 import time
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+from openpilot.common.atc_params import right_lane_change_distance
 from blink_protocol import PACKAGE_CONFIG, LIMIT, encode, finite, fresh
 from blink_policy import Policy, AutomaticSignals
 from blink_tbt import TbtBlinker, right_front_clear
@@ -72,7 +73,7 @@ class Events:
     return result[-4:]
 
 
-def main(fd, spas=False):
+def main(fd, spas=False, ble=False):
   if spas:
     import os
     try:
@@ -88,17 +89,21 @@ def main(fd, spas=False):
   with car.CarParams.from_bytes(Params().get('CarParams')) as cp:
     fingerprint = cp.carFingerprint
     front_radar_available = not getattr(cp, 'radarUnavailable', True)
+    if ble and getattr(cp, 'passive', False):
+      return
     if spas:
       from opendbc.car.hyundai.values import HyundaiFlags
       if cp.brand != 'hyundai' or not cp.flags & HyundaiFlags.CANFD_SPAS_BLINKERS or cp.passive:
         return
-  if not spas and json.loads(PACKAGE_CONFIG.read_text()).get('fingerprint') != fingerprint:
+  if not spas and not ble and json.loads(PACKAGE_CONFIG.read_text()).get('fingerprint') != fingerprint:
     return
   sock = socket.socket(fileno=fd)
   sock.setblocking(False)
   sm = messaging.SubMaster(['carState', 'carControl', 'selfdriveState', 'pandaStates', 'modelV2', 'carrotMan', 'livePose', 'radarState',
                              'gpsLocation', 'gpsLocationExternal', 'carrotNavi'])
   events = Events(time.monotonic())
+  trial_until = 0.
+  last_trial = None
   policy, params = Policy(), Params()
   automatic = AutomaticSignals()
   tbt = TbtBlinker()
@@ -133,7 +138,7 @@ def main(fd, spas=False):
         feedback = {}
     sm.update(0)
     now = time.monotonic()  # SubMaster assigns receive timestamps during update.
-    ok = vehicle_ready(sm, now, fingerprint, spas)
+    ok = vehicle_ready(sm, now, fingerprint, spas or ble)
     status = read_json(RUNTIME/'status.json', {})
     settings, learning, cancelled = config(), read_json(RUNTIME/'learn.json', {}), read_json(RUNTIME/'cancelled.json', {})
     commands = events.read(read_json(RUNTIME/'blinker.json', {}), settings, status, learning, cancelled, now)
@@ -170,12 +175,13 @@ def main(fd, spas=False):
       automatic.update(now, mode, False, 0., 'none', '', 'none', use_travel=True)
     # The ATC add-on lights the real right indicator. Its CAN feedback goes through the
     # unchanged driver-blinker lane-change path; no LANECHANGE command is sent.
+    tbt_distance = right_lane_change_distance(params)
     tbt_enabled = (not spas and mode == 2 and params.get_int('AutoTurnControl') in (1, 2) and
-                   params.get_bool('AutoTurnControlRightLaneChange'))
+                   tbt_distance > 0)
     front_clear = (tbt_enabled and front_radar_available and 'radarState' in sm.services and sm.valid['radarState'] and
                    sm.alive['radarState'] and fresh(sm.recv_time['radarState'], now, .35) and
                    right_front_clear(sm['radarState']))
-    tbt_auto = tbt.update(now, enabled=tbt_enabled,
+    tbt_auto = tbt.update(now, enabled=tbt_enabled, distance_limit=tbt_distance,
                           front_clear=front_clear,
                           valid=(auto_valid and fresh(sm.recv_time['carrotMan'], now, .35) and
                                  sm['carControl'].latActive and params.get_int('LaneChangeNeedTorque') == 0),
@@ -208,9 +214,18 @@ def main(fd, spas=False):
     commands, hold = policy.update(now, mode, ok, commands, cs.vEgo, cs.steeringAngleDeg,
                                   str(cs.gearShifter), remote, auto, policy_valid)
     observation_feedback.prepare(now, hold, meta, cs)
-    hold = policy.acknowledged(now, activated_id, fresh(feedback.get('stamp'), now, .35) and feedback.get('state') == 'driver_override')
+    receiver_override = fresh(feedback.get('stamp'), now, .35) and feedback.get('state') == 'driver_override'
+    native_hold = not ble or fingerprint == 'HYUNDAI_IONIQ_5_PE'
+    tbt_turn_hold = bool(not spas and native_hold and hold and hold['source'] == 'turn' and automatic.journey.active)
+    # A confirmed TBT lamp is maintained by the comma-side lease. Receiver
+    # one-touch ownership ending must not erase the ongoing turn. This cannot
+    # activate a hold whose initial send and lamp were never acknowledged.
+    continuing_turn = (tbt_turn_hold and activated_id == hold['id'] and fresh(feedback.get('stamp'), now, .35) and
+                       feedback.get('state') in ('ready', 'waiting', 'driver_override') and
+                       feedback.get('accepted_id') in (None, hold['id']))
+    hold = policy.acknowledged(now, activated_id, receiver_override and not tbt_turn_hold)
     acknowledged = (hold and fresh(feedback.get('stamp'), now, .35) and feedback.get('accepted_id') == hold['id'] and
-                    feedback.get('state') in ('ready', 'waiting', 'waiting_previous_signal'))
+                    feedback.get('state') in ('ready', 'waiting', 'waiting_previous_signal')) or continuing_turn
     if not acknowledged:
       if activated_id is not None:
         release_until = now+.8
@@ -219,14 +234,14 @@ def main(fd, spas=False):
           (hold['direction'] == 'right' and cs.rightBlinker and not cs.leftBlinker)):
       activated_id = hold['id']
     activated_id = observation_feedback.activation(now, hold, cs, feedback, acknowledged, activated_id, ok)
-    if feedback.get('state') == 'driver_override':
+    if feedback.get('state') == 'driver_override' and not continuing_turn:
       release_until = 0.
-    if commands or feedback.get('state') == 'driver_override':
+    if commands or ((spas or not native_hold) and feedback.get('state') == 'driver_override'):
       automatic.pending = None
       automatic.journey.pending = None
       automatic.journey.active = None
       automatic.journey.cancelled_until = now+3.
-    if not spas and policy.relight(now, activated_id, acknowledged, cs.leftBlinker, cs.rightBlinker,
+    if not spas and policy.relight(now, activated_id, acknowledged and not receiver_override, cs.leftBlinker, cs.rightBlinker,
                                   retry_unlit=auto_valid and automatic.direction is not None and feedback.get('state') == 'ready'):
       hold, activated_id = policy.hold, None
     model_fresh = ('modelV2' in sm.services and sm.valid['modelV2'] and sm.alive['modelV2'] and fresh(sm.recv_time['modelV2'], now, .35))
@@ -250,10 +265,25 @@ def main(fd, spas=False):
     devices = [mac for mac in status.get('grabbed', []) if fresh(status.get('time'), now) and
                settings.get('devices', {}).get(mac, {}).get('enabled') is True and
                not (learning.get('address') == mac and learning.get('until', 0) > now)]
+    # Physical, local-only service test. A fresh nonce permits one tap while
+    # parked. Keep checking P/standstill/control state for its whole lease.
+    if ble:
+      trial = read_json(RUNTIME/'b1-park-test.json', {})
+      if isinstance(trial, dict) and trial.get('id') != last_trial and fresh(trial.get('time'), now):
+        if isinstance(trial.get('id'), str) and trial['id'].startswith('park-test:') and trial.get('direction') in ('left','right'):
+          last_trial = trial['id']
+          trial_until = now + 1.
+      if now < trial_until:
+        cc, ss = sm['carControl'], sm['selfdriveState']
+        ok = (ok and str(cs.gearShifter)=='park' and cs.standstill and abs(cs.vEgo)<.01 and
+              not (cc.enabled or cc.latActive or cc.longActive or ss.enabled or ss.active))
+        commands = [trial] if ok and isinstance(trial, dict) and trial.get('id')==last_trial and fresh(trial.get('time'),now) else []
+        hold = None
     submitted = False
     try:
       sock.send(encode({'stamp': now, 'ok': bool(ok), 'events': commands, 'hold': wire_hold(hold), 'devices':devices,
                         'activated':activated_id is not None, 'relights':policy.relights,
+                        'b1_hold':ble and fingerprint != 'HYUNDAI_IONIQ_5_PE',
                         'turn_phase':automatic.reason, 'turn_position':bool(automatic.journey.active and automatic.journey.active['target'] is not None),
                         'tbt_phase':tbt.reason, 'observation_phase':observed_source,
                         'indicator_origin':hold['source'] if hold else None}))
@@ -269,4 +299,4 @@ def main(fd, spas=False):
 
 
 if __name__ == '__main__':
-  main(int(sys.argv[1]), len(sys.argv) > 2 and sys.argv[2] == 'spas')
+  main(int(sys.argv[1]), 'spas' in sys.argv[2:], 'ble' in sys.argv[2:])

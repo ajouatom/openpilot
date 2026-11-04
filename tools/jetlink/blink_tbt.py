@@ -36,12 +36,12 @@ def right_front_clear(radar):
     return False
 
 
-def candidate(cs, model, nav):
+def candidate(cs, model, nav, distance_limit=TBT_DISTANCE_MAX_M):
   """The ordinary maneuver controller remains responsible after lamp feedback."""
   meta = model.meta
   try:
     return (nav.xTurnInfo in (2, 4) and math.isfinite(nav.xDistToTurn) and
-            0 < nav.xDistToTurn <= TBT_DISTANCE_MAX_M and
+            0 < nav.xDistToTurn <= distance_limit and
             math.isfinite(cs.vEgo) and cs.vEgo >= INDICATOR_SPEED_MIN and
             str(cs.gearShifter) == 'drive' and cs.canValid and not cs.trailerConnected and
             not cs.steeringPressed and not cs.steerFaultTemporary and not cs.steerFaultPermanent and
@@ -71,11 +71,11 @@ class TbtBlinker:
     self.phase, self.ready_since, self.reason = 'cancelled', None, reason
     return None
 
-  def update(self, now, *, enabled, valid, cs, model, nav, manual=False, busy=False, front_clear=False):
+  def update(self, now, *, enabled, valid, cs, model, nav, manual=False, busy=False, front_clear=False, distance_limit=TBT_DISTANCE_MAX_M):
     # Gaps reset confirmation and cancel an owned indication, never replay it.
     gap = self.last_time is not None and not 0 <= now-self.last_time <= .35
     self.last_time = now
-    if not enabled:
+    if not enabled or not math.isfinite(distance_limit) or not 0 < distance_limit <= 500:
       self.phase, self.ready_since, self.last_distance = 'idle', None, None
       self.reason = 'disabled'
       return None
@@ -83,7 +83,7 @@ class TbtBlinker:
       self.ready_since = None
       return self.cancel('inputs') if self.phase in ('waiting', 'changing', 'finishing') else None
     distance = nav.xDistToTurn
-    if nav.xTurnInfo not in (2, 4) or not math.isfinite(distance) or distance <= 0 or distance > TBT_DISTANCE_MAX_M:
+    if nav.xTurnInfo not in (2, 4) or not math.isfinite(distance) or distance <= 0 or distance > distance_limit:
       self.phase, self.ready_since, self.last_distance = 'idle', None, None
       self.reason = 'route'
       return None
@@ -116,7 +116,7 @@ class TbtBlinker:
         return None
       elif self.phase == 'changing':
         return self.cancel('interrupted')
-      elif (now-self.started >= START_TIMEOUT_SEC and not self.display_only) or not front_clear or not candidate(cs, model, nav):
+      elif (now-self.started >= START_TIMEOUT_SEC and not self.display_only) or not front_clear or not candidate(cs, model, nav, distance_limit):
         return self.cancel('start')
       self.reason = self.phase
       return ('tbt_display' if self.display_only else 'lane', 'right')
@@ -126,7 +126,8 @@ class TbtBlinker:
     # the lamp while that same right-turn preparation waits; admission still uses
     # every ordinary lane/rear/driver gate above. Never join an active change.
     preparing_right = (state == 'preLaneChange' and direction == 'right' and nav.atcType in ('atc right', 'fork right'))
-    if (state != 'off' and not preparing_right) or cs.leftBlinker or cs.rightBlinker or busy or not front_clear or not candidate(cs, model, nav):
+    if ((state != 'off' and not preparing_right) or cs.leftBlinker or cs.rightBlinker or busy or
+        not front_clear or not candidate(cs, model, nav, distance_limit)):
       self.ready_since = None
       self.reason = 'waiting_conditions'
       return None

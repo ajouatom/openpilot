@@ -2328,6 +2328,19 @@
       "lead_one_continuous_window": [0.3, 6.0],
       "forbidden_lead_one_ids": [42],
       "scene": "User-reported close automatic stop. Log-derived regression: confirmed center front 50 remains measured while braking through 4m/s to rest. A similar-speed front 42 appears about 2.3m farther away and must not replace it solely when the moving-acquisition speed gate closes. The screenshot and kinematics support the nearer return; physical identity of the farther reflection is not established. Times use replay frame origin; video is about 0.10s later."
+    },
+    {
+      "id": "k8-35f-52-right-cutin-7480",
+      "vehicle_folder": "KIA_K8_HEV_1ST_GEN b34d1abb87cce93b",
+      "log": "0000035f--2d84b8a557--52/rlog.zst",
+      "source": "front+corner",
+      "window": [2.35, 4.05],
+      "expected": "detect",
+      "human_verified": false,
+      "validation_stage": "lead_two",
+      "target_track_ids": [7480],
+      "latest_detection_s": 3.35,
+      "scene": "Right sedan closing ahead on a bend. Corner 7480 and front 50 converge inward while front 61 is the original lead. Require control-facing L2 by the reported screenshot (3.38s video, nearest replay frame 3.35s). Baseline first selects C7480 at 3.95s; a late selection must fail."
     }
   ]
 }

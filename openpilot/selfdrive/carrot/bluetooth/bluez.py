@@ -14,6 +14,18 @@ DEVICE = 'org.bluez.Device1'
 ADAPTER = 'org.bluez.Adapter1'
 
 
+async def radio_enabled():
+  # BlueZ deliberately keeps the parent directory private because it contains bonds.
+  process = await asyncio.create_subprocess_exec('sudo', '-n', 'test', '-f', '/data/bluetooth/ENABLED',
+    stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL)
+  try:
+    return await asyncio.wait_for(process.wait(), 3) == 0
+  except TimeoutError:
+    process.kill()
+    await process.wait()
+    return False
+
+
 def properties(values):
   return {key: value[1] for key, value in values.items()}
 
@@ -25,6 +37,7 @@ class Bluez:
     self.agent_registered = False
     self.owner = None
     self.target = None
+    self.auto_pair = False
     self.prompt = None
     self.answer = None
     self.pair = {'state': 'idle'}
@@ -90,7 +103,7 @@ class Bluez:
     else:
       await self.call(path, DEVICE, {'connect': 'Connect', 'disconnect': 'Disconnect'}[action], reply_timeout=30)
 
-  async def start_pair(self, mac):
+  async def start_pair(self, mac, *, headless=False):
     if self.pair_task and not self.pair_task.done():
       raise ValueError('pairing already in progress')
     path = await self.locate(mac)
@@ -98,9 +111,10 @@ class Bluez:
       owner_request = new_method_call(DBusAddress('/org/freedesktop/DBus', bus_name='org.freedesktop.DBus',
         interface='org.freedesktop.DBus'), 'GetNameOwner', 's', ('org.bluez',))
       self.owner = unwrap_msg(await asyncio.wait_for(self.router.send_and_get_reply(owner_request), 5))[0]
-      await self.call('/org/bluez', 'org.bluez.AgentManager1', 'RegisterAgent', 'os', (AGENT, 'KeyboardDisplay'))
+      await self.call('/org/bluez', 'org.bluez.AgentManager1', 'RegisterAgent', 'os', (AGENT, 'NoInputNoOutput' if headless else 'KeyboardDisplay'))
       self.agent_registered = True
     self.target = path
+    self.auto_pair = headless
     self.pair = {'state': 'pairing', 'address': address(mac)}
 
     async def run():
@@ -118,6 +132,7 @@ class Bluez:
       except Exception as exc:
         self.pair = {'state': 'error', 'address': address(mac), 'error': str(exc)}
       finally:
+        self.auto_pair = False
         self.target = self.prompt = None
         if self.answer and not self.answer.done():
           self.answer.cancel()
@@ -171,6 +186,12 @@ class Bluez:
         reply = new_method_return(message)
       elif not self.target or not message.body or message.body[0] != self.target:
         reply = new_error(message, 'org.bluez.Error.Rejected')
+      elif self.auto_pair and method in ('RequestAuthorization', 'RequestConfirmation'):
+        # Only the exact name/service-selected device above can reach this branch.
+        reply = new_method_return(message)
+      elif self.auto_pair and method == 'AuthorizeService':
+        reply = (new_method_return(message) if message.body[1].lower() == 'db340a90-804c-4ead-af37-8a0e6af754a1'
+                 else new_error(message, 'org.bluez.Error.Rejected'))
       elif method in ('DisplayPinCode', 'DisplayPasskey'):
         self.prompt = {'id': uuid.uuid4().hex, 'kind': method, 'value': str(message.body[1]).zfill(6) if method == 'DisplayPasskey' else str(message.body[1])}
         reply = new_method_return(message)

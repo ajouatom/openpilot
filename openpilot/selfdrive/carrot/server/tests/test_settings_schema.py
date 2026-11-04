@@ -264,7 +264,26 @@ def test_c3x_lite_hardware_setting_is_exposed(settings, params):
 
   vehicle = next(category for category in settings["menu"] if category["id"] == "VEHICLE")
   device_hardware = next(group for group in vehicle["groups"] if group["id"] == "VEH_DEVICE")
-  assert device_hardware["params"] == ["HardwareC3xLite"]
+  assert device_hardware["params"] == ["CommaPedalEnabled", "HardwareC3xLite"]
+
+
+def test_comma_pedal_toggle_is_default_off_and_under_device_hardware(settings, params):
+  by_name = {p["name"]: p for p in params}
+  pedal = by_name["CommaPedalEnabled"]
+  assert pedal["title"] == "Comma Pedal사용"
+  assert pedal["descr"].startswith("ACC 미 장착 차량에서 Comma Pedal 장치를 통한 종방향 제어를 허용합니다.")
+  for key in ("descr", "edescr", "cdescr"):
+    assert "CC_ONLY_CAR" in pedal[key] and "Cruise ready" in pedal[key]
+    assert "HardwareC3xLite" not in pedal[key]
+  assert "순정 크루즈 컨트롤이 우선" in pedal["descr"]
+  assert (pedal["min"], pedal["max"], pedal["default"]) == (0, 1, 0)
+  assert pedal["control"] == "toggle"
+  assert pedal["risk"] == "high"
+  params_keys = PARAMS_KEYS_PATH.read_text(encoding="utf-8")
+  assert '{"CommaPedalEnabled", {PERSISTENT, INT, "0"}}' in params_keys
+  vehicle = next(category for category in settings["menu"] if category["id"] == "VEHICLE")
+  device_hardware = next(group for group in vehicle["groups"] if group["id"] == "VEH_DEVICE")
+  assert pedal["name"] in device_hardware["params"]
 
 
 def test_wide_camera_fallback_setting_is_exposed(settings, params):

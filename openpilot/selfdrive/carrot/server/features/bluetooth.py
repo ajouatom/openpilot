@@ -5,23 +5,13 @@ from urllib.parse import urlsplit
 
 from aiohttp import web
 
-from openpilot.selfdrive.carrot.bluetooth.bluez import Bluez
+from openpilot.selfdrive.carrot.bluetooth.b1_monitor import ENROLLMENT, SETUP, Monitor, compatible
+from openpilot.selfdrive.carrot.bluetooth.bluez import Bluez, radio_enabled
 from openpilot.selfdrive.carrot.bluetooth.model import CONFIG_PATH, RUNTIME, ACTIONS, DEFAULT_MAPPING, address, atomic_json, config, read_json, validate_config
 
 CLIENT = web.AppKey('bluetooth', Bluez)
+B1 = web.AppKey('b1_monitor', Monitor)
 LOCK = web.AppKey('bluetooth_lock', asyncio.Lock)
-
-
-async def radio_enabled():
-  # BlueZ deliberately keeps the parent directory private because it contains bonds.
-  process = await asyncio.create_subprocess_exec('sudo', '-n', 'test', '-f', '/data/bluetooth/ENABLED',
-    stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL)
-  try:
-    return await asyncio.wait_for(process.wait(), 3) == 0
-  except TimeoutError:
-    process.kill()
-    await process.wait()
-    return False
 
 
 def runtime():
@@ -58,6 +48,8 @@ async def status(request):
   result = {'runtime': runtime(), 'config': config(), 'actions': ACTIONS, 'defaults': DEFAULT_MAPPING,
             'radioEnabled': await radio_enabled()}
   try:
+    result['b1'] = {'address': read_json(ENROLLMENT, {}).get('address'), 'state': request.app[B1].state,
+                    'firmware': request.app[B1].firmware_state}
     result.update(await request.app[CLIENT].snapshot())
     result['available'] = True
   except Exception as exc:
@@ -81,7 +73,18 @@ async def mutate(request):
     operation = request.match_info['operation']
     async with request.app[LOCK]:
       guard(request)
-      if operation == 'scan':
+      if operation == 'b1-register':
+        mac = address(body.get('address'))
+        devices = (await client.snapshot())['devices']
+        if not any(device['address'] == mac and compatible(device) for device in devices):
+          raise ValueError('Scan for a Carrot-B1 service first')
+        ENROLLMENT.unlink(missing_ok=True)
+        atomic_json(SETUP, {'selected': mac})
+        request.app[B1].next_discovery = 0.
+      elif operation == 'b1-forget':
+        atomic_json(SETUP, {'disabled':True})
+        ENROLLMENT.unlink(missing_ok=True)
+      elif operation == 'scan':
         await client.scan()
       elif operation == 'pair':
         await client.start_pair(address(body.get('address')))
@@ -154,6 +157,19 @@ async def mutate(request):
 
 
 def register(app):
+  app[B1] = Monitor()
+
+  async def monitor_context(app):
+    from tools.carrot_b1.auto_update import run as auto_update  # noqa: TID251 -- board release package
+    tasks = [asyncio.create_task(app[B1].run()), asyncio.create_task(auto_update(app[B1]))]
+    try:
+      yield
+    finally:
+      for task in tasks:
+        task.cancel()
+      await asyncio.gather(*tasks, return_exceptions=True)
+
+  app.cleanup_ctx.append(monitor_context)
   app[CLIENT] = Bluez()
   app[LOCK] = asyncio.Lock()
   app.router.add_get('/api/bluetooth', status)

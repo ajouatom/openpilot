@@ -3,7 +3,6 @@
 #include <string.h>
 #include "fake_stm.h"
 #include "can.h"
-void putui(uint32_t value) { (void)value; }
 bool safety_tx_buffered_for_fwd = false;
 #include "faults.h"
 #include "safety.h"

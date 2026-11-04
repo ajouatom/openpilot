@@ -44,6 +44,16 @@ over a no-lead acceleration gap caused by an uncertain future-path prediction.
 A separate measured moving object already in the current path still needs the
 normal motion history before starting leadTwo.
 
+The K8 segment 35f/52 checks for the right-hand entrant C7480 in leadTwo by
+3.35 s of radar replay (3.40 s on the synchronized video). Both radars can
+establish entry before vision switches from the original lead. The corner
+needs consistent position history and rotation-corrected inward speed. The
+paired moving front return must independently move toward the path beyond
+its range-dependent noise floor and report inward velocity. Both measured
+body returns must move laterally by at least a target half-width and remain
+ahead at the forecast crossing. Keep the Carnival 182/59 parallel-pass case
+clear when validating changes to this gate.
+
 Before normal CUT-IN confirmation, a separate corner-radar-only risk path may
 request bounded pre-deceleration without creating leadTwo. It requires 0.10
 seconds of the same closing track, `8 <= dRel <= 45 m`, `2.4 <= |dPath| <=

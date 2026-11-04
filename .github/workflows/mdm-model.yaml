@@ -35,6 +35,7 @@ jobs:
           tools/jetlink/test_output_validation.py
           openpilot/selfdrive/modeld/tests/test_egpu_startup_retry.py
           openpilot/selfdrive/modeld/tests/test_generic_model_runtime.py
+          openpilot/selfdrive/modeld/tests/test_action_curvature.py
           openpilot/selfdrive/modeld/tests/test_local_gpu_warp.py
           openpilot/selfdrive/modeld/tests/test_precompiled_artifact.py
           openpilot/selfdrive/modeld/tests/test_big_model_delivery.py

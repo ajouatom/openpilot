@@ -37,6 +37,10 @@ jobs:
       - name: Tesla intent, card, feedback, native safety and existing Ioniq indicators
         run: |
           python tools/signal_validation/run.py \
+            opendbc_repo/opendbc/car/hyundai/tests/test_pedal_interceptor.py \
+            opendbc_repo/opendbc/safety/tests/test_pedal_interceptor.py \
+            opendbc_repo/opendbc/car/hyundai/tests/test_alt2_adas_buttons.py \
+            opendbc_repo/opendbc/safety/tests/test_hyundai_canfd_alt_buttons.py \
             opendbc_repo/opendbc/car/hyundai/tests/test_spas.py \
             opendbc_repo/opendbc/safety/tests/test_hyundai_spas.py \
             openpilot/selfdrive/car/tests/test_hyundai_spas.py \
@@ -53,3 +57,7 @@ jobs:
             tools/signal_validation/test_trial_integration.py \
             tools/signal_validation/test_lane_line_time.py \
             tools/jetlink/test_blinker.py tools/jetlink/test_blinker_auto.py
+      - name: Pedal protocol on the Python CAN backend
+        env:
+          CARROT_NATIVE_CPU: '0'
+        run: python tools/signal_validation/run.py opendbc_repo/opendbc/car/hyundai/tests/test_pedal_interceptor.py
