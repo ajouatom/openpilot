@@ -130,6 +130,25 @@ def test_unverified_or_in_use_state_never_writes(fixture, writes, case):
   assert not io.permitted(controller)
   assert not io.release(controller)
   assert writes == []
+  expected = {
+    'default_off': 'opt_in_missing', 'wrong_controller': 'controller', 'no_tici': 'platform',
+    'onroad': 'offroad', 'unknown_road': 'io_error', 'host_role': 'usb_role',
+    'wrong_vendor': 'gadget_identity', 'wrong_product': 'gadget_identity',
+    'missing_function': 'gadget_functions', 'extra_function': 'gadget_functions',
+    'function_symlink': 'gadget_functions', 'flag_symlink': 'opt_in_invalid',
+    'flag_hardlink': 'opt_in_invalid', 'foreign_owner': 'other_owner',
+    'foreign_controller': 'controller_changed', 'jetlink_owned': 'controller_changed',
+    'g1_symlink': 'gadget_identity', 'udc_symlink': 'io_error',
+  }
+  # Iteration may encounter the newly bound jetlink before the detached g1.
+  if case == 'jetlink_owned':
+    assert any(f'[adb-handoff:{code}]' in io.reason for code in ('controller_changed', 'other_owner'))
+  else:
+    assert f'[adb-handoff:{expected[case]}]' in io.reason
+  if case == 'onroad':
+    assert "IsOffroad='1', IsOnroad='1'" in io.reason
+  if case == 'unknown_road':
+    assert 'road state: FileNotFoundError, errno=2' in io.reason
 
 
 @pytest.mark.parametrize('race', ['onroad', 'foreign_owner', 'flag_removed'])
@@ -155,6 +174,7 @@ def test_revalidation_after_open_rejects_changed_state(fixture, writes, monkeypa
   assert len(checks) == 2
   assert writes == []
   assert (io.gadgets / 'g1/UDC').read_text() == MODULE.CONTROLLER
+  assert '(pre-write recheck)' in io.reason
 
 
 def test_existing_lock_prevents_duplicate_handoff(fixture, writes):
@@ -164,6 +184,7 @@ def test_existing_lock_prevents_duplicate_handoff(fixture, writes):
     fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
     assert not io.release(MODULE.CONTROLLER)
     assert writes == []
+    assert '[adb-handoff:lock_busy]' in io.reason
   finally:
     os.close(lock)
   assert io.release(MODULE.CONTROLLER)
@@ -188,7 +209,7 @@ def test_untrusted_lock_preserves_target(fixture, writes, kind):
 
 
 @pytest.mark.parametrize('case,ok,called', [
-  ('default_off', False, False), ('approved', True, True),
+  ('default_off', False, True), ('approved', True, True),
   ('helper_rejected', False, True), ('foreign_owner', False, False),
 ])
 def test_actual_shell_owner_loop_respects_helper_result(fixture, case, ok, called):
@@ -197,6 +218,7 @@ def test_actual_shell_owner_loop_respects_helper_result(fixture, case, ok, calle
   # 실제 소유자 루프만 실행하고 이후 mount/configfs 생성 단계는 포함하지 않는다.
   loop = 'for other in "$CONFIGFS"/usb_gadget/*/UDC; do' + source.split(
     'for other in "$CONFIGFS"/usb_gadget/*/UDC; do', 1)[1].split('\nmkdir -p "$GADGET"', 1)[0]
+  reporting = 'status() {' + source.split('status() {', 1)[1].split('if [[ "${1:-}" == "--teardown" ]]', 1)[0]
   loop = loop.replace(MODULE.FLAG, str(io.path(MODULE.FLAG)))
   if case == 'default_off':
     io.path(MODULE.FLAG).unlink()
@@ -208,16 +230,20 @@ CONFIGFS=$1
 LOG=$2
 UDC=$3
 HELPER_RC=$4
-fail() { exit 1; }
+STATUS_FILE=$CONFIGFS/handoff-status
 python3() {
   printf '%s\\n' "$*" > "$LOG"
-  [[ "$HELPER_RC" == 0 ]] || return 1
+  if [[ "$HELPER_RC" != 0 ]]; then
+    printf '[adb-handoff:%s] test rejection\\n' "$HELPER_RC" >&2
+    return 1
+  fi
   printf '\\n' > "$UDC"
 }
-''' + loop)
+''' + reporting + loop)
   log = io.root / 'helper-call'
   result = subprocess.run(['/bin/bash', str(script), str(io.path('/sys/kernel/config')),
-                           str(log), str(io.gadgets / 'g1/UDC'), '1' if case == 'helper_rejected' else '0'],
+                           str(log), str(io.gadgets / 'g1/UDC'),
+                           {'default_off': 'opt_in_missing', 'helper_rejected': 'offroad'}.get(case, '0')],
                           env={'PATH': '/usr/bin:/bin', 'LANG': 'C', 'LC_ALL': 'C'},
                           stdin=subprocess.DEVNULL, capture_output=True, timeout=5, check=False)
   assert (result.returncode == 0) == ok
@@ -226,6 +252,11 @@ python3() {
     args = log.read_text().strip().split()
     assert args[:3] == ['-I', '-S', '-B']
     assert args[-2:] == ['--udc', MODULE.CONTROLLER]
+  if case in ('default_off', 'helper_rejected'):
+    code = 'opt_in_missing' if case == 'default_off' else 'offroad'
+    assert f'[adb-handoff:{code}] test rejection' in result.stderr.decode()
+    assert io.path('/sys/kernel/config/handoff-status').read_text().strip() == f'error: [adb-handoff:{code}] test rejection'
+    assert (io.gadgets / 'g1/UDC').read_text() == MODULE.CONTROLLER
 
 
 @pytest.mark.parametrize('fault', ['writable', 'foreign_uid'])
@@ -238,3 +269,25 @@ def test_opt_in_marker_must_belong_to_privileged_caller(fixture, writes, monkeyp
     monkeypatch.setattr(MODULE.os, 'geteuid', lambda: uid + 1)
   assert not io.release(MODULE.CONTROLLER)
   assert writes == []
+  assert '[adb-handoff:opt_in_invalid]' in io.reason
+
+
+@pytest.mark.parametrize('fault,code', [('short_write', 'write_failed'), ('rebound', 'still_bound')])
+def test_unbind_failure_reports_exact_stage(fixture, monkeypatch, fault, code):
+  monkeypatch.setattr(MODULE.os, 'write', lambda fd, data: 0 if fault == 'short_write' else 1)
+  assert not fixture.release(MODULE.CONTROLLER)
+  assert f'[adb-handoff:{code}]' in fixture.reason
+
+
+def test_cli_reports_io_stage_without_traceback(fixture, monkeypatch, capsys):
+  def failed_release(controller):
+    fixture.stage = 'unbind g1 UDC'
+    raise PermissionError(13, 'test')
+  monkeypatch.setattr(fixture, 'release', failed_release)
+  monkeypatch.setattr(MODULE, 'AdbHandoff', lambda: fixture)
+  monkeypatch.setattr(MODULE.os, 'geteuid', lambda: 0)
+  monkeypatch.setattr(sys, 'argv', ['adb_handoff.py', '--udc', MODULE.CONTROLLER])
+  assert MODULE.main() == 1
+  error = capsys.readouterr().err
+  assert '[adb-handoff:io_error] unbind g1 UDC: PermissionError, errno=13' in error
+  assert 'Traceback' not in error
