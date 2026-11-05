@@ -13,6 +13,13 @@
   on Jetson and reboot requested; owner then explicitly PAUSED Jetson work due to
   CAN-task overlap. No further device changes/tests until resumed. Automatic boot
   update may proceed; actual Light2 engine/inference/road readiness unverified.
+  Owner then resumed. Auto-install7c6be06a/ONNX909a1400/FP16 engine matches pin,
+  built47s. Actual commaf8e02ee19d boot selectsLight2, snapshotfalse/P/inactive.
+  120s/2405frames: mean37.569/P9941.971/max44.868ms, zero>50execution/gaps/invalid
+  pose/alerts/linkloss. N16 prior mean40.662; CAN cadence also changed, not isolated
+  A/B. Loop max61.614ms remains; no absolute50ms or road/eGPUhardware guarantee.
+  DATA4GBfree. FullCI4Bluetooth import failures match pre-model895905 baseline.
+  Light2 remains selected/running; no additional reboot after resume.
 
 
 - On 2026-11-05, owner requests MKS CANable 2.0 support alongside PEAK and S3,
