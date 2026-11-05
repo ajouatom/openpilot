@@ -127,5 +127,23 @@ git() { echo test-head; }
     self.assertIn('cleanup failed', r.stdout)
 
 
+  def test_unfinished_build_marker_requests_rebuild_all(self):
+    # A power cut mid-build leaves the marker; the next boot runs the same full cleanup.
+    self.request.unlink()
+    (self.root / 'carrot_build.inprogress').touch()
+    r = self.shell('consume_rebuild_request')
+    self.assertEqual(r.returncode, 0, r.stderr)
+    self.assertFalse(self.request.exists())
+    self.assertFalse(self.cache.exists())
+    self.assertIn('full build still pending', self.log.read_text())
+
+  def test_build_marker_is_armed_and_cleared_after_a_finished_build(self):
+    r = self.shell('consume_rebuild_request')
+    self.assertEqual(r.returncode, 0, r.stderr)
+    self.assertTrue((self.root / 'carrot_build.inprogress').exists())
+    # consume_rebuild_request runs right before the Params build; the marker goes only after build.py.
+    self.assertGreater(self.source.index('rm -f "$BUILD_MARKER"'), self.source.index('run_startup_command ./build.py'))
+
+
 if __name__ == '__main__':
   unittest.main()
