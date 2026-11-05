@@ -34,3 +34,31 @@ loading, timing and drive acceptance must be reported separately from CI results
 Baseline parked N16 measurement before another concurrent vehicle update: 60 seconds,
 1206 model frames, mean40.662/P9945.356/max48.789 ms, no invalid odometry/livePose,
 no link failure. This is a stationary baseline, not a moving-drive comparison.
+
+## Publication and interrupted physical verification
+
+Published model catalog/release in 7c6be06a5b and 9faaee0ab9. The signed host
+package pins source7c6be06a5b; all1186 payload files, signature and HTTPS hashes
+verified. Model binaries and isolated runtime are independently HTTPS-verified.
+Desktop39 catalog/runtime checks and17 web checks pass. CI42008426400 passes
+506 contract checks,57 navigation checks, native old runtime3/2skip and Light
+speed/Light speed2 five each; Jetson42008426504 passes2364/56skip plus supporting
+suites and Windows installer. User docs pass. Full build42008426377 was still
+running when physical work paused.
+
+Owner's car was concurrently updated by a separate CAN task. Preserve its newer
+f8e02ee19d source. With fresh P/standstill/inactive-control and Panda controlsAllowed
+false verified, use IsTakingSnapshot plus hardwared restart to re-evaluate startup
+conditions; actual IsOffroad and Panda noOutput were verified before selecting
+light-speed-2 and requesting a normal manager reboot. Snapshot alone does not
+stop an already-onroad hardwared session. New comma boot6de2c5dd selected Light
+speed2; manager startup returned to onroad/P/inactive normally. No CAN test sent.
+
+Jetson downloaded and verified909a1400 ONNX to its ordinary model cache. Before
+new-model build DATA had5.6GB free. A Jetson reboot was requested to use the normal
+signed selected-model boot gate. At this point the owner explicitly paused Jetson
+work because the separate CAN task was operating the same device. Stop further
+Jetson settings, reboots and inference trials until resumed. Boot-time automatic
+installation may still proceed; the pending SSH status read timed out. **New-model
+TensorRT build completion, active inference and road readiness are NOT verified.**
+Do not interpret the selected model or completed downloads as running-model proof.
