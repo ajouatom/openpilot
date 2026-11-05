@@ -3,6 +3,10 @@ import test from "node:test";
 
 import { modelDisplayName, modelDisplayTitle } from "../src/features/tools/egpu_model.js";
 
+test("Light speed 2 has its own eGPU title", () => {
+  assert.equal(modelDisplayName({ model_id: "comma-light-speed-2-b92fc482-b4dead3e" }), "Light speed 2");
+});
+
 test("Light speed has its own eGPU title", () => {
   assert.equal(modelDisplayName({ model_id: "comma-light-speed-c7cbe5de-33ba0928" }), "Light speed");
 });

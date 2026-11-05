@@ -100,6 +100,8 @@ class Intent:
 
 class Monitor:
   def __init__(self):
+    from tools.jetlink.blink_owner import Owner
+    self.output_owner = Owner('S3 BLE')
     self.client = Bluez()
     self.exchange_lock = asyncio.Lock()
     self.last_signal_at = time.monotonic()
@@ -142,6 +144,7 @@ class Monitor:
       self.worker.close()
       self.worker = None
     self.source = None
+    self.output_owner.release()
 
   async def release(self):
     self.stop_source()
@@ -205,6 +208,7 @@ class Monitor:
       self.proven_at = now
     authenticated = now-self.proven_at < 1.
     available = authenticated and state not in ('missing','error') and self.params.get_bool('IsOnroad') and not self.params.get_bool('CanfdBlinkerControl')
+    available = self.output_owner.acquire(available and (self.output_owner.held or (state == 'ready' and not lamps)))
     if self.worker and (not available or self.worker.process.poll() is not None):
       self.stop_source()
       self.intent.inflight = self.intent.queued = None

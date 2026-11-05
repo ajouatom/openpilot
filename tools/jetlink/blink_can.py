@@ -3,6 +3,7 @@ import json
 import os
 from pathlib import Path
 import select
+import secrets
 import signal
 import socket
 import struct
@@ -278,15 +279,32 @@ def main(fd, token):
   signal.signal(signal.SIGTERM, stop)
   signal.signal(signal.SIGINT, stop)
   try:
-    config = configuration()
-    if config is None:
-      return
     CONFIG.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-    bus = Bus(config['interface'])
-    controller = Controller(bus, token, CONFIG.parent/'blinker-counter.json')
-    next_status = next_config = 0.
+    controller, config = None, None
+    next_status = next_config = next_scan = 0.
+    generation, error = '', None
+    failed, can_seen = {}, 0.
     while True:
-      bus.receive()
+      now = time.monotonic()
+      if bus is None and now >= next_scan:
+        next_scan = now+1
+        config = configuration(exclude=[name for name, until in failed.items() if now < until])
+        if config is not None:
+          try:
+            if config['interface'].startswith('/dev/'):
+              from blink_slcan import Bus as SerialBus
+              bus = SerialBus(config['interface'])
+            else:
+              bus = Bus(config['interface'])
+            controller = Controller(bus, token, CONFIG.parent/'blinker-counter.json')
+            generation, error = secrets.token_hex(8), None
+            can_seen = now
+          except (OSError, ValueError, subprocess.SubprocessError) as exc:
+            error = str(exc)[:200]
+            failed[config['interface']] = now+5
+            if bus is not None:
+              bus.close()
+            bus = controller = None
       for _ in range(8):
         try:
           raw = sock.recv(LIMIT+1)
@@ -294,21 +312,53 @@ def main(fd, token):
           break
         if not raw:
           return
-        if len(raw) <= LIMIT:
-          controller.accept(json.loads(raw))
-      controller.tick()
-      now = time.monotonic()
-      if now >= next_config:
-        if configuration() != config:
-          return
-        next_config = now+1
-      if now >= next_status:
+        if len(raw) <= LIMIT and controller is not None:
+          try:
+            controller.accept(json.loads(raw))
+          except (OSError, ValueError, subprocess.SubprocessError) as exc:
+            error = str(exc)[:200]
+            failed[config['interface']] = time.monotonic()+5
+            bus.close()
+            bus = controller = None
+            next_scan = time.monotonic()+1
+      if bus is not None:
         try:
-          sock.send(encode({**controller.status, 'updated':now}))
+          bus.receive()
+          controller.tick()
+          now = time.monotonic()
+          if all(k in bus.latest and 0 <= now-bus.latest[k][0] < .4 for k in (0x3c1, 0x413)):
+            original = bus.latest[0x3c1][1]
+            if len(original) == 8 and crc(original[1:]) == original[0]:
+              can_seen = now
+          if now-can_seen >= 2:
+            raise ValueError('No fresh matching B1 CAN data; probing another adapter')
+          if now >= next_config:
+            if configuration(preferred=config['interface']) != config:
+              raise ValueError('USB CAN configuration or adapter changed')
+            next_config = now+1
+        except (OSError, ValueError, subprocess.SubprocessError) as exc:
+          error = str(exc)[:200]
+          failed[config['interface']] = time.monotonic()+5
+          bus.close()
+          bus = controller = None
+          next_scan = time.monotonic()+1
+      now = time.monotonic()
+      if now >= next_status:
+        status = dict(controller.status) if controller else {'ready':False, 'state':'error' if error else 'missing'}
+        available = bool(bus and all(k in bus.latest and 0 <= now-bus.latest[k][0] < .4 for k in (0x3c1, 0x413)))
+        if available:
+          original = bus.latest[0x3c1][1]
+          available = len(original) == 8 and crc(original[1:]) == original[0]
+        status.update(available=available, idle=bool(bus and bus.neutral(now) is not None), generation=generation,
+                      adapter=('CANable 2.0' if config and config['interface'].startswith('/dev/') else 'PEAK PCAN-USB'))
+        if error:
+          status['error'] = error
+        try:
+          sock.send(encode({**status, 'updated':now}))
         except BlockingIOError:
           pass
         next_status = now+.2
-      select.select([sock, bus.sock], [], [], .005)
+      select.select([sock]+([bus.sock] if bus else []), [], [], .005 if bus else .05)
   except Exception as exc:
     try:
       sock.send(encode({'ready':False, 'state':'error', 'error':str(exc)[:200]}))

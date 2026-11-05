@@ -11,13 +11,14 @@ import numpy as np
 from openpilot.selfdrive.modeld.precompiled_artifact import compile_warp, load_warp, prepare_jit
 
 
-# Upstream 880b40e1's captured transfer API is verified against d39227 only.
+# Captured transfer API reviewed for the exact d39227 and ec91b74 runtime pairs.
 COMPILED_COPY_RUNTIME = 'cb9bf2cfa14746485f75b1dd89d8b7ab65011c10c8fc6c4aea4d41b45a47dc51'
 
 
 def use_compiled_copies(manifest):
   runtime = manifest.get('runtime')
-  return isinstance(runtime, dict) and runtime.get('sha256') == COMPILED_COPY_RUNTIME
+  from openpilot.selfdrive.modeld.egpu_usb_wait import LIGHT_SPEED_2_RUNTIME_SHA
+  return isinstance(runtime, dict) and runtime.get('sha256') in (COMPILED_COPY_RUNTIME, LIGHT_SPEED_2_RUNTIME_SHA)
 
 
 def compile_copy(tensor):

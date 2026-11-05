@@ -1,5 +1,10 @@
 # Bluetooth physical indicators and fast button input
 
+> 2026-11-05: Current installation and supported adapters are documented in
+> [한국어](user/ko/indicator-adapters.md) / [English](user/en/indicator-adapters.md).
+> The current maintained branch is `carrot-wip`; CANable support and first-ready
+> S3/USB ownership supersede the historical branch/priority notes below.
+
 The owner authorized publishing only `carrot-nav-blink` and installing through
 normal Git Pull plus a signed Jetson update. This branch starts at the unchanged
 `carrot-nav` tip `24c1ba5e4b`; `carrot-nav` and `carrot-wip` are not updated.

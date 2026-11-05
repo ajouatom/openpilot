@@ -114,6 +114,7 @@ def test_precompiled_only_boot_failure_skips_local_compilation(monkeypatch, tmp_
   ({'runtime': {'sha256': 'c7c58622652231359ecea1a4253b63e157d002242bf596ede1b853f941f937ac'}}, False),
   ({'runtime': {'sha256': '90970e01f2ba70d553294c0f9d5c6fe1678827f750705cab679a7b19b7bcb0b2'}}, False),
   ({'runtime': {'sha256': 'cb9bf2cfa14746485f75b1dd89d8b7ab65011c10c8fc6c4aea4d41b45a47dc51'}}, True),
+  ({'runtime': {'sha256': '96c6ecc92fe5085096cddb4a0683e10d5ed5c8693184af301cd5f21753acf2dd'}}, True),
 ])
 def test_compiled_copies_only_select_the_verified_upstream_runtime(manifest, expected):
   from openpilot.selfdrive.modeld.generic_model_runtime import use_compiled_copies

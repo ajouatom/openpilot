@@ -1,5 +1,75 @@
 # Repository memory
 
+- On 2026-11-05, owner requests 0.20s coherent-vision replacement while a
+  healthy measured front radar lead remains, following ID4 29e/46 on contributor
+  model_selector-ha c6eb3b36a. Short visual range/speed outliers replace measured
+  281 and drive recorded acceleration dips. Retain current measured values;
+  reset confirmation on visual kinematic jumps, revoke on invalid radar/path,
+  count model timestamps (not repeated wakeups), preserve new radar matches
+  and independent stationary contradictions. No parameter/model/device change.
+  New log-derived case passes modes1/2/3; all104logs/504labels have no new failures.
+  Existing expectation failures11/10/13, mode3 predecel1 and208unverified remain.
+  Full124489frame audit changes677 vision-only L1 frames in33logs to radar,
+  no L2/risk identity changes. Local1847pass/4skip and Ruff pass. Actual road
+  acceleration untested; NAS graph retains recorded commands. See
+  docs/id4_vision_transition_20261105.md; private evidence under .analysis/archive.
+
+- On 2026-11-05, owner requests Light speed 2 b92fc482 as an additional shared
+  eGPU/Jetson choice, keeping old Light speed. Official PKL b4dead3e/767228907B,
+  ONNX909a1400/768749892B, checkpoint ea2f516f match all metadata; NOO unsupported.
+  Pin isolated tinygrad ec91b74/runtime96c6ecc9; upstream includes cast-zero USB
+  wrap rule, so retain old backport only for d39227. Add exact-runtime cooperative
+  USB wait/captured copies and native compatibility CI. Signed selected-model
+  host delivery required. Parked physical testing authorized before19:40; do not
+  treat desktop metadata/CI as road acceptance. See docs/light_speed_2_model_20261105.md.
+  Published9faaee0ab9; native Light2 five/Jetson2364 checks pass. Owner car retained
+  concurrent CAN-task f8e02ee19d, normal comma reboot selects Light2. ONNX downloaded
+  on Jetson and reboot requested; owner then explicitly PAUSED Jetson work due to
+  CAN-task overlap. No further device changes/tests until resumed. Automatic boot
+  update may proceed; actual Light2 engine/inference/road readiness unverified.
+  Owner then resumed. Auto-install7c6be06a/ONNX909a1400/FP16 engine matches pin,
+  built47s. Actual commaf8e02ee19d boot selectsLight2, snapshotfalse/P/inactive.
+  120s/2405frames: mean37.569/P9941.971/max44.868ms, zero>50execution/gaps/invalid
+  pose/alerts/linkloss. N16 prior mean40.662; CAN cadence also changed, not isolated
+  A/B. Loop max61.614ms remains; no absolute50ms or road/eGPUhardware guarantee.
+  DATA4GBfree. FullCI4Bluetooth import failures match pre-model895905 baseline.
+  Light2 remains selected/running; no additional reboot after resume.
+
+
+- On 2026-11-05, owner requests MKS CANable 2.0 support alongside PEAK and S3,
+  first-ready output selection, and beginner PC/Jetson firmware/photo guides.
+  Standard G431 board flashed/readback-verified carrot-b1-slcan-2; exact image
+  aa59e9f7733d3398537d1a7d7c07cdd5e17edc91ac689fd7e0bd738dad03cd26.
+  Fix upstream silent-open override, disable automatic retries, clear pending TX
+  on close, and report actual sequence/TXBTO/protocol-error/cancellation results.
+  Host retries only confirmed no-error cancellations within 15ms/eight attempts.
+  Native Park test: left/right each exactly three flashes, comma and 0x413 agree;
+  13 completed TX frames, no opposite lamp. No long-duration driving proof.
+  Shared comma lease selects first ready S3/USB, retains working owner, expires
+  old commands before failover; enrollment alone never reserves S3 priority.
+  Native ownership/SLCAN21 pass, desktop88 pass/7 native-only skips; staged
+  production discovery receives matching CAN without sending. Installer backs up
+  full internal flash then programs/readback-compares; never writes options/OTP.
+  Standard MKS V2.0 only; Pro/V1/other MCU unverified. Windows physical DFU flash
+  untested. User explicitly authorizes KO/EN photo guides, Wiki and release kits.
+  See docs/user/ko/indicator-adapters.md and tools/jetlink/canable/README.md.
+  Live installation exposed bridge status cadence (1Hz inference/2s idle) versus
+  the new 500ms lease: source restarted repeatedly despite healthy CAN. Request
+  telemetry on each inference with an indicator channel, poll idle at200ms and
+  keep local receive timeout100ms; retain 500ms stale revocation. Production-loop
+  cadence regressions3pass. No firmware change is needed for this correction.
+  Public release carrot-canable-v2 and clickable KO/EN Wiki adapter pages are
+  published; five downloaded assets hash-match, public photo/link navigation and
+  mobile offline guide checked. Windows GUI/no-device checks exercised; no PC DFU
+  hardware attached. Park-guarded comma GitPull/reboot installed f8e02ee19d; avoid
+  only killing Python child processes after source changes because manager
+  preimports their modules. Concurrent owner-authorized Light2 work rebooted
+  both devices; preserve its selection. Final native observation: CANable owns
+  all391 samples across20s, same lease token, fresh CAN/ready/no error. Jetson
+  then runs Light2 source7c6be06a5b (includes CANable), not the earlier c70 pin.
+  This final check is passive; the earlier direct Park left/right test remains
+  the physical lamp proof, not a new end-to-end Bluetooth-button test.
+
 - On 2026-11-05, owner requests exact g1 handoff rejection on screen and logs.
   Add adb-handoff reason codes and bounded observations for first failed guard,
   pre-write recheck, locks and unbind IO. Setup always invokes the existing

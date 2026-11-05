@@ -1,0 +1,161 @@
+--- a/src/can.c
++++ b/src/can.c
+@@ -17,8 +17,12 @@
+ static uint32_t prescaler;
+ static uint32_t data_prescaler;
+ enum can_bus_state bus_state;
+-static uint8_t can_autoretransmit = ENABLE;
++static uint8_t can_autoretransmit = DISABLE;
++static uint8_t can_silent = 1;
+ static can_txbuf_t txqueue = {0};
++static uint16_t tx_sequence = 0;
++static uint32_t last_tx_buffer = 0;
++static uint8_t last_tx_failed = 0;
+ 
+ 
+ // Initialize CAN peripheral settings, but don't actually start the peripheral
+@@ -89,7 +93,7 @@
+ 
+ 
+     	//can_handle.Init.Prescaler = prescaler;
+-    	can_handle.Init.Mode = FDCAN_MODE_NORMAL;
++    	can_handle.Init.Mode = can_silent ? FDCAN_MODE_BUS_MONITORING : FDCAN_MODE_NORMAL;
+     	can_handle.Init.AutoRetransmission = can_autoretransmit;
+         can_handle.Init.TransmitPause = DISABLE; // emz
+         can_handle.Init.ProtocolException = DISABLE; // emz
+@@ -120,11 +124,11 @@
+         can_handle.Init.TxFifoQueueMode = FDCAN_TX_FIFO_OPERATION;
+ 
+         
+-        HAL_FDCAN_Init(&can_handle);
++        if (HAL_FDCAN_Init(&can_handle) != HAL_OK) return;
+ 
+         //HAL_CAN_ConfigFilter(&can_handle, &filter);
+ 
+-        HAL_FDCAN_Start(&can_handle);
++        if (HAL_FDCAN_Start(&can_handle) != HAL_OK) return;
+         bus_state = ON_BUS;
+ 
+         led_blue_on();
+@@ -137,7 +141,9 @@
+ {
+     if (bus_state == ON_BUS)
+     {
++        HAL_FDCAN_AbortTxRequest(&can_handle, FDCAN_TX_BUFFER0 | FDCAN_TX_BUFFER1 | FDCAN_TX_BUFFER2);
+         HAL_FDCAN_Stop(&can_handle);
++        txqueue.head = txqueue.tail = 0;
+ 
+         bus_state = OFF_BUS;
+ 
+@@ -226,6 +232,7 @@
+         // cannot set silent mode while on bus
+         return;
+     }
++    can_silent = silent != 0;
+     if (silent)
+     {
+     	can_handle.Init.Mode = FDCAN_MODE_BUS_MONITORING; // !!!?!?!
+@@ -260,6 +267,11 @@
+ // Send a message on the CAN bus. Called from USB ISR.
+ uint32_t can_tx(FDCAN_TxHeaderTypeDef *tx_msg_header, uint8_t* tx_msg_data)
+ {
++    if (bus_state != ON_BUS || can_silent) return HAL_ERROR;
++    last_tx_buffer = 0;
++    last_tx_failed = 0;
++    can_handle.Instance->IR = FDCAN_IR_PEA | FDCAN_IR_PED | FDCAN_IR_BO;
++    tx_sequence++;
+ 	// If when we increment the head we're going to hit the tail
+ 	// (if we're filling the last spot in the queue)
+ 	if( ((txqueue.head + 1) % TXQUEUE_LEN) == txqueue.tail)
+@@ -294,6 +306,7 @@
+ // Process data from CAN tx/rx circular buffers
+ void can_process(void)
+ {
++    if (bus_state != ON_BUS || can_silent) return;
+ 	while((txqueue.tail != txqueue.head) && (HAL_FDCAN_GetTxFifoFreeLevel(&can_handle) > 0))
+ 	{
+ 		uint32_t status;
+@@ -306,9 +319,11 @@
+ 		// since we check if there is a TX mailbox free.
+ 		if(status != HAL_OK)
+ 		{
++            last_tx_failed = 1;
+ 			error_assert(ERR_CAN_TXFAIL);
+ 		}
+ 
++        if (status == HAL_OK) last_tx_buffer = HAL_FDCAN_GetLatestTxFifoQRequestBuffer(&can_handle);
+ 		led_green_on();
+ 	}
+ }
+@@ -342,3 +357,34 @@
+ {
+ 	return &can_handle;
+ }
++
++// Carrot host query: hardware mode, latest TX outcome, accepted sequence.
++// TX success is the controller TXBTO bit, not merely acceptance by USB.
++void can_query(uint8_t *out)
++{
++    const char hex[] = "0123456789ABCDEF";
++    uint32_t control = can_handle.Instance->CCCR;
++    uint32_t psr = can_handle.Instance->PSR;
++    uint32_t ir = can_handle.Instance->IR;
++    uint32_t ecr = can_handle.Instance->ECR;
++    out[0] = 'Q';
++    out[1] = bus_state == OFF_BUS ? 'C' :
++        ((control & FDCAN_CCCR_MON) ? 'L' :
++        ((control & FDCAN_CCCR_DAR) && !(control & (FDCAN_CCCR_TEST | FDCAN_CCCR_INIT)) ? 'T' : 'E'));
++    if (bus_state == ON_BUS && (psr & FDCAN_PSR_BO)) out[1] = 'E';
++    out[2] = '0';
++    if (txqueue.head != txqueue.tail || (last_tx_buffer &&
++        HAL_FDCAN_IsTxBufferMessagePending(&can_handle, last_tx_buffer))) out[2] = '1';
++    else if (last_tx_failed) out[2] = '3';
++    else if (last_tx_buffer) {
++        if (can_handle.Instance->TXBTO & last_tx_buffer) out[2] = '2';
++        else if (can_handle.Instance->TXBCF & last_tx_buffer)
++            out[2] = (ir & (FDCAN_IR_PEA | FDCAN_IR_PED | FDCAN_IR_BO)) ? '3' : '4';
++        else out[2] = '1'; // Request state has not propagated yet.
++    }
++    for (int i = 0; i < 4; i++) out[3+i] = hex[(tx_sequence >> (12-4*i)) & 15];
++    uint32_t values[3] = {psr, ir, ecr};
++    for (int j = 0; j < 3; j++)
++        for (int i = 0; i < 8; i++) out[7+j*8+i] = hex[(values[j] >> (28-4*i)) & 15];
++    out[31] = '\r';
++}
+--- a/inc/can.h
++++ b/inc/can.h
+@@ -52,6 +52,7 @@
+ 
+ 
+ // Prototypes
++void can_query(uint8_t *out);
+ void can_init(void);
+ void can_enable(void);
+ void can_disable(void);
+--- a/src/slcan.c
++++ b/src/slcan.c
+@@ -225,6 +225,13 @@
+ 
+ 
+ 	    // FIXME: Nonstandard!
++		case 'Q':
++        {
++            uint8_t status[32];
++            can_query(status);
++            cdc_transmit(status, sizeof(status));
++            return 0;
++        }
+ 		case 'V':
+ 		{
+ 	        // Report firmware version and remote
+--- a/src/system.c
++++ b/src/system.c
+@@ -81,7 +81,7 @@
+     __HAL_RCC_GPIOC_CLK_ENABLE();
+     __HAL_RCC_GPIOG_CLK_ENABLE(); // just nrst is on portG
+ 
+-    __option_byte_config();
++    // Preserve the board option bytes; firmware never reprograms them.
+ }
+ 
+ 
