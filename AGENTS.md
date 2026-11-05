@@ -27,6 +27,11 @@
   Standard MKS V2.0 only; Pro/V1/other MCU unverified. Windows physical DFU flash
   untested. User explicitly authorizes KO/EN photo guides, Wiki and release kits.
   See docs/user/ko/indicator-adapters.md and tools/jetlink/canable/README.md.
+  Live installation exposed bridge status cadence (1Hz inference/2s idle) versus
+  the new 500ms lease: source restarted repeatedly despite healthy CAN. Request
+  telemetry on each inference with an indicator channel, poll idle at200ms and
+  keep local receive timeout100ms; retain 500ms stale revocation. Production-loop
+  cadence regressions3pass. No firmware change is needed for this correction.
 
 - On 2026-11-05, owner requests exact g1 handoff rejection on screen and logs.
   Add adb-handoff reason codes and bounded observations for first failed guard,
