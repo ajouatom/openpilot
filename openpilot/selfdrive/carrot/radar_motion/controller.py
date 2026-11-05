@@ -41,6 +41,7 @@ from openpilot.selfdrive.carrot.radar_motion.primary import (
   VISION_LEAD_MIN_PROB,
   VisionLead,
   VisionRadarMatcher,
+  VisionRadarMatch,
   lead_from_vision,
   lead_from_radar_point,
   match_dpath_primary_lead,
@@ -98,6 +99,7 @@ MOVING_FRONT_RANGE_MAX_GAP_S = 0.15
 MOVING_FRONT_RANGE_MAX_POSITION_ERROR_M = 2.5
 MOVING_FRONT_RANGE_MAX_LATERAL_ERROR_M = 0.75
 MOVING_FRONT_RANGE_MAX_SPEED_JUMP_MPS = 3.0
+VISION_TRANSITION_CONFIRM_S = 0.20
 CORROBORATED_STATIONARY_VISION_RANGE_MISMATCH_HOLD_S = 0.15
 SCC_PRIMARY_DUPLICATE_MAX_VLEAD_DELTA_MPS = 3.0
 SCC_PRIMARY_CLOSER_MARGIN_M = 1.0
@@ -561,6 +563,88 @@ class DPathRadarController:
     self._stationary_range_last_point: RadarPointSnapshot | None = None
     self._stationary_range_last_time_s: float | None = None
     self._stationary_range_anchor_time_s: float | None = None
+    self._vision_transition_radar: tuple[float, RadarPointSnapshot] | None = None
+    self._vision_transition_previous: tuple[float, dict[str, Any]] | None = None
+    self._vision_transition_since_s = 0.0
+
+  def _confirm_vision_transition(
+    self,
+    match: VisionRadarMatch | None,
+    vision_lead: dict[str, Any] | None,
+    points: tuple[RadarPointSnapshot, ...],
+    path: tuple[tuple[float, float], ...],
+    time_s: float,
+  ) -> VisionRadarMatch | None:
+    """Retain a measured front lead until its visual replacement is coherent."""
+    # Count camera time even while the ordinary matcher still accepts radar.
+    # This avoids adding another wait after existing confirmation/hold paths.
+    # Use published visual velocity, including the model ego-speed correction.
+    if vision_lead is None:
+      self._vision_transition_previous = None
+      self._vision_transition_since_s = 0.0
+    else:
+      previous_vision = self._vision_transition_previous
+      continuous = False
+      if previous_vision is not None:
+        previous_s, lead = previous_vision
+        dt = time_s - previous_s
+        continuous = (
+          0.0 <= dt <= RADAR_MOTION_MAX_TIME_SKEW_S
+          and abs(vision_lead["dRel"] - (lead["dRel"] + lead["vRel"] * dt)) <= MOVING_FRONT_RANGE_MAX_POSITION_ERROR_M
+          and abs(vision_lead["yRel"] - lead["yRel"]) <= MOVING_FRONT_RANGE_MAX_LATERAL_ERROR_M
+          and abs(vision_lead["vLead"] - lead["vLead"]) <= MOVING_FRONT_RANGE_MAX_SPEED_JUMP_MPS
+        )
+      if not continuous:
+        self._vision_transition_since_s = time_s
+      self._vision_transition_previous = (time_s, vision_lead)
+    previous = self._vision_transition_radar
+    self._vision_transition_radar = None
+    point = None
+    if previous is not None:
+      previous_s, previous_point = previous
+      point = next((
+        candidate for candidate in points
+        if (candidate.source, candidate.track_id) == (previous_point.source, previous_point.track_id)
+      ), None)
+      dt = time_s - previous_s
+      if not (
+        point is not None and point.measured
+        and 0.0 <= dt <= RADAR_MOTION_MAX_TIME_SKEW_S
+        and 0.5 < point.d_rel < 180.0
+        and abs(point.d_rel - (previous_point.d_rel + previous_point.v_rel * dt)) <= MOVING_FRONT_RANGE_MAX_POSITION_ERROR_M
+        and abs(point.y_rel - (previous_point.y_rel + previous_point.yv_rel * dt)) <= MOVING_FRONT_RANGE_MAX_LATERAL_ERROR_M
+        and abs(point.v_lead - previous_point.v_lead) <= (
+          STATIONARY_FRONT_ANCHOR_MAX_SPEED_JUMP_MPS
+          if abs(previous_point.v_lead) <= STATIONARY_MAX_ABS_VLEAD_MPS
+          else MOVING_FRONT_RANGE_MAX_SPEED_JUMP_MPS
+        )
+        and (
+          point.v_lead > STATIONARY_MAX_ABS_VLEAD_MPS
+          or self.primary_matcher.stationary_identity == (point.source, point.track_id)
+        )
+        and abs(project_to_model_path(path, point.d_rel, point.y_rel).d_path) <= RADAR_VISION_FALLBACK_MAX_ABS_DPATH_M
+      ):
+        point = None
+    if match is not None or vision_lead is None or point is None or self.enable_radar_tracks <= 0:
+      if (
+        match is not None and self.enable_radar_tracks > 0
+        and match.point.source == "frontRadar" and match.point.measured
+        and abs(match.d_path) <= RADAR_VISION_FALLBACK_MAX_ABS_DPATH_M
+      ):
+        self._vision_transition_radar = (time_s, match.point)
+      return match
+
+    # Both histories are current. A visual jump restarts confirmation while
+    # the retained radar supplies its latest measured distance and kinematics.
+    if time_s - self._vision_transition_since_s >= VISION_TRANSITION_CONFIRM_S - 1e-6:
+      self._vision_transition_previous = None
+      self._vision_transition_since_s = 0.0
+      return None
+    self._vision_transition_radar = (time_s, point)
+    return VisionRadarMatch(
+      point=point, probability=0.0, score=0.0,
+      d_path=project_to_model_path(path, point.d_rel, point.y_rel).d_path,
+    )
 
   def _reset_stationary_range_history(self) -> None:
     self._stationary_range_last_point = None
@@ -935,6 +1019,9 @@ class DPathRadarController:
       self._moving_range_last_point = None
       self._moving_range_last_time_s = None
       self._reset_stationary_range_history()
+      self._vision_transition_radar = None
+      self._vision_transition_previous = None
+      self._vision_transition_since_s = 0.0
       return DPathRadarOutput(
         None, None, None, None, (), (), (), (), (), (), None,
       )
@@ -1007,7 +1094,16 @@ class DPathRadarController:
       )
     else:
       self.scc_primary_fallback_matcher.reset()
-    lead_one = None
+    vision_candidate = None
+    if vision is not None and (
+      vision_only_lead_allowed(self.enable_radar_tracks)
+      or _central_vision_fallback_allowed(vision, path)
+    ):
+      vision_candidate = lead_from_vision(
+        vision, path, v_ego, model_v_ego=_model_ego_speed(model, v_ego),
+      )
+    primary_match = self._confirm_vision_transition(primary_match, vision_candidate, points, path, time_s)
+    lead_one = vision_candidate
     if primary_match is not None:
       lead_one = self._lead_from_radar_point(
         primary_match.point,
@@ -1015,20 +1111,6 @@ class DPathRadarController:
         primary_match.probability,
         primary_match.score,
       )
-    else:
-      if (
-        vision is not None
-        and (
-          vision_only_lead_allowed(self.enable_radar_tracks)
-          or _central_vision_fallback_allowed(vision, path)
-        )
-      ):
-        lead_one = lead_from_vision(
-          vision,
-          path,
-          v_ego,
-          model_v_ego=_model_ego_speed(model, v_ego),
-        )
     if self.enable_radar_tracks > 0 and self.motion_sensor == "corner" and lead_one is None:
       stopping_corner = self.stopping_lane_corner_tracker.update(
         time_s, v_ego, model, points, vision_lead_from_model(model),
