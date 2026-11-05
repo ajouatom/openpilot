@@ -206,6 +206,7 @@ class Sender:
     self.owner = Owner('USB CAN')
     self.generation = None
     self.params = None
+    self.last_drop = 0.
     if peer.get('carrot_host') != 'jetson' or peer.get(CAPABILITY) is not True:
       return
     if Path('/TICI').is_file():
@@ -230,6 +231,7 @@ class Sender:
       return
     self.next_send = now + .05
     if self.worker is not None and self.worker.process.poll() is not None:
+      self._report_drop('source_exit', now, exitcode=self.worker.process.returncode)
       self._stop_source()
       client.t.send(DATA, client._next_seq(), [encode({'token':self.token, 'ok':False, 'events':[]})])
       return
@@ -246,12 +248,16 @@ class Sender:
       available = available and self.params.get_bool('IsOnroad') and not self.params.get_bool('CanfdBlinkerControl')
     generation = state.get('generation')
     if generation != self.generation:
+      if self.worker is not None:
+        self._report_drop('adapter_changed', now)
       self._stop_source()
       self.generation = generation
     self.owner.name = str(state.get('adapter', 'USB CAN'))[:64]
     owns = self.owner.acquire(available and (self.owner.held or state.get('idle') is True))
     if not owns:
       if self.worker is not None:
+        self._report_drop('lease_lost', now, available=available, clock_age=now-self.clock_received,
+                          receiver_available=state.get('available') is True)
         self._stop_source()
         client.t.send(DATA, client._next_seq(), [encode({'token':self.token, 'ok':False, 'events':[]})])
       return
@@ -285,6 +291,11 @@ class Sender:
       self.worker.close()
       self.worker = None
     self.owner.release()
+
+  def _report_drop(self, reason, now, **detail):
+    if self.report is not None and now-self.last_drop >= 5:
+      self.report('physicalBlinkerOwnershipLost', reason=reason, **detail)
+      self.last_drop = now
 
   def close(self):
     self._stop_source()
