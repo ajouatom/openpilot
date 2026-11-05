@@ -187,6 +187,14 @@ def test_usb_ring_wrap_cast_zero_uses_usb_fill(monkeypatch):
     return UOp.custom_function('memset', dtype=dtypes.uint64).call(destination, value, length)
   # The exact pinned matcher misses a cast zero; no device access is needed
   # to reproduce this compiler-rule bug. Native USB ring execution is separate.
+  if os.getenv('MDM_USB_WRAP_UPSTREAM') == '1':
+    from openpilot.selfdrive.modeld.egpu_usb_wait import LIGHT_SPEED_2_RUNTIME_SHA
+    assert not configure_usb_wrap({'runtime': {'sha256': LIGHT_SPEED_2_RUNTIME_SHA}})
+    assert Compiled.pm_lower is original
+    for value in (zero, cast_zero):
+      assert original.rewrite(memset(value)) is sentinel
+      assert calls[-1] == (destination, zeros.index(0), length, True)
+    return
   assert original.rewrite(memset(cast_zero)) is None
   assert configure_usb_wrap({'runtime': {'sha256': LIGHT_SPEED_RUNTIME_SHA}})
   fixed = Compiled.pm_lower
