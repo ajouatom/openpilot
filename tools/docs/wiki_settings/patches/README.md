@@ -4,6 +4,13 @@ These patches preserve reviewed Wiki edits in the code branch when the author
 cannot push to the separate Wiki repository. Committing a patch here does not
 publish its content to the live Wiki.
 
+## Comma Pedal cruise modes
+
+`comma-pedal-cruise-modes.patch` updates the Korean, English and Chinese
+`CommaPedalEnabled` manual regions from Wiki commit `6636374e5728`. Apply it
+with `git apply --unidiff-zero` after the source branch supports mode 2, then
+regenerate and validate the three pages against that catalog.
+
 ## Bosch passive reception
 
 `bosch-passive-reception.patch` changes only the Korean and English

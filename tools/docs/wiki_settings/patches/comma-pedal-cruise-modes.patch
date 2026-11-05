@@ -1,0 +1,60 @@
+diff --git a/EN-Comma-Pedal-longitudinal-control.md b/EN-Comma-Pedal-longitudinal-control.md
+index 06c69e0..bd146cd 100644
+--- a/EN-Comma-Pedal-longitudinal-control.md
++++ b/EN-Comma-Pedal-longitudinal-control.md
+@@ -29 +29 @@ Allows longitudinal control through a Comma Pedal device in vehicles without ACC
+-<!-- CARROT:REVIEW reviewed-for="5cbde9f56254e3cc6a7304e4b3cf2da6b07f9ec7b1a494bfc3889cd0e17da671" reviewed-at="2026-11-03T12:00:00+09:00" -->
++<!-- CARROT:REVIEW reviewed-for="2ebee01d7839a4c0233f5ee7c9dab15858ed135f8a2e2d77d5c27ae2702f2936" reviewed-at="2026-11-05T22:31:44+09:00" -->
+@@ -33 +33,5 @@ Allows longitudinal control through a Comma Pedal device in vehicles without ACC
+-Allows pedal control on CC_ONLY_CAR vehicles with an explicit profile, detected device and satisfied safety conditions. The current profile is for Kia Ray EV. OEM Cruise ready or engagement, invalid inputs, braking or driver accelerator input blocks pedal output.
++The supplied vehicle profile is for Kia Ray EV. Pedal control requires the device's CAN input and valid safety conditions.
++
++- `0` turns pedal control off.
++- `1` gives OEM cruise priority. Set Auto Engage to `2` and use pedal control while the vehicle's Cruise ready state is off.
++- `2` replaces OEM cruise and works without Auto Engage. If OEM cruise engages, the controller requests cancellation and waits for confirmation before allowing pedal output.
+@@ -39 +43 @@ Allows pedal control on CC_ONLY_CAR vehicles with an explicit profile, detected
+-Find the setting under Vehicle and hardware → Device hardware. Confirm the vehicle and pedal profile, then restart after changing the setting to apply vehicle parameters and the Panda firmware update.
++Reboot the device after changing the setting. In mode `2`, turn on the vehicle's cruise MAIN and use SET or RES to start Carrot cruise.
+@@ -45 +49 @@ Find the setting under Vehicle and hardware → Device hardware. Confirm the veh
+-CarrotPilot vehicle operation, braking and standstill holding require separate validation. The contributor’s reported limited acceleration remains unresolved.
++Mode `1` was reported working on Kia Ray EV after PR 570. The mode `2` handover still requires vehicle confirmation.
+diff --git a/KO-Comma-Pedal사용.md b/KO-Comma-Pedal사용.md
+index a6088e5..3ef9bd3 100644
+--- a/KO-Comma-Pedal사용.md
++++ b/KO-Comma-Pedal사용.md
+@@ -29 +29 @@ ACC 미 장착 차량에서 Comma Pedal 장치를 통한 종방향 제어를 허
+-<!-- CARROT:REVIEW reviewed-for="5cbde9f56254e3cc6a7304e4b3cf2da6b07f9ec7b1a494bfc3889cd0e17da671" reviewed-at="2026-11-03T12:00:00+09:00" -->
++<!-- CARROT:REVIEW reviewed-for="2ebee01d7839a4c0233f5ee7c9dab15858ed135f8a2e2d77d5c27ae2702f2936" reviewed-at="2026-11-05T22:31:44+09:00" -->
+@@ -33 +33,5 @@ ACC 미 장착 차량에서 Comma Pedal 장치를 통한 종방향 제어를 허
+-명시적인 페달 프로파일이 있는 CC_ONLY_CAR 차량에서 장치 CAN 수신과 안전 조건을 만족하면 페달 제어를 허용합니다. 현재 프로파일은 레이 EV용이며, 순정 Cruise ready·크루즈 활성·입력 오류·브레이크·운전자 가속 입력 시 페달 출력을 차단합니다.
++현재 제공되는 차량별 설정은 레이 EV용입니다. Comma Pedal CAN 입력과 안전 조건이 충족되어야 합니다.
++
++- `0`은 페달 제어를 끕니다.
++- `1`은 순정 크루즈가 우선합니다. 오토인게이지를 `2`로 설정하고 차량의 Cruise ready가 꺼져 있을 때 페달 제어를 사용합니다.
++- `2`는 순정 크루즈를 대체하며 오토인게이지 없이 작동합니다. 순정 크루즈가 걸리면 해제를 요청하고, 해제 확인 후 페달 출력을 허용합니다.
+@@ -39 +43 @@ ACC 미 장착 차량에서 Comma Pedal 장치를 통한 종방향 제어를 허
+-설정은 차량·하드웨어 → 기기 하드웨어에 있습니다. 차량과 페달 장치의 프로파일을 확인한 뒤 설정하고 재부팅하여 차량 파라미터와 Panda 펌웨어 적용을 완료하세요.
++설정을 변경한 뒤 기기를 재부팅하세요. 모드 `2`에서는 차량의 크루즈 MAIN을 켜고 SET 또는 RES로 캐럿 크루즈를 시작합니다.
+@@ -45 +49 @@ ACC 미 장착 차량에서 Comma Pedal 장치를 통한 종방향 제어를 허
+-CarrotPilot 실차 작동과 제동·정차 유지 성능은 별도 검증이 필요합니다. 제출자가 보고한 가속 제한 증상은 아직 해결되지 않았습니다.
++모드 `1`은 PR 570 반영 후 레이 EV에서 작동이 보고되었습니다. 모드 `2`의 실차 전환 동작은 별도로 확인해야 합니다.
+diff --git a/ZH-Comma-Pedal纵向控制.md b/ZH-Comma-Pedal纵向控制.md
+index f790cb6..02a2d52 100644
+--- a/ZH-Comma-Pedal纵向控制.md
++++ b/ZH-Comma-Pedal纵向控制.md
+@@ -29 +29 @@
+-<!-- CARROT:REVIEW reviewed-for="5cbde9f56254e3cc6a7304e4b3cf2da6b07f9ec7b1a494bfc3889cd0e17da671" reviewed-at="2026-11-03T12:00:00+09:00" -->
++<!-- CARROT:REVIEW reviewed-for="2ebee01d7839a4c0233f5ee7c9dab15858ed135f8a2e2d77d5c27ae2702f2936" reviewed-at="2026-11-05T22:31:44+09:00" -->
+@@ -33 +33,5 @@
+-仅在具有明确踏板配置的 CC_ONLY_CAR 车辆上，检测到设备且满足安全条件时允许踏板控制。当前配置适用于 Kia Ray EV。原厂 Cruise ready 或巡航激活、输入无效、制动或驾驶员踩下加速踏板时阻止踏板输出。
++当前车辆配置适用于 Kia Ray EV。踏板控制需要设备的 CAN 输入和有效的安全条件。
++
++- `0` 关闭踏板控制。
++- `1` 优先使用原厂巡航。请将自动激活设为 `2`，并在车辆的 Cruise ready 关闭时使用踏板控制。
++- `2` 替代原厂巡航，无需自动激活。原厂巡航激活时，控制器会请求取消，并在确认解除后才允许踏板输出。
+@@ -39 +43 @@
+-设置位于车辆与硬件 → 设备硬件。确认车辆和踏板配置后修改设置并重启，以应用车辆参数及 Panda 固件更新。
++更改设置后请重启设备。在模式 `2` 下，开启车辆的巡航 MAIN，再用 SET 或 RES 启动 Carrot 巡航。
+@@ -45 +49 @@
+-CarrotPilot 实车运行、制动和停车保持仍需单独验证。贡献者报告的加速受限问题尚未解决。
++PR 570 合并后，模式 `1` 已在 Kia Ray EV 上报告正常工作。模式 `2` 的切换仍需实车确认。

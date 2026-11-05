@@ -266,10 +266,10 @@ class CarInterface(CarInterfaceBase):
     # protocol. The toggle leaves all existing vehicle paths unchanged otherwise.
     pedal_interceptor_params = PEDAL_INTERCEPTOR_PARAMS.get(candidate)
     if (ret.flags & HyundaiFlags.CC_ONLY_CAR and pedal_interceptor_params is not None and
-        params.get_bool("CommaPedalEnabled") and
         not ret.flags & (HyundaiFlags.CANFD | HyundaiFlags.LEGACY | HyundaiFlags.CAMERA_SCC) and
         fingerprint[PEDAL_INTERCEPTOR_BUS].get(PEDAL_INTERCEPTOR_SENSOR_ADDR) == 6 and
-        not any(addr in fingerprint[bus] for bus in (0, 2) for addr in (0x420, 0x421))):
+        not any(addr in fingerprint[bus] for bus in (0, 2) for addr in (0x420, 0x421)) and
+        (pedal_mode := params.get_int("CommaPedalEnabled")) in (1, 2)):
       ret.flags |= HyundaiFlags.PEDAL_INTERCEPTOR.value
       ret.enableGasInterceptorDEPRECATED = True
       ret.alphaLongitudinalAvailable = True
@@ -280,6 +280,9 @@ class CarInterface(CarInterfaceBase):
       ret.minEnableSpeed = pedal_interceptor_params.min_enable_speed
       ret.safetyConfigs[-1].safetyParam |= (HyundaiSafetyFlags.LONG | HyundaiSafetyFlags.PEDAL_INTERCEPTOR).value
       ret.safetyConfigs[-1].safetyParam |= pedal_interceptor_params.safety_profile
+      if pedal_mode == 2:
+        ret.flags |= HyundaiFlags.PEDAL_INTERCEPTOR_REPLACE_CRUISE.value
+        ret.safetyConfigs[-1].safetyParam |= HyundaiSafetyFlags.PEDAL_INTERCEPTOR_REPLACE_CRUISE.value
 
     # Car specific configuration overrides
 

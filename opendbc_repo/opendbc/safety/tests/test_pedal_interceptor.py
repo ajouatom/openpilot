@@ -8,6 +8,7 @@ from opendbc.safety.tests.test_hyundai import checksum
 
 
 PEDAL_INTERCEPTOR_SAFETY_PARAM = 0x6005
+REPLACE_CRUISE_SAFETY_PARAM = 0xE005
 
 
 @pytest.fixture
@@ -16,6 +17,13 @@ def safety():
   assert lib.set_safety_hooks(CarParams.SafetyModel.hyundai, PEDAL_INTERCEPTOR_SAFETY_PARAM) == 0
   lib.init_tests()
   return lib
+
+
+@pytest.fixture
+def replacement_safety(safety):
+  assert safety.set_safety_hooks(CarParams.SafetyModel.hyundai, REPLACE_CRUISE_SAFETY_PARAM) == 0
+  safety.init_tests()
+  return safety
 
 
 def packet(message):
@@ -179,7 +187,8 @@ def test_relay_fault_cannot_be_overridden(safety):
   assert not safety.safety_tx_hook(packet(command(0.0)))
 
 
-@pytest.mark.parametrize("param", [0, 1, 4, 5, 8192, 8192 | 4, 8192 | 16384 | 4, 0x600D])
+@pytest.mark.parametrize("param", [0, 1, 4, 5, 8192, 8192 | 4, 8192 | 16384 | 4, 0x600D,
+                                    0x8000, 0xA005, 0xE004, 0xE00D])
 def test_pedal_is_not_implicitly_added_to_existing_or_incomplete_profiles(param):
   safety = libsafety_py.libsafety
   safety.set_safety_hooks(CarParams.SafetyModel.hyundai, param)
@@ -222,3 +231,89 @@ def test_switching_from_pedal_to_ordinary_profiles_removes_pedal_permission(safe
   safety.set_controls_allowed(True)
   assert not safety.safety_tx_hook(packet(command()))
   assert not safety.safety_tx_hook(packet(command(0.0)))
+
+
+@pytest.mark.parametrize("button", [1, 2])  # RES, SET
+def test_replacement_requires_driver_and_waits_for_oem_release(replacement_safety, button):
+  safety = replacement_safety
+  cancel = packet((0x4F1, bytes([4, 0, 0, 0]), 0))
+  positive = packet(command(0.70))
+  heartbeat = packet(command(0.0))
+  label_ready = packet((0x592, bytes([0, 0, 0, 0, 4, 0, 0, 0]), 0))
+  label_engaged = packet((0x592, bytes([0, 0, 0, 0, 8, 0, 0, 0]), 0))
+  assert safety.safety_rx_hook(packet(sensor()))
+  assert safety.safety_rx_hook(label_ready)
+  assert not safety.safety_tx_hook(positive)
+  assert not safety.safety_tx_hook(cancel)
+  assert safety.safety_rx_hook(packet((0x4F1, bytes([button, 0, 0, 0]), 0)))
+  assert safety.safety_rx_hook(label_engaged)
+  assert safety.safety_rx_hook(packet((0x4F1, bytes([0, 0, 0, 16]), 0)))
+  assert safety.get_controls_allowed()
+  assert safety.safety_tx_hook(cancel)
+  assert safety.get_controls_allowed()  # Transmitting CANCEL must not change driver authorization.
+  assert not safety.safety_tx_hook(positive)
+  assert safety.safety_tx_hook(heartbeat)
+  assert safety.safety_rx_hook(label_ready)
+  assert safety.safety_tx_hook(positive)
+  assert not safety.safety_tx_hook(cancel)
+  assert not safety.safety_tx_hook(packet(command(0.701)))
+
+  assert safety.safety_rx_hook(packet((0x4F1, bytes([8, 0, 0, 32]), 0)))  # MAIN press before LABEL11 changes
+  assert not safety.get_controls_allowed()
+  assert not safety.safety_tx_hook(positive)
+  safety.set_controls_allowed(True)
+  assert safety.safety_rx_hook(packet((0x4F1, bytes([4, 0, 0, 48]), 0)))  # Driver CANCEL
+  assert not safety.get_controls_allowed()
+  assert not safety.safety_tx_hook(positive)
+  safety.set_controls_allowed(True)
+  assert safety.safety_rx_hook(packet((0x592, bytes(8), 0)))  # MAIN off
+  assert not safety.get_controls_allowed()
+  assert not safety.safety_tx_hook(positive)
+  assert safety.safety_rx_hook(label_ready)
+  assert not safety.safety_tx_hook(positive)
+
+
+def test_replacement_cancel_is_only_for_fresh_oem_engagement(replacement_safety):
+  safety = replacement_safety
+  label_engaged = bytes([0, 0, 0, 0, 0xC, 0, 0, 0])
+  cancel = packet((0x4F1, bytes([4, 0, 0, 0]), 0))
+  assert not safety.safety_tx_hook(cancel)
+  assert safety.safety_rx_hook(packet((0x592, label_engaged, 2)))
+  assert not safety.safety_tx_hook(cancel)
+  assert safety.safety_rx_hook(packet((0x592, label_engaged, 0)))
+  assert safety.safety_tx_hook(cancel)
+  assert not safety.get_controls_allowed()
+  for bad in [0, 1, 2, 3, 4 | 8, 4 | 16]:
+    assert not safety.safety_tx_hook(packet((0x4F1, bytes([bad, 0, 0, 0]), 0)))
+  assert not safety.safety_tx_hook(packet((0x4F1, bytes([4, 0, 0, 0]), 2)))
+  assert not safety.safety_tx_hook(packet((0x4F1, bytes([4, 0, 0, 0, 0, 0]), 0)))
+  safety.set_timer(1_000_001)
+  assert safety.safety_rx_hook(packet(sensor()))
+  safety.set_controls_allowed(True)
+  assert not safety.safety_tx_hook(cancel)
+  assert not safety.safety_tx_hook(packet(command()))
+  assert safety.safety_tx_hook(packet(command(0.0)))
+
+
+def test_replacement_does_not_arm_from_alternate_or_malformed_buttons(replacement_safety):
+  safety = replacement_safety
+  assert safety.safety_rx_hook(packet(sensor()))
+  assert safety.safety_rx_hook(packet((0x592, bytes([0, 0, 0, 0, 4, 0, 0, 0]), 0)))
+  for message in ((0x3EF, bytes(7) + b"\x20", 0), (0x3EF, bytes(8), 0),
+                  (0x4F1, b"\x02" + bytes(5), 0), (0x4F1, bytes(6), 0)):
+    assert safety.safety_rx_hook(packet(message))
+  assert not safety.get_controls_allowed()
+  assert not safety.safety_tx_hook(packet(command()))
+
+
+def test_replacement_profile_reset_restores_mode1_oem_priority(replacement_safety):
+  safety = replacement_safety
+  assert safety.safety_rx_hook(packet((0x592, bytes([0, 0, 0, 0, 8, 0, 0, 0]), 0)))
+  assert safety.set_safety_hooks(CarParams.SafetyModel.hyundai, PEDAL_INTERCEPTOR_SAFETY_PARAM) == 0
+  safety.init_tests()
+  assert safety.safety_rx_hook(packet(sensor()))
+  assert safety.safety_rx_hook(packet((0x592, bytes([0, 0, 0, 0, 4, 0, 0, 0]), 0)))
+  safety.set_controls_allowed(True)
+  assert not safety.safety_tx_hook(packet(command()))
+  assert safety.safety_rx_hook(packet((0x592, bytes(8), 0)))
+  assert safety.safety_tx_hook(packet(command()))

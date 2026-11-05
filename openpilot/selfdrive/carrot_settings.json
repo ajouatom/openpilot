@@ -2898,18 +2898,23 @@
       "group": "시작",
       "name": "CommaPedalEnabled",
       "title": "Comma Pedal사용",
-      "descr": "ACC 미 장착 차량에서 Comma Pedal 장치를 통한 종방향 제어를 허용합니다. CC_ONLY_CAR 차량에서만 사용할 수 있으며, 차량의 Cruise ready가 꺼져 있을 때에만 작동합니다. Cruise ready 상태에서는 순정 크루즈 컨트롤이 우선하여 Comma Pedal 제어를 사용할 수 없습니다.",
+      "descr": "ACC 미 장착 차량에서 Comma Pedal 장치를 통한 종방향 제어를 허용합니다. CC_ONLY_CAR 차량 중 지원되는 차량에서 사용할 수 있습니다.\n0은 꺼짐입니다.\n1로 설정한 경우 오토인게이지를 2로 설정해야 합니다. Cruise ready가 꺼져 있을 때 페달 제어가 작동하며, 순정 크루즈 컨트롤이 우선합니다.\n2는 오토인게이지 없이도 작동하지만, 순정 크루즈를 사용할 수 없게 됩니다. 차량의 크루즈 MAIN을 켜고 SET 또는 RES로 캐럿 크루즈를 시작합니다.\n설정 변경 후 기기를 재부팅하세요.",
       "egroup": "START",
       "etitle": "Comma Pedal longitudinal control",
-      "edescr": "Allows longitudinal control through a Comma Pedal device in vehicles without ACC. Requires CC_ONLY_CAR and the vehicle's Cruise ready state to be off. When Cruise ready is on, OEM cruise control takes priority and Comma Pedal control is unavailable.",
+      "edescr": "Allows longitudinal control through a Comma Pedal device on supported CC_ONLY_CAR vehicles without ACC.\n0 is off.\nFor mode 1, set Auto Engage to 2. Pedal control works with Cruise ready off. OEM cruise control takes priority.\nMode 2 works without Auto Engage and replaces OEM cruise control. Turn on the vehicle's cruise MAIN and use SET or RES to start Carrot cruise.\nReboot the device after changing this setting.",
       "cgroup": "启动设置",
       "ctitle": "Comma Pedal纵向控制",
-      "cdescr": "允许在未配备ACC的车辆上通过Comma Pedal设备进行纵向控制。仅适用于CC_ONLY_CAR车辆，且车辆的Cruise ready必须关闭。Cruise ready开启时原厂巡航优先，无法使用Comma Pedal控制。",
+      "cdescr": "允许在支持的未配备ACC的CC_ONLY_CAR车辆上通过Comma Pedal设备进行纵向控制。\n0为关闭。\n使用模式1时，请将自动激活设为2。Cruise ready关闭时可使用踏板控制，原厂巡航优先。\n模式2无需自动激活，并替代原厂巡航。开启车辆的巡航MAIN，再用SET或RES启动Carrot巡航。\n更改此设置后请重启设备。",
       "min": 0,
-      "max": 1,
+      "max": 2,
       "default": 0,
       "unit": 1,
-      "control": "toggle",
+      "control": "select",
+      "options": {
+        "ko": ["0 꺼짐", "1 순정 크루즈 우선", "2 순정 크루즈 대체"],
+        "en": ["0 Off", "1 OEM cruise priority", "2 Replace OEM cruise"],
+        "zh": ["0 关闭", "1 原厂巡航优先", "2 替代原厂巡航"]
+      },
       "risk": "high"
     },
     {

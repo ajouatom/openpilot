@@ -1,5 +1,6 @@
 from dataclasses import replace
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 import time
 
@@ -11,19 +12,20 @@ from opendbc.car import structs
 from opendbc.car.hyundai.interface import CarInterface
 from opendbc.car.hyundai.carstate import CarState
 from opendbc.car.hyundai.pedal_interceptor import RAY_PEDAL_INTERCEPTOR_PARAMS, get_ray_pedal_target
-from opendbc.car.hyundai.values import CAR, HyundaiFlags, HyundaiSafetyFlags, get_pedal_interceptor_params
+from opendbc.car.hyundai.values import (CAR, Buttons, HyundaiFlags,
+                                       get_pedal_interceptor_params, pedal_interceptor_replaces_cruise)
 from opendbc.car.hyundai.values import PEDAL_INTERCEPTOR_PARAMS
 from opendbc.car.pedal_interceptor import (PEDAL_INTERCEPTOR_DBC, PedalInterceptor,
                                          PedalInterceptorState, create_pedal_interceptor_command)
 
 
-def car_params(candidate, enabled, fingerprint=None):
+def car_params(candidate, mode, fingerprint=None):
   class Settings:
     def get_bool(self, key):
-      return enabled if key == "CommaPedalEnabled" else False
+      return False
 
     def get_int(self, key):
-      return 0
+      return int(mode) if key == "CommaPedalEnabled" else 0
 
   with patch("opendbc.car.hyundai.interface.Params", Settings):
     return CarInterface.get_params(candidate, fingerprint or gen_empty_fingerprint(), [], False, False, False)
@@ -44,29 +46,36 @@ def test_toggle_preserves_all_unconfigured_vehicle_car_params(candidate):
     # Some existing platform entries have no torque metadata. Preserve that
     # existing result too; this port must not repair unrelated vehicle support.
     assert error.args == (candidate,)
-    with pytest.raises(KeyError) as enabled_error:
-      car_params(candidate, True, fingerprint)
-    assert enabled_error.value.args == error.args
+    for mode in (1, 2):
+      with pytest.raises(KeyError) as enabled_error:
+        car_params(candidate, mode, fingerprint)
+      assert enabled_error.value.args == error.args
     return
-  on = car_params(candidate, True, fingerprint)
-  if candidate == CAR.KIA_RAY_EV:
-    assert not off.flags & HyundaiFlags.PEDAL_INTERCEPTOR
-    assert on.flags & HyundaiFlags.PEDAL_INTERCEPTOR
-  else:
-    assert on.to_dict() == off.to_dict()
-    assert get_pedal_interceptor_params(on) is None
+  for mode in (1, 2):
+    on = car_params(candidate, mode, fingerprint)
+    if candidate == CAR.KIA_RAY_EV:
+      assert not off.flags & HyundaiFlags.PEDAL_INTERCEPTOR
+      assert on.flags & HyundaiFlags.PEDAL_INTERCEPTOR
+      assert pedal_interceptor_replaces_cruise(on) == (mode == 2)
+    else:
+      assert on.to_dict() == off.to_dict()
+      assert get_pedal_interceptor_params(on) is None
+      assert not pedal_interceptor_replaces_cruise(on)
 
 
-def test_profile_requires_the_device_but_not_ray_lfa_or_lda_markers():
-  CP = car_params(CAR.KIA_RAY_EV, True, pedal_fingerprint())
+@pytest.mark.parametrize("mode,safety_param", [(1, 0x6005), (2, 0xE005)])
+def test_profile_requires_the_device_but_not_ray_lfa_or_lda_markers(mode, safety_param):
+  CP = car_params(CAR.KIA_RAY_EV, mode, pedal_fingerprint())
   assert CP.enableGasInterceptorDEPRECATED
   assert CP.openpilotLongitudinalControl and not CP.pcmCruise
-  assert CP.safetyConfigs[-1].safetyParam == (
-    HyundaiSafetyFlags.EV_GAS | HyundaiSafetyFlags.LONG |
-    HyundaiSafetyFlags.PEDAL_INTERCEPTOR | HyundaiSafetyFlags.PEDAL_INTERCEPTOR_RAY
-  )
+  assert CP.safetyConfigs[-1].safetyParam == safety_param
   for fingerprint in (gen_empty_fingerprint(), {**pedal_fingerprint(), 0: {0x201: 8}}):
-    assert not car_params(CAR.KIA_RAY_EV, True, fingerprint).flags & HyundaiFlags.PEDAL_INTERCEPTOR
+    assert not car_params(CAR.KIA_RAY_EV, mode, fingerprint).flags & HyundaiFlags.PEDAL_INTERCEPTOR
+
+
+@pytest.mark.parametrize("mode", [-1, 3])
+def test_unknown_mode_keeps_the_adapter_off(mode):
+  assert car_params(CAR.KIA_RAY_EV, mode, pedal_fingerprint()).to_dict() == car_params(CAR.KIA_RAY_EV, 0, pedal_fingerprint()).to_dict()
 
 
 def test_non_cc_only_vehicle_cannot_activate_even_with_an_explicit_profile(monkeypatch):
@@ -75,14 +84,15 @@ def test_non_cc_only_vehicle_cannot_activate_even_with_an_explicit_profile(monke
   assert not before.flags & HyundaiFlags.CC_ONLY_CAR
   assert not before.flags & (HyundaiFlags.CANFD | HyundaiFlags.LEGACY | HyundaiFlags.CAMERA_SCC)
   monkeypatch.setitem(PEDAL_INTERCEPTOR_PARAMS, candidate, RAY_PEDAL_INTERCEPTOR_PARAMS)
-  enabled = car_params(candidate, True, pedal_fingerprint())
+  enabled = car_params(candidate, 2, pedal_fingerprint())
   assert enabled.to_dict() == before.to_dict()
   assert not enabled.enableGasInterceptorDEPRECATED
   assert get_pedal_interceptor_params(enabled) is None
   assert Bus.party not in CarState.__new__(CarState).get_can_parsers(enabled)
   # Reject a stale/inconsistent CP flag too, before parser/controller creation.
-  enabled.flags |= HyundaiFlags.PEDAL_INTERCEPTOR.value
+  enabled.flags |= (HyundaiFlags.PEDAL_INTERCEPTOR | HyundaiFlags.PEDAL_INTERCEPTOR_REPLACE_CRUISE).value
   assert get_pedal_interceptor_params(enabled) is None
+  assert not pedal_interceptor_replaces_cruise(enabled)
   assert Bus.party not in CarState.__new__(CarState).get_can_parsers(enabled)
 
 
@@ -111,9 +121,9 @@ def test_ray_target_caps_and_rate_parameters_revert_to_reference():
 def test_existing_scc_cannot_select_the_new_protocol(bus, address):
   fingerprint = pedal_fingerprint()
   fingerprint[bus][address] = 8
-  on = car_params(CAR.KIA_RAY_EV, True, fingerprint)
   off = car_params(CAR.KIA_RAY_EV, False, fingerprint)
-  assert on.to_dict() == off.to_dict()
+  for mode in (1, 2):
+    assert car_params(CAR.KIA_RAY_EV, mode, fingerprint).to_dict() == off.to_dict()
 
 
 def test_parsers_follow_selected_cp_without_global_dbc_map_changes():
@@ -223,19 +233,23 @@ def test_pedal_init_skips_scc_disable_but_keeps_existing_vehicle_init(stale_peda
     disable.assert_called_once_with(None, None, bus=0, addr=0x7D0, com_cont_req=b"\x28\x83\x01")
 
 
-def test_selected_interface_runs_real_state_controller_and_releases_on_override(monkeypatch):
+def setup_pedal_interface(monkeypatch, mode, auto_engage):
   fingerprint = pedal_fingerprint()
   fingerprint[2][0x485] = 8
 
   class Settings:
+    def __init__(self, *args):
+      pass
+
     def get(self, key, *args, **kwargs):
       return str(fingerprint) if key == "FingerPrints" else ""
 
     def get_bool(self, key):
-      return key in ("CommaPedalEnabled", "ControlsReady")
+      return key == "ControlsReady"
 
     def get_int(self, key):
-      return {"AutoEngage": 2, "MaxAngleFrames": 89, "SpeedFromPCM": 2,
+      return {"CommaPedalEnabled": mode, "AutoEngage": auto_engage, "MaxAngleFrames": 89, "SpeedFromPCM": 2,
+              "CruiseButtonLongDelay": 40, "CruiseSpeedUnit": 10, "CruiseSpeedUnitBasic": 1,
               "CruiseButtonTest1": 8, "CruiseButtonTest2": 30, "CruiseButtonTest3": 1}.get(key, 0)
 
     def get_float(self, key):
@@ -260,7 +274,8 @@ def test_selected_interface_runs_real_state_controller_and_releases_on_override(
   control.actuators.accel = 1.0
   now = time.monotonic_ns()
 
-  def tick(frame, *, brake=False, driver=False, fault=0, oem_cc=False, cruise_ready=False, missing_cruise=False):
+  def tick(frame, *, brake=False, driver=False, fault=0, oem_cc=False, cruise_ready=False, missing_cruise=False,
+           button=Buttons.NONE, main_button=False, limiter_button=False, gear=5, brake_hold=False, park_brake=False):
     frames = []
     for role, parser in interface.can_parsers.items():
       if role == Bus.party:
@@ -272,9 +287,18 @@ def test_selected_interface_runs_real_state_controller_and_releases_on_override(
       for address in list(parser.addresses):
         values = {}
         if address == 0x394:
-          values = {"DriverOverride": 2 if brake else 0}
+          values = {"DriverOverride": 2 if brake else 0, "PBRAKE_ACT": park_brake}
         elif address == 0x371:
           values = {"Accel_Pedal_Pos": 50}
+        elif address == 0x4F1:
+          values = {"CF_Clu_CruiseSwState": button, "CF_Clu_CruiseSwMain": main_button, "CF_Clu_SldMainSW": limiter_button,
+                    "CF_Clu_AliveCnt1": frame & 0xF, "CF_Clu_Vanz": 35}
+        elif address == 882:
+          values = {"Elect_Gear_Shifter": gear}
+        elif address == packer.dbc.name_to_msg["TCS15"].address:
+          values = {"AVH_LAMP": 2 if brake_hold else 0}
+        elif address == packer.dbc.name_to_msg["CGW1"].address:
+          values = {"CF_Gway_DrvSeatBeltSw": 1}
         frames.append(packer.make_can_msg(address, parser.bus, values))
     # LABEL11 is registered by the selected adapter. CC_Engaged is deliberately
     # observed as a raw bit so the shared DBC and other vehicles stay unchanged.
@@ -288,12 +312,17 @@ def test_selected_interface_runs_real_state_controller_and_releases_on_override(
 
   for frame in range(208):
     state, sends = tick(frame)
+  return interface, control, tick, Settings
+
+
+def test_selected_interface_runs_real_state_controller_and_releases_on_override(monkeypatch):
+  interface, control, tick, _ = setup_pedal_interface(monkeypatch, 1, auto_engage=2)
+  state, sends = tick(208)
   assert state.cruiseState.available
   assert state.canValid and not state.canTimeout
   assert 0x201 not in interface.can_parsers[Bus.pt].addresses
   assert not state.accFaulted and not state.gasPressed
   assert state.gas > 0.0  # Commanded native gas must not masquerade as driver input.
-  state, sends = tick(208)
   assert any(address == 0x200 and data[4] & 0x80 for address, data, _ in sends)
   assert not any(address in (0x420, 0x421, 0x389, 0x50A, 0x7D0) for address, _, _ in sends)
 
@@ -323,3 +352,61 @@ def test_selected_interface_runs_real_state_controller_and_releases_on_override(
     state, sends = tick(frame, missing_cruise=True)
   assert not state.cruiseState.available
   assert next(data for address, data, _ in sends if address == 0x200)[:4] == bytes(4)
+
+
+@pytest.mark.parametrize("button", [Buttons.SET_DECEL, Buttons.RES_ACCEL])
+def test_mode2_driver_engagement_and_oem_handover(monkeypatch, button):
+  from openpilot.selfdrive.car import cruise
+
+  interface, control, tick, settings = setup_pedal_interface(monkeypatch, 2, auto_engage=0)
+  monkeypatch.setattr(cruise, "Params", settings)
+  monkeypatch.setattr(cruise, "CommandReader", lambda *args: SimpleNamespace(read=lambda **kwargs: None))
+  helper = cruise.VCruiseCarrot(interface.CP)
+  sm = type("Messages", (dict,), {"alive": dict.fromkeys(("longitudinalPlan", "radarState", "drivingModelData"), False),
+                                 "seen": {"carrotMan": False}})(carControl=structs.CarControl())
+  control.enabled = control.longActive = False
+
+  state, sends = tick(208)
+  assert state.canValid and state.gearShifter == "drive"
+  assert not state.cruiseState.available and not state.buttonEnable
+  state, sends = tick(209, cruise_ready=True)
+  helper.update_v_cruise(state, sm, True)
+  assert state.cruiseState.available and not state.buttonEnable
+  assert not helper._lat_enabled and helper._activate_cruise == 0
+  assert not any(address == 0x4F1 for address, _, _ in sends)
+
+  # The same physical SET/RES release that requests Carrot engagement may
+  # also activate stock cruise. Confirm cancellation before sending gas.
+  state, _ = tick(210, cruise_ready=True, button=button)
+  helper.update_v_cruise(state, sm, True)
+  state, sends = tick(211, oem_cc=True, limiter_button=True)
+  helper.update_v_cruise(state, sm, True)
+  assert state.buttonEnable and helper._lat_enabled
+  assert state.cruiseState.available and state.cruiseState.enabled
+  assert [(data[0] & 0x1F, bus) for address, data, bus in sends if address == 0x4F1] == [(Buttons.CANCEL, 0)]
+
+  control.enabled = control.longActive = True
+  _, sends = tick(212, oem_cc=True)
+  assert next(data for address, data, _ in sends if address == 0x200)[:5] == bytes([0, 0, 0, 0, 5])
+  assert not any(address == 0x4F1 for address, _, _ in sends)
+  for frame in range(213, 217):
+    _, sends = tick(frame, cruise_ready=True)
+    assert not any(address == 0x4F1 for address, _, _ in sends)
+  assert next(data for address, data, _ in sends if address == 0x200)[4] & 0x80
+
+  for first, inputs in ((217, {"brake": True}), (221, {"driver": True}), (225, {"fault": 1}),
+                        (229, {"brake_hold": True}), (233, {"park_brake": True}), (237, {"gear": 7})):
+    for frame in range(first, first + 4):
+      _, sends = tick(frame, cruise_ready=True, **inputs)
+    assert next(data for address, data, _ in sends if address == 0x200)[:4] == bytes(4)
+
+  for frame in range(241, 245):
+    state, sends = tick(frame, cruise_ready=True, main_button=True)  # LABEL11 still reports ready.
+  assert not state.cruiseState.available
+  assert next(data for address, data, _ in sends if address == 0x200)[:4] == bytes(4)
+
+  for frame in range(245, 349):
+    state, sends = tick(frame, oem_cc=True, missing_cruise=frame > 245)
+  assert not state.cruiseState.available
+  assert next(data for address, data, _ in sends if address == 0x200)[:4] == bytes(4)
+  assert not any(address == 0x4F1 for address, _, _ in sends)

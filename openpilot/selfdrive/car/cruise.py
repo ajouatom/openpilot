@@ -9,6 +9,7 @@ from openpilot.selfdrive.carrot.bluetooth.model import BLUETOOTH_CANCEL, Command
 from openpilot.selfdrive.car.toyota_pcm_speed import ToyotaPcmSetSpeedSync
 
 from opendbc.car import structs
+from opendbc.car.hyundai.values import pedal_interceptor_replaces_cruise
 GearShifter = structs.CarState.GearShifter
 
 
@@ -160,6 +161,8 @@ from openpilot.common.params import Params
 class VCruiseCarrot:
   def __init__(self, CP):
     self.CP = CP
+    self.pedal_interceptor_replaces_cruise = (getattr(CP, "brand", "") == "hyundai" and
+                                             pedal_interceptor_replaces_cruise(CP))
     self.bluetooth_commands = CommandReader('cruise')
     self.frame = 0
     self.params_memory = Params("/dev/shm/params")
@@ -385,7 +388,10 @@ class VCruiseCarrot:
 
     if CS.cruiseState.available:
       if not self.cruise_state_available_last:
-        self._lat_enabled = True
+        # OEM standby can already be on at startup. Keep steering intent tied
+        # to AutoEngage and the driver's SET/RES or lateral button.
+        if not self.pedal_interceptor_replaces_cruise:
+          self._lat_enabled = True
         v_cruise_kph = self.v_ego_kph_set
       if not self.CP.pcmCruise:
         # if stock cruise is completely disabled, then we can use our own set speed logic

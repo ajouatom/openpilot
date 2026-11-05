@@ -675,6 +675,17 @@ class CarController(CarControllerBase):
       pedal_active = (CC.longActive and not CS.pedal_interceptor_cruise_blocked and
                       not CS.pedal_interceptor_state.faulted and
                       not CC.cruiseControl.override and not CS.out.gasPressed and not CS.out.brakePressed)
+      if CS.pedal_interceptor_replaces_cruise:
+        cruise_available = (CS.out.canValid and CS.out.cruiseState.available and
+                            CS.out.gearShifter == structs.CarState.GearShifter.drive and
+                            not (CS.out.brakePressed or CS.out.brakeHoldActive or CS.out.parkingBrake))
+        pedal_active = pedal_active and CC.enabled and cruise_available
+        # StarPilot's 50 ms cancellation cadence. Keep the other switch bits clear.
+        if (cruise_available and CS.out.cruiseState.enabled and CS.clu11 is not None and
+            self.frame - self.last_button_frame >= 5):
+          clu11 = {**CS.clu11, "CF_Clu_CruiseSwMain": 0, "CF_Clu_SldMainSW": 0}
+          can_sends.append(hyundaican.create_clu11(self.packer, self.frame, clu11, Buttons.CANCEL, self.CP))
+          self.last_button_frame = self.frame
       pedal_message = self.pedal_interceptor.update(self.frame, pedal_active, accel, CS.out.vEgo, hud_control.setSpeed)
       if pedal_message is not None:
         can_sends.append(pedal_message)

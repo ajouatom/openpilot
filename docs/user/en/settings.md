@@ -296,9 +296,13 @@ In modes `EnableRadarTracks=1`–`3`, a confirmed departing front lead can recei
 
 `CarrotRadarCutInSensitivity` controls only Carrot Radar Mode CUT-IN detection: `0` disables it, `1` is insensitive, `3` is normal (default), and `5` is very sensitive; `2` and `4` are the intermediate levels. Levels `1` through `5` require `0.50`, `0.40`, `0.35`, `0.25`, and `0.20 s` of continuing measured motion evidence, while the physical future prediction remains fixed at 5.0 seconds. A front-radar track with at least 0.50 m of strongly one-way progress in its recent measured history may receive at most one 20 Hz radar-frame credit so timestamp quantization does not discard a completed dwell; small adjacent drift does not. It does not affect conventional radar mode or `EnableCornerRadar`. The value is read at the next OnRoad start, so restart the vehicle or reboot the device after changing it.
 
-`CommaPedalEnabled` defaults to OFF. It permits the Comma Pedal longitudinal path on vehicles without ACC carrying the `CC_ONLY_CAR` flag when explicit vehicle configuration, device CAN reception, and the existing control and safety conditions are satisfied. It works only while the vehicle's **Cruise ready is off**; when Cruise ready is on, OEM cruise control takes priority and Comma Pedal control is unavailable. The shared protocol is reusable; the supplied DBC, tuning, and safety profile are for Kia Ray EV. Other vehicles require their own configuration and never inherit the Ray values automatically.
+`CommaPedalEnabled` applies to `CC_ONLY_CAR` vehicles without ACC that have a supported vehicle configuration and a Comma Pedal CAN input. The supplied configuration is for Kia Ray EV.
 
-A saved change takes effect at the **next vehicle-parameter initialization**; it does not switch the running control path immediately. Comma Pedal operation on CarrotPilot has not yet been validated in a vehicle. Pedal firmware and voltage calibration are unchanged. See the [Comma Pedal diagnostic guide](../../comma_pedal.md) for the observations required at each stage.
+- `0` turns the feature off and is the default.
+- `1` gives OEM cruise priority. **Set Auto Engage to 2** and use pedal control while the vehicle's Cruise ready state is off.
+- `2` replaces OEM cruise control and works without Auto Engage. Turn on the vehicle's cruise MAIN and use SET or RES to start Carrot cruise.
+
+**Reboot the device after changing this setting.** It takes effect when the vehicle parameters and Panda safety mode initialize. [Comma Pedal diagnostic guide](../../comma_pedal.md)
 
 `HardwareC3xLite` must remain off on standard C3 and C3X hardware. Enable it only on a C3X Lite, then reboot the device. The setting skips the unavailable amplifier so startup is not delayed by I2C retries, uses the GPIO buzzer for alerts, disables `micd`, `soundd`, and `loggerd`, and turns off `RecordAudio`. Normal route logging is unavailable while this hardware mode is enabled.
 

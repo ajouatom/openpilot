@@ -19,7 +19,7 @@ from opendbc.car.hyundai.values import HyundaiFlags, CAR, DBC, Buttons, CarContr
                                        EV_MODE_ACTIVE_VALUES, EV_MODE_STATUS_ADDR, EV_MODE_STATUS_DLC, EV_MODE_STATUS_MSG, \
                                        EV_MODE_STATUS_SIGNAL
 from opendbc.car.interfaces import CarStateBase
-from opendbc.car.hyundai.values import get_pedal_interceptor_params
+from opendbc.car.hyundai.values import get_pedal_interceptor_params, pedal_interceptor_replaces_cruise
 from opendbc.car.pedal_interceptor import (PEDAL_INTERCEPTOR_BUS,
                                          PEDAL_INTERCEPTOR_RX_FREQUENCY, PedalInterceptorState)
 
@@ -246,6 +246,7 @@ class CarState(CarStateBase):
     self.main_enabled = True if self.op_params.get_int("AutoEngage") == 2 else False
     self.pedal_interceptor_params = get_pedal_interceptor_params(CP)
     self.pedal_interceptor_state = PedalInterceptorState() if self.pedal_interceptor_params is not None else None
+    self.pedal_interceptor_replaces_cruise = pedal_interceptor_replaces_cruise(CP)
     self.pedal_interceptor_cruise_blocked = True
     self.manual_main_off_latched = False
     self.gear_shifter = GearShifter.drive # Gear_init for Nexo ?? unknown 21.02.23.LSW
@@ -315,6 +316,8 @@ class CarState(CarStateBase):
     self.HAS_LFA_BUTTON, self.CRUISE_BUTTON_ALT, self.CRUISE_BUTTON_LFA = (
       _get_legacy_button_capabilities(fingerprints[0])
     )
+    if self.pedal_interceptor_replaces_cruise:
+      self.CRUISE_BUTTON_ALT = False  # Match the replacement Panda profile's CLU11 input.
 
     cam_bus = CanBus(CP).CAM
     pt_bus = CanBus(CP).ECAN
@@ -586,10 +589,15 @@ class CarState(CarStateBase):
       ret.cruiseState.enabled = len(payload) == 8 and bool(int.from_bytes(payload, "little") & (1 << bit))
       cruise_valid = (cp.ts_nanos[message][signal] > 0 and len(payload) == 8 and
                       cp.message_states[address].valid(cp._last_update_nanos, False))
-      self.pedal_interceptor_cruise_blocked = (not cruise_valid or bool(cp.vl[message][signal]) or ret.cruiseState.enabled)
-      # OEM Cruise ready/engaged takes priority. Keep Carrot's independent
-      # main-switch/controls-initialization gate as well.
-      ret.cruiseState.available = ret.cruiseState.available and not self.pedal_interceptor_cruise_blocked
+      cruise_ready = bool(cp.vl[message][signal])
+      self.pedal_interceptor_cruise_blocked = (not cruise_valid or ret.cruiseState.enabled or
+                                              cruise_ready != self.pedal_interceptor_replaces_cruise)
+      if self.pedal_interceptor_replaces_cruise:
+        # Keep standby during handover. Pedal output waits for OEM cruise to release.
+        ret.cruiseState.available = (cruise_valid and (cruise_ready or ret.cruiseState.enabled) and
+                                     self.controls_ready_count >= READY_COUNT_OK)
+      else:
+        ret.cruiseState.available = ret.cruiseState.available and not self.pedal_interceptor_cruise_blocked
       message, signal = pedal_interceptor_params.cruise_speed
       ret.cruiseState.speed = cp.vl[message][signal] * speed_conv
 
@@ -724,6 +732,10 @@ class CarState(CarStateBase):
 
     if prev_main_buttons == 0 and self.main_buttons[-1] != 0:
       self.main_enabled = not self.main_enabled
+
+    # Release on the physical MAIN input before the next LABEL11 update.
+    if self.pedal_interceptor_replaces_cruise and self.main_buttons[-1]:
+      ret.cruiseState.available = False
 
     ret.vehicleGps = self.vehicle_gps.update(cp, ret.vEgoRaw, ret.gearShifter == GearShifter.reverse)
     return ret
@@ -1699,4 +1711,6 @@ class CarState(CarStateBase):
                                     PEDAL_INTERCEPTOR_BUS)
       # Register the configured OEM CC input at its actual receive rate.
       parsers[Bus.pt]._add_message(pedal_interceptor_params.cruise_ready[0], 10)
+      if pedal_interceptor_replaces_cruise(CP):
+        parsers[Bus.pt]._add_message("CLU11", 50)
     return parsers

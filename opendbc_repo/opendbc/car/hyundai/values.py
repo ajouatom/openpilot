@@ -89,6 +89,7 @@ class HyundaiSafetyFlags(IntFlag):
   CANFD_SPAS_BLINKERS = 4096
   PEDAL_INTERCEPTOR = 8192
   PEDAL_INTERCEPTOR_RAY = 16384
+  PEDAL_INTERCEPTOR_REPLACE_CRUISE = 32768
 
 
 class HyundaiFlags(IntFlag):
@@ -148,6 +149,7 @@ class HyundaiFlags(IntFlag):
   CANFD_SPAS_BLINKERS = 2 ** 28
 
   PEDAL_INTERCEPTOR = 2 ** 29
+  PEDAL_INTERCEPTOR_REPLACE_CRUISE = 2 ** 30
 
   CC_ONLY_CAR = 2 ** 31
 
@@ -1100,6 +1102,11 @@ PEDAL_INTERCEPTOR_PARAMS: dict[str, PedalInterceptorParams] = {
 def get_pedal_interceptor_params(CP) -> PedalInterceptorParams | None:
   required_flags = HyundaiFlags.CC_ONLY_CAR | HyundaiFlags.PEDAL_INTERCEPTOR
   return PEDAL_INTERCEPTOR_PARAMS.get(CP.carFingerprint) if CP.flags & required_flags == required_flags else None
+
+
+def pedal_interceptor_replaces_cruise(CP) -> bool:
+  return (bool(getattr(CP, "flags", 0) & HyundaiFlags.PEDAL_INTERCEPTOR_REPLACE_CRUISE) and
+          get_pedal_interceptor_params(CP) is not None)
 
 if __name__ == "__main__":
   cars = []

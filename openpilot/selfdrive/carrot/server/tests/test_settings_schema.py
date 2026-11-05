@@ -267,7 +267,7 @@ def test_c3x_lite_hardware_setting_is_exposed(settings, params):
   assert device_hardware["params"] == ["CommaPedalEnabled", "HardwareC3xLite"]
 
 
-def test_comma_pedal_toggle_is_default_off_and_under_device_hardware(settings, params):
+def test_comma_pedal_modes_are_default_off_and_under_device_hardware(settings, params):
   by_name = {p["name"]: p for p in params}
   pedal = by_name["CommaPedalEnabled"]
   assert pedal["title"] == "Comma Pedal사용"
@@ -276,8 +276,12 @@ def test_comma_pedal_toggle_is_default_off_and_under_device_hardware(settings, p
     assert "CC_ONLY_CAR" in pedal[key] and "Cruise ready" in pedal[key]
     assert "HardwareC3xLite" not in pedal[key]
   assert "순정 크루즈 컨트롤이 우선" in pedal["descr"]
-  assert (pedal["min"], pedal["max"], pedal["default"]) == (0, 1, 0)
-  assert pedal["control"] == "toggle"
+  assert "오토인게이지를 2로 설정해야 합니다" in pedal["descr"]
+  assert "2는 오토인게이지 없이도 작동하지만, 순정 크루즈를 사용할 수 없게 됩니다" in pedal["descr"]
+  assert "설정 변경 후 기기를 재부팅하세요" in pedal["descr"]
+  assert (pedal["min"], pedal["max"], pedal["default"]) == (0, 2, 0)
+  assert pedal["control"] == "select"
+  assert pedal["options"]["ko"] == ["0 꺼짐", "1 순정 크루즈 우선", "2 순정 크루즈 대체"]
   assert pedal["risk"] == "high"
   params_keys = PARAMS_KEYS_PATH.read_text(encoding="utf-8")
   assert '{"CommaPedalEnabled", {PERSISTENT, INT, "0"}}' in params_keys
