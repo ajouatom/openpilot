@@ -512,3 +512,33 @@ def test_upper_sequence_changes_no_other_decoded_packet_fields(camera):
     expected.pop('JerkUpperLimit')
     assert actual == expected
     assert controller.phase == reference.phase
+
+
+def test_roll_after_unconfirmed_hold_brakes_until_scc_holds():
+  # route 0000007c: stopped by time (no SCC hold), then rolled back 1.55 m on zero aReq
+  controller = CanfdStopping()
+  for _ in range(20):
+    step(controller, speed=.02, previous_value=0.)
+  assert controller.phase == StopPhase.held
+  value = 0.
+  for _ in range(40):
+    cmd = step(controller, speed=.08, previous_value=value)
+    value = cmd.value
+    assert cmd.stop_req == 1 and cmd.raw == -0.5
+  assert value == pytest.approx(-0.5)
+  for _ in range(50):  # stopped again, still no SCC hold: keep braking
+    cmd = step(controller, speed=0., previous_value=cmd.value)
+    assert (cmd.stop_req, cmd.raw, cmd.value) == (1, -0.5, -0.5)
+  cmd = step(controller, speed=0., held=True, previous_value=cmd.value)
+  assert (cmd.stop_req, cmd.raw, cmd.value) == (1, 0., 0.)
+
+
+def test_unheld_roll_brake_ends_with_the_stop_request():
+  controller = CanfdStopping()
+  for _ in range(20):
+    step(controller, speed=.02, previous_value=0.)
+  step(controller, speed=.08, previous_value=0.)
+  assert step(controller, requested=False) is None
+  for _ in range(20):
+    cmd = step(controller, speed=.02, previous_value=0.)
+  assert (cmd.raw, cmd.value) == (0., 0.)
