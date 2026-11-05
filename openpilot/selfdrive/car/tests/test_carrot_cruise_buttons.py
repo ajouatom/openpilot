@@ -41,6 +41,7 @@ def make_cruise_helper(button_kph, cruise_button_mode, carrot_cruise_active, cru
   helper.carrot_cruise_active = carrot_cruise_active
   helper.autoRoadSpeedOnEngage = False
   helper.nRoadLimitSpeed = 0
+  helper._last_engaged_kph = 0
 
   CS = car.CarState(cruiseState={"standstill": False})
   CC = car.CarControl(enabled=cruise_enabled)
@@ -764,3 +765,28 @@ def test_paddle_stop_restores_set_speed_when_the_light_turns_green_before_stoppi
   helper.xState = 2
   speeds = [helper._update_cruise_state(CS, CC, 29) for _ in range(101)]
   assert speeds[:100] == [29] * 100 and speeds[100] == 60 and helper._paddle_resume_kph == 0
+
+
+@pytest.mark.parametrize("last, road_limit, expected", [
+  (64, 60, 64),   # RES+ returns to the set speed last used while engaged (11-05: a SET- at a stop had left 5)
+  (40, 60, 40),   # even below the road limit
+  (0, 50, 50),    # nothing used yet this drive: the road limit as before
+])
+def test_resume_engage_returns_to_last_engaged_speed(last, road_limit, expected):
+  helper, CS, CC = make_cruise_helper(81, 0, carrot_cruise_active=False, cruise_enabled=False, cruise_speed_initialized=False)
+  helper.v_ego_kph_set = 0
+  helper.autoRoadSpeedOnEngage, helper.nRoadLimitSpeed, helper._last_engaged_kph = True, road_limit, last
+  assert helper._update_cruise_buttons(CS, CC, 5) == expected
+
+
+@pytest.mark.parametrize("v_ego, road_limit, expected", [
+  (0, 60, 60),    # at a stop SET- used to give 5 km/h
+  (80, 60, 60),   # SET- takes the road limit, not the current speed
+  (0, 0, 5),      # unknown limit: current speed as before
+  (45, 0, 45),
+])
+def test_set_engage_starts_at_the_road_limit(v_ego, road_limit, expected):
+  helper, CS, CC = make_cruise_helper(81, 0, carrot_cruise_active=False, cruise_enabled=False)
+  helper._prepare_buttons = lambda CS, v_cruise_kph, remote=None: (v_cruise_kph, ButtonType.decelCruise, False)
+  helper.v_ego_kph_set, helper.nRoadLimitSpeed, helper._last_engaged_kph = v_ego, road_limit, 64
+  assert helper._update_cruise_buttons(CS, CC, 64) == expected

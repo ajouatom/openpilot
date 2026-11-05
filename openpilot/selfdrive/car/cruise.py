@@ -208,6 +208,7 @@ class VCruiseCarrot:
     self._steering_interlock_active = False
     self._lat_enabled = self.params.get_int("AutoEngage") > 0
     self._v_cruise_kph_at_brake = 0
+    self._last_engaged_kph = 0  # set speed last used while engaged; RES+ engage returns to it
     self.cruise_state_available_last = False
 
     self._paddle_decel_active = False
@@ -415,6 +416,9 @@ class VCruiseCarrot:
 
     self.cruise_state_available_last = CS.cruiseState.available
     self.enabled_last = CC.enabled
+    if CC.enabled and not self._paddle_decel_active:
+      # A paddle stop holds a lower hand-off speed; its set speed is the one to come back to.
+      self._last_engaged_kph = self._paddle_resume_kph if self._paddle_resume_kph > 0 else self.v_cruise_kph
 
   def initialize_v_cruise(self, CS, experimental_mode: bool) -> None:
     return
@@ -615,6 +619,10 @@ class VCruiseCarrot:
           self._soft_hold_active = 0
         elif self.carrot_cruise_active:
           self._v_cruise_kph_at_brake = 0
+        elif not CC.enabled and self._last_engaged_kph > 0:
+          # RES+ engage returns to the set speed last used while engaged, not a road limit (11-05 user)
+          v_cruise_kph = self._last_engaged_kph
+          self._v_cruise_kph_at_brake = 0
         elif self._cruise_ready or not CC.enabled or CS.cruiseState.standstill:
           if self._v_cruise_kph_at_brake > 0:
             v_cruise_kph = max(v_cruise_kph, self._v_cruise_kph_at_brake)
@@ -650,7 +658,8 @@ class VCruiseCarrot:
           self._paddle_decel_active = True
           pass
         elif not CC.enabled:
-          v_cruise_kph = max(self.v_ego_kph_set, self._cruise_speed_min)
+          # SET- engage starts at the road speed limit; at a stop the current speed gave 5 km/h (11-05, §46)
+          v_cruise_kph = self.nRoadLimitSpeed if self.nRoadLimitSpeed > 0 else max(self.v_ego_kph_set, self._cruise_speed_min)
         elif self.v_ego_kph_set > v_cruise_kph + 2 and self._cruise_button_mode in [2, 3]:
           v_cruise_kph = max(self.v_ego_kph_set, self._cruise_speed_min)
         elif self._cruise_button_mode in [0, 1]:
