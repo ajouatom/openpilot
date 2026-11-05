@@ -305,6 +305,10 @@ class HudRenderer(Widget):
     self._overlay.draw(rect, self._paint, key, enabled=state is not None and state.enabled,
                        urgent=state is not None and state.urgent)
     self._draw_cruise_speed_animation(rect)
+    from openpilot.common.indicator_display import draw as draw_indicator
+    badge_width = min(500, rect.width * .62)
+    draw_indicator(rect.x + (rect.width-badge_width)/2, rect.y+rect.height*.16,
+                   badge_width, self._font_display, 26 if rect.width > 1200 else 19)
 
   def _paint(self, rect: rl.Rectangle) -> None:
 

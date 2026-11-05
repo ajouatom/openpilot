@@ -17,6 +17,9 @@ from openpilot.selfdrive.modeld.tests.test_precompiled_model import Response, ca
   ('ValueError: invalid precompiled model output', 'boot_validation', True, False),
   ('ValueError: invalid precompiled model output: count=1, expected=2', 'inference', True, False),
   ('ValueError: checkpoint mismatch', 'inference', True, False),
+  ('TimeoutError: flush_tlb timeout. Timed out after 10000 ms, condition not met: 0 != 1', 'load', True, True),
+  ('TimeoutError: flush_tlb timeout. Timed out after 10000 ms, condition not met: 0 != 1', 'load', False, False),
+  ('TimeoutError: flush_tlb timeout. Timed out after 10000 ms, condition not met: 0 != 1', 'inference', True, False),
   ('NonFiniteModelOutput: invalid\nValueError: checksum mismatch', 'inference', True, False),
 ])
 def test_reboot_retry_rehashes_artifacts_and_requires_new_smoke_test(tmp_path, monkeypatch, capsys, error, phase, old_boot, allowed):

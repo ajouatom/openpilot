@@ -1,0 +1,23 @@
+VERSION ""
+
+NS_ :
+BS_:
+BU_: INTERCEPTOR NEO
+
+BO_ 512 GAS_COMMAND: 6 NEO
+ SG_ GAS_COMMAND : 7|16@0+ (0.336,-88.704) [0|255] "" INTERCEPTOR
+ SG_ GAS_COMMAND2 : 23|16@0+ (0.166,-82.502) [0|255] "" INTERCEPTOR
+ SG_ ENABLE : 39|1@0+ (1,0) [0|1] "" INTERCEPTOR
+ SG_ COUNTER_PEDAL : 35|4@0+ (1,0) [0|15] "" INTERCEPTOR
+ SG_ CHECKSUM_PEDAL : 47|8@0+ (1,0) [0|255] "" INTERCEPTOR
+
+BO_ 513 GAS_SENSOR: 6 INTERCEPTOR
+ SG_ INTERCEPTOR_GAS : 7|16@0+ (0.672,-177.408) [0|255] "" NEO
+ SG_ INTERCEPTOR_GAS2 : 23|16@0+ (0.332,-165.004) [0|255] "" NEO
+ SG_ STATE : 39|4@0+ (1,0) [0|15] "" NEO
+ SG_ COUNTER_PEDAL : 35|4@0+ (1,0) [0|15] "" NEO
+ SG_ CHECKSUM_PEDAL : 47|8@0+ (1,0) [0|255] "" NEO
+
+VAL_ 513 STATE 5 "FAULT_TIMEOUT" 4 "FAULT_STARTUP" 3 "FAULT_SCE" 2 "FAULT_SEND" 1 "FAULT_BAD_CHECKSUM" 0 "NO_FAULT" ;
+
+CM_ "Ray EV experimental command expansion x2. Only GAS_COMMAND factors and offsets are halved from the original (0.672,-177.408)/(0.332,-165.004), preserving raw neutral 264/497 while doubling each command's unrounded increment above neutral. This is a requested output-map expansion, not a measured calibration or proof of doubled ECU pedal position/acceleration. With target cap 0.70, rounded command maxima are 795/1572. GAS_SENSOR retains the original input scaling; raw driver thresholds are unchanged. The 0x200/0x201 protocol, counter and CRC8 are unchanged. Pedal firmware/input transforms and voltage calibration are not modified.";

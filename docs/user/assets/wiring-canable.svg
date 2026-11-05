@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1100" height="530" viewBox="0 0 1100 530">
+<rect width="1100" height="530" rx="20" fill="#f4f7fb"/>
+<g font-family="Malgun Gothic,Arial,sans-serif" fill="#192b3e">
+<text x="45" y="53" font-size="29" font-weight="700">CANable 2.0 차량 배선 / Vehicle wiring</text>
+<text x="45" y="86" font-size="17">그림의 선 색은 구분용입니다. 실제 케이블 색이 아니라 단자의 글자를 확인하세요.</text>
+<rect x="45" y="135" width="230" height="110" rx="14" fill="white" stroke="#a6b6c7" stroke-width="2"/>
+<text x="160" y="177" text-anchor="middle" font-size="26" font-weight="700">Jetson</text>
+<text x="160" y="213" text-anchor="middle" font-size="19">USB 포트 / USB port</text>
+<path d="M275 191 H370" stroke="#6554c0" stroke-width="10" fill="none"/>
+<rect x="370" y="130" width="335" height="282" rx="18" fill="#fff" stroke="#548b75" stroke-width="3"/>
+<text x="537" y="177" text-anchor="middle" font-size="27" font-weight="700">CANable 2.0</text>
+<text x="389" y="207" font-size="17">USB</text>
+<rect x="398" y="226" width="278" height="44" rx="8" fill="#eef4f0"/>
+<text x="537" y="254" text-anchor="middle" font-size="18">BOOT 제거 · 120Ω OFF</text>
+<text x="620" y="307" text-anchor="middle" font-size="20">CANH</text>
+<text x="620" y="350" text-anchor="middle" font-size="20">CANL</text>
+<text x="620" y="391" text-anchor="middle" font-size="20">GND</text>
+<path d="M675 300 H815" stroke="#2474d2" stroke-width="6"/>
+<path d="M675 343 H815" stroke="#16845d" stroke-width="6"/>
+<path d="M675 385 H815" stroke="#657382" stroke-width="4" stroke-dasharray="10 6"/>
+<rect x="815" y="256" width="240" height="157" rx="14" fill="white" stroke="#a6b6c7" stroke-width="2"/>
+<text x="840" y="307" font-size="20">차량 CAN H</text>
+<text x="840" y="350" font-size="20">같은 버스 CAN L</text>
+<text x="840" y="391" font-size="19">확인된 CAN 기준접지</text>
+<text x="821" y="227" font-size="18" font-weight="700">차량 배선도로 확인한 연결점</text>
+<text x="45" y="460" font-size="18">• 기존 종단이 있는 차량 CAN에 분기할 때의 그림입니다. 커넥터와 핀 번호는 차량마다 다릅니다.</text>
+<text x="45" y="492" font-size="18">• H/L만 있는 기존 하네스는 USB 쪽 접지와 기준이 공유되는지 확인하세요. 차량 12 V 연결 금지.</text>
+</g></svg>

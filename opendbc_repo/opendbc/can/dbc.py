@@ -34,6 +34,7 @@ class SignalType:
   TESLA_CHECKSUM = 11
   PSA_CHECKSUM = 12
   VOLKSWAGEN_MLB_CHECKSUM = 13
+  PEDAL_INTERCEPTOR_CHECKSUM = 14
 
 
 @dataclass
@@ -206,6 +207,15 @@ def get_checksum_state(dbc_name: str) -> ChecksumState | None:
   return None
 
 
+def pedal_interceptor_checksum(address: int, sig: Signal, d: bytearray) -> int:
+  crc = 0xFF
+  for byte in reversed(d[:-1]):
+    crc ^= byte
+    for _ in range(8):
+      crc = ((crc << 1) ^ (0xD5 if crc & 0x80 else 0)) & 0xFF
+  return crc
+
+
 def set_signal_type(sig: Signal, chk: ChecksumState | None, dbc_name: str, line_num: int) -> None:
   sig.calc_checksum = None
   if chk:
@@ -215,4 +225,17 @@ def set_signal_type(sig: Signal, chk: ChecksumState | None, dbc_name: str, line_
       sig.type = chk.checksum_type
       sig.calc_checksum = chk.calc_checksum
     elif sig.name == "COUNTER":
+      sig.type = SignalType.COUNTER
+
+  # Scope the new protocol to its own DBC. Existing interceptor DBCs retain
+  # their original checksum/counter handling, including when the toggle is on.
+  if dbc_name == "pedal_interceptor":
+    if sig.name == "CHECKSUM_PEDAL":
+      if sig.size != 8:
+        raise RuntimeError(f"CHECKSUM_PEDAL not 8 bits long in {dbc_name}:{line_num}")
+      sig.type = SignalType.PEDAL_INTERCEPTOR_CHECKSUM
+      sig.calc_checksum = pedal_interceptor_checksum
+    elif sig.name == "COUNTER_PEDAL":
+      if sig.size != 4:
+        raise RuntimeError(f"COUNTER_PEDAL not 4 bits long in {dbc_name}:{line_num}")
       sig.type = SignalType.COUNTER

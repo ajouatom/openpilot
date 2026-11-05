@@ -40,7 +40,7 @@ def validation_key(path: Path, device: dict, sizes: tuple[tuple[int, int], ...])
   sources = [
     'openpilot/selfdrive/modeld/' + name for name in (
       'precompiled_validation.py', 'precompiled_runner.py', 'precompiled_worker.py', 'precompiled_model.py',
-      'egpu_output_recovery.py', 'output_validation.py',
+      'egpu_output_recovery.py', 'output_validation.py', 'egpu_usb_wait.py', 'egpu_usb_wrap.py',
       'generic_model_runtime.py', 'precompiled_artifact.py', 'local_gpu_warp.py', 'helpers.py', 'parse_model_outputs.py', 'constants.py',
     )
   ] + ['openpilot/common/file_chunker.py', 'openpilot/system/camerad/cameras/nv12_info.py']

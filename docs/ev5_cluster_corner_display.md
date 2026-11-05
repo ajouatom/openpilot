@@ -327,3 +327,62 @@ running before its installation cannot retroactively produce this new alert.
 Focused desktop tests cover real Git changes/worktrees, reverting/restarting,
 read failures, alert timing, translations, and unchanged engagement state.
 Device display/timing validation remains separate from these tests.
+
+
+## Follow-up on 2026-11-03
+
+The eight archived full logs confirm separate stock LFA, SCC and HDA states.
+In the recent segment 38, stock MAIN input precedes SCC activation at 35.511 s,
+HDA activation at 35.594 s and the return of corner display geometry. SCC turns
+off at 38.121 s and HDA at 38.202 s. Segment 45 also contains stock LFA/SCC
+simultaneous activation with HDA remaining off, so additional OEM admission
+conditions remain unresolved. Both recent segments keep Carrot enabled false.
+AutoEngage is zero, but that setting alone does not establish engagement state.
+
+The existing native ALT2 correction remains present. Automatic LFA button
+pulses reach bus 130, yet stock LFA activation follows physical input in these
+captures. Emission of an activation request does not establish ECU acceptance.
+
+The owner requests stock SCC MAIN activation while its control output is replaced.
+The Wip controller now requests MAIN independently of Carrot engagement when
+CameraSCC, openpilot longitudinal control and corner radar are enabled, stock
+SCC/LFA messages exist, CAN is valid, gear is Drive, speed is finite and above
+3 m/s, and brake, AutoHold and parking brake are released. The normal CameraSCC
+stock-longitudinal configuration fails this admission condition.
+
+Both ALT2 and legacy button paths use their existing pulse timing and transport.
+Physical button input takes precedence for the added MAIN request. Existing
+MAIN-on states end that request, including canceled SCC states. SET and
+standstill resume keep their Carrot-enabled requirement. Vehicle control-side
+SCC output, Panda forwarding and safety policy retain their existing behavior.
+
+258 focused desktop packet/entry-point tests and 25 Wiki tests pass. Native
+ALT2 forwarding tests are included in Signal integration CI. Live ADAS response
+and physical cluster rendering require follow-up verification after Git Pull
+and comma restart. This change does not establish a cure for ineffective LFA
+requests or the remaining HDA activation conditions. Raw evidence stays private.
+
+
+## Steering-intent correction on 2026-11-04
+
+Owners report steering activation after startup with AutoEngage disabled following
+the independent OEM MAIN change. The source path reproduces this mechanism.
+`_update_canfd_main_enabled` adopted OEM `MainMode_ACC` into `main_enabled`, which
+raised `cruiseState.available`. `VCruiseCarrot.update_v_cruise` armed lateral intent
+on that rising edge, and AlwaysLateral could then permit steering.
+
+The earlier packet tests checked request admission and transport, but missed this
+feedback path into driver intent. CameraSCC with openpilot longitudinal control
+now keeps OEM MAIN feedback separate from the driver's main selection. Initialization
+still derives from AutoEngage, and physical MAIN/RES/SET update the driver's choice.
+The driver LFA toggle remains effective across subsequent OEM MAIN transitions.
+The scope is the CAN-FD CameraSCC state receiver. The generic cruise state machine,
+stock-longitudinal path and existing MAIN request transport retain their code.
+
+A regression uses the production state-receiver helper, full VCruiseCarrot updates,
+real button events and the production lateral-permission function. Before the fix,
+seven of nine cases fail. All nine pass with the fix, including AutoEngage 0/1/2,
+LFA on/off, MAIN and RES/SET intent, repeated OEM state transitions and AlwaysLateral.
+The broader desktop state/button/pedal checks pass 368 cases with UTF-8 enabled.
+The fix is delivered by Git Pull and comma restart. Physical vehicle confirmation
+remains pending, and individual reports have not yet been matched to drive logs.

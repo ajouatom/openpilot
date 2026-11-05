@@ -13,11 +13,16 @@ sys.path.insert(0, str(Path(__file__).parent))
 from build_host_bundle import export_members, PATHS, ROOT
 
 
-def test_selected_pin_is_exported_under_both_bootstrap_filenames():
+@pytest.mark.parametrize('catalog_pin', [False, True])
+def test_selected_pin_is_exported_under_both_bootstrap_filenames(catalog_pin):
   prefix = 'openpilot/selfdrive/modeld/jetlink/'
   selected = json.dumps({'sha256': 'b' * 64, 'nbytes': 814591106}).encode()
   files = {prefix + 'cinque_v2.json': b'{"sha256":"old"}', prefix + 'jetson_model.json': selected,
            'tools/jetlink/server.py': b'# committed runtime\n'}
+  model_path = 'openpilot/selfdrive/modeld/model_catalog/light-speed.json'
+  if catalog_pin:
+    selected = (ROOT / model_path).read_bytes()
+    files[model_path] = selected
   original, result = io.BytesIO(), io.BytesIO()
   with tarfile.open(fileobj=original, mode='w') as archive:
     for name, data in files.items():
@@ -26,7 +31,7 @@ def test_selected_pin_is_exported_under_both_bootstrap_filenames():
       archive.addfile(member, io.BytesIO(data))
   original.seek(0)
   with tarfile.open(fileobj=original) as source, tarfile.open(fileobj=result, mode='w') as target:
-    export_members(source, target)
+    export_members(source, target, model_path if catalog_pin else None)
   result.seek(0)
   with tarfile.open(fileobj=result) as archive:
     assert archive.extractfile(prefix + 'cinque_v2.json').read() == selected

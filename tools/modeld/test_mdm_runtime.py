@@ -117,3 +117,92 @@ def test_pinned_state_checkpoint_restores_in_place_aliases(monkeypatch):
   for name, alias in aliases.items():
     np.testing.assert_array_equal(alias.numpy(), np.zeros_like(originals[name]))
     np.testing.assert_array_equal(runtime.queues[name].numpy(), np.zeros_like(originals[name]))
+
+
+@pytest.mark.skipif(os.getenv('MDM_COMPILED_COPIES') != '1', reason='captured transfers require the d39227 runtime')
+def test_compiled_transfers_replay_mutable_inputs_and_current_outputs(monkeypatch):
+  monkeypatch.syspath_prepend(os.environ['MDM_RUNTIME_ROOT'])
+  monkeypatch.setenv('DEV', 'CPU')
+  from tinygrad import Tensor, dtypes
+  from openpilot.selfdrive.modeld import generic_model_runtime as generic
+
+  runtime = object.__new__(generic.GenericModelRuntime)
+  runtime.device, runtime.compiled_copies = 'CPU:1', True
+  # Distinct CPU devices exercise actual copy schedules rather than a to-self no-op.
+  source = Tensor(np.zeros((1, 18452), np.float32), device=runtime.device).realize()
+  runtime.outputs = {'outputs': source}
+  shared = np.zeros(3244544, np.uint8)
+  captured = []
+  compile_copy = generic.compile_copy
+  def capture(tensor):
+    captured.append(tensor)
+    return compile_copy(tensor)
+  monkeypatch.setattr(generic, 'compile_copy', capture)
+  runtime.bind_transfers(shared)
+  assert len(captured) == 2
+  storage = runtime.device_buffer
+  view = generic.input_view(storage, (2, 3), dtypes.float32, 128)
+  original = np.arange(18452, dtype=np.float32).reshape(1, -1)
+  for frame in range(16):
+    shared[:] = frame
+    shared[128:152].view(np.float32)[:] = frame + np.arange(6, dtype=np.float32)
+    runtime.copy_inputs()
+    np.testing.assert_array_equal(view.numpy(), (frame + np.arange(6)).reshape(2, 3))
+    np.testing.assert_array_equal(captured[0].numpy(), shared)
+    source._buffer().copy_from(Tensor(original + frame, device='NPY')._buffer())
+    result = runtime.copy_outputs().numpy()
+    np.testing.assert_array_equal(result, original + frame)
+    assert runtime.device_buffer is storage and len(captured) == 2
+  # Non-finite results must reach the existing validator, never a cached good result.
+  source._buffer().copy_from(Tensor(np.full_like(original, np.nan), device='NPY')._buffer())
+  assert np.isnan(runtime.copy_outputs().numpy()).all()
+
+
+@pytest.mark.skipif(os.getenv('MDM_COMPILED_COPIES') != '1', reason='USB wrap rule belongs to d39227')
+def test_usb_ring_wrap_cast_zero_uses_usb_fill(monkeypatch):
+  monkeypatch.syspath_prepend(os.environ['MDM_RUNTIME_ROOT'])
+  from tinygrad.device import Compiled
+  from tinygrad.dtype import dtypes
+  from tinygrad.uop.ops import UOp, Ops
+  from tinygrad.runtime.support import usb
+  from openpilot.selfdrive.modeld.egpu_usb_wrap import configure_usb_wrap
+  from openpilot.selfdrive.modeld.egpu_usb_wait import LIGHT_SPEED_RUNTIME_SHA
+
+  original = Compiled.pm_lower
+  monkeypatch.setattr(Compiled, 'pm_lower', original)
+  monkeypatch.setattr(usb, '_carrot_sdma_wrap_fixed', False, raising=False)
+  destination = UOp.alloc((16,), dtypes.uint8, device='AMD', name='ring').index(0)
+  zeros = UOp.alloc((16,), dtypes.uint8, device='CPU', name='zeros')
+  sentinel = UOp(Ops.NOOP)
+  calls = []
+  def usb_fill(dst, src, n, fill=False):
+    calls.append((dst, src, n, fill))
+    return sentinel
+  monkeypatch.setattr(usb, 'usb_memcpy', usb_fill)
+  monkeypatch.setattr(usb, 'usb_zeros', lambda device: zeros)
+  zero = UOp.const(0)
+  cast_zero = zero.cast(dtypes.uint64)
+  length = UOp.const(4, dtypes.uint64)  # last dword before wrap
+  def memset(value):
+    return UOp.custom_function('memset', dtype=dtypes.uint64).call(destination, value, length)
+  # The exact pinned matcher misses a cast zero; no device access is needed
+  # to reproduce this compiler-rule bug. Native USB ring execution is separate.
+  if os.getenv('MDM_USB_WRAP_UPSTREAM') == '1':
+    from openpilot.selfdrive.modeld.egpu_usb_wait import LIGHT_SPEED_2_RUNTIME_SHA
+    assert not configure_usb_wrap({'runtime': {'sha256': LIGHT_SPEED_2_RUNTIME_SHA}})
+    assert Compiled.pm_lower is original
+    for value in (zero, cast_zero):
+      assert original.rewrite(memset(value)) is sentinel
+      assert calls[-1] == (destination, zeros.index(0), length, True)
+    return
+  assert original.rewrite(memset(cast_zero)) is None
+  assert configure_usb_wrap({'runtime': {'sha256': LIGHT_SPEED_RUNTIME_SHA}})
+  fixed = Compiled.pm_lower
+  assert configure_usb_wrap({'runtime': {'sha256': LIGHT_SPEED_RUNTIME_SHA}})
+  assert Compiled.pm_lower is fixed
+  for value in (zero, cast_zero):
+    assert fixed.rewrite(memset(value)) is sentinel
+    assert calls[-1] == (destination, zeros.index(0), length, True)
+  calls.clear()
+  assert fixed.rewrite(memset(UOp.const(7, dtypes.int))) is None
+  assert not calls

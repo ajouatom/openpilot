@@ -68,7 +68,7 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
-      - run: python -m pip install pytest numpy
+      - run: python -m pip install pytest numpy pycapnp
       - name: Check speed mismatch, original deceleration and planner routing
         run: >-
           python -m pytest -c /dev/null --rootdir=. --confcutdir=openpilot/selfdrive/controls/tests -q
@@ -111,6 +111,13 @@ jobs:
             opendbc_repo/opendbc/car/hyundai/tests/test_bosch_mirror_birth.py \
             opendbc_repo/opendbc/car/hyundai/tests/test_bosch_mirror_m3.py \
             opendbc_repo/opendbc/car/hyundai/tests/test_bosch_road_edge.py
+      - name: Check temporary navigation destinations and native Params
+        run: >-
+          python -m pytest -o addopts='' -q
+          openpilot/common/tests/test_params.py::TestParams::test_temporary_navigation_destination_lifecycle
+          openpilot/selfdrive/navigation/tests/test_route_engine.py
+          openpilot/selfdrive/carrot/server/tests/test_navigation_map.py
+          openpilot/selfdrive/navd/tests/test_instruction_serialization.py
       - name: Check passive camera SOF diagnostics
         run: openpilot/system/camerad/test/test_camera_event_timing
       - name: Check Hyundai navigation and lever features and RAV4 ARS integration
@@ -122,6 +129,8 @@ jobs:
           opendbc_repo/opendbc/car/hyundai/tests/test_blink_hold.py
           opendbc_repo/opendbc/car/hyundai/tests/test_blinker_stalks.py
           opendbc_repo/opendbc/car/hyundai/tests/test_ccnc_cluster.py
+          opendbc_repo/opendbc/car/hyundai/tests/test_carstate_buttons.py
+          openpilot/selfdrive/car/tests/test_camera_scc_steering_intent.py
           opendbc_repo/opendbc/car/toyota/tests/test_ars510_carrot.py
           opendbc_repo/opendbc/car/toyota/tests/test_ars510_display.py
           openpilot/selfdrive/car/tests/test_toyota_pcm_mode0.py

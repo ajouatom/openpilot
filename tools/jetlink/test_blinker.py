@@ -160,8 +160,13 @@ def test_sender_uses_separate_bounded_message_and_expires_clock_anchor(monkeypat
   clock, sent = [1.], []
   monkeypatch.setattr(protocol.time, 'monotonic', lambda: clock[0])
   value = {'stamp':1., 'ok':True, 'events':[{'id':'one','time':.95,'direction':'left'}]}
-  monkeypatch.setattr(protocol, 'Process', lambda *a: SimpleNamespace(latest=lambda:value, close=lambda:None, send=lambda _:True))
-  client = SimpleNamespace(last_state={}, _next_seq=lambda:1,
+  monkeypatch.setattr(protocol, 'Process', lambda *a: SimpleNamespace(latest=lambda:value, close=lambda **kw:None, send=lambda _:True,
+                                                                  process=SimpleNamespace(poll=lambda:None)))
+  owner = SimpleNamespace(held=False, name='USB CAN')
+  owner.acquire = lambda ready: setattr(owner, 'held', ready) or ready
+  owner.release = lambda: setattr(owner, 'held', False)
+  monkeypatch.setattr(protocol, 'Owner', lambda _: owner)
+  client = SimpleNamespace(last_state={'carrot_blinker':{'token':'t','clock':100.,'available':True,'idle':True,'generation':'one'}}, _next_seq=lambda:1,
                            _expect=lambda *a:SimpleNamespace(payload=protocol.encode({'ready':True,'token':'t','clock':100.})),
                            t=SimpleNamespace(send_json=lambda *a:None, send=lambda *a:sent.append(a)))
   sender = protocol.Sender(client, {'carrot_host':'jetson',protocol.CAPABILITY:True})
@@ -172,7 +177,8 @@ def test_sender_uses_separate_bounded_message_and_expires_clock_anchor(monkeypat
   clock[0] = 4.1
   value['stamp'] = clock[0]
   sender.send(client)
-  assert len(sent) == 1
+  assert len(sent) == 2 and json.loads(sent[-1][2][0])['ok'] is False
+  assert sender.worker is None and not owner.held
   sender.close()
 
 
@@ -274,7 +280,8 @@ def test_bundled_driver_sources_match_pinned_manifest():
     assert entry['url'].startswith('https://raw.githubusercontent.com/gregkh/linux/v5.15.148/')
 
 
-def test_source_uses_time_after_receiving_vehicle_messages(monkeypatch):
+@pytest.mark.parametrize('ble,fingerprint', [(False, 'HYUNDAI_IONIQ_5_PE'), (True, 'ANOTHER_CAR')])
+def test_source_uses_time_after_receiving_vehicle_messages(monkeypatch, ble, fingerprint):
   import blink_source as source
   import types
   from contextlib import nullcontext
@@ -289,7 +296,7 @@ def test_source_uses_time_after_receiving_vehicle_messages(monkeypatch):
   fake_params.Params = lambda: SimpleNamespace(get=lambda _:b'car-params', get_int=lambda _:0)
   fake_cereal = types.ModuleType('openpilot.cereal')
   fake_cereal.messaging = SimpleNamespace(SubMaster=lambda _:sm)
-  fake_cereal.car = SimpleNamespace(CarParams=SimpleNamespace(from_bytes=lambda _:nullcontext(SimpleNamespace(carFingerprint='HYUNDAI_IONIQ_5_PE'))))
+  fake_cereal.car = SimpleNamespace(CarParams=SimpleNamespace(from_bytes=lambda _:nullcontext(SimpleNamespace(carFingerprint=fingerprint))))
   monkeypatch.setitem(sys.modules, 'openpilot.common.params', fake_params)
   monkeypatch.setitem(sys.modules, 'openpilot.cereal', fake_cereal)
   sock = SimpleNamespace(setblocking=lambda _:None, recv=lambda _:b'', send=lambda raw:sent.append(json.loads(raw)))
@@ -299,6 +306,7 @@ def test_source_uses_time_after_receiving_vehicle_messages(monkeypatch):
   monkeypatch.setattr(source.time, 'sleep', lambda _:None)
   monkeypatch.setattr(model, 'read_json', lambda *a:{})
   monkeypatch.setattr(model, 'config', dict)
-  source.main(0)
+  source.main(0, ble=ble)
   assert len(sent) == 1 and sent[0]['ok'] is True
   assert sent[0]['stamp'] == clock[0]
+  assert sent[0]['b1_hold'] == ble

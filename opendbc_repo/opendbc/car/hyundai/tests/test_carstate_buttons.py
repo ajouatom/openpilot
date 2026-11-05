@@ -3,7 +3,7 @@ from types import SimpleNamespace
 import pytest
 
 from opendbc.car.hyundai.carstate import CarState, _get_legacy_button_capabilities
-from opendbc.car.hyundai.values import Buttons
+from opendbc.car.hyundai.values import Buttons, HyundaiFlags
 
 
 def make_carstate(*, lfa_button=False, cruise_button_alt=False, lfa_button_alt=False):
@@ -14,9 +14,9 @@ def make_carstate(*, lfa_button=False, cruise_button_alt=False, lfa_button_alt=F
   return carstate
 
 
-def make_canfd_main_carstate(*, main_enabled=True, manual_main_off_latched=False, main_mode_acc=True):
+def make_canfd_main_carstate(*, main_enabled=True, manual_main_off_latched=False, main_mode_acc=True, camera_scc=False):
   carstate = CarState.__new__(CarState)
-  carstate.CP = SimpleNamespace(openpilotLongitudinalControl=True)
+  carstate.CP = SimpleNamespace(openpilotLongitudinalControl=True, flags=HyundaiFlags.CAMERA_SCC if camera_scc else 0)
   carstate.main_enabled = main_enabled
   carstate.manual_main_off_latched = manual_main_off_latched
   carstate.MainMode_ACC = main_mode_acc
@@ -120,9 +120,30 @@ def test_canfd_cruise_enable_button_clears_manual_main_off(button):
   assert not carstate.manual_main_off_latched
 
 
-def test_canfd_camera_main_still_enables_cruise_without_manual_off():
+def test_non_camera_scc_main_still_enables_cruise_without_manual_off():
   carstate = make_canfd_main_carstate(main_enabled=False)
 
   carstate._update_canfd_main_enabled(Buttons.NONE, main_button_released=False)
 
   assert carstate.main_enabled
+
+
+@pytest.mark.parametrize("auto_engage", (0, 1, 2))
+def test_camera_scc_automatic_main_preserves_driver_initialization(auto_engage):
+  state = make_canfd_main_carstate(main_enabled=auto_engage == 2, camera_scc=True)
+  for stock_main in (False, True, True, False, True):
+    state.MainMode_ACC = stock_main
+    state._update_canfd_main_enabled(Buttons.NONE, main_button_released=False)
+    assert state.main_enabled == (auto_engage == 2)
+
+
+@pytest.mark.parametrize("button", (Buttons.RES_ACCEL, Buttons.SET_DECEL, Buttons.NONE))
+def test_camera_scc_driver_can_enable_then_disable_with_oem_main_still_on(button):
+  state = make_canfd_main_carstate(main_enabled=False, camera_scc=True)
+  state._update_canfd_main_enabled(button, main_button_released=button == Buttons.NONE)
+  assert state.main_enabled
+  state._update_canfd_main_enabled(Buttons.NONE, main_button_released=True)
+  assert not state.main_enabled and state.manual_main_off_latched
+  for _ in range(20):
+    state._update_canfd_main_enabled(Buttons.NONE, main_button_released=False)
+    assert not state.main_enabled

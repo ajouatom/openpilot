@@ -98,3 +98,44 @@ def test_schema_roundtrip_and_legacy_defaults():
   msg.tbtRightRearBlocked = False
   with structs.CarState.from_bytes(msg.to_bytes()) as decoded:
     assert decoded.tbtRearInputsAvailable and not decoded.tbtRightRearBlocked
+
+
+
+def test_tbt_bsd_only_does_not_need_any_corner_message_or_gap():
+  from opendbc.car.hyundai.rear_gap import tbt_bsd_inputs
+  camera, bsm, _ = inputs(25.0)
+  assert tbt_bsd_inputs(bsm, camera._last_update_nanos) == (True, False)
+  camera.vl.clear()
+  camera.dat.clear()
+  assert tbt_bsd_inputs(bsm, camera._last_update_nanos) == (True, False)
+
+
+@pytest.mark.parametrize('field', ['FR_INDICATOR', 'INDICATOR_RIGHT_TWO', 'INDICATOR_RIGHT_FOUR'])
+def test_each_oem_right_warning_blocks_tbt(field):
+  from opendbc.car.hyundai.rear_gap import tbt_bsd_inputs
+  camera, bsm, _ = inputs()
+  bsm.vl['BLINDSPOTS_REAR_CORNERS'][field] = 1
+  assert tbt_bsd_inputs(bsm, camera._last_update_nanos) == (True, True)
+
+
+@pytest.mark.parametrize('fault', ['old', 'future', 'missing_stamp', 'short_frame', 'bus_timeout', 'missing_field', 'absent'])
+def test_tbt_bsd_missing_is_not_clear(fault):
+  from opendbc.car.hyundai.rear_gap import tbt_bsd_inputs
+  camera, bsm, _ = inputs()
+  name = 'BLINDSPOTS_REAR_CORNERS'
+  now = camera._last_update_nanos
+  if fault == 'old':
+    now += REAR_INPUT_MAX_AGE_NS + 1
+  elif fault == 'future':
+    bsm.ts_nanos[name]['COUNTER'] += 1
+  elif fault == 'missing_stamp':
+    bsm.ts_nanos[name] = {}
+  elif fault == 'short_frame':
+    bsm.dat[0x1BA] = bytes(8)
+  elif fault == 'bus_timeout':
+    bsm.bus_timeout = True
+  elif fault == 'missing_field':
+    del bsm.vl[name]['FR_INDICATOR']
+  else:
+    bsm = None
+  assert tbt_bsd_inputs(bsm, now) == (False, True)

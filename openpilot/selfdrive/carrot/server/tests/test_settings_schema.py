@@ -264,7 +264,26 @@ def test_c3x_lite_hardware_setting_is_exposed(settings, params):
 
   vehicle = next(category for category in settings["menu"] if category["id"] == "VEHICLE")
   device_hardware = next(group for group in vehicle["groups"] if group["id"] == "VEH_DEVICE")
-  assert device_hardware["params"] == ["HardwareC3xLite"]
+  assert device_hardware["params"] == ["CommaPedalEnabled", "HardwareC3xLite"]
+
+
+def test_comma_pedal_toggle_is_default_off_and_under_device_hardware(settings, params):
+  by_name = {p["name"]: p for p in params}
+  pedal = by_name["CommaPedalEnabled"]
+  assert pedal["title"] == "Comma Pedal사용"
+  assert pedal["descr"].startswith("ACC 미 장착 차량에서 Comma Pedal 장치를 통한 종방향 제어를 허용합니다.")
+  for key in ("descr", "edescr", "cdescr"):
+    assert "CC_ONLY_CAR" in pedal[key] and "Cruise ready" in pedal[key]
+    assert "HardwareC3xLite" not in pedal[key]
+  assert "순정 크루즈 컨트롤이 우선" in pedal["descr"]
+  assert (pedal["min"], pedal["max"], pedal["default"]) == (0, 1, 0)
+  assert pedal["control"] == "toggle"
+  assert pedal["risk"] == "high"
+  params_keys = PARAMS_KEYS_PATH.read_text(encoding="utf-8")
+  assert '{"CommaPedalEnabled", {PERSISTENT, INT, "0"}}' in params_keys
+  vehicle = next(category for category in settings["menu"] if category["id"] == "VEHICLE")
+  device_hardware = next(group for group in vehicle["groups"] if group["id"] == "VEH_DEVICE")
+  assert pedal["name"] in device_hardware["params"]
 
 
 def test_wide_camera_fallback_setting_is_exposed(settings, params):
@@ -601,3 +620,35 @@ def test_declared_numeric_bounds_stay_intact(params):
   assert (by_name["ApplyModelSpeed"]["min"], by_name["ApplyModelSpeed"]["max"]) == (-120, 120)
   assert by_name["ApplyModelSpeed"]["default"] == 0
   assert by_name["TFollowDecelBoost"]["unit"] == 10
+
+
+def test_live_geometry_has_zero_default_and_no_enable_switch(settings, params):
+  from openpilot.selfdrive.carrot.server.services.params import clamp_numeric
+  by_name = {p['name']: p for p in params}
+  assert 'CenterToFrontRatioEnabled' not in by_name
+  ratio = by_name['CenterToFrontRatio']
+  assert (ratio['min'], ratio['nonzero_min'], ratio['max'], ratio['default'], ratio['unit']) == (0, 31, 69, 0, 1)
+  assert ratio['display_unit'] == 'percent'
+  assert not ratio.get('detail_parent') and not ratio.get('hidden_brands')
+  assert ratio['risk'] == 'high'
+  keys = PARAMS_KEYS_PATH.read_text(encoding='utf-8')
+  assert '{"CenterToFrontRatio", {PERSISTENT, INT, "0"}}' in keys
+  assert '{"CenterToFrontRatioEnabled", {PERSISTENT, BOOL}}' in keys  # Migration only, no recreated default.
+  categories = build_menu_categories(settings, by_name)
+  section = next(section for category in categories for group in category['groups'] for section in group['sections']
+                 if 'SteerActuatorDelay' in section['items'])
+  assert section['items'].index(ratio['name']) == section['items'].index('SteerActuatorDelay') + 1
+  for raw, expected in ((0, 0), (1, 31), (30, 31), (40, 40), (60, 60), (99, 69)):
+    assert clamp_numeric(raw, ratio) == expected
+  assert clamp_numeric(1, by_name['SteerActuatorDelay']) == 1
+  assert '재시작 없이' in ratio['descr']
+  assert 'without restarting' in ratio['edescr']
+  assert set(ratio['zero_label']) == {'ko', 'en', 'zh'}
+
+
+def test_declared_nonzero_min_and_zero_labels_are_well_formed(params):
+  for item in params:
+    if 'nonzero_min' in item:
+      assert item['min'] == item['default'] == 0
+      assert 0 < item['nonzero_min'] <= item['max']
+      assert set(item['zero_label']) == {'ko', 'en', 'zh'}

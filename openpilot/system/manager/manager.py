@@ -13,6 +13,8 @@ import openpilot.system.sentry as sentry
 from openpilot.common.utils import atomic_write
 from openpilot.common.basedir import BASEDIR
 from openpilot.common.params import Params, ParamKeyFlag
+from openpilot.common.atc_params import migrate_atc_params
+from openpilot.common.lateral_geometry_params import migrate_lateral_geometry_params
 from openpilot.common.stopping_params import get_stopping_speed
 from openpilot.common.repo_update import release_boot_lock
 from openpilot.common.text_window import TextWindow
@@ -76,6 +78,7 @@ def manager_init() -> UpdateStatus:
   params.clear_all(ParamKeyFlag.CLEAR_ON_ONROAD_TRANSITION)
   params.clear_all(ParamKeyFlag.CLEAR_ON_OFFROAD_TRANSITION)
   params.clear_all(ParamKeyFlag.CLEAR_ON_IGNITION_ON)
+  Params('/dev/shm/params').remove('NavDestinationTemporary')
   if build_metadata.release_channel:
     params.clear_all(ParamKeyFlag.DEVELOPMENT_ONLY)
 
@@ -83,6 +86,8 @@ def manager_init() -> UpdateStatus:
     params.put_bool("RecordFront", True)
 
   configure_monitoring(params)
+  migrate_atc_params(params)
+  migrate_lateral_geometry_params(params)
 
   # set unset params to their default value
   for k in params.all_keys():
@@ -212,6 +217,7 @@ def manager_thread(update_status: UpdateStatus) -> None:
       params.clear_all(ParamKeyFlag.CLEAR_ON_ONROAD_TRANSITION)
     elif not started and started_prev:
       params.clear_all(ParamKeyFlag.CLEAR_ON_OFFROAD_TRANSITION)
+      Params('/dev/shm/params').remove('NavDestinationTemporary')
 
     ignition = any(ps.ignitionLine or ps.ignitionCan for ps in sm['pandaStates'] if ps.pandaType != log.PandaState.PandaType.unknown)
     if ignition and not ignition_prev:

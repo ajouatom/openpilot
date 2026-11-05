@@ -21,6 +21,7 @@ from openpilot.common.transformations.camera import DEVICE_CAMERAS
 from openpilot.system.camerad.cameras.nv12_info import get_nv12_info
 from openpilot.common.transformations.model import get_warp_matrix
 from openpilot.selfdrive.controls.lib.desire_helper import DesireHelper
+from openpilot.selfdrive.controls.lib.desire_lib.boundary_observer import BoundaryObserver
 from openpilot.selfdrive.controls.lib.drive_helpers import get_accel_from_plan, smooth_value, get_curvature_from_plan
 from openpilot.selfdrive.modeld.parse_model_outputs import Parser
 from openpilot.selfdrive.modeld.compile_modeld import make_input_queues, WARP_INPUTS, POLICY_INPUTS
@@ -110,7 +111,7 @@ def get_action_from_model(model_output: dict[str, np.ndarray], prev_action: log.
                                                 lat_action_t)
   else:
     desired_accel = model_output['action'][0,1]
-    desired_curvature = model_output['action'][0,0] / (max(1.0, v_ego))**2
+    desired_curvature = model_output['action'][0,0] / (max(2.5, v_ego))**2
     #should_stop = (v_ego < 0.3 and desired_accel < 0.1)
   desired_accel = smooth_value(desired_accel, prev_action.desiredAcceleration, LONG_SMOOTH_SECONDS)
   desired_velocity_now = smooth_value(desired_velocity_now, prev_action.desiredVelocity, LONG_SMOOTH_SECONDS)
@@ -413,7 +414,9 @@ def main(demo=False):
   prev_action = log.ModelDataV2.Action()
 
   from opendbc.car.tesla.values import TeslaFlags
-  DH = DesireHelper(tesla_auto_signals=CP.brand == "tesla" and bool(CP.flags & TeslaFlags.AUTO_TURN_SIGNALS))
+  DH = DesireHelper(tesla_auto_signals=CP.brand == "tesla" and bool(CP.flags & TeslaFlags.AUTO_TURN_SIGNALS),
+                    boundary_indicator_supported=CP.carFingerprint == 'HYUNDAI_IONIQ_5_PE')
+  boundary_observer = BoundaryObserver(cloudlog.event) if DH.boundary_indicator_supported else None
   nav_input = MapInput()
 
 
@@ -573,7 +576,12 @@ def main(demo=False):
       l_lane_change_prob = desire_state[log.Desire.laneChangeLeft]
       r_lane_change_prob = desire_state[log.Desire.laneChangeRight]
       lane_change_prob = l_lane_change_prob + r_lane_change_prob
-      DH.update(sm['carState'], modelv2_send.modelV2, sm['carControl'].latActive, lane_change_prob, sm['carrotMan'], sm['radarState'])
+      indicator_now = time.monotonic()
+      indicator_valid = modelv2_send.valid and all(
+        sm.valid[k] and sm.alive[k] and 0 <= indicator_now-sm.recv_time[k] < .35
+        for k in ('carState', 'carControl'))
+      DH.update(sm['carState'], modelv2_send.modelV2, sm['carControl'].latActive, lane_change_prob, sm['carrotMan'], sm['radarState'],
+                indicator_valid=indicator_valid, indicator_curvature=sm['carControl'].actuators.curvature)
       modelv2_send.modelV2.meta.laneChangeState = DH.lane_change_state
       modelv2_send.modelV2.meta.laneChangeDirection = DH.lane_change_direction
       modelv2_send.modelV2.meta.desireLog = DH.desireLog #carrot
@@ -583,6 +591,29 @@ def main(demo=False):
       modelv2_send.modelV2.meta.autoTurnSignalLaneChange = DH.auto_turn_signal_lane_change
       modelv2_send.modelV2.meta.autoTurnSignalDirection = DH.auto_signal_direction
       modelv2_send.modelV2.meta.autoTurnSignalRequestId = DH.auto_signal_request_id
+      modelv2_send.modelV2.meta.manualLaneIndicator = DH.boundary_indicator.request_direction
+      modelv2_send.modelV2.meta.manualLaneIndicatorMonoTime = int(DH.boundary_indicator.request_time * 1e9)
+      observation = DH.model_indicator.active
+      modelv2_send.modelV2.meta.observedIndicator = observation.direction if observation else 0
+      modelv2_send.modelV2.meta.observedIndicatorMonoTime = int(DH.model_indicator.request_time * 1e9)
+      modelv2_send.modelV2.meta.observedIndicatorSource = DH.model_indicator.reason
+      modelv2_send.modelV2.meta.indicatorIsolationMask = DH.boundary_indicator.blocked
+      modelv2_send.modelV2.meta.indicatorJournalMonoTime = int(DH.indicator_journal_time * 1e9)
+      preparation = DH.model_indicator.candidate
+      if preparation and not (DH.model_path_indicator_enabled if preparation[1] == 'model_path' else DH.model_desire_indicator_enabled):
+        preparation = None
+      if DH.boundary_indicator_enabled and DH.boundary_indicator.episode:
+        preparation = (DH.boundary_indicator.episode['direction'], 'manual')
+      modelv2_send.modelV2.meta.indicatorPrepareDirection = preparation[0] if preparation and not observation else 0
+      modelv2_send.modelV2.meta.indicatorPrepareSource = preparation[1] if preparation and not observation else ''
+      if boundary_observer is not None:
+        # Read-only experiment: independent of navigation freshness, no request/desire assignment.
+        boundary_observer.observe(indicator_now, sm['carState'], modelv2_send.modelV2,
+          enabled=DH.boundary_indicator_enabled,
+          valid=modelv2_send.valid and sm.valid['carState'] and sm.alive['carState'] and
+                0 <= indicator_now-sm.recv_time['carState'] < .35,
+          busy=DH.lane_change_state in (log.LaneChangeState.laneChangeStarting, log.LaneChangeState.laneChangeFinishing),
+          legacy_direction=DH.boundary_indicator.request_direction)
 
       drivingdata_send.drivingModelData.meta.laneChangeState = DH.lane_change_state
       drivingdata_send.drivingModelData.meta.laneChangeDirection = DH.lane_change_direction

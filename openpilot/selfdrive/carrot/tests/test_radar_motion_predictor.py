@@ -5906,10 +5906,13 @@ def test_uncertain_vision_range_requires_continuous_accepted_front(mode, change)
 def test_moving_front_releases_when_vision_range_is_precise_or_invalid(mode, x_std):
   controller = DPathRadarController(enable_radar_tracks=mode, cut_in_sensitivity=0)
   point = seed_moving_range_front(controller)
-  output = controller.update(
-    0.05, 11.7, (replace(point, d_rel=89.65),),
-    moving_range_model(79.65, x_std=x_std),
-  )
+  for index in range(1, 7):
+    output = controller.update(
+      index * 0.05, 11.7, (replace(point, d_rel=89.4 + index * 0.25),),
+      moving_range_model(79.4 + index * 0.25, x_std=x_std),
+    )
+    if index == 1:
+      assert output.lead_one["radarTrackId"] == 35
   assert output.lead_one["radarTrackId"] == -1
 
 
@@ -5918,10 +5921,13 @@ def test_moving_front_releases_when_vision_range_is_precise_or_invalid(mode, x_s
 def test_uncertain_range_cannot_hide_much_nearer_or_close_visual_car(mode, radar_d, vision_d):
   controller = DPathRadarController(enable_radar_tracks=mode, cut_in_sensitivity=0)
   point = seed_moving_range_front(controller, d_rel=radar_d)
-  output = controller.update(
-    0.05, 11.7, (replace(point, d_rel=radar_d + 0.25),),
-    moving_range_model(vision_d, x_std=30.0),
-  )
+  for index in range(1, 6):
+    output = controller.update(
+      index * 0.05, 11.7, (replace(point, d_rel=radar_d + index * 0.25),),
+      moving_range_model(vision_d, x_std=30.0),
+    )
+    if index < 5:
+      assert output.lead_one["radarTrackId"] == 35
   assert output.lead_one["radarTrackId"] == -1
   assert output.lead_one["dRel"] == pytest.approx(vision_d)
 
@@ -5930,10 +5936,14 @@ def test_uncertain_range_cannot_hide_much_nearer_or_close_visual_car(mode, radar
 def test_moving_front_range_retention_releases_for_stopped_visual_lead(mode):
   controller = DPathRadarController(enable_radar_tracks=mode, cut_in_sensitivity=0)
   previous = seed_moving_range_front(controller)
-  output = controller.update(
-    0.05, 11.7, (replace(previous, d_rel=89.65),),
-    moving_range_model(79.65, velocity=0.0),
-  )
+  for index in range(1, 6):
+    time_s = index * 0.05
+    output = controller.update(
+      time_s, 11.7, (replace(previous, d_rel=89.4 + 5.0 * time_s),),
+      moving_range_model(80.235 - 11.7 * time_s, velocity=0.0),
+    )
+    if index < 5:
+      assert output.lead_one["radarTrackId"] == 35
   assert output.lead_one["radarTrackId"] == -1
 
 
@@ -8787,3 +8797,114 @@ def test_production_radar_is_fixed_to_carrot() -> None:
   assert '"radard", "openpilot.selfdrive.carrot.radar.radard_dpath", only_onroad' in manager_source
   assert 'PythonProcess("radard_dpath"' not in manager_source
   assert "CarrotRadarMode" not in manager_source
+
+
+def seed_vision_transition_front(controller):
+  point = Point(281, 50.0, 0.1, trackState=2)
+  output = controller.update(0.0, 25.0, (point,), model_with_lead(50.0, 0.1, 25.0))
+  assert output.lead_one["radarTrackId"] == 281
+  return point
+
+
+@pytest.mark.parametrize("mode", (1, 2, 3))
+@pytest.mark.parametrize("period", (0.025, 0.05, 0.10))
+def test_healthy_front_switches_after_200ms_of_consistent_vision(mode, period):
+  controller = DPathRadarController(enable_radar_tracks=mode, cut_in_sensitivity=0)
+  point = seed_vision_transition_front(controller)
+  for index in range(round(0.30 / period) + 1):
+    elapsed = index * period
+    output = controller.update(period + elapsed, 25.0, (point,),
+                               model_with_lead(30.0 - 15.0 * elapsed, 0.1, 10.0))
+    if elapsed < 0.20 - 1e-6:
+      assert output.lead_one["radarTrackId"] == 281
+      assert output.lead_one["dRel"] == pytest.approx(50.0)
+    else:
+      assert output.lead_one["radarTrackId"] == -1
+      assert output.lead_one["dRel"] == pytest.approx(30.0 - 15.0 * elapsed)
+
+
+@pytest.mark.parametrize("flash_frames", (1, 2, 3))
+def test_short_visual_outlier_keeps_current_radar_kinematics(flash_frames):
+  controller = DPathRadarController(cut_in_sensitivity=0)
+  point = seed_vision_transition_front(controller)
+  for index in range(1, 12):
+    time_s = index * 0.05
+    current = replace(point, d_rel=50.0 - time_s, v_rel=-1.0, a_lead=-0.4)
+    model = model_with_lead(30.0, 0.1, 10.0) if index <= flash_frames else model_with_lead(current.d_rel, 0.1, 24.0)
+    output = controller.update(time_s, 25.0, (current,), model)
+    assert output.lead_one["radarTrackId"] == 281
+    assert output.lead_one["dRel"] == pytest.approx(current.d_rel)
+    assert output.lead_one["vLead"] == pytest.approx(24.0)
+    assert output.lead_one["aLeadK"] == pytest.approx(-0.4)
+
+
+@pytest.mark.parametrize("change", ("distance", "velocity", "lateral", "model_ego_velocity"))
+def test_visual_discontinuities_restart_transition_confirmation(change):
+  controller = DPathRadarController(cut_in_sensitivity=0)
+  point = seed_vision_transition_front(controller)
+  for index in range(1, 20):
+    time_s = index * 0.05
+    model = model_with_lead(30.0, 0.0, 10.0)
+    if index % 2:
+      if change == "distance":
+        model.leadsV3[0].x = (21.52,)
+      elif change == "velocity":
+        model.leadsV3[0].v = (16.0,)
+      elif change == "lateral":
+        model.leadsV3[0].y = (-0.9,)
+      else:
+        model.velocity = SimpleNamespace(x=(19.0,))
+    output = controller.update(time_s, 25.0, (point,), model)
+    assert output.lead_one["radarTrackId"] == 281
+  for index in range(20, 25):
+    output = controller.update(index * 0.05, 25.0, (point,), model_with_lead(30.0, 0.0, 10.0))
+    assert output.lead_one["radarTrackId"] == (281 if index < 24 else -1)
+
+
+@pytest.mark.parametrize("change", (
+  "missing", "unmeasured", "new_id", "range_jump", "lateral_jump", "speed_jump",
+  "off_path", "gap", "reverse_time", "invalid_path", "vision_mode",
+))
+def test_vision_transition_does_not_retain_broken_radar(change):
+  controller = DPathRadarController(cut_in_sensitivity=0)
+  point = seed_vision_transition_front(controller)
+  model = model_with_lead(30.0, 0.0, 10.0)
+  assert controller.update(0.05, 25.0, (point,), model).lead_one["radarTrackId"] == 281
+  time_s = 0.1
+  points = (point,)
+  if change == "missing":
+    points = ()
+  elif change == "unmeasured":
+    points = (replace(point, measured=False),)
+  elif change == "new_id":
+    points = (replace(point, track_id=282),)
+  elif change == "range_jump":
+    points = (replace(point, d_rel=55.0),)
+  elif change == "lateral_jump":
+    points = (replace(point, y_rel=-0.7),)
+  elif change == "speed_jump":
+    points = (replace(point, v_rel=4.0),)
+  elif change == "off_path":
+    model.position.y = (0.0, 4.0)
+    model.leadsV3[0].y = (1.2,)
+  elif change == "gap":
+    time_s = 0.25
+  elif change == "reverse_time":
+    time_s = 0.04
+  elif change == "invalid_path":
+    controller.update(0.075, 25.0, (point,), SimpleNamespace(position=SimpleNamespace(x=(), y=())))
+  else:
+    controller.enable_radar_tracks = -2
+  output = controller.update(time_s, 25.0, points, model)
+  assert output.lead_one is not None and output.lead_one["radarTrackId"] == -1
+
+
+def test_repeated_model_time_does_not_confirm_vision_transition():
+  controller = DPathRadarController(cut_in_sensitivity=0)
+  point = seed_vision_transition_front(controller)
+  model = model_with_lead(30.0, 0.0, 10.0)
+  for _ in range(20):
+    assert controller.update(0.05, 25.0, (point,), model).lead_one["radarTrackId"] == 281
+  for t in (0.10, 0.15, 0.20):
+    assert controller.update(t, 25.0, (point,), model).lead_one["radarTrackId"] == 281
+  assert controller.update(0.25, 25.0, (point,), model).lead_one["radarTrackId"] == -1

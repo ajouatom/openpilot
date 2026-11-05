@@ -289,8 +289,9 @@ struct CarState {
   turnSignalDriverValid @107 :Bool;
   turnSignalDriverDirection @108 :UInt8; # actual stalk: 0 released, 1 left, 2 right
   autoTurnSignalReadyRequestId @109 :UInt64; # TX echoed and lamps confirmed for this automatic maneuver; zero otherwise
-  tbtRearInputsAvailable @110 :Bool; # optional observed CANFD BSD/corner inputs, for the TBT physical-indicator trigger only
-  tbtRightRearBlocked @111 :Bool = true; # unknown/stale/saturated or <20m; does not alter manual lane-change admission
+  tbtRearInputsAvailable @110 :Bool; # fresh CANFD OEM BSD input for the TBT physical-indicator trigger only (BSD-only since 2026-10-30)
+  tbtRightRearBlocked @111 :Bool = true; # OEM right BSD warning or invalid/stale BSD; no corner-distance veto; manual admission unchanged
+  laneLineInfoMonoTime @112 :UInt64; # exact OEM lane type/colour CAN observation; zero means unknown, manual indicator only
   struct VehicleGps {
     available @0 :Bool;
     valid @1 :Bool; # receive/continuity checks, not a decoded satellite fix flag

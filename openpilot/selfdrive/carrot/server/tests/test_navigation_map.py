@@ -10,7 +10,17 @@ from aiohttp.test_utils import TestClient, TestServer
 from openpilot.selfdrive.carrot.server.features import navigation
 
 
-def test_destination_lifecycle_and_validation(monkeypatch):
+@pytest.fixture(autouse=True)
+def temporary_params(monkeypatch):
+  values = {}
+  def params(path):
+    assert path == '/dev/shm/params'
+    return NS(get=values.get, put=values.__setitem__, remove=lambda key: values.pop(key, None))
+  monkeypatch.setattr(navigation, 'Params', params)
+  return values
+
+
+def test_destination_lifecycle_and_validation(monkeypatch, temporary_params):
   values = {}
   monkeypatch.setattr(navigation, 'get_param_value', lambda key, default: values.get(key, default))
   monkeypatch.setattr(navigation, 'set_param_value', lambda key, value: values.__setitem__(key, value))
@@ -21,14 +31,19 @@ def test_destination_lifecycle_and_validation(monkeypatch):
     async with TestClient(TestServer(app)) as client:
       response = await client.post('/api/navigation/destination', json={'latitude': 37., 'longitude': 127., 'place_name': '<script>name</script>'})
       assert response.status == 200
-      assert json.loads(values['NavDestination'])['place_name'] == '<script>name</script>'
+      assert json.loads(temporary_params['NavDestinationTemporary'])['place_name'] == '<script>name</script>'
+      assert 'NavDestinationTemporary' not in values
+      assert response.headers['Cache-Control'] == 'no-store'
+      assert values['NavDestination'] == ''
       response = await client.get('/api/navigation/destination')
+      assert response.headers['Cache-Control'] == 'no-store'
       assert (await response.json())['destination']['latitude'] == 37.
       for payload in ([], {}, {'latitude': 91, 'longitude': 127}, {'latitude': None, 'longitude': 0}):
         assert (await client.post('/api/navigation/destination', json=payload)).status == 400
       assert (await client.get('/api/navigation/search?q=Seoul')).status == 409
       assert (await client.delete('/api/navigation/destination')).status == 200
       assert values['NavDestination'] == ''
+      assert not temporary_params
   asyncio.run(run())
 
 
@@ -78,7 +93,7 @@ def test_search_reads_fragmented_response_and_keeps_token_server_side(monkeypatc
   async def get(url, **kwargs):
     assert url == 'https://api.mapbox.com/search/geocode/v6/forward'
     assert kwargs['params']['access_token'] == 'pk.private-test'
-    assert kwargs['params']['permanent'] == 'true'
+    assert kwargs['params']['permanent'] == 'false'
     yield NS(status=200, content=NS(iter_chunked=chunks))
   async def run():
     app = web.Application()
@@ -88,6 +103,7 @@ def test_search_reads_fragmented_response_and_keeps_token_server_side(monkeypatc
       response = await client.get('/api/navigation/search?q=Seoul')
       body = await response.text()
       assert response.status == 200 and 'pk.private-test' not in body
+      assert response.headers['Cache-Control'] == 'no-store'
       assert json.loads(body)['results'][0]['latitude'] == 37.
       assert (await client.get('/api/navigation/search?q=Seoul')).status == 429
   asyncio.run(run())

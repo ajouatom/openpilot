@@ -1108,6 +1108,15 @@ struct ModelDataV2 {
     autoTurnSignalLaneChange @23 :Bool;
     autoTurnSignalDirection @24 :LaneChangeDirection;
     autoTurnSignalRequestId @25 :UInt64;
+    manualLaneIndicator @26 :LaneChangeDirection;  # Lamp only; its feedback is excluded from driver lane requests.
+    manualLaneIndicatorMonoTime @27 :UInt64;
+    observedIndicator @28 :LaneChangeDirection; # Lamp-only observation; never steering admission.
+    observedIndicatorMonoTime @29 :UInt64;
+    observedIndicatorSource @30 :Text;
+    indicatorIsolationMask @31 :UInt8;
+    indicatorJournalMonoTime @32 :UInt64;
+    indicatorPrepareDirection @33 :LaneChangeDirection; # Display only; never an actuation request.
+    indicatorPrepareSource @34 :Text;
 
 
     deprecated :group {
@@ -2358,6 +2367,7 @@ struct LiveParametersData {
   angleOffsetAverageValid @18 :Bool = true;
   steerRatioValid @19 :Bool = true;
   stiffnessFactorValid @20 :Bool = true;
+  centerToFrontRatio @21 :Float32;  # Applied geometry; 0 in legacy messages.
 
 
   struct FilterState {

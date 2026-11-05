@@ -105,6 +105,9 @@ def clamp_numeric(value: float, p: Optional[Dict[str, Any]]) -> float:
       value = max(value, float(mn))
     if mx is not None:
       value = min(value, float(mx))
+    nonzero_min = p.get("nonzero_min")
+    if nonzero_min is not None and 0 < value < float(nonzero_min):
+      value = float(nonzero_min)
   except Exception:
     pass
   return value

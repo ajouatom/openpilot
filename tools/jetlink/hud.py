@@ -156,6 +156,9 @@ def main():
   sys.modules[messaging.__name__] = messaging
   from hud_signal import install as install_signal_display
   remote_signals = install_signal_display(read_snapshot)
+  from blink_display import Remote
+  from openpilot.common import indicator_display
+  indicator_display.current = Remote(read_snapshot, time.monotonic).read
   import cluster_live_camera
   from hud_camera import RemoteRoadCamera
   cluster_live_camera.LiveRoadCamera = RemoteRoadCamera

@@ -125,6 +125,7 @@ class Controls:
     sr = resolve_vehicle_model_steer_ratio(lp.steerRatio,
                                            self.params.get_float("SteerRatioRate"),
                                            self.params.get_float("CustomSR"))
+    self.VM.update_geometry(getattr(lp, "centerToFrontRatio", 0.0))
     self.VM.update_params(x, sr)
 
     steer_angle_without_offset = math.radians(CS.steeringAngleDeg - lp.angleOffsetDeg)

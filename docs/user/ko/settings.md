@@ -105,12 +105,12 @@ Carrot Web 설정 화면에서는 다음 기능을 사용할 수 있습니다.
 
 ## 전체 설정 지도
 
-현재 `carrot-wip`의 `carrot_settings.json`에는 **201개 파라미터**가 있습니다. 운전자 감시 예외 설정과 `NNFF` 2개는 검색으로만 표시되며, 나머지는 아래 메뉴에 표시됩니다.
+현재 `carrot-wip`의 `carrot_settings.json`에는 **207개 파라미터**가 있습니다. 운전자 감시 예외 설정과 `NNFF` 2개는 검색으로만 표시되며, 나머지는 아래 메뉴에 표시됩니다.
 
 | 대분류 | 항목 수 | 중분류 |
 |---|---:|---|
 | 주행 제어 | 124 | 시작·오토, 버튼·프리셋, 차량 조향, 속도·감속, 크루즈·차간 |
-| 차량·하드웨어 | 17 | 현대·기아, CANFD·HDA, 레이더, 운전자 모니터링, 차량 보조, 기기 하드웨어 |
+| 차량·하드웨어 | 18 | 현대·기아, CANFD·HDA, 레이더, 운전자 모니터링, 차량 보조, 기기 하드웨어 |
 | 화면 표시 | 34 | 정보 표시, 경로 표시, 밝기·주행화면, 외부 HUD |
 | 시스템 | 12 | 녹화·전원, 네트워크·지도, 사운드, 소프트웨어 |
 
@@ -156,7 +156,7 @@ Carrot Web 설정 화면에서는 다음 기능을 사용할 수 있습니다.
 | ONNX 차선·BSD | `ShareData`, `OnnxBsdEnabled`, `OnnxLaneThreshold`, `OnnxLaneIntervalMs`, `OnnxBsdThreshold`, `OnnxBsdSmoothingMs`, `OnnxBsdIntervalMs` | 차선 종류 인식과 별도 카메라 BSD 실행 및 세부 조정 |
 | 중앙 보정 | `PathOffset`, `CameraYawTrimDeg` | 레인모드 경로의 좌우 위치와 카메라 YAW 미세 보정 |
 | 조향감 | `SteerActuatorDelay`, `LatSmoothSec`, `LatSuspendAngleDeg`, `CustomSR`, `SteerRatioRate` | 조향 시점, 평활화, 일시중지 각도와 조향비 |
-| [차로 변경](lane-change.md)·자동 턴 | `LaneChangeNeedTorque`, `LaneChangeDelay`, `LaneChangeBsd`, `LaneLineCheck`, `BlinkerLatchedTurn`, `LaneChangeLeverWait`, `AutoTurnControl`, `AutoTurnControlSpeedTurn`, `AutoTurnControlTurnEnd`, `AutoTurnMapChange` | 차로 변경 진입 조건과 ATC 동작 |
+| [차로 변경](lane-change.md)·자동 턴 | `LaneChangeNeedTorque`, `LaneChangeDelay`, `LaneChangeBsd`, `LaneLineCheck`, `BlinkerLatchedTurn`, `LaneChangeLeverWait`, `AutoTurnControl`, `AutoTurnControlRightLaneChange`, `ManualLaneChangeIndicator`, `ModelDesireIndicator`, `ModelPathIndicator`, `AutoTurnControlSpeedTurn`, `AutoTurnControlTurnEnd`, `AutoTurnMapChange` | 차로 변경 진입 조건과 ATC 동작 |
 | 레인모드 | `LatMpcPathCost`, `LatMpcMotionCost`, `LatMpcAccelCost`, `LatMpcJerkCost`, `LatMpcSteeringRateCost`, `LatMpcInputOffset`, `UseLaneLineSpeed`, `UseLaneLineCurveSpeed`, `AdjustLaneOffset` | 레인모드 MPC 가중치와 차선 사용 조건 |
 | 고급 토크·토크 계수 | `LateralTorqueCustom`, `LateralTorqueAccelFactor`, `LateralTorqueFriction`, `LateralTorqueKpV`, `LateralTorqueKiV`, `LateralTorqueKf`, `LateralTorqueKd` | 커스텀 토크 제어 계수 |
 | 고급 토크·검색 전용 | `NNFF` | 토크 조향의 신경망 피드포워드 옵션 |
@@ -167,6 +167,8 @@ Carrot Web 설정 화면에서는 다음 기능을 사용할 수 있습니다.
 `UseLaneLineSpeed`로 레인모드를 사용하더라도 모델 속도 궤적의 시작값이 실제 차속의 70% 미만이거나 끝값이 시작값의 70% 미만이면 일시적으로 레인리스로 전환합니다. 속도 조건이 약 1초간 연속으로 정상이고 기존 차선·속도 조건도 충족해야 레인모드로 복귀합니다.
 
 `SteerActuatorDelay`는 높을수록 더 일찍 조향하도록 보상하고, `LatSmoothSec`는 높을수록 부드러워지는 대신 반응이 늦어질 수 있습니다. 두 값을 동시에 바꾸면 원인을 구분하기 어렵습니다.
+
+`CenterToFrontRatio`는 전 차종 공통 **무게중심 비율**입니다. `0`은 차종별 기본값, `31~69%`는 지정한 비율이며 저장하면 재시작 없이 부드럽게 반영됩니다. 기본값은 현대·기아·제네시스 `40%`, 토요타·렉서스 `44%`, 마쓰다 `41%`, 폭스바겐 `45%`이며 혼다는 차종별로 다릅니다. 진입이 늦으면 소폭 증가, 초입에 파고들면 소폭 감소를 비교하되 효과는 차선 모드·차량에 따라 다릅니다. SAD·SR은 유지하고 하나씩 조절하세요. 악화되면 이전 값이나 `0`으로 복원하세요. 실제 휠베이스는 바뀌지 않으며 범위는 주행 검증 범위를 뜻하지 않습니다.
 
 `SteerRatioRate`의 기본값 `100%`는 학습된 조향비를 그대로 적용합니다. `CustomSR=0`일 때 사용되며, 저장된 비율이 허용 범위(`30~200%`)를 벗어나면 안전하게 `100%`로 대체됩니다.
 
@@ -256,7 +258,7 @@ VW MEB(ID.4 포함)에도 수동 조향비와 학습 비율이 적용됩니다. 
 <a id="vehicle-hardware"></a>
 ## 차량·하드웨어
 
-차량·하드웨어에는 일반 메뉴 17개와 검색 전용 운전자 감시 예외 설정 1개가 있습니다. 차종, 하네스와 기기 하드웨어 구성을 결정하므로 화면 표시 설정처럼 시험 삼아 켜면 안 됩니다.
+차량·하드웨어에는 일반 메뉴 18개와 검색 전용 운전자 감시 예외 설정 1개가 있습니다. 차종, 하네스와 기기 하드웨어 구성을 결정하므로 화면 표시 설정처럼 시험 삼아 켜면 안 됩니다.
 
 | 중분류 | 파라미터 | 용도 |
 |---|---|---|
@@ -265,12 +267,13 @@ VW MEB(ID.4 포함)에도 수동 조향비와 학습 비율이 적용됩니다. 
 | 레이더 | `EnableRadarTracks`, `RadarTrackFlip`, `EnableCornerRadar`, `CarrotRadarMode`, `CarrotRadarCutInSensitivity` | SCC 레이더, 전방 트랙 좌우 보정, 코너 레이더와 당근레이더 처리·컷인 감도 |
 | 운전자 모니터링 | `DriverMonitoringEnabled`(검색 전용), `DriverMonitoringMode`, `CarrotVisionEnabled`, `MuteDoor`, `MuteSeatbelt` | 운전자 모니터링과 일부 차량 경고음 처리 |
 | 차량 보조 | `MaxAngleFrames`, `SpeedFromPCM` | 최대 조향각 관련 프레임과 순정 SCC 속도 제어 방식 |
-| 기기 하드웨어 | `HardwareC3xLite` | 스피커가 없는 C3X Lite의 알림음과 프로세스 구성 |
+| 기기 하드웨어 | `CommaPedalEnabled`, `HardwareC3xLite` | ACC 미장착 차량의 Comma Pedal 허용 설정, C3X Lite 하드웨어 구성 |
 
 > [!CAUTION]
 > `HyundaiCameraSCC`, `CanfdHDA2`, `EnableRadarTracks`, `CarrotRadarMode`, `CarrotRadarCutInSensitivity`, `SpeedFromPCM`은 잘못 설정하면 차량 인식, SCC, 레이더와 가감속 동작이 달라질 수 있습니다. 차종, 연식, HDA 구성, 하네스 연결 위치와 순정 ACC 사용 여부를 확인한 뒤 변경하세요.
 
 - `HyundaiCameraSCC`: 현대·기아 차량의 롱컨, 크루즈 동기화와 CAN FD 배선 구성에 따라 모드가 달라집니다.
+  CAN-FD CameraSCC에서 캐럿 롱컨과 코너레이더가 켜져 있으면, 정상 CAN·D단·브레이크 해제·시속 10.8km 초과 조건에서 꺼진 순정 SCC MAIN을 주기적으로 켜도록 요청합니다. AutoEngage와 캐럿 크루즈 활성 여부에 관계없이 적용하며, MAIN이 이미 켜져 있으면 이 경로의 추가 요청은 끝납니다. SET·재출발 요청에는 기존 캐럿 크루즈 활성 조건이 적용됩니다. CAN-FD CameraSCC에서 캐럿 롱컨을 사용하는 경우 계기판용 순정 SCC MAIN 상태와 캐럿의 활성 선택을 분리해 처리합니다. 조향 활성은 AutoEngage 초기 설정과 기존 운전자 버튼 설정을 따릅니다.
   설정이 `0`이고 차량에 카메라 SCC가 적용되지 않은 상태에서, 이번 onroad의 카메라 버스(bus2, 다중 Panda에서는 해당 카메라 버스)에서 `SCC_CONTROL`(CAN-FD) 또는 `SCC12`(일반 CAN)를 수신하면 CAN 오류 화면에 **CameraSCC 설정을 켜 주세요** 안내가 표시됩니다. 수신 이력에 따른 설정 확인 안내이며 모든 CAN 오류의 원인을 확정하지는 않습니다. 설정을 자동 변경하지 않으며, 기존 제어 해제와 진입 차단은 유지됩니다. 정차 후 차량·배선에 맞는 모드를 설정하고 다음 onroad에서 확인하세요.
 - `CanfdHDA2`: HDA2 차량에서만 활성화합니다.
 - **계기판 CAN 직접 송신** (`HyundaiCanfdClusterDirectTx`): 현대·기아·제네시스 CAN-FD CameraSCC 차량에서 간헐적인 계기판 경고가 발생할 때 기존 직접 송신 방식과 비교하는 설정입니다. 모든 차량에서 기본 꺼짐이며 증상 차량에서 직접 켭니다. 변경 후 기기를 재부팅해야 적용됩니다. 이 설정을 지원하는 Panda 펌웨어가 필요하며, 경고 원인 해결이 검증된 것은 아닙니다.
@@ -290,6 +293,10 @@ Bosch MRRevo14F 수신을 지원하는 버전에서 Bosch MRRevo14F 후보 차�
 - `DriverMonitoringMode`: 운전자 감시가 켜져 있을 때 적용됩니다. 기본값 0은 카메라 사용 시 콤마 순정 감시 기준이며, 카메라 미장착·고장 시에는 15·30·45초 조작 감시로 전환합니다. 1은 빈 도로 시간 완화와 조작 후 카메라 경고 유예를 적용하는 시험 전용 실험 모드입니다. 공통 예외로 P단·완전 정차·인게이지 해제가 유효한 신호로 1초간 확인되면 재사용 제한을 초기화합니다. 모드 변경은 재부팅 없이 약 0.5초 주기로 적용됩니다. 전환해도 누적 감시시간·경고 횟수·재사용 제한은 초기화되지 않으며, 이전 조작 유예와 전방주시 연속 판정은 종료됩니다. [운전자 감시와 실험 모드 조건](driver-monitoring.md)을 확인하세요. 현대·기아·제네시스 CAN-FD의 검증된 원본 `STEER_TOUCH_2AF` 수신 신호를 차종명 제한 없이 처리하며 카메라·모드에 따라 유지와 새 접촉을 구분합니다.
 - `CarrotVisionEnabled`: 운전자 감시와 별도로 웹 도로 영상을 켭니다. `DisableDM`은 이관 전용이며, 기존 `DisableDM=2`의 영상 기능만 최초 전환 시 `CarrotVisionEnabled`로 승계합니다.
 - `SpeedFromPCM`: 기본값은 `2`(커브·카메라 감속)이며, PCM 차량의 버튼 스패밍과 속도 선택에 영향을 줍니다. `3`에서 토요타·렉서스는 순정 설정속도를 사용하며 가감속 제어 방식은 바뀌지 않습니다. `TOYOTA_RAV4_TSS2_2022`의 PCM 직접 가감속에서는 `0`도 유효한 순정 설정속도 변경·크루즈 재개를 반영하며 낮은 감속 목표를 유지합니다. [버튼 전송 상세](buttons-presets.md#button-spam)를 참고하세요.
+
+- `CommaPedalEnabled`: 기본값은 꺼짐입니다. `CC_ONLY_CAR` 플래그가 있는 ACC 미장착 차량에서 명시적인 차량별 페달 설정, 장치 CAN 수신 조건, 기존 제어·안전 조건을 만족할 때 Comma Pedal 종방향 경로를 허용합니다. 차량의 **Cruise ready가 꺼져 있을 때에만** 작동하며, Cruise ready 상태에서는 순정 크루즈 컨트롤이 우선하여 Comma Pedal 제어를 사용할 수 없습니다. 공통 프로토콜을 재사용할 수 있으며, 현재 제공되는 DBC·튜닝·safety profile은 Kia Ray EV용입니다. 다른 차량에는 해당 차량의 설정이 필요하고 Ray 값을 자동 적용하지 않습니다.
+
+저장한 값은 **다음 차량 파라미터 초기화**부터 적용되며, 실행 중인 제어 경로는 즉시 바뀌지 않습니다. CarrotPilot에서의 Comma Pedal 실차 정상 작동은 아직 확인되지 않았습니다. 장치 펌웨어·전압 보정은 변경하지 않으며, 작동 단계별 확인 항목은 [Comma Pedal 점검 가이드](../../comma_pedal.md)를 참고하세요.
 
 `HardwareC3xLite`는 일반 C3/C3X에서는 반드시 꺼 두고 C3X Lite에서만 켠 뒤 기기를 재부팅하세요. 이 설정을 켜면 존재하지 않는 앰프를 초기화하지 않아 I2C 재시도로 인한 시작 지연을 없애고, 경고음을 GPIO 부저로 출력합니다. 또한 `micd`, `soundd`, `loggerd`를 실행하지 않고 `RecordAudio`를 끄므로 이 하드웨어 모드에서는 일반 주행 로그 기록을 사용할 수 없습니다.
 
@@ -459,7 +466,7 @@ Carrot Vision에는 `carrot_settings.json` 카탈로그와 별도로 **AR 표시
 
 Carrot Web의 **도구 → Nav Map / 내비 지도**에서 지도를 보고 목적지를 검색·선택하거나 취소합니다. **설정 → 네트워크 → Mapbox**에 Public 키를 먼저 등록하세요. Secret 키는 이 기능에 필요하지 않습니다. 목적지는 재시작 후에도 유지하며, 외부 네비가 연결되어 있으면 외부 TBT와 경로를 우선합니다. 외부 경로가 없을 때 저장된 Mapbox 경로를 섞어 쓰지 않습니다.
 
-지도는 onroad에서 위치와 안내가 유효할 때 생성됩니다. USB 화면은 `ClusterHudScreenMode=7`로 주행 화면 오른쪽에 같은 이미지를 표시합니다. N16 Nav는 eGPU와 Jetson 모두에서 내비 경로 입력을 사용합니다. Flip Flop은 NOO를 지원하지 않으며 내부 CD210과 운전자 감시 모델은 별도로 유지됩니다. Mapbox 검색·경로·타일은 네트워크와 사용 가능한 계정/키가 필요하며, 저장 가능한 검색 결과를 요청하므로 Permanent Geocoding 권한이 필요합니다. [설계·검증 범위](../../nav_model_integration_20261012.md)를 참고하세요.
+지도는 onroad에서 위치와 안내가 유효할 때 생성됩니다. USB 화면은 `ClusterHudScreenMode=7`로 주행 화면 오른쪽에 같은 이미지를 표시합니다. N16 Nav는 eGPU와 Jetson 모두에서 내비 경로 입력을 사용합니다. Flip Flop, Light speed, Light speed 2는 NOO를 지원하지 않으며 내부 CD210과 운전자 감시 모델은 별도로 유지됩니다. Mapbox 검색·경로·타일은 네트워크와 사용 가능한 계정/키가 필요하며, 저장 가능한 검색 결과를 요청하므로 Permanent Geocoding 권한이 필요합니다. [설계·검증 범위](../../nav_model_integration_20261012.md)를 참고하세요.
 # 앞차 브레이크등 관찰 (시험)
 
 신호감지 설정의 **앞차 브레이크등 관찰**(`LeadBrakeLights`)은 기본 OFF입니다.
@@ -478,7 +485,9 @@ USB/HUD 일반 카메라 화면에 `BRAKE?`로 표시하고 기록합니다. `BR
 
 `AutoBlinkerControl` — 설정 > 주행 제어 > 차량 조향 > 차로 변경 (자동 턴). 기본값은 0입니다. 현재 carrot-wip의 아이오닉 5 PE·젯슨·PEAK USB-CAN/B1 조합을 대상으로 합니다.
 
-정상 점등이 확인된 ATC 회전은 내비가 같은 회전을 아직 앞에 안내하는 동안 접근로의 굴곡만으로 완료 처리하지 않습니다. 기존 유지 요청이 유효하고 운전자 취소·통신 이상이 없는데 양쪽 램프가 1.5초 이상 계속 꺼지면, 같은 회전에서 한 번만 재점등을 시도합니다. 최초 점등 확인 실패, 수동/블루투스 취소, 반대 깜박이, 경로 취소에는 자동 재점등하지 않습니다. 실제 램프 재점등은 차량에서 확인해야 합니다.
+ATC 회전은 audioTurn에서 시작하고 정차 중에도 유지합니다. D단 완전 정지에서는 횡제어 허용·고장 없음이 확인되면 새 안내를 받을 수 있습니다. 수신기가 전송 완료를 확인했는데 양쪽 램프가 1.5초 이상 계속 꺼져 있으면 최초 미점등도 포함해 해당 회전에서 한 번만 재요청합니다. 운전자 취소·통신 이상·전송 미확인에는 재요청하지 않습니다. 앞선 회전 중 들어온 반대 방향 안내는 최대 3초 보관하며, 실제 회전 완료 후에만 넘깁니다.
+
+유효한 TBT 지점 좌표와 차량 GPS가 있으면 해당 지점을 가까이 지나 회전했는지 확인해 종료를 보완합니다. 회전하지 않고 지점을 충분히 지나 직진이 지속되면 자동 취소하며 같은 audioTurn은 재실행하지 않습니다. 위치 정확도·연속성·진행 방향을 확인하므로 GPS 불량, 좌표 미제공, 굽은 접근로에서는 이 위치 기반 취소를 사용하지 않습니다. 최신 내비가 안내 종료·경로 이탈을 알리면 자동 요청도 해제합니다. 실제 램프 및 도로 동작은 추가 확인이 필요합니다.
 
 ### 동작
 
@@ -502,4 +511,19 @@ USB-CAN은 최초 점멸만 요청하고 기존 차량 깜박이 유지 기능�
 
 점등이 확인되지 않은 유지 시작 요청은 4초 후 버리므로 다음 버튼 입력은 새 요청으로 처리합니다.
 
-ATC 4번은 차선변경 가능 속도이면서 TBT 우회전까지 250m 이내인 구간에서 턴 시작 전까지 우측 실물 깜박이를 켜는 선택 기능입니다. 지원 USB2CAN 깜박이 구성과 우측 차선·BSD·신선한 후방 거리 조건이 필요하며, 기존 수동·블루투스 차선변경 동작은 유지됩니다. 자세한 내용은 [차선변경](lane-change.md)을 참고하세요.
+ATC 세부 설정의 `AutoTurnControlRightLaneChange`는 1·2번 모드에서 10km/h 이상이면서 TBT 우회전·우측 분기까지 설정 거리 이내인 구간에서 턴 시작 전까지 우측 실물 깜박이를 켜는 선택 기능입니다. 지원 USB2CAN 깜박이 구성과 우측 차선·유효한 차량 BSD와 우측 전방의 현재 및 3초 예측 거리 5m 조건이 필요하며, 기존 수동·블루투스 차선변경 동작은 유지됩니다. 자세한 내용은 [차선변경](lane-change.md)을 참고하세요.
+
+`ManualLaneChangeIndicator`는 ATC와 독립적인 수동 조향 깜박이입니다. 최근 조향 의도를 최대 1.5초 기억합니다. 왼쪽은 최신 흰 차선 분류로 중앙선을 제외하고, 오른쪽은 목표 차선부터 로드에지까지 2.5m 이상 여유를 확인합니다. 바깥 차선 인식 확률은 사용하지 않으며 자동 조향은 요청하지 않습니다. 자세한 조건은 [차로 변경](lane-change.md)을 참고하세요.
+
+수동 차선변경 깜박이는 이전 요청 후 최소 3초·연속 1초 소등과 새로운 조향/접근 조건을 확인한 뒤 재요청합니다. 자동 조향 피드백 보호는 최소 12초 유지합니다.
+
+ATC 재요청이 실행되면 새 요청부터 점등 확인 제한 4초를 다시 적용합니다. 최초 요청부터 전체 유지 상한 5분은 연장하지 않습니다.
+
+`ModelDesireIndicator`와 `ModelPathIndicator`는 표시 전용인 별도 기본 꺼짐 옵션입니다. TBT 턴의 거리 유지와 각 기능의 시작·종료 조건은 [차로 변경](lane-change.md)을 참고하세요.
+
+수동 깜박이는 차선 접근 속도로 0.3초 뒤를 예측하되, 중심에서 경계까지의 기준을 최대 0.3m만 앞당깁니다. 기존 속도·중앙선·로드에지 조건은 유지합니다.
+
+TBT 턴은 실제 회전 진입을 확인한 뒤 주행 중 핸들이 ±15도 안으로 돌아오면 30m 이동을 기다리지 않고 유지 요청을 끝냅니다. 턴 진입 전 신호 대기에서는 유지하며, 자세한 조건은 [차로 변경](lane-change.md)을 참고하세요.
+
+
+ATC 세부 설정의 우회전 자동 차선변경 거리는 0m에서 꺼지며 50m 단위로 최대 500m까지 선택합니다. 기존 켜짐 설정은 재시작 시 250m로 전환합니다.
