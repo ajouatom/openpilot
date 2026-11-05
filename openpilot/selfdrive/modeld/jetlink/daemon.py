@@ -663,7 +663,8 @@ def main():
         log.exception('Jetlink cable setup failed')
         if TRANSPORT_MODE == 'auto' and not mobile_unavailable:
           mobile_unavailable = True
-          publish('retrying', peer=None, error=f'iOS/NCM unavailable; retrying bulk USB after verified cleanup: {exc}'[:300])
+          error = str(exc) if '[adb-handoff:' in str(exc) else f'iOS/NCM unavailable; retrying bulk USB after verified cleanup: {exc}'
+          publish('retrying', peer=None, error=error[:300])
         else:
           publish('retrying', peer=None, error=str(exc)[:300])
       except Exception as exc:
