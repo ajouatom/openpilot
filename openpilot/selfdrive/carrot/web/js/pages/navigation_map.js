@@ -7,14 +7,14 @@
   $("searchTitle").textContent = tr("목적지 검색", "Find a destination");
   $("search").textContent = tr("검색", "Search");
   $("clear").textContent = tr("Mapbox 목적지 취소", "Clear Mapbox destination");
-  $("note").textContent = tr("키 등록 후 목적지를 검색하고 선택하세요. 경로 지도는 차량의 주행 화면이 켜져 있고 현재 위치와 안내 경로가 있을 때 표시됩니다. 외부 내비 안내가 우선이며, 연결이 끝나면 Mapbox 목적지를 사용합니다.", "After saving your Public key, search for and select a destination. The route map needs the vehicle's driving screen to be active, a current position and route guidance. External navigation takes priority; your Mapbox destination resumes after it disconnects.");
+  $("note").textContent = tr("키 등록 후 목적지를 검색하고 선택하세요. 선택한 위치는 현재 주행 세션에만 사용되며, 주행이 끝나거나 장치가 재시작되면 지워집니다. 경로 지도는 주행 화면이 켜져 있고 현재 위치와 안내 경로가 있을 때 표시됩니다. 외부 내비 안내가 우선이며, 연결이 끝나면 현재 주행의 Mapbox 목적지를 사용합니다.", "After saving your Public key, search for and select a destination. The selected place is used only for the current drive and is cleared when the drive ends or the device restarts. The route map needs the driving screen, a current position and route guidance. External navigation takes priority; the current drive's Mapbox destination resumes after it disconnects.");
   async function api(path, options) {
-    const response = await fetch(`/api/navigation/${path}`, options);
+    const response = await fetch(`/api/navigation/${path}`, {...options, cache:"no-store"});
     const value = await response.json();
     if (!response.ok) throw new Error(value.error || `HTTP ${response.status}`);
     return value;
   }
-  function current(value) { $("current").textContent = value.destination?.place_name || tr("저장된 목적지 없음", "No saved destination"); }
+  function current(value) { $("current").textContent = value.destination?.place_name || tr("현재 목적지 없음", "No current destination"); }
   $("form").addEventListener("submit", async (event) => {
     event.preventDefault(); $("search").disabled = true; $("results").replaceChildren();
     $("status").textContent = tr("검색 중…", "Searching…");
@@ -26,7 +26,7 @@
         button.addEventListener("click", async () => {
           button.disabled = true;
           try { current(await api("destination", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(place)}));
-            $("status").textContent = tr("목적지를 저장했습니다. GPS와 지도 수신을 기다립니다.", "Destination saved. Waiting for GPS and map data.");
+            $("status").textContent = tr("현재 주행 목적지로 설정했습니다. GPS와 지도 수신을 기다립니다.", "Destination set for this drive. Waiting for GPS and map data.");
           } catch (error) { $("status").textContent = error.message; }
           finally { button.disabled = false; }
         }); row.append(button); $("results").append(row);

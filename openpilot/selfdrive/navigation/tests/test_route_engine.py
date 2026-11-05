@@ -12,10 +12,13 @@ from openpilot.selfdrive.navd.helpers import Coordinate, coordinate_from_param
 def engine(monkeypatch):
   values = {'MapboxPublicKey': 'pk.test', 'NavDestination': json.dumps({'latitude': 37.01, 'longitude': 127.01})}
   params = NS(get=values.get, remove=lambda key: values.pop(key, None))
-  monkeypatch.setattr(navd, 'Params', lambda: params)
+  temporary = {}
+  memory = NS(get=temporary.get, remove=lambda key: temporary.pop(key, None))
+  monkeypatch.setattr(navd, 'Params', lambda path=None: memory if path == '/dev/shm/params' else params)
   published = []
   engine = navd.RouteEngine(None, NS(send=lambda name, value: published.append((name, value))))
   engine.last_position = Coordinate(37., 127.)
+  engine.temporary_values = temporary
   engine.refresh_token()
   yield engine, values, published
   engine.executor.shutdown(wait=True)
@@ -81,3 +84,42 @@ def test_destination_change_immediately_clears_old_route_during_request(engine):
   engine.send_instruction()
   assert engine.route is None and not published[-1][1].valid
   assert len(published[-2][1].navRouteNavd.coordinates) == 0
+
+
+def test_temporary_destination_precedes_persistent_destination(engine):
+  engine, _, _ = engine
+  engine.temporary_values['NavDestinationTemporary'] = json.dumps({'latitude': 38., 'longitude': 128.})
+  assert engine.destination_from_params()[0] == Coordinate(38., 128.)
+  engine.params_memory.remove('NavDestinationTemporary')
+  assert engine.destination_from_params()[0] == Coordinate(37.01, 127.01)
+
+
+@pytest.mark.parametrize('change', ['replace', 'clear'])
+def test_temporary_destination_rejects_late_route_response(engine, change):
+  engine, values, published = engine
+  values['NavDestination'] = ''
+  engine.temporary_values['NavDestinationTemporary'] = json.dumps({'latitude': 37.01, 'longitude': 127.01})
+  pending(engine)
+  engine.pending.set_result(response())
+  if change == 'replace':
+    engine.temporary_values['NavDestinationTemporary'] = json.dumps({'latitude': 38., 'longitude': 128.})
+  else:
+    engine.params_memory.remove('NavDestinationTemporary')
+  engine.poll_route()
+  assert engine.route is None and not published
+
+
+def test_arrival_clears_temporary_destination_without_restarting_route(engine, monkeypatch):
+  engine, values, _ = engine
+  values['NavDestination'] = ''
+  engine.temporary_values['NavDestinationTemporary'] = json.dumps({'latitude': 37.01, 'longitude': 127.01})
+  pending(engine)
+  engine.pending.set_result(response())
+  engine.poll_route()
+  engine.last_position = Coordinate(37.02, 127.02)
+  monkeypatch.setattr(navd, 'distance_along_geometry', lambda *args: 150.)
+  engine.send_instruction()
+  assert not engine.temporary_values
+  assert engine.destination_from_params() == (None, None)
+  engine.recompute_route()
+  assert engine.route is None and engine.pending is None
