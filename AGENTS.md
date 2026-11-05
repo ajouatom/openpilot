@@ -8,6 +8,11 @@
   USB wait/captured copies and native compatibility CI. Signed selected-model
   host delivery required. Parked physical testing authorized before19:40; do not
   treat desktop metadata/CI as road acceptance. See docs/light_speed_2_model_20261105.md.
+  Published9faaee0ab9; native Light2 five/Jetson2364 checks pass. Owner car retained
+  concurrent CAN-task f8e02ee19d, normal comma reboot selects Light2. ONNX downloaded
+  on Jetson and reboot requested; owner then explicitly PAUSED Jetson work due to
+  CAN-task overlap. No further device changes/tests until resumed. Automatic boot
+  update may proceed; actual Light2 engine/inference/road readiness unverified.
 
 
 - On 2026-11-05, owner requests MKS CANable 2.0 support alongside PEAK and S3,
