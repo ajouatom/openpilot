@@ -166,4 +166,11 @@ def test_stationary_range_hold_cannot_cover_a_new_or_contradictory_object(mode, 
     controller.enable_radar_tracks = mode
     time_s = 1.05
   output = controller.update(time_s, 24.0, (point,), model, yaw_rate_rad_s=0.04)
+  if change in ("precise_range", "farther_object"):
+    assert output.lead_one["radarTrackId"] == 53
+    for index in range(1, 5):
+      next_time = time_s + index * 0.05
+      next_point = replace(point, d_rel=point.d_rel + point.v_rel * index * 0.05)
+      model.leadsV3[0].x = (model.leadsV3[0].x[0] - 0.25,)
+      output = controller.update(next_time, 24.0, (next_point,), model, yaw_rate_rad_s=0.04)
   assert output.lead_one is None or output.lead_one["radarTrackId"] != 53

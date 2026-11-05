@@ -37,8 +37,11 @@ sample in its two-second forecast; proximity alone cannot promote a same-row
 vehicle. Front, SCC, and corner inputs retain their production source identity.
 CUT-OUT never removes leadOne, latches an identity out, or excludes either
 control-lead candidate. Its only control use is arming the cross-sensor-confirmed
-stationary `leadTwo` path above. LeadOne changes only when the primary
-model-to-front/SCC-radar matcher loses its match or switches to another object.
+stationary `leadTwo` path above. After the primary model-to-front/SCC-radar
+matcher loses its match, a healthy measured front lead is retained until its
+visual replacement has stayed kinematically consistent for 0.20 seconds. A new
+radar match can still switch immediately. Missing measurements, discontinuous
+motion, an off-path point, or invalid model geometry revoke this extra hold.
 This intentionally prefers a brief conservative hold on a departing vehicle
 over a no-lead acceleration gap caused by an uncertain future-path prediction.
 A separate measured moving object already in the current path still needs the
@@ -53,6 +56,12 @@ its range-dependent noise floor and report inward velocity. Both measured
 body returns must move laterally by at least a target half-width and remain
 ahead at the forecast crossing. Keep the Carnival 182/59 parallel-pass case
 clear when validating changes to this gate.
+
+The ID.4 segment 29e/46 checks continuous front track 281 across the 38.0--59.8 s
+window despite brief vision distance/speed outliers. This is a log-derived
+regression expectation, not human-verified target-motion ground truth. See
+`docs/id4_vision_transition_20261105.md` for the 0.20-second transition contract,
+full-corpus comparison, and remaining validation failures.
 
 Before normal CUT-IN confirmation, a separate corner-radar-only risk path may
 request bounded pre-deceleration without creating leadTwo. It requires 0.10
@@ -285,8 +294,9 @@ physical-predictor CUT-IN only. One physical continuity creates at most one
 automatic pause even if it briefly moves between lead roles; a physically
 discontinuous reuse of the same track ID may create another pause.
 
-With no filters, the maintained cases cover 49 unique logs. They open in
-sequence, and finishing one log automatically opens the next.
+With no filters, the maintained cases open in sequence, and finishing one log
+automatically opens the next. The combined case and trajectory-label validation
+corpus contains 104 unique logs as of 2026-11-05.
 
 Controls:
 
