@@ -41,7 +41,57 @@ existing stopped/slow-speed suppression remains in effect. In 3D, important
 lead distance labels retain their existing visibility even with radar info
 off; camera overlays retain their separate existing visibility rules.
 
-### Tests and synthetic pre-rendering
+### P/R-only selection on `thftgr/carrot-wip-cluster`
+
+Based on `carrot-wip` `612881c4d9`, this branch selectively applies the display
+work from `thftgr/carrot-wip` commit `939464082f`. Only onroad P and R select
+the imported parking/reversing screens. Other gears (including N, L and unknown)
+and offroad retain the selected upstream screen mode. Alerts and the shared
+indicator status remain drawn over both special screens.
+
+The imported clean driving layout, path rails, badges and surrounding-model
+code is retained for future review. `cluster_scene.clean_ui_enabled()` is
+unconditionally false: neither `EV6_HUD_CLEAN` nor an old device flag can enable
+it. P/R selection is independent of that function. Normal driving retains the
+upstream Cybertruck, materials, path and labels, including the enlarged distant
+L1 metrics. Device UI sleep changes were excluded.
+
+P/R model resources are loaded only when a special screen is first prepared,
+use separate handles from the driving model, and are released before the GL
+context closes. CarParams identity selects the P/R image with an EV6 fallback;
+it does not alter the driving scene. Reverse lines remain an illustrative EV6
+wheelbase/steering-ratio reference, not camera video or measured free space.
+The device files `/data/ev6_park_screen_off` and `/data/ev6_reverse_screen_off`
+disable the respective screen. `/data/ev6_weather_off` disables the imported
+parking-weather fetcher; previews disable network fetching.
+
+Linux validation and pre-rendering (from the repository root):
+
+```bash
+PYTHONPATH=. .venv/bin/python -m pytest -c /dev/null -p no:cacheprovider --confcutdir=openpilot/selfdrive/carrot/tests openpilot/selfdrive/carrot/tests/test_cluster_ev6_hud.py openpilot/selfdrive/carrot/tests/test_cluster_scene.py openpilot/selfdrive/carrot/tests/test_cluster_display.py openpilot/selfdrive/carrot/tests/test_cluster_vehicle_shader_gles.py
+PYTHONPATH=. .venv/bin/python openpilot/selfdrive/carrot/cluster/render_gear_screens.py --output build/cluster_gear_screens --baseline-ref 612881c4d9
+```
+
+The preview uses the production raylib path on Linux, writes P/R views in both
+themes, and compares D/N frames before and after P/R against the specified Git
+baseline. It uses synthetic data without vehicle services or weather requests.
+Desktop GL images and GLES shader checks cannot establish comma GPU, USB or
+physical-device performance.
+
+2026-11-05 validation: 173 focused cases passed in the Linux environment,
+including a real surfaceless EGL/GLES shader compile/link check. This total
+counts unique cases across the initial run, the corrected missing-onroad-state
+cases and the normalized battery-value regression; reruns are not added twice.
+The existing `fuelGauge` fraction is converted to percent on P just as in the
+upstream driving gauge. Twelve P/R previews (both themes, alternate model,
+steering/BSD and alert overlay) and two context-reopen captures were rendered.
+Visual review covered P/R in both themes, the alternate car, alerts and D.
+All 12 D/N comparisons, before and after P/R, matched `612881c4d9` with zero
+changed pixels. The 13 Wiki generator tests, two local manual pages and user-docs
+mapping passed. Full builds, the full test suite and physical comma validation
+were intentionally not run. Neither code nor Wiki content was pushed.
+
+### Lead-label tests and synthetic pre-rendering
 
 From this repository checkout's root, using its Linux Python environment:
 

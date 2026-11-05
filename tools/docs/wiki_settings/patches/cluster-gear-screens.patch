@@ -1,0 +1,40 @@
+--- a/KO-외부-HUD-화면-모드(0).md
++++ b/KO-외부-HUD-화면-모드(0).md
+@@ -30,0 +31,17 @@
++<!-- CARROT:SECTION:BEGIN BEHAVIOR -->
++### 동작
++
++`thftgr/carrot-wip-cluster`에서는 onroad P 기어에서 주차 화면, R 기어에서 후진 참고 화면이 우선합니다. 다른 기어와 offroad에서는 기존 화면 모드로 돌아가며 주행 화면과 본체 화면 꺼짐은 바뀌지 않습니다.
++<!-- CARROT:SECTION:END BEHAVIOR -->
++
++<!-- CARROT:SECTION:BEGIN USAGE -->
++### 사용
++
++`/data/ev6_park_screen_off` 또는 `/data/ev6_reverse_screen_off` 파일로 해당 화면만 끌 수 있습니다. 주차 날씨 조회는 `/data/ev6_weather_off`로 끕니다.
++<!-- CARROT:SECTION:END USAGE -->
++
++<!-- CARROT:SECTION:BEGIN REFERENCE -->
++### 참고
++
++P/R 차량 그림은 지원 차종을 따르고 일치하지 않으면 EV6를 사용합니다. 후진 선은 EV6 제원의 참고 그림으로 실제 후방 영상이나 장애물 검출 결과가 아닙니다. 주차 날씨는 마지막 위치를 약 1km로 반올림해 Open-Meteo에 조회하며 최대 1시간 동안 캐시합니다.
++<!-- CARROT:SECTION:END REFERENCE -->
+--- a/EN-External-HUD-Screen-Mode(0).md
++++ b/EN-External-HUD-Screen-Mode(0).md
+@@ -30,0 +31,17 @@
++<!-- CARROT:SECTION:BEGIN BEHAVIOR -->
++### Behavior
++
++On `thftgr/carrot-wip-cluster`, onroad P prioritizes the parking screen and R the reverse reference screen. Other gears and offroad restore the existing screen mode; driving layout and device-screen sleep are unchanged.
++<!-- CARROT:SECTION:END BEHAVIOR -->
++
++<!-- CARROT:SECTION:BEGIN USAGE -->
++### Usage
++
++Create `/data/ev6_park_screen_off` or `/data/ev6_reverse_screen_off` to disable only that screen. `/data/ev6_weather_off` disables parking weather queries.
++<!-- CARROT:SECTION:END USAGE -->
++
++<!-- CARROT:SECTION:BEGIN REFERENCE -->
++### Reference
++
++P/R images follow supported vehicles with an EV6 fallback. Reverse lines use illustrative EV6 geometry, not rear-camera video or obstacle detection. Parking weather queries Open-Meteo using the last location rounded to approximately 1 km, with a cache age of up to one hour.
++<!-- CARROT:SECTION:END REFERENCE -->
