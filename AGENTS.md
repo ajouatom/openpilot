@@ -1,5 +1,21 @@
 # Repository memory
 
+- On 2026-11-05, owner reports ATC indicator-associated warnings while driving,
+  then explicitly requests PC-only fix/test/push and will apply after exercise.
+  Full-cereal NAS rlog 11a6/30: receiver unavailable/lease_lost at19:47:56.001,
+  model IPC timeout/local fallback167ms later and commIssue soft-disable.
+  Both reported indicators are off at failure; this does not prove a turn-on
+  trigger or why receiver availability dropped. Sender synchronously waited
+  for policy-child exit on the model bridge thread. Reap only that source in
+  background after immediate IPC closure; retain synchronous CAN-worker close,
+  lease grace and expiry. Gate fresh sources until reaping ends, revoke commands
+  on adapter-generation change, log receiver state/error on loss. Real desktop
+  child with400ms shutdown reproduces old405ms blocking; new lifecycle tests
+  cover loss/change/close, recovery without command replay and CAN close.
+  Indicator suites606pass/7Linux-only skips; Ruff passes. No vehicle write,
+  restart, firmware or model change. Initial receiver failure and road cure
+  remain unverified; user must GitPull/full reboot to load the comma bridge fix.
+
 - On 2026-11-05, owner requests 0.20s coherent-vision replacement while a
   healthy measured front radar lead remains, following ID4 29e/46 on contributor
   model_selector-ha c6eb3b36a. Short visual range/speed outliers replace measured
