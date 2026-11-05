@@ -86,3 +86,41 @@ def test_priority_off_keeps_the_previous_lead_behaviour():
   p.paddleSignalPriority = False
   run(p, sm, 0.)
   assert p.xState.name == 'lead' and not p._paddle_stop
+
+
+def open_road(speed=16.7):
+  return inputs(speed=speed, distance=150.)  # model plans to keep going: no light seen yet
+
+
+def test_paddle_before_the_light_is_seen_eases_down_instead_of_stopping():
+  p, sm = planner(), open_road()
+  run(p, sm, 0.)  # 1 s
+  assert p.xState.name not in ('e2eStop', 'e2eStopped')
+  assert abs(p.v_cruise - (16.7 - 0.6 * 20 * 0.05)) < 0.05
+
+
+def test_paddle_hint_holds_at_the_floor_until_the_light_is_seen():
+  p, sm = planner(), open_road()
+  run(p, sm, 0., 400)
+  assert abs(p.v_cruise - 30. / 3.6) < 1e-3
+
+
+def test_paddle_hint_below_the_floor_holds_speed():
+  p, sm = planner(), open_road(speed=5.)
+  run(p, sm, 0., 40)
+  assert abs(p.v_cruise - 5.) < 1e-3
+
+
+def test_seen_light_takes_over_from_the_hint():
+  sm = red_scene()
+  sm['radarState'].leadOne = NS(status=False, dRel=0., vLead=0.)
+  p = planner()
+  run(p, sm, 0.)
+  assert p.xState.name == 'e2eStop' and p._paddle_hint_v == 1e3
+
+
+def test_priority_off_keeps_the_stop_on_the_spot():
+  p, sm = planner(), open_road()
+  p.paddleSignalPriority = False
+  run(p, sm, 0.)
+  assert p.v_cruise == 0

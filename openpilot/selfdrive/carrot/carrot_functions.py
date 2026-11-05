@@ -58,6 +58,9 @@ class TrafficState(Enum):
 A_CRUISE_MAX_BP_CARROT = [0., 10 * CV.KPH_TO_MS, 40 * CV.KPH_TO_MS, 60 * CV.KPH_TO_MS, 80 * CV.KPH_TO_MS, 110 * CV.KPH_TO_MS, 140 * CV.KPH_TO_MS]
 
 class CarrotPlanner:
+  PADDLE_HINT_DECEL = 0.6  # m/s^2, the model-planned light stops after a paddle ran -0.4..-0.6 (§47)
+  PADDLE_HINT_MIN_SPEED = 30. * CV.KPH_TO_MS  # the light is picked up within ~105-120 m at this speed
+
   def __init__(self, signal_assist=None, start_guard=None, stop_prepare=None):
     # SignalAssistMode defaults OFF; injected helpers support offline comparison.
     self.signal_assist = signal_assist
@@ -85,6 +88,7 @@ class CarrotPlanner:
     self._signal_stop_owned = False
     self._paddle_stop = False
     self.paddleSignalPriority = True
+    self._paddle_hint_v = 1e3
     self.params = Params()
     self.params_count = 0
     self.frame = 0
@@ -552,6 +556,7 @@ class CarrotPlanner:
       self._paddle_stop = False
     # A moving lead is not a reason to skip the light during a paddle stop: without a lead gate the first red comes
     # ~78 m before the stop instead of ~3-26 m (02_logs/measurements.md §44). The MPC still keeps the lead.
+    paddle_hint = self._paddle_stop and v_cruise_kph == 0  # card still asks for the stop (no hand-off yet)
     paddle_moving_lead = self._paddle_stop and radarstate.leadOne.status and getattr(radarstate.leadOne, 'vLead', 0.) > 1.0
 
     v_cruise_kph = self.cruise_eco_control(v_ego_cluster_kph, v_cruise_kph)
@@ -819,6 +824,16 @@ class CarrotPlanner:
       lead_y_std=model_lead_y_std,
       lead_v_std=model_lead_v_std,
     )
+
+    # Paddle = "red light ahead" hint, not a stop on the spot (02_logs/measurements.md §47): until the model plans the
+    # stop, ease down at PADDLE_HINT_DECEL toward PADDLE_HINT_MIN_SPEED so the light comes into range; the light stop
+    # above takes over once seen. vCruise 0 alone braked at the cruise limit and the driver overrode it (3 of 5).
+    if paddle_hint and not stopping_active:
+      hint = min(self._paddle_hint_v, v_ego)
+      self._paddle_hint_v = max(hint - self.PADDLE_HINT_DECEL * DT_MDL, min(hint, self.PADDLE_HINT_MIN_SPEED))
+      v_cruise = self._paddle_hint_v
+    else:
+      self._paddle_hint_v = 1e3
 
     if stopping_active and stop_dist < 300.0:
       stop_dist_soft = max(stop_dist - 1.0, 0.0)
