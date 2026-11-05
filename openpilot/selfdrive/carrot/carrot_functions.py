@@ -84,6 +84,7 @@ class CarrotPlanner:
     self.signal_lead_present = False
     self._signal_stop_owned = False
     self._paddle_stop = False
+    self.paddleSignalPriority = True
     self.params = Params()
     self.params_count = 0
     self.frame = 0
@@ -237,6 +238,7 @@ class CarrotPlanner:
       self.stopGoAssist = self.params.get_int("StopGoAssist")
       self.comfort_brake_symmetric = self.params.get_bool("ComfortBrakeSymmetric")
       self.trafficStopDistanceAdjust = self.params.get_float("TrafficStopDistanceAdjust") / 100.
+      self.paddleSignalPriority = self.params.get_int("PaddleSignalPriority") > 0
     elif self.params_count >= 100:
 
       self.params_count = 0
@@ -544,7 +546,7 @@ class CarrotPlanner:
 
     # Paddle stop request: card publishes vCruise 0 while it is active. Latch it until standstill or a pedal so the
     # stop the paddle asked for survives the hand-off to a light (cruise.py then restores vCruise).
-    if v_cruise_kph == 0 and v_ego > 1.0:
+    if self.paddleSignalPriority and v_cruise_kph == 0 and v_ego > 1.0:  # PaddleSignalPriority 0: previous behaviour
       self._paddle_stop = True
     elif v_ego < 0.3 or carstate.gasPressed or carstate.brakePressed or self.xState not in (XState.e2eStop, XState.e2eStopped):
       self._paddle_stop = False

@@ -79,3 +79,10 @@ def test_paddle_stop_target_ignores_the_go_plan_of_a_flicker():
   sm['modelV2'].velocity.x = [10.] + [15.] * 32
   run(p, sm, 80., 5)
   assert p.xState.name == 'e2eStop' and p.stop_dist <= before
+
+
+def test_priority_off_keeps_the_previous_lead_behaviour():
+  p, sm = planner(), red_scene()
+  p.paddleSignalPriority = False
+  run(p, sm, 0.)
+  assert p.xState.name == 'lead' and not p._paddle_stop

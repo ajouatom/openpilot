@@ -444,6 +444,7 @@
             "CanfdBvmRaw",
             "CanfdBvmAltTime",
             "PalisadeBlinkerTest",
+            "PaddleSignalPriority",
             "ClusterLaneTest",
             "ClusterLaneTestValue",
             "ClusterLaneTestFrom",
@@ -3221,6 +3222,22 @@
       "min": 0,
       "max": 2,
       "default": 0,
+      "unit": 1
+    },
+    {
+      "group": "Joongyu Lab",
+      "name": "PaddleSignalPriority",
+      "title": "패들 정지: 신호 우선",
+      "descr": "PaddleMode 2(패들 = 정지 요청)에서 정지를 요청하면 앞차보다 신호등을 먼저 봅니다. 1: 켬(기본), 0: 끔(기존 동작).\n켜면 패들 정지 중 달리는 앞차(신호 건너편 차 포함)가 있어도 적색 신호를 보고 정지선에 섭니다. 초록 깜빡임에도 정지를 유지합니다. 멈춰 있는 앞차는 그대로 따라 서고 차간거리 제어도 유지됩니다. 가속·브레이크 페달을 밟거나 정지하면 풀립니다.\n끄면 앞차가 잡혀 있을 때 신호를 보지 않고 감속이 끝나는 곳에 섭니다(도로 중간 정지).",
+      "egroup": "Joongyu Lab",
+      "etitle": "Paddle Stop: Light First",
+      "edescr": "With PaddleMode 2 (paddle = stop request), a paddle stop looks at the traffic light before the lead. 1: On (default), 0: Off (previous behaviour).\nOn: a moving lead (also one past the junction) no longer hides the red light, so the car stops at the stop line, and a green flicker does not cancel the stop. A stopped lead is still followed and lead spacing stays active. Released by a pedal or at standstill.\nOff: with a lead the light is not used and the car stops wherever it finishes slowing (mid-road).",
+      "cgroup": "Joongyu Lab",
+      "ctitle": "拨片停车: 信号优先",
+      "cdescr": "PaddleMode 2(拨片 = 停车请求)时, 拨片停车优先看红绿灯而不是前车。1: 开(默认), 0: 关(原有行为)。\n开启时, 行驶中的前车(包括已过路口的车)不再挡住红灯判断, 车辆在停止线停车, 绿灯闪烁也不取消停车。静止的前车仍会跟停, 车距控制保持。踩踏板或停车后解除。\n关闭时, 有前车则不看信号, 在减速结束处停车(路中停车)。",
+      "min": 0,
+      "max": 1,
+      "default": 1,
       "unit": 1
     },
     {
