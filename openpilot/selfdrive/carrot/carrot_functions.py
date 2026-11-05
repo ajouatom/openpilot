@@ -83,6 +83,7 @@ class CarrotPlanner:
     self.signal_green_active = False
     self.signal_lead_present = False
     self._signal_stop_owned = False
+    self._paddle_stop = False
     self.params = Params()
     self.params_count = 0
     self.frame = 0
@@ -541,6 +542,16 @@ class CarrotPlanner:
     )
 
 
+    # Paddle stop request: card publishes vCruise 0 while it is active. Latch it until standstill or a pedal so the
+    # stop the paddle asked for survives the hand-off to a light (cruise.py then restores vCruise).
+    if v_cruise_kph == 0 and v_ego > 1.0:
+      self._paddle_stop = True
+    elif v_ego < 0.3 or carstate.gasPressed or carstate.brakePressed or self.xState not in (XState.e2eStop, XState.e2eStopped):
+      self._paddle_stop = False
+    # A moving lead is not a reason to skip the light during a paddle stop: without a lead gate the first red comes
+    # ~78 m before the stop instead of ~3-26 m (02_logs/measurements.md §44). The MPC still keeps the lead.
+    paddle_moving_lead = self._paddle_stop and radarstate.leadOne.status and getattr(radarstate.leadOne, 'vLead', 0.) > 1.0
+
     v_cruise_kph = self.cruise_eco_control(v_ego_cluster_kph, v_cruise_kph)
     v_cruise_kph, atc_active = self._update_carrot_man(sm, v_ego_kph, v_cruise_kph)
     
@@ -585,7 +596,8 @@ class CarrotPlanner:
       self.trafficState = TrafficState.off
       self.stopSignCount = self.startSignCount = 0
     else:
-      self.check_model_stopping(v_cruise, v, v_ego, a_ego, x[-1], y, radarstate.leadOne.dRel if lead_detected else 1000)
+      self.check_model_stopping(v_cruise, v, v_ego, a_ego, x[-1], y,
+                                radarstate.leadOne.dRel if lead_detected and not paddle_moving_lead else 1000)
 
     if self.myDrivingMode == DrivingMode.High or self.trafficLightDetectMode == 0:
       self.trafficState = TrafficState.off
@@ -696,10 +708,11 @@ class CarrotPlanner:
         #self.xState = XState.e2ePrepare
         self.xState = XState.e2eCruise
         self.traffic_starting_count = 10.0 / DT_MDL
-      elif lead_in_stop_range:
+      elif lead_in_stop_range and not paddle_moving_lead:
         self.xState = XState.lead
       else:
-        if self.trafficState == TrafficState.green:
+        # The early paddle red flickers to green in 18 of 34 stops (§44); the driver asked to stop, so only stop.
+        if self.trafficState == TrafficState.green and not self._paddle_stop:
           self.add_signal_event(EventName.trafficSignGreen)
           self.xState = XState.e2eCruise
         else:
@@ -708,7 +721,13 @@ class CarrotPlanner:
           self.trafficStopAdjustRatio = np.interp(v_ego_kph, [0, 100], [1.0, 0.7])
           # 속도가 높을수록 먼 정지거리 추정값을 줄여 보정함.
           stop_dist = stop_model_x_rl * np.interp(stop_model_x_rl, [0, 50], [1.0, self.trafficStopAdjustRatio])
-          if stop_dist > 10.0:  # 10m 이상일 때만 실제 정지거리를 갱신함.
+          if self._paddle_stop:
+            # A green/off flicker carries the model's go plan (~140 m) into xStopFilter and _stop_x_rl for ~1 s. Track
+            # only frames that plan a stop, so the target dead-reckons through flickers and still converges on the line.
+            if self.actual_stop_distance > 10.0 and v[-1] < max(3.0, v[0] * 0.7):
+              paddle_x = x[31] * np.interp(x[31], [0, 50], [1.0, self.trafficStopAdjustRatio])
+              self.actual_stop_distance += 0.1 * (paddle_x - self.actual_stop_distance)
+          elif stop_dist > 10.0:  # 10m 이상일 때만 실제 정지거리를 갱신함.
             self.actual_stop_distance = stop_dist
           stop_model_x = 0
           self.fakeCruiseDistance = 0 if self.actual_stop_distance > 10.0 else 10.0
@@ -728,7 +747,7 @@ class CarrotPlanner:
         self.xState = XState.e2eCruise
     else: #XState.lead, XState.cruise, XState.e2eCruise
       self.traffic_starting_count = max(0, self.traffic_starting_count - 1)
-      if lead_detected:
+      if lead_detected and not (paddle_moving_lead and self.trafficState == TrafficState.red):
         self.xState = XState.lead
       elif self.trafficState == TrafficState.red and is_traffic_stop_entry_allowed(carstate.steeringAngleDeg) and self.traffic_starting_count == 0:
         self.add_signal_event(EventName.trafficStopping)
@@ -737,7 +756,9 @@ class CarrotPlanner:
       else:
         self.xState = XState.e2eCruise
 
-    if self.trafficState in [TrafficState.off, TrafficState.green] or self.xState not in [XState.e2eStop, XState.e2eStopped]:
+    # A paddle stop keeps its stop target through red off/green flickers (red share after first red is ~0.75, §44).
+    if ((self.trafficState in [TrafficState.off, TrafficState.green] and not self._paddle_stop)
+        or self.xState not in [XState.e2eStop, XState.e2eStopped]):
       stop_model_x = 1000.0
 
     if self.user_stop_distance >= 0 and not start_hold:
