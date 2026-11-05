@@ -1,6 +1,7 @@
 import ast
 import io
 import os
+import stat
 from pathlib import Path
 import subprocess
 import sys
@@ -26,11 +27,108 @@ class CacheExclusionTests(unittest.TestCase):
       (self.cache / name).write_text(name)
     self.env = dict(os.environ, PYTHONPATH=str(ROOT))
     tree = ast.parse((ROOT / 'openpilot/system/manager/build.py').read_text())
-    names = {'prunable_cache_files', 'prune_cache', 'is_cache_lock_failure', 'build'}
+    names = {'prunable_cache_files', 'prune_cache', 'is_cache_lock_failure', 'build', 'remove_empty_build_outputs'}
     body = [n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name in names]
     self.ns = {'Path': Path, 'Spinner': object, 'acquire_cache_lock': acquire_cache_lock,
-               'MAX_CACHE_SIZE': 0, 'os': os, 'BASEDIR': str(ROOT), 'AGNOS': False, 'CACHE_DIR': self.cache}
+               'MAX_CACHE_SIZE': 0, 'os': os, 'stat': stat, 'BASEDIR': str(ROOT), 'AGNOS': False, 'CACHE_DIR': self.cache}
     exec(compile(ast.Module(body=body, type_ignores=[]), '<cache>', 'exec'), self.ns)
+
+  def test_empty_output_cleanup_preserves_sources_nonempty_files_and_links(self):
+    repo = self.root / 'repo'
+    repo.mkdir()
+    for name in ('empty.o', 'empty.os', 'empty.a', 'source.cc'):
+      (repo / name).touch()
+    (repo / 'valid.o').write_bytes(b'object')
+    (repo / '.git').mkdir()
+    (repo / '.git/keep.o').touch()
+    external = self.root / 'external'
+    external.mkdir()
+    (external / 'keep.o').touch()
+    (repo / 'linked.o').symlink_to(external / 'keep.o')
+    (repo / 'linked-dir').symlink_to(external, target_is_directory=True)
+    self.assertEqual(self.ns['remove_empty_build_outputs'](repo, self.cache), 3)
+    for name in ('source.cc', 'valid.o', '.git/keep.o', 'linked.o', 'linked-dir/keep.o'):
+      self.assertTrue((repo / name).exists(), name)
+    self.assertEqual(self.ns['remove_empty_build_outputs'](repo, self.cache), 0)
+
+  def test_empty_output_cleanup_respects_active_builder(self):
+    artifact = self.root / 'empty.o'
+    artifact.touch()
+    self.holder()
+    self.assertEqual(self.ns['remove_empty_build_outputs'](self.root, self.cache), 0)
+    self.assertTrue(artifact.exists())
+
+  def test_empty_output_cleanup_reports_permission_failure(self):
+    artifact = self.root / 'empty.o'
+    artifact.touch()
+    with patch.object(Path, 'unlink', side_effect=PermissionError('read-only')):
+      self.assertEqual(self.ns['remove_empty_build_outputs'](self.root, self.cache), 0)
+    self.assertTrue(artifact.exists())
+
+  def test_empty_output_created_on_last_normal_attempt_still_gets_one_retry(self):
+    repo = self.root / 'repo'
+    repo.mkdir()
+    artifact = repo / 'encoderd.o'
+    calls = []
+    def popen(command, **kwargs):
+      calls.append(command)
+      if len(calls) == 3:
+        artifact.touch()
+      rc = int(len(calls) < 4)
+      if rc == 0:
+        self.assertFalse(artifact.exists())
+        artifact.write_bytes(b'compiled')
+      return SimpleNamespace(returncode=rc, poll=lambda: rc, stdout=io.BytesIO(b'build failed'))
+    self.ns.update(AGNOS=True, BASEDIR=str(repo),
+                   HARDWARE=SimpleNamespace(set_power_save=lambda value: None, get_device_type=lambda: 'mici'),
+                   subprocess=SimpleNamespace(Popen=popen, PIPE=-1, STDOUT=-2), prune_cache=lambda path: None)
+    with patch.object(os, 'sched_setaffinity'), patch.object(os, 'cpu_count', return_value=8):
+      self.ns['build'](SimpleNamespace(update=lambda *a: None), minimal=True)
+    self.assertEqual([command[1] for command in calls], ['-j8', '-j4', '-j1', '-j1'])
+    self.assertEqual(calls[-1][2:], ['--cache-disable', '--minimal'])
+    self.assertEqual(artifact.read_bytes(), b'compiled')
+
+  def test_empty_output_recovery_is_bounded_and_only_on_comma_four_failure(self):
+    for device, empty, first_rc, recovery_rc, expected_calls in (
+      ('mici', True, 1, 0, 2), ('mici', True, 1, 1, 2),
+      ('mici', False, 1, 1, 3), ('mici', True, 0, 0, 1),
+      ('tici', True, 1, 1, 3), ('tizi', True, 1, 1, 3),
+    ):
+      with self.subTest(device=device, empty=empty, first_rc=first_rc, recovery_rc=recovery_rc):
+        repo = self.root / 'repo'
+        repo.mkdir(exist_ok=True)
+        artifact = repo / 'encoderd.o'
+        artifact.write_bytes(b'' if empty else b'valid')
+        calls = []
+        def popen(command, **kwargs):
+          calls.append(command)
+          rc = first_rc if len(calls) == 1 else recovery_rc
+          if len(calls) == 2 and device == 'mici' and empty:
+            self.assertFalse(artifact.exists())
+            artifact.write_bytes(b'compiled' if rc == 0 else b'')
+          return SimpleNamespace(returncode=rc, poll=lambda: rc, stdout=io.BytesIO(b'link failed'))
+        self.ns.update(AGNOS=True, BASEDIR=str(repo),
+                       HARDWARE=SimpleNamespace(set_power_save=lambda value: None, get_device_type=lambda: device),
+                       subprocess=SimpleNamespace(Popen=popen, PIPE=-1, STDOUT=-2),
+                       cloudlog=SimpleNamespace(error=lambda message: None), add_file_handler=lambda *a: None,
+                       prune_cache=lambda path: None)
+        spinner = SimpleNamespace(update=lambda *a: None, close=lambda: None)
+        with patch.object(os, 'sched_setaffinity'), patch.object(os, 'cpu_count', return_value=8), \
+             patch.dict(os.environ, {'CARROT_STARTUP_RECOVERY': '1'}):
+          if first_rc == 0 or recovery_rc == 0:
+            self.ns['build'](spinner, minimal=True)
+          else:
+            with self.assertRaises(SystemExit):
+              self.ns['build'](spinner, minimal=True)
+        self.assertEqual(len(calls), expected_calls)
+        self.assertTrue(all('--minimal' in command for command in calls))
+        recovered = device == 'mici' and empty and first_rc != 0
+        if recovered:
+          self.assertEqual(calls[1], ['scons', '-j1', '--cache-disable', '--minimal'])
+          self.assertEqual(artifact.read_bytes(), b'compiled' if recovery_rc == 0 else b'')
+        else:
+          self.assertTrue(all('--cache-disable' not in command for command in calls))
+          self.assertEqual(artifact.read_bytes(), b'' if empty else b'valid')
 
   def holder(self, code=None):
     code = code or ('from openpilot.common.scons_cache_lock import acquire_cache_lock; from pathlib import Path; import sys; ' +

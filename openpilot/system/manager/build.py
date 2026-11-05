@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import os
 import selectors
+import stat
 import subprocess
 import sys
 import time
@@ -236,6 +237,7 @@ def build(spinner: Spinner, dirty: bool = False, minimal: bool = False) -> None:
     nproc = 2
 
   extra_args = ["--minimal"] if minimal else []
+  cache_option = "--cache-populate"
 
   if AGNOS:
     HARDWARE.set_power_save(False)
@@ -244,9 +246,10 @@ def build(spinner: Spinner, dirty: bool = False, minimal: bool = False) -> None:
   # building with all cores can result in using too
   # much memory, so retry with less parallelism
   compile_output: list[bytes] = []
-  for n in (nproc, nproc/2, 1):
+  attempts = [nproc, nproc/2, 1]
+  for attempt, n in enumerate(attempts):
     compile_output.clear()
-    scons: subprocess.Popen = subprocess.Popen(["scons", f"-j{int(n)}", "--cache-populate", *extra_args], cwd=BASEDIR, env=env,
+    scons: subprocess.Popen = subprocess.Popen(["scons", f"-j{int(n)}", cache_option, *extra_args], cwd=BASEDIR, env=env,
                                                stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
     assert scons.stdout is not None
 
@@ -280,6 +283,12 @@ def build(spinner: Spinner, dirty: bool = False, minimal: bool = False) -> None:
       spinner.update(message)
       compile_output.append(message.encode('utf8'))
       break
+    if AGNOS and HARDWARE.get_device_type() == "mici" and cache_option != "--cache-disable":
+      if remove_empty_build_outputs(Path(BASEDIR), CACHE_DIR):
+        spinner.update("Repairing empty build files; retrying without cache")
+        cache_option = "--cache-disable"
+        # One low-memory recovery attempt, including after the last normal attempt.
+        attempts[attempt + 1:] = [1]
 
   if scons.returncode != 0:
     # Read remaining output
@@ -300,6 +309,26 @@ def build(spinner: Spinner, dirty: bool = False, minimal: bool = False) -> None:
 
   # enforce max cache size only while no other patched SCons process uses it
   prune_cache(CACHE_DIR)
+
+
+def remove_empty_build_outputs(root: Path, cache_dir: Path) -> int:
+  removed = 0
+  try:
+    with acquire_cache_lock(cache_dir):
+      for directory, dirs, files in os.walk(root):
+        dirs[:] = [d for d in dirs if d != ".git"]
+        for name in files:
+          path = Path(directory) / name
+          if path.suffix not in {".o", ".os", ".a"}:
+            continue
+          info = path.lstat()
+          if stat.S_ISREG(info.st_mode) and info.st_size == 0:
+            path.unlink()
+            removed += 1
+            print(f"Removed empty build output: {path.relative_to(root)}")
+  except (OSError, RuntimeError) as exc:
+    print(f"Empty build output recovery stopped: {exc}")
+  return removed
 
 
 def prunable_cache_files(cache_dir: Path) -> list[Path]:
