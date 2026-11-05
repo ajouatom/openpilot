@@ -37,6 +37,17 @@
   telemetry on each inference with an indicator channel, poll idle at200ms and
   keep local receive timeout100ms; retain 500ms stale revocation. Production-loop
   cadence regressions3pass. No firmware change is needed for this correction.
+  Public release carrot-canable-v2 and clickable KO/EN Wiki adapter pages are
+  published; five downloaded assets hash-match, public photo/link navigation and
+  mobile offline guide checked. Windows GUI/no-device checks exercised; no PC DFU
+  hardware attached. Park-guarded comma GitPull/reboot installed f8e02ee19d; avoid
+  only killing Python child processes after source changes because manager
+  preimports their modules. Concurrent owner-authorized Light2 work rebooted
+  both devices; preserve its selection. Final native observation: CANable owns
+  all391 samples across20s, same lease token, fresh CAN/ready/no error. Jetson
+  then runs Light2 source7c6be06a5b (includes CANable), not the earlier c70 pin.
+  This final check is passive; the earlier direct Park left/right test remains
+  the physical lamp proof, not a new end-to-end Bluetooth-button test.
 
 - On 2026-11-05, owner requests exact g1 handoff rejection on screen and logs.
   Add adb-handoff reason codes and bounded observations for first failed guard,
