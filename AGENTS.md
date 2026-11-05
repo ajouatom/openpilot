@@ -1,5 +1,23 @@
 # Repository memory
 
+- On 2026-11-05, owner requests MKS CANable 2.0 support alongside PEAK and S3,
+  first-ready output selection, and beginner PC/Jetson firmware/photo guides.
+  Standard G431 board flashed/readback-verified carrot-b1-slcan-2; exact image
+  aa59e9f7733d3398537d1a7d7c07cdd5e17edc91ac689fd7e0bd738dad03cd26.
+  Fix upstream silent-open override, disable automatic retries, clear pending TX
+  on close, and report actual sequence/TXBTO/protocol-error/cancellation results.
+  Host retries only confirmed no-error cancellations within 15ms/eight attempts.
+  Native Park test: left/right each exactly three flashes, comma and 0x413 agree;
+  13 completed TX frames, no opposite lamp. No long-duration driving proof.
+  Shared comma lease selects first ready S3/USB, retains working owner, expires
+  old commands before failover; enrollment alone never reserves S3 priority.
+  Native ownership/SLCAN21 pass, desktop88 pass/7 native-only skips; staged
+  production discovery receives matching CAN without sending. Installer backs up
+  full internal flash then programs/readback-compares; never writes options/OTP.
+  Standard MKS V2.0 only; Pro/V1/other MCU unverified. Windows physical DFU flash
+  untested. User explicitly authorizes KO/EN photo guides, Wiki and release kits.
+  See docs/user/ko/indicator-adapters.md and tools/jetlink/canable/README.md.
+
 - On 2026-11-05, owner requests exact g1 handoff rejection on screen and logs.
   Add adb-handoff reason codes and bounded observations for first failed guard,
   pre-write recheck, locks and unbind IO. Setup always invokes the existing

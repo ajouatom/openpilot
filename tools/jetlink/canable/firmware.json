@@ -1,0 +1,14 @@
+{
+  "version": "carrot-b1-slcan-2",
+  "source_commit": "16e7497ebfaa2ab6d1fe023784f10d839351258a",
+  "source_archive_sha256": "823b77391b6c1a7111ffbd961612c6196a8ef8e71dfd978feb5395925d1c010c",
+  "printf_commit": "7db5050674f6a3a9fb6b7a10b26ef8bfb93e2f7a",
+  "files": {
+    "carrot-b1.patch": "4b182fdb5470913a8f5358c3055ccc54f131ec787843c7e084e4eedebf143f62",
+    "canable2-carrot-b1-slcan-2.bin": "aa59e9f7733d3398537d1a7d7c07cdd5e17edc91ac689fd7e0bd738dad03cd26"
+  },
+  "printf": {
+    "printf.c": "c06ecb31cec8928078f627a678a09375c0d0e8053e74ef5b7a996a0cb02af6b6",
+    "printf.h": "253f975553d3080ba9daa0f6a56af2199e7faee3618e9d2b283d3906b3af02d9"
+  }
+}
