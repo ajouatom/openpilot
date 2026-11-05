@@ -160,7 +160,7 @@ def test_sender_uses_separate_bounded_message_and_expires_clock_anchor(monkeypat
   clock, sent = [1.], []
   monkeypatch.setattr(protocol.time, 'monotonic', lambda: clock[0])
   value = {'stamp':1., 'ok':True, 'events':[{'id':'one','time':.95,'direction':'left'}]}
-  monkeypatch.setattr(protocol, 'Process', lambda *a: SimpleNamespace(latest=lambda:value, close=lambda:None, send=lambda _:True,
+  monkeypatch.setattr(protocol, 'Process', lambda *a: SimpleNamespace(latest=lambda:value, close=lambda **kw:None, send=lambda _:True,
                                                                   process=SimpleNamespace(poll=lambda:None)))
   owner = SimpleNamespace(held=False, name='USB CAN')
   owner.acquire = lambda ready: setattr(owner, 'held', ready) or ready
