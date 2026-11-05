@@ -110,8 +110,14 @@ def test_diagnostic_transitions_are_bounded_and_excluded_from_wire(monkeypatch):
   source = {'stamp':1., 'ok':True, 'events':[], 'activated':True, 'relights':1,
             'turn_phase':'approach', 'turn_position':True,
             'hold':{'id':'secret-id', 'time':1., 'source':'turn', 'direction':'left'}}
-  monkeypatch.setattr(protocol, 'Process', lambda *a:NS(latest=lambda:source, close=lambda:None, send=lambda _:True))
-  client = NS(last_state={'carrot_blinker':{'token':'secret', 'clock':100., 'state':'ready', 'accepted_id':'secret-id'}},
+  monkeypatch.setattr(protocol, 'Process', lambda *a:NS(latest=lambda:source, close=lambda:None, send=lambda _:True,
+                                                    process=NS(poll=lambda:None)))
+  owner = NS(held=False, name='USB CAN')
+  owner.acquire = lambda ready: setattr(owner, 'held', ready) or ready
+  owner.release = lambda: setattr(owner, 'held', False)
+  monkeypatch.setattr(protocol, 'Owner', lambda _: owner)
+  client = NS(last_state={'carrot_blinker':{'token':'secret', 'clock':100., 'state':'ready', 'accepted_id':'secret-id',
+                                         'available':True, 'idle':True, 'generation':'one'}},
               _next_seq=lambda:1, _expect=lambda *a:NS(payload=protocol.encode({'ready':True,'token':'secret','clock':100.})),
               t=NS(send_json=lambda *a:None, send=lambda *a:sent.append(a)))
   sender = protocol.Sender(client, {'carrot_host':'jetson', protocol.CAPABILITY:True})
@@ -128,6 +134,7 @@ def test_diagnostic_transitions_are_bounded_and_excluded_from_wire(monkeypatch):
     assert 'turn_phase' not in wire and 'turn_position' not in wire
   clock[0] = 1.6
   source['stamp'] = 1.6
+  client.last_state['carrot_blinker']['clock'] = 100.6
   client.last_state['carrot_blinker']['state'] = 'late_request'
   sender.send(client)
   assert records[-1][1]['peer_state'] == 'late_request'

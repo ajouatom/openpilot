@@ -66,6 +66,8 @@ def test_monitor_joins_source_only_after_board_authentication(monkeypatch):
 
   async def run():
     monitor = Monitor()
+    ownership = [False]
+    monitor.output_owner.acquire = lambda ready: ready and ownership[0]
     monitor.attrs = {META: 'meta', CONTROL: 'command'}
     monitor.params = SimpleNamespace(get_bool=lambda name: name == 'IsOnroad')
     monkeypatch.setitem(sys.modules, 'openpilot.common.params', SimpleNamespace(Params=lambda: monitor.params))
@@ -98,6 +100,9 @@ def test_monitor_joins_source_only_after_board_authentication(monkeypatch):
       data['stamp'] = time.monotonic()
       return data
     worker.latest = latest
+    await monitor.exchange(key)
+    assert not started and writes[-1] == 3  # Another ready adapter owns output.
+    ownership[0] = True
     await monitor.exchange(key)
     assert started == [('blink_source.py','ble')]
     assert writes[-1] == 1

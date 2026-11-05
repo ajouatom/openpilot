@@ -238,7 +238,7 @@ def serve_local(listener, client, peer, wifi=None):
   blinker = None
   try:
     blinker = BlinkerSender(client, peer)
-    _serve_local(listener, client, peer, publisher, phase, wifi, blinker if blinker.worker is not None else None)
+    _serve_local(listener, client, peer, publisher, phase, wifi, blinker if blinker.enabled else None)
   finally:
     if blinker is not None:
       blinker.close()

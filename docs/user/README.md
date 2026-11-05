@@ -6,6 +6,7 @@
 
 | 주제 | 한국어 | English |
 |---|---|---|
+| 깜빡이 제어 장치 | [지원 목록·사진·설치](ko/indicator-adapters.md) | [Supported adapters and installation](en/indicator-adapters.md) |
 | Carrot Web | [Carrot Web 사용 설명서](ko/carrot-web.md) | [Carrot Web User Guide](en/carrot-web.md) |
 | 분석 로그 전송 | [분석용 대시캠 로그 전송](ko/dashcam-log-sharing.md) | [Sending Dashcam Logs for Analysis](en/dashcam-log-sharing.md) |
 | 설정 | [설정 이해하기](ko/settings.md) | [Understanding Settings](en/settings.md) |
