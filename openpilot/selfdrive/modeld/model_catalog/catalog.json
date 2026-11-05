@@ -51,5 +51,18 @@
     },
     "jetson_spec": "light-speed.json",
     "jetson_release": "light-speed-release.json"
+  },
+  "light-speed-2": {
+    "name": "Light speed 2",
+    "manifest_url": "https://upload.shind0.synology.me/models/comma4-big-light-speed-2-b4dead3e/manifest.json",
+    "egpu": {
+      "model_id": "comma-light-speed-2-b92fc482-b4dead3e",
+      "filename": "big_driving_tinygrad.pkl",
+      "size": 767228907,
+      "sha256": "b4dead3ee091d66ab002a6b8e716c26f4f79e3c931e4be5f48e017ba92f6e960",
+      "url": "https://upload.shind0.synology.me/models/comma4-big-light-speed-2-b4dead3e/big_driving_tinygrad.pkl"
+    },
+    "jetson_spec": "light-speed-2.json",
+    "jetson_release": "light-speed-2-release.json"
   }
 }

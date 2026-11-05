@@ -1,5 +1,15 @@
 # Repository memory
 
+- On 2026-11-05, owner requests Light speed 2 b92fc482 as an additional shared
+  eGPU/Jetson choice, keeping old Light speed. Official PKL b4dead3e/767228907B,
+  ONNX909a1400/768749892B, checkpoint ea2f516f match all metadata; NOO unsupported.
+  Pin isolated tinygrad ec91b74/runtime96c6ecc9; upstream includes cast-zero USB
+  wrap rule, so retain old backport only for d39227. Add exact-runtime cooperative
+  USB wait/captured copies and native compatibility CI. Signed selected-model
+  host delivery required. Parked physical testing authorized before19:40; do not
+  treat desktop metadata/CI as road acceptance. See docs/light_speed_2_model_20261105.md.
+
+
 - On 2026-11-05, owner requests MKS CANable 2.0 support alongside PEAK and S3,
   first-ready output selection, and beginner PC/Jetson firmware/photo guides.
   Standard G431 board flashed/readback-verified carrot-b1-slcan-2; exact image
