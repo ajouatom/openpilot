@@ -62,3 +62,46 @@ Jetson settings, reboots and inference trials until resumed. Boot-time automatic
 installation may still proceed; the pending SSH status read timed out. **New-model
 TensorRT build completion, active inference and road readiness are NOT verified.**
 Do not interpret the selected model or completed downloads as running-model proof.
+
+## Resumed live verification, 19:23–19:25 KST
+
+Owner resumed the paused task. Read-only inspection confirms automatic signed
+installation completed: Jetson source7c6be06a5b, ONNX909a1400, TensorRT10.3.0
+Orin-sm87 FP16 engine769895844B. Sidecar spec matches the committed selected pin;
+engine build47.0s, completed19:19:53 KST. Server and HUD active with NRestarts0.
+Comma actual sourcef8e02ee19d/boot6de2c5dd has boot selection Light speed2,
+IsTakingSnapshot=false, onroad/P/standstill/control inactive, clean checkout.
+Web API lists all four choices, Light2 selected/effective, NOO=false and no reboot
+required; internalCD210 remains independent. No new device writes or restarts
+were necessary after resumption. Physical eGPU inference was not tested.
+
+120.004 seconds of live subscription:2405 model/odometry/each-camera/livePose
+frames, zero frame-ID gaps, zero invalid messages, all livePose inputs/sensors/
+posenet healthy, no selfdrive alerts or missing processes. All120 sampled link
+states active/ready with no error. Navigation disconnected, as in the baseline;
+this model has no navigation input. No road/engaged-control acceptance is claimed.
+
+| Metric (ms) | Earlier N16 baseline | Light speed 2 |
+| --- | ---: | ---: |
+| Published model execution mean | 40.662 | 37.569 |
+| Published model execution P99 | 45.356 | 41.971 |
+| Published model execution max | 48.789 | 44.868 |
+| Host GPU mean | 24.646 | 21.159 |
+| USB exchange mean | 34.030 | 31.417 |
+
+Observed mean difference3.093ms (7.6%). This is a stationary before/after sample,
+not an isolated model A/B: concurrent CAN work changed telemetry cadence and
+both devices restarted. Execution-time>50ms count0 in both samples. Do NOT claim
+all scheduling intervals stay below50ms: Light2 modeld loop max61.614ms and
+jetlinkd loop max63.149ms were recorded, despite no model frame loss in this sample.
+
+Comma thermal green, max56.171C. Jetson snapshot GPU70.5C. DATA4.0GB free after
+ONNX/engine installation. Host journal after19:20:10 contains two slow-response
+warnings at19:20:12/19:20:47; no subsequent link closure in the inspected excerpt.
+Earlier19:20:00 boot handoff includes one bootstrap-message mismatch and USB
+reconnect before19:20:05 normal session; this is not counted as a clean boot.
+
+Full build42008426377 built successfully but its integration step has4 Bluetooth
+imports failing with `No module named tools.jetlink`,1153 passing. The preceding
+895905bd20 full run42006880280 has the exact same4 failed test names,1152 passing.
+These failures predate this model addition. Focused eGPU/Jetson/user-docs CI passes.
