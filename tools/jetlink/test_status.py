@@ -1,8 +1,32 @@
 import json
+import subprocess
 
 import pytest
 
 from openpilot.common import jetlink_status as status
+
+
+@pytest.mark.parametrize('reason', [
+  '[adb-handoff:opt_in_missing] ADB handoff permission is missing (/data/jetlink-adb-handoff)',
+  "[adb-handoff:offroad] Offroad required: IsOffroad='0', IsOnroad='1' (pre-write recheck)",
+  '[adb-handoff:io_error] unbind g1 UDC: PermissionError, errno=13',
+])
+def test_handoff_subprocess_error_reaches_screen_diagnostics(tmp_path, monkeypatch, reason):
+  from openpilot.selfdrive.modeld.jetlink import mobile
+  def rejected(command, **kwargs):
+    raise subprocess.CalledProcessError(1, command, stderr=f'jetlink: {reason}\n')
+  monkeypatch.setattr(mobile.subprocess, 'run', rejected)
+  monkeypatch.setattr(mobile.os, 'geteuid', lambda: 0, raising=False)
+  with pytest.raises(mobile.MobileLinkError) as error:
+    mobile._root('setup_gadget.sh')
+  link, model = tmp_path / 'link', tmp_path / 'model'
+  monkeypatch.setattr(status, 'LINK_STATUS', link)
+  monkeypatch.setattr(status, 'MODEL_STATUS', model)
+  monkeypatch.setattr(status.time, 'monotonic', lambda: 10.)
+  link.write_text(json.dumps({'updated': 10., 'state': 'retrying', 'error': str(error.value)[:300]}))
+  diagnostic = status.diagnostics()
+  assert diagnostic['severity'] == 'error'
+  assert reason in diagnostic['reason']
 
 
 @pytest.mark.parametrize(('peer', 'expected'), (

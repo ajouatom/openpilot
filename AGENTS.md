@@ -1,5 +1,15 @@
 # Repository memory
 
+- On 2026-11-05, owner requests exact g1 handoff rejection on screen and logs.
+  Add adb-handoff reason codes and bounded observations for first failed guard,
+  pre-write recheck, locks and unbind IO. Setup always invokes the existing
+  permission-checking helper for g1, including missing/unsafe marker diagnostics.
+  Shell status/stderr and daemon errors carry the cause to Carrot Web KO/EN;
+  label becomes comma USB setup blocked. Automatic NCM fallback retains the
+  cause at the start of its bounded error. Default opt-in/offroad/identity and
+  ownership checks still govern release. No marker enrollment/live device writes.
+  See docs/jetlink_konik_usb_recognition_20261023.md diagnostic table.
+
 - On 2026-11-05, owner requests review/integration of PR570/571. PR570 final
   5f6712c422 doubles Ray command increment above neutral264/497; cap0.70 maps
   795/1572 with matching explicit Panda bounds. Raw slew increases too.

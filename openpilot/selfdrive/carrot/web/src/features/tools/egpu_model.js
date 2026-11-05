@@ -57,6 +57,26 @@ const FALLBACK_STRINGS = {
   restart: "Restart & compile",
   restart_confirm: "Park the car and turn ignition on. Restart now to compile the eGPU big model?",
   restart_requested: "Restart requested. Compilation will begin during boot.",
+  host_usb_error: "Comma USB setup blocked",
+  handoff_opt_in_missing: "USB ADB handoff permission is missing.",
+  handoff_opt_in_invalid: "USB ADB permission marker ownership, permissions or file type failed validation.",
+  handoff_controller: "The USB controller is unsupported.",
+  handoff_platform: "The required comma platform marker is missing.",
+  handoff_offroad: "Turn ignition off and wait for comma to enter offroad.",
+  handoff_usb_role: "Comma USB has not entered device role (ufp).",
+  handoff_gadget_identity: "The g1 USB identity differs from the expected ADB gadget.",
+  handoff_gadget_functions: "The g1 functions differ from the expected ADB and network configuration.",
+  handoff_gadget_tree: "USB gadget entry count or file type validation failed.",
+  handoff_controller_changed: "The g1 USB controller binding changed during validation.",
+  handoff_other_owner: "Another USB gadget has a bound controller.",
+  handoff_lock_invalid: "USB handoff lock ownership or file type is invalid.",
+  handoff_lock_busy: "Another USB handoff is in progress.",
+  handoff_udc_attribute: "The g1 controller attribute has an invalid file type.",
+  handoff_write_failed: "The USB controller unbind write was incomplete.",
+  handoff_still_bound: "The g1 gadget remains bound after the unbind request.",
+  handoff_io_error: "USB handoff file access failed. See the stage and error number below.",
+  handoff_not_root: "The USB handoff helper requires root privileges.",
+  handoff_helper_failed: "The USB handoff helper exited without a reason.",
   host_ok: "Connected",
   host_warning: "High temperature",
   host_error: "Host error / connection lost",
@@ -70,6 +90,17 @@ const FALLBACK_STRINGS = {
 
 function t(key) {
   return typeof getUIText === "function" ? getUIText(`egpu_model_${key}`, FALLBACK_STRINGS[key] || key) : (FALLBACK_STRINGS[key] || key);
+}
+
+function hostReason(reason) {
+  const code = String(reason || "").match(/\[adb-handoff:([a-z_]+)\]/)?.[1];
+  const key = `handoff_${code}`;
+  if (code && FALLBACK_STRINGS[key]) return `${t(key)} · ${reason}`;
+  return ({
+    "Host not connected": t("host_not_connected"),
+    "Host connection unavailable": t("host_unavailable"),
+    "Host health unavailable": t("host_health_unavailable"),
+  })[reason] || reason;
 }
 
 function formatBytes(value) {
@@ -146,15 +177,12 @@ function render(status = lastStatus) {
   }
   const host = status.jetlink;
   hostEl.hidden = !host;
+  const usbBlocked = String(host?.reason || "").includes("[adb-handoff:");
   if (host) {
     const severity = ["ok", "warning", "error", "unknown"].includes(host.severity) ? host.severity : "unknown";
-    hostEl.textContent = `${host.label} · ${t(`host_${severity}`)} · ${t("host_ip")}: ${(host.addresses || []).join(", ") || t("host_no_ip")}`
+    hostEl.textContent = `${host.label} · ${usbBlocked ? t("host_usb_error") : t(`host_${severity}`)} · ${t("host_ip")}: ${(host.addresses || []).join(", ") || t("host_no_ip")}`
       + (Number.isFinite(host.temp_c) ? ` · ${host.temp_c.toFixed(1)} °C` : "")
-        + (host.reason ? ` · ${({
-          "Host not connected": t("host_not_connected"),
-          "Host connection unavailable": t("host_unavailable"),
-          "Host health unavailable": t("host_health_unavailable"),
-        })[host.reason] || host.reason}` : "");
+        + (host.reason ? ` · ${hostReason(host.reason)}` : "");
     hostEl.style.color = severity === "error" ? "#ff7474" : severity === "warning" ? "#ffd166" : "";
   }
   if (!status.available) {
@@ -162,7 +190,7 @@ function render(status = lastStatus) {
     card.dataset.state = host.severity === "error" ? "error" : "compiled";
     card.classList.remove("is-running");
     document.getElementById("egpuModelTitle").textContent = `${host.label} · ${status.library?.models?.find(m => m.id === status.library.effective)?.name || "Jetson"}`;
-    stateEl.textContent = t(`host_${host.severity || "unknown"}`);
+    stateEl.textContent = usbBlocked ? t("host_usb_error") : t(`host_${host.severity || "unknown"}`);
     detailEl.textContent = "";
     progressEl.hidden = true;
     amountEl.textContent = "";

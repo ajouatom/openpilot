@@ -5,6 +5,44 @@ import vm from "node:vm";
 
 import { CarrotEgpuModel } from "../src/features/tools/egpu_model.js";
 
+for (const language of ["ko", "en"]) {
+  test(`USB handoff reasons render localized text and retain diagnostic codes (${language})`, (t) => {
+    const savedDocument = globalThis.document;
+    const savedTranslator = globalThis.getUIText;
+    t.after(() => {
+      globalThis.document = savedDocument;
+      if (savedTranslator === undefined) delete globalThis.getUIText;
+      else globalThis.getUIText = savedTranslator;
+    });
+    let strings;
+    vm.runInNewContext(readFileSync(new URL(`../js/translations/${language}.js`, import.meta.url), "utf8"), {
+      window: { CarrotTranslations: { register(_language, translation) { strings = translation.strings; } } },
+    });
+    const elements = new Map();
+    globalThis.document = { getElementById(id) {
+      if (!elements.has(id)) elements.set(id, { dataset: {}, style: {}, classList: { remove() {} } });
+      return elements.get(id);
+    } };
+    globalThis.getUIText = (key, fallback) => strings[key] || fallback;
+    const codes = ["opt_in_missing", "opt_in_invalid", "controller", "platform", "offroad", "usb_role",
+      "gadget_identity", "gadget_functions", "gadget_tree", "controller_changed", "other_owner",
+      "lock_invalid", "lock_busy", "udc_attribute", "write_failed", "still_bound", "io_error", "not_root", "helper_failed"];
+    for (const code of codes) {
+      const reason = `setup_gadget.sh failed: jetlink: [adb-handoff:${code}] observed state`;
+      CarrotEgpuModel.render({ available: false, jetlink: { label: "Jetlink", severity: "error", reason } });
+      const shown = elements.get("jetlinkHealth").textContent;
+      assert.ok(strings[`egpu_model_handoff_${code}`]);
+      assert.ok(shown.includes(strings[`egpu_model_handoff_${code}`]));
+      assert.ok(shown.includes(reason));
+      assert.equal(elements.get("egpuModelState").textContent, strings.egpu_model_host_usb_error);
+    }
+    CarrotEgpuModel.render({ available: false, jetlink: {
+      label: "Jetlink", severity: "error", reason: "[adb-handoff:future_code] future detail",
+    } });
+    assert.match(elements.get("jetlinkHealth").textContent, /future_code.*future detail/);
+  });
+}
+
 test("delivery failures explain automatic recovery and installed files do not imply active inference", (t) => {
   const saved = globalThis.document;
   t.after(() => { globalThis.document = saved; });
