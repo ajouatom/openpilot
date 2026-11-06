@@ -10,9 +10,8 @@ import time
 from decimal import Decimal, ROUND_HALF_UP
 from pathlib import Path
 
-# These presentation settings can change while moving. All other catalog edits
-# require fresh stationary/disengaged state, including at final application.
-ONROAD_SETTINGS = frozenset({'ShowCustomBrightness', 'ClusterHudBrightness', 'SoundVolumeAdjust'})
+# Supported catalog settings may be edited onroad after explicit confirmation.
+# Initial authorization still requires stationary/disengaged state.
 DENIED_SETTINGS = frozenset({'DriverMonitoringEnabled', 'DriverMonitoringSessionDisabled', 'JetsonLegacyUpdatePending'})
 
 
@@ -91,11 +90,8 @@ class AssistantSettings:
     return {'name': name, 'title': str(meta.get('title', name))[:160], 'current': int(current),
             'min': int(low), 'max': int(high), 'step': int(step),
             'unit_note': 'Values are the integers displayed/stored by Carrot Web; honor any scale in the setting title.',
-            'stationary_required': name not in ONROAD_SETTINGS}
-
-  def _guard(self, snapshot):
-    if snapshot['stationary_required'] and not self.stationary():
-      raise ValueError('This setting can be changed only with fresh stationary/disengaged state')
+            'step_note': 'step is the web button increment, not a required multiple or an offset from min. Any in-range integer may be specified.',
+            'stationary_required': False}
 
   def execute(self, token, origin, command):
     owner = self.authorize(token, origin)
@@ -118,7 +114,6 @@ class AssistantSettings:
       # Consume before writing. Retrying an uncertain result cannot apply twice.
       del self.proposals[command['proposal_id']]
       snapshot = self.snapshot(proposal['name'])
-      self._guard(snapshot)
       if any(snapshot[k] != proposal[k] for k in ('current', 'min', 'max', 'step')):
         raise ValueError('Setting value or definition changed; prepare and confirm again')
       result = {'status': 'failed', 'name': proposal['name'], 'error': 'Application not verified; read current value before retrying'}
@@ -133,12 +128,13 @@ class AssistantSettings:
       snapshot = self.snapshot(command.get('name'))
       result = {'status': 'read', **snapshot}
       if operation == 'prepare':
-        self._guard(snapshot)
         amount = number(command.get('value'))
         mode = command.get('mode')
         current = Decimal(str(snapshot['current']))
         delta = Decimal(str(amount))
         if mode == 'absolute':
+          if delta != delta.to_integral_value():
+            raise ValueError('Specify an exact integer displayed/stored by Carrot Web')
           target = delta
         elif mode in ('delta', 'percent'):
           if not snapshot['min'] <= current <= snapshot['max']:
@@ -146,12 +142,14 @@ class AssistantSettings:
           target = current + (delta if mode == 'delta' else abs(current) * delta / 100)
         else:
           raise ValueError('Choose absolute, delta or percent')
-        low, high, step = (Decimal(str(snapshot[k])) for k in ('min', 'max', 'step'))
+        low, high = (Decimal(str(snapshot[k])) for k in ('min', 'max'))
         if not low <= target <= high:
           raise ValueError('Requested value is outside the allowed range; no value was changed')
-        proposed = low + ((target - low) / step).quantize(Decimal('1'), rounding=ROUND_HALF_UP) * step
+        # Catalog unit is a UI button increment, not a lattice anchored at min.
+        # Preserve explicit integers; round computed relative values to integers.
+        proposed = target.quantize(Decimal('1'), rounding=ROUND_HALF_UP)
         if not low <= proposed <= high or proposed == current:
-          raise ValueError('No valid change at this setting step; choose another value')
+          raise ValueError('No integer value change; choose another value')
         if len(self.proposals) >= 100:
           raise ValueError('Too many pending proposals')
         # A correction replaces the previous proposal for this owner.

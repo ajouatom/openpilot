@@ -71,19 +71,32 @@ class TestAssistantSettings:
         self.execute(self.command('commit', proposal_id=proposal['proposal_id']))
     assert self.writes == []
 
-  def test_stationary_rechecked_but_display_allowed_onroad(self):
+  def test_prepared_setting_can_apply_after_starting_drive(self):
     proposal = self.prepare()
     self.parked = False
-    with pytest.raises(ValueError):
-      self.execute(self.command('commit', proposal_id=proposal['proposal_id']))
-    with pytest.raises(ValueError):
-      self.prepare()
+    assert self.execute(self.command('commit', proposal_id=proposal['proposal_id']))['current'] == 110
+    assert self.history == [('Gap', 100, 110)]
+
+  @pytest.mark.parametrize('name', ['Gap', 'ShowCustomBrightness', 'Negative'])
+  def test_supported_settings_can_prepare_and_commit_onroad(self, name):
+    self.parked = False
+    proposal = self.prepare(name=name, mode='delta', value=5)
+    assert proposal['stationary_required'] is False
+    assert proposal['confirmation_required'] is True
+    assert self.writes == []
+    result = self.execute(self.command('commit', proposal_id=proposal['proposal_id']))
+    assert result['status'] == 'applied'
+    assert result['current'] == proposal['current'] + 5
+    assert self.history == [(name, proposal['current'], result['current'])]
+
+  def test_initial_permission_still_requires_stationary(self):
+    self.parked = False
     with pytest.raises(ValueError):
       self.service.enable('http://carrot:7000')
-    proposal = self.prepare(name='ShowCustomBrightness', mode='absolute', value=70)
-    assert self.execute(self.command('commit', proposal_id=proposal['proposal_id']))['status'] == 'applied'
 
   def test_no_defaults_unknown_internal_or_invalid_values(self):
+    self.catalog['DriverMonitoringEnabled'] = {'min': 0, 'max': 1, 'unit': 1}
+    self.values['DriverMonitoringEnabled'] = 1
     for name in ('Missing', 'DriverMonitoringEnabled'):
       with pytest.raises(ValueError):
         self.execute(self.command('read', name=name))
@@ -96,11 +109,26 @@ class TestAssistantSettings:
         self.prepare(mode='absolute', value=value)
     assert self.writes == []
 
-  def test_step_rounding_negative_percent_and_noop(self):
-    assert self.prepare(mode='absolute', value=112.5)['proposed'] == 115
+  def test_integer_rounding_negative_percent_and_noop(self):
+    assert self.prepare(mode='percent', value=12.5)['proposed'] == 113
     assert self.prepare(name='Negative')['proposed'] == -45
     with pytest.raises(ValueError):
-      self.prepare(value=1)
+      self.prepare(value=0.1)
+    with pytest.raises(ValueError):
+      self.prepare(mode='absolute', value=112.5)
+
+  @pytest.mark.parametrize('mode,amount,target', [('absolute', 240, 240), ('delta', -10, 240), ('percent', -4, 240),
+                                               ('absolute', 239, 239), ('absolute', 1, 1)])
+  def test_acceleration_minimum_is_not_step_origin(self, mode, amount, target):
+    self.catalog['CruiseMaxVals0'] = {'title': '0–10 km/h', 'min': 1, 'max': 250, 'unit': 5}
+    self.values['CruiseMaxVals0'] = 250
+    self.parked = False
+    proposal = self.prepare(name='CruiseMaxVals0', mode=mode, value=amount)
+    assert proposal['proposed'] == target
+    assert self.writes == []
+    result = self.execute(self.command('commit', proposal_id=proposal['proposal_id']))
+    assert result['current'] == target
+    assert self.writes == [('CruiseMaxVals0', target)]
 
   def test_correction_and_cancel_invalidate_previous_proposals(self):
     old = self.prepare()

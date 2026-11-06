@@ -51,7 +51,7 @@ Keep the CarrotAssist web interface active beneath the small voice overlay. A di
 
 ## Supported scope
 
-Voice changes support device-defined integer settings with valid bounds and increments. Except for screen brightness (`ShowCustomBrightness`), cluster brightness (`ClusterHudBrightness`) and alert volume (`SoundVolumeAdjust`), changes require fresh stationary/disengaged state. Restricted settings such as disabling driver monitoring are excluded.
+Voice changes support device-defined integer settings with valid bounds and increments. All supported settings, including driving settings, can be changed while driving after confirming the current and proposed values. Only initial authorization requires stationary/disengaged state. Each setting retains its existing activation timing; some require a restart. An explicit integer such as “set it to 240” is preserved within the allowed range. A button increment of 5 and minimum of 1 do not force 240 to become 241. Relative calculations are rounded to the nearest integer and the proposed value must be confirmed. Restricted settings such as disabling driver monitoring are excluded.
 
 This version does not execute real-time cruise-speed commands, lane changes, direct indicator control, drive analysis or log uploads. Editing a tuning parameter is different from issuing an immediate driving command. Setting history identifies changes made by the voice assistant. Follow each setting's instructions when a restart is required.
 
