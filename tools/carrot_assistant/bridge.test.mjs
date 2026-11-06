@@ -8,6 +8,63 @@ import { mkdtempSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
+test('DHCP migration keeps the account session, drops stale commands and persists the new origin', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'carrot-move-'));
+  const path = join(dir, 'connections.json');
+  let time = 1000;
+  try {
+    const old = 'http://10.225.84.19:7000', next = 'http://192.168.0.178:7000';
+    const b = createBridge({ statePath: path, now: () => time, isAccountLinked: () => true, accountActivity: () => 123 });
+    const browser = b.create(old), token = browser.browser_token;
+    const account = b.claimAccountCode(b.browser(token, old, 'account_code').account_code);
+    assert.equal(b.browser(token, old, 'inspect').account_activity_at, 123);
+    assert.equal(b.accountStatus(account.id).browser_online, false); // inspect is not a heartbeat
+    const pendingCode = b.browser(token, old, 'account_code');
+    b.browser(token, old, 'poll');
+    b.accountAction(account.id, 'open', 'AutoBlinkerControl');
+    const result = b.browser(token, next, 'relocate', { previous_origin: old });
+    assert.equal(result.account_linked, true); assert.equal(result.browser_online, false);
+    assert.equal(result.command, null); assert.equal(result.label, '192.168.0.178:7000');
+    assert.throws(() => b.claimAccountCode(pendingCode.account_code));
+    assert.throws(() => b.browser(token, old, 'poll'), /origin mismatch/);
+    assert.throws(() => b.browser('z'.repeat(43), next, 'relocate', { previous_origin: old }));
+    assert.throws(() => b.browser(token, 'https://evil.example', 'relocate', { previous_origin: next }));
+    b.browser(token, next, 'relocate', { previous_origin: old }); // lost response is retryable
+    const restored = createBridge({ statePath: path, now: () => time });
+    assert.equal(restored.accountStatus(account.id).label, '192.168.0.178:7000');
+    assert.equal(restored.browser(token, next, 'poll').command, null);
+    time += 1000;
+    restored.browser(token, old, 'relocate', { previous_origin: next });
+    assert.equal(restored.browser(token, old, 'poll').command, null);
+  } finally { rmSync(dir, { recursive: true }); }
+});
+
+test('unpaired sessions cannot relocate and failed persistence leaves the old origin intact', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'carrot-move-failure-'));
+  const old = 'http://10.0.0.2:7000', next = 'http://192.168.0.178:7000';
+  const b = createBridge({ statePath: join(dir, 'connections.json') });
+  const browser = b.create(old), token = browser.browser_token;
+  assert.throws(() => b.browser(token, next, 'relocate', { previous_origin: old }));
+  b.claimAccountCode(b.browser(token, old, 'account_code').account_code);
+  rmSync(dir, { recursive: true });
+  assert.throws(() => b.browser(token, next, 'relocate', { previous_origin: old }));
+  assert.equal(b.browser(token, old, 'inspect').connected, true);
+});
+
+test('address selection discards pending settings, driving and Tools delivery', async () => {
+  const b = createBridge(), old = 'http://10.0.0.2:7000', next = 'http://192.168.0.178:7000';
+  const browser = b.create(old), token = browser.browser_token;
+  const account = b.claimAccountCode(b.browser(token, old, 'account_code').account_code);
+  b.browser(token, old, 'poll');
+  const requests = [b.accountSettingAction(account.id, 'read', { name: 'ShowCustomBrightness' }),
+    b.accountDriveAction(account.id, { action: 'speed_up' }),
+    b.accountToolsAction(account.id, 'prepare', { action: 'backup_settings' })];
+  b.browser(token, next, 'relocate', { previous_origin: old });
+  const poll = b.browser(token, next, 'poll');
+  for (const field of ['settings_command', 'drive_command', 'tools_command']) assert.equal(poll[field], null);
+  await Promise.all(requests);
+});
+
 test('fresh account codes retain their full lifetime beyond the original browser lease', () => {
   let time = 1000;
   const b = createBridge({ now: () => time });

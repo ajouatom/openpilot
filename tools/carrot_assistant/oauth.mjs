@@ -35,12 +35,15 @@ export function createAccountAuth({ issuer, bridge, statePath, now = Date.now })
   const resource = `${issuer}/account/mcp`;
   let clients = new Map(), grants = new Map();
   const flows = new Map(), codes = new Map();
+  const activity = new Map();
   function save(nextClients = clients, nextGrants = grants) {
     if (statePath) {
       writeFileSync(`${statePath}.tmp`, JSON.stringify({ version: 1, clients: [...nextClients.values()], grants: [...nextGrants.values()] }), { mode: 0o600 });
       renameSync(`${statePath}.tmp`, statePath);
     }
     clients = nextClients; grants = nextGrants;
+    const retained = new Set([...grants.values()].map(g => g.sessionId));
+    for (const id of activity.keys()) if (!retained.has(id)) activity.delete(id);
   }
   if (statePath) {
     let saved;
@@ -84,6 +87,8 @@ export function createAccountAuth({ issuer, bridge, statePath, now = Date.now })
     resource,
     // Does not call bridge.accountStatus (which includes this display flag).
     hasConnection: sessionId => [...grants.values()].some(g => g.sessionId === sessionId && g.refreshExpiresAt > now()),
+    accountActivity: sessionId => Math.max(0, activity.get(sessionId) || 0,
+      ...[...grants.values()].filter(g => g.sessionId === sessionId && g.refreshExpiresAt > now()).map(g => g.refreshExpiresAt - 365 * 86400000)),
     clientsStore: {
       getClient: clientId => clients.get(clientId),
       registerClient: async client => {
@@ -134,7 +139,10 @@ export function createAccountAuth({ issuer, bridge, statePath, now = Date.now })
       const digest = hash(token);
       for (const g of grants.values()) {
         const access = g.access.find(a => a.hash === digest && a.expiresAt > now());
-        if (access && alive(g)) return { token, clientId: g.clientId, scopes: g.scopes, expiresAt: access.expiresAt / 1000, resource: new URL(resource), extra: { sessionId: g.sessionId } };
+        if (access && alive(g)) {
+          activity.set(g.sessionId, now());
+          return { token, clientId: g.clientId, scopes: g.scopes, expiresAt: access.expiresAt / 1000, resource: new URL(resource), extra: { sessionId: g.sessionId } };
+        }
       }
       throw new InvalidTokenError('Connection expired or revoked.');
     },

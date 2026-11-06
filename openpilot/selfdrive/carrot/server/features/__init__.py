@@ -1,6 +1,7 @@
 from aiohttp import web
 
 from . import (
+  assistant_connection,
   assistant_drive,
   assistant_settings,
   assistant_tools,
@@ -35,6 +36,7 @@ from . import (
 
 
 def register_all(app: web.Application) -> None:
+  assistant_connection.register(app)
   assistant_drive.register(app)
   assistant_settings.register(app)
   assistant_tools.register(app)

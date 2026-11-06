@@ -123,6 +123,18 @@ Tests cover real SDK/OAuth/HTTP calls, scope separation, replay/revocation, rest
 persistence, expiry, bounds and ownership. Device and web suites run separately.
 Publishing this relay does not update existing device software.
 
+## Selected Carrot Web connection (0.7.1)
+
+Android 0.2.1 reuses an app-owned approved browser capability when discovery or
+selection opens another local Carrot Web address. `/bridge/inspect` is read-only
+and does not mark a device online. `/bridge/relocate` requires that capability
+and the previous/current local origin; it persists the destination on the same
+session, preserving OAuth grants/scopes. It invalidates pending screen, settings,
+driving and Tools requests and outstanding approval codes. No commands replay.
+Destination selection does not require matching the old vehicle identity.
+Local device permissions remain independently enforced by the selected web.
+Optional permission restoration cannot create grants or block screen connection.
+
 ## Tools operations (0.7.0)
 
 `carrot.tools` requires explicit OAuth consent and a separate stationary-issued

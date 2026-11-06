@@ -64,6 +64,10 @@ public final class MainActivity extends Activity {
   private String currentAddress;
   private SharedPreferences preferences;
   private AppUpdater updater;
+  private ConnectionRecovery recovery;
+  private boolean recovering;
+  private boolean checkAfterBackground;
+  private DeviceProbe resumeProbe;
   private static final class Device {
     final String address, name;
     Device(String address, String name) { this.address = address; this.name = name; }
@@ -107,12 +111,15 @@ public final class MainActivity extends Activity {
   private TextView text(String value,int size) { TextView v = new TextView(this); v.setText(value); v.setTextSize(size); v.setTextColor(foreground); return v; }
   private Button button(String label,View.OnClickListener listener) { Button b = new Button(this); b.setText(label); b.setAllCaps(false); b.setTextColor(accent); b.setOnClickListener(listener); return b; }
   private void stopSearch() {
+    if (resumeProbe != null) { resumeProbe.close(); resumeProbe = null; }
     scanning = false; generation++; ui.removeCallbacks(tick);
     if (progress != null) progress.setVisibility(View.GONE);
     if (workers != null) { workers.shutdownNow(); workers = null; }
     for (DeviceProbe p : probes) p.close(); probes.clear();
   }
   private void startSearch() {
+    if (recovery != null) { recovery.cancel(); recovery = null; }
+    recovering = false;
     stopSearch(); choosing = false; found.clear(); currentAddress = null;
     if (web != null) { web.stopLoading(); web.loadUrl("about:blank"); }
     content.removeAllViews(); title.setText("당근 기기 찾기");
@@ -227,6 +234,8 @@ public final class MainActivity extends Activity {
   }
   @android.annotation.SuppressLint("SetJavaScriptEnabled")
   private void openDevice(Device device) {
+    String previous = "http://" + preferences.getString("last_address", "") + ":7000";
+    if (recovery != null) recovery.cancel();
     stopSearch(); currentAddress = device.address; preferences.edit().putString("last_address",device.address).apply(); title.setText(device.name+" · "+device.address);
     content.removeAllViews();
     if (web == null) {
@@ -256,19 +265,46 @@ public final class MainActivity extends Activity {
       });
     }
     if (web.getParent()!=null) ((ViewGroup)web.getParent()).removeView(web);
-    content.addView(web,new LinearLayout.LayoutParams(-1,-1)); web.loadUrl("http://"+device.address+":7000/");
+    web.stopLoading(); web.loadUrl("about:blank");
+    TextView connecting = text("당근 기기 연결 중…\n기존 ChatGPT 연결을 확인하고 있어요.",18);
+    connecting.setPadding(dp(22),dp(28),dp(22),dp(16)); content.addView(connecting);
+    recovering = true; final int token = generation;
+    recovery = new ConnectionRecovery(this);
+    recovery.start("http://"+device.address+":7000",previous,message -> {
+      if (token != generation || isFinishing()) return;
+      recovering = false;
+      content.removeAllViews(); content.addView(web,new LinearLayout.LayoutParams(-1,-1));
+      web.loadUrl("http://"+device.address+":7000/");
+      if (!message.isEmpty()) {
+        title.setText("ChatGPT 연결 확인 필요 · "+device.address);
+        if (foregroundActivity) notice(message);
+      }
+    });
   }
   private boolean isCurrent(Uri uri) { return currentAddress!=null && "http".equals(uri.getScheme()) && currentAddress.equals(uri.getHost()) && uri.getPort()==7000 && uri.getUserInfo()==null; }
   private void invokeAssistant() {
     if (!foregroundActivity) return;
+    if (recovering) { notice("기존 ChatGPT 연결을 확인하고 있어요. 당근웹이 열린 뒤 마이크를 눌러 주세요."); return; }
     try { if (showAssist(new Bundle())) return; } catch (RuntimeException ignored) {}
     new AlertDialog.Builder(this).setTitle("기본 음성비서 설정").setMessage("Android 기본 디지털 어시스턴트를 선택해 주세요. ChatGPT 또는 Gemini 등 선택한 앱을 호출합니다. 당근 설정 검색·화면 열기는 현재 ChatGPT 연결로 시험했으며, 음성창의 모양은 선택한 앱에 따라 달라집니다.")
       .setNegativeButton("닫기",null).setPositiveButton("설정 열기",(d,w) -> { try { startActivity(new Intent(Settings.ACTION_VOICE_INPUT_SETTINGS)); } catch (Exception e) { notice("휴대폰 설정에서 기본 디지털 어시스턴트를 선택해 주세요."); } }).show();
   }
   private void notice(String message) { new AlertDialog.Builder(this).setMessage(message).setPositiveButton("확인",null).show(); }
-  @Override protected void onResume() { super.onResume(); foregroundActivity = true; if (web!=null) web.onResume(); if (updater!=null) updater.resume(); }
+  @Override protected void onResume() {
+    super.onResume(); foregroundActivity = true; if (web!=null) web.onResume(); if (updater!=null) updater.resume();
+    if (checkAfterBackground && currentAddress!=null && !recovering) {
+      final String address=currentAddress; final int token=generation;
+      final DeviceProbe probe=new DeviceProbe(url -> (HttpURLConnection)url.openConnection()); resumeProbe=probe;
+      new Thread(() -> {
+        boolean valid=probe.verify(address); probe.close();
+        ui.post(() -> { boolean current=resumeProbe==probe; if (current) resumeProbe=null;
+          if (current && !valid && foregroundActivity && token==generation && address.equals(currentAddress)) startSearch(); });
+      },"carrot-resume-probe").start();
+    }
+    checkAfterBackground=false;
+  }
   @Override protected void onPause() { foregroundActivity = false; super.onPause(); }
-  @Override protected void onStop() { if (scanning) { stopSearch(); if (status!=null) status.setText("검색이 중단됐어요. 다시 검색을 눌러 주세요."); } super.onStop(); }
+  @Override protected void onStop() { checkAfterBackground=true; if (scanning) { stopSearch(); if (status!=null) status.setText("검색이 중단됐어요. 다시 검색을 눌러 주세요."); } super.onStop(); }
   @Override public void onBackPressed() { if (web!=null && currentAddress!=null && web.canGoBack()) web.goBack(); else if (currentAddress!=null) startSearch(); else super.onBackPressed(); }
-  @Override protected void onDestroy() { stopSearch(); ui.removeCallbacksAndMessages(null); if (updater!=null) updater.close(); if (web!=null) { web.destroy(); web=null; } super.onDestroy(); }
+  @Override protected void onDestroy() { if (recovery!=null) recovery.cancel(); stopSearch(); ui.removeCallbacksAndMessages(null); if (updater!=null) updater.close(); if (web!=null) { web.destroy(); web=null; } super.onDestroy(); }
 }
