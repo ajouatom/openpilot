@@ -18,8 +18,9 @@ export function allowedWebOrigin(origin) {
 
 // Only screen navigation is supported. No values, device credentials or log files.
 // Persist only paired capability hashes. Pending commands never survive restart.
-export function createBridge({ now = Date.now, maxSessions = 1000, statePath } = {}) {
+export function createBridge({ now = Date.now, maxSessions = 1000, statePath, isAccountLinked = () => false } = {}) {
   const sessions = new Map(), browsers = new Map(), controls = new Map(), codes = new Map();
+  const accountCodes = new Map();
   const record = s => ({ id: s.id, origin: s.origin, label: s.label, browserHash: s.browserHash, controlHash: s.controlHash });
   function persist(replacement, removed) {
     if (!statePath) return;
@@ -50,6 +51,7 @@ export function createBridge({ now = Date.now, maxSessions = 1000, statePath } =
     if (s.controlHash) controls.delete(s.controlHash);
   };
   function sweep() {
+    for (const [hash, link] of accountCodes) if (link.expiresAt <= now() || !sessions.has(link.id)) accountCodes.delete(hash);
     for (const s of sessions.values()) {
       if (!s.controlHash && s.pairExpiresAt <= now()) { remove(s); continue; }
       if (s.command?.status === 'queued' && s.command.expiresAt <= now()) s.command.status = 'expired';
@@ -62,12 +64,37 @@ export function createBridge({ now = Date.now, maxSessions = 1000, statePath } =
     return s;
   }
   function status(s) {
-    return { connected: Boolean(s.controlHash), label: s.label, expires_at: s.expiresAt,
+    return { connected: Boolean(s.controlHash), account_linked: isAccountLinked(s.id), label: s.label, expires_at: s.expiresAt,
       browser_online: s.lastSeen > 0 && now() - s.lastSeen < 15000,
       command: s.command ? { id: s.command.id, name: s.command.name, status: s.command.status,
         expires_at: s.command.expiresAt } : null };
   }
   return {
+    // Internal OAuth interface: the identity comes only from validated credentials.
+    accountStatus(id) {
+      sweep(); const s = sessions.get(id);
+      if (!s?.controlHash) fail('Carrot Web disconnected. Authorize this device again.', 401);
+      return status(s);
+    },
+    accountAction(id, operation, name) {
+      this.accountStatus(id);
+      const s = sessions.get(id);
+      if (operation === 'cancel') { if (s.command?.status === 'queued') s.command.status = 'cancelled'; return status(s); }
+      if (operation !== 'open') fail('Unknown account operation.');
+      if (s.command?.status === 'queued' && s.command.name !== name) fail('Another screen request is pending. Cancel it first.', 409);
+      if (s.command?.status !== 'queued') s.command = { id: token(), name, status: 'queued', expiresAt: now() + 90000 };
+      return status(s);
+    },
+    claimAccountCode(code) {
+      sweep(); const hash = digest(String(code).replace(/[\s-]/g, '').toUpperCase());
+      const link = accountCodes.get(hash), s = link && sessions.get(link.id);
+      if (!s || link.expiresAt <= now()) fail('Invalid or expired device code. Create a new code in Carrot Web.', 401);
+      // Preserve the old conversation capability if already paired.
+      const paired = { ...s, controlHash: s.controlHash || digest(token()), expiresAt: null };
+      persist(paired); Object.assign(s, paired); controls.set(s.controlHash, s);
+      accountCodes.delete(hash); codes.delete(s.codeHash);
+      return { id: s.id, label: s.label };
+    },
     create(origin, label = 'Carrot Web') {
       sweep();
       if (!allowedWebOrigin(origin)) fail('Open this from your local Carrot Web.', 403);
@@ -109,6 +136,12 @@ export function createBridge({ now = Date.now, maxSessions = 1000, statePath } =
       const s = lookup(browsers, key);
       if (s.origin !== origin) fail('Browser origin mismatch.', 403);
       if (operation === 'disconnect') { remove(s); return { disconnected: true }; }
+      if (operation === 'account_code') {
+        for (const [hash, link] of accountCodes) if (link.id === s.id) accountCodes.delete(hash);
+        const code = randomBytes(10).toString('hex').toUpperCase();
+        accountCodes.set(digest(code), { id: s.id, expiresAt: now() + 300000 });
+        return { account_code: code, expires_at: now() + 300000 };
+      }
       if (operation === 'ack') {
         if (!s.command || body.id !== s.command.id) fail('Unknown request.', 409);
         if (s.command.status === 'queued') {

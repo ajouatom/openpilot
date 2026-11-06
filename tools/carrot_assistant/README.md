@@ -9,6 +9,41 @@ remain subject to that ChatGPT client/account.
 
 ## Flow
 
+### Account connection for new conversations and Android assistant mode
+
+Register `https://carrot-mcp.shind0.synology.me/account/mcp` in ChatGPT using
+OAuth (dynamic client registration). In Carrot Web's connection settings create
+a **mini-mode connection code**, then enter it on the HTTPS Carrot authorization
+page and approve screen navigation. Do not paste this code into a conversation.
+It authorizes the specific browser connection, not the shared LAN IP address.
+Existing conversation connections remain usable during this migration.
+
+ChatGPT stores the OAuth credentials and supplies them in subsequent MCP calls.
+The six authenticated tools resolve the device from validated credentials;
+they do not accept a conversation capability, user ID, or device selector.
+New conversations can search and open screens without recalling an old chat.
+Android assistant mode must have the plugin available; the web button cannot
+force Android to show the assistant overlay. Browser delivery while that overlay
+is visible still needs validation on each supported phone/browser.
+
+Device codes are one-use, 80-bit, five-minute secrets. OAuth authorization codes
+last two minutes, bind to client/redirect/resource/S256 PKCE, and never persist.
+Consent requires a same-origin POST and a per-flow HttpOnly/SameSite cookie.
+DCR accepts only allowlisted ChatGPT callback shapes, never fetches caller URLs,
+and retains registered clients. The SDK implements OAuth protocol endpoints.
+Access tokens last one hour. Rotating refresh tokens renew a one-year idle
+window; recent replay revokes that grant. Revocation or web Disconnect is checked
+on every authenticated request. Disconnect invalidates all grants for that web
+connection; reopening or restarting does not choose another user's connection.
+
+`MCP_OAUTH_STATE_PATH` stores registered clients and hashed access/refresh tokens
+atomically in the existing private state volume. Registered confidential-client
+secrets are stored there for the SDK's client authentication; do not expose or
+log this file. Device/access/refresh credentials and consent cookies are never
+stored raw. Corrupt stores fail startup. No OpenAI model API calls are made.
+
+### Legacy conversation connection
+
 1. In Carrot Web, tap the top-right microphone icon > Create pairing code.
 2. Copy the generated message into a conversation with the Carrot MCP enabled.
    `connect_carrot_web` exchanges the one-time code for a conversation capability.
@@ -41,7 +76,7 @@ Closing the tab pauses delivery; reopening the same address resumes it.
   survive server restarts. Codes, raw tokens and commands are never persisted.
   Invalid storage fails startup; failed saves do not issue new capabilities.
   Without MCP_STATE_PATH, state is in memory for local development.
-  This is not account identity: reuse the same ChatGPT conversation; if it loses
+  The legacy `/mcp` endpoint is not account identity: reuse the same ChatGPT conversation; if it loses
   its capability, or browser data/origin changes, pair again. The one-time 0.2 to
   0.3 deployment cannot preserve old RAM-only connections; pair once afterwards.
 - Each session holds one request, expiring after 90 seconds. Different pending

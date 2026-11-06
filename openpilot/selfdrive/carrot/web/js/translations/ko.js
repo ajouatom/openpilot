@@ -6,6 +6,12 @@ window.CarrotTranslations.register("ko", {
   shortName: "KO",
   strings: {
     assistant_title: "ChatGPT 설정 도우미",
+    assistant_account_help: "미니 음성창 연결: ChatGPT에 당근 MCP 주소 https://carrot-mcp.shind0.synology.me/account/mcp 를 OAuth 방식으로 등록하세요. 최초 한 번 아래 코드를 당근 연결 승인 화면에 입력하면 새 음성 대화에서도 이 기기를 사용할 수 있습니다. 코드는 대화에 보내지 마세요. 당근웹의 연결 해제는 이 기기에 대한 모든 연결을 해제합니다.",
+    assistant_account_pair: "미니모드 연결 코드 만들기",
+    assistant_account_code: "기기 승인 코드 · 5분 유효",
+    assistant_account_copy: "승인 코드 복사",
+    assistant_account_ready: "당근 연결 승인 화면에만 입력하세요. 기존 연결은 유지됩니다.",
+    assistant_account_connected: "계정 연결됨 · 새 음성 대화에서도 사용 가능",
     assistant_help: "한 번 연결하면 설정 화면을 열 수 있습니다. 코드는 5분 동안 유효하고 연결은 직접 해제할 때까지 저장됩니다. 같은 브라우저·당근웹 주소·ChatGPT 대화를 이용하세요. 브라우저 데이터를 지우거나 대화가 연결 정보를 잊으면 다시 연결해야 합니다. 설정값 변경은 지원하지 않습니다.",
     assistant_install: "ChatGPT 앱 설치 · Google Play",
     assistant_voice_help: "ChatGPT 앱 설치 후 본인 계정으로 로그인하세요. 앱 음성 설정에 백그라운드 대화가 있으면 켜세요. 연결한 대화에서 음성을 시작한 뒤 당근웹으로 돌아오세요. 폰에서 지원하면 분할 화면·팝업 화면도 사용할 수 있습니다. 음성 시작과 창 모드는 앱·폰에서 설정해야 합니다.",

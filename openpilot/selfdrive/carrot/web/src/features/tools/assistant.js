@@ -49,8 +49,9 @@ async function poll() {
   try {
     const result = await request('poll', {}, current);
     if (epoch !== generation) return;
-    if (session.expires_at !== result.expires_at || session.connected !== result.connected) {
-      session.expires_at = result.expires_at; session.connected = result.connected; storeSession();
+    const newlyLinked = result.account_linked && !session.account_linked;
+    if (session.expires_at !== result.expires_at || session.connected !== result.connected || session.account_linked !== result.account_linked) {
+      session.expires_at = result.expires_at; session.connected = result.connected; session.account_linked = result.account_linked; storeSession();
     }
     if (result.connected && session.pairing_code) {
       delete session.pairing_code; storeSession();
@@ -61,7 +62,11 @@ async function poll() {
       const message = document.getElementById('assistantPairMessage');
       if (message) message.hidden = true;
     }
-    status(result.connected ? text('connected', 'Connected · screen navigation only') : text('waiting', 'Waiting for ChatGPT to pair'));
+    status(result.account_linked ? text('account_connected', 'Account connected · reusable in new voice chats') : result.connected ? text('connected', 'Connected · screen navigation only') : text('waiting', 'Waiting for ChatGPT to pair'));
+    if (newlyLinked) {
+      const field = document.getElementById('assistantAccountCode');
+      if (field) field.value = '';
+    }
     const command = result.command;
     if (!screenRequest(command)) return;
     // Do not interrupt editing or another dialog. A pending request expires on the server.
@@ -134,6 +139,28 @@ export function openAssistantDialog() {
   const voiceHelp = document.createElement('p');
   voiceHelp.textContent = text('voice_help', 'Install ChatGPT and sign in. If available, enable Background conversations in its voice settings. Start voice in the paired conversation, then return to Carrot Web. Split screen or pop-up view may also be available on your phone. Start voice and choose window mode in the app/phone.');
   el('Panel').prepend(install, voiceHelp);
+  const account = document.createElement('section');
+  account.innerHTML = '<p id="assistantAccountHelp"></p><button id="assistantAccountPair" class="btn" type="button"></button><label id="assistantAccountCodeLabel" for="assistantAccountCode"></label><input id="assistantAccountCode" class="input-text" readonly autocomplete="off" style="width:100%;box-sizing:border-box;user-select:text;-webkit-user-select:text"><button id="assistantAccountCopy" class="btn" type="button"></button><p id="assistantAccountFeedback" role="status"></p><hr>';
+  el('Panel').prepend(account);
+  label('AccountHelp', 'account_help', `For mini voice mode, connect the Carrot MCP with OAuth at ${ASSISTANT_RELAY}/account/mcp. Enter the code below on its authorization page once. Then use your Android ChatGPT assistant in new chats. Do not send this code in chat. Disconnect revokes all access to this web connection.`);
+  label('AccountPair', 'account_pair', 'Create mini-mode connection code');
+  label('AccountCodeLabel', 'account_code', 'Device authorization code · expires in 5 minutes');
+  label('AccountCopy', 'account_copy', 'Copy authorization code');
+  el('AccountCopy').onclick = async () => {
+    const field = el('AccountCode');
+    if (!field.value) return;
+    const copied = await copyPairingMessage(field);
+    if (el('AccountCode') === field) el('AccountFeedback').textContent = copied ? text('copied', 'Copied') : text('copy_manual', 'Select the code and copy it manually.');
+  };
+  el('AccountPair').onclick = async () => {
+    el('AccountPair').disabled = true;
+    try {
+      if (!session) { session = await request('create', { label: location.host }, null); generation++; storeSession(); schedule(); }
+      const result = await request('account_code');
+      if (el('AccountCode')) { el('AccountCode').value = result.account_code; el('AccountFeedback').textContent = text('account_ready', 'Enter this code only on the Carrot authorization page. Existing connections remain active.'); }
+    } catch (e) { status(e.message); }
+    finally { if (el('AccountPair')) el('AccountPair').disabled = false; }
+  };
   label('Help', 'help', 'Pair once to open setting screens. Codes expire in 5 minutes; paired connections are saved until disconnected. Use the same browser, Carrot Web address and ChatGPT conversation. Clearing browser data or losing the conversation connection may require pairing again. Setting values cannot be changed.');
   label('Pair', 'pair', 'Create pairing code');
   label('Disconnect', 'disconnect', 'Disconnect');
