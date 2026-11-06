@@ -14,6 +14,11 @@ Codes are single-use, 80-bit secrets valid for five minutes; the connection does
 not expire in five minutes. New chats resolve the approved web session from the
 validated token, without a caller-selected user or device ID.
 
+Relay0.6.1 fixes a fresh approval code expiring with an older unpaired browser
+lease. Each newly issued account code now has its full five-minute window;
+renewal invalidates its predecessor without extending the legacy chat code.
+Existing authenticated connections and permissions are unchanged.
+
 `carrot.screen` permits search/explanation/navigation. `carrot.settings` is an
 additional, explicitly selected consent scope for live reads and changes. Existing
 grants and refresh tokens retain their original scopes. The device must also issue a local
