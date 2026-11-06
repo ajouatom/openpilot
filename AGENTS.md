@@ -18,8 +18,12 @@
   crossing plus FSM finish; set-speed readback is not measured vehicle speed.
   Missing result-file IO cannot restore a consumed rejection. Wakeable polling
   reduces delivery wait, not ChatGPT latency. Fix0.5.1 strict MCP result rejecting
-  device step_note. PC new controller20/API48/MCP18/web8, isolated build/Ruff pass;
-  native Linux safety CI and actual spoken road operation are separate checks.
+  device step_note. PC new controller20/API49/MCP18/web8, isolated build/Ruff pass.
+  Linux Signal CI42202066904 passes1644/362subtests +131,40skips; Jetson CI42202066820
+  also passes. Full general build CI remains separate. Runtime owner hashes let
+  revocation cancel pending requests even after a web-server restart.
+  NAS0.6.0 built/started exit0 and public health/discovery verify new scope; owner's
+  driving grant has NOT been added and actual spoken road operation is untested.
   Full parked device restart needed after GitPull, not web-only reload. No API/key
   or APK change. KO/EN guides and Wiki describe experimental scope and setup.
 

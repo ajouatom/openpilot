@@ -164,3 +164,13 @@ def test_feedback_write_failure_cannot_restore_rejected_intent(system, monkeypat
   assert speed.read(allowed=False, current=80, minimum=30, maximum=160) is None
   assert speed.active is None
   assert speed.read(allowed=True, current=80, minimum=30, maximum=160) is None
+
+
+def test_revocation_after_web_restart_cancels_pending_intent(system):
+  _, service, lane, _, token, state = system
+  send(system)
+  assert lane.before(state)[0] == 'left'
+  restarted = AssistantDrive(service.permissions.path, lambda: True, service.root, service.clock)
+  restarted.revoke(token, 'http://carrot:7000')
+  assert lane.before(state) == (None, True)
+  assert lane.active is None
