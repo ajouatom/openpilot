@@ -66,6 +66,8 @@ async function poll() {
     if (newlyLinked) {
       const field = document.getElementById('assistantAccountCode');
       if (field) field.value = '';
+      const feedback = document.getElementById('assistantAccountFeedback');
+      if (feedback) feedback.textContent = text('account_connected', 'Account connected · reusable in new voice chats');
     }
     const command = result.command;
     if (!screenRequest(command)) return;
@@ -137,7 +139,7 @@ export function openAssistantDialog() {
   install.target = '_blank'; install.rel = 'noopener noreferrer';
   install.textContent = text('install', 'Install ChatGPT · Google Play');
   const voiceHelp = document.createElement('p');
-  voiceHelp.textContent = text('voice_help', 'Install ChatGPT and sign in. If available, enable Background conversations in its voice settings. Start voice in the paired conversation, then return to Carrot Web. Split screen or pop-up view may also be available on your phone. Start voice and choose window mode in the app/phone.');
+  voiceHelp.textContent = text('voice_help', 'Sign in to ChatGPT and select it as your Android digital assistant. Complete the account connection above, then invoke your phone assistant over Carrot Web. The web icon opens the app; invoke the mini voice overlay using your phone. Return to Carrot Web if a screen request is waiting.');
   el('Panel').prepend(install, voiceHelp);
   const account = document.createElement('section');
   account.innerHTML = '<p id="assistantAccountHelp"></p><button id="assistantAccountPair" class="btn" type="button"></button><label id="assistantAccountCodeLabel" for="assistantAccountCode"></label><input id="assistantAccountCode" class="input-text" readonly autocomplete="off" style="width:100%;box-sizing:border-box;user-select:text;-webkit-user-select:text"><button id="assistantAccountCopy" class="btn" type="button"></button><p id="assistantAccountFeedback" role="status"></p><hr>';
@@ -155,13 +157,13 @@ export function openAssistantDialog() {
   el('AccountPair').onclick = async () => {
     el('AccountPair').disabled = true;
     try {
-      if (!session) { session = await request('create', { label: location.host }, null); generation++; storeSession(); schedule(); }
+      if (!session) { session = await request('create', { label: location.host }, null); generation++; storeSession(); render(); schedule(); }
       const result = await request('account_code');
       if (el('AccountCode')) { el('AccountCode').value = result.account_code; el('AccountFeedback').textContent = text('account_ready', 'Enter this code only on the Carrot authorization page. Existing connections remain active.'); }
     } catch (e) { status(e.message); }
     finally { if (el('AccountPair')) el('AccountPair').disabled = false; }
   };
-  label('Help', 'help', 'Pair once to open setting screens. Codes expire in 5 minutes; paired connections are saved until disconnected. Use the same browser, Carrot Web address and ChatGPT conversation. Clearing browser data or losing the conversation connection may require pairing again. Setting values cannot be changed.');
+  label('Help', 'help', 'Use the account connection above for mini voice mode. The controls below are for legacy conversation pairing, which requires the same browser, Carrot Web address and ChatGPT conversation. Account connections work in new chats. Both methods only open setting screens; setting values cannot be changed.');
   label('Pair', 'pair', 'Create pairing code');
   label('Disconnect', 'disconnect', 'Disconnect');
   label('PromptLabel', 'prompt', 'Copy this message to your ChatGPT conversation once');
