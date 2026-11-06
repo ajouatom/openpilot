@@ -1,0 +1,8 @@
+*
+!Dockerfile
+!package.json
+!package-lock.json
+!server.mjs
+!bridge.mjs
+!catalog.mjs
+!catalog.json
