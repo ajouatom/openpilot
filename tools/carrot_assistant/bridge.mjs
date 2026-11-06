@@ -2,6 +2,7 @@ import { randomBytes, createHash } from 'node:crypto';
 import { readFileSync, writeFileSync, renameSync } from 'node:fs';
 import { createSettingBridge } from './setting_bridge.mjs';
 import { createDriveBridge } from './drive_bridge.mjs';
+import { createToolsBridge } from './tools_bridge.mjs';
 
 const digest = value => createHash('sha256').update(String(value)).digest('hex');
 const token = () => randomBytes(32).toString('base64url');
@@ -22,6 +23,7 @@ export function allowedWebOrigin(origin) {
 // Persist only paired capability hashes. Pending commands never survive restart.
 export function createBridge({ now = Date.now, maxSessions = 1000, statePath, isAccountLinked = () => false } = {}) {
   const settings = createSettingBridge(now);
+  const toolJobs = createToolsBridge(now);
   const driving = createDriveBridge(now), waiters = new Map();
   const wake = id => waiters.get(id)?.();
   const sessions = new Map(), browsers = new Map(), controls = new Map(), codes = new Map();
@@ -51,7 +53,7 @@ export function createBridge({ now = Date.now, maxSessions = 1000, statePath, is
     }
   }
   const remove = s => {
-    settings.remove(s.id); driving.remove(s.id); wake(s.id);
+    settings.remove(s.id); driving.remove(s.id); toolJobs.remove(s.id); wake(s.id);
     if (s.controlHash) persist(null, s.id);
     sessions.delete(s.id); browsers.delete(s.browserHash); codes.delete(s.codeHash);
     if (s.controlHash) controls.delete(s.controlHash);
@@ -81,7 +83,7 @@ export function createBridge({ now = Date.now, maxSessions = 1000, statePath, is
       if (s.origin !== origin) fail('Browser origin mismatch.', 403);
       if (waiters.has(s.id)) fail('A browser poll is already pending.', 409);
       s.lastSeen = now();
-      if (!settings.poll(s.id) && !driving.poll(s.id) && s.command?.status !== 'queued') {
+      if (!settings.poll(s.id) && !driving.poll(s.id) && !toolJobs.poll(s.id) && s.command?.status !== 'queued') {
         await new Promise(resolve => {
           const timer = setTimeout(() => { waiters.delete(s.id); resolve(); }, 7500);
           waiters.set(s.id, () => { clearTimeout(timer); waiters.delete(s.id); resolve(); });
@@ -103,6 +105,15 @@ export function createBridge({ now = Date.now, maxSessions = 1000, statePath, is
       return this.accountDriveStatus(id, true);
     },
     accountSettingStatus(id) { this.accountStatus(id); return settings.status(id); },
+    accountToolsStatus(id) { this.accountStatus(id); return toolJobs.status(id); },
+    async accountToolsAction(id, operation, fields = {}) {
+      if (!this.accountStatus(id).browser_online) fail('Carrot Web is offline. Open the app; do not retry automatically.', 409);
+      toolJobs.queue(id, operation, fields); wake(id);
+      const deadline = Date.now() + 8000;
+      while (Date.now() < deadline && toolJobs.status(id).status === 'queued') await new Promise(resolve => setTimeout(resolve, 100));
+      this.accountStatus(id);
+      return toolJobs.status(id);
+    },
     async accountSettingAction(id, operation, fields = {}) {
       this.accountStatus(id);
       settings.queue(id, operation, fields); wake(id);
@@ -179,6 +190,7 @@ export function createBridge({ now = Date.now, maxSessions = 1000, statePath, is
       if (operation === 'disconnect') { remove(s); return { disconnected: true }; }
       if (operation === 'drive_ack') return driving.ack(s.id, body.id, body.result);
       if (operation === 'settings_ack') return settings.ack(s.id, body.id, body.result);
+      if (operation === 'tools_ack') return toolJobs.ack(s.id, body.id, body.result);
       if (operation === 'account_code') {
         for (const [hash, link] of accountCodes) if (link.id === s.id) accountCodes.delete(hash);
         const code = randomBytes(10).toString('hex').toUpperCase();
@@ -199,7 +211,7 @@ export function createBridge({ now = Date.now, maxSessions = 1000, statePath, is
       if (operation !== 'poll') fail('Unknown operation.');
       if (now() - s.pollAt < 900) fail('Poll too fast.', 429);
       s.pollAt = now(); s.lastSeen = now();
-      return { ...status(s), settings_command: settings.poll(s.id), drive_command: driving.poll(s.id) };
+      return { ...status(s), settings_command: settings.poll(s.id), drive_command: driving.poll(s.id), tools_command: toolJobs.poll(s.id) };
     },
   };
 }

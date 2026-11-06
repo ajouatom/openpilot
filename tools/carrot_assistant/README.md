@@ -38,7 +38,7 @@ All supported catalog edits, including driving settings, may be confirmed and
 applied onroad. Initial authorization still requires stationary/disengaged state.
 Saving does not change when each setting takes effect in the vehicle.
 Driver-monitoring disabling is excluded.
-Log uploads are unsupported. Experimental driving requests use separate
+Driving-record uploads are unsupported. Experimental driving requests use separate
 `carrot.drive` consent and a separate stationary-issued local grant. Existing
 tokens never gain this scope automatically. `VOICE_RULES.md` is loaded as MCP
 instructions: one continuing conversation, no per-command button/mode switch,
@@ -122,3 +122,20 @@ the public catalog is `catalog.json`.
 Tests cover real SDK/OAuth/HTTP calls, scope separation, replay/revocation, restart
 persistence, expiry, bounds and ownership. Device and web suites run separately.
 Publishing this relay does not update existing device software.
+
+## Tools operations (0.7.0)
+
+`carrot.tools` requires explicit OAuth consent and a separate stationary-issued
+local grant. Existing refresh grants never acquire it. Fixed action/panel enums
+exclude arbitrary shell commands, paths, commits and URLs. Prepare returns a
+60-second owner-bound proposal; commit consumes it before dispatch and requires
+a follow-up user confirmation. Maintenance rechecks parked/disengaged state at
+dispatch. Screen recording uses explicit on/off targets, not a toggle.
+
+Existing Tools jobs provide execution and history. Relay results contain only
+action/status, never job logs or backup content. Reboot, rebuild, calibration reset
+and tmux upload report request acceptance, not completion. Expired/unknown results
+are never automatically retried. Job ownership is local and in-memory: after a
+web-server restart, inspect local Tools history instead of reissuing a job.
+File/QR/clipboard/repository-reset workflows require direct local input.
+No live vehicle maintenance acceptance test is run.

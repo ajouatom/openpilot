@@ -15,20 +15,52 @@ The app targets Android 8 and newer. Device connection and the small voice overl
 
 ## Connect once
 
-1. Open CarrotAssist. One device found during the initial five-second window opens automatically; multiple devices require selection. With no result, scanning continues for about one minute. Enter a device's IPv4 address manually if necessary.
-2. Open **Tools > ChatGPT assistant** in the web interface.
-3. To use live values, select **Allow setting reads and changes** while stationary and disengaged. Requested current values and change results will be sent to ChatGPT and the Carrot relay.
-4. Expand **First connection / reconnect**, then use **Copy Carrot connection address** and **Open ChatGPT connections**. If the add menu is unavailable on the phone, open [ChatGPT Plugins](https://chatgpt.com/plugins) in a desktop browser with the same account.
-5. Select the add button and **Add custom MCP server**. Use `CarrotAssist` as its name and paste the copied address into the server URL field. Select **OAuth** from the authentication list and create/connect. OAuth is the connection method that lets you authorize access to your Carrot device from your own ChatGPT account.
+**Copy the code in CarrotAssist. Paste it into the device authorization WEBPAGE opened by ChatGPT. Never send it in a voice or mini-mode conversation.**
 
-   `https://carrot-mcp.shind0.synology.me/account/mcp`
+### 1. Prepare in CarrotAssist
 
-6. When the Carrot authorization page opens, return to CarrotAssist and select **Create mini-mode connection code**, then enter that code on the authorization page. Select setting access as well if you want reads and changes, then approve. Existing screen-only connections need new authorization for the additional scope. If an existing plugin lacks new tools, select **Refresh tools** in ChatGPT's plugin management and test in a new chat.
-7. Install the plugin and search for a Carrot setting in a new chat. Return to CarrotAssist and tap its top-right microphone to invoke the assistant.
+1. Open CarrotAssist. One device found in the initial five seconds opens automatically; choose if several appear. With no result, scanning continues for about one minute. A device IPv4 address can also be entered manually.
+2. Open **Tools → ChatGPT assistant**. While parked and disengaged, allow the features you want. Settings, driving commands and Tools each have separate permission.
+3. Expand **First connection / reconnect**. **Do not create a code yet.** Open the authorization page using the appropriate path below.
 
-The code's **five-minute expiry applies to initial authorization**, not the resulting connection. Codes are single-use; create another if expired. Enter codes only on the Carrot authorization page, never in a conversation. Once approved, new voice chats can use the same device without another connection request.
+### 2-A. Already installed in ChatGPT
 
-CarrotAssist has separate web storage from Chrome or Samsung Internet, so authorize the app once. Uninstalling, clearing app data or changing the device IP may require reconnection. One connection targets one explicitly approved web session.
+Select **Open ChatGPT Plugins → Installed → CarrotAssist → Reconnect**. An older connection may be called ‘당근파일럿 미니 음성’. Reconnect may appear under Connected accounts. Do not create another plugin. If only categories such as Popular or Productivity appear, select Installed first.
+
+When you see a code field and **이 기기 연결 승인** (Authorize this device), continue to step 3.
+
+### 2-B. First-time installation
+
+1. Expand **First registration only: show instructions**, select **First registration: copy Carrot server address**, then **Open ChatGPT Plugins**. If the add menu is missing on the phone, use [ChatGPT Plugins](https://chatgpt.com/plugins) on a computer signed into the same account.
+2. Select **+ → Add custom MCP server** and enter:
+
+   | Field | Value |
+   |---|---|
+   | Name | `CarrotAssist` |
+   | Server URL | `https://carrot-mcp.shind0.synology.me/account/mcp` |
+   | Authentication | Select **OAuth** |
+
+   OAuth is the authentication option in this form. You do not need to set up a server or buy an API key.
+3. Create/connect. When the page with the code field and **이 기기 연결 승인** appears, continue below. Availability varies by account; support is not promised for accounts without custom MCP registration.
+
+### 3. Put a fresh code into that page
+
+1. Leave the authorization page open. Return to **CarrotAssist**, then select **After opening authorization: create a fresh code → Copy code for the authorization page**.
+2. Return to **the authorization webpage you just opened**, paste into its code field, select the desired settings/driving/Tools permissions, and press **이 기기 연결 승인**. Permission is needed both here and in CarrotAssist.
+3. Check that ChatGPT returns successfully and CarrotAssist shows **Account connected**. Complete plugin installation if this is the first registration. If new tools are missing, use **Refresh tools** in plugin management and try a new conversation.
+4. Keep CarrotAssist visible, invoke voice, and try “Find one turn-signal setting with Carrot tools and open it.” Start by verifying search and screen navigation.
+
+**Five minutes is the code-entry window, not the connection lifetime.** A successful connection is reused in new conversations. Creating another code immediately invalidates the previous code. An approved code cannot be used again.
+
+| Screen or error | What to do |
+|---|---|
+| ChatGPT conversation or small voice overlay | This is not the code-entry page. Go to Plugins → Installed → CarrotAssist → Reconnect. |
+| Google Play | This is app installation. Return to CarrotAssist and choose **Open ChatGPT Plugins**. |
+| Invalid or expired code | Open a fresh authorization page through **Reconnect**, then create one fresh code in CarrotAssist and paste it immediately. If it still fails, report the error text, not the code. |
+| Connected but device offline | Check the device/phone network and Internet access, and keep CarrotAssist visible. Do not start by making another code. |
+| Permission missing | Check both the relevant permission button in CarrotAssist and the checkbox during ChatGPT reconnection. |
+
+CarrotAssist, Chrome and Samsung Internet use separate storage. **Create the code in the CarrotAssist app you will use.** App deletion, clearing data or a device IP change can require reconnection. Menu labels can vary by account, language and app version.
 
 ## Example requests
 
@@ -53,7 +85,7 @@ Keep the CarrotAssist web interface active beneath the small voice overlay. A di
 
 Voice changes support device-defined integer settings with valid bounds and increments. All supported settings, including driving settings, can be changed while driving after confirming the current and proposed values. Only initial authorization requires stationary/disengaged state. Each setting retains its existing activation timing; some require a restart. An explicit integer such as “set it to 240” is preserved within the allowed range. A button increment of 5 and minimum of 1 do not force 240 to become 241. Relative calculations are rounded to the nearest integer and the proposed value must be confirmed. Restricted settings such as disabling driver monitoring are excluded.
 
-Setting history identifies changes made by the voice assistant. Follow each setting's instructions when a restart is required. Direct indicator control, drive analysis and log uploads remain unsupported.
+Setting history identifies changes made by the voice assistant. Follow each setting's instructions when a restart is required. Direct indicator control, drive analysis and driving-record uploads remain unsupported. Separate Tools permission enables tmux diagnostic upload requests.
 
 ## Driving commands in the same conversation — experimental
 
@@ -78,6 +110,28 @@ Lane commands respect active assistance, speed, lane geometry, measured blind sp
 Relay delivery expires after five seconds; controller consumption requires an intent no older than one second. Pending lane preparation expires after three seconds. Only one driving request runs at once. During ten seconds after a request, identical calls return its result and other calls can be rejected to prevent duplicate maneuvers. Expired, failed or uncertain requests never retry automatically. An ambiguous “go slowly, there is a car ahead” needs a specific target; it does not trigger indefinite braking until radar detects a lead.
 
 Running and completed are distinct. Lane completion requires both controller completion and observed lane crossing. **Revoke driving commands** prevents new commands and cancels pending preparation; it does not force an ongoing steering maneuver to abort. A phone voice-start action has not been added to the existing Bluetooth remote.
+
+## Use Tools buttons by voice
+
+This requires relay 0.7.0 and matching device code. Android 0.2.0 remains compatible. GitPull and restart the device, then reload Carrot Web. Select **Tools > ChatGPT assistant > Allow Tools panels and actions**, then follow the existing-installation reconnection steps above and select **도구 화면·작업 실행 허용** (Tools access) on the authorization page. Existing settings/driving grants do not expand automatically.
+
+| Example | Behavior |
+|---|---|
+| “Open Bluetooth settings”, “Show device info” | Opens the panel. Car selection, language, web settings, branches, Git history, setting display and QR backup are also supported. |
+| “Run GitPull” | Explains the effect and starts the existing job after confirmation. Reboot is a separate request. |
+| “Reboot the device”, “Rebuild everything” | Requests the operation after confirmation. Rebuild and calibration reset include reboot. |
+| “Back up settings” | Creates a backup on the device after confirmation. Download it from Tools on the phone. |
+| “Send the tmux diagnostic log to the server” | Confirms the transfer and requests upload through the existing Carrot upload service. This is not a driving-record upload. |
+| “Save the diagnostic log” | Captures tmux to a local device file without server upload. |
+| “Start/stop screen recording” | Confirms and sets the requested recording state. Does not claim a recording file has been created. |
+| “Delete all screen recordings”, “Delete all driving logs” | Confirms the full deletion scope before starting. Deletion cannot be undone. |
+| “Open settings restore” | Shows the corresponding button. File selection, QR scanning, clipboard copying and repository reset require direct phone interaction. |
+
+Git Sync and hard/mixed/soft reset to HEAD are also available after confirmation. No arbitrary shell command, URL, file path, commit or branch is accepted by voice execution. Make branch/Git-history choices on the opened screen. The eGPU panel can be shown, but voice does not automatically change a model or restart compilation.
+
+Execution other than screen recording requires a fresh parked/disengaged state during preparation and dispatch. **Prepared means not executed; running means not complete.** Reboot, rebuild, calibration reset and diagnostic transfer report request acceptance, not verified reboot/upload completion. Unknown results and disconnected sessions are never automatically retried. See the Tools job history for details. Revoking permission blocks new requests and uncommitted proposals; it does not stop a job already running.
+
+ChatGPT receives only the action and a limited result, not diagnostic contents or backup files. Diagnostic upload may include vehicle identifiers and diagnostics on the existing upload server. Actual vehicle deletion, reboot and upload have not been exercised as acceptance tests.
 
 ## Updates and disconnection
 
