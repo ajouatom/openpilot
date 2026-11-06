@@ -88,7 +88,7 @@ public final class MainActivity extends Activity {
     LinearLayout bar = new LinearLayout(this); bar.setGravity(Gravity.CENTER_VERTICAL);
     Button search = button("⌕", v -> startSearch()); search.setContentDescription("당근 기기 찾기");
     bar.addView(search,new LinearLayout.LayoutParams(dp(52),dp(48)));
-    title = text("당근웹",18); title.setSingleLine(true); title.setEllipsize(android.text.TextUtils.TruncateAt.END);
+    title = text("CarrotAssist",18); title.setSingleLine(true); title.setEllipsize(android.text.TextUtils.TruncateAt.END);
     bar.addView(title,new LinearLayout.LayoutParams(0,dp(48),1)); title.setGravity(Gravity.CENTER_VERTICAL);
     ImageButton assistant = new ImageButton(this);
     assistant.setImageResource(android.R.drawable.ic_btn_speak_now); assistant.setColorFilter(accent);
