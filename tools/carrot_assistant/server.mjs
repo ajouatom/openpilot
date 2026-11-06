@@ -9,7 +9,7 @@ import { createBridge, installBridgeRoutes } from './bridge.mjs';
 const readOnly = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false };
 const output = data => ({ content: [{ type: 'text', text: JSON.stringify(data) }], structuredContent: data });
 export function createServer(onTool = () => {}, bridge = createBridge()) {
-  const server = new McpServer({ name: 'carrot-voice-probe', version: '0.2.0' }, { instructions });
+  const server = new McpServer({ name: 'carrot-voice-probe', version: '0.3.0' }, { instructions });
   const register = (name, description, inputSchema, fn) => server.registerTool(name, {
     description, inputSchema, annotations: readOnly,
   }, async args => { onTool(name); return output(await fn(args)); });
@@ -33,7 +33,7 @@ export function createServer(onTool = () => {}, bridge = createBridge()) {
     try { return output(fn(args)); }
     catch (e) { return { isError: true, content: [{ type: 'text', text: e.message }] }; }
   });
-  action('connect_carrot_web', '사용자가 자신의 당근웹에서 생성한 5분 유효 일회용 코드를 제공했을 때만 연결합니다. connection_id는 이 대화에서만 보관하고 매번 연결을 요구하지 마세요. 8시간/서버 재시작/연결 해제 시 만료됩니다. 설정값 조회·변경 권한은 없습니다.',
+  action('connect_carrot_web', '사용자가 자신의 당근웹에서 생성한 5분 유효 일회용 코드를 제공했을 때만 연결합니다. connection_id는 이 대화에서 보관하고 다음 이용에도 재사용하세요. 연결 해제 또는 인증 실패 전까지 새 코드를 요구하지 마세요. 설정값 조회·변경 권한은 없습니다.',
     { pairing_code: z.string().min(20).max(30) }, ({ pairing_code }) => bridge.pair(pairing_code));
   action('open_carrot_setting', '연결된 당근웹 탭에 설정 화면 열기를 요청합니다. 먼저 검색하여 정확한 name을 고르세요. queued는 대기 중이고 opened가 실제 완료입니다. 폰 브라우저가 멈춘 경우 사용자가 당근웹으로 돌아와야 합니다. 요청은 90초 후 만료됩니다. 설정값을 바꾸지 않습니다.',
     { ...connectionSchema, name: z.string().regex(/^[A-Za-z][A-Za-z0-9_]{0,100}$/) }, ({ connection_id, name }) => {
@@ -47,11 +47,11 @@ export function createServer(onTool = () => {}, bridge = createBridge()) {
   return server;
 }
 
-export function createApp({ onTool = () => {}, host = '127.0.0.1', publicHostname, requestsPerMinute = 600 } = {}) {
+export function createApp({ onTool = () => {}, host = '127.0.0.1', publicHostname, requestsPerMinute = 600, statePath } = {}) {
   const allowedHosts = ['127.0.0.1', 'localhost', '[::1]'];
   if (publicHostname) allowedHosts.push(publicHostname);
   const app = createMcpExpressApp({ host, allowedHosts });
-  const bridge = createBridge();
+  const bridge = createBridge({ statePath });
   let windowStart = Date.now(), requests = 0;
   app.disable('x-powered-by');
   app.use((req, res, next) => {
@@ -65,7 +65,7 @@ export function createApp({ onTool = () => {}, host = '127.0.0.1', publicHostnam
     next();
   });
   installBridgeRoutes(app, bridge);
-  app.get('/health', (_req, res) => res.json({ ok: true, version: '0.2.0', mode: 'catalog_and_paired_web_navigation', count: source.count, commit: source.commit }));
+  app.get('/health', (_req, res) => res.json({ ok: true, version: '0.3.0', mode: 'catalog_and_paired_web_navigation', count: source.count, commit: source.commit }));
   app.get('/', (_req, res) => res.type('html').send('<!doctype html><html lang="ko"><meta charset="utf-8"><title>당근 ChatGPT 연결</title><h1>당근 ChatGPT 연결</h1><p>MCP 주소: /mcp</p><p>공개 설정 설명 조회와 코드로 연결한 당근웹의 설정 화면 열기를 지원합니다. 실제 설정값 변경·로그 업로드는 지원하지 않습니다.</p>'));
   app.post('/mcp', async (req, res) => {
     const server = createServer(onTool, bridge);
@@ -87,7 +87,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   const host = process.env.HOST || '127.0.0.1';
   const publicHostname = process.env.PUBLIC_HOSTNAME;
   if (host !== '127.0.0.1' && !publicHostname) throw new Error('PUBLIC_HOSTNAME required for non-local binding');
-  const app = createApp({ host, publicHostname, onTool: name => console.log(JSON.stringify({ time: new Date().toISOString(), tool: name })) });
+  const app = createApp({ host, publicHostname, statePath: process.env.MCP_STATE_PATH, onTool: name => console.log(JSON.stringify({ time: new Date().toISOString(), tool: name })) });
   const http = app.listen(port, host, () => console.log(`Carrot read-only MCP ready on ${host}:${port}/mcp`));
   http.requestTimeout = 15000;
   http.headersTimeout = 10000;

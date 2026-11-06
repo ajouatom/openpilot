@@ -1,7 +1,7 @@
 services:
   carrot-mcp:
     build: .
-    image: carrot-voice-probe:0.2.0
+    image: carrot-voice-probe:0.3.0
     restart: unless-stopped
     init: true
     environment:
@@ -9,6 +9,9 @@ services:
       PORT: "18770"
       PUBLIC_HOSTNAME: carrot-mcp.shind0.synology.me
       NODE_ENV: production
+      MCP_STATE_PATH: /app/state/connections.json
+    volumes:
+      - connections:/app/state
     ports:
       - "127.0.0.1:18770:18770"
     read_only: true
@@ -26,3 +29,5 @@ services:
       options:
         max-size: 5m
         max-file: "2"
+volumes:
+  connections:

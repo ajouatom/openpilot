@@ -3,7 +3,7 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev --ignore-scripts && npm cache clean --force
 COPY server.mjs bridge.mjs catalog.mjs catalog.json ./
-RUN chmod 644 /app/*.mjs /app/*.json
+RUN chmod 644 /app/*.mjs /app/*.json && mkdir /app/state && chown node:node /app/state
 USER node
 RUN node -e "import('./server.mjs').then(m => m.createApp())"
 EXPOSE 18770

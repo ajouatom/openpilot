@@ -20,6 +20,37 @@ body.dialog-open {
   overflow: hidden;
 }
 
+/* Shared assistant control across the primary web screens. */
+.assistant-launcher {
+  position: fixed;
+  top: max(8px, env(safe-area-inset-top, 0px));
+  right: max(8px, env(safe-area-inset-right, 0px));
+  z-index: var(--z-fab, 130);
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 1px solid var(--md-outline-var);
+  background: var(--md-surface-cont-h);
+  color: var(--md-on-surface);
+  box-shadow: var(--shadow-1);
+  touch-action: manipulation;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+.assistant-launcher.is-connected { color: var(--md-primary); border-color: currentColor; }
+body.dialog-open .assistant-launcher { visibility: hidden; }
+html[data-carrot-mini-hud="1"] .assistant-launcher { z-index: 5001; }
+html[data-carrot-mini-hud="1"] .carrot-mini-hud__top { padding-right: 56px; }
+#pageTerminal .terminal-toolbar { padding-right: 64px; }
+#pageTools .tools-console-log__header { padding-right: 56px; }
+@media (max-width: 600px) {
+  #settingTabBar, .logs-tabbar, #toolsMeta,
+  .page-header:not(.page-header--hidden) { margin-right: 52px; }
+}
+
 /* ── Global Focus Ring ─────────────────────────────────────────
    One accessible focus indicator for every interactive element.
    Components may override this with a more specific :focus-visible
