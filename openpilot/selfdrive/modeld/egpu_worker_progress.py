@@ -117,6 +117,6 @@ def saved_failure(cache: Path, sha: str) -> dict:
       installed = json.loads(f.read(32768))
     if value.get('pickle_sha256') != installed['pickle']['sha256'] or not isinstance(value.get('error'), str):
       return {}
-    return {key: value[key] for key in ('time', 'phase', 'rejected', 'pickle_sha256', 'error', 'boot_id', 'worker') if key in value}
+    return {key: value[key] for key in ('time', 'phase', 'rejected', 'classification', 'pickle_sha256', 'error', 'boot_id', 'worker') if key in value}
   except (OSError, ValueError, TypeError, AttributeError, KeyError):
     return {}
