@@ -4,6 +4,7 @@ from openpilot.selfdrive.ui.mici.layouts.home import MiciHomeLayout
 from openpilot.selfdrive.ui.mici.layouts.settings.settings import SettingsLayout
 from openpilot.selfdrive.ui.mici.layouts.offroad_alerts import MiciOffroadAlerts
 from openpilot.selfdrive.ui.mici.onroad.augmented_road_view import AugmentedRoadView
+from openpilot.selfdrive.ui.mici.onroad import SIDE_PANEL_WIDTH
 from openpilot.selfdrive.ui.ui_state import device, ui_state
 from openpilot.selfdrive.ui.b1_badge import draw as draw_b1_badge
 from openpilot.selfdrive.ui.widgets.carrot_web_dialog import CarrotWebDialog
@@ -140,7 +141,9 @@ class MiciMainLayout(Scroller):
 
     # Render
     super()._render(self._rect)
-    draw_b1_badge(self._rect)
+    # The runtime badge occupies y=12..48 in the HUD content area. Keep the
+    # S3 link on a second row, aligned with it and clear of the side panel.
+    draw_b1_badge(self._rect, top=52, right_margin=SIDE_PANEL_WIDTH + 24)
 
     self._handle_carrot_record_cmd(ui_state.sm)
 

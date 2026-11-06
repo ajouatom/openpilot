@@ -35,7 +35,7 @@ _next = 0.
 _state = None
 
 
-def draw(rect):
+def draw(rect, *, top=None, right_margin=None):
   global _next, _state
   now = time.monotonic()
   if now >= _next:
@@ -49,6 +49,10 @@ def draw(rect):
   size = 24 if rect.width >= 1200 else 16
   width = size*8
   x, y = rect.x + rect.width*.72 - width/2, rect.y + size*.55
+  if top is not None:
+    y = rect.y + top
+  if right_margin is not None:
+    x = rect.x + rect.width - right_margin - width
   rl.draw_rectangle_rounded(rl.Rectangle(x, y, width, size*1.55), .7, 8, rl.Color(10, 18, 25, 220))
   rl.draw_circle(int(x+size*.62), int(y+size*.77), size*.19, rl.Color(*rgb, 255))
   rl.draw_text_ex(gui_app.font(FontWeight.DISPLAY), label, rl.Vector2(x+size*1.05, y+size*.24), size, 0, rl.WHITE)
