@@ -18,12 +18,12 @@ The app targets Android 8 and newer. Device connection and the small voice overl
 1. Open CarrotAssist. One device found during the initial five-second window opens automatically; multiple devices require selection. With no result, scanning continues for about one minute. Enter a device's IPv4 address manually if necessary.
 2. Open **Tools > ChatGPT assistant** in the web interface.
 3. To use live values, select **Allow setting reads and changes** while stationary and disengaged. Requested current values and change results will be sent to ChatGPT and the Carrot relay.
-4. Select **Create mini-mode connection code**.
-5. Open [ChatGPT Plugins](https://chatgpt.com/plugins) in a desktop browser with the same account. Select the add button and **Add custom MCP server**. Use `CarrotAssist` as its name, **OAuth** authentication and this server URL:
+4. Expand **First connection / reconnect**, then use **Copy Carrot connection address** and **Open ChatGPT connections**. If the add menu is unavailable on the phone, open [ChatGPT Plugins](https://chatgpt.com/plugins) in a desktop browser with the same account.
+5. Select the add button and **Add custom MCP server**. Use `CarrotAssist` as its name and paste the copied address into the server URL field. Select **OAuth** from the authentication list and create/connect. OAuth is the connection method that lets you authorize access to your Carrot device from your own ChatGPT account.
 
    `https://carrot-mcp.shind0.synology.me/account/mcp`
 
-6. Enter the code on the Carrot authorization page. Select setting access as well if you want reads and changes, then approve. Existing screen-only connections need new authorization for the additional scope.
+6. When the Carrot authorization page opens, return to CarrotAssist and select **Create mini-mode connection code**, then enter that code on the authorization page. Select setting access as well if you want reads and changes, then approve. Existing screen-only connections need new authorization for the additional scope. If an existing plugin lacks new tools, select **Refresh tools** in ChatGPT's plugin management and test in a new chat.
 7. Install the plugin and search for a Carrot setting in a new chat. Return to CarrotAssist and tap its top-right microphone to invoke the assistant.
 
 The code's **five-minute expiry applies to initial authorization**, not the resulting connection. Codes are single-use; create another if expired. Enter codes only on the Carrot authorization page, never in a conversation. Once approved, new voice chats can use the same device without another connection request.

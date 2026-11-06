@@ -5,6 +5,11 @@ window.CarrotTranslations.register("zh", {
   nativeName: "中文",
   shortName: "ZH",
   strings: {
+    assistant_setup_steps: "首次连接 / 重新连接",
+    assistant_setup_open: "1. 打开 ChatGPT 连接页面",
+    assistant_setup_address: "Carrot 连接地址",
+    assistant_setup_copy_address: "2. 复制 Carrot 连接地址",
+    assistant_account_help: "在 ChatGPT 中选择 + > 添加自定义 MCP 服务器。名称填写 CarrotAssist，服务器 URL 粘贴复制的地址，认证选择 OAuth。创建并连接后，在 Carrot 授权页面输入下方生成的代码。5 分钟仅为代码输入期限，连接会继续保留。不要将代码发到聊天中。",
     setting_history_source_voice: "语音助手",
     assistant_settings_required: "请先在 Carrot Web 工具 > ChatGPT 助手中允许读取和修改设置值。",
     assistant_settings_disabled: "已撤销设置值权限。",
