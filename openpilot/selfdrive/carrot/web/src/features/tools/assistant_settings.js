@@ -69,7 +69,16 @@ export async function executeSettingCommand(command) {
   completed = { id: command.id, result };
   // Navigation must not turn a verified device write into a reported failure.
   if (result.status === 'applied') {
+    // The destination may already be open, so navigation alone will not reload
+    // its controls. Discard in-flight cached reads before applying the readback.
+    const values = { [result.name]: result.current };
+    try {
+      globalThis.CarrotSettingsRuntime?.values?.clear();
+      globalThis.CarrotSettingsRuntime?.values?.applyValues(values);
+      globalThis.applyRestoredSettingValuesToRenderedItems?.(values);
+    } catch {}
     try { await globalThis.openAssistantSetting?.(result.name); } catch {}
+    try { globalThis.applyRestoredSettingValuesToRenderedItems?.(values); } catch {}
   }
   return completed;
 }
