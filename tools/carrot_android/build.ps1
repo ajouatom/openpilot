@@ -1,10 +1,14 @@
+[CmdletBinding(DefaultParameterSetName='Debug')]
 param(
   [string]$Sdk = "$env:LOCALAPPDATA\Android\Sdk",
   [string]$BuildTools = "35.0.0",
   [string]$Platform = "android-36",
   [string]$Jdk = $env:JAVA_HOME,
   [Parameter(Mandatory=$true)][string]$OutputApk,
-  [Parameter(Mandatory=$true)][string]$DebugKeystore
+  [Parameter(Mandatory=$true,ParameterSetName='Debug')][string]$DebugKeystore,
+  [Parameter(Mandatory=$true,ParameterSetName='Release')][string]$SigningKeystore,
+  [Parameter(ParameterSetName='Release')][string]$SigningAlias = 'carrotassist',
+  [Parameter(ParameterSetName='Release')][string]$SigningPasswordEnv = 'CARROT_ASSIST_SIGNING_PASSWORD'
 )
 $ErrorActionPreference = 'Stop'
 if (!$Jdk) {
@@ -29,6 +33,10 @@ $coreSources = @((Join-Path $sourceRoot 'src\me\shind0\carrotweb\DiscoveryPolicy
 Assert-Exit 'Compile discovery checks'
 & $javaExe -cp $testClasses DiscoveryTest
 Assert-Exit 'Discovery checks'
+& $javacExe -encoding UTF-8 -d $testClasses (Join-Path $sourceRoot 'src\me\shind0\carrotweb\UpdatePolicy.java') (Join-Path $sourceRoot 'tests\UpdatePolicyTest.java')
+Assert-Exit 'Compile update policy checks'
+& $javaExe -cp $testClasses UpdatePolicyTest
+Assert-Exit 'Update policy checks'
 $sources = @(Get-ChildItem -LiteralPath (Join-Path $sourceRoot 'src') -Filter '*.java' -Recurse | ForEach-Object FullName)
 & $javacExe -source 8 -target 8 -encoding UTF-8 -bootclasspath "$platformJar;$(Join-Path $bin 'core-lambda-stubs.jar')" -d $classes @sources
 Assert-Exit 'Compile Android app'
@@ -48,16 +56,25 @@ Assert-Exit 'Add dex'
 $aligned = Join-Path $buildRoot 'aligned.apk'
 & (Join-Path $bin 'zipalign.exe') -f -p 4 $unsigned $aligned
 Assert-Exit 'Align APK'
-$DebugKeystore = [IO.Path]::GetFullPath($DebugKeystore)
-if (!(Test-Path -LiteralPath $DebugKeystore)) {
+if ($PSCmdlet.ParameterSetName -eq 'Debug') {
+  $DebugKeystore = [IO.Path]::GetFullPath($DebugKeystore)
+  if (!(Test-Path -LiteralPath $DebugKeystore)) {
   New-Item -ItemType Directory -Force ([IO.Path]::GetDirectoryName($DebugKeystore)) | Out-Null
   & $keytoolExe -genkeypair -keystore $DebugKeystore -storepass android -keypass android -alias androiddebugkey -dname 'CN=Android Debug,O=Android,C=US' -keyalg RSA -keysize 2048 -validity 3650
   Assert-Exit 'Create local test signing key'
+  }
+  $SigningKeystore = $DebugKeystore
+  $SigningAlias = 'androiddebugkey'
+  $signingPassArg = 'pass:android'
+} else {
+  $SigningKeystore = [IO.Path]::GetFullPath($SigningKeystore)
+  if (!(Test-Path -LiteralPath $SigningKeystore) -or ![Environment]::GetEnvironmentVariable($SigningPasswordEnv)) { throw 'Release signing key and password environment variable are required' }
+  $signingPassArg = "env:$SigningPasswordEnv"
 }
 $OutputApk = [IO.Path]::GetFullPath($OutputApk)
 New-Item -ItemType Directory -Force ([IO.Path]::GetDirectoryName($OutputApk)) | Out-Null
-& (Join-Path $bin 'apksigner.bat') sign --ks $DebugKeystore --ks-key-alias androiddebugkey --ks-pass pass:android --key-pass pass:android --out $OutputApk $aligned
-Assert-Exit 'Sign test APK'
+& (Join-Path $bin 'apksigner.bat') sign --ks $SigningKeystore --ks-key-alias $SigningAlias --ks-pass $signingPassArg --key-pass $signingPassArg --out $OutputApk $aligned
+Assert-Exit 'Sign APK'
 & (Join-Path $bin 'apksigner.bat') verify --verbose $OutputApk
 Assert-Exit 'Verify signature'
 Get-FileHash -LiteralPath $OutputApk -Algorithm SHA256

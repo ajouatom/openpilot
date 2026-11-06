@@ -36,6 +36,7 @@ MAX_PARAM_CHANGE_RECORDS = 1000
 # Where a write came from. Anything outside this set is recorded as "unknown"
 # so a caller cannot invent a source that hides what actually happened.
 PARAM_CHANGE_SOURCES = frozenset({
+  "voice_assistant",
   "web_ui",
   "profile",
   "restore",

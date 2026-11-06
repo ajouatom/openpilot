@@ -4,6 +4,7 @@
 !package-lock.json
 !server.mjs
 !bridge.mjs
+!setting_bridge.mjs
 !oauth.mjs
 !catalog.mjs
 !catalog.json

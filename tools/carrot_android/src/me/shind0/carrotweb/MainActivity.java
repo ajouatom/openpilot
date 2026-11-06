@@ -63,6 +63,7 @@ public final class MainActivity extends Activity {
   private boolean scanning, choosing, foregroundActivity;
   private String currentAddress;
   private SharedPreferences preferences;
+  private AppUpdater updater;
   private static final class Device {
     final String address, name;
     Device(String address, String name) { this.address = address; this.name = name; }
@@ -74,6 +75,7 @@ public final class MainActivity extends Activity {
   @Override public void onCreate(Bundle saved) {
     super.onCreate(saved);
     preferences = getSharedPreferences("carrot-web", MODE_PRIVATE);
+    updater = new AppUpdater(this, preferences);
     root = column(); root.setBackgroundColor(background);
     if (android.os.Build.VERSION.SDK_INT >= 30) root.setOnApplyWindowInsetsListener((v,insets) -> {
       android.graphics.Insets b = insets.getInsets(WindowInsets.Type.systemBars() | WindowInsets.Type.displayCutout() | WindowInsets.Type.ime());
@@ -89,6 +91,7 @@ public final class MainActivity extends Activity {
     Button search = button("⌕", v -> startSearch()); search.setContentDescription("당근 기기 찾기");
     bar.addView(search,new LinearLayout.LayoutParams(dp(52),dp(48)));
     title = text("CarrotAssist",18); title.setSingleLine(true); title.setEllipsize(android.text.TextUtils.TruncateAt.END);
+    title.setOnClickListener(v -> updater.info()); title.setContentDescription("기기 이름 · 앱 정보와 업데이트 확인");
     bar.addView(title,new LinearLayout.LayoutParams(0,dp(48),1)); title.setGravity(Gravity.CENTER_VERTICAL);
     ImageButton assistant = new ImageButton(this);
     assistant.setImageResource(android.R.drawable.ic_btn_speak_now); assistant.setColorFilter(accent);
@@ -97,6 +100,7 @@ public final class MainActivity extends Activity {
     bar.addView(assistant,new LinearLayout.LayoutParams(dp(52),dp(48)));
     root.addView(bar); content = column(); root.addView(content,new LinearLayout.LayoutParams(-1,0,1)); setContentView(root);
     startSearch();
+    updater.check(false);
   }
   private int dp(int value) { return Math.round(value * getResources().getDisplayMetrics().density); }
   private LinearLayout column() { LinearLayout v = new LinearLayout(this); v.setOrientation(LinearLayout.VERTICAL); return v; }
@@ -228,6 +232,9 @@ public final class MainActivity extends Activity {
     if (web == null) {
       web = new WebView(this); web.setBackgroundColor(background);
       WebSettings settings = web.getSettings(); settings.setJavaScriptEnabled(true); settings.setDomStorageEnabled(true);
+      // Match the existing browser page's CSS sizing. WebView otherwise adds
+      // Android font_scale (130% on the test phone) to the page's own typography.
+      settings.setTextZoom(100);
       settings.setAllowFileAccess(false); settings.setAllowContentAccess(false); settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
       settings.setMediaPlaybackRequiresUserGesture(true); settings.setSupportMultipleWindows(false);
       settings.setUserAgentString(settings.getUserAgentString()+" CarrotWebAndroid/0.1");
@@ -259,9 +266,9 @@ public final class MainActivity extends Activity {
       .setNegativeButton("닫기",null).setPositiveButton("설정 열기",(d,w) -> { try { startActivity(new Intent(Settings.ACTION_VOICE_INPUT_SETTINGS)); } catch (Exception e) { notice("휴대폰 설정에서 기본 디지털 어시스턴트를 선택해 주세요."); } }).show();
   }
   private void notice(String message) { new AlertDialog.Builder(this).setMessage(message).setPositiveButton("확인",null).show(); }
-  @Override protected void onResume() { super.onResume(); foregroundActivity = true; if (web!=null) web.onResume(); }
+  @Override protected void onResume() { super.onResume(); foregroundActivity = true; if (web!=null) web.onResume(); if (updater!=null) updater.resume(); }
   @Override protected void onPause() { foregroundActivity = false; super.onPause(); }
   @Override protected void onStop() { if (scanning) { stopSearch(); if (status!=null) status.setText("검색이 중단됐어요. 다시 검색을 눌러 주세요."); } super.onStop(); }
   @Override public void onBackPressed() { if (web!=null && currentAddress!=null && web.canGoBack()) web.goBack(); else if (currentAddress!=null) startSearch(); else super.onBackPressed(); }
-  @Override protected void onDestroy() { stopSearch(); ui.removeCallbacksAndMessages(null); if (web!=null) { web.destroy(); web=null; } super.onDestroy(); }
+  @Override protected void onDestroy() { stopSearch(); ui.removeCallbacksAndMessages(null); if (updater!=null) updater.close(); if (web!=null) { web.destroy(); web=null; } super.onDestroy(); }
 }

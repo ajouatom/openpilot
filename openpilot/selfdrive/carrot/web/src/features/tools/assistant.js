@@ -1,5 +1,6 @@
 import { ASSISTANT_RELAY, ASSISTANT_SESSION_KEY, CHATGPT_INSTALL_URL, screenRequest, sessionValid } from './assistant_policy.js';
 import { copyPairingMessage } from './assistant_clipboard.js';
+import { executeSettingCommand, mountSettingAccess, revokeSettingAccess } from './assistant_settings.js';
 
 const text = (key, fallback) => globalThis.getUIText?.(`assistant_${key}`, fallback) || fallback;
 let session = null, completed = null, timer = null, polling = false, generation = 0;
@@ -29,6 +30,7 @@ async function request(operation, body = {}, current = session) {
   return response.json();
 }
 async function revoke() {
+  await revokeSettingAccess();
   if (!session) return;
   try { await request('disconnect'); }
   catch (error) { if (error.status !== 401) throw error; }
@@ -61,6 +63,10 @@ async function poll() {
       if (field) field.value = '';
       const feedback = document.getElementById('assistantAccountFeedback');
       if (feedback) feedback.textContent = text('account_connected', 'Account connected · reusable in new voice chats');
+    }
+    if (result.settings_command && !/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName)) {
+      const settingResult = await executeSettingCommand(result.settings_command);
+      if (settingResult && epoch === generation) await request('settings_ack', settingResult, current);
     }
     const command = result.command;
     if (!screenRequest(command)) return;
@@ -103,6 +109,7 @@ export function openAssistantDialog() {
   const account = document.createElement('section');
   account.innerHTML = '<p id="assistantAccountHelp"></p><button id="assistantAccountPair" class="btn" type="button"></button><label id="assistantAccountCodeLabel" for="assistantAccountCode"></label><input id="assistantAccountCode" class="input-text" readonly autocomplete="off" style="width:100%;box-sizing:border-box;user-select:text;-webkit-user-select:text"><button id="assistantAccountCopy" class="btn" type="button"></button><p id="assistantAccountFeedback" role="status"></p><hr>';
   el('Panel').prepend(account);
+  mountSettingAccess(el('Panel'));
   label('AccountHelp', 'account_help', `For mini voice mode, connect the Carrot MCP with OAuth at ${ASSISTANT_RELAY}/account/mcp. Enter the code below on its authorization page once. Then use your Android ChatGPT assistant in new chats. Do not send this code in chat. Disconnect revokes all access to this web connection.`);
   label('AccountPair', 'account_pair', 'Create mini-mode connection code');
   label('AccountCodeLabel', 'account_code', 'Device authorization code · expires in 5 minutes');
@@ -122,7 +129,7 @@ export function openAssistantDialog() {
     } catch (e) { status(e.message); }
     finally { if (el('AccountPair')) el('AccountPair').disabled = false; }
   };
-  label('Help', 'help', 'Connect your account once to use new voice chats. Only setting search, explanation and screen navigation are supported; setting values cannot be changed.');
+  label('Help', 'help', 'Connect your account once to use new voice chats. Setting reads and confirmed changes additionally require permission here and in ChatGPT.');
   label('Disconnect', 'disconnect', 'Disconnect');
   const render = () => {
     if (!el('Panel')) return;

@@ -1,5 +1,6 @@
 import { randomBytes, createHash } from 'node:crypto';
 import { readFileSync, writeFileSync, renameSync } from 'node:fs';
+import { createSettingBridge } from './setting_bridge.mjs';
 
 const digest = value => createHash('sha256').update(String(value)).digest('hex');
 const token = () => randomBytes(32).toString('base64url');
@@ -19,6 +20,7 @@ export function allowedWebOrigin(origin) {
 // Only screen navigation is supported. No values, device credentials or log files.
 // Persist only paired capability hashes. Pending commands never survive restart.
 export function createBridge({ now = Date.now, maxSessions = 1000, statePath, isAccountLinked = () => false } = {}) {
+  const settings = createSettingBridge(now);
   const sessions = new Map(), browsers = new Map(), controls = new Map(), codes = new Map();
   const accountCodes = new Map();
   const record = s => ({ id: s.id, origin: s.origin, label: s.label, browserHash: s.browserHash, controlHash: s.controlHash });
@@ -46,6 +48,7 @@ export function createBridge({ now = Date.now, maxSessions = 1000, statePath, is
     }
   }
   const remove = s => {
+    settings.remove(s.id);
     if (s.controlHash) persist(null, s.id);
     sessions.delete(s.id); browsers.delete(s.browserHash); codes.delete(s.codeHash);
     if (s.controlHash) controls.delete(s.controlHash);
@@ -70,6 +73,15 @@ export function createBridge({ now = Date.now, maxSessions = 1000, statePath, is
         expires_at: s.command.expiresAt } : null };
   }
   return {
+    accountSettingStatus(id) { this.accountStatus(id); return settings.status(id); },
+    async accountSettingAction(id, operation, fields = {}) {
+      this.accountStatus(id);
+      settings.queue(id, operation, fields);
+      const deadline = Date.now() + 8000;
+      while (Date.now() < deadline && settings.status(id).status === 'queued') await new Promise(resolve => setTimeout(resolve, 100));
+      this.accountStatus(id);
+      return settings.status(id);
+    },
     // Internal OAuth interface: the identity comes only from validated credentials.
     accountStatus(id) {
       sweep(); const s = sessions.get(id);
@@ -136,6 +148,7 @@ export function createBridge({ now = Date.now, maxSessions = 1000, statePath, is
       const s = lookup(browsers, key);
       if (s.origin !== origin) fail('Browser origin mismatch.', 403);
       if (operation === 'disconnect') { remove(s); return { disconnected: true }; }
+      if (operation === 'settings_ack') return settings.ack(s.id, body.id, body.result);
       if (operation === 'account_code') {
         for (const [hash, link] of accountCodes) if (link.id === s.id) accountCodes.delete(hash);
         const code = randomBytes(10).toString('hex').toUpperCase();
@@ -153,7 +166,7 @@ export function createBridge({ now = Date.now, maxSessions = 1000, statePath, is
       if (operation !== 'poll') fail('Unknown operation.');
       if (now() - s.pollAt < 900) fail('Poll too fast.', 429);
       s.pollAt = now(); s.lastSeen = now();
-      return status(s);
+      return { ...status(s), settings_command: settings.poll(s.id) };
     },
   };
 }

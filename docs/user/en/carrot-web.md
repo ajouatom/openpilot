@@ -1,5 +1,7 @@
 # Carrot Web User Guide
 
+For Android device discovery and the ChatGPT voice setting assistant, see the [CarrotAssist guide](carrot-assist.md). Live setting reads and changes require both local device permission and ChatGPT connection authorization.
+
 [한국어](../ko/carrot-web.md)
 
 Carrot Web is a local web interface for viewing and managing carrotpilot from a phone, tablet, or PC connected to the same network as the device. It provides driving status, settings, logs, updates, and diagnostic tools.
