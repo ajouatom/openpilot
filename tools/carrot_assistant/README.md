@@ -15,8 +15,8 @@ not expire in five minutes. New chats resolve the approved web session from the
 validated token, without a caller-selected user or device ID.
 
 `carrot.screen` permits search/explanation/navigation. `carrot.settings` is an
-additional, explicitly selected consent scope for live reads and changes. Old
-grants and refresh tokens remain screen-only. The device must also issue a local
+additional, explicitly selected consent scope for live reads and changes. Existing
+grants and refresh tokens retain their original scopes. The device must also issue a local
 grant while stationary/disengaged. That grant stays in WebView storage and goes
 only to same-origin device endpoints, never to the relay or ChatGPT.
 

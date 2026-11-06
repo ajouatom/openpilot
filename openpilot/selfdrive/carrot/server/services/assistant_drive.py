@@ -22,9 +22,11 @@ class AssistantDrive:
   def revoke(self, token, origin):
     owner = self.permissions.authorize(token, origin)
     self.permissions.revoke(token, origin)
-    for request in self.requests.values():
-      if request['owner'] == owner:
-        atomic_json(request['root'] / 'cancel.json', {'id': request['id']})
+    # Runtime ownership also survives a web-server restart during preparation.
+    for root in (self.root, self.root / 'speed'):
+      request = read_json(root / 'request.json', {})
+      if isinstance(request, dict) and request.get('owner') == owner and IDENTITY.fullmatch(str(request.get('id', ''))):
+        atomic_json(root / 'cancel.json', {'id': request['id']})
 
   def execute(self, token, origin, command):
     owner = self.permissions.authorize(token, origin)
@@ -61,7 +63,7 @@ class AssistantDrive:
     root = self.root if action.startswith('lane_') else self.root / 'speed'
     request = {'id': identity, 'owner': owner, 'action': action, 'value': value, 'time': now, 'root': root}
     self.requests[identity] = request  # Consume before publishing; uncertain writes are never retried.
-    atomic_json(root / 'request.json', {'id': identity, 'time': now, 'action': action, 'value': value,
+    atomic_json(root / 'request.json', {'id': identity, 'owner': owner, 'time': now, 'action': action, 'value': value,
                                       'direction': action.removeprefix('lane_') if action.startswith('lane_') else None})
     return self.status(request)
 
