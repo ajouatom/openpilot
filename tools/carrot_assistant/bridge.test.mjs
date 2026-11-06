@@ -8,6 +8,37 @@ import { mkdtempSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
+test('fresh account codes retain their full lifetime beyond the original browser lease', () => {
+  let time = 1000;
+  const b = createBridge({ now: () => time });
+  const origin = 'http://carrot:7000';
+  const browser = b.create(origin);
+  time += 299000;
+  const old = b.browser(browser.browser_token, origin, 'account_code');
+  time += 2000;
+  assert.equal(b.browser(browser.browser_token, origin, 'poll').expires_at, old.expires_at);
+  // Renewing account approval must not extend the old legacy chat-pairing code.
+  assert.throws(() => b.pair(browser.pairing_code));
+  const fresh = b.browser(browser.browser_token, origin, 'account_code');
+  assert.throws(() => b.claimAccountCode(old.account_code));
+  time += 299999;
+  const account = b.claimAccountCode(fresh.account_code);
+  assert.equal(b.accountStatus(account.id).connected, true);
+  assert.throws(() => b.claimAccountCode(fresh.account_code));
+});
+
+test('an unclaimed renewed account code still expires at its own deadline', () => {
+  let time = 1000;
+  const b = createBridge({ now: () => time });
+  const origin = 'http://carrot:7000';
+  const browser = b.create(origin);
+  time += 299000;
+  const code = b.browser(browser.browser_token, origin, 'account_code');
+  time = code.expires_at;
+  assert.throws(() => b.claimAccountCode(code.account_code));
+  assert.throws(() => b.browser(browser.browser_token, origin, 'poll'));
+});
+
 test('pairing is single-use, origin-bound, isolated, expiring and revocable', () => {
   let time = 1000;
   const bridge = createBridge({ now: () => time, maxSessions: 2 });

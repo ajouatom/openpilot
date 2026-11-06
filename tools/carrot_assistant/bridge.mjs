@@ -59,7 +59,7 @@ export function createBridge({ now = Date.now, maxSessions = 1000, statePath, is
   function sweep() {
     for (const [hash, link] of accountCodes) if (link.expiresAt <= now() || !sessions.has(link.id)) accountCodes.delete(hash);
     for (const s of sessions.values()) {
-      if (!s.controlHash && s.pairExpiresAt <= now()) { remove(s); continue; }
+      if (!s.controlHash && s.expiresAt <= now()) { remove(s); continue; }
       if (s.command?.status === 'queued' && s.command.expiresAt <= now()) s.command.status = 'expired';
     }
   }
@@ -182,8 +182,11 @@ export function createBridge({ now = Date.now, maxSessions = 1000, statePath, is
       if (operation === 'account_code') {
         for (const [hash, link] of accountCodes) if (link.id === s.id) accountCodes.delete(hash);
         const code = randomBytes(10).toString('hex').toUpperCase();
-        accountCodes.set(digest(code), { id: s.id, expiresAt: now() + 300000 });
-        return { account_code: code, expires_at: now() + 300000 };
+        const expiresAt = now() + 300000;
+        // A freshly issued code must not die with the older unpaired browser lease.
+        if (!s.controlHash) s.expiresAt = expiresAt;
+        accountCodes.set(digest(code), { id: s.id, expiresAt });
+        return { account_code: code, expires_at: expiresAt };
       }
       if (operation === 'ack') {
         if (!s.command || body.id !== s.command.id) fail('Unknown request.', 409);

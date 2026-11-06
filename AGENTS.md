@@ -1,5 +1,17 @@
 # Repository memory
 
+- On 2026-11-06 voice setup follow-up, owner reaches real OAuth consent but reports
+  invalid/expired code. Reproduced one possible cause: regenerate account code at
+  initial browser lease299s, claim2s later rejects despite298s code validity.
+  Relay0.6.1 extends only unpaired browser lease to newly issued account deadline;
+  sweeper uses that lease, legacy chat-code expiry remains unchanged. Two new
+  regressions plus existing MCP suites20 pass. This does not establish that every
+  reported expiry shares this cause. Owner had also pasted codes in mini voice
+  chat and confused Play Store with setup link; consent code belongs only in the
+  Carrot HTTPS approval form reached via ChatGPT Plugins > Installed > CarrotAssist
+  > Reconnect. No phone/vehicle update needed for this server fix. Never request
+  that authorization codes be sent in chat or silently expand old scopes.
+
 - On 2026-11-06, owner requests one continuing ChatGPT voice conversation mixing
   settings and direct lane/set-speed commands. Rejects per-command buttons and
   short-local-STT/long-ChatGPT modes. Keep Android0.2.0/default assistant unchanged.
