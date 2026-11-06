@@ -14,7 +14,7 @@ export function createServer(onTool = () => {}, bridge = createBridge(), session
   const accountInstructions = `당근파일럿 음성 도우미입니다. 이 요청은 이미 인증된 기기에 연결되어 있습니다. 새 대화나 안드로이드 미니 음성창에서도 연결 코드를 요구하지 마세요. get_carrot_web_status로 본인 기기를 확인하고 open_carrot_setting에 정확한 name만 전달하세요. 사용자 ID나 connection_id는 필요 없습니다. 브라우저가 오프라인이면 당근웹을 열도록 안내하고 재연결 코드를 요구하지 마세요. 인증 실패만 재인증이 필요합니다. 설정 화면 열기만 허용하며 값 변경·차량 제어·로그 전송은 지원하지 않습니다. queued는 대기이며 opened만 완료입니다.\n${instructions.slice(instructions.indexOf('설정 질문에는'))}`;
   const activeInstructions = sessionId ? accountInstructions : instructions;
   const security = sessionId ? { securitySchemes: [{ type: 'oauth2', scopes: [ACCOUNT_SCOPE] }] } : {};
-  const server = new McpServer({ name: sessionId ? 'carrot-account-assistant' : 'carrot-voice-probe', version: '0.4.1' }, { instructions: activeInstructions });
+  const server = new McpServer({ name: sessionId ? 'carrot-account-assistant' : 'carrot-voice-probe', version: '0.4.2' }, { instructions: activeInstructions });
   const register = (name, description, inputSchema, fn) => server.registerTool(name, {
     description, inputSchema, annotations: readOnly, _meta: security,
   }, async args => { onTool(name); return output(await fn(args)); });
@@ -74,7 +74,7 @@ export function createApp({ onTool = () => {}, host = '127.0.0.1', publicHostnam
   });
   installBridgeRoutes(app, bridge);
   if (accountAuth) installAccountAuth(app, accountAuth, issuer);
-  app.get('/health', (_req, res) => res.json({ ok: true, version: '0.4.1', mode: 'catalog_and_paired_web_navigation', account_auth: Boolean(accountAuth), count: source.count, commit: source.commit }));
+  app.get('/health', (_req, res) => res.json({ ok: true, version: '0.4.2', mode: 'catalog_and_paired_web_navigation', account_auth: Boolean(accountAuth), count: source.count, commit: source.commit }));
   app.get('/', (_req, res) => res.type('html').send('<!doctype html><html lang="ko"><meta charset="utf-8"><title>당근 ChatGPT 연결</title><h1>당근 ChatGPT 연결</h1><p>MCP 주소: /mcp</p><p>공개 설정 설명 조회와 코드로 연결한 당근웹의 설정 화면 열기를 지원합니다. 실제 설정값 변경·로그 업로드는 지원하지 않습니다.</p>'));
   const handleMcp = async (req, res) => {
     const server = createServer(onTool, bridge, req.auth?.extra?.sessionId || null);

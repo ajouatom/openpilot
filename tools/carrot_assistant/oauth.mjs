@@ -101,7 +101,9 @@ export function createAccountAuth({ issuer, bridge, statePath, now = Date.now })
       res.cookie('carrot_oauth', cookie, { httpOnly: true, secure: issuer.startsWith('https:'), sameSite: 'lax', path: '/oauth/approve', maxAge: 600000 });
       // Chromium checks form-action again after the POST's 303 redirect. Permit
       // only this validated ChatGPT callback as well as our own consent POST.
-      res.set({ 'Content-Security-Policy': `default-src 'none'; style-src 'unsafe-inline'; form-action 'self' ${params.redirectUri}; frame-ancestors 'none'; base-uri 'none'`, 'Referrer-Policy': 'no-referrer', 'X-Content-Type-Options': 'nosniff' });
+      // no-referrer also makes a browser form POST's Origin null. same-origin
+      // preserves our CSRF origin check without disclosing the URL to ChatGPT.
+      res.set({ 'Content-Security-Policy': `default-src 'none'; style-src 'unsafe-inline'; form-action 'self' ${params.redirectUri}; frame-ancestors 'none'; base-uri 'none'`, 'Referrer-Policy': 'same-origin', 'X-Content-Type-Options': 'nosniff' });
       res.type('html').send(`<!doctype html><html lang="ko"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>당근 기기 연결</title><style>body{font:18px system-ui;background:#10151c;color:#eee;max-width:520px;margin:40px auto;padding:20px;line-height:1.6}input,button{font:inherit;box-sizing:border-box;padding:12px;width:100%;margin:12px 0}button{background:#ed9144;border:0;border-radius:10px}small{color:#bbb}</style><h1>ChatGPT에 당근 기기 연결</h1><p>한 번 연결하면 새 대화와 미니 음성창에서도 같은 당근웹을 사용할 수 있습니다.</p><p>당근웹의 ChatGPT 연결 설정에서 <b>미니모드 연결 코드</b>를 만든 뒤 아래에 입력하세요. 이 코드는 대화에 보내지 마세요.</p><form method="post" action="/oauth/approve"><input type="hidden" name="flow" value="${escape(flow)}"><label for="code">미니모드 연결 코드 (5분 유효)</label><input id="code" name="code" required maxlength="30" autocomplete="off" autocapitalize="characters" spellcheck="false"><p>허용: 설정 검색·설명 및 해당 웹의 설정 화면 열기.<br>설정값 변경·차량 제어·로그 전송은 허용하지 않습니다.</p><button type="submit">이 기기 연결 승인</button></form><small>연결은 당근웹에서 해제할 수 있습니다. 인증은 자동 갱신되며, 1년 동안 사용하지 않으면 다시 연결해야 합니다. 다른 사람이 보낸 코드는 입력하지 마세요.</small></html>`);
     },
     async challengeForAuthorizationCode(client, code) { return codeFor(client, code).challenge; },
@@ -136,7 +138,9 @@ export function createAccountAuth({ issuer, bridge, statePath, now = Date.now })
     approve(req, res) {
       sweep(); const flow = flows.get(req.body?.flow);
       const cookie = String(req.headers.cookie || '').split(';').map(s => s.trim()).find(s => s.startsWith('carrot_oauth='))?.slice('carrot_oauth='.length);
-      if (req.headers.origin !== issuer || !flow || hash(cookie || '') !== flow.cookieHash || ++flow.attempts > 5) return res.status(403).type('text').send('연결 요청이 만료됐습니다. ChatGPT에서 연결을 다시 시작하세요.');
+      if (!flow) return res.status(403).type('text').send('연결 요청이 만료됐습니다. ChatGPT에서 연결을 다시 시작하세요.');
+      if (req.headers.origin !== issuer || hash(cookie || '') !== flow.cookieHash) return res.status(403).type('text').send('연결 요청의 보안 확인에 실패했습니다. 승인 화면을 연 브라우저에서 진행하거나 ChatGPT에서 연결을 다시 시작하세요.');
+      if (++flow.attempts > 5) return res.status(403).type('text').send('입력 시도 횟수를 초과했습니다. ChatGPT에서 연결을 다시 시작하세요.');
       try {
         const linked = bridge.claimAccountCode(req.body.code);
         const code = random();

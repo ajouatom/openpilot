@@ -34,6 +34,7 @@ async function start(dir, port = 0) {
     const policy = response.headers.get('content-security-policy');
     assert.equal(policy.split(';').map(s => s.trim()).find(s => s.startsWith('form-action')), `form-action 'self' ${callback}`);
     assert.match(policy, /frame-ancestors 'none'/);
+    assert.equal(response.headers.get('referrer-policy'), 'same-origin');
     const flow = (await response.text()).match(/name="flow" value="([^"]+)"/)[1];
     return { verifier, flow, cookie: response.headers.get('set-cookie').split(';')[0] };
   }
@@ -68,6 +69,9 @@ test('OAuth discovery, callback allowlist, consent CSRF, PKCE, resource and code
     const device = await (await env.browser('create')).json();
     const auth = await env.begin(client);
     const code = await (await env.browser('account_code', device.browser_token)).json();
+    const opaqueOrigin = await env.form('/oauth/approve', { flow: auth.flow, code: code.account_code }, { Cookie: auth.cookie, Origin: 'null' });
+    assert.equal(opaqueOrigin.status, 403);
+    assert.match(await opaqueOrigin.text(), /보안 확인/);
     assert.equal((await env.form('/oauth/approve', { flow: auth.flow, code: code.account_code }, { Origin: env.base })).status, 403);
     assert.equal((await env.form('/oauth/approve', { flow: auth.flow, code: code.account_code }, { Cookie: auth.cookie, Origin: 'https://evil.example' })).status, 403);
     const linked = await env.link(client, device.browser_token);
