@@ -1,5 +1,31 @@
 # Repository memory
 
+- On 2026-11-06, owner authorizes CarrotAssist public beta with confirmed setting
+  changes, automatic update checks, KO/EN guides and Wiki. Android 0.2.0/code7
+  retains prototype signing identity; release APK SHA256
+  c05c86f2312aa46aaa05bd1ea73f39066c6a7cc49ace88fd3399491bbf433968.
+  Release carrot-assist-v0.2.0 and separate carrot-assist-updates/update.json
+  are published without changing the repository's general Latest release.
+  NAS carrot-mcp 0.5.0/account OAuth adds carrot.settings only by new consent;
+  existing permissions never expand silently. Hashed local origin-bound grant,
+  single-setting read, 60s proposal, explicit confirmation, fresh state and value
+  recheck, readback and voice-source history guard writes. Only display/HUD
+  brightness and alert volume may change onroad; other supported integer settings
+  need fresh stationary/disengaged state. No real-time vehicle commands or logs.
+  Owner's parked device verified through ChatGPT tools: brightness90 ->95 ->90;
+  direct Params readback agrees. Phone updated via GitHub verifier/Android installer
+  code6 ->7; pairing and local grant survive. Tool refresh after reauthorization
+  exposes all11 tools. Actual voice-overlay navigation was tested separately;
+  setting writes used ChatGPT text tools, not a spoken-road acceptance test.
+  Fix already-open setting rows/cache after applied readback. Python41, MCP14,
+  Android discovery33/update15, focused web15 and docs validation pass.
+  Free ChatGPT unverified; Gemini custom MCP US/English restrictions and Live
+  unverified, no Gemini/legacy Assistant tool integration. No AI API/key on relay;
+  each user's ChatGPT allowance applies. Hundreds of clients/load unverified.
+  See docs/user/{ko,en}/carrot-assist.md and Wiki Guide-CarrotAssist. Preserve
+  private signing material outside Git. Web UI setup uses connection-page/copy
+  buttons and actual menu names instead of unexplained OAuth instructions.
+
 - On 2026-11-06, owner reports eGPU Light/N16 first-inference AMD-7/hang becoming
   permanently rejected. Prior committed code reproduces next-boot denial;
   pinned N16/Flip/Light/Light2 runtime archives hash-check and map-7 to USB wait

@@ -1,4 +1,4 @@
-# CarrotAssist Android prototype
+# CarrotAssist Android public beta
 
 당근파일럿 AI 조수. Display name: CarrotAssist.
 
@@ -64,6 +64,14 @@ device and other phone/Android versions still need acceptance testing. The
 MCP 0.5 additionally supports individually requested setting reads and confirmed
 changes after both OAuth `carrot.settings` and local device permission. Dynamic
 driving commands and log uploads remain unsupported.
+
+On 2026-11-06, the owner's parked device was tested through their ChatGPT account:
+actual ShowCustomBrightness 90, prepare 95, confirmed apply/readback 95, then
+confirmed restoration/readback 90. The Android app was updated through its own
+GitHub download/verifier/Android installer from version code 6 to 7; the existing
+account connection and local setting permission survived without entering a code.
+The test used ChatGPT text tool calls with the phone WebView active; voice overlay
+navigation was tested separately. It is not a driving or multi-user load test.
 
 ## Signed app updates
 
