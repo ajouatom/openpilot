@@ -1,0 +1,28 @@
+services:
+  carrot-mcp:
+    build: .
+    image: carrot-voice-probe:0.2.0
+    restart: unless-stopped
+    init: true
+    environment:
+      HOST: 0.0.0.0
+      PORT: "18770"
+      PUBLIC_HOSTNAME: carrot-mcp.shind0.synology.me
+      NODE_ENV: production
+    ports:
+      - "127.0.0.1:18770:18770"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 256m
+    cpu_shares: 128
+    healthcheck:
+      test: [CMD, node, -e, "fetch('http://127.0.0.1:18770/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    logging:
+      driver: json-file
+      options:
+        max-size: 5m
+        max-file: "2"
