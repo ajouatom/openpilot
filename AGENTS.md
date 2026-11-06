@@ -1,5 +1,18 @@
 # Repository memory
 
+- On 2026-11-06, owner reports eGPU Light/N16 first-inference AMD-7/hang becoming
+  permanently rejected. Prior committed code reproduces next-boot denial;
+  pinned N16/Flip/Light/Light2 runtime archives hash-check and map-7 to USB wait
+  timeout. Recognize exact terminal-7/hang only for those runtimes, retain this
+  boot quarantine/internal fallback, allow matching previous-boot verified load.
+  No expansion of live recovery. Migrate old reports, keep diagnostics and all
+  hash/contract/output/smoke gates. Web KO/EN shows cause and permits offroad-only
+  one-shot next-boot verification, bound to model/runtime/failure/boot identity;
+  never directly deletes markers, starts GPU or reboots. Desktop416+web19 pass,
+  isolated web build/Ruff pass. No vehicle/CAN/model/Jetson writes. Initial fault
+  and physical cure unverified; reporter JSONs not supplied. GitPull/full comma
+  reboot. See docs/egpu_rejection_recovery_20261106.md.
+
 - On 2026-11-05, owner reports ATC indicator-associated warnings while driving,
   then explicitly requests PC-only fix/test/push and will apply after exercise.
   Full-cereal NAS rlog 11a6/30: receiver unavailable/lease_lost at19:47:56.001,

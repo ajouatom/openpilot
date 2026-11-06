@@ -6,6 +6,42 @@ import vm from "node:vm";
 import { CarrotEgpuModel } from "../src/features/tools/egpu_model.js";
 
 for (const language of ["ko", "en"]) {
+  test(`blocked GPU shows cause, next-boot recovery and gated action (${language})`, (t) => {
+    const savedDocument = globalThis.document;
+    const savedTranslator = globalThis.getUIText;
+    t.after(() => { globalThis.document = savedDocument; globalThis.getUIText = savedTranslator; });
+    let strings;
+    vm.runInNewContext(readFileSync(new URL(`../js/translations/${language}.js`, import.meta.url), "utf8"), {
+      window: { CarrotTranslations: { register(_language, translation) { strings = translation.strings; } } },
+    });
+    const elements = new Map();
+    globalThis.document = { getElementById(id) {
+      if (!elements.has(id)) elements.set(id, { dataset: {}, style: {}, classList: { toggle() {} } });
+      return elements.get(id);
+    } };
+    globalThis.getUIText = (key, fallback) => strings[key] || fallback;
+    const status = { available: true, state: "error", error_code: "rejected", rejection: {
+      blocked: true, can_request: false, reason: "device_restart_required", phase: "boot_validation", error: "RuntimeError: Device hang detected",
+    } };
+    CarrotEgpuModel.render(status);
+    assert.ok(elements.get("egpuModelDetail").textContent.includes(strings.egpu_model_blocked_device));
+    assert.match(elements.get("egpuModelDetail").textContent, /boot_validation: RuntimeError: Device hang detected/);
+    assert.equal(elements.get("btnEgpuRetryVerification").hidden, false);
+    assert.equal(elements.get("btnEgpuRetryVerification").disabled, true);
+    assert.equal(elements.get("egpuModelDiagnostics").hidden, false);
+    status.rejection.can_request = true;
+    CarrotEgpuModel.render(status);
+    assert.equal(elements.get("btnEgpuRetryVerification").disabled, false);
+    status.rejection.retry_pending = true;
+    CarrotEgpuModel.render(status);
+    assert.equal(elements.get("btnEgpuRetryVerification").disabled, true);
+    assert.equal(elements.get("egpuModelRecovery").textContent, strings.egpu_model_retry_pending);
+    CarrotEgpuModel.render({ ...status, active: true, state: "compiled", error_code: null });
+    assert.equal(elements.get("btnEgpuRetryVerification").hidden, true);
+  });
+}
+
+for (const language of ["ko", "en"]) {
   test(`USB handoff reasons render localized text and retain diagnostic codes (${language})`, (t) => {
     const savedDocument = globalThis.document;
     const savedTranslator = globalThis.getUIText;
