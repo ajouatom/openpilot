@@ -2,6 +2,8 @@
 
 [한국어](../ko/settings.md)
 
+Android [CarrotAssist](carrot-assist.md) uses ChatGPT to find, explain and open settings. Separate device and ChatGPT authorization enables live value reads and confirmed changes. Voice changes other than brightness and volume require stationary/disengaged state.
+
 > [!NOTE]
 > This is the canonical English user guide maintained with the `carrot-wip` code. When user-visible behavior changes, update this document together with the related code and tests.
 

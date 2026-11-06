@@ -4,8 +4,8 @@ import { createHash } from 'node:crypto';
 const bytes = readFileSync(new URL('./catalog.json', import.meta.url));
 const catalog = JSON.parse(bytes);
 export const source = {
-  commit: '612881c4d9052baf0de8246ea2226a23f70a573f',
-  url: 'https://github.com/ajouatom/openpilot/blob/612881c4d9052baf0de8246ea2226a23f70a573f/openpilot/selfdrive/carrot_settings.json',
+  commit: '38bd9f27888eedb28f977cb4db1f8680181ae6e2',
+  url: 'https://github.com/ajouatom/openpilot/blob/38bd9f27888eedb28f977cb4db1f8680181ae6e2/openpilot/selfdrive/carrot_settings.json',
   sha256: createHash('sha256').update(bytes).digest('hex'),
   count: catalog.params.length,
 };

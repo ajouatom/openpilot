@@ -2,6 +2,10 @@
 
 당근파일럿 AI 조수. Display name: CarrotAssist.
 
+The launcher uses the approved Carrot mascot with CARROT above and ASSIST below.
+WebView text zoom is 100% so Android's font scale does not additionally enlarge
+the existing web page's CSS typography. Native controls retain system scaling.
+
 Small native host for the existing device web service on port 7000. It does not
 run an AI model or use an API key. The microphone button asks Android to show
 the current default assistant with `Activity.showAssist`; it does not simulate
@@ -57,7 +61,34 @@ reauthorized for the app's separate web session; a fresh ChatGPT conversation
 opened AutoBlinkerControl in that WebView without another code. Multiple-device
 selection and the 60-second timeout have desktop policy checks; a second live
 device and other phone/Android versions still need acceptance testing. The
-existing MCP permits only search/explanation/screen navigation.
+MCP 0.5 additionally supports individually requested setting reads and confirmed
+changes after both OAuth `carrot.settings` and local device permission. Dynamic
+driving commands and log uploads remain unsupported.
+
+## Signed app updates
+
+The app checks the CarrotAssist-specific update manifest on launch, at most once
+per six hours after a successful check. Tap the top device name for app information
+and a manual check. A new version is announced without interrupting the page.
+Downloading and installation are user initiated; Android may require allowing
+this app as an installation source and always retains its installer checks.
+GitHub and its named HTTPS release-asset hosts are the only download destinations.
+The APK must match the manifest SHA-256, package, increasing version code and
+the installed app's signing certificate. Downloads are bounded to 32 MiB/60s.
+Only that private cache file is shared with the system installer by temporary URI
+permission. There is no general file provider or background silent installation.
+
+Release builds use `-SigningKeystore`, `-SigningAlias` (default `carrotassist`),
+and `-SigningPasswordEnv` (default `CARROT_ASSIST_SIGNING_PASSWORD`). Never commit
+the key or password. Preserve the signing identity across releases to retain
+WebView account pairing. The existing unique prototype identity was retained
+and re-encrypted for releases; the APK does not enable Android debugging.
+
+Publish immutable APK assets under `carrot-assist-vX.Y.Z`, then update
+`update.json` on the separate `carrot-assist-updates` release only after verifying
+the downloadable APK. Schema: `package`, `version`, `version_code`, `apk_url`,
+`sha256`. The APK name is `CarrotAssist-X.Y.Z.apk`. Do not point this app at the
+repository's general latest release, which also contains unrelated tools.
 
 ## Assistant compatibility
 
