@@ -57,6 +57,8 @@ This version does not execute real-time cruise-speed commands, lane changes, dir
 
 The app checks for updates on launch, at most once per six hours after a successful check. Tap the top device name for app information and a manual check. Download the new version and approve installation in Android. Updates with the same signing identity preserve connection data; do not uninstall first.
 
+The first in-app update may open Android's **Install unknown apps > CarrotAssist > Allow permission** screen. After allowing it, return and select **Package installer > Just once > Update** if an app chooser appears. Samsung devices may show an additional notice for apps distributed outside their stores; verify that you are installing CarrotAssist from the official release above.
+
 App updates, device Git updates and relay updates are separate. Updating the APK does not add device features to old device software.
 
 Use **Revoke setting access** to revoke live value access alone, or **Disconnect** to revoke this web session's connection. Disconnect the plugin in ChatGPT as needed.
