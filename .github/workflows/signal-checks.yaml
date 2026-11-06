@@ -9,6 +9,7 @@ on:
       - 'openpilot/selfdrive/controls/**'
       - 'openpilot/selfdrive/modeld/modeld.py'
       - 'openpilot/selfdrive/carrot/xiaoge_data.py'
+      - 'openpilot/selfdrive/carrot/assistant_speed.py'
       - 'openpilot/selfdrive/carrot/tests/test_xiaoge_data.py'
       - 'tools/signal_validation/**'
       - '.github/workflows/signal-checks.yaml'
@@ -54,6 +55,8 @@ jobs:
             openpilot/selfdrive/car/tests/test_tesla_signal_card.py \
             openpilot/selfdrive/controls/tests/test_tesla_auto_signal_intent.py \
             openpilot/selfdrive/controls/tests/test_desire_helper_stalk.py \
+            openpilot/selfdrive/controls/tests/test_assistant_lane.py \
+            openpilot/selfdrive/car/tests/test_assistant_speed.py \
             openpilot/selfdrive/controls/tests/test_lever_forced_turn.py \
             openpilot/selfdrive/carrot/tests/test_xiaoge_data.py \
             tools/signal_validation/test_trial_integration.py \

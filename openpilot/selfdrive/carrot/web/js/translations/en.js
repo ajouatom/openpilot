@@ -5,6 +5,10 @@ window.CarrotTranslations.register("en", {
   nativeName: "English",
   shortName: "EN",
   strings: {
+    assistant_drive_help: "Driving commands need separate permission. Allow this while parked and disengaged, then select driving commands when connecting ChatGPT. Clear lane-change and set-speed commands are requested without an extra confirmation conversation, subject to existing vehicle conditions. Requests and results are sent to ChatGPT and the Carrot relay. ChatGPT may show its own tool approval.",
+    assistant_drive_enable: "Allow voice lane-change and set-speed commands",
+    assistant_drive_disable: "Revoke driving commands",
+    assistant_drive_required: "Keep Carrot Web visible and allow driving commands first.",
     setting_history_source_voice: "Voice assistant",
     assistant_settings_required: "Allow setting access in Carrot Web Tools > ChatGPT assistant first.",
     assistant_settings_disabled: "Setting access revoked.",

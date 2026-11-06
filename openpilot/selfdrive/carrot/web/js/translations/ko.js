@@ -5,6 +5,10 @@ window.CarrotTranslations.register("ko", {
   nativeName: "한국어",
   shortName: "KO",
   strings: {
+    assistant_drive_help: "운전 명령은 설정값 변경과 별도 권한입니다. 정차·보조 기능 해제 상태에서 허용한 뒤 ChatGPT 연결 승인에서도 운전 명령을 선택하세요. 명확한 차선변경·설정속도 명령은 재확인 대화 없이 요청하며 기존 차량 조건을 따릅니다. 요청과 실행 결과가 ChatGPT 및 당근 중계 서버에 전달됩니다. ChatGPT 자체 실행 승인이 표시될 수 있습니다.",
+    assistant_drive_enable: "음성 차선변경·설정속도 명령 허용",
+    assistant_drive_disable: "음성 운전 명령 허용 해제",
+    assistant_drive_required: "당근웹을 열고 음성 운전 명령 권한을 허용해야 합니다.",
     setting_history_source_voice: "음성비서",
     assistant_settings_required: "당근웹 도구 > ChatGPT 설정 도우미에서 설정값 조회·변경을 먼저 허용하세요.",
     assistant_settings_disabled: "설정값 조회·변경 권한을 해제했습니다.",

@@ -1,5 +1,6 @@
 import { ASSISTANT_RELAY, ASSISTANT_SESSION_KEY, CHATGPT_INSTALL_URL, screenRequest, sessionValid } from './assistant_policy.js';
 import { copyPairingMessage } from './assistant_clipboard.js';
+import { executeDriveCommand, mountDriveAccess, revokeDriveAccess, driveAccessEnabled } from './assistant_drive.js';
 import { executeSettingCommand, mountSettingAccess, revokeSettingAccess } from './assistant_settings.js';
 
 const text = (key, fallback) => globalThis.getUIText?.(`assistant_${key}`, fallback) || fallback;
@@ -30,6 +31,7 @@ async function request(operation, body = {}, current = session) {
   return response.json();
 }
 async function revoke() {
+  await revokeDriveAccess();
   await revokeSettingAccess();
   if (!session) return;
   try { await request('disconnect'); }
@@ -37,7 +39,7 @@ async function revoke() {
 }
 function schedule() {
   clearTimeout(timer);
-  if (session) timer = setTimeout(poll, document.hidden ? 10000 : 3000);
+  if (session) timer = setTimeout(poll, document.hidden ? 10000 : driveAccessEnabled() ? 1000 : 3000);
 }
 async function poll() {
   if (polling || !session) return;
@@ -48,7 +50,7 @@ async function poll() {
   polling = true;
   const current = session, epoch = generation;
   try {
-    const result = await request('poll', {}, current);
+    const result = await request(driveAccessEnabled() ? 'poll_wait' : 'poll', {}, current);
     if (epoch !== generation) return;
     const newlyLinked = result.account_linked && !session.account_linked;
     if (session.expires_at !== result.expires_at || session.connected !== result.connected || session.account_linked !== result.account_linked) {
@@ -63,6 +65,10 @@ async function poll() {
       if (field) field.value = '';
       const feedback = document.getElementById('assistantAccountFeedback');
       if (feedback) feedback.textContent = text('account_connected', 'Account connected · reusable in new voice chats');
+    }
+    if (result.drive_command) {
+      const driveResult = await executeDriveCommand(result.drive_command);
+      if (driveResult && epoch === generation) await request('drive_ack', driveResult, current);
     }
     if (result.settings_command && !/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName)) {
       const settingResult = await executeSettingCommand(result.settings_command);
@@ -129,6 +135,7 @@ export function openAssistantDialog() {
   account.prepend(summary, setupLink, address, copyAddress);
   el('Panel').prepend(account);
   mountSettingAccess(el('Panel'));
+  mountDriveAccess(el('Panel'));
   label('AccountHelp', 'account_help', 'In ChatGPT, select + > Add custom MCP server. Name it CarrotAssist, paste the copied address into Server URL and choose OAuth under Authentication. Create and connect it, then enter the code below on the Carrot approval page. The five-minute limit is only for this code; your connection stays available. Do not send the code in chat.');
   label('AccountPair', 'account_pair', 'Create mini-mode connection code');
   label('AccountCodeLabel', 'account_code', 'Device authorization code · expires in 5 minutes');
