@@ -6,6 +6,12 @@ window.CarrotTranslations.register("en", {
   shortName: "EN",
   strings: {
     assistant_title: "ChatGPT assistant",
+    assistant_account_help: "For mini voice mode, connect the Carrot MCP with OAuth at https://carrot-mcp.shind0.synology.me/account/mcp. Enter the code below on its authorization page once to use this device in new voice chats. Do not send this code in chat. Disconnect revokes all access to this web connection.",
+    assistant_account_pair: "Create mini-mode connection code",
+    assistant_account_code: "Device authorization code · expires in 5 minutes",
+    assistant_account_copy: "Copy authorization code",
+    assistant_account_ready: "Enter this code only on the Carrot authorization page. Existing connections remain active.",
+    assistant_account_connected: "Account connected · reusable in new voice chats",
     assistant_help: "Pair once to open setting screens. Codes expire in 5 minutes; paired connections are saved until disconnected. Use the same browser, Carrot Web address and ChatGPT conversation. Clearing browser data or losing the conversation connection may require pairing again. Setting values cannot be changed.",
     assistant_install: "Install ChatGPT · Google Play",
     assistant_voice_help: "Install ChatGPT and sign in. If available, enable Background conversations in its voice settings. Start voice in the paired conversation, then return to Carrot Web. Split screen or pop-up view may also be available on your phone. Start voice and choose window mode in the app/phone.",

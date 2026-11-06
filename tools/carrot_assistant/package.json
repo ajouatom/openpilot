@@ -1,11 +1,11 @@
 {
   "name": "carrot-voice-probe",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "private": true,
   "type": "module",
   "scripts": {
     "start": "node server.mjs",
-    "test": "node --test test.mjs bridge.test.mjs"
+    "test": "node --test test.mjs bridge.test.mjs oauth.test.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.32.2",

@@ -1,7 +1,7 @@
 services:
   carrot-mcp:
     build: .
-    image: carrot-voice-probe:0.3.0
+    image: carrot-voice-probe:0.4.0
     restart: unless-stopped
     init: true
     environment:
@@ -10,6 +10,7 @@ services:
       PUBLIC_HOSTNAME: carrot-mcp.shind0.synology.me
       NODE_ENV: production
       MCP_STATE_PATH: /app/state/connections.json
+      MCP_OAUTH_STATE_PATH: /app/state/oauth.json
     volumes:
       - connections:/app/state
     ports:
