@@ -59,6 +59,29 @@ async function start(dir, port = 0) {
   return { http, base, post, form, browser, register, begin, link, mcp, close: () => new Promise(r => http.close(r)) };
 }
 
+test('selecting another Carrot Web keeps ChatGPT authorization without a new code or broader scopes', async () => {
+  const env = await start();
+  let mcp;
+  try {
+    const client = await (await env.register()).json();
+    const browser = await (await env.browser('create')).json();
+    const linked = await env.link(client, browser.browser_token);
+    const tokens = await (await env.form('/token', linked.exchange)).json();
+    mcp = await env.mcp(tokens.access_token);
+    const target = 'http://10.225.84.19:7000';
+    const moved = await env.post('/bridge/relocate', { previous_origin: origin }, { Origin: target, Authorization: `Bearer ${browser.browser_token}` });
+    assert.equal(moved.status, 200);
+    assert.equal((await moved.json()).account_linked, true);
+    assert.equal((await env.browser('inspect', browser.browser_token)).status, 403);
+    const info = await mcp.callTool({ name: 'get_carrot_web_status', arguments: {} });
+    assert.equal(info.isError, undefined);
+    assert.equal(JSON.parse(info.content[0].text).label, '10.225.84.19:7000');
+    const refreshed = await (await env.form('/token', { grant_type: 'refresh_token', client_id: client.client_id,
+      refresh_token: tokens.refresh_token, resource: `${env.base}/account/mcp` })).json();
+    assert.equal(refreshed.scope, 'carrot.screen');
+  } finally { if (mcp) await mcp.close(); await env.close(); }
+});
+
 test('OAuth discovery, callback allowlist, consent CSRF, PKCE, resource and code replay', async () => {
   const env = await start();
   try {

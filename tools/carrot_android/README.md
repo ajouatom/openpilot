@@ -27,10 +27,19 @@ Use a trusted LAN, as with Carrot Web itself.
 - Repeat finite sweeps while waiting for a device to boot. Stop and cancel
   connections at the deadline, user cancellation, selection or backgrounding.
 - Manual entry also verifies Carrot Web. HTTP redirects are rejected by probes.
-- App WebView storage is separate from Samsung Internet/Chrome. Each selected
-  origin needs its own first OAuth device approval. Existing browser pairing is
-  not imported or copied. One ChatGPT connection currently selects one approved
-  web session; changing devices requires explicit reauthorization.
+- App WebView storage is separate from Samsung Internet/Chrome. Approve ChatGPT
+  once from this app. In 0.2.1, discovery/selection transfers the most recently
+  used saved ChatGPT connection to the selected Carrot Web, even a different
+  device. IP changes do not require another code. No device-identity condition
+  gates this connection. After backgrounding, an unreachable address triggers
+  discovery on return. No outside browser storage is imported.
+- An isolated, network-blocked WebView reads only the app's four connection keys
+  from at most 16 local origins. Browser credentials go only to the fixed HTTPS
+  relay. Relocation retains the OAuth session/scopes and discards pending work.
+  Local permissions are separate: optional challenge-response restores only
+  grants already stored on that device; other-device/old-firmware failure never
+  blocks account connection. Existing destination grants are preserved. New
+  settings/drive/Tools access still uses the existing explicit permission flow.
 - External links open the user's browser. The WebView has no native JavaScript
   bridge, no file/content access and no microphone permission. Voice invocation
   is available only from the native toolbar microphone; the former floating web
@@ -74,6 +83,13 @@ The test used ChatGPT text tool calls with the phone WebView active; voice overl
 navigation was tested separately. It is not a driving or multi-user load test.
 
 ## Signed app updates
+
+The 0.2.1 connection recovery has emulator WebView storage/transport tests and
+relay OAuth tests. It has not yet been verified across Wi-Fi/hotspot changes on
+the owner's physical phone. Run `test-recovery.ps1` on a disposable emulator
+with `-Serial emulator-N -Apk ... -DebugKeystore ...`; it overwrites only test
+WebView storage and rejects physical-device serials. No live vehicle commands
+are executed by this harness.
 
 The app checks the CarrotAssist-specific update manifest on launch, at most once
 per six hours after a successful check. Tap the top device name for app information

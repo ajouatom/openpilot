@@ -21,7 +21,7 @@ export function allowedWebOrigin(origin) {
 
 // Only screen navigation is supported. No values, device credentials or log files.
 // Persist only paired capability hashes. Pending commands never survive restart.
-export function createBridge({ now = Date.now, maxSessions = 1000, statePath, isAccountLinked = () => false } = {}) {
+export function createBridge({ now = Date.now, maxSessions = 1000, statePath, isAccountLinked = () => false, accountActivity = () => 0 } = {}) {
   const settings = createSettingBridge(now);
   const toolJobs = createToolsBridge(now);
   const driving = createDriveBridge(now), waiters = new Map();
@@ -186,7 +186,21 @@ export function createBridge({ now = Date.now, maxSessions = 1000, statePath, is
     },
     browser(key, origin, operation, body = {}) {
       const s = lookup(browsers, key);
+      if (operation === 'relocate') {
+        if (!s.controlHash || !allowedWebOrigin(origin) || !allowedWebOrigin(body.previous_origin)
+          || ![origin, body.previous_origin].includes(s.origin)) fail('Connection move is not authorized.', 403);
+        if (s.origin !== origin) {
+          const next = { ...s, origin, label: new URL(origin).host };
+          persist(next); Object.assign(s, next);
+          // A new address is not permission to replay old commands.
+          settings.remove(s.id); driving.remove(s.id); toolJobs.remove(s.id);
+          s.command = null; s.lastSeen = 0; s.pollAt = -Infinity; wake(s.id);
+          for (const [hash, code] of accountCodes) if (code.id === s.id) accountCodes.delete(hash);
+        }
+        return status(s);
+      }
       if (s.origin !== origin) fail('Browser origin mismatch.', 403);
+      if (operation === 'inspect') return { ...status(s), account_activity_at: accountActivity(s.id) };
       if (operation === 'disconnect') { remove(s); return { disconnected: true }; }
       if (operation === 'drive_ack') return driving.ack(s.id, body.id, body.result);
       if (operation === 'settings_ack') return settings.ack(s.id, body.id, body.result);
