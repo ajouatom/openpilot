@@ -1,5 +1,25 @@
 # Repository memory
 
+- On 2026-11-06, owner requests voice control of Carrot Web Tools buttons and
+  novice-readable code-entry instructions. Relay0.7.0 adds separate carrot.tools
+  consent plus a stationary-issued local grant; existing scopes never expand.
+  Fixed actions use existing Tools jobs: GitPull/sync/HEAD reset, reboot/rebuild,
+  calibration reset, deletion, backup, tmux capture/upload request and explicit
+  screen-record on/off. Prepare60s -> explain effect -> follow-up confirmation ->
+  consume/commit; maintenance rechecks parked/disengaged at dispatch. No shell,
+  supplied paths/URLs/commit targets. File/QR/clipboard/repository-reset selection
+  remains on the phone. Panels open through existing UI. Reboot/upload/recording
+  acceptance is not actual completion; no replay after unknown/expired delivery.
+  Job status is owner-bound and returns no logs/backups/IDs. Local job ownership
+  is in-memory; after server restart inspect Tools history, do not reissue.
+  Setup now separates first registration from Plugins > Installed > CarrotAssist
+  > Reconnect; open approval page BEFORE creating code, paste only into that form,
+  never mini-mode chat. App labels/KO+EN guides/Wiki clarify Play Store, expiry,
+  offline state and new permission. NAS0.7.0 built/started exit0, health and OAuth
+  discovery verified. API63/MCP23/focused web8 and isolated build/Ruff pass.
+  No APK change, no live vehicle maintenance/drive test or device update; owner
+  must parked GitPull/restart/reload and add Tools permission on both sides.
+
 - On 2026-11-06 voice setup follow-up, owner reaches real OAuth consent but reports
   invalid/expired code. Reproduced one possible cause: regenerate account code at
   initial browser lease299s, claim2s later rejects despite298s code validity.
