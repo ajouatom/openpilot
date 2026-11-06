@@ -1,4 +1,5 @@
 import { ASSISTANT_RELAY, ASSISTANT_SESSION_KEY, ASSISTANT_CHAT_KEY, chatGptUrl, screenRequest, sessionValid } from './assistant_policy.js';
+import { copyPairingMessage } from './assistant_clipboard.js';
 
 const text = (key, fallback) => globalThis.getUIText?.(`assistant_${key}`, fallback) || fallback;
 let session = null, completed = null, timer = null, polling = false, generation = 0;
@@ -88,7 +89,7 @@ function savedChat() {
 export function openAssistantDialog() {
   // Static structure only. User content, URLs and server responses are assigned via DOM properties.
   void globalThis.appAlert('', { title: text('title', 'ChatGPT assistant'), html: true,
-    messageHtml: '<div id="assistantPanel"><p id="assistantHelp"></p><p id="assistantStatus" role="status"></p><div class="ui-action-grid"><button id="assistantPair" class="btn" type="button"></button><button id="assistantDisconnect" class="btn" type="button"></button></div><div id="assistantPairMessage"><label id="assistantPromptLabel" for="assistantPrompt"></label><textarea id="assistantPrompt" class="input-text" rows="3" readonly style="width:100%;box-sizing:border-box;resize:vertical"></textarea><button id="assistantCopy" class="btn" type="button"></button></div><p id="assistantLaunchHelp"></p><label id="assistantChatLabel" for="assistantChat"></label><input id="assistantChat" class="input-text" type="url" style="width:100%;box-sizing:border-box" autocomplete="off"><button id="assistantSave" class="btn" type="button"></button><p><a id="assistantLaunch" class="btn" target="_blank" rel="noopener noreferrer"></a></p><p id="assistantSetup"></p></div>' });
+    messageHtml: '<div id="assistantPanel"><p id="assistantHelp"></p><p id="assistantStatus" role="status"></p><div class="ui-action-grid"><button id="assistantPair" class="btn" type="button"></button><button id="assistantDisconnect" class="btn" type="button"></button></div><div id="assistantPairMessage"><label id="assistantPromptLabel" for="assistantPrompt"></label><textarea id="assistantPrompt" class="input-text" rows="3" readonly style="width:100%;box-sizing:border-box;resize:vertical;user-select:text;-webkit-user-select:text"></textarea><button id="assistantCopy" class="btn" type="button"></button><p id="assistantCopyStatus" role="status"></p></div><p id="assistantLaunchHelp"></p><label id="assistantChatLabel" for="assistantChat"></label><input id="assistantChat" class="input-text" type="url" style="width:100%;box-sizing:border-box" autocomplete="off"><button id="assistantSave" class="btn" type="button"></button><p><a id="assistantLaunch" class="btn" target="_blank" rel="noopener noreferrer"></a></p><p id="assistantSetup"></p></div>' });
   const el = id => document.getElementById(`assistant${id}`);
   if (!el('Panel')) return;
   const label = (id, key, fallback) => { el(id).textContent = text(key, fallback); };
@@ -108,6 +109,7 @@ export function openAssistantDialog() {
     if (!el('Panel')) return;
     el('Disconnect').disabled = !session;
     el('Copy').disabled = !session?.pairing_code;
+    el('CopyStatus').textContent = '';
     el('PairMessage').hidden = !session?.pairing_code;
     el('Prompt').value = session?.pairing_code
       ? `${text('pair_message', 'Use the Carrot tool connect_carrot_web to connect this pairing code:')} ${session.pairing_code}` : '';
@@ -133,8 +135,12 @@ export function openAssistantDialog() {
     } catch (e) { status(e.message); }
   };
   el('Copy').onclick = async () => {
-    try { await navigator.clipboard.writeText(el('Prompt').value); status(text('copied', 'Copied')); }
-    catch { el('Prompt').focus(); el('Prompt').select(); status(text('copy_manual', 'Select and copy this message.')); }
+    const field = el('Prompt');
+    const copied = await copyPairingMessage(field);
+    if (el('Prompt') !== field || !session?.pairing_code) return;
+    // Connection polls update the main status; keep copy feedback next to its button.
+    el('CopyStatus').textContent = copied ? text('copied', 'Copied')
+      : text('copy_manual', 'Automatic copy was blocked. Long-press the message, select all, then Copy.');
   };
   el('Save').onclick = () => {
     const url = chatGptUrl(el('Chat').value);

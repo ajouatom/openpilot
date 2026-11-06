@@ -24,7 +24,7 @@ window.CarrotTranslations.register("ko", {
     assistant_retry: "연결 끊김 · 다시 연결 중",
     assistant_error: "연결에 실패했습니다. 인터넷을 확인하고 다시 시도하세요.",
     assistant_copied: "복사했습니다",
-    assistant_copy_manual: "아래 문장을 선택해 복사해 주세요.",
+    assistant_copy_manual: "자동 복사가 차단됐습니다. 문장을 길게 누르고 전체 선택 → 복사를 눌러 주세요.",
     assistant_invalid_url: "https://chatgpt.com/c/... 형식의 대화 주소를 넣으세요. 주소 뒤의 검색 조건은 제외하세요.",
     assistant_saved: "저장했습니다",
     model_library_title: "외부 주행 모델",

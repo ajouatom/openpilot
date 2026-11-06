@@ -24,7 +24,7 @@ window.CarrotTranslations.register("en", {
     assistant_retry: "Connection interrupted · retrying",
     assistant_error: "Connection failed. Check internet access and try again.",
     assistant_copied: "Copied",
-    assistant_copy_manual: "Select and copy this message.",
+    assistant_copy_manual: "Automatic copy was blocked. Long-press the message, select all, then Copy.",
     assistant_invalid_url: "Use an https://chatgpt.com/c/... conversation URL without query parameters.",
     assistant_saved: "Saved",
     model_library_title: "External driving model",
