@@ -16,7 +16,7 @@ class Crossing:
   def __init__(self):
     self.side = 0
 
-  def update(self, md, t, allowed, torque=None):
+  def update(self, md, t, allowed, torque=None, torque_min=250):
     side, self.side = (self.side, 0) if allowed else (0, self.side)
     return side
 
@@ -42,10 +42,12 @@ class Ecu:
 
 
 def make_cc(control=True, test=0, spas=0, ecu=None, mode=1):
-  return SimpleNamespace(blinker_control=control, blinker_test=test, blinker_kick_mode=mode, aprk_state=0, aprk_frame=0, aprk_nanos=0, aprk_acked=False,
+  cc = SimpleNamespace(blinker_control=control, blinker_test=test, blinker_kick_mode=mode, aprk_state=0, aprk_frame=0, aprk_nanos=0, aprk_acked=False,
                          lane_crossing=Crossing(), blinker_side=0, blinker_pulse_end=0, frame=0, yellow_until=[0, 0],
-                         CAN=SimpleNamespace(ECAN=0, ACAN=1), packer=CANPacker('hyundai_canfd_generated'),
+                         CAN=SimpleNamespace(ECAN=0, ACAN=1), packer=CANPacker('hyundai_canfd_generated'), params=SimpleNamespace(STEER_THRESHOLD=250),
                          spas_steer_test=spas, spas_angle=0., aprk_buses=(), ecu=ecu or Ecu())
+  cc.kick_pulse = lambda CS: CarController.kick_pulse(cc, CS)
+  return cc
 
 
 def run(cc, frames, out):
@@ -126,6 +128,56 @@ def test_kick_mode_picks_the_send_pattern_without_an_ack():
   cc = make_cc(mode=2)
   step(cc, 30, D, 60, cross=3)
   assert len(spas2(cc, step(cc, 20, D, 60))) == 20
+
+
+STOCK_CGW1 = bytes([0x01, 0x00, 0x00, 0x80, 0x00, 0x00, 0x00, 0x00])  # ignition on, nothing else
+
+
+def cgw_step(cc, frames, gear=D, cross=0, raw=STOCK_CGW1, lamp=False):
+  """-> [(frame, addr, dat, bus)] sent"""
+  cc.lane_crossing.side = cross or cc.lane_crossing.side
+  sent = []
+  for _ in range(frames):
+    CS = SimpleNamespace(cgw_test_raw=raw, out=SimpleNamespace(
+      gearShifter=gear, vEgo=15., leftBlinker=lamp, rightBlinker=False, steeringTorque=0, naviTunnel=False,
+      naviRoundabout=False, leftLaneLine=0, rightLaneLine=0))
+    sent += [(cc.frame, *m) for m in CarController.cgw_blinkers(cc, CS)]
+    cc.frame += 1
+  return sent
+
+
+def test_palisade_kick_forges_cgw1_like_the_parked_test():
+  cc = make_cc()
+  assert cgw_step(cc, 50) == []  # nobody crossing
+  start = cc.frame
+  sent = cgw_step(cc, carcontroller.BLINKER_PULSE_FRAMES + 20, cross=3)
+  pulse = range(start, start + carcontroller.BLINKER_PULSE_FRAMES)
+  assert [f for f, *_ in sent] == [f for f in pulse if f % carcontroller.CGW_TX_FRAMES == 0]  # 60 ms for the 1 s pulse
+  assert all(addr == 0x541 and bus == 0 and len(dat) == 8 for _, addr, dat, bus in sent)
+  assert all((dat[5] >> 1) & 3 == 2 and dat[7] >> 6 == 0 for _, _, dat, _ in sent)  # left lever, right lamp untouched
+  # 0.35 s on / 0.35 s off from the kick
+  assert [(dat[2] >> 3) & 3 for _, _, dat, _ in sent] == [int((f - start) // carcontroller.CGW_FLASH_HALF_FRAMES % 2 == 0) for f, *_ in sent]
+  assert all(bytes(dat[i] for i in (0, 1, 3, 4, 6)) == bytes(STOCK_CGW1[i] for i in (0, 1, 3, 4, 6)) for _, _, dat, _ in sent)
+  cc = make_cc()
+  sent = cgw_step(cc, 30, cross=4)
+  assert sent and all(dat[7] >> 6 in (0, 1) and (dat[5] >> 1) & 3 == 1 and dat[2] & 0x18 == 0 for _, _, dat, _ in sent)  # right
+
+
+def test_palisade_kick_yields_to_the_driver_and_needs_d():
+  cc = make_cc()
+  assert cgw_step(cc, 30, gear=P, cross=3) == []  # not in D: no pulse
+  cc = make_cc()
+  cgw_step(cc, 10, cross=3)
+  assert cgw_step(cc, 20, gear=P) == []  # out of D mid-pulse: nothing goes to the parked direct path
+  cc = make_cc()
+  cgw_step(cc, 10, cross=3)
+  assert cgw_step(cc, 10, raw=bytes([0, 0, 0, 0, 0x02, 0, 0, 0])) == [] and cc.blinker_pulse_end == 0  # hazard: pulse over
+  cc = make_cc()
+  cgw_step(cc, 10, cross=4)
+  assert cgw_step(cc, 10, raw=bytes([0, 0, 0, 0, 0, 0x04, 0, 0])) == []  # the driver's own lever
+  cc = make_cc()
+  cgw_step(cc, 10, cross=3)
+  assert cgw_step(cc, 10, raw=b"") == []  # no fresh stock frame to copy: nothing sent
 
 
 def test_no_answer_never_steers():

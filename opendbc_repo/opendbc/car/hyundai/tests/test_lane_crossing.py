@@ -82,3 +82,13 @@ def test_kick_needs_driver_torque_toward_the_line():
   assert run_tq(lane_change_left(), 300).count(3) == 1    # pushing left
   assert not any(run_tq(lane_change_left(), 100))         # below the steeringPressed threshold
   assert not any(run_tq(lane_change_left(), -300))        # pushing the other way (10-29 IC ramp)
+
+
+def test_torque_threshold_follows_the_car():
+  # classic CAN (Palisade) steeringPressed is 150, CAN-FD 250: the kick takes the car's threshold
+  def run_tq(track, tq, **kw):
+    lc = LaneCrossing()
+    return [lc.update(md(i, *f), i * 0.05, True, tq, **kw) for i, f in enumerate(track)]
+  assert run_tq(lane_change_left(), 160, torque_min=150).count(3) == 1
+  assert not any(run_tq(lane_change_left(), 160))
+  assert not any(run_tq(lane_change_left(), 140, torque_min=150))

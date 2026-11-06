@@ -201,6 +201,9 @@ class CarInterface(CarInterfaceBase):
 
       if candidate == CAR.HYUNDAI_PALISADE:
         ret.safetyConfigs[0].safetyParam |= HyundaiSafetyFlags.PALISADE_CGW_TEST.value
+        # CanfdBlinkerKick on the Palisade forges CGW1 (carcontroller.cgw_blinkers); modes 2/3 send it directly
+        if params.get_bool("CanfdBlinkerKick") and params.get_int("CanfdBlinkerKickMode") in (2, 3):
+          ret.safetyConfigs[0].safetyParam |= HyundaiSafetyFlags.CANFD_SPAS_DIRECT.value
 
     # Common lateral control setup
 

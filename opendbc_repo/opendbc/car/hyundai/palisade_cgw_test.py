@@ -4,6 +4,15 @@ TX_PERIOD_NS = 50_000_000
 FLASH_HALF_NS = 350_000_000
 
 
+def cgw_frame(raw, direction, lamp):
+  """The stock CGW1 bytes with the lever side (1 left, 2 right) and, when lamp, that side's lamp bit set."""
+  data = bytearray(raw)
+  data[2] |= 0x08 if direction == 1 and lamp else 0
+  data[7] |= 0x40 if direction == 2 and lamp else 0
+  data[5] |= 0x04 if direction == 1 else 0x02
+  return (0x541, bytes(data), 0)
+
+
 class PalisadeCgwTest:
   """Parked, one-shot CGW1 status experiment; lamp actuation is unverified."""
 
@@ -35,9 +44,5 @@ class PalisadeCgwTest:
       return []
 
     lamp = (now - self.started) // FLASH_HALF_NS % 2 == 0
-    data = bytearray(raw)
-    data[2] |= 0x08 if self.direction == 1 and lamp else 0
-    data[7] |= 0x40 if self.direction == 2 and lamp else 0
-    data[5] |= 0x04 if self.direction == 1 else 0x02
     self.last_tx = now
-    return [(0x541, bytes(data), 0)]
+    return [cgw_frame(raw, self.direction, lamp)]

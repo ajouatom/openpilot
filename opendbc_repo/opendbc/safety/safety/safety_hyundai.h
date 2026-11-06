@@ -79,9 +79,39 @@ static struct {
   uint32_t template_ts, wheels_ts, gear_ts, attempt_ts, sent_ts, trial_ts;
 } hyundai_cgw_test;
 
+// CanfdBlinkerKick while driving (the parked test lit a lamp, 11-03 video): the same CGW1 frame is held here and sent
+// right behind the next stock CGW1 (hyundai_rx_tx_hook), so our 0x541 never starts together with the BCM's 10 Hz one
+// (00000e46 10-27: 32 bus-0 errors in the first 0.5 s of direct 20 Hz sending). CANFD_SPAS_DIRECT (1024,
+// CanfdBlinkerKickMode 2/3) queues the frames directly instead.
+static struct {
+  CANPacket_t pkt;
+  bool pending, direct;
+  uint32_t push_us;
+} hyundai_cgw_pb;
+#define HYUNDAI_CGW_PB_HOLD_US 150000U  // stock CGW1 is 10 Hz: a held frame older than this is dropped, not sent
+
 static void hyundai_cgw_test_init(uint16_t param) {
   hyundai_cgw_test = (__typeof__(hyundai_cgw_test)){0};  // no libc here (host libsafety build has no memset)
   hyundai_cgw_test.enabled = (param & 32768U) != 0U;  // HyundaiSafetyFlags.PALISADE_CGW_TEST
+  hyundai_cgw_pb = (__typeof__(hyundai_cgw_pb)){0};
+  hyundai_cgw_pb.direct = (param & 1024U) != 0U;  // HyundaiSafetyFlags.CANFD_SPAS_DIRECT
+}
+
+// The frame may differ from the stock one (tmpl) only in that side's lamp bit and the lever side; hazard and the
+// driver's own lever must be off in the stock frame. Checked at TX and again against the stock frame it rides behind.
+static bool hyundai_cgw_frame_fits(const CANPacket_t *msg, const uint8_t *tmpl) {
+  // Stock (10-26 rlog 00000e40): the lamp bit flashes 0.35 s on / 0.35 s off while byte 5 bits 1..2 hold the
+  // lever side (2 left, 1 right), so a frame is the lever side plus that side's lamp on or off.
+  unsigned int left = (GET_BYTE(msg, 2) >> 3) & 3U;
+  unsigned int right = GET_BYTE(msg, 7) >> 6;
+  unsigned int lever = (GET_BYTE(msg, 5) >> 1) & 3U;
+  bool fits = ((lever == 2U) && (left <= 1U) && (right == 0U)) || ((lever == 1U) && (left == 0U) && (right <= 1U));
+  fits = fits && ((tmpl[4] & 0x06U) == 0U) && ((tmpl[5] & 0x06U) == 0U);
+  for (int i = 0; i < 8; i++) {
+    uint8_t mask = (i == 2) ? 0xE7U : ((i == 7) ? 0x3FU : ((i == 5) ? 0xF9U : 0xFFU));
+    fits = fits && ((GET_BYTE(msg, i) & mask) == (tmpl[i] & mask));
+  }
+  return fits;
 }
 
 static bool hyundai_cgw_test_tx(const CANPacket_t *msg) {
@@ -96,28 +126,21 @@ static bool hyundai_cgw_test_tx(const CANPacket_t *msg) {
   if (hyundai_cgw_test.trial_active && (get_ts_elapsed(now, hyundai_cgw_test.trial_ts) >= 3000000U)) {
     hyundai_cgw_test.cutoff = true;
   }
-  bool allowed = hyundai_cgw_test.enabled && !controls_allowed && !relay_malfunction &&
+  // Parked test (PalisadeBlinkerTest): P, wheels still, not engaged - sent directly. Otherwise the driving kick:
+  // held and sent behind the stock frame unless CANFD_SPAS_DIRECT.
+  bool parked = !controls_allowed && hyundai_cgw_test.wheels_valid && hyundai_cgw_test.gear_valid &&
+                hyundai_cgw_test.stationary && hyundai_cgw_test.park &&
+                (get_ts_elapsed(now, hyundai_cgw_test.wheels_ts) <= 250000U) &&
+                (get_ts_elapsed(now, hyundai_cgw_test.gear_ts) <= 250000U);
+  bool allowed = hyundai_cgw_test.enabled && !relay_malfunction &&
                  (GET_BUS(msg) == 0) && (GET_LEN(msg) == 8) && !msg->extended && !msg->fd &&
-                 hyundai_cgw_test.template_valid && hyundai_cgw_test.wheels_valid && hyundai_cgw_test.gear_valid &&
-                 hyundai_cgw_test.stationary && hyundai_cgw_test.park && !hyundai_cgw_test.cutoff &&
+                 hyundai_cgw_test.template_valid && !hyundai_cgw_test.cutoff &&
                  (get_ts_elapsed(now, hyundai_cgw_test.template_ts) <= 250000U) &&
-                 (get_ts_elapsed(now, hyundai_cgw_test.wheels_ts) <= 250000U) &&
-                 (get_ts_elapsed(now, hyundai_cgw_test.gear_ts) <= 250000U) &&
                  (!hyundai_cgw_test.sent || (get_ts_elapsed(now, hyundai_cgw_test.sent_ts) >= 50000U));
-  // Stock (10-26 rlog 00000e40): the lamp bit flashes 0.35 s on / 0.35 s off while byte 5 bits 1..2 hold the
-  // lever side (2 left, 1 right), so a frame is the lever side plus that side's lamp on or off.
-  unsigned int left = (GET_BYTE(msg, 2) >> 3) & 3U;
-  unsigned int right = GET_BYTE(msg, 7) >> 6;
-  unsigned int lever = (GET_BYTE(msg, 5) >> 1) & 3U;
-  allowed &= ((lever == 2U) && (left <= 1U) && (right == 0U)) || ((lever == 1U) && (left == 0U) && (right <= 1U));
-  allowed &= ((hyundai_cgw_test.template[2] & 0x18U) == 0U) &&
-             ((hyundai_cgw_test.template[7] & 0xC0U) == 0U) &&
-             ((hyundai_cgw_test.template[4] & 0x06U) == 0U) &&
-             ((hyundai_cgw_test.template[5] & 0x06U) == 0U);
-  for (int i = 0; i < 8; i++) {
-    uint8_t mask = (i == 2) ? 0xE7U : ((i == 7) ? 0x3FU : ((i == 5) ? 0xF9U : 0xFFU));
-    allowed &= (GET_BYTE(msg, i) & mask) == (hyundai_cgw_test.template[i] & mask);
-  }
+  allowed &= hyundai_cgw_frame_fits(msg, hyundai_cgw_test.template);
+  // the parked test also wants the stock lamps off; while driving the stock frame may already echo our lamp bit
+  allowed &= !parked || (((hyundai_cgw_test.template[2] & 0x18U) == 0U) &&
+                         ((hyundai_cgw_test.template[7] & 0xC0U) == 0U));
   if (allowed) {
     if (!hyundai_cgw_test.trial_active) {
       hyundai_cgw_test.trial_active = true;
@@ -125,8 +148,30 @@ static bool hyundai_cgw_test_tx(const CANPacket_t *msg) {
     }
     hyundai_cgw_test.sent = true;
     hyundai_cgw_test.sent_ts = now;
+    if (!parked && !hyundai_cgw_pb.direct) {
+      hyundai_cgw_pb.pkt = *msg;
+      hyundai_cgw_pb.pending = true;
+      hyundai_cgw_pb.push_us = now;
+      extern bool safety_tx_buffered_for_fwd;
+      safety_tx_buffered_for_fwd = true;
+    }
   }
   return allowed;
+}
+
+static bool hyundai_rx_tx_hook(const CANPacket_t *to_push, CANPacket_t *to_send) {
+  bool send = false;
+  if ((GET_BUS(to_push) == 0) && (GET_ADDR(to_push) == 0x541) && hyundai_cgw_pb.pending) {
+    hyundai_cgw_pb.pending = false;
+    // the stock frame it rides behind may have changed since TX (the BCM sends an extra CGW1 ~11 ms after any
+    // change): the driver's lever, hazard or a door bit now wins
+    if ((get_ts_elapsed(microsecond_timer_get(), hyundai_cgw_pb.push_us) < HYUNDAI_CGW_PB_HOLD_US) &&
+        (GET_LEN(to_push) == 8) && hyundai_cgw_frame_fits(&hyundai_cgw_pb.pkt, to_push->data)) {
+      *to_send = hyundai_cgw_pb.pkt;
+      send = true;
+    }
+  }
+  return send;
 }
 
 
@@ -703,6 +748,7 @@ const safety_hooks hyundai_hooks = {
   .rx = hyundai_rx_hook,
   .tx = hyundai_tx_hook,
   .fwd = hyundai_fwd_hook,
+  .rx_tx = hyundai_rx_tx_hook,
   .get_counter = hyundai_get_counter,
   .get_checksum = hyundai_get_checksum,
   .compute_checksum = hyundai_compute_checksum,
@@ -713,6 +759,7 @@ const safety_hooks hyundai_legacy_hooks = {
   .rx = hyundai_rx_hook,
   .tx = hyundai_tx_hook,
   .fwd = hyundai_fwd_hook,
+  .rx_tx = hyundai_rx_tx_hook,
   .get_counter = hyundai_get_counter,
   .get_checksum = hyundai_get_checksum,
   .compute_checksum = hyundai_compute_checksum,

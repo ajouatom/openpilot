@@ -33,7 +33,7 @@ class LaneCrossing:
     self.hold = self.last = -99.
     self.torque = []  # (t, driver torque, + = left)
 
-  def update(self, md, t, allowed, torque=None):
+  def update(self, md, t, allowed, torque=None, torque_min=TORQUE_MIN):
     """3 (left) or 4 (right) on the model frame a crossing starts while allowed, else 0. laneLines[1] left, [2] right.
     torque: carState.steeringTorque; given, a crossing also needs the driver pushing toward it."""
     if torque is not None:
@@ -61,14 +61,14 @@ class LaneCrossing:
       return 0
     for i in (1, 2):
       if y[i] < NEAR_M and self.rate[i] > RATE_MPS and -self.rate[3 - i] > RATE_MPS and max(hy for _, hy in self.hist[i]) >= FROM_M \
-         and not self._no_lane_beyond(md, i, y[i], t) and self._pushed(i, torque is not None):
+         and not self._no_lane_beyond(md, i, y[i], t) and self._pushed(i, torque is not None, torque_min):
         self.last = t
         return 3 if i == 1 else 4
     return 0
 
-  def _pushed(self, i, gated):
+  def _pushed(self, i, gated, torque_min):
     sign = 1 if i == 1 else -1
-    return not gated or any(sign * q >= TORQUE_MIN for _, q in self.torque)
+    return not gated or any(sign * q >= torque_min for _, q in self.torque)
 
   def _no_lane_beyond(self, md, i, y, t):
     edges = getattr(md, "roadEdges", None)

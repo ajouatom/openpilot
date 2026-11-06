@@ -9,7 +9,7 @@ from opendbc.car.hyundai import hyundaicanfd, hyundaican
 from opendbc.car.hyundai.carstate import CarState
 from opendbc.car.hyundai.lane_crossing import LaneCrossing
 from opendbc.car.hyundai.stopping import CanfdStopping
-from opendbc.car.hyundai.palisade_cgw_test import PalisadeCgwTest
+from opendbc.car.hyundai.palisade_cgw_test import PalisadeCgwTest, cgw_frame
 from opendbc.car.hyundai.steering_handover import SteeringHandover
 from opendbc.car.carlog import carlog
 from opendbc.car.hyundai.hyundaicanfd import CanBus
@@ -76,6 +76,10 @@ BLINKER_PULSE_FRAMES = int(1.0 / DT_CTRL)
 # No kick across a yellow (centre) line. The camera color drops to 0 while the line is crossed (10-30 seg 22: 10 -> 2
 # at the kick), so a yellow seen on that side in the last 2 s counts (10-30 seg 1: kick over yellow dashed 20)
 YELLOW_HOLD_FRAMES = int(2.0 / DT_CTRL)
+# Palisade kick on CGW1 (cgw_blinkers): lamp bit 0.35 s on / 0.35 s off like stock. 60 ms, not the test's 50 ms: panda's
+# 50 ms rate limit would bounce every frame that arrives a little early (4 of 49 even at 50 ms, 00000e46)
+CGW_TX_FRAMES = 6
+CGW_FLASH_HALF_FRAMES = int(0.35 / DT_CTRL)
 # Every stock lever press starts with one BLINKER + BLINKER_TAP frame before the steady frame (Ioniq 5 3372.9 s:
 # 4280304010000000 tap -> de90304000000000 hold; GV80 82.96 s: 5a10304010000000 tap). The BCM needs that edge -
 # replaying only the steady form (TAP 0) did nothing on either car. GV80's lever is momentary and releases itself.
@@ -384,8 +388,9 @@ class CarController(CarControllerBase):
       return []
     return [CanData(0x400, bytes([0, 0, 0, 0, val, 0, 0, 0]), self.CAN.ECAN)]
 
-  def aprk_blinkers(self, CC, CS):
-    ret = []
+  def kick_pulse(self, CS):
+    """CanfdBlinkerKick trigger, any CAN: the driver crossing a lane line with the lamp off starts a BLINKER_PULSE_FRAMES
+    pulse toward blinker_side (3 left, 4 right). True while a pulse runs."""
     drive = CS.out.gearShifter == structs.CarState.GearShifter.drive
     # The driver crossing a line with the lamp off, engaged or not (modelV2 runs either way). Not the model's own lane
     # change: holding SPAS2 through it read back as the driver's blinker and the lamp never went off (EV4 10-26).
@@ -393,7 +398,8 @@ class CarController(CarControllerBase):
     # lane changes are banned in a tunnel announced as no-lane-change, and for 20 s after a roundabout sign (carstate)
     tunnel = getattr(CS.out, "naviTunnel", False) or getattr(CS.out, "naviRoundabout", False)
     side = self.lane_crossing.update(getattr(CS, "modelV2", None), self.frame * DT_CTRL,
-                                     self.blinker_control and drive and not lamp and not tunnel, CS.out.steeringTorque)
+                                     self.blinker_control and drive and not lamp and not tunnel, CS.out.steeringTorque,
+                                     torque_min=self.params.STEER_THRESHOLD)  # 250 CAN-FD, 150 classic
     for i, line in enumerate((CS.out.leftLaneLine, CS.out.rightLaneLine)):
       if line // 10 == 2:  # camera color: 0 none, 1 white, 2 yellow, 3 blue
         self.yellow_until[i] = self.frame + YELLOW_HOLD_FRAMES
@@ -401,7 +407,28 @@ class CarController(CarControllerBase):
       side = 0
     if side:
       self.blinker_side, self.blinker_pulse_end = side, self.frame + BLINKER_PULSE_FRAMES
-    pulse = self.frame < self.blinker_pulse_end
+    return self.frame < self.blinker_pulse_end
+
+  def cgw_blinkers(self, CS):
+    """Palisade (classic CAN) kick: the BCM's own CGW1 (0x541) with the lever side and the lamp bit flashing 0.35 s like
+    stock - the PalisadeBlinkerTest frame, while driving in D. panda holds the newest frame and sends it right behind
+    the next stock CGW1 (safety_hyundai.h hyundai_rx_tx_hook): one per stock frame (10 Hz), never starting together.
+    No yellow-line / tunnel guard here: classic carstate has no lane colour or navi events."""
+    pulse = self.kick_pulse(CS)
+    raw = getattr(CS, "cgw_test_raw", b"")
+    if not pulse or CS.out.gearShifter != structs.CarState.GearShifter.drive or len(raw) != 8 or self.frame % CGW_TX_FRAMES:
+      return []
+    if raw[4] & 0x06 or raw[5] & 0x06:  # hazard or the driver's own lever: theirs, not ours
+      self.blinker_pulse_end = 0
+      return []
+    start = self.blinker_pulse_end - BLINKER_PULSE_FRAMES
+    lamp = (self.frame - start) // CGW_FLASH_HALF_FRAMES % 2 == 0
+    return [CanData(*cgw_frame(raw, self.blinker_side - 2, lamp))]
+
+  def aprk_blinkers(self, CC, CS):
+    ret = []
+    drive = CS.out.gearShifter == structs.CarState.GearShifter.drive
+    pulse = self.kick_pulse(CS)
     # the parking ECU is paused only around a kick and restored right after it (menu test: any speed or gear)
     # SpasSteerTest: parked, stopped, hands off. APRK is asked on both buses - bus 0 ignored it 10-26, and a second SPAS1
     # stream with its own counter runs on bus 1 (10-30)
@@ -883,6 +910,8 @@ class CarController(CarControllerBase):
           self.palisade_blinker_test, now_nanos, CS.cgw_test_raw, CS.cgw_test_timestamps,
           parked, not (CC.enabled or CC.latActive or CC.longActive),
         ))
+        if self.blinker_control:
+          can_sends.extend(self.cgw_blinkers(CS))
       if CS.lkas11 is not None:
         if self.lkas11_active:
           can_sends.append(hyundaican.create_lkas11(self.packer, self.frame, self.CP, apply_torque, apply_steer_req,
