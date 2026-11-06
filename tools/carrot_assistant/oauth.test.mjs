@@ -30,6 +30,10 @@ async function start(dir, port = 0) {
     const response = await fetch(`${base}/authorize?${new URLSearchParams({ client_id: client.client_id, response_type: 'code', redirect_uri: callback,
       code_challenge_method: 'S256', code_challenge: digest(verifier), state: 'test-state', resource: `${base}/account/mcp`, scope: 'carrot.screen' })}`, { redirect: 'manual' });
     assert.equal(response.status, 200);
+    // A real browser must permit the consent POST's cross-origin 303 callback.
+    const policy = response.headers.get('content-security-policy');
+    assert.equal(policy.split(';').map(s => s.trim()).find(s => s.startsWith('form-action')), `form-action 'self' ${callback}`);
+    assert.match(policy, /frame-ancestors 'none'/);
     const flow = (await response.text()).match(/name="flow" value="([^"]+)"/)[1];
     return { verifier, flow, cookie: response.headers.get('set-cookie').split(';')[0] };
   }
