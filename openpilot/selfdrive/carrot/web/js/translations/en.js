@@ -14,7 +14,7 @@ window.CarrotTranslations.register("en", {
     assistant_disconnect: "Disconnect",
     assistant_prompt: "Copy this message to your ChatGPT conversation once",
     assistant_copy: "Copy pairing message",
-    assistant_launch_help: "Keep Carrot Web visible to receive screen requests. Save this conversation URL to reopen it with the corner icon. Hold the icon for connection settings.",
+    assistant_launch_help: "After pairing, the corner icon opens ChatGPT without setup. Save the paired conversation URL to reopen that conversation, then tap its voice button. Voice does not start automatically. Keep Carrot Web visible to receive screen requests. Hold the icon for connection settings.",
     assistant_chat_url: "Your ChatGPT conversation URL (optional, saved in this browser)",
     assistant_save: "Save conversation URL",
     assistant_launch: "Open ChatGPT",

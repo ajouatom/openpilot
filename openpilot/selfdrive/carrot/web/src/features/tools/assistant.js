@@ -97,6 +97,7 @@ function updateLauncher() {
   const launcher = document.getElementById('assistantLauncher');
   if (!launcher) return;
   launcher.href = launchUrl();
+  launcher.target = isAndroid() ? '_self' : '_blank';
   launcher.title = launcher.ariaLabel = text('icon_help', 'ChatGPT · hold for connection settings');
   launcher.classList.toggle('is-connected', Boolean(session?.connected));
 }
@@ -113,7 +114,7 @@ function installLauncher() {
   launcher.addEventListener('contextmenu', event => { event.preventDefault(); clearTimeout(hold); held = true; openAssistantDialog(); });
   launcher.addEventListener('click', event => {
     if (held) { event.preventDefault(); held = false; return; }
-    if (!session?.connected || !savedChat().includes('/c/') || event.shiftKey) {
+    if (!session?.connected || event.shiftKey) {
       event.preventDefault(); openAssistantDialog();
     }
   });
@@ -138,13 +139,13 @@ export function openAssistantDialog() {
   label('Disconnect', 'disconnect', 'Disconnect');
   label('PromptLabel', 'prompt', 'Copy this message to your ChatGPT conversation once');
   label('Copy', 'copy', 'Copy pairing message');
-  label('LaunchHelp', 'launch_help', 'Keep Carrot Web visible to receive screen requests. Save this conversation URL to reopen it with the corner icon. Hold the icon for connection settings.');
+  label('LaunchHelp', 'launch_help', 'After pairing, the corner icon opens ChatGPT without setup. Save the paired conversation URL to reopen that conversation, then tap its voice button. Voice does not start automatically. Keep Carrot Web visible to receive screen requests. Hold the icon for connection settings.');
   label('ChatLabel', 'chat_url', 'Your ChatGPT conversation URL (optional, saved in this browser)');
   label('Save', 'save', 'Save conversation URL');
   label('Launch', 'launch', 'Open ChatGPT');
   el('Setup').textContent = `${text('setup', 'First connect the Carrot MCP in your own ChatGPT account. Server URL:')} ${ASSISTANT_RELAY}/mcp`;
   el('Chat').value = savedChat(); el('Launch').href = launchUrl();
-  el('Launch').onclick = () => document.getElementById('appDialogConfirm')?.click();
+  el('Launch').target = isAndroid() ? '_self' : '_blank';
   const render = () => {
     if (!el('Panel')) return;
     el('Disconnect').disabled = !session;

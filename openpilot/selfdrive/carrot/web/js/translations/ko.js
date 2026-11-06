@@ -14,7 +14,7 @@ window.CarrotTranslations.register("ko", {
     assistant_disconnect: "연결 해제",
     assistant_prompt: "아래 문장을 본인의 ChatGPT 대화에 한 번 전달하세요",
     assistant_copy: "연결 문장 복사",
-    assistant_launch_help: "화면 요청을 받으려면 당근웹을 보이는 상태로 두세요. 대화 주소를 저장하면 우측 상단 아이콘으로 다시 열 수 있습니다. 아이콘을 길게 누르면 연결 설정이 열립니다.",
+    assistant_launch_help: "연결 후에는 우측 상단 아이콘으로 설정창 없이 ChatGPT를 엽니다. 연결한 대화 주소를 저장하면 그 대화로 이동하며, 대화 안의 음성 버튼을 한 번 더 눌러야 합니다. 음성은 자동으로 시작되지 않습니다. 화면 요청을 받으려면 당근웹을 보이는 상태로 두세요. 아이콘을 길게 누르면 연결 설정이 열립니다.",
     assistant_chat_url: "본인 ChatGPT 대화 주소 (선택 · 이 브라우저에 저장)",
     assistant_save: "대화 주소 저장",
     assistant_launch: "ChatGPT 열기",
