@@ -1,17 +1,19 @@
-import { ASSISTANT_RELAY, ASSISTANT_SESSION_KEY, ASSISTANT_CHAT_KEY, chatGptUrl, screenRequest, sessionValid } from './assistant_policy.js';
+import { ASSISTANT_RELAY, ASSISTANT_SESSION_KEY, ASSISTANT_CHAT_KEY, CHATGPT_INSTALL_URL, chatGptLaunchUrl, chatGptUrl, screenRequest, sessionValid } from './assistant_policy.js';
 import { copyPairingMessage } from './assistant_clipboard.js';
 
 const text = (key, fallback) => globalThis.getUIText?.(`assistant_${key}`, fallback) || fallback;
 let session = null, completed = null, timer = null, polling = false, generation = 0;
 let state = '';
-try { session = JSON.parse(sessionStorage.getItem(ASSISTANT_SESSION_KEY)); } catch {}
+try { session = JSON.parse(localStorage.getItem(ASSISTANT_SESSION_KEY) || sessionStorage.getItem(ASSISTANT_SESSION_KEY)); } catch {}
 if (!sessionValid(session)) session = null;
 
 function storeSession() {
   try {
-    if (session) sessionStorage.setItem(ASSISTANT_SESSION_KEY, JSON.stringify(session));
-    else sessionStorage.removeItem(ASSISTANT_SESSION_KEY);
+    if (session) localStorage.setItem(ASSISTANT_SESSION_KEY, JSON.stringify(session));
+    else localStorage.removeItem(ASSISTANT_SESSION_KEY);
+    sessionStorage.removeItem(ASSISTANT_SESSION_KEY);
   } catch { /* In-memory pairing still works until this page is closed. */ }
+  updateLauncher();
 }
 function status(message) {
   state = message;
@@ -47,6 +49,9 @@ async function poll() {
   try {
     const result = await request('poll', {}, current);
     if (epoch !== generation) return;
+    if (session.expires_at !== result.expires_at || session.connected !== result.connected) {
+      session.expires_at = result.expires_at; session.connected = result.connected; storeSession();
+    }
     if (result.connected && session.pairing_code) {
       delete session.pairing_code; storeSession();
       const prompt = document.getElementById('assistantPrompt');
@@ -86,6 +91,34 @@ function savedChat() {
   catch { return 'https://chatgpt.com/'; }
 }
 
+const isAndroid = () => /Android/i.test(navigator.userAgent);
+const launchUrl = () => chatGptLaunchUrl(savedChat(), isAndroid());
+function updateLauncher() {
+  const launcher = document.getElementById('assistantLauncher');
+  if (!launcher) return;
+  launcher.href = launchUrl();
+  launcher.title = launcher.ariaLabel = text('icon_help', 'ChatGPT · hold for connection settings');
+  launcher.classList.toggle('is-connected', Boolean(session?.connected));
+}
+function installLauncher() {
+  const launcher = document.getElementById('assistantLauncher');
+  if (!launcher) return;
+  updateLauncher();
+  let hold, held = false;
+  launcher.addEventListener('pointerdown', () => {
+    held = false;
+    hold = setTimeout(() => { held = true; openAssistantDialog(); }, 650);
+  });
+  for (const event of ['pointerup', 'pointercancel', 'pointerleave']) launcher.addEventListener(event, () => clearTimeout(hold));
+  launcher.addEventListener('contextmenu', event => { event.preventDefault(); clearTimeout(hold); held = true; openAssistantDialog(); });
+  launcher.addEventListener('click', event => {
+    if (held) { event.preventDefault(); held = false; return; }
+    if (!session?.connected || !savedChat().includes('/c/') || event.shiftKey) {
+      event.preventDefault(); openAssistantDialog();
+    }
+  });
+}
+
 export function openAssistantDialog() {
   // Static structure only. User content, URLs and server responses are assigned via DOM properties.
   void globalThis.appAlert('', { title: text('title', 'ChatGPT assistant'), html: true,
@@ -93,17 +126,24 @@ export function openAssistantDialog() {
   const el = id => document.getElementById(`assistant${id}`);
   if (!el('Panel')) return;
   const label = (id, key, fallback) => { el(id).textContent = text(key, fallback); };
-  label('Help', 'help', 'Pair this Carrot Web tab with ChatGPT to open setting screens. Setting values cannot be changed. Codes expire in 5 minutes; connections last up to 8 hours. Closing this tab ends screen delivery.');
+  const install = document.createElement('a');
+  install.className = 'btn'; install.href = CHATGPT_INSTALL_URL;
+  install.target = '_blank'; install.rel = 'noopener noreferrer';
+  install.textContent = text('install', 'Install ChatGPT · Google Play');
+  const voiceHelp = document.createElement('p');
+  voiceHelp.textContent = text('voice_help', 'Install ChatGPT and sign in. If available, enable Background conversations in its voice settings. Start voice in the paired conversation, then return to Carrot Web. Split screen or pop-up view may also be available on your phone. Start voice and choose window mode in the app/phone.');
+  el('Panel').prepend(install, voiceHelp);
+  label('Help', 'help', 'Pair once to open setting screens. Codes expire in 5 minutes; paired connections are saved until disconnected. Use the same browser, Carrot Web address and ChatGPT conversation. Clearing browser data or losing the conversation connection may require pairing again. Setting values cannot be changed.');
   label('Pair', 'pair', 'Create pairing code');
   label('Disconnect', 'disconnect', 'Disconnect');
   label('PromptLabel', 'prompt', 'Copy this message to your ChatGPT conversation once');
   label('Copy', 'copy', 'Copy pairing message');
-  label('LaunchHelp', 'launch_help', 'Return to Carrot Web to apply pending screen requests. This button opens ChatGPT; start voice there.');
+  label('LaunchHelp', 'launch_help', 'Keep Carrot Web visible to receive screen requests. Save this conversation URL to reopen it with the corner icon. Hold the icon for connection settings.');
   label('ChatLabel', 'chat_url', 'Your ChatGPT conversation URL (optional, saved in this browser)');
   label('Save', 'save', 'Save conversation URL');
   label('Launch', 'launch', 'Open ChatGPT');
   el('Setup').textContent = `${text('setup', 'First connect the Carrot MCP in your own ChatGPT account. Server URL:')} ${ASSISTANT_RELAY}/mcp`;
-  el('Chat').value = savedChat(); el('Launch').href = savedChat();
+  el('Chat').value = savedChat(); el('Launch').href = launchUrl();
   el('Launch').onclick = () => document.getElementById('appDialogConfirm')?.click();
   const render = () => {
     if (!el('Panel')) return;
@@ -145,10 +185,12 @@ export function openAssistantDialog() {
   el('Save').onclick = () => {
     const url = chatGptUrl(el('Chat').value);
     if (!url) { status(text('invalid_url', 'Use an https://chatgpt.com/c/... conversation URL without query parameters.')); return; }
-    try { localStorage.setItem(ASSISTANT_CHAT_KEY, url); el('Launch').href = url; status(text('saved', 'Saved')); }
+    try { localStorage.setItem(ASSISTANT_CHAT_KEY, url); el('Launch').href = chatGptLaunchUrl(url, isAndroid()); updateLauncher(); status(text('saved', 'Saved')); }
     catch { status(text('error', 'Could not save in this browser.')); }
   };
 }
 
 document.addEventListener('visibilitychange', () => { if (!document.hidden) { clearTimeout(timer); void poll(); } });
 schedule();
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', installLauncher, { once: true });
+else installLauncher();
