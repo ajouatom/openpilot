@@ -1,5 +1,17 @@
 # Repository memory
 
+- On 2026-11-06, owner explicitly requests supported driving-setting edits while
+  moving. Supersedes the CarrotAssist onroad allowlist below: catalog edits may
+  prepare/commit onroad; only initial local permission needs parked/disengaged
+  state. Keep denied internal/driver-monitoring switches, scope/origin grants,
+  expiry, user confirmation, current-value/definition rechecks and readback/history.
+  Owner reports CruiseMaxVals0 250 ->240 incorrectly proposed241: min=1/unit=5
+  was mistakenly treated as a value lattice. Unit is a web button increment;
+  preserve any in-range explicit integer; round relative calculations to integers
+  (half away from zero), reject fractional absolute requests. MCP0.5.1 explains
+  this to ChatGPT. No APK change needed. Python21/MCP14/web4 and isolated build
+  pass; moving-state tests use fakes, not actual driving or live acceleration edits.
+
 - On 2026-11-06, owner authorizes CarrotAssist public beta with confirmed setting
   changes, automatic update checks, KO/EN guides and Wiki. Android 0.2.0/code7
   retains prototype signing identity; release APK SHA256

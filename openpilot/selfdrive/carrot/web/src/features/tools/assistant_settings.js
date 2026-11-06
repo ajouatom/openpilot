@@ -32,7 +32,7 @@ export async function revokeSettingAccess() {
 
 export function mountSettingAccess(container) {
   const section = document.createElement('section'), help = document.createElement('p');
-  help.textContent = t('settings_help', 'Optional: let this connection read and change one setting at a time. Its current value and change result are sent to ChatGPT and the Carrot relay. Changes require a spoken confirmation. Driving settings require stationary/disengaged state. Also authorize setting access when connecting ChatGPT.');
+  help.textContent = t('settings_help', 'Optional: let this connection read and change one setting at a time. Its current value and change result are sent to ChatGPT and the Carrot relay. Changes require a spoken confirmation. Supported driving settings can also be changed while driving after confirmation. Initial permission must be granted while stationary and disengaged. Also authorize setting access when connecting ChatGPT.');
   const button = document.createElement('button'), result = document.createElement('p');
   button.type = 'button'; button.className = 'btn'; result.setAttribute('role', 'status');
   const render = () => { button.textContent = credential ? t('settings_disable', 'Revoke setting access') : t('settings_enable', 'Allow setting reads and changes'); };

@@ -11,7 +11,7 @@ window.CarrotTranslations.register("en", {
     assistant_settings_enabled: "Allowed on this device. Reauthorize ChatGPT and select setting read/change access.",
     assistant_settings_disable: "Revoke setting access",
     assistant_settings_enable: "Allow setting reads and changes",
-    assistant_settings_help: "Allow reading and changing one requested setting at a time. Its current value and change result are sent to ChatGPT and the Carrot relay. Confirm the proposed value by voice before applying it. Driving settings require stationary/disengaged state. Also select this permission when authorizing ChatGPT.",
+    assistant_settings_help: "Allow reading and changing one requested setting at a time. Its current value and change result are sent to ChatGPT and the Carrot relay. Confirm the proposed value by voice before applying it. Supported driving settings can also be changed while driving after confirmation. Initial permission must be granted while stationary and disengaged. Also select this permission when authorizing ChatGPT.",
     assistant_title: "ChatGPT assistant",
     assistant_setup_steps: "First connection / reconnect",
     assistant_setup_open: "1. Open ChatGPT connection page",

@@ -11,7 +11,7 @@ window.CarrotTranslations.register("ko", {
     assistant_settings_enabled: "기기에서 허용했습니다. ChatGPT에서도 연결을 다시 승인하고 설정값 조회·변경 권한을 선택하세요.",
     assistant_settings_disable: "설정값 조회·변경 권한 해제",
     assistant_settings_enable: "설정값 조회·변경 허용",
-    assistant_settings_help: "설정값 조회·변경을 허용하면 요청한 한 항목의 현재값과 변경 결과를 ChatGPT 및 당근 연결 서버에 전달합니다. 변경값을 안내받고 음성으로 확인한 뒤 적용합니다. 주행 관련 설정은 정차·보조 기능 해제 상태에서만 변경합니다. ChatGPT 연결 승인에서도 같은 권한을 선택하세요.",
+    assistant_settings_help: "설정값 조회·변경을 허용하면 요청한 한 항목의 현재값과 변경 결과를 ChatGPT 및 당근 연결 서버에 전달합니다. 변경값을 안내받고 음성으로 확인한 뒤 적용합니다. 지원하는 주행 관련 설정도 주행 중 확인 후 변경할 수 있습니다. 최초 권한 허용은 정차·보조 기능 해제 상태에서 진행하세요. ChatGPT 연결 승인에서도 같은 권한을 선택하세요.",
     assistant_title: "ChatGPT 설정 도우미",
     assistant_setup_steps: "처음 연결하는 방법 · 다시 연결",
     assistant_setup_open: "1. ChatGPT 연결 화면 열기",

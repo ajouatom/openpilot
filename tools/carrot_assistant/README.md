@@ -23,10 +23,16 @@ only to same-origin device endpoints, never to the relay or ChatGPT.
 Five setting tools read a selected value, prepare a change, commit a confirmed
 proposal, inspect the request and cancel a prepared proposal. Instructions require
 before/after values and a follow-up user confirmation. The device validates actual
-values, bounds/increments, ownership, expiry and fresh stationary state, verifies
+values, bounds/increments, ownership and expiry, verifies
 readback and records voice change history. Defaults are not live values.
-Brightness and volume have a narrow onroad allowlist; other edits require
-stationary/disengaged state. Driver-monitoring disabling is excluded.
+Catalog unit/step is the web button increment, not an allowed-value lattice.
+Absolute requests preserve any in-range integer (e.g. CruiseMaxVals0 250 -> 240,
+with min=1 and unit=5); relative calculations round to the nearest integer,
+with ties away from zero. Fractional absolute values are rejected.
+All supported catalog edits, including driving settings, may be confirmed and
+applied onroad. Initial authorization still requires stationary/disengaged state.
+Saving does not change when each setting takes effect in the vehicle.
+Driver-monitoring disabling is excluded.
 Real-time driving commands and log uploads are unsupported.
 
 Requests expire after 30 seconds; proposals after 60 seconds. Results are bounded
