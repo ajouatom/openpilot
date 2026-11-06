@@ -402,6 +402,21 @@ CanfdBufferedFwd canfd_bfwd[] = {
   { 0 },
 };
 
+// CanfdBlinkerKick: the parking ECU never answers 0x7B1 on this car (0 of ~180, 10-24..11-05) and keeps its own
+// SPAS1/SPAS2 at 50 Hz on bus 0. A host frame with the same id queued at a random moment can start together with the
+// stock one -> error frames in 78/111 kicks, bus-off in 33 (02_logs/measurements.md s49). So while the stock stream
+// is on the bus the newest host frame is held here and sent right behind the next stock frame (rx_tx hook); the ECU
+// has nothing pending for the next 20 ms. Without a stock stream (ECU silenced, GV80) frames go out directly.
+typedef struct {
+  CANPacket_t pkt;
+  bool pending;
+  uint32_t push_us;
+  uint32_t stock_us;
+} HyundaiSpasPiggyback;
+static HyundaiSpasPiggyback hyundai_spas_pb[2];  // 0x165, 0x16A
+#define HYUNDAI_SPAS_PB_STOCK_US 100000U  // stock stream counts as present this long after its last frame
+#define HYUNDAI_SPAS_PB_HOLD_US 50000U    // a held frame older than this is dropped, not sent
+
 static void canfd_copy_packet(CANPacket_t* dst, const CANPacket_t* src) {
   dst->fd = src->fd;
   dst->returned = 0U;
@@ -800,6 +815,18 @@ static bool hyundai_canfd_tx_hook(const CANPacket_t *to_send_const) {
     }
   }
 
+  if (tx && ((addr == 0x165) || (addr == 0x16A)) && (GET_BUS(to_send) == 0)) {
+    HyundaiSpasPiggyback *pb = &hyundai_spas_pb[(addr == 0x165) ? 0 : 1];
+    uint32_t now = microsecond_timer_get();
+    if (get_ts_elapsed(now, pb->stock_us) < HYUNDAI_SPAS_PB_STOCK_US) {
+      canfd_copy_packet(&pb->pkt, to_send);
+      pb->pending = true;
+      pb->push_us = now;
+      extern bool safety_tx_buffered_for_fwd;
+      safety_tx_buffered_for_fwd = true;
+    }
+  }
+
   // Only an accepted replacement may suppress stock forwarding. The outer
   // hook's allowlist/relay rejection happens after this hook returns.
   const bool accepted = tx && !relay_malfunction &&
@@ -807,6 +834,24 @@ static bool hyundai_canfd_tx_hook(const CANPacket_t *to_send_const) {
   canfd_record_tx_time(GET_BUS(to_send), addr, accepted);
 
   return tx;
+}
+
+static bool hyundai_canfd_rx_tx_hook(const CANPacket_t *to_push, CANPacket_t *to_send) {
+  int addr = GET_ADDR(to_push);
+  bool send = false;
+  if ((GET_BUS(to_push) == 0) && ((addr == 0x165) || (addr == 0x16A))) {
+    HyundaiSpasPiggyback *pb = &hyundai_spas_pb[(addr == 0x165) ? 0 : 1];
+    uint32_t now = microsecond_timer_get();
+    pb->stock_us = now;
+    if (pb->pending) {
+      pb->pending = false;
+      if (get_ts_elapsed(now, pb->push_us) < HYUNDAI_SPAS_PB_HOLD_US) {
+        canfd_copy_packet(to_send, &pb->pkt);
+        send = true;
+      }
+    }
+  }
+  return send;
 }
 
 static int hyundai_canfd_fwd_hook(CANPacket_t* to_send) {
@@ -919,6 +964,9 @@ static safety_config hyundai_canfd_init(uint16_t param) {
 
   for (int i = 0; canfd_bfwd[i].addr > 0; i++) {
     canfd_bfwd_reset(&canfd_bfwd[i]);
+  }
+  for (int i = 0; i < 2; i++) {
+    hyundai_spas_pb[i] = (HyundaiSpasPiggyback){0};
   }
 
   hyundai_common_init(param);
@@ -1036,6 +1084,7 @@ const safety_hooks hyundai_canfd_hooks = {
   .rx = hyundai_canfd_rx_hook,
   .tx = hyundai_canfd_tx_hook,
   .fwd = hyundai_canfd_fwd_hook,
+  .rx_tx = hyundai_canfd_rx_tx_hook,
   .get_counter = hyundai_canfd_get_counter,
   .get_checksum = hyundai_canfd_get_checksum,
   .compute_checksum = hyundai_common_canfd_compute_checksum,

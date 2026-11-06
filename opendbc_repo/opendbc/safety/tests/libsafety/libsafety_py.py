@@ -27,6 +27,8 @@ typedef struct {
 ffi.cdef("""
 bool safety_rx_hook(CANPacket_t *to_send);
 bool safety_tx_hook(CANPacket_t *to_push);
+bool safety_rx_tx_hook(CANPacket_t *to_push, CANPacket_t *to_send);
+extern bool safety_tx_buffered_for_fwd;
 int safety_fwd_hook(int bus_num, int addr);
 int set_safety_hooks(uint16_t mode, uint16_t param);
 """)

@@ -162,6 +162,8 @@ typedef safety_config (*safety_hook_init)(uint16_t param);
 typedef void (*rx_hook)(const CANPacket_t *to_push);
 typedef bool (*tx_hook)(const CANPacket_t *to_send);
 typedef int (*fwd_hook)(CANPacket_t* to_send);
+// called for every received frame; may hand back a frame to send on that bus right behind it
+typedef bool (*rx_tx_hook)(const CANPacket_t *to_push, CANPacket_t *to_send);
 
 typedef struct {
   safety_hook_init init;
@@ -172,10 +174,12 @@ typedef struct {
   compute_checksum_t compute_checksum;
   get_counter_t get_counter;
   get_quality_flag_valid_t get_quality_flag_valid;
+  rx_tx_hook rx_tx;
 } safety_hooks;
 
 bool safety_rx_hook(const CANPacket_t *to_push);
 bool safety_tx_hook(CANPacket_t *to_send);
+bool safety_rx_tx_hook(const CANPacket_t *to_push, CANPacket_t *to_send);
 static bool tx_msg_safety_check(const CANPacket_t *to_send, const CanMsg msg_list[], int len);
 uint32_t get_ts_elapsed(uint32_t ts, uint32_t ts_last);
 int to_signed(int d, int bits);

@@ -272,6 +272,12 @@ void can_rx(uint8_t can_number) {
     safety_rx_invalid += safety_rx_hook(&to_push) ? 0U : 1U;
     ignition_can_hook(&to_push);
 
+    // a frame the safety model held back to send right behind this one (same bus, same id: Hyundai SPAS)
+    CANPacket_t to_tx;
+    if (safety_rx_tx_hook(&to_push, &to_tx)) {
+      can_send(&to_tx, bus_number, true);
+    }
+
     led_set(LED_BLUE, true);
     rx_buffer_overflow += can_push(&can_rx_q, &to_push) ? 0U : 1U;
 

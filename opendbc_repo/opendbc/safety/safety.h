@@ -296,6 +296,10 @@ int safety_fwd_hook(CANPacket_t *to_send) {
   return (relay_malfunction ? -1 : current_hooks->fwd(to_send));
 }
 
+bool safety_rx_tx_hook(const CANPacket_t *to_push, CANPacket_t *to_send) {
+  return !relay_malfunction && (current_hooks->rx_tx != NULL) && current_hooks->rx_tx(to_push, to_send);
+}
+
 bool get_longitudinal_allowed(void) {
   return controls_allowed && !gas_pressed_prev;
 }

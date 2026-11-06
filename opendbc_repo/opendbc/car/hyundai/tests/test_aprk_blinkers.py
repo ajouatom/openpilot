@@ -42,7 +42,7 @@ class Ecu:
 
 
 def make_cc(control=True, test=0, spas=0, ecu=None):
-  return SimpleNamespace(blinker_control=control, blinker_test=test, aprk_state=0, aprk_frame=0, aprk_nanos=0,
+  return SimpleNamespace(blinker_control=control, blinker_test=test, aprk_state=0, aprk_frame=0, aprk_nanos=0, aprk_acked=False,
                          lane_crossing=Crossing(), blinker_side=0, blinker_pulse_end=0, frame=0, yellow_until=[0, 0],
                          CAN=SimpleNamespace(ECAN=0, ACAN=1), packer=CANPacker('hyundai_canfd_generated'),
                          spas_steer_test=spas, spas_angle=0., aprk_buses=(), ecu=ecu or Ecu())
@@ -99,13 +99,24 @@ def test_frames_only_after_the_ecu_answered_and_went_quiet():
   assert cc.ecu.quiet
 
 
-def test_no_answer_means_no_frames_and_the_ecu_is_restored():
-  cc = make_cc(ecu=Ecu(answers=False))  # 10-26..30: no 0x7B9 reply on bus 0 to ~140 requests
-  sent = step(cc, carcontroller.BLINKER_PULSE_FRAMES, D, 60, cross=3)
-  assert spas2(cc, sent) == [] and not any(m[0] == 0x165 for m in sent)
-  assert uds(sent) == [(EXT, 0), (EXT, 1), (DEFAULT, 0), (DEFAULT, 1)]  # one try, then given back for this kick
-  assert cc.aprk_state == carcontroller.APRK_FAILED and step(cc, 1, D, 60) == []  # kick over: back to idle, quietly
-  assert cc.aprk_state == carcontroller.APRK_IDLE
+def test_no_answer_still_blinks_behind_the_stock_frames():
+  cc = make_cc(ecu=Ecu(answers=False))  # 10-24..11-05: no 0x7B9 reply to ~180 requests, stock stream stays on
+  sent = step(cc, carcontroller.APRK_REPLY_FRAMES, D, 60, cross=3)
+  assert spas2(cc, sent) == [] and uds(sent) == [(EXT, 0), (EXT, 1)]  # the reply window: nothing yet
+  sent = step(cc, carcontroller.BLINKER_PULSE_FRAMES, D, 60)
+  # a full pulse after the window, next to the stock frames (panda sends each frame right behind a stock one)
+  assert set(spas2(cc, sent)) == {3} and len(spas2(cc, sent)) == carcontroller.BLINKER_PULSE_FRAMES - 1  # none on the switch frame
+  assert cc.aprk_state == carcontroller.APRK_ACTIVE and not cc.aprk_acked
+  assert uds(step(cc, 1, D, 60)) == [(DEFAULT, 0), (DEFAULT, 1)] and cc.aprk_state == carcontroller.APRK_IDLE
+
+
+def test_no_answer_never_steers():
+  cc = make_cc(spas=30, ecu=Ecu(answers=False))
+  parked = lambda: SimpleNamespace(out=SimpleNamespace(
+    gearShifter=P, standstill=True, steeringPressed=False, steeringAngleDeg=-10., leftBlinker=False, rightBlinker=False,
+    steeringTorque=0, leftLaneLine=0, rightLaneLine=0))
+  sent = run(cc, carcontroller.APRK_REPLY_FRAMES + 1, parked)
+  assert not any(m[0] == 0x165 for m in sent) and cc.aprk_state == carcontroller.APRK_FAILED
 
 
 def test_ecu_that_keeps_sending_is_never_overwritten():

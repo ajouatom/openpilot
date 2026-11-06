@@ -286,7 +286,7 @@ class CarController(CarControllerBase):
     self.stalk_values = None
     self.stalk_press_side = 0   # 1/2 while the lever is being held/tapped
     self.stalk_press_frame = 0
-    self.aprk_state, self.aprk_frame, self.aprk_nanos = APRK_IDLE, 0, 0
+    self.aprk_state, self.aprk_frame, self.aprk_nanos, self.aprk_acked = APRK_IDLE, 0, 0, False
     self.lane_crossing, self.blinker_side, self.blinker_pulse_end = LaneCrossing(), 0, 0
     self.yellow_until = [0, 0]  # left, right
     self.standstill_frame = -1e6
@@ -425,10 +425,17 @@ class CarController(CarControllerBase):
         ret += [CanData(APRK_ADDR, APRK_COM_DISABLE, bus) for bus in self.aprk_buses]
         self.aprk_state, self.aprk_frame = APRK_WAIT_QUIET, self.frame
       elif self.frame - self.aprk_frame >= APRK_REPLY_FRAMES:
-        return give_back()  # no answer: the stock stream is still on the bus, sending would collide
+        if spas:
+          return give_back()  # steering next to the ECU's own SPAS1 is not tried
+        # No answer (this car: 0 of ~180 requests, 10-24..11-05): the stock stream stays on the bus. panda holds each
+        # of our SPAS frames and sends it right behind the stock one (hyundai_canfd_rx_tx_hook), so the same id never
+        # starts twice at once - 10-30..11-02 that collision made error frames in 78/111 kicks and bus-off in 33.
+        self.aprk_state, self.aprk_frame, self.aprk_nanos, self.aprk_acked = APRK_ACTIVE, self.frame, now, False
+        if pulse and self.blinker_test not in (1, 2):
+          self.blinker_pulse_end = self.frame + BLINKER_PULSE_FRAMES
     elif self.aprk_state == APRK_WAIT_QUIET:
       if self.frame - self.aprk_frame >= APRK_QUIET_NANOS // 10_000_000 and now - stock >= APRK_QUIET_NANOS:
-        self.aprk_state, self.aprk_frame, self.aprk_nanos = APRK_ACTIVE, self.frame, now
+        self.aprk_state, self.aprk_frame, self.aprk_nanos, self.aprk_acked = APRK_ACTIVE, self.frame, now, True
         if spas:
           self.spas_angle = CS.out.steeringAngleDeg
         elif pulse and self.blinker_test not in (1, 2):
@@ -436,7 +443,7 @@ class CarController(CarControllerBase):
       elif self.frame - self.aprk_frame >= APRK_REPLY_FRAMES:
         return give_back()
     elif self.aprk_state == APRK_ACTIVE:
-      if stock > self.aprk_nanos:
+      if self.aprk_acked and stock > self.aprk_nanos:
         return give_back()  # the ECU came back: stop before our frames collide with its own
       if self.frame % 100 == 0:
         ret += [make_tester_present_msg(APRK_ADDR, bus, suppress_response=True) for bus in self.aprk_buses]
