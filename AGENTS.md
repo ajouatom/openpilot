@@ -25,6 +25,13 @@
   See docs/user/{ko,en}/carrot-assist.md and Wiki Guide-CarrotAssist. Preserve
   private signing material outside Git. Web UI setup uses connection-page/copy
   buttons and actual menu names instead of unexplained OAuth instructions.
+  Post-update repeated test applied95; ChatGPT tool-approval delays expired
+  successive restoration proposals, then the owner took a phone call. Restore90
+  through the normal local param_set API after fresh parked check; direct Params
+  verifies90. Do not claim the second restoration completed through ChatGPT or
+  that changed-row display was physically verified after the last cache fix.
+  ChatGPT may require Allow once in addition to conversational confirmation;
+  guides disclose this, and fully hands-free changes remain unverified.
 
 - On 2026-11-06, owner reports eGPU Light/N16 first-inference AMD-7/hang becoming
   permanently rejected. Prior committed code reproduces next-boot denial;
