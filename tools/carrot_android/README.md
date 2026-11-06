@@ -1,4 +1,6 @@
-# Carrot Web Android prototype
+# CarrotAssist Android prototype
+
+당근파일럿 AI 조수. Display name: CarrotAssist.
 
 Small native host for the existing device web service on port 7000. It does not
 run an AI model or use an API key. The microphone button asks Android to show
