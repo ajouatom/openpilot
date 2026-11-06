@@ -53,7 +53,31 @@ Keep the CarrotAssist web interface active beneath the small voice overlay. A di
 
 Voice changes support device-defined integer settings with valid bounds and increments. All supported settings, including driving settings, can be changed while driving after confirming the current and proposed values. Only initial authorization requires stationary/disengaged state. Each setting retains its existing activation timing; some require a restart. An explicit integer such as “set it to 240” is preserved within the allowed range. A button increment of 5 and minimum of 1 do not force 240 to become 241. Relative calculations are rounded to the nearest integer and the proposed value must be confirmed. Restricted settings such as disabling driver monitoring are excluded.
 
-This version does not execute real-time cruise-speed commands, lane changes, direct indicator control, drive analysis or log uploads. Editing a tuning parameter is different from issuing an immediate driving command. Setting history identifies changes made by the voice assistant. Follow each setting's instructions when a restart is required.
+Setting history identifies changes made by the voice assistant. Follow each setting's instructions when a restart is required. Direct indicator control, drive analysis and log uploads remain unsupported.
+
+## Driving commands in the same conversation — experimental
+
+Requires relay 0.6.0 and its matching device code. Keep the existing Android 0.2.0 APK. GitPull and fully restart the device while parked and disengaged; restarting only the web server does not reload the vehicle controllers. Controller and connection tests run on a PC; spoken on-road operation has not been validated.
+
+1. In CarrotAssist, select **Tools > ChatGPT assistant > Allow voice lane-change and set-speed commands** while parked and disengaged.
+2. Reauthorize the ChatGPT CarrotAssist connection with the new scope and select driving commands on the Carrot consent page. Settings access alone never grants driving access. If a code is needed, create a fresh one in the app and enter it on that consent page.
+3. Start voice once with the existing microphone button. Discuss settings, then ask for a lane change within the same conversation. No button press or mode switch is needed for each utterance. Keep Carrot Web visible under the small voice overlay.
+
+| Request | Behavior |
+|---|---|
+| “Change one lane left/right” | Request one lane through the existing lane-change controller |
+| “Increase speed” | Same set-speed handling as one remote RES/+ press |
+| “Reduce speed by 10” | Subtract 10 km/h from the current set speed |
+| “Reduce speed” | Subtract 10 km/h, matching the legacy voice command |
+| “Set speed to 100” | Set the cruise target to 100 km/h |
+
+Clear execution requests do not add a separate conversational confirmation. Saved tuning settings retain their value-confirmation procedure. ChatGPT may independently require tool approval; fully hands-free operation is not guaranteed for every account. Speech recognition, model reasoning and network latency remain, so this is not an emergency control interface.
+
+Lane commands respect active assistance, speed, lane geometry, measured blind spots, existing steering-torque requirements and driver priority. Conflicting maneuvers and stale state can reject them. Speed commands require already-active, supported openpilot longitudinal control and never engage assistance. Configurations following the PCM set speed can reject them. An applied set speed does not mean the vehicle has reached that speed.
+
+Relay delivery expires after five seconds; controller consumption requires an intent no older than one second. Pending lane preparation expires after three seconds. Only one driving request runs at once. During ten seconds after a request, identical calls return its result and other calls can be rejected to prevent duplicate maneuvers. Expired, failed or uncertain requests never retry automatically. An ambiguous “go slowly, there is a car ahead” needs a specific target; it does not trigger indefinite braking until radar detects a lead.
+
+Running and completed are distinct. Lane completion requires both controller completion and observed lane crossing. **Revoke driving commands** prevents new commands and cancels pending preparation; it does not force an ongoing steering maneuver to abort. A phone voice-start action has not been added to the existing Bluetooth remote.
 
 ## Updates and disconnection
 

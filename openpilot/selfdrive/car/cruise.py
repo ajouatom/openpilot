@@ -1,4 +1,5 @@
 import math
+import time
 import numpy as np
 
 from openpilot.cereal import car
@@ -6,6 +7,7 @@ from openpilot.common.constants import CV
 from openpilot.selfdrive.carrot.carrot_man_input import get_carrot_man
 from openpilot.selfdrive.carrot.cruise_gap import cruise_gap_levels, next_gap_personality, supported_gap_levels
 from openpilot.selfdrive.carrot.bluetooth.model import BLUETOOTH_CANCEL, CommandReader, REMOTE_BUTTONS
+from openpilot.selfdrive.carrot.assistant_speed import AssistantSpeed
 from openpilot.selfdrive.car.toyota_pcm_speed import ToyotaPcmSetSpeedSync
 
 from opendbc.car import structs
@@ -161,6 +163,8 @@ class VCruiseCarrot:
   def __init__(self, CP):
     self.CP = CP
     self.bluetooth_commands = CommandReader('cruise')
+    self.assistant_speed = AssistantSpeed()
+    self.assistant_speed_valid = False
     self.frame = 0
     self.params_memory = Params("/dev/shm/params")
     self.params = Params()
@@ -331,6 +335,8 @@ class VCruiseCarrot:
       self.autoCruiseControl_cancel_timer = max(0, self.autoCruiseControl_cancel_timer - 1)
 
     CC = sm['carControl']
+    self.assistant_speed_valid = bool(getattr(sm, 'valid', {}).get('carControl', False) and sm.alive['carControl'] and
+                                     0 <= time.monotonic() - getattr(sm, 'recv_time', {}).get('carControl', 0) < .35)
     self._update_carrot_man(sm)
     if sm.alive['longitudinalPlan']:
       lp = sm['longitudinalPlan']
@@ -370,7 +376,10 @@ class VCruiseCarrot:
     self._prepare_brake_gas(CS, CC)
     if CC.enabled:
       self._cruise_ready = False
+    previous_lat_enabled = self._lat_enabled
     v_cruise_kph = self._update_cruise_buttons(CS, CC, self.v_cruise_kph)
+    if self.assistant_speed.active:
+      self._lat_enabled = previous_lat_enabled  # A speed request must not enable lateral control.
     pcm_speed = self.toyota_pcm_speed_sync.update(
       self.CP, self.speed_from_pcm, CS,
       local_changed=abs(v_cruise_kph - prior_cruise_kph) > 1e-3,
@@ -412,6 +421,10 @@ class VCruiseCarrot:
 
     self.cruise_state_available_last = CS.cruiseState.available
     self.enabled_last = CC.enabled
+    try:
+      self.assistant_speed.finish(self.v_cruise_kph)
+    except (OSError, ValueError, TypeError):
+      pass
 
   def initialize_v_cruise(self, CS, experimental_mode: bool) -> None:
     return
@@ -566,11 +579,30 @@ class VCruiseCarrot:
     
     return v_cruise_kph, button_type, long_pressed
 
+  def _read_assistant_speed(self, CS, CC, v_cruise_kph, remote):
+    if getattr(self, 'assistant_speed', None) is None:
+      return None
+    try:
+      minimum = max(self._cruise_speed_min, 30 if self.CP.pcmCruise else self._cruise_speed_min)
+      allowed = (self.assistant_speed_valid and CS.canValid and CC.enabled and getattr(CC, 'longActive', False) and
+                 self.CP.openpilotLongitudinalControl and CS.cruiseState.available and CS.gearShifter == GearShifter.drive and
+                 not (CS.brakePressed or CS.gasPressed or CS.buttonEvents or remote or self.button_cnt or self._hold_interlock_active) and
+                 self._soft_hold_active == 0 and minimum <= v_cruise_kph <= self._cruise_speed_max and
+                 not (self.CP.pcmCruise and (self.speed_from_pcm == 1 or (self.speed_from_pcm == 3 and self.CP.brand == 'toyota'))) and
+                 self.carrot_cmd_index_last == self.carrot_cmd_index)
+      voice_speed = self.assistant_speed.read(allowed=allowed, current=v_cruise_kph, minimum=minimum, maximum=self._cruise_speed_max)
+      return voice_speed
+    except (OSError, ValueError, TypeError):
+      return None
+
   def _update_cruise_buttons(self, CS, CC, v_cruise_kph):
     remote = self.bluetooth_commands.read(allowed=(CS.canValid and CS.cruiseState.available and
       CS.gearShifter == GearShifter.drive and not CS.buttonEvents and self.button_cnt == 0))
     if getattr(self.bluetooth_commands, 'is_repeat', False) and not CC.enabled:
       remote = None  # Holding a remote must never re-engage after disengagement.
+    voice_speed = self._read_assistant_speed(CS, CC, v_cruise_kph, remote)
+    if voice_speed and voice_speed['action'] == 'speed_up':
+      remote = 'accelCruise'  # Same RES/+ handling, without driver-attention input.
     button_kph, button_type, long_pressed = self._prepare_buttons(CS, v_cruise_kph, remote)
     remote_enable = remote in ('accelCruise', 'decelCruise', 'accelCruiseLong', 'decelCruiseLong') and not CC.enabled
     # SET during soft hold retains its existing cancel behavior.
@@ -578,6 +610,10 @@ class VCruiseCarrot:
       remote_enable = False
 
     v_cruise_kph, button_type, long_pressed = self._carrot_command(v_cruise_kph, button_type, long_pressed)
+    if voice_speed and 'target' in voice_speed:
+      v_cruise_kph = voice_speed['target']
+      self._pause_auto_speed_up = True
+      self._v_cruise_kph_at_brake = 0
 
     if button_type in [ButtonType.accelCruise, ButtonType.decelCruise, ButtonType.setCruise, ButtonType.resumeCruise]:
       self._paddle_decel_active = False

@@ -14,13 +14,13 @@ from aiohttp.test_utils import TestClient, TestServer
 from openpilot.selfdrive.carrot.server.services.assistant_settings import AssistantSettings
 
 
-def load_routes():
+def load_routes(feature='assistant_settings'):
   # Import the real feature without starting unrelated native msgq features on Windows.
   package = 'openpilot.selfdrive.carrot.server.features'
   directory = Path(__file__).resolve().parents[1] / 'features'
   namespace = types.ModuleType(package)
   namespace.__path__ = [str(directory)]
-  spec = importlib.util.spec_from_file_location(package + '.assistant_settings', directory / 'assistant_settings.py')
+  spec = importlib.util.spec_from_file_location(package + '.' + feature, directory / (feature + '.py'))
   module = importlib.util.module_from_spec(spec)
   with pytest.MonkeyPatch.context() as patch:
     patch.setitem(sys.modules, package, namespace)

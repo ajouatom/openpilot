@@ -8,12 +8,13 @@ import { InvalidClientMetadataError, InvalidGrantError, InvalidRequestError, Inv
 
 export const ACCOUNT_SCOPE = 'carrot.screen';
 export const SETTINGS_SCOPE = 'carrot.settings';
+export const DRIVE_SCOPE = 'carrot.drive';
 const random = () => randomBytes(32).toString('base64url');
 const hash = value => createHash('sha256').update(String(value)).digest('hex');
 const hex = z.string().regex(/^[a-f0-9]{64}$/);
 const id = z.string().regex(/^[A-Za-z0-9_-]{43}$/);
 const grantSchema = z.object({ id, sessionId: id, clientId: z.string(), refreshHash: hex,
-  scopes: z.array(z.enum([ACCOUNT_SCOPE, SETTINGS_SCOPE])).default([ACCOUNT_SCOPE]),
+  scopes: z.array(z.enum([ACCOUNT_SCOPE, SETTINGS_SCOPE, DRIVE_SCOPE])).default([ACCOUNT_SCOPE]),
   refreshExpiresAt: z.number().finite(), used: z.array(hex).max(64),
   access: z.array(z.object({ hash: hex, expiresAt: z.number().finite() })).max(8) });
 const storeSchema = z.object({ version: z.literal(1), clients: z.array(OAuthClientInformationFullSchema).max(2000), grants: z.array(grantSchema).max(2000) });
@@ -57,7 +58,7 @@ export function createAccountAuth({ issuer, bridge, statePath, now = Date.now })
     if (g.refreshExpiresAt <= now()) return false;
     try { return bridge.accountStatus(g.sessionId).connected; } catch { return false; }
   };
-  const scopeCheck = scopes => { if (scopes?.some(s => ![ACCOUNT_SCOPE, SETTINGS_SCOPE].includes(s))) throw new InvalidScopeError('Unsupported Carrot scope.'); };
+  const scopeCheck = scopes => { if (scopes?.some(s => ![ACCOUNT_SCOPE, SETTINGS_SCOPE, DRIVE_SCOPE].includes(s))) throw new InvalidScopeError('Unsupported Carrot scope.'); };
   const resourceCheck = value => { if (value?.href !== resource) throw new InvalidRequestError('Incorrect resource.'); };
   function sweep() {
     for (const map of [flows, codes]) for (const [key, value] of map) if (value.expiresAt <= now()) map.delete(key);
@@ -99,7 +100,7 @@ export function createAccountAuth({ issuer, bridge, statePath, now = Date.now })
       if (!/^[A-Za-z0-9_-]{43}$/.test(params.codeChallenge) || (params.state?.length || 0) > 2048 || flows.size >= 1000) throw new InvalidRequestError('Invalid authorization request.');
       const flow = random(), cookie = random();
       flows.set(flow, { clientId: client.client_id, redirectUri: params.redirectUri, state: params.state,
-        scopes: [ACCOUNT_SCOPE, ...(params.scopes?.includes(SETTINGS_SCOPE) ? [SETTINGS_SCOPE] : [])],
+        scopes: [ACCOUNT_SCOPE, ...(params.scopes?.includes(SETTINGS_SCOPE) ? [SETTINGS_SCOPE] : []), ...(params.scopes?.includes(DRIVE_SCOPE) ? [DRIVE_SCOPE] : [])],
         challenge: params.codeChallenge, cookieHash: hash(cookie), expiresAt: now() + 600000, attempts: 0 });
       res.cookie('carrot_oauth', cookie, { httpOnly: true, secure: issuer.startsWith('https:'), sameSite: 'lax', path: '/oauth/approve', maxAge: 600000 });
       // Chromium checks form-action again after the POST's 303 redirect. Permit
@@ -107,7 +108,7 @@ export function createAccountAuth({ issuer, bridge, statePath, now = Date.now })
       // no-referrer also makes a browser form POST's Origin null. same-origin
       // preserves our CSRF origin check without disclosing the URL to ChatGPT.
       res.set({ 'Content-Security-Policy': `default-src 'none'; style-src 'unsafe-inline'; form-action 'self' ${params.redirectUri}; frame-ancestors 'none'; base-uri 'none'`, 'Referrer-Policy': 'same-origin', 'X-Content-Type-Options': 'nosniff' });
-      res.type('html').send(`<!doctype html><html lang="ko"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>당근 기기 연결</title><style>body{font:18px system-ui;background:#10151c;color:#eee;max-width:520px;margin:40px auto;padding:20px;line-height:1.6}input,button{font:inherit;box-sizing:border-box;padding:12px;width:100%;margin:12px 0}button{background:#ed9144;border:0;border-radius:10px}small{color:#bbb}</style><h1>ChatGPT에 당근 기기 연결</h1><p>한 번 연결하면 새 대화와 미니 음성창에서도 같은 당근웹을 사용할 수 있습니다.</p><p>당근웹의 ChatGPT 연결 설정에서 <b>미니모드 연결 코드</b>를 만든 뒤 아래에 입력하세요. 이 코드는 대화에 보내지 마세요.</p><form method="post" action="/oauth/approve"><input type="hidden" name="flow" value="${escape(flow)}"><label for="code">미니모드 연결 코드 (5분 유효)</label><input id="code" name="code" required maxlength="30" autocomplete="off" autocapitalize="characters" spellcheck="false"><p>허용: 설정 검색·설명 및 해당 웹의 설정 화면 열기.<br>차량 제어·로그 전송은 허용하지 않습니다.</p>${params.scopes?.includes(SETTINGS_SCOPE) ? '<label><input type="checkbox" name="settings_access" value="yes" style="width:auto"> 설정값 조회·변경도 허용</label><p><small>선택한 설정의 현재값과 변경 결과를 ChatGPT 및 당근 연결 서버에 전달합니다. 당근웹에서도 별도로 허용해야 하며, 변경 전 값 확인과 승인이 필요합니다. 주행 관련 설정은 정차·보조 기능 해제 상태에서만 적용합니다.</small></p>' : '<p>현재 연결은 화면 열기 전용입니다. 설정값 변경을 원하면 새 권한으로 다시 연결하세요.</p>'}<button type="submit">이 기기 연결 승인</button></form><small>연결은 당근웹에서 해제할 수 있습니다. 인증은 자동 갱신되며, 1년 동안 사용하지 않으면 다시 연결해야 합니다. 다른 사람이 보낸 코드는 입력하지 마세요.</small></html>`);
+      res.type('html').send(`<!doctype html><html lang="ko"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>당근 기기 연결</title><style>body{font:18px system-ui;background:#10151c;color:#eee;max-width:520px;margin:40px auto;padding:20px;line-height:1.6}input,button{font:inherit;box-sizing:border-box;padding:12px;width:100%;margin:12px 0}button{background:#ed9144;border:0;border-radius:10px}small{color:#bbb}</style><h1>ChatGPT에 당근 기기 연결</h1><p>한 번 연결하면 새 대화와 미니 음성창에서도 같은 당근웹을 사용할 수 있습니다.</p><p>당근웹의 ChatGPT 연결 설정에서 <b>미니모드 연결 코드</b>를 만든 뒤 아래에 입력하세요. 이 코드는 대화에 보내지 마세요.</p><form method="post" action="/oauth/approve"><input type="hidden" name="flow" value="${escape(flow)}"><label for="code">미니모드 연결 코드 (5분 유효)</label><input id="code" name="code" required maxlength="30" autocomplete="off" autocapitalize="characters" spellcheck="false"><p>허용: 설정 검색·설명 및 해당 웹의 설정 화면 열기.<br>추가 권한은 아래에서 별도로 선택합니다. 로그 전송은 허용하지 않습니다.</p>${params.scopes?.includes(SETTINGS_SCOPE) ? '<label><input type="checkbox" name="settings_access" value="yes" style="width:auto"> 설정값 조회·변경도 허용</label><p><small>선택한 설정의 현재값과 변경 결과를 ChatGPT 및 당근 연결 서버에 전달합니다. 당근웹에서도 별도로 허용해야 하며, 변경 전 값 확인과 승인이 필요합니다. 지원하는 주행 설정도 주행 중 확인 후 변경할 수 있습니다. 최초 권한 허용은 정차 상태에서 진행합니다.</small></p>' : '<p>현재 연결은 화면 열기 전용입니다. 설정값 변경을 원하면 새 권한으로 다시 연결하세요.</p>'}${params.scopes?.includes(DRIVE_SCOPE) ? '<label><input type="checkbox" name="drive_access" value="yes" style="width:auto"> 음성 차선변경·설정속도 명령 허용</label><p><small>명확한 실행 명령은 재확인 대화 없이 차량에 요청합니다. 실행 여부는 기존 차량 조건에 따르며, 명령과 실행 결과가 ChatGPT와 당근 중계 서버에 전달됩니다. 당근웹에서도 별도로 허용해야 합니다.</small></p>' : ''}<button type="submit">이 기기 연결 승인</button></form><small>연결은 당근웹에서 해제할 수 있습니다. 인증은 자동 갱신되며, 1년 동안 사용하지 않으면 다시 연결해야 합니다. 다른 사람이 보낸 코드는 입력하지 마세요.</small></html>`);
     },
     async challengeForAuthorizationCode(client, code) { return codeFor(client, code).challenge; },
     async exchangeAuthorizationCode(client, code, _verifier, redirectUri, target) {
@@ -150,7 +151,7 @@ export function createAccountAuth({ issuer, bridge, statePath, now = Date.now })
       try {
         const linked = bridge.claimAccountCode(req.body.code);
         const code = random();
-        const scopes = [ACCOUNT_SCOPE, ...(flow.scopes.includes(SETTINGS_SCOPE) && req.body.settings_access === 'yes' ? [SETTINGS_SCOPE] : [])];
+        const scopes = [ACCOUNT_SCOPE, ...(flow.scopes.includes(SETTINGS_SCOPE) && req.body.settings_access === 'yes' ? [SETTINGS_SCOPE] : []), ...(flow.scopes.includes(DRIVE_SCOPE) && req.body.drive_access === 'yes' ? [DRIVE_SCOPE] : [])];
         codes.set(hash(code), { ...flow, scopes, sessionId: linked.id, expiresAt: now() + 120000 });
         flows.delete(req.body.flow);
         const redirect = new URL(flow.redirectUri); redirect.searchParams.set('code', code);
@@ -168,7 +169,7 @@ export function installAccountAuth(app, provider, issuer) {
   // DSM is the sole reverse proxy. Keep global proxy-IP limits; never trust a caller's X-Forwarded-For.
   const validate = { xForwardedForHeader: false };
   app.use(mcpAuthRouter({ provider, issuerUrl: new URL(issuer), resourceServerUrl: new URL(provider.resource),
-    scopesSupported: [ACCOUNT_SCOPE, SETTINGS_SCOPE], resourceName: '당근파일럿 기기 연결',
+    scopesSupported: [ACCOUNT_SCOPE, SETTINGS_SCOPE, DRIVE_SCOPE], resourceName: '당근파일럿 기기 연결',
     authorizationOptions: { rateLimit: { validate } }, revocationOptions: { rateLimit: { validate } },
     clientRegistrationOptions: { clientSecretExpirySeconds: 0, rateLimit: { max: 200, validate } }, tokenOptions: { rateLimit: { max: 1200, validate } } }));
   app.post('/oauth/approve', express.urlencoded({ extended: false, limit: '4kb' }), (req, res) => provider.approve(req, res));

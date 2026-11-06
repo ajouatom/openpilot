@@ -33,7 +33,26 @@ All supported catalog edits, including driving settings, may be confirmed and
 applied onroad. Initial authorization still requires stationary/disengaged state.
 Saving does not change when each setting takes effect in the vehicle.
 Driver-monitoring disabling is excluded.
-Real-time driving commands and log uploads are unsupported.
+Log uploads are unsupported. Experimental driving requests use separate
+`carrot.drive` consent and a separate stationary-issued local grant. Existing
+tokens never gain this scope automatically. `VOICE_RULES.md` is loaded as MCP
+instructions: one continuing conversation, no per-command button/mode switch,
+no added conversational confirmation for clear current driving intents, no
+invented deceleration target, and truthful acknowledgement versus completion.
+Platform tool approvals still apply; driving tools are marked as state-changing.
+
+`request_carrot_drive` supports lane_left/right, remote-equivalent speed_up,
+explicit speed_down and speed_set (km/h). `get_carrot_drive_request` only observes.
+Delivery expires in5s, local controller consumption in1s. Pending lane start
+expires in3s, active observation in20s. The relay deduplicates identical calls
+and rejects other calls within10s; one request at a time. No pending work survives
+restart. Local request IDs prevent replay after ambiguous delivery. The existing
+lane FSM owns motion; fresh state, BSD, lane geometry, driver priority and torque
+requirements remain. Speed cannot engage assistance or impersonate attention input.
+Terminal lane completion also requires observed crossing. Revocation cancels
+pending preparation, not an already-running steering trajectory.
+Full device restart is required; web-only restart is insufficient. No APK update.
+PC controller/transport tests are not on-road voice validation.
 
 Requests expire after 30 seconds; proposals after 60 seconds. Results are bounded
 and ephemeral. Duplicate delivery cannot repeat a committed write. Queued/unknown
@@ -65,6 +84,9 @@ and all account grants associated with that web connection.
 
 - Up to 1,000 paired sessions, 60 bridge creations/minute and 600 MCP requests/minute
   globally. Each visible paired tab polls every three seconds; hidden tabs pause.
+  Driving-enabled tabs use a wakeable7.5s long poll followed by a1s pause; pending
+  commands wake it immediately. This reduces idle requests and delivery wait,
+  not speech recognition/model latency. Simultaneous-client load remains untested.
 - These are limits, not proof of capacity for hundreds of simultaneous users.
   300 visible tabs imply about 100 polls/second plus CORS traffic. Monitor the NAS
   before expanding beyond a small beta.

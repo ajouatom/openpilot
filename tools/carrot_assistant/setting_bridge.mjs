@@ -7,7 +7,7 @@ export const settingResult = z.object({
   name: z.string().regex(/^[A-Za-z][A-Za-z0-9_]{0,100}$/).optional(),
   title: z.string().max(160).optional(), current: numeric.optional(), previous: numeric.optional(),
   min: numeric.optional(), max: numeric.optional(), step: numeric.positive().optional(), proposed: numeric.optional(),
-  unit_note: z.string().max(200).optional(), stationary_required: z.boolean().optional(),
+  unit_note: z.string().max(200).optional(), step_note: z.string().max(200).optional(), stationary_required: z.boolean().optional(),
   proposal_id: z.string().regex(/^[A-Za-z0-9_-]{43}$/).optional(),
   expires_in_seconds: z.number().int().min(0).max(60).optional(), confirmation_required: z.boolean().optional(),
   error: z.string().max(300).optional(),

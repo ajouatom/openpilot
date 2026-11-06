@@ -13,7 +13,8 @@ test('setting relay isolates owners, expires work and validates acknowledgements
   assert.throws(() => relay.ack('a', first.request_id, { status: 'applied', current: 66 }));
   assert.throws(() => relay.ack('a', first.request_id, { status: 'prepared', name: 'ShowCustomBrightness', current: 60 }));
   assert.throws(() => relay.ack('a', first.request_id, { status: 'failed', secret: 'not allowed' }));
-  const result = { status: 'prepared', name: 'ShowCustomBrightness', current: 60, proposed: 66, proposal_id: 'p'.repeat(43), confirmation_required: true };
+  const result = { status: 'prepared', name: 'ShowCustomBrightness', current: 60, proposed: 66, proposal_id: 'p'.repeat(43), confirmation_required: true,
+    step_note: 'step is the web button increment, not a required multiple or an offset from min. Any in-range integer may be specified.' };
   relay.ack('a', first.request_id, result);
   assert.deepEqual(relay.status('a').result, result);
   assert.equal(relay.poll('a'), null);
