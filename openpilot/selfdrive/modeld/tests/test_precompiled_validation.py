@@ -56,12 +56,13 @@ def test_artifact_change_invalidates(receipt, artifact):
   assert key != old_key and not pv.validation_cached(path, key)
 
 
-def test_source_change_invalidates_without_repository_head(receipt, monkeypatch):
+@pytest.mark.parametrize('source_name', ['local_gpu_warp.py', 'egpu_usb_wrap.py'])
+def test_source_change_invalidates_without_repository_head(receipt, monkeypatch, source_name):
   path, device, old_key = receipt
   original = pv.Path.read_bytes
   def changed_source(source):
     value = original(source)
-    return value + b'\n# changed warp\n' if source.name == 'local_gpu_warp.py' else value
+    return value + b'\n# changed warp\n' if source.name == source_name else value
   monkeypatch.setattr(pv.Path, 'read_bytes', changed_source)
   key = pv.validation_key(path, device, pv.camera_sizes('mici'))
   assert key != old_key and not pv.validation_cached(path, key)

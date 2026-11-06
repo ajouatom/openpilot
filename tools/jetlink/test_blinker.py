@@ -160,8 +160,13 @@ def test_sender_uses_separate_bounded_message_and_expires_clock_anchor(monkeypat
   clock, sent = [1.], []
   monkeypatch.setattr(protocol.time, 'monotonic', lambda: clock[0])
   value = {'stamp':1., 'ok':True, 'events':[{'id':'one','time':.95,'direction':'left'}]}
-  monkeypatch.setattr(protocol, 'Process', lambda *a: SimpleNamespace(latest=lambda:value, close=lambda:None, send=lambda _:True))
-  client = SimpleNamespace(last_state={}, _next_seq=lambda:1,
+  monkeypatch.setattr(protocol, 'Process', lambda *a: SimpleNamespace(latest=lambda:value, close=lambda **kw:None, send=lambda _:True,
+                                                                  process=SimpleNamespace(poll=lambda:None)))
+  owner = SimpleNamespace(held=False, name='USB CAN')
+  owner.acquire = lambda ready: setattr(owner, 'held', ready) or ready
+  owner.release = lambda: setattr(owner, 'held', False)
+  monkeypatch.setattr(protocol, 'Owner', lambda _: owner)
+  client = SimpleNamespace(last_state={'carrot_blinker':{'token':'t','clock':100.,'available':True,'idle':True,'generation':'one'}}, _next_seq=lambda:1,
                            _expect=lambda *a:SimpleNamespace(payload=protocol.encode({'ready':True,'token':'t','clock':100.})),
                            t=SimpleNamespace(send_json=lambda *a:None, send=lambda *a:sent.append(a)))
   sender = protocol.Sender(client, {'carrot_host':'jetson',protocol.CAPABILITY:True})
@@ -172,7 +177,8 @@ def test_sender_uses_separate_bounded_message_and_expires_clock_anchor(monkeypat
   clock[0] = 4.1
   value['stamp'] = clock[0]
   sender.send(client)
-  assert len(sent) == 1
+  assert len(sent) == 2 and json.loads(sent[-1][2][0])['ok'] is False
+  assert sender.worker is None and not owner.held
   sender.close()
 
 

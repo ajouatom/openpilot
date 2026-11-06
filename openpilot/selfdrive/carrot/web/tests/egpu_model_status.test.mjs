@@ -5,6 +5,80 @@ import vm from "node:vm";
 
 import { CarrotEgpuModel } from "../src/features/tools/egpu_model.js";
 
+for (const language of ["ko", "en"]) {
+  test(`blocked GPU shows cause, next-boot recovery and gated action (${language})`, (t) => {
+    const savedDocument = globalThis.document;
+    const savedTranslator = globalThis.getUIText;
+    t.after(() => { globalThis.document = savedDocument; globalThis.getUIText = savedTranslator; });
+    let strings;
+    vm.runInNewContext(readFileSync(new URL(`../js/translations/${language}.js`, import.meta.url), "utf8"), {
+      window: { CarrotTranslations: { register(_language, translation) { strings = translation.strings; } } },
+    });
+    const elements = new Map();
+    globalThis.document = { getElementById(id) {
+      if (!elements.has(id)) elements.set(id, { dataset: {}, style: {}, classList: { toggle() {} } });
+      return elements.get(id);
+    } };
+    globalThis.getUIText = (key, fallback) => strings[key] || fallback;
+    const status = { available: true, state: "error", error_code: "rejected", rejection: {
+      blocked: true, can_request: false, reason: "device_restart_required", phase: "boot_validation", error: "RuntimeError: Device hang detected",
+    } };
+    CarrotEgpuModel.render(status);
+    assert.ok(elements.get("egpuModelDetail").textContent.includes(strings.egpu_model_blocked_device));
+    assert.match(elements.get("egpuModelDetail").textContent, /boot_validation: RuntimeError: Device hang detected/);
+    assert.equal(elements.get("btnEgpuRetryVerification").hidden, false);
+    assert.equal(elements.get("btnEgpuRetryVerification").disabled, true);
+    assert.equal(elements.get("egpuModelDiagnostics").hidden, false);
+    status.rejection.can_request = true;
+    CarrotEgpuModel.render(status);
+    assert.equal(elements.get("btnEgpuRetryVerification").disabled, false);
+    status.rejection.retry_pending = true;
+    CarrotEgpuModel.render(status);
+    assert.equal(elements.get("btnEgpuRetryVerification").disabled, true);
+    assert.equal(elements.get("egpuModelRecovery").textContent, strings.egpu_model_retry_pending);
+    CarrotEgpuModel.render({ ...status, active: true, state: "compiled", error_code: null });
+    assert.equal(elements.get("btnEgpuRetryVerification").hidden, true);
+  });
+}
+
+for (const language of ["ko", "en"]) {
+  test(`USB handoff reasons render localized text and retain diagnostic codes (${language})`, (t) => {
+    const savedDocument = globalThis.document;
+    const savedTranslator = globalThis.getUIText;
+    t.after(() => {
+      globalThis.document = savedDocument;
+      if (savedTranslator === undefined) delete globalThis.getUIText;
+      else globalThis.getUIText = savedTranslator;
+    });
+    let strings;
+    vm.runInNewContext(readFileSync(new URL(`../js/translations/${language}.js`, import.meta.url), "utf8"), {
+      window: { CarrotTranslations: { register(_language, translation) { strings = translation.strings; } } },
+    });
+    const elements = new Map();
+    globalThis.document = { getElementById(id) {
+      if (!elements.has(id)) elements.set(id, { dataset: {}, style: {}, classList: { remove() {} } });
+      return elements.get(id);
+    } };
+    globalThis.getUIText = (key, fallback) => strings[key] || fallback;
+    const codes = ["opt_in_missing", "opt_in_invalid", "controller", "platform", "offroad", "usb_role",
+      "gadget_identity", "gadget_functions", "gadget_tree", "controller_changed", "other_owner",
+      "lock_invalid", "lock_busy", "udc_attribute", "write_failed", "still_bound", "io_error", "not_root", "helper_failed"];
+    for (const code of codes) {
+      const reason = `setup_gadget.sh failed: jetlink: [adb-handoff:${code}] observed state`;
+      CarrotEgpuModel.render({ available: false, jetlink: { label: "Jetlink", severity: "error", reason } });
+      const shown = elements.get("jetlinkHealth").textContent;
+      assert.ok(strings[`egpu_model_handoff_${code}`]);
+      assert.ok(shown.includes(strings[`egpu_model_handoff_${code}`]));
+      assert.ok(shown.includes(reason));
+      assert.equal(elements.get("egpuModelState").textContent, strings.egpu_model_host_usb_error);
+    }
+    CarrotEgpuModel.render({ available: false, jetlink: {
+      label: "Jetlink", severity: "error", reason: "[adb-handoff:future_code] future detail",
+    } });
+    assert.match(elements.get("jetlinkHealth").textContent, /future_code.*future detail/);
+  });
+}
+
 test("delivery failures explain automatic recovery and installed files do not imply active inference", (t) => {
   const saved = globalThis.document;
   t.after(() => { globalThis.document = saved; });

@@ -2,6 +2,10 @@
 
 [English](../en/settings.md)
 
+Android [CarrotAssist](carrot-assist.md)에서는 ChatGPT로 설정을 찾고 설명을 듣거나 화면을 열 수 있습니다. 기기와 ChatGPT 양쪽에서 별도 허용하면 현재 값을 조회하고 제안값을 확인한 뒤 변경합니다. 지원하는 주행 관련 설정도 주행 중 확인 후 변경할 수 있습니다. 최초 권한 허용만 정차·주행 보조 해제 상태에서 진행하며, 각 설정의 실제 반영 시점은 기존과 같습니다.
+
+같은 음성대화에서 차선변경·크루즈 설정속도를 요청하는 시험 기능은 **음성 차선변경·설정속도 명령 허용** 권한을 양쪽에서 별도로 추가해야 합니다. 설정 변경 권한은 자동으로 확대되지 않습니다. 설정의 현재값·제안값 확인 절차와 운전 명령의 실행·결과 안내는 구분됩니다. [연속 음성대화 사용법과 지원 조건](carrot-assist.md)을 확인하세요.
+
 > [!NOTE]
 > 이 문서는 `carrot-wip` 코드와 함께 관리하는 사용자 설명서 원본입니다. 사용자 동작이 바뀌면 관련 코드·테스트와 같은 변경에서 이 문서도 갱신합니다.
 
@@ -275,7 +279,7 @@ VW MEB(ID.4 포함)에도 수동 조향비와 학습 비율이 적용됩니다. 
 > `HyundaiCameraSCC`, `CanfdHDA2`, `EnableRadarTracks`, `CarrotRadarMode`, `CarrotRadarCutInSensitivity`, `SpeedFromPCM`은 잘못 설정하면 차량 인식, SCC, 레이더와 가감속 동작이 달라질 수 있습니다. 차종, 연식, HDA 구성, 하네스 연결 위치와 순정 ACC 사용 여부를 확인한 뒤 변경하세요.
 
 - `HyundaiCameraSCC`: 현대·기아 차량의 롱컨, 크루즈 동기화와 CAN FD 배선 구성에 따라 모드가 달라집니다.
-  CAN-FD CameraSCC에서 캐럿 롱컨과 코너레이더가 켜져 있으면, 정상 CAN·D단·브레이크 해제·시속 10.8km 초과 조건에서 꺼진 순정 SCC MAIN을 주기적으로 켜도록 요청합니다. AutoEngage와 캐럿 크루즈 활성 여부에 관계없이 적용하며, MAIN이 이미 켜져 있으면 이 경로의 추가 요청은 끝납니다. SET·재출발 요청에는 기존 캐럿 크루즈 활성 조건이 적용됩니다.
+  CAN-FD CameraSCC에서 캐럿 롱컨과 코너레이더가 켜져 있으면, 정상 CAN·D단·브레이크 해제·시속 10.8km 초과 조건에서 꺼진 순정 SCC MAIN을 주기적으로 켜도록 요청합니다. AutoEngage와 캐럿 크루즈 활성 여부에 관계없이 적용하며, MAIN이 이미 켜져 있으면 이 경로의 추가 요청은 끝납니다. SET·재출발 요청에는 기존 캐럿 크루즈 활성 조건이 적용됩니다. CAN-FD CameraSCC에서 캐럿 롱컨을 사용하는 경우 계기판용 순정 SCC MAIN 상태와 캐럿의 활성 선택을 분리해 처리합니다. 조향 활성은 AutoEngage 초기 설정과 기존 운전자 버튼 설정을 따릅니다.
   설정이 `0`이고 차량에 카메라 SCC가 적용되지 않은 상태에서, 이번 onroad의 카메라 버스(bus2, 다중 Panda에서는 해당 카메라 버스)에서 `SCC_CONTROL`(CAN-FD) 또는 `SCC12`(일반 CAN)를 수신하면 CAN 오류 화면에 **CameraSCC 설정을 켜 주세요** 안내가 표시됩니다. 수신 이력에 따른 설정 확인 안내이며 모든 CAN 오류의 원인을 확정하지는 않습니다. 설정을 자동 변경하지 않으며, 기존 제어 해제와 진입 차단은 유지됩니다. 정차 후 차량·배선에 맞는 모드를 설정하고 다음 onroad에서 확인하세요.
 - `CanfdHDA2`: HDA2 차량에서만 활성화합니다.
 - **계기판 CAN 직접 송신** (`HyundaiCanfdClusterDirectTx`): 현대·기아·제네시스 CAN-FD CameraSCC 차량에서 간헐적인 계기판 경고가 발생할 때 기존 직접 송신 방식과 비교하는 설정입니다. 모든 차량에서 기본 꺼짐이며 증상 차량에서 직접 켭니다. 변경 후 기기를 재부팅해야 적용됩니다. 이 설정을 지원하는 Panda 펌웨어가 필요하며, 경고 원인 해결이 검증된 것은 아닙니다.
@@ -462,7 +466,7 @@ Carrot Vision에는 `carrot_settings.json` 카탈로그와 별도로 **AR 표시
 
 Carrot Web의 **도구 → Nav Map / 내비 지도**에서 지도를 보고 목적지를 검색·선택하거나 취소합니다. **설정 → 네트워크 → Mapbox**에 Public 키를 먼저 등록하세요. Secret 키는 이 기능에 필요하지 않습니다. 목적지는 재시작 후에도 유지하며, 외부 네비가 연결되어 있으면 외부 TBT와 경로를 우선합니다. 외부 경로가 없을 때 저장된 Mapbox 경로를 섞어 쓰지 않습니다.
 
-지도는 onroad에서 위치와 안내가 유효할 때 생성됩니다. USB 화면은 `ClusterHudScreenMode=7`로 주행 화면 오른쪽에 같은 이미지를 표시합니다. N16 Nav는 eGPU와 Jetson 모두에서 내비 경로 입력을 사용합니다. Flip Flop과 Light speed는 NOO를 지원하지 않으며 내부 CD210과 운전자 감시 모델은 별도로 유지됩니다. Mapbox 검색·경로·타일은 네트워크와 사용 가능한 계정/키가 필요하며, 저장 가능한 검색 결과를 요청하므로 Permanent Geocoding 권한이 필요합니다. [설계·검증 범위](../../nav_model_integration_20261012.md)를 참고하세요.
+지도는 onroad에서 위치와 안내가 유효할 때 생성됩니다. USB 화면은 `ClusterHudScreenMode=7`로 주행 화면 오른쪽에 같은 이미지를 표시합니다. N16 Nav는 eGPU와 Jetson 모두에서 내비 경로 입력을 사용합니다. Flip Flop, Light speed, Light speed 2는 NOO를 지원하지 않으며 내부 CD210과 운전자 감시 모델은 별도로 유지됩니다. Mapbox 검색·경로·타일은 네트워크와 사용 가능한 계정/키가 필요하며, 저장 가능한 검색 결과를 요청하므로 Permanent Geocoding 권한이 필요합니다. [설계·검증 범위](../../nav_model_integration_20261012.md)를 참고하세요.
 # 앞차 브레이크등 관찰 (시험)
 
 신호감지 설정의 **앞차 브레이크등 관찰**(`LeadBrakeLights`)은 기본 OFF입니다.

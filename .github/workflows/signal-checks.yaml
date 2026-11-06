@@ -9,6 +9,7 @@ on:
       - 'openpilot/selfdrive/controls/**'
       - 'openpilot/selfdrive/modeld/modeld.py'
       - 'openpilot/selfdrive/carrot/xiaoge_data.py'
+      - 'openpilot/selfdrive/carrot/assistant_speed.py'
       - 'openpilot/selfdrive/carrot/tests/test_xiaoge_data.py'
       - 'tools/signal_validation/**'
       - '.github/workflows/signal-checks.yaml'
@@ -37,6 +38,8 @@ jobs:
       - name: Tesla intent, card, feedback, native safety and existing Ioniq indicators
         run: |
           python tools/signal_validation/run.py \
+            openpilot/selfdrive/car/tests/test_camera_scc_steering_intent.py \
+            opendbc_repo/opendbc/car/hyundai/tests/test_carstate_buttons.py \
             opendbc_repo/opendbc/car/hyundai/tests/test_pedal_interceptor.py \
             opendbc_repo/opendbc/safety/tests/test_pedal_interceptor.py \
             opendbc_repo/opendbc/car/hyundai/tests/test_alt2_adas_buttons.py \
@@ -52,6 +55,8 @@ jobs:
             openpilot/selfdrive/car/tests/test_tesla_signal_card.py \
             openpilot/selfdrive/controls/tests/test_tesla_auto_signal_intent.py \
             openpilot/selfdrive/controls/tests/test_desire_helper_stalk.py \
+            openpilot/selfdrive/controls/tests/test_assistant_lane.py \
+            openpilot/selfdrive/car/tests/test_assistant_speed.py \
             openpilot/selfdrive/controls/tests/test_lever_forced_turn.py \
             openpilot/selfdrive/carrot/tests/test_xiaoge_data.py \
             tools/signal_validation/test_trial_integration.py \

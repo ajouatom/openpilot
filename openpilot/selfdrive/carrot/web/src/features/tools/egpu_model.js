@@ -42,6 +42,13 @@ const FALLBACK_STRINGS = {
   failure_install: "The eGPU package could not be installed or verified. The saved diagnostic report contains the cause.",
   failure_rejected: "A previous failure blocked this model. Compiling again does not resolve a runtime failure. If it remains after a reboot, download the diagnostics and send them for support.",
   diagnostics: "Download diagnostics",
+  retry_verification: "Recheck blocked model after reboot",
+  retry_confirm: "Keep the diagnostic report and retry file checks and a startup inference test after the next full reboot? This does not start the GPU now.",
+  retry_pending: "Verification is scheduled. Reboot comma once while parked. No files or diagnostics have been deleted.",
+  retry_offroad: "Turn ignition off and wait for the offroad screen to schedule verification. Then reboot comma while parked.",
+  blocked_device: "GPU/USB timeout or hang: this model is blocked for this boot. A full reboot automatically retries file checks and startup inference. Repeated failures need device/power/USB diagnosis.",
+  blocked_verify: "This model is blocked after a failed check. You can schedule one new verification after reboot. File and output checks remain mandatory; another failure falls back to the internal model.",
+  blocked_missing: "This model is blocked, but its diagnostic identity is missing or inconsistent. Send the diagnostic report for support; automatic release is unavailable.",
   failure_runtime: "The eGPU could not start or continue running. The internal model is selected.",
   failure_pcie: "The eGPU connection could not start. The internal model is selected.",
   failure_timeout: "The eGPU took too long to respond. The internal model is selected.",
@@ -57,6 +64,26 @@ const FALLBACK_STRINGS = {
   restart: "Restart & compile",
   restart_confirm: "Park the car and turn ignition on. Restart now to compile the eGPU big model?",
   restart_requested: "Restart requested. Compilation will begin during boot.",
+  host_usb_error: "Comma USB setup blocked",
+  handoff_opt_in_missing: "USB ADB handoff permission is missing.",
+  handoff_opt_in_invalid: "USB ADB permission marker ownership, permissions or file type failed validation.",
+  handoff_controller: "The USB controller is unsupported.",
+  handoff_platform: "The required comma platform marker is missing.",
+  handoff_offroad: "Turn ignition off and wait for comma to enter offroad.",
+  handoff_usb_role: "Comma USB has not entered device role (ufp).",
+  handoff_gadget_identity: "The g1 USB identity differs from the expected ADB gadget.",
+  handoff_gadget_functions: "The g1 functions differ from the expected ADB and network configuration.",
+  handoff_gadget_tree: "USB gadget entry count or file type validation failed.",
+  handoff_controller_changed: "The g1 USB controller binding changed during validation.",
+  handoff_other_owner: "Another USB gadget has a bound controller.",
+  handoff_lock_invalid: "USB handoff lock ownership or file type is invalid.",
+  handoff_lock_busy: "Another USB handoff is in progress.",
+  handoff_udc_attribute: "The g1 controller attribute has an invalid file type.",
+  handoff_write_failed: "The USB controller unbind write was incomplete.",
+  handoff_still_bound: "The g1 gadget remains bound after the unbind request.",
+  handoff_io_error: "USB handoff file access failed. See the stage and error number below.",
+  handoff_not_root: "The USB handoff helper requires root privileges.",
+  handoff_helper_failed: "The USB handoff helper exited without a reason.",
   host_ok: "Connected",
   host_warning: "High temperature",
   host_error: "Host error / connection lost",
@@ -70,6 +97,17 @@ const FALLBACK_STRINGS = {
 
 function t(key) {
   return typeof getUIText === "function" ? getUIText(`egpu_model_${key}`, FALLBACK_STRINGS[key] || key) : (FALLBACK_STRINGS[key] || key);
+}
+
+function hostReason(reason) {
+  const code = String(reason || "").match(/\[adb-handoff:([a-z_]+)\]/)?.[1];
+  const key = `handoff_${code}`;
+  if (code && FALLBACK_STRINGS[key]) return `${t(key)} · ${reason}`;
+  return ({
+    "Host not connected": t("host_not_connected"),
+    "Host connection unavailable": t("host_unavailable"),
+    "Host health unavailable": t("host_health_unavailable"),
+  })[reason] || reason;
 }
 
 function formatBytes(value) {
@@ -89,6 +127,7 @@ function modelDisplayName(status) {
   if (explicitName) return explicitName;
 
   const modelId = String(status?.model_id || "").toLowerCase();
+  if (modelId.includes("light-speed-2")) return "Light speed 2";
   if (modelId.includes("light-speed")) return "Light speed";
   if (modelId.includes("flip-flop")) return "Flip Flop";
   if (modelId.includes("md-v3")) return "MD v3";
@@ -132,6 +171,19 @@ function render(status = lastStatus) {
   const amountEl = document.getElementById("egpuModelAmount");
   const action = document.getElementById("btnEgpuCompileRestart");
   const diagnostics = document.getElementById("egpuModelDiagnostics");
+  let retryButton = document.getElementById("btnEgpuRetryVerification");
+  if (!retryButton) {
+    retryButton = document.createElement("button");
+    retryButton.id = "btnEgpuRetryVerification";
+    retryButton.className = action.className;
+    retryButton.type = "button";
+    retryButton.addEventListener("click", requestVerification);
+    action.after(retryButton);
+  }
+  const blocked = !!status.rejection?.blocked && !status.active;
+  retryButton.hidden = !status.available || !blocked;
+  retryButton.textContent = t("retry_verification");
+  retryButton.disabled = !status.rejection?.can_request || !!status.rejection?.retry_pending;
   if (diagnostics) {
     diagnostics.hidden = !status.available || state !== "error" || !!status.active;
     diagnostics.textContent = t("diagnostics");
@@ -146,15 +198,12 @@ function render(status = lastStatus) {
   }
   const host = status.jetlink;
   hostEl.hidden = !host;
+  const usbBlocked = String(host?.reason || "").includes("[adb-handoff:");
   if (host) {
     const severity = ["ok", "warning", "error", "unknown"].includes(host.severity) ? host.severity : "unknown";
-    hostEl.textContent = `${host.label} · ${t(`host_${severity}`)} · ${t("host_ip")}: ${(host.addresses || []).join(", ") || t("host_no_ip")}`
+    hostEl.textContent = `${host.label} · ${usbBlocked ? t("host_usb_error") : t(`host_${severity}`)} · ${t("host_ip")}: ${(host.addresses || []).join(", ") || t("host_no_ip")}`
       + (Number.isFinite(host.temp_c) ? ` · ${host.temp_c.toFixed(1)} °C` : "")
-        + (host.reason ? ` · ${({
-          "Host not connected": t("host_not_connected"),
-          "Host connection unavailable": t("host_unavailable"),
-          "Host health unavailable": t("host_health_unavailable"),
-        })[host.reason] || host.reason}` : "");
+        + (host.reason ? ` · ${hostReason(host.reason)}` : "");
     hostEl.style.color = severity === "error" ? "#ff7474" : severity === "warning" ? "#ffd166" : "";
   }
   if (!status.available) {
@@ -162,7 +211,7 @@ function render(status = lastStatus) {
     card.dataset.state = host.severity === "error" ? "error" : "compiled";
     card.classList.remove("is-running");
     document.getElementById("egpuModelTitle").textContent = `${host.label} · ${status.library?.models?.find(m => m.id === status.library.effective)?.name || "Jetson"}`;
-    stateEl.textContent = t(`host_${host.severity || "unknown"}`);
+    stateEl.textContent = usbBlocked ? t("host_usb_error") : t(`host_${host.severity || "unknown"}`);
     detailEl.textContent = "";
     progressEl.hidden = true;
     amountEl.textContent = "";
@@ -185,6 +234,14 @@ function render(status = lastStatus) {
     : t(active ? "active_detail" : `${state}_detail`);
   recoveryEl.hidden = !runtimeFailure;
   recoveryEl.textContent = runtimeFailure ? t("recovery_restart") : "";
+  if (blocked) {
+    const rejection = status.rejection;
+    detailEl.textContent = t(rejection.reason === "device_restart_required" ? "blocked_device"
+      : rejection.reason === "diagnostics_missing" ? "blocked_missing" : "blocked_verify");
+    if (rejection.error) detailEl.textContent += ` · ${rejection.phase || ""}: ${rejection.error}`;
+    recoveryEl.hidden = rejection.reason === "diagnostics_missing";
+    recoveryEl.textContent = t(rejection.retry_pending ? "retry_pending" : "retry_offroad");
+  }
 
   const showProgress = state === "downloading" && Number.isFinite(percent);
   progressEl.hidden = !showProgress;
@@ -231,6 +288,20 @@ async function requestCompileRestart() {
     if (typeof showError === "function") showError("eGPU model", error);
     await refresh();
   }
+}
+
+async function requestVerification() {
+  const sha256 = lastStatus?.sha256;
+  if (!await appConfirm(t("retry_confirm"), { title: t("retry_verification") })) return;
+  const button = document.getElementById("btnEgpuRetryVerification");
+  if (button) button.disabled = true;
+  try {
+    await postJson("/api/egpu/model/retry-verification", { sha256 });
+    if (typeof showAppToast === "function") showAppToast(t("retry_pending"));
+  } catch (error) {
+    if (typeof showAppToast === "function") showAppToast(`${t("error")}: ${error?.message || error}`, { tone: "error" });
+  }
+  await refresh();
 }
 
 function init() {

@@ -362,9 +362,11 @@ class CarState(CarStateBase):
       self.manual_main_off_latched = not self.main_enabled
       print(f"main_enabled = {self.main_enabled}")
 
-    # Camera SCC reports the MAIN change after the physical button release.
-    # Do not let that stale state immediately undo an explicit manual MAIN off.
-    if self.CP.openpilotLongitudinalControl and self.MainMode_ACC and not self.manual_main_off_latched:
+    # CameraSCC MAIN can be requested automatically for cluster objects. Driver
+    # intent comes from AutoEngage initialization and the physical buttons above.
+    # Importing that OEM state would raise cruiseState.available and arm steering.
+    if (self.CP.openpilotLongitudinalControl and not self.CP.flags & HyundaiFlags.CAMERA_SCC
+        and self.MainMode_ACC and not self.manual_main_off_latched):
       self.main_enabled = True
 
   def _update_camera_scc_hint(self, cp_cam, canfd):

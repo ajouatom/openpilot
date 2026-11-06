@@ -156,3 +156,53 @@ def test_compiled_transfers_replay_mutable_inputs_and_current_outputs(monkeypatc
   # Non-finite results must reach the existing validator, never a cached good result.
   source._buffer().copy_from(Tensor(np.full_like(original, np.nan), device='NPY')._buffer())
   assert np.isnan(runtime.copy_outputs().numpy()).all()
+
+
+@pytest.mark.skipif(os.getenv('MDM_COMPILED_COPIES') != '1', reason='USB wrap rule belongs to d39227')
+def test_usb_ring_wrap_cast_zero_uses_usb_fill(monkeypatch):
+  monkeypatch.syspath_prepend(os.environ['MDM_RUNTIME_ROOT'])
+  from tinygrad.device import Compiled
+  from tinygrad.dtype import dtypes
+  from tinygrad.uop.ops import UOp, Ops
+  from tinygrad.runtime.support import usb
+  from openpilot.selfdrive.modeld.egpu_usb_wrap import configure_usb_wrap
+  from openpilot.selfdrive.modeld.egpu_usb_wait import LIGHT_SPEED_RUNTIME_SHA
+
+  original = Compiled.pm_lower
+  monkeypatch.setattr(Compiled, 'pm_lower', original)
+  monkeypatch.setattr(usb, '_carrot_sdma_wrap_fixed', False, raising=False)
+  destination = UOp.alloc((16,), dtypes.uint8, device='AMD', name='ring').index(0)
+  zeros = UOp.alloc((16,), dtypes.uint8, device='CPU', name='zeros')
+  sentinel = UOp(Ops.NOOP)
+  calls = []
+  def usb_fill(dst, src, n, fill=False):
+    calls.append((dst, src, n, fill))
+    return sentinel
+  monkeypatch.setattr(usb, 'usb_memcpy', usb_fill)
+  monkeypatch.setattr(usb, 'usb_zeros', lambda device: zeros)
+  zero = UOp.const(0)
+  cast_zero = zero.cast(dtypes.uint64)
+  length = UOp.const(4, dtypes.uint64)  # last dword before wrap
+  def memset(value):
+    return UOp.custom_function('memset', dtype=dtypes.uint64).call(destination, value, length)
+  # The exact pinned matcher misses a cast zero; no device access is needed
+  # to reproduce this compiler-rule bug. Native USB ring execution is separate.
+  if os.getenv('MDM_USB_WRAP_UPSTREAM') == '1':
+    from openpilot.selfdrive.modeld.egpu_usb_wait import LIGHT_SPEED_2_RUNTIME_SHA
+    assert not configure_usb_wrap({'runtime': {'sha256': LIGHT_SPEED_2_RUNTIME_SHA}})
+    assert Compiled.pm_lower is original
+    for value in (zero, cast_zero):
+      assert original.rewrite(memset(value)) is sentinel
+      assert calls[-1] == (destination, zeros.index(0), length, True)
+    return
+  assert original.rewrite(memset(cast_zero)) is None
+  assert configure_usb_wrap({'runtime': {'sha256': LIGHT_SPEED_RUNTIME_SHA}})
+  fixed = Compiled.pm_lower
+  assert configure_usb_wrap({'runtime': {'sha256': LIGHT_SPEED_RUNTIME_SHA}})
+  assert Compiled.pm_lower is fixed
+  for value in (zero, cast_zero):
+    assert fixed.rewrite(memset(value)) is sentinel
+    assert calls[-1] == (destination, zeros.index(0), length, True)
+  calls.clear()
+  assert fixed.rewrite(memset(UOp.const(7, dtypes.int))) is None
+  assert not calls

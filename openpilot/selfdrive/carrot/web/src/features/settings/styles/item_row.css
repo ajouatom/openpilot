@@ -34,6 +34,11 @@
   word-break: break-word;
 }
 
+/* A little more room between lines, without adding blank paragraphs. */
+.page--setting :is(#settingScreenItems, #settingInlineSearchResults) .descr {
+  line-height: 1.7;
+}
+
 /* Safety net: never let a single item bleed past its box and drag the control
    column with it (matches the known-good split layout). The title/name marquees
    keep their own inner overflow-x scroller, so this does not clip them. */

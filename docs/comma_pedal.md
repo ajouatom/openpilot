@@ -6,9 +6,9 @@ The source reference is StarPilot `98f8443122909a86c5a5fd628337c4077cd1f957`; th
 
 ## Protocol and vehicle configuration
 
-`opendbc_repo/opendbc/car/pedal_interceptor.py` handles the wire codec, state and command cadence. The separate `pedal_interceptor.dbc` retains the installed device's complete original `hyundai_kia_ray_pedal.dbc` definitions, including factors/offsets `(0.672, -177.408)` and `(0.332, -165.004)` and physical ranges 0–255. TX is 0x200/DLC6 and RX is 0x201/DLC6 on bus 0, with two 16-bit tracks, ENABLE/STATE, a 4-bit rolling counter and CRC8 (initial 0xFF, polynomial 0xD5, reversed payload order excluding the CRC byte). Reception is 50 Hz and command transmission is 25 Hz from the 100 Hz controller loop. Enabled commands pass `amount * 255` directly to the packer; disabled commands omit both tracks to retain raw-zero/disable heartbeat. Physical driver thresholds still use the raw received bytes.
+`opendbc_repo/opendbc/car/pedal_interceptor.py` handles the wire codec, state and command cadence. The separate `pedal_interceptor.dbc` uses Ray command factors/offsets `(0.336, -88.704)` and `(0.166, -82.502)` after PR 570. Sensor factors/offsets are `(0.672, -177.408)` and `(0.332, -165.004)` with physical ranges 0–255. TX is 0x200/DLC6 and RX is 0x201/DLC6 on bus 0, with two 16-bit tracks, ENABLE/STATE, a 4-bit rolling counter and CRC8 (initial 0xFF, polynomial 0xD5, reversed payload order excluding the CRC byte). Reception is 50 Hz and command transmission is 25 Hz from the 100 Hz controller loop. Enabled commands pass `amount * 255` directly to the packer; disabled commands omit both tracks to retain raw-zero/disable heartbeat. Physical driver thresholds still use the raw received bytes.
 
-The supplied Ray calibration is in `car/hyundai/pedal_interceptor.py`. Its target function, command conversion, command cap and rate values are retained from the reference. Physical input thresholds and Panda track limits belong to that explicit vehicle profile. They are not protocol-wide defaults. The existing Carrot longitudinal PID, state transitions, lateral controller, LFA display and driver-monitoring indications remain in place.
+The supplied Ray calibration is in `car/hyundai/pedal_interceptor.py`. Its target caps are `[0.55, 0.55, 0.65, 0.70]` and normalized rate limits are `0.02` up and `0.06` down. PR 570 doubles the unrounded command increment above raw neutral 264/497 through the DBC conversion. Consequently, raw increments per update also increase. At target 0.70, the rounded maximum is 795/1572 and the Ray Panda profile enforces those limits. Physical input thresholds and Panda track limits belong to that explicit vehicle profile. They are not protocol-wide defaults. The existing Carrot longitudinal PID, state transitions, lateral controller, LFA display and driver-monitoring indications remain in place.
 
 The Hyundai adapter requires `CC_ONLY_CAR`, an explicit configuration, the opt-in parameter, a classic non-legacy/non-camera-SCC path, a 6-byte pedal sensor fingerprint on bus 0, and no observed SCC11/SCC12 on buses 0 or 2. The independent device parser is created only on that path. LFA and LDA markers are not common protocol prerequisites. LABEL11.CC_React is OEM Cruise ready; raw bit 35 is OEM CC engaged. Pedal control is allowed only when both are off and the cruise-state message is present and fresh. OEM Cruise ready/engaged blocks positive pedal commands in both the controller and Panda; OEM cruise is not automatically canceled. Carrot's separate main-switch/controls-initialization admission remains in effect.
 
@@ -67,3 +67,19 @@ The contributor reports limited acceleration on their test vehicle. This review
 preserves the submitted Ray calibration and does not resolve or validate that
 vehicle symptom. No vehicle writes, settings activation, pedal transmission or
 hardware installation were performed during this integration review.
+
+
+## PR 570 review on 2026-11-05
+
+Reviewed head `5f6712c422e63e27e1d7c2c633b9d3263e53295b` against Wip
+`90bd49d284`. The final diff changes command scaling, the explicit Ray output
+bounds and regression tests. Eligibility, sensor conversion and driver thresholds
+retain their existing definitions. The contributor reports successful operation
+on a 2024 Ray EV after this change. Local review does not measure vehicle
+acceleration or establish compatibility with other pedal firmware calibrations.
+
+The Windows pedal, Hyundai button, CameraSCC driver-intent and ALT2 regressions
+pass 221 cases. Native Panda checks run through Signal CI, including expanded
+limits, over-limit rejection, track correlation, OEM cruise priority, sensor faults,
+brake and driver override, and profile switching. Vehicle installation and
+physical pedal operation are outside this code integration.

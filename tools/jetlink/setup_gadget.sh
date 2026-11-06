@@ -94,9 +94,11 @@ for other in "$CONFIGFS"/usb_gadget/*/UDC; do
     owner=$(basename "$(dirname "$other")")
     bound=$(cat "$other" 2>/dev/null || true)
     if [[ "$owner" != "jetlink" && -n "$bound" ]]; then
-      if [[ "$owner" == "g1" && -f /data/jetlink-adb-handoff && ! -L /data/jetlink-adb-handoff ]] &&
-         python3 -I -S -B "$(dirname -- "${BASH_SOURCE[0]}")/adb_handoff.py" --udc "$bound"; then
-        continue
+      if [[ "$owner" == "g1" ]]; then
+        if handoff_error=$(python3 -I -S -B "$(dirname -- "${BASH_SOURCE[0]}")/adb_handoff.py" --udc "$bound" 2>&1); then
+          continue
+        fi
+        fail "${handoff_error:-[adb-handoff:helper_failed] ADB handoff helper failed without a reason}"
       fi
       fail "USB gadget '$owner' already holds the device controller ($bound); tear it down first"
     fi

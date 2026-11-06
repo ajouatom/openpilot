@@ -74,3 +74,31 @@ Maintainer integration: the opt-in marker must additionally belong to the
 privileged caller (root for the CLI), and must not be group/world writable.
 No marker is installed or enabled by ordinary Git Pull/reboot. See
 [PR review](jetlink_pr560_562_review_20261023.md) for final integration scope.
+
+## 인계 거절 원인 표시 — 2026-11-05
+
+캐럿웹은 인계 실패를 `콤마 USB 인계 차단`으로 표시하고 원인 설명과
+`[adb-handoff:원인코드]`를 함께 보여 준다. 같은 코드와 관측값은
+`setup_gadget.sh`의 오류 상태 파일과 jetlinkd 예외 로그에도 남는다.
+매 시도에서 처음 실패한 검사 조건을 보고하며, 쓰기 직전 재검사에서
+거절되면 `(pre-write recheck)`가 붙는다.
+
+| 원인 코드 | 확인한 조건 |
+|---|---|
+| `opt_in_missing` | `/data/jetlink-adb-handoff` 허용 표식 없음 |
+| `opt_in_invalid` | 표식의 소유자, 권한, 링크 수 또는 파일 형식 부적합 |
+| `offroad` | `IsOffroad=1`, `IsOnroad=0` 조건 불충족, 실제 값 포함 |
+| `usb_role` | `current_dr`이 `ufp`와 다름, 실제 값 포함 |
+| `controller`, `platform` | 지원 컨트롤러 또는 `/TICI` 조건 불충족 |
+| `gadget_identity`, `gadget_functions`, `gadget_tree` | 기본 ADB 식별 정보, 기능 구성 또는 gadget 항목 검사 실패 |
+| `controller_changed`, `other_owner` | 컨트롤러 점유 변경 또는 다른 gadget 점유 |
+| `lock_invalid`, `lock_busy` | 잠금 파일 검사 실패 또는 다른 인계 실행 중 |
+| `udc_attribute`, `write_failed`, `still_bound` | 컨트롤러 속성 검사, 해제 쓰기 또는 해제 확인 실패 |
+| `io_error` | 파일 접근 실패, 검사 단계·예외 종류·errno 포함 |
+| `not_root`, `helper_failed` | 실행 권한 부족 또는 도우미의 원인 없는 종료 |
+
+예를 들어 `offroad`와 `IsOffroad='0', IsOnroad='1'`이 함께 기록되면
+그 시도의 오프로드 조건이 충족되지 않았음을 알 수 있다. 이 진단을 받은 뒤
+조건을 바꾸면 다음 시도에서 다시 검사하므로 다른 거절 원인이 드러날 수 있다.
+이전 버전의 `already holds the device controller` 기록만으로는
+누락된 허용 표식과 개별 검사 실패를 구분할 수 없다.

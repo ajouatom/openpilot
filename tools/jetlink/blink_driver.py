@@ -1,4 +1,4 @@
-"""Load the optional, pinned PEAK driver at startup, never in an inference session."""
+"""Prepare optional USB CAN access at startup, never in an inference session."""
 import hashlib
 import json
 from pathlib import Path
@@ -8,6 +8,21 @@ import sys
 import tempfile
 
 ROOT = Path(__file__).parent
+CANABLE_RULE = ''.join('SUBSYSTEM=="tty", ATTRS{idVendor}=="'+vid+'", ATTRS{idProduct}=="'+pid+'", GROUP="plugdev", MODE="0660"\n'
+                       for vid, pid in (('16d0', '117e'), ('ad50', '60c4')))
+
+
+def prepare_canable():
+  # Protected Jetson images rebuild /etc on boot. Reinstall this narrow rule
+  # before discovery so both cold-plug and later hot-plug use the service group.
+  rule = Path('/etc/udev/rules.d/71-carrot-canable.rules')
+  if not rule.exists() or rule.read_text() != CANABLE_RULE:
+    with tempfile.TemporaryDirectory(prefix='carrot-canable-') as work:
+      source = Path(work)/rule.name
+      source.write_text(CANABLE_RULE)
+      subprocess.run(['sudo', '-n', 'install', '-m', '0644', str(source), str(rule)], check=True, timeout=5)
+    subprocess.run(['sudo', '-n', 'udevadm', 'control', '--reload-rules'], check=True, timeout=5)
+    subprocess.run(['sudo', '-n', 'udevadm', 'trigger', '--subsystem-match=tty'], check=True, timeout=5)
 
 
 def prepare():
@@ -17,6 +32,7 @@ def prepare():
   config = json.loads(profile.read_text())
   if config.get('enabled') is not True or config.get('driver_kernel') != platform.release():
     return False
+  prepare_canable()
   if Path('/sys/module/peak_usb').is_dir():
     return True
   headers = Path('/lib/modules')/platform.release()/'build'
@@ -48,7 +64,7 @@ def prepare_optional():
   try:
     return prepare()
   except (OSError, ValueError, RuntimeError, subprocess.SubprocessError) as exc:
-    print('Optional PEAK indicator unavailable: '+str(exc), file=sys.stderr, flush=True)
+    print('Optional USB CAN preparation failed: '+str(exc), file=sys.stderr, flush=True)
     return False
 
 

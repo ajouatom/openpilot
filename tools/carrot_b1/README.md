@@ -1,5 +1,8 @@
 # Carrot B1 BLE indicator controller
 
+[처음 만드는 분 · USB 펌웨어 설치, 사진 배선도, LED 색상표](START.ko.md)
+
+
 ESP32-S3 N16R8, Arduino-ESP32 3.3.5, one 500 kbit/s classic CAN bus.
 Build and upload from the repository root with Arduino CLI:
 
@@ -8,13 +11,13 @@ Build and upload from the repository root with Arduino CLI:
 
 ## Wiring
 
-S3 GPIO4 is TWAI TX, GPIO5 is TWAI RX. Power a TJA1050 from a regulated 5 V
-supply and connect logic ground. Use an SN74LVC1G17 at 3.3 V between module
-RX and GPIO5. Use an SN74LVC1G07 at 3.3 V between GPIO4 and module TX, with
-10 kΩ from GPIO4 to 3.3 V and 2.2 kΩ from its open-drain output to 5 V.
-Decouple each buffer with 100 nF. Connect H and L to the matching bus wires.
-Only terminate a bus at its two ends. GPIO38 and GPIO48 are both reserved for
-the two common onboard RGB LED variants.
+Use a 3.3 V SN65HVD230 CAN module. Connect S3 3V3 to module 3.3V,
+G to GND, GPIO4 to TX and GPIO5 to RX directly. Connect CANH and CANL
+to the corresponding vehicle bus wires. Disable module termination when
+tapping an already terminated bus. GPIO38 and GPIO48 are reserved for
+the onboard RGB LED variants.
+
+[한국어 조립 안내 및 배선도](WIRING.ko.md)
 
 ## Enroll a board
 

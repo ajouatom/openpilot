@@ -238,7 +238,7 @@ def serve_local(listener, client, peer, wifi=None):
   blinker = None
   try:
     blinker = BlinkerSender(client, peer)
-    _serve_local(listener, client, peer, publisher, phase, wifi, blinker if blinker.worker is not None else None)
+    _serve_local(listener, client, peer, publisher, phase, wifi, blinker if blinker.enabled else None)
   finally:
     if blinker is not None:
       blinker.close()
@@ -278,20 +278,20 @@ def _serve_local(listener, client, peer, publisher, phase, wifi=None, blinker=No
       connection, _ = listener.accept()
     except TimeoutError:
       library.idle(client, params)
+      if time.monotonic() - last_ping > (.2 if blinker is not None else 2):
+        client.last_state = client.state()
+        check_loaded(client, client.last_state)
+        telemetry_updated = time.monotonic()
+        last_ping = time.monotonic()
       if blinker is not None:
         blinker.send(client)
       if wifi is not None:
         wifi.send(client)
       if usb_display:
         publish_hud(client, publisher)
-      if time.monotonic() - last_ping > 2:
-        client.last_state = client.state()
-        check_loaded(client, client.last_state)
-        telemetry_updated = time.monotonic()
-        last_ping = time.monotonic()
       continue
     with connection:
-      connection.settimeout(.5)
+      connection.settimeout(.1 if blinker is not None else .5)
       from jetlink import deferred_map
       reader = PacketReader(REQUEST.size + spec.warped_nbytes + spec.packed_nbytes + deferred_map.META.size)
       from openpilot.selfdrive.modeld.jetlink import shared_input
@@ -375,7 +375,10 @@ def _serve_local(listener, client, peer, publisher, phase, wifi=None, blinker=No
             raise ValueError('invalid local model context')
           started = time.monotonic()
           map_options = {'nav_metadata': nav_meta} if nav_meta is not None else {}
-          seq = client.infer_begin(images, packed, frame, reset=bool(reset & 1), want_state=(frame % 20 == 0), **map_options)
+          # Output ownership needs fresh receiver health within 500 ms. The
+          # usual 1 Hz display telemetry would repeatedly expire that lease.
+          seq = client.infer_begin(images, packed, frame, reset=bool(reset & 1),
+                                   want_state=(blinker is not None or frame % 20 == 0), **map_options)
           sent = time.monotonic()
           if peer.get('carrot_host') == 'jetson':
             phase.sent(source_sof)
@@ -663,7 +666,8 @@ def main():
         log.exception('Jetlink cable setup failed')
         if TRANSPORT_MODE == 'auto' and not mobile_unavailable:
           mobile_unavailable = True
-          publish('retrying', peer=None, error=f'iOS/NCM unavailable; retrying bulk USB after verified cleanup: {exc}'[:300])
+          error = str(exc) if '[adb-handoff:' in str(exc) else f'iOS/NCM unavailable; retrying bulk USB after verified cleanup: {exc}'
+          publish('retrying', peer=None, error=error[:300])
         else:
           publish('retrying', peer=None, error=str(exc)[:300])
       except Exception as exc:

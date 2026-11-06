@@ -1,6 +1,7 @@
 "use strict";
 
 import { handleWebAutoUpdateStatus, openWebSettingsDialog } from "./web_settings/controller.js";
+import { openAssistantDialog } from "./assistant.js";
 import {
   bindToolsDeviceInfoCopy,
   buildToolsDeviceInfoDialog,
@@ -1131,6 +1132,7 @@ function initToolsPage() {
   bindOnce("btnToolsWebSettings", () => {
     if (typeof openWebSettingsDialog === "function") openWebSettingsDialog();
   });
+  bindOnce("btnToolsAssistant", openAssistantDialog);
 
   bindOnce("btnDeviceInfo", async () => {
     let values = toolsMetaLastValues || {};

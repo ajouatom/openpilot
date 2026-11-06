@@ -171,8 +171,21 @@ def gpu_usb_link_failure(detail: str, manifest: dict) -> bool:
           re.search(r'^(?:RuntimeError: )?AMD(?::[0-9]+)? failed with -?1\Z', detail.rstrip(), re.MULTILINE) is not None)
 
 
+def gpu_restart_failure(detail: str, manifest: dict) -> bool:
+  """A latched USB timeout/hang needs a new boot, not a different model.
+
+  In these hash-pinned runtimes -7 is LIBUSB_ERROR_TIMEOUT in the link error
+  word. Device hang is the terminal exception from AMD's hang handler. Neither
+  proves damaged weights; neither enables the live background recovery loop.
+  """
+  runtime = manifest.get('runtime')
+  return (isinstance(runtime, dict) and runtime.get('sha256') in VERIFIED_USB_RUNTIMES and
+          re.search(r'^(?:RuntimeError: )?(?:AMD(?::[0-9]+)? failed with -7|Device hang detected)\Z',
+                    detail.rstrip(), re.MULTILINE) is not None)
+
+
 def retry_usb_rejection(root: Path, pickle_sha256: str) -> bool:
-  """Migrate old USB-I/O/PSP/TLB misclassification after a device reboot.
+  """Migrate old USB/PSP/TLB/hang misclassification after a device reboot.
 
   This grants another verified load attempt, never a validation receipt.
   Missing/mismatched diagnostics and actual model errors remain rejected.
@@ -194,7 +207,9 @@ def retry_usb_rejection(root: Path, pickle_sha256: str) -> bool:
     manifest = json.loads((root / 'installed.json').read_text())
     return (isinstance(manifest, dict) and isinstance(manifest.get('pickle'), dict) and
             manifest['pickle'].get('sha256') == pickle_sha256 and
-            gpu_usb_link_failure(failure['error'], manifest))
+            (gpu_usb_link_failure(failure['error'], manifest) or gpu_restart_failure(failure['error'], manifest) or
+             re.search(r'^(?:RuntimeError: )?PCIe link not up \(LTSSM=0x[0-9a-fA-F]+\)\Z',
+                       failure['error'].rstrip(), re.MULTILINE) is not None))
   except (OSError, ValueError, TypeError):
     return False
 
@@ -237,9 +252,11 @@ def ensure_precompiled(model=None, cache_dir: Path | None = None, progress=None)
     raise ValueError('precompiled catalog too large')
   value = validate_catalog(json.loads(data), model.sha256, catalog_url)
   # Runtime numerical errors block this boot, not every future ignition cycle.
-  # Artifact integrity/contract errors still require a different valid artifact.
+  # Other failures require an explicit request; verification is never bypassed.
   if (root / 'rejected').exists() and (root / 'rejected').read_text() == value['pickle']['sha256']:
-    if not (retry_usb_rejection(root, value['pickle']['sha256']) or retry_output_rejection(root, value['pickle']['sha256'])):
+    from openpilot.selfdrive.modeld.egpu_rejection import consume_retry_request
+    requested = consume_retry_request(root, value)
+    if not (requested or retry_usb_rejection(root, value['pickle']['sha256']) or retry_output_rejection(root, value['pickle']['sha256'])):
       from openpilot.selfdrive.modeld.egpu_worker_progress import saved_failure
       failure = saved_failure(cache_dir or model_cache_dir(), model.sha256)
       log_event('artifact_blocked', model=model.sha256, retry=False,
@@ -248,7 +265,7 @@ def ensure_precompiled(model=None, cache_dir: Path | None = None, progress=None)
                 diagnostic=str(root / 'last_failure.json'))
       return None
     (root / 'boot_validation.json').unlink(missing_ok=True)
-    log_event('artifact_retry', model=model.sha256, reason='recoverable previous-boot failure',
+    log_event('artifact_retry', model=model.sha256, reason='user requested verification' if requested else 'recoverable previous-boot failure',
               next='verify files and require a new startup smoke test')
   root.mkdir(parents=True, exist_ok=True)
   target = root / 'model.pkl'
@@ -302,7 +319,8 @@ def record_failure(path: Path, error: BaseException | str, phase: str) -> bool:
                gpu_bootloader_timeout(detail, phase) or gpu_mapping_timeout(detail, phase) or
                'precompiled eGPU worker timed out' in detail or 'precompiled eGPU worker exited' in detail)
   from openpilot.selfdrive.modeld.egpu_worker_progress import boot_identity
-  failure = {'time': time.time(), 'phase': phase, 'rejected': not transient,  # noqa: TID251 - correlate persisted failures with boot logs
+  classification = 'transient_device' if transient else 'device_restart_required' if gpu_restart_failure(detail, value) else 'artifact_blocked'
+  failure = {'time': time.time(), 'phase': phase, 'rejected': not transient, 'classification': classification,  # noqa: TID251
              'pickle_sha256': value['pickle']['sha256'], 'error': detail[-16384:], 'boot_id': boot_identity()}
   if isinstance(worker := getattr(error, 'worker_diagnostics', None), dict):
     failure['worker'] = worker
@@ -315,6 +333,6 @@ def record_failure(path: Path, error: BaseException | str, phase: str) -> bool:
   log_event('failure', model=value['pickle']['sha256'],
             runtime=value['runtime'].get('sha256') if isinstance(value.get('runtime'), dict) else None,
             boot_id=failure['boot_id'], phase=phase, error=error_summary(error),
-            classification='transient_device' if transient else 'artifact_blocked',
+            classification=classification,
             diagnostic=str(target))
   return not transient

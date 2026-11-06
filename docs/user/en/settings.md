@@ -2,6 +2,10 @@
 
 [한국어](../ko/settings.md)
 
+Android [CarrotAssist](carrot-assist.md) uses ChatGPT to find, explain and open settings. Separate device and ChatGPT authorization enables live value reads and confirmed changes. Supported driving settings can also be changed while driving after confirmation. Only initial authorization requires stationary/disengaged state; each setting keeps its existing activation timing.
+
+Experimental lane-change and cruise set-speed requests within the same voice conversation need separate **Allow voice lane-change and set-speed commands** permission on both sides. Setting access never expands automatically. Saved-setting confirmation remains distinct from driving execution and result feedback. See the [continuous voice guide and supported conditions](carrot-assist.md).
+
 > [!NOTE]
 > This is the canonical English user guide maintained with the `carrot-wip` code. When user-visible behavior changes, update this document together with the related code and tests.
 
@@ -280,7 +284,7 @@ See [Radar tracks and corner radar](radar.md) before changing radar modes.
 
 **Cluster CAN Direct Send** (`HyundaiCanfdClusterDirectTx`) compares the original direct-send method on Hyundai/Kia/Genesis CAN-FD CameraSCC vehicles with intermittent cluster warnings. It defaults to OFF for every vehicle; enable it manually on an affected vehicle. Reboot the device after changing it. Updated Panda firmware supporting this setting is required. Resolution of vehicle warnings has not been validated.
 
-With CAN-FD CameraSCC, openpilot longitudinal control and corner radar enabled, valid CAN, Drive, released brakes and speed above 10.8 km/h allow periodic requests to switch on stock SCC MAIN. This applies independently of AutoEngage and Carrot cruise engagement, and these requests stop once MAIN is on. SET and standstill-resume requests retain the existing Carrot cruise engagement requirement.
+With CAN-FD CameraSCC, openpilot longitudinal control and corner radar enabled, valid CAN, Drive, released brakes and speed above 10.8 km/h allow periodic requests to switch on stock SCC MAIN. This applies independently of AutoEngage and Carrot cruise engagement, and these requests stop once MAIN is on. SET and standstill-resume requests retain the existing Carrot cruise engagement requirement. With CAN-FD CameraSCC and openpilot longitudinal control, the OEM SCC MAIN state used for cluster display is tracked separately from Carrot engagement intent. Steering activation follows AutoEngage initialization and the existing driver-button settings.
 
 With `HyundaiCameraSCC=0` and no camera-SCC configuration already applied to the vehicle, receiving `SCC_CONTROL` (CAN-FD) or `SCC12` (classic CAN) on the camera bus during the current onroad session adds **Enable CameraSCC** to the CAN error alert. This is bus2, or the corresponding camera bus with multiple Pandas. The hint uses reception history and does not establish the cause of every CAN error. It never changes the setting automatically; existing disengagement and engagement blocking remain active. Select the mode appropriate for the vehicle and wiring while stopped, then verify it in the next onroad session.
 
@@ -433,7 +437,7 @@ See the Wiki [Tuning introduction](https://github.com/ajouatom/openpilot/wiki/Gu
 
 Open **Tools ? Nav Map / ?? ??** in Carrot Web to view the map, search/select a destination, or clear it. Register a Public key under **Settings ? Network ? Mapbox** first; this feature does not need a Secret key. Destinations survive restart. A connected external navigator owns both TBT and route; a missing external route is never replaced with saved Mapbox geometry.
 
-The map is generated onroad with usable position and guidance. USB screen mode `ClusterHudScreenMode=7` displays the same image beside the driving view, on the right. N16 Nav uses navigation inputs on both eGPU and Jetson. Flip Flop and Light speed do not support NOO; the internal CD210 and driver-monitoring model are independent. Mapbox search, directions and tiles require network access and a suitable account/key. Search requests use Permanent Geocoding so selected destinations can be saved. See [design and validation limits](../../nav_model_integration_20261012.md).
+The map is generated onroad with usable position and guidance. USB screen mode `ClusterHudScreenMode=7` displays the same image beside the driving view, on the right. N16 Nav uses navigation inputs on both eGPU and Jetson. Flip Flop, Light speed and Light speed 2 do not support NOO; the internal CD210 and driver-monitoring model are independent. Mapbox search, directions and tiles require network access and a suitable account/key. Search requests use Permanent Geocoding so selected destinations can be saved. See [design and validation limits](../../nav_model_integration_20261012.md).
 # Lead brake lamp observation (trial)
 
 **Lead Brake Lamp Observation** (`LeadBrakeLights`) in Traffic Light settings
