@@ -414,6 +414,7 @@ typedef struct {
   uint32_t stock_us;
 } HyundaiSpasPiggyback;
 static HyundaiSpasPiggyback hyundai_spas_pb[2];  // 0x165, 0x16A
+static bool hyundai_spas_direct = false;  // CanfdBlinkerKickMode 2/3: host frames go straight out (collision-prone)
 #define HYUNDAI_SPAS_PB_STOCK_US 100000U  // stock stream counts as present this long after its last frame
 #define HYUNDAI_SPAS_PB_HOLD_US 50000U    // a held frame older than this is dropped, not sent
 
@@ -815,7 +816,7 @@ static bool hyundai_canfd_tx_hook(const CANPacket_t *to_send_const) {
     }
   }
 
-  if (tx && ((addr == 0x165) || (addr == 0x16A)) && (GET_BUS(to_send) == 0)) {
+  if (tx && !hyundai_spas_direct && ((addr == 0x165) || (addr == 0x16A)) && (GET_BUS(to_send) == 0)) {
     HyundaiSpasPiggyback *pb = &hyundai_spas_pb[(addr == 0x165) ? 0 : 1];
     uint32_t now = microsecond_timer_get();
     if (get_ts_elapsed(now, pb->stock_us) < HYUNDAI_SPAS_PB_STOCK_US) {
@@ -968,6 +969,7 @@ static safety_config hyundai_canfd_init(uint16_t param) {
   for (int i = 0; i < 2; i++) {
     hyundai_spas_pb[i] = (HyundaiSpasPiggyback){0};
   }
+  hyundai_spas_direct = GET_FLAG(param, 1024U);
 
   hyundai_common_init(param);
   hyundai_spas_init(GET_FLAG(param, 4096), (hyundai_canfd_hda2 && !hyundai_camera_scc) ? 1 : 0);

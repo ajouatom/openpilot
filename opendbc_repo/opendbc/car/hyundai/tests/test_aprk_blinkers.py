@@ -41,8 +41,8 @@ class Ecu:
       self.stock = now
 
 
-def make_cc(control=True, test=0, spas=0, ecu=None):
-  return SimpleNamespace(blinker_control=control, blinker_test=test, aprk_state=0, aprk_frame=0, aprk_nanos=0, aprk_acked=False,
+def make_cc(control=True, test=0, spas=0, ecu=None, mode=1):
+  return SimpleNamespace(blinker_control=control, blinker_test=test, blinker_kick_mode=mode, aprk_state=0, aprk_frame=0, aprk_nanos=0, aprk_acked=False,
                          lane_crossing=Crossing(), blinker_side=0, blinker_pulse_end=0, frame=0, yellow_until=[0, 0],
                          CAN=SimpleNamespace(ECAN=0, ACAN=1), packer=CANPacker('hyundai_canfd_generated'),
                          spas_steer_test=spas, spas_angle=0., aprk_buses=(), ecu=ecu or Ecu())
@@ -108,6 +108,24 @@ def test_no_answer_still_blinks_behind_the_stock_frames():
   assert set(spas2(cc, sent)) == {3} and len(spas2(cc, sent)) == carcontroller.BLINKER_PULSE_FRAMES - 1  # none on the switch frame
   assert cc.aprk_state == carcontroller.APRK_ACTIVE and not cc.aprk_acked
   assert uds(step(cc, 1, D, 60)) == [(DEFAULT, 0), (DEFAULT, 1)] and cc.aprk_state == carcontroller.APRK_IDLE
+
+
+def test_kick_mode_picks_the_send_pattern_without_an_ack():
+  # 0: as before fcd251a2 - one try, then given back for this kick
+  cc = make_cc(ecu=Ecu(answers=False), mode=0)
+  sent = step(cc, carcontroller.BLINKER_PULSE_FRAMES, D, 60, cross=3)
+  assert spas2(cc, sent) == [] and uds(sent) == [(EXT, 0), (EXT, 1), (DEFAULT, 0), (DEFAULT, 1)]
+  assert cc.aprk_state == carcontroller.APRK_FAILED
+  # 2: direct at a quarter rate; 3: direct at full rate (panda decides piggyback vs direct from the safety flag)
+  for mode, frames in ((2, carcontroller.BLINKER_PULSE_FRAMES // 4), (3, carcontroller.BLINKER_PULSE_FRAMES - 1)):
+    cc = make_cc(ecu=Ecu(answers=False), mode=mode)
+    step(cc, carcontroller.APRK_REPLY_FRAMES, D, 60, cross=4)
+    n = len(spas2(cc, step(cc, carcontroller.BLINKER_PULSE_FRAMES, D, 60)))
+    assert abs(n - frames) <= 1 and cc.aprk_state == carcontroller.APRK_ACTIVE
+  # an ECU that answered and went quiet is never rate-limited
+  cc = make_cc(mode=2)
+  step(cc, 30, D, 60, cross=3)
+  assert len(spas2(cc, step(cc, 20, D, 60))) == 20
 
 
 def test_no_answer_never_steers():

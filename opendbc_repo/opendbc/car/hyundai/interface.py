@@ -154,6 +154,10 @@ class CarInterface(CarInterfaceBase):
       if params.get_bool("CanfdBlinkerControl") and compatible(fingerprint, CAN.ECAN) and not ret.flags & HyundaiFlags.ENABLE_BLINKERS:
         ret.flags |= HyundaiFlags.CANFD_SPAS_BLINKERS.value
         ret.safetyConfigs[-1].safetyParam |= HyundaiSafetyFlags.CANFD_SPAS_BLINKERS.value
+      # CanfdBlinkerKickMode 2/3: panda queues our SPAS frames as they come instead of holding them for the stock
+      # frame (carcontroller.aprk_blinkers). Read at fingerprint time, so it applies from the next onroad start.
+      if params.get_bool("CanfdBlinkerKick") and params.get_int("CanfdBlinkerKickMode") in (2, 3):
+        ret.safetyConfigs[-1].safetyParam |= HyundaiSafetyFlags.CANFD_SPAS_DIRECT.value
 
 
       if ret.flags & HyundaiFlags.CANFD_HDA2:

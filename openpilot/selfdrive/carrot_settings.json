@@ -458,7 +458,8 @@
             "ScreenOn",
             "StopGoAssist",
             "AutoRoadSpeedOnEngage",
-            "CanfdBlinkerKick"
+            "CanfdBlinkerKick",
+            "CanfdBlinkerKickMode"
           ]
         },
         {
@@ -3207,6 +3208,22 @@
       "unit": 1,
       "control": "toggle",
       "risk": "high"
+    },
+    {
+      "group": "Joongyu Lab",
+      "name": "CanfdBlinkerKickMode",
+      "title": "차로변경 깜빡이 송신 방식",
+      "descr": "0: 자동주차 ECU가 멈춤 요청에 답할 때만 보냅니다. 답이 없는 아이오닉5 PE에서는 램프가 켜지지 않습니다(11-04~05 로그).\n1: 피기백(기본). ECU가 안 멈추면 panda가 우리 깜빡이 프레임을 순정 SPAS 프레임 바로 뒤에 붙여 보냅니다. 같은 메시지가 동시에 시작하지 않아 CAN 오류가 나지 않습니다. panda 펌웨어가 바뀝니다.\n2: 직접 송신 25 Hz. panda 피기백을 끄고 초당 25번만 보냅니다. 충돌 확률이 줄 뿐 0은 아닙니다(10-30~11-02 측정: 100 Hz 111회 중 78회 오류 프레임, 33회 bus-off).\n3: 직접 송신 100 Hz. 10-26~30 방식 그대로, 비교용입니다. CAN 오류·accFaulted가 날 수 있습니다.\n- 1↔2/3 변경은 다음 OnRoad 시작 때 panda에 적용됩니다. 「차로변경 깜빡이 자동」이 켜져 있어야 합니다. 기본 1.",
+      "egroup": "Joongyu Lab",
+      "etitle": "Lane Change Auto Blinker Send Mode",
+      "edescr": "0: send only when the parking ECU answers the pause request. No answer on the Ioniq 5 PE, so no lamp (11-04..05 logs).\n1: piggyback (default). If the ECU keeps sending, panda sends our blinker frame right behind each stock SPAS frame; the same id never starts twice at once, so no CAN errors. Changes the panda firmware.\n2: direct at 25 Hz. Piggyback off, 25 frames a second. Fewer collisions, not zero (10-30..11-02 at 100 Hz: error frames in 78 of 111 kicks, bus-off in 33).\n3: direct at 100 Hz. The 10-26..30 behaviour, for comparison. CAN errors / accFaulted possible.\n- Switching between 1 and 2/3 reaches panda at the next onroad start. Needs Lane Change Auto Blinker on. Default 1.",
+      "cgroup": "Joongyu Lab",
+      "ctitle": "变道自动转向灯发送方式",
+      "cdescr": "0: 仅在泊车ECU应答暂停请求时发送。IONIQ 5 PE 无应答, 转向灯不亮。\n1: 搭载(默认)。ECU不停时, panda把我们的转向灯帧紧跟在原厂SPAS帧之后发送, 同一ID不会同时起始, 无CAN错误。会更改panda固件。\n2: 直接发送 25 Hz。关闭搭载, 每秒25帧。冲突减少但不为零。\n3: 直接发送 100 Hz。10-26~30 的方式, 用于对比。可能出现CAN错误。\n- 1与2/3之间的切换在下次上路启动时生效。默认1。",
+      "min": 0,
+      "max": 3,
+      "default": 1,
+      "unit": 1
     },
     {
       "group": "Joongyu Lab",

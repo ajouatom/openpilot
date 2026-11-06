@@ -87,6 +87,7 @@ class HyundaiSafetyFlags(IntFlag):
   ALT_LIMITS_2 = 512
   CANFD_CLUSTER_DIRECT_TX = 2048
   CANFD_SPAS_BLINKERS = 4096
+  CANFD_SPAS_DIRECT = 1024  # CanfdBlinkerKickMode 2/3: queue SPAS frames directly, no piggyback
   PALISADE_CGW_TEST = 32768
   PEDAL_INTERCEPTOR = 8192
   PEDAL_INTERCEPTOR_RAY = 16384

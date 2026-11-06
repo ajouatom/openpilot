@@ -10,9 +10,9 @@ SPAS1, SPAS2 = 0x165, 0x16A
 
 
 class Device:
-  def __init__(self):
+  def __init__(self, param=PARAM):
     self.s = libsafety_py.libsafety
-    assert self.s.set_safety_hooks(CarParams.SafetyModel.hyundaiCanfd, PARAM) == 0
+    assert self.s.set_safety_hooks(CarParams.SafetyModel.hyundaiCanfd, param) == 0
     self.s.init_tests()
     self.t = 1_000_000
     self.s.set_timer(self.t)
@@ -63,6 +63,13 @@ def test_held_and_sent_right_behind_the_next_stock_frame():
   assert d.tx(SPAS1, 6) == (True, True)
   assert d.stock(SPAS2, 4) == bytes(frame(SPAS2, 12, "left", 0).dat)
   assert d.stock(SPAS1, 2) == bytes(frame(SPAS1, 6, "left", 0).dat)
+
+
+def test_direct_flag_turns_the_piggyback_off():
+  d = Device(PARAM | 1024)  # CANFD_SPAS_DIRECT: CanfdBlinkerKickMode 2/3
+  d.stock(SPAS2, 1)
+  assert d.tx(SPAS2, 10) == (True, False)  # queued at once, next to the stock stream
+  assert d.stock(SPAS2, 2) is None
 
 
 def test_a_stale_held_frame_is_dropped():
