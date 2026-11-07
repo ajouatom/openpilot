@@ -43,7 +43,7 @@ window.CarrotTranslations.register("en", {
     assistant_account_connected: "Account connected · reusable in new voice chats",
     assistant_help: "Connect once for setting search, explanations and screen navigation. Reading and changing values additionally requires permission here and in the ChatGPT connection.",
     assistant_install: "Install ChatGPT · Google Play",
-    assistant_voice_help: "The top microphone opens your default assistant overlay. If touching the web ends the conversation, enable ChatGPT Settings → Voice → Background conversations, start voice in the ChatGPT app, then press Home and open CarrotAssist without ending voice. The test phone shows a green ChatGPT indicator at the top while active. CarrotAssist cannot limit the overlay size.",
+    assistant_voice_help: "Drag the orange CarrotAssist 0.2.4 microphone to save its position. Tap it to check the current Carrot Web connection and open your default assistant overlay. If touching the web ends the conversation, enable ChatGPT Settings → Voice → Background conversations, start voice in the ChatGPT app, then press Home and open CarrotAssist without ending voice. The test phone shows a green ChatGPT indicator at the top while active. CarrotAssist cannot limit the overlay size.",
     assistant_disconnect: "Disconnect",
     assistant_connected: "Connected · screen navigation only",
     assistant_waiting: "Waiting for ChatGPT to pair",

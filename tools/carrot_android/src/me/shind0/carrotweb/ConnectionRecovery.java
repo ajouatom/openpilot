@@ -84,6 +84,50 @@ final class ConnectionRecovery {
       worker.start();
     });
   }
+  // Inspect only the selected origin. Never relocate, issue a code or poll for commands here.
+  void checkForVoice(WebView page, String origin, Done done) {
+    if (!ConnectionPolicy.origin(origin)) { done.finish(voiceUnavailable()); return; }
+    // Read the page already on screen. Creating a second WebView here can stall a cold launch.
+    String key = JSONObject.quote(SESSION);
+    String script = "(()=>{try{if(location.origin!==" + JSONObject.quote(origin) + ")return null;"
+      + "const raw=localStorage.getItem(" + key + ")||sessionStorage.getItem(" + key + ");"
+      + "const t=raw&&JSON.parse(raw).browser_token;return typeof t==='string'&&t.length===43?t:'';"
+      + "}catch(e){return null}})()";
+    page.evaluateJavascript(script, value -> {
+      if (cancelled) return;
+      try {
+        Object result = new JSONTokener(value).nextValue();
+        if (result instanceof String) inspectForVoice(origin, (String)result, done);
+        else done.finish(voiceUnavailable());
+      } catch (Exception e) { done.finish(voiceUnavailable()); }
+    });
+  }
+  private void inspectForVoice(String origin, String token, Done done) {
+    worker = new Thread(() -> {
+      String message;
+      try {
+        if (!ConnectionPolicy.token(token)) message = voiceUnlinked();
+        else {
+          JSONObject state = post(RELAY + "/bridge/inspect", origin, token, new JSONObject());
+          if (!state.optBoolean("connected") || !state.optBoolean("account_linked")) message = voiceUnlinked();
+          else if (!state.optBoolean("browser_online")) message = UiText.get("당근웹이 아직 응답하지 않아요. 웹이 열린 뒤 다시 눌러 주세요.", "Carrot Web is not responding yet. Wait for the web page to open and try again.");
+          else message = "";
+        }
+      } catch (InterruptedException stopped) { return; }
+      catch (HttpFailure e) { message = (e.status == 401 || e.status == 403) ? voiceUnlinked() : voiceUnavailable(); }
+      catch (Exception e) { message = voiceUnavailable(); }
+      final String result = message;
+      ui.post(() -> { if (!cancelled) done.finish(result); });
+    }, "carrot-voice-connection-check");
+    worker.start();
+  }
+  static boolean temporaryVoiceFailure(String message) { return !message.isEmpty() && !voiceUnlinked().equals(message); }
+  private static String voiceUnlinked() {
+    return UiText.get("이 당근웹의 ChatGPT 계정 연결을 확인하지 못했어요. 도구의 ChatGPT 설정 도우미를 확인해 주세요.", "No ChatGPT account link was verified for this Carrot Web. Check the ChatGPT assistant in Tools.");
+  }
+  static String voiceUnavailable() {
+    return UiText.get("당근웹과 ChatGPT 연결을 확인하지 못했어요. 잠시 후 다시 확인해 주세요.", "Could not verify the Carrot Web connection to ChatGPT. Try again in a moment.");
+  }
   private static final class Candidate {
     final String origin, token; final JSONObject saved, state;
     Candidate(String origin, String token, JSONObject saved, JSONObject state) { this.origin=origin; this.token=token; this.saved=saved; this.state=state; }
@@ -180,7 +224,8 @@ final class ConnectionRecovery {
   private JSONObject storage(String origin, JSONObject write) throws Exception {
     check(); CountDownLatch ready=new CountDownLatch(1); JSONObject[] result=new JSONObject[1];
     StringBuilder keys=new StringBuilder("[").append(JSONObject.quote(SESSION));
-    for (String role : ROLES) keys.append(',').append(JSONObject.quote(key(role))); keys.append(']');
+    for (String role : ROLES) keys.append(',').append(JSONObject.quote(key(role)));
+    keys.append(']');
     final String script="(()=>{const keys="+keys+",values="+(write==null ? "null" : write.toString())+";"
       +"if(values)for(const k of keys){if(values[k]===null)localStorage.removeItem(k);else localStorage.setItem(k,values[k]);}"
       +"const out={};for(const k of keys)out[k]=localStorage.getItem(k);return JSON.stringify(out);})()";

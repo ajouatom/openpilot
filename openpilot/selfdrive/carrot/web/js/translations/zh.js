@@ -5,7 +5,7 @@ window.CarrotTranslations.register("zh", {
   nativeName: "中文",
   shortName: "ZH",
   strings: {
-    assistant_voice_help: "顶部麦克风会打开默认语音助手浮窗。如果触摸网页会结束对话，请启用 ChatGPT 设置 → 语音 → 后台对话，在 ChatGPT 应用中启动语音，然后按主页键返回 CarrotAssist，不要结束语音。测试手机顶部会显示绿色 ChatGPT 活动标记。CarrotAssist 无法限制浮窗大小。",
+    assistant_voice_help: "在 CarrotAssist 0.2.4 中，拖动橙色麦克风可保存位置。轻点后会先检查 Carrot Web 连接，再打开默认语音助手浮窗。如果触摸网页会结束对话，请启用 ChatGPT 设置 → 语音 → 后台对话，在 ChatGPT 应用中启动语音，然后按主页键返回 CarrotAssist，不要结束语音。测试手机顶部会显示绿色 ChatGPT 活动标记。CarrotAssist 无法限制浮窗大小。",
     assistant_approval_refresh: "如果仍使用旧的重复确认说明，请在 CarrotAssist 插件设置中刷新工具并开始新对话。操作审批不需要重新生成连接码。",
     assistant_approval_open: "打开 ChatGPT 插件权限设置",
     assistant_approval_help: "Carrot 设备权限与 ChatGPT 操作审批相互独立。如不希望每次询问，请在 ChatGPT 插件设置 → CarrotAssist → 权限中选择允许所有操作。这适用于此插件已获授权的全部操作，而非单个设置。每位用户须在自己的账号中选择；CarrotAssist 无法自动启用或读取该选择，也不会因此新增设备权限。",

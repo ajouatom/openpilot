@@ -42,8 +42,16 @@ Use a trusted LAN, as with Carrot Web itself.
   settings/drive/Tools access still uses the existing explicit permission flow.
 - External links open the user's browser. The WebView has no native JavaScript
   bridge, no file/content access and no microphone permission. Voice invocation
-  is available only from the native toolbar microphone; the former floating web
-  launcher and conversation-pairing UI have been removed. Account connection
+  uses a 68dp draggable native microphone inside CarrotAssist. Dragging stores a
+  relative position and tapping checks the selected WebView session through the
+  authenticated relay inspect endpoint before opening Android’s default assistant.
+  Transient errors get at most three checks, each limited to four seconds; leaving
+  the activity cancels the operation. Unlinked accounts skip retries. Enable
+  auto-start in device-name settings to greet once when opening a selected web,
+  with an optional Git update question based on the existing read-only status API.
+  The manual button skips the greeting. Startup performs no maintenance actions. A successful
+  check provides optional short-lived Android assist content containing only
+  connection status. The voice provider controls spoken preambles. Account connection
   settings remain in the web Tools menu.
 - Target SDK 36 with installed SDK tools. Android 17 requires a local-network
   runtime permission for target SDK 37+; raise the target only together with

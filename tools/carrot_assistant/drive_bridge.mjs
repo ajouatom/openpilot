@@ -24,8 +24,12 @@ export function createDriveBridge(now = Date.now) {
       for (const [key, value] of requests) if (now() - value.created > 120000) requests.delete(key);
       const previous = get(owner);
       if (previous && (!terminal(previous.result) || now() - previous.created < 10000)) {
-        if (previous.action === fields.action && previous.value === fields.value) return this.status(owner);
-        throw new Error('Another driving request is active or just completed. Do not queue another maneuver.');
+        if (previous.action === fields.action && previous.value === fields.value) {
+          return { ...this.status(owner), submitted: false, reason: 'duplicate', retry_allowed: false,
+            message: '같은 요청이 이미 접수됐어요.' };
+        }
+        return { status: 'blocked', submitted: false, reason: 'active_or_recent_request', retry_allowed: false,
+          message: '직전 운전 요청이 있어 이번 요청은 접수하지 않았어요.' };
       }
       if (!requests.has(owner) && requests.size >= 1000) throw new Error('Driving request capacity reached');
       requests.set(owner, { ...fields, id: randomBytes(32).toString('base64url'), created: now(), expires_at: now() + 5000 });

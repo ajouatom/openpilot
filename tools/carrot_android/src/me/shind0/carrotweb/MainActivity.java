@@ -2,6 +2,7 @@ package me.shind0.carrotweb;
 
 import android.app.Activity;
 import android.app.AlertDialog;
+import android.app.assist.AssistContent;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.graphics.Color;
@@ -29,7 +30,7 @@ import android.webkit.WebViewClient;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.LinearLayout;
-import android.widget.ImageButton;
+import android.widget.FrameLayout;
 import android.widget.ProgressBar;
 import android.widget.ScrollView;
 import android.widget.TextView;
@@ -66,6 +67,16 @@ public final class MainActivity extends Activity {
   private AppUpdater updater;
   private ConnectionRecovery recovery;
   private boolean recovering;
+  private ConnectionRecovery voiceCheck;
+  private long voiceVerifiedUntil;
+  private VoiceWelcome welcome;
+  private boolean updateOffered;
+  private boolean voiceStarting, voiceFromAuto, pageReady;
+  private int voiceAttempt, autoVoiceGeneration = -1;
+  private final Runnable retryVoice = this::beginVoiceAttempt;
+  private final Runnable tryAutoVoice = this::maybeStartAutoVoice;
+  private CharSequence titleBeforeVoiceCheck;
+  private final Runnable voiceTimeout = () -> finishVoiceCheck(ConnectionRecovery.voiceUnavailable());
   private boolean checkAfterBackground;
   private DeviceProbe resumeProbe;
   private static final class Device {
@@ -80,6 +91,7 @@ public final class MainActivity extends Activity {
     super.onCreate(saved);
     preferences = getSharedPreferences("carrot-web", MODE_PRIVATE);
     updater = new AppUpdater(this, preferences);
+    welcome = new VoiceWelcome(this);
     root = column(); root.setBackgroundColor(background);
     if (android.os.Build.VERSION.SDK_INT >= 30) root.setOnApplyWindowInsetsListener((v,insets) -> {
       android.graphics.Insets b = insets.getInsets(WindowInsets.Type.systemBars() | WindowInsets.Type.displayCutout() | WindowInsets.Type.ime());
@@ -97,12 +109,16 @@ public final class MainActivity extends Activity {
     title = text("CarrotAssist",18); title.setSingleLine(true); title.setEllipsize(android.text.TextUtils.TruncateAt.END);
     title.setOnClickListener(v -> updater.info()); title.setContentDescription(UiText.get("기기 이름 · 앱 정보와 업데이트 확인", "Device name · App information and updates"));
     bar.addView(title,new LinearLayout.LayoutParams(0,dp(48),1)); title.setGravity(Gravity.CENTER_VERTICAL);
-    ImageButton assistant = new ImageButton(this);
-    assistant.setImageResource(android.R.drawable.ic_btn_speak_now); assistant.setColorFilter(accent);
-    assistant.setBackgroundColor(background); assistant.setOnClickListener(v -> invokeAssistant());
-    assistant.setContentDescription(UiText.get("음성비서 호출", "Open voice assistant"));
-    bar.addView(assistant,new LinearLayout.LayoutParams(dp(52),dp(48)));
-    root.addView(bar); content = column(); root.addView(content,new LinearLayout.LayoutParams(-1,0,1)); setContentView(root);
+    root.addView(bar);
+    FrameLayout page = new FrameLayout(this);
+    root.addView(page, new LinearLayout.LayoutParams(-1, 0, 1));
+    content = column();
+    page.addView(content, new FrameLayout.LayoutParams(-1, -1));
+    FloatingVoiceButton assistant = new FloatingVoiceButton(this, preferences);
+    assistant.setOnClickListener(v -> invokeAssistant());
+    page.addView(assistant, new FrameLayout.LayoutParams(dp(68), dp(68)));
+    page.addOnLayoutChangeListener((v,l,t,r,b,oldL,oldT,oldR,oldB) -> assistant.place());
+    setContentView(root);
     startSearch();
     updater.check(false);
   }
@@ -111,6 +127,11 @@ public final class MainActivity extends Activity {
   private TextView text(String value,int size) { TextView v = new TextView(this); v.setText(value); v.setTextSize(size); v.setTextColor(foreground); return v; }
   private Button button(String label,View.OnClickListener listener) { Button b = new Button(this); b.setText(label); b.setAllCaps(false); b.setTextColor(accent); b.setOnClickListener(listener); return b; }
   private void stopSearch() {
+    voiceVerifiedUntil = 0;
+    if (welcome != null) welcome.reset();
+    pageReady = false;
+    ui.removeCallbacks(tryAutoVoice);
+    cancelVoiceCheck();
     if (resumeProbe != null) { resumeProbe.close(); resumeProbe = null; }
     scanning = false; generation++; ui.removeCallbacks(tick);
     if (progress != null) progress.setVisibility(View.GONE);
@@ -261,6 +282,12 @@ public final class MainActivity extends Activity {
           }
           return true;
         }
+        @Override public void onPageFinished(WebView view,String url) {
+          if (isCurrent(Uri.parse(url))) {
+            pageReady = true;
+            scheduleAutoVoice();
+          }
+        }
         @Override public void onReceivedError(WebView view,WebResourceRequest request,android.webkit.WebResourceError error) {
           if (request.isForMainFrame()) title.setText(UiText.get("기기 연결 끊김 · 왼쪽에서 다시 검색", "Device disconnected · Use search on the left"));
         }
@@ -270,6 +297,7 @@ public final class MainActivity extends Activity {
     web.stopLoading(); web.loadUrl("about:blank");
     TextView connecting = text(UiText.get("당근 기기 연결 중…\n기존 ChatGPT 연결을 확인하고 있어요.", "Connecting to Carrot…\nChecking your saved ChatGPT connection."),18);
     connecting.setPadding(dp(22),dp(28),dp(22),dp(16)); content.addView(connecting);
+    if (preferences.getBoolean("voice_auto_start",false)) welcome.prepare(device.address);
     recovering = true; final int token = generation;
     recovery = new ConnectionRecovery(this);
     recovery.start("http://"+device.address+":7000",previous,message -> {
@@ -287,6 +315,99 @@ public final class MainActivity extends Activity {
   private void invokeAssistant() {
     if (!foregroundActivity) return;
     if (recovering) { notice(UiText.get("기존 ChatGPT 연결을 확인하고 있어요. 당근웹이 열린 뒤 마이크를 눌러 주세요.", "Checking your saved ChatGPT connection. Wait for Carrot Web to open, then tap the microphone.")); return; }
+    if (welcome.isGreeting()) { welcome.cancel(); launchVerifiedVoice(false); return; }
+    startVoice(false);
+  }
+  private void scheduleAutoVoice() {
+    ui.removeCallbacks(tryAutoVoice);
+    if (foregroundActivity && pageReady) ui.postDelayed(tryAutoVoice, 450);
+  }
+  @Override public void onWindowFocusChanged(boolean focus) {
+    super.onWindowFocusChanged(focus);
+    if (focus && ui != null) scheduleAutoVoice();
+  }
+  private void maybeStartAutoVoice() {
+    if (autoVoiceGeneration == generation || !foregroundActivity || !hasWindowFocus() || !pageReady || recovering) return;
+    if (preferences.getBoolean("voice_auto_start", false)) startVoice(true);
+  }
+  private void startVoice(boolean automatic) {
+    if (voiceStarting || !foregroundActivity) return;
+    autoVoiceGeneration = generation;
+    voiceVerifiedUntil = 0;
+    if (currentAddress == null) { if (!automatic) openAssistant(); return; }
+    String page = web == null ? null : web.getUrl();
+    if (page == null || !isCurrent(Uri.parse(page))) {
+      if (!automatic) voiceProblem(UiText.get("당근웹이 아직 열리지 않았어요.", "Carrot Web has not opened yet."));
+      return;
+    }
+    voiceStarting = true;
+    voiceFromAuto = automatic;
+    if (automatic) welcome.prepare(currentAddress);
+    voiceAttempt = 0;
+    titleBeforeVoiceCheck = title.getText();
+    beginVoiceAttempt();
+  }
+  private void beginVoiceAttempt() {
+    if (!voiceStarting || !foregroundActivity) return;
+    voiceAttempt++;
+    ConnectionRecovery check = new ConnectionRecovery(this);
+    voiceCheck = check;
+    title.setText(UiText.get("당근웹 연결 확인 중", "Checking Carrot Web") + " (" + voiceAttempt + "/3)");
+    ui.postDelayed(voiceTimeout, 4000);
+    check.checkForVoice(web, "http://" + currentAddress + ":7000", message -> {
+      if (voiceCheck == check) finishVoiceCheck(message);
+    });
+  }
+  private void stopVoiceAttempt() {
+    ui.removeCallbacks(voiceTimeout);
+    if (voiceCheck != null) { voiceCheck.cancel(); voiceCheck = null; }
+  }
+  private void cancelVoiceCheck() {
+    ui.removeCallbacks(retryVoice);
+    stopVoiceAttempt();
+    if (voiceStarting) title.setText(titleBeforeVoiceCheck);
+    voiceStarting = false;
+    titleBeforeVoiceCheck = null;
+  }
+  private void finishVoiceCheck(String message) {
+    if (!voiceStarting || voiceCheck == null) return;
+    stopVoiceAttempt();
+    if (!foregroundActivity || isFinishing()) { cancelVoiceCheck(); return; }
+    if (ConnectionRecovery.temporaryVoiceFailure(message) && voiceAttempt < 3) {
+      ui.postDelayed(retryVoice, voiceAttempt == 1 ? 600 : 1500);
+      return;
+    }
+    boolean automatic = voiceFromAuto;
+    cancelVoiceCheck();
+    if (message.isEmpty()) {
+      if (automatic) welcome.greet(this::launchVerifiedVoice);
+      else launchVerifiedVoice(false);
+    } else if (automatic) {
+      android.widget.Toast.makeText(this,message,android.widget.Toast.LENGTH_SHORT).show();
+    } else voiceProblem(message);
+  }
+  private void launchVerifiedVoice(boolean update) {
+    if (!foregroundActivity || isFinishing()) return;
+    updateOffered = update;
+    voiceVerifiedUntil = SystemClock.elapsedRealtime() + 5000;
+    openAssistant();
+  }
+  @Override public void onProvideAssistContent(AssistContent content) {
+    super.onProvideAssistContent(content);
+    if (SystemClock.elapsedRealtime() >= voiceVerifiedUntil) return;
+    // Optional Android assistant context. Share neither credentials nor vehicle or account identifiers.
+    String notice = updateOffered ? " CarrotAssist just asked whether to GitPull and reboot after a successful update. The user has not yet approved either operation." : "";
+    content.setStructuredData("{\"@context\":\"https://schema.org\",\"@type\":\"WebPage\","
+      + "\"name\":\"CarrotAssist\",\"description\":\"Carrot Web was online and account-linked at voice startup." + notice + "\"}");
+  }
+  private void voiceProblem(String message) {
+    new AlertDialog.Builder(this).setMessage(message)
+      .setNegativeButton(UiText.get("닫기", "Close"), null)
+      .setNeutralButton(UiText.get("다시 확인", "Check again"), (d,w) -> invokeAssistant())
+      .setPositiveButton(UiText.get("음성비서만 열기", "Open assistant only"), (d,w) -> openAssistant()).show();
+  }
+  private void openAssistant() {
+    if (!foregroundActivity) return;
     try { if (showAssist(new Bundle())) return; } catch (RuntimeException ignored) {}
     new AlertDialog.Builder(this).setTitle(UiText.get("기본 음성비서 설정", "Default voice assistant")).setMessage(UiText.get("Android 기본 디지털 어시스턴트를 선택해 주세요. ChatGPT 또는 Gemini 등 선택한 앱을 호출합니다. 당근 설정 검색·화면 열기는 현재 ChatGPT 연결로 시험했으며, 음성창의 모양은 선택한 앱에 따라 달라집니다.", "Choose your default Android digital assistant. The microphone opens your selected app, such as ChatGPT or Gemini. Carrot setting search and screen navigation have been tested with ChatGPT. The voice window depends on the assistant app."))
       .setNegativeButton(UiText.get("닫기", "Close"),null).setPositiveButton(UiText.get("설정 열기", "Open settings"),(d,w) -> { try { startActivity(new Intent(Settings.ACTION_VOICE_INPUT_SETTINGS)); } catch (Exception e) { notice(UiText.get("휴대폰 설정에서 기본 디지털 어시스턴트를 선택해 주세요.", "Choose the default digital assistant in your phone settings.")); } }).show();
@@ -304,8 +425,9 @@ public final class MainActivity extends Activity {
       },"carrot-resume-probe").start();
     }
     checkAfterBackground=false;
+    scheduleAutoVoice();
   }
-  @Override protected void onPause() { foregroundActivity = false; super.onPause(); }
+  @Override protected void onPause() { foregroundActivity = false; welcome.cancel(); ui.removeCallbacks(tryAutoVoice); cancelVoiceCheck(); super.onPause(); }
   @Override protected void onStop() { checkAfterBackground=true; if (scanning) { stopSearch(); if (status!=null) status.setText(UiText.get("검색이 중단됐어요. 다시 검색을 눌러 주세요.", "Search paused. Tap Search again.")); } super.onStop(); }
   @Override public void onBackPressed() { if (web!=null && currentAddress!=null && web.canGoBack()) web.goBack(); else if (currentAddress!=null) startSearch(); else super.onBackPressed(); }
   @Override protected void onDestroy() { if (recovery!=null) recovery.cancel(); stopSearch(); ui.removeCallbacksAndMessages(null); if (updater!=null) updater.close(); if (web!=null) { web.destroy(); web=null; } super.onDestroy(); }
