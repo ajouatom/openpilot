@@ -133,15 +133,21 @@ final class ConnectionRecovery {
     Candidate(String origin, String token, JSONObject saved, JSONObject state) { this.origin=origin; this.token=token; this.saved=saved; this.state=state; }
   }
   private String recover(String next, List<String> origins) throws Exception {
-    List<Candidate> candidates = new ArrayList<>(); boolean savedConnection = false;
+    List<Candidate> candidates = new ArrayList<>(), localOnly = new ArrayList<>(); boolean savedConnection = false;
     JSONObject destination = null;
     // Relay requests only go to the fixed HTTPS service, never to a discovered device.
     for (String origin : origins) {
       check(); JSONObject saved = storage(origin, null);
       if (origin.equals(next)) destination = saved;
-      JSONObject session;
-      try { session = new JSONObject(saved.optString(SESSION)); } catch (Exception ignored) { continue; }
-      String token = session.optString("browser_token"); if (!ConnectionPolicy.token(token)) continue;
+      String token = "";
+      try { token = new JSONObject(saved.optString(SESSION)).optString("browser_token"); } catch (Exception ignored) {}
+      if (!ConnectionPolicy.token(token)) {
+        String drive = saved.optString(key("drive"));
+        if (!origin.equals(next) && ConnectionPolicy.token(drive)) {
+          localOnly.add(new Candidate(origin, "", new JSONObject().put(key("drive"),drive), null));
+        }
+        continue;
+      }
       remember(activity,origin);
       savedConnection = true;
       try {
@@ -153,6 +159,17 @@ final class ConnectionRecovery {
         }
         if (state.optBoolean("account_linked")) candidates.add(new Candidate(origin, token, saved, state));
       } catch (HttpFailure error) { if (error.status != 401 && error.status != 403) throw error; }
+    }
+    // An unpaired phone can recover a local drive grant only if this device proves it already owns that grant.
+    if (destination != null && !ConnectionPolicy.token(destination.optString(key("drive")))) {
+      for (Candidate local : localOnly) {
+        JSONObject restored = restorePermissions(next,local);
+        if (restored.has("drive")) {
+          destination.put(key("drive"),restored.getString("drive"));
+          storage(next,destination);
+          break;
+        }
+      }
     }
     candidates.sort((a,b) -> Long.compare(b.state.optLong("account_activity_at"), a.state.optLong("account_activity_at")));
     if (candidates.isEmpty()) return savedConnection ? UiText.get("저장된 ChatGPT 연결을 확인하지 못했어요. 인터넷과 ChatGPT 연결 설정을 확인해 주세요.", "Could not verify the saved ChatGPT connection. Check your Internet connection and ChatGPT connection settings.") : "";

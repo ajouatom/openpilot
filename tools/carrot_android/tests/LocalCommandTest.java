@@ -1,0 +1,44 @@
+package me.shind0.carrotweb;
+
+import java.util.Arrays;
+import java.util.Collections;
+import static me.shind0.carrotweb.LocalCommand.*;
+
+public class LocalCommandTest {
+  private static int checks;
+  private static void check(boolean ok) { if (!ok) throw new AssertionError("Voice check "+checks); checks++; }
+  public static void main(String[] args) {
+    for (String word : new String[]{"왼쪽으로 차로 변경해", "좌측 차선 변경해 주세요", "왼쪽 차로를 바꿔줘", "change lanes left"})
+      check(LocalCommand.choose(Collections.singletonList(word),new float[]{.92f}) == LEFT);
+    for (String word : new String[]{"오른쪽으로 차로 변경해줘", "우측 차선변경", "change lanes to the right"})
+      check(LocalCommand.choose(Collections.singletonList(word),new float[]{.92f}) == RIGHT);
+    for (String word : new String[]{"차로 변경해줘", "왼쪽으로 차로 변경하지 마", "왼쪽 차로 변경해 말고 오른쪽", "왼쪽 차로 변경해 라고 했어",
+           "왼쪽 차로 변경해?", "왼쪽 차로 변경하면 어떻게 돼?", "Don't change lanes left", "change lanes left or right", "please change lanes left?",
+           "어제 왼쪽으로 차로 변경해", "왼쪽으로 차로 변경해 그리고 속도를 올려", "가속이 너무 빨라 왜 그래?"}) {
+      LocalCommand parsed = LocalCommand.choose(Collections.singletonList(word),new float[]{.99f});
+      check(parsed != LEFT && parsed != RIGHT);
+    }
+    check(LocalCommand.choose(Arrays.asList("왼쪽으로 차로 변경해","오른쪽으로 차로 변경해"),new float[]{.95f,.89f}) == UNCERTAIN);
+    check(LocalCommand.choose(Arrays.asList("왼쪽으로 차로 변경해","왼쪽으로 차로 변경하면?"),new float[]{.99f,.8f}) == UNCERTAIN);
+    check(LocalCommand.choose(Arrays.asList("왼쪽으로 차로 변경해","왼쪽 차선 변경해줘"),new float[]{.95f,.9f}) == LEFT);
+    for (float f : new float[]{0f,.4f,Float.NaN,1.5f}) check(LocalCommand.choose(Collections.singletonList("좌측차로변경"),new float[]{f}) == UNCERTAIN);
+    check(LocalCommand.choose(Collections.singletonList("우측 차로 변경"),null) == CLARIFY_RIGHT);
+    check(LocalCommand.choose(Collections.singletonList("왼쪽으로 차로 변경해"),new float[]{-1f}) == CLARIFY_LEFT);
+    check(LocalCommand.choose(Collections.singletonList("왼쪽 확인"),null) == CONFIRM_LEFT);
+    check(LocalCommand.choose(Arrays.asList("왼쪽 확인","오른쪽 확인"),null) == UNCERTAIN);
+    check(LocalCommand.parse("깜박이 설정 열어줘") == BLINKER_SETTINGS);
+    check(LocalCommand.parse("깜빡이 관련 설정 보여 주세요") == BLINKER_SETTINGS);
+    check(LocalCommand.parse("Open turn signal settings") == BLINKER_SETTINGS);
+    check(LocalCommand.parse("깜박이 설정을 바꿔줘") == UNRECOGNIZED);
+    check(LocalCommand.parse("가속이 너무 빨라 왜 그래?") == QUESTION);
+    check(LocalCommand.parse("음성 종료") == STOP);
+    LocalCommand.DirectionCheck pending = new LocalCommand.DirectionCheck();
+    check(pending.resolve(CONFIRM_LEFT, 1) == UNCERTAIN);
+    pending.ask(CLARIFY_LEFT, 1); check(pending.resolve(CONFIRM_RIGHT, 2) == UNCERTAIN);
+    pending.ask(CLARIFY_RIGHT, 1); check(pending.resolve(CONFIRM_RIGHT, 6002) == UNCERTAIN);
+    pending.ask(CLARIFY_LEFT, 1); check(pending.resolve(CONFIRM_LEFT, 2) == LEFT);
+    check(pending.resolve(CONFIRM_LEFT, 3) == UNCERTAIN);
+    pending.ask(CLARIFY_RIGHT, 1); pending.clear(); check(pending.resolve(CONFIRM_RIGHT, 2) == UNCERTAIN);
+    System.out.println("Local voice command checks passed: "+checks);
+  }
+}

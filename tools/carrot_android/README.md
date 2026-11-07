@@ -1,5 +1,7 @@
 # CarrotAssist Android public beta
 
+Version 0.2.6 uses Android 12+ on-device speech recognition for direct Korean and English left/right lane requests and opening Automatic turn signals. The phone checks the visible Carrot Web page, greets and listens. No MCP connection is needed for this route. Motion uses only whole final imperatives, consistent alternatives, a high reported score or a fresh direction-specific confirmation when scores are absent, and the existing device drive grant and controller. Questions hand off to the default assistant, where the user repeats the question. Disable direct listening in device settings to use the default assistant first.
+
 당근파일럿 AI 조수. Display name: CarrotAssist.
 
 The launcher uses the approved Carrot mascot with CARROT above and ASSIST below.

@@ -89,6 +89,26 @@ public final class RecoveryInstrumentation extends Instrumentation {
         }
         runOnMainSync(r::cancel);
       }
+      for (boolean knownDevice : new boolean[]{true, false}) {
+        int[] moves = {0};
+        ConnectionRecovery direct = new ConnectionRecovery(getTargetContext(), (target,origin,token,body) -> {
+          check(target.startsWith(next + "/api/assistant/connection/")); // never contact the relay
+          if (target.endsWith("/proof")) {
+            JSONObject proofs = new JSONObject();
+            if (knownDevice) proofs.put("drive",ConnectionPolicy.proof(grant,body.getString("nonce"),old,next));
+            return new JSONObject().put("proofs",proofs);
+          }
+          check(target.endsWith("/move")); moves[0]++; return new JSONObject();
+        });
+        storage(direct,old,bundle(browser).put(ConnectionRecovery.SESSION,JSONObject.NULL));
+        storage(direct,next,bundle(browser).put(ConnectionRecovery.SESSION,JSONObject.NULL).put(ConnectionRecovery.key("drive"),JSONObject.NULL));
+        check(run(direct,old).isEmpty());
+        JSONObject restored = storage(direct,next,null);
+        check(restored.isNull(ConnectionRecovery.SESSION));
+        check(knownDevice ? grant.equals(restored.optString(ConnectionRecovery.key("drive"))) : restored.isNull(ConnectionRecovery.key("drive")));
+        check(moves[0] == (knownDevice ? 1 : 0));
+        runOnMainSync(direct::cancel);
+      }
       // The startup check must authenticate this origin, never relocate or execute a command.
       for (int scenario = 0; scenario < 4; scenario++) {
         final int mode = scenario;
@@ -126,6 +146,13 @@ public final class RecoveryInstrumentation extends Instrumentation {
       check(!VoiceWelcome.verifiedUpdate(git.put("ahead",1)));
       check(!VoiceWelcome.verifiedUpdate(git.put("ahead",0).put("behind",0)));
       check(!VoiceWelcome.verifiedUpdate(git.put("behind",1).put("available",false)));
+      android.content.SharedPreferences mode = getTargetContext().getSharedPreferences("test-local-voice-mode",0);
+      mode.edit().clear().commit(); MainActivity.initializeVoiceMode(mode);
+      check(mode.getBoolean("voice_local_first",false));
+      mode.edit().clear().putString("last_address","192.168.1.1").commit(); MainActivity.initializeVoiceMode(mode);
+      check(!mode.getBoolean("voice_local_first",true));
+      mode.edit().putBoolean("voice_local_first",true).commit(); MainActivity.initializeVoiceMode(mode);
+      check(mode.getBoolean("voice_local_first",false));
       runOnMainSync(this::checkFloatingButton);
       runOnMainSync(() -> {
         String visible=visibleText(screen.findViewById(android.R.id.content));

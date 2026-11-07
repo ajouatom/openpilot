@@ -1,5 +1,15 @@
 # Repository memory
 
+- CarrotAssist 0.2.6 supports foreground Android 12+ on-device speech recognition.
+  A local WebView readiness check precedes greeting/listening; no ChatGPT account,
+  relay pairing, cloud transcription or MCP grant is required on the direct route.
+  Korean/English explicit lane requests use the existing local driving grant and
+  vehicle gates. Execute only final, unambiguous recognition, with a bounded
+  direction-specific challenge if scores are missing. Opening AutoBlinkerControl
+  needs no driving grant. Questions launch the default assistant; repeat them in
+  that voice window. Support depends on the installed language model. The rules
+  and transport are tested offline; no real maneuver or cabin accuracy claim.
+
 - Voice lane changes retain normal admission on all supported vehicles, with or
   without indicator hardware. Bind optional signaling once per request to an active
   receiver on the current vehicle (AutoBlinkerControl=2), a supported native output,

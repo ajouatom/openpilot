@@ -9,7 +9,7 @@ window.CarrotTranslations.register("ko", {
     assistant_approval_open: "ChatGPT 승인 설정 열기",
     assistant_approval_help: "당근 기기의 허용과 ChatGPT의 실행 승인은 별개입니다. 매번 묻지 않으려면 ChatGPT 플러그인 설정 → CarrotAssist → 권한 → 모두 허용을 선택하세요. 한 설정만이 아니라 이 플러그인에서 허용된 작업 전체에 적용됩니다. 각 사용자가 본인 계정에서 선택하며, 당근앱이 자동으로 켜거나 선택 여부를 확인할 수는 없습니다. 새 기기 권한을 추가하는 선택은 아닙니다.",
     assistant_approval_title: "연결 후 한 번: ChatGPT 반복 승인 설정",
-    assistant_drive_help: "운전 명령은 설정값 변경과 별도 권한입니다. 정차·보조 기능 해제 상태에서 허용한 뒤 ChatGPT 연결 승인에서도 운전 명령을 선택하세요. 명확한 차선변경·설정속도 명령은 재확인 대화 없이 요청하며 기존 차량 조건을 따릅니다. 요청과 실행 결과가 ChatGPT 및 당근 중계 서버에 전달됩니다. ChatGPT 자체 실행 승인이 표시될 수 있습니다.",
+    assistant_drive_help: "정차·주행 보조 해제 상태에서 이 기기의 음성 운전 명령을 허용할 수 있습니다. 폰 직접 명령은 ChatGPT 등록 없이 기기로 전달됩니다. ChatGPT로도 운전 명령을 보내려면 별도로 ChatGPT 연결 승인에서 운전 권한을 선택하세요. 두 경로 모두 기존 차량 조건을 따릅니다.",
     assistant_drive_enable: "음성 차선변경·설정속도 명령 허용",
     assistant_drive_disable: "음성 운전 명령 허용 해제",
     assistant_drive_required: "당근웹을 열고 음성 운전 명령 권한을 허용해야 합니다.",

@@ -70,6 +70,12 @@ public final class MainActivity extends Activity {
   private ConnectionRecovery voiceCheck;
   private long voiceVerifiedUntil;
   private VoiceWelcome welcome;
+  private PhoneVoice phoneVoice;
+  private boolean phoneSession, waitingForPermission, resumePhoneVoice, permissionGreeting;
+  private int phoneGeneration, permissionDevice;
+  private final LocalCommand.DirectionCheck directionCheck = new LocalCommand.DirectionCheck();
+  private static final int PHONE_MIC = 42;
+
   private String lastPhoneRequest = "", lastPhoneResult = "failed";
   private boolean voiceStarting, voiceFromAuto, pageReady;
   private int voiceAttempt, autoVoiceGeneration = -1;
@@ -90,8 +96,13 @@ public final class MainActivity extends Activity {
   @Override public void onCreate(Bundle saved) {
     super.onCreate(saved);
     preferences = getSharedPreferences("carrot-web", MODE_PRIVATE);
+    initializeVoiceMode(preferences);
     updater = new AppUpdater(this, preferences);
     welcome = new VoiceWelcome(this);
+    phoneVoice = new PhoneVoice(this, new PhoneVoice.Listener() {
+      public void status(String text) { title.setText(text); if (!phoneVoice.listening()) phoneSession = false; }
+      public void heard(LocalCommand command) { handlePhoneCommand(command); }
+    });
     root = column(); root.setBackgroundColor(background);
     if (android.os.Build.VERSION.SDK_INT >= 30) root.setOnApplyWindowInsetsListener((v,insets) -> {
       android.graphics.Insets b = insets.getInsets(WindowInsets.Type.systemBars() | WindowInsets.Type.displayCutout() | WindowInsets.Type.ime());
@@ -122,11 +133,19 @@ public final class MainActivity extends Activity {
     startSearch();
     updater.check(false);
   }
+  static void initializeVoiceMode(SharedPreferences preferences) {
+    // Preserve the launch mode of an existing installation before discovery records its first address.
+    if (!preferences.contains("voice_local_first")) {
+      boolean alreadyUsed = preferences.contains("last_address") || preferences.contains("voice_auto_start");
+      preferences.edit().putBoolean("voice_local_first", !alreadyUsed).apply();
+    }
+  }
   private int dp(int value) { return Math.round(value * getResources().getDisplayMetrics().density); }
   private LinearLayout column() { LinearLayout v = new LinearLayout(this); v.setOrientation(LinearLayout.VERTICAL); return v; }
   private TextView text(String value,int size) { TextView v = new TextView(this); v.setText(value); v.setTextSize(size); v.setTextColor(foreground); return v; }
   private Button button(String label,View.OnClickListener listener) { Button b = new Button(this); b.setText(label); b.setAllCaps(false); b.setTextColor(accent); b.setOnClickListener(listener); return b; }
   private void stopSearch() {
+    stopPhoneVoice(); resumePhoneVoice = false;
     voiceVerifiedUntil = 0;
     if (welcome != null) welcome.reset();
     pageReady = false;
@@ -286,6 +305,10 @@ public final class MainActivity extends Activity {
           }
           return true;
         }
+        @Override public void onPageStarted(WebView view,String url,android.graphics.Bitmap icon) {
+          pageReady = false; stopPhoneVoice(); cancelVoiceCheck();
+          super.onPageStarted(view,url,icon);
+        }
         @Override public void onPageFinished(WebView view,String url) {
           if (isCurrent(Uri.parse(url))) {
             pageReady = true;
@@ -301,7 +324,7 @@ public final class MainActivity extends Activity {
     web.stopLoading(); web.loadUrl("about:blank");
     TextView connecting = text(UiText.get("당근 기기 연결 중…\n기존 ChatGPT 연결을 확인하고 있어요.", "Connecting to Carrot…\nChecking your saved ChatGPT connection."),18);
     connecting.setPadding(dp(22),dp(28),dp(22),dp(16)); content.addView(connecting);
-    if (preferences.getBoolean("voice_auto_start",false)) welcome.prepare(device.address);
+    if (autoVoiceEnabled()) welcome.prepare(device.address);
     recovering = true; final int token = generation;
     recovery = new ConnectionRecovery(this);
     recovery.start("http://"+device.address+":7000",previous,message -> {
@@ -309,7 +332,7 @@ public final class MainActivity extends Activity {
       recovering = false;
       content.removeAllViews(); content.addView(web,new LinearLayout.LayoutParams(-1,-1));
       web.loadUrl("http://"+device.address+":7000/");
-      if (!message.isEmpty()) {
+      if (!message.isEmpty() && !phoneMode()) {
         title.setText(UiText.get("ChatGPT 연결 확인 필요 · ", "Check ChatGPT connection · ")+device.address);
         if (foregroundActivity) notice(message);
       }
@@ -338,7 +361,8 @@ public final class MainActivity extends Activity {
   private boolean isCurrent(Uri uri) { return currentAddress!=null && "http".equals(uri.getScheme()) && currentAddress.equals(uri.getHost()) && uri.getPort()==7000 && uri.getUserInfo()==null; }
   private void invokeAssistant() {
     if (!foregroundActivity) return;
-    if (recovering) { notice(UiText.get("기존 ChatGPT 연결을 확인하고 있어요. 당근웹이 열린 뒤 마이크를 눌러 주세요.", "Checking your saved ChatGPT connection. Wait for Carrot Web to open, then tap the microphone.")); return; }
+    if (recovering) { notice(UiText.get("당근웹 연결 중이에요. 웹이 열리면 음성을 시작할 수 있어요.", "Connecting to Carrot Web. Voice is available when the page opens.")); return; }
+    if (phoneSession) { stopPhoneVoice(); title.setText(currentAddress); return; }
     if (welcome.isGreeting()) { welcome.cancel(); launchVerifiedVoice(); return; }
     startVoice(false);
   }
@@ -348,28 +372,171 @@ public final class MainActivity extends Activity {
   }
   @Override public void onWindowFocusChanged(boolean focus) {
     super.onWindowFocusChanged(focus);
+    if (!focus && phoneSession) stopPhoneVoice();
     if (focus && ui != null) scheduleAutoVoice();
   }
   private void maybeStartAutoVoice() {
-    if (autoVoiceGeneration == generation || !foregroundActivity || !hasWindowFocus() || !pageReady || recovering) return;
-    if (preferences.getBoolean("voice_auto_start", false)) startVoice(true);
+    if (!foregroundActivity || !hasWindowFocus() || !pageReady || recovering || waitingForPermission) return;
+    if (resumePhoneVoice) {
+      resumePhoneVoice = false;
+      if (permissionDevice == generation && phoneMode()) startVoice(permissionGreeting);
+      return;
+    }
+    if (autoVoiceGeneration != generation && autoVoiceEnabled()) startVoice(true);
   }
   private void startVoice(boolean automatic) {
     if (voiceStarting || !foregroundActivity) return;
     autoVoiceGeneration = generation;
     voiceVerifiedUntil = 0;
-    if (currentAddress == null) { if (!automatic) openAssistant(); return; }
+    if (currentAddress == null) {
+      if (!automatic) {
+        if (phoneMode()) notice(UiText.get("당근웹에 먼저 연결해 주세요.", "Connect to Carrot Web first."));
+        else openAssistant();
+      }
+      return;
+    }
     String page = web == null ? null : web.getUrl();
     if (page == null || !isCurrent(Uri.parse(page))) {
       if (!automatic) voiceProblem(UiText.get("당근웹이 아직 열리지 않았어요.", "Carrot Web has not opened yet."));
       return;
     }
+    if (phoneMode()) { startPhoneVoice(automatic); return; }
     voiceStarting = true;
     voiceFromAuto = automatic;
     if (automatic) welcome.prepare(currentAddress);
     voiceAttempt = 0;
     titleBeforeVoiceCheck = title.getText();
     beginVoiceAttempt();
+  }
+  private boolean phoneMode() { return preferences.getBoolean("voice_local_first", true); }
+  private boolean autoVoiceEnabled() { return preferences.getBoolean("voice_auto_start", phoneMode()); }
+
+  private void stopPhoneVoice() {
+    phoneGeneration++; directionCheck.clear();
+    if (phoneVoice != null) phoneVoice.stop();
+    if (phoneSession && welcome != null) welcome.cancel();
+    phoneSession = false;
+  }
+
+  private boolean localPage() {
+    return foregroundActivity && !isFinishing() && hasWindowFocus() && pageReady && web != null && web.getUrl() != null
+      && isCurrent(Uri.parse(web.getUrl())) && phoneMode();
+  }
+  private boolean currentSession(int token) { return phoneSession && token == phoneGeneration && localPage(); }
+  private String onDevicePage(String expression) {
+    return "(location.origin===" + JSONObject.quote("http://" + currentAddress + ":7000") +
+      " && !document.hidden && (" + expression + "))";
+  }
+  private void startPhoneVoice(boolean automatic) {
+    if (!localPage() || phoneSession || waitingForPermission) return;
+    final int token = ++phoneGeneration;
+    directionCheck.clear(); phoneSession = true;
+    web.evaluateJavascript(onDevicePage("typeof window.CarrotLocalVoice?.start === 'function'"), value -> {
+      if (!currentSession(token)) return;
+      if (!"true".equals(value)) {
+        stopPhoneVoice();
+        notice(UiText.get("정차 후 당근 기기를 GitPull하고 재시작해 주세요. 휴대폰 직접 음성 명령에는 새 당근웹이 필요해요.",
+                          "Update and restart the parked Carrot device. Direct voice commands need the updated Carrot Web."));
+        return;
+      }
+      if (checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+        phoneSession = false;
+        waitingForPermission = true; permissionDevice = generation; permissionGreeting = automatic;
+        requestPermissions(new String[]{android.Manifest.permission.RECORD_AUDIO}, PHONE_MIC);
+        return;
+      }
+      welcome.prepare(currentAddress);
+      Runnable listen = () -> { if (currentSession(token)) phoneVoice.listen(); };
+      if (automatic) welcome.greet(listen); else listen.run();
+    });
+  }
+
+  @Override public void onRequestPermissionsResult(int request, String[] permissions, int[] grants) {
+    super.onRequestPermissionsResult(request, permissions, grants);
+    if (request != PHONE_MIC) return;
+    waitingForPermission = false;
+    if (grants.length > 0 && grants[0] == android.content.pm.PackageManager.PERMISSION_GRANTED && permissionDevice == generation) {
+      resumePhoneVoice = true; scheduleAutoVoice();
+    } else {
+      resumePhoneVoice = false;
+      title.setText(UiText.get("직접 음성 명령에는 마이크 권한이 필요해요.", "Microphone permission is required for direct voice commands."));
+    }
+  }
+
+  private void handlePhoneCommand(LocalCommand command) {
+    final int token = phoneGeneration;
+    if (!currentSession(token)) { stopPhoneVoice(); return; }
+    dispatchPhoneCommand(token, directionCheck.resolve(command, SystemClock.elapsedRealtime()));
+  }
+  private void dispatchPhoneCommand(int token, LocalCommand command) {
+    switch (command) {
+      case CLARIFY_LEFT: case CLARIFY_RIGHT:
+        boolean left = command == LocalCommand.CLARIFY_LEFT;
+        String prompt = left ? UiText.get("왼쪽이면 왼쪽 확인이라고 말해 주세요.", "Say confirm left if you mean left.")
+                             : UiText.get("오른쪽이면 오른쪽 확인이라고 말해 주세요.", "Say confirm right if you mean right.");
+        title.setText(prompt);
+        welcome.say(prompt, () -> {
+          if (currentSession(token)) { directionCheck.ask(command, SystemClock.elapsedRealtime()); phoneVoice.listen(); }
+        });
+        break;
+      case LEFT: case RIGHT: case BLINKER_SETTINGS:
+        String action = command == LocalCommand.LEFT ? "lane_left" : command == LocalCommand.RIGHT ? "lane_right" : "blinker_settings";
+        String id = ConnectionPolicy.nonce();
+        long expires = System.currentTimeMillis() + 3500;
+        long deadline = SystemClock.elapsedRealtime() + 4300;
+        web.evaluateJavascript(onDevicePage("window.CarrotLocalVoice.start(" + JSONObject.quote(action) + "," +
+          JSONObject.quote(id) + "," + expires + ")"), value -> {
+          if (!currentSession(token)) return;
+          if ("true".equals(value)) checkPhoneResult(token, id, command, deadline);
+          else phoneResult(token, command, "unverified");
+        });
+        break;
+      case QUESTION:
+        String handoff = UiText.get("음성비서를 열게요. 질문을 다시 말해 주세요.", "Opening the assistant. Please repeat your question there.");
+        title.setText(handoff);
+        welcome.say(handoff, () -> { if (currentSession(token)) { stopPhoneVoice(); openAssistant(); } });
+        break;
+      case STOP: stopPhoneVoice(); title.setText(currentAddress); break;
+      default:
+        replyAndListen(token, command == LocalCommand.UNCERTAIN
+          ? UiText.get("방향을 확실히 알아듣지 못했어요. 요청을 보내지 않았어요.", "Direction uncertain. No request sent.")
+          : UiText.get("명령을 알아듣지 못했어요.", "Command not recognized."));
+    }
+  }
+  private void checkPhoneResult(int token, String id, LocalCommand command, long deadline) {
+    if (!currentSession(token)) return;
+    if (SystemClock.elapsedRealtime() >= deadline) { phoneResult(token, command, "unverified"); return; }
+    web.evaluateJavascript(onDevicePage("window.CarrotLocalVoice.result(" + JSONObject.quote(id) + ")"), raw -> {
+      if (!currentSession(token)) return;
+      if ("\"\"".equals(raw)) { ui.postDelayed(() -> checkPhoneResult(token,id,command,deadline),120); return; }
+      String status;
+      try { Object v = new org.json.JSONTokener(raw).nextValue(); status = v instanceof String ? (String)v : "unverified"; }
+      catch (Exception e) { status = "unverified"; }
+      phoneResult(token, command, status);
+    });
+  }
+  private void phoneResult(int token, LocalCommand command, String status) {
+    String output;
+    switch (status) {
+      case "opened": output = UiText.get("깜박이 설정을 열었어요.", "Opened the turn signal setting."); break;
+      case "waiting": output = command == LocalCommand.LEFT
+        ? UiText.get("왼쪽 요청을 접수했어요.", "Left request received.")
+        : UiText.get("오른쪽 요청을 접수했어요.", "Right request received."); break;
+      case "running": output = UiText.get("차로 변경 중이에요.", "Lane change in progress."); break;
+      case "completed": output = UiText.get("차로 변경을 완료했어요.", "Lane change completed."); break;
+      case "permission": output = UiText.get("정차 후 당근웹 도구에서 운전 명령을 허용해 주세요.", "While parked, allow driving commands in Carrot Web Tools."); break;
+      case "duplicate": output = UiText.get("직전 요청이 있어 다시 보내지 않았어요.", "Recent request. No repeat sent."); break;
+      case "rejected": case "expired": case "interrupted": case "cancelled":
+        output = UiText.get("차로변경 요청이 종료됐어요.", "The lane change request ended."); break;
+      case "unavailable": output = UiText.get("이 기기에서 설정을 찾지 못했어요.", "Setting unavailable on this device."); break;
+      default: output = UiText.get("결과를 확인하지 못했어요.", "Result unavailable.");
+    }
+    replyAndListen(token, output);
+  }
+  private void replyAndListen(int token, String message) {
+    if (!currentSession(token)) return;
+    title.setText(message);
+    welcome.say(message, () -> { if (currentSession(token)) phoneVoice.listen(); });
   }
   private void beginVoiceAttempt() {
     if (!voiceStarting || !foregroundActivity) return;
@@ -449,7 +616,7 @@ public final class MainActivity extends Activity {
     checkAfterBackground=false;
     scheduleAutoVoice();
   }
-  @Override protected void onPause() { foregroundActivity = false; welcome.cancel(); ui.removeCallbacks(tryAutoVoice); cancelVoiceCheck(); super.onPause(); }
+  @Override protected void onPause() { foregroundActivity = false; stopPhoneVoice(); welcome.cancel(); ui.removeCallbacks(tryAutoVoice); cancelVoiceCheck(); super.onPause(); }
   @Override protected void onStop() { checkAfterBackground=true; if (scanning) { stopSearch(); if (status!=null) status.setText(UiText.get("검색이 중단됐어요. 다시 검색을 눌러 주세요.", "Search paused. Tap Search again.")); } super.onStop(); }
   @Override public void onBackPressed() { if (web!=null && currentAddress!=null && web.canGoBack()) web.goBack(); else if (currentAddress!=null) startSearch(); else super.onBackPressed(); }
   @Override protected void onDestroy() { if (recovery!=null) recovery.cancel(); stopSearch(); ui.removeCallbacksAndMessages(null); if (updater!=null) updater.close(); if (web!=null) { web.destroy(); web=null; } super.onDestroy(); }

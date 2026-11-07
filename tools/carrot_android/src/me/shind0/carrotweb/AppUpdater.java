@@ -44,9 +44,17 @@ public final class AppUpdater {
     try { label += " "+installed().versionName; } catch (Exception ignored) {}
     android.widget.CheckBox autoVoice = new android.widget.CheckBox(activity);
     autoVoice.setText(UiText.get("당근웹 연결 시 음성조수 자동 실행", "Start the voice assistant when Carrot Web connects"));
-    autoVoice.setChecked(preferences.getBoolean("voice_auto_start",false));
+    autoVoice.setChecked(preferences.getBoolean("voice_auto_start",preferences.getBoolean("voice_local_first", true)));
     autoVoice.setOnCheckedChangeListener((v,on) -> preferences.edit().putBoolean("voice_auto_start",on).apply());
-    new AlertDialog.Builder(activity).setTitle(label).setView(autoVoice).setMessage(UiText.get("새 버전을 자동 확인합니다. 업데이트해도 기존 기기 연결 정보는 유지됩니다.\n\n설치는 주차 후 진행하세요.", "New versions are checked automatically. Updating preserves your saved connection.\n\nInstall updates while parked."))
+    android.widget.CheckBox direct = new android.widget.CheckBox(activity);
+    direct.setText(UiText.get("폰에서 음성 명령 먼저 듣기", "Listen for commands on this phone first"));
+    direct.setChecked(preferences.getBoolean("voice_local_first", true));
+    direct.setOnCheckedChangeListener((v,on) -> preferences.edit().putBoolean("voice_local_first", on)
+      .putBoolean("voice_auto_start", autoVoice.isChecked()).apply());
+    android.widget.LinearLayout options = new android.widget.LinearLayout(activity);
+    options.setOrientation(android.widget.LinearLayout.VERTICAL);
+    options.addView(autoVoice); options.addView(direct);
+    new AlertDialog.Builder(activity).setTitle(label).setView(options).setMessage(UiText.get("폰 직접 듣기는 차로변경과 깜박이 설정 열기를 처리합니다. 질문은 기본 음성비서에서 다시 말해 주세요. 직접 듣기를 끄면 미니창으로 시작합니다.\n\n업데이트 설치는 주차 후 진행하세요.", "Direct listening handles lane requests and turn signal settings. Repeat questions in the default assistant. Turn off direct listening to start in the assistant overlay.\n\nInstall updates while parked."))
       .setPositiveButton(available == null ? UiText.get("업데이트 확인", "Check for updates") : UiText.get("새 버전 설치", "Install update"), (d,w)->{ if (available==null) check(true); else offer(); })
       .setNegativeButton(UiText.get("닫기", "Close"),null).show();
   }
