@@ -78,7 +78,9 @@ In the 2026-11-07 test, refreshing old tool descriptions still left a ChatGPT ap
 
 In CarrotAssist 0.2.4, drag the orange microphone to keep it in your preferred position. Tap to verify the current Carrot Web account link and online status, then open the default assistant overlay. If verification fails, choose **Check again** or **Open assistant only**. Invoking the assistant directly with the phone’s side key skips the app’s startup check.
 
-Tap the device name at the top and enable **Start the voice assistant when Carrot Web connects**. Transient startup connection failures get up to three attempts in total. On connection the app greets you once, wishes you a safe drive and opens the assistant overlay. When the device has reported a Git update at startup, the greeting asks about pulling and restarting even while driving. Actual maintenance still requires the existing stationary, disengagement and confirmation checks. A manual microphone tap skips the greeting.
+Tap the device name at the top and enable **Start the voice assistant when Carrot Web connects**. Transient startup connection failures get up to three attempts in total. On connection the app greets you once, wishes you a safe drive and opens the assistant overlay. From version 0.2.5, an available Git update is announced once. No reply is needed. A manual microphone tap skips the greeting.
+
+With CarrotAssist 0.2.5, updated Carrot Web and Tools access, say **“Open Naver Map”** in the mini voice window to launch the installed Android app.
 
 If touching the web closes the small assistant overlay and ends voice:
 

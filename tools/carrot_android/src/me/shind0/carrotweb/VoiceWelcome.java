@@ -12,16 +12,15 @@ import org.json.JSONObject;
 
 /** The optional app-open greeting is separate from manual voice invocation and driving requests. */
 final class VoiceWelcome {
-  interface Finished { void open(boolean updateOffered); }
   private final Context context;
   private final Handler ui = new Handler(Looper.getMainLooper());
   private TextToSpeech tts;
-  private boolean ttsReady, updateAvailable, offered;
+  private boolean ttsReady, updateAvailable;
   private int generation, utterance;
   private String address;
   private DeviceProbe probe;
-  private Finished pending;
-  private final Runnable fallback = () -> finish(false);
+  private Runnable pending;
+  private final Runnable fallback = this::finish;
   private final Runnable speak = this::speakNow;
 
   VoiceWelcome(Context context) { this.context = context; }
@@ -56,7 +55,7 @@ final class VoiceWelcome {
       && !result.optString("target_head").equals(result.optString("head"));
   }
 
-  void greet(Finished done) {
+  void greet(Runnable done) {
     cancel(); pending = done;
     // Don't make an unresponsive speech engine delay access to the assistant.
     ui.postDelayed(speak, ttsReady ? 0 : 450);
@@ -65,28 +64,27 @@ final class VoiceWelcome {
   private void speakNow() {
     if (pending == null) return;
     ui.removeCallbacks(speak);
-    offered = updateAvailable;
     String message = UiText.get("안녕하세요. 안전 운전하세요.", "Hello. Drive safely.");
-    if (offered) message += UiText.get(" 새 업데이트가 있어요. 깃풀하고 성공하면 재부팅할까요?", " An update is available. Pull it and restart if it succeeds?");
-    if (!ttsReady || tts == null) { Toast.makeText(context,message,Toast.LENGTH_SHORT).show(); finish(offered); return; }
+    if (updateAvailable) message += UiText.get(" 당근 기기에 새 업데이트가 있어요.", " An update is available for your Carrot device.");
+    if (!ttsReady || tts == null) { Toast.makeText(context,message,Toast.LENGTH_SHORT).show(); finish(); return; }
     final String id = "welcome-" + ++utterance;
     tts.setOnUtteranceProgressListener(new UtteranceProgressListener() {
       @Override public void onStart(String speaking) {}
       @Override public void onDone(String speaking) { complete(speaking); }
       @Override public void onError(String speaking) { complete(speaking); }
       private void complete(String speaking) {
-        ui.post(() -> { if (id.equals(speaking) && id.equals("welcome-" + utterance)) finish(offered); });
+        ui.post(() -> { if (id.equals(speaking) && id.equals("welcome-" + utterance)) finish(); });
       }
     });
     ui.postDelayed(fallback, 8000);
-    if (tts.speak(message,TextToSpeech.QUEUE_FLUSH,null,id) == TextToSpeech.ERROR) finish(false);
+    if (tts.speak(message,TextToSpeech.QUEUE_FLUSH,null,id) == TextToSpeech.ERROR) finish();
   }
 
   boolean isGreeting() { return pending != null; }
-  private void finish(boolean update) {
-    Finished done = pending;
+  private void finish() {
+    Runnable done = pending;
     cancel();
-    if (done != null) done.open(update);
+    if (done != null) done.run();
   }
   void cancel() {
     pending = null; utterance++;

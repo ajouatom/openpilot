@@ -46,3 +46,31 @@ test('manual-only panels do not synthesize destructive clicks and an unrelated o
   await assert.rejects(module.openToolPanel('bluetooth'), /Close the current dialog/);
   assert.equal(clicks, 0);
 });
+
+test('Naver Map launches only for the Android wrapper and reports the matching native result', async () => {
+  globalThis.localStorage = { getItem: () => 'local-grant' };
+  globalThis.document = { hidden: false };
+  globalThis.fetch = async () => ({ ok: true, json: async () => ({ ok: true, status: 'open_requested', action: 'naver_map' }) });
+  const module = await import('../src/features/tools/assistant_tools.js?phone');
+  const command = id => ({ id: id.repeat(43), operation: 'open', action: 'naver_map', expires_at: Date.now() + 20000 });
+  const browser = await module.executeToolsCommand(command('a'));
+  assert.equal(browser.result.status, 'failed');
+  Object.defineProperty(globalThis, 'navigator', { configurable: true, value: { userAgent: 'CarrotAssistPhone/1' } });
+  globalThis.window = new EventTarget();
+  let launches = 0, outcome = 'requested';
+  window.location = { assign(value) {
+    launches++;
+    const url = new URL(value);
+    assert.equal(url.protocol, 'carrotassist:');
+    assert.equal(url.hostname, 'phone');
+    const id = url.pathname.split('/')[2];
+    for (const key of ['unrelated', id]) window.dispatchEvent(new CustomEvent('carrot-phone-result', { detail: { id: key, status: outcome } }));
+  } };
+  const request = command('b');
+  const result = await module.executeToolsCommand(request);
+  assert.equal(result.result.status, 'requested');
+  assert.deepEqual(await module.executeToolsCommand(request), result);
+  assert.equal(launches, 1);
+  outcome = 'not_installed';
+  assert.match((await module.executeToolsCommand(command('c'))).result.error, /not installed/);
+});
