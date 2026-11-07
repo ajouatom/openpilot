@@ -1,5 +1,21 @@
 # Repository memory
 
+- On 2026-11-07, owner rejects full-app and Samsung pop-up voice UI; keep native
+  showAssist mini overlay. Private phone APK0.2.3/code10 was restored to the0.2.2
+  behavior; not publicly released and repository Android sources remain0.2.2.
+  Outside web touch dismisses ChatGPT mini without activating the underlying tab;
+  continuous voice through that dismissal remains unresolved. Do not promise it.
+  During drive-permission audit, initial live context was can_drive=false; later
+  persisted grant and live Codex/ChatGPT web context verify drive/settings/tools
+  true. Do not claim owner never approved, silently union grants, or infer when
+  the connection changed. Read-only diagnostics only; no driving request executed.
+  Updated stale plugin description that incorrectly said driving unsupported.
+  Relay0.7.4 makes clear left/right lane and speed requests tool-first, without
+  preamble or context/status/catalog lookups. Existing authorization/vehicle checks,
+  expiry/dedup/no-retry remain. Model/network latency is not bounded by prompting.
+  29 relay checks and KO/EN docs validator passed. NAS build035779c92085 exited0;
+  public health0.7.4 and live request-first instructions verified. No vehicle pull.
+
 - On 2026-11-07 follow-up, cached ChatGPT plugin tool descriptions still demanded
   confirmation after relay0.7.3. Refreshed plugin metadata and verified new text.
   A NEW web conversation then reproduced a separate ChatGPT commit approval card.
