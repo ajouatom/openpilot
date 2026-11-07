@@ -59,6 +59,29 @@ async function start(dir, port = 0) {
   return { http, base, post, form, browser, register, begin, link, mcp, close: () => new Promise(r => http.close(r)) };
 }
 
+test('English OAuth consent and errors retain the same fields and security requirements', async () => {
+  const env = await start();
+  try {
+    const client = await (await env.register()).json();
+    const query = new URLSearchParams({ client_id: client.client_id, response_type: 'code', redirect_uri: callback,
+      code_challenge_method: 'S256', code_challenge: digest(randomBytes(32)), state: 'language-test',
+      resource: `${env.base}/account/mcp`, scope: 'carrot.screen carrot.settings carrot.drive carrot.tools' });
+    const page = async language => {
+      const response = await fetch(`${env.base}/authorize?${query}`, { headers: { 'Accept-Language': language } });
+      assert.equal(response.status, 200);
+      assert.match(response.headers.get('vary'), /Accept-Language/i);
+      return response.text();
+    };
+    const en = await page('en-US,en;q=0.9'), ko = await page('ko-KR,ko;q=0.9');
+    assert.match(en, /<html lang="en">/); assert.doesNotMatch(en, /[가-힣]/);
+    assert.match(en, /Authorize this connection/); assert.match(en, /diagnostic log uploads/);
+    assert.match(ko, /이 기기 연결 승인/);
+    assert.deepEqual([...en.matchAll(/name="([^"]+)"/g)].map(x => x[1]), [...ko.matchAll(/name="([^"]+)"/g)].map(x => x[1]));
+    const error = await env.form('/oauth/approve', { flow: 'missing' }, { 'Accept-Language': 'en' });
+    assert.equal(error.status, 403); assert.match(await error.text(), /connection request expired/);
+  } finally { await env.close(); }
+});
+
 test('selecting another Carrot Web keeps ChatGPT authorization without a new code or broader scopes', async () => {
   const env = await start();
   let mcp;

@@ -1,5 +1,45 @@
 # Repository memory
 
+- On 2026-11-07, reproduced the remaining Android0.2.1 offline case: WebStorage
+  getOrigins omits localStorage-only origins, and last_address already pointed to
+  the new office IP. Android0.2.2(code9) persists bounded origin history and reads
+  only local-address hints from this app's legacy WebView storage as an upgrade
+  fallback. Actual tokens still come from isolated WebView and relay validation;
+  database bytes never authorize a connection. Local grants never gate navigation.
+  Signed0.2.2 installed on owner's USB phone; existing account moved from hotspot
+  to192.168.0.178 without code or vehicle GitPull. English screen-brightness search
+  and actual screen-open acknowledged opened; no setting writes/driving commands.
+  Native UI now follows phone language (KO/English fallback), web language remains
+  separate; relay0.7.2 consent follows browser language and AI follows user language.
+  Java policy72, emulator WebView62/English native screen, MCP29 checks pass.
+  NAS0.7.2 built/started exit0 image615f4d14150f; public health and owner online
+  status verified after restart. Actual spoken-English accents are not tested.
+  Final APK SHA256 c9e4e659a3d0fee217342aa0b14477f9feed5d1413210058eca21db788b62842.
+- On 2026-11-07, owner reports overnight/offline use after switching hotspot
+  10.225.84.19 to office 192.168.0.178. Discovery worked but WebView storage and
+  relay/local grants were origin-bound. Owner explicitly rejects matching the
+  previous device as a condition: the Carrot Web currently selected/opened in
+  CarrotAssist must become ChatGPT's target, even a different Carrot device.
+  Commit2856def933 / Android0.2.1(code8) restores app-owned saved ChatGPT browser
+  capabilities from isolated network-blocked WebViews, ranks authenticated account
+  activity, relocates the existing relay session, preserves OAuth scopes and
+  discards pending screen/settings/drive/Tools requests. No device-identity gate.
+  Optional local-permission restoration uses a double-hash/HMAC challenge before
+  sending an existing bearer grant; failed/absent/different-device permissions do
+  NOT block account/screen connection or create new privileges. Destination-local
+  permissions stay in effect. An unreachable address after backgrounding triggers
+  discovery. Outside Chrome/Samsung storage is not imported. Uninstall/data reset
+  still removes app authorization. Never replay old driving commands on reconnect.
+  Python68/MCP27/Java policy66/emulator WebView44 checks and KO/EN docs validation
+  pass. NAS0.7.1 built/started exit0(image4b31e0f2f6ca); health/discovery verified,
+  existing owner's OAuth survives but still points offline to old IP until phone
+  update/reopen. APK0.2.1 release and app-specific update.json(code8) published,
+  downloaded hash verified:4f09a0c56b40e92dda8583d334f46e802484f43053c542ccd27625d49f336336.
+  Signing identity matches0.2.0. Wiki66be9c5 pushed; both repos0/0. Physical phone
+  absent from USB; no live phone network-switch or vehicle command test, no vehicle
+  GitPull/restart performed. Owner needs phone app update; local permission recovery
+  also needs parked device GitPull/restart. Keep unrelated working changes intact.
+
 - On 2026-11-06, owner requests voice control of Carrot Web Tools buttons and
   novice-readable code-entry instructions. Relay0.7.0 adds separate carrot.tools
   consent plus a stationary-issued local grant; existing scopes never expand.
