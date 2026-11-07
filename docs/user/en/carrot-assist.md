@@ -161,6 +161,8 @@ Relay delivery expires after five seconds; controller consumption requires an in
 
 Running and completed are distinct. Lane completion requires both controller completion and observed lane crossing. **Revoke driving commands** prevents new commands and cancels pending preparation; it does not force an ongoing steering maneuver to abort. A phone voice-start action has not been added to the existing Bluetooth remote.
 
+On Ioniq 5 PE, set **Automatic turn signals** to **2** and connect a supported indicator device. Once the usual lane-change conditions are met, “Change lanes left” or “Change lanes right” requests the corresponding indicator. The maneuver starts after the device acknowledges that request and the car reports only the requested lamp lit. A blocked adjacent lane or unconfirmed indicator during preparation ends the request.
+
 ## Use Tools buttons by voice
 
 This requires relay 0.7.0 and matching device code. Android 0.2.0 remains compatible. GitPull and restart the device, then reload Carrot Web. Select **Tools > ChatGPT assistant > Allow Tools panels and actions**, then follow the existing-installation reconnection steps above and select **도구 화면·작업 실행 허용** (Tools access) on the authorization page. Existing settings/driving grants do not expand automatically.
