@@ -559,7 +559,7 @@ def test_voice_hold_never_rejoins_same_request(fault):
   from blink_voice import VoiceLaneSignal
   source = VoiceLaneSignal()
   cs = NS(leftBlinker=False, rightBlinker=False)
-  meta = NS(assistantLaneSignalId='', laneChangeDirection='left', laneChangeState='preLaneChange')
+  meta = NS(assistantLaneSignalId='', assistantLaneSignalRoute=source.route, laneChangeDirection='left', laneChangeState='preLaneChange')
   def select(busy=False):
     return source.select(meta, cs, allowed=True, peer_ready=True, hold=None, busy=busy)
   assert select() is None
@@ -572,3 +572,23 @@ def test_voice_hold_never_rejoins_same_request(fault):
   else:
     source = VoiceLaneSignal()
   assert select() is None
+
+@pytest.mark.parametrize('direction,bit', [('left',1), ('right',2)])
+def test_b1_voice_uses_receiver_lamps_when_vehicle_port_has_none(direction, bit):
+  from types import SimpleNamespace as NS
+  from blink_voice import VoiceLaneSignal
+  source = VoiceLaneSignal()
+  cs = NS(leftBlinker=False, rightBlinker=False)
+  meta = NS(assistantLaneSignalId='', assistantLaneSignalRoute=source.route, laneChangeDirection=direction, laneChangeState='preLaneChange')
+  def select():
+    return source.select(meta, cs, allowed=True, peer_ready=True, hold=None, busy=False)
+  assert not select()
+  meta.assistantLaneSignalId = 'a'*43
+  assert select() == ('lane',direction)
+  hold = {'id':'hold:1','source':'lane','direction':direction}
+  assert source.bind(hold)
+  for lamps in (0,1,2,3):
+    assert source.confirmed(hold, hold['id'], {'accepted_id':hold['id'],'lamps':lamps}, cs) == (lamps == bit)
+  assert not source.confirmed(hold, None, {'accepted_id':None,'lamps':bit}, cs)
+  setattr(cs, ('right' if direction=='left' else 'left')+'Blinker', True)
+  assert not source.confirmed(hold, hold['id'], {'accepted_id':hold['id'],'lamps':bit}, cs)

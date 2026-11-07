@@ -29,19 +29,20 @@ AUTO_APP_WAIT_S = 10.0
 
 
 class DesireHelper:
-  def __init__(self, tesla_auto_signals=False, boundary_indicator_supported=False):
+  def __init__(self, tesla_auto_signals=False, boundary_indicator_supported=False, *, fingerprint='', native_voice_signal=False):
     self.params = Params()
     self.boundary_indicator_supported = boundary_indicator_supported
     self.boundary_indicator_enabled = False
-    self.voice_lane_signals_enabled = False
+    journal = read_json(RUNTIME/'boundary-indicator.json', {}) if fingerprint or boundary_indicator_supported else {}
+    journal = journal if isinstance(journal, dict) else {}
     self.boundary_indicator = BoundaryIndicator(
-      read_json(RUNTIME/'boundary-indicator.json', {}) if boundary_indicator_supported else None)
+      journal if boundary_indicator_supported or journal.get('voice_fingerprint') == fingerprint else None)
     self.model_indicator = ModelIndicator()
     self.model_desire_indicator_enabled = False
     self.model_path_indicator_enabled = False
     self.indicator_journal_time = 0.
     self.bluetooth_commands = CommandReader('lane')
-    self.assistant_lane = AssistantLane()
+    self.assistant_lane = AssistantLane(fingerprint=fingerprint, native_signal=native_voice_signal)
     self.frame = 0
 
     # FSM core
@@ -132,7 +133,6 @@ class DesireHelper:
   def _update_params_periodic(self):
     if self.boundary_indicator_supported and (self.frame == 1 or self.frame % 20 == 0):
       mode = self.params.get_int("AutoBlinkerControl")
-      self.voice_lane_signals_enabled = mode == 2
       lamp_mode = mode in (1, 2) and not self.params.get_bool("CanfdBlinkerControl")
       self.boundary_indicator_enabled = lamp_mode and self.params.get_bool("ManualLaneChangeIndicator")
       self.model_desire_indicator_enabled = lamp_mode and self.params.get_bool("ModelDesireIndicator")
@@ -400,6 +400,10 @@ class DesireHelper:
         isolation=self.boundary_indicator, manual_edge=self.boundary_indicator.request_direction, command_curvature=indicator_curvature,
         feedback=read_json(HOLD_PATH, {}) if self.model_indicator.active else None)
 
+    elif self.boundary_indicator.blocked or not self.boundary_indicator.initialized:
+      # Expire a voice-owned lamp mask without enabling PE-only geometry observation.
+      self.boundary_indicator.update(time.monotonic(), carstate, modeldata, enabled=False, valid=assistant_valid, busy=False)
+
     # counts
     self.carrot_lane_change_count = max(0, self.carrot_lane_change_count - 1)
     self.lane_change_delay = max(0.0, self.lane_change_delay - DT_MDL)
@@ -443,15 +447,15 @@ class DesireHelper:
       voice_side = self.assistant_lane.active.get('direction') if self.assistant_lane.active else None
       opposite_torque = carstate.steeringPressed and ((voice_side == 'left' and carstate.steeringTorque < 0) or
                                                      (voice_side == 'right' and carstate.steeringTorque > 0))
-      pe_signal = self.boundary_indicator_supported and self.assistant_lane.signal_id
+      owned_signal = self.assistant_lane.signal_id
       raw_lamps = int(carstate.leftBlinker) | (int(carstate.rightBlinker) << 1)
-      expected_lamps = (BLINKER_LEFT if voice_side == 'left' else BLINKER_RIGHT) if pe_signal else BLINKER_NONE
-      if pe_signal and raw_lamps and raw_lamps != expected_lamps and not (lever or physical_stalk_press):
+      expected_lamps = (BLINKER_LEFT if voice_side == 'left' else BLINKER_RIGHT) if owned_signal else BLINKER_NONE
+      if owned_signal and raw_lamps and raw_lamps != expected_lamps and not (lever or physical_stalk_press):
         # Unexplained opposite/hazard feedback must not re-enter the FSM as a driver request.
         self.boundary_indicator.own(time.monotonic(), raw_lamps)
         driver_st = BLINKER_NONE
         driver_changed = driver_enabled = False
-      pe_driver_busy = self.boundary_indicator_supported and (
+      signal_driver_busy = not self.tesla_auto_signals and (
         (raw_lamps and raw_lamps != expected_lamps) or
         ((lever or physical_stalk_press) and not self.assistant_lane.own_tap(carstate)))
       assistant_state = {
@@ -461,9 +465,9 @@ class DesireHelper:
         'phase': {LaneChangeState.off: 'off', LaneChangeState.preLaneChange: 'preLaneChange',
                   LaneChangeState.laneChangeStarting: 'laneChangeStarting', LaneChangeState.laneChangeFinishing: 'laneChangeFinishing'
                   }.get(self.lane_change_state, 'unknown'),
-        'signal_disabled': self.boundary_indicator_supported and not self.voice_lane_signals_enabled,
-        'driver_busy': bool(driver_enabled or stalk_press or opposite_torque or pe_driver_busy),
-        'driver_override': bool(stalk_press or opposite_torque or pe_driver_busy),
+        'driver_busy': bool(driver_enabled or stalk_press or opposite_torque),
+        'indicator_driver_busy': signal_driver_busy,
+        'driver_override': bool(stalk_press or opposite_torque or (owned_signal and signal_driver_busy)),
         'other_request': bool(remote or self.desire_disable_count or self.turn_desire_state or self.turn_direction != TurnDirection.none or
                               carrotMan.atcType not in ('', 'none', 'none prepare', 'straight', 'straight prepare') or
                               (carrotMan.carrotCmd == 'LANECHANGE' and carrotMan.carrotCmdIndex != self.carrot_cmd_index_last)),
@@ -696,7 +700,7 @@ class DesireHelper:
                     # 여기서는 시작 직전 안전성 체크
                     if side.lane_change_available or atc_line_release:
                       can_start = True
-              if can_start and assistant_direction and self.boundary_indicator_supported:
+              if can_start and assistant_direction and not self.tesla_auto_signals and self.assistant_lane.signal_route != 'ordinary':
                 # Reserve our lamp before publishing its intent. A delayed blink must never become driver input.
                 self.boundary_indicator.own(time.monotonic(), blinker_state)
                 can_start = self.assistant_lane.signal_ready(assistant_direction, carstate)

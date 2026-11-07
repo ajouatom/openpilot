@@ -18,8 +18,10 @@ TERMINAL = {'completed', 'rejected', 'expired', 'interrupted', 'unverified', 'ca
 
 
 class AssistantLane:
-  def __init__(self, root=ROOT, clock=time.monotonic):
+  def __init__(self, root=ROOT, clock=time.monotonic, *, fingerprint='', native_signal=False):
     self.root, self.clock = Path(root), clock
+    self.fingerprint = fingerprint
+    self.native_signal = native_signal
     self.started = clock()
     self.seen = deque(maxlen=128)
     self.active = None
@@ -44,8 +46,7 @@ class AssistantLane:
       except OSError:
         pass  # Missing feedback cannot undo a rejection/cancellation.
 
-  @staticmethod
-  def blocked(state, direction):
+  def blocked(self, state, direction):
     if not state['valid']:
       return 'vehicle_state_unavailable'
     if not state['lateral_active']:
@@ -54,9 +55,7 @@ class AssistantLane:
       return 'vehicle_condition'
     if not math.isfinite(state['speed']) or state['speed'] < 30 / 3.6:
       return 'below_lane_change_speed'
-    if state.get('signal_disabled'):
-      return 'lane_indicator_control_disabled'
-    if state['driver_busy'] or state['other_request']:
+    if state['driver_busy'] or state['other_request'] or (self.signal_route != 'ordinary' and state.get('indicator_driver_busy')):
       return 'driver_or_other_maneuver'
     side = state[direction]
     if side['blindspot']:
@@ -81,6 +80,7 @@ class AssistantLane:
         elif state['phase'] != 'off':
           self.publish('rejected', 'maneuver_already_active')
         else:
+          self.active['signal_route'] = self.indicator_route(now)
           reason = self.blocked(state, command['direction'])
           if reason:
             self.publish('rejected', reason)
@@ -106,6 +106,20 @@ class AssistantLane:
     self.publish('waiting', 'existing_lane_change_conditions')
     return active['direction'], False
 
+  def indicator_route(self, now):
+    if self.native_signal:
+      return 'native'
+    available = read_json(self.root / 'indicator-device.json', {})
+    if isinstance(available, dict) and self.fingerprint and available.get('fingerprint') == self.fingerprint:
+      stamp, route = available.get('time'), available.get('route')
+      if type(stamp) in (int, float) and 0 <= now - stamp < .6 and isinstance(route, str) and IDENTITY.fullmatch(route):
+        return route
+    return 'ordinary'
+
+  @property
+  def signal_route(self):
+    return self.active.get('signal_route', '') if self.active else ''
+
   @property
   def signal_id(self):
     return self.active['id'] if self.active and 'signal_since' in self.active else ''
@@ -114,7 +128,8 @@ class AssistantLane:
     if not self.signal_id or not cs.blinkerLever:
       return False
     value = read_json(self.root / 'signal.json', {})
-    if not isinstance(value, dict) or value.get('id') != self.signal_id or value.get('direction') != self.active['direction']:
+    if (not isinstance(value, dict) or value.get('id') != self.signal_id or value.get('route') != self.signal_route or
+        value.get('direction') != self.active['direction']):
       return False
     direction = 1 if self.active['direction'] == 'left' else 2
     return self.tap_echo.matches(self.clock(), cs, direction, 0., {'stamp':value.get('time'), 'tap':value.get('tap')})
@@ -131,7 +146,9 @@ class AssistantLane:
     stamp = feedback.get('time')
     return (feedback.get('confirmed') is True and feedback.get('id') == active['id'] and feedback.get('direction') == direction and
             type(stamp) in (int, float) and active['signal_since'] <= stamp <= now and now - stamp < .35 and
-            (cs.leftBlinker, cs.rightBlinker) == (direction == 'left', direction == 'right'))
+            feedback.get('route') == self.signal_route and
+            not (cs.rightBlinker if direction == 'left' else cs.leftBlinker) and
+            (self.signal_route == 'native' or feedback.get('board_lamp') is True or (cs.leftBlinker if direction == 'left' else cs.rightBlinker)))
 
   def after(self, phase, direction, *, crossed=False):
     if self.active is None:
