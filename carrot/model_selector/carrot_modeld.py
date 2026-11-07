@@ -499,7 +499,9 @@ def main(demo=False):
   prev_action = log.ModelDataV2.Action()
 
   from opendbc.car.tesla.values import TeslaFlags
-  DH = DesireHelper(tesla_auto_signals=CP.brand == "tesla" and bool(CP.flags & TeslaFlags.AUTO_TURN_SIGNALS),
+  from openpilot.selfdrive.car.voice_indicator import native_indicator
+  DH = DesireHelper(fingerprint=CP.carFingerprint, native_voice_signal=native_indicator(CP) is not None,
+                    tesla_auto_signals=CP.brand == "tesla" and bool(CP.flags & TeslaFlags.AUTO_TURN_SIGNALS),
                     boundary_indicator_supported=CP.carFingerprint == 'HYUNDAI_IONIQ_5_PE')
   boundary_observer = BoundaryObserver(cloudlog.event) if DH.boundary_indicator_supported else None
 
@@ -628,6 +630,7 @@ def main(demo=False):
       modelv2_send.modelV2.meta.autoTurnSignal = DH.auto_turn_signal
       modelv2_send.modelV2.meta.autoTurnSignalLaneChange = DH.auto_turn_signal_lane_change
       modelv2_send.modelV2.meta.assistantLaneSignalId = DH.assistant_lane.signal_id
+      modelv2_send.modelV2.meta.assistantLaneSignalRoute = DH.assistant_lane.signal_route
       modelv2_send.modelV2.meta.autoTurnSignalDirection = DH.auto_signal_direction
       modelv2_send.modelV2.meta.autoTurnSignalRequestId = DH.auto_signal_request_id
       modelv2_send.modelV2.meta.manualLaneIndicator = DH.boundary_indicator.request_direction
