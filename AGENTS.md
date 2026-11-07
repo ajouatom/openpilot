@@ -1,5 +1,15 @@
 # Repository memory
 
+- On 2026-11-07 voice follow-up, actual mini conversations showed an unsupported
+  response without visible tools and a later 14-second turn with a lane tool call
+  and unnecessary dashboard question. Current account can_drive=true; last relay
+  request ended unverified (delivery_or_feedback_expired), not confirmed completion.
+  Relay0.7.5 caps first-ack wait at about 400 ms, reports queued/first progress
+  promptly, and reads latest status immediately on explicit follow-up. Late vehicle
+  results keep the same request ID. No automatic retry or scope change. Model
+  preambles and tool selection are not under deterministic relay control. No live
+  maneuver triggered during diagnosis or tests.
+
 - On 2026-11-07, owner rejects full-app and Samsung pop-up voice UI; keep native
   showAssist mini overlay. Private phone APK0.2.3/code10 was restored to the0.2.2
   behavior; not publicly released and repository Android sources remain0.2.2.
