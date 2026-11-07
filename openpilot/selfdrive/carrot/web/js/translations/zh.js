@@ -16,7 +16,7 @@ window.CarrotTranslations.register("zh", {
     assistant_settings_enabled: "设备已授权。请重新授权 ChatGPT 并选择设置值读写权限。",
     assistant_settings_disable: "撤销设置值权限",
     assistant_settings_enable: "允许读取和修改设置值",
-    assistant_settings_help: "授权后，仅将所请求设置的当前值及修改结果发送到 ChatGPT 和 Carrot 中继服务器。说明新值并获得语音确认后才应用。驾驶相关设置仅在停车且辅助功能关闭时修改。请在 ChatGPT 连接授权中选择相同权限。",
+    assistant_settings_help: "允许读取和修改指定设置；当前值和修改结果会发送给 ChatGPT 与 Carrot 中继。明确指定设置和数值的命令会在范围检查后直接执行，不重复询问。含糊的请求才需澄清。首次授权须停车并关闭辅助驾驶，也须在 ChatGPT 连接中授权。",
     assistant_help: "连接账户后可搜索、解释和打开设置。读取及修改当前值需要在此设备和 ChatGPT 连接中另行授权。",
     model_library_title: "外部驾驶模型",
     model_library_internal: "内部模型：固定 CD210",

@@ -84,20 +84,21 @@ For example: “Find the screen brightness setting and open it.” English setti
 | Explain | “What does the first setting do?” |
 | Open screen | “Open the following-gap level setting.” |
 | Read value | “What is the Carrot device's current screen brightness?” |
-| Propose change | “Change that brightness to 60.” |
-| Confirm | After hearing the values: “Yes, apply that value.” |
+| Change value | “Change that brightness to 60.” → “Changed to 60” after verified storage. |
 
-Changes follow **read current value → propose → user confirms → verify application**. Catalog defaults are not treated as live device values. Bounds and increments are checked. Proposals expire after 60 seconds; a changed current value requires a new proposal and confirmation.
+Relay **0.7.3** treats a clear command specifying the setting and value or adjustment as authorization. It internally **checks the current value and bounds → saves → verifies readback**, without asking the same question again. “Set acceleration setting 0 to 240” applies 240 when valid and gives a short result. Ambiguous requests or AI-recommended values still need clarification. Out-of-range requests are rejected with the allowed range.
 
-ChatGPT's plugin permissions may add a tool-approval prompt such as **Allow once**. If a proposal expires while waiting for approval, confirm a new proposal. Completely hands-free operation is not guaranteed in every account or conversation.
+Internal preparations expire after 60 seconds; changed values or definitions prevent saving. Failed, expired or unverified requests are not automatically replayed. ChatGPT may independently show a tool approval such as **Allow once**. That is not a request for a Carrot connection code or new permission.
 
-“Increase by 10%” adds ten percent of the current value: 50 becomes 55 before rounding to the setting's increment. “Add 10” adds ten units. If zero has a special meaning such as automatic mode, check the explanation and request an explicit value. Distinguish the Carrot display from the phone display.
+Reads do not need a change confirmation. Updated Carrot Web refreshes local permission from storage for each new request and does not block commands while a read-only code field has focus. Active editing blocks changes, but not reads. GitPull the device and reopen Carrot Web for these web fixes; keep phone APK 0.2.2.
+
+“Increase by 10%” adds ten percent of the current value: 50 becomes 55; fractional calculated results are rounded to the nearest integer. “Add 10” adds ten units. If zero has a special meaning such as automatic mode, check the explanation and request an explicit value. Distinguish the Carrot display from the phone display.
 
 Keep the CarrotAssist web interface active beneath the small voice overlay. A different fullscreen app or locked phone can suspend delivery until a request expires. A queued request is not a confirmed change.
 
 ## Supported scope
 
-Voice changes support device-defined integer settings with valid bounds and increments. All supported settings, including driving settings, can be changed while driving after confirming the current and proposed values. Only initial authorization requires stationary/disengaged state. Each setting retains its existing activation timing; some require a restart. An explicit integer such as “set it to 240” is preserved within the allowed range. A button increment of 5 and minimum of 1 do not force 240 to become 241. Relative calculations are rounded to the nearest integer and the proposed value must be confirmed. Restricted settings such as disabling driver monitoring are excluded.
+Voice changes support device-defined integer settings with valid bounds and increments. All supported settings, including driving settings, can be changed while driving on a clear change command. Only initial authorization requires stationary/disengaged state. Each setting retains its existing activation timing; some require a restart. An explicit integer such as “set it to 240” is preserved within the allowed range. A button increment of 5 and minimum of 1 do not force 240 to become 241. Relative calculations are rounded to the nearest integer without an extra confirmation question for a clear command. Restricted settings such as disabling driver monitoring are excluded.
 
 Setting history identifies changes made by the voice assistant. Follow each setting's instructions when a restart is required. Direct indicator control, drive analysis and driving-record uploads remain unsupported. Separate Tools permission enables tmux diagnostic upload requests.
 
@@ -117,7 +118,7 @@ Requires relay 0.6.0 and its matching device code. Keep the existing Android 0.2
 | “Reduce speed” | Subtract 10 km/h, matching the legacy voice command |
 | “Set speed to 100” | Set the cruise target to 100 km/h |
 
-Clear execution requests do not add a separate conversational confirmation. Saved tuning settings retain their value-confirmation procedure. ChatGPT may independently require tool approval; fully hands-free operation is not guaranteed for every account. Speech recognition, model reasoning and network latency remain, so this is not an emergency control interface.
+Clear execution requests do not add a separate conversational confirmation. Clear target/value commands for saved settings also apply after internal validation without another question. ChatGPT may independently require tool approval; fully hands-free operation is not guaranteed for every account. Speech recognition, model reasoning and network latency remain, so this is not an emergency control interface.
 
 Lane commands respect active assistance, speed, lane geometry, measured blind spots, existing steering-torque requirements and driver priority. Conflicting maneuvers and stale state can reject them. Speed commands require already-active, supported openpilot longitudinal control and never engage assistance. Configurations following the PCM set speed can reject them. An applied set speed does not mean the vehicle has reached that speed.
 

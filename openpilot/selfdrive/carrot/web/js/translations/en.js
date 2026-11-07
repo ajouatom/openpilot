@@ -15,7 +15,7 @@ window.CarrotTranslations.register("en", {
     assistant_settings_enabled: "Allowed on this device. Reauthorize ChatGPT and select setting read/change access.",
     assistant_settings_disable: "Revoke setting access",
     assistant_settings_enable: "Allow setting reads and changes",
-    assistant_settings_help: "Allow reading and changing one requested setting at a time. Its current value and change result are sent to ChatGPT and the Carrot relay. Confirm the proposed value by voice before applying it. Supported driving settings can also be changed while driving after confirmation. Initial permission must be granted while stationary and disengaged. Also select this permission when authorizing ChatGPT.",
+    assistant_settings_help: "Allow reading and changing one requested setting at a time. Its current value and change result are sent to ChatGPT and the Carrot relay. Clear commands specifying a setting and value are applied after bounds checks without another question. Ambiguous requests need clarification. Supported driving settings may also be changed while driving. Initial permission must be granted while stationary and disengaged. Also select this permission when authorizing ChatGPT.",
     assistant_title: "ChatGPT assistant",
     assistant_setup_reconnect: "Already installed: ChatGPT > Plugins > Installed > CarrotAssist > Reconnect. Wait for the page with the code field and 「이 기기 연결 승인」 (Authorize this device) button. Then return here to create a fresh code.",
     assistant_setup_code_warning: "Copy the code here, then paste it into the device authorization PAGE opened by ChatGPT. Do not send it in a voice/mini-mode conversation. Google Play is only for installing the app.",

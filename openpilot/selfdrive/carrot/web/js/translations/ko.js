@@ -15,7 +15,7 @@ window.CarrotTranslations.register("ko", {
     assistant_settings_enabled: "기기에서 허용했습니다. ChatGPT에서도 연결을 다시 승인하고 설정값 조회·변경 권한을 선택하세요.",
     assistant_settings_disable: "설정값 조회·변경 권한 해제",
     assistant_settings_enable: "설정값 조회·변경 허용",
-    assistant_settings_help: "설정값 조회·변경을 허용하면 요청한 한 항목의 현재값과 변경 결과를 ChatGPT 및 당근 연결 서버에 전달합니다. 변경값을 안내받고 음성으로 확인한 뒤 적용합니다. 지원하는 주행 관련 설정도 주행 중 확인 후 변경할 수 있습니다. 최초 권한 허용은 정차·보조 기능 해제 상태에서 진행하세요. ChatGPT 연결 승인에서도 같은 권한을 선택하세요.",
+    assistant_settings_help: "설정값 조회·변경을 허용하면 요청한 한 항목의 현재값과 변경 결과를 ChatGPT 및 당근 연결 서버에 전달합니다. 대상과 값을 명확히 말하면 범위 검사 후 재질문 없이 적용합니다. 모호한 요청만 되묻습니다. 지원하는 주행 관련 설정도 같은 방식으로 변경할 수 있습니다. 최초 권한 허용은 정차·보조 기능 해제 상태에서 진행하세요. ChatGPT 연결 승인에서도 같은 권한을 선택하세요.",
     assistant_title: "ChatGPT 설정 도우미",
     assistant_setup_reconnect: "이미 등록했다면: ChatGPT → 플러그인 → 설치됨 → CarrotAssist → 다시 연결. 코드 입력칸과 「이 기기 연결 승인」 버튼이 있는 페이지가 열리면, 당근앱으로 돌아와 아래에서 새 코드를 만드세요.",
     assistant_setup_code_warning: "코드는 당근앱에서 복사 → ChatGPT가 연 「이 기기 연결 승인」 페이지에 붙여넣기! 음성·미니모드 대화창에 보내지 마세요. Google Play는 앱 설치 화면입니다.",

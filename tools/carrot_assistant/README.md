@@ -26,15 +26,15 @@ grant while stationary/disengaged. That grant stays in WebView storage and goes
 only to same-origin device endpoints, never to the relay or ChatGPT.
 
 Five setting tools read a selected value, prepare a change, commit a confirmed
-proposal, inspect the request and cancel a prepared proposal. Instructions require
-before/after values and a follow-up user confirmation. The device validates actual
+proposal, inspect the request and cancel a prepared proposal. A clear user
+setting/value command authorizes internal prepare/commit without another question. The device validates actual
 values, bounds/increments, ownership and expiry, verifies
 readback and records voice change history. Defaults are not live values.
 Catalog unit/step is the web button increment, not an allowed-value lattice.
 Absolute requests preserve any in-range integer (e.g. CruiseMaxVals0 250 -> 240,
 with min=1 and unit=5); relative calculations round to the nearest integer,
 with ties away from zero. Fractional absolute values are rejected.
-All supported catalog edits, including driving settings, may be confirmed and
+All supported catalog edits, including driving settings, may be requested and
 applied onroad. Initial authorization still requires stationary/disengaged state.
 Saving does not change when each setting takes effect in the vehicle.
 Driver-monitoring disabling is excluded.
@@ -151,3 +151,14 @@ are never automatically retried. Job ownership is local and in-memory: after a
 web-server restart, inspect local Tools history instead of reissuing a job.
 File/QR/clipboard/repository-reset workflows require direct local input.
 No live vehicle maintenance acceptance test is run.
+
+## Direct setting commands (0.7.3)
+
+An explicit target/value command authorizes a setting edit. Prepare/commit remain
+internal preflight and single-use storage steps, with device bounds, expiry,
+current-value rechecks and readback unchanged. The relay presents legacy device
+`confirmation_required:true` as `confirmation_required:false, commit_required:true`
+for prepared settings. This never commits automatically or changes OAuth/local
+permissions. Ambiguous requests and AI recommendations still need clarification.
+Tool maintenance confirmations and platform approvals remain separate. Refresh
+plugin metadata for updated tool descriptions; no phone APK update is required.

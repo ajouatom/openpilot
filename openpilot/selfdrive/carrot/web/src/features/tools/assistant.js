@@ -1,7 +1,7 @@
 import { ASSISTANT_RELAY, ASSISTANT_SESSION_KEY, CHATGPT_INSTALL_URL, screenRequest, sessionValid } from './assistant_policy.js';
 import { copyPairingMessage } from './assistant_clipboard.js';
 import { executeDriveCommand, mountDriveAccess, revokeDriveAccess, driveAccessEnabled } from './assistant_drive.js';
-import { executeSettingCommand, mountSettingAccess, revokeSettingAccess } from './assistant_settings.js';
+import { executeSettingCommand, mountSettingAccess, revokeSettingAccess, settingCommandBlocked } from './assistant_settings.js';
 import { executeToolsCommand, mountToolsAccess, revokeToolsAccess } from './assistant_tools.js';
 
 const text = (key, fallback) => globalThis.getUIText?.(`assistant_${key}`, fallback) || fallback;
@@ -72,7 +72,7 @@ async function poll() {
       const driveResult = await executeDriveCommand(result.drive_command);
       if (driveResult && epoch === generation) await request('drive_ack', driveResult, current);
     }
-    if (result.settings_command && !/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName)) {
+    if (result.settings_command && !settingCommandBlocked(result.settings_command, document.activeElement)) {
       const settingResult = await executeSettingCommand(result.settings_command);
       if (settingResult && epoch === generation) await request('settings_ack', settingResult, current);
     }

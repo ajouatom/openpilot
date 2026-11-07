@@ -3,6 +3,16 @@ let credential = null, completed = null;
 try { credential = localStorage.getItem(KEY); } catch {}
 const t = (key, fallback) => globalThis.getUIText?.(`assistant_${key}`, fallback) || fallback;
 
+function refreshCredential() {
+  // Permission can be enabled/revoked in another same-origin WebView or tab.
+  // Never keep a stale startup snapshot, and never retry an old write on refresh.
+  try { credential = localStorage.getItem(KEY); } catch {}
+}
+
+export function settingCommandBlocked(command, active) {
+  return command?.operation !== 'read' && /^(INPUT|TEXTAREA|SELECT)$/.test(active?.tagName) && !active.readOnly;
+}
+
 async function local(operation, body = {}, token = credential) {
   const response = await fetch(`/api/assistant/settings/${operation}`, {
     method: 'POST', headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
@@ -23,6 +33,7 @@ function remember(value) {
 }
 
 export async function revokeSettingAccess() {
+  refreshCredential();
   if (credential) {
     try { await local('disable'); }
     catch (error) { if (error.status !== 403) throw error; }
@@ -31,12 +42,14 @@ export async function revokeSettingAccess() {
 }
 
 export function mountSettingAccess(container) {
+  refreshCredential();
   const section = document.createElement('section'), help = document.createElement('p');
-  help.textContent = t('settings_help', 'Optional: let this connection read and change one setting at a time. Its current value and change result are sent to ChatGPT and the Carrot relay. Changes require a spoken confirmation. Supported driving settings can also be changed while driving after confirmation. Initial permission must be granted while stationary and disengaged. Also authorize setting access when connecting ChatGPT.');
+  help.textContent = t('settings_help', 'Optional: let this connection read and change one setting at a time. Its current value and change result are sent to ChatGPT and the Carrot relay. Clear commands specifying a setting and value are applied after bounds checks without another question. Ambiguous requests need clarification. Supported driving settings may also be changed while driving. Initial permission must be granted while stationary and disengaged. Also authorize setting access when connecting ChatGPT.');
   const button = document.createElement('button'), result = document.createElement('p');
   button.type = 'button'; button.className = 'btn'; result.setAttribute('role', 'status');
   const render = () => { button.textContent = credential ? t('settings_disable', 'Revoke setting access') : t('settings_enable', 'Allow setting reads and changes'); };
   button.onclick = async () => {
+    refreshCredential();
     button.disabled = true;
     try {
       if (credential) await revokeSettingAccess();
@@ -57,6 +70,7 @@ export function validSettingCommand(command, now = Date.now()) {
 export async function executeSettingCommand(command) {
   if (!validSettingCommand(command)) return null;
   if (completed?.id === command.id) return completed;
+  refreshCredential();
   let result;
   try {
     if (!credential) throw new Error(t('settings_required', 'Allow setting access in Carrot Web Tools > ChatGPT assistant first.'));

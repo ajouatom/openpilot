@@ -1,5 +1,25 @@
 # Repository memory
 
+- On 2026-11-07, owner explicitly rejects repeated conversational confirmation for
+  clear, in-range setting commands. Relay0.7.3 treats the original exact target/value
+  or adjustment command as authorization; ambiguous requests/AI recommendations
+  still require clarification. Internal prepare/commit, bounds, fresh value checks,
+  expiry, ownership, readback and history remain; tools maintenance confirmations
+  and ChatGPT platform approvals are separate. Old firmware prepared results are
+  exposed as confirmation_required=false/commit_required=true, not auto-written.
+  Web now refreshes existing same-origin setting permission per new request and
+  allows reads during editing; read-only code input focus no longer blocks writes.
+  Never replay cached failures/writes when a grant changes. Previous live failure
+  said local permission absent, then two live reads returned250; exact earlier
+  cause is not established. A later commit queued while phone auto-locked; owner
+  unlocked, same request completed once, CruiseMaxVals0 250->240. Separate live
+  readback and phone UI both verify240. No vehicle GitPull/restart was performed;
+  web fixes are prepared for owner GitPull/reopen. APK stays0.2.2.
+  Relay29/web4/Python18 checks and isolated web build pass. NAS0.7.3 is running,
+  image9912e4cf1cc2, build exit0/public health/context verified. Initial deployment
+  failed because an overbroad version replacement touched cookie dependency;
+  restored dependency lock entries, changed only root versions, rebuilt successfully.
+  Never globally replace package version strings in lockfiles.
 - On 2026-11-07, reproduced the remaining Android0.2.1 offline case: WebStorage
   getOrigins omits localStorage-only origins, and last_address already pointed to
   the new office IP. Android0.2.2(code9) persists bounded origin history and reads
