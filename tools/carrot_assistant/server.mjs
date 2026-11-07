@@ -18,14 +18,14 @@ export function createServer(onTool = () => {}, bridge = createBridge(), session
   const settingInstructions = `설정값 조회·변경은 carrot.settings 권한과 해당 당근웹의 별도 허용이 필요합니다. 공개 카탈로그의 기본값을 현재값처럼 말하지 마세요. 조회 질문에는 read_carrot_setting_value를 사용하세요. 사용자가 대상과 값 또는 증감량을 명확히 지정한 실행 명령에는 prepare_carrot_setting_change로 내부 검증한 뒤 commit_carrot_setting_change를 이어서 호출하세요. 별도 read 호출이나 중간 승인 대화는 필요 없습니다. 대상이 모호하면 먼저 되물으세요. 예: 디바이스 밝기와 외부 HUD 밝기는 다릅니다. percent는 현재값의 절댓값을 기준으로 한 상대 변화이며 percent와 퍼센트포인트를 혼동하지 마세요. 값은 웹에 표시되는 저장 정수이고 제목의 x0.01 등 배율을 확인하세요. step은 웹 버튼의 증감 단위이며 허용값의 배수나 min 기준 격자가 아닙니다. 범위 안의 정수 absolute는 요청값 그대로 지정하세요. 예: CruiseMaxVals0의 min=1, step=5여도 240을 지정할 수 있으며 241로 바꾸지 마세요. 상대 변화의 소수 결과는 기기에서 정수로 반올림합니다. 명확한 사용자 변경 명령 자체가 승인입니다. 범위 안이면 prepared의 대상과 계산값이 원래 명령에 맞는지 내부 확인하고 재질문 없이 commit_carrot_setting_change(confirmed=true)를 호출하세요. commit_required는 내부 저장 단계이며 사용자가 누르는 승인 버튼이 아닙니다. 대상·값이 모호하거나 AI가 추천한 값이면 먼저 필요한 내용만 물으세요. 범위 밖이면 변경하지 말고 범위만 짧게 알려주세요. 허용 범위를 매번 길게 낭독하지 마세요. 성공은 “가속도설정 0을 240으로 변경했어요”처럼 한 문장으로 안내하세요. 실패는 실제 이유와 필요한 조치만 말하고 권한·코드 문제로 추측하지 마세요. queued이면 결과를 확인하되 실패·만료·저장 결과 미확인 후 자동 재실행하지 마세요. 정정하면 새 제안을 만들고 취소하면 cancel_carrot_setting_change를 호출하세요. completed만으로 성공이라 말하지 말고 result.status가 applied이며 current가 확인된 경우만 변경 완료로 말하세요. queued는 대기, expired는 미확인입니다. 막연한 주행 증상만으로 설정이나 원인을 추측하지 마세요. 지원하는 주행 관련 설정도 같은 명확한 명령으로 주행 중 변경할 수 있습니다. 저장 완료와 실제 제어 반영 시점은 다를 수 있으므로 즉시 주행 동작이 바뀐다고 단정하지 마세요. 운전 명령은 별도의 carrot.drive 권한과 도구를 사용합니다. 진단 로그 전송은 별도의 carrot.tools 도구 권한으로만 요청할 수 있습니다.`;
   const activeInstructions = sessionId ? accountInstructions.replace(/설정 화면 열기만 허용하며 값 변경·차량 제어·로그 전송은 지원하지 않습니다\./, '').replace(/변경 요청은 현재 읽기 전용 시험이라 변경할 수 없다고 알리고 대상 설명까지만 제공하세요\./, '') + '\n' + settingInstructions + '\n' + voiceRules : instructions;
   const security = sessionId ? { securitySchemes: [{ type: 'oauth2', scopes: [ACCOUNT_SCOPE] }] } : {};
-  const server = new McpServer({ name: sessionId ? 'carrot-account-assistant' : 'carrot-voice-probe', version: '0.7.7' }, { instructions: activeInstructions });
+  const server = new McpServer({ name: sessionId ? 'carrot-account-assistant' : 'carrot-voice-probe', version: '0.7.8' }, { instructions: activeInstructions });
   const register = (name, description, inputSchema, fn) => server.registerTool(name, {
     description, inputSchema, annotations: readOnly, _meta: security,
   }, async args => { onTool(name); return output(await fn(args)); });
   register('get_carrot_context', '당근 음성 도우미의 권한과 지원 범위를 조회합니다. 설정값·운전 명령·도구 작업은 각각 별도 계정 권한과 기기 허용이 필요합니다. 도구 작업에는 확인 후 진단 로그 전송 요청이 포함됩니다.', {}, () => ({
-    mode: sessionId ? 'account_bound_web_navigation' : 'catalog_and_paired_web_navigation', vehicle_connected: false,
+    mode: sessionId ? 'account_bound_web_navigation' : 'catalog_and_paired_web_navigation', vehicle_connected: sessionId ? null : false,
     can_drive: Boolean(sessionId && scopes.includes(DRIVE_SCOPE)), can_write: Boolean(sessionId && scopes.includes(SETTINGS_SCOPE)), can_navigate: true, can_use_tools: Boolean(sessionId && scopes.includes(TOOLS_SCOPE)), can_upload: Boolean(sessionId && scopes.includes(TOOLS_SCOPE)), navigation_requires_pairing: !sessionId,
-    ...(sessionId ? { web: bridge.accountStatus(sessionId) } : {}), instructions: activeInstructions, source,
+    ...(sessionId ? { web: bridge.accountStatus(sessionId), vehicle_state: 'not_observed' } : {}), instructions: activeInstructions, source,
   }));
   register('search_carrot_settings', '깜박이·앞차간격·밝기·음량·정지거리·가속 등 당근 설정 검색. 자연어 질문을 받아 실제 설정 ID와 원본 설명 후보를 반환합니다. 현재 차량값은 없습니다.', {
     query: z.string().trim().min(1).max(300), limit: z.number().int().min(1).max(10).default(5),
@@ -142,7 +142,7 @@ export function createApp({ onTool = () => {}, host = '127.0.0.1', publicHostnam
   });
   installBridgeRoutes(app, bridge);
   if (accountAuth) installAccountAuth(app, accountAuth, issuer);
-  app.get('/health', (_req, res) => res.json({ ok: true, version: '0.7.7', mode: 'catalog_and_paired_web_navigation', account_auth: Boolean(accountAuth), count: source.count, commit: source.commit }));
+  app.get('/health', (_req, res) => res.json({ ok: true, version: '0.7.8', mode: 'catalog_and_paired_web_navigation', account_auth: Boolean(accountAuth), count: source.count, commit: source.commit }));
   app.get('/', (_req, res) => res.type('html').send('<!doctype html><html lang="ko"><meta charset="utf-8"><title>CarrotAssist 연결</title><h1>CarrotAssist 연결</h1><p>MCP 주소: /account/mcp · 인증: OAuth</p><p>설정 검색·설명·화면 열기와 별도로 허용한 설정값 조회·변경을 지원합니다. 별도 허용 시 음성 차선변경·설정속도 요청도 지원합니다. 도구 작업은 별도 허용과 확인 후 실행하며 진단 로그 전송 요청도 포함됩니다.</p><p><a href="https://github.com/ajouatom/openpilot/wiki/Guide-CarrotAssist">설치 및 사용 설명서</a></p>'));
   const handleMcp = async (req, res) => {
     const server = createServer(onTool, bridge, req.auth?.extra?.sessionId || null, req.auth?.scopes || []);

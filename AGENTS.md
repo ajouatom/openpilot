@@ -1,5 +1,13 @@
 # Repository memory
 
+- 2026-11-07 mini voice follow-up: two correctly transcribed “왼쪽으로 차로 변경”
+  refusals with no visible tool call; authenticated readback can_drive=true,
+  browser_online=true, last drive request none. Native greeting verifies web
+  pairing/connectivity only. The phone disabled both Android assist structure
+  and screenshot sharing; neither was changed. Account context in relay 0.7.8
+  reports vehicle telemetry as unobserved rather than hard-coded disconnected.
+  No live maneuver; this does not force plugin activation in a new mini session.
+
 - CarrotAssist 0.2.5 (code12) startup TTS announces an available device Git update once;
   the native greeting ends before showAssist. No startup question, affirmative handler,
   maintenance proposal or reboot. The optional carrot.tools grant also supports a fixed
