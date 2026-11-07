@@ -228,7 +228,7 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"AutoGasSyncSpeed", {PERSISTENT, INT, "1"} },
     {"ApplyModelSpeed", {PERSISTENT, INT, "0"} },
     {"AutoEngage", {PERSISTENT, INT, "0"}},
-    {"AlwaysLateral", {PERSISTENT, INT, "1"} },
+    {"AlwaysLateral", {PERSISTENT, INT, "0"} },
     {"DisableMinSteerSpeed", {PERSISTENT, INT, "0"}},
     {"AutoCurveSpeedLowerLimit", {PERSISTENT, INT, "30"}},
     {"AutoCurveSpeedFactor", {PERSISTENT, INT, "120"}},
@@ -399,6 +399,10 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"MaxTimeOffroadMin", {PERSISTENT, INT, "60"}},
     {"TeslaWakeOnCAN", {PERSISTENT, BOOL, "1"}},
     {"TeslaAutoTurnSignals", {PERSISTENT, BOOL, "0"}},
+    {"TeslaCanTrafficStop", {PERSISTENT, BOOL, "0"}},
+    {"TeslaManualLaneSignals", {PERSISTENT, BOOL, "0"}},
+    {"TeslaModelDesireSignals", {PERSISTENT, BOOL, "0"}},
+    {"TeslaModelPathSignals", {PERSISTENT, BOOL, "0"}},
 
     {"DisableDM", {PERSISTENT, INT, "0"}},  // retired; read only for one-time streaming migration
     {"DriverMonitoringEnabled", {PERSISTENT, BOOL, "1"}},

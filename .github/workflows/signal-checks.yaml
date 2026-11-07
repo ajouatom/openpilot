@@ -53,7 +53,10 @@ jobs:
             opendbc_repo/opendbc/safety/tests/test_tesla_turn_signals.py \
             openpilot/selfdrive/car/tests/test_tesla_turn_signals.py \
             openpilot/selfdrive/car/tests/test_tesla_signal_card.py \
+            openpilot/selfdrive/car/tests/test_tesla_lane_signals.py \
             openpilot/selfdrive/controls/tests/test_tesla_auto_signal_intent.py \
+            openpilot/selfdrive/controls/tests/test_tesla_turn_journey.py \
+            openpilot/selfdrive/controls/tests/test_tesla_traffic_stop.py \
             openpilot/selfdrive/controls/tests/test_desire_helper_stalk.py \
             openpilot/selfdrive/controls/tests/test_assistant_lane.py \
             openpilot/selfdrive/car/tests/test_assistant_speed.py \

@@ -9,6 +9,7 @@ from opendbc.car.common.conversions import Conversions as CV
 from opendbc.car.crc import CRC8H2F, mk_crc8_fun
 from opendbc.car.interfaces import CarStateBase
 from opendbc.car.tesla.values import DBC, CANBUS, GEAR_MAP, STEER_THRESHOLD, TeslaFlags
+from opendbc.car.tesla.traffic_control import TeslaTrafficControl
 
 ButtonType = structs.CarState.ButtonEvent.Type
 
@@ -93,6 +94,7 @@ class CarState(CarStateBase):
     self._turn_stalk_counts = [0, 0]
     self._turn_stalk_inputs: dict[int, TeslaStalkInput] = {}
     self._invalid_measurements: tuple[str, ...] = ()
+    self.traffic_control = TeslaTrafficControl() if CP.flags & TeslaFlags.CAN_TRAFFIC_STOP else None
 
   def _measurement_valid(self, parser: CANParser, message: str, signal: str) -> bool:
     value = parser.vl[message][signal]
@@ -163,6 +165,8 @@ class CarState(CarStateBase):
     ret = structs.CarState()
     length = 0.11
     now = time.clock_gettime_ns(getattr(time, "CLOCK_BOOTTIME", time.CLOCK_MONOTONIC))
+    if self.traffic_control is not None:
+      self.traffic_control.publish(ret.teslaTrafficControl, now)
     invalid_measurements = []
 
     # Vehicle speed

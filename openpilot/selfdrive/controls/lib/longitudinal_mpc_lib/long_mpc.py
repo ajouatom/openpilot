@@ -417,7 +417,12 @@ class LongitudinalMpc:
              lead_gap_enabled=False,
              lead_track_frames=(0, 0),
              measured_a_ego=0.0,
-             cutout_relief_enabled=False):
+             cutout_relief_enabled=False,
+             tesla_stop_distance=None):
+    tesla_stop_active = (tesla_stop_distance is not None and not reset_state
+                         and math.isfinite(tesla_stop_distance) and 0 <= tesla_stop_distance < 255)
+    if tesla_stop_active:
+      self.mode = 'acc'
     v_ego = self.x0[1]
     a_ego = self.x0[2]
     self.status = radarstate.leadOne.status or radarstate.leadTwo.status
@@ -438,7 +443,8 @@ class LongitudinalMpc:
     if mode == 'blended':
       stop_x = 1000.0
     else:
-      v_cruise, stop_x, mode = carrot.v_cruise, carrot.stop_dist, carrot.mode
+      v_cruise, stop_x = carrot.v_cruise, carrot.stop_dist
+      mode = 'acc' if tesla_stop_active else carrot.mode
 
     # To estimate a safe distance from a moving lead, we calculate how much stopping
     # distance that lead needs as a minimum. We can add that to the current distance
@@ -515,6 +521,14 @@ class LongitudinalMpc:
 
     else:
       raise NotImplementedError(f'Planner mode {self.mode} not recognized in planner update')
+
+    if tesla_stop_active:
+      # This is an ego stop endpoint, not a model endpoint or a measured lead.
+      # Cancel the standstill gap in the solver's obstacle representation.
+      obstacle = tesla_stop_distance + stop_distance
+      x_obstacles = np.column_stack((x_obstacles, np.full(N+1, obstacle)))
+      if np.argmin(x_obstacles[0]) == x_obstacles.shape[1] - 1:
+        self.source = 'e2e'
 
     response_lead_index = 1 if self.source == 'lead1' else 0
     response_lead = (radarstate.leadOne, radarstate.leadTwo)[response_lead_index]
