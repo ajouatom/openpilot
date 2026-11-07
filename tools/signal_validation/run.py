@@ -11,7 +11,8 @@ sys.path[:0] = [str(ROOT), str(ROOT / 'opendbc_repo'), str(ROOT / 'tools/jetlink
 class IsolatedParams:
   """Only the documented defaults used by vehicle fixtures; never device IO."""
   def get_bool(self, key):
-    assert key in {'TeslaAutoTurnSignals', 'NNFF', 'NNFFLite', 'DisableMinSteerSpeed'}, key
+    assert key in {'TeslaAutoTurnSignals', 'TeslaManualLaneSignals', 'TeslaModelDesireSignals', 'TeslaModelPathSignals',
+                   'TeslaCanTrafficStop', 'NNFF', 'NNFFLite', 'DisableMinSteerSpeed'}, key
     return False
 
   def put_int(self, key, value):

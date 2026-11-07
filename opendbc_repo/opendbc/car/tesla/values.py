@@ -151,6 +151,7 @@ class TeslaFlags(IntFlag):
   HAS_VEHICLE_BUS = 8
   AUTO_SPEED_LIMIT = 16
   AUTO_TURN_SIGNALS = 32
+  CAN_TRAFFIC_STOP = 64
 
 
 DBC = CAR.create_dbc_map()

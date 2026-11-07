@@ -129,17 +129,19 @@ The current `carrot_settings.json` contains **207 parameters**. The driver-monit
 These 124 settings can affect driving behavior. Change one item at a time.
 
 <a id="start-auto"></a>
-### Startup and auto — 10 settings
+### Startup and auto — 14 settings
 
 | Section | Parameters | Purpose |
 |---|---|---|
-| Startup | `AlwaysLateral`, `TeslaAutoTurnSignals`, `AutoEngage`, `DisableMinSteerSpeed` | Always-on lateral control, Tesla lamps, automatic engagement, and low-speed steering limits |
+| Startup | `AlwaysLateral`, `TeslaAutoTurnSignals`, `TeslaCanTrafficStop`, `AutoEngage`, `DisableMinSteerSpeed` | Always-on lateral control, Tesla lamps/CAN red-light stop, automatic engagement, and low-speed steering limits |
 | Auto cruise | `AutoCruiseControl`, `AutoGasTokSpeed`, `AutoGasCancelSpeed`, `AutoGasSyncSpeed`, `CruiseOnDist` | Automatic cruise activation and accelerator-pedal behavior |
 
-- `AlwaysLateral` permits lateral control even when cruise is not engaged. On supported Tesla vehicles it can also steer at true standstill in a forward-driving gear; moving below the minimum steering speed remains restricted. See [Tesla engagement](tesla.md#engagement-and-standstill).
+- `AlwaysLateral` defaults OFF and permits lateral control even when cruise is not engaged. Tesla's three-finger screen contact toggles it live instead of Experimental Mode; OFF does not disengage steering under active driving control. On supported Tesla vehicles it can also steer at true standstill in a forward-driving gear; moving below the minimum steering speed remains restricted. See [Tesla engagement](tesla.md#engagement-and-standstill).
 - Always Lateral waits for the first confirmation of valid model, vehicle-parameter, pose, and other required inputs after system startup. Once confirmed, this startup check ends; later input interruptions or disengagement/reengagement do not rearm it. Existing runtime safety handling remains unchanged. Expiry of the startup waiting period alone does not pass this check.
 - `AutoEngage`: `0` off, `1` lateral on, `2` lateral on with cruise ready.
-- `TeslaAutoTurnSignals`: default OFF, reboot required. Uses existing ATC requests on supported Model 3/Y with vehicle CAN and valid physical stalk input. It does not authorize steering or departure. See [Tesla automatic turn signals](tesla.md#automatic-turn-signals) for prerequisites and closed-course validation.
+- `TeslaAutoTurnSignals`: default OFF, reboot required. On supported Model 3/Y with vehicle CAN and valid physical stalk input, turn lamps start with turn desire, not navigation preparation or distance alone. Measured heading and wheel return govern completion; only confirmed turns can wait at standstill under fresh lateral permission. Automatic lane changes retain preparation-stage lamp confirmation. It does not authorize steering or departure. See [Tesla automatic turn signals](tesla.md#automatic-turn-signals) for prerequisites and closed-course validation.
+- `TeslaCanTrafficStop`: independent default-OFF Tesla CAN red-light stopping; restart required. Requires actual openpilot longitudinal control and the exact supported 8-byte vision-backed APP profile, not stock TACC. Below 126 m, confirmed red adds a stop constraint; green releases only its own constraint. Signal failure requests takeover/soft-disable. Other brands ignore it; see [Tesla CAN stopping](tesla.md#can-red-light-stopping) for protocol, pedal override and closed-course validation limits.
+- `TeslaManualLaneSignals`, `TeslaModelDesireSignals`, `TeslaModelPathSignals`: independent default-OFF Tesla lamp-only observations; reboot required. All require `TeslaAutoTurnSignals`, `ShareData`, fresh repeated ONNX dashed classification and supported adjacent-lane geometry above 30 km/h. Manual torque/approach can work without cruise; model desire/path predictions require active lateral control and can light early or falsely. Solid/dashed does not prove colour or traffic direction. No steering permission, navigation turn preannouncement or U-turn implementation is added; see the [Tesla guide](tesla.md#optional-lane-change-lamp-observations) for completion, timestamp and physical-validation limits.
 - `AutoCruiseControl` covers Hyundai/Kia auto-cruise and soft-hold behavior.
 - `DisableMinSteerSpeed` is vehicle-specific and relates to low-speed steering restrictions on SMDPS-equipped cars.
 

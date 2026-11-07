@@ -24,10 +24,12 @@ def state(**kwargs):
   return NS(**(values | kwargs))
 
 
-def intent(direction=1, request=1):
+def intent(direction=1, request=1, turn=False):
   meta = log.ModelDataV2.new_message().meta
   meta.autoTurnSignalDirection = direction
   meta.autoTurnSignalRequestId = request
+  if turn:
+    meta.desire = "turnLeft" if direction == 1 else "turnRight"
   return meta.as_reader()
 
 
@@ -42,23 +44,52 @@ def feedback(c, now, ui=(0, 0), front=(0, 0), body=True):
   c.observe([(now, frames)], now)
 
 
-def update(c, now=N, direction=1, request=1, fresh=True, cs=None, active=True):
-  return c.update(cs or state(), NS(latActive=active), intent(direction, request), fresh, now)
+def update(c, now=N, direction=1, request=1, fresh=True, cs=None, active=True, turn=False, hold=False):
+  return c.update(cs or state(), NS(latActive=active), intent(direction, request, turn), fresh, now, turn_hold_allowed=hold)
 
 
 def echo(c, frame, now, source=0x81):
   c.observe([(now, [(frame.address, frame.dat, source)])], now)
 
 
-def opened(direction=1):
+def opened(direction=1, turn=False):
   c = TeslaTurnSignals(True)
   feedback(c, N)
-  frame = update(c, direction=direction)[0]
+  frame = update(c, direction=direction, turn=turn)[0]
   echo(c, frame, N + 1)
   feedback(c, N + 2, ui=(2, 0) if direction == 1 else (0, 2),
            front=(1, 0) if direction == 1 else (0, 1))
   assert c.session.on_seen
   return c
+
+
+@pytest.mark.parametrize("direction", [1, 2])
+@pytest.mark.parametrize("gate", ["", "lane", "unlit", "no_echo", "moving", "nan", "not_stopped", "permission", "stale", "new_id"])
+def test_stopped_hold_is_only_for_an_existing_confirmed_turn(direction, gate):
+  c = opened(direction, turn=gate != "lane")
+  if gate == "unlit":
+    c.session.on_seen = False
+  elif gate == "no_echo":
+    c.session.active_echoes = 0
+  now = N + 50_000_000
+  feedback(c, now, ui=(2, 0) if direction == 1 else (0, 2), front=(1, 0) if direction == 1 else (0, 1))
+  if gate == "unlit":
+    c.session.on_seen = False
+  cs = state(vEgo=float("nan") if gate == "nan" else 1. if gate == "moving" else 0., standstill=gate != "not_stopped")
+  sends = update(c, now, direction, request=2 if gate == "new_id" else 1, fresh=gate != "stale",
+                 cs=cs, active=False, hold=gate != "permission", turn=True)
+  assert c.session.cancelling == bool(gate)
+  assert [send.dat[1] & 3 for send in sends] == [3 if gate else direction]
+  # A lane session cannot be relabelled into a turn by a later model message.
+  assert c.session.turn == (gate != "lane")
+
+
+@pytest.mark.parametrize("direction", [1, 2])
+def test_stopped_permission_never_initiates_a_new_turn(direction):
+  c = TeslaTurnSignals(True)
+  feedback(c, N)
+  assert not update(c, direction=direction, cs=state(vEgo=0., standstill=True), active=False, hold=True, turn=True)
+  assert c.session is None and c.status == "blocked:lateral_inactive"
 
 
 def channel_frame(channel, direction=1, lit=True, fault=False):
