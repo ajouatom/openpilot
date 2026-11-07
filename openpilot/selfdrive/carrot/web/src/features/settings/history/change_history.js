@@ -10,6 +10,7 @@
  */
 
 export const CHANGE_SOURCE_LABEL_KEYS = Object.freeze({
+  voice_assistant: "setting_history_source_voice",
   web_ui: "setting_history_source_web",
   profile: "setting_history_source_profile",
   restore: "setting_history_source_restore",

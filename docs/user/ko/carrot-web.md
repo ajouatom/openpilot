@@ -9,6 +9,8 @@ Carrot Web은 carrotpilot 장치와 같은 네트워크에 연결된 휴대폰·
 
 ## 접속하기
 
+Android에서 기기 자동 검색과 ChatGPT 음성 설정 도우미를 사용하려면 [CarrotAssist 사용 설명서](carrot-assist.md)를 참고하세요. 설정값 조회·변경은 앱 안의 기기 권한과 ChatGPT 연결 권한을 각각 허용해야 합니다.
+
 1. 장치와 브라우저를 실행할 기기를 같은 Wi-Fi 또는 핫스팟에 연결합니다.
 2. carrotpilot 장치의 IP 주소를 확인합니다.
 3. 브라우저 주소창에 `http://장치-IP:7000`을 입력합니다.

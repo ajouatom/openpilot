@@ -42,6 +42,13 @@ const FALLBACK_STRINGS = {
   failure_install: "The eGPU package could not be installed or verified. The saved diagnostic report contains the cause.",
   failure_rejected: "A previous failure blocked this model. Compiling again does not resolve a runtime failure. If it remains after a reboot, download the diagnostics and send them for support.",
   diagnostics: "Download diagnostics",
+  retry_verification: "Recheck blocked model after reboot",
+  retry_confirm: "Keep the diagnostic report and retry file checks and a startup inference test after the next full reboot? This does not start the GPU now.",
+  retry_pending: "Verification is scheduled. Reboot comma once while parked. No files or diagnostics have been deleted.",
+  retry_offroad: "Turn ignition off and wait for the offroad screen to schedule verification. Then reboot comma while parked.",
+  blocked_device: "GPU/USB timeout or hang: this model is blocked for this boot. A full reboot automatically retries file checks and startup inference. Repeated failures need device/power/USB diagnosis.",
+  blocked_verify: "This model is blocked after a failed check. You can schedule one new verification after reboot. File and output checks remain mandatory; another failure falls back to the internal model.",
+  blocked_missing: "This model is blocked, but its diagnostic identity is missing or inconsistent. Send the diagnostic report for support; automatic release is unavailable.",
   failure_runtime: "The eGPU could not start or continue running. The internal model is selected.",
   failure_pcie: "The eGPU connection could not start. The internal model is selected.",
   failure_timeout: "The eGPU took too long to respond. The internal model is selected.",
@@ -164,6 +171,19 @@ function render(status = lastStatus) {
   const amountEl = document.getElementById("egpuModelAmount");
   const action = document.getElementById("btnEgpuCompileRestart");
   const diagnostics = document.getElementById("egpuModelDiagnostics");
+  let retryButton = document.getElementById("btnEgpuRetryVerification");
+  if (!retryButton) {
+    retryButton = document.createElement("button");
+    retryButton.id = "btnEgpuRetryVerification";
+    retryButton.className = action.className;
+    retryButton.type = "button";
+    retryButton.addEventListener("click", requestVerification);
+    action.after(retryButton);
+  }
+  const blocked = !!status.rejection?.blocked && !status.active;
+  retryButton.hidden = !status.available || !blocked;
+  retryButton.textContent = t("retry_verification");
+  retryButton.disabled = !status.rejection?.can_request || !!status.rejection?.retry_pending;
   if (diagnostics) {
     diagnostics.hidden = !status.available || state !== "error" || !!status.active;
     diagnostics.textContent = t("diagnostics");
@@ -214,6 +234,14 @@ function render(status = lastStatus) {
     : t(active ? "active_detail" : `${state}_detail`);
   recoveryEl.hidden = !runtimeFailure;
   recoveryEl.textContent = runtimeFailure ? t("recovery_restart") : "";
+  if (blocked) {
+    const rejection = status.rejection;
+    detailEl.textContent = t(rejection.reason === "device_restart_required" ? "blocked_device"
+      : rejection.reason === "diagnostics_missing" ? "blocked_missing" : "blocked_verify");
+    if (rejection.error) detailEl.textContent += ` · ${rejection.phase || ""}: ${rejection.error}`;
+    recoveryEl.hidden = rejection.reason === "diagnostics_missing";
+    recoveryEl.textContent = t(rejection.retry_pending ? "retry_pending" : "retry_offroad");
+  }
 
   const showProgress = state === "downloading" && Number.isFinite(percent);
   progressEl.hidden = !showProgress;
@@ -260,6 +288,20 @@ async function requestCompileRestart() {
     if (typeof showError === "function") showError("eGPU model", error);
     await refresh();
   }
+}
+
+async function requestVerification() {
+  const sha256 = lastStatus?.sha256;
+  if (!await appConfirm(t("retry_confirm"), { title: t("retry_verification") })) return;
+  const button = document.getElementById("btnEgpuRetryVerification");
+  if (button) button.disabled = true;
+  try {
+    await postJson("/api/egpu/model/retry-verification", { sha256 });
+    if (typeof showAppToast === "function") showAppToast(t("retry_pending"));
+  } catch (error) {
+    if (typeof showAppToast === "function") showAppToast(`${t("error")}: ${error?.message || error}`, { tone: "error" });
+  }
+  await refresh();
 }
 
 function init() {

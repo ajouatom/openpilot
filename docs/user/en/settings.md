@@ -2,6 +2,12 @@
 
 [한국어](../ko/settings.md)
 
+Android [CarrotAssist](carrot-assist.md) uses ChatGPT to find, explain and open settings. Separate device and ChatGPT authorization enables live value reads and confirmed changes. Supported driving settings can also be changed while driving after confirmation. Only initial authorization requires stationary/disengaged state; each setting keeps its existing activation timing.
+
+Experimental lane-change and cruise set-speed requests within the same voice conversation need separate **Allow voice lane-change and set-speed commands** permission on both sides. Setting access never expands automatically. Saved-setting confirmation remains distinct from driving execution and result feedback. See the [continuous voice guide and supported conditions](carrot-assist.md).
+
+Voice Tools operations require separate **Allow Tools panels and actions** permission. The [CarrotAssist guide](carrot-assist.md) covers backup/restore screens, confirmed GitPull/restart jobs, and separate first-installation and reconnection steps. Paste authorization codes into the device approval webpage, never a voice conversation.
+
 > [!NOTE]
 > This is the canonical English user guide maintained with the `carrot-wip` code. When user-visible behavior changes, update this document together with the related code and tests.
 

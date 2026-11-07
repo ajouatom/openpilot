@@ -13,7 +13,7 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
-      - run: python -m pip install numpy pytest requests psutil scons cython setuptools
+      - run: python -m pip install numpy pytest requests psutil scons cython setuptools aiohttp
       - name: Build deterministic native map rasterizer
         env:
           CFLAGS: -O3 -fno-fast-math -ffp-contract=off
@@ -29,6 +29,7 @@ jobs:
           openpilot/selfdrive/modeld/tests/test_big_model.py
           openpilot/selfdrive/modeld/tests/test_precompiled_model.py
           openpilot/selfdrive/modeld/tests/test_precompiled_rejection_retry.py
+          openpilot/selfdrive/carrot/server/tests/test_egpu_model.py
           openpilot/selfdrive/modeld/tests/test_precompiled_runner.py
           openpilot/selfdrive/modeld/tests/test_egpu_output_recovery.py
           openpilot/selfdrive/modeld/tests/test_egpu_recovery.py
