@@ -288,3 +288,20 @@ def test_native_indicator_requires_enabled_vehicle_interface():
   assert native_indicator(cp) == 'SPAS2'
   cp.passive = True
   assert native_indicator(cp) is None
+
+
+@pytest.mark.parametrize('route,armed,active,sends', [
+  ('', False, True, True), ('ordinary', False, True, True), ('v'*43, True, True, False),
+  ('native', False, True, False), ('native', True, False, False), ('native', True, True, True)])
+def test_existing_native_blinker_output_is_bound_only_for_native_voice(route, armed, active, sends):
+  from openpilot.selfdrive.car.voice_indicator import set_lane_change_blinkers
+  meta = log.ModelDataV2.new_message().meta
+  meta.laneChangeState = 'preLaneChange'
+  meta.laneChangeDirection = 'right'
+  meta.assistantLaneSignalRoute = route
+  meta.assistantLaneSignalId = 'n'*43 if armed else ''
+  cc = car.CarControl.new_message()
+  cc.latActive = active
+  set_lane_change_blinkers(cc, meta)
+  assert cc.rightBlinker == sends and not cc.leftBlinker
+  assert cc.assistantLaneSignalId == ('n'*43 if route == 'native' and sends else '')
