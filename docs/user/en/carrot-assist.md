@@ -161,7 +161,7 @@ Relay delivery expires after five seconds; controller consumption requires an in
 
 Running and completed are distinct. Lane completion requires both controller completion and observed lane crossing. **Revoke driving commands** prevents new commands and cancels pending preparation; it does not force an ongoing steering maneuver to abort. A phone voice-start action has not been added to the existing Bluetooth remote.
 
-On Ioniq 5 PE, set **Automatic turn signals** to **2** and connect a supported indicator device. Once the usual lane-change conditions are met, “Change lanes left” or “Change lanes right” requests the corresponding indicator. The maneuver starts after the device acknowledges that request and the car reports only the requested lamp lit. A blocked adjacent lane or unconfirmed indicator during preparation ends the request.
+Voice lane changes left and right use the usual lane-change conditions even without an indicator device. With supported native turn-signal control, or a responding external indicator on this vehicle with **Automatic turn signals** set to **2**, the maneuver waits for the requested lamp. If the device disconnects after its selection or the adjacent lane becomes blocked during preparation, that request ends.
 
 ## Use Tools buttons by voice
 

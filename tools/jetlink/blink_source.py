@@ -213,9 +213,14 @@ def main(fd, spas=False, ble=False):
     if auto is None and observe_auto:
       auto = observe_auto
     peer_fresh = fresh(feedback.get('stamp'), now, .35)
+    # Only a worker with live receiver feedback for this vehicle advertises a path.
+    # Bind a request to that worker for its lifetime, even across adapter handoff.
+    voice.advertise(now, fingerprint, ok and mode == 2 and peer_fresh and (not spas or feedback.get('available') is True) and feedback.get('state') in
+      ('ready', 'waiting', 'sending', 'waiting_previous_signal', 'driver_override'),
+      lambda record: atomic_json(ASSISTANT_LANE_ROOT/'indicator-device.json', record))
     voice_auto = voice.select(meta, cs,
-      allowed=(fingerprint == 'HYUNDAI_IONIQ_5_PE' and mode == 2 and auto_valid and sm['carControl'].latActive),
-      peer_ready=peer_fresh and not feedback.get('accepted_id') and (
+      allowed=(mode == 2 and auto_valid and sm['carControl'].latActive),
+      peer_ready=peer_fresh and not feedback.get('lamps') and not feedback.get('accepted_id') and (
         feedback.get('state') == 'ready' or (spas and feedback.get('state') == 'waiting')), hold=policy.hold,
       busy=(auto is not None or bool(commands) or not peer_fresh or feedback.get('state') == 'driver_override'))
     if voice_auto:
@@ -226,7 +231,7 @@ def main(fd, spas=False, ble=False):
                                   str(cs.gearShifter), remote, auto, policy_valid)
     if voice.bind(hold):
       # Persist ownership before sending, so a process restart cannot reinterpret the lamp as a lever press.
-      record_ownership({'time': now, 'direction': 1 if voice.direction == 'left' else 2})
+      record_ownership({'time': now, 'direction': 1 if voice.direction == 'left' else 2, 'voice_fingerprint':fingerprint})
     voice_hold = hold if voice.direction and hold and hold['id'] == voice.hold_id else None
     voice_tap.prepare_tap(now, voice_hold, 0., cs)
     observation_feedback.prepare(now, hold, meta, cs)
@@ -307,9 +312,12 @@ def main(fd, spas=False, ble=False):
     except BlockingIOError:
       pass  # Never buffer commands for delivery after congestion.
     if voice_hold and hold and hold['id'] == voice_hold['id']:
-      confirmation = submitted and ok and acknowledged and voice.confirmed(hold, activated_id, feedback, cs)
+      # The board's own lamp observation can supply the missing carState lamp sample.
+      receiver_hold = feedback.get('accepted_id') if ble and feedback.get('lamps') is not None else activated_id
+      confirmation = submitted and ok and acknowledged and voice.confirmed(hold, receiver_hold, feedback, cs)
       atomic_json(ASSISTANT_LANE_ROOT/'signal.json', {
-        'id': voice.request, 'direction': voice.direction, 'time': now, 'confirmed': bool(confirmation),
+        'id': voice.request, 'route': voice.route, 'direction': voice.direction, 'time': now, 'confirmed': bool(confirmation),
+        'board_lamp': bool(ble and confirmation and feedback.get('lamps') is not None),
         'tap': voice_tap.sent(now, feedback, submitted and ok)})
     if mode and not spas:
       atomic_json(HOLD_PATH, {'stamp':now, 'mode':mode, 'fingerprint':fingerprint,

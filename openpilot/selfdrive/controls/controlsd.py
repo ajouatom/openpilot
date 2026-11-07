@@ -169,7 +169,11 @@ class Controls:
     actuators = CC.actuators
 
     # Enable blinkers while lane changing
-    if model_v2.meta.laneChangeState != LaneChangeState.off:
+    route = model_v2.meta.assistantLaneSignalRoute
+    native_voice = route == 'native' and model_v2.meta.assistantLaneSignalId and CC.latActive
+    if model_v2.meta.laneChangeState != LaneChangeState.off and (not route or native_voice):
+      if native_voice:
+        CC.assistantLaneSignalId = model_v2.meta.assistantLaneSignalId
       CC.leftBlinker = model_v2.meta.laneChangeDirection == LaneChangeDirection.left
       CC.rightBlinker = model_v2.meta.laneChangeDirection == LaneChangeDirection.right
 

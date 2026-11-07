@@ -1,11 +1,11 @@
 # Repository memory
 
-- Ioniq 5 PE voice lane changes use AutoBlinkerControl=2 and the existing indicator
-  transport. The existing steering FSM first admits the maneuver, then waits in
-  preLaneChange for fresh receiver acceptance and exclusive physical lamp feedback
-  for this voice request and direction. Stale/unrelated acknowledgements, lost gates,
-  disabled/missing transport or timeout cannot start motion. Keep the Tesla, manual
-  and navigation paths separate. Verified offline only; no live vehicle action.
+- Voice lane changes retain normal admission on all supported vehicles, with or
+  without indicator hardware. Bind optional signaling once per request to an active
+  receiver on the current vehicle (AutoBlinkerControl=2), a supported native output,
+  or the existing Tesla path. After selection, timeout or loss never falls back to
+  unsignaled motion. External BLE/SPAS support follows receiver checks. PEAK/CANable
+  retains its verified CAN profile. No live maneuver or actual lamp test.
 
 - 2026-11-07 mini voice follow-up: two correctly transcribed “왼쪽으로 차로 변경”
   refusals with no visible tool call; authenticated readback can_drive=true,
