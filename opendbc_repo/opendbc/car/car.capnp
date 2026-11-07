@@ -469,6 +469,7 @@ struct CarControl {
   # Blinker controls
   leftBlinker @15: Bool;
   rightBlinker @16: Bool;
+  assistantLaneSignalId @18 :Text; # Correlates an eligible voice request with the native indicator output.
 
   orientationNED @13 :List(Float32);
   angularVelocity @14 :List(Float32);

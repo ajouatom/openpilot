@@ -1,7 +1,7 @@
 import { ASSISTANT_RELAY, ASSISTANT_SESSION_KEY, CHATGPT_INSTALL_URL, screenRequest, sessionValid } from './assistant_policy.js';
 import { copyPairingMessage } from './assistant_clipboard.js';
 import { executeDriveCommand, mountDriveAccess, revokeDriveAccess, driveAccessEnabled } from './assistant_drive.js';
-import { executeSettingCommand, mountSettingAccess, revokeSettingAccess } from './assistant_settings.js';
+import { executeSettingCommand, mountSettingAccess, revokeSettingAccess, settingCommandBlocked } from './assistant_settings.js';
 import { executeToolsCommand, mountToolsAccess, revokeToolsAccess } from './assistant_tools.js';
 
 const text = (key, fallback) => globalThis.getUIText?.(`assistant_${key}`, fallback) || fallback;
@@ -72,7 +72,7 @@ async function poll() {
       const driveResult = await executeDriveCommand(result.drive_command);
       if (driveResult && epoch === generation) await request('drive_ack', driveResult, current);
     }
-    if (result.settings_command && !/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName)) {
+    if (result.settings_command && !settingCommandBlocked(result.settings_command, document.activeElement)) {
       const settingResult = await executeSettingCommand(result.settings_command);
       if (settingResult && epoch === generation) await request('settings_ack', settingResult, current);
     }
@@ -116,7 +116,7 @@ export function openAssistantDialog() {
   install.target = '_blank'; install.rel = 'noopener noreferrer';
   install.textContent = text('install', 'Install ChatGPT · Google Play');
   const voiceHelp = document.createElement('p');
-  voiceHelp.textContent = text('voice_help', 'Sign in to ChatGPT and choose it as your Android default assistant. After connecting once, use the microphone at the top right of the Carrot Web Android app. In a browser, invoke your phone assistant. Keep Carrot Web visible for screen requests.');
+  voiceHelp.textContent = text('voice_help', 'Drag the orange CarrotAssist 0.2.4 microphone to save its position. Tap it to check the current Carrot Web connection and open your default assistant overlay. If touching the web ends voice, enable ChatGPT Settings > Voice > Background conversations, start voice in the full ChatGPT app, then press Home and open CarrotAssist without ending voice. CarrotAssist cannot limit the overlay size or read its listening state.');
   el('Panel').prepend(install, voiceHelp);
   const account = document.createElement('details');
   account.open = !session?.account_linked;
@@ -146,6 +146,19 @@ export function openAssistantDialog() {
   firstSetup.append(firstSummary, address, copyAddress, account.querySelector('#assistantAccountHelp'));
   account.prepend(summary, codeWarning, reconnect, setupLink, firstSetup);
   el('Panel').prepend(account);
+  const approval = document.createElement('details');
+  const approvalSummary = document.createElement('summary');
+  approvalSummary.textContent = text('approval_title', 'After connecting: repeated ChatGPT approvals');
+  const approvalHelp = document.createElement('p');
+  approvalHelp.textContent = text('approval_help', 'Carrot device access and ChatGPT action approvals are separate. To stop repeated prompts, choose CarrotAssist > Permissions > Allow all actions in ChatGPT plugin settings. This applies to all actions allowed for this plugin, not just one setting. Each user chooses this in their own account; CarrotAssist cannot enable it automatically or check the selection. It does not grant new device permissions.');
+  const approvalLink = document.createElement('a');
+  approvalLink.className = 'btn'; approvalLink.href = 'https://chatgpt.com/settings/plugins-settings';
+  approvalLink.target = '_blank'; approvalLink.rel = 'noopener noreferrer';
+  approvalLink.textContent = text('approval_open', 'Open ChatGPT plugin permissions');
+  const approvalRefresh = document.createElement('p');
+  approvalRefresh.textContent = text('approval_refresh', 'If old confirmation instructions remain, refresh tools in CarrotAssist plugin settings and start a new conversation. Do not create another connection code for an action approval.');
+  approval.append(approvalSummary, approvalHelp, approvalLink, approvalRefresh);
+  account.after(approval);
   mountSettingAccess(el('Panel'));
   mountDriveAccess(el('Panel'));
   mountToolsAccess(el('Panel'));
@@ -169,7 +182,7 @@ export function openAssistantDialog() {
     } catch (e) { status(e.message); }
     finally { if (el('AccountPair')) el('AccountPair').disabled = false; }
   };
-  label('Help', 'help', 'Connect your account once to use new voice chats. Setting reads and confirmed changes additionally require permission here and in ChatGPT.');
+  label('Help', 'help', 'Connect your account once to use new voice chats. Setting reads and changes additionally require permission here and in the ChatGPT connection.');
   label('Disconnect', 'disconnect', 'Disconnect');
   const render = () => {
     if (!el('Panel')) return;

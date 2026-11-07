@@ -1117,6 +1117,8 @@ struct ModelDataV2 {
     indicatorJournalMonoTime @32 :UInt64;
     indicatorPrepareDirection @33 :LaneChangeDirection; # Display only; never an actuation request.
     indicatorPrepareSource @34 :Text;
+    assistantLaneSignalId @35 :Text; # Set only after ordinary lane-change admission; direction is laneChangeDirection.
+    assistantLaneSignalRoute @36 :Text; # Empty outside voice maneuvers, otherwise ordinary, native or the selected adapter instance.
 
 
     deprecated :group {

@@ -9,6 +9,8 @@ import android.webkit.WebViewClient;
 import android.webkit.WebResourceRequest;
 import org.json.JSONObject;
 import org.json.JSONTokener;
+import org.json.JSONArray;
+import java.io.File;
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
@@ -37,6 +39,16 @@ final class ConnectionRecovery {
   ConnectionRecovery(Context activity) { this(activity, null); }
   ConnectionRecovery(Context activity, Transport transport) { this.activity = activity; this.transport = transport; }
   static String key(String role) { return "carrot-assistant-" + role + "-v1"; }
+  static void remember(Context context,String origin) {
+    if (!ConnectionPolicy.origin(origin)) return;
+    android.content.SharedPreferences prefs=context.getSharedPreferences("carrot-web",Context.MODE_PRIVATE);
+    LinkedHashSet<String> all=new LinkedHashSet<>(); all.add(origin);
+    try {
+      JSONArray saved=new JSONArray(prefs.getString("connection_origins_v1","[]"));
+      for(int i=0;i<saved.length() && all.size()<16;i++) if(ConnectionPolicy.origin(saved.optString(i))) all.add(saved.optString(i));
+    } catch(Exception ignored) {}
+    prefs.edit().putString("connection_origins_v1",new JSONArray(all).toString()).apply();
+  }
   void cancel() {
     cancelled = true;
     if (worker != null) worker.interrupt();
@@ -48,20 +60,73 @@ final class ConnectionRecovery {
       if (cancelled) return;
       LinkedHashSet<String> candidates = new LinkedHashSet<>(); candidates.add(origin);
       if (ConnectionPolicy.origin(preferred)) candidates.add(preferred);
+      try {
+        JSONArray saved=new JSONArray(activity.getSharedPreferences("carrot-web",Context.MODE_PRIVATE).getString("connection_origins_v1","[]"));
+        for(int i=0;i<saved.length() && candidates.size()<16;i++) if(ConnectionPolicy.origin(saved.optString(i))) candidates.add(saved.optString(i));
+      } catch(Exception ignored) {}
       for (Object entry : origins.keySet()) {
         String saved = String.valueOf(entry);
         if (ConnectionPolicy.origin(saved) && candidates.size() < 16) candidates.add(saved);
       }
       worker = new Thread(() -> {
         String message;
-        try { message = recover(origin, new ArrayList<>(candidates)); }
+        try {
+          // getOrigins() may omit localStorage-only origins. Old apps had only last_address.
+          for (String saved : LegacyOriginHints.read(new File(activity.getApplicationInfo().dataDir,"app_webview")))
+            if (candidates.size()<16) candidates.add(saved);
+          message = recover(origin, new ArrayList<>(candidates));
+        }
         catch (InterruptedException e) { return; }
-        catch (Exception e) { message = "ChatGPT 연결 복구를 마치지 못했어요. 인터넷과 당근 기기를 확인한 뒤 다시 검색해 주세요."; }
+        catch (Exception e) { message = UiText.get("ChatGPT 연결 복구를 마치지 못했어요. 인터넷과 당근 기기를 확인한 뒤 다시 검색해 주세요.", "Could not restore the ChatGPT connection. Check the Internet connection and Carrot device, then search again."); }
         final String result = message;
         ui.post(() -> { if (!cancelled) done.finish(result); });
       }, "carrot-connection-recovery");
       worker.start();
     });
+  }
+  // Inspect only the selected origin. Never relocate, issue a code or poll for commands here.
+  void checkForVoice(WebView page, String origin, Done done) {
+    if (!ConnectionPolicy.origin(origin)) { done.finish(voiceUnavailable()); return; }
+    // Read the page already on screen. Creating a second WebView here can stall a cold launch.
+    String key = JSONObject.quote(SESSION);
+    String script = "(()=>{try{if(location.origin!==" + JSONObject.quote(origin) + ")return null;"
+      + "const raw=localStorage.getItem(" + key + ")||sessionStorage.getItem(" + key + ");"
+      + "const t=raw&&JSON.parse(raw).browser_token;return typeof t==='string'&&t.length===43?t:'';"
+      + "}catch(e){return null}})()";
+    page.evaluateJavascript(script, value -> {
+      if (cancelled) return;
+      try {
+        Object result = new JSONTokener(value).nextValue();
+        if (result instanceof String) inspectForVoice(origin, (String)result, done);
+        else done.finish(voiceUnavailable());
+      } catch (Exception e) { done.finish(voiceUnavailable()); }
+    });
+  }
+  private void inspectForVoice(String origin, String token, Done done) {
+    worker = new Thread(() -> {
+      String message;
+      try {
+        if (!ConnectionPolicy.token(token)) message = voiceUnlinked();
+        else {
+          JSONObject state = post(RELAY + "/bridge/inspect", origin, token, new JSONObject());
+          if (!state.optBoolean("connected") || !state.optBoolean("account_linked")) message = voiceUnlinked();
+          else if (!state.optBoolean("browser_online")) message = UiText.get("당근웹이 아직 응답하지 않아요. 웹이 열린 뒤 다시 눌러 주세요.", "Carrot Web is not responding yet. Wait for the web page to open and try again.");
+          else message = "";
+        }
+      } catch (InterruptedException stopped) { return; }
+      catch (HttpFailure e) { message = (e.status == 401 || e.status == 403) ? voiceUnlinked() : voiceUnavailable(); }
+      catch (Exception e) { message = voiceUnavailable(); }
+      final String result = message;
+      ui.post(() -> { if (!cancelled) done.finish(result); });
+    }, "carrot-voice-connection-check");
+    worker.start();
+  }
+  static boolean temporaryVoiceFailure(String message) { return !message.isEmpty() && !voiceUnlinked().equals(message); }
+  private static String voiceUnlinked() {
+    return UiText.get("이 당근웹의 ChatGPT 계정 연결을 확인하지 못했어요. 도구의 ChatGPT 설정 도우미를 확인해 주세요.", "No ChatGPT account link was verified for this Carrot Web. Check the ChatGPT assistant in Tools.");
+  }
+  static String voiceUnavailable() {
+    return UiText.get("당근웹과 ChatGPT 연결을 확인하지 못했어요. 잠시 후 다시 확인해 주세요.", "Could not verify the Carrot Web connection to ChatGPT. Try again in a moment.");
   }
   private static final class Candidate {
     final String origin, token; final JSONObject saved, state;
@@ -77,6 +142,7 @@ final class ConnectionRecovery {
       JSONObject session;
       try { session = new JSONObject(saved.optString(SESSION)); } catch (Exception ignored) { continue; }
       String token = session.optString("browser_token"); if (!ConnectionPolicy.token(token)) continue;
+      remember(activity,origin);
       savedConnection = true;
       try {
         JSONObject state;
@@ -89,7 +155,7 @@ final class ConnectionRecovery {
       } catch (HttpFailure error) { if (error.status != 401 && error.status != 403) throw error; }
     }
     candidates.sort((a,b) -> Long.compare(b.state.optLong("account_activity_at"), a.state.optLong("account_activity_at")));
-    if (candidates.isEmpty()) return savedConnection ? "저장된 ChatGPT 연결을 확인하지 못했어요. 인터넷과 ChatGPT 연결 설정을 확인해 주세요." : "";
+    if (candidates.isEmpty()) return savedConnection ? UiText.get("저장된 ChatGPT 연결을 확인하지 못했어요. 인터넷과 ChatGPT 연결 설정을 확인해 주세요.", "Could not verify the saved ChatGPT connection. Check your Internet connection and ChatGPT connection settings.") : "";
     Candidate chosen = candidates.get(0);
     if (chosen.origin.equals(next)) return "";
     check();
@@ -158,7 +224,8 @@ final class ConnectionRecovery {
   private JSONObject storage(String origin, JSONObject write) throws Exception {
     check(); CountDownLatch ready=new CountDownLatch(1); JSONObject[] result=new JSONObject[1];
     StringBuilder keys=new StringBuilder("[").append(JSONObject.quote(SESSION));
-    for (String role : ROLES) keys.append(',').append(JSONObject.quote(key(role))); keys.append(']');
+    for (String role : ROLES) keys.append(',').append(JSONObject.quote(key(role)));
+    keys.append(']');
     final String script="(()=>{const keys="+keys+",values="+(write==null ? "null" : write.toString())+";"
       +"if(values)for(const k of keys){if(values[k]===null)localStorage.removeItem(k);else localStorage.setItem(k,values[k]);}"
       +"const out={};for(const k of keys)out[k]=localStorage.getItem(k);return JSON.stringify(out);})()";

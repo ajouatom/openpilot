@@ -24,16 +24,21 @@ public final class RecoveryInstrumentation extends Instrumentation {
     for (String role:ConnectionRecovery.ROLES) result.put(ConnectionRecovery.key(role),grant);
     return result;
   }
-  private String run(ConnectionRecovery r) throws Exception {
+  private String run(ConnectionRecovery r,String preferred) throws Exception {
     CountDownLatch done=new CountDownLatch(1); String[] message=new String[1];
-    runOnMainSync(() -> r.start(next,old,value -> { message[0]=value; done.countDown(); }));
+    runOnMainSync(() -> r.start(next,preferred,value -> { message[0]=value; done.countDown(); }));
     check(done.await(30,TimeUnit.SECONDS)); return message[0];
   }
   @Override public void onStart() {
     Bundle result=new Bundle();
     try {
-      runOnMainSync(() -> WebStorage.getInstance().deleteAllData());
-      for (int scenario=0;scenario<4;scenario++) {
+      java.util.Locale.setDefault(java.util.Locale.ENGLISH);
+      android.app.Activity screen=startActivitySync(new android.content.Intent(getTargetContext(),MainActivity.class).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK));
+      runOnMainSync(() -> {
+        screen.getWindow().addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        WebStorage.getInstance().deleteAllData();
+      });
+      for (int scenario=0;scenario<5;scenario++) {
         final int mode=scenario; int[] moves={0};
         ConnectionRecovery r=new ConnectionRecovery(getTargetContext(),(target,origin,token,body) -> {
           if (target.endsWith("/inspect")) {
@@ -58,7 +63,16 @@ public final class RecoveryInstrumentation extends Instrumentation {
         for(String role:ConnectionRecovery.ROLES) empty.put(ConnectionRecovery.key(role),JSONObject.NULL);
         storage(r,old,bundle(browser)); storage(r,next, mode==2 ? bundle(ConnectionPolicy.nonce()) : empty);
         if (mode==3) storage(r,next,bundle(browser));
-        String message=run(r);
+        // Reproduce 0.2.1: last_address is already the new IP, with no native origin history.
+        getTargetContext().getSharedPreferences("carrot-web",0).edit().remove("connection_origins_v1").commit();
+        if (mode==4) {
+          // Chromium batches its disk writes; this fixture represents a prior app session.
+          java.io.File root=new java.io.File(getTargetContext().getApplicationInfo().dataDir,"app_webview");
+          long until=System.currentTimeMillis()+10000;
+          while (!LegacyOriginHints.read(root).contains(old) && System.currentTimeMillis()<until) Thread.sleep(100);
+          if (!LegacyOriginHints.read(root).contains(old)) throw new AssertionError("Legacy origin fixture not persisted: " + java.util.Arrays.toString(root.list()));
+        }
+        String message=run(r,mode==4 ? next : old);
         JSONObject saved=storage(r,next,null);
         if (mode==1) {
           check(message.isEmpty()); check(moves[0]==1); // a different device still becomes the target
@@ -75,7 +89,91 @@ public final class RecoveryInstrumentation extends Instrumentation {
         }
         runOnMainSync(r::cancel);
       }
-      result.putString("stream","Recovery WebView checks passed: " + checks + "\n"); finish(-1,result);
+      // The startup check must authenticate this origin, never relocate or execute a command.
+      for (int scenario = 0; scenario < 4; scenario++) {
+        final int mode = scenario;
+        int[] calls = {0};
+        ConnectionRecovery inspector = new ConnectionRecovery(getTargetContext(), (target,origin,token,body) -> {
+          check(target.endsWith("/bridge/inspect") && next.equals(origin));
+          check(browser.equals(token) && body.length() == 0);
+          calls[0]++;
+          return new JSONObject().put("connected", true).put("account_linked", mode != 2).put("browser_online", mode != 3);
+        });
+        storage(inspector, next, mode == 0 ? new JSONObject().put(ConnectionRecovery.SESSION,JSONObject.NULL) : bundle(browser));
+        CountDownLatch checked = new CountDownLatch(1);
+        String[] outcome = new String[1];
+        android.webkit.WebView[] currentPage = new android.webkit.WebView[1];
+        runOnMainSync(() -> {
+          android.webkit.WebView page = new android.webkit.WebView(getTargetContext()); currentPage[0] = page;
+          page.getSettings().setJavaScriptEnabled(true); page.getSettings().setDomStorageEnabled(true);
+          page.getSettings().setBlockNetworkLoads(true);
+          page.setWebViewClient(new android.webkit.WebViewClient() {
+            @Override public void onPageFinished(android.webkit.WebView w,String url) {
+              inspector.checkForVoice(w,next,message -> { outcome[0] = message; checked.countDown(); });
+            }
+          });
+          page.loadDataWithBaseURL(next+"/","<html></html>","text/html","UTF-8",null);
+        });
+        check(checked.await(15,TimeUnit.SECONDS));
+        runOnMainSync(currentPage[0]::destroy);
+        check(outcome[0].isEmpty() == (mode == 1));
+        check(calls[0] == (mode == 0 ? 0 : 1));
+        runOnMainSync(inspector::cancel);
+      }
+      JSONObject git = new JSONObject().put("ok",true).put("available",true).put("state","ok").put("behind",1).put("ahead",0)
+        .put("head","1234567890123456789012345678901234567890").put("target_head","9876543210987654321098765432109876543210");
+      check(VoiceWelcome.verifiedUpdate(git));
+      check(!VoiceWelcome.verifiedUpdate(git.put("ahead",1)));
+      check(!VoiceWelcome.verifiedUpdate(git.put("ahead",0).put("behind",0)));
+      check(!VoiceWelcome.verifiedUpdate(git.put("behind",1).put("available",false)));
+      runOnMainSync(this::checkFloatingButton);
+      runOnMainSync(() -> {
+        String visible=visibleText(screen.findViewById(android.R.id.content));
+        check(visible.contains("Looking for Carrot")); check(visible.contains("Search again"));
+        check(visible.contains("Enter IP address")); check(!visible.matches("(?s).*[가-힣].*"));
+        screen.finish();
+      });
+      result.putString("stream","Recovery WebView checks passed: " + checks + "\nEnglish native search screen verified.\n"); finish(-1,result);
     } catch (Throwable error) { result.putString("stream","FAILED: " + android.util.Log.getStackTraceString(error)); finish(0,result); }
+  }
+  private void checkFloatingButton() {
+    android.content.Context context = getTargetContext();
+    android.content.SharedPreferences prefs = context.getSharedPreferences("voice-position-test", 0);
+    prefs.edit().clear().commit();
+    android.widget.FrameLayout frame = new android.widget.FrameLayout(context);
+    FloatingVoiceButton mic = new FloatingVoiceButton(context,prefs);
+    frame.addView(mic, new android.widget.FrameLayout.LayoutParams(80,80));
+    layout(frame,700,900); mic.place();
+    int[] clicks = {0}; mic.setOnClickListener(v -> clicks[0]++);
+    float initialX = mic.getX(), initialY = mic.getY();
+    touch(mic,0,30,30); touch(mic,2,-170,240); touch(mic,1,-170,240);
+    check(clicks[0] == 0 && mic.getX() < initialX && mic.getY() > initialY);
+    float x = mic.getX(), y = mic.getY();
+    touch(mic,0,30,30); touch(mic,1,30,30); check(clicks[0] == 1);
+    frame.removeView(mic);
+    FloatingVoiceButton restored = new FloatingVoiceButton(context,prefs);
+    frame.addView(restored,new android.widget.FrameLayout.LayoutParams(80,80)); layout(frame,700,900); restored.place();
+    check(Math.abs(restored.getX()-x)<1 && Math.abs(restored.getY()-y)<1);
+    layout(frame,400,360); restored.place();
+    check(restored.getX() >= 0 && restored.getY() >= 0 && restored.getX()+80<=400 && restored.getY()+80<=360);
+  }
+  private static void layout(android.widget.FrameLayout frame, int width, int height) {
+    int exact = android.view.View.MeasureSpec.EXACTLY;
+    frame.measure(android.view.View.MeasureSpec.makeMeasureSpec(width,exact), android.view.View.MeasureSpec.makeMeasureSpec(height,exact));
+    frame.layout(0,0,width,height);
+  }
+  private static void touch(FloatingVoiceButton view, int action, float x, float y) {
+    long now = android.os.SystemClock.uptimeMillis();
+    android.view.MotionEvent event = android.view.MotionEvent.obtain(now,now,action,x,y,0);
+    try { view.onTouchEvent(event); } finally { event.recycle(); }
+  }
+  private String visibleText(android.view.View view) {
+    StringBuilder out=new StringBuilder();
+    if (view instanceof android.widget.TextView) out.append(((android.widget.TextView)view).getText()).append('\n');
+    if (view instanceof android.view.ViewGroup) {
+      android.view.ViewGroup group=(android.view.ViewGroup)view;
+      for(int i=0;i<group.getChildCount();i++) out.append(visibleText(group.getChildAt(i)));
+    }
+    return out.toString();
   }
 }

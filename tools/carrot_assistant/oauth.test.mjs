@@ -59,6 +59,29 @@ async function start(dir, port = 0) {
   return { http, base, post, form, browser, register, begin, link, mcp, close: () => new Promise(r => http.close(r)) };
 }
 
+test('English OAuth consent and errors retain the same fields and security requirements', async () => {
+  const env = await start();
+  try {
+    const client = await (await env.register()).json();
+    const query = new URLSearchParams({ client_id: client.client_id, response_type: 'code', redirect_uri: callback,
+      code_challenge_method: 'S256', code_challenge: digest(randomBytes(32)), state: 'language-test',
+      resource: `${env.base}/account/mcp`, scope: 'carrot.screen carrot.settings carrot.drive carrot.tools' });
+    const page = async language => {
+      const response = await fetch(`${env.base}/authorize?${query}`, { headers: { 'Accept-Language': language } });
+      assert.equal(response.status, 200);
+      assert.match(response.headers.get('vary'), /Accept-Language/i);
+      return response.text();
+    };
+    const en = await page('en-US,en;q=0.9'), ko = await page('ko-KR,ko;q=0.9');
+    assert.match(en, /<html lang="en">/); assert.doesNotMatch(en, /[가-힣]/);
+    assert.match(en, /Authorize this connection/); assert.match(en, /diagnostic log uploads/);
+    assert.match(ko, /이 기기 연결 승인/);
+    assert.deepEqual([...en.matchAll(/name="([^"]+)"/g)].map(x => x[1]), [...ko.matchAll(/name="([^"]+)"/g)].map(x => x[1]));
+    const error = await env.form('/oauth/approve', { flow: 'missing' }, { 'Accept-Language': 'en' });
+    assert.equal(error.status, 403); assert.match(await error.text(), /connection request expired/);
+  } finally { await env.close(); }
+});
+
 test('selecting another Carrot Web keeps ChatGPT authorization without a new code or broader scopes', async () => {
   const env = await start();
   let mcp;
@@ -161,8 +184,12 @@ test('fresh MCP conversations resolve only the authenticated browser, survive re
     const la = await env.link(client, a.browser_token), lb = await env.link(client, b.browser_token);
     const ta = await (await env.form('/token', la.exchange)).json(), tb = await (await env.form('/token', lb.exchange)).json();
     const chatA = await env.mcp(ta.access_token), chatB = await env.mcp(tb.access_token); sdk.push(chatA, chatB);
+    const context = (await chatA.callTool({ name: 'get_carrot_context', arguments: {} })).structuredContent;
+    assert.equal(context.vehicle_connected, null);
+    assert.equal(context.vehicle_state, 'not_observed');
+    assert.equal(context.can_drive, false);
     const listed = (await chatA.listTools()).tools;
-    assert.equal(listed.length, 20); assert.equal(listed.some(t => t.name === 'connect_carrot_web'), false);
+    assert.equal(listed.length, 21); assert.ok(listed.some(t => t.name === 'open_carrot_phone_app')); assert.equal(listed.some(t => t.name === 'connect_carrot_web'), false);
     assert.equal((await chatA.callTool({ name: 'request_carrot_drive', arguments: { action: 'lane_left' } })).isError, true);
     assert.equal((await chatA.callTool({ name: 'get_carrot_drive_request', arguments: {} })).isError, true);
     assert.equal((await chatA.callTool({ name: 'read_carrot_setting_value', arguments: { name: 'AutoBlinkerControl' } })).isError, true);
@@ -228,11 +255,19 @@ test('driving scope needs explicit consent and cannot be added by refreshing a s
     assert.equal((await oldChat.callTool({ name: 'request_carrot_drive', arguments: { action: 'speed_up' } })).isError, true);
     const chat = await env.mcp(token.access_token); clients.push(chat);
     const listed = (await chat.listTools()).tools;
+    const context = (await chat.callTool({ name: 'get_carrot_context', arguments: {} })).structuredContent;
+    assert.equal(context.can_drive, true);
+    assert.equal(context.vehicle_connected, null);
+    assert.equal(context.vehicle_state, 'not_observed');
+    assert.equal(context.web.browser_online, false);
     const annotation = listed.find(t => t.name === 'request_carrot_drive').annotations;
     assert.equal(annotation.readOnlyHint, false);
     assert.equal(annotation.destructiveHint, true);
     const waitingBrowser = env.browser('poll_wait', browser.browser_token);
     await new Promise(resolve => setTimeout(resolve, 20));
+    const online = (await chat.callTool({ name: 'get_carrot_context', arguments: {} })).structuredContent;
+    assert.equal(online.web.browser_online, true);
+    assert.equal(online.vehicle_connected, null);
     const pending = chat.callTool({ name: 'request_carrot_drive', arguments: { action: 'speed_set', value: 100 } });
     const poll = await (await waitingBrowser).json();
     assert.equal(poll.drive_command.action, 'speed_set');
@@ -277,6 +312,18 @@ test('explicit settings OAuth scope delivers only to its browser and returns ver
       status: 'prepared', name: 'ShowCustomBrightness', current: 50, proposed: 55, proposal_id: 'p'.repeat(43), confirmation_required: true,
     } })).status, 200);
     assert.equal((await pending).structuredContent.result.proposed, 55);
+    const ready = (await chat.callTool({ name: 'get_carrot_setting_request', arguments: {} })).structuredContent.result;
+    assert.equal(ready.confirmation_required, false);
+    assert.equal(ready.commit_required, true);
+    assert.match(chat.getInstructions(), /명확한 사용자 변경 명령 자체가 승인/);
+    const committing = chat.callTool({ name: 'commit_carrot_setting_change', arguments: { proposal_id: ready.proposal_id, confirmed: true } });
+    await new Promise(resolve => setTimeout(resolve, 950));
+    const commitPoll = await (await env.browser('poll', browser.browser_token)).json();
+    assert.equal(commitPoll.settings_command.operation, 'commit');
+    assert.equal(commitPoll.settings_command.proposal_id, ready.proposal_id);
+    await env.browser('settings_ack', browser.browser_token, { id: commitPoll.settings_command.id,
+      result: { status: 'applied', name: 'ShowCustomBrightness', previous: 50, current: 55 } });
+    assert.equal((await committing).structuredContent.result.current, 55);
     const oldChat = await env.mcp(oldTokens.access_token); clients.push(oldChat);
     assert.equal((await oldChat.callTool({ name: 'get_carrot_setting_request', arguments: {} })).isError, true);
     const screen = (await oldChat.callTool({ name: 'get_carrot_web_status', arguments: {} })).structuredContent;

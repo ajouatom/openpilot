@@ -220,7 +220,7 @@ class Monitor:
     if pending and state != 'sending' and ack != pending[0] and now-pending[2] > .45:
       self.intent.inflight = self.intent.queued = pending = None
     if self.worker:
-      self.worker.send({'stamp':now, 'state':state, 'accepted_id': pending[1] if pending and ack==pending[0] else None})
+      self.worker.send({'stamp':now, 'state':state, 'lamps':lamps, 'accepted_id': pending[1] if pending and ack==pending[0] else None})
       latest = self.worker.latest()
       if latest is not None:
         self.source = latest

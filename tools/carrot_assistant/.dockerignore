@@ -9,5 +9,6 @@
 !tools_bridge.mjs
 !VOICE_RULES.md
 !oauth.mjs
+!oauth_language.mjs
 !catalog.mjs
 !catalog.json

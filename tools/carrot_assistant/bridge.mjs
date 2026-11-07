@@ -91,18 +91,26 @@ export function createBridge({ now = Date.now, maxSessions = 1000, statePath, is
       }
       return this.browser(key, origin, 'poll');
     },
-    async accountDriveStatus(id, wait = false) {
-      this.accountStatus(id);
-      const deadline = Date.now() + (wait ? 8000 : 0);
-      while (Date.now() < deadline && ['queued', 'active'].includes(driving.status(id).status)) await new Promise(resolve => setTimeout(resolve, 100));
+    accountDriveStatus(id) {
       this.accountStatus(id);
       return driving.status(id);
     },
     async accountDriveAction(id, fields) {
       const state = this.accountStatus(id);
       if (!state.browser_online) fail('Carrot Web is offline. Do not retry automatically.', 409);
-      driving.queue(id, fields); wake(id);
-      return this.accountDriveStatus(id, true);
+      const queued = driving.queue(id, fields);
+      if (queued.submitted === false) return queued;
+      wake(id);
+      // Give a fast local acknowledgement a chance to arrive. A voice reply
+      // need not wait for the vehicle to finish a maneuver.
+      const deadline = performance.now() + 400;
+      let status = queued;
+      while (status.status === 'queued' && performance.now() < deadline) {
+        await new Promise(resolve => setTimeout(resolve, 25));
+        status = this.accountDriveStatus(id);
+        if (status.request_id !== queued.request_id) return { status: 'none' };
+      }
+      return status;
     },
     accountSettingStatus(id) { this.accountStatus(id); return settings.status(id); },
     accountToolsStatus(id) { this.accountStatus(id); return toolJobs.status(id); },

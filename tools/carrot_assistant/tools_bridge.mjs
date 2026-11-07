@@ -6,7 +6,7 @@ export const toolActions = ['git_pull', 'git_sync', 'git_reset_hard', 'git_reset
   'server_tmux_log', 'backup_settings', 'record_start', 'record_stop'];
 export const toolPanels = ['tools', 'car_select', 'language', 'web_settings', 'device_info', 'bluetooth', 'assistant',
   'git_branch', 'git_log', 'git_reset_repo', 'restore_settings', 'qr_backup_settings', 'qr_restore_settings',
-  'copy_settings', 'view_settings', 'egpu'];
+  'copy_settings', 'view_settings', 'egpu', 'naver_map'];
 const id = z.string().regex(/^[A-Za-z0-9_-]{43}$/);
 export const toolResult = z.object({
   status: z.enum(['prepared', 'running', 'completed', 'requested', 'opened', 'needs_input', 'cancelled', 'failed', 'unknown']),
@@ -48,7 +48,7 @@ export function createToolsBridge(now = Date.now) {
       if (!r || r.id !== identity) throw new Error('Unknown Tools request');
       if (state.status !== 'queued') return state;
       const result = toolResult.parse(raw);
-      const expected = { open: ['opened', 'needs_input'], prepare: ['prepared'], commit: ['running', 'requested', 'unknown'],
+      const expected = { open: ['opened', 'needs_input', ...(r.action === 'naver_map' ? ['requested'] : [])], prepare: ['prepared'], commit: ['running', 'requested', 'unknown'],
         status: ['running', 'completed', 'requested', 'unknown'], cancel: ['cancelled'] }[r.operation] || [];
       if (result.status !== 'failed' && (!expected.includes(result.status) || (r.action && result.action !== r.action))) throw new Error('Unexpected Tools result');
       if (result.status === 'prepared' && (!result.proposal_id || !result.title || !result.effect || result.confirmation_required !== true)) throw new Error('Incomplete Tools proposal');

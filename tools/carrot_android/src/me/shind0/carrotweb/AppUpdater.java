@@ -42,9 +42,13 @@ public final class AppUpdater {
   public void info() {
     String label = "CarrotAssist";
     try { label += " "+installed().versionName; } catch (Exception ignored) {}
-    new AlertDialog.Builder(activity).setTitle(label).setMessage("새 버전을 자동 확인합니다. 업데이트해도 기존 기기 연결 정보는 유지됩니다.\n\n설치는 주차 후 진행하세요.")
-      .setPositiveButton(available == null ? "업데이트 확인" : "새 버전 설치", (d,w)->{ if (available==null) check(true); else offer(); })
-      .setNegativeButton("닫기",null).show();
+    android.widget.CheckBox autoVoice = new android.widget.CheckBox(activity);
+    autoVoice.setText(UiText.get("당근웹 연결 시 음성조수 자동 실행", "Start the voice assistant when Carrot Web connects"));
+    autoVoice.setChecked(preferences.getBoolean("voice_auto_start",false));
+    autoVoice.setOnCheckedChangeListener((v,on) -> preferences.edit().putBoolean("voice_auto_start",on).apply());
+    new AlertDialog.Builder(activity).setTitle(label).setView(autoVoice).setMessage(UiText.get("새 버전을 자동 확인합니다. 업데이트해도 기존 기기 연결 정보는 유지됩니다.\n\n설치는 주차 후 진행하세요.", "New versions are checked automatically. Updating preserves your saved connection.\n\nInstall updates while parked."))
+      .setPositiveButton(available == null ? UiText.get("업데이트 확인", "Check for updates") : UiText.get("새 버전 설치", "Install update"), (d,w)->{ if (available==null) check(true); else offer(); })
+      .setNegativeButton(UiText.get("닫기", "Close"),null).show();
   }
   public void check(boolean manual) {
     if (busy || destroyed) return;
@@ -62,25 +66,25 @@ public final class AppUpdater {
           next=info;
         }
         preferences.edit().putLong("update_checked",System.currentTimeMillis()).apply();
-      } catch (Exception failure) { error="업데이트 정보를 확인하지 못했어요. 인터넷 연결을 확인해 주세요."; }
+      } catch (Exception failure) { error=UiText.get("업데이트 정보를 확인하지 못했어요. 인터넷 연결을 확인해 주세요.", "Could not check for updates. Check your Internet connection."); }
       final JSONObject result=next; final String message=error;
       activity.runOnUiThread(()->{
         busy=false; if (destroyed) return; available=result;
         if (message!=null) { if (manual) toast(message); }
-        else if (available!=null) { if (manual) offer(); else toast("CarrotAssist 새 버전이 있어요. 상단 기기 이름을 눌러 업데이트하세요."); }
-        else if (manual) toast("현재 최신 버전입니다.");
+        else if (available!=null) { if (manual) offer(); else toast(UiText.get("CarrotAssist 새 버전이 있어요. 상단 기기 이름을 눌러 업데이트하세요.", "A CarrotAssist update is available. Tap the device name at the top to update.")); }
+        else if (manual) toast(UiText.get("현재 최신 버전입니다.", "You are up to date."));
       });
     });
   }
   private void offer() {
     if (available==null || busy || destroyed) return;
     new AlertDialog.Builder(activity).setTitle("CarrotAssist "+available.optString("version"))
-      .setMessage("새 버전을 다운로드하고 안드로이드 설치 화면을 열까요? 설치 중 앱이 종료될 수 있으니 주차 후 진행하세요.")
-      .setPositiveButton("다운로드",(d,w)->download()).setNegativeButton("나중에",null).show();
+      .setMessage(UiText.get("새 버전을 다운로드하고 안드로이드 설치 화면을 열까요? 설치 중 앱이 종료될 수 있으니 주차 후 진행하세요.", "Download the update and open the Android installer? The app may close during installation. Please park first."))
+      .setPositiveButton(UiText.get("다운로드", "Download"),(d,w)->download()).setNegativeButton(UiText.get("나중에", "Later"),null).show();
   }
   private void download() {
     if (available==null || busy) return;
-    busy=true; final JSONObject info=available; toast("업데이트를 다운로드하고 확인하고 있어요.");
+    busy=true; final JSONObject info=available; toast(UiText.get("업데이트를 다운로드하고 확인하고 있어요.", "Downloading and verifying the update."));
     worker.execute(()->{
       File part=new File(activity.getCacheDir(),"update.part"), apk=new File(activity.getCacheDir(),"update.apk");
       String error=null;
@@ -88,7 +92,7 @@ public final class AppUpdater {
         try (FileOutputStream output=new FileOutputStream(part)) { transfer(info.getString("apk_url"),output,32*1024*1024); }
         verify(part,info);
         if (!part.renameTo(apk)) throw new Exception("Cannot prepare installer");
-      } catch (Exception failure) { part.delete(); error="업데이트 검증에 실패했어요. 설치하지 않았습니다. 인터넷이나 배포 파일을 확인해 주세요."; }
+      } catch (Exception failure) { part.delete(); error=UiText.get("업데이트 검증에 실패했어요. 설치하지 않았습니다. 인터넷이나 배포 파일을 확인해 주세요.", "Update verification failed. Nothing was installed. Check your Internet connection or the release file."); }
       final String message=error;
       activity.runOnUiThread(()->{
         busy=false; if (destroyed) return;
@@ -118,10 +122,10 @@ public final class AppUpdater {
       Intent intent=new Intent(Intent.ACTION_VIEW).setDataAndType(Uri.parse("content://"+activity.getPackageName()+".updates/update.apk"),"application/vnd.android.package-archive")
         .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
       activity.startActivity(intent); pending=null;
-    } catch (Exception error) { pending=null; toast("설치 화면을 열지 못했어요. 앱 정보에서 다시 확인해 주세요."); }
+    } catch (Exception error) { pending=null; toast(UiText.get("설치 화면을 열지 못했어요. 앱 정보에서 다시 확인해 주세요.", "Could not open the installer. Try again from app information.")); }
   }
   public void resume() {
-    if (awaitingPermission) { awaitingPermission=false; if (activity.getPackageManager().canRequestPackageInstalls()) install(); else toast("설치 권한이 허용되지 않아 업데이트를 중단했어요."); }
+    if (awaitingPermission) { awaitingPermission=false; if (activity.getPackageManager().canRequestPackageInstalls()) install(); else toast(UiText.get("설치 권한이 허용되지 않아 업데이트를 중단했어요.", "Update stopped because installation permission was not allowed.")); }
   }
   public void close() { destroyed=true; worker.shutdownNow(); }
   private static void transfer(String address, java.io.OutputStream output, int maximum) throws Exception {

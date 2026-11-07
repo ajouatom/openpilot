@@ -1,5 +1,145 @@
 # Repository memory
 
+- Voice lane changes retain normal admission on all supported vehicles, with or
+  without indicator hardware. Bind optional signaling once per request to an active
+  receiver on the current vehicle (AutoBlinkerControl=2), a supported native output,
+  or the existing Tesla path. After selection, timeout or loss never falls back to
+  unsignaled motion. External BLE/SPAS support follows receiver checks. PEAK/CANable
+  retains its verified CAN profile. No live maneuver or actual lamp test.
+
+- 2026-11-07 mini voice follow-up: two correctly transcribed “왼쪽으로 차로 변경”
+  refusals with no visible tool call; authenticated readback can_drive=true,
+  browser_online=true, last drive request none. Native greeting verifies web
+  pairing/connectivity only. The phone disabled both Android assist structure
+  and screenshot sharing; neither was changed. Account context in relay 0.7.8
+  reports vehicle telemetry as unobserved rather than hard-coded disconnected.
+  No live maneuver; this does not force plugin activation in a new mini session.
+
+- CarrotAssist 0.2.5 (code12) startup TTS announces an available device Git update once;
+  the native greeting ends before showAssist. No startup question, affirmative handler,
+  maintenance proposal or reboot. The optional carrot.tools grant also supports a fixed
+  Naver Map launch through updated Carrot Web and the visible Android wrapper. Only
+  the installed com.nhn.android.nmap launcher can be requested. Report OS acceptance
+  separately from the map actually appearing. No claim of live spoken end-to-end testing.
+
+- CarrotAssist 0.2.4 (code11) moves the microphone into a draggable 68dp
+  in-app button with normalized saved coordinates. Toolbar device-name settings
+  provide opt-in auto-open once per device discovery, with a greeting/safe-drive
+  message and GitPull/restart question when current device Git status verifies a
+  nondiverged update, even while driving. No Git or reboot is executed at startup.
+  Manual taps skip the greeting. Both paths inspect the active WebView session
+  before opening showAssist, with up to 3 transient attempts and foreground
+  cancellation. Startup Android assist content is optional; MCP cannot suppress
+  all ChatGPT mini preambles. Relay0.7.6 returns explicit no-submit/no-retry
+  outcomes for duplicate/conflicting requests without queuing them. Phone tested
+  button drag, tap and mini opening; emulator checks include saved position and
+  resize. Temporary relay downtime produced a real startup alert during deployment.
+
+- On 2026-11-07 voice follow-up, actual mini conversations showed an unsupported
+  response without visible tools and a later 14-second turn with a lane tool call
+  and unnecessary dashboard question. Current account can_drive=true; last relay
+  request ended unverified (delivery_or_feedback_expired), not confirmed completion.
+  Relay0.7.5 caps first-ack wait at about 400 ms, reports queued/first progress
+  promptly, and reads latest status immediately on explicit follow-up. Late vehicle
+  results keep the same request ID. No automatic retry or scope change. Model
+  preambles and tool selection are not under deterministic relay control. No live
+  maneuver triggered during diagnosis or tests.
+
+- On 2026-11-07, owner rejects full-app and Samsung pop-up voice UI; keep native
+  showAssist mini overlay. Private phone APK0.2.3/code10 was restored to the0.2.2
+  behavior; not publicly released and repository Android sources remain0.2.2.
+  Outside web touch dismisses ChatGPT mini without activating the underlying tab;
+  continuous voice through that dismissal remains unresolved. Do not promise it.
+  During drive-permission audit, initial live context was can_drive=false; later
+  persisted grant and live Codex/ChatGPT web context verify drive/settings/tools
+  true. Do not claim owner never approved, silently union grants, or infer when
+  the connection changed. Read-only diagnostics only; no driving request executed.
+  Updated stale plugin description that incorrectly said driving unsupported.
+  Relay0.7.4 makes clear left/right lane and speed requests tool-first, without
+  preamble or context/status/catalog lookups. Existing authorization/vehicle checks,
+  expiry/dedup/no-retry remain. Model/network latency is not bounded by prompting.
+  29 relay checks and KO/EN docs validator passed. NAS build035779c92085 exited0;
+  public health0.7.4 and live request-first instructions verified. No vehicle pull.
+
+- On 2026-11-07 follow-up, cached ChatGPT plugin tool descriptions still demanded
+  confirmation after relay0.7.3. Refreshed plugin metadata and verified new text.
+  A NEW web conversation then reproduced a separate ChatGPT commit approval card.
+  Owner explicitly chose CarrotAssist only Allow all actions/full_access via the
+  plugin-management tool; readback verifies custom override, global default stays
+  low-risk actions. Old expired approval was denied, not replayed. New conversation
+  applied CruiseMaxVals0 240->250 without another approval; independent read250.
+  This account choice is NOT an automatic permission for other users. Their app
+  setup explains plugin-wide scope, account-owned selection and tool refresh.
+  No new OAuth/local drive/tools scopes. Phone0.2.2 unchanged. Background voice
+  was already enabled, but owner reported small-overlay dismissal ended voice.
+  Started voice in full ChatGPT app, Home->CarrotAssist, touched settings tab;
+  green ChatGPT indicator remained and owner confirmed audible reply. External
+  assistant window sizing/listening state is not controlled/exposed by our app;
+  never label our bridge connection or an invocation flag as confirmed listening.
+  KO/EN user guides, KO/EN/ZH helper and Guide-CarrotAssist Wiki document both flows.
+  Isolated web build, five focused assistant checks, translation syntax and user
+  docs validation pass. Vehicle files were not deployed or restarted this turn.
+
+- On 2026-11-07, owner explicitly rejects repeated conversational confirmation for
+  clear, in-range setting commands. Relay0.7.3 treats the original exact target/value
+  or adjustment command as authorization; ambiguous requests/AI recommendations
+  still require clarification. Internal prepare/commit, bounds, fresh value checks,
+  expiry, ownership, readback and history remain; tools maintenance confirmations
+  and ChatGPT platform approvals are separate. Old firmware prepared results are
+  exposed as confirmation_required=false/commit_required=true, not auto-written.
+  Web now refreshes existing same-origin setting permission per new request and
+  allows reads during editing; read-only code input focus no longer blocks writes.
+  Never replay cached failures/writes when a grant changes. Previous live failure
+  said local permission absent, then two live reads returned250; exact earlier
+  cause is not established. A later commit queued while phone auto-locked; owner
+  unlocked, same request completed once, CruiseMaxVals0 250->240. Separate live
+  readback and phone UI both verify240. No vehicle GitPull/restart was performed;
+  web fixes are prepared for owner GitPull/reopen. APK stays0.2.2.
+  Relay29/web4/Python18 checks and isolated web build pass. NAS0.7.3 is running,
+  image9912e4cf1cc2, build exit0/public health/context verified. Initial deployment
+  failed because an overbroad version replacement touched cookie dependency;
+  restored dependency lock entries, changed only root versions, rebuilt successfully.
+  Never globally replace package version strings in lockfiles.
+- On 2026-11-07, reproduced the remaining Android0.2.1 offline case: WebStorage
+  getOrigins omits localStorage-only origins, and last_address already pointed to
+  the new office IP. Android0.2.2(code9) persists bounded origin history and reads
+  only local-address hints from this app's legacy WebView storage as an upgrade
+  fallback. Actual tokens still come from isolated WebView and relay validation;
+  database bytes never authorize a connection. Local grants never gate navigation.
+  Signed0.2.2 installed on owner's USB phone; existing account moved from hotspot
+  to192.168.0.178 without code or vehicle GitPull. English screen-brightness search
+  and actual screen-open acknowledged opened; no setting writes/driving commands.
+  Native UI now follows phone language (KO/English fallback), web language remains
+  separate; relay0.7.2 consent follows browser language and AI follows user language.
+  Java policy72, emulator WebView62/English native screen, MCP29 checks pass.
+  NAS0.7.2 built/started exit0 image615f4d14150f; public health and owner online
+  status verified after restart. Actual spoken-English accents are not tested.
+  Final APK SHA256 c9e4e659a3d0fee217342aa0b14477f9feed5d1413210058eca21db788b62842.
+- On 2026-11-07, owner reports overnight/offline use after switching hotspot
+  10.225.84.19 to office 192.168.0.178. Discovery worked but WebView storage and
+  relay/local grants were origin-bound. Owner explicitly rejects matching the
+  previous device as a condition: the Carrot Web currently selected/opened in
+  CarrotAssist must become ChatGPT's target, even a different Carrot device.
+  Commit2856def933 / Android0.2.1(code8) restores app-owned saved ChatGPT browser
+  capabilities from isolated network-blocked WebViews, ranks authenticated account
+  activity, relocates the existing relay session, preserves OAuth scopes and
+  discards pending screen/settings/drive/Tools requests. No device-identity gate.
+  Optional local-permission restoration uses a double-hash/HMAC challenge before
+  sending an existing bearer grant; failed/absent/different-device permissions do
+  NOT block account/screen connection or create new privileges. Destination-local
+  permissions stay in effect. An unreachable address after backgrounding triggers
+  discovery. Outside Chrome/Samsung storage is not imported. Uninstall/data reset
+  still removes app authorization. Never replay old driving commands on reconnect.
+  Python68/MCP27/Java policy66/emulator WebView44 checks and KO/EN docs validation
+  pass. NAS0.7.1 built/started exit0(image4b31e0f2f6ca); health/discovery verified,
+  existing owner's OAuth survives but still points offline to old IP until phone
+  update/reopen. APK0.2.1 release and app-specific update.json(code8) published,
+  downloaded hash verified:4f09a0c56b40e92dda8583d334f46e802484f43053c542ccd27625d49f336336.
+  Signing identity matches0.2.0. Wiki66be9c5 pushed; both repos0/0. Physical phone
+  absent from USB; no live phone network-switch or vehicle command test, no vehicle
+  GitPull/restart performed. Owner needs phone app update; local permission recovery
+  also needs parked device GitPull/restart. Keep unrelated working changes intact.
+
 - On 2026-11-06, owner requests voice control of Carrot Web Tools buttons and
   novice-readable code-entry instructions. Relay0.7.0 adds separate carrot.tools
   consent plus a stationary-issued local grant; existing scopes never expand.

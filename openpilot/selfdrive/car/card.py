@@ -27,6 +27,7 @@ from openpilot.selfdrive.car.cruise import VCruiseCarrot
 from openpilot.selfdrive.car.car_specific import MockCarState
 from openpilot.selfdrive.car.openpilot_toggle import CruiseMainOpenpilotToggle
 from openpilot.selfdrive.car.tesla_turn_signals import TeslaTurnSignals
+from openpilot.selfdrive.car.voice_indicator import NativeVoiceIndicator, native_indicator
 from openpilot.selfdrive.car.hyundai_spas import SpasSignals
 from openpilot.selfdrive.car.aprk_diag import AprkDiag, RESERVED as APRK_DIAG_RESERVED
 from openpilot.system.hardware import HARDWARE
@@ -141,6 +142,8 @@ class Car:
     self.tesla_signals = TeslaTurnSignals.from_car_params(self.CP, enabled=self.params.get_bool("TeslaAutoTurnSignals"))
     self.tesla_signal_status = None if self.CP.brand == "tesla" else self.tesla_signals.status
     self.tesla_signal_log_ns = 0
+    stock_signal = native_indicator(self.CP)
+    self.native_voice_indicator = NativeVoiceIndicator(stock_signal) if stock_signal else None
     self.spas_signals = SpasSignals(self.CP, self.params)
     self.spas_signal_status = None
     self.spas_signal_log_at = 0.
@@ -433,6 +436,13 @@ class Car:
       radar_state = self.sm['radarState'] if self.sm.valid['radarState'] and self.sm.alive['radarState'] else None
       if self.aprk_diag.supported:
         self.CI.CC.aprk_diag_active = self.aprk_diag.busy
+      if CC.assistantLaneSignalId and not (CC.latActive and model_v2 is not None and
+          model_v2.meta.assistantLaneSignalRoute == 'native' and model_v2.meta.assistantLaneSignalId == CC.assistantLaneSignalId and
+          all(self.sm.alive[k] and self.sm.valid[k] and 0 <= time.monotonic()-self.sm.recv_time[k] < .2 for k in ('carControl', 'modelV2'))):
+        CC = CC.as_builder()
+        CC.leftBlinker = CC.rightBlinker = False
+        CC.assistantLaneSignalId = ''
+        CC = CC.as_reader()
       self.last_actuators_output, can_sends = self.CI.apply(CC, now_nanos, model_v2, radar_state)
       if self.aprk_diag.busy:
         can_sends = [m for m in can_sends if m[0] not in APRK_DIAG_RESERVED]
@@ -444,6 +454,8 @@ class Car:
       apply_done_ns = time.monotonic_ns()
       self.pm.send('sendcan', can_list_to_can_capnp(can_sends, msgtype='sendcan', valid=CS.canValid))
       sendcan_done_ns = time.monotonic_ns()
+      if self.native_voice_indicator is not None:
+        self.native_voice_indicator.update(sendcan_done_ns * 1e-9, CC, CS, self.CI.CS, can_sends)
 
       process_us = (sendcan_done_ns - self.card_diag_recv_ns) // 1000
       self.card_diag_stage_current['apply'] = (apply_done_ns - apply_start_ns) // 1000

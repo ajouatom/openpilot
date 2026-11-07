@@ -43,4 +43,18 @@ test('voice settings reject stale/unknown work and never send the local grant to
   assert.equal(calls[2].url, '/api/assistant/settings/disable');
   assert.equal((await module.executeSettingCommand({ ...command, id: 'b'.repeat(43) })).result.status, 'failed');
   assert.equal(calls.length, 3);
+  // Same-origin permission restored elsewhere after this module was loaded.
+  // A new request uses it; the earlier failed request must never replay.
+  stored.set('carrot-assistant-settings-v1', 'restored-secret');
+  assert.equal((await module.executeSettingCommand({ ...command, id: 'b'.repeat(43) })).result.status, 'failed');
+  assert.equal(calls.length, 3);
+  await module.executeSettingCommand({ ...command, id: 'd'.repeat(43) });
+  assert.equal(calls[3].options.headers.Authorization, 'Bearer restored-secret');
+  stored.delete('carrot-assistant-settings-v1');
+  assert.equal((await module.executeSettingCommand({ ...command, id: 'e'.repeat(43) })).result.status, 'failed');
+  assert.equal(calls.length, 4);
+  // Read-only code fields do not block commands; reads never interrupt editing.
+  assert.equal(module.settingCommandBlocked(command, { tagName: 'INPUT', readOnly: true }), false);
+  assert.equal(module.settingCommandBlocked(command, { tagName: 'INPUT', readOnly: false }), true);
+  assert.equal(module.settingCommandBlocked({ operation: 'read' }, { tagName: 'INPUT' }), false);
 });
