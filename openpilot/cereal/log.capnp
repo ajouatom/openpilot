@@ -1117,6 +1117,7 @@ struct ModelDataV2 {
     indicatorJournalMonoTime @32 :UInt64;
     indicatorPrepareDirection @33 :LaneChangeDirection; # Display only; never an actuation request.
     indicatorPrepareSource @34 :Text;
+    assistantLaneSignalId @35 :Text; # Eligible Ioniq 5 PE voice maneuver; direction is laneChangeDirection.
 
 
     deprecated :group {

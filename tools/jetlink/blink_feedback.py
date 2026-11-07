@@ -10,14 +10,18 @@ class ObservationFeedback:
     self.seen = None
 
   def prepare(self, now, hold, meta, cs):
-    ident = hold['id'] if hold and hold['source'] == 'observation' else None
+    self.prepare_tap(now, hold if hold and hold['source'] == 'observation' else None,
+                     getattr(meta, 'observedIndicatorMonoTime', 0)/1e9, cs)
+
+  def prepare_tap(self, now, hold, request_time, cs):
+    ident = hold['id'] if hold else None
     if ident != self.ident:
       self.ident, self.tap, self.value, self.seen = ident, None, {}, None
       if ident and not cs.blinkerLever and not cs.leftBlinker and not cs.rightBlinker:
         direction = {'left':1, 'right':2}[hold['direction']]
         counts = [getattr(cs, 'leftBlinkerStalkCount', None), getattr(cs, 'rightBlinkerStalkCount', None)]
         if all(type(x) is int and 0 <= x < 256 for x in counts):
-          self.tap = {'id':ident, 'direction':direction, 'request':getattr(meta, 'observedIndicatorMonoTime', 0)/1e9,
+          self.tap = {'id':ident, 'direction':direction, 'request':request_time,
                       'start':now, 'counts':counts}
 
   def sent(self, now, peer, ok):

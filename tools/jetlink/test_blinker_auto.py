@@ -551,3 +551,24 @@ def test_tbt_source_preserves_confirmed_hold_through_receiver_override(monkeypat
     assert all(value['direction'] is None for value in leases[8:])
   assert all(value['direction'] is None for value in leases[80:])
   assert all(record['turn_phase'] == 'approach' for record in sent[8:60])
+
+
+@pytest.mark.parametrize('fault', ['busy', 'stale', 'restart'])
+def test_voice_hold_never_rejoins_same_request(fault):
+  from types import SimpleNamespace as NS
+  from blink_voice import VoiceLaneSignal
+  source = VoiceLaneSignal()
+  cs = NS(leftBlinker=False, rightBlinker=False)
+  meta = NS(assistantLaneSignalId='', laneChangeDirection='left', laneChangeState='preLaneChange')
+  def select(busy=False):
+    return source.select(meta, cs, allowed=True, peer_ready=True, hold=None, busy=busy)
+  assert select() is None
+  meta.assistantLaneSignalId = 'a'*43
+  assert select() == ('lane', 'left')
+  if fault == 'busy':
+    assert select(busy=True) is None
+  elif fault == 'stale':
+    assert source.select(None, cs, allowed=False, peer_ready=False, hold=None, busy=True) is None
+  else:
+    source = VoiceLaneSignal()
+  assert select() is None

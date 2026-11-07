@@ -10,6 +10,7 @@ import re
 import time
 
 from openpilot.selfdrive.carrot.bluetooth.model import atomic_json, read_json
+from openpilot.selfdrive.controls.lib.desire_lib.indicator_feedback import TapEcho
 
 ROOT = Path('/dev/shm/carrot-assistant-lane')
 IDENTITY = re.compile(r'^[A-Za-z0-9_-]{43}$')
@@ -25,6 +26,7 @@ class AssistantLane:
     self.last_publish = 0.
     self.result = None
     self.last_tick = None
+    self.tap_echo = TapEcho()
 
   def publish(self, status, reason=''):
     if self.active is None:
@@ -52,6 +54,8 @@ class AssistantLane:
       return 'vehicle_condition'
     if not math.isfinite(state['speed']) or state['speed'] < 30 / 3.6:
       return 'below_lane_change_speed'
+    if state.get('signal_disabled'):
+      return 'lane_indicator_control_disabled'
     if state['driver_busy'] or state['other_request']:
       return 'driver_or_other_maneuver'
     side = state[direction]
@@ -96,10 +100,38 @@ class AssistantLane:
       return None, False
     reason = self.blocked(state, active['direction'])
     if reason or gap or now - active['accepted'] > 3:
-      self.publish('rejected' if reason else 'expired', reason or 'start_not_observed')
+      timeout = 'indicator_not_confirmed' if self.signal_id else 'start_not_observed'
+      self.publish('rejected' if reason else 'expired', reason or timeout)
       return None, True
     self.publish('waiting', 'existing_lane_change_conditions')
     return active['direction'], False
+
+  @property
+  def signal_id(self):
+    return self.active['id'] if self.active and 'signal_since' in self.active else ''
+
+  def own_tap(self, cs):
+    if not self.signal_id or not cs.blinkerLever:
+      return False
+    value = read_json(self.root / 'signal.json', {})
+    if not isinstance(value, dict) or value.get('id') != self.signal_id or value.get('direction') != self.active['direction']:
+      return False
+    direction = 1 if self.active['direction'] == 'left' else 2
+    return self.tap_echo.matches(self.clock(), cs, direction, 0., {'stamp':value.get('time'), 'tap':value.get('tap')})
+
+  def signal_ready(self, direction, cs):
+    active = self.active
+    now = self.clock()
+    if not active or active['direction'] != direction:
+      return False
+    active.setdefault('signal_since', now)
+    feedback = read_json(self.root / 'signal.json', {})
+    if not isinstance(feedback, dict):
+      return False
+    stamp = feedback.get('time')
+    return (feedback.get('confirmed') is True and feedback.get('id') == active['id'] and feedback.get('direction') == direction and
+            type(stamp) in (int, float) and active['signal_since'] <= stamp <= now and now - stamp < .35 and
+            (cs.leftBlinker, cs.rightBlinker) == (direction == 'left', direction == 'right'))
 
   def after(self, phase, direction, *, crossed=False):
     if self.active is None:
@@ -113,6 +145,8 @@ class AssistantLane:
       active['crossed'] |= crossed
       active['finishing'] |= phase == 'laneChangeFinishing'
       self.publish('running', 'lane_change_in_progress')
+    elif self.signal_id and not active['began'] and phase != 'preLaneChange':
+      self.publish('rejected', 'lane_conditions_changed')
     elif active['began']:
       # An FSM reset/timeout alone is never evidence of crossing a lane.
       self.publish('completed' if active['finishing'] and active['crossed'] else 'unverified',
