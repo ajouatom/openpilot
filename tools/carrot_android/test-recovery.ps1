@@ -12,6 +12,7 @@ New-Item -ItemType Directory -Force "$build/classes","$build/dex" | Out-Null
 $bin=Join-Path $Sdk 'build-tools/35.0.0'
 $platform=Join-Path $Sdk 'platforms/android-36/android.jar'
 $adb=Join-Path $Sdk 'platform-tools/adb.exe'
+if ((& $adb -s $Serial shell getprop sys.boot_completed).Trim() -ne '1') { throw 'Wait for the emulator to finish booting before running instrumentation.' }
 function Check([string]$step) { if ($LASTEXITCODE -ne 0) { throw "$step failed" } }
 $manifest=@'
 <manifest xmlns:android="http://schemas.android.com/apk/res/android" package="me.shind0.carrotweb.recoverytest">
@@ -21,7 +22,7 @@ $manifest=@'
 </manifest>
 '@
 [IO.File]::WriteAllText("$build/AndroidManifest.xml",$manifest)
-$sources=@('DiscoveryPolicy.java','ConnectionPolicy.java','ConnectionRecovery.java') | ForEach-Object { Join-Path $PSScriptRoot "src/me/shind0/carrotweb/$_" }
+$sources=@(Get-ChildItem -LiteralPath (Join-Path $PSScriptRoot 'src') -Filter '*.java' -Recurse | ForEach-Object FullName)
 & "$Jdk/bin/javac.exe" -source 8 -target 8 -encoding UTF-8 -bootclasspath "$platform;$bin/core-lambda-stubs.jar" -d "$build/classes" @sources "$PSScriptRoot/tests/RecoveryInstrumentation.java"
 Check 'Compile instrumentation'
 & "$Jdk/bin/jar.exe" cf "$build/classes.jar" -C "$build/classes" .

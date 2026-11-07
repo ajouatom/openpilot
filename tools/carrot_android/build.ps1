@@ -41,6 +41,10 @@ Assert-Exit 'Update policy checks'
 Assert-Exit 'Compile connection policy checks'
 & $javaExe -cp $testClasses ConnectionPolicyTest
 Assert-Exit 'Connection policy checks'
+& $javacExe -encoding UTF-8 -cp $testClasses -d $testClasses (Join-Path $sourceRoot 'src\me\shind0\carrotweb\LegacyOriginHints.java') (Join-Path $sourceRoot 'tests\LegacyOriginHintsTest.java')
+Assert-Exit 'Compile legacy origin checks'
+& $javaExe -cp $testClasses LegacyOriginHintsTest
+Assert-Exit 'Legacy origin checks'
 $sources = @(Get-ChildItem -LiteralPath (Join-Path $sourceRoot 'src') -Filter '*.java' -Recurse | ForEach-Object FullName)
 & $javacExe -source 8 -target 8 -encoding UTF-8 -bootclasspath "$platformJar;$(Join-Path $bin 'core-lambda-stubs.jar')" -d $classes @sources
 Assert-Exit 'Compile Android app'

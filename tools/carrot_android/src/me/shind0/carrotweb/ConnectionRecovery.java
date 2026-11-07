@@ -9,6 +9,8 @@ import android.webkit.WebViewClient;
 import android.webkit.WebResourceRequest;
 import org.json.JSONObject;
 import org.json.JSONTokener;
+import org.json.JSONArray;
+import java.io.File;
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
@@ -37,6 +39,16 @@ final class ConnectionRecovery {
   ConnectionRecovery(Context activity) { this(activity, null); }
   ConnectionRecovery(Context activity, Transport transport) { this.activity = activity; this.transport = transport; }
   static String key(String role) { return "carrot-assistant-" + role + "-v1"; }
+  static void remember(Context context,String origin) {
+    if (!ConnectionPolicy.origin(origin)) return;
+    android.content.SharedPreferences prefs=context.getSharedPreferences("carrot-web",Context.MODE_PRIVATE);
+    LinkedHashSet<String> all=new LinkedHashSet<>(); all.add(origin);
+    try {
+      JSONArray saved=new JSONArray(prefs.getString("connection_origins_v1","[]"));
+      for(int i=0;i<saved.length() && all.size()<16;i++) if(ConnectionPolicy.origin(saved.optString(i))) all.add(saved.optString(i));
+    } catch(Exception ignored) {}
+    prefs.edit().putString("connection_origins_v1",new JSONArray(all).toString()).apply();
+  }
   void cancel() {
     cancelled = true;
     if (worker != null) worker.interrupt();
@@ -48,15 +60,24 @@ final class ConnectionRecovery {
       if (cancelled) return;
       LinkedHashSet<String> candidates = new LinkedHashSet<>(); candidates.add(origin);
       if (ConnectionPolicy.origin(preferred)) candidates.add(preferred);
+      try {
+        JSONArray saved=new JSONArray(activity.getSharedPreferences("carrot-web",Context.MODE_PRIVATE).getString("connection_origins_v1","[]"));
+        for(int i=0;i<saved.length() && candidates.size()<16;i++) if(ConnectionPolicy.origin(saved.optString(i))) candidates.add(saved.optString(i));
+      } catch(Exception ignored) {}
       for (Object entry : origins.keySet()) {
         String saved = String.valueOf(entry);
         if (ConnectionPolicy.origin(saved) && candidates.size() < 16) candidates.add(saved);
       }
       worker = new Thread(() -> {
         String message;
-        try { message = recover(origin, new ArrayList<>(candidates)); }
+        try {
+          // getOrigins() may omit localStorage-only origins. Old apps had only last_address.
+          for (String saved : LegacyOriginHints.read(new File(activity.getApplicationInfo().dataDir,"app_webview")))
+            if (candidates.size()<16) candidates.add(saved);
+          message = recover(origin, new ArrayList<>(candidates));
+        }
         catch (InterruptedException e) { return; }
-        catch (Exception e) { message = "ChatGPT 연결 복구를 마치지 못했어요. 인터넷과 당근 기기를 확인한 뒤 다시 검색해 주세요."; }
+        catch (Exception e) { message = UiText.get("ChatGPT 연결 복구를 마치지 못했어요. 인터넷과 당근 기기를 확인한 뒤 다시 검색해 주세요.", "Could not restore the ChatGPT connection. Check the Internet connection and Carrot device, then search again."); }
         final String result = message;
         ui.post(() -> { if (!cancelled) done.finish(result); });
       }, "carrot-connection-recovery");
@@ -77,6 +98,7 @@ final class ConnectionRecovery {
       JSONObject session;
       try { session = new JSONObject(saved.optString(SESSION)); } catch (Exception ignored) { continue; }
       String token = session.optString("browser_token"); if (!ConnectionPolicy.token(token)) continue;
+      remember(activity,origin);
       savedConnection = true;
       try {
         JSONObject state;
@@ -89,7 +111,7 @@ final class ConnectionRecovery {
       } catch (HttpFailure error) { if (error.status != 401 && error.status != 403) throw error; }
     }
     candidates.sort((a,b) -> Long.compare(b.state.optLong("account_activity_at"), a.state.optLong("account_activity_at")));
-    if (candidates.isEmpty()) return savedConnection ? "저장된 ChatGPT 연결을 확인하지 못했어요. 인터넷과 ChatGPT 연결 설정을 확인해 주세요." : "";
+    if (candidates.isEmpty()) return savedConnection ? UiText.get("저장된 ChatGPT 연결을 확인하지 못했어요. 인터넷과 ChatGPT 연결 설정을 확인해 주세요.", "Could not verify the saved ChatGPT connection. Check your Internet connection and ChatGPT connection settings.") : "";
     Candidate chosen = candidates.get(0);
     if (chosen.origin.equals(next)) return "";
     check();

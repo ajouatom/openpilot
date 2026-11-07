@@ -24,16 +24,16 @@ public final class RecoveryInstrumentation extends Instrumentation {
     for (String role:ConnectionRecovery.ROLES) result.put(ConnectionRecovery.key(role),grant);
     return result;
   }
-  private String run(ConnectionRecovery r) throws Exception {
+  private String run(ConnectionRecovery r,String preferred) throws Exception {
     CountDownLatch done=new CountDownLatch(1); String[] message=new String[1];
-    runOnMainSync(() -> r.start(next,old,value -> { message[0]=value; done.countDown(); }));
+    runOnMainSync(() -> r.start(next,preferred,value -> { message[0]=value; done.countDown(); }));
     check(done.await(30,TimeUnit.SECONDS)); return message[0];
   }
   @Override public void onStart() {
     Bundle result=new Bundle();
     try {
       runOnMainSync(() -> WebStorage.getInstance().deleteAllData());
-      for (int scenario=0;scenario<4;scenario++) {
+      for (int scenario=0;scenario<5;scenario++) {
         final int mode=scenario; int[] moves={0};
         ConnectionRecovery r=new ConnectionRecovery(getTargetContext(),(target,origin,token,body) -> {
           if (target.endsWith("/inspect")) {
@@ -58,7 +58,16 @@ public final class RecoveryInstrumentation extends Instrumentation {
         for(String role:ConnectionRecovery.ROLES) empty.put(ConnectionRecovery.key(role),JSONObject.NULL);
         storage(r,old,bundle(browser)); storage(r,next, mode==2 ? bundle(ConnectionPolicy.nonce()) : empty);
         if (mode==3) storage(r,next,bundle(browser));
-        String message=run(r);
+        // Reproduce 0.2.1: last_address is already the new IP, with no native origin history.
+        getTargetContext().getSharedPreferences("carrot-web",0).edit().remove("connection_origins_v1").commit();
+        if (mode==4) {
+          // Chromium batches its disk writes; this fixture represents a prior app session.
+          java.io.File root=new java.io.File(getTargetContext().getApplicationInfo().dataDir,"app_webview");
+          long until=System.currentTimeMillis()+10000;
+          while (!LegacyOriginHints.read(root).contains(old) && System.currentTimeMillis()<until) Thread.sleep(100);
+          if (!LegacyOriginHints.read(root).contains(old)) throw new AssertionError("Legacy origin fixture not persisted: " + java.util.Arrays.toString(root.list()));
+        }
+        String message=run(r,mode==4 ? next : old);
         JSONObject saved=storage(r,next,null);
         if (mode==1) {
           check(message.isEmpty()); check(moves[0]==1); // a different device still becomes the target
@@ -75,7 +84,24 @@ public final class RecoveryInstrumentation extends Instrumentation {
         }
         runOnMainSync(r::cancel);
       }
-      result.putString("stream","Recovery WebView checks passed: " + checks + "\n"); finish(-1,result);
+      java.util.Locale.setDefault(java.util.Locale.ENGLISH);
+      android.app.Activity screen=startActivitySync(new android.content.Intent(getTargetContext(),MainActivity.class).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK));
+      runOnMainSync(() -> {
+        String visible=visibleText(screen.findViewById(android.R.id.content));
+        check(visible.contains("Looking for Carrot")); check(visible.contains("Search again"));
+        check(visible.contains("Enter IP address")); check(!visible.matches("(?s).*[가-힣].*"));
+        screen.finish();
+      });
+      result.putString("stream","Recovery WebView checks passed: " + checks + "\nEnglish native search screen verified.\n"); finish(-1,result);
     } catch (Throwable error) { result.putString("stream","FAILED: " + android.util.Log.getStackTraceString(error)); finish(0,result); }
+  }
+  private String visibleText(android.view.View view) {
+    StringBuilder out=new StringBuilder();
+    if (view instanceof android.widget.TextView) out.append(((android.widget.TextView)view).getText()).append('\n');
+    if (view instanceof android.view.ViewGroup) {
+      android.view.ViewGroup group=(android.view.ViewGroup)view;
+      for(int i=0;i<group.getChildCount();i++) out.append(visibleText(group.getChildAt(i)));
+    }
+    return out.toString();
   }
 }

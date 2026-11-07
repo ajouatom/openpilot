@@ -28,7 +28,7 @@ Use a trusted LAN, as with Carrot Web itself.
   connections at the deadline, user cancellation, selection or backgrounding.
 - Manual entry also verifies Carrot Web. HTTP redirects are rejected by probes.
 - App WebView storage is separate from Samsung Internet/Chrome. Approve ChatGPT
-  once from this app. In 0.2.1, discovery/selection transfers the most recently
+  once from this app. In 0.2.2, discovery/selection transfers the most recently
   used saved ChatGPT connection to the selected Carrot Web, even a different
   device. IP changes do not require another code. No device-identity condition
   gates this connection. After backgrounding, an unreachable address triggers
@@ -84,9 +84,19 @@ navigation was tested separately. It is not a driving or multi-user load test.
 
 ## Signed app updates
 
-The 0.2.1 connection recovery has emulator WebView storage/transport tests and
-relay OAuth tests. It has not yet been verified across Wi-Fi/hotspot changes on
-the owner's physical phone. Run `test-recovery.ps1` on a disposable emulator
+The 0.2.2 recovery fixes a reproduced 0.2.1 omission: WebStorage.getOrigins()
+can omit localStorage-only origins, and last_address may already hold the new IP.
+The app now records its own bounded origin history. For pre-history upgrades it
+also reads bounded address hints from its own WebView local-storage files (up to
+8 MiB/32 files/16 local origins). This is a best-effort compatibility fallback,
+not a LevelDB reader or authority: it never writes database files or extracts
+credentials from them. Actual tokens are read through WebView and authenticated
+by the relay. No outside browser storage, raw database data or tokens are logged.
+Future discovery does not depend on legacy-file hints. The owner's physical phone
+recovered its previous hotspot connection to the office IP and completed an MCP
+screen-open request without reauthorization or a device update. No live driving
+command or setting write was performed. Native UI follows the phone language
+(Korean or English fallback); the Carrot Web language remains independent. Run `test-recovery.ps1` on a disposable emulator
 with `-Serial emulator-N -Apk ... -DebugKeystore ...`; it overwrites only test
 WebView storage and rejects physical-device serials. No live vehicle commands
 are executed by this harness.

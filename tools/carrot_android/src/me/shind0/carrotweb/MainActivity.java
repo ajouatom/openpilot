@@ -92,15 +92,15 @@ public final class MainActivity extends Activity {
       v.setPadding(insets.getSystemWindowInsetLeft(),insets.getSystemWindowInsetTop(),insets.getSystemWindowInsetRight(),insets.getSystemWindowInsetBottom()); return insets.consumeSystemWindowInsets();
     });
     LinearLayout bar = new LinearLayout(this); bar.setGravity(Gravity.CENTER_VERTICAL);
-    Button search = button("⌕", v -> startSearch()); search.setContentDescription("당근 기기 찾기");
+    Button search = button("⌕", v -> startSearch()); search.setContentDescription(UiText.get("당근 기기 찾기", "Find Carrot"));
     bar.addView(search,new LinearLayout.LayoutParams(dp(52),dp(48)));
     title = text("CarrotAssist",18); title.setSingleLine(true); title.setEllipsize(android.text.TextUtils.TruncateAt.END);
-    title.setOnClickListener(v -> updater.info()); title.setContentDescription("기기 이름 · 앱 정보와 업데이트 확인");
+    title.setOnClickListener(v -> updater.info()); title.setContentDescription(UiText.get("기기 이름 · 앱 정보와 업데이트 확인", "Device name · App information and updates"));
     bar.addView(title,new LinearLayout.LayoutParams(0,dp(48),1)); title.setGravity(Gravity.CENTER_VERTICAL);
     ImageButton assistant = new ImageButton(this);
     assistant.setImageResource(android.R.drawable.ic_btn_speak_now); assistant.setColorFilter(accent);
     assistant.setBackgroundColor(background); assistant.setOnClickListener(v -> invokeAssistant());
-    assistant.setContentDescription("음성비서 호출");
+    assistant.setContentDescription(UiText.get("음성비서 호출", "Open voice assistant"));
     bar.addView(assistant,new LinearLayout.LayoutParams(dp(52),dp(48)));
     root.addView(bar); content = column(); root.addView(content,new LinearLayout.LayoutParams(-1,0,1)); setContentView(root);
     startSearch();
@@ -122,20 +122,20 @@ public final class MainActivity extends Activity {
     recovering = false;
     stopSearch(); choosing = false; found.clear(); currentAddress = null;
     if (web != null) { web.stopLoading(); web.loadUrl("about:blank"); }
-    content.removeAllViews(); title.setText("당근 기기 찾기");
+    content.removeAllViews(); title.setText(UiText.get("당근 기기 찾기", "Find Carrot"));
     LinearLayout panel = column(); panel.setPadding(dp(22),dp(28),dp(22),dp(16));
-    panel.addView(text("당근을 찾고 있어요",26));
-    TextView help = text("같은 Wi-Fi 또는 휴대폰 핫스팟에 연결해 주세요.\n5초 동안 한 대만 찾으면 자동으로 열립니다.",16); help.setPadding(0,dp(14),0,dp(16)); panel.addView(help);
-    status = text("검색 준비 중…",16); panel.addView(status);
+    panel.addView(text(UiText.get("당근을 찾고 있어요", "Looking for Carrot"),26));
+    TextView help = text(UiText.get("같은 Wi-Fi 또는 휴대폰 핫스팟에 연결해 주세요.\n5초 동안 한 대만 찾으면 자동으로 열립니다.", "Connect to the same Wi-Fi or phone hotspot.\nOne device found within five seconds opens automatically."),16); help.setPadding(0,dp(14),0,dp(16)); panel.addView(help);
+    status = text(UiText.get("검색 준비 중…", "Preparing search…"),16); panel.addView(status);
     progress = new ProgressBar(this,null,android.R.attr.progressBarStyleHorizontal); progress.setIndeterminate(true); panel.addView(progress);
     devices = column(); ScrollView list = new ScrollView(this); list.addView(devices); panel.addView(list,new LinearLayout.LayoutParams(-1,0,1));
     LinearLayout actions = new LinearLayout(this);
-    actions.addView(button("다시 검색",v -> startSearch()),new LinearLayout.LayoutParams(0,dp(52),1));
-    actions.addView(button("주소 직접 입력",v -> manualAddress()),new LinearLayout.LayoutParams(0,dp(52),1)); panel.addView(actions);
-    panel.addView(button("검색 중단",v -> { stopSearch(); status.setText("검색을 중단했습니다. 발견된 기기를 선택할 수 있어요."); progress.setVisibility(View.GONE); }));
+    actions.addView(button(UiText.get("다시 검색", "Search again"),v -> startSearch()),new LinearLayout.LayoutParams(0,dp(52),1));
+    actions.addView(button(UiText.get("주소 직접 입력", "Enter IP address"),v -> manualAddress()),new LinearLayout.LayoutParams(0,dp(52),1)); panel.addView(actions);
+    panel.addView(button(UiText.get("검색 중단", "Stop search"),v -> { stopSearch(); status.setText(UiText.get("검색을 중단했습니다. 발견된 기기를 선택할 수 있어요.", "Search stopped. You can select a device already found.")); progress.setVisibility(View.GONE); }));
     content.addView(panel,new LinearLayout.LayoutParams(-1,-1));
     List<Target> targets = targets();
-    if (targets.isEmpty()) { status.setText("검색할 Wi-Fi를 찾지 못했어요. 연결을 확인하거나 주소를 입력해 주세요."); progress.setVisibility(View.GONE); return; }
+    if (targets.isEmpty()) { status.setText(UiText.get("검색할 Wi-Fi를 찾지 못했어요. 연결을 확인하거나 주소를 입력해 주세요.", "No Wi-Fi network found. Check the connection or enter an IP address.")); progress.setVisibility(View.GONE); return; }
     started = SystemClock.elapsedRealtime(); scanning = true; final int token = generation;
     workers = Executors.newFixedThreadPool(32); AtomicInteger cursor = new AtomicInteger();
     for (int w=0;w<32;w++) workers.execute(() -> {
@@ -144,7 +144,7 @@ public final class MainActivity extends Activity {
         if (index >= targets.size()) break;
         Target target = targets.get(index);
         if (target.probe.verify(target.address)) {
-          String name = "당근파일럿";
+          String name = UiText.get("당근파일럿", "CarrotPilot");
           try { JSONObject response = new JSONObject(target.probe.get(target.address,"/api/params_bulk?names=CarName",8192));
             String car = response.optJSONObject("values") == null ? "" : response.getJSONObject("values").optString("CarName","");
             if (!car.trim().isEmpty() && !car.equals("0")) name = car.trim().substring(0,Math.min(car.trim().length(),80));
@@ -166,7 +166,7 @@ public final class MainActivity extends Activity {
           if (found.containsKey(target.address)) continue;
           workers.execute(() -> {
             if (token != generation || SystemClock.elapsedRealtime()-started >= DiscoveryPolicy.LIMIT_MS) return;
-            if (target.probe.verify(target.address)) ui.post(() -> { if (token == generation && scanning) addDevice(new Device(target.address,"당근파일럿")); });
+            if (target.probe.verify(target.address)) ui.post(() -> { if (token == generation && scanning) addDevice(new Device(target.address,UiText.get("당근파일럿", "CarrotPilot"))); });
           });
         }
       }
@@ -180,11 +180,11 @@ public final class MainActivity extends Activity {
       DiscoveryPolicy.Decision decision = DiscoveryPolicy.decide(elapsed,found.size());
       if (decision == DiscoveryPolicy.Decision.OPEN_ONLY && !choosing) { openDevice(found.values().iterator().next()); return; }
       if (elapsed >= DiscoveryPolicy.LIMIT_MS) {
-        stopSearch(); status.setText(found.isEmpty() ? "1분 동안 기기를 찾지 못했어요. 같은 Wi-Fi인지 확인한 뒤 다시 검색해 주세요." : "검색을 마쳤어요. 연결할 기기를 선택해 주세요."); return;
+        stopSearch(); status.setText(found.isEmpty() ? UiText.get("1분 동안 기기를 찾지 못했어요. 같은 Wi-Fi인지 확인한 뒤 다시 검색해 주세요.", "No device found within one minute. Check that you are on the same Wi-Fi and search again.") : UiText.get("검색을 마쳤어요. 연결할 기기를 선택해 주세요.", "Search complete. Select a device to connect.")); return;
       }
-      if (found.size() > 1) { choosing = true; status.setText(found.size()+"대를 찾았어요. 연결할 기기를 선택해 주세요. · "+Math.max(0,(60-elapsed/1000))+"초 남음"); }
-      else if (elapsed < DiscoveryPolicy.QUICK_MS) status.setText("빠른 검색 · "+Math.max(1,(5-elapsed/1000))+"초 · 발견 "+found.size()+"대");
-      else status.setText("계속 검색 중 · "+Math.max(0,(60-elapsed/1000))+"초 남음");
+      if (found.size() > 1) { choosing = true; status.setText(found.size()+UiText.get("대를 찾았어요. 연결할 기기를 선택해 주세요. · ", " devices found. Select one. · ")+Math.max(0,(60-elapsed/1000))+UiText.get("초 남음", "s remaining")); }
+      else if (elapsed < DiscoveryPolicy.QUICK_MS) status.setText(UiText.get("빠른 검색 · ", "Quick search · ")+Math.max(1,(5-elapsed/1000))+UiText.get("초 · 발견 ", "s · Found ")+found.size()+UiText.get("대", ""));
+      else status.setText(UiText.get("계속 검색 중 · ", "Searching · ")+Math.max(0,(60-elapsed/1000))+UiText.get("초 남음", "s remaining"));
       ui.postDelayed(this,200);
     }
   };
@@ -221,20 +221,22 @@ public final class MainActivity extends Activity {
   private void manualAddress() {
     stopSearch(); EditText input = new EditText(this); input.setSingleLine(true); input.setHint("192.168.0.178"); input.setText(preferences.getString("last_address",""));
     input.setInputType(android.text.InputType.TYPE_CLASS_PHONE);
-    new AlertDialog.Builder(this).setTitle("당근 기기 IP 주소").setView(input).setNegativeButton("취소",null).setPositiveButton("확인",(dialog,which) -> {
+    new AlertDialog.Builder(this).setTitle(UiText.get("당근 기기 IP 주소", "Carrot device IP address")).setView(input).setNegativeButton(UiText.get("취소", "Cancel"),null).setPositiveButton(UiText.get("확인", "OK"),(dialog,which) -> {
       String address = input.getText().toString().trim();
-      if (!DiscoveryPolicy.local(address)) { notice("같은 네트워크의 IP 주소만 입력해 주세요. 포트는 7000번을 사용합니다."); return; }
-      status.setText("당근웹인지 확인 중…"); final int token = generation;
+      if (!DiscoveryPolicy.local(address)) { notice(UiText.get("같은 네트워크의 IP 주소만 입력해 주세요. 포트는 7000번을 사용합니다.", "Enter an IP address on your local network. Carrot Web uses port 7000.")); return; }
+      status.setText(UiText.get("당근웹인지 확인 중…", "Checking for Carrot Web…")); final int token = generation;
       DeviceProbe probe = new DeviceProbe(url -> (HttpURLConnection)url.openConnection()); probes.add(probe);
       workers = Executors.newSingleThreadExecutor(); workers.execute(() -> {
         boolean valid = probe.verify(address);
-        ui.post(() -> { if (token != generation) return; if (valid) openDevice(new Device(address,"당근파일럿")); else { stopSearch(); status.setText("해당 주소에서 당근웹을 확인하지 못했어요. IP와 Wi-Fi 연결을 확인해 주세요."); } });
+        ui.post(() -> { if (token != generation) return; if (valid) openDevice(new Device(address,UiText.get("당근파일럿", "CarrotPilot"))); else { stopSearch(); status.setText(UiText.get("해당 주소에서 당근웹을 확인하지 못했어요. IP와 Wi-Fi 연결을 확인해 주세요.", "Carrot Web was not found at that address. Check the IP address and Wi-Fi connection.")); } });
       });
     }).show();
   }
   @android.annotation.SuppressLint("SetJavaScriptEnabled")
   private void openDevice(Device device) {
     String previous = "http://" + preferences.getString("last_address", "") + ":7000";
+    ConnectionRecovery.remember(this,previous);
+    ConnectionRecovery.remember(this,"http://"+device.address+":7000");
     if (recovery != null) recovery.cancel();
     stopSearch(); currentAddress = device.address; preferences.edit().putString("last_address",device.address).apply(); title.setText(device.name+" · "+device.address);
     content.removeAllViews();
@@ -255,18 +257,18 @@ public final class MainActivity extends Activity {
           if (isCurrent(uri)) return false;
           if (!request.isForMainFrame() || !request.hasGesture()) return true;
           if ("https".equals(uri.getScheme()) || "http".equals(uri.getScheme())) {
-            try { startActivity(new Intent(Intent.ACTION_VIEW,uri).addCategory(Intent.CATEGORY_BROWSABLE)); } catch (Exception e) { notice("이 링크를 열 수 있는 브라우저가 필요합니다."); }
+            try { startActivity(new Intent(Intent.ACTION_VIEW,uri).addCategory(Intent.CATEGORY_BROWSABLE)); } catch (Exception e) { notice(UiText.get("이 링크를 열 수 있는 브라우저가 필요합니다.", "A browser is required to open this link.")); }
           }
           return true;
         }
         @Override public void onReceivedError(WebView view,WebResourceRequest request,android.webkit.WebResourceError error) {
-          if (request.isForMainFrame()) title.setText("기기 연결 끊김 · 왼쪽에서 다시 검색");
+          if (request.isForMainFrame()) title.setText(UiText.get("기기 연결 끊김 · 왼쪽에서 다시 검색", "Device disconnected · Use search on the left"));
         }
       });
     }
     if (web.getParent()!=null) ((ViewGroup)web.getParent()).removeView(web);
     web.stopLoading(); web.loadUrl("about:blank");
-    TextView connecting = text("당근 기기 연결 중…\n기존 ChatGPT 연결을 확인하고 있어요.",18);
+    TextView connecting = text(UiText.get("당근 기기 연결 중…\n기존 ChatGPT 연결을 확인하고 있어요.", "Connecting to Carrot…\nChecking your saved ChatGPT connection."),18);
     connecting.setPadding(dp(22),dp(28),dp(22),dp(16)); content.addView(connecting);
     recovering = true; final int token = generation;
     recovery = new ConnectionRecovery(this);
@@ -276,7 +278,7 @@ public final class MainActivity extends Activity {
       content.removeAllViews(); content.addView(web,new LinearLayout.LayoutParams(-1,-1));
       web.loadUrl("http://"+device.address+":7000/");
       if (!message.isEmpty()) {
-        title.setText("ChatGPT 연결 확인 필요 · "+device.address);
+        title.setText(UiText.get("ChatGPT 연결 확인 필요 · ", "Check ChatGPT connection · ")+device.address);
         if (foregroundActivity) notice(message);
       }
     });
@@ -284,12 +286,12 @@ public final class MainActivity extends Activity {
   private boolean isCurrent(Uri uri) { return currentAddress!=null && "http".equals(uri.getScheme()) && currentAddress.equals(uri.getHost()) && uri.getPort()==7000 && uri.getUserInfo()==null; }
   private void invokeAssistant() {
     if (!foregroundActivity) return;
-    if (recovering) { notice("기존 ChatGPT 연결을 확인하고 있어요. 당근웹이 열린 뒤 마이크를 눌러 주세요."); return; }
+    if (recovering) { notice(UiText.get("기존 ChatGPT 연결을 확인하고 있어요. 당근웹이 열린 뒤 마이크를 눌러 주세요.", "Checking your saved ChatGPT connection. Wait for Carrot Web to open, then tap the microphone.")); return; }
     try { if (showAssist(new Bundle())) return; } catch (RuntimeException ignored) {}
-    new AlertDialog.Builder(this).setTitle("기본 음성비서 설정").setMessage("Android 기본 디지털 어시스턴트를 선택해 주세요. ChatGPT 또는 Gemini 등 선택한 앱을 호출합니다. 당근 설정 검색·화면 열기는 현재 ChatGPT 연결로 시험했으며, 음성창의 모양은 선택한 앱에 따라 달라집니다.")
-      .setNegativeButton("닫기",null).setPositiveButton("설정 열기",(d,w) -> { try { startActivity(new Intent(Settings.ACTION_VOICE_INPUT_SETTINGS)); } catch (Exception e) { notice("휴대폰 설정에서 기본 디지털 어시스턴트를 선택해 주세요."); } }).show();
+    new AlertDialog.Builder(this).setTitle(UiText.get("기본 음성비서 설정", "Default voice assistant")).setMessage(UiText.get("Android 기본 디지털 어시스턴트를 선택해 주세요. ChatGPT 또는 Gemini 등 선택한 앱을 호출합니다. 당근 설정 검색·화면 열기는 현재 ChatGPT 연결로 시험했으며, 음성창의 모양은 선택한 앱에 따라 달라집니다.", "Choose your default Android digital assistant. The microphone opens your selected app, such as ChatGPT or Gemini. Carrot setting search and screen navigation have been tested with ChatGPT. The voice window depends on the assistant app."))
+      .setNegativeButton(UiText.get("닫기", "Close"),null).setPositiveButton(UiText.get("설정 열기", "Open settings"),(d,w) -> { try { startActivity(new Intent(Settings.ACTION_VOICE_INPUT_SETTINGS)); } catch (Exception e) { notice(UiText.get("휴대폰 설정에서 기본 디지털 어시스턴트를 선택해 주세요.", "Choose the default digital assistant in your phone settings.")); } }).show();
   }
-  private void notice(String message) { new AlertDialog.Builder(this).setMessage(message).setPositiveButton("확인",null).show(); }
+  private void notice(String message) { new AlertDialog.Builder(this).setMessage(message).setPositiveButton(UiText.get("확인", "OK"),null).show(); }
   @Override protected void onResume() {
     super.onResume(); foregroundActivity = true; if (web!=null) web.onResume(); if (updater!=null) updater.resume();
     if (checkAfterBackground && currentAddress!=null && !recovering) {
@@ -304,7 +306,7 @@ public final class MainActivity extends Activity {
     checkAfterBackground=false;
   }
   @Override protected void onPause() { foregroundActivity = false; super.onPause(); }
-  @Override protected void onStop() { checkAfterBackground=true; if (scanning) { stopSearch(); if (status!=null) status.setText("검색이 중단됐어요. 다시 검색을 눌러 주세요."); } super.onStop(); }
+  @Override protected void onStop() { checkAfterBackground=true; if (scanning) { stopSearch(); if (status!=null) status.setText(UiText.get("검색이 중단됐어요. 다시 검색을 눌러 주세요.", "Search paused. Tap Search again.")); } super.onStop(); }
   @Override public void onBackPressed() { if (web!=null && currentAddress!=null && web.canGoBack()) web.goBack(); else if (currentAddress!=null) startSearch(); else super.onBackPressed(); }
   @Override protected void onDestroy() { if (recovery!=null) recovery.cancel(); stopSearch(); ui.removeCallbacksAndMessages(null); if (updater!=null) updater.close(); if (web!=null) { web.destroy(); web=null; } super.onDestroy(); }
 }

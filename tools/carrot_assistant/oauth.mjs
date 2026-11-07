@@ -1,6 +1,7 @@
 import { randomBytes, createHash } from 'node:crypto';
 import { readFileSync, writeFileSync, renameSync } from 'node:fs';
 import express from 'express';
+import { consentPage, consentText } from './oauth_language.mjs';
 import { z } from 'zod';
 import { OAuthClientInformationFullSchema } from '@modelcontextprotocol/sdk/shared/auth.js';
 import { mcpAuthRouter } from '@modelcontextprotocol/sdk/server/auth/router.js';
@@ -114,7 +115,7 @@ export function createAccountAuth({ issuer, bridge, statePath, now = Date.now })
       // no-referrer also makes a browser form POST's Origin null. same-origin
       // preserves our CSRF origin check without disclosing the URL to ChatGPT.
       res.set({ 'Content-Security-Policy': `default-src 'none'; style-src 'unsafe-inline'; form-action 'self' ${params.redirectUri}; frame-ancestors 'none'; base-uri 'none'`, 'Referrer-Policy': 'same-origin', 'X-Content-Type-Options': 'nosniff' });
-      res.type('html').send(`<!doctype html><html lang="ko"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>당근 기기 연결</title><style>body{font:18px system-ui;background:#10151c;color:#eee;max-width:520px;margin:40px auto;padding:20px;line-height:1.6}input,button{font:inherit;box-sizing:border-box;padding:12px;width:100%;margin:12px 0}button{background:#ed9144;border:0;border-radius:10px}small{color:#bbb}</style><h1>ChatGPT에 당근 기기 연결</h1><p>한 번 연결하면 새 대화와 미니 음성창에서도 같은 당근웹을 사용할 수 있습니다.</p><p>당근웹의 ChatGPT 연결 설정에서 <b>미니모드 연결 코드</b>를 만든 뒤 아래에 입력하세요. 이 코드는 대화에 보내지 마세요.</p><form method="post" action="/oauth/approve"><input type="hidden" name="flow" value="${escape(flow)}"><label for="code">미니모드 연결 코드 (5분 유효)</label><input id="code" name="code" required maxlength="30" autocomplete="off" autocapitalize="characters" spellcheck="false"><p>허용: 설정 검색·설명 및 해당 웹의 설정 화면 열기.<br>추가 권한은 아래에서 별도로 선택합니다. 도구 실행 권한에는 확인 후 진단 로그 전송이 포함됩니다.</p>${params.scopes?.includes(SETTINGS_SCOPE) ? '<label><input type="checkbox" name="settings_access" value="yes" style="width:auto"> 설정값 조회·변경도 허용</label><p><small>선택한 설정의 현재값과 변경 결과를 ChatGPT 및 당근 연결 서버에 전달합니다. 당근웹에서도 별도로 허용해야 하며, 변경 전 값 확인과 승인이 필요합니다. 지원하는 주행 설정도 주행 중 확인 후 변경할 수 있습니다. 최초 권한 허용은 정차 상태에서 진행합니다.</small></p>' : '<p>현재 연결은 화면 열기 전용입니다. 설정값 변경을 원하면 새 권한으로 다시 연결하세요.</p>'}${params.scopes?.includes(DRIVE_SCOPE) ? '<label><input type="checkbox" name="drive_access" value="yes" style="width:auto"> 음성 차선변경·설정속도 명령 허용</label><p><small>명확한 실행 명령은 재확인 대화 없이 차량에 요청합니다. 실행 여부는 기존 차량 조건에 따르며, 명령과 실행 결과가 ChatGPT와 당근 중계 서버에 전달됩니다. 당근웹에서도 별도로 허용해야 합니다.</small></p>' : ''}${params.scopes?.includes(TOOLS_SCOPE) ? '<label><input type="checkbox" name="tools_access" value="yes" style="width:auto"> 도구 화면·작업 실행 허용</label><p><small>Git 업데이트, 재시작, 초기화, 삭제, 백업, 화면 녹화 및 진단 로그 전송을 확인 후 요청할 수 있습니다. 유지보수 작업은 정차·보조 기능 해제 상태에서만 처리합니다. 진단 로그는 기존 당근 업로드 서버로 전송하며 ChatGPT에는 작업 종류와 결과만 전달합니다. 당근웹에서도 별도로 허용해야 합니다.</small></p>' : ''}<button type="submit">이 기기 연결 승인</button></form><small>연결은 당근웹에서 해제할 수 있습니다. 인증은 자동 갱신되며, 1년 동안 사용하지 않으면 다시 연결해야 합니다. 다른 사람이 보낸 코드는 입력하지 마세요.</small></html>`);
+      res.vary('Accept-Language').type('html').send(consentPage(`<!doctype html><html lang="ko"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>당근 기기 연결</title><style>body{font:18px system-ui;background:#10151c;color:#eee;max-width:520px;margin:40px auto;padding:20px;line-height:1.6}input,button{font:inherit;box-sizing:border-box;padding:12px;width:100%;margin:12px 0}button{background:#ed9144;border:0;border-radius:10px}small{color:#bbb}</style><h1>ChatGPT에 당근 기기 연결</h1><p>한 번 연결하면 새 대화와 미니 음성창에서도 같은 당근웹을 사용할 수 있습니다.</p><p>당근웹의 ChatGPT 연결 설정에서 <b>미니모드 연결 코드</b>를 만든 뒤 아래에 입력하세요. 이 코드는 대화에 보내지 마세요.</p><form method="post" action="/oauth/approve"><input type="hidden" name="flow" value="${escape(flow)}"><label for="code">미니모드 연결 코드 (5분 유효)</label><input id="code" name="code" required maxlength="30" autocomplete="off" autocapitalize="characters" spellcheck="false"><p>허용: 설정 검색·설명 및 해당 웹의 설정 화면 열기.<br>추가 권한은 아래에서 별도로 선택합니다. 도구 실행 권한에는 확인 후 진단 로그 전송이 포함됩니다.</p>${params.scopes?.includes(SETTINGS_SCOPE) ? '<label><input type="checkbox" name="settings_access" value="yes" style="width:auto"> 설정값 조회·변경도 허용</label><p><small>선택한 설정의 현재값과 변경 결과를 ChatGPT 및 당근 연결 서버에 전달합니다. 당근웹에서도 별도로 허용해야 하며, 변경 전 값 확인과 승인이 필요합니다. 지원하는 주행 설정도 주행 중 확인 후 변경할 수 있습니다. 최초 권한 허용은 정차 상태에서 진행합니다.</small></p>' : '<p>현재 연결은 화면 열기 전용입니다. 설정값 변경을 원하면 새 권한으로 다시 연결하세요.</p>'}${params.scopes?.includes(DRIVE_SCOPE) ? '<label><input type="checkbox" name="drive_access" value="yes" style="width:auto"> 음성 차선변경·설정속도 명령 허용</label><p><small>명확한 실행 명령은 재확인 대화 없이 차량에 요청합니다. 실행 여부는 기존 차량 조건에 따르며, 명령과 실행 결과가 ChatGPT와 당근 중계 서버에 전달됩니다. 당근웹에서도 별도로 허용해야 합니다.</small></p>' : ''}${params.scopes?.includes(TOOLS_SCOPE) ? '<label><input type="checkbox" name="tools_access" value="yes" style="width:auto"> 도구 화면·작업 실행 허용</label><p><small>Git 업데이트, 재시작, 초기화, 삭제, 백업, 화면 녹화 및 진단 로그 전송을 확인 후 요청할 수 있습니다. 유지보수 작업은 정차·보조 기능 해제 상태에서만 처리합니다. 진단 로그는 기존 당근 업로드 서버로 전송하며 ChatGPT에는 작업 종류와 결과만 전달합니다. 당근웹에서도 별도로 허용해야 합니다.</small></p>' : ''}<button type="submit">이 기기 연결 승인</button></form><small>연결은 당근웹에서 해제할 수 있습니다. 인증은 자동 갱신되며, 1년 동안 사용하지 않으면 다시 연결해야 합니다. 다른 사람이 보낸 코드는 입력하지 마세요.</small></html>`, res.req));
     },
     async challengeForAuthorizationCode(client, code) { return codeFor(client, code).challenge; },
     async exchangeAuthorizationCode(client, code, _verifier, redirectUri, target) {
@@ -154,9 +155,9 @@ export function createAccountAuth({ issuer, bridge, statePath, now = Date.now })
     approve(req, res) {
       sweep(); const flow = flows.get(req.body?.flow);
       const cookie = String(req.headers.cookie || '').split(';').map(s => s.trim()).find(s => s.startsWith('carrot_oauth='))?.slice('carrot_oauth='.length);
-      if (!flow) return res.status(403).type('text').send('연결 요청이 만료됐습니다. ChatGPT에서 연결을 다시 시작하세요.');
-      if (req.headers.origin !== issuer || hash(cookie || '') !== flow.cookieHash) return res.status(403).type('text').send('연결 요청의 보안 확인에 실패했습니다. 승인 화면을 연 브라우저에서 진행하거나 ChatGPT에서 연결을 다시 시작하세요.');
-      if (++flow.attempts > 5) return res.status(403).type('text').send('입력 시도 횟수를 초과했습니다. ChatGPT에서 연결을 다시 시작하세요.');
+      if (!flow) return res.status(403).type('text').send(consentText(req, '연결 요청이 만료됐습니다. ChatGPT에서 연결을 다시 시작하세요.', 'The connection request expired. Restart the connection from ChatGPT.'));
+      if (req.headers.origin !== issuer || hash(cookie || '') !== flow.cookieHash) return res.status(403).type('text').send(consentText(req, '연결 요청의 보안 확인에 실패했습니다. 승인 화면을 연 브라우저에서 진행하거나 ChatGPT에서 연결을 다시 시작하세요.', 'The security check failed. Continue in the browser that opened the authorization page, or restart the connection from ChatGPT.'));
+      if (++flow.attempts > 5) return res.status(403).type('text').send(consentText(req, '입력 시도 횟수를 초과했습니다. ChatGPT에서 연결을 다시 시작하세요.', 'Too many attempts. Restart the connection from ChatGPT.'));
       try {
         const linked = bridge.claimAccountCode(req.body.code);
         const code = random();
@@ -167,7 +168,7 @@ export function createAccountAuth({ issuer, bridge, statePath, now = Date.now })
         if (flow.state) redirect.searchParams.set('state', flow.state);
         res.set('Referrer-Policy', 'no-referrer').redirect(303, redirect.href);
       } catch {
-        res.status(400).type('text').send('코드가 만료됐거나 올바르지 않습니다. 당근웹에서 미니모드 코드를 새로 만든 뒤 뒤로 돌아가 다시 입력하세요.');
+        res.status(400).type('text').send(consentText(req, '코드가 만료됐거나 올바르지 않습니다. 당근웹에서 미니모드 코드를 새로 만든 뒤 뒤로 돌아가 다시 입력하세요.', 'The code is invalid or expired. Create a fresh mini-mode code in Carrot Web, then return to this page and enter it.'));
       }
     },
   };

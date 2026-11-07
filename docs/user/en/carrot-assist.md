@@ -8,7 +8,7 @@ CarrotAssist discovers a Carrot device on the local network, opens its Carrot We
 
 1. While parked, update the device to current `carrot-wip` and restart it.
 2. Connect the phone and device to the same trusted Wi-Fi or hotspot. Never expose the device's port 7000 to the Internet.
-3. Install the APK from the [CarrotAssist release](https://github.com/ajouatom/openpilot/releases/tag/carrot-assist-v0.2.1). Review Android's installation-source permission if prompted.
+3. Install the APK from the [CarrotAssist release](https://github.com/ajouatom/openpilot/releases/tag/carrot-assist-v0.2.2). Review Android's installation-source permission if prompted.
 4. Install the official ChatGPT app and sign in with your own account. Select ChatGPT as Android's default digital assistant. Settings names vary by phone.
 
 The app targets Android 8 and newer. Device connection and the small voice overlay were tested on Samsung Android 17; other phones may behave differently. Your ChatGPT account must offer **Add custom MCP server**. Carrot connectivity and mini voice mode on Free accounts remain unverified. Paid accounts are also subject to their available features and policies.
@@ -64,11 +64,17 @@ CarrotAssist, Chrome and Samsung Internet use separate storage. **Create the cod
 
 ### Switching between office Wi-Fi and a vehicle hotspot
 
-With app **0.2.1** and relay **0.7.1**, ChatGPT follows **the Carrot Web currently opened in the app** after the initial authorization. A changed IP or a different selected Carrot device does not require another code or matching the previous device's identity. Choose the intended device when discovery finds several. Returning to the app triggers discovery if the previous address is unreachable.
+With app **0.2.2** and relay **0.7.1**, ChatGPT follows **the Carrot Web currently opened in the app** after the initial authorization. A changed IP or a different selected Carrot device does not require another code or matching the previous device's identity. Choose the intended device when discovery finds several. Returning to the app triggers discovery if the previous address is unreachable.
 
 Settings, driving and Tools actions still follow the permissions allowed in the current Carrot Web. Updated device software can restore existing local permissions after an IP change. Features not yet allowed on a different device need permission there. Failure to restore local permissions never blocks account connection or screen navigation. Pending commands from the old address are discarded.
 
-Existing users can tap the top device name to check for an app update; do not uninstall. Update and restart the parked Carrot device as well for local permission restoration. Emulator WebView and relay tests pass; physical-phone Wi-Fi/hotspot switching remains unverified.
+Existing users can tap the top device name to check for an app update; do not uninstall. Update and restart the parked Carrot device as well for local permission restoration. Version 0.2.2 fixes a 0.2.1 case where the app could not find stored information for an older IP. On the owner’s phone, updating the app restored the existing hotspot-address connection to the office address and successfully opened a settings screen, without a fresh code or device GitPull. No driving command or setting write was performed.
+
+## Using English
+
+App 0.2.2 displays native search, connection and update messages in English when the phone language is not Korean. Carrot Web keeps its own language preference; select English there as well. Relay 0.7.2 displays the authorization page in English or Korean according to browser language and instructs the AI to reply in the user’s language.
+
+For example: “Find the screen brightness setting and open it.” English setting search, the English consent page and the native English search screen have been tested. Actual spoken-English recognition and accent accuracy have not been separately verified. Parameter IDs are never translated. Speed commands use km/h; do not treat an mph value as km/h.
 
 ## Example requests
 
