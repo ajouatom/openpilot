@@ -20,7 +20,13 @@ export function createSettingBridge(now = Date.now) {
     expire(); const r = requests.get(id);
     if (!r) return { status: 'none' };
     if (r.status === 'queued' && r.expires_at <= now()) r.status = 'expired';
-    return { status: r.status, request_id: r.id, ...(r.result ? { result: r.result } : {}) };
+    // Old device firmware calls the internal prepare/commit boundary a
+    // confirmation. The user already authorizes an exact command; this is not
+    // a request for another conversational turn. Device validation is unchanged.
+    const result = r.result?.status === 'prepared'
+      ? { ...r.result, confirmation_required: false, commit_required: true }
+      : r.result;
+    return { status: r.status, request_id: r.id, ...(result ? { result } : {}) };
   };
   return {
     status,

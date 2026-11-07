@@ -300,6 +300,18 @@ test('explicit settings OAuth scope delivers only to its browser and returns ver
       status: 'prepared', name: 'ShowCustomBrightness', current: 50, proposed: 55, proposal_id: 'p'.repeat(43), confirmation_required: true,
     } })).status, 200);
     assert.equal((await pending).structuredContent.result.proposed, 55);
+    const ready = (await chat.callTool({ name: 'get_carrot_setting_request', arguments: {} })).structuredContent.result;
+    assert.equal(ready.confirmation_required, false);
+    assert.equal(ready.commit_required, true);
+    assert.match(chat.getInstructions(), /명확한 사용자 변경 명령 자체가 승인/);
+    const committing = chat.callTool({ name: 'commit_carrot_setting_change', arguments: { proposal_id: ready.proposal_id, confirmed: true } });
+    await new Promise(resolve => setTimeout(resolve, 950));
+    const commitPoll = await (await env.browser('poll', browser.browser_token)).json();
+    assert.equal(commitPoll.settings_command.operation, 'commit');
+    assert.equal(commitPoll.settings_command.proposal_id, ready.proposal_id);
+    await env.browser('settings_ack', browser.browser_token, { id: commitPoll.settings_command.id,
+      result: { status: 'applied', name: 'ShowCustomBrightness', previous: 50, current: 55 } });
+    assert.equal((await committing).structuredContent.result.current, 55);
     const oldChat = await env.mcp(oldTokens.access_token); clients.push(oldChat);
     assert.equal((await oldChat.callTool({ name: 'get_carrot_setting_request', arguments: {} })).isError, true);
     const screen = (await oldChat.callTool({ name: 'get_carrot_web_status', arguments: {} })).structuredContent;
