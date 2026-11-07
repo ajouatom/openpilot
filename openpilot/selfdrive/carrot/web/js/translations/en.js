@@ -9,7 +9,7 @@ window.CarrotTranslations.register("en", {
     assistant_approval_open: "Open ChatGPT plugin permissions",
     assistant_approval_help: "Carrot device access and ChatGPT action approvals are separate. To stop repeated prompts, choose ChatGPT plugin settings → CarrotAssist → Permissions → Allow all actions. This applies to all actions allowed for this plugin, not just one setting. Each user chooses this in their own account; CarrotAssist cannot enable it automatically or check the selection. It does not grant new device permissions.",
     assistant_approval_title: "After connecting: repeated ChatGPT approvals",
-    assistant_drive_help: "Driving commands need separate permission. Allow this while parked and disengaged, then select driving commands when connecting ChatGPT. Clear lane-change and set-speed commands are requested without an extra confirmation conversation, subject to existing vehicle conditions. Requests and results are sent to ChatGPT and the Carrot relay. ChatGPT may show its own tool approval.",
+    assistant_drive_help: "Allow voice driving commands on this device while parked and disengaged. Direct phone commands go to the device without ChatGPT registration. For commands through ChatGPT, also grant driving access in the ChatGPT connection. Both routes use the existing vehicle conditions.",
     assistant_drive_enable: "Allow voice lane-change and set-speed commands",
     assistant_drive_disable: "Revoke driving commands",
     assistant_drive_required: "Keep Carrot Web visible and allow driving commands first.",
