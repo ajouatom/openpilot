@@ -80,6 +80,8 @@ In CarrotAssist 0.2.4, drag the orange microphone to keep it in your preferred p
 
 Tap the device name at the top and enable **Start the voice assistant when Carrot Web connects**. Transient startup connection failures get up to three attempts in total. On connection the app greets you once, wishes you a safe drive and opens the assistant overlay. From version 0.2.5, an available Git update is announced once. No reply is needed. A manual microphone tap skips the greeting.
 
+The startup greeting confirms that Carrot Web is online and linked to your account. Look for a CarrotAssist tool call in the reply to see whether the new mini conversation used it. If you receive only a generic reply, ask while parked, “Use CarrotAssist to report the last driving request.” This status check does not request a maneuver.
+
 With CarrotAssist 0.2.5, updated Carrot Web and Tools access, say **“Open Naver Map”** in the mini voice window to launch the installed Android app.
 
 If touching the web closes the small assistant overlay and ends voice:

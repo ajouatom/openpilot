@@ -1,7 +1,7 @@
 services:
   carrot-mcp:
     build: .
-    image: carrot-voice-probe:0.7.7
+    image: carrot-voice-probe:0.7.8
     restart: unless-stopped
     init: true
     environment:
