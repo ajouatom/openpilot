@@ -175,3 +175,11 @@ avoid platform approval. In the 2026-11-07 live test, metadata refresh plus the
 owner-selected plugin override allowed240->250 without another prompt, verified
 by an independent device read. The full Android ChatGPT app's background voice
 path also continued while the owner touched Carrot Web; overlay behavior differs.
+
+## Voice request order (0.7.4)
+
+Clear driving commands call request_carrot_drive before narration or status/catalog
+lookups. Korean lane/road-lane and left/right variants share the same action.
+Existing authorization, vehicle checks, expiry and no-retry rules are unchanged.
+Refresh ChatGPT tool metadata after deployment; existing voice sessions may retain
+old instructions. This reduces avoidable turns, not model/network latency guarantees.
