@@ -48,7 +48,7 @@ Use a trusted LAN, as with Carrot Web itself.
   Transient errors get at most three checks, each limited to four seconds; leaving
   the activity cancels the operation. Unlinked accounts skip retries. Enable
   auto-start in device-name settings to greet once when opening a selected web,
-  with an optional Git update question based on the existing read-only status API.
+  with a spoken notice if the device reports an available Git update. The greeting ends without a question. With Tools access, “Open Naver Map” requests the installed Android app.
   The manual button skips the greeting. Startup performs no maintenance actions. A successful
   check provides optional short-lived Android assist content containing only
   connection status. The voice provider controls spoken preambles. Account connection

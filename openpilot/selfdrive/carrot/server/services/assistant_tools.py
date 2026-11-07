@@ -25,7 +25,7 @@ JOBS = {
 PANELS = {
   'tools', 'car_select', 'language', 'web_settings', 'device_info', 'bluetooth', 'assistant',
   'git_branch', 'git_log', 'git_reset_repo', 'restore_settings', 'qr_backup_settings',
-  'qr_restore_settings', 'copy_settings', 'view_settings', 'egpu',
+  'qr_restore_settings', 'copy_settings', 'view_settings', 'egpu', 'naver_map',
 }
 RECORD = {'record_start': True, 'record_stop': False}
 REQUESTED = {'reboot', 'rebuild_all', 'reset_calib', 'server_tmux_log'}

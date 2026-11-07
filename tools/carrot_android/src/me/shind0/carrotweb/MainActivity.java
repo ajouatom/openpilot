@@ -70,7 +70,7 @@ public final class MainActivity extends Activity {
   private ConnectionRecovery voiceCheck;
   private long voiceVerifiedUntil;
   private VoiceWelcome welcome;
-  private boolean updateOffered;
+  private String lastPhoneRequest = "", lastPhoneResult = "failed";
   private boolean voiceStarting, voiceFromAuto, pageReady;
   private int voiceAttempt, autoVoiceGeneration = -1;
   private final Runnable retryVoice = this::beginVoiceAttempt;
@@ -269,12 +269,16 @@ public final class MainActivity extends Activity {
       settings.setTextZoom(100);
       settings.setAllowFileAccess(false); settings.setAllowContentAccess(false); settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
       settings.setMediaPlaybackRequiresUserGesture(true); settings.setSupportMultipleWindows(false);
-      settings.setUserAgentString(settings.getUserAgentString()+" CarrotWebAndroid/0.1");
+      settings.setUserAgentString(settings.getUserAgentString()+" CarrotWebAndroid/0.1 CarrotAssistPhone/1");
       CookieManager.getInstance().setAcceptThirdPartyCookies(web,false);
       web.setWebChromeClient(new WebChromeClient());
       web.setWebViewClient(new WebViewClient() {
         @Override public boolean shouldOverrideUrlLoading(WebView view,WebResourceRequest request) {
           Uri uri = request.getUrl();
+          if ("carrotassist".equals(uri.getScheme())) {
+            if (request.isForMainFrame() && view.getUrl() != null && isCurrent(Uri.parse(view.getUrl()))) openPhoneApp(uri, view);
+            return true;
+          }
           if (isCurrent(uri)) return false;
           if (!request.isForMainFrame() || !request.hasGesture()) return true;
           if ("https".equals(uri.getScheme()) || "http".equals(uri.getScheme())) {
@@ -311,11 +315,31 @@ public final class MainActivity extends Activity {
       }
     });
   }
+  private void openPhoneApp(Uri uri, WebView source) {
+    if (!"phone".equals(uri.getHost()) || uri.getPathSegments().size() != 2 || !"naver_map".equals(uri.getPathSegments().get(0))) return;
+    String id = uri.getPathSegments().get(1);
+    if (!ConnectionPolicy.token(id)) return;
+    long until;
+    try { until = Long.parseLong(uri.getQueryParameter("expires")); } catch (RuntimeException e) { return; }
+    long remaining = until - System.currentTimeMillis();
+    if (remaining <= 0 || remaining > 30000 || !source.isShown() || source.getWindowVisibility() != View.VISIBLE) return;
+    if (!id.equals(lastPhoneRequest)) {
+      lastPhoneRequest = id; lastPhoneResult = "failed";
+      Intent launch = getPackageManager().getLaunchIntentForPackage("com.nhn.android.nmap");
+      if (launch == null) lastPhoneResult = "not_installed";
+      else {
+        try { startActivity(launch); lastPhoneResult = "requested"; }
+        catch (android.content.ActivityNotFoundException | SecurityException ignored) {}
+      }
+    }
+    source.evaluateJavascript("window.dispatchEvent(new CustomEvent('carrot-phone-result',{detail:{id:" + JSONObject.quote(id)
+      + ",status:" + JSONObject.quote(lastPhoneResult) + "}}))", null);
+  }
   private boolean isCurrent(Uri uri) { return currentAddress!=null && "http".equals(uri.getScheme()) && currentAddress.equals(uri.getHost()) && uri.getPort()==7000 && uri.getUserInfo()==null; }
   private void invokeAssistant() {
     if (!foregroundActivity) return;
     if (recovering) { notice(UiText.get("기존 ChatGPT 연결을 확인하고 있어요. 당근웹이 열린 뒤 마이크를 눌러 주세요.", "Checking your saved ChatGPT connection. Wait for Carrot Web to open, then tap the microphone.")); return; }
-    if (welcome.isGreeting()) { welcome.cancel(); launchVerifiedVoice(false); return; }
+    if (welcome.isGreeting()) { welcome.cancel(); launchVerifiedVoice(); return; }
     startVoice(false);
   }
   private void scheduleAutoVoice() {
@@ -381,14 +405,13 @@ public final class MainActivity extends Activity {
     cancelVoiceCheck();
     if (message.isEmpty()) {
       if (automatic) welcome.greet(this::launchVerifiedVoice);
-      else launchVerifiedVoice(false);
+      else launchVerifiedVoice();
     } else if (automatic) {
       android.widget.Toast.makeText(this,message,android.widget.Toast.LENGTH_SHORT).show();
     } else voiceProblem(message);
   }
-  private void launchVerifiedVoice(boolean update) {
+  private void launchVerifiedVoice() {
     if (!foregroundActivity || isFinishing()) return;
-    updateOffered = update;
     voiceVerifiedUntil = SystemClock.elapsedRealtime() + 5000;
     openAssistant();
   }
@@ -396,9 +419,8 @@ public final class MainActivity extends Activity {
     super.onProvideAssistContent(content);
     if (SystemClock.elapsedRealtime() >= voiceVerifiedUntil) return;
     // Optional Android assistant context. Share neither credentials nor vehicle or account identifiers.
-    String notice = updateOffered ? " CarrotAssist just asked whether to GitPull and reboot after a successful update. The user has not yet approved either operation." : "";
     content.setStructuredData("{\"@context\":\"https://schema.org\",\"@type\":\"WebPage\","
-      + "\"name\":\"CarrotAssist\",\"description\":\"Carrot Web was online and account-linked at voice startup." + notice + "\"}");
+      + "\"name\":\"CarrotAssist\",\"description\":\"Carrot Web was online and account-linked at voice startup.\"}");
   }
   private void voiceProblem(String message) {
     new AlertDialog.Builder(this).setMessage(message)

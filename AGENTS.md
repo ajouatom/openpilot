@@ -1,5 +1,12 @@
 # Repository memory
 
+- CarrotAssist 0.2.5 (code12) startup TTS announces an available device Git update once;
+  the native greeting ends before showAssist. No startup question, affirmative handler,
+  maintenance proposal or reboot. The optional carrot.tools grant also supports a fixed
+  Naver Map launch through updated Carrot Web and the visible Android wrapper. Only
+  the installed com.nhn.android.nmap launcher can be requested. Report OS acceptance
+  separately from the map actually appearing. No claim of live spoken end-to-end testing.
+
 - CarrotAssist 0.2.4 (code11) moves the microphone into a draggable 68dp
   in-app button with normalized saved coordinates. Toolbar device-name settings
   provide opt-in auto-open once per device discovery, with a greeting/safe-drive

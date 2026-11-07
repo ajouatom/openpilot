@@ -54,6 +54,22 @@ export function validToolsCommand(command, now = Date.now()) {
     ['open', 'prepare', 'commit', 'status', 'cancel'].includes(command.operation) &&
     Number.isFinite(command.expires_at) && command.expires_at > now && command.expires_at - now <= 30000;
 }
+async function openNaverMap(id, expiresAt) {
+  if (!/CarrotAssistPhone\/1\b/.test(navigator.userAgent)) throw new Error(t('phone_app_required', 'Open CarrotAssist 0.2.5 or later on Android.'));
+  if (document.hidden || expiresAt <= Date.now()) throw new Error(t('phone_app_expired', 'Phone request expired.'));
+  return new Promise((resolve, reject) => {
+    const stop = () => { clearTimeout(timer); window.removeEventListener('carrot-phone-result', receive); };
+    const receive = event => {
+      if (event.detail?.id !== id) return;
+      stop();
+      if (event.detail.status === 'requested') resolve('requested');
+      else reject(new Error(event.detail.status === 'not_installed' ? t('naver_missing', 'Naver Map is not installed.') : t('phone_app_failed', 'Could not open the phone app.')));
+    };
+    const timer = setTimeout(() => { stop(); reject(new Error(t('phone_app_unknown', 'Phone launch result unavailable. Do not retry automatically.'))); }, Math.min(3500, expiresAt - Date.now()));
+    window.addEventListener('carrot-phone-result', receive);
+    window.location.assign(`carrotassist://phone/naver_map/${id}?expires=${expiresAt}`);
+  });
+}
 export async function openToolPanel(action) {
   if (document.hidden) throw new Error('Keep Carrot Web visible');
   if (document.querySelector('.app-dialog:not([hidden])')) throw new Error('Close the current dialog first');
@@ -84,7 +100,7 @@ export async function executeToolsCommand(command) {
     if (!credential) throw new Error(t('tools_required', 'Allow Tools access in Carrot Web > Tools > ChatGPT assistant first.'));
     const { ok, ...value } = await local('execute', { command });
     result = value;
-    if (result.status === 'open_requested') result = { ...result, status: await openToolPanel(result.action) };
+    if (result.status === 'open_requested') result = { ...result, status: result.action === 'naver_map' ? await openNaverMap(command.id, command.expires_at) : await openToolPanel(result.action) };
     if (['running', 'requested'].includes(result.status)) {
       try { globalThis.CarrotToolsRuntime?.logNotice?.(t('tools_started', 'Voice Tools request accepted. Check the Tools history for progress.'), { label: result.action }); } catch {}
     }

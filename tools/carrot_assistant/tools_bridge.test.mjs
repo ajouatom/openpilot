@@ -40,6 +40,11 @@ test('MCP existing screen/settings/drive grants cannot run Tools; separately gra
       if (allowed) assert.deepEqual(calls[0], ['owner', 'prepare', { action: 'git_pull' }]);
       const bad = await client.callTool({ name: 'prepare_carrot_tool_action', arguments: { action: 'shell_cmd' } });
       assert.equal(bad.isError, true);
+      const phone = await client.callTool({ name: 'open_carrot_phone_app', arguments: { app: 'naver_map' } });
+      assert.equal(Boolean(phone.isError), !allowed);
+      if (allowed) assert.deepEqual(calls.at(-1), ['owner', 'open', { action: 'naver_map' }]);
+      const invalid = await client.callTool({ name: 'open_carrot_phone_app', arguments: { app: 'any_package' } });
+      assert.equal(invalid.isError, true);
       const tools = await client.listTools();
       assert.equal(tools.tools.find(t => t.name === 'commit_carrot_tool_action').annotations.destructiveHint, true);
       assert.equal(toolActions.includes('git_checkout'), false);

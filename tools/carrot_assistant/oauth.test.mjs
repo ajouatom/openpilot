@@ -185,7 +185,7 @@ test('fresh MCP conversations resolve only the authenticated browser, survive re
     const ta = await (await env.form('/token', la.exchange)).json(), tb = await (await env.form('/token', lb.exchange)).json();
     const chatA = await env.mcp(ta.access_token), chatB = await env.mcp(tb.access_token); sdk.push(chatA, chatB);
     const listed = (await chatA.listTools()).tools;
-    assert.equal(listed.length, 20); assert.equal(listed.some(t => t.name === 'connect_carrot_web'), false);
+    assert.equal(listed.length, 21); assert.ok(listed.some(t => t.name === 'open_carrot_phone_app')); assert.equal(listed.some(t => t.name === 'connect_carrot_web'), false);
     assert.equal((await chatA.callTool({ name: 'request_carrot_drive', arguments: { action: 'lane_left' } })).isError, true);
     assert.equal((await chatA.callTool({ name: 'get_carrot_drive_request', arguments: {} })).isError, true);
     assert.equal((await chatA.callTool({ name: 'read_carrot_setting_value', arguments: { name: 'AutoBlinkerControl' } })).isError, true);
