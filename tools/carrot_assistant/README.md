@@ -162,3 +162,16 @@ for prepared settings. This never commits automatically or changes OAuth/local
 permissions. Ambiguous requests and AI recommendations still need clarification.
 Tool maintenance confirmations and platform approvals remain separate. Refresh
 plugin metadata for updated tool descriptions; no phone APK update is required.
+
+## ChatGPT metadata and action approvals
+
+After deploying changed tool descriptions/instructions, refresh the registered
+CarrotAssist plugin's tools and test in a NEW ChatGPT conversation. Deployment
+alone does not invalidate cached plugin metadata. ChatGPT action approval policy
+is separate from OAuth scopes and local device grants. Users may explicitly
+choose CarrotAssist > Permissions > Allow all actions in their own account; the
+relay/app cannot make or verify that choice. Never mark writes as read-only to
+avoid platform approval. In the 2026-11-07 live test, metadata refresh plus the
+owner-selected plugin override allowed240->250 without another prompt, verified
+by an independent device read. The full Android ChatGPT app's background voice
+path also continued while the owner touched Carrot Web; overlay behavior differs.
