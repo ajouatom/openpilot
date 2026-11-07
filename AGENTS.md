@@ -1,5 +1,24 @@
 # Repository memory
 
+- On 2026-11-07 follow-up, cached ChatGPT plugin tool descriptions still demanded
+  confirmation after relay0.7.3. Refreshed plugin metadata and verified new text.
+  A NEW web conversation then reproduced a separate ChatGPT commit approval card.
+  Owner explicitly chose CarrotAssist only Allow all actions/full_access via the
+  plugin-management tool; readback verifies custom override, global default stays
+  low-risk actions. Old expired approval was denied, not replayed. New conversation
+  applied CruiseMaxVals0 240->250 without another approval; independent read250.
+  This account choice is NOT an automatic permission for other users. Their app
+  setup explains plugin-wide scope, account-owned selection and tool refresh.
+  No new OAuth/local drive/tools scopes. Phone0.2.2 unchanged. Background voice
+  was already enabled, but owner reported small-overlay dismissal ended voice.
+  Started voice in full ChatGPT app, Home->CarrotAssist, touched settings tab;
+  green ChatGPT indicator remained and owner confirmed audible reply. External
+  assistant window sizing/listening state is not controlled/exposed by our app;
+  never label our bridge connection or an invocation flag as confirmed listening.
+  KO/EN user guides, KO/EN/ZH helper and Guide-CarrotAssist Wiki document both flows.
+  Isolated web build, five focused assistant checks, translation syntax and user
+  docs validation pass. Vehicle files were not deployed or restarted this turn.
+
 - On 2026-11-07, owner explicitly rejects repeated conversational confirmation for
   clear, in-range setting commands. Relay0.7.3 treats the original exact target/value
   or adjustment command as authorization; ambiguous requests/AI recommendations

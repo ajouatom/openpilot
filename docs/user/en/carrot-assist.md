@@ -2,7 +2,7 @@
 
 [한국어](../ko/carrot-assist.md) · [Carrot Web](carrot-web.md)
 
-CarrotAssist discovers a Carrot device on the local network, opens its Carrot Web interface, and invokes the phone's default Android assistant. Connecting the Carrot plugin to ChatGPT enables setting search, explanations and screen navigation. Additional permission enables individual live setting reads and changes after confirmation of the before/after values.
+CarrotAssist discovers a Carrot device on the local network, opens its Carrot Web interface, and invokes the phone's default Android assistant. Connecting the Carrot plugin to ChatGPT enables setting search, explanations and screen navigation. Additional permission enables live setting reads and bounded changes on clear setting/value commands.
 
 ## Prepare and install
 
@@ -62,6 +62,29 @@ When you see a code field and **이 기기 연결 승인** (Authorize this devic
 
 CarrotAssist, Chrome and Samsung Internet use separate storage. **Create the code in the CarrotAssist app you will use.** App deletion or clearing data can require reconnection. Menu labels can vary by account, language and app version.
 
+### 4. Avoid repeated action approvals
+
+Allowing features in CarrotAssist does **not** change ChatGPT's separate action approval policy. Users who do not want repeated prompts can make this choice after connecting:
+
+1. In the Carrot setup helper, expand **After connecting: repeated ChatGPT approvals → Open ChatGPT plugin permissions**, or open [ChatGPT plugin settings](https://chatgpt.com/settings/plugins-settings).
+2. Choose **CarrotAssist → Permissions → Allow all actions**. There is no need to change the default for other plugins.
+3. Start a new voice conversation and request a specific setting/value change. If old confirmation instructions remain, use **Refresh tools** in CarrotAssist plugin settings and start another new conversation.
+
+This choice covers **all actions authorized for CarrotAssist**, not one setting. Features granted later through separate connection consent also follow this plugin policy. Device permissions, bounds checks and maintenance confirmations still apply. Each user chooses this in their own ChatGPT account; CarrotAssist cannot select it automatically or read its state. This does not require a fresh pairing code. Account or organization policy may hide the option.
+
+In the 2026-11-07 test, refreshing old tool descriptions still left a ChatGPT approval card. After selecting **Allow all actions** for CarrotAssist only, a new conversation changed acceleration setting 0 from 240 to 250 without another approval. A separate device read verified 250.
+
+### Talk while touching Carrot Web
+
+If touching the web closes the small assistant overlay and ends voice:
+
+1. Enable **ChatGPT Settings → Voice → Background conversations**.
+2. **Start voice inside the full ChatGPT app**.
+3. Press **Home**, not End voice, then open **CarrotAssist**. Do not invoke its microphone again.
+4. Touch a web settings tab and verify that spoken conversation continues.
+
+On the test phone, Background conversations was already enabled when the owner reported that the small-overlay path ended voice. With the full-app path, the voice indicator remained after touching the web and the owner confirmed an audible reply. That phone shows a green ChatGPT indicator at the top; appearance varies by device/version. CarrotAssist cannot constrain ChatGPT's overlay to one third of the display or directly read its listening state. A connected-device label is not a live microphone indicator.
+
 ### Switching between office Wi-Fi and a vehicle hotspot
 
 With app **0.2.2** and relay **0.7.1**, ChatGPT follows **the Carrot Web currently opened in the app** after the initial authorization. A changed IP or a different selected Carrot device does not require another code or matching the previous device's identity. Choose the intended device when discovery finds several. Returning to the app triggers discovery if the previous address is unreachable.
@@ -94,7 +117,7 @@ Reads do not need a change confirmation. Updated Carrot Web refreshes local perm
 
 “Increase by 10%” adds ten percent of the current value: 50 becomes 55; fractional calculated results are rounded to the nearest integer. “Add 10” adds ten units. If zero has a special meaning such as automatic mode, check the explanation and request an explicit value. Distinguish the Carrot display from the phone display.
 
-Keep the CarrotAssist web interface active beneath the small voice overlay. A different fullscreen app or locked phone can suspend delivery until a request expires. A queued request is not a confirmed change.
+Keep the CarrotAssist web interface active, either beneath the small voice overlay or with ChatGPT voice running in the background as described above. A different fullscreen app or locked phone can suspend delivery until a request expires. A queued request is not a confirmed change.
 
 ## Supported scope
 
