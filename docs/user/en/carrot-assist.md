@@ -127,6 +127,8 @@ Setting history identifies changes made by the voice assistant. Follow each sett
 
 ## Driving commands in the same conversation — experimental
 
+For clear commands such as “Change lanes left/right”, the assistant is instructed to send the driving request before speaking or making separate status queries. It then briefly reports the actual progress, completion or failure. A directionless request asks only left or right. Speech recognition, model processing and network delay remain; immediate execution or a fixed response time is not guaranteed.
+
 Requires relay 0.6.0 and its matching device code. Keep the existing Android 0.2.0 APK. GitPull and fully restart the device while parked and disengaged; restarting only the web server does not reload the vehicle controllers. Controller and connection tests run on a PC; spoken on-road operation has not been validated.
 
 1. In CarrotAssist, select **Tools > ChatGPT assistant > Allow voice lane-change and set-speed commands** while parked and disengaged.
