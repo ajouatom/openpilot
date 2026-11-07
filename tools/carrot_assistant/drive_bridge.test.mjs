@@ -8,7 +8,12 @@ test('driving delivery deduplicates, separates owners and never replays after ex
   const b = createDriveBridge(() => time);
   const first = b.queue('a', { action: 'lane_left' });
   assert.equal(b.queue('a', { action: 'lane_left' }).request_id, first.request_id);
-  assert.throws(() => b.queue('a', { action: 'lane_right' }));
+  const blocked = b.queue('a', { action: 'lane_right' });
+  assert.equal(blocked.status, 'blocked');
+  assert.equal(blocked.submitted, false);
+  assert.equal(blocked.retry_allowed, false);
+  assert.equal(b.queue('a', { action: 'lane_left' }).reason, 'duplicate');
+  assert.equal(b.poll('a').id, first.request_id);
   assert.equal(b.poll('b'), null);
   assert.equal(b.poll('a').operation, 'execute');
   assert.throws(() => b.ack('b', first.request_id, { id: first.request_id, status: 'completed', direction: 'left' }));

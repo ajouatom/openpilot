@@ -43,7 +43,7 @@ window.CarrotTranslations.register("ko", {
     assistant_account_connected: "계정 연결됨 · 새 음성 대화에서도 사용 가능",
     assistant_help: "계정 연결 후 설정 검색·설명·화면 열기를 사용할 수 있습니다. 설정값 조회·변경은 아래 기기 허용과 ChatGPT 연결 승인을 추가해야 합니다.",
     assistant_install: "ChatGPT 앱 설치 · Google Play",
-    assistant_voice_help: "상단 마이크는 기본 음성비서의 작은 창을 엽니다. 웹 터치 시 대화가 끝나면 ChatGPT 설정 → 음성 → 백그라운드 대화를 켜고, ChatGPT 앱에서 음성을 시작한 뒤 홈 버튼으로 나와 CarrotAssist를 여세요. 종료 버튼은 누르지 않습니다. 시험 폰에서는 상단 초록색 ChatGPT 표시로 실행 상태를 확인했습니다. 작은 창의 크기는 당근앱에서 제한할 수 없습니다.",
+    assistant_voice_help: "CarrotAssist 0.2.4의 주황색 마이크를 끌어 놓으면 위치를 기억합니다. 짧게 누르면 당근웹 연결을 확인하고 기본 음성비서의 작은 창을 엽니다. 웹 터치 시 대화가 끝나면 ChatGPT 설정 → 음성 → 백그라운드 대화를 켜고, ChatGPT 앱에서 음성을 시작한 뒤 홈 버튼으로 나와 CarrotAssist를 여세요. 종료 버튼은 누르지 않습니다. 시험 폰에서는 상단 초록색 ChatGPT 표시로 실행 상태를 확인했습니다. 작은 창의 크기는 당근앱에서 제한할 수 없습니다.",
     assistant_disconnect: "연결 해제",
     assistant_connected: "연결됨 · 설정 화면 열기만 허용",
     assistant_waiting: "ChatGPT 연결 대기 중",

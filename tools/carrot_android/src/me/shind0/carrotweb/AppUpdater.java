@@ -42,7 +42,11 @@ public final class AppUpdater {
   public void info() {
     String label = "CarrotAssist";
     try { label += " "+installed().versionName; } catch (Exception ignored) {}
-    new AlertDialog.Builder(activity).setTitle(label).setMessage(UiText.get("새 버전을 자동 확인합니다. 업데이트해도 기존 기기 연결 정보는 유지됩니다.\n\n설치는 주차 후 진행하세요.", "New versions are checked automatically. Updating preserves your saved connection.\n\nInstall updates while parked."))
+    android.widget.CheckBox autoVoice = new android.widget.CheckBox(activity);
+    autoVoice.setText(UiText.get("당근웹 연결 시 음성조수 자동 실행", "Start the voice assistant when Carrot Web connects"));
+    autoVoice.setChecked(preferences.getBoolean("voice_auto_start",false));
+    autoVoice.setOnCheckedChangeListener((v,on) -> preferences.edit().putBoolean("voice_auto_start",on).apply());
+    new AlertDialog.Builder(activity).setTitle(label).setView(autoVoice).setMessage(UiText.get("새 버전을 자동 확인합니다. 업데이트해도 기존 기기 연결 정보는 유지됩니다.\n\n설치는 주차 후 진행하세요.", "New versions are checked automatically. Updating preserves your saved connection.\n\nInstall updates while parked."))
       .setPositiveButton(available == null ? UiText.get("업데이트 확인", "Check for updates") : UiText.get("새 버전 설치", "Install update"), (d,w)->{ if (available==null) check(true); else offer(); })
       .setNegativeButton(UiText.get("닫기", "Close"),null).show();
   }

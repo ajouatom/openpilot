@@ -1,5 +1,18 @@
 # Repository memory
 
+- CarrotAssist 0.2.4 (code11) moves the microphone into a draggable 68dp
+  in-app button with normalized saved coordinates. Toolbar device-name settings
+  provide opt-in auto-open once per device discovery, with a greeting/safe-drive
+  message and GitPull/restart question when current device Git status verifies a
+  nondiverged update, even while driving. No Git or reboot is executed at startup.
+  Manual taps skip the greeting. Both paths inspect the active WebView session
+  before opening showAssist, with up to 3 transient attempts and foreground
+  cancellation. Startup Android assist content is optional; MCP cannot suppress
+  all ChatGPT mini preambles. Relay0.7.6 returns explicit no-submit/no-retry
+  outcomes for duplicate/conflicting requests without queuing them. Phone tested
+  button drag, tap and mini opening; emulator checks include saved position and
+  resize. Temporary relay downtime produced a real startup alert during deployment.
+
 - On 2026-11-07 voice follow-up, actual mini conversations showed an unsupported
   response without visible tools and a later 14-second turn with a lane tool call
   and unnecessary dashboard question. Current account can_drive=true; last relay

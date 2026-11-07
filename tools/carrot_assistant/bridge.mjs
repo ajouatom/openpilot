@@ -99,6 +99,7 @@ export function createBridge({ now = Date.now, maxSessions = 1000, statePath, is
       const state = this.accountStatus(id);
       if (!state.browser_online) fail('Carrot Web is offline. Do not retry automatically.', 409);
       const queued = driving.queue(id, fields);
+      if (queued.submitted === false) return queued;
       wake(id);
       // Give a fast local acknowledgement a chance to arrive. A voice reply
       // need not wait for the vehicle to finish a maneuver.

@@ -116,7 +116,7 @@ export function openAssistantDialog() {
   install.target = '_blank'; install.rel = 'noopener noreferrer';
   install.textContent = text('install', 'Install ChatGPT · Google Play');
   const voiceHelp = document.createElement('p');
-  voiceHelp.textContent = text('voice_help', 'The top microphone opens your default assistant overlay. If touching the web ends voice, enable ChatGPT Settings > Voice > Background conversations, start voice in the full ChatGPT app, then press Home and open CarrotAssist without ending voice. CarrotAssist cannot limit the overlay size or read its listening state.');
+  voiceHelp.textContent = text('voice_help', 'Drag the orange CarrotAssist 0.2.4 microphone to save its position. Tap it to check the current Carrot Web connection and open your default assistant overlay. If touching the web ends voice, enable ChatGPT Settings > Voice > Background conversations, start voice in the full ChatGPT app, then press Home and open CarrotAssist without ending voice. CarrotAssist cannot limit the overlay size or read its listening state.');
   el('Panel').prepend(install, voiceHelp);
   const account = document.createElement('details');
   account.open = !session?.account_linked;
