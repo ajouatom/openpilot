@@ -2,12 +2,14 @@
 import math
 from collections import deque
 
+from openpilot.selfdrive.controls.lib.desire_lib.boundary_indicator import QUIET_SEC
 from openpilot.selfdrive.controls.lib.desire_lib.boundary_lane import adjacent_lane
 from openpilot.selfdrive.controls.lib.desire_lib.indicator_feedback import TapEcho
 from openpilot.selfdrive.controls.lib.desire_lib.manual_turn_indicator import ManualTurnIndicator
 
 LINE_CONFIDENCE = .10
 CONFIRM_SEC = .20
+MANUAL_TURN_QUIET_SEC = 2.
 
 
 def interpolate(x, xs, ys):
@@ -174,9 +176,12 @@ class ModelIndicator:
         self.request_time = now
         self.reason = 'manual'
         return
+      # A new driver turn may be observed before other automatic sources rearm.
+      # Lamp masking and the uninterrupted dark interval still apply.
+      manual_turn_after = isolation.block_until - QUIET_SEC + MANUAL_TURN_QUIET_SEC
       turn = self.manual_turn.update(now, cs, md.frameId, yaw_rate,
         allowed=(manual_turn_enabled and common and not busy and not cs.leftBlinker and not cs.rightBlinker and
-                 now >= isolation.block_until and now >= isolation.relabel_until and
+                 now >= manual_turn_after and now >= isolation.relabel_until and
                  isolation.dark_since is not None and now - isolation.dark_since >= 1.),
         following_curve=manual_turn_enabled and following_road_curve(md, cs.vEgo, yaw_rate))
       if turn is not None:

@@ -34,6 +34,8 @@ def drive(direction=1, fault=None):
       yaw = 0.
     elif fault == 'small_angle':
       cs.steeringAngleDeg = min(40, abs(cs.steeringAngleDeg)) * sign
+    elif fault == 'moderate_turn':
+      cs.steeringAngleDeg = (20 + min(22.5, abs(cs.steeringAngleDeg))) * sign
     elif fault == 'held_angle':
       cs.steeringAngleDeg = 100 * sign
     elif fault == 'park':
@@ -80,6 +82,36 @@ def test_manual_turn_starts_without_atc_lanes_or_lateral_activation(direction):
   'duplicate_frame', 'invalid', 'busy', 'disabled'])
 def test_counterexamples_never_request(fault):
   assert not drive(fault=fault)[4]
+
+
+@pytest.mark.parametrize('direction', [1, 2])
+def test_moderate_driver_turn_requests_indicator(direction):
+  assert drive(direction, 'moderate_turn')[4]
+
+
+@pytest.mark.parametrize('last_lamp', [0., 1.75])
+def test_second_turn_requires_fresh_steering_after_both_rearm_intervals(last_lamp):
+  cs, md = scene()
+  detector, isolation = ModelIndicator(), BoundaryIndicator()
+  isolation.own(10., 1)
+  cs.vEgo = 5.
+  md.laneLineProbs = [0.] * 4
+  ready = max(2., last_lamp + 1.)
+  for i in range(90):
+    t = i * .05
+    md.frameId = i
+    cs.leftBlinker = t < last_lamp
+    cs.steeringPressed = .25 <= t <= .75 or t >= ready + .1
+    cs.steeringTorque = -400. if cs.steeringPressed else 0.
+    cs.steeringAngleDeg = -55. if .25 <= t <= .75 else -min(48., max(0., t-ready-.1) * 180)
+    isolation.update(10.+t, cs, md, enabled=False, valid=True, busy=False)
+    detector.update(10.+t, cs, md, valid=True, lateral_active=False, desire_enabled=False, path_enabled=False,
+                    busy=False, isolation=isolation, manual_turn_enabled=True, yaw_rate=.22 if cs.steeringPressed else 0.)
+    if detector.active:
+      assert ready+.1 < t < ready+1 and detector.active.direction == 2
+      break
+  else:
+    pytest.fail('fresh second turn did not activate')
 
 
 @pytest.mark.parametrize('direction', [1, 2])

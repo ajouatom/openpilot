@@ -96,11 +96,11 @@ class ManualTurnIndicator:
       return None
     self.candidate = (self.intent, 'manual_turn')
     self.reason = 'confirming'
-    turn = (self.intent_confirmed and cs.steeringAngleDeg * sign >= 45 and
-            (cs.steeringAngleDeg - self.initial_angle) * sign >= 25 and
+    turn = (self.intent_confirmed and cs.steeringAngleDeg * sign >= 42 and
+            (cs.steeringAngleDeg - self.initial_angle) * sign >= 22 and
             signed_yaw >= math.radians(3) and self.rotation >= math.radians(1.5))
     self.confirmed_since = (now if self.confirmed_since is None else self.confirmed_since) if turn else None
-    if self.confirmed_since is not None and now - self.confirmed_since >= .15:
+    if self.confirmed_since is not None and now - self.confirmed_since >= .10:
       movement = ManualTurnMovement(now, self.intent)
       self.reset('manual_turn')
       return movement
