@@ -76,8 +76,8 @@ public final class AppUpdater {
       // The selectable text below also works on phones that restrict clipboard access.
     }
     String steps = UiText.get(
-      "1. ChatGPT 앱에서 메뉴를 열고 프로필을 누르세요.\n2. 설정 → 개인 맞춤 설정(또는 ChatGPT 맞춤 설정) → 사용자 지정 지침을 여세요. 버전에 따라 ‘맞춤 지침’으로 표시돼요.\n3. 기존 지침이 있으면 그 아래에 붙여넣고 저장하세요.\n\n새 대화에서 “가속도 설정을 찾아줘”로 확인해 보세요.",
-      "1. Open the menu in ChatGPT and tap your profile.\n2. In Settings, open Personalization (or Customize ChatGPT), then Custom instructions.\n3. Paste below any existing instructions and save.\n\nTry “Find acceleration settings” in a new chat.");
+      "1. ChatGPT 앱에서 메뉴를 열고 프로필을 누르세요.\n2. 설정 화면을 아래로 스크롤해 ‘ChatGPT 맞춤 설정’을 누른 뒤 ‘성격’을 여세요. 화면 아래에 ‘사용자 지정 지침’ 입력칸이 있어요.\n3. 기존 지침이 있으면 그 아래에 붙여넣고 오른쪽 위 ‘저장’을 누르세요.\n\n새 대화에서 “가속도 설정을 찾아줘”로 확인해 보세요.",
+      "1. Open the menu in ChatGPT and tap your profile.\n2. In Settings, scroll to Customize ChatGPT and open Personality. The Custom instructions field is below the style controls.\n3. Paste below any existing instructions and tap Save at the top right.\n\nTry “Find acceleration settings” in a new chat.");
     AlertDialog guide = new AlertDialog.Builder(activity)
       .setTitle(copied ? UiText.get("맞춤 지침을 복사했어요", "Custom instructions copied")
                        : UiText.get("아래 문구를 길게 눌러 복사하세요", "Press and hold the text to copy"))
