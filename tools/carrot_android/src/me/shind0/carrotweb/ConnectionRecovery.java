@@ -133,15 +133,18 @@ final class ConnectionRecovery {
     Candidate(String origin, String token, JSONObject saved, JSONObject state) { this.origin=origin; this.token=token; this.saved=saved; this.state=state; }
   }
   private String recover(String next, List<String> origins) throws Exception {
-    List<Candidate> candidates = new ArrayList<>(); boolean savedConnection = false;
+    List<Candidate> candidates = new ArrayList<>(), localOnly = new ArrayList<>(); boolean savedConnection = false;
     JSONObject destination = null;
     // Relay requests only go to the fixed HTTPS service, never to a discovered device.
     for (String origin : origins) {
       check(); JSONObject saved = storage(origin, null);
       if (origin.equals(next)) destination = saved;
-      JSONObject session;
-      try { session = new JSONObject(saved.optString(SESSION)); } catch (Exception ignored) { continue; }
-      String token = session.optString("browser_token"); if (!ConnectionPolicy.token(token)) continue;
+      String token = "";
+      try { token = new JSONObject(saved.optString(SESSION)).optString("browser_token"); } catch (Exception ignored) {}
+      if (!ConnectionPolicy.token(token)) {
+        if (!origin.equals(next)) localOnly.add(new Candidate(origin, "", saved, null));
+        continue;
+      }
       remember(activity,origin);
       savedConnection = true;
       try {
@@ -153,6 +156,23 @@ final class ConnectionRecovery {
         }
         if (state.optBoolean("account_linked")) candidates.add(new Candidate(origin, token, saved, state));
       } catch (HttpFailure error) { if (error.status != 401 && error.status != 403) throw error; }
+    }
+    // For direct voice, move only missing local grants the destination proves it already owns.
+    if (destination != null) {
+      for (Candidate local : localOnly) {
+        JSONObject missing = new JSONObject();
+        for (String role : new String[]{"settings", "drive"}) {
+          String token = local.saved.optString(key(role));
+          if (!ConnectionPolicy.token(destination.optString(key(role))) && ConnectionPolicy.token(token))
+            missing.put(key(role), token);
+        }
+        if (missing.length() == 0) continue;
+        JSONObject restored = restorePermissions(next, new Candidate(local.origin, "", missing, null));
+        if (restored.length() == 0) continue;
+        for (String role : ROLES)
+          if (restored.has(role)) destination.put(key(role), restored.getString(role));
+        storage(next, destination);
+      }
     }
     candidates.sort((a,b) -> Long.compare(b.state.optLong("account_activity_at"), a.state.optLong("account_activity_at")));
     if (candidates.isEmpty()) return savedConnection ? UiText.get("저장된 ChatGPT 연결을 확인하지 못했어요. 인터넷과 ChatGPT 연결 설정을 확인해 주세요.", "Could not verify the saved ChatGPT connection. Check your Internet connection and ChatGPT connection settings.") : "";

@@ -1,5 +1,23 @@
 # Repository memory
 
+- CarrotAssist 0.2.10 lets the user copy a Korean or English custom-instructions prompt from the device-name dialog. It shows how to append and save the prompt in ChatGPT. Copying does not modify the user’s ChatGPT account.
+
+- CarrotAssist 0.2.9 gives the Android recognizer left/right phrase hints and explains recognition failures. Keep the final-result confidence, direction agreement and age checks. No live maneuver or cabin accuracy measurement.
+
+- CarrotAssist 0.2.8 phone voice supports numbered results from its most recent search in the same listening session. Bind the position to the displayed row, recheck the parameter before committing, and announce its actual name.
+
+- CarrotAssist 0.2.7 phone voice searches the visible device catalog and writes explicit absolute integer settings without a relay session. Use the existing same-origin setting grant, prepare/commit validation and device readback. Never convert a broad search, ambiguous name or conflicting numerical recognition into a write.
+
+- CarrotAssist 0.2.6 supports foreground Android 12+ on-device speech recognition.
+  A local WebView readiness check precedes greeting/listening; no ChatGPT account,
+  relay pairing, cloud transcription or MCP grant is required on the direct route.
+  Korean/English explicit lane requests use the existing local driving grant and
+  vehicle gates. Execute only final, unambiguous recognition, with a bounded
+  direction-specific challenge if scores are missing. Opening AutoBlinkerControl
+  needs no driving grant. Questions launch the default assistant; repeat them in
+  that voice window. Support depends on the installed language model. The rules
+  and transport are tested offline; no real maneuver or cabin accuracy claim.
+
 - Voice lane changes retain normal admission on all supported vehicles, with or
   without indicator hardware. Bind optional signaling once per request to an active
   receiver on the current vehicle (AutoBlinkerControl=2), a supported native output,

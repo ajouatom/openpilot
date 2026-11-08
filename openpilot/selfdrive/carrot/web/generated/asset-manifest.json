@@ -27,14 +27,14 @@
       "kind": "bundle",
       "source": "src/entries/settings.js",
       "path": "js/generated/settings.js",
-      "hash": "3399bc44bb17279e8fb5d5a9aad0fe483d0c2bfd6a9e6acc2d0de24bcff42abe"
+      "hash": "294402a254d5c1479f5de1b8d29fbe2c718ab10a9696898688d4eebca8b44e2f"
     },
     {
       "id": "tools.runtime",
       "kind": "bundle",
       "source": "src/entries/tools.js",
       "path": "js/generated/tools.js",
-      "hash": "9dc8eb52f7d3ecfa7c6bdd1009920af62fa70f8fb3b52a456bd20b54e8f3b436"
+      "hash": "2b4d3eae0dae1cb3a480a74fb2d027d92f656b0826cda5bf24a7dd1126ac0f6a"
     },
     {
       "id": "logs.runtime",

@@ -27,7 +27,7 @@ export async function revokeDriveAccess() {
 }
 export function mountDriveAccess(container) {
   const section = document.createElement('section'), help = document.createElement('p'), button = document.createElement('button');
-  help.textContent = t('help', 'Driving commands need separate permission. Allow this while parked and disengaged, then select driving commands when connecting ChatGPT. Clear lane-change and set-speed commands are requested without an extra confirmation conversation, subject to existing vehicle conditions. Requests and results are sent to ChatGPT and the Carrot relay. ChatGPT may show its own tool approval.');
+  help.textContent = t('help', 'Allow voice driving commands on this device while parked and disengaged. Direct phone commands go to the device without ChatGPT registration. For commands through ChatGPT, also grant driving access in the ChatGPT connection. Both routes use the existing vehicle conditions.');
   button.type = 'button'; button.className = 'btn';
   const label = () => { button.textContent = token ? t('disable', 'Revoke driving commands') : t('enable', 'Allow voice lane-change and set-speed commands'); };
   button.onclick = async () => {

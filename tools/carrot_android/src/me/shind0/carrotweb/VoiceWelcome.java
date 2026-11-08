@@ -20,6 +20,7 @@ final class VoiceWelcome {
   private String address;
   private DeviceProbe probe;
   private Runnable pending;
+  private String feedback;
   private final Runnable fallback = this::finish;
   private final Runnable speak = this::speakNow;
 
@@ -61,11 +62,17 @@ final class VoiceWelcome {
     ui.postDelayed(speak, ttsReady ? 0 : 450);
   }
 
+  void say(String text, Runnable done) {
+    cancel(); feedback = text; pending = done;
+    speakNow();
+  }
+
   private void speakNow() {
     if (pending == null) return;
     ui.removeCallbacks(speak);
     String message = UiText.get("안녕하세요. 안전 운전하세요.", "Hello. Drive safely.");
     if (updateAvailable) message += UiText.get(" 당근 기기에 새 업데이트가 있어요.", " An update is available for your Carrot device.");
+    if (feedback != null) message = feedback;
     if (!ttsReady || tts == null) { Toast.makeText(context,message,Toast.LENGTH_SHORT).show(); finish(); return; }
     final String id = "welcome-" + ++utterance;
     tts.setOnUtteranceProgressListener(new UtteranceProgressListener() {
@@ -87,7 +94,7 @@ final class VoiceWelcome {
     if (done != null) done.run();
   }
   void cancel() {
-    pending = null; utterance++;
+    pending = null; feedback = null; utterance++;
     ui.removeCallbacks(fallback); ui.removeCallbacks(speak);
     if (tts != null && ttsReady) tts.stop();
   }

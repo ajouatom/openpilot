@@ -1,3 +1,4 @@
+import { localVoice } from './local_voice.js';
 "use strict";
 
 import { handleWebAutoUpdateStatus, openWebSettingsDialog } from "./web_settings/controller.js";
@@ -1583,6 +1584,7 @@ const CarrotToolsRuntime = Object.freeze({
 });
 
 Object.assign(globalThis, {
+  CarrotLocalVoice: localVoice,
   CarrotToolsRuntime,
   initToolsPage,
   refreshGitPullStatus,
