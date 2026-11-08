@@ -199,6 +199,7 @@ def main(fd, spas=False, ble=False):
     meta = sm['modelV2'].meta if model_fresh else None
     observed_source = str(getattr(meta, 'observedIndicatorSource', ''))
     observation_enabled = (params.get_bool('ManualLaneChangeIndicator') if observed_source == 'manual' else
+                           params.get_bool('ManualTurnIndicator') if observed_source == 'manual_turn' else
                            params.get_bool('ModelPathIndicator') if observed_source == 'model_path' else
                            params.get_bool('ModelDesireIndicator') if observed_source in ('model_desire', 'model_turn') else False)
     own_tap = (observation.owned is not None and tap_echo.matches(

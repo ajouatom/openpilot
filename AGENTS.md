@@ -1,5 +1,61 @@
 # Repository memory
 
+- On 2026-11-08 the owner requests slightly earlier manual turn indications and
+  asks about closely spaced turns. ManualTurnIndicator alone uses 42 degrees
+  steering/22 degrees growth and 100 ms confirmation. Its next observation
+  requires two seconds from last ownership renewal, one continuous dark second
+  and fresh steering. Torque duration, yaw/curve rejection, isolation of lamp
+  feedback and the other observers' quiet periods are preserved. A/B replay of
+  14528 recorded model frames matched all 10 indications on side and segment;
+  nine occurred earlier (median advance 0.054 s, maximum 1.253 s). Real lamp
+  response and the owner's unrecorded missed turn remain unverified.
+
+- On 2026-11-08 the owner requests voice lane changes to use normal lane-change
+  admission and issue the external indicator in parallel. This supersedes the
+  external-adapter confirmation prerequisite. Keep native and Tesla signal gates.
+  Ioniq 5 PE rlog 11b9/2 records one voice request, same-side physical flashes,
+  B1 override without accepted ID, preLaneChange for 3 s and no steering start.
+  The 0x413 lever bit outlasts the tap echo window. Receiver subreason is
+  unrecorded. A desktop replay of recorded inputs with a bound external adapter
+  and absent ACK reproduced the old timeout; new helper starts and requests
+  the left lamp on the same frame at segment 20.702 s. No actual crossing proof.
+
+- On 2026-11-08, owner requests an ATC-independent ManualTurnIndicator option.
+  DefaultOFF/Ioniq5PE/supported indicator adapter/AutoBlinker1or2. Shared lamp-only
+  observer uses5..60km/h, pressed same-side torque150ms/recent800ms, angle45deg
+  plus25deg growth, yaw3deg/s and1.5deg rotation/150ms confirmation. Recognized
+  matching lane curves suppress admission. Fresh pose/CAN/model and ownership
+  gates remain; existing journal/echo/ACK path isolates feedback before steering.
+  Return15deg+yaw<=3deg/s/moving300ms ends, opposite pressed torque pastzero
+  cancels; stop retains up to30s. ATC/nav/lateral activation are not admission.
+  Current14hash-matched logs174387477B plus prior21logs give39081 replayframes,
+  27candidates. Current10candidates reviewed with video include one street-right
+  turn and nine parking-area/ramp/entry maneuvers; unwanted parking indications
+  remain possible. Prior20manual requests have no candidate overlap within4s;
+  remaining older candidates lack new video labels, so no false-positive-rate
+  claim. Morning right0+45.611s starts0.803s after first pressed torque and ends
+  50.164s. Synthetic counterexamples/source ATC0..3 OFF/ON covered; local668 checks
+  pass. C3/C4 manual-turn reason; old USB HUD uses driver category/turning reason.
+  KO/EN guides/catalog updated. Normal GitPull/full comma restart then opt in.
+  No vehicle writes, CAN actuation, model or Jetson bundle; physical lamps untested.
+  Private evidence .analysis/scratch/2026-11-08-manual-turn.
+
+- On 2026-11-08, owner requests PR572 Tesla review/integration with code-only
+  validation because no Tesla is available. Merge contributor d40c8d247b into
+  current Wip, preserving newer native voice indicators and assistant admission.
+  Keep existing shared AlwaysLateral initialization default1, excluding PR's
+  global default0 change. Tesla gesture now toggles AlwaysLateral; new manual,
+  model-desire/path lamp options and CAN traffic-stop remain defaultOFF.
+  Traffic stop accepts only vision-backed8byte APP_trafficControl with active
+  OP longitudinal; retains other obstacles and normal soft-disable on loss.
+  Desktop1042/23subtests pass with32 native-safety cases deferred to Linux;
+  Wiki25 and focused Ruff pass. Add native MPC/planner, gesture/default tests
+  to full-build CI. Linux Signal42433213035 passes1963/40skip/362subtests plus131;
+  eGPU/Jetson/docs pass. First full build passes50 new native checks but one
+  gesture test exposes a pre-existing fixture missing set_lane_change_blinkers
+  after voice integration. Bind the real helper; desktop full-control11 pass.
+  No vehicle writes or physical lamp/braking acceptance.
+
 - CarrotAssist 0.2.10 lets the user copy a Korean or English custom-instructions prompt from the device-name dialog. It shows how to append and save the prompt in ChatGPT. Copying does not modify the user’s ChatGPT account.
 
 - CarrotAssist 0.2.9 gives the Android recognizer left/right phrase hints and explains recognition failures. Keep the final-result confidence, direction agreement and age checks. No live maneuver or cabin accuracy measurement.

@@ -21,15 +21,15 @@ class Publisher:
           origin = observed_source
         elif origin == 'tbt_display' or origin == 'lane' and tbt.phase in ('waiting', 'changing', 'finishing'):
           origin = 'tbt'
-        reason = automatic.reason if origin == 'turn' else tbt.reason if origin == 'tbt' else 'active'
+        reason = automatic.reason if origin == 'turn' else tbt.reason if origin == 'tbt' else 'turning' if origin == 'manual_turn' else 'active'
         value = {'origin': origin, 'direction': hold['direction'], 'state': 'confirmed' if activated else 'request',
                      'reason': reason if activated or peer == 'ready' else 'peer'}
       elif mode and ok and meta is not None:
         direction = str(getattr(meta, 'indicatorPrepareDirection', 'none'))
         source = str(getattr(meta, 'indicatorPrepareSource', ''))
-        if direction in ('left', 'right') and source in ('manual', 'model_path', 'model_turn', 'model_desire'):
+        if direction in ('left', 'right') and source in ('manual', 'manual_turn', 'model_path', 'model_turn', 'model_desire'):
           value = {'origin': source, 'direction': direction, 'state': 'prepare', 'reason': 'boundary' if source == 'manual' else 'confirming'}
-        elif str(getattr(meta, 'observedIndicator', 'none')) in ('left', 'right') and observed_source in ('manual', 'model_path', 'model_turn', 'model_desire'):
+        elif str(getattr(meta, 'observedIndicator', 'none')) in ('left', 'right') and observed_source in ('manual', 'manual_turn', 'model_path', 'model_turn', 'model_desire'):
           value = {'origin': observed_source, 'direction': str(meta.observedIndicator), 'state': 'prepare',
                    'reason': 'peer' if peer != 'ready' else 'admission'}
         elif auto_valid and str(meta.laneChangeState) == 'preLaneChange' and atc_type in ('atc left', 'atc right', 'fork left', 'fork right'):

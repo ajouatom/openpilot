@@ -88,6 +88,21 @@ def test_packet_extra_is_allowlisted_and_bounded():
   assert len(json.dumps(value))<d.MAX_BYTES
 
 
+def test_manual_turn_reason_and_existing_hud_compatibility(tmp_path):
+  from hud_protocol import encode_snapshot
+  path = tmp_path / 'display'
+  args = inputs()
+  args.update(hold={'source': 'observation', 'direction': 'left'}, observed_source='manual_turn')
+  Publisher(path).update(10., **args)
+  value = json.loads(path.read_text())
+  assert value['origin'] == 'manual_turn' and value['reason'] == 'turning'
+  assert '수동 턴' in d.lines(value)[0]
+  packet = json.loads(encode_snapshot({'indicator_display': value}))
+  assert packet['indicator_display']['origin'] == 'manual'
+  assert packet['indicator_display']['reason'] == 'turning'
+  assert value['origin'] == 'manual_turn'
+
+
 def test_prepare_schema_round_trip():
   from openpilot.cereal import log
   md=log.ModelDataV2.new_message()

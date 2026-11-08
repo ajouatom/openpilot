@@ -134,12 +134,16 @@ class AssistantLane:
     direction = 1 if self.active['direction'] == 'left' else 2
     return self.tap_echo.matches(self.clock(), cs, direction, 0., {'stamp':value.get('time'), 'tap':value.get('tap')})
 
-  def signal_ready(self, direction, cs):
+  def request_signal(self, direction, cs):
     active = self.active
     now = self.clock()
     if not active or active['direction'] != direction:
       return False
     active.setdefault('signal_since', now)
+    # An external adapter follows the admitted maneuver. Only native output
+    # requires vehicle feedback before the transition to laneChangeStarting.
+    if self.signal_route != 'native':
+      return True
     feedback = read_json(self.root / 'signal.json', {})
     if not isinstance(feedback, dict):
       return False
@@ -147,8 +151,7 @@ class AssistantLane:
     return (feedback.get('confirmed') is True and feedback.get('id') == active['id'] and feedback.get('direction') == direction and
             type(stamp) in (int, float) and active['signal_since'] <= stamp <= now and now - stamp < .35 and
             feedback.get('route') == self.signal_route and
-            not (cs.rightBlinker if direction == 'left' else cs.leftBlinker) and
-            (self.signal_route == 'native' or feedback.get('board_lamp') is True or (cs.leftBlinker if direction == 'left' else cs.rightBlinker)))
+            not (cs.rightBlinker if direction == 'left' else cs.leftBlinker))
 
   def after(self, phase, direction, *, crossed=False):
     if self.active is None:

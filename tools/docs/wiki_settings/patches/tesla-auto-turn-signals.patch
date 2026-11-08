@@ -5,7 +5,7 @@
  <!-- CARROT:REVIEW reviewed-for="" -->
 +
 +<!-- CARROT:SECTION:BEGIN BEHAVIOR -->
-+Requests lamps through the existing maneuver; turns require started-turn and stable straightening evidence independently of the steering desire. Each repeat needs a new idle template and TX echo; missing templates or lost feedback ends the automatic session. Unknown/automatic lamps are not driver confirmation. Stalk input, hazards or an unexpected opposite lamp stops automatic output; cleanup cancellation waits for fresh idle stalk and stable actual OFF. Unconfirmed cancellation stops further automatic output for this onroad cycle.
++Turn lamps start with turn desire, not navigation preparation or distance alone. Lane changes retain preparation-stage lamp confirmation. Completion requires fresh measured heading (20 degrees), selected steering above 30 degrees and wheel return within 15 degrees while moving at least 1 km/h. Only TX/lamp-confirmed turns may wait at true standstill under fresh lateral permission and healthy pose, never new requests or lane changes. A following cue waits for completion and current turn desire (three-second queue); same-side handoff retains the ID. The 60-second limit, new idle template and TX echo per repeat, manual priority and cancel/OFF handshake remain. Missing feedback ends the session; unconfirmed cancellation blocks this onroad cycle. Desktop tests do not prove sustained physical lamps.
 +<!-- CARROT:SECTION:END BEHAVIOR -->
 +
 +<!-- CARROT:SECTION:BEGIN USAGE -->
@@ -23,7 +23,7 @@
  <!-- CARROT:REVIEW reviewed-for="" -->
 +
 +<!-- CARROT:SECTION:BEGIN BEHAVIOR -->
-+기존 동작 동안 램프를 요청하며 회전은 조향 판단과 별개로 회전 시작과 안정된 직진 복귀를 확인합니다. 반복마다 새 유휴 템플릿과 TX 에코가 필요하며 템플릿·피드백 상실 시 자동 세션을 종료합니다. 출처 불명·자동 램프는 운전자 확인이 아닙니다. 스토크·비상등·예상 밖 반대 램프 감지 시 자동 출력을 멈추고 신선한 스토크 중립과 안정된 실제 OFF 이후 취소합니다. 취소 미확인 시 해당 주행의 추가 자동 출력을 중지합니다.
++회전 desire 시작 시 점등하며 준비나 거리만으로 켜지지 않습니다. 차로변경 준비 점등은 유지합니다. 완료는 신선한 실측 방위 20도·해당 방향 조향 30도 초과·1km/h 이상 이동 중 핸들 15도 이내 복귀로 판단합니다. 송신·점등을 확인한 회전만 신선한 횡방향 허용과 정상 자세 아래 정차 대기하며 새 요청·차로변경에는 적용하지 않습니다. 다음 cue는 현재 완료와 회전 desire를 기다리며 대기 상한은 3초입니다. 같은 방향 ID·60초 상한·반복마다 새 템플릿과 TX 에코·운전자 우선·취소/OFF 확인은 유지합니다. 피드백 상실은 종료하고 취소 미확인은 해당 주행을 차단합니다. PC 검증은 실제 지속 점등 증명이 아닙니다.
 +<!-- CARROT:SECTION:END BEHAVIOR -->
 +
 +<!-- CARROT:SECTION:BEGIN USAGE -->
@@ -41,7 +41,7 @@
  <!-- CARROT:REVIEW reviewed-for="" -->
 +
 +<!-- CARROT:SECTION:BEGIN BEHAVIOR -->
-+沿用现有动作请求灯光；转弯另需实际开始和稳定回正证据，不跟随转向欲望提前结束。每次重复须有新 idle 模板和 TX 回报；模板或灯反馈丢失时结束自动会话。未知来源或自动灯不作为驾驶员确认。拨杆、双闪或意外对侧灯优先，立即停止自动输出；清理取消延后至新鲜拨杆中立且双侧稳定真关闭，未确认取消则本次运行不再自动输出。
++转弯灯从既有转弯 desire 开始，不因导航准备或距离提前点亮；变道保留准备亮灯确认。完成需新鲜实测航向变化 20°、目标方向转向超过 30°，再以至少 1 km/h 移动且回正至 ±15°。仅已确认 TX/点亮的转弯可在新鲜横向权限和健康姿态下停车等待，不适用于新请求或变道。后续候选等待当前完成及有效转弯 desire，最多排队三秒，同方向保持 ID。60 秒上限、新 idle 模板与逐次 TX 回报、驾驶员优先和取消/OFF 确认均保留。反馈丢失则退出，取消未确认则本次运行禁止自动输出。PC 测试不能证明实车持续点亮。
 +<!-- CARROT:SECTION:END BEHAVIOR -->
 +
 +<!-- CARROT:SECTION:BEGIN USAGE -->

@@ -943,6 +943,17 @@ EVENTS: dict[int, dict[str, Alert | AlertCallbackType]] = {
     ET.SOFT_DISABLE: soft_disable_alert("Communication Issue Between Processes"),
     ET.NO_ENTRY: comm_issue_alert,
   },
+  EventName.teslaTrafficStopWarning: {
+    ET.WARNING: Alert(
+      "BRAKE! Tesla CAN Red Light",
+      "Stopping Distance May Be Insufficient",
+      AlertStatus.critical, AlertSize.full, Priority.HIGH,
+      VisualAlert.fcw, AudibleAlert.warningSoft, 2.),
+  },
+  EventName.teslaTrafficStopTakeover: {
+    ET.SOFT_DISABLE: soft_disable_alert("Tesla CAN Traffic Signal Lost or Inconsistent"),
+    ET.NO_ENTRY: NoEntryAlert("Tesla CAN Traffic Signal Lost or Inconsistent"),
+  },
   EventName.commIssueAvgFreq: {
     ET.SOFT_DISABLE: soft_disable_alert("Low Communication Rate Between Processes"),
     ET.NO_ENTRY: NoEntryAlert("Low Communication Rate Between Processes"),
