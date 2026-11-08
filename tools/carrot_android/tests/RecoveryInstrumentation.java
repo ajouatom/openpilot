@@ -191,10 +191,10 @@ public final class RecoveryInstrumentation extends Instrumentation {
       check(clip != null && clip.getItemCount() == 1);
       String prompt = clip.getItemAt(0).getText().toString();
       check(prompt.contains("CarrotAssist") && prompt.contains(korean ? "왼쪽으로 차로 변경해" : "change lanes left"));
-      android.widget.TextView message = (android.widget.TextView)windowText(korean ? "사용자 지정 지침" : "Personalization",
+      android.widget.TextView message = (android.widget.TextView)windowText(korean ? "‘성격’" : "Personality",
         android.view.View.FIND_VIEWS_WITH_TEXT);
       check(message.getText().toString().contains(prompt));
-      check(message.getText().toString().contains(korean ? "붙여넣고 저장" : "and save"));
+      check(message.getText().toString().contains(korean ? "사용자 지정 지침" : "Custom instructions"));
       windowText(korean ? "확인" : "Done", android.view.View.FIND_VIEWS_WITH_TEXT).performClick();
     });
     waitForIdleSync();
