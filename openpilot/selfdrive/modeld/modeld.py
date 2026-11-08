@@ -588,6 +588,8 @@ def main(demo=False):
       pose = sm['livePose']
       indicator_yaw_rate = (pose.angularVelocityDevice.z if sm.valid['livePose'] and sm.alive['livePose'] and
                             0 <= indicator_now-sm.recv_time['livePose'] < .2 and pose.inputsOK and pose.sensorsOK and
+                            0 <= time.clock_gettime_ns(getattr(time, "CLOCK_BOOTTIME", time.CLOCK_MONOTONIC)) -
+                            sm.logMonoTime['livePose'] < 200_000_000 and
                             pose.posenetOK and pose.angularVelocityDevice.valid else None)
       if DH.tesla_auto_signals:
         turn_hold_allowed, turn_pose = turn_signal_context(sm, sm['carState'], indicator_now,
