@@ -1,5 +1,25 @@
 # Repository memory
 
+- On 2026-11-08, owner requests an ATC-independent ManualTurnIndicator option.
+  DefaultOFF/Ioniq5PE/supported indicator adapter/AutoBlinker1or2. Shared lamp-only
+  observer uses5..60km/h, pressed same-side torque150ms/recent800ms, angle45deg
+  plus25deg growth, yaw3deg/s and1.5deg rotation/150ms confirmation. Recognized
+  matching lane curves suppress admission. Fresh pose/CAN/model and ownership
+  gates remain; existing journal/echo/ACK path isolates feedback before steering.
+  Return15deg+yaw<=3deg/s/moving300ms ends, opposite pressed torque pastzero
+  cancels; stop retains up to30s. ATC/nav/lateral activation are not admission.
+  Current14hash-matched logs174387477B plus prior21logs give39081 replayframes,
+  27candidates. Current10candidates reviewed with video include one street-right
+  turn and nine parking-area/ramp/entry maneuvers; unwanted parking indications
+  remain possible. Prior20manual requests have no candidate overlap within4s;
+  remaining older candidates lack new video labels, so no false-positive-rate
+  claim. Morning right0+45.611s starts0.803s after first pressed torque and ends
+  50.164s. Synthetic counterexamples/source ATC0..3 OFF/ON covered; local668 checks
+  pass. C3/C4 manual-turn reason; old USB HUD uses driver category/turning reason.
+  KO/EN guides/catalog updated. Normal GitPull/full comma restart then opt in.
+  No vehicle writes, CAN actuation, model or Jetson bundle; physical lamps untested.
+  Private evidence .analysis/scratch/2026-11-08-manual-turn.
+
 - On 2026-11-08, owner requests PR572 Tesla review/integration with code-only
   validation because no Tesla is available. Merge contributor d40c8d247b into
   current Wip, preserving newer native voice indicators and assistant admission.

@@ -8,7 +8,7 @@ PATH = Path('/dev/shm/carrot-indicator-display.json')
 MAX_BYTES = 1024
 MAX_AGE = .6
 ORIGINS = {'turn': 'TBT 턴', 'lane': 'ATC 차선변경', 'tbt': '250m 우측',
-           'manual': '운전자 차선접근', 'model_path': '모델 경로',
+           'manual': '운전자 차선접근', 'manual_turn': '운전자 수동 턴', 'model_path': '모델 경로',
            'model_desire': '모델 차선변경', 'model_turn': '모델 턴', 'bluetooth': 'BT 리모컨'}
 REASONS = {'confirming': '조건 확인 중', 'approach': '턴 지점 접근', 'turning': '턴 진행 중',
            'boundary': '차선 경계 접근 중', 'waiting_conditions': '차선·주변 조건 대기',
