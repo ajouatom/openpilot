@@ -102,6 +102,13 @@ jobs:
       - run: ./tools/op.sh setup
       - name: Build openpilot
         run: scons
+      - name: Check Tesla stop solver, gesture and shared defaults
+        run: |
+          python -c "import openpilot.selfdrive.controls.lib.longitudinal_mpc_lib.long_mpc"
+          python -m pytest -o addopts='' -q \
+            openpilot/selfdrive/controls/tests/test_tesla_traffic_stop_integration.py \
+            openpilot/selfdrive/car/tests/test_tesla_three_finger.py \
+            openpilot/common/tests/test_params.py::test_always_lateral_manager_preserves_existing_default_and_saved_choice
       - name: Bosch provider regression tests
         run: |
           python -m pytest -o addopts='' -q \

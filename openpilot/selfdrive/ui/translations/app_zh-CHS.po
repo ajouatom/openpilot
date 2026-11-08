@@ -4,6 +4,18 @@ msgstr ""
 "Language: zh-CHS\n"
 "Plural-Forms: nplurals=1; plural=0;\n"
 
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "BRAKE! Tesla CAN Red Light"
+msgstr "请刹车！特斯拉 CAN 红灯"
+
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "Stopping Distance May Be Insufficient"
+msgstr "剩余距离可能不足以停车"
+
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "Tesla CAN Traffic Signal Lost or Inconsistent"
+msgstr "特斯拉 CAN 信号灯数据丢失或不一致"
+
 #: openpilot/selfdrive/ui/layouts/settings/device.py
 msgid " Steering torque response calibration is complete."
 msgstr " 转向扭矩响应校准完成。"

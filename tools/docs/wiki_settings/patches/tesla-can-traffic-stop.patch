@@ -1,0 +1,57 @@
+--- a/EN-Tesla-CAN-Red-Light-Stop.md
++++ b/EN-Tesla-CAN-Red-Light-Stop.md
+@@ -28,3 +28,15 @@
+ <!-- CARROT:MANUAL:BEGIN TeslaCanTrafficStop -->
+-<!-- CARROT:REVIEW reviewed-for="" -->
++<!-- CARROT:REVIEW reviewed-for="046215718bed37d52f0c6633e5d551de2ff163be2a341b1cb647fab8b5f803dc" reviewed-at="2026-11-06T09:00:00Z" -->
++
++<!-- CARROT:SECTION:BEGIN BEHAVIOR -->
++ON supplements stops on Tesla Model 3/Y with active openpilot longitudinal control; OFF preserves existing behavior. Three unique red samples spanning 0.2 seconds and a positive line distance below 126 m admit a constraint in ACC or blended; green needs three same-target samples spanning 0.5 seconds and releases only this constraint. Active CAN stops temporarily use ACC solving in blended, retain stronger model braking and restore the selected mode on release.
++<!-- CARROT:SECTION:END BEHAVIOR -->
++
++<!-- CARROT:SECTION:BEGIN USAGE -->
++Restart after changing. Independent of turn lamps, Share Data and Signal Assist. Only the exact 8-byte, metre-scale, vision-backed APP_trafficControl profile qualifies; six-byte DAS_road is rejected. Pedal input suppresses this feature until disengagement and new engagement. Other brands ignore the switch.
++<!-- CARROT:SECTION:END USAGE -->
++
++<!-- CARROT:SECTION:BEGIN REFERENCE -->
++Verify raw vehicle CAN, direction relevance and the provisional 2 m stop buffer on a closed course before use. Late red can exceed braking capability. Signal loss after 0.5 seconds or target inconsistency requests takeover and soft-disable, which ultimately disengages; the driver must brake. No new Panda permission or road acceptance. Details: docs/user/en/tesla.md in the source repository.
++<!-- CARROT:SECTION:END REFERENCE -->
+ <!-- CARROT:MANUAL:END TeslaCanTrafficStop -->
+--- a/KO-Tesla-CAN-빨간불-정지.md
++++ b/KO-Tesla-CAN-빨간불-정지.md
+@@ -28,3 +28,15 @@
+ <!-- CARROT:MANUAL:BEGIN TeslaCanTrafficStop -->
+-<!-- CARROT:REVIEW reviewed-for="" -->
++<!-- CARROT:REVIEW reviewed-for="046215718bed37d52f0c6633e5d551de2ff163be2a341b1cb647fab8b5f803dc" reviewed-at="2026-11-06T09:00:00Z" -->
++
++<!-- CARROT:SECTION:BEGIN BEHAVIOR -->
++켜면 Model 3/Y의 활성 openpilot 종제어에서 정지를 보조하고 끄면 기존 동작을 유지합니다. 서로 다른 빨간불 3회·0.2초와 양의 126m 미만 정지선으로 ACC·blended 제약을 추가하며 같은 목표의 초록불 3회·0.5초로 이 제약만 해제합니다. CAN 정지 중 blended는 더 강한 모델 제동을 유지하며 ACC 정지 계산을 사용하고 해제 후 선택 모드로 돌아갑니다.
++<!-- CARROT:SECTION:END BEHAVIOR -->
++
++<!-- CARROT:SECTION:BEGIN USAGE -->
++변경 후 재시작합니다. 램프·데이터 공유·신호 보조와 별개이며 정확한 8바이트·미터 단위·비전 APP_trafficControl만 허용하고 6바이트 DAS_road는 차단합니다. 페달 개입 후 제어 해제·재진입과 새 표본이 필요하며 다른 차종은 무시합니다.
++<!-- CARROT:SECTION:END USAGE -->
++
++<!-- CARROT:SECTION:BEGIN REFERENCE -->
++실차 CAN·진행 방향 관련성·임시 2m 정지 여유를 폐쇄 시험장에서 확인해야 합니다. 가까운 빨간불은 제동 능력을 넘을 수 있고 0.5초 신호 상실·목표 불일치는 인계와 최종 제어 해제인 soft-disable을 요청하므로 운전자가 제동해야 합니다. Panda 권한 추가나 도로 검증이 아닙니다. 상세: 소스 저장소 docs/user/ko/tesla.md.
++<!-- CARROT:SECTION:END REFERENCE -->
+ <!-- CARROT:MANUAL:END TeslaCanTrafficStop -->
+--- a/ZH-特斯拉-CAN-红灯停车.md
++++ b/ZH-特斯拉-CAN-红灯停车.md
+@@ -28,3 +28,15 @@
+ <!-- CARROT:MANUAL:BEGIN TeslaCanTrafficStop -->
+-<!-- CARROT:REVIEW reviewed-for="" -->
++<!-- CARROT:REVIEW reviewed-for="046215718bed37d52f0c6633e5d551de2ff163be2a341b1cb647fab8b5f803dc" reviewed-at="2026-11-06T09:00:00Z" -->
++
++<!-- CARROT:SECTION:BEGIN BEHAVIOR -->
++开启后仅在 Model 3/Y 实际 openpilot 纵向激活时补充停车，关闭保留原行为。3次不同红灯跨越0.2秒且正停止线小于126米，在 ACC/blended 添加约束；同一目标3次连续绿灯跨越0.5秒，仅解除此约束。CAN 停车期间 blended 临时使用 ACC 求解，保留更强模型制动，解除后恢复原模式。
++<!-- CARROT:SECTION:END BEHAVIOR -->
++
++<!-- CARROT:SECTION:BEGIN USAGE -->
++修改后重启，独立于打灯、数据共享及信号辅助。仅接受严格8字节、米制、视觉来源 APP_trafficControl，拒绝6字节 DAS_road。踩踏板后需退出并重新接入、等待新观测；其他车型忽略此开关。
++<!-- CARROT:SECTION:END USAGE -->
++
++<!-- CARROT:SECTION:BEGIN REFERENCE -->
++先在封闭场地核对原始 CAN、行驶方向适用性及暂定2米停车余量。近距离变红可能超出制动能力；信号超过0.5秒未更新或目标跳变会请求接管和最终解除控制的软退出，驾驶员必须制动。不增加 Panda 权限，不代表道路验收。详见源码仓库 docs/user/zh/tesla.md。
++<!-- CARROT:SECTION:END REFERENCE -->
+ <!-- CARROT:MANUAL:END TeslaCanTrafficStop -->

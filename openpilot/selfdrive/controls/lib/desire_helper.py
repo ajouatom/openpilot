@@ -10,6 +10,7 @@ from openpilot.selfdrive.carrot.bluetooth.physical import HOLD_PATH
 from openpilot.selfdrive.controls.lib.desire_lib.boundary_indicator import BoundaryIndicator
 from openpilot.selfdrive.controls.lib.desire_lib.indicator_observer import ModelIndicator
 from openpilot.selfdrive.controls.lib.desire_lib.assistant_lane import AssistantLane
+from openpilot.selfdrive.controls.lib.desire_lib.tesla_turn import TeslaTurnJourney
 
 from openpilot.selfdrive.controls.lib.desire_lib.constants import (
   LaneChangeState, LaneChangeDirection, TurnDirection,
@@ -98,15 +99,11 @@ class DesireHelper:
     self._auto_app_direction = BLINKER_NONE
     self._auto_app_wait = 0.0
     self._auto_app_deadline = 0.0
-    self._auto_turn_consumed = False
     self._auto_atc_type = ""
     self._driver_signal_counts = None
     self._manual_signal_direction = BLINKER_NONE
     self._manual_signal_grace = 0.0
-    self._auto_turn_direction = LaneChangeDirection.none
-    self._auto_turn_started = 0.0
-    self._auto_turn_peak_angle = 0.0
-    self._auto_turn_settled = 0.0
+    self.auto_turn_journey = TeslaTurnJourney()
 
     # keep pulse
     self.keep_pulse_timer = 0.0
@@ -380,8 +377,8 @@ class DesireHelper:
   # ─────────────────────────────────────────────
   # main update
   # ─────────────────────────────────────────────
-  def update(self, carstate, modeldata, lateral_active, lane_change_prob, carrotMan, radarState, *, indicator_valid=False, indicator_curvature=None,
-             assistant_valid=False):
+  def update(self, carstate, modeldata, lateral_active, lane_change_prob, carrotMan, radarState, *,
+             indicator_valid=False, indicator_curvature=None, assistant_valid=False, turn_hold_allowed=False, turn_pose=None):
     self.frame += 1
     self._update_params_periodic()
     if self.boundary_indicator_supported:
@@ -793,7 +790,8 @@ class DesireHelper:
       self.desire = DESIRES[self.lane_change_direction][self.lane_change_state]
     self.lever_turn = lever_decided_turn and self.turn_direction != TurnDirection.none
     if self.tesla_auto_signals:
-      self._update_auto_signal(carstate, modeldata, carrotMan, lateral_active, atc_enabled, atc_st, driver_st, prev_lane_change_state)
+      self._update_auto_signal(carstate, carrotMan, lateral_active, atc_enabled, atc_st, driver_st, prev_lane_change_state,
+                               turn_hold_allowed, turn_pose)
     if self.tesla_auto_signals and (self.lane_change_state == LaneChangeState.off or self._auto_lane_completed):
       self._auto_app_direction = BLINKER_NONE
 
@@ -832,49 +830,10 @@ class DesireHelper:
         self.auto_turn_signal_lane_change = True
     return self.desire
 
-  def _update_auto_turn_geometry(self, carstate, modeldata):
-    if self._auto_turn_direction == LaneChangeDirection.none:
-      return
-    # Cap'n Proto lists support iteration and integer indexing, but not slicing.
-    rates = list(getattr(getattr(modeldata, "orientationRate", None), "z", ()))
-    headings = list(getattr(getattr(modeldata, "orientation", None), "z", ()))
-    signed_angle = getattr(carstate, "steeringAngleDeg", float("nan"))
-    angle = abs(signed_angle)
-    if (len(rates) < 16 or len(headings) < 16 or
-        not all(math.isfinite(v) for v in (*rates[:16], *headings[:16], angle, carstate.vEgo))):
-      if self._auto_turn_started < 0.3:
-        self._auto_turn_started = 0.0
-      self._auto_turn_settled = 0.0
-      return
-    moving = carstate.vEgo > 1.0
-    turn_sign = 1 if self._auto_turn_direction == LaneChangeDirection.left else -1
-    if moving and signed_angle * turn_sign > 20 and rates[5] * turn_sign > 0.1:
-      self._auto_turn_started = min(0.3, self._auto_turn_started + DT_MDL)
-      self._auto_turn_peak_angle = max(self._auto_turn_peak_angle, angle)
-    elif self._auto_turn_started < 0.3:
-      self._auto_turn_started = 0.0
-    # This lamp-only completion must not inherit the steering FSM's early
-    # turn-disable heuristic, nor mistake a stopped/slow corner for straight.
-    settled = (self._auto_turn_started >= 0.3 and moving and
-               angle <= min(20, self._auto_turn_peak_angle * 0.25) and
-               max(abs(v) for v in rates[:16]) < 0.05 and abs(headings[15] - headings[5]) < 0.06)
-    self._auto_turn_settled = self._auto_turn_settled + DT_MDL if settled else 0.0
-    if self._auto_turn_settled >= 1.0:
-      self._auto_turn_consumed = True
-      self._auto_turn_direction = LaneChangeDirection.none
-
-  def _update_auto_signal(self, carstate, modeldata, carrot_man, lateral_active, atc_enabled, atc_st, driver_st, previous):
+  def _update_auto_signal(self, carstate, carrot_man, lateral_active, atc_enabled, atc_st, driver_st, previous,
+                          turn_hold_allowed, turn_pose):
     direction = LaneChangeDirection.none
-    turn_type = not self._auto_app_direction and self.atc_type in ("turn left", "turn right", "turn left prepare", "turn right prepare")
-    navigation_direction = (LaneChangeDirection.left if turn_type and self.atc_type in ("turn left", "turn left prepare")
-                            else LaneChangeDirection.right if turn_type else LaneChangeDirection.none)
-    turn_handoff = self.atc_type in ("turn left", "turn right") and self._auto_atc_type == self.atc_type + " prepare"
     if self.atc_type != self._auto_atc_type:
-      if navigation_direction not in (LaneChangeDirection.none, self._auto_turn_direction):
-        self._auto_turn_direction = LaneChangeDirection.none
-        self._auto_turn_started = self._auto_turn_peak_angle = self._auto_turn_settled = 0.0
-      if self._auto_turn_direction == LaneChangeDirection.none:
-        self._auto_turn_consumed = False
       self._auto_lane_completed = False
     self._auto_atc_type = self.atc_type
     if previous == LaneChangeState.laneChangeFinishing and self.lane_change_state != previous:
@@ -884,12 +843,18 @@ class DesireHelper:
     if ((self.carrot_lane_change_count > 0 or self._auto_app_direction) and previous == LaneChangeState.off and
         self.lane_change_state == LaneChangeState.preLaneChange):
       self._auto_lane_completed = False
-    self._update_auto_turn_geometry(carstate, modeldata)
-    permitted = (self.tesla_auto_signals and lateral_active and carstate.canValid and not carstate.trailerConnected and
+    common = (self.tesla_auto_signals and carstate.canValid and not carstate.trailerConnected and
                  not getattr(carstate, "vehicleSensorsInvalid", False) and
                  str(getattr(carstate, "gearShifter", "drive")) == "drive" and carstate.turnSignalDriverValid and
                  not driver_st and not self._manual_signal_direction and
                  not (carstate.leftBlinker and carstate.rightBlinker) and self.desire_disable_count == 0)
+    stopped_hold = (self.auto_turn_journey.direction and turn_hold_allowed and getattr(carstate, "standstill", False) and
+                    math.isfinite(carstate.vEgo) and abs(carstate.vEgo) < .1 and self.auto_signal_request_id and
+                    getattr(carstate, "autoTurnSignalReadyRequestId", 0) == self.auto_signal_request_id)
+    turn_desire = (1 if self.desire == log.Desire.turnLeft else 2 if self.desire == log.Desire.turnRight else 0) if atc_enabled else 0
+    direction = self.auto_turn_journey.update(time.monotonic(), carstate, turn_pose, self.atc_type,
+      getattr(carrot_man, "xDistToTurn", None), turn_desire, common and (lateral_active or stopped_hold), lateral_active)
+    permitted = common and lateral_active
     if not permitted or self.lane_change_state == LaneChangeState.off or self._auto_lane_completed:
       if not permitted and self._auto_lane_direction != LaneChangeDirection.none:
         self._auto_lane_completed = True
@@ -898,31 +863,13 @@ class DesireHelper:
           (self.lane_change_state == LaneChangeState.preLaneChange or previous == LaneChangeState.preLaneChange)):
       # The existing FSM owns the maneuver, including a bounded App preparation wait.
       self._auto_lane_direction = LaneChangeDirection.left if atc_st == BLINKER_LEFT else LaneChangeDirection.right
-    if permitted:
-      if (not self._auto_turn_consumed and self._auto_turn_direction != LaneChangeDirection.none and
-          (navigation_direction == self._auto_turn_direction or
-           (self.atc_type in ("", "none", "none prepare", "straight", "straight prepare") and self._auto_turn_started >= 0.3))):
-        direction = self._auto_turn_direction
-      elif atc_enabled and self.turn_direction != TurnDirection.none and not self._auto_turn_consumed:
-        direction = LaneChangeDirection.left if self.turn_direction == TurnDirection.turnLeft else LaneChangeDirection.right
-      elif self._auto_lane_direction != LaneChangeDirection.none:
+    if permitted and not direction and not self.auto_turn_journey.consumed:
+      if self._auto_lane_direction != LaneChangeDirection.none:
         direction = self._auto_lane_direction
-      elif (turn_handoff and not self._auto_turn_consumed and self.atc_active != 2 and not self.blinker_ignore and
-            self.auto_signal_direction == (LaneChangeDirection.left if self.atc_type == "turn left" else LaneChangeDirection.right)):
-        # ATC suppresses maneuver changes for one frame, not an already requested same-direction lamp.
-        direction = self.auto_signal_direction
-      elif (not self._auto_turn_consumed and not self._auto_lane_completed and self.atc_active != 2 and
-            not self.blinker_ignore and getattr(carrot_man, "xTurnInfo", 0) in (1, 2) and
-            self.atc_type in ("turn left prepare", "turn right prepare", "atc left", "atc right") and
+      elif (not self._auto_lane_completed and self.atc_active != 2 and not self.blinker_ignore and
+            self.atc_type in ("atc left", "atc right") and getattr(carrot_man, "xTurnInfo", 0) in (1, 2) and
             0 < getattr(carrot_man, "xDistToTurn", 0) <= min(250, max(40, carstate.vEgo * 8 + 20))):
         direction = LaneChangeDirection.left if carrot_man.xTurnInfo == 1 else LaneChangeDirection.right
-      if direction != LaneChangeDirection.none and turn_type and not self._auto_turn_consumed:
-        if direction != self._auto_turn_direction:
-          self._auto_turn_started = self._auto_turn_peak_angle = self._auto_turn_settled = 0.0
-        self._auto_turn_direction = direction
-    if direction == LaneChangeDirection.none and self._auto_turn_direction != LaneChangeDirection.none:
-      self._auto_turn_consumed = True
-      self._auto_turn_direction = LaneChangeDirection.none
     if direction != LaneChangeDirection.none and direction != self.auto_signal_direction:
       self._auto_signal_counter += 1
     self.auto_signal_direction = direction

@@ -13,7 +13,8 @@ ISOLATE_SEC = 12.0  # Keep delayed lamp feedback out of automatic steering.
 
 
 class BoundaryIndicator:
-  def __init__(self, journal=None):
+  def __init__(self, journal=None, *, lane_admission=adjacent_lane):
+    self.lane_admission = lane_admission
     self.journal = journal if isinstance(journal, dict) else {}
     self.initialized = False
     self.previous = None
@@ -88,7 +89,7 @@ class BoundaryIndicator:
     if now < self.block_until or (self.blocked and not dark):
       self._reset_geometry()
       # Preserve the same fresh edge after torque release, never replay a timer.
-      if not 0 <= now - self.request_time < .2 or not adjacent_lane(cs, md, self.request_direction, now):
+      if not 0 <= now - self.request_time < .2 or not self.lane_admission(cs, md, self.request_direction, now):
         self.request_direction = 0
       return
     self.request_direction = 0
@@ -118,7 +119,7 @@ class BoundaryIndicator:
         return
       self.rates = [0.5 * self.rates[i] + 0.5 * (prev_y[i] - y[i]) / dt for i in (0, 1)]
       for i in (0, 1):
-        self.lane_since[i] = (now if self.lane_since[i] is None else self.lane_since[i]) if adjacent_lane(cs, md, i + 1, now) else None
+        self.lane_since[i] = (now if self.lane_since[i] is None else self.lane_since[i]) if self.lane_admission(cs, md, i + 1, now) else None
       direction = (1 if cs.steeringTorque > 0 else 2 if cs.steeringTorque < 0 else 0) if cs.steeringPressed else 0
       if direction != self.intent:
         self.intent, self.intent_since = direction, now
