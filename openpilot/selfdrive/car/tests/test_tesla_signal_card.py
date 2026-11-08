@@ -178,7 +178,8 @@ def test_production_card_loop_lamp_observations_preserve_controls(direction, gat
     return car.CarControl.Actuators.new_message().as_reader(), []
 
   stages = ("apply", "sendcan", "total")
-  card = NS(spas_signals=NS(enabled=False), native_voice_indicator=None, initialized_prev=True,
+  card = NS(spas_signals=NS(enabled=False), aprk_diag=NS(busy=False, supported=False), native_voice_indicator=None,
+            initialized_prev=True,
             params=NS(get_bool=lambda name: gate == "dashcam" and name == "ImpactDashcamReboot"),
             sm=sm, CI=NS(apply=apply), pm=NS(send=lambda *args: sent.append(args)), tesla_signals=signals,
             lateral_startup=LateralStartupGate(ready=gate != "startup"),
