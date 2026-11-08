@@ -2,7 +2,7 @@
 import math
 
 from blink_boundary import BoundaryEvents
-from openpilot.selfdrive.controls.lib.desire_lib.boundary_lane import adjacent_lane
+from openpilot.selfdrive.controls.lib.desire_lib.boundary_lane import MANUAL_INDICATOR_MIN_SPEED, adjacent_lane
 
 
 def allowed(cs, cc, md, source, now, holding=False, tap_echo=False):
@@ -16,7 +16,9 @@ def allowed(cs, cc, md, source, now, holding=False, tap_echo=False):
     if holding:
       return True
     direction = {'left':1, 'right':2}.get(str(md.meta.observedIndicator), 0)
-    minimum_speed = 5/3.6 if source == 'manual_turn' else 10/3.6 if source == 'model_turn' else 30/3.6
+    minimum_speed = 10/3.6 if source == 'model_turn' else 30/3.6
+    if source in ('manual', 'manual_turn'):
+      minimum_speed = MANUAL_INDICATOR_MIN_SPEED
     return (direction != 0 and not cs.leftBlinker and not cs.rightBlinker and cs.vEgo >= minimum_speed and
             str(md.meta.laneChangeState) in ('off', 'preLaneChange') and
             (source in ('model_turn', 'manual_turn') or adjacent_lane(cs, md, direction, now)))

@@ -179,9 +179,12 @@ class ModelIndicator:
       # A new driver turn may be observed before other automatic sources rearm.
       # Lamp masking and the uninterrupted dark interval still apply.
       manual_turn_after = isolation.block_until - QUIET_SEC + MANUAL_TURN_QUIET_SEC
+      # At low speeds a lane-boundary relabel is common in parking areas. A
+      # manual turn uses measured steering and yaw independently of those lines.
+      lane_labels_ready = cs.vEgo < 30 / 3.6 or now >= isolation.relabel_until
       turn = self.manual_turn.update(now, cs, md.frameId, yaw_rate,
         allowed=(manual_turn_enabled and common and not busy and not cs.leftBlinker and not cs.rightBlinker and
-                 now >= manual_turn_after and now >= isolation.relabel_until and
+                 now >= manual_turn_after and lane_labels_ready and
                  isolation.dark_since is not None and now - isolation.dark_since >= 1.),
         following_curve=manual_turn_enabled and following_road_curve(md, cs.vEgo, yaw_rate))
       if turn is not None:

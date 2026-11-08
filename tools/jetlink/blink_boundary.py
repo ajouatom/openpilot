@@ -1,6 +1,7 @@
 """One fresh model-owned lamp-only edge through the existing USB2CAN tap path."""
 
 import math
+from openpilot.selfdrive.controls.lib.desire_lib.boundary_lane import MANUAL_INDICATOR_MIN_SPEED
 
 
 def vehicle_allowed(cs, direction):
@@ -10,7 +11,7 @@ def vehicle_allowed(cs, direction):
       and cs.canValid
       and str(cs.gearShifter) == 'drive'
       and math.isfinite(cs.vEgo)
-      and cs.vEgo >= 30 / 3.6
+      and cs.vEgo >= MANUAL_INDICATOR_MIN_SPEED
       # The fresh model-owned edge already proved recent driver intent. Requiring
       # pressed torque again here discards real crossings after torque release.
       and math.isfinite(cs.steeringTorque)

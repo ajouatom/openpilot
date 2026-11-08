@@ -56,6 +56,9 @@ def drive(direction=1, fault=None):
       cs.rightBlinker = True
     elif fault == 'duplicate_frame':
       md.frameId = 0
+    elif fault in ('slow_relabel', 'fast_relabel'):
+      cs.vEgo = (8 if fault == 'slow_relabel' else 35) / 3.6
+      isolation.relabel_until = now + 2.
     isolation.update(now, cs, md, enabled=False, valid=True, busy=False)
     detector.update(now, cs, md, valid=fault != 'invalid', lateral_active=False, desire_enabled=False,
                     path_enabled=False, busy=fault == 'busy', isolation=isolation,
@@ -87,6 +90,11 @@ def test_counterexamples_never_request(fault):
 @pytest.mark.parametrize('direction', [1, 2])
 def test_moderate_driver_turn_requests_indicator(direction):
   assert drive(direction, 'moderate_turn')[4]
+
+
+def test_low_speed_lane_relabels_do_not_hide_an_independent_manual_turn():
+  assert drive(fault='slow_relabel')[4]
+  assert not drive(fault='fast_relabel')[4]
 
 
 @pytest.mark.parametrize('last_lamp', [0., 1.75])

@@ -8,6 +8,7 @@ from openpilot.common.params import Params
 from openpilot.selfdrive.carrot.bluetooth.model import CommandReader, RUNTIME, read_json
 from openpilot.selfdrive.carrot.bluetooth.physical import HOLD_PATH
 from openpilot.selfdrive.controls.lib.desire_lib.boundary_indicator import BoundaryIndicator
+from openpilot.selfdrive.controls.lib.desire_lib.boundary_lane import MANUAL_INDICATOR_MIN_SPEED
 from openpilot.selfdrive.controls.lib.desire_lib.indicator_observer import ModelIndicator
 from openpilot.selfdrive.controls.lib.desire_lib.assistant_lane import AssistantLane
 from openpilot.selfdrive.controls.lib.desire_lib.tesla_turn import TeslaTurnJourney
@@ -38,7 +39,8 @@ class DesireHelper:
     journal = read_json(RUNTIME/'boundary-indicator.json', {}) if fingerprint or boundary_indicator_supported else {}
     journal = journal if isinstance(journal, dict) else {}
     self.boundary_indicator = BoundaryIndicator(
-      journal if boundary_indicator_supported or journal.get('voice_fingerprint') == fingerprint else None)
+      journal if boundary_indicator_supported or journal.get('voice_fingerprint') == fingerprint else None,
+      minimum_speed=MANUAL_INDICATOR_MIN_SPEED)
     self.model_indicator = ModelIndicator()
     self.model_desire_indicator_enabled = False
     self.model_path_indicator_enabled = False
