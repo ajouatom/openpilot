@@ -213,6 +213,7 @@ class VCruiseCarrot:
     self._lat_enabled = self.params.get_int("AutoEngage") > 0
     self._v_cruise_kph_at_brake = 0
     self._last_engaged_kph = 0  # set speed last used while engaged; RES+ engage returns to it
+    self.stock_adopt_kph = 0.  # card: stock SCC set speed while a restart hand-over waits (StockCruiseAdopt)
     self.cruise_state_available_last = False
 
     self._paddle_decel_active = False
@@ -400,6 +401,7 @@ class VCruiseCarrot:
       if not self.cruise_state_available_last:
         self._lat_enabled = True
         v_cruise_kph = self.v_ego_kph_set
+      v_cruise_kph = self._adopt_stock_cruise(CC, v_cruise_kph)
       if not self.CP.pcmCruise:
         # if stock cruise is completely disabled, then we can use our own set speed logic
         self.v_cruise_kph = np.clip(v_cruise_kph, self._cruise_speed_min, self._cruise_speed_max)
@@ -849,6 +851,16 @@ class VCruiseCarrot:
     self.road_limit_kph = road_limit_kph
     self.nRoadLimitSpeed_last = self.nRoadLimitSpeed
     return v_cruise_kph
+
+  def _adopt_stock_cruise(self, CC, v_cruise_kph):
+    # The device (re)started while the camera's stock SCC was cruising: take it over at the driver's stock set speed.
+    # Interlocks in _cruise_control still apply. Re-request every 0.5 s: engage needs a rising edge, and an early one
+    # can fall on a no-entry frame (e.g. still initializing).
+    if self.stock_adopt_kph <= 0 or CC.enabled:
+      return v_cruise_kph
+    if self.frame % 50 == 0:
+      self._cruise_control(1, -1, "Cruise on (stock SCC)", allow_cancel_state=True, manual=True)
+    return self.stock_adopt_kph
 
   def _cruise_control(self, enable, cancel_timer, reason, allow_cancel_state=False, manual=False):
     # Explicit HID button requests bypass automatic-engage preferences only;

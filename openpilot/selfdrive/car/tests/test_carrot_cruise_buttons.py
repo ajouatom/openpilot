@@ -790,3 +790,24 @@ def test_set_engage_starts_at_the_road_limit(v_ego, road_limit, expected):
   helper._prepare_buttons = lambda CS, v_cruise_kph, remote=None: (v_cruise_kph, ButtonType.decelCruise, False)
   helper.v_ego_kph_set, helper.nRoadLimitSpeed, helper._last_engaged_kph = v_ego, road_limit, 64
   assert helper._update_cruise_buttons(CS, CC, 64) == expected
+
+
+@pytest.mark.parametrize("frame, requested", [(50, True), (51, False)])
+def test_stock_cruise_adopt_engages_at_the_stock_set_speed(frame, requested):
+  helper, CS, CC = make_cruise_helper(70, 0, carrot_cruise_active=False, cruise_enabled=False)
+  helper.autoCruiseControl = 0  # restart hand-over does not depend on automatic engage settings
+  helper._cruise_cancel_state = True
+  helper.frame, helper.stock_adopt_kph = frame, 87.
+  assert helper._adopt_stock_cruise(CC, 70) == 87.
+  assert helper._activate_cruise == (1 if requested else 0)
+
+
+def test_stock_cruise_adopt_respects_interlocks_and_stops_once_engaged():
+  helper, CS, CC = make_cruise_helper(70, 0, carrot_cruise_active=False, cruise_enabled=False)
+  helper.frame, helper.stock_adopt_kph = 50, 87.
+  helper._steering_interlock_active = True
+  helper._adopt_stock_cruise(CC, 70)
+  assert helper._activate_cruise == 0
+  CC = car.CarControl(enabled=True)
+  helper._steering_interlock_active = False
+  assert helper._adopt_stock_cruise(CC, 70) == 70 and helper._activate_cruise == 0

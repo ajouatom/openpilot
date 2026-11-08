@@ -61,6 +61,7 @@ BUTTONS_DICT = {Buttons.RES_ACCEL: ButtonType.accelCruise, Buttons.SET_DECEL: Bu
 GearShifter = structs.CarState.GearShifter
 
 READY_COUNT_OK = 200
+STOCK_ADOPT_FRAMES = int(30. / DT_CTRL)  # restart hand-over window after the device starts
 CANFD_CAMERA_TX_MESSAGES = (
   ("LFA", "lfa", 121), ("LFA_ALT", "lfa_alt", 121),
   ("LFAHDA_CLUSTER", "lfahda_cluster", 121),
@@ -259,6 +260,12 @@ class CarState(CarStateBase):
     self.op_params.put_bool("HyundaiCameraSccHint", False)
 
     self.main_enabled = True if self.op_params.get_int("AutoEngage") == 2 else False
+    # StockCruiseAdopt: the device (re)started while the camera's stock SCC was cruising (e.g. it rebooted mid-drive).
+    # Keep stock driving and engage openpilot at the stock set speed instead of cutting it off with ACCMode 0.
+    self.stock_adopt_pending = (bool(CP.flags & HyundaiFlags.CANFD) and bool(CP.flags & HyundaiFlags.CAMERA_SCC)
+                                and CP.openpilotLongitudinalControl and self.op_params.get_int("StockCruiseAdopt") > 0)
+    self.stock_adopt_kph = 0.
+    self.stock_adopt_frames = 0
     self.pedal_interceptor_params = get_pedal_interceptor_params(CP)
     self.pedal_interceptor_state = PedalInterceptorState() if self.pedal_interceptor_params is not None else None
     self.pedal_interceptor_cruise_blocked = True
@@ -386,6 +393,23 @@ class CarState(CarStateBase):
     if (self.CP.openpilotLongitudinalControl and not self.CP.flags & HyundaiFlags.CAMERA_SCC
         and self.MainMode_ACC and not self.manual_main_off_latched):
       self.main_enabled = True
+
+  def _update_stock_adopt(self, camera_scc_seen, stock_set_speed_ms):
+    self.stock_adopt_kph = 0.
+    if not self.stock_adopt_pending:
+      return
+    self.stock_adopt_frames += 1
+    if self.stock_adopt_frames > STOCK_ADOPT_FRAMES:
+      self.stock_adopt_pending = False  # too late to be a restart hand-over: normal startup
+      return
+    if not camera_scc_seen:
+      return
+    if not (self.MainMode_ACC and self.ACCMode in (1, 2)):  # 1 enabled, 2 driver override (gas)
+      self.stock_adopt_pending = False  # stock is not cruising: normal startup
+      return
+    self.main_enabled = True
+    self.manual_main_off_latched = False
+    self.stock_adopt_kph = stock_set_speed_ms * CV.MS_TO_KPH
 
   def _update_camera_scc_hint(self, cp_cam, canfd):
     if self.camera_scc_hint_enabled and not self.camera_scc_hint:
@@ -1537,6 +1561,7 @@ class CarState(CarStateBase):
       self.MainMode_ACC = cp_cam.vl["SCC_CONTROL"]["MainMode_ACC"] == 1
       self.ACCMode = cp_cam.vl["SCC_CONTROL"]["ACCMode"]
       self.LFA_ICON = cp_cam.vl["LFAHDA_CLUSTER"]["HDA_LFA_SymSta"]
+      self._update_stock_adopt(0x1A0 in cp_cam.seen_addresses, cp_cam.vl["SCC_CONTROL"]["VSetDis"] * speed_factor)
     self._update_canfd_main_enabled(cruise_button, main_button_released)
     # CAN FD cars enable on main button press, set available if no TCS faults preventing engagement
     ret.cruiseState.available = self.main_enabled and self.controls_ready_count >= READY_COUNT_OK #cp.vl["TCS"]["ACCEnable"] == 0

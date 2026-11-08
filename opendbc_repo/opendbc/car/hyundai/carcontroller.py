@@ -878,10 +878,15 @@ class CarController(CarControllerBase):
             can_sends.extend(hyundaicanfd.create_fca_warning_light(self.CP, self.packer, self.CAN, self.frame))
         if self.frame % 2 == 0:
           if self.CP.flags & HyundaiFlags.CAMERA_SCC.value:
-            msg, self.accel_value_last = hyundaicanfd.create_acc_control_scc2(
-              self.packer, self.CAN, CC.enabled, self.accel_value_last, accel, stopping, CC.cruiseControl.override,
-              set_speed_in_units, hud_control, self.hyundai_jerk, CS, self.canfd_stopping, hud_lateral=hud_lateral,
-            )
+            if CC.enabled:
+              CS.stock_adopt_pending = False
+            msg = None
+            # StockCruiseAdopt: send nothing, so panda keeps forwarding the camera's cruising SCC until openpilot engages
+            if not getattr(CS, "stock_adopt_pending", False):
+              msg, self.accel_value_last = hyundaicanfd.create_acc_control_scc2(
+                self.packer, self.CAN, CC.enabled, self.accel_value_last, accel, stopping, CC.cruiseControl.override,
+                set_speed_in_units, hud_control, self.hyundai_jerk, CS, self.canfd_stopping, hud_lateral=hud_lateral,
+              )
             if msg is not None:
               can_sends.append(msg)
             can_sends.extend(hyundaicanfd.create_tcs_messages(self.packer, self.CAN, CS)) # for sorento SCC radar...
