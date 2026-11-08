@@ -557,6 +557,9 @@ class CarrotPlanner:
     # A moving lead is not a reason to skip the light during a paddle stop: without a lead gate the first red comes
     # ~78 m before the stop instead of ~3-26 m (02_logs/measurements.md §44). The MPC still keeps the lead.
     paddle_hint = self._paddle_stop and v_cruise_kph == 0  # card still asks for the stop (no hand-off yet)
+    if paddle_hint:
+      # A paddle after the gas is a fresh stop request: drop the 10 s red-ignore the gas started (§51 85 18:49:59).
+      self.traffic_starting_count = 0
     paddle_moving_lead = self._paddle_stop and radarstate.leadOne.status and getattr(radarstate.leadOne, 'vLead', 0.) > 1.0
 
     v_cruise_kph = self.cruise_eco_control(v_ego_cluster_kph, v_cruise_kph)

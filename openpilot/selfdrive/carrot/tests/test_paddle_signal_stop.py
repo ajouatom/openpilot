@@ -124,3 +124,18 @@ def test_priority_off_keeps_the_stop_on_the_spot():
   p.paddleSignalPriority = False
   run(p, sm, 0.)
   assert p.v_cruise == 0
+
+
+def test_paddle_after_gas_cancels_the_red_ignore():
+  sm = red_scene()
+  sm['radarState'].leadOne = NS(status=False, dRel=0., vLead=0.)
+  p = planner()
+  run(p, sm, 80.)
+  assert p.xState.name == 'e2eStop'
+  sm['carState'].gasPressed = True
+  run(p, sm, 80., 1)  # gas starts the 10 s red-ignore
+  sm['carState'].gasPressed = False
+  run(p, sm, 80.)
+  assert p.xState.name == 'e2eCruise'  # red still ignored without the paddle
+  run(p, sm, 0.)
+  assert p.xState.name == 'e2eStop'
