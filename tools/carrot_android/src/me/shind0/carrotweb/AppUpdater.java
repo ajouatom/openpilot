@@ -2,6 +2,8 @@ package me.shind0.carrotweb;
 
 import android.app.Activity;
 import android.app.AlertDialog;
+import android.content.ClipData;
+import android.content.ClipboardManager;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageInfo;
@@ -56,7 +58,33 @@ public final class AppUpdater {
     options.addView(autoVoice); options.addView(direct);
     new AlertDialog.Builder(activity).setTitle(label).setView(options).setMessage(UiText.get("폰 직접 듣기는 차로변경과 깜박이 설정 열기를 처리합니다. 질문은 기본 음성비서에서 다시 말해 주세요. 직접 듣기를 끄면 미니창으로 시작합니다.\n\n업데이트 설치는 주차 후 진행하세요.", "Direct listening handles lane requests and turn signal settings. Repeat questions in the default assistant. Turn off direct listening to start in the assistant overlay.\n\nInstall updates while parked."))
       .setPositiveButton(available == null ? UiText.get("업데이트 확인", "Check for updates") : UiText.get("새 버전 설치", "Install update"), (d,w)->{ if (available==null) check(true); else offer(); })
+      .setNeutralButton(UiText.get("ChatGPT 맞춤 지침 복사", "Copy ChatGPT instructions"), (d,w)->copyChatGPTInstructions())
       .setNegativeButton(UiText.get("닫기", "Close"),null).show();
+  }
+  private void copyChatGPTInstructions() {
+    String prompt = UiText.get(
+      "운전이나 차량 설정에 관한 대화에서 내가 말하는 ‘당근’은 당근파일럿(CarrotAssist)을 뜻해. 당근파일럿 설정을 찾거나 바꿔 달라고 하거나, ‘왼쪽으로 차로 변경해’처럼 지금 실행할 운전 명령을 내리면 연결된 CarrotAssist 도구를 사용해 줘. 도구가 알려준 결과를 짧게 말해 줘.",
+      "When we talk about driving or vehicle settings, Carrot means CarrotPilot (CarrotAssist). When I ask you to find or change a CarrotPilot setting, or give a driving command such as “change lanes left”, use the connected CarrotAssist tool. Briefly report the result returned by the tool.");
+    boolean copied = false;
+    try {
+      ClipboardManager clipboard = activity.getSystemService(ClipboardManager.class);
+      if (clipboard != null) {
+        clipboard.setPrimaryClip(ClipData.newPlainText("CarrotAssist", prompt));
+        copied = true;
+      }
+    } catch (SecurityException ignored) {
+      // The selectable text below also works on phones that restrict clipboard access.
+    }
+    String steps = UiText.get(
+      "1. ChatGPT 앱에서 메뉴를 열고 프로필을 누르세요.\n2. 설정 → 개인 맞춤 설정(또는 ChatGPT 맞춤 설정) → 사용자 지정 지침을 여세요. 버전에 따라 ‘맞춤 지침’으로 표시돼요.\n3. 기존 지침이 있으면 그 아래에 붙여넣고 저장하세요.\n\n새 대화에서 “가속도 설정을 찾아줘”로 확인해 보세요.",
+      "1. Open the menu in ChatGPT and tap your profile.\n2. In Settings, open Personalization (or Customize ChatGPT), then Custom instructions.\n3. Paste below any existing instructions and save.\n\nTry “Find acceleration settings” in a new chat.");
+    AlertDialog guide = new AlertDialog.Builder(activity)
+      .setTitle(copied ? UiText.get("맞춤 지침을 복사했어요", "Custom instructions copied")
+                       : UiText.get("아래 문구를 길게 눌러 복사하세요", "Press and hold the text to copy"))
+      .setMessage(steps + "\n\n“" + prompt + "”")
+      .setPositiveButton(UiText.get("확인", "Done"), null).show();
+    android.widget.TextView message = guide.findViewById(android.R.id.message);
+    if (message != null) message.setTextIsSelectable(true);
   }
   public void check(boolean manual) {
     if (busy || destroyed) return;

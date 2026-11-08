@@ -1,5 +1,7 @@
 # Repository memory
 
+- CarrotAssist 0.2.10 lets the user copy a Korean or English custom-instructions prompt from the device-name dialog. It shows how to append and save the prompt in ChatGPT. Copying does not modify the user’s ChatGPT account.
+
 - CarrotAssist 0.2.9 gives the Android recognizer left/right phrase hints and explains recognition failures. Keep the final-result confidence, direction agreement and age checks. No live maneuver or cabin accuracy measurement.
 
 - CarrotAssist 0.2.8 phone voice supports numbered results from its most recent search in the same listening session. Bind the position to the displayed row, recheck the parameter before committing, and announce its actual name.

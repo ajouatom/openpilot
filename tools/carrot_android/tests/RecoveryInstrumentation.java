@@ -160,10 +160,44 @@ public final class RecoveryInstrumentation extends Instrumentation {
         String visible=visibleText(screen.findViewById(android.R.id.content));
         check(visible.contains("Looking for Carrot")); check(visible.contains("Search again"));
         check(visible.contains("Enter IP address")); check(!visible.matches("(?s).*[가-힣].*"));
-        screen.finish();
       });
+      checkInstructionsCopy(screen, java.util.Locale.KOREAN);
+      checkInstructionsCopy(screen, java.util.Locale.ENGLISH);
+      runOnMainSync(screen::finish);
       result.putString("stream","Recovery WebView checks passed: " + checks + "\nEnglish native search screen verified.\n"); finish(-1,result);
     } catch (Throwable error) { result.putString("stream","FAILED: " + android.util.Log.getStackTraceString(error)); finish(0,result); }
+  }
+  private android.view.View windowText(String label, int flags) {
+    java.util.ArrayList<android.view.View> found = new java.util.ArrayList<>();
+    for (android.view.View root : android.view.inspector.WindowInspector.getGlobalWindowViews()) {
+      root.findViewsWithText(found, label, flags);
+    }
+    for (android.view.View view : found) if (view.isShown()) return view;
+    throw new AssertionError("Missing visible view: " + label);
+  }
+  private void checkInstructionsCopy(android.app.Activity screen, java.util.Locale locale) {
+    boolean korean = locale.equals(java.util.Locale.KOREAN);
+    runOnMainSync(() -> {
+      java.util.Locale.setDefault(locale);
+      windowText("Device name", android.view.View.FIND_VIEWS_WITH_CONTENT_DESCRIPTION).performClick();
+    });
+    waitForIdleSync();
+    runOnMainSync(() -> windowText(korean ? "ChatGPT 맞춤 지침 복사" : "Copy ChatGPT instructions",
+      android.view.View.FIND_VIEWS_WITH_TEXT).performClick());
+    waitForIdleSync();
+    runOnMainSync(() -> {
+      android.content.ClipboardManager manager = screen.getSystemService(android.content.ClipboardManager.class);
+      android.content.ClipData clip = manager.getPrimaryClip();
+      check(clip != null && clip.getItemCount() == 1);
+      String prompt = clip.getItemAt(0).getText().toString();
+      check(prompt.contains("CarrotAssist") && prompt.contains(korean ? "왼쪽으로 차로 변경해" : "change lanes left"));
+      android.widget.TextView message = (android.widget.TextView)windowText(korean ? "사용자 지정 지침" : "Personalization",
+        android.view.View.FIND_VIEWS_WITH_TEXT);
+      check(message.getText().toString().contains(prompt));
+      check(message.getText().toString().contains(korean ? "붙여넣고 저장" : "and save"));
+      windowText(korean ? "확인" : "Done", android.view.View.FIND_VIEWS_WITH_TEXT).performClick();
+    });
+    waitForIdleSync();
   }
   private void checkFloatingButton() {
     android.content.Context context = getTargetContext();

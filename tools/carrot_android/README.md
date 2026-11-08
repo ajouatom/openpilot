@@ -1,5 +1,7 @@
 # CarrotAssist Android public beta
 
+In 0.2.10, tap the top device name and **Copy ChatGPT instructions** to copy the localized prompt and see how to append it to your existing ChatGPT custom instructions.
+
 Version 0.2.9 sends balanced lane phrase hints to Android 13+ recognizers and explains rejected final transcripts. If speech-start timing is available, the freshness check excludes the wait before speech. Phone voice uses a device recognizer and command grammar. Mini voice uses the default assistant, which selects its own tools.
 
 CarrotAssist 0.2.8 supports ordinal follow-ups in the same phone voice session. After “Find acceleration settings”, say “Set the first one to 240”. The selected row sets the target, and the spoken response names the setting that was saved.
