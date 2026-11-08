@@ -44,6 +44,7 @@ const settingSearchRuntime = carrotSettingsRuntime.search;
 // restore the entries.
 const SETTING_OVERLAY_SEARCH_ENABLED = false;
 let settingInlineSearchQuery = "";
+let settingSearchTitlesFirst = false;
 let settingInlineSearchPreviousGroup = null;
 // Field behaviour (debounce, IME, clear button, slot mounting, labels) lives in
 // features/settings/search/inline.js; the page keeps the navigation that
@@ -583,7 +584,7 @@ function getSettingGroupLabel(group) {
 }
 
 function getSettingInlineSearchResults() {
-  return getSettingDerivedModel().searchItemEntries(settingInlineSearchQuery);
+  return getSettingDerivedModel().searchItemEntries(settingInlineSearchQuery, { preferTitle: settingSearchTitlesFirst });
 }
 
 function getSettingInlineSearchCountLabel() {
@@ -716,11 +717,17 @@ function restoreSettingInlineSearch(query = "") {
   settingValueRepository.invalidateGroup(SETTING_INLINE_SEARCH_GROUP);
 }
 
-async function applySettingInlineSearch(query = settingInlineSearchView.getQuery()) {
+async function applySettingInlineSearch(query = settingInlineSearchView.getQuery(), { preferTitle = false } = {}) {
   settingInlineSearchView.cancelPending();
   if (!SETTINGS || CURRENT_PAGE !== "setting" || !isCarrotSettingTabActive()) return;
   const nextQuery = String(query || "").trim();
-  if (nextQuery === settingInlineSearchQuery && CURRENT_GROUP === SETTING_INLINE_SEARCH_GROUP
+  const orderChanged = settingSearchTitlesFirst !== preferTitle;
+  settingSearchTitlesFirst = preferTitle;
+  if (orderChanged) {
+    const box = document.getElementById("settingInlineSearchResults");
+    if (box) delete box.dataset.renderedSearchQuery;
+  }
+  if (!orderChanged && nextQuery === settingInlineSearchQuery && CURRENT_GROUP === SETTING_INLINE_SEARCH_GROUP
     && !CURRENT_SETTING_DETAIL && isSettingInlineSearchSurfaceActive()) return;
   const wasSearching = CURRENT_GROUP === SETTING_INLINE_SEARCH_GROUP;
   settingInlineSearchQuery = nextQuery;
@@ -1691,6 +1698,20 @@ async function selectSettingSearchEntry(entry) {
   } catch (e) {
     showAppToast(e.message || "Search jump failed", { tone: "error" });
   }
+}
+
+async function findPhoneSettings(query) {
+  showPage("setting", true);
+  await loadSettings();
+  if (CURRENT_PAGE !== "setting" || document.hidden) return null;
+  await switchSettingTab("carrot");
+  settingInlineSearchView.setQuery(query);
+  await applySettingInlineSearch(query, { preferTitle: true });
+  if (!isSettingInlineSearchSurfaceActive() || settingInlineSearchQuery !== query) return null;
+  const { total, entries } = getSettingInlineSearchResults();
+  const item = entries[0]?.item;
+  const spokenTitle = title => (title || item?.name || "").split(/[:：]/, 1)[0].trim();
+  return { status: "found", total, firstKo: spokenTitle(item?.title), firstEn: spokenTitle(item?.etitle) };
 }
 
 // The paired assistant may navigate only to an actual setting available in this

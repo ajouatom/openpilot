@@ -1,6 +1,8 @@
 # CarrotAssist Android public beta
 
-Version 0.2.6 uses Android 12+ on-device speech recognition for direct Korean and English left/right lane requests and opening Automatic turn signals. The phone checks the visible Carrot Web page, greets and listens. No MCP connection is needed for this route. Motion uses only whole final imperatives, consistent alternatives, a high reported score or a fresh direction-specific confirmation when scores are absent, and the existing device drive grant and controller. Questions hand off to the default assistant, where the user repeats the question. Disable direct listening in device settings to use the default assistant first.
+Version 0.2.7 adds direct setting search and absolute integer writes. Say “Find acceleration settings” or “가속도 설정을 찾아줘”. For writes, enable setting access in Carrot Web Tools and say “가속도 설정 0을 240으로 바꿔줘”. The app requires one exact catalog match and consistent final recognition. The device validates the value and verifies storage. No ChatGPT subscription or MCP registration is required.
+
+The app uses Android 12+ on-device speech recognition for direct Korean and English left/right lane requests and opening Automatic turn signals. The phone checks the visible Carrot Web page, greets and listens. No MCP connection is needed for this route. Motion uses only whole final imperatives, consistent alternatives, a high reported score or a fresh direction-specific confirmation when scores are absent, and the existing device drive grant and controller. Questions hand off to the default assistant, where the user repeats the question. Disable direct listening in device settings to use the default assistant first.
 
 당근파일럿 AI 조수. Display name: CarrotAssist.
 

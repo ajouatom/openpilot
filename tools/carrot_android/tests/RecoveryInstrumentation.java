@@ -95,17 +95,19 @@ public final class RecoveryInstrumentation extends Instrumentation {
           check(target.startsWith(next + "/api/assistant/connection/")); // never contact the relay
           if (target.endsWith("/proof")) {
             JSONObject proofs = new JSONObject();
-            if (knownDevice) proofs.put("drive",ConnectionPolicy.proof(grant,body.getString("nonce"),old,next));
+            if (knownDevice) for (String role : new String[]{"drive","settings"})
+              proofs.put(role,ConnectionPolicy.proof(grant,body.getString("nonce"),old,next));
             return new JSONObject().put("proofs",proofs);
           }
           check(target.endsWith("/move")); moves[0]++; return new JSONObject();
         });
         storage(direct,old,bundle(browser).put(ConnectionRecovery.SESSION,JSONObject.NULL));
-        storage(direct,next,bundle(browser).put(ConnectionRecovery.SESSION,JSONObject.NULL).put(ConnectionRecovery.key("drive"),JSONObject.NULL));
+        storage(direct,next,bundle(browser).put(ConnectionRecovery.SESSION,JSONObject.NULL).put(ConnectionRecovery.key("drive"),JSONObject.NULL).put(ConnectionRecovery.key("settings"),JSONObject.NULL));
         check(run(direct,old).isEmpty());
         JSONObject restored = storage(direct,next,null);
         check(restored.isNull(ConnectionRecovery.SESSION));
         check(knownDevice ? grant.equals(restored.optString(ConnectionRecovery.key("drive"))) : restored.isNull(ConnectionRecovery.key("drive")));
+        check(knownDevice ? grant.equals(restored.optString(ConnectionRecovery.key("settings"))) : restored.isNull(ConnectionRecovery.key("settings")));
         check(moves[0] == (knownDevice ? 1 : 0));
         runOnMainSync(direct::cancel);
       }

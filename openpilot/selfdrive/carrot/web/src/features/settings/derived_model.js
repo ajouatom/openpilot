@@ -222,7 +222,7 @@ export function createSettingsDerivedModel(options = {}) {
   // Include detail children and their parent context, so a feature search also
   // finds controls normally tucked inside that feature's detail screen.
   let inlineSearchIndex = null;
-  function searchItemEntries(query) {
+  function searchItemEntries(query, { preferTitle = false } = {}) {
     const keywords = settingSearchKeywords(query);
     if (!keywords.length) return { entries: [], total: 0 };
     if (!inlineSearchIndex) {
@@ -245,6 +245,7 @@ export function createSettingsDerivedModel(options = {}) {
           .filter(Boolean).join("\n").normalize("NFC").toLowerCase();
         return {
           entry,
+          title: [item.title, item.etitle, item.ctitle].filter(Boolean).join("\n").normalize("NFC").toLowerCase(),
           haystack,
           // Precomputed Korean initial-consonant projection (초성 검색).
           chosung: extractSettingChosung(haystack),
@@ -253,6 +254,11 @@ export function createSettingsDerivedModel(options = {}) {
     }
     const matches = inlineSearchIndex.filter(({ haystack, chosung }) =>
       settingSearchMatches(haystack, chosung, keywords));
+    if (preferTitle) {
+      // Read a matching setting title first, ahead of incidental hits in long descriptions.
+      const rank = row => Number(settingSearchMatches(row.title, '', keywords));
+      matches.sort((a, b) => rank(b) - rank(a));
+    }
     return { entries: matches.slice(0, 20).map(({ entry }) => entry), total: matches.length };
   }
 

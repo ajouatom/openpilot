@@ -2,6 +2,8 @@
 
 [한국어](../ko/settings.md)
 
+With **phone voice** in CarrotAssist 0.2.7, say “Find acceleration settings.” After granting setting access once on the device, say “Set acceleration setting zero to 240.” Direct commands work without ChatGPT or MCP registration. [Phone voice instructions](carrot-assist.md)
+
 Android [CarrotAssist](carrot-assist.md) uses ChatGPT to find, explain and open settings. Separate device and ChatGPT authorization enables live reads and changes. With relay0.7.3, a clear setting/value or adjustment command applies after bounds checks without another question. For example, “Set acceleration setting 0 to 240” produces a short result after verified storage. Ambiguous requests and AI-recommended values require clarification; out-of-range values are rejected. Supported driving settings follow the same procedure while driving. Only initial authorization requires stationary/disengaged state; each setting keeps its existing activation timing.
 
 ChatGPT action approval is separate from device permission. Users who do not want repeated prompts can choose **ChatGPT Settings → Plugins → CarrotAssist → Permissions → Allow all actions** in their own account. This covers all actions authorized for this plugin; CarrotAssist cannot select it automatically. If old confirmation instructions remain, use **Refresh tools → new conversation**, not a fresh pairing code. To talk while touching the web, start background voice in the full ChatGPT app and return to CarrotAssist using the [documented steps](carrot-assist.md).
