@@ -105,6 +105,7 @@ def hw_state_thread(end_event, hw_queue):
   prev_hw_state = None
 
   modem_version = None
+  modem_missing_count = 0
 
   while not end_event.is_set():
     # these are expensive calls. update every 10s
@@ -121,6 +122,11 @@ def hw_state_thread(end_event, hw_queue):
 
           if modem_version is not None:
             cloudlog.event("modem version", version=modem_version)
+          elif TICI and HARDWARE.get_device_type() == "tici":
+            modem_missing_count += 1
+            if modem_missing_count == 4:
+              cloudlog.event("restarting ModemManager")
+              os.system("sudo systemctl restart --no-block ModemManager")
 
         tx, rx = HARDWARE.get_modem_data_usage()
 

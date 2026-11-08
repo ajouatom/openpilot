@@ -4,7 +4,7 @@ import importlib.util
 
 from openpilot.cereal import car
 from openpilot.common.params import Params
-from openpilot.system.hardware import PC, TICI
+from openpilot.system.hardware import HARDWARE, PC, TICI
 from openpilot.system.manager.process import PythonProcess, NativeProcess, DaemonProcess
 
 try:
@@ -164,7 +164,7 @@ procs = [
   PythonProcess("radard", "openpilot.selfdrive.carrot.radar.radard_dpath", only_onroad),
   PythonProcess("radarcan", "openpilot.selfdrive.carrot.radar.radarcan", only_onroad),
   PythonProcess("hardwared", "openpilot.system.hardware.hardwared", always_run),
-  PythonProcess("modem", "openpilot.system.hardware.tici.modem", always_run, enabled=TICI),
+  PythonProcess("modem", "openpilot.system.hardware.tici.modem", always_run, enabled=TICI and HARDWARE.get_device_type() != "tici"),
   PythonProcess("tombstoned", "openpilot.system.tombstoned", always_run, enabled=not PC),
   PythonProcess("updated", "openpilot.system.updated.updated", enable_updated, enabled=not PC),
   #PythonProcess("uploader", "openpilot.system.loggerd.uploader", enable_connect),
