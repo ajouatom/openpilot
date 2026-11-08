@@ -171,7 +171,7 @@ Volkswagen's separate `SET` button sets current speed and `RES` restores the pre
 | ONNX Lane and BSD | `ShareData`, `OnnxBsdEnabled`, `OnnxLaneThreshold`, `OnnxLaneIntervalMs`, `OnnxBsdThreshold`, `OnnxBsdSmoothingMs`, `OnnxBsdIntervalMs` | Lane-type detection plus separately controlled camera BSD and tuning |
 | Centering | `PathOffset`, `CameraYawTrimDeg` | Path position and camera-yaw trim |
 | Steering feel | `SteerActuatorDelay`, `LatSmoothSec`, `LatSuspendAngleDeg`, `CustomSR`, `SteerRatioRate` | Timing, smoothing, suspension angle, and steering ratio |
-| [Lane change](lane-change.md) and automatic turn | `LaneChangeNeedTorque`, `LaneChangeDelay`, `LaneChangeBsd`, `LaneLineCheck`, `BlinkerLatchedTurn`, `LaneChangeLeverWait`, `AutoTurnControl`, `AutoTurnControlRightLaneChange`, `ManualLaneChangeIndicator`, `ModelDesireIndicator`, `ModelPathIndicator`, `AutoTurnControlSpeedTurn`, `AutoTurnControlTurnEnd`, `AutoTurnMapChange` | Lane-change entry conditions and ATC behavior |
+| [Lane change](lane-change.md) and automatic turn | `LaneChangeNeedTorque`, `LaneChangeDelay`, `LaneChangeBsd`, `LaneLineCheck`, `BlinkerLatchedTurn`, `LaneChangeLeverWait`, `AutoTurnControl`, `AutoTurnControlRightLaneChange`, `ManualLaneChangeIndicator`, `ManualTurnIndicator`, `ModelDesireIndicator`, `ModelPathIndicator`, `AutoTurnControlSpeedTurn`, `AutoTurnControlTurnEnd`, `AutoTurnMapChange` | Lane-change entry conditions and ATC behavior |
 | Lane mode | `LatMpcPathCost`, `LatMpcMotionCost`, `LatMpcAccelCost`, `LatMpcJerkCost`, `LatMpcSteeringRateCost`, `LatMpcInputOffset`, `UseLaneLineSpeed`, `UseLaneLineCurveSpeed`, `AdjustLaneOffset` | Lane-mode MPC weights and lane-line conditions |
 | Advanced torque | `LateralTorqueCustom`, `LateralTorqueAccelFactor`, `LateralTorqueFriction`, `LateralTorqueKpV`, `LateralTorqueKiV`, `LateralTorqueKf`, `LateralTorqueKd` | Custom torque-control gains |
 | Advanced torque, search only | `NNFF` | Neural-network feedforward for torque steering |
@@ -492,6 +492,8 @@ USB-CAN requests the initial blink; the existing vehicle indicator-hold function
 A hold-start request without confirmed lamp activation expires after four seconds, allowing the next button press to start a new request.
 
 `AutoTurnControlRightLaneChange` under ATC details adds to modes 1 and 2 and triggers the physical right indicator before a TBT right turn or right fork, at 10km/h or above and within the configured distance, until turning starts. It requires the supported USB2CAN indicator setup, a right lane, fresh OEM BSD and right-front gaps of at least 5 m both now and after three seconds; existing manual/Bluetooth lane-change behavior is unchanged. See [lane changes](lane-change.md).
+
+`ManualTurnIndicator` is a default-OFF, ATC-independent driver-turn indicator using driver steering and measured vehicle rotation. Parking maneuvers can also trigger. See [lane changes](lane-change.md) for admission, completion and validation limits.
 
 `AutoTurnControlRightLaneChange` remains the separate ATC distance add-on. `ManualLaneChangeIndicator` independently retains recent intent for up to 1.5s. The left side excludes centre lines using fresh white-line classification; the right requires at least 2.5m from the target boundary to the road edge. Outer-line probability is not required. It never requests automatic steering. See [lane changes](lane-change.md).
 

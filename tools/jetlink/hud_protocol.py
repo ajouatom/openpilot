@@ -179,6 +179,10 @@ class SnapshotBuilder:
 
 
 def encode_snapshot(record):
+  indicator = record.get('indicator_display')
+  if indicator and indicator.get('origin') == 'manual_turn':
+    # Older HUD bundles know the driver-indicator origin and turning reason.
+    record = dict(record, indicator_display=dict(indicator, origin='manual'))
   data = json.dumps(record, separators=(',', ':')).encode()
   if len(data) > 96 * 1024:
     # Optional signal metadata must not evict an existing camera or NAV image.

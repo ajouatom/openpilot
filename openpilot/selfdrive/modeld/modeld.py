@@ -585,6 +585,10 @@ def main(demo=False):
         sm.valid[k] and sm.alive[k] and 0 <= indicator_now-sm.recv_time[k] < .35
         for k in ('carState', 'carControl'))
       turn_hold_allowed, turn_pose = False, None
+      pose = sm['livePose']
+      indicator_yaw_rate = (pose.angularVelocityDevice.z if sm.valid['livePose'] and sm.alive['livePose'] and
+                            0 <= indicator_now-sm.recv_time['livePose'] < .2 and pose.inputsOK and pose.sensorsOK and
+                            pose.posenetOK and pose.angularVelocityDevice.valid else None)
       if DH.tesla_auto_signals:
         turn_hold_allowed, turn_pose = turn_signal_context(sm, sm['carState'], indicator_now,
           time.clock_gettime_ns(getattr(time, "CLOCK_BOOTTIME", time.CLOCK_MONOTONIC)),
@@ -592,6 +596,7 @@ def main(demo=False):
         turn_hold_allowed &= indicator_valid
       DH.update(sm['carState'], modelv2_send.modelV2, sm['carControl'].latActive, lane_change_prob, sm['carrotMan'], sm['radarState'],
                 indicator_valid=indicator_valid, indicator_curvature=sm['carControl'].actuators.curvature,
+                indicator_yaw_rate=indicator_yaw_rate,
                 assistant_valid=indicator_valid and sm.valid['radarState'] and sm.alive['radarState'] and
                 0 <= indicator_now-sm.recv_time['radarState'] < .35,
                 turn_hold_allowed=turn_hold_allowed, turn_pose=turn_pose)
@@ -619,6 +624,8 @@ def main(demo=False):
         preparation = None
       if DH.boundary_indicator_enabled and DH.boundary_indicator.episode:
         preparation = (DH.boundary_indicator.episode['direction'], 'manual')
+      if DH.manual_turn_indicator_enabled and DH.model_indicator.manual_turn.candidate:
+        preparation = DH.model_indicator.manual_turn.candidate
       modelv2_send.modelV2.meta.indicatorPrepareDirection = preparation[0] if preparation and not observation else 0
       modelv2_send.modelV2.meta.indicatorPrepareSource = preparation[1] if preparation and not observation else ''
       if boundary_observer is not None:

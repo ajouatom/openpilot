@@ -34,6 +34,7 @@ class DesireHelper:
     self.params = Params()
     self.boundary_indicator_supported = boundary_indicator_supported
     self.boundary_indicator_enabled = False
+    self.manual_turn_indicator_enabled = False
     journal = read_json(RUNTIME/'boundary-indicator.json', {}) if fingerprint or boundary_indicator_supported else {}
     journal = journal if isinstance(journal, dict) else {}
     self.boundary_indicator = BoundaryIndicator(
@@ -132,6 +133,7 @@ class DesireHelper:
       mode = self.params.get_int("AutoBlinkerControl")
       lamp_mode = mode in (1, 2) and not self.params.get_bool("CanfdBlinkerControl")
       self.boundary_indicator_enabled = lamp_mode and self.params.get_bool("ManualLaneChangeIndicator")
+      self.manual_turn_indicator_enabled = lamp_mode and self.params.get_bool("ManualTurnIndicator")
       self.model_desire_indicator_enabled = lamp_mode and self.params.get_bool("ModelDesireIndicator")
       self.model_path_indicator_enabled = lamp_mode and self.params.get_bool("ModelPathIndicator")
       # Low-speed TBT source waits for this ownership acknowledgement BEFORE
@@ -378,7 +380,8 @@ class DesireHelper:
   # main update
   # ─────────────────────────────────────────────
   def update(self, carstate, modeldata, lateral_active, lane_change_prob, carrotMan, radarState, *,
-             indicator_valid=False, indicator_curvature=None, assistant_valid=False, turn_hold_allowed=False, turn_pose=None):
+             indicator_valid=False, indicator_curvature=None, assistant_valid=False, turn_hold_allowed=False, turn_pose=None,
+             indicator_yaw_rate=None):
     self.frame += 1
     self._update_params_periodic()
     if self.boundary_indicator_supported:
@@ -395,7 +398,8 @@ class DesireHelper:
         desire_enabled=self.model_desire_indicator_enabled, path_enabled=self.model_path_indicator_enabled,
         busy=self.lane_change_state in (LaneChangeState.laneChangeStarting, LaneChangeState.laneChangeFinishing),
         isolation=self.boundary_indicator, manual_edge=self.boundary_indicator.request_direction, command_curvature=indicator_curvature,
-        feedback=read_json(HOLD_PATH, {}) if self.model_indicator.active else None)
+        feedback=read_json(HOLD_PATH, {}) if self.model_indicator.active else None,
+        manual_turn_enabled=self.manual_turn_indicator_enabled, yaw_rate=indicator_yaw_rate)
 
     elif self.boundary_indicator.blocked or not self.boundary_indicator.initialized:
       # Expire a voice-owned lamp mask without enabling PE-only geometry observation.

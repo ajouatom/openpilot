@@ -21,6 +21,16 @@ Measured boundary approach projects 0.3 seconds ahead to request indication earl
 Manual/model indication distinguishes its short one-touch echo only with matching request time, direction and stalk counters. Opposite input, a latched lever or receiver-detected driver intervention cancels. Lamp feedback preceding the completed-send response is remembered briefly; holding still requires the matching response. Same-direction physical input during the brief transmission interval cannot be uniquely distinguished from these fields alone.
 
 
+## Manual turn indicator (trial)
+
+`ManualTurnIndicator` is a separate option in the Lane Change (Auto Turn) settings group, OFF by default. It supports Ioniq 5 PE with a supported indicator adapter and `AutoBlinkerControl=1·2`. Driver observation operates independently of ATC, navigation and lateral-control activation. Its lamp feedback receives automatic-steering request isolation.
+
+Admission uses 5–60km/h, 0.15s of same-direction driver torque and up to 0.8s of remembered intent. The wheel must reach 45 degrees and increase by at least 25 degrees from intent onset. Same-direction vehicle rotation must reach 3 degrees/s and accumulate 1.5 degrees, followed by 0.15s confirmation. Each intent is tracked for at most four seconds. Recognized curved lane geometry agreeing with measured rotation suppresses admission.
+
+After a request, moving wheel return within ±15 degrees and rotation at most 3 degrees/s for 0.3s completes the indication. Opposite driver torque with the wheel crossing zero cancels it. A stop retains the hold, with a total 30s limit. Disabling the option, stale inputs, physical stalk intervention, opposite lamps or an executing lane change also ends the request. A subsequent request requires at least three seconds, one second of continuous lamp extinction and fresh steering evidence.
+
+The comma display labels the source as a manual driver turn. Existing USB HUD bundles receive the compatible driver-boundary category with the turning reason. Parking aisles, ramps and parking entry can also trigger. Unmarked bends and evasive movements can produce false indications. Recorded-input replay and physical lamp validation require separate evaluation. Apply with Git Pull and a full comma restart. Physical vehicle validation remains pending.
+
 ## Model indication (trial)
 
 `ModelDesireIndicator` and `ModelPathIndicator` are separate default-off options for Ioniq 5 PE with Jetson USB2CAN and `AutoBlinkerControl=1` or `2`. Initiation requires active lateral control. Their lamp feedback is not reused as a new automatic steering request.
