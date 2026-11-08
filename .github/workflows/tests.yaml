@@ -108,6 +108,7 @@ jobs:
           python -m pytest -o addopts='' -q \
             openpilot/selfdrive/controls/tests/test_tesla_traffic_stop_integration.py \
             openpilot/selfdrive/car/tests/test_tesla_three_finger.py \
+            openpilot/selfdrive/controls/tests/test_lateral_startup_control.py \
             openpilot/common/tests/test_params.py::test_always_lateral_manager_preserves_existing_default_and_saved_choice
       - name: Bosch provider regression tests
         run: |
