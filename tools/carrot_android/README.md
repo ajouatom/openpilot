@@ -1,5 +1,7 @@
 # CarrotAssist Android public beta
 
+Version 0.2.9 sends balanced lane phrase hints to Android 13+ recognizers and explains rejected final transcripts. If speech-start timing is available, the freshness check excludes the wait before speech. Phone voice uses a device recognizer and command grammar. Mini voice uses the default assistant, which selects its own tools.
+
 CarrotAssist 0.2.8 supports ordinal follow-ups in the same phone voice session. After “Find acceleration settings”, say “Set the first one to 240”. The selected row sets the target, and the spoken response names the setting that was saved.
 
 Version 0.2.7 adds direct setting search and absolute integer writes. Say “Find acceleration settings” or “가속도 설정을 찾아줘”. For writes, enable setting access in Carrot Web Tools and say “가속도 설정 0을 240으로 바꿔줘”. The app requires one exact catalog match and consistent final recognition. The device validates the value and verifies storage. No ChatGPT subscription or MCP registration is required.

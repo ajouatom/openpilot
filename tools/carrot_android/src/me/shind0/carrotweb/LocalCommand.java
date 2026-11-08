@@ -9,7 +9,7 @@ import java.util.regex.Pattern;
 public enum LocalCommand {
   LEFT, RIGHT, CLARIFY_LEFT, CLARIFY_RIGHT, CONFIRM_LEFT, CONFIRM_RIGHT, BLINKER_SETTINGS, QUESTION, STOP, UNRECOGNIZED, UNCERTAIN;
 
-  private static final String CHANGE = "(?:차로|차선)(?:를|을)?(?:변경|바꿔)(?:해|해줘|해주세요|줘|주세요)?";
+  private static final String CHANGE = "[,，]?(?:차로|차선)(?:를|을)?(?:(?:변경|바꿔)(?:해|해줘|해주세요|줘|주세요)?|변경(?:을)?(?:좀)?(?:해(?:줘|주세요)?|부탁해(?:요)?))";
   private static final Pattern LEFT_KO = Pattern.compile("(?:왼쪽|좌측|왼편)(?:으로|로)?" + CHANGE);
   private static final Pattern RIGHT_KO = Pattern.compile("(?:오른쪽|우측|오른편)(?:으로|로)?" + CHANGE);
   private static final Pattern SETTING = Pattern.compile("(?:깜박이|깜빡이|방향지시등)(?:자동제어|제어)?(?:관련)?설정(?:을)?(?:좀)?(?:열어|보여)(?:줘봐|줘|주세요)?");
@@ -36,9 +36,7 @@ public enum LocalCommand {
     if (alternatives == null || alternatives.isEmpty()) return UNRECOGNIZED;
     LocalCommand first = parse(alternatives.get(0));
     if (first != LEFT && first != RIGHT && first != CONFIRM_LEFT && first != CONFIRM_RIGHT) return first;
-    for (int i = 1; i < alternatives.size(); i++) {
-      if (parse(alternatives.get(i)) != first) return UNCERTAIN;
-    }
+    if (conflicting(alternatives)) return UNCERTAIN;
     if (scores == null || scores.length == 0 || scores[0] == -1f) {
       if (first == LEFT) return CLARIFY_LEFT;
       if (first == RIGHT) return CLARIFY_RIGHT;
@@ -46,6 +44,17 @@ public enum LocalCommand {
     }
     if (!(scores[0] >= MIN_DRIVE_CONFIDENCE && scores[0] <= 1)) return UNCERTAIN;
     return first;
+  }
+
+  static boolean conflicting(List<String> alternatives) {
+    LocalCommand first = parse(alternatives.get(0));
+    for (int i = 1; i < alternatives.size(); i++)
+      if (parse(alternatives.get(i)) != first) return true;
+    return false;
+  }
+
+  static boolean stale(long start, long speechStart, long end, long now) {
+    return now - (speechStart > 0 ? speechStart : start) > 10000 || end > 0 && now - end > 1500;
   }
 
   /** A bare yes cannot authorize movement. Challenges never survive pause, timeout or a different reply. */

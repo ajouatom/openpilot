@@ -1,5 +1,7 @@
 # Repository memory
 
+- CarrotAssist 0.2.9 gives the Android recognizer left/right phrase hints and explains recognition failures. Keep the final-result confidence, direction agreement and age checks. No live maneuver or cabin accuracy measurement.
+
 - CarrotAssist 0.2.8 phone voice supports numbered results from its most recent search in the same listening session. Bind the position to the displayed row, recheck the parameter before committing, and announce its actual name.
 
 - CarrotAssist 0.2.7 phone voice searches the visible device catalog and writes explicit absolute integer settings without a relay session. Use the existing same-origin setting grant, prepare/commit validation and device readback. Never convert a broad search, ambiguous name or conflicting numerical recognition into a write.

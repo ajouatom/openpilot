@@ -6,7 +6,7 @@ CarrotAssist discovers a Carrot device on the local network, opens its Carrot We
 
 ### Direct voice commands on the phone
 
-CarrotAssist 0.2.8 with updated Carrot Web can use Android 12+ on-device speech recognition when a recognizer and language model are available. Grant microphone permission once. Direct commands require no ChatGPT account, subscription or MCP registration. Free ChatGPT users and users without the MCP registration menu can use phone voice. Skip the pairing code. Fresh installations start with direct listening. Updating an app that was already in use preserves its previous mini voice behavior. Under the device name, enable **Listen for commands on this phone first** and **Start the voice assistant when Carrot Web connects**. The app greets you and listens. Tap the microphone to stop or restart listening.
+CarrotAssist 0.2.9 with updated Carrot Web can use Android 12+ on-device speech recognition when a recognizer and language model are available. Grant microphone permission once. Direct commands require no ChatGPT account, subscription or MCP registration. Free ChatGPT users and users without the MCP registration menu can use phone voice. Skip the pairing code. Fresh installations start with direct listening. Updating an app that was already in use preserves its previous mini voice behavior. Under the device name, enable **Listen for commands on this phone first** and **Start the voice assistant when Carrot Web connects**. The app greets you and listens. Tap the microphone to stop or restart listening.
 
 - **“Find acceleration settings”** opens the matching settings on this device and reads the count and first item. Search needs no setting-write permission.
 - **“Set acceleration setting zero to 240”** applies the specified integer and reads back the verified result. While parked and disengaged, open **Carrot Web → Tools → ChatGPT assistant → Allow setting reads and changes** once. An existing grant works. One matching name and an in-range integer are enough. The allowed range for this setting is 1–250. Conflicting recognized numbers or an ambiguous name leave the setting alone.
@@ -15,13 +15,17 @@ CarrotAssist 0.2.8 with updated Carrot Web can use Android 12+ on-device speech 
 - **“Change lanes left”** or **“Change lanes right”** requests one maneuver after you allow driving commands in Carrot Web Tools while parked and disengaged. The final recognition must be clear. Conflicting or low-confidence candidates do not dispatch. If scores are unavailable, reply “confirm left” or “confirm right” to the short prompt. Existing vehicle conditions still apply.
 - Questions such as “Why is acceleration fast?” open your default assistant. With ChatGPT selected, repeat the question in its mini window. The first utterance is not sent to ChatGPT. General questions need no Carrot MCP connection. Using the Carrot tools in ChatGPT still requires the connection.
 
-In-car speech accuracy has not been measured. Turn off direct listening to restore the previous assistant behavior. Say “ChatGPT” to open your default assistant. Turn off **Listen for commands on this phone first** to start with ChatGPT every time. Mini-window lane requests require the existing CarrotAssist connection and driving permission.
+Turn off direct listening to restore the previous assistant behavior. Say “ChatGPT” to open your default assistant. Turn off **Listen for commands on this phone first** to start with ChatGPT every time. Mini-window lane requests require the existing CarrotAssist connection and driving permission.
+
+Phone voice supports “change lanes left” and “change lanes right”. Version 0.2.9 supplies both directions as phrase hints to recognizers on Android 13 and later. If a command is declined, the app reads back the recognized words when available and distinguishes conflicting candidates, low confidence and late results. In-car recognition accuracy has not been measured.
+
+If the ChatGPT mini window mistakes Carrot for a marketplace or declines a lane change, ask “Use the CarrotAssist tool to find acceleration settings” in that conversation. Account pairing persists, but a new voice session may not select the tool. Check whether the settings list opens.
 
 ## Prepare and install
 
 1. While parked, update the device to current `carrot-wip` and restart it.
 2. Connect the phone and device to the same trusted Wi-Fi or hotspot. Never expose the device's port 7000 to the Internet.
-3. Install the APK from the [CarrotAssist release](https://github.com/ajouatom/openpilot/releases/tag/carrot-assist-v0.2.8). Review Android's installation-source permission if prompted.
+3. Install the APK from the [CarrotAssist release](https://github.com/ajouatom/openpilot/releases/tag/carrot-assist-v0.2.9). Review Android's installation-source permission if prompted.
 4. **Only for the ChatGPT mini window**, install the official ChatGPT app and sign in with your own account. Select ChatGPT as Android's default digital assistant. Settings names vary by phone.
 
 The app targets Android 8 and newer. Device connection and the small voice overlay were tested on Samsung Android 17; other phones may behave differently. To control Carrot through ChatGPT, your account must offer **Add custom MCP server**. Carrot connectivity and mini voice mode on Free accounts remain unverified. Paid accounts are also subject to their available features and policies.

@@ -70,6 +70,14 @@ public class LocalCommandTest {
     check(SpokenSetting.parse(ordinal).agreed(Arrays.asList(ordinal, "1번 항목을 240으로 바꿔줘"), null));
     check(!SpokenSetting.parse(ordinal).agreed(Arrays.asList(ordinal, "두 번째 거 240으로 바꿔줘"), null));
     check(!SpokenSetting.parse(ordinal).agreed(Arrays.asList(ordinal, "첫 번째 거 250으로 바꿔줘"), null));
+    for (String text : Arrays.asList("왼쪽으로 차로변경", "왼쪽으로, 차로 변경", "왼쪽 차로 변경을 해줘"))
+      check(LocalCommand.choose(Arrays.asList(text,"왼쪽으로 차로 변경"), new float[]{.95f}) == LEFT);
+    check(LocalCommand.choose(Arrays.asList("오른쪽으로, 차로 변경", "우측 차선 변경 부탁해"), new float[]{.95f}) == RIGHT);
+    check(LocalCommand.choose(Arrays.asList("왼쪽으로 차로변경", "왼쪽으로 차로변경 하지 마"), new float[]{.99f}) == UNCERTAIN);
+    check(!LocalCommand.stale(1000,10000,11900,12000));
+    check(LocalCommand.stale(1000,0,11900,12000));
+    check(LocalCommand.stale(1000,9000,10400,12000));
+    check(LocalCommand.stale(1000,2000,12900,13000));
     System.out.println("Local voice command checks passed: "+checks);
   }
 }
