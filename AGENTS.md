@@ -10,7 +10,11 @@
   OP longitudinal; retains other obstacles and normal soft-disable on loss.
   Desktop1042/23subtests pass with32 native-safety cases deferred to Linux;
   Wiki25 and focused Ruff pass. Add native MPC/planner, gesture/default tests
-  to full-build CI. No vehicle writes or physical lamp/braking acceptance.
+  to full-build CI. Linux Signal42433213035 passes1963/40skip/362subtests plus131;
+  eGPU/Jetson/docs pass. First full build passes50 new native checks but one
+  gesture test exposes a pre-existing fixture missing set_lane_change_blinkers
+  after voice integration. Bind the real helper; desktop full-control11 pass.
+  No vehicle writes or physical lamp/braking acceptance.
 
 - CarrotAssist 0.2.10 lets the user copy a Korean or English custom-instructions prompt from the device-name dialog. It shows how to append and save the prompt in ChatGPT. Copying does not modify the user’s ChatGPT account.
 

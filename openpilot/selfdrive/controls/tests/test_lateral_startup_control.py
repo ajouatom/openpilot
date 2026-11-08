@@ -11,6 +11,7 @@ import pytest
 from openpilot.cereal import car, log
 from openpilot.common.realtime import DT_CTRL
 from openpilot.common.constants import CV
+from openpilot.selfdrive.car.voice_indicator import set_lane_change_blinkers
 from opendbc.car.vehicle_model import VehicleModel
 from opendbc.car.interfaces import CarInterfaceBase
 from openpilot.selfdrive.controls.lib.drive_helpers import clip_curvature, get_lag_adjusted_curvature
@@ -35,6 +36,7 @@ def control_fixture():
         'clip_curvature': clip_curvature, 'get_lag_adjusted_curvature': get_lag_adjusted_curvature,
         'resolve_vehicle_model_steer_ratio': resolve_vehicle_model_steer_ratio,
         'lateral_vehicle_parameters': lateral_vehicle_parameters,
+        'set_lane_change_blinkers': set_lane_change_blinkers,
         'cloudlog': NS(error=lambda msg: pytest.fail(msg))}
   exec(compile(ast.Module(body=nodes, type_ignores=[]), str(path), 'exec'), ns)
   cp = car.CarParams.new_message(brand='hyundai', steerRatio=12.81, wheelbase=2.84, mass=1600,
