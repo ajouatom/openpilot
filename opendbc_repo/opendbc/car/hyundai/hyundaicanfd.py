@@ -1177,6 +1177,38 @@ def _apply_ccnc_lead(values, radar_state, enabled, model_v2=None, hud_lateral=No
   values["FF_LATERAL"] = clip_float(lateral if hud_lateral is None else hud_lateral, -6.4, 6.3)
 
 
+class CameraSetSpeedSync:
+  """CameraSetSpeedSync: while engaged the camera's stock SCC is kept cruising in the background (RES pulses below), so
+  when the device drops out the car continues at the camera's own VSetDis. Nudge it toward openpilot's set speed with
+  short +/- presses on the camera bus. If a press overshoots (a car whose short press steps by more than 1), stop
+  for that target instead of toggling."""
+  # shortcut: stock SCC set range assumed 30..180 (km/h or mph units); a target outside is clamped to it
+  MIN, MAX = 30, 180
+
+  def __init__(self):
+    self.target = None
+    self.direction = 0
+    self.done = False
+
+  def button(self, target_speed, camera_speed, frame):
+    target = int(round(min(max(target_speed, self.MIN), self.MAX)))
+    if target != self.target:
+      self.target, self.direction, self.done = target, 0, False
+    camera = int(camera_speed)
+    if camera == target:
+      self.direction = 0
+    if self.done or camera <= 0 or camera == target:
+      return 0
+    direction = 1 if target > camera else -1
+    if self.direction and direction != self.direction:
+      self.done = True  # overshot: this car's short press is not a single unit
+      return 0
+    self.direction = direction
+    if not 10 < frame % 30 <= 16:  # one short press every 0.3 s (same cadence as the RES pulse)
+      return 0
+    return 1 if direction > 0 else 2  # Buttons.RES_ACCEL (+) / Buttons.SET_DECEL (-)
+
+
 def create_alt2_adas_button_request(packer, CAN, frame, CC, CS, stopping, *, keep_stock_scc_main=False):
   # This is a button request for Panda, not a replacement vehicle frame.
   # Panda overlays it on fresh 0x10B input, retaining all unknown fields,
@@ -1221,6 +1253,9 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
   md = CS.modelV2
   if not hasattr(create_ccnc_messages, '_lane_line_check') or frame % 100 == 0:
     create_ccnc_messages._lane_line_check = Params().get_int("LaneLineCheck")
+    create_ccnc_messages._set_speed_sync_on = Params().get_int("CameraSetSpeedSync") > 0
+  if not hasattr(create_ccnc_messages, '_set_speed_sync'):
+    create_ccnc_messages._set_speed_sync = CameraSetSpeedSync()
   lane_line_check = create_ccnc_messages._lane_line_check
   desire, _ = _get_desire_and_lane_changing(md)
 
@@ -1272,6 +1307,10 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
           elif CS.scc_control is not None and CS.scc_control["InfoDisplay"] == 4:
             if 10 < frame % 30 <= 16 and not stopping:
               values["CRUISE_BUTTONS"] = 2
+          elif (create_ccnc_messages._set_speed_sync_on and not driver_pressed and CS.scc_control is not None and
+                (sync_button := create_ccnc_messages._set_speed_sync.button(
+                  hud_control.setSpeed * (CV.MS_TO_KPH if CS.is_metric else CV.MS_TO_MPH), CS.scc_control["VSetDis"], frame))):
+            values["CRUISE_BUTTONS"] = sync_button
           else:
             if CS.adrv_0x1ea is not None and CS.adrv_0x1ea["HDA_MODE2"] == 0: # if corner radar is disabled, send main btn
               if 10 < frame % 1000 <= 16 and CS.out.vEgo > 3:
