@@ -38,12 +38,14 @@ export async function assignSpokenSetting(spoken, value, id, expires, deps = {})
   const send = deps.send || executeLocalSetting;
   const token = grant();
   if (!token) return { status: 'permission' };
-  const usable = () => !document.hidden && Date.now() < expires && grant() === token;
+  const usable = () => !document.hidden && Date.now() < expires && grant() === token && (!deps.selected || deps.selected() === spoken);
   if (!usable()) return { status: 'unverified' };
-  const item = resolveSpokenSetting(await (deps.catalog || catalog)(), spoken);
+  const items = await (deps.catalog || catalog)();
+  const item = deps.selected ? items.find(entry => entry.name === spoken) : resolveSpokenSetting(items, spoken);
   if (!item) return { status: 'unknown' };
   if (!Number.isSafeInteger(value)) return { status: 'unverified' };
   const { name, min, max } = item;
+  const label = deps.selected ? shortTitle((deps.language === 'ko' ? item.title : item.etitle) || name) : spoken;
   if (value < min || value > max) return { status: 'range', min, max };
   const command = (operation, fields, identity = requestId()) =>
     send({ operation, id: identity, expires_at: expires, ...fields }, token);
@@ -56,7 +58,7 @@ export async function assignSpokenSetting(spoken, value, id, expires, deps = {})
       if (!error.message.startsWith('No integer value change') || !usable()) throw error;
       const read = await command('read', { name });
       if (read.status === 'read' && read.name === name && read.current === value)
-        return { status: 'unchanged', label: spoken, current: value };
+        return { status: 'unchanged', label, current: value };
       return { status: 'unverified' };
     }
     if (!usable() || proposal.status !== 'prepared' || proposal.name !== name || proposal.proposed !== value ||
@@ -64,7 +66,7 @@ export async function assignSpokenSetting(spoken, value, id, expires, deps = {})
     const result = await command('commit', { proposal_id: proposal.proposal_id }, id);
     if (result.status !== 'applied' || result.name !== name || result.current !== value) return { status: 'unverified' };
     (deps.display || updateDisplayedSetting)(result);
-    return { status: 'applied', label: spoken, current: result.current };
+    return { status: 'applied', label, current: result.current };
   } catch (error) {
     return { status: error.status === 403 ? 'permission' : 'unverified' };
   }

@@ -20,7 +20,17 @@ export function createLocalVoice(openSetting, driveEnabled, drive, now = Date.no
   return Object.freeze({
     findSettings(query, id, expires) {
       if (typeof query !== 'string' || !query.trim() || query.length > 80) return false;
-      return start(id, expires, async () => await globalThis.findPhoneSettings(query) || 'unavailable');
+      return start(id, expires, async () => await globalThis.findPhoneSettings(query, id) || 'unavailable');
+    },
+    setResultValue(searchId, position, value, language, id, expires) {
+      if (!/^[A-Za-z0-9_-]{43}$/.test(searchId) || !Number.isInteger(position) || position < 1 ||
+          !Number.isSafeInteger(value)) return false;
+      return start(id, expires, async () => {
+        const selected = () => globalThis.phoneSearchResultName(searchId, position);
+        const name = selected();
+        if (!name) return { status: 'no_result' };
+        return assign(name, value, id, expires, { selected, language });
+      });
     },
     setValue(name, value, id, expires) {
       if (typeof name !== 'string' || !name.trim() || name.length > 100 || !Number.isSafeInteger(value)) return false;

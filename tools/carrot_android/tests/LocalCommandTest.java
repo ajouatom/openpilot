@@ -59,6 +59,17 @@ public class LocalCommandTest {
     check("가속도".equals(SpokenSetting.search("가속도에 관련된 설정을 찾아줘")));
     check("acceleration".equals(SpokenSetting.search("Find acceleration settings")));
     check(SpokenSetting.search(phrase) == null);
+    String ordinal = "첫 번째 거 240으로 바꿔줘";
+    for (String phraseByNumber : Arrays.asList(ordinal, "첫번째 것을 이백사십으로 변경해줘", "1번째 걸 240으로 바꿔줘", "set the first one to 240")) {
+      SpokenSetting selected = SpokenSetting.parse(phraseByNumber);
+      check(selected != null && selected.position == 1 && selected.value == 240);
+    }
+    check(SpokenSetting.parse("두 번째 설정을 245로 변경해줘").position == 2);
+    check(SpokenSetting.parse("20번 항목을 10으로 바꿔줘").position == 20);
+    check(SpokenSetting.parse("가속도 설정 0을 240으로 바꿔줘").position == 0);
+    check(SpokenSetting.parse(ordinal).agreed(Arrays.asList(ordinal, "1번 항목을 240으로 바꿔줘"), null));
+    check(!SpokenSetting.parse(ordinal).agreed(Arrays.asList(ordinal, "두 번째 거 240으로 바꿔줘"), null));
+    check(!SpokenSetting.parse(ordinal).agreed(Arrays.asList(ordinal, "첫 번째 거 250으로 바꿔줘"), null));
     System.out.println("Local voice command checks passed: "+checks);
   }
 }
