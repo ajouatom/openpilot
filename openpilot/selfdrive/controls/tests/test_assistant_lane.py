@@ -88,7 +88,7 @@ def signal_vehicle(voice, request):
 
 
 @pytest.mark.parametrize('direction', ['left', 'right'])
-def test_adapter_voice_signal_before_lane_start(signal_vehicle, direction, monkeypatch):
+def test_adapter_signal_and_lane_change_start_together(signal_vehicle, direction, monkeypatch):
   from pathlib import Path
   monkeypatch.syspath_prepend(str(Path(__file__).resolve().parents[4] / 'tools/jetlink'))
   from blink_voice import VoiceLaneSignal
@@ -113,22 +113,18 @@ def test_adapter_voice_signal_before_lane_start(signal_vehicle, direction, monke
   request(direction)
   assert tick() == log.LaneChangeState.preLaneChange
   assert not helper.assistant_lane.signal_id  # delay, torque and classifier gates run before requesting a lamp
-  assert tick() == log.LaneChangeState.preLaneChange
+  assert tick() == log.LaneChangeState.laneChangeStarting
   identity = helper.assistant_lane.signal_id
   assert identity == 'a' * 43
-  meta = SimpleNamespace(assistantLaneSignalId=identity, assistantLaneSignalRoute=lamp.route, laneChangeDirection=direction, laneChangeState='preLaneChange')
+  meta = SimpleNamespace(assistantLaneSignalId=identity, assistantLaneSignalRoute=lamp.route, laneChangeDirection=direction, laneChangeState='laneChangeStarting')
   hold = update_lamp(meta)
   assert hold['direction'] == direction and hold['source'] == 'lane'
   assert not lamp.confirmed(hold, hold['id'], {'accepted_id':hold['id']}, dark)
-  assert tick() == log.LaneChangeState.preLaneChange
+  assert tick() == log.LaneChangeState.laneChangeStarting
   setattr(cs, direction + 'Blinker', True)
-  update_lamp(meta, 'other-receiver-hold')
-  assert tick() == log.LaneChangeState.preLaneChange
-  path = helper.assistant_lane.root/'signal.json'
-  for fields in [{'route':'other'}, {'id':'other'}, {'direction':'right' if direction=='left' else 'left'}, {'time':now()-1}]:
-    atomic_json(path, {'id':identity, 'route':lamp.route, 'direction':direction, 'time':now(), 'confirmed':True, **fields})
-    assert tick() == log.LaneChangeState.preLaneChange
-  update_lamp(meta, hold['id'])
+  # Reproduce the recorded S3 behavior: the lamp lights but the tap never
+  # receives its completion ACK. Lamp feedback cannot start a second maneuver.
+  update_lamp(meta)
   assert tick() == log.LaneChangeState.laneChangeStarting
   assert result()['status'] == 'running'
   meta.laneChangeState = 'laneChangeStarting'
@@ -150,7 +146,7 @@ def test_adapter_voice_signal_before_lane_start(signal_vehicle, direction, monke
     assert tick() != log.LaneChangeState.laneChangeStarting
 
 
-@pytest.mark.parametrize('fault', ['bsd', 'lane', 'torque', 'opposite', 'hazards', 'cancel', 'no_feedback'])
+@pytest.mark.parametrize('fault', ['bsd', 'lane', 'torque', 'opposite', 'hazards', 'cancel'])
 @pytest.mark.parametrize('direction', ['left', 'right'])
 def test_adapter_voice_does_not_start_under_blocked_conditions(signal_vehicle, direction, fault):
   helper, cs, tick, request, result = signal_vehicle
@@ -161,11 +157,7 @@ def test_adapter_voice_does_not_start_under_blocked_conditions(signal_vehicle, d
     getattr(helper, direction).lane_change_available_geom = False
   request(direction)
   tick()
-  tick()
-  if fault in ('lane', 'torque'):
-    assert not helper.assistant_lane.signal_id
-  else:
-    assert helper.assistant_lane.signal_id
+  assert not helper.assistant_lane.signal_id
   if fault == 'bsd':
     setattr(cs, direction+'Blindspot', True)
   if fault in ('opposite','hazards'):
@@ -174,14 +166,11 @@ def test_adapter_voice_does_not_start_under_blocked_conditions(signal_vehicle, d
       setattr(cs, direction+'Blinker', True)
   if fault == 'cancel':
     atomic_json(helper.assistant_lane.root/'cancel.json', {'id':'a'*43})
-  # Continuing wrong-side feedback must not turn into an opposite voice maneuver.
-  assert tick() != log.LaneChangeState.laneChangeStarting
   for _ in range(66):
-    assert tick() != log.LaneChangeState.laneChangeStarting
+    tick()
+    assert result()['status'] != 'running'
   assert not helper.assistant_lane.signal_id
   assert result()['status'] in ('rejected', 'expired', 'cancelled')
-  if fault == 'no_feedback':
-    assert result()['reason'] == 'indicator_not_confirmed'
 
 
 @pytest.mark.parametrize('direction', ['left', 'right'])
@@ -199,8 +188,8 @@ def test_adapter_tap_echo_requires_this_request_and_never_confirms_lamp(signal_v
   atomic_json(helper.assistant_lane.root/'signal.json', {
     'id':helper.assistant_lane.signal_id, 'route':'v'*43, 'time':now, 'direction':direction, 'confirmed':False,
     'tap':{'id':'hold:1', 'direction':side, 'request':0., 'start':now, 'counts':[0, 0]}})
-  assert tick() != log.LaneChangeState.laneChangeStarting
-  assert result()['status'] == ('rejected' if physical_override else 'waiting')
+  tick()
+  assert result()['status'] == ('interrupted' if physical_override else 'running')
 
 
 @pytest.mark.parametrize('fingerprint', ['HYUNDAI_IONIQ_5_PE', 'TEST_OTHER_PLATFORM'])
@@ -222,16 +211,16 @@ def test_optional_indicator_keeps_normal_lane_change(voice, fingerprint, fault, 
   assert not helper.assistant_lane.signal_id
 
 
-def test_adapter_loss_cannot_change_an_accepted_request_to_ordinary(signal_vehicle):
+def test_selected_adapter_is_not_replaced_if_it_disconnects(signal_vehicle):
   helper, cs, tick, request, result = signal_vehicle
   tick()
   request('right')
   tick()
   (helper.assistant_lane.root/'indicator-device.json').unlink()
   cs.rightBlinker = False
-  for _ in range(65):
-    assert tick() != log.LaneChangeState.laneChangeStarting
-  assert result()['reason'] == 'indicator_not_confirmed'
+  assert tick() == log.LaneChangeState.laneChangeStarting
+  assert helper.assistant_lane.signal_route == 'v'*43
+  assert result()['status'] == 'running'
 
 @pytest.mark.parametrize('output', ['EA_02', 'SPAS2'])
 @pytest.mark.parametrize('direction', ['left', 'right'])

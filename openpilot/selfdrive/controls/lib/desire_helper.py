@@ -704,7 +704,7 @@ class DesireHelper:
               if can_start and assistant_direction and not self.tesla_auto_signals and self.assistant_lane.signal_route != 'ordinary':
                 # Reserve our lamp before publishing its intent. A delayed blink must never become driver input.
                 self.boundary_indicator.own(time.monotonic(), blinker_state)
-                can_start = self.assistant_lane.signal_ready(assistant_direction, carstate)
+                can_start = self.assistant_lane.request_signal(assistant_direction, carstate)
               elif self.assistant_lane.signal_id:
                 # Once armed, losing admission cancels the attempt rather than rearming a delayed maneuver.
                 can_start = False
