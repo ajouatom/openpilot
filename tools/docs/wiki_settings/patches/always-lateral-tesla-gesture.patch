@@ -1,0 +1,42 @@
+--- a/EN-Always-Lateral.md
++++ b/EN-Always-Lateral.md
+@@ -28,3 +28,11 @@
+ <!-- CARROT:MANUAL:BEGIN AlwaysLateral -->
+ <!-- CARROT:REVIEW reviewed-for="" -->
++
++<!-- CARROT:SECTION:BEGIN BEHAVIOR -->
++Permits lateral control independently of cruise, subject to forward gear, the lateral-enable switch, input readiness and steering-fault checks. OFF removes only that independent permission; active driving control can still steer. It does not change longitudinal control.
++<!-- CARROT:SECTION:END BEHAVIOR -->
++
++<!-- CARROT:SECTION:BEGIN USAGE -->
++Tesla with the vehicle CAN extension can toggle this setting live with each distinct three-finger infotainment contact. Release before repeating; held or duplicate presses do not repeat. Experimental/Chill mode and its confirmation are not changed or required. Existing saved values are preserved during upgrade. This is not an emergency disengagement gesture.
++<!-- CARROT:SECTION:END USAGE -->
+ <!-- CARROT:MANUAL:END AlwaysLateral -->
+--- a/KO-상시-조향.md
++++ b/KO-상시-조향.md
+@@ -28,3 +28,11 @@
+ <!-- CARROT:MANUAL:BEGIN AlwaysLateral -->
+ <!-- CARROT:REVIEW reviewed-for="" -->
++
++<!-- CARROT:SECTION:BEGIN BEHAVIOR -->
++크루즈와 독립적으로 조향을 허용하되 전진 기어·조향 스위치·입력 준비·조향 고장 검사는 유지합니다. 끄면 독립적인 허용만 해제하며 활성 주행 제어의 조향은 계속 작동할 수 있습니다. 종방향 제어는 바꾸지 않습니다.
++<!-- CARROT:SECTION:END BEHAVIOR -->
++
++<!-- CARROT:SECTION:BEGIN USAGE -->
++차량 CAN 확장이 있는 Tesla는 화면의 세 손가락 접촉마다 이 설정을 즉시 전환합니다. 다음 접촉 전 손을 떼어야 하며 유지·중복 눌림은 반복 전환하지 않습니다. 실험/Chill 모드와 확인 상태는 바꾸지 않고 확인도 필요하지 않습니다. 업그레이드 시 기존 저장값은 유지합니다. 비상 해제용 조작이 아닙니다.
++<!-- CARROT:SECTION:END USAGE -->
+ <!-- CARROT:MANUAL:END AlwaysLateral -->
+--- a/ZH-全时横向控制.md
++++ b/ZH-全时横向控制.md
+@@ -28,3 +28,11 @@
+ <!-- CARROT:MANUAL:BEGIN AlwaysLateral -->
+ <!-- CARROT:REVIEW reviewed-for="" -->
++
++<!-- CARROT:SECTION:BEGIN BEHAVIOR -->
++允许巡航未激活时使用横向控制，仍须前进挡、横向已开启、输入就绪且无转向故障。关闭只移除独立横向许可；主控制激活时正常转向仍可继续。不改变纵向控制。
++<!-- CARROT:SECTION:END BEHAVIOR -->
++
++<!-- CARROT:SECTION:BEGIN USAGE -->
++有车辆 CAN 扩展的 Tesla，每次独立三指触屏实时切换此设置。松开后才可再次切换，持续接触和重复按下不重复切换。不再改变实验/Chill 模式，也不需要实验模式确认。升级保留已有保存值。这不是紧急接管手势。
++<!-- CARROT:SECTION:END USAGE -->
+ <!-- CARROT:MANUAL:END AlwaysLateral -->

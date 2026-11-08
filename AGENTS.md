@@ -1,5 +1,17 @@
 # Repository memory
 
+- On 2026-11-08, owner requests PR572 Tesla review/integration with code-only
+  validation because no Tesla is available. Merge contributor d40c8d247b into
+  current Wip, preserving newer native voice indicators and assistant admission.
+  Keep existing shared AlwaysLateral initialization default1, excluding PR's
+  global default0 change. Tesla gesture now toggles AlwaysLateral; new manual,
+  model-desire/path lamp options and CAN traffic-stop remain defaultOFF.
+  Traffic stop accepts only vision-backed8byte APP_trafficControl with active
+  OP longitudinal; retains other obstacles and normal soft-disable on loss.
+  Desktop1042/23subtests pass with32 native-safety cases deferred to Linux;
+  Wiki25 and focused Ruff pass. Add native MPC/planner, gesture/default tests
+  to full-build CI. No vehicle writes or physical lamp/braking acceptance.
+
 - CarrotAssist 0.2.10 lets the user copy a Korean or English custom-instructions prompt from the device-name dialog. It shows how to append and save the prompt in ChatGPT. Copying does not modify the user’s ChatGPT account.
 
 - CarrotAssist 0.2.9 gives the Android recognizer left/right phrase hints and explains recognition failures. Keep the final-result confidence, direction agreement and age checks. No live maneuver or cabin accuracy measurement.

@@ -4,6 +4,18 @@ msgstr ""
 "Language: ko\n"
 "Plural-Forms: nplurals=1; plural=0;\n"
 
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "BRAKE! Tesla CAN Red Light"
+msgstr "제동하세요! Tesla CAN 빨간불"
+
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "Stopping Distance May Be Insufficient"
+msgstr "정지 거리가 부족할 수 있습니다"
+
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "Tesla CAN Traffic Signal Lost or Inconsistent"
+msgstr "Tesla CAN 신호등 정보 끊김 또는 불일치"
+
 #: openpilot/selfdrive/ui/layouts/settings/device.py
 msgid " Steering torque response calibration is complete."
 msgstr " 스티어링 토크 응답 보정이 완료되었습니다."

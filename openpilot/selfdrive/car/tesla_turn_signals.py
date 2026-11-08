@@ -1,8 +1,10 @@
 """Tesla lamp execution adapted from xpilot's bounded DAS_bodyControls sessions."""
 from dataclasses import dataclass
+import math
 
 from opendbc.car.can_definitions import CanData
 from opendbc.car.tesla.values import CAR, TeslaFlags, TeslaSafetyFlags
+from openpilot.selfdrive.car.tesla_lane_signals import TeslaLaneSignals
 
 BODY = 0x3E9
 UI = 0x311
@@ -56,6 +58,8 @@ class Session:
   last_on: int = 0
   last_front_on: int = 0
   lost_since: int | None = None
+  turn: bool = False
+  lamp_only: bool = False
 
 
 class TeslaTurnSignals:
@@ -78,6 +82,7 @@ class TeslaTurnSignals:
     self.failed = False
     self.driver_idle_time = 0
     self.driver_press_time = 0
+    self.lane_assistance = TeslaLaneSignals()
 
   @classmethod
   def from_car_params(cls, CP, *, enabled: bool):
@@ -126,6 +131,8 @@ class TeslaTurnSignals:
       "panda_rejections": s.rejected if s else 0,
       "awaiting_echo": s is not None and s.awaiting is not None,
       "manual": s.manual if s else False,
+      "lamp_only": s.lamp_only if s else False,
+      "lane_observation": self.lane_assistance.reason,
       "on_seen": s.on_seen if s else False,
       "session_ms": (now - s.started) // 1_000_000 if s else None,
       "body_age_ms": (now - self.template_time) // 1_000_000 if self.template_time else None,
@@ -282,7 +289,8 @@ class TeslaTurnSignals:
             s.last_on = max(s.last_on, self.front_time)
     self.advance(now)
 
-  def update(self, state, control, meta, fresh: bool, now: int) -> list[CanData]:
+  def update(self, state, control, meta, fresh: bool, now: int, *, turn_hold_allowed: bool = False,
+             lamp_intent: tuple[int, int] | None = None) -> list[CanData]:
     self.context_time = now if fresh else 0
     self.observe_driver(state, now)
     pressed = self.driver_press_time and 0 <= now - self.driver_press_time <= CONTEXT_NS
@@ -294,8 +302,17 @@ class TeslaTurnSignals:
 
     direction = meta.autoTurnSignalDirection.raw if fresh else 0
     request_id = int(meta.autoTurnSignalRequestId) if fresh else 0
+    lamp_only = (fresh and not direction and lamp_intent is not None and
+                 lamp_intent[0] in (1, 2) and (1 << 31) < lamp_intent[1] < (1 << 32) and
+                 math.isfinite(state.vEgo) and state.vEgo >= 30 / 3.6 and
+                 not state.trailerConnected and not state.steerFaultTemporary and not state.steerFaultPermanent)
+    if lamp_only:
+      direction, request_id = lamp_intent
+    stopped_hold = (s is not None and s.turn and s.on_seen and s.active_echoes and not s.cancelling and not s.manual and
+                    request_id == s.request_id and direction == s.direction and turn_hold_allowed and
+                    getattr(state, "standstill", False) and math.isfinite(state.vEgo) and abs(state.vEgo) < .1)
     checks = ((self.configured, self.disabled_status), (fresh, "context_stale"),
-              (control.latActive, "lateral_inactive"), (state.canValid, "can_invalid"),
+              (control.latActive or stopped_hold or lamp_only, "lateral_inactive"), (state.canValid, "can_invalid"),
               (not state.vehicleSensorsInvalid, "vehicle_sensors_invalid"),
               (str(state.gearShifter) == "drive", "not_in_drive"),
               (state.turnSignalDriverValid, "driver_input_unavailable"),
@@ -310,7 +327,7 @@ class TeslaTurnSignals:
       if self.session is None and self.status.startswith(("blocked:", "waiting:")) and not self.failed:
         self.status = "idle"
     elif s is not None:
-      if request_id != s.request_id or direction != s.direction:
+      if request_id != s.request_id or direction != s.direction or lamp_only != s.lamp_only:
         self._cancel(now, "request_changed")
     elif not self.failed and request_id != self.blocked_id:
       if not 0 < self.ui_time <= now or now - self.ui_time > FEEDBACK_NS:
@@ -324,7 +341,8 @@ class TeslaTurnSignals:
       elif self.template is None or not 0 <= now - self.template_time <= TEMPLATE_NS:
         self.status = "waiting:body_template"
       else:
-        self.session = Session(request_id, direction, now)
+        self.session = Session(request_id, direction, now, lamp_only=lamp_only,
+                               turn=not lamp_only and str(meta.desire) == ("turnLeft" if direction == 1 else "turnRight"))
         self.status = "active"
     self.advance(now)
     return self.take_sends(now)

@@ -1,11 +1,27 @@
 import pytest
+import ast
 import datetime
 import os
 import threading
 import time
 import uuid
+from pathlib import Path
 
 from openpilot.common.params import Params, ParamKeyFlag, UnknownKeyName
+
+
+@pytest.mark.parametrize("saved", [None, 0, 1])
+def test_always_lateral_manager_preserves_existing_default_and_saved_choice(tmp_path, saved):
+  params = Params(str(tmp_path / "params"))
+  if saved is not None:
+    params.put("AlwaysLateral", saved)
+  manager = Path(__file__).resolve().parents[2] / "system/manager/manager.py"
+  tree = ast.parse(manager.read_text())
+  init = next(node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == "manager_init")
+  defaults = next(node for node in init.body if isinstance(node, ast.For) and ast.unparse(node.iter) == "params.all_keys()")
+  exec(compile(ast.Module(body=[defaults], type_ignores=[]), str(manager), "exec"), {"params": params})
+  assert params.get("AlwaysLateral") == (1 if saved is None else saved)
+
 
 class TestParams:
   def setup_method(self):

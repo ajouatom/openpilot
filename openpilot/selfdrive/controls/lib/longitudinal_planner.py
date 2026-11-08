@@ -2,6 +2,7 @@
 import time
 import numpy as np
 
+from openpilot.cereal import log
 import openpilot.cereal.messaging as messaging
 from opendbc.car.interfaces import ACCEL_MIN, ACCEL_MAX
 from openpilot.common.constants import CV
@@ -30,6 +31,7 @@ from openpilot.common.stopping_params import get_stopping_speed
 from openpilot.selfdrive.carrot.carrot_man_input import get_carrot_man
 from openpilot.selfdrive.carrot.signal_stop_prepare import PrepareAccel
 from openpilot.selfdrive.controls.lib.cruise_coasting import CruiseCoastingPlan, coasting_percent, no_coasting_lead
+from openpilot.selfdrive.controls.lib.tesla_traffic_stop import STOP_BUFFER, create_tesla_traffic_stop
 
 
 LON_MPC_STEP = 0.2  # first step is 0.2s
@@ -92,6 +94,42 @@ class LongitudinalPlanner:
     self.coasting_percent = 0
     self.coasting_param_time = 1.0
     self.coasting_target = 0.0
+    self.tesla_traffic_stop = create_tesla_traffic_stop(CP)
+    self.tesla_traffic_decision = None
+    self.tesla_traffic_blended = False
+    self._tesla_traffic_status = None
+    self._tesla_traffic_log_ns = 0
+
+  def update_tesla_traffic_stop(self, sm, carrot, reset_state, now=None):
+    if self.tesla_traffic_stop is None:
+      return
+    now = time.clock_gettime_ns(getattr(time, "CLOCK_BOOTTIME", time.CLOCK_MONOTONIC)) if now is None else now
+    decision = self.tesla_traffic_stop.update(
+      sm['carState'], now, engaged=sm['selfdriveState'].enabled,
+      control_active=(not reset_state and sm['carControl'].longActive and sm.all_checks(
+        service_list=['carState', 'carControl', 'selfdriveState', 'controlsState', 'modelV2'])),
+    )
+    self.tesla_traffic_decision = decision
+    if decision.fault:
+      carrot.events.add(log.OnroadEvent.EventName.teslaTrafficStopTakeover)
+    elif decision.warn:
+      carrot.events.add(log.OnroadEvent.EventName.teslaTrafficStopWarning)
+    if decision.reason != self._tesla_traffic_status or (decision.active and now - self._tesla_traffic_log_ns >= 1_000_000_000):
+      cloudlog.event("tesla_can_traffic_stop", reason=decision.reason, active=decision.active,
+                     distance=decision.distance, required_decel=decision.required_decel,
+                     sample_ns=int(sm['carState'].teslaTrafficControl.sampleMonoTime))
+      self._tesla_traffic_status, self._tesla_traffic_log_ns = decision.reason, now
+
+  def apply_tesla_traffic_stop(self):
+    decision = self.tesla_traffic_decision
+    if decision is not None and decision.active:
+      self.coasting_target = 0.0
+      self.coasting.reset()
+      if decision.hold:
+        self.output_should_stop = True
+        self.output_v_target_now = 0.0
+        self.output_a_target = min(self.output_a_target, 0.0)
+        self.a_desired = min(self.a_desired, 0.0)
 
   def update_lead_tracks(self, radar_state):
     for index, lead in enumerate((radar_state.leadOne, radar_state.leadTwo)):
@@ -159,6 +197,11 @@ class LongitudinalPlanner:
     reset_state = long_control_off if self.CP.openpilotLongitudinalControl else not sm['selfdriveState'].enabled
     # PCM cruise speed may be updated a few cycles later, check if initialized
     reset_state = reset_state or not v_cruise_initialized or carrot.soft_hold_active
+    if getattr(self, 'tesla_traffic_stop', None) is not None:
+      self.update_tesla_traffic_stop(sm, carrot, reset_state)
+      self.tesla_traffic_blended = self.mpc.mode == 'blended' and self.tesla_traffic_decision.active
+      if self.tesla_traffic_decision.active:
+        self.mpc.mode = 'acc'
 
     # No change cost when user is controlling the speed, or when standstill
     prev_accel_constraint = not (reset_state or sm['carState'].standstill)
@@ -259,6 +302,10 @@ class LongitudinalPlanner:
       ),
       lead_track_frames=lead_track_frames,
       measured_a_ego=sm['carState'].aEgo,
+      tesla_stop_distance=(
+        max(0.0, self.tesla_traffic_decision.distance - STOP_BUFFER)
+        if self.tesla_traffic_decision is not None and self.tesla_traffic_decision.active else None
+      ),
     )
 
     self.v_desired_trajectory = np.interp(CONTROL_N_T_IDX, T_IDXS_MPC, self.mpc.v_solution)
@@ -306,6 +353,7 @@ class LongitudinalPlanner:
       and not reset_state
       and not sm['carState'].gasPressed
       and not sm['carState'].brakePressed
+      and not (getattr(self, 'tesla_traffic_decision', None) and self.tesla_traffic_decision.active)
     )
     preview_request = get_lead_preview_request(
       carrot.myDrivingMode,
@@ -350,7 +398,7 @@ class LongitudinalPlanner:
     output_should_stop_e2e = sm['modelV2'].action.shouldStop
     output_v_target_now_e2e = sm['modelV2'].action.desiredVelocity
 
-    if self.mpc.mode == 'acc':
+    if self.mpc.mode == 'acc' and not getattr(self, 'tesla_traffic_blended', False):
       output_a_target = output_a_target_mpc
       output_v_target_now = output_v_target_mpc
       self.output_should_stop = output_should_stop_mpc
@@ -372,6 +420,8 @@ class LongitudinalPlanner:
                          force_slow_decel, coasting_turn_blocked, cutin_predecel_limit)
     self.apply_signal_stop_prepare(sm, carrot, reset_state)
     self.apply_signal_start_guard(carrot, v_ego)
+    if getattr(self, 'tesla_traffic_decision', None) is not None:
+      self.apply_tesla_traffic_stop()
 
   def apply_signal_stop_prepare(self, sm, carrot, reset_state, now=None):
     from openpilot.selfdrive.carrot.signal_stop_prepare import prepare_lead_blocked

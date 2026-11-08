@@ -1,0 +1,171 @@
+--- a/EN-Tesla-Manual-Lane-Lamps.md
++++ b/EN-Tesla-Manual-Lane-Lamps.md
+@@ -28,3 +28,15 @@
+ <!-- CARROT:MANUAL:BEGIN TeslaManualLaneSignals -->
+-<!-- CARROT:REVIEW reviewed-for="" -->
++<!-- CARROT:REVIEW reviewed-for="669db437b176b1b2fdb9d4effef75f18f63f9ba24fa2385698d782ce9d784aec" reviewed-at="2026-11-06T08:00:00Z" -->
++
++<!-- CARROT:SECTION:BEGIN BEHAVIOR -->
++ON observes sustained driver torque and paired-boundary approach, requesting left/right lamps without cruise; OFF leaves ATC/App lamps unchanged. Both sides require repeated fresh ONNX dashed results, confident adjacent-lane geometry and road-edge clearance at 30 km/h or more. It never writes steering desires.
++<!-- CARROT:SECTION:END BEHAVIOR -->
++
++<!-- CARROT:SECTION:BEGIN USAGE -->
++Requires Tesla Automatic Turn Signals, Share Data, supported vehicle CAN and physical stalk/feedback. Reboot after changing. Visual BSD remains independent. Driver input/hazards, invalid context, lost evidence, retreat, completed crossing or 12 seconds end the observation through the existing cancel/OFF handshake.
++<!-- CARROT:SECTION:END USAGE -->
++
++<!-- CARROT:SECTION:BEGIN REFERENCE -->
++Two distinct dashed completion timestamps must span 0.2 seconds and remain at most 0.8 seconds old; the default 400 ms inference interval is unchanged. Completion time is not capture time. Solid/dashed does not prove white/yellow, same-direction traffic or free space. No navigation turn preannouncement, distance add-on or U-turn implementation; no guaranteed detection before tire crossing. Closed-course vehicle acceptance remains required.
++<!-- CARROT:SECTION:END REFERENCE -->
+ <!-- CARROT:MANUAL:END TeslaManualLaneSignals -->
+--- a/KO-Tesla-수동-차로변경-램프.md
++++ b/KO-Tesla-수동-차로변경-램프.md
+@@ -28,3 +28,15 @@
+ <!-- CARROT:MANUAL:BEGIN TeslaManualLaneSignals -->
+-<!-- CARROT:REVIEW reviewed-for="" -->
++<!-- CARROT:REVIEW reviewed-for="669db437b176b1b2fdb9d4effef75f18f63f9ba24fa2385698d782ce9d784aec" reviewed-at="2026-11-06T08:00:00Z" -->
++
++<!-- CARROT:SECTION:BEGIN BEHAVIOR -->
++켜면 운전자 토크와 양쪽 경계 접근을 관찰해 크루즈 없이 좌우 램프만 요청하고, 끄면 기존 ATC/App 램프만 유지합니다. 좌우 모두 30km/h 이상·신선한 연속 ONNX 점선·인접 차로 형상·도로 경계 여유가 필요하며 조향 desire는 쓰지 않습니다.
++<!-- CARROT:SECTION:END BEHAVIOR -->
++
++<!-- CARROT:SECTION:BEGIN USAGE -->
++Tesla 자동 방향지시등·데이터 공유·지원 차량 CAN·실제 스토크와 램프 피드백이 필요하며 변경 후 재부팅합니다. 시각 BSD는 별개입니다. 운전자·비상등·무효 상태·근거 상실·복귀·통과 완료 또는 12초 후 기존 취소/OFF 확인으로 종료합니다.
++<!-- CARROT:SECTION:END USAGE -->
++
++<!-- CARROT:SECTION:BEGIN REFERENCE -->
++서로 다른 점선 완료 시각 2회가 0.2초 이상 이어지고 현재 0.8초 이내여야 하며 기본 추론 400ms는 유지합니다. 완료 시각은 촬영 시각이 아닙니다. 점선은 흰색·같은 진행 방향·빈 공간의 증거가 아닙니다. 내비 회전 사전점등·거리 추가·유턴 구현은 없고 타이어 통과 전 점등을 보장하지 않습니다. 폐쇄 시험장 실차 확인이 필요합니다.
++<!-- CARROT:SECTION:END REFERENCE -->
+ <!-- CARROT:MANUAL:END TeslaManualLaneSignals -->
+--- a/ZH-特斯拉手动变道灯.md
++++ b/ZH-特斯拉手动变道灯.md
+@@ -28,3 +28,15 @@
+ <!-- CARROT:MANUAL:BEGIN TeslaManualLaneSignals -->
+-<!-- CARROT:REVIEW reviewed-for="" -->
++<!-- CARROT:REVIEW reviewed-for="669db437b176b1b2fdb9d4effef75f18f63f9ba24fa2385698d782ce9d784aec" reviewed-at="2026-11-06T08:00:00Z" -->
++
++<!-- CARROT:SECTION:BEGIN BEHAVIOR -->
++开启后根据持续驾驶员扭矩和两侧边界接近，仅请求左右灯，巡航未激活也可使用；关闭时保留既有 ATC/App 灯光。左右均需至少 30km/h、新鲜连续 ONNX 虚线、可信相邻车道与道路边界余量，不写入转向 desire。
++<!-- CARROT:SECTION:END BEHAVIOR -->
++
++<!-- CARROT:SECTION:BEGIN USAGE -->
++需特斯拉自动转向灯、数据共享、支持的车辆 CAN、真实拨杆及灯光反馈，修改后重启。视觉盲点开关独立。人工输入、双闪、无效状态、证据丢失、远离边界、越线完成或 12 秒后，通过既有取消/OFF 握手结束。
++<!-- CARROT:SECTION:END USAGE -->
++
++<!-- CARROT:SECTION:BEGIN REFERENCE -->
++至少两次不同虚线完成时间相隔 0.2 秒，当前年龄不超过 0.8 秒；默认 400ms 推理间隔不变。完成时间不是拍摄时间，虚线不证明白线、同向或无障碍。不恢复导航转弯预告、不增加距离附加或掉头实现，不保证轮胎越线前亮灯；仍需封闭场地实车验收。
++<!-- CARROT:SECTION:END REFERENCE -->
+ <!-- CARROT:MANUAL:END TeslaManualLaneSignals -->
+--- a/EN-Tesla-Model-Desire-Lamps.md
++++ b/EN-Tesla-Model-Desire-Lamps.md
+@@ -28,3 +28,15 @@
+ <!-- CARROT:MANUAL:BEGIN TeslaModelDesireSignals -->
+-<!-- CARROT:REVIEW reviewed-for="" -->
++<!-- CARROT:REVIEW reviewed-for="bca04977c235f3a14fba9b7ea53e0b0d380d401a15291409e8f45d1bfb0bedc7" reviewed-at="2026-11-06T08:00:00Z" -->
++
++<!-- CARROT:SECTION:BEGIN BEHAVIOR -->
++ON requests lamps for a dominant lane-change probability repeated over at least four unique model frames and 0.2 seconds; OFF does not use this prediction. Requires active lateral control, 30 km/h and the same fresh ONNX dashed/adjacent-lane evidence as manual lamp observations. It never creates a steering request.
++<!-- CARROT:SECTION:END BEHAVIOR -->
++
++<!-- CARROT:SECTION:BEGIN USAGE -->
++Requires Tesla Automatic Turn Signals, Share Data and supported vehicle CAN/stalk/feedback; reboot after changing. Independent of manual and path options. Existing ATC/App intent takes priority. Context/evidence loss, completion, retreat or 12 seconds cancels; continuous predictions cannot replay a consumed observation without neutral prediction and dark-lamp rearming.
++<!-- CARROT:SECTION:END USAGE -->
++
++<!-- CARROT:SECTION:BEGIN REFERENCE -->
++May light early or falsely. Two distinct dashed updates span 0.2 seconds, completion age is at most 0.8 seconds, not total capture age; the 400 ms default inference interval is unchanged. No colour/same-direction/free-space proof, navigation turn preannouncement, turn prediction or U-turn logic. Desktop tests do not establish physical acceptance.
++<!-- CARROT:SECTION:END REFERENCE -->
+ <!-- CARROT:MANUAL:END TeslaModelDesireSignals -->
+--- a/KO-Tesla-모델-의도-램프.md
++++ b/KO-Tesla-모델-의도-램프.md
+@@ -28,3 +28,15 @@
+ <!-- CARROT:MANUAL:BEGIN TeslaModelDesireSignals -->
+-<!-- CARROT:REVIEW reviewed-for="" -->
++<!-- CARROT:REVIEW reviewed-for="bca04977c235f3a14fba9b7ea53e0b0d380d401a15291409e8f45d1bfb0bedc7" reviewed-at="2026-11-06T08:00:00Z" -->
++
++<!-- CARROT:SECTION:BEGIN BEHAVIOR -->
++켜면 우세한 차로변경 확률이 서로 다른 모델 프레임 최소 4개·0.2초 이상 이어질 때 램프를 요청하고 끄면 이 예측을 사용하지 않습니다. 횡제어 활성·30km/h·수동 램프와 같은 신선한 ONNX 점선/인접 차로 근거가 필요하며 조향 요청은 만들지 않습니다.
++<!-- CARROT:SECTION:END BEHAVIOR -->
++
++<!-- CARROT:SECTION:BEGIN USAGE -->
++Tesla 자동 방향지시등·데이터 공유·지원 차량 CAN/스토크/피드백이 필요하며 변경 후 재부팅합니다. 수동·경로 옵션과 독립적이고 기존 ATC/App 의도가 우선합니다. 근거 상실·완료·복귀·12초에 취소하며 연속 예측은 중립 예측과 소등 재확인 없이 소비한 관찰을 재실행하지 않습니다.
++<!-- CARROT:SECTION:END USAGE -->
++
++<!-- CARROT:SECTION:BEGIN REFERENCE -->
++미리 또는 잘못 점등할 수 있습니다. 서로 다른 점선 2회·0.2초와 완료 나이 0.8초 이내가 필요하며 촬영 나이 상한은 아닙니다. 기본 추론 400ms는 유지합니다. 색상·진행 방향·빈 공간 증거와 내비 회전 사전점등·회전 예측·유턴 구현은 없습니다. PC 검증은 실차 검증이 아닙니다.
++<!-- CARROT:SECTION:END REFERENCE -->
+ <!-- CARROT:MANUAL:END TeslaModelDesireSignals -->
+--- a/ZH-特斯拉模型意图灯.md
++++ b/ZH-特斯拉模型意图灯.md
+@@ -28,3 +28,15 @@
+ <!-- CARROT:MANUAL:BEGIN TeslaModelDesireSignals -->
+-<!-- CARROT:REVIEW reviewed-for="" -->
++<!-- CARROT:REVIEW reviewed-for="bca04977c235f3a14fba9b7ea53e0b0d380d401a15291409e8f45d1bfb0bedc7" reviewed-at="2026-11-06T08:00:00Z" -->
++
++<!-- CARROT:SECTION:BEGIN BEHAVIOR -->
++开启后，优势变道概率在至少四个不同模型帧中持续 0.2 秒时请求灯光；关闭时不使用该预测。需横向控制激活、至少 30km/h 及手动灯相同的新鲜 ONNX 虚线/相邻车道证据，不生成转向请求。
++<!-- CARROT:SECTION:END BEHAVIOR -->
++
++<!-- CARROT:SECTION:BEGIN USAGE -->
++需特斯拉自动转向灯、数据共享和支持的 CAN/真实拨杆/灯光反馈，修改后重启。与手动及路径选项独立，既有 ATC/App 意图优先。证据丢失、完成、回退或 12 秒时取消；连续预测不能在中立预测和持续熄灯确认前重放已消费的观察。
++<!-- CARROT:SECTION:END USAGE -->
++
++<!-- CARROT:SECTION:BEGIN REFERENCE -->
++可能提前或误亮。需两次不同虚线结果跨度 0.2 秒、完成年龄不超过 0.8 秒，而非总拍摄年龄；默认 400ms 推理不变。不证明颜色、同向或无障碍，不增加导航转弯预告、转弯预测或掉头实现。PC 测试不等于实车验收。
++<!-- CARROT:SECTION:END REFERENCE -->
+ <!-- CARROT:MANUAL:END TeslaModelDesireSignals -->
+--- a/EN-Tesla-Model-Path-Lamps.md
++++ b/EN-Tesla-Model-Path-Lamps.md
+@@ -28,3 +28,15 @@
+ <!-- CARROT:MANUAL:BEGIN TeslaModelPathSignals -->
+-<!-- CARROT:REVIEW reviewed-for="" -->
++<!-- CARROT:REVIEW reviewed-for="edf04a247afa9d6aaf6f0a28c3a2a9441df5e3bfed9758d06e290ced61ea05b0" reviewed-at="2026-11-06T08:00:00Z" -->
++
++<!-- CARROT:SECTION:BEGIN BEHAVIOR -->
++ON requests lamps for repeated model-path crossing relative to curved lane boundaries; OFF does not use this prediction. At least four unique frames over 0.2 seconds, active lateral control, 30 km/h and fresh ONNX dashed/adjacent-lane evidence are required. No model or steering command is changed.
++<!-- CARROT:SECTION:END BEHAVIOR -->
++
++<!-- CARROT:SECTION:BEGIN USAGE -->
++Requires Tesla Automatic Turn Signals, Share Data and supported CAN/stalk/feedback; reboot after changing. Independent of manual and desire options. ATC/App takes priority. Evidence/context loss, return, completion or 12 seconds cancels through the existing executor; neutral prediction and dark lamps are required before rearming.
++<!-- CARROT:SECTION:END USAGE -->
++
++<!-- CARROT:SECTION:BEGIN REFERENCE -->
++Predictions may light early or falsely, not detect every crossing. Two distinct dashed updates span 0.2 seconds and completion age is at most 0.8 seconds, not capture age; the default 400 ms interval stays unchanged. Dashed is not colour, same-direction or free-space proof. No navigation turn preannouncement, turn prediction or U-turn logic; physical closed-course acceptance remains unverified.
++<!-- CARROT:SECTION:END REFERENCE -->
+ <!-- CARROT:MANUAL:END TeslaModelPathSignals -->
+--- a/KO-Tesla-모델-경로-램프.md
++++ b/KO-Tesla-모델-경로-램프.md
+@@ -28,3 +28,15 @@
+ <!-- CARROT:MANUAL:BEGIN TeslaModelPathSignals -->
+-<!-- CARROT:REVIEW reviewed-for="" -->
++<!-- CARROT:REVIEW reviewed-for="edf04a247afa9d6aaf6f0a28c3a2a9441df5e3bfed9758d06e290ced61ea05b0" reviewed-at="2026-11-06T08:00:00Z" -->
++
++<!-- CARROT:SECTION:BEGIN BEHAVIOR -->
++켜면 곡선 차선 대비 모델 경로의 반복된 경계 통과 예측으로 램프를 요청하고 끄면 이 예측을 사용하지 않습니다. 서로 다른 프레임 최소 4개·0.2초, 횡제어 활성·30km/h·신선한 ONNX 점선/인접 차로 근거가 필요하며 모델·조향 명령은 바꾸지 않습니다.
++<!-- CARROT:SECTION:END BEHAVIOR -->
++
++<!-- CARROT:SECTION:BEGIN USAGE -->
++Tesla 자동 방향지시등·데이터 공유·지원 CAN/스토크/피드백이 필요하며 변경 후 재부팅합니다. 수동·의도 옵션과 독립적이고 ATC/App이 우선합니다. 근거·상태 상실, 복귀·완료·12초에 기존 실행기로 취소하며 재시작에는 중립 예측과 소등 재확인이 필요합니다.
++<!-- CARROT:SECTION:END USAGE -->
++
++<!-- CARROT:SECTION:BEGIN REFERENCE -->
++미리 또는 잘못 점등할 수 있으며 모든 통과를 감지하지 못합니다. 서로 다른 점선 2회·0.2초와 완료 나이 0.8초 이내가 필요하며 촬영 나이는 아닙니다. 기본 400ms는 유지합니다. 점선은 색상·진행 방향·빈 공간 증거가 아닙니다. 내비 회전 사전점등·회전 예측·유턴 구현은 없으며 폐쇄 시험장 실차 확인은 미완료입니다.
++<!-- CARROT:SECTION:END REFERENCE -->
+ <!-- CARROT:MANUAL:END TeslaModelPathSignals -->
+--- a/ZH-特斯拉模型路径灯.md
++++ b/ZH-特斯拉模型路径灯.md
+@@ -28,3 +28,15 @@
+ <!-- CARROT:MANUAL:BEGIN TeslaModelPathSignals -->
+-<!-- CARROT:REVIEW reviewed-for="" -->
++<!-- CARROT:REVIEW reviewed-for="edf04a247afa9d6aaf6f0a28c3a2a9441df5e3bfed9758d06e290ced61ea05b0" reviewed-at="2026-11-06T08:00:00Z" -->
++
++<!-- CARROT:SECTION:BEGIN BEHAVIOR -->
++开启后，根据相对弯曲车道边界的连续模型路径越线预测请求灯光；关闭时不使用该预测。需至少四个不同帧持续 0.2 秒、横向控制激活、至少 30km/h 及新鲜 ONNX 虚线/相邻车道证据，不改变模型或转向命令。
++<!-- CARROT:SECTION:END BEHAVIOR -->
++
++<!-- CARROT:SECTION:BEGIN USAGE -->
++需特斯拉自动转向灯、数据共享和支持的 CAN/真实拨杆/灯光反馈，修改后重启。与手动和意图选项独立，ATC/App 优先。证据/状态失效、回退、完成或 12 秒后由原执行器取消；重新触发前需中立预测和持续熄灯确认。
++<!-- CARROT:SECTION:END USAGE -->
++
++<!-- CARROT:SECTION:BEGIN REFERENCE -->
++可能提前或误亮，不保证识别每次越线。需两次不同虚线跨度 0.2 秒、完成年龄最多 0.8 秒，而非拍摄年龄；默认 400ms 间隔不变。虚线不证明颜色、同向或无障碍。不增加导航转弯预告、转弯预测或掉头逻辑；封闭场地实车验收仍未完成。
++<!-- CARROT:SECTION:END REFERENCE -->
+ <!-- CARROT:MANUAL:END TeslaModelPathSignals -->

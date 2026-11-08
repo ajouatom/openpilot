@@ -2,6 +2,18 @@ msgid ""
 msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "BRAKE! Tesla CAN Red Light"
+msgstr ""
+
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "Stopping Distance May Be Insufficient"
+msgstr ""
+
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "Tesla CAN Traffic Signal Lost or Inconsistent"
+msgstr ""
+
 #: openpilot/selfdrive/ui/layouts/sidebar.py
 #: openpilot/system/ui/widgets/confirm_dialog.py
 #: openpilot/system/ui/widgets/html_render.py
