@@ -1522,6 +1522,10 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
 
         _apply_cluster_lane_lines(values, CS, lat_active, desire)
         _normalize_cluster_corner_objects(values)
+        # A double one-touch queued a second lane change. The cluster has no such text; the user picked
+        # 3 "Analyzing driving lane" (2026-11-09). Shown until the second change starts.
+        if md is not None and getattr(md.meta, "laneChangeDouble", False):
+          values["AUTOLANECHANGE_MSG"] = 3
 
         msg = _cluster_test_msg(packer, "ADRV_0x1ea", CAN.ECAN, values, rx_counter, test_field, test_value)
         if HAZARD_REQUEST_BIT not in CLUSTER_TEST_BITS_1EA.get(test_field, ()) and _hazard_test():

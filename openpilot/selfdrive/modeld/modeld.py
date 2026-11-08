@@ -607,6 +607,7 @@ def main(demo=False):
       modelv2_send.modelV2.meta.desireLog = DH.desireLog #carrot
       modelv2_send.modelV2.meta.laneChangeBlinkerHold = DH.blinker_hold_direction
       modelv2_send.modelV2.meta.leverTurn = DH.lever_turn
+      modelv2_send.modelV2.meta.laneChangeDouble = DH.lane_change_double
       modelv2_send.modelV2.meta.autoTurnSignal = DH.auto_turn_signal
       modelv2_send.modelV2.meta.autoTurnSignalLaneChange = DH.auto_turn_signal_lane_change
       modelv2_send.modelV2.meta.assistantLaneSignalId = DH.assistant_lane.signal_id

@@ -143,13 +143,16 @@ class TestDesireHelperStalkRequest:
     self.double_tap(0.2)
     assert self.helper.queued_lane_change == 1
     assert self.helper.blinker_hold_direction == LCD.left  # lamp kept for the second change
+    assert self.helper.lane_change_double                  # cluster: "analyzing driving lane"
     assert self.finish() == LCS.preLaneChange
     assert not self.helper.next_lane_change                 # no torque needed for the second one
     assert self.update() == LCS.laneChangeStarting
+    assert not self.helper.lane_change_double              # message ends when the second change starts
 
   def test_slow_second_press_before_the_crossing_is_not_a_double(self):
     self.double_tap(0.6)
     assert self.helper.queued_lane_change == 0
+    assert not self.helper.lane_change_double
     assert self.finish() == LCS.preLaneChange
     assert self.helper.next_lane_change                     # one lane only: the next one needs torque
 

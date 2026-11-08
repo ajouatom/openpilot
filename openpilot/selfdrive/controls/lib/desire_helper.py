@@ -86,6 +86,8 @@ class DesireHelper:
     self.stalk_counts = None
     self.queued_lane_change = BLINKER_NONE
     self.double_tap_side = BLINKER_NONE  # a double one-touch asked for a second lane change after this one
+    self.queued_from_double = False
+    self.lane_change_double = False  # modelV2.meta.laneChangeDouble: from the double press until the second change starts
     self.last_press_side = BLINKER_NONE
     self.last_press_frame = -1000
     self.finishing_timer = 0.0
@@ -804,6 +806,9 @@ class DesireHelper:
         self.double_tap_side = BLINKER_NONE
       elif changing and prev_lane_change_state != LaneChangeState.preLaneChange:
         self.queued_lane_change, self.double_tap_side = self.double_tap_side, BLINKER_NONE
+        self.queued_from_double = True
+    self.queued_from_double = self.queued_from_double and self.queued_lane_change != BLINKER_NONE
+    self.lane_change_double = self.double_tap_side != BLINKER_NONE or self.queued_from_double
 
     hold = self.lever_wait.update_hold(self.lane_change_state, blinker_state)
     if self.queued_lane_change != BLINKER_NONE:

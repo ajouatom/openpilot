@@ -1121,6 +1121,7 @@ struct ModelDataV2 {
     indicatorPrepareSource @34 :Text;
     assistantLaneSignalId @35 :Text; # Set only after ordinary lane-change admission; direction is laneChangeDirection.
     assistantLaneSignalRoute @36 :Text; # Empty outside voice maneuvers, otherwise ordinary, native or the selected adapter instance.
+    laneChangeDouble @37 :Bool; # joongyu01: a double one-touch queued a second lane change (until it starts); cluster message
 
 
     deprecated :group {

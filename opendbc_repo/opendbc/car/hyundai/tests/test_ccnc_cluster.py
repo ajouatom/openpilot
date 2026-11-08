@@ -648,3 +648,24 @@ def test_cluster_test_on_scc_control_only_parked(monkeypatch, gear, standstill, 
   assert get_raw_value(data, definition.sigs['aReqValue']) == get_raw_value(scc[1], definition.sigs['aReqValue'])
   assert get_raw_value(data, definition.sigs['CHECKSUM']) == hyundaicanfd.hkg_can_fd_checksum(address, None, bytearray(data))
   assert out[1][1] == other[1]
+
+
+@pytest.mark.parametrize("double", [False, True])
+def test_double_lane_change_shows_analyzing_lane_on_the_cluster(monkeypatch, double):
+  from openpilot.cereal import log
+  monkeypatch.setattr(hyundaicanfd, "Params", lambda: SimpleNamespace(get_int=lambda key: 0, get=lambda key: '0'))
+  packer = CANPacker("hyundai_canfd_generated")
+  definition = packer.dbc.name_to_msg["ADRV_0x1ea"]
+  model = log.ModelDataV2.new_message()
+  model.meta.laneChangeDouble = double
+  state = SimpleNamespace(
+    out=SimpleNamespace(brakeHoldActive=False, parkingBrake=False, steeringAngleDeg=0.0, leftBlinker=False, rightBlinker=False),
+    modelV2=model.as_reader(), lfahda_cluster=None, cruise_buttons_msg=None, adrv_0x161=None, adrv_0x200=None,
+    ccnc_0x162=None, adrv_0x1ea={key: 0 for key in definition.sigs}, radarState=None,
+  )
+  control = SimpleNamespace(latActive=False, enabled=False)
+  hud = SimpleNamespace(leadDistance=0, leadRadar=0, leadRelSpeed=0)
+  (address, data, bus), = hyundaicanfd.create_ccnc_messages(SimpleNamespace(flags=HyundaiFlags.CAMERA_SCC.value), packer,
+                                                            SimpleNamespace(ECAN=0, CAM=2), 0, control, state, hud,
+                                                            0, False, False, 0, False, 0, 0)
+  assert get_raw_value(data, definition.sigs["AUTOLANECHANGE_MSG"]) == (3 if double else 0)
