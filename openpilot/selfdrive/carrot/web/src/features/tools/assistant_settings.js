@@ -6,7 +6,7 @@ const t = (key, fallback) => globalThis.getUIText?.(`assistant_${key}`, fallback
 function refreshCredential() {
   // Permission can be enabled/revoked in another same-origin WebView or tab.
   // Never keep a stale startup snapshot, and never retry an old write on refresh.
-  try { credential = localStorage.getItem(KEY); } catch {}
+  try { credential = localStorage.getItem(KEY); } catch { credential = null; }
 }
 
 export function settingCommandBlocked(command, active) {
@@ -44,7 +44,7 @@ export async function revokeSettingAccess() {
 export function mountSettingAccess(container) {
   refreshCredential();
   const section = document.createElement('section'), help = document.createElement('p');
-  help.textContent = t('settings_help', 'Optional: let this connection read and change one setting at a time. Its current value and change result are sent to ChatGPT and the Carrot relay. Clear commands specifying a setting and value are applied after bounds checks without another question. Ambiguous requests need clarification. Supported driving settings may also be changed while driving. Initial permission must be granted while stationary and disengaged. Also authorize setting access when connecting ChatGPT.');
+  help.textContent = t('settings_help', 'Phone voice reads and changes settings directly on this Carrot Web device. Say one setting and an in-range value to apply it. Park and disengage before granting access for the first time. To use ChatGPT, also authorize setting access in its connection. That route sends the current value and result to ChatGPT and the relay.');
   const button = document.createElement('button'), result = document.createElement('p');
   button.type = 'button'; button.className = 'btn'; result.setAttribute('role', 'status');
   const render = () => { button.textContent = credential ? t('settings_disable', 'Revoke setting access') : t('settings_enable', 'Allow setting reads and changes'); };
@@ -54,7 +54,7 @@ export function mountSettingAccess(container) {
     try {
       if (credential) await revokeSettingAccess();
       else { const response = await local('enable', { confirmed: true }, null); remember(response.token); }
-      result.textContent = credential ? t('settings_enabled', 'Setting access allowed on this device. Authorize the same scope in ChatGPT.') : t('settings_disabled', 'Setting access revoked');
+      result.textContent = credential ? t('settings_enabled', 'Setting access is allowed on this device.') : t('settings_disabled', 'Setting access revoked');
     } catch (error) { result.textContent = error.message; }
     finally { button.disabled = false; render(); }
   };
@@ -66,6 +66,23 @@ export function validSettingCommand(command, now = Date.now()) {
     ['read', 'prepare', 'commit', 'cancel'].includes(command.operation) &&
     Number.isFinite(command.expires_at) && command.expires_at > now && command.expires_at - now <= 30000;
 }
+
+export function updateDisplayedSetting(result) {
+  const values = { [result.name]: result.current };
+  try {
+    globalThis.CarrotSettingsRuntime?.values?.clear();
+    globalThis.CarrotSettingsRuntime?.values?.applyValues(values);
+    globalThis.applyRestoredSettingValuesToRenderedItems?.(values);
+  } catch {}
+  return values;
+}
+
+export function settingAccessToken() {
+  refreshCredential();
+  return credential;
+}
+
+export const executeLocalSetting = (command, token) => local('execute', { command }, token);
 
 export async function executeSettingCommand(command) {
   if (!validSettingCommand(command)) return null;
@@ -85,12 +102,7 @@ export async function executeSettingCommand(command) {
   if (result.status === 'applied') {
     // The destination may already be open, so navigation alone will not reload
     // its controls. Discard in-flight cached reads before applying the readback.
-    const values = { [result.name]: result.current };
-    try {
-      globalThis.CarrotSettingsRuntime?.values?.clear();
-      globalThis.CarrotSettingsRuntime?.values?.applyValues(values);
-      globalThis.applyRestoredSettingValuesToRenderedItems?.(values);
-    } catch {}
+    const values = updateDisplayedSetting(result);
     try { await globalThis.openAssistantSetting?.(result.name); } catch {}
     try { globalThis.applyRestoredSettingValuesToRenderedItems?.(values); } catch {}
   }

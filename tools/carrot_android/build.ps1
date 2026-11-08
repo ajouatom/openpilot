@@ -45,7 +45,7 @@ Assert-Exit 'Connection policy checks'
 Assert-Exit 'Compile legacy origin checks'
 & $javaExe -cp $testClasses LegacyOriginHintsTest
 Assert-Exit 'Legacy origin checks'
-& $javacExe -encoding UTF-8 -d $testClasses (Join-Path $sourceRoot 'src/me/shind0/carrotweb/LocalCommand.java') (Join-Path $sourceRoot 'tests/LocalCommandTest.java')
+& $javacExe -encoding UTF-8 -d $testClasses (Join-Path $sourceRoot 'src/me/shind0/carrotweb/LocalCommand.java') (Join-Path $sourceRoot 'src/me/shind0/carrotweb/SpokenSetting.java') (Join-Path $sourceRoot 'tests/LocalCommandTest.java')
 Assert-Exit 'Compile local voice checks'
 & $javaExe -cp $testClasses me.shind0.carrotweb.LocalCommandTest
 Assert-Exit 'Local voice checks'

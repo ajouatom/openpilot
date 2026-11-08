@@ -142,10 +142,7 @@ final class ConnectionRecovery {
       String token = "";
       try { token = new JSONObject(saved.optString(SESSION)).optString("browser_token"); } catch (Exception ignored) {}
       if (!ConnectionPolicy.token(token)) {
-        String drive = saved.optString(key("drive"));
-        if (!origin.equals(next) && ConnectionPolicy.token(drive)) {
-          localOnly.add(new Candidate(origin, "", new JSONObject().put(key("drive"),drive), null));
-        }
+        if (!origin.equals(next)) localOnly.add(new Candidate(origin, "", saved, null));
         continue;
       }
       remember(activity,origin);
@@ -160,15 +157,21 @@ final class ConnectionRecovery {
         if (state.optBoolean("account_linked")) candidates.add(new Candidate(origin, token, saved, state));
       } catch (HttpFailure error) { if (error.status != 401 && error.status != 403) throw error; }
     }
-    // An unpaired phone can recover a local drive grant only if this device proves it already owns that grant.
-    if (destination != null && !ConnectionPolicy.token(destination.optString(key("drive")))) {
+    // For direct voice, move only missing local grants the destination proves it already owns.
+    if (destination != null) {
       for (Candidate local : localOnly) {
-        JSONObject restored = restorePermissions(next,local);
-        if (restored.has("drive")) {
-          destination.put(key("drive"),restored.getString("drive"));
-          storage(next,destination);
-          break;
+        JSONObject missing = new JSONObject();
+        for (String role : new String[]{"settings", "drive"}) {
+          String token = local.saved.optString(key(role));
+          if (!ConnectionPolicy.token(destination.optString(key(role))) && ConnectionPolicy.token(token))
+            missing.put(key(role), token);
         }
+        if (missing.length() == 0) continue;
+        JSONObject restored = restorePermissions(next, new Candidate(local.origin, "", missing, null));
+        if (restored.length() == 0) continue;
+        for (String role : ROLES)
+          if (restored.has(role)) destination.put(key(role), restored.getString(role));
+        storage(next, destination);
       }
     }
     candidates.sort((a,b) -> Long.compare(b.state.optLong("account_activity_at"), a.state.optLong("account_activity_at")));

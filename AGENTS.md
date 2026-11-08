@@ -1,5 +1,7 @@
 # Repository memory
 
+- CarrotAssist 0.2.7 phone voice searches the visible device catalog and writes explicit absolute integer settings without a relay session. Use the existing same-origin setting grant, prepare/commit validation and device readback. Never convert a broad search, ambiguous name or conflicting numerical recognition into a write.
+
 - CarrotAssist 0.2.6 supports foreground Android 12+ on-device speech recognition.
   A local WebView readiness check precedes greeting/listening; no ChatGPT account,
   relay pairing, cloud transcription or MCP grant is required on the direct route.

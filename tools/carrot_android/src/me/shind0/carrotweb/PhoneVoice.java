@@ -17,6 +17,8 @@ final class PhoneVoice {
   interface Listener {
     void status(String text);
     void heard(LocalCommand command);
+    void heardSetting(SpokenSetting setting);
+    void findSettings(String query);
   }
   private final Context context;
   private final Listener listener;
@@ -52,12 +54,24 @@ final class PhoneVoice {
         public void onResults(Bundle results) {
           if (token != generation) return;
           long now = SystemClock.elapsedRealtime();
+          java.util.List<String> alternatives = results == null ? null : results.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION);
+          float[] scores = results == null ? null : results.getFloatArray(SpeechRecognizer.CONFIDENCE_SCORES);
+          SpokenSetting setting = alternatives == null || alternatives.isEmpty() ? null : SpokenSetting.parse(alternatives.get(0));
+          boolean stale = now-started > 10000 || ended != 0 && now-ended > 1500;
+          if (setting != null) {
+            stop();
+            listener.heardSetting(!stale && setting.agreed(alternatives, scores) ? setting : null);
+            return;
+          }
           LocalCommand command = results == null ? LocalCommand.UNRECOGNIZED : LocalCommand.choose(
-            results.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION), results.getFloatArray(SpeechRecognizer.CONFIDENCE_SCORES));
-          if ((command == LocalCommand.LEFT || command == LocalCommand.RIGHT || command == LocalCommand.CONFIRM_LEFT || command == LocalCommand.CONFIRM_RIGHT || command == LocalCommand.CLARIFY_LEFT || command == LocalCommand.CLARIFY_RIGHT) && (now-started > 10000 || ended != 0 && now-ended > 1500))
+            alternatives, scores);
+          if ((command == LocalCommand.LEFT || command == LocalCommand.RIGHT || command == LocalCommand.CONFIRM_LEFT || command == LocalCommand.CONFIRM_RIGHT || command == LocalCommand.CLARIFY_LEFT || command == LocalCommand.CLARIFY_RIGHT) && stale)
             command = LocalCommand.UNCERTAIN;
+          String query = command == LocalCommand.UNRECOGNIZED && alternatives != null && !alternatives.isEmpty()
+            ? SpokenSetting.search(alternatives.get(0)) : null;
           stop();
-          listener.heard(command);
+          if (query != null && !stale) listener.findSettings(query);
+          else listener.heard(command);
         }
         public void onError(int error) {
           if (token != generation) return;
