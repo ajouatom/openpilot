@@ -10,6 +10,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from openpilot.common.atc_params import right_lane_change_distance
 from blink_protocol import PACKAGE_CONFIG, LIMIT, encode, finite, fresh
 from blink_policy import Policy, AutomaticSignals
+from blink_voice import VoiceLaneSignal
+from openpilot.selfdrive.controls.lib.desire_lib.assistant_lane import ROOT as ASSISTANT_LANE_ROOT
 from blink_tbt import TbtBlinker, right_front_clear
 from blink_turn_location import observations as turn_observations, navigation_cancelled
 from blink_boundary import BoundaryEvents, vehicle_allowed as boundary_vehicle_allowed
@@ -106,6 +108,7 @@ def main(fd, spas=False, ble=False):
   last_trial = None
   policy, params = Policy(), Params()
   automatic = AutomaticSignals()
+  voice, voice_tap = VoiceLaneSignal(), ObservationFeedback()
   tbt = TbtBlinker()
   boundary = BoundaryEvents(read_json(RUNTIME/'boundary-indicator.json', {}))
   observation = ObservationSignals(read_json(RUNTIME/'boundary-indicator.json', {}))
@@ -196,6 +199,7 @@ def main(fd, spas=False, ble=False):
     meta = sm['modelV2'].meta if model_fresh else None
     observed_source = str(getattr(meta, 'observedIndicatorSource', ''))
     observation_enabled = (params.get_bool('ManualLaneChangeIndicator') if observed_source == 'manual' else
+                           params.get_bool('ManualTurnIndicator') if observed_source == 'manual_turn' else
                            params.get_bool('ModelPathIndicator') if observed_source == 'model_path' else
                            params.get_bool('ModelDesireIndicator') if observed_source in ('model_desire', 'model_turn') else False)
     own_tap = (observation.owned is not None and tap_echo.matches(
@@ -209,10 +213,28 @@ def main(fd, spas=False, ble=False):
       record=record_ownership)
     if auto is None and observe_auto:
       auto = observe_auto
+    peer_fresh = fresh(feedback.get('stamp'), now, .35)
+    # Only a worker with live receiver feedback for this vehicle advertises a path.
+    # Bind a request to that worker for its lifetime, even across adapter handoff.
+    voice.advertise(now, fingerprint, ok and mode == 2 and peer_fresh and (not spas or feedback.get('available') is True) and feedback.get('state') in
+      ('ready', 'waiting', 'sending', 'waiting_previous_signal', 'driver_override'),
+      lambda record: atomic_json(ASSISTANT_LANE_ROOT/'indicator-device.json', record))
+    voice_auto = voice.select(meta, cs,
+      allowed=(mode == 2 and auto_valid and sm['carControl'].latActive),
+      peer_ready=peer_fresh and not feedback.get('lamps') and not feedback.get('accepted_id') and (
+        feedback.get('state') == 'ready' or (spas and feedback.get('state') == 'waiting')), hold=policy.hold,
+      busy=(auto is not None or bool(commands) or not peer_fresh or feedback.get('state') == 'driver_override'))
+    if voice_auto:
+      auto = voice_auto
     local_observation = (auto is not None and auto[0] == 'observation') or (auto is None and (policy.hold is None or policy.hold['source'] == 'observation'))
     policy_valid = (ok and model_fresh) if local_observation else auto_valid
     commands, hold = policy.update(now, mode, ok, commands, cs.vEgo, cs.steeringAngleDeg,
                                   str(cs.gearShifter), remote, auto, policy_valid)
+    if voice.bind(hold):
+      # Persist ownership before sending, so a process restart cannot reinterpret the lamp as a lever press.
+      record_ownership({'time': now, 'direction': 1 if voice.direction == 'left' else 2, 'voice_fingerprint':fingerprint})
+    voice_hold = hold if voice.direction and hold and hold['id'] == voice.hold_id else None
+    voice_tap.prepare_tap(now, voice_hold, 0., cs)
     observation_feedback.prepare(now, hold, meta, cs)
     receiver_override = fresh(feedback.get('stamp'), now, .35) and feedback.get('state') == 'driver_override'
     native_hold = not ble or fingerprint == 'HYUNDAI_IONIQ_5_PE'
@@ -290,6 +312,14 @@ def main(fd, spas=False, ble=False):
       submitted = True
     except BlockingIOError:
       pass  # Never buffer commands for delivery after congestion.
+    if voice_hold and hold and hold['id'] == voice_hold['id']:
+      # The board's own lamp observation can supply the missing carState lamp sample.
+      receiver_hold = feedback.get('accepted_id') if ble and feedback.get('lamps') is not None else activated_id
+      confirmation = submitted and ok and acknowledged and voice.confirmed(hold, receiver_hold, feedback, cs)
+      atomic_json(ASSISTANT_LANE_ROOT/'signal.json', {
+        'id': voice.request, 'route': voice.route, 'direction': voice.direction, 'time': now, 'confirmed': bool(confirmation),
+        'board_lamp': bool(ble and confirmation and feedback.get('lamps') is not None),
+        'tap': voice_tap.sent(now, feedback, submitted and ok)})
     if mode and not spas:
       atomic_json(HOLD_PATH, {'stamp':now, 'mode':mode, 'fingerprint':fingerprint,
                              'direction':hold['direction'] if hold and activated_id == hold['id'] else None,

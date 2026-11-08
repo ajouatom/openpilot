@@ -11,6 +11,39 @@ LCS = log.LaneChangeState
 LCD = log.LaneChangeDirection
 
 
+def test_manual_turn_signal_remains_isolated_during_acceleration_with_atc_off():
+  from openpilot.cereal import car
+
+  for lateral_active in (False, True):
+    harness = TestDesireHelperStalkRequest()
+    harness.setup_method()
+    helper = harness.helper
+    helper.boundary_indicator_supported = True
+    helper.manual_turn_indicator_enabled = True
+    cs = car.CarState.new_message(canValid=True, gearShifter='drive', vEgo=5.)
+    md = log.ModelDataV2.new_message()
+    md.laneLines = [{'x': [0., 5., 10., 15.], 'y': [y] * 4} for y in (-5., -1.8, 1.8, 5.)]
+    md.laneLineProbs = [0.] * 4
+    md.meta.desireState = [1., 0., 0., 0., 0., 0., 0., 0.]
+    saw_request = False
+    with patch('openpilot.selfdrive.controls.lib.desire_helper.read_json', return_value={}):
+      for i in range(90):
+        now = 10 + i * .05
+        md.frameId = i
+        cs.steeringPressed = 25 <= i < 55
+        cs.steeringTorque = 400. if cs.steeringPressed else 0.
+        cs.steeringAngleDeg = min(100., max(0, i - 25) * 8.)
+        cs.vEgo = 12. if i >= 55 else 5.
+        cs.leftBlinker = i >= 50
+        with patch('openpilot.selfdrive.controls.lib.desire_helper.time.monotonic', return_value=now):
+          helper.update(cs, md, lateral_active, 0., harness.carrot_man, SimpleNamespace(),
+                        indicator_valid=True, indicator_yaw_rate=-.2 if i >= 29 else 0.)
+        saw_request |= helper.model_indicator.active is not None
+        assert helper.lane_change_state == LCS.off
+        assert helper.desire == log.Desire.none
+    assert saw_request and helper.model_indicator.active.source == 'manual_turn'
+
+
 class TestDesireHelperStalkRequest:
   """Turn-signal lever presses (carState.*BlinkerStalkCount) as explicit next-lane-change requests."""
 

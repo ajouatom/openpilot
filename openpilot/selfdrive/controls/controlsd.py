@@ -17,6 +17,7 @@ from opendbc.car.car_helpers import interfaces
 from opendbc.car.vehicle_model import VehicleModel
 from opendbc.car.volkswagen.values import MEB_CURVATURE_PID_KP, MEB_CURVATURE_PID_KI, MEB_CURVATURE_PID_KF, MEB_CURVATURE_MAX
 
+from openpilot.selfdrive.car.voice_indicator import set_lane_change_blinkers
 from openpilot.selfdrive.controls.lib.drive_helpers import clip_curvature, get_lag_adjusted_curvature, is_volkswagen_meb
 from openpilot.selfdrive.controls.lib.latcontrol import LatControl, MIN_LATERAL_CONTROL_SPEED
 from openpilot.selfdrive.controls.lib.latcontrol_pid import LatControlPID
@@ -39,8 +40,6 @@ from openpilot.selfdrive.monitoring.dm_alerts import driver_monitoring_hud_alert
 from openpilot.selfdrive.carrot.bluetooth.physical import HoldReader
 
 State = log.SelfdriveState.OpenpilotState
-LaneChangeState = log.LaneChangeState
-LaneChangeDirection = log.LaneChangeDirection
 LAT_CURVATURE_SATURATION_ACCEL = 0.1  # infiniteCable2 LatControlCurvature: 곡률 기반 steer_limited 임계 (m/s^2 환산)
 
 ACTUATOR_FIELDS = tuple(car.CarControl.Actuators.schema.fields.keys())
@@ -168,10 +167,7 @@ class Controls:
 
     actuators = CC.actuators
 
-    # Enable blinkers while lane changing
-    if model_v2.meta.laneChangeState != LaneChangeState.off:
-      CC.leftBlinker = model_v2.meta.laneChangeDirection == LaneChangeDirection.left
-      CC.rightBlinker = model_v2.meta.laneChangeDirection == LaneChangeDirection.right
+    set_lane_change_blinkers(CC, model_v2.meta)
 
     if not CC.latActive:
       self.LaC.reset()

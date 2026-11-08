@@ -292,6 +292,23 @@ struct CarState {
   tbtRearInputsAvailable @110 :Bool; # fresh CANFD OEM BSD input for the TBT physical-indicator trigger only (BSD-only since 2026-10-30)
   tbtRightRearBlocked @111 :Bool = true; # OEM right BSD warning or invalid/stale BSD; no corner-distance veto; manual admission unchanged
   laneLineInfoMonoTime @112 :UInt64; # exact OEM lane type/colour CAN observation; zero means unknown, manual indicator only
+  teslaTrafficControl @113 :TeslaTrafficControl;
+
+  struct TeslaTrafficControl {
+    available @0 :Bool;
+    valid @1 :Bool;
+    sampleMonoTime @2 :UInt64;
+    stopLineDistance @3 :Float32; # APP_trafficControl metres; legacy DAS_road is not supported
+    light @4 :Light;
+    status @5 :Text;
+
+    enum Light {
+      unknown @0;
+      red @1;
+      green @2;
+      yellow @3;
+    }
+  }
   struct VehicleGps {
     available @0 :Bool;
     valid @1 :Bool; # receive/continuity checks, not a decoded satellite fix flag
@@ -467,6 +484,7 @@ struct CarControl {
   # Blinker controls
   leftBlinker @15: Bool;
   rightBlinker @16: Bool;
+  assistantLaneSignalId @18 :Text; # Correlates an eligible voice request with the native indicator output.
 
   orientationNED @13 :List(Float32);
   angularVelocity @14 :List(Float32);

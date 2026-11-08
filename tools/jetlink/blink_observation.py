@@ -2,7 +2,7 @@
 import math
 
 from blink_boundary import BoundaryEvents
-from openpilot.selfdrive.controls.lib.desire_lib.boundary_lane import adjacent_lane
+from openpilot.selfdrive.controls.lib.desire_lib.boundary_lane import MANUAL_INDICATOR_MIN_SPEED, adjacent_lane
 
 
 def allowed(cs, cc, md, source, now, holding=False, tap_echo=False):
@@ -11,15 +11,17 @@ def allowed(cs, cc, md, source, now, holding=False, tap_echo=False):
         cs.steerFaultTemporary or cs.steerFaultPermanent or (cs.blinkerLever and not (holding and tap_echo)) or
         not math.isfinite(cs.vEgo) or cs.vEgo < 0):
       return False
-    if source != 'manual' and not cc.latActive:
+    if source not in ('manual', 'manual_turn') and not cc.latActive:
       return False
     if holding:
       return True
     direction = {'left':1, 'right':2}.get(str(md.meta.observedIndicator), 0)
-    return (direction != 0 and not cs.leftBlinker and not cs.rightBlinker and
-            cs.vEgo >= (10/3.6 if source == 'model_turn' else 30/3.6) and
+    minimum_speed = 10/3.6 if source == 'model_turn' else 30/3.6
+    if source in ('manual', 'manual_turn'):
+      minimum_speed = MANUAL_INDICATOR_MIN_SPEED
+    return (direction != 0 and not cs.leftBlinker and not cs.rightBlinker and cs.vEgo >= minimum_speed and
             str(md.meta.laneChangeState) in ('off', 'preLaneChange') and
-            (source == 'model_turn' or adjacent_lane(cs, md, direction, now)))
+            (source in ('model_turn', 'manual_turn') or adjacent_lane(cs, md, direction, now)))
   except (AttributeError, TypeError, ValueError):
     return False
 

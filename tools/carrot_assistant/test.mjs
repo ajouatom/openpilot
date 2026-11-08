@@ -17,6 +17,19 @@ test('Korean questions resolve real catalog entries, with no invented current va
   assert.equal(getSetting('UnknownSetting').found, false);
 });
 
+test('English requests resolve stable parameter IDs and include English descriptions', () => {
+  for (const query of ['turn signal settings', 'screen brightness', 'following gap', 'acceleration settings']) {
+    const result = searchSettings(query, 3);
+    assert.ok(result.matches.length > 0, query);
+    for (const item of result.matches) {
+      assert.ok(item.etitle); assert.ok(item.edescr);
+      assert.equal(item.current_value, null);
+      assert.ok(getSetting(item.name).found);
+    }
+  }
+  assert.equal(searchSettings('ShowCustomBrightness',1).matches[0].name, 'ShowCustomBrightness');
+});
+
 test('public deployment restricts hostnames and bounds request traffic', async () => {
   const http = createApp({ host: '0.0.0.0', publicHostname: 'carrot-mcp.shind0.synology.me', requestsPerMinute: 2 }).listen(0, '127.0.0.1');
   await new Promise(resolve => http.once('listening', resolve));
@@ -49,6 +62,8 @@ test('real MCP handshake, bounded tools, concurrent clients, invalid and write c
       const client = new Client({ name: `test-${n}`, version: '1' });
       clients.push(client);
       await client.connect(new StreamableHTTPClientTransport(url));
+      assert.match(client.getInstructions(), /Reply in the user's language/);
+      assert.doesNotMatch(client.getInstructions(), /한국어로 짧게/);
       const tools = (await client.listTools()).tools;
       assert.equal(tools.length, 7);
       assert.equal(tools.filter(tool => tool.annotations.readOnlyHint === true).length, 4);

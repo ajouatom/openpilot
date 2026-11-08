@@ -2,11 +2,14 @@
 import math
 from collections import deque
 
+from openpilot.selfdrive.controls.lib.desire_lib.boundary_indicator import QUIET_SEC
 from openpilot.selfdrive.controls.lib.desire_lib.boundary_lane import adjacent_lane
 from openpilot.selfdrive.controls.lib.desire_lib.indicator_feedback import TapEcho
+from openpilot.selfdrive.controls.lib.desire_lib.manual_turn_indicator import ManualTurnIndicator
 
 LINE_CONFIDENCE = .10
 CONFIRM_SEC = .20
+MANUAL_TURN_QUIET_SEC = 2.
 
 
 def interpolate(x, xs, ys):
@@ -48,6 +51,24 @@ def path_direction(md, curvature):
   except (AttributeError, IndexError, TypeError, ValueError):
     pass
   return 0
+
+
+def following_road_curve(md, speed, yaw_rate):
+  """Recognized curved lane geometry agreeing with the vehicle's current arc."""
+  try:
+    if yaw_rate is None or speed < 1 or min(md.laneLineProbs[1:3]) < .5:
+      return False
+    curvature = yaw_rate / speed
+    if abs(curvature) < .002:
+      return False
+    curves = []
+    for line in md.laneLines[1:3]:
+      near = [interpolate(x, line.x, line.y) for x in (5., 10., 15.)]
+      slope = (near[2] - near[0]) / 10.
+      curves.append((near[2] - 2 * near[1] + near[0]) / 25. / (1 + slope * slope)**1.5)
+    return all(c * curvature > 0 and abs(c - curvature) <= max(.002, abs(curvature) * .5) for c in curves)
+  except (AttributeError, IndexError, TypeError, ValueError):
+    return False
 
 
 class Movement:
@@ -115,11 +136,13 @@ class ModelIndicator:
     self.reason = 'idle'
     self.manual_seen = 0.
     self.tap_echo = TapEcho()
+    self.manual_turn = ManualTurnIndicator()
 
   def update(self, now, cs, md, *, valid, lateral_active, desire_enabled, path_enabled, busy, isolation, manual_edge=0, command_curvature=None,
-             feedback=None):
+             feedback=None, manual_turn_enabled=False, yaw_rate=None):
     self.reason = 'idle'
-    if self.active is None and not manual_edge and not (desire_enabled or path_enabled):
+    if self.active is None and not manual_edge and not (desire_enabled or path_enabled or manual_turn_enabled):
+      self.manual_turn.reset('disabled')
       self.evidence.clear()
       self.previous = None
       self.reason = 'disabled'
@@ -130,11 +153,12 @@ class ModelIndicator:
                 not cs.steerFaultTemporary and not cs.steerFaultPermanent and (not cs.blinkerLever or echo) and
                 math.isfinite(cs.vEgo) and math.isfinite(cs.steeringTorque))
       if self.active:
+        self.manual_turn.reset('busy')
         a = self.active
-        allowed = (a.source == 'manual' or lateral_active and
+        allowed = (manual_turn_enabled if a.source == 'manual_turn' else a.source == 'manual' or lateral_active and
                    (path_enabled if a.source == 'model_path' else desire_enabled))
         opposite_lamp = cs.rightBlinker if a.direction == 1 else cs.leftBlinker
-        if not common or busy or not allowed or opposite_lamp or not a.update(now, cs, md):
+        if not common or busy or not allowed or opposite_lamp or not a.update(now, cs, yaw_rate if a.source == 'manual_turn' else md):
           self.reason = a.reason if common and allowed and not busy and not opposite_lamp else 'cancelled'
           self.active = None
         else:
@@ -146,10 +170,28 @@ class ModelIndicator:
         self.previous = None
         return
       if manual_edge and common and isolation.request_time != self.manual_seen:
+        self.manual_turn.reset('busy')
         self.manual_seen = isolation.request_time
         self.active = Movement(now, manual_edge, 'manual', cs, md)
         self.request_time = now
         self.reason = 'manual'
+        return
+      # A new driver turn may be observed before other automatic sources rearm.
+      # Lamp masking and the uninterrupted dark interval still apply.
+      manual_turn_after = isolation.block_until - QUIET_SEC + MANUAL_TURN_QUIET_SEC
+      # At low speeds a lane-boundary relabel is common in parking areas. A
+      # manual turn uses measured steering and yaw independently of those lines.
+      lane_labels_ready = cs.vEgo < 30 / 3.6 or now >= isolation.relabel_until
+      turn = self.manual_turn.update(now, cs, md.frameId, yaw_rate,
+        allowed=(manual_turn_enabled and common and not busy and not cs.leftBlinker and not cs.rightBlinker and
+                 now >= manual_turn_after and lane_labels_ready and
+                 isolation.dark_since is not None and now - isolation.dark_since >= 1.),
+        following_curve=manual_turn_enabled and following_road_curve(md, cs.vEgo, yaw_rate))
+      if turn is not None:
+        self.active, self.request_time, self.reason = turn, now, turn.source
+        isolation.own(now, turn.direction)
+        self.candidate, self.previous = None, None
+        self.evidence.clear()
         return
       if (not common or not lateral_active or busy or cs.leftBlinker or cs.rightBlinker or
           cs.steeringPressed or cs.vEgo < 10/3.6 or now < isolation.block_until or
@@ -199,3 +241,4 @@ class ModelIndicator:
     except (AttributeError, IndexError, TypeError, ValueError):
       self.active, self.candidate, self.previous = None, None, None
       self.reason = 'invalid'
+      self.manual_turn.reset('invalid')

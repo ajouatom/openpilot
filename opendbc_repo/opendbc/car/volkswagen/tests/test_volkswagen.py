@@ -1,7 +1,11 @@
 import random
 import re
 
+import pytest
+
+from opendbc.car import Bus
 from opendbc.car.structs import CarParams
+from opendbc.car.volkswagen.carstate import CarState
 from opendbc.car.volkswagen.values import CAR, FW_QUERY_CONFIG, WMI
 from opendbc.car.volkswagen.fingerprints import FW_VERSIONS
 
@@ -10,6 +14,19 @@ Ecu = CarParams.Ecu
 CHASSIS_CODE_PATTERN = re.compile('[A-Z0-9]{2}')
 # TODO: determine the unknown groups
 SPARE_PART_FW_PATTERN = re.compile(b'\xf1\x87(?P<gateway>[0-9][0-9A-Z]{2})(?P<unknown>[0-9][0-9A-Z][0-9])(?P<unknown2>[0-9A-Z]{2}[0-9])([A-Z0-9]| )')
+
+
+def test_golf_mk7_wheel_speed_update():
+  candidate = CAR.VOLKSWAGEN_GOLF_MK7
+  cp = CarParams(carFingerprint=candidate, flags=int(candidate.config.flags), transmissionType='automatic', wheelSpeedFactor=1.0)
+  state = CarState(cp)
+  parsers = state.get_can_parsers(cp)
+  assert state.update(parsers).standstill
+  parsers[Bus.pt].vl['ESP_19'].update(ESP_VL_Radgeschw_02=36, ESP_VR_Radgeschw_02=54,
+                                     ESP_HL_Radgeschw_02=72, ESP_HR_Radgeschw_02=90)
+  moving = state.update(parsers)
+  assert moving.vEgoRaw == pytest.approx(17.5)
+  assert not moving.standstill
 
 
 class TestVolkswagenPlatformConfigs:

@@ -2,9 +2,17 @@
 
 [English](../en/settings.md)
 
-Android [CarrotAssist](carrot-assist.md)에서는 ChatGPT로 설정을 찾고 설명을 듣거나 화면을 열 수 있습니다. 기기와 ChatGPT 양쪽에서 별도 허용하면 현재 값을 조회하고 제안값을 확인한 뒤 변경합니다. 지원하는 주행 관련 설정도 주행 중 확인 후 변경할 수 있습니다. 최초 권한 허용만 정차·주행 보조 해제 상태에서 진행하며, 각 설정의 실제 반영 시점은 기존과 같습니다.
+CarrotAssist 0.2.8의 **폰 직접 음성**에서는 “가속도 설정을 찾아줘”로 관련 항목을 볼 수 있습니다. 기기에서 설정값 조회·변경을 한 번 허용하면 “가속도 설정 0을 240으로 바꿔줘”처럼 이름과 정수를 지정해 변경할 수 있습니다. ChatGPT 계정이나 MCP 등록은 필요 없습니다. 같은 음성 세션에서 “첫 번째 거 240으로 바꿔줘”라고 해도 됩니다. [폰 직접 음성 사용법](carrot-assist.md)
 
-같은 음성대화에서 차선변경·크루즈 설정속도를 요청하는 시험 기능은 **음성 차선변경·설정속도 명령 허용** 권한을 양쪽에서 별도로 추가해야 합니다. 설정 변경 권한은 자동으로 확대되지 않습니다. 설정의 현재값·제안값 확인 절차와 운전 명령의 실행·결과 안내는 구분됩니다. [연속 음성대화 사용법과 지원 조건](carrot-assist.md)을 확인하세요.
+Android [CarrotAssist](carrot-assist.md)에서는 ChatGPT로 설정을 찾고 설명을 듣거나 화면을 열 수 있습니다. 기기와 ChatGPT 양쪽에서 별도 허용하면 현재 값을 조회하고, 대상과 값·증감량이 명확한 명령은 범위 검사 후 재질문 없이 변경합니다(중계 서버0.7.3). 예를 들어 “가속도설정 0을 240으로 변경해”는 저장값을 확인한 뒤 결과만 안내합니다. 모호한 요청이나 AI 추천값은 확인하며, 범위 밖이면 변경하지 않습니다. 지원하는 주행 관련 설정도 같은 방식으로 변경할 수 있습니다. 최초 권한 허용만 정차·주행 보조 해제 상태에서 진행하며, 각 설정의 실제 반영 시점은 기존과 같습니다.
+
+ChatGPT 자체의 실행 승인은 위 기기 허용과 별개입니다. 반복 승인을 원하지 않는 사용자는 본인 ChatGPT의 **설정 → 플러그인 → CarrotAssist → 권한 → 모두 허용**을 선택합니다. 이 플러그인에 허용된 작업 전체에 적용되며, 당근앱이 자동 선택하지 않습니다. 예전 확인 지침이 남으면 **도구 새로 고침 → 새 대화**로 시험하며 코드를 다시 만들지 않습니다. 웹을 터치하면서 대화하려면 전체 ChatGPT 앱에서 백그라운드 음성을 시작하고 CarrotAssist로 돌아오는 [사용 순서](carrot-assist.md)를 따르세요.
+
+같은 음성대화에서 차선변경·크루즈 설정속도를 요청하는 시험 기능은 **음성 차선변경·설정속도 명령 허용** 권한을 양쪽에서 별도로 추가해야 합니다. 설정 변경 권한은 자동으로 확대되지 않습니다. 설정은 내부 현재값·범위 검사와 저장값 검증을 유지하며, 운전 명령은 별도 실행 조건을 따릅니다. [연속 음성대화 사용법과 지원 조건](carrot-assist.md)을 확인하세요.
+
+CarrotAssist 0.2.4에서는 주황색 마이크를 끌어 원하는 곳에 놓으면 위치가 저장됩니다. 짧게 누르면 화면에 열린 당근웹의 계정 연결과 온라인 상태를 확인한 뒤 미니 음성창을 엽니다. 실패하면 ‘다시 확인’을 누르거나 ‘음성비서만 열기’를 선택할 수 있습니다. 휴대폰 측면 버튼으로 직접 호출할 때는 이 앱의 시작 검사를 거치지 않습니다. 0.2.5부터 시작 인사는 새 Git 업데이트가 있을 때 한 번 알려줍니다. 최신 당근웹에서 도구 권한을 허용하면 “네이버지도 띄워줘”로 휴대폰 앱을 열 수 있습니다. 0.2.6부터 기기 내 음성 인식을 지원하는 폰은 “깜박이 설정 열어줘”와 좌우 차로변경을 ChatGPT 등록 없이 직접 요청할 수 있습니다.
+
+도구 버튼의 음성 실행은 별도 **도구 화면·작업 실행 허용**이 필요합니다. 설정 백업·복원 화면 안내와 GitPull·재시작 등의 확인 절차, 처음 연결과 기존 사용자의 재연결 순서는 [CarrotAssist 설명서](carrot-assist.md)에 정리되어 있습니다. 승인 코드는 음성 대화창이 아닌 기기 연결 승인 웹페이지에 입력합니다.
 
 > [!NOTE]
 > 이 문서는 `carrot-wip` 코드와 함께 관리하는 사용자 설명서 원본입니다. 사용자 동작이 바뀌면 관련 코드·테스트와 같은 변경에서 이 문서도 갱신합니다.
@@ -109,31 +117,33 @@ Carrot Web 설정 화면에서는 다음 기능을 사용할 수 있습니다.
 
 ## 전체 설정 지도
 
-현재 `carrot-wip`의 `carrot_settings.json`에는 **207개 파라미터**가 있습니다. 운전자 감시 예외 설정과 `NNFF` 2개는 검색으로만 표시되며, 나머지는 아래 메뉴에 표시됩니다.
+현재 `carrot-wip`의 `carrot_settings.json`에는 **211개 파라미터**가 있습니다. 운전자 감시 예외 설정과 `NNFF` 2개는 검색으로만 표시되며, 나머지는 아래 메뉴에 표시됩니다.
 
 | 대분류 | 항목 수 | 중분류 |
 |---|---:|---|
-| 주행 제어 | 124 | 시작·오토, 버튼·프리셋, 차량 조향, 속도·감속, 크루즈·차간 |
+| 주행 제어 | 128 | 시작·오토, 버튼·프리셋, 차량 조향, 속도·감속, 크루즈·차간 |
 | 차량·하드웨어 | 18 | 현대·기아, CANFD·HDA, 레이더, 운전자 모니터링, 차량 보조, 기기 하드웨어 |
 | 화면 표시 | 34 | 정보 표시, 경로 표시, 밝기·주행화면, 외부 HUD |
 | 시스템 | 12 | 녹화·전원, 네트워크·지도, 사운드, 소프트웨어 |
 
 ## 주행 제어
 
-주행 제어는 주행 동작에 영향을 줄 수 있는 124개 항목입니다. 한 번에 여러 값을 변경하지 마세요.
+주행 제어는 주행 동작에 영향을 줄 수 있는 128개 항목입니다. 한 번에 여러 값을 변경하지 마세요.
 
 <a id="start-auto"></a>
-### 시작·오토 — 10개
+### 시작·오토 — 14개
 
 | 세부 구역 | 파라미터 | 용도 |
 |---|---|---|
-| 시작 동작 | `AlwaysLateral`, `TeslaAutoTurnSignals`, `AutoEngage`, `DisableMinSteerSpeed` | 상시 조향, Tesla 방향지시등, 주행 시작 시 자동 활성화, 저속 조향 제한 |
+| 시작 동작 | `AlwaysLateral`, `TeslaAutoTurnSignals`, `TeslaCanTrafficStop`, `AutoEngage`, `DisableMinSteerSpeed` | 상시 조향, Tesla 방향지시등·CAN 빨간불 정지, 주행 시작 시 자동 활성화, 저속 조향 제한 |
 | 오토크루즈 | `AutoCruiseControl`, `AutoGasTokSpeed`, `AutoGasCancelSpeed`, `AutoGasSyncSpeed`, `CruiseOnDist` | 크루즈 자동 활성화와 가속 페달 입력 시 동작 |
 
-- `AlwaysLateral`: 크루즈가 켜져 있지 않아도 조향 제어를 허용합니다. 지원 Tesla 차량에서는 전진 기어의 실제 정차 상태에서도 조향할 수 있으며, 최소 조향 속도 이하로 이동할 때의 제한은 유지됩니다. [Tesla 제어 진입](tesla.md#engagement-and-standstill)을 참고하세요.
+- `AlwaysLateral`: 크루즈가 켜져 있지 않아도 조향 제어를 허용합니다. Tesla 화면의 세 손가락 접촉으로 실험 모드 대신 이 설정을 즉시 전환합니다. 끄더라도 활성 주행 제어의 조향까지 해제하지는 않습니다. 지원 Tesla 차량에서는 전진 기어의 실제 정차 상태에서도 조향할 수 있으며, 최소 조향 속도 이하로 이동할 때의 제한은 유지됩니다. [Tesla 제어 진입](tesla.md#engagement-and-standstill)을 참고하세요.
 - 상시 조향도 시스템 시작 후 최초 준비 확인 전에는 조향하지 않습니다. 모델·차량 파라미터·자세 정보 등 필수 입력이 한 번 정상으로 확인되면 이 시작 검사는 종료되며, 이후 입력의 일시적 불량이나 조향 해제·재작동으로 다시 차단하지 않습니다. 기존 주행 중 안전 처리는 그대로 유지됩니다. 초기 대기시간 경과만으로 준비를 통과하지 않습니다.
 - `AutoEngage`: `0` 끄기, `1` 조향 ON, `2` 조향 ON과 크루즈 대기입니다.
-- `TeslaAutoTurnSignals`: 기본 꺼짐이며 재부팅 후 적용됩니다. 차량 CAN과 실제 스토크 입력이 유효한 Model 3/Y의 기존 ATC 요청을 사용하며 조향·출발 권한을 늘리지 않습니다. 조건과 폐쇄 시험장 검증은 [Tesla 자동 방향지시등](tesla.md#자동-방향지시등)을 참고하세요.
+- `TeslaAutoTurnSignals`: 기본 꺼짐이며 재부팅 후 적용됩니다. 차량 CAN과 실제 스토크가 있는 Model 3/Y에서 회전 desire 시작 시 점등하며 준비나 거리만으로 켜지지 않습니다. 실측 방위·핸들 복귀로 완료하고 확인된 회전만 신선한 횡방향 허용 아래 정차 대기합니다. 차로변경 준비 점등은 유지하며 조향·출발 권한은 늘리지 않습니다. 조건과 폐쇄 시험장 검증은 [Tesla 자동 방향지시등](tesla.md#자동-방향지시등)을 참고하세요.
+- `TeslaCanTrafficStop`: 독립적인 기본 꺼짐 Tesla CAN 빨간불 정지이며 재시작이 필요합니다. 순정 TACC가 아닌 실제 openpilot 종제어와 지원 8바이트 비전 APP 프로필이 필요합니다. 126m 미만에서 확인된 빨간불 제약을 추가하고 초록불은 이 제약만 해제합니다. 신호 고장은 인계·soft-disable을 요청하고 다른 차종은 무시합니다. 프로토콜·페달 개입·폐쇄 시험장 한계는 [Tesla CAN 정지](tesla.md#can-빨간불-정지)를 참고하세요.
+- `TeslaManualLaneSignals`, `TeslaModelDesireSignals`, `TeslaModelPathSignals`: 독립적인 기본 꺼짐 Tesla 램프 관찰 옵션이며 재부팅이 필요합니다. 모두 `TeslaAutoTurnSignals`·`ShareData`와 30km/h 이상에서 신선한 ONNX 연속 점선·인접 차로 형상이 필요합니다. 수동 토크·접근은 크루즈 없이 가능하고 모델 의도·경로 예측은 횡제어 활성이 필요하며 오점등할 수 있습니다. 점선은 색상·진행 방향 증거가 아닙니다. 조향 권한·내비 회전 사전점등·유턴 기능은 추가하지 않습니다. 완료·시각·실차 검증 한계는 [Tesla 안내](tesla.md#선택형-차로변경-램프-관찰)를 참고하세요.
 - `AutoCruiseControl`: 현대·기아 차량용 오토크루즈와 소프트홀드 관련 설정입니다.
 - `DisableMinSteerSpeed`: SMDPS 장착 차량의 저속 조향 제한과 관련된 차량별 설정입니다.
 
@@ -160,7 +170,7 @@ Carrot Web 설정 화면에서는 다음 기능을 사용할 수 있습니다.
 | ONNX 차선·BSD | `ShareData`, `OnnxBsdEnabled`, `OnnxLaneThreshold`, `OnnxLaneIntervalMs`, `OnnxBsdThreshold`, `OnnxBsdSmoothingMs`, `OnnxBsdIntervalMs` | 차선 종류 인식과 별도 카메라 BSD 실행 및 세부 조정 |
 | 중앙 보정 | `PathOffset`, `CameraYawTrimDeg` | 레인모드 경로의 좌우 위치와 카메라 YAW 미세 보정 |
 | 조향감 | `SteerActuatorDelay`, `LatSmoothSec`, `LatSuspendAngleDeg`, `CustomSR`, `SteerRatioRate` | 조향 시점, 평활화, 일시중지 각도와 조향비 |
-| [차로 변경](lane-change.md)·자동 턴 | `LaneChangeNeedTorque`, `LaneChangeDelay`, `LaneChangeBsd`, `LaneLineCheck`, `BlinkerLatchedTurn`, `LaneChangeLeverWait`, `AutoTurnControl`, `AutoTurnControlRightLaneChange`, `ManualLaneChangeIndicator`, `ModelDesireIndicator`, `ModelPathIndicator`, `AutoTurnControlSpeedTurn`, `AutoTurnControlTurnEnd`, `AutoTurnMapChange` | 차로 변경 진입 조건과 ATC 동작 |
+| [차로 변경](lane-change.md)·자동 턴 | `LaneChangeNeedTorque`, `LaneChangeDelay`, `LaneChangeBsd`, `LaneLineCheck`, `BlinkerLatchedTurn`, `LaneChangeLeverWait`, `AutoTurnControl`, `AutoTurnControlRightLaneChange`, `ManualLaneChangeIndicator`, `ManualTurnIndicator`, `ModelDesireIndicator`, `ModelPathIndicator`, `AutoTurnControlSpeedTurn`, `AutoTurnControlTurnEnd`, `AutoTurnMapChange` | 차로 변경 진입 조건과 ATC 동작 |
 | 레인모드 | `LatMpcPathCost`, `LatMpcMotionCost`, `LatMpcAccelCost`, `LatMpcJerkCost`, `LatMpcSteeringRateCost`, `LatMpcInputOffset`, `UseLaneLineSpeed`, `UseLaneLineCurveSpeed`, `AdjustLaneOffset` | 레인모드 MPC 가중치와 차선 사용 조건 |
 | 고급 토크·토크 계수 | `LateralTorqueCustom`, `LateralTorqueAccelFactor`, `LateralTorqueFriction`, `LateralTorqueKpV`, `LateralTorqueKiV`, `LateralTorqueKf`, `LateralTorqueKd` | 커스텀 토크 제어 계수 |
 | 고급 토크·검색 전용 | `NNFF` | 토크 조향의 신경망 피드포워드 옵션 |
@@ -513,7 +523,9 @@ USB-CAN은 최초 점멸만 요청하고 기존 차량 깜박이 유지 기능�
 
 ATC 세부 설정의 `AutoTurnControlRightLaneChange`는 1·2번 모드에서 10km/h 이상이면서 TBT 우회전·우측 분기까지 설정 거리 이내인 구간에서 턴 시작 전까지 우측 실물 깜박이를 켜는 선택 기능입니다. 지원 USB2CAN 깜박이 구성과 우측 차선·유효한 차량 BSD와 우측 전방의 현재 및 3초 예측 거리 5m 조건이 필요하며, 기존 수동·블루투스 차선변경 동작은 유지됩니다. 자세한 내용은 [차선변경](lane-change.md)을 참고하세요.
 
-`ManualLaneChangeIndicator`는 ATC와 독립적인 수동 조향 깜박이입니다. 최근 조향 의도를 최대 1.5초 기억합니다. 왼쪽은 최신 흰 차선 분류로 중앙선을 제외하고, 오른쪽은 목표 차선부터 로드에지까지 2.5m 이상 여유를 확인합니다. 바깥 차선 인식 확률은 사용하지 않으며 자동 조향은 요청하지 않습니다. 자세한 조건은 [차로 변경](lane-change.md)을 참고하세요.
+`ManualTurnIndicator`는 운전자가 같은 방향으로 조향하고 차체가 회전할 때 깜빡이를 요청합니다. 핸들이 42도 이상이고 조작 시작 때보다 22도 이상 돌아가야 합니다. 다음 턴은 직전 표시의 마지막 유지 시점에서 2초가 지나고 양쪽 램프가 연속 1초 꺼진 뒤 감지합니다. 기본은 꺼짐이며 주차장 회전도 감지될 수 있습니다. [수동 턴 조건](lane-change.md)
+
+`ManualLaneChangeIndicator`는 시속 5km 이상에서 수동 차로변경을 감지해 깜빡이를 요청합니다. 최근 조향 의도를 최대 1.5초 기억합니다. 왼쪽은 최신 흰 차선 분류로 중앙선을 제외하고, 오른쪽은 목표 차선부터 로드에지까지 2.5m 이상 여유를 확인합니다. 바깥 차선 인식 확률은 사용하지 않으며 자동 조향은 요청하지 않습니다. 자세한 조건은 [차로 변경](lane-change.md)을 참고하세요.
 
 수동 차선변경 깜박이는 이전 요청 후 최소 3초·연속 1초 소등과 새로운 조향/접근 조건을 확인한 뒤 재요청합니다. 자동 조향 피드백 보호는 최소 12초 유지합니다.
 

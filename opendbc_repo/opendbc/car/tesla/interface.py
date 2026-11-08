@@ -21,6 +21,8 @@ class CarInterface(CarInterfaceBase):
           self.CS.observe_speed_wheel_frame(data, mono_time)
         elif address == 0x249:
           self.CS.observe_turn_stalk_frame(data, source, mono_time)
+        elif address == 0x25D and self.CS.traffic_control is not None:
+          self.CS.traffic_control.observe(data, source, mono_time)
     return super().update(can_packets)
 
   @staticmethod
@@ -59,6 +61,8 @@ class CarInterface(CarInterfaceBase):
     if alpha_long:
       ret.openpilotLongitudinalControl = True
       ret.safetyConfigs[0].safetyParam |= TeslaSafetyFlags.LONG_CONTROL.value
+      if candidate in (CAR.TESLA_MODEL_3, CAR.TESLA_MODEL_Y) and Params().get_bool("TeslaCanTrafficStop"):
+        ret.flags |= TeslaFlags.CAN_TRAFFIC_STOP.value
       if has_vehicle_bus:
         ret.flags |= TeslaFlags.AUTO_SPEED_LIMIT.value
         ret.safetyConfigs[0].safetyParam |= TeslaSafetyFlags.AUTO_SPEED_LIMIT.value

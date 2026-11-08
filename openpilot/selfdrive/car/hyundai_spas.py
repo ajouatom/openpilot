@@ -265,6 +265,7 @@ class SpasSignals:
     self.status = ('parked_direct' if direct_active else 'parked_direct_ended') if direct else self.session.reason or self.session.state
     if self.worker is not None and now >= self.feedback_at:
       self.worker.send({'stamp': now, 'accepted_id': self.session.request if self.session.state == 'active' else None,
+                        'available': healthy and not self.test_setting and (self.session.stock_ready(now) or self.session.state == 'active'),
                         'state': 'driver_override' if self.driver_override else 'ready' if self.session.state == 'active' else 'waiting'})
       self.feedback_at = now+.05
     if self.test_request is not None and self.session.state in ('idle', 'failed') and now >= self.test_until:

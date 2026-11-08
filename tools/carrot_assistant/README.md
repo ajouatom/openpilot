@@ -14,6 +14,11 @@ Codes are single-use, 80-bit secrets valid for five minutes; the connection does
 not expire in five minutes. New chats resolve the approved web session from the
 validated token, without a caller-selected user or device ID.
 
+Relay0.6.1 fixes a fresh approval code expiring with an older unpaired browser
+lease. Each newly issued account code now has its full five-minute window;
+renewal invalidates its predecessor without extending the legacy chat code.
+Existing authenticated connections and permissions are unchanged.
+
 `carrot.screen` permits search/explanation/navigation. `carrot.settings` is an
 additional, explicitly selected consent scope for live reads and changes. Existing
 grants and refresh tokens retain their original scopes. The device must also issue a local
@@ -21,19 +26,19 @@ grant while stationary/disengaged. That grant stays in WebView storage and goes
 only to same-origin device endpoints, never to the relay or ChatGPT.
 
 Five setting tools read a selected value, prepare a change, commit a confirmed
-proposal, inspect the request and cancel a prepared proposal. Instructions require
-before/after values and a follow-up user confirmation. The device validates actual
+proposal, inspect the request and cancel a prepared proposal. A clear user
+setting/value command authorizes internal prepare/commit without another question. The device validates actual
 values, bounds/increments, ownership and expiry, verifies
 readback and records voice change history. Defaults are not live values.
 Catalog unit/step is the web button increment, not an allowed-value lattice.
 Absolute requests preserve any in-range integer (e.g. CruiseMaxVals0 250 -> 240,
 with min=1 and unit=5); relative calculations round to the nearest integer,
 with ties away from zero. Fractional absolute values are rejected.
-All supported catalog edits, including driving settings, may be confirmed and
+All supported catalog edits, including driving settings, may be requested and
 applied onroad. Initial authorization still requires stationary/disengaged state.
 Saving does not change when each setting takes effect in the vehicle.
 Driver-monitoring disabling is excluded.
-Log uploads are unsupported. Experimental driving requests use separate
+Driving-record uploads are unsupported. Experimental driving requests use separate
 `carrot.drive` consent and a separate stationary-issued local grant. Existing
 tokens never gain this scope automatically. `VOICE_RULES.md` is loaded as MCP
 instructions: one continuing conversation, no per-command button/mode switch,
@@ -117,3 +122,64 @@ the public catalog is `catalog.json`.
 Tests cover real SDK/OAuth/HTTP calls, scope separation, replay/revocation, restart
 persistence, expiry, bounds and ownership. Device and web suites run separately.
 Publishing this relay does not update existing device software.
+
+## Selected Carrot Web connection (0.7.1)
+
+Android 0.2.1 reuses an app-owned approved browser capability when discovery or
+selection opens another local Carrot Web address. `/bridge/inspect` is read-only
+and does not mark a device online. `/bridge/relocate` requires that capability
+and the previous/current local origin; it persists the destination on the same
+session, preserving OAuth grants/scopes. It invalidates pending screen, settings,
+driving and Tools requests and outstanding approval codes. No commands replay.
+Destination selection does not require matching the old vehicle identity.
+Local device permissions remain independently enforced by the selected web.
+Optional permission restoration cannot create grants or block screen connection.
+
+## Tools operations (0.7.0)
+
+`carrot.tools` requires explicit OAuth consent and a separate stationary-issued
+local grant. Existing refresh grants never acquire it. Fixed action/panel enums
+exclude arbitrary shell commands, paths, commits and URLs. Prepare returns a
+60-second owner-bound proposal; commit consumes it before dispatch and requires
+a follow-up user confirmation. Maintenance rechecks parked/disengaged state at
+dispatch. Screen recording uses explicit on/off targets, not a toggle.
+
+Existing Tools jobs provide execution and history. Relay results contain only
+action/status, never job logs or backup content. Reboot, rebuild, calibration reset
+and tmux upload report request acceptance, not completion. Expired/unknown results
+are never automatically retried. Job ownership is local and in-memory: after a
+web-server restart, inspect local Tools history instead of reissuing a job.
+File/QR/clipboard/repository-reset workflows require direct local input.
+No live vehicle maintenance acceptance test is run.
+
+## Direct setting commands (0.7.3)
+
+An explicit target/value command authorizes a setting edit. Prepare/commit remain
+internal preflight and single-use storage steps, with device bounds, expiry,
+current-value rechecks and readback unchanged. The relay presents legacy device
+`confirmation_required:true` as `confirmation_required:false, commit_required:true`
+for prepared settings. This never commits automatically or changes OAuth/local
+permissions. Ambiguous requests and AI recommendations still need clarification.
+Tool maintenance confirmations and platform approvals remain separate. Refresh
+plugin metadata for updated tool descriptions; no phone APK update is required.
+
+## ChatGPT metadata and action approvals
+
+After deploying changed tool descriptions/instructions, refresh the registered
+CarrotAssist plugin's tools and test in a NEW ChatGPT conversation. Deployment
+alone does not invalidate cached plugin metadata. ChatGPT action approval policy
+is separate from OAuth scopes and local device grants. Users may explicitly
+choose CarrotAssist > Permissions > Allow all actions in their own account; the
+relay/app cannot make or verify that choice. Never mark writes as read-only to
+avoid platform approval. In the 2026-11-07 live test, metadata refresh plus the
+owner-selected plugin override allowed240->250 without another prompt, verified
+by an independent device read. The full Android ChatGPT app's background voice
+path also continued while the owner touched Carrot Web; overlay behavior differs.
+
+## Voice request order (0.7.4)
+
+Clear driving commands call request_carrot_drive before narration or status/catalog
+lookups. Korean lane/road-lane and left/right variants share the same action.
+Existing authorization, vehicle checks, expiry and no-retry rules are unchanged.
+Refresh ChatGPT tool metadata after deployment; existing voice sessions may retain
+old instructions. This reduces avoidable turns, not model/network latency guarantees.
