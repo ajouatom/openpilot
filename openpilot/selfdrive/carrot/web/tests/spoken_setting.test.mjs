@@ -77,3 +77,32 @@ test('search has no write path, accepts no duplicates and reads the displayed re
   assert.deepEqual(searched, ['가속도']);
   assert.equal(voice.findSettings(' ', id, 5000), false);
 });
+
+test('ordinal writes bind the displayed row to its canonical setting and report its actual title', async () => {
+  const searchId = 's'.repeat(43);
+  globalThis.phoneSearchResultName = (search, position) => search === searchId && position === 1 ? target : null;
+  const h = fixture();
+  const voice = createLocalVoice(null, null, null, Date.now, (name, value, request, expires, selection) =>
+    assignSpokenSetting(name, value, request, expires, { ...h.deps, ...selection }));
+  const until = Date.now() + 5000;
+  const run = async (search, row, identity) => {
+    assert.ok(voice.setResultValue(search, row, 240, 'ko', identity, until));
+    await new Promise(r => setImmediate(r));
+    return voice.result(identity);
+  };
+  assert.deepEqual(await run(searchId, 1, id), {status:'applied', label:'가속도설정 0', current:240});
+  assert.equal((await run(searchId, 1, id)).status, 'applied');
+  assert.equal((await run(searchId, 2, 'b'.repeat(43))).status, 'no_result');
+  assert.equal((await run('x'.repeat(43), 1, 'c'.repeat(43))).status, 'no_result');
+  assert.deepEqual(h.calls.map(x => x.operation), ['prepare', 'commit']);
+});
+
+test('changing the result selection during prepare cannot commit an ordinal write', async () => {
+  const h = fixture();
+  let row = target;
+  const send = async (...args) => { const result = await h.deps.send(...args); row = null; return result; };
+  const result = await assignSpokenSetting(target, 240, id, Date.now()+5000,
+    { ...h.deps, send, language:'en', selected:() => row });
+  assert.equal(result.status, 'unverified');
+  assert.deepEqual(h.calls.map(c => c.operation), ['prepare']);
+});

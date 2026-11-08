@@ -45,6 +45,7 @@ const settingSearchRuntime = carrotSettingsRuntime.search;
 const SETTING_OVERLAY_SEARCH_ENABLED = false;
 let settingInlineSearchQuery = "";
 let settingSearchTitlesFirst = false;
+let phoneSearchResults = null;
 let settingInlineSearchPreviousGroup = null;
 // Field behaviour (debounce, IME, clear button, slot mounting, labels) lives in
 // features/settings/search/inline.js; the page keeps the navigation that
@@ -711,6 +712,7 @@ function exitSettingInlineSearchSurface(options = {}) {
 }
 
 function restoreSettingInlineSearch(query = "") {
+  phoneSearchResults = null;
   settingInlineSearchView.cancelPending();
   settingInlineSearchQuery = String(query).trim();
   settingInlineSearchView.setQuery(settingInlineSearchQuery);
@@ -721,6 +723,7 @@ async function applySettingInlineSearch(query = settingInlineSearchView.getQuery
   settingInlineSearchView.cancelPending();
   if (!SETTINGS || CURRENT_PAGE !== "setting" || !isCarrotSettingTabActive()) return;
   const nextQuery = String(query || "").trim();
+  if (!preferTitle) phoneSearchResults = null;
   const orderChanged = settingSearchTitlesFirst !== preferTitle;
   settingSearchTitlesFirst = preferTitle;
   if (orderChanged) {
@@ -1700,7 +1703,23 @@ async function selectSettingSearchEntry(entry) {
   }
 }
 
-async function findPhoneSettings(query) {
+function renderedPhoneSearchNames() {
+  if (document.hidden || CURRENT_PAGE !== "setting" || !isCarrotSettingTabActive() ||
+      CURRENT_GROUP !== SETTING_INLINE_SEARCH_GROUP || CURRENT_SETTING_DETAIL || !isSettingInlineSearchSurfaceActive()) return [];
+  const container = getSettingItemRenderContainer() || document.getElementById("items");
+  return Array.from(container?.querySelectorAll(".setting[data-setting-name]") || [])
+    .filter(row => row.offsetParent !== null).map(row => row.dataset.settingName);
+}
+
+function phoneSearchResultName(id, position) {
+  if (!phoneSearchResults || phoneSearchResults.id !== id || !settingSearchTitlesFirst ||
+      settingInlineSearchQuery !== phoneSearchResults.query) return null;
+  const expected = phoneSearchResults.names[position - 1];
+  return expected && renderedPhoneSearchNames()[position - 1] === expected ? expected : null;
+}
+
+async function findPhoneSettings(query, id) {
+  phoneSearchResults = null;
   showPage("setting", true);
   await loadSettings();
   if (CURRENT_PAGE !== "setting" || document.hidden) return null;
@@ -1709,7 +1728,10 @@ async function findPhoneSettings(query) {
   await applySettingInlineSearch(query, { preferTitle: true });
   if (!isSettingInlineSearchSurfaceActive() || settingInlineSearchQuery !== query) return null;
   const { total, entries } = getSettingInlineSearchResults();
-  const item = entries[0]?.item;
+  const names = renderedPhoneSearchNames();
+  if (total > 0 && !names.length) return null;
+  phoneSearchResults = { id, query, names };
+  const item = entries.find(entry => entry.item.name === names[0])?.item;
   const spokenTitle = title => (title || item?.name || "").split(/[:：]/, 1)[0].trim();
   return { status: "found", total, firstKo: spokenTitle(item?.title), firstEn: spokenTitle(item?.etitle) };
 }

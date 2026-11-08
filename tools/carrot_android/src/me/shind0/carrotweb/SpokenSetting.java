@@ -26,10 +26,30 @@ final class SpokenSetting {
     String query = match.group(1).trim();
     return query.isEmpty() ? null : query;
   }
+  // The web displays at most twenty search results; spoken numbers are one-based.
+  private static final String[] KOREAN_ORDINALS = {"첫", "두", "세", "네", "다섯", "여섯", "일곱", "여덟", "아홉", "열",
+    "열한", "열두", "열세", "열네", "열다섯", "열여섯", "열일곱", "열여덟", "열아홉", "스무"};
+  private static final String[] ENGLISH_ORDINALS = {"first", "second", "third", "fourth", "fifth", "sixth", "seventh", "eighth", "ninth", "tenth",
+    "eleventh", "twelfth", "thirteenth", "fourteenth", "fifteenth", "sixteenth", "seventeenth", "eighteenth", "nineteenth", "twentieth"};
+  private static final Pattern NUMBERED_KO = Pattern.compile("([1-9][0-9]?)(?:번째|번)");
+  private static final Pattern NUMBERED_EN = Pattern.compile("([1-9][0-9]?)(?:st|nd|rd|th)");
+  private static int position(String name) {
+    String ko = name.replace(" ", "").replaceFirst("(?:항목|설정|거|것|걸)$", "");
+    Matcher digits = NUMBERED_KO.matcher(ko);
+    if (digits.matches()) return Integer.parseInt(digits.group(1));
+    String en = name.replaceFirst("^the ", "").replaceFirst(" (?:one|result|setting|item)$", "");
+    digits = NUMBERED_EN.matcher(en);
+    if (digits.matches()) return Integer.parseInt(digits.group(1));
+    for (int i = 0; i < KOREAN_ORDINALS.length; i++)
+      if (ko.equals(KOREAN_ORDINALS[i] + "번째") || en.equals(ENGLISH_ORDINALS[i])) return i + 1;
+    return 0;
+  }
+
+  final int position;
   final String name;
   final int value;
 
-  SpokenSetting(String name, int value) { this.name = name; this.value = value; }
+  SpokenSetting(String name, int value) { this.name = name; this.value = value; this.position = position(name); }
 
   private static Integer integer(String text) {
     if (text.matches("-?[0-9]+")) return Integer.valueOf(text);
@@ -71,7 +91,8 @@ final class SpokenSetting {
     if (scores != null && scores.length > 0 && scores[0] != -1f && !(scores[0] >= .8f && scores[0] <= 1)) return false;
     for (String alternative : alternatives) {
       SpokenSetting other = parse(alternative);
-      if (other == null || other.value != value || !name.replace(" ", "").equals(other.name.replace(" ", ""))) return false;
+      if (other == null || other.value != value || other.position != position) return false;
+      if (position == 0 && !name.replace(" ", "").equals(other.name.replace(" ", ""))) return false;
     }
     return true;
   }
