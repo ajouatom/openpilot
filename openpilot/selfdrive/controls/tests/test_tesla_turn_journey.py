@@ -157,7 +157,6 @@ def test_modeld_passes_validated_pose_and_hold_permission_to_actual_desire_updat
   tree = ast.parse(path.read_text())
   init = next(node for node in ast.walk(tree) if isinstance(node, ast.Assign) and
               ast.unparse(node.targets[0]) == "(turn_hold_allowed, turn_pose)" and isinstance(node.value, ast.Tuple))
-  guard = next(node for node in ast.walk(tree) if isinstance(node, ast.If) and ast.unparse(node.test) == "DH.tesla_auto_signals")
   call = next(node for node in ast.walk(tree) if isinstance(node, ast.Expr) and
               isinstance(node.value, ast.Call) and ast.unparse(node.value.func) == "DH.update")
   sm = messages()
@@ -170,7 +169,8 @@ def test_modeld_passes_validated_pose_and_hold_permission_to_actual_desire_updat
                "indicator_now": 10., "indicator_valid": True, "turn_signal_context": turn_signal_context,
                "params": NS(get_bool=lambda name: False), "time": NS(clock_gettime_ns=lambda clock: N, CLOCK_MONOTONIC=1),
                "modelv2_send": NS(modelV2=log.ModelDataV2.new_message()), "lane_change_prob": .5}
-  code = compile(ast.Module(body=[init, guard, call], type_ignores=[]), str(path), "exec")
+  block = next(node.body for node in ast.walk(tree) if isinstance(getattr(node, 'body', None), list) and init in node.body)
+  code = compile(ast.Module(body=block[block.index(init):block.index(call) + 1], type_ignores=[]), str(path), "exec")
   exec(code, namespace)
   assert received[-1]["turn_hold_allowed"]
   assert received[-1]["turn_pose"] == (N, .5)
