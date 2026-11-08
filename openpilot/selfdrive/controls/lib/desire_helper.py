@@ -20,11 +20,14 @@ from openpilot.selfdrive.controls.lib.desire_lib.constants import (
 )
 from openpilot.selfdrive.controls.lib.desire_lib.side_state import SideState
 from openpilot.selfdrive.controls.lib.desire_lib.maneuver_classifier import classify_maneuver_type
-from openpilot.selfdrive.controls.lib.desire_lib.lever import LEVER_REQUEST_WAIT_S, LaneCrossing, LeverForcedTurn, LeverRequestWait, lever_maneuver
+from openpilot.selfdrive.controls.lib.desire_lib.lever import LEVER_LATCHED, LEVER_REQUEST_WAIT_S, LaneCrossing, LeverForcedTurn, LeverRequestWait, lever_maneuver
 
 # Without a model-detected crossing, a lever press this early in laneChangeFinishing is still the driver
 # re-lighting the lamp of the change that just crossed, not a request for the next one.
 STALK_QUEUE_GUARD_S = 0.3
+# Two one-touch presses on the same side this close together ask for two lane changes in a row. A slower second press
+# stays the existing "re-light this change's lamp" (ignored before the crossing).
+DOUBLE_TAP_S = 0.3
 # An accepted App action may wait for interlocks, but must not start unexpectedly much later.
 AUTO_APP_WAIT_S = 10.0
 
@@ -82,6 +85,9 @@ class DesireHelper:
     # turn-signal lever presses (carState.*BlinkerStalkCount): an explicit request for the next lane change
     self.stalk_counts = None
     self.queued_lane_change = BLINKER_NONE
+    self.double_tap_side = BLINKER_NONE  # a double one-touch asked for a second lane change after this one
+    self.last_press_side = BLINKER_NONE
+    self.last_press_frame = -1000
     self.finishing_timer = 0.0
     self.queued_wait = 0.0
     self.lever_wait = LeverRequestWait()
@@ -435,6 +441,11 @@ class DesireHelper:
     physical_stalk_press = self._update_stalk(carstate)
     stalk_press = self.boundary_indicator.filter_lamp(physical_stalk_press)
     lever = getattr(carstate, "blinkerLever", 0)
+    if stalk_press != BLINKER_NONE:
+      if (stalk_press == self.last_press_side and lever != LEVER_LATCHED and
+          (self.frame - self.last_press_frame) * DT_MDL <= DOUBLE_TAP_S + 1e-6):
+        self.double_tap_side = stalk_press
+      self.last_press_side, self.last_press_frame = stalk_press, self.frame
     forced_turn = self.lever_forced_turn.update(lever, getattr(carstate, "blinkerLamp", 0))
     if self.lever_wait.update(self.laneChangeLeverWait, stalk_press, lever, driver_st, self.lane_change_state,
                               self.laneChangeDelay):
@@ -782,6 +793,17 @@ class DesireHelper:
         prev_lane_change_state == LaneChangeState.preLaneChange) or        (self.lane_change_state == LaneChangeState.preLaneChange and
         (self.queued_wait >= LEVER_REQUEST_WAIT_S or self.queued_lane_change != blinker_state)):
       self.queued_lane_change = BLINKER_NONE
+    # A double one-touch becomes the queued next change once this change is under way (queued before the start
+    # would be cleared by the start itself); the queue then keeps the lamp lit and skips the torque check.
+    if self.double_tap_side != BLINKER_NONE:
+      changing = self.lane_change_state in (LaneChangeState.laneChangeStarting, LaneChangeState.laneChangeFinishing)
+      since_press = (self.frame - self.last_press_frame) * DT_MDL
+      # the lamp (and so the FSM) can trail the presses by a few frames; the other side or no change at all ends it
+      if (self.lane_change_state == LaneChangeState.off and since_press > 1.0) or \
+         blinker_state not in (BLINKER_NONE, self.double_tap_side):
+        self.double_tap_side = BLINKER_NONE
+      elif changing and prev_lane_change_state != LaneChangeState.preLaneChange:
+        self.queued_lane_change, self.double_tap_side = self.double_tap_side, BLINKER_NONE
 
     hold = self.lever_wait.update_hold(self.lane_change_state, blinker_state)
     if self.queued_lane_change != BLINKER_NONE:

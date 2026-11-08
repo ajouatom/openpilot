@@ -130,6 +130,33 @@ class TestDesireHelperStalkRequest:
     assert self.helper.next_lane_change
     assert self.update() == LCS.preLaneChange              # no torque: no second lane change
 
+  def double_tap(self, gap_s, lever=1):
+    self.update(left_blinker=False)
+    assert self.update(press=True, lever=1) == LCS.preLaneChange
+    for _ in range(int(round(gap_s / DT_MDL)) - 1):
+      self.update()
+    self.update(press=True, lever=lever)
+    for _ in range(5):
+      self.update()
+
+  def test_double_one_touch_asks_for_two_lane_changes(self):
+    self.double_tap(0.2)
+    assert self.helper.queued_lane_change == 1
+    assert self.helper.blinker_hold_direction == LCD.left  # lamp kept for the second change
+    assert self.finish() == LCS.preLaneChange
+    assert not self.helper.next_lane_change                 # no torque needed for the second one
+    assert self.update() == LCS.laneChangeStarting
+
+  def test_slow_second_press_before_the_crossing_is_not_a_double(self):
+    self.double_tap(0.6)
+    assert self.helper.queued_lane_change == 0
+    assert self.finish() == LCS.preLaneChange
+    assert self.helper.next_lane_change                     # one lane only: the next one needs torque
+
+  def test_double_press_with_a_latched_lever_is_not_a_double(self):
+    self.double_tap(0.2, lever=2)
+    assert self.helper.queued_lane_change == 0
+
   def test_press_while_crossing_is_ignored(self):
     self.start_and_cross()
     self.update(press=True)                                 # re-lighting the lamp mid-change
