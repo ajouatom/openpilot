@@ -1,5 +1,15 @@
 # Repository memory
 
+- On 2026-11-08 the owner requests voice lane changes to use normal lane-change
+  admission and issue the external indicator in parallel. This supersedes the
+  external-adapter confirmation prerequisite. Keep native and Tesla signal gates.
+  Ioniq 5 PE rlog 11b9/2 records one voice request, same-side physical flashes,
+  B1 override without accepted ID, preLaneChange for 3 s and no steering start.
+  The 0x413 lever bit outlasts the tap echo window. Receiver subreason is
+  unrecorded. A desktop replay of recorded inputs with a bound external adapter
+  and absent ACK reproduced the old timeout; new helper starts and requests
+  the left lamp on the same frame at segment 20.702 s. No actual crossing proof.
+
 - On 2026-11-08, owner requests an ATC-independent ManualTurnIndicator option.
   DefaultOFF/Ioniq5PE/supported indicator adapter/AutoBlinker1or2. Shared lamp-only
   observer uses5..60km/h, pressed same-side torque150ms/recent800ms, angle45deg

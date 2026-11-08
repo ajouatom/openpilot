@@ -32,7 +32,7 @@ class VoiceLaneSignal:
       if request:
         self.seen.append(request)
       if (fresh and allowed and peer_ready and not busy and hold is None and
-          phase == 'preLaneChange' and direction in ('left', 'right') and not (cs.leftBlinker or cs.rightBlinker)):
+          phase in ('preLaneChange', 'laneChangeStarting') and direction in ('left', 'right') and not (cs.leftBlinker or cs.rightBlinker)):
         self.direction = direction
     if (not allowed or busy or direction != self.direction or phase not in
         ('preLaneChange', 'laneChangeStarting', 'laneChangeFinishing') or

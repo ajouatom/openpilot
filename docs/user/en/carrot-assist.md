@@ -184,7 +184,7 @@ Relay delivery expires after five seconds; controller consumption requires an in
 
 Running and completed are distinct. Lane completion requires both controller completion and observed lane crossing. **Revoke driving commands** prevents new commands and cancels pending preparation; it does not force an ongoing steering maneuver to abort. A phone voice-start action has not been added to the existing Bluetooth remote.
 
-Voice lane changes left and right use the usual lane-change conditions even without an indicator device. With supported native turn-signal control, or a responding external indicator on this vehicle with **Automatic turn signals** set to **2**, the maneuver waits for the requested lamp. If the device disconnects after its selection or the adjacent lane becomes blocked during preparation, that request ends.
+Voice lane changes use the usual lane-change conditions. A blocked adjacent lane or a detected blind spot during preparation prevents the maneuver from starting. With **Automatic turn signals** set to **2** and a responding external indicator, the car requests the matching signal as the lane change starts. The maneuver can proceed if the adapter responds late or fails to signal. Supported native turn-signal control still waits for lamp confirmation.
 
 ## Use Tools buttons by voice
 
