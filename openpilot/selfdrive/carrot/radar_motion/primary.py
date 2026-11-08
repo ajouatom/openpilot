@@ -57,6 +57,10 @@ STATIONARY_FRONT_MIN_VISION_SUPPORT_FRAMES = 3
 STATIONARY_CONFIRMATION_S = 0.25
 STATIONARY_RADAR_ONLY_CONFIRMATION_S = 0.50
 STATIONARY_MAX_ABS_VLEAD_MPS = 4.0
+# A fresh stationary-class track closer than a central moving lead we keep measuring is something that lead just drove
+# through (tunnel sign, joint, reflector), not a car: it waits for _match_stationary. 11-08 tunnel FCW: the flickering
+# vision lead landed on a reflector for 1-3 frames and _match_moving adopted it at once (02_logs/measurements.md s49, s53).
+MOVING_LEAD_SHIELD_MAX_DPATH_M = 1.0
 STATIONARY_TURN_MIN_ABS_YAW_RATE_RAD_S = 0.10
 STATIONARY_TURN_CORNER_MIN_VISION_PROB = 0.80
 STATIONARY_HELD_CORNER_MAX_ABS_VLEAD_MPS = 8.0
@@ -827,6 +831,8 @@ class VisionRadarMatcher:
     self.closing_range_match: VisionRadarMatch | None = None
     self.last_identity: tuple[str, int] | None = None
     self.low_probability_hold_frames = 0
+    # fresh stationary-class tracks closer than this (minus the gain margin) are left to _match_stationary this frame
+    self._fresh_stationary_shield_d_rel = -math.inf
     self.stationary_identity: tuple[str, int] | None = None
     self._stationary_pending_identity: tuple[str, int] | None = None
     self._stationary_pending_since_s: float | None = None
@@ -3574,6 +3580,13 @@ class VisionRadarMatcher:
       held_identity = identity == self.last_identity
       if holding_previous and not held_identity:
         continue
+      if (
+        not held_identity
+        and abs(point.v_lead) <= STATIONARY_MAX_ABS_VLEAD_MPS
+        and point.d_rel + STATIONARY_CLOSER_THAN_MOVING_MIN_DREL_GAIN_M
+        < self._fresh_stationary_shield_d_rel
+      ):
+        continue  # stationary acquisition stays with _match_stationary and its confirmation dwell
       if not 0.5 < point.d_rel < 180.0:
         continue
       score = (
@@ -3644,6 +3657,31 @@ class VisionRadarMatcher:
       score=selected[1],
       d_path=selected[2],
     )
+
+  def _moving_lead_shield_d_rel(
+    self,
+    points: Iterable[RadarPointSnapshot],
+    path: Sequence[tuple[float, float]],
+    time_s: float | None,
+  ) -> float:
+    """Nearest frontRadar track that is measured, moving, central and observed for VISION_CORROBORATED_MIN_OBSERVED_S;
+    -inf when there is none."""
+    shield = -math.inf
+    if time_s is None:
+      return shield
+    for point in points:
+      if (
+        point.source != "frontRadar"
+        or not point.measured
+        or point.v_lead <= STATIONARY_MAX_ABS_VLEAD_MPS
+        or time_s - self._observed_since_s.get(self._identity(point), time_s)
+        < VISION_CORROBORATED_MIN_OBSERVED_S
+        or abs(project_to_model_path(path, point.d_rel, point.y_rel).d_path)
+        > MOVING_LEAD_SHIELD_MAX_DPATH_M
+      ):
+        continue
+      shield = point.d_rel if shield == -math.inf else min(shield, point.d_rel)
+    return shield
 
   def _stationary_closer_handoff_ready(
     self,
@@ -3808,6 +3846,7 @@ class VisionRadarMatcher:
     prefer_primary_stationary: bool = False,
     yaw_rate_rad_s: float = 0.0,
     allowed_output_sources: frozenset[str] | None = None,
+    in_tunnel: bool = False,
   ) -> VisionRadarMatch | None:
     vision = vision_lead_from_model(model)
     self._update_vision_fallback(vision)
@@ -3913,6 +3952,11 @@ class VisionRadarMatcher:
       prefer_primary_stationary,
       yaw_rate_rad_s,
       allowed_output_sources,
+    )
+    # Tunnel lighting flickers the vision lead (11-08: 19-41 m frame to frame): inside a navi-announced tunnel every
+    # stationary object goes through _match_stationary, elsewhere only those behind a lead we keep measuring.
+    self._fresh_stationary_shield_d_rel = (
+      math.inf if in_tunnel else self._moving_lead_shield_d_rel(point_values, path, time_s)
     )
     moving = self._match_moving(vision, point_values, path)
     output_values = (
@@ -4065,6 +4109,7 @@ def match_dpath_primary_lead(
   enable_radar_tracks: int,
   stationary_points: Iterable[RadarPointSnapshot] | None = None,
   yaw_rate_rad_s: float = 0.0,
+  in_tunnel: bool = False,
 ) -> VisionRadarMatch | None:
   """Apply dPath vision-present and no-vision primary fallback orders."""
   point_values = tuple(points)
@@ -4103,6 +4148,7 @@ def match_dpath_primary_lead(
     prefer_primary_stationary=True,
     yaw_rate_rad_s=yaw_rate_rad_s,
     allowed_output_sources=allowed_output_sources,
+    in_tunnel=in_tunnel,
   )
 
 

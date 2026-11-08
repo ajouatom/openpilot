@@ -998,6 +998,7 @@ class DPathRadarController:
     model: Any,
     yaw_rate_rad_s: float = 0.0,
     radar_to_model_time_s: float = 0.0,
+    in_tunnel: bool = False,
   ) -> DPathRadarOutput:
     path = _model_path(model)
     if len(path) < 2:
@@ -1044,6 +1045,7 @@ class DPathRadarController:
       time_s=time_s,
       enable_radar_tracks=self.enable_radar_tracks,
       yaw_rate_rad_s=yaw_rate_rad_s,
+      in_tunnel=in_tunnel,
     )
     vision = self.primary_matcher.vision_fallback
     if self.enable_radar_tracks in (-1, 0):

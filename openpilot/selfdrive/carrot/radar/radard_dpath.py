@@ -145,6 +145,7 @@ class DPathRadarD:
       model=sm["modelV2"],
       yaw_rate_rad_s=_yaw_rate(sm["livePose"]),
       radar_to_model_time_s=model_time_s - radar_time_s,
+      in_tunnel=bool(sm["carState"].naviTunnel),  # 0x4A3 TunnelExist (CAN-FD HKG); False elsewhere
     )
     self.radar_state.leadOne = output.lead_one or empty_lead()
     self.radar_state.leadTwo = output.lead_two or empty_lead()
