@@ -103,6 +103,13 @@ public final class MainActivity extends Activity {
     phoneVoice = new PhoneVoice(this, new PhoneVoice.Listener() {
       public void status(String text) { title.setText(text); if (!phoneVoice.listening()) phoneSession = false; }
       public void heard(LocalCommand command) { handlePhoneCommand(command); }
+      public void missed(String heard, String reason) {
+        directionCheck.clear();
+        String text = heard == null ? "" : heard.trim();
+        if (text.length() > 48) text = text.substring(0, 48) + "…";
+        String prefix = text.isEmpty() ? "" : UiText.get("“" + text + "”로 들었어요. ", "I heard “" + text + "”. ");
+        replyAndListen(phoneGeneration, prefix + reason);
+      }
       public void heardSetting(SpokenSetting setting) { handleSpokenSetting(setting); }
       public void findSettings(String query) { startSettingAction("findSettings", JSONObject.quote(query)); }
     });
