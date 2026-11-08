@@ -9,6 +9,7 @@ from openpilot.selfdrive.carrot.cruise_gap import cruise_gap_levels, next_gap_pe
 from openpilot.selfdrive.carrot.bluetooth.model import BLUETOOTH_CANCEL, CommandReader, REMOTE_BUTTONS
 from openpilot.selfdrive.carrot.assistant_speed import AssistantSpeed
 from openpilot.selfdrive.car.toyota_pcm_speed import ToyotaPcmSetSpeedSync
+from openpilot.selfdrive.carrot.signal_road_policy import signal_detection_suspended
 
 from opendbc.car import structs
 GearShifter = structs.CarState.GearShifter
@@ -214,6 +215,7 @@ class VCruiseCarrot:
     self._v_cruise_kph_at_brake = 0
     self._last_engaged_kph = 0  # set speed last used while engaged; RES+ engage returns to it
     self.stock_adopt_kph = 0.  # card: stock SCC set speed while a restart hand-over waits (StockCruiseAdopt)
+    self._paddle_highway = False  # navigation says motorway: paddle stop requests are ignored
     self.cruise_state_available_last = False
 
     self._paddle_decel_active = False
@@ -343,6 +345,7 @@ class VCruiseCarrot:
     self.assistant_speed_valid = bool(getattr(sm, 'valid', {}).get('carControl', False) and sm.alive['carControl'] and
                                      0 <= time.monotonic() - getattr(sm, 'recv_time', {}).get('carControl', 0) < .35)
     self._update_carrot_man(sm)
+    self._paddle_highway = signal_detection_suspended(sm)  # same motorway test as the light detection (unknown = not)
     if sm.alive['longitudinalPlan']:
       lp = sm['longitudinalPlan']
       self.xState = lp.xState
@@ -769,11 +772,18 @@ class VCruiseCarrot:
       # Repeated requests keep the mode on; RES/+ retains its existing exit path.
       self.carrot_cruise_active = True
     elif remote == 'paddleDecel':
-      self._cruise_control(-2, -1, "Cruise off & Ready (Bluetooth paddle)")
-      self._paddle_decel_active = True
+      if self._paddle_highway:
+        self._add_log("Paddle stop ignored (highway)")
+      else:
+        self._cruise_control(-2, -1, "Cruise off & Ready (Bluetooth paddle)")
+        self._paddle_decel_active = True
     elif self._paddle_mode > 0 and button_type in [ButtonType.paddleLeft, ButtonType.paddleRight]:  # paddle button
       if self._paddle_mode == 3:
         self.carrot_cruise_active = True
+      elif self._paddle_mode == 2 and self._paddle_highway:
+        self._add_log("Paddle stop ignored (highway)")  # stop requests are for city lights, not motorways
+      elif self._paddle_mode == 2 and button_type == ButtonType.paddleRight:
+        v_cruise_kph = self._cancel_paddle_stop(CC, v_cruise_kph)
       else:
         self._cruise_control(-2, -1, "Cruise off & Ready (paddle)")
         if self._paddle_mode == 2:
@@ -850,6 +860,19 @@ class VCruiseCarrot:
       v_cruise_kph = min(v_cruise_kph, new_road_limit_kph)
     self.road_limit_kph = road_limit_kph
     self.nRoadLimitSpeed_last = self.nRoadLimitSpeed
+    return v_cruise_kph
+
+  def _cancel_paddle_stop(self, CC, v_cruise_kph):
+    # PaddleMode 2: + (right paddle) undoes the stop the - paddle just asked for; nothing pending, nothing happens.
+    if not (self._paddle_decel_active or self._paddle_resume_kph > 0):
+      return v_cruise_kph
+    if self._paddle_resume_kph > 0:  # already handed to a light: back to the set speed held for after the stop
+      v_cruise_kph = max(v_cruise_kph, self._paddle_resume_kph)
+    self._paddle_decel_active = False
+    self._paddle_resume_kph = 0
+    if not CC.enabled:
+      self._cruise_control(1, -1, "Cruise on (paddle cancel)", manual=True)
+    self._add_log("Paddle stop canceled")
     return v_cruise_kph
 
   def _adopt_stock_cruise(self, CC, v_cruise_kph):

@@ -89,7 +89,7 @@ class Car:
     self.can_sock = messaging.sub_sock('can', timeout=20)
     self.sm = messaging.SubMaster(['pandaStates', 'carControl', 'onroadEvents', 'carrotMan', 'longitudinalPlan',
                                    'radarState', 'modelV2', 'drivingModelData', 'customReservedRawData0',
-                                   'liveParameters', 'livePose', 'selfdriveState', 'lateralPlan'])
+                                   'liveParameters', 'livePose', 'selfdriveState', 'lateralPlan', 'carrotNavi'])
     self.pm = messaging.PubMaster(['sendcan', 'carState', 'carParams', 'carOutput', 'customReservedRawData1'])
 
     self.can_rcv_cum_timeout_counter = 0
@@ -331,6 +331,7 @@ class Car:
     CS.latEnabled = self.v_cruise_helper._lat_enabled
     CS.useLaneLineSpeed = self.v_cruise_helper.useLaneLineSpeedApply
     CS.carrotCruise = 1 if self.v_cruise_helper.carrot_cruise_active else 0
+    CS.paddleStopActive = self.v_cruise_helper._paddle_decel_active or self.v_cruise_helper._paddle_resume_kph > 0
 
     self.CI.CS.softHoldActive = CS.softHoldActive
     state_done_ns = time.monotonic_ns()

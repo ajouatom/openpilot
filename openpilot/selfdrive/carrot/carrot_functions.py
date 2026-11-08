@@ -552,7 +552,8 @@ class CarrotPlanner:
     # stop the paddle asked for survives the hand-off to a light (cruise.py then restores vCruise).
     if self.paddleSignalPriority and v_cruise_kph == 0 and v_ego > 1.0:  # PaddleSignalPriority 0: previous behaviour
       self._paddle_stop = True
-    elif v_ego < 0.3 or carstate.gasPressed or carstate.brakePressed or self.xState not in (XState.e2eStop, XState.e2eStopped):
+    elif (v_ego < 0.3 or carstate.gasPressed or carstate.brakePressed or self.xState not in (XState.e2eStop, XState.e2eStopped)
+          or not getattr(carstate, "paddleStopActive", True)):  # card dropped the paddle stop (+ paddle cancel)
       self._paddle_stop = False
     # A moving lead is not a reason to skip the light during a paddle stop: without a lead gate the first red comes
     # ~78 m before the stop instead of ~3-26 m (02_logs/measurements.md §44). The MPC still keeps the lead.

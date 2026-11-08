@@ -296,6 +296,7 @@ struct CarState {
   # joongyu01: was @113/@114 before carrot-wip took @113 (2026-11-08); both Bools keep their data-section bits
   naviTunnel @114 :Bool; # 0x4A3 TunnelExist in a tunnel the stock navigation announced as no-lane-change (0x162 SIGNS 16; TunnelLaneChangeHold)
   naviRoundabout @115 :Bool; # stock cluster 0x162 SIGNS=24 rose in the last 20 s and below 60 km/h (RoundaboutLaneChangeHold): no Kick or auto lane change
+  paddleStopActive @116 :Bool; # joongyu01: card still owns a paddle stop (slowing or handed to a light); the + paddle clears it
 
   struct TeslaTrafficControl {
     available @0 :Bool;

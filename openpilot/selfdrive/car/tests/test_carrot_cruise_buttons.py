@@ -42,6 +42,7 @@ def make_cruise_helper(button_kph, cruise_button_mode, carrot_cruise_active, cru
   helper.autoRoadSpeedOnEngage = False
   helper.nRoadLimitSpeed = 0
   helper._last_engaged_kph = 0
+  helper._paddle_highway = False
 
   CS = car.CarState(cruiseState={"standstill": False})
   CC = car.CarControl(enabled=cruise_enabled)
@@ -811,3 +812,42 @@ def test_stock_cruise_adopt_respects_interlocks_and_stops_once_engaged():
   CC = car.CarControl(enabled=True)
   helper._steering_interlock_active = False
   assert helper._adopt_stock_cruise(CC, 70) == 70 and helper._activate_cruise == 0
+
+
+def paddle_helper(cruise_enabled=True, highway=False):
+  helper, CS, CC = make_cruise_helper(70, 0, carrot_cruise_active=False, cruise_enabled=cruise_enabled)
+  helper._paddle_mode, helper._paddle_highway, helper._paddle_resume_kph = 2, highway, 0
+  return helper, CS, CC
+
+
+def press(helper, CS, CC, button):
+  helper._prepare_buttons = lambda CS, v_cruise_kph, remote=None: (v_cruise_kph, button, False)
+  helper._activate_cruise = 0
+  return helper._update_cruise_buttons(CS, CC, 70)
+
+
+def test_minus_paddle_requests_a_stop_and_plus_cancels_it():
+  helper, CS, CC = paddle_helper()
+  press(helper, CS, CC, ButtonType.paddleLeft)
+  assert helper._paddle_decel_active and helper._activate_cruise == -2
+  press(helper, CS, CC, ButtonType.paddleRight)
+  assert not helper._paddle_decel_active and helper._paddle_resume_kph == 0
+
+
+def test_plus_paddle_after_hand_off_restores_the_set_speed_and_reengages():
+  helper, CS, CC = paddle_helper(cruise_enabled=False)
+  helper._paddle_resume_kph = 80
+  assert press(helper, CS, CC, ButtonType.paddleRight) == 80
+  assert helper._paddle_resume_kph == 0 and helper._activate_cruise == 1
+
+
+def test_plus_paddle_without_a_stop_does_nothing():
+  helper, CS, CC = paddle_helper()
+  assert press(helper, CS, CC, ButtonType.paddleRight) == 70
+  assert not helper._paddle_decel_active and helper._activate_cruise == 0
+
+
+def test_paddle_stop_is_ignored_on_a_motorway():
+  helper, CS, CC = paddle_helper(highway=True)
+  press(helper, CS, CC, ButtonType.paddleLeft)
+  assert not helper._paddle_decel_active and helper._activate_cruise == 0

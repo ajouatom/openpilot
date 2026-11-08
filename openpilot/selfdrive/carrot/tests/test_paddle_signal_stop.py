@@ -139,3 +139,14 @@ def test_paddle_after_gas_cancels_the_red_ignore():
   assert p.xState.name == 'e2eCruise'  # red still ignored without the paddle
   run(p, sm, 0.)
   assert p.xState.name == 'e2eStop'
+
+
+def test_plus_paddle_cancel_releases_the_planner_latch():
+  p, sm = planner(), red_scene()
+  sm['carState'].paddleStopActive = True
+  run(p, sm, 0.)
+  assert p.xState.name == 'e2eStop'
+  sm['modelV2'].velocity.x = [10.] + [15.] * 32  # green
+  sm['carState'].paddleStopActive = False  # card: + paddle canceled the stop
+  run(p, sm, 80.)
+  assert p.xState.name != 'e2eStop'
