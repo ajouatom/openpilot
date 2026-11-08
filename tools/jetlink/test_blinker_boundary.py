@@ -4,6 +4,8 @@ from types import SimpleNamespace as N
 import pytest
 
 from openpilot.selfdrive.controls.lib.desire_lib.boundary_indicator import BoundaryIndicator
+from openpilot.selfdrive.controls.lib.desire_lib.boundary_lane import MANUAL_INDICATOR_MIN_SPEED
+from blink_observation import allowed as observation_allowed
 from blink_boundary import BoundaryEvents, vehicle_allowed
 from blink_protocol import wire_record
 
@@ -69,13 +71,29 @@ def test_both_directions_need_real_driver_motion_and_emit_one_edge(direction):
   assert b.filter_lamp(direction) == 0
 
 
+@pytest.mark.parametrize('speed_kph,expected', [(0, False), (4.9, False), (5, True), (10, True), (26.4, True)])
+@pytest.mark.parametrize('direction', [1, 2])
+def test_slow_manual_lane_crossing_reaches_both_indicator_gates(speed_kph, expected, direction):
+  cs, md = scene(direction)
+  cs.vEgo = speed_kph / 3.6
+  observer = BoundaryIndicator(minimum_speed=MANUAL_INDICATOR_MIN_SPEED)
+  assert bool(drive(observer, cs, md, direction)) == expected
+  assert not drive(BoundaryIndicator(), cs, md, direction)  # standard 30 km/h profile
+  side = 'left' if direction == 1 else 'right'
+  md.meta = N(observedIndicator=side, laneChangeState='off')
+  t = cs.laneLineInfoMonoTime / 1e9
+  assert vehicle_allowed(cs, direction) == expected
+  assert observation_allowed(cs, N(latActive=False), md, 'manual', t) == expected
+  assert not observation_allowed(cs, N(latActive=True), md, 'model_path', t)
+
+
 @pytest.mark.parametrize(
   'field,value',
   [
     ('steeringPressed', False),
     ('steeringTorque', -300.0),
     ('steeringTorque', math.nan),
-    ('vEgo', 8.0),
+    ('vEgo', 4.9 / 3.6),
     ('vEgo', math.nan),
     ('gearShifter', 'park'),
     ('canValid', False),
