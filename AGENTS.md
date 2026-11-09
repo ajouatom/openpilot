@@ -1,5 +1,17 @@
 # Repository memory
 
+- 2026-11-09: Fix the four full-build Bluetooth import failures previously
+  reported as pre-existing. Cluster paths expose openpilot/tools as top-level
+  tools, hiding root tools/jetlink even with the repository first on sys.path.
+  Extend only that legacy package namespace using pkgutil; canonical
+  openpilot.tools stays scoped. Fresh-process regressions cover both path orders,
+  vehicle-only paths, preloaded tools, real Monitor/Owner and updater imports.
+  Four cases reproduce failure before correction; all six pass after. Desktop
+  Bluetooth61 pass/one Linux-only skip. This is a production import failure
+  under the same path condition; prior CI failure does not establish device safety.
+  Reviewed PV5 captures show controlsd NameError, plus signal-camera geometry
+  rejection; no tools.jetlink exception in those three captures.
+
 - 2026-11-09: PV5 uploaded process_crash13:30:20 at e318f767 proves controlsd
   repeatedly exits in publish with undefined t_since_plan. Introduced by our
   7d337 stop-object change; the previous state_control/helper checks missed the
