@@ -372,6 +372,10 @@ While the external HUD is connected over USB, `ShowCameraWithCluster=0` switches
 
 The final `ClusterHudScreenMode` layout is:
 
+On `thftgr/carrot-wip-cluster`, onroad P selects the parking screen and R selects the reverse reference screen ahead of the selected mode. P shows the clock, tyre pressures, trip statistics and available battery level; R shows a steering-based guide and blind-spot state. Other gears and offroad restore the existing `carrot-wip` display. The driving layout and device-screen sleep behavior are unchanged.
+
+P/R car images follow the detected supported vehicle, falling back to EV6. Reverse lines use illustrative EV6 geometry; they are not rear-camera video or obstacle detection. Create `/data/ev6_park_screen_off` or `/data/ev6_reverse_screen_off` to disable only that screen. `/data/ev6_weather_off` disables parking weather queries. Weather uses the last position rounded to approximately 1 km for Open-Meteo and caches results for up to one hour.
+
 - `-1` uses the full width only in 3D camera views `0` and `1`, with no information panel or world shift. Left-side HUD items retain their margins, right-side gauges and TPMS align to the physical right edge, and the clock, world, and turn signals use the full-display center axis. In road-camera view `2`, it behaves exactly like mode `0`, including automatic navigation/report selection and `ClusterHudPanelLayout`.
 - `0` is the default screen. It shows navigation while live navigation is received and automatically shows the driving report otherwise.
 - `1` is the general live-debug screen, grouping delay, torque, steering, and lateral-plan state into four 2×2 cards. In 3D camera views, the world and driving HUD use the same 1124 px driving region as mode `0`, while the four cards fill the opposite 792 px information region. The acceleration, steering, fuel, and DEF gauges plus TPMS remain inside the driving region's right edge.
