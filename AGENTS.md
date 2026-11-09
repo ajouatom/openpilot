@@ -1,5 +1,14 @@
 # Repository memory
 
+- 2026-11-09: PV5 uploaded process_crash13:30:20 at e318f767 proves controlsd
+  repeatedly exits in publish with undefined t_since_plan. Introduced by our
+  7d337 stop-object change; the previous state_control/helper checks missed the
+  publish scope. Compute plan age from SubMaster in publish. Complete-method
+  real-cereal regression reproduces the NameError before correction and passes
+  54 cases afterward, including inactive/non-CANFD and stale/invalid inputs.
+  Add it to native Signal and full-build CI. Local related97 and F821 check pass.
+  Vehicle installation/restart and physical operation require separate evidence.
+
 - 2026-11-09: Casper EV 1ef4/12 has bus2 SCC11 fixed10.4m/+0.2m/s in
   2163/2217 plausible objects, 176 SCC/vision handoffs, original FCA fault297/2990.
   Panda hardwareCAN2/canState1 error-passive has606231 new error IRQs/59.9s;
