@@ -206,6 +206,7 @@ def build_proc_log_message(msg, sampler: SmapsSampler) -> None:
     # Only completed, identity-checked samples; no expensive reads in publication.
     smaps = sampler.get(r['pid'], r['starttime'], now)
     proc.memPss = smaps.pss
+    proc.memPrivateDirty = smaps.private_dirty
     proc.memPssAnon = smaps.pss_anon
     proc.memPssShmem = smaps.pss_shmem
     proc.memPssMonoTime = int(smaps.mono_time * 1e9)

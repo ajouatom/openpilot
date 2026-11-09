@@ -19,6 +19,11 @@ class SmapsSample:
   pss_shmem: int = 0
   # Conservative age: beginning of a multi-read scan, not its completion.
   mono_time: float = 0.0
+  private_dirty: int = 0
+
+
+_SMAPS_FIELDS = {b'Pss:': 0, b'Pss_Anon:': 1, b'Pss_Shmem:': 2, b'Private_Dirty:': 3}
+_SMAPS_PREFIXES = tuple(_SMAPS_FIELDS)
 
 
 class SmapsSampler:
@@ -32,7 +37,7 @@ class SmapsSampler:
     self.file: BinaryIO | None = None
     self.started = 0.0
     self.pending = b''
-    self.totals = [0, 0, 0]
+    self.totals = [0] * len(_SMAPS_FIELDS)
 
   def _starttime(self, pid: int) -> int:
     # Fields after the final ')' begin with field 3; starttime is field 22.
@@ -67,10 +72,9 @@ class SmapsSampler:
     lines = (self.pending + data).split(b'\n')
     self.pending = b'' if eof else lines.pop()
     for line in lines:
-      if line.startswith((b'Pss:', b'Pss_Anon:', b'Pss_Shmem:')):
+      if line.startswith(_SMAPS_PREFIXES):
         key, amount, *_ = line.split()
-        index = {b'Pss:': 0, b'Pss_Anon:': 1, b'Pss_Shmem:': 2}[key]
-        self.totals[index] += int(amount) * 1024
+        self.totals[_SMAPS_FIELDS[key]] += int(amount) * 1024
     # Malformed input must not create an unbounded buffer.
     if len(self.pending) > READ_BYTES:
       raise ValueError('oversized smaps line')
@@ -97,7 +101,7 @@ class SmapsSampler:
           return
         self.active = (pid, identity)
         self.started = now
-        self.totals = [0, 0, 0]
+        self.totals = [0] * len(_SMAPS_FIELDS)
         # Preserve rollup-only Pss_Anon/Pss_Shmem where supported. Its kernel
         # walk is indivisible, but other processes still wait for the duty pause.
         # Older kernels (including C3's 4.9 base) use chunked per-VMA smaps.
@@ -115,7 +119,7 @@ class SmapsSampler:
       self._parse(data, eof=not data)
       if not data:
         if self._starttime(pid) == identity:
-          self.cache[pid] = SmapsSample(*self.totals, self.started)
+          self.cache[pid] = SmapsSample(*self.totals[:3], mono_time=self.started, private_dirty=self.totals[3])
         else:
           self.cache.pop(pid, None)
         self.due[pid] = time.monotonic() + REFRESH_SECONDS

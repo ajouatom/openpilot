@@ -51,6 +51,11 @@ def _setxattr(path: str, attr_name: str, attr_value: bytes) -> None:
 
 _cached_attributes: dict[tuple, bytes | None] = {}
 
+
+def cached_attribute_count() -> int:
+  return len(_cached_attributes)
+
+
 def getxattr(path: str, attr_name: str) -> bytes | None:
   key = (path, attr_name)
   if key not in _cached_attributes:
