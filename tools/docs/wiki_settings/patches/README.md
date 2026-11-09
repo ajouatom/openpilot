@@ -4,6 +4,18 @@ These patches preserve reviewed Wiki edits in the code branch when the author
 cannot push to the separate Wiki repository. Committing a patch here does not
 publish its content to the live Wiki.
 
+## P/R-only cluster screens
+
+`cluster-gear-screens.patch` contains only the KO/EN `ClusterHudScreenMode`
+manual regions for `thftgr/carrot-wip-cluster`. It applies to empty manual
+regions generated from this branch's catalog; reconcile existing manual text
+when integrating elsewhere. The clean driving layout and device-screen sleep
+changes are excluded. This patch is local and has not been published. It uses
+zero context lines; check/apply it with `git apply --unidiff-zero`.
+
+Follow the [authoring guide](../AUTHORING_GUIDE.md), regenerate with the staged
+pages as `--wiki-dir`, and validate before any later publication.
+
 ## Bosch passive reception
 
 `bosch-passive-reception.patch` changes only the Korean and English
