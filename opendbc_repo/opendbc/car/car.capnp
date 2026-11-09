@@ -293,6 +293,7 @@ struct CarState {
   tbtRightRearBlocked @111 :Bool = true; # OEM right BSD warning or invalid/stale BSD; no corner-distance veto; manual admission unchanged
   laneLineInfoMonoTime @112 :UInt64; # exact OEM lane type/colour CAN observation; zero means unknown, manual indicator only
   teslaTrafficControl @113 :TeslaTrafficControl;
+  stockSccFault @114 :Bool; # original Casper FCA failure, before outgoing fault suppression
 
   struct TeslaTrafficControl {
     available @0 :Bool;
@@ -511,6 +512,7 @@ struct CarControl {
 
     jerk @9: Float32;  # m/s^3
     aTarget @10: Float32;  # m/s^2
+    stopObjectActive @11 :Bool; # synthetic signal-stop object included in the generated SCC packet
 
     enum LongControlState @0xe40f3a917d908282{
       off @0;
@@ -554,6 +556,7 @@ struct CarControl {
 
     driverMonitoringAlert @22: UInt8;  # 0=none, 1=initial, 2=audible, 3=terminal; fresh enabled DM only
     physicalBlinkerHold @23: UInt8;  # 0=legacy, 1=release, 2=left hold, 3=right hold; fresh USB-CAN lease
+    signalStopObject @24 :Bool; # request only; final SCC interlocks own application
 
     # not used with the dash, TODO: separate structs for dash UI and device UI
     audibleAlert @5: AudibleAlert;

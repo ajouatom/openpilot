@@ -687,6 +687,7 @@ class CarController(CarControllerBase):
     new_actuators.torqueOutputCan = steering_authority if angle_control else apply_torque
     new_actuators.steeringAngleDeg = float(apply_angle)
     new_actuators.accel = accel
+    new_actuators.stopObjectActive = bool(self.canfd_stopping is not None and self.canfd_stopping.stop_object_active)
 
     self.frame += 1
     return new_actuators, can_sends

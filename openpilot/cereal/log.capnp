@@ -166,6 +166,8 @@ struct OnroadEvent @0xc4fa6047f024e718 {
     impactDashcamReboot @129;
     teslaTrafficStopWarning @130;
     teslaTrafficStopTakeover @131;
+    pandaCanFault @132;
+    stockSccFault @133;
 
     soundsUnavailableDEPRECATED @47;
   }
