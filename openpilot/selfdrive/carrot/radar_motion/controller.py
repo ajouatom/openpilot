@@ -117,6 +117,11 @@ FORCED_SCC_VISION_MIN_PROB = 0.5
 # During a lane change the old lane can still hold a stopped car the path has already left.
 FORCED_SCC_LANE_CHANGE_KEEP_VLEAD_MPS = 5.0
 FORCED_SCC_REJECT_HOLD_S = 1.0
+# The adopted SCC object and the front track of the same body coincide (80-segment replay: |dRel| difference
+# p99 0.95 m, max 1.55 m; |vLead| p99 0.24 m/s). Publishing that front track keeps leadOne's identity through
+# frames where only the vision association failed.
+FORCED_SCC_SAME_BODY_MAX_DREL_M = 2.0
+FORCED_SCC_SAME_BODY_MAX_VLEAD_DELTA_MPS = 1.0
 LANE_CHANGE_ACTIVE_STATES = frozenset(("preLaneChange", "laneChangeStarting", "laneChangeFinishing"))
 
 
@@ -830,6 +835,38 @@ class DPathRadarController:
       and 0.0 <= time_s - self.forced_scc_rejected_s <= FORCED_SCC_REJECT_HOLD_S
     )
 
+  def _forced_scc_front_body(
+    self,
+    scc: VisionRadarMatch,
+    points: tuple[RadarPointSnapshot, ...],
+    path: tuple[tuple[float, float], ...],
+    vision: VisionLead | None,
+  ) -> VisionRadarMatch | None:
+    """Mode 3: the measured front track that is the adopted SCC body, so leadOne keeps one identity."""
+    candidates = []
+    for point in points:
+      d_rel_error = abs(point.d_rel - scc.point.d_rel)
+      v_lead_error = abs(point.v_lead - scc.point.v_lead)
+      if (
+        point.source != "frontRadar" or not point.measured
+        or d_rel_error > FORCED_SCC_SAME_BODY_MAX_DREL_M
+        or v_lead_error > FORCED_SCC_SAME_BODY_MAX_VLEAD_DELTA_MPS
+      ):
+        continue
+      d_path = project_to_model_path(path, point.d_rel, point.y_rel).d_path
+      # Same boundary as the beside-path refusal: never publish a beside-path lateral.
+      if abs(d_path) < FORCED_SCC_BESIDE_PATH_M:
+        candidates.append((d_rel_error, v_lead_error, point, d_path))
+    if not candidates:
+      return None
+    _, _, point, d_path = min(candidates, key=lambda candidate: candidate[:2])
+    probability = (
+      vision.probability
+      if vision is not None and abs(vision.d_rel - point.d_rel) <= VISION_RADAR_MAX_DISTANCE_ERROR_M
+      else 0.0
+    )
+    return VisionRadarMatch(point=point, probability=probability, score=scc.score, d_path=d_path)
+
   def _points_at_model_time(
     self,
     radar_points: Any,
@@ -1059,13 +1096,17 @@ class DPathRadarController:
     ):
       # A farther permissive match must not hide a strongly visible nearer car.
       primary_match = None
+    forced_scc_body = None
     if primary_match is None and self.enable_radar_tracks == 3:
       # Mode 3 tries front-radar/vision first, then SCC unless physical lateral
       # evidence identifies an adjacent car. Vision remains the final fallback.
       primary_match = unconditional_scc_match(points)
       if primary_match is not None and self._reject_forced_scc(primary_match.point, points, path, vision, model, time_s):
         primary_match = None
-      elif primary_match is None:
+      elif primary_match is not None:
+        forced_scc_body = self._forced_scc_front_body(primary_match, points, path, vision)
+        primary_match = forced_scc_body or primary_match
+      else:
         self.forced_scc_rejected_s = None
         self._forced_scc_previous = None
     else:
@@ -1103,6 +1144,9 @@ class DPathRadarController:
         vision, path, v_ego, model_v_ego=_model_ego_speed(model, v_ego),
       )
     primary_match = self._confirm_vision_transition(primary_match, vision_candidate, points, path, time_s)
+    if forced_scc_body is not None:
+      # Still an SCC fallback frame: like the SCC object, it never delays the next frame's switch to vision.
+      self._vision_transition_radar = None
     lead_one = vision_candidate
     if primary_match is not None:
       lead_one = self._lead_from_radar_point(
