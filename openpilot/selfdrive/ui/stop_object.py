@@ -43,6 +43,17 @@ def draw_stop_object(renderer, sm, *, started_frame=0):
   index = renderer._get_path_length_idx(path[:, 0], STOP_OBJECT_DISTANCE)
   z = float(path[min(index, len(path) - 1), 2]) + renderer._path_offset_z
   point = renderer._map_to_screen(STOP_OBJECT_DISTANCE, 0.0, z)
+  if point is None:
+    # The ordinary lead projector clips far outside the camera view. A 3 m
+    # ground point can be below that margin on a zoomed/tall camera; retain its
+    # projection for the bounded edge marker, but never project behind camera.
+    transform = getattr(renderer, '_car_space_transform', None)
+    if transform is None:
+      return
+    projected = transform @ (STOP_OBJECT_DISTANCE, 0.0, z)
+    if not all(math.isfinite(float(v)) for v in projected) or projected[2] <= 1e-6:
+      return
+    point = projected[:2] / projected[2]
   if point is None or not all(math.isfinite(float(v)) for v in point):
     return
   rect = renderer._rect

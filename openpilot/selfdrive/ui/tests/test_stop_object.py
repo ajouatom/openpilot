@@ -85,3 +85,14 @@ def test_actual_draw_uses_three_metre_projection_and_cone_not_car(monkeypatch):
   for name, values in calls:
     if name == 'triangle':
       assert all(0 <= x <= 1920 and 0 <= y <= 1080 for x, y in values[:3])
+
+  # Actual renderer clipping must not erase a valid close ground projection.
+  calls.clear()
+  renderer._map_to_screen = lambda *v: None
+  renderer._car_space_transform = np.array([[960., 0., 0.], [2000., 0., 0.], [1., 0., 0.]])
+  draw_stop_object(renderer, Messages())
+  assert len(calls) == 6
+  calls.clear()
+  renderer._car_space_transform[2, 0] = -1.
+  draw_stop_object(renderer, Messages())
+  assert not calls
