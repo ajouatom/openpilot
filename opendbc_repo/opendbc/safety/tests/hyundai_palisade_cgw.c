@@ -50,15 +50,7 @@ static void ready(uint32_t now, uint64_t stock, int counter) {
   CHECK(safety_rx_hook(&w));
 }
 
-// parked test: accepted and queued directly
-static bool tx(uint32_t now, uint64_t data) {
-  timer.CNT = now;
-  CANPacket_t p = msg(0x541, data);
-  safety_tx_buffered_for_fwd = false;
-  return safety_tx_hook(&p) && !safety_tx_buffered_for_fwd;
-}
-
-// driving kick: accepted but held for the rx_tx hook (sent right behind the next stock CGW1)
+// parked test and driving kick alike: accepted but held for the rx_tx hook (sent right behind the next stock CGW1)
 static bool held(uint32_t now, uint64_t data) {
   timer.CNT = now;
   CANPacket_t p = msg(0x541, data);
@@ -81,13 +73,13 @@ int main(void) {
   // Flag, all classic config variants, first-frame at timestamp zero, and both directions.
   for (int param = 0; param < 16; param++) {
     init(param); ready(0, stock, 0); CHECK(rejected(0, stock | left));
-    init(param | 32768); ready(0, stock, 0); CHECK(tx(0, stock | left));
-    CHECK(rejected(49999, stock | right)); CHECK(tx(50000, stock | right));
+    init(param | 32768); ready(0, stock, 0); CHECK(held(0, stock | left));
+    CHECK(rejected(49999, stock | right)); CHECK(held(50000, stock | right));
   }
   // the off half of a flash (lever only, lamp 0) is allowed; the other side's lamp or a lamp without lever is not
   for (int l = 0; l < 4; l++) for (int r = 0; r < 4; r++) for (int s = 0; s < 4; s++) {
     init(32768); ready(0, stock, 0);
-    CHECK(tx(0, stock | ((uint64_t)l << 19) | ((uint64_t)r << 62) | ((uint64_t)s << 41)) ==
+    CHECK(held(0, stock | ((uint64_t)l << 19) | ((uint64_t)r << 62) | ((uint64_t)s << 41)) ==
           (((s == 2) && (l <= 1) && (r == 0)) || ((s == 1) && (l == 0) && (r <= 1))));
   }
   // Every unrelated bit must match, including fields currently zero and currently one.
@@ -130,11 +122,11 @@ int main(void) {
     // no usable stock CGW1: nothing; no gear / wheel sample: not the parked test, so held for the kick
     CHECK(missing == 0 ? rejected(250001, stock | left) : held(250001, stock | left));
   }
-  init(32768); ready(0, stock, 0); CHECK(tx(250000, stock | left));
+  init(32768); ready(0, stock, 0); CHECK(held(250000, stock | left));
   init(32768); ready(0, stock, 0); CHECK(rejected(250001, stock | left));
   // Latest template replaces the previous one.
   init(32768); ready(0, stock, 0); ready(1, stock ^ 1ULL, 1);
-  CHECK(rejected(1, stock | left)); CHECK(tx(1, (stock ^ 1ULL) | left));
+  CHECK(rejected(1, stock | left)); CHECK(held(1, (stock ^ 1ULL) | left));
   for (int kind = 0; kind < 7; kind++) {
     init(32768); ready(0, stock, 0);
     CANPacket_t p = msg(0x541, stock | left);
@@ -156,11 +148,11 @@ int main(void) {
     for (int i = 0; i <= 100; i++) {
       uint32_t now = start + i * 50000U;
       ready(now, stock, i % 16);
-      CHECK(tx(now, stock | left) == (i < 60));
+      CHECK(held(now, stock | left) == (i < 60));
     }
     ready(start + 5999999U, stock, 5); CHECK(rejected(start + 5999999U, stock | left));
-    ready(start + 6999999U, stock, 6); CHECK(tx(start + 6999999U, stock | right));
-    init(32768); ready(0, stock, 0); CHECK(tx(0, stock | left));
+    ready(start + 6999999U, stock, 6); CHECK(held(start + 6999999U, stock | right));
+    init(32768); ready(0, stock, 0); CHECK(held(0, stock | left));
   }
   // Bad checksums cannot supply a wheel sample.
   init(32768);
@@ -172,13 +164,13 @@ int main(void) {
     CHECK(rejected(0, stock | ((uint64_t)switches << 41) | left));
   }
   // Init clears cached RX and rate/trial state, also after switching safety modes.
-  init(32768); ready(0, stock, 0); CHECK(tx(0, stock | left));
-  init(32768); CHECK(rejected(0, stock | left)); ready(0, stock, 0); CHECK(tx(0, stock | left));
+  init(32768); ready(0, stock, 0); CHECK(held(0, stock | left));
+  init(32768); CHECK(rejected(0, stock | left)); ready(0, stock, 0); CHECK(held(0, stock | left));
   init(0); ready(0, stock, 0); CHECK(rejected(0, stock | left));
   CHECK(set_safety_hooks(SAFETY_HYUNDAI_LEGACY, 32768) == 0);
   CHECK(rejected(0, stock | left));
   // CGW forwarding is unchanged even immediately after accepted host TX.
-  init(32768); ready(0, stock, 0); CHECK(tx(0, stock | left));
+  init(32768); ready(0, stock, 0); CHECK(held(0, stock | left));
   for (int bus = 0; bus < 3; bus++) {
     CANPacket_t p = msg(0x541, stock); p.bus = bus;
     CHECK(safety_fwd_hook(&p) == (bus == 0 ? 2 : (bus == 2 ? 0 : -1)));
@@ -208,10 +200,10 @@ int main(void) {
   CANPacket_t door = msg(0x541, stock ^ (1ULL << 8)); timer.CNT = 820000; CHECK(safety_rx_hook(&door)); CHECK(!safety_rx_tx_hook(&door, &out));
   relay_malfunction = true; CHECK(held(550000, stock | left) == false); relay_malfunction = false;
   // CANFD_SPAS_DIRECT (1024, CanfdBlinkerKickMode 2/3): queued directly even while driving
-  init(32768 | 1024); timer.CNT = 0; CHECK(safety_rx_hook(&c)); CHECK(tx(30000, stock | left));
+  init(32768 | 1024); timer.CNT = 0; CHECK(safety_rx_hook(&c)); CHECK(held(30000, stock | left));
   CHECK(!safety_rx_tx_hook(&in, &out));
   // the parked test is never held
-  init(32768); ready(0, stock, 0); CHECK(tx(0, stock | left));
+  init(32768); ready(0, stock, 0); CHECK(held(0, stock | left));
   printf("Palisade CGW production safety: %u checks passed\n", checks);
   return 0;
 }

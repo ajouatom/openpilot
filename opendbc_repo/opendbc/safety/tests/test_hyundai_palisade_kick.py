@@ -1,7 +1,7 @@
 # CanfdBlinkerKick on the classic-CAN Palisade: while driving, the host's CGW1 (0x541) frame is held by the safety
 # model and sent right behind the next stock CGW1 (safety_rx_tx_hook) instead of being queued next to the BCM's own
-# 10 Hz frame (00000e46 10-27: bus errors at the start of direct sending). The parked PalisadeBlinkerTest still sends
-# directly, and so does CANFD_SPAS_DIRECT (CanfdBlinkerKickMode 2/3).
+# 10 Hz frame (00000e46 10-27: bus errors at the start of direct sending). The parked PalisadeBlinkerTest takes the same
+# path; only CANFD_SPAS_DIRECT (CanfdBlinkerKickMode 2/3) sends directly.
 from opendbc.car.structs import CarParams
 from opendbc.safety.tests.libsafety import libsafety_py
 

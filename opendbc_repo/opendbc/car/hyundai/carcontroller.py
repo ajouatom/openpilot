@@ -78,8 +78,8 @@ BLINKER_PULSE_FRAMES = int(1.0 / DT_CTRL)
 # No kick across a yellow (centre) line. The camera color drops to 0 while the line is crossed (10-30 seg 22: 10 -> 2
 # at the kick), so a yellow seen on that side in the last 2 s counts (10-30 seg 1: kick over yellow dashed 20)
 YELLOW_HOLD_FRAMES = int(2.0 / DT_CTRL)
-# Palisade kick on CGW1 (cgw_blinkers): lamp bit 0.35 s on / 0.35 s off like stock. 60 ms, not the test's 50 ms: panda's
-# 50 ms rate limit would bounce every frame that arrives a little early (4 of 49 even at 50 ms, 00000e46)
+# Palisade kick on CGW1 (cgw_blinkers): lamp bit 0.35 s on / 0.35 s off like stock. 60 ms, same as PalisadeBlinkerTest:
+# panda's 50 ms rate limit would bounce every frame that arrives a little early (4 of 49 even at 50 ms, 00000e46)
 CGW_TX_FRAMES = 6
 CGW_FLASH_HALF_FRAMES = int(0.35 / DT_CTRL)
 # Every stock lever press starts with one BLINKER + BLINKER_TAP frame before the steady frame (Ioniq 5 3372.9 s:

@@ -1,6 +1,7 @@
 # Stock CGW1 (10-26 rlog 00000e40): 10 Hz, lamp bit 0.35 s on / 0.35 s off, byte 5 bits 1..2 = lever side (2 left, 1 right).
-# We send at 20 Hz so ours outnumber the BCM's own 0 frames; 7 frames = one 0.35 s half period.
-TX_PERIOD_NS = 50_000_000
+# Every 60 ms like the kick (carcontroller.CGW_TX_FRAMES): panda holds the newest frame and sends it right behind the
+# next stock CGW1, and its 50 ms rate limit would bounce frames that arrive a little early.
+TX_PERIOD_NS = 60_000_000
 FLASH_HALF_NS = 350_000_000
 
 

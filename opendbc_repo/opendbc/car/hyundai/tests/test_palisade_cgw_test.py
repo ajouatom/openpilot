@@ -30,11 +30,11 @@ class TestPalisadeCgwTest(unittest.TestCase):
     # stock 10-26 00000e40: 0.35 s on / 0.35 s off, lever bits held throughout
     self.call(0)
     frames = []
-    for tick in range(28):
-      self.now = 1_000_000_000 + tick * 50_000_000
+    for tick in range(24):
+      self.now = 1_000_000_000 + tick * 60_000_000
       frames += self.call(1)
     lamps = [(data[2] >> 3) & 3 for _, data, _ in frames]
-    self.assertEqual(lamps, ([1] * 7 + [0] * 7) * 2)
+    self.assertEqual(lamps, ([1] * 6 + [0] * 6) * 2)  # every 60 ms: 0..300 ms on, 360..660 ms off, ...
     self.assertTrue(all((data[5] >> 1) & 3 == 2 for _, data, _ in frames))
 
   def test_rate_duration_and_off_rearm(self):
@@ -42,7 +42,7 @@ class TestPalisadeCgwTest(unittest.TestCase):
     for tick in range(401):
       self.now = 1_000_000_000 + tick * 10_000_000
       sent += len(self.call())
-    self.assertEqual(sent, 60)
+    self.assertEqual(sent, 50)  # 3 s at 60 ms
     self.assertEqual(self.call(2), [])
     self.call(0)
     self.assertEqual(len(self.call(2)), 1)
@@ -66,7 +66,7 @@ class TestPalisadeCgwTest(unittest.TestCase):
     self.assertEqual(self.call(), [])
     self.call(0)
     self.assertTrue(self.call())
-    self.now += 50_000_000
+    self.now += 60_000_000
     self.assertEqual(self.call(2), [])
     self.assertEqual(self.call(), [])
 

@@ -82,7 +82,8 @@ static struct {
 // CanfdBlinkerKick while driving (the parked test lit a lamp, 11-03 video): the same CGW1 frame is held here and sent
 // right behind the next stock CGW1 (hyundai_rx_tx_hook), so our 0x541 never starts together with the BCM's 10 Hz one
 // (00000e46 10-27: 32 bus-0 errors in the first 0.5 s of direct 20 Hz sending). CANFD_SPAS_DIRECT (1024,
-// CanfdBlinkerKickMode 2/3) queues the frames directly instead.
+// CanfdBlinkerKickMode 2/3) queues the frames directly instead. The parked PalisadeBlinkerTest takes the same path,
+// so the menu test checks what the kick sends.
 static struct {
   CANPacket_t pkt;
   bool pending, direct;
@@ -126,8 +127,8 @@ static bool hyundai_cgw_test_tx(const CANPacket_t *msg) {
   if (hyundai_cgw_test.trial_active && (get_ts_elapsed(now, hyundai_cgw_test.trial_ts) >= 3000000U)) {
     hyundai_cgw_test.cutoff = true;
   }
-  // Parked test (PalisadeBlinkerTest): P, wheels still, not engaged - sent directly. Otherwise the driving kick:
-  // held and sent behind the stock frame unless CANFD_SPAS_DIRECT.
+  // Parked test (PalisadeBlinkerTest): P, wheels still, not engaged - the stock lamps must be off too. The test and
+  // the driving kick are both held and sent behind the stock frame unless CANFD_SPAS_DIRECT.
   bool parked = !controls_allowed && hyundai_cgw_test.wheels_valid && hyundai_cgw_test.gear_valid &&
                 hyundai_cgw_test.stationary && hyundai_cgw_test.park &&
                 (get_ts_elapsed(now, hyundai_cgw_test.wheels_ts) <= 250000U) &&
@@ -148,7 +149,7 @@ static bool hyundai_cgw_test_tx(const CANPacket_t *msg) {
     }
     hyundai_cgw_test.sent = true;
     hyundai_cgw_test.sent_ts = now;
-    if (!parked && !hyundai_cgw_pb.direct) {
+    if (!hyundai_cgw_pb.direct) {
       hyundai_cgw_pb.pkt = *msg;
       hyundai_cgw_pb.pending = true;
       hyundai_cgw_pb.push_us = now;
