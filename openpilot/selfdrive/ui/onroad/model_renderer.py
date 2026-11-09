@@ -171,6 +171,8 @@ class ModelRenderer(Widget):
     # self._draw_path(sm)
     # self._draw_lead_indicator()
     self._draw_carrot_overlays(sm)
+    from openpilot.selfdrive.ui.stop_object import draw_stop_object
+    draw_stop_object(self, sm, started_frame=ui_state.started_frame)
 
   def _draw_carrot_overlays(self, sm) -> None:
     timing = self._render_diagnostics

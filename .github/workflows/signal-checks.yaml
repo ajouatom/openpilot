@@ -69,3 +69,12 @@ jobs:
         env:
           CARROT_NATIVE_CPU: '0'
         run: python tools/signal_validation/run.py opendbc_repo/opendbc/car/hyundai/tests/test_pedal_interceptor.py
+      - name: Vehicle fault admission and CAN FD signal-stop object
+        run: |
+          python tools/signal_validation/run.py \
+            openpilot/selfdrive/controls/tests/test_controlsd_publish.py \
+            openpilot/selfdrive/selfdrived/tests/test_vehicle_faults.py \
+            opendbc_repo/opendbc/car/hyundai/tests/test_casper_fault_reporting.py \
+            opendbc_repo/opendbc/car/hyundai/tests/test_stop_object.py \
+            opendbc_repo/opendbc/car/hyundai/tests/test_stopping.py \
+            openpilot/selfdrive/ui/tests/test_stop_object.py

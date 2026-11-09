@@ -293,11 +293,12 @@ struct CarState {
   tbtRightRearBlocked @111 :Bool = true; # OEM right BSD warning or invalid/stale BSD; no corner-distance veto; manual admission unchanged
   laneLineInfoMonoTime @112 :UInt64; # exact OEM lane type/colour CAN observation; zero means unknown, manual indicator only
   teslaTrafficControl @113 :TeslaTrafficControl;
-  # joongyu01: was @113/@114 before carrot-wip took @113 (2026-11-08); both Bools keep their data-section bits
-  naviTunnel @114 :Bool; # 0x4A3 TunnelExist in a tunnel the stock navigation announced as no-lane-change (0x162 SIGNS 16; TunnelLaneChangeHold)
-  naviRoundabout @115 :Bool; # stock cluster 0x162 SIGNS=24 rose in the last 20 s and below 60 km/h (RoundaboutLaneChangeHold): no Kick or auto lane change
-  paddleStopActive @116 :Bool; # joongyu01: card still owns a paddle stop (slowing or handed to a light); the + paddle clears it
-  naviMotorway @117 :Bool; # joongyu01: fresh stock HDA 0x4A3 LinkClass 1 (motorway); road-class fallback when carrotNavi cannot say
+  stockSccFault @114 :Bool; # original Casper FCA failure, before outgoing fault suppression
+  # joongyu01: was @113..@117 before carrot-wip took @113 (2026-11-08) and @114 (2026-11-09); logs before 11-09 merge decode these one Bool slot off
+  naviTunnel @115 :Bool; # 0x4A3 TunnelExist in a tunnel the stock navigation announced as no-lane-change (0x162 SIGNS 16; TunnelLaneChangeHold)
+  naviRoundabout @116 :Bool; # stock cluster 0x162 SIGNS=24 rose in the last 20 s and below 60 km/h (RoundaboutLaneChangeHold): no Kick or auto lane change
+  paddleStopActive @117 :Bool; # joongyu01: card still owns a paddle stop (slowing or handed to a light); the + paddle clears it
+  naviMotorway @118 :Bool; # joongyu01: fresh stock HDA 0x4A3 LinkClass 1 (motorway); road-class fallback when carrotNavi cannot say
 
   struct TeslaTrafficControl {
     available @0 :Bool;
@@ -516,6 +517,7 @@ struct CarControl {
 
     jerk @9: Float32;  # m/s^3
     aTarget @10: Float32;  # m/s^2
+    stopObjectActive @11 :Bool; # synthetic signal-stop object included in the generated SCC packet
 
     enum LongControlState @0xe40f3a917d908282{
       off @0;
@@ -559,10 +561,12 @@ struct CarControl {
 
     driverMonitoringAlert @22: UInt8;  # 0=none, 1=initial, 2=audible, 3=terminal; fresh enabled DM only
     physicalBlinkerHold @23: UInt8;  # 0=legacy, 1=release, 2=left hold, 3=right hold; fresh USB-CAN lease
-    trafficState @24: Int16;  # longitudinalPlan.trafficState: 0=off, 1=red, 2=green
-    latHudState @25: UInt8;  # 0=lat off, 1=laneless, 2=lane mode, 3=angle error > 3 deg for 0.3 s, 4=saturated
-    desiredDistance @26: Float32;  # longitudinalPlan.desiredDistance (m): the gap openpilot keeps, cluster target ring
-    alertType @27: Text;  # selfdriveState.alertType ("eventName/eventType"): cluster text popups
+    signalStopObject @24 :Bool; # request only; final SCC interlocks own application
+    # joongyu01: @24..@27 until carrot-wip took @24 (2026-11-09)
+    trafficState @25: Int16;  # longitudinalPlan.trafficState: 0=off, 1=red, 2=green
+    latHudState @26: UInt8;  # 0=lat off, 1=laneless, 2=lane mode, 3=angle error > 3 deg for 0.3 s, 4=saturated
+    desiredDistance @27: Float32;  # longitudinalPlan.desiredDistance (m): the gap openpilot keeps, cluster target ring
+    alertType @28: Text;  # selfdriveState.alertType ("eventName/eventType"): cluster text popups
 
     # not used with the dash, TODO: separate structs for dash UI and device UI
     audibleAlert @5: AudibleAlert;
