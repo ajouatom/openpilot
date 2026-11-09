@@ -33,7 +33,7 @@ def apply_accel_jerk_limit(a_raw: float, a_value_last: float, jerk_u: float, jer
 
 
 def apply_canfd_stopping(values, CS, controller, accel, previous_value, jerk_u, jerk_l):
-  """Apply the zero-aReq stopping sequence after the normal SCC interlocks."""
+  """Apply the hold-aware stopping sequence after the normal SCC interlocks."""
   if controller is None:
     return
 

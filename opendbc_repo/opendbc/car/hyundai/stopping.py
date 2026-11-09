@@ -1,4 +1,4 @@
-"""Hyundai CAN FD: zero aReq with StopReq, without automatic release/retry.
+"""Hyundai CAN FD: retain gentle braking until the SCC hold is confirmed.
 
 Thresholds below are experimental, not OEM acceptance conditions. This controller
 cannot guarantee stopping; ECU response must be measured on the vehicle.
@@ -8,11 +8,13 @@ from enum import StrEnum
 
 
 DT = 0.02  # SCC_CONTROL is transmitted at 50 Hz
-ENTRY_SPEED = 0.7  # m/s; retain approach braking above the low-speed stop region
+ENTRY_SPEED = 0.55  # m/s; retain approach braking until about 2 km/h
 STOP_SPEED = 0.05
 MOVING_SPEED = 0.10
 STOP_CONFIRM_TIME = 0.2
 APPROACH_ACCEL = -0.5
+HOLD_PENDING_ACCEL = -0.15
+STOP_RELEASE_JERK = 1.5
 STOP_LOWER_BAND = 0.20  # fixed during active ACC, including before StopReq; never copied from stock
 
 
@@ -80,9 +82,14 @@ class CanfdStopping:
       self.enter(StopPhase.request, "motion_after_hold")
 
     if self.phase in (StopPhase.request, StopPhase.held):
-      # Match the observed Ioniq stock entry: both aReq fields become zero in
-      # the FIRST StopReq frame, bypassing the ordinary aReqValue jerk ramp.
-      return StopCommand(1, 0.0, 0.0, STOP_LOWER_BAND)
+      # Do not release the remaining braking request before the vehicle reports
+      # a real SCC hold. Ramp the value upward to avoid a sharp low-speed pitch,
+      # then release it only after hold is confirmed. If motion resumes, restore
+      # the small negative request immediately.
+      hold_confirmed = held and speed <= MOVING_SPEED
+      raw = 0.0 if hold_confirmed else HOLD_PENDING_ACCEL
+      value = min(raw, previous_value + min(jerk_u, STOP_RELEASE_JERK) * DT)
+      return StopCommand(1, raw, value, STOP_LOWER_BAND)
 
     # Preserve the existing approach deceleration until initial low-speed entry.
     raw = min(accel, APPROACH_ACCEL)

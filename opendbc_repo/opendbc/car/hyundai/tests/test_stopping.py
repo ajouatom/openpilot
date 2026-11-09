@@ -6,7 +6,8 @@ from opendbc.can import CANPacker, CANParser
 from opendbc.car import Bus, structs
 from opendbc.car.hyundai import carcontroller
 from opendbc.car.hyundai.hyundaicanfd import create_acc_control, create_acc_control_scc2
-from opendbc.car.hyundai.stopping import CanfdStopping, StopPhase, DT, ENTRY_SPEED, STOP_LOWER_BAND
+from opendbc.car.hyundai.stopping import (CanfdStopping, StopPhase, DT, ENTRY_SPEED, HOLD_PENDING_ACCEL,
+                                          STOP_LOWER_BAND, STOP_RELEASE_JERK)
 from opendbc.car.hyundai.values import CAR, HyundaiFlags
 
 
@@ -35,30 +36,43 @@ def step(controller, **overrides):
   return controller.update(**args)
 
 
-def test_normal_stop_keeps_zero_request_without_toggle():
+def test_normal_stop_keeps_braking_until_hold_without_toggle():
   controller = CanfdStopping()
+  previous = -0.5
   for tick in range(150):
-    cmd = step(controller, speed=max(0, 0.6 - tick * DT * 0.4), held=tick >= 80)
-    assert (cmd.stop_req, cmd.raw, cmd.value, cmd.lower) == (1, 0., 0., STOP_LOWER_BAND)
+    held = tick >= 80
+    cmd = step(controller, speed=max(0, 0.6 - tick * DT * 0.4), held=held, previous_value=previous)
+    assert cmd.stop_req == 1
+    assert cmd.raw == (0. if held else HOLD_PENDING_ACCEL)
+    assert cmd.value <= cmd.raw
+    assert cmd.lower == STOP_LOWER_BAND
+    previous = cmd.value
   assert controller.phase == StopPhase.held
+  assert previous == pytest.approx(0.)
 
 
 @pytest.mark.parametrize('speed', [.07, .3, .65])
 def test_persistent_creep_never_releases_request(speed):
   controller = CanfdStopping()
+  previous = -0.5
   for _ in range(1500):  # exceed every old timeout, distance and retry limit
-    cmd = step(controller, speed=speed)
-    assert (cmd.stop_req, cmd.raw, cmd.value) == (1, 0., 0.)
+    cmd = step(controller, speed=speed, previous_value=previous)
+    assert (cmd.stop_req, cmd.raw) == (1, HOLD_PENDING_ACCEL)
+    assert cmd.value <= HOLD_PENDING_ACCEL
+    previous = cmd.value
   assert controller.phase == StopPhase.request
+  assert previous == pytest.approx(HOLD_PENDING_ACCEL)
 
 
 def test_motion_after_hold_changes_diagnostic_without_releasing():
   controller = CanfdStopping()
-  step(controller, speed=.02, held=True)
+  previous = step(controller, speed=.02, held=True).value
   assert controller.phase == StopPhase.held
   for tick in range(300):
-    cmd = step(controller, speed=.2 + tick * .005, held=True)
-    assert (cmd.stop_req, cmd.raw, cmd.value) == (1, 0., 0.)
+    cmd = step(controller, speed=.2 + tick * .005, held=True, previous_value=previous)
+    assert (cmd.stop_req, cmd.raw) == (1, HOLD_PENDING_ACCEL)
+    assert cmd.value <= HOLD_PENDING_ACCEL
+    previous = cmd.value
   assert controller.phase == StopPhase.request
   assert controller.reason == 'motion_after_hold'
 
@@ -72,7 +86,7 @@ def test_hold_flag_dropout_at_zero_does_not_release():
   assert controller.phase == StopPhase.held
 
 
-def test_approach_preserves_braking_until_first_entry_then_zeros_immediately():
+def test_approach_preserves_braking_then_releases_toward_pending_brake():
   controller = CanfdStopping()
   previous = -.3
   for _ in range(20):
@@ -83,7 +97,8 @@ def test_approach_preserves_braking_until_first_entry_then_zeros_immediately():
     assert cmd.lower == STOP_LOWER_BAND
     previous = cmd.value
   cmd = step(controller, speed=ENTRY_SPEED, accel=-2., previous_value=previous)
-  assert (cmd.stop_req, cmd.raw, cmd.value) == (1, 0., 0.)
+  assert (cmd.stop_req, cmd.raw) == (1, HOLD_PENDING_ACCEL)
+  assert cmd.value == pytest.approx(previous + STOP_RELEASE_JERK * DT)
   for _ in range(100):
     assert step(controller, speed=ENTRY_SPEED + .3).stop_req == 1
 
@@ -205,7 +220,9 @@ def test_lower_band_precedes_stop_and_survives_hold_and_departure(camera, stock_
       assert values["AccelLimitBandUpper"] == 0.
       assert values["StopReq"] == stop_req
       if stop_req:
-        assert values["aReqRaw"] == values["aReqValue"] == 0.
+        expected_raw = 0. if cs.canfdSccHoldActive else HOLD_PENDING_ACCEL
+        assert values["aReqRaw"] == pytest.approx(expected_raw)
+        assert values["aReqValue"] <= expected_raw
   disabled = send(camera, controller, cs, enabled=False, stopping=False)
   assert disabled["AccelLimitBandLower"] == disabled["StopReq"] == 0.
   # Reengagement must not wait for a new stopping episode to restore the band.
@@ -217,7 +234,7 @@ def test_lower_band_precedes_stop_and_survives_hold_and_departure(camera, stock_
 @pytest.mark.parametrize("camera", [True, False])
 @pytest.mark.parametrize("initial", [-1., -.3, .3])
 @pytest.mark.parametrize("target", [-.5, -.8, -1.])
-def test_packed_stop_zeros_both_requests_on_first_frame_and_keeps_zero(camera, initial, target):
+def test_packed_stop_releases_toward_pending_brake_without_dropping_request(camera, initial, target):
   cs = make_cs()
   controller = CanfdStopping()
   previous = initial
@@ -229,8 +246,10 @@ def test_packed_stop_zeros_both_requests_on_first_frame_and_keeps_zero(camera, i
     cs.out.aEgo = -.3 if tick < 40 else .5
     values = send(camera, controller, cs, accel=target, previous_value=previous, previous_target=target)
     assert values['StopReq'] == 1
-    assert values['aReqRaw'] == values['aReqValue'] == 0.
+    assert values['aReqRaw'] == pytest.approx(HOLD_PENDING_ACCEL)
+    assert values['aReqValue'] <= HOLD_PENDING_ACCEL
     previous = values['aReqValue']
+  assert previous == pytest.approx(HOLD_PENDING_ACCEL)
 
 
 @pytest.mark.parametrize("camera", [True, False])
@@ -256,7 +275,8 @@ def test_default_controller_keeps_stop_request_during_persistent_motion(camera, 
   cs = make_cs()
   values = send(camera, controller.canfd_stopping, cs)
   assert values["StopReq"] == 1
-  assert values["aReqRaw"] == pytest.approx(0.)
+  assert values["aReqRaw"] == pytest.approx(HOLD_PENDING_ACCEL)
+  assert values["aReqValue"] < HOLD_PENDING_ACCEL
   assert values["InfoDisplay"] == values["ZEROS_7"] == 0
   assert values["AccelLimitBandLower"] == pytest.approx(STOP_LOWER_BAND)
   initial = controller.canfd_stopping
@@ -267,13 +287,13 @@ def test_default_controller_keeps_stop_request_during_persistent_motion(camera, 
 
 
 @pytest.mark.parametrize("camera", [True, False])
-def test_packed_scc_stop_acceleration_zero_display_fields_and_fixed_band(camera):
+def test_packed_scc_stop_keeps_pending_brake_display_fields_and_fixed_band(camera):
   controller = CanfdStopping()
   values = send(camera, controller, make_cs())
   assert values["ACCMode"] == 1
   assert values["StopReq"] == 1
-  assert values["aReqRaw"] == pytest.approx(0.)
-  assert values["aReqValue"] == pytest.approx(0.)
+  assert values["aReqRaw"] == pytest.approx(HOLD_PENDING_ACCEL)
+  assert values["aReqValue"] == pytest.approx(-0.47)
   assert values["InfoDisplay"] == values["ZEROS_7"] == 0
   assert values["AccelLimitBandLower"] == pytest.approx(STOP_LOWER_BAND)
 
@@ -339,7 +359,7 @@ def test_departure_releases_and_resumes_normal_acceleration_limiter(camera):
   controller = CanfdStopping()
   cs = make_cs()
   stopped = send(camera, controller, cs)
-  assert stopped['aReqValue'] == 0.
+  assert stopped['aReqValue'] == pytest.approx(-0.47)
   actual = dict(send(camera, controller, cs, stopping=False, accel=.5, previous_value=0., previous_target=0.))
   expected = dict(send(camera, None, cs, stopping=False, accel=.5, previous_value=0., previous_target=0.))
   assert actual['StopReq'] == expected['StopReq'] == 0
@@ -362,7 +382,7 @@ def test_missing_stock_message_resets_camera_experiment():
 
 @pytest.mark.parametrize("camera", [True, False])
 @pytest.mark.parametrize("brake_pressed", [False, True])
-def test_soft_hold_zeros_requests_without_preparation(camera, brake_pressed):
+def test_soft_hold_keeps_pending_brake_without_preparation(camera, brake_pressed):
   cs = make_cs()
   cs.softHoldActive = 1 if brake_pressed else 2
   cs.out.brakePressed = brake_pressed
@@ -375,11 +395,11 @@ def test_soft_hold_zeros_requests_without_preparation(camera, brake_pressed):
                   previous_value=previous, previous_target=previous_target)
     assert values['ACCMode'] == values['StopReq'] == 1
     assert values['HUD_LEAD_INFO'] == (2 if camera else 0)
-    assert values['aReqRaw'] == 0.
-    assert values['aReqValue'] == 0.
+    assert values['aReqRaw'] == pytest.approx(HOLD_PENDING_ACCEL)
+    assert values['aReqValue'] == pytest.approx(HOLD_PENDING_ACCEL)
     previous, previous_target = values['aReqValue'], -2.
   assert controller.phase == StopPhase.held
-  assert previous == 0.
+  assert previous == pytest.approx(HOLD_PENDING_ACCEL)
 
 
 @pytest.mark.parametrize('camera', [True, False])
@@ -411,6 +431,8 @@ def test_confirmed_existing_hold_is_not_released():
   controller = CanfdStopping()
   command = step(controller, speed=0., held=True)
   assert command.stop_req == 1
+  assert command.raw == 0.
+  assert command.value == pytest.approx(-0.47)
   assert controller.phase == StopPhase.held
 
 
@@ -432,8 +454,8 @@ def test_stop_upper_increase_waits_one_packet_without_delaying_stop(camera, prev
   assert first['StopReq'] == second['StopReq'] == 1
   assert first['JerkUpperLimit'] == min(previous_upper, 2.)
   assert second['JerkUpperLimit'] == 2.
-  assert first['aReqRaw'] == second['aReqRaw'] == 0.
-  assert first['aReqValue'] == second['aReqValue'] == 0.
+  assert first['aReqRaw'] == second['aReqRaw'] == pytest.approx(HOLD_PENDING_ACCEL)
+  assert first['aReqValue'] == second['aReqValue'] == pytest.approx(-0.47)
   assert first['AccelLimitBandLower'] == second['AccelLimitBandLower'] == STOP_LOWER_BAND
 
 
