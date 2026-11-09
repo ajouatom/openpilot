@@ -171,13 +171,60 @@ def fingerprint(can_recv: CanRecvCallable, can_send: CanSendCallable, set_obd_mu
 
 def get_car(can_recv: CanRecvCallable, can_send: CanSendCallable, set_obd_multiplexing: ObdCallback, alpha_long_allowed: bool,
             is_release: bool, num_pandas: int = 1, cached_params: CarParamsT | None = None):
-  selected_car = Params().get("CarSelected3")
+  params = Params()
+  from openpilot.common.auto_vehicle_branch import session_required
+  if params.get('AutoVehicleBranchHandoff'):
+    params.put_bool('AutoVehicleSession', session_required(params))
+  # A same-boot card restart during handoff must not query firmware again:
+  # Panda is already noOutput and no controller may be constructed before reboot.
+  from openpilot.common.auto_vehicle_branch import boot_id, await_correct_branch, TARGET_BRANCHES
+  handoff = params.get('AutoVehicleBranchHandoff') or {}
+  request = params.get('AutoVehicleBranchRequest') or {}
+  pending_vehicle = handoff.get('vehicle') if handoff and handoff.get('boot') == boot_id() else (
+    request.get('vehicle') if params.get_bool('AutoVehicleBranchPending') and request.get('boot') == boot_id() else None)
+  if pending_vehicle in TARGET_BRANCHES:
+    await_correct_branch(params, pending_vehicle, can_recv)
+  auto_session = params.get_bool("AutoVehicleSession")
+  auto_vehicle = auto_session and not params.get_bool("AutoVehicleReady")
+  profile_data = None
+  if auto_vehicle:
+    from openpilot.common.auto_vehicle import prepare_settings
+    profile_data = prepare_settings(params)
+    # A cached VIN/FW from the other car must never select this vehicle.
+    cached_params = None
+  selected_car = params.get("CarSelected3")
   forced_candidate = get_selected_car_platform(selected_car) if selected_car else None
+  if auto_vehicle:
+    forced_candidate = None
+  elif auto_session:
+    # A card restart during a drive must not query ECUs, reapply presets, or
+    # honor a manual selection changed since this session was identified.
+    from openpilot.common.auto_vehicle import CAR_LABELS
+    resolved = params.get("AutoVehicleResolved")
+    forced_candidate = resolved if resolved in CAR_LABELS else "MOCK"
 
   # A valid manual selection doesn't need active VIN, ECU presence, or firmware queries.
   # Keep passive CAN fingerprinting since interfaces use it to detect buses and optional equipment.
   candidate, fingerprints, vin, car_fw, source, exact_match = fingerprint(can_recv, can_send, set_obd_multiplexing, num_pandas,
                                                                           cached_params, skip_fw_query=forced_candidate is not None)
+
+  if auto_vehicle:
+    from openpilot.common.auto_vehicle import IONIQ_SETTINGS, PORTER, apply_vehicle_settings, select_vehicle
+    # Known firmware for a different car wins over the passive Porter fallback.
+    # Ioniq also requires exact firmware and an actual HDA2 LKAS message.
+    observed_candidate = candidate
+    candidate = None if os.environ.get("FINGERPRINT") else select_vehicle(candidate, fingerprints, exact_match)
+    if candidate is None:
+      carlog.error({"event": "automatic_vehicle_unresolved", "candidate": str(observed_candidate), "exact": exact_match})
+    else:
+      from openpilot.common.auto_vehicle_branch import await_correct_branch
+      await_correct_branch(params, str(candidate), can_recv)
+      if candidate == PORTER:
+        source = CarParams.FingerprintSource.can
+        exact_match = True
+      recalibrate = apply_vehicle_settings(params, str(candidate), profile_data)
+      carlog.warning({"event": "automatic_vehicle_settings", "candidate": str(candidate),
+                      "settings": {key: params.get(key) for key in IONIQ_SETTINGS}, "recalibrate": recalibrate})
 
   if forced_candidate is not None:
     candidate = forced_candidate
@@ -199,7 +246,6 @@ def get_car(can_recv: CanRecvCallable, can_send: CanSendCallable, set_obd_multip
   CP.fingerprintSource = source
   CP.fuzzyFingerprint = not exact_match
 
-  params = Params()
   print("Carrot GitBranch = {}, {}".format(format_git_source(params.get("GitRemote"), params.get("GitBranch")),
                                          params.get("GitCommitDate")))
 

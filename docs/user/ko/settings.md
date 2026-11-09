@@ -138,9 +138,9 @@ Carrot Web 설정 화면에서는 다음 기능을 사용할 수 있습니다.
 | 시작 동작 | `AlwaysLateral`, `TeslaAutoTurnSignals`, `TeslaCanTrafficStop`, `AutoEngage`, `DisableMinSteerSpeed` | 상시 조향, Tesla 방향지시등·CAN 빨간불 정지, 주행 시작 시 자동 활성화, 저속 조향 제한 |
 | 오토크루즈 | `AutoCruiseControl`, `AutoGasTokSpeed`, `AutoGasCancelSpeed`, `AutoGasSyncSpeed`, `CruiseOnDist` | 크루즈 자동 활성화와 가속 페달 입력 시 동작 |
 
-- `AlwaysLateral`: 크루즈가 켜져 있지 않아도 조향 제어를 허용합니다. Tesla 화면의 세 손가락 접촉으로 실험 모드 대신 이 설정을 즉시 전환합니다. 끄더라도 활성 주행 제어의 조향까지 해제하지는 않습니다. 지원 Tesla 차량에서는 전진 기어의 실제 정차 상태에서도 조향할 수 있으며, 최소 조향 속도 이하로 이동할 때의 제한은 유지됩니다. [Tesla 제어 진입](tesla.md#engagement-and-standstill)을 참고하세요.
+- `AlwaysLateral`: 크루즈가 켜져 있지 않아도 조향 제어를 허용합니다. Tesla 화면의 세 손가락 접촉으로 실험 모드 대신 이 설정을 즉시 전환합니다. 끄더라도 활성 주행 제어의 조향까지 해제하지는 않습니다. 지원 Tesla 차량에서는 전진 기어의 실제 정차 상태에서도 조향할 수 있으며, 최소 조향 속도 이하로 이동할 때의 제한은 유지됩니다. [Tesla 제어 진입](tesla.md#engagement-and-standstill)을 참고하세요. 2022~24 아이오닉5 HDA2·CAMERA SCC=2 토크 조향에서는 변경 후 콤마를 재시작해야 하며, Panda가 유효하고 최신인 차량 입력을 계속 확인합니다. 크루즈 해제 상태의 상시 조향 허가는 가감속 시작 권한과 별개입니다.
 - 상시 조향도 시스템 시작 후 최초 준비 확인 전에는 조향하지 않습니다. 모델·차량 파라미터·자세 정보 등 필수 입력이 한 번 정상으로 확인되면 이 시작 검사는 종료되며, 이후 입력의 일시적 불량이나 조향 해제·재작동으로 다시 차단하지 않습니다. 기존 주행 중 안전 처리는 그대로 유지됩니다. 초기 대기시간 경과만으로 준비를 통과하지 않습니다.
-- `AutoEngage`: `0` 끄기, `1` 조향 ON, `2` 조향 ON과 크루즈 대기입니다.
+- `AutoEngage`: `0` 끄기, `1` 조향 ON, `2` 조향 ON과 크루즈 대기입니다. 2022~24 아이오닉5 HDA2·CAMERA SCC=2 토크 조향의 강화 안전 프로필에서는 이 설정만으로 가감속 권한을 켜지 않으며, 시작과 브레이크·CANCEL·MAIN 조작 후 실제 SET−/RES+ 입력이 필요합니다.
 - `TeslaAutoTurnSignals`: 기본 꺼짐이며 재부팅 후 적용됩니다. 차량 CAN과 실제 스토크가 있는 Model 3/Y에서 회전 desire 시작 시 점등하며 준비나 거리만으로 켜지지 않습니다. 실측 방위·핸들 복귀로 완료하고 확인된 회전만 신선한 횡방향 허용 아래 정차 대기합니다. 차로변경 준비 점등은 유지하며 조향·출발 권한은 늘리지 않습니다. 조건과 폐쇄 시험장 검증은 [Tesla 자동 방향지시등](tesla.md#자동-방향지시등)을 참고하세요.
 - `TeslaCanTrafficStop`: 독립적인 기본 꺼짐 Tesla CAN 빨간불 정지이며 재시작이 필요합니다. 순정 TACC가 아닌 실제 openpilot 종제어와 지원 8바이트 비전 APP 프로필이 필요합니다. 126m 미만에서 확인된 빨간불 제약을 추가하고 초록불은 이 제약만 해제합니다. 신호 고장은 인계·soft-disable을 요청하고 다른 차종은 무시합니다. 프로토콜·페달 개입·폐쇄 시험장 한계는 [Tesla CAN 정지](tesla.md#can-빨간불-정지)를 참고하세요.
 - `TeslaManualLaneSignals`, `TeslaModelDesireSignals`, `TeslaModelPathSignals`: 독립적인 기본 꺼짐 Tesla 램프 관찰 옵션이며 재부팅이 필요합니다. 모두 `TeslaAutoTurnSignals`·`ShareData`와 30km/h 이상에서 신선한 ONNX 연속 점선·인접 차로 형상이 필요합니다. 수동 토크·접근은 크루즈 없이 가능하고 모델 의도·경로 예측은 횡제어 활성이 필요하며 오점등할 수 있습니다. 점선은 색상·진행 방향 증거가 아닙니다. 조향 권한·내비 회전 사전점등·유턴 기능은 추가하지 않습니다. 완료·시각·실차 검증 한계는 [Tesla 안내](tesla.md#선택형-차로변경-램프-관찰)를 참고하세요.
@@ -282,7 +282,7 @@ VW MEB(ID.4 포함)에도 수동 조향비와 학습 비율이 적용됩니다. 
 | CANFD·HDA | `CanfdHDA2`, `HyundaiCanfdClusterDirectTx`, `CanfdDebug`, `HDPuse` | HDA2 차량, 계기판 직접 송신과 CAN FD 디버그·HDP 기능 |
 | 레이더 | `EnableRadarTracks`, `RadarTrackFlip`, `EnableCornerRadar`, `CarrotRadarMode`, `CarrotRadarCutInSensitivity` | SCC 레이더, 전방 트랙 좌우 보정, 코너 레이더와 당근레이더 처리·컷인 감도 |
 | 운전자 모니터링 | `DriverMonitoringEnabled`(검색 전용), `DriverMonitoringMode`, `CarrotVisionEnabled`, `MuteDoor`, `MuteSeatbelt` | 운전자 모니터링과 일부 차량 경고음 처리 |
-| 차량 보조 | `MaxAngleFrames`, `SpeedFromPCM` | 최대 조향각 관련 프레임과 순정 SCC 속도 제어 방식 |
+| 차량 보조 | `AutoVehicleSwitch`, `MaxAngleFrames`, `SpeedFromPCM` | 최대 조향각 관련 프레임과 순정 SCC 속도 제어 방식 |
 | 기기 하드웨어 | `CommaPedalEnabled`, `HardwareC3xLite` | ACC 미장착 차량의 Comma Pedal 허용 설정, C3X Lite 하드웨어 구성 |
 
 > [!CAUTION]
@@ -315,6 +315,24 @@ Bosch MRRevo14F 수신을 지원하는 버전에서 Bosch MRRevo14F 후보 차�
 저장한 값은 **다음 차량 파라미터 초기화**부터 적용되며, 실행 중인 제어 경로는 즉시 바뀌지 않습니다. CarrotPilot에서의 Comma Pedal 실차 정상 작동은 아직 확인되지 않았습니다. 장치 펌웨어·전압 보정은 변경하지 않으며, 작동 단계별 확인 항목은 [Comma Pedal 점검 가이드](../../comma_pedal.md)를 참고하세요.
 
 `HardwareC3xLite`는 일반 C3/C3X에서는 반드시 꺼 두고 C3X Lite에서만 켠 뒤 기기를 재부팅하세요. 이 설정을 켜면 존재하지 않는 앰프를 초기화하지 않아 I2C 재시도로 인한 시작 지연을 없애고, 경고음을 GPIO 부저로 출력합니다. 또한 `micd`, `soundd`, `loggerd`를 실행하지 않고 `RecordAudio`를 끄므로 이 하드웨어 모드에서는 일반 주행 로그 기록을 사용할 수 없습니다.
+
+### 포터·아이오닉5 차종·브랜치 자동 전환
+
+**포터·아이오닉5 차종·브랜치 자동 전환** (`AutoVehicleSwitch`)은 기본 OFF입니다. 현재 포터 설정에서 ON으로 저장한 뒤 포터에서 재시작해 일곱 설정의 기준값을 먼저 보관하세요. 정확한 ECU 정보와 HDA2 CAN이 확인된 2022~24 아이오닉5는 `c3-pht`, 확인된 카메라 하네스 전체 CAN 패턴의 포터2 EV는 `c3-pht-porter`를 사용합니다.
+
+브랜치가 다르면 시작 단계에서 제어를 보류하고 **P단·네 바퀴 속도 0이 1초 유지·Panda noOutput**을 확인해 브랜치를 바꾸고 재부팅합니다. 주행 중에는 전환하지 않습니다. 양쪽에 동일한 전환 코드가 필요하며, 처음 다른 브랜치를 설치할 때는 인터넷과 `parkhantae/openpilot` 원격 설정이 필요합니다. 설치한 호환 로컬 브랜치는 이후 오프라인 왕복이 가능합니다. 로컬 수정·충돌·전환 코드 불일치·불명확한 식별은 제어를 막고 상태를 남깁니다. 강제 checkout/reset/stash를 수행하지 않습니다.
+
+| 설정 | 아이오닉5 HDA2 | 포터 복귀 |
+|---|---|---|
+| `HyundaiCameraSCC` | `2` | 저장한 포터 값 |
+| `EnableRadarTracks` | `3` | 저장한 포터 값 |
+| `CanfdHDA2` | `1` | 저장한 포터 값 |
+| `CustomSR` | `140` — 조향비 14.0 | 저장한 포터 값 |
+| 포터 자동 SET·30km/h 미만 취소·전용 GAP 사용 | 모두 OFF | 각 항목의 저장한 포터 값 |
+
+GAP 수치와 다른 설정은 유지합니다. 실제 차종 변경 때 카메라 보정·조향·차량 파라미터·제어 지연 학습값을 초기화하며, 같은 차종 재부팅은 유지합니다. 돌아올 때도 과거 보정을 복원하지 않습니다. OFF는 다음 시작부터 수동 차종 선택과 현재 설정을 유지합니다. 이미 시작한 전환은 실제 OS 재부팅을 마치기 전까지 제어를 보류합니다. 전원을 끄고 각 차량의 하네스로 옮기세요.
+
+전환에 실패하면 정차한 상태에서 `AutoVehicleBranchStatus`를 확인하고 로컬 변경이나 Git 문제를 해결한 뒤 재시작합니다. 진행 중 기록은 `AutoVehicleBranchHandoff`에 보존됩니다. 임의로 삭제해 제어를 우회하지 마세요. 아이오닉5의 정차 후 뒤밀림을 해결하는 기능은 아닙니다.
 
 <a id="display"></a>
 ## 화면 표시

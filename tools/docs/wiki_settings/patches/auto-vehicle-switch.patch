@@ -1,0 +1,69 @@
+--- a/KO-포터·아이오닉5-차종·브랜치-자동-전환.md
++++ b/KO-포터·아이오닉5-차종·브랜치-자동-전환.md
+@@ -29 +29,19 @@
+-<!-- CARROT:REVIEW reviewed-for="" -->
++<!-- CARROT:REVIEW reviewed-for="4e3743b52a197cfae5634d4b7d2cdf8e959a455a81199950481cda6f3585f13a" reviewed-at="2026-11-09T00:00:00Z" -->
++<!-- CARROT:SECTION:BEGIN BEHAVIOR -->
++### 동작
++
++확인된 포터2 EV는 c3-pht-porter, 2022~24 아이오닉5 HDA2는 c3-pht를 선택합니다. 다른 브랜치이면 시작 중 P단·네 바퀴 정지 1초·Panda noOutput을 확인해 전환·재부팅하고, 차종 설정과 실제 차종 변경 재보정을 적용합니다. 주행 중에는 전환하지 않습니다.
++<!-- CARROT:SECTION:END BEHAVIOR -->
++
++<!-- CARROT:SECTION:BEGIN USAGE -->
++### 사용
++
++현재 포터 설정으로 켠 뒤 포터에서 재시작해 일곱 값의 기준을 저장합니다. 기기 이동 전 전원을 끄고 맞는 하네스를 연결하세요. 처음 다른 브랜치를 설치하려면 인터넷과 parkhantae/openpilot 원격이 필요하며, 같은 전환 코드가 설치된 로컬 브랜치는 오프라인 왕복이 가능합니다.
++<!-- CARROT:SECTION:END USAGE -->
++
++<!-- CARROT:SECTION:BEGIN REFERENCE -->
++### 참고
++
++로컬 수정·충돌·전환 코드 불일치·불확실한 식별이면 제어를 보류하고 강제 초기화하지 않습니다. 전환 상태는 AutoVehicleBranchStatus에서 확인합니다. OFF는 다음 시작부터 적용하며 진행 중 전환은 OS 재부팅을 마쳐야 합니다. 실제 정지 유지·자동 SET 수락을 보장하는 기능은 아닙니다.
++<!-- CARROT:SECTION:END REFERENCE -->
++
+--- a/EN-Porter–Ioniq-5-Automatic-Branch-Switch.md
++++ b/EN-Porter–Ioniq-5-Automatic-Branch-Switch.md
+@@ -29 +29,19 @@
+-<!-- CARROT:REVIEW reviewed-for="" -->
++<!-- CARROT:REVIEW reviewed-for="4e3743b52a197cfae5634d4b7d2cdf8e959a455a81199950481cda6f3585f13a" reviewed-at="2026-11-09T00:00:00Z" -->
++<!-- CARROT:SECTION:BEGIN BEHAVIOR -->
++### Behavior
++
++Confirmed Porter II EV selects c3-pht-porter; 2022–24 Ioniq 5 HDA2 selects c3-pht. A different branch requires Park, four zero-speed wheels for one second and Panda noOutput during startup, then checkout and reboot, vehicle settings and recalibration on actual vehicle changes. No mid-drive switching.
++<!-- CARROT:SECTION:END BEHAVIOR -->
++
++<!-- CARROT:SECTION:BEGIN USAGE -->
++### Usage
++
++Enable and restart on the Porter first to save its seven-setting baseline. Power down before moving the device and use the matching harness. Initial installation of the other branch requires internet and a parkhantae/openpilot remote; compatible installed local branches can switch offline.
++<!-- CARROT:SECTION:END USAGE -->
++
++<!-- CARROT:SECTION:BEGIN REFERENCE -->
++### Reference
++
++Local edits, conflicts, mismatched handoff code or unresolved identity hold control without a forced reset. Inspect AutoVehicleBranchStatus for progress. OFF applies at the next startup; an in-progress handoff must complete an OS reboot. This feature does not guarantee stop hold or vehicle acceptance of automatic SET.
++<!-- CARROT:SECTION:END REFERENCE -->
++
+--- a/ZH-波特与IONIQ-5车型及分支自动切换.md
++++ b/ZH-波特与IONIQ-5车型及分支自动切换.md
+@@ -29 +29,19 @@
+-<!-- CARROT:REVIEW reviewed-for="" -->
++<!-- CARROT:REVIEW reviewed-for="4e3743b52a197cfae5634d4b7d2cdf8e959a455a81199950481cda6f3585f13a" reviewed-at="2026-11-09T00:00:00Z" -->
++<!-- CARROT:SECTION:BEGIN BEHAVIOR -->
++### 行为
++
++确认波特II EV后选择c3-pht-porter；2022–24款IONIQ 5 HDA2选择c3-pht。分支不符时，在启动阶段确认P挡、四轮零速持续1秒及Panda禁止输出，再切换并重启，应用车型设置及实际车型变化后的重新校准。行驶中不切换。
++<!-- CARROT:SECTION:END BEHAVIOR -->
++
++<!-- CARROT:SECTION:BEGIN USAGE -->
++### 使用
++
++先在波特当前配置下开启并重启，保存七项基准。移动车载设备前断电并连接对应线束。首次安装另一分支需要网络及parkhantae/openpilot远程；已安装且转换代码一致的本地分支可离线往返。
++<!-- CARROT:SECTION:END USAGE -->
++
++<!-- CARROT:SECTION:BEGIN REFERENCE -->
++### 参考
++
++本地修改、冲突、转换代码不匹配或车型不明确时保持控制阻断，不强制重置。进度见AutoVehicleBranchStatus。关闭后下次启动生效；进行中的切换必须完成系统重启。本功能不保证停车保持或车辆接受自动SET。
++<!-- CARROT:SECTION:END REFERENCE -->
++

@@ -36,6 +36,9 @@ def test_only_valid_manual_selection_skips_fw_query(monkeypatch, forced_candidat
   fingerprint_args = {}
 
   class FakeParams:
+    def get_bool(self, key):
+      return False
+
     def get(self, key):
       return "Selected Car" if key == "CarSelected3" else ""
 

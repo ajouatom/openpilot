@@ -201,6 +201,10 @@ class CarInterface(CarInterfaceBase):
     else:
       CarInterfaceBase.configure_torque_tune(candidate, ret.lateralTuning)
 
+    if (candidate == CAR.HYUNDAI_IONIQ_5 and ret.flags & HyundaiFlags.CANFD_HDA2 and
+        camera_scc == 2 and not ret.flags & HyundaiFlags.ANGLE_CONTROL):
+      ret.safetyConfigs[-1].safetyParam |= HyundaiSafetyFlags.CANFD_STRICT_CONTROL.value
+
     if ret.flags & HyundaiFlags.ALT_LIMITS:
       ret.safetyConfigs[-1].safetyParam |= HyundaiSafetyFlags.ALT_LIMITS.value
 
