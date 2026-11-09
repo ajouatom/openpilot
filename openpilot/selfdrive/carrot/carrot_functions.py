@@ -562,6 +562,9 @@ class CarrotPlanner:
       # A paddle after the gas is a fresh stop request: drop the 10 s red-ignore the gas started (§51 85 18:49:59).
       self.traffic_starting_count = 0
     paddle_moving_lead = self._paddle_stop and radarstate.leadOne.status and getattr(radarstate.leadOne, 'vLead', 0.) > 1.0
+    # Rolling to the line under 3 m/s a red stop keeps its target through off/green like the paddle stop: on 11-09
+    # 00:00:30.8 the night model planned go 2 m before a red line and the car went 1.4 -> 10 km/h (02_logs §55).
+    stop_hold = self._paddle_stop or (self.xState == XState.e2eStop and v_ego < 3.0)
 
     v_cruise_kph = self.cruise_eco_control(v_ego_cluster_kph, v_cruise_kph)
     v_cruise_kph, atc_active = self._update_carrot_man(sm, v_ego_kph, v_cruise_kph)
@@ -723,7 +726,7 @@ class CarrotPlanner:
         self.xState = XState.lead
       else:
         # The early paddle red flickers to green in 18 of 34 stops (§44); the driver asked to stop, so only stop.
-        if self.trafficState == TrafficState.green and not self._paddle_stop:
+        if self.trafficState == TrafficState.green and not stop_hold:
           self.add_signal_event(EventName.trafficSignGreen)
           self.xState = XState.e2eCruise
         else:
@@ -732,7 +735,7 @@ class CarrotPlanner:
           self.trafficStopAdjustRatio = np.interp(v_ego_kph, [0, 100], [1.0, 0.7])
           # 속도가 높을수록 먼 정지거리 추정값을 줄여 보정함.
           stop_dist = stop_model_x_rl * np.interp(stop_model_x_rl, [0, 50], [1.0, self.trafficStopAdjustRatio])
-          if self._paddle_stop:
+          if stop_hold:
             # A green/off flicker carries the model's go plan (~140 m) into xStopFilter and _stop_x_rl for ~1 s. Track
             # only frames that plan a stop, so the target dead-reckons through flickers and still converges on the line.
             if self.actual_stop_distance > 10.0 and v[-1] < max(3.0, v[0] * 0.7):
@@ -760,7 +763,10 @@ class CarrotPlanner:
       self.traffic_starting_count = max(0, self.traffic_starting_count - 1)
       if lead_detected and not (paddle_moving_lead and self.trafficState == TrafficState.red):
         self.xState = XState.lead
-      elif self.trafficState == TrafficState.red and is_traffic_stop_entry_allowed(carstate.steeringAngleDeg) and self.traffic_starting_count == 0:
+      # A gas still held when the red appears is no answer to a stop yet: entering here let the next frame's gas arm the
+      # 10 s red-ignore (11-09 00:11:29.5: red ignored at 50 km/h until the driver braked at -4 m/s2, 02_logs §55).
+      elif (self.trafficState == TrafficState.red and is_traffic_stop_entry_allowed(carstate.steeringAngleDeg)
+            and self.traffic_starting_count == 0 and not carstate.gasPressed):
         self.add_signal_event(EventName.trafficStopping)
         self.xState = XState.e2eStop
         self.actual_stop_distance = stop_model_x_rl
@@ -768,7 +774,7 @@ class CarrotPlanner:
         self.xState = XState.e2eCruise
 
     # A paddle stop keeps its stop target through red off/green flickers (red share after first red is ~0.75, §44).
-    if ((self.trafficState in [TrafficState.off, TrafficState.green] and not self._paddle_stop)
+    if ((self.trafficState in [TrafficState.off, TrafficState.green] and not stop_hold)
         or self.xState not in [XState.e2eStop, XState.e2eStopped]):
       stop_model_x = 1000.0
 

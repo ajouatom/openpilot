@@ -150,3 +150,34 @@ def test_plus_paddle_cancel_releases_the_planner_latch():
   sm['carState'].paddleStopActive = False  # card: + paddle canceled the stop
   run(p, sm, 80.)
   assert p.xState.name != 'e2eStop'
+
+
+def no_lead_red(speed=10.):
+  sm = red_scene(speed)
+  sm['radarState'].leadOne = NS(status=False, dRel=0., vLead=0.)
+  return sm
+
+
+def test_red_stop_keeps_its_target_through_a_go_plan_while_creeping_to_the_line():
+  # 11-09 00:00:30.8: at 2 km/h, 2 m before a red line, the night model planned go and the car rolled 1.4 -> 10 km/h
+  p, sm = planner(), no_lead_red()
+  run(p, sm, 80.)
+  assert p.xState.name == 'e2eStop'
+  sm['carState'].vEgo = sm['carState'].vEgoCluster = 2.
+  sm['modelV2'].velocity.x = [2.] + [15.] * 32
+  run(p, sm, 80.)
+  assert p.xState.name == 'e2eStop' and p.stop_dist < 300.
+  sm['carState'].vEgo = sm['carState'].vEgoCluster = 0.
+  run(p, sm, 80.)  # stopped at the line: the green now starts as before
+  assert p.xState.name == 'e2eCruise'
+
+
+def test_red_seen_under_gas_waits_for_release_instead_of_arming_the_red_ignore():
+  # 11-09 00:11:29.5: gas held when the red appeared armed the 10 s ignore; the driver braked at -4.2 m/s2
+  p, sm = planner(), no_lead_red()
+  sm['carState'].gasPressed = True
+  run(p, sm, 80.)
+  assert p.xState.name == 'e2eCruise' and p.traffic_starting_count == 0
+  sm['carState'].gasPressed = False
+  run(p, sm, 80., 1)
+  assert p.xState.name == 'e2eStop'
