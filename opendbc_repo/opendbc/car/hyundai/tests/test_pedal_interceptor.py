@@ -117,6 +117,24 @@ def test_ray_target_caps_and_rate_parameters_revert_to_reference():
   assert (RAY_PEDAL_INTERCEPTOR_PARAMS.rate_up, RAY_PEDAL_INTERCEPTOR_PARAMS.rate_down) == (0.02, 0.06)
 
 
+@pytest.mark.parametrize("speed,observed_command", [
+  (1.9230417013168335, 0.17261176470588238),
+  (1.9257330894470215, 0.17524705882352942),
+  (1.9306769371032715, 0.17788235294117657),
+])
+def test_ray_zero_accel_baseline_matches_low_speed_observations(speed, observed_command):
+  # One low-speed following event: measured accel -0.027..+0.043 m/s^2,
+  # no speed taper or driver override, and commands returned by Panda.
+  # Compare the zero-request baseline with observed output, not the nonzero
+  # controller acceleration present in the recording.
+  assert get_ray_pedal_target(0.0, speed, 20.0) == pytest.approx(observed_command, abs=0.004)
+
+
+@pytest.mark.parametrize("speed", [0.0, 1.0, 2.0, 3.0, 4.0])
+def test_ray_low_speed_stopping_request_still_releases_pedal(speed):
+  assert get_ray_pedal_target(-0.5, speed, 20.0) == 0.0
+
+
 @pytest.mark.parametrize("overspeed,fraction", [
   (0.0, 0.65),
   (0.5, 0.37916666666666665),
