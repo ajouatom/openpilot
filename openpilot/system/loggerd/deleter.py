@@ -2,11 +2,13 @@
 import os
 import shutil
 import threading
+import time
 from openpilot.system.hardware.hw import Paths
 from openpilot.common.swaglog import cloudlog
 from openpilot.system.loggerd.config import get_available_bytes, get_available_percent
 from openpilot.system.loggerd.uploader import listdir_by_creation
-from openpilot.system.loggerd.xattr_cache import getxattr
+from openpilot.system.loggerd.xattr_cache import getxattr, cached_attribute_count
+from openpilot.system.memory_trace import FullGCTrace
 
 MIN_BYTES = 5 * 1024 * 1024 * 1024
 MIN_PERCENT = 30
@@ -45,11 +47,14 @@ def get_preserved_segments(dirs_by_creation: list[str]) -> set[str]:
   return preserved
 
 
-def deleter_thread(exit_event: threading.Event):
+def deleter_thread(exit_event: threading.Event, trace: FullGCTrace | None = None):
   while not exit_event.is_set():
     out_of_bytes = get_available_bytes(default=MIN_BYTES + 1) < MIN_BYTES
     out_of_percent = get_available_percent(default=MIN_PERCENT + 1) < MIN_PERCENT
 
+    now = time.monotonic()
+    if trace is not None and trace.due(now):
+      trace.report(now, xattr_entries=cached_attribute_count(), under_threshold=out_of_percent or out_of_bytes)
     if out_of_percent or out_of_bytes:
       dirs = listdir_by_creation(Paths.log_root())
       preserved_dirs = get_preserved_segments(dirs)
@@ -75,7 +80,8 @@ def deleter_thread(exit_event: threading.Event):
 
 
 def main():
-  deleter_thread(threading.Event())
+  with FullGCTrace('deleter') as trace:
+    deleter_thread(threading.Event(), trace)
 
 
 if __name__ == "__main__":

@@ -1536,6 +1536,7 @@ struct ProcLog {
     memPssAnon @18 :UInt64;    # Pss_Anon — private anonymous (heap, stack)
     memPssShmem @19 :UInt64;   # Pss_Shmem — proportional MSGQ/tmpfs share
     memPssMonoTime @20 :UInt64; # scan start in monotonic ns; 0 means unavailable (also older logs)
+    memPrivateDirty @21 :UInt64; # bytes from the same completed scan; absent in older logs
   }
 
   struct CPUTimes {

@@ -9,6 +9,7 @@ import time
 import uuid
 
 from openpilot.cereal import messaging
+from openpilot.system.memory_trace import FullGCTrace
 from openpilot.selfdrive.carrot.bluetooth.model import RUNTIME, CommandWriter, Decoder, address, atomic_json, config, read_json
 
 EVENT = struct.Struct('@llHHi')
@@ -62,6 +63,11 @@ def initial_buttons(fd):
 
 
 def main():
+  with FullGCTrace('carrot_bluetooth') as trace:
+    run_reader(trace)
+
+
+def run_reader(trace):
   RUNTIME.mkdir(parents=True, exist_ok=True)
   lock = (RUNTIME / 'reader.lock').open('w')
   fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -181,6 +187,10 @@ def main():
                    {f'{path}:{token}' for path, (_, _, decoder) in opened.items() for token in decoder.active_longs})
       if now - last_status >= 0.2:
         last_status = now
+        if trace.due(now):
+          trace.report(now, devices=len(settings['devices']), opened=len(opened), recent=len(recent_events),
+                       last_events=len(last_events), last_fire=len(last_fire), commands=sum(map(len, writer.events.values())),
+                       pending_keys=sum(len(decoder.pending_keys) for _, _, decoder in opened.values()))
         atomic_json(RUNTIME / 'status.json', {'time': now, 'stationary': bool(stationary), 'started': bool(started),
                     'grabbed': sorted({entry[1] for entry in opened.values()}), 'errors': errors,
                     'last_event': last_event, 'last_events': last_events, 'recent_events': recent_events, 'learning': learning})
