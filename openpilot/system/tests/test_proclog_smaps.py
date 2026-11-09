@@ -32,18 +32,18 @@ def advance(sampler, clock):
 
 
 def test_chunk_boundaries_and_no_partial_publication(tmp_path, clock, monkeypatch):
-  monkeypatch.setattr(smaps, 'READ_BYTES', 16)
-  make_process(tmp_path, 1, data=b'Pss: 10 kB\nPss_Anon: 3 kB\nPss_Shmem: 2 kB\nPss: 4 kB')
+  monkeypatch.setattr(smaps, 'READ_BYTES', 20)
+  make_process(tmp_path, 1, data=b'Pss: 10 kB\nPss_Anon: 3 kB\nPss_Shmem: 2 kB\nPrivate_Dirty: 5 kB\nPss: 4 kB\nPrivate_Dirty: 2 kB')
   sampler = smaps.SmapsSampler(tmp_path)
   sampler.update({1: 123})
   sampler.step()
-  assert sampler.file.tell() == 16
+  assert sampler.file.tell() == 20
   assert sampler.get(1, 123, clock.now).mono_time == 0
   for _ in range(10):
     if sampler.active is None:
       break
     advance(sampler, clock)
-  assert sampler.get(1, 123, clock.now) == smaps.SmapsSample(14*1024, 3*1024, 2*1024, 10.0)
+  assert sampler.get(1, 123, clock.now) == smaps.SmapsSample(14*1024, 3*1024, 2*1024, 10.0, 7*1024)
   assert sampler.file is None
 
 
@@ -164,12 +164,12 @@ def test_missing_file_is_nonfatal(tmp_path, clock):
 
 def test_rollup_preserves_anonymous_and_shared_pss(tmp_path, clock):
   make_process(tmp_path, 1, data=b'Pss: 99 kB\n')
-  (tmp_path / '1' / 'smaps_rollup').write_bytes(b'Pss: 20 kB\nPss_Anon: 8 kB\nPss_Shmem: 7 kB\n')
+  (tmp_path / '1' / 'smaps_rollup').write_bytes(b'Pss: 20 kB\nPss_Anon: 8 kB\nPss_Shmem: 7 kB\nPrivate_Dirty: 6 kB\n')
   sampler = smaps.SmapsSampler(tmp_path)
   sampler.update({1: 123})
   sampler.step()
   advance(sampler, clock)
-  assert sampler.get(1, 123, clock.now) == smaps.SmapsSample(20*1024, 8*1024, 7*1024, 10.0)
+  assert sampler.get(1, 123, clock.now) == smaps.SmapsSample(20*1024, 8*1024, 7*1024, 10.0, 6*1024)
 
 
 @pytest.mark.skipif(sys.platform != 'linux', reason='requires real Linux procfs')
@@ -219,7 +219,7 @@ def test_proclog_publication_reads_cache_without_smaps_io(tmp_path, clock, monke
     ['MemTotal:', 'MemFree:', 'MemAvailable:', 'Buffers:', 'Cached:', 'Active:', 'Inactive:', 'Shmem:'], 0))
   sampler = smaps.SmapsSampler(tmp_path)
   sampler.update({1: 123})
-  sampler.cache[1] = smaps.SmapsSample(1024, 512, 256, 9.0)
+  sampler.cache[1] = smaps.SmapsSample(1024, 512, 256, 9.0, 768)
   monkeypatch.setattr(sampler, 'step', lambda: pytest.fail('publication must not scan'))
   event = log.Event.new_message()
   event.init('procLog')
@@ -228,6 +228,8 @@ def test_proclog_publication_reads_cache_without_smaps_io(tmp_path, clock, monke
   assert (proc.cpuUser, proc.cpuSystem, proc.memRss) == (1, 2, 2000*4096)
   assert (proc.memPss, proc.memPssAnon, proc.memPssShmem, proc.memPssMonoTime) == (1024, 512, 256, 9_000_000_000)
   clock.now = 130
+  with log.Event.from_bytes(event.to_bytes()) as reader:
+    assert reader.procLog.procs[0].memPrivateDirty == 768
   module.build_proc_log_message(log.Event.new_message(procLog={}), sampler)
   assert sampler.get(1, 123, clock.now).mono_time == 0
 
