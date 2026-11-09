@@ -382,7 +382,7 @@ class Controls:
     hudControl.signalStopObject = signal_stop_object_requested(
       self.CP, CS, CC, lp, radarState,
       inputs_ready=self.sm.all_checks(['longitudinalPlan', 'radarState']) and
-                   0 <= t_since_plan <= 0.2 and
+                   0 <= (self.sm.frame - self.sm.recv_frame['longitudinalPlan']) * DT_CTRL <= 0.2 and
                    0 <= (self.sm.frame - self.sm.recv_frame['radarState']) * DT_CTRL <= 0.2,
     )
 
