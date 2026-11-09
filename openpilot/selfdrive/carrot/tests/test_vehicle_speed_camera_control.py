@@ -42,6 +42,8 @@ def _car_state(*, gas=False, brake=False, speed_limit=50, distance=300, v_ego=20
     vehicleNaviSectionActive=False,
     vehicleNaviSpeed=0,
     vEgo=v_ego,
+    vCruiseCluster=0,
+    cruiseState=SimpleNamespace(enabled=False),
   )
 
 
@@ -370,7 +372,25 @@ def test_vehicle_navigation_display_is_independent_of_cruise_state():
   CS.vehicleNaviActive = True
   CS.vehicleNaviSectionActive = True
   CS.vehicleNaviSpeed = 100
+  CS.vCruiseCluster = 60  # disengaged: cruise.py keeps a stale set speed
 
+  assert serv._vehicle_navigation_display(CS) == (True, 105, True)
+
+
+def test_vehicle_navigation_display_caps_section_at_engaged_set_speed():
+  serv = _serv(1)
+  CS = _car_state()
+  CS.vehicleNaviActive = CS.vehicleNaviSectionActive = True
+  CS.cruiseState.enabled = True
+  CS.vehicleNaviSpeed = 200  # unlocked section: carstate overwrites with the bank allowance
+  CS.vCruiseCluster = 115
+  assert serv._vehicle_navigation_display(CS) == (True, 115, True)
+
+  CS.vehicleNaviSpeed = 100  # locked section with set speed below limit x factor: shows the effective cap
+  CS.vCruiseCluster = 90
+  assert serv._vehicle_navigation_display(CS) == (True, 90, True)
+
+  CS.vCruiseCluster = 0  # paddle decel
   assert serv._vehicle_navigation_display(CS) == (True, 105, True)
 
 

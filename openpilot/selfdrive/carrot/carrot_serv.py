@@ -447,6 +447,10 @@ class CarrotServ:
       speed = 30
     elif getattr(CS, "vehicleNaviSpeed", 0) > 0:
       speed = int(CS.vehicleNaviSpeed * self.autoNaviSpeedSafetyFactor)
+      v_cruise = int(getattr(CS, "vCruiseCluster", 0))
+      # an unlocked section overwrites vehicleNaviSpeed with its bank allowance (up to 250 km/h); 0 = paddle decel
+      if v_cruise > 0 and CS.cruiseState.enabled:
+        speed = min(speed, v_cruise)
     elif self._speed_bump_control_active(CS.speedBumpDistance):
       speed = int(self.autoNaviSpeedBumpSpeed)
     else:
