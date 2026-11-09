@@ -64,6 +64,7 @@ def publish_fixture(brand, flags, enabled):
   control = NS(CP=cp, sm=Messages(), curvature=0.0, desired_curvature=0.0, calibrated_pose=None,
                physical_blinker_hold=NS(read=lambda valid: 0), is_vw_meb=False,
                params=NS(get_int=lambda key: 0), lanefull_mode_enabled=False,
+               lat_hud_state=lambda lat_active, lac_log: 0,  # joongyu01: Controls.lat_hud_state is outside the compiled publish()
                LoC=NS(long_control_state='off', pid=NS(p=0.0, i=0.0, f=0.0)),
                pm=NS(send=lambda service, message: sent.update({service: message})))
   cc = car.CarControl.new_message(enabled=enabled, longActive=enabled)
