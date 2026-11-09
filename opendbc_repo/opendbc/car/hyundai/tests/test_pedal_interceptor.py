@@ -117,6 +117,20 @@ def test_ray_target_caps_and_rate_parameters_revert_to_reference():
   assert (RAY_PEDAL_INTERCEPTOR_PARAMS.rate_up, RAY_PEDAL_INTERCEPTOR_PARAMS.rate_down) == (0.02, 0.06)
 
 
+@pytest.mark.parametrize("overspeed,fraction", [
+  (0.0, 0.65),
+  (0.5, 0.37916666666666665),
+  (1.0, 0.10833333333333331),
+  (1.2, 0.0),
+  (1.5, 0.0),
+])
+def test_ray_overspeed_margin_softens_release_until_4_32_kph(overspeed, fraction):
+  # Keep using the actual curve/stop target. Widen only the overspeed taper;
+  # reaching the target still gives 65% and +1.2 m/s fully releases the pedal.
+  base = get_ray_pedal_target(0.0, 12.0, 20.0)
+  assert get_ray_pedal_target(0.0, 12.0, 12.0 - overspeed) == pytest.approx(base * fraction, abs=1e-12)
+
+
 @pytest.mark.parametrize("bus,address", [(0, 0x420), (0, 0x421), (2, 0x420), (2, 0x421)])
 def test_existing_scc_cannot_select_the_new_protocol(bus, address):
   fingerprint = pedal_fingerprint()
