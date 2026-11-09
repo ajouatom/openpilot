@@ -23,6 +23,7 @@ from openpilot.selfdrive.selfdrived.events import Events, ET, EmptyAlert
 from openpilot.selfdrive.selfdrived.helpers import ExcessiveActuationCheck
 from openpilot.selfdrive.selfdrived.state import StateMachine
 from openpilot.selfdrive.selfdrived.impact_detector import ImpactDetector
+from openpilot.selfdrive.selfdrived.vehicle_faults import VehicleFaultMonitor
 from openpilot.selfdrive.controls.lib.radar_only_warning import RadarOnlyWarning
 from openpilot.selfdrive.carrot.radar_motion.timing import front_radar_distance_delay_s
 from openpilot.selfdrive.selfdrived.alertmanager import AlertManager, set_offroad_alert
@@ -130,6 +131,7 @@ class SelfdriveD:
     self.enabled = False
     self.active = False
     self.mismatch_counter = 0
+    self.vehicle_fault_monitor = VehicleFaultMonitor()
     self.cruise_mismatch_counter = 0
     self.last_steering_pressed_frame = 0
     self.distance_traveled = 0
@@ -386,6 +388,14 @@ class SelfdriveD:
     elif self.sm['modelV2'].meta.laneChangeState in (LaneChangeState.laneChangeStarting,
                                                     LaneChangeState.laneChangeFinishing):
       self.events.add(EventName.laneChange)
+
+    if self.vehicle_fault_monitor.update_pandas(
+        self.sm['pandaStates'], self.sm.logMonoTime['pandaStates'] * 1e-9,
+        valid=self.sm.all_checks(['pandaStates'])):
+      self.events.add(EventName.pandaCanFault)
+    if self.vehicle_fault_monitor.update_scc(
+        CS.stockSccFault, CS.radarInput.receiveMonoTime * 1e-9, valid=CS.canValid and not CS.canTimeout):
+      self.events.add(EventName.stockSccFault)
 
     for i, pandaState in enumerate(self.sm['pandaStates']):
       # All pandas must match the list of safetyConfigs, and if outside this list, must be silent or noOutput

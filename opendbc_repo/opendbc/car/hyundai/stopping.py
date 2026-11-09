@@ -48,6 +48,7 @@ class CanfdStopping:
     return jerk_upper
 
   def reset(self):
+    self.stop_object_active = False
     self.phase = StopPhase.idle
     self.reason = "inactive"
     self.stopped_time = 0.0

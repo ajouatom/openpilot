@@ -1548,3 +1548,19 @@ msgstr "Dashcam 모드로 재부팅 중"
 #: openpilot/selfdrive/ui/impact_dashcam.py
 msgid "openpilot disabled"
 msgstr "openpilot 사용 꺼짐"
+
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "CAN Controller Fault"
+msgstr "CAN 제어기 오류"
+
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "CAN Controller Fault: Check Connections"
+msgstr "CAN 제어기 오류: 연결 상태를 확인하세요"
+
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "Front Safety System Fault"
+msgstr "전방 안전 시스템 오류"
+
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "Front Safety System Fault: Check Vehicle"
+msgstr "전방 안전 시스템 오류: 차량을 점검하세요"

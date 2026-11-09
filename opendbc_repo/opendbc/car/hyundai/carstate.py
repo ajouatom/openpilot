@@ -673,6 +673,7 @@ class CarState(CarStateBase):
       aeb_braking = cp_cruise.vl[aeb_src]["CF_VSM_DecCmdAct"] != 0 or cp_cruise.vl[aeb_src][aeb_sig] != 0
       if self.CP.carFingerprint == CAR.HYUNDAI_CASPER_EV and aeb_src == "FCA11":
         fca_fault = cp_cruise.vl["FCA11"]["FCA_Failinfo"] != 0 or cp_cruise.vl["FCA11"]["FCA_Status"] == 3
+        ret.stockSccFault = fca_fault
         if fca_fault:
           aeb_warning = False
           aeb_braking = False

@@ -7,6 +7,7 @@ from opendbc.car.carlog import carlog
 from opendbc.car.crc import CRC16_XMODEM
 from opendbc.car.hyundai.values import HyundaiFlags, HyundaiExtFlags
 from opendbc.car.hyundai.stopping import MOVING_SPEED, STOP_LOWER_BAND
+from opendbc.car.hyundai.stop_object import apply_signal_stop_object
 from openpilot.common.params import Params
 from openpilot.common.filter_simple import FirstOrderFilter
 from opendbc.car.common.conversions import Conversions as CV
@@ -494,6 +495,8 @@ def _apply_scc_lead(values, radar_state, model_v2=None, hud_lateral=None):
 def create_acc_control_scc2(packer, CAN, enabled, accel_value_last, accel, stopping, gas_override, set_speed, hud_control, hyundai_jerk, CS,
                             stop_controller=None, hud_lateral=None):
 
+  if stop_controller is not None:
+    stop_controller.stop_object_active = False
   if CS.scc_control is None:
     if stop_controller is not None:
       stop_controller.reset()
@@ -566,11 +569,14 @@ def create_acc_control_scc2(packer, CAN, enabled, accel_value_last, accel, stopp
   values["ZEROS_7"] = 0 if stop_controller is not None else 1
   apply_canfd_stopping(values, CS, stop_controller, accel, previous_value, jerk_u, jerk_l)
 
-  # Trial for no-lead stops: OEM SCC_ObjSta is named HUD_LEAD_INFO in this DBC.
-  # Change only the state after the final StopReq/interlocks; do not fabricate
-  # object distance/speed or latch it into RX. This is not a confirmed ESC gate.
+  # Existing state-only fallback for no-lead stops (OEM SCC_ObjSta). The
+  # explicitly requested signal-stop object below additionally supplies range
+  # and speed; neither path modifies RX or establishes an ESC acceptance gate.
   if stop_controller is not None and values["ACCMode"] == 1 and values["StopReq"] == 1 and values["HUD_LEAD_INFO"] == 0:
     values["HUD_LEAD_INFO"] = 2
+
+  if stop_controller is not None:
+    stop_controller.stop_object_active = apply_signal_stop_object(values, CS, hud_control, stopping_controller=stop_controller)
 
   return packer.make_can_msg("SCC_CONTROL", CAN.ECAN, values), values["aReqValue"]
 

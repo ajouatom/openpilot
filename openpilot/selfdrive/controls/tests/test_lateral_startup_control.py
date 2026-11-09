@@ -12,6 +12,7 @@ from openpilot.cereal import car, log
 from openpilot.common.realtime import DT_CTRL
 from openpilot.common.constants import CV
 from openpilot.selfdrive.car.voice_indicator import set_lane_change_blinkers
+from openpilot.selfdrive.selfdrived.vehicle_faults import inhibit_faulted_controls
 from opendbc.car.vehicle_model import VehicleModel
 from opendbc.car.interfaces import CarInterfaceBase
 from openpilot.selfdrive.controls.lib.drive_helpers import clip_curvature, get_lag_adjusted_curvature
@@ -37,6 +38,7 @@ def control_fixture():
         'resolve_vehicle_model_steer_ratio': resolve_vehicle_model_steer_ratio,
         'lateral_vehicle_parameters': lateral_vehicle_parameters,
         'set_lane_change_blinkers': set_lane_change_blinkers,
+        'inhibit_faulted_controls': inhibit_faulted_controls,
         'cloudlog': NS(error=lambda msg: pytest.fail(msg))}
   exec(compile(ast.Module(body=nodes, type_ignores=[]), str(path), 'exec'), ns)
   cp = car.CarParams.new_message(brand='hyundai', steerRatio=12.81, wheelbase=2.84, mass=1600,
@@ -68,6 +70,17 @@ def control_fixture():
                desired_curvature=0.0, lateral_startup=LateralStartupGate(), lateral_started=False,
                steer_limited_by_safety=False)
   return control, lambda: ns['state_control'](control)
+
+
+@pytest.mark.parametrize('fault', ['pandaCanFault', 'stockSccFault'])
+def test_confirmed_vehicle_fault_blocks_always_lateral_in_full_control_loop(fault):
+  control, step = control_fixture()
+  control.sm['selfdriveState'].enabled = control.sm['selfdriveState'].active = True
+  step()
+  control.sm['onroadEvents'] = [log.OnroadEvent.new_message(name=fault)]
+  cc, _ = step()
+  assert not cc.enabled and not cc.latActive and not cc.longActive
+  assert cc.actuators.torque == 0
 
 
 @pytest.mark.parametrize('enabled', [False, True])
