@@ -40,6 +40,8 @@ PRE_OVERRIDE_FILTERED_MIN_RATIO = 0.65
 PRE_OVERRIDE_MIN_RATE_RATIO = 0.50
 PRE_OVERRIDE_CONFIRM_FRAMES = 2
 PRE_OVERRIDE_MAX_TORQUE_DELTA = -10.0
+# Hand-resting torque blips shorter than this must not stretch recovery_time.
+OVERRIDE_COUNT_MIN_FRAMES = int(0.3 / DT_CTRL)
 LOW_SPEED_ANGLE_RATE_RAMP_SPEED = 15.0 * CV.KPH_TO_MS
 MID_SPEED_ANGLE_RATE_LIMIT_SPEED = 40.0 * CV.KPH_TO_MS
 # SteerAngleTest range. The LKAS angle itself stays at STEER_ANGLE_MAX: 10-29 test (20261029_2056) the EPS stopped at
@@ -314,6 +316,7 @@ class CarController(CarControllerBase):
     self.recovering_from_override = False
     self.full_recovery_frames = 0
     self.repeated_override_count = 0
+    self.steering_pressed_frames = 0
     self.override_latched = False
     self.override_release_frames = 0
     self.driver_torque_filtered = 0.0
@@ -605,10 +608,12 @@ class CarController(CarControllerBase):
 
     steering_pressed_rising = CS.out.steeringPressed and not self.steering_pressed_prev
     if steering_pressed_rising:
+      self.recovering_from_override = True
+    self.steering_pressed_frames = self.steering_pressed_frames + 1 if CS.out.steeringPressed and CC.latActive else 0
+    if self.steering_pressed_frames == OVERRIDE_COUNT_MIN_FRAMES:
       if 0 < self.full_recovery_frames < int(5.0 / DT_CTRL):
         self.repeated_override_count = min(self.repeated_override_count + 1, 3)
       self.full_recovery_frames = 0
-      self.recovering_from_override = True
 
     torque_threshold = max(self.params.STEER_THRESHOLD, 1.0)
     # Filter signed torque so alternating sensor noise cancels out before its

@@ -226,3 +226,24 @@ def test_initial_template_guard_does_not_rearm_during_operation(monkeypatch, ang
   cc.latActive = True
   output, _ = step(controller, cs, cc)
   assert output.torqueOutputCan > 0 and controller.steering_template_ready
+
+
+def _press_then_recover(controller, cs, cc, press_frames):
+  cs.out.steeringPressed, cs.out.steeringTorque = True, 300
+  for _ in range(press_frames):
+    step(controller, cs, cc)
+  cs.out.steeringPressed, cs.out.steeringTorque = False, 0
+  for _ in range(200):
+    step(controller, cs, cc)
+  assert controller.lkas_max_torque >= controller.angle_max_torque
+
+
+def test_short_press_blips_do_not_stretch_recovery(monkeypatch):
+  controller, cs, cc, _ = setup_controller(monkeypatch)
+  _press_then_recover(controller, cs, cc, 100)
+  assert controller.repeated_override_count == 0 and controller.full_recovery_frames > 0
+  for _ in range(3):
+    _press_then_recover(controller, cs, cc, 20)  # 0.2 s hand-resting blip
+  assert controller.repeated_override_count == 0
+  _press_then_recover(controller, cs, cc, 40)  # 0.4 s real press inside the 5 s window
+  assert controller.repeated_override_count == 1
