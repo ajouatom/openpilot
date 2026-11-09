@@ -28,6 +28,7 @@ from openpilot.selfdrive.carrot.radar_motion.timing import front_radar_distance_
 from openpilot.selfdrive.selfdrived.alertmanager import AlertManager, set_offroad_alert
 from openpilot.selfdrive.controls.lib.cutin_alert import (
   CutinAlertCandidate,
+  CUTIN_ALERT_MIN_V_EGO_MPS,
   CutinAlertTracker,
   promoted_cutin_candidates,
 )
@@ -238,13 +239,14 @@ class SelfdriveD:
     if self.CP.passive:
       return
 
-    cutin_enabled = self.enabled and self.sm.valid['radarState']
+    cutin_enabled = self.enabled and self.sm.valid['radarState'] and CS.vEgo >= CUTIN_ALERT_MIN_V_EGO_MPS
     cutin_candidates = tuple(
       CutinAlertCandidate(
         int(lead.radarTrackId),
         float(lead.dRel),
         float(lead.yRel),
         float(lead.vRel),
+        float(lead.vLat),
       )
       for lead in self.sm['radarState'].leadsCutIn
     ) if cutin_enabled else ()
@@ -256,7 +258,8 @@ class SelfdriveD:
       float(lead_two.vRel),
     ) if cutin_enabled and lead_two.status else None
     promoted_cutins = promoted_cutin_candidates(cutin_candidates, promoted_lead)
-    cutin_alert = self.cutin_audio_tracker.update(promoted_cutins, cutin_enabled)
+    cutin_alert = self.cutin_audio_tracker.update(promoted_cutins, cutin_enabled,
+                                                  self.car_state_time_s if REPLAY else time.monotonic())
     if cutin_alert:
       self.events.add(EventName.radarCutin)
 
