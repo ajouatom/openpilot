@@ -18,7 +18,6 @@ RAY_PEDAL_TAPER_BELOW_TARGET = 0.75
 
 
 def get_ray_pedal_target(accel: float, v_ego: float, set_speed: float) -> float:
-  """Map acceleration to pedal output; set_speed is the driver's cruise setting in m/s."""
   if not all(np.isfinite(x) for x in (accel, v_ego, set_speed)) or set_speed < 1.0:
     return 0.0
 

@@ -307,59 +307,12 @@ def setup_pedal_interface(monkeypatch, mode, auto_engage):
       frames.append((0x592, bytes([0, 0, 0, 0, (0x04 if cruise_ready else 0) | (0x08 if oem_cc else 0), 0, 0, 0]), 0))
     frames.append(packer.make_can_msg("LKAS11", 2, {}))
     state = interface.update([(now + frame * 10_000_000, frames)])
-    # card supplies the driver's cruise setting after the vehicle state update.
-    state.vCruise = state.vCruiseCluster = 72.0
     _, sends = interface.apply(control.as_reader(), now + frame * 10_000_000)
     return state, sends
 
   for frame in range(208):
     state, sends = tick(frame)
   return interface, control, tick, Settings
-
-
-@pytest.mark.parametrize("mode", [1, 2])
-@pytest.mark.parametrize("speed_kph,hud_before,hud_after,accel", [
-  (45.84, 50.0, 43.30, -0.3654),
-  (43.94, 70.0, 42.36, -0.1649),
-])
-def test_future_hud_speed_does_not_cut_pedal_twice(monkeypatch, mode, speed_kph, hud_before, hud_after, accel):
-  # Segment 39 has two brief future-speed changes before a corner. The planner
-  # already requests deceleration; treating the HUD speed as a hard limit
-  # produced 25.4 -> 0.0% and 27.9 -> 2.8% pedal steps in the recorded drive.
-  interface, control, tick, _ = setup_pedal_interface(monkeypatch, mode, auto_engage=2)
-  state, _ = tick(208, cruise_ready=mode == 2)
-  state.vEgo = speed_kph / 3.6
-  state.vCruise = state.vCruiseCluster = 70.0
-  control.actuators.accel = accel
-  control.hudControl.setSpeed = hud_before / 3.6
-
-  def pedal_data():
-    sends = []
-    for _ in range(4):
-      _, messages = interface.apply(control.as_reader(), time.monotonic_ns())
-      sends.extend(messages)
-    return next(data for address, data, _ in sends if address == 0x200)
-
-  for _ in range(20):
-    pedal_data()
-  before = pedal_data()
-  control.hudControl.setSpeed = hud_after / 3.6
-  after = pedal_data()
-  assert before[4] & 0x80
-  assert after[:4] == before[:4]
-
-  # A stronger deceleration request must still immediately lower the output.
-  control.actuators.accel = accel - 0.2
-  less = pedal_data()
-  assert int.from_bytes(less[:2], "big") < int.from_bytes(after[:2], "big")
-  control.actuators.accel = -3.0
-  assert pedal_data()[:4] == bytes(4)
-
-  # The driver's actual speed limit and invalid cruise settings still release.
-  control.actuators.accel = 1.0
-  for speed in (speed_kph - 3.0, 0.0, float("nan"), float("inf")):
-    state.vCruise = speed
-    assert pedal_data()[:4] == bytes(4)
 
 
 def test_selected_interface_runs_real_state_controller_and_releases_on_override(monkeypatch):

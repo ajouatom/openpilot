@@ -686,11 +686,7 @@ class CarController(CarControllerBase):
           clu11 = {**CS.clu11, "CF_Clu_CruiseSwMain": 0, "CF_Clu_SldMainSW": 0}
           can_sends.append(hyundaican.create_clu11(self.packer, self.frame, clu11, Buttons.CANCEL, self.CP))
           self.last_button_frame = self.frame
-      # HUD setSpeed can jump to a future curve/stop speed. Those reductions
-      # already reach the pedal through accel; use the driver's cruise setting
-      # for the independent overspeed guard to avoid a second throttle cut.
-      pedal_set_speed = CS.out.vCruise * CV.KPH_TO_MS
-      pedal_message = self.pedal_interceptor.update(self.frame, pedal_active, accel, CS.out.vEgo, pedal_set_speed)
+      pedal_message = self.pedal_interceptor.update(self.frame, pedal_active, accel, CS.out.vEgo, hud_control.setSpeed)
       if pedal_message is not None:
         can_sends.append(pedal_message)
 
