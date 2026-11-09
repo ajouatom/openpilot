@@ -13,8 +13,9 @@ ISOLATE_SEC = 12.0  # Keep delayed lamp feedback out of automatic steering.
 
 
 class BoundaryIndicator:
-  def __init__(self, journal=None, *, lane_admission=adjacent_lane):
+  def __init__(self, journal=None, *, lane_admission=adjacent_lane, minimum_speed=30 / 3.6):
     self.lane_admission = lane_admission
+    self.minimum_speed = minimum_speed
     self.journal = journal if isinstance(journal, dict) else {}
     self.initialized = False
     self.previous = None
@@ -81,7 +82,7 @@ class BoundaryIndicator:
       or cs.steerFaultPermanent
       or not math.isfinite(cs.vEgo)
       or not math.isfinite(cs.steeringTorque)
-      or cs.vEgo < 30 / 3.6
+      or cs.vEgo < self.minimum_speed
     ):
       self.request_direction = 0
       self._reset_geometry()

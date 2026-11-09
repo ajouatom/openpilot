@@ -1,5 +1,18 @@
 # Repository memory
 
+- 2026-11-09: Ioniq 5 PE route 11bb/7 camera shows a manual move into the
+  right lane near 37 s. Speed fell from above 30 to 26.43 km/h during approach;
+  wheel angle was about 22 degrees. The 30 km/h boundary observer reset.
+  Owner requests a 5 km/h minimum for both manual lamp features. Lower the PE
+  manual lane observer and external output admission to 5 km/h; manual turns
+  already use 5–60. Keep lane geometry, torque, feedback isolation, and the
+  separate Tesla/steering thresholds. Low-speed lane relabels do not suppress
+  a turn independently supported by driver steering and measured rotation.
+  Offline A/B through observation and lamp policy, ready adapter assumed:
+  new right request at 36.475 s; unchanged left turn later in this segment.
+  In 14 comparison segments all 19 previous requests matched in time and side.
+  781 focused tests passed, 7 platform-specific skips. No physical lamp test.
+
 - On 2026-11-08 the owner requests slightly earlier manual turn indications and
   asks about closely spaced turns. ManualTurnIndicator alone uses 42 degrees
   steering/22 degrees growth and 100 ms confirmation. Its next observation

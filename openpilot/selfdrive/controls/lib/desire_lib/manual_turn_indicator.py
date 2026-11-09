@@ -1,5 +1,6 @@
 """Driver turn observations used exclusively by the physical-indicator path."""
 import math
+from openpilot.selfdrive.controls.lib.desire_lib.boundary_lane import MANUAL_INDICATOR_MIN_SPEED
 
 
 class ManualTurnMovement:
@@ -59,7 +60,7 @@ class ManualTurnIndicator:
   def update(self, now, cs, frame, yaw_rate, *, allowed, following_curve=False):
     self.candidate = None
     if (not allowed or yaw_rate is None or not all(math.isfinite(v) for v in
-        (now, yaw_rate, cs.vEgo, cs.steeringAngleDeg, cs.steeringTorque)) or not 5 / 3.6 <= cs.vEgo <= 60 / 3.6):
+        (now, yaw_rate, cs.vEgo, cs.steeringAngleDeg, cs.steeringTorque)) or not MANUAL_INDICATOR_MIN_SPEED <= cs.vEgo <= 60 / 3.6):
       self.reset('admission')
       return None
     previous, self.previous = self.previous, (now, frame, cs.steeringAngleDeg)
