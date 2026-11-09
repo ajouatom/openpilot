@@ -1,6 +1,6 @@
 from opendbc.car import Bus, get_safety_config, structs
 from opendbc.car.hyundai.hyundaicanfd import CanBus
-from opendbc.car.hyundai.values import HyundaiFlags, CAR, DBC, CANFD_RADAR_SCC_CAR, \
+from opendbc.car.hyundai.values import HyundaiFlags, CAR, DBC, CANFD_RADAR_SCC_CAR, CANFD_1CF_BUTTONS_CAR, \
                                                    CANFD_UNSUPPORTED_LONGITUDINAL_CAR, \
                                                    UNSUPPORTED_LONGITUDINAL_CAR, HyundaiSafetyFlags, HyundaiExtFlags, \
                                                    CANFD_HYBRID_STATUS_ADDR, CANFD_HYBRID_STATUS_DLC, \
@@ -113,13 +113,13 @@ class CarInterface(CarInterfaceBase):
             print("$$$CANFD ALT_STEERING2")
 
         ## carrot: canival 4th, no 0x1cf
-        if 0x1cf not in fingerprint[CAN.ECAN]: # 0x1cf(463): CRUISE_BUTTONS
+        if 0x1cf not in fingerprint[CAN.ECAN] and candidate not in CANFD_1CF_BUTTONS_CAR: # 0x1cf(463): CRUISE_BUTTONS
           ret.flags |= HyundaiFlags.CANFD_ALT_BUTTONS.value
           print("$$$CANFD ALT_BUTTONS")
       else:
         # non-HDA2
         print("$$$CANFD non HDA2")
-        if 0x1cf not in fingerprint[CAN.ECAN]:
+        if 0x1cf not in fingerprint[CAN.ECAN] and candidate not in CANFD_1CF_BUTTONS_CAR:
           ret.flags |= HyundaiFlags.CANFD_ALT_BUTTONS.value
           print("$$$CANFD ALT_BUTTONS")
         #if not ret.flags & HyundaiFlags.RADAR_SCC:

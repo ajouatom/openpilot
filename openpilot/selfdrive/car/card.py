@@ -22,7 +22,7 @@ from opendbc.car.car_helpers import get_car
 from opendbc.car.interfaces import CarInterfaceBase
 from openpilot.selfdrive.pandad import can_capnp_to_list, can_list_to_can_capnp
 from openpilot.selfdrive.car.alternative_experience import get_alternative_experience
-from openpilot.selfdrive.car.card_diagnostics import should_log_card_diagnostics
+from openpilot.selfdrive.car.card_diagnostics import invalid_can_messages, should_log_card_diagnostics
 from openpilot.selfdrive.car.cruise import VCruiseCarrot
 from openpilot.selfdrive.car.car_specific import MockCarState
 from openpilot.selfdrive.car.openpilot_toggle import CruiseMainOpenpilotToggle
@@ -206,6 +206,7 @@ class Car:
     self.card_diag_slow_loop = 0
     self.card_diag_slow_process = 0
     self.card_diag_can_timeouts = 0
+    self.can_parser_result = ""
     self.xiaoge_vision_result: XiaogeVisionResult | None = None
     self.xiaoge_blindspot_sources = (False, False, False, False)
     self.xiaoge_blindspot_sources_published = None
@@ -254,6 +255,11 @@ class Car:
     if self.CP.brand == 'mock':
       CS = self.mock_carstate.update(CS)
     ci_done_ns = time.monotonic_ns()
+    # canError alert text2 (events.car_parser_result) names the timed-out messages
+    can_result = "" if CS.canValid else invalid_can_messages(self.CI.can_parsers.values())
+    if can_result != self.can_parser_result:
+      self.can_parser_result = can_result
+      self.params.put_nonblocking("CanParserResult", can_result)
 
     self.sm.update(0)
     sm_done_ns = time.monotonic_ns()

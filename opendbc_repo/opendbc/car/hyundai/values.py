@@ -1044,6 +1044,8 @@ CAN_GEARS = {
 }
 
 CANFD_CAR = CAR.with_flags(HyundaiFlags.CANFD)
+# Steering-wheel buttons are on 0x1CF; a missing 0x1CF at boot is a fault, not the ALT_BUTTONS variant
+CANFD_1CF_BUTTONS_CAR = {CAR.HYUNDAI_IONIQ_5_PE}
 CANFD_RADAR_SCC_CAR = CAR.with_flags(HyundaiFlags.RADAR_SCC)  # TODO: merge with UNSUPPORTED_LONGITUDINAL_CAR
 
 CANFD_HYBRID_STATUS_ADDR = 0xFA

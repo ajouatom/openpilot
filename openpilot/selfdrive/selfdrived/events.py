@@ -453,7 +453,7 @@ def car_parser_result(CP: car.CarParams, CS: car.CarState, sm: messaging.SubMast
   return Alert(
     "CAN Error: Check Connections!!",
     results,
-    AlertStatus.normal, AlertSize.small,
+    AlertStatus.normal, AlertSize.mid if results else AlertSize.small,  # small alerts never draw text2
     Priority.LOW, VisualAlert.none, AudibleAlert.none, 1., creation_delay=1.)
 
 
