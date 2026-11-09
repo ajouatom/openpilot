@@ -297,6 +297,7 @@ struct CarState {
   naviTunnel @114 :Bool; # 0x4A3 TunnelExist in a tunnel the stock navigation announced as no-lane-change (0x162 SIGNS 16; TunnelLaneChangeHold)
   naviRoundabout @115 :Bool; # stock cluster 0x162 SIGNS=24 rose in the last 20 s and below 60 km/h (RoundaboutLaneChangeHold): no Kick or auto lane change
   paddleStopActive @116 :Bool; # joongyu01: card still owns a paddle stop (slowing or handed to a light); the + paddle clears it
+  naviMotorway @117 :Bool; # joongyu01: fresh stock HDA 0x4A3 LinkClass 1 (motorway); road-class fallback when carrotNavi cannot say
 
   struct TeslaTrafficControl {
     available @0 :Bool;

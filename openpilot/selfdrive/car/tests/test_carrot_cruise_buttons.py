@@ -1,3 +1,4 @@
+import time
 from types import SimpleNamespace
 
 import pytest
@@ -851,3 +852,53 @@ def test_paddle_stop_is_ignored_on_a_motorway():
   helper, CS, CC = paddle_helper(highway=True)
   press(helper, CS, CC, ButtonType.paddleLeft)
   assert not helper._paddle_decel_active and helper._activate_cruise == 0
+
+
+class CardSM(dict):  # card's SubMaster: carrotNavi but no carState (card publishes it)
+  def __init__(self, category):
+    now, known = time.monotonic(), category is not None
+    lane = SimpleNamespace(meta=SimpleNamespace(present=known, receivedMonoTimeNanos=int(now * 1e9)),
+                           roadCategory=category or 0, roadCategoryValid=known)
+    super().__init__(carControl=car.CarControl(), carrotNavi=SimpleNamespace(
+      schemaVersion=1, connected=True, sessionId='test', navigationStatus=SimpleNamespace(meta=SimpleNamespace(present=False)),
+      laneCurrent=lane))
+    self.seen = self.valid = self.alive = {'carrotNavi': known, 'carControl': False}
+    self.recv_time = {'carrotNavi': now}
+
+
+@pytest.mark.parametrize('category,hda,ignored', [(None, True, True), (None, False, False), (8, True, False)])
+def test_paddle_motorway_falls_back_to_hda_only_when_carrot_navi_cannot_say(category, hda, ignored):
+  helper, _, CC = paddle_helper()
+  CS = car.CarState(cruiseState={"standstill": False}, gearShifter="drive", naviMotorway=hda)
+  helper.v_cruise_kph, helper.frame = 70, 0
+  helper.update_params = lambda is_metric: None
+  helper._update_carrot_man = lambda sm: None
+  with pytest.raises(KeyError, match='longitudinalPlan'):  # stop right after the motorway test in update_v_cruise
+    helper.update_v_cruise(CS, CardSM(category), True)
+  assert helper._paddle_highway is ignored
+  press(helper, CS, CC, ButtonType.paddleLeft)
+  assert helper._paddle_decel_active is (not ignored)
+  assert helper._activate_cruise == (0 if ignored else -2)
+
+
+def make_auto_speed_helper(upto, adjust, last, limit):
+  helper = VCruiseCarrot.__new__(VCruiseCarrot)
+  helper._add_log = lambda log: None
+  helper._pause_auto_speed_up, helper.applyModelSpeed = False, 0.
+  helper.autoSpeedUptoRoadSpeedLimit, helper.autoRoadSpeedAdjust = upto, adjust
+  helper.autoRoadSpeedLimitOffset, helper.autoNaviSpeedSafetyFactor = -1, 1.
+  helper.v_lead_kph, helper.d_rel = 0, 0
+  helper.nRoadLimitSpeed_last, helper.nRoadLimitSpeed = last, limit
+  return helper
+
+
+@pytest.mark.parametrize('upto', [0., 1.])
+def test_road_speed_adjust_lowers_cruise_without_auto_speed_up(upto):
+  helper = make_auto_speed_helper(upto, .39, 100, 60)
+  assert helper._auto_speed_up(110) == pytest.approx(90.5)  # 60*.39 + 110*.61
+  assert helper.nRoadLimitSpeed_last == 60
+
+
+def test_road_speed_follow_mode_stays_off_without_auto_speed_up():
+  helper = make_auto_speed_helper(0., -1, 60, 100)
+  assert helper._auto_speed_up(60) == 60

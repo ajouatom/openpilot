@@ -15,8 +15,9 @@ from tools.signal_analysis.test_signal_assist_planner import inputs
 
 
 class SM(dict):
-  def __init__(self, category=0, speed=22., distance=91., lead=False):
+  def __init__(self, category=0, speed=22., distance=91., lead=False, hda=False):
     super().__init__(inputs(speed=speed, distance=distance, lead=lead))
+    self['carState'].naviMotorway = hda
     self.seen = self.valid = self.alive = {'carrotNavi': True}
     self.recv_time = {'carrotNavi': 100.}
     self['carrotNavi'] = NS(schemaVersion=1, connected=True, sessionId='test',
@@ -48,6 +49,21 @@ def test_unknown_data_never_means_highway(bad):
   if bad == 'stale_item': lane.meta.receivedMonoTimeNanos = 89_000_000_000
   if bad == 'future_item': lane.meta.receivedMonoTimeNanos = 101_000_000_000
   if bad == 'zero_time': lane.meta.receivedMonoTimeNanos = 0
+  assert not policy.signal_detection_suspended(sm, 100.)
+
+
+@pytest.mark.parametrize('state,hda,expected', [('unseen', True, True), ('unseen', False, False),
+  ('stale_message', True, True), (8, True, False), (0, False, True)])
+def test_hda_motorway_only_when_carrot_navi_cannot_say(state, hda, expected):
+  sm = SM(state if isinstance(state, int) else 0, hda=hda)
+  if state == 'unseen': sm.seen = {'carrotNavi': False}
+  if state == 'stale_message': sm.recv_time['carrotNavi'] = 97.
+  assert policy.signal_detection_suspended(sm, 100.) is expected
+
+
+def test_card_passes_its_own_car_state():
+  sm = SM(hda=True); sm.seen = {'carrotNavi': False}; del sm['carState']
+  assert policy.signal_detection_suspended(sm, 100., car_state=NS(naviMotorway=True))
   assert not policy.signal_detection_suspended(sm, 100.)
 
 
@@ -92,6 +108,14 @@ def test_incident_model_outputs_stop_only_off_highway(monkeypatch, category):
   else:
     assert p.trafficState.value == 1 and p.xState.name == 'e2eStop'
     assert p.stop_dist < 100.
+
+
+def test_hda_motorway_suspends_lights_without_carrot_navi(monkeypatch):
+  p, _ = make_planner(monkeypatch); sm = SM(8, hda=True); sm.seen = {'carrotNavi': False}
+  sm['modelV2'].velocity.x = [21.02] + [2.039] * 32
+  for i in range(20): update(p, sm, 100.+i*.05, red=True)
+  assert p.signal_detection_suspended
+  assert p.trafficState.value == 0 and p.xState.name == 'e2eCruise'
 
 
 def test_road_exit_resumes_detection_without_changing_user_mode(monkeypatch):
@@ -150,3 +174,19 @@ def test_highway_cancels_already_active_preparation(monkeypatch):
   update(p, sm, 101.3, red=True)
   assert not p.prepare_control_active and not p.prepare_decision.active
   assert p.xState.name == 'e2eCruise' and not p.events.events
+
+
+@pytest.mark.parametrize('link_class', [1, 2])
+def test_hda_motorway_needs_fresh_link_class_1_for_3_s(link_class):
+  from opendbc.car import structs
+  from opendbc.car.hyundai.carstate import CarState, MOTORWAY_CONFIRM_FRAMES
+  cs = CarState.__new__(CarState)
+  cs.canfd_wrapped_navi, cs.motorway_frames, cs.hda_info_4a3 = False, 0, {'LinkClass': link_class}
+  cp, ret = NS(ts_nanos={'HDA_INFO_4A3': {1187: 10**9}}, _last_update_nanos=10**9), structs.CarState()
+  for _ in range(MOTORWAY_CONFIRM_FRAMES - 1): cs._update_motorway(cp, ret)
+  assert not ret.naviMotorway
+  cs._update_motorway(cp, ret)
+  assert ret.naviMotorway is (link_class == 1)
+  cp._last_update_nanos += 1_000_000_001  # 0x4A3 (about 5 Hz) stopped: the last LinkClass must not hold
+  cs._update_motorway(cp, ret)
+  assert not ret.naviMotorway and cs.motorway_frames == 0

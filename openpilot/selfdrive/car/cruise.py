@@ -345,7 +345,7 @@ class VCruiseCarrot:
     self.assistant_speed_valid = bool(getattr(sm, 'valid', {}).get('carControl', False) and sm.alive['carControl'] and
                                      0 <= time.monotonic() - getattr(sm, 'recv_time', {}).get('carControl', 0) < .35)
     self._update_carrot_man(sm)
-    self._paddle_highway = signal_detection_suspended(sm)  # same motorway test as the light detection (unknown = not)
+    self._paddle_highway = signal_detection_suspended(sm, car_state=CS)  # card's sm has no carState: pass the HDA road class
     if sm.alive['longitudinalPlan']:
       lp = sm['longitudinalPlan']
       self.xState = lp.xState
@@ -841,15 +841,16 @@ class VCruiseCarrot:
         v_cruise_kph = apply_speed
 
     road_limit_kph = self.nRoadLimitSpeed * self.autoSpeedUptoRoadSpeedLimit
-    if road_limit_kph < 1.0:
+    if self.nRoadLimitSpeed < 1.0:
       return v_cruise_kph
 
-    if self.autoRoadSpeedLimitOffset > 0:
+    # AutoSpeedUptoRoadSpeedLimit=0 keeps only the downward AutoRoadSpeedAdjust below
+    if road_limit_kph >= 1.0 and self.autoRoadSpeedLimitOffset > 0:
       self._v_cruise_kph_at_brake = self.nRoadLimitSpeed + self.autoRoadSpeedLimitOffset
 
     if not self._pause_auto_speed_up and self.v_lead_kph + 5 > v_cruise_kph and v_cruise_kph < road_limit_kph and self.d_rel < 60:
       v_cruise_kph = min(v_cruise_kph + 5, road_limit_kph)
-    elif self.autoRoadSpeedAdjust < 0 and self.nRoadLimitSpeed != self.nRoadLimitSpeed_last:  # 도로제한속도가 바뀌면, 바뀐속도로 속도를 바꿈.
+    elif road_limit_kph >= 1.0 and self.autoRoadSpeedAdjust < 0 and self.nRoadLimitSpeed != self.nRoadLimitSpeed_last:  # 도로제한속도가 바뀌면, 바뀐속도로 속도를 바꿈.
       if self.autoRoadSpeedLimitOffset < 0:
         v_cruise_kph = self.nRoadLimitSpeed * self.autoNaviSpeedSafetyFactor
       else:

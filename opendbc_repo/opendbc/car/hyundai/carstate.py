@@ -79,6 +79,8 @@ ROUNDABOUT_MAX_SPEED = 60 * CV.KPH_TO_MS
 # Stock navigation's no-lane-change notice (0x162 SIGNS 16, always with 0x380 byte10 0x10) came 2..58 s before 72 of 83
 # tunnels in October (05_can/navi_lanechange_ban.md 10-30); the short city underpasses got none
 TUNNEL_NOTICE_FRAMES = int(60.0 / DT_CTRL)
+# 11-08 85 segments: the only LinkClass 1 run off a motorway was 1.4 s (city -> IC ramp, limit 30)
+MOTORWAY_CONFIRM_FRAMES = int(3.0 / DT_CTRL)
 LEGACY_LFA_BUTTON_ADDR = 0x391
 LEGACY_CRUISE_BUTTON_ALT_ADDR = 0x3EF
 LEGACY_LFA_BUTTON_ALT_ADDR = 0x416
@@ -214,6 +216,7 @@ class CarState(CarStateBase):
     self.ccnc_0x162 = None
     self.ccnc_signs_prev, self.roundabout_frames = 0, 0
     self.tunnel_notice_frames, self.tunnel_banned = 0, False
+    self.motorway_frames = 0
     self.canfd_wrapped_navi = CP.carFingerprint == CAR.KIA_PV5
     self.navi_profile_msg = CANFD_NAVI_PROFILE_MSG if self.canfd_wrapped_navi else "NEW_MSG_4BE"
     self.vehicleNaviZoneControlSupported = not self.canfd_wrapped_navi  # Legacy kind-7 profile zones only
@@ -1188,6 +1191,15 @@ class CarState(CarStateBase):
       self.tunnel_banned = True
     ret.naviTunnel = self.tunnel_hold_enabled and self.tunnel_banned
 
+  def _update_motorway(self, cp, ret):
+    # LinkClass 1 only (2/3 are IC/JC ramps that end at lights); a stale 0x4A3 must not keep city light detection off
+    timestamp = self._vehicle_navi_message_timestamp(cp, CANFD_HDA_INFO_MSG if self.canfd_wrapped_navi else "HDA_INFO_4A3")
+    age = getattr(cp, "_last_update_nanos", timestamp) - timestamp
+    motorway = (timestamp > 0 and 0 <= age <= VEHICLE_NAVI_POSITION_TIMEOUT_NS and
+                self.hda_info_4a3 is not None and int(self.hda_info_4a3.get("LinkClass", 0)) == 1)
+    self.motorway_frames = self.motorway_frames + 1 if motorway else 0
+    ret.naviMotorway = self.motorway_frames >= MOTORWAY_CONFIRM_FRAMES
+
   def _update_vehicle_navi_events(self, cp, ret, speed_limit_cam, cp_alt=None):
     ret.speedBumpDistance = 0.0
     ret.schoolZoneActive = False
@@ -1201,6 +1213,7 @@ class CarState(CarStateBase):
     ret.vehicleNaviAvailable = self.vehicleNaviAvailable
     self._update_tunnel(ret)
     self._update_roundabout(ret)
+    self._update_motorway(cp, ret)
     self.vehicleNaviCameraTarget = None
 
     # Track the current warning independently of future 0x4BE previews. A new
