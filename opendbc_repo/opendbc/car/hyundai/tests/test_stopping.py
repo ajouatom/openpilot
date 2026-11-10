@@ -246,7 +246,8 @@ def test_lower_band_precedes_stop_and_survives_hold_and_departure(camera, stock_
       assert values["AccelLimitBandUpper"] == 0.
       assert values["StopReq"] == stop_req
       if stop_req:
-        expected_raw = 0. if cs.canfdSccHoldActive else HOLD_PENDING_ACCEL
+        expected_raw = (0. if cs.canfdSccHoldActive else
+                        HOLD_SETTLE_ACCEL if controller.settle_brake else HOLD_PENDING_ACCEL)
         assert values["aReqRaw"] == pytest.approx(expected_raw)
         assert values["aReqValue"] <= expected_raw
   disabled = send(camera, controller, cs, enabled=False, stopping=False)
