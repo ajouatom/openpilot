@@ -99,3 +99,14 @@ Ioniq 5 HDA2/CAMERA SCC=2 safety profile for `AlwaysLateral` and `AutoEngage`.
 It preserves this branch's Tesla-specific catalog behavior. Apply to fresh
 branch-generated pages with `git apply --check --unidiff-zero` and
 `git apply --unidiff-zero`, regenerate and validate. No upstream Wiki publication.
+
+## Porter and Ioniq 5 low-speed steering response
+
+`low-speed-steering-response.patch` supplies reviewed Korean, English and Chinese
+`LatSmoothSec` and `AutoTurnControl` explanations for the Porter II EV and Ioniq 5
+HDA2 CAMERA SCC torque profiles. Generate fresh pages from this branch catalog,
+apply with `git apply --check --unidiff-zero` / `git apply --unidiff-zero`,
+regenerate and validate. It documents the low-speed duplicate-filter removal,
+measured wheel-return completion and the bounded ten-second navigation request.
+Torque, rate and driver-override limits remain. This branch-specific patch does
+not publish to the live upstream Wiki.

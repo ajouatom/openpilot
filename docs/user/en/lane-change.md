@@ -196,3 +196,7 @@ When a usable TBT point and raw vehicle GPS are available, passage evidence supp
 
 
 A TBT hold with confirmed transmission and illumination continues through a receiver `driver_override` status until normal completion or the driver steering cancellation. A missing initial transmission acknowledgement or invalid communication/vehicle input prevents hold output.
+
+## Porter and Ioniq 5 navigation turn completion
+
+ATC navigation turns on Porter II EV and Ioniq 5 HDA2 CAMERA SCC torque steering do not end solely because predicted yaw rate decreases during the turn. After the wheel exceeds 80 degrees in the turn direction, return within ±15 degrees for 0.2s while moving finishes the request. An unchanged turn cue executes for at most 10s; navigation changes, lateral disengagement and opposite physical turn-signal requests take priority. Valid model output and fresh vehicle, control and navigation state are required; invalid CAN or steering angle stops retention. A long turn may reach the time bound. This does not overcome steering limits or decelerate with cruise OFF.

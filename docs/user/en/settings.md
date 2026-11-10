@@ -528,3 +528,9 @@ After confirmed turn entry, the TBT indicator ends its hold as the wheel returns
 
 
 The ATC right lane-change distance uses 0m for off and 50m steps up to 500m. The former ON setting migrates to 250m at restart.
+
+## Low-speed steering response and ATC turn completion
+
+For Porter II EV and Ioniq 5 HDA2 CAMERA SCC torque steering, the laneless path omits the extra fixed 0.1s controller filter after the already-filtered model action at or below 30km/h. It blends back between 30 and 40km/h; operation at or above 40km/h is unchanged. The model filter selected by `LatSmoothSec`, lane mode, maximum torque, rate and driver-override limits remain. This reduces low-speed target delivery delay; it does not increase physical steering capacity or guarantee tracking.
+
+ATC navigation turns on Porter II EV and Ioniq 5 HDA2 CAMERA SCC torque steering do not end solely because predicted yaw rate decreases during the turn. After the wheel exceeds 80 degrees in the turn direction, return within ±15 degrees for 0.2s while moving finishes the request. An unchanged turn cue executes for at most 10s; navigation changes, lateral disengagement and opposite physical turn-signal requests take priority. Valid model output and fresh vehicle, control and navigation state are required; invalid CAN or steering angle stops retention. A long turn may reach the time bound. This does not overcome steering limits or decelerate with cruise OFF.

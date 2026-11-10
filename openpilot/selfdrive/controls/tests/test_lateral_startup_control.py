@@ -14,7 +14,7 @@ from openpilot.common.constants import CV
 from openpilot.selfdrive.car.voice_indicator import set_lane_change_blinkers
 from opendbc.car.vehicle_model import VehicleModel
 from opendbc.car.interfaces import CarInterfaceBase
-from openpilot.selfdrive.controls.lib.drive_helpers import clip_curvature, get_lag_adjusted_curvature
+from openpilot.selfdrive.controls.lib.drive_helpers import clip_curvature, get_lag_adjusted_curvature, model_action_curvature
 from openpilot.selfdrive.controls.lib.latcontrol import MIN_LATERAL_CONTROL_SPEED
 from openpilot.selfdrive.controls.lib.latcontrol_torque import LatControlTorque
 from openpilot.selfdrive.controls.lib.lateral_readiness import LateralStartupGate, lateral_vehicle_parameters
@@ -34,6 +34,7 @@ def control_fixture():
         'MIN_LATERAL_CONTROL_SPEED': MIN_LATERAL_CONTROL_SPEED, 'LaneChangeState': log.LaneChangeState,
         'LaneChangeDirection': log.LaneChangeDirection, 'ACTUATOR_FIELDS': tuple(car.CarControl.Actuators.schema.fields),
         'clip_curvature': clip_curvature, 'get_lag_adjusted_curvature': get_lag_adjusted_curvature,
+        'model_action_curvature': model_action_curvature,
         'resolve_vehicle_model_steer_ratio': resolve_vehicle_model_steer_ratio,
         'lateral_vehicle_parameters': lateral_vehicle_parameters,
         'set_lane_change_blinkers': set_lane_change_blinkers,

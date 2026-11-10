@@ -1,5 +1,5 @@
 import numpy as np
-from openpilot.cereal import log
+from openpilot.cereal import car, log
 from opendbc.car.vehicle_model import ACCELERATION_DUE_TO_GRAVITY
 from openpilot.common.realtime import DT_CTRL, DT_MDL
 from openpilot.selfdrive.modeld.constants import ModelConstants
@@ -23,6 +23,24 @@ MAX_VEL_ERR = 5.0  # m/s
 MAX_LATERAL_JERK = 5.0  # m/s^3
 MAX_LATERAL_ACCEL_NO_ROLL = 3.0  # m/s^2
 MAX_LATERAL_ACCEL_NO_ROLL_LOW_SPEED = 4.5  # m/s^2
+
+
+def supports_low_speed_torque_response(CP) -> bool:
+  from opendbc.car.hyundai.values import HyundaiFlags
+  if CP.brand != 'hyundai' or CP.steerControlType != car.CarParams.SteerControlType.torque:
+    return False
+  return bool(CP.carFingerprint == 'HYUNDAI_PORTER_II_EV' or
+              (CP.carFingerprint == 'HYUNDAI_IONIQ_5' and
+               CP.flags & HyundaiFlags.CANFD_HDA2 and CP.flags & HyundaiFlags.CAMERA_SCC))
+
+
+def model_action_curvature(CP, v_ego: float, curvature: float, previous: float) -> float:
+  # modeld already filters this action with LatSmoothSec and accounts for that
+  # delay in its action horizon. Avoid another unaccounted 100 ms at low speed.
+  # Blend back to the existing filter between 30 and 40 km/h.
+  tau = float(np.interp(v_ego, [30 / 3.6, 40 / 3.6], [0., .1])) if supports_low_speed_torque_response(CP) else .1
+  alpha = 1 - np.exp(-DT_CTRL / tau) if tau > 0 else 1.
+  return float(alpha * curvature + (1 - alpha) * previous)
 
 def apply_deadzone(error, deadzone):
   if error > deadzone:
