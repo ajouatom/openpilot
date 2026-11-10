@@ -67,7 +67,7 @@ def apply_canfd_stopping(values, CS, controller, accel, previous_value, jerk_u, 
     values["AccelLimitBandLower"] = STOP_LOWER_BAND
 
   # Apply only to the final packet, after approach and interlocks select StopReq.
-  # The first StopReq frame already carries zero Raw/Value; Upper may rise next.
+  # Keep an Upper increase off the first StopReq frame; it may rise next.
   values["JerkUpperLimit"] = controller.limit_scc_jerk_upper(values["StopReq"], values["JerkUpperLimit"])
 
   if controller.phase != previous_phase:

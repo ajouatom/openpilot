@@ -6,7 +6,8 @@ from opendbc.can import CANPacker, CANParser
 from opendbc.car import Bus, structs
 from opendbc.car.hyundai import carcontroller
 from opendbc.car.hyundai.hyundaicanfd import create_acc_control, create_acc_control_scc2
-from opendbc.car.hyundai.stopping import (CanfdStopping, StopPhase, DT, ENTRY_SPEED, HOLD_PENDING_ACCEL,
+from opendbc.car.hyundai.stopping import (CanfdStopping, StopPhase, DT, ENTRY_SPEED, HOLD_APPLY_JERK,
+                                          HOLD_PENDING_ACCEL, HOLD_SETTLE_ACCEL, MOVING_SPEED,
                                           STOP_LOWER_BAND, STOP_RELEASE_JERK)
 from opendbc.car.hyundai.values import CAR, HyundaiFlags
 
@@ -48,8 +49,10 @@ def test_normal_stop_keeps_braking_until_hold_without_toggle():
       assert (cmd.stop_req, cmd.raw) == (0, -0.5)
     else:
       assert cmd.stop_req == 1
-      assert cmd.raw == (0. if held else HOLD_PENDING_ACCEL)
-      assert cmd.value <= cmd.raw
+      expected_raw = (0. if held and speed <= MOVING_SPEED else
+                      HOLD_SETTLE_ACCEL if speed <= MOVING_SPEED else HOLD_PENDING_ACCEL)
+      assert cmd.raw == expected_raw
+      assert min(previous, expected_raw) <= cmd.value <= max(previous, expected_raw)
     previous = cmd.value
   assert controller.phase == StopPhase.held
   assert previous == pytest.approx(0.)
@@ -61,11 +64,12 @@ def test_persistent_creep_never_releases_request(speed):
   previous = -0.5
   for _ in range(1500):  # exceed every old timeout, distance and retry limit
     cmd = step(controller, speed=speed, previous_value=previous)
-    assert (cmd.stop_req, cmd.raw) == (1, HOLD_PENDING_ACCEL)
-    assert cmd.value <= HOLD_PENDING_ACCEL
+    expected_raw = HOLD_SETTLE_ACCEL if speed <= MOVING_SPEED else HOLD_PENDING_ACCEL
+    assert (cmd.stop_req, cmd.raw) == (1, expected_raw)
+    assert min(previous, expected_raw) <= cmd.value <= max(previous, expected_raw)
     previous = cmd.value
   assert controller.phase == StopPhase.request
-  assert previous == pytest.approx(HOLD_PENDING_ACCEL)
+  assert previous == pytest.approx(expected_raw)
 
 
 def test_motion_after_hold_changes_diagnostic_without_releasing():
@@ -105,6 +109,15 @@ def test_approach_preserves_braking_then_releases_toward_pending_brake():
   assert cmd.value == pytest.approx(previous + STOP_RELEASE_JERK * DT)
   for _ in range(100):
     assert step(controller, speed=ENTRY_SPEED + .3).stop_req == 1
+
+
+def test_pending_and_settle_brake_apply_without_a_one_frame_step():
+  controller = CanfdStopping()
+  pending = step(controller, speed=.3, previous_value=0.)
+  assert (pending.raw, pending.value) == pytest.approx((HOLD_PENDING_ACCEL, -HOLD_APPLY_JERK * DT))
+  settling = step(controller, speed=.05, previous_value=HOLD_PENDING_ACCEL)
+  assert (settling.raw, settling.value) == pytest.approx(
+    (HOLD_SETTLE_ACCEL, HOLD_PENDING_ACCEL - HOLD_APPLY_JERK * DT))
 
 
 @pytest.mark.parametrize('reason', ['inactive', 'departing'])
@@ -399,11 +412,11 @@ def test_soft_hold_keeps_pending_brake_without_preparation(camera, brake_pressed
                   previous_value=previous, previous_target=previous_target)
     assert values['ACCMode'] == values['StopReq'] == 1
     assert values['HUD_LEAD_INFO'] == (2 if camera else 0)
-    assert values['aReqRaw'] == pytest.approx(HOLD_PENDING_ACCEL)
-    assert values['aReqValue'] == pytest.approx(HOLD_PENDING_ACCEL)
+    assert values['aReqRaw'] == pytest.approx(HOLD_SETTLE_ACCEL)
+    assert values['aReqValue'] == pytest.approx(HOLD_SETTLE_ACCEL)
     previous, previous_target = values['aReqValue'], -2.
   assert controller.phase == StopPhase.held
-  assert previous == pytest.approx(HOLD_PENDING_ACCEL)
+  assert previous == pytest.approx(HOLD_SETTLE_ACCEL)
 
 
 @pytest.mark.parametrize('camera', [True, False])
@@ -455,10 +468,11 @@ def test_stop_upper_increase_waits_one_packet_without_delaying_stop(camera, prev
     cs.out.wheelSpeeds = SimpleNamespace(fl=0., fr=0., rl=0., rr=0.)
   first = send(camera, controller, cs, stopping=not soft_hold, jerk_upper=2.)
   second = send(camera, controller, cs, stopping=not soft_hold, jerk_upper=2.)
+  expected_raw = HOLD_SETTLE_ACCEL if soft_hold else HOLD_PENDING_ACCEL
   assert first['StopReq'] == second['StopReq'] == 1
   assert first['JerkUpperLimit'] == min(previous_upper, 2.)
   assert second['JerkUpperLimit'] == 2.
-  assert first['aReqRaw'] == second['aReqRaw'] == pytest.approx(HOLD_PENDING_ACCEL)
+  assert first['aReqRaw'] == second['aReqRaw'] == pytest.approx(expected_raw)
   assert first['aReqValue'] == second['aReqValue'] == pytest.approx(-0.47)
   assert first['AccelLimitBandLower'] == second['AccelLimitBandLower'] == STOP_LOWER_BAND
 

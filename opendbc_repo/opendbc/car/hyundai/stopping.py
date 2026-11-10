@@ -13,7 +13,9 @@ STOP_SPEED = 0.05
 MOVING_SPEED = 0.10
 STOP_CONFIRM_TIME = 0.2
 APPROACH_ACCEL = -0.5
-HOLD_PENDING_ACCEL = -0.15
+HOLD_PENDING_ACCEL = -0.10
+HOLD_SETTLE_ACCEL = -0.25
+HOLD_APPLY_JERK = 0.35
 STOP_RELEASE_JERK = 1.5
 STOP_LOWER_BAND = 0.20  # fixed during active ACC, including before StopReq; never copied from stock
 
@@ -82,13 +84,16 @@ class CanfdStopping:
       self.enter(StopPhase.request, "motion_after_hold")
 
     if self.phase in (StopPhase.request, StopPhase.held):
-      # Do not release the remaining braking request before the vehicle reports
-      # a real SCC hold. Ramp the value upward to avoid a sharp low-speed pitch,
-      # then release it only after hold is confirmed. If motion resumes, restore
-      # the small negative request immediately.
+      # Enter with a light request, then add holding force only near standstill.
+      # Limit both applying and releasing the request so either target change
+      # cannot create a one-frame low-speed pitch.
       hold_confirmed = held and speed <= MOVING_SPEED
-      raw = 0.0 if hold_confirmed else HOLD_PENDING_ACCEL
-      value = min(raw, previous_value + min(jerk_u, STOP_RELEASE_JERK) * DT)
+      raw = (0.0 if hold_confirmed else
+             HOLD_SETTLE_ACCEL if speed <= MOVING_SPEED else HOLD_PENDING_ACCEL)
+      if raw >= previous_value:
+        value = min(raw, previous_value + min(jerk_u, STOP_RELEASE_JERK) * DT)
+      else:
+        value = max(raw, previous_value - min(jerk_l, HOLD_APPLY_JERK) * DT)
       return StopCommand(1, raw, value, STOP_LOWER_BAND)
 
     # Preserve the existing approach deceleration until initial low-speed entry.
