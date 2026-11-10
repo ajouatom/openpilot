@@ -264,7 +264,10 @@ def test_packed_stop_releases_toward_pending_brake_without_dropping_request(came
     values = send(camera, controller, cs, accel=target, previous_value=previous, previous_target=target)
     assert values['StopReq'] == 1
     assert values['aReqRaw'] == pytest.approx(HOLD_PENDING_ACCEL)
-    assert values['aReqValue'] <= HOLD_PENDING_ACCEL
+    expected_value = (min(HOLD_PENDING_ACCEL, previous + STOP_RELEASE_JERK * DT)
+                      if HOLD_PENDING_ACCEL >= previous else
+                      max(HOLD_PENDING_ACCEL, previous - HOLD_APPLY_JERK * DT))
+    assert values['aReqValue'] == pytest.approx(expected_value, abs=.0051)
     previous = values['aReqValue']
   assert previous == pytest.approx(HOLD_PENDING_ACCEL)
 
@@ -399,7 +402,7 @@ def test_missing_stock_message_resets_camera_experiment():
 
 @pytest.mark.parametrize("camera", [True, False])
 @pytest.mark.parametrize("brake_pressed", [False, True])
-def test_soft_hold_keeps_pending_brake_without_preparation(camera, brake_pressed):
+def test_soft_hold_ramps_settle_brake_without_preparation(camera, brake_pressed):
   cs = make_cs()
   cs.softHoldActive = 1 if brake_pressed else 2
   cs.out.brakePressed = brake_pressed
@@ -413,7 +416,8 @@ def test_soft_hold_keeps_pending_brake_without_preparation(camera, brake_pressed
     assert values['ACCMode'] == values['StopReq'] == 1
     assert values['HUD_LEAD_INFO'] == (2 if camera else 0)
     assert values['aReqRaw'] == pytest.approx(HOLD_SETTLE_ACCEL)
-    assert values['aReqValue'] == pytest.approx(HOLD_SETTLE_ACCEL)
+    expected_value = max(HOLD_SETTLE_ACCEL, previous - HOLD_APPLY_JERK * DT)
+    assert values['aReqValue'] == pytest.approx(expected_value, abs=.0051)
     previous, previous_target = values['aReqValue'], -2.
   assert controller.phase == StopPhase.held
   assert previous == pytest.approx(HOLD_SETTLE_ACCEL)
