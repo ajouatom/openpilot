@@ -146,6 +146,62 @@ class Movement:
       return False
 
 
+class ForecastLaneMovement(Movement):
+  """A split can widen before the model assigns the boundaries of the new lane."""
+  def __init__(self, now, direction, source, cs, md):
+    super().__init__(now, direction, source, cs, md)
+    self.far_start = self.far_peak = abs(md.laneLines[3-direction].y[0])
+    self.progress_at = now
+    self.split = False
+
+  def update(self, now, cs, md):
+    left, right = md.laneLines[1].y[0], md.laneLines[2].y[0]
+    near, far = (-left, right) if self.direction == 1 else (right, -left)
+    stamp, old_left, old_right = self.last
+    old_near, old_far = (-old_left, old_right) if self.direction == 1 else (old_right, -old_left)
+    if (not all(math.isfinite(v) for v in (now, left, right, cs.vEgo)) or not 0 < now-stamp <= .15 or
+        cs.steeringPressed or not left < 0 < right or not 2.5 < right-left < 5.5 or cs.vEgo < 30/3.6):
+      self.reason = 'cancelled'
+      return False
+    widening = (near > self.minimum + .20 and far >= self.far_start + .20 and
+                near + far >= self.initial + self.far_start + .30)
+    if not self.split and not widening:
+      return super().update(now, cs, md)
+    self.split = True
+    index = self.direction + 2
+    pred, current = md.meta.desirePrediction, md.meta.desireState
+    if len(pred) != 32 or len(current) != 8:
+      self.reason = 'inputs'
+      return False
+    rows = ([pred[i] for i in range(8)], list(current))
+    if (not all(math.isfinite(p) and 0 <= p <= 1 for row in rows for p in row) or
+        any(max(row[3-self.direction], row[5-self.direction]) >= .5 for row in rows) or
+        not any(row[index] >= .55 and row[index] == max(row) for row in rows)):
+      self.reason = 'completed'
+      return False
+    # Both labels moving together into the new lane is different from the
+    # target line alone moving away. Require evidence from the far side first.
+    relabel = (self.far_peak >= self.far_start + .55 and self.far_peak-far >= .60 and
+               near-self.minimum >= .55 and near-old_near > .15 and old_far-far > .15)
+    if max(abs(near-old_near), abs(far-old_far)) > 1.5 or (
+        not self.crossed and not relabel and self.far_peak-far > .45):
+      self.reason = 'returned'
+      return False
+    self.crossed |= relabel
+    settled = self.crossed and min(near, far) > 1. and abs(near-old_near) < .08
+    self.settled = (now if self.settled is None else self.settled) if settled else None
+    if self.settled is not None and now-self.settled >= .4:
+      self.reason = 'completed'
+      return False
+    if far >= self.far_peak + .05:
+      self.far_peak, self.progress_at = far, now
+    if now-self.started >= 12 or (not self.crossed and now-self.progress_at > .75):
+      self.reason = 'timeout'
+      return False
+    self.last = (now, left, right)
+    return True
+
+
 class ModelIndicator:
   def __init__(self):
     self.active = None
@@ -233,6 +289,7 @@ class ModelIndicator:
         self.evidence.clear()
         return
       candidate = None
+      forecast = False
       if desire_enabled and cs.vEgo >= 30/3.6:
         self.approach.append((now, left, right, md.laneLineProbs[1], md.laneLineProbs[2]))
       else:
@@ -250,6 +307,7 @@ class ModelIndicator:
           if candidate is None and probs[0] == max(probs) and cs.vEgo >= 30/3.6:
             direction = anticipated_lane(md, self.approach)
             if direction:
+              forecast = True
               candidate = (direction, 'model_desire')
       if candidate is None and path_enabled and cs.vEgo >= 30/3.6:
         direction = path_direction(md, command_curvature) if command_curvature is not None else 0
@@ -265,7 +323,8 @@ class ModelIndicator:
       opposite = any(c is not None and candidate is not None and c[0] != candidate[0] for _,c in evidence)
       self.candidate = candidate
       if candidate and not opposite and len(matches) >= 4 and len(matches)*2 >= len(evidence) and now-matches[0] >= CONFIRM_SEC:
-        self.active = Movement(now, *candidate, cs, md)
+        movement = ForecastLaneMovement if forecast else Movement
+        self.active = movement(now, *candidate, cs, md)
         self.request_time = now
         isolation.own(now, candidate[0])
         self.reason = candidate[1]
