@@ -71,6 +71,27 @@ def following_road_curve(md, speed, yaw_rate):
     return False
 
 
+def anticipated_lane(md, samples):
+  """Confirm the two nearest forecast rows against measured motion of both lane boundaries."""
+  forecast = getattr(md.meta, 'desirePrediction', ())
+  if len(forecast) != 32 or len(samples) < 2:
+    return 0
+  old_t, old_l, old_r, _, _ = samples[0]
+  t, left, right, _, _ = samples[-1]
+  if not .30 <= t-old_t <= .55:
+    return 0
+  for side, index, sign in ((1, 3, -1), (2, 4, 1)):
+    if (0 < (-left if side == 1 else right) <= 1.5 and
+        min(sign*(old_l-left), sign*(old_r-right)) >= .06 and
+        any(sample[2+side] >= LINE_CONFIDENCE for sample in samples)):
+      # Two 8-class softmax rows; check the cheap geometric gates first.
+      rows = ([forecast[j+i] for i in range(8)] for j in (0, 8))
+      if all(all(math.isfinite(x) and 0 <= x <= 1 for x in row) and
+             row[index] >= .65 and row[index] == max(row) for row in rows):
+        return side
+  return 0
+
+
 class Movement:
   """Bounded observation lifetime, including return-before-crossing cancellation."""
   def __init__(self, now, direction, source, cs, md):
@@ -130,6 +151,7 @@ class ModelIndicator:
     self.active = None
     self.request_time = 0.
     self.candidate = None
+    self.approach = deque(maxlen=10)
     self.evidence = deque(maxlen=12)
     self.since = 0.
     self.previous = None
@@ -207,9 +229,14 @@ class ModelIndicator:
           max(abs(left-old[2]), abs(right-old[3])) > .4):
         self.candidate = None
         self.reason = 'geometry'
+        self.approach.clear()
         self.evidence.clear()
         return
       candidate = None
+      if desire_enabled and cs.vEgo >= 30/3.6:
+        self.approach.append((now, left, right, md.laneLineProbs[1], md.laneLineProbs[2]))
+      else:
+        self.approach.clear()
       if desire_enabled:
         probs = list(md.meta.desireState)
         if len(probs) >= 5 and all(math.isfinite(p) and 0 <= p <= 1 for p in probs):
@@ -220,6 +247,10 @@ class ModelIndicator:
           if probs[index] >= .5 and probs[index] >= probs[0] and probs[index]-opposite >= .3:
             if index < 3 or cs.vEgo >= 30/3.6:
               candidate = (direction, 'model_turn' if index < 3 else 'model_desire')
+          if candidate is None and probs[0] == max(probs) and cs.vEgo >= 30/3.6:
+            direction = anticipated_lane(md, self.approach)
+            if direction:
+              candidate = (direction, 'model_desire')
       if candidate is None and path_enabled and cs.vEgo >= 30/3.6:
         direction = path_direction(md, command_curvature) if command_curvature is not None else 0
         if direction:

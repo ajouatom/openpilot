@@ -312,6 +312,7 @@ class TeslaTurnSignals:
                     request_id == s.request_id and direction == s.direction and turn_hold_allowed and
                     getattr(state, "standstill", False) and math.isfinite(state.vEgo) and abs(state.vEgo) < .1)
     checks = ((self.configured, self.disabled_status), (fresh, "context_stale"),
+              (not getattr(state, "cruiseCancelState", False), "cruise_cancel"),
               (control.latActive or stopped_hold or lamp_only, "lateral_inactive"), (state.canValid, "can_invalid"),
               (not state.vehicleSensorsInvalid, "vehicle_sensors_invalid"),
               (str(state.gearShifter) == "drive", "not_in_drive"),

@@ -561,12 +561,12 @@ def test_real_capnp_inputs_and_can_serialization():
   assert can_capnp_to_list([packet], msgtype="sendcan")[0][1] == [tuple(sends[0])]
 
 
-@pytest.mark.parametrize("gate", ["model", "lateral", "can", "gear", "stalk"])
+@pytest.mark.parametrize("gate", ["model", "lateral", "can", "gear", "stalk", "cancel"])
 def test_loss_of_any_start_gate_requests_cancel_instead_of_relighting(gate):
   c = opened()
   sends = update(c, N + 3, fresh=gate != "model", active=gate != "lateral",
                  cs=state(canValid=gate != "can", gearShifter="park" if gate == "gear" else "drive",
-                          turnSignalDriverValid=gate != "stalk"))
+                          turnSignalDriverValid=gate != "stalk", cruiseCancelState=gate == "cancel"))
   assert sends[0].dat[1] & 3 == 3
   assert c.owned_direction == 1
 
