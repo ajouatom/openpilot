@@ -274,3 +274,35 @@ def test_near_forecasts_require_measured_approach_and_fresh_agreement(side, case
     assert isolation.filter_lamp(side) == 0
   else:
     assert detector.active is None
+
+
+@pytest.mark.parametrize('side', [1, 2])
+@pytest.mark.parametrize('stop', ['fade', 'opposite', 'return', 'stalled', 'steering', 'bad_geometry', 'gap'])
+def test_forecast_hold_tracks_widening_fork_without_a_second_request(side, stop):
+  from openpilot.selfdrive.controls.lib.desire_lib.indicator_observer import ForecastLaneMovement
+  cs, md = scene()
+  def boundaries(near, far):
+    md.laneLines[1].y[0], md.laneLines[2].y[0] = (-near, far) if side == 1 else (-far, near)
+  boundaries(1., 2.3)
+  row = [0.] * 8
+  row[side+2], row[0] = .8, .2
+  md.meta.desirePrediction = row * 4
+  move = ForecastLaneMovement(10., side, 'model_desire', cs, md)
+  for i in range(1, 13):
+    boundaries(1.+i*.03, 2.3+i*.06)
+    assert move.update(10.+i*.05, cs, md)
+  assert move.split and not move.crossed
+  if stop == 'fade':
+    md.meta.desirePrediction = [1.,0.,0.,0.,0.,0.,0.,0.] * 4
+  elif stop == 'opposite':
+    md.meta.desireState[5-side] = .8
+  elif stop == 'return':
+    boundaries(1.38, 2.49)
+  elif stop == 'steering':
+    cs.steeringPressed = True
+  elif stop == 'bad_geometry':
+    boundaries(math.nan, 3.)
+  elif stop == 'stalled':
+    for i in range(1, 15):
+      assert move.update(10.6+i*.05, cs, md)
+  assert not move.update(11.41 if stop == 'stalled' else 11. if stop == 'gap' else 10.65, cs, md)
