@@ -1,5 +1,17 @@
 # Repository memory
 
+- 2026-11-11: Owner requests state2 trial after I5PE11c8/2 rollback with real
+  radar lead41 maintained. Camera-SCC final ACCMode1/StopReq1 now promotes
+  receding real-lead state1 to SCC_ObjSta2, alongside existing no-lead state0
+  fallback. Scope chosen for final stop packets; departure restores normal
+  relative-speed mapping. Four regressions fail before, related261 pass after.
+  Eight-log full-builder A/B23987calls changes475 object-state/CRC packets,
+  23512 identical; acceleration/phase/synthetic-marker outputs agree. OEM
+  parity remains partial: I5PE band.04 vs ours.20, target distance, InfoDisplay,
+  entry timing and trajectories differ. Prior nine failure entries had state2.
+  ESC acceptance and physical hold effect remain unverified. Evidence private
+  .analysis/archive/2026-11-11/stop-state-trial and existing stop-object doc.
+
 - 2026-11-10: Use the actual Carrot cruise cancel latch, not cruise enablement
   or a timeout, to pause automatic physical indicator requests until SET/RES or
   +/- clears it. Keep the driver's lever and explicit BT signals independent.

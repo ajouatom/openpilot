@@ -569,10 +569,10 @@ def create_acc_control_scc2(packer, CAN, enabled, accel_value_last, accel, stopp
   values["ZEROS_7"] = 0 if stop_controller is not None else 1
   apply_canfd_stopping(values, CS, stop_controller, accel, previous_value, jerk_u, jerk_l)
 
-  # Existing state-only fallback for no-lead stops (OEM SCC_ObjSta). The
-  # explicitly requested signal-stop object below additionally supplies range
-  # and speed; neither path modifies RX or establishes an ESC acceptance gate.
-  if stop_controller is not None and values["ACCMode"] == 1 and values["StopReq"] == 1 and values["HUD_LEAD_INFO"] == 0:
+  # OEM SCC_ObjSta=2 denotes an object controllable longitudinally. During a
+  # final stop request, also promote a receding real lead from state 1. Keep
+  # its measured kinematics and the existing no-lead state fallback.
+  if stop_controller is not None and values["ACCMode"] == 1 and values["StopReq"] == 1 and values["HUD_LEAD_INFO"] in (0, 1):
     values["HUD_LEAD_INFO"] = 2
 
   if stop_controller is not None:
