@@ -294,6 +294,7 @@ struct CarState {
   laneLineInfoMonoTime @112 :UInt64; # exact OEM lane type/colour CAN observation; zero means unknown, manual indicator only
   teslaTrafficControl @113 :TeslaTrafficControl;
   stockSccFault @114 :Bool; # original Casper FCA failure, before outgoing fault suppression
+  cruiseCancelState @115 :Bool; # Carrot cruise CANCEL latch, cleared by SET/RES or +/-.
 
   struct TeslaTrafficControl {
     available @0 :Bool;

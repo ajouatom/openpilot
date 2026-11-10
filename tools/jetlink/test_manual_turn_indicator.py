@@ -186,7 +186,8 @@ def test_active_turn_revokes_on_new_input(reason):
 
 @pytest.mark.parametrize('enabled', [False, True])
 @pytest.mark.parametrize('atc', [0, 1, 2, 3])
-def test_source_loop_uses_independent_option_with_lateral_control_off(monkeypatch, enabled, atc):
+@pytest.mark.parametrize('cancel', [False, True])
+def test_source_loop_uses_independent_option_with_lateral_control_off(monkeypatch, enabled, atc, cancel):
   import json
   import sys
   from contextlib import nullcontext
@@ -212,8 +213,9 @@ def test_source_loop_uses_independent_option_with_lateral_control_off(monkeypatc
     i = len(sent)
     clock[0] = 10 + i * .05
     sm.recv_time = dict.fromkeys(sm, clock[0])
-    sm['modelV2'].meta.observedIndicator = 'left' if 2 <= i < 8 else 'none'
-    sm['modelV2'].meta.observedIndicatorMonoTime = int(10.1e9) if i >= 2 else 0
+    sm['carState'].cruiseCancelState = cancel and 4 <= i < 7
+    sm['modelV2'].meta.observedIndicator = 'left' if 2 <= i < 8 or 9 <= i else 'none'
+    sm['modelV2'].meta.observedIndicatorMonoTime = int((10.45 if i >= 9 else 10.1) * 1e9) if i >= 2 else 0
 
   def receive(_):
     i = len(sent)
@@ -240,5 +242,7 @@ def test_source_loop_uses_independent_option_with_lateral_control_off(monkeypatc
   assert bool(holds) is enabled
   if enabled:
     assert {h['direction'] for h in holds} == {'left'}
-    assert len({h['id'] for h in holds}) == 1
-    assert all(value['hold'] is None for value in sent[8:])
+    assert len({h['id'] for h in holds}) == 2
+    assert sent[2]['hold'] and sent[9]['hold'] and not sent[8]['hold']
+    # Release the active hold, and never replay its old edge on resume.
+    assert all(bool(value['hold']) is (not cancel) for value in sent[4:8])
