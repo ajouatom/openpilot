@@ -6,7 +6,7 @@ from opendbc.can import CANPacker, CANParser
 from opendbc.car import structs
 from opendbc.car.hyundai.hyundaicanfd import create_acc_control_scc2
 from opendbc.car.hyundai.stop_object import signal_stop_object_requested
-from opendbc.car.hyundai.stopping import CanfdStopping
+from opendbc.car.hyundai.stopping import HOLD_PENDING_ACCEL, CanfdStopping
 from opendbc.car.hyundai.tests.test_stopping import make_cs
 from opendbc.car.hyundai.values import HyundaiFlags
 
@@ -47,7 +47,8 @@ def test_final_stop_object_adds_only_object_fields_and_crc():
   assert changed <= {"ACC_ObjDist", "ACC_ObjRelSpd", "CHECKSUM"}
   assert {"ACC_ObjDist", "ACC_ObjRelSpd"} <= changed
   assert old_bytes != new_bytes and cs.scc_control == before
-  assert new["aReqRaw"] == new["aReqValue"] == 0.0
+  assert new["aReqRaw"] == pytest.approx(HOLD_PENDING_ACCEL)
+  assert new["aReqValue"] < new["aReqRaw"]
 
 
 @pytest.mark.parametrize(
