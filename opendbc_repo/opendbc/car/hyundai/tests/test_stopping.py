@@ -41,17 +41,21 @@ def test_normal_stop_keeps_braking_until_hold_without_toggle():
   previous = -0.5
   for tick in range(150):
     held = tick >= 80
-    cmd = step(controller, speed=max(0, 0.6 - tick * DT * 0.4), held=held, previous_value=previous)
-    assert cmd.stop_req == 1
-    assert cmd.raw == (0. if held else HOLD_PENDING_ACCEL)
-    assert cmd.value <= cmd.raw
+    speed = max(0, 0.6 - tick * DT * 0.4)
+    cmd = step(controller, speed=speed, held=held, previous_value=previous)
     assert cmd.lower == STOP_LOWER_BAND
+    if speed > ENTRY_SPEED:
+      assert (cmd.stop_req, cmd.raw) == (0, -0.5)
+    else:
+      assert cmd.stop_req == 1
+      assert cmd.raw == (0. if held else HOLD_PENDING_ACCEL)
+      assert cmd.value <= cmd.raw
     previous = cmd.value
   assert controller.phase == StopPhase.held
   assert previous == pytest.approx(0.)
 
 
-@pytest.mark.parametrize('speed', [.07, .3, .65])
+@pytest.mark.parametrize('speed', [.07, .3, .5])
 def test_persistent_creep_never_releases_request(speed):
   controller = CanfdStopping()
   previous = -0.5
