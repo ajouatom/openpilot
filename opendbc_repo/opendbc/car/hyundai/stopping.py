@@ -56,6 +56,7 @@ class CanfdStopping:
     self.phase = StopPhase.idle
     self.reason = "inactive"
     self.stopped_time = 0.0
+    self.settle_brake = False
 
   def enter(self, phase: StopPhase, reason: str):
     self.phase = phase
@@ -74,7 +75,10 @@ class CanfdStopping:
       self.enter(StopPhase.request, "entry_speed")
 
     self.stopped_time = self.stopped_time + DT if speed <= STOP_SPEED else 0.0
-    stopped = (held and speed <= MOVING_SPEED) or self.stopped_time >= STOP_CONFIRM_TIME
+    stationary_confirmed = self.stopped_time >= STOP_CONFIRM_TIME
+    if stationary_confirmed:
+      self.settle_brake = True
+    stopped = (held and speed <= MOVING_SPEED) or stationary_confirmed
     if stopped:
       if self.phase != StopPhase.held:
         self.enter(StopPhase.held, "stop_observed")
@@ -89,7 +93,7 @@ class CanfdStopping:
       # cannot create a one-frame low-speed pitch.
       hold_confirmed = held and speed <= MOVING_SPEED
       raw = (0.0 if hold_confirmed else
-             HOLD_SETTLE_ACCEL if speed <= MOVING_SPEED else HOLD_PENDING_ACCEL)
+             HOLD_SETTLE_ACCEL if self.settle_brake else HOLD_PENDING_ACCEL)
       if raw >= previous_value:
         value = min(raw, previous_value + min(jerk_u, STOP_RELEASE_JERK) * DT)
       else:
