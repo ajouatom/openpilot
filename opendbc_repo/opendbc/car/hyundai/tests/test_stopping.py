@@ -7,7 +7,7 @@ from opendbc.car import Bus, structs
 from opendbc.car.hyundai import carcontroller
 from opendbc.car.hyundai.hyundaicanfd import create_acc_control, create_acc_control_scc2
 from opendbc.car.hyundai.stopping import (CanfdStopping, StopPhase, DT, ENTRY_SPEED, HOLD_APPLY_JERK,
-                                          HOLD_PENDING_ACCEL, HOLD_SETTLE_ACCEL, MOVING_SPEED,
+                                          HOLD_PENDING_ACCEL, HOLD_SETTLE_ACCEL, HOLD_SETTLE_APPLY_JERK, MOVING_SPEED,
                                           STOP_LOWER_BAND, STOP_RELEASE_JERK)
 from opendbc.car.hyundai.values import CAR, HyundaiFlags
 
@@ -111,22 +111,23 @@ def test_approach_preserves_braking_then_releases_toward_pending_brake():
     assert step(controller, speed=ENTRY_SPEED + .3).stop_req == 1
 
 
-def test_settle_brake_waits_for_stationary_confirmation_and_latches_on_motion():
+def test_settle_brake_requires_confirmed_motion_after_near_zero():
   controller = CanfdStopping()
   pending = step(controller, speed=.3, previous_value=0.)
   assert (pending.raw, pending.value) == pytest.approx((HOLD_PENDING_ACCEL, -HOLD_APPLY_JERK * DT))
   previous = HOLD_PENDING_ACCEL
   for _ in range(20):
-    settling = step(controller, speed=.05, previous_value=previous)
-    previous = settling.value
-    if controller.settle_brake:
-      break
-    assert settling.raw == HOLD_PENDING_ACCEL
+    stationary = step(controller, speed=.02, previous_value=previous)
+    assert stationary.raw == HOLD_PENDING_ACCEL
+    assert not controller.settle_brake
+    previous = stationary.value
+  first_motion = step(controller, speed=.06, previous_value=previous)
+  assert first_motion.raw == HOLD_PENDING_ACCEL
+  assert not controller.settle_brake
+  settling = step(controller, speed=.06, previous_value=first_motion.value)
   assert controller.settle_brake
   assert (settling.raw, settling.value) == pytest.approx(
-    (HOLD_SETTLE_ACCEL, HOLD_PENDING_ACCEL - HOLD_APPLY_JERK * DT))
-  moving = step(controller, speed=.08, previous_value=settling.value)
-  assert moving.raw == HOLD_SETTLE_ACCEL
+    (HOLD_SETTLE_ACCEL, HOLD_PENDING_ACCEL - HOLD_SETTLE_APPLY_JERK * DT))
 
 
 @pytest.mark.parametrize('reason', ['inactive', 'departing'])
@@ -412,7 +413,7 @@ def test_missing_stock_message_resets_camera_experiment():
 
 @pytest.mark.parametrize("camera", [True, False])
 @pytest.mark.parametrize("brake_pressed", [False, True])
-def test_soft_hold_ramps_settle_brake_without_preparation(camera, brake_pressed):
+def test_soft_hold_keeps_light_brake_without_detected_motion(camera, brake_pressed):
   cs = make_cs()
   cs.softHoldActive = 1 if brake_pressed else 2
   cs.out.brakePressed = brake_pressed
@@ -425,13 +426,13 @@ def test_soft_hold_ramps_settle_brake_without_preparation(camera, brake_pressed)
                   previous_value=previous, previous_target=previous_target)
     assert values['ACCMode'] == values['StopReq'] == 1
     assert values['HUD_LEAD_INFO'] == (2 if camera else 0)
-    expected_raw = HOLD_SETTLE_ACCEL if controller.settle_brake else HOLD_PENDING_ACCEL
+    expected_raw = HOLD_PENDING_ACCEL
     expected_value = max(expected_raw, previous - HOLD_APPLY_JERK * DT)
     assert values['aReqRaw'] == pytest.approx(expected_raw)
     assert values['aReqValue'] == pytest.approx(expected_value, abs=.0051)
     previous, previous_target = values['aReqValue'], -2.
   assert controller.phase == StopPhase.held
-  assert previous == pytest.approx(HOLD_SETTLE_ACCEL)
+  assert previous == pytest.approx(HOLD_PENDING_ACCEL)
 
 
 @pytest.mark.parametrize('camera', [True, False])
