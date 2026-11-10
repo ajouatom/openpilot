@@ -15,6 +15,7 @@ from collections import deque
 
 from opendbc.car.car_helpers import interfaces
 from opendbc.car.vehicle_model import VehicleModel
+from opendbc.car.hyundai.stop_object import signal_stop_object_requested
 from opendbc.car.volkswagen.values import MEB_CURVATURE_PID_KP, MEB_CURVATURE_PID_KI, MEB_CURVATURE_PID_KF, MEB_CURVATURE_MAX
 
 from openpilot.selfdrive.car.voice_indicator import set_lane_change_blinkers
@@ -38,6 +39,7 @@ from openpilot.selfdrive.carrot.carrot_controls import CarrotControls
 from openpilot.selfdrive.carrot.carrot_man_input import get_carrot_man
 from openpilot.selfdrive.monitoring.dm_alerts import driver_monitoring_hud_alert
 from openpilot.selfdrive.carrot.bluetooth.physical import HoldReader
+from openpilot.selfdrive.selfdrived.vehicle_faults import inhibit_faulted_controls
 
 State = log.SelfdriveState.OpenpilotState
 LAT_CURVATURE_SATURATION_ACCEL = 0.1  # infiniteCable2 LatControlCurvature: 곡률 기반 steer_limited 임계 (m/s^2 환산)
@@ -160,6 +162,7 @@ class Controls:
     # Wait only for the first readiness confirmation, including AlwaysLateral.
     CC.latActive = CC.latActive and lateral_ready
     CC.longActive = CC.enabled and not any(e.overrideLongitudinal for e in self.sm['onroadEvents']) and self.CP.openpilotLongitudinalControl
+    inhibit_faulted_controls(CC, self.sm['onroadEvents'])
 
     # AlwaysLateral must also stop while manager drains workers for this reboot.
     if self.params.get_bool("ImpactDashcamReboot"):
@@ -376,6 +379,12 @@ class Controls:
     hudControl.leadRelSpeed = leadOne.vRel if leadOne.status else 0
     hudControl.leadRadar = 1 if leadOne.radar else 0
     hudControl.leadDPath = leadOne.dPath
+    hudControl.signalStopObject = signal_stop_object_requested(
+      self.CP, CS, CC, lp, radarState,
+      inputs_ready=self.sm.all_checks(['longitudinalPlan', 'radarState']) and
+                   0 <= (self.sm.frame - self.sm.recv_frame['longitudinalPlan']) * DT_CTRL <= 0.2 and
+                   0 <= (self.sm.frame - self.sm.recv_frame['radarState']) * DT_CTRL <= 0.2,
+    )
 
     meta = self.sm['modelV2'].meta
     if False: # command
