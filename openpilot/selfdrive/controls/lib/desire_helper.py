@@ -388,17 +388,21 @@ class DesireHelper:
     self._update_params_periodic()
     if self.boundary_indicator_supported:
       indicator_now = time.monotonic()
+      # Reset parking maneuver evidence while CANCEL is latched. Keep updating
+      # lamp isolation so an OEM one-touch tail cannot become a steering request.
+      lamp_busy = getattr(carstate, 'cruiseCancelState', False) or self.lane_change_state in (
+        LaneChangeState.laneChangeStarting, LaneChangeState.laneChangeFinishing)
       self.boundary_indicator.update(indicator_now, carstate, modeldata,
         enabled=self.boundary_indicator_enabled, valid=indicator_valid,
         # Navigation preparation is not driver intent. Reserve only an executing
         # lane-change maneuver; model desire probabilities also predict manual moves.
-        busy=self.lane_change_state in (LaneChangeState.laneChangeStarting, LaneChangeState.laneChangeFinishing))
+        busy=lamp_busy)
       if self.model_indicator.active and self.model_indicator.active.source == 'manual' and not self.boundary_indicator_enabled:
         self.model_indicator.active = None
       self.model_indicator.update(indicator_now, carstate, modeldata,
         valid=indicator_valid, lateral_active=lateral_active,
         desire_enabled=self.model_desire_indicator_enabled, path_enabled=self.model_path_indicator_enabled,
-        busy=self.lane_change_state in (LaneChangeState.laneChangeStarting, LaneChangeState.laneChangeFinishing),
+        busy=lamp_busy,
         isolation=self.boundary_indicator, manual_edge=self.boundary_indicator.request_direction, command_curvature=indicator_curvature,
         feedback=read_json(HOLD_PATH, {}) if self.model_indicator.active else None,
         manual_turn_enabled=self.manual_turn_indicator_enabled, yaw_rate=indicator_yaw_rate)
@@ -849,7 +853,7 @@ class DesireHelper:
     if ((self.carrot_lane_change_count > 0 or self._auto_app_direction) and previous == LaneChangeState.off and
         self.lane_change_state == LaneChangeState.preLaneChange):
       self._auto_lane_completed = False
-    common = (self.tesla_auto_signals and carstate.canValid and not carstate.trailerConnected and
+    common = (self.tesla_auto_signals and not getattr(carstate, "cruiseCancelState", False) and carstate.canValid and not carstate.trailerConnected and
                  not getattr(carstate, "vehicleSensorsInvalid", False) and
                  str(getattr(carstate, "gearShifter", "drive")) == "drive" and carstate.turnSignalDriverValid and
                  not driver_st and not self._manual_signal_direction and

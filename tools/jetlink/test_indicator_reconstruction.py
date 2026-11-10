@@ -239,3 +239,38 @@ def test_travel_gap_invalidates_anchor_without_extrapolating_stale_speed():
   assert t.distance==pytest.approx(1.)
   j,s=turn()
   assert s(12.,travel=(1,1.)) is None
+
+@pytest.mark.parametrize('side', [1, 2])
+@pytest.mark.parametrize('case', ['approaching', 'no_motion', 'other_side', 'one_boundary', 'split_vote',
+                                  'low_confidence', 'no_target_line', 'bad_shape', 'invalid', 'cancel'])
+def test_near_forecasts_require_measured_approach_and_fresh_agreement(side, case):
+  cs, md = scene()
+  detector, isolation = ModelIndicator(), BoundaryIndicator()
+  sign = 1 if side == 1 else -1
+  row = [0.] * 8
+  row[side+2] = .8
+  row[0] = .2
+  md.meta.desirePrediction = row * 4
+  if case == 'bad_shape':
+    md.meta.desirePrediction.pop()
+  elif case == 'split_vote':
+    md.meta.desirePrediction[8+side+2], md.meta.desirePrediction[8+5-side] = .1, .7
+  elif case == 'low_confidence':
+    md.meta.desirePrediction[side+2] = .64
+  elif case == 'invalid':
+    md.meta.desirePrediction[8] = math.nan
+  elif case == 'no_target_line':
+    md.laneLineProbs[side] = 0.
+  for i in range(22):
+    now = 10+i*.05
+    md.frameId, cs.laneLineInfoMonoTime = i, int(now*1e9)
+    delta = (0 if case == 'no_motion' else -.025 if case == 'other_side' else .025)*i*sign
+    for j in (1, 2):
+      md.laneLines[j].y[0] = (-1.55 if j == 1 else 1.55) + (0 if case == 'one_boundary' and j != side else delta)
+    detector.update(now, cs, md, valid=True, lateral_active=True, desire_enabled=True, path_enabled=False,
+                    busy=case == 'cancel', isolation=isolation)
+  if case == 'approaching':
+    assert detector.active and (detector.active.direction, detector.active.source) == (side, 'model_desire')
+    assert isolation.filter_lamp(side) == 0
+  else:
+    assert detector.active is None

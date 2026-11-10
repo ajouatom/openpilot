@@ -156,11 +156,13 @@ def main(fd, spas=False, ble=False):
     cs = sm['carState']
     mode = params.get_int('AutoBlinkerControl')
     mode = mode if mode in (0, 1, 2) else 0
+    # Physical lever and explicit Bluetooth taps/holds keep their normal behavior.
+    auto_paused = getattr(cs, 'cruiseCancelState', False)
     auto_fresh = all(k in sm.services and sm.valid[k] and sm.alive[k] and
                      fresh(sm.recv_time[k], now, 1.0 if k == 'carrotMan' and automatic.direction else .35)
                      for k in ('modelV2', 'carrotMan'))
     travelled = travel.update(now, cs.vEgo, ok)
-    auto_valid = auto_fresh and ok and automatic_control_allowed(
+    auto_valid = not auto_paused and auto_fresh and ok and automatic_control_allowed(
       cs, sm['carControl'], sm['selfdriveState'], params.get_bool('AlwaysLateral'), automatic.direction is not None)
     auto_valid = auto_valid and not navigation_cancelled(sm, now)
     auto = None
@@ -205,7 +207,7 @@ def main(fd, spas=False, ble=False):
     own_tap = (observation.owned is not None and tap_echo.matches(
       now, cs, observation.owned[1], observation.owned[0], observation_feedback.value))
     observe_auto = observation.update(now, meta,
-      allowed=(not spas and mode in (1, 2) and observation_enabled and ok and model_fresh and
+      allowed=(not auto_paused and not spas and mode in (1, 2) and observation_enabled and ok and model_fresh and
                observation_allowed(cs, sm['carControl'], sm['modelV2'], observed_source, now, observation.owned is not None, own_tap) and
                (observation.owned is not None or fresh(feedback.get('stamp'), now, .35) and feedback.get('state') == 'ready')),
       busy=bool(commands) or auto is not None or (policy.hold is not None and policy.hold['source'] != 'observation') or
@@ -227,7 +229,7 @@ def main(fd, spas=False, ble=False):
     if voice_auto:
       auto = voice_auto
     local_observation = (auto is not None and auto[0] == 'observation') or (auto is None and (policy.hold is None or policy.hold['source'] == 'observation'))
-    policy_valid = (ok and model_fresh) if local_observation else auto_valid
+    policy_valid = (not auto_paused and ok and model_fresh) if local_observation else auto_valid
     commands, hold = policy.update(now, mode, ok, commands, cs.vEgo, cs.steeringAngleDeg,
                                   str(cs.gearShifter), remote, auto, policy_valid)
     if voice.bind(hold):
@@ -271,7 +273,7 @@ def main(fd, spas=False, ble=False):
     boundary_direction = {'left':1, 'right':2}.get(str(getattr(meta, 'manualLaneIndicator', 'none')), 0)
     boundary_commands = boundary.read(now, boundary_direction,
       getattr(meta, 'manualLaneIndicatorMonoTime', 0)/1e9,
-      allowed=(not hasattr(meta, 'observedIndicator') and not spas and mode in (1, 2) and params.get_bool('ManualLaneChangeIndicator') and
+      allowed=(not auto_paused and not hasattr(meta, 'observedIndicator') and not spas and mode in (1, 2) and params.get_bool('ManualLaneChangeIndicator') and
                ok and model_fresh and not commands and not hold and
                boundary_vehicle_allowed(cs, boundary_direction) and
                adjacent_lane(cs, sm['modelV2'], boundary_direction, now) and

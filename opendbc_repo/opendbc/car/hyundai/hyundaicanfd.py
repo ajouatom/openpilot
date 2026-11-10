@@ -1165,7 +1165,8 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
         values = copy.copy(CS.adrv_0x1ea)
         rx_counter = values.pop("COUNTER", None)
         # blinker hold: the confirmed lane change until the body is across (see _blink_hold_side)
-        hold = _blink_hold_side(md, desire, create_ccnc_messages.__dict__.setdefault("_blink_hold", {}))
+        hold_desire = 0 if getattr(CS.out, "cruiseCancelState", False) else desire
+        hold = _blink_hold_side(md, hold_desire, create_ccnc_messages.__dict__.setdefault("_blink_hold", {}))
         external_hold = getattr(hud_control, "physicalBlinkerHold", 0)
         if external_hold in (1, 2, 3):
           hold = {1:0, 2:3, 3:4}[external_hold]

@@ -321,6 +321,7 @@ class Car:
     CS.vCruise = float(v_cruise_kph)
     CS.vCruiseCluster = float(v_cruise_cluster_kph)
     CS.softHoldActive = self.v_cruise_helper._soft_hold_active
+    CS.cruiseCancelState = self.v_cruise_helper._cruise_cancel_state
     CS.activateCruise = self.v_cruise_helper._activate_cruise
     CS.latEnabled = self.v_cruise_helper._lat_enabled
     CS.useLaneLineSpeed = self.v_cruise_helper.useLaneLineSpeedApply
@@ -436,9 +437,10 @@ class Car:
       now_nanos = self.can_log_mono_time if REPLAY else int(time.monotonic() * 1e9)
       model_v2 = self.sm['modelV2'] if self.sm.valid['modelV2'] and self.sm.alive['modelV2'] else None
       radar_state = self.sm['radarState'] if self.sm.valid['radarState'] and self.sm.alive['radarState'] else None
-      if CC.assistantLaneSignalId and not (CC.latActive and model_v2 is not None and
+      native_cancelled = CS.cruiseCancelState and (CC.leftBlinker or CC.rightBlinker or CC.assistantLaneSignalId)
+      if native_cancelled or (CC.assistantLaneSignalId and not (CC.latActive and model_v2 is not None and
           model_v2.meta.assistantLaneSignalRoute == 'native' and model_v2.meta.assistantLaneSignalId == CC.assistantLaneSignalId and
-          all(self.sm.alive[k] and self.sm.valid[k] and 0 <= time.monotonic()-self.sm.recv_time[k] < .2 for k in ('carControl', 'modelV2'))):
+          all(self.sm.alive[k] and self.sm.valid[k] and 0 <= time.monotonic()-self.sm.recv_time[k] < .2 for k in ('carControl', 'modelV2')))):
         CC = CC.as_builder()
         CC.leftBlinker = CC.rightBlinker = False
         CC.assistantLaneSignalId = ''
@@ -453,7 +455,7 @@ class Car:
           turn_hold_allowed, _ = turn_signal_context(self.sm, CS, time.monotonic(), signal_now, self.params.get_bool("AlwaysLateral"))
         lamp_intent = self.tesla_signals.lane_assistance.update(
           CS, CC, self.sm['modelV2'], self.xiaoge_vision_result, time.monotonic_ns(),
-          allowed=fresh and lateral_ready and not impact_reboot,
+          allowed=fresh and lateral_ready and not impact_reboot and not CS.cruiseCancelState,
           busy=bool(self.sm['modelV2'].meta.autoTurnSignalDirection.raw) or
                (self.tesla_signals.session is not None and not self.tesla_signals.session.lamp_only))
         can_sends.extend(self.tesla_signals.update(CS, CC, self.sm['modelV2'].meta, fresh, signal_now,
