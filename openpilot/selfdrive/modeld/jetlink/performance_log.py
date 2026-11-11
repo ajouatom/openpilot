@@ -29,7 +29,8 @@ class PerformanceLog:
           # Bound older/third-party peers too. No addresses, credentials or argv.
           sample = {key: performance[key] for key in (
             'version', 'sample_mono', 'board', 'power_mode', 'cpu', 'gpu', 'emc', 'cooling',
-            'power_rails', 'memory', 'top_processes', 'unavailable', 'sample_duration_ms', 'status', 'error') if key in performance}
+            'power_rails', 'memory', 'top_processes', 'server_threads', 'schedstats_enabled',
+            'unavailable', 'sample_duration_ms', 'status', 'error') if key in performance}
           if len(json.dumps(sample)) > 16384:
             sample = None
             status = 'oversized'

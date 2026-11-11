@@ -38,6 +38,9 @@ low-priority read-only process. Every second it samples CPU/GPU clocks and
 configured limits, EMC clock, CPU/GPU utilization, thermal cooling states,
 board power rails, available memory and the five busiest processes. CPU usage
 uses one core as 100 percent. The first sample has no utilization delta.
+Server threads include CPU time and runnable scheduler wait over the sampling
+interval, plus the kernel's schedstats enablement flag. These measurements help
+distinguish GPU completion waits from CPU scheduling contention.
 `nvpmodel -q` supplies the selected mode and ID every 30 seconds. Its query age
 is included. Root access allows reading BPMP debugfs through the observer.
 The observer writes a bounded snapshot under `/run`; the inference process
