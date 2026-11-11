@@ -1,5 +1,21 @@
 # Repository memory
 
+- 2026-11-11: Ioniq5 b4dcfe6ce00fe149 route8/7..10 on ed157919 confirms
+  ShareData0/xiaoge stopped, little-core load64..76%, but model56.29ms and
+  Jetson execution/completion39.13ms persist.947 frame gaps match invalid
+  odometry. Add root read-only low-priority observer under /run, sampled1Hz,
+  nvpmodel30s, CPU/GPU/EMC clocks/limits/load, rails, cooling, memory, topCPU
+  processes and server-thread scheduler wait. Cache with age/unavailable status;
+  comma jetsonPerformance events bind frame/USBseq/runtime/model and timings.
+  Use elapsed-time telemetry requests so dropped frame IDs cannot starve logs.
+  N16 signed host f07617011dc02856d1e0ae5fa649908f1d11387b published,67188353B,
+  SHA256 13aba9e1ad7068f537529987fdca71778918d74aaf64e73860fb0c120a990909.
+  HTTPS/signature verified. Jetson CI42963567764 passes2481/56skip plus other
+  groups; Windows installer/eGPU/docs pass. Normal GitPull and full comma/Jetson
+  reboot. Other model host pins unchanged. No vehicle install or real Jetson
+  sensor/overhead test;39ms root cause awaits new logs. Private evidence in
+  .analysis/scratch/2026-11-11-jetson-performance and 2026-11-11-ioniq5-route8.
+
 - 2026-11-11: Keep fixed SCC11 input case attached to Casper ac960474. New
   RayEV53e037b67afdc67d/159e3a01 is CommaPedal. Supplied00000002/0 has no
   longActive and all1385 commands disabled. Additional NAS00000003/0 has
