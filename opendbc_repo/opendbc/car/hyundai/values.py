@@ -1101,6 +1101,13 @@ def get_pedal_interceptor_params(CP) -> PedalInterceptorParams | None:
   required_flags = HyundaiFlags.CC_ONLY_CAR | HyundaiFlags.PEDAL_INTERCEPTOR
   return PEDAL_INTERCEPTOR_PARAMS.get(CP.carFingerprint) if CP.flags & required_flags == required_flags else None
 
+
+def is_ray_pedal_control(CP) -> bool:
+  return (CP.brand == "hyundai" and CP.openpilotLongitudinalControl
+          and getattr(CP, "carFingerprint", "") == CAR.KIA_RAY_EV
+          and get_pedal_interceptor_params(CP) is not None)
+
+
 if __name__ == "__main__":
   cars = []
   for platform in CAR:

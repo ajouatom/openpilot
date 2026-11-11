@@ -182,3 +182,45 @@ are archived under `.analysis/archive/2026-11-11/ray-pedal/`. Source hashes are
 
 - Supplied route `695770387a03cc301b4006056700dd051bbf86d224657996bd367f94cbf88418`
 - Additional route `871f12776e4d0ed6be629ee05c17fe9862ffdcae66a047db5c992dabbcb228bc`
+
+### Follow-up implementation and initial gain estimate
+
+The owner requested restoring Long Kp/Ki/Kf for Ray Comma Pedal while retaining
+the speed PID. The shared capability check requires the Ray EV fingerprint,
+CC_ONLY_CAR and PEDAL_INTERCEPTOR flags, and openpilot longitudinal control.
+The settings catalog and snapshot expose these three controls for that capability.
+LongControl reads their saved values on construction and through its existing
+approximately one-second refresh. The stored-to-coefficient multipliers are
+0.01, 0.001 and 0.01 respectively. The Ki menu title now reflects 0.001.
+
+The existing defaults are 100/0/100. Previously saved values become effective
+when the updated controller starts. The owner-specific initial candidate is
+100/50/100, corresponding to Kp=1, Ki=0.05 and Kf=1. Ki=100 is a second comparison
+candidate if persistent error remains. This selects a modest integral correction
+for the observed sustained error. The sample does not establish optimal gains.
+
+The additional route's logged P and F terms reconstruct the exact original
+speed error and acceleration feedforward because its Kp and Kf were both one.
+Replaying those inputs and recorded activation through production LongControl
+reproduces all 1,713 active baseline outputs within 2.99e-8 m/s². Holding the
+recorded trajectory fixed gives the following comparison for 46–55 seconds.
+
+| Stored Kp/Ki/Kf | Mean acceleration request, m/s² | Mean normalized pedal target |
+| --- | --- | --- |
+| 100/0/100 | −0.1793 | 0.4641 |
+| 100/50/100 | −0.2013 | 0.4520 |
+| 100/100/100 | −0.2233 | 0.4400 |
+| 150/0/100 | −0.2868 | 0.4055 |
+
+Pedal targets use the production map before output slew limiting. At 55 seconds,
+the I term is approximately −0.0722 for Ki=50 and −0.1444 for Ki=100.
+Changing Kp also increases immediate reactions to speed error, so the initial
+candidate keeps Kp=100 and adds Ki=50. Vehicle response, future speed error,
+stability and comfort require closed-loop validation. The replay holds measured
+motion fixed and establishes only the controller-output difference.
+
+Regression coverage exercises first-frame saved gains, the actual speed-error
+update, live refresh, integral reset on disengagement, other vehicle configurations,
+real serialized CarParams, and catalog/snapshot visibility and values. The related
+Hyundai/Toyota, settings and pedal suites pass 312 tests locally. Private comparison
+code and results are archived under `.analysis/archive/2026-11-11/ray-tuning/`.
