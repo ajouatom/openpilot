@@ -76,6 +76,22 @@ def test_sample_clocks_units_cpu_deltas_and_pid_reuse(sample_env):
   assert len(calls) == 2
 
 
+def test_server_scheduler_wait_has_real_interval_and_role(sample_env):
+  root, clock, _ = sample_env
+  write(root, '/proc/123/cmdline', '/usr/bin/python3\x00/opt/carrot-jetlink/current/tools/jetlink/server.py\x00')
+  fields = ['0'] * 37
+  fields[19], fields[36] = '10', '4'
+  write(root, '/proc/123/task/124/stat', '124 (python3) ' + ' '.join(fields))
+  write(root, '/proc/123/task/124/schedstat', '1000000000 1000000 20')
+  sampler = performance.Sampler(root)
+  assert sampler.sample()['server_threads'] == []
+  clock[0] += 1
+  write(root, '/proc/123/task/124/schedstat', '1250000000 3000000 30')
+  value = sampler.sample()
+  assert value['server_threads'] == [{'tid': 124, 'cpu': 4, 'cpu_pct': 25, 'runqueue_wait_ms': 2, 'interval_s': 1}]
+  assert value['top_processes'][0]['role'] == 'server'
+
+
 def test_unavailable_and_stale_values_are_explicit(sample_env):
   root, clock, _ = sample_env
   (root / 'sys/kernel/debug/bpmp/debug/clk/emc/rate').unlink()

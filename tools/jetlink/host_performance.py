@@ -14,6 +14,8 @@ class Sampler:
     self.root = root
     self.previous_cpu = {}
     self.previous_processes = {}
+    self.previous_threads = {}
+    self.server_threads = []
     self.previous_time = None
     self.mode = {}
     self.mode_time = float('-inf')
@@ -78,7 +80,8 @@ class Sampler:
     return result
 
   def processes(self, now):
-    current, ranked = {}, []
+    current, ranked, threads = {}, [], {}
+    self.server_threads = []
     for path in (self.root / 'proc').glob('[0-9]*'):
       try:
         raw = (path / 'stat').read_text()
@@ -87,13 +90,41 @@ class Sampler:
         identity = (int(path.name), int(fields[19]))  # PID and starttime avoid PID reuse.
         ticks = int(fields[11]) + int(fields[12])
         current[identity] = ticks
+        role = None
+        try:
+          command = (path / 'cmdline').read_bytes()[:4096].split(b'\0')
+          for name in ('server.py', 'hud.py', 'hud_navi_receiver.py', 'host_performance.py'):
+            if any(arg.endswith(('/tools/jetlink/' + name).encode()) for arg in command):
+              role = name.removesuffix('.py')
+              break
+        except OSError:
+          pass
+        if role == 'server':
+          for task in list((path / 'task').glob('[0-9]*'))[:128]:
+            try:
+              stat = (task / 'stat').read_text().rsplit(')', 1)[1].split()
+              key = (identity, int(task.name), int(stat[19]))
+              cpu, wait, _ = map(int, (task / 'schedstat').read_text().split())
+              threads[key] = cpu, wait, now
+              previous_thread = self.previous_threads.get(key)
+              if previous_thread and now > previous_thread[2] and cpu >= previous_thread[0] and wait >= previous_thread[1]:
+                self.server_threads.append({'tid': key[1], 'cpu': int(stat[36]),
+                  'cpu_pct': round((cpu - previous_thread[0]) / 1e7 / (now - previous_thread[2]), 2),
+                  'runqueue_wait_ms': round((wait - previous_thread[1]) / 1e6, 3),
+                  'interval_s': round(now - previous_thread[2], 3)})
+            except (OSError, ValueError, IndexError):
+              continue
         previous = self.previous_processes.get(identity)
         if previous is not None and self.previous_time is not None and now > self.previous_time and ticks >= previous:
-          ranked.append({'pid': identity[0], 'name': raw[raw.index('(') + 1:end][:32],
+          ranked.append({'pid': identity[0], 'name': raw[raw.index('(') + 1:end][:32], 'role': role,
                          'cpu_pct': round(100 * (ticks - previous) / self.hz / (now - self.previous_time), 1)})
       except (OSError, ValueError, IndexError):
         continue  # Processes can exit during a sample.
     self.previous_processes, self.previous_time = current, now
+    self.previous_threads = threads
+    self.server_threads = sorted(self.server_threads,
+                                key=lambda item: item['cpu_pct'] + item['runqueue_wait_ms'] / item['interval_s'] / 10,
+                                reverse=True)[:8]
     return sorted(ranked, key=lambda item: item['cpu_pct'], reverse=True)[:5]
 
   def sample(self):
@@ -103,6 +134,8 @@ class Sampler:
     result = {'version': 1, 'sample_mono': started,
               'board': self.read('/proc/device-tree/model'), 'power_mode': self.power_mode(started),
               'cpu': self.cpu(), 'top_processes': self.processes(started)}
+    result['server_threads'] = self.server_threads
+    result['schedstats_enabled'] = self.read('/proc/sys/kernel/sched_schedstats')
     gpu_paths = [path for path in sorted((self.root / 'sys/class/devfreq').glob('*'))
                  if any(name in path.name for name in ('gpu', 'ga10b', 'gv11b'))]
     result['gpu'] = {}
