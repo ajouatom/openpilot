@@ -309,3 +309,24 @@ evidence, comparison scripts, source snapshots and replay results are archived a
 - Segment 0 `588dbc23e7c7450da4f05fe15215582557e0b0ade41ea67249a517eb3bd0a98f`
 - Segment 1 `fc0384394ac52e106baa74225cea4792009d8685ed70ddf91892e4b82941060b`
 - Failure `34f00df4794598576bd59e5135c62501941109f4ae20da95e19521197175e781`
+
+### Owner's stock-control and intermittent-onset follow-up
+
+The owner additionally reports normal operation with stock SCC, and intermittent
+failures with recent software both immediately after starting and later during
+driving. These are owner-reported observations. The stock test's comma/harness
+connection state and the recent failing executable revision are awaiting clarification.
+Together with normal older-version operation, this increases the priority of
+software-dependent ECU interaction and startup/state transitions in the investigation.
+The received-byte evidence identifies where the abnormal content is observed.
+The cause can still involve software that influences the transmitting ECU.
+
+An additional offline check executed the actual `CarInterface.init` methods from
+2ea4415ac, b1c827468f and ecdd043934 with recorded Casper CP flags 67976,
+extFlags 20 and EnableRadarTracks=0. All three make only the same
+LongitudinalPersonalityMax=4 parameter write. None attempts ECU-disable, radar
+track enablement or blinker-ECU diagnostics in that configuration. Recorded
+CAMERA_SCC also excludes the periodic tester-present branch in all three.
+Params writes and CAN functions were captured by offline spies, with no device IO.
+This narrows those specific diagnostic paths. The earlier received-data replay
+and this initialization check leave full runtime/ECU interaction unresolved.
