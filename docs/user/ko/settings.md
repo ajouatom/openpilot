@@ -117,25 +117,26 @@ Carrot Web 설정 화면에서는 다음 기능을 사용할 수 있습니다.
 
 ## 전체 설정 지도
 
-현재 `carrot-wip`의 `carrot_settings.json`에는 **211개 파라미터**가 있습니다. 운전자 감시 예외 설정과 `NNFF` 2개는 검색으로만 표시되며, 나머지는 아래 메뉴에 표시됩니다.
+현재 `carrot_settings.json`에는 **213개 파라미터**가 있습니다. 운전자 감시 예외 설정과 `NNFF` 2개는 검색으로만 표시되며, 나머지는 아래 메뉴에 표시됩니다.
 
 | 대분류 | 항목 수 | 중분류 |
 |---|---:|---|
-| 주행 제어 | 128 | 시작·오토, 버튼·프리셋, 차량 조향, 속도·감속, 크루즈·차간 |
+| 주행 제어 | 136 | 시작·오토, Tesla, 버튼·프리셋, 차량 조향, 속도·감속, 크루즈·차간 |
 | 차량·하드웨어 | 18 | 현대·기아, CANFD·HDA, 레이더, 운전자 모니터링, 차량 보조, 기기 하드웨어 |
 | 화면 표시 | 34 | 정보 표시, 경로 표시, 밝기·주행화면, 외부 HUD |
 | 시스템 | 12 | 녹화·전원, 네트워크·지도, 사운드, 소프트웨어 |
 
 ## 주행 제어
 
-주행 제어는 주행 동작에 영향을 줄 수 있는 128개 항목입니다. 한 번에 여러 값을 변경하지 마세요.
+주행 제어는 주행 동작에 영향을 줄 수 있는 136개 항목입니다. 한 번에 여러 값을 변경하지 마세요.
 
 <a id="start-auto"></a>
-### 시작·오토 — 14개
+### 시작·오토 — 9개; Tesla — 6개
 
 | 세부 구역 | 파라미터 | 용도 |
 |---|---|---|
-| 시작 동작 | `AlwaysLateral`, `TeslaAutoTurnSignals`, `TeslaCanTrafficStop`, `AutoEngage`, `DisableMinSteerSpeed` | 상시 조향, Tesla 방향지시등·CAN 빨간불 정지, 주행 시작 시 자동 활성화, 저속 조향 제한 |
+| 시작 동작 | `AlwaysLateral`, `AutoEngage`, `DisableMinSteerSpeed` | 상시 조향, 주행 시작 시 자동 활성화, 저속 조향 제한 |
+| 주행 제어 > Tesla 전용 > Tesla 기능 | `TeslaAutoTurnSignals`, `TeslaCanTrafficStop`, `TeslaManualLaneSignals`, `TeslaModelDesireSignals`, `TeslaModelPathSignals`, `TeslaAutoSpeedLimit` | 여섯 독립 스위치, 기본 꺼짐, 변경 후 전체 재시작 |
 | 오토크루즈 | `AutoCruiseControl`, `AutoGasTokSpeed`, `AutoGasCancelSpeed`, `AutoGasSyncSpeed`, `CruiseOnDist` | 크루즈 자동 활성화와 가속 페달 입력 시 동작 |
 
 - `AlwaysLateral`: 크루즈가 켜져 있지 않아도 조향 제어를 허용합니다. Tesla 화면의 세 손가락 접촉으로 실험 모드 대신 이 설정을 즉시 전환합니다. 끄더라도 활성 주행 제어의 조향까지 해제하지는 않습니다. 지원 Tesla 차량에서는 전진 기어의 실제 정차 상태에서도 조향할 수 있으며, 최소 조향 속도 이하로 이동할 때의 제한은 유지됩니다. [Tesla 제어 진입](tesla.md#engagement-and-standstill)을 참고하세요.
@@ -146,6 +147,7 @@ Carrot Web 설정 화면에서는 다음 기능을 사용할 수 있습니다.
 - `TeslaCanTrafficStop`: 독립적인 기본 꺼짐 Tesla CAN 빨간불 정지이며 재시작이 필요합니다. 순정 TACC가 아닌 실제 openpilot 종제어와 지원 8바이트 비전 APP 프로필이 필요합니다. 126m 미만에서 확인된 빨간불 제약을 추가하고 초록불은 이 제약만 해제합니다. 신호 고장은 인계·soft-disable을 요청하고 다른 차종은 무시합니다. 프로토콜·페달 개입·폐쇄 시험장 한계는 [Tesla CAN 정지](tesla.md#can-빨간불-정지)를 참고하세요.
 - `TeslaManualLaneSignals`, `TeslaModelDesireSignals`, `TeslaModelPathSignals`: 독립적인 기본 꺼짐 Tesla 램프 관찰 옵션이며 재부팅이 필요합니다. 모두 `TeslaAutoTurnSignals`·`ShareData`와 30km/h 이상에서 신선한 ONNX 연속 점선·인접 차로 형상이 필요합니다. 수동 토크·접근은 크루즈 없이 가능하고 모델 의도·경로 예측은 횡제어 활성이 필요하며 오점등할 수 있습니다. 점선은 색상·진행 방향 증거가 아닙니다. 조향 권한·내비 회전 사전점등·유턴 기능은 추가하지 않습니다. 완료·시각·실차 검증 한계는 [Tesla 안내](tesla.md#선택형-차로변경-램프-관찰)를 참고하세요.
 - `AutoCruiseControl`: 현대·기아 차량용 오토크루즈와 소프트홀드 관련 설정입니다.
+- `TeslaAutoSpeedLimit`: 기본 꺼짐, 전체 재시작 필요. 켜면 추가 차량 CAN·alpha 종제어 조건에서 차량 DAS 제한속도에 맞춰 자동 휠 조절을 허용합니다. 끄면 자동 송신만 중지하며 수동 휠은 유지합니다. 기존 자동 활성화도 이제 직접 켜야 하며 내비·Carrot 속도 제어 중 일시 중지는 그대로입니다. [자동 설정속도 안내](tesla.md#automatic-cruise-speed)를 참고하세요.
 - `DisableMinSteerSpeed`: SMDPS 장착 차량의 저속 조향 제한과 관련된 차량별 설정입니다.
 
 ### 버튼·프리셋 — 15개
@@ -268,7 +270,7 @@ VW MEB(ID.4 포함)에도 수동 조향비와 학습 비율이 적용됩니다. 
 
 현대·기아 CANFD 오픈파일럿 종방향 제어에서는 StopReq를 켜는 첫 프레임부터 aReqRaw·aReqValue를 0으로 보내므로, 이 설정은 StopReq 유지 중 송신 가속도를 바꾸지 않습니다. 자동 해제·재시도는 제거되었습니다.
 
-지원되는 Tesla 차량에서 추가 차량 버스가 감지되면 장치의 **alpha longitudinal**(`AlphaLongitudinalEnabled`) 토글을 켤 때 차량 수신 제한속도에 맞춘 [크루즈 설정속도 자동 조절](tesla.md#automatic-cruise-speed)도 활성화됩니다. 내비게이션·Carrot 속도 제어가 활성 상태이면 DAS 기반 조절을 중지하고, 해당 제어가 끝난 뒤 제한속도가 다시 안정되면 재개합니다. 수동 조작에 따른 중지는 그대로 유지됩니다. 오른쪽 속도 휠을 직접 돌리면 일시 중지하며, 1초 안에 반대 방향으로 돌리거나 제어를 해제했다가 다시 켜면 재개합니다. 별도의 Carrot Web 설정은 없습니다.
+지원되는 Tesla 차량에서 추가 차량 버스와 **alpha longitudinal**(`AlphaLongitudinalEnabled`)뿐 아니라 Carrot Web의 `TeslaAutoSpeedLimit`도 켜야 [크루즈 설정속도 자동 조절](tesla.md#automatic-cruise-speed)이 활성화됩니다. 기본 꺼짐이며 변경 후 전체 재시작이 필요합니다. 내비게이션·Carrot 속도 제어가 활성 상태이면 DAS 기반 조절을 중지하고, 해당 제어가 끝난 뒤 제한속도가 다시 안정되면 재개합니다. 수동 조작에 따른 중지는 그대로 유지됩니다. 오른쪽 속도 휠을 직접 돌리면 일시 중지하며, 1초 안에 반대 방향으로 돌리거나 제어를 해제했다가 다시 켜면 재개합니다. 끄면 자동 휠 송신만 중지하며 수동 휠은 유지됩니다.
 
 <a id="vehicle-hardware"></a>
 ## 차량·하드웨어

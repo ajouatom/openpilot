@@ -20,11 +20,6 @@
               "zh": "起步动作",
               "params": [
                 "AlwaysLateral",
-                "TeslaAutoTurnSignals",
-                "TeslaCanTrafficStop",
-                "TeslaManualLaneSignals",
-                "TeslaModelDesireSignals",
-                "TeslaModelPathSignals",
                 "AutoEngage",
                 "DisableMinSteerSpeed"
               ]
@@ -41,6 +36,28 @@
                 "AutoGasCancelSpeed",
                 "AutoGasSyncSpeed",
                 "CruiseOnDist"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "TESLA",
+          "ko": "Tesla 전용",
+          "en": "Tesla",
+          "zh": "特斯拉专用",
+          "groups": [
+            {
+              "id": "TESLA_FEATURES",
+              "ko": "Tesla 기능",
+              "en": "Tesla Features",
+              "zh": "特斯拉功能",
+              "params": [
+                "TeslaAutoTurnSignals",
+                "TeslaCanTrafficStop",
+                "TeslaManualLaneSignals",
+                "TeslaModelDesireSignals",
+                "TeslaModelPathSignals",
+                "TeslaAutoSpeedLimit"
               ]
             }
           ]
@@ -1970,6 +1987,24 @@
       "max": 1,
       "default": 0,
       "unit": 1
+    },
+    {
+      "group": "시작",
+      "name": "TeslaAutoSpeedLimit",
+      "title": "Tesla 자동 속도 휠",
+      "descr": "기본 꺼짐, 변경 후 전체 재시작. 추가 차량 CAN과 alpha 종제어가 있는 지원 Tesla에서 크루즈·carrotpilot 작동 중 차량 DAS 제한속도에 맞춰 설정속도를 1km/h 또는 1mph씩 조절합니다. 끄면 자동 휠 송신과 해당 Panda 권한을 설정하지 않으며 수동 휠은 유지됩니다. 기존 자동 활성화도 이제 이 설정을 켜야 합니다. 내비·Carrot 속도 제어 중에는 일시 중지합니다. 수동 휠은 자동 조절을 중지하고 1초 안에 반대 방향까지 돌리거나 해제·재진입하면 재개합니다. 브레이크·오래된 입력·응답 없음 보호는 유지하며 실차·도로 검증을 뜻하지 않습니다.",
+      "egroup": "START",
+      "etitle": "Tesla Automatic Speed Wheel",
+      "edescr": "Default OFF; full restart required. On supported Tesla with additional vehicle CAN and alpha longitudinal control, follows the vehicle DAS speed limit while cruise and carrotpilot are engaged, adjusting set speed by 1 km/h or 1 mph per step. OFF omits automatic wheel output and its Panda permission; manual scrolling remains. Previously automatic activation now also requires this switch. Active navigation/Carrot speed control pauses it. Manual scrolling pauses it; scroll in opposite directions within one second or disengage/re-engage to resume. Existing braking, stale-input and missing-feedback protections remain. Not vehicle or road acceptance.",
+      "cgroup": "启动设置",
+      "ctitle": "特斯拉自动滚轮调速",
+      "cdescr": "默认关闭，修改后需完整重启。支持的 Tesla 需额外车辆 CAN 及 alpha 纵向控制；巡航与 carrotpilot 已激活时，按原车 DAS 限速以每次1km/h或1mph调整巡航设定速度。关闭不配置自动滚轮发送及对应 Panda 权限，手动滚轮保留。此前自动启用的车辆现在也必须打开此开关。导航／Carrot 速度控制激活时暂停。手动滚轮暂停自动调速；1秒内先向一侧再向反侧滚动，或退出后重新激活可恢复。保留刹车、输入过期及无反馈保护；不代表实车或道路验收。",
+      "min": 0,
+      "max": 1,
+      "default": 0,
+      "unit": 1,
+      "control": "toggle",
+      "risk": "high"
     },
     {
       "group": "시작",

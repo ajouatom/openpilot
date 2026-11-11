@@ -400,6 +400,7 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"MaxTimeOffroadMin", {PERSISTENT, INT, "60"}},
     {"TeslaWakeOnCAN", {PERSISTENT, BOOL, "1"}},
     {"TeslaAutoTurnSignals", {PERSISTENT, BOOL, "0"}},
+    {"TeslaAutoSpeedLimit", {PERSISTENT, BOOL, "0"}},
     {"TeslaCanTrafficStop", {PERSISTENT, BOOL, "0"}},
     {"TeslaManualLaneSignals", {PERSISTENT, BOOL, "0"}},
     {"TeslaModelDesireSignals", {PERSISTENT, BOOL, "0"}},
