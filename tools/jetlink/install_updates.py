@@ -37,6 +37,7 @@ ExecStart=/opt/carrot-jetlink/venv/bin/python /opt/carrot-jetlink/current/tools/
 PERFORMANCE_UNIT = """[Unit]
 Description=Read-only Jetson performance samples for route diagnostics
 PartOf=carrot-jetlink.service
+ConditionPathExists=/opt/carrot-jetlink/current/tools/jetlink/host_performance.py
 [Service]
 ExecStart=/usr/bin/python3 /opt/carrot-jetlink/current/tools/jetlink/host_performance.py
 Restart=on-failure
