@@ -1,5 +1,17 @@
 # Repository memory
 
+- 2026-11-11: Keep fixed SCC11 input case attached to Casper ac960474. New
+  RayEV53e037b67afdc67d/159e3a01 is CommaPedal. Supplied00000002/0 has no
+  longActive and all1385 commands disabled. Additional NAS00000003/0 has
+  active37.944..38.753 and43.163..end. At46..55s all900 requests negative
+  (mean-.179m/s²), actualmean+.146, speed70.88->75.61km/h, normalizedpedal
+  .418..505 and nativegas34..41%, no driver input/lead/currentCANerror/pedal
+  fault/TXblock. PID P/F active,I0. Fixed map and PR570 x2 raw scaling need
+  vehicle calibration/feedback review. Both handovers restartgas0, ramp.02/40ms,
+  raw8pairs reproduce, with about1m/s² decel. Additional route incident match
+  unconfirmed. Both rlogsdf90dirty versus suppliedheaderecdd. No production
+  change or validated fix. See docs/comma_pedal.md and private Ray archive.
+
 - 2026-11-11: Casper owner supplies normal 1f02/0,1 on older2ea4415ac,
   recorded Nov11 on same ac960474 as Nov9 failure1ef4/12 b1c827468f.
   Fixed10.4m/+0.2 absent in6053 plausible good objects, present2163/2217 bad.
