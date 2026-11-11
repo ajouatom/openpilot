@@ -83,3 +83,144 @@ pass 221 cases. Native Panda checks run through Signal CI, including expanded
 limits, over-limit rejection, track correlation, OEM cruise priority, sensor faults,
 brake and driver override, and profile switching. Vehicle installation and
 physical pedal operation are outside this code integration.
+
+## Ray EV recorded-response investigation, 2026-11-11
+
+The owner asks about poor acceleration/deceleration on device 53e037b67afdc67d,
+serial 159e3a01. This case uses the Ray Comma Pedal path. The previously discussed
+fixed SCC11 object input belongs to Casper ac960474 and remains a separate case.
+
+The supplied route `00000002--fbec2ccc7e--0` has 5,927 carControl publications,
+all with longActive=false and actuator accel=0. All 1,385 pedal commands have
+ENABLE=0. The recording covers manual driving after startup, so it cannot establish
+active pedal-controller response. Full cereal decoding and raw command bytes agree.
+
+The same device also has `00000003--90b0726b2d--0` on the NAS. It was inspected
+as an additional available sample. This is the source of the active-control
+measurements below, and the owner's intended incident correspondence remains
+unconfirmed. Both logs record `df90d30833d5f0a180aaec61db94a3b4dd0047e7`,
+dirty=true. The supplied upload header reports ecdd0439. The recorded executable
+identity takes precedence for this analysis, while dirty state prevents exact
+installed-source reconstruction. The first recorded clock times are approximately
+11:36:48 and 12:04:48 KST on November 11, respectively.
+
+### Active-control evidence
+
+The additional route has two longActive intervals, approximately 37.944–38.753 s
+and 43.163 s through the end at 59.463 s. Driver accelerator override occupies
+the interval between them. Times are relative to the first carState.
+
+| Measurement during 46–55 s | Recorded value |
+| --- | --- |
+| Requested acceleration | −0.245 to −0.113 m/s², mean −0.179 |
+| Negative requests | All 900 carControl samples |
+| Actual acceleration | Mean +0.146 m/s² |
+| Vehicle speed | 70.88 → 75.61 km/h |
+| Internal normalized pedal command | 0.418–0.505, mean 0.464 |
+| Vehicle-reported accelerator input | 34.3–41.3%, mean 38.2% |
+| Driver gas/brake pressed | Zero samples for both |
+| Selected front lead | Zero present samples |
+
+The requested deceleration and measured response disagree over nine seconds,
+well beyond the short transition at engagement. The pedal command and the
+vehicle-reported accelerator input use different scales. The latter is the
+vehicle's reported input after the interceptor, while driver override is derived
+from the separate pedal sensor stream.
+
+All 1,387 sent commands and 3,025 received sensor packets in the additional route
+pass the protocol CRC check. Command and sensor counters are continuous.
+During the 37.94–59.46 s inspection window, pedal STATE remains zero, Panda faults
+are empty, safetyTxBlocked remains zero and all three CAN total-error counters
+have zero growth. Old cumulative fault counters precede this window. These
+measurements prioritize the command-to-response control path in this sample.
+
+### Two concrete control concerns
+
+The actual Ray mapping gives normalized target 0.455 for a request of −0.2 m/s²
+at 20 m/s, with a sufficiently higher speed target. It computes speed offset
+0.565 plus −0.2 × 0.55. The current command DBC encodes this as raw tracks
+609/1196. The pre-expansion DBC would encode the same normalized target as
+437/846. PR 570 expanded the raw command increment while retaining the target
+offset/gain table. The recorded positive response to negative requests strongly
+suggests that the resulting map does not deliver the requested acceleration in
+these conditions. Road grade, regenerative-braking mode, interceptor firmware
+and voltage calibration have not been isolated, so reversing the expansion is
+not established as a fix by this observation alone.
+
+The upstream Hyundai controller still uses speed-error P=1, I=0 and acceleration
+feedforward F=1. Logged P/F terms are active and I is zero. The pedal adapter
+uses the fixed speed/acceleration map without a measured-acceleration correction
+or a learned steady-state offset. Persistent map error therefore has limited
+compensation through the existing speed P term. The code has an operating
+feedback path, and the recorded failure should not be described as missing PID
+execution or F=0.
+
+At both transfers from driver pedal use to automatic control, `gas_last` starts
+from zero. The first commands are approximately 0.02, 0.04, 0.06, 0.08 and increase
+by 0.02 every 40 ms. Executing the actual PedalInterceptor update method reproduces
+the first eight raw command-track pairs at both transitions. Vehicle speed falls
+59.74 → 57.71 km/h in the first transition, with minimum acceleration −1.095 m/s².
+The second falls 69.55 → 67.90 km/h, with minimum −0.916 m/s², before acceleration
+recovers. This supports inadequate pedal-output continuity at transfer as another
+contributor to the reported uncomfortable response.
+
+The speed taper also receives `hudControl.setSpeed`. In cruise xState=3 this is
+derived from the planner's terminal speed and cluster ratio, so its changes must
+not be interpreted as driver changes to the selected cruise setting. The observed
+handover drop and sustained request/response mismatch are the primary findings.
+
+### Scope and evidence
+
+The priority for a corrective design is a Ray-specific calibrated pedal map,
+appropriate feedback for sustained acceleration error, and a verified transfer
+from driver input to automatic output. No numerical replacement calibration or
+physical cure has been established by this two-minute sample. Production behavior
+was not changed during this investigation.
+
+Private full logs, decoded services/CAN, CRC checks, transition replay and chart
+are archived under `.analysis/archive/2026-11-11/ray-pedal/`. Source hashes are
+
+- Supplied route `695770387a03cc301b4006056700dd051bbf86d224657996bd367f94cbf88418`
+- Additional route `871f12776e4d0ed6be629ee05c17fe9862ffdcae66a047db5c992dabbcb228bc`
+
+### Follow-up implementation and initial gain estimate
+
+The owner requested restoring Long Kp/Ki/Kf for Ray Comma Pedal while retaining
+the speed PID. The shared capability check requires the Ray EV fingerprint,
+CC_ONLY_CAR and PEDAL_INTERCEPTOR flags, and openpilot longitudinal control.
+The settings catalog and snapshot expose these three controls for that capability.
+LongControl reads their saved values on construction and through its existing
+approximately one-second refresh. The stored-to-coefficient multipliers are
+0.01, 0.001 and 0.01 respectively. The Ki menu title now reflects 0.001.
+
+The existing defaults are 100/0/100. Previously saved values become effective
+when the updated controller starts. The owner-specific initial candidate is
+100/50/100, corresponding to Kp=1, Ki=0.05 and Kf=1. Ki=100 is a second comparison
+candidate if persistent error remains. This selects a modest integral correction
+for the observed sustained error. The sample does not establish optimal gains.
+
+The additional route's logged P and F terms reconstruct the exact original
+speed error and acceleration feedforward because its Kp and Kf were both one.
+Replaying those inputs and recorded activation through production LongControl
+reproduces all 1,713 active baseline outputs within 2.99e-8 m/s². Holding the
+recorded trajectory fixed gives the following comparison for 46–55 seconds.
+
+| Stored Kp/Ki/Kf | Mean acceleration request, m/s² | Mean normalized pedal target |
+| --- | --- | --- |
+| 100/0/100 | −0.1793 | 0.4641 |
+| 100/50/100 | −0.2013 | 0.4520 |
+| 100/100/100 | −0.2233 | 0.4400 |
+| 150/0/100 | −0.2868 | 0.4055 |
+
+Pedal targets use the production map before output slew limiting. At 55 seconds,
+the I term is approximately −0.0722 for Ki=50 and −0.1444 for Ki=100.
+Changing Kp also increases immediate reactions to speed error, so the initial
+candidate keeps Kp=100 and adds Ki=50. Vehicle response, future speed error,
+stability and comfort require closed-loop validation. The replay holds measured
+motion fixed and establishes only the controller-output difference.
+
+Regression coverage exercises first-frame saved gains, the actual speed-error
+update, live refresh, integral reset on disengagement, other vehicle configurations,
+real serialized CarParams, and catalog/snapshot visibility and values. The related
+Hyundai/Toyota, settings and pedal suites pass 312 tests locally. Private comparison
+code and results are archived under `.analysis/archive/2026-11-11/ray-tuning/`.

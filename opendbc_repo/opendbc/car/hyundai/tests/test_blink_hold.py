@@ -97,3 +97,12 @@ def test_external_hold_changes_only_existing_1ea_fields():
     assert (actual['LEFT_BLINK_HOLD'],actual['RIGHT_BLINK_HOLD'])==(left,right)
     assert {k:v for k,v in actual.items() if k not in ('LEFT_BLINK_HOLD','RIGHT_BLINK_HOLD','CHECKSUM')} == {
       k:v for k,v in baseline.items() if k not in ('LEFT_BLINK_HOLD','RIGHT_BLINK_HOLD','CHECKSUM')}
+  from openpilot.cereal import log
+  md = log.ModelDataV2.new_message()
+  md.meta.desire = 'laneChangeLeft'
+  state.modelV2 = md
+  assert message(0)['LEFT_BLINK_HOLD'] == 1
+  state.out.cruiseCancelState = True
+  assert message(0)['LEFT_BLINK_HOLD'] == 0
+  # An explicitly requested Bluetooth hold can still use the external lease.
+  assert message(3)['RIGHT_BLINK_HOLD'] == 1

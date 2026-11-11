@@ -6,6 +6,7 @@ from openpilot.selfdrive.controls.lib.drive_helpers import CONTROL_N
 from openpilot.common.pid import PIDController
 from openpilot.selfdrive.modeld.constants import ModelConstants
 from openpilot.common.params import Params
+from opendbc.car.hyundai.values import is_ray_pedal_control
 from openpilot.selfdrive.controls.lib.cruise_coasting import (
   CruiseCoastingControl, MAX_PLAN_AGE, coasting_relief, no_coasting_lead,
 )
@@ -78,9 +79,12 @@ class LongControl:
     self._refresh_stopping_accel()
     self.j_lead = 0.0
 
-    self.hyundai_fixed_longitudinal_tuning = CP.brand == "hyundai"
+    ray_pedal_control = is_ray_pedal_control(CP)
+    self.hyundai_fixed_longitudinal_tuning = CP.brand == "hyundai" and not ray_pedal_control
     if self.hyundai_fixed_longitudinal_tuning:
       self._apply_hyundai_longitudinal_tuning()
+    elif ray_pedal_control:
+      self._refresh_longitudinal_tuning()
     elif CP.brand == "toyota":
       self._apply_toyota_longitudinal_tuning()
 

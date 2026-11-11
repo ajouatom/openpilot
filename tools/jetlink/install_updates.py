@@ -4,6 +4,7 @@ import os
 import argparse
 import subprocess
 import sys
+import logging
 
 
 def migrate_running_release(runtime=Path('/opt/carrot-jetlink')):
@@ -12,6 +13,11 @@ def migrate_running_release(runtime=Path('/opt/carrot-jetlink')):
   Published images already grant the jetlink service account passwordless sudo.
   Enable only next boot so installing never interrupts the current session.
   """
+  try:
+    subprocess.run(['sudo', '-n', sys.executable, str(runtime / 'current/tools/jetlink/install_updates.py'),
+                    '--performance-runtime'], check=True, timeout=15)
+  except (OSError, subprocess.SubprocessError) as exc:
+    logging.getLogger('jetlink').warning('Jetson performance observer unavailable: %s', type(exc).__name__)
   if Path('/etc/systemd/system/carrot-jetlink-boot-display.service').is_file():
     migrate_boot_display(runtime)
   if not (runtime / 'current/tools/jetlink/boot_update.py').is_file():
@@ -27,6 +33,36 @@ BOOT_DISPLAY_OVERRIDE = """[Service]
 ExecStart=
 ExecStart=/opt/carrot-jetlink/venv/bin/python /opt/carrot-jetlink/current/tools/jetlink/boot_display.py
 """
+
+PERFORMANCE_UNIT = """[Unit]
+Description=Read-only Jetson performance samples for route diagnostics
+PartOf=carrot-jetlink.service
+ConditionPathExists=/opt/carrot-jetlink/current/tools/jetlink/host_performance.py
+[Service]
+ExecStart=/usr/bin/python3 /opt/carrot-jetlink/current/tools/jetlink/host_performance.py
+Restart=on-failure
+RestartSec=5
+RuntimeDirectory=carrot-jetlink-performance
+RuntimeDirectoryMode=0755
+Nice=19
+IOSchedulingClass=idle
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+ProtectKernelTunables=yes
+ProtectControlGroups=yes
+ReadWritePaths=/run/carrot-jetlink-performance
+"""
+
+
+def configure_runtime_performance(unit=Path('/run/systemd/system/carrot-jetlink-performance-observer.service')):
+  # /run survives signed-runtime activation but is recreated at boot, including
+  # protected images. Root is needed only to read BPMP debugfs and nvpmodel.
+  temporary = unit.with_suffix('.new')
+  temporary.write_text(PERFORMANCE_UNIT)
+  temporary.replace(unit)
+  subprocess.run(['systemctl', 'daemon-reload'], check=True, timeout=5)
+  subprocess.run(['systemctl', 'restart', unit.name], check=True, timeout=5)
 
 
 def migrate_boot_display(runtime):
@@ -130,8 +166,11 @@ if __name__ == '__main__':
   parser = argparse.ArgumentParser(description=__doc__)
   parser.add_argument('--boot-display-runtime', action='store_true', help='Use the signed display runtime for this boot only')
   parser.add_argument('--bootstrap-only', action='store_true', help='Migrate an installed runtime; enable from its next boot without OS writes')
+  parser.add_argument('--performance-runtime', action='store_true', help='Start read-only performance sampling for this boot')
   args = parser.parse_args()
-  if args.boot_display_runtime:
+  if args.performance_runtime:
+    configure_runtime_performance()
+  elif args.boot_display_runtime:
     configure_runtime_boot_display()
   elif args.bootstrap_only:
     source = Path('/opt/carrot-jetlink/current/tools/jetlink')

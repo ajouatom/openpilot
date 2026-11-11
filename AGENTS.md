@@ -1,5 +1,82 @@
 # Repository memory
 
+- 2026-11-11: Restore Long Kp/Ki/Kf for identified Ray EV CommaPedal with
+  CC_ONLY_CAR/PEDAL_INTERCEPTOR and OP longitudinal. Shared capability gates
+  catalog/snapshot and actual speed-PID tuning, startup plus ~1s refresh.
+  Ki title corrected to x0.001. Existing defaults100/0/100 and saved values
+  retained; old saved values become effective. Related312 tests pass locally.
+  Fixed-input production replay of additional Ray00000003/0 matches1713
+  baseline commands within2.99e-8. Initial candidate100/50/100 adds mean-.022
+  m/s² at46..55s; Ki100 adds-.044. This is an estimate with recorded motion
+  fixed. Optimal gains/physical response/incident correspondence unverified.
+  Details docs/comma_pedal.md, private archive2026-11-11/ray-tuning.
+
+- 2026-11-11: Ioniq5 b4dcfe6ce00fe149 route8/7..10 on ed157919 confirms
+  ShareData0/xiaoge stopped, little-core load64..76%, but model56.29ms and
+  Jetson execution/completion39.13ms persist.947 frame gaps match invalid
+  odometry. Add root read-only low-priority observer under /run, sampled1Hz,
+  nvpmodel30s, CPU/GPU/EMC clocks/limits/load, rails, cooling, memory, topCPU
+  processes and server-thread scheduler wait. Cache with age/unavailable status;
+  comma jetsonPerformance events bind frame/USBseq/runtime/model and timings.
+  Use elapsed-time telemetry requests so dropped frame IDs cannot starve logs.
+  N16 signed host f07617011dc02856d1e0ae5fa649908f1d11387b published,67188353B,
+  SHA256 13aba9e1ad7068f537529987fdca71778918d74aaf64e73860fb0c120a990909.
+  HTTPS/signature verified. Jetson CI42963567764 passes2481/56skip plus other
+  groups; Windows installer/eGPU/docs pass. Normal GitPull and full comma/Jetson
+  reboot. Other model host pins unchanged. No vehicle install or real Jetson
+  sensor/overhead test;39ms root cause awaits new logs. Private evidence in
+  .analysis/scratch/2026-11-11-jetson-performance and 2026-11-11-ioniq5-route8.
+
+- 2026-11-11: Keep fixed SCC11 input case attached to Casper ac960474. New
+  RayEV53e037b67afdc67d/159e3a01 is CommaPedal. Supplied00000002/0 has no
+  longActive and all1385 commands disabled. Additional NAS00000003/0 has
+  active37.944..38.753 and43.163..end. At46..55s all900 requests negative
+  (mean-.179m/s²), actualmean+.146, speed70.88->75.61km/h, normalizedpedal
+  .418..505 and nativegas34..41%, no driver input/lead/currentCANerror/pedal
+  fault/TXblock. PID P/F active,I0. Fixed map and PR570 x2 raw scaling need
+  vehicle calibration/feedback review. Both handovers restartgas0, ramp.02/40ms,
+  raw8pairs reproduce, with about1m/s² decel. Additional route incident match
+  unconfirmed. Both rlogsdf90dirty versus suppliedheaderecdd. No production
+  change or validated fix. See docs/comma_pedal.md and private Ray archive.
+
+- 2026-11-11: Casper owner supplies normal 1f02/0,1 on older2ea4415ac,
+  recorded Nov11 on same ac960474 as Nov9 failure1ef4/12 b1c827468f.
+  Fixed10.4m/+0.2 absent in6053 plausible good objects, present2163/2217 bad.
+  Both good logs also have canState1 errorPassive/REC255, about4k errorIRQ/s
+  versus10k/s bad. Do not identify that passive condition alone as SCC cause.
+  SCC receiver/DBC/classic generator/Panda drivers unchanged between commits.
+  MAIN and steady-state forwarding audit do not explain difference. Exact
+  source SCC-method9150 and isolated full radar-controller3551 A/B outputs
+  match, including both versions accepting the bad object. Good dirty=true,
+  saved PandaSignatures differs, good early-boot versus baduptime729s confound
+  rollback inference. Failure NAS11..14 empty, archived12 available. Upstream
+  freeze trigger/causal commit unresolved. No production change. Details in
+  docs/casper_scc_input_20261109.md, private archive2026-11-11/casper-version.
+
+- 2026-11-11: Owner requests state2 trial after I5PE11c8/2 rollback with real
+  radar lead41 maintained. Camera-SCC final ACCMode1/StopReq1 now promotes
+  receding real-lead state1 to SCC_ObjSta2, alongside existing no-lead state0
+  fallback. Scope chosen for final stop packets; departure restores normal
+  relative-speed mapping. Four regressions fail before, related261 pass after.
+  Eight-log full-builder A/B23987calls changes475 object-state/CRC packets,
+  23512 identical; acceleration/phase/synthetic-marker outputs agree. OEM
+  parity remains partial: I5PE band.04 vs ours.20, target distance, InfoDisplay,
+  entry timing and trajectories differ. Prior nine failure entries had state2.
+  ESC acceptance and physical hold effect remain unverified. Evidence private
+  .analysis/archive/2026-11-11/stop-state-trial and existing stop-object doc.
+
+- 2026-11-10: Use the actual Carrot cruise cancel latch, not cruise enablement
+  or a timeout, to pause automatic physical indicator requests until SET/RES or
+  +/- clears it. Keep the driver's lever and explicit BT signals independent.
+  Ioniq 5 PE 11c5/36 video shows the right-hand split near 56s. Current-state
+  right-lane probability was still low; the first two future forecast rows
+  agreed before the crossing. The optional model-desire lamp observes these
+  only with measured same-side boundary approach and existing ownership gates.
+  A/B replay through the lamp policy with a ready receiver: new right request
+  at 55.800s; the other 15 segments match. A forecast-owned widening fork
+  tracks far-side progress and lane relabeling while same-side intent persists;
+  11c5/36 owns one request until 58.698s. Replay does not prove physical light.
+
 - 2026-11-09: Fix the four full-build Bluetooth import failures previously
   reported as pre-existing. Cluster paths expose openpilot/tools as top-level
   tools, hiding root tools/jetlink even with the repository first on sys.path.

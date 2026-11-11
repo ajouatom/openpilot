@@ -131,10 +131,11 @@ def test_signed_runtime_still_migrates_once_without_reboot(tmp_path, monkeypatch
   calls = []
   monkeypatch.setattr(install_updates.subprocess, 'run', lambda args, **kw: calls.append(args))
   install_updates.migrate_running_release(tmp_path)
-  assert calls[0][:2] == ['sudo', '-n'] and calls[0][-1] == '--bootstrap-only'
+  assert all(command[:2] == ['sudo', '-n'] for command in calls)
+  assert [command[-1] for command in calls] == ['--performance-runtime', '--bootstrap-only']
   (tmp_path / 'boot-update-required').write_text('this-boot')
   install_updates.migrate_running_release(tmp_path)
-  assert len(calls) == 1
+  assert [command[-1] for command in calls] == ['--performance-runtime', '--bootstrap-only', '--performance-runtime']
 
 
 def test_retired_hold_cannot_strand_updated_comma():

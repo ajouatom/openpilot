@@ -253,11 +253,14 @@ def _serve_local(listener, client, peer, publisher, phase, wifi=None, blinker=No
   from openpilot.common.swaglog import cloudlog
   params = Params()
   diagnostics = RuntimeDiagnostics('jetlinkd', cloudlog.event, peak_metric='usb_exchange_ms')
+  from openpilot.selfdrive.modeld.jetlink.performance_log import PerformanceLog
+  performance_log = PerformanceLog(cloudlog.event, peer, getattr(client.spec, 'sha256', None))
   from tools.jetlink.model_library import Client as ModelLibrary  # noqa: TID251 -- shared standalone host protocol
   library = ModelLibrary(peer)
   last_status = 0.
   last_ping = time.monotonic()
   telemetry_updated = 0.
+  last_state_request = time.monotonic()
   hud_connected = None
   spec = client.spec
   usb_display = publisher is not None and (peer.get('carrot_host') != 'jetson' or peer.get(HUD_USB_CAPABILITY) is True)
@@ -377,8 +380,11 @@ def _serve_local(listener, client, peer, publisher, phase, wifi=None, blinker=No
           map_options = {'nav_metadata': nav_meta} if nav_meta is not None else {}
           # Output ownership needs fresh receiver health within 500 ms. The
           # usual 1 Hz display telemetry would repeatedly expire that lease.
+          want_state = blinker is not None or time.monotonic() - last_state_request >= 1
           seq = client.infer_begin(images, packed, frame, reset=bool(reset & 1),
-                                   want_state=(blinker is not None or frame % 20 == 0), **map_options)
+                                   want_state=want_state, **map_options)
+          if want_state:
+            last_state_request = time.monotonic()
           sent = time.monotonic()
           if peer.get('carrot_host') == 'jetson':
             phase.sent(source_sof)
@@ -459,6 +465,7 @@ def _serve_local(listener, client, peer, publisher, phase, wifi=None, blinker=No
             **display_metrics,
             **receive_metrics,
           )
+          performance_log.record(client.last_state, telemetry_updated, frame, seq, client.last_timings)
       except (ConnectionError, BrokenPipeError, ValueError) as exc:
         log.info('local client ended: %s', exc)
       finally:

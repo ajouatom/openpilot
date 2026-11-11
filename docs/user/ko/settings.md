@@ -240,7 +240,7 @@ VW MEB(ID.4 포함)에도 수동 조향비와 학습 비율이 적용됩니다. 
 | [가속 성향·드라이브 모드](cruise-gap.md#driving-mode) | `MyDrivingMode`, `MyDrivingModeAuto` | 연비, 안전, 일반, 고속 모드와 자동 전환 |
 | [가속 성향·속도별 가속값](cruise-gap.md#acceleration-table) | `CruiseMaxVals0`, `CruiseMaxVals1`, `CruiseMaxVals2`, `CruiseMaxVals3`, `CruiseMaxVals4`, `CruiseMaxVals5`, `CruiseMaxVals6` | 속도 구간별 최대 가속 성향 |
 | [정차·재출발](cruise-gap.md#stop-resume) | `StopDistanceCarrot`, `StoppingAccel`, `VEgoStopping`, `AChangeCostStarting` | 정지 위치, 정지 진입과 재출발 특성 |
-| [가감속 튜닝](cruise-gap.md#longitudinal-tuning) | `LongTuningKpV`, `LongTuningKiV`, `LongTuningKf`, `LongActuatorDelay` | 현기차 `100/0/100`, 토요타·렉서스 `0/0/100` 고정·숨김; VW MEB(ID.4 포함)는 저장 게인 적용 |
+| [가감속 튜닝](cruise-gap.md#longitudinal-tuning) | `LongTuningKpV`, `LongTuningKiV`, `LongTuningKf`, `LongActuatorDelay` | 레이 EV 콤마페달은 저장 게인 적용; 그 외 현기차 `100/0/100`, 토요타·렉서스 `0/0/100` 고정·숨김; VW MEB(ID.4 포함)는 저장 게인 적용 |
 | [차간거리](cruise-gap.md#following-gap) | `TFollowGap1`, `TFollowGap2`, `TFollowGap3`, `TFollowGap4`, `DynamicTFollowLC`, `SpeedTFFactor`, `TFollowDecelBoost` | 차간 단계별 시간, 정상 선택 앞차 기준 차로 변경 완화와 감속 여유(기본 0%) |
 | [추종응답성](cruise-gap.md#lead-response) | `LeadAccelResponse`, `LeadAccelResponseTF1`–`LeadAccelResponseTF4` | 모든 차간 단계의 앞차 출발·가속 추종과 접근 반응 |
 | [당근 크루즈](cruise-gap.md#carrot-cruise) | `CruiseEcoControl`, `CruiseCoastingPercent`, `CarrotCruiseDecel`, `CarrotCruiseAtcDecel` | 연비 제어, 진입 기준속도를 고정하는 코스팅 여유(기본 0%: 기존 제어), 당근 크루즈 감속 특성 |
@@ -260,7 +260,7 @@ VW MEB(ID.4 포함)에도 수동 조향비와 학습 비율이 적용됩니다. 
 
 감속 미리보기는 반응 단계와 별도로 동작합니다. 상대 가속도가 줄거나 앞차가 레이더·비전 사이에서 전환되거나 사라져도, 제어 중에는 남은 보정을 점진적으로 해제합니다. 가속·브레이크 페달 개입이나 종방향 제어 종료 시에는 초기화합니다.
 
-`LongTuning*`, `LongActuatorDelay`는 openpilot이 가감속을 제어하는 차량에서 직접적인 영향을 줄 수 있는 고급 항목입니다. 현대·기아·제네시스에서는 `LongTuningKpV`, `LongTuningKiV`, `LongTuningKf`가 안전값 `100/0/100`으로 고정되어 설정 화면에 나오지 않으며, 토요타·렉서스는 전용 보정기 앞의 중복 보정을 막기 위해 공통 게인을 `0/0/100`으로 고정·숨깁니다. 순정 ACC 차량에서는 관련 없는 항목도 있습니다.
+`LongTuning*`, `LongActuatorDelay`는 openpilot이 가감속을 제어하는 차량에서 직접적인 영향을 줄 수 있는 고급 항목입니다. 차량 식별로 확인된 레이 EV 콤마페달에서는 세 게인을 표시하고 저장값을 속도 PID에 적용합니다. 그 외 현대·기아·제네시스에서는 `LongTuningKpV`, `LongTuningKiV`, `LongTuningKf`가 안전값 `100/0/100`으로 고정되어 설정 화면에 나오지 않으며, 토요타·렉서스는 전용 보정기 앞의 중복 보정을 막기 위해 공통 게인을 `0/0/100`으로 고정·숨깁니다. 순정 ACC 차량에서는 관련 없는 항목도 있습니다.
 
 `StoppingAccel`(정지시작가속도)은 기본 `-50`, 범위 `-100~-50`, 변경 단위 `10`으로 다시 조정할 수 있습니다. 저장값에 0.01을 곱한 가속도를 사용하며, 제어에서도 범위를 제한합니다. 기존 정지 진입·감속 방식과 차종별 소프트홀드를 사용하고 변경은 약 1초 안에 반영됩니다. [정차·재출발](cruise-gap.md#stop-resume)을 참고하세요.
 
@@ -496,7 +496,7 @@ USB/HUD 일반 카메라 화면에 `BRAKE?`로 표시하고 기록합니다. `BR
 
 ## 깜박이 자동제어 (시험 브랜치)
 
-`AutoBlinkerControl` — 설정 > 주행 제어 > 차량 조향 > 차로 변경 (자동 턴). 기본값은 0입니다. 현재 carrot-wip의 아이오닉 5 PE·젯슨·PEAK USB-CAN/B1 조합을 대상으로 합니다.
+`AutoBlinkerControl` — 설정 > 주행 제어 > 차량 조향 > 차로 변경 (자동 턴). 기본값은 0입니다. 현재 carrot-wip의 아이오닉 5 PE·젯슨·PEAK USB-CAN/B1 조합을 대상으로 합니다. 크루즈 CANCEL을 누르면 자동 깜빡이 요청과 유지가 중단됩니다. 주차 중 핸들을 돌려도 새로 켜지지 않으며, SET/RES 또는 +/−로 기존 크루즈 취소 상태를 해제하면 새 동작부터 재개합니다. 직접 쓰는 레버와 블루투스 깜빡이 버튼은 계속 사용할 수 있습니다.
 
 ATC 회전은 audioTurn에서 시작하고 정차 중에도 유지합니다. D단 완전 정지에서는 횡제어 허용·고장 없음이 확인되면 새 안내를 받을 수 있습니다. 수신기가 전송 완료를 확인했는데 양쪽 램프가 1.5초 이상 계속 꺼져 있으면 최초 미점등도 포함해 해당 회전에서 한 번만 재요청합니다. 운전자 취소·통신 이상·전송 미확인에는 재요청하지 않습니다. 앞선 회전 중 들어온 반대 방향 안내는 최대 3초 보관하며, 실제 회전 완료 후에만 넘깁니다.
 
@@ -534,7 +534,7 @@ ATC 세부 설정의 `AutoTurnControlRightLaneChange`는 1·2번 모드에서 10
 
 ATC 재요청이 실행되면 새 요청부터 점등 확인 제한 4초를 다시 적용합니다. 최초 요청부터 전체 유지 상한 5분은 연장하지 않습니다.
 
-`ModelDesireIndicator`와 `ModelPathIndicator`는 표시 전용인 별도 기본 꺼짐 옵션입니다. TBT 턴의 거리 유지와 각 기능의 시작·종료 조건은 [차로 변경](lane-change.md)을 참고하세요.
+`ModelDesireIndicator`와 `ModelPathIndicator`는 표시 전용인 별도 기본 꺼짐 옵션입니다. TBT 턴의 거리 유지와 각 기능의 시작·종료 조건은 [차로 변경](lane-change.md)을 참고하세요. 30km/h 이상에서는 모델의 가까운 두 미래 예측이 모두 같은 방향 차로변경을 65% 이상으로 가리키고, 실제 좌우 차선 위치도 그 방향으로 접근할 때 깜빡이를 요청할 수 있습니다. 차선에 접근하지 않는 예측만으로는 켜지지 않으며, 이 기능은 조향을 요청하지 않습니다. 예측으로 점등한 뒤 분기에서 차로 폭이 넓어져도 같은 방향 모델 의도와 진행이 확인되면 같은 요청을 유지합니다. 의도가 약해지거나 반대로 바뀌면 분기 유지가 끝나며, CANCEL은 즉시 유지 요청을 해제합니다.
 
 수동 깜박이는 차선 접근 속도로 0.3초 뒤를 예측하되, 중심에서 경계까지의 기준을 최대 0.3m만 앞당깁니다. 기존 속도·중앙선·로드에지 조건은 유지합니다.
 

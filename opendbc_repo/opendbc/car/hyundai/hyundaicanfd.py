@@ -571,10 +571,10 @@ def create_acc_control_scc2(packer, CAN, enabled, accel_value_last, accel, stopp
   values["ZEROS_7"] = 0 if stop_controller is not None else 1
   apply_canfd_stopping(values, CS, stop_controller, accel, previous_value, jerk_u, jerk_l)
 
-  # Existing state-only fallback for no-lead stops (OEM SCC_ObjSta). The
-  # explicitly requested signal-stop object below additionally supplies range
-  # and speed; neither path modifies RX or establishes an ESC acceptance gate.
-  if stop_controller is not None and values["ACCMode"] == 1 and values["StopReq"] == 1 and values["HUD_LEAD_INFO"] == 0:
+  # OEM SCC_ObjSta=2 denotes an object controllable longitudinally. During a
+  # final stop request, also promote a receding real lead from state 1. Keep
+  # its measured kinematics and the existing no-lead state fallback.
+  if stop_controller is not None and values["ACCMode"] == 1 and values["StopReq"] == 1 and values["HUD_LEAD_INFO"] in (0, 1):
     values["HUD_LEAD_INFO"] = 2
 
   if stop_controller is not None:
@@ -1519,7 +1519,8 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
         values = copy.copy(CS.adrv_0x1ea)
         rx_counter = values.pop("COUNTER", None)
         # blinker hold: the confirmed lane change until the body is across (see _blink_hold_side)
-        hold = _blink_hold_side(md, desire, create_ccnc_messages.__dict__.setdefault("_blink_hold", {}))
+        hold_desire = 0 if getattr(CS.out, "cruiseCancelState", False) else desire
+        hold = _blink_hold_side(md, hold_desire, create_ccnc_messages.__dict__.setdefault("_blink_hold", {}))
         external_hold = getattr(hud_control, "physicalBlinkerHold", 0)
         if external_hold in (1, 2, 3):
           hold = {1:0, 2:3, 3:4}[external_hold]

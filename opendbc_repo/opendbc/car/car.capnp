@@ -294,11 +294,12 @@ struct CarState {
   laneLineInfoMonoTime @112 :UInt64; # exact OEM lane type/colour CAN observation; zero means unknown, manual indicator only
   teslaTrafficControl @113 :TeslaTrafficControl;
   stockSccFault @114 :Bool; # original Casper FCA failure, before outgoing fault suppression
-  # joongyu01: was @113..@117 before carrot-wip took @113 (2026-11-08) and @114 (2026-11-09); logs before 11-09 merge decode these one Bool slot off
-  naviTunnel @115 :Bool; # 0x4A3 TunnelExist in a tunnel the stock navigation announced as no-lane-change (0x162 SIGNS 16; TunnelLaneChangeHold)
-  naviRoundabout @116 :Bool; # stock cluster 0x162 SIGNS=24 rose in the last 20 s and below 60 km/h (RoundaboutLaneChangeHold): no Kick or auto lane change
-  paddleStopActive @117 :Bool; # joongyu01: card still owns a paddle stop (slowing or handed to a light); the + paddle clears it
-  naviMotorway @118 :Bool; # joongyu01: fresh stock HDA 0x4A3 LinkClass 1 (motorway); road-class fallback when carrotNavi cannot say
+  cruiseCancelState @115 :Bool; # Carrot cruise CANCEL latch, cleared by SET/RES or +/-.
+  # joongyu01: was @113..@117 before carrot-wip took @113 (2026-11-08), @114 (2026-11-09) and @115 (2026-11-10); logs from older merges decode these shifted
+  naviTunnel @116 :Bool; # 0x4A3 TunnelExist in a tunnel the stock navigation announced as no-lane-change (0x162 SIGNS 16; TunnelLaneChangeHold)
+  naviRoundabout @117 :Bool; # stock cluster 0x162 SIGNS=24 rose in the last 20 s and below 60 km/h (RoundaboutLaneChangeHold): no Kick or auto lane change
+  paddleStopActive @118 :Bool; # joongyu01: card still owns a paddle stop (slowing or handed to a light); the + paddle clears it
+  naviMotorway @119 :Bool; # joongyu01: fresh stock HDA 0x4A3 LinkClass 1 (motorway); road-class fallback when carrotNavi cannot say
 
   struct TeslaTrafficControl {
     available @0 :Bool;
