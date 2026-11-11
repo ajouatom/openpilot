@@ -330,3 +330,26 @@ CAMERA_SCC also excludes the periodic tester-present branch in all three.
 Params writes and CAN functions were captured by offline spies, with no device IO.
 This narrows those specific diagnostic paths. The earlier received-data replay
 and this initialization check leave full runtime/ECU interaction unresolved.
+
+The owner then clarifies that operation is normal when SCC data is used directly
+without blocking. This investigation interprets that description as forwarding
+stock SCC commands to the vehicle. The exact configuration or implementation of
+that successful path has not been supplied. This observation strengthens the
+priority of investigating command substitution and its ECU feedback effects.
+
+The actual `hyundai_fwd_hook` is byte-identical across 2ea4415ac, b1c827468f
+and the November 11 source. Accepted host SCC12 transmissions suppress forwarding
+of stock SCC11/SCC12/SCC14 for 400 ms. FCA11 has its own 400 ms suppression timer.
+The recorded host SCC12 maximum transmission gaps are 23.97, 23.78 and 23.64 ms
+in good segment 0, good segment 1 and the failure respectively. Normal older-version
+operation therefore already includes this substitution mechanism.
+
+After excluding the first 0.5 s following each segment's first host SCC12, original
+SCC11/SCC14 payloads have no matching vehicle-side TX echoes in any of the three
+logs. The sole failure SCC12 payload overlap also matches a preceding host send,
+so it does not establish stock passthrough. Stock SCC13 and FCA12 payloads continue
+through in all three windows, with no host replacements for those addresses.
+FCA11 echo identity alone cannot distinguish forwarding from a host copy with
+unchanged fields. This evidence narrows intermittent forwarding takeover as an
+explanation for the supplied windows. Timing or ECU interactions outside those
+windows remain unresolved. Private results are in `forwarding-followup.json`.
