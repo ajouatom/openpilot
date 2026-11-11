@@ -111,10 +111,12 @@ class HostHealth:
     return {**value, 'age_s': age} if 0 <= age < 3 else {}
 
   def _run(self):
+    from host_performance import read_snapshot
     while True:
       started = time.monotonic()
       try:
         value = thermal_health()
+        value['performance'] = read_snapshot()
         storage_health(value)
         try:
           value['addresses'] = network_addresses()
